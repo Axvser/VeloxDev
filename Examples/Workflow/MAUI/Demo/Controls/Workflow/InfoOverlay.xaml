@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Realtime canvas-info HUD. The root layer is InputTransparent (CascadeInputTransparent=False) so
-     drags fall through to the surface; the Border + Label are also input-transparent, leaving only the
-     复制 button interactive. The WorkflowView host refreshes it on scroll/viewport changes and it
-     subscribes to the Core model for layout / visible counts. -->
+<!-- 实时画布信息 HUD：根层 InputTransparent（CascadeInputTransparent=False），Border 与 Label 同样
+     不吃点击，只留“复制”按钮可交互；宿主在滚动/视口变化时刷新，数据订阅 Core 模型 -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="Demo.Controls.InfoOverlay">

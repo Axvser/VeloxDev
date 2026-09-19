@@ -4,10 +4,10 @@ using VeloxDev.WorkflowSystem.AttachedBehaviors;
 namespace Demo.Controls;
 
 /// <summary>
-/// A minimap overlay that renders a thumbnail overview of a workflow surface.
-/// Delegates data subscription and drag/click navigation to the canonical
-/// <see cref="WorkflowMinimapOverlay"/> adapter (same data/logic as the full demo),
-/// applying the unified minimap palette for the style.
+/// A minimap overlay that renders a thumbnail overview of a workflow surface. It delegates data
+/// subscription and drag/click navigation to the canonical <see cref="WorkflowMinimapOverlay"/>
+/// adapter (same data/logic as the full demo), and adds only the unified palette — the base paints
+/// nothing without it.
 /// </summary>
 public class MinimapOverlay : WorkflowMinimapOverlay
 {

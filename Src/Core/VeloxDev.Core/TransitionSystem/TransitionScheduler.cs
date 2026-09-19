@@ -36,10 +36,9 @@ public class TransitionSchedulerCore<
     /// segment again against the same endpoints.
     /// </summary>
     /// <remarks>
-    /// This is what a chain-level loop is built on: the first cycle prepares each segment at the moment that
-    /// segment is due — which is what keeps a segment's start value continuous with the segment before it — and
-    /// the cycles after it replay the same sets, so every cycle is the same animation rather than the first one
-    /// plus a re-measurement of wherever it left the target.
+    /// What a chain's loops are built on: a segment is prepared the first time its turn comes — which keeps its
+    /// start value continuous with the segment before it — and every later iteration of that segment replays the
+    /// same set.
     /// </remarks>
     public virtual Task<SamplerSet<TPriorityCore>?> ExecuteCapturing(
         InterpolatorCore producer,
@@ -75,12 +74,10 @@ public class TransitionSchedulerCore<
         await _gate.WaitAsync();
         try
         {
-            // Exit() ran while this segment was queued: it was cancelled before it ever started.
+            // 排队期间 Exit() 跑过了：这一段还没开始就已被取消。
             if (generation != Generation) return;
 
-            // The run reaches the interpreter through the sampler set, and a replay is handed the very set the
-            // first cycle ran against — so the run it carries is already this animation's. Re-binding it only
-            // keeps the thread it was resolved on current.
+            // 重放拿到的正是首趟跑的那套帧集，它带着的 run 本就是这个动画的；重绑只是让线程归属跟上。
             if (_activeRuns.TryGetValue(newCts, out var run))
             {
                 run.Thread = thread;

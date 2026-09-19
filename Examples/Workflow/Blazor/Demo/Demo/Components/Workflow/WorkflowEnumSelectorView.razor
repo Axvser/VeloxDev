@@ -28,8 +28,7 @@
                 {
                     <div class="selector-slot-row">
                         <span class="selector-slot-label">@item.Name</span>
-                        @* TemplateSlotView already opens the connection behavior for its slot; wrapping it in
-                           another one doubles the measured anchors and the gesture handlers. *@
+                        @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
                         <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="16" />
                     </div>
                 }

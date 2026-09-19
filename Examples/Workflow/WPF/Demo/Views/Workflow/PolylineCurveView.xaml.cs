@@ -21,22 +21,11 @@ public partial class PolylineCurveView : UserControl
         Focusable = true;
         Panel.SetZIndex(this, -100);
 
-        // The brush is the view's own and the stops are only created here: AimFlowBrush aims it, gives it its
-        // colours and builds the declaration whose endpoints those colours are.
+        // 画刷归视图所有；这里只建它，指向、配色与链都由 AimFlowBrush 完成
         AimFlowBrush();
 
-        // The attach/detach pair. WPF's UserControl has no virtual OnAttachedToVisualTree to override the way
-        // Avalonia's Control does, so this is the event pair instead — the same one the WPF adapter itself
-        // uses to hook a surface (VeloxDev.WPF, WorkflowSurfaceBehavior.Attach).
-        //
-        // What these two cover is the view entering and leaving the tree, not the view pool recycling it:
-        // this pool hides a released view with Visibility = Collapsed and hands it a new DataContext rather
-        // than detaching it, so a recycled view raises neither event. It does not need to: recycling rebinds
-        // the four anchor properties, which re-aims the brush at the link it is now drawing, and the animation
-        // was never stopped in the first place — it goes on walking the band along whichever link the view
-        // holds. The one case that does need something is a recycled view landing on a link of another colour:
-        // AimFlowBrush rebuilds the declaration there and restarts the cycle, so the band is never animated in
-        // the colour of the link this view used to hold.
+        // WPF 的 UserControl 没有可重写的虚拟挂载方法，用 Loaded/Unloaded 这对事件（WPF 适配器也用它挂载画布）
+        // 池化复用只隐藏视图并改绑 DataContext，不摘树，两个事件都不触发；锚点属性重绑已让画刷重新指向，周期也从未停过，只有落到另一颜色的链接上时才由 AimFlowBrush 重建链并重启
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
 
@@ -79,8 +68,7 @@ public partial class PolylineCurveView : UserControl
         control.UpdateInteractivity();
         control.InvalidateVisual();
 
-        // The gradient runs along the link's own axis and is mixed from the link's own colour, so an endpoint
-        // and the colour are both inputs to the brush rather than to the drawing code.
+        // 渐变沿链接自身轴向、由链接自身颜色混合：端点与颜色都是画刷的输入，而非绘制代码的
         if (e.Property == StartLeftProperty || e.Property == StartTopProperty
             || e.Property == EndLeftProperty || e.Property == EndTopProperty
             || e.Property == LineColorProperty)
@@ -88,9 +76,7 @@ public partial class PolylineCurveView : UserControl
             control.AimFlowBrush();
         }
 
-        // A link becomes drawable only once both endpoints have been measured, and the flow has nothing to
-        // travel along before that — while a virtual one is the rubber band under the pointer, which has no
-        // settled connection to describe.
+        // 两端测量完才可绘制，在那之前流光无物可循；虚拟链接是指针下的橡皮筋，没有稳定连接可描述
         if (e.Property == CanRenderProperty || e.Property == IsVirtualProperty)
         {
             if (control.IsVirtual || !control.CanRender)
@@ -114,11 +100,10 @@ public partial class PolylineCurveView : UserControl
 
     #region Flow effect
 
-    /// <summary>Half the band's width, in gradient-offset units.</summary>
+    // 光带半宽（渐变偏移单位）
     private const double BandHalfWidth = 0.04;
 
-    // The three phases, as the band's centre at the end of each: it forms as it enters, travels fully lit,
-    // and settles back on its way out. What the animation writes is these centres, plus and minus HalfWidth.
+    // 三段相位各自结束时光带中心的位置：成形、全亮行进、退去
     private const double BandStart = 0.06;
     private const double BandFormed = 0.34;
     private const double BandLeaving = 0.66;
@@ -146,52 +131,25 @@ public partial class PolylineCurveView : UserControl
         MappingMode = BrushMappingMode.Absolute,
     };
 
-    /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
+    // 光带与箭头颜色：链接本色提到全不透明
     private Color Lit { get; set; }
 
-    /// <summary>The line's resting colour: the lit colour dimmed to a little under two thirds.</summary>
+    // 线体静息色：亮色按 alpha 变暗到约 62%
     private Color Dim { get; set; }
 
     private Transition<PolylineCurveView>? _flow;
     private bool _running;
 
-    /// <summary>
-    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
-    /// </summary>
-    /// <remarks>
-    /// Built per view rather than held in a <c>static readonly</c> field, because two of its endpoints are the
-    /// link's own colours, and a declaration that reads a local is shared by every later execution of it — here
-    /// that would paint one link's band in another link's colour.
-    /// <para>
-    /// The paths go into the brush itself: <c>GradientStops[1]</c> is the band and the two stops either side of
-    /// it are its shoulders, so a phase is a handful of indexed writes and the phase structure is readable
-    /// rather than computed. A straight line rather than an eased curve, because the band should move at a
-    /// constant speed — an ease would make each cycle pause at the ends and read as pulses instead of flow.
-    /// </para>
-    /// <para>
-    /// Each effect also carries the one thing this port has to add that the reference does not: the repaint.
-    /// Avalonia invalidates a control from the brush it drew with, so there the stop writes are the whole story;
-    /// WPF does not — the drawing a DrawingContext captured keeps its reference to the brush, but nothing is
-    /// subscribed to it, so the link would sit on the frame it was last told to paint and the band would never
-    /// appear to move. Measured on a control shaped like this one: with the stop writes alone OnRender is not
-    /// entered again at all, with an explicit invalidate it is entered once per write. It hangs off
-    /// <c>LateUpdate</c> rather than <c>Update</c> because the frame's writes have to have landed before the
-    /// repaint is asked for — <c>Update</c> fires before the frame is applied, <c>LateUpdate</c> after — and it
-    /// hangs off every segment, so the phase that is running is the one that asks.
-    /// </para>
-    /// <para>
-    /// The handler reads the view's own <c>InvalidateVisual</c>, which is sound here precisely because the
-    /// declaration is per view: a <c>static readonly</c> declaration would hold this view through the handler
-    /// for as long as the declaration lived.
-    /// </para>
-    /// </remarks>
+    // 每视图构建：两个端点取自该链接自己的颜色（静态声明会把读到的值共享给之后每次执行，也会被处理器一直持有视图）
+    // 路径直达画刷：GradientStops[1] 是光带、两侧是肩；匀速所以不用缓动
+    // WPF 还须自带重绘：DrawingContext 按引用持有画刷却不订阅它，只写停靠点 OnRender 不会再次进入，显式 InvalidateVisual 才每次写进入一次
     private Transition<PolylineCurveView> BuildFlow() => Transition<PolylineCurveView>.Create()
-        // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
-        // resting colour to the lit one.
+        // 相位一：一边成形一边进入（走三分之一路程，同时由静息色变亮）
         .Property(v => v.FlowBrush.GradientStops[0].Offset, BandFormed - BandHalfWidth)
         .Property(v => v.FlowBrush.GradientStops[1].Offset, BandFormed)
         .Property(v => v.FlowBrush.GradientStops[2].Offset, BandFormed + BandHalfWidth)
         .Property(v => v.FlowBrush.GradientStops[1].Color, Lit)
+        // 重绘挂 LateUpdate（Update 在应用帧之前，LateUpdate 之后），且每段都挂；重放每周期照发 Update/LateUpdate，Clone 也复制处理器，所以重绘不丢
         .Effect(e =>
         {
             e.Duration = EnterDuration;
@@ -199,8 +157,7 @@ public partial class PolylineCurveView : UserControl
             e.LateUpdate += (_, _) => InvalidateVisual();
         })
         .Then()
-        // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than as a
-        // pulse: nothing about it changes except where it is.
+        // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲
         .Property(v => v.FlowBrush.GradientStops[0].Offset, BandLeaving - BandHalfWidth)
         .Property(v => v.FlowBrush.GradientStops[1].Offset, BandLeaving)
         .Property(v => v.FlowBrush.GradientStops[2].Offset, BandLeaving + BandHalfWidth)
@@ -211,9 +168,7 @@ public partial class PolylineCurveView : UserControl
             e.LateUpdate += (_, _) => InvalidateVisual();
         })
         .Then()
-        // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel. That is
-        // also what makes the seam invisible when the cycle repeats: the line is uniformly dim at both ends of
-        // a cycle, so the value snapping back to its captured start cannot be seen.
+        // 相位三：一边退回静息色一边离开；周期两端都是均匀暗色，循环接缝才看不出来
         .Property(v => v.FlowBrush.GradientStops[0].Offset, BandExit - BandHalfWidth)
         .Property(v => v.FlowBrush.GradientStops[1].Offset, BandExit)
         .Property(v => v.FlowBrush.GradientStops[2].Offset, BandExit + BandHalfWidth)
@@ -226,21 +181,11 @@ public partial class PolylineCurveView : UserControl
         })
         .Repeat(int.MaxValue);
 
-    /// <summary>
-    /// Aims the brush along the link and gives it its two colours. Called whenever the link moves — its anchors
-    /// change on every frame of a zoom (the Core anchor getters collapse the nodes toward the origin) and of a
-    /// node drag — and when its colour changes, which is also when the declaration is rebuilt, since the two
-    /// colours are its endpoints.
-    /// </summary>
-    /// <remarks>
-    /// Nothing here writes the band's position. The cycle owns those stops and writes them every frame from the
-    /// endpoints it captured, so re-seating them from a path that runs during a gesture would fight it for a
-    /// frame — which reads as a band that stutters while the canvas moves.
-    /// </remarks>
+    // 链接移动（缩放与拖拽每帧都改锚点）或变色时调用，变色要重建链：两个端点就是它的颜色
+    // 这里不写光带位置：那些停靠点归周期所有，手势期间抢写会让光带抖动
     private void AimFlowBrush()
     {
-        // The brush's mapping mode is absolute (set with the brush itself), so these two are the link's own
-        // endpoints in the control's space, not fractions of a bounding box.
+        // 绝对映射（随画刷一起设）：这两点就是控件空间里链接自己的端点，不是包围盒的比例
         FlowBrush.StartPoint = new Point(StartLeft, StartTop);
         FlowBrush.EndPoint = new Point(EndLeft, EndTop);
 
@@ -267,24 +212,14 @@ public partial class PolylineCurveView : UserControl
             stops[2].Color = Dim;
         }
 
-        // A view recycled onto a link of another colour gets its cycle restarted, from its own colour's
-        // starting state rather than the previous link's.
+        // 视图被复用到另一种颜色的链接上时，按自己的颜色重新起周期
         if (_running)
         {
             StartFlow();
         }
     }
 
-    /// <summary>
-    /// The band's colour: the link's own colour at full strength, lifted a little towards white so the band
-    /// is the brighter end of the pair on a coloured link as well as the more opaque one.
-    /// </summary>
-    /// <remarks>
-    /// On this demo's white links the lift has nothing left to lift — every channel is already at the top —
-    /// so there the band is carried by alpha alone, which is the other reason the resting colour has to be
-    /// the dim one (see <see cref="DimOf"/>). On the cyan links the other demos draw, both halves of the
-    /// difference show.
-    /// </remarks>
+    // 亮色：各通道向白抬 45%；本 demo 的白链接已无处可抬，光带只靠 alpha 撑，这也是静息色必须暗的原因
     private static Color LitOf(Color color)
     {
         const double lift = 0.45;
@@ -294,27 +229,11 @@ public partial class PolylineCurveView : UserControl
         return Color.FromArgb(255, Up(color.R), Up(color.G), Up(color.B));
     }
 
-    /// <summary>
-    /// The line's resting colour: the lit colour dimmed to a little under two thirds, which is what makes a
-    /// lit band read as a band.
-    /// </summary>
-    /// <remarks>
-    /// Dimming by alpha is what keeps the hue: the alternative that suggests itself — a "highlight" that is
-    /// the line colour pushed <em>towards white</em> — is what the Avalonia demo used to draw, and it is
-    /// invisible there. Its links are cyan, and cyan lifted 75% towards white differs from cyan in one
-    /// channel out of three, on a 2px line, against a dark canvas. Against white links it is worse still:
-    /// white pushed towards white is white. Making the resting line the dim one puts the contrast where the
-    /// eye can find it at a glance, and it is the half of the difference that survives on any hue.
-    /// </remarks>
+    // 靠 alpha 变暗取反差，色相不变；往白里提在青线（2px 线、暗底）上几乎看不出，白链接更是白提白
     private static Color DimOf(Color color) => Color.FromArgb(
         (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 
-    /// <summary>
-    /// Starts the cycle from the sender's end. Started when the view becomes drawable and when the view is
-    /// loaded into the tree, so a view that is handed a different link than the one it was built for animates
-    /// that link, and a view that comes back into the tree after its cycle was exited has one running on it
-    /// again.
-    /// </summary>
+    // 从发送端起动周期；变得可绘制和载入树时都起动：复用换链接后要动的是新链接，出树又回来的也要重新跑起来
     private void StartFlow()
     {
         if (IsVirtual || !CanRender)
@@ -325,9 +244,7 @@ public partial class PolylineCurveView : UserControl
 
         AimFlowBrush();
 
-        // The transition reads its start values from the target, so the brush has to be at the cycle's start
-        // before Execute — and the loop replays that captured start at every seam, so this is also the state
-        // each later cycle begins from.
+        // 声明从目标读起始值，Execute 前画刷要先落到周期起点；循环在每个接缝重放捕获的起点，故这也是之后每周期的起始状态
         var stops = FlowBrush.GradientStops;
         stops[0].Offset = BandStart - BandHalfWidth;
         stops[1].Offset = BandStart;
@@ -338,10 +255,7 @@ public partial class PolylineCurveView : UserControl
         _running = true;
     }
 
-    /// <summary>
-    /// Stops the cycle: a pooled view released and reused for another link must not leave the old animation
-    /// running on it.
-    /// </summary>
+    // 停周期：视图被释放复用时不能留着旧动画在跑
     private void StopFlow()
     {
         if (!_running)
@@ -372,15 +286,11 @@ public partial class PolylineCurveView : UserControl
         var color = IsHighlighted ? Colors.OrangeRed : LineColor;
         var thickness = IsHighlighted ? 3.5 : 2.0;
 
-        // The travelling highlight is only meaningful on a settled connection. A virtual link is the rubber
-        // band under the pointer and a highlighted one is already the thing the eye is on, so both keep a
-        // flat pen; every other link is drawn with the gradient the flow animation writes into.
+        // 流动高亮只对稳定连接有意义：虚拟链接是指针下的橡皮筋，高亮的已经是视线所在，两者都用平色；其余用流光写入的渐变
         var flat = new SolidColorBrush(color);
         Brush brush = IsHighlighted || IsVirtual ? flat : FlowBrush;
 
-        // The arrowhead is the destination marker, so it carries the band's colour rather than the gradient:
-        // the line rests dim, and an arrowhead dimmed with it would be the one part of the link that never
-        // lights up.
+        // 箭头是终点标记，用光带亮色而非渐变：线静息是暗的，箭头跟着暗就成了链接上永不点亮的那一处
         Brush arrowBrush = IsHighlighted ? flat : new SolidColorBrush(Lit);
 
         var pen = IsVirtual

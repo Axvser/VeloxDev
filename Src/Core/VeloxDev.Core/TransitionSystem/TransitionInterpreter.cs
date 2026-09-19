@@ -167,10 +167,8 @@ public abstract class TransitionInterpreterCore : IDisposable
         var durationMs = effect.Duration.TotalMilliseconds;
         var foreverloop = effect.LoopTime == int.MaxValue;
 
-        // The counter is shared by the whole run, and a chain runs several segments against it, so this segment's
-        // loop counts from where the counter stood when *this* segment started. Without the offset, the second
-        // segment of a chain begins with the counter already past its LoopTime and breaks before its first pass:
-        // it reports Start and Completed and writes no frame at all.
+        // 计数器整趟共用，而一段只是链中的一段，所以本段的环按它自己起点时的计数器起算。少了这个偏移，
+        // 链里第二段一上来计数就已越过 LoopTime，头一趟之前就 break：报了 Start 与 Completed 却一帧不写。
         var startCycle = run.Cycle;
         var diagnostics = new TransitionDiagnostics(effect, target, Args);
         frameSet.SetDiagnostics(diagnostics);
@@ -194,10 +192,8 @@ public abstract class TransitionInterpreterCore : IDisposable
             }
             while (true)
             {
-                // The counter is read rather than held, so a seek can move the animation to another pass: the loop
-                // has no private notion of which pass it is in. It is also the only thing that can express a pass
-                // position when a zero-duration pass consumes no time at all. Read as an offset from this segment's
-                // own start, so a seek still repositions it while a chain's earlier segments do not count against it.
+                // 计数器是读来的不是存下的，所以 Seek 仍能把动画挪到另一趟：这个环没有自己的「第几趟」。
+                // 零时长的趟不占时间，也只有它能表示趟位。相对本段起点读：Seek 照旧重定位，链中更早的段不算在它头上。
                 if (!foreverloop && run.Cycle - startCycle > effect.LoopTime) break;
 
                 if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();

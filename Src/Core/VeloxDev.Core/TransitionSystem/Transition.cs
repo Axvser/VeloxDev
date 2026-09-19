@@ -278,17 +278,11 @@ public class TransitionCore<
     /// runs it forever.
     /// </summary>
     /// <remarks>
-    /// A segment's loop wraps the chain <em>from its first segment through this one</em>, and loops nest by where
-    /// they end — so a count on the last segment repeats the whole chain, while a count on the first repeats only
-    /// what the first segment does. The count is the number of <em>additional</em> iterations, the rule the
-    /// effect's <c>LoopTime</c> already follows, and it is per segment rather than per chain: three segments each
-    /// carrying <c>Repeat(1)</c> run <c>1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3</c>, because the middle segment's
-    /// loop closes around the first and the last's closes around both.
-    /// <para>
-    /// Every iteration after a segment's first replays the frame set that first iteration prepared — the rule a
-    /// single segment's <c>LoopTime</c> follows — so an iteration is the same animation however deep in which loop
-    /// it is running.
-    /// </para>
+    /// The loop wraps the chain <em>from its first segment through this one</em>, and loops nest by where they end,
+    /// so the count is the number of <em>additional</em> iterations — the rule the effect's <c>LoopTime</c> already
+    /// follows. Three segments each carrying <c>Repeat(1)</c> run <c>1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3</c>.
+    /// Every iteration after a segment's first replays the frame set that first iteration prepared, so an iteration
+    /// is the same animation however deep in which loop it is running.
     /// </remarks>
     public int RepeatTime { get; set; }
     protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? next = null;
@@ -410,33 +404,26 @@ public class TransitionCore<
 
         TransitionSchedulerCore.CancelDrained(superseded);
 
-        // The chain as the segments it is made of, in order, with the repeat each one asks for. An array rather
-        // than the queue this used to be: a loop walks the same segments more than once.
+        // 链按段列出：顺序、以及每段自己要的重复次数。用数组而非队列——环会把同一段走多次。
         var segments = new List<(InterpolatorCore Interpolator, TimeSpan Delay, ITransitionEffectCore Effect, IFrameState State)>();
         var repeats = new List<int>();
 
         TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? currentNode = root;
         do
         {
-            // Cloned per segment, as before, and shared by every iteration of that segment: an effect is
-            // configuration and handler lists, and a pass reads it rather than writing it.
+            // 仍旧按段克隆，并给该段的每次迭代共用：effect 只是配置与处理器列表，一趟只读它。
             segments.Add((currentNode.interpolator, currentNode.delay, currentNode.effect.Clone(), currentNode.state));
             repeats.Add(currentNode.RepeatTime);
             currentNode = currentNode.next;
         }
         while (currentNode is not null);
 
-        // The frame set each segment was prepared with the first time it ran. Every iteration after that replays
-        // it instead of preparing again, which is what makes an iteration the same animation as the first one
-        // however deep in which loop it is running: without it, a repeated segment would re-read the target and
-        // start from wherever the previous iteration left it — a chain that ends somewhere other than where it
-        // began would walk backwards, and a segment naming a property no earlier segment touches would drift a
-        // little further on every pass.
+        // 每段首次跑时备下的帧集；之后的迭代复用它而不重新准备。否则重复段会重读目标、从上趟停处起步：
+        // 终点不同于起点的链会倒退，而某段写着更早的段都没碰过的属性时会一趟比一趟漂。
         var prepared = new SamplerSet<TPriorityCore>?[segments.Count];
         var chainScheduler = (TransitionSchedulerCore<THost, TTransitionInterpreterCore, TPriorityCore>)scheduler;
 
-        // Runs one segment once: the delay it declares, then its frame, prepared on the first iteration of that
-        // segment and replayed on every one after it.
+        // 跑一段一次：先它声明的延时，再它的帧——该段首次准备，之后每次重放。
         async Task RunSegmentAsync(int index)
         {
             try
@@ -459,8 +446,7 @@ public class TransitionCore<
             }
         }
 
-        // One iteration of the loop a segment closes: everything up to but not including that segment — with the
-        // loops closed inside it expanded — and then the segment itself.
+        // 某段所闭环的一次迭代：它之前的部分（内含的环已展开），再加上它自己。
         async Task RunBodyAsync(int from, int to)
         {
             await RunRangeAsync(from, to - 1);
@@ -468,9 +454,8 @@ public class TransitionCore<
             await RunSegmentAsync(to - 1);
         }
 
-        // The chain from `from` through `to`, with every loop closed inside that range expanded. The loop is the
-        // one the last segment asks for, wrapping the chain from its first segment through that one — so a chain
-        // of three segments, each carrying Repeat(1), runs 1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3.
+        // from..to 的链，区间内所闭的环都已展开。展开的是末段要的那个环，它从首段包到该段：
+        // 三段各带 Repeat(1) 的链跑 1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3。
         async Task RunRangeAsync(int from, int to)
         {
             if (to < from)
@@ -481,8 +466,7 @@ public class TransitionCore<
             var repeat = repeats[to - 1];
             for (var iteration = 0; repeat == int.MaxValue || iteration <= repeat; iteration++)
             {
-                // Read between iterations, not only at the top: an Exit during the last segment has to stop the
-                // chain before it starts another pass, the same way it stops a segment mid-frame.
+                // 迭代之间也读取消，不只在顶上读：末段期间来的 Exit 得在下一趟开始前停住链，如同它中途停住一段。
                 if (cts.IsCancellationRequested) return;
                 await RunBodyAsync(from, to);
             }
@@ -571,10 +555,7 @@ public class TransitionCore<
         next = converted;
         return newNode;
     }
-    /// <summary>
-    /// Records how many further times this segment's loop runs, on the segment the call is written after — like
-    /// every other member of the declaration, <c>Repeat</c> configures the node it is called on.
-    /// </summary>
+    // 记下本段的环还要再跑几次：与其他声明成员一样，Repeat 配的是它写在其后的那个节点。
     internal override T1 CoreRepeat<T1>(int count)
     {
         if (this is not T1 result)

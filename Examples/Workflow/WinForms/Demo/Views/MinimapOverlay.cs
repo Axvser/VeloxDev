@@ -69,13 +69,8 @@ public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMi
 
     private void OnParentResized(object? sender, EventArgs e) => PositionAtTopRight();
 
-    /// <summary>
-    /// Anchors this overlay to the top-right of its host surface. The surface's
-    /// size is only known once it is added and laid out, so the position is
-    /// recomputed whenever the parent resizes — and by the surface after a
-    /// pan/scroll, because WinForms translates a scrolling container's children
-    /// by the scroll delta and this overlay now lives inside the canvas.
-    /// </summary>
+    // 把覆盖层钉在宿主表面右上：表面大小要等加入并布局后才知道，所以父容器尺寸一变就重算
+    // 表面在平移/滚动后也重算——WinForms 按滚动增量平移滚动容器的子控件，而本覆盖层现在就在画布里
     internal void PositionAtTopRight()
     {
         if (Parent is null) return;

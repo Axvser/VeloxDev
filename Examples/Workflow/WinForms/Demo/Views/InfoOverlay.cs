@@ -21,7 +21,7 @@ public sealed class InfoOverlay : Panel
     private const int PadX = 10;
     private const int PadTop = 8;
     private const int LineGap = 4;
-    private const int RightZone = 66; // leave room for the bottom-right copy button
+    private const int RightZone = 66; // 给右下角的复制按钮留位置
 
     private static readonly Color s_bg = Color.FromArgb(0xFF, 0x12, 0x15, 0x1B);
     private static readonly Color s_border = Color.FromArgb(0xFF, 0x8E, 0xA3, 0xB8);
@@ -136,14 +136,14 @@ public sealed class InfoOverlay : Panel
         Invalidate();
     }
 
-    /// <summary>Positions the copy button at the panel's bottom-right and pins the overlay bottom-left of its parent.</summary>
+    // 复制按钮摆到面板右下，覆盖层钉在父容器左下
     private void LayoutButton()
     {
         _copy.Location = new Point(Width - _copy.Width - 6, Height - _copy.Height - 6);
 
         if (Parent is not null)
         {
-            int left = Math.Max(4, 40); // clear the left ruler band
+            int left = Math.Max(4, 40); // 让开左侧标尺带
             int top = Math.Max(4, Parent.ClientSize.Height - Height - 12);
             if (Left != left || Top != top)
             {
@@ -235,7 +235,7 @@ public sealed class InfoOverlay : Panel
     }
 }
 
-/// <summary>GraphicsPath rounded-rectangle helper (single corner radius).</summary>
+// GraphicsPath 圆角矩形辅助（单一半径）
 internal static class RoundedRectPath
 {
     public static void AddRoundedRectangle(this GraphicsPath path, Rectangle bounds, int radius)

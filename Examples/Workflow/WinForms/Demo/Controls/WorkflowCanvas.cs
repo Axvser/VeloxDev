@@ -53,14 +53,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // the content boundary rather than at the top-left corner junction.
     private Point _panOffset = new(RulerThickness, RulerThickness);
 
-    // Minimap: the surface adopts it, names it PART_MinimapOverlay and tells the surface behavior that
-    // name, so WorkflowSurfaceBehavior.Refresh pushes scroll / content offset / viewport / tree into it
-    // on every cycle — the offset values SyncMinimap used to hand-wire. Refresh's ResolveScrollOffset
-    // reads this host's private _panOffset and folds AutoScrollPosition into it (the AutoScroll branch
-    // of that resolver names this demo), so the pushed numbers are the same ones SyncMinimap computed.
+    // 小地图：由 surface 认领为具名子控件 PART_MinimapOverlay，Refresh 每周期把滚动/内容偏移/视口/树推进来
+    // （原先 SyncMinimap 手推的就是这组值）
     private Control? _minimap;
 
-    /// <summary>Realtime canvas-info HUD (bottom-left floating panel + copy button).</summary>
+    // 画布信息 HUD（左下浮动面板 + 复制按钮）
     private readonly Views.InfoOverlay _infoOverlay = new();
 
     // Floating translucent ruler overlay (owned popup), created once the canvas is parented.
@@ -151,8 +148,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
                     mm.WorkflowTree = _session?.Tree;
                 }
 
-                // Canonical wiring (mirrors the tree-view template): the overlay becomes a named child
-                // of the surface and the surface is told that name, so Refresh feeds it.
+                // 与树视图模板一致的接线：覆盖层成为具名子控件，surface 才会喂它
                 value.Name = "PART_MinimapOverlay";
                 Controls.Add(value);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlayName(this, "PART_MinimapOverlay");
@@ -163,8 +159,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
                 value.Visible = true;
                 BringOverlaysToFront();
-                // Push the current region into the newly named overlay now (mirrors the template's
-                // AttachTree), then repaint it.
+                // 立刻把当前区域推给刚命名的覆盖层（对应模板的 AttachTree），再重绘
                 if (_session is not null)
                 {
                     WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
@@ -196,19 +191,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             ControlStyles.UserPaint,
             true);
 
-        // Realtime canvas-info HUD: floating bottom-left over the canvas, above the pooled node cards
-        // (the tree-view template adds it the same way). It reads the Core model plus helper.Viewport,
-        // which the surface's Refresh keeps current, and re-pins itself on every UpdateText.
+        // 画布信息 HUD：浮在左下、压在复用的节点卡片之上（模板同样如此），读 Core 模型与 helper.Viewport
         Controls.Add(_infoOverlay);
         _infoOverlay.BringToFront();
     }
 
     // ── Link flow ────────────────────────────────────────────────────────────────
 
-    // The band's cycle, as the two numbers the whole surface shares. They live on the canvas because the
-    // canvas is the only thing here that is a window: its link renderers are held in a list and painted from
-    // OnPaint, so an Invalidate on one of them reaches nothing, and the clock has to write a target that can
-    // be repainted. See the flow declaration below for the cycle they move through.
+    // 光带周期的两个数、整个表面共用：渲染器不在控件树里、由 OnPaint 统一绘制，对它 Invalidate 到不了窗口
+    // 时钟只能写在能被重绘的目标上，所以这两个数落在画布上
     private double _bandCentre;
     private double _bandMix;
 
@@ -243,102 +234,45 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         set { _bandMix = value; Invalidate(); }
     }
 
-    // One cycle, as the band's centre at the end of each of its three phases. The same four numbers are in
-    // every platform's demo: it forms as it enters, travels fully lit and unchanged, and settles back on its
-    // way out. The band's width is not among them — a renderer works its two shoulders out from the centre
-    // it is handed — so two numbers per frame are the whole of what crosses to the links.
+    // 一个周期：三段相位各自结束时光带中心的位置，四个数与各平台 demo 相同——成形、行进、退回
+    // 不含光带宽度：渲染器由中心自行算两侧肩，每帧跨到链接上的只有这两个数
     private const double BandStart = 0.06;
     private const double BandFormed = 0.34;
     private const double BandLeaving = 0.66;
     private const double BandExit = 0.94;
 
-    /// <summary>
-    /// Walks the band across every link once per cycle, forever, so a link reads as carrying data from the
-    /// sender's anchor to the receiver's. The two numbers above are the whole of the animated state, and the
-    /// setters they are written through are what repaint the surface the bands are drawn on.
-    /// </summary>
-    /// <remarks>
-    /// The three phases are declared one after the other and repeated with <c>Repeat(int.MaxValue)</c>. This
-    /// is the shape the previous design had to work around: a chain could not repeat — a segment's
-    /// <c>LoopTime</c> repeats that segment, and the queue of segments is walked exactly once — so the whole
-    /// cycle was a single looping segment over a phase scalar, with a piecewise mapping turning that one
-    /// number into the band's place and its colour. <c>Repeat</c> runs the whole chain, every segment of it,
-    /// and replays the endpoints its first cycle captured, so each cycle begins from
-    /// <see cref="BandStart"/> rather than from wherever the previous one left the target; that is the seam,
-    /// and it is invisible because the last phase ends with the band settled back onto the resting colour.
-    /// <para>
-    /// A <c>static readonly</c> field rather than a declaration built per canvas: nothing in it reads the
-    /// caller — every endpoint in it is the same constant for every cycle and every canvas — which is the
-    /// case the animation reference puts in a static field. (The reference builds its own per view because two
-    /// of its endpoints are the link's own colours and a declaration that reads a local is shared by every
-    /// later execution of it; here the colours are not animated at all, so there is nothing to share wrongly.)
-    /// A straight line rather than an eased curve, because the band should move at a constant speed — an ease
-    /// would make each cycle pause at the ends and read as a series of pulses instead of a flow. That is what
-    /// <c>Eases.Default</c> is: <c>EaseDefault</c> returns its input unchanged, so it is the identity rather
-    /// than a shaped curve, and it is named here to say that the straightness is a choice.
-    /// </para>
-    /// </remarks>
+    // 三段相位依次声明、Repeat(int.MaxValue) 整链重复并重放首周期抓到的起值；接缝不可见因末相位停在静息色
+    // 端点全是常量故可 static readonly（引用方按视图构建，因其两端取自链接颜色）；匀速故 Eases.Default 即恒等
     private static readonly Transition<WorkflowCanvas> Flow =
         Transition<WorkflowCanvas>.Create()
-            // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
-            // resting colour to the lit one.
+            // 相位一：一边成形一边进入（走三分之一路程，同时由静息色变亮）
             .Property(c => c.BandCentre, BandFormed)
             .Property(c => c.BandMix, 1d)
             .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(550), Ease = Eases.Default })
             .Then()
-            // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather
-            // than as a pulse: nothing about it changes except where it is. BandMix is not among the paths
-            // here, and that is the point of splitting the cycle into phases: an untouched path is left
-            // where the phase before it left it, so the band stays lit across this one.
+            // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲；BandMix 不在路径里，留在亮处
             .Property(c => c.BandCentre, BandLeaving)
             .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(650), Ease = Eases.Default })
             .Then()
-            // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel.
+            // 相位三：一边退回静息色一边离开；周期两端都是静息色，循环接缝才看不出来
             .Property(c => c.BandCentre, BandExit)
             .Property(c => c.BandMix, 0d)
             .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(550), Ease = Eases.Default })
             .Repeat(int.MaxValue);
 
-    /// <summary>
-    /// Starts the band's clock. Called from the two moments a canvas can come to have links to draw: the
-    /// session arriving (<see cref="AttachSession"/>) and the handle being created
-    /// (<see cref="OnHandleCreated"/>), whichever of the two lands second — the demo attaches its session
-    /// from the form constructor, so a canvas is normally given links before it is ever shown.
-    /// </summary>
-    /// <remarks>
-    /// The handle is not a formality here. A <c>Transition</c> reaches the target's thread through
-    /// <see cref="VeloxDev.TransitionSystem.UIThreadInspector"/>, which captures a
-    /// <c>WindowsFormsSynchronizationContext</c> and nothing else, and the engine hands the effect's
-    /// <c>Awake</c> to the host before the first frame and gives up if the host refuses it. Started before
-    /// <c>Application.Run</c> there is no such context yet, so the target resolves to no thread, both the
-    /// dispatch and the frame pacer are refused, and the animation ends before it has drawn anything —
-    /// silently. Hence: on the thread and after the moment this canvas has a handle, which is exactly what
-    /// both callers check.
-    /// <para>
-    /// The target is this canvas, where it used to be the model the band's place was kept in. That is the one
-    /// thing about the port that is WinForms': the reference animates the view that draws the brush, and this
-    /// canvas is that view — the links have no view of their own, and only this object has a window to
-    /// invalidate.
-    /// </para>
-    /// </remarks>
+    // 起动光带时钟：会话挂载与句柄创建两处调用，取较晚发生的那次
+    // 句柄之前起动画会被宿主静默拒绝（Awake 被拒即结束），所以必须等到这块画布成为窗口
     private void StartLinkFlow()
     {
         if (_session is null || !IsHandleCreated) return;
 
-        // The transition reads its start values from the target, so both of them have to be at the cycle's
-        // beginning before Execute. The chain replays that captured start at every seam, so this is also
-        // where each later cycle begins.
+        // 转换从目标读起值，Execute 前两个都要回到周期起点；链在每个接缝重放这份抓到的起值
         _bandCentre = BandStart;
         _bandMix = 0d;
         Flow.Execute(this);
     }
 
-    /// <summary>
-    /// Stops the clock. The flow is only ever writing into a link surface that belongs to a session, and
-    /// with the session gone there is nothing for the frame to move — an idle canvas has no reason to
-    /// repaint itself at the frame rate. <c>Exit</c> names this canvas, because the canvas is what the
-    /// animation writes.
-    /// </summary>
+    // 停时钟：会话没了就没东西可动，闲置画布不必按帧率重绘；Exit 点名这块画布，因为动画写的就是它
     private void StopLinkFlow() => Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
 
     // ── Session lifecycle ───────────────────────────────────────────────────────
@@ -355,13 +289,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         // Link renderer: VirtualLink (first) + all real links → drawn uniformly by the canvas OnPaint.
         AttachLinksPool();
-        // The HUD subscribes to the model itself (Layout / Nodes / Links / helper VisibleItems); the
-        // surface Push in RefreshOverlays keeps the viewport numbers it reads current.
+        // HUD 自己订阅模型（Layout / Nodes / Links / VisibleItems），视口数由 RefreshOverlays 里的 surface 推送保持
         _infoOverlay.Bind(s.Tree);
         RefreshOverlays();
 
-        // A session arriving after this canvas is on screen is the other half of the flow's start condition
-        // (OnHandleCreated is the first) — see StartLinkFlow.
+        // 会话在这块画布已上屏后到达，是流动起动条件的一半（另一半是 OnHandleCreated）
         StartLinkFlow();
 
         // Delayed sync: wait for WinForms to complete the first layout before computing SlotView screen coordinates
@@ -398,9 +330,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         var view = new Views.LinkView
         {
-            // Renderers are not in the control tree, and a control with no handle cannot be repainted: an
-            // Invalidate on one is answered by no window at all. Its geometry changes therefore have to
-            // reach this canvas, which is what paints it (the Trimmed demo wires the same callback).
+            // 渲染器不在控件树里，没有句柄就没有窗口应答它的 Invalidate；几何变化只能借此回抛给画它的画布
             ExternalInvalidate = () =>
             {
                 if (!IsDisposed) Invalidate();
@@ -424,16 +354,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     }
 
     // ── Overlay refresh ─────────────────────────────────────────────────────────
-    /// <summary>
-    /// Repaints the minimap and the canvas-info HUD, and re-pins the minimap, after the surface pans,
-    /// scrolls, resizes or re-lays out. The overlay DATA is not hand-pushed: naming the minimap
-    /// <c>PART_MinimapOverlay</c> makes <see cref="WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh"/>
-    /// write its scroll offset, content offset, viewport size and tree on every cycle (the template's
-    /// arrangement). What the host still owes them is a repaint after a pan — a pan changes no model
-    /// property, so nothing else would invalidate the thumbnail — and a re-pin, because WinForms
-    /// translates a scrolling container's children by the scroll delta, so a scrollbar scroll would
-    /// otherwise slide the minimap up-left out of the corner. The HUD re-pins itself in UpdateText.
-    /// </summary>
+    // 平移/滚动/缩放/重排后重绘小地图与 HUD 并重钉小地图：覆盖层数据由 surface 推送，这里只欠一次重绘
+    // 重钉是因为 WinForms 按滚动增量平移滚动容器的子控件，不钉会被滚动条拖出角外
     private void RefreshOverlays()
     {
         if (_minimap is not null)
@@ -442,30 +364,23 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             _minimap.Invalidate();
         }
 
-        // Reads helper.Viewport (kept current by the surface Refresh push) plus the Core model.
+        // 读 helper.Viewport（由 surface 的 Refresh 推送保持）与 Core 模型
         _infoOverlay.UpdateText();
     }
 
-    /// <summary>Keeps the floating overlays above the pooled node cards, which BringToFront on add.</summary>
+    // 让浮动覆盖层压在复用的节点卡片之上（卡片加入时会 BringToFront）
     private void BringOverlaysToFront()
     {
         _minimap?.BringToFront();
         _infoOverlay.BringToFront();
     }
 
-    /// <summary>
-    /// Minimap drag requests scrolling: the minimap expresses an absolute world visible region, so
-    /// invert ScrollOffset = -(panOffset + AutoScrollPosition) into the pan and re-lay the cards out.
-    /// The surface's Refresh (inside RelayoutAllCards) then pushes the new region straight back into
-    /// the named minimap, so its viewport block follows the drag without the host writing the values.
-    /// </summary>
+    // 小地图拖拽请求滚动：它给的是绝对世界可见区，故把 ScrollOffset = -(panOffset + AutoScrollPosition) 反解进平移
+    // 再重排卡片；RelayoutAllCards 里的 surface Refresh 随后把新区域推回具名小地图
     private void OnMinimapScrollRequested(double sx, double sy)
     {
-        // Compensate the pan for the current AutoScrollPosition instead of resetting it: resetting
-        // fires a (deferred) Scroll event that re-reads the pre-pan scroll and overwrites the minimap's
-        // region back to its old spot — the "stuck until you drag" symptom. With the compensation the
-        // total pan (panOffset + AutoScrollPosition) equals the requested ScrollOffset, so the block
-        // follows the very first press.
+        // 不重置而补偿当前 AutoScrollPosition：重置会触发（延迟的）Scroll 事件，按旧滚动把区域写回原位
+        // 那正是“要拖一下才动”的症状；补偿后总平移等于请求的 ScrollOffset，第一次按下就跟手
         var scroll = AutoScrollPosition;
         _panOffset = new Point(
             (int)Math.Round(-sx - scroll.X),
@@ -531,9 +446,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         base.OnHandleCreated(e);
         EnsureRulerOverlay();
 
-        // A session normally arrives from the form constructor, before this canvas can have a handle — and a
-        // transition started from there would be refused by the host rather than draw a frame, so the flow
-        // starts when the canvas becomes a window. See StartLinkFlow.
+        // 会话通常从窗体构造函数到达，那时还没有句柄；从那里起动画会被宿主拒绝而非画帧，故等到成为窗口再起
         StartLinkFlow();
     }
 
@@ -541,7 +454,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         if (s is null) return;
 
-        // The clock belongs to this canvas's link surface, which belongs to a session.
+        // 时钟属于这块画布的链接面，链接面属于会话
         StopLinkFlow();
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, null);
         _infoOverlay.Bind(null);
@@ -618,7 +531,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         Controls.Add(card);
         LayoutCard(node, card);
         card.BringToFront();
-        // A card is added after the overlays, so put the floating minimap/HUD back on top.
+        // 卡片加在覆盖层之后，把浮动的迷你地图/HUD 重新置顶
         BringOverlaysToFront();
     }
 
@@ -910,9 +823,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         g.TranslateTransform(origin.X, origin.Y);
         foreach (var lv in _linkRenderers)
         {
-            // The frame's numbers, from the one place they live: a renderer is not an animated object and
-            // holds nothing of the cycle, so the band's place for this frame is pushed in here — before the
-            // paint that reads it, and the same two values for every link.
+            // 本帧的两个数从唯一存放处推入：渲染器不持有周期，同一对值给每条链接，且在读它的绘制之前
             lv.SetFlow(_bandCentre, _bandMix);
             lv.Render(g);
         }

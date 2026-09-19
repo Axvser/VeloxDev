@@ -8,10 +8,9 @@ namespace Demo.Controls;
 /// <summary>
 /// Realtime floating-text info layer for the node-editor surface: canvas actual size, the visible
 /// viewport (canvas + world), zoom/origin and the visible node/link elements materialized by the Core
-/// virtualization. Model-driven: reads <see cref="IWorkflowTreeViewModelHelper.Viewport"/> (kept
-/// current by the surface behavior) plus <see cref="CanvasLayout"/> and the helper VisibleItems; the
-/// WorkflowView host refreshes it on ScrollView scroll/size changes. The 复制 button copies the current
-/// multi-line info to the clipboard.
+/// virtualization. It subscribes to the Core model — <see cref="CanvasLayout"/> plus the helper's
+/// VisibleItems — and the offset/viewport numbers it shows come from the host, which refreshes it on
+/// ScrollView scroll and size changes. The 复制 button copies the current multi-line info to the clipboard.
 /// </summary>
 public partial class InfoOverlay : ContentView
 {

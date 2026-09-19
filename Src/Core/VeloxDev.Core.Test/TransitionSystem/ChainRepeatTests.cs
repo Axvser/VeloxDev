@@ -9,10 +9,10 @@ namespace VeloxDev.Core.Test.TransitionSystem;
 /// n further times, and loops nest by where they end.
 /// </summary>
 /// <remarks>
-/// Deterministic by construction. Every segment in the counting tests has a zero duration, which makes a pass
-/// write exactly one frame (its endpoint) and lets the whole chain run without waiting on a clock; the one test
-/// that needs a loop to still be running reads a short real duration instead, because a zero-duration pass
-/// completes without yielding and a forever loop built on those would spin rather than loop.
+/// Deterministic: every segment in the counting tests has a zero duration, so a pass writes exactly one frame and
+/// the chain runs without a clock. The one test that needs a loop still running reads a short real duration
+/// instead, because a zero-duration pass completes without yielding and a forever loop built on one would spin
+/// rather than loop.
 /// </remarks>
 [TestClass]
 public class ChainRepeatTests
@@ -29,7 +29,7 @@ public class ChainRepeatTests
         public int Completed { get; set; }
     }
 
-    /// <summary>Records every frame a path is asked to write, with the endpoints it was handed.</summary>
+    // 记下每条路径被要求写的每一帧，连同交给它的那对端点
     private sealed class RecordingSampler : ISampler
     {
         public List<(double Start, double End, double T)> Frames { get; } = [];
@@ -45,8 +45,7 @@ public class ChainRepeatTests
             var to = (double)end!;
             Frames.Add((from, to, t));
 
-            // Writes the interpolated value, as a real sampler does — the target has to end up where the
-            // animation says it does, or an iteration that re-read the target would look like a replay.
+            // 像真采样器那样写入插值：目标最终得落在动画说的位置，否则重读目标的迭代会看着像重放
             property.SetValue(target, from + ((to - from) * t));
         }
     }
@@ -63,7 +62,7 @@ public class ChainRepeatTests
     {
     }
 
-    /// <summary>One segment of a test chain, with what it animates and reports reachable from here.</summary>
+    // 测试链的一段：它动什么、上报什么，从这里都够得着
     private sealed class ChainNode : TransitionCore<
         Target, StateCore, TransitionEffectCore, TestInterpolator, ImmediateInspector, TestInterpreter, NonPriority>
     {
@@ -94,9 +93,9 @@ public class ChainRepeatTests
         /// <summary>
         /// Attaches an effect and counts what it reports, optionally appending <paramref name="index"/> to
         /// <paramref name="order"/> as it completes — which is how a test reads the order the segments ran in.
-        /// Each segment gets its own effect instance: the events live on the effect, so one shared by two segments
-        /// would count both segments' frames in one.
         /// </summary>
+        /// <remarks>Each segment needs its own instance: the events live on the effect, so a shared one would count
+        /// two segments' frames in one.</remarks>
         public ChainNode WithEffect(TransitionEffectCore effect, Stats stats, List<int>? order = null, int index = 0)
         {
             var wired = CoreEffect<ChainNode, TransitionEffectCore>(effect);
@@ -110,7 +109,7 @@ public class ChainRepeatTests
         }
     }
 
-    /// <summary>One pass, one frame, no waiting.</summary>
+    // 一趟、一帧、不用等
     private static TransitionEffectCore Tiny(int loopTime = 0) => new()
     {
         Duration = TimeSpan.Zero,
@@ -129,9 +128,7 @@ public class ChainRepeatTests
         Assert.Fail($"timed out waiting for {what}");
     }
 
-    /// <summary>
-    /// A chain of three segments 1, 2, 3, each asking for one further iteration of the loop it closes.
-    /// </summary>
+    // 三段链 1、2、3，每段各要求它闭的那个环再跑一次
     private static ChainNode ThreeSegments(
         List<int> order, Stats[] stats, out ChainNode second, out ChainNode third)
     {
@@ -145,9 +142,9 @@ public class ChainRepeatTests
     }
 
     /// <summary>
-    /// A chain of three segments animates all three. This is the case that used to fail silently: a segment whose
-    /// turn came second broke out of its own sampling loop before its first pass, because the loop guard read a
-    /// pass counter the whole run shares — it reported `Start` and `Completed` and wrote no frame at all.
+    /// A chain of three segments animates all three. A segment whose turn came second used to break out of its own
+    /// sampling loop before its first pass — it reported <c>Start</c> and <c>Completed</c> and wrote no frame at
+    /// all — because the loop guard read a pass counter the whole run shares.
     /// </summary>
     [TestMethod]
     public async Task Chain_RunsEverySegment()
@@ -177,9 +174,8 @@ public class ChainRepeatTests
     /// <c>1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3</c>.
     /// </summary>
     /// <remarks>
-    /// The middle segment's loop closes around the first, and the last segment's closes around both, so the
-    /// innermost repetition is the earliest segment's. Reading it out in order is the only way to see whether the
-    /// nesting came out right: the counts alone are the same for any arrangement.
+    /// The counts alone are the same for any arrangement, so reading the order out is the only way to see whether
+    /// the nesting came out right.
     /// </remarks>
     [TestMethod]
     public async Task Repeat_LoopsNestByWhereTheyEnd()
@@ -256,8 +252,7 @@ public class ChainRepeatTests
 
     /// <summary>
     /// An iteration after a segment's first replays the endpoints that first iteration captured rather than
-    /// re-reading the target — which is what keeps a repeated segment from walking backwards, or drifting a
-    /// little further every pass. The first iteration moves the target, so the two readings are distinguishable.
+    /// re-reading the target. The first iteration moves the target, so the two readings are distinguishable.
     /// </summary>
     [TestMethod]
     public async Task Repeat_ReplaysTheEndpointsTheFirstIterationCaptured()

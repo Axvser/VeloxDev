@@ -216,16 +216,15 @@
                     </ScrollView>
                 </controls:WorkflowGridDecorator>
             </Border>
-            <!-- Minimap. The surface pushes scroll / content / viewport into it because
-                 MinimapOverlayName="PART_MinimapOverlay" names this element; wiring those same values
-                 by hand here is what the attached property replaces. -->
+            <!-- 小地图：画布按 MinimapOverlayName="PART_MinimapOverlay" 找到此元素，把滚动/内容/视口推给
+                 它，取代原先手写的绑定 -->
             <controls:MinimapOverlay x:Name="PART_MinimapOverlay"
                                      HorizontalOptions="End"
                                      VerticalOptions="Start"
                                      Margin="0,8,8,0"
                                      ScrollViewerName="PART_ScrollViewer" />
-            <!-- Realtime canvas-info HUD. Refreshes from the model and the surface's scroll changes
-                 (WorkflowView.xaml.cs); its text layer is hit-test transparent so drags reach the canvas. -->
+            <!-- 实时画布信息 HUD：随模型与画布的滚动变化刷新（WorkflowView.xaml.cs）；文本层不吃命中测试，
+                 拖拽仍落到画布 -->
             <controls:InfoOverlay x:Name="InfoOverlay"
                                   HorizontalOptions="Start"
                                   VerticalOptions="End"

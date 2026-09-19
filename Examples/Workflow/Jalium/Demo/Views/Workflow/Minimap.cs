@@ -3,14 +3,8 @@ using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>Minimap overlay for the node-editor surface. Subclasses the adapter's self-contained
-/// <see cref="WorkflowMinimapOverlay"/> (content-fit over the node bounding box, cyan node rects,
-/// translucent viewport block, drag-to-pan through the surface's edge-aware navigation) exactly as
-/// the Trimmed demo's MinimapOverlay does — its palette is the adapter's default, the same colours
-/// this overlay used to hard-code. The composing window feeds its <see cref="WorkflowMinimapOverlay.WorkflowTree"/>,
-/// its <see cref="WorkflowMinimapOverlay.ScrollViewer"/> and the scroll / content-offset / viewport
-/// numbers whenever the surface scrolls or pans.
-/// </summary>
+// 节点编辑器表面的小地图覆盖层：派生适配器自带的 WorkflowMinimapOverlay，与 Trimmed demo 的做法一致
+// 配色即适配器默认值（原先写死的几个色）；组装窗口在滚动或平移时喂它 WorkflowTree、ScrollViewer 与三个偏移数
 internal sealed class Minimap : WorkflowMinimapOverlay
 {
     public Minimap(ScrollViewer viewer)

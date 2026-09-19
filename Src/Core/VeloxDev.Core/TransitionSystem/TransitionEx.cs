@@ -24,13 +24,13 @@ public static class TransitionCoreEx
     }
 
     /// <summary>
-    /// Runs the whole chain this many further times. 0 runs it once, <c>int.MaxValue</c> runs it forever.
+    /// Runs this segment's loop this many further times. 0 runs it once, <c>int.MaxValue</c> runs it forever.
     /// </summary>
     /// <remarks>
-    /// The chain-level counterpart of the effect's <c>LoopTime</c>, following the same rule: the count is the
-    /// number of additional cycles, so <c>Repeat(2)</c> runs the chain three times in all. Every cycle replays the
-    /// frame sets the first one prepared, so a segment starts from the value captured when the chain started rather
-    /// than from wherever the previous cycle left the target.
+    /// A segment's loop wraps the chain from its first segment through this one, and loops nest by where they end:
+    /// three segments each carrying <c>Repeat(1)</c> run <c>1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3</c>, so only a
+    /// count on the last segment repeats the whole chain. Every iteration after a segment's first replays the frame
+    /// set that first iteration prepared.
     /// </remarks>
     public static T Repeat<T>(this T snapshot, int count)
         where T : StateSnapshotCore, new()

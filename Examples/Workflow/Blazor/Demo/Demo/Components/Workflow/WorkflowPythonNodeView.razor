@@ -12,8 +12,7 @@
             @foreach (var item in inputs.Items)
             {
                 <div style="display:flex;align-items:center;gap:4px;min-width:0;flex:0 0 auto;">
-                    @* TemplateSlotView already opens the connection behavior for its slot; wrapping it in
-                       another one doubles the measured anchors and the gesture handlers. *@
+                    @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
                     <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="16" />
                     <span style="color:#6ec6ff;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@item.Name</span>
                 </div>

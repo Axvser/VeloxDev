@@ -75,9 +75,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         InputTransparent = true;
         Drawable = new LinkOverlayDrawable(this);
 
-        // The flow is a per-frame animation, so it is bound to this element's own lifetime: loaded starts
-        // it, unloaded stops it, and a view taken out of the tree must not keep a timer's worth of frames
-        // arriving for a link layer nobody can see.
+        // 逐帧动画要在 UI 线程上从 Loaded 起动、Unloaded 停止；移出树后不能还留着帧到达链接层
         Loaded += (_, _) => StartFlow();
         Unloaded += (_, _) => StopFlow();
     }
@@ -92,16 +90,12 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public Color? VirtualLineColor { get => (Color?)GetValue(VirtualLineColorProperty); set => SetValue(VirtualLineColorProperty, value); }
     public double StrokeWidth { get => (double)GetValue(StrokeWidthProperty); set => SetValue(StrokeWidthProperty, value); }
 
-    /// <summary>
-    /// Whether a settled link carries the travelling highlight that shows which way its data flows.
-    /// Off by default, because it is decoration: a minimal editor draws plain links.
-    /// </summary>
+    /// <summary>Whether a settled link carries the travelling highlight that shows which way its data
+    /// flows. Off by default, because it is decoration: a minimal editor draws plain links.</summary>
     public bool LinkFlowEnabled { get => (bool)GetValue(LinkFlowEnabledProperty); set => SetValue(LinkFlowEnabledProperty, value); }
 
-    /// <summary>
-    /// Where the band is, as a fraction of a link's length from its sender's end. Written by the flow's
-    /// animation every frame; each link's geometry and colours are derived from it while drawing.
-    /// </summary>
+    /// <summary>Where the band is, as a fraction of a link's length from its sender's end. Written by the
+    /// flow every frame; each link derives its geometry and colours from it while drawing.</summary>
     public double BandCentre
     {
         get => _bandCentre;
@@ -112,10 +106,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
     }
 
-    /// <summary>
-    /// How far the band has come up from the line's resting colour to the lit one: 0 is not there yet, 1 is
-    /// fully lit. The phases carry it — it climbs while the band enters and falls while it leaves.
-    /// </summary>
+    /// <summary>How far the band has come up from the line's resting colour to the lit one: 0 is not there
+    /// yet, 1 is fully lit. It climbs while the band enters and falls while it leaves.</summary>
     public double BandMix
     {
         get => _bandMix;
@@ -128,34 +120,20 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     #region Flow effect
 
-    /// <summary>Half the band's width, in gradient-offset units along the link.</summary>
+    // 光带半宽（沿链的渐变偏移单位）
     private const double FlowBandHalfWidth = 0.04;
 
-    // The three phases, as where the band's centre is at the end of each: it forms as it enters, travels
-    // fully lit, and settles back on its way out.
+    // 三段相位各自结束时光带中心的位置：成形、全亮行进、退去
     private const double FlowBandFrom = 0.06;
     private const double FlowBandFormed = 0.34;
     private const double FlowBandLeaving = 0.66;
     private const double FlowBandTo = 0.94;
 
-    /// <summary>
-    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
-    /// </summary>
-    /// <remarks>
-    /// One animation drives the whole overlay rather than one per link, because this layer draws every link in
-    /// a single pass: the bands therefore advance together, which is what a surface-wide flow looks like. What it
-    /// animates is two numbers — where the band is and how lit it is — and each link derives its own geometry and
-    /// its own colours from them while drawing.
-    /// <para>
-    /// The phases are a chain because the engine repeats one: a segment's <c>LoopTime</c> repeats that segment,
-    /// and <c>Repeat</c> runs the whole chain again from the endpoints its first cycle captured — so the three
-    /// phases keep their order and every cycle restarts where the first began.
-    /// </para>
-    /// </remarks>
+    // 整层只跑一个动画：本层一趟画完所有链接，光带因此一起前进；只动两个数（位置、亮度），各链接自推几何与颜色
+    // 相位成链：段的 LoopTime 只重复该段，Repeat 用首轮捕获的端点重跑整条链
     private static readonly Transition<WorkflowLinkOverlay> Flow =
         Transition<WorkflowLinkOverlay>.Create()
-            // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
-            // resting colour to the lit one, so it appears rather than sliding in from off-link.
+            // 相位一：一边成形一边进入（走三分之一路程，同时由静息色变亮）
             .Property(o => o.BandCentre, FlowBandFormed)
             .Property(o => o.BandMix, 1d)
             .Effect(new TransitionEffect()
@@ -164,8 +142,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 Ease = Eases.Default,
             })
             .Then()
-            // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than
-            // as a pulse: nothing about it changes except where it is.
+            // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲
             .Property(o => o.BandCentre, FlowBandLeaving)
             .Effect(new TransitionEffect()
             {
@@ -173,9 +150,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 Ease = Eases.Default,
             })
             .Then()
-            // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel. That
-            // is also what makes the seam invisible when the cycle repeats: the line is uniformly dim at both
-            // ends of a cycle.
+            // 相位三：一边退回静息色一边离开；周期两端都是均匀暗色，循环接缝才看不出来
             .Property(o => o.BandCentre, FlowBandTo)
             .Property(o => o.BandMix, 0d)
             .Effect(new TransitionEffect()
@@ -185,10 +160,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             })
             .Repeat(int.MaxValue);
 
-    /// <summary>
-    /// Starts the flow. Called from <c>Loaded</c>, and again when the switch is turned on, so the band always
-    /// starts from the sender's end rather than wherever a previous run left it.
-    /// </summary>
+    // 起动流动；Loaded 与开关打开时都调，光带因此总从发送端开始，而不是上次停在哪就从哪
     private void StartFlow()
     {
         if (!LinkFlowEnabled)
@@ -196,15 +168,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             return;
         }
 
-        // The transition reads its start values from the target, so the cycle has to be at its beginning before
-        // Execute — and a loop replays that captured start at every seam, so this is also the state each later
-        // cycle begins from.
+        // 链从目标读起始值，Execute 前先回到起点；循环在每个接缝重放这份捕获值
         _bandCentre = FlowBandFrom;
         _bandMix = 0d;
         Flow.Execute(this);
     }
 
-    /// <summary>Stops the flow, and lets the transition release the resources it holds.</summary>
+    // 停流动，并让链释放它持有的资源
     private void StopFlow()
         => Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
 
@@ -227,10 +197,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         overlay.ScheduleInvalidate();
     }
 
-    /// <summary>
-    /// The band's colour: the link's own colour at full strength, lifted a little so a link that is already
-    /// white still has somewhere brighter to go.
-    /// </summary>
+    // 亮色：链接本色提到全不透明，各通道再向白抬一点，白链接也留出更亮处
     private static Color FlowLit(Color color)
     {
         const double lift = 0.45;
@@ -240,16 +207,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         return new Color(Up(color.Red), Up(color.Green), Up(color.Blue), 1f);
     }
 
-    /// <summary>
-    /// The link's resting colour: the lit colour dimmed to a little under two thirds, which is what makes a
-    /// lit band read as a band.
-    /// </summary>
-    /// <remarks>
-    /// Dimming by alpha is what keeps the hue. The alternative that suggests itself — a "highlight" that is
-    /// the link colour pushed towards white — is invisible on a saturated light colour: on a 2px line
-    /// against a dark canvas, a cyan link lifted 75% towards white differs from cyan in one channel out of
-    /// three. Making the resting line the dim one puts the contrast where the eye finds it.
-    /// </remarks>
+    // 静息色：亮色按 alpha 变暗到约 62%，色相不变；往白里提在青线上几乎看不出（实测过）
     private static Color FlowDim(Color color)
         => new(color.Red, color.Green, color.Blue, (float)(color.Alpha * 0.62));
 
@@ -259,34 +217,18 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         (float)Math.Round(from.Blue + (to.Blue - from.Blue) * t, 6),
         (float)Math.Round(from.Alpha + (to.Alpha - from.Alpha) * t, 6));
 
-    /// <summary>How many pieces a flowed link is drawn in.</summary>
-    /// <remarks>
-    /// Enough that the steps between them are invisible at the stroke widths these demos use, and few
-    /// enough that a viewport full of links stays cheap per frame.
-    /// </remarks>
+    // 流动链接分成的份数：够细看不出台阶，也够少撑得住满屏链接的每帧开销
     private const int FlowSegments = 24;
 
-    /// <summary>The colour a point on the link carries — where it is along the link is <paramref name="u"/>.</summary>
+    // 链上某点应得的颜色；u 是它在链上的位置
     private static Color BandColorAt(Color dim, Color lit, double u, double centre, double mix)
     {
         var reach = Math.Abs(u - centre) / FlowBandHalfWidth;
         return reach >= 1d ? dim : FlowBlend(dim, lit, mix * (1d - reach));
     }
 
-    /// <summary>
-    /// Strokes one link with the flow and returns the colour its arrowhead should carry. The link is drawn
-    /// as a run of short pieces, each stroked with the colour the band's mapping gives it at that point
-    /// along the link.
-    /// </summary>
-    /// <remarks>
-    /// Sampled rather than painted with a gradient brush, because this version of <c>ICanvas</c> can set a
-    /// <em>fill</em> paint and has no stroke equivalent — a gradient stroke is not expressible, and the
-    /// pieces reproduce it exactly (the mapping between the two shoulders is linear, so a piece per
-    /// <see cref="FlowSegments"/>th of the link is the same ramp drawn in steps). It also has one advantage
-    /// the straight-axis gradients the other adapters stroke with do not: a link here is an elbow, and
-    /// because the mapping is sampled along the link's own length the band follows the corner instead of
-    /// being projected across it.
-    /// </remarks>
+    // 以流动画一条链接并返回箭头该用的颜色：链接画成一串短段，每段取映射在该处的颜色
+    // 本版 ICanvas 只有 SetFillPaint、无描边等价物，渐变描边不可表达；沿链长度采样也让光带能跟着肘部拐角走
     private Color ApplyFlowStroke(
         ICanvas canvas,
         Color color,
@@ -299,12 +241,11 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     {
         var lit = FlowLit(color);
         var dim = FlowDim(lit);
-        // The two values the cycle writes; everything below is this link's own reading of them.
+        // 循环写的两个值；下面全是本链接对它们的读取
         var centre = _bandCentre;
         var mix = _bandMix;
 
-        // The elbow is three runs — horizontal stub, diagonal, horizontal stub — and a piece is placed by
-        // how far along the link it is, not by the fraction of a bounding box it crosses.
+        // 肘部是三段——横档、斜线、横档；按沿链的里程放段，而不是按它跨过包围盒的比例
         var stub = MathF.Abs(turn1X - startX);
         var diagonal = MathF.Sqrt(((turn2X - turn1X) * (turn2X - turn1X)) + ((endY - startY) * (endY - startY)));
         var tail = MathF.Abs(endX - turn2X);
@@ -340,8 +281,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 y = endY;
             }
 
-            // Coloured at the piece's midpoint: a piece carries the colour of the length it covers, not of
-            // its far end, which is what keeps a bright band from trailing half a piece behind itself.
+            // 取段中点的颜色：一段带的是它所覆盖长度上的颜色而非末端，亮带才不会落后半段
             canvas.StrokeColor = BandColorAt(dim, lit, (piece - 0.5f) / FlowSegments, centre, mix);
             canvas.DrawLine(previousX, previousY, x, y);
 
@@ -760,10 +700,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 canvas.StrokeSize = strokeWidth;
                 canvas.StrokeDashPattern = isVirtual ? [4, 2] : null;
 
-                // A flowed link is drawn in pieces carrying the band's colours, and its arrowhead carries
-                // the band's own colour — the line rests dim, and an arrowhead dimmed with it would be the
-                // one part of the link that never lights up. A virtual link is the rubber band under the
-                // pointer, so it keeps the flat dashed pen.
+                // 流动链接按光带颜色分段画；箭头用亮色——线体静息是暗的，箭头跟着暗就永远不亮
+                // 虚拟链接是指针下的橡皮筋，保持平色虚线笔
                 var arrowColor = color;
                 if (isVirtual || !owner.LinkFlowEnabled)
                 {

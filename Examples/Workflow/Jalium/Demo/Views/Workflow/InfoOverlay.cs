@@ -27,8 +27,7 @@ public sealed class InfoOverlay : Border
     public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.Register(
         "WorkflowTree", typeof(IWorkflowTreeViewModel), typeof(InfoOverlay), new PropertyMetadata(null, OnTreeChanged));
 
-    // The same scroll / content-offset / viewport feeds the minimap overlay consumes; the window pushes
-    // them on every scroll or surface change so the numbers never go stale while panning or zooming.
+    // 与小地图同一组滚动/内容偏移/视口喂数：窗口在滚动或表面变化时推入，平移缩放时数值不会过期
     public static readonly DependencyProperty ScrollOffsetXProperty = DependencyProperty.Register(
         "ScrollOffsetX", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
     public static readonly DependencyProperty ScrollOffsetYProperty = DependencyProperty.Register(
@@ -73,7 +72,7 @@ public sealed class InfoOverlay : Border
             {
                 Foreground = s_text,
                 FontSize = 12,
-                IsHitTestVisible = false, // text area stays click-through; only the copy button is interactive
+                IsHitTestVisible = false, // 文字区点击穿透，只有复制按钮可交互
             };
             lines.Children.Add(_lineText[i]);
         }
@@ -193,7 +192,7 @@ public sealed class InfoOverlay : Border
         double ox = ContentOffsetX, oy = ContentOffsetY;
         double sx = ScrollOffsetX, sy = ScrollOffsetY;
         double vw = ViewportWidth, vh = ViewportHeight;
-        double wx = sx - ox, wy = sy - oy; // world = canvas − origin
+        double wx = sx - ox, wy = sy - oy; // 世界 = 画布 − 原点
 
         double scale = layout.Scale.Horizontal;
         double zoomPercent = scale > 0 ? 100.0 / scale : 100.0;

@@ -153,7 +153,7 @@
                                                 BorderColor="#475569"
                                                 NodeFill="#38BDF8"
                                                 ViewportStroke="#FFFFFF" />
-                        @* Realtime canvas-info HUD (bottom-left floating text + copy button). *@
+                        @* 实时画布信息 HUD（左下浮动文本 + 复制按钮） *@
                         <InfoOverlay Tree="tree" Viewport="vp" />
                     </Minimap>
                     <ChildContent Context="sc">
@@ -187,9 +187,7 @@
                                                 <WorkflowControllerView Controller="c" />
                                             </BodyContent>
                                             <OutputSlots>
-                                                @* TemplateSlotView already opens the connection behavior for its
-                                                   slot; wrapping it in another one doubles the measured anchors and
-                                                   the gesture handlers. *@
+                                                @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
                                                 <TemplateSlotView Slot="c.OutputSlot" Tree="tree" SlotSize="20" />
                                             </OutputSlots>
                                         </TemplateNodeView>

@@ -7,20 +7,8 @@
              mc:Ignorable="d"
              ClipToBounds="False"
              d:DesignHeight="180" d:DesignWidth="260">
-    <!-- The fallback node card: what the canvas draws for a node type that ships no view of its own.
-
-         Bare on purpose. The framework's IWorkflowNodeViewModel carries geometry and slots and no display
-         name — a title is a property of the concrete ViewModel — so this card cannot honestly label a node
-         it knows nothing else about. Every node type in this demo has a view of its own (ControllerView,
-         TimerNodeView, PythonNodeView, EnumSelectorNodeView), so this renders only for a foreign type.
-
-         This file used to be a copy of one concrete node's view: the fallback advertised a Delay box, an
-         Execution panel and Run/Forward buttons on any node type it happened to render, none of which
-         exist on the node interfaces, and its chrome was bound to ChromeBackground / ChromeBorderBrush —
-         properties that exist nowhere in this repository, so the card drew with no background and no
-         border at all. Chrome is a property of the view rather than of a ViewModel that has to stay
-         portable across seven GUI toolkits, which is why the colours here are static, exactly as the item
-         template's node view writes them. -->
+    <!-- 兜底节点卡：节点类型自带视图时不会用到。故意留空——IWorkflowNodeViewModel 只有几何与插槽、
+         没有显示名；Chrome 是视图的属性，别绑到 ViewModel（旧版绑的 ChromeBackground 本仓库并不存在） -->
     <Grid ClipToBounds="False">
         <Border CornerRadius="6"
                 Background="#1E293B"

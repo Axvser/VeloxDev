@@ -28,7 +28,7 @@ internal sealed class NodeEditorSurface : Canvas
     private const double Phi = 0.6180339887;
     private const double LinkThickness = 2;
 
-    /// <summary>The colour every link is drawn in: what the band travels along, and what its two pens are built from.</summary>
+    // 所有链接的颜色：光带沿它行进，两支笔也由它建
     private static readonly Color LinkColor = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
     private static readonly SolidColorBrush s_surfaceBrush = new(Color.FromRgb(0x1E, 0x1E, 0x1E));
     private static readonly SolidColorBrush s_gridMinor = new(Color.FromRgb(0x2A, 0x2D, 0x2E));
@@ -79,10 +79,8 @@ internal sealed class NodeEditorSurface : Canvas
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
         AddHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnZoomMouseWheel));
 
-        // The surface paints its own links, so it is also the only thing that can own their animation. The band
-        // is one cycle over the whole surface rather than one per link, so these two are its entire lifetime:
-        // Loaded is where it starts and Unloaded is where it stops — see the flow region below. (Before this
-        // flow existed the surface had no lifetime hook at all; these two are it.)
+        // 表面自己画链接，故只有它能持有链接的动画；光带是整个表面一个周期，生命周期就这两处
+        // Loaded 起、Unloaded 停（见下面的 flow 区）
         Loaded += (_, _) => StartFlow();
 
         Unloaded += (_, _) => StopFlow();
@@ -108,12 +106,9 @@ internal sealed class NodeEditorSurface : Canvas
     public void AttachScrollViewer(ScrollViewer viewer)
     {
         _scrollViewer = viewer;
-        // The ruler bands are viewport-fixed, so a scroll must repaint the surface (grid + rulers), and
-        // the virtualization window has to follow the scroll: writing helper.Viewport is what populates
-        // VisibleItems (the info HUD counts them). A canvas that hosts itself instead of using the
-        // adapter surface must write that viewport itself, in collapsed coordinates and after setting
-        // the virtualize inset for its ruler band — the Trimmed surface does the same.
-        // SizeChanged catches the viewer's first measure, which Jalium may not report as a scroll.
+        // 标尺带视口固定，滚动必须重绘表面（网格 + 标尺）；虚拟化窗口跟着走，写 helper.Viewport 才会填 VisibleItems
+        // 自己承载的 canvas 得自己写这个视口（塌缩坐标、设好标尺内缩之后，Trimmed 表面亦然）
+        // SizeChanged 兜住 Jalium 可能不上报为滚动的首次测量
         void OnViewportChanged()
         {
             UpdateViewport();
@@ -125,8 +120,7 @@ internal sealed class NodeEditorSurface : Canvas
         viewer.SizeChanged += (_, _) => OnViewportChanged();
     }
 
-    /// <summary>Recomputes <see cref="IWorkflowTreeHelper.Viewport"/> from the viewer's scroll offsets,
-    /// in collapsed (world − ActualOffset) coordinates.</summary>
+    // 由视图器的滚动量重算 Viewport，用塌缩坐标（世界 − ActualOffset）
     private void UpdateViewport()
     {
         if (_tree is null)
@@ -141,16 +135,14 @@ internal sealed class NodeEditorSurface : Canvas
         double vh = _scrollViewer?.ViewportHeight ?? 0;
         if (vw <= 0 || vh <= 0)
         {
-            // The viewer isn't measured yet; fall back to the whole canvas so the first Virtualize
-            // materializes immediately instead of no-op'ing on a 0-size viewport.
+            // 视图器还没测量：退回整块画布，让首次 Virtualize 立刻有节点，而不是在零尺寸视口上空转
             hx = layout.ActualOffset.Horizontal;
             vy = layout.ActualOffset.Vertical;
             vw = Width;
             vh = Height;
         }
 
-        // Count the ruler band into virtualization so nodes under the floating band are not culled a
-        // ruler-thickness early.
+        // 把标尺带也算进虚拟化，浮带下面的节点才不会被提前一个标尺厚度剔除
         _tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness);
         _tree.GetHelper().Viewport = new Viewport(
             hx - layout.ActualOffset.Horizontal,
@@ -165,11 +157,8 @@ internal sealed class NodeEditorSurface : Canvas
         _cards.Clear();
         Children.Clear();
 
-        // Nothing here stops the band, and this is where a surface-wide flow is simpler than a per-link one:
-        // the cycle is the surface's rather than any link's or tree's, so a replaced tree does not own it and
-        // the new tree's links are drawn by the cycle that is already running. Nothing has to start one either
-        // — a tree is swapped on a surface that is already on screen, and Loaded is the only place the cycle
-        // starts.
+        // 这里不停光带：周期是表面的而非某条链接或某棵树的，换树不影响它，新树的链接由已在跑的周期画
+        // 也不用重起——树是在已上屏的表面上换的，而周期只在 Loaded 起
         if (_tree is null)
         {
             return;
@@ -185,8 +174,7 @@ internal sealed class NodeEditorSurface : Canvas
 
         Width = Math.Max(2000, _tree.Layout.ActualSize.Width);
         Height = Math.Max(2000, _tree.Layout.ActualSize.Height);
-        // Virtualize against the current viewer (or the whole canvas before it measures), as the
-        // Trimmed surface does when its tree is set.
+        // 按当前视图器虚拟化（测量前则按整块画布），Trimmed 表面在设树时也是这么做
         UpdateViewport();
         InvalidateVisual();
         Changed?.Invoke();
@@ -232,11 +220,8 @@ internal sealed class NodeEditorSurface : Canvas
         }
         else if (e.PropertyName is "ActualSize" or "ActualOffset")
         {
-            // The canvas extent and the world origin live on the layout: drag-panning past an edge and
-            // the minimap's drag-to-pan grow Positive/NegativeOffset (ActualSize / ActualOffset), which
-            // both moves every card (they sit at anchor + the origin) and widens the range the viewer can
-            // scroll to. Adopt the grown extent (monotonic — the surface never shrinks itself, matching
-            // its own Grow* paths) and re-place the cards on the new origin, so links follow their ports.
+            // 画布尺寸与世界原点都在 layout 上：拖拽平移越界、小地图拖拽都会撑大 ActualSize / ActualOffset
+            // 于是接纳变大的尺寸（只增不减，与自身的 Grow* 一致），并按新原点重摆卡片，链接才跟着端口走
             if (_tree is not null)
             {
                 Width = System.Math.Max(Width, _tree.Layout.ActualSize.Width);
@@ -418,9 +403,7 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // A link that arrives or goes needs neither teardown nor start-up: the band is the surface's and it is
-        // a length of whichever link is being drawn, so the next paint treats the new collection the same way
-        // it treated the old one.
+        // 链接增删不用拆也不用起：光带是表面的、是被画那条链接上的一段长度，下次绘制照旧处理新集合
         InvalidateVisual();
         UpdateAllPortColors();
         Changed?.Invoke();
@@ -680,28 +663,16 @@ internal sealed class NodeEditorSurface : Canvas
             var p0 = ToCanvas(GetSlotPortCenter(link.Sender).X, GetSlotPortCenter(link.Sender).Y);
             var p1 = ToCanvas(GetSlotPortCenter(link.Receiver).X, GetSlotPortCenter(link.Receiver).Y);
 
-            // Two constant colours and a length of the link drawn on top of them, rather than one graded
-            // stroke — see the note on the flow declaration for why this platform gets the band that way.
-            // Where that length starts and ends is the surface's own state, so every link carries the same
-            // band along its own axis; the ports are read here on every draw because a node drag moves them
-            // without telling the link anything.
+            // 两个常量色 + 其上再画一段链接长度，而不是一条渐变描边——原因见 flow 声明处
+            // 长度的起止是表面自己的状态，故每条链接沿自己的轴带同一条光带；端口每次绘制现读，拖节点不通知链接
             DrawLink(dc, s_dimPen, p0, p1);
             DrawBand(dc, s_litPen, p0, p1, BandCentre, BandHalf);
             DrawArrowhead(dc, s_arrowBrush, p0, p1);
         }
     }
 
-    /// <summary>
-    /// The four points of a link's stub polyline, in canvas coordinates.
-    /// </summary>
-    /// <remarks>
-    /// Golden-ratio polyline aligned with the other GUI schemes: 4 points
-    /// [from, (from.X+stub, from.Y), (to.X−stub, to.Y), to] with stub = dx/2·(1−φ).
-    /// <para>
-    /// Shared with the band rather than inlined into the draw: the band is clipped along the same four points
-    /// the link is stroked along, so computing them once is what keeps the two in step.
-    /// </para>
-    /// </remarks>
+    // 链接折线的四个点（画布坐标，黄金比走线）：[from, (from.X+stub, from.Y), (to.X−stub, to.Y), to]，stub = dx/2·(1−φ)
+    // 与光带共用而非写进绘制里：光带按同样这四个点裁剪，算一遍两者才不会走偏
     private static Point[] LinkPoints(Point from, Point to)
     {
         double dx = to.X - from.X;
@@ -726,21 +697,11 @@ internal sealed class NodeEditorSurface : Canvas
         dc.DrawGeometry(null, pen, geometry);
     }
 
-    /// <summary>
-    /// Strokes the lit band: the link's own polyline, clipped to the stretch of the link the band covers,
-    /// measured from the sender's end.
-    /// </summary>
-    /// <remarks>
-    /// A drawn geometry rather than a gradient on the stroke, because a geometry that changes every frame is
-    /// the only thing this build repaints — the measurement is in the note on the flow declaration. The
-    /// clipping walks the polyline's three runs by length, so the band follows an elbow instead of being
-    /// projected across it, and the width it ends up stroked at is what carries the cycle's phases: the band
-    /// grows as it enters and shrinks as it leaves.
-    /// </remarks>
+    // 描出光带：链接自身的折线，裁到光带覆盖的一段（自发送端量起）——实测亮段 2–4px 读 255，静息 169
+    // 裁剪按长度走三段，故光带跟着拐弯而不是横跨过去；绘制用几何而非描边渐变的原因见 flow 声明
     private static void DrawBand(DrawingContext dc, Pen pen, Point from, Point to, double centre, double half)
     {
-        // The band as the stretch the surface's two values describe: the centre plus and minus its half-width,
-        // clamped to the link, so the end of a cycle stops at the link's end rather than past it.
+        // 光带即表面那两个数描述的一段：中心加减半宽，并夹在链接内，周期末尾停在链接端点而不是越过去
         var bandStart = Math.Max(0d, centre - half);
         var bandEnd = Math.Min(1d, centre + half);
 
@@ -837,13 +798,10 @@ internal sealed class NodeEditorSurface : Canvas
 
     // ── Link flow (the travelling band) ────────────────────────────────────
 
-    /// <summary>Half the band's width, as a fraction of a link's length: the size the band travels at, and the
-    /// same motion every demo's travel has, in this platform's own units.</summary>
+    // 光带半宽（占链接长度的比例）：与其它 demo 同一种运动，只是换成本平台的单位
     private const double BandHalfWidth = 0.04;
 
-    // The three phases, as the band's centre at the end of each: it forms as it enters, travels fully lit and
-    // unchanged, and shrinks away on its way out. What the animation writes is these centres, plus the width
-    // where a phase is about the band's size rather than about where it is.
+    // 三段相位各自结束时光带中心的位置：成形、全亮行进、缩小退去；动画写的就是这些中心，外加宽度
     private const double BandStart = 0.06;
     private const double BandFormed = 0.34;
     private const double BandLeaving = 0.66;
@@ -853,31 +811,21 @@ internal sealed class NodeEditorSurface : Canvas
     private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(650);
     private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(550);
 
-    /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
+    // 光带与箭头的颜色：链接本色提到全不透明
     private static readonly Color Lit = LitOf(LinkColor);
 
-    /// <summary>The colour a link rests in: the lit colour dimmed to a little under two thirds.</summary>
+    // 链接的静息色：亮色按 alpha 变暗到约 62%
     private static readonly Color Dim = DimOf(Lit);
 
-    /// <summary>The two pens every link is drawn with: the one it rests in, and the one the band is stroked with.</summary>
-    /// <remarks>
-    /// Shared by every link, which is what they were before the band needed a gradient and what they are again
-    /// now that the band is geometry: the colour they are built from is the surface's single <see cref="LinkColor"/>,
-    /// so there is nothing per link left for them to hold. Built once and never written to, which is the case a
-    /// brush this build has been handed survives — the note on the declaration below is the measurement.
-    /// </remarks>
+    // 每条链接都用这两支笔：静息的一支与描光带的一支
+    // 颜色取自表面唯一的 LinkColor，无按链接的内容故共享；建好不再写——本 build 认的正是这种画刷（实测）
     private static readonly Pen s_dimPen = new(new SolidColorBrush(Dim), LinkThickness);
     private static readonly Pen s_litPen = new(new SolidColorBrush(Lit), LinkThickness);
 
-    /// <summary>The arrowhead's fill: the colour the band travels in, not the one its line rests in.</summary>
-    /// <remarks>
-    /// The arrowhead is the destination marker, so it carries the band's colour rather than the link's resting
-    /// one: the line rests dim, and an arrowhead dimmed with it would be the one part of the link that never
-    /// read as part of the flow.
-    /// </remarks>
+    // 箭头填充用光带的颜色，而不是线体的静息色：否则线体暗着，箭头就成了唯一读不出流动的一段
     private static readonly SolidColorBrush s_arrowBrush = new(Lit);
 
-    /// <summary>Whether the band's cycle is running, so that stopping it is only asked for once.</summary>
+    // 周期是否在跑，停只要停一次
     private bool _running;
 
     private double _bandCentre;
@@ -927,46 +875,11 @@ internal sealed class NodeEditorSurface : Canvas
         }
     }
 
-    /// <summary>
-    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
-    /// </summary>
-    /// <remarks>
-    /// One declaration for the whole surface rather than one per link, because the values it animates are the
-    /// surface's own and every link reads the same two of them while drawing: the bands advance together, which
-    /// is what a surface-wide flow looks like. That is also why this one can sit in a <c>static readonly</c>
-    /// field where the Avalonia view's is built per view — every endpoint here is a constant, and a declaration
-    /// that reads a local is shared by every later execution of it.
-    /// <para>
-    /// A straight line rather than an eased curve, because the band should move at a constant speed — an ease
-    /// would make each cycle pause at the ends and read as a series of pulses instead of a flow.
-    /// </para>
-    /// <para>
-    /// The band's width is what appears and disappears: phase 1 grows it from nothing while the band enters,
-    /// phase 2 carries it at full width and unchanged, and phase 3 takes the width back to nothing as the band
-    /// leaves. That is also what makes the seam invisible when the cycle repeats — the band has no width at
-    /// either end of a cycle, so the centre snapping back to its captured start cannot be seen.
-    /// </para>
-    /// <para>
-    /// <b>Why the band is geometry here and a gradient on the other six.</b> This build does not render a change
-    /// to the gradient a link is stroked with: stops written in place, the whole stop collection replaced, the
-    /// gradient's axis moved, and a brand-new brush handed over every frame all left the capture byte-identical —
-    /// the band rendered, at the right colour and width, parked at the offset a fresh cycle starts from. It is
-    /// specific to the gradient's contents rather than to invalidation: writing the same brush's <c>Opacity</c>
-    /// does land within a frame, and so does a drawn geometry that changes every frame. So the link is drawn in
-    /// its two constant colours and the band is a <em>length of the link</em> stroked on top of them, which
-    /// makes the animated state where that length starts and how long it is — the two members above — and the
-    /// drawing a clip along the link's own runs (see <see cref="DrawBand"/>).
-    /// </para>
-    /// <para>
-    /// Carried that way it advances as intended, measured on the running demo: a lit segment of some 2–4 px
-    /// reads 255 against a resting line of 169, and across six frames 220 ms apart it walks the link from about
-    /// a fifth of its length to about four fifths.
-    /// </para>
-    /// </remarks>
+    // 整个表面一条声明而非每条链接一条：写的都是表面自己的值，端点全常量故可 static readonly；匀速故不用缓动
+    // 本 build 只认每帧变化的几何——渐变写停靠点/换整组/移轴/每帧新刷子截图全同（实测），故光带画成几何的一段
     private static readonly Transition<NodeEditorSurface> Flow =
         Transition<NodeEditorSurface>.Create()
-            // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from no
-            // width to its full one, so it appears rather than sliding in from off the link.
+            // 相位一：一边成形一边进入（走三分之一路程，宽度由零到满，是显现而非从链接外滑入）
             .Property(s => s.BandCentre, BandFormed)
             .Property(s => s.BandHalf, BandHalfWidth)
             .Effect(new TransitionEffect()
@@ -975,8 +888,7 @@ internal sealed class NodeEditorSurface : Canvas
                 Ease = Eases.Default,
             })
             .Then()
-            // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than
-            // as a pulse: nothing about it changes except where it is.
+            // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲
             .Property(s => s.BandCentre, BandLeaving)
             .Effect(new TransitionEffect()
             {
@@ -984,9 +896,7 @@ internal sealed class NodeEditorSurface : Canvas
                 Ease = Eases.Default,
             })
             .Then()
-            // Phase 3 — it leaves, the width going back to nothing over the last third of the travel. That is
-            // also what makes the seam invisible when the cycle repeats: the band has no width at either end of
-            // a cycle, so the centre snapping back to its captured start cannot be seen.
+            // 相位三：一边把宽度收回零一边离开；周期两端宽度都是零，循环接缝才看不出来
             .Property(s => s.BandCentre, BandExit)
             .Property(s => s.BandHalf, 0d)
             .Effect(new TransitionEffect()
@@ -996,14 +906,8 @@ internal sealed class NodeEditorSurface : Canvas
             })
             .Repeat(int.MaxValue);
 
-    /// <summary>
-    /// Starts the cycle: the band at the sender's end of every link, with no width.
-    /// </summary>
-    /// <remarks>
-    /// The transition reads its start values from the target, so the surface has to be at the cycle's start
-    /// before <c>Execute</c> — and the loop replays that captured start at every seam, so this is also the state
-    /// each later cycle begins from.
-    /// </remarks>
+    // 起周期：光带在每条链接的发送端、宽度为零
+    // 转换从目标读起值，Execute 前要先回到周期起点；循环在每个接缝重放这份抓到的起值
     private void StartFlow()
     {
         BandCentre = BandStart;
@@ -1013,14 +917,8 @@ internal sealed class NodeEditorSurface : Canvas
         _running = true;
     }
 
-    /// <summary>
-    /// Stops the cycle, and lets the transition release the resources it holds.
-    /// </summary>
-    /// <remarks>
-    /// A surface that leaves the tree must not leave an animation running on it — and because the cycle is the
-    /// surface's own, this is the whole of the teardown: a link that comes or goes, and a tree that is replaced,
-    /// have nothing here to stop.
-    /// </remarks>
+    // 停周期并让转换释放它持有的资源
+    // 离开树的表面不能留着动画在跑；周期是表面自己的，这就是全部拆卸——链接增删、换树都不必停
     private void StopFlow()
     {
         if (!_running)
@@ -1032,10 +930,7 @@ internal sealed class NodeEditorSurface : Canvas
         _running = false;
     }
 
-    /// <summary>
-    /// The band's colour: the link's own colour at full strength, lifted a little so a link that is already
-    /// white still has somewhere brighter to go.
-    /// </summary>
+    // 亮色：链接本色各通道向白抬 45% 并置全不透明（白链接也留出更亮处）
     private static Color LitOf(Color color)
     {
         const double lift = 0.45;
@@ -1045,18 +940,8 @@ internal sealed class NodeEditorSurface : Canvas
         return Color.FromArgb(255, Up(color.R), Up(color.G), Up(color.B));
     }
 
-    /// <summary>
-    /// The line's resting colour: the lit colour dimmed to a little under two thirds, which is what makes a lit
-    /// band read as a band.
-    /// </summary>
-    /// <remarks>
-    /// Dimming by alpha is what keeps the hue: the alternative that suggests itself — a "highlight" that is the
-    /// line colour pushed <em>towards white</em> — is invisible. Jalium's links are already white, where the
-    /// lifted colour and the resting one are the same pixel; on the cyan links the other demos draw, cyan lifted
-    /// 75% towards white differs from cyan in one channel out of three, on a 2px line, against a dark canvas.
-    /// Making the resting line the dim one puts the contrast where the eye can find it at a glance, and it works
-    /// the same on both.
-    /// </remarks>
+    // 静息色：亮色按 alpha 变暗到约 62%，光带才读得出来
+    // 往白里提不行：Jalium 的链接本就白，抬亮与静息同像素；青线上也只差三个通道里的一个（实测）
     private static Color DimOf(Color color) => Color.FromArgb(
         (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 

@@ -2,11 +2,8 @@
 <UserControl x:Class="Demo.Views.InfoOverlay"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Realtime canvas-info HUD. The text layer (Border + TextBlock) is hit-test transparent so
-         drags fall through to the surface; only the 复制 button is interactive. The host binds
-         ScrollOffset/ContentOffset/Viewport DPs (same feed as the minimap) and WorkflowTree; the
-         control subscribes to the Core model for scale / actual size / visible counts, and the
-         surface's ViewChanged refreshes it. -->
+    <!-- 实时画布信息 HUD：文本层不吃命中测试，拖拽落到画布，只有“复制”按钮可交互；宿主像绑小地图一样
+         绑偏移与视口，缩放与实际尺寸由控件订阅 Core 模型，ViewChanged 时刷新 -->
     <Grid>
         <Border IsHitTestVisible="False"
                 CornerRadius="6"

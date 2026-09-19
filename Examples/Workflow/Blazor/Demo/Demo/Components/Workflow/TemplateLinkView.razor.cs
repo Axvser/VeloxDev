@@ -111,11 +111,10 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
     #region Flow effect
 
-    /// <summary>Half the band's width, in gradient-offset units.</summary>
+    // 光带半宽（渐变偏移单位）
     private const double BandHalfWidth = 0.04;
 
-    // The three phases, as the band's centre at the end of each: it forms as it enters, travels fully lit,
-    // and settles back on its way out. What the animation writes is these centres, plus and minus HalfWidth.
+    // 三段相位各自结束时光带中心的位置：成形、全亮行进、退去
     private const double BandStart = 0.06;
     private const double BandFormed = 0.34;
     private const double BandLeaving = 0.66;
@@ -125,76 +124,52 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(650);
     private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(550);
 
-    /// <summary>
-    /// The band's three stop offsets, in gradient units along the link, and its colour: the whole of the
-    /// animated state, and the reason this component — rather than a model behind it — is the animation's
-    /// target. <c>Transition&lt;T&gt;</c> animates a member of a reference type, and a Razor component is a
-    /// class, so the animated paths read straight off the view and there is no scalar in between to map back
-    /// into stops. The offsets are formatted invariantly by <see cref="N"/> in the markup, because Razor
-    /// writes a bare <c>double</c> with the current culture and a comma decimal separator would serialize
-    /// an SVG attribute no browser can read.
-    /// </summary>
+    // 光带的三个停靠点偏移（沿链接的渐变单位）与颜色：全部动画状态；本组件即动画对象，路径直接读视图，中间没有标量要映射回停靠点
+    // 偏移由 N 不变文化格式化：Razor 用当前区域写裸 double，逗号小数点会写出浏览器读不了的 SVG 属性
     private double BandTail { get; set; }
     private double BandCentre { get; set; }
     private double BandLead { get; set; }
 
-    /// <summary>The band's colour, as CSS markup: what the cycle writes and the middle stop reads.</summary>
+    // 光带颜色（CSS 串）：周期写它，中间那个 stop 读它
     private string BandColor { get; set; } = "rgba(0,0,0,0)";
 
     private Transition<TemplateLinkView>? _flow;
     private bool _flowRunning;
     private IWorkflowLinkViewModel? _flowLink;
 
-    // The flow's three colours, as channels rather than markup so they can be mixed. Parsed once per
-    // parameter change, not per frame.
+    // 流动两色按通道存而非标记串（要能混色）：只在参数变化时解析，不是每帧
     private (int A, int R, int G, int B) _dimColor = (0x9E, 0xFF, 0xFF, 0xFF);
     private (int A, int R, int G, int B) _litColor = (0xFF, 0xFF, 0xFF, 0xFF);
 
-    /// <summary>The band's colour at full strength, as CSS, which the arrowhead also carries.</summary>
+    // 满亮度的光带色（CSS）：箭头也用它
     private string LitCss => Css(_litColor);
 
-    /// <summary>The line's resting colour, as CSS: the band's two shoulders, which the cycle never writes.</summary>
+    // 线体静息色（CSS）：光带两侧的肩，周期从不写它
     private string DimCss => Css(_dimColor);
 
-    /// <summary>Identifies this link's gradient; one definition per link, referenced by its stroke.</summary>
+    // 本链接的渐变 id：一条链接一份定义，描边按 id 引用
     private string FlowId => $"veloxdev-flow-{MarkerSuffix}";
 
-    /// <summary>The settled link's stroke: the flow gradient. A virtual one keeps its flat dashed colour.</summary>
+    // 已连接的链接描边就是这段渐变；虚拟链接保留原来的虚线平色
     private string FlowStroke => EffectiveIsVirtual ? LineColor : $"url(#{FlowId})";
 
-    /// <summary>
-    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
-    /// </summary>
-    /// <remarks>
-    /// Built per component rather than held in a <c>static readonly</c> field, because two of its endpoints are the
-    /// link's own colours, and a declaration that reads a local is shared by every later execution of it — here
-    /// that would paint one link's band in another link's colour.
-    /// <para>
-    /// The paths go into the component itself: the three stop offsets and the band's colour, so a phase is a
-    /// handful of named writes and the phase structure is readable rather than computed. A straight line rather
-    /// than an eased curve, because the band should move at a constant speed — an ease would make each cycle pause
-    /// at the ends and read as pulses instead of flow.
-    /// </para>
-    /// </remarks>
+    // 每组件构建：两个端点取自该链接自己的颜色，静态声明会把读到的那份值共享给之后每次执行
+    // 路径直达组件自身：三个偏移与颜色是具名写入，相位结构看得见而非算出来；匀速所以不用缓动
     private Transition<TemplateLinkView> BuildFlow() => Transition<TemplateLinkView>.Create()
-        // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
-        // resting colour to the lit one.
+        // 相位一：一边成形一边进入（走三分之一路程，同时由静息色变亮）
         .Property(v => v.BandTail, BandFormed - BandHalfWidth)
         .Property(v => v.BandCentre, BandFormed)
         .Property(v => v.BandLead, BandFormed + BandHalfWidth)
         .Property(v => v.BandColor, LitCss)
         .Effect(Repainting(EnterDuration))
         .Then()
-        // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than as a
-        // pulse: nothing about it changes except where it is.
+        // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲
         .Property(v => v.BandTail, BandLeaving - BandHalfWidth)
         .Property(v => v.BandCentre, BandLeaving)
         .Property(v => v.BandLead, BandLeaving + BandHalfWidth)
         .Effect(Repainting(TravelDuration))
         .Then()
-        // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel. That is
-        // also what makes the seam invisible when the cycle repeats: the line is uniformly dim at both ends of
-        // a cycle, so the value snapping back to its captured start cannot be seen.
+        // 相位三：一边退回静息色一边离开；周期两端都是均匀暗色，循环接缝才看不出来
         .Property(v => v.BandTail, BandExit - BandHalfWidth)
         .Property(v => v.BandCentre, BandExit)
         .Property(v => v.BandLead, BandExit + BandHalfWidth)
@@ -202,17 +177,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         .Effect(Repainting(ExitDuration))
         .Repeat(int.MaxValue);
 
-    /// <summary>
-    /// One phase's effect: a straight line over <paramref name="duration"/>, with this component's repaint
-    /// attached.
-    /// </summary>
-    /// <remarks>
-    /// A repaint per frame is what this platform needs instead of a brush. In Avalonia the animated paths reach
-    /// the rendered object and the framework notices; here the browser paints the gradient and the component only
-    /// carries the values, so each frame has to be handed to the renderer by hand. <c>LateUpdate</c> rather than
-    /// <c>Update</c>: it fires after the frame's writes have landed, so what renders is the frame the animation
-    /// just wrote rather than the one before it.
-    /// </remarks>
+    // 一相的效果：直线时长 + 本组件的重绘；这里没有可达渲染对象的画刷，只能逐帧交给渲染器
+    // 用 LateUpdate 而非 Update：它在当帧的写入落地后才触发，渲染的是刚写下的那帧（重放时每周期都触发）
     private TransitionEffect Repainting(TimeSpan duration)
     {
         var effect = new TransitionEffect()
@@ -225,11 +191,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return effect;
     }
 
-    /// <summary>
-    /// The gradient's axis, in the canvas coordinates the polyline is drawn in — the link's own endpoints,
-    /// not its bounding box, so the band travels along the link rather than across a diagonal of its box.
-    /// Re-derived per render, and it writes nothing the cycle owns: see <see cref="AimFlow"/>.
-    /// </summary>
+    // 渐变轴（userSpaceOnUse）：取链接自身两端而非包围盒，光带才沿链接走而不是横扫盒子的对角线
+    // 每次渲染从锚点重算，也不反过来写：偏移归周期所有（见 AimFlow）
     private string[] FlowAxis => Link?.Sender is { } sender && Link.Receiver is { } receiver
         ?
         [
@@ -238,12 +201,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         ]
         : ["0", "0", "0", "0"];
 
-    /// <summary>
-    /// Starts the cycle from the sender's end on a settled link and stops it on one that is not: a virtual link
-    /// is the rubber band under the pointer, and a band that streamed along it would claim a connection that does
-    /// not exist yet. Also restarts when this view is handed a different link, which is what the render-ready gate
-    /// makes routine — a pooled view is reused before its first link is ever measured.
-    /// </summary>
+    // 已连接的链接从发送端起周期，虚拟链接停周期：橡皮筋上流动会宣称一条还不存在的连接
+    // 换链接时重起——渲染就绪门让复用成为常态，池中视图常在首个链接测出前就被复用
     private void SyncFlow()
     {
         if (EffectiveIsVirtual || !EffectiveCanRender)
@@ -258,10 +217,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         StartFlow();
     }
 
-    /// <summary>
-    /// Starts the cycle from the sender's end. Started when a view is handed a drawable link, so a pooled view
-    /// reused for another link animates that link rather than the one it was built for.
-    /// </summary>
+    // 从发送端起周期：视图被复用到另一条链接上时，动的是新那条
     private void StartFlow()
     {
         if (EffectiveIsVirtual || !EffectiveCanRender)
@@ -272,9 +228,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
         AimFlow();
 
-        // The transition reads its start values from the target, so the component has to be at the cycle's start
-        // before Execute — and the loop replays that captured start at every seam, so this is also the state each
-        // later cycle begins from.
+        // 转换从目标读起始值，Execute 前组件必须已在周期起点；循环在每个接缝重放它，后续每轮都从它开始
         BandTail = BandStart - BandHalfWidth;
         BandCentre = BandStart;
         BandLead = BandStart + BandHalfWidth;
@@ -284,27 +238,19 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         _flowRunning = true;
     }
 
-    /// <summary>
-    /// Stops the cycle: a view that is no longer drawable, or one whose render is over, must not leave the old
-    /// animation running on it.
-    /// </summary>
+    // 停周期：不再可绘、渲染已结束的视图，不能留着旧动画在跑
     private void StopFlow()
     {
         if (!_flowRunning) return;
 
-        // The cycle is started on the component itself, so this is also the call that unregisters it: from here on
-        // no frame can reach the renderer through it.
+        // 周期起在组件自身上，这里也是注销它的那次调用：此后没有帧能经由它到达渲染器
         Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
         _flowRunning = false;
         _flowLink = null;
     }
 
-    /// <summary>Parses the XAML-style colour literal the template symbols carry, as four channels.</summary>
-    /// <remarks>
-    /// A literal this cannot read — a CSS colour name, say — falls back to the templates' own
-    /// <c>#DDFFFFFF</c>, because the flow needs channel values to mix and a band it cannot mix is a band it
-    /// cannot draw.
-    /// </remarks>
+    // 把模板符号带的 XAML 色值解析成四通道
+    // 读不了的（如 CSS 颜色名）退回模板自己的 #DDFFFFFF：流程要通道值才能混色，混不了就画不出光带
     private static (int A, int R, int G, int B) ParseColor(string value)
     {
         var text = value.Trim();
@@ -327,17 +273,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return (0xDD, 0xFF, 0xFF, 0xFF);
     }
 
-    /// <summary>
-    /// Recomputes the flow's two colours from the link's own, and rebuilds the declaration whose endpoints they
-    /// are. Called whenever the view is handed its link, its parameters or its colour — the last of which is also
-    /// the only thing that can change what the declaration captures.
-    /// </summary>
-    /// <remarks>
-    /// Nothing here writes the band's position. The cycle owns those and writes them every frame from the endpoints
-    /// it captured, so re-seating them from a path that runs whenever the link moves — which is every frame of a
-    /// drag, since the anchors change under the band — would fight it for a frame. That reads as a band that
-    /// stutters while the canvas moves, and there is no code path here that could reset it.
-    /// </remarks>
+    // 按链接自己的颜色算出流动两色，并重建以它们为端点的声明：换链接、换参数、换颜色时调用
+    // 这里不写光带位置：那些停靠点归周期所有，拖拽中每帧都改锚点，抢写会让光带抖动
     private void AimFlow()
     {
         var lit = LitOf(ParseColor(LineColorOverride ?? "#DDFFFFFF"));
@@ -350,18 +287,14 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         _dimColor = DimOf(lit);
         _flow = BuildFlow();
 
-        // A view recycled onto a link of another colour gets its cycle restarted, from its own colour's starting
-        // state rather than the previous link's.
+        // 视图被复用到另一种颜色的链接上时，按自己的颜色重新起周期
         if (_flowRunning)
         {
             StartFlow();
         }
     }
 
-    /// <summary>
-    /// The band's colour: the link's own colour at full strength, lifted a little so a link that is already
-    /// white still has somewhere brighter to go.
-    /// </summary>
+    // 亮色：各通道向白抬 45%（白链接也留出更亮处）
     private static (int A, int R, int G, int B) LitOf((int A, int R, int G, int B) color)
     {
         const double lift = 0.45;
@@ -371,24 +304,11 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return (0xFF, Up(color.R), Up(color.G), Up(color.B));
     }
 
-    /// <summary>
-    /// The line's resting colour: the lit colour dimmed to a little under two thirds, which is what makes a
-    /// lit band read as a band.
-    /// </summary>
-    /// <remarks>
-    /// Dimming by alpha is what keeps the hue. The alternative that suggests itself — a "highlight" that is
-    /// the line colour pushed <em>towards white</em> — has been tried in this demo suite and is invisible:
-    /// on a 2px line against a dark canvas, a cyan link lifted 75% towards white differs from cyan in one
-    /// channel out of three.
-    /// </remarks>
+    // 靠 alpha 变暗取反差，色相不变；往白里提在青线（本 demo）和白线上都几乎看不出（实测过）
     private static (int A, int R, int G, int B) DimOf((int A, int R, int G, int B) color)
         => ((int)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 
-    /// <summary>
-    /// Writes a colour as CSS markup. The alpha goes out invariantly for the same reason the offsets do — and here
-    /// it is more than an attribute: this string is an endpoint of the cycle, so a comma decimal separator would
-    /// not merely garble the rendered stop but leave the band's colour unparseable to the sampler that mixes it.
-    /// </summary>
+    // 颜色写成 CSS 串；alpha 与偏移同理必须不变文化——它是周期的一个端点，逗号小数点会让混色的采样器读不出它
     private static string Css((int A, int R, int G, int B) color) => color.A >= 0xFF
         ? $"rgb({color.R},{color.G},{color.B})"
         : string.Create(CultureInfo.InvariantCulture,
@@ -403,8 +323,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     {
         Sync(Link);
 
-        // The declaration's endpoints are the link's own colours, so the colours come first: the cycle is built
-        // from them, and a virtual link that never starts a cycle still needs them for the arrowhead.
+        // 声明的端点是链接自己的颜色，所以颜色在前：周期由它构建，不起周期的虚拟链接也用它画箭头
         AimFlow();
         SyncFlow();
     }
@@ -515,9 +434,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        // The animation outlives neither the component nor its render: a disposed link view that kept
-        // streaming would keep calling StateHasChanged into a renderer that has moved on. The cycle is started
-        // on the component itself, so stopping it is also what unregisters it.
+        // 已释放的视图不能继续流动：那会一直向已经走掉的渲染器发 StateHasChanged
         StopFlow();
 
         if (_notifier is not null)

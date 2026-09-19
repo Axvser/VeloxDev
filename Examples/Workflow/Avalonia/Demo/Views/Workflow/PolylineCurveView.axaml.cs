@@ -23,8 +23,7 @@ public partial class PolylineCurveView : Control
         IsHitTestVisible = true;
         Focusable = true;
 
-        // The brush is the view's own and the stops are only created here: AimFlowBrush aims it, gives it its
-        // colours and builds the declaration whose endpoints those colours are.
+        // 画刷归视图所有；这里只建它，指向、配色与链都由 AimFlowBrush 完成
         AimFlowBrush();
 
         CurveSelectionManager.SelectionChanged += owner =>
@@ -79,11 +78,10 @@ public partial class PolylineCurveView : Control
 
     #region Flow effect
 
-    /// <summary>Half the band's width, in gradient-offset units.</summary>
+    // 光带半宽（渐变偏移单位）
     private const double BandHalfWidth = 0.04;
 
-    // The three phases, as the band's centre at the end of each: it forms as it enters, travels fully lit,
-    // and settles back on its way out. What the animation writes is these centres, plus and minus HalfWidth.
+    // 三段相位各自结束时光带中心的位置：成形、全亮行进、退去
     private const double BandStart = 0.06;
     private const double BandFormed = 0.34;
     private const double BandLeaving = 0.66;
@@ -104,32 +102,19 @@ public partial class PolylineCurveView : Control
         SpreadMethod = GradientSpreadMethod.Pad,
     };
 
-    /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
+    // 光带与箭头颜色：链接本色提到全不透明
     private Color Lit { get; set; }
 
-    /// <summary>The line's resting colour: the lit colour dimmed to a little under two thirds.</summary>
+    // 线体静息色：亮色按 alpha 变暗到约 62%
     private Color Dim { get; set; }
 
     private Transition<PolylineCurveView>? _flow;
     private bool _running;
 
-    /// <summary>
-    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
-    /// </summary>
-    /// <remarks>
-    /// Built per view rather than held in a <c>static readonly</c> field, because two of its endpoints are the
-    /// link's own colours, and a declaration that reads a local is shared by every later execution of it — here
-    /// that would paint one link's band in another link's colour.
-    /// <para>
-    /// The paths go into the brush itself: <c>GradientStops[1]</c> is the band and the two stops either side of
-    /// it are its shoulders, so a phase is a handful of indexed writes and the phase structure is readable
-    /// rather than computed. A straight line rather than an eased curve, because the band should move at a
-    /// constant speed — an ease would make each cycle pause at the ends and read as pulses instead of flow.
-    /// </para>
-    /// </remarks>
+    // 每视图构建：两个端点取自该链接自己的颜色，静态声明会把读到的那份值共享给之后每次执行
+    // 路径直达画刷：GradientStops[1] 是光带、两侧是肩；匀速所以不用缓动
     private Transition<PolylineCurveView> BuildFlow() => Transition<PolylineCurveView>.Create()
-        // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
-        // resting colour to the lit one.
+        // 相位一：一边成形一边进入（走三分之一路程，同时由静息色变亮）
         .Property(v => v.FlowBrush.GradientStops[0].Offset, BandFormed - BandHalfWidth)
         .Property(v => v.FlowBrush.GradientStops[1].Offset, BandFormed)
         .Property(v => v.FlowBrush.GradientStops[2].Offset, BandFormed + BandHalfWidth)
@@ -140,8 +125,7 @@ public partial class PolylineCurveView : Control
             Ease = Eases.Default,
         })
         .Then()
-        // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than as a
-        // pulse: nothing about it changes except where it is.
+        // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲
         .Property(v => v.FlowBrush.GradientStops[0].Offset, BandLeaving - BandHalfWidth)
         .Property(v => v.FlowBrush.GradientStops[1].Offset, BandLeaving)
         .Property(v => v.FlowBrush.GradientStops[2].Offset, BandLeaving + BandHalfWidth)
@@ -151,9 +135,7 @@ public partial class PolylineCurveView : Control
             Ease = Eases.Default,
         })
         .Then()
-        // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel. That is
-        // also what makes the seam invisible when the cycle repeats: the line is uniformly dim at both ends of
-        // a cycle, so the value snapping back to its captured start cannot be seen.
+        // 相位三：一边退回静息色一边离开；周期两端都是均匀暗色，循环接缝才看不出来
         .Property(v => v.FlowBrush.GradientStops[0].Offset, BandExit - BandHalfWidth)
         .Property(v => v.FlowBrush.GradientStops[1].Offset, BandExit)
         .Property(v => v.FlowBrush.GradientStops[2].Offset, BandExit + BandHalfWidth)
@@ -165,21 +147,11 @@ public partial class PolylineCurveView : Control
         })
         .Repeat(int.MaxValue);
 
-    /// <summary>
-    /// Aims the brush along the link and gives it its two colours. Called whenever the link moves — its anchors
-    /// change on every frame of a zoom (the Core anchor getters collapse the nodes toward the origin) and of a
-    /// node drag — and when its colour changes, which is also when the declaration is rebuilt, since the two
-    /// colours are its endpoints.
-    /// </summary>
-    /// <remarks>
-    /// Nothing here writes the band's position. The cycle owns those stops and writes them every frame from the
-    /// endpoints it captured, so re-seating them from a path that runs during a gesture would fight it for a
-    /// frame — which reads as a band that stutters while the canvas moves.
-    /// </remarks>
+    // 链接移动（缩放与拖拽每帧都改锚点）或变色时调用，变色要重建链：两个端点就是它的颜色
+    // 这里不写光带位置：那些停靠点归周期所有，手势期间抢写会让光带抖动
     private void AimFlowBrush()
     {
-        // Absolute coordinates: the four points are drawn in the control's own space and the link runs
-        // diagonally, so a relative gradient would sweep across the bounding box instead of along the line.
+        // 绝对坐标：四个点在控件自身坐标系里且连线是斜的，相对渐变会扫过包围盒而不是沿线
         FlowBrush.StartPoint = new RelativePoint(StartLeft, StartTop, RelativeUnit.Absolute);
         FlowBrush.EndPoint = new RelativePoint(EndLeft, EndTop, RelativeUnit.Absolute);
 
@@ -206,18 +178,14 @@ public partial class PolylineCurveView : Control
             stops[2].Color = Dim;
         }
 
-        // A view recycled onto a link of another colour gets its cycle restarted, from its own colour's
-        // starting state rather than the previous link's.
+        // 视图被复用到另一种颜色的链接上时，按自己的颜色重新起周期
         if (_running)
         {
             StartFlow();
         }
     }
 
-    /// <summary>
-    /// The band's colour: the link's own colour at full strength, lifted a little so a link that is already
-    /// white still has somewhere brighter to go.
-    /// </summary>
+    // 亮色：各通道向白抬 45%（白链接也留出更亮处）
     private static Color LitOf(Color color)
     {
         const double lift = 0.45;
@@ -227,24 +195,11 @@ public partial class PolylineCurveView : Control
         return Color.FromArgb(255, Up(color.R), Up(color.G), Up(color.B));
     }
 
-    /// <summary>
-    /// The line's resting colour: the lit colour dimmed to a little under two thirds, which is what makes a
-    /// lit band read as a band.
-    /// </summary>
-    /// <remarks>
-    /// Dimming by alpha is what keeps the hue: the alternative that suggests itself — a "highlight" that is the
-    /// line colour pushed <em>towards white</em> — is what this demo had, and it is invisible. Its links are
-    /// cyan, and cyan lifted 75% towards white differs from cyan in one channel out of three, on a 2px line,
-    /// against a dark canvas. Making the resting line the dim one puts the contrast where the eye can find it at
-    /// a glance, and it works the same on the white links the other demos draw.
-    /// </remarks>
+    // 靠 alpha 变暗取反差，色相不变；往白里提在青线（本 demo）和白线上都几乎看不出（实测过）
     private static Color DimOf(Color color) => Color.FromArgb(
         (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 
-    /// <summary>
-    /// Starts the cycle from the sender's end. Started on attach so a pooled view that is handed a different
-    /// link animates that link rather than the one it was built for.
-    /// </summary>
+    // 从发送端起动周期；视图复用后会换链接，所以在挂载时起动
     private void StartFlow()
     {
         if (IsVirtual || !CanRender)
@@ -268,10 +223,7 @@ public partial class PolylineCurveView : Control
         _running = true;
     }
 
-    /// <summary>
-    /// Stops the cycle: a pooled view released and reused for another link must not leave the old animation
-    /// running on it.
-    /// </summary>
+    // 停周期：视图被释放复用时不能留着旧动画在跑
     private void StopFlow()
     {
         if (!_running)

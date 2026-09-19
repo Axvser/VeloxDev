@@ -33,10 +33,8 @@ internal abstract class NodeViewBase : Canvas
     /// <summary>Initial status-badge text for the given node.</summary>
     protected abstract string InitialStatus(IWorkflowNodeViewModel node);
 
-    /// <summary>Header title of the card. The view-model interface carries geometry and slots and no
-    /// display name, so this reads the type's own <c>Title</c> property when it publishes one
-    /// (Timer / PythonScript / EnumSelector do) and a type that publishes none overrides this with the
-    /// name its card is known by — the same hard-coded title the other GUIs' controller views carry.</summary>
+    // 卡片标题：接口只有几何与插槽、没有显示名，故读类型自己发布的 Title（Timer / PythonScript 等有）
+    // 没有 Title 的类型重写此方法给出自己的名字——与其它 GUI 的控制器视图写死的一致
     protected virtual string TitleFor(IWorkflowNodeViewModel node) => NodePorts.TitleOf(node);
 
     /// <summary>Builds the card body content into the content grid.</summary>

@@ -34,26 +34,19 @@ public sealed class LinkView : Control
     private bool _isVirtual;
     private Color _lineColor = ParseColor("#DDFFFFFF");
 
-    // The band's place in the cycle, for the frame that is about to be drawn: where its middle stop sits and
-    // how much of its colour is the lit one. Pushed in before every Render (SetFlow) rather than owned here:
-    // the clock belongs to the surface, because a renderer the canvas holds in a list has no window of its
-    // own to be invalidated (see WorkflowCanvas's flow notes).
+    // 本帧光带的位置与亮度混合：每次 Render 前由 surface 的时钟推入（SetFlow）——时钟归表面，渲染器没有窗口
     private double _bandCentre;
     private double _bandMix;
 
-    // This link's own gradient: the axis is its two endpoints and the stops are the band. Held for as long as
-    // its axis is, because GDI+ takes a gradient's endpoints in its constructor and offers no way to re-aim
-    // them afterwards — a link that moves gets a rebuilt brush, a band that moves does not (MoveBand).
+    // 该链接自己的渐变：轴是它的两端点、停靠点是光带
+    // GDI+ 的渐变端点只能在构造时给、之后改不了——链接移动才重建刷子，光带移动不重建（MoveBand）
     private LinearGradientBrush? _flowBrush;
 
-    // The blend handed to that brush, kept here rather than fetched from it: InterpolationColors' getter
-    // returns a copy, so a stop written into the returned object is written into nothing (measured — see
-    // MoveBand). Five slots rather than the band's three, because GDI+ refuses a blend that does not span
-    // the whole axis — the two extra stops are the link's resting colour again, at either end.
+    // 那个刷子的混合存在这里而不是从它取：InterpolationColors 的 getter 返回副本，写进副本等于没写（实测）
+    // 五档而非光带的三档，因为 GDI+ 只认铺满整条轴的混合，多出的两档两端再放一遍静息色
     private readonly ColorBlend _band = new(5);
 
-    // The two colours the band is mixed from, derived from this link's own colour — per link rather than per
-    // surface, because two links need not be the same colour.
+    // 光带混合用的两个颜色，取自本链接自己的颜色——按链接而非按表面，两条链接未必同色
     private Color _lit;
     private Color _dim;
 
@@ -74,9 +67,7 @@ public sealed class LinkView : Control
         TabStop = false;
         Enabled = false;
 
-        // Seed the two colours the band is mixed from: the gradient is only built once the link has an axis,
-        // but the arrowhead is drawn from the lit colour from the first frame, and a view built by hand is
-        // never pushed a frame's numbers at all.
+        // 先种下光带混合的两个颜色：渐变要等链接有轴才建，箭头却第一帧就用亮色；手工 new 的视图不会被推帧数
         UpdateFlowBrush();
     }
 
@@ -112,8 +103,7 @@ public sealed class LinkView : Control
         set
         {
             _lineColor = value;
-            // The band is mixed from this colour, so the gradient is rebuilt with it — the brush holds both
-            // the axis and the two colours, and neither can be changed on a brush GDI+ has already made.
+            // 光带由这个颜色混出，故刷子随之重建：轴与两个颜色都由刷子持有，GDI+ 造好后都改不了
             UpdateFlowBrush();
             RequestPaint();
         }
@@ -259,9 +249,7 @@ public sealed class LinkView : Control
 
         IsVirtual = IsVirtualLink(_link);
 
-        // The one place the gradient is re-aimed: every anchor the canvas writes back arrives through here
-        // (the four anchor setters are only ever written from this method and from Bind), so this is the
-        // WinForms equivalent of the reference's per-property check on its four endpoint properties.
+        // 唯一重新指向渐变之处：画布写回的锚点都经此（四个锚点 setter 只在这里与 Bind 里被写）
         UpdateFlowBrush();
         RequestPaint();
     }
@@ -288,8 +276,7 @@ public sealed class LinkView : Control
                 _notifier = null;
             }
 
-            // A GDI+ brush is not collected on its own, and this one is rebuilt on every anchor write while a
-            // node is dragged.
+            // GDI+ 画刷不会被自行回收，而拖节点时每写一次锚点就重建一个
             _flowBrush?.Dispose();
             _flowBrush = null;
         }
@@ -299,7 +286,7 @@ public sealed class LinkView : Control
 
     // ── Flow effect ──────────────────────────────────────────────────────────────
 
-    /// <summary>Half the band's width, in gradient-offset units.</summary>
+    // 光带半宽（渐变偏移单位）
     private const double HalfWidth = 0.04;
 
     /// <summary>
@@ -321,28 +308,8 @@ public sealed class LinkView : Control
         _bandMix = mix;
     }
 
-    /// <summary>
-    /// Orients the gradient along the link and gives the band its two colours — everything about the effect
-    /// that is per link rather than per frame: the axis is the link's own endpoints and the two colours are
-    /// mixed from the link's own colour. The band's position is not among them; that is the clock's, and
-    /// arrives per frame through <see cref="SetFlow"/>.
-    /// </summary>
-    /// <remarks>
-    /// The brush is rebuilt rather than re-aimed, which is the one piece of the reference this port cannot
-    /// keep. Avalonia's <c>LinearGradientBrush</c> takes its two points as properties and the reference
-    /// re-writes them; GDI+ takes them as constructor arguments and has no settable equivalent, so a link
-    /// that moved would keep painting the axis it was born with. What is kept across frames is the
-    /// <see cref="ColorBlend"/> — the band's own stops — since that is the part written every frame (see
-    /// <see cref="MoveBand"/>). Rebuilt from here rather than from <see cref="Render"/> because the axis only
-    /// changes when the canvas writes an anchor back, and both writers of an anchor funnel through
-    /// <see cref="SyncEndpoints"/>.
-    /// <para>
-    /// The gradient is built for every link, not only for one a canvas animates: its axis and its colours
-    /// are the link's own, and the clock is not an input to either. The two checks below are therefore the
-    /// only thing that can leave a link without a brush — which is what the guard in <see cref="Render"/>
-    /// tests for.
-    /// </para>
-    /// </remarks>
+    // 沿链接指向渐变、给光带配色——按链接而非按帧的那部分；这里不写光带位置，它归时钟，由 SetFlow 每帧推入
+    // 刷子重建而非重指（GDI+ 端点只能在构造时给），跨帧保留的只有 ColorBlend，锚点写回都经 SyncEndpoints
     private void UpdateFlowBrush()
     {
         _lit = LitOf(_lineColor);
@@ -354,57 +321,26 @@ public sealed class LinkView : Control
         var from = new PointF(_startLeft, _startTop);
         var to = new PointF(_endLeft, _endTop);
 
-        // A link is drawn only once both of its anchors have been measured, and before that they are NaN —
-        // which GDI+ refuses outright rather than drawing nothing — and, in a view built by hand, the
-        // origin twice. A gradient between two identical points has no axis for a band to travel along, so
-        // the flat pen is the honest answer until there is one.
+        // 两个锚点都测出长度才画链接：之前是 NaN（GDI+ 直接拒绝而非不画），手工建的视图则是原点两次
+        // 两点重合的渐变没有轴可让光带走，用平色笔最诚实——这两个检查是唯一会让链接没有刷子的情况
         if (!IsFinite(from) || !IsFinite(to)) return;
         if (Math.Abs(to.X - from.X) < 0.5f && Math.Abs(to.Y - from.Y) < 0.5f) return;
 
-        // The wrap mode is left at the brush's own default (Tile). The reference asks for Pad, and this is
-        // where GDI+ simply does not offer it: WrapMode.Clamp — the nearest thing to Pad — throws
-        // ArgumentException on a linear gradient brush, measured, so it cannot be mirrored. It also cannot
-        // be missed: a stroke runs from the axis's first point to its last and never samples past them, and
-        // the last stop is the same resting colour the first one is (see MoveBand), so an out-of-range
-        // sample has nothing to differ from.
+        // 环绕模式留给刷子默认的 Tile：GDI+ 给不了 Pad，最接近的 WrapMode.Clamp 会抛 ArgumentException（实测）
+        // 也无妨：描边从不采样到轴的两端之外，且首末停靠点同为静息色（见 MoveBand），越界采样无从不同
         _flowBrush = new LinearGradientBrush(from, to, _dim, _dim);
 
         MoveBand();
     }
 
-    /// <summary>
-    /// Places the band where the clock last put it — the two numbers <see cref="SetFlow"/> was handed — and
-    /// hands back the brush it was placed in: the two things <see cref="Render"/> needs from the effect, in
-    /// that order.
-    /// </summary>
-    /// <remarks>
-    /// The band is written as five stops where the reference writes three, and that is forced rather than
-    /// chosen: GDI+ refuses <c>SetPresetBlend</c> unless the first stop is at 0 and the last at 1. Measured
-    /// — a blend at 0.25/0.50/0.75 is refused, 0.25/0.50/1.00 is refused, 0.00/0.50/0.75 is refused, and
-    /// only a blend spanning the whole axis is accepted. Since the band's stops sit between 0.02 and 0.98
-    /// of the axis by construction, the reference's three cannot be written at all; the two extra stops are
-    /// the resting colour again at either end, which is the same picture Pad would have produced — outside
-    /// the band the gradient is flat at the resting colour, so the lit length of a link is the band and not
-    /// a row of them.
-    /// <para>
-    /// Two further details are GDI+ rather than the reference, and both were measured rather than assumed.
-    /// The blend is a field that is re-assigned: <c>InterpolationColors</c>' getter hands back a fresh
-    /// <see cref="ColorBlend"/>, so stops written into the object it returned are written into nothing — a
-    /// render of a brush whose returned copy had been mutated is pixel-for-pixel identical to one before
-    /// the mutation, while re-assigning that same object moves the band. And the pen that strokes with this
-    /// brush is built in <see cref="Render"/> after this call and never held across one: a pen built from a
-    /// brush keeps the stops that brush had when the pen was made, likewise measured, so a pen kept from the
-    /// previous frame would pin the band to its last position and the link would look static while the
-    /// numbers under it moved.
-    /// </para>
-    /// </remarks>
+    // 把光带放在时钟上次放的位置（SetFlow 收到的两个数），并交回它被放进去的刷子——Render 要的两样东西
+    // 五档而非三档：GDI+ 只认铺满整条轴的混合（0.25/0.50/0.75 被拒，实测），多出两档两端补静息色
+    // 笔必须每帧重建，因为一支笔会留住造它时刷子的停靠点（否则光带被钉在上一帧位置）
     private LinearGradientBrush MoveBand()
     {
         var brush = _flowBrush!;
 
-        // The band's two shoulders are not animated: the clock writes where the middle stop is, and they are
-        // HalfWidth either side of it, which is what keeps this a band instead of one wide smear of lit
-        // colour down the whole link.
+        // 两个肩不动画：时钟只写中间停靠点，肩在其两侧 HalfWidth 处，光带才不至于糊满整条链接
         var trailing = _bandCentre - HalfWidth;
         var leading = _bandCentre + HalfWidth;
 
@@ -423,10 +359,7 @@ public sealed class LinkView : Control
         return brush;
     }
 
-    /// <summary>
-    /// Linear mix of two colours, alpha included: the band's colour at the mix the cycle is at, where zero
-    /// rests on the line's own colour and one is fully lit.
-    /// </summary>
+    // 两色线性混合（含 alpha）：mix 为 0 停在链接本色，为 1 全亮
     private static Color Blend(Color from, Color to, double t) => Color.FromArgb(
         (byte)Math.Round(from.A + (to.A - from.A) * t),
         (byte)Math.Round(from.R + (to.R - from.R) * t),
@@ -435,11 +368,7 @@ public sealed class LinkView : Control
 
     private static bool IsFinite(PointF p) => float.IsFinite(p.X) && float.IsFinite(p.Y);
 
-    /// <summary>
-    /// The band's colour: the link's own colour at full strength, lifted a little towards white so a link
-    /// that is already white still has somewhere brighter to go (this demo's links are white at 87%, so
-    /// there the lift is what removes the translucency).
-    /// </summary>
+    // 亮色：链接本色各通道向白抬 45% 并置全不透明（本 demo 的链接是 87% 的白，这一步同时去掉半透）
     private static Color LitOf(Color color)
     {
         const double lift = 0.45;
@@ -449,18 +378,8 @@ public sealed class LinkView : Control
         return Color.FromArgb(255, Up(color.R), Up(color.G), Up(color.B));
     }
 
-    /// <summary>
-    /// The line's resting colour: the lit colour dimmed to a little under two thirds, which is what makes a
-    /// lit band read as a band.
-    /// </summary>
-    /// <remarks>
-    /// Dimming by alpha is what keeps the hue: the alternative that suggests itself — a "highlight" that is
-    /// the line colour pushed <em>towards white</em> — is what this effect started as, and it is invisible.
-    /// The Avalonia demo's links are cyan, and cyan lifted 75% towards white differs from cyan in one channel
-    /// out of three, on a 2px line, against a dark canvas; this demo's are white, where pushing towards
-    /// white is nothing at all. Making the resting line the dim one puts the contrast where the eye can find
-    /// it at a glance, and it is the half of the difference that survives on any hue.
-    /// </remarks>
+    // 静息色：亮色按 alpha 变暗到约 62%，靠它取反差而色相不变
+    // 往白里提不行——青线（Avalonia）与白线（本 demo）上都几乎看不出，实测过
     private static Color DimOf(Color color) => Color.FromArgb(
         (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 
@@ -493,24 +412,8 @@ public sealed class LinkView : Control
         var points = BuildPoints();
         if (points.Length < 2) return;
 
-        // The travelling highlight is only meaningful on a settled connection. A virtual link is the rubber
-        // band under the pointer; a link with no gradient is one whose axis is not there yet, which is the
-        // one case UpdateFlowBrush leaves without a brush (its endpoints are not finite, or both of them
-        // land on the same point). Both keep the flat pen this demo drew every link with before — this view
-        // draws no other kind (it is passive: no hover and no selection), so those two conditions are the
-        // whole of what the reference also asks of IsSelected and CanRender.
-        //
-        // The second of them used to read "no flow was attached", and it is not that any more: the gradient
-        // is built from the link's own geometry and colour, and the clock that moves the band is not an
-        // input to the brush at all. What can still leave a view without one is the geometry — and the
-        // check is load-bearing rather than tidy, because MoveBand writes into the brush: with no axis
-        // there is nothing to write into, and nothing to draw a band along either. (A view nothing has
-        // pushed numbers into is drawn in the resting colour throughout, since a mix of zero makes the whole
-        // gradient the resting colour — the flat line it drew before.)
-        //
-        // The pen is built per frame from the brush the band was just written into, rather than kept: see
-        // MoveBand for the measurement behind that. The brush itself is not disposed with the pen — it is a
-        // field, and a pen does not own the brush it was built from.
+        // 行进高亮只在成形的连线上有意义：虚拟链接是指针下的橡皮筋，无渐变的链接是轴还没到，两者都用平色笔
+        // 后一根检查有实义——MoveBand 要往刷子里写；笔每帧自刚写完光带的刷子新建（见 MoveBand），且不拥有它
         using var pen = _isVirtual || _flowBrush is null
             ? new Pen(_lineColor, float.Parse("2", CultureInfo.InvariantCulture))
             : new Pen(MoveBand(), float.Parse("2", CultureInfo.InvariantCulture));
@@ -561,9 +464,7 @@ public sealed class LinkView : Control
             new PointF(bx - px * (aw / 2f), by - py * (aw / 2f)),
         };
 
-        // The arrowhead is the destination marker, so it carries the band's colour rather than the gradient:
-        // the line rests dim, and an arrowhead dimmed with it would be the one part of the link that never
-        // lights up.
+        // 箭头是终点标记，用光带的颜色而不是渐变：线体静息为暗，箭头若一起暗就成了唯一不亮的部分
         using var brush = new SolidBrush(_lit);
         g.FillPolygon(brush, pts);
     }

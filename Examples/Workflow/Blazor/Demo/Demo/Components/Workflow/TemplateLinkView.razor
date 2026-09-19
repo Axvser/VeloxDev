@@ -15,10 +15,8 @@
     var dash = EffectiveIsVirtual ? "6 4" : "none";
     var markerEnd = EffectiveIsVirtual ? "" : $"url(#{markerId})";
 
-    // The travelling highlight: three stops at the offsets the cycle writes onto this component, and an axis
-    // along the link's own endpoints (userSpaceOnUse) so the band travels along the link rather than across a
-    // diagonal of its bounding box. The axis is re-derived here from the anchors and never the other way
-    // round: the cycle owns the offsets, so a render may read them but must not seat them.
+    // 行进的高光：三个停靠点用周期写在本组件上的偏移，轴取链接自身两端（userSpaceOnUse），光带才沿链接走
+    // 轴每次渲染从锚点重算，不反过来写：偏移归周期所有，渲染可读不可写
     var axis = FlowAxis;
 
     <svg width="@CanvasWidthCss" height="@CanvasHeightCss"

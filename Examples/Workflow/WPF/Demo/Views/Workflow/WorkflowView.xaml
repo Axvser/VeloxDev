@@ -123,20 +123,15 @@
                     </ScrollViewer>
                 </local:WorkflowGridDecorator>
             </Border>
-            <!-- Minimap. The surface pushes scroll / content / viewport / tree into it because
-                 MinimapOverlayName="PART_MinimapOverlay" names this element; the six hand-written
-                 bindings that used to sit here are what the attached property replaces. Only
-                 ScrollViewerName stays — the minimap resolves that one itself, for drag navigation. -->
+            <!-- 小地图：画布按 MinimapOverlayName="PART_MinimapOverlay" 找到此元素，把滚动/内容/视口/树
+                 推给它，取代原先手写的六条绑定；ScrollViewerName 仍留着，小地图自己解析它做拖拽导航 -->
             <behaviors:WorkflowMinimapOverlay x:Name="PART_MinimapOverlay"
                                               HorizontalAlignment="Right"
                                               VerticalAlignment="Top"
                                               Margin="0,56,45,0"
                                               ScrollViewerName="PART_ScrollViewer"/>
-            <!-- Realtime canvas-info HUD (floating decorator layer). Scroll/content offsets come from the
-                 grid decorator's DPs (fed by WorkflowSurfaceBehavior on scroll/pan/zoom); viewport size from
-                 the surface border so it also tracks window resize. The overlay subscribes to the Core model
-                 itself (scale / ActualSize / helper VisibleItems) and is refreshed on the scroll viewer's
-                 ScrollChanged in WorkflowView.xaml.cs. -->
+            <!-- 实时画布信息 HUD（浮动装饰层）：偏移取网格装饰器的依赖属性，视口尺寸取画布边框以跟随窗口
+                 缩放；缩放与实际尺寸由控件订阅 Core 模型，滚动时刷新 -->
             <local:InfoOverlay x:Name="InfoOverlay"
                                HorizontalAlignment="Left"
                                VerticalAlignment="Bottom"
