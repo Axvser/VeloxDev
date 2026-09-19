@@ -1,4 +1,4 @@
----
+﻿---
 name: veloxdev-create-animation
 description: Write VeloxDev interpolation animations — pick the adapter package for the project's GUI, declare transitions in the layout the shipped demos use, choose static-reuse or create-and-discard, express indices (constant, live, frozen), and build an adapter for a GUI that has no official one
 ---
@@ -179,9 +179,41 @@ private sealed class RampTarget
 
 ⚙ Time spent paused inside a wait is not consumed — a pause of any length leaves the remaining delay unchanged.
 
-⚙ **Every segment after the first samples nothing, so do not build a multi-phase animation as a chain.** A segment's `LoopTime` repeats *that segment*, the queue of segments is walked exactly once, and the loop guard reads a pass counter the whole run shares (`Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs`). By the time the second segment starts, that counter is already past its `LoopTime`, so the segment reports `Start` and `Completed` and **writes no frame at all** — the second property simply keeps its start value. Measured, not inferred: a two-segment chain with 120ms segments leaves the second segment's property with zero writes after a second of running.
+⚙ **A chain runs every segment, and the whole chain repeats through `Repeat(n)`.** Each segment's loop counts
+its own passes, so a segment after the first animates rather than breaking out before its first frame; `LoopTime`
+still repeats *that one segment*, and `Repeat(n)` — written after the last segment — runs the whole chain n further
+times in all:
 
-⚙ There is also **no chain-level loop**: `LoopTime = int.MaxValue` on a first segment runs that segment forever and the rest never start. A looping motion with phases inside it is **one** looping segment, with the phases expressed as a mapping from the single animated value:
+```csharp
+Transition<Link>.Create()
+    .Property(t => t.BandOffset, 0.34d)
+    .Property(t => t.BandColor, Lit)
+    .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(550) })
+    .Then()
+    .Property(t => t.BandOffset, 0.66d)
+    .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(650) })
+    .Then()
+    .Property(t => t.BandOffset, 0.94d)
+    .Property(t => t.BandColor, Dim)
+    .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(550) })
+    .Repeat(int.MaxValue);
+```
+
+⚙ **Every cycle replays the endpoints the first one captured.** That is the same rule a single segment's `LoopTime`
+follows, applied to the chain: a segment starts from the value captured when the chain started, not from wherever
+the previous cycle left the target. Make the end of the cycle land in the same state as its start and the seam is
+invisible; leave them different and the value snaps back at every seam, exactly as a looping single segment does.
+
+⚙ `Repeat(0)` — the default — runs the chain once. The count is *additional* cycles, so `Repeat(2)` runs it three
+times; `int.MaxValue` runs it forever, and `Transition.Exit` stops it between cycles the same way it stops a
+segment mid-pass.
+
+⚙ **A forever loop needs a pass that takes time.** A pass with `Duration = 0` writes its frame and finishes without
+yielding, so a loop — segment-level or chain-level — built on zero-duration passes spins instead of looping and
+cannot be stopped from the thread it is spinning on.
+
+⚙ Phases can equally well live inside **one** looping segment, as a mapping from a single animated value; that form
+needs no chain, and it is what the shipped demos do:
 
 ```csharp
 // the animated path is a scalar; its setter is what turns it into the phase's geometry and colour
@@ -193,8 +225,6 @@ private sealed class RampTarget
     Ease = Eases.Default,
 });
 ```
-
-Because a loop replays the endpoints captured when the run started, the value at the end of the cycle must land in the same visible state as the start — which is what makes the seam invisible. Several independent phases that must run one after another and repeat are separate declarations you start yourself, not a chain.
 
 ## Controlling a running animation
 

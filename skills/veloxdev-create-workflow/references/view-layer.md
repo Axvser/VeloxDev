@@ -1,4 +1,4 @@
-# Your views
+﻿# Your views
 
 The canvas you put on screen is assembled from seven view roles, and the item templates generate all seven for you — see [templates.md](templates.md). This file is what you need in order to **customize and debug** them: how they are composed, which parts are yours to change, and the handful of rules that make them silently not work when broken.
 
@@ -110,7 +110,7 @@ stops[1].Color  = Blend(Dim, Lit, mix);
 
 ⚙ Start the animation when the view attaches and `Transition.Exit(...)` it when the view detaches: views are pooled, and a released view that is handed a different link must not keep animating the previous one.
 
-⚙ The declaration is a **single looping segment** and the phases are a mapping from that one animated value — see [the animation skill's segments note](../../veloxdev-create-animation/SKILL.md#segments) for why a `Then()` chain cannot do this.
+⚙ The declaration is a **single looping segment** and the phases are a mapping from that one animated value. A `Then()` chain with `Repeat(...)` expresses the same three phases and is the more declarative spelling — see [the animation skill's segments note](../../veloxdev-create-animation/SKILL.md#segments); the demos carry the single-segment form, which needs no chain.
 
 ## Virtualization
 
