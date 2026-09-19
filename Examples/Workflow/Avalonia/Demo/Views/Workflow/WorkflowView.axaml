@@ -139,25 +139,41 @@
 							   Margin="44,0,0,12"/>
 		</Grid>
 
-		<!-- Action buttons (for testing) -->
-		<Grid Grid.Column="0">
-			<ScrollViewer>
-				<StackPanel Orientation="Vertical">
-					<Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}" />
-					<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" />
-					<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
-					<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
-					<Button Content="Load Workflow Demo" Width="140" Height="50" Click="LoadNetworkDemo" />
-						<TextBlock Text="节点总数：" />
-						<TextBlock Text="{Binding Nodes.Count}"/>
-						<TextBlock Text="可见组件数：( Node / Link )" />
-						<TextBlock Text="{Binding Helper.VisibleItems.Count}" />
-						<!-- Minmap toggle -->
-						<Grid Margin="0,6,0,0" ColumnDefinitions="*,Auto">
-							<TextBlock Text="小地图" VerticalAlignment="Center"/>
-							<ToggleSwitch Grid.Column="1"
-										  IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}"/>
+		<!-- Host shell: the demo's own chrome — the item templates deliberately stop at the canvas, so
+		     everything in this column is the demo's design. Laid out as a panel with its own padding and
+		     a background, rather than as controls against the window edge: at the canvas column's 2:8
+		     split the sidebar is a fifth of the window, and anything that does not wrap or stretch is
+		     clipped there rather than reflowed. -->
+		<Border Grid.Column="0" Background="#12161C" Padding="12,12,12,12"
+				BorderBrush="#1F2937" BorderThickness="0,0,1,0">
+			<ScrollViewer HorizontalScrollBarVisibility="Disabled">
+				<StackPanel Orientation="Vertical" Spacing="10">
+
+					<!-- Commands. Stretch rather than a fixed pixel width, so they follow the splitter. -->
+					<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="6">
+						<Button Grid.Row="0" Grid.Column="0" Content="Undo" Command="{Binding UndoCommand}" HorizontalAlignment="Stretch" />
+						<Button Grid.Row="0" Grid.Column="1" Content="Redo" Command="{Binding RedoCommand}" HorizontalAlignment="Stretch" />
+						<Button Grid.Row="1" Grid.Column="0" Content="Save" Click="SaveWorkflow" HorizontalAlignment="Stretch" />
+						<Button Grid.Row="1" Grid.Column="1" Content="Select" Click="SelectWorkflow" HorizontalAlignment="Stretch" />
+						<Button Grid.Row="2" Grid.ColumnSpan="2" Content="Load Workflow Demo" Click="LoadNetworkDemo" HorizontalAlignment="Stretch" />
+					</Grid>
+
+					<!-- Model counts, as label/value rows so a long value cannot push the label off the edge. -->
+					<Border Background="#1A2029" CornerRadius="4" Padding="10">
+						<Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="4">
+							<TextBlock Grid.Row="0" Grid.Column="0" Text="节点总数" Foreground="#94A3B8" />
+							<TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Nodes.Count}" Foreground="#E2E8F0" FontWeight="SemiBold" />
+							<TextBlock Grid.Row="1" Grid.Column="0" Text="可见组件数 ( Node / Link )" Foreground="#94A3B8" TextWrapping="Wrap" />
+							<TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Helper.VisibleItems.Count}" Foreground="#E2E8F0" FontWeight="SemiBold" />
 						</Grid>
+					</Border>
+
+					<!-- Minmap toggle -->
+					<Grid Margin="0,2,0,0" ColumnDefinitions="*,Auto">
+						<TextBlock Text="小地图" Foreground="#94A3B8" VerticalAlignment="Center" />
+						<ToggleSwitch Grid.Column="1"
+									  IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}" />
+					</Grid>
 						<!-- Agent chat -->
 						<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
 							<StackPanel Spacing="6">
@@ -243,8 +259,8 @@
 						</Border>
 				</StackPanel>
 			</ScrollViewer>
-		</Grid>
+		</Border>
 
-		<GridSplitter Grid.Column="1" Width="5" Background="Gray"/>
+		<GridSplitter Grid.Column="1" Width="5" Background="#1F2937"/>
 	</Grid>
 </UserControl>
