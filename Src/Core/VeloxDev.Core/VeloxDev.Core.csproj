@@ -51,10 +51,6 @@
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
 		</None>
-		<None Include="BuildConfigs\VeloxDev.Core.props">
-			<Pack>True</Pack>
-			<PackagePath>buildTransitive\</PackagePath>
-		</None>
 	</ItemGroup>
 
 </Project>

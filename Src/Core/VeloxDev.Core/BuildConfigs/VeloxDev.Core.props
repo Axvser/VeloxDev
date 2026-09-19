@@ -1,5 +1,0 @@
-<Project>
-	<ItemGroup>
-		<TrimmerRootAssembly Include="VeloxDev.Core" />
-	</ItemGroup>
-</Project>
