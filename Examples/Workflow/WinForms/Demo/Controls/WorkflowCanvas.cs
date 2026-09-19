@@ -43,11 +43,6 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // WinForms being clipped by WS_CLIPSIBLINGS (only the topmost one would be drawn).
     private readonly List<Views.LinkView> _linkRenderers = [];
 
-    // The travelling highlight every link is drawn with: one cycle, shared by every renderer in
-    // _linkRenderers, so all the bands move together on one clock (see the Link flow section for why the
-    // clock is here and not on the links).
-    private readonly Views.LinkFlow _flow = new();
-
     // Panning
     private bool _isPanning;
     private Point _panPressScreen;
@@ -206,41 +201,103 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // which the surface's Refresh keeps current, and re-pins itself on every UpdateText.
         Controls.Add(_infoOverlay);
         _infoOverlay.BringToFront();
-
-        // Every frame the flow writes is a repaint of this canvas, and nothing else: the link renderers live
-        // in a list and are painted by OnPaint, so there is no individual control to invalidate.
-        _flow.Changed = Invalidate;
     }
 
     // ── Link flow ────────────────────────────────────────────────────────────────
+
+    // The band's cycle, as the two numbers the whole surface shares. They live on the canvas because the
+    // canvas is the only thing here that is a window: its link renderers are held in a list and painted from
+    // OnPaint, so an Invalidate on one of them reaches nothing, and the clock has to write a target that can
+    // be repainted. See the flow declaration below for the cycle they move through.
+    private double _bandCentre;
+    private double _bandMix;
+
     /// <summary>
-    /// Walks the band across every link once per cycle, forever, so a link reads as carrying data from the
-    /// sender's anchor to the receiver's. <see cref="Views.LinkFlow.Phase"/> is the only animated value; its
-    /// setter is what places the band on every link that reads the flow.
+    /// Where the band is along every link, in gradient-offset units of each link's own axis: 0 at the
+    /// sender's anchor, 1 at the receiver's, and the same value for every link on the surface.
     /// </summary>
     /// <remarks>
-    /// Declared once for the canvas rather than per link, and executed once: the endpoint is the same every
-    /// cycle, which is the case the animation reference puts in a <c>static readonly</c> field. A straight
-    /// line rather than an eased curve, because the band should move at a constant speed — an ease would
-    /// make each cycle pause at the ends and read as a series of pulses instead of a flow.
+    /// Written every frame by <see cref="Flow"/> and read by the link loop in <see cref="OnPaint"/>, which
+    /// hands it to each renderer before drawing it (<see cref="Views.LinkView.SetFlow"/>). The write is also
+    /// the frame: the reference gets its repaint from writing into the brush it draws with, which GDI+ has no
+    /// equivalent of — a brush that has been written moves nothing until something paints again — so the
+    /// repaint is asked for here, on the surface that can answer it.
+    /// </remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public double BandCentre
+    {
+        get => _bandCentre;
+        set { _bandCentre = value; Invalidate(); }
+    }
+
+    /// <summary>
+    /// How much of the band's colour is the lit one: 0 rests on the link's own colour, 1 is fully lit. Each
+    /// link mixes its own two colours from it, so one value lights every link in its own hue.
+    /// </summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public double BandMix
+    {
+        get => _bandMix;
+        set { _bandMix = value; Invalidate(); }
+    }
+
+    // One cycle, as the band's centre at the end of each of its three phases. The same four numbers are in
+    // every platform's demo: it forms as it enters, travels fully lit and unchanged, and settles back on its
+    // way out. The band's width is not among them — a renderer works its two shoulders out from the centre
+    // it is handed — so two numbers per frame are the whole of what crosses to the links.
+    private const double BandStart = 0.06;
+    private const double BandFormed = 0.34;
+    private const double BandLeaving = 0.66;
+    private const double BandExit = 0.94;
+
+    /// <summary>
+    /// Walks the band across every link once per cycle, forever, so a link reads as carrying data from the
+    /// sender's anchor to the receiver's. The two numbers above are the whole of the animated state, and the
+    /// setters they are written through are what repaint the surface the bands are drawn on.
+    /// </summary>
+    /// <remarks>
+    /// The three phases are declared one after the other and repeated with <c>Repeat(int.MaxValue)</c>. This
+    /// is the shape the previous design had to work around: a chain could not repeat — a segment's
+    /// <c>LoopTime</c> repeats that segment, and the queue of segments is walked exactly once — so the whole
+    /// cycle was a single looping segment over a phase scalar, with a piecewise mapping turning that one
+    /// number into the band's place and its colour. <c>Repeat</c> runs the whole chain, every segment of it,
+    /// and replays the endpoints its first cycle captured, so each cycle begins from
+    /// <see cref="BandStart"/> rather than from wherever the previous one left the target; that is the seam,
+    /// and it is invisible because the last phase ends with the band settled back onto the resting colour.
     /// <para>
-    /// The phases are one looping segment and a piecewise mapping rather than three segments joined with
-    /// <c>Then()</c>, because nothing in the engine repeats a chain: a segment's <c>LoopTime</c> repeats
-    /// that segment, the queue of segments is walked exactly once, and the loop guard reads a pass counter
-    /// the whole run shares (<c>Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:194</c>) —
-    /// so <c>LoopTime = int.MaxValue</c> on a first segment never reaches the second, and there is no way to
-    /// express "these three, in order, forever" as a chain today.
+    /// A <c>static readonly</c> field rather than a declaration built per canvas: nothing in it reads the
+    /// caller — every endpoint in it is the same constant for every cycle and every canvas — which is the
+    /// case the animation reference puts in a static field. (The reference builds its own per view because two
+    /// of its endpoints are the link's own colours and a declaration that reads a local is shared by every
+    /// later execution of it; here the colours are not animated at all, so there is nothing to share wrongly.)
+    /// A straight line rather than an eased curve, because the band should move at a constant speed — an ease
+    /// would make each cycle pause at the ends and read as a series of pulses instead of a flow. That is what
+    /// <c>Eases.Default</c> is: <c>EaseDefault</c> returns its input unchanged, so it is the identity rather
+    /// than a shaped curve, and it is named here to say that the straightness is a choice.
     /// </para>
     /// </remarks>
-    private static readonly Transition<Views.LinkFlow> Flow =
-        Transition<Views.LinkFlow>.Create()
-            .Property(t => t.Phase, 1d)
-            .Effect(new TransitionEffect
-            {
-                Duration = TimeSpan.FromSeconds(1.8),
-                LoopTime = int.MaxValue,
-                Ease = Eases.Default,
-            });
+    private static readonly Transition<WorkflowCanvas> Flow =
+        Transition<WorkflowCanvas>.Create()
+            // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
+            // resting colour to the lit one.
+            .Property(c => c.BandCentre, BandFormed)
+            .Property(c => c.BandMix, 1d)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(550), Ease = Eases.Default })
+            .Then()
+            // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather
+            // than as a pulse: nothing about it changes except where it is. BandMix is not among the paths
+            // here, and that is the point of splitting the cycle into phases: an untouched path is left
+            // where the phase before it left it, so the band stays lit across this one.
+            .Property(c => c.BandCentre, BandLeaving)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(650), Ease = Eases.Default })
+            .Then()
+            // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel.
+            .Property(c => c.BandCentre, BandExit)
+            .Property(c => c.BandMix, 0d)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(550), Ease = Eases.Default })
+            .Repeat(int.MaxValue);
 
     /// <summary>
     /// Starts the band's clock. Called from the two moments a canvas can come to have links to draw: the
@@ -257,24 +314,32 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     /// dispatch and the frame pacer are refused, and the animation ends before it has drawn anything —
     /// silently. Hence: on the thread and after the moment this canvas has a handle, which is exactly what
     /// both callers check.
+    /// <para>
+    /// The target is this canvas, where it used to be the model the band's place was kept in. That is the one
+    /// thing about the port that is WinForms': the reference animates the view that draws the brush, and this
+    /// canvas is that view — the links have no view of their own, and only this object has a window to
+    /// invalidate.
+    /// </para>
     /// </remarks>
     private void StartLinkFlow()
     {
         if (_session is null || !IsHandleCreated) return;
 
-        // The transition reads its start value from the target, so the cycle has to be at its beginning
-        // before Execute. The loop replays that captured start at every seam, so this is also the value
-        // each later cycle begins from.
-        _flow.Phase = 0d;
-        Flow.Execute(_flow);
+        // The transition reads its start values from the target, so both of them have to be at the cycle's
+        // beginning before Execute. The chain replays that captured start at every seam, so this is also
+        // where each later cycle begins.
+        _bandCentre = BandStart;
+        _bandMix = 0d;
+        Flow.Execute(this);
     }
 
     /// <summary>
     /// Stops the clock. The flow is only ever writing into a link surface that belongs to a session, and
     /// with the session gone there is nothing for the frame to move — an idle canvas has no reason to
-    /// repaint itself at the frame rate.
+    /// repaint itself at the frame rate. <c>Exit</c> names this canvas, because the canvas is what the
+    /// animation writes.
     /// </summary>
-    private void StopLinkFlow() => Transition.Exit(_flow, IncludeMutual: true, IncludeNoMutual: true);
+    private void StopLinkFlow() => Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
 
     // ── Session lifecycle ───────────────────────────────────────────────────────
     private void AttachSession(WorkflowDemoSession? s)
@@ -340,12 +405,6 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             {
                 if (!IsDisposed) Invalidate();
             },
-
-            // The band's clock, shared with every other link. One flow for the whole surface rather than one
-            // per renderer: these renderers are thrown away and rebuilt on every link change, so a per-link
-            // animation would have to be re-started from here anyway, and each one would own a WinForms timer
-            // of its own (see the Link flow section).
-            Flow = _flow,
         };
         view.ViewModel = link;
         return view;
@@ -851,6 +910,10 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         g.TranslateTransform(origin.X, origin.Y);
         foreach (var lv in _linkRenderers)
         {
+            // The frame's numbers, from the one place they live: a renderer is not an animated object and
+            // holds nothing of the cycle, so the band's place for this frame is pushed in here — before the
+            // paint that reads it, and the same two values for every link.
+            lv.SetFlow(_bandCentre, _bandMix);
             lv.Render(g);
         }
         g.Restore(linkState);

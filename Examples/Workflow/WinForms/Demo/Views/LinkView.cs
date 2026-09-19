@@ -34,10 +34,12 @@ public sealed class LinkView : Control
     private bool _isVirtual;
     private Color _lineColor = ParseColor("#DDFFFFFF");
 
-    // The band's cycle, shared with every other link the canvas draws. Held rather than owned: the clock
-    // belongs to the canvas (see WorkflowCanvas's flow notes), and this view only reads the place in the
-    // cycle that the clock is at.
-    private LinkFlow? _flow;
+    // The band's place in the cycle, for the frame that is about to be drawn: where its middle stop sits and
+    // how much of its colour is the lit one. Pushed in before every Render (SetFlow) rather than owned here:
+    // the clock belongs to the surface, because a renderer the canvas holds in a list has no window of its
+    // own to be invalidated (see WorkflowCanvas's flow notes).
+    private double _bandCentre;
+    private double _bandMix;
 
     // This link's own gradient: the axis is its two endpoints and the stops are the band. Held for as long as
     // its axis is, because GDI+ takes a gradient's endpoints in its constructor and offers no way to re-aim
@@ -50,8 +52,8 @@ public sealed class LinkView : Control
     // the whole axis — the two extra stops are the link's resting colour again, at either end.
     private readonly ColorBlend _band = new(5);
 
-    // The two colours the band is mixed from, derived from this link's own colour. The reference keeps them
-    // on its LinkFlow; they belong to the link here, because two links need not be the same colour.
+    // The two colours the band is mixed from, derived from this link's own colour — per link rather than per
+    // surface, because two links need not be the same colour.
     private Color _lit;
     private Color _dim;
 
@@ -72,8 +74,9 @@ public sealed class LinkView : Control
         TabStop = false;
         Enabled = false;
 
-        // Seed the two colours the band is mixed from, so a link drawn before a canvas hands it a flow is
-        // still drawn in the pair this effect is built on (the arrowhead uses the lit one).
+        // Seed the two colours the band is mixed from: the gradient is only built once the link has an axis,
+        // but the arrowhead is drawn from the lit colour from the first frame, and a view built by hand is
+        // never pushed a frame's numbers at all.
         UpdateFlowBrush();
     }
 
@@ -130,27 +133,6 @@ public sealed class LinkView : Control
     {
         if (ExternalInvalidate is { } external) external();
         else Invalidate();
-    }
-
-    /// <summary>
-    /// The band's cycle, shared with every other link on the canvas. The canvas sets it when it builds the
-    /// renderer; a link without one is drawn flat, which is also the state of a view built by hand.
-    /// </summary>
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    internal LinkFlow? Flow
-    {
-        get => _flow;
-        set
-        {
-            if (ReferenceEquals(_flow, value)) return;
-
-            _flow = value;
-            // The gradient exists only for a flow: it is what the band is painted with, and the resting
-            // colour it holds is the flow's other half.
-            UpdateFlowBrush();
-            RequestPaint();
-        }
     }
 
     /// <summary>Wires a link model so anchor/visibility changes repaint this view.</summary>
@@ -317,10 +299,33 @@ public sealed class LinkView : Control
 
     // ── Flow effect ──────────────────────────────────────────────────────────────
 
+    /// <summary>Half the band's width, in gradient-offset units.</summary>
+    private const double HalfWidth = 0.04;
+
+    /// <summary>
+    /// The band's place for the frame that is about to be drawn: where its middle stop sits along the link,
+    /// and how much of its colour is the lit one. Pushed in by <c>WorkflowCanvas</c> before each
+    /// <see cref="Render"/>, from the two numbers its clock writes.
+    /// </summary>
+    /// <remarks>
+    /// Two numbers rather than the four the reference animates (its band's three stop offsets and its
+    /// colour), because these are the two the other two are derived from and the same pair serves every
+    /// renderer on the surface. The band's shoulders are <see cref="HalfWidth"/> either side of the centre
+    /// and its colour is the mix of this link's own pair (see <see cref="MoveBand"/>), so nothing per link
+    /// has to cross this boundary — which is what lets one pair of values be handed to every link, including
+    /// links of different colours.
+    /// </remarks>
+    public void SetFlow(double centre, double mix)
+    {
+        _bandCentre = centre;
+        _bandMix = mix;
+    }
+
     /// <summary>
     /// Orients the gradient along the link and gives the band its two colours — everything about the effect
     /// that is per link rather than per frame: the axis is the link's own endpoints and the two colours are
-    /// mixed from the link's own colour.
+    /// mixed from the link's own colour. The band's position is not among them; that is the clock's, and
+    /// arrives per frame through <see cref="SetFlow"/>.
     /// </summary>
     /// <remarks>
     /// The brush is rebuilt rather than re-aimed, which is the one piece of the reference this port cannot
@@ -331,6 +336,12 @@ public sealed class LinkView : Control
     /// <see cref="MoveBand"/>). Rebuilt from here rather than from <see cref="Render"/> because the axis only
     /// changes when the canvas writes an anchor back, and both writers of an anchor funnel through
     /// <see cref="SyncEndpoints"/>.
+    /// <para>
+    /// The gradient is built for every link, not only for one a canvas animates: its axis and its colours
+    /// are the link's own, and the clock is not an input to either. The two checks below are therefore the
+    /// only thing that can leave a link without a brush — which is what the guard in <see cref="Render"/>
+    /// tests for.
+    /// </para>
     /// </remarks>
     private void UpdateFlowBrush()
     {
@@ -339,8 +350,6 @@ public sealed class LinkView : Control
 
         _flowBrush?.Dispose();
         _flowBrush = null;
-
-        if (_flow is null) return;
 
         var from = new PointF(_startLeft, _startTop);
         var to = new PointF(_endLeft, _endTop);
@@ -364,8 +373,9 @@ public sealed class LinkView : Control
     }
 
     /// <summary>
-    /// Places the band for the point in the cycle the shared flow is at, and hands back the brush it was
-    /// placed in — the two things <see cref="Render"/> needs from the effect, in that order.
+    /// Places the band where the clock last put it — the two numbers <see cref="SetFlow"/> was handed — and
+    /// hands back the brush it was placed in: the two things <see cref="Render"/> needs from the effect, in
+    /// that order.
     /// </summary>
     /// <remarks>
     /// The band is written as five stops where the reference writes three, and that is forced rather than
@@ -390,23 +400,38 @@ public sealed class LinkView : Control
     /// </remarks>
     private LinearGradientBrush MoveBand()
     {
-        var flow = _flow!;
         var brush = _flowBrush!;
+
+        // The band's two shoulders are not animated: the clock writes where the middle stop is, and they are
+        // HalfWidth either side of it, which is what keeps this a band instead of one wide smear of lit
+        // colour down the whole link.
+        var trailing = _bandCentre - HalfWidth;
+        var leading = _bandCentre + HalfWidth;
 
         _band.Colors![0] = _dim;
         _band.Colors[1] = _dim;
-        _band.Colors[2] = LinkFlow.Blend(_dim, _lit, flow.Mix);
+        _band.Colors[2] = Blend(_dim, _lit, _bandMix);
         _band.Colors[3] = _dim;
         _band.Colors[4] = _dim;
         _band.Positions![0] = 0f;
-        _band.Positions[1] = (float)flow.Trailing;
-        _band.Positions[2] = (float)flow.Centre;
-        _band.Positions[3] = (float)flow.Leading;
+        _band.Positions[1] = (float)trailing;
+        _band.Positions[2] = (float)_bandCentre;
+        _band.Positions[3] = (float)leading;
         _band.Positions[4] = 1f;
 
         brush.InterpolationColors = _band;
         return brush;
     }
+
+    /// <summary>
+    /// Linear mix of two colours, alpha included: the band's colour at the mix the cycle is at, where zero
+    /// rests on the line's own colour and one is fully lit.
+    /// </summary>
+    private static Color Blend(Color from, Color to, double t) => Color.FromArgb(
+        (byte)Math.Round(from.A + (to.A - from.A) * t),
+        (byte)Math.Round(from.R + (to.R - from.R) * t),
+        (byte)Math.Round(from.G + (to.G - from.G) * t),
+        (byte)Math.Round(from.B + (to.B - from.B) * t));
 
     private static bool IsFinite(PointF p) => float.IsFinite(p.X) && float.IsFinite(p.Y);
 
@@ -469,10 +494,19 @@ public sealed class LinkView : Control
         if (points.Length < 2) return;
 
         // The travelling highlight is only meaningful on a settled connection. A virtual link is the rubber
-        // band under the pointer, and a link with no gradient yet is one the canvas has not measured — both
-        // keep the flat pen this demo drew every link with before. This view draws no other kind (it is
-        // passive: no hover and no selection), so those two conditions are the whole of what the reference
-        // also asks of IsSelected and CanRender.
+        // band under the pointer; a link with no gradient is one whose axis is not there yet, which is the
+        // one case UpdateFlowBrush leaves without a brush (its endpoints are not finite, or both of them
+        // land on the same point). Both keep the flat pen this demo drew every link with before — this view
+        // draws no other kind (it is passive: no hover and no selection), so those two conditions are the
+        // whole of what the reference also asks of IsSelected and CanRender.
+        //
+        // The second of them used to read "no flow was attached", and it is not that any more: the gradient
+        // is built from the link's own geometry and colour, and the clock that moves the band is not an
+        // input to the brush at all. What can still leave a view without one is the geometry — and the
+        // check is load-bearing rather than tidy, because MoveBand writes into the brush: with no axis
+        // there is nothing to write into, and nothing to draw a band along either. (A view nothing has
+        // pushed numbers into is drawn in the resting colour throughout, since a mix of zero makes the whole
+        // gradient the resting colour — the flat line it drew before.)
         //
         // The pen is built per frame from the brush the band was just written into, rather than kept: see
         // MoveBand for the measurement behind that. The brush itself is not disposed with the pen — it is a
@@ -560,126 +594,4 @@ public sealed class LinkView : Control
 
         return Color.FromName(value);
     }
-}
-
-/// <summary>
-/// The band's place in its cycle, as the whole of the animated state: cycle progress goes in, the band's
-/// three stop offsets and the colour mix come out.
-/// </summary>
-/// <remarks>
-/// The object the flow animation writes into. <c>Transition&lt;T&gt;</c> animates a member of a reference
-/// type, so this is held rather than the view: the animated path is <see cref="Phase"/>, and its setter is
-/// what turns that one number into the band.
-/// <para>
-/// One instance serves every link a canvas draws, so all the bands move together on one clock — see
-/// <c>WorkflowCanvas</c> for why the clock is the canvas's rather than each link's. The line is drawn dim
-/// and the band is the same colour at full strength, so what travels is a lit length of the link rather
-/// than a different colour painted on it. The three offsets ARE the band: the middle one carries the lit
-/// colour and the other two sit <see cref="HalfWidth"/> either side of it, which is what keeps it a band
-/// instead of one wide smear along the whole line. (The brush that paints it carries five stops, not three:
-/// the two extra are the resting colour at either end of the axis, which GDI+ requires and which change
-/// nothing — see <see cref="LinkView"/>'s <c>MoveBand</c>.)
-/// </para>
-/// </remarks>
-internal sealed class LinkFlow
-{
-    /// <summary>Half the band's width, in gradient-offset units.</summary>
-    private const double HalfWidth = 0.04;
-
-    // One cycle, as fractions of it. The phases have different lengths because they cover different
-    // distances: the band travels a third of the link while forming, a third while fully lit, and a third
-    // while leaving.
-    private const double EnterEnd = 0.30;
-    private const double FadeStart = 0.66;
-    private const double BandFrom = 0.06;
-    private const double BandFormed = 0.34;
-    private const double BandLeaving = 0.66;
-    private const double BandTo = 0.94;
-
-    /// <summary>
-    /// Raised by every write, which is how a frame reaches the screen: the canvas that owns this flow
-    /// repaints its link surface from here.
-    /// </summary>
-    public Action? Changed { get; set; }
-
-    private double _phase;
-
-    /// <summary>
-    /// Cycle progress, 0→1: the whole of the animated state. Writing it places the band, and the animation
-    /// writes it every frame.
-    /// </summary>
-    public double Phase
-    {
-        get => _phase;
-        set { _phase = value; Apply(); }
-    }
-
-    /// <summary>Where the band's middle stop sits, in gradient-offset units along the link.</summary>
-    public double Centre { get; private set; }
-
-    /// <summary>Where the band's trailing stop sits — behind the middle, towards the sender.</summary>
-    public double Trailing { get; private set; }
-
-    /// <summary>Where the band's leading stop sits — ahead of the middle, towards the receiver.</summary>
-    public double Leading { get; private set; }
-
-    /// <summary>
-    /// How much of the band's colour is the lit one: 0 rests on the line's own colour and 1 is fully lit.
-    /// Each link mixes its own two colours from it.
-    /// </summary>
-    public double Mix { get; private set; }
-
-    /// <summary>
-    /// Places the band for the current phase — the three phases the cycle is made of, as one piecewise
-    /// mapping.
-    /// <para>
-    /// Phase 1 (0 → <see cref="EnterEnd"/>) the band forms as it enters: it travels a third of the way while
-    /// coming up from the line's resting colour to the lit one. Phase 2 (<see cref="EnterEnd"/> →
-    /// <see cref="FadeStart"/>) it travels fully lit and unchanged, which is the phase that reads as flow
-    /// rather than as a pulse. Phase 3 (<see cref="FadeStart"/> → 1) it leaves: the last third of the
-    /// travel, settling back to the resting colour — which is also what makes the seam invisible when the
-    /// cycle repeats, since the line is uniformly dim at both ends of a cycle.
-    /// </para>
-    /// </summary>
-    private void Apply()
-    {
-        double centre;
-        double mix;
-        if (_phase < EnterEnd)
-        {
-            var t = _phase / EnterEnd;
-            centre = BandFrom + (BandFormed - BandFrom) * t;
-            mix = t;
-        }
-        else if (_phase < FadeStart)
-        {
-            var t = (_phase - EnterEnd) / (FadeStart - EnterEnd);
-            centre = BandFormed + (BandLeaving - BandFormed) * t;
-            mix = 1d;
-        }
-        else
-        {
-            var t = (_phase - FadeStart) / (1d - FadeStart);
-            centre = BandLeaving + (BandTo - BandLeaving) * t;
-            mix = 1d - t;
-        }
-
-        Centre = centre;
-        Trailing = centre - HalfWidth;
-        Leading = centre + HalfWidth;
-        Mix = mix;
-
-        // The reference writes the stops into the brush it draws with, and the framework repaints the control
-        // from that write. GDI+ has no such link between a brush and a frame — writing a brush moves nothing
-        // until something paints it again — so the repaint is asked for here instead, and it is the same idea
-        // either way: the write of the animated value is what produces the next frame.
-        Changed?.Invoke();
-    }
-
-    /// <summary>Linear mix of two colours, alpha included.</summary>
-    public static Color Blend(Color from, Color to, double t) => Color.FromArgb(
-        (byte)Math.Round(from.A + (to.A - from.A) * t),
-        (byte)Math.Round(from.R + (to.R - from.R) * t),
-        (byte)Math.Round(from.G + (to.G - from.G) * t),
-        (byte)Math.Round(from.B + (to.B - from.B) * t));
 }
