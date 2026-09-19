@@ -274,15 +274,21 @@ public class TransitionCore<
     protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? root;
 
     /// <summary>
-    /// How many further times the whole chain runs after its first pass: 0 — the default — runs it once, and
-    /// <c>int.MaxValue</c> runs it forever.
+    /// How many further times this segment's loop runs: 0 — the default — runs it once, and <c>int.MaxValue</c>
+    /// runs it forever.
     /// </summary>
     /// <remarks>
-    /// The chain-level counterpart of the effect's <c>LoopTime</c>, and it follows that member's rule: the count
-    /// is the number of <em>additional</em> cycles. It lives on the chain's root whichever segment
-    /// <c>Repeat(...)</c> is written after, because what repeats is the chain, and each cycle replays the frame
-    /// sets the first one prepared — so a segment's endpoints are the ones captured when the chain started rather
-    /// than wherever the previous cycle left the target.
+    /// A segment's loop wraps the chain <em>from its first segment through this one</em>, and loops nest by where
+    /// they end — so a count on the last segment repeats the whole chain, while a count on the first repeats only
+    /// what the first segment does. The count is the number of <em>additional</em> iterations, the rule the
+    /// effect's <c>LoopTime</c> already follows, and it is per segment rather than per chain: three segments each
+    /// carrying <c>Repeat(1)</c> run <c>1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3</c>, because the middle segment's
+    /// loop closes around the first and the last's closes around both.
+    /// <para>
+    /// Every iteration after a segment's first replays the frame set that first iteration prepared — the rule a
+    /// single segment's <c>LoopTime</c> follows — so an iteration is the same animation however deep in which loop
+    /// it is running.
+    /// </para>
     /// </remarks>
     public int RepeatTime { get; set; }
     protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? next = null;
@@ -404,63 +410,87 @@ public class TransitionCore<
 
         TransitionSchedulerCore.CancelDrained(superseded);
 
-        // The chain as the segments it is made of, in order. An array rather than the queue this used to be: a
-        // chain-level loop walks the same segments more than once, and a queue would have to be rebuilt per cycle.
+        // The chain as the segments it is made of, in order, with the repeat each one asks for. An array rather
+        // than the queue this used to be: a loop walks the same segments more than once.
         var segments = new List<(InterpolatorCore Interpolator, TimeSpan Delay, ITransitionEffectCore Effect, IFrameState State)>();
+        var repeats = new List<int>();
 
         TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? currentNode = root;
         do
         {
-            // Cloned per segment, as before, and shared by every cycle of that segment: an effect is configuration
-            // and handler lists, and a pass reads it rather than writing it.
+            // Cloned per segment, as before, and shared by every iteration of that segment: an effect is
+            // configuration and handler lists, and a pass reads it rather than writing it.
             segments.Add((currentNode.interpolator, currentNode.delay, currentNode.effect.Clone(), currentNode.state));
+            repeats.Add(currentNode.RepeatTime);
             currentNode = currentNode.next;
         }
         while (currentNode is not null);
 
-        // The frame set each segment was prepared with during the chain's first cycle. Every cycle after it
-        // replays these instead of preparing again, which is what makes the second cycle the same animation as the
-        // first: without it, a segment would re-read the target and start from wherever the previous cycle left
-        // it — a chain that ends somewhere other than where it began would walk backwards, and a segment naming a
-        // property no earlier segment touches would drift a little further every cycle.
+        // The frame set each segment was prepared with the first time it ran. Every iteration after that replays
+        // it instead of preparing again, which is what makes an iteration the same animation as the first one
+        // however deep in which loop it is running: without it, a repeated segment would re-read the target and
+        // start from wherever the previous iteration left it — a chain that ends somewhere other than where it
+        // began would walk backwards, and a segment naming a property no earlier segment touches would drift a
+        // little further on every pass.
         var prepared = new SamplerSet<TPriorityCore>?[segments.Count];
-        var chainRepeat = root!.RepeatTime;
         var chainScheduler = (TransitionSchedulerCore<THost, TTransitionInterpreterCore, TPriorityCore>)scheduler;
+
+        // Runs one segment once: the delay it declares, then its frame, prepared on the first iteration of that
+        // segment and replayed on every one after it.
+        async Task RunSegmentAsync(int index)
+        {
+            try
+            {
+                await DelayWhilePausedAsync(run.Timeline, segments[index].Delay, cts.Token);
+            }
+            catch (OperationCanceledException) { return; }
+
+            if (prepared[index] is { } frameSet)
+            {
+                await chainScheduler.Replay(frameSet, (ITransitionEffect<TPriorityCore>)segments[index].Effect, cts);
+            }
+            else
+            {
+                prepared[index] = await chainScheduler.ExecuteCapturing(
+                    segments[index].Interpolator,
+                    segments[index].State,
+                    (ITransitionEffect<TPriorityCore>)segments[index].Effect,
+                    cts);
+            }
+        }
+
+        // One iteration of the loop a segment closes: everything up to but not including that segment — with the
+        // loops closed inside it expanded — and then the segment itself.
+        async Task RunBodyAsync(int from, int to)
+        {
+            await RunRangeAsync(from, to - 1);
+            if (cts.IsCancellationRequested) return;
+            await RunSegmentAsync(to - 1);
+        }
+
+        // The chain from `from` through `to`, with every loop closed inside that range expanded. The loop is the
+        // one the last segment asks for, wrapping the chain from its first segment through that one — so a chain
+        // of three segments, each carrying Repeat(1), runs 1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3.
+        async Task RunRangeAsync(int from, int to)
+        {
+            if (to < from)
+            {
+                return;
+            }
+
+            var repeat = repeats[to - 1];
+            for (var iteration = 0; repeat == int.MaxValue || iteration <= repeat; iteration++)
+            {
+                // Read between iterations, not only at the top: an Exit during the last segment has to stop the
+                // chain before it starts another pass, the same way it stops a segment mid-frame.
+                if (cts.IsCancellationRequested) return;
+                await RunBodyAsync(from, to);
+            }
+        }
 
         try
         {
-            for (var cycle = 0; ; cycle++)
-            {
-                for (var index = 0; index < segments.Count; index++)
-                {
-                    if (cts.IsCancellationRequested) return;
-
-                    try
-                    {
-                        await DelayWhilePausedAsync(run.Timeline, segments[index].Delay, cts.Token);
-                    }
-                    catch (OperationCanceledException) { return; }
-
-                    if (prepared[index] is { } frameSet)
-                    {
-                        await chainScheduler.Replay(frameSet, (ITransitionEffect<TPriorityCore>)segments[index].Effect, cts);
-                    }
-                    else
-                    {
-                        prepared[index] = await chainScheduler.ExecuteCapturing(
-                            segments[index].Interpolator,
-                            segments[index].State,
-                            (ITransitionEffect<TPriorityCore>)segments[index].Effect,
-                            cts);
-                    }
-                }
-
-                // Read between cycles rather than only at the top: an Exit during the last segment has to stop the
-                // chain before it starts another cycle, the same way it stops a segment mid-pass.
-                if (cts.IsCancellationRequested) return;
-                if (chainRepeat == int.MaxValue) continue;
-                if (cycle >= chainRepeat) break;
-            }
+            await RunRangeAsync(1, segments.Count);
         }
         finally
         {
@@ -542,8 +572,8 @@ public class TransitionCore<
         return newNode;
     }
     /// <summary>
-    /// Records how many further times the whole chain runs, on the chain's root rather than on the segment the
-    /// call happens to be written after — <c>Repeat</c> belongs to the chain, the way <c>Then</c> does.
+    /// Records how many further times this segment's loop runs, on the segment the call is written after — like
+    /// every other member of the declaration, <c>Repeat</c> configures the node it is called on.
     /// </summary>
     internal override T1 CoreRepeat<T1>(int count)
     {
@@ -552,7 +582,7 @@ public class TransitionCore<
             throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
 
-        (root ?? this).RepeatTime = count;
+        RepeatTime = count;
         return result;
     }
 
