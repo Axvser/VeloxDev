@@ -15,6 +15,10 @@ internal sealed class ControllerView : NodeViewBase
 
     protected override Brush Accent => NodeChrome.AccentBlue;
 
+    /// <summary>The controller view-model publishes no Title, so the card names itself — the same
+    /// title the Avalonia / WinForms / WPF controller views hard-code.</summary>
+    protected override string TitleFor(IWorkflowNodeViewModel node) => "Network Flow Controller";
+
     protected override string InitialStatus(IWorkflowNodeViewModel node)
         => node is ControllerViewModel { IsActive: true } ? "Running" : "Idle";
 

@@ -52,10 +52,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // the content boundary rather than at the top-left corner junction.
     private Point _panOffset = new(RulerThickness, RulerThickness);
 
-    // Minimap: hosted in splitContainer.Panel2 (non-scrolling area), synced manually via SyncMinimap.
-    // SetMinimapOverlayName is not used — Refresh's ResolveScrollOffset only returns
-    // -AutoScrollPosition and does not include _panOffset; manual sync is deterministic.
+    // Minimap: the surface adopts it, names it PART_MinimapOverlay and tells the surface behavior that
+    // name, so WorkflowSurfaceBehavior.Refresh pushes scroll / content offset / viewport / tree into it
+    // on every cycle — the offset values SyncMinimap used to hand-wire. Refresh's ResolveScrollOffset
+    // reads this host's private _panOffset and folds AutoScrollPosition into it (the AutoScroll branch
+    // of that resolver names this demo), so the pushed numbers are the same ones SyncMinimap computed.
     private Control? _minimap;
+
+    /// <summary>Realtime canvas-info HUD (bottom-left floating panel + copy button).</summary>
+    private readonly Views.InfoOverlay _infoOverlay = new();
 
     // Floating translucent ruler overlay (owned popup), created once the canvas is parented.
     // The ruler bands/ticks/labels moved out of OnPaintBackground into this WS_EX_LAYERED
@@ -102,10 +107,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     }
 
     /// <summary>
-    /// Optional minimap overlay. The host should place it in a non-scrolling area (such as
-    /// splitContainer.Panel2) and call <c>BringToFront</c> so it stays fixed while the canvas
-    /// pans/scrolls. The canvas syncs the visible region and responds to the minimap's viewport
-    /// drag requests.
+    /// Optional minimap overlay. The canvas adopts it as a child named <c>PART_MinimapOverlay</c> and
+    /// registers that name with <see cref="WorkflowBehaviors.WorkflowSurfaceBehavior"/>, which is what
+    /// makes the surface push its scroll offset, content offset, viewport size and tree on every refresh
+    /// cycle — the same arrangement the tree-view template builds. The host repaints it after a pan and
+    /// answers the minimap's viewport drag requests.
     /// </summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -126,6 +132,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
                 {
                     oldMm.WorkflowTree = null;
                 }
+
+                Controls.Remove(_minimap);
+                _minimap = null;
             }
 
             _minimap = value;
@@ -141,7 +150,26 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
                     mm.WorkflowTree = _session?.Tree;
                 }
 
-                SyncMinimap();
+                // Canonical wiring (mirrors the tree-view template): the overlay becomes a named child
+                // of the surface and the surface is told that name, so Refresh feeds it.
+                value.Name = "PART_MinimapOverlay";
+                Controls.Add(value);
+                WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlayName(this, "PART_MinimapOverlay");
+                if (value is Views.MinimapOverlay minimap)
+                {
+                    minimap.PositionAtTopRight();
+                }
+
+                value.Visible = true;
+                BringOverlaysToFront();
+                // Push the current region into the newly named overlay now (mirrors the template's
+                // AttachTree), then repaint it.
+                if (_session is not null)
+                {
+                    WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+                }
+
+                RefreshOverlays();
             }
         }
     }
@@ -167,6 +195,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             ControlStyles.UserPaint,
             true);
 
+        // Realtime canvas-info HUD: floating bottom-left over the canvas, above the pooled node cards
+        // (the tree-view template adds it the same way). It reads the Core model plus helper.Viewport,
+        // which the surface's Refresh keeps current, and re-pins itself on every UpdateText.
+        Controls.Add(_infoOverlay);
+        _infoOverlay.BringToFront();
     }
 
     // ── Session lifecycle ───────────────────────────────────────────────────────
@@ -183,7 +216,10 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         // Link renderer: VirtualLink (first) + all real links → drawn uniformly by the canvas OnPaint.
         AttachLinksPool();
-        SyncMinimap();
+        // The HUD subscribes to the model itself (Layout / Nodes / Links / helper VisibleItems); the
+        // surface Push in RefreshOverlays keeps the viewport numbers it reads current.
+        _infoOverlay.Bind(s.Tree);
+        RefreshOverlays();
 
         // Delayed sync: wait for WinForms to complete the first layout before computing SlotView screen coordinates
         if (IsHandleCreated)
@@ -232,63 +268,57 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         SyncAllSlotAnchors();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-        SyncMinimap();
+        RefreshOverlays();
     }
 
-    // ── Minimap sync ─────────────────────────────────────────────────────────────
+    // ── Overlay refresh ─────────────────────────────────────────────────────────
     /// <summary>
-    /// Pushes the current visible world region to the minimap. Node cards are positioned by
-    /// anchor + panOffset + scroll (<see cref="NodeBounds"/>); node.Anchor is already the final
-    /// screen-world coordinate — this self-drawn canvas does not apply an additional content
-    /// offset pan, so the minimap ContentOffset is always 0, and
-    /// ScrollOffset = -(panOffset + scroll) exactly equals the world coordinate at the left screen edge.
+    /// Repaints the minimap and the canvas-info HUD, and re-pins the minimap, after the surface pans,
+    /// scrolls, resizes or re-lays out. The overlay DATA is not hand-pushed: naming the minimap
+    /// <c>PART_MinimapOverlay</c> makes <see cref="WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh"/>
+    /// write its scroll offset, content offset, viewport size and tree on every cycle (the template's
+    /// arrangement). What the host still owes them is a repaint after a pan — a pan changes no model
+    /// property, so nothing else would invalidate the thumbnail — and a re-pin, because WinForms
+    /// translates a scrolling container's children by the scroll delta, so a scrollbar scroll would
+    /// otherwise slide the minimap up-left out of the corner. The HUD re-pins itself in UpdateText.
     /// </summary>
-    private void SyncMinimap()
+    private void RefreshOverlays()
     {
-        if (_minimap is not IWorkflowMinimapOverlay m) return;
+        if (_minimap is not null)
+        {
+            if (_minimap is Views.MinimapOverlay minimap) minimap.PositionAtTopRight();
+            _minimap.Invalidate();
+        }
 
-        var scroll = AutoScrollPosition;
-        m.ScrollOffsetX = -(_panOffset.X + scroll.X);
-        m.ScrollOffsetY = -(_panOffset.Y + scroll.Y);
-        m.ContentOffsetX = 0;
-        m.ContentOffsetY = 0;
-        m.ViewportWidth = ClientSize.Width;
-        m.ViewportHeight = ClientSize.Height;
-        m.WorkflowTree = _session?.Tree;
-        _minimap.Invalidate();
+        // Reads helper.Viewport (kept current by the surface Refresh push) plus the Core model.
+        _infoOverlay.UpdateText();
+    }
+
+    /// <summary>Keeps the floating overlays above the pooled node cards, which BringToFront on add.</summary>
+    private void BringOverlaysToFront()
+    {
+        _minimap?.BringToFront();
+        _infoOverlay.BringToFront();
     }
 
     /// <summary>
-    /// Minimap drag requests scrolling: the minimap expresses an absolute world visible region,
-    /// so first reset AutoScroll to zero (after wheel scrolling AutoScrollPosition is non-zero,
-    /// which conflicts with panning, and it would be re-clamped in RelayoutAllCards →
-    /// UpdateCanvasMinSize, causing the viewport block to bounce back and look undraggable),
-    /// then invert ScrollOffset = -panOffset to get panOffset = -sx,
-    /// and finally re-layout the cards (which also re-syncs the minimap).
+    /// Minimap drag requests scrolling: the minimap expresses an absolute world visible region, so
+    /// invert ScrollOffset = -(panOffset + AutoScrollPosition) into the pan and re-lay the cards out.
+    /// The surface's Refresh (inside RelayoutAllCards) then pushes the new region straight back into
+    /// the named minimap, so its viewport block follows the drag without the host writing the values.
     /// </summary>
     private void OnMinimapScrollRequested(double sx, double sy)
     {
         // Compensate the pan for the current AutoScrollPosition instead of resetting it: resetting
-        // fires a (deferred) Scroll event that re-runs SyncMinimap from the pre-pan scroll and
-        // overwrites the minimap's ScrollOffset back to its old spot — the "stuck until you drag"
-        // symptom. With the compensation the total pan (panOffset + AutoScrollPosition) equals the
-        // requested ScrollOffset, so the block follows the very first press.
+        // fires a (deferred) Scroll event that re-reads the pre-pan scroll and overwrites the minimap's
+        // region back to its old spot — the "stuck until you drag" symptom. With the compensation the
+        // total pan (panOffset + AutoScrollPosition) equals the requested ScrollOffset, so the block
+        // follows the very first press.
         var scroll = AutoScrollPosition;
         _panOffset = new Point(
             (int)Math.Round(-sx - scroll.X),
             (int)Math.Round(-sy - scroll.Y));
         RelayoutAllCards();
-
-        // RelayoutAllCards → SyncMinimap can still read the stale AutoScrollPosition, so force the
-        // minimap to the requested scroll now for immediate feedback; it converges on the pan.
-        if (_minimap is IWorkflowMinimapOverlay m)
-        {
-            m.ScrollOffsetX = sx;
-            m.ScrollOffsetY = sy;
-            m.ViewportWidth = ClientSize.Width;
-            m.ViewportHeight = ClientSize.Height;
-            _minimap.Invalidate();
-        }
 
         // While dragging on the minimap, the mouse capture is held by the minimap, not the canvas —
         // the synchronous redraw branch in Refresh's host.Capture never fires, only async Invalidate.
@@ -354,6 +384,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         if (s is null) return;
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, null);
+        _infoOverlay.Bind(null);
         HandleCreated -= OnHandleCreatedForInitialSync;
         s.Tree.Nodes.CollectionChanged -= OnNodesChanged;
         s.Tree.Links.CollectionChanged -= OnLinksChanged;
@@ -392,7 +423,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         SyncAllSlotAnchors();
         UpdateCanvasMinSize();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-        SyncMinimap();
+        RefreshOverlays();
     }
 
     private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -402,7 +433,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         RebuildLinkRenderers();
         SyncAllSlotAnchors();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-        SyncMinimap();
+        RefreshOverlays();
     }
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -427,6 +458,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         Controls.Add(card);
         LayoutCard(node, card);
         card.BringToFront();
+        // A card is added after the overlays, so put the floating minimap/HUD back on top.
+        BringOverlaysToFront();
     }
 
     private void RemoveCard(IWorkflowNodeViewModel node)
@@ -450,7 +483,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             SyncAllSlotAnchors();
             UpdateCanvasMinSize();
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-            SyncMinimap();
+            RefreshOverlays();
             // One canvas refresh per wheel notch (coalesced across the 2×N Anchor/Size events) fills
             // the region a moved card vacated — the self-drawn canvas redraws the grid + links there,
             // erasing the pre-zoom ghost. Card subtrees repaint on their own child-window cycle.
@@ -460,7 +493,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         {
             card.Refresh(node);
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-            SyncMinimap();
+            RefreshOverlays();
         }
     }
 
@@ -497,7 +530,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         }
 
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-        SyncMinimap();
+        RefreshOverlays();
     }
 
     /// <summary>Positions a node card at the client location corresponding to its canvas coordinate.</summary>
@@ -525,7 +558,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         UpdateCanvasMinSize();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-        SyncMinimap();
+        RefreshOverlays();
         SyncRulerOverlay();
     }
 
@@ -868,7 +901,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // Link renderers are not part of the control tree; panning/scrolling is handled uniformly
         // by the canvas OnPaint origin transform.
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-        SyncMinimap();
+        RefreshOverlays();
         SyncRulerOverlay();
     }
 

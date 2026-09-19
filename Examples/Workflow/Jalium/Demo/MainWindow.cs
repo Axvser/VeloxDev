@@ -79,33 +79,70 @@ internal sealed class MainWindow : Window
 
     private static FrameworkElement BuildSurfaceArea(out NodeEditorSurface surface, out ScrollViewer viewer)
     {
-        surface = new NodeEditorSurface();
-        viewer = new ScrollViewer
+        var surfaceView = new NodeEditorSurface();
+        var viewerControl = new ScrollViewer
         {
-            Content = surface,
+            Content = surfaceView,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             PanningMode = PanningMode.None, // surface handles mouse-pan itself
         };
-        surface.AttachScrollViewer(viewer);
+        surfaceView.AttachScrollViewer(viewerControl);
 
-        var minimap = new Minimap(surface, viewer)
+        var minimap = new Minimap(viewerControl)
         {
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 40, 16, 0),
         };
 
-        // The grid + ruler bands are drawn by the NodeEditorSurface's own OnRender/OnPostRender
-        // (absolute-floating rulers, viewport-fixed), like the Trimmed demo.
-        void RefreshOverlays() => minimap.Update();
+        // Realtime canvas-info decorator layer (floating text HUD): anchored bottom-left, hit-test
+        // transparent. It subscribes to the Core model itself (Layout.ActualSize / Scale / helper
+        // VisibleItems) and is fed the same scroll + content-offset + viewport numbers as the minimap,
+        // so the read-out stays live while panning / zooming / dragging beneath it.
+        var info = new InfoOverlay
+        {
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(16, 0, 0, 18),
+        };
 
-        viewer.ScrollChanged += (_, _) => RefreshOverlays();
-        surface.Changed += RefreshOverlays;
+        // The grid + ruler bands are drawn by the NodeEditorSurface's own OnRender/OnPostRender
+        // (absolute-floating rulers, viewport-fixed), like the Trimmed demo. Feed the minimap (the
+        // overlay base repaints from these and drag-pans through its ScrollViewer) and the HUD on every
+        // scroll / model change — the same feed the Trimmed window gives its overlays.
+        void RefreshOverlays()
+        {
+            minimap.WorkflowTree = surfaceView.Tree;
+            minimap.ContentOffsetX = surfaceView.OriginX;
+            minimap.ContentOffsetY = surfaceView.OriginY;
+            minimap.ScrollOffsetX = viewerControl.HorizontalOffset;
+            minimap.ScrollOffsetY = viewerControl.VerticalOffset;
+            minimap.ViewportWidth = viewerControl.ViewportWidth;
+            minimap.ViewportHeight = viewerControl.ViewportHeight;
+
+            info.WorkflowTree = surfaceView.Tree;
+            info.ContentOffsetX = surfaceView.OriginX;
+            info.ContentOffsetY = surfaceView.OriginY;
+            info.ScrollOffsetX = viewerControl.HorizontalOffset;
+            info.ScrollOffsetY = viewerControl.VerticalOffset;
+            info.ViewportWidth = viewerControl.ViewportWidth;
+            info.ViewportHeight = viewerControl.ViewportHeight;
+        }
+
+        // SizeChanged catches the viewer's first measure (Jalium may not fire ScrollChanged on the
+        // initial layout).
+        viewerControl.ScrollChanged += (_, _) => RefreshOverlays();
+        viewerControl.SizeChanged += (_, _) => RefreshOverlays();
+        surfaceView.Changed += RefreshOverlays;
 
         var root = new Grid();
-        root.Children.Add(viewer);
+        root.Children.Add(viewerControl);
         root.Children.Add(minimap);
+        root.Children.Add(info);
+
+        surface = surfaceView;
+        viewer = viewerControl;
         return root;
     }
 

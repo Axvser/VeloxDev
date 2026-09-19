@@ -74,7 +74,6 @@
             splitContainer.Panel1.Controls.Add(logTabControl);
             splitContainer.Panel1.Controls.Add(toolbarPanel);
             splitContainer.Panel1.Padding = new Padding(12);
-            splitContainer.Panel2.Controls.Add(minimapOverlay);
             splitContainer.Panel2.Controls.Add(workflowSurfaceControl);
             splitContainer.Panel2.Padding = new Padding(12);
             splitContainer.Size = new Size(1440, 820);
@@ -342,12 +341,13 @@
             //
             // minimapOverlay
             //
-            // The minimap is hosted in the non-scrolling area (splitContainer.Panel2) and stays
-            // fixed at the top-right while the canvas pans/scrolls. Its Location is computed by
-            // MinimapOverlay.PositionAtTopRight from the parent size, so it is not set here.
+            // Created here but parented by the surface: WorkflowSurfaceBehavior.MinimapOverlayName
+            // resolves the overlay by name inside the surface host, so the canvas adopts this control
+            // as its child named PART_MinimapOverlay (Form1 assigns it to WorkflowCanvas.MinimapOverlay).
+            // Its Location is computed by MinimapOverlay.PositionAtTopRight from the parent size, so it
+            // is not set here.
             minimapOverlay.Name = "minimapOverlay";
             minimapOverlay.TabIndex = 1;
-            minimapOverlay.BringToFront();
             // 
             // Form1
             // 

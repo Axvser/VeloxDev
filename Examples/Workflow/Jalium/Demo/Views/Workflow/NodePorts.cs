@@ -46,7 +46,9 @@ internal static class NodePorts
         return single is { } s ? [(s, string.Empty)] : [];
     }
 
-    /// <summary>Display title of a node (the generated Title property on the Common/Lib VMs).</summary>
+    /// <summary>Display title of a node: the <c>Title</c> property the Common/Lib view-models publish
+    /// (Timer, PythonScript, EnumSelector), or an empty string for a type that publishes none — the
+    /// controller VM is one, which is why its view supplies its own title instead of reading this.</summary>
     public static string TitleOf(IWorkflowNodeViewModel node)
         => node.GetType().GetProperty("Title")?.GetValue(node)?.ToString() ?? string.Empty;
 

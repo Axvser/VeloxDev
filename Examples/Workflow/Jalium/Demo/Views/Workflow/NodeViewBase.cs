@@ -33,6 +33,12 @@ internal abstract class NodeViewBase : Canvas
     /// <summary>Initial status-badge text for the given node.</summary>
     protected abstract string InitialStatus(IWorkflowNodeViewModel node);
 
+    /// <summary>Header title of the card. The view-model interface carries geometry and slots and no
+    /// display name, so this reads the type's own <c>Title</c> property when it publishes one
+    /// (Timer / PythonScript / EnumSelector do) and a type that publishes none overrides this with the
+    /// name its card is known by — the same hard-coded title the other GUIs' controller views carry.</summary>
+    protected virtual string TitleFor(IWorkflowNodeViewModel node) => NodePorts.TitleOf(node);
+
     /// <summary>Builds the card body content into the content grid.</summary>
     protected abstract void Build(IWorkflowNodeViewModel node, Grid content);
 
@@ -100,7 +106,7 @@ internal abstract class NodeViewBase : Canvas
         _inputStates = new SlotState[NodePorts.Inputs(node).Count];
         _outputStates = new SlotState[NodePorts.Outputs(node).Count];
 
-        var card = NodeChrome.Card(DesignWidth, DesignHeight, Accent, NodePorts.TitleOf(node),
+        var card = NodeChrome.Card(DesignWidth, DesignHeight, Accent, TitleFor(node),
             InitialStatus(node), out _, out _, out var statusText, out var content);
         StatusText = statusText;
 

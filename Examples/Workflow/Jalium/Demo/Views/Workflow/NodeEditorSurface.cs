@@ -7,6 +7,7 @@ using Jalium.UI.Input;
 using Jalium.UI.Interop;
 using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 using Size = VeloxDev.WorkflowSystem.Size;
 
 namespace Demo.Views.Workflow;
@@ -96,12 +97,54 @@ internal sealed class NodeEditorSurface : Canvas
     public void AttachScrollViewer(ScrollViewer viewer)
     {
         _scrollViewer = viewer;
-        // The ruler bands are viewport-fixed, so a scroll must repaint the surface (grid + rulers).
-        viewer.ScrollChanged += (_, _) =>
+        // The ruler bands are viewport-fixed, so a scroll must repaint the surface (grid + rulers), and
+        // the virtualization window has to follow the scroll: writing helper.Viewport is what populates
+        // VisibleItems (the info HUD counts them). A canvas that hosts itself instead of using the
+        // adapter surface must write that viewport itself, in collapsed coordinates and after setting
+        // the virtualize inset for its ruler band — the Trimmed surface does the same.
+        // SizeChanged catches the viewer's first measure, which Jalium may not report as a scroll.
+        void OnViewportChanged()
         {
+            UpdateViewport();
             InvalidateVisual();
             Changed?.Invoke();
-        };
+        }
+
+        viewer.ScrollChanged += (_, _) => OnViewportChanged();
+        viewer.SizeChanged += (_, _) => OnViewportChanged();
+    }
+
+    /// <summary>Recomputes <see cref="IWorkflowTreeHelper.Viewport"/> from the viewer's scroll offsets,
+    /// in collapsed (world − ActualOffset) coordinates.</summary>
+    private void UpdateViewport()
+    {
+        if (_tree is null)
+        {
+            return;
+        }
+
+        var layout = _tree.Layout;
+        double hx = _scrollViewer?.HorizontalOffset ?? layout.ActualOffset.Horizontal;
+        double vy = _scrollViewer?.VerticalOffset ?? layout.ActualOffset.Vertical;
+        double vw = _scrollViewer?.ViewportWidth ?? 0;
+        double vh = _scrollViewer?.ViewportHeight ?? 0;
+        if (vw <= 0 || vh <= 0)
+        {
+            // The viewer isn't measured yet; fall back to the whole canvas so the first Virtualize
+            // materializes immediately instead of no-op'ing on a 0-size viewport.
+            hx = layout.ActualOffset.Horizontal;
+            vy = layout.ActualOffset.Vertical;
+            vw = Width;
+            vh = Height;
+        }
+
+        // Count the ruler band into virtualization so nodes under the floating band are not culled a
+        // ruler-thickness early.
+        _tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness);
+        _tree.GetHelper().Viewport = new Viewport(
+            hx - layout.ActualOffset.Horizontal,
+            vy - layout.ActualOffset.Vertical,
+            vw, vh);
     }
 
     public void SetTree(IWorkflowTreeViewModel? tree)
@@ -126,6 +169,9 @@ internal sealed class NodeEditorSurface : Canvas
 
         Width = Math.Max(2000, _tree.Layout.ActualSize.Width);
         Height = Math.Max(2000, _tree.Layout.ActualSize.Height);
+        // Virtualize against the current viewer (or the whole canvas before it measures), as the
+        // Trimmed surface does when its tree is set.
+        UpdateViewport();
         InvalidateVisual();
         Changed?.Invoke();
     }
@@ -164,6 +210,26 @@ internal sealed class NodeEditorSurface : Canvas
                 Canvas.SetTop(card, node.Anchor.Vertical + _tree!.Layout.ActualOffset.Vertical);
             }
 
+            UpdateViewport();
+            InvalidateVisual();
+            Changed?.Invoke();
+        }
+        else if (e.PropertyName is "ActualSize" or "ActualOffset")
+        {
+            // The canvas extent and the world origin live on the layout: drag-panning past an edge and
+            // the minimap's drag-to-pan grow Positive/NegativeOffset (ActualSize / ActualOffset), which
+            // both moves every card (they sit at anchor + the origin) and widens the range the viewer can
+            // scroll to. Adopt the grown extent (monotonic — the surface never shrinks itself, matching
+            // its own Grow* paths) and re-place the cards on the new origin, so links follow their ports.
+            if (_tree is not null)
+            {
+                Width = System.Math.Max(Width, _tree.Layout.ActualSize.Width);
+                Height = System.Math.Max(Height, _tree.Layout.ActualSize.Height);
+            }
+
+            RepositionCards();
+            UpdateViewport();
+            InvalidateMeasure();
             InvalidateVisual();
             Changed?.Invoke();
         }
