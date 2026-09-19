@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -23,14 +23,9 @@ public partial class PolylineCurveView : Control
         IsHitTestVisible = true;
         Focusable = true;
 
-        _flow.Brush = new LinearGradientBrush
-        {
-            SpreadMethod = GradientSpreadMethod.Pad,
-        };
-        _flow.Brush.GradientStops.Add(new GradientStop(LineColor, 0d));
-        _flow.Brush.GradientStops.Add(new GradientStop(LineColor, 0.5d));
-        _flow.Brush.GradientStops.Add(new GradientStop(LineColor, 1d));
-        UpdateFlowBrush();
+        // The brush is the view's own and the stops are only created here: AimFlowBrush aims it, gives it its
+        // colours and builds the declaration whose endpoints those colours are.
+        AimFlowBrush();
 
         CurveSelectionManager.SelectionChanged += owner =>
         {
@@ -84,171 +79,139 @@ public partial class PolylineCurveView : Control
 
     #region Flow effect
 
+    /// <summary>Half the band's width, in gradient-offset units.</summary>
+    private const double BandHalfWidth = 0.04;
+
+    // The three phases, as the band's centre at the end of each: it forms as it enters, travels fully lit,
+    // and settles back on its way out. What the animation writes is these centres, plus and minus HalfWidth.
+    private const double BandStart = 0.06;
+    private const double BandFormed = 0.34;
+    private const double BandLeaving = 0.66;
+    private const double BandExit = 0.94;
+
+    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(550);
+    private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(650);
+    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(550);
+
     /// <summary>
-    /// The object the flow animation writes into. <c>Transition&lt;T&gt;</c> animates a member of a
-    /// reference type, so the brush and the two colours the band is mixed from are held here rather than
-    /// reached through the control: the animated path is <see cref="Phase"/>, and its setter is what turns
-    /// that one number into the band's position and colour.
+    /// The brush the link is drawn with, and the object the flow animates: a gradient along the link's own
+    /// axis whose middle stop is the band. It is a property of this control rather than something a model
+    /// holds, so the animated paths read straight off the view — <c>FlowBrush.GradientStops[1].Offset</c> and
+    /// <c>[1].Color</c> — and there is no value in between to map back into geometry.
+    /// </summary>
+    public LinearGradientBrush FlowBrush { get; } = new()
+    {
+        SpreadMethod = GradientSpreadMethod.Pad,
+    };
+
+    /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
+    private Color Lit { get; set; }
+
+    /// <summary>The line's resting colour: the lit colour dimmed to a little under two thirds.</summary>
+    private Color Dim { get; set; }
+
+    private Transition<PolylineCurveView>? _flow;
+    private bool _running;
+
+    /// <summary>
+    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
     /// </summary>
     /// <remarks>
-    /// The line is drawn dim and the band is the same colour at full strength, so what travels is a lit
-    /// length of the link rather than a different colour on it. The three stops are the band: the middle
-    /// one carries the lit colour and the other two sit <see cref="HalfWidth"/> either side of it, which is
-    /// what keeps it a band instead of one wide smear along the whole line.
+    /// Built per view rather than held in a <c>static readonly</c> field, because two of its endpoints are the
+    /// link's own colours, and a declaration that reads a local is shared by every later execution of it — here
+    /// that would paint one link's band in another link's colour.
+    /// <para>
+    /// The paths go into the brush itself: <c>GradientStops[1]</c> is the band and the two stops either side of
+    /// it are its shoulders, so a phase is a handful of indexed writes and the phase structure is readable
+    /// rather than computed. A straight line rather than an eased curve, because the band should move at a
+    /// constant speed — an ease would make each cycle pause at the ends and read as pulses instead of flow.
+    /// </para>
     /// </remarks>
-    private sealed class LinkFlow
-    {
-        /// <summary>Half the band's width, in gradient-offset units.</summary>
-        private const double HalfWidth = 0.04;
-
-        // One cycle, as fractions of it. The phases have different lengths because they cover different
-        // distances: the band travels a third of the link while forming, a third while fully lit, and a
-        // third while leaving.
-        private const double EnterEnd = 0.30;
-        private const double FadeStart = 0.66;
-        private const double BandFrom = 0.06;
-        private const double BandFormed = 0.34;
-        private const double BandLeaving = 0.66;
-        private const double BandTo = 0.94;
-
-        public LinearGradientBrush Brush { get; set; } = null!;
-
-        /// <summary>The line's resting colour: <see cref="Lit"/> at the link's own strength dimmed.</summary>
-        public Color Dim { get; set; }
-
-        /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
-        public Color Lit { get; set; }
-
-        private double _phase;
-
-        /// <summary>
-        /// Cycle progress, 0→1: the whole of the animated state. Writing it repaints the band, and the
-        /// animation writes it every frame.
-        /// </summary>
-        public double Phase
+    private Transition<PolylineCurveView> BuildFlow() => Transition<PolylineCurveView>.Create()
+        // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
+        // resting colour to the lit one.
+        .Property(v => v.FlowBrush.GradientStops[0].Offset, BandFormed - BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Offset, BandFormed)
+        .Property(v => v.FlowBrush.GradientStops[2].Offset, BandFormed + BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Color, Lit)
+        .Effect(new TransitionEffect()
         {
-            get => _phase;
-            set { _phase = value; Apply(); }
-        }
-
-        /// <summary>
-        /// Re-derives the band's stops from the phase the cycle is at right now, without moving it.
-        /// </summary>
-        /// <remarks>
-        /// The brush has to be repainted whenever the link moves, because the gradient's axis is the link's
-        /// own and the stops' colours are mixed from its colour — and a link moves on every frame of a zoom
-        /// (the Core anchor getters collapse toward the origin) and of a node drag. Writing the phase back
-        /// to zero there would park the band at the sender's end for as long as the gesture lasted, so this
-        /// re-derives from the value the cycle is already at instead.
-        /// </remarks>
-        public void Repaint() => Apply();
-
-        /// <summary>
-        /// Places the band and mixes its colour for the current phase — the three phases the cycle is made
-        /// of, as one piecewise mapping.
-        /// <para>
-        /// Phase 1 (0 → <see cref="EnterEnd"/>) the band forms as it enters: it travels a third of the way
-        /// while coming up from the line's resting colour to the lit one. Phase 2 (<see cref="EnterEnd"/> →
-        /// <see cref="FadeStart"/>) it travels fully lit and unchanged, which is the phase that reads as
-        /// flow rather than as a pulse. Phase 3 (<see cref="FadeStart"/> → 1) it leaves: the last third of
-        /// the travel, settling back to the resting colour — which is also what makes the seam invisible
-        /// when the cycle repeats, since the line is uniformly dim at both ends of a cycle.
-        /// </para>
-        /// </summary>
-        private void Apply()
+            Duration = EnterDuration,
+            Ease = Eases.Default,
+        })
+        .Then()
+        // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than as a
+        // pulse: nothing about it changes except where it is.
+        .Property(v => v.FlowBrush.GradientStops[0].Offset, BandLeaving - BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Offset, BandLeaving)
+        .Property(v => v.FlowBrush.GradientStops[2].Offset, BandLeaving + BandHalfWidth)
+        .Effect(new TransitionEffect()
         {
-            double centre;
-            double mix;
-            if (_phase < EnterEnd)
-            {
-                var t = _phase / EnterEnd;
-                centre = BandFrom + (BandFormed - BandFrom) * t;
-                mix = t;
-            }
-            else if (_phase < FadeStart)
-            {
-                var t = (_phase - EnterEnd) / (FadeStart - EnterEnd);
-                centre = BandFormed + (BandLeaving - BandFormed) * t;
-                mix = 1d;
-            }
-            else
-            {
-                var t = (_phase - FadeStart) / (1d - FadeStart);
-                centre = BandLeaving + (BandTo - BandLeaving) * t;
-                mix = 1d - t;
-            }
-
-            // Addressed in place rather than rebuilt: the brush is the property the control renders from, so
-            // writing its stops is what makes the framework repaint the link.
-            var stops = Brush.GradientStops;
-            stops[0].Offset = centre - HalfWidth;
-            stops[1].Offset = centre;
-            stops[2].Offset = centre + HalfWidth;
-            stops[1].Color = Blend(Dim, Lit, mix);
-        }
-
-        private static Color Blend(Color from, Color to, double t) => Color.FromArgb(
-            (byte)Math.Round(from.A + (to.A - from.A) * t),
-            (byte)Math.Round(from.R + (to.R - from.R) * t),
-            (byte)Math.Round(from.G + (to.G - from.G) * t),
-            (byte)Math.Round(from.B + (to.B - from.B) * t));
-    }
-
-    private readonly LinkFlow _flow = new();
+            Duration = TravelDuration,
+            Ease = Eases.Default,
+        })
+        .Then()
+        // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel. That is
+        // also what makes the seam invisible when the cycle repeats: the line is uniformly dim at both ends of
+        // a cycle, so the value snapping back to its captured start cannot be seen.
+        .Property(v => v.FlowBrush.GradientStops[0].Offset, BandExit - BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Offset, BandExit)
+        .Property(v => v.FlowBrush.GradientStops[2].Offset, BandExit + BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Color, Dim)
+        .Effect(new TransitionEffect()
+        {
+            Duration = ExitDuration,
+            Ease = Eases.Default,
+        })
+        .Repeat(int.MaxValue);
 
     /// <summary>
-    /// Walks the band across the link once per cycle, forever, so the link reads as carrying data from the
-    /// sender's anchor to the receiver's. <see cref="LinkFlow.Phase"/> is the only animated value; its
-    /// setter paints the three phases.
-    /// <para>
-    /// Declared once and executed per view rather than built per call: the endpoint is the same every
-    /// cycle, which is the case the animation reference puts in a <c>static readonly</c> field. A straight
-    /// line rather than an eased curve, because the band should move at a constant speed — an ease would
-    /// make each cycle pause at the ends and read as a series of pulses instead of a flow.
-    /// </para>
-    /// <para>
-    /// The phases are one looping segment and a piecewise mapping rather than three segments joined with
-    /// <c>Then()</c>, because nothing in the engine repeats a chain: a segment's <c>LoopTime</c> repeats
-    /// that segment, the queue of segments is walked exactly once, and the loop guard reads a pass counter
-    /// the whole run shares — so <c>LoopTime = int.MaxValue</c> on a first segment never reaches the
-    /// second, and there is no way to express "these three, in order, forever" as a chain today.
-    /// </para>
+    /// Aims the brush along the link and gives it its two colours. Called whenever the link moves — its anchors
+    /// change on every frame of a zoom (the Core anchor getters collapse the nodes toward the origin) and of a
+    /// node drag — and when its colour changes, which is also when the declaration is rebuilt, since the two
+    /// colours are its endpoints.
     /// </summary>
-    private static readonly Transition<LinkFlow> Flow =
-        Transition<LinkFlow>.Create()
-            .Property(t => t.Phase, 1d)
-            .Effect(new TransitionEffect()
-            {
-                Duration = TimeSpan.FromSeconds(1.8),
-                LoopTime = int.MaxValue,
-                Ease = Eases.Default,
-            });
-
-    /// <summary>
-    /// Orients the gradient along the link and gives the flow its two colours. <see cref="LinkFlow.Phase"/>
-    /// is written back to 0 for the same reason: it is what paints the middle stop, and at phase 0 that is
-    /// the link's colour at the band's starting position — the state a cycle begins and ends in.
-    /// </summary>
-    private void UpdateFlowBrush()
+    /// <remarks>
+    /// Nothing here writes the band's position. The cycle owns those stops and writes them every frame from the
+    /// endpoints it captured, so re-seating them from a path that runs during a gesture would fight it for a
+    /// frame — which reads as a band that stutters while the canvas moves.
+    /// </remarks>
+    private void AimFlowBrush()
     {
-        var brush = _flow.Brush;
-        if (brush is null) return;
-
         // Absolute coordinates: the four points are drawn in the control's own space and the link runs
         // diagonally, so a relative gradient would sweep across the bounding box instead of along the line.
-        brush.StartPoint = new RelativePoint(StartLeft, StartTop, RelativeUnit.Absolute);
-        brush.EndPoint = new RelativePoint(EndLeft, EndTop, RelativeUnit.Absolute);
+        FlowBrush.StartPoint = new RelativePoint(StartLeft, StartTop, RelativeUnit.Absolute);
+        FlowBrush.EndPoint = new RelativePoint(EndLeft, EndTop, RelativeUnit.Absolute);
 
-        _flow.Lit = LitOf(LineColor);
-        _flow.Dim = DimOf(_flow.Lit);
+        var lit = LitOf(LineColor);
+        if (_flow is not null && lit == Lit)
+        {
+            return;
+        }
 
-        var stops = brush.GradientStops;
-        stops[0].Color = _flow.Dim;
-        stops[2].Color = _flow.Dim;
+        Lit = lit;
+        Dim = DimOf(lit);
+        _flow = BuildFlow();
 
-        // The two shoulder stops are painted here and the middle one is left to the cycle — which is
-        // re-derived rather than restarted, since this runs while a gesture is in flight.
-        _flow.Repaint();
+        var stops = FlowBrush.GradientStops;
+        if (stops.Count == 0)
+        {
+            stops.Add(new GradientStop(Dim, BandStart - BandHalfWidth));
+            stops.Add(new GradientStop(Dim, BandStart));
+            stops.Add(new GradientStop(Dim, BandStart + BandHalfWidth));
+        }
+        else
+        {
+            stops[0].Color = Dim;
+            stops[2].Color = Dim;
+        }
+
+        // A view recycled onto a link of another colour gets its cycle restarted, from its own colour's
+        // starting state rather than the previous link's.
+        if (_running)
+        {
+            StartFlow();
+        }
     }
 
     /// <summary>
@@ -269,28 +232,55 @@ public partial class PolylineCurveView : Control
     /// lit band read as a band.
     /// </summary>
     /// <remarks>
-    /// Dimming by alpha is what keeps the hue: the alternative that suggests itself — a "highlight" that is
-    /// the line colour pushed <em>towards white</em> — is what this demo had, and it is invisible. Its links
-    /// are cyan, and cyan lifted 75% towards white differs from cyan in one channel out of three, on a 2px
-    /// line, against a dark canvas. Making the resting line the dim one puts the contrast where the eye can
-    /// find it at a glance, and it works the same on the white links the other demos draw.
+    /// Dimming by alpha is what keeps the hue: the alternative that suggests itself — a "highlight" that is the
+    /// line colour pushed <em>towards white</em> — is what this demo had, and it is invisible. Its links are
+    /// cyan, and cyan lifted 75% towards white differs from cyan in one channel out of three, on a 2px line,
+    /// against a dark canvas. Making the resting line the dim one puts the contrast where the eye can find it at
+    /// a glance, and it works the same on the white links the other demos draw.
     /// </remarks>
     private static Color DimOf(Color color) => Color.FromArgb(
         (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 
     /// <summary>
-    /// Starts the flow from the sender's end. Started on attach so a pooled view that is handed a
-    /// different link animates that link rather than the one it was built for.
+    /// Starts the cycle from the sender's end. Started on attach so a pooled view that is handed a different
+    /// link animates that link rather than the one it was built for.
     /// </summary>
     private void StartFlow()
     {
-        if (IsVirtual || !CanRender) return;
+        if (IsVirtual || !CanRender)
+        {
+            StopFlow();
+            return;
+        }
 
-        // The transition reads its start value from the target, so the cycle has to be at its beginning
-        // before Execute. The loop replays that captured start at every seam, so this is also the value
+        AimFlowBrush();
+
+        // The transition reads its start values from the target, so the brush has to be at the cycle's start
+        // before Execute — and the loop replays that captured start at every seam, so this is also the state
         // each later cycle begins from.
-        _flow.Phase = 0d;
-        Flow.Execute(_flow);
+        var stops = FlowBrush.GradientStops;
+        stops[0].Offset = BandStart - BandHalfWidth;
+        stops[1].Offset = BandStart;
+        stops[2].Offset = BandStart + BandHalfWidth;
+        stops[1].Color = Dim;
+
+        _flow!.Execute(this);
+        _running = true;
+    }
+
+    /// <summary>
+    /// Stops the cycle: a pooled view released and reused for another link must not leave the old animation
+    /// running on it.
+    /// </summary>
+    private void StopFlow()
+    {
+        if (!_running)
+        {
+            return;
+        }
+
+        Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
+        _running = false;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -303,7 +293,7 @@ public partial class PolylineCurveView : Control
     {
         base.OnDetachedFromVisualTree(e);
         // A pooled view released and reused for another link must not leave the old animation running on it.
-        Transition.Exit(_flow, IncludeMutual: true, IncludeNoMutual: true);
+        StopFlow();
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -314,13 +304,23 @@ public partial class PolylineCurveView : Control
             || change.Property == EndLeftProperty || change.Property == EndTopProperty
             || change.Property == LineColorProperty)
         {
-            UpdateFlowBrush();
+            AimFlowBrush();
         }
 
         // A link becomes drawable only once both endpoints have been measured, and the flow has nothing to
-        // travel along before that.
+        // travel along before that — while a virtual one is the rubber band under the pointer, which has no
+        // settled connection to describe.
         if (change.Property == CanRenderProperty || change.Property == IsVirtualProperty)
-            StartFlow();
+        {
+            if (IsVirtual || !CanRender)
+            {
+                StopFlow();
+            }
+            else
+            {
+                StartFlow();
+            }
+        }
     }
 
     #endregion
@@ -341,12 +341,12 @@ public partial class PolylineCurveView : Control
         // The travelling highlight is only meaningful on a settled connection. A virtual link is the rubber
         // band under the pointer and a selected one is already highlighted, so both keep a flat pen.
         ImmutableSolidColorBrush GetSolid() => new(color);
-        IBrush brush = IsSelected || IsVirtual ? GetSolid() : _flow.Brush!;
+        IBrush brush = IsSelected || IsVirtual ? GetSolid() : FlowBrush;
 
         // The arrowhead is the destination marker, so it carries the band's colour rather than the
         // gradient: the line rests dim, and an arrowhead dimmed with it would be the one part of the link
         // that never lights up.
-        IBrush arrowBrush = IsSelected ? GetSolid() : new ImmutableSolidColorBrush(_flow.Lit);
+        IBrush arrowBrush = IsSelected ? GetSolid() : new ImmutableSolidColorBrush(Lit);
 
         Pen pen;
         if (IsVirtual)
