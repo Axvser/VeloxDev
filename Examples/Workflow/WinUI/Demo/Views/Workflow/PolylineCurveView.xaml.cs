@@ -25,7 +25,7 @@ public sealed partial class PolylineCurveView : UserControl
     private readonly SolidColorBrush _strokeBrush = new(Colors.Cyan);
     // The arrowhead's brush, kept apart from the line's because it is not the same colour: it takes the flow's
     // lit colour rather than the gradient the line strokes with (see UpdatePath). Recoloured in place by
-    // UpdateFlowBrush; the seed value is only what it wears until the link's own colour is known.
+    // AimFlowBrush; the seed value is only what it wears until the link's own colour is known.
     private readonly SolidColorBrush _arrowBrush = new(Colors.Cyan);
     private readonly PathGeometry _pathGeometry = new();
     private readonly PathFigure _pathFigure = new() { IsClosed = false };
@@ -54,21 +54,9 @@ public sealed partial class PolylineCurveView : UserControl
         container.Children.Add(_arrowPath);
         this.Content = container;
 
-        // The band's brush: three stops, the middle one carrying the travelling highlight (see LinkFlow.Apply).
-        // Built here and handed to the flow rather than declared inside the LinkFlow type so that the type stays
-        // a plain holder of the members the animation writes. Seeded from the link's colour and then immediately
-        // put in the resting state by UpdateFlowBrush — the same order the reference platform uses.
-        _flow.Brush = new LinearGradientBrush
-        {
-            SpreadMethod = GradientSpreadMethod.Pad,
-            GradientStops =
-            [
-                new GradientStop { Color = LineColor, Offset = 0d },
-                new GradientStop { Color = LineColor, Offset = 0.5d },
-                new GradientStop { Color = LineColor, Offset = 1d },
-            ],
-        };
-        UpdateFlowBrush();
+        // The brush is the view's own and the stops are only created here: AimFlowBrush aims it, gives it its
+        // colours and builds the declaration whose endpoints those colours are.
+        AimFlowBrush();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -112,22 +100,31 @@ public sealed partial class PolylineCurveView : UserControl
         control.UpdateInteractivity();
         control.ScheduleUpdate();
 
-        // Only the four endpoints and the colour the band is mixed from re-orient the gradient, and
-        // re-orienting also puts the cycle back at its beginning (see UpdateFlowBrush). Every other change
-        // here — a hover, a link turning virtual — asks for a repaint and nothing more, because a band that
-        // snapped back to the sender's anchor whenever the pointer crossed the link would read as a stutter
-        // rather than as flow.
+        // The gradient runs along the link's own axis and is mixed from the link's own colour, so an endpoint
+        // and the colour are both inputs to the brush rather than to the drawing code. Re-aiming is all this
+        // may do: the cycle owns the band's position, so a handler here that re-seated the stops would park the
+        // band at the sender's anchor for as long as the gesture lasted — a stutter, not flow.
         if (e.Property == StartLeftProperty || e.Property == StartTopProperty
             || e.Property == EndLeftProperty || e.Property == EndTopProperty
             || e.Property == LineColorProperty)
         {
-            control.UpdateFlowBrush();
+            control.AimFlowBrush();
         }
 
         // A link becomes drawable only once both endpoints have been measured, and the flow has nothing to
-        // travel along before that.
+        // travel along before that — while a virtual one is the rubber band under the pointer, which has no
+        // settled connection to describe.
         if (e.Property == CanRenderProperty || e.Property == IsVirtualProperty)
-            control.StartFlow();
+        {
+            if (control.IsVirtual || !control.CanRender)
+            {
+                control.StopFlow();
+            }
+            else
+            {
+                control.StartFlow();
+            }
+        }
     }
 
     private void UpdateInteractivity()
@@ -140,172 +137,125 @@ public sealed partial class PolylineCurveView : UserControl
 
     #region Flow effect
 
+    /// <summary>Half the band's width, in gradient-offset units.</summary>
+    private const double BandHalfWidth = 0.04;
+
+    // The three phases, as the band's centre at the end of each: it forms as it enters, travels fully lit,
+    // and settles back on its way out. What the animation writes is these centres, plus and minus HalfWidth.
+    private const double BandStart = 0.06;
+    private const double BandFormed = 0.34;
+    private const double BandLeaving = 0.66;
+    private const double BandExit = 0.94;
+
+    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(550);
+    private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(650);
+    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(550);
+
     /// <summary>
-    /// The object the flow animation writes into. <c>Transition&lt;T&gt;</c> animates a member of a reference
-    /// type, so the brush and the two colours the band is mixed from are held here rather than reached through
-    /// the control: the animated path is <see cref="Phase"/>, and its setter is what turns that one number into
-    /// the band's position and colour.
+    /// The brush the link is drawn with, and the object the flow animates: a gradient along the link's own
+    /// axis whose middle stop is the band. It is a property of this control rather than something a model
+    /// holds, so the animated paths read straight off the view — <c>FlowBrush.GradientStops[1].Offset</c> and
+    /// <c>[1].Color</c> — and there is no value in between to map back into geometry.
     /// </summary>
-    /// <remarks>
-    /// The line is drawn dim and the band is the same colour at full strength, so what travels is a lit length
-    /// of the link rather than a different colour on it. The three stops are the band: the middle one carries
-    /// the lit colour and the other two sit <see cref="HalfWidth"/> either side of it, which is what keeps it a
-    /// band instead of one wide smear along the whole line.
-    /// </remarks>
-    private sealed class LinkFlow
+    public LinearGradientBrush FlowBrush { get; } = new()
     {
-        /// <summary>Half the band's width, in gradient-offset units.</summary>
-        private const double HalfWidth = 0.04;
+        SpreadMethod = GradientSpreadMethod.Pad,
+    };
 
-        // One cycle, as fractions of it. The phases have different lengths because they cover different
-        // distances: the band travels a third of the link while forming, a third while fully lit, and a
-        // third while leaving.
-        private const double EnterEnd = 0.30;
-        private const double FadeStart = 0.66;
-        private const double BandFrom = 0.06;
-        private const double BandFormed = 0.34;
-        private const double BandLeaving = 0.66;
-        private const double BandTo = 0.94;
+    /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
+    private Windows.UI.Color Lit { get; set; }
 
-        public LinearGradientBrush Brush { get; set; } = null!;
+    /// <summary>The line's resting colour: the lit colour dimmed to a little under two thirds.</summary>
+    private Windows.UI.Color Dim { get; set; }
 
-        /// <summary>The line's resting colour: <see cref="Lit"/> at the link's own strength dimmed.</summary>
-        public Windows.UI.Color Dim { get; set; }
-
-        /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
-        public Windows.UI.Color Lit { get; set; }
-
-        private double _phase;
-
-        /// <summary>
-        /// Cycle progress, 0→1: the whole of the animated state. Writing it repaints the band, and the
-        /// animation writes it every frame.
-        /// </summary>
-        public double Phase
-        {
-            get => _phase;
-            set { _phase = value; Apply(); }
-        }
-
-        /// <summary>
-        /// Re-derives the band's stops from the phase the cycle is at right now, without moving it.
-        /// </summary>
-        /// <remarks>
-        /// The brush has to be repainted whenever the link moves, because the gradient's axis is the link's
-        /// own and the stops' colours are mixed from its colour — and a link moves on every frame of a zoom
-        /// (the Core anchor getters collapse toward the origin) and of a node drag. Writing the phase back
-        /// to zero there would park the band at the sender's end for as long as the gesture lasted, so this
-        /// re-derives from the value the cycle is already at instead.
-        /// </remarks>
-        public void Repaint() => Apply();
-
-        /// <summary>
-        /// Places the band and mixes its colour for the current phase — the three phases the cycle is made of,
-        /// as one piecewise mapping.
-        /// <para>
-        /// Phase 1 (0 → <see cref="EnterEnd"/>) the band forms as it enters: it travels a third of the way while
-        /// coming up from the line's resting colour to the lit one. Phase 2 (<see cref="EnterEnd"/> →
-        /// <see cref="FadeStart"/>) it travels fully lit and unchanged, which is the phase that reads as flow
-        /// rather than as a pulse. Phase 3 (<see cref="FadeStart"/> → 1) it leaves: the last third of the
-        /// travel, settling back to the resting colour — which is also what makes the seam invisible when the
-        /// cycle repeats, since the line is uniformly dim at both ends of a cycle.
-        /// </para>
-        /// </summary>
-        private void Apply()
-        {
-            double centre;
-            double mix;
-            if (_phase < EnterEnd)
-            {
-                var t = _phase / EnterEnd;
-                centre = BandFrom + (BandFormed - BandFrom) * t;
-                mix = t;
-            }
-            else if (_phase < FadeStart)
-            {
-                var t = (_phase - EnterEnd) / (FadeStart - EnterEnd);
-                centre = BandFormed + (BandLeaving - BandFormed) * t;
-                mix = 1d;
-            }
-            else
-            {
-                var t = (_phase - FadeStart) / (1d - FadeStart);
-                centre = BandLeaving + (BandTo - BandLeaving) * t;
-                mix = 1d - t;
-            }
-
-            // Addressed in place rather than rebuilt: the brush is what the Path strokes with, so writing its
-            // stops is what makes the framework repaint the link, while a rebuilt brush would be an object the
-            // Path has never been handed and nothing on screen would change.
-            var stops = Brush.GradientStops;
-            stops[0].Offset = centre - HalfWidth;
-            stops[1].Offset = centre;
-            stops[2].Offset = centre + HalfWidth;
-            stops[1].Color = Blend(Dim, Lit, mix);
-        }
-
-        private static Windows.UI.Color Blend(Windows.UI.Color from, Windows.UI.Color to, double t)
-            => Windows.UI.Color.FromArgb(
-                (byte)Math.Round(from.A + (to.A - from.A) * t),
-                (byte)Math.Round(from.R + (to.R - from.R) * t),
-                (byte)Math.Round(from.G + (to.G - from.G) * t),
-                (byte)Math.Round(from.B + (to.B - from.B) * t));
-    }
-
-    private readonly LinkFlow _flow = new();
+    private Transition<PolylineCurveView>? _flow;
+    private bool _running;
 
     /// <summary>
-    /// Walks the band across the link once per cycle, forever, so the link reads as carrying data from the
-    /// sender's anchor to the receiver's. <see cref="LinkFlow.Phase"/> is the only animated value; its setter
-    /// paints the three phases.
-    /// <para>
-    /// A straight line rather than an eased curve, because the band should move at a constant speed — an ease
-    /// would make each cycle pause at the ends and read as a series of pulses instead of a flow.
-    /// </para>
-    /// <para>
-    /// The phases are one looping segment and a piecewise mapping rather than three segments joined with
-    /// <c>Then()</c>, because nothing in the engine repeats a chain: a segment's <c>LoopTime</c> repeats that
-    /// segment, the queue of segments is walked exactly once, and the loop guard reads a pass counter the whole
-    /// run shares (<c>Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:194</c>) — so
-    /// <c>LoopTime = int.MaxValue</c> on a first segment never reaches the second, and there is no way to
-    /// express "these three, in order, forever" as a chain today.
-    /// </para>
-    /// <para>
-    /// Held per view rather than in the <c>static readonly</c> field the other platforms declare their
-    /// animations in: on WinUI a <c>Transition&lt;T&gt;</c> field is built on whichever thread first touches the
-    /// declaring type, and that is a documented hazard in this repository's WinUI demos (see
-    /// <c>Examples/Transition/WinUI/Demo/MainWindow.xaml.cs</c>). An instance field is built in the view's own
-    /// constructor, which the framework only ever runs on the UI thread, so the hazard cannot arise — at the
-    /// cost of one declaration per view instead of one per process.
-    /// </para>
-    /// </summary>
-    private readonly Transition<LinkFlow> _flowAnimation =
-        Transition<LinkFlow>.Create()
-            .Property(t => t.Phase, 1d)
-            .Effect(new TransitionEffect()
-            {
-                Duration = TimeSpan.FromSeconds(1.8),
-                LoopTime = int.MaxValue,
-                Ease = Eases.Default,
-            });
-
-    /// <summary>
-    /// Orients the gradient along the link and gives the flow its two colours. <see cref="LinkFlow.Phase"/> is
-    /// written back to 0 for the same reason: it is what paints the middle stop, and at phase 0 that is the
-    /// link's colour at the band's starting position — the state a cycle begins and ends in.
+    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
     /// </summary>
     /// <remarks>
+    /// Built per view rather than held in a <c>static readonly</c> field, because two of its endpoints are the
+    /// link's own colours, and a declaration that reads a local is shared by every later execution of it — here
+    /// that would paint one link's band in another link's colour. WinUI adds a second reason for the same shape:
+    /// a <c>Transition&lt;T&gt;</c> field is built on whichever thread first touches the declaring type, and that
+    /// is a documented hazard in this repository's WinUI demos (see
+    /// <c>Examples/Transition/WinUI/Demo/MainWindow.xaml.cs</c>). Built here, where every caller is already on
+    /// the UI thread, the hazard cannot arise — at the cost of one declaration per view.
+    /// <para>
+    /// The paths go into the brush itself: <c>GradientStops[1]</c> is the band and the two stops either side of
+    /// it are its shoulders, so a phase is a handful of indexed writes and the phase structure is readable
+    /// rather than computed. A straight line rather than an eased curve, because the band should move at a
+    /// constant speed — an ease would make each cycle pause at the ends and read as pulses instead of flow.
+    /// </para>
+    /// <para>
+    /// Nothing here asks for a repaint, where every segment of the WPF port attaches one. WinUI's gradient stop
+    /// is a dependency object under a dependency-property brush and these are in-place writes to the brush the
+    /// <see cref="Path"/> already strokes with — which is exactly what the phase-scalar design this replaces
+    /// did, and it carried no repaint path either. The rewrite is therefore repaint-neutral against the code it
+    /// replaces: whatever the framework did for those same writes, it does for these. The WPF adapter's repaint
+    /// exists because a DrawingContext keeps the brush by reference without subscribing to it, which is a fact
+    /// about WPF's immediate-mode drawing and not about WinUI's retained <see cref="Path"/>.
+    /// </para>
+    /// </remarks>
+    private Transition<PolylineCurveView> BuildFlow() => Transition<PolylineCurveView>.Create()
+        // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
+        // resting colour to the lit one.
+        .Property(v => v.FlowBrush.GradientStops[0].Offset, BandFormed - BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Offset, BandFormed)
+        .Property(v => v.FlowBrush.GradientStops[2].Offset, BandFormed + BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Color, Lit)
+        .Effect(new TransitionEffect()
+        {
+            Duration = EnterDuration,
+            Ease = Eases.Default,
+        })
+        .Then()
+        // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than as a
+        // pulse: nothing about it changes except where it is.
+        .Property(v => v.FlowBrush.GradientStops[0].Offset, BandLeaving - BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Offset, BandLeaving)
+        .Property(v => v.FlowBrush.GradientStops[2].Offset, BandLeaving + BandHalfWidth)
+        .Effect(new TransitionEffect()
+        {
+            Duration = TravelDuration,
+            Ease = Eases.Default,
+        })
+        .Then()
+        // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel. That is
+        // also what makes the seam invisible when the cycle repeats: the line is uniformly dim at both ends of
+        // a cycle, so the value snapping back to its captured start cannot be seen.
+        .Property(v => v.FlowBrush.GradientStops[0].Offset, BandExit - BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Offset, BandExit)
+        .Property(v => v.FlowBrush.GradientStops[2].Offset, BandExit + BandHalfWidth)
+        .Property(v => v.FlowBrush.GradientStops[1].Color, Dim)
+        .Effect(new TransitionEffect()
+        {
+            Duration = ExitDuration,
+            Ease = Eases.Default,
+        })
+        .Repeat(int.MaxValue);
+
+    /// <summary>
+    /// Aims the brush along the link and gives it its two colours. Called whenever the link moves — its anchors
+    /// change on every frame of a zoom (the Core anchor getters collapse the nodes toward the origin) and of a
+    /// node drag — and when its colour changes, which is also when the declaration is rebuilt, since the two
+    /// colours are its endpoints.
+    /// </summary>
+    /// <remarks>
+    /// Nothing here writes the band's position. The cycle owns those stops and writes them every frame from the
+    /// endpoints it captured, so re-seating them from a path that runs during a gesture would fight it for a
+    /// frame — which reads as a band that stutters while the canvas moves.
+    /// <para>
     /// WinUI's <see cref="LinearGradientBrush"/> has no <c>MappingMode</c>: its axis is always expressed in the
     /// own 0..1 space of the geometry the shape paints. This Path's geometry is the whole polyline, in the
     /// control's own coordinates, so each endpoint has to be converted into a position inside the geometry's
     /// bounds — a gradient declared as (0,0)→(1,1) would sweep along the bounding box's diagonal rather than
     /// along the link, and on a link whose endpoints run up and to the left it would run backwards as well.
+    /// </para>
     /// </remarks>
-    private void UpdateFlowBrush()
+    private void AimFlowBrush()
     {
-        var brush = _flow.Brush;
-        if (brush is null) return;
-
         // Read from the control's own endpoints rather than from the geometry: this runs on the property change
         // that moved an endpoint, which is before the deferred UpdatePath has rebuilt anything.
         BuildPoints();
@@ -326,20 +276,43 @@ public sealed partial class PolylineCurveView : UserControl
         var width = maxX > minX ? maxX - minX : 1d;
         var height = maxY > minY ? maxY - minY : 1d;
 
-        brush.StartPoint = new Point((StartLeft - minX) / width, (StartTop - minY) / height);
-        brush.EndPoint = new Point((EndLeft - minX) / width, (EndTop - minY) / height);
+        FlowBrush.StartPoint = new Point((StartLeft - minX) / width, (StartTop - minY) / height);
+        FlowBrush.EndPoint = new Point((EndLeft - minX) / width, (EndTop - minY) / height);
 
-        _flow.Lit = LitOf(LineColor);
-        _flow.Dim = DimOf(_flow.Lit);
-        _arrowBrush.Color = _flow.Lit;
+        var lit = LitOf(LineColor);
+        if (_flow is not null && lit == Lit)
+        {
+            return;
+        }
 
-        var stops = brush.GradientStops;
-        stops[0].Color = _flow.Dim;
-        stops[2].Color = _flow.Dim;
+        Lit = lit;
+        Dim = DimOf(lit);
+        _flow = BuildFlow();
 
-        // The two shoulder stops are painted here and the middle one is left to the cycle — which is
-        // re-derived rather than restarted, since this runs while a gesture is in flight.
-        _flow.Repaint();
+        var stops = FlowBrush.GradientStops;
+        if (stops.Count == 0)
+        {
+            stops.Add(new GradientStop { Color = Dim, Offset = BandStart - BandHalfWidth });
+            stops.Add(new GradientStop { Color = Dim, Offset = BandStart });
+            stops.Add(new GradientStop { Color = Dim, Offset = BandStart + BandHalfWidth });
+        }
+        else
+        {
+            stops[0].Color = Dim;
+            stops[2].Color = Dim;
+        }
+
+        // The arrowhead is the destination marker and carries the band's colour rather than the gradient, so it
+        // is repainted with the declaration rather than on the render path: it is the one part of a link that
+        // must not be left resting dim.
+        _arrowBrush.Color = Lit;
+
+        // A view recycled onto a link of another colour gets its cycle restarted, from its own colour's
+        // starting state rather than the previous link's.
+        if (_running)
+        {
+            StartFlow();
+        }
     }
 
     /// <summary>
@@ -370,12 +343,16 @@ public sealed partial class PolylineCurveView : UserControl
         (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 
     /// <summary>
-    /// Starts the flow from the sender's end. Started on load so a pooled view that is handed a different link
+    /// Starts the cycle from the sender's end. Started on load so a pooled view that is handed a different link
     /// animates that link rather than the one it was built for.
     /// </summary>
     private void StartFlow()
     {
-        if (IsVirtual || !CanRender) return;
+        if (IsVirtual || !CanRender)
+        {
+            StopFlow();
+            return;
+        }
 
         // Loaded is the only place a view is known to be in the tree, and WinUI can raise a property change
         // while it is not — a pooled view being prepared for its next link, for instance. A flow started there
@@ -383,11 +360,34 @@ public sealed partial class PolylineCurveView : UserControl
         // starts one as soon as the view is really on screen.
         if (!_isLoaded) return;
 
-        // The transition reads its start value from the target, so the cycle has to be at its beginning before
-        // Execute. The loop replays that captured start at every seam, so this is also the value each later
-        // cycle begins from.
-        _flow.Phase = 0d;
-        _flowAnimation.Execute(_flow);
+        AimFlowBrush();
+
+        // The transition reads its start values from the target, so the brush has to be at the cycle's start
+        // before Execute — and the loop replays that captured start at every seam, so this is also the state
+        // each later cycle begins from.
+        var stops = FlowBrush.GradientStops;
+        stops[0].Offset = BandStart - BandHalfWidth;
+        stops[1].Offset = BandStart;
+        stops[2].Offset = BandStart + BandHalfWidth;
+        stops[1].Color = Dim;
+
+        _flow!.Execute(this);
+        _running = true;
+    }
+
+    /// <summary>
+    /// Stops the cycle: a pooled view released and reused for another link must not leave the old animation
+    /// running on it, driving the brush of whatever it is reused for.
+    /// </summary>
+    private void StopFlow()
+    {
+        if (!_running)
+        {
+            return;
+        }
+
+        Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
+        _running = false;
     }
 
     #endregion
@@ -409,8 +409,8 @@ public sealed partial class PolylineCurveView : UserControl
         _updatePending = false;
 
         // Detaching is where it stops, for the same reason: a pooled view released and reused for another link
-        // must not leave the old animation running on it, driving the brush of whatever it is reused for.
-        Transition.Exit(_flow, IncludeMutual: true, IncludeNoMutual: true);
+        // must not leave the old animation running on it.
+        StopFlow();
     }
 
     private void EnsureGeometry()
@@ -477,7 +477,7 @@ public sealed partial class PolylineCurveView : UserControl
         // under the pointer and a highlighted one is already lit, so both keep a flat pen. A settled link strokes
         // with the gradient, whose two outer stops are the resting colour — so what a settled link rests in is
         // the link's own colour dimmed, which is what gives the lit band something to read against.
-        _path.Stroke = IsHighlighted || IsVirtual ? _strokeBrush : _flow.Brush;
+        _path.Stroke = IsHighlighted || IsVirtual ? _strokeBrush : FlowBrush;
 
         // The arrowhead is the destination marker, so it carries the band's colour rather than the gradient: the
         // line rests dim, and an arrowhead dimmed with it would be the one part of the link that never lights up.
