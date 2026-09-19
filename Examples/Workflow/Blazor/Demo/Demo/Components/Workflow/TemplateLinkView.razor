@@ -15,6 +15,12 @@
     var dash = EffectiveIsVirtual ? "6 4" : "none";
     var markerEnd = EffectiveIsVirtual ? "" : $"url(#{markerId})";
 
+    // The travelling highlight: three stops whose position and colour come from the cycle's progress, and
+    // an axis along the link's own endpoints (userSpaceOnUse) so the band travels along the link rather
+    // than across a diagonal of its bounding box.
+    var stops = CurrentFlowStops();
+    var axis = FlowAxis;
+
     <svg width="@CanvasWidthCss" height="@CanvasHeightCss"
          data-veloxdev-link-id="@wfLinkId"
          data-veloxdev-sender-slot="@wfSenderSlotId"
@@ -23,8 +29,17 @@
         <defs>
             <marker id="@markerId" markerWidth="10" markerHeight="7"
                     refX="9" refY="3.5" orient="auto">
-                <polygon points="0 0, 10 3.5, 0 7" fill="@LineColor" />
+                <polygon points="0 0, 10 3.5, 0 7" fill="@LitCss" />
             </marker>
+            @if (!EffectiveIsVirtual)
+            {
+                <linearGradient id="@FlowId" gradientUnits="userSpaceOnUse"
+                                x1="@axis[0]" y1="@axis[1]" x2="@axis[2]" y2="@axis[3]">
+                    <stop offset="@stops[0].Offset" stop-color="@stops[0].Color" />
+                    <stop offset="@stops[1].Offset" stop-color="@stops[1].Color" />
+                    <stop offset="@stops[2].Offset" stop-color="@stops[2].Color" />
+                </linearGradient>
+            }
         </defs>
         @if (EffectiveIsVirtual)
         {
@@ -38,7 +53,7 @@
         {
             <polyline points="@points"
                       fill="none"
-                      stroke="@LineColor"
+                      stroke="@FlowStroke"
                       stroke-width="@ThicknessCss"
                       marker-end="@markerEnd" />
         }
