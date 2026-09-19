@@ -23,6 +23,12 @@ public partial class WorkflowView : UserControl
     public WorkflowView()
     {
         InitializeComponent();
+
+        // Keep the canvas-info HUD current on every scroll / viewport change. The overlay subscribes to
+        // the Core model itself (scale / actual size / visible items); the scroll and content offsets come
+        // from the grid decorator's DPs, which WorkflowSurfaceBehavior pushes on this same event.
+        PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
+
         DataContext = _workflowViewModel;
         InitializeNetworkDemo();
         InitializeMcp();

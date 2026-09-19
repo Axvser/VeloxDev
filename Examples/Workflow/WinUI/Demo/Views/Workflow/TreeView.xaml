@@ -14,6 +14,7 @@
     behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
     behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
     behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+    behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -23,40 +24,35 @@
                             Height="{Binding Size.Height}"
                             Canvas.Left="{Binding Anchor.Horizontal}"
                             Canvas.Top="{Binding Anchor.Vertical}"
-                            Canvas.ZIndex="{Binding Anchor.Layer}"
-                            IsEnabled="{Binding IsEnabled}"/>
+                            Canvas.ZIndex="{Binding Anchor.Layer}"/>
         </DataTemplate>
         <DataTemplate x:Key="ControllerTemplate">
             <local:ControllerView Width="{Binding Size.Width}"
                                   Height="{Binding Size.Height}"
                                   Canvas.Left="{Binding Anchor.Horizontal}"
                                   Canvas.Top="{Binding Anchor.Vertical}"
-                                  Canvas.ZIndex="{Binding Anchor.Layer}"
-                                  IsEnabled="{Binding IsEnabled}"/>
+                                  Canvas.ZIndex="{Binding Anchor.Layer}"/>
         </DataTemplate>
         <DataTemplate x:Key="EnumSelectorTemplate">
             <local:EnumSelectorNodeView Width="{Binding Size.Width}"
                                         Height="{Binding Size.Height}"
                                         Canvas.Left="{Binding Anchor.Horizontal}"
                                         Canvas.Top="{Binding Anchor.Vertical}"
-                                        Canvas.ZIndex="{Binding Anchor.Layer}"
-                                        IsEnabled="{Binding IsEnabled}"/>
+                                        Canvas.ZIndex="{Binding Anchor.Layer}"/>
         </DataTemplate>
         <DataTemplate x:Key="PythonTemplate">
             <local:PythonNodeView Width="{Binding Size.Width}"
                                   Height="{Binding Size.Height}"
                                   Canvas.Left="{Binding Anchor.Horizontal}"
                                   Canvas.Top="{Binding Anchor.Vertical}"
-                                  Canvas.ZIndex="{Binding Anchor.Layer}"
-                                  IsEnabled="{Binding IsEnabled}"/>
+                                  Canvas.ZIndex="{Binding Anchor.Layer}"/>
         </DataTemplate>
         <DataTemplate x:Key="TimerTemplate">
             <local:TimerNodeView Width="{Binding Size.Width}"
                                  Height="{Binding Size.Height}"
                                  Canvas.Left="{Binding Anchor.Horizontal}"
                                  Canvas.Top="{Binding Anchor.Vertical}"
-                                 Canvas.ZIndex="{Binding Anchor.Layer}"
-                                 IsEnabled="{Binding IsEnabled}"/>
+                                 Canvas.ZIndex="{Binding Anchor.Layer}"/>
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
             <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
@@ -124,17 +120,31 @@
                     </ScrollViewer>
                 </local:WorkflowGridDecorator>
             </Border>
-            <behaviors:WorkflowMinimapOverlay HorizontalAlignment="Right"
+            <!-- Minimap. The surface pushes scroll / content / viewport / tree into it because
+                 MinimapOverlayName="PART_MinimapOverlay" names this element; the six hand-written
+                 bindings that used to sit here are what the attached property replaces. Only
+                 ScrollViewerName stays — the minimap resolves that one itself, for drag navigation. -->
+            <behaviors:WorkflowMinimapOverlay x:Name="PART_MinimapOverlay"
+                                              HorizontalAlignment="Right"
                                               VerticalAlignment="Top"
                                               Margin="0,56,45,0"
-                                              ScrollViewerName="PART_ScrollViewer"
-                                              WorkflowTree="{Binding}"
-                                              ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
-                                              ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
-                                              ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
-                                              ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
-                                              ViewportWidth="{Binding ActualWidth, ElementName=PART_SurfaceBorder}"
-                                              ViewportHeight="{Binding ActualHeight, ElementName=PART_SurfaceBorder}"/>
+                                              ScrollViewerName="PART_ScrollViewer"/>
+            <!-- Realtime canvas-info HUD (floating decorator layer). Scroll/content offsets come from the
+                 grid decorator's DPs (fed by WorkflowSurfaceBehavior on scroll/pan/zoom); viewport size from
+                 the surface border so it also tracks window resize. The overlay subscribes to the Core model
+                 itself (scale / ActualSize / helper VisibleItems) and is refreshed on the scroll viewer's
+                 ViewChanged in TreeView.xaml.cs. -->
+            <local:InfoOverlay x:Name="InfoOverlay"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Bottom"
+                               Margin="44,0,20,32"
+                               WorkflowTree="{Binding}"
+                               ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
+                               ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
+                               ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
+                               ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
+                               ViewportWidth="{Binding ActualWidth, ElementName=PART_SurfaceBorder}"
+                               ViewportHeight="{Binding ActualHeight, ElementName=PART_SurfaceBorder}" />
         </Grid>
 
         <Grid Grid.Column="0" Margin="20,20,0,20">

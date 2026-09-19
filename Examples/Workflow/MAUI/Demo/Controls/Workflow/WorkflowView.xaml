@@ -11,7 +11,8 @@
              behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
     <ContentView.Resources>
         <DataTemplate x:Key="NodeTemplate">
             <controls:NodeView WidthRequest="{Binding Size.Width}"
@@ -214,18 +215,20 @@
                     </ScrollView>
                 </controls:WorkflowGridDecorator>
             </Border>
-            <!-- Minimap overlay -->
-            <behaviors:WorkflowMinimapOverlay HorizontalOptions="End"
-                                              VerticalOptions="Start"
-                                              Margin="0,8,8,0"
-                                              ScrollViewerName="PART_ScrollViewer"
-                                              WorkflowTree="{Binding Source={x:Reference PART_SurfaceBorder}, Path=BindingContext}"
-                                              ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                              ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                              ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                              ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                              ViewportWidth="{Binding Width, Source={x:Reference PART_SurfaceBorder}}"
-                                              ViewportHeight="{Binding Height, Source={x:Reference PART_SurfaceBorder}}"/>
+            <!-- Minimap. The surface pushes scroll / content / viewport into it because
+                 MinimapOverlayName="PART_MinimapOverlay" names this element; wiring those same values
+                 by hand here is what the attached property replaces. -->
+            <controls:MinimapOverlay x:Name="PART_MinimapOverlay"
+                                     HorizontalOptions="End"
+                                     VerticalOptions="Start"
+                                     Margin="0,8,8,0"
+                                     ScrollViewerName="PART_ScrollViewer" />
+            <!-- Realtime canvas-info HUD. Refreshes from the model and the surface's scroll changes
+                 (WorkflowView.xaml.cs); its text layer is hit-test transparent so drags reach the canvas. -->
+            <controls:InfoOverlay x:Name="InfoOverlay"
+                                  HorizontalOptions="Start"
+                                  VerticalOptions="End"
+                                  Margin="44,0,0,12" />
         </Grid>
     </Grid>
 </ContentView>

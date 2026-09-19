@@ -153,6 +153,8 @@
                                                 BorderColor="#475569"
                                                 NodeFill="#38BDF8"
                                                 ViewportStroke="#FFFFFF" />
+                        @* Realtime canvas-info HUD (bottom-left floating text + copy button). *@
+                        <InfoOverlay Tree="tree" Viewport="vp" />
                     </Minimap>
                     <ChildContent Context="sc">
                         @* Links layer: one full-canvas TemplateLinkView per connection (template product,
@@ -185,9 +187,10 @@
                                                 <WorkflowControllerView Controller="c" />
                                             </BodyContent>
                                             <OutputSlots>
-                                                <WorkflowSlotConnectionBehavior Slot="c.OutputSlot" Tree="tree" IsEnabled="true">
-                                                    <TemplateSlotView Slot="c.OutputSlot" Tree="tree" SlotSize="20" />
-                                                </WorkflowSlotConnectionBehavior>
+                                                @* TemplateSlotView already opens the connection behavior for its
+                                                   slot; wrapping it in another one doubles the measured anchors and
+                                                   the gesture handlers. *@
+                                                <TemplateSlotView Slot="c.OutputSlot" Tree="tree" SlotSize="20" />
                                             </OutputSlots>
                                         </TemplateNodeView>
                                         break;
@@ -200,9 +203,7 @@
                                                 <WorkflowEnumSelectorView Selector="e" Tree="tree" />
                                             </BodyContent>
                                             <InputSlots>
-                                                <WorkflowSlotConnectionBehavior Slot="e.InputSlot" Tree="tree" IsEnabled="true">
-                                                    <TemplateSlotView Slot="e.InputSlot" Tree="tree" SlotSize="20" />
-                                                </WorkflowSlotConnectionBehavior>
+                                                <TemplateSlotView Slot="e.InputSlot" Tree="tree" SlotSize="20" />
                                             </InputSlots>
                                         </TemplateNodeView>
                                         break;
@@ -225,14 +226,10 @@
                                                 <WorkflowTimerView Selector="t" />
                                             </BodyContent>
                                             <InputSlots>
-                                                <WorkflowSlotConnectionBehavior Slot="t.InputSlot" Tree="tree" IsEnabled="true">
-                                                    <TemplateSlotView Slot="t.InputSlot" Tree="tree" SlotSize="20" />
-                                                </WorkflowSlotConnectionBehavior>
+                                                <TemplateSlotView Slot="t.InputSlot" Tree="tree" SlotSize="20" />
                                             </InputSlots>
                                             <OutputSlots>
-                                                <WorkflowSlotConnectionBehavior Slot="t.OutputSlot" Tree="tree" IsEnabled="true">
-                                                    <TemplateSlotView Slot="t.OutputSlot" Tree="tree" SlotSize="20" />
-                                                </WorkflowSlotConnectionBehavior>
+                                                <TemplateSlotView Slot="t.OutputSlot" Tree="tree" SlotSize="20" />
                                             </OutputSlots>
                                         </TemplateNodeView>
                                         break;

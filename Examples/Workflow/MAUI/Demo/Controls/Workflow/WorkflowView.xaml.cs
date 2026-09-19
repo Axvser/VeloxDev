@@ -22,6 +22,11 @@ public partial class WorkflowView : ContentView
     public WorkflowView()
     {
         InitializeComponent();
+
+        // Keep the canvas-info HUD current on every scroll / viewport change (it reads helper.Viewport,
+        // which the surface behavior refreshes; the model events cover scale / visible counts).
+        PART_ScrollViewer.Scrolled += (_, _) => InfoOverlay.Update();
+        PART_ScrollViewer.SizeChanged += (_, _) => InfoOverlay.Update();
     }
 
     private void LoadNetworkDemo()
@@ -162,6 +167,9 @@ public partial class WorkflowView : ContentView
         // inheritance chain and can cause missed binding updates.
         BindingContext = _workflowViewModel;
         UpdateNodeItemsSource(newSession?.Tree);
+        // Propagate the tree to the HUD explicitly so its BindingContextChanged fires even if
+        // inheritance does not reach the nested overlay.
+        InfoOverlay.BindingContext = _workflowViewModel;
 
         if (newSession is not null)
         {

@@ -46,6 +46,13 @@ namespace Demo.Views
         public TreeView()
         {
             InitializeComponent();
+
+            // Keep the canvas-info HUD current on every scroll / viewport change. The overlay subscribes to
+            // the Core model itself (scale / actual size / visible items); the scroll and content offsets come
+            // from the grid decorator's DPs, which WorkflowSurfaceBehavior pushes on this same event. WinUI's
+            // ScrollViewer reports through ViewChanged — there is no ScrollChanged on this framework.
+            PART_ScrollViewer.ViewChanged += (_, _) => InfoOverlay.Refresh();
+
             WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, Resources["NodeSelector"] as DataTemplateSelector);
             InitializeNetworkDemo();
         }

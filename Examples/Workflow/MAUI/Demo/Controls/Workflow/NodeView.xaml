@@ -1,138 +1,28 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:controls="clr-namespace:Demo.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.NodeView"
-             InputTransparent="False"
-             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
-             behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
-             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid x:Name="DesignGrid" RowDefinitions="40,*,36">
-        <Border Grid.RowSpan="3"
+             InputTransparent="False">
+    <!-- The fallback node card: what the canvas draws for a node type that ships no view of its own.
+
+         Bare on purpose. The framework's IWorkflowNodeViewModel carries geometry and slots and no display
+         name — a title is a property of the concrete ViewModel — so this card cannot honestly label a node
+         it knows nothing else about. Every node type in this demo has a view of its own (ControllerView,
+         TimerNodeView, PythonNodeView, EnumSelectorNodeView), so this renders only for a foreign type.
+
+         This file used to be a copy of the timer node's view: the fallback advertised a Delay box, an
+         Execution panel and Run/Forward buttons on any node type it happened to render, and its chrome was
+         bound to ChromeBackground / ChromeBorderBrush — properties that exist nowhere in this repository,
+         so the card drew with no background and no border at all. Chrome is a property of the view rather
+         than of a ViewModel that has to stay portable across seven GUI toolkits, which is why the colours
+         here are static, exactly as the item template's node view writes them. -->
+    <Grid>
+        <Border Stroke="#334155"
                 StrokeThickness="1.5"
                 StrokeShape="RoundRectangle 6"
-                Stroke="{Binding ChromeBorderBrush}"
-                BackgroundColor="{Binding ChromeBackground}" />
-
-        <Grid Grid.RowSpan="3" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
-            <controls:SlotView x:Name="PART_InputSlot"
-                               WidthRequest="20"
-                               HeightRequest="20"
-                               HorizontalOptions="Start"
-                               VerticalOptions="Center"
-                               Margin="-10,0,0,0"
-                               BindingContext="{Binding InputSlot}"
-                               IsVisible="{Binding HasInputSlot}"
-                               SlotState="{Binding State}" />
-
-            <controls:SlotView x:Name="PART_OutputSlot"
-                               WidthRequest="20"
-                               HeightRequest="20"
-                               HorizontalOptions="End"
-                               VerticalOptions="Center"
-                               Margin="0,0,-10,0"
-                               BindingContext="{Binding OutputSlot}"
-                               IsVisible="{Binding HasOutputSlot}"
-                               SlotState="{Binding State}" />
-        </Grid>
-
-        <Border Grid.Row="0"
-                BackgroundColor="{Binding HeaderBackground}"
-                StrokeShape="RoundRectangle 4,4,0,0"
-                StrokeThickness="0"
-                Padding="12,0"
+                BackgroundColor="#1E293B"
                 behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <Grid ColumnDefinitions="*,Auto">
-                <HorizontalStackLayout Spacing="8"
-                                       HorizontalOptions="Center"
-                                       VerticalOptions="Center">
-                    <Label Text="{Binding Title}"
-                           TextColor="White"
-                           FontAttributes="Bold"
-                           VerticalTextAlignment="Center" />
-                    <Border BackgroundColor="#1F3D1F"
-                            Stroke="#7BD97B"
-                            StrokeThickness="1"
-                            StrokeShape="RoundRectangle 10"
-                            Padding="6,1"
-                            IsVisible="{Binding HasExecutionOrder}">
-                        <Label Text="{Binding ExecutionOrderText}"
-                               TextColor="#C8FFC8"
-                               FontAttributes="Bold"
-                               VerticalTextAlignment="Center" />
-                    </Border>
-                    <Border BackgroundColor="#2B2440"
-                            Stroke="#B799FF"
-                            StrokeThickness="1"
-                            StrokeShape="RoundRectangle 10"
-                            Padding="6,1"
-                            IsVisible="{Binding HasWorkLoad}">
-                        <Label Text="{Binding WorkLoadText}"
-                               TextColor="#E4D8FF"
-                               FontAttributes="Bold"
-                               VerticalTextAlignment="Center" />
-                    </Border>
-                </HorizontalStackLayout>
-                <VerticalStackLayout Grid.Column="1"
-                                     HorizontalOptions="End"
-                                     VerticalOptions="Center"
-                                     Spacing="0">
-                    <Label Text="耗时"
-                           TextColor="#BFBFBF"
-                           FontSize="10"
-                           HorizontalTextAlignment="End" />
-                    <Label Text="{Binding LastDuration}"
-                           TextColor="{Binding DurationForeground}"
-                           FontSize="18"
-                           FontAttributes="Bold"
-                           HorizontalTextAlignment="End" />
-                </VerticalStackLayout>
-            </Grid>
-        </Border>
-
-        <Border Grid.Row="1" BackgroundColor="#252525">
-            <ScrollView Orientation="Vertical">
-                <VerticalStackLayout Margin="14" Spacing="10">
-                    <Grid ColumnDefinitions="110,*">
-                        <Label Text="Delay" TextColor="#DCDCDC" VerticalTextAlignment="Center" />
-                        <Entry Grid.Column="1" Text="{Binding DelayMilliseconds}" Keyboard="Numeric" />
-                    </Grid>
-                    <Grid ColumnDefinitions="110,*">
-                        <Label Text="Title" TextColor="#DCDCDC" VerticalTextAlignment="Center" />
-                        <Entry Grid.Column="1" Text="{Binding Title}" />
-                    </Grid>
-                    <CheckBox IsChecked="{Binding AutoBroadcast}" Color="#DCDCDC" />
-                    <Label Text="执行完成后自动广播到下游" TextColor="#DCDCDC" Margin="36,-32,0,0" />
-                    <Border BackgroundColor="{Binding ExecutionBackground}"
-                            Stroke="{Binding ExecutionBorderBrush}"
-                            StrokeThickness="1.5"
-                            StrokeShape="RoundRectangle 4"
-                            Padding="10">
-                        <VerticalStackLayout Spacing="4">
-                            <Label Text="Execution" TextColor="#7EC8FF" FontAttributes="Bold" />
-                            <Label Text="{Binding RunCount, StringFormat='Active: {0}'}" TextColor="#FFD54A" FontAttributes="Bold" />
-                            <Label Text="{Binding WaitCount, StringFormat='Queued: {0}'}" TextColor="#D6B7FF" FontAttributes="Bold" />
-                            <Label Text="{Binding LastExecutionTrace, StringFormat='Order: {0}'}" TextColor="#9EE79E" FontAttributes="Bold" />
-                            <Label Text="{Binding LastStatus, StringFormat='Status: {0}'}" TextColor="White" FontAttributes="Bold" />
-                            <Label Text="{Binding LastDuration}" TextColor="{Binding DurationForeground}" FontSize="24" FontAttributes="Bold" />
-                            <Label Text="{Binding LastError, StringFormat='Error: {0}'}" TextColor="#FF9B9B" />
-                            <Label Text="{Binding LastResponsePreview}" TextColor="#CFCFCF" />
-                        </VerticalStackLayout>
-                    </Border>
-                </VerticalStackLayout>
-            </ScrollView>
-        </Border>
-
-        <Border Grid.Row="2"
-                Padding="1"
-                BackgroundColor="#2D2D2D"
-                StrokeShape="RoundRectangle 0,0,4,4">
-            <Grid ColumnDefinitions="*,*">
-                <Button Grid.Column="0" Text="Run" Command="{Binding ReceiveCommand}" TextColor="White" />
-                <Button Grid.Column="1" Text="Forward" Command="{Binding BroadcastCommand}" TextColor="White" />
-            </Grid>
-        </Border>
+                behaviors:WorkflowNodeDragBehavior.IsEnabled="True" />
     </Grid>
 </ContentView>
