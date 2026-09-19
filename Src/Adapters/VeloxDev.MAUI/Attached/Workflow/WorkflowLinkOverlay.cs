@@ -67,7 +67,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
     private bool _invalidatePending;
 
-    private double _flowPhase;
+    private double _bandCentre;
+    private double _bandMix;
 
     public WorkflowLinkOverlay()
     {
@@ -98,16 +99,29 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public bool LinkFlowEnabled { get => (bool)GetValue(LinkFlowEnabledProperty); set => SetValue(LinkFlowEnabledProperty, value); }
 
     /// <summary>
-    /// Cycle progress of the flow, 0→1: the one animated value the travelling highlight is drawn from.
-    /// Public because the animation addresses it by name, and writing it is what schedules the repaint —
-    /// the band's position and colour are derived from it while drawing.
+    /// Where the band is, as a fraction of a link's length from its sender's end. Written by the flow's
+    /// animation every frame; each link's geometry and colours are derived from it while drawing.
     /// </summary>
-    public double FlowPhase
+    public double BandCentre
     {
-        get => _flowPhase;
+        get => _bandCentre;
         set
         {
-            _flowPhase = value;
+            _bandCentre = value;
+            ScheduleInvalidate();
+        }
+    }
+
+    /// <summary>
+    /// How far the band has come up from the line's resting colour to the lit one: 0 is not there yet, 1 is
+    /// fully lit. The phases carry it — it climbs while the band enters and falls while it leaves.
+    /// </summary>
+    public double BandMix
+    {
+        get => _bandMix;
+        set
+        {
+            _bandMix = value;
             ScheduleInvalidate();
         }
     }
@@ -117,42 +131,63 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// <summary>Half the band's width, in gradient-offset units along the link.</summary>
     private const double FlowBandHalfWidth = 0.04;
 
-    // One cycle, as fractions of it: the band travels a third of the link while forming, a third while
-    // fully lit, and a third while leaving. The phases cover different distances, so they are not equal
-    // thirds of the cycle.
-    private const double FlowEnterEnd = 0.30;
-    private const double FlowFadeStart = 0.66;
+    // The three phases, as where the band's centre is at the end of each: it forms as it enters, travels
+    // fully lit, and settles back on its way out.
     private const double FlowBandFrom = 0.06;
     private const double FlowBandFormed = 0.34;
     private const double FlowBandLeaving = 0.66;
     private const double FlowBandTo = 0.94;
 
     /// <summary>
-    /// Walks the band across every settled link once per cycle, forever. One animation drives the whole
-    /// overlay rather than one per link, because this layer draws all links in a single pass: the bands
-    /// therefore advance together, which is what a surface-wide flow looks like.
-    /// <para>
-    /// The phases are one looping segment and a piecewise mapping rather than three segments joined with
-    /// <c>Then()</c>, because nothing in the engine repeats a chain: a segment's <c>LoopTime</c> repeats
-    /// that segment, the queue of segments is walked exactly once, and the loop guard reads a pass counter
-    /// the whole run shares — so a second segment samples no frames at all. One looping segment also gives
-    /// a seamless seam: a loop replays the endpoints captured when it started, and the line is uniformly
-    /// dim at both ends of a cycle.
-    /// </para>
+    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
     /// </summary>
+    /// <remarks>
+    /// One animation drives the whole overlay rather than one per link, because this layer draws every link in
+    /// a single pass: the bands therefore advance together, which is what a surface-wide flow looks like. What it
+    /// animates is two numbers — where the band is and how lit it is — and each link derives its own geometry and
+    /// its own colours from them while drawing.
+    /// <para>
+    /// The phases are a chain because the engine repeats one: a segment's <c>LoopTime</c> repeats that segment,
+    /// and <c>Repeat</c> runs the whole chain again from the endpoints its first cycle captured — so the three
+    /// phases keep their order and every cycle restarts where the first began.
+    /// </para>
+    /// </remarks>
     private static readonly Transition<WorkflowLinkOverlay> Flow =
         Transition<WorkflowLinkOverlay>.Create()
-            .Property(o => o.FlowPhase, 1d)
+            // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
+            // resting colour to the lit one, so it appears rather than sliding in from off-link.
+            .Property(o => o.BandCentre, FlowBandFormed)
+            .Property(o => o.BandMix, 1d)
             .Effect(new TransitionEffect()
             {
-                Duration = TimeSpan.FromSeconds(1.8),
-                LoopTime = int.MaxValue,
+                Duration = TimeSpan.FromMilliseconds(550),
                 Ease = Eases.Default,
-            });
+            })
+            .Then()
+            // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than
+            // as a pulse: nothing about it changes except where it is.
+            .Property(o => o.BandCentre, FlowBandLeaving)
+            .Effect(new TransitionEffect()
+            {
+                Duration = TimeSpan.FromMilliseconds(650),
+                Ease = Eases.Default,
+            })
+            .Then()
+            // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel. That
+            // is also what makes the seam invisible when the cycle repeats: the line is uniformly dim at both
+            // ends of a cycle.
+            .Property(o => o.BandCentre, FlowBandTo)
+            .Property(o => o.BandMix, 0d)
+            .Effect(new TransitionEffect()
+            {
+                Duration = TimeSpan.FromMilliseconds(550),
+                Ease = Eases.Default,
+            })
+            .Repeat(int.MaxValue);
 
     /// <summary>
-    /// Starts the flow. Called from <c>Loaded</c>, and again when the switch is turned on, so the band
-    /// always starts from the sender's end rather than wherever the previous run left it.
+    /// Starts the flow. Called from <c>Loaded</c>, and again when the switch is turned on, so the band always
+    /// starts from the sender's end rather than wherever a previous run left it.
     /// </summary>
     private void StartFlow()
     {
@@ -161,12 +196,15 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             return;
         }
 
-        // The transition reads its start value from the target, so the cycle has to be at its beginning
-        // before Execute.
-        FlowPhase = 0d;
+        // The transition reads its start values from the target, so the cycle has to be at its beginning before
+        // Execute — and a loop replays that captured start at every seam, so this is also the state each later
+        // cycle begins from.
+        _bandCentre = FlowBandFrom;
+        _bandMix = 0d;
         Flow.Execute(this);
     }
 
+    /// <summary>Stops the flow, and lets the transition release the resources it holds.</summary>
     private void StopFlow()
         => Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
 
@@ -187,31 +225,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         overlay.ScheduleInvalidate();
-    }
-
-    /// <summary>Where the band's centre sits, and how lit it is, at one position in the cycle.</summary>
-    /// <remarks>
-    /// The three phases, as one piecewise mapping: the band comes up from the resting colour over the first
-    /// third of its travel — so it appears rather than sliding in from off-link — travels fully lit and
-    /// unchanged for the middle third, which is the phase that reads as flow rather than as a pulse, and
-    /// settles back over the last third.
-    /// </remarks>
-    private static (double Centre, double Mix) BandAt(double phase)
-    {
-        if (phase < FlowEnterEnd)
-        {
-            var t = phase / FlowEnterEnd;
-            return (FlowBandFrom + (FlowBandFormed - FlowBandFrom) * t, t);
-        }
-
-        if (phase < FlowFadeStart)
-        {
-            var t = (phase - FlowEnterEnd) / (FlowFadeStart - FlowEnterEnd);
-            return (FlowBandFormed + (FlowBandLeaving - FlowBandFormed) * t, 1d);
-        }
-
-        var fade = (phase - FlowFadeStart) / (1d - FlowFadeStart);
-        return (FlowBandLeaving + (FlowBandTo - FlowBandLeaving) * fade, 1d - fade);
     }
 
     /// <summary>
@@ -286,7 +299,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     {
         var lit = FlowLit(color);
         var dim = FlowDim(lit);
-        var (centre, mix) = BandAt(_flowPhase);
+        // The two values the cycle writes; everything below is this link's own reading of them.
+        var centre = _bandCentre;
+        var mix = _bandMix;
 
         // The elbow is three runs — horizontal stub, diagonal, horizontal stub — and a piece is placed by
         // how far along the link it is, not by the fraction of a bounding box it crosses.
