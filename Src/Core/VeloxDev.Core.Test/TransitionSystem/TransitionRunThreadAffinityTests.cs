@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using VeloxDev.Threading;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
@@ -31,16 +31,38 @@ public class TransitionRunThreadAffinityTests
     {
     }
 
-    /// <summary>One circuit's renderer: counts what was handed to it.</summary>
+    /// <summary>One circuit's renderer: counts what was handed to it, and remembers for which target.</summary>
     private sealed class Circuit(string name) : SynchronizationContext
     {
+        private readonly object _gate = new();
+        private readonly HashSet<object> _targets = [];
+        private int _posted;
+
         public string Name { get; } = name;
 
-        public int Posted { get; private set; }
+        public int Posted => Volatile.Read(ref _posted);
+
+        /// <summary>True when this circuit was asked to marshal something for <paramref name="target"/>.</summary>
+        public bool PostedFor(object target)
+        {
+            lock (_gate)
+            {
+                return _targets.Contains(target);
+            }
+        }
+
+        // 每次 run 有自己的 target，所以记下 target 就能证明帧有没有落到别人的电路上。
+        public void Record(object target)
+        {
+            lock (_gate)
+            {
+                _targets.Add(target);
+            }
+        }
 
         public override void Post(SendOrPostCallback d, object? state)
         {
-            Posted++;
+            Interlocked.Increment(ref _posted);
             d(state);
         }
     }
@@ -74,6 +96,8 @@ public class TransitionRunThreadAffinityTests
         {
             if (!thread.TryGet<SynchronizationContext>(out var context)) return false;
 
+            if (context is Circuit circuit) circuit.Record(target);
+
             context.Post(_ => action(), null);
             return true;
         }
@@ -97,6 +121,17 @@ public class TransitionRunThreadAffinityTests
         }
     }
 
+    /// <summary>
+    /// Two runs started on two circuits each post to their own — the question the sampling loop's thread cannot
+    /// answer for itself.
+    /// </summary>
+    /// <remarks>
+    /// The two post *counts* are not comparable: a 60 ms pass at 120 FPS gets however many wake-ups the scheduler
+    /// hands it, so asserting that they match fails whenever one run is given a frame less than the other. What is
+    /// comparable is which targets each circuit was asked to marshal for, and that is the property this test is
+    /// about — every run carries its own target, so a frame on the wrong circuit would show up as one circuit
+    /// having posted for the other one's target.
+    /// </remarks>
     [TestMethod]
     public void EachRunPostsToTheCircuitItWasStartedOn()
     {
@@ -104,21 +139,26 @@ public class TransitionRunThreadAffinityTests
 
         var circuitA = new Circuit("A");
         var circuitB = new Circuit("B");
+        var targetA = new Target();
+        var targetB = new Target();
         var completed = 0;
 
-        StartOn(circuitA, new Target(), () => Interlocked.Increment(ref completed));
-        StartOn(circuitB, new Target(), () => Interlocked.Increment(ref completed));
+        StartOn(circuitA, targetA, () => Interlocked.Increment(ref completed));
+        StartOn(circuitB, targetB, () => Interlocked.Increment(ref completed));
 
         // 必须等两条都跑完，而不是等它们各收到一次投递：第一帧还在启动线程上，谁都答得对，
         // 问题从第二帧起、在池线程上才露头。
         var deadline = Environment.TickCount64 + 8000;
         while (Volatile.Read(ref completed) < 2 && Environment.TickCount64 < deadline) Thread.Sleep(20);
 
-        Assert.AreEqual(2, Volatile.Read(ref completed), "两条动画都该跑完，否则下面的计数比不出东西");
-        Assert.IsTrue(circuitB.Posted >= 2,
-            $"电路 B 应当收到它自己那一趟的读取与帧，实际只收到 {circuitB.Posted}");
-        Assert.AreEqual(circuitA.Posted, circuitB.Posted,
-            "两趟动画形状相同，各自收到的投递数也该相同——不等就说明有一趟的帧落到了别人的电路上");
+        Assert.AreEqual(2, Volatile.Read(ref completed), "两条动画都该跑完，否则下面的判断比不出东西");
+        Assert.IsTrue(circuitA.Posted >= 1, $"电路 A 应当收到它自己那一趟的投递，实际收到 {circuitA.Posted}");
+        Assert.IsTrue(circuitB.Posted >= 1, $"电路 B 应当收到它自己那一趟的投递，实际收到 {circuitB.Posted}");
+
+        Assert.IsTrue(circuitA.PostedFor(targetA), "电路 A 应当为自己那一趟的目标投递过");
+        Assert.IsFalse(circuitA.PostedFor(targetB), "电路 A 不该为另一趟的目标投递——那说明帧落到了别人的电路上");
+        Assert.IsTrue(circuitB.PostedFor(targetB), "电路 B 应当为自己那一趟的目标投递过");
+        Assert.IsFalse(circuitB.PostedFor(targetA), "电路 B 不该为另一趟的目标投递");
     }
 
     private static void StartOn(Circuit circuit, Target target, Action onCompleted)
