@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -108,6 +108,8 @@ public abstract class StateSnapshotCore
     internal abstract T CoreThen<T>()
         where T : StateSnapshotCore, new();
     internal abstract T CoreAwaitThen<T>(TimeSpan timeSpan)
+        where T : StateSnapshotCore, new();
+    internal abstract T CoreRepeat<T>(int count)
         where T : StateSnapshotCore, new();
     internal abstract void CoreExecute(object target, bool CanMutualTask = true, ITimeSourceControl? timeline = null);
     internal abstract void CoreValidate();

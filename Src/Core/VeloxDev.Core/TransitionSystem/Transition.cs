@@ -272,6 +272,19 @@ public class TransitionCore<
 {
     protected TStateCore state = new();
     protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? root;
+
+    /// <summary>
+    /// How many further times the whole chain runs after its first pass: 0 — the default — runs it once, and
+    /// <c>int.MaxValue</c> runs it forever.
+    /// </summary>
+    /// <remarks>
+    /// The chain-level counterpart of the effect's <c>LoopTime</c>, and it follows that member's rule: the count
+    /// is the number of <em>additional</em> cycles. It lives on the chain's root whichever segment
+    /// <c>Repeat(...)</c> is written after, because what repeats is the chain, and each cycle replays the frame
+    /// sets the first one prepared — so a segment's endpoints are the ones captured when the chain started rather
+    /// than wherever the previous cycle left the target.
+    /// </remarks>
+    public int RepeatTime { get; set; }
     protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? next = null;
     protected TEffectCore effect = new();
     protected TInterpolatorCore interpolator = new();
@@ -391,36 +404,62 @@ public class TransitionCore<
 
         TransitionSchedulerCore.CancelDrained(superseded);
 
-        Queue<InterpolatorCore> interpolators = [];
-        Queue<TimeSpan> spans = [];
-        Queue<ITransitionEffectCore> effects = [];
-        Queue<IFrameState> states = [];
-        int Count = 0;
+        // The chain as the segments it is made of, in order. An array rather than the queue this used to be: a
+        // chain-level loop walks the same segments more than once, and a queue would have to be rebuilt per cycle.
+        var segments = new List<(InterpolatorCore Interpolator, TimeSpan Delay, ITransitionEffectCore Effect, IFrameState State)>();
 
         TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? currentNode = root;
         do
         {
-            interpolators.Enqueue(currentNode.interpolator);
-            spans.Enqueue(currentNode.delay);
-            var newEffect = currentNode.effect.Clone();
-            effects.Enqueue(newEffect);
-            states.Enqueue(currentNode.state);
-            Count++;
+            // Cloned per segment, as before, and shared by every cycle of that segment: an effect is configuration
+            // and handler lists, and a pass reads it rather than writing it.
+            segments.Add((currentNode.interpolator, currentNode.delay, currentNode.effect.Clone(), currentNode.state));
             currentNode = currentNode.next;
         }
         while (currentNode is not null);
 
+        // The frame set each segment was prepared with during the chain's first cycle. Every cycle after it
+        // replays these instead of preparing again, which is what makes the second cycle the same animation as the
+        // first: without it, a segment would re-read the target and start from wherever the previous cycle left
+        // it — a chain that ends somewhere other than where it began would walk backwards, and a segment naming a
+        // property no earlier segment touches would drift a little further every cycle.
+        var prepared = new SamplerSet<TPriorityCore>?[segments.Count];
+        var chainRepeat = root!.RepeatTime;
+        var chainScheduler = (TransitionSchedulerCore<THost, TTransitionInterpreterCore, TPriorityCore>)scheduler;
+
         try
         {
-            while (!cts.IsCancellationRequested && Count > 0)
+            for (var cycle = 0; ; cycle++)
             {
-                try
+                for (var index = 0; index < segments.Count; index++)
                 {
-                    await DelayWhilePausedAsync(run.Timeline, spans.Dequeue(), cts.Token);
+                    if (cts.IsCancellationRequested) return;
+
+                    try
+                    {
+                        await DelayWhilePausedAsync(run.Timeline, segments[index].Delay, cts.Token);
+                    }
+                    catch (OperationCanceledException) { return; }
+
+                    if (prepared[index] is { } frameSet)
+                    {
+                        await chainScheduler.Replay(frameSet, (ITransitionEffect<TPriorityCore>)segments[index].Effect, cts);
+                    }
+                    else
+                    {
+                        prepared[index] = await chainScheduler.ExecuteCapturing(
+                            segments[index].Interpolator,
+                            segments[index].State,
+                            (ITransitionEffect<TPriorityCore>)segments[index].Effect,
+                            cts);
+                    }
                 }
-                catch (OperationCanceledException) { return; }
-                await scheduler.Execute(interpolators.Dequeue(), states.Dequeue(), effects.Dequeue(), cts);
-                Count--;
+
+                // Read between cycles rather than only at the top: an Exit during the last segment has to stop the
+                // chain before it starts another cycle, the same way it stops a segment mid-pass.
+                if (cts.IsCancellationRequested) return;
+                if (chainRepeat == int.MaxValue) continue;
+                if (cycle >= chainRepeat) break;
             }
         }
         finally
@@ -502,6 +541,21 @@ public class TransitionCore<
         next = converted;
         return newNode;
     }
+    /// <summary>
+    /// Records how many further times the whole chain runs, on the chain's root rather than on the segment the
+    /// call happens to be written after — <c>Repeat</c> belongs to the chain, the way <c>Then</c> does.
+    /// </summary>
+    internal override T1 CoreRepeat<T1>(int count)
+    {
+        if (this is not T1 result)
+        {
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
+        }
+
+        (root ?? this).RepeatTime = count;
+        return result;
+    }
+
     internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, ISampler interpolator)
     {
         if (this is not T1 result)

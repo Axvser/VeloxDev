@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using VeloxDev.Threading;
@@ -29,11 +29,83 @@ public class TransitionSchedulerCore<
         IFrameState state,
         ITransitionEffect<TPriorityCore> effect,
         CancellationTokenSource? externCts = default)
+        => await ExecuteCore(producer, state, effect, externCts);
+
+    /// <summary>
+    /// Runs one segment and hands back the frame set it was prepared with, so the caller can run that same
+    /// segment again against the same endpoints.
+    /// </summary>
+    /// <remarks>
+    /// This is what a chain-level loop is built on: the first cycle prepares each segment at the moment that
+    /// segment is due — which is what keeps a segment's start value continuous with the segment before it — and
+    /// the cycles after it replay the same sets, so every cycle is the same animation rather than the first one
+    /// plus a re-measurement of wherever it left the target.
+    /// </remarks>
+    public virtual Task<SamplerSet<TPriorityCore>?> ExecuteCapturing(
+        InterpolatorCore producer,
+        IFrameState state,
+        ITransitionEffect<TPriorityCore> effect,
+        CancellationTokenSource? externCts = default)
+        => ExecuteCore(producer, state, effect, externCts);
+
+    /// <summary>
+    /// Runs one segment again against the frame set it was prepared with (see <see cref="ExecuteCapturing"/>).
+    /// </summary>
+    /// <remarks>
+    /// The target is not re-read and <c>Awake</c> is not re-raised: Awake is the hook that puts the target into
+    /// the state the segment is meant to start from, and a replay is defined by not depending on the target's
+    /// state at all. <c>Start</c>, <c>Update</c>, <c>LateUpdate</c>, <c>Completed</c> and the diagnostics fire
+    /// exactly as they do for any other pass, so a replay is observable the same way a pass is.
+    /// </remarks>
+    public virtual async Task Replay(
+        SamplerSet<TPriorityCore> frameSet,
+        ITransitionEffect<TPriorityCore> effect,
+        CancellationTokenSource? externCts = default)
     {
         if (targetref is null || !targetref.TryGetTarget(out var target))
         {
             targetref = null;
             return;
+        }
+
+        var thread = host.ThreadFor(target);
+        var newCts = externCts ?? new CancellationTokenSource();
+        TTransitionInterpreterCore newInterpreter = new();
+        var generation = Generation;
+        await _gate.WaitAsync();
+        try
+        {
+            // Exit() ran while this segment was queued: it was cancelled before it ever started.
+            if (generation != Generation) return;
+
+            // The run reaches the interpreter through the sampler set, and a replay is handed the very set the
+            // first cycle ran against — so the run it carries is already this animation's. Re-binding it only
+            // keeps the thread it was resolved on current.
+            if (_activeRuns.TryGetValue(newCts, out var run))
+            {
+                run.Thread = thread;
+                frameSet.SetRun(run);
+            }
+
+            if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
+            await newInterpreter.Execute(target, frameSet, effect, newCts);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task<SamplerSet<TPriorityCore>?> ExecuteCore(
+        InterpolatorCore producer,
+        IFrameState state,
+        ITransitionEffect<TPriorityCore> effect,
+        CancellationTokenSource? externCts = default)
+    {
+        if (targetref is null || !targetref.TryGetTarget(out var target))
+        {
+            targetref = null;
+            return null;
         }
         // 线程归属在这里解析一次，仍同步跑在启动这一趟的线程上——对 Razor 这类"UI 线程随回路而变"的宿主，
         // 这是唯一拿得到正确答案的时刻：帧是从采样循环的线程投出去的，那里没有调用方的上下文。
@@ -46,7 +118,7 @@ public class TransitionSchedulerCore<
         try
         {
             // Exit() ran while this animation was queued: it was cancelled before it ever started.
-            if (generation != Generation) return;
+            if (generation != Generation) return null;
 
             var diagnostics = new TransitionDiagnostics(effect, target, newInterpreter.Args);
 
@@ -69,7 +141,7 @@ public class TransitionSchedulerCore<
             {
                 // 宿主回调抛出的异常到此为止：动画结束，宿主进程不受影响。
                 diagnostics.Error("Awake", exception);
-                return;
+                return null;
             }
 
             // The host's queue is gone: nothing would be dispatched, frames included, so give up rather than start an
@@ -77,7 +149,7 @@ public class TransitionSchedulerCore<
             if (!awoken)
             {
                 diagnostics.Warn("Dropped", "the host's dispatch queue refused the animation's Awake.");
-                return;
+                return null;
             }
 
             SamplerSet<TPriorityCore> frameSet;
@@ -89,7 +161,7 @@ public class TransitionSchedulerCore<
             {
                 // 一个准备不出来的属性不该带走整趟动画，更不该带走宿主进程。
                 diagnostics.Error("Prepare", exception);
-                return;
+                return null;
             }
 
             // The run reaches the interpreter through the sampler set, the same way the token source does. It is
@@ -102,8 +174,9 @@ public class TransitionSchedulerCore<
                 frameSet.SetRun(run);
             }
 
-            if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
+            if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return null;
             await newInterpreter.Execute(target, frameSet, effect, newCts);
+            return frameSet;
         }
         finally
         {
