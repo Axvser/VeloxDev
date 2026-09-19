@@ -179,7 +179,7 @@ private sealed class RampTarget
 
 ⚙ Time spent paused inside a wait is not consumed — a pause of any length leaves the remaining delay unchanged.
 
-⚙ **A chain runs every segment, and the whole chain repeats through `Repeat(n)`.** Each segment's loop counts its own passes, so a segment after the first animates rather than breaking out before its first frame; `LoopTime` still repeats *that one segment*, and `Repeat(n)` — written after the last segment — runs the whole chain n further times in all:
+⚙ **A chain runs every segment, and `Repeat(n)` loops it.** `Repeat` configures the segment it is written after, and that segment's loop wraps the chain *from its first segment through that one*, n further iterations — so a count on the last segment repeats the whole chain, and counts on several segments nest by where they end:
 
 ```csharp
 private static readonly Transition<LinkView> Flow =
@@ -211,9 +211,11 @@ private static readonly Transition<LinkView> Flow =
 
 ⚙ **Animate the thing you are drawing with, and reach into it with indexed paths.** `T` is the view, the component or the surface that owns the brush — not a carrier object holding a scalar for the setter to map back into geometry. `Brush.GradientStops[1]` is part of the path, so a phase is a handful of writes whose endpoints a reader can check against the constants, and there is no arithmetic in between to get wrong. Introduce a carrier only when there is nothing else to write into: an object whose members the framework does not repaint from, or a value shared by several drawn items (a surface-level band position, say).
 
-⚙ **Every cycle replays the endpoints the first one captured**, which is the same rule a single segment's `LoopTime` follows. A segment therefore starts from the value captured when the chain started, not from wherever the previous cycle left the target. Make the end of a cycle land in the same state as its start and the seam is invisible; leave them different and the value snaps back at every seam, exactly as a looping single segment does.
+⚙ **Every iteration of a segment after its first replays the endpoints that first iteration captured**, which is the same rule a single segment's `LoopTime` follows. A segment therefore starts from the value captured when it first ran, not from wherever the previous iteration left the target. Make the end of a loop land in the same state as its start and the seam is invisible; leave them different and the value snaps back at every seam, exactly as a looping single segment does.
 
-⚙ `Repeat(0)` — the default — runs the chain once. The count is *additional* cycles, so `Repeat(2)` runs it three times; `int.MaxValue` runs it forever, and `Transition.Exit` stops it between cycles the same way it stops a segment mid-pass.
+⚙ Three segments each carrying `Repeat(1)` run `1, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 1, 2, 3` — the middle segment's loop closes around the first, and the last's closes around both, so the innermost repetition is the earliest segment's. A count on the *first* segment is therefore the narrow one (`1, 1, 1, 2, 3` for `Repeat(2)`), and only the last segment's count means the whole chain.
+
+⚙ `Repeat(0)` — the default — runs that segment's loop once. The count is *additional* iterations, so `Repeat(2)` runs the chain three times; `int.MaxValue` runs it forever, and `Transition.Exit` stops it between iterations the same way it stops a segment mid-pass. A forever loop on a segment other than the last means the segments after it never run, which is what nesting means rather than a defect.
 
 ⚙ **A forever loop needs a pass that takes time.** A pass with `Duration = 0` writes its frame and finishes without yielding, so a loop — segment-level or chain-level — built on zero-duration passes spins instead of looping and cannot be stopped from the thread it is spinning on.
 
