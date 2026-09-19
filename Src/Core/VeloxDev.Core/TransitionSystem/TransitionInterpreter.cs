@@ -1,4 +1,4 @@
-using VeloxDev.Threading;
+﻿using VeloxDev.Threading;
 using VeloxDev.TimeLine;
 using VeloxDev.Timing;
 
@@ -166,6 +166,12 @@ public abstract class TransitionInterpreterCore : IDisposable
         var run = frameSet.Run;
         var durationMs = effect.Duration.TotalMilliseconds;
         var foreverloop = effect.LoopTime == int.MaxValue;
+
+        // The counter is shared by the whole run, and a chain runs several segments against it, so this segment's
+        // loop counts from where the counter stood when *this* segment started. Without the offset, the second
+        // segment of a chain begins with the counter already past its LoopTime and breaks before its first pass:
+        // it reports Start and Completed and writes no frame at all.
+        var startCycle = run.Cycle;
         var diagnostics = new TransitionDiagnostics(effect, target, Args);
         frameSet.SetDiagnostics(diagnostics);
 
@@ -190,8 +196,9 @@ public abstract class TransitionInterpreterCore : IDisposable
             {
                 // The counter is read rather than held, so a seek can move the animation to another pass: the loop
                 // has no private notion of which pass it is in. It is also the only thing that can express a pass
-                // position when a zero-duration pass consumes no time at all.
-                if (!foreverloop && run.Cycle > effect.LoopTime) break;
+                // position when a zero-duration pass consumes no time at all. Read as an offset from this segment's
+                // own start, so a seek still repositions it while a chain's earlier segments do not count against it.
+                if (!foreverloop && run.Cycle - startCycle > effect.LoopTime) break;
 
                 if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
                 await RunPassAsync(target, effect, run, durationMs, cts, apply, diagnostics, forward: true);
