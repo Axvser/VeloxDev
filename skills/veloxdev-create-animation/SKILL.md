@@ -179,52 +179,47 @@ private sealed class RampTarget
 
 ⚙ Time spent paused inside a wait is not consumed — a pause of any length leaves the remaining delay unchanged.
 
-⚙ **A chain runs every segment, and the whole chain repeats through `Repeat(n)`.** Each segment's loop counts
-its own passes, so a segment after the first animates rather than breaking out before its first frame; `LoopTime`
-still repeats *that one segment*, and `Repeat(n)` — written after the last segment — runs the whole chain n further
-times in all:
+⚙ **A chain runs every segment, and the whole chain repeats through `Repeat(n)`.** Each segment's loop counts its own passes, so a segment after the first animates rather than breaking out before its first frame; `LoopTime` still repeats *that one segment*, and `Repeat(n)` — written after the last segment — runs the whole chain n further times in all:
 
 ```csharp
-Transition<Link>.Create()
-    .Property(t => t.BandOffset, 0.34d)
-    .Property(t => t.BandColor, Lit)
-    .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(550) })
-    .Then()
-    .Property(t => t.BandOffset, 0.66d)
-    .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(650) })
-    .Then()
-    .Property(t => t.BandOffset, 0.94d)
-    .Property(t => t.BandColor, Dim)
-    .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(550) })
-    .Repeat(int.MaxValue);
+private static readonly Transition<LinkView> Flow =
+    Transition<LinkView>.Create()
+        .Property(v => v.Brush.GradientStops[1].Offset, BandFormed)
+        .Property(v => v.Brush.GradientStops[1].Color, Lit)
+        .Effect(new TransitionEffect()
+        {
+            Duration = TimeSpan.FromMilliseconds(550),
+            Ease = Eases.Default,
+        })
+        .Then()
+        .Property(v => v.Brush.GradientStops[1].Offset, BandLeaving)
+        .Effect(new TransitionEffect()
+        {
+            Duration = TimeSpan.FromMilliseconds(650),
+            Ease = Eases.Default,
+        })
+        .Then()
+        .Property(v => v.Brush.GradientStops[1].Offset, BandExit)
+        .Property(v => v.Brush.GradientStops[1].Color, Dim)
+        .Effect(new TransitionEffect()
+        {
+            Duration = TimeSpan.FromMilliseconds(550),
+            Ease = Eases.Default,
+        })
+        .Repeat(int.MaxValue);
 ```
 
-⚙ **Every cycle replays the endpoints the first one captured.** That is the same rule a single segment's `LoopTime`
-follows, applied to the chain: a segment starts from the value captured when the chain started, not from wherever
-the previous cycle left the target. Make the end of the cycle land in the same state as its start and the seam is
-invisible; leave them different and the value snaps back at every seam, exactly as a looping single segment does.
+⚙ **Animate the thing you are drawing with, and reach into it with indexed paths.** `T` is the view, the component or the surface that owns the brush — not a carrier object holding a scalar for the setter to map back into geometry. `Brush.GradientStops[1]` is part of the path, so a phase is a handful of writes whose endpoints a reader can check against the constants, and there is no arithmetic in between to get wrong. Introduce a carrier only when there is nothing else to write into: an object whose members the framework does not repaint from, or a value shared by several drawn items (a surface-level band position, say).
 
-⚙ `Repeat(0)` — the default — runs the chain once. The count is *additional* cycles, so `Repeat(2)` runs it three
-times; `int.MaxValue` runs it forever, and `Transition.Exit` stops it between cycles the same way it stops a
-segment mid-pass.
+⚙ **Every cycle replays the endpoints the first one captured**, which is the same rule a single segment's `LoopTime` follows. A segment therefore starts from the value captured when the chain started, not from wherever the previous cycle left the target. Make the end of a cycle land in the same state as its start and the seam is invisible; leave them different and the value snaps back at every seam, exactly as a looping single segment does.
 
-⚙ **A forever loop needs a pass that takes time.** A pass with `Duration = 0` writes its frame and finishes without
-yielding, so a loop — segment-level or chain-level — built on zero-duration passes spins instead of looping and
-cannot be stopped from the thread it is spinning on.
+⚙ `Repeat(0)` — the default — runs the chain once. The count is *additional* cycles, so `Repeat(2)` runs it three times; `int.MaxValue` runs it forever, and `Transition.Exit` stops it between cycles the same way it stops a segment mid-pass.
 
-⚙ Phases can equally well live inside **one** looping segment, as a mapping from a single animated value; that form
-needs no chain, and it is what the shipped demos do:
+⚙ **A forever loop needs a pass that takes time.** A pass with `Duration = 0` writes its frame and finishes without yielding, so a loop — segment-level or chain-level — built on zero-duration passes spins instead of looping and cannot be stopped from the thread it is spinning on.
 
-```csharp
-// the animated path is a scalar; its setter is what turns it into the phase's geometry and colour
-.Property(t => t.Progress, 1d)
-.Effect(new TransitionEffect()
-{
-    Duration = TimeSpan.FromSeconds(1.8),
-    LoopTime = int.MaxValue,
-    Ease = Eases.Default,
-});
-```
+⚙ **A declaration whose endpoints come from the caller is built per caller, not cached.** Two of the phase endpoints above are the link's own colours, so the declaration is built once per view (or per component) and rebuilt when that colour changes — the rule below about locals applies to it: a `static readonly` declaration reading a local shares it with every later execution.
+
+⚙ **When the platform needs a frame hook, attach it with the setter overload.** WPF does not repaint from a gradient-stop write, so a port there ends each segment with `.Effect(e => { e.Duration = …; e.Ease = …; e.LateUpdate += (_, _) => InvalidateVisual(); })` — `Update` runs *before* the frame is applied and `LateUpdate` after, and a replay fires them per cycle like any other pass. An instance handler is safe exactly because the declaration is per view; on a `static readonly` one it would keep the view alive.
 
 ## Controlling a running animation
 

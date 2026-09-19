@@ -95,11 +95,11 @@ A link whose endpoints have not been measured must draw nothing. Some adapters s
 A settled link carries a **travelling highlight**, so its direction is read from the motion rather than from a mark that is a few pixels wide and invisible at 40% zoom. Every full demo does this; the Trimmed suites deliberately do not, because it is decoration rather than part of the editor.
 
 ```csharp
-// the resting line, and the length of it that is lit as it passes
-stops[0].Offset = centre - HalfWidth;   // HalfWidth ≈ 0.04 of the link
-stops[1].Offset = centre;               // the band, at the lit colour
-stops[2].Offset = centre + HalfWidth;
-stops[1].Color  = Blend(Dim, Lit, mix);
+// three stops ARE the band: the middle carries the lit colour, the two either side are its shoulders
+.Property(v => v.FlowBrush.GradientStops[0].Offset, BandFormed - BandHalfWidth)
+.Property(v => v.FlowBrush.GradientStops[1].Offset, BandFormed)
+.Property(v => v.FlowBrush.GradientStops[2].Offset, BandFormed + BandHalfWidth)
+.Property(v => v.FlowBrush.GradientStops[1].Color, Lit)
 ```
 
 ⚙ **The line rests dim and the band is the same colour at full strength — do not paint the band a different colour.** The obvious reading of "highlight" is the link's colour pushed towards white, and it is invisible: cyan lifted 75% towards white differs from cyan in one channel out of three, on a 2px line, against a dark canvas. Dimming the *resting* line by alpha (about three fifths) keeps the hue and puts the contrast where the eye finds it, and the same rule works on the white links the non-Avalonia demos draw.
@@ -110,7 +110,9 @@ stops[1].Color  = Blend(Dim, Lit, mix);
 
 ⚙ Start the animation when the view attaches and `Transition.Exit(...)` it when the view detaches: views are pooled, and a released view that is handed a different link must not keep animating the previous one.
 
-⚙ The declaration is a **single looping segment** and the phases are a mapping from that one animated value. A `Then()` chain with `Repeat(...)` expresses the same three phases and is the more declarative spelling — see [the animation skill's segments note](../../veloxdev-create-animation/SKILL.md#segments); the demos carry the single-segment form, which needs no chain.
+⚙ The three phases are a **`Then()` chain ending in `Repeat(...)`** — the band forms as it enters, travels fully lit, and settles back, forever. The animated object is the view that owns the brush (or the component, or the surface that draws the links), with the paths going into `GradientStops[i]` rather than into a carrier value: see [the animation skill's segments note](../../veloxdev-create-animation/SKILL.md#segments).
+
+⚙ **A link move must not write the band's position.** Aiming the gradient and re-colouring the shoulders happens whenever the link's endpoints change — which is every frame of a zoom or a node drag — while the cycle owns the offsets and writes them from its captured endpoints. A path that re-seats them fights the animation for a frame, which reads as a band that stutters while the canvas moves.
 
 ## Virtualization
 
