@@ -5,13 +5,15 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
 using System.Collections.Generic;
+using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo;
 
 /// <summary>
 /// Orthogonal (polyline) connection: H-stub → vertical jog → H-stub → tip.
-/// Supports click-to-select (highlighted) and Delete to remove.
+/// Supports click-to-select (highlighted) and Delete to remove, and carries a travelling highlight so
+/// the direction of data flow is readable at a glance.
 /// </summary>
 public partial class PolylineCurveView : Control
 {
@@ -20,6 +22,15 @@ public partial class PolylineCurveView : Control
         InitializeComponent();
         IsHitTestVisible = true;
         Focusable = true;
+
+        _flow.Brush = new LinearGradientBrush
+        {
+            SpreadMethod = GradientSpreadMethod.Pad,
+        };
+        _flow.Brush.GradientStops.Add(new GradientStop(LineColor, 0d));
+        _flow.Brush.GradientStops.Add(new GradientStop(LineColor, 0.5d));
+        _flow.Brush.GradientStops.Add(new GradientStop(LineColor, 1d));
+        UpdateFlowBrush();
 
         CurveSelectionManager.SelectionChanged += owner =>
         {
@@ -71,6 +82,113 @@ public partial class PolylineCurveView : Control
 
     #endregion
 
+    #region Flow effect
+
+    /// <summary>
+    /// The object the flow animation writes into. <c>Transition&lt;T&gt;</c> animates a member of a
+    /// reference type, so the brush is held here rather than reached through the control: the animated
+    /// path is <c>Brush.GradientStops[1].Offset</c>, and that index is what makes the middle stop — and
+    /// only the middle stop — move.
+    /// </summary>
+    private sealed class LinkFlow
+    {
+        public LinearGradientBrush Brush { get; set; } = null!;
+    }
+
+    private readonly LinkFlow _flow = new();
+
+    /// <summary>
+    /// Walks the middle gradient stop from 0 to 1, forever, so a brighter band travels from the sender's
+    /// anchor to the receiver's and the link reads as carrying data one way.
+    /// <para>
+    /// Declared once and executed per view rather than built per call: the endpoint is the same every
+    /// cycle, which is the case the animation reference puts in a <c>static readonly</c> field. A straight
+    /// line rather than an eased curve, because the band should move at a constant speed — an ease would
+    /// make each cycle pause at the ends and read as a series of pulses instead of a flow.
+    /// </para>
+    /// </summary>
+    private static readonly Transition<LinkFlow> Flow =
+        Transition<LinkFlow>.Create()
+            .Property(t => t.Brush.GradientStops[1].Offset, 1d)
+            .Effect(new TransitionEffect()
+            {
+                Duration = TimeSpan.FromSeconds(1.6),
+                LoopTime = int.MaxValue,
+                Ease = Eases.Default,
+            });
+
+    /// <summary>
+    /// Orients the gradient along the link and keeps its end stops on the link colour. The middle stop is
+    /// left to the animation — writing it here would fight the running transition every frame.
+    /// </summary>
+    private void UpdateFlowBrush()
+    {
+        var brush = _flow.Brush;
+        if (brush is null) return;
+
+        // Absolute coordinates: the four points are drawn in the control's own space and the link runs
+        // diagonally, so a relative gradient would sweep across the bounding box instead of along the line.
+        brush.StartPoint = new RelativePoint(StartLeft, StartTop, RelativeUnit.Absolute);
+        brush.EndPoint = new RelativePoint(EndLeft, EndTop, RelativeUnit.Absolute);
+
+        var stops = brush.GradientStops;
+        stops[0].Color = LineColor;
+        stops[2].Color = LineColor;
+        stops[1].Color = Lifted(LineColor);
+    }
+
+    /// <summary>The travelling band's colour: the link colour pushed towards white, so it reads as the same line.</summary>
+    private static Color Lifted(Color color) => Color.FromArgb(
+        color.A,
+        (byte)(color.R + (255 - color.R) * 0.75),
+        (byte)(color.G + (255 - color.G) * 0.75),
+        (byte)(color.B + (255 - color.B) * 0.75));
+
+    /// <summary>
+    /// Starts the flow from the sender's end. Started on attach so a pooled view that is handed a
+    /// different link animates that link rather than the one it was built for.
+    /// </summary>
+    private void StartFlow()
+    {
+        if (IsVirtual || !CanRender) return;
+
+        // The transition reads its start value from the target, so the band has to be at 0 before Execute.
+        _flow.Brush.GradientStops[1].Offset = 0d;
+        Flow.Execute(_flow);
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        StartFlow();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        // A pooled view released and reused for another link must not leave the old animation running on it.
+        Transition.Exit(_flow, IncludeMutual: true, IncludeNoMutual: true);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == StartLeftProperty || change.Property == StartTopProperty
+            || change.Property == EndLeftProperty || change.Property == EndTopProperty
+            || change.Property == LineColorProperty)
+        {
+            UpdateFlowBrush();
+        }
+
+        // A link becomes drawable only once both endpoints have been measured, and the flow has nothing to
+        // travel along before that.
+        if (change.Property == CanRenderProperty || change.Property == IsVirtualProperty)
+            StartFlow();
+    }
+
+    #endregion
+
     #region Render
 
     public override void Render(DrawingContext context)
@@ -83,7 +201,11 @@ public partial class PolylineCurveView : Control
 
         var color = IsSelected ? Colors.OrangeRed : LineColor;
         var thickness = IsSelected ? LineThickness + 1.5 : LineThickness;
-        var brush = new ImmutableSolidColorBrush(color);
+
+        // The travelling highlight is only meaningful on a settled connection. A virtual link is the rubber
+        // band under the pointer and a selected one is already highlighted, so both keep a flat pen.
+        ImmutableSolidColorBrush GetSolid() => new(color);
+        IBrush brush = IsSelected || IsVirtual ? GetSolid() : _flow.Brush!;
 
         Pen pen;
         if (IsVirtual)
