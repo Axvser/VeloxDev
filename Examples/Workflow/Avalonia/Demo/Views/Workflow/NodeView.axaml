@@ -1,140 +1,32 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-			 mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="260"
+			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+			 mc:Ignorable="d" d:DesignWidth="260" d:DesignHeight="180"
 			 x:Class="Demo.NodeView"
-			 xmlns:local="using:Demo"
-            xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
-			 xmlns:vm="using:Demo.ViewModels"
-             ClipToBounds="False"
-           behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
-			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
-			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
-			 x:CompileBindings="False">
-    <Viewbox Stretch="Uniform">
-    <Grid RowDefinitions="52,*,54" Width="300" Height="260" ClipToBounds="False">
-		<Border Grid.RowSpan="3"
-				CornerRadius="6"
+			 ClipToBounds="False">
+
+	<!-- The fallback node card: what the canvas draws for a node type that ships no view of its own.
+
+	     Bare on purpose. The framework's IWorkflowNodeViewModel carries geometry and slots and no display
+	     name — a title is a property of the concrete ViewModel — so this card cannot honestly label a node
+	     it knows nothing else about. Every node type in this demo has a view of its own (ControllerView,
+	     TimerNodeView, PythonNodeView, EnumSelectorNodeView), so this renders only for a foreign type.
+
+	     This file used to be a copy of the timer node's view: the fallback advertised a Delay box, an
+	     Execution panel and Run/Forward buttons on any node type it happened to render, and its chrome was
+	     bound to ChromeBackground / ChromeBorderBrush — properties that exist nowhere in this repository,
+	     so the card drew with no background and no border at all. Chrome is a property of the view rather
+	     than of a ViewModel that has to stay portable across seven GUI toolkits, which is why the colours
+	     here are static, exactly as the item template's node view writes them. -->
+
+	<Grid ClipToBounds="False">
+		<Border CornerRadius="6"
+				Background="#1E293B"
+				BorderBrush="#334155"
 				BorderThickness="1.5"
-               BorderBrush="{Binding ChromeBorderBrush}"
-				Background="{Binding ChromeBackground}">
-		</Border>
-
-		<Grid Grid.RowSpan="3" ZIndex="6" ClipToBounds="False">
-			<Grid.Styles>
-				<Style Selector="local|SlotView">
-					<Setter Property="Foreground" Value="White"/>
-				</Style>
-				<Style Selector="local|SlotView[SlotState=8]">
-					<Setter Property="Foreground" Value="Tomato"/>
-				</Style>
-				<Style Selector="local|SlotView[SlotState=16]">
-					<Setter Property="Foreground" Value="Lime"/>
-				</Style>
-				<Style Selector="local|SlotView[SlotState=24]">
-					<Setter Property="Foreground" Value="Violet"/>
-				</Style>
-			</Grid.Styles>
-
-			<local:SlotView x:Name="PART_InputSlot"
-						 Width="20"
-						 Height="20"
-						 HorizontalAlignment="Left"
-						 VerticalAlignment="Center"
-						 Margin="-10,0,0,0"
-						 DataContext="{Binding InputSlot}"
-                       IsVisible="{Binding $parent[local:NodeView].DataContext.HasInputSlot}"
-						 SlotState="{Binding State}"/>
-
-			<local:SlotView x:Name="PART_OutputSlot"
-						 Width="20"
-						 Height="20"
-						 HorizontalAlignment="Right"
-						 VerticalAlignment="Center"
-						 Margin="0,0,-10,0"
-						 DataContext="{Binding OutputSlot}"
-                       IsVisible="{Binding $parent[local:NodeView].DataContext.HasOutputSlot}"
-						 SlotState="{Binding State}"/>
-		</Grid>
-
-		<!-- Title bar -->
-		<Border Grid.Row="0"
-                Background="{Binding HeaderBackground}"
-				CornerRadius="4,4,0,0"
-				BorderThickness="0,0,0,0.5"
-                BorderBrush="{Binding HeaderBorderBrush}"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-			<Grid ColumnDefinitions="*,Auto" Margin="12,0">
-				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
-					<TextBlock Text="{Binding Title}" Foreground="White" VerticalAlignment="Center" FontWeight="Bold"/>
-                   <Border Background="#1f3d1f"
-                      BorderBrush="#7bd97b"
-                      BorderThickness="1"
-                      CornerRadius="10"
-                      Padding="6,1"
-                      IsVisible="{Binding HasExecutionOrder}">
-                      <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"/>
-                   </Border>
-                   <Border Background="#2b2440"
-							BorderBrush="#b799ff"
-							IsVisible="{Binding HasWorkLoad}">
-                     <TextBlock Text="{Binding WorkLoadText}" Foreground="#e4d8ff" FontWeight="SemiBold" VerticalAlignment="Center"/>
-					</Border>
-				</StackPanel>
-				<StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="0">
-					<TextBlock Text="耗时" Foreground="#bfbfbf" FontSize="10" HorizontalAlignment="Right"/>
-                 <TextBlock Text="{Binding LastDuration}" Foreground="{Binding DurationForeground}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Right"/>
-				</StackPanel>
-			</Grid>
-		</Border>
-
-       <Border Grid.Row="1" Background="#252525">
-			<ScrollViewer VerticalScrollBarVisibility="Auto" MinHeight="40">
-				<StackPanel Margin="14" Spacing="10">
-					<Grid ColumnDefinitions="110,*">
-                      <TextBlock Text="Delay" Foreground="#dcdcdc" VerticalAlignment="Center"/>
-						<NumericUpDown Grid.Column="1"
-								   Minimum="100"
-								   Maximum="10000"
-								   Increment="100"
-								   Value="{Binding DelayMilliseconds, Mode=TwoWay}"/>
-					</Grid>
-                    <Border Background="{Binding ExecutionBackground}" BorderBrush="{Binding ExecutionBorderBrush}" BorderThickness="1.5" CornerRadius="4" Padding="10">
-						<StackPanel Spacing="4">
-							<TextBlock Text="Execution" Foreground="#7ec8ff" FontWeight="Bold"/>
-                           <TextBlock Text="{Binding RunCount, StringFormat=Active: {0}}" Foreground="#ffd54a" FontWeight="SemiBold"/>
-							<TextBlock Text="{Binding WaitCount, StringFormat=Queued: {0}}" Foreground="#d6b7ff" FontWeight="SemiBold"/>
-                          <TextBlock Text="{Binding LastExecutionTrace, StringFormat=Order: {0}}"
-									   Foreground="#9ee79e"
-									   FontWeight="SemiBold"
-									   TextWrapping="Wrap"/>
-							<TextBlock Text="{Binding LastStatus, StringFormat=Status: {0}}"
-									   Foreground="White"
-									   FontWeight="SemiBold"/>
-							<TextBlock Text="{Binding LastDuration}"
-									   Foreground="{Binding DurationForeground}"
-									   FontSize="24"
-									   FontWeight="Bold"/>
-							<TextBlock Text="{Binding LastError, StringFormat=Error: {0}}" Foreground="#ff9b9b" TextWrapping="Wrap"/>
-							<TextBlock Text="{Binding LastResponsePreview}" Foreground="#cfcfcf" TextWrapping="Wrap"/>
-						</StackPanel>
-					</Border>
-				</StackPanel>
-			</ScrollViewer>
-		</Border>
-
-		<!-- Action buttons -->
-        <Border Grid.Row="2"
-				Padding="1"
-				Background="#2d2d2d"
-				CornerRadius="0,0,4,4">
-          <Grid ColumnDefinitions="*,*,*">
-				<Button Grid.Column="0" Content="Run" Command="{Binding ReceiveCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
-				<Button Grid.Column="1" Content="Forward" Command="{Binding BroadcastCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
-			</Grid>
-		</Border>
+				behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
+				behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas" />
 	</Grid>
-	</Viewbox>
 </UserControl>

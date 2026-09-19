@@ -33,6 +33,11 @@ public partial class WorkflowView : UserControl
     public WorkflowView()
     {
         InitializeComponent();
+
+        // Keep the canvas-info HUD current on every scroll / viewport change: it reads helper.Viewport,
+        // which the surface behaviour refreshes, and subscribes to the model for the rest.
+        PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
+
         DataContext = _workflowViewModel;
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
 

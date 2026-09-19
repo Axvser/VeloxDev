@@ -15,7 +15,8 @@
 			 behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
 			 behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
 			 behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+			 behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
 
 	<!-- Templates -->
 	<UserControl.DataTemplates>
@@ -122,20 +123,20 @@
 					</ScrollViewer>
 				</local:WorkflowGridDecorator>
 			</Border>
-			<!-- Minimap: positioned below ruler, with equal gap from ruler & right edge -->
-			<behaviors:WorkflowMinimapOverlay x:Name="PART_MinimapOverlay"
-											  HorizontalAlignment="Right"
-											  VerticalAlignment="Top"
-											  Margin="0,36,8,0"
-											  ScrollViewerName="PART_ScrollViewer"
-											  IsHitTestVisible="True"
-											  WorkflowTree="{Binding}"
-											  ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
-											  ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
-											  ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
-											  ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
-											  ViewportWidth="{Binding Bounds.Width, ElementName=WorkflowContainer}"
-											  ViewportHeight="{Binding Bounds.Height, ElementName=WorkflowContainer}"/>
+			<!-- Minimap. The surface pushes scroll / content / viewport into it because
+			     MinimapOverlayName="PART_MinimapOverlay" names this element; wiring those same five values
+			     by hand here is what the attached property replaces. -->
+			<local:MinimapOverlay x:Name="PART_MinimapOverlay"
+								  HorizontalAlignment="Right"
+								  VerticalAlignment="Top"
+								  Margin="0,36,8,0"
+								  ScrollViewerName="PART_ScrollViewer"/>
+			<!-- Realtime canvas-info HUD. Refreshes from the model and the surface's scroll changes
+			     (WorkflowView.axaml.cs); its text layer is hit-test transparent so drags reach the canvas. -->
+			<local:InfoOverlay x:Name="InfoOverlay"
+							   HorizontalAlignment="Left"
+							   VerticalAlignment="Bottom"
+							   Margin="44,0,0,12"/>
 		</Grid>
 
 		<!-- Action buttons (for testing) -->
