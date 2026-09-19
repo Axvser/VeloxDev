@@ -1,4 +1,5 @@
 ﻿using Microsoft.Agents.AI;
+using VeloxDev.AI.Pipelines;
 using Microsoft.Extensions.AI;
 using System;
 using System.Collections.Generic;
@@ -1339,7 +1340,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         skills.WithPromptLanguage(_defaultLanguage);
         skills.WithSkillRoot(rootPath);
         skills.Refresh();
-        _skillProvider = skills.CreateContextProvider(SharedPolicy);
+        _skillProvider = skills.CreateContextProvider(SharedTools, Pipeline);
         BumpVersion();
         return this;
     }
@@ -1353,7 +1354,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         Skills = skills ?? throw new ArgumentNullException(nameof(skills));
         Skills.WithSynchronizationContext(UIContext);
         Skills.WithPromptLanguage(_defaultLanguage);
-        _skillProvider = Skills.CreateContextProvider(SharedPolicy);
+        _skillProvider = Skills.CreateContextProvider(SharedTools, Pipeline);
         BumpVersion();
         return this;
     }
@@ -1362,15 +1363,77 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private AIContextProvider? _mcpProvider;
 
     /// <summary>
-    /// The policy every tool source this scope composes is given, so a tool from MCP or a skill is
-    /// counted, reported and dirtied exactly like a built-in one.
+    /// The tool seam every source this scope composes is given, so a tool from MCP or a skill is gated,
+    /// counted and reported exactly like a built-in one.
     /// <para>
-    /// One shared instance, not a copy per source: separate policies would mean separate call counters,
-    /// and the budgets would stop being budgets. It reads the scope live, so a <c>With*</c> call made
-    /// after a subsystem was attached still governs that subsystem's tools.
+    /// One shared instance, not a copy per source: separate seams would mean separate call counters, and
+    /// the budgets would stop being budgets. It reads the scope live, so a <c>With*</c> call made after a
+    /// subsystem was attached still governs that subsystem's tools.
     /// </para>
     /// </summary>
-    private AgentToolPolicy SharedPolicy => CreateToolkit().Policy;
+    private ToolPipeline SharedTools => CreateToolkit().Tools;
+
+    // ── Event pipeline ──────────────────────────────────────────────────────
+
+    private AgentPipeline? _pipeline;
+    private AgentTranscript? _transcript;
+
+    /// <summary>
+    /// The conversation this scope reports into, once <see cref="WithTranscript"/> has attached one.
+    /// A host binds this instead of writing its own run loop.
+    /// </summary>
+    public AgentTranscript? Transcript => _transcript;
+
+    /// <summary>
+    /// The scope's event chain: every tool call, every fragment of text, every piece of reasoning, and the
+    /// turn boundaries. Composed on first use and shared, so a host subscribes once.
+    /// <para>
+    /// Attach the pipeline to the agent with <c>agent.AsBuilder().UseAgentPipeline(scope.Pipeline).Build()</c>
+    /// — the framework's own middleware slot, which is what lets a host keep calling
+    /// <c>RunAsync</c> / <c>RunStreamingAsync</c> unchanged.
+    /// </para>
+    /// </summary>
+    public AgentPipeline Pipeline
+    {
+        get
+        {
+            if (_pipeline is not null) return _pipeline;
+
+            var pipeline = new AgentPipeline();
+
+            // Text first, then tools: they handle disjoint events, so the order is only about which a
+            // reader of the chain meets first.
+            if (_transcript is not null)
+                pipeline.Use(new TextPipeline(_transcript, () => UIContext));
+
+            pipeline.Use(SharedTools);
+            pipeline.Use(CreateToolkit().CreateAccountingStage());
+
+            _pipeline = pipeline;
+            return _pipeline;
+        }
+    }
+
+    /// <summary>
+    /// Attaches a conversation for the scope to report into, and wires the stages that maintain it.
+    /// <para>
+    /// One call replaces the run loop a host would otherwise write: after this,
+    /// <see cref="AgentTranscript.Entries"/> is the conversation, in order, with the model's reasoning kept
+    /// beside its answers rather than folded into them.
+    /// </para>
+    /// </summary>
+    public WorkflowAgentScope WithTranscript(AgentTranscript transcript)
+    {
+        if (transcript is null) throw new ArgumentNullException(nameof(transcript));
+        if (ReferenceEquals(_transcript, transcript)) return this;
+
+        if (_transcript is not null)
+            throw new InvalidOperationException(
+                "This scope already reports into a transcript. Attach one scope per conversation, or clear the existing transcript.");
+
+        _transcript = transcript;
+        return this;
+    }
 
     /// <summary>
     /// The Agent-facing skill tools, bound to this scope's skill set and prompt language. The language
@@ -1405,7 +1468,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         mcp.WithSynchronizationContext(UIContext);
         // Composed with this scope's policy, so MCP-sourced tools join the same budgets and callbacks.
         // Without it the subsystem would fall back to marshalling only, and its calls would go uncounted.
-        _mcpProvider = mcp.CreateContextProvider(SharedPolicy);
+        _mcpProvider = mcp.CreateContextProvider(SharedTools, Pipeline);
 
         BumpVersion();
         return this;

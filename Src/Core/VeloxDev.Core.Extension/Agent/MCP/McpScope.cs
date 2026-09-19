@@ -1,4 +1,5 @@
-using CliWrap;
+﻿using CliWrap;
+using VeloxDev.AI.Pipelines;
 using CliWrap.Buffered;
 using Microsoft.Agents.AI;
 using System;
@@ -422,8 +423,8 @@ public class McpScope
     /// <i>its</i> policy instead, so its budgets, callbacks and side effects still apply — and must pass
     /// the same instance it gives every other source, or the call counts diverge.
     /// </param>
-    public AIContextProvider CreateContextProvider(AgentToolPolicy? policy = null)
-        => new McpAgentContextProvider(this, policy);
+    public AIContextProvider CreateContextProvider(ToolPipeline? tools = null, AgentPipeline? pipeline = null)
+        => new McpAgentContextProvider(this, tools, pipeline);
 
     /// <summary>
     /// Unloads a server (mid-session removal): removes its tool set, resets its status to

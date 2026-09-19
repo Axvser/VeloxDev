@@ -1,14 +1,16 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
 using Newtonsoft.Json;
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.AI.Pipelines;
 
 namespace VeloxDev.AI;
 
 /// <summary>
 /// Wraps an <see cref="AIFunction"/> so that a call to it is subject to the owning layer's
-/// <see cref="AgentToolPolicy"/>: marshalled onto the host's thread, gated, and reported afterwards.
+/// <see cref="ToolPipeline"/>: marshalled onto the host's thread, gated, and reported into the pipeline.
 /// <para>
 /// <b>The tool bodies deliberately contain no <c>ConfigureAwait(false)</c>.</b> A posted callback runs
 /// with the dispatcher installed as <see cref="SynchronizationContext.Current"/>, so a bare
@@ -24,17 +26,24 @@ namespace VeloxDev.AI;
 /// the callers' factory methods.
 /// </para>
 /// </summary>
-internal sealed class TrackedAIFunction(AIFunction inner, AgentToolPolicy? policy = null) : DelegatingAIFunction(inner)
+internal sealed class TrackedAIFunction(
+    AIFunction inner,
+    ToolPipeline? tools = null,
+    AgentPipeline? pipeline = null) : DelegatingAIFunction(inner)
 {
-    private readonly AgentToolPolicy _policy = policy ?? new AgentToolPolicy();
+    private readonly ToolPipeline _tools = tools ?? new ToolPipeline();
+
+    // Null when the owner composes no chain — a wrapped tool still marshals and still refuses, it just has
+    // nowhere to report to.
+    private readonly AgentPipeline? _pipeline = pipeline;
 
     protected override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
         // Components are UI-bound, so when the host configured a UI SynchronizationContext and we are not
-        // already on it, marshal the entire call (body + policy hooks) onto it. Resolved per call, since
-        // the host may register the context after this wrapper was built.
-        var uiContext = _policy.MarshalTo?.Invoke();
+        // already on it, marshal the entire call (body + reporting) onto it. Resolved per call, since the
+        // host may register the context after this wrapper was built.
+        var uiContext = _tools.ResolveContext();
         if (uiContext is not null && !ReferenceEquals(uiContext, SynchronizationContext.Current))
         {
             return await RunOnContextAsync(uiContext, cancellationToken,
@@ -47,21 +56,41 @@ internal sealed class TrackedAIFunction(AIFunction inner, AgentToolPolicy? polic
         AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
         // ── Pre-flight: the owner may refuse the call outright (budgets are enforced here) ──
-        if (_policy.Refuse?.Invoke(Name) is { } refusal)
+        if (_tools.CheckRefusal(Name) is { } refusal)
+        {
+            // Reported as completed-without-started: the call never ran, so announcing it first would make
+            // the pair a lie, and a host counting events would count something that did not happen.
+            await ReportAsync(refusal, AgentToolOutcome.Refused, TimeSpan.Zero, cancellationToken);
             return Error(refusal);
+        }
+
+        var elapsed = Stopwatch.StartNew();
+        if (_pipeline is not null)
+            await _pipeline.PublishAsync(new AgentToolCallStarted(Name), cancellationToken);
 
         try
         {
             var result = await base.InvokeCoreAsync(arguments, cancellationToken);
-            if (_policy.AfterCall is { } afterCall)
-                await afterCall(Name, result?.ToString() ?? string.Empty);
+            elapsed.Stop();
+            await ReportAsync(result?.ToString() ?? string.Empty, AgentToolOutcome.Succeeded, elapsed.Elapsed, cancellationToken);
             return result;
         }
         catch (Exception ex)
         {
-            return Error($"Tool '{Name}' threw an unhandled exception: {ex.Message}");
+            elapsed.Stop();
+            var message = $"Tool '{Name}' threw an unhandled exception: {ex.Message}";
+            // The run continues: a tool that throws is reported, not fatal, which is why the outcome is
+            // carried on the event rather than left to be inferred from a missing one.
+            await ReportAsync(message, AgentToolOutcome.Failed, elapsed.Elapsed, cancellationToken);
+            return Error(message);
         }
     }
+
+    /// <summary>Publishes what this invocation produced, when the owner composed a chain.</summary>
+    private ValueTask ReportAsync(string result, AgentToolOutcome outcome, TimeSpan elapsed, CancellationToken cancellationToken)
+        => _pipeline is null
+            ? default
+            : _pipeline.PublishAsync(new AgentToolCallCompleted(Name, result, outcome, elapsed), cancellationToken);
 
     /// <summary>
     /// Runs <paramref name="body"/> on <paramref name="context"/> and awaits the outcome.

@@ -1,4 +1,5 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
+using VeloxDev.AI.Pipelines;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -15,7 +16,7 @@ namespace VeloxDev.AI.Skills;
 /// same "host and agent operate one shared data layer" arrangement.
 /// <para>
 /// Reach the model through <see cref="SkillScope.CreateContextProvider"/>, which contributes these tools
-/// already wrapped so they obey the composing host's policy. Use <see cref="CreateTools(AgentToolPolicy)"/>
+/// already wrapped so they obey the composing host's policy. Use <see cref="CreateTools(ToolPipeline)"/>
 /// directly only when assembling providers by hand; the parameterless <see cref="CreateTools()"/> returns
 /// them unwrapped, with no marshalling or accounting.
 /// </para>
@@ -65,11 +66,11 @@ public sealed class SkillAgentToolkit(SkillScope scope)
     /// marshalled onto the host's thread, gated, and reported afterwards. This is what a context provider
     /// contributes; registering the unwrapped set by hand gets none of it.
     /// </summary>
-    public IList<AITool> CreateTools(AgentToolPolicy policy)
+    public IList<AITool> CreateTools(ToolPipeline tools, AgentPipeline? pipeline = null)
     {
-        if (policy is null) throw new ArgumentNullException(nameof(policy));
+        if (tools is null) throw new ArgumentNullException(nameof(tools));
         return [.. CreateTools().Select(tool =>
-            tool is AIFunction function ? (AITool)new TrackedAIFunction(function, policy) : tool)];
+            tool is AIFunction function ? (AITool)new TrackedAIFunction(function, tools, pipeline) : tool)];
     }
 
     [Description("Lists every discovered skill with its source (Embedded/File), state (NotStarted/Loading/Ready/Error), whether it is currently enabled, its bundled resource count and any error. Also returns aggregate counts. Pure query — call it first to see what is available and what is already switched on. Embedded skills are injected in full when enabled; file skills are advertised only, so use load_skill to read one.")]

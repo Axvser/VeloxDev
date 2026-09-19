@@ -1,4 +1,5 @@
-using Microsoft.Agents.AI;
+﻿using Microsoft.Agents.AI;
+using VeloxDev.AI.Pipelines;
 using Microsoft.Extensions.AI;
 using System;
 using System.Collections.Generic;
@@ -81,8 +82,8 @@ public class SkillScope
     /// host passes <i>its</i> policy instead, so its budgets, callbacks and side effects still apply —
     /// and must pass the same instance it gives every other source, or the call counts diverge.
     /// </param>
-    public AIContextProvider CreateContextProvider(AgentToolPolicy? policy = null)
-        => new SkillAgentContextProvider(this, policy);
+    public AIContextProvider CreateContextProvider(ToolPipeline? tools = null, AgentPipeline? pipeline = null)
+        => new SkillAgentContextProvider(this, tools, pipeline);
 
     /// <summary>
     /// Optional UI thread context. When registered, discovery results and enabled-flag changes marshal to

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.AI;
+using VeloxDev.AI.Pipelines;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -53,7 +54,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     internal IList<AITool> CreateAllTools(WorkflowToolCategory categories = WorkflowToolCategory.All)
     {
         AITool T(Delegate method, string name)
-            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Policy);
+            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Tools, _scope.Pipeline);
 
         var tools = new List<AITool>();
 
@@ -187,31 +188,55 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// Non-<c>AIFunction</c> tools are returned unchanged.
     /// </summary>
     internal AITool WrapTool(AITool tool)
-        => tool is AIFunction fn ? new TrackedAIFunction(fn, Policy) : tool;
+        => tool is AIFunction fn ? new TrackedAIFunction(fn, Tools, _scope.Pipeline) : tool;
 
-    private AgentToolPolicy? _policy;
+    private ToolPipeline? _tools;
 
     /// <summary>
-    /// This toolkit's policy for the shared <see cref="TrackedAIFunction"/>: marshal onto the scope's UI
-    /// context, enforce the three call budgets, and on completion count the call, raise the scope's
-    /// callback, and mark the tree dirty for a mutation when the host asked for that.
+    /// This toolkit's tool seam: marshal onto the scope's UI context, and enforce the three call budgets
+    /// before a call runs.
     /// <para>
     /// <b>One instance per scope, shared with everything the scope composes.</b> The subsystem context
-    /// providers are handed this same reference, so a tool sourced from MCP or a skill counts against the
-    /// same budgets and raises the same callback as a built-in one. Its hooks read the scope live, so
-    /// <c>With*</c> calls made <i>after</i> the subsystems were attached still reach their tools.
+    /// providers are handed this same reference, so a tool sourced from MCP or a skill is gated by the same
+    /// budgets as a built-in one. Its hooks read the scope live, so <c>With*</c> calls made <i>after</i>
+    /// the subsystems were attached still reach their tools.
     /// </para>
     /// <para>
     /// Built lazily so it can read <see cref="WorkflowAgentScope.UIContext"/>, which a host is free to
-    /// register after this toolkit exists.
+    /// register after this toolkit exists. It holds no reference to the scope's pipeline — the gates and
+    /// the chain are separate, and the toolkit hands both to each wrapper.
     /// </para>
     /// </summary>
-    internal AgentToolPolicy Policy => _policy ??= new AgentToolPolicy
+    internal ToolPipeline Tools => _tools ??= new ToolPipeline(_scope.Transcript, () => _scope.UIContext)
     {
-        MarshalTo = () => _scope.UIContext,
         Refuse = CheckBudget,
-        AfterCall = TrackAsync,
     };
+
+    /// <summary>
+    /// The stage that turns a completed call into conversation state: it counts the call against the three
+    /// budgets' counters, raises the scope's callback, and marks the tree dirty for a mutation when the
+    /// host asked for that.
+    /// <para>
+    /// This used to be the policy's <c>AfterCall</c> delegate, which could only ever feed one observer and
+    /// never saw a refusal or a failure. Registered by the scope on its pipeline.
+    /// </para>
+    /// </summary>
+    internal IAgentPipelineStage CreateAccountingStage() => new AccountingStage(this);
+
+    private sealed class AccountingStage(WorkflowAgentToolkit owner) : IAgentPipelineStage
+    {
+        public async ValueTask OnEventAsync(
+            AgentEvent agentEvent, Func<AgentEvent, ValueTask> next, CancellationToken cancellationToken)
+        {
+            // Succeeded only, which is what AfterCall saw: a refused or failed call never ran its body, and
+            // counting it would spend budget on something the model did not get. A host that wants those
+            // has them on the pipeline.
+            if (agentEvent is AgentToolCallCompleted { Outcome: AgentToolOutcome.Succeeded } completed)
+                await owner.AccountAsync(completed.ToolName, completed.Result).ConfigureAwait(false);
+
+            await next(agentEvent).ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// The pre-flight gate: returns the refusal message when a configured call limit is already reached,
@@ -274,17 +299,17 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     /// <summary>
-    /// Wraps a tool result with call counting, callback invocation, max-call enforcement,
-    /// and optional auto-dirty marking when <see cref="WorkflowAgentScope.AutoMarkDirty"/> is enabled.
+    /// Counts a completed call, raises the scope's callback, and marks the tree dirty when
+    /// <see cref="WorkflowAgentScope.AutoMarkDirty"/> is enabled.
     /// </summary>
-    private async Task TrackAsync(string toolName, string result)
+    private async Task AccountAsync(string toolName, string result)
     {
         Interlocked.Increment(ref _toolCallCount);
         if (IsQueryTool(toolName))
             Interlocked.Increment(ref _readToolCallCount);
         else
             Interlocked.Increment(ref _writeToolCallCount);
-        await _scope.RaiseToolCalledAsync(toolName, result, _toolCallCount);
+        await _scope.RaiseToolCalledAsync(toolName, result, _toolCallCount).ConfigureAwait(false);
         if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName) && !_scope.IsQueryOnlyCustomTool(toolName))
             Tree.GetHelper().MarkDirty();
     }

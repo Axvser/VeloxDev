@@ -1,4 +1,5 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
+using VeloxDev.AI.Pipelines;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
 using System;
@@ -214,13 +215,13 @@ public class McpAgentContextProviderTests
     {
         using var context = new SingleThreadContext();
         int? calledOn = null;
-        var policy = new AgentToolPolicy
+        var pipeline = new AgentPipeline().Use((e, next, ct) =>
         {
-            MarshalTo = () => context,
-            AfterCall = (_, _) => { calledOn = Environment.CurrentManagedThreadId; return Task.CompletedTask; },
-        };
+            if (e is AgentToolCallCompleted) calledOn = Environment.CurrentManagedThreadId;
+            return next(e);
+        });
 
-        var list = new McpAgentContextProvider(new McpScope(), policy)
+        var list = new McpAgentContextProvider(new McpScope(), new ToolPipeline { MarshalTo = () => context }, pipeline)
             .BuildContext().Tools!.Single(t => t.Name == "ListMcpServers");
         Invoke(list);
 
@@ -231,12 +232,9 @@ public class McpAgentContextProviderTests
     public void Tools_AreGatedByThePolicy()
     {
         var refusals = 0;
-        var policy = new AgentToolPolicy
-        {
-            Refuse = _ => { refusals++; return "refused by the composing host"; },
-        };
-
-        var list = new McpAgentContextProvider(new McpScope(), policy)
+        var list = new McpAgentContextProvider(
+                new McpScope(),
+                new ToolPipeline { Refuse = _ => { refusals++; return "refused by the composing host"; } })
             .BuildContext().Tools!.Single(t => t.Name == "ListMcpServers");
         var json = JObject.Parse(Invoke(list));
 

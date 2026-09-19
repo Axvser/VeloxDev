@@ -1,4 +1,5 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
+using VeloxDev.AI.Pipelines;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -19,7 +20,7 @@ namespace VeloxDev.AI.MCP;
 /// <para>
 /// Reach the model through <see cref="McpScope.CreateContextProvider"/>, which contributes these tools
 /// — and every connected server's — already wrapped so they obey the composing host's policy. Use
-/// <see cref="CreateTools(AgentToolPolicy)"/> directly only when assembling providers by hand; the
+/// <see cref="CreateTools(ToolPipeline)"/> directly only when assembling providers by hand; the
 /// parameterless <see cref="CreateTools()"/> returns them unwrapped, with no marshalling or accounting.
 /// </para>
 /// </summary>
@@ -71,11 +72,11 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// marshalled onto the host's thread, gated, and reported afterwards. This is what a context provider
     /// contributes; registering the unwrapped set by hand gets none of it.
     /// </summary>
-    public IList<AITool> CreateTools(AgentToolPolicy policy)
+    public IList<AITool> CreateTools(ToolPipeline tools, AgentPipeline? pipeline = null)
     {
-        if (policy is null) throw new ArgumentNullException(nameof(policy));
+        if (tools is null) throw new ArgumentNullException(nameof(tools));
         return [.. CreateTools().Select(tool =>
-            tool is AIFunction function ? (AITool)new TrackedAIFunction(function, policy) : tool)];
+            tool is AIFunction function ? (AITool)new TrackedAIFunction(function, tools, pipeline) : tool)];
     }
 
     /// <summary>

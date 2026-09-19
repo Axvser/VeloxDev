@@ -1,4 +1,5 @@
-using Microsoft.Agents.AI;
+﻿using Microsoft.Agents.AI;
+using VeloxDev.AI.Pipelines;
 using Microsoft.Extensions.AI;
 using System;
 using System.Collections.Generic;
@@ -23,7 +24,8 @@ namespace VeloxDev.AI.Skills;
 public sealed class SkillAgentContextProvider : AIContextProvider
 {
     private readonly SkillScope _scope;
-    private readonly AgentToolPolicy _policy;
+    private readonly ToolPipeline _toolPipeline;
+    private readonly AgentPipeline? _pipeline;
     private readonly SkillAgentToolkit _toolkit;
     private readonly string[] _stateKeys;
     private readonly object _gate = new();
@@ -38,10 +40,11 @@ public sealed class SkillAgentContextProvider : AIContextProvider
     /// How the contributed tools behave. Omit for standalone use — a thread-only policy is derived from
     /// the scope's own synchronization context.
     /// </param>
-    public SkillAgentContextProvider(SkillScope scope, AgentToolPolicy? policy = null)
+    public SkillAgentContextProvider(SkillScope scope, ToolPipeline? tools = null, AgentPipeline? pipeline = null)
     {
         _scope = scope ?? throw new ArgumentNullException(nameof(scope));
-        _policy = policy ?? new AgentToolPolicy { MarshalTo = () => scope.UIContext };
+        _toolPipeline = tools ?? new ToolPipeline(marshalTo: () => scope.UIContext);
+        _pipeline = pipeline;
         _toolkit = new SkillAgentToolkit(scope) { Language = scope.PromptLanguage };
 
         // Keyed by the scope, so two providers over one scope collide loudly at agent construction
@@ -76,7 +79,7 @@ public sealed class SkillAgentContextProvider : AIContextProvider
                 _toolkit.Language = language;
 
                 _instructions = BuildInstructions(language);
-                _tools = [.. _toolkit.CreateTools(_policy)];
+                _tools = [.. _toolkit.CreateTools(_toolPipeline, _pipeline)];
                 _renderedFor = key;
             }
 

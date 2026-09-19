@@ -1,4 +1,5 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
+using VeloxDev.AI.Pipelines;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
 using System;
@@ -215,13 +216,14 @@ public class SkillAgentContextProviderTests
         using var context = new SingleThreadContext();
         var scope = ScopeWithEmbeddedSkills();
         int? calledOn = null;
-        var policy = new AgentToolPolicy
+        var pipeline = new AgentPipeline().Use((e, next, ct) =>
         {
-            MarshalTo = () => context,
-            AfterCall = (_, _) => { calledOn = Environment.CurrentManagedThreadId; return System.Threading.Tasks.Task.CompletedTask; },
-        };
+            if (e is AgentToolCallCompleted) calledOn = Environment.CurrentManagedThreadId;
+            return next(e);
+        });
 
-        var list = new SkillAgentContextProvider(scope, policy).BuildContext().Tools!.Single(t => t.Name == "ListSkills");
+        var list = new SkillAgentContextProvider(scope, new ToolPipeline { MarshalTo = () => context }, pipeline)
+            .BuildContext().Tools!.Single(t => t.Name == "ListSkills");
         Invoke(list);
 
         Assert.AreEqual(context.ThreadId, calledOn, "a subsystem tool must run where the composing host says");
@@ -233,12 +235,10 @@ public class SkillAgentContextProviderTests
         // The seam is how a composing host keeps its budgets applying to subsystem tools.
         var scope = ScopeWithEmbeddedSkills();
         var refusals = 0;
-        var policy = new AgentToolPolicy
-        {
-            Refuse = _ => { refusals++; return "refused by the composing host"; },
-        };
-
-        var list = new SkillAgentContextProvider(scope, policy).BuildContext().Tools!.Single(t => t.Name == "ListSkills");
+        var list = new SkillAgentContextProvider(
+                scope,
+                new ToolPipeline { Refuse = _ => { refusals++; return "refused by the composing host"; } })
+            .BuildContext().Tools!.Single(t => t.Name == "ListSkills");
         var json = JObject.Parse(Invoke(list));
 
         Assert.AreEqual("error", json["status"]?.Value<string>());
@@ -251,12 +251,13 @@ public class SkillAgentContextProviderTests
     {
         var scope = ScopeWithEmbeddedSkills();
         var calls = new ConcurrentQueue<string>();
-        var policy = new AgentToolPolicy
+        var pipeline = new AgentPipeline().Use((e, next, ct) =>
         {
-            AfterCall = (name, result) => { calls.Enqueue(name); return System.Threading.Tasks.Task.CompletedTask; },
-        };
+            if (e is AgentToolCallCompleted done) calls.Enqueue(done.ToolName);
+            return next(e);
+        });
 
-        var list = new SkillAgentContextProvider(scope, policy).BuildContext().Tools!.Single(t => t.Name == "ListSkills");
+        var list = new SkillAgentContextProvider(scope, null, pipeline).BuildContext().Tools!.Single(t => t.Name == "ListSkills");
         Invoke(list);
 
         Assert.HasCount(1, calls);

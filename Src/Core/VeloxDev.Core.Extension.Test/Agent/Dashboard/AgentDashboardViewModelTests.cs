@@ -154,7 +154,7 @@ public class AgentDashboardViewModelTests
         // Captured before the switch: the refusal has to be enforced at call time, not by the tool merely
         // disappearing from a list someone else builds.
         var tool = (AIFunction)((SkillAgentContextProvider)scope.Skills!
-            .CreateContextProvider(scope.CreateToolkit().Policy))
+            .CreateContextProvider(scope.CreateToolkit().Tools, scope.Pipeline))
             .BuildContext().Tools!.Single(t => t.Name == "ListSkills");
 
         panel.SkillTools.Single(t => t.Name == "ListSkills").IsEnabled = false;
@@ -191,7 +191,7 @@ public class AgentDashboardViewModelTests
         // Contributed by the skill provider rather than the workflow toolkit, so it is reached through the
         // composed provider — the same route the model's call takes.
         InvokeCaptured((AIFunction)((SkillAgentContextProvider)scope.Skills!
-            .CreateContextProvider(scope.CreateToolkit().Policy))
+            .CreateContextProvider(scope.CreateToolkit().Tools, scope.Pipeline))
             .BuildContext().Tools!.Single(t => t.Name == "ListSkills"));
 
         Assert.AreEqual(2, panel.SystemTools.Single(t => t.Name == "ListNodes").CallCount);
@@ -215,7 +215,7 @@ public class AgentDashboardViewModelTests
         var subTool = server.Tools.Single();
 
         // Invoke it through the MCP provider's own tool list, which is what the model would call.
-        var tool = new McpAgentContextProvider(mcp, scope.CreateToolkit().Policy)
+        var tool = new McpAgentContextProvider(mcp, scope.CreateToolkit().Tools, scope.Pipeline)
             .BuildContext().Tools!.Single(t => t.Name == "server_tool");
         ((AIFunction)tool).InvokeAsync(new AIFunctionArguments(), CancellationToken.None)
             .AsTask().GetAwaiter().GetResult();
@@ -361,7 +361,7 @@ public class AgentDashboardViewModelTests
         Assert.IsTrue(server.IsConnected, "disabling is not unloading — the connection stays up");
         Assert.IsEmpty(mcp.LoadedTools, "a switched-off server contributes nothing");
         Assert.IsEmpty(
-            new McpAgentContextProvider(mcp, scope.CreateToolkit().Policy).BuildContext().Tools!
+            new McpAgentContextProvider(mcp, scope.CreateToolkit().Tools, scope.Pipeline).BuildContext().Tools!
                 .Where(t => t.Name.StartsWith("server_tool", StringComparison.Ordinal)).ToArray());
         Assert.Contains("disabled by host", mcp.BuildInventoryBlock());
 

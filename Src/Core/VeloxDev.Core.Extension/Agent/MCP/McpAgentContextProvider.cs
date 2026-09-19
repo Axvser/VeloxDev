@@ -1,4 +1,5 @@
-using Microsoft.Agents.AI;
+﻿using Microsoft.Agents.AI;
+using VeloxDev.AI.Pipelines;
 using Microsoft.Extensions.AI;
 using System;
 using System.Collections.Generic;
@@ -25,7 +26,8 @@ namespace VeloxDev.AI.MCP;
 public sealed class McpAgentContextProvider : AIContextProvider
 {
     private readonly McpScope _scope;
-    private readonly AgentToolPolicy _policy;
+    private readonly ToolPipeline _toolPipeline;
+    private readonly AgentPipeline? _pipeline;
     private readonly string[] _stateKeys;
     private readonly object _gate = new();
 
@@ -39,10 +41,11 @@ public sealed class McpAgentContextProvider : AIContextProvider
     /// How the contributed tools behave. Omit for standalone use — a thread-only policy is derived from
     /// the scope's own synchronization context.
     /// </param>
-    public McpAgentContextProvider(McpScope scope, AgentToolPolicy? policy = null)
+    public McpAgentContextProvider(McpScope scope, ToolPipeline? tools = null, AgentPipeline? pipeline = null)
     {
         _scope = scope ?? throw new ArgumentNullException(nameof(scope));
-        _policy = policy ?? new AgentToolPolicy { MarshalTo = () => scope.UIContext };
+        _toolPipeline = tools ?? new ToolPipeline(marshalTo: () => scope.UIContext);
+        _pipeline = pipeline;
 
         // Keyed by the scope, so two providers over one scope collide loudly at agent construction
         // instead of silently contributing everything twice.
@@ -102,12 +105,12 @@ public sealed class McpAgentContextProvider : AIContextProvider
     /// </summary>
     private IReadOnlyList<AITool> BuildTools(McpAgentToolkit toolkit)
     {
-        var tools = new List<AITool>(toolkit.CreateTools(_policy));
+        var tools = new List<AITool>(toolkit.CreateTools(_toolPipeline, _pipeline));
 
         // Server tools are AIFunctions (McpClientTool derives from it), so they wrap the same way. A tool
         // that is not falls through unwrapped rather than being dropped.
         foreach (var tool in _scope.LoadedTools)
-            tools.Add(tool is AIFunction function ? new TrackedAIFunction(function, _policy) : tool);
+            tools.Add(tool is AIFunction function ? new TrackedAIFunction(function, _toolPipeline, _pipeline) : tool);
 
         return tools;
     }

@@ -1,4 +1,5 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
+using VeloxDev.AI.Pipelines;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -48,7 +49,7 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     public IList<AITool> CreateTools()
     {
         AITool T(Delegate method, string name)
-            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Policy);
+            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Tools, Pipeline);
 
         return
         [
@@ -67,30 +68,53 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
 
     // ────────────────────────── Tracking ──────────────────────────
 
-    private AgentToolPolicy? _policy;
+    private AgentPipeline? _pipeline;
+    private ToolPipeline? _tools;
 
     /// <summary>
-    /// This toolkit's policy for the shared <see cref="TrackedAIFunction"/>: one global call ceiling, and
-    /// a <see cref="ToolCalled"/> notification after each call.
+    /// This toolkit's event chain. Exposed so a host that wants more than the call notification — the
+    /// refusals and failures the wrapper now reports — can add a stage instead of being limited to the one
+    /// delegate the old policy accepted.
+    /// </summary>
+    public AgentPipeline Pipeline => _pipeline ??= new AgentPipeline().Use(new CountingStage(this));
+
+    /// <summary>
+    /// The tool seam handed to every <see cref="TrackedAIFunction"/> this toolkit creates: one global call
+    /// ceiling, and one place the calls are reported.
     /// <para>
     /// It registers no thread marshalling on purpose. The wrapped target is an arbitrary object rather
     /// than a UI-bound component, so there is no thread it must run on; a host that needs one can set
-    /// <see cref="AgentToolPolicy.MarshalTo"/> on a policy of its own.
+    /// <see cref="ToolPipeline.MarshalTo"/> before creating the tools.
     /// </para>
     /// </summary>
-    private AgentToolPolicy Policy => _policy ??= new AgentToolPolicy
+    public ToolPipeline Tools => _tools ??= new ToolPipeline()
     {
         Refuse = _ => MaxToolCalls.HasValue && _toolCallCount >= MaxToolCalls.Value
             ? $"Tool call limit ({MaxToolCalls.Value}) exceeded. No further tool calls are allowed."
             : null,
-        AfterCall = TrackAsync,
     };
 
-    private Task TrackAsync(string toolName, string result)
+    /// <summary>
+    /// Counts completed calls and raises <see cref="ToolCalled"/>.
+    /// <para>
+    /// Counts successes only, which is what the old <c>AfterCall</c> hook saw: a caller that wants the
+    /// refusals and failures too now has them on the pipeline, which is the point of the events carrying
+    /// an outcome rather than the absence of a call meaning "failed".
+    /// </para>
+    /// </summary>
+    private sealed class CountingStage(AgentObjectToolkit owner) : IAgentPipelineStage
     {
-        var count = Interlocked.Increment(ref _toolCallCount);
-        ToolCalled?.Invoke(this, new AgentToolCallEventArgs(toolName, result, count));
-        return Task.CompletedTask;
+        public ValueTask OnEventAsync(
+            AgentEvent agentEvent, Func<AgentEvent, ValueTask> next, CancellationToken cancellationToken)
+        {
+            if (agentEvent is AgentToolCallCompleted { Outcome: AgentToolOutcome.Succeeded } completed)
+            {
+                var count = Interlocked.Increment(ref owner._toolCallCount);
+                owner.ToolCalled?.Invoke(owner, new AgentToolCallEventArgs(completed.ToolName, completed.Result, count));
+            }
+
+            return next(agentEvent);
+        }
     }
 
     // ────────────────────────── Context ──────────────────────────
