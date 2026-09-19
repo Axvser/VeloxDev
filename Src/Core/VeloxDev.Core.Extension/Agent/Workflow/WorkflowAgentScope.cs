@@ -627,6 +627,15 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         sb.AppendLine("4. If a `hint` or `preferredAlternative` names another tool, switch to it.");
         sb.AppendLine("5. If you still cannot make progress after two attempts, stop and ask the user via `RequestConfirmation`, or report the blocker plainly in your reply. Do not loop silently.");
         sb.AppendLine();
+        sb.AppendLine("### When a call limit is reached");
+        sb.AppendLine();
+        sb.AppendLine("A refusal that names a **limit** is a hard stop, not a retryable error. Every tool call is accepted or refused; once the budget is spent, none of them work until it is reopened.");
+        sb.AppendLine();
+        sb.AppendLine("1. **Do not retry the refused tool**, and do not switch to another tool hoping it is exempt — they all go through the same budget.");
+        sb.AppendLine("2. **Do not tell the user you will continue.** You cannot widen your own budget, and saying otherwise is a promise you cannot keep.");
+        sb.AppendLine("3. Call **`ResetToolCallLimit`**. It puts the question to the user and waits for their answer; only their agreement reopens the budget.");
+        sb.AppendLine("4. If they decline, stop and report: what you completed, what is still outstanding, and that the limit is why you stopped. Let them raise or reset it themselves.");
+        sb.AppendLine();
         sb.AppendLine("> Some tools may be **disabled by host policy** (e.g. `ExecuteNode`, `ExecuteCommandOnNode`, `ExecuteCommandById`). If a tool returns a `disabled by host policy` error, do not work around it — report it and let the user enable it if needed.");
         return sb.ToString();
     }

@@ -170,6 +170,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         // wrapped with TrackedAIFunction so they get the same UI-thread marshalling, MaxToolCalls
         // accounting, ToolCalled callback and auto-dirty handling as the built-in tools. Non-AIFunction
         // tools (e.g. raw MCP client tools) are added as-is.
+        // Always offered, whatever categories were asked for: this is the way out of a budget the host set,
+        // and it would be useless if it disappeared exactly when the budget ran out.
+        tools.Add(T(ResetToolCallLimit, ResetBudgetToolName));
+
         foreach (var tool in _scope.CustomTools)
             tools.Add(WrapTool(tool));
         foreach (var tool in _scope.QueryOnlyCustomTools)
@@ -207,7 +211,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// the chain are separate, and the toolkit hands both to each wrapper.
     /// </para>
     /// </summary>
-    internal ToolPipeline Tools => _tools ??= new ToolPipeline(_scope.Transcript, () => _scope.UIContext)
+    internal ToolPipeline Tools => _tools ??= new ToolPipeline(() => _scope.Transcript, () => _scope.UIContext)
     {
         Refuse = CheckBudget,
     };
@@ -251,14 +255,19 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!_scope.IsToolEnabled(toolName))
             return $"'{toolName}' is disabled by host policy. Do not try to work around it — use another tool or report it to the user.";
 
+        // The escape hatch survives the gate it exists to open. Refusing it exactly when the budget is spent
+        // would leave the session with no way forward at all.
+        if (string.Equals(toolName, ResetBudgetToolName, StringComparison.OrdinalIgnoreCase))
+            return null;
+
         if (_scope.MaxToolCalls.HasValue && _toolCallCount >= _scope.MaxToolCalls.Value)
-            return $"Tool call limit ({_scope.MaxToolCalls.Value}) exceeded. No further tool calls are allowed.";
+            return LimitRefusal($"Tool call limit ({_scope.MaxToolCalls.Value}) reached.");
 
         bool isQueryTool = IsQueryTool(toolName);
         if (!isQueryTool && _scope.MaxWriteToolCalls.HasValue && _writeToolCallCount >= _scope.MaxWriteToolCalls.Value)
-            return $"Mutation tool call limit ({_scope.MaxWriteToolCalls.Value}) exceeded. No further mutation tool calls are allowed.";
+            return LimitRefusal($"Mutation tool call limit ({_scope.MaxWriteToolCalls.Value}) reached.");
         if (isQueryTool && _scope.MaxReadToolCalls.HasValue && _readToolCallCount >= _scope.MaxReadToolCalls.Value)
-            return $"Query tool call limit ({_scope.MaxReadToolCalls.Value}) exceeded. No further query tool calls are allowed.";
+            return LimitRefusal($"Query tool call limit ({_scope.MaxReadToolCalls.Value}) reached.");
 
         return null;
     }
@@ -288,7 +297,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             "GetFullTopology", "FindNodes", "ResolveSlotId", "ListSlotProperties",
             "GetEnumSlotByValue", "GetLinkDetail", "GetNodeStatistics", "ListCreatableTypes",
             "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
-            "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation",
+            "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation", "ResetToolCallLimit",
             "CompileWorkflow", "CompileNodeResult", "GetCompileStatus", "GetExecutionLog",
         };
 
@@ -304,6 +313,15 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// </summary>
     private async Task AccountAsync(string toolName, string result)
     {
+        // The budget's own tool does not spend the budget — and this is not a nicety. Accounting runs after
+        // the tool body, so counting the reset would increment the counter the reset had just zeroed and
+        // leave the session refused again: the reset would undo itself.
+        if (IsBudgetTool(toolName))
+        {
+            await _scope.RaiseToolCalledAsync(toolName, result, _toolCallCount).ConfigureAwait(false);
+            return;
+        }
+
         Interlocked.Increment(ref _toolCallCount);
         if (IsQueryTool(toolName))
             Interlocked.Increment(ref _readToolCallCount);
@@ -313,6 +331,84 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName) && !_scope.IsQueryOnlyCustomTool(toolName))
             Tree.GetHelper().MarkDirty();
     }
+
+    /// <summary>Whether the name belongs to a tool that manages the budget rather than spending it.</summary>
+    private static bool IsBudgetTool(string toolName)
+        => string.Equals(toolName, ResetBudgetToolName, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The tool that can reopen a spent tool-call budget.</summary>
+    internal const string ResetBudgetToolName = "ResetToolCallLimit";
+
+    /// <summary>
+    /// The operation key the reset asks its confirmation under, so a host UI can present it as one decision
+    /// and the user's "always" covers the rest of the session.
+    /// </summary>
+    internal const string ResetBudgetOperationKey = "extend-tool-call-budget";
+
+    [Description("Asks the user to extend this session's tool-call budget. This is the ONLY way to continue after a call is refused for reaching a limit. Call it as soon as a tool reports that a limit was reached — do not retry the refused tool first, and do not assume the answer is yes. The user must agree; until they do, no further tool calls are accepted. Answers with whether the budget was reopened.")]
+    private async Task<string> ResetToolCallLimit(CancellationToken cancellationToken = default)
+    {
+        var exhausted = DescribeExhaustedLimit();
+        if (exhausted is null)
+            return Ok("No tool-call limit is currently reached; there is nothing to extend.");
+
+        // Level 0 means the host asked never to be interrupted. There is then no way to obtain the user's
+        // agreement, and a budget may only be reopened with it — so this denies rather than asking a
+        // question the host said it does not want.
+        if (!_scope.IsInteractionAllowed)
+            return JsonConvert.SerializeObject(new
+            {
+                status = "denied",
+                message = "The host has switched interaction off for this session, so the user cannot be asked. Stop calling tools and report what remains.",
+            }, Formatting.None);
+
+        // Asking is the whole safety property: the Agent cannot widen its own budget, it can only put the
+        // question to the user. With no confirmation handler registered the answer is no — an unanswerable
+        // prompt must deny, never silently allow.
+        var allowed = await _scope.ResolveConfirmationAsync(
+            ResetBudgetOperationKey,
+            $"Agent 已达到工具调用上限（{exhausted}）。是否允许重置额度让它继续？").ConfigureAwait(false);
+
+        if (!allowed)
+            return JsonConvert.SerializeObject(new
+            {
+                status = "denied",
+                message = "The user did not allow more tool calls. Stop calling tools and report what you have done and what remains.",
+            }, Formatting.None);
+
+        Interlocked.Exchange(ref _toolCallCount, 0);
+        Interlocked.Exchange(ref _readToolCallCount, 0);
+        Interlocked.Exchange(ref _writeToolCallCount, 0);
+
+        return Ok("Tool-call budget reset by the user. You may continue.");
+    }
+
+    /// <summary>
+    /// Describes whichever limit is currently reached, or <c>null</c> when none is. Used both to decide
+    /// whether there is anything to extend and to tell the user what exactly ran out.
+    /// </summary>
+    private string? DescribeExhaustedLimit()
+    {
+        var parts = new List<string>();
+
+        if (_scope.MaxToolCalls.HasValue && _toolCallCount >= _scope.MaxToolCalls.Value)
+            parts.Add($"{_toolCallCount}/{_scope.MaxToolCalls.Value} 次工具调用");
+        if (_scope.MaxReadToolCalls.HasValue && _readToolCallCount >= _scope.MaxReadToolCalls.Value)
+            parts.Add($"{_readToolCallCount}/{_scope.MaxReadToolCalls.Value} 次查询");
+        if (_scope.MaxWriteToolCalls.HasValue && _writeToolCallCount >= _scope.MaxWriteToolCalls.Value)
+            parts.Add($"{_writeToolCallCount}/{_scope.MaxWriteToolCalls.Value} 次变更");
+
+        return parts.Count == 0 ? null : string.Join("、", parts);
+    }
+
+    /// <summary>
+    /// A budget refusal. It names <see cref="ResetBudgetToolName"/> because the model cannot see the limit
+    /// itself — only this message — and a refusal with no way out is where a run used to simply stop.
+    /// </summary>
+    private static string LimitRefusal(string cause)
+        => $"{cause} No further tool calls are accepted until the budget is extended. "
+         + $"If the task is unfinished, call {ResetBudgetToolName} — it asks the user, and only their agreement reopens the budget. "
+         + "Do not retry this call, and do not tell the user you can continue without it.";
 
     /// <summary>
     /// Whether a tool is a read-only query (a built-in <see cref="QueryToolNames"/> entry or a
