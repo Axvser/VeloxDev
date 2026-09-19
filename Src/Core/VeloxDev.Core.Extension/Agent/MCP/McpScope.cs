@@ -171,8 +171,121 @@ public class McpScope
         get
         {
             lock (_loadedToolsLock)
-                return _loadedToolSets.Values.SelectMany(v => v).ToArray();
+                return
+                [
+                    .. _loadedToolSets
+                        .Where(kv => !_disabledServers.Contains(kv.Key))
+                        .SelectMany(kv => kv.Value.Where(t => !_disabledServerTools.Contains(ToolKey(kv.Key, t.Name))))
+                ];
         }
+    }
+
+    /// <summary>
+    /// Individual server tools switched off via <see cref="SetToolEnabled"/>, keyed
+    /// <c>server/tool</c> so two servers exposing the same tool name stay independent.
+    /// </summary>
+    private readonly HashSet<string> _disabledServerTools = new(StringComparer.OrdinalIgnoreCase);
+
+    private static string ToolKey(string server, string tool) => server + "/" + tool;
+
+    /// <summary>
+    /// Servers switched off via <see cref="SetServerEnabled"/>. Their tools stay loaded and their
+    /// connection stays up; they are simply not offered to the model. Empty by default.
+    /// </summary>
+    private readonly HashSet<string> _disabledServers = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Switches one server's tools on or off <b>without touching its connection</b> — the counterpart of
+    /// <see cref="UnloadServer"/>, and a deliberately different operation. Disabling is instant, costs no
+    /// reconnect, and is undone by switching back on; unloading tears the process/transport down and has
+    /// to be paid for again on the next load.
+    /// <para>
+    /// Works for a server that is not connected yet too: the switch is remembered, so a server disabled
+    /// before it loads stays out of the tool set once it does.
+    /// </para>
+    /// </summary>
+    /// <param name="name">Server name as it appears in <see cref="Status"/>.</param>
+    /// <param name="enabled">Whether the server's tools should reach the Agent.</param>
+    /// <returns>Whether the switch actually moved.</returns>
+    public bool SetServerEnabled(string name, bool enabled)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+
+        bool changed;
+        lock (_loadedToolsLock)
+            changed = enabled ? _disabledServers.Remove(name) : _disabledServers.Add(name);
+
+        if (!changed) return false;
+
+        // Mirror into the status row so a bound checkbox follows, and advance the version so the prompt
+        // provider re-renders its cached tool set on the next invocation.
+        //
+        // Posted, not awaited: the mirror is a pure UI concern with no ordering contract, and blocking a
+        // background caller on the UI thread is the deadlock this file warns about elsewhere.
+        // UpdateStatus short-circuits when there is no UI context (or we are already on it), so unit tests
+        // still observe the mirror synchronously.
+        UpdateStatus(() =>
+        {
+            var row = Status.Servers.FirstOrDefault(
+                s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (row is not null) row.IsEnabled = enabled;
+        });
+
+        Interlocked.Increment(ref _version);
+        return true;
+    }
+
+    /// <summary>Whether the named server's tools are currently offered to the model.</summary>
+    public bool IsServerEnabled(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        lock (_loadedToolsLock)
+            return !_disabledServers.Contains(name);
+    }
+
+    /// <summary>A snapshot of the switched-off server names.</summary>
+    public IReadOnlyList<string> DisabledServerNames
+    {
+        get { lock (_loadedToolsLock) return [.. _disabledServers]; }
+    }
+
+    /// <summary>
+    /// Switches one tool of one server on or off, independently of the server itself. Narrower than
+    /// <see cref="SetServerEnabled"/>: the server keeps offering its other tools.
+    /// <para>
+    /// The switch is remembered by name, so it survives a reload of the same server and works before the
+    /// tool is known.
+    /// </para>
+    /// </summary>
+    /// <param name="serverName">Server the tool belongs to.</param>
+    /// <param name="toolName">Tool name as reported by <see cref="GetServerTools"/>.</param>
+    /// <param name="enabled">Whether the tool should reach the Agent.</param>
+    /// <returns>Whether the switch actually moved.</returns>
+    public bool SetToolEnabled(string serverName, string toolName, bool enabled)
+    {
+        if (string.IsNullOrWhiteSpace(serverName) || string.IsNullOrWhiteSpace(toolName)) return false;
+
+        bool changed;
+        lock (_loadedToolsLock)
+        {
+            var key = ToolKey(serverName, toolName);
+            changed = enabled ? _disabledServerTools.Remove(key) : _disabledServerTools.Add(key);
+        }
+
+        if (!changed) return false;
+        Interlocked.Increment(ref _version);
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the named tool of the named server is currently offered. A tool is offered only when both
+    /// it and its server are switched on.
+    /// </summary>
+    public bool IsToolEnabled(string serverName, string toolName)
+    {
+        if (string.IsNullOrWhiteSpace(serverName) || string.IsNullOrWhiteSpace(toolName)) return false;
+        lock (_loadedToolsLock)
+            return !_disabledServers.Contains(serverName) && !_disabledServerTools.Contains(ToolKey(serverName, toolName));
     }
 
     private long _version;
@@ -262,6 +375,8 @@ public class McpScope
             Name = name,
             State = McpServerStatus.Connected,
             ToolCount = _loadedToolSets[name].Count,
+            // A switch flipped before the server was known has to survive the row being created now.
+            IsEnabled = IsServerEnabled(name),
         }));
 
         Interlocked.Increment(ref _version);
@@ -286,7 +401,13 @@ public class McpScope
         sb.AppendLine("| Server | State | Tools |");
         sb.AppendLine("| ------ | ----- | ----- |");
         foreach (var server in servers)
-            sb.AppendLine($"| {server.Name} | {server.StateText} | {server.ToolCount} |");
+        {
+            // A disabled server keeps its connection and its tool count, but offers the Agent nothing.
+            // Reporting the real count here would contradict the tool set actually contributed this turn.
+            var state = server.IsEnabled ? server.StateText : $"{server.StateText} (disabled by host)";
+            var offered = server.IsEnabled ? server.ToolCount : 0;
+            sb.AppendLine($"| {server.Name} | {state} | {offered} |");
+        }
         return sb.ToString();
     }
 
@@ -337,7 +458,12 @@ public class McpScope
         {
             var status = Status.Servers.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
             if (status is not null)
+            {
                 status.State = McpServerStatus.NotStarted;
+                // The tools went with the client. Leaving the old count behind made the row claim
+                // "3 tools" for a server that now has none.
+                status.ToolCount = 0;
+            }
         }).ConfigureAwait(false);
 
         if (client is not null)
@@ -628,6 +754,8 @@ public class McpScope
                 Description = config.Description,
                 RunMode = config.RunMode,
                 Endpoint = config.Endpoint,
+                // A switch flipped before the server was known has to survive the row being created now.
+                IsEnabled = IsServerEnabled(config.Name),
             };
             Status.Track(created);
             status = created;

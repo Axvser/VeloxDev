@@ -36,8 +36,21 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// to the given <see cref="WorkflowToolCategory"/> flags. Every tool is wrapped with
     /// <see cref="TrackedAIFunction"/> so that tracking is invoked after each call.
     /// Developer-registered custom tools are always included regardless of <paramref name="categories"/>.
+    /// <para>
+    /// Tools switched off via <see cref="WorkflowAgentScope.SetToolEnabled"/> are omitted, whichever
+    /// category is asked for — this method is the single point that decides what reaches the model, so a
+    /// switch cannot be honoured in one path and ignored in another.
+    /// </para>
     /// </summary>
     public IList<AITool> CreateTools(WorkflowToolCategory categories = WorkflowToolCategory.All)
+        => [.. CreateAllTools(categories).Where(t => _scope.IsToolEnabled(t.Name))];
+
+    /// <summary>
+    /// Every tool this toolkit can offer — the built-ins for <paramref name="categories"/>, the custom
+    /// ones, and no per-tool filtering. This is what a host UI enumerates to show the switchable surface;
+    /// <see cref="CreateTools(WorkflowToolCategory)"/> is what the model is shown.
+    /// </summary>
+    internal IList<AITool> CreateAllTools(WorkflowToolCategory categories = WorkflowToolCategory.All)
     {
         AITool T(Delegate method, string name)
             => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Policy);
@@ -161,6 +174,9 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         foreach (var tool in _scope.QueryOnlyCustomTools)
             tools.Add(WrapTool(tool));
 
+        // Deliberately unfiltered — the switches are applied by CreateTools, which is what the model is
+        // shown. Filtering here as well would hide a switched-off tool from a host UI that needs to list it
+        // in order to switch it back on.
         return tools;
     }
 
@@ -203,6 +219,13 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// </summary>
     private string? CheckBudget(string toolName)
     {
+        // A tool the host switched off is refused here, not merely filtered out of the workflow tool list:
+        // this hook is shared by every slice the scope composes — MCP's and the skills' providers are given
+        // this same policy — so one switch reaches all of them. Filtering alone would only reach the
+        // workflow built-ins, and a switch on, say, "ListSkills" would silently do nothing.
+        if (!_scope.IsToolEnabled(toolName))
+            return $"'{toolName}' is disabled by host policy. Do not try to work around it — use another tool or report it to the user.";
+
         if (_scope.MaxToolCalls.HasValue && _toolCallCount >= _scope.MaxToolCalls.Value)
             return $"Tool call limit ({_scope.MaxToolCalls.Value}) exceeded. No further tool calls are allowed.";
 

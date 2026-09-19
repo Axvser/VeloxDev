@@ -209,6 +209,12 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     private string DescribeServer(
         [Description("Server name, e.g. \"Microsoft Learn\".")] string serverName)
     {
+        // A server switched off by the host still has its tools loaded, but they are not offered to the
+        // model — describing them here would advertise a capability this turn does not carry.
+        if (!_scope.IsServerEnabled(serverName))
+            return JsonConvert.SerializeObject(
+                new { status = "error", message = $"Server '{serverName}' is switched off by host policy; its tools are not offered. The host can switch it back on." }, Formatting.None);
+
         var tools = _scope.GetServerTools(serverName);
         if (tools.Count == 0)
             return JsonConvert.SerializeObject(
@@ -247,7 +253,7 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             Formatting.None);
     }
 
-    [Description("Lists the configured MCP servers and their current status: name, run mode, state (NotStarted/Installing/Connecting/Connected/Error), tool count, and error message. Also returns aggregate counts (connected/error). Pure query — call it first to see which servers are alive, still installing, connecting, or failed.")]
+    [Description("Lists the configured MCP servers and their current status: name, run mode, state (NotStarted/Installing/Connecting/Connected/Error), tool count, whether the host has switched it on, and error message. A server can be connected but switched off by the host — its tools are then NOT available to you even though it is alive. Also returns aggregate counts (connected/error). Pure query — call it first to see which servers are alive, still installing, connecting, or failed.")]
     private string ListServers()
     {
         var status = _scope.Status;
@@ -260,7 +266,11 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
                 ["runMode"] = s.RunMode.ToString(),
                 ["state"] = s.State.ToString(),
                 ["stateText"] = s.StateText,
-                ["toolCount"] = s.ToolCount,
+                // Reported as offered-tools, not loaded-tools: a switched-off server keeps its count but
+                // hands the model nothing, and saying "3 tools" here would contradict the tool set.
+                ["enabled"] = s.IsEnabled,
+                ["toolCount"] = s.IsEnabled ? s.ToolCount : 0,
+                ["loadedToolCount"] = s.ToolCount,
                 ["error"] = s.Error,
             });
         }

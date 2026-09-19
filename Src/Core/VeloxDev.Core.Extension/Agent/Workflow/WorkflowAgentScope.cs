@@ -267,6 +267,92 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return _allowedGenericCommands.Contains(name);
     }
 
+    /// <summary>
+    /// Whether any command was allowlisted at all. The generic command tools are registered either way, so
+    /// a host UI needs this to tell "this tool is live" from "this tool will refuse whatever the model asks
+    /// it" — which the tool's own description cannot say per call.
+    /// </summary>
+    internal bool HasAllowedGenericCommands => _allowedGenericCommands.Count > 0;
+
+    // ── Per-tool switches ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Names switched off via <see cref="WithToolEnabled"/>/<see cref="SetToolEnabled"/>. Everything is on
+    /// by default, so an empty set is the unchanged behaviour.
+    /// </summary>
+    private readonly HashSet<string> _disabledTools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _toolSwitchLock = new();
+
+    /// <summary>
+    /// Switches one tool on or off by name — built-in or developer-registered. A disabled tool is not
+    /// offered to the model at all from the next invocation on: the tool set is rendered per turn, so the
+    /// change needs no agent rebuild.
+    /// <para>
+    /// This is a narrower instrument than <see cref="WithAllowNodeExecution"/> or
+    /// <see cref="WithAllowedGenericCommands"/>, which gate a capability in code. Use it to trim the tool
+    /// surface for token cost or tool-selection accuracy, or to take one tool out of play while a
+    /// subsystem stays wired up.
+    /// </para>
+    /// </summary>
+    /// <param name="toolName">Tool name as it reaches the model, e.g. <c>ListNodes</c>.</param>
+    /// <param name="enabled">Whether the tool should be offered.</param>
+    public WorkflowAgentScope WithToolEnabled(string toolName, bool enabled = true)
+    {
+        // Bump only on a real move, so Changed keeps meaning "something changed" — a dashboard following
+        // this scope rebuilds on that event, and a no-op registration would be pure noise.
+        if (ApplyToolEnabled(toolName, enabled)) BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// Switches one tool on or off after the scope was configured (the runtime counterpart of
+    /// <see cref="WithToolEnabled"/>), and advances <see cref="Version"/> so a context provider re-renders
+    /// its cached tool set. Returns whether the switch actually moved.
+    /// </summary>
+    /// <param name="toolName">Tool name as it reaches the model, e.g. <c>ListNodes</c>.</param>
+    /// <param name="enabled">Whether the tool should be offered.</param>
+    public bool SetToolEnabled(string toolName, bool enabled)
+    {
+        var changed = ApplyToolEnabled(toolName, enabled);
+        if (changed) BumpVersion();
+        return changed;
+    }
+
+    private bool ApplyToolEnabled(string toolName, bool enabled)
+    {
+        if (string.IsNullOrWhiteSpace(toolName)) return false;
+        // Locked: switched from the host's UI thread, read from the agent's invocation thread via
+        // BuildDynamicTools. Same treatment the sibling scopes give their own switch sets.
+        lock (_toolSwitchLock)
+            return enabled ? _disabledTools.Remove(toolName) : _disabledTools.Add(toolName);
+    }
+
+    /// <summary>Whether the named tool is currently offered to the model.</summary>
+    public bool IsToolEnabled(string toolName)
+    {
+        if (string.IsNullOrWhiteSpace(toolName)) return true;
+        lock (_toolSwitchLock)
+            return !_disabledTools.Contains(toolName);
+    }
+
+    /// <summary>A snapshot of the switched-off tool names.</summary>
+    public IReadOnlyList<string> DisabledToolNames
+    {
+        get { lock (_toolSwitchLock) return [.. _disabledTools]; }
+    }
+
+    /// <summary>
+    /// Raised whenever something the Agent is shown changes — a <c>With*</c> call, a
+    /// <see cref="SetToolEnabled"/> switch, an attached subsystem. Lets a bindable panel follow the scope
+    /// instead of only its own edits.
+    /// <para>
+    /// <b>Raised on whichever thread made the change, with no marshalling.</b> A scope is normally
+    /// configured on the UI thread, but nothing enforces that — a subscriber that touches bound state must
+    /// post to its own <see cref="SynchronizationContext"/>.
+    /// </para>
+    /// </summary>
+    public event EventHandler? Changed;
+
     // ── UI-thread marshalling ───────────────────────────────────────────────
 
     internal SynchronizationContext? UIContext { get; private set; }
@@ -1395,7 +1481,11 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         => [.. CreateToolkit().CreateTools()];
 
     /// <summary>Advances <see cref="Version"/>, invalidating any provider render cached against it.</summary>
-    private void BumpVersion() => Interlocked.Increment(ref _version);
+    private void BumpVersion()
+    {
+        Interlocked.Increment(ref _version);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// Appends the library's embedded skill corpus to a statically built prompt — unless skills are under

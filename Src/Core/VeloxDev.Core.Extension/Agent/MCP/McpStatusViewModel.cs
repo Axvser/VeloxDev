@@ -22,8 +22,23 @@ public partial class McpServerStatusViewModel
     [VeloxProperty] private string? error = null;
     [VeloxProperty] private string? endpoint = null;
 
+    /// <summary>
+    /// Whether this server's tools reach the Agent.
+    /// <para>
+    /// Deliberately independent of <see cref="State"/>, and the same distinction
+    /// <see cref="Skills.SkillStatusViewModel.IsEnabled"/> draws: a disabled server stays
+    /// <see cref="McpServerStatus.Connected"/> and keeps its tools loaded, but none of them is offered to
+    /// the model. That is a different operation from <see cref="McpScope.UnloadServer"/>, which tears the
+    /// connection down — disabling is instant and reversible, unloading is not.
+    /// </para>
+    /// </summary>
+    [VeloxProperty] private bool isEnabled = true;
+
     /// <summary>Connected (tools available).</summary>
     public bool IsConnected => State == McpServerStatus.Connected;
+
+    /// <summary>Connected and switched on — the only state in which this server's tools are offered.</summary>
+    public bool IsActive => IsConnected && IsEnabled;
 
     /// <summary>Installing the runtime (local npm/pip).</summary>
     public bool IsInstalling => State == McpServerStatus.Installing;
@@ -50,8 +65,12 @@ public partial class McpServerStatusViewModel
         OnPropertyChanged(nameof(IsInstalling));
         OnPropertyChanged(nameof(IsConnecting));
         OnPropertyChanged(nameof(IsError));
+        OnPropertyChanged(nameof(IsActive));
         OnPropertyChanged(nameof(StateText));
     }
+
+    partial void OnIsEnabledChanged(bool oldValue, bool newValue)
+        => OnPropertyChanged(nameof(IsActive));
 }
 
 /// <summary>
@@ -67,6 +86,9 @@ public sealed class McpServerSummary
 
     /// <summary>Number of tools the server currently exposes.</summary>
     public int ToolCount { get; set; }
+
+    /// <summary>Whether the server's tools currently reach the Agent (see <see cref="McpServerStatusViewModel.IsEnabled"/>).</summary>
+    public bool IsEnabled { get; set; } = true;
 }
 
 /// <summary>
@@ -143,10 +165,11 @@ public partial class McpStatusViewModel
 
     private void OnServerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // ToolCount and Name are part of the snapshot even though they are not part of the counts.
+        // ToolCount, Name and IsEnabled are part of the snapshot even though they are not part of the counts.
         if (e.PropertyName is nameof(McpServerStatusViewModel.State)
             or nameof(McpServerStatusViewModel.ToolCount)
-            or nameof(McpServerStatusViewModel.Name))
+            or nameof(McpServerStatusViewModel.Name)
+            or nameof(McpServerStatusViewModel.IsEnabled))
             NotifyAggregates();
     }
 
@@ -159,6 +182,7 @@ public partial class McpStatusViewModel
             Name = s.Name,
             StateText = s.StateText,
             ToolCount = s.ToolCount,
+            IsEnabled = s.IsEnabled,
         })];
 
         OnPropertyChanged(nameof(Snapshot));
