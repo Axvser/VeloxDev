@@ -200,7 +200,8 @@
                                                   ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
                                                   RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
                                                   LinkLineColor="#22D3EE"
-                                                  VirtualLineColor="#E2E8F0" />
+                                                  VirtualLineColor="#E2E8F0"
+                                                  LinkFlowEnabled="True" />
                     <ScrollView x:Name="PART_ScrollViewer"
                                 Orientation="Both"
                                 BackgroundColor="Transparent">
