@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -41,6 +42,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // canvas OnPaint — this avoids overlapping full-size transparent sibling windows in
     // WinForms being clipped by WS_CLIPSIBLINGS (only the topmost one would be drawn).
     private readonly List<Views.LinkView> _linkRenderers = [];
+
+    // The travelling highlight every link is drawn with: one cycle, shared by every renderer in
+    // _linkRenderers, so all the bands move together on one clock (see the Link flow section for why the
+    // clock is here and not on the links).
+    private readonly Views.LinkFlow _flow = new();
 
     // Panning
     private bool _isPanning;
@@ -200,7 +206,75 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // which the surface's Refresh keeps current, and re-pins itself on every UpdateText.
         Controls.Add(_infoOverlay);
         _infoOverlay.BringToFront();
+
+        // Every frame the flow writes is a repaint of this canvas, and nothing else: the link renderers live
+        // in a list and are painted by OnPaint, so there is no individual control to invalidate.
+        _flow.Changed = Invalidate;
     }
+
+    // ── Link flow ────────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Walks the band across every link once per cycle, forever, so a link reads as carrying data from the
+    /// sender's anchor to the receiver's. <see cref="Views.LinkFlow.Phase"/> is the only animated value; its
+    /// setter is what places the band on every link that reads the flow.
+    /// </summary>
+    /// <remarks>
+    /// Declared once for the canvas rather than per link, and executed once: the endpoint is the same every
+    /// cycle, which is the case the animation reference puts in a <c>static readonly</c> field. A straight
+    /// line rather than an eased curve, because the band should move at a constant speed — an ease would
+    /// make each cycle pause at the ends and read as a series of pulses instead of a flow.
+    /// <para>
+    /// The phases are one looping segment and a piecewise mapping rather than three segments joined with
+    /// <c>Then()</c>, because nothing in the engine repeats a chain: a segment's <c>LoopTime</c> repeats
+    /// that segment, the queue of segments is walked exactly once, and the loop guard reads a pass counter
+    /// the whole run shares (<c>Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:194</c>) —
+    /// so <c>LoopTime = int.MaxValue</c> on a first segment never reaches the second, and there is no way to
+    /// express "these three, in order, forever" as a chain today.
+    /// </para>
+    /// </remarks>
+    private static readonly Transition<Views.LinkFlow> Flow =
+        Transition<Views.LinkFlow>.Create()
+            .Property(t => t.Phase, 1d)
+            .Effect(new TransitionEffect
+            {
+                Duration = TimeSpan.FromSeconds(1.8),
+                LoopTime = int.MaxValue,
+                Ease = Eases.Default,
+            });
+
+    /// <summary>
+    /// Starts the band's clock. Called from the two moments a canvas can come to have links to draw: the
+    /// session arriving (<see cref="AttachSession"/>) and the handle being created
+    /// (<see cref="OnHandleCreated"/>), whichever of the two lands second — the demo attaches its session
+    /// from the form constructor, so a canvas is normally given links before it is ever shown.
+    /// </summary>
+    /// <remarks>
+    /// The handle is not a formality here. A <c>Transition</c> reaches the target's thread through
+    /// <see cref="VeloxDev.TransitionSystem.UIThreadInspector"/>, which captures a
+    /// <c>WindowsFormsSynchronizationContext</c> and nothing else, and the engine hands the effect's
+    /// <c>Awake</c> to the host before the first frame and gives up if the host refuses it. Started before
+    /// <c>Application.Run</c> there is no such context yet, so the target resolves to no thread, both the
+    /// dispatch and the frame pacer are refused, and the animation ends before it has drawn anything —
+    /// silently. Hence: on the thread and after the moment this canvas has a handle, which is exactly what
+    /// both callers check.
+    /// </remarks>
+    private void StartLinkFlow()
+    {
+        if (_session is null || !IsHandleCreated) return;
+
+        // The transition reads its start value from the target, so the cycle has to be at its beginning
+        // before Execute. The loop replays that captured start at every seam, so this is also the value
+        // each later cycle begins from.
+        _flow.Phase = 0d;
+        Flow.Execute(_flow);
+    }
+
+    /// <summary>
+    /// Stops the clock. The flow is only ever writing into a link surface that belongs to a session, and
+    /// with the session gone there is nothing for the frame to move — an idle canvas has no reason to
+    /// repaint itself at the frame rate.
+    /// </summary>
+    private void StopLinkFlow() => Transition.Exit(_flow, IncludeMutual: true, IncludeNoMutual: true);
 
     // ── Session lifecycle ───────────────────────────────────────────────────────
     private void AttachSession(WorkflowDemoSession? s)
@@ -220,6 +294,10 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // surface Push in RefreshOverlays keeps the viewport numbers it reads current.
         _infoOverlay.Bind(s.Tree);
         RefreshOverlays();
+
+        // A session arriving after this canvas is on screen is the other half of the flow's start condition
+        // (OnHandleCreated is the first) — see StartLinkFlow.
+        StartLinkFlow();
 
         // Delayed sync: wait for WinForms to complete the first layout before computing SlotView screen coordinates
         if (IsHandleCreated)
@@ -251,9 +329,24 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         }
     }
 
-    private static Views.LinkView CreateLinkRenderer(IWorkflowLinkViewModel link)
+    private Views.LinkView CreateLinkRenderer(IWorkflowLinkViewModel link)
     {
-        var view = new Views.LinkView();
+        var view = new Views.LinkView
+        {
+            // Renderers are not in the control tree, and a control with no handle cannot be repainted: an
+            // Invalidate on one is answered by no window at all. Its geometry changes therefore have to
+            // reach this canvas, which is what paints it (the Trimmed demo wires the same callback).
+            ExternalInvalidate = () =>
+            {
+                if (!IsDisposed) Invalidate();
+            },
+
+            // The band's clock, shared with every other link. One flow for the whole surface rather than one
+            // per renderer: these renderers are thrown away and rebuilt on every link change, so a per-link
+            // animation would have to be re-started from here anyway, and each one would own a WinForms timer
+            // of its own (see the Link flow section).
+            Flow = _flow,
+        };
         view.ViewModel = link;
         return view;
     }
@@ -378,11 +471,19 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         base.OnHandleCreated(e);
         EnsureRulerOverlay();
+
+        // A session normally arrives from the form constructor, before this canvas can have a handle — and a
+        // transition started from there would be refused by the host rather than draw a frame, so the flow
+        // starts when the canvas becomes a window. See StartLinkFlow.
+        StartLinkFlow();
     }
 
     private void DetachSession(WorkflowDemoSession? s)
     {
         if (s is null) return;
+
+        // The clock belongs to this canvas's link surface, which belongs to a session.
+        StopLinkFlow();
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, null);
         _infoOverlay.Bind(null);
         HandleCreated -= OnHandleCreatedForInitialSync;
