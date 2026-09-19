@@ -1,4 +1,5 @@
 ﻿using Microsoft.Agents.AI;
+using VeloxDev.AI.Pipelines;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using System;
@@ -22,8 +23,21 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     private const string Endpoint = "https://api.deepseek.com";
     private const string Model = "deepseek-v4-flash";
 
-    public ChatClientAgent? Agent;
+    // AIAgent rather than ChatClientAgent: the pipeline attaches as agent middleware, and that wrapper is
+    // what the host now calls. Nothing here reads a ChatClientAgent-only member.
+    public AIAgent? Agent;
     public AgentSession? Session;
+
+    /// <summary>
+    /// The conversation the Agent reports into — every turn, its answer, the reasoning behind it, and the
+    /// tools it used, in order.
+    /// <para>
+    /// Maintained by the pipeline rather than by this host: the view binds
+    /// <see cref="AgentTranscript.ToMarkdown"/> for a rich panel, or <see cref="AgentTranscript.Entries"/>
+    /// to render its own.
+    /// </para>
+    /// </summary>
+    public AgentTranscript Transcript { get; } = new();
 
     /// <summary>
     /// Global MCP server loader and status (shared by the Agent and the UI): WorkflowView binds its Status panel,
@@ -142,7 +156,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// </summary>
     public Dictionary<int, string> InteractionSafetyPrompts { get; } = [];
 
-    public static async Task<ChatClientAgent> ProvideAgent(IWorkflowTreeViewModel tree, AgentHelper helper)
+    public static async Task<AIAgent> ProvideAgent(IWorkflowTreeViewModel tree, AgentHelper helper)
     {
         // Create an isolated workspace
         var scope = tree.AsAgentScope()
@@ -197,6 +211,11 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         // below but never author one. Raising the level via Mcp.WithSelfService(...) adds AddMcpServer and
         // changes what the prompt says the model may do; see McpSelfServiceLevel.
 
+        // Attach the conversation before the agent exists: the scope composes its stage chain from this, and
+        // the agent below is wrapped with that chain — so every turn's answer, reasoning and tool calls land
+        // in the transcript without this host looping the stream itself.
+        scope.WithTranscript(helper.Transcript);
+
         // Progressive context: the static skeleton. Skills put the scope under dynamic management, so the
         // provider renders them per turn instead — the two must not both carry the corpus.
         var contextPrompt = scope.ProvideProgressiveContextPrompt();
@@ -226,7 +245,9 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             AIContextProviders = scope.CreateContextProviders(),
         });
 
-        return agent;
+        // The pipeline goes in the framework's own middleware slot, which wraps the whole run — so both
+        // RunAsync and RunStreamingAsync are observed, and every caller above keeps calling them unchanged.
+        return agent.WithPipeline(scope.Pipeline);
     }
 
     public override IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)

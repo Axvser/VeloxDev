@@ -222,7 +222,7 @@ public class SkillAgentContextProviderTests
             return next(e);
         });
 
-        var list = new SkillAgentContextProvider(scope, new ToolPipeline { MarshalTo = () => context }, pipeline)
+        var list = new SkillAgentContextProvider(scope, new ToolPipeline(null) { MarshalTo = () => context }, pipeline)
             .BuildContext().Tools!.Single(t => t.Name == "ListSkills");
         Invoke(list);
 
@@ -237,7 +237,7 @@ public class SkillAgentContextProviderTests
         var refusals = 0;
         var list = new SkillAgentContextProvider(
                 scope,
-                new ToolPipeline { Refuse = _ => { refusals++; return "refused by the composing host"; } })
+                new ToolPipeline(null) { Refuse = _ => { refusals++; return "refused by the composing host"; } })
             .BuildContext().Tools!.Single(t => t.Name == "ListSkills");
         var json = JObject.Parse(Invoke(list));
 

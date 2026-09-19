@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -19,10 +19,10 @@ namespace VeloxDev.AI.Pipelines;
 /// before it. <c>TrackedAIFunction</c> is handed both.
 /// </para>
 /// </summary>
-public sealed class ToolPipeline(AgentTranscript? transcript = null, Func<SynchronizationContext?>? marshalTo = null)
+public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func<SynchronizationContext?>? marshalTo = null)
     : IAgentPipelineStage
 {
-    private readonly AgentTranscript? _transcript = transcript;
+    private readonly Func<AgentTranscript?>? _transcript = transcript;
 
     /// <summary>
     /// The thread the whole call is marshalled onto, or <c>null</c> to run on the caller's.
@@ -51,12 +51,12 @@ public sealed class ToolPipeline(AgentTranscript? transcript = null, Func<Synchr
     public async ValueTask OnEventAsync(
         AgentEvent agentEvent, Func<AgentEvent, ValueTask> next, CancellationToken cancellationToken)
     {
-        if (agentEvent is AgentToolCallCompleted completed && _transcript is not null)
+        if (agentEvent is AgentToolCallCompleted completed && _transcript?.Invoke() is { } transcript)
         {
             var context = MarshalTo?.Invoke();
             await PipelineDispatch.RunAsync(
                 context,
-                () => _transcript.AddToolCall(completed.ToolName, completed.Result, completed.Outcome))
+                () => transcript.AddToolCall(completed.ToolName, completed.Result, completed.Outcome))
                 .ConfigureAwait(false);
         }
 

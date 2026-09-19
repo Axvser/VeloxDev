@@ -53,7 +53,7 @@ public class AgentPipelineTests
     private static (AIAgent Agent, AgentTranscript Transcript) Build(params ChatResponseUpdate[] stream)
     {
         var transcript = new AgentTranscript();
-        var pipeline = new AgentPipeline().Use(new TextPipeline(transcript));
+        var pipeline = new AgentPipeline().Use(new TextPipeline(() => transcript));
         var agent = new ScriptedChatClient(stream).AsAIAgent([]).WithPipeline(pipeline);
         return (agent, transcript);
     }
@@ -254,7 +254,7 @@ public class AgentPipelineTests
         // see, which is why order in the chain is meaningful rather than decorative.
         var pipeline = new AgentPipeline()
             .Use((e, next, ct) => e is AgentReasoningDelta ? default : next(e))
-            .Use(new TextPipeline(transcript));
+            .Use(new TextPipeline(() => transcript));
 
         await pipeline.PublishAsync(new AgentReasoningDelta("不该出现"));
         await pipeline.PublishAsync(new AgentTextDelta("该出现"));
@@ -270,7 +270,7 @@ public class AgentPipelineTests
         // the filter runs, so the reasoning stays. Documenting the ordering contract by its failure mode.
         var transcript = new AgentTranscript();
         var pipeline = new AgentPipeline()
-            .Use(new TextPipeline(transcript))
+            .Use(new TextPipeline(() => transcript))
             .Use((e, next, ct) => e is AgentReasoningDelta ? default : next(e));
 
         await pipeline.PublishAsync(new AgentReasoningDelta("已经写进去了"));
@@ -315,7 +315,7 @@ public class AgentPipelineTests
     {
         var transcript = new AgentTranscript();
         var pipeline = new AgentPipeline()
-            .Use(new TextPipeline(transcript))
+            .Use(new TextPipeline(() => transcript))
             .Use((e, next, ct) => throw new InvalidOperationException("second stage broke"));
 
         await pipeline.PublishAsync(new AgentTextDelta("写进去了"));

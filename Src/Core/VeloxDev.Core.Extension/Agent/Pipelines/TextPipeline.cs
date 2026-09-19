@@ -18,10 +18,16 @@ namespace VeloxDev.AI.Pipelines;
 /// answered from nowhere.
 /// </para>
 /// </summary>
-public sealed class TextPipeline(AgentTranscript transcript, Func<SynchronizationContext?>? marshalTo = null)
+public sealed class TextPipeline(Func<AgentTranscript?> transcript, Func<SynchronizationContext?>? marshalTo = null)
     : IAgentPipelineStage
 {
-    private readonly AgentTranscript _transcript = transcript ?? throw new ArgumentNullException(nameof(transcript));
+    /// <summary>
+    /// Resolved per event rather than captured: a scope composes its chain on first use and anything that
+    /// reads the pipeline decides what the chain is made of, so a host that attached a subsystem before its
+    /// conversation would otherwise get a chain with no text stage in it — and an empty panel. Asking for
+    /// the conversation each time makes the attach order irrelevant.
+    /// </summary>
+    private readonly Func<AgentTranscript?> _transcript = transcript ?? throw new ArgumentNullException(nameof(transcript));
 
     /// <summary>
     /// Resolved per event rather than captured, so a host may register its UI context after the pipeline
@@ -34,26 +40,32 @@ public sealed class TextPipeline(AgentTranscript transcript, Func<Synchronizatio
         AgentEvent agentEvent, Func<AgentEvent, ValueTask> next, CancellationToken cancellationToken)
     {
         var context = _marshalTo?.Invoke();
+        var transcript = _transcript();
+        if (transcript is null)
+        {
+            await next(agentEvent).ConfigureAwait(false);
+            return;
+        }
 
         switch (agentEvent)
         {
             case AgentTurnStarted started when !string.IsNullOrEmpty(started.Prompt):
-                await PipelineDispatch.RunAsync(context, () => _transcript.AddUser(started.Prompt!)).ConfigureAwait(false);
+                await PipelineDispatch.RunAsync(context, () => transcript.AddUser(started.Prompt!)).ConfigureAwait(false);
                 break;
 
             case AgentTextDelta text:
-                await PipelineDispatch.RunAsync(context, () => _transcript.AppendAnswer(text.Text)).ConfigureAwait(false);
+                await PipelineDispatch.RunAsync(context, () => transcript.AppendAnswer(text.Text)).ConfigureAwait(false);
                 break;
 
             case AgentReasoningDelta reasoning:
-                await PipelineDispatch.RunAsync(context, () => _transcript.AppendReasoning(reasoning.Text)).ConfigureAwait(false);
+                await PipelineDispatch.RunAsync(context, () => transcript.AppendReasoning(reasoning.Text)).ConfigureAwait(false);
                 break;
 
             case AgentTurnCompleted:
             case AgentTurnFaulted:
                 // The turn is over, whatever happened in it: close the open entry so the next one starts
                 // fresh. Done before the fault case below so a cancelled turn closes too.
-                await PipelineDispatch.RunAsync(context, _transcript.CloseOpen).ConfigureAwait(false);
+                await PipelineDispatch.RunAsync(context, transcript.CloseOpen).ConfigureAwait(false);
                 break;
         }
 
@@ -62,7 +74,7 @@ public sealed class TextPipeline(AgentTranscript transcript, Func<Synchronizatio
             case AgentTurnFaulted { Cancelled: false } faulted:
                 // A cancelled run is not an error: the host asked for it, and rendering it as a failure
                 // would put a red line under something that worked.
-                await PipelineDispatch.RunAsync(context, () => _transcript.AddError(Describe(faulted))).ConfigureAwait(false);
+                await PipelineDispatch.RunAsync(context, () => transcript.AddError(Describe(faulted))).ConfigureAwait(false);
                 break;
         }
 

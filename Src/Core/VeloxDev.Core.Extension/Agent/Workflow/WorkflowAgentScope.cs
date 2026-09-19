@@ -1401,11 +1401,14 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
             var pipeline = new AgentPipeline();
 
+            // The text stage is always present, even with no conversation attached yet: this getter is
+            // reached by anything that composes a subsystem, so a host that attaches its transcript
+            // afterwards would otherwise end up with a chain that can never feed it. The stage asks for the
+            // transcript per event and no-ops while there is none.
+            //
             // Text first, then tools: they handle disjoint events, so the order is only about which a
             // reader of the chain meets first.
-            if (_transcript is not null)
-                pipeline.Use(new TextPipeline(_transcript, () => UIContext));
-
+            pipeline.Use(new TextPipeline(() => _transcript, () => UIContext));
             pipeline.Use(SharedTools);
             pipeline.Use(CreateToolkit().CreateAccountingStage());
 

@@ -221,7 +221,7 @@ public class McpAgentContextProviderTests
             return next(e);
         });
 
-        var list = new McpAgentContextProvider(new McpScope(), new ToolPipeline { MarshalTo = () => context }, pipeline)
+        var list = new McpAgentContextProvider(new McpScope(), new ToolPipeline(null) { MarshalTo = () => context }, pipeline)
             .BuildContext().Tools!.Single(t => t.Name == "ListMcpServers");
         Invoke(list);
 
@@ -234,7 +234,7 @@ public class McpAgentContextProviderTests
         var refusals = 0;
         var list = new McpAgentContextProvider(
                 new McpScope(),
-                new ToolPipeline { Refuse = _ => { refusals++; return "refused by the composing host"; } })
+                new ToolPipeline(null) { Refuse = _ => { refusals++; return "refused by the composing host"; } })
             .BuildContext().Tools!.Single(t => t.Name == "ListMcpServers");
         var json = JObject.Parse(Invoke(list));
 
