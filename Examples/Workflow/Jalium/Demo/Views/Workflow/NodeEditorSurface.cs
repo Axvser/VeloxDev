@@ -28,7 +28,7 @@ internal sealed class NodeEditorSurface : Canvas
     private const double Phi = 0.6180339887;
     private const double LinkThickness = 2;
 
-    /// <summary>The colour every link is drawn in: what the band travels along, and what it is mixed from.</summary>
+    /// <summary>The colour every link is drawn in: what the band travels along, and what its two pens are built from.</summary>
     private static readonly Color LinkColor = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
     private static readonly SolidColorBrush s_surfaceBrush = new(Color.FromRgb(0x1E, 0x1E, 0x1E));
     private static readonly SolidColorBrush s_gridMinor = new(Color.FromRgb(0x2A, 0x2D, 0x2E));
@@ -59,18 +59,6 @@ internal sealed class NodeEditorSurface : Canvas
     private readonly HashSet<IWorkflowSlotViewModel> _slotSubs = new();
     private ScrollViewer? _scrollViewer;
 
-    /// <summary>One travelling band per settled link, keyed by the link the band belongs to.</summary>
-    /// <remarks>
-    /// Keyed by the link rather than by index because the link is what owns the band's identity: a link
-    /// that is removed takes its band with it (<see cref="PruneFlows"/>), and one that survives a
-    /// re-order keeps the band it already has instead of starting a fresh one. Entries appear on the
-    /// first draw of a new link and are dropped when the tree, or the link itself, goes away.
-    /// </remarks>
-    private readonly Dictionary<IWorkflowLinkViewModel, LinkFlow> _flows = new();
-
-    /// <summary>Whether the surface is on screen, and therefore whether the bands should be running.</summary>
-    private bool _flowActive;
-
     private enum DragKind { None, Node, Link, Pan }
     private DragKind _dragKind;
     private IWorkflowNodeViewModel? _dragNode;
@@ -91,23 +79,13 @@ internal sealed class NodeEditorSurface : Canvas
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
         AddHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnZoomMouseWheel));
 
-        // The surface paints its own links, so it is also the only thing that can own their animations.
-        // Until now it had no lifetime hook at all; these two are it. Loaded is where a band may start
-        // running and Unloaded is where every band stops — see the flow region below.
-        Loaded += (_, _) =>
-        {
-            _flowActive = true;
-            foreach (var flow in _flows.Values)
-            {
-                StartFlow(flow);
-            }
-        };
+        // The surface paints its own links, so it is also the only thing that can own their animation. The band
+        // is one cycle over the whole surface rather than one per link, so these two are its entire lifetime:
+        // Loaded is where it starts and Unloaded is where it stops — see the flow region below. (Before this
+        // flow existed the surface had no lifetime hook at all; these two are it.)
+        Loaded += (_, _) => StartFlow();
 
-        Unloaded += (_, _) =>
-        {
-            _flowActive = false;
-            StopFlows();
-        };
+        Unloaded += (_, _) => StopFlow();
     }
 
     /// <summary>Ctrl + mouse wheel zooms the workspace: each node collapses toward the world origin
@@ -187,11 +165,11 @@ internal sealed class NodeEditorSurface : Canvas
         _cards.Clear();
         Children.Clear();
 
-        // A replaced tree took its links with it, so every band stops here rather than being left running
-        // on a flow nothing will ever draw again. The new tree's links get fresh bands on the next draw,
-        // and those start immediately if the surface is already on screen.
-        StopFlows();
-
+        // Nothing here stops the band, and this is where a surface-wide flow is simpler than a per-link one:
+        // the cycle is the surface's rather than any link's or tree's, so a replaced tree does not own it and
+        // the new tree's links are drawn by the cycle that is already running. Nothing has to start one either
+        // — a tree is swapped on a surface that is already on screen, and Loaded is the only place the cycle
+        // starts.
         if (_tree is null)
         {
             return;
@@ -440,10 +418,9 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // A removed link's band has nothing left to travel along, so it stops with the link instead of
-        // animating an object the next draw will never reach. New links are not started here — the draw
-        // that first renders them creates and starts their bands.
-        PruneFlows();
+        // A link that arrives or goes needs neither teardown nor start-up: the band is the surface's and it is
+        // a length of whichever link is being drawn, so the next paint treats the new collection the same way
+        // it treated the old one.
         InvalidateVisual();
         UpdateAllPortColors();
         Changed?.Invoke();
@@ -703,17 +680,14 @@ internal sealed class NodeEditorSurface : Canvas
             var p0 = ToCanvas(GetSlotPortCenter(link.Sender).X, GetSlotPortCenter(link.Sender).Y);
             var p1 = ToCanvas(GetSlotPortCenter(link.Receiver).X, GetSlotPortCenter(link.Receiver).Y);
 
-            // Per-link brush rather than one shared pen: the band is a property of this link's own axis,
-            // so it cannot live on a static. The flow is re-pointed at the ports on every draw because a
-            // node drag moves them without telling the link anything.
-            var flow = EnsureFlow(link);
-            flow.Orient(p0, p1);
-
             // Two constant colours and a length of the link drawn on top of them, rather than one graded
-            // stroke — see LinkFlow.Orient for why this platform gets the band that way.
-            DrawLink(dc, flow.DimPen, p0, p1);
-            DrawBand(dc, flow.LitPen, p0, p1, flow.BandStart, flow.BandEnd);
-            DrawArrowhead(dc, flow.Arrow, p0, p1);
+            // stroke — see the note on the flow declaration for why this platform gets the band that way.
+            // Where that length starts and ends is the surface's own state, so every link carries the same
+            // band along its own axis; the ports are read here on every draw because a node drag moves them
+            // without telling the link anything.
+            DrawLink(dc, s_dimPen, p0, p1);
+            DrawBand(dc, s_litPen, p0, p1, BandCentre, BandHalf);
+            DrawArrowhead(dc, s_arrowBrush, p0, p1);
         }
     }
 
@@ -724,9 +698,8 @@ internal sealed class NodeEditorSurface : Canvas
     /// Golden-ratio polyline aligned with the other GUI schemes: 4 points
     /// [from, (from.X+stub, from.Y), (to.X−stub, to.Y), to] with stub = dx/2·(1−φ).
     /// <para>
-    /// Shared with the band's brush rather than inlined into the draw: the gradient has to be aimed at
-    /// the same four points the link is stroked along, and the box the brush is resolved against is the
-    /// bounding box of exactly those points, so computing them once is what keeps the two in step.
+    /// Shared with the band rather than inlined into the draw: the band is clipped along the same four points
+    /// the link is stroked along, so computing them once is what keeps the two in step.
     /// </para>
     /// </remarks>
     private static Point[] LinkPoints(Point from, Point to)
@@ -754,17 +727,23 @@ internal sealed class NodeEditorSurface : Canvas
     }
 
     /// <summary>
-    /// Strokes the lit band: the link's own polyline, clipped to the length the band covers, measured from
-    /// the sender's end.
+    /// Strokes the lit band: the link's own polyline, clipped to the stretch of the link the band covers,
+    /// measured from the sender's end.
     /// </summary>
     /// <remarks>
     /// A drawn geometry rather than a gradient on the stroke, because a geometry that changes every frame is
-    /// the only thing this build repaints — the measurement is on <c>LinkFlow.Orient</c>. The clipping walks
-    /// the polyline's three runs by length, so the band follows an elbow instead of being projected across
-    /// it, and it is what carries the cycle's phases: the band grows as it enters and shrinks as it leaves.
+    /// the only thing this build repaints — the measurement is in the note on the flow declaration. The
+    /// clipping walks the polyline's three runs by length, so the band follows an elbow instead of being
+    /// projected across it, and the width it ends up stroked at is what carries the cycle's phases: the band
+    /// grows as it enters and shrinks as it leaves.
     /// </remarks>
-    private static void DrawBand(DrawingContext dc, Pen pen, Point from, Point to, double bandStart, double bandEnd)
+    private static void DrawBand(DrawingContext dc, Pen pen, Point from, Point to, double centre, double half)
     {
+        // The band as the stretch the surface's two values describe: the centre plus and minus its half-width,
+        // clamped to the link, so the end of a cycle stops at the link's end rather than past it.
+        var bandStart = Math.Max(0d, centre - half);
+        var bandEnd = Math.Min(1d, centre + half);
+
         if (bandEnd <= bandStart)
         {
             return;
@@ -858,367 +837,228 @@ internal sealed class NodeEditorSurface : Canvas
 
     // ── Link flow (the travelling band) ────────────────────────────────────
 
+    /// <summary>Half the band's width, as a fraction of a link's length: the size the band travels at, and the
+    /// same motion every demo's travel has, in this platform's own units.</summary>
+    private const double BandHalfWidth = 0.04;
+
+    // The three phases, as the band's centre at the end of each: it forms as it enters, travels fully lit and
+    // unchanged, and shrinks away on its way out. What the animation writes is these centres, plus the width
+    // where a phase is about the band's size rather than about where it is.
+    private const double BandStart = 0.06;
+    private const double BandFormed = 0.34;
+    private const double BandLeaving = 0.66;
+    private const double BandExit = 0.94;
+
+    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(550);
+    private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(650);
+    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(550);
+
+    /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
+    private static readonly Color Lit = LitOf(LinkColor);
+
+    /// <summary>The colour a link rests in: the lit colour dimmed to a little under two thirds.</summary>
+    private static readonly Color Dim = DimOf(Lit);
+
+    /// <summary>The two pens every link is drawn with: the one it rests in, and the one the band is stroked with.</summary>
+    /// <remarks>
+    /// Shared by every link, which is what they were before the band needed a gradient and what they are again
+    /// now that the band is geometry: the colour they are built from is the surface's single <see cref="LinkColor"/>,
+    /// so there is nothing per link left for them to hold. Built once and never written to, which is the case a
+    /// brush this build has been handed survives — the note on the declaration below is the measurement.
+    /// </remarks>
+    private static readonly Pen s_dimPen = new(new SolidColorBrush(Dim), LinkThickness);
+    private static readonly Pen s_litPen = new(new SolidColorBrush(Lit), LinkThickness);
+
+    /// <summary>The arrowhead's fill: the colour the band travels in, not the one its line rests in.</summary>
+    /// <remarks>
+    /// The arrowhead is the destination marker, so it carries the band's colour rather than the link's resting
+    /// one: the line rests dim, and an arrowhead dimmed with it would be the one part of the link that never
+    /// read as part of the flow.
+    /// </remarks>
+    private static readonly SolidColorBrush s_arrowBrush = new(Lit);
+
+    /// <summary>Whether the band's cycle is running, so that stopping it is only asked for once.</summary>
+    private bool _running;
+
+    private double _bandCentre;
+    private double _bandHalf;
+
     /// <summary>
-    /// One link's travelling highlight: the gradient brush the link is stroked with, the solid colour its
-    /// arrowhead is filled with, and the single animated number that places the band on the link.
+    /// Where the band is: the fraction of a link's length, measured from its sender's end, that the band's
+    /// centre sits at. Written by the cycle every frame and read by every link as it is drawn.
     /// </summary>
     /// <remarks>
-    /// This surface paints every link itself instead of giving each one a view, so there is no per-link
-    /// object for an animation to write into — and the pens it used to draw them were <c>static
-    /// readonly</c>, which one shared gradient could never have survived. This holder is that missing
-    /// object: the surface keeps one per link, keyed by the link, and draws each link with the brush it
-    /// carries.
-    /// <para>
-    /// The link is drawn dim and the band is the same colour at full strength, so what travels is a lit
-    /// length of the link rather than a different colour painted onto it. The three stops are the band:
-    /// the middle one carries the lit colour and the other two sit <see cref="HalfWidth"/> either side of
-    /// it, which is what keeps it a band instead of one wide smear along the whole link.
-    /// </para>
+    /// A member of the surface rather than of anything per link, because this surface paints every link in one
+    /// pass and there is no per-link view for an animation to write into: these two numbers are the whole of the
+    /// animated state and the whole surface shares them, so every link carries its band at the same point of its
+    /// own length at any moment. Writing either repaints, because the band is drawn by this surface's own
+    /// <c>OnRender</c> and nothing else would tell it that the band moved — one repaint per frame is the price
+    /// of animating something the surface draws itself, and the transitions tick at 60fps.
     /// </remarks>
-    private sealed class LinkFlow
+    public double BandCentre
     {
-        /// <summary>Half the band's width, in gradient-offset units.</summary>
-        private const double HalfWidth = 0.04;
-
-        // One cycle, as fractions of it. The phases have different lengths because they cover different
-        // distances: the band travels a third of the link while forming, a third while fully lit, and a
-        // third while leaving.
-        private const double EnterEnd = 0.30;
-        private const double FadeStart = 0.66;
-        private const double BandFrom = 0.06;
-        private const double BandFormed = 0.34;
-        private const double BandLeaving = 0.66;
-        private const double BandTo = 0.94;
-
-        private readonly NodeEditorSurface _surface;
-
-        public LinkFlow(NodeEditorSurface surface)
+        get => _bandCentre;
+        set
         {
-            _surface = surface;
-
-            // Transparent placeholders: the colours are known at the first Orient, which is before anything
-            // is drawn with them, and are replaced rather than written into — see Orient.
-            DimPen = new Pen(new SolidColorBrush(Colors.Transparent), LinkThickness);
-            LitPen = new Pen(new SolidColorBrush(Colors.Transparent), LinkThickness);
-            Arrow = new SolidColorBrush(Colors.Transparent);
+            _bandCentre = value;
+            InvalidateVisual();
         }
-
-        /// <summary>The pen the link rests in: the lit colour dimmed to a little under two thirds.</summary>
-        public Pen DimPen { get; private set; }
-
-        /// <summary>
-        /// The pen the band is drawn with. Replaced rather than re-coloured when the link's colour changes,
-        /// because a brush the renderer has already been handed is the one thing this build does not
-        /// re-read (measured; the note on <see cref="Apply"/> has the detail).
-        /// </summary>
-        public Pen LitPen { get; private set; }
-
-        /// <summary>The arrowhead's fill: the band's lit colour, not the gradient.</summary>
-        public SolidColorBrush Arrow { get; private set; }
-
-        /// <summary>The link's resting colour: <see cref="Lit"/> at the link's own strength dimmed.</summary>
-        public Color Dim { get; private set; }
-
-        /// <summary>The band's colour, and the arrowhead's: the link's colour at full strength.</summary>
-        public Color Lit { get; private set; }
-
-        private double _phase;
-
-        /// <summary>
-        /// Cycle progress, 0→1: the whole of the animated state. Writing it repaints the band, and the
-        /// animation writes it every frame.
-        /// </summary>
-        public double Phase
-        {
-            get => _phase;
-            set
-            {
-                _phase = value;
-                Apply();
-
-                // The band is painted by the surface's own OnRender, not by a property the framework watches,
-                // so nothing else would tell it that a stop moved. One repaint per animation frame is the
-                // price of animating something the surface draws itself; the transitions tick at 60fps.
-                _surface.InvalidateVisual();
-            }
-        }
-
-        private Point _lastFrom;
-        private Point _lastTo;
-        private bool _hasAxis;
-
-        /// <summary>
-        /// Points the flow at this link: the two colours its pens carry, and the endpoints the band is
-        /// measured between.
-        /// </summary>
-        /// <remarks>
-        /// Called on every draw, because the ports it runs between move whenever a node is dragged and the
-        /// link is never told. The work is skipped while the endpoints are unchanged, which is the common
-        /// case, and the phase is deliberately not reset here: a drag re-points a link many times a second,
-        /// and restarting the cycle on each of those would hold the band at the sender's end for the whole
-        /// gesture instead of letting it run.
-        /// <para>
-        /// <b>Why the band is geometry and not a gradient here.</b> The other six demos stroke the link with
-        /// a linear gradient and animate the middle stop; this build does not render that. A gradient handed
-        /// to the renderer keeps the contents it held at hand-over: moving a stop in place, replacing the
-        /// whole stop collection, moving the gradient's axis, and handing over a brand-new brush every frame
-        /// all left the capture byte-identical — while a drawn geometry that changes every frame does reach
-        /// the screen. So the link is drawn in its two constant colours and the band is a *length of the
-        /// link* stroked on top of it, which means the animated state is where that length is and how long
-        /// it is. Both of those are geometry, and geometry is what this surface repaints.
-        /// </para>
-        /// </remarks>
-        public void Orient(Point from, Point to)
-        {
-            if (_hasAxis && from.X == _lastFrom.X && from.Y == _lastFrom.Y
-                && to.X == _lastTo.X && to.Y == _lastTo.Y)
-            {
-                return;
-            }
-
-            _hasAxis = true;
-            _lastFrom = from;
-            _lastTo = to;
-
-            // The two colours, and the pens that carry them. Built here rather than written into: a brush
-            // this build has been handed keeps whatever it held at hand-over, so a pen is replaced whenever
-            // the colour changes — in a demo with one link colour that is this first call and never again.
-            Lit = LitOf(LinkColor);
-            Dim = DimOf(Lit);
-            DimPen = new Pen(new SolidColorBrush(Dim), LinkThickness);
-            LitPen = new Pen(new SolidColorBrush(Lit), LinkThickness);
-            Arrow = new SolidColorBrush(Lit);
-
-            // The link has just been re-pointed, so the band has to be put back on it. Phase is deliberately
-            // not reset here: a drag re-points a link many times a second, and restarting the cycle on each
-            // of those would hold the band at the sender's end for the whole drag instead of letting it run.
-            Apply();
-        }
-
-        /// <summary>
-        /// Places the band and mixes its colour for the current phase — the three phases the cycle is made
-        /// of, as one piecewise mapping.
-        /// <para>
-        /// Phase 1 (0 → <see cref="EnterEnd"/>) the band forms as it enters: it travels a third of the way
-        /// while coming up from the line's resting colour to the lit one. Phase 2 (<see cref="EnterEnd"/> →
-        /// <see cref="FadeStart"/>) it travels fully lit and unchanged, which is the phase that reads as
-        /// flow rather than as a pulse. Phase 3 (<see cref="FadeStart"/> → 1) it leaves: the last third of
-        /// the travel, settling back to the resting colour — which is also what makes the seam invisible
-        /// when the cycle repeats, since the line is uniformly dim at both ends of a cycle.
-        /// </para>
-        /// </summary>
-        private void Apply()
-        {
-            double centre;
-            double grow;
-            if (_phase < EnterEnd)
-            {
-                var t = _phase / EnterEnd;
-                centre = BandFrom + (BandFormed - BandFrom) * t;
-                grow = t;
-            }
-            else if (_phase < FadeStart)
-            {
-                var t = (_phase - EnterEnd) / (FadeStart - EnterEnd);
-                centre = BandFormed + (BandLeaving - BandFormed) * t;
-                grow = 1d;
-            }
-            else
-            {
-                var t = (_phase - FadeStart) / (1d - FadeStart);
-                centre = BandLeaving + (BandTo - BandLeaving) * t;
-                grow = 1d - t;
-            }
-
-            // Rebuilt as a whole collection rather than by moving the existing stops in place: assigning
-            // GradientStops is a change to the brush itself, where a write to one of its stops is a change
-            // the renderer has to be told about through the collection. On this Jalium build neither has
-            // been seen to reach the cached native gradient (see the note on StartFlow), so the form kept
-            // here is the one the Avalonia view's structure ports to most directly. Three stops per link
-            // per frame is a small allocation beside the full-canvas repaint the change drives anyway.
-            // The band, as a length of the link: where it starts and where it ends, in fractions of the
-            // link's own length measured from the sender's end. The phases come out as its *size* rather
-            // than as a colour: phase 1 grows it from nothing while it enters, phase 2 carries it at full
-            // width, and phase 3 shrinks it away — the same "appear, travel, disappear" rhythm the other
-            // six demos get from mixing the colour, in the form this surface can repaint.
-            var half = HalfWidth * grow;
-            BandStart = Math.Max(0d, centre - half);
-            BandEnd = Math.Min(1d, centre + half);
-        }
-
-        /// <summary>Where the band begins, as a fraction of the link's length from the sender's end.</summary>
-        public double BandStart { get; private set; }
-
-        /// <summary>Where the band ends, on the same scale as <see cref="BandStart"/>.</summary>
-        public double BandEnd { get; private set; }
-
-        /// <summary>
-        /// The band's colour: the link's own colour at full strength, lifted a little so a link that is
-        /// already white still has somewhere brighter to go.
-        /// </summary>
-        private static Color LitOf(Color color)
-        {
-            const double lift = 0.45;
-
-            byte Up(byte channel) => (byte)Math.Round(channel + (255 - channel) * lift);
-
-            return Color.FromArgb(255, Up(color.R), Up(color.G), Up(color.B));
-        }
-
-        /// <summary>
-        /// The line's resting colour: the lit colour dimmed to a little under two thirds, which is what makes
-        /// a lit band read as a band.
-        /// </summary>
-        /// <remarks>
-        /// Dimming by alpha is what keeps the hue: the alternative that suggests itself — a "highlight" that
-        /// is the line colour pushed <em>towards white</em> — is invisible. Jalium's links are already white,
-        /// where the lifted colour and the resting one are the same pixel; on the cyan links the other demos
-        /// draw, cyan lifted 75% towards white differs from cyan in one channel out of three, on a 2px line,
-        /// against a dark canvas. Making the resting line the dim one puts the contrast where the eye can
-        /// find it at a glance, and it works the same on both.
-        /// </remarks>
-        private static Color DimOf(Color color) => Color.FromArgb(
-            (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
     }
 
     /// <summary>
-    /// Walks the band across each link once per cycle, forever, so the link reads as carrying data from the
-    /// sender's anchor to the receiver's. <see cref="LinkFlow.Phase"/> is the only animated value; its
-    /// setter paints the three phases.
-    /// <para>
-    /// Declared once and executed per link rather than built per call: the endpoint is the same every cycle,
-    /// which is the case the animation reference puts in a <c>static readonly</c> field. A straight line
-    /// rather than an eased curve, because the band should move at a constant speed — an ease would make
-    /// each cycle pause at the ends and read as a series of pulses instead of a flow.
-    /// </para>
-    /// <para>
-    /// The phases are one looping segment and a piecewise mapping rather than three segments joined with
-    /// <c>Then()</c>, because nothing in the engine repeats a chain: a segment's <c>LoopTime</c> repeats
-    /// that segment, the queue of segments is walked exactly once, and the loop guard reads a pass counter
-    /// the whole run shares (<c>TransitionInterpreter.cs:194</c>) — so <c>LoopTime = int.MaxValue</c> on a
-    /// first segment never reaches the second. A two-segment chain was measured reporting <c>Start</c> and
-    /// <c>Completed</c> while writing zero frames, and there is no way to express "these three, in order,
-    /// forever" as a chain today.
-    /// </para>
+    /// Half the band's width, on the same scale as <see cref="BandCentre"/>: the rest of the animated state, and
+    /// this platform's own answer to the flow's phases.
     /// </summary>
-    private static readonly Transition<LinkFlow> Flow =
-        Transition<LinkFlow>.Create()
-            .Property(t => t.Phase, 1d)
-            .Effect(new TransitionEffect
+    /// <remarks>
+    /// The other six demos carry a phase as a colour mix between the link's two colours; here it is the band's
+    /// size, because a band on this platform is a length of the link drawn as geometry rather than a gradient on
+    /// it (the note on the declaration below says why). So the cycle grows this while the band enters and takes
+    /// it back to nothing while the band leaves, and a phase reads as a band appearing and disappearing rather
+    /// than as the line lighting up. The band's own colour is never mixed: it is stroked lit throughout, and
+    /// what changes about it is how much of the link it covers.
+    /// </remarks>
+    public double BandHalf
+    {
+        get => _bandHalf;
+        set
+        {
+            _bandHalf = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
+    /// </summary>
+    /// <remarks>
+    /// One declaration for the whole surface rather than one per link, because the values it animates are the
+    /// surface's own and every link reads the same two of them while drawing: the bands advance together, which
+    /// is what a surface-wide flow looks like. That is also why this one can sit in a <c>static readonly</c>
+    /// field where the Avalonia view's is built per view — every endpoint here is a constant, and a declaration
+    /// that reads a local is shared by every later execution of it.
+    /// <para>
+    /// A straight line rather than an eased curve, because the band should move at a constant speed — an ease
+    /// would make each cycle pause at the ends and read as a series of pulses instead of a flow.
+    /// </para>
+    /// <para>
+    /// The band's width is what appears and disappears: phase 1 grows it from nothing while the band enters,
+    /// phase 2 carries it at full width and unchanged, and phase 3 takes the width back to nothing as the band
+    /// leaves. That is also what makes the seam invisible when the cycle repeats — the band has no width at
+    /// either end of a cycle, so the centre snapping back to its captured start cannot be seen.
+    /// </para>
+    /// <para>
+    /// <b>Why the band is geometry here and a gradient on the other six.</b> This build does not render a change
+    /// to the gradient a link is stroked with: stops written in place, the whole stop collection replaced, the
+    /// gradient's axis moved, and a brand-new brush handed over every frame all left the capture byte-identical —
+    /// the band rendered, at the right colour and width, parked at the offset a fresh cycle starts from. It is
+    /// specific to the gradient's contents rather than to invalidation: writing the same brush's <c>Opacity</c>
+    /// does land within a frame, and so does a drawn geometry that changes every frame. So the link is drawn in
+    /// its two constant colours and the band is a <em>length of the link</em> stroked on top of them, which
+    /// makes the animated state where that length starts and how long it is — the two members above — and the
+    /// drawing a clip along the link's own runs (see <see cref="DrawBand"/>).
+    /// </para>
+    /// <para>
+    /// Carried that way it advances as intended, measured on the running demo: a lit segment of some 2–4 px
+    /// reads 255 against a resting line of 169, and across six frames 220 ms apart it walks the link from about
+    /// a fifth of its length to about four fifths.
+    /// </para>
+    /// </remarks>
+    private static readonly Transition<NodeEditorSurface> Flow =
+        Transition<NodeEditorSurface>.Create()
+            // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from no
+            // width to its full one, so it appears rather than sliding in from off the link.
+            .Property(s => s.BandCentre, BandFormed)
+            .Property(s => s.BandHalf, BandHalfWidth)
+            .Effect(new TransitionEffect()
             {
-                Duration = TimeSpan.FromSeconds(1.8),
-                LoopTime = int.MaxValue,
+                Duration = EnterDuration,
                 Ease = Eases.Default,
-            });
-
-    /// <summary>
-    /// Starts one link's band from the sender's end.
-    /// </summary>
-    /// <remarks>
-    /// The transition reads its start value from the target, so the cycle has to be at its beginning before
-    /// <c>Execute</c>. The loop replays that captured start at every seam, so this is also the value each
-    /// later cycle begins from.
-    /// <para>
-    /// <b>What this demo measured about animating a link on this build.</b> The cycle itself is sound: every
-    /// link starts once, <c>Phase</c> takes roughly five hundred writes a second sweeping the whole 0→1
-    /// range, and the surface's <c>OnRender</c> runs about a hundred times a second. What does not reach the
-    /// screen is a change to the *gradient a link is stroked with*: stops written in place, the whole stop
-    /// collection replaced, the gradient's axis moved, and a brand-new brush handed over every frame all left
-    /// the capture byte-identical — the band rendered, at the right colour and width, parked at the offset a
-    /// fresh cycle starts from. It is specific to the gradient's contents rather than to invalidation: writing
-    /// the same brush's <c>Opacity</c> does land within a frame. A drawn geometry that changes every frame
-    /// lands as well, which is why the band is carried as a length of the link instead of as a gradient on it
-    /// (see <c>LinkFlow.Orient</c> and <c>DrawBand</c>).
-    /// </para>
-    /// <para>
-    /// Carried that way it advances as intended: measured on the running demo, a lit segment of some 2–4 px
-    /// reads 255 against a resting line of 169, and across six frames 220 ms apart it walks the link from
-    /// about a fifth of its length to about four fifths.
-    /// </para>
-    /// </remarks>
-    private static void StartFlow(LinkFlow flow)
-    {
-        flow.Phase = 0d;
-        Flow.Execute(flow);
-    }
-
-    /// <summary>Stops one link's band and lets the transition release the resources it holds.</summary>
-    private static void StopFlow(LinkFlow flow)
-        => Transition.Exit(flow, IncludeMutual: true, IncludeNoMutual: true);
-
-    /// <summary>
-    /// This link's band, created and started the first time the link is drawn.
-    /// </summary>
-    /// <remarks>
-    /// Starting here rather than when the link appears is what makes a link added to an already-visible tree
-    /// behave the same as one the tree was built with: the draw that first reaches it is also the moment its
-    /// ports are known, and running the band before then would only be animating a link with no position.
-    /// </remarks>
-    private LinkFlow EnsureFlow(IWorkflowLinkViewModel link)
-    {
-        if (_flows.TryGetValue(link, out var existing))
-        {
-            return existing;
-        }
-
-        var flow = new LinkFlow(this);
-        _flows[link] = flow;
-        if (_flowActive)
-        {
-            StartFlow(flow);
-        }
-
-        return flow;
-    }
-
-    /// <summary>
-    /// Stops and forgets the band of every link the tree no longer holds.
-    /// </summary>
-    /// <remarks>
-    /// Runs on a link-collection change rather than per draw, so the scan costs nothing while the tree is
-    /// merely being painted. Membership is asked of the tree rather than taken from the change event because
-    /// a reset carries no old items at all.
-    /// </remarks>
-    private void PruneFlows()
-    {
-        if (_flows.Count == 0)
-        {
-            return;
-        }
-
-        List<IWorkflowLinkViewModel>? gone = null;
-        foreach (var link in _flows.Keys)
-        {
-            if (_tree is not null && _tree.Links.Contains(link))
+            })
+            .Then()
+            // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than
+            // as a pulse: nothing about it changes except where it is.
+            .Property(s => s.BandCentre, BandLeaving)
+            .Effect(new TransitionEffect()
             {
-                continue;
-            }
+                Duration = TravelDuration,
+                Ease = Eases.Default,
+            })
+            .Then()
+            // Phase 3 — it leaves, the width going back to nothing over the last third of the travel. That is
+            // also what makes the seam invisible when the cycle repeats: the band has no width at either end of
+            // a cycle, so the centre snapping back to its captured start cannot be seen.
+            .Property(s => s.BandCentre, BandExit)
+            .Property(s => s.BandHalf, 0d)
+            .Effect(new TransitionEffect()
+            {
+                Duration = ExitDuration,
+                Ease = Eases.Default,
+            })
+            .Repeat(int.MaxValue);
 
-            (gone ??= []).Add(link);
-        }
+    /// <summary>
+    /// Starts the cycle: the band at the sender's end of every link, with no width.
+    /// </summary>
+    /// <remarks>
+    /// The transition reads its start values from the target, so the surface has to be at the cycle's start
+    /// before <c>Execute</c> — and the loop replays that captured start at every seam, so this is also the state
+    /// each later cycle begins from.
+    /// </remarks>
+    private void StartFlow()
+    {
+        BandCentre = BandStart;
+        BandHalf = 0d;
 
-        if (gone is null)
+        Flow.Execute(this);
+        _running = true;
+    }
+
+    /// <summary>
+    /// Stops the cycle, and lets the transition release the resources it holds.
+    /// </summary>
+    /// <remarks>
+    /// A surface that leaves the tree must not leave an animation running on it — and because the cycle is the
+    /// surface's own, this is the whole of the teardown: a link that comes or goes, and a tree that is replaced,
+    /// have nothing here to stop.
+    /// </remarks>
+    private void StopFlow()
+    {
+        if (!_running)
         {
             return;
         }
 
-        foreach (var link in gone)
-        {
-            StopFlow(_flows[link]);
-            _flows.Remove(link);
-        }
+        Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
+        _running = false;
     }
 
-    /// <summary>Stops every band and drops the state, leaving nothing animating behind a replaced or unloaded tree.</summary>
-    private void StopFlows()
+    /// <summary>
+    /// The band's colour: the link's own colour at full strength, lifted a little so a link that is already
+    /// white still has somewhere brighter to go.
+    /// </summary>
+    private static Color LitOf(Color color)
     {
-        foreach (var flow in _flows.Values)
-        {
-            StopFlow(flow);
-        }
+        const double lift = 0.45;
 
-        _flows.Clear();
+        byte Up(byte channel) => (byte)Math.Round(channel + (255 - channel) * lift);
+
+        return Color.FromArgb(255, Up(color.R), Up(color.G), Up(color.B));
     }
+
+    /// <summary>
+    /// The line's resting colour: the lit colour dimmed to a little under two thirds, which is what makes a lit
+    /// band read as a band.
+    /// </summary>
+    /// <remarks>
+    /// Dimming by alpha is what keeps the hue: the alternative that suggests itself — a "highlight" that is the
+    /// line colour pushed <em>towards white</em> — is invisible. Jalium's links are already white, where the
+    /// lifted colour and the resting one are the same pixel; on the cyan links the other demos draw, cyan lifted
+    /// 75% towards white differs from cyan in one channel out of three, on a 2px line, against a dark canvas.
+    /// Making the resting line the dim one puts the contrast where the eye can find it at a glance, and it works
+    /// the same on both.
+    /// </remarks>
+    private static Color DimOf(Color color) => Color.FromArgb(
+        (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 
     // ── Hit testing (world coords) ─────────────────────────────────────────
 
