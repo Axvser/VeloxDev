@@ -14,7 +14,7 @@ Derive from `TransitionHostBase<TPriorityCore>` and answer **three** members. Ev
 |---|---|
 | `ThreadRef ThreadFor(object target)` | which thread owns this target, or `ThreadRef.None` |
 | `bool IsCurrentThread(ThreadRef thread)` | whether the calling thread is that one |
-| `bool PostCore(object target, Action action, TPriorityCore priority)` | the platform's one queue entry point |
+| `bool PostCore(object target, ThreadRef thread, Action action, TPriorityCore priority)` | the platform's one queue entry point |
 
 **Route by the target, not by a captured global.** If the target is a UI object it already knows its thread, so a background-thread start marshals straight there with no capture and no wrong-thread hop:
 
@@ -150,7 +150,11 @@ public class Interpolator : InterpolatorCore
 
 ⚙ That makes a registration for a concrete type *redundant* when its base or interface is already registered — Jalium registers both `Brush` and `SolidColorBrush`, which still works but no longer carries anything the base registration does not. Register the general type unless a concrete one genuinely needs its own sampler.
 
-⚙ **A more general registration must handle the whole family.** Registering `Brush` means your sampler will be handed gradients, not only solids; `Size` means `SizeF` is not covered (it has its own registration), but a custom subclass of a registered type will reach you. Handle the subclasses or the paths that use them will misbehave rather than fail loudly.
+⚙ **The walk only goes up, so a concrete registration leaves base-declared properties unserved.** A property declared as `Effect` never reaches a sampler registered for `DropShadowEffect` — not a near miss, no sampler at all: `Prepare` reports the path `Unsampled` and drops it, with nothing thrown and no fallback. Register the type your users will *declare*; if that is the abstract base, the sampler has to handle the whole family (the next bullet) rather than the one subclass it was written for. WPF is the worked example of both halves: its `UIElement.Effect` DP is declared `Effect`, so it registers `typeof(Effect)` and its `DropShadowEffectSampler` serves the family — pairing two `DropShadowEffect`s field by field, and switching at `t >= 0.5` for a pair it cannot compare (a `BlurEffect` reaches it too, and must be handed back rather than replaced by a stand-in of the sampler's making).
+
+⚙ **The key's type is the type your sampler gets handed — check that line against the cast in the sampler's body.** Two types sharing a *simple name* in different assemblies are two different keys and coexist happily; what breaks is a sampler that unboxes the *other* assembly's type, because the first frame throws `InvalidCastException` and the run is cancelled rather than degraded. Nothing catches this at compile time, and the coverage check — written against sampler *type sets* — cannot see a `(key, sampler)` mismatch; the acceptance suite's key check can, because it resolves each entry's declared type against the live registry. A registration whose key is `typeof(RectF)` next to a body of `(RectangleF)(…)` is the shape to watch for — spell the sampler's own using list out if the framework also ships same-named geometry.
+
+⚙ **A more general registration must handle the whole family.** Registering `Brush` means your sampler will be handed gradients, not only solids; `Size` means `SizeF` is not covered (it has its own registration), but a custom subclass of a registered type will reach you. Handle the subclasses or the paths that use them will misbehave rather than fail loudly. For a family member you genuinely cannot interpolate, hand back one of the endpoints you were given — building a stand-in of the type your sampler knows best turns a visible no-op into a wrong animation that nothing reports.
 
 ## 4. Priority
 
@@ -181,3 +185,5 @@ Use the framework's dispatcher-priority type when it has one, and `NonPriority` 
 ⚙ If the project also runs the acceptance suite, an adapter is registered in two places — `Drivers/DemoCatalog.cs` (one line) and `Suites/PlatformSuites.cs` (one class that opens and closes the demo). `Examples/Transition/AUTO TEST/AGENTS.md` is the operating guide.
 
 ⚙ The acceptance suite verifies **every published sampler** (`Examples/Transition/AUTO TEST/Samplers/`): 69 of the 75 against a closed form, and the remaining six — WinUI's and MAUI's framework-object samplers, which cannot be constructed in a process with no XAML/MAUI runtime — in a real running app by the AT suite. A coverage test fails if a published sampler has no entry in either list. Adding a sampler means adding its row there — which is how these rules were checked in the first place.
+
+⚙ Each row also carries the **declared type of the property it animates**, and that type is the registration key. The suite resolves it against the live registry (it runs your adapter's `Interpolator` static constructor to get one) and fails when the key lands on a different sampler or on none at all. So a row whose declared type is not the one you registered goes red rather than quietly animating nothing — and the registry key is the one thing the closed-form half, which picks its own endpoints, cannot check.
