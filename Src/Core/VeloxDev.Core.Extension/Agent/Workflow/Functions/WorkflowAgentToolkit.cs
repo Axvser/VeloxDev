@@ -11,6 +11,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI.Skills;
+using VeloxDev.AI.SubAgents;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
@@ -23,14 +24,41 @@ namespace VeloxDev.AI.Workflow.Functions;
 /// full operational control over a single <see cref="IWorkflowTreeViewModel"/>.
 /// All JSON output uses <see cref="Formatting.None"/> to minimize token consumption.
 /// </summary>
-public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
+public sealed class WorkflowAgentToolkit
 {
-    private readonly WorkflowAgentScope _scope = scope ?? throw new ArgumentNullException(nameof(scope));
-    private readonly WorkflowStateTracker _tracker = new(scope.Tree);
-    private int _toolCallCount;
-    private int _readToolCallCount;
-    private int _writeToolCallCount;
+    private readonly WorkflowAgentScope _scope;
+    private readonly WorkflowStateTracker _tracker;
+    private readonly ToolCallLedger _ledger;
     private IWorkflowTreeViewModel Tree => _scope.Tree;
+
+    /// <summary>
+    /// Creates the toolkit for a scope that owns the session's tool-call allowance.
+    /// </summary>
+    public WorkflowAgentToolkit(WorkflowAgentScope scope) : this(scope, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates the toolkit for a scope whose allowance is a share of another scope's.
+    /// </summary>
+    /// <param name="scope">The scope being served.</param>
+    /// <param name="outerLedger">
+    /// The ledger of the scope that spawned <paramref name="scope"/>, or <c>null</c> when nobody did. Every
+    /// call counted here is counted there too, which is what makes <paramref name="scope"/>'s caps a
+    /// narrowing of its parent's rather than a second budget beside it.
+    /// </param>
+    internal WorkflowAgentToolkit(WorkflowAgentScope scope, ToolCallLedger? outerLedger)
+    {
+        _scope = scope ?? throw new ArgumentNullException(nameof(scope));
+        _tracker = new WorkflowStateTracker(_scope.Tree);
+        _ledger = new ToolCallLedger(_scope, outerLedger);
+    }
+
+    /// <summary>
+    /// This scope's place in the session's call accounting — handed to a spawned sub-agent's toolkit as its
+    /// <paramref name="outerLedger"/>.
+    /// </summary>
+    internal ToolCallLedger Ledger => _ledger;
 
     /// <summary>
     /// Creates the AI tools for workflow operations within the scoped tree, optionally restricted
@@ -260,14 +288,28 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (string.Equals(toolName, ResetBudgetToolName, StringComparison.OrdinalIgnoreCase))
             return null;
 
-        if (_scope.MaxToolCalls.HasValue && _toolCallCount >= _scope.MaxToolCalls.Value)
-            return LimitRefusal($"Tool call limit ({_scope.MaxToolCalls.Value}) reached.");
+        // ── The session's shared allowance, when this scope is spending somebody else's ──
+        // Asked before this scope's own share, because it is the harder wall and the only one the model
+        // cannot reason its way around: when the tree is out, no call of any kind is accepted, so naming a
+        // per-kind limit here would explain the refusal with the wrong limit. Skipped at the root, where it
+        // would be the same counter measured against the same cap and would report one wall as two.
+        var root = _ledger.Root;
+        if (!ReferenceEquals(root, _ledger) && root.Owner.MaxToolCalls is { } ceiling)
+        {
+            var (treeSpent, _, _) = root.Usage;
+            if (treeSpent >= ceiling)
+                return BudgetRefusal($"The session's tool-call budget ({ceiling}) is spent.");
+        }
+
+        var (spent, readCalls, writeCalls) = _ledger.Usage;
+        if (_scope.MaxToolCalls.HasValue && spent >= _scope.MaxToolCalls.Value)
+            return BudgetRefusal($"Tool call limit ({_scope.MaxToolCalls.Value}) reached.");
 
         bool isQueryTool = IsQueryTool(toolName);
-        if (!isQueryTool && _scope.MaxWriteToolCalls.HasValue && _writeToolCallCount >= _scope.MaxWriteToolCalls.Value)
-            return LimitRefusal($"Mutation tool call limit ({_scope.MaxWriteToolCalls.Value}) reached.");
-        if (isQueryTool && _scope.MaxReadToolCalls.HasValue && _readToolCallCount >= _scope.MaxReadToolCalls.Value)
-            return LimitRefusal($"Query tool call limit ({_scope.MaxReadToolCalls.Value}) reached.");
+        if (!isQueryTool && _scope.MaxWriteToolCalls.HasValue && writeCalls >= _scope.MaxWriteToolCalls.Value)
+            return BudgetRefusal($"Mutation tool call limit ({_scope.MaxWriteToolCalls.Value}) reached.");
+        if (isQueryTool && _scope.MaxReadToolCalls.HasValue && readCalls >= _scope.MaxReadToolCalls.Value)
+            return BudgetRefusal($"Query tool call limit ({_scope.MaxReadToolCalls.Value}) reached.");
 
         return null;
     }
@@ -304,6 +346,9 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         foreach (var name in SkillAgentToolkit.ToolNames)
             names.Add(name);
 
+        foreach (var name in SubAgentAgentToolkit.ToolNames)
+            names.Add(name);
+
         return names;
     }
 
@@ -318,16 +363,12 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         // leave the session refused again: the reset would undo itself.
         if (IsBudgetTool(toolName))
         {
-            await _scope.RaiseToolCalledAsync(toolName, result, _toolCallCount).ConfigureAwait(false);
+            await _scope.RaiseToolCalledAsync(toolName, result, _ledger.Usage.ToolCalls).ConfigureAwait(false);
             return;
         }
 
-        Interlocked.Increment(ref _toolCallCount);
-        if (IsQueryTool(toolName))
-            Interlocked.Increment(ref _readToolCallCount);
-        else
-            Interlocked.Increment(ref _writeToolCallCount);
-        await _scope.RaiseToolCalledAsync(toolName, result, _toolCallCount).ConfigureAwait(false);
+        _ledger.Spend(IsQueryTool(toolName));
+        await _scope.RaiseToolCalledAsync(toolName, result, _ledger.Usage.ToolCalls).ConfigureAwait(false);
         if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName) && !_scope.IsQueryOnlyCustomTool(toolName))
             Tree.GetHelper().MarkDirty();
     }
@@ -376,26 +417,30 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 message = "The user did not allow more tool calls. Stop calling tools and report what you have done and what remains.",
             }, Formatting.None);
 
-        Interlocked.Exchange(ref _toolCallCount, 0);
-        Interlocked.Exchange(ref _readToolCallCount, 0);
-        Interlocked.Exchange(ref _writeToolCallCount, 0);
+        // The whole chain, not this scope's share alone: the user agreed to reopen the budget, and a
+        // session whose root allowance is still spent would refuse the very next call — the extension would
+        // undo itself. At the root the chain is this scope, so the behaviour is unchanged.
+        _ledger.ResetChain();
 
         return Ok("Tool-call budget reset by the user. You may continue.");
     }
 
     /// <summary>
-    /// How much of each call budget is spent. Read without a lock — the counters are only ever moved by
-    /// <see cref="Interlocked"/>, so a torn read is not possible and a stale one is harmless.
+    /// How much of each call budget <i>this scope</i> has spent — its own share, not the whole tree's.
+    /// <para>
+    /// Deliberately local even though a tree-wide count exists: this is what the scope's capability
+    /// envelope measures against its own caps, and a spawned scope reporting the session's total would
+    /// describe itself as exhausted the moment its parent had spent the cap that governs the two of them
+    /// differently. Read without a lock — the counters are only ever moved by <see cref="Interlocked"/>, so
+    /// a torn read is not possible and a stale one is harmless.
+    /// </para>
     /// <para>
     /// A tuple rather than three properties so a reader gets one consistent-enough picture; the scope's
     /// capability envelope and <see cref="DescribeExhaustedLimit"/> both read it, so the two cannot drift
     /// into describing the same budget differently.
     /// </para>
     /// </summary>
-    internal (int ToolCalls, int ReadCalls, int WriteCalls) CallUsage
-        => (Volatile.Read(ref _toolCallCount),
-            Volatile.Read(ref _readToolCallCount),
-            Volatile.Read(ref _writeToolCallCount));
+    internal (int ToolCalls, int ReadCalls, int WriteCalls) CallUsage => _ledger.Usage;
 
     /// <summary>
     /// Describes whichever limit is currently reached, or <c>null</c> when none is. Used both to decide
@@ -417,6 +462,23 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     /// <summary>
+    /// A budget refusal, worded for whoever hit it.
+    /// <para>
+    /// A scope that owns the session's allowance is sent to <see cref="ResetBudgetToolName"/>, exactly as
+    /// before. A spawned scope is not, and the reason is structural rather than stylistic: the reset is
+    /// switched off for it (see <c>SubAgentScope</c>'s child assembly), because a background child raising a
+    /// confirmation prompt would put a modal question to a user while its parent's turn is still suspended.
+    /// Telling such a scope to call a tool that will refuse teaches it to retry — so it is told the option
+    /// it actually has: stop, and report upward.
+    /// </para>
+    /// </summary>
+    private string BudgetRefusal(string cause)
+        => ReferenceEquals(_ledger.Root, _ledger)
+            ? LimitRefusal(cause)
+            : $"{cause} You cannot extend it yourself. Stop calling tools and report what you have done "
+            + "and what remains to the agent that spawned you.";
+
+    /// <summary>
     /// A budget refusal. It names <see cref="ResetBudgetToolName"/> because the model cannot see the limit
     /// itself — only this message — and a refusal with no way out is where a run used to simply stop.
     /// </summary>
@@ -431,6 +493,17 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// </summary>
     private bool IsQueryTool(string toolName)
         => QueryToolNames.Contains(toolName) || _scope.IsQueryOnlyCustomTool(toolName);
+
+    /// <summary>
+    /// Whether a tool leaves the workflow graph alone — the same classification <see cref="CheckBudget"/>
+    /// and the dirty marking use.
+    /// <para>
+    /// Exposed so that a subsystem narrowing a child's tool surface can ask what "inherit the parent's
+    /// tools" should mean without repeating the list, which would drift out of step the first time a tool
+    /// was reclassified.
+    /// </para>
+    /// </summary>
+    internal bool IsQueryOnlyTool(string toolName) => IsQueryTool(toolName);
 
     // ────────────────────────── Query Functions ──────────────────────────
 

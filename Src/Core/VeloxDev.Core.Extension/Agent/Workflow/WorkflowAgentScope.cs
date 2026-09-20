@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
 using VeloxDev.AI.Skills;
+using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
@@ -398,6 +399,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // the host's business, and a skill list left unbound would throw when a UI binds it.
         Skills?.WithSynchronizationContext(context);
         Mcp?.WithSynchronizationContext(context);
+        SubAgents?.WithSynchronizationContext(context);
         return this;
     }
 
@@ -1291,16 +1293,28 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private WorkflowAgentToolkit? _toolkit;
 
     /// <summary>
+    /// The call ledger of the scope that spawned this one, or <c>null</c> when this scope owns the session's
+    /// tool-call allowance. Set by the sub-agent subsystem while it assembles a child, before the child's
+    /// toolkit is built.
+    /// <para>
+    /// Chaining rather than copying, because a copy taken at spawn time would freeze the parent's spend: a
+    /// second child spawned a minute later would be measured against a stale number and the tree's total
+    /// would exceed the allowance without any counter noticing.
+    /// </para>
+    /// </summary>
+    internal ToolCallLedger? ParentLedger { get; set; }
+
+    /// <summary>
     /// The scope's <see cref="WorkflowAgentToolkit"/>, providing MAF-compatible <see cref="AITool"/>
     /// instances for full operational control over the scoped tree.
     /// <para>
     /// There is exactly one toolkit per scope, created on first use. It owns mutable state — the call
-    /// counters the budgets are enforced against and the state tracker behind
+    /// ledger the budgets are enforced against and the state tracker behind
     /// <c>GetChangesSinceSnapshot</c> — so handing out a fresh instance per call would silently give
     /// each caller its own budget and its own snapshot history.
     /// </para>
     /// </summary>
-    public WorkflowAgentToolkit CreateToolkit() => _toolkit ??= new WorkflowAgentToolkit(this);
+    public WorkflowAgentToolkit CreateToolkit() => _toolkit ??= new WorkflowAgentToolkit(this, ParentLedger);
 
     /// <summary>
     /// Convenience method: returns all tools ready for use with <c>ChatOptions.Tools</c> or
@@ -1348,6 +1362,14 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// the built-in tools so they take part in call accounting, UI-thread marshalling and dirty marking.
     /// </summary>
     public McpScope? Mcp { get; private set; }
+
+    /// <summary>
+    /// Attached sub-agent scope, or <c>null</c> when this Agent may not spawn sub-agents. Set by
+    /// <see cref="WithSubAgents"/>. When attached, five tools that dispatch, wait for, inspect and cancel
+    /// child agents join the Agent's tool set on every turn, wrapped like the built-in tools so each spawn
+    /// they make is charged to this scope's ledger.
+    /// </summary>
+    public SubAgentScope? SubAgents { get; private set; }
 
     private readonly List<Func<WorkflowAgentScope, AIContextProvider>> _contextProviderFactories = [];
 
@@ -1421,6 +1443,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     private AIContextProvider? _skillProvider;
     private AIContextProvider? _mcpProvider;
+    private AIContextProvider? _subAgentProvider;
 
     /// <summary>
     /// The tool seam every source this scope composes is given, so a tool from MCP or a skill is gated,
@@ -1532,6 +1555,38 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // Composed with this scope's policy, so MCP-sourced tools join the same budgets and callbacks.
         // Without it the subsystem would fall back to marshalling only, and its calls would go uncounted.
         _mcpProvider = mcp.CreateContextProvider(SharedTools, Pipeline);
+
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// Attaches the sub-agent subsystem, which lets this Agent dispatch child agents of its own and give
+    /// each one a narrower slice of its own capabilities.
+    /// <para>
+    /// The parent's capability is the superset by construction: every request a spawn carries is
+    /// intersected with what this scope actually has, and whatever is dropped is reported back in the
+    /// spawn's own result, so the child cannot come away believing it holds something it was refused.
+    /// </para>
+    /// <para>
+    /// <paramref name="subAgents"/> must have been built with a factory that can produce an agent for a
+    /// given child scope — see <see cref="SubAgentScope.ForClient"/>. The subsystem never touches a chat
+    /// client of its own; the host owns that.
+    /// </para>
+    /// </summary>
+    public WorkflowAgentScope WithSubAgents(SubAgentScope subAgents)
+    {
+        SubAgents = subAgents ?? throw new ArgumentNullException(nameof(subAgents));
+
+        // Hand the subsystem this scope rather than the other way round: it reads the parent's real
+        // capabilities to narrow against, and the parent's ledger to charge to, and neither exists until
+        // the scope it belongs to does.
+        subAgents.Attach(this);
+        subAgents.WithSynchronizationContext(UIContext);
+
+        // Composed with this scope's policy, so each spawn is counted, gated and reported exactly like a
+        // built-in call. Without it the subsystem would be invisible to the budget it draws on.
+        _subAgentProvider = subAgents.CreateContextProvider(SharedTools, Pipeline);
 
         BumpVersion();
         return this;
@@ -1669,6 +1724,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         providers.Add(CreateContextProvider());
         if (_skillProvider is not null) providers.Add(_skillProvider);
         if (_mcpProvider is not null) providers.Add(_mcpProvider);
+        // 子代理名册排在自我描述之后、todo 之前：它是上下文（现在有谁在跑），不是行为指令。
+        if (_subAgentProvider is not null) providers.Add(_subAgentProvider);
         // 框架自带的行为脚手架排在上下文来源之后，与宿主挂载的先后无关：提示读起来始终是「先上下文、后指令」。
         if (_todoProvider is not null) providers.Add(_todoProvider);
         if (_agentModeProvider is not null) providers.Add(_agentModeProvider);
