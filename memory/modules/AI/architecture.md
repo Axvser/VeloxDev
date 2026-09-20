@@ -43,17 +43,18 @@
 
 | 特性 | 声明位置 | Core 里谁读它 | 消费方谁读它 |
 |---|---|---|---|
-| `AgentContextAttribute` | `AgentContextAttribute.cs:4` | `AgentContextReader.cs:16`/`:26`；四个助手**各自内联**过滤：`AgentCommandDiscoverer.cs:73`、`:97`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63` | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/AgentContextCollector.cs:18`（转调 Core）、`.../Workflow/Functions/TypeIntrospector.cs:66` |
+| `AgentContextAttribute` | `AgentContextAttribute.cs:4` | `AgentContextReader.cs:19`/`:26`（两个公开入口）→ `:59` 私有的 `Select`（**规则唯一所在**）；四个助手**转调**它：`AgentCommandDiscoverer.cs:73`、`:94`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63` | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/AgentContextCollector.cs:18`（转调 Core）、`.../Workflow/Functions/TypeIntrospector.cs:66` |
 | `AgentCommandParameterAttribute` | `AgentCommandParameterAttribute.cs:10` | **只有** `AgentCommandDiscoverer.FindParameterAttribute`（`AgentCommandDiscoverer.cs:223`） | `.../Agent/Workflow/WorkflowAgentScope.cs:810`、`:838`、`:850`（只取 `ParameterType` 用于注册类型，不参与调用） |
 | `SlotSelectorsAttribute` | `SlotSelectorsAttribute.cs:38` | **没有。Core 一处都不读它** | `.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1133`、`:1293`、`:1344`；`.../Functions/ComponentPatcher.cs:128`；`.../Agent/Workflow/AgentContextCollector.cs:221`；`.../Agent/Workflow/WorkflowAgentScope.cs:809`、`:818`、`:837`、`:863` |
 
 **结论**：`SlotSelectorsAttribute` 住在 Core/AI，但它是**给消费方的 Workflow 工具箱用的**（语义属于 `SlotEnumerator<TSlot>` 的校验白名单）。Core 只是提供了一个「编译器保证的常量容器」。动它的语义 = 动 Extension，Core 无感。
 
-### `[AgentContext]` 的三条硬规则（读代码得出，不是读注释得出）
+### `[AgentContext]` 的四条硬规则（读代码得出，不是读注释得出）
 
-1. **`inherit: false` 到处都是。** 类型/属性/方法上的 `[AgentContext]` **不会**沿继承链或接口下沉 —— 每一处读取都传 `inherit: false`（`AgentContextReader.cs:16`、`:26`、`:36`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63`）。
-2. **没有语言回退。** 读取是 `Where(a => a.Language == language)`，只返回**完全匹配**的那些。只写英文的成员在 `Chinese` 下返回**空数组**，不会退回英文（`AgentContextReader.cs:16-18`；测试 `Src/Core/VeloxDev.Core.Test/AI/AgentContextReaderTests.cs:37-40` 断言 Japanese 命中 0 条）。
-3. **一个语言可写多条，全部返回且保序**（`AllowMultiple = true`，`AgentContextAttribute.cs:3`；测试 `.../AgentContextReaderTests.cs:20-23` 断言 English 命中 2 条）。`Context` 默认空串，所以 `[AgentContext(AgentLanguages.English)]` 合法但什么都不说明。
+1. **`inherit: false` 到处都是。** 类型/属性/方法上的 `[AgentContext]` **不会**沿继承链或接口下沉 —— 每一处读取都传 `inherit: false`（`AgentContextReader.cs:20`、`:27`、`:34`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63`）。
+2. **有语言回退，且是「整目标、全有或全无」。** 规则集中在 `AgentContextReader.Select`（`:59`）：先取 `Language == language` 的；若**一条都没有**且请求的不是 `English`，则整体改取 `English` 的那些（`AgentContextReader.cs:63-67`）。所以「同语言命中 ≥ 1 条」时**不会**混入英文；`English` 自身无处可退。测试 `Src/Core/VeloxDev.Core.Test/AI/AgentContextReaderTests.cs`：`..._FallsBackToEnglish`、`..._FallbackIsAllOrNothing`、`..._EnglishRequestNeverFallsBack`、`..._NoEnglishEither_ReturnsEmpty`。**四个助手的过滤点已全部转调 `AgentContextReader.GetContexts(member, language)`**（`PropertyInfo`/`MethodInfo` 都是 `MemberInfo`），所以这条规则不再有第二份拷贝 —— 改它只需改 `Select` 一处。
+3. **`HasAgentContext` 不看语言**（`AgentContextReader.cs:34-35`）：只要有任何语言的标注就为 true，与 `GetContexts` 的选取无关。
+4. **一个语言可写多条，全部返回且保序**（`AllowMultiple = true`，`AgentContextAttribute.cs:3`；测试 `.../AgentContextReaderTests.cs` 断言 English 命中 2 条）。`Context` 默认空串，所以 `[AgentContext(AgentLanguages.English)]` 合法但什么都不说明。
 
 **`ICommand` 是唯一「接口上的特性算数」的地方。** `AgentCommandDiscoverer.DiscoverCommands` **先扫接口**再扫具体类型（`AgentCommandDiscoverer.cs:64-88` / `:90-111`），用一个 `Ordinal` 名字集合去重（`:61`、`:70`、`:94`）。对命令而言「特性写在接口上」是官方做法（代码注释自己写着 `these carry the authoritative attributes`，`:64`），这也正是 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:33` 那一族标注的位置。对**方法**与**普通属性**没有对应的接口扫描，接口上的特性一律读不到。
 
@@ -105,7 +106,7 @@ SetProperty(obj, "Name", v)     → ConvertValue → prop.SetValue → SetResult
 6. **`InvokeStatic` 有两处不对称**（`AgentMethodInvoker.cs:165-198`）：不补默认值、不做类型转换；且匹配失败时的兜底是 `?? candidates.FirstOrDefault()`（`:180`）**挑一个名字对但参数个数不对的重载**，然后在 `:187` 抛出来 —— 调用方只会看到一条错误字符串。
 7. **`FindParameterAttribute` 会猜「后备方法」**：`commandName.Replace("Command", "")`（`:239`）—— `Replace` 替换**所有**出现，`"CommandHistoryCommand"` 会变成 `"History"`。
 8. **`DiscoverCommands` 的输出顺序未定义**（`type.GetInterfaces()` 的顺序不是规范）；两次调用之间、两台机器之间都可能不同。名字本身会被去重，顺序不会。
-9. **`AgentContextReader.HasAgentContext` 不看语言**（`:34-37`）：只要有任何语言的 `[AgentContext]` 就为 true。
+9. **`AgentContextReader.HasAgentContext` 不看语言**（`:32-35`）：只要有任何语言的 `[AgentContext]` 就为 true。
 10. **反射未加裁剪注解。** `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 TargetFrameworks 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0` 且 `IsTrimmable=false`；`AI/` 里 `RequiresUnreferencedCode`/`DynamicallyAccessedMembers` 零处。也就是说这套反射**没有 AOT/裁剪契约**；消费方要裁剪就必须自己保住元数据。
 
 ---
@@ -118,7 +119,7 @@ SetProperty(obj, "Name", v)     → ConvertValue → prop.SetValue → SetResult
 | 命令怎么被执行（名字规范化、参数、错误文本） | `AgentCommandDiscoverer.cs:123-168`、`:199-242` |
 | 方法重载怎么挑、实参怎么补/转 | `AgentMethodInvoker.cs:103-160` |
 | 属性读写与类型转换规则 | `AgentPropertyAccessor.cs:84-218` |
-| 说明文字怎么取（语言、inherit、多值） | `AgentContextReader.cs` + 四个内联过滤点（见 §二表） |
+| 说明文字怎么取（语言、回退、inherit、多值） | `AgentContextReader.cs` 一处（规则在私有 `Select`）；四个助手只是转调，见 §二表 |
 | 语言枚举与码表 | `AgentLanguages.cs:3-39`（枚举）、`:43-86`（码表）、`:88`/`:129`/`:163`（三处 switch） |
 | 确认 / 选择 / 工具调用的事件负载 | `AgentConfirmationEventArgs.cs`、`AgentSelectionEventArgs.cs`、`AgentToolCallEventArgs.cs` |
 | `SlotSelectors` 的行为 | **不在本模块** —— `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1293`、`.../Functions/ComponentPatcher.cs:128` |

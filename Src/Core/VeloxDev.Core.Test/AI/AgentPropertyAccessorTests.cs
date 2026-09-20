@@ -12,6 +12,39 @@ public class AgentPropertyAccessorTests
         public double ReadOnly => 3.14;
     }
 
+    /// <summary>
+    /// One property, annotated in English only — the shape a Chinese- or Japanese-language agent meets
+    /// whenever a member has not been translated yet.
+    /// </summary>
+    private sealed class AnnotatedTarget
+    {
+        public int Untouched { get; set; }
+
+        [AgentContext(AgentLanguages.English, "What this object is called")]
+        public string? Name { get; set; }
+    }
+
+    [TestMethod]
+    public void DiscoverProperties_UntranslatedLanguage_FallsBackToEnglish()
+    {
+        var target = new AnnotatedTarget();
+        var props = AgentPropertyAccessor.DiscoverProperties(target, AgentLanguages.Japanese);
+
+        var name = props.First(p => p.Name == "Name");
+        CollectionAssert.Contains((System.Collections.ICollection)name.AgentDescriptions, "What this object is called");
+    }
+
+    [TestMethod]
+    public void DiscoverProperties_UnannotatedProperty_StaysUndescribed()
+    {
+        // The fallback is per target, not a blanket: a member nobody annotated has nothing to fall back to.
+        var target = new AnnotatedTarget();
+        var props = AgentPropertyAccessor.DiscoverProperties(target, AgentLanguages.Japanese);
+
+        var untouched = props.First(p => p.Name == "Untouched");
+        Assert.AreEqual(0, untouched.AgentDescriptions.Count);
+    }
+
     [TestMethod]
     public void DiscoverProperties_ReturnsAll()
     {

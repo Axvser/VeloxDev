@@ -75,9 +75,7 @@ public static class AgentMethodInvoker
                 Name = method.Name,
                 ReturnType = method.ReturnType,
                 IsStatic = method.IsStatic,
-                AgentDescriptions = [.. method.GetCustomAttributes<AgentContextAttribute>(inherit: false)
-                    .Where(a => a.Language == language)
-                    .Select(a => a.Context)],
+                AgentDescriptions = AgentContextReader.GetContexts(method, language),
                 Parameters = [.. method.GetParameters().Select(p => new ParameterDescriptor
                 {
                     Name = p.Name ?? string.Empty,

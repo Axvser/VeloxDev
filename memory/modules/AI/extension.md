@@ -12,14 +12,14 @@
 
 | 我要扩展… | 扩展点 | 具体位置 |
 |---|---|---|
-| 给类型/属性/方法/命令补说明文字 | `[AgentContext]` | 声明 `AgentContextAttribute.cs:4`；读取点 6 处（`architecture.md` §二） |
+| 给类型/属性/方法/命令补说明文字 | `[AgentContext]` | 声明 `AgentContextAttribute.cs:4`；读取入口 `AgentContextReader.GetContexts`（类型 / 成员两个重载），规则在私有 `Select`；四个助手转调它（`architecture.md` §二） |
 | 声明一个命令要吃什么参数 | `[AgentCommandParameter]` | 声明 `AgentCommandParameterAttribute.cs:10`；**Core 里唯一读取点** `AgentCommandDiscoverer.cs:223` |
 | 限定 `SlotEnumerator<TSlot>` 允许哪些 selector 类型 | `[SlotSelectors]` | 声明 `SlotSelectorsAttribute.cs:38`；**Core 零读取**，全在消费方 |
 | 控制 Agent 能写哪些属性 | `rejected` 集合 | `AgentPropertyAccessor.SetProperties`（`AgentPropertyAccessor.cs:138`）；由消费方构造时传（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:29`） |
 | 加一个语言 | `AgentLanguages` 枚举 + 码表 + 两个 switch | `AgentLanguages.cs:3-39`、`:43-86`、`:88`、`:163`；另有消费方第二张码表（见 §四·1） |
 | 把一个新的对象整体暴露成工具面 | `AsAgentToolkit()` / `AsAgentTools()` | `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:340`、`:349` |
 | 给确认/选择接自己的交互 | `Func<..., Task>` handler | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs:494`、`:521` |
-| 加一种新的「特性 + 反射读取」能力 | 特性类 + **每个助手的语言过滤点** | 见 §二·6 —— 这是本模块最容易漏的形状 |
+| 加一种新的「特性 + 反射读取」能力 | 特性类 + **一个读取助手** | 见 §二·6 —— 说明文字的规则已经收敛到 `AgentContextReader`，新特性照它写，别再复制过滤条件 |
 
 ---
 
@@ -29,12 +29,13 @@
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 把 `[AgentContext]` 写在具体类上，指望接口/基类的能带下来 | 每次读取都传 `inherit: false`，**没有继承**；而且属性/方法路径**不扫接口** | `AgentContextReader.cs:16`、`:26`、`:36`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63` |
-| 只写英文，指望中文界面拿英文兜底 | **没有语言回退** —— 不匹配就返回空数组 | `AgentContextReader.cs:16-18`；测试 `Src/Core/VeloxDev.Core.Test/AI/AgentContextReaderTests.cs:37-40` |
+| 把 `[AgentContext]` 写在具体类上，指望接口/基类的能带下来 | 每次读取都传 `inherit: false`，**没有继承**；而且属性/方法路径**不扫接口** | `AgentContextReader.cs:20`、`:27`、`:34`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63` |
+| 只写英文，就以为中文/日文界面下这个成员没有说明 | **有语言回退，但是整目标、全有或全无**：该目标一条目标语言都没有时整体退回英文；只要命中 ≥ 1 条目标语言，就不再夹带英文 | `AgentContextReader.cs:63-67`；测试 `.../AgentContextReaderTests.cs` 的 `..._FallsBackToEnglish` / `..._FallbackIsAllOrNothing` |
+| 只写了中文，指望英文界面也能看到 | **英文无处可退**：`language == English` 时直接返回命中集（可能为空） | `AgentContextReader.cs:64`；测试 `..._EnglishRequestNeverFallsBack` |
 | 写 `[AgentContext("说明")]` | **编译不过**：位置参数第一位是 `AgentLanguages` | `AgentContextAttribute.cs:4` |
 | 给命令补说明时写在具体类的属性上 | 对 `ICommand` 而言**接口上的才算数**（先扫接口 + 按名字去重，具体类同名的那个根本不会被扫到） | `AgentCommandDiscoverer.cs:64-88`、`:90-94` |
 
-**官方**：命令的说明与参数类型标在**接口**上（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:33` 那一族是范本）；其它成员标在**声明它的那个类**上，每种要支持的语言各写一条。
+**官方**：命令的说明与参数类型标在**接口**上（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:33` 那一族是范本）；其它成员标在**声明它的那个类**上。想支持几种语言就写几条 —— 但**不必为回退而写**：整目标缺该语言时会自动退回英文。
 
 ### 2. 暴露一个命令
 
@@ -78,7 +79,7 @@
 
 ### 6. 新增一种「特性 + 反射读取」
 
-**官方**：特性类 + **显式列出所有读取点**。语言过滤不是走一个公共函数，而是**内联复制在每一处**（`AgentCommandDiscoverer.cs:73`、`:97`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63`；`AgentContextReader.cs:16`、`:26`）。新增一种读取语义（例如「回退英文」「继承基类」）必须逐处改 —— 漏一处不会有编译错误，只会让那一个助手的行为与众不同。
+**官方**：特性类 + **一个读取助手**，读取语义（语言、回退、inherit）写在那一个助手里。说明文字的这条规则已经从「内联复制在每一处」改成了集中实现 —— `AgentCommandDiscoverer`（`:73`、`:94`）、`AgentMethodInvoker`（`:78`）、`AgentPropertyAccessor`（`:63`）现在都只是转调 `AgentContextReader.GetContexts(member, language)`（`PropertyInfo`/`MethodInfo` 都是 `MemberInfo`），过滤条件只在 `AgentContextReader.Select`（`:59`）里有一份。新增一种读取语义（「回退英文」正是这次的例子）改 `Select` 一处即可；**新写一个助手时要照这个形状走**，再把过滤条件抄一遍就又回到了「漏一处没有编译错误、只有行为不一致」的老问题。
 
 ### 7. 「我改 Core 的助手，为什么跑起来没变化」
 
@@ -107,7 +108,7 @@
 1. 定位它**被读取的方式**：命令 → 写在**接口**上；属性/方法/类型 → 写在**声明类**上。
 2. 每种要支持的语言各写一条 `[AgentContext(AgentLanguages.X, "…")]`（同一语言可多条，全部会返回）。
 3. 命令若带参数，另外补 `[AgentCommandParameter(typeof(T))]` —— 它和 `[AgentContext]` 的扫描规则**不一样**：`FindParameterAttribute` 会依次找接口 → 具体属性 → 去掉 `"Command"` 的**后备方法**（`AgentCommandDiscoverer.cs:223-242`）。
-4. 自检：用目标语言调一次 `AgentContextReader.GetContexts(...)`，返回空数组 = 该语言没写（不是「回退到英文」）。
+4. 自检：用目标语言调一次 `AgentContextReader.GetContexts(...)`。返回空数组 = 该目标**既没有目标语言、也没有英文**标注；只写英文时返回的是英文那几条（回退），不是空，也不是「两种语言都有」。
 
 ### B. 暴露一个新命令
 
@@ -147,14 +148,14 @@
 | 3 | `AgentLanguagesExtensions.GetDisplayName` 的 switch（`:163-202`） | 同上，提示词渲染时抛 |
 | 4 | `LanguageCodeMap`（`:43-86`） | `TryParseLanguageCode` 永远认不出该语言，**静默返回 false** |
 | 5 | 消费方的第二张码表 `Src/Core/VeloxDev.Core.Extension/Agent/AgentEmbeddedResources.cs:38-46` | 它的判断是 `language == AgentLanguages.Chinese ? "zh" : "en"`，而 `Chinese` 是 `ChineseSimplified` 的别名（`AgentLanguages.cs:7`）⇒ **只有简中进 `zh` 目录，繁体中文也走 `"en"`**；新语言同样静默走英文目录 |
-| 6 | 每个作者的 `[AgentContext]` | 该语言下这个成员的说明是**空数组**（无回退） |
+| 6 | 每个作者的 `[AgentContext]` | 该语言下这个成员的说明**退回英文**（只有在连英文都没写时才是空数组） |
 | 7 | 嵌入式资源目录（今天只有 `Src/Core/VeloxDev.Core.Extension/Resources/Workflow/en|zh/` 两个，32 个 .md） | 该语言的技能/参考文件不存在 → 静默回退英文。目录约定见 `.../Agent/AgentEmbeddedResources.cs:9-15`，读法见 `.../Agent/Skills/EmbeddedSkillSource.cs:103` |
 
 **两张同名不同义的 `ToLanguageCode` 都在 `VeloxDev.AI` 命名空间里**：`AgentLanguagesExtensions.ToLanguageCode`（扩展方法，BCP-47 风格，33 个出口）与 `AgentEmbeddedResources.ToLanguageCode`（普通静态，只有 `zh`/`en`）。因为前者是扩展方法，`lang.ToLanguageCode()` 永远解析到前者 —— 所以**没有编译期歧义，也没有任何提示**告诉你这里有两套码。
 
 ### 4.2 加一个 `[AgentContext]` 的读取点（新助手 / 新发现器）
 
-必须同时改：`AgentCommandDiscoverer.cs:73`、`:97`、`AgentMethodInvoker.cs:78`、`AgentPropertyAccessor.cs:63`、`AgentContextReader.cs:16`、`:26` —— **每一处都是内联的语言过滤**，没有公共函数可改。
+**转调 `AgentContextReader.GetContexts(...)` 就完了** —— 语言与回退规则只在 `AgentContextReader.Select`（`:59`）里一份。今天的调用点是 `AgentCommandDiscoverer.cs:73`、`:94`、`AgentMethodInvoker.cs:78`、`AgentPropertyAccessor.cs:63`，全都是转调。**不要**在这些助手内部再写一次 `Where(a => a.Language == language)`：那正是这次修掉的历史形态，它会静默地不回退。
 
 ### 4.3 给发现器加一个字段（例如 `CommandDescriptor` 上再挂一个属性）
 
@@ -188,7 +189,7 @@
 | `AgentCommandDiscoverer.CanExecuteCommand` | `AgentCommandDiscoverer.cs:159` | 零非测试调用者；发现路径用的是私有的 `TryCanExecute`（`:244`） |
 | `AgentMethodInvoker.InvokeStatic` | `AgentMethodInvoker.cs:165` | 零非测试调用者 |
 | `AgentPropertyAccessor.CopyScalarProperties` | `AgentPropertyAccessor.cs:169` | 零非测试调用者；**消费方另写了一份同名实现在 `.../Agent/Workflow/Functions/ComponentPatcher.cs:236`**（没有转调 Core）—— 改 Core 那份不会影响实际跑的路径 |
-| `AgentContextReader.HasAgentContext` | `AgentContextReader.cs:34` | 零非测试调用者 |
+| `AgentContextReader.HasAgentContext` | `AgentContextReader.cs:32` | 零非测试调用者 |
 | `AgentLanguagesExtensions.ParseLanguageCode` | `AgentLanguages.cs:153` | **零调用者**（连测试都没有；测试用的是 `TryParseLanguageCode`）。`ToLanguageCode`/`GetDisplayName` 相反，消费方在用（`.../Agent/Workflow/WorkflowAgentScope.cs:1203`、`:1204`） |
 | `IAgentConfirmationNotifier` / `IAgentSelectionNotifier` | `AgentConfirmationEventArgs.cs:37`、`AgentSelectionEventArgs.cs:60` | **全仓零实现者**。三个 `IAgent*Notifier` 里只有 `IAgentToolCallNotifier` 被实现了（`.../Agent/AgentObjectToolkit.cs:29`、`.../Agent/Workflow/WorkflowAgentScope.cs:20`）。确认/选择的实际通路是消费方的 `Func<..., Task>` handler —— 因为 `EventHandler` 没法表达「等用户点完」 |
 

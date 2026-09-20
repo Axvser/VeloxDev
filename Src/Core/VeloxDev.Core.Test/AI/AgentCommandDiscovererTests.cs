@@ -58,6 +58,17 @@ public class AgentCommandDiscovererTests
     }
 
     [TestMethod]
+    public void DiscoverCommands_UntranslatedLanguage_FallsBackToEnglish()
+    {
+        // Commands are described by the same rule as every other annotation: a command documented only in
+        // English still reaches a non-English agent described rather than undescribed. This view model
+        // carries no Japanese annotations, so the English ones are what a Japanese-language agent reads.
+        var cmds = AgentCommandDiscoverer.DiscoverCommands(new ViewModel(), AgentLanguages.Japanese);
+        var save = cmds.First(c => c.Name == "SaveCommand");
+        CollectionAssert.Contains((System.Collections.ICollection)save.AgentDescriptions, "Saves data");
+    }
+
+    [TestMethod]
     public void Execute_ValidCommand_Succeeds()
     {
         object? received = null;

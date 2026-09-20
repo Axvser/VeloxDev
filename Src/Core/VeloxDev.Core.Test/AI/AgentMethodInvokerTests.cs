@@ -7,6 +7,7 @@ public class AgentMethodInvokerTests
 {
     private sealed class Calculator
     {
+        [AgentContext(AgentLanguages.English, "Adds two numbers")]
         public int Add(int a, int b) => a + b;
         public string Greet(string name) => $"Hello, {name}!";
         public void SideEffect() { WasCalled = true; }
@@ -60,6 +61,17 @@ public class AgentMethodInvokerTests
         Assert.AreEqual(2, add.Parameters.Count);
         Assert.AreEqual("a", add.Parameters[0].Name);
         Assert.AreEqual(typeof(int), add.Parameters[0].ParameterType);
+    }
+
+    [TestMethod]
+    public void DiscoverMethods_UntranslatedLanguage_FallsBackToEnglish()
+    {
+        // Only Add carries an annotation, and only in English. A Japanese-language agent reads the English
+        // description rather than nothing — the annotation names the method even in the wrong language,
+        // while its absence would leave the model to guess what Add does.
+        var methods = AgentMethodInvoker.DiscoverMethods(new Calculator(), AgentLanguages.Japanese);
+        var add = methods.First(m => m.Name == "Add");
+        CollectionAssert.Contains((System.Collections.ICollection)add.AgentDescriptions, "Adds two numbers");
     }
 
     [TestMethod]

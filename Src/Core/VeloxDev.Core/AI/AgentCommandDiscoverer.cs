@@ -70,10 +70,7 @@ public static class AgentCommandDiscoverer
                 if (!seen.Add(prop.Name)) continue;
 
                 var paramAttr = prop.GetCustomAttribute<AgentCommandParameterAttribute>();
-                var descriptions = prop.GetCustomAttributes<AgentContextAttribute>(inherit: false)
-                    .Where(a => a.Language == language)
-                    .Select(a => a.Context)
-                    .ToArray();
+                var descriptions = AgentContextReader.GetContexts(prop, language);
 
                 var command = GetCommandInstance(target, type, prop.Name);
 
@@ -94,10 +91,7 @@ public static class AgentCommandDiscoverer
             if (!seen.Add(prop.Name)) continue;
 
             var paramAttr = FindParameterAttribute(type, prop.Name);
-            var descriptions = prop.GetCustomAttributes<AgentContextAttribute>(inherit: false)
-                .Where(a => a.Language == language)
-                .Select(a => a.Context)
-                .ToArray();
+            var descriptions = AgentContextReader.GetContexts(prop, language);
 
             var command = GetCommandInstance(target, type, prop.Name);
 

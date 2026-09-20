@@ -60,9 +60,7 @@ public static class AgentPropertyAccessor
                 PropertyType = prop.PropertyType,
                 CanRead = prop.CanRead,
                 CanWrite = prop.CanWrite,
-                AgentDescriptions = [.. prop.GetCustomAttributes<AgentContextAttribute>(inherit: false)
-                    .Where(a => a.Language == language)
-                    .Select(a => a.Context)],
+                AgentDescriptions = AgentContextReader.GetContexts(prop, language),
             };
 
             if (includeValues && prop.CanRead)
