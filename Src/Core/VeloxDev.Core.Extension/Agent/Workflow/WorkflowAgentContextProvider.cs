@@ -30,9 +30,27 @@ public sealed class WorkflowAgentContextProvider : AIContextProvider
     private readonly string[] _stateKeys;
     private readonly object _gate = new();
 
-    private long? _renderedFor;
-    private string? _instructions;
-    private IReadOnlyList<AITool>? _tools;
+    /// <summary>
+    /// The last render, or <c>null</c> before the first one. Read and written with <see cref="Volatile"/>
+    /// so the whole render crosses threads as one unit — a bare <c>long</c> key beside a bare field would
+    /// leave a window where a reader sees the new key and the old payload. A <see cref="Render"/> is never
+    /// mutated once published, so a reader either sees all of it or none of it.
+    /// </summary>
+    private Render? _published;
+
+    /// <summary>One turn's contribution, and the keys it was built for.</summary>
+    private sealed class Render
+    {
+        /// <summary>The <see cref="WorkflowAgentScope.ContextKey"/> this was built for.</summary>
+        public long Key;
+
+        /// <summary>The <see cref="WorkflowAgentScope.Version"/> the tool list was built for.</summary>
+        public long ToolsVersion;
+
+        public IReadOnlyList<AITool>? Tools;
+
+        public AIContext Context = null!;
+    }
 
     /// <summary>Creates a provider bound to <paramref name="scope"/>.</summary>
     /// <param name="scope">The scope whose current state each invocation is rendered from.</param>
@@ -55,33 +73,61 @@ public sealed class WorkflowAgentContextProvider : AIContextProvider
         => new(BuildContext());
 
     /// <summary>
-    /// Renders the current context, reusing the previous render while the scope's version is unchanged.
+    /// Renders the current context, reusing the previous render while nothing it depends on has moved.
     /// Internal rather than private so the rendering contract can be tested without standing up a chat
     /// client; the framework only ever reaches it through <see cref="ProvideAIContextAsync"/>.
+    /// <para>
+    /// On an unchanged turn this takes no lock and allocates nothing — it returns the very same
+    /// <see cref="AIContext"/> instance it returned last time. The framework reads that instance and builds
+    /// its own from the parts, so handing back one object rather than a fresh three-field copy every turn
+    /// is what keeps an idle agent off the GC entirely.
+    /// </para>
     /// </summary>
     internal AIContext BuildContext()
     {
-        // This scope's own version only. Skills and MCP are rendered by their own providers now, so their
-        // versions cannot change anything this provider produces — keying on them would re-render a slice
-        // that has not moved.
-        var key = _scope.Version;
+        // This scope's own key. Skills and MCP are rendered by their own providers now, so their versions
+        // cannot change anything this provider produces — keying on them would re-render a slice that has
+        // not moved. The key carries the budget-usage band as well as the version: the band is the one fact
+        // that moves without a configuration change, and the envelope states it.
+        var key = _scope.ContextKey;
+
+        var published = Volatile.Read(ref _published);
+        if (published is not null && published.Key == key) return published.Context;
 
         lock (_gate)
         {
-            if (_renderedFor != key)
+            published = _published;
+            if (published is null || published.Key != key)
             {
-                _instructions = _scope.BuildDynamicInstructions();
-                _tools = _scope.BuildDynamicTools();
-                _renderedFor = key;
+                published = BuildRender(key, published);
+                Volatile.Write(ref _published, published);
             }
 
             // Never return null — the framework dereferences the result. An AIContext with nothing set
             // is the documented no-op: it contributes nothing without clearing what came before.
-            return new AIContext
-            {
-                Instructions = _instructions,
-                Tools = _tools,
-            };
+            return published.Context;
         }
+    }
+
+    private Render BuildRender(long key, Render? previous)
+    {
+        var version = _scope.Version;
+        var instructions = _scope.BuildDynamicInstructions();
+
+        // The tool list depends on the version alone, so a band-only move keeps the previous one rather
+        // than rebuilding sixty-odd wrappers to say the same thing. Note the framework hands this exact
+        // array to ChatOptions.Tools when this is the only provider on the agent, so it is shared with the
+        // host and must not be mutated in place.
+        var tools = previous is not null && previous.ToolsVersion == version
+            ? previous.Tools
+            : _scope.BuildDynamicTools();
+
+        return new Render
+        {
+            Key = key,
+            ToolsVersion = version,
+            Tools = tools,
+            Context = new AIContext { Instructions = instructions, Tools = tools },
+        };
     }
 }

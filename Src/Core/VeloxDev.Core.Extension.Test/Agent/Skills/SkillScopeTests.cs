@@ -104,6 +104,78 @@ public class SkillScopeTests
             "re-enabling must restore the original block exactly");
     }
 
+    // ── The corpus's difference, for a prompt that already carries it ─────────
+
+    [TestMethod]
+    public void WithdrawnBlock_IsEmptyWhileNothingIsWithdrawn()
+    {
+        // The ordinary state: the difference is nothing, so nothing is contributed.
+        var scope = new SkillScope().WithSource(new EmbeddedSkillSource(System));
+        scope.Refresh();
+
+        Assert.AreEqual(string.Empty, scope.BuildWithdrawnBlock(AgentLanguages.English));
+    }
+
+    [TestMethod]
+    public void WithdrawnBlock_NamesTheDisabledEmbeddedSkillAndNoOther()
+    {
+        var scope = new SkillScope().WithSource(new EmbeddedSkillSource(System));
+        scope.Refresh();
+
+        scope.Disable("smart-layout");
+
+        var block = scope.BuildWithdrawnBlock(AgentLanguages.English);
+
+        // The name is the handle the model has: the corpus in a frozen prompt keeps each document's
+        // frontmatter, so `name: smart-layout` sits directly above the text being withdrawn.
+        Assert.Contains("`smart-layout`", block);
+        Assert.DoesNotContain("`slot-enumerator`", block,
+            "a skill that is still enabled is not part of the difference");
+    }
+
+    [TestMethod]
+    public void WithdrawnBlock_NamesEverySkillThatIsOff()
+    {
+        // Two switches, two names — the block is a list, not a single replacement notice.
+        var scope = new SkillScope().WithSource(new EmbeddedSkillSource(System));
+        scope.Refresh();
+
+        scope.Disable("smart-layout");
+        scope.Disable("compiler-usage");
+
+        var block = scope.BuildWithdrawnBlock(AgentLanguages.English);
+
+        Assert.Contains("`smart-layout`", block);
+        Assert.Contains("`compiler-usage`", block);
+    }
+
+    [TestMethod]
+    public void WithdrawnBlock_FollowsTheLanguage()
+    {
+        // It lands in the same prompt as the corpus, so it has to read in the same language.
+        var scope = new SkillScope().WithSource(new EmbeddedSkillSource(System));
+        scope.Refresh();
+        scope.Disable("smart-layout");
+
+        Assert.Contains("已停用", scope.BuildWithdrawnBlock(AgentLanguages.Chinese));
+        Assert.DoesNotContain("已停用", scope.BuildWithdrawnBlock(AgentLanguages.English));
+    }
+
+    [TestMethod]
+    public void WithdrawnBlock_NeverNamesAFileSkill()
+    {
+        // File skills are advertised rather than injected, so switching one off drops it from the
+        // advertisement. There is no text to withdraw, and naming it would name nothing.
+        var root = NewTempRoot();
+        WriteSkill(root, "disk-skill", "---\nname: disk-skill\ndescription: d\n---", "body");
+
+        var scope = new SkillScope().WithSource(new FileSkillSource(root));
+        scope.Refresh();
+        scope.Disable("disk-skill");
+
+        Assert.AreEqual(string.Empty, scope.BuildWithdrawnBlock(AgentLanguages.English));
+    }
+
     [TestMethod]
     public void Refresh_PreservesEnabledFlags()
     {

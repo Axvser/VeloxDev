@@ -1,7 +1,7 @@
 # VeloxDev.Core.Extension — MCP 子系统
 
 > 代码：`Src/Core/VeloxDev.Core.Extension/Agent/MCP/`（8 个文件）。
-> 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`（预注册服务器在 `:50-80`）。
+> 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`（预注册服务器在 `:73-104`，注册点是 `:50`）。
 
 ---
 
@@ -59,7 +59,7 @@ AddAsync(config, ct)          McpScope.cs:603   ← 中途加一个，不清空
 
 **写了别的键 ⇒ 抛异常**（`:1059-1065`），错误信息会把允许列表列出来。所以要加一个新的 option 键，必须同时改 `HttpOptionKeys` / `StdioOptionKeys` **以及** 消费它的 `BuildHttpTransportOptions`（`:985`）/ `BuildStdioTransportOptions`（`:943`）。
 
-`connectionTimeout` 有两级来源：`Options.connectionTimeout`（秒数或 TimeSpan 字符串）**优先于**作用域级的 `WithConnectionTimeout`（`ParseTimeout`，`:1078-1082`）。宿主样例两个值：Microsoft Learn 30 秒、一个故意不可达的示例服务器 8 秒（`AgentHelper.cs:60`、`:70`）。
+`connectionTimeout` 有两级来源：`Options.connectionTimeout`（秒数或 TimeSpan 字符串）**优先于**作用域级的 `WithConnectionTimeout`（`ParseTimeout`，`:1078-1082`）。宿主样例两个值：Microsoft Learn 30 秒、一个故意不可达的示例服务器 8 秒（`AgentHelper.cs:81`、`:91`）。
 
 ---
 
@@ -124,6 +124,6 @@ AddAsync(config, ct)          McpScope.cs:603   ← 中途加一个，不清空
 
 ## 七、死面 / 仓库内零真实使用者
 
-- **`WithSelfService` 没有任何非测试调用者。** 调用点全部在 `Src/Core/VeloxDev.Core.Extension.Test/Agent/MCP/McpSelfServiceTests.cs` 与 `McpAgentContextProviderTests.cs:119`。三个 demo 都停在 `Closed`，`AgentHelper.cs:211` 只是注释里提到「升档会加 AddMcpServer」。所以 **`AddMcpServer` 的完整路径（含确认、含四个级别的 prompt 分支）只有测试在跑**。
-- `McpServerRunMode.Pip` / `Uvx` / `Dotnet` / `Exe` 在 demo 里都没有实例 —— demo 只配了 `Http` 与 `Npx`（`AgentHelper.cs:50-80`）。
+- **`WithSelfService` 没有任何非测试调用者。** 调用点全部在 `Src/Core/VeloxDev.Core.Extension.Test/Agent/MCP/McpSelfServiceTests.cs` 与 `McpAgentContextProviderTests.cs:119`。三个 demo 都停在 `Closed`，`AgentHelper.cs:241` 只是注释里提到「升档会加 AddMcpServer」。所以 **`AddMcpServer` 的完整路径（含确认、含四个级别的 prompt 分支）只有测试在跑**。
+- `McpServerRunMode.Pip` / `Uvx` / `Dotnet` / `Exe` 在 demo 里都没有实例 —— demo 只配了 `Http` 与 `Npx`（`AgentHelper.cs:73-104`）。
 - `McpScope.WithMcpRoot`（`:58`）在仓库内无调用者；`.evn/mcp` 是唯一被用到的根。

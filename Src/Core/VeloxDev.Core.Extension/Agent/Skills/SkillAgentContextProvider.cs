@@ -27,6 +27,7 @@ public sealed class SkillAgentContextProvider : AIContextProvider
     private readonly ToolPipeline _toolPipeline;
     private readonly AgentPipeline? _pipeline;
     private readonly SkillAgentToolkit _toolkit;
+    private readonly bool _embeddedCorpusDelivered;
     private readonly string[] _stateKeys;
     private readonly object _gate = new();
 
@@ -40,12 +41,21 @@ public sealed class SkillAgentContextProvider : AIContextProvider
     /// How the contributed tools behave. Omit for standalone use — a thread-only policy is derived from
     /// the scope's own synchronization context.
     /// </param>
-    public SkillAgentContextProvider(SkillScope scope, ToolPipeline? tools = null, AgentPipeline? pipeline = null)
+    /// <param name="embeddedCorpusDelivered">
+    /// <c>true</c> when the prompt this provider's instructions are appended to already carries the
+    /// embedded corpus — the workflow scope's static skeleton, built before skills were attached. It then
+    /// contributes the corpus's difference instead of the corpus, which is what keeps every skill document
+    /// from reaching the model twice.
+    /// </param>
+    public SkillAgentContextProvider(
+        SkillScope scope, ToolPipeline? tools = null, AgentPipeline? pipeline = null,
+        bool embeddedCorpusDelivered = false)
     {
         _scope = scope ?? throw new ArgumentNullException(nameof(scope));
         _toolPipeline = tools ?? new ToolPipeline(marshalTo: () => scope.UIContext);
         _pipeline = pipeline;
         _toolkit = new SkillAgentToolkit(scope) { Language = scope.PromptLanguage };
+        _embeddedCorpusDelivered = embeddedCorpusDelivered;
 
         // Keyed by the scope, so two providers over one scope collide loudly at agent construction
         // instead of silently contributing everything twice.
@@ -95,7 +105,12 @@ public sealed class SkillAgentContextProvider : AIContextProvider
 
     private string? BuildInstructions(AgentLanguages language)
     {
-        var embedded = _scope.BuildEmbeddedBlock(language);
+        // A skill document reaches the prompt from exactly one place. When the static skeleton already
+        // carries the corpus, repeating it here would put every one of those documents in twice — so the
+        // contribution is the corpus's difference: the skills switched off since it was built.
+        var embedded = _embeddedCorpusDelivered
+            ? _scope.BuildWithdrawnBlock(language)
+            : _scope.BuildEmbeddedBlock(language);
         var advertised = _scope.BuildAdvertisement(language);
 
         // Both empty means no skill is enabled: contribute nothing rather than an empty heading.

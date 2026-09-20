@@ -1,6 +1,6 @@
 # VeloxDev.Core.Extension.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（24 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；23 个 `[TestClass]`）
+> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（27 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；25 个 `[TestClass]`）
 > 被测：`Src/Core/VeloxDev.Core.Extension/`（AI 工具面，命名空间 `VeloxDev.AI.*`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Test/`。两者只共享「逐字相同的一行并行设置」，其余差异很大 —— 见 §六那张对照表。
 
@@ -60,6 +60,7 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 | `ScriptedChatClient` | `Agent/Pipelines/AgentPipelineTests.cs:26` | 手写的 `IChatClient`，重放固定流。类注释（`:11-17`）写明它证明的是「管线怎么处理模型输出」，**不是**「某个模型会不会产出推理」—— 后者的所有者是端点，不是这里 |
 | `SingleThreadContext : SynchronizationContext, IDisposable` | `Agent/Workflow/Functions/ToolThreadAffinityTests.cs:27` | 专用线程 + 真 `BlockingCollection` 队列；断言线程 id 在进入 / await 后 / 返回时不变 |
 | 手写 skill 目录 | `Agent/Skills/SkillScopeTests.cs:21` | `%TEMP%\veloxdev-skill-tests\<guid>` 下写 `SKILL.md` |
+| `RecordingChatClient` / `OfflineAgent.RunOnce` | `Agent/Workflow/RecordingChatClient.cs:15` | 记录型 `IChatClient`：跑一次真 agent，把 `ChatOptions.Tools` 的名字与所有系统文本录下来。用来断言**模型实际被喂了什么**，而不是「provider 说自己会喂什么」。**全模块唯一的共享替身文件** —— 见 §六 |
 
 **工具是按公共注册路径调的，不是反射**：`Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs:23-24` 写明走 `scope.ProvideTools()` → `AIFunction.InvokeAsync`，「the same route an AI host uses — not by reflecting into private methods」。
 
@@ -70,8 +71,8 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **230** |
-| 耗时 | **739 ms** |
+| 测试条数 | **270** |
+| 耗时 | **380 ms** |
 | 失败 | 0 |
 
 **为什么比姊妹模块快约 40 倍**：这里几乎没有真实时钟。全部真实等待只有两处：
@@ -106,7 +107,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 | 目录 | 文件数 | 备注 |
 |---|---|---|
-| `Agent/` | 21 | 含 `Workflow/` 8（4 直接 + `Functions/` 4）、`MCP/` 5、`Skills/` 3、`Pipelines/` 2、`Dashboard/` 1，以及直接放在 `Agent/` 下的 2 |
+| `Agent/` | 24 | 含 `Workflow/` 11（7 直接 + `Functions/` 4）、`MCP/` 5、`Skills/` 3、`Pipelines/` 2、`Dashboard/` 1，以及直接放在 `Agent/` 下的 2 |
 | `Examples/` | 1 | `AgentTranscriptTests.cs`（守 demo 面板的契约，见 §一） |
 | `Serialization/` | 1 | `ComponentModelExTests.cs` |
 | 根 | 1 | `MSTestSettings.cs` |
@@ -116,7 +117,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 | | `VeloxDev.Core.Test` | `VeloxDev.Core.Extension.Test` |
 |---|---|---|
 | `GlobalUsings.cs` | 有（2 条） | **没有** → 每个文件自己写全 using（连 `System.Threading` 都显式写） |
-| 共享替身文件（如 `TestHosts.cs`） | 有 | **没有** → 每个类各持私有辅助，跨文件重复。第一个消费者出现时不要急着上提，第二个再提 |
+| 共享替身文件（如 `TestHosts.cs`） | 有 | **有且仅有一个**：`Agent/Workflow/RecordingChatClient.cs`（+ 同文件的 `OfflineAgent.RunOnce`）。`AgentCapabilityProvidersTests` 与 `CapabilityEnvelopeTests` 两个消费者出现后才提取的 —— 其余仍是每类各持私有辅助，第一个消费者出现时不要急着上提 |
 | 源生成器引用 | 无 | **有**（§二），Debug 走本地 / Release 走包 |
 | `[DoNotParallelize]` | 12 个类 | **0** |
 

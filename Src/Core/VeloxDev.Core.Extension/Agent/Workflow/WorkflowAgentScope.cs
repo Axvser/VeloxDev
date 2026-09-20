@@ -1,4 +1,5 @@
 ﻿using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Compaction;
 using VeloxDev.AI.Pipelines;
 using Microsoft.Extensions.AI;
 using System;
@@ -134,6 +135,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithMaxToolCalls(int maxCalls)
     {
         MaxToolCalls = maxCalls;
+        BumpVersion();
         return this;
     }
 
@@ -148,6 +150,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithMaxReadToolCalls(int maxCalls)
     {
         MaxReadToolCalls = maxCalls;
+        BumpVersion();
         return this;
     }
 
@@ -158,6 +161,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithMaxWriteToolCalls(int maxCalls)
     {
         MaxWriteToolCalls = maxCalls;
+        BumpVersion();
         return this;
     }
 
@@ -221,6 +225,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithAutoMarkDirty(bool enabled = false)
     {
         AutoMarkDirty = enabled;
+        // The embedded CommandReference.md documents both modes side by side and cannot say which one is
+        // live, so the capability envelope is what resolves it — and that needs the version to move.
+        BumpVersion();
         return this;
     }
 
@@ -243,6 +250,11 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     private readonly HashSet<string> _allowedGenericCommands = new(StringComparer.OrdinalIgnoreCase);
 
+    // Locked for the same reason _disabledTools is: allowlisted from the host's UI thread, consulted from
+    // the agent's invocation thread. The set is small and the lock is uncontended, so the cost is nil
+    // next to the tool call it guards.
+    private readonly object _genericCommandLock = new();
+
     /// <summary>
     /// Allowlists command names (e.g. <c>"ReceiveCommand"</c>) for the generic tools
     /// <c>ExecuteCommandOnNode</c> and <c>ExecuteCommandById</c>. The <c>"Command"</c> suffix is optional.
@@ -251,10 +263,13 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// </summary>
     public WorkflowAgentScope WithAllowedGenericCommands(params string[] commandNames)
     {
-        foreach (var c in commandNames ?? [])
+        lock (_genericCommandLock)
         {
-            var name = c.EndsWith("Command", StringComparison.OrdinalIgnoreCase) ? c : c + "Command";
-            _allowedGenericCommands.Add(name);
+            foreach (var c in commandNames ?? [])
+            {
+                var name = c.EndsWith("Command", StringComparison.OrdinalIgnoreCase) ? c : c + "Command";
+                _allowedGenericCommands.Add(name);
+            }
         }
         BumpVersion();
         return this;
@@ -265,7 +280,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         var name = commandName.EndsWith("Command", StringComparison.OrdinalIgnoreCase)
             ? commandName
             : commandName + "Command";
-        return _allowedGenericCommands.Contains(name);
+        lock (_genericCommandLock)
+            return _allowedGenericCommands.Contains(name);
     }
 
     /// <summary>
@@ -273,7 +289,16 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// a host UI needs this to tell "this tool is live" from "this tool will refuse whatever the model asks
     /// it" — which the tool's own description cannot say per call.
     /// </summary>
-    internal bool HasAllowedGenericCommands => _allowedGenericCommands.Count > 0;
+    internal bool HasAllowedGenericCommands
+    {
+        get { lock (_genericCommandLock) return _allowedGenericCommands.Count > 0; }
+    }
+
+    /// <summary>A snapshot of the allowlisted generic command names, in no particular order.</summary>
+    internal IReadOnlyList<string> AllowedGenericCommands
+    {
+        get { lock (_genericCommandLock) return [.. _allowedGenericCommands]; }
+    }
 
     // ── Per-tool switches ───────────────────────────────────────────────────
 
@@ -1038,6 +1063,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // ── Built-in Skills ──
         AppendEmbeddedSkills(result, language);
         AppendOutputLanguageDirective(result);
+        CaptureSkeletonReceipt(language);
         return result.ToString();
     }
 
@@ -1181,6 +1207,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // ── Built-in Skills ──
         AppendEmbeddedSkills(result, language);
         AppendOutputLanguageDirective(result);
+        CaptureSkeletonReceipt(language);
         return result.ToString();
     }
 
@@ -1307,6 +1334,11 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// <summary>
     /// Attached skill scope, or <c>null</c> when skills are not under dynamic management. Set by
     /// <see cref="WithSkills(string)"/> or <see cref="WithSkills(SkillScope)"/>.
+    /// <para>
+    /// Whichever side is attached second owns the embedded corpus: a skeleton rendered before this call
+    /// already carries it, so the subsystem contributes the difference instead of repeating it. The
+    /// documented host order — configure everything, <i>then</i> build the skeleton — puts the corpus here.
+    /// </para>
     /// </summary>
     public SkillScope? Skills { get; private set; }
 
@@ -1349,9 +1381,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         skills.WithPromptLanguage(_defaultLanguage);
         skills.WithSkillRoot(rootPath);
         skills.Refresh();
-        _skillProvider = skills.CreateContextProvider(SharedTools, Pipeline);
-        BumpVersion();
-        return this;
+        return AttachSkillProvider();
     }
 
     /// <summary>
@@ -1363,10 +1393,31 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         Skills = skills ?? throw new ArgumentNullException(nameof(skills));
         Skills.WithSynchronizationContext(UIContext);
         Skills.WithPromptLanguage(_defaultLanguage);
-        _skillProvider = Skills.CreateContextProvider(SharedTools, Pipeline);
+        return AttachSkillProvider();
+    }
+
+    /// <summary>
+    /// Builds the skill subsystem's provider and wires the corpus's ownership.
+    /// <para>
+    /// A host may have rendered the static skeleton before calling <c>WithSkills</c>, in which case that
+    /// skeleton already carries the embedded corpus and the skill subsystem must not carry it again — the
+    /// model would read all seven documents twice. The skeleton is a string the host has already taken, so
+    /// there is nothing to re-render; the subsystem is told what the prompt already says and contributes
+    /// the difference instead (which skills have since been switched off).
+    /// </para>
+    /// </summary>
+    private WorkflowAgentScope AttachSkillProvider()
+    {
+        _skillProvider = Skills!.CreateContextProvider(SharedTools, Pipeline, _embeddedSkillsFrozenIntoPrompt);
         BumpVersion();
         return this;
     }
+
+    /// <summary>
+    /// Whether any prompt this scope built has carried the embedded skill corpus. Sticky: the string was
+    /// handed to a host, and re-rendering cannot un-say it.
+    /// </summary>
+    private bool _embeddedSkillsFrozenIntoPrompt;
 
     private AIContextProvider? _skillProvider;
     private AIContextProvider? _mcpProvider;
@@ -1486,6 +1537,93 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
+    // ── 框架自带的能力 provider ─────────────────────────────────────────────
+    // 这三个是 Agent Framework 自己提供的 AIContextProvider，本模块只是把它们接进组合里，
+    // 不复制任何实现。挂上之后它们的工具直接进模型，不经 ToolPipeline。
+
+    private AIContextProvider? _todoProvider;
+    private AIContextProvider? _agentModeProvider;
+    private AIContextProvider? _compactionProvider;
+
+    /// <summary>
+    /// The todo list the Agent keeps its own work in, once <see cref="WithTodoTracking"/> has attached it;
+    /// <c>null</c> otherwise. Bind it to show the plan the model is working to.
+    /// </summary>
+    public TodoProvider? Todo { get; private set; }
+
+    /// <summary>
+    /// The operating mode the Agent is in, once <see cref="WithAgentModes"/> has attached it; <c>null</c>
+    /// otherwise. A host reads and sets the mode through this to build a mode switch the user can drive.
+    /// </summary>
+    public AgentModeProvider? AgentMode { get; private set; }
+
+    /// <summary>
+    /// Puts the Agent Framework's todo list into play: the model gains its <c>todos_*</c> tools and is told
+    /// on every turn what is still outstanding, so a task that outlives one context window keeps its plan.
+    /// <para>
+    /// Those tools come from the framework's own provider and are deliberately <b>not</b> wrapped the way
+    /// the workflow tools are. They neither read nor write the tree, so there is nothing to marshal to the
+    /// host thread, nothing to charge to a call budget and nothing to mark dirty — the same treatment
+    /// <c>ResetToolCallLimit</c> gets, for the same reason.
+    /// </para>
+    /// </summary>
+    /// <param name="options">Framework options for the todo provider; defaults are used when <c>null</c>.</param>
+    /// <seealso cref="Todo"/>
+    public WorkflowAgentScope WithTodoTracking(TodoProviderOptions? options = null)
+    {
+        Todo = new TodoProvider(options ?? new TodoProviderOptions());
+        _todoProvider = Todo;
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// Puts the Agent Framework's operating modes into play: the model gains the <c>mode_set</c> and
+    /// <c>mode_get</c> tools and is told how to behave in each mode. Which modes exist, and which one the
+    /// Agent starts in, is the host's choice — see <see cref="AgentModeProviderOptions.Modes"/>.
+    /// </summary>
+    /// <param name="options">The modes and their instructions. Required: there is no useful default set.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
+    /// <seealso cref="AgentMode"/>
+    public WorkflowAgentScope WithAgentModes(AgentModeProviderOptions options)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+
+        AgentMode = new AgentModeProvider(options);
+        _agentModeProvider = AgentMode;
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// Bounds how much conversation the model carries. Once the history approaches the model's input budget
+    /// the oldest tool results are summarised up, and past the next threshold the oldest turns are dropped —
+    /// so a long editing session degrades instead of failing outright. Nothing happens while it fits.
+    /// <para>
+    /// The two numbers are facts about the host's model, not about this scope: the strategy divides the
+    /// difference to decide when to act, so pass the real context window and output cap rather than a guess.
+    /// </para>
+    /// </summary>
+    /// <param name="maxContextWindowTokens">The model's total context window, in tokens.</param>
+    /// <param name="maxOutputTokens">The most the model may generate per response, in tokens.</param>
+    public WorkflowAgentScope WithContextCompaction(int maxContextWindowTokens, int maxOutputTokens)
+    {
+        // 整个 Microsoft.Agents.AI.Compaction 命名空间都标着 [Experimental]（MAAI001）。把引用圈在这一处是为了
+        // 让诊断只落在本库内：宿主用上面两个整数配置，自己永远不必写出那个实验类型名。
+#pragma warning disable MAAI001
+        _compactionProvider = new CompactionProvider(
+            new ContextWindowCompactionStrategy(
+                maxContextWindowTokens,
+                maxOutputTokens,
+                ContextWindowCompactionStrategy.DefaultToolEvictionThreshold,
+                ContextWindowCompactionStrategy.DefaultTruncationThreshold),
+            $"{nameof(CompactionProvider)}:{StateDiscriminator}",
+            null);
+#pragma warning restore MAAI001
+        BumpVersion();
+        return this;
+    }
+
     /// <summary>
     /// Adds a factory for an additional context provider. Factories run once, from
     /// <see cref="CreateContextProviders"/>, in registration order; the framework chains the resulting
@@ -1511,13 +1649,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public AIContextProvider CreateContextProvider() => new WorkflowAgentContextProvider(this);
 
     /// <summary>
-    /// Creates every context provider to attach: the scope's own, plus one per factory registered with
+    /// Creates every context provider to attach: compaction when the host asked for it, then this scope's
+    /// own, then one per attached subsystem, then one per factory registered with
     /// <see cref="WithContextProvider"/>. Pass the result to
-    /// <c>ChatClientAgentOptions.AIContextProviders</c>.
-    /// </summary>
-    /// <summary>
-    /// Creates every context provider to attach: this scope's own, then one for each attached subsystem,
-    /// then one per factory registered with <see cref="WithContextProvider"/>. Pass the result to
     /// <c>ChatClientAgentOptions.AIContextProviders</c>.
     /// <para>
     /// The order is fixed rather than the order the host attached things in, because the framework
@@ -1527,22 +1661,404 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// </summary>
     public IReadOnlyList<AIContextProvider> CreateContextProviders()
     {
-        var providers = new List<AIContextProvider> { CreateContextProvider() };
+        var providers = new List<AIContextProvider>();
+
+        // 压缩排最前：它重写的是消息历史，排在它之后的切片应该看到裁剪过的版本，而不是完整的。
+        if (_compactionProvider is not null) providers.Add(_compactionProvider);
+
+        providers.Add(CreateContextProvider());
         if (_skillProvider is not null) providers.Add(_skillProvider);
         if (_mcpProvider is not null) providers.Add(_mcpProvider);
+        // 框架自带的行为脚手架排在上下文来源之后，与宿主挂载的先后无关：提示读起来始终是「先上下文、后指令」。
+        if (_todoProvider is not null) providers.Add(_todoProvider);
+        if (_agentModeProvider is not null) providers.Add(_agentModeProvider);
         foreach (var factory in _contextProviderFactories) providers.Add(factory(this));
         return providers;
     }
 
+    // ── 能力包络：骨架之后每轮补的那一块 ──────────────────────────────────────
+    //
+    // 骨架（ProvideProgressiveContextPrompt）是「调用那一刻的快照」，宿主把它冻进 ChatOptions.Instructions
+    // 之后就不再变。而本 scope 的 Version 会在二十多处配置变更时自增，那些变更全都只喂给那个冻住的字符串。
+    // 于是模型会拿着过期的自我描述工作：宿主在 agent 造好之后调 WithInteractionSafety(1)，模型仍按旧挡位行事。
+    //
+    // 这一块补的就是那个差。它只讲「现在能做什么」，不讲框架是什么（骨架的事）、也不讲图长什么样
+    // （ListNodes 渐进披露的事）。它必须由一个专用廉价渲染器产出 —— 骨架一次分配 870 KB，是框架每轮
+    // 基线的十九倍，任何情况下都不能每轮跑。
+
+    private readonly StringBuilder _envelopeScratch = new();
+    private readonly object _envelopeGate = new();
+    private long _envelopeKey = -1;
+    private string? _envelope;
+
     /// <summary>
-    /// The prompt text this scope contributes on every invocation.
+    /// What the skeleton was rendered from, or <c>null</c> until a skeleton is built. The envelope repairs
+    /// only what has drifted since, which is what keeps a section from being said twice: the skeleton
+    /// already carries the safety policy, the registered-type catalogue and the custom-tool guidance, and
+    /// repeating any of them verbatim costs tokens and attention without adding a fact.
+    /// </summary>
+    private SkeletonReceipt? _skeletonReceipt;
+
+    /// <summary>
+    /// The state a built prompt captured. Every field records something that only ever grows or moves on a
+    /// configuration change, so comparing a field against the live value answers "has this section gone
+    /// stale?" without holding on to the 57 KB of text itself.
+    /// </summary>
+    private sealed class SkeletonReceipt
+    {
+        /// <summary>The language the skeleton was written in — the envelope's prose follows it.</summary>
+        public AgentLanguages Language;
+
+        /// <summary>The interaction-safety level whose policy the skeleton spelled out.</summary>
+        public int SafetyLevel;
+
+        /// <summary>Length of that level's host override, or -1 when it had none.</summary>
+        public int SafetyOverrideLength;
+
+        /// <summary>The output language the skeleton directed, or -1 when none was set.</summary>
+        public int OutputLanguage;
+
+        /// <summary>How much custom-tool guidance the skeleton carried.</summary>
+        public int CustomToolPromptLength;
+
+        /// <summary>The registered-type full names the skeleton listed, per category.</summary>
+        public HashSet<string> Enums = [];
+        public HashSet<string> Interfaces = [];
+        public HashSet<string> Components = [];
+        public HashSet<string> Data = [];
+    }
+
+    /// <summary>
+    /// Records what the prompt just built carried, so the envelope can tell what has drifted.
     /// <para>
-    /// Nothing, currently: skills and MCP are each owned by their own context provider, and this scope has
-    /// no other per-turn prompt of its own. The method stays because a workflow-specific block would
-    /// belong here rather than in the composition.
+    /// This assumes the string this call returned is the one the model is given — which is how both callers
+    /// are documented to be used (<c>ChatOptions.Instructions</c>). Rendering a skeleton for any other
+    /// purpose (a preview pane, a log, a different agent) makes the envelope treat it as already delivered
+    /// and stay quiet about the sections it contained. Attach the skeleton to the agent you are describing,
+    /// or accept the envelope will consider its content stated.
     /// </para>
     /// </summary>
-    internal string? BuildDynamicInstructions() => null;
+    private void CaptureSkeletonReceipt(AgentLanguages language)
+    {
+        _skeletonReceipt = new SkeletonReceipt
+        {
+            Language = language,
+            SafetyLevel = _interactionSafety,
+            SafetyOverrideLength = OverrideLengthFor(_interactionSafety),
+            OutputLanguage = _outputLanguage.HasValue ? (int)_outputLanguage.Value : -1,
+            CustomToolPromptLength = _customToolPrompt.Length,
+            Enums = CollectTypeNames(CustomerEnums),
+            Interfaces = CollectTypeNames(CustomerInterfaces),
+            Components = CollectTypeNames(CustomerComponents),
+            Data = CollectTypeNames(CustomerData),
+        };
+    }
+
+    private static HashSet<string> CollectTypeNames(Dictionary<AgentLanguages, HashSet<Type>> source)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var set in source.Values)
+            foreach (var t in set)
+                names.Add(t.FullName ?? t.Name);
+        return names;
+    }
+
+    private int OverrideLengthFor(int level)
+        => _safetyPromptOverrides.TryGetValue(level, out var body) ? (body?.Length ?? 0) : -1;
+
+    /// <summary>
+    /// The key a per-turn render is cached against: <see cref="Version"/> plus the current budget-usage
+    /// band. The band is the one fact that moves without a version bump — every tool call consumes one —
+    /// and it is part of what the envelope says, so folding it in is what lets the provider hand back a
+    /// single cached context while the model still hears about a budget that is filling up.
+    /// </summary>
+    internal long ContextKey => unchecked((Version << 3) | (uint)UsageBand());
+
+    /// <summary>
+    /// How close this run is to any of its call budgets, as 0–5: 0 while there is headroom, 4 once past 80%
+    /// of a cap, 5 once a cap is spent. Bands rather than raw counts because a raw count changes on every
+    /// tool call, which would make the rendered text differ every turn and put a string on the per-turn
+    /// path for no new information — a warning is worth acting on, a counter ticking up is not.
+    /// </summary>
+    private int UsageBand()
+    {
+        var (toolCalls, readCalls, writeCalls) = CreateToolkit().CallUsage;
+        return Math.Max(
+            BandFor(toolCalls, MaxToolCalls),
+            Math.Max(BandFor(readCalls, MaxReadToolCalls), BandFor(writeCalls, MaxWriteToolCalls)));
+    }
+
+    /// <summary>0–5 for one budget: 0 with headroom, 4 past 80% of the cap, 5 once the cap is spent.</summary>
+    private static int BandFor(int used, int? cap)
+    {
+        if (!cap.HasValue || cap.Value <= 0) return 0;
+        var percent = (int)((long)used * 100 / cap.Value);
+        return Math.Min(5, percent / 20);
+    }
+
+    /// <summary>
+    /// The prompt text this scope contributes on every invocation — the capability envelope.
+    /// <para>
+    /// Not the skeleton: that belongs to the host, in <c>ChatOptions.Instructions</c>, built once. This is
+    /// only the part of the model's self-description that can change while it is running.
+    /// </para>
+    /// </summary>
+    internal string? BuildDynamicInstructions()
+    {
+        var key = ContextKey;
+        if (_envelopeKey == key) return _envelope;
+
+        lock (_envelopeGate)
+        {
+            if (_envelopeKey != key)
+            {
+                _envelope = RenderEnvelope();
+                _envelopeKey = key;
+            }
+            return _envelope;
+        }
+    }
+
+    private string RenderEnvelope()
+    {
+        var sb = _envelopeScratch;
+        sb.Clear();
+
+        var language = _skeletonReceipt?.Language ?? _defaultLanguage;
+        var chinese = language == AgentLanguages.Chinese;
+
+        sb.AppendLine(chinese ? "## 当前能力状态（每轮实时渲染）" : "## Current Capability State (rendered live, every turn)");
+        sb.AppendLine();
+        sb.AppendLine(chinese
+            ? "> 上面那段提示词是启动时的快照。以下是**现在**的实际情况；若两者冲突，以这里为准。"
+            : "> The prompt above was a snapshot taken at startup. Below is how things stand **now**; where the two disagree, this section wins.");
+        sb.AppendLine();
+
+        AppendGates(sb, language);
+        AppendToolSwitches(sb, language);
+        AppendBudgets(sb, chinese);
+
+        var receipt = _skeletonReceipt;
+        if (receipt is null)
+        {
+            // No skeleton was ever built, so nothing above has stated any of this and there is nothing to
+            // supersede — every section is emitted plainly.
+            AppendInteractionSafetyPolicy(sb, language, supersedesLevel: null);
+            AppendOutputLanguageDirective(sb, language, supersedes: false);
+            AppendCustomToolGuidance(sb, language, fromLength: 0);
+            AppendRegisteredTypeDelta(sb, language, new SkeletonReceipt());
+        }
+        else
+        {
+            if (receipt.SafetyLevel != _interactionSafety
+                || receipt.SafetyOverrideLength != OverrideLengthFor(_interactionSafety))
+                AppendInteractionSafetyPolicy(sb, language, supersedesLevel: receipt.SafetyLevel);
+
+            var outputLanguage = _outputLanguage.HasValue ? (int)_outputLanguage.Value : -1;
+            if (receipt.OutputLanguage != outputLanguage)
+                AppendOutputLanguageDirective(sb, language, supersedes: receipt.OutputLanguage >= 0);
+
+            if (receipt.CustomToolPromptLength != _customToolPrompt.Length)
+                AppendCustomToolGuidance(sb, language, fromLength: receipt.CustomToolPromptLength);
+
+            AppendRegisteredTypeDelta(sb, language, receipt);
+        }
+
+        var text = sb.ToString();
+        sb.Clear(); // Hand the buffer back empty; this instance is reused on the next render.
+        return text;
+    }
+
+    private void AppendGates(StringBuilder sb, AgentLanguages language)
+    {
+        var chinese = language == AgentLanguages.Chinese;
+        sb.AppendLine(chinese ? "### 当前生效的闸门" : "### Gates in force");
+        sb.AppendLine();
+        sb.AppendLine(chinese
+            ? $"- 运行节点业务代码（`ExecuteNode` / `ExecuteNodes` / `BroadcastNode` / `ReverseBroadcastNode`）：**{(AllowNodeExecution ? "允许" : "禁止")}**"
+            : $"- Running node business code (`ExecuteNode` / `ExecuteNodes` / `BroadcastNode` / `ReverseBroadcastNode`): **{(AllowNodeExecution ? "ALLOWED" : "DENIED")}**");
+
+        sb.AppendLine(chinese
+            ? $"- 自动标脏：**{(AutoMarkDirty ? "开启 —— 每次变更调用后框架自动标脏，不要调用 `MarkDirty`" : "关闭 —— 变更任务结束时你自己调用一次 `MarkDirty`")}**"
+            : $"- Automatic dirty marking: **{(AutoMarkDirty ? "ON — the framework marks dirty after every mutating call; do not call `MarkDirty`" : "OFF — call `MarkDirty` yourself, exactly once, at the end of a mutation task")}**");
+
+        var commands = AllowedGenericCommands;
+        var generic = chinese
+            ? "- 泛型命令（`ExecuteCommandOnNode` / `ExecuteCommandById`）："
+            : "- Generic commands (`ExecuteCommandOnNode` / `ExecuteCommandById`): ";
+        sb.AppendLine(generic + (commands.Count > 0
+            ? (chinese ? $"仅限 {string.Join("、", commands.OrderBy(c => c, StringComparer.Ordinal))}"
+                       : $"restricted to {string.Join(", ", commands.OrderBy(c => c, StringComparer.Ordinal))}")
+            : (chinese ? "**完全禁用**（未加入任何白名单）" : "**disabled entirely** (nothing is allowlisted)")));
+        sb.AppendLine();
+    }
+
+    private void AppendToolSwitches(StringBuilder sb, AgentLanguages language)
+    {
+        var chinese = language == AgentLanguages.Chinese;
+        var disabled = DisabledToolNames;
+
+        sb.AppendLine(chinese ? "### 被宿主关掉的工具" : "### Tools switched off by the host");
+        sb.AppendLine();
+        if (disabled.Count == 0)
+        {
+            sb.AppendLine(chinese
+                ? "全部可用 —— 没有任何工具被关闭。"
+                : "None — every registered tool is available.");
+        }
+        else
+        {
+            sb.AppendLine(chinese
+                ? "下列工具**不会被提供**给你。不要尝试调用它们，也不要假设它们失败是暂时的："
+                : "These are **not offered** to you. Do not attempt to call them, and do not treat their absence as temporary:");
+            foreach (var name in disabled.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+                sb.AppendLine($"- `{name}`");
+        }
+        sb.AppendLine();
+    }
+
+    private void AppendBudgets(StringBuilder sb, bool chinese)
+    {
+        var (toolCalls, readCalls, writeCalls) = CreateToolkit().CallUsage;
+
+        sb.AppendLine(chinese ? "### 调用预算" : "### Call budgets");
+        sb.AppendLine();
+        AppendBudgetLine(sb, chinese, chinese ? "工具调用" : "Tool calls", toolCalls, MaxToolCalls);
+        AppendBudgetLine(sb, chinese, chinese ? "只读（查询）调用" : "Read-only (query) calls", readCalls, MaxReadToolCalls);
+        AppendBudgetLine(sb, chinese, chinese ? "变更调用" : "Mutating calls", writeCalls, MaxWriteToolCalls);
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// One budget line. The usage figure appears only once the band is non-zero — below that the model has
+    /// nothing to act on, and leaving it out is what keeps an idle turn from rendering different text.
+    /// </summary>
+    private static void AppendBudgetLine(StringBuilder sb, bool chinese, string label, int used, int? cap)
+    {
+        if (!cap.HasValue)
+        {
+            sb.AppendLine(chinese ? $"- {label}：无上限" : $"- {label}: no cap");
+            return;
+        }
+
+        var percent = cap.Value > 0 ? (int)((long)used * 100 / cap.Value) : 0;
+        if (percent < 80)
+        {
+            sb.AppendLine(chinese ? $"- {label}：上限 {cap.Value}" : $"- {label}: cap {cap.Value}");
+            return;
+        }
+
+        var state = percent >= 100
+            ? (chinese ? "**已用尽 —— 在重置前不会再接受任何调用**" : "**spent — no further calls are accepted until it is reset**")
+            : (chinese ? "**接近上限**" : "**near the limit**");
+        sb.AppendLine(chinese
+            ? $"- {label}：{used}/{cap.Value}，{state}"
+            : $"- {label}: {used}/{cap.Value}, {state}");
+    }
+
+    private void AppendInteractionSafetyPolicy(StringBuilder sb, AgentLanguages language, int? supersedesLevel)
+    {
+        var chinese = language == AgentLanguages.Chinese;
+
+        // Level 0 means no policy at all, and saying so is not the same as saying nothing: a skeleton
+        // written at level 1+ still carries a policy the model will keep obeying unless it is told the
+        // policy was withdrawn. An empty "the following replaces it" would be worse than silence.
+        if (_interactionSafety == 0)
+        {
+            sb.AppendLine(chinese
+                ? "### 交互安全策略已撤销（取代上文）"
+                : "### Interaction safety policy withdrawn (replaces the section above)");
+            sb.AppendLine();
+            sb.AppendLine(chinese
+                ? "> 上文那份交互安全策略**不再适用** —— 宿主已撤销它。"
+                : "> The interaction safety policy above **no longer applies** — the host has withdrawn it.");
+            sb.AppendLine();
+            return;
+        }
+
+        if (supersedesLevel.HasValue)
+        {
+            sb.AppendLine(chinese
+                ? $"### 安全策略已变更（取代上文为第 {supersedesLevel.Value} 挡渲染的那一份）"
+                : $"### Interaction safety policy changed (replaces the one above, written for level {supersedesLevel.Value})");
+            sb.AppendLine();
+            sb.AppendLine(chinese
+                ? "> 上文那份策略已经失效，**以下取代它**。"
+                : "> The policy above no longer applies — **the following replaces it**.");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine(BuildInteractionSafetyPrompt(language));
+    }
+
+    private void AppendOutputLanguageDirective(StringBuilder sb, AgentLanguages language, bool supersedes)
+    {
+        if (_outputLanguage is null) return;
+
+        var chinese = language == AgentLanguages.Chinese;
+        if (supersedes)
+        {
+            sb.AppendLine(chinese
+                ? "### 输出语言已变更（取代上文的 Output Language 小节）"
+                : "### Output language changed (replaces the Output Language section above)");
+            sb.AppendLine();
+        }
+        AppendOutputLanguageDirective(sb);
+        sb.AppendLine();
+    }
+
+    private void AppendCustomToolGuidance(StringBuilder sb, AgentLanguages language, int fromLength)
+    {
+        if (_customToolPrompt.Length <= fromLength) return;
+
+        var chinese = language == AgentLanguages.Chinese;
+        sb.AppendLine(chinese
+            ? "### 新注册工具的使用说明（上文 Custom Tools 小节之后新增的部分）"
+            : "### Guidance for tools registered since startup (the part after the Custom Tools section above)");
+        sb.AppendLine();
+        sb.AppendLine(_customToolPrompt.ToString(fromLength, _customToolPrompt.Length - fromLength).TrimEnd());
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Types registered after the skeleton was built. The catalogue in the skeleton names every type the
+    /// model may meet, and a type registered later would otherwise be invisible until the agent stumbles on
+    /// it — <c>GetComponentContext</c> answers 404 for a type it was never told about.
+    /// </summary>
+    private void AppendRegisteredTypeDelta(StringBuilder sb, AgentLanguages language, SkeletonReceipt receipt)
+    {
+        var added = new List<string>();
+        CollectAdded(added, CustomerEnums, receipt.Enums, language, "enum");
+        CollectAdded(added, CustomerInterfaces, receipt.Interfaces, language, "interface");
+        CollectAdded(added, CustomerComponents, receipt.Components, language, "component");
+        CollectAdded(added, CustomerData, receipt.Data, language, "data");
+        if (added.Count == 0) return;
+
+        sb.AppendLine(language == AgentLanguages.Chinese
+            ? "### 启动后新注册的类型"
+            : "### Types registered since startup");
+        sb.AppendLine();
+        sb.AppendLine(language == AgentLanguages.Chinese
+            ? "> 上文清单是启动时的快照。以下类型在那之后加入，现在同样可用。"
+            : "> The catalogue above was a startup snapshot. These were added afterwards and are available now.");
+        sb.AppendLine();
+        foreach (var line in added) sb.AppendLine(line);
+        sb.AppendLine();
+    }
+
+    private static void CollectAdded(
+        List<string> into, Dictionary<AgentLanguages, HashSet<Type>> source,
+        HashSet<string> alreadyListed, AgentLanguages language, string kind)
+    {
+        var label = language == AgentLanguages.Chinese ? "客户" : "customer";
+        foreach (var set in source.Values)
+            foreach (var t in set)
+            {
+                var name = t.FullName ?? t.Name;
+                if (alreadyListed.Contains(name)) continue;
+                into.Add($"- `{name}` ({label} {kind})");
+            }
+    }
 
     /// <summary>
     /// The tools this scope offers on every invocation: the built-in workflow tools and the
@@ -1564,12 +2080,19 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     /// <summary>
     /// Appends the library's embedded skill corpus to a statically built prompt — unless skills are under
-    /// dynamic management, where <see cref="WorkflowAgentContextProvider"/> renders them per turn and
-    /// appending them here as well would duplicate the whole corpus.
+    /// dynamic management, where the skill subsystem's own provider renders them per turn and appending
+    /// them here as well would duplicate the whole corpus.
+    /// <para>
+    /// Which of the two happens is decided here, by whether a skill scope was attached <i>at this moment</i>
+    /// — but the string this went into is one a host freezes into the agent's instructions, so the decision
+    /// is not reversible by a later <c>WithSkills</c>. That case is recorded rather than ignored; see
+    /// <see cref="AttachSkillProvider"/>.
+    /// </para>
     /// </summary>
     private void AppendEmbeddedSkills(StringBuilder result, AgentLanguages language)
     {
         if (Skills is not null) return;
+        _embeddedSkillsFrozenIntoPrompt = true;
         result.AppendLine(AgentEmbeddedResources.ReadAllSkills(SystemName, language).TrimEnd());
         result.AppendLine();
     }

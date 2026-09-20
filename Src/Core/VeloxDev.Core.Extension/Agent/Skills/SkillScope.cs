@@ -82,8 +82,15 @@ public class SkillScope
     /// host passes <i>its</i> policy instead, so its budgets, callbacks and side effects still apply —
     /// and must pass the same instance it gives every other source, or the call counts diverge.
     /// </param>
-    public AIContextProvider CreateContextProvider(ToolPipeline? tools = null, AgentPipeline? pipeline = null)
-        => new SkillAgentContextProvider(this, tools, pipeline);
+    /// <param name="embeddedCorpusDelivered">
+    /// <c>true</c> when the prompt the model is reading already carries the embedded corpus, so this
+    /// provider must state the difference rather than the corpus itself — see
+    /// <see cref="BuildWithdrawnBlock"/>. The workflow scope sets it when its static skeleton was built
+    /// before skills were attached.
+    /// </param>
+    public AIContextProvider CreateContextProvider(
+        ToolPipeline? tools = null, AgentPipeline? pipeline = null, bool embeddedCorpusDelivered = false)
+        => new SkillAgentContextProvider(this, tools, pipeline, embeddedCorpusDelivered);
 
     /// <summary>
     /// Optional UI thread context. When registered, discovery results and enabled-flag changes marshal to
@@ -222,6 +229,49 @@ public class SkillScope
             sb.AppendLine(body!.TrimEnd());
             sb.AppendLine();
         }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// The counterpart of <see cref="BuildEmbeddedBlock"/> for a prompt that already carries the corpus
+    /// somewhere else — the workflow scope's static skeleton, whenever a host built it before attaching
+    /// skills. That skeleton is frozen into the agent's own instructions at construction; the corpus in it
+    /// cannot be recalled, so this provider names the <i>difference</i> instead: the skills switched off
+    /// since, whose text the model can still read above and must now disregard.
+    /// <para>
+    /// The alternative — contributing nothing — would make <see cref="SetEnabled"/> a silent no-op on such
+    /// a scope: it would report success while the model kept following the disabled document. Empty while
+    /// nothing has drifted, which is the ordinary state and costs no tokens.
+    /// </para>
+    /// <para>
+    /// File skills never appear here: they are advertised rather than injected, so switching one off just
+    /// removes it from the advertisement — there is no text to withdraw.
+    /// </para>
+    /// </summary>
+    public string BuildWithdrawnBlock(AgentLanguages language)
+    {
+        // Every embedded skill, enabled or not, is in the frozen corpus: the skeleton reads the documents
+        // off disk rather than the switch state. So what has to be withdrawn is exactly what is switched
+        // off now, whether it was switched off before or after that render.
+        var withdrawn = Status.Snapshot
+            .Where(s => s.Source == SkillSourceKind.Embedded && !s.IsActive)
+            .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (withdrawn.Length == 0) return string.Empty;
+
+        var chinese = language == AgentLanguages.Chinese;
+        var sb = new StringBuilder();
+        sb.AppendLine(chinese
+            ? "## 本提示词生成之后的技能变更"
+            : "## Skill changes since this prompt was built");
+        sb.AppendLine();
+        sb.AppendLine(chinese
+            ? "本提示词靠前部分的技能文档是会话开始时写入的。以下技能已停用 —— 请忽略它们的正文："
+            : "The skill documents earlier in this prompt were captured when the session started. These are no longer enabled — disregard their instructions:");
+        sb.AppendLine();
+        foreach (var skill in withdrawn)
+            sb.AppendLine($"- `{skill.Name}`");
         return sb.ToString();
     }
 

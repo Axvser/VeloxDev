@@ -228,7 +228,7 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 - [ ] `WorkflowAgentToolkit` 加 `[AgentCommand]` 方法
 - [ ] `WorkflowToolCategory` 加/选分类（`.../Functions/WorkflowToolCategory.cs`）
 - [ ] `AgentContextCollector` 若要暴露新的元数据
-- [ ] `WorkflowAgentContextProvider` 是**唯一工具来源**（`.../WorkflowAgentContextProvider.cs`），按 `_scope.Version` 缓存渲染
+- [ ] `WorkflowAgentContextProvider` 是**唯一工具来源**（`.../WorkflowAgentContextProvider.cs`），按 `_scope.ContextKey`（= `Version` + 预算用量档）缓存渲染
 
 ---
 

@@ -384,19 +384,34 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     /// <summary>
+    /// How much of each call budget is spent. Read without a lock — the counters are only ever moved by
+    /// <see cref="Interlocked"/>, so a torn read is not possible and a stale one is harmless.
+    /// <para>
+    /// A tuple rather than three properties so a reader gets one consistent-enough picture; the scope's
+    /// capability envelope and <see cref="DescribeExhaustedLimit"/> both read it, so the two cannot drift
+    /// into describing the same budget differently.
+    /// </para>
+    /// </summary>
+    internal (int ToolCalls, int ReadCalls, int WriteCalls) CallUsage
+        => (Volatile.Read(ref _toolCallCount),
+            Volatile.Read(ref _readToolCallCount),
+            Volatile.Read(ref _writeToolCallCount));
+
+    /// <summary>
     /// Describes whichever limit is currently reached, or <c>null</c> when none is. Used both to decide
     /// whether there is anything to extend and to tell the user what exactly ran out.
     /// </summary>
     private string? DescribeExhaustedLimit()
     {
+        var (toolCalls, readCalls, writeCalls) = CallUsage;
         var parts = new List<string>();
 
-        if (_scope.MaxToolCalls.HasValue && _toolCallCount >= _scope.MaxToolCalls.Value)
-            parts.Add($"{_toolCallCount}/{_scope.MaxToolCalls.Value} 次工具调用");
-        if (_scope.MaxReadToolCalls.HasValue && _readToolCallCount >= _scope.MaxReadToolCalls.Value)
-            parts.Add($"{_readToolCallCount}/{_scope.MaxReadToolCalls.Value} 次查询");
-        if (_scope.MaxWriteToolCalls.HasValue && _writeToolCallCount >= _scope.MaxWriteToolCalls.Value)
-            parts.Add($"{_writeToolCallCount}/{_scope.MaxWriteToolCalls.Value} 次变更");
+        if (_scope.MaxToolCalls.HasValue && toolCalls >= _scope.MaxToolCalls.Value)
+            parts.Add($"{toolCalls}/{_scope.MaxToolCalls.Value} 次工具调用");
+        if (_scope.MaxReadToolCalls.HasValue && readCalls >= _scope.MaxReadToolCalls.Value)
+            parts.Add($"{readCalls}/{_scope.MaxReadToolCalls.Value} 次查询");
+        if (_scope.MaxWriteToolCalls.HasValue && writeCalls >= _scope.MaxWriteToolCalls.Value)
+            parts.Add($"{writeCalls}/{_scope.MaxWriteToolCalls.Value} 次变更");
 
         return parts.Count == 0 ? null : string.Join("、", parts);
     }

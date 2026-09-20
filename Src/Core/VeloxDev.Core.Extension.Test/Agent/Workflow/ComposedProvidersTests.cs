@@ -207,4 +207,102 @@ public class ComposedProvidersTests
         foreach (var name in McpAgentToolkit.ToolNames)
             CollectionAssert.DoesNotContain(workflowNames, name);
     }
+
+    // ── The corpus has one owner, whichever order the host built things in ───
+    //
+    // The skeleton and the skill subsystem can both render the embedded corpus, and the skeleton is
+    // frozen into the agent's own instructions the moment a host takes it. So the order decides who
+    // owns it: what the skeleton already says, the subsystem must not say again.
+
+    /// <summary>A heading that appears in exactly one embedded document, so occurrences can be counted.</summary>
+    private const string CorpusMarker = "## Skill: SlotEnumerator";
+
+    /// <summary>What the model reads: the host's frozen skeleton, then each provider appended.</summary>
+    private static string FullPrompt(string? skeleton, WorkflowAgentScope scope)
+        => string.Join("\n", skeleton, AllInstructions(scope));
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var count = 0;
+        for (var at = haystack.IndexOf(needle, StringComparison.Ordinal); at >= 0;
+             at = haystack.IndexOf(needle, at + needle.Length, StringComparison.Ordinal))
+            count++;
+        return count;
+    }
+
+    [TestMethod]
+    public void SkeletonBuiltAfterSkills_LeavesTheCorpusToTheSkillSubsystem()
+    {
+        // The documented host order: configure everything, then build the skeleton.
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(DiscoveredSkills());
+
+        var skeleton = scope.ProvideProgressiveContextPrompt();
+
+        Assert.DoesNotContain(CorpusMarker, skeleton,
+            "with skills under dynamic management the skeleton must leave the corpus to the provider");
+        Assert.AreEqual(1, CountOccurrences(FullPrompt(skeleton, scope), CorpusMarker),
+            "the corpus must reach the model exactly once");
+    }
+
+    [TestMethod]
+    public void SkeletonBuiltBeforeSkills_KeepsTheCorpus_AndTheSubsystemStaysOffIt()
+    {
+        // The reverse order. The skeleton already said it, so the subsystem must not say it again — the
+        // whole corpus duplicated is the failure this covers, and it costs nothing to reintroduce.
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+
+        var skeleton = scope.ProvideProgressiveContextPrompt();
+        scope.WithSkills(DiscoveredSkills());
+
+        Assert.Contains(CorpusMarker, skeleton, "no skills were attached when it was built");
+        Assert.AreEqual(1, CountOccurrences(FullPrompt(skeleton, scope), CorpusMarker),
+            "attaching skills after the skeleton was built must not put the corpus in twice");
+    }
+
+    [TestMethod]
+    public void SkeletonBuiltBeforeSkills_StillReportsASkillSwitchedOffAfterwards()
+    {
+        // The price of leaving the corpus to the skeleton: the text cannot be recalled, so the switch has
+        // to be stated instead. Silence here would make SetEnabled a no-op that reports success.
+        var skills = DiscoveredSkills();
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+
+        scope.ProvideProgressiveContextPrompt();
+        scope.WithSkills(skills);
+
+        skills.Disable("slot-enumerator");
+
+        Assert.Contains("`slot-enumerator`", AllInstructions(scope) ?? string.Empty,
+            "a skill switched off after the skeleton was built must still reach the model as withdrawn");
+    }
+
+    [TestMethod]
+    public void SkeletonBuiltBeforeSkills_DeliversAnAlreadyDisabledSkillToo()
+    {
+        // The skeleton reads the documents off disk, not the switch state, so a skill switched off before
+        // it was built is in it all the same. Withdrawing only what changed since would leave the model
+        // following a document the host had already turned off.
+        var skills = DiscoveredSkills();
+        skills.Disable("slot-enumerator");
+
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var skeleton = scope.ProvideProgressiveContextPrompt();
+        scope.WithSkills(skills);
+
+        Assert.Contains(CorpusMarker, skeleton, "the corpus is read off disk, not filtered by the switches");
+        Assert.Contains("`slot-enumerator`", AllInstructions(scope) ?? string.Empty);
+    }
+
+    [TestMethod]
+    public void SkillSubsystem_Standalone_StillCarriesTheCorpus()
+    {
+        // Only a skeleton that already said it makes the subsystem stand down. Used on its own — no
+        // workflow layer, no skeleton — it is the only owner there is.
+        var skills = DiscoveredSkills();
+
+        var text = Build(skills.CreateContextProvider()).Instructions;
+
+        Assert.IsNotNull(text);
+        Assert.Contains(CorpusMarker, text);
+    }
 }

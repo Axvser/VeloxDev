@@ -29,13 +29,17 @@ public class WorkflowAgentContextProviderTests
     }
 
     [TestMethod]
-    public void BuildContext_ContributesNoPromptTextOfItsOwn()
+    public void BuildContext_ContributesTheLiveCapabilityEnvelope()
     {
-        // The workflow slice is tools-only now: skills and MCP are each owned by their own provider, and
-        // this one has no other per-turn prompt. A null here is correct, not a missed contribution.
+        // This slice used to contribute nothing, which meant the host froze the whole skeleton into
+        // ChatOptions.Instructions at construction and every later scope change reached the tools but never
+        // the prompt. The envelope closes that gap — a null here would put the model back on a stale
+        // self-description of what it is allowed to do right now.
         var context = new WorkflowAgentContextProvider(ScopeWithSkills()).BuildContext();
 
-        Assert.IsNull(context.Instructions);
+        StringAssert.Contains(context.Instructions!, "Gates in force");
+        StringAssert.Contains(context.Instructions!, "Tools switched off by the host");
+        StringAssert.Contains(context.Instructions!, "Call budgets");
         Assert.IsNotEmpty(context.Tools!);
     }
 
@@ -76,6 +80,8 @@ public class WorkflowAgentContextProviderTests
         var second = provider.BuildContext();
 
         Assert.AreSame(first.Tools, second.Tools, "an unchanged scope must not re-wrap the tool set");
+        Assert.AreSame(first, second,
+            "and must not re-wrap the context either — an idle turn is meant to allocate nothing at all");
     }
 
     [TestMethod]

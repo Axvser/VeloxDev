@@ -1,6 +1,6 @@
 # VeloxDev.Core.Extension — 扩展
 
-> 配套：`architecture.md`（分层与控制流）、`pipelines.md`、`skills.md`、`mcp.md`、`dashboard.md`。
+> 配套：`architecture.md`（分层与控制流）、`pipelines.md`、`skills.md`、`mcp.md`、`dashboard.md`、`native-capabilities.md`（框架自带的三条原生能力）。
 
 ---
 
@@ -13,13 +13,14 @@
 | 一个技能（内置语料） | 放 `Resources/Workflow/{en,zh}/Skills/<Name>.md` | 不需要改 C# | — |
 | 一个技能来源（外部） | 实现 `ISkillSource` | `Agent/Skills/ISkillSource.cs:17` | — |
 | 一个管线阶段 | 实现 `IAgentPipelineStage` / `Use(handler)` | `Agent/Pipelines/AgentPipeline.cs:16`、`:62` | — |
-| 一个上下文提供者 | `WorkflowAgentScope.WithContextProvider(Func<scope, AIContextProvider>)` | `Agent/Workflow/WorkflowAgentScope.cs:1499` | 顺序固定在自带的三个之后 |
+| 一个上下文提供者 | `WorkflowAgentScope.WithContextProvider(Func<scope, AIContextProvider>)` | `Agent/Workflow/WorkflowAgentScope.cs:1637` | 顺序固定在自带的三片之后 |
+| 待办清单 / 运行模式 / 上下文压缩 | `WithTodoTracking()` / `WithAgentModes(options)` / `WithContextCompaction(cw, out)` —— **都是挂框架自带的 provider，不自己写** | `Agent/Workflow/WorkflowAgentScope.cs:1572` 起 | 见 `native-capabilities.md`；压缩那条的 MAF 命名空间是 `[Experimental]` |
 | 一个 MCP 管理工具 | `McpAgentToolkit` 加方法 + 在 `CreateTools()` 注册 | `Agent/MCP/McpAgentToolkit.cs:52` | 是 |
 | 一个 MCP 运行模式 | 枚举 + `GetRuntimeDir` + 装载分支 + 选项白名单 + 提示文案 | `Agent/MCP/McpScope.cs`（见 `mcp.md` §六） | 是 |
 | 一个宿主可开关的成员 | 继承 `AgentMemberViewModel` + `ApplyToScope` | `Agent/Dashboard/AgentMemberViewModel.cs:18`、`:68` | 是（必须穿透到 scope） |
 | 宿主提供只读工具 | `WithQueryTools(promptContext, tools…)` | `WorkflowAgentScope.cs:194` | 是（计入读预算、不标脏） |
 | 宿主提供任意工具 | `WithTools(promptContext, tools…)` | `WorkflowAgentScope.cs:179` | 是（计入写预算、可标脏） |
-| 宿主接对话记录 | `WithTranscript(AgentTranscript)` | `WorkflowAgentScope.cs:1437` | **只能设一次**，重复抛 `InvalidOperationException` |
+| 宿主接对话记录 | `WithTranscript(AgentTranscript)` | `WorkflowAgentScope.cs:1488` | **只能设一次**，重复抛 `InvalidOperationException` |
 
 **六个能力闸门，逐个确认是「代码挡」还是「提示说」。** 本模块的立场是**代码挡**（`WorkflowAgentScope.cs:227` 的小节标题就是这句话）：
 
@@ -41,10 +42,13 @@
 | 想做的事 | 官方做法 | 捷径（能编译，但是错的） |
 |---|---|---|
 | 让模型用上某套工具 | 挂 provider：`scope.CreateContextProviders()` → `AIAgent` 的 `AIContextProviders` | 把工具塞进 `ChatOptions.Tools`。框架把两者**并集且不按名去重** ⇒ 模型收到两遍（`WorkflowAgentContextProvider.cs:15-19`） |
-| 给模型加指令 | `ChatOptions.Instructions = scope.ProvideProgressiveContextPrompt()`（宿主样例 `AgentHelper.cs` 就是这么做的） | 指望 provider 注入。`BuildDynamicInstructions()` **恒返回 `null`**（`WorkflowAgentScope.cs:1545`），那是个预留坑位 |
+| 给模型加指令 | `ChatOptions.Instructions = scope.ProvideProgressiveContextPrompt()`（宿主样例 `AgentHelper.cs` 就是这么做的）。**每轮变化的那部分不用你管**：`BuildDynamicInstructions()`（`WorkflowAgentScope.cs:1806`）渲染能力包络，由 provider 自动追加在骨架之后 | 把会变的东西也写进 `ChatOptions.Instructions`：那是构造期冻住的一份，之后 26 处 `BumpVersion()` 都到不了它 |
+| 给 Agent 加待办清单 / 运行模式 | `WithTodoTracking()` / `WithAgentModes(options)` —— **挂框架自带的** | 自己写一套 todo 工具：MAF 已经给了 `todos_*` 与配套的提示文本，自己写的还得自己维护 |
+| 给 Agent 加上下文压缩 | `WithContextCompaction(窗口, 输出上限)`，两个数必须是**宿主模型的真实值** | ① 猜一个窗口大小 —— 策略拿 `窗口 - 输出上限` 当输入预算，猜错就在错误的时刻压缩；② 让签名收 `CompactionStrategy` —— 那会把宿主拖进 `[Experimental]` 命名空间 |
+| 读 Agent 当前的待办 / 模式 | `scope.Todo` / `scope.AgentMode`（框架 provider 的公开访问器） | 自己再 new 一个 provider —— 拿到的是**第二本账**，与模型实际看到的那份无关 |
 | 让技能、MCP 的工具受预算管 | 什么都不做：`CreateContextProviders()` 把**同一个** `ToolPipeline` 递给每个子系统 | 自己 `new ToolPipeline(...)` —— 会得到**另一本账本**，预算形同虚设 |
 | 关掉一个工具 | `SetToolEnabled(name, false)` | 只在宿主侧过滤 `ProvideTools()` 的结果。模型那一侧走的是 provider 渲染的集合，过滤不掉，而且不推进 `Version` ⇒ 缓存不失效 |
-| 关掉一个技能 | `SkillScope.SetEnabled(name, false)` | 直写 `SkillStatusViewModel.IsEnabled` —— 绕过 `Version` 自增，缓存的提示继续送旧文本（`AgentMemberViewModel.cs:11-15`） |
+| 关掉一个技能 | `SkillScope.SetEnabled(name, false)` —— 它会推 `Version`。**内置技能关掉后，提示词里会出现一份「已停用」清单**（`SkillScope.BuildWithdrawnBlock`）：骨架若已把语料冻进去，撤不回，只能告诉模型忽略那几篇 | 直写 `SkillStatusViewModel.IsEnabled` —— 绕过 `Version` 自增，缓存的提示继续送旧文本（`AgentMemberViewModel.cs:11-15`） |
 | 加一个「只读」工具 | 把名字加进 `BuildQueryToolNames`（`WorkflowAgentToolkit.cs:290`） | 不登记 —— 它会计入 `MaxWriteToolCalls`，并在 `AutoMarkDirty` 打开时**把图标脏** |
 | 加一个技能工具 | 加进 `SkillAgentToolkit.ToolNames` | 另起一个名字或另写一个常量集合 —— 只读分类只认 `ToolNames` 里那几个（自动并入点在 `WorkflowAgentToolkit.cs:304`） |
 | 写一个 pipeline 阶段 | 实现 `IAgentPipelineStage`，自己 `try/catch` | 靠抛异常中断 run。工具路径上它已经被 `TrackedAIFunction` 的 `catch` 变成**工具错误**，模型会以为工具失败（`AgentPipeline.cs:70-83`） |
@@ -52,7 +56,7 @@
 | 从后台线程改绑定的集合 | 走 scope 的 `Set*`（内部编组） | 直改 —— `SkillsViewModel.Skills`、`McpStatusViewModel.Servers` 是绑到宿主 UI 的 `ObservableCollection`（`McpScope.cs:726-731`） |
 | 让面板开关生效 | `ApplyToScope` 穿透 | 直接改行的 `IsEnabled` 字段不触发 `OnIsEnabledChanged`（生成器只挂在属性 setter 上） |
 | 加一个复合工具 | 不加 —— 每个操作都是单个组件命令步骤 | 加一个「批量做 N 件事」的工具：会**绕过或重复提交** Core 的 undo/redo 栈（`WorkflowAgentToolkit.cs:156-158`） |
-| 给 MCP 自服务配审批 | 在 **scope** 上调 `WithConfirmationHandler`（`WorkflowAgentScope.cs:521`），工作流工具与 MCP 共用它 | 在 `McpScope` 上调 —— `WithMcps` 会**无条件顶掉**它（`WorkflowAgentScope.cs:1478`，注释明说「直接设在 MCP scope 上的处理器会被它替换」） |
+| 给 MCP 自服务配审批 | 在 **scope** 上调 `WithConfirmationHandler`（`WorkflowAgentScope.cs:546`），工作流工具与 MCP 共用它 | 在 `McpScope` 上调 —— `WithMcps` 会**无条件顶掉**它（`WorkflowAgentScope.cs:1522`，注释明说「直接设在 MCP scope 上的处理器会被它替换」） |
 
 ---
 
@@ -63,7 +67,7 @@
 1. `Agent/Workflow/Functions/WorkflowAgentToolkit.cs`：加一个 `private async Task<string> Xxx(...)`，参数上用 `[Description]` 写清每个参数；返回 `Ok(...)` / `Error(...)` 信封。
 2. 同一个文件，在 `CreateAllTools`（`:54`）里选一个 `WorkflowToolCategory` 并 `Add(类别, T(Xxx, nameof(Xxx)))`。**类别只影响 `ProvideTools(类别)` 的切片**；`Layout` 与 `Composite` 是保留位，别用。
 3. **若它是只读的**：加进 `BuildQueryToolNames`（`:290`）的字面量集合。这决定它计入读还是写预算，以及 `AutoMarkDirty` 打开时会不会标脏。
-4. **若它会在提示里被点名**：`WorkflowAgentScope.ProvideProgressiveContextPrompt`（`:1053`）与 `ProvideAllContexts`（`:998`）；失败协议里的工具名清单在 `:618`。
+4. **若它会在提示里被点名**：`WorkflowAgentScope.ProvideProgressiveContextPrompt`（`:1079`）与 `ProvideAllContexts`（`:1023`）；失败协议里的工具名清单在 `:643`。**另加**：闸门 / 关闭开关 / 预算上限若属于这个工具的语义，包络（`RenderEnvelope`，`:1798`）也要跟着说。
 5. **若它属于某个能力闸门**：闸门判定在 `WorkflowAgentScope.cs`（`AllowNodeExecution` / `IsGenericCommandAllowed` / `IsInteractionAllowed`），注册的条件也在这里判断，不是「注册了再拒」——见 `:161-167` 的写法。
 6. 文档同步：`skills/veloxdev-drive-workflow-with-ai/references/tools.md` 与 `Src/Core/VeloxDev.Core.Extension/README.md`（README 里写着工具数量，`Description` 属性里也有）。
 7. 测试：`VeloxDev.Core.Extension.Test` 里按 `ProvideTools().Single(t => t.Name == "…")` 拿工具（`Agent/Workflow/Functions/ToolThreadAffinityTests.cs` 是范式）。**别绕过 `ProvideTools()`** —— 它是「公开注册路径」，`WorkflowLifecycleFidelityTests.cs:23` 的注释就是为这条写的。
@@ -91,11 +95,15 @@
 `Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs` 是唯一一份完整的官方接线，顺序不能换：
 
 1. 建 scope：`tree.AsAgentScope().With…(…)`，**先**把语言、预算、闸门、子系统都配好。
-2. `scope.WithTranscript(transcript)` —— **必须在 agent 存在之前**，因为 scope 是从它组合出 stage 链的（`AgentHelper.cs:215`）。
+2. `scope.WithTranscript(transcript)` —— **必须在 agent 存在之前**，因为 scope 是从它组合出 stage 链的（`AgentHelper.cs:248`）。
 3. `scope.ProvideProgressiveContextPrompt()` 取静态骨架文本，塞进 `ChatOptions.Instructions`。
 4. `chatClient.AsAIAgent(new ChatClientAgentOptions { ChatOptions = …, AIContextProviders = scope.CreateContextProviders() })` —— **不传 tools**。
 5. `agent.WithPipeline(scope.Pipeline)`。
-6. **不要**再手动注册技能/MCP 的管理工具。`AgentHelper.cs:205-210` 的注释把这条写死了：provider 每轮贡献自己那套，再注册一遍就是每个工具两份。
+6. **不要**再手动注册技能/MCP 的管理工具。`AgentHelper.cs:236-241` 的注释把这条写死了：provider 每轮贡献自己那套，再注册一遍就是每个工具两份。
+
+**第 3 步的文本是骨架，不是全部。** 构造之后调 `WithInteractionSafety` / `WithAllowNodeExecution` / `WithMax*ToolCalls` 等，模型是通过 provider 每轮追加的**能力包络**知道的，不需要重建 agent。唯一必须重建的是 `WithPromptLanguage`。
+
+**骨架与技能的语料只能有一个主人。** `ProvideProgressiveContextPrompt()` 在 `Skills == null` 时会把嵌入语料一并冻进骨架；`WithSkills(...)` 之后，技能子系统发现自己「接得晚了」就**不再重复语料**，改为每轮只报「自骨架生成以来被关掉的技能」（`SkillScope.BuildWithdrawnBlock`，`WorkflowAgentScope.AttachSkillProvider`）。两种顺序都能跑，但**先 `WithSkills` 再取骨架**才是语料归子系统管的那一种。`AgentHelper.cs:250-255` 的注释就是把这条写死在宿主样例里的地方。
 
 ---
 
@@ -122,8 +130,9 @@
 
 | 面 | 位置 | 实际状态 |
 |---|---|---|
-| `WorkflowAgentScope.BuildDynamicInstructions()` | `WorkflowAgentScope.cs:1545` | `internal`、**恒 `null`**。`WorkflowAgentContextProvider.cs:73` 唯一调用它。**这是预留位，不是坏掉的钩子** —— 想让它生效要让宿主与 provider 二选一 |
-| `WorkflowAgentScope.ProvideAllContexts` | `WorkflowAgentScope.cs:996`、`:998` | **仓库内无外部调用者**；是「另一档提示模式」，宿主样例走的是渐进模式 |
+| ~~`WorkflowAgentScope.BuildDynamicInstructions()`~~ | `WorkflowAgentScope.cs:1806` | **已不是死钩子**（本轮 2b）：渲染**能力包络**。`WorkflowAgentContextProvider.cs:115` 是唯一调用它。宿主接线一行未改 —— 包络走 provider 通道，追加在骨架之后 |
+| `WorkflowAgentScope.ProvideAllContexts` | `WorkflowAgentScope.cs:1021`、`:1023` | **仓库内无外部调用者**；是「另一档提示模式」，宿主样例走的是渐进模式。两档都会写骨架收据 |
+| `WorkflowAgentScope.WithPromptLanguage` 的漂移 | `WorkflowAgentScope.cs:111` | **不修**：语言变了，结构上无法用「追加」纠正（不能说一句「忘掉上面那段旧语言」）。文档把它定死为构造期首个调用；包络的措辞跟随**骨架渲染时的**语言 |
 | `AgentEmbeddedResources.ReadScript` / `ListScripts` / `ReadAllScripts` | `AgentEmbeddedResources.cs:135`、`:141`、`:147` | **零调用者，且要读的 `Resources/{system}/Scripts/` 目录不存在** —— 加目录不会自动生效 |
 | `AgentEmbeddedResources.ReadSafetyFiles` | `AgentEmbeddedResources.cs:114` | **零调用者**。逐级读的是单个 `ReadSafety`（`WorkflowAgentScope.cs:582`、`:589`） |
 | `AgentEmbeddedResources.ReadReference` / `ListReferences` | `AgentEmbeddedResources.cs:86`、`:92` | **零调用者**。活的是「全读」的 `ReadAllReferences` |

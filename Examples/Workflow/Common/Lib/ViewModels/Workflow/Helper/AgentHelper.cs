@@ -49,6 +49,27 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// Security model: configuration is fixed once at load time and cannot change afterwards — the Agent can only load/unload/inspect, never reconfigure mid-session.</summary>
     public IReadOnlyList<McpServerConfiguration> McpServers { get; set; } = DemoMcpServers;
 
+    /// <summary>
+    /// The operating modes the Agent may switch between, from the Agent Framework's own mode provider.
+    /// <para>
+    /// "plan" is the one that earns its keep here: an editing agent that can survey the graph and say what
+    /// it would change, without changing it, is what makes a large edit reviewable before it happens.
+    /// The mode tools are the framework's; a host switch only needs to call
+    /// <see cref="Microsoft.Agents.AI.AgentModeProvider.SetModeAsync"/> on the scope's <c>AgentMode</c>.
+    /// </para>
+    /// </summary>
+    public AgentModeProviderOptions AgentModes { get; } = new()
+    {
+        Modes =
+        [
+            new AgentModeProviderOptions.AgentMode("build",
+                "You change the workflow: add, wire, configure and run nodes."),
+            new AgentModeProviderOptions.AgentMode("plan",
+                "You inspect only. Describe what you would change and why, and do not call any tool that modifies the graph."),
+        ],
+        DefaultMode = "build",
+    };
+
     private static readonly McpServerConfiguration[] DemoMcpServers =
     [
         new()
@@ -190,7 +211,17 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             // where an application drops its own Agent Skills folders — it is allowed not to exist yet.
             .WithSkills("skills")
             // MCP servers join the tool set per turn, so load/unload takes effect on the next turn.
-            .WithMcps(helper.Mcp);
+            .WithMcps(helper.Mcp)
+            // The Agent Framework's own task tracking and operating modes. Nothing about these is this
+            // repo's: the scope attaches the framework's providers, so their tools and prompt text arrive
+            // exactly the way the skill and MCP subsystems' do.
+            //
+            // Context compaction is deliberately NOT attached here. It needs the model's real context
+            // window and output cap as integers, and those are facts about the deployment this host does
+            // not hold — a guessed value would compact at the wrong moment. A host that knows its model
+            // adds scope.WithContextCompaction(contextWindow, maxOutput).
+            .WithTodoTracking()
+            .WithAgentModes(helper.AgentModes);
 
         // The configurations the Agent may load by name. Registering them on the scope — rather than only
         // handing them to a toolkit — is what lets LoadMcpServers bring one back after it was unloaded.
@@ -217,7 +248,10 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         scope.WithTranscript(helper.Transcript);
 
         // Progressive context: the static skeleton. Skills put the scope under dynamic management, so the
-        // provider renders them per turn instead — the two must not both carry the corpus.
+        // provider renders them per turn instead — the two must not both carry the corpus. Attaching skills
+        // after this line still works (the subsystem then states only which skills have been switched off
+        // since), but the skeleton keeps the copy it takes here, so attaching first is the order that leaves
+        // the corpus under the subsystem's control.
         var contextPrompt = scope.ProvideProgressiveContextPrompt();
 
         var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableName);
@@ -235,8 +269,10 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "deepseek-v4-flash" : Model)
               .AsIChatClient();
 
-        // The static skeleton is the agent's own instructions; everything that changes — skills, the tool
-        // set, connected MCP servers — is contributed per invocation by the context providers. Tools are
+        // The static skeleton is the agent's own instructions; everything that changes — the live capability
+        // envelope (the gates, the switched-off tools, the call budgets, and anything that has drifted since
+        // this skeleton was rendered), the skills, the tool set, the connected MCP servers — is contributed
+        // per invocation by the context providers and appended after these instructions. Tools are
         // deliberately NOT passed through ChatOptions: the framework unions that list with the providers'
         // without deduplicating, so the same tool offered through both channels reaches the model twice.
         var agent = chatClient.AsAIAgent(new ChatClientAgentOptions
