@@ -38,18 +38,34 @@
 
 ## 四、`AgentTranscript` 的两条规则（这是这个类型存在的全部理由）
 
-`AgentTranscript.cs:120-146` 的注释说得很直白：**这两条规则原本是 demo 宿主的视图模型代码，实现错了**，而且因为它就是宿主代码所以测不到、反复回归。所以它被移进库里。
+`AgentTranscript.cs:138-165` 的注释说得很直白：**这两条规则原本是 demo 宿主的视图模型代码，实现错了**，而且因为它就是宿主代码所以测不到、反复回归。所以它被移进库里。
 
 | 规则 | 旧实现的缺陷（同一段注释记载） |
 |---|---|
-| **片段只在「开着的、同角色的」条目上继续**（`:208-221`）。中间出现任何别的 —— 工具调用、推理块、用户 —— 就关掉它，答案在**新条目**里续写 | 旧宿主只在「最后一条仍是 assistant 消息」时追加，所以一旦落了工具调用，这次回复之后的所有片段都进了侧边日志、**从不渲染** |
-| **工具调用是条目，不是分隔符**（`:137-141`）。它是一行带名字与结果的记录 | 旧 markdown 路径会追加工具调用行的（空）文本，于是产生**一列空白分隔线** |
+| **片段只在「开着的、同角色的」条目上继续**（`:227-241`）。中间出现任何别的 —— 工具调用、推理块、用户 —— 就关掉它，答案在**新条目**里续写 | 旧宿主只在「最后一条仍是 assistant 消息」时追加，所以一旦落了工具调用，这次回复之后的所有片段都进了侧边日志、**从不渲染** |
+| **工具调用是条目，不是分隔符**（`:156-160`）。它是一行带名字与结果的记录 | 旧 markdown 路径会追加工具调用行的（空）文本，于是产生**一列空白分隔线** |
 
-**唯一实现处**：`Append(role, fragment)`（`:208`）。`IsStreaming` 是 `Assistant or Reasoning`（`:69`），所以这两种角色才可能被续写。
+**唯一实现处**：`Append(role, fragment)`（`:227`）。`IsStreaming` 是 `Assistant or Reasoning`（`:69`），所以这两种角色才可能被续写。
 
-**不是线程安全的，且刻意如此**（`:144`）：一个 stage 喂它，在那一个被编组到的线程上。
+**不是线程安全的，且刻意如此**（`:163`）：一个 stage 喂它，在那一个被编组到的线程上。
 
-**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它只做两件事 —— `ToMarkdown()`（`:237`）与 `ToPlainTextLines()`；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs:196`、`:200`。`ToMarkdown` 会把**连续的**工具调用攒成一个块（`:240-249`），理由同样是为了让每个 markdown 宿主不必自己写渲染器。
+**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`（`:269`）、`ToPlainTextLines()`（`:341`），以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs:196`、`:200`。`ToMarkdown` 会把**连续的**工具调用攒成一个块（`:276-288`），理由同样是为了让每个 markdown 宿主不必自己写渲染器。
+
+### 推理的渲染形状（`:249-269` 的文档注释 + `AgentMarkdownOptions`）
+
+推理走**围栏代码块**，不是加粗段落 —— 段落的形状与 `Assistant` **完全同形**，只差标签，消费端拿到扁平字符串后无法把它独立包裹成一块。形状由 `AgentMarkdownOptions`（`:123`，与 `AgentTranscript` 同文件）决定，两个成员都有出厂默认值，**传 `null` 就是出厂形状**：
+
+| 成员 | 默认 | 语义 |
+|---|---|---|
+| `ReasoningFence` | `"thinking"` | 围栏的 info string。**空串 = 关掉围栏**，退回旧的 `**思考：**\n\n{text}` |
+| `ReasoningHeading` | `"**思考：**"` | 围栏**之上、之外**的标签；`null` = 无标签（放进围栏会被当字面代码） |
+
+两条必须知道的实现细节：
+
+- **围栏长度按正文里最长的连续反引号串 + 1 算**（`FenceLength`，`:400`），下限 3。CommonMark 在遇到第一行「反引号数 ≥ 开围栏」时就闭合 —— 模型思考里写 ` ``` ` 是常态，固定 3 个会被内容自己提前闭合，把**后续整个对话**吞进代码块。
+- **info string 里的反引号被剔除**（`FenceInfo`，`:416`）。它由宿主提供，一个反引号会并进开围栏、把开围栏拉得比闭围栏长，于是**永远闭合不了**。
+
+**`ToPlainTextLines()` 一行不动，也不给它对称的 options**：它的「一个条目一行」是一份**契约**而非形状（`:334-339` 的注释），宿主靠 `Count ==` + `SequenceEqual` 同步、再按前缀解析回角色；推理在那儿早就是 `[Thinking] …` 行。纯文本宿主没有歧义要解，加 options 只会多一个面。
 
 ---
 
@@ -89,4 +105,6 @@
 ## 七、死面
 
 - `Agent/Pipelines/` 下 7 个文件**全部**在仓库内有真实调用者（`TextPipeline`、`ToolPipeline`、`AgentPipelineAgent` 由 `WorkflowAgentScope.Pipeline` 组装；`AgentTranscript` 由 demo 的 `TreeViewModel` 消费）。这个目录没有死面。
+- 文件计数仍是 7：`AgentMarkdownOptions` 与 `AgentTranscript` **同文件**，没新增文件（同一文件承载多个公开类型是本目录既有做法，`AgentEvent.cs`、`AgentPipeline.cs` 都是）。
+- **`AgentMarkdownOptions` 有一个成员在仓库内无人显式构造**（`ReasoningFence` —— demo 全走默认）。这是**有意**的默认值面而不是死面：它的存在意义就是「宿主不改任何东西也拿到围栏」，仓库里没有第二个消费者是正常的。但它同时意味着**形状回归不会有编译期信号** —— 守卫在 `VeloxDev.Core.Extension.Test/Agent/Pipelines/AgentTranscriptTests.cs` 的 8 条测试里。
 - 唯一值得留意的是**事件种类里没有「交互」类**：`RequestSelection` / `RequestConfirmation` 走的是工具返回 + 宿主 handler，不走事件管线。想在 UI 上看到它们，订阅 `WorkflowAgentScope.ToolCalled` 或让工具自己回调。

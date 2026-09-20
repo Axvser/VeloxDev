@@ -225,6 +225,26 @@ public class AgentPipelineTests
     }
 
     [TestMethod]
+    public void ReasoningEntry_IsSeparatedLikeAnyOtherTurn()
+    {
+        // The fence is a block inside a turn, not a turn boundary: the reasoning was already its own entry,
+        // so wrapping it changes the body of that block and nothing about the rules between blocks. A fence
+        // that introduced a separator would break the panel's rhythm — and reading the count is the only way
+        // to see it, because the markdown would still look plausible.
+        var transcript = new AgentTranscript();
+
+        transcript.AddUser("做点事");
+        transcript.AppendReasoning("先想想。");
+        transcript.AppendAnswer("完成了。");
+
+        var markdown = transcript.ToMarkdown();
+
+        StringAssert.Contains(markdown, "```thinking");
+        Assert.AreEqual(2, CountOccurrences(markdown, "\n\n---\n\n"),
+            "three turns, two boundaries — the fence adds none");
+    }
+
+    [TestMethod]
     public void AddUser_ClosesAnOpenAnswer()
     {
         var transcript = new AgentTranscript();

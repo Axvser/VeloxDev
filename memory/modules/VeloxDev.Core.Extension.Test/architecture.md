@@ -1,6 +1,6 @@
 # VeloxDev.Core.Extension.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（27 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；25 个 `[TestClass]`）
+> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（28 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；26 个 `[TestClass]`）
 > 被测：`Src/Core/VeloxDev.Core.Extension/`（AI 工具面，命名空间 `VeloxDev.AI.*`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Test/`。两者只共享「逐字相同的一行并行设置」，其余差异很大 —— 见 §六那张对照表。
 
@@ -17,11 +17,18 @@
 | 你以为在这里 | 其实在哪 |
 |---|---|
 | 真调模型 / 真连 MCP 服务器 | **没有**。网络只用于**构造选项对象**：URL 只用 `example.com` / `.invalid` / `localhost` |
-| 验七家面板的渲染 | `Examples/*/Agent/*` 的 demo 面板。本模块只**守住**面板依赖的 ViewModel 契约（§三） |
+| 验七家面板的渲染 | `Examples/*/Agent/*` 的 demo 面板。本模块守住的是**共享层自己的契约**（`AgentLog` 的行数/前缀、`ConversationMarkdown` 的形状、结构化模型映射），**不是面板渲染** —— 没有面板绑 `AgentMessageViewModel`，见 §一 |
 | 验 Workflow 的 GUI / 缩放 | 姊妹模块 `Src/Core/VeloxDev.Core.Test/WorkflowSystem/` |
 | 验 Core 的过渡 / 时钟 / 主题 | 姊妹模块 |
 
-**为什么 `Examples/AgentTranscriptTests.cs` 长在这里** —— 它的文件头（`:8-14`）写明了：七个平台面板都渲染 `AgentMessageViewModel`，工具调用行的形状（折叠行 + 解析出的状态）就是面板与共享层之间的**全部契约**；这里静默变化会同时打断每家面板，**而不会打断构建**。而只有本项目引了 `Lib`，所以它只能放这。（它的 `using` 是 `Demo.ViewModels` —— 命名空间来自 `Lib`，不是本模块的。）
+**为什么 `Examples/AgentTranscriptTests.cs` 长在这里** —— 因为只有本项目引了 `Lib`，所以任何守 `Lib` 契约的测试只能放这。（它的 `using` 是 `Demo.ViewModels` —— 命名空间来自 `Lib`，不是本模块的。）
+
+**但它的守卫对象和文件头一度宣称的不一样，这点已核实并改正**：它守的是**结构化模型**（`AgentMessageViewModel` / `AgentMessageRole`）与 `TreeViewModel` 的 `AgentLog` / `ConversationMarkdown` 之间的契约，**不是「七个平台面板的渲染」**。全仓核对（`.axaml` / `.xaml` / `.razor` / `.cs` 逐类搜）：**没有任何面板绑定 `AgentMessageViewModel`，也没有任何地方按 `AgentMessageRole` 分支**。七个面板实际绑的是 `TreeViewModel.AgentLog`（`ObservableCollection<string>`，来自 `AgentTranscript.ToPlainTextLines()`），Avalonia 例外，绑 `ConversationMarkdown`（来自 `ToMarkdown()`）。
+
+后果有两面，都值得记住：
+
+- `AgentMessages` 这条结构化列表在实跑路径上近乎空集 —— 它是**第三条形状**，为「想要逐角色渲染的宿主」保留着。往 `AgentMessageRole` 加成员（如 `Reasoning`）**不会改变任何界面**。
+- 因此这里的断言是**唯一的守卫**：静默改动会打断面板与共享层的契约，**而不会打断构建**，且没有任何像素能替你发现它。
 
 ---
 
@@ -71,8 +78,8 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **270** |
-| 耗时 | **380 ms** |
+| 测试条数 | **281** |
+| 耗时 | **450 ms** |
 | 失败 | 0 |
 
 **为什么比姊妹模块快约 40 倍**：这里几乎没有真实时钟。全部真实等待只有两处：
@@ -107,7 +114,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 | 目录 | 文件数 | 备注 |
 |---|---|---|
-| `Agent/` | 24 | 含 `Workflow/` 11（7 直接 + `Functions/` 4）、`MCP/` 5、`Skills/` 3、`Pipelines/` 2、`Dashboard/` 1，以及直接放在 `Agent/` 下的 2 |
+| `Agent/` | 25 | 含 `Workflow/` 11（7 直接 + `Functions/` 4）、`MCP/` 5、`Skills/` 3、`Pipelines/` 3、`Dashboard/` 1，以及直接放在 `Agent/` 下的 2 |
 | `Examples/` | 1 | `AgentTranscriptTests.cs`（守 demo 面板的契约，见 §一） |
 | `Serialization/` | 1 | `ComponentModelExTests.cs` |
 | 根 | 1 | `MSTestSettings.cs` |
@@ -146,3 +153,6 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 | 让测试能用生成器类型 | `VeloxDev.Core.Extension.Test.csproj:24-32` 那组引用 |
 | 声明一个生成类型 | `Agent/Workflow/Functions/WorkflowSerializationTests.cs:12-30`（唯一先例） |
 | 等后台线程做完 | `Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs:196` 的 `WaitUntilAsync` |
+| 改 `AgentTranscript` 的渲染形状 | **两个** `AgentTranscriptTests`：库侧形状在 `Agent/Pipelines/AgentTranscriptTests.cs`（当前 8 条），`Lib` 契约转发在 `Examples/AgentTranscriptTests.cs`（当前 9 条） |
+
+**同名类 `AgentTranscriptTests` 出现两次**（`Agent/Pipelines/` 与 `Examples/`，命名空间不同所以合法）。搜类名会拿到两个结果，这不是重复文件 —— 前者守库的输出形状，后者守它经过 `TreeViewModel` 转发到面板绑定字符串的那一跳。改动渲染时必须同时想到两边。

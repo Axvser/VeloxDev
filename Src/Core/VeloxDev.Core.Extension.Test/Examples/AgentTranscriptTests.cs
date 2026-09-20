@@ -1,4 +1,5 @@
 using Demo.ViewModels;
+using Demo.ViewModels.Workflow.Helper;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
 
@@ -7,10 +8,16 @@ namespace VeloxDev.Core.Extension.Test.Examples;
 /// <summary>
 /// Coverage for the structured agent transcript the demo chat panels bind to.
 /// <para>
-/// It lives in this test project because that is the only one referencing <c>Lib</c>, and it is worth
-/// having: seven platform panels render <see cref="AgentMessageViewModel"/> and the shape of a tool-call
-/// row — its collapsed line and its parsed status — is the whole contract between them and the shared
-/// layer. A silent change here breaks every panel at once without breaking a build.
+/// It lives in this test project because that is the only one referencing <c>Lib</c>, and it is worth having:
+/// the shape of a tool-call row — its collapsed line and its parsed status — and the role a log line maps to
+/// are the contract between the shared layer and whatever renders it, and a silent change there breaks a
+/// panel without breaking a build.
+/// </para>
+/// <para>
+/// What the panels bind today is the plain-text log, built from the transcript's own lines; the Avalonia
+/// demo binds the transcript's markdown instead. The structured list here is the third shape, kept so a host
+/// that wants per-role rendering has something to bind — which is why its mapping is checked against what
+/// the log actually carries rather than against itself.
 /// </para>
 /// </summary>
 [TestClass]
@@ -101,5 +108,35 @@ public class AgentTranscriptTests
         tree.AppendToolCall("  ", "{}");
 
         Assert.IsEmpty(tree.AgentMessages);
+    }
+
+    [TestMethod]
+    public void FromLogLine_MapsThinkingToItsOwnRole()
+    {
+        // The transcript renders reasoning as "[Thinking] …". Without a branch here the line lands as an
+        // anonymous Plain message, so a host that shows the thinking cannot tell it from anything else.
+        var thinking = AgentMessageViewModel.FromLogLine("[Thinking] 先看一下拓扑。");
+
+        Assert.AreEqual(AgentMessageRole.Reasoning, thinking.Role);
+        Assert.AreEqual("先看一下拓扑。", thinking.Text);
+
+        // The prefixes that were recognised before must keep mapping the way they did.
+        Assert.AreEqual(AgentMessageRole.User, AgentMessageViewModel.FromLogLine("[User] do it").Role);
+        Assert.AreEqual(AgentMessageRole.Assistant, AgentMessageViewModel.FromLogLine("[Agent] done").Role);
+        Assert.AreEqual(AgentMessageRole.Error, AgentMessageViewModel.FromLogLine("[Error] boom").Role);
+        Assert.AreEqual(AgentMessageRole.Plain, AgentMessageViewModel.FromLogLine("just a line").Role);
+    }
+
+    [TestMethod]
+    public void ConversationMarkdown_WrapsReasoningInAFence()
+    {
+        // The Avalonia demo hands this string straight to a Markdown control, so the fence has to survive
+        // the hop through the view model — a rebuild that dropped it would leave the panel looking exactly
+        // as it did before the fence existed.
+        var tree = new TreeViewModel();
+
+        ((AgentHelper)tree.Helper).Transcript.AppendReasoning("先看一下拓扑。");
+
+        StringAssert.Contains(tree.ConversationMarkdown, "```thinking");
     }
 }

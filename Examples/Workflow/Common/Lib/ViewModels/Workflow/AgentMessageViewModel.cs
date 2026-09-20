@@ -17,6 +17,12 @@ public enum AgentMessageRole
     /// printing those inline buries the conversation.
     /// </summary>
     ToolCall,
+
+    /// <summary>
+    /// The model's thinking, which the transcript keeps beside its answers rather than folding in. Reached
+    /// only through <see cref="FromLogLine"/> — nothing writes it directly.
+    /// </summary>
+    Reasoning,
 }
 
 /// <summary>
@@ -105,6 +111,10 @@ public partial class AgentMessageViewModel
             return new AgentMessageViewModel(AgentMessageRole.Assistant, trimmed.Substring("[Agent]".Length).TrimStart());
         if (trimmed.StartsWith("[Error]", StringComparison.Ordinal))
             return new AgentMessageViewModel(AgentMessageRole.Error, trimmed.Substring("[Error]".Length).TrimStart());
+        // The transcript renders reasoning as "[Thinking] …", and a host that shows the thinking has to
+        // recognise it here or the line lands as an anonymous Plain message.
+        if (trimmed.StartsWith("[Thinking]", StringComparison.Ordinal))
+            return new AgentMessageViewModel(AgentMessageRole.Reasoning, trimmed.Substring("[Thinking]".Length).TrimStart());
 
         return new AgentMessageViewModel(AgentMessageRole.Plain, trimmed);
     }

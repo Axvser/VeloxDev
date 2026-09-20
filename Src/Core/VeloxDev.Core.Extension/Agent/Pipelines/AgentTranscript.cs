@@ -117,6 +117,25 @@ public partial class AgentTranscriptEntry
 }
 
 /// <summary>
+/// How <see cref="AgentTranscript.ToMarkdown"/> shapes its output. Every member has a shipped default, so a
+/// host that wants the stock rendering passes nothing at all.
+/// </summary>
+public sealed class AgentMarkdownOptions
+{
+    /// <summary>
+    /// The info string on the fence the reasoning is wrapped in — <c>thinking</c> by default. An empty
+    /// string drops the fence and restores the bold paragraph it replaced.
+    /// </summary>
+    public string ReasoningFence { get; set; } = "thinking";
+
+    /// <summary>
+    /// The label above that fence, or <c>null</c> for none. Kept by default because it is what the panel
+    /// showed before the fence existed; a host that would rather the block stands alone nulls it.
+    /// </summary>
+    public string? ReasoningHeading { get; set; } = "**思考：**";
+}
+
+/// <summary>
 /// The conversation a host binds: what the user said, what the model thought, what it answered, and which
 /// tools it used — in one ordered collection.
 /// <para>
@@ -233,9 +252,24 @@ public partial class AgentTranscript
     /// Provided so that the markdown hosts do not each write their own renderer — which is where the blank
     /// separator rows came from.
     /// </para>
+    /// <para>
+    /// Reasoning is wrapped in a fenced code block rather than a bold paragraph, so a Markdown control draws
+    /// it as a block of its own instead of as the answer's shape under a different label. The fence is
+    /// measured against the body: the model's thinking about code contains backtick runs, and a fixed
+    /// three-backtick fence would be closed by the first one it met. The label stays above the fence, where
+    /// it is a paragraph rather than code.
+    /// </para>
+    /// <para>
+    /// The shape is <paramref name="options"/>'s to decide; passing nothing renders the shape described here.
+    /// </para>
     /// </summary>
-    public string ToMarkdown()
+    /// <param name="options">
+    /// Overrides the reasoning fence and its label. <c>null</c> — the default — uses the shipped shape.
+    /// </param>
+    public string ToMarkdown(AgentMarkdownOptions? options = null)
     {
+        options ??= new AgentMarkdownOptions();
+
         var sb = new StringBuilder();
         var toolRun = new List<AgentTranscriptEntry>();
 
@@ -274,7 +308,7 @@ public partial class AgentTranscript
                     sb.Append("**助手：**\n\n").Append(entry.Text);
                     break;
                 case AgentTranscriptRole.Reasoning:
-                    sb.Append("**思考：**\n\n").Append(entry.Text);
+                    AppendReasoning(sb, options, entry.Text);
                     break;
                 case AgentTranscriptRole.Error:
                     sb.Append("**错误：** ").Append(entry.Text);
@@ -296,6 +330,12 @@ public partial class AgentTranscript
     /// <para>
     /// Tool calls appear here too — the plain-text hosts used to show none at all, because tool calls only
     /// ever reached the structured list.
+    /// </para>
+    /// <para>
+    /// <b>One entry is one line, and that is a contract rather than a shape.</b> The demo host syncs these
+    /// into its log with a count comparison and a sequence comparison, and it parses the prefixes back into
+    /// roles; splitting an entry, or renaming a prefix, changes what it displays. A host that wants another
+    /// arrangement builds it from <see cref="Entries"/> instead.
     /// </para>
     /// </summary>
     public IReadOnlyList<string> ToPlainTextLines()
@@ -324,4 +364,54 @@ public partial class AgentTranscript
         }
         return lines;
     }
+
+    /// <summary>
+    /// Writes one reasoning block: the label as its own paragraph, then the thinking — fenced when
+    /// <see cref="AgentMarkdownOptions.ReasoningFence"/> names a language.
+    /// </summary>
+    private static void AppendReasoning(StringBuilder sb, AgentMarkdownOptions options, string text)
+    {
+        if (!string.IsNullOrEmpty(options.ReasoningHeading))
+            sb.Append(options.ReasoningHeading).Append("\n\n");
+
+        var info = FenceInfo(options.ReasoningFence);
+        if (info.Length == 0)
+        {
+            sb.Append(text);
+            return;
+        }
+
+        // The fence is measured against the body, so no line inside it can be read as the closing fence.
+        var fence = new string('`', FenceLength(text));
+        sb.Append(fence).Append(info).Append('\n');
+        sb.Append(text);
+        if (sb[sb.Length - 1] != '\n') sb.Append('\n');
+        sb.Append(fence);
+    }
+
+    /// <summary>
+    /// The fence length a body needs: longer than every backtick run inside it.
+    /// <para>
+    /// CommonMark closes a fenced block at the first line whose backtick run is at least as long as the
+    /// opener's, and thinking about code is full of backtick runs. A fixed three would be closed by the
+    /// first one the model wrote, swallowing everything that followed into the code block.
+    /// </para>
+    /// </summary>
+    private static int FenceLength(string body)
+    {
+        var longest = 0;
+        var run = 0;
+        for (var i = 0; i < body.Length; i++)
+        {
+            run = body[i] == '`' ? run + 1 : 0;
+            if (run > longest) longest = run;
+        }
+        return Math.Max(3, longest + 1);
+    }
+
+    /// <summary>
+    /// The info string to put on the fence. Backticks are dropped: one would merge with the fence and
+    /// lengthen the opening run past the closing one, leaving the block open for the rest of the document.
+    /// </summary>
+    private static string FenceInfo(string? fence) => fence?.Replace("`", string.Empty) ?? string.Empty;
 }

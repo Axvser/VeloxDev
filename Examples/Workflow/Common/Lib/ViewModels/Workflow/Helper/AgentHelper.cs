@@ -36,6 +36,12 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// <see cref="AgentTranscript.ToMarkdown"/> for a rich panel, or <see cref="AgentTranscript.Entries"/>
     /// to render its own.
     /// </para>
+    /// <para>
+    /// The reasoning arrives already wrapped in a fenced code block — a Markdown control draws that as a
+    /// block of its own, which a bold paragraph shaped like the answer never was. A host that wants another
+    /// shape passes <see cref="AgentMarkdownOptions"/> to
+    /// <see cref="AgentTranscript.ToMarkdown(AgentMarkdownOptions)"/>; the panel here takes the default.
+    /// </para>
     /// </summary>
     public AgentTranscript Transcript { get; } = new();
 
