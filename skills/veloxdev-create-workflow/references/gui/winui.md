@@ -55,5 +55,3 @@ The point is to keep the geometry non-negative and inside the element's own box,
 ⚙ **`slotBorderColor` (`-bc`) is accepted and discarded** on this pack.
 
 ⚙ **The template does not emit `x:Name="Root"`**, although the demo's tree has one and MAUI's template requires it. Do not assume the packs are symmetric.
-
-⚙ The demo's `TreeView.xaml.cs` carries a leftover drift probe from debugging. It is not part of the contract — do not port it into your project.
