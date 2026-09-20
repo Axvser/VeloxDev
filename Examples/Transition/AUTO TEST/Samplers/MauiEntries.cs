@@ -9,10 +9,10 @@ using MauiCornerRadius = Microsoft.Maui.CornerRadius;
 using MauiPoint = Microsoft.Maui.Graphics.Point;
 using MauiPointF = Microsoft.Maui.Graphics.PointF;
 using MauiRect = Microsoft.Maui.Graphics.Rect;
+using MauiRectF = Microsoft.Maui.Graphics.RectF;
 using MauiSize = Microsoft.Maui.Graphics.Size;
 using MauiSizeF = Microsoft.Maui.Graphics.SizeF;
 using MauiThickness = Microsoft.Maui.Thickness;
-using SysRectangleF = System.Drawing.RectangleF;
 
 namespace VeloxDev.SamplerTest;
 
@@ -35,7 +35,7 @@ internal static class MauiEntries
         public MauiPoint Spot { get; set; }
         public MauiPointF SpotF { get; set; }
         public MauiRect Bounds { get; set; }
-        public SysRectangleF BoundsF { get; set; }
+        public MauiRectF BoundsF { get; set; }
         public MauiSize Extent { get; set; }
         public MauiSizeF ExtentF { get; set; }
         public MauiThickness Margin { get; set; }
@@ -65,6 +65,7 @@ internal static class MauiEntries
         return new SamplerEntry
         {
             SamplerType = samplerType,
+            ValueType = entry.ValueType,
             Adapter = entry.Adapter,
             Rule = entry.Rule,
             Write = entry.Write,
@@ -181,15 +182,15 @@ internal static class MauiEntries
                     Lerp(WidthStart, WidthEnd, size), Lerp(HeightStart, HeightEnd, size));
             }),
 
-        // 单精度矩形：注意它操作的是 System.Drawing.RectangleF，不是 MAUI 自己的 RectF。
+        // 单精度矩形：产物是 MAUI 自己的 RectF；System.Drawing.RectangleF 由 Core 的 RectangleFSampler 覆盖。
         Entry("RectFSampler", SamplerRule.Saturate,
-            new SysRectangleF(0, 0, (float)WidthStart, (float)HeightStart),
-            new SysRectangleF(100, 200, (float)WidthEnd, (float)HeightEnd),
+            new MauiRectF(0, 0, (float)WidthStart, (float)HeightStart),
+            new MauiRectF(100, 200, (float)WidthEnd, (float)HeightEnd),
             (Target x) => x.BoundsF,
             t =>
             {
                 var size = SharedProgress(t, double.PositiveInfinity, (WidthStart, WidthEnd), (HeightStart, HeightEnd));
-                return new SysRectangleF(
+                return new MauiRectF(
                     0f + 100f * (float)t, 0f + 200f * (float)t,
                     (float)WidthStart + ((float)WidthEnd - (float)WidthStart) * (float)size,
                     (float)HeightStart + ((float)HeightEnd - (float)HeightStart) * (float)size);

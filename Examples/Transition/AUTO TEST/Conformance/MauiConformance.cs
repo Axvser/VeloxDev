@@ -96,8 +96,8 @@ internal static class MauiConformance
             ];
         }),
 
-        // 单精度矩形：注意它操作的是 System.Drawing.RectangleF，不是 MAUI 自己的 RectF；运算在 float 里。
-        new("RectFSampler", "RectangleF", t =>
+        // 单精度矩形：产物是 MAUI 自己的 RectF，不是 Core 那条 System.Drawing.RectangleF；运算在 float 里。
+        new("RectFSampler", "RectF", t =>
         {
             var size = ClosedForm.SharedProgress(t, double.PositiveInfinity, (WidthStart, WidthEnd), (HeightStart, HeightEnd));
             return

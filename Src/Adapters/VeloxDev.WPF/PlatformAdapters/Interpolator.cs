@@ -20,7 +20,9 @@ namespace VeloxDev.TransitionSystem
             RegisterInterpolator(typeof(Rect), new RectSampler());
             RegisterInterpolator(typeof(Vector), new VectorSampler());
             RegisterInterpolator(typeof(Color), new ColorSampler());
-            RegisterInterpolator(typeof(DropShadowEffect), new DropShadowEffectSampler());
+            // 注册抽象基类 Effect，不是具体类型 DropShadowEffect：WPF 自己的 UIElement.Effect DP 就是按 Effect 声明的，
+            // 而查找只向上走，注册具体类型会让所有声明成 Effect 的属性一条键都查不到（静默 Unsampled）。
+            RegisterInterpolator(typeof(Effect), new DropShadowEffectSampler());
             RegisterInterpolator(typeof(Point3D), new Point3DSampler());
             RegisterInterpolator(typeof(Vector3D), new Vector3DSampler());
         }

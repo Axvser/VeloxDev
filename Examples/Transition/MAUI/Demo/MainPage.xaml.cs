@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using VeloxDev.TransitionSystem;
 
-// 同名类型一律显式取 MAUI 的那一侧：System.Drawing 里也有一份 PointF/RectF/SizeF，量纲不同、不能混。
+// 同名类型一律显式取 MAUI 的那一侧：PointF / SizeF 在 System.Drawing 里也各有一份，量纲不同、不能混。
 using MauiColor = Microsoft.Maui.Graphics.Color;
 
 namespace Demo

@@ -6,7 +6,7 @@ using VeloxDev.Adapters.NativeSamplers;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 
-// 同名类型一律显式取 MAUI 的那一侧：System.Drawing 里也有一份 PointF/RectF/SizeF，量纲不同、不能混。
+// 同名类型一律显式取 MAUI 的那一侧：PointF / SizeF 在 System.Drawing 里也各有一份，量纲不同、不能混。
 using MauiColor = Microsoft.Maui.Graphics.Color;
 using MauiLinearGradientBrush = Microsoft.Maui.Controls.LinearGradientBrush;
 using MauiCornerRadius = Microsoft.Maui.CornerRadius;
@@ -14,12 +14,12 @@ using MauiMatrix = Microsoft.Maui.Controls.Shapes.Matrix;
 using MauiPoint = Microsoft.Maui.Graphics.Point;
 using MauiPointF = Microsoft.Maui.Graphics.PointF;
 using MauiRect = Microsoft.Maui.Graphics.Rect;
+using MauiRectF = Microsoft.Maui.Graphics.RectF;
 using MauiShadow = Microsoft.Maui.Controls.Shadow;
 using MauiSize = Microsoft.Maui.Graphics.Size;
 using MauiSizeF = Microsoft.Maui.Graphics.SizeF;
 using MauiThickness = Microsoft.Maui.Thickness;
 using MauiTransform = Microsoft.Maui.Controls.Shapes.Transform;
-using SysRectangleF = System.Drawing.RectangleF;
 
 namespace Demo;
 
@@ -167,8 +167,8 @@ internal static class SamplerProbe
             () => new MauiPointF(10, 20), () => new MauiPointF(110, 220)),
         new(Kinds.RectSampler, "矩形：原点外推，宽高共用进度并在 0 处停住 —— 画不出负宽度的矩形。", nameof(SamplerSubject.Area), () => new RectSampler(),
             () => new MauiRect(0, 0, 100, 50), () => new MauiRect(100, 200, 0, 150)),
-        new(Kinds.RectFSampler, "单精度矩形：产物是 System.Drawing.RectangleF，与 MAUI 自己的 Rect 不是同一个类型。", nameof(SamplerSubject.AreaF), () => new RectFSampler(),
-            () => new SysRectangleF(0, 0, 100, 50), () => new SysRectangleF(100, 200, 0, 150)),
+        new(Kinds.RectFSampler, "单精度矩形：产物就是 MAUI 自己的 RectF，与双精度的 Rect 是两个类型。", nameof(SamplerSubject.AreaF), () => new RectFSampler(),
+            () => new MauiRectF(0, 0, 100, 50), () => new MauiRectF(100, 200, 0, 150)),
         new(Kinds.ShadowSampler, "阴影：颜色在 t≥0.5 处直接换成端点刷（不插色），偏移、不透明度、半径各自插值。", nameof(SamplerSubject.ShadowValue), () => new ShadowSampler(), ShadowStart, ShadowEnd),
         new(Kinds.SizeSampler, "尺寸：宽高共用进度并在 0 处停住，下降的那一端过冲会被截住。", nameof(SamplerSubject.Extent), () => new SizeSampler(),
             () => new MauiSize(100, 50), () => new MauiSize(0, 150)),
@@ -350,8 +350,8 @@ internal static class SamplerProbe
         MauiPoint point => new("Point", [point.X, point.Y]),
         MauiPointF pointF => new("PointF", [pointF.X, pointF.Y]),
         MauiRect rect => new("Rect", [rect.X, rect.Y, rect.Width, rect.Height]),
-        // 不是 MAUI 自己的 RectF：适配器的 RectFSampler 操作的是 System.Drawing.RectangleF。
-        SysRectangleF rectF => new("RectangleF", [rectF.X, rectF.Y, rectF.Width, rectF.Height]),
+        // 适配器的 RectFSampler 按注册键操作的就是 MAUI 自己的 RectF；System.Drawing.RectangleF 那条键在 Core。
+        MauiRectF rectF => new("RectF", [rectF.X, rectF.Y, rectF.Width, rectF.Height]),
         MauiSize size => new("Size", [size.Width, size.Height]),
         MauiSizeF sizeF => new("SizeF", [sizeF.Width, sizeF.Height]),
         MauiThickness thickness
@@ -525,45 +525,27 @@ internal static class SamplerProbe
         /// </summary>
         /// <param name="sampler">跑的是哪条采样器。</param>
         /// <param name="sequence">点击序号，与 <c>over.conf</c> 共用 —— 载荷靠它证明这一份是新的。</param>
-        /// <param name="error">起动画时就抛出来的异常，没有则为 null。</param>
         internal string Digest(string sampler, long sequence)
-
             => $"v=1;seq={sequence};done=1;sampler={sampler};" + RowFields();
 
-
         /// <summary>
-
         /// 这一行那组字段，前缀是 <c>l.&lt;采样器名&gt;.</c> —— 批量载荷里十几行并排，靠它分得开。
-
         /// </summary>
-
         internal string BatchFields(string sampler)
-
         {
-
             var prefix = $"l.{sampler}.";
-
             var payload = new StringBuilder();
 
-
             foreach (var field in RowFields().Split(';', StringSplitOptions.RemoveEmptyEntries))
-
             {
-
                 payload.Append(prefix).Append(field).Append(';');
-
             }
 
-
             return payload.ToString();
-
         }
 
-
         private string RowFields()
-
             => $"type={_type};k={_last.Length};samples={_samples};bad={_bad};err={Sanitize(_error)};"
-
              + $"last={Vector(_last)};min={Vector(_min)};max={Vector(_max)};";
 
         /// <summary>点击那一刻先写一份，让验收侧立刻看到这一份是新的，然后等 <see cref="Digest"/>。</summary>

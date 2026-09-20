@@ -32,6 +32,8 @@ internal static class WpfEntries
         public Brush Fill { get; set; } = null!;
         public Color Tint { get; set; }
         public CornerRadius Corners { get; set; }
+        // 声明成抽象基类 Effect，对齐 WPF 自己的 UIElement.Effect DP 与真 demo 的形状 —— 这个声明类型就是注册键，
+        // 由 WPF 注册的 typeof(Effect) 解析到 DropShadowEffectSampler（下面两条条目各用一半）。
         public Effect Shadow { get; set; } = null!;
         public Point3D Anchor3D { get; set; }
         public Point Anchor { get; set; }
@@ -75,6 +77,7 @@ internal static class WpfEntries
         return new SamplerEntry
         {
             SamplerType = samplerType,
+            ValueType = entry.ValueType,
             Adapter = entry.Adapter,
             Rule = entry.Rule,
             Write = entry.Write,
@@ -213,6 +216,7 @@ internal static class WpfEntries
                 Opacity = Clamp01(Lerp(0.2, 0.8, t)),
                 BlurRadius = Lerp(10d, 60d, t),
             },
+            // 属性声明成抽象基类 Effect（WPF 自己的 UIElement.Effect DP 就是它），解析靠 WPF 注册的 typeof(Effect)。
             EffectEquivalent),
 
         Entry(CrossAdapter("Point3DSampler"), SamplerRule.Extrapolate,

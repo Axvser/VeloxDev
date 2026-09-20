@@ -85,6 +85,7 @@ internal static class AvaloniaEntries
         return new SamplerEntry
         {
             SamplerType = samplerType,
+            ValueType = entry.ValueType,
             Adapter = entry.Adapter,
             Rule = entry.Rule,
             Write = entry.Write,

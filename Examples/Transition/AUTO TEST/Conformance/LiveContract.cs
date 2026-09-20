@@ -31,8 +31,10 @@ internal static class LiveContract
         ["SizeF"] = [new(0, 1, 0d, double.PositiveInfinity)],
         ["PixelSize"] = [new(0, 1, 0d, double.PositiveInfinity)],
 
-        // 矩形的前两个分量是原点，可以为负；后两个是尺寸。
+        // 矩形的前两个分量是原点，可以为负；后两个是尺寸。两个单精度矩形的分量序相同，各占一个键：
+        // RectF 是 MAUI 那条 live 载荷的标签，RectangleF 是 Core 那条 System.Drawing 单精度矩形。
         ["Rect"] = [new(2, 3, 0d, double.PositiveInfinity)],
+        ["RectF"] = [new(2, 3, 0d, double.PositiveInfinity)],
         ["RectangleF"] = [new(2, 3, 0d, double.PositiveInfinity)],
         ["PixelRect"] = [new(2, 3, 0d, double.PositiveInfinity)],
 

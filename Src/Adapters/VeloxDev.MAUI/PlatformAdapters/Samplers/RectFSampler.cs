@@ -1,6 +1,4 @@
-﻿using System.Drawing;
-
-namespace VeloxDev.Adapters.NativeSamplers
+﻿namespace VeloxDev.Adapters.NativeSamplers
 {
     public class RectFSampler : ISampler
     {
@@ -11,8 +9,8 @@ namespace VeloxDev.Adapters.NativeSamplers
         {
 
             // Handle null values by providing defaults.
-            var r1 = (RectangleF)(start ?? RectangleF.Empty);
-            var r2 = (RectangleF)(end ?? RectangleF.Empty);
+            var r1 = (RectF)(start ?? new RectF());
+            var r2 = (RectF)(end ?? new RectF());
 
             var deltaX = r2.X - r1.X;
             var deltaY = r2.Y - r1.Y;
@@ -24,7 +22,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             var size = new BoundedProgress(t, 0d, double.PositiveInfinity);
             size.Add(r1.Width, r2.Width);
             size.Add(r1.Height, r2.Height);
-            property.SetValue(target, new RectangleF(
+            property.SetValue(target, new RectF(
                 r1.X + deltaX * (float)t,
                 r1.Y + deltaY * (float)t,
                 r1.Width + deltaWidth * (float)size.Progress,

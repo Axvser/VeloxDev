@@ -29,6 +29,26 @@ internal sealed class SamplerEntry
     /// <summary>The sampler's type, which is also what the coverage check matches against reflection.</summary>
     internal required Type SamplerType { get; init; }
 
+    /// <summary>
+    /// The declared type of the property this entry animates — and therefore the key the registry is looked up
+    /// with, since <c>InterpolatorCore.Prepare</c> resolves a sampler by the property's declared type.
+    /// </summary>
+    /// <remarks>
+    /// Paired with <see cref="SamplerType"/>: that one says <em>who runs</em>, this one says <em>which type of value
+    /// runs</em>. The registry is keyed by <see cref="Type"/> itself, assembly included, so two same-named types are
+    /// two keys and cannot collide — what breaks is a key of one type next to a sampler that unboxes another. That
+    /// compiles clean and the coverage check cannot see it, because it compares sampler type <em>sets</em>;
+    /// <see cref="SamplerKeyTests"/> is the check that puts the two halves together.
+    /// </remarks>
+    internal required Type ValueType { get; init; }
+
+    /// <summary>
+    /// Why the registry must <em>not</em> resolve <see cref="ValueType"/> to <see cref="SamplerType"/>, or null when
+    /// it must. Non-null is a claim, not an escape hatch: <see cref="SamplerKeyTests"/> fails if the key exists after
+    /// all, the same way <c>UnreachableSamplers</c> fails when its value turns out to be constructible.
+    /// </summary>
+    internal string? UnregisteredReason { get; init; }
+
     /// <summary>Which adapter the sampler belongs to, for the failure messages.</summary>
     internal required string Adapter { get; init; }
 

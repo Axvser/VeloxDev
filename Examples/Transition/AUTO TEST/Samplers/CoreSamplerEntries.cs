@@ -75,10 +75,11 @@ internal static class CoreSamplerEntries
         return new SamplerEntry
         {
             SamplerType = sampler.GetType(),
+            ValueType = property.PropertyType,
             Adapter = adapter,
             Rule = rule,
             Equivalent = equivalent ?? ExactEquivalent,
-            Write = (_, t) =>
+            Write = (sampler, t) =>
             {
                 var target = new Target();
                 object? working = null;
@@ -247,6 +248,10 @@ internal static class CoreSamplerEntries
         return new SamplerEntry
         {
             SamplerType = core.GetType("VeloxDev.TransitionSystem.Abstractions.StructAssemblerSampler", throwOnError: true)!,
+            ValueType = property.PropertyType,
+            // 注册表里不该有这条键：复合值类型走的是 Prepare 的第三条路（StructAssembler.Create 现造一个采样器），
+            // 而不是按声明类型查表。SamplerKeyTests 从反面核这句话 —— 真去查一次，查出键来它就红。
+            UnregisteredReason = "复合值类型的采样器由 StructAssembler.Create 每次动画现造，不按声明类型注册。",
             Adapter = "Core",
             Rule = SamplerRule.Saturate,
             Create = () => (ISampler)(assemble.Invoke(null, arguments)

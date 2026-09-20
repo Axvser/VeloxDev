@@ -37,9 +37,12 @@ internal static class EntryFactory
         return new SamplerEntry
         {
             SamplerType = typeof(TSampler),
+            ValueType = property.PropertyType,
             Adapter = adapter,
             Rule = rule,
-            Write = (_, t) =>
+            // 用传进来的那个实例，而不是上面捕获的：两者同型，采样器又是无状态单例，结果一样 —— 但这样
+            // `Write` 才能被喂一个"注册表实际会用的那个采样器"，那正是 SamplerKeyTests 要问的问题。
+            Write = (sampler, t) =>
             {
                 var target = new TTarget();
                 object? working = null;

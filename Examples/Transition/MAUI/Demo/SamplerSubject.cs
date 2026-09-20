@@ -1,6 +1,6 @@
 using Microsoft.Maui.Controls.Shapes;
 
-// 同名类型一律显式取 MAUI 的那一侧：System.Drawing 里也有一份 PointF/RectF/SizeF，量纲不同、不能混。
+// 同名类型一律显式取 MAUI 的那一侧：PointF / SizeF 在 System.Drawing 里也各有一份，量纲不同、不能混。
 using MauiBrush = Microsoft.Maui.Controls.Brush;
 using MauiColor = Microsoft.Maui.Graphics.Color;
 using MauiGradientStop = Microsoft.Maui.Controls.GradientStop;
@@ -9,12 +9,12 @@ using MauiCornerRadius = Microsoft.Maui.CornerRadius;
 using MauiPoint = Microsoft.Maui.Graphics.Point;
 using MauiPointF = Microsoft.Maui.Graphics.PointF;
 using MauiRect = Microsoft.Maui.Graphics.Rect;
+using MauiRectF = Microsoft.Maui.Graphics.RectF;
 using MauiShadow = Microsoft.Maui.Controls.Shadow;
 using MauiSize = Microsoft.Maui.Graphics.Size;
 using MauiSizeF = Microsoft.Maui.Graphics.SizeF;
 using MauiThickness = Microsoft.Maui.Thickness;
 using MauiTransform = Microsoft.Maui.Controls.Shapes.Transform;
-using SysRectangleF = System.Drawing.RectangleF;
 
 namespace Demo;
 
@@ -103,7 +103,7 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
         Register(nameof(Area), typeof(MauiRect), default(MauiRect));
 
     public static readonly BindableProperty AreaFProperty =
-        Register(nameof(AreaF), typeof(SysRectangleF), default(SysRectangleF));
+        Register(nameof(AreaF), typeof(MauiRectF), default(MauiRectF));
 
     public static readonly BindableProperty ShadowValueProperty =
         Register(nameof(ShadowValue), typeof(MauiShadow), null);
@@ -135,8 +135,8 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
     /// <summary>矩形。名字不叫 <c>Bounds</c>（也不叫 <c>Frame</c>，那是它的旧名）：<see cref="VisualElement"/> 上那个只读的 <c>Bounds</c> 是布局算出来的位置与大小，两个名字都被占了。</summary>
     public MauiRect Area { get => (MauiRect)GetValue(AreaProperty); set => SetValue(AreaProperty, value); }
 
-    /// <summary>单精度矩形。适配器的 <c>RectFSampler</c> 操作的是 <see cref="SysRectangleF"/>，不是 MAUI 自己的 RectF。</summary>
-    public SysRectangleF AreaF { get => (SysRectangleF)GetValue(AreaFProperty); set => SetValue(AreaFProperty, value); }
+    /// <summary>单精度矩形。适配器的 <c>RectFSampler</c> 操作的就是 <see cref="MauiRectF"/>；<c>System.Drawing.RectangleF</c> 归 Core 的 <c>RectangleFSampler</c>，两条注册键互不相同。</summary>
+    public MauiRectF AreaF { get => (MauiRectF)GetValue(AreaFProperty); set => SetValue(AreaFProperty, value); }
 
     /// <summary>阴影。名字不叫 <c>Shadow</c>：<see cref="VisualElement"/> 上已经有一个 <c>Shadow</c>，而采样器的产物正是同一个类型。</summary>
     public MauiShadow? ShadowValue { get => (MauiShadow?)GetValue(ShadowValueProperty); set => SetValue(ShadowValueProperty, value); }

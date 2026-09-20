@@ -72,6 +72,7 @@ internal static class JaliumEntries
         return new SamplerEntry
         {
             SamplerType = SamplerType(samplerName),
+            ValueType = property.PropertyType,
             Adapter = Adapter,
             Rule = rule,
             Equivalent = equivalent ?? ExactEquivalent,
