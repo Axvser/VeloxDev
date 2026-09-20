@@ -88,7 +88,7 @@
 
 1. 实现 `IAgentPipelineStage`（`AgentPipeline.cs:16`），或直接用 `DelegateAgentPipelineStage`（`:26`）/ `Use(handler)` 重载（`:62`）。
 2. `pipeline.Use(stage)` 追加。顺序即执行顺序。
-3. 挂在 scope 的 pipeline 上：`WorkflowAgentScope.Pipeline`（`WorkflowAgentScope.cs:1383` 一带）返回的是**新建的组合**：`TextPipeline → SharedTools → CreateToolkit().CreateAccountingStage()`。想接在最后，就用 `WithPipeline(this AIAgent, …)`（`AgentPipelineAgent.cs:187`）或 `UseAgentPipeline(AIAgentBuilder, …)`（`:182`）。
+3. 挂在 scope 的 pipeline 上：`WorkflowAgentScope.Pipeline`（`WorkflowAgentScope.cs:1456` 的 getter，首次读时在 `:1471-1476` 组装并缓存进 `_pipeline`）返回的是**新建的组合**：`TextPipeline → SharedTools → CreateToolkit().CreateAccountingStage()`。想接在最后，就用 `WithPipeline(this AIAgent, …)`（`AgentPipelineAgent.cs:187`）或 `UseAgentPipeline(AIAgentBuilder, …)`（`:182`）。
 
 **捷径（能编译，但是错的）**
 
