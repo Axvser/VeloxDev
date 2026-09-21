@@ -78,6 +78,16 @@ public sealed partial class SubAgentTreeViewModel : IDisposable
     // during the walk rather than subscribed up front: children that do not exist yet cannot be named.
     private readonly Dictionary<SubAgentScope, EventHandler> _watched = [];
 
+    /// <summary>
+    /// Serializes rebuilds. The class-wide assumption is that they happen on one thread — the one this was
+    /// created on — and the queue below only *delivers* on that thread. With no context to post to (a panel
+    /// built off the UI thread, which is every test and any headless host) the rebuild runs inline on
+    /// whichever scope raised the change, and two children finishing in the same instant are two threads in
+    /// <see cref="Fill"/>. That is not a rare interleaving: it is what a fan-out does by construction, and
+    /// the corruption it causes lands as an exception inside a child's own run rather than here.
+    /// </summary>
+    private readonly object _rebuildGate = new();
+
     private List<SubAgentStatusViewModel> _flat = [];
     private bool _rebuildQueued;
     private bool _disposed;
@@ -121,17 +131,23 @@ public sealed partial class SubAgentTreeViewModel : IDisposable
     /// <summary>At least one sub-agent failed.</summary>
     public bool HasFailed => FailedCount > 0;
 
-    /// <summary>Rebuilds the tree from the scopes as they stand, on the calling thread.</summary>
+    /// <summary>
+    /// Rebuilds the tree from the scopes as they stand, on the calling thread. Serialized against every
+    /// other rebuild, so a caller does not have to be the thread the tree was created on to be safe.
+    /// </summary>
     public void Rebuild()
     {
-        if (_disposed) return;
+        lock (_rebuildGate)
+        {
+            if (_disposed) return;
 
-        var flat = new List<SubAgentStatusViewModel>();
-        Watch(_scope);
-        Fill(Roots, _scope, null, flat);
-        _flat = flat;
+            var flat = new List<SubAgentStatusViewModel>();
+            Watch(_scope);
+            Fill(Roots, _scope, null, flat);
+            _flat = flat;
 
-        NotifyCounts();
+            NotifyCounts();
+        }
     }
 
     /// <summary>
@@ -180,13 +196,18 @@ public sealed partial class SubAgentTreeViewModel : IDisposable
 
     private void QueueRebuild()
     {
-        if (_disposed || _rebuildQueued) return;
-        _rebuildQueued = true;
-
-        if (_ui is null || ReferenceEquals(_ui, SynchronizationContext.Current))
+        // Checked and set under the same gate the rebuild takes, or two threads raising at once would both
+        // see an unqueued flag, both queue, and the coalescing would guarantee nothing.
+        lock (_rebuildGate)
         {
-            Drain();
-            return;
+            if (_disposed || _rebuildQueued) return;
+            _rebuildQueued = true;
+
+            if (_ui is null || ReferenceEquals(_ui, SynchronizationContext.Current))
+            {
+                Drain();
+                return;
+            }
         }
 
         _ui.Post(_ => Drain(), null);
@@ -194,8 +215,11 @@ public sealed partial class SubAgentTreeViewModel : IDisposable
 
     private void Drain()
     {
-        _rebuildQueued = false;
-        Rebuild();
+        lock (_rebuildGate)
+        {
+            _rebuildQueued = false;
+            Rebuild();
+        }
     }
 
     /// <summary>
@@ -203,18 +227,21 @@ public sealed partial class SubAgentTreeViewModel : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_rebuildGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
 
-        foreach (var pair in _watched) pair.Key.Changed -= pair.Value;
-        _watched.Clear();
+            foreach (var pair in _watched) pair.Key.Changed -= pair.Value;
+            _watched.Clear();
 
-        // The counts go with the nodes. They are derived from the last rebuild, and a disposed panel can
-        // never be refreshed into agreement — Rebuild returns early once disposed — so a total left standing
-        // would describe children this panel no longer holds, for good.
-        Roots.Clear();
-        _flat = [];
-        NotifyCounts();
+            // The counts go with the nodes. They are derived from the last rebuild, and a disposed panel can
+            // never be refreshed into agreement — Rebuild returns early once disposed — so a total left standing
+            // would describe children this panel no longer holds, for good.
+            Roots.Clear();
+            _flat = [];
+            NotifyCounts();
+        }
     }
 
     private void NotifyCounts()
