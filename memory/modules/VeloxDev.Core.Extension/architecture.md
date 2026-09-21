@@ -42,7 +42,7 @@
 WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
   │  配置 facade：Version / 语言 / 预算 / 开关 / 子系统 / 工具注册
   │
-  ├─ CreateToolkit()  ──► WorkflowAgentToolkit          (每个 scope 一个实例，:1317)
+  ├─ CreateToolkit()  ──► WorkflowAgentToolkit          (每个 scope 一个实例，:1364)
   │                          ├─ CreateTools()    受 IsToolEnabled 过滤，给模型看   :74
   │                          └─ CreateAllTools() 不过滤，给宿主 UI 列全             :82
   │                          └─ Tools(ToolPipeline)  每 scope 一个，Refuse=CheckBudget  :242
@@ -72,7 +72,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 - `WorkflowAgentContextProvider.cs:15-19`：**provider 是工具的唯一来源**。Agent Framework 会把 provider 贡献的工具与 `ChatOptions.Tools` **并集**，且**不按名去重** —— 两条通道给同一个工具，模型就收到两份。所以 `Agent/AgentClientExtensions.cs` 的 `AsAIAgent(providers, instructions)` **刻意没有 tools 参数**。
 - `WorkflowAgentToolkit.cs:231-235`：`Tools` 是**每 scope 一个实例**，并且**同一个引用**交给各子系统 provider —— 这是「MCP 或技能贡献的工具与内置工具受同一套预算约束」的实现方式。钩子读 scope 的**实时**值，所以子系统挂上之后再调 `With*` 也能到达它们的工具。
-- `WorkflowAgentContextProvider.cs:92`：本 provider 只按 **`_scope.ContextKey`**（= `Version` + 预算用量档，见 `WorkflowAgentScope.cs:1832`）缓存。技能与 MCP 由各自的 provider 渲染，它们的版本变了不会影响这里，按它们开键只会重渲染一个没动过的切片。用量档进键是因为**它是唯一一个不 bump `Version` 也会变的事实**（每次工具调用都在动），而包络会陈述它。
+- `WorkflowAgentContextProvider.cs:92`：本 provider 只按 **`_scope.ContextKey`**（= `Version` + 预算用量档，见 `WorkflowAgentScope.cs:1879`）缓存。技能与 MCP 由各自的 provider 渲染，它们的版本变了不会影响这里，按它们开键只会重渲染一个没动过的切片。用量档进键是因为**它是唯一一个不 bump `Version` 也会变的事实**（每次工具调用都在动），而包络会陈述它。
 
 ---
 
@@ -95,7 +95,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 ## 四、四条承重的不变量
 
 1. **工具只从 provider 出，不从 `ChatOptions.Tools` 出。** 理由见上（并集不去重）。
-2. **每个 scope 一个 `WorkflowAgentToolkit`、一个 `ToolPipeline`、一个 `WorkflowAgentContextProvider`。** 工具计数与状态都在 toolkit 实例上，但**计数不再是三个裸字段**：每个 toolkit 持一个 `ToolCallLedger`（`WorkflowAgentToolkit.cs:31`），根 scope 的账本 `Outer == null`，被 spawn 出来的子 scope 经 `WorkflowAgentScope.ParentLedger`（`:1305`）接到父的账本上。换实例 = 换账本；**没有父子关系时账本的每个成员逐字退化成那三个计数器**，这是既有预算测试仍然有意义的前提。`WorkflowAgentScope.CreateToolkit()` 是 `_toolkit ??= new(this, ParentLedger)`（`:1317`），`CreateTools` 每次调用**新建工具列表**但复用同一个账本。这与 `ProvideTools()`（`:1327`，一次快照）的区别写在 `skills/veloxdev-drive-workflow-with-ai/SKILL.md:43`。详见 `sub-agents.md` §二。
+2. **每个 scope 一个 `WorkflowAgentToolkit`、一个 `ToolPipeline`、一个 `WorkflowAgentContextProvider`。** 工具计数与状态都在 toolkit 实例上，但**计数不再是三个裸字段**：每个 toolkit 持一个 `ToolCallLedger`（`WorkflowAgentToolkit.cs:31`），根 scope 的账本 `Outer == null`，被 spawn 出来的子 scope 经 `WorkflowAgentScope.ParentLedger`（`:1352`）接到父的账本上。换实例 = 换账本；**没有父子关系时账本的每个成员逐字退化成那三个计数器**，这是既有预算测试仍然有意义的前提。`WorkflowAgentScope.CreateToolkit()` 是 `_toolkit ??= new(this, ParentLedger)`（`:1364`），`CreateTools` 每次调用**新建工具列表**但复用同一个账本。这与 `ProvideTools()`（`:1374`，一次快照）的区别写在 `skills/veloxdev-drive-workflow-with-ai/SKILL.md:43`。详见 `sub-agents.md` §二。
 3. **提示词按三个时钟切成三份，各有各的载体。** 混起来就会得到一个每轮重建 870 KB、或者永远过期的提示词。
 
 | 内容 | 变化时钟 | 载体 | 缓存键 |
@@ -104,7 +104,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 | **能力包络**（闸门 / 关掉的工具 / 预算 / 挡位漂移 / 类型差量） | 配置变更 + 预算用量档 | provider 的 `AIContext.Instructions`（框架**追加**在骨架之后，逐字 `"骨架\n"` 前缀稳定） | `ContextKey` = `Version` + 用量档 |
 | 预算消耗 | 每轮 | 包络内，**分档**：仅 ≥ 上限 80% 时出现，20% 一档 | 靠分档自然稳定 —— 整个预算生命周期最多变 2 次 |
 
-**骨架收据**（`_skeletonReceipt`，`WorkflowAgentScope.cs:1757`）是「不说两遍」的机制：骨架渲染时记下它写了什么快照，包络只补漂移的那几段，并用「取代上文」措辞。骨架从没被渲染过时，包络全量输出。**代价**：它假定「渲染出来的骨架就是交给模型的那份」—— 拿去当预览/日志渲染会让包络以为已经说过。
+**骨架收据**（`_skeletonReceipt`，`WorkflowAgentScope.cs:1804`）是「不说两遍」的机制：骨架渲染时记下它写了什么快照，包络只补漂移的那几段，并用「取代上文」措辞。骨架从没被渲染过时，包络全量输出。**代价**：它假定「渲染出来的骨架就是交给模型的那份」—— 拿去当预览/日志渲染会让包络以为已经说过。
 
 **图状态刻意不进包络**：渐进披露，模型自己 `ListNodes`。
 
@@ -122,8 +122,8 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 | 哪些工具算「只读」、脏标记怎么落 | `WorkflowAgentToolkit.cs:332`（`BuildQueryToolNames`）+ `:373` |
 | 工具预算（三档、拒绝文案、重置流程） | `WorkflowAgentToolkit.cs:277`（`CheckBudget`）、`:359`（`AccountAsync`）、`:390`（`ResetToolCallLimit`）、`:475`（`BudgetRefusal` 的根/子分叉）、`Agent/Workflow/Functions/ToolCallLedger.cs`（树共享的那口锅）。**上限本身**由 `WithMax{Tool,Read,Write}ToolCalls` 设，三个都 `BumpVersion()` —— 门（`CheckBudget`）读的是实时属性，包络读的是缓存文本，不 bump 就会让模型读到一个不被执行的上限 |
 | 子代理（派发 / 窄化 / 任意深度为什么终止） | `Agent/SubAgents/`（见 `sub-agents.md`） |
-| 提示词（行为约束、失败处理、渐进模式） | `Agent/Workflow/WorkflowAgentScope.cs:1079`（`ProvideProgressiveContextPrompt`）、`:645`（`BuildFailureHandlingProtocol`） |
-| 各级安全挡位注入什么 | `WorkflowAgentScope.cs:597`（`BuildInteractionSafetyPrompt`）+ `Resources/Workflow/{lang}/Safety/*.md` |
+| 提示词（行为约束、失败处理、渐进模式） | `Agent/Workflow/WorkflowAgentScope.cs:1126`（`ProvideProgressiveContextPrompt`）、`:692`（`BuildFailureHandlingProtocol`） |
+| 各级安全挡位注入什么 | `WorkflowAgentScope.cs:644`（`BuildInteractionSafetyPrompt`）+ `Resources/Workflow/{lang}/Safety/*.md` |
 | 每轮渲染的指令与工具 | `Agent/Workflow/WorkflowAgentContextProvider.cs:86`（`BuildContext`）；指令是**能力包络**，不是 `null` —— 见 §四.3 |
 | 待办清单 / 运行模式 / 上下文压缩 | 三个都是**框架自带的 provider**，本模块只负责挂上去 —— 见 `native-capabilities.md` |
 | 每轮都用哪些 provider、按什么顺序 | `WorkflowAgentScope.CreateContextProviders()`；工具只从这里出，不走 `ChatOptions.Tools` |
@@ -143,13 +143,13 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 | 成员 | 位置 | 状态 |
 |---|---|---|
 | `ReadScript` / `ListScripts` / `ReadAllScripts` | `AgentEmbeddedResources.cs:135 / :141 / :147` | **零调用者**（三个只互相调用）。XML 注释宣称读 `Resources/{system}/Scripts/{name}`（`:132`），而 `Resources/Workflow/` 下**只有 `en/`、`zh/` 两个目录**，其下只有 `References/`、`Safety/`、`Skills/`。**没有 `Scripts/`** |
-| `ReadSafetyFiles` | `AgentEmbeddedResources.cs:114` | **零调用者**。单个 `ReadSafety`（`:108`）是活的（`WorkflowAgentScope.cs:609`、`:616`） |
-| `ReadReference`（单个）/ `ListReferences` | `AgentEmbeddedResources.cs:86 / :92` | **零调用者**（只有一个「全读」的 `ReadAllReferences` 是活的：`WorkflowAgentScope.cs:1036`、`:1159`） |
-| `ProvideAllContexts` | `WorkflowAgentScope.cs:1023 / :1025` | **仓库内零外部调用者**（无参重载只转发给有参重载）。是给宿主的另一档提示模式，宿主样例走的是渐进模式（`AgentHelper.cs` 调 `ProvideProgressiveContextPrompt`）。**它和渐进模式一样会写骨架收据**，所以两档都算「骨架已交付」 |
-| `BuildDynamicInstructions()` | `WorkflowAgentScope.cs:1863` | **2b 起不再是预留坑位**：渲染**能力包络**（闸门 / 被关掉的工具 / 调用预算的分档用量 / 相对骨架的漂移段）。按 `ContextKey` 缓存，空闲轮零分配；**绝不调用** `ProvideProgressiveContextPrompt`（骨架一次 870 KB，是它的 1,100 倍） |
+| `ReadSafetyFiles` | `AgentEmbeddedResources.cs:114` | **零调用者**。单个 `ReadSafety`（`:108`）是活的（`WorkflowAgentScope.cs:656`、`:663`） |
+| `ReadReference`（单个）/ `ListReferences` | `AgentEmbeddedResources.cs:86 / :92` | **零调用者**（只有一个「全读」的 `ReadAllReferences` 是活的：`WorkflowAgentScope.cs:1083`、`:1206`） |
+| `ProvideAllContexts` | `WorkflowAgentScope.cs:1070 / :1072` | **仓库内零外部调用者**（无参重载只转发给有参重载）。是给宿主的另一档提示模式，宿主样例走的是渐进模式（`AgentHelper.cs` 调 `ProvideProgressiveContextPrompt`）。**它和渐进模式一样会写骨架收据**，所以两档都算「骨架已交付」 |
+| `BuildDynamicInstructions()` | `WorkflowAgentScope.cs:1910` | **2b 起不再是预留坑位**：渲染**能力包络**（闸门 / 被关掉的工具 / 调用预算的分档用量 / 相对骨架的漂移段）。按 `ContextKey` 缓存，空闲轮零分配；**绝不调用** `ProvideProgressiveContextPrompt`（骨架一次 870 KB，是它的 1,100 倍） |
 | `WorkflowToolCategory.Layout`（`1<<5`）、`Composite`（`1<<8`） | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | 保留位，**没有工具注册在这两个类别下**（与 `WorkflowAgentToolkit.cs:185-186` 的「不做复合工具」一致） |
 
-**推论**：改 `Resources/` 时不要以为加一个 `Scripts/` 目录就会被自动加载 —— 加载器在（`ListScriptCategory`），调用者在（`ReadAllScripts`），但**没有第三方调用它**。同理，加 `Safety/Level4.md` 不会有任何效果，档位取值域是 `_interactionSafety > 0` 且文件名按 `$"Level{_interactionSafety}"` 拼（`WorkflowAgentScope.cs:616`），级别的语义定义在 `McpSelfServiceLevel.cs` 之外的那套交互挡位上，要新加挡位必须同时改宿主。
+**推论**：改 `Resources/` 时不要以为加一个 `Scripts/` 目录就会被自动加载 —— 加载器在（`ListScriptCategory`），调用者在（`ReadAllScripts`），但**没有第三方调用它**。同理，加 `Safety/Level4.md` 不会有任何效果，档位取值域是 `_interactionSafety > 0` 且文件名按 `$"Level{_interactionSafety}"` 拼（`WorkflowAgentScope.cs:663`），级别的语义定义在 `McpSelfServiceLevel.cs` 之外的那套交互挡位上，要新加挡位必须同时改宿主。
 
 ---
 

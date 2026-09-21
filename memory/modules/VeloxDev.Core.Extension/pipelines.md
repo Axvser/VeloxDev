@@ -8,7 +8,7 @@
 
 | 层 | 拥有什么 | 不拥有什么 |
 |---|---|---|
-| **MAF agent 中间件**（`AgentPipelineAgent.cs:29`，`DelegatingAIAgent` 子类） | 「一次 run 何时发生、返回什么」。坐在框架**官方的 middleware 槽位**里，把一次 run 拆成事件发布出去 | 不发工具调用事件 —— 那是 `TrackedAIFunction` 的活 |
+| **MAF agent 中间件**（`AgentPipelineAgent.cs:33`，`DelegatingAIAgent` 子类） | 「一次 run 何时发生、返回什么」。坐在框架**官方的 middleware 槽位**里，把一次 run 拆成事件发布出去 | 不发工具调用事件 —— 那是 `TrackedAIFunction` 的活 |
 | **`AgentPipeline`**（`AgentPipeline.cs:46`） | 一条有序 stage 链 + 失败隔离。这是**本库自己的一层**，不是 MAF 的 | 不驱动 run。stage 只「观察」，通过叫不叫 `next` 决定下游看见什么（`:16-23`） |
 | **`TrackedAIFunction`**（`TrackedAIFunction.cs:29`） | 工具调用这一侧的唯一事件源。它在 MAF 的 `DelegatingAIFunction` 槽位上，因此与 agent 中间件天然互补 | 不持有 pipeline 的所有权，只是往上面 publish |
 
@@ -78,7 +78,7 @@
 
 同一个模式在 `TrackedAIFunction.RunOnContextAsync`（`:104`）里复现，注释说明了为什么**不能**用阻塞式 `Send`：工具体自己可能在 UI 线程上，阻塞式投递会**死锁**。（对比：`Agent/Skills/SkillScope.cs:RunOnUI` 用的就是阻塞 `Send`，因为技能刷新是纯 UI 侧操作、不在工具体内。）
 
-**同步上下文解析是延迟的** —— `ToolPipeline.MarshalTo` 是 `Func<SynchronizationContext?>`（`WorkflowAgentToolkit.cs:214` 传入 `() => _scope.UIContext`）。理由：宿主完全可能在 toolkit 已经建好**之后**才调 `WithSynchronizationContext`。
+**同步上下文解析是延迟的** —— `ToolPipeline.MarshalTo` 是 `Func<SynchronizationContext?>`（`WorkflowAgentToolkit.cs:242` 传入 `() => _scope.UIContext`）。理由：宿主完全可能在 toolkit 已经建好**之后**才调 `WithSynchronizationContext`。
 
 ---
 
@@ -88,17 +88,17 @@
 
 1. 实现 `IAgentPipelineStage`（`AgentPipeline.cs:16`），或直接用 `DelegateAgentPipelineStage`（`:26`）/ `Use(handler)` 重载（`:62`）。
 2. `pipeline.Use(stage)` 追加。顺序即执行顺序。
-3. 挂在 scope 的 pipeline 上：`WorkflowAgentScope.Pipeline`（`WorkflowAgentScope.cs:1456` 的 getter，首次读时在 `:1471-1476` 组装并缓存进 `_pipeline`）返回的是**新建的组合**：`TextPipeline → SharedTools → CreateToolkit().CreateAccountingStage()`。想接在最后，就用 `WithPipeline(this AIAgent, …)`（`AgentPipelineAgent.cs:187`）或 `UseAgentPipeline(AIAgentBuilder, …)`（`:182`）。
+3. 挂在 scope 的 pipeline 上：`WorkflowAgentScope.Pipeline`（`WorkflowAgentScope.cs:1526` 的 getter，首次读时在 `:1541-1546` 组装并缓存进 `_pipeline`）返回的是**新建的组合**：`TextPipeline → SharedTools → CreateToolkit().CreateAccountingStage()`。想接在最后，就用 `WithPipeline(this AIAgent, …)`（`AgentPipelineAgent.cs:187`）或 `UseAgentPipeline(AIAgentBuilder, …)`（`:182`）。
 
 **捷径（能编译，但是错的）**
 
 | 捷径 | 为什么错 |
 |---|---|
 | 在 stage 里抛异常来中断 run | 异常被 `InvokeAsync` 吞成 `StageFailed`（`AgentPipeline.cs:103-106`）；在工具路径上它已经被外层 `catch` 变成工具错误了 |
-| 在 stage 里 `await Task.Run(...)` 或 `ConfigureAwait(false)` 之后改 transcript | 片段会落到线程池线程上；`AgentTranscript` 不是线程安全的（`AgentTranscript.cs:144`），且 `ObservableCollection` 的绑定会被跨线程改 |
-| 自己 `new ToolPipeline(...)` 给子系统用 | 会得到**另一本预算账本**。共享同一个 `WorkflowAgentToolkit.Tools`（`WorkflowAgentToolkit.cs:214`）才是官方做法 —— `CreateContextProviders()` 就是这么把同一个引用递下去的 |
+| 在 stage 里 `await Task.Run(...)` 或 `ConfigureAwait(false)` 之后改 transcript | 片段会落到线程池线程上；`AgentTranscript` 不是线程安全的（`AgentTranscript.cs:163`），且 `ObservableCollection` 的绑定会被跨线程改 |
+| 自己 `new ToolPipeline(...)` 给子系统用 | 会得到**另一本预算账本**。共享同一个 `WorkflowAgentToolkit.Tools`（`WorkflowAgentToolkit.cs:242`）才是官方做法 —— `CreateContextProviders()` 就是这么把同一个引用递下去的 |
 | 想「抑制」某个事件却只在 stage 里 `return` | 不调 `next` 只对**下游**生效，`AgentPipeline` 自己的 `StageFailed` / 上游观察者仍然看得见 |
-| 往 pipeline 里塞「工具过滤」 | 工具过滤在 `CreateTools` 的 `.Where(IsToolEnabled)`（`WorkflowAgentToolkit.cs:47`）与 `CheckBudget`（`:255`）两处。stage 层过滤会绕过预算记账与脏标记 |
+| 往 pipeline 里塞「工具过滤」 | 工具过滤在 `CreateTools` 的 `.Where(IsToolEnabled)`（`WorkflowAgentToolkit.cs:75`）与 `CheckBudget`（`:283`）两处。stage 层过滤会绕过预算记账与脏标记 |
 
 ---
 

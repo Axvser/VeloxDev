@@ -64,7 +64,7 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 
 | 替身 | 在哪 | 顶替什么 |
 |---|---|---|
-| `ScriptedChatClient` | `Agent/Pipelines/AgentPipelineTests.cs:26` | 手写的 `IChatClient`，重放固定流。类注释（`:11-17`）写明它证明的是「管线怎么处理模型输出」，**不是**「某个模型会不会产出推理」—— 后者的所有者是端点，不是这里 |
+| `ScriptedChatClient` | `Agent/Pipelines/AgentPipelineTests.cs:26` | 手写的 `IChatClient`，重放固定流。类注释（`:12-21`）写明它证明的是「管线怎么处理模型输出」，**不是**「某个模型会不会产出推理」—— 后者的所有者是端点，不是这里 |
 | `SingleThreadContext : SynchronizationContext, IDisposable` | `Agent/Workflow/Functions/ToolThreadAffinityTests.cs:27` | 专用线程 + 真 `BlockingCollection` 队列；断言线程 id 在进入 / await 后 / 返回时不变 |
 | 手写 skill 目录 | `Agent/Skills/SkillScopeTests.cs:21` | `%TEMP%\veloxdev-skill-tests\<guid>` 下写 `SKILL.md` |
 | `RecordingChatClient` / `OfflineAgent.RunOnce` | `Agent/Workflow/RecordingChatClient.cs:15` | 记录型 `IChatClient`：跑一次真 agent，把 `ChatOptions.Tools` 的名字与所有系统文本录下来。用来断言**模型实际被喂了什么**，而不是「provider 说自己会喂什么」。**共享替身文件之一**（另一个是下面那个）—— 见 §六 |
@@ -82,7 +82,7 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
 | 测试条数 | **371**（含 `Agent/SubAgents/SubAgentLiveTests.cs` 的 3 条门控实测） |
-| 耗时 | **5–8 s**（有 `API_KEY_DEEPSEEK`，那 3 条真的走网络；实测连续 6 轮为 5/5/5/6/7/7/8 s）/ 无 key 时全量约 10 s 后**中止**（见下），而 `--filter FullyQualifiedName~Agent.SubAgents` 无 key 只需 **0.44–0.49 s** |
+| 耗时 | **5–8 s**（有 `API_KEY_DEEPSEEK`，那 3 条真的走网络；实测连续 6 轮为 5/5/5/6/7/7/8 s）/ 无 key 时全量会在跑到 122~246 条之间**中止**（见下），而 `--filter FullyQualifiedName~Agent.SubAgents` 无 key 只需 **0.44–0.49 s** |
 | 失败 | 0 |
 
 **为什么离线部分比姊妹模块快得多**：这里几乎没有真实时钟。全部真实等待只有三处：
@@ -102,16 +102,16 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 ```
 活动的测试运行已中止。原因: 测试主机进程崩溃 : Unhandled exception.
 System.InvalidOperationException: Environment variable 'API_KEY_DEEPSEEK' is not configured.
-   at Demo.ViewModels.Workflow.Helper.AgentHelper.ProvideAgent(...) AgentHelper.cs:line 266
-   at Demo.ViewModels.Workflow.Helper.AgentHelper.Install(...)      AgentHelper.cs:line 124
+   at Demo.ViewModels.Workflow.Helper.AgentHelper.ProvideAgent(...) AgentHelper.cs:line 285
+   at Demo.ViewModels.Workflow.Helper.AgentHelper.Install(...)      AgentHelper.cs:line 140
    at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
 ```
 
-**直接原因是 `Examples/` 的既有缺陷，不是子代理代码**：`AgentHelper.Install` 是 `public async override void`（`AgentHelper.cs:119`），里面 `await ProvideAgent(...)`（`:186`）在缺 key 时于 `:265` 抛，异常从 `async void` 逃逸到线程池 → **宿主进程崩溃**。触发它的测试是 `Examples/AgentTranscriptTests.cs:138`（那里把一个 `TreeViewModel` 的 `Helper` 转成 `AgentHelper`，构造即 `Install`）。
+**直接原因是 `Examples/` 的既有缺陷，不是子代理代码**：`AgentHelper.Install` 是 `public async override void`（`AgentHelper.cs:135`），里面 `await ProvideAgent(...)`（`:140`）在缺 key 时于 `:285` 抛，异常从 `async void` 逃逸到线程池 → **宿主进程崩溃**。触发它的测试是 `Examples/AgentTranscriptTests.cs:138`（那里把一个 `TreeViewModel` 的 `Helper` 转成 `AgentHelper`，构造即 `Install`）。
 
-**中止点的计数是竞态的，别把某一次的读数当基准**。两次实测分别是 `失败 3 + 通过 240 + 跳过 3 = 246` 与 `失败 0 + 通过 206 + 跳过 3 = 209` —— 崩在哪一刻决定了有多少条测试还没来得及报结果，其中那几条「失败」全是**正在跑的**子代理测试被连坐成的 `TimeoutException`，没有一条是完整的断言失败。
+**中止点的计数是竞态的，别把某一次的读数当基准**。三次实测分别是 `失败 3 + 通过 240 + 跳过 3 = 246`、`失败 0 + 通过 206 + 跳过 3 = 209` 与 `通过 122 = 122` —— 崩在哪一刻决定了有多少条测试还没来得及报结果，其中那几条「失败」全是**正在跑的**子代理测试被连坐成的 `TimeoutException`，没有一条是完整的断言失败。第三次的 122 比前两次低，原因是可复现的：demo 的宿主接线为了挂子代理，把「解析模型」挪到了骨架渲染之前（`AgentHelper.cs:282-291`），于是缺 key 这件事**更早**抛。这是同一个缺陷更早触发，不是新增的缺陷。
 
-那么为什么**以前不红**：抛出的时机是竞态的，只有整轮跑得够久它才落在测试宿主收集结果的窗口内。本模块原有的 281 条跑完只要 0.45 s，够快；加了 90 条子代理测试后，无 key 时整轮变成 ~10 s，它就落进来了。三条独立实验钉住了这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除 3 条门控测试、只留下子代理那 90 条，仍然红**。
+那么为什么**以前不红**：抛出的时机是竞态的 —— 异常从 `async void` 逃逸后由线程池接住，只有它恰好落在测试宿主收集结果的窗口内才会崩掉整轮。本模块原有的 281 条跑完只要 0.45 s，不够久也不够忙；加了 90 条子代理测试（它们各自在 `Thread.Sleep(5)` 轮询、把整轮拉长了十几倍）之后，它稳定地落进来了。**是「时长」还是「线程池压力」在起决定作用，我没有单独隔离**，能确定的是子代理那一批就是那个差。三条独立实验钉住这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除 3 条门控测试、只留下子代理那 90 条，仍然红**。
 
 **结论**：本模块自己的门控约定是成立的 —— `SubAgentLiveTests` 缺 key 时 `Assert.Inconclusive`，MSTest 4.0.2 下报成**已跳过**（`--filter FullyQualifiedName~Agent.SubAgents` 无 key = 87 通过 + 3 跳过，0 失败，0.44–0.49 s）。红的是全量轮次，根因在 `Examples/` 的 `async void`。**修它要动 demo，本仓库当前的选择是不动** —— 所以这条要一直记着，别把它误判成本模块的回归。
 
@@ -190,8 +190,8 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 | 并行度 | `MSTestSettings.cs:1` |
 | 加一个模型替身 | `Agent/Pipelines/AgentPipelineTests.cs:26` 的 `ScriptedChatClient`（目前私有） |
 | 加一个同步上下文替身 | `Agent/Workflow/Functions/ToolThreadAffinityTests.cs:27` 的 `SingleThreadContext` |
-| 加一个「卡住 / 放行」的模型替身 | `Agent/SubAgents/SubAgentDoubles.cs:106` 的 `GateChatClient`（并发、超时、取消全靠它） |
-| 造一个父子 scope 现场 | `Agent/SubAgents/SubAgentDoubles.cs:535` 的 `SubAgentFixture`（`DescendantSubAgents(path)` 拿任意一层孙代理的名册；`skills` / `mcp` / `customTools` 三个可选参数把父装成带能力的宿主） |
+| 加一个「卡住 / 放行」的模型替身 | `Agent/SubAgents/SubAgentDoubles.cs:59` 的 `GateChatClient`（并发、超时、取消全靠它；`WaitForCalls` 在 `:106`） |
+| 造一个父子 scope 现场 | `Agent/SubAgents/SubAgentDoubles.cs:291` 的 `SubAgentFixture`（`WaitFor` 在 `:535`；`DescendantSubAgents(path)` 拿任意一层孙代理的名册；`skills` / `mcp` / `customTools` 三个可选参数把父装成带能力的宿主） |
 | 断言「窄化真的落到了能力上」 | `Agent/SubAgents/SubAgentDoubles.cs:402-446` 的探针组：`SkillSurfaceOf` / `McpSurfaceOf` / `CustomSurfaceOf` / `PromptOf` / `ProviderToolOf` |
 | 加一个带真实语料的能力源 | `Agent/SubAgents/SubAgentCapabilityGrantTests.cs:36` 的 `EmbeddedSkills()`（库自带的 7 个技能）与 `:44` 的 `TwoServers()`（`SeedLoadedTools` 假的两个 MCP 服务器） |
 | 让测试能用生成器类型 | `VeloxDev.Core.Extension.Test.csproj:24-32` 那组引用 |
