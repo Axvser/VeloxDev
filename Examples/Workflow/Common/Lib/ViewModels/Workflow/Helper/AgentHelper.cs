@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
 using VeloxDev.AI.Skills;
+using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
 using VeloxDev.WorkflowSystem;
 
@@ -54,6 +55,21 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// <summary>MCP server configurations pre-registered by the host (the Agent may only load these, never construct arbitrary ones).
     /// Security model: configuration is fixed once at load time and cannot change afterwards — the Agent can only load/unload/inspect, never reconfigure mid-session.</summary>
     public IReadOnlyList<McpServerConfiguration> McpServers { get; set; } = DemoMcpServers;
+
+    /// <summary>
+    /// The sub-agent subsystem: the Agent dispatches background children through it, and what each child may
+    /// do is a narrowed slice of what this scope holds — never a superset of it.
+    /// <para>
+    /// Created inside <see cref="ProvideAgent"/> rather than here, because a subsystem is built over a chat
+    /// client and that is not resolved until the key has been read. So this is <c>null</c> until
+    /// <see cref="Install"/> has run, and again once <see cref="Uninstall"/> has.
+    /// </para>
+    /// <para>
+    /// Read the roster through <see cref="SubAgentScope.Snapshot"/>, not <c>SubAgentScope.Children</c>, from
+    /// anywhere but the UI thread.
+    /// </para>
+    /// </summary>
+    public SubAgentScope? SubAgents { get; private set; }
 
     /// <summary>
     /// The operating modes the Agent may switch between, from the Agent Framework's own mode provider.
@@ -128,6 +144,16 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     public override void Uninstall(IWorkflowTreeViewModel tree)
     {
         base.Uninstall(tree);
+
+        // Children still running are cancelled and then waited for, not abandoned — their tool calls are
+        // marshalled onto this host's dispatcher, so one that posted after the tree went away would land in
+        // a pump that no longer exists. Uninstall is void by inheritance and so cannot await; what matters
+        // is that the cancellation is issued before this host stops holding the subsystem, and it is.
+        if (SubAgents is { } subAgents)
+        {
+            SubAgents = null;
+            _ = subAgents.DisposeAsync();
+        }
 
         Agent = null;
         Session = null;
@@ -253,13 +279,6 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         // in the transcript without this host looping the stream itself.
         scope.WithTranscript(helper.Transcript);
 
-        // Progressive context: the static skeleton. Skills put the scope under dynamic management, so the
-        // provider renders them per turn instead — the two must not both carry the corpus. Attaching skills
-        // after this line still works (the subsystem then states only which skills have been switched off
-        // since), but the skeleton keeps the copy it takes here, so attaching first is the order that leaves
-        // the corpus under the subsystem's control.
-        var contextPrompt = scope.ProvideProgressiveContextPrompt();
-
         var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableName);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -274,6 +293,24 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
                 Endpoint = new Uri(Endpoint)
             }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "deepseek-v4-flash" : Model)
               .AsIChatClient();
+
+        // Sub-agents: the Agent can dispatch background children, each holding a narrowed slice of what this
+        // scope holds. Attached here — before CreateContextProviders() below, which is the line that matters:
+        // the five dispatch tools reach the model as that provider's contribution, so attaching afterwards
+        // would leave the model with none of them and the subsystem unreachable however it was configured.
+        //
+        // The depth limit is not redundant with WithMaxToolCalls(200) above. The budget is what makes the
+        // tree terminate; a root allowing 200 calls terminates a 199-deep chain, which is bounded and
+        // useless. Three levels is what this demo wants: a child, its helper, and one level of oversight.
+        helper.SubAgents = SubAgentScope.ForClient(chatClient).WithSubAgentDepth(3);
+        scope.WithSubAgents(helper.SubAgents);
+
+        // Progressive context: the static skeleton. Skills put the scope under dynamic management, so the
+        // provider renders them per turn instead — the two must not both carry the corpus. Attaching skills
+        // after this line still works (the subsystem then states only which skills have been switched off
+        // since), but the skeleton keeps the copy it takes here, so attaching first is the order that leaves
+        // the corpus under the subsystem's control.
+        var contextPrompt = scope.ProvideProgressiveContextPrompt();
 
         // The static skeleton is the agent's own instructions; everything that changes — the live capability
         // envelope (the gates, the switched-off tools, the call budgets, and anything that has drifted since
