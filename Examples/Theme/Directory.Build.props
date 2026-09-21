@@ -1,0 +1,13 @@
+<Project>
+	<ItemGroup>
+		<!-- 本树（含 Lib）都用了生成器特性，而 analyzer 不随 ProjectReference 传递，故在此统一引用。
+		     Debug 用本地源码、Release 用包；两者必须互斥，否则生成器执行两次、报重复成员。
+		     路径基准是导入方项目目录，必须走 MSBuildThisFileDirectory。 -->
+		<ProjectReference Include="$(MSBuildThisFileDirectory)..\..\Src\Generators\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false"
+		                  Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0"
+		                  Condition="'$(Configuration)' != 'Debug'" />
+	</ItemGroup>
+</Project>
