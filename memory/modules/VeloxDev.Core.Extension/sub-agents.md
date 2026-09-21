@@ -169,6 +169,24 @@
 
 **一条测试写法上的硬约束**：断言若放在 `ui.Send(...)` 的 lambda 里，**里面不能阻塞**（泵是单线程的）。先在测试线程 `WaitFor`，再 `Send` 进去只做读。
 
+### 把这块面板挂上屏（Avalonia 是第一家，`Examples/Workflow/Avalonia/Demo/Views/Workflow/WorkflowView`）
+
+| 事实 | 为什么 |
+|---|---|
+| 接线点在 `SubscribeAutoScroll` / `UnsubscribeAutoScroll`（`.axaml.cs:226`、`:243`），**不是**构造器 | 这正是它与 MCP 面板（`InitializeMcp`，只跑一次）不同的地方，两条理由各自都够：① `AgentHelper.Mcp` 是属性初始化器，视图构造时就在；`AgentHelper.SubAgents` 是 `ProvideAgent` 在**读到 key、解析出 client 之后**才建的（`AgentHelper.cs:305`），视图构造时它**可能为 null**，所以只能挂载时去查、不能假定；② 换工作流会换 helper，而这一对方法是唯一跟着换的地方 —— 挂在构造器上的话，第二棵树的子代理永远进不了面板 |
+| `SubAgentPanel.IsVisible` 由代码置位（`.axaml.cs:84,92,102`），XAML 里初值是 `False` | `DataContext == null` 这件事绑不出来（没有 `IsNull` 转换器），而无 key 的宿主 `SubAgents` 永远为 null |
+| 换树时 `Dispose()` 树 VM 而**不**动 scope（`.axaml.cs:103`，理由见上面「`Dispose` 不取消任何孩子」那行） | 换一棵树时旧 helper 是直接丢掉的（`InitializeNetworkDemo` 不 `Uninstall`），旧 scope 的孩子仍在跑。不 Dispose 树 VM 的话，它会一直订阅一个没人看的 scope、每变一次就重建一次 |
+| 节点的默认展开靠 `<Style Selector="TreeViewItem">` 上的 `{ReflectionBinding IsExpanded, Mode=TwoWay}`（`.axaml` `:25-29`） | `SubAgentTreeNodeViewModel.IsExpanded` 默认 `true`，而 `TreeViewItem.IsExpanded` 默认 `false` —— 不接上的话面板一打开全是收起的。**必须是 `ReflectionBinding`**：`Style` 里没有 `x:DataType` 作用域，编译绑定无从下手 |
+
+**一条可复用的验证杠杆**：Avalonia demo 的 `Demo.csproj:8` 是 `AvaloniaUseCompiledBindingsByDefault=true`，于是**绑错的路径是编译错误而不是运行时静默失效** —— 实测把一个绑定名改错，报的是
+
+```
+WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property or method of name
+'RunningCountTypo' on type 'VeloxDev.AI.SubAgents.SubAgentTreeViewModel'
+```
+
+所以「Avalonia demo 构建绿了」对绑定路径的**存在性**是真证据，可以拿着当地基用。但它证明不了**渲染**：`TreeViewItem.IsExpanded` 那条样式绑定、`TreeView` + `TreeDataTemplate` 的实际排版、以及内层 `TreeView`（`MaxHeight="320"`）与外层侧栏 `ScrollViewer` 的嵌套滚动，三件都**只经过编译校验，没有视觉复核**（跑它需要 key + 真窗口）。失效时的退路是优雅的：节点渲染成收起状态，用户逐个点开，而不是崩。
+
 ---
 
 ## 九、扩展点与捷径

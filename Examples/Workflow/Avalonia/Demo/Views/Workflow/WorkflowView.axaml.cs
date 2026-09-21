@@ -18,6 +18,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
+using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
@@ -29,6 +30,13 @@ public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
     private WindowNotificationManager _manager;
+
+    /// <summary>
+    /// The panel's tree, built over whichever helper's subsystem is currently showing. Kept as a field
+    /// because it has to be detached from the scope it was built on — swapping the workflow replaces the
+    /// helper, and a tree left subscribed to the old one would keep rebuilding a panel nobody sees.
+    /// </summary>
+    private SubAgentTreeViewModel? _subAgentTree;
 
     public WorkflowView()
     {
@@ -58,6 +66,42 @@ public partial class WorkflowView : UserControl
     {
         if (_workflowViewModel.GetHelper() is AgentHelper helper)
             await helper.LoadMcpServersAsync();
+    }
+
+    /// <summary>
+    /// Attaches the sub-agent panel to a helper's subsystem.
+    /// <para>
+    /// Unlike <see cref="AgentHelper.Mcp"/> — a property initializer, and so already there when the view is
+    /// constructed — the sub-agent subsystem is built inside <c>ProvideAgent</c>, after the key has been read
+    /// and the chat client resolved. So it is looked for at attach time rather than assumed, and a host
+    /// without a key simply has no panel.
+    /// </para>
+    /// </summary>
+    private void AttachSubAgents(AgentHelper helper)
+    {
+        if (helper.SubAgents is not { } scope)
+        {
+            SubAgentPanel.IsVisible = false;
+            return;
+        }
+
+        // Built here, on the UI thread, and not in the constructor: the tree captures the context it
+        // marshals its rebuilds to, so it has to be born on the thread that will render it.
+        _subAgentTree = new SubAgentTreeViewModel(scope);
+        SubAgentPanel.DataContext = _subAgentTree;
+        SubAgentPanel.IsVisible = true;
+    }
+
+    /// <summary>
+    /// Detaches the panel. Disposing the tree only unsubscribes it — the children it was showing keep
+    /// running, because closing a panel is not a decision about the work the panel described.
+    /// </summary>
+    private void DetachSubAgents()
+    {
+        SubAgentPanel.DataContext = null;
+        SubAgentPanel.IsVisible = false;
+        _subAgentTree?.Dispose();
+        _subAgentTree = null;
     }
 
     private async void SaveWorkflow(object? sender, RoutedEventArgs e)
@@ -178,6 +222,8 @@ public partial class WorkflowView : UserControl
             helper.ConfirmationHandler = ShowConfirmationDialogAsync;
             helper.ToolCalled += OnAgentToolCalled;
             helper.VisualRefreshRequested += OnVisualRefreshRequested;
+
+            AttachSubAgents(helper);
         }
     }
 
@@ -191,6 +237,10 @@ public partial class WorkflowView : UserControl
             helper.ToolCalled -= OnAgentToolCalled;
             helper.VisualRefreshRequested -= OnVisualRefreshRequested;
         }
+
+        // Outside the guard on purpose: the panel belongs to this view, so it goes when the view lets go of
+        // the tree — whether or not the helper turned out to be an AgentHelper.
+        DetachSubAgents();
     }
 
     // ── Agent interaction dialogs ────────────────────────────────────────────

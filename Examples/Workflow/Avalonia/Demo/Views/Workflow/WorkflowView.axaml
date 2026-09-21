@@ -9,6 +9,7 @@
 			 xmlns:vm="using:Demo.ViewModels"
 			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
 			 xmlns:mcp="using:VeloxDev.AI.MCP"
+			 xmlns:sub="using:VeloxDev.AI.SubAgents"
 			 xmlns:md="clr-namespace:AvalonMarkdown.Views;assembly=AvalonMarkdown"
 			 x:DataType="vm:TreeViewModel"
              behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
@@ -17,6 +18,15 @@
 			 behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
 			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
 			 behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
+
+	<!-- 子代理树的展开状态由库里那一行自己持有（SubAgentTreeNodeViewModel.IsExpanded，默认展开），而
+	     TreeViewItem 默认是收起的 —— 这块面板的全部意义就是一眼看见孩子，不该让用户逐个点开。
+	     用 ReflectionBinding 而非编译绑定：Style 里没有 x:DataType 作用域，编译绑定在此无从下手。 -->
+	<UserControl.Styles>
+		<Style Selector="TreeViewItem">
+			<Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
+		</Style>
+	</UserControl.Styles>
 
 	<!-- Templates -->
 	<UserControl.DataTemplates>
@@ -229,6 +239,47 @@
 										</DataTemplate>
 									</ItemsControl.ItemTemplate>
 								</ItemsControl>
+							</StackPanel>
+						</Border>
+						<!-- Sub-agents the Agent dispatched, at every depth. The tree is the library's own
+						     (VeloxDev.AI.SubAgents.SubAgentTreeViewModel), built over helper.SubAgents in the
+						     code-behind once the subsystem exists. IsVisible starts False because a host with no
+						     key never gets one — the panel is wired on, not assumed. -->
+						<Border x:Name="SubAgentPanel" x:DataType="sub:SubAgentTreeViewModel" IsVisible="False" Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
+							<StackPanel Spacing="6">
+								<Grid ColumnDefinitions="*,Auto">
+									<TextBlock Text="子代理" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
+									<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+										<TextBlock Text="{Binding RunningCount, StringFormat=运行中 {0}}" Foreground="#6bffb8" FontWeight="Bold"/>
+										<TextBlock Text="{Binding TotalCount, StringFormat=· 共 {0}}" Foreground="#a0a0a0"/>
+										<TextBlock Text="{Binding FailedCount, StringFormat=· 失败 {0}}" Foreground="#ff6b6b"
+												   IsVisible="{Binding HasFailed}"/>
+									</StackPanel>
+								</Grid>
+								<TextBlock Text="尚无子代理。让 Agent「派一个子代理去数一数节点」试试。" Foreground="#6b7280"
+										   FontSize="11" TextWrapping="Wrap" IsVisible="{Binding IsEmpty}"/>
+								<TreeView ItemsSource="{Binding Roots}" Background="Transparent" BorderThickness="0" MaxHeight="320">
+									<TreeView.ItemTemplate>
+										<TreeDataTemplate x:DataType="sub:SubAgentTreeNodeViewModel" ItemsSource="{Binding Children}">
+											<StackPanel Spacing="2" Margin="0,0,0,4">
+												<StackPanel Orientation="Horizontal" Spacing="6">
+													<TextBlock Text="{Binding Row.Name}" Foreground="#e0e0e0" FontWeight="SemiBold"/>
+													<TextBlock Text="{Binding Row.StateText}" Foreground="#a0a0a0"/>
+													<TextBlock Text="{Binding Row.CallCount, StringFormat=· {0} 次调用}" Foreground="#6bffb8"/>
+												</StackPanel>
+												<TextBlock Text="{Binding Row.Task}" Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap"/>
+												<TextBlock Text="{Binding Row.Result}" Foreground="#6bffb8" FontSize="11" TextWrapping="Wrap"
+														   IsVisible="{Binding Row.HasResult}" Margin="14,0,0,0" MaxHeight="120"/>
+												<TextBlock Text="{Binding Row.Error}" Foreground="#ff6b6b" FontSize="11" TextWrapping="Wrap"
+														   IsVisible="{Binding Row.HasError}" Margin="14,0,0,0"/>
+												<TextBlock Text="{Binding Row.GrantedSummary, StringFormat=授权：{0}}" Foreground="#7ec8ff" FontSize="11"
+														   TextWrapping="Wrap" Margin="14,0,0,0"/>
+												<TextBlock Text="{Binding Row.DroppedRequests.Count, StringFormat=· 有 {0} 项请求被拒}" Foreground="#ffd166" FontSize="11"
+														   IsVisible="{Binding Row.HasDroppedRequests}" Margin="14,0,0,0"/>
+											</StackPanel>
+										</TreeDataTemplate>
+									</TreeView.ItemTemplate>
+								</TreeView>
 							</StackPanel>
 						</Border>
 						<!-- Execution log -->
