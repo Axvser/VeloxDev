@@ -79,12 +79,14 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
 
     [Description("Dispatches a background sub-agent to carry out one task and returns immediately with its id — the agent runs while you carry on. "
         + "Its abilities are a narrowed subset of yours, and whatever you ask for that you do not have is refused and listed in the reply under \"dropped\": read that list, because the agent will not tell you. "
-        + "Omit a capability argument to inherit the sensible default: the tool set defaults to your read-only tools, and every budget defaults to as much as you have left. "
-        + "Name tools explicitly to grant anything that changes the graph. Afterwards use WaitSubAgents to collect its report.")]
+        + "Omit a capability argument to inherit the sensible default: tools default to your read-only tools, skills to the ones you have switched on, MCP servers to none, and every budget to as much as you have left. "
+        + "Name tools explicitly to grant anything that changes the graph, and name servers explicitly to grant any MCP access at all. Afterwards use WaitSubAgents to collect its report.")]
     private Task<string> SpawnSubAgent(
         [Description("What the sub-agent must do. Write it as a complete, self-contained instruction — it cannot ask you questions.")] string task,
         [Description("A short display name, e.g. \"node-counter\". Omitted, one is generated.")] string? name = null,
         [Description("The exact tools the sub-agent may use. Omitted, it inherits your read-only tools only. An empty list grants no tools. Naming one you do not have, or one the host switched off, is refused and reported.")] string[]? allowedTools = null,
+        [Description("The skills the sub-agent may read, by the names ListSkills reports. Omitted, it inherits the skills you have switched on. An empty list grants none, and its skill tools go with them — there would be nothing left for them to load.")] string[]? allowedSkills = null,
+        [Description("The MCP servers the sub-agent may use, by the names ListMcpServers reports. Omitted, it gets none: MCP tools can do anything and must be asked for by name. Each granted server arrives with only the tools you yourself have switched on, and the sub-agent can use it but cannot load, unload or add one.")] string[]? allowedMcpServers = null,
         [Description("The most tool calls the sub-agent and anything it dispatches may make in total. Omitted, up to as much of your remaining budget as can be granted.")] int? maxToolCalls = null,
         [Description("A separate cap on its read-only calls. Omitted, inherits yours.")] int? maxReadToolCalls = null,
         [Description("A separate cap on its calls that change the graph. Omitted, inherits yours.")] int? maxWriteToolCalls = null,
@@ -97,6 +99,8 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             Task = task,
             Name = name,
             AllowedTools = allowedTools,
+            AllowedSkills = allowedSkills,
+            AllowedMcpServers = allowedMcpServers,
             MaxToolCalls = maxToolCalls,
             MaxReadToolCalls = maxReadToolCalls,
             MaxWriteToolCalls = maxWriteToolCalls,
@@ -124,6 +128,8 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             ["depth"] = row?.Depth ?? 0,
             ["maxToolCalls"] = row?.MaxToolCalls,
             ["grantedToolCount"] = row?.GrantedToolCount ?? 0,
+            ["grantedSkillCount"] = row?.GrantedSkillCount ?? 0,
+            ["grantedMcpServerCount"] = row?.GrantedMcpServerCount ?? 0,
             ["dropped"] = new JArray(row?.DroppedRequests ?? []),
             ["message"] = (row?.DroppedRequests.Count ?? 0) > 0
                 ? "Dispatched, but not with everything you asked for — read \"dropped\". Call WaitSubAgents to collect its report."
@@ -241,7 +247,8 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         {
             sb.AppendLine("You may dispatch background sub-agents to work in parallel or to keep a long side task out of your own context.");
             sb.AppendLine("A sub-agent gets a narrowed subset of your abilities — never more — and anything you ask for beyond that is refused and listed in the dispatch reply under \"dropped\".");
-            sb.AppendLine("It cannot ask you questions, so give it a complete instruction. Omitting a capability argument inherits your default: read-only tools, and as much budget as you have left.");
+            sb.AppendLine("It cannot ask you questions, so give it a complete instruction. Omitting a capability argument inherits your default: read-only tools, the skills you have switched on, no MCP servers, and as much budget as you have left.");
+            sb.AppendLine("MCP servers are the exception to inheriting — nothing is handed down unless you name it, because an MCP tool can do anything and silence is not consent.");
             sb.AppendLine("Dispatch, then collect with WaitSubAgents — do not poll in a loop.");
         }
 
@@ -308,6 +315,14 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         if (!string.IsNullOrWhiteSpace(briefing.Notes))
             sb.AppendLine($"The agent that dispatched you added: {briefing.Notes!.Trim()}");
 
+        // Skills and servers are named here rather than left to their own blocks, because they are part of
+        // what this spawn granted and not part of the host's standing configuration: a child that was given
+        // two of its parent's nine skills needs to know those are the two.
+        if (briefing.GrantedSkills.Count > 0)
+            sb.AppendLine().AppendLine("Skills you may read, and no others: " + string.Join(", ", briefing.GrantedSkills) + ".");
+        if (briefing.GrantedMcpServers.Count > 0)
+            sb.AppendLine().AppendLine("MCP servers you may use: " + string.Join(", ", briefing.GrantedMcpServers) + ".");
+
         if (briefing.Dropped.Count > 0)
         {
             sb.AppendLine();
@@ -336,6 +351,8 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             ["callCount"] = row.CallCount,
             ["maxToolCalls"] = row.MaxToolCalls,
             ["grantedToolCount"] = row.GrantedToolCount,
+            ["grantedSkillCount"] = row.GrantedSkillCount,
+            ["grantedMcpServerCount"] = row.GrantedMcpServerCount,
         };
 
         if (row.DroppedRequests.Count > 0) result["dropped"] = new JArray(row.DroppedRequests);

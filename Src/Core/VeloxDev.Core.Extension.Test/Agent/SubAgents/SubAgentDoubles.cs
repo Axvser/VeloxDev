@@ -9,6 +9,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.AI.MCP;
+using VeloxDev.AI.Skills;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
@@ -294,7 +296,11 @@ internal sealed class SubAgentFixture : IAsyncDisposable
         SynchronizationContext? ui = null,
         int? maxToolCalls = null,
         int? maxDepth = null,
-        int? spawnBudget = null)
+        int? spawnBudget = null,
+        SkillScope? skills = null,
+        McpScope? mcp = null,
+        IEnumerable<AITool>? customTools = null,
+        AgentLanguages language = AgentLanguages.English)
     {
         Tree = new TreeDefaultViewModel();
         Tree.GetHelper().CreateNode(new NodeDefaultViewModel());
@@ -302,6 +308,14 @@ internal sealed class SubAgentFixture : IAsyncDisposable
         Scope = new WorkflowAgentScope(Tree);
         if (maxToolCalls is { } cap) Scope.WithMaxToolCalls(cap);
         Scope.WithSynchronizationContext(ui);
+        Scope.WithPromptLanguage(language);
+
+        // Attached before the sub-agent subsystem, in the order the README documents for a host: the
+        // narrowing reads these off the parent at spawn time, so what the parent is configured with has to
+        // be settled first.
+        if (skills is not null) Scope.WithSkills(skills);
+        if (mcp is not null) Scope.WithMcps(mcp);
+        if (customTools is not null) Scope.WithTools("Notes about the custom tools.", [.. customTools]);
 
         SubAgents = factory is not null
             ? new SubAgentScope(factory)
@@ -378,6 +392,76 @@ internal sealed class SubAgentFixture : IAsyncDisposable
             .OfType<SubAgentAgentContextProvider>()
             .SelectMany(p => p.BuildContext().Tools ?? [])
             .Select(t => t.Name)];
+
+    /// <summary>
+    /// The skill tools a scope's providers contribute. Reached this way rather than through
+    /// <see cref="SurfaceOf"/> because the skill tools never enter the workflow toolkit — they arrive with
+    /// the skill subsystem's own provider, which is exactly why narrowing them could not be a matter of
+    /// tool names and had to be a narrowed view of the source instead.
+    /// </summary>
+    public static HashSet<string> SkillSurfaceOf(WorkflowAgentScope scope)
+        => [.. scope.CreateContextProviders()
+            .OfType<SkillAgentContextProvider>()
+            .SelectMany(p => p.BuildContext().Tools ?? [])
+            .Select(t => t.Name)];
+
+    /// <summary>The MCP tools a scope's providers contribute, for the same reason as the skill ones.</summary>
+    public static HashSet<string> McpSurfaceOf(WorkflowAgentScope scope)
+        => [.. scope.CreateContextProviders()
+            .OfType<McpAgentContextProvider>()
+            .SelectMany(p => p.BuildContext().Tools ?? [])
+            .Select(t => t.Name)];
+
+    /// <summary>The custom tools a scope's own toolkit holds, by name.</summary>
+    public static HashSet<string> CustomSurfaceOf(WorkflowAgentScope scope, IEnumerable<string> candidates)
+        => [.. scope.ProvideTools()
+            .Where(t => candidates.Contains(t.Name, StringComparer.Ordinal))
+            .Select(t => t.Name)];
+
+    /// <summary>
+    /// Everything a scope's providers would put in front of its model this turn, concatenated — the closest
+    /// a test can get to what the model reads, which is where a child's briefing about its own grant lives.
+    /// <para>
+    /// Written as three typed folds rather than one over <see cref="AIContextProvider"/>, because
+    /// <c>BuildContext</c> is internal to each subsystem's own provider type and does not exist on the base.
+    /// </para>
+    /// </summary>
+    public static string PromptOf(WorkflowAgentScope scope)
+    {
+        var parts = new List<string>();
+        foreach (var provider in scope.CreateContextProviders())
+            parts.Add(provider switch
+            {
+                WorkflowAgentContextProvider p => p.BuildContext().Instructions ?? string.Empty,
+                SubAgentAgentContextProvider p => p.BuildContext().Instructions ?? string.Empty,
+                SkillAgentContextProvider p => p.BuildContext().Instructions ?? string.Empty,
+                McpAgentContextProvider p => p.BuildContext().Instructions ?? string.Empty,
+                _ => string.Empty,
+            });
+
+        return string.Join("\n", parts);
+    }
+
+    /// <summary>Every tool a scope's providers contribute, whichever subsystem they come from.</summary>
+    public static AIFunction ProviderToolOf(WorkflowAgentScope scope, string toolName)
+    {
+        foreach (var provider in scope.CreateContextProviders())
+        {
+            var tools = provider switch
+            {
+                SubAgentAgentContextProvider p => p.BuildContext().Tools,
+                SkillAgentContextProvider p => p.BuildContext().Tools,
+                McpAgentContextProvider p => p.BuildContext().Tools,
+                _ => null,
+            };
+
+            var tool = tools?.OfType<AIFunction>()
+                .FirstOrDefault(t => string.Equals(t.Name, toolName, StringComparison.OrdinalIgnoreCase));
+            if (tool is not null) return tool;
+        }
+
+        throw new InvalidOperationException($"No provider of that scope contributes '{toolName}'.");
+    }
 
     /// <summary>The tools the sub-agent subsystem contributes to the host — the five it manages children with.</summary>
     public IEnumerable<AITool> Tools

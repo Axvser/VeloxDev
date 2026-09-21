@@ -8,7 +8,9 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.AI.MCP;
 using VeloxDev.AI.Pipelines;
+using VeloxDev.AI.Skills;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
 
@@ -32,6 +34,20 @@ internal sealed class SubAgentRequest
     /// An empty array is a request for no tools at all, which is a different thing from omitting it.
     /// </summary>
     public string[]? AllowedTools { get; set; }
+
+    /// <summary>
+    /// The skills the child may read, or <c>null</c> to inherit every skill the parent has switched on.
+    /// An empty array grants none — and its skill tools go with them, since a <c>load_skill</c> with no
+    /// skills behind it is a tool that can only fail.
+    /// </summary>
+    public string[]? AllowedSkills { get; set; }
+
+    /// <summary>
+    /// The MCP servers the child may use, or <c>null</c> for none. The asymmetry with
+    /// <see cref="AllowedSkills"/> is deliberate: this is the one source with no read-only part, so its
+    /// default is the empty set and a server has to be asked for by name.
+    /// </summary>
+    public string[]? AllowedMcpServers { get; set; }
 
     public int? MaxToolCalls { get; set; }
     public int? MaxReadToolCalls { get; set; }
@@ -60,6 +76,12 @@ internal sealed class ChildBriefing
     public IReadOnlyList<string> Dropped { get; set; } = [];
     public bool CanSpawn { get; set; }
     public int RemainingDepth { get; set; }
+
+    /// <summary>The skills this child was given, as the names it can pass to <c>load_skill</c>.</summary>
+    public IReadOnlyList<string> GrantedSkills { get; set; } = [];
+
+    /// <summary>The MCP servers this child was given. Empty is the ordinary case.</summary>
+    public IReadOnlyList<string> GrantedMcpServers { get; set; } = [];
 }
 
 /// <summary>
@@ -313,6 +335,8 @@ public sealed class SubAgentScope : IAsyncDisposable
             CallCount = e.Row.CallCount,
             MaxToolCalls = e.Row.MaxToolCalls,
             GrantedToolCount = e.Row.GrantedTools.Count,
+            GrantedSkillCount = e.Row.GrantedSkills.Count,
+            GrantedMcpServerCount = e.Row.GrantedMcpServers.Count,
             DroppedRequests = [.. e.Row.DroppedRequests],
         })];
 
@@ -384,10 +408,14 @@ public sealed class SubAgentScope : IAsyncDisposable
         // an inherited tool the parent itself had turned off would be a capability the child holds and its
         // parent does not, which is the one thing this subsystem exists to make impossible.
         var parentToolkit = parent.CreateToolkit();
-        var everyName = parentToolkit.CreateAllTools()
-            .Select(t => t.Name)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var everyName = parentToolkit.CreateAllTools().Select(t => t.Name).ToList();
+
+        // The skill tools are the parent's potential too, even though they are absent from the toolkit:
+        // they come from the skill subsystem's own provider. Leaving them out would drop `load_skill` from
+        // every grant as "not available to this agent", and would leave the skill tools switched on for a
+        // child that was granted no skills — a tool the model can call and that can only fail.
+        if (parent.Skills is not null) everyName.AddRange(SkillAgentToolkit.ToolNames);
+        everyName = [.. everyName.Distinct(StringComparer.OrdinalIgnoreCase)];
 
         var available = everyName
             .Where(parent.IsToolEnabled)
@@ -397,7 +425,9 @@ public sealed class SubAgentScope : IAsyncDisposable
         List<string> grantedTools;
         if (request.AllowedTools is { } wanted)
         {
-            grantedTools = [.. wanted.Where(name => available.Contains(name, StringComparer.OrdinalIgnoreCase))];
+            grantedTools = [.. wanted
+                .Where(name => available.Contains(name, StringComparer.OrdinalIgnoreCase))
+                .Select(name => Canonical(name, available))];
             foreach (var name in wanted.Where(name => !available.Contains(name, StringComparer.OrdinalIgnoreCase)))
                 dropped.Add(NoChildMayHold(name)
                     ? $"{name}: never granted to a sub-agent — {NoChildMayHoldReason}"
@@ -422,6 +452,20 @@ public sealed class SubAgentScope : IAsyncDisposable
                 grantedTools.Remove(name);
                 dropped.Add($"{name}: needs a UI synchronization context, and the host registered none");
             }
+        }
+
+        // ── the knowledge surface, and the one with no read-only part ──
+        var grantedSkills = ResolveSkills(parent, request, dropped);
+        var grantedServers = ResolveMcpServers(parent, request, dropped);
+
+        // Nothing to load is nothing to hold the loader for. Without this the inherited read-only surface
+        // would still list `load_skill` — it is classified read-only, so it comes back through the branch
+        // above — and the child would come away told it holds a tool that does not exist on its scope.
+        if (grantedSkills.Count == 0 && parent.Skills is not null)
+        {
+            foreach (var name in SkillAgentToolkit.ToolNames)
+                if (grantedTools.RemoveAll(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) > 0)
+                    dropped.Add($"{name}: no skills were granted to it, so there is nothing for this tool to operate on");
         }
 
         var child = parent.Tree.AsAgentScope();
@@ -452,6 +496,26 @@ public sealed class SubAgentScope : IAsyncDisposable
         child.WithInteractionSafety(0);
         child.WithToolEnabled(WorkflowAgentToolkit.ResetBudgetToolName, false);
 
+        // ── the two sources that carry their own providers ──
+        // A tool name cannot express these: skills and MCP servers are contributed by their own context
+        // providers, out of their own data layers. So the child is given a narrowed *view* of each source
+        // rather than a list of names — a view that owns nothing its parent owns, and whose tool set is the
+        // capability boundary rather than a rule the child is asked to respect.
+        if (grantedSkills.Count > 0 && parent.Skills is { } parentSkills)
+        {
+            // Before WithSkills, which re-applies the scope's default language to whatever it attaches.
+            // A skill's text is read back in the language it was rendered in, so setting this afterwards
+            // would leave a Chinese session's child reading English documents.
+            child.WithPromptLanguage(parent.PromptLanguage);
+            child.WithSkills(parentSkills.CreateNarrowed(grantedSkills));
+        }
+        if (grantedServers.Count > 0 && parent.Mcp is { } parentMcp)
+            child.WithMcps(McpScope.CreateGrantedView(parentMcp, grantedServers));
+
+        // Custom tools, in the groups they were registered in — so the child gets the guidance belonging to
+        // the tools it actually holds, and not the guidance for the ones it does not.
+        parent.GrantCustomToolsTo(child, grantedTools);
+
         // Takes effect before the toolkit exists, so the child's very first call is already charged to the
         // tree rather than to a counter of its own.
         child.ParentLedger = parentLedger;
@@ -481,6 +545,8 @@ public sealed class SubAgentScope : IAsyncDisposable
                 Dropped = dropped,
                 CanSpawn = childDepth < MaxDepth,
                 RemainingDepth = Math.Max(0, MaxDepth - childDepth),
+                GrantedSkills = grantedSkills,
+                GrantedMcpServers = grantedServers,
             },
         };
         grand.InheritFrom(this);
@@ -492,6 +558,8 @@ public sealed class SubAgentScope : IAsyncDisposable
             Transcript = transcript,
         };
         row.SetGrantedTools(grantedTools.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        row.SetGrantedSkills(grantedSkills.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        row.SetGrantedMcpServers(grantedServers.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
         row.SetDroppedRequests(dropped);
 
         var cancellation = new CancellationTokenSource();
@@ -535,6 +603,70 @@ public sealed class SubAgentScope : IAsyncDisposable
         => string.Equals(name, WorkflowAgentToolkit.ResetBudgetToolName, StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, "RequestConfirmation", StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, "RequestSelection", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The skills a spawn asks for: what it named, or every skill the parent has switched on.
+    /// <para>
+    /// Skills inherit by default while servers do not, and that is not an inconsistency. Every skill tool
+    /// reads, and a skill the parent has switched on is already in its own prompt — so handing it down
+    /// hands down nothing the parent was not already told. MCP has no such split (see
+    /// <see cref="ResolveMcpServers"/>).
+    /// </para>
+    /// </summary>
+    private static List<string> ResolveSkills(
+        WorkflowAgentScope parent, SubAgentRequest request, List<string> dropped)
+    {
+        var grantable = parent.Skills?.GrantableNames ?? [];
+        if (request.AllowedSkills is not { } wanted) return [.. grantable];
+
+        var granted = new List<string>();
+        foreach (var name in wanted)
+        {
+            if (grantable.Contains(name, StringComparer.OrdinalIgnoreCase)) granted.Add(Canonical(name, grantable));
+            else dropped.Add(parent.Skills is null
+                ? $"{name}: this agent has no skills attached"
+                : $"{name}: not a skill this agent has switched on");
+        }
+        return granted;
+    }
+
+    /// <summary>
+    /// The MCP servers a spawn asks for: exactly what it named, and nothing when it named nothing.
+    /// <para>
+    /// The framework cannot tell whether an MCP tool reads or writes, so this source has no read-only part
+    /// to inherit — the empty set <i>is</i> its read-only part. If silence meant inheritance here, then
+    /// saying nothing would be the most powerful request in the schema, which is the wrong default for a
+    /// source whose tools can do anything.
+    /// </para>
+    /// </summary>
+    private static List<string> ResolveMcpServers(
+        WorkflowAgentScope parent, SubAgentRequest request, List<string> dropped)
+    {
+        if (request.AllowedMcpServers is not { } wanted) return [];
+
+        var grantable = parent.Mcp?.GrantableNames ?? [];
+        var granted = new List<string>();
+        foreach (var name in wanted)
+        {
+            if (grantable.Contains(name, StringComparer.OrdinalIgnoreCase)) granted.Add(Canonical(name, grantable));
+            else dropped.Add(parent.Mcp is null
+                ? $"{name}: this agent has no MCP servers attached"
+                : $"{name}: not an MCP server this agent has connected and switched on");
+        }
+        return granted;
+    }
+
+    /// <summary>
+    /// The canonical spelling of <paramref name="name"/> among <paramref name="candidates"/>, or the name
+    /// as given when it is not there.
+    /// <para>
+    /// Every match in this file is case-insensitive, but the grant list is read by people and by the model
+    /// that asked. Echoing back the model's spelling of <c>Load_Skill</c> would put a second spelling of a
+    /// name this library owns into the row, the briefing and the spawn's own result.
+    /// </para>
+    /// </summary>
+    private static string Canonical(string name, IEnumerable<string> candidates)
+        => candidates.FirstOrDefault(c => string.Equals(c, name, StringComparison.OrdinalIgnoreCase)) ?? name;
 
     /// <summary>
     /// How much of the session's allowance this scope's subtree may still spend.
@@ -636,8 +768,11 @@ public sealed class SubAgentScope : IAsyncDisposable
     {
         await OnRosterThread(() =>
         {
-            entry.Row.State = SubAgentState.Running;
+            // StartedAt before State, and never the other way round: State is a bindable property, so
+            // assigning it publishes the row — and a consumer reading on that notification would otherwise
+            // see a child that is running with no start time.
             entry.Row.StartedAt = DateTimeOffset.Now;
+            entry.Row.State = SubAgentState.Running;
         }).ConfigureAwait(false);
 
         try
@@ -656,6 +791,16 @@ public sealed class SubAgentScope : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Ends a child's run.
+    /// <para>
+    /// The state is assigned last in every branch, after the payload it announces. State is a bindable
+    /// property whose assignment republishes the roster and notifies the panel, so a consumer reading on
+    /// that notification — which is exactly what a panel does — would otherwise be handed a finished child
+    /// with no result, or a failed one with no reason. The state is the signal; a signal that arrives before
+    /// what it announces is a lie about the row it belongs to.
+    /// </para>
+    /// </summary>
     private void Finish(SubAgentEntry entry, string? result, Exception? error, bool cancelled)
     {
         entry.Row.FinishedAt = DateTimeOffset.Now;
@@ -669,13 +814,13 @@ public sealed class SubAgentScope : IAsyncDisposable
 
         if (error is not null)
         {
-            entry.Row.State = SubAgentState.Failed;
             entry.Row.Error = error.Message;
+            entry.Row.State = SubAgentState.Failed;
             return;
         }
 
-        entry.Row.State = SubAgentState.Completed;
         entry.Row.Result = result ?? string.Empty;
+        entry.Row.State = SubAgentState.Completed;
     }
 
     // ────────────────────────── the operations the tools map to ──────────────────────────

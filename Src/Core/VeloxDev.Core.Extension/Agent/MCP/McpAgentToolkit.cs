@@ -30,11 +30,22 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     private readonly IReadOnlyList<McpServerConfiguration> _servers = servers ?? [];
 
     /// <summary>
-    /// Names of the management tools that are always registered, in registration order. Exposed so a host
-    /// composing several tool sources can classify them without repeating the literals.
+    /// Names of the management tools, in registration order. Exposed so a host composing several tool
+    /// sources can classify them without repeating the literals.
+    /// <para>
+    /// A granted view (see <see cref="McpScope.CreateGrantedView"/>) registers only
+    /// <see cref="ListName"/> and <see cref="DescribeName"/> — the two that read. The other two are in this
+    /// array because they are names the host needs to recognise, not because every scope registers them.
+    /// </para>
     /// </summary>
     public static readonly string[] ToolNames =
         ["ListMcpServers", "LoadMcpServers", "UnloadMcpServer", "DescribeMcpServer"];
+
+    /// <summary>Read-only: lists server state.</summary>
+    public const string ListName = "ListMcpServers";
+
+    /// <summary>Read-only: exports a server's tool-capability prompt.</summary>
+    public const string DescribeName = "DescribeMcpServer";
 
     /// <summary>
     /// Name of the tool that lets the model add a server of its own. Registered only when the scope's
@@ -48,20 +59,28 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// the host did not pre-register is a separate opt-in — see
     /// <see cref="McpScope.WithSelfService"/> — and its tool is registered only once the host has opened
     /// that gate.
+    /// <para>
+    /// A granted view registers the two reading tools only. It is the MCP surface handed to a spawned
+    /// child, and a child runs while its parent's turn is suspended: loading installs and launches
+    /// software, and unloading tears down a connection the parent may still be using. Neither is a
+    /// decision a background child gets to make, so neither tool exists on its scope.
+    /// </para>
     /// </summary>
     public IList<AITool> CreateTools()
     {
-        var tools = new List<AITool>
+        var tools = new List<AITool> { AIFunctionFactory.Create(ListServers, ListName) };
+
+        if (!_scope.IsGrantedView)
         {
-            AIFunctionFactory.Create(ListServers, ToolNames[0]),
-            AIFunctionFactory.Create(LoadServers, ToolNames[1]),
-            AIFunctionFactory.Create(UnloadServer, ToolNames[2]),
-            AIFunctionFactory.Create(DescribeServer, ToolNames[3]),
-        };
+            tools.Add(AIFunctionFactory.Create(LoadServers, ToolNames[1]));
+            tools.Add(AIFunctionFactory.Create(UnloadServer, ToolNames[2]));
+        }
+
+        tools.Add(AIFunctionFactory.Create(DescribeServer, DescribeName));
 
         // At Closed the tool is absent rather than present-and-refusing: a tool the model can see but
         // never use only wastes prompt budget and invites retries.
-        if (_scope.SelfServiceLevel != McpSelfServiceLevel.Closed)
+        if (_scope.SelfServiceLevel != McpSelfServiceLevel.Closed && !_scope.IsGrantedView)
             tools.Add(AIFunctionFactory.Create(AddServer, AddToolName));
 
         return tools;
@@ -85,11 +104,19 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// Generated rather than fixed, because what the model may do with MCP depends on the host's
     /// <see cref="McpScope.SelfServiceLevel"/>: a paragraph promising that servers cannot be added would
     /// be a lie at every level above <see cref="McpSelfServiceLevel.Closed"/>, and one inviting the model
-    /// to add them would be a lie at it.
+    /// to add them would be a lie at it. A granted view forks off the same way — it is told to use the
+    /// servers it has rather than named tools it does not hold.
     /// </para>
     /// </summary>
     public string BuildPromptContext()
     {
+        if (_scope.IsGrantedView)
+            return "MCP server tools: ListMcpServers shows each server's state and tool count; "
+                 + "DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools). "
+                 + "The servers listed are the whole of your MCP surface — loading, unloading and adding servers are the "
+                 + "host's decisions, no tool to take any of them exists here, and asking for one will not produce it. "
+                 + "Use the tools the servers offer.";
+
         var sb = new StringBuilder();
         sb.Append("MCP server management tools: ListMcpServers shows each server's alive/installing/connecting/error state and tool count; ");
         sb.Append("DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools) so you can tell the user what it can do; ");

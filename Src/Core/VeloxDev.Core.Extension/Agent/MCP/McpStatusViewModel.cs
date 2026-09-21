@@ -75,11 +75,25 @@ public partial class McpServerStatusViewModel
 
 /// <summary>
 /// An immutable copy of one server's state, safe to read from any thread.
+/// <para>
+/// Carries everything a <see cref="McpServerStatusViewModel"/> needs to be rebuilt, not just the
+/// aggregates: a scope built from a snapshot (a spawned child's view of its parent's servers) has no
+/// tracked servers to point at, so its rows have to be reconstructed out of these fields.
+/// </para>
 /// </summary>
 public sealed class McpServerSummary
 {
     /// <summary>Server name.</summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>Operator-facing description of what the server is for.</summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>How the server is launched (npm / pip / remote / …).</summary>
+    public McpServerRunMode RunMode { get; set; } = McpServerRunMode.Npm;
+
+    /// <summary>Raw lifecycle state, for readers that branch rather than display.</summary>
+    public McpServerStatus State { get; set; } = McpServerStatus.NotStarted;
 
     /// <summary>Localized state text (see <see cref="McpServerStatusViewModel.StateText"/>).</summary>
     public string StateText { get; set; } = string.Empty;
@@ -87,8 +101,17 @@ public sealed class McpServerSummary
     /// <summary>Number of tools the server currently exposes.</summary>
     public int ToolCount { get; set; }
 
+    /// <summary>Load failure text, when <see cref="State"/> is <see cref="McpServerStatus.Error"/>.</summary>
+    public string? Error { get; set; }
+
+    /// <summary>Remote endpoint, when the server is not launched locally.</summary>
+    public string? Endpoint { get; set; }
+
     /// <summary>Whether the server's tools currently reach the Agent (see <see cref="McpServerStatusViewModel.IsEnabled"/>).</summary>
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>Connected and switched on — the only state in which this server's tools are offered.</summary>
+    public bool IsActive => State == McpServerStatus.Connected && IsEnabled;
 }
 
 /// <summary>
@@ -180,8 +203,13 @@ public partial class McpStatusViewModel
         _snapshot = [.. Servers.Select(s => new McpServerSummary
         {
             Name = s.Name,
+            Description = s.Description,
+            RunMode = s.RunMode,
+            State = s.State,
             StateText = s.StateText,
             ToolCount = s.ToolCount,
+            Error = s.Error,
+            Endpoint = s.Endpoint,
             IsEnabled = s.IsEnabled,
         })];
 

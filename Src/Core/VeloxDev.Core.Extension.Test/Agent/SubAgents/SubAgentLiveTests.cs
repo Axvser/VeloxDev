@@ -14,17 +14,18 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.SubAgents;
 
 /// <summary>
-/// The two questions no offline double can answer.
+/// The three questions no offline double can answer.
 /// <para>
 /// Every other test in this folder drives the machinery with a fake model, which proves the machinery works
 /// but says nothing about whether a model will use it. Only a real one can settle that: whether the tool
-/// descriptions are clear enough that an agent dispatches a child at all, and whether a child with a narrowed
-/// tool set can actually do the work it was handed and report back.
+/// descriptions are clear enough that an agent dispatches a child at all, whether a child with a narrowed
+/// tool set can actually do the work it was handed and report back, and whether a model asked to narrow a
+/// capability populates the argument that carries it rather than letting the default stand.
 /// </para>
 /// <para>
 /// Gated on <c>API_KEY_DEEPSEEK</c>: without it these are <c>Inconclusive</c>, so a machine that holds no
 /// key stays green rather than red. When they do run they cost a handful of model calls, so they are kept
-/// to two turns of the host agent rather than a suite.
+/// to one turn of the host agent each rather than a suite.
 /// </para>
 /// </summary>
 [TestClass]
@@ -95,11 +96,61 @@ public class SubAgentLiveTests
             "and it looked: a child that reported without calling a tool answered from nothing");
     }
 
+    [TestMethod]
+    public async Task ARealModel_PassesTheNarrowingOnRatherThanIgnoringIt()
+    {
+        // The third question, and the newest: the two capability axes a spawn can now name are only worth
+        // having if a model populates them. A description that reads well to a person can still leave a model
+        // omitting the argument and taking the default — which for skills is "everything" and for MCP is
+        // "nothing". Both halves of that are visible in the grant, so one turn settles it.
+        var client = ClientOrNull();
+        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+
+        var skills = new VeloxDev.AI.Skills.SkillScope()
+            .WithSource(new VeloxDev.AI.Skills.EmbeddedSkillSource("Workflow"));
+        skills.Refresh();
+        var only = skills.Names[0];
+
+        var tree = new TreeDefaultViewModel();
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
+
+        var scope = tree.AsAgentScope().WithMaxToolCalls(60);
+        scope.WithSkills(skills);
+        var subAgents = SubAgentScope.ForClient(client!);
+        scope.WithSubAgents(subAgents);
+
+        var host = client!.AsAIAgent(new ChatClientAgentOptions
+        {
+            ChatOptions = new ChatOptions
+            {
+                Instructions = "You are an assistant working on a workflow graph. Use the tools you are given.",
+            },
+            AIContextProviders = scope.CreateContextProviders(),
+        });
+
+        await using (subAgents)
+        {
+            await host.RunAsync(
+                $"Dispatch a background sub-agent to summarise `{only}` for you, and allow it to read that one "
+                + "skill and no other. Do not summarise it yourself and do not wait for the child.");
+
+            var row = subAgents.Snapshot.FirstOrDefault();
+            if (row is null)
+                Assert.Inconclusive("The model did not dispatch a child this time; ARealModel_DispatchesAChildAtAll is the test that reports on that.");
+
+            Assert.AreEqual(1, row.GrantedSkillCount,
+                "the spawn named one skill; a model that omitted `allowedSkills` would have granted all "
+                + $"{skills.Names.Count} of them, and that is the failure this asserts against");
+        }
+    }
+
     /// <summary>
     /// The host agent and the sub-agent subsystem over one real client, assembled the way a host would.
     /// <para>
-    /// Held in one place because both live tests need exactly this and differ only in what they ask. The
-    /// graph is one node, so "how many nodes" has a known answer.
+    /// Held in one place because the first two live tests need exactly this and differ only in what they ask.
+    /// The graph is one node, so "how many nodes" has a known answer. The third test builds its own scope
+    /// instead: it needs a skill source attached before the sub-agent subsystem is, which this constructor
+    /// has no room for.
     /// </para>
     /// </summary>
     private sealed class LiveSession : IAsyncDisposable

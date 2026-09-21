@@ -45,6 +45,7 @@ public class SubAgentToolSchemaTests
         [
             "task", "name", "allowedTools", "maxToolCalls", "maxReadToolCalls", "maxWriteToolCalls",
             "allowNodeExecution", "allowedGenericCommands", "autoMarkDirty", "notes",
+            "allowedSkills", "allowedMcpServers",
         ];
 
         foreach (var name in capabilityArguments)

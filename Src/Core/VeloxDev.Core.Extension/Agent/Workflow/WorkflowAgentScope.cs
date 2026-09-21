@@ -65,6 +65,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private readonly List<AITool> _queryOnlyCustomTools = [];
     private readonly HashSet<string> _queryOnlyCustomToolNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly StringBuilder _customToolPrompt = new();
+    private readonly List<CustomToolGroup> _customToolGroups = [];
 
     private AgentLanguages _defaultLanguage = AgentLanguages.English;
     private AgentLanguages? _outputLanguage;
@@ -184,7 +185,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithTools(string? promptContext, params AITool[] tools)
     {
         _customTools.AddRange(tools);
-        AppendCustomToolPrompt(promptContext);
+        AppendCustomToolPrompt(promptContext, tools ?? [], queryOnly: false);
         BumpVersion();
         return this;
     }
@@ -204,15 +205,61 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             if (!string.IsNullOrEmpty(tool.Name))
                 _queryOnlyCustomToolNames.Add(tool.Name);
         }
-        AppendCustomToolPrompt(promptContext);
+        AppendCustomToolPrompt(promptContext, tools ?? [], queryOnly: true);
         BumpVersion();
         return this;
     }
 
-    private void AppendCustomToolPrompt(string? promptContext)
+    private void AppendCustomToolPrompt(string? promptContext, IReadOnlyList<AITool> tools, bool queryOnly)
     {
         if (!string.IsNullOrWhiteSpace(promptContext))
             _customToolPrompt.AppendLine(promptContext);
+
+        if (tools.Count > 0)
+            _customToolGroups.Add(new CustomToolGroup(promptContext, [.. tools], queryOnly));
+    }
+
+    /// <summary>
+    /// One <see cref="WithTools"/> / <see cref="WithQueryTools"/> call: the tools it registered and the
+    /// guidance text that came with them.
+    /// <para>
+    /// Kept beside <see cref="_customToolPrompt"/> rather than instead of it, because that string builder
+    /// is also a watermark — the capability envelope renders only the characters appended after the static
+    /// skeleton was built, and the offsets it compares are positions in exactly this text. These groups are
+    /// what lets a spawned child be given a <i>subset</i>: with the guidance belonging to the tools it
+    /// actually got, and without the guidance for the ones it did not.
+    /// </para>
+    /// </summary>
+    private sealed class CustomToolGroup(string? prompt, AITool[] tools, bool queryOnly)
+    {
+        public string? Prompt { get; } = prompt;
+        public AITool[] Tools { get; } = tools;
+        public bool QueryOnly { get; } = queryOnly;
+    }
+
+    /// <summary>
+    /// Copies onto a spawned child the registered custom tools that this spawn granted — and only those —
+    /// together with the guidance text their own registration came with.
+    /// <para>
+    /// A child needs its own registration rather than a share of this scope's: both the tool list and the
+    /// read-only classification live on the scope, and the child's set is a subset of it. A group whose
+    /// tools were all refused contributes nothing, guidance included — text describing a tool the child
+    /// does not hold is the same lie as a grant list naming one.
+    /// </para>
+    /// </summary>
+    internal void GrantCustomToolsTo(WorkflowAgentScope child, IReadOnlyCollection<string> granted)
+    {
+        foreach (var group in _customToolGroups)
+        {
+            var tools = group.Tools
+                .Where(t => granted.Contains(t.Name, StringComparer.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (tools.Length == 0) continue;
+
+            if (group.QueryOnly) child.WithQueryTools(group.Prompt, tools);
+            else child.WithTools(group.Prompt, tools);
+        }
     }
 
     /// <summary>

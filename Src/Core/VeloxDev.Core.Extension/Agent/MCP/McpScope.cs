@@ -413,11 +413,97 @@ public class McpScope
     }
 
     /// <summary>
+    /// Whether this scope is a view granted to a spawned child rather than a host's own MCP surface.
+    /// <para>
+    /// A granted view is read-only: it holds the tools of the servers it was given and nothing else, it
+    /// owns no client, and it refuses to load, unload or add a server. See <see cref="CreateGrantedView"/>.
+    /// </para>
+    /// </summary>
+    internal bool IsGrantedView { get; private set; }
+
+    /// <summary>
+    /// The server names a spawn may ask for: connected <i>and</i> switched on. The same set
+    /// <see cref="LoadedTools"/> draws from, so a grant list built from here never names a server whose
+    /// tools this scope is not offering.
+    /// </summary>
+    internal IReadOnlyList<string> GrantableNames
+        => [.. Status.Snapshot.Where(s => s.IsActive).Select(s => s.Name)];
+
+    /// <summary>
+    /// A read-only view of <paramref name="parent"/>'s servers restricted to <paramref name="granted"/>,
+    /// for a spawned child.
+    /// <para>
+    /// <b>Why a view rather than the scope itself.</b> Handing the child the parent's scope would hand it
+    /// <c>LoadMcpServers</c> and <c>UnloadMcpServer</c> too — power over processes that the parent's own
+    /// turn is suspended behind. A view is a different object with a different tool set, so the child's
+    /// boundary is a fact about what it holds rather than a rule it is asked to respect.
+    /// </para>
+    /// <para>
+    /// <b>Why it owns no client.</b> <see cref="_loadedClients"/> and <see cref="_loadedConfigs"/> stay
+    /// empty, so disposing the view — which happens when the child's scope is disposed — cannot tear down
+    /// a connection the parent is still using. The tools it exposes still reference the parent's clients;
+    /// those outlive the view by construction, because the parent's scope is what owns them.
+    /// </para>
+    /// <para>
+    /// <b>What it copies.</b> Only the granted servers, and only the tools of theirs the parent currently
+    /// offers: a tool the host switched off on the parent is not a capability the parent has, so it is not
+    /// one it can hand down. A granted name that is not connected simply produces no row — the grant list
+    /// is intersected with reality rather than trusted.
+    /// </para>
+    /// </summary>
+    internal static McpScope CreateGrantedView(McpScope parent, IReadOnlyCollection<string> granted)
+    {
+        var allowed = new HashSet<string>(granted, StringComparer.OrdinalIgnoreCase);
+        var view = new McpScope { IsGrantedView = true };
+        view.WithSynchronizationContext(parent.UIContext);
+
+        // Rows come from the parent's thread-safe snapshot, not from its bound collection: a spawn runs on
+        // whatever thread the spawning tool was marshalled to, and enumerating `Servers` there races the UI.
+        var rows = parent.Status.Snapshot
+            .Where(s => s.IsActive && allowed.Contains(s.Name))
+            .ToArray();
+
+        Dictionary<string, IReadOnlyList<AITool>> offered;
+        lock (parent._loadedToolsLock)
+        {
+            offered = rows
+                .Where(r => parent._loadedToolSets.ContainsKey(r.Name))
+                .ToDictionary(
+                    r => r.Name,
+                    r => (IReadOnlyList<AITool>)
+                        [.. parent._loadedToolSets[r.Name].Where(t => parent.IsToolEnabled(r.Name, t.Name))],
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        lock (view._loadedToolsLock)
+            foreach (var kvp in offered)
+                view._loadedToolSets[kvp.Key] = kvp.Value;
+
+        foreach (var row in rows)
+        {
+            var count = offered.TryGetValue(row.Name, out var tools) ? tools.Count : 0;
+            view.Status.Track(new McpServerStatusViewModel
+            {
+                Name = row.Name,
+                Description = row.Description,
+                RunMode = row.RunMode,
+                State = row.State,
+                ToolCount = count,
+                Error = row.Error,
+                Endpoint = row.Endpoint,
+                // Everything still in the view passed the parent's own switch, so the row says so.
+                IsEnabled = true,
+            });
+        }
+
+        return view;
+    }
+
+    /// <summary>
     /// Creates the context provider that contributes this scope's server inventory, its management tools
     /// and every connected server's tools on each agent invocation — everything a host needs to use MCP
     /// without the workflow layer.
-    /// </summary>
-    /// <param name="policy">
+    /// </summary>    /// <param name="policy">
     /// How the contributed tools behave. Omit for standalone use: the provider then builds a thread-only
     /// policy from this scope's own <see cref="WithSynchronizationContext"/>. A composing host passes
     /// <i>its</i> policy instead, so its budgets, callbacks and side effects still apply — and must pass

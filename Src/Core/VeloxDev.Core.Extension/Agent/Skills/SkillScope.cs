@@ -35,6 +35,22 @@ public class SkillScope
     private readonly object _gate = new();
     private long _version;
 
+    /// <summary>
+    /// The names this scope is restricted to, or <c>null</c> for a scope that serves everything its
+    /// sources found. Set only on a narrowed view — see <see cref="CreateNarrowed"/> — and applied inside
+    /// <see cref="Apply"/>, so a view that is refreshed later stays narrowed rather than quietly widening
+    /// back to the whole corpus.
+    /// </summary>
+    private HashSet<string>? _narrow;
+
+    /// <summary>
+    /// The last discovery's raw result, kept so a narrowed view can be built from it instead of re-reading
+    /// every source. For a view this already holds the view's own restricted set.
+    /// </summary>
+    private List<SkillDescriptor> _discovered = [];
+
+    private Dictionary<string, ISkillSource> _owners = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Bindable skill list and aggregate counts. Held for the scope's lifetime.</summary>
     public SkillsViewModel Status { get; } = new();
 
@@ -325,6 +341,41 @@ public class SkillScope
     /// <summary>Discovered skill names, in listing order. Snapshot-backed, so safe off the bound thread.</summary>
     public IReadOnlyList<string> Names => [.. Status.Snapshot.Select(s => s.Name)];
 
+    /// <summary>
+    /// The names a spawn may ask for: every discovered skill that is readable and currently switched on.
+    /// <para>
+    /// The intersection with the enabled flags is what keeps "a child is a subset of its parent" true of
+    /// skills too. A skill the host switched off is not advertised to this agent, so it is not a capability
+    /// this agent has to hand down — offering it would let a spawn talk the child into a document the
+    /// parent was told to disregard.
+    /// </para>
+    /// </summary>
+    internal IReadOnlyList<string> GrantableNames
+        => [.. Status.Snapshot.Where(s => s.IsActive).Select(s => s.Name)];
+
+    /// <summary>
+    /// A view over these skills restricted to <paramref name="allowed"/>, for a spawned child.
+    /// <para>
+    /// A child needs its own skill list rather than a share of this one: the enabled flags live on the
+    /// scope, so switching a skill off for a child would switch it off for the parent too. The view reuses
+    /// this scope's already-discovered descriptors instead of re-reading every source — a spawn pays no
+    /// discovery cost — but it keeps the source list, so a later <see cref="Refresh"/> on the view
+    /// rediscovers and re-applies the restriction.
+    /// </para>
+    /// <para>
+    /// It is a snapshot in the sense that matters for a capability grant: a skill discovered on the parent
+    /// afterwards is not in the view, and one switched off on the parent afterwards stays on in the view.
+    /// </para>
+    /// </summary>
+    internal SkillScope CreateNarrowed(IReadOnlyCollection<string> allowed)
+    {
+        var view = new SkillScope { _narrow = new HashSet<string>(allowed, StringComparer.OrdinalIgnoreCase) };
+        lock (_gate) view._sources.AddRange(_sources);
+        view.WithPromptLanguage(PromptLanguage);
+        view.Apply(_discovered, _owners);
+        return view;
+    }
+
     // ── Rendering helpers ────────────────────────────────────────────────────
 
     /// <summary>
@@ -346,6 +397,16 @@ public class SkillScope
 
     private void Apply(List<SkillDescriptor> found, Dictionary<string, ISkillSource> owners)
     {
+        // The restriction is applied here rather than at the call sites so that it survives a refresh:
+        // a narrowed view that rediscovers must stay narrowed, not quietly widen back to the whole corpus.
+        if (_narrow is { } allowed)
+        {
+            found = [.. found.Where(d => allowed.Contains(d.Name))];
+            owners = owners
+                .Where(kv => allowed.Contains(kv.Key))
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
         // One entry per name: a skill is toggled as a concept, while its text is rendered per language.
         var byName = new Dictionary<string, List<SkillDescriptor>>(StringComparer.OrdinalIgnoreCase);
         var order = new List<string>();
@@ -393,6 +454,9 @@ public class SkillScope
             _owningSource.Clear();
             foreach (var kvp in owners) _owningSource[kvp.Key] = kvp.Value;
         }
+
+        _discovered = found;
+        _owners = owners;
 
         Interlocked.Increment(ref _version);
     }

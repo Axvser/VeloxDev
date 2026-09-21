@@ -78,6 +78,12 @@ public sealed class SubAgentSummary
     /// <summary>How many tools the child was actually given.</summary>
     public int GrantedToolCount { get; set; }
 
+    /// <summary>How many skills the child was given. Zero when it has no skill provider at all.</summary>
+    public int GrantedSkillCount { get; set; }
+
+    /// <summary>How many MCP servers the child was given. Zero is the ordinary case.</summary>
+    public int GrantedMcpServerCount { get; set; }
+
     /// <summary>
     /// What the spawn asked for and did not get, one line each. Carried into the summary rather than only
     /// into the spawn's own reply, because a panel showing a child that quietly has fewer abilities than it

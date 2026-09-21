@@ -32,6 +32,8 @@ public sealed partial class SubAgentStatusViewModel
     [VeloxProperty] private DateTimeOffset? startedAt = null;
     [VeloxProperty] private DateTimeOffset? finishedAt = null;
     [VeloxProperty] private ObservableCollection<string> grantedTools = [];
+    [VeloxProperty] private ObservableCollection<string> grantedSkills = [];
+    [VeloxProperty] private ObservableCollection<string> grantedMcpServers = [];
     [VeloxProperty] private ObservableCollection<string> droppedRequests = [];
 
     /// <summary>The handle every other tool takes, and the row's identity in the tree.</summary>
@@ -114,5 +116,19 @@ public sealed partial class SubAgentStatusViewModel
         GrantedTools.Clear();
         foreach (var tool in granted) GrantedTools.Add(tool);
         OnPropertyChanged(nameof(GrantedSummary));
+    }
+
+    /// <summary>Called by the roster when the granted skill list is filled in at spawn time.</summary>
+    internal void SetGrantedSkills(IEnumerable<string> granted)
+    {
+        GrantedSkills.Clear();
+        foreach (var skill in granted) GrantedSkills.Add(skill);
+    }
+
+    /// <summary>Called by the roster when the granted MCP server list is filled in at spawn time.</summary>
+    internal void SetGrantedMcpServers(IEnumerable<string> granted)
+    {
+        GrantedMcpServers.Clear();
+        foreach (var server in granted) GrantedMcpServers.Add(server);
     }
 }
