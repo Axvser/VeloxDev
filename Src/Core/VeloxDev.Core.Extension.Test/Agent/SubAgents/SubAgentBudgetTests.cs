@@ -19,9 +19,13 @@ namespace VeloxDev.Core.Extension.Test.Agent.SubAgents;
 /// is made, against the root is what turns "arbitrary depth" into "bounded by the root's allowance".
 /// </para>
 /// <para>
-/// The second half is the safety property, and it is the reason this subsystem may hand out spendable
-/// capabilities at all: a child cannot widen its own budget. The parent's escape hatch — ask the user — is
-/// structurally absent from a background child, in two independent ways.
+/// The second half is the escape hatch, which a child now holds. The reset tool is part of the surface like
+/// any other, so a child that runs out is sent to it exactly as its parent is — and it reaches the user
+/// because the host's interaction configuration travels down with it. What remains a property is that
+/// <i>the user</i> decides: the level, the handler and the operation key all have to have been the host's to
+/// begin with, and with no handler there is no answer and the reset denies. The cost of the widening is
+/// recorded where it belongs — <c>ResetChain</c> walks to the root, so a child asking successfully reopens
+/// the whole session rather than its own share; see the memory note on the three constraints.
 /// </para>
 /// </summary>
 [TestClass]
@@ -76,10 +80,12 @@ public class SubAgentBudgetTests
     }
 
     [TestMethod]
-    public async Task AChildThatRunsOut_IsToldToReportUpward_NotToAskTheUser()
+    public async Task AChildThatRunsOut_IsSentToTheEscapeHatch_AndToldToReportUpward()
     {
-        // The refusal text differs by whether the scope owns the session's allowance. A child sent to the
-        // reset tool would find it switched off and learn to retry; it is told the option it actually has.
+        // A child holds the reset tool, so the refusal may name it — and must, because a refusal with no way
+        // out is where the run stops. What is added for a child and not for a root is the duty: someone is
+        // suspended on this run's result, and a child that sits waiting for an answer nobody will give wastes
+        // that dispatcher's turn.
         await using var fx = new SubAgentFixture(maxToolCalls: 4);
 
         var id = fx.Spawn("the thing", ("maxToolCalls", 1));
@@ -87,59 +93,115 @@ public class SubAgentBudgetTests
 
         var refusal = SubAgentFixture.InvokeOn(fx.ChildScope(id), "ListNodes");
 
-        StringAssert.Contains(refusal, "cannot extend it yourself");
-        Assert.IsFalse(refusal.Contains(WorkflowAgentToolkit.ResetBudgetToolName),
-            "a child must not be pointed at a tool it does not hold");
-        Assert.IsTrue(refusal.Contains("report"), "it needs to be told what to do instead");
+        StringAssert.Contains(refusal, WorkflowAgentToolkit.ResetBudgetToolName,
+            "the child holds it, so it may be pointed at it");
+        StringAssert.Contains(refusal, "report", "and it still owes its dispatcher an answer");
     }
 
     [TestMethod]
-    public async Task AChild_CannotReachTheResetTool()
+    public async Task AChild_HoldsTheResetTool()
     {
-        // The safety property. Interaction safety closes the question, the switch closes the tool; either
-        // alone would do, and both are asserted because a regression in one must not be masked by the other.
+        // The widening, stated plainly: the reset tool is part of the parent's surface like any other, so it
+        // is inherited by default and can be named in a whitelist. The alternative — a name in the grant list
+        // that the child's scope has switched off — is the "visible and unusable" shape this change removes,
+        // and it is what the model was before: told about a way out and refused it.
         await using var fx = new SubAgentFixture(maxToolCalls: 4);
 
-        var id = fx.Spawn("the thing", ("allowedTools", new[] { "ListNodes", WorkflowAgentToolkit.ResetBudgetToolName }));
+        var id = fx.Spawn("the thing",
+            ("maxToolCalls", 1),
+            ("allowedTools", new[] { "ListNodes", WorkflowAgentToolkit.ResetBudgetToolName }));
         var child = fx.ChildScope(id);
 
-        Assert.IsFalse(child.IsToolEnabled(WorkflowAgentToolkit.ResetBudgetToolName),
-            "the switch is off on the child");
-        Assert.IsFalse(SubAgentFixture.SurfaceOf(child).Contains(WorkflowAgentToolkit.ResetBudgetToolName),
-            "so the model is never shown it");
+        Assert.IsTrue(child.IsToolEnabled(WorkflowAgentToolkit.ResetBudgetToolName),
+            "the switch is on, as it is on the parent");
+        Assert.IsTrue(SubAgentFixture.SurfaceOf(child).Contains(WorkflowAgentToolkit.ResetBudgetToolName),
+            "so the model is shown it");
+        Assert.IsFalse(fx.RowOf(id).DroppedRequests.Any(d => d.Contains(WorkflowAgentToolkit.ResetBudgetToolName)),
+            "and naming it is not a refusal");
 
-        // And reaching for it anyway — through the unfiltered surface — is refused by the gate rather than
-        // quietly obeyed. The refused call must not move the ledger either: a refusal is not a call.
+        // Reaching it with nobody registered to answer denies rather than allowing itself — the property that
+        // survives the widening. An unanswerable prompt is a no, whichever scope asks it. The child's own share
+        // is spent first, so the reset has something to be about and the denial cannot be a "nothing to do".
+        SubAgentFixture.InvokeOn(child, "ListNodes");
         var before = Spent(child);
-        var refusal = SubAgentFixture.InvokeTool(
-            SubAgentFixture.ToolOn(child.CreateToolkit(), WorkflowAgentToolkit.ResetBudgetToolName));
+        var reply = JObject.Parse(SubAgentFixture.InvokeOn(child, WorkflowAgentToolkit.ResetBudgetToolName));
 
-        StringAssert.Contains(refusal, "disabled");
-        Assert.AreEqual(before, Spent(child));
-        Assert.AreEqual(1, Spent(fx.Scope), "and nothing was charged to the tree either");
+        Assert.AreEqual("denied", (string?)reply["status"]);
+        Assert.AreEqual(before, Spent(child), "a denial leaves the budget where it was");
     }
 
     [TestMethod]
-    public async Task AChildWithInteractionOff_CannotAskEvenIfTheSwitchWereOn()
+    public async Task AChildsReset_ReachesTheUser_AndReopensTheWholeTree()
     {
-        // The second half of the same property, tested where it lives. A background child raising a modal
-        // question would put it to the user while its parent's turn is still suspended, so the level is
-        // zeroed unconditionally — and at level zero the reset denies rather than asking.
-        await using var fx = new SubAgentFixture(maxToolCalls: 10);
+        // The other half, and the reason the level and the handler have to travel with the tool: a child
+        // holding the reset tool is useless unless the question it asks arrives at the host's dialog. Where it
+        // lands is the cost of the widening — ResetChain walks to the root, so the child's ask reopens the
+        // session and not merely its own share.
+        await using var fx = new SubAgentFixture(maxToolCalls: 4);
+        var asked = 0;
+        fx.Scope.WithConfirmationHandler(args =>
+        {
+            asked++;
+            args.Result = AgentConfirmationResult.AllowAlways;
+            return Task.CompletedTask;
+        });
+
         var id = fx.Spawn("the thing", ("maxToolCalls", 1));
-        var child = fx.ChildScope(id);
+        SubAgentFixture.InvokeOn(fx.ChildScope(id), "ListNodes");
+        Assert.AreEqual(2, Spent(fx.Scope));
 
-        Assert.IsFalse(child.IsInteractionAllowed, "a background child never puts a question to the user");
+        var reply = JObject.Parse(SubAgentFixture.InvokeOn(fx.ChildScope(id), WorkflowAgentToolkit.ResetBudgetToolName));
 
-        // Proving the belt independently of the braces: put the tool back, exhaust the child's own share,
-        // and the escape hatch still refuses — because there is nobody to ask, not because it is missing.
-        child.WithToolEnabled(WorkflowAgentToolkit.ResetBudgetToolName, true);
-        SubAgentFixture.InvokeOn(child, "ListNodes");
+        Assert.AreEqual("ok", (string?)reply["status"]);
+        Assert.AreEqual(1, asked, "the host's own handler answered it, from the dialogs the host registered");
+        Assert.AreEqual(0, Spent(fx.Scope),
+            "and the whole chain is zeroed — the child's agreement reopens the session, not its own share");
+    }
 
-        var reply = JObject.Parse(SubAgentFixture.InvokeOn(child, WorkflowAgentToolkit.ResetBudgetToolName));
+    [TestMethod]
+    public async Task AChild_InheritsTheHostsInteractionConfiguration()
+    {
+        // The prerequisite the "hand it down as it stands" change turns on. RequestConfirmation is offered
+        // only when the level is above zero AND a handler is registered on that very scope, and a child scope
+        // is a fresh one — so a child handed the tool without the configuration would hold a name it does not
+        // have. Asserted at both settings, because "the level travels" is only true if the off state does too.
+        await using var on = new SubAgentFixture(maxToolCalls: 10);
+        var asked = 0;
+        on.Scope.WithConfirmationHandler(args =>
+        {
+            asked++;
+            args.Result = AgentConfirmationResult.AllowAlways;
+            return Task.CompletedTask;
+        });
 
-        Assert.AreEqual("denied", (string?)reply["status"],
-            "level zero means the user cannot be asked, and a budget only reopens with their agreement");
+        var child = on.ChildScope(on.Spawn("the thing",
+            ("allowedTools", new[] { "ListNodes", "RequestConfirmation" })));
+
+        Assert.IsTrue(child.IsInteractionAllowed, "the host's level travels with the tool that needs it");
+        Assert.IsTrue(SubAgentFixture.SurfaceOf(child).Contains("RequestConfirmation"),
+            "and the tool is really on the child's surface, not merely in its grant list");
+
+        var reply = JObject.Parse(SubAgentFixture.InvokeOn(child, "RequestConfirmation",
+            ("operationKey", "delete-all-nodes"), ("description", "delete every node")));
+
+        Assert.AreEqual("ok", (string?)reply["status"]);
+        Assert.AreEqual(1, asked, "the host's own handler answered it — which is what 'usable' means here");
+
+        // And a host that switched interaction off hands down the off state, which is the same decision as
+        // not offering the tool: nothing is registered at level zero, on either side of the spawn.
+        await using var off = new SubAgentFixture(maxToolCalls: 10);
+        off.Scope.WithInteractionSafety(0);
+        off.Scope.WithConfirmationHandler(args =>
+        {
+            args.Result = AgentConfirmationResult.AllowAlways;
+            return Task.CompletedTask;
+        });
+
+        var quiet = off.ChildScope(off.Spawn("the thing"));
+
+        Assert.IsFalse(quiet.IsInteractionAllowed, "level zero is a decision about the tree, not about one scope");
+        Assert.IsFalse(SubAgentFixture.SurfaceOf(quiet).Contains("RequestConfirmation"),
+            "and at level zero the tool is not offered at all");
     }
 
     [TestMethod]
@@ -178,9 +240,9 @@ public class SubAgentBudgetTests
     [TestMethod]
     public async Task ASpentChild_ReportsUpward_RatherThanWaitingToBeUnstuck()
     {
-        // What a child does when its share runs out, pinned so the reset's asymmetry above stays a design
-        // and not an omission: it is refused, it is not pointed at the escape hatch, and the grant it was
-        // given does not silently grow.
+        // What a child does when its share runs out, pinned so the reset's asymmetry above stays a design and
+        // not an omission: it is refused, it is told its dispatcher is waiting, and the grant it was given
+        // does not silently grow behind the model's back.
         await using var fx = new SubAgentFixture(maxToolCalls: 4);
 
         var id = fx.Spawn("the thing", ("maxToolCalls", 1));

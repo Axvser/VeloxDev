@@ -147,6 +147,72 @@ public class SubAgentHierarchyTests
     }
 
     [TestMethod]
+    public async Task AChildDispatchedWithoutAWhitelist_IsToldItMayDispatchToo()
+    {
+        // The default grant is what most children get, so the wording that goes with it is the one that
+        // decides whether a tree ever grows past one level. A child told nothing about delegating does not go
+        // looking for the tool, and the tool being present is not the same as the model reaching for it.
+        await using var fx = new SubAgentFixture(client: new InstantChatClient());
+
+        var child = fx.Spawn("count the nodes");
+
+        StringAssert.Contains(InstructionsOf(fx.ChildScope(child)), "may dispatch");
+        CollectionAssert.Contains(
+            SubAgentFixture.SubAgentSurfaceOf(fx.ChildScope(child)).ToArray(), "SpawnSubAgent");
+    }
+
+    [TestMethod]
+    public async Task OneAgent_DispatchesAsManyChildrenAsItLikes()
+    {
+        // Every agent in the tree may create several children for itself, and nothing caps that. The pot is
+        // what bounds the tree rather than a per-scope count: each spawn charges the shared allowance and each
+        // grant is one smaller than its parent's, so a hundred siblings are permitted and simply cost a
+        // hundred calls. A count limit would have to be some number, and the requirement was "many".
+        await using var fx = new SubAgentFixture(client: new InstantChatClient(), maxToolCalls: 40);
+
+        var ids = new[] { fx.Spawn("first"), fx.Spawn("second"), fx.Spawn("third") };
+
+        Assert.AreEqual(3, fx.Rows.Count);
+        Assert.AreEqual(3, ids.Distinct().Count(), "each spawn is a child of its own, not a re-use of one");
+        Assert.AreEqual(1, fx.Rows.Select(r => r.ParentId).Distinct().Count(),
+            "all three hang off the one node that dispatched them");
+
+        foreach (var id in ids)
+        {
+            Assert.AreEqual(1, fx.RowOf(id).Depth);
+            Assert.IsTrue(SubAgentFixture.SubAgentSurfaceOf(fx.ChildScope(id)).Contains("SpawnSubAgent"),
+                "and each can dispatch in turn — the fan-out is not a privilege of the root");
+        }
+    }
+
+    [TestMethod]
+    public async Task AChild_DispatchesItsOwnChildren_AndTheyAreSiblings()
+    {
+        // The other half of the same requirement, one level down: a child's ability to dispatch several is
+        // what makes a tree rather than a fan. Depth is measured from the host's scope and is not reset at
+        // each level, and each child is a scope of its own — two siblings must not share one.
+        await using var fx = new SubAgentFixture(client: new InstantChatClient(), maxToolCalls: 40);
+
+        var parent = fx.Spawn("the outer job");
+        var a = SpawnFrom(fx, [parent], "the first inner job");
+        var b = SpawnFrom(fx, [parent], "the second inner job");
+
+        var roster = fx.ChildSubAgents(parent).Snapshot;
+        CollectionAssert.AreEquivalent(new[] { a, b }, roster.Select(r => r.Id).ToArray());
+        foreach (var row in roster)
+        {
+            Assert.AreEqual(2, row.Depth);
+            Assert.AreEqual(parent, row.ParentId, "both name the row that dispatched them");
+        }
+
+        Assert.AreNotSame(fx.DescendantScope(parent, a), fx.DescendantScope(parent, b),
+            "two siblings are two scopes, or one's configuration would be the other's");
+        Assert.IsTrue(
+            SubAgentFixture.SubAgentSurfaceOf(fx.DescendantScope(parent, a)).Contains("SpawnSubAgent"),
+            "and the tree goes on growing from either of them");
+    }
+
+    [TestMethod]
     public async Task TwoScopes_NeverShareAStateKey()
     {
         // The framework throws when two providers attached to one agent share a key, and the keys default to

@@ -105,6 +105,21 @@
 2. **全模块唯一的反射点读的是私有框架字段，而且是「做一次就自摘」的。** `WorkflowSurfaceBehavior.cs:424-427` 取 `GestureRecognizerCollection` 的私有 `_recognizers` 列表，把 `ScrollGestureRecognizer` 全删掉（理由写在 `:411-413`：它会在拖拽中抢走指针捕获，触屏平台尤甚），删完立刻 `viewer.LayoutUpdated -= OnScrollViewerLayoutUpdated`（`:427`）—— 所以这段逻辑只在第一次布局后跑一次，之后不再走。前提是 `GestureRecognizerCollection` 只公开 `Add`（`WorkflowSystem/adapters/avalonia.md` §二.4）。这家**一个裁剪注解都没有**（grep `IsTrimmable|DynamicDependency|RequiresUnreferencedCode` 只命中 `obj/` 产物），而这家恰好有裁剪 demo（§七）。**裁剪会把这里影响到什么程度、是抛还是静默失效，我没有验证 —— 存疑**；要动这里先在裁剪 demo 上实测。
 3. **`WorkflowSurfaceBehavior.Refresh` 是 public 静态入口**（`:90`），每次都会重解析名字、重写滚动偏移并写 `viewModel.Layout.ViewportOffset`（`:90-100`、`:507-523`）。别在别处再写一次 `Viewport` / `ScrollViewer.Offset` —— `Viewport` 只有适配器写这条契约（`WorkflowSystem/extension.md` §3.9-3）在这家由这一处落地。
 4. **`ViewManager.Attach` 要求集合实现 `IEnumerable`**（`:41-42`，否则抛 `ArgumentException`）；`ViewPool` 的两个属性**谁后写谁重建管理器**（`:41-71`），运行期换 `TemplateSelector` 会 `Detach` → 清空并重建整池视图（`:84-91`）。
+5. **故意让一次 XAML 编译失败，会把 Avalonia 的构建服务卡住；此后每一笔「成功」的构建都在产出一个没有编译 XAML 的程序集。** 症状是**启动即抛**
+   `Avalonia.Markup.Xaml.XamlLoadException: No precompiled XAML found for <App>`（栈顶在 `App.axaml.cs:13` 的 `Initialize()`）。
+   机制：XAML 编译由一个**常驻的构建服务进程**做（命令行形如 `dotnet exec .../avalonia.buildservices/<ver>/tools/netstandard2.0/...`），它把目标程序集载进自己进程来改写。一次失败的编译把它留在「载着 `obj/<cfg>/<tfm>/<App>.dll`」的状态，后续构建就改不动那个文件了 —— 而且**增量构建既不报错、也不产出编译后的 XAML**，只有 `-t:Rebuild` 才会明说：
+   `AVLN9999: The process cannot access the file '...obj\Debug\net8.0\Demo.dll' because it is being used by another process`。
+   解法：先 `dotnet build-server shutdown`，再按命令行把剩下的持有者找出来 kill —— `Get-CimInstance Win32_Process -Filter "Name='dotnet.exe'" | ? { $_.CommandLine -like '*avalonia.buildservices*' }` —— 然后 `-t:Rebuild`。
+   **实测于 2026-09-22**：一次故意写错的绑定（`AVLN2000`）之后，连续两笔构建都报「0 警告 0 错误」，产出的 `Demo.dll` 启动即抛上句；关服务 + `Rebuild` 后恢复正常。（当时记的是「跑满 25 s 无任何输出」，那**不是**通过判据 —— 见本节末那条推论修正。）
+   **同日稍后再实测一次，持有者不是那个服务**：跑完一次**整解并行构建**后，`Demo.csproj` 无论增量还是 `-t:Rebuild` 都报同一句 `AVLN9999`，而按上面那条 `-like '*avalonia.buildservices*'` 过滤**一个进程都找不到** —— 当时只有一批 `MSBuild.dll /nodemode:1 /nodeReuse:true` 的驻留节点。**`dotnet build-server shutdown` 一条命令即解**（随后 `-t:Rebuild` 20 s、0 错误）。所以这条错误的持有者**至少有两种**：Avalonia 自己的构建服务，以及 MSBuild 的 node-reuse 驻留节点（整解并行构建更容易留下后者）。**先关构建服务、再重试，两步都不成再去找 `avalonia.buildservices`** —— 不要因为找不到那个服务就以为诊断错了。
+   ⚠ **推论：Avalonia 工程的「构建绿」不足以证明程序集可用。** 这条直接推翻「构建过了就算验过」——改完 XAML 要真启动一次。
+   **用户侧的症状就叫「demo 起不来」**：双击 `bin/.../Demo.exe` 一闪即退，从命令行才看得到上句（它走 stderr，进程立刻退出）。**2026-09-22 第三次实测，并且这次是使用者报上来的**：我在同一轮里先关服务 + `-t:Rebuild`（0 错误）并「跑满 28 s」，随后又跑了几笔整解构建 —— 那些构建的总结是 **`0 个警告 / 5 个错误`，而 5 个全部来自 Android AOT workload，Demo 那一步算「成功」** —— 交到手上时 demo 启动即抛上句。`dotnet build-server shutdown` + `-t:Rebuild`（22 s、0 错误）之后恢复正常。
+   ⇒ **两条要分开记**：① 「服务卡住」是一次性的状态，**不是「整解构建必然弄坏它」** —— 修好之后再跑一次整解构建，demo 照样正常启动（测过）；② 但**整解构建的绿色总结不覆盖这一件事**，Demo 明明产出了没有 XAML 的程序集，总结里却只有 Android 那 5 个错误。
+   ⚠ **复核手段本身也要改**：「跑 N 秒没输出」**不是**「起来了」的证据 —— 它区分不了「窗口在」和「进程刚好还没崩」，而这一轮我就是拿它当通过、把坏掉的一版交了出去。**判据是窗口句柄**：`Get-Process Demo | Select MainWindowHandle` 非 0、且 `Responding=True`，才算起来了（`.axaml` 里 `Title="Demo"`，`MainWindowTitle` 应当对得上；句柄读得早会拿到 0，要等几秒再读）。
+6. **kill 掉一个 Avalonia workflow demo 会留下它自己的 WebView2 子进程**，占着 `bin/.../<App>.exe.WebView2\EBWebView`；下一次启动死在
+   `COMException 0x800700AA`（资源正在使用中，栈在 `WebView2HwndAdapter.InitializeAsync`）。
+   来源是 **`md:MarkdownView`**：`AvalonMarkdown` 8.0.0 直接依赖 `Avalonia.Controls.WebView`（nuspec 里写着），于是每个带对话面板的 workflow demo 都真的起一个 WebView2 —— Debug / Release 都有，与 `AvaloniaUI.DiagnosticsSupport` 无关。
+   收尾要连子进程一起收：`taskkill /PID <pid> /T /F`，或按命令行筛 `msedgewebview2.exe`（`CommandLine -like '*<demo 目录>*'`），别只关主进程。
 
 ---
 

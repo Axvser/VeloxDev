@@ -30,7 +30,7 @@ internal sealed class SubAgentRequest
     public string? Name { get; set; }
 
     /// <summary>
-    /// The exact tools the child may use, or <c>null</c> to inherit the parent's read-only surface.
+    /// The exact tools the child may use, or <c>null</c> to inherit every tool the parent currently offers.
     /// An empty array is a request for no tools at all, which is a different thing from omitting it.
     /// </summary>
     public string[]? AllowedTools { get; set; }
@@ -43,9 +43,9 @@ internal sealed class SubAgentRequest
     public string[]? AllowedSkills { get; set; }
 
     /// <summary>
-    /// The MCP servers the child may use, or <c>null</c> for none. The asymmetry with
-    /// <see cref="AllowedSkills"/> is deliberate: this is the one source with no read-only part, so its
-    /// default is the empty set and a server has to be asked for by name.
+    /// The MCP servers the child may use, or <c>null</c> to inherit every server the parent has connected
+    /// and switched on — the same default <see cref="AllowedSkills"/> has. An empty array grants none, which
+    /// is a different thing from omitting it.
     /// </summary>
     public string[]? AllowedMcpServers { get; set; }
 
@@ -80,8 +80,19 @@ internal sealed class ChildBriefing
     /// <summary>The skills this child was given, as the names it can pass to <c>load_skill</c>.</summary>
     public IReadOnlyList<string> GrantedSkills { get; set; } = [];
 
-    /// <summary>The MCP servers this child was given. Empty is the ordinary case.</summary>
+    /// <summary>The MCP servers this child was given, as the names it reaches their tools through.</summary>
     public IReadOnlyList<string> GrantedMcpServers { get; set; } = [];
+
+    /// <summary>
+    /// Whether the spawn that produced this child asked for less than its parent had.
+    /// <para>
+    /// It gates whether the child is read the roster of what it was given. Naming that roster is worth its
+    /// length exactly when the set is smaller than the parent's — a child handed two of nine skills cannot
+    /// find out which two any other way — and is pure repetition when it is not, because the child's own
+    /// skill and MCP providers already describe what they contribute.
+    /// </para>
+    /// </summary>
+    public bool Narrowed { get; set; }
 }
 
 /// <summary>
@@ -163,8 +174,9 @@ public sealed class SubAgentScope : IAsyncDisposable
         "You are a sub-agent dispatched in the background by another agent to carry out one task. "
         + "The task is the user message of this conversation; do not ask for clarification, decide what is "
         + "reasonable and proceed. Use the tools you have been given, then answer with a concise report of "
-        + "what you found or did. Your abilities are a narrowed subset of the agent that spawned you, and "
-        + "the tools you actually hold are the whole of what you may use — do not attempt to obtain others.";
+        + "what you found or did. You hold what the agent that dispatched you handed down — by default "
+        + "everything it had — and the tools you actually hold are the whole of what you may use; do not "
+        + "attempt to obtain others.";
 
     /// <summary>The child agents this scope has spawned, oldest first, as bindable rows.</summary>
     public ObservableCollection<SubAgentStatusViewModel> Children { get; } = [];
@@ -401,26 +413,43 @@ public sealed class SubAgentScope : IAsyncDisposable
         if (request.MaxToolCalls is { } askedBudget && askedBudget > granted)
             dropped.Add($"maxToolCalls: asked for {askedBudget}, granted {granted} — the parent has that much left at most");
 
-        // ── the tool surface: the parent's own, narrowed ──
-        // Narrowing is against the parent's *potential* surface, not against what its switches currently
-        // allow. Both halves matter and they are not the same list: what may be asked for is what the parent
-        // currently offers, while what must be switched off is everything the child could otherwise reach —
-        // an inherited tool the parent itself had turned off would be a capability the child holds and its
-        // parent does not, which is the one thing this subsystem exists to make impossible.
+        // ── the tool surface: the parent's own, handed down as it stands ──
+        // What may be asked for is what the parent currently offers, and it is also what the child gets when
+        // the request says nothing: omitting a field means *inherit*, and inheriting means the whole of it.
+        // Naming tools is the one way to take anything away. The only subtraction is the parent's own
+        // switches — a tool the parent itself had turned off is not a capability the parent has, so it is not
+        // one it can hand down.
         var parentToolkit = parent.CreateToolkit();
         var everyName = parentToolkit.CreateAllTools().Select(t => t.Name).ToList();
 
-        // The skill tools are the parent's potential too, even though they are absent from the toolkit:
-        // they come from the skill subsystem's own provider. Leaving them out would drop `load_skill` from
-        // every grant as "not available to this agent", and would leave the skill tools switched on for a
-        // child that was granted no skills — a tool the model can call and that can only fail.
+        // The skill tools are part of that surface even though they are absent from the toolkit: they come
+        // from the skill subsystem's own provider. Leaving them out would drop `load_skill` from every grant
+        // as "not available to this agent", and would leave the skill tools switched on for a child that was
+        // granted no skills — a tool the model can call and that can only fail.
         if (parent.Skills is not null) everyName.AddRange(SkillAgentToolkit.ToolNames);
+
+        // The five management tools, and unlike the skill line above this one is not behind a check on the
+        // parent: `child.WithSubAgents(grand)` below is unconditional, so every child reaches these five
+        // whether or not its parent had a subsystem attached. A name that is reachable has to be in this
+        // list, or the switch-off loop further down cannot take it away — which is exactly what was wrong.
+        // Absent from this list the axis ran inverted: a spawn that named its tools switched all five off,
+        // while a spawn that named none left them all on. So the model could delegate only when it had not
+        // stopped to think about what it was granting, and never by asking — and asking was answered with
+        // "not available to this agent", which is also false.
+        everyName.AddRange(SubAgentAgentToolkit.ToolNames);
+
+        // And the third source, MCP, which was missing from this list entirely. Its tools are reachable by a
+        // child through its own MCP provider, so a name absent from here could not be granted by name either
+        // — asking for one was answered with "not available to this agent, or switched off by the host",
+        // which is precisely what it was not. `LoadedTools` is already the set this wants: connected,
+        // switched on, and with the individually disabled tools taken out.
+        var mcpNames = new HashSet<string>(
+            parent.Mcp is { } mcpSource ? mcpSource.LoadedTools.Select(t => t.Name) : Enumerable.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
+        everyName.AddRange(mcpNames);
         everyName = [.. everyName.Distinct(StringComparer.OrdinalIgnoreCase)];
 
-        var available = everyName
-            .Where(parent.IsToolEnabled)
-            .Where(name => !NoChildMayHold(name))
-            .ToList();
+        var available = everyName.Where(parent.IsToolEnabled).ToList();
 
         List<string> grantedTools;
         if (request.AllowedTools is { } wanted)
@@ -429,38 +458,20 @@ public sealed class SubAgentScope : IAsyncDisposable
                 .Where(name => available.Contains(name, StringComparer.OrdinalIgnoreCase))
                 .Select(name => Canonical(name, available))];
             foreach (var name in wanted.Where(name => !available.Contains(name, StringComparer.OrdinalIgnoreCase)))
-                dropped.Add(NoChildMayHold(name)
-                    ? $"{name}: never granted to a sub-agent — {NoChildMayHoldReason}"
-                    : $"{name}: not available to this agent, or switched off by the host");
+                dropped.Add($"{name}: not available to this agent, or switched off by the host");
         }
         else
         {
-            // Inheriting means inheriting the *read-only* part. A child that must change the graph says so
-            // by naming the tools, which keeps the default the one that cannot damage anything.
-            grantedTools = [.. available.Where(parentToolkit.IsQueryOnlyTool)];
+            grantedTools = [.. available];
         }
 
-        // A background child must not put a modal question to the user while its parent's turn is suspended,
-        // and there is no UI context to marshal a graph mutation onto. Both are properties of being a
-        // background child rather than requests the model gets to make, so they are applied unconditionally
-        // — safety enforced in code, not in prompt prose.
-        if (parent.UIContext is null)
-        {
-            var needingUi = grantedTools.Where(name => !parentToolkit.IsQueryOnlyTool(name)).ToList();
-            foreach (var name in needingUi)
-            {
-                grantedTools.Remove(name);
-                dropped.Add($"{name}: needs a UI synchronization context, and the host registered none");
-            }
-        }
-
-        // ── the knowledge surface, and the one with no read-only part ──
+        // ── the knowledge surface: the same default as the tools ──
         var grantedSkills = ResolveSkills(parent, request, dropped);
         var grantedServers = ResolveMcpServers(parent, request, dropped);
 
-        // Nothing to load is nothing to hold the loader for. Without this the inherited read-only surface
-        // would still list `load_skill` — it is classified read-only, so it comes back through the branch
-        // above — and the child would come away told it holds a tool that does not exist on its scope.
+        // Nothing to load is nothing to hold the loader for. Without this the inherited surface would still
+        // list `load_skill` — it is part of the parent's surface, so it comes back through the branch above
+        // — and the child would come away told it holds a tool that does not exist on its scope.
         if (grantedSkills.Count == 0 && parent.Skills is not null)
         {
             foreach (var name in SkillAgentToolkit.ToolNames)
@@ -481,26 +492,34 @@ public sealed class SubAgentScope : IAsyncDisposable
         child.WithAutoMarkDirty(RequestableAutoMarkDirty(request, parent, dropped));
 
         // Everything the child could otherwise reach but was not granted is switched off by name — over the
-        // parent's whole surface, not over the part its own switches happen to allow.
+        // parent's whole surface, not over the part its own switches happen to allow. That whole surface
+        // includes the names the child gets from its own providers, which is what lets this one loop be the
+        // only place a workflow tool is taken away. MCP names are skipped here, and only they: an MCP tool's
+        // switch is keyed `server/tool` on its own scope rather than by tool name on this one, so a name
+        // passed to `WithToolEnabled` here would look like a removal and take nothing away. That source is
+        // narrowed where its key lives, in the granted view built below.
         foreach (var name in everyName)
-            if (!grantedTools.Contains(name, StringComparer.OrdinalIgnoreCase))
+            if (!mcpNames.Contains(name) && !grantedTools.Contains(name, StringComparer.OrdinalIgnoreCase))
                 child.WithToolEnabled(name, false);
 
-        if (request.AllowedTools is not null)
-            foreach (var name in SubAgentAgentToolkit.ToolNames)
-                if (!request.AllowedTools.Contains(name, StringComparer.OrdinalIgnoreCase))
-                    child.WithToolEnabled(name, false);
-
-        // The one gate the child can never open. Its two halves are independent on purpose: the level stops
-        // the reset from asking a question, and the switch stops it from being offered or reached at all.
-        child.WithInteractionSafety(0);
-        child.WithToolEnabled(WorkflowAgentToolkit.ResetBudgetToolName, false);
+        // ── the host's interaction configuration, handed down with the two tools that need it ──
+        // RequestSelection and RequestConfirmation are offered only when the level is above zero AND a
+        // handler is registered on that very scope (WorkflowAgentToolkit.CreateAllTools). A child scope is a
+        // fresh one over the same tree, so leaving this out would put two names in the grant list that the
+        // child does not have and can never call — a permission the model can see and never use, which is
+        // worse than no permission. The level travels with them because level zero is what makes the reset
+        // tool refuse to ask: a child holding the reset tool under level zero holds a tool that only fails.
+        // A host that registered no handlers hands down nothing, and then neither tool reaches the child
+        // either — which is the point.
+        parent.GrantInteractionTo(child);
 
         // ── the two sources that carry their own providers ──
         // A tool name cannot express these: skills and MCP servers are contributed by their own context
-        // providers, out of their own data layers. So the child is given a narrowed *view* of each source
-        // rather than a list of names — a view that owns nothing its parent owns, and whose tool set is the
-        // capability boundary rather than a rule the child is asked to respect.
+        // providers, out of their own data layers. So the child is given a *view* of each — one that owns
+        // nothing its parent owns, so disposing it cannot tear down a connection or a skill folder the
+        // parent is still using. The view is not a narrowing: it carries the parent's enabled set unless the
+        // request named a smaller one, and for MCP it takes the named tools away at the key that source
+        // actually switches on.
         if (grantedSkills.Count > 0 && parent.Skills is { } parentSkills)
         {
             // Before WithSkills, which re-applies the scope's default language to whatever it attaches.
@@ -510,7 +529,7 @@ public sealed class SubAgentScope : IAsyncDisposable
             child.WithSkills(parentSkills.CreateNarrowed(grantedSkills));
         }
         if (grantedServers.Count > 0 && parent.Mcp is { } parentMcp)
-            child.WithMcps(McpScope.CreateGrantedView(parentMcp, grantedServers));
+            child.WithMcps(McpScope.CreateGrantedView(parentMcp, grantedServers, grantedTools));
 
         // Custom tools, in the groups they were registered in — so the child gets the guidance belonging to
         // the tools it actually holds, and not the guidance for the ones it does not.
@@ -547,12 +566,19 @@ public sealed class SubAgentScope : IAsyncDisposable
                 RemainingDepth = Math.Max(0, MaxDepth - childDepth),
                 GrantedSkills = grantedSkills,
                 GrantedMcpServers = grantedServers,
+                // The request said something about what the child may have, which is what makes the roster
+                // worth reading to it. A silent spawn inherits the parent's set, and the child's own skill and
+                // MCP providers already describe that — repeating it every turn is the whole of what this
+                // flag exists to avoid.
+                Narrowed = request.AllowedTools is not null
+                    || request.AllowedSkills is not null
+                    || request.AllowedMcpServers is not null,
             },
         };
         grand.InheritFrom(this);
         child.WithSubAgents(grand);
 
-        var row = new SubAgentStatusViewModel(id, Describe(request, id), SelfId, childDepth, request.Task)
+        var row = new SubAgentStatusViewModel(id, Describe(request, Children.Count + 1), SelfId, childDepth, request.Task)
         {
             MaxToolCalls = granted,
             Transcript = transcript,
@@ -574,43 +600,24 @@ public sealed class SubAgentScope : IAsyncDisposable
         return id;
     }
 
-    private static string Describe(SubAgentRequest request, string id)
-        => string.IsNullOrWhiteSpace(request.Name) ? $"agent-{id[..8]}" : request.Name!;
-
     /// <summary>
-    /// Why a tool can never be handed to a spawned agent, whatever the request says. Shared by the predicate
-    /// below and by the reasoning it reports, so the two cannot describe different rules.
-    /// </summary>
-    private const string NoChildMayHoldReason =
-        "a background sub-agent must never put a modal question to the user, because the turn of the agent "
-        + "that dispatched it is still suspended, and asking the user to widen a budget is the parent's move, not a child's";
-
-    /// <summary>
-    /// Tools that are subtracted from what a spawn may match against, rather than switched off after the
-    /// grant is reported.
+    /// The row's display title: the one the spawn asked for, or a numbered stand-in.
     /// <para>
-    /// The distinction is the whole point of the reporting contract: a grant list that named one of these
-    /// would be a promise the child cannot keep, and a model that believed it would plan around a capability
-    /// that is not there. Switching it off afterwards is not enough — the report has already been made.
-    /// </para>
-    /// <para>
-    /// These are structural rather than policy: a background child's interaction level is zeroed and its
-    /// budget tool is switched off unconditionally (see the child assembly below), so neither is a decision
-    /// any request can change.
+    /// Per parent rather than the id's first eight characters. This string is what the host's panel prints
+    /// beside the lamp, and an identifier there tells the person watching nothing that the position in the
+    /// tree had not already said, while taking the width a title would have used.
     /// </para>
     /// </summary>
-    private static bool NoChildMayHold(string name)
-        => string.Equals(name, WorkflowAgentToolkit.ResetBudgetToolName, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, "RequestConfirmation", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, "RequestSelection", StringComparison.OrdinalIgnoreCase);
+    private static string Describe(SubAgentRequest request, int ordinal)
+        => string.IsNullOrWhiteSpace(request.Name) ? $"子代理 {ordinal}" : request.Name!;
 
     /// <summary>
     /// The skills a spawn asks for: what it named, or every skill the parent has switched on.
     /// <para>
-    /// Skills inherit by default while servers do not, and that is not an inconsistency. Every skill tool
-    /// reads, and a skill the parent has switched on is already in its own prompt — so handing it down
-    /// hands down nothing the parent was not already told. MCP has no such split (see
-    /// <see cref="ResolveMcpServers"/>).
+    /// The same default <see cref="ResolveMcpServers"/> has, and for the same reason: a skill the parent has
+    /// switched on is already in its own prompt, so handing it down hands down nothing the parent was not
+    /// already told. What has to be asked for is the opposite — a *smaller* set, because a child given nine
+    /// skills it does not need carries nine documents' worth of prompt it will never read.
     /// </para>
     /// </summary>
     private static List<string> ResolveSkills(
@@ -631,20 +638,22 @@ public sealed class SubAgentScope : IAsyncDisposable
     }
 
     /// <summary>
-    /// The MCP servers a spawn asks for: exactly what it named, and nothing when it named nothing.
+    /// The MCP servers a spawn asks for: what it named, or every server the parent has connected and switched
+    /// on.
     /// <para>
-    /// The framework cannot tell whether an MCP tool reads or writes, so this source has no read-only part
-    /// to inherit — the empty set <i>is</i> its read-only part. If silence meant inheritance here, then
-    /// saying nothing would be the most powerful request in the schema, which is the wrong default for a
-    /// source whose tools can do anything.
+    /// Inheriting rather than refusing is what makes a dispatched agent usable. A child is dispatched to do
+    /// work, and the servers its parent can reach are part of what it needs to do that work; making every
+    /// spawn restate the whole server list is how a spawn comes back with a tree of agents that cannot open
+    /// the tools they were dispatched for. What the child must not reach is the parent's servers that are
+    /// switched off — that is the intersection <see cref="McpScope.GrantableNames"/> already draws.
     /// </para>
     /// </summary>
     private static List<string> ResolveMcpServers(
         WorkflowAgentScope parent, SubAgentRequest request, List<string> dropped)
     {
-        if (request.AllowedMcpServers is not { } wanted) return [];
-
         var grantable = parent.Mcp?.GrantableNames ?? [];
+        if (request.AllowedMcpServers is not { } wanted) return [.. grantable];
+
         var granted = new List<string>();
         foreach (var name in wanted)
         {

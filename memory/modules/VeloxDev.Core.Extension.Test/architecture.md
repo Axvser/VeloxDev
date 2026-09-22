@@ -81,8 +81,8 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **371**（含 `Agent/SubAgents/SubAgentLiveTests.cs` 的 3 条门控实测） |
-| 耗时 | **5–8 s**（有 `API_KEY_DEEPSEEK`，那 3 条真的走网络；实测连续 6 轮为 5/5/5/6/7/7/8 s）/ 无 key 时全量会在跑到 122~246 条之间**中止**（见下），而 `--filter FullyQualifiedName~Agent.SubAgents` 无 key 只需 **0.44–0.49 s** |
+| 测试条数 | **382**（含 `Agent/SubAgents/SubAgentLiveTests.cs` 的 5 条门控实测） |
+| 耗时 | **5–9 s**（有 `API_KEY_DEEPSEEK`，那 5 条真的走网络；实测连续 6 轮为 5/5/5/6/7/7/8 s，2026-09-22 加第 5 条门控后为 **9 s**）/ 无 key 时全量会在跑到 122~246 条之间**中止**（见下），而 `--filter FullyQualifiedName~Agent.SubAgents` 无 key 只需 **0.42–0.45 s**（2026-09-22 五次实测 441/423/440/431/451 ms） |
 | 失败 | 0 |
 
 **为什么离线部分比姊妹模块快得多**：这里几乎没有真实时钟。全部真实等待只有三处：
@@ -93,7 +93,7 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 | `Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs:198,203` | `WaitUntilAsync`：`Stopwatch` + `Task.Delay(5)` 轮询，`timeoutMs = 3000`（`:196`） |
 | `Agent/SubAgents/SubAgentDoubles.cs:106,535` | `WaitForCalls` / `WaitFor`：`Environment.TickCount64` + `Thread.Sleep(5)` 轮询，`timeoutMs = 5000` |
 
-前两处是「等一个后台线程把它做完」；子代理那两处是**「等一个孩子跑到某一步」**，形态更接近并发测试 —— 这也解释了有 key 时的 5–8 s：那 3 条门控测试在真调模型，与它们并行的子代理测试各自在轮询自己的 `Thread.Sleep(5)`。这直接决定了 §五。
+前两处是「等一个后台线程把它做完」；子代理那两处是**「等一个孩子跑到某一步」**，形态更接近并发测试 —— 这也解释了有 key 时的 5–9 s：那 5 条门控测试在真调模型，与它们并行的子代理测试各自在轮询自己的 `Thread.Sleep(5)`。这直接决定了 §五。
 
 ### ⚠ 无 key 的机器上，**全量**跑会红 —— 但原因不在本模块
 
@@ -111,9 +111,10 @@ System.InvalidOperationException: Environment variable 'API_KEY_DEEPSEEK' is not
 
 **中止点的计数是竞态的，别把某一次的读数当基准**。三次实测分别是 `失败 3 + 通过 240 + 跳过 3 = 246`、`失败 0 + 通过 206 + 跳过 3 = 209` 与 `通过 122 = 122` —— 崩在哪一刻决定了有多少条测试还没来得及报结果，其中那几条「失败」全是**正在跑的**子代理测试被连坐成的 `TimeoutException`，没有一条是完整的断言失败。第三次的 122 比前两次低，原因是可复现的：demo 的宿主接线为了挂子代理，把「解析模型」挪到了骨架渲染之前（`AgentHelper.cs:282-291`），于是缺 key 这件事**更早**抛。这是同一个缺陷更早触发，不是新增的缺陷。
 
-那么为什么**以前不红**：抛出的时机是竞态的 —— 异常从 `async void` 逃逸后由线程池接住，只有它恰好落在测试宿主收集结果的窗口内才会崩掉整轮。本模块原有的 281 条跑完只要 0.45 s，不够久也不够忙；加了 90 条子代理测试（它们各自在 `Thread.Sleep(5)` 轮询、把整轮拉长了十几倍）之后，它稳定地落进来了。**是「时长」还是「线程池压力」在起决定作用，我没有单独隔离**，能确定的是子代理那一批就是那个差。三条独立实验钉住这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除 3 条门控测试、只留下子代理那 90 条，仍然红**。
+那么为什么**以前不红**：抛出的时机是竞态的 —— 异常从 `async void` 逃逸后由线程池接住，只有它恰好落在测试宿主收集结果的窗口内才会崩掉整轮。本模块原有的 281 条跑完只要 0.45 s，不够久也不够忙；加了 90 条子代理测试（它们各自在 `Thread.Sleep(5)` 轮询、把整轮拉长了十几倍）之后，它稳定地落进来了。**是「时长」还是「线程池压力」在起决定作用，我没有单独隔离**，能确定的是子代理那一批就是那个差。三条独立实验钉住这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除门控测试、只留下子代理那批（当时 94 条），仍然红**。
 
-**结论**：本模块自己的门控约定是成立的 —— `SubAgentLiveTests` 缺 key 时 `Assert.Inconclusive`，MSTest 4.0.2 下报成**已跳过**（`--filter FullyQualifiedName~Agent.SubAgents` 无 key = 87 通过 + 3 跳过，0 失败，0.44–0.49 s）。红的是全量轮次，根因在 `Examples/` 的 `async void`。**修它要动 demo，本仓库当前的选择是不动** —— 所以这条要一直记着，别把它误判成本模块的回归。
+**结论**：本模块自己的门控约定是成立的 —— `SubAgentLiveTests` 缺 key 时 `Assert.Inconclusive`，MSTest 4.0.2 下报成**已跳过**（`--filter FullyQualifiedName~Agent.SubAgents` 无 key = 96 通过 + 5 跳过，0 失败，0.42–0.45 s）。红的是全量轮次，根因在 `Examples/` 的 `async void`。**修它要动 demo，本仓库当前的选择是不动** —— 所以这条要一直记着，别把它误判成本模块的回归。
+**「281 条其余」这个数一直没变**：382 − 101（子代理那批 = 96 离线 + 5 门控）= 281，与 379 − 98、371 − 90 同值 —— 历轮改的都是子代理那批，别处的条数未动。
 
 ---
 
@@ -179,7 +180,9 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 **子代理那一批的边界（这张表为什么没有新增行）**：`Agent/SubAgents/` 里**没有**任何类型落进上表 —— 包括内部的 `SubAgentScope` / `SubAgentAgentToolkit` / `SubAgentAgentContextProvider`，它们因 `InternalsVisibleTo` 被直接构造。真正按名零引用的是三个 `internal`：`ChildBriefing`、`SubAgentEntry`、`ToolCallLedger`。前两个是纯粹的载体（没有行为可断言，它们的字段经由 `SubAgentSummary` 与面板行被检查），**`ToolCallLedger` 不是缺口而是刻意的** —— 它的每一条性质都由 `SubAgentBudgetTests` 从 `SubAgentScope` 那一侧钉住（一口锅、沿路径递减、`ResetChain` 只向上）。**别为它单写一个测试类**：那样就多了一份「账本自己说自己」，而既有那几条断言的价值正在于它们从不直接读账本。
 
-**不能离线证明的事集中在 `SubAgentLiveTests`**（类注释在 `Agent/SubAgents/SubAgentLiveTests.cs:16-29`），本轮从一条变成三条：工具描述够不够清楚、模型会不会真的调用 `SpawnSubAgent`；被夹紧的孩子会不会**真的去调工具**再汇报（断言里带 `callCount > 0`，因为从零编一个答案能通过任何「回复非空」的断言）；以及模型会不会**真的去填** `allowedSkills` / `allowedMcpServers`。第三条是新增两条能力轴唯一买不到离线答案的地方 —— 参数描述在人看来通顺、模型却省略掉，两条轴的默认值（技能 = 父已开启的全部、MCP = 空集）就会静默生效，而离线测试全绿。一句话：离线套件能证明「被调用时是对的」，证明不了「会不会被调用」，也证明不了「参数会不会被填」。
+**不能离线证明的事集中在 `SubAgentLiveTests`**（类注释在 `Agent/SubAgents/SubAgentLiveTests.cs:16-32`），2026-09-22 起是**五条**（本轮之前四条）：工具描述够不够清楚、模型会不会真的调用 `SpawnSubAgent`；被夹紧的孩子会不会**真的去调工具**再汇报（断言里带 `callCount > 0`，因为从零编一个答案能通过任何「回复非空」的断言）；模型会不会**真的去填** `allowedSkills` / `allowedMcpServers`；模型会不会**真的去填** `name`；以及**自发派发** —— 给一个「读一大堆、只要六个词」的合成语料、通篇不提「派发」，模型会不会自己把材料读进一个孩子。第 5 条问的是「会不会被调用」这一半，第 2~4 条问的是「参数会不会被填」。第 2、3 条是两张能力轴唯一买不到离线答案的地方 —— 参数描述在人看来通顺、模型却省略掉，而两条轴的默认值（都是**父的全量**）就会静默生效，离线测试全绿。第 4 条是同一类静默失败，而它更硬一层：`name` 的读者是**人**（面板那一行，见 [`VeloxDev.Core.Extension/sub-agents.md`](../VeloxDev.Core.Extension/sub-agents.md) §八），所以连「填得对不对」都没有反馈回路可依。一句话：离线套件能证明「被调用时是对的」，证明不了「会不会被调用」，也证明不了「参数会不会被填」。
+
+**第四条是先失败后通过的，记在这里以免被当成一次就写对的**：判据第一版写成「这次调用难不难」（例外是「一次你已经知道怎么发的调用就自己做」），而那个例外把规则整个吃掉了 —— 每一次读都是模型知道怎么发的调用。实测（`deepseek-v4-flash`、六章语料）结果是**六次调用全在模型自己的上下文里、零孩子**，而当时离线套件全绿。把判据换成「工作的目的」（gather material vs. act）、例外收窄到「整个答案是一次调用读出的一个值」之后才通过。详见 `sub-agents.md` §五之末与 §十。
 
 ---
 

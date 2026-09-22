@@ -61,7 +61,8 @@
 | 让面板开关生效 | `ApplyToScope` 穿透 | 直接改行的 `IsEnabled` 字段不触发 `OnIsEnabledChanged`（生成器只挂在属性 setter 上） |
 | 加一个复合工具 | 不加 —— 每个操作都是单个组件命令步骤 | 加一个「批量做 N 件事」的工具：会**绕过或重复提交** Core 的 undo/redo 栈（`WorkflowAgentToolkit.cs:185-186`） |
 | 给 MCP 自服务配审批 | 在 **scope** 上调 `WithConfirmationHandler`（`WorkflowAgentScope.cs:595`），工作流工具与 MCP 共用它 | 在 `McpScope` 上调 —— `WithMcps` 会**无条件顶掉**它（`WorkflowAgentScope.cs:1592`，注释明说「直接设在 MCP scope 上的处理器会被它替换」） |
-| 让子代理继承技能 / MCP / todo / 运行模式 | **不继承**，这是刻意的：那些是宿主在工厂里定的静态形状，不由模型每次 spawn 决定。要给孩子加，就在传给 `SubAgentScope` 的工厂里显式加 | 让子 scope 共享宿主的 `McpScope` —— `WithMcps` 会顶掉宿主设的确认处理器，N 个孩子各挂一次就各覆盖一次（`sub-agents.md` §七） |
+| 让子代理继承技能 / MCP / todo / 运行模式 | 技能与 MCP **默认就继承**（省略参数 = 父的全量）；todo 与运行模式**不继承**，这是刻意的 —— 那些是宿主在工厂里定的静态形状，不由模型每次 spawn 决定。要给孩子加，就在传给 `SubAgentScope` 的工厂里显式加 | 让子 scope 共享宿主的 `McpScope` —— `WithMcps` 会顶掉宿主设的确认处理器，N 个孩子各挂一次就各覆盖一次；交给孩子的是 `CreateGrantedView` 造的新 `McpScope`（`sub-agents.md` §3.2、§七） |
+| 给子代理一把它「看得见」的工具 | 名字从父的能力里来，**并且**孩子自己那一侧真的存在它 —— 交互工具要先 `GrantInteractionTo` 转交宿主的处理器，MCP 工具要能通过视图的键开关 | 只改授权清单。`RequestConfirmation` 在孩子 scope 上没有处理器就**不会被提供**，清单于是列出两把永远调不通的工具（`sub-agents.md` §4.1） |
 
 ---
 

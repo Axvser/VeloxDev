@@ -242,9 +242,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// together with the guidance text their own registration came with.
     /// <para>
     /// A child needs its own registration rather than a share of this scope's: both the tool list and the
-    /// read-only classification live on the scope, and the child's set is a subset of it. A group whose
-    /// tools were all refused contributes nothing, guidance included — text describing a tool the child
-    /// does not hold is the same lie as a grant list naming one.
+    /// read-only classification live on the scope, and what the child gets is the intersection with the grant.
+    /// That intersection is the whole of this scope's set when the dispatch named no tools, and a smaller set
+    /// whenever it did. A group whose tools were all left out contributes nothing, guidance included — text
+    /// describing a tool the child does not hold is the same lie as a grant list naming one.
     /// </para>
     /// </summary>
     internal void GrantCustomToolsTo(WorkflowAgentScope child, IReadOnlyCollection<string> granted)
@@ -260,6 +261,38 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             if (group.QueryOnly) child.WithQueryTools(group.Prompt, tools);
             else child.WithTools(group.Prompt, tools);
         }
+    }
+
+    /// <summary>
+    /// Copies this scope's interaction configuration onto a spawned child: the safety level, its per-level
+    /// prompt overrides, and both handlers.
+    /// <para>
+    /// <b>Why the level has to travel with the tools.</b> <c>RequestSelection</c> and
+    /// <c>RequestConfirmation</c> are offered only when the level is above zero <i>and</i> a handler is
+    /// registered on that very scope — see <c>WorkflowAgentToolkit.CreateAllTools</c>. A child scope is a
+    /// fresh one over the same tree, so a grant list that named those two without this would name tools the
+    /// child does not have and can never call. A permission the model can see and never use is worse than no
+    /// permission: it plans around it and then fails. The same is true of <c>ResetToolCallLimit</c>, which at
+    /// level zero refuses to ask on purpose — level zero plus that tool is a tool that only fails.
+    /// </para>
+    /// <para>
+    /// A host that registered no handler hands down nothing, and then neither tool reaches the child either.
+    /// The two move together, which is what keeps the grant list honest in both directions.
+    /// </para>
+    /// </summary>
+    internal void GrantInteractionTo(WorkflowAgentScope child)
+    {
+        if (child is null) throw new ArgumentNullException(nameof(child));
+
+        child.WithInteractionSafety(_interactionSafety);
+        foreach (var kvp in _safetyPromptOverrides)
+            child.WithInteractionSafetyPrompt(kvp.Key, kvp.Value);
+
+        // Assigned rather than routed through the public `With…` overloads, which take the host-facing event
+        // args: these are the delegates the toolkit actually calls, and re-wrapping them would put a second
+        // conversion layer between the child's call and the host's dialog for no gain.
+        child.SelectionHandler = SelectionHandler;
+        child.ConfirmationHandler = ConfirmationHandler;
     }
 
     /// <summary>
@@ -1608,12 +1641,14 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     }
 
     /// <summary>
-    /// Attaches the sub-agent subsystem, which lets this Agent dispatch child agents of its own and give
-    /// each one a narrower slice of its own capabilities.
+    /// Attaches the sub-agent subsystem, which lets this Agent dispatch child agents of its own and hand
+    /// each one the capabilities it needs.
     /// <para>
-    /// The parent's capability is the superset by construction: every request a spawn carries is
-    /// intersected with what this scope actually has, and whatever is dropped is reported back in the
-    /// spawn's own result, so the child cannot come away believing it holds something it was refused.
+    /// The parent's capability is the ceiling by construction: every request a spawn carries is intersected
+    /// with what this scope actually has, and whatever is dropped is reported back in the spawn's own
+    /// result, so the child cannot come away believing it holds something it was refused. A spawn that asks
+    /// for nothing gets everything this scope currently offers — the same tools, skills and MCP servers,
+    /// including the ability to dispatch in turn.
     /// </para>
     /// <para>
     /// <paramref name="subAgents"/> must have been built with a factory that can produce an agent for a

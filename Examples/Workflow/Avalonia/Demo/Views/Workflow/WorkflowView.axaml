@@ -261,21 +261,22 @@
 								<TreeView ItemsSource="{Binding Roots}" Background="Transparent" BorderThickness="0" MaxHeight="320">
 									<TreeView.ItemTemplate>
 										<TreeDataTemplate x:DataType="sub:SubAgentTreeNodeViewModel" ItemsSource="{Binding Children}">
-											<StackPanel Spacing="2" Margin="0,0,0,4">
-												<StackPanel Orientation="Horizontal" Spacing="6">
-													<TextBlock Text="{Binding Row.Name}" Foreground="#e0e0e0" FontWeight="SemiBold"/>
-													<TextBlock Text="{Binding Row.StateText}" Foreground="#a0a0a0"/>
-													<TextBlock Text="{Binding Row.CallCount, StringFormat=· {0} 次调用}" Foreground="#6bffb8"/>
-												</StackPanel>
-												<TextBlock Text="{Binding Row.Task}" Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap"/>
-												<TextBlock Text="{Binding Row.Result}" Foreground="#6bffb8" FontSize="11" TextWrapping="Wrap"
-														   IsVisible="{Binding Row.HasResult}" Margin="14,0,0,0" MaxHeight="120"/>
-												<TextBlock Text="{Binding Row.Error}" Foreground="#ff6b6b" FontSize="11" TextWrapping="Wrap"
-														   IsVisible="{Binding Row.HasError}" Margin="14,0,0,0"/>
-												<TextBlock Text="{Binding Row.GrantedSummary, StringFormat=授权：{0}}" Foreground="#7ec8ff" FontSize="11"
-														   TextWrapping="Wrap" Margin="14,0,0,0"/>
+											<!-- One lamp and one line, and that is the whole node. A child's task is often a paragraph and
+											     its result often longer, so printing them made every row four wrapped blocks and turned the
+											     tree unreadable at exactly the moment it got interesting — a fan-out. What belongs here is
+											     what a person scans for: the lamp for the state, the title for which piece of work this is,
+											     the count for what it cost. The text itself lives on SubAgentSummary and comes back through the
+											     tools, which is where anyone who needs it should look.
+											     The title is trimmed rather than wrapped: it is whatever the model titled the task with, so the
+											     row must survive a title that turned out to be a sentence. -->
+											<StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
+												<local:SubAgentStatusLight Row="{Binding Row}" Width="9" Height="9" VerticalAlignment="Center"/>
+												<TextBlock Text="{Binding Row.Name}" Foreground="#e0e0e0" FontWeight="SemiBold"
+														   MaxWidth="180" TextTrimming="CharacterEllipsis"/>
+												<TextBlock Text="{Binding Row.StateText}" Foreground="#a0a0a0"/>
+												<TextBlock Text="{Binding Row.CallCount, StringFormat=· {0} 次调用}" Foreground="#6bffb8"/>
 												<TextBlock Text="{Binding Row.DroppedRequests.Count, StringFormat=· 有 {0} 项请求被拒}" Foreground="#ffd166" FontSize="11"
-														   IsVisible="{Binding Row.HasDroppedRequests}" Margin="14,0,0,0"/>
+														   VerticalAlignment="Center" IsVisible="{Binding Row.HasDroppedRequests}"/>
 											</StackPanel>
 										</TreeDataTemplate>
 									</TreeView.ItemTemplate>

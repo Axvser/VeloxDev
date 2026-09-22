@@ -56,6 +56,27 @@ public class SubAgentDispatchTests
     }
 
     [TestMethod]
+    public async Task AChildWithNoTitle_FallsBackToANumberUnderItsOwnParent()
+    {
+        // The panel's label is the title the spawn gave, and a numbered stand-in when it gave none. The
+        // number is per parent rather than the id's first eight characters, because its consumer is the
+        // person watching the tree: the tree already says where the node sits, so an identifier there spends
+        // the width a title would have used and tells them nothing. The grandchild is the point — numbering
+        // that counted the whole tree instead of one parent's roster would make it 3.
+        await using var fx = new SubAgentFixture(client: new InstantChatClient());
+
+        var outer = fx.Spawn("the outer job");
+        fx.Spawn("the second job");
+        SubAgentFixture.InvokeTool(
+            SubAgentFixture.SubAgentToolOf(fx.ChildScope(outer), "SpawnSubAgent"), ("task", "the inner job"));
+
+        CollectionAssert.AreEqual(new[] { "子代理 1", "子代理 2" }, fx.Rows.Select(r => r.Name).ToArray());
+
+        var grand = fx.ChildSubAgents(outer).Snapshot.Single();
+        Assert.AreEqual("子代理 1", grand.Name, "a grandchild is the first child of its own parent, not the third of the tree");
+    }
+
+    [TestMethod]
     public async Task AWaitThatTimesOut_SaysSoAndLeavesThemRunning()
     {
         // A timeout is information, not a failure: the model is told which children are still going so it
@@ -266,5 +287,53 @@ public class SubAgentDispatchTests
         var after = provider.BuildContext().Instructions ?? string.Empty;
         StringAssert.Contains(after, "你的子代理");
         StringAssert.Contains(after, "scout");
+    }
+
+    [TestMethod]
+    public async Task TheStandingText_MakesDelegationARule_NotAPermission()
+    {
+        // The wording behind the mandate, pinned as a string so that a later round cannot soften it back. A
+        // "you may dispatch" sentence answers a question the model is not asking — it already assumes nothing
+        // forbids delegating — and the cost of not delegating is invisible to it, because doing the work
+        // itself costs one turn and is never wrong. So what has to survive here is the kind of work *and* the
+        // must. Whether a real model obeys it is the separate question SubAgentLiveTests exists for.
+        await using var fx = new SubAgentFixture();
+
+        var prompt = SubAgentFixture.PromptOf(fx.Scope);
+
+        StringAssert.Contains(prompt, "must be dispatched to a sub-agent",
+            "delegation is stated as required for a kind of work, not as something merely allowed");
+        StringAssert.Contains(prompt, "web search",
+            "and the kind of work is named, so the model does not have to infer which tasks qualify");
+        StringAssert.Contains(prompt, "omit them to hand down the lot",
+            "what a spawn hands down is stated where the model reads it, not only in the tool schema");
+
+        // The escape clause is the part that has to stay narrow, and it used to be wide enough to swallow the
+        // rule: "only when it is one call you already know how to make" is satisfied by every read there is,
+        // because a model knows how to make all of them. Measured against a six-chapter corpus, that wording
+        // produced six calls in the model's own context and no child at all. The threshold is the *work* now —
+        // material gathered rather than a value read off — so this pins that it cannot drift back.
+        Assert.IsFalse(prompt.Contains("one call you already know how to make"),
+            "the exemption is about the work, not about how easy each step is");
+    }
+
+    [TestMethod]
+    public async Task TheStandingText_AsksForATitle_BecauseThePanelShowsOne()
+    {
+        // The same reasoning as the pin above, applied to the one argument whose consumer is neither the
+        // model nor the child but the person watching the panel. Nothing the model can observe would tell it
+        // that the title matters, or that "node-counter" is the wrong register for something a human reads —
+        // and an unfilled optional argument is silent rather than an error. So it is asked for in the standing
+        // text and not only in the parameter schema, which is the half a model filling arguments from memory
+        // may never read again. Whether a real model then fills it is the separate question
+        // SubAgentLiveTests exists for.
+        await using var fx = new SubAgentFixture();
+
+        var prompt = SubAgentFixture.PromptOf(fx.Scope);
+
+        StringAssert.Contains(prompt, "Title each one with `name`",
+            "the title is asked for where the model reads it every turn, not only in the parameter description");
+        StringAssert.Contains(prompt, "what the user reads on the panel",
+            "and the reason given is the one the model will act on: this string has a reader who is not it");
     }
 }

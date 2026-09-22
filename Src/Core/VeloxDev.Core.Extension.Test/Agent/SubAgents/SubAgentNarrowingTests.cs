@@ -9,13 +9,19 @@ using VeloxDev.AI.Workflow.Functions;
 namespace VeloxDev.Core.Extension.Test.Agent.SubAgents;
 
 /// <summary>
-/// The invariant the whole subsystem exists for: a child's abilities are a <i>narrowing</i> of its parent's,
-/// never a widening, and whatever a spawn asked for and did not get is said out loud.
+/// The invariant the whole subsystem exists for: a child's abilities are its parent's own, or fewer — never
+/// more — and whatever a spawn asked for and did not get is said out loud.
 /// <para>
-/// The reporting half matters as much as the narrowing half. A model that asked for a tool, believed it had
+/// "Its parent's own" is the default and the whole of it: omitting a field means inherit, so a spawn that
+/// names nothing gets the parent's entire surface. Naming tools is the only way to take anything away, and it
+/// is the only reason the report below has anything to report.
+/// </para>
+/// <para>
+/// The reporting half matters as much as the granting half. A model that asked for a tool, believed it had
 /// it, and planned around it will not notice the absence until it has already wasted the run — so the
 /// dropped list is asserted here against what the child <i>actually</i> holds, not merely against the
-/// request.
+/// request. Its mirror image is the defect this replaced: a name the parent really did hold, reported as
+/// "not available to this agent", which taught the model that asking was futile.
 /// </para>
 /// </summary>
 [TestClass]
@@ -50,7 +56,7 @@ public class SubAgentNarrowingTests
         var id = fx.Spawn("do the thing",
             ("allowedTools", new[] { "ListNodes", "GetWorkflowSummary", "CreateNode" }));
         var reported = fx.RowVm(id).GrantedTools;
-        var actual = SubAgentFixture.SurfaceOf(fx.ChildScope(id));
+        var actual = SubAgentFixture.FullSurfaceOf(fx.ChildScope(id));
 
         CollectionAssert.AreEquivalent(reported.ToArray(), actual.ToArray(),
             "the granted list and the child's real surface must be the same set");
@@ -58,23 +64,62 @@ public class SubAgentNarrowingTests
     }
 
     [TestMethod]
-    public async Task InheritingTheSurface_MeansTheReadOnlyHalf()
+    public async Task InheritingTheSurface_MeansTheParentsOwn()
     {
-        // Omitting the whitelist is the common case, so its default is the one that has to be safe: a child
-        // that was never asked to change anything must not be able to.
+        // Omitting the whitelist is the common case, so its default is the one that has to be stated exactly:
+        // the child gets the parent's whole surface, mutation tools included. There is no read-only half any
+        // more and no structural gate behind the surface — a whitelist is the only way to take anything away,
+        // and a child is left unable to change the graph only when its dispatcher said so on purpose.
         await using var fx = new SubAgentFixture();
 
         var id = fx.Spawn("just look at it");
         var granted = fx.RowVm(id).GrantedTools;
 
         CollectionAssert.Contains(granted.ToArray(), "ListNodes");
-        CollectionAssert.DoesNotContain(granted.ToArray(), "CreateNode");
-        CollectionAssert.DoesNotContain(granted.ToArray(), "DeleteNode");
-        CollectionAssert.DoesNotContain(granted.ToArray(), "ExecuteNode");
-        CollectionAssert.DoesNotContain(granted.ToArray(), "ExecuteCommandOnNode");
+        CollectionAssert.Contains(granted.ToArray(), "CreateNode");
+        CollectionAssert.Contains(granted.ToArray(), "DeleteNode");
+        CollectionAssert.Contains(granted.ToArray(), "ExecuteNode");
+        CollectionAssert.Contains(granted.ToArray(), "ExecuteCommandOnNode");
+        CollectionAssert.Contains(granted.ToArray(), WorkflowAgentToolkit.ResetBudgetToolName,
+            "the reset tool is on the parent's surface, so it is on its child's");
 
+        Assert.AreEqual(0, fx.RowOf(id).DroppedRequests.Count,
+            "a silent spawn asks for nothing, so there is nothing to refuse it");
+
+        // The five management tools are part of that surface — a child dispatched without a whitelist can
+        // dispatch one of its own, and it has to be able to: a child that only delegates when its parent
+        // remembered to name the tool is a child that never delegates.
+        CollectionAssert.IsSubsetOf(SubAgentAgentToolkit.ToolNames, granted.ToArray());
+
+        // Compared against the whole surface, not the workflow toolkit alone: the report has to cover the
+        // tools the child gets from its own providers too, or "exactly what it holds" is measured against a
+        // surface that was never the whole of it.
         CollectionAssert.AreEquivalent(
-            granted.ToArray(), SubAgentFixture.SurfaceOf(fx.ChildScope(id)).ToArray());
+            granted.ToArray(), SubAgentFixture.FullSurfaceOf(fx.ChildScope(id)).ToArray());
+    }
+
+    [TestMethod]
+    public async Task TheSubAgentTools_CanBeNamed_InAWhitelist()
+    {
+        // The other end of the same defect. The five were missing from the list a grant draws on, so naming
+        // one was answered with "not available to this agent" — which is false, and which leaves the model
+        // concluding that delegation is a thing it cannot ask for.
+        await using var fx = new SubAgentFixture();
+
+        var id = fx.Spawn("count the nodes", ("allowedTools", new[] { "ListNodes", "SpawnSubAgent" }));
+        var row = fx.RowOf(id);
+
+        CollectionAssert.Contains(fx.RowVm(id).GrantedTools.ToArray(), "SpawnSubAgent");
+        Assert.IsFalse(row.DroppedRequests.Any(d => d.Contains("SpawnSubAgent")),
+            "a tool the parent holds and did not switch off is not a refusal");
+        CollectionAssert.Contains(
+            SubAgentFixture.SubAgentSurfaceOf(fx.ChildScope(id)).ToArray(), "SpawnSubAgent",
+            "and the grant is a fact about the child, not only about the row");
+
+        // Naming a whitelist that leaves them out still takes them away — the grant is a list either way.
+        var narrow = fx.Spawn("count the nodes", ("allowedTools", new[] { "ListNodes" }));
+        CollectionAssert.DoesNotContain(
+            SubAgentFixture.SubAgentSurfaceOf(fx.ChildScope(narrow)).ToArray(), "SpawnSubAgent");
     }
 
     [TestMethod]
@@ -89,27 +134,6 @@ public class SubAgentNarrowingTests
         Assert.AreEqual(0, fx.RowOf(id).GrantedToolCount);
         Assert.AreEqual(0, SubAgentFixture.SurfaceOf(fx.ChildScope(id)).Count,
             "an empty whitelist leaves the child with no workflow tools at all");
-    }
-
-    [TestMethod]
-    public async Task TheResetTool_IsNeverGranted_EvenWhenNamed()
-    {
-        // The one capability no child may hold. It is reported as dropped rather than silently withheld,
-        // and the grant list must not name it — a grant the child cannot use is worse than no grant.
-        await using var fx = new SubAgentFixture();
-
-        var id = fx.Spawn("do the thing", ("allowedTools", new[] { "ListNodes", WorkflowAgentToolkit.ResetBudgetToolName }));
-        var row = fx.RowOf(id);
-
-        CollectionAssert.DoesNotContain(fx.RowVm(id).GrantedTools.ToArray(), WorkflowAgentToolkit.ResetBudgetToolName);
-        Assert.IsTrue(row.DroppedRequests.Any(d => d.Contains(WorkflowAgentToolkit.ResetBudgetToolName)),
-            "the refusal has to be reported, or the model will keep trying to widen its own budget");
-        Assert.IsFalse(SubAgentFixture.SurfaceOf(fx.ChildScope(id)).Contains(WorkflowAgentToolkit.ResetBudgetToolName));
-
-        // The parent keeps it: the escape hatch belongs to the agent holding the conversation, not to the
-        // ones it dispatched, and nothing about narrowing may take it from the parent.
-        CollectionAssert.Contains(
-            SubAgentFixture.SurfaceOf(fx.Scope).ToArray(), WorkflowAgentToolkit.ResetBudgetToolName);
     }
 
     [TestMethod]
@@ -159,34 +183,42 @@ public class SubAgentNarrowingTests
     }
 
     [TestMethod]
-    public async Task WithNoUIContext_MutationToolsAreDroppedAndQueriesAreKept()
+    public async Task WithNoUIContext_TheSurfaceIsStillTheParentsOwn()
     {
-        // A background child edits the graph on a thread the parent's UI never serialized with, and the only
-        // serialization this library has is the marshalling the UI context provides. So the gate is
-        // structural, not a warning in a prompt.
+        // The gate that used to sit here is gone, and this pins its absence rather than leaving it to be
+        // re-invented. It read well — a background child editing a graph nothing has serialized with is a race
+        // — but it answered a request for a tool the parent held with a refusal, which is the shape the "hand
+        // it down as it stands" rule forbids whatever the reason for it. The serialization is still supplied
+        // where there is one: the child inherits the host's context.
         await using var fx = new SubAgentFixture();
 
         var id = fx.Spawn("edit the graph", ("allowedTools", new[] { "ListNodes", "CreateNode" }));
         var row = fx.RowOf(id);
 
-        CollectionAssert.Contains(fx.RowVm(id).GrantedTools.ToArray(), "ListNodes");
-        Assert.IsTrue(row.DroppedRequests.Any(d => d.Contains("CreateNode") && d.Contains("UI")),
-            "the drop reason has to name the missing UI context, or it reads as an arbitrary refusal");
-        CollectionAssert.DoesNotContain(fx.RowVm(id).GrantedTools.ToArray(), "CreateNode");
+        CollectionAssert.Contains(fx.RowVm(id).GrantedTools.ToArray(), "CreateNode");
+        Assert.AreEqual(0, row.DroppedRequests.Count, "nothing is refused for want of a UI context");
+        CollectionAssert.Contains(
+            SubAgentFixture.SurfaceOf(fx.ChildScope(id)).ToArray(), "CreateNode",
+            "and the grant is a fact about the child, not only about the row");
     }
 
     [TestMethod]
-    public async Task WithAUIContext_NamedMutationToolsAreGranted()
+    public async Task TheUIContext_ChangesNothingAboutWhatIsGranted()
     {
-        // The same request, against a host that did register a UI context: the gate is about the host's
-        // configuration, not about mutation being forbidden to children in general.
+        // The pair that stood here asserted that a UI context decided whether mutation tools were granted. It
+        // no longer does: the context decides where a call runs, never whether the child may make it — so the
+        // same request against the two hosts has to come out the same.
         using var ui = new CountingUIContext();
-        await using var fx = new SubAgentFixture(ui: ui);
+        await using var withUi = new SubAgentFixture(ui: ui);
+        await using var withoutUi = new SubAgentFixture();
 
-        var id = fx.Spawn("edit the graph", ("allowedTools", new[] { "ListNodes", "CreateNode" }));
+        var a = withUi.Spawn("edit the graph", ("allowedTools", new[] { "ListNodes", "CreateNode" }));
+        var b = withoutUi.Spawn("edit the graph", ("allowedTools", new[] { "ListNodes", "CreateNode" }));
 
-        CollectionAssert.Contains(fx.RowVm(id).GrantedTools.ToArray(), "CreateNode");
-        Assert.AreEqual(0, fx.RowOf(id).DroppedRequests.Count);
+        CollectionAssert.AreEquivalent(
+            withUi.RowVm(a).GrantedTools.ToArray(), withoutUi.RowVm(b).GrantedTools.ToArray());
+        Assert.AreEqual(0, withUi.RowOf(a).DroppedRequests.Count);
+        Assert.AreEqual(0, withoutUi.RowOf(b).DroppedRequests.Count);
     }
 
     [TestMethod]

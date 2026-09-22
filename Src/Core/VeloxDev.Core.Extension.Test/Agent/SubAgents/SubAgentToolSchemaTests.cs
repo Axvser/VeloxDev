@@ -86,7 +86,7 @@ public class SubAgentToolSchemaTests
 
         Assert.AreEqual(19, row.MaxToolCalls, "the omitted budget inherited the parent's remaining allowance");
         Assert.IsEmpty(row.DroppedRequests, "and omitting a capability is not being refused one");
-        Assert.AreNotEqual(0, row.GrantedToolCount, "the omitted whitelist inherited the read-only surface");
+        Assert.AreNotEqual(0, row.GrantedToolCount, "the omitted whitelist inherited the parent's own surface");
     }
 
     private static JObject SchemaOf(SubAgentFixture fx, string toolName)

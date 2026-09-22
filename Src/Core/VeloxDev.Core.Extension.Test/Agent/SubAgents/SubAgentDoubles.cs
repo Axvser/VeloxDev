@@ -386,6 +386,21 @@ internal sealed class SubAgentFixture : IAsyncDisposable
     public static HashSet<string> SurfaceOf(WorkflowAgentScope scope)
         => [.. scope.ProvideTools().Select(t => t.Name)];
 
+    /// <summary>Everything a scope's model is actually shown, from every source there is.</summary>
+    /// <remarks>
+    /// <see cref="SurfaceOf"/> is the workflow toolkit alone. That is the whole surface for a scope with no
+    /// subsystems attached and only part of it for one that has them — and the part it leaves out is exactly
+    /// what changes when a grant does, so a claim about "what the child holds" has to be made against this.
+    /// </remarks>
+    public static HashSet<string> FullSurfaceOf(WorkflowAgentScope scope)
+    {
+        var all = SurfaceOf(scope);
+        all.UnionWith(SubAgentSurfaceOf(scope));
+        all.UnionWith(SkillSurfaceOf(scope));
+        all.UnionWith(McpSurfaceOf(scope));
+        return all;
+    }
+
     /// <summary>The sub-agent tools a scope's providers contribute, which the workflow toolkit never holds.</summary>
     public static HashSet<string> SubAgentSurfaceOf(WorkflowAgentScope scope)
         => [.. scope.CreateContextProviders()

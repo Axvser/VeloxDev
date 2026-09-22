@@ -16,10 +16,15 @@ namespace VeloxDev.Core.Extension.Test.Agent.SubAgents;
 /// The two capability axes that a list of tool names cannot express: skills and MCP servers.
 /// <para>
 /// Neither is contributed by the workflow toolkit — each arrives with a context provider of its own, out of
-/// a data layer of its own — so narrowing them is not a matter of switching tools on and off. The child is
-/// given a narrowed <i>view</i> of the parent's source, and the claim under test is that the view is the
-/// boundary: what the child can reach through it is exactly what the spawn granted, and asking for more
-/// fails inside the child rather than being a rule it was merely told to respect.
+/// a data layer of its own — so granting them is not a matter of switching tools on and off. The child is
+/// given a <i>view</i> of the parent's source, and the claim under test is that the view is the boundary:
+/// what the child can reach through it is exactly what the spawn granted, and asking for more fails inside
+/// the child rather than being a rule it was merely told to respect.
+/// </para>
+/// <para>
+/// All three axes share one default now: silence means inherit, and inheriting means the parent's own
+/// switched-on set. What differs between them is only how a <i>named</i> grant is taken away — by name for a
+/// skill, by the <c>server/tool</c> key the source is actually switched on for an MCP tool.
 /// </para>
 /// <para>
 /// The third axis is the one that was already a list — custom tools registered through <c>WithTools</c> —
@@ -215,20 +220,68 @@ public class SubAgentCapabilityGrantTests
     }
 
     [TestMethod]
-    public async Task OmittingTheServerList_GrantsNone()
+    public async Task NamingAnMcpTool_IsNotARefusal()
     {
-        // The one asymmetry that is deliberate and worth pinning: the framework cannot classify an MCP tool
-        // as read-only, so the read-only half of that source is the empty set. Inheriting therefore cannot
-        // mean inheriting anything, and MCP must be asked for by name.
+        // The defect the requirement named, pinned at its exact point. MCP tool names were missing from the
+        // list a grant is drawn from, so a model naming one it could plainly see was answered "not available
+        // to this agent, or switched off by the host" — neither half of which was true. What it learned from
+        // that is that the MCP surface it had been told it owned did not exist.
+        await using var fx = new SubAgentFixture(mcp: TwoServers());
+
+        var id = fx.Spawn("read alpha", ("allowedTools", new[] { "ListNodes", "alpha_read" }));
+        var row = fx.RowOf(id);
+
+        Assert.IsFalse(row.DroppedRequests.Any(d => d.Contains("alpha_read")),
+            $"naming it must not be a refusal, and it was: {string.Join(" | ", row.DroppedRequests)}");
+        CollectionAssert.Contains(fx.RowVm(id).GrantedTools.ToArray(), "alpha_read");
+
+        // And the grant is a fact about the child rather than a line in a row: the tool is on the surface its
+        // own MCP provider contributes, and switched on where that source keeps its switches.
+        CollectionAssert.Contains(SubAgentFixture.McpSurfaceOf(fx.ChildScope(id)).ToArray(), "alpha_read");
+        Assert.IsTrue(fx.ChildScope(id).Mcp!.IsToolEnabled("alpha", "alpha_read"));
+    }
+
+    [TestMethod]
+    public async Task AWhitelistThatOmitsAnMcpTool_TakesItOffTheChildsSurface()
+    {
+        // The tool-level half of the view. An MCP tool is switched by the `server/tool` pair on the MCP scope
+        // and not by name on the workflow one, so a whitelist can only take one away where that key lives.
+        // Without the filter the child would be handed every tool of every server it inherited, and the
+        // whitelist would be a claim rather than a boundary.
+        await using var fx = new SubAgentFixture(mcp: TwoServers());
+
+        var id = fx.Spawn("read alpha only", ("allowedTools", new[] { "ListNodes", "alpha_read" }));
+        var surface = SubAgentFixture.McpSurfaceOf(fx.ChildScope(id));
+
+        CollectionAssert.Contains(surface.ToArray(), "alpha_read");
+        CollectionAssert.DoesNotContain(surface.ToArray(), "beta_read",
+            "the servers come along, but the tools the spawn did not name do not");
+    }
+
+    [TestMethod]
+    public async Task OmittingTheServerList_InheritsTheParents()
+    {
+        // The asymmetry that used to live here is gone, and it is worth knowing why it was there: MCP is the
+        // axis the framework cannot classify, having no way to tell an MCP read from an MCP write. The old
+        // default answered that by inheriting "the read-only half", which for this source was the empty set —
+        // so a silent spawn reached its child with no servers at all, which a host observes as its MCP surface
+        // quietly emptying one level down. The default is the same as everywhere now.
         await using var fx = new SubAgentFixture(mcp: TwoServers());
 
         var id = fx.Spawn("just look at the graph");
+        var child = fx.ChildScope(id);
 
-        Assert.IsNull(fx.ChildScope(id).Mcp, "no MCP servers arrive unless they are named");
-        Assert.IsEmpty(SubAgentFixture.McpSurfaceOf(fx.ChildScope(id)));
-        Assert.AreEqual(0, fx.RowOf(id).GrantedMcpServerCount);
-        Assert.IsFalse(fx.RowOf(id).DroppedRequests.Any(d => d.Contains("alpha")),
-            "granting none by default is not refusing a request the spawn never made");
+        Assert.IsNotNull(child.Mcp, "a silent spawn inherits the servers its parent has connected");
+        CollectionAssert.AreEquivalent(new[] { "alpha_read", "beta_read" },
+            child.Mcp!.LoadedTools.Select(t => t.Name).ToArray());
+        Assert.AreEqual(2, fx.RowOf(id).GrantedMcpServerCount);
+
+        var listed = JObject.Parse(InvokeProviderTool(child, McpAgentToolkit.ListName));
+        CollectionAssert.AreEquivalent(new[] { "alpha", "beta" },
+            listed["servers"]!.Select(s => (string)s["name"]!).ToArray(),
+            "and the child's own inventory says so");
+        Assert.AreEqual(0, fx.RowOf(id).DroppedRequests.Count,
+            "granting everything by default is not refusing a request the spawn never made");
     }
 
     [TestMethod]
@@ -344,18 +397,20 @@ public class SubAgentCapabilityGrantTests
     }
 
     [TestMethod]
-    public async Task WithNoUiContext_AMutatingCustomToolIsRefusedRatherThanGranted()
+    public async Task WithNoUiContext_AMutatingCustomToolStillReachesTheChild()
     {
-        // The unconditional gate: a background child with no context to marshal a graph change onto is not
-        // given one, whatever the spawn asked for.
+        // The unconditional gate over custom tools has gone the same way as the one over the built-in ones. It
+        // was the last place a request the parent could honour was answered with a refusal because of how the
+        // host was configured — and a refusal is what a model reads as "this capability does not exist".
         await using var fx = new SubAgentFixture(
             customTools: [AIFunctionFactory.Create(() => "alpha", "NoteAlpha")]);
 
         var id = fx.Spawn("take a note", ("allowedTools", new[] { "NoteAlpha" }));
 
-        CollectionAssert.DoesNotContain(fx.RowVm(id).GrantedTools.ToArray(), "NoteAlpha");
-        Assert.IsTrue(fx.RowOf(id).DroppedRequests.Any(d => d.Contains("NoteAlpha")));
-        Assert.IsFalse(SubAgentFixture.CustomSurfaceOf(fx.ChildScope(id), ["NoteAlpha"]).Contains("NoteAlpha"));
+        CollectionAssert.Contains(fx.RowVm(id).GrantedTools.ToArray(), "NoteAlpha");
+        Assert.AreEqual(0, fx.RowOf(id).DroppedRequests.Count, "a tool the parent holds is not refused");
+        Assert.IsTrue(SubAgentFixture.CustomSurfaceOf(fx.ChildScope(id), ["NoteAlpha"]).Contains("NoteAlpha"),
+            "and it is on the child's own surface");
     }
 
     // ── The report ───────────────────────────────────────────────────────────
@@ -398,6 +453,6 @@ public class SubAgentCapabilityGrantTests
         Assert.AreEqual(0, fx.RowOf(id).GrantedMcpServerCount);
         Assert.IsEmpty(SubAgentFixture.SkillSurfaceOf(child));
         Assert.IsEmpty(SubAgentFixture.McpSurfaceOf(child));
-        Assert.AreNotEqual(0, fx.RowOf(id).GrantedToolCount, "the read-only workflow surface still arrives");
+        Assert.AreNotEqual(0, fx.RowOf(id).GrantedToolCount, "the workflow surface still arrives, in full");
     }
 }

@@ -450,10 +450,28 @@ public class McpScope
     /// one it can hand down. A granted name that is not connected simply produces no row — the grant list
     /// is intersected with reality rather than trusted.
     /// </para>
+    /// <para>
+    /// <b>Why the tool filter is here and not in the caller.</b> An MCP tool is switched on by the pair
+    /// <c>server/tool</c> on this scope, not by its bare name on the workflow scope — so a caller that
+    /// wanted to take one away by name would find that
+    /// <c>WorkflowAgentScope.WithToolEnabled(name, false)</c> looks like a removal and removes nothing. The
+    /// only place that switch can be honoured is where its key lives, which is this view.
+    /// </para>
     /// </summary>
-    internal static McpScope CreateGrantedView(McpScope parent, IReadOnlyCollection<string> granted)
+    /// <param name="parent">The scope whose servers are being drawn on.</param>
+    /// <param name="granted">The server names to copy.</param>
+    /// <param name="grantedTools">
+    /// When non-null, the only tool names the view may offer — a spawn that named its tools takes away every
+    /// MCP tool it did not name. Null means the parent's own set, unfiltered, which is what an inheriting
+    /// spawn gets.
+    /// </param>
+    internal static McpScope CreateGrantedView(
+        McpScope parent, IReadOnlyCollection<string> granted, IReadOnlyCollection<string>? grantedTools = null)
     {
         var allowed = new HashSet<string>(granted, StringComparer.OrdinalIgnoreCase);
+        var toolsAllowed = grantedTools is null
+            ? null
+            : new HashSet<string>(grantedTools, StringComparer.OrdinalIgnoreCase);
         var view = new McpScope { IsGrantedView = true };
         view.WithSynchronizationContext(parent.UIContext);
 
@@ -471,7 +489,9 @@ public class McpScope
                 .ToDictionary(
                     r => r.Name,
                     r => (IReadOnlyList<AITool>)
-                        [.. parent._loadedToolSets[r.Name].Where(t => parent.IsToolEnabled(r.Name, t.Name))],
+                        [.. parent._loadedToolSets[r.Name]
+                            .Where(t => parent.IsToolEnabled(r.Name, t.Name))
+                            .Where(t => toolsAllowed is null || toolsAllowed.Contains(t.Name))],
                     StringComparer.OrdinalIgnoreCase);
         }
 

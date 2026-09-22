@@ -464,19 +464,22 @@ public sealed class WorkflowAgentToolkit
     /// <summary>
     /// A budget refusal, worded for whoever hit it.
     /// <para>
-    /// A scope that owns the session's allowance is sent to <see cref="ResetBudgetToolName"/>, exactly as
-    /// before. A spawned scope is not, and the reason is structural rather than stylistic: the reset is
-    /// switched off for it (see <c>SubAgentScope</c>'s child assembly), because a background child raising a
-    /// confirmation prompt would put a modal question to a user while its parent's turn is still suspended.
-    /// Telling such a scope to call a tool that will refuse teaches it to retry — so it is told the option
-    /// it actually has: stop, and report upward.
+    /// Both kinds of scope are now sent to <see cref="ResetBudgetToolName"/>, because both hold it — a
+    /// spawned child is handed the parent's interaction configuration along with the tool, so its reset
+    /// reaches the user exactly as the parent's does. What differs is the duty the refusal adds: a child has
+    /// a dispatcher suspended on its result, so it is told to report upward as well rather than sit still.
+    /// Telling it to call a tool that refuses is what this message used to do, and it taught the model to
+    /// retry.
     /// </para>
     /// </summary>
     private string BudgetRefusal(string cause)
-        => ReferenceEquals(_ledger.Root, _ledger)
-            ? LimitRefusal(cause)
-            : $"{cause} You cannot extend it yourself. Stop calling tools and report what you have done "
-            + "and what remains to the agent that spawned you.";
+    {
+        var text = LimitRefusal(cause);
+        return ReferenceEquals(_ledger.Root, _ledger)
+            ? text
+            : text + " You were dispatched by another agent that is waiting on this run: if the task cannot "
+                   + "be finished, report what you have done and what remains.";
+    }
 
     /// <summary>
     /// A budget refusal. It names <see cref="ResetBudgetToolName"/> because the model cannot see the limit
@@ -493,17 +496,6 @@ public sealed class WorkflowAgentToolkit
     /// </summary>
     private bool IsQueryTool(string toolName)
         => QueryToolNames.Contains(toolName) || _scope.IsQueryOnlyCustomTool(toolName);
-
-    /// <summary>
-    /// Whether a tool leaves the workflow graph alone — the same classification <see cref="CheckBudget"/>
-    /// and the dirty marking use.
-    /// <para>
-    /// Exposed so that a subsystem narrowing a child's tool surface can ask what "inherit the parent's
-    /// tools" should mean without repeating the list, which would drift out of step the first time a tool
-    /// was reclassified.
-    /// </para>
-    /// </summary>
-    internal bool IsQueryOnlyTool(string toolName) => IsQueryTool(toolName);
 
     // ────────────────────────── Query Functions ──────────────────────────
 

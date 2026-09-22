@@ -57,8 +57,8 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     public IReadOnlyList<McpServerConfiguration> McpServers { get; set; } = DemoMcpServers;
 
     /// <summary>
-    /// The sub-agent subsystem: the Agent dispatches background children through it, and what each child may
-    /// do is a narrowed slice of what this scope holds — never a superset of it.
+    /// The sub-agent subsystem: the Agent dispatches background children through it, and each child holds what
+    /// this scope holds — handed down whole unless the dispatch named a smaller list — never more than it.
     /// <para>
     /// Created inside <see cref="ProvideAgent"/> rather than here, because a subsystem is built over a chat
     /// client and that is not resolved until the key has been read. So this is <c>null</c> until
@@ -294,10 +294,11 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "deepseek-v4-flash" : Model)
               .AsIChatClient();
 
-        // Sub-agents: the Agent can dispatch background children, each holding a narrowed slice of what this
-        // scope holds. Attached here — before CreateContextProviders() below, which is the line that matters:
-        // the five dispatch tools reach the model as that provider's contribution, so attaching afterwards
-        // would leave the model with none of them and the subsystem unreachable however it was configured.
+        // Sub-agents: the Agent can dispatch background children, each holding what this scope holds — the
+        // whole of it unless the dispatch named a smaller list. Attached here — before CreateContextProviders()
+        // below, which is the line that matters: the five dispatch tools reach the model as that provider's
+        // contribution, so attaching afterwards would leave the model with none of them and the subsystem
+        // unreachable however it was configured.
         //
         // The depth limit is not redundant with WithMaxToolCalls(200) above. The budget is what makes the
         // tree terminate; a root allowing 200 calls terminates a 199-deep chain, which is bounded and

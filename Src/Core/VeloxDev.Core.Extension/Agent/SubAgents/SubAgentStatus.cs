@@ -41,7 +41,13 @@ public sealed class SubAgentSummary
     /// <summary>The handle a spawn returned, and what every other tool takes.</summary>
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>Display name — the one the spawn asked for, or a generated one.</summary>
+    /// <summary>
+    /// The task's display title — what the spawn asked for, or a numbered stand-in.
+    /// <para>
+    /// A title rather than an identifier, because its consumer is the person watching the panel rather than
+    /// the model: it sits beside the state lamp on a row that deliberately shows nothing else of the task.
+    /// </para>
+    /// </summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
