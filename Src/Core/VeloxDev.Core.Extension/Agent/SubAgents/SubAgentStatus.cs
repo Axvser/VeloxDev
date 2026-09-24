@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace VeloxDev.AI.SubAgents;
@@ -81,6 +82,27 @@ public sealed class SubAgentSummary
     /// <summary>The cap on that count that was granted at spawn time, or <c>null</c> for none.</summary>
     public int? MaxToolCalls { get; set; }
 
+    /// <summary>
+    /// How many tokens the child's own runs spent, or <c>null</c> when the provider reported none.
+    /// <para>
+    /// This is the child's own spend, not its subtree's. A parent's total is the sum over the tree, which
+    /// only the tree can compute — see <c>SubAgentTreeNodeViewModel.SubtreeTokens</c>.
+    /// </para>
+    /// </summary>
+    public long? TokensUsed { get; set; }
+
+    /// <summary>The prompt-side half of <see cref="TokensUsed"/>, when the provider splits it.</summary>
+    public long? InputTokens { get; set; }
+
+    /// <summary>The completion-side half of <see cref="TokensUsed"/>, when the provider splits it.</summary>
+    public long? OutputTokens { get; set; }
+
+    /// <summary>When the child's run started, or <c>null</c> before it did.</summary>
+    public DateTimeOffset? StartedAt { get; set; }
+
+    /// <summary>When the child's run ended, or <c>null</c> while it is still going.</summary>
+    public DateTimeOffset? FinishedAt { get; set; }
+
     /// <summary>How many tools the child was actually given.</summary>
     public int GrantedToolCount { get; set; }
 
@@ -116,4 +138,23 @@ public sealed class SubAgentSummary
 
     /// <summary>There is a result worth showing.</summary>
     public bool HasResult => !string.IsNullOrEmpty(Result);
+
+    /// <summary>Whether the provider reported a token count. False means "not measured", not zero.</summary>
+    public bool HasTokens => TokensUsed is not null;
+
+    /// <summary>How long the child ran, or has been running. <c>null</c> before it started.</summary>
+    /// <remarks>
+    /// Measured against the clock while the child is running, so a caller that re-reads the same summary
+    /// gets a larger span — and <see cref="SubAgentScope.Snapshot"/> does not republish merely because time
+    /// passed. Read it, do not cache it.
+    /// </remarks>
+    public TimeSpan? Duration
+    {
+        get
+        {
+            if (StartedAt is not { } from) return null;
+            var span = (FinishedAt ?? DateTimeOffset.Now) - from;
+            return span < TimeSpan.Zero ? TimeSpan.Zero : span;
+        }
+    }
 }

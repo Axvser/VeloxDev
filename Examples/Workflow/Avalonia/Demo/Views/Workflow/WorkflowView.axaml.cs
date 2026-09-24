@@ -38,6 +38,13 @@ public partial class WorkflowView : UserControl
     /// </summary>
     private SubAgentTreeViewModel? _subAgentTree;
 
+    /// <summary>
+    /// The clock behind the panel's elapsed times. The library owns no timer on purpose — a panel that ticks
+    /// and a process that hosts one have different lifetimes — so the demo supplies the one it already has a
+    /// dispatcher for. One second is the coarsest rate at which a "分/秒" label still looks alive.
+    /// </summary>
+    private DispatcherTimer? _subAgentTick;
+
     public WorkflowView()
     {
         InitializeComponent();
@@ -90,6 +97,29 @@ public partial class WorkflowView : UserControl
         _subAgentTree = new SubAgentTreeViewModel(scope);
         SubAgentPanel.DataContext = _subAgentTree;
         SubAgentPanel.IsVisible = true;
+        StartSubAgentTick();
+    }
+
+    /// <summary>
+    /// Starts the elapsed-time clock. It runs for as long as the panel is attached rather than only while a
+    /// child is running: a child can be spawned at any moment by an agent that is itself one of the children,
+    /// so "nothing is running right now" is not a state this can reliably observe and wake up from.
+    /// </summary>
+    private void StartSubAgentTick()
+    {
+        _subAgentTick ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _subAgentTick.Tick -= OnSubAgentTick;
+        _subAgentTick.Tick += OnSubAgentTick;
+        _subAgentTick.Start();
+    }
+
+    private void OnSubAgentTick(object? sender, EventArgs e) => _subAgentTree?.TickElapsed();
+
+    private void StopSubAgentTick()
+    {
+        if (_subAgentTick is null) return;
+        _subAgentTick.Stop();
+        _subAgentTick.Tick -= OnSubAgentTick;
     }
 
     /// <summary>
@@ -98,6 +128,7 @@ public partial class WorkflowView : UserControl
     /// </summary>
     private void DetachSubAgents()
     {
+        StopSubAgentTick();
         SubAgentPanel.DataContext = null;
         SubAgentPanel.IsVisible = false;
         _subAgentTree?.Dispose();

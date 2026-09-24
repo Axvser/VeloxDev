@@ -15,15 +15,16 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.SubAgents;
 
 /// <summary>
-/// The five questions no offline double can answer.
+/// The six questions no offline double can answer.
 /// <para>
 /// Every other test in this folder drives the machinery with a fake model, which proves the machinery works
 /// but says nothing about whether a model will use it. Only a real one can settle that: whether the tool
 /// descriptions are clear enough that an agent dispatches a child at all, whether a child with a narrowed
 /// tool set can actually do the work it was handed and report back, whether a model asked to narrow a
 /// capability populates the argument that carries it rather than letting the default stand, whether it
-/// titles the task it delegates — the one argument whose reader is a person rather than the model — and,
-/// the one the standing text exists for, whether it delegates read-heavy work on its own initiative.
+/// titles the task it delegates — the one argument whose reader is a person rather than the model —,
+/// the one the standing text exists for, whether it delegates read-heavy work on its own initiative, and
+/// whether the provider's token usage survives the agent wrap to reach the panel.
 /// </para>
 /// <para>
 /// Gated on <c>API_KEY_DEEPSEEK</c>: without it these are <c>Inconclusive</c>, so a machine that holds no
@@ -97,6 +98,51 @@ public class SubAgentLiveTests
             "the graph has exactly one node, so a child that looked says one");
         Assert.IsTrue((int?)agent["callCount"] > 0,
             "and it looked: a child that reported without calling a tool answered from nothing");
+    }
+
+    [TestMethod]
+    public async Task ARealChild_ReportsWhatItSpent()
+    {
+        // The one claim about the metrics that no double can make. `UsageChatClient` proves the half of the
+        // wiring this repository owns — that a UsageDetails on the response becomes a number on the row. It
+        // cannot prove the half it does not own: that a real provider reports usage at all and that MAF
+        // aggregates it onto AgentResponse. If that ever stops, the panel's token column goes quietly blank,
+        // and this is the test that says so first.
+        var client = ClientOrNull();
+        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+
+        await using var session = new LiveSession(client!);
+
+        await session.Host.RunAsync(DispatchInstruction);
+
+        var id = session.SubAgents.Snapshot.FirstOrDefault()?.Id;
+        if (id is null)
+            Assert.Inconclusive("The model did not dispatch a child this time; ARealModel_DispatchesAChildAtAll is the test that reports on that.");
+
+        var reply = JObject.Parse(SubAgentFixture.InvokeTool(
+            SubAgentFixture.SubAgentToolOf(session.Scope, "WaitSubAgents"),
+            ("ids", new[] { id }), ("timeoutMs", 180_000)));
+
+        var agent = ((JArray)reply["agents"]!).Single();
+        Assert.AreEqual("Completed", (string?)agent["state"], (string?)agent["error"] ?? (string?)agent["stateText"]);
+
+        var row = session.SubAgents.Snapshot.Single(s => s.Id == id);
+
+        Assert.IsTrue(row.TokensUsed > 0,
+            "the provider reported no usage, so the panel's token figure would be empty. Either the provider "
+            + "stopped sending it or AgentResponse.Usage stopped carrying it — MAF aggregates it, and a "
+            + "version bump is the likely cause.");
+        Assert.IsTrue(row.InputTokens > 0, "the prompt side is the half a chat completion always bills");
+        Assert.IsNotNull(row.StartedAt);
+        Assert.IsNotNull(row.FinishedAt);
+        Assert.IsTrue(row.Duration > TimeSpan.Zero, "a real child takes time, and the panel prints that time");
+
+        // And the same figures reach the tree, which is the thing the panel actually binds.
+        using var tree = new SubAgentTreeViewModel(session.SubAgents);
+        var node = tree.Roots.Single();
+        Assert.AreEqual(row.TokensUsed, node.TokensUsed, "the node reports the row's own spend");
+        Assert.AreEqual(row.TokensUsed, tree.SubtreeTokens, "one child, so the subtree total is that spend");
+        Assert.IsFalse(node.ShowSubtreeTokens, "with no grandchildren there is no second figure to print");
     }
 
     [TestMethod]

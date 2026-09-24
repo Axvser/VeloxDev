@@ -49,6 +49,42 @@ internal sealed class InstantChatClient(string answer = "done") : IChatClient
 }
 
 /// <summary>
+/// A chat client that answers at once and reports token usage, for the plumbing that carries it from
+/// <see cref="ChatResponse.Usage"/> onto the roster row.
+/// <para>
+/// Separate from <see cref="InstantChatClient"/> rather than an option on it: the rest of the suite asserts
+/// on children whose provider reports nothing, and a default that fabricated counts would quietly weaken
+/// those assertions. One type per claim also means a failure here is about the plumbing, not the answer.
+/// </para>
+/// </summary>
+internal sealed class UsageChatClient(int inputTokens, int outputTokens, string answer = "done") : IChatClient
+{
+    public Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+        => Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, answer))
+        {
+            Usage = new UsageDetails
+            {
+                InputTokenCount = inputTokens,
+                OutputTokenCount = outputTokens,
+                TotalTokenCount = inputTokens + outputTokens,
+            },
+        });
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await Task.CompletedTask;
+        yield return new ChatResponseUpdate(ChatRole.Assistant, answer);
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose() { }
+}
+
+/// <summary>
 /// A chat client that stops inside <c>GetResponseAsync</c> until the test lets it go.
 /// <para>
 /// The double the suite was missing: everything about dispatch-and-poll — several children running at

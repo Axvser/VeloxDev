@@ -19,12 +19,39 @@
 			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
 			 behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
 
+	<!-- 子代理树是只读的：没有任何东西会因为「某一行被选中」而改变，所以选中与悬停都不该画出色块。
+	     Fluent 的主题会画，而 SelectionMode 没有 None 这一档（只有 Single/Multiple/Toggle/AlwaysSelected），
+	     只能在两处同时盖：Theme 资源键（下面）与 Style（再下面）。两处都写是因为 Fluent 12 把主题编译进了
+	     二进制资源、取不到它到底用了哪个键或哪个模板部件 —— 键名不存在时只是多一个没人用的资源，无害；
+	     命中一处就够。 -->
+	<UserControl.Resources>
+		<SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="Transparent" />
+		<SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+		<SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="Transparent" />
+		<SolidColorBrush x:Key="TreeViewItemBackgroundPointerOver" Color="Transparent" />
+	</UserControl.Resources>
+
 	<!-- 子代理树的展开状态由库里那一行自己持有（SubAgentTreeNodeViewModel.IsExpanded，默认展开），而
 	     TreeViewItem 默认是收起的 —— 这块面板的全部意义就是一眼看见孩子，不该让用户逐个点开。
 	     用 ReflectionBinding 而非编译绑定：Style 里没有 x:DataType 作用域，编译绑定在此无从下手。 -->
 	<UserControl.Styles>
 		<Style Selector="TreeViewItem">
 			<Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
+		</Style>
+		<!-- 这块面板是只读的：没有任何东西会因为「某一行被选中」而改变，所以选中与悬停都不该画出色块。
+		     Fluent 的主题会画，而 SelectionMode 没有 None 这一档（只有 Single/Multiple/Toggle/AlwaysSelected），
+		     只能用样式盖。三项都要盖：单击会同时置上选中与指针悬停，只盖一个仍然会闪出色块来。 -->
+		<Style Selector="TreeViewItem">
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<Style Selector="TreeViewItem:selected">
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<Style Selector="TreeViewItem:pointerover">
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<Style Selector="TreeViewItem:selected:pointerover">
+			<Setter Property="Background" Value="Transparent" />
 		</Style>
 	</UserControl.Styles>
 
@@ -241,46 +268,57 @@
 								</ItemsControl>
 							</StackPanel>
 						</Border>
-						<!-- Sub-agents the Agent dispatched, at every depth. The tree is the library's own
-						     (VeloxDev.AI.SubAgents.SubAgentTreeViewModel), built over helper.SubAgents in the
-						     code-behind once the subsystem exists. IsVisible starts False because a host with no
-						     key never gets one — the panel is wired on, not assumed. -->
+						<!-- Sub-agents the Agent dispatched, at every depth, under the scope's own node. The tree is the
+						     library's own (VeloxDev.AI.SubAgents.SubAgentTreeViewModel), built over helper.SubAgents in the
+						     code-behind once the subsystem exists. IsVisible starts False because a host with no key never gets
+						     one — the panel is wired on, not assumed. -->
 						<Border x:Name="SubAgentPanel" x:DataType="sub:SubAgentTreeViewModel" IsVisible="False" Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
 							<StackPanel Spacing="6">
 								<Grid ColumnDefinitions="*,Auto">
 									<TextBlock Text="子代理" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
 									<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-										<TextBlock Text="{Binding RunningCount, StringFormat=运行中 {0}}" Foreground="#6bffb8" FontWeight="Bold"/>
-										<TextBlock Text="{Binding TotalCount, StringFormat=· 共 {0}}" Foreground="#a0a0a0"/>
-										<TextBlock Text="{Binding FailedCount, StringFormat=· 失败 {0}}" Foreground="#ff6b6b"
-												   IsVisible="{Binding HasFailed}"/>
+										<TextBlock Text="{Binding RunningCount, StringFormat=运行中 {0}}" Foreground="#6bffb8" FontWeight="Bold" IsVisible="{Binding !IsIdle}"/>
+										<TextBlock Text="{Binding TotalCount, StringFormat={}{0} 个}" Foreground="#a0a0a0"/>
+										<TextBlock Text="{Binding SubtreeTokensText, StringFormat=· {0} tokens}" Foreground="#c8b6ff" IsVisible="{Binding ScopeRoot.HasTokens}"/>
+										<TextBlock Text="{Binding FailedCount, StringFormat=· 失败 {0}}" Foreground="#ff6b6b" IsVisible="{Binding HasFailed}"/>
 									</StackPanel>
 								</Grid>
-								<TextBlock Text="尚无子代理。让 Agent「派一个子代理去数一数节点」试试。" Foreground="#6b7280"
-										   FontSize="11" TextWrapping="Wrap" IsVisible="{Binding IsEmpty}"/>
-								<TreeView ItemsSource="{Binding Roots}" Background="Transparent" BorderThickness="0" MaxHeight="320">
-									<TreeView.ItemTemplate>
-										<TreeDataTemplate x:DataType="sub:SubAgentTreeNodeViewModel" ItemsSource="{Binding Children}">
-											<!-- One lamp and one line, and that is the whole node. A child's task is often a paragraph and
-											     its result often longer, so printing them made every row four wrapped blocks and turned the
-											     tree unreadable at exactly the moment it got interesting — a fan-out. What belongs here is
-											     what a person scans for: the lamp for the state, the title for which piece of work this is,
-											     the count for what it cost. The text itself lives on SubAgentSummary and comes back through the
-											     tools, which is where anyone who needs it should look.
-											     The title is trimmed rather than wrapped: it is whatever the model titled the task with, so the
-											     row must survive a title that turned out to be a sentence. -->
-											<StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
-												<local:SubAgentStatusLight Row="{Binding Row}" Width="9" Height="9" VerticalAlignment="Center"/>
-												<TextBlock Text="{Binding Row.Name}" Foreground="#e0e0e0" FontWeight="SemiBold"
-														   MaxWidth="180" TextTrimming="CharacterEllipsis"/>
-												<TextBlock Text="{Binding Row.StateText}" Foreground="#a0a0a0"/>
-												<TextBlock Text="{Binding Row.CallCount, StringFormat=· {0} 次调用}" Foreground="#6bffb8"/>
-												<TextBlock Text="{Binding Row.DroppedRequests.Count, StringFormat=· 有 {0} 项请求被拒}" Foreground="#ffd166" FontSize="11"
-														   VerticalAlignment="Center" IsVisible="{Binding Row.HasDroppedRequests}"/>
-											</StackPanel>
-										</TreeDataTemplate>
-									</TreeView.ItemTemplate>
-								</TreeView>
+								<TextBlock Text="尚无子代理。让 Agent「派一个子代理去数一数节点」试试。" Foreground="#6b7280" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding IsEmpty}"/>
+								<ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+									<TreeView ItemsSource="{Binding Tree}" Background="Transparent" BorderThickness="0">
+										<TreeView.ItemTemplate>
+											<TreeDataTemplate x:DataType="sub:SubAgentTreeNodeViewModel" ItemsSource="{Binding Children}">
+												<!-- What an agent map is read for. A lamp for the state, the title for which piece of work this is, and
+												     under it what the run cost: how long it took, what it spent, and the subtree total beside the node's
+												     own when the two differ. The task and the result are deliberately absent — a task is often a paragraph
+												     and a result often longer, and printing them made every row four wrapped blocks and turned the tree
+												     unreadable at exactly the moment it got interesting, a fan-out. Both live on SubAgentSummary and come
+												     back through the tools, which is where anyone who needs them should look.
+												     Everything is bound off the node, never through Row: the top node stands for the scope and has none. -->
+												<Grid ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+													<local:SubAgentStatusLight Grid.Column="0" Row="{Binding Row}" Width="9" Height="9"
+																	   VerticalAlignment="Top" Margin="0,4,7,0"/>
+													<StackPanel Grid.Column="1" Spacing="1">
+														<TextBlock Text="{Binding Title}" Foreground="#e0e0e0" FontWeight="SemiBold"
+																   TextTrimming="CharacterEllipsis"/>
+														<StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding !IsScopeRoot}">
+															<TextBlock Text="{Binding DurationText}" Foreground="#8a8a8a" FontSize="11"
+																	   IsVisible="{Binding HasDuration}"/>
+															<TextBlock Text="{Binding TokensText, StringFormat=· {0}}" Foreground="#9d8cff" FontSize="11"
+																	   IsVisible="{Binding HasTokens}"/>
+															<TextBlock Text="{Binding SubtreeTokensText, StringFormat=· 子树 {0}}" Foreground="#7ec8ff" FontSize="11"
+																	   IsVisible="{Binding ShowSubtreeTokens}"/>
+															<TextBlock Text="{Binding DroppedRequestCount, StringFormat=· 有 {0} 项请求被拒}" Foreground="#ffd166" FontSize="11"
+																	   IsVisible="{Binding HasDroppedRequests}"/>
+															<TextBlock Text="{Binding StateText}" Foreground="#8a8a8a" FontSize="11"
+																	   IsVisible="{Binding ShowStateText}"/>
+														</StackPanel>
+													</StackPanel>
+												</Grid>
+											</TreeDataTemplate>
+										</TreeView.ItemTemplate>
+									</TreeView>
+								</ScrollViewer>
 							</StackPanel>
 						</Border>
 						<!-- Execution log -->

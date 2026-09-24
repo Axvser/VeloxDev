@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core.Extension/Agent/SubAgents/`（6 个 .cs，命名空间 `VeloxDev.AI.SubAgents`）。
 > 账本：`Agent/Workflow/Functions/ToolCallLedger.cs`（1 个 `internal` 类型，跨子代理与 Workflow 两侧）。
-> 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/SubAgents/`（9 个 .cs，8 个 `[TestClass]`）。
+> 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/SubAgents/`（10 个 .cs，9 个 `[TestClass]`）。
 > 不依赖 MAF 的 `BackgroundAgentsProvider`：那个类型构造时吃死的 `IEnumerable<AIAgent>`，**没有「按次配置子能力」这个概念**，且整体标着 `[Experimental("MAAI001")]`。
 
 本文只写「读完这些文件才知道的东西」。
@@ -241,6 +241,20 @@
 
 **一条测试写法上的硬约束**：断言若放在 `ui.Send(...)` 的 lambda 里，**里面不能阻塞**（泵是单线程的）。先在测试线程 `WaitFor`，再 `Send` 进去只做读。
 
+### 度量：时长、token、作用域根节点（2026-09-25 加）
+
+| 事实 | 为什么 |
+|---|---|
+| **token 的接缝在 `SubAgentScope.cs:790`**：`response` 是 `AgentResponse`，`response.Usage` 是 `Microsoft.Extensions.AI.UsageDetails?`，`Finish` 收下它并写三个字段 | 那里是**唯一**拿得到用量的地方 —— 五个管理工具、`AgentTranscript`、`AgentPipeline` 的事件全都没有 token 概念（`CallUsage` 是**调用次数**，别混）。走这条路**不必动 `AgentEvent` 的公共构造器**，改动面因此只在 SubAgents 子系统内。token 只在**成功分支**写：被取消或抛异常的孩子其 response 已经无从取得，留 null 让面板显示「未计量」，而不是一个没测过的 0 |
+| **MAF 1.22.0 确实把 `ChatResponse.Usage` 聚合进 `AgentResponse.Usage`**（`SubAgentMetricsTests.TokenUsage_FromTheProvider_ReachesTheRowAndTheSummary` 钉住） | 这条查文档查不到、只能实测：框架里有 `UsageAggregator` / `UsageAggregationExtensions.ApplyAggregatedUsage`，但「这条路径上到底调没调」只有一条喂了 usage 的假 client 能回答。**换 MAF 版本时先跑这条**，它红了就是面板开始静默显示空白的日子 |
+| `Republish()` 原先**不投影** `StartedAt` / `FinishedAt`，所以 `Snapshot` 上根本没有时长 | 面板走 `Children` 才看得见，而 `Snapshot` 是跨线程那一份、也是五个工具那一份。加 token 时必须一并把它们补进去，否则「面板有、模型没有」 |
+| 时长是**算出来的**（`FinishedAt ?? Now − StartedAt`），不是存的；`NotifyElapsed()` / `TickElapsed()` 才是通知 | 运行中的孩子没有「已完成」那一刻可言。库**故意不持有计时器**：面板会跳、进程会活，两者寿命不同，计时器属于宿主。demo 用 1 秒的 `DispatcherTimer`（`WorkflowView.axaml.cs` 的 `StartSubAgentTick`），只跟面板的挂载/卸载走 —— **不是**「有孩子在跑才走」，因为下一个孩子可能是某个正在跑的孩子派出来的，「此刻空闲」不是一个能可靠观察到并唤醒的状态 |
+| **行存自身消耗，节点算子树合计**（`TokensUsed` vs `SubtreeTokens`） | 二者不能相加：父只报自身会藏起它底下的工作，父报合计则整列无法求和。面板同时印两者，`ShowSubtreeTokens` 只在**自身有值且子树更大**时为真。自下而上的顺序是构造保证的 —— `Fill` 先递归孩子、再 `RecomputeAggregates()` |
+| 顶节点代表作用域（`Row == null`，`Id` 是固定的 `__scope__`），`Roots` 就是它的 `Children` | 照 agent map 的形状：最上面那个是「会话本身」，不是某个子代理。`ScopeTokens` / `ScopeTitle` 由宿主填 —— **库测不出主代理的用量**（那是宿主的对话），所以留 null 时顶节点退回去显示子树合计，而不是替宿主猜一个数。`ScopeTokens` 可以在树建好之后再设，所以它的 `partial` 钩子里**必须重算**而不只是发通知 |
+| `Fill` **就地重整**（先移除离开的、再按名册顺序 `Insert` / `Move`），不再 `Clear()` | 名册在**每一行的每一次属性写入**上都重发一次，所以清空重建会把面板的容器每孩子拆装好几遍，展开状态与选中项也一并丢掉。`SubAgentMetricsTests.ARebuild_ReconcilesTheLevelInPlace` 连「重置次数为 0、新增只有一次、节点实例还是原来那个」一起断言 |
+| 树 VM 里那个 `[VeloxProperty]` 字段（`tree`）**不能删** | 生成器按「类里有没有 `VeloxProperty` 成员」决定要不要注入 `OnPropertyChanged`。把 `Roots` 从字段改成 `ScopeRoot.Children` 的别名时顺手删掉它，整个类的计数通知就都编译不过 —— 而计数全是派生属性 |
+| 计数面板那一行多了子树 token 合计（`SubtreeTokensText`） | 侧栏一屏只看得见几个节点，总量必须有一个不属于任何单个节点的地方 |
+
 ### 把这块面板挂上屏（Avalonia 是第一家，`Examples/Workflow/Avalonia/Demo/Views/Workflow/WorkflowView`）
 
 | 事实 | 为什么 |
@@ -249,10 +263,15 @@
 | `SubAgentPanel.IsVisible` 由代码置位（`.axaml.cs:84,92,102`），XAML 里初值是 `False` | `DataContext == null` 这件事绑不出来（没有 `IsNull` 转换器），而无 key 的宿主 `SubAgents` 永远为 null |
 | 换树时 `Dispose()` 树 VM 而**不**动 scope（`.axaml.cs:103`，理由见上面「`Dispose` 不取消任何孩子」那行） | 换一棵树时旧 helper 是直接丢掉的（`InitializeNetworkDemo` 不 `Uninstall`），旧 scope 的孩子仍在跑。不 Dispose 树 VM 的话，它会一直订阅一个没人看的 scope、每变一次就重建一次 |
 | 节点的默认展开靠 `<Style Selector="TreeViewItem">` 上的 `{ReflectionBinding IsExpanded, Mode=TwoWay}`（`.axaml` `:26-28`） | `SubAgentTreeNodeViewModel.IsExpanded` 默认 `true`，而 `TreeViewItem.IsExpanded` 默认 `false` —— 不接上的话面板一打开全是收起的。**必须是 `ReflectionBinding`**：`Style` 里没有 `x:DataType` 作用域，编译绑定无从下手 |
-| 状态灯是**库外**的一个控件：`SubAgentStatusLight : Ellipse`（`Demo/Views/Workflow/SubAgentStatusLight.cs`），在节点模板里绑 `Row="{Binding Row}"`（`.axaml` `:273`） | 面板 VM 活在库侧而灯是纯视图的事，所以它属于 demo。`Row` 是 `StyledProperty` 而不是普通字段：模板带 `x:DataType`，这样 `{Binding Row}` 走编译绑定，路径错了是**编译错误** |
+| 状态灯是**库外**的一个控件：`SubAgentStatusLight : Ellipse`（`Demo/Views/Workflow/SubAgentStatusLight.cs`），在节点模板里绑 `Row="{Binding Row}"`（`.axaml` `:276`） | 面板 VM 活在库侧而灯是纯视图的事，所以它属于 demo。`Row` 是 `StyledProperty` 而不是普通字段：模板带 `x:DataType`，这样 `{Binding Row}` 走编译绑定，路径错了是**编译错误**。**`Row` 现在可为 null**（顶节点是作用域），灯对此已经有正确行为：`Paint()` 取 `_watched?.State ?? Completed` ⇒ 灰、不呼吸 —— 恰好是一个「没有自己的运行可言」的节点该有的样子 |
+| 树绑的是 `{Binding Tree}`（单个节点），`MaxHeight="340"` 在外层 `ScrollViewer` 上而不是 `TreeView` 上（`.axaml` `:264-265`） | `Tree` 只有一个元素 —— 作用域节点，`Roots` 是它的 `Children`。高度上限移到外层，是因为 `TreeView` 自己也有滚动条，两个嵌套的滚动区域会在同一处滚轮事件上打架 |
+| 时长要有人推：`StartSubAgentTick` / `OnSubAgentTick` / `StopSubAgentTick` 挂在 `AttachSubAgents` / `DetachSubAgents` 上（`.axaml.cs`） | 与面板同生共死 —— 卸载后还留着一个 `DispatcherTimer` 就是往一个没人看的树上写属性。**库不提供计时器**（见上一节），demo 用 1 秒的 `DispatcherTimer` |
 | 灯只在 `Running/Queued` 时呼吸，`Failed` 红、其余灰（含 `Cancelled`） | 呼吸动画由 `Transition<T>.Create().Property(l => l.Opacity, 1d).Effect(new TransitionEffect { Duration = 800ms, IsAutoReverse = true, LoopTime = int.MaxValue, Ease = Eases.Sine.InOut })` 一个静态声明驱动，`LoopTime = int.MaxValue` 是这套系统唯一的「永久」。**必须在 `OnDetachedFromVisualTree` 里 `Transition.Exit`**（照 `PolylineCurveView.axaml.cs:244-249` 那条先例）：永久循环不会因为控件离开可视树而停，滚走的节点会留着一条对无人可见的控件写 `Opacity` 的采样循环。`Duration` 不能为 0 —— 零长的一趟不消耗时间，永久循环会变成空转且 `Exit` 再也打断不了它 |
-| 节点**只有一行**：「灯 + 标题 + 状态 + 调用数 (+ 被拒数)」（`WorkflowView.axaml:263-281`） | **面板是状态视图，不是内容视图。** 上一轮它印的是四行：`Task` / `Result` / `Error` / 被拒数。而一个孩子的任务常常是一段、结果更长，于是扇出的那一刻整棵树变成每行四个折行块 —— 恰好在它开始有意思的时候不可读。用者 2026-09-22 的口径是「代理树中的任何成员都不应该显示具体内容」，**失败节点也不例外**：红灯 + 「失败」就这一行，原因不显示。**`Task` / `Result` / `Error` 仍留在 `SubAgentSummary` 上**，它们从五个工具出去，要看的人去那里看 —— 从面板上拿掉的只是那个界面，不是那些数据 |
-| 标题那一格是 `Row.Name`，而 `Name` 现在是**任务标题**不是标识符（`SubAgentScope.Describe` `:612`） | 原先印的是 id 前八位。位置已经由树本身说清楚了，所以标识符在这里花掉了一格标题的宽度却什么也没告诉看的人。省略 `name` 时回退成 `子代理 N`，**N 按父各自编号**（`Describe` 收的是 `Children.Count + 1`），不是全树的序号 —— 孙代理是它自己父的第一个孩子。标题**裁剪而不折行**（`MaxWidth=180` + `CharacterEllipsis`）：它是模型填的，行必须扛得住一个填成了句子的标题 |
+| 节点是**两行**：「灯 + 标题」/「时长 · tokens (· 子树 N) (+ 被拒数) (状态)」。作用域根节点的第二行整块不显示（`IsVisible="{Binding !IsScopeRoot}"`），因为它的合计已经印在表头上了 | **面板是状态视图，不是内容视图。** 上一轮它印的是四行：`Task` / `Result` / `Error` / 被拒数。而一个孩子的任务常常是一段、结果更长，于是扇出的那一刻整棵树变成每行四个折行块 —— 恰好在它开始有意思的时候不可读。2026-09-25 把第二行给了**度量**（时长、token、子树合计），因为它回答的仍是「这一行现在怎么样」而不是「它说了什么」。用者 2026-09-22 的口径是「代理树中的任何成员都不应该显示具体内容」，**失败节点也不例外**：红灯 + 「失败」就这一行，原因不显示。**`Task` / `Result` / `Error` 仍留在 `SubAgentSummary` 上**，它们从五个工具出去，要看的人去那里看 —— 从面板上拿掉的只是那个界面，不是那些数据 |
+| 2026-09-25 又砍掉两样，用者的口径是「更精简美观」：**调用数**不再上屏，**状态文字只在灯说不清时才印**（`ShowStateText` = 非 `Completed`） | 调用数与 token 争同一个「代价」位置，而 token 是更好的那个；它仍在 `SubAgentSummary` / 五个工具上。状态文字同理：灰灯已经说了「完成了」，而那是最常见的状态 —— 每行再印一遍「已完成」等于把同一件事说 N 次。灯分不清的是其余几档：排队与运行都在呼吸、取消与失败都是灰的，那才是文字该出现的地方。表头的「共 N」也一并改成「N 个」，因为它和「N 次调用」用了同一个数字形状，读起来会串 |
+| 选中与悬停的**强调色块要在两处同时盖**：`UserControl.Resources` 里四个 `TreeViewItemBackground*` 画刷设为 `Transparent`，再加 `Style Selector="TreeViewItem:selected"` / `:pointerover` / `:selected:pointerover` 的 `Background` | 这块面板只读，选中什么都不改变，而 Fluent 默认会画一个蓝色块 —— 深色侧栏里非常刺眼。**`SelectionMode` 没有 `None` 这一档**（只有 `Single` / `Multiple` / `Toggle` / `AlwaysSelected`），关不掉。两处都写是因为 Fluent 12 把主题编译进了二进制资源，既取不到键名也取不到模板部件名；键名不存在时只是一个没人用的资源，无害。**这两处是本模块唯一「防不住也不会报错」的改动** —— 见 §八之末的复核记录 |
+| 模板只绑**节点自己的成员**（`Title` / `DurationText` / `TokensText` / `SubtreeTokensText` / `CallCount` / `StateText` / `HasDroppedRequests`），一个 `Row.*` 路径都没有 | 顶节点代表作用域、**没有行**（`Row` 是 `SubAgentStatusViewModel?`），所以任何以 `Row` 起头的路径恰好会在面板围着建的那个节点上指向空。节点把这些成员全部转发一遍（`NotifyRow`），就是为了让模板有一个不依赖 `Row` 的面。**编译绑定抓不出这种错** —— `{Binding Row.Name}` 在类型上仍然合法，只是永远取不到值 |
+| 标题那一格是节点的 `Title`（= `Row?.Name ?? ScopeTitle`），而 `Name` 现在是**任务标题**不是标识符（`SubAgentScope.Describe` `:612`） | 原先印的是 id 前八位。位置已经由树本身说清楚了，所以标识符在这里花掉了一格标题的宽度却什么也没告诉看的人。省略 `name` 时回退成 `子代理 N`，**N 按父各自编号**（`Describe` 收的是 `Children.Count + 1`），不是全树的序号 —— 孙代理是它自己父的第一个孩子。标题**裁剪而不折行**：它是模型填的，行必须扛得住一个填成了句子的标题 |
 
 **一条可复用的验证杠杆**：Avalonia demo 的 `Demo.csproj:8` 是 `AvaloniaUseCompiledBindingsByDefault=true`，于是**绑错的路径是编译错误而不是运行时静默失效** —— 实测把一个绑定名改错，报的是
 
@@ -267,7 +286,37 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 **2026-09-22 实测到的那一步**：改完这份 XAML 后 `-t:Rebuild` 0 错误，并**真的启动过一次** demo（随后连它自己的 `msedgewebview2.exe` 子进程一起收掉，见 [`VeloxDev.Avalonia/architecture.md`](../VeloxDev.Avalonia/architecture.md) §八.5、§八.6）。这一层证明的是「程序集可用」，不是「画面对」。
 **同日第二次改动这份 XAML，同一步又跑了一遍**：`Demo.csproj` 先是无论增量还是 `-t:Rebuild` 都报 `AVLN9999`（文件被占），而**查不到任何 `avalonia.buildservices` 进程** —— 占着它的是上一步整解并行构建留下的 MSBuild node-reuse 节点，`dotnet build-server shutdown` 一条即解；随后 `-t:Rebuild` **20 s、0 错误**。**所以「Rebuild 绿 + 真启动」这个复核动作本身要连着「先关构建服务」一起做**，否则会误把一次 `AVLN9999` 当成「改坏了」。
 **但紧接着这一步就被使用者当场证伪了，这是这一节最该记住的一笔。** 上面两次我都拿「**跑满 N 秒、日志为空**」当通过 —— 那**不是**证据：它区分不了「窗口在」和「进程刚好还没崩」，而这一轮我正是拿它把一版**启动即抛 `No precompiled XAML found for Demo.App`** 的 demo 报成「可用」，使用者一句「demo 起不来」才把它翻出来。判据换成**窗口句柄**：`Get-Process Demo | Select MainWindowHandle` 非 0 且 `Responding=True`（`MainWindowTitle` 应当读到 `Demo`；读早了会拿到 0，隔几秒再读）。⇒ **凡是「起来了吗」这类断言，判据必须是那个东西本身，不能是它的一个代理量 —— 代理量恰好也能被「坏得安静」满足。**
-**同日第三次改这份 XAML，改后的复核第一次就用了新判据并一次通过**：`dotnet build-server shutdown`（这一步仍不能省，见上一段）→ `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **40 s、0 错误、1 个既有警告**（`WorkflowAgentToolkit.cs:2050` 的 CS8602）→ 启动后读到 `MainWindowHandle=6819388` / `Responding=True` / `MainWindowTitle=Demo`，进程持续存活且日志为空。**注意这一轮没有任何一处验证是「构建绿」** —— 单行节点到底长什么样、`CharacterEllipsis` 截在哪个字上、9px 的灯在深色底上够不够醒目，仍然**只经过编译校验**，`Read` 读 PNG 在本环境返回 `[Unsupported Image]`，视觉复核做不了（这是环境限制，不是没做）。
+**同日第三次改这份 XAML，改后的复核第一次就用了新判据并一次通过**：`dotnet build-server shutdown`（这一步仍不能省，见上一段）→ `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **40 s、0 错误、1 个既有警告**（`WorkflowAgentToolkit.cs:2050` 的 CS8602）→ 启动后读到 `MainWindowHandle=6819388` / `Responding=True` / `MainWindowTitle=Demo`，进程持续存活且日志为空。**注意这一轮没有任何一处验证是「构建绿」** —— 单行节点到底长什么样、`CharacterEllipsis` 截在哪个字上、9px 的灯在深色底上够不够醒目，仍然**只经过编译校验**。
+
+**2026-09-25 第四次改（度量那一批，节点从一行变两行、树顶多了一个根节点），构建与启动复核一次通过**：`dotnet build-server shutdown` → `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **0 错误、1 个既有警告** → 启动 14 s 后读到 `MainWindowHandle=1246990` / `Responding=True` / `MainWindowTitle=Demo`。
+
+**同日发现：截图是可以读回来的 —— 「视觉复核做不了」这条从前的结论作废。** 用 PowerShell 的 `System.Drawing` 抓窗口（`GetWindowRect` + `Graphics.CopyFromScreen`）存 PNG，再用 `Read` 读它，**能看清内容**（`PrintWindow` 不行：对这块 GPU 合成的窗口会返回缺元素的残帧，实测两次得到的画面都是不完整的，别用它）。这条能力的**边界**同样实测过：
+
+| 能做 | 不能做 |
+|---|---|
+| 看到面板的真实排版、配色、缩进、文字截断 | **滚不动侧栏**：滚轮要落在纯 Avalonia 区域上，落在 `MarkdownView`（WebView）上会被它吃掉；实测能把侧栏滚到 MCP 面板那一屏，再往下就不动了 |
+| 验证某一个样式到底有没有生效（这是它最大的价值） | **输入进不去**：`SendKeys` 与剪贴板粘贴都到不了 demo 的 `TextBox`（窗口确实是前台，`GetForegroundWindow` 已核对），所以**没法从空状态驱动出一次真实的派发** |
+| 窗口可以 `SetWindowPos` 拉高，但**超过 1067（屏幕高）会被系统钳住** | 因此「面板里有子代理」那种状态只能由**人**跑出来，agent 自己复现不了 |
+
+⇒ 结论：**样式类改动可以自己验，交互类改动不能。** 「那个蓝色选中块到底盖掉了没有」属于前者，本可以验；这一轮改完没来得及做（同一天晚些时候补做）。
+
+**2026-09-25 第五次改（精简那一批：砍掉调用数与冗余的状态文字、把选中/悬停的强调色块盖掉），验证到什么程度**：`Demo.csproj` 构建 0 错误、`Extension.Test` **391/391 通过**（含新增的那条实时测试，真跑了 `deepseek-v4-flash`）。**没有做视觉复核**，所以下面这些**没有**被证明：那个蓝块是否真的被 `TreeViewItem` 的 `Background` 样式 / 主题资源键盖掉了（Fluent 12 的主题编译在二进制资源里，取不到键名也取不到模板部件名，**两处都写是在赌其中一个命中**，而且不命中时**不会报错**，只是继续蓝）、两行节点在侧栏宽度下会不会把第二行挤到换行、表头三个数字并排会不会溢出。⇒ 这一节里凡是形容观感的句子（「读起来像」「够不够醒目」）都是**未经复核的判断**，不是记录下来的事实。
+
+### 一个已知缺口：新启动时面板不显示，且之后没有东西会重新挂它
+
+**2026-09-25 实测发现**：冷启动 demo（key 已设）后把侧栏滚到底，**面板不在侧栏里** —— 不是被滚过头了，是它压根没渲染。
+
+原因是时序，不是滚动：
+
+- `AttachSubAgents` 的调用点只有三个，**全部在 `SubscribeAutoScroll` 里**（`.axaml.cs:257`），而 `SubscribeAutoScroll` 的三个调用点是构造器路径（经 `InitializeNetworkDemo`，`:53`/`:224`）与「从文件载入」（`:184`）。
+- `InitializeNetworkDemo`（`:219-227`）会**新建一棵树**（`:222`），于是 helper 是新的、`helper.SubAgents` 在那一刻是 null —— `AgentHelper.Install` 是 `async void`，它要等读 key、建 client、`ProvideAgent` 返回之后才把 `SubAgents` 立起来。
+- 所以那一次 `AttachSubAgents` 走的是 `SubAgentPanel.IsVisible = false` 那条分支（`:84`），**而此后没有任何东西会再调它一次** —— `ToolCalled` / `VisualRefreshRequested` 都不重挂面板。
+
+⇒ **用户要再点一次「Load Workflow Demo」（或从文件载入工作流）面板才会出现**，尽管那时子代理子系统早就准备好了。使用者那张截图里的面板是这么来的。
+
+**这是 demo 的接线缺口，不是库的缺陷** —— 但修它需要 `AgentHelper` 在 install 完成时给出一个信号（新增事件，或在 `VisualRefreshRequested` 之外补一个），而 `AgentHelper` 活在 `Examples/Workflow/Common/Lib`，是**七个平台 demo 共享**的，所以那是一次跨平台面的改动，还没做。
+
+**对复核的含义**：agent 自己**无法**在空状态下把这个面板弄出来（面板不显示 → 滚不到 → 也没法靠输入驱动，见上一节的表）。所以「面板长什么样」这类复核，目前只能由**人**跑一次来提供。
 
 ---
 
@@ -305,12 +354,19 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 | 只把 `CreateAllTools()` 的名字当 `everyName`，另外给 provider 贡献的工具名补一段「专用关停循环」 | 关停循环只关得掉它**看得见**的名字。看不见时那一段专用循环与它并存，两条路径对同一个名字给出不同答案，而这种不一致不会报错 —— 它表现为整条轴反过来：省略参数就留着、点名就全关掉（`SubAgentScope.cs:439` 的注释记了完整症状）。**MCP 那一源是同一个病的另一个分支**，只是症状不同：它被漏掉时不进 `dropped` 的是「点名即失败」（`:461`）—— 用户报的「MCP 子工具被判定为失败」就是它 |
 | 照抄技能那行的 `if (parent.Skills is not null)` 去守卫子代理工具名 | 两条轴的**所有关系**刚好相反：技能工具由**父的**技能源贡献（父没有就没有），子代理工具由 `child.WithSubAgents(grand)` 无条件地挂到**孩子**身上（`:579`）。守卫照抄 ⇒ 父没挂子系统的那些孩子的名字又掉出 `everyName`，缺陷原样回来 |
 | 把孩子那半提示词只写成否定的（「到深度上限就不能派发」） | 模型**从没被告知它可以**派发，而「工具在不在」与「模型会不会去够它」是两件事。同一段里「不能派发的两种原因」（到顶 / 白名单没给）也必须分开写，否则孩子分不清那是限制还是自己的 bug |
+| 拿 `CallUsage` / `ToolCallLedger.Usage` 当 token 计量 | 那是**调用次数**（`(ToolCalls, ReadCalls, WriteCalls)`），与 token 没有关系。子代理子系统里原先一处 token 都没有，`grep -i "token"` 是空的 |
+| 去 `AgentEvent` / `AgentPipeline` / `AgentTranscript` 上接 token，或给 `AgentTurnCompleted` 的公共构造器加参数 | 这三处都没有 token，接上去要动一个公共构造器。**接缝早就有了**：`SubAgentScope.cs:790` 那句 `var response = await agent.RunAsync(...)` 手上的就是 `AgentResponse`，`response.Usage` 直接可读 —— 改动因此完全关在 SubAgents 子系统里 |
+| 给被取消 / 抛异常的孩子补一个 `TokensUsed = 0` | 那两条路径上 response 已经不存在了，0 是编的。留 null，面板据此不显示 —— `HasTokens` 存在的全部意义就是让「没测过」与「花了 0」在界面上不是一件事 |
+| 在树节点模板里写 `{Binding Row.Name}` 这类路径 | 顶节点代表作用域、没有行，所以这些路径**恰好会在面板围着建的那个节点上**取不到值。而且编译绑定**不会报错**（路径在类型上合法）。节点的 `Title` / `StateText` / `CallCount` / `DurationText` / `TokensText` 就是为此转发的一层 |
+| 把树 VM 里那个 `[VeloxProperty]` 字段删掉（比如把 `Roots` 改成 `ScopeRoot.Children` 的别名时顺手删） | 生成器按「类里有没有 `VeloxProperty` 成员」决定注入不注入 `OnPropertyChanged`。删掉它，`NotifyCounts()` 里的九行全部编译不过 —— 而这个类的计数**全是**派生属性，没有一条是自己会通知的 |
+| 让 `SubAgentTreeViewModel` 自己起一个计时器来推动时长 | 库的寿命与面板的寿命不是一回事，这是本仓库「帧源由适配器/宿主提供」那条分工的另一处体现。而且计时器一旦起了就得管：一个没被停在 `DetachSubAgents` 的 `DispatcherTimer` 会一直往一个没人看的树上写属性 |
+| 在 `Fill` 里 `level.Clear()` 之后再重建 | 名册在每一行的**每一次属性写入**上都重发，所以这是每孩子好几趟的容器拆装，连带丢掉展开状态与选中项。就地重整（先移除离开的、再按序 `Insert` / `Move`）才有 `ARebuild_ReconcilesTheLevelInPlace` 断言的那三条 |
 
 ---
 
-## 十、实测才能回答的五件事（门控测试）
+## 十、实测才能回答的六件事（门控测试）
 
-`SubAgentLiveTests.cs` 读 `API_KEY_DEEPSEEK`，缺失则 `Assert.Inconclusive`（MSTest 4.0.2 下报成**已跳过**，不是失败 —— 已实测）。五条问的是离线替身**证明不了**的事：
+`SubAgentLiveTests.cs` 读 `API_KEY_DEEPSEEK`，缺失则 `Assert.Inconclusive`（MSTest 4.0.2 下报成**已跳过**，不是失败 —— 已实测）。六条问的是离线替身**证明不了**的事：
 
 1. `ARealModel_DispatchesAChildAtAll`（`:47-69`）—— **工具描述够不够清楚，模型会不会真的用 `SpawnSubAgent`**。离线套件已经证明「工具被调用时是对的」，所以这条红了只可能是描述的问题。
    ⚠ **但它问的是「叫它派它就派吗」** —— 它喂的 `DispatchInstruction`（`SubAgentLiveTests.cs:40-43`）里写着 "by dispatching a background sub-agent to do the counting — do not count them yourself"。**自发派发由第 5 条回答**，见下。
@@ -318,6 +374,7 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 3. `ARealModel_PassesTheNarrowingOnRatherThanIgnoringIt`（`:102-148`）—— 模型会不会**真的去填 `allowedSkills` / `allowedMcpServers`**。这是这两条轴唯一买不到离线答案的地方：描述在人看来通顺、模型却省略参数，而省略现在意味着**拿到父的全量**（旧口径下 MCP 那半是「拿到空集」），两种错法都静默且离线全绿。**已实测通过** —— 被明确要求「只让它读这一个技能」时，模型确实传了。
 4. `ARealModel_TitlesTheTaskItDelegates`（`:150-177`）—— 模型会不会**真的去填 `name`**。与上一条同一类静默失败，但它的读者是**人**（§八的面板那一行），所以连「填得对不对」都没有反馈回路可依。断言是 `Name` 不以 `子代理 ` 开头（即回退没被触发）且长度 ≤ 60。**已实测通过**（`deepseek-v4-flash`）。
 5. `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo`（`:179-237`）—— **要求 1 的唯一判据**：给一个「读一大堆、只要六个词」的任务，**通篇不提「派发」**，模型会不会自发地把材料读进一个孩子的上下文而不是自己的。语料是自造的六章（每章 300 行填充、中间埋一个核心词），因为技能库的列表自带描述、用它造不出这种任务。**这条是先失败后通过的**：第一版判据写成「难度」时它连跑三次都是六次调用 + 零孩子；把判据换成「工作的目的」后才过（§五之末，`SubAgentAgentToolkit.cs:262`）。失败时它会把「花了多少次调用、其中多少次是读、以及模型答了什么」一起打进消息里，这样下一个人不必重跑一遍才知道是哪种失败。
+6. `ARealChild_ReportsWhatItSpent`（2026-09-25 加）—— **token 计量的另一半**。`UsageChatClient` 证明的是本仓库自己那半：response 上的 `UsageDetails` 会变成行上的数字。**它证明不了另外半**：真实 provider 到底报不报用量、MAF 到底聚不聚合到 `AgentResponse.Usage`。这条红了就说明面板的 token 那一格会**静默变空**，而换 MAF 版本正是最可能的成因。**已实测通过**（`deepseek-v4-flash`，4 秒），断言 `TokensUsed > 0` / `InputTokens > 0` / `Duration > 0`，并顺带断言同一组数字走到了树上（`node.TokensUsed == row.TokensUsed`、单孩子时 `tree.SubtreeTokens` 等于它、`ShowSubtreeTokens` 为假）。
 
 **仍然没被证明的一件事**：宿主 UI 线程在一棵树跑着的时候到底自不自由。整个轮询模型倚赖这一个假设（`TrackedAIFunction.RunOnContextAsync` 是 post + await TCS，理论上会让出），但离线替身**证明不了** —— `SingleThreadContext` 按构造是阻塞式 `Send` 的假货。要拿真 `DispatcherSynchronizationContext` 加真消息泵去验，本仓库目前没有这个环境。
 

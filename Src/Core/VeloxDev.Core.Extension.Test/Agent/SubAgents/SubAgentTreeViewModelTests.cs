@@ -58,7 +58,12 @@ public class SubAgentTreeViewModelTests
         Assert.AreEqual(grand, child.Id);
         Assert.AreEqual(2, child.Depth);
         Assert.AreSame(parent, child.Parent, "the back-reference is what a template binds a level up with");
-        Assert.IsNull(parent.Parent, "and the root has none");
+        Assert.AreSame(tree.ScopeRoot, parent.Parent, "a top-level row hangs off the scope's own node");
+        Assert.IsNull(tree.ScopeRoot.Parent, "and the scope is the top of the tree, so it has none");
+        Assert.IsTrue(tree.ScopeRoot.IsScopeRoot);
+        Assert.AreSame(tree.ScopeRoot.Children, tree.Roots, "Roots is that node's children, not a copy");
+        Assert.HasCount(1, tree.Tree, "the tree is rendered from one node, the scope");
+        Assert.AreSame(tree.ScopeRoot, tree.Tree[0]);
     }
 
     [TestMethod]

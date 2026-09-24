@@ -31,6 +31,9 @@ public sealed partial class SubAgentStatusViewModel
     [VeloxProperty] private int? maxToolCalls = null;
     [VeloxProperty] private DateTimeOffset? startedAt = null;
     [VeloxProperty] private DateTimeOffset? finishedAt = null;
+    [VeloxProperty] private long? tokensUsed = null;
+    [VeloxProperty] private long? inputTokens = null;
+    [VeloxProperty] private long? outputTokens = null;
     [VeloxProperty] private ObservableCollection<string> grantedTools = [];
     [VeloxProperty] private ObservableCollection<string> grantedSkills = [];
     [VeloxProperty] private ObservableCollection<string> grantedMcpServers = [];
@@ -91,6 +94,66 @@ public sealed partial class SubAgentStatusViewModel
         ? "无工具"
         : string.Join("、", GrantedTools);
 
+    /// <summary>How long the child ran, or has been running. <c>null</c> before it started.</summary>
+    /// <remarks>
+    /// <para>
+    /// While the child is running this is measured against the clock rather than stored, so it advances
+    /// without any property changing. A panel showing it live has to ask for the refresh —
+    /// <see cref="NotifyElapsed"/> — because nothing else can tell that time passed.
+    /// </para>
+    /// <para>
+    /// A system clock that steps backwards would otherwise yield a negative span; the floor is zero rather
+    /// than the negative value, because a panel would render the latter as a countdown.
+    /// </para>
+    /// </remarks>
+    public TimeSpan? Duration
+    {
+        get
+        {
+            if (StartedAt is not { } from) return null;
+            var span = (FinishedAt ?? DateTimeOffset.Now) - from;
+            return span < TimeSpan.Zero ? TimeSpan.Zero : span;
+        }
+    }
+
+    /// <summary>The elapsed time as text, for a panel that binds it without a converter.</summary>
+    public string DurationText => Duration switch
+    {
+        null => string.Empty,
+        { TotalHours: >= 1 } d => $"{(int)d.TotalHours}小时{d.Minutes}分",
+        { TotalMinutes: >= 1 } d => $"{d.Minutes}分{d.Seconds}秒",
+        { } d => $"{d.Seconds}秒",
+    };
+
+    /// <summary>
+    /// Whether the provider reported a token count. False is the ordinary case for a provider that does not
+    /// report usage at all — a panel must show nothing rather than a zero it did not measure.
+    /// </summary>
+    public bool HasTokens => TokensUsed is not null;
+
+    /// <summary>The token count as text, abbreviated the way a panel wants it. Empty when there is none.</summary>
+    public string TokensText => TokensUsed switch
+    {
+        null => string.Empty,
+        < 1000 => $"{TokensUsed}",
+        < 1_000_000 => $"{TokensUsed.Value / 1000d:0.#}k",
+        _ => $"{TokensUsed.Value / 1_000_000d:0.##}M",
+    };
+
+    /// <summary>
+    /// Tells a bound panel that <see cref="Duration"/> and <see cref="DurationText"/> have moved.
+    /// <para>
+    /// Called by whoever drives the clock — <see cref="SubAgentTreeViewModel.TickElapsed"/> is the shipped
+    /// caller. The library owns no timer: a panel that ticks and a process that hosts one are different
+    /// lifetimes, and a timer started here would outlive neither cleanly.
+    /// </para>
+    /// </summary>
+    public void NotifyElapsed()
+    {
+        OnPropertyChanged(nameof(Duration));
+        OnPropertyChanged(nameof(DurationText));
+    }
+
     partial void OnStateChanged(SubAgentState oldValue, SubAgentState newValue)
     {
         OnPropertyChanged(nameof(StateText));
@@ -101,6 +164,27 @@ public sealed partial class SubAgentStatusViewModel
     partial void OnResultChanged(string oldValue, string newValue) => OnPropertyChanged(nameof(HasResult));
 
     partial void OnErrorChanged(string oldValue, string newValue) => OnPropertyChanged(nameof(HasError));
+
+    partial void OnTokensUsedChanged(long? oldValue, long? newValue)
+    {
+        OnPropertyChanged(nameof(HasTokens));
+        OnPropertyChanged(nameof(TokensText));
+    }
+
+    // Both ends of the span move Duration, and each is assigned exactly once — but a row that is re-run in
+    // place (a resumed child) would get a fresh StartedAt with the old FinishedAt still standing, so both
+    // notify rather than only the one the roster happens to write last.
+    partial void OnStartedAtChanged(DateTimeOffset? oldValue, DateTimeOffset? newValue)
+    {
+        OnPropertyChanged(nameof(Duration));
+        OnPropertyChanged(nameof(DurationText));
+    }
+
+    partial void OnFinishedAtChanged(DateTimeOffset? oldValue, DateTimeOffset? newValue)
+    {
+        OnPropertyChanged(nameof(Duration));
+        OnPropertyChanged(nameof(DurationText));
+    }
 
     /// <summary>Called by the roster when the dropped list is filled in at spawn time.</summary>
     internal void SetDroppedRequests(IEnumerable<string> dropped)

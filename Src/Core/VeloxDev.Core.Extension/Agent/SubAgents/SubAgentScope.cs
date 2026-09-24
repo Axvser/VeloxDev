@@ -346,6 +346,11 @@ public sealed class SubAgentScope : IAsyncDisposable
             Error = e.Row.Error,
             CallCount = e.Row.CallCount,
             MaxToolCalls = e.Row.MaxToolCalls,
+            TokensUsed = e.Row.TokensUsed,
+            InputTokens = e.Row.InputTokens,
+            OutputTokens = e.Row.OutputTokens,
+            StartedAt = e.Row.StartedAt,
+            FinishedAt = e.Row.FinishedAt,
             GrantedToolCount = e.Row.GrantedTools.Count,
             GrantedSkillCount = e.Row.GrantedSkills.Count,
             GrantedMcpServerCount = e.Row.GrantedMcpServers.Count,
@@ -788,29 +793,26 @@ public sealed class SubAgentScope : IAsyncDisposable
         {
             var agent = _agentFactory(entry.Scope);
             var response = await agent.RunAsync(request.Task, cancellationToken: entry.Cancellation.Token).ConfigureAwait(false);
-            await OnRosterThread(() => Finish(entry, response.Text, null, cancelled: false)).ConfigureAwait(false);
+            await OnRosterThread(() => Finish(entry, response.Text, response.Usage, null, cancelled: false)).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            await OnRosterThread(() => Finish(entry, null, null, cancelled: true)).ConfigureAwait(false);
+            await OnRosterThread(() => Finish(entry, null, null, null, cancelled: true)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            await OnRosterThread(() => Finish(entry, null, ex, cancelled: false)).ConfigureAwait(false);
+            await OnRosterThread(() => Finish(entry, null, null, ex, cancelled: false)).ConfigureAwait(false);
         }
     }
 
-    /// <summary>
-    /// Ends a child's run.
-    /// <para>
-    /// The state is assigned last in every branch, after the payload it announces. State is a bindable
-    /// property whose assignment republishes the roster and notifies the panel, so a consumer reading on
-    /// that notification — which is exactly what a panel does — would otherwise be handed a finished child
-    /// with no result, or a failed one with no reason. The state is the signal; a signal that arrives before
-    /// what it announces is a lie about the row it belongs to.
-    /// </para>
-    /// </summary>
-    private void Finish(SubAgentEntry entry, string? result, Exception? error, bool cancelled)
+    // 结束一个孩子的运行。
+    // 每个分支都把 State 放在最后、在它宣告的载荷之后：State 是可绑定属性，赋值即重发名册并通知面板，
+    // 于是恰好在这一刻读取的消费者（面板就是这么做的）否则会拿到「已完成但没有结论」的行。State 是信号，
+    // 比它宣告的东西先到的信号，是对它所属那一行的谎言。
+    //
+    // token 只在成功分支写：只有那条路径拿得到 response。被取消或抛异常的孩子的消耗已经无从取得，
+    // 留 null 让面板显示「未计量」，而不是一个它没测过的 0。
+    private void Finish(SubAgentEntry entry, string? result, UsageDetails? usage, Exception? error, bool cancelled)
     {
         entry.Row.FinishedAt = DateTimeOffset.Now;
         entry.Row.CallCount = entry.Scope.CreateToolkit().CallUsage.ToolCalls;
@@ -827,6 +829,10 @@ public sealed class SubAgentScope : IAsyncDisposable
             entry.Row.State = SubAgentState.Failed;
             return;
         }
+
+        entry.Row.TokensUsed = usage?.TotalTokenCount;
+        entry.Row.InputTokens = usage?.InputTokenCount;
+        entry.Row.OutputTokens = usage?.OutputTokenCount;
 
         entry.Row.Result = result ?? string.Empty;
         entry.Row.State = SubAgentState.Completed;
