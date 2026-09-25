@@ -172,44 +172,51 @@
                         </div>
 
                         @* Nodes layer: generated TemplateNodeView cards with type-specific body content
-                           (template product). Each card wires slot-layout + node-drag behaviors itself. *@
+                           (template product). Each card wires slot-layout + node-drag behaviors itself,
+                           and each card states only what is its own: its type accent (the 2px bar at the
+                           head of the title row) and, when it has one, the status capsule it reads live.
+                           The surface, the hairline and the title row are the shared card design system
+                           in app.css — no card paints its own palette any more.
+
+                           A port on the card's edge is 32 design units, a port inside a list is 24:
+                           the card is authored at its design size and scaled, so these are design
+                           lengths and they match the Avalonia cards' 32 / 24. *@
                         <ViewPool ItemsSource="tree.Nodes" KeySelector="n => n">
                             <ItemTemplate Context="node">
                                 @switch (node)
                                 {
                                     case ControllerViewModel c:
                                         <TemplateNodeView Node="c" Title="Network Flow Controller"
+                                                          Accent="var(--wf-accent-controller)"
                                                           AllowOverflow="true"
-                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
-                                                          BorderBrush="@(c.IsActive ? "#DD67E8F9" : "#DD4B5563")"
-                                                          BorderThickness="1.5" CornerRadius="6">
+                                                          BorderBrush="@(c.IsActive ? "var(--wf-accent-controller)" : null)">
                                             <BodyContent>
                                                 <WorkflowControllerView Controller="c" />
                                             </BodyContent>
                                             <OutputSlots>
                                                 @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
-                                                <TemplateSlotView Slot="c.OutputSlot" Tree="tree" SlotSize="20" />
+                                                <TemplateSlotView Slot="c.OutputSlot" Tree="tree" SlotSize="32" />
                                             </OutputSlots>
                                         </TemplateNodeView>
                                         break;
                                     case EnumSelectorNodeViewModel e:
                                         <TemplateNodeView Node="e"
-                                                          AllowOverflow="true"
-                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
-                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
+                                                          Accent="var(--wf-accent-enum)"
+                                                          StatusProperty="LastRouted"
+                                                          AllowOverflow="true">
                                             <BodyContent>
                                                 <WorkflowEnumSelectorView Selector="e" Tree="tree" />
                                             </BodyContent>
                                             <InputSlots>
-                                                <TemplateSlotView Slot="e.InputSlot" Tree="tree" SlotSize="20" />
+                                                <TemplateSlotView Slot="e.InputSlot" Tree="tree" SlotSize="32" />
                                             </InputSlots>
                                         </TemplateNodeView>
                                         break;
                                     case PythonScriptNodeViewModel p:
                                         <TemplateNodeView Node="p"
-                                                          AllowOverflow="true"
-                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
-                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
+                                                          Accent="var(--wf-accent-worker)"
+                                                          StatusProperty="LastStatus"
+                                                          AllowOverflow="true">
                                             <BodyContent>
                                                 <WorkflowPythonNodeView Selector="p" Tree="tree" />
                                             </BodyContent>
@@ -217,26 +224,24 @@
                                         break;
                                     case TimerNodeViewModel t:
                                         <TemplateNodeView Node="t"
-                                                          AllowOverflow="true"
-                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
-                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
+                                                          Accent="var(--wf-accent-worker)"
+                                                          AllowOverflow="true">
                                             <BodyContent>
                                                 <WorkflowTimerView Selector="t" />
                                             </BodyContent>
                                             <InputSlots>
-                                                <TemplateSlotView Slot="t.InputSlot" Tree="tree" SlotSize="20" />
+                                                <TemplateSlotView Slot="t.InputSlot" Tree="tree" SlotSize="32" />
                                             </InputSlots>
                                             <OutputSlots>
-                                                <TemplateSlotView Slot="t.OutputSlot" Tree="tree" SlotSize="20" />
+                                                <TemplateSlotView Slot="t.OutputSlot" Tree="tree" SlotSize="32" />
                                             </OutputSlots>
                                         </TemplateNodeView>
                                         break;
                                     case IWorkflowNodeViewModel g:
-                                        @* Generic catch-all: render any remaining node in a plain card. *@
-                                        <TemplateNodeView Node="g"
-                                                          AllowOverflow="true"
-                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
-                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
+                                        @* Generic catch-all: a foreign node still lands on the same card
+                                           family, with the neutral slate accent, because there is no type
+                                           here to give it a colour. *@
+                                        <TemplateNodeView Node="g" AllowOverflow="true">
                                             <BodyContent>
                                                 <WorkflowNodeView Node="g" />
                                             </BodyContent>

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="Demo.Views.TreeView"
     x:Name="Root"
@@ -60,7 +60,7 @@
                                      EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                      EndTop="{Binding Receiver.Anchor.Vertical}"
                                      CanRender="{Binding IsVisible}"
-                                     LineColor="White"
+                                     LineColor="#CC38BDF8"
                                      Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
                                      Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
                                      Canvas.ZIndex="-1" />
@@ -82,10 +82,12 @@
         </Grid.ColumnDefinitions>
 
         <Grid Grid.Column="2">
+            <!-- BorderBrush 与 Avalonia 的 WorkflowView 同步收细：纯白框在暗场里太抢，
+                 改成 20% 白，画布边界仍在但不成为画面里的最高对比 -->
             <Border x:Name="PART_SurfaceBorder"
                     Margin="0,20,20,20"
                     Background="#0B1120"
-                    BorderBrush="White"
+                    BorderBrush="#33FFFFFF"
                     BorderThickness="1"
                     CornerRadius="3">
                 <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
@@ -112,7 +114,7 @@
                                                          EndTop="{Binding Receiver.Anchor.Vertical}"
                                                          CanRender="{Binding IsVisible}"
                                                          IsVirtual="True"
-                                                         LineColor="White"
+                                                         LineColor="#CC38BDF8"
                                                          Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
                                                          Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}" />
                             </Grid>

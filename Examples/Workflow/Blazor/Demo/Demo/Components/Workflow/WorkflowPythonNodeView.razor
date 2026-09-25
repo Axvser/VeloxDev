@@ -3,48 +3,52 @@
 @implements IDisposable
 
 @* Body-only content rendered inside the generated TemplateNodeView (BodyContent).
-   The card header (node title) and border come from TemplateNodeView, so this view
-   shows only the description, the Python editor, and the dynamic input/output ports. *@
-<div style="display:flex;height:100%;">
-    <div style="flex:0 0 72px;display:flex;flex-direction:column;justify-content:flex-start;gap:4px;padding:4px 0;min-height:0;overflow-y:auto;overflow-x:hidden;">
-        @if (Selector?.InputSlots is { } inputs)
-        {
-            @foreach (var item in inputs.Items)
-            {
-                <div style="display:flex;align-items:center;gap:4px;min-width:0;flex:0 0 auto;">
-                    @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
-                    <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="16" />
-                    <span style="color:#6ec6ff;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@item.Name</span>
-                </div>
-            }
-        }
-    </div>
+   Three bands, exactly as the Avalonia card: a full-width description strip, then the
+   workspace — an input port strip, the script surface, an output port strip. The strips
+   are wide enough for a port glyph plus its label, and each port sits on the card's edge
+   with half of the glyph hanging over it. *@
+<div class="py-root">
+    <div class="py-desc">@(Selector?.Description)</div>
 
-    <div style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;padding:4px 0;">
-        <div style="color:#8b949e;font-size:10px;line-height:1.3;padding:0 2px;">@(Selector?.Description)</div>
-        <div style="display:flex;gap:6px;background:#161b22;border:1px solid #30363d;border-radius:4px;padding:2px 6px;">
-            <span style="color:#7ee787;font-family:Consolas,monospace;font-size:11px;font-weight:600;">script.py</span>
-            <span style="color:#6e7681;font-size:10px;margin-left:auto;">Python 3</span>
+    <div class="py-workspace">
+        <div class="py-port-strip py-port-strip-in">
+            @if (Selector?.InputSlots is { } inputs)
+            {
+                @foreach (var item in inputs.Items)
+                {
+                    <div class="py-port-row">
+                        @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
+                        <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="24" />
+                        <span class="py-port-label">@item.Name</span>
+                    </div>
+                }
+            }
         </div>
-        <textarea class="python-script"
-                  value="@_script"
-                  @oninput="OnScriptChanged"
-                  title="@(Selector?.LastOutput)"
-                  style="flex:1;width:100%;resize:none;background:#0d1117;color:#e6edf3;
-                         font-family:Consolas,monospace;font-size:12px;border:1px solid #30363d;
-                         border-radius:4px;padding:6px;white-space:pre;overflow:auto;"></textarea>
-    </div>
 
-    <div style="flex:0 0 72px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding:4px 0;min-height:0;overflow-y:auto;overflow-x:hidden;">
-        @if (Selector?.OutputSlots is { } outputs)
-        {
-            @foreach (var item in outputs.Items)
+        @* The editor gets its own near-black surface with a title bar, because code wants to
+           read as code: a field tint under a mono block reads as a disabled form control. *@
+        <div class="py-editor">
+            <div class="py-editor-bar">
+                <span class="py-editor-file">script.py</span>
+                <span class="py-editor-lang">Python 3</span>
+            </div>
+            <textarea class="wf-field-code"
+                      value="@_script"
+                      @oninput="OnScriptChanged"
+                      title="@(Selector?.LastOutput)"></textarea>
+        </div>
+
+        <div class="py-port-strip py-port-strip-out">
+            @if (Selector?.OutputSlots is { } outputs)
             {
-                <div style="display:flex;align-items:center;gap:4px;min-width:0;flex:0 0 auto;">
-                    <span style="color:#6ec6ff;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@item.Name</span>
-                    <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="16" />
-                </div>
+                @foreach (var item in outputs.Items)
+                {
+                    <div class="py-port-row py-port-row-out">
+                        <span class="py-port-label">@item.Name</span>
+                        <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="24" />
+                    </div>
+                }
             }
-        }
+        </div>
     </div>
 </div>

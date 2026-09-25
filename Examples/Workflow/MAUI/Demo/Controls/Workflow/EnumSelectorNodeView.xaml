@@ -4,81 +4,104 @@
              xmlns:controls="clr-namespace:Demo.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.EnumSelectorNodeView"
+             x:Name="Root"
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid x:Name="DesignGrid" RowDefinitions="48,*">
-        <Border Grid.RowSpan="2"
-                Stroke="#D6A0FF"
-                StrokeThickness="1.5"
-                StrokeShape="RoundRectangle 6"
-                BackgroundColor="#2A1E35" />
 
-        <Grid Grid.RowSpan="2" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
-            <controls:SlotView x:Name="PART_InputSlot"
-                               WidthRequest="20"
-                               HeightRequest="20"
-                               HorizontalOptions="Start"
-                               VerticalOptions="Center"
-                               Margin="-10,0,0,0"
-                               BindingContext="{Binding InputSlot}"
-                               IsVisible="{Binding HasInputSlot}"
-                               SlotState="{Binding State}" />
+    <!-- 尺寸必须与 [DefaultSize] 一致（280×380），行高清一色照抄 Avalonia 版：32 / * -->
+    <Grid x:Name="DesignGrid" RowDefinitions="32,*">
+
+        <Border Grid.RowSpan="2" Style="{StaticResource Card}" />
+
+        <!-- 标题行：左对齐 + 类型色条，路由结果做成一个中性胶囊靠右 -->
+        <Grid Grid.Row="0">
+            <Border BackgroundColor="Transparent"
+                    behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                    behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+                <Grid ColumnDefinitions="2,*,Auto,Auto">
+                    <Border Grid.Column="0"
+                            Style="{StaticResource CardAccent}"
+                            BackgroundColor="{StaticResource AccentEnum}" />
+                    <Label Grid.Column="1"
+                           Style="{StaticResource CardTitle}"
+                           Text="{Binding Title}"
+                           Margin="12,0,6,0" />
+                    <Label Grid.Column="2"
+                           Style="{StaticResource CardValue}"
+                           Text="{Binding ExecutionOrderText}"
+                           TextColor="{StaticResource CardExecOrder}"
+                           VerticalTextAlignment="Center"
+                           Margin="0,0,12,0" />
+                    <Border Grid.Column="3" Style="{StaticResource CardPill}" Margin="0,0,12,0">
+                        <Label Style="{StaticResource CardPillText}"
+                               Text="{Binding LastRouted}"
+                               TextColor="{StaticResource AccentEnum}"
+                               FontAttributes="Bold" />
+                    </Border>
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardHairline}" VerticalOptions="End" />
         </Grid>
 
-        <Border Grid.Row="0"
-                BackgroundColor="#3A2550"
-                Stroke="#D6A0FF"
-                StrokeThickness="0"
-                StrokeShape="RoundRectangle 4,4,0,0"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <HorizontalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="8">
-                <Label Text="{Binding Title}" TextColor="White" FontAttributes="Bold" />
-                <Border BackgroundColor="#2B1540" Stroke="#D6A0FF" StrokeThickness="1" StrokeShape="RoundRectangle 10" Padding="6,1">
-                    <Label Text="{Binding LastRouted}" TextColor="#E4D8FF" FontAttributes="Bold" />
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Margin="14,10" Spacing="6">
+                <Label Style="{StaticResource CardLabel}" Text="SELECTED METHOD" />
+                <Border Style="{StaticResource CardFieldBox}">
+                    <Picker Style="{StaticResource CardPicker}"
+                            ItemsSource="{Binding EnumValues}"
+                            SelectedItem="{Binding SelectedValue, Mode=TwoWay}" />
                 </Border>
-            </HorizontalStackLayout>
-        </Border>
-
-        <Border Grid.Row="1" BackgroundColor="#2A1E35" StrokeShape="RoundRectangle 0,0,4,4">
-            <ScrollView>
-            <VerticalStackLayout Margin="14" Spacing="8">
-                <Label Text="Selected Method" TextColor="#BFBFBF" FontSize="11" />
-                <Picker Title="Select Method"
-                        ItemsSource="{Binding EnumValues}"
-                        SelectedItem="{Binding SelectedValue}" />
-                <Label Text="Compile Mode" TextColor="#BFBFBF" FontSize="11" />
-                <Picker Title="Compile Mode"
-                        ItemsSource="{Binding CompileModeOptions}"
-                        SelectedItem="{Binding CompileMode}" />
-                <Label Text="Output Slots" TextColor="#BFBFBF" FontSize="11" Margin="0,6,0,0" />
-                <VerticalStackLayout x:Name="PART_OutputSlotsList" BindableLayout.ItemsSource="{Binding OutputSlots.Items}" Spacing="2">
+                <Label Style="{StaticResource CardLabel}" Text="COMPILE MODE" Margin="0,4,0,0" />
+                <Border Style="{StaticResource CardFieldBox}">
+                    <Picker Style="{StaticResource CardPicker}"
+                            ItemsSource="{Binding CompileModeOptions}"
+                            SelectedItem="{Binding CompileMode, Mode=TwoWay}" />
+                </Border>
+                <Label Style="{StaticResource CardLabel}" Text="OUTPUT SLOTS" Margin="0,6,0,0" />
+                <VerticalStackLayout x:Name="PART_OutputSlotsList"
+                                     BindableLayout.ItemsSource="{Binding OutputSlots.Items}"
+                                     Spacing="2">
                     <BindableLayout.ItemTemplate>
                         <DataTemplate>
                             <Grid ColumnDefinitions="*,Auto">
                                 <Label Grid.Column="0"
                                        Text="{Binding Name}"
-                                       TextColor="#D6A0FF"
-                                       FontAttributes="Bold"
+                                       Style="{StaticResource CardSlotName}"
+                                       TextColor="{StaticResource AccentEnum}"
                                        HorizontalTextAlignment="End"
-                                       VerticalTextAlignment="Center"
-                                       Margin="0,0,8,0" />
+                                       Margin="0,0,12,0" />
                                 <controls:SlotView Grid.Column="1"
-                                                   WidthRequest="16"
-                                                   HeightRequest="16"
+                                                   WidthRequest="24"
+                                                   HeightRequest="24"
                                                    HorizontalOptions="End"
                                                    VerticalOptions="Center"
-                                                   Margin="0,0,-8,0"
+                                                   Margin="0,0,-12,0"
                                                    BindingContext="{Binding Slot}"
-                                                   SlotState="{Binding Slot.State}" />
+                                                   SlotState="{Binding State}"
+                                                   Channel="{Binding Channel}" />
                             </Grid>
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
             </VerticalStackLayout>
-            </ScrollView>
-        </Border>
+        </ScrollView>
+
+        <!-- 端口挂在根 Grid 上，而不是上面那个 ScrollView 里：ScrollView 会按边界裁内容，
+             而端口要外溢 16 骑在卡边上，放进去就被切掉一半。
+             ZIndex 那条同样要：端口有一半压在卡面上，不给序会被卡面盖掉 -->
+        <controls:SlotView x:Name="PART_InputSlot"
+                           ZIndex="6"
+                           WidthRequest="32"
+                           HeightRequest="32"
+                           Grid.Row="1"
+                           HorizontalOptions="Start"
+                           VerticalOptions="Center"
+                           Margin="-16,0,0,0"
+                           BindingContext="{Binding InputSlot}"
+                           IsVisible="{Binding BindingContext.HasInputSlot, Source={x:Reference Root}}"
+                           SlotState="{Binding State}"
+                           Channel="{Binding Channel}" />
     </Grid>
 </ContentView>

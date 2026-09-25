@@ -333,7 +333,69 @@ tree-view 直接用它做模式匹配（`workflow-tree-view/TemplateClass.cs:674
 
 ---
 
-## 八、我要改 X → 打开哪个文件
+## 八、调色板与连线：模板的默认值 = Trimmed 那一套，非 Trimmed 的 demo 分四套
+
+**模板的默认配色不是随手写的，是 `template.json` 里 symbol 的 `defaultValue`**，七家同名 symbol 取值一致。它是全仓**唯一一套统一调色板**：
+
+| 用途 | 值 |
+|---|---|
+| 画布底 / 边框 | `#1E1E1E` / `#33FFFFFF`（1px，圆角 3） |
+| 次网格 / 主网格 / 轴 / 刻度 / 分隔 | `#2A2D2E` / `#3A3D40` / `#4D4D4D` / `#555555` / `#3A3D40` |
+| 标尺底 / 标尺字 | `#C8252526` / `#888888` |
+| 节点卡 底 / 字 / 边 | `#DDFFFFFF` / `#DD1E1E1E` / `#331E1E1E` |
+| 槽位 待机 / 描边 / 三态 | `#DD1E1E1E` / `#FFFFFFFF` / `#FF6347`·`#32CD32`·`#EE82EE` |
+| 连线 | `#DDFFFFFF`，粗 2 |
+| 小地图四色 | `#D2141922` / `#DC94A3B8` / `#DC38BDF8` / `#F0FFFFFF` |
+
+**七家 Trimmed demo 逐项等于上表**，只有两处刻意偏差：WinForms 标尺 alpha 用 `#70252526`（源码注释：让网格透出来）、Jalium 标尺四色自成一档。
+
+**七家非 Trimmed demo 却是四套**：Avalonia / WPF / WinUI / MAUI 共用一套「青蓝 v1」（画布 `#141922`、轴 `#38BDF8`、连线 `Colors.Cyan` 或 `#22D3EE`、节点卡逐类型配色），WinForms、Blazor、Jalium 各又一套。
+
+**2026-09-25 对齐的只是画布层，不是全部。** 那四家的画布底 / 网格 / 标尺 / 连线 / 边框已换成上表的值（各家 `WorkflowGridDecorator` 的八个静态字段 + 连线默认色 + `PART_SurfaceBorder`）。**节点卡的逐类型配色刻意保留** —— Controller 深灰、Timer/Python 蓝、Enum 紫是 feature demo 要展示的东西，对齐成一张白卡等于把这条信息删掉。用者的口径是「只对齐画布层」。
+
+**改配色的落点**：网格与标尺集中在各家的 `WorkflowGridDecorator`（WinForms 是 `GridDecorator.cs` **加** `TreeView.cs` —— 两份拷贝；Blazor 在 `TreeView.razor.cs`）。连线的默认色一般在各家自己的连线视图里，**MAUI 是例外：它没有本地连线视图，用的是适配器** `Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowLinkOverlay.cs`，在那里改会**同时改掉 Trimmed MAUI**（2026-09-25 删箭头就是这么做的）。
+
+**连线：七家都没有箭头了，效果只剩流光。** 流光是 demo 层自己加的，**模板里没有**（模板的 `workflow-link-view` 是一条平线）。机制七家同构：**不动 `StrokeDashOffset`**，而是移一条渐变刷的三个停靠点 + 中间那个的颜色；常数 `0.06 / 0.34 / 0.66 / 0.94`、半宽 `±0.04`、三段 `550 / 650 / 550 ms`、`.Repeat(int.MaxValue)`；驱动是 **Core** 的 `VeloxDev.TransitionSystem`（适配器只各出 12 行的 `TransitionScheduler` 别名）。箭头原先七家都有（长 12、宽 8，`!IsVirtual` 时画），2026-09-25 全部删除。
+
+> 要改流光的写法，**链是同一套、落点各家不同**：Avalonia 直接写刷子；WPF 必须挂 `LateUpdate → InvalidateVisual()`（`DrawingContext` 按引用持有画刷却不订阅它）；WinUI 的轴要换算进几何包围盒（没有 `MappingMode`）；MAUI 的 `ICanvas` 没有描边渐变、只好切 24 段逐段改色；WinForms 每帧重建 `Pen`（GDI+ 的笔会留住造它时刷子的停靠点）；Blazor 走 `LateUpdate → StateHasChanged` 且数值一律 InvariantCulture；Jalium 写渐变停靠点不出帧、光带改成按里程裁剪的几何 + 宽度动画。
+
+**两处死代码，改连线时不要以为改了它们有用**：WPF 的 `BezierCurveView` 与 WinUI 的 `LinkView`（贝塞尔版）在各自 demo 里**零引用**。
+
+---
+
+## 九、Demo 视图层的两个坑：端口被裁一半、删 axaml 会连带删掉交互
+
+这两个坑都不报错 —— 编译通过、端口照样画出来，只是**半边不见了**或**再也拖不动**。2026-09-25 一次自绘改造里同时踩到。
+
+### 9.1 端口有一半骑在卡外，所以它上方不能有裁剪面
+
+端口宽 32 设计单位（枚举列表里 24）、外溢一半骑在卡边上。任何一个 `ClipToBounds="True"` 的祖先都会把它切掉外侧那一半。
+
+已经踩到的两处，**成因不同、修法也不同**：
+
+| 卡 | 成因 | 修法 |
+|---|---|---|
+| `Examples/Workflow/Avalonia/Demo/Views/Workflow/ControllerView.axaml` | 端口**没有 `ZIndex`**，被卡面盖掉内侧一半。`TimerNodeView.axaml` 一直把端口包在 `ZIndex="6"` 的层里，Controller 漏了 | 补 `ZIndex="6"` |
+| `…/EnumSelectorNodeView.axaml` | 输入端口原本放在 `<Border Grid.Row="1" ClipToBounds="True">` **里面** —— 那个裁剪是为「滚动内容不溢出圆角」而设的，**不能去掉** | 把端口挪成该 Border 的**兄弟**，直接挂根 Grid（与 Controller 同形） |
+
+**Python 走的是第三条路**：它用「ScrollViewer 视口外扩 N / ItemsControl 内容内缩 N / 端口外溢 N」把端口留在滚动视口内。**三个 N 必须相等，且等于端口尺寸的一半** —— 端口从 16 换到 24 时 N 必须从 8 一起改到 12。这条约束在 `…/PythonNodeView.axaml` 的两条端口带里各有一份（左输入、右输出），改一处不改另一处就是对不齐。
+
+**核查方法（比截图可靠得多）**：沿端口往上数祖先，只要有一个 `ClipToBounds="True"` 就是错的。五张卡 2026-09-25 审计后：Controller / Timer / Python / Enum 输入全部干净；Enum 的输出列表行仍在那层裁剪里，但行内容内缩 14、端口只外溢 12 → 还剩 2 单位在卡内，**够用**。
+
+### 9.2 删掉 `SlotView.axaml` 会连带删掉交互，而且不报错
+
+`Avalonia/Demo/Views/Workflow/` 下的 `SlotView` 原是一个 `UserControl` + 一个 `.axaml`，那个 axaml 的根上挂着**两样性命攸关的东西**：
+
+- `behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"` —— 它给控件挂 `PointerPressed` / `PointerReleased`（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSlotConnectionBehavior.cs:22-32`）。没有它，**端口拖不出连线**。
+- `Background="#01000000"` —— 那是端口的**命中测试面**。全部改自绘、删掉 axaml 之后它一起没了，指针事件到不了控件。
+
+两样都不报错：端口照样画得好好的，只是静默失去交互。现在两者都写在 `SlotView` 的**构造函数**里（外加一个近透明的子 `Border` 作实在的命中面 —— 依赖 `UserControl` 自己的 `Background` 能否被命中是一层推断，落一个真元素就不是了），卡片忘了也不会再丢。
+
+⇒ **把标记语言控件改成自绘之前，先列出被删掉的那个根元素上都挂了什么。** 附着属性、`Background`、`x:Name`（会被别处按名字找）都算。
+
+---
+
+## 十、我要改 X → 打开哪个文件
 
 | 我要改 | 先打开 |
 |---|---|

@@ -1,5 +1,6 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
+using System.Text;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
@@ -7,19 +8,53 @@ using VeloxDev.WorkflowSystem;
 namespace Demo.Components.Workflow;
 
 /// <summary>
-/// A Blazor workflow link view rendered as an orthogonal polyline with golden-ratio
-/// stubs, mirroring the WPF template's geometry. Points derive from the endpoint slot
-/// anchors; the polyline spans the whole canvas so links are absolutely positioned
-/// (overflow visible) and redraw whenever the endpoints move.
+/// A Blazor workflow link view: one cubic curve that leaves each end horizontally, with a comet
+/// travelling along it.
 /// <para>
-/// The view is also the object the flow animates — <c>Transition&lt;TemplateLinkView&gt;</c>. A Razor component
-/// is a class, so the band's three stop offsets and its colour are this component's own members and the markup
-/// reads the cycle's position straight off it, with nothing in between to map back into stops.
+/// The comet is a bright head, a tail that fades behind it, and a halo that follows the head — and it
+/// is cut out of the curve <b>by arc length</b> rather than by a gradient brush. That is the whole
+/// reason this view keeps its own sample table: a <c>LinearGradientBrush</c>'s axis is the straight
+/// line between the two ends, so on a curve it lights the string rather than the rope.
+/// </para>
+/// <para>
+/// The view is also the object the flow animates — <c>Transition&lt;TemplateLinkView&gt;</c>. A Razor
+/// component is a class, so the cycle's position is this component's own member and the markup reads
+/// it straight off, with nothing in between to map back into stops. There is exactly one animated
+/// value, <see cref="Phase"/>: the head's position and the comet's intensity are both derived from it
+/// rather than being two animations that could interrupt each other.
+/// </para>
+/// <para>
+/// Every number the SVG carries goes through <see cref="N"/>. Razor writes a bare <c>double</c> in the
+/// current culture, and a comma decimal separator produces an attribute the browser silently drops —
+/// which for a path means no path at all.
 /// </para>
 /// </summary>
 public partial class TemplateLinkView : ComponentBase, IDisposable
 {
-    private const double Phi = 0.6180339887;
+    // 弧长表的分辨率。128 段在缩放上限下也看不出折线感，而每段重建它只是几百次算术。
+    private const int SampleCount = 128;
+
+    // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
+    private const double TailFraction = 0.30;
+
+    // 拖尾分几段画。每段一个颜色与一个不透明度，衰减因此是连续的，不需要渐变刷。
+    private const int TailSegments = 16;
+
+    // 三段相位各自结束时头部走过的比例：出发、行进、到达
+    private const double BandFormed = 0.30;
+    private const double BandLeaving = 0.78;
+
+    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(450);
+    private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(700);
+    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(450);
+
+    private static readonly TimeSpan CycleDuration = EnterDuration + TravelDuration + ExitDuration;
+
+    // 三段在周期里的占比。头部位置与亮度都从 Phase 按这三个占比推出来，所以时长改一处就够。
+    private static readonly double EnterShare = EnterDuration.TotalMilliseconds / CycleDuration.TotalMilliseconds;
+    private static readonly double TravelShare = TravelDuration.TotalMilliseconds / CycleDuration.TotalMilliseconds;
+
+    private static readonly double ExitStart = EnterShare + TravelShare;
 
     /// <summary>Gets or sets the link rendered by this view.</summary>
     [Parameter]
@@ -33,7 +68,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     [Parameter]
     public double CanvasHeight { get; set; } = 1080;
 
-    /// <summary>Gets or sets an optional line-color override (defaults to <c>#DDFFFFFF</c>).</summary>
+    /// <summary>Gets or sets an optional line-color override (defaults to <c>#CC38BDF8</c>).</summary>
     [Parameter]
     public string? LineColorOverride { get; set; }
 
@@ -53,19 +88,20 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private INotifyPropertyChanged? _senderNotifier;
     private INotifyPropertyChanged? _receiverNotifier;
 
-    private string LineColor => LineColorOverride ?? ToCss("#DDFFFFFF");
+    private string LineColor => LineColorOverride ?? ToCss("#CC38BDF8");
+
     private double Thickness
     {
         get
         {
             if (ThicknessOverride is not null
-                && double.TryParse(ThicknessOverride, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out var t))
+                && double.TryParse(ThicknessOverride, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var t))
             {
                 return t;
             }
 
-            return double.Parse("2", System.Globalization.CultureInfo.InvariantCulture);
+            return 2;
         }
     }
 
@@ -81,8 +117,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         {
             var alpha = text.Substring(1, 2);
             var rgb = text.Substring(3);
-            if (byte.TryParse(alpha, System.Globalization.NumberStyles.HexNumber,
-                    System.Globalization.CultureInfo.InvariantCulture, out var a))
+            if (byte.TryParse(alpha, NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture, out var a))
             {
                 return $"rgba({HexByte(rgb, 0)},{HexByte(rgb, 2)},{HexByte(rgb, 4)},{a / 255d:0.###})";
             }
@@ -98,108 +134,99 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
     private static int HexByte(string hex, int offset)
         => Convert.ToInt32(hex.Substring(offset, 2), 16);
+
     private bool CanRender { get; set; } = true;
     private bool IsVirtual { get; set; }
 
     private bool EffectiveCanRender => CanRenderOverride ?? CanRender;
     private bool EffectiveIsVirtual => IsVirtualOverride ?? IsVirtual;
 
-    private string CanvasWidthCss => CanvasWidth.ToString("0.#");
-    private string CanvasHeightCss => CanvasHeight.ToString("0.#");
-    private string ThicknessCss => Thickness.ToString("0.#");
-    private string MarkerSuffix => Link?.GetHashCode().ToString("X8") ?? "virtual";
+    // 数值一律走不变文化：Razor 按当前区域写裸 double，逗号小数点会让浏览器读不出这个属性
+    private string CanvasWidthCss => N(CanvasWidth);
+    private string CanvasHeightCss => N(CanvasHeight);
+    private string ThicknessCss => N(Thickness);
+    private double HaloOuterWidth => Thickness + 9;
+    private double HaloInnerWidth => Thickness + 4;
+
+    private static string N(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
     #region Flow effect
 
-    // 光带半宽（渐变偏移单位）
-    private const double BandHalfWidth = 0.04;
-
-    // 三段相位各自结束时光带中心的位置：成形、全亮行进、退去
-    private const double BandStart = 0.06;
-    private const double BandFormed = 0.34;
-    private const double BandLeaving = 0.66;
-    private const double BandExit = 0.94;
-
-    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(550);
-    private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(650);
-    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(550);
-
-    // 光带的三个停靠点偏移（沿链接的渐变单位）与颜色：全部动画状态；本组件即动画对象，路径直接读视图，中间没有标量要映射回停靠点
-    // 偏移由 N 不变文化格式化：Razor 用当前区域写裸 double，逗号小数点会写出浏览器读不了的 SVG 属性
-    private double BandTail { get; set; }
-    private double BandCentre { get; set; }
-    private double BandLead { get; set; }
-
-    // 光带颜色（CSS 串）：周期写它，中间那个 stop 读它
-    private string BandColor { get; set; } = "rgba(0,0,0,0)";
+    /// <summary>
+    /// The clock's phase, 0 to 1, repeating. Written by the transition, read by everything the comet
+    /// draws — never set by a caller.
+    /// </summary>
+    private double Phase { get; set; }
 
     private Transition<TemplateLinkView>? _flow;
     private bool _flowRunning;
     private IWorkflowLinkViewModel? _flowLink;
 
-    // 流动两色按通道存而非标记串（要能混色）：只在参数变化时解析，不是每帧
-    private (int A, int R, int G, int B) _dimColor = (0x9E, 0xFF, 0xFF, 0xFF);
-    private (int A, int R, int G, int B) _litColor = (0xFF, 0xFF, 0xFF, 0xFF);
-
-    // 满亮度的光带色（CSS）：箭头也用它
-    private string LitCss => Css(_litColor);
-
-    // 线体静息色（CSS）：光带两侧的肩，周期从不写它
-    private string DimCss => Css(_dimColor);
-
-    // 本链接的渐变 id：一条链接一份定义，描边按 id 引用
-    private string FlowId => $"veloxdev-flow-{MarkerSuffix}";
-
-    // 已连接的链接描边就是这段渐变；虚拟链接保留原来的虚线平色
-    private string FlowStroke => EffectiveIsVirtual ? LineColor : $"url(#{FlowId})";
-
-    // 每组件构建：两个端点取自该链接自己的颜色，静态声明会把读到的那份值共享给之后每次执行
-    // 路径直达组件自身：三个偏移与颜色是具名写入，相位结构看得见而非算出来；匀速所以不用缓动
-    private Transition<TemplateLinkView> BuildFlow() => Transition<TemplateLinkView>.Create()
-        // 相位一：一边成形一边进入（走三分之一路程，同时由静息色变亮）
-        .Property(v => v.BandTail, BandFormed - BandHalfWidth)
-        .Property(v => v.BandCentre, BandFormed)
-        .Property(v => v.BandLead, BandFormed + BandHalfWidth)
-        .Property(v => v.BandColor, LitCss)
-        .Effect(Repainting(EnterDuration))
-        .Then()
-        // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲
-        .Property(v => v.BandTail, BandLeaving - BandHalfWidth)
-        .Property(v => v.BandCentre, BandLeaving)
-        .Property(v => v.BandLead, BandLeaving + BandHalfWidth)
-        .Effect(Repainting(TravelDuration))
-        .Then()
-        // 相位三：一边退回静息色一边离开；周期两端都是均匀暗色，循环接缝才看不出来
-        .Property(v => v.BandTail, BandExit - BandHalfWidth)
-        .Property(v => v.BandCentre, BandExit)
-        .Property(v => v.BandLead, BandExit + BandHalfWidth)
-        .Property(v => v.BandColor, DimCss)
-        .Effect(Repainting(ExitDuration))
-        .Repeat(int.MaxValue);
-
-    // 一相的效果：直线时长 + 本组件的重绘；这里没有可达渲染对象的画刷，只能逐帧交给渲染器
-    // 用 LateUpdate 而非 Update：它在当帧的写入落地后才触发，渲染的是刚写下的那帧（重放时每周期都触发）
-    private TransitionEffect Repainting(TimeSpan duration)
+    /// <summary>How far along the link the comet's head has travelled, as a fraction of its length.</summary>
+    /// <remarks>
+    /// Derived, not animated: <see cref="Phase"/> is the one animated value, and this is the piecewise
+    /// map from the cycle onto the head's three legs (leave, travel, arrive). Two animations on one
+    /// component would interrupt each other — <c>Transition.Exit</c> stops per target — so there is
+    /// only ever one.
+    /// </remarks>
+    private double Head
     {
-        var effect = new TransitionEffect()
+        get
         {
-            Duration = duration,
-            Ease = Eases.Default,
-        };
+            if (Phase <= EnterShare)
+            {
+                return BandFormed * (Phase / EnterShare);
+            }
 
-        effect.LateUpdate += (_, _) => InvokeAsync(StateHasChanged);
-        return effect;
+            if (Phase <= ExitStart)
+            {
+                return BandFormed + ((BandLeaving - BandFormed) * ((Phase - EnterShare) / TravelShare));
+            }
+
+            return BandLeaving + ((1 - BandLeaving) * ((Phase - ExitStart) / EnterShare));
+        }
     }
 
-    // 渐变轴（userSpaceOnUse）：取链接自身两端而非包围盒，光带才沿链接走而不是横扫盒子的对角线
-    // 每次渲染从锚点重算，也不反过来写：偏移归周期所有（见 AimFlow）
-    private string[] FlowAxis => Link?.Sender is { } sender && Link.Receiver is { } receiver
-        ?
-        [
-            N(sender.Anchor.Horizontal), N(sender.Anchor.Vertical),
-            N(receiver.Anchor.Horizontal), N(receiver.Anchor.Vertical),
-        ]
-        : ["0", "0", "0", "0"];
+    /// <summary>How lit the comet is: 0 while it is absent, 1 while it travels.</summary>
+    private double Intensity
+    {
+        get
+        {
+            if (Phase <= EnterShare)
+            {
+                return Phase / EnterShare;
+            }
+
+            if (Phase <= ExitStart)
+            {
+                return 1.0;
+            }
+
+            return 1.0 - ((Phase - ExitStart) / EnterShare);
+        }
+    }
+
+    // 每组件构建：周期只写一个标量，几何、配色与弧长表都不参与。
+    // 匀速（Eases.Default 就是恒等）—— 流水不该有缓动，头部的速度一变化就不像在流了。
+    // LoopTime = int.MaxValue 是这套系统里唯一的「永远」，而时长不能是零：零时长的趟不占时间，
+    // 一个永远循环于是空转，Exit 也就再也打断不了它。
+    private Transition<TemplateLinkView> BuildFlow()
+    {
+        var effect = new TransitionEffect
+        {
+            Duration = CycleDuration,
+            Ease = Eases.Default,
+            LoopTime = int.MaxValue,
+        };
+
+        // 一相的效果：直线时长 + 本组件的重绘。这里没有可达渲染对象的画刷，只能逐帧交给渲染器。
+        // 用 LateUpdate 而非 Update：它在当帧的写入落地后才触发，渲染的是刚写下的那帧。
+        effect.LateUpdate += (_, _) => InvokeAsync(StateHasChanged);
+
+        return Transition<TemplateLinkView>.Create()
+            .Property(v => v.Phase, 1d)
+            .Effect(effect);
+    }
 
     // 已连接的链接从发送端起周期，虚拟链接停周期：橡皮筋上流动会宣称一条还不存在的连接
     // 换链接时重起——渲染就绪门让复用成为常态，池中视图常在首个链接测出前就被复用
@@ -226,15 +253,12 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
             return;
         }
 
-        AimFlow();
+        _flow ??= BuildFlow();
 
-        // 转换从目标读起始值，Execute 前组件必须已在周期起点；循环在每个接缝重放它，后续每轮都从它开始
-        BandTail = BandStart - BandHalfWidth;
-        BandCentre = BandStart;
-        BandLead = BandStart + BandHalfWidth;
-        BandColor = DimCss;
-
-        _flow!.Execute(this);
+        // 转换从目标读起始值，所以 Execute 前组件必须已经在周期起点；
+        // 循环在每个接缝重放它，后续每轮都从它开始。
+        Phase = 0;
+        _flow.Execute(this);
         _flowRunning = true;
     }
 
@@ -249,8 +273,249 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         _flowLink = null;
     }
 
+    #endregion
+
+    #region Geometry
+
+    // 弧长表：_cumulative[i] 是 _samples[0..i] 的累计长度，_length 是全长。
+    // 只在端点变化时重建 —— 每帧渲染要按弧长取点，现算不划算。
+    private (double X, double Y)[] _samples = [];
+    private double[] _cumulative = [];
+    private double _length;
+
+    private double _cacheSx = double.NaN;
+    private double _cacheSy;
+    private double _cacheEx;
+    private double _cacheEy;
+
+    // 彗星的两遍（光晕在前、本体在后）拼成一条列表，Razor 只跑一次循环。
+    // 够不着的段把不透明度压到零而不是删掉：元素数恒定，diff 才不会每帧建删元素。
+    private readonly List<CometStop> _comet = new(TailSegments * 2);
+
+    /// <summary>One drawn piece of the comet: a polyline run, its colour, its opacity and its width.</summary>
+    private readonly record struct CometStop(string D, string Color, string Opacity, string Width);
+
+    /// <summary>
+    /// Refreshes the arc-length table (only when the endpoints moved) and rebuilds the comet for this
+    /// frame's <see cref="Phase"/>. Returns false when the link cannot be drawn at all.
+    /// </summary>
+    private bool Prepare()
+    {
+        if (!TryEndpoints(out var sx, out var sy, out var ex, out var ey))
+        {
+            return false;
+        }
+
+        if (sx != _cacheSx || sy != _cacheSy || ex != _cacheEx || ey != _cacheEy)
+        {
+            _cacheSx = sx;
+            _cacheSy = sy;
+            _cacheEx = ex;
+            _cacheEy = ey;
+            RefreshGeometry(sx, sy, ex, ey);
+        }
+
+        BuildComet();
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the two endpoints, honouring the render gates the XAML adapters use. Returns false when
+    /// the link has no drawable geometry yet.
+    /// </summary>
+    /// <remarks>
+    /// NaN gate: slot anchors default to NaN (unmeasured placeholder). Rendering before the GUI
+    /// measures the endpoints would serialize NaN coordinates and paint a stale frame that jumps back
+    /// once measurement lands — the first-entry flicker the XAML adapters guard against via
+    /// WorkflowLinkRenderEx.IsRenderReady(). Skip until both non-virtual endpoints are measured.
+    /// Placeholder endpoints (Parent is null, e.g. the VirtualLink gesture) are exempt.
+    /// </remarks>
+    private bool TryEndpoints(out double sx, out double sy, out double ex, out double ey)
+    {
+        sx = sy = ex = ey = 0;
+
+        var link = Link;
+        if (link?.Sender is null || link.Receiver is null) return false;
+        if (!WorkflowSlotUpdateGate.IsLinkRenderReady(link)) return false;
+
+        sx = link.Sender.Anchor.Horizontal;
+        sy = link.Sender.Anchor.Vertical;
+        ex = link.Receiver.Anchor.Horizontal;
+        ey = link.Receiver.Anchor.Vertical;
+
+        // Placeholder endpoints (VirtualLink gesture) can still carry NaN anchors on the reset
+        // intermediate frames, which would serialize a "NaN,NaN" path. Suppress until real.
+        return !double.IsNaN(sx) && !double.IsNaN(sy) && !double.IsNaN(ex) && !double.IsNaN(ey);
+    }
+
+    // 弧长表。端点变化时重建，渲染时只读。
+    private void RefreshGeometry(double sx, double sy, double ex, double ey)
+    {
+        var samples = new (double X, double Y)[SampleCount + 1];
+        for (int i = 0; i <= SampleCount; i++)
+        {
+            samples[i] = BezierAt(i / (double)SampleCount, sx, sy, ex, ey);
+        }
+
+        var cumulative = new double[SampleCount + 1];
+        for (int i = 1; i <= SampleCount; i++)
+        {
+            double dx = samples[i].X - samples[i - 1].X;
+            double dy = samples[i].Y - samples[i - 1].Y;
+            cumulative[i] = cumulative[i - 1] + Math.Sqrt((dx * dx) + (dy * dy));
+        }
+
+        _samples = samples;
+        _cumulative = cumulative;
+        _length = cumulative[SampleCount];
+    }
+
+    // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角。
+    // 控制点的纵坐标跟着各自那一端，所以出线方向是水平的。
+    private (double X, double Y, double X2, double Y2) Controls(double sx, double sy, double ex, double ey)
+    {
+        double dx = ex - sx;
+
+        // 最小拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，
+        // 失去「从端口水平出来」的形状
+        double pull = Math.Max(40, Math.Abs(dx) * 0.5);
+
+        return (sx + pull, sy, ex - pull, ey);
+    }
+
+    private (double X, double Y) BezierAt(double t, double sx, double sy, double ex, double ey)
+    {
+        var (c1x, c1y, c2x, c2y) = Controls(sx, sy, ex, ey);
+        double u = 1 - t;
+        double a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+
+        return (
+            (a * sx) + (b * c1x) + (c * c2x) + (d * ex),
+            (a * sy) + (b * c1y) + (c * c2y) + (d * ey));
+    }
+
+    // 弧长 → 点。二分找所在采样段再线性插值，所以取点是精确到亚像素的，不受采样密度限制
+    private (double X, double Y) PointAtLength(double len)
+    {
+        if (_length <= 0 || _samples.Length < 2) return (0, 0);
+
+        len = Math.Clamp(len, 0, _length);
+
+        int lo = 0, hi = _cumulative.Length - 1;
+        while (hi - lo > 1)
+        {
+            int mid = (lo + hi) / 2;
+            if (_cumulative[mid] <= len) lo = mid;
+            else hi = mid;
+        }
+
+        double span = _cumulative[hi] - _cumulative[lo];
+        double t = span <= 0 ? 0 : (len - _cumulative[lo]) / span;
+
+        return (
+            _samples[lo].X + ((_samples[hi].X - _samples[lo].X) * t),
+            _samples[lo].Y + ((_samples[hi].Y - _samples[lo].Y) * t));
+    }
+
+    // 取 [from, to] 这一段弧长上的折线。两端各自插值到精确位置，中间用现成采样点。
+    // 返回 SVG 的 path d —— 一段拖尾就是一个独立的元素，才能各带各的颜色与不透明度
+    private string SegmentPath(double from, double to)
+    {
+        to = Math.Min(to, _length);
+        from = Math.Clamp(from, 0, _length);
+        if (to <= from) return "";
+
+        var sb = new StringBuilder();
+        var start = PointAtLength(from);
+        sb.Append('M').Append(N(start.X)).Append(',').Append(N(start.Y));
+
+        for (int i = 0; i < _samples.Length; i++)
+        {
+            double l = _cumulative[i];
+            if (l <= from || l >= to) continue;
+            sb.Append('L').Append(N(_samples[i].X)).Append(',').Append(N(_samples[i].Y));
+        }
+
+        var end = PointAtLength(to);
+        sb.Append('L').Append(N(end.X)).Append(',').Append(N(end.Y));
+        return sb.ToString();
+    }
+
+    /// <summary>The full resting curve, as one path.</summary>
+    private string BodyPath { get; set; } = "";
+
+    /// <summary>
+    /// The comet: the arc-length window [head − tail, head] cut into <see cref="TailSegments"/> pieces,
+    /// drawn twice — the halo pass first (wider, fainter, same segments) and the body pass after it.
+    /// </summary>
+    private void BuildComet()
+    {
+        _comet.Clear();
+        BodyPath = _length > 0 ? SegmentPath(0, _length) : "";
+
+        if (_length <= 0 || EffectiveIsVirtual)
+        {
+            return;
+        }
+
+        double intensity = Intensity;
+        double head = Math.Clamp(Head, 0, 1) * _length;
+        double tail = TailFraction * _length;
+
+        // 复用同一批颜色，别每段都解析一次
+        var body = ParseColor(LineColorOverride ?? "#CC38BDF8");
+
+        // 光晕一遍在前
+        for (int k = 0; k < TailSegments; k++)
+        {
+            double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
+            double f1 = (k + 1) / (double)TailSegments;
+
+            double l0 = head - (tail * (1 - f0));
+            double l1 = head - (tail * (1 - f1));
+
+            // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
+            double a = intensity * f0 * f0;
+            if (l1 <= 0 || l0 >= _length || a <= 0.004)
+            {
+                _comet.Add(new CometStop("", LineColor, "0", N(HaloOuterWidth)));
+                continue;
+            }
+
+            // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部
+            _comet.Add(new CometStop(
+                SegmentPath(l0, l1),
+                MixToWhite(body, f0),
+                N(a * 0.22),
+                N(HaloOuterWidth)));
+        }
+
+        // 本体一遍在后
+        for (int k = 0; k < TailSegments; k++)
+        {
+            double f0 = k / (double)TailSegments;
+            double f1 = (k + 1) / (double)TailSegments;
+
+            double l0 = head - (tail * (1 - f0));
+            double l1 = head - (tail * (1 - f1));
+
+            double a = intensity * f0 * f0;
+            if (l1 <= 0 || l0 >= _length || a <= 0.004)
+            {
+                _comet.Add(new CometStop("", LineColor, "0", ThicknessCss));
+                continue;
+            }
+
+            _comet.Add(new CometStop(
+                SegmentPath(l0, l1),
+                MixToWhite(body, f0),
+                N(a),
+                N(Thickness * (0.45 + (0.95 * f0)))));
+        }
+    }
+
     // 把模板符号带的 XAML 色值解析成四通道
-    // 读不了的（如 CSS 颜色名）退回模板自己的 #DDFFFFFF：流程要通道值才能混色，混不了就画不出光带
+    // 读不了的（如 CSS 颜色名）退回模板自己的 #CC38BDF8：流程要通道值才能混色，混不了就画不出彗星
     private static (int A, int R, int G, int B) ParseColor(string value)
     {
         var text = value.Trim();
@@ -273,48 +538,14 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return (0xDD, 0xFF, 0xFF, 0xFF);
     }
 
-    // 按链接自己的颜色算出流动两色，并重建以它们为端点的声明：换链接、换参数、换颜色时调用
-    // 这里不写光带位置：那些停靠点归周期所有，拖拽中每帧都改锚点，抢写会让光带抖动
-    private void AimFlow()
+    // 尾梢（f0 = 0）是本体的颜色，头（f0 = 1）是白：白热只发生在头部
+    private static string MixToWhite((int A, int R, int G, int B) from, double t)
     {
-        var lit = LitOf(ParseColor(LineColorOverride ?? "#DDFFFFFF"));
-        if (_flow is not null && lit == _litColor)
-        {
-            return;
-        }
+        byte L(int channel) => (byte)Math.Round(channel + ((255 - channel) * t));
 
-        _litColor = lit;
-        _dimColor = DimOf(lit);
-        _flow = BuildFlow();
-
-        // 视图被复用到另一种颜色的链接上时，按自己的颜色重新起周期
-        if (_flowRunning)
-        {
-            StartFlow();
-        }
+        return string.Create(CultureInfo.InvariantCulture,
+            $"rgb({L(from.R)},{L(from.G)},{L(from.B)})");
     }
-
-    // 亮色：各通道向白抬 45%（白链接也留出更亮处）
-    private static (int A, int R, int G, int B) LitOf((int A, int R, int G, int B) color)
-    {
-        const double lift = 0.45;
-
-        int Up(int channel) => (int)Math.Round(channel + (255 - channel) * lift);
-
-        return (0xFF, Up(color.R), Up(color.G), Up(color.B));
-    }
-
-    // 靠 alpha 变暗取反差，色相不变；往白里提在青线（本 demo）和白线上都几乎看不出（实测过）
-    private static (int A, int R, int G, int B) DimOf((int A, int R, int G, int B) color)
-        => ((int)Math.Round(color.A * 0.62), color.R, color.G, color.B);
-
-    // 颜色写成 CSS 串；alpha 与偏移同理必须不变文化——它是周期的一个端点，逗号小数点会让混色的采样器读不出它
-    private static string Css((int A, int R, int G, int B) color) => color.A >= 0xFF
-        ? $"rgb({color.R},{color.G},{color.B})"
-        : string.Create(CultureInfo.InvariantCulture,
-            $"rgba({color.R},{color.G},{color.B},{color.A / 255d:0.###})");
-
-    private static string N(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
     #endregion
 
@@ -322,9 +553,6 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     protected override void OnInitialized()
     {
         Sync(Link);
-
-        // 声明的端点是链接自己的颜色，所以颜色在前：周期由它构建，不起周期的虚拟链接也用它画箭头
-        AimFlow();
         SyncFlow();
     }
 
@@ -376,7 +604,6 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     protected override void OnParametersSet()
     {
         base.OnParametersSet();
-        AimFlow();
         SyncFlow();
         if (IsVirtualOverride is not null || CanRenderOverride is not null)
         {
@@ -394,42 +621,6 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
     private bool IsVirtualLink(IWorkflowLinkViewModel? link)
         => link is null || (link.Sender?.Parent is null && link.Receiver?.Parent is null);
-
-    private string BuildPoints()
-    {
-        var link = Link;
-        if (link is null) return "";
-
-        var sender = link.Sender;
-        var receiver = link.Receiver;
-        if (sender is null || receiver is null) return "";
-
-        // NaN gate: slot anchors default to NaN (unmeasured placeholder). Rendering before
-        // the GUI measures the endpoints would serialize NaN coordinates and paint a stale
-        // frame that jumps back once measurement lands — the first-entry flicker the XAML
-        // adapters guard against via WorkflowLinkRenderEx.IsRenderReady(). Skip until both
-        // non-virtual endpoints are measured. Placeholder endpoints (Parent is null, e.g. the
-        // VirtualLink gesture) are exempt and render immediately.
-        if (!WorkflowSlotUpdateGate.IsLinkRenderReady(link)) return "";
-
-        double sx = sender.Anchor.Horizontal;
-        double sy = sender.Anchor.Vertical;
-        double ex = receiver.Anchor.Horizontal;
-        double ey = receiver.Anchor.Vertical;
-
-        // Placeholder endpoints (VirtualLink gesture) can still carry NaN anchors on the
-        // reset intermediate frames (Reset nulls the anchors before clearing IsVisible), which
-        // would serialize a "NaN,NaN" polyline. Suppress until the coordinates are real.
-        if (double.IsNaN(sx) || double.IsNaN(sy) || double.IsNaN(ex) || double.IsNaN(ey)) return "";
-
-        double dx = ex - sx;
-        // Signed stub keeps the orthogonal bend on the correct side when dragging leftward.
-        double stub = dx / 2.0 * (1.0 - Phi);
-        double p1x = sx + stub;
-        double p4x = ex - stub;
-
-        return $"{sx:F1},{sy:F1} {p1x:F1},{sy:F1} {p4x:F1},{ey:F1} {ex:F1},{ey:F1}";
-    }
 
     /// <inheritdoc />
     public void Dispose()

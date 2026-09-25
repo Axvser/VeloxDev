@@ -1,82 +1,101 @@
 <?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="Demo.Views.TimerNodeView"
+    x:Name="Root"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Demo.Views"
+    xmlns:vm="using:Demo.ViewModels"
     xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
     Clip="{x:Null}"
     behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
     behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
-    behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
-    mc:Ignorable="d">
+    behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
 
     <UserControl.Resources>
         <local:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     </UserControl.Resources>
 
     <!-- Design-canvas: DataTemplate binds Width/Height to the collapsed Node.Size; the Viewbox
-         uniformly scales this fixed 200x140 design grid (Timer's [DefaultSize]) into that host. -->
+         uniformly scales this fixed 200x140 design grid (Timer's [DefaultSize]) into that host.
+         色值与字级来自 Views/Workflow/CardTheme.xaml。 -->
     <Viewbox Stretch="Uniform">
-        <Grid Clip="{x:Null}" Width="200" Height="140">
+        <Grid Width="200" Height="140" Clip="{x:Null}" Background="Transparent">
             <Grid.RowDefinitions>
-                <RowDefinition Height="40" />
+                <RowDefinition Height="32" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Border Grid.RowSpan="2"
-                    CornerRadius="6"
-                    BorderThickness="1.5"
-                    BorderBrush="#6ec6ff"
-                    Background="#1e2a35"/>
+            <Border Grid.RowSpan="2" Style="{StaticResource CardBorderStyle}" />
 
-            <Grid Grid.RowSpan="2" Canvas.ZIndex="6" Clip="{x:Null}">
-                <local:SlotView x:Name="PART_InputSlot"
-                                Width="20" Height="20"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Center"
-                                Margin="-10,0,0,0"
-                                DataContext="{Binding InputSlot}"
-                                Visibility="{Binding HasInputSlot, Converter={StaticResource BoolToVisibility}}"
-                                SlotState="{Binding State}"/>
-                <local:SlotView x:Name="PART_OutputSlot"
-                                Width="20" Height="20"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                Margin="0,0,-10,0"
-                                DataContext="{Binding OutputSlot}"
-                                Visibility="{Binding HasOutputSlot, Converter={StaticResource BoolToVisibility}}"
-                                SlotState="{Binding State}"/>
-            </Grid>
-
+            <!-- 标题行：左对齐 + 左侧 2px 类型色条；执行序号靠右。原来是居中白字压在一条蓝带上 -->
             <Border Grid.Row="0"
-                    Background="#253545"
-                    CornerRadius="4,4,0,0"
-                    BorderThickness="0,0,0,0.5"
-                    BorderBrush="#6ec6ff"
+                    Background="Transparent"
                     behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
                     behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                    <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
-                    <Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1"
-                            Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold"/>
-                    </Border>
+                <Grid ColumnDefinitions="2,*,Auto">
+                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="#6EC6FF" />
+                    <TextBlock Grid.Column="1" Style="{StaticResource CardTitleTextStyle}"
+                               Text="{Binding Title}" Margin="12,0,6,0" />
+                    <TextBlock Grid.Column="2" Style="{StaticResource CardValueTextStyle}"
+                               Text="{Binding ExecutionOrderText}"
+                               Foreground="{StaticResource CardActionRunBrush}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,12,0"
+                               Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
+            </Border>
+            <Border Grid.Row="0" Style="{StaticResource CardDividerStyle}" />
+
+            <Border Grid.Row="1" Padding="12,9">
+                <StackPanel Spacing="5">
+                    <TextBlock Style="{StaticResource CardLabelTextStyle}" Text="INTERVAL (MS)" />
+                    <TextBox FontSize="11.5"
+                             Padding="7,4"
+                             MinHeight="26"
+                             CornerRadius="6"
+                             Background="{StaticResource CardFieldBrush}"
+                             BorderBrush="{StaticResource CardBorderBrush}"
+                             BorderThickness="1"
+                             Foreground="{StaticResource CardValueBrush}"
+                             Text="{Binding IntervalMilliseconds, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Style="{StaticResource CardLabelTextStyle}" Text="LAST TICK" Margin="0,4,0,0" />
+                    <TextBlock Style="{StaticResource CardValueTextStyle}"
+                               Text="{Binding LastTick}"
+                               Foreground="#6EC6FF"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="1" Background="#1e2a35" CornerRadius="0,0,4,4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="14" Spacing="6">
-                        <TextBlock Text="Interval (ms)" Foreground="#bfbfbf" FontSize="11"/>
-                        <TextBox Text="{Binding IntervalMilliseconds, UpdateSourceTrigger=PropertyChanged}" FontSize="11"/>
-                        <TextBlock Text="Last Tick" Foreground="#bfbfbf" FontSize="11"/>
-                        <TextBlock Text="{Binding LastTick}" Foreground="#6ec6ff" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
+            <!-- 端口最后加，且挂在根 Grid 上：它有一半骑在卡边外，进任何有底的面都会被那块面盖住。
+
+                 Visibility 走 ElementName 回到根（＝ Avalonia 的 $parent[TimerNodeView].DataContext）：
+                 同一个元素上 DataContext 已经被换成 InputSlot，再在它身上写 HasInputSlot 会绑到端口
+                 自己身上，永远查不到 —— 那就是「端口从不隐藏」。 -->
+            <Grid Grid.RowSpan="2" Clip="{x:Null}">
+                <local:SlotView x:Name="PART_InputSlot"
+                                Width="32" Height="32"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Margin="-16,0,0,0"
+                                DataContext="{Binding InputSlot}"
+                                Visibility="{Binding DataContext.HasInputSlot, ElementName=Root, Converter={StaticResource BoolToVisibility}}"
+                                SlotState="{Binding State}"
+                                Channel="{Binding Channel}" />
+                <local:SlotView x:Name="PART_OutputSlot"
+                                Width="32" Height="32"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,-16,0"
+                                DataContext="{Binding OutputSlot}"
+                                Visibility="{Binding DataContext.HasOutputSlot, ElementName=Root, Converter={StaticResource BoolToVisibility}}"
+                                SlotState="{Binding State}"
+                                Channel="{Binding Channel}" />
+            </Grid>
         </Grid>
     </Viewbox>
 </UserControl>

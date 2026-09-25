@@ -2,37 +2,43 @@
 @using System.ComponentModel
 @implements IDisposable
 
-@* Body-only content rendered inside the generated TemplateNodeView (BodyContent).
-   The card header (node title) and border come from TemplateNodeView, so the inner
-   view no longer draws its own card/header. *@
+@* Body-only content rendered inside the generated TemplateNodeView (BodyContent): two
+   labelled selects and the routed output ports. The fields scroll and the port list does not,
+   on purpose: the port glyph straddles the card's right edge and a scroller would clip the half
+   that hangs outside it. The routed outputs are the enum's own vocabulary, so they are named in
+   its accent colour rather than in the worker blue. *@
 <div class="enum-root">
-    <div class="enum-body">
-        <label class="enum-label">Selected Method</label>
-        <select class="enum-select" @onchange="OnValueChanged">
+    <div class="enum-fields">
+        <label class="wf-label" for="enum-value">SELECTED METHOD</label>
+        <select id="enum-value" class="wf-field" @onchange="OnValueChanged">
             @foreach (var opt in _items)
             {
                 <option value="@opt" selected="@(opt == _selectedValue)">@opt</option>
             }
         </select>
-        <label class="enum-label">Compile Mode</label>
-        <select class="enum-select" @onchange="OnModeChanged">
+
+        <label class="wf-label" for="enum-mode" style="margin-top:4px;">COMPILE MODE</label>
+        <select id="enum-mode" class="wf-field" @onchange="OnModeChanged">
             @foreach (var opt in _modeOptions)
             {
                 <option value="@opt" selected="@(opt == _compileMode)">@opt</option>
             }
         </select>
-        <div class="selector-slots">
-            @if (Selector?.OutputSlots is { } slots)
+    </div>
+
+    <div class="enum-slots">
+        <label class="wf-label" style="margin-bottom:2px;">OUTPUT SLOTS</label>
+        @if (Selector?.OutputSlots is { } slots)
+        {
+            @foreach (var item in slots.Items)
             {
-                @foreach (var item in slots.Items)
-                {
-                    <div class="selector-slot-row">
-                        <span class="selector-slot-label">@item.Name</span>
-                        @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
-                        <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="16" />
-                    </div>
-                }
+                <div class="selector-slot-row">
+                    <span class="selector-slot-label">@item.Name</span>
+                    @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
+                    <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="24" />
+                </div>
             }
-        </div>
+        }
     </div>
 </div>
+

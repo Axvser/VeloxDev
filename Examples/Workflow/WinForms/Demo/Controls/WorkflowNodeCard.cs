@@ -1,54 +1,61 @@
 using Demo.ViewModels;
 using System.ComponentModel;
-using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
+// `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; a drawing
+// alias keeps `new Size(24, 24)` and `node.Size` unambiguous in the same file.
+using Size = System.Drawing.Size;
 
 namespace Demo.Controls;
 
 /// <summary>
 /// Card control for a single workflow node.
+///
+/// The look is the Avalonia demo's node design, and it is authored entirely at the node type's
+/// <c>[DefaultSize]</c> (Controller 230×170, Timer 200×140, Python 280×260, Enum 280×380) with every colour and
+/// metric taken from <see cref="Views.CardTheme"/> — the same one-place-per-token arrangement as that demo's
+/// <c>CardTheme.axaml</c>. The canvas collapses a node by shrinking its bounds, so the interior is re-scaled
+/// uniformly by <c>k = current / design</c> on every layout instead of being re-authored per zoom step.
+///
+/// WinForms has none of the controls the reference's cards are built from — a rounded, hairline-bordered box —
+/// so the three shapes that need one are drawn by hand: <see cref="Views.FramePanel"/> for the fields, the
+/// script editor and its header, the status capsule and the type accent bar; <see cref="Views.GhostButton"/>
+/// for the action row. Everything else is a plain label, panel or table layout.
 /// </summary>
 internal sealed class WorkflowNodeCard : UserControl
 {
-    // ── Appearance constants ──────────────────────────────────────────────────────────────
-    private static readonly Color DarkBody = Color.FromArgb(37, 37, 37);
-    private static readonly Color DarkHeader = Color.FromArgb(45, 45, 45);
-    private static readonly Color DarkExec = Color.FromArgb(31, 31, 31);
-
     // ── Layout ──────────────────────────────────────────────────────────────────
     private readonly TableLayoutPanel _rootLayout;
     private readonly Panel _headerPanel;
     private readonly Panel _bodyPanel;
     private readonly Panel _footerPanel;
+    private readonly Panel _headerDivider;
+    private readonly Panel _footerDivider;
 
-    // ── Uniform design-coordinate scaling ─────────────────────────────────────────
-    // The card host is sized by the canvas to the node's collapsed box (node.Size =
-    // [DefaultSize] × collapse). The interior is authored once at the type's DESIGN size
-    // and re-scaled uniformly on every layout by k = current / design (fonts, row/column
-    // styles, paddings, glyphs), mirroring the Trimmed WinForms ApplyScale so content can
-    // never overflow the collapsed card.
+    // ── Uniform design-coordinate scaling ────────────────────────────────────────
     private float _designW;
     private float _designH;
     private double _k = 1d;
     private bool _layoutReady;
     private bool _applyingScale;
 
-    // ── ViewModel subscription ────────────────────────────────────────────────────────
+    // ── ViewModel subscription ────────────────────────────────────────────────────
     private IWorkflowNodeViewModel? _node;
     private INotifyPropertyChanged? _nodeNotifier;
     private bool _updatingFromVm;
 
-    // ── Dynamic control references ──────────────────────────────────────────────────────────
+    // ── Dynamic control references ────────────────────────────────────────────────
+    private Views.FramePanel? _accentBar;
     private Label? _titleLabel;
     private Label? _orderBadge;
-    private Label? _routedBadge;
+    private Label? _capsuleLabel;
+    private Views.FramePanel? _capsule;
     private TextBox? _seedBox;
-    private Label? _controllerDesc;
+    private Views.GhostButton? _runButton;
     private ComboBox? _enumCombo;
     private ComboBox? _routerModeCombo;
     private TableLayoutPanel? _outputSlotsLayout;
@@ -56,7 +63,6 @@ internal sealed class WorkflowNodeCard : UserControl
     private TableLayoutPanel? _inputSlotsLayout;
     private TextBox? _scriptBox;
     private Label? _descriptionLabel;
-    private Label? _pythonStatusLabel;
     private readonly List<Views.SlotView> _pythonSlotRows = [];
     private TextBox? _intervalBox;
     private Label? _tickLabel;
@@ -65,17 +71,31 @@ internal sealed class WorkflowNodeCard : UserControl
     internal Views.SlotView? InputSlotButton { get; private set; }
     internal Views.SlotView? OutputSlotButton { get; private set; }
 
-    // ── Events ──────────────────────────────────────────────────────────────────
     /// <summary>
-    /// Gets the bound node view model.
+    /// Every port this card owns. Each one rides the edge of the container that holds it — the card itself or
+    /// one of the port strips — so half of every glyph falls outside that container and WinForms, which clips a
+    /// child window to its parent, can never paint it. The canvas draws that half; see
+    /// <see cref="Views.SlotView"/>'s remarks.
     /// </summary>
+    internal IEnumerable<Views.SlotView> Ports() => EnumeratePorts(this);
+
+    private static IEnumerable<Views.SlotView> EnumeratePorts(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is Views.SlotView slot) yield return slot;
+            foreach (var nested in EnumeratePorts(child)) yield return nested;
+        }
+    }
+
+    /// <summary>The bound node view model.</summary>
     internal IWorkflowNodeViewModel? ViewModel => _node;
 
     // ── Constructor ──────────────────────────────────────────────────────────────────
     internal WorkflowNodeCard()
     {
         DoubleBuffered = true;
-        BackColor = Color.FromArgb(11, 17, 32);
+        BackColor = Views.CardTheme.Ground;
         Padding = new Padding(1);
         Margin = Padding.Empty;
         WorkflowBehaviors.WorkflowNodeDragBehavior.SetIsEnabled(this, true);
@@ -94,21 +114,25 @@ internal sealed class WorkflowNodeCard : UserControl
         {
             Dock = DockStyle.Fill,
             Margin = Padding.Empty,
-            Padding = Padding.Empty,
+            Padding = new Padding(1),
             ColumnCount = 1,
-            RowCount = 3,
-            BackColor = DarkBody,
+            RowCount = 5,
+            BackColor = Views.CardTheme.Surface,
         };
         _rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
         _headerPanel = MakeSection();
         _bodyPanel = MakeSection();
         _footerPanel = MakeSection();
+        _headerDivider = MakeDivider();
+        _footerDivider = MakeDivider();
 
         Controls.Add(_rootLayout);
         _rootLayout.Controls.Add(_headerPanel, 0, 0);
-        _rootLayout.Controls.Add(_bodyPanel, 0, 1);
-        _rootLayout.Controls.Add(_footerPanel, 0, 2);
+        _rootLayout.Controls.Add(_headerDivider, 0, 1);
+        _rootLayout.Controls.Add(_bodyPanel, 0, 2);
+        _rootLayout.Controls.Add(_footerDivider, 0, 3);
+        _rootLayout.Controls.Add(_footerPanel, 0, 4);
     }
 
     // ── Public binding API ──────────────────────────────────────────────────────────
@@ -150,6 +174,7 @@ internal sealed class WorkflowNodeCard : UserControl
         _bodyPanel.Controls.Clear();
         _footerPanel.Controls.Clear();
         _footerPanel.Visible = false;
+        _footerDivider.Visible = false;
         _dynamicSlotRows.Clear();
         ResetRefs();
     }
@@ -167,6 +192,7 @@ internal sealed class WorkflowNodeCard : UserControl
                 case EnumSelectorNodeViewModel e: ApplyEnumSelector(e); break;
                 case PythonScriptNodeViewModel p: ApplyPython(p); break;
                 case TimerNodeViewModel t: ApplyTimer(t); break;
+                default: ApplyFallback(); break;
             }
         }
         finally
@@ -177,61 +203,36 @@ internal sealed class WorkflowNodeCard : UserControl
         RefreshVisual();
     }
 
-    /// <summary>Refreshes only visual state such as border color and section backgrounds.</summary>
-    internal void RefreshVisual()
-    {
-        if (_node is null) return;
+    /// <summary>
+    /// The reference card is one surface whose identity is carried by its type accent bar, so there is no
+    /// per-state border or header tint to re-apply here — only the repaint the canvas asks for after a node
+    /// property changed.
+    /// </summary>
+    internal void RefreshVisual() => Invalidate();
 
-        Color border, header, body, footer;
-        switch (_node)
+    // ── Drawing (rounded surface + type accent) ───────────────────────────────────────
+    /// <summary>
+    /// The card's own chrome: a single dark surface inside a hairline and an 8-unit corner, painted in
+    /// <c>OnPaintBackground</c> so the section panels and any transparent child label sit on it.
+    /// </summary>
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Views.CardTheme.Ground);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+        var rect = new RectangleF(0.5f, 0.5f, Width - 1f, Height - 1f);
+        using var path = Views.CardTheme.RoundedPath(rect, F(CardRadius));
+        using (var fill = new SolidBrush(Views.CardTheme.Surface))
         {
-            case ControllerViewModel c:
-                border = c.IsActive ? Color.FromArgb(103, 232, 249) : Color.White;
-                header = c.IsActive ? Color.FromArgb(21, 94, 117) : DarkHeader;
-                body = DarkBody;
-                footer = DarkHeader;
-                break;
-            case EnumSelectorNodeViewModel:
-                border = Color.FromArgb(214, 160, 255);
-                header = Color.FromArgb(58, 37, 80);
-                body = Color.FromArgb(42, 30, 53);
-                footer = body;
-                break;
-            case PythonScriptNodeViewModel:
-            case TimerNodeViewModel:
-                border = Color.FromArgb(110, 198, 255);
-                header = Color.FromArgb(37, 53, 69);
-                body = Color.FromArgb(30, 42, 53);
-                footer = body;
-                break;
-            default:
-                border = Color.FromArgb(75, 85, 99);
-                header = body = footer = DarkBody;
-                break;
+            g.FillPath(fill, path);
         }
 
-        _borderColor = border;
-        _headerPanel.BackColor = header;
-        _bodyPanel.BackColor = body;
-        _footerPanel.BackColor = footer;
-        PropagateBackColor(_headerPanel);
-        PropagateBackColor(_bodyPanel);
-        PropagateBackColor(_footerPanel);
-        Invalidate();
+        using var pen = new Pen(Views.CardTheme.Border, 1f);
+        g.DrawPath(pen, path);
     }
 
-    // ── Drawing (rounded border) ─────────────────────────────────────────────────────────
-    private Color _borderColor = Color.FromArgb(75, 85, 99);
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var rect = new Rectangle(0, 0, Width - 1, Height - 1);
-        using var path = RoundRect(rect, 18);
-        using var pen = new Pen(_borderColor, 1.5F);
-        e.Graphics.DrawPath(pen, path);
-    }
+    private static float CardRadius => Views.CardTheme.CardRadius;
 
     protected override void OnLayout(LayoutEventArgs levent)
     {
@@ -244,39 +245,52 @@ internal sealed class WorkflowNodeCard : UserControl
         PositionOverlaySlotButtons();
     }
 
-    /// <summary>Positions the floating slot buttons at the card's left-center / right-center edges.</summary>
+    /// <summary>
+    /// Positions the edge-anchored ports so their centre lands exactly on the card's left/right edge — half of
+    /// each port rides the card, which is what the design asks for. Their size is taken from the port's design
+    /// size (32) times the current scale rather than from whatever size the port happens to have, so a round trip
+    /// through a small zoom cannot drift.
+    /// </summary>
     private void PositionOverlaySlotButtons()
     {
         if (InputSlotButton is not null)
+        {
+            SizeSlot(InputSlotButton);
             InputSlotButton.Location = new Point(
                 -(InputSlotButton.Width / 2),
                 (Height - InputSlotButton.Height) / 2);
+        }
 
         if (OutputSlotButton is not null)
+        {
+            SizeSlot(OutputSlotButton);
             OutputSlotButton.Location = new Point(
-                Width - OutputSlotButton.Width / 2,
+                Width - (OutputSlotButton.Width / 2),
                 (Height - OutputSlotButton.Height) / 2);
+        }
+    }
+
+    /// <summary>Resizes one port from its design size at the current uniform scale.</summary>
+    private void SizeSlot(Views.SlotView slot)
+    {
+        var s = Math.Max(9, (int)Math.Round(slot.DesignSize * K));
+        slot.Size = new Size(s, s);
     }
 
     // ── Uniform scale application ─────────────────────────────────────────────────
-    /// <summary>Records the card's design (scale-1) dimensions for the bound node type — matching
-    /// each node view-model's [DefaultSize] (Controller 220×340, Timer 200×140, Python 280×260,
-    /// Enum 280×380).</summary>
+    /// <summary>
+    /// Records the card's design (scale-1) dimensions for the bound node type, taken from the type's
+    /// <c>[DefaultSize]</c> attribute — the same value seven demos share, so a card can never disagree with the
+    /// box the canvas gives it (a stale copy of this table is exactly how this card ended up 220×340 for a
+    /// 230×170 node, and its buttons clipped).
+    /// </summary>
     private void SetDesignSize(IWorkflowNodeViewModel node)
     {
-        switch (node)
-        {
-            case ControllerViewModel:
-                _designW = 220; _designH = 340; break;
-            case TimerNodeViewModel:
-                _designW = 200; _designH = 140; break;
-            case PythonScriptNodeViewModel:
-                _designW = 280; _designH = 260; break;
-            case EnumSelectorNodeViewModel:
-                _designW = 280; _designH = 380; break;
-            default:
-                _designW = 220; _designH = 340; break;
-        }
+        var attribute = node.GetType()
+            .GetCustomAttribute<DefaultSizeAttribute>(inherit: false);
+
+        _designW = attribute is { Width: > 0 } ? (float)attribute.Width : 220f;
+        _designH = attribute is { Height: > 0 } ? (float)attribute.Height : 170f;
     }
 
     /// <summary>Recomputes the current uniform factor k = collapsed / design and re-scales the interior.</summary>
@@ -313,8 +327,13 @@ internal sealed class WorkflowNodeCard : UserControl
             }
             finally
             {
+                // The card's hairline is one device pixel at every zoom, so its inset is not scaled.
+                _rootLayout.Padding = new Padding(1);
                 _rootLayout.ResumeLayout(true);
             }
+
+            ResizeCapsule();
+            foreach (var port in Ports()) SizeSlot(port);
         }
         finally
         {
@@ -347,27 +366,39 @@ internal sealed class WorkflowNodeCard : UserControl
             var f = c.Font;
             if (f is not null)
             {
-                c.Font = new Font(f.FontFamily, Math.Max(0.5f, f.SizeInPoints * (float)r), f.Style);
+                c.Font = Views.CardTheme.Font(f.SizeInPoints * (float)r, f.Style);
             }
         }
 
-        // In-card dynamic port glyphs scale with the card from their DESIGN size (20 × k), so a
-        // round-trip to a tiny zoom cannot drift via the minimum clamp. Edge-anchored overlay slot
-        // buttons live OUTSIDE _rootLayout and are intentionally not scaled (canvas positions them).
+        // Hand-drawn shapes carry their own metrics, which a Font change cannot reach.
+        if (c is Views.FramePanel frame)
+        {
+            frame.Radius *= (float)r;
+            frame.FrameWidth = Math.Max(0f, frame.FrameWidth * (float)r);
+        }
+
+        if (c is Views.GhostButton ghost)
+        {
+            ghost.Radius *= (float)r;
+            ghost.FrameWidth = Math.Max(0f, ghost.FrameWidth * (float)r);
+        }
+
+        // In-card port glyphs scale from their DESIGN size (24 × k), so a round-trip to a tiny zoom cannot
+        // drift via the minimum clamp. Edge-anchored ports live OUTSIDE _rootLayout and are sized by
+        // PositionOverlaySlotButtons, which the canvas drives.
         if (c is Views.SlotView sv)
         {
-            var s = Math.Max(9, (int)Math.Round(20 * k));
-            sv.Width = s;
-            sv.Height = s;
+            var s = Math.Max(9, (int)Math.Round(sv.DesignSize * k));
+            sv.Size = new Size(s, s);
         }
 
         if (c.Padding != Padding.Empty)
             c.Padding = ScalePadding(c.Padding, r);
         if (c.Margin != Padding.Empty)
             c.Margin = ScalePadding(c.Margin, r);
-        if (c.MinimumSize != System.Drawing.Size.Empty)
+        if (c.MinimumSize != Size.Empty)
             c.MinimumSize = ScaleSize(c.MinimumSize, r);
-        if (c.MaximumSize != System.Drawing.Size.Empty)
+        if (c.MaximumSize != Size.Empty)
             c.MaximumSize = ScaleSize(c.MaximumSize, r);
 
         foreach (Control child in c.Controls)
@@ -383,7 +414,7 @@ internal sealed class WorkflowNodeCard : UserControl
             Math.Max(0, (int)Math.Round(p.Right * r)),
             Math.Max(0, (int)Math.Round(p.Bottom * r)));
 
-    private static System.Drawing.Size ScaleSize(System.Drawing.Size s, double r)
+    private static Size ScaleSize(Size s, double r)
         => new(
             Math.Max(0, (int)Math.Round(s.Width * r)),
             Math.Max(0, (int)Math.Round(s.Height * r)));
@@ -400,10 +431,14 @@ internal sealed class WorkflowNodeCard : UserControl
 
     // ── Slot button management ──────────────────────────────────────────────────────────
 
-    private Views.SlotView AddSlotButton(IWorkflowSlotViewModel? slot)
+    private Views.SlotView AddSlotButton(IWorkflowSlotViewModel? slot, int designSize)
     {
-        var btn = new Views.SlotView();
+        var btn = new Views.SlotView { DesignSize = designSize };
         btn.ViewModel = slot;
+        // 端口骑在卡边上，外溢的那一半由画布绘制（WinForms 会把子窗口裁到父窗口的客户区），
+        // 所以端口的每一帧与每次状态变化都要让画布跟着重绘
+        btn.ExternalInvalidate = () => { if (!IsDisposed) Parent?.Invalidate(); };
+        SizeSlot(btn);
         Controls.Add(btn);
         btn.BringToFront();
         return btn;
@@ -447,6 +482,11 @@ internal sealed class WorkflowNodeCard : UserControl
         _headerPanel.Controls.Clear();
         _bodyPanel.Controls.Clear();
         _footerPanel.Controls.Clear();
+        // The sections are shared across the five layouts: a padding the previous type set would otherwise
+        // survive into the next one (the Controller pads its body, and the port strips must not inherit it —
+        // their ports ride the card's edge, and an inset strip takes those ports with it).
+        _bodyPanel.Padding = Padding.Empty;
+        _footerPanel.Padding = Padding.Empty;
 
         switch (node)
         {
@@ -454,6 +494,7 @@ internal sealed class WorkflowNodeCard : UserControl
             case EnumSelectorNodeViewModel: BuildEnumSelector(); break;
             case PythonScriptNodeViewModel: BuildPython(); break;
             case TimerNodeViewModel: BuildTimer(); break;
+            default: BuildFallback(); break;
         }
     }
 
@@ -461,285 +502,478 @@ internal sealed class WorkflowNodeCard : UserControl
     {
         _rootLayout.SuspendLayout();
         _rootLayout.RowStyles.Clear();
-        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, headerH));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, F(headerH)));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, F(Views.CardTheme.DividerThickness)));
         _rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, footerH));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, F(Views.CardTheme.DividerThickness)));
+        _rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, F(footerH)));
         _footerPanel.Visible = showFooter;
+        _footerDivider.Visible = showFooter;
         _rootLayout.ResumeLayout();
+    }
+
+    /// <summary>
+    /// The title row: a 2-unit type accent bar, the left-aligned title, and the card's right-hand readouts
+    /// (the execution order and, where the node reports one, a neutral status capsule).
+    /// </summary>
+    private void BuildHeader(Color accent)
+    {
+        var header = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Math.Max(1, S(Views.CardTheme.AccentWidth))));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        _accentBar = new Views.FramePanel
+        {
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            Fill = accent,
+            Frame = Color.Transparent,
+            FrameWidth = 0f,
+            Radius = F(Views.CardTheme.CardRadius),
+            Corners = Views.CardCorners.TopLeft,
+        };
+        header.Controls.Add(_accentBar, 0, 0);
+
+        _titleLabel = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            ForeColor = Views.CardTheme.Title,
+            Font = Views.CardTheme.Font(Views.CardTheme.TitleSize, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(S(Views.CardTheme.BodyPaddingX), 0, S(6), 0),
+        };
+        header.Controls.Add(_titleLabel, 1, 0);
+
+        var badges = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Anchor = AnchorStyles.Right,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
+        };
+
+        _capsuleLabel = new Label
+        {
+            AutoSize = true,
+            BackColor = Views.CardTheme.Hover,
+            ForeColor = Views.CardTheme.BadgeText,
+            Font = Views.CardTheme.Font(Views.CardTheme.CapsuleSize),
+            Margin = Padding.Empty,
+            TextAlign = ContentAlignment.MiddleLeft,
+        };
+        _capsule = new Views.FramePanel
+        {
+            Size = new Size(S(40), S(16)),
+            Fill = Views.CardTheme.Hover,
+            Frame = Views.CardTheme.Border,
+            Radius = F(Views.CardTheme.CapsuleRadius),
+            Padding = new Padding(S(Views.CardTheme.CapsulePaddingX), S(Views.CardTheme.CapsulePaddingY),
+                S(Views.CardTheme.CapsulePaddingX), S(Views.CardTheme.CapsulePaddingY)),
+            Margin = new Padding(S(12), 0, S(12), 0),
+            Visible = false,
+        };
+        _capsuleLabel.Location = new Point(S(Views.CardTheme.CapsulePaddingX), S(Views.CardTheme.CapsulePaddingY));
+        _capsule.Controls.Add(_capsuleLabel);
+
+        _orderBadge = new Label
+        {
+            AutoSize = true,
+            BackColor = Color.Transparent,
+            ForeColor = Views.CardTheme.ActionRun,
+            Font = Views.CardTheme.Font(Views.CardTheme.ValueSize),
+            Margin = new Padding(0, 0, S(12), 0),
+            Visible = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+        };
+
+        // RightToLeft flow puts the first child added at the far right (the capsule), then the order text.
+        badges.Controls.Add(_capsule);
+        badges.Controls.Add(_orderBadge);
+        header.Controls.Add(badges, 2, 0);
+
+        _headerPanel.Controls.Add(header);
     }
 
     // ── Layout: Controller ──────────────────────────────────────────────────────
     private void BuildController()
     {
-        SetRows(52F, 88F, true);
+        BuildHeader(Views.CardTheme.AccentController);
+        SetRows(Views.CardTheme.HeaderHeight, Views.CardTheme.ControllerFooterHeight, showFooter: true);
 
-        _titleLabel = MakeLabel(Color.White, 10.5F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleCenter, "Network Flow Controller");
-        _titleLabel.Dock = DockStyle.Fill;
-        _headerPanel.Controls.Add(_titleLabel);
+        _bodyPanel.Padding = new Padding(S(Views.CardTheme.BodyPaddingX), S(Views.CardTheme.BodyPaddingY),
+            S(Views.CardTheme.BodyPaddingX), S(Views.CardTheme.BodyPaddingY));
 
-        var bodyHost = new Panel
+        var body = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, AutoScroll = true,
-            MinimumSize = new System.Drawing.Size(0, 40),
-            BackColor = DarkBody, Padding = new Padding(12),
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
         };
-        var bodyTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 1, RowCount = 3,
-            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkBody,
-        };
-        bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        // Row 0-1: Seed Payload
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Seed Payload"), 0, 0);
-        _seedBox = MakeTextBox();
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, F(28)));
+        body.Controls.Add(MakeLabel("SEED", Views.CardTheme.LabelSize, FontStyle.Regular, Views.CardTheme.Label), 0, 0);
+
+        _seedBox = MakeField();
         _seedBox.TextChanged += OnSeedTextChanged;
-        bodyTlp.Controls.Add(_seedBox, 0, 1);
-        // Row 2: Description
-        _controllerDesc = MakeLabel(Color.FromArgb(189, 189, 189), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.TopLeft);
-        _controllerDesc.Dock = DockStyle.Fill;
-        bodyTlp.Controls.Add(_controllerDesc, 0, 2);
-        bodyHost.Controls.Add(bodyTlp);
-        _bodyPanel.Controls.Add(bodyHost);
+        body.Controls.Add(MakeFieldHost(_seedBox), 0, 1);
+        _bodyPanel.Controls.Add(body);
 
-        var ctrlFooterTlp = new TableLayoutPanel
+        var footer = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
-            Margin = Padding.Empty, Padding = new Padding(8), BackColor = DarkBody,
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 2,
+            Margin = Padding.Empty,
+            Padding = new Padding(S(9), S(4), S(9), S(4)),
+            BackColor = Views.CardTheme.Surface,
         };
-        ctrlFooterTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        ctrlFooterTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        ctrlFooterTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-        ctrlFooterTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-        ctrlFooterTlp.Controls.Add(MakeCmdButton("Compile", nameof(ControllerViewModel.CompileCommand)), 0, 0);
-        ctrlFooterTlp.Controls.Add(MakeCmdButton("Run", nameof(ControllerViewModel.RunCommand)), 1, 0);
-        ctrlFooterTlp.Controls.Add(MakeCmdButton("Stop", nameof(ControllerViewModel.StopCommand)), 0, 1);
-        ctrlFooterTlp.Controls.Add(MakeCmdButton("Close", nameof(ControllerViewModel.CloseWorkflowCommand)), 1, 1);
-        _footerPanel.Controls.Add(ctrlFooterTlp);
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        footer.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        footer.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        footer.Controls.Add(MakeGhostButton("Compile", nameof(ControllerViewModel.CompileCommand), Views.CardTheme.ActionCompile), 0, 0);
+        _runButton = MakeGhostButton("Run", nameof(ControllerViewModel.RunCommand), Views.CardTheme.ActionRun);
+        footer.Controls.Add(_runButton, 1, 0);
+        footer.Controls.Add(MakeGhostButton("Stop", nameof(ControllerViewModel.StopCommand), Views.CardTheme.ActionStop), 0, 1);
+        footer.Controls.Add(MakeGhostButton("Close", nameof(ControllerViewModel.CloseWorkflowCommand), Views.CardTheme.ActionClose), 1, 1);
+        _footerPanel.Controls.Add(footer);
 
-        OutputSlotButton = AddSlotButton(null);
+        OutputSlotButton = AddSlotButton(null, designSize: 32);
     }
 
     // ── Layout: EnumSelector ────────────────────────────────────────────────────
     private void BuildEnumSelector()
     {
-        SetRows(48F, 0F, false);
+        BuildHeader(Views.CardTheme.AccentEnum);
+        SetRows(Views.CardTheme.HeaderHeight, 0F, showFooter: false);
+        _capsuleLabel!.ForeColor = Views.CardTheme.AccentEnum;
+        _capsuleLabel.Font = Views.CardTheme.Font(Views.CardTheme.CapsuleSize, FontStyle.Bold);
 
-        var flow = new FlowLayoutPanel
+        var scroll = new Panel
         {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false, Margin = Padding.Empty,
-            Padding = new Padding(12, 14, 12, 10), BackColor = Color.FromArgb(58, 37, 80),
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
         };
-        _titleLabel = MakeLabel(Color.White, 10.5F, FontStyle.Bold, autoSize: true);
-        _routedBadge = MakeBadge(Color.FromArgb(228, 216, 255), Color.FromArgb(43, 21, 64));
-        flow.Controls.Add(_titleLabel);
-        flow.Controls.Add(_routedBadge);
-        _headerPanel.Controls.Add(flow);
 
-        // Whole body scrolls (Auto row heights, content-sized) so an arbitrary number of dynamic
-        // output rows stays reachable and is never hard-clipped when the node is small.
-        var bodyHost = new Panel
+        var body = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, AutoScroll = true,
-            MinimumSize = new System.Drawing.Size(0, 40),
-            Margin = Padding.Empty, Padding = Padding.Empty,
-            BackColor = Color.FromArgb(42, 30, 53),
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 6,
+            Margin = Padding.Empty,
+            Padding = new Padding(S(14), S(10), 0, S(10)),
+            BackColor = Views.CardTheme.Surface,
         };
-        var bodyTlp = new TableLayoutPanel
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        // Labels size to their text; the two drop-downs get the same fixed field height the text fields have, so
+        // the panel hosting them has a height to lay the combo out inside.
+        for (var i = 0; i < 6; i++)
         {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 1, RowCount = 6,
-            Margin = Padding.Empty, Padding = new Padding(14), BackColor = Color.FromArgb(42, 30, 53),
-        };
-        for (var i = 0; i < 6; i++) bodyTlp.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Selected Method"), 0, 0);
+            body.RowStyles.Add(i is 1 or 3
+                ? new RowStyle(SizeType.Absolute, F(28))
+                : new RowStyle(SizeType.AutoSize));
+        }
+
+        body.Controls.Add(MakeLabel("SELECTED METHOD", Views.CardTheme.LabelSize, FontStyle.Regular, Views.CardTheme.Label), 0, 0);
         _enumCombo = MakeComboBox();
         _enumCombo.SelectedIndexChanged += OnEnumValueChanged;
-        bodyTlp.Controls.Add(_enumCombo, 0, 1);
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Compile Mode"), 0, 2);
+        body.Controls.Add(MakeComboField(_enumCombo), 0, 1);
+        body.Controls.Add(MakeLabel("COMPILE MODE", Views.CardTheme.LabelSize, FontStyle.Regular, Views.CardTheme.Label, new Padding(0, S(4), 0, 0)), 0, 2);
         _routerModeCombo = MakeComboBox();
         _routerModeCombo.SelectedIndexChanged += OnRouterModeChanged;
-        bodyTlp.Controls.Add(_routerModeCombo, 0, 3);
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Output Slots"), 0, 4);
+        body.Controls.Add(MakeComboField(_routerModeCombo), 0, 3);
+        body.Controls.Add(MakeLabel("OUTPUT SLOTS", Views.CardTheme.LabelSize, FontStyle.Regular, Views.CardTheme.Label, new Padding(0, S(6), 0, 0)), 0, 4);
 
         _outputSlotsLayout = new TableLayoutPanel
         {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 2, Margin = Padding.Empty,
-            Padding = Padding.Empty, BackColor = Color.FromArgb(42, 30, 53),
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
         };
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
-        bodyTlp.Controls.Add(_outputSlotsLayout, 0, 5);
-        bodyHost.Controls.Add(bodyTlp);
-        _bodyPanel.Controls.Add(bodyHost);
+        _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Math.Max(1, S(24))));
+        body.Controls.Add(_outputSlotsLayout, 0, 5);
 
-        InputSlotButton = AddSlotButton(null);
+        scroll.Controls.Add(body);
+        _bodyPanel.Controls.Add(scroll);
+
+        InputSlotButton = AddSlotButton(null, designSize: 32);
     }
 
     // ── Layout: Python node ───────────────────────────────────────────────────────
     private void BuildPython()
     {
-        SetRows(48F, 0F, false);
+        BuildHeader(Views.CardTheme.AccentAgent);
+        SetRows(Views.CardTheme.HeaderHeight, 0F, showFooter: false);
+        _capsuleLabel!.ForeColor = Views.CardTheme.BadgeText;
 
-        var flow = new FlowLayoutPanel
+        var body = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false, Margin = Padding.Empty,
-            Padding = new Padding(12, 14, 12, 10), BackColor = Color.FromArgb(37, 53, 69),
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
         };
-        _titleLabel = MakeLabel(Color.White, 10.5F, FontStyle.Bold, autoSize: true);
-        _pythonStatusLabel = MakeBadge(Color.FromArgb(228, 216, 255), Color.FromArgb(43, 36, 64));
-        flow.Controls.Add(_titleLabel);
-        flow.Controls.Add(_pythonStatusLabel);
-        _headerPanel.Controls.Add(flow);
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        body.RowStyles.Add(new RowStyle(SizeType.AutoSize));            // description
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, F(Views.CardTheme.DividerThickness)));
+        body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));       // editor row
 
-        // Purpose description spans the full body width above the editor row (Auto row, wraps; no cap),
-        // so wrapped text is never hard-clipped; the editor row below fills the remaining space. The
-        // port strips are isolated in fixed left/right columns and scroll so extra dynamic ports stay
-        // reachable no matter how many the selector produces.
-        var bodyHost = new Panel
+        _descriptionLabel = new Label
         {
-            Dock = DockStyle.Fill, AutoScroll = true,
-            MinimumSize = new System.Drawing.Size(0, 40),
-            BackColor = Color.FromArgb(30, 42, 53), Padding = Padding.Empty,
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            BackColor = Views.CardTheme.Surface,
+            ForeColor = Views.CardTheme.Label,
+            Font = Views.CardTheme.Font(Views.CardTheme.CapsuleSize),
+            TextAlign = ContentAlignment.TopLeft,
+            Padding = new Padding(S(12), S(5), S(12), S(5)),
+            Margin = Padding.Empty,
         };
-        var pythonBody = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
-            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
-        };
-        pythonBody.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // full-width description
-        pythonBody.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));  // editor row
+        body.Controls.Add(_descriptionLabel, 0, 0);
+        body.Controls.Add(MakeDivider(), 0, 1);
 
-        _descriptionLabel = MakeLabel(Color.FromArgb(139, 148, 158), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.TopLeft);
-        _descriptionLabel.Dock = DockStyle.Fill;
-        _descriptionLabel.Margin = new Padding(10, 6, 10, 2);
-        pythonBody.Controls.Add(_descriptionLabel, 0, 0);
-
-        var bodyGrid = new TableLayoutPanel
+        var grid = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1,
-            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
         };
-        bodyGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64F));   // input ports (left)
-        bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));   // middle: script editor
-        bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64F));   // output ports (right)
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, F(64)));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, F(64)));
 
-        _inputSlotsLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 2, Margin = Padding.Empty,
-            Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
-        };
-        _inputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
-        _inputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        bodyGrid.Controls.Add(MakePortStrip(_inputSlotsLayout, Color.FromArgb(30, 42, 53)), 0, 0);
+        _inputSlotsLayout = MakePortStripLayout(inputPortsLeft: true);
+        grid.Controls.Add(MakePortStrip(_inputSlotsLayout), 0, 0);
 
-        var middle = new Panel
+        grid.Controls.Add(BuildScriptEditor(), 1, 0);
+
+        _outputSlotsLayout = MakePortStripLayout(inputPortsLeft: false);
+        grid.Controls.Add(MakePortStrip(_outputSlotsLayout), 2, 0);
+
+        body.Controls.Add(grid, 0, 2);
+        _bodyPanel.Controls.Add(body);
+    }
+
+    /// <summary>The script editor: its own near-black surface inside a hairline, with a titled header strip.</summary>
+    private Control BuildScriptEditor()
+    {
+        var host = new Panel
         {
-            Dock = DockStyle.Fill, Margin = Padding.Empty,
-            Padding = new Padding(4, 6, 4, 6), BackColor = Color.FromArgb(30, 42, 53),
+            Dock = DockStyle.Fill,
+            Margin = new Padding(S(4), S(6), S(4), S(6)),
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
         };
+
+        var frame = new Views.FramePanel
+        {
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            Fill = Views.CardTheme.EditorSurface,
+            Frame = Views.CardTheme.Divider,
+            Radius = F(Views.CardTheme.FieldRadius),
+        };
+
+        var header = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = S(22),
+            BackColor = Views.CardTheme.EditorChrome,
+            Padding = new Padding(S(8), S(4), S(8), 0),
+        };
+        var file = new Label
+        {
+            AutoSize = true,
+            BackColor = Color.Transparent,
+            ForeColor = Views.CardTheme.EditorFile,
+            Font = Views.CardTheme.Mono(11f, FontStyle.Bold),
+            Text = "script.py",
+            Location = new Point(S(8), S(4)),
+        };
+        var meta = new Label
+        {
+            AutoSize = true,
+            BackColor = Color.Transparent,
+            ForeColor = Views.CardTheme.EditorMeta,
+            Font = Views.CardTheme.Font(Views.CardTheme.LabelSize),
+            Text = "Python 3",
+            Location = new Point(S(8), S(4)),
+        };
+        header.Controls.Add(file);
+        header.Controls.Add(meta);
+        header.Resize += (_, _) => meta.Location = new Point(Math.Max(S(8), header.Width - meta.Width - S(8)), S(4));
 
         _scriptBox = new TextBox
         {
-            Dock = DockStyle.Fill,
             Multiline = true,
             AcceptsReturn = true,
             WordWrap = false,
             ScrollBars = ScrollBars.Both,
-            Font = ScaledFont("Consolas", 10F, FontStyle.Regular),
-            BackColor = Color.FromArgb(13, 17, 23),
-            ForeColor = Color.FromArgb(230, 237, 243),
-            BorderStyle = BorderStyle.FixedSingle,
-            Margin = new Padding(0, 2, 0, 0),
+            BorderStyle = BorderStyle.None,
+            Font = Views.CardTheme.Mono(12f),
+            BackColor = Views.CardTheme.EditorSurface,
+            ForeColor = Views.CardTheme.Value,
+            Margin = new Padding(0),
         };
         _scriptBox.TextChanged += OnScriptTextChanged;
-        middle.Controls.Add(_scriptBox);
-        bodyGrid.Controls.Add(middle, 1, 0);
 
-        _outputSlotsLayout = new TableLayoutPanel
+        // A text box's scrollbars are non-client and follow the system theme: on a dark card they are the one
+        // opaque white L in the whole design. Sizing the box past its viewport puts them outside the clip
+        // instead of on show, which leaves the near-black surface the reference asks for intact; the wheel and
+        // the caret still scroll the text, and the visible text area is exactly the viewport's width.
+        var viewport = new Panel
         {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 2, Margin = Padding.Empty,
-            Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.EditorSurface,
         };
-        _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
-        bodyGrid.Controls.Add(MakePortStrip(_outputSlotsLayout, Color.FromArgb(30, 42, 53)), 2, 0);
+        viewport.Controls.Add(_scriptBox);
+        viewport.Layout += (_, _) =>
+        {
+            var scrollbar = SystemInformation.VerticalScrollBarWidth;
+            _scriptBox.Bounds = new Rectangle(
+                0, 0,
+                viewport.ClientSize.Width + scrollbar,
+                viewport.ClientSize.Height + scrollbar);
+        };
 
-        pythonBody.Controls.Add(bodyGrid, 0, 1);
-        bodyHost.Controls.Add(pythonBody);
-        _bodyPanel.Controls.Add(bodyHost);
+        // Dock order matters: the header takes the top strip, the editor viewport fills what is left.
+        frame.Controls.Add(viewport);
+        frame.Controls.Add(header);
+        host.Controls.Add(frame);
+        return host;
     }
 
     // ── Layout: Timer node ─────────────────────────────────────────────────────────
     private void BuildTimer()
     {
-        SetRows(48F, 0F, false);
+        BuildHeader(Views.CardTheme.AccentAgent);
+        SetRows(Views.CardTheme.HeaderHeight, 0F, showFooter: false);
 
-        var flow = new FlowLayoutPanel
+        var scroll = new Panel
         {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false, Margin = Padding.Empty,
-            Padding = new Padding(12, 14, 12, 10), BackColor = Color.FromArgb(37, 53, 69),
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
         };
-        _titleLabel = MakeLabel(Color.White, 10.5F, FontStyle.Bold, autoSize: true);
-        _orderBadge = MakeBadge(Color.FromArgb(200, 255, 200), Color.FromArgb(31, 61, 31));
-        flow.Controls.Add(_titleLabel);
-        flow.Controls.Add(_orderBadge);
-        _headerPanel.Controls.Add(flow);
 
-        // Auto rows in a scrollable host: content takes its natural height and the body scrolls
-        // instead of clipping when the node is small or the tick text wraps long.
-        var bodyHost = new Panel
+        var body = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, AutoScroll = true,
-            MinimumSize = new System.Drawing.Size(0, 40),
-            Margin = Padding.Empty, Padding = Padding.Empty,
-            BackColor = Color.FromArgb(30, 42, 53),
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 4,
+            Margin = Padding.Empty,
+            Padding = new Padding(S(Views.CardTheme.BodyPaddingX), S(Views.CardTheme.BodyPaddingY),
+                S(Views.CardTheme.BodyPaddingX), S(Views.CardTheme.BodyPaddingY)),
+            BackColor = Views.CardTheme.Surface,
         };
-        var bodyTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 1, RowCount = 4,
-            Margin = Padding.Empty, Padding = new Padding(14, 10, 14, 10), BackColor = Color.FromArgb(30, 42, 53),
-        };
-        for (var i = 0; i < 4; i++) bodyTlp.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, F(28)));
+        body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Interval (ms)"), 0, 0);
-        _intervalBox = MakeTextBox();
+        body.Controls.Add(MakeLabel("INTERVAL (MS)", Views.CardTheme.LabelSize, FontStyle.Regular, Views.CardTheme.Label), 0, 0);
+        _intervalBox = MakeField();
         _intervalBox.TextChanged += OnIntervalTextChanged;
-        bodyTlp.Controls.Add(_intervalBox, 0, 1);
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Last Tick"), 0, 2);
-        _tickLabel = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.TopLeft);
-        bodyTlp.Controls.Add(_tickLabel, 0, 3);
-        bodyHost.Controls.Add(bodyTlp);
-        _bodyPanel.Controls.Add(bodyHost);
+        body.Controls.Add(MakeFieldHost(_intervalBox), 0, 1);
+        body.Controls.Add(MakeLabel("LAST TICK", Views.CardTheme.LabelSize, FontStyle.Regular, Views.CardTheme.Label, new Padding(0, S(4), 0, 0)), 0, 2);
 
-        InputSlotButton = AddSlotButton(null);
-        OutputSlotButton = AddSlotButton(null);
+        _tickLabel = new Label
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            ForeColor = Views.CardTheme.AccentAgent,
+            Font = Views.CardTheme.Font(Views.CardTheme.ValueSize, FontStyle.Bold),
+            TextAlign = ContentAlignment.TopLeft,
+            Margin = Padding.Empty,
+            Height = S(16),
+        };
+        body.Controls.Add(_tickLabel, 0, 3);
+
+        scroll.Controls.Add(body);
+        _bodyPanel.Controls.Add(scroll);
+
+        InputSlotButton = AddSlotButton(null, designSize: 32);
+        OutputSlotButton = AddSlotButton(null, designSize: 32);
+    }
+
+    // ── Layout: fallback ───────────────────────────────────────────────────────────
+    /// <summary>
+    /// The fallback card, for a node type this demo ships no view of its own for — the reference's
+    /// <c>NodeView</c>. Bare on purpose: the framework's <see cref="IWorkflowNodeViewModel"/> carries geometry
+    /// and slots and no display name, so this card cannot honestly label a node it knows nothing else about, and
+    /// the accent is the neutral slate because there is no type here to give it a colour.
+    /// </summary>
+    private void BuildFallback()
+    {
+        BuildHeader(Views.CardTheme.AccentFallback);
+        SetRows(Views.CardTheme.HeaderHeight, 0F, showFooter: false);
+        if (_titleLabel is not null)
+        {
+            _titleLabel.Text = "?";
+            _titleLabel.Font = Views.CardTheme.Font(Views.CardTheme.LabelSize);
+            _titleLabel.ForeColor = Views.CardTheme.Label;
+        }
     }
 
     // ── Data application ──────────────────────────────────────────────────────────────
     private void ApplyController(ControllerViewModel c)
     {
+        SetText(_titleLabel, "Network Flow Controller");
         SetText(_seedBox, c.SeedPayload);
-
-        if (_controllerDesc is not null)
+        // 参考实现里 Run 只在编译出了图之后可用；这条也正是「幽灵按钮的禁用两态」唯一会露出来的地方
+        if (_runButton is not null && _runButton.Enabled != c.HasCompiledGraphs)
         {
-            _controllerDesc.Text = c.IsActive
-                ? "The controller is currently streaming the initial context into the workflow."
-                : "The controller only pushes the initial context into the workflow.";
+            _runButton.Enabled = c.HasCompiledGraphs;
         }
 
         OutputSlotButton!.ViewModel = c.OutputSlot;
     }
+
+    private void ApplyFallback() => SetText(_titleLabel, "?");
 
     private static void PopulateCombo<T>(ComboBox? combo, T[] items, T selected)
     {
@@ -766,8 +1000,9 @@ internal sealed class WorkflowNodeCard : UserControl
     private void ApplyEnumSelector(EnumSelectorNodeViewModel e)
     {
         SetText(_titleLabel, e.Title);
-        SetText(_routedBadge, e.LastRouted);
-        SetVisible(_routedBadge, !string.IsNullOrEmpty(e.LastRouted) && e.LastRouted != "-");
+        SetCapsuleText(e.LastRouted, !string.IsNullOrEmpty(e.LastRouted) && e.LastRouted != "-");
+        SetText(_orderBadge, e.ExecutionOrderText);
+        SetVisible(_orderBadge, e.HasExecutionOrder);
         InputSlotButton!.ViewModel = e.InputSlot;
         UpdateEnumCombo(e);
         RebuildEnumSlots(e);
@@ -776,8 +1011,9 @@ internal sealed class WorkflowNodeCard : UserControl
     private void ApplyPython(PythonScriptNodeViewModel p)
     {
         SetText(_titleLabel, p.Title);
-        SetText(_pythonStatusLabel, p.LastStatus);
-        SetVisible(_pythonStatusLabel, !string.IsNullOrEmpty(p.LastStatus) && p.LastStatus != "Idle");
+        SetCapsuleText(p.LastStatus, !string.IsNullOrEmpty(p.LastStatus) && p.LastStatus != "Idle");
+        SetText(_orderBadge, p.ExecutionOrderText);
+        SetVisible(_orderBadge, p.HasExecutionOrder);
         SetText(_descriptionLabel, p.Description);
         SetText(_scriptBox, p.Script);
         RebuildPythonSlots(p);
@@ -832,23 +1068,19 @@ internal sealed class WorkflowNodeCard : UserControl
         for (var i = 0; i < inputs.Length; i++)
         {
             _inputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var btn = MakeDynamicSlot();
+            var btn = MakePortSlot(output: false);
             btn.ViewModel = inputs[i].Slot;
             _inputSlotsLayout.Controls.Add(btn, 0, i);
-            var lbl = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft);
-            lbl.Dock = DockStyle.Fill;
-            lbl.Text = inputs[i].Name;
+            var lbl = MakePortName(inputs[i].Name, Views.CardTheme.AccentAgent, ContentAlignment.MiddleLeft);
             _inputSlotsLayout.Controls.Add(lbl, 1, i);
             _pythonSlotRows.Add(btn);
         }
         for (var i = 0; i < outputs.Length; i++)
         {
             _outputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var lbl = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleRight);
-            lbl.Dock = DockStyle.Fill;
-            lbl.Text = outputs[i].Name;
+            var lbl = MakePortName(outputs[i].Name, Views.CardTheme.AccentAgent, ContentAlignment.MiddleRight);
             _outputSlotsLayout.Controls.Add(lbl, 0, i);
-            var btn = MakeDynamicSlot();
+            var btn = MakePortSlot(output: true);
             btn.ViewModel = outputs[i].Slot;
             _outputSlotsLayout.Controls.Add(btn, 1, i);
             _pythonSlotRows.Add(btn);
@@ -863,7 +1095,7 @@ internal sealed class WorkflowNodeCard : UserControl
         if (_outputSlotsLayout is null) return;
 
         var items = e.OutputSlots?.Items;
-        if (items is null) { RebuildDynamicSlots([], Color.FromArgb(214, 160, 255)); return; }
+        if (items is null) { RebuildDynamicSlots([], Views.CardTheme.AccentEnum); return; }
 
         var entries = items
             .Select((item, i) => (
@@ -871,7 +1103,7 @@ internal sealed class WorkflowNodeCard : UserControl
                 Slot: (IWorkflowSlotViewModel?)item.Slot))
             .ToArray();
 
-        RebuildDynamicSlots(entries!, Color.FromArgb(214, 160, 255));
+        RebuildDynamicSlots(entries!, Views.CardTheme.AccentEnum);
     }
 
     private void RebuildDynamicSlots(IReadOnlyList<(string Name, IWorkflowSlotViewModel? Slot)> entries, Color labelColor)
@@ -907,12 +1139,11 @@ internal sealed class WorkflowNodeCard : UserControl
         for (var i = 0; i < entries.Count; i++)
         {
             _outputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var lbl = MakeLabel(labelColor, 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleRight);
-            lbl.Dock = DockStyle.Fill;
-            lbl.Text = entries[i].Name;
+            var lbl = MakePortName(entries[i].Name, labelColor, ContentAlignment.MiddleRight);
+            lbl.Padding = new Padding(0, S(4), S(12), S(4));
             _outputSlotsLayout.Controls.Add(lbl, 0, i);
 
-            var btn = MakeDynamicSlot();
+            var btn = MakePortSlot(output: true);
             btn.ViewModel = entries[i].Slot;
             _outputSlotsLayout.Controls.Add(btn, 1, i);
             _dynamicSlotRows.Add((lbl, btn));
@@ -1028,31 +1259,21 @@ internal sealed class WorkflowNodeCard : UserControl
 
     private void ResetRefs()
     {
-        _titleLabel = _orderBadge = _routedBadge = null;
+        _accentBar = null;
+        _titleLabel = _orderBadge = _capsuleLabel = null;
+        _capsule = null;
         _seedBox = null;
+        _runButton = null;
         _enumCombo = null;
         _routerModeCombo = null;
-        _controllerDesc = null;
         _outputSlotsLayout = null;
         _inputSlotsLayout = null;
         _scriptBox = null;
         _descriptionLabel = null;
-        _pythonStatusLabel = null;
         _intervalBox = null;
         _tickLabel = null;
         InputSlotButton = OutputSlotButton = null;
-    }
-
-    private static void PropagateBackColor(Control parent)
-    {
-        foreach (Control child in parent.Controls)
-        {
-            if (child is Label || child is TableLayoutPanel || child is Panel || child is FlowLayoutPanel)
-            {
-                child.BackColor = parent.BackColor;
-                PropagateBackColor(child);
-            }
-        }
+        _pythonSlotRows.Clear();
     }
 
     private static void SetText(Control? ctrl, string? text)
@@ -1065,141 +1286,312 @@ internal sealed class WorkflowNodeCard : UserControl
         if (ctrl is not null && ctrl.Visible != visible) ctrl.Visible = visible;
     }
 
-    private static void SetChecked(CheckBox? check, bool value)
+    /// <summary>
+    /// Puts the status capsule's own size right: it is a hand-drawn pill, so unlike a label it does not grow to
+    /// its text on its own, and it has to be re-measured after every zoom step as well as on every text change.
+    /// </summary>
+    private void SetCapsuleText(string? text, bool visible)
     {
-        if (check is not null && check.Checked != value) check.Checked = value;
+        SetText(_capsuleLabel, text);
+        SetVisible(_capsule, visible);
+        ResizeCapsule();
     }
 
-    private static Color ParseColor(string? value, Color fallback)
+    private void ResizeCapsule()
     {
-        if (string.IsNullOrWhiteSpace(value)) return fallback;
-        try { return ColorTranslator.FromHtml(value); }
-        catch (ArgumentException) { return fallback; }
-    }
+        if (_capsule is null || _capsuleLabel is null) return;
 
-    private static GraphicsPath RoundRect(Rectangle r, int radius)
-    {
-        var d = radius * 2;
-        var path = new GraphicsPath();
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
+        var text = string.IsNullOrEmpty(_capsuleLabel.Text) ? " " : _capsuleLabel.Text;
+        var measured = TextRenderer.MeasureText(text, _capsuleLabel.Font);
+        var padX = Math.Max(1, S(Views.CardTheme.CapsulePaddingX));
+        var padY = Math.Max(1, S(Views.CardTheme.CapsulePaddingY));
+        _capsule.Size = new Size(measured.Width + (padX * 2) + 2, measured.Height + (padY * 2) + 2);
+        _capsuleLabel.Location = new Point(padX + 1, padY + 1);
+        _capsuleLabel.BackColor = Views.CardTheme.Hover;
     }
 
     // ── Control factory ──────────────────────────────────────────────────────────────
     private static Panel MakeSection()
-        => new() { Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkBody };
+        => new()
+        {
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
+        };
 
-    /// <summary>Wraps a growing port list in a vertical AutoScroll viewport so extra dynamic port
-    /// rows are reachable (never hard-clipped) and the strip keeps a small minimum height even when
-    /// the node collapses.</summary>
-    private static Panel MakePortStrip(Control inner, Color back)
+    private static Panel MakeDivider()
+        => new()
+        {
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            BackColor = Views.CardTheme.Divider,
+        };
+
+    /// <summary>Wraps a port list in a scrolling viewport, so extra dynamic ports stay reachable.</summary>
+    private static Panel MakePortStrip(Control inner)
     {
         var host = new Panel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
-            MinimumSize = new System.Drawing.Size(0, 28),
             Margin = Padding.Empty,
             Padding = Padding.Empty,
-            BackColor = back,
+            BackColor = Views.CardTheme.Surface,
         };
         host.Controls.Add(inner);
         return host;
     }
 
+    private TableLayoutPanel MakePortStripLayout(bool inputPortsLeft)
+    {
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
+        };
+
+        // The port's column is one glyph wide and the port carries a spacer margin as wide as itself on the
+        // outer side (see MakePortSlot), which squeezes the layout's display rectangle for that cell to zero:
+        // the port is then centred on the strip's outer edge — the card's edge — and half of it rides outside,
+        // the way the design asks. The half outside is drawn by the canvas (see Ports()).
+        var portColumn = new ColumnStyle(SizeType.Absolute, Math.Max(1, S(24)));
+        var names = new ColumnStyle(SizeType.Percent, 100F);
+
+        if (inputPortsLeft)
+        {
+            layout.ColumnStyles.Add(portColumn);
+            layout.ColumnStyles.Add(names);
+        }
+        else
+        {
+            layout.ColumnStyles.Add(names);
+            layout.ColumnStyles.Add(portColumn);
+        }
+
+        return layout;
+    }
+
     /// <summary>The current uniform scale factor (design × k = rendered metric).</summary>
     private float K => (float)Math.Max(0.05, _k);
 
-    /// <summary>Creates the font for a control at the current uniform scale (design size × k).</summary>
-    private Font ScaledFont(string family, float size, FontStyle style)
-        => new(family, Math.Max(0.5f, size * K), style);
+    /// <summary>A design-pixel metric at the current scale, as a float (paddings, radii, row heights).</summary>
+    private float F(float design) => design * K;
 
-    /// <summary>Scales an in-card metric (font size, glyph, padding) by the current uniform factor k,
-    /// so content authored at the design size stays proportional inside the collapsed card.</summary>
+    /// <summary>A design-pixel metric at the current scale, rounded (glyph and hairline sizes).</summary>
     private int S(float design) => (int)Math.Round(design * K);
 
-    private Label MakeLabel(Color fore, float size, FontStyle style, bool autoSize,
-        ContentAlignment align = ContentAlignment.MiddleLeft, string text = "")
-        => new()
-        {
-            AutoSize = autoSize,
-            ForeColor = fore,
-            BackColor = Color.Transparent,
-            Font = ScaledFont("Microsoft YaHei UI", size, style),
-            Margin = Padding.Empty,
-            Padding = Padding.Empty,
-            TextAlign = align,
-            Text = text,
-            Dock = autoSize ? DockStyle.None : DockStyle.Fill,
-        };
-
-    private Label MakeBadge(Color fore, Color back)
+    private Label MakeLabel(string text, float size, FontStyle style, Color fore, Padding margin = default)
         => new()
         {
             AutoSize = true,
+            BackColor = Color.Transparent,
             ForeColor = fore,
-            BackColor = back,
-            BorderStyle = BorderStyle.FixedSingle,
-            Font = ScaledFont("Microsoft YaHei UI", 8.2F, FontStyle.Bold),
-            Margin = new Padding(S(8), 0, 0, 0),
-            Padding = new Padding(S(6), Math.Max(1, S(2)), S(6), Math.Max(1, S(2))),
-            Visible = false,
+            Font = Views.CardTheme.Font(size, style),
+            Margin = margin,
+            Text = text,
+            TextAlign = ContentAlignment.MiddleLeft,
         };
 
-    private TextBox MakeTextBox()
+    /// <summary>A port's name in a strip — the same blue/semibold pair the reference gives those rows.</summary>
+    private Label MakePortName(string text, Color fore, ContentAlignment align)
+        => new()
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            ForeColor = fore,
+            Font = Views.CardTheme.Font(Views.CardTheme.PortNameSize, FontStyle.Bold),
+            Margin = new Padding(S(4), S(4), S(4), S(4)),
+            Text = text,
+            TextAlign = align,
+            AutoEllipsis = true,
+        };
+
+    /// <summary>
+    /// A borderless text box on the field's own near-black ground. It is multi-line only so that its height is
+    /// controlled by the row it sits in — a single-line WinForms text box ignores its height and would float at
+    /// the top of the field.
+    /// </summary>
+    private TextBox MakeField()
         => new()
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(55, 55, 55),
-            ForeColor = Color.White,
-            BorderStyle = BorderStyle.FixedSingle,
-            Font = ScaledFont("Microsoft YaHei UI", 9F, FontStyle.Regular),
-            Margin = new Padding(0, Math.Max(1, S(2)), 0, Math.Max(1, S(2))),
+            Multiline = true,
+            AcceptsReturn = false,
+            WordWrap = false,
+            ScrollBars = ScrollBars.None,
+            BorderStyle = BorderStyle.None,
+            BackColor = Views.CardTheme.Field,
+            ForeColor = Views.CardTheme.Value,
+            Font = Views.CardTheme.Font(Views.CardTheme.ValueSize),
+            Margin = Padding.Empty,
         };
 
-    private ComboBox MakeComboBox()
-        => new()
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(55, 55, 55),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Font = ScaledFont("Microsoft YaHei UI", 9F, FontStyle.Regular),
-            Margin = new Padding(0, Math.Max(1, S(2)), 0, Math.Max(1, S(2))),
-        };
-
-    /// <summary>Creates an in-card dynamic slot glyph at the current uniform scale (the row's AutoSize
-    /// height follows). Edge-anchored overlay slot buttons are created elsewhere and stay unscaled.</summary>
-    private Views.SlotView MakeDynamicSlot()
+    /// <summary>The rounded, hairline-framed ground an input field sits in.</summary>
+    private Views.FramePanel MakeFieldHost(Control inner)
     {
-        var s = Math.Max(9, S(20));
-        return new Views.SlotView
+        var frame = new Views.FramePanel
         {
-            Size = new System.Drawing.Size(s, s),
-            Margin = new Padding(Math.Max(0, S(2)), Math.Max(1, S(4)), Math.Max(0, S(2)), Math.Max(1, S(4))),
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, S(5), 0, 0),
+            Padding = new Padding(S(7), S(5), S(7), S(3)),
+            Fill = Views.CardTheme.Field,
+            Frame = Views.CardTheme.Border,
+            Radius = F(Views.CardTheme.FieldRadius),
         };
+        frame.Controls.Add(inner);
+        return frame;
     }
 
-    private Button MakeCmdButton(string text, string cmdProp)
+    private ComboBox MakeComboBox()
     {
-        var btn = new Button
+        var combo = new ComboBox
+        {
+            BackColor = Views.CardTheme.Field,
+            ForeColor = Views.CardTheme.Value,
+            FlatStyle = FlatStyle.Flat,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            // Owner-drawn for two reasons: the list drops down in the card's own dark palette instead of the
+            // system's light one, and only an owner-drawn combo lets ItemHeight set its height, which the layout
+            // below needs (a combo's height is otherwise fixed by its font).
+            DrawMode = DrawMode.OwnerDrawFixed,
+            Font = Views.CardTheme.Font(Views.CardTheme.ValueSize),
+            Margin = Padding.Empty,
+        };
+        combo.DrawItem += OnComboDrawItem;
+        return combo;
+    }
+
+    private static void OnComboDrawItem(object? sender, DrawItemEventArgs e)
+    {
+        if (sender is not ComboBox combo) return;
+
+        var edit = (e.State & DrawItemState.ComboBoxEdit) != 0;
+        var selected = e.Index == combo.SelectedIndex;
+        var back = edit || !selected ? Views.CardTheme.Field : Views.CardTheme.Hover;
+
+        using (var fill = new SolidBrush(back))
+        {
+            e.Graphics.FillRectangle(fill, e.Bounds);
+        }
+
+        if (e.Index < 0 || e.Index >= combo.Items.Count) return;
+
+        TextRenderer.DrawText(
+            e.Graphics,
+            combo.Items[e.Index]?.ToString() ?? string.Empty,
+            combo.Font,
+            e.Bounds,
+            Views.CardTheme.Value,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+            TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+    }
+
+    /// <summary>
+    /// The rounded, hairline-framed ground a drop-down sits in, with a chevron beside it standing in for the
+    /// system's arrow.
+    /// <para>
+    /// A WinForms combo draws its own 1px frame and its arrow as a light system button, and neither colour has a
+    /// property (a combo has <c>FlatStyle</c> but no <c>FlatAppearance</c>). So the combo is laid out one pixel
+    /// past its host on every side and well past on the right, which puts its frame and its arrow outside the
+    /// host's clip — the host is the thing that clips it — while leaving the field's fill, text and chevron
+    /// entirely ours. Clicking the field opens the list itself, so hiding the arrow costs nothing.
+    /// </para>
+    /// </summary>
+    private Control MakeComboField(ComboBox inner)
+    {
+        var row = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0, S(2), 0, S(2)),
+            Padding = Padding.Empty,
+            BackColor = Views.CardTheme.Surface,
+        };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Math.Max(1, S(14))));
+        row.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        var frame = new Views.FramePanel
         {
             Dock = DockStyle.Fill,
             Margin = Padding.Empty,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(45, 45, 45),
-            ForeColor = Color.White,
-            Font = ScaledFont("Microsoft YaHei UI", 9F, FontStyle.Regular),
+            Padding = Padding.Empty,
+            Fill = Views.CardTheme.Field,
+            Frame = Views.CardTheme.Border,
+            Radius = F(Views.CardTheme.FieldRadius),
+        };
+
+        void Fit()
+        {
+            inner.ItemHeight = Math.Max(8, frame.ClientSize.Height - 4);
+            inner.Bounds = new Rectangle(
+                -1,
+                -1,
+                frame.ClientSize.Width + SystemInformation.VerticalScrollBarWidth + 6,
+                frame.ClientSize.Height + 2);
+        }
+
+        frame.Layout += (_, _) => Fit();
+        inner.MouseDown += (_, _) => inner.DroppedDown = true;
+        frame.Controls.Add(inner);
+
+        var chevron = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            ForeColor = Views.CardTheme.Label,
+            Font = Views.CardTheme.Font(Views.CardTheme.LabelSize),
+            Text = "▾",
+            TextAlign = ContentAlignment.MiddleCenter,
+            Margin = Padding.Empty,
+        };
+
+        row.Controls.Add(frame, 0, 0);
+        row.Controls.Add(chevron, 1, 0);
+        return row;
+    }
+
+    /// <summary>
+    /// A port inside a port strip. Its size follows the uniform scale (24 at scale 1), and it sits flush against
+    /// the strip's outer edge — which is the card's edge.
+    /// <para>
+    /// The reference lets these ports ride half a glyph past the card's edge, on a negative margin. WinForms
+    /// cannot: a child window is clipped to its parent, so an overhanging port loses the half the layout put
+    /// outside, and squeezing the layout's display rectangle to push the port out — the only other lever a table
+    /// layout gives — shrinks the port to nothing instead. Flush is the closest placement that stays whole, and
+    /// the ports that do ride the card's own edge (the ones the card positions itself) are completed by the
+    /// canvas, as <see cref="Ports"/> describes.
+    /// </para>
+    /// </summary>
+    private Views.SlotView MakePortSlot(bool output)
+        => new()
+        {
+            DesignSize = 24,
+            Size = new Size(Math.Max(9, S(24)), Math.Max(9, S(24))),
+            Margin = new Padding(0, S(4), 0, S(4)),
+        };
+
+    private Views.GhostButton MakeGhostButton(string text, string cmdProp, Color textColor)
+    {
+        var btn = new Views.GhostButton
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(S(3)),
+            Radius = F(Views.CardTheme.FieldRadius),
+            TextColor = textColor,
             Text = text,
             Tag = cmdProp,
             AccessibleName = text,
         };
-        btn.FlatAppearance.BorderColor = Color.FromArgb(71, 85, 105);
         btn.Click += OnCommandButtonClick;
         return btn;
     }

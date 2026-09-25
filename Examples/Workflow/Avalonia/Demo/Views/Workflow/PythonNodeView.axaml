@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -12,146 +12,150 @@
 			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_InputSlotsList,PART_OutputSlotsList"
 			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:PythonScriptNodeViewModel">
-	<Viewbox Stretch="Uniform">
-	<Grid RowDefinitions="40,Auto,*" Width="280" Height="260" ClipToBounds="False">
-		<Border Grid.RowSpan="3"
-				CornerRadius="6"
-				BorderThickness="1.5"
-				BorderBrush="#6ec6ff"
-				Background="#1e2a35"/>
+	<Viewbox Stretch="Uniform" ClipToBounds="False">
+		<Grid RowDefinitions="32,Auto,*" Width="280" Height="260" ClipToBounds="False" Background="Transparent">
+			<Border Grid.RowSpan="3" Classes="card" />
 
-		<Border Grid.Row="0"
-				Background="#253545"
-				CornerRadius="4,4,0,0"
-				BorderThickness="0,0,0,0.5"
-				BorderBrush="#6ec6ff"
-				behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-				<TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
-				<TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"
-						   IsVisible="{Binding HasExecutionOrder}"/>
-				<Border Background="#2b2440" BorderBrush="#b799ff" BorderThickness="1" CornerRadius="10" Padding="6,1">
-					<TextBlock Text="{Binding LastStatus}" Foreground="#e4d8ff" FontWeight="SemiBold"/>
-				</Border>
-			</StackPanel>
-		</Border>
+			<!-- 标题行：左对齐 + 类型色条，状态徽章靠右。原来是居中白字压在一条蓝带上 -->
+			<Border Grid.Row="0"
+					Background="Transparent"
+					behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+					behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+				<Grid ColumnDefinitions="2,*,Auto,Auto">
+					<Border Grid.Column="0" Classes="card-accent" Background="#6EC6FF" />
+					<TextBlock Grid.Column="1" Classes="card-title" Text="{Binding Title}" Margin="12,0,6,0" />
+					<TextBlock Grid.Column="2"
+							   Classes="card-value"
+							   Text="{Binding ExecutionOrderText}"
+							   Foreground="#6EE7A8"
+							   VerticalAlignment="Center"
+							   Margin="0,0,12,0"
+							   IsVisible="{Binding HasExecutionOrder}" />
+					<Border Grid.Column="3"
+							Background="#1E2731" BorderBrush="#2A313C" BorderThickness="1"
+							CornerRadius="9" Padding="7,1" Margin="0,0,12,0"
+							VerticalAlignment="Center">
+						<TextBlock Text="{Binding LastStatus}" Foreground="#9AA6B5" FontSize="10.5" />
+					</Border>
+				</Grid>
+			</Border>
+			<Border Grid.Row="0" Classes="card-divider" />
 
-		<Border Grid.Row="1" Padding="12,3" BorderBrush="#30363d" BorderThickness="0,0,0,1">
-			<TextBlock Text="{Binding Description}" Foreground="#8b949e" FontSize="10" TextWrapping="Wrap"/>
-		</Border>
+			<Border Grid.Row="1" Padding="12,5" BorderBrush="#222A34" BorderThickness="0,0,0,1">
+				<TextBlock Text="{Binding Description}" Classes="card-label" FontSize="10.5" TextWrapping="Wrap" />
+			</Border>
 
-		<Border Grid.Row="2" Background="#1e2a35" CornerRadius="0,0,4,4">
-			<Grid ColumnDefinitions="64,*,64" ClipToBounds="False">
-				<Grid.Styles>
-					<Style Selector="local|SlotView">
-						<Setter Property="Foreground" Value="White"/>
-					</Style>
-					<Style Selector="local|SlotView[SlotState=8]">
-						<Setter Property="Foreground" Value="Tomato"/>
-					</Style>
-					<Style Selector="local|SlotView[SlotState=16]">
-						<Setter Property="Foreground" Value="Lime"/>
-					</Style>
-					<Style Selector="local|SlotView[SlotState=24]">
-						<Setter Property="Foreground" Value="Violet"/>
-					</Style>
-				</Grid.Styles>
+			<Border Grid.Row="2">
+				<Grid ColumnDefinitions="64,*,64" ClipToBounds="False">
+					<Grid.Styles>
+						<Style Selector="local|SlotView">
+							<Setter Property="Foreground" Value="White" />
+						</Style>
+						<Style Selector="local|SlotView[SlotState=8]">
+							<Setter Property="Foreground" Value="Tomato" />
+						</Style>
+						<Style Selector="local|SlotView[SlotState=16]">
+							<Setter Property="Foreground" Value="Lime" />
+						</Style>
+						<Style Selector="local|SlotView[SlotState=24]">
+							<Setter Property="Foreground" Value="Violet" />
+						</Style>
+					</Grid.Styles>
 
-				<!-- Input port strip (scrollable, left). Viewport extends 8px past the card edge and the content is
-					 inset 8px so the -8px edge port glyph stays centered on the card edge yet never horizontally
-					 clipped; rows scroll when they exceed the body height. -->
-				<ScrollViewer Grid.Column="0" MinHeight="40" Margin="-8,0,0,0"
-							  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-				<ItemsControl
-							  ItemsSource="{Binding InputSlots.Items}"
-							  x:Name="PART_InputSlotsList"
-							  Margin="8,0,0,0"
-							  ClipToBounds="False">
-					<ItemsControl.ItemTemplate>
-						<DataTemplate>
-							<Grid ColumnDefinitions="Auto,*" Margin="0,4" ClipToBounds="False">
-								<local:SlotView Grid.Column="0"
-												Width="16" Height="16"
-												HorizontalAlignment="Left"
-												VerticalAlignment="Center"
-												Margin="-8,0,0,0"
-												DataContext="{Binding Slot}"
-												SlotState="{Binding State}"/>
-								<TextBlock Grid.Column="1"
-										   Text="{Binding Name}"
-										   Foreground="#6ec6ff"
-										   FontWeight="SemiBold"
-										   FontSize="11"
-										   VerticalAlignment="Center"
-										   HorizontalAlignment="Left"
-										   Margin="4,0,0,0"
-										   TextTrimming="CharacterEllipsis"/>
-							</Grid>
-						</DataTemplate>
-					</ItemsControl.ItemTemplate>
-				</ItemsControl>
-				</ScrollViewer>
+					<!-- Input port strip (scrollable, left). Viewport extends 8px past the card edge and the content is
+						 inset 8px so the -8px edge port glyph stays centered on the card edge yet never horizontally
+						 clipped; rows scroll when they exceed the body height. -->
+					<ScrollViewer Grid.Column="0" MinHeight="40" Margin="-12,0,0,0"
+								  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+						<ItemsControl ItemsSource="{Binding InputSlots.Items}"
+									  x:Name="PART_InputSlotsList"
+									  Margin="12,0,0,0"
+									  ClipToBounds="False">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate>
+									<Grid ColumnDefinitions="Auto,*" Margin="0,4" ClipToBounds="False">
+										<local:SlotView Grid.Column="0"
+														Width="24" Height="24"
+														HorizontalAlignment="Left"
+														VerticalAlignment="Center"
+														Margin="-12,0,0,0"
+														DataContext="{Binding Slot}"
+														SlotState="{Binding State}"
+														Channel="{Binding Channel}" />
+										<TextBlock Grid.Column="1"
+												   Text="{Binding Name}"
+												   Classes="card-value" FontSize="11" FontWeight="SemiBold"
+												   Foreground="#6EC6FF"
+												   VerticalAlignment="Center"
+												   HorizontalAlignment="Left"
+												   Margin="4,0,0,0"
+												   TextTrimming="CharacterEllipsis" />
+									</Grid>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</ScrollViewer>
 
-				<!-- Script editor -->
-				<Border Grid.Column="1" Margin="4,6" BorderBrush="#30363d" BorderThickness="1" CornerRadius="4" Background="#0d1117">
-					<DockPanel>
-						<Border DockPanel.Dock="Top" Background="#161b22" BorderBrush="#30363d" BorderThickness="0,0,0,1" Padding="8,4">
-							<Grid ColumnDefinitions="*,Auto">
-								<TextBlock Grid.Column="0" Text="script.py" Foreground="#7ee787" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold"/>
-								<TextBlock Grid.Column="1" Text="Python 3" Foreground="#6e7681" FontSize="10"/>
-							</Grid>
-						</Border>
-						<TextBox Text="{Binding Script, UpdateSourceTrigger=PropertyChanged}"
-								 AcceptsReturn="True"
-								 TextWrapping="NoWrap"
-								 FontFamily="Consolas"
-								 FontSize="12"
-								 Foreground="#e6edf3"
-								 Background="#0d1117"
-								 CaretBrush="#6ec6ff"
-								 BorderThickness="0"
-								 Padding="6,4"
-								 ToolTip.Tip="{Binding LastOutput}"/>
-					</DockPanel>
-				</Border>
+					<!-- Script editor: its own near-black surface, because code wants to read as code -->
+					<Border Grid.Column="1" Margin="4,6" BorderBrush="#222A34" BorderThickness="1" CornerRadius="6" Background="#0D1117">
+						<DockPanel>
+							<Border DockPanel.Dock="Top" Background="#161B22" BorderBrush="#222A34" BorderThickness="0,0,0,1" Padding="8,4"
+									CornerRadius="6,6,0,0">
+								<Grid ColumnDefinitions="*,Auto">
+									<TextBlock Grid.Column="0" Text="script.py" Foreground="#6EE7A8" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" />
+									<TextBlock Grid.Column="1" Text="Python 3" Foreground="#5A6474" FontSize="10" />
+								</Grid>
+							</Border>
+							<TextBox Text="{Binding Script, UpdateSourceTrigger=PropertyChanged}"
+									 AcceptsReturn="True"
+									 TextWrapping="NoWrap"
+									 FontFamily="Consolas"
+									 FontSize="12"
+									 Foreground="#D6DCE6"
+									 Background="#0D1117"
+									 CaretBrush="#6EC6FF"
+									 BorderThickness="0"
+									 CornerRadius="0,0,6,6"
+									 Padding="6,4"
+									 ToolTip.Tip="{Binding LastOutput}" />
+						</DockPanel>
+					</Border>
 
-				<!-- Output port strip (scrollable, right). Mirror of the left strip: viewport extends 8px past the
-					 right card edge and content is inset 8px so the edge port glyph is never clipped horizontally. -->
-				<ScrollViewer Grid.Column="2" MinHeight="40" Margin="0,0,-8,0"
-							  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-				<ItemsControl
-							  ItemsSource="{Binding OutputSlots.Items}"
-							  x:Name="PART_OutputSlotsList"
-							  Margin="0,0,8,0"
-							  ClipToBounds="False"
-							  HorizontalAlignment="Right">
-					<ItemsControl.ItemTemplate>
-						<DataTemplate>
-							<Grid ColumnDefinitions="*,Auto" Margin="0,4" ClipToBounds="False">
-								<TextBlock Grid.Column="0"
-										   Text="{Binding Name}"
-										   Foreground="#6ec6ff"
-										   FontWeight="SemiBold"
-										   FontSize="11"
-										   VerticalAlignment="Center"
-										   HorizontalAlignment="Right"
-										   Margin="0,0,4,0"
-										   TextTrimming="CharacterEllipsis"/>
-								<local:SlotView Grid.Column="1"
-												Width="16" Height="16"
-												HorizontalAlignment="Right"
-												VerticalAlignment="Center"
-												Margin="0,0,-8,0"
-												DataContext="{Binding Slot}"
-												SlotState="{Binding State}"/>
-							</Grid>
-						</DataTemplate>
-					</ItemsControl.ItemTemplate>
-				</ItemsControl>
-				</ScrollViewer>
-			</Grid>
-		</Border>
-	</Grid>
+					<!-- Output port strip (scrollable, right). Mirror of the left strip: viewport extends 8px past the
+						 right card edge and content is inset 8px so the edge port glyph is never clipped horizontally. -->
+					<ScrollViewer Grid.Column="2" MinHeight="40" Margin="0,0,-12,0"
+								  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+						<ItemsControl ItemsSource="{Binding OutputSlots.Items}"
+									  x:Name="PART_OutputSlotsList"
+									  Margin="0,0,12,0"
+									  ClipToBounds="False"
+									  HorizontalAlignment="Right">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate>
+									<Grid ColumnDefinitions="*,Auto" Margin="0,4" ClipToBounds="False">
+										<TextBlock Grid.Column="0"
+												   Text="{Binding Name}"
+												   Classes="card-value" FontSize="11" FontWeight="SemiBold"
+												   Foreground="#6EC6FF"
+												   VerticalAlignment="Center"
+												   HorizontalAlignment="Right"
+												   Margin="0,0,4,0"
+												   TextTrimming="CharacterEllipsis" />
+										<local:SlotView Grid.Column="1"
+														Width="24" Height="24"
+														HorizontalAlignment="Right"
+														VerticalAlignment="Center"
+														Margin="0,0,-12,0"
+														DataContext="{Binding Slot}"
+														SlotState="{Binding State}"
+														Channel="{Binding Channel}" />
+									</Grid>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</ScrollViewer>
+				</Grid>
+			</Border>
+		</Grid>
 	</Viewbox>
 </UserControl>

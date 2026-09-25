@@ -3,17 +3,21 @@
 @implements IDisposable
 
 @* Body-only content rendered inside the generated TemplateNodeView (BodyContent).
-   The card chrome — header title, border, background, active-state border — comes from
-   TemplateNodeView in Workflow.razor, so this view no longer draws its own card/header. *@
+   The card chrome — the accent bar, the title row, the surface and the hairline — comes
+   from TemplateNodeView, so this view draws only the seed field and the action row.
+   The four actions are one ghost shape four times over: the verb is in the text colour
+   (Compile / Run / Stop / Close), never in a filled block, so the row reads as one
+   control group instead of four competing buttons. *@
 <div class="ctrl-root">
     <div class="ctrl-body">
-        <label class="ctrl-label">Seed</label>
-        <input class="ctrl-input" type="text" value="@_seedValue" @onchange="OnSeedChanged" />
+        <label class="wf-label" for="ctrl-seed">SEED</label>
+        <input id="ctrl-seed" class="wf-field" type="text" placeholder="payload"
+               value="@_seedValue" @onchange="OnSeedChanged" />
     </div>
-    <div class="ctrl-footer">
-        <button class="btn-ctrl btn-compile" @onclick="CompileFlow">Compile</button>
-        <button class="btn-ctrl btn-run" @onclick="RunFlow" disabled="@(!Controller?.HasCompiledGraphs)">Run</button>
-        <button class="btn-ctrl btn-stop" @onclick="StopFlow">Stop</button>
-        <button class="btn-ctrl btn-close" @onclick="CloseFlow">Close</button>
+    <div class="wf-actions">
+        <button class="wf-ghost wf-act-compile" @onclick="CompileFlow">Compile</button>
+        <button class="wf-ghost wf-act-run" @onclick="RunFlow" disabled="@(!Controller?.HasCompiledGraphs)">Run</button>
+        <button class="wf-ghost wf-act-stop" @onclick="StopFlow">Stop</button>
+        <button class="wf-ghost wf-act-close" @onclick="CloseFlow">Close</button>
     </div>
 </div>

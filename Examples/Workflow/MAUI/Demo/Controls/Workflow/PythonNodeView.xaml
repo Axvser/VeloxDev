@@ -4,92 +4,119 @@
              xmlns:controls="clr-namespace:Demo.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.PythonNodeView"
+             x:Name="Root"
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_InputSlotsList,PART_OutputSlotsList"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid x:Name="DesignGrid" RowDefinitions="40,Auto,*">
-        <Border Grid.RowSpan="3"
-                Stroke="#6EC6FF"
-                StrokeThickness="1.5"
-                StrokeShape="RoundRectangle 6"
-                BackgroundColor="#1E2A35" />
 
-        <Border Grid.Row="0"
-                BackgroundColor="#253545"
-                Stroke="#6EC6FF"
-                StrokeThickness="0"
-                StrokeShape="RoundRectangle 4,4,0,0"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <HorizontalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="8">
-                <Label Text="{Binding Title}" TextColor="White" FontAttributes="Bold" />
-                <Border BackgroundColor="#2B2440" Stroke="#B799FF" StrokeThickness="1" StrokeShape="RoundRectangle 10" Padding="6,1">
-                    <Label Text="{Binding LastStatus}" TextColor="#E4D8FF" FontAttributes="Bold" />
-                </Border>
-            </HorizontalStackLayout>
-        </Border>
+    <!-- 尺寸必须与 [DefaultSize] 一致（280×260），行高清一色照抄 Avalonia 版：32 / Auto / * -->
+    <Grid x:Name="DesignGrid" RowDefinitions="32,Auto,*">
 
-        <Border Grid.Row="1" Padding="12,3" Stroke="#30363D" StrokeThickness="0" StrokeShape="RoundRectangle 0">
-            <Border.StrokeShape>
-                <RoundRectangle CornerRadius="0" />
-            </Border.StrokeShape>
-            <Label Text="{Binding Description}" TextColor="#8B949E" FontSize="10" LineBreakMode="WordWrap" />
-        </Border>
+        <Border Grid.RowSpan="3" Style="{StaticResource Card}" />
 
-        <Border Grid.Row="2" BackgroundColor="#1E2A35" StrokeShape="RoundRectangle 0,0,4,4">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <!-- Input port strip (fixed, left; scrolls when the dynamic slots outgrow the body) -->
-                <ScrollView Grid.Column="0" Orientation="Vertical">
+        <!-- 标题行：左对齐 + 类型色条，状态徽章靠右。原来是居中白字压在一条蓝带上 -->
+        <Grid Grid.Row="0">
+            <Border BackgroundColor="Transparent"
+                    behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                    behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+                <Grid ColumnDefinitions="2,*,Auto,Auto">
+                    <Border Grid.Column="0"
+                            Style="{StaticResource CardAccent}"
+                            BackgroundColor="{StaticResource AccentTimerPython}" />
+                    <Label Grid.Column="1"
+                           Style="{StaticResource CardTitle}"
+                           Text="{Binding Title}"
+                           Margin="12,0,6,0" />
+                    <Label Grid.Column="2"
+                           Style="{StaticResource CardValue}"
+                           Text="{Binding ExecutionOrderText}"
+                           TextColor="{StaticResource CardExecOrder}"
+                           VerticalTextAlignment="Center"
+                           Margin="0,0,12,0"
+                           IsVisible="{Binding HasExecutionOrder}" />
+                    <Border Grid.Column="3" Style="{StaticResource CardPill}" Margin="0,0,12,0">
+                        <Label Style="{StaticResource CardPillText}"
+                               Text="{Binding LastStatus}"
+                               TextColor="{StaticResource GhostCloseText}" />
+                    </Border>
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardHairline}" VerticalOptions="End" />
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Border Padding="12,5" BackgroundColor="Transparent">
+                <Label Text="{Binding Description}"
+                       Style="{StaticResource CardLabel}"
+                       FontSize="10.5"
+                       LineBreakMode="WordWrap" />
+            </Border>
+            <Border Style="{StaticResource CardHairline}" VerticalOptions="End" />
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnDefinitions="64,*,64">
+
+            <!-- Input port strip (scrollable, left). 视口向左多伸出 12、内容再内缩 12：
+                 端口要外溢 12 骑在卡边上，而 ScrollView 会按自己的边界裁掉内容 ——
+                 不这么挪一下，端口在卡内那半边之外的那半会被裁掉。
+                 （Avalonia 版同款手法，那儿的 ScrollViewer 也是这么让位的） -->
+            <ScrollView Grid.Column="0" Margin="-12,0,0,0">
                 <VerticalStackLayout x:Name="PART_InputSlotsList"
+                                     Margin="12,0,0,0"
                                      BindableLayout.ItemsSource="{Binding InputSlots.Items}"
                                      Spacing="2">
                     <BindableLayout.ItemTemplate>
                         <DataTemplate>
                             <Grid ColumnDefinitions="Auto,*" Margin="0,4">
                                 <controls:SlotView Grid.Column="0"
-                                                   WidthRequest="16"
-                                                   HeightRequest="16"
+                                                   WidthRequest="24"
+                                                   HeightRequest="24"
                                                    HorizontalOptions="Start"
                                                    VerticalOptions="Center"
-                                                   Margin="-8,0,0,0"
+                                                   Margin="-12,0,0,0"
                                                    BindingContext="{Binding Slot}"
-                                                   SlotState="{Binding Slot.State}" />
+                                                   SlotState="{Binding State}"
+                                                   Channel="{Binding Channel}" />
                                 <Label Grid.Column="1"
                                        Text="{Binding Name}"
-                                       TextColor="#6EC6FF"
-                                       FontAttributes="Bold"
-                                       FontSize="11"
-                                       VerticalTextAlignment="Center"
+                                       Style="{StaticResource CardSlotName}"
+                                       TextColor="{StaticResource AccentTimerPython}"
                                        HorizontalTextAlignment="Start"
-                                       Margin="4,0,0,0"
-                                       LineBreakMode="TailTruncation" />
+                                       Margin="4,0,0,0" />
                             </Grid>
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
-                </ScrollView>
+            </ScrollView>
 
-                <!-- Script editor -->
-                <Border Grid.Column="1" Margin="4,6" Stroke="#30363D" StrokeThickness="1" StrokeShape="RoundRectangle 4" BackgroundColor="#0D1117">
-                    <Grid RowDefinitions="Auto,*">
-                        <Border Grid.Row="0" BackgroundColor="#161B22" Stroke="#30363D" StrokeThickness="0" Padding="8,4">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Label Grid.Column="0" Text="script.py" TextColor="#7EE787" FontFamily="monospace" FontSize="11" FontAttributes="Bold" />
-                                <Label Grid.Column="1" Text="Python 3" TextColor="#6E7681" FontSize="10" />
-                            </Grid>
-                        </Border>
-                        <Editor Grid.Row="1"
-                                Text="{Binding Script}"
-                                BackgroundColor="#0D1117"
-                                TextColor="#E6EDF3"
-                                FontFamily="monospace"
-                                FontSize="12" />
-                    </Grid>
-                </Border>
+            <!-- Script editor: 自己一块更深的底，代码要读起来像代码 -->
+            <Border Grid.Column="1" Style="{StaticResource CardCodeBox}" Margin="4,6">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Grid.Row="0" Style="{StaticResource CardCodeHeader}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0"
+                                   Text="script.py"
+                                   TextColor="{StaticResource CardCodeTitle}"
+                                   FontFamily="monospace"
+                                   FontSize="11"
+                                   FontAttributes="Bold" />
+                            <Label Grid.Column="1"
+                                   Text="Python 3"
+                                   TextColor="{StaticResource CardCodeMuted}"
+                                   FontSize="10" />
+                        </Grid>
+                    </Border>
+                    <Editor Grid.Row="1"
+                            Style="{StaticResource CardEditor}"
+                            Text="{Binding Script}"
+                            VerticalOptions="Fill" />
+                </Grid>
+            </Border>
 
-                <!-- Output port strip (fixed, right; scrolls when the dynamic slots outgrow the body) -->
-                <ScrollView Grid.Column="2" Orientation="Vertical">
+            <!-- Output port strip (scrollable, right)。左边那条的镜像 -->
+            <ScrollView Grid.Column="2" Margin="0,0,-12,0">
                 <VerticalStackLayout x:Name="PART_OutputSlotsList"
+                                     Margin="0,0,12,0"
                                      BindableLayout.ItemsSource="{Binding OutputSlots.Items}"
                                      Spacing="2"
                                      HorizontalOptions="End">
@@ -98,27 +125,24 @@
                             <Grid ColumnDefinitions="*,Auto" Margin="0,4">
                                 <Label Grid.Column="0"
                                        Text="{Binding Name}"
-                                       TextColor="#6EC6FF"
-                                       FontAttributes="Bold"
-                                       FontSize="11"
-                                       VerticalTextAlignment="Center"
+                                       Style="{StaticResource CardSlotName}"
+                                       TextColor="{StaticResource AccentTimerPython}"
                                        HorizontalTextAlignment="End"
-                                       Margin="0,0,4,0"
-                                       LineBreakMode="TailTruncation" />
+                                       Margin="0,0,4,0" />
                                 <controls:SlotView Grid.Column="1"
-                                                   WidthRequest="16"
-                                                   HeightRequest="16"
+                                                   WidthRequest="24"
+                                                   HeightRequest="24"
                                                    HorizontalOptions="End"
                                                    VerticalOptions="Center"
-                                                   Margin="0,0,-8,0"
+                                                   Margin="0,0,-12,0"
                                                    BindingContext="{Binding Slot}"
-                                                   SlotState="{Binding Slot.State}" />
+                                                   SlotState="{Binding State}"
+                                                   Channel="{Binding Channel}" />
                             </Grid>
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
-                </ScrollView>
-            </Grid>
-        </Border>
+            </ScrollView>
+        </Grid>
     </Grid>
 </ContentView>

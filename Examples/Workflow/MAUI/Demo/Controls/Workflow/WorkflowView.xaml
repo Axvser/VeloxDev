@@ -184,7 +184,7 @@
         <Grid Grid.Column="1">
             <Border x:Name="PART_SurfaceBorder"
                     Margin="0"
-                    Stroke="White"
+                    Stroke="#33FFFFFF"
                     StrokeThickness="1"
                     StrokeShape="RoundRectangle 3"
                     BackgroundColor="#0B1120">
@@ -199,8 +199,9 @@
                                                   ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
                                                   ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
                                                   RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
-                                                  LinkLineColor="#22D3EE"
+                                                  LinkLineColor="#CC38BDF8"
                                                   VirtualLineColor="#E2E8F0"
+                                                  StrokeWidth="2"
                                                   LinkFlowEnabled="True" />
                     <ScrollView x:Name="PART_ScrollViewer"
                                 Orientation="Both"

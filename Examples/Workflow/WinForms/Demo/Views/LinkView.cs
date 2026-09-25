@@ -1,9 +1,9 @@
 // VeloxDev customization: Customize line geometry, color, and thickness here.
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Globalization;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
 // `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; a drawing
@@ -13,13 +13,33 @@ using Size = System.Drawing.Size;
 namespace Demo.Views;
 
 /// <summary>
-/// Orthogonal (polyline) connection with golden-ratio stubs, carrying a travelling highlight so the
-/// direction of data flow is readable at a glance.
-/// Passive visual only — no hover, highlight, or keyboard interaction.
+/// One connection between two ports, drawn as a single cubic curve that leaves each end horizontally, carrying
+/// a travelling comet so the direction of data flow is readable at a glance.
+/// <para>
+/// The comet — a bright head, a tail that fades behind it, and a halo that follows the head — is cut out of the
+/// curve <b>by arc length</b> rather than by a gradient brush, and that is the whole reason this view keeps its
+/// own sample table. GDI+ made the difference plain: a <see cref="LinearGradientBrush"/>'s axis is the straight
+/// line between the two ends, so on a curve it lights the string rather than the rope; its stops can only be
+/// given at construction and are refused unless they span the whole axis; and a pen keeps the stops of the brush
+/// it was built from, so the band had to be re-plumbed every frame. Cutting the tail out of the geometry by arc
+/// length needs none of that — each slice is given its own colour and width.
+/// </para>
+/// <para>
+/// Passive visual only — no hover, highlight, or keyboard interaction. The link is rendered by the host canvas
+/// (<see cref="Render"/>) rather than as a child window, so it never participates in WinForms' fragile
+/// transparent compositing.
+/// </para>
 /// </summary>
 public sealed class LinkView : Control
 {
-    private const double Phi = 0.6180339887;
+    // 弧长表的分辨率。128 段在缩放上限下也看不出折线感，而每帧重建它只是几百次算术。
+    private const int SampleCount = 128;
+
+    // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
+    private const double TailFraction = 0.30;
+
+    // 拖尾分几段画。每段一个透明度，衰减因此是连续的而不需要渐变刷。
+    private const int TailSegments = 16;
 
     private IWorkflowLinkViewModel? _link;
     private INotifyPropertyChanged? _notifier;
@@ -32,30 +52,21 @@ public sealed class LinkView : Control
     private float _endTop;
     private bool _canRender = true;
     private bool _isVirtual;
-    private Color _lineColor = ParseColor("#DDFFFFFF");
+    private Color _lineColor = CardTheme.FromHex("#CC38BDF8");
 
-    // 本帧光带的位置与亮度混合：每次 Render 前由 surface 的时钟推入（SetFlow）——时钟归表面，渲染器没有窗口
-    private double _bandCentre;
-    private double _bandMix;
+    // 本帧彗星的头部走到全长的几成、以及它有多亮：每次 Render 前由画布从它的时钟推入（SetFlow）——
+    // 时钟归画布，渲染器不在控件树里、没有窗口应答它的 Invalidate
+    private double _bandHead;
+    private double _bandIntensity;
 
-    // 该链接自己的渐变：轴是它的两端点、停靠点是光带
-    // GDI+ 的渐变端点只能在构造时给、之后改不了——链接移动才重建刷子，光带移动不重建（MoveBand）
-    private LinearGradientBrush? _flowBrush;
-
-    // 那个刷子的混合存在这里而不是从它取：InterpolationColors 的 getter 返回副本，写进副本等于没写（实测）
-    // 五档而非光带的三档，因为 GDI+ 只认铺满整条轴的混合，多出的两档两端再放一遍静息色
-    private readonly ColorBlend _band = new(5);
-
-    // 光带混合用的两个颜色，取自本链接自己的颜色——按链接而非按表面，两条链接未必同色
-    private Color _lit;
-    private Color _dim;
+    // 弧长表：_cumulative[i] 是 _samples[0..i] 的累计长度，_length 是全长。
+    // 三者只在端点变化时重建 —— 每帧渲染要按弧长取点，现算不划算。
+    private PointF[] _samples = [];
+    private double[] _cumulative = [];
+    private double _length;
 
     public LinkView()
     {
-        // Passive overlay: no hit-testing, sits behind the nodes. The link is
-        // rendered by the host canvas (Render) rather than as a child window, and
-        // uses an opaque background so it never participates in WinForms' fragile
-        // transparent compositing.
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
@@ -66,9 +77,6 @@ public sealed class LinkView : Control
         // background (a translucent BackColor would throw in .NET 10).
         TabStop = false;
         Enabled = false;
-
-        // 先种下光带混合的两个颜色：渐变要等链接有轴才建，箭头却第一帧就用亮色；手工 new 的视图不会被推帧数
-        UpdateFlowBrush();
     }
 
     [Browsable(false)]
@@ -103,8 +111,6 @@ public sealed class LinkView : Control
         set
         {
             _lineColor = value;
-            // 光带由这个颜色混出，故刷子随之重建：轴与两个颜色都由刷子持有，GDI+ 造好后都改不了
-            UpdateFlowBrush();
             RequestPaint();
         }
     }
@@ -121,6 +127,7 @@ public sealed class LinkView : Control
 
     private void RequestPaint()
     {
+        RefreshGeometry();
         if (ExternalInvalidate is { } external) external();
         else Invalidate();
     }
@@ -249,8 +256,8 @@ public sealed class LinkView : Control
 
         IsVirtual = IsVirtualLink(_link);
 
-        // 唯一重新指向渐变之处：画布写回的锚点都经此（四个锚点 setter 只在这里与 Bind 里被写）
-        UpdateFlowBrush();
+        // 唯一重建弧长表之处：画布写回的锚点都经此（四个锚点 setter 只在这里与 Bind 里被写）
+        RefreshGeometry();
         RequestPaint();
     }
 
@@ -275,10 +282,6 @@ public sealed class LinkView : Control
                 _notifier.PropertyChanged -= OnLinkChanged;
                 _notifier = null;
             }
-
-            // GDI+ 画刷不会被自行回收，而拖节点时每写一次锚点就重建一个
-            _flowBrush?.Dispose();
-            _flowBrush = null;
         }
 
         base.Dispose(disposing);
@@ -286,117 +289,32 @@ public sealed class LinkView : Control
 
     // ── Flow effect ──────────────────────────────────────────────────────────────
 
-    // 光带半宽（渐变偏移单位）
-    private const double HalfWidth = 0.04;
-
     /// <summary>
-    /// The band's place for the frame that is about to be drawn: where its middle stop sits along the link,
-    /// and how much of its colour is the lit one. Pushed in by <c>WorkflowCanvas</c> before each
-    /// <see cref="Render"/>, from the two numbers its clock writes.
+    /// The comet's place and brightness for the frame that is about to be drawn: how far along the link its head
+    /// has travelled (0 at the sender's anchor, 1 at the receiver's) and how lit it is. Pushed in by
+    /// <c>WorkflowCanvas</c> before each <see cref="Render"/>, from the two numbers its clock writes.
     /// </summary>
     /// <remarks>
-    /// Two numbers rather than the four the reference animates (its band's three stop offsets and its
-    /// colour), because these are the two the other two are derived from and the same pair serves every
-    /// renderer on the surface. The band's shoulders are <see cref="HalfWidth"/> either side of the centre
-    /// and its colour is the mix of this link's own pair (see <see cref="MoveBand"/>), so nothing per link
-    /// has to cross this boundary — which is what lets one pair of values be handed to every link, including
-    /// links of different colours.
+    /// Two numbers, and the same pair for every link on the surface: the tail is a fraction of each link's own
+    /// arc length and both of its colours are mixed from that link's own <see cref="LineColor"/>, so nothing per
+    /// link has to cross this boundary. That is what lets one clock light every link in its own hue. The write is
+    /// also the frame — a renderer with no window cannot ask for a repaint, so the canvas does it when it writes.
     /// </remarks>
-    public void SetFlow(double centre, double mix)
+    public void SetFlow(double head, double intensity)
     {
-        _bandCentre = centre;
-        _bandMix = mix;
-    }
-
-    // 沿链接指向渐变、给光带配色——按链接而非按帧的那部分；这里不写光带位置，它归时钟，由 SetFlow 每帧推入
-    // 刷子重建而非重指（GDI+ 端点只能在构造时给），跨帧保留的只有 ColorBlend，锚点写回都经 SyncEndpoints
-    private void UpdateFlowBrush()
-    {
-        _lit = LitOf(_lineColor);
-        _dim = DimOf(_lit);
-
-        _flowBrush?.Dispose();
-        _flowBrush = null;
-
-        var from = new PointF(_startLeft, _startTop);
-        var to = new PointF(_endLeft, _endTop);
-
-        // 两个锚点都测出长度才画链接：之前是 NaN（GDI+ 直接拒绝而非不画），手工建的视图则是原点两次
-        // 两点重合的渐变没有轴可让光带走，用平色笔最诚实——这两个检查是唯一会让链接没有刷子的情况
-        if (!IsFinite(from) || !IsFinite(to)) return;
-        if (Math.Abs(to.X - from.X) < 0.5f && Math.Abs(to.Y - from.Y) < 0.5f) return;
-
-        // 环绕模式留给刷子默认的 Tile：GDI+ 给不了 Pad，最接近的 WrapMode.Clamp 会抛 ArgumentException（实测）
-        // 也无妨：描边从不采样到轴的两端之外，且首末停靠点同为静息色（见 MoveBand），越界采样无从不同
-        _flowBrush = new LinearGradientBrush(from, to, _dim, _dim);
-
-        MoveBand();
-    }
-
-    // 把光带放在时钟上次放的位置（SetFlow 收到的两个数），并交回它被放进去的刷子——Render 要的两样东西
-    // 五档而非三档：GDI+ 只认铺满整条轴的混合（0.25/0.50/0.75 被拒，实测），多出两档两端补静息色
-    // 笔必须每帧重建，因为一支笔会留住造它时刷子的停靠点（否则光带被钉在上一帧位置）
-    private LinearGradientBrush MoveBand()
-    {
-        var brush = _flowBrush!;
-
-        // 两个肩不动画：时钟只写中间停靠点，肩在其两侧 HalfWidth 处，光带才不至于糊满整条链接
-        var trailing = _bandCentre - HalfWidth;
-        var leading = _bandCentre + HalfWidth;
-
-        _band.Colors![0] = _dim;
-        _band.Colors[1] = _dim;
-        _band.Colors[2] = Blend(_dim, _lit, _bandMix);
-        _band.Colors[3] = _dim;
-        _band.Colors[4] = _dim;
-        _band.Positions![0] = 0f;
-        _band.Positions[1] = (float)trailing;
-        _band.Positions[2] = (float)_bandCentre;
-        _band.Positions[3] = (float)leading;
-        _band.Positions[4] = 1f;
-
-        brush.InterpolationColors = _band;
-        return brush;
-    }
-
-    // 两色线性混合（含 alpha）：mix 为 0 停在链接本色，为 1 全亮
-    private static Color Blend(Color from, Color to, double t) => Color.FromArgb(
-        (byte)Math.Round(from.A + (to.A - from.A) * t),
-        (byte)Math.Round(from.R + (to.R - from.R) * t),
-        (byte)Math.Round(from.G + (to.G - from.G) * t),
-        (byte)Math.Round(from.B + (to.B - from.B) * t));
-
-    private static bool IsFinite(PointF p) => float.IsFinite(p.X) && float.IsFinite(p.Y);
-
-    // 亮色：链接本色各通道向白抬 45% 并置全不透明（本 demo 的链接是 87% 的白，这一步同时去掉半透）
-    private static Color LitOf(Color color)
-    {
-        const double lift = 0.45;
-
-        byte Up(byte channel) => (byte)Math.Round(channel + (255 - channel) * lift);
-
-        return Color.FromArgb(255, Up(color.R), Up(color.G), Up(color.B));
-    }
-
-    // 静息色：亮色按 alpha 变暗到约 62%，靠它取反差而色相不变
-    // 往白里提不行——青线（Avalonia）与白线（本 demo）上都几乎看不出，实测过
-    private static Color DimOf(Color color) => Color.FromArgb(
-        (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        Render(e.Graphics);
+        _bandHead = head;
+        _bandIntensity = intensity;
     }
 
     /// <summary>
-    /// Draws the link geometry onto an arbitrary <see cref="Graphics"/> surface. In OnPaint the
-    /// canvas first writes back all slot anchors, then calls this method uniformly in world
-    /// coordinates after TranslateTransform(origin) — links are no longer separate transparent
-    /// overlay child controls, avoiding the WinForms issue where overlapping full-size sibling
-    /// windows are clipped by WS_CLIPSIBLINGS (only the topmost is drawn) and links become
-    /// invisible. When used as a standalone control, OnPaint takes the same path.
+    /// Draws the link onto an arbitrary <see cref="Graphics"/> surface. In OnPaint the canvas first writes back
+    /// all slot anchors, then calls this method uniformly in world coordinates after
+    /// <c>TranslateTransform(origin)</c> — links are not separate transparent overlay child controls, which
+    /// avoids the WinForms issue where overlapping full-size sibling windows are clipped by WS_CLIPSIBLINGS
+    /// (only the topmost is drawn) and links become invisible. When used as a standalone control, OnPaint takes
+    /// the same path.
     /// </summary>
+    /// <param name="g">The surface to draw on, already translated to world coordinates.</param>
     public void Render(Graphics g)
     {
         if (!_canRender) return;
@@ -406,93 +324,196 @@ public sealed class LinkView : Control
         // a stale frame at NaN/origin before measurement lands. Placeholder endpoints (Parent
         // is null, e.g. the VirtualLink gesture) are exempt and render immediately.
         if (_link is not null && !WorkflowSlotUpdateGate.IsLinkRenderReady(_link)) return;
+        if (_samples.Length < 2 || _length <= 0) return;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        var points = BuildPoints();
-        if (points.Length < 2) return;
+        var color = _lineColor;
+        const float thickness = 2f;
 
-        // 行进高亮只在成形的连线上有意义：虚拟链接是指针下的橡皮筋，无渐变的链接是轴还没到，两者都用平色笔
-        // 后一根检查有实义——MoveBand 要往刷子里写；笔每帧自刚写完光带的刷子新建（见 MoveBand），且不拥有它
-        using var pen = _isVirtual || _flowBrush is null
-            ? new Pen(_lineColor, float.Parse("2", CultureInfo.InvariantCulture))
-            : new Pen(MoveBand(), float.Parse("2", CultureInfo.InvariantCulture));
+        // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
+        // 两端才不像被截断的横截面
+        DrawSegment(g, 0, _length, Fade(color, 0.10), thickness + 9);
+        DrawSegment(g, 0, _length, Fade(color, 0.16), thickness + 4);
+
+        // 虚拟连线是指针下的橡皮筋：虚线、不流动
         if (_isVirtual)
         {
-            pen.DashStyle = DashStyle.Dash;
-            pen.DashPattern = [4f, 2f];
+            using var pen = new Pen(Fade(color, 0.75), thickness) { DashStyle = DashStyle.Custom, DashPattern = [4f, 2f] };
+            using var path = BuildPath(0, _length);
+            g.DrawPath(pen, path);
+            return;
         }
 
-        g.DrawLines(pen, points);
+        // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
+        DrawSegment(g, 0, _length, Fade(color, 0.55), thickness);
 
-        if (!_isVirtual)
+        if (_bandIntensity > 0.001)
         {
-            DrawArrowhead(g, points[^2], points[^1]);
+            DrawComet(g, color, thickness);
         }
     }
 
-    private PointF[] BuildPoints()
+    // 彗星：沿弧长切出 [头-尾, 头] 这一段，分若干小段画，每段给一个递减的透明度与变化的颜色。
+    // 不用渐变刷是因为它的轴是两端之间的直线，在曲线上会把光打偏（见类注释）。
+    private void DrawComet(Graphics g, Color color, float thickness)
     {
-        var s = new PointF(_startLeft, _startTop);
-        var e = new PointF(_endLeft, _endTop);
+        double head = Math.Clamp(_bandHead, 0, 1) * _length;
+        double tail = TailFraction * _length;
+
+        // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来
+        for (int pass = 0; pass < 2; pass++)
+        {
+            bool bloom = pass == 0;
+
+            for (int k = 0; k < TailSegments; k++)
+            {
+                double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
+                double f1 = (k + 1) / (double)TailSegments;
+
+                double l0 = head - (tail * (1 - f0));
+                double l1 = head - (tail * (1 - f1));
+                if (l1 <= 0 || l0 >= _length) continue;
+
+                // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
+                double a = _bandIntensity * f0 * f0;
+                if (a <= 0.004) continue;
+
+                // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部
+                var c = Mix(color, Color.White, f0);
+
+                DrawSegment(
+                    g, l0, l1,
+                    Fade(c, bloom ? a * 0.22 : a),
+                    bloom ? thickness + 9 : (float)(thickness * (0.45 + (0.95 * f0))),
+                    roundCap: true);
+            }
+        }
+    }
+
+    // 取 [from, to] 这一段弧长上的几何并描边。两端各自插值到精确位置，中间用现成采样点
+    private void DrawSegment(Graphics g, double from, double to, Color color, float thickness, bool roundCap = false)
+    {
+        using var path = BuildPath(from, to);
+        using var pen = new Pen(color, thickness);
+        if (roundCap) pen.StartCap = pen.EndCap = LineCap.Round;
+        g.DrawPath(pen, path);
+    }
+
+    private GraphicsPath BuildPath(double from, double to)
+    {
+        var path = new GraphicsPath();
+        if (_samples.Length < 2) return path;
+
+        to = Math.Min(to, _length);
+        from = Math.Clamp(from, 0, _length);
+
+        var points = new List<PointF>(_samples.Length + 2) { PointAtLength(from) };
+        for (int i = 0; i < _samples.Length; i++)
+        {
+            double l = _cumulative[i];
+            if (l <= from || l >= to) continue;
+            points.Add(_samples[i]);
+        }
+
+        points.Add(PointAtLength(to));
+        path.AddLines(points.ToArray());
+        return path;
+    }
+
+    // ── Geometry ─────────────────────────────────────────────────────────────────
+
+    // 弧长表。端点变化时重建，渲染时只读。
+    private void RefreshGeometry()
+    {
+        if (!float.IsFinite(_startLeft) || !float.IsFinite(_startTop)
+            || !float.IsFinite(_endLeft) || !float.IsFinite(_endTop))
+        {
+            _samples = [];
+            _cumulative = [];
+            _length = 0;
+            return;
+        }
+
+        var samples = new PointF[SampleCount + 1];
+        for (int i = 0; i <= SampleCount; i++)
+        {
+            samples[i] = BezierAt(i / (double)SampleCount);
+        }
+
+        var cumulative = new double[SampleCount + 1];
+        for (int i = 1; i <= SampleCount; i++)
+        {
+            double dx = samples[i].X - samples[i - 1].X;
+            double dy = samples[i].Y - samples[i - 1].Y;
+            cumulative[i] = cumulative[i - 1] + Math.Sqrt((dx * dx) + (dy * dy));
+        }
+
+        _samples = samples;
+        _cumulative = cumulative;
+        _length = cumulative[SampleCount];
+    }
+
+    // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角
+    private (PointF C1, PointF C2) BezierControls()
+    {
         double dx = _endLeft - _startLeft;
-        double stub = dx / 2.0 * (1.0 - Phi);
-        var p1 = new PointF(s.X + (float)stub, s.Y);
-        var p4 = new PointF(e.X - (float)stub, e.Y);
-        return [s, p1, p4, e];
+
+        // 最小拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，失去「从端口水平出来」的形状
+        double pull = Math.Max(40, Math.Abs(dx) * 0.5);
+
+        return (new PointF((float)(_startLeft + pull), _startTop), new PointF((float)(_endLeft - pull), _endTop));
     }
 
-    private void DrawArrowhead(Graphics g, PointF from, PointF tip)
+    private PointF BezierAt(double t)
     {
-        float tx = tip.X - from.X;
-        float ty = tip.Y - from.Y;
-        float len = (float)Math.Sqrt(tx * tx + ty * ty);
-        if (len < 0.03f) return;
+        var (c1, c2) = BezierControls();
+        double u = 1 - t;
+        double a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
 
-        // Unit vector along the last segment, plus its perpendicular.
-        float ux = tx / len;
-        float uy = ty / len;
-        const float al = 12f, aw = 8f;
-        float bx = tip.X - ux * al;
-        float by = tip.Y - uy * al;
-        float px = -uy, py = ux;
-
-        var pts = new[]
-        {
-            tip,
-            new PointF(bx + px * (aw / 2f), by + py * (aw / 2f)),
-            new PointF(bx - px * (aw / 2f), by - py * (aw / 2f)),
-        };
-
-        // 箭头是终点标记，用光带的颜色而不是渐变：线体静息为暗，箭头若一起暗就成了唯一不亮的部分
-        using var brush = new SolidBrush(_lit);
-        g.FillPolygon(brush, pts);
+        return new PointF(
+            (float)((a * _startLeft) + (b * c1.X) + (c * c2.X) + (d * _endLeft)),
+            (float)((a * _startTop) + (b * c1.Y) + (c * c2.Y) + (d * _endTop)));
     }
 
-    private static Color ParseColor(string hex)
+    // 弧长 → 点。二分找所在采样段再线性插值，所以取点是精确到亚像素的，不受采样密度限制
+    private PointF PointAtLength(double len)
     {
-        var value = hex.Trim();
-        if (value.StartsWith("#", StringComparison.Ordinal))
-        {
-            var digits = value.Substring(1);
-            if (digits.Length == 8)
-            {
-                return Color.FromArgb(
-                    byte.Parse(digits.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(6, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
-            }
+        if (_length <= 0 || _cumulative.Length == 0) return new PointF(_startLeft, _startTop);
 
-            if (digits.Length == 6)
-            {
-                return Color.FromArgb(
-                    byte.Parse(digits.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
-            }
+        len = Math.Clamp(len, 0, _length);
+
+        int lo = 0, hi = _cumulative.Length - 1;
+        while (hi - lo > 1)
+        {
+            int mid = (lo + hi) / 2;
+            if (_cumulative[mid] <= len) lo = mid;
+            else hi = mid;
         }
 
-        return Color.FromName(value);
+        double span = _cumulative[hi] - _cumulative[lo];
+        double t = span <= 0 ? 0 : (len - _cumulative[lo]) / span;
+
+        return new PointF(
+            _samples[lo].X + (float)((_samples[hi].X - _samples[lo].X) * t),
+            _samples[lo].Y + (float)((_samples[hi].Y - _samples[lo].Y) * t));
+    }
+
+    // 两色之间线性混合（含 alpha），用于尾梢到头部的那一段
+    private static Color Mix(Color from, Color to, double t)
+    {
+        byte L(byte a, byte b) => (byte)Math.Round(a + ((b - a) * t));
+
+        return Color.FromArgb(L(from.A, to.A), L(from.R, to.R), L(from.G, to.G), L(from.B, to.B));
+    }
+
+    /// <summary>Same hue, given opacity. GDI+ colours carry alpha as a byte, the design's values are 0..1.</summary>
+    private static Color Fade(Color color, double opacity)
+        => Color.FromArgb((int)Math.Round(Math.Clamp(opacity, 0, 1) * 255), color.R, color.G, color.B);
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        Render(e.Graphics);
     }
 }

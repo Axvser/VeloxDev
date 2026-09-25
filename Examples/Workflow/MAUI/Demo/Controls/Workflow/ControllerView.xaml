@@ -1,70 +1,95 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
              xmlns:controls="clr-namespace:Demo.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.ControllerView"
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid x:Name="DesignGrid" RowDefinitions="52,*,88">
-        <Border Grid.RowSpan="3"
-                Stroke="White"
-                StrokeThickness="1"
-                StrokeShape="RoundRectangle 5"
-                BackgroundColor="#2D2D2D" />
 
-        <Border Grid.Row="0"
-                BackgroundColor="#2D2D2D"
-                StrokeShape="RoundRectangle 5,5,0,0"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <Label Text="Network Flow Controller"
-                   HorizontalTextAlignment="Center"
-                   VerticalTextAlignment="Center"
-                   TextColor="White" />
-        </Border>
+    <!-- 卡片的色值与字级都来自 Resources/Styles/CardTheme.xaml（App.xaml 里挂上的）。
+         尺寸必须与 [DefaultSize] 一致（230×170），否则 NodeMetricScaler 的 k 就不是 1，
+         整张卡会跟着缩放；行高也照抄 Avalonia 版：32 / * / 66。 -->
+    <Grid x:Name="DesignGrid" RowDefinitions="32,*,66">
 
-        <Border Grid.Row="1" BackgroundColor="#252525" Padding="12">
-            <ScrollView>
-            <VerticalStackLayout Spacing="4">
-                <Label Text="Seed" TextColor="#DCDCDC" FontSize="11" />
-                <Entry Text="{Binding SeedPayload}" FontSize="11" />
-            </VerticalStackLayout>
-            </ScrollView>
-        </Border>
+        <Border Grid.RowSpan="3" Style="{StaticResource Card}" />
 
-        <Border Grid.Row="2" BackgroundColor="#2D2D2D" StrokeShape="RoundRectangle 0,0,5,5" Padding="8">
-            <Grid RowDefinitions="*,*" ColumnDefinitions="*,*" ColumnSpacing="6" RowSpacing="6">
-                <Button Grid.Row="0" Grid.Column="0" Text="Compile"
-                        BackgroundColor="#1E3A5F" TextColor="White"
-                        HorizontalOptions="Fill" VerticalOptions="Fill"
+        <!-- 标题行：左对齐 + 左侧 2px 类型色条。原来是居中白字压在自己的灰带上 -->
+        <Grid Grid.Row="0">
+            <Border BackgroundColor="Transparent"
+                    behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                    behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+                <Grid ColumnDefinitions="2,*">
+                    <Border Grid.Column="0"
+                            Style="{StaticResource CardAccent}"
+                            BackgroundColor="{StaticResource AccentController}" />
+                    <Label Grid.Column="1"
+                           Style="{StaticResource CardTitle}"
+                           Text="Controller"
+                           Margin="12,0,0,0" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardHairline}" VerticalOptions="End" />
+        </Grid>
+
+        <!-- 主体放在 ScrollView 里：Avalonia 的 TextBox（11.5 字 + 7,4 内边距）大约 25 高，
+             这里换成了 MAUI 的 Entry —— 它的高度由平台定（Windows 上原生 TextBox 的
+             默认最小高是 32），所以同一套行高下这一格会比 Avalonia 版高出一截。
+             设计尺寸不能动（它必须等于 [DefaultSize]），于是让主体自己滚，而不是把内容挤到卡外 -->
+        <ScrollView Grid.Row="1">
+            <Border Padding="12,9">
+                <VerticalStackLayout Spacing="5">
+                    <Label Style="{StaticResource CardLabel}" Text="SEED" />
+                    <Border Style="{StaticResource CardFieldBox}">
+                        <Entry Style="{StaticResource CardField}"
+                               Text="{Binding SeedPayload, Mode=TwoWay}"
+                               Placeholder="payload" />
+                    </Border>
+                </VerticalStackLayout>
+            </Border>
+        </ScrollView>
+
+        <!-- 动作区：顶上一条分隔线，下面是 2×2 的同形「幽灵按钮」。
+             语义只体现在文字颜色上，原来是一排四块高饱和色块 -->
+        <Grid Grid.Row="2">
+            <Border Style="{StaticResource CardHairline}" VerticalOptions="Start" />
+            <Grid ColumnDefinitions="*,*" RowDefinitions="*,*"
+                  ColumnSpacing="6" RowSpacing="6"
+                  Margin="12,7">
+                <Button Grid.Row="0" Grid.Column="0"
+                        Style="{StaticResource CardGhostCompile}"
+                        Text="Compile"
                         Command="{Binding CompileCommand}" />
-                <Button Grid.Row="0" Grid.Column="1" Text="Run"
-                        BackgroundColor="#1E5F2E" TextColor="White"
-                        HorizontalOptions="Fill" VerticalOptions="Fill"
+                <Button Grid.Row="0" Grid.Column="1"
+                        Style="{StaticResource CardGhostRun}"
+                        Text="Run"
                         IsEnabled="{Binding HasCompiledGraphs}"
                         Command="{Binding RunCommand}" />
-                <Button Grid.Row="1" Grid.Column="0" Text="Stop"
-                        BackgroundColor="#5F1E1E" TextColor="White"
-                        HorizontalOptions="Fill" VerticalOptions="Fill"
+                <Button Grid.Row="1" Grid.Column="0"
+                        Style="{StaticResource CardGhostStop}"
+                        Text="Stop"
                         Command="{Binding StopCommand}" />
-                <Button Grid.Row="1" Grid.Column="1" Text="Close"
-                        BackgroundColor="#1E1E1E" TextColor="White"
-                        HorizontalOptions="Fill" VerticalOptions="Fill"
+                <Button Grid.Row="1" Grid.Column="1"
+                        Style="{StaticResource CardGhostClose}"
+                        Text="Close"
                         Command="{Binding CloseWorkflowCommand}" />
             </Grid>
-        </Border>
+        </Grid>
 
+        <!-- ZIndex：端口有一半压在卡片上，不给序就会被卡面盖掉内侧那一半。
+             它挂在根 Grid 上而不是上面任何一个 Border/Grid 里：那些容器要么是 ClipToBounds 的，
+             要么将来可能变成 —— 端口外溢的一半必须有一个不裁切它的祖先链。 -->
         <controls:SlotView x:Name="PART_OutputSlot"
-                           WidthRequest="20"
-                           HeightRequest="20"
+                           ZIndex="6"
+                           WidthRequest="32"
+                           HeightRequest="32"
                            Grid.RowSpan="3"
                            HorizontalOptions="End"
                            VerticalOptions="Center"
-                           Margin="0,0,-10,0"
+                           Margin="0,0,-16,0"
                            BindingContext="{Binding OutputSlot}"
-                           SlotState="{Binding State}" />
+                           SlotState="{Binding State}"
+                           Channel="{Binding Channel}" />
     </Grid>
 </ContentView>

@@ -1,4 +1,4 @@
-using Demo.ViewModels;
+﻿using Demo.ViewModels;
 using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -198,77 +198,74 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     // ── Link flow ────────────────────────────────────────────────────────────────
 
-    // 光带周期的两个数、整个表面共用：渲染器不在控件树里、由 OnPaint 统一绘制，对它 Invalidate 到不了窗口
+    // 彗星的两个数、整个表面共用：渲染器不在控件树里、由 OnPaint 统一绘制，对它 Invalidate 到不了窗口
     // 时钟只能写在能被重绘的目标上，所以这两个数落在画布上
-    private double _bandCentre;
-    private double _bandMix;
+    private double _bandHead;
+    private double _bandIntensity;
 
     /// <summary>
-    /// Where the band is along every link, in gradient-offset units of each link's own axis: 0 at the
-    /// sender's anchor, 1 at the receiver's, and the same value for every link on the surface.
+    /// How far along every link the comet's head has travelled, as a fraction of that link's own arc length:
+    /// 0 at the sender's anchor, 1 at the receiver's, and the same value for every link on the surface.
     /// </summary>
     /// <remarks>
     /// Written every frame by <see cref="Flow"/> and read by the link loop in <see cref="OnPaint"/>, which
     /// hands it to each renderer before drawing it (<see cref="Views.LinkView.SetFlow"/>). The write is also
-    /// the frame: the reference gets its repaint from writing into the brush it draws with, which GDI+ has no
-    /// equivalent of — a brush that has been written moves nothing until something paints again — so the
-    /// repaint is asked for here, on the surface that can answer it.
+    /// the frame: the renderers are not child controls, so nothing they do can reach the window, and the
+    /// repaint is asked for here — on the surface that can answer it.
     /// </remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public double BandCentre
+    public double BandHead
     {
-        get => _bandCentre;
-        set { _bandCentre = value; Invalidate(); }
+        get => _bandHead;
+        set { _bandHead = value; Invalidate(); }
     }
 
     /// <summary>
-    /// How much of the band's colour is the lit one: 0 rests on the link's own colour, 1 is fully lit. Each
-    /// link mixes its own two colours from it, so one value lights every link in its own hue.
+    /// How lit the comet is: 0 while it is absent, 1 while it travels. Each link mixes its own colours from it,
+    /// so one value lights every link in its own hue.
     /// </summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public double BandMix
+    public double BandIntensity
     {
-        get => _bandMix;
-        set { _bandMix = value; Invalidate(); }
+        get => _bandIntensity;
+        set { _bandIntensity = value; Invalidate(); }
     }
 
-    // 一个周期：三段相位各自结束时光带中心的位置，四个数与各平台 demo 相同——成形、行进、退回
-    // 不含光带宽度：渲染器由中心自行算两侧肩，每帧跨到链接上的只有这两个数
-    private const double BandStart = 0.06;
-    private const double BandFormed = 0.34;
-    private const double BandLeaving = 0.66;
-    private const double BandExit = 0.94;
+    // 一个周期：三段相位各自结束时头部走过的比例——出发、行进、到达。
+    // 两端都是「没有光」的状态（头在起点/终点且强度为 0），循环接缝才看不出来。
+    private const double BandFormed = 0.30;
+    private const double BandLeaving = 0.78;
 
-    // 三段相位依次声明、Repeat(int.MaxValue) 整链重复并重放首周期抓到的起值；接缝不可见因末相位停在静息色
-    // 端点全是常量故可 static readonly（引用方按视图构建，因其两端取自链接颜色）；匀速故 Eases.Default 即恒等
+    // 三段相位依次声明、Repeat(int.MaxValue) 整链重复并重放首周期抓到的起值；接缝不可见因首尾皆无光
+    // 端点全是常量故可 static readonly；匀速故 Eases.Default 即恒等
     private static readonly Transition<WorkflowCanvas> Flow =
         Transition<WorkflowCanvas>.Create()
-            // 相位一：一边成形一边进入（走三分之一路程，同时由静息色变亮）
-            .Property(c => c.BandCentre, BandFormed)
-            .Property(c => c.BandMix, 1d)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(550), Ease = Eases.Default })
+            // 相位一：从发送端出发，一边走一边亮起
+            .Property(c => c.BandHead, BandFormed)
+            .Property(c => c.BandIntensity, 1d)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(450), Ease = Eases.Default })
             .Then()
-            // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲；BandMix 不在路径里，留在亮处
-            .Property(c => c.BandCentre, BandLeaving)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(650), Ease = Eases.Default })
+            // 相位二：全亮行进——这一段读起来才是流动而非脉冲；BandIntensity 不在路径里，留在亮处
+            .Property(c => c.BandHead, BandLeaving)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(700), Ease = Eases.Default })
             .Then()
-            // 相位三：一边退回静息色一边离开；周期两端都是静息色，循环接缝才看不出来
-            .Property(c => c.BandCentre, BandExit)
-            .Property(c => c.BandMix, 0d)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(550), Ease = Eases.Default })
+            // 相位三：到达并熄灭
+            .Property(c => c.BandHead, 1d)
+            .Property(c => c.BandIntensity, 0d)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(450), Ease = Eases.Default })
             .Repeat(int.MaxValue);
 
-    // 起动光带时钟：会话挂载与句柄创建两处调用，取较晚发生的那次
+    // 起动彗星时钟：会话挂载与句柄创建两处调用，取较晚发生的那次
     // 句柄之前起动画会被宿主静默拒绝（Awake 被拒即结束），所以必须等到这块画布成为窗口
     private void StartLinkFlow()
     {
         if (_session is null || !IsHandleCreated) return;
 
         // 转换从目标读起值，Execute 前两个都要回到周期起点；链在每个接缝重放这份抓到的起值
-        _bandCentre = BandStart;
-        _bandMix = 0d;
+        _bandHead = 0d;
+        _bandIntensity = 0d;
         Flow.Execute(this);
     }
 
@@ -824,16 +821,43 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         foreach (var lv in _linkRenderers)
         {
             // 本帧的两个数从唯一存放处推入：渲染器不持有周期，同一对值给每条链接，且在读它的绘制之前
-            lv.SetFlow(_bandCentre, _bandMix);
+            lv.SetFlow(_bandHead, _bandIntensity);
             lv.Render(g);
         }
         g.Restore(linkState);
+
+        // 骑在卡边上的端口有一半落在卡面之外，而 WinForms 会把子窗口裁到父窗口的客户区，
+        // 那一半永远画不出来。所以由画布在端口自己的圆心上补画同一个字形：卡面之上的半边被卡面盖住，
+        // 露在外面的半边接上端口画的那一半，合起来才是一只完整的端口。
+        // 顺序在链接之后 —— 参考实现里端口压在连线上（ZIndex 6），出线口不该被自己的线穿过
+        DrawPortHalves(g, slotMap, origin);
 
         // Nodes without a corresponding card: draw a placeholder rectangle
         foreach (var node in _session.Tree.Nodes)
         {
             if (!_cards.ContainsKey(node))
                 DrawNodeFallback(g, node, origin);
+        }
+    }
+
+    /// <summary>
+    /// Completes every port that rides an edge: the half of its glyph that falls outside the container holding
+    /// it. WinForms clips a child window to its parent, so a port whose centre sits exactly on that edge — which
+    /// is what the design asks for — can only ever paint its inner half from its own window. This draws the
+    /// identical glyph at the identical centre from the other side of the edge; the two halves meet there and
+    /// read as one port. A port that happens to sit wholly inside its container is drawn twice, invisibly.
+    /// </summary>
+    private void DrawPortHalves(Graphics g, Dictionary<IWorkflowSlotViewModel, PointF> slotMap, PointF origin)
+    {
+        foreach (var (_, card) in _cards)
+        {
+            foreach (var port in card.Ports())
+            {
+                if (!port.Visible || port.ViewModel is null) continue;
+                if (!slotMap.TryGetValue(port.ViewModel, out var world)) continue;
+
+                port.RenderGlyph(g, origin.X + world.X, origin.Y + world.Y, Math.Min(port.Width, port.Height));
+            }
         }
     }
 
@@ -846,11 +870,18 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             (float)node.Size.Width,
             (float)node.Size.Height);
 
-        using var body = new SolidBrush(Color.FromArgb(37, 37, 37));
-        using var border = new Pen(Color.FromArgb(75, 85, 99), 1.5f);
-        using var path = RoundRectF(bounds, 18f);
+        // The same bare card the fallback node view draws: one surface, one hairline, the neutral slate accent.
+        using var body = new SolidBrush(Views.CardTheme.Surface);
+        using var border = new Pen(Views.CardTheme.Border, 1f);
+        using var path = Views.CardTheme.RoundedPath(bounds, Views.CardTheme.CardRadius);
         g.FillPath(body, path);
         g.DrawPath(border, path);
+
+        using var accent = new SolidBrush(Views.CardTheme.AccentFallback);
+        using var accentPath = Views.CardTheme.RoundedPath(
+            new RectangleF(bounds.X + 1f, bounds.Y + 1f, Views.CardTheme.AccentWidth, bounds.Height - 2f),
+            Views.CardTheme.CardRadius, Views.CardCorners.TopLeft);
+        g.FillPath(accent, accentPath);
     }
 
     // ── Grid drawing ──────────────────────────────────────────────────────────────
@@ -1028,18 +1059,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
     }
 
-    private static GraphicsPath RoundRectF(RectangleF r, float radius)
-    {
-        var d = radius * 2f;
-        var path = new GraphicsPath();
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
+    // ── Ruler overlay ────────────────────────────────────────────────────────────
     /// <summary>
     /// Per-pixel alpha ruler-band overlay. WinForms children always paint above the parent's
     /// OnPaintBackground, so a translucent band drawn there can never dim the opaque node cards

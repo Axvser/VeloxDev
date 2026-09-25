@@ -117,21 +117,15 @@ public sealed class WorkflowDemoSession
         json.dump({'saved_to': path, 'grade': grade, 'records': len(d.get('summary', {})) + 2}, open(sys.argv[2], 'w', encoding='utf-8'))
         """;
 
-    private WorkflowDemoSession(TreeViewModel tree, ControllerViewModel primary,
-        IReadOnlyList<ControllerViewModel> controllers, IEnumerable<IWorkflowNodeViewModel> nodes)
+    private WorkflowDemoSession(TreeViewModel tree, ControllerViewModel primary)
     {
         Tree = tree;
         Controller = primary;
-        Controllers = controllers;
-        Nodes = [.. nodes];
     }
 
     public TreeViewModel Tree { get; }
     /// <summary>Primary controller (example C: compiled compute chain), for backward compatibility / single-graph hosts.</summary>
     public ControllerViewModel Controller { get; }
-    /// <summary>Each example's own initiator node (Controller).</summary>
-    public IReadOnlyList<ControllerViewModel> Controllers { get; }
-    public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; }
 
     public static WorkflowDemoSession Create()
     {
@@ -251,7 +245,7 @@ public sealed class WorkflowDemoSession
 
         controllers.Add(controller);
 
-        return new WorkflowDemoSession(tree, controller, controllers, []);
+        return new WorkflowDemoSession(tree, controller);
     }
 
     /// <summary>
@@ -279,6 +273,6 @@ public sealed class WorkflowDemoSession
     {
         var controllers = tree.Nodes.OfType<ControllerViewModel>().ToList();
         var controller = controllers.FirstOrDefault() ?? new ControllerViewModel();
-        return new WorkflowDemoSession(tree, controller, controllers, tree.Nodes);
+        return new WorkflowDemoSession(tree, controller);
     }
 }

@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    节点卡共用的一套：简笔、暗色、靠字重与留白分区。放在这里而不是每张卡各写一遍 ——
+    五张卡重复同一组色值与内边距，改一次要改五处，而且必然会漂（这个仓库的其它地方已经吃过这个亏）。
+
+    与 Avalonia 版 CardTheme.axaml 是同一套色板与同一组类名，差别只在挂载方式：
+    Avalonia 用 `Classes="card"` 的类选择器，MAUI 没有等价的类选择器（它的 StyleClass 是运行时
+    在资源树里按名查找，本工程没法离线验证），所以这里把同一组 Setter 做成带 x:Key 的 Style，
+    卡片用 `Style="{StaticResource Card...}"` 显式挂载 —— 落地的色值与字级完全一致，只是挂载点是
+    属性而非类名。
+
+    色板：
+      卡面 #161B22 ／ 边框 #2A313C（1px，圆角 8）／ 分隔线 #222A34
+      标题 #E6EAF2 12.5 SemiBold ／ 标签 #7C8798 10 ／ 正文 #D6DCE6 11.5
+      输入底 #0E1218 ／ 悬停底 #1E2731 ／ 禁用字 #5A6474
+    类型色条由各卡自己给（Controller #38BDF8、Timer/Python #6EC6FF、Enum #D6A0FF、兜底 #94A3B8）。
+    MAUI 的 FontAttributes 只有 None/Bold/Italic，没有 SemiBold —— 标题在此落成 Bold。
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- ── 色板 ───────────────────────────────────────────────────────────── -->
+    <Color x:Key="CardSurface">#161B22</Color>
+    <Color x:Key="CardBorder">#2A313C</Color>
+    <Color x:Key="CardDivider">#222A34</Color>
+    <Color x:Key="CardTitleText">#E6EAF2</Color>
+    <Color x:Key="CardLabelText">#7C8798</Color>
+    <Color x:Key="CardValueText">#D6DCE6</Color>
+    <Color x:Key="CardFieldSurface">#0E1218</Color>
+    <Color x:Key="CardHoverSurface">#1E2731</Color>
+    <Color x:Key="CardDisabledText">#5A6474</Color>
+    <Color x:Key="CardDisabledBorder">#232A34</Color>
+    <Color x:Key="CardHoverBorder">#3A4553</Color>
+
+    <!-- 标题行右侧那个执行序号 -->
+    <Color x:Key="CardExecOrder">#6EE7A8</Color>
+
+    <!-- 类型色条 -->
+    <Color x:Key="AccentController">#38BDF8</Color>
+    <Color x:Key="AccentTimerPython">#6EC6FF</Color>
+    <Color x:Key="AccentEnum">#D6A0FF</Color>
+    <Color x:Key="AccentFallback">#94A3B8</Color>
+
+    <!-- 动作按钮的语义字色 -->
+    <Color x:Key="GhostCompileText">#7EC8FF</Color>
+    <Color x:Key="GhostRunText">#6EE7A8</Color>
+    <Color x:Key="GhostStopText">#FCA5A5</Color>
+    <Color x:Key="GhostCloseText">#9AA6B5</Color>
+
+    <!-- 代码面（Python 卡） -->
+    <Color x:Key="CardCodeSurface">#0D1117</Color>
+    <Color x:Key="CardCodeBorder">#222A34</Color>
+    <Color x:Key="CardCodeTitle">#6EE7A8</Color>
+    <Color x:Key="CardCodeMuted">#5A6474</Color>
+
+    <!-- ── 卡片外壳 ───────────────────────────────────────────────────────── -->
+
+    <!-- 单层暗面 + 发丝边 -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardSurface}" />
+        <Setter Property="Stroke" Value="{StaticResource CardBorder}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 8" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <!-- 标题行左侧那条 2px 类型色条。圆角只削左上，与卡面左上角对齐 -->
+    <Style x:Key="CardAccent" TargetType="Border">
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 8,0,0,0" />
+    </Style>
+
+    <!-- 分隔线。MAUI 的 Border 只有一条 StrokeThickness，写不出「只描底边」，
+         所以分隔线是一条 1px 高的实心条（Avalonia 那边是 BorderThickness="0,0,0,1"） -->
+    <Style x:Key="CardHairline" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardDivider}" />
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="StrokeShape" Value="Rectangle" />
+        <Setter Property="HeightRequest" Value="1" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <!-- ── 字级 ───────────────────────────────────────────────────────────── -->
+
+    <Style x:Key="CardTitle" TargetType="Label">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor" Value="{StaticResource CardTitleText}" />
+        <Setter Property="VerticalTextAlignment" Value="Center" />
+        <Setter Property="LineBreakMode" Value="TailTruncation" />
+    </Style>
+
+    <Style x:Key="CardLabel" TargetType="Label">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="TextColor" Value="{StaticResource CardLabelText}" />
+    </Style>
+
+    <Style x:Key="CardValue" TargetType="Label">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+    </Style>
+
+    <!-- 插槽名（端口旁边那行小字） -->
+    <Style x:Key="CardSlotName" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="VerticalTextAlignment" Value="Center" />
+        <Setter Property="LineBreakMode" Value="TailTruncation" />
+    </Style>
+
+    <!-- ── 输入 ───────────────────────────────────────────────────────────── -->
+
+    <!-- 输入底 + 发丝边 + 圆角 6。MAUI 的 Entry/Picker 没有自己的边框与圆角属性，
+         所以这一圈壳由外层 Border 提供，控件本身只留透明底与字色 -->
+    <Style x:Key="CardFieldBox" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardFieldSurface}" />
+        <Setter Property="Stroke" Value="{StaticResource CardBorder}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 6" />
+        <Setter Property="Padding" Value="7,2" />
+    </Style>
+
+    <Style x:Key="CardField" TargetType="Entry">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+        <Setter Property="PlaceholderColor" Value="{StaticResource CardDisabledText}" />
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+    </Style>
+
+    <Style x:Key="CardPicker" TargetType="Picker">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+        <Setter Property="TitleColor" Value="{StaticResource CardLabelText}" />
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+    </Style>
+
+    <Style x:Key="CardEditor" TargetType="Editor">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontFamily" Value="monospace" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource CardCodeSurface}" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+    </Style>
+
+    <!-- ── 状态胶囊（ExecutionOrder / LastStatus / LastRouted 那个小圆角框） ── -->
+    <Style x:Key="CardPill" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardHoverSurface}" />
+        <Setter Property="Stroke" Value="{StaticResource CardBorder}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 9" />
+        <Setter Property="Padding" Value="7,1" />
+        <Setter Property="VerticalOptions" Value="Center" />
+    </Style>
+
+    <Style x:Key="CardPillText" TargetType="Label">
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+    </Style>
+
+    <!-- ── 代码面（Python 卡） ─────────────────────────────────────────────── -->
+    <Style x:Key="CardCodeBox" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardCodeSurface}" />
+        <Setter Property="Stroke" Value="{StaticResource CardCodeBorder}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 6" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <Style x:Key="CardCodeHeader" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardSurface}" />
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 6,6,0,0" />
+        <Setter Property="Padding" Value="8,4" />
+    </Style>
+
+    <!-- ── 动作按钮 ───────────────────────────────────────────────────────── -->
+
+    <!--
+        同形的「幽灵按钮」：透明底 + 发丝边 + 圆角 6，语义只体现在各卡给的前景色上，不靠高饱和色块。
+        这些卡用的是同一个按钮样式，语义色由下面四个派生样式给（走 Style 而不是内联属性：
+        VisualState 的 Setter 特异度高于 Style，但低于元素上的本地值 —— 内联写死字色，
+        禁用态那份压暗的字色就盖不上去了）。
+    -->
+    <Style x:Key="CardGhost" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="BorderColor" Value="{StaticResource CardBorder}" />
+        <Setter Property="BorderWidth" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="FontSize" Value="11" />
+        <!-- 平台默认的触摸目标（MAUI 模板给 Button 定的是 44）会把一排小按钮撑破卡片 -->
+        <Setter Property="MinimumHeightRequest" Value="0" />
+        <Setter Property="MinimumWidthRequest" Value="0" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <!-- 悬停只抬边框与底，不换色 —— 动作语义已经写在各自的前景色里了 -->
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="{StaticResource CardHoverSurface}" />
+                            <Setter Property="BorderColor" Value="{StaticResource CardHoverBorder}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <!-- 禁用态只压暗边与字，形状不变（默认 Button 样式会把它填成一块实灰，
+                         在一排幽灵按钮里格外突兀） -->
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="Transparent" />
+                            <Setter Property="BorderColor" Value="{StaticResource CardDisabledBorder}" />
+                            <Setter Property="TextColor" Value="{StaticResource CardDisabledText}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style x:Key="CardGhostCompile" TargetType="Button" BasedOn="{StaticResource CardGhost}">
+        <Setter Property="TextColor" Value="{StaticResource GhostCompileText}" />
+    </Style>
+
+    <Style x:Key="CardGhostRun" TargetType="Button" BasedOn="{StaticResource CardGhost}">
+        <Setter Property="TextColor" Value="{StaticResource GhostRunText}" />
+    </Style>
+
+    <Style x:Key="CardGhostStop" TargetType="Button" BasedOn="{StaticResource CardGhost}">
+        <Setter Property="TextColor" Value="{StaticResource GhostStopText}" />
+    </Style>
+
+    <Style x:Key="CardGhostClose" TargetType="Button" BasedOn="{StaticResource CardGhost}">
+        <Setter Property="TextColor" Value="{StaticResource GhostCloseText}" />
+    </Style>
+
+</ResourceDictionary>

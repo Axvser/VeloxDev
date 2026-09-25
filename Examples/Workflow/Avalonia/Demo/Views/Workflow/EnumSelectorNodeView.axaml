@@ -5,90 +5,102 @@
 			 mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="380"
 			 x:Class="Demo.EnumSelectorNodeView"
 			 xmlns:local="using:Demo"
-            xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 xmlns:vm="using:Demo.ViewModels"
 			 ClipToBounds="False"
-             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
 			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
 			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
 			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:EnumSelectorNodeViewModel">
-	<Viewbox Stretch="Uniform">
-	<Grid RowDefinitions="48,*" Width="280" Height="380" ClipToBounds="False">
-		<Border Grid.RowSpan="2"
-				CornerRadius="6"
-				BorderThickness="1.5"
-				BorderBrush="#d6a0ff"
-				Background="#2a1e35"/>
-		<Grid Grid.RowSpan="2" ZIndex="6" ClipToBounds="False">
-			<Grid.Styles>
-				<Style Selector="local|SlotView">
-					<Setter Property="Foreground" Value="White"/>
-				</Style>
-				<Style Selector="local|SlotView[SlotState=16]">
-					<Setter Property="Foreground" Value="Lime"/>
-				</Style>
-			</Grid.Styles>
-			<local:SlotView x:Name="PART_InputSlot"
-							Width="20" Height="20"
-							HorizontalAlignment="Left"
-							VerticalAlignment="Center"
-							Margin="-10,0,0,0"
-							DataContext="{Binding InputSlot}"
-							IsVisible="{Binding $parent[local:EnumSelectorNodeView].DataContext.HasInputSlot}"
-							SlotState="{Binding State}"/>
+	<Viewbox Stretch="Uniform" ClipToBounds="False">
+		<Grid RowDefinitions="32,*" Width="280" Height="380" ClipToBounds="False" Background="Transparent">
+			<Border Grid.RowSpan="2" Classes="card" />
+
+			<!-- 标题行：左对齐 + 类型色条，路由结果做成一个中性胶囊靠右 -->
+			<Border Grid.Row="0"
+					Background="Transparent"
+					behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+					behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+				<Grid ColumnDefinitions="2,*,Auto,Auto">
+					<Border Grid.Column="0" Classes="card-accent" Background="#D6A0FF" />
+					<TextBlock Grid.Column="1" Classes="card-title" Text="{Binding Title}" Margin="12,0,6,0" />
+					<TextBlock Grid.Column="2"
+							   Classes="card-value"
+							   Text="{Binding ExecutionOrderText}"
+							   Foreground="#6EE7A8"
+							   VerticalAlignment="Center"
+							   Margin="0,0,12,0" />
+					<Border Grid.Column="3"
+							Background="#1E2731" BorderBrush="#2A313C" BorderThickness="1"
+							CornerRadius="9" Padding="7,1" Margin="0,0,12,0"
+							VerticalAlignment="Center">
+						<TextBlock Text="{Binding LastRouted}" Foreground="#D6A0FF" FontSize="10.5" FontWeight="SemiBold" />
+					</Border>
+				</Grid>
+			</Border>
+			<Border Grid.Row="0" Classes="card-divider" />
+
+			<Border Grid.Row="1" ClipToBounds="True">
+				<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+					<StackPanel Margin="14,10" Spacing="6">
+						<TextBlock Classes="card-label" Text="SELECTED METHOD" />
+						<ComboBox Classes="card-field"
+								  ItemsSource="{Binding EnumValues}"
+								  SelectedValue="{Binding SelectedValue, Mode=TwoWay}" />
+						<TextBlock Classes="card-label" Text="COMPILE MODE" Margin="0,4,0,0" />
+						<ComboBox Classes="card-field"
+								  ItemsSource="{Binding CompileModeOptions}"
+								  SelectedItem="{Binding CompileMode, Mode=TwoWay}" />
+						<TextBlock Classes="card-label" Text="OUTPUT SLOTS" Margin="0,6,0,0" />
+						<ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate>
+									<Grid ColumnDefinitions="*,Auto" Margin="0,2" ClipToBounds="False">
+										<TextBlock Grid.Column="0"
+												   Text="{Binding Name}"
+												   Classes="card-value" FontSize="11" FontWeight="SemiBold"
+												   Foreground="#D6A0FF"
+												   VerticalAlignment="Center"
+												   HorizontalAlignment="Right"
+												   Margin="0,0,12,0" />
+										<local:SlotView Grid.Column="1" Width="24" Height="24"
+														HorizontalAlignment="Right"
+														VerticalAlignment="Center"
+														Margin="0,0,-12,0"
+														DataContext="{Binding Slot}"
+														SlotState="{Binding State}"
+														Channel="{Binding Channel}" />
+									</Grid>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</StackPanel>
+				</ScrollViewer>
+			</Border>
+
+			<!-- 端口挂在根 Grid 上，而不是上面那个 Border 里：Border 是 ClipToBounds="True" 的
+			     （内容滚动时不该溢出圆角），而端口要外溢 16 单位骑在卡边上，放进去就被切掉一半。
+			     ZIndex 那条同样要：端口有一半压在卡面上，不给序会被卡面盖掉 -->
+			<Grid Grid.Row="1" ZIndex="6" ClipToBounds="False">
+				<Grid.Styles>
+					<Style Selector="local|SlotView">
+						<Setter Property="Foreground" Value="White" />
+					</Style>
+					<Style Selector="local|SlotView[SlotState=16]">
+						<Setter Property="Foreground" Value="Lime" />
+					</Style>
+				</Grid.Styles>
+				<local:SlotView x:Name="PART_InputSlot"
+								Width="32" Height="32"
+								HorizontalAlignment="Left"
+								VerticalAlignment="Center"
+								Margin="-16,0,0,0"
+								DataContext="{Binding InputSlot}"
+								IsVisible="{Binding $parent[local:EnumSelectorNodeView].DataContext.HasInputSlot}"
+								SlotState="{Binding State}"
+								Channel="{Binding Channel}" />
+			</Grid>
 		</Grid>
-		<Border Grid.Row="0"
-				Background="#3a2550"
-				CornerRadius="4,4,0,0"
-				BorderThickness="0,0,0,0.5"
-				BorderBrush="#d6a0ff"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-				<TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
-				<TextBlock Text="{Binding ExecutionOrderText}" Foreground="#e4d8ff" FontWeight="Bold" VerticalAlignment="Center"/>
-				<Border Background="#2b1540" BorderBrush="#d6a0ff" BorderThickness="1" CornerRadius="10" Padding="6,1">
-					<TextBlock Text="{Binding LastRouted}" Foreground="#e4d8ff" FontWeight="Bold"/>
-				</Border>
-			</StackPanel>
-		</Border>
-		<Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4" ClipToBounds="True">
-			<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-			<StackPanel Margin="14" Spacing="8">
-				<TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
-				<ComboBox ItemsSource="{Binding EnumValues}"
-						  SelectedValue="{Binding SelectedValue, Mode=TwoWay}"
-						  HorizontalAlignment="Stretch"/>
-				<TextBlock Text="Compile Mode" Foreground="#bfbfbf" FontSize="11"/>
-				<ComboBox ItemsSource="{Binding CompileModeOptions}"
-						  SelectedItem="{Binding CompileMode, Mode=TwoWay}"
-						  HorizontalAlignment="Stretch"/>
-				<TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,6,0,0"/>
-				<ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
-					<ItemsControl.ItemTemplate>
-						<DataTemplate>
-							<Grid ColumnDefinitions="*,Auto" Margin="0,2" ClipToBounds="False">
-								<TextBlock Grid.Column="0"
-										   Text="{Binding Name}"
-										   Foreground="#d6a0ff"
-										   FontWeight="SemiBold"
-										   VerticalAlignment="Center"
-										   HorizontalAlignment="Right"
-										   Margin="0,0,8,0"/>
-								<local:SlotView Grid.Column="1" Width="16" Height="16"
-												HorizontalAlignment="Right"
-												VerticalAlignment="Center"
-												Margin="0,0,-8,0"
-												DataContext="{Binding Slot}"
-												SlotState="{Binding State}"/>
-							</Grid>
-						</DataTemplate>
-					</ItemsControl.ItemTemplate>
-				</ItemsControl>
-			</StackPanel>
-			</ScrollViewer>
-		</Border>
-	</Grid>
 	</Viewbox>
 </UserControl>

@@ -2,58 +2,68 @@
 @using VeloxDev.WorkflowSystem
 @using VeloxDev.WorkflowSystem.AttachedBehaviors
 
-@if (EffectiveCanRender && Link is not null)
+@if (EffectiveCanRender && Link is not null && Prepare())
 {
     // Stable DOM ids (mirroring the adapter's node/slot data ids) so the zoom JS can re-sync this
-    // link's polyline from the live endpoint slots in the same frame the nodes collapse.
+    // link from the live endpoint slots in the same frame the nodes collapse.
     var link = Link;
     var wfLinkId = link is null ? null : WorkflowRuntimeIds.Get(link);
     var wfSenderSlotId = link?.Sender is { } wfSender ? WorkflowRuntimeIds.Get(wfSender) : null;
     var wfReceiverSlotId = link?.Receiver is { } wfReceiver ? WorkflowRuntimeIds.Get(wfReceiver) : null;
-    var points = BuildPoints();
-    var markerId = $"veloxdev-arrow-{MarkerSuffix}";
-    var dash = EffectiveIsVirtual ? "6 4" : "none";
-    var markerEnd = EffectiveIsVirtual ? "" : $"url(#{markerId})";
 
-    // 行进的高光：三个停靠点用周期写在本组件上的偏移，轴取链接自身两端（userSpaceOnUse），光带才沿链接走
-    // 轴每次渲染从锚点重算，不反过来写：偏移归周期所有，渲染可读不可写
-    var axis = FlowAxis;
+    @* The whole link is one cubic curve, and the comet travelling along it is cut out of that curve
+       BY ARC LENGTH rather than by a gradient brush. That is why this view keeps its own sample
+       table: a gradient's axis is the straight line between the two ends, so on a curve it lights
+       the string and not the rope — the brightness stops tracking the bend, the light appears to
+       speed up and slow down as it goes round, and the kink where an orthogonal stub met its
+       diagonal reads as a kink in the light itself. Cutting by arc length is also what gives each
+       tail segment its own colour and opacity, so the tail is drawn as a run of separate elements.
 
+       Paths rather than <polyline>s on purpose: the adapter's zoom pass re-syncs every link's FIRST
+       <polyline> from the live slot boxes using the template's orthogonal golden-ratio formula, and
+       it would overwrite a bezier's geometry with an orthogonal route for the length of the zoom
+       settle. A <path> is not what that selector looks for, so the geometry here stays the only
+       thing that ever writes it. *@
     <svg width="@CanvasWidthCss" height="@CanvasHeightCss"
          data-veloxdev-link-id="@wfLinkId"
          data-veloxdev-sender-slot="@wfSenderSlotId"
          data-veloxdev-receiver-slot="@wfReceiverSlotId"
-         style="position:absolute;left:0;top:0;overflow:visible;">
-        <defs>
-            <marker id="@markerId" markerWidth="10" markerHeight="7"
-                    refX="9" refY="3.5" orient="auto">
-                <polygon points="0 0, 10 3.5, 0 7" fill="@LitCss" />
-            </marker>
-            @if (!EffectiveIsVirtual)
+         style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;">
+        <g fill="none" stroke-linecap="round">
+            @* 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上 *@
+            <path d="@BodyPath"
+                  stroke="@LineColor"
+                  stroke-opacity="0.10"
+                  stroke-width="@N(HaloOuterWidth)" />
+            <path d="@BodyPath"
+                  stroke="@LineColor"
+                  stroke-opacity="0.16"
+                  stroke-width="@N(HaloInnerWidth)" />
+
+            @if (EffectiveIsVirtual)
             {
-                <linearGradient id="@FlowId" gradientUnits="userSpaceOnUse"
-                                x1="@axis[0]" y1="@axis[1]" x2="@axis[2]" y2="@axis[3]">
-                    <stop offset="@N(BandTail)" stop-color="@DimCss" />
-                    <stop offset="@N(BandCentre)" stop-color="@BandColor" />
-                    <stop offset="@N(BandLead)" stop-color="@DimCss" />
-                </linearGradient>
-            }
-        </defs>
-        @if (EffectiveIsVirtual)
-        {
-            <polyline points="@points"
-                      fill="none"
+                @* 虚拟连线是指针下的橡皮筋：虚线、不流动 *@
+                <path d="@BodyPath"
                       stroke="@LineColor"
+                      stroke-opacity="0.75"
                       stroke-width="@ThicknessCss"
-                      stroke-dasharray="@dash" />
-        }
-        else
-        {
-            <polyline points="@points"
-                      fill="none"
-                      stroke="@FlowStroke"
-                      stroke-width="@ThicknessCss"
-                      marker-end="@markerEnd" />
-        }
+                      stroke-dasharray="4 2" />
+            }
+            else
+            {
+                @* 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来 *@
+                <path d="@BodyPath"
+                      stroke="@LineColor"
+                      stroke-opacity="0.55"
+                      stroke-width="@ThicknessCss" />
+
+                @* 彗星：光晕一遍（更宽更淡）在前，本体一遍在后，两遍都跟着头走。
+                   段数固定，够不着的那几段只是把不透明度压到零 —— 元素数不变，DOM 才稳定。 *@
+                @foreach (var s in _comet)
+                {
+                    <path d="@s.D" stroke="@s.Color" stroke-opacity="@s.Opacity" stroke-width="@s.Width" />
+                }
+            }
+        </g>
     </svg>
 }

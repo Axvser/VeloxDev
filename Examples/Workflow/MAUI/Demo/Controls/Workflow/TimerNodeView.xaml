@@ -4,60 +4,86 @@
              xmlns:controls="clr-namespace:Demo.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.TimerNodeView"
+             x:Name="Root"
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid x:Name="DesignGrid" RowDefinitions="40,*">
-        <Border Grid.RowSpan="2"
-                Stroke="#6EC6FF"
-                StrokeThickness="1.5"
-                StrokeShape="RoundRectangle 6"
-                BackgroundColor="#1E2A35" />
 
-        <Grid Grid.RowSpan="2" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
-            <controls:SlotView x:Name="PART_InputSlot"
-                               WidthRequest="20"
-                               HeightRequest="20"
-                               HorizontalOptions="Start"
-                               VerticalOptions="Center"
-                               Margin="-10,0,0,0"
-                               BindingContext="{Binding InputSlot}"
-                               IsVisible="{Binding HasInputSlot}"
-                               SlotState="{Binding State}" />
-            <controls:SlotView x:Name="PART_OutputSlot"
-                               WidthRequest="20"
-                               HeightRequest="20"
-                               HorizontalOptions="End"
-                               VerticalOptions="Center"
-                               Margin="0,0,-10,0"
-                               BindingContext="{Binding OutputSlot}"
-                               IsVisible="{Binding HasOutputSlot}"
-                               SlotState="{Binding State}" />
+    <!-- 尺寸必须与 [DefaultSize] 一致（200×140），行高清一色照抄 Avalonia 版：32 / * -->
+    <Grid x:Name="DesignGrid" RowDefinitions="32,*">
+
+        <Border Grid.RowSpan="2" Style="{StaticResource Card}" />
+
+        <!-- 标题行：左对齐 + 左侧 2px 类型色条；执行序号靠右。原来是居中白字压在一条蓝带上 -->
+        <Grid Grid.Row="0">
+            <Border BackgroundColor="Transparent"
+                    behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                    behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+                <Grid ColumnDefinitions="2,*,Auto">
+                    <Border Grid.Column="0"
+                            Style="{StaticResource CardAccent}"
+                            BackgroundColor="{StaticResource AccentTimerPython}" />
+                    <Label Grid.Column="1"
+                           Style="{StaticResource CardTitle}"
+                           Text="{Binding Title}"
+                           Margin="12,0,6,0" />
+                    <Label Grid.Column="2"
+                           Style="{StaticResource CardValue}"
+                           Text="{Binding ExecutionOrderText}"
+                           TextColor="{StaticResource CardExecOrder}"
+                           VerticalTextAlignment="Center"
+                           Margin="0,0,12,0"
+                           IsVisible="{Binding HasExecutionOrder}" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource CardHairline}" VerticalOptions="End" />
         </Grid>
 
-        <Border Grid.Row="0"
-                BackgroundColor="#253545"
-                Stroke="#6EC6FF"
-                StrokeThickness="0"
-                StrokeShape="RoundRectangle 4,4,0,0"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <HorizontalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="8">
-                <Label Text="{Binding Title}" TextColor="White" FontAttributes="Bold" />
-                <Label Text="{Binding ExecutionOrderText}" TextColor="#C8FFC8" FontAttributes="Bold"
-                       IsVisible="{Binding HasExecutionOrder}" />
-            </HorizontalStackLayout>
-        </Border>
+        <!-- 主体自己滚：MAUI 的 Entry 高度由平台定（Windows 上原生 TextBox 最小高 32），
+             比 Avalonia 版那颗 25 高的 TextBox 高一截，同一套行高放不下。设计尺寸不能动 -->
+        <ScrollView Grid.Row="1">
+            <Border Padding="12,9">
+                <VerticalStackLayout Spacing="5">
+                    <Label Style="{StaticResource CardLabel}" Text="INTERVAL (MS)" />
+                    <Border Style="{StaticResource CardFieldBox}">
+                        <Entry Style="{StaticResource CardField}"
+                               Keyboard="Numeric"
+                               Text="{Binding IntervalMilliseconds}" />
+                    </Border>
+                    <Label Style="{StaticResource CardLabel}" Text="LAST TICK" Margin="0,4,0,0" />
+                    <Label Style="{StaticResource CardValue}"
+                           Text="{Binding LastTick}"
+                           TextColor="{StaticResource AccentTimerPython}"
+                           FontAttributes="Bold"
+                           LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+            </Border>
+        </ScrollView>
 
-        <Border Grid.Row="1" BackgroundColor="#1E2A35" StrokeShape="RoundRectangle 0,0,4,4">
-            <ScrollView>
-            <VerticalStackLayout Margin="14" Spacing="6">
-                <Label Text="Interval (ms)" TextColor="#BFBFBF" FontSize="11" />
-                <Entry Text="{Binding IntervalMilliseconds}" Keyboard="Numeric" FontSize="11" />
-                <Label Text="Last Tick" TextColor="#BFBFBF" FontSize="11" />
-                <Label Text="{Binding LastTick}" TextColor="#6EC6FF" FontAttributes="Bold" FontSize="11" LineBreakMode="WordWrap" />
-            </VerticalStackLayout>
-            </ScrollView>
-        </Border>
+        <!-- ZIndex：端口有一半压在卡面上，不给序就会被卡面盖掉。
+             InputTransparent + CascadeInputTransparent=False：这层容器本身不吃指针事件，
+             但里面的端口照收 —— 否则这一层会把端口的连接拖拽一起吞掉 -->
+        <Grid Grid.RowSpan="2" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
+            <controls:SlotView x:Name="PART_InputSlot"
+                               WidthRequest="32"
+                               HeightRequest="32"
+                               HorizontalOptions="Start"
+                               VerticalOptions="Center"
+                               Margin="-16,0,0,0"
+                               BindingContext="{Binding InputSlot}"
+                               IsVisible="{Binding BindingContext.HasInputSlot, Source={x:Reference Root}}"
+                               SlotState="{Binding State}"
+                               Channel="{Binding Channel}" />
+            <controls:SlotView x:Name="PART_OutputSlot"
+                               WidthRequest="32"
+                               HeightRequest="32"
+                               HorizontalOptions="End"
+                               VerticalOptions="Center"
+                               Margin="0,0,-16,0"
+                               BindingContext="{Binding OutputSlot}"
+                               IsVisible="{Binding BindingContext.HasOutputSlot, Source={x:Reference Root}}"
+                               SlotState="{Binding State}"
+                               Channel="{Binding Channel}" />
+        </Grid>
     </Grid>
 </ContentView>

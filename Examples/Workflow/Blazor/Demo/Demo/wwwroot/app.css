@@ -1,3 +1,44 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   Workflow node-card design system.
+
+   Ported from the Avalonia demo (CardTheme.axaml + the five card views). Every value
+   the five cards share lives here exactly once, as a custom property and a class — a
+   card that inlines its own palette drifts away from the other four, and this
+   repository has already paid for that lesson.
+
+     surface #161B22 · border #2A313C (1px, radius 8) · divider #222A34
+     title #E6EAF2 12.5 SemiBold · label #7C8798 10 · value #D6DCE6 11.5
+     field #0E1218 · hover #1E2731 · disabled #5A6474
+   ══════════════════════════════════════════════════════════════════════════════ */
+:root {
+    --wf-surface: #161B22;
+    --wf-border: #2A313C;
+    --wf-border-hover: #3A4553;
+    --wf-border-disabled: #232A34;
+    --wf-divider: #222A34;
+    --wf-title: #E6EAF2;
+    --wf-label: #7C8798;
+    --wf-value: #D6DCE6;
+    --wf-field: #0E1218;
+    --wf-hover: #1E2731;
+    --wf-disabled: #5A6474;
+    --wf-code: #0D1117;
+
+    /* Type accent: the 2px bar at the head of the title row. Controller / worker /
+       enum / no-type-at-all. */
+    --wf-accent-controller: #38BDF8;
+    --wf-accent-worker: #6EC6FF;
+    --wf-accent-enum: #D6A0FF;
+    --wf-accent-fallback: #94A3B8;
+
+    /* Action semantics. The buttons are all the same ghost shape; the verb is said
+       with the text colour alone, never with a saturated block. */
+    --wf-act-compile: #7EC8FF;
+    --wf-act-run: #6EE7A8;
+    --wf-act-stop: #FCA5A5;
+    --wf-act-close: #9AA6B5;
+}
+
 /* VeloxDev Workflow Blazor Demo — matching WPF full demo styling */
 html, body {
     margin: 0;
@@ -230,42 +271,232 @@ html, body {
     z-index: 2;
 }
 
-/* ── Node body (rendered inside generated TemplateNodeView) ── */
-/* The generated card body is a flex column so body-only inner views (node-body,
-   ctrl-root, bool-root, enum-root) fill the card below the header. */
-.veloxdev-wf-node-body {
+/* ── The node card (generated TemplateNodeView) ─────────────────────────────
+   One dark surface + a hairline edge. The header is one 32px row: a 2px type
+   accent, a left-aligned title, then the right-hand readouts. Everything below
+   32px is the node's own body, supplied by the type-specific view. */
+.wf-card {
+    background: var(--wf-surface);
+    border: 1px solid var(--wf-border);
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.wf-card-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 32px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--wf-divider);
+}
+
+/* The type bar. Rounds only its top-left so it meets the card's corner. */
+.wf-card-accent {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 8px 0 0 0;
+    background: var(--wf-accent-fallback);
+}
+
+.wf-card-title {
+    flex: 1;
+    min-width: 0;
+    margin-left: 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--wf-title);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The execution step number, stated as text — it is a number, not a badge. */
+.wf-card-order {
+    flex: none;
+    margin-right: 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--wf-act-run);
+}
+
+/* A status capsule for readouts that are words ("Idle", "Routed → Left"). Same
+   neutral surface as the card, one step up, so it reads as chrome not as content. */
+.wf-card-pill {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 12px;
+    padding: 1px 7px;
+    background: var(--wf-hover);
+    border: 1px solid var(--wf-border);
+    border-radius: 9px;
+    font-size: 10.5px;
+    line-height: 15px;
+    color: var(--wf-act-close);
+    white-space: nowrap;
+}
+
+.wf-card-body {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 0;
+}
+
+/* The body box. It is NOT a scroller, and that is deliberate: a port hangs half over the
+   card's edge, and a scroller clips at its padding box, so the first body that scrolled
+   would slice that half off. Each card that needs to scroll puts its own scroller inside,
+   widened by the port's half-width so the clip box moves out with the glyph (see the Python
+   strips) or kept clear of the port rows entirely (see the enum's fields / slots split). The
+   edge ports are siblings of this box, not children. */
+.wf-card-scroll {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: visible;
 }
+
+/* Port hosts. Centred on the card's edge with the glyph's own centre on it, so half
+   the port sits on the card and half hangs outside. Kept out of the body box, whose
+   overflow is the one thing here that could cut a port in half. */
+.wf-card-slot-host {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    line-height: 0;
+}
+.wf-card-slot-in { left: 0; transform: translate(-50%, -50%); }
+.wf-card-slot-out { right: 0; transform: translate(50%, -50%); }
+
+/* ── The shared typographic atoms the five cards draw from ───────────────── */
+.wf-label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.6px;
+    color: var(--wf-label);
+}
+
+.wf-value {
+    font-size: 11.5px;
+    color: var(--wf-value);
+}
+
+.wf-field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 7px;
+    background: var(--wf-field);
+    border: 1px solid var(--wf-border);
+    border-radius: 6px;
+    color: var(--wf-value);
+    font-family: inherit;
+    font-size: 11.5px;
+    outline: none;
+}
+.wf-field:focus { border-color: var(--wf-border-hover); }
+
+/* Long-form input (the Python editor) gets its own near-black surface: code wants
+   to read as code, and the field tint vanishes under a mono block. */
+.wf-field-code {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--wf-code);
+    border: none;
+    color: var(--wf-value);
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.35;
+    padding: 4px 6px;
+    outline: none;
+    resize: none;
+}
+
+/* ── Ghost actions ─────────────────────────────────────────────────────────
+   Four identical shapes; the verb is in the text colour, not in a colour block.
+   Hover lifts the edge and the surface only — the semantics are already written
+   on the label. Disabled presses the edge and the text down and keeps the shape,
+   because a filled grey slab in a row of ghosts reads as a different kind of
+   control than the three next to it. */
+.wf-ghost {
+    min-width: 0;
+    padding: 3px 10px;
+    background: transparent;
+    border: 1px solid var(--wf-border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 11px;
+    /* The 66px action row is two rows and a 6px gap: 22.5 each. A line-height of 1.2 keeps the
+       label inside that without trimming the padding. */
+    line-height: 1.2;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.wf-ghost:hover:not(:disabled) {
+    background: var(--wf-hover);
+    border-color: var(--wf-border-hover);
+}
+/* (0,2,0) beats the single-class semantic colours below, so this needs no !important. */
+.wf-ghost:disabled {
+    border-color: var(--wf-border-disabled);
+    color: var(--wf-disabled);
+    cursor: default;
+}
+.wf-act-compile { color: var(--wf-act-compile); }
+.wf-act-run     { color: var(--wf-act-run); }
+.wf-act-stop    { color: var(--wf-act-stop); }
+.wf-act-close   { color: var(--wf-act-close); }
+
+/* The 2×2 action block. Height is the design's 66px action row, hairline on top. */
+.wf-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 6px;
+    height: 66px;
+    box-sizing: border-box;
+    padding: 7px 12px;
+    border-top: 1px solid var(--wf-divider);
+}
+
+/* A generic drop-in body, for a node view that ships with the template. It draws from the
+   same palette as the five cards, so a dropped-in view does not land on a surface of its own. */
 .node-body {
     flex: 1;
     min-height: 0;
-    padding: 14px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     overflow-y: auto;
-    background: #252525;
     box-sizing: border-box;
 }
 .node-body .node-label {
     display: block;
-    font-size: 12px;
-    color: #DCDCDC;
+    font-size: 10px;
+    letter-spacing: 0.6px;
+    color: var(--wf-label);
     margin-bottom: 2px;
 }
 .node-body .node-input {
     width: 100%;
-    padding: 6px;
-    background: #333;
-    color: white;
-    border: 1px solid #555;
-    border-radius: 3px;
-    font-size: 12px;
+    padding: 4px 7px;
+    background: var(--wf-field);
+    color: var(--wf-value);
+    border: 1px solid var(--wf-border);
+    border-radius: 6px;
+    font-size: 11.5px;
     box-sizing: border-box;
 }
-.node-body label { font-size: 12px; color: #DCDCDC; cursor: pointer; }
+.node-body label { font-size: 11.5px; color: var(--wf-value); cursor: pointer; }
 .node-body input[type=checkbox] { margin-right: 4px; }
 
 /* ── Node execution feedback strip (step number, load, status, duration) ── */
@@ -296,37 +527,12 @@ html, body {
 .wf-node-status-duration{ background: rgba(160, 160, 160, 0.12); color: #B9B9B9; border: 1px solid rgba(160, 160, 160, 0.25); }
 .wf-node-status-trace   { background: rgba(214, 160, 255, 0.1); color: #D6A0FF; border: 1px solid rgba(214, 160, 255, 0.25); }
 
-/* ── Node card execution highlight (badges + running glow). Demo-only: the item
-   templates never emit these classes, so generated node cards stay clean. ── */
-.veloxdev-wf-node-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex: none;
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1;
-    padding: 3px 7px;
-    border-radius: 10px;
-    white-space: nowrap;
-}
-
-.veloxdev-wf-node-badge-order {
-    background: rgba(200, 255, 200, 0.14);
-    color: #C8FFC8;
-    border: 1px solid rgba(200, 255, 200, 0.35);
-}
-
-.veloxdev-wf-node-badge-load {
-    background: rgba(228, 216, 255, 0.12);
-    color: #E4D8FF;
-    border: 1px solid rgba(228, 216, 255, 0.3);
-}
-
-.veloxdev-wf-node-badge-running {
+/* ── Node card execution highlight (running pill + running glow). Demo-only: the
+   item templates never emit these classes, so generated node cards stay clean. ── */
+.wf-card-pill-running {
     background: rgba(255, 213, 74, 0.14);
+    border-color: rgba(255, 213, 74, 0.45);
     color: #FFD54A;
-    border: 1px solid rgba(255, 213, 74, 0.45);
 }
 
 .veloxdev-wf-node-pulse {
@@ -342,9 +548,18 @@ html, body {
     50%      { opacity: 0.35; transform: scale(0.7); }
 }
 
-/* The card itself breathes a yellow glow while its node is executing. */
+/* The card itself breathes a yellow glow while its node is executing. The amber surface
+   and edge used to live as string constants in TemplateNodeView; they are palette values,
+   so they belong here with the rest of them. */
 .veloxdev-wf-node-running {
     animation: veloxdev-wf-card-glow 1.2s ease-in-out infinite;
+}
+.wf-card.veloxdev-wf-node-running {
+    background: #2D2817;
+    border-color: #FFD54A;
+}
+.wf-card.veloxdev-wf-node-running .wf-card-header {
+    border-bottom-color: rgba(255, 213, 74, 0.35);
 }
 
 @keyframes veloxdev-wf-card-glow {
@@ -352,62 +567,23 @@ html, body {
     50%      { box-shadow: 0 0 0 1px rgba(255, 213, 74, 0.7), 0 0 22px rgba(255, 213, 74, 0.55); }
 }
 
-/* ── Controller View (body-only; card chrome comes from TemplateNodeView) ── */
+/* ── Controller card body (230×170: 32 header / 72 body / 66 actions) ────── */
 .ctrl-root {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    box-sizing: border-box;
 }
 .ctrl-body {
     flex: 1;
     min-height: 0;
-    padding: 12px;
-    background: #252525;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 5px;
+    padding: 9px 12px;
+    box-sizing: border-box;
     overflow-y: auto;
 }
-.ctrl-label {
-    display: block;
-    font-size: 11px;
-    color: #DCDCDC;
-    margin-bottom: -4px;
-}
-.ctrl-input, .ctrl-select {
-    width: 100%;
-    padding: 6px;
-    background: #333;
-    color: white;
-    border: 1px solid #555;
-    border-radius: 3px;
-    font-size: 11px;
-    box-sizing: border-box;
-}
-.ctrl-footer {
-    display: flex;
-    gap: 8px;
-    padding: 8px;
-    background: #2D2D2D;
-    border-top: 0.5px solid #444;
-}
-.btn-ctrl {
-    flex: 1;
-    padding: 6px;
-    border: none;
-    border-radius: 3px;
-    color: white;
-    font-size: 12px;
-    cursor: pointer;
-    text-align: center;
-}
-.btn-compile { background: #1e3a5f; }
-.btn-run { background: #166534; }
-.btn-stop { background: #5f1e1e; }
-.btn-close { background: #991b1b; }
 
 /* ── Bool Selector View (body-only; card chrome comes from TemplateNodeView) ── */
 .bool-root {
@@ -425,75 +601,197 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    background: #252525;
 }
-.bool-label { font-size: 12px; color: #DCDCDC; cursor: pointer; }
+.bool-label { font-size: 12px; color: var(--wf-value); cursor: pointer; }
 .bool-label input { margin-right: 4px; }
 
-/* ── Enum Selector View (body-only; card chrome comes from TemplateNodeView) ── */
+/* ── Enum Selector card body (280×380) ──────────────────────────────────── */
 .enum-root {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: visible;
-    box-sizing: border-box;
 }
-.enum-body {
-    flex: 1;
+/* The fields scroll; the port list does NOT. A port straddles the card's right edge, and a
+   scroller clips at its padding box — so the rows live outside the scroller, where nothing can
+   cut the outer half of a glyph. Splitting them means the label has to travel with the rows. */
+.enum-fields {
+    flex: 0 1 auto;
     min-height: 0;
-    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    background: #252525;
+    gap: 6px;
+    padding: 10px 14px 4px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
-.enum-label { font-size: 12px; color: #DCDCDC; }
-.enum-select {
-    width: 100%;
-    padding: 6px;
-    background: #333;
-    color: white;
-    border: 1px solid #555;
-    border-radius: 3px;
-    font-size: 12px;
+.enum-root select.wf-field {
+    appearance: auto;
+    cursor: pointer;
 }
 
 /* ── Selector multi-output slots (SlotEnumerator) ─────────── */
-.selector-slots {
-    margin-top: 8px;
+.enum-slots {
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
+    padding: 0 14px 10px;
+    box-sizing: border-box;
 }
 .selector-slot-row {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
-    margin-right: -16px;
     flex: 0 0 auto;
+    min-width: 0;
+    /* Pulls the row out to the card edge so the glyph straddles it: 14 is the body's own inset
+       and 12 is half of the 24-unit port. Nothing here clips, so the pull needs no widening
+       trick the way the scrolling strips do. */
+    margin-right: -26px;
 }
 .selector-slot-label {
+    min-width: 0;
     font-size: 11px;
-    color: #d6a0ff;
     font-weight: 600;
+    color: var(--wf-accent-enum);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* ── Slot View (generated TemplateSlotView SVG path) ── */
+/* ── Slot View (generated TemplateSlotView SVG rings) ──
+   The ring, its core and the one travelling ripple are drawn in SVG so the halo can
+   scale per frame without a raster step. The ripple is the whole direction language:
+   it spreads outward when the slot can send, gathers inward when it can receive, and
+   does both when its channel declares both — so a port states what it is for with
+   nothing wired to it. */
 .veloxdev-wf-slot-svg {
     display: block;
+    overflow: visible;
 }
-.veloxdev-wf-slot[data-veloxdev-slot-id] {
-    cursor: crosshair;
-    pointer-events: auto;
+
+/* ── Timer card body (200×140: 32 header / 108 body) ─────────────────────── */
+.timer-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 9px 12px;
+    box-sizing: border-box;
+    overflow-y: auto;
 }
-.veloxdev-wf-slot-svg path { transition: filter 0.15s ease; }
+.timer-tick {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--wf-accent-worker);
+    word-break: break-all;
+}
+
+/* ── Python card body (280×260: 32 header / description strip / * workspace) ── */
+.py-root {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.py-desc {
+    flex: none;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--wf-divider);
+    font-size: 10.5px;
+    line-height: 1.35;
+    color: var(--wf-label);
+}
+/* Three columns: an input strip, the editor, an output strip. The side columns are
+   wide enough for the port glyph plus its label; the editor takes what is left. */
+.py-workspace {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 64px 1fr 64px;
+}
+.py-port-strip {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+/* A port is centred ON the card's edge, so half of its glyph is outside the strip's
+   content box — and a scroller clips at its padding box, which would slice that half
+   off. The strip therefore reaches 12 units past the edge and insets its content by the
+   same 12: the clip box moves out with the port, and the half-glyph survives. (The
+   Avalonia cards solve the same problem the same way, with a negative ScrollViewer
+   margin.) 12 is half of the 24-unit port. */
+.py-port-strip-in {
+    margin-left: -12px;
+    padding-left: 12px;
+    align-items: flex-start;
+}
+.py-port-strip-in .py-port-row { margin-left: -12px; }
+.py-port-strip-out {
+    margin-right: -12px;
+    padding-right: 12px;
+    align-items: flex-end;
+}
+.py-port-strip-out .py-port-row { margin-right: -12px; }
+.py-port-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+.py-port-row-out { justify-content: flex-end; }
+.py-port-label {
+    min-width: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--wf-accent-worker);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.py-editor {
+    min-width: 0;
+    margin: 6px 4px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--wf-divider);
+    border-radius: 6px;
+    background: var(--wf-code);
+    overflow: hidden;
+}
+.py-editor-bar {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--wf-surface);
+    border-bottom: 1px solid var(--wf-divider);
+}
+.py-editor-file {
+    font-family: Consolas, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--wf-act-run);
+}
+.py-editor-lang {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--wf-disabled);
+}
+.py-editor textarea {
+    flex: 1;
+    min-height: 0;
+    white-space: pre;
+    overflow: auto;
+}
 
 /* ── Slot Overlays (positioned at node edges) ── */
 .slot-overlay {

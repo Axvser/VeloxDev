@@ -8,6 +8,8 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
                 <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
+                <!-- 节点卡共用的一套（卡面、字级、幽灵按钮、代码面）。五张卡都从它取样式，不各自写色值。 -->
+                <ResourceDictionary Source="Resources/Styles/CardTheme.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -109,7 +109,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         public void Draw(ICanvas canvas, RectF dirtyRect)
         {
             canvas.SaveState();
-            canvas.FillColor = Color.FromArgb("#141922");
+            canvas.FillColor = Color.FromArgb("#1E1E1E");
             canvas.FillRectangle(dirtyRect);
 
             DrawGrid(canvas, dirtyRect, Math.Max(0, owner.RulerThickness));
@@ -130,7 +130,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
                 var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
-                canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#38BDF8") : IsMajorLine(value, majorStep) ? Color.FromArgb("#31445C") : Color.FromArgb("#223043");
+                canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#4D4D4D") : IsMajorLine(value, majorStep) ? Color.FromArgb("#3A3D40") : Color.FromArgb("#2A2D2E");
                 canvas.StrokeSize = IsNearZero(value) ? 1.2f : 1f;
                 canvas.DrawLine(x, 0, x, bounds.Height);
             }
@@ -139,7 +139,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
                 var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, ruler);
-                canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#38BDF8") : IsMajorLine(value, majorStep) ? Color.FromArgb("#31445C") : Color.FromArgb("#223043");
+                canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#4D4D4D") : IsMajorLine(value, majorStep) ? Color.FromArgb("#3A3D40") : Color.FromArgb("#2A2D2E");
                 canvas.StrokeSize = IsNearZero(value) ? 1.2f : 1f;
                 canvas.DrawLine(0, y, bounds.Width, y);
             }
@@ -154,7 +154,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             canvas.SaveState();
 
             var ruler = Math.Max(0, owner.RulerThickness);
-            canvas.FillColor = Color.FromArgb("#C81C2330");
+            canvas.FillColor = Color.FromArgb("#C8252526");
             canvas.FillRectangle(0, 0, dirtyRect.Width, (float)ruler);
             canvas.FillRectangle(0, 0, (float)ruler, dirtyRect.Height);
 
@@ -172,7 +172,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 
-            canvas.StrokeColor = Color.FromArgb("#475569");
+            canvas.StrokeColor = Color.FromArgb("#3A3D40");
             canvas.StrokeSize = 1f;
             canvas.DrawLine((float)ruler, 0, (float)ruler, bounds.Height);
             canvas.DrawLine(0, (float)ruler, bounds.Width, (float)ruler);
@@ -188,7 +188,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
                 var isMajor = IsMajorLine(value, majorStep);
                 var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
-                canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#38BDF8") : Color.FromArgb("#64748B");
+                canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#4D4D4D") : Color.FromArgb("#555555");
                 canvas.StrokeSize = IsNearZero(value) ? 1.2f : 1f;
                 canvas.DrawLine(x, (float)ruler, x, (float)(ruler - tickLength));
                 if (isMajor)
@@ -208,7 +208,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
                 var isMajor = IsMajorLine(value, majorStep);
                 var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
-                canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#38BDF8") : Color.FromArgb("#64748B");
+                canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#4D4D4D") : Color.FromArgb("#555555");
                 canvas.StrokeSize = IsNearZero(value) ? 1.2f : 1f;
                 canvas.DrawLine((float)ruler, y, (float)(ruler - tickLength), y);
                 if (isMajor)
@@ -221,7 +221,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         private static void DrawLabel(ICanvas canvas, double value, float x, float y)
         {
             canvas.FontSize = 10;
-            canvas.FontColor = Color.FromArgb("#94A3B8");
+            canvas.FontColor = Color.FromArgb("#888888");
             canvas.DrawString(FormatGridValue(value), x, y, HorizontalAlignment.Left);
         }
 

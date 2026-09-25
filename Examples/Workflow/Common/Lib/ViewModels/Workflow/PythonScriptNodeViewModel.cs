@@ -58,16 +58,9 @@ public partial class PythonScriptNodeViewModel : ICompileTimeAware, IRuntimeAwar
     [AgentContext(AgentLanguages.English, "Description of what this Python node does (inputs/outputs, computation, purpose) — helps the Agent and is shown on the canvas. Editable via PatchNodeProperties.")]
     [VeloxProperty] private string description = "";
 
-    [AgentContext(AgentLanguages.Chinese, "无状态模式下是否显示 Run/Forward 按钮")]
-    [AgentContext(AgentLanguages.English, "Whether to show the Run/Forward buttons in stateless mode.")]
-    [VeloxProperty] private bool showActionButtons = false;
-
     [VeloxProperty] private string lastStatus = "Idle";
     [VeloxProperty] private string lastRun = "-";
     [VeloxProperty] private string lastOutput = "-";
-
-    public bool HasInputSlots => InputSlots is not null && InputSlots.Items.Count > 0;
-    public bool HasOutputSlots => OutputSlots is not null && OutputSlots.Items.Count > 0;
 
     /// <summary>Compile-time identity injected by the compiler (Order = -1 means absolute stop).</summary>
     public ICompileContext? CompileContext { get; private set; }

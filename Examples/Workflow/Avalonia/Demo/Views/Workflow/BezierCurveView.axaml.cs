@@ -48,7 +48,7 @@ public partial class BezierCurveView : Control
         AvaloniaProperty.Register<BezierCurveView, bool>(nameof(IsVirtual), false);
 
     public static readonly StyledProperty<Color> LineColorProperty =
-        AvaloniaProperty.Register<BezierCurveView, Color>(nameof(LineColor), Colors.Cyan);
+        AvaloniaProperty.Register<BezierCurveView, Color>(nameof(LineColor), Color.Parse("#DDFFFFFF"));
 
     public static readonly StyledProperty<double> LineThicknessProperty =
         AvaloniaProperty.Register<BezierCurveView, double>(nameof(LineThickness), 2.0);
@@ -136,12 +136,6 @@ public partial class BezierCurveView : Control
         if (geometry == null) return;
 
         DrawBezierLine(context, geometry);
-
-        // If it is not a dashed line, draw the arrow
-        if (!IsVirtual && (DashArray == null || DashArray.Count == 0))
-        {
-            DrawArrowhead(context);
-        }
     }
 
     private void DrawBezierLine(DrawingContext context, StreamGeometry geometry)
@@ -188,46 +182,6 @@ public partial class BezierCurveView : Control
             ctx.CubicBezierTo(cp1, cp2, endPoint);
         }
         return geometry;
-    }
-
-    private void DrawArrowhead(DrawingContext context)
-    {
-        var diffx = EndLeft - StartLeft;
-
-        // Compute the arrow direction (using the direction at the end of the curve)
-        var cp2 = new Point(EndLeft - diffx * 0.3, EndTop);
-        var arrowTip = new Point(EndLeft, EndTop);
-
-        var tangent = new Vector(arrowTip.X - cp2.X, arrowTip.Y - cp2.Y);
-        tangent = tangent.Normalize();
-
-        double arrowLength = 12;
-        double arrowWidth = 8;
-
-        var perp = new Vector(-tangent.Y, tangent.X);
-        var basePt = new Point(
-            arrowTip.X - tangent.X * arrowLength,
-            arrowTip.Y - tangent.Y * arrowLength);
-        var wing1 = new Point(
-            basePt.X + perp.X * (arrowWidth / 2),
-            basePt.Y + perp.Y * (arrowWidth / 2));
-        var wing2 = new Point(
-            basePt.X - perp.X * (arrowWidth / 2),
-            basePt.Y - perp.Y * (arrowWidth / 2));
-
-        var arrowGeo = new StreamGeometry();
-        using (var ctx = arrowGeo.Open())
-        {
-            ctx.BeginFigure(arrowTip, true);
-            ctx.LineTo(wing1);
-            ctx.LineTo(wing2);
-        }
-
-        var brush = new ImmutableSolidColorBrush(LineColor);
-        var pen = new Pen(brush, LineThickness);
-
-        context.DrawGeometry(brush, null, arrowGeo);
-        context.DrawGeometry(null, pen, arrowGeo);
     }
 
     #region Interaction

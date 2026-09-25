@@ -21,14 +21,16 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    private static readonly Brush SurfaceBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#141922"));
-    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C81C2330"));
-    private static readonly Brush LabelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#94A3B8"));
-    private static readonly Pen MinorGridPen = CreateFrozenPen("#223043", 1);
-    private static readonly Pen MajorGridPen = CreateFrozenPen("#31445C", 1);
-    private static readonly Pen AxisPen = CreateFrozenPen("#38BDF8", 1.2);
-    private static readonly Pen TickPen = CreateFrozenPen("#64748B", 1);
-    private static readonly Pen DividerPen = CreateFrozenPen("#475569", 1);
+    // 中性灰一套，与 Trimmed demo（模板的默认调色板）逐字相同。原先这套是青蓝的──画布 #141922、
+    // 轴用 #38BDF8──七家非 Trimmed 里有四家共用它。对齐的只有画布层：节点卡的逐类型配色是刻意保留的。
+    private static readonly Brush SurfaceBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E1E1E"));
+    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C8252526"));
+    private static readonly Brush LabelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888"));
+    private static readonly Pen MinorGridPen = CreateFrozenPen("#2A2D2E", 1);
+    private static readonly Pen MajorGridPen = CreateFrozenPen("#3A3D40", 1);
+    private static readonly Pen AxisPen = CreateFrozenPen("#4D4D4D", 1.2);
+    private static readonly Pen TickPen = CreateFrozenPen("#555555", 1);
+    private static readonly Pen DividerPen = CreateFrozenPen("#3A3D40", 1);
     private static readonly Typeface LabelTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
     private readonly GridLayer _gridLayer;

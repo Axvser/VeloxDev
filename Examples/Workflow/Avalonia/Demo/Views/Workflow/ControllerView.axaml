@@ -1,86 +1,73 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-			 mc:Ignorable="d" d:DesignWidth="220" d:DesignHeight="340"
+			 mc:Ignorable="d" d:DesignWidth="230" d:DesignHeight="170"
 			 x:Class="Demo.ControllerView"
 			 xmlns:local="using:Demo"
-            xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 xmlns:vm="using:Demo.ViewModels"
-             ClipToBounds="False"
-           behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 ClipToBounds="False"
+			 behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
 			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
 			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:ControllerViewModel">
-  <Viewbox Stretch="Uniform">
-  <Grid RowDefinitions="52,*,88" ColumnDefinitions="*" Width="220" Height="340" ClipToBounds="False">
-		<Border Grid.RowSpan="5"
-             Grid.ColumnSpan="2"
-				BorderThickness="1"
-				CornerRadius="5"
-				BorderBrush="White"
-				Background="#2d2d2d" />
-		<Border Grid.Row="0"
-				Grid.ColumnSpan="2"
-				BorderThickness="1"
-				CornerRadius="5,5,0,0"
-				Background="#2d2d2d"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-         <TextBlock Text="Network Flow Controller"
-					   VerticalAlignment="Center"
-					   HorizontalAlignment="Center"
-					   Foreground="White"/>
-		</Border>
 
-        <Border Grid.Row="1" Background="#252525" Padding="12">
-			<ScrollViewer>
-			<StackPanel Spacing="6">
-               <TextBlock Text="Seed" Foreground="#dcdcdc" FontSize="11"/>
-				<TextBox Text="{Binding SeedPayload, Mode=TwoWay}" PlaceholderText="payload" FontSize="11"/>
-			</StackPanel>
-			</ScrollViewer>
-		</Border>
+	<!-- 卡片的色值与字级都来自 CardTheme.axaml（App.axaml 里挂上的），这里只用类名。
+	     尺寸必须与 [DefaultSize] 一致，否则 Viewbox 会把设计整体缩放。 -->
+	<Viewbox Stretch="Uniform" ClipToBounds="False">
+		<Grid RowDefinitions="32,*,66" Width="230" Height="170" ClipToBounds="False" Background="Transparent">
+			<Border Grid.RowSpan="3" Classes="card" />
 
-		<Border Grid.Row="2" Background="#2d2d2d" CornerRadius="0,0,5,5" Padding="8">
-			<Grid ColumnDefinitions="*,*" RowDefinitions="*,*" ColumnSpacing="6" RowSpacing="6">
-				<Button Grid.Row="0" Grid.Column="0"
-						Content="Compile"
-						VerticalContentAlignment="Center"
-						Background="#1e3a5f"
-						Foreground="White"
-						Command="{Binding CompileCommand}"/>
-				<Button Grid.Row="0" Grid.Column="1"
-						Content="Run"
-						VerticalContentAlignment="Center"
-						Background="#1e5f2e"
-						Foreground="White"
+			<!-- 标题行：左对齐 + 左侧 2px 类型色条。原来是居中白字压在自己的灰带上 -->
+			<Border Grid.Row="0"
+					Background="Transparent"
+					behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+					behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+				<Grid ColumnDefinitions="2,*">
+					<Border Grid.Column="0" Classes="card-accent" Background="#38BDF8" />
+					<TextBlock Grid.Column="1" Classes="card-title" Text="Controller" Margin="12,0,0,0" />
+				</Grid>
+			</Border>
+			<Border Grid.Row="0" Classes="card-divider" />
+
+			<Border Grid.Row="1" Padding="12,9">
+				<StackPanel Spacing="5">
+					<TextBlock Classes="card-label" Text="SEED" />
+					<TextBox Classes="card-field"
+							 Text="{Binding SeedPayload, Mode=TwoWay}"
+							 PlaceholderText="payload" />
+				</StackPanel>
+			</Border>
+			<Border Grid.Row="2" BorderBrush="#222A34" BorderThickness="0,1,0,0" />
+
+			<!-- 动作：2×2 的同形「幽灵按钮」，语义只体现在文字颜色上。原来是一排四块高饱和色块 -->
+			<Grid Grid.Row="2" ColumnDefinitions="*,*" RowDefinitions="*,*" ColumnSpacing="6" RowSpacing="6" Margin="12,7">
+				<Button Grid.Row="0" Grid.Column="0" Classes="ghost" Content="Compile"
+						Foreground="#7EC8FF" Command="{Binding CompileCommand}" />
+				<Button Grid.Row="0" Grid.Column="1" Classes="ghost" Content="Run"
+						Foreground="#6EE7A8"
 						IsEnabled="{Binding HasCompiledGraphs}"
-						Command="{Binding RunCommand}"/>
-				<Button Grid.Row="1" Grid.Column="0"
-						Content="Stop"
-						VerticalContentAlignment="Center"
-						Background="#5f1e1e"
-						Foreground="White"
-						Command="{Binding StopCommand}"/>
-				<Button Grid.Row="1" Grid.Column="1"
-						Content="Close"
-						VerticalContentAlignment="Center"
-						Background="#1e1e1e"
-						Foreground="White"
-						Command="{Binding CloseWorkflowCommand}"/>
+						Command="{Binding RunCommand}" />
+				<Button Grid.Row="1" Grid.Column="0" Classes="ghost" Content="Stop"
+						Foreground="#FCA5A5" Command="{Binding StopCommand}" />
+				<Button Grid.Row="1" Grid.Column="1" Classes="ghost" Content="Close"
+						Foreground="#9AA6B5" Command="{Binding CloseWorkflowCommand}" />
 			</Grid>
-		</Border>
 
-     <local:SlotView x:Name="PART_OutputSlot"
-					 Width="20"
-					 Height="20"
-					 Grid.RowSpan="3"
-					 HorizontalAlignment="Right"
-					 VerticalAlignment="Center"
-					 Margin="0,0,-10,0"
-					 DataContext="{Binding OutputSlot}"
-					 SlotState="{Binding State}"/>
-	</Grid>
+			<!-- ZIndex：端口有一半压在卡片上，不给序就会被卡面盖掉内侧那一半。Timer 那家早就这么做了，
+			     这里原来漏了 -->
+			<local:SlotView x:Name="PART_OutputSlot"
+							Width="32"
+							Height="32"
+							ZIndex="6"
+							Grid.RowSpan="3"
+							HorizontalAlignment="Right"
+							VerticalAlignment="Center"
+							Margin="0,0,-16,0"
+							DataContext="{Binding OutputSlot}"
+							SlotState="{Binding State}"
+							Channel="{Binding Channel}" />
+		</Grid>
 	</Viewbox>
 </UserControl>

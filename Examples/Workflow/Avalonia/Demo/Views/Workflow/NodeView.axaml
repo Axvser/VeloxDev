@@ -3,7 +3,7 @@
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
-			 mc:Ignorable="d" d:DesignWidth="260" d:DesignHeight="180"
+			 mc:Ignorable="d" d:DesignWidth="260" d:DesignHeight="120"
 			 x:Class="Demo.NodeView"
 			 ClipToBounds="False">
 
@@ -14,19 +14,16 @@
 	     it knows nothing else about. Every node type in this demo has a view of its own (ControllerView,
 	     TimerNodeView, PythonNodeView, EnumSelectorNodeView), so this renders only for a foreign type.
 
-	     This file used to be a copy of the timer node's view: the fallback advertised a Delay box, an
-	     Execution panel and Run/Forward buttons on any node type it happened to render, and its chrome was
-	     bound to ChromeBackground / ChromeBorderBrush — properties that exist nowhere in this repository,
-	     so the card drew with no background and no border at all. Chrome is a property of the view rather
-	     than of a ViewModel that has to stay portable across seven GUI toolkits, which is why the colours
-	     here are static, exactly as the item template's node view writes them. -->
+	     Only the chrome is shared now: the surface, the hairline and the accent bar come from
+	     CardTheme.axaml, so a foreign node still lands on the same visual family as the known ones
+	     without this file claiming to know anything about it. The accent is the neutral slate, because
+	     there is no type here to give it a colour. -->
 
-	<Grid ClipToBounds="False">
-		<Border CornerRadius="6"
-				Background="#1E293B"
-				BorderBrush="#334155"
-				BorderThickness="1.5"
-				behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
-				behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas" />
-	</Grid>
+	<Border Classes="card" Padding="0" behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
+			behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas">
+		<Grid ColumnDefinitions="2,*">
+			<Border Grid.Column="0" Classes="card-accent" Background="#94A3B8" />
+			<TextBlock Grid.Column="1" Classes="card-label" Text="?" Margin="12,0,0,0" VerticalAlignment="Center" />
+		</Grid>
+	</Border>
 </UserControl>

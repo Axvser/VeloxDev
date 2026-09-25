@@ -3,5 +3,7 @@
 @implements IDisposable
 
 @* Generic catch-all body rendered inside the TemplateNodeView card when no dedicated
-   body view exists for the node type. Title and execution feedback are shown by the
-   surrounding card; this body adds no worker-specific inputs. *@
+   body view exists for the node type. Deliberately empty: the card chrome — the neutral
+   slate accent, the title row, the surface and the hairline — all come from
+   TemplateNodeView, so a foreign node still lands on the same visual family as the four
+   known types without this file claiming to know anything about it. *@

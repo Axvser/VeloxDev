@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    节点卡共用的一套：简笔、暗色、靠字重与留白分区。
+
+    与 Avalonia 的 Views/Workflow/CardTheme.axaml 同源，与 WinUI 的 Views/Workflow/CardTheme.xaml
+    同一份键名。那边是 <Styles> + CSS 风格的选择器（Border.card、TextBlock.card-title、
+    Button.ghost:pointerover ……），WPF 与 WinUI 一样没有类选择器，所以这里的一一对应物是
+    「一组具名 Brush + 一组 x:Key 的 Style」，卡片用 Style="{StaticResource ...}" 取用 ——
+    色值仍然只有这一份，五张卡不各自写。键名与 WinUI 那份保持一致，两边对照着读得出来。
+
+    打开它的地方是 App.xaml 的 MergedDictionaries，与 Avalonia 把 StyleInclude 挂在
+    Application.Styles 上同一个位置。
+
+    色板：
+      卡面 #161B22 ／ 边框 #2A313C（1px，圆角 8）／ 分隔线 #222A34
+      标题 #E6EAF2 12.5 SemiBold ／ 标签 #7C8798 10 ／ 正文 #D6DCE6 11.5
+      输入底 #0E1218 ／ 悬停底 #1E2731 ／ 禁用字 #5A6474
+    类型色条由各卡自己给（Controller #38BDF8、Timer/Python #6EC6FF、Enum #D6A0FF、兜底 #94A3B8）。
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ── 色板 ───────────────────────────────────────────────────────────── -->
+
+    <SolidColorBrush x:Key="CardSurfaceBrush"        Color="#161B22" />
+    <SolidColorBrush x:Key="CardBorderBrush"         Color="#2A313C" />
+    <SolidColorBrush x:Key="CardBorderHoverBrush"    Color="#3A4553" />
+    <SolidColorBrush x:Key="CardBorderFocusedBrush"  Color="#38BDF8" />
+    <SolidColorBrush x:Key="CardBorderDisabledBrush" Color="#232A34" />
+    <SolidColorBrush x:Key="CardDividerBrush"        Color="#222A34" />
+    <SolidColorBrush x:Key="CardTitleBrush"          Color="#E6EAF2" />
+    <SolidColorBrush x:Key="CardLabelBrush"          Color="#7C8798" />
+    <SolidColorBrush x:Key="CardValueBrush"          Color="#D6DCE6" />
+    <SolidColorBrush x:Key="CardFieldBrush"          Color="#0E1218" />
+    <SolidColorBrush x:Key="CardFieldHoverBrush"     Color="#141A22" />
+    <SolidColorBrush x:Key="CardHoverBrush"          Color="#1E2731" />
+    <SolidColorBrush x:Key="CardDisabledTextBrush"   Color="#5A6474" />
+
+    <!-- 动作按钮的语义色。Avalonia 那边写在每张卡的 Foreground 上，这里同理，只是顺带留个名字 -->
+    <SolidColorBrush x:Key="CardActionCompileBrush" Color="#7EC8FF" />
+    <SolidColorBrush x:Key="CardActionRunBrush"     Color="#6EE7A8" />
+    <SolidColorBrush x:Key="CardActionStopBrush"    Color="#FCA5A5" />
+    <SolidColorBrush x:Key="CardActionCloseBrush"   Color="#9AA6B5" />
+
+    <!-- ── 卡面 ───────────────────────────────────────────────────────────── -->
+
+    <Style x:Key="CardBorderStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="Background" Value="{StaticResource CardSurfaceBrush}" />
+    </Style>
+
+    <Style x:Key="CardDividerStyle" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{StaticResource CardDividerBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <!-- 标题行左侧那条 2px 类型色条。圆角只削左上，与卡面左上角对齐 -->
+    <Style x:Key="CardAccentStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="8,0,0,0" />
+        <Setter Property="Width" Value="2" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- ── 字级 ───────────────────────────────────────────────────────────── -->
+
+    <Style x:Key="CardTitleTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource CardTitleBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!--
+        标签这档在 Avalonia 是 LetterSpacing="0.6"、WinUI 是 CharacterSpacing="60"，
+        WPF 的 TextBlock 两者都没有 —— 没有任何「字距」属性可写。硬凑的办法（往文本里插空格、
+        换 Glyphs、挂自定义 TextFormatter）都会改变文本本身或换掉整个排版路径，为 0.6px 的
+        字距不值得。所以这一条 WPF 缺一档：标签只剩字号与颜色，字距由字体默认给。
+    -->
+    <Style x:Key="CardLabelTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{StaticResource CardLabelBrush}" />
+    </Style>
+
+    <Style x:Key="CardValueTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{StaticResource CardValueBrush}" />
+    </Style>
+
+    <!-- ── 输入 ───────────────────────────────────────────────────────────── -->
+
+    <!--
+        输入框的圆角也得自带模板：WPF 的 TextBox / ComboBox 都没有 CornerRadius，
+        只设 Background / BorderBrush 的话底还是方的（而且 TextBox 悬停时 Aero 模板会自己
+        换边色，那一档不在这份色板上）。模板本身很短 —— 一个圆角 Border 套 PART_ContentHost，
+        与 Avalonia 那边「Fluent 模板照读控件的 Background / BorderBrush，所以一条 Style 就够」
+        的差别就在这里：WPF 必须把模板一起换掉。
+
+        PART_ContentHost 是 TextBox 唯一的模板契约（必须是 ScrollViewer 或 Decorator），
+        少了它连光标都不会出现。两个滚动条可见性照 TemplateBinding 传下去，多行的调用方
+        自己设了也会生效。
+
+        内边距落在 Border 上而不是 PART_ContentHost 的 Margin 上：两者量出来的高度一样，
+        但落在 Border 上才是 WPF 的常规写法 —— 输入区填满边框以内的部分，内容再长也只在
+        框内滚。
+    -->
+    <ControlTemplate x:Key="CardFieldTextBoxTemplate" TargetType="TextBox">
+        <Border x:Name="Field"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="6"
+                Padding="{TemplateBinding Padding}">
+            <ScrollViewer x:Name="PART_ContentHost"
+                          Focusable="False"
+                          HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                          VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}" />
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Field" Property="Background" Value="{StaticResource CardFieldHoverBrush}" />
+                <Setter TargetName="Field" Property="BorderBrush" Value="{StaticResource CardBorderHoverBrush}" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Field" Property="BorderBrush" Value="{StaticResource CardBorderFocusedBrush}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Field" Property="BorderBrush" Value="{StaticResource CardBorderDisabledBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource CardDisabledTextBrush}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style x:Key="CardFieldTextBoxStyle" TargetType="TextBox">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Padding" Value="7,4" />
+        <Setter Property="Background" Value="{StaticResource CardFieldBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{StaticResource CardValueBrush}" />
+        <Setter Property="CaretBrush" Value="{StaticResource CardBorderFocusedBrush}" />
+        <Setter Property="Template" Value="{StaticResource CardFieldTextBoxTemplate}" />
+    </Style>
+
+    <!--
+        下拉框同理，而且要写全：WPF 的 ComboBox 模板自带一套 Aero 外观（浅灰底、系统高亮、
+        悬停变蓝边），不换模板就只改了闭合态的底与边，展开的那一半还是系统色。
+
+        契约有两个，缺一不可：Popup 必须叫 PART_Popup（ComboBox 自己按名字找它来开合），
+        内部的 ToggleButton 用 IsChecked 双向绑到 IsDropDownOpen（否则点开就关不上）。
+        ToggleButton 自己的模板里不去 TemplateBind，而是 AncestorType 找回 ComboBox ——
+        因为 ToggleButton 的 DataContext / TemplatedParent 链在这里不指向 ComboBox。
+    -->
+    <ControlTemplate x:Key="CardFieldComboBoxTemplate" TargetType="ComboBox">
+        <Grid>
+            <ToggleButton x:Name="Toggle"
+                          Focusable="False"
+                          ClickMode="Press"
+                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <ToggleButton.Template>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Field"
+                                Background="{Binding Background, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                BorderThickness="{Binding BorderThickness, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                CornerRadius="6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0"
+                                                  Margin="7,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}" />
+                                <Path Grid.Column="1"
+                                      Margin="0,0,8,0"
+                                      VerticalAlignment="Center"
+                                      Stroke="{StaticResource CardLabelBrush}"
+                                      StrokeThickness="1.4"
+                                      Data="M 0,0 L 4,4 L 8,0" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Field" Property="Background" Value="{StaticResource CardFieldHoverBrush}" />
+                                <Setter TargetName="Field" Property="BorderBrush" Value="{StaticResource CardBorderHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Field" Property="BorderBrush" Value="{StaticResource CardBorderDisabledBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </ToggleButton.Template>
+            </ToggleButton>
+
+            <Popup x:Name="PART_Popup"
+                   AllowsTransparency="True"
+                   Placement="Bottom"
+                   PopupAnimation="Fade"
+                   PlacementTarget="{Binding ElementName=Toggle}"
+                   IsOpen="{TemplateBinding IsDropDownOpen}">
+                <Border Background="{StaticResource CardSurfaceBrush}"
+                        BorderBrush="{StaticResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        MinWidth="{Binding ActualWidth, ElementName=Toggle}"
+                        MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsPresenter />
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+        </Grid>
+    </ControlTemplate>
+
+    <!-- 展开后的每一项。不换模板（Aero 的项模板本来就照着 Background 画底），
+         只把悬停与选中压到同一档悬停底上，与 Avalonia 那边 Fluent 的下拉观感对齐 -->
+    <Style x:Key="CardFieldComboBoxItemStyle" TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource CardValueBrush}" />
+        <Setter Property="Padding" Value="7,3" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Style.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter Property="Background" Value="{StaticResource CardHoverBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource CardTitleBrush}" />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{StaticResource CardHoverBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource CardTitleBrush}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="CardFieldComboBoxStyle" TargetType="ComboBox">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Padding" Value="7,3" />
+        <Setter Property="Background" Value="{StaticResource CardFieldBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{StaticResource CardValueBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Template" Value="{StaticResource CardFieldComboBoxTemplate}" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource CardFieldComboBoxItemStyle}" />
+    </Style>
+
+    <!--
+        动作按钮：同形的「幽灵按钮」，语义只体现在各卡给的前景色上，不靠高饱和色块。
+
+        这里必须换掉整个 ControlTemplate：Aero 的按钮模板自带渐变底与圆角高光，
+        只覆盖 Background 是改不动的。禁用态尤其要自己写 —— 默认模板在 IsEnabled=False 时
+        会把按钮填成一块实灰，那会在一排幽灵按钮里格外突兀；这里只把边与字压暗，形状不变。
+
+        禁用态的「字」落在模板里的 ContentPresenter 上，而不是按钮自己的 Foreground：
+        语义色是各卡写在按钮上的局部值（Compile #7EC8FF 之类），局部值压过一切样式触发器，
+        在按钮那一层怎么写都盖不掉；写进模板内部是直接赋值，压过 ContentPresenter 从按钮
+        继承来的那个值 —— 与 Avalonia 那边改 /template/ ContentPresenter 的 TextElement.Foreground
+        是同一个手法（WPF 的 Control.Foreground 就是 TextElement.Foreground 本身）。
+    -->
+    <ControlTemplate x:Key="CardGhostButtonTemplate" TargetType="Button">
+        <Border x:Name="Chrome"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="6"
+                SnapsToDevicePixels="True">
+            <ContentPresenter x:Name="Presenter"
+                              Margin="{TemplateBinding Padding}"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                              RecognizesAccessKey="True" />
+        </Border>
+        <ControlTemplate.Triggers>
+            <!-- 悬停只抬边框与底，不换色 —— 动作语义已经写在各自的前景色里了 -->
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource CardHoverBrush}" />
+                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource CardBorderHoverBrush}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource CardBorderDisabledBrush}" />
+                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource CardBorderHoverBrush}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Chrome" Property="Background" Value="Transparent" />
+                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource CardBorderDisabledBrush}" />
+                <Setter TargetName="Presenter" Property="TextElement.Foreground" Value="{StaticResource CardDisabledTextBrush}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style x:Key="CardGhostButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template" Value="{StaticResource CardGhostButtonTemplate}" />
+    </Style>
+
+</ResourceDictionary>

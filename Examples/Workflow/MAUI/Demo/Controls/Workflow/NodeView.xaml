@@ -4,14 +4,28 @@
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.NodeView"
              InputTransparent="False">
-    <!-- 兜底节点卡：节点类型自带视图时不会用到。故意留空——IWorkflowNodeViewModel 只有几何与插槽、
-         没有显示名；Chrome 是视图的属性，别绑到 ViewModel（旧版绑的 ChromeBackground 本仓库并不存在） -->
-    <Grid>
-        <Border Stroke="#334155"
-                StrokeThickness="1.5"
-                StrokeShape="RoundRectangle 6"
-                BackgroundColor="#1E293B"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True" />
-    </Grid>
+
+    <!-- 兜底节点卡：节点类型自带视图时不会用到。
+
+         故意留空：IWorkflowNodeViewModel 只有几何与插槽、没有显示名 —— 标题是具体 ViewModel 的属性，
+         所以这张卡没法诚实地说出它不认识的那个节点叫什么。这个 demo 里每种节点都有自己的视图
+         （ControllerView / TimerNodeView / PythonNodeView / EnumSelectorNodeView），这里只会画外来类型。
+
+         现在共用的是同一套外壳：卡面、发丝边、类型色条都来自 CardTheme.xaml，外来的节点因此落在
+         与已知节点同一族的观感上，而这张卡不用假装知道任何多余的事。色条取中性灰蓝 ——
+         这里没有类型可给它上色。 -->
+    <Border Style="{StaticResource Card}"
+            behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+            behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+        <Grid ColumnDefinitions="2,*">
+            <Border Grid.Column="0"
+                    Style="{StaticResource CardAccent}"
+                    BackgroundColor="{StaticResource AccentFallback}" />
+            <Label Grid.Column="1"
+                   Style="{StaticResource CardLabel}"
+                   Text="?"
+                   Margin="12,0,0,0"
+                   VerticalTextAlignment="Center" />
+        </Grid>
+    </Border>
 </ContentView>

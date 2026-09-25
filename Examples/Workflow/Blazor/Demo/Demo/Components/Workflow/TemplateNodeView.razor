@@ -11,64 +11,55 @@
                into the collapsed Node.Size host by a CSS transform (the Blazor equivalent of the XAML
                Viewbox). Header text, body content, scrollbars and slot glyphs shrink together, so the
                interior never re-flows / overflows the collapsed card on zoom. Body content scrolls at
-               design coordinates inside the body (overflow-y auto). Edge slot hosts live outside the
-               scrollable body-content (but inside the card), so the half-outside glyphs stay reachable. *@
-            @{ var design = Design; var headerHeight = 36; }
-            <div class="veloxdev-wf-node-card @(IsRunning ? "veloxdev-wf-node-running" : null)"
+               design coordinates inside the body (overflow-y auto). Edge slot hosts are SIBLINGS of the
+               scrollable body box, so a half-outside glyph is never clipped by the body's own overflow. *@
+            @{ var design = Design; }
+            <div class="wf-card @(IsRunning ? "veloxdev-wf-node-running" : null)"
                  style="position:relative;width:@(design.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))px;height:@(design.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))px;
                         transform:scale(@ScaleCss);transform-origin:top left;
-                        background:@CardBackgroundCss;
-                        border:@BorderThicknessCss solid @BorderBrushCss;
-                        border-radius:@CornerRadiusCss;
-                        overflow:@(AllowOverflow ? "visible" : "hidden");">
-                <div class="veloxdev-wf-node-header"
-                     style="height:@(headerHeight)px;display:flex;align-items:center;gap:8px;padding:0 12px;
-                            color:@ForegroundCss;font-weight:bold;font-size:13px;
-                            background:@HeaderBackgroundCss;
-                            border-bottom:1px solid @HeaderDividerCss;">
-                    <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                        @(Title ?? FallbackTitle)
-                    </span>
+                        overflow:@OverflowCss;@SurfaceOverrideCss">
+                @* One 32px title row: the type accent bar, a left-aligned title, then the readouts.
+                   Nothing here is centred and nothing sits on a coloured band — the accent is a 2px
+                   rule at the head of the row, which leaves the title the whole width to be read in. *@
+                <div class="wf-card-header">
+                    <span class="wf-card-accent" style="background:@AccentCss;"></span>
+                    <span class="wf-card-title">@(Title ?? FallbackTitle)</span>
                     @if (HasOrderBadge)
                     {
-                        <span class="veloxdev-wf-node-badge veloxdev-wf-node-badge-order" title="执行步骤编号">@OrderText</span>
+                        <span class="wf-card-order" title="执行步骤编号">@OrderText</span>
                     }
-                    @if (HasLoadBadge)
+                    @if (!string.IsNullOrEmpty(StatusValue))
                     {
-                        <span class="veloxdev-wf-node-badge veloxdev-wf-node-badge-load" title="工作负载">@LoadText</span>
+                        <span class="wf-card-pill" title="最近一次状态">@StatusValue</span>
                     }
                     @if (IsRunning)
                     {
-                        <span class="veloxdev-wf-node-badge veloxdev-wf-node-badge-running">
+                        <span class="wf-card-pill wf-card-pill-running">
                             <span class="veloxdev-wf-node-pulse"></span>执行中
                         </span>
                     }
                 </div>
-                <div class="veloxdev-wf-node-body" style="position:absolute;left:0;right:0;top:@(headerHeight)px;bottom:0;min-height:0;">
+                <div class="wf-card-body" style="top:32px;">
                     @if (BodyContent is not null)
                     {
-                        <div class="veloxdev-wf-node-body-content"
-                             style="position:absolute;left:0;top:0;right:0;bottom:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;min-height:0;">
+                        <div class="wf-card-scroll">
                             @BodyContent
                         </div>
                     }
-
-                    @if (InputSlots is not null)
-                    {
-                        <div class="veloxdev-wf-node-input-host"
-                             style="position:absolute;left:0;top:50%;transform:translate(-50%,-50%);z-index:1;">
-                            @InputSlots
-                        </div>
-                    }
-
-                    @if (OutputSlots is not null)
-                    {
-                        <div class="veloxdev-wf-node-output-host"
-                             style="position:absolute;right:0;top:50%;transform:translate(50%,-50%);z-index:1;">
-                            @OutputSlots
-                        </div>
-                    }
                 </div>
+
+                @* Ports hang off the card's edge, centred on it. Outside the scrolling body box on
+                   purpose: that box owns an overflow rule, and an overflow rule is the one thing here
+                   that would cut a port in half. *@
+                @if (InputSlots is not null)
+                {
+                    <div class="wf-card-slot-host wf-card-slot-in">@InputSlots</div>
+                }
+
+                @if (OutputSlots is not null)
+                {
+                    <div class="wf-card-slot-host wf-card-slot-out">@OutputSlots</div>
+                }
             </div>
         </WorkflowNodeDragBehavior>
     </WorkflowSlotLayoutBehavior>

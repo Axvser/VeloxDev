@@ -6,67 +6,74 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>Workflow initiator node: a "Network Flow Controller" card with an editable seed payload
-/// and Compile / Run / Stop / Close buttons on the card (Run enabled once graphs are compiled). The
-/// surface handles dragging/connecting; the ports are drawn by the base.</summary>
+/// <summary>
+/// 工作流发起节点：可编辑的种子负载 + 一排 Compile / Run / Stop / Close。
+/// 骨架照这套设计（Avalonia ControllerView.axaml）：标题行 32 高，主体可编辑，动作区 66 高、
+/// 四颗同形的幽灵按钮按 2×2 摆，语义只在文字颜色上（Run 要编译过才亮）。拖拽与连线归表面，端口归表面。
+/// </summary>
 internal sealed class ControllerView : NodeViewBase
 {
-    private Button? _runButton;
+    private TextBox? _seed;
+    private Button? _run;
 
-    protected override Brush Accent => NodeChrome.AccentBlue;
+    protected override Color Accent => CardPalette.AccentController;
 
-    // 控制器视图模型不发布 Title，卡片自己起名——与 Avalonia / WinForms / WPF 的控制器视图写死的一致
-    protected override string TitleFor(IWorkflowNodeViewModel node) => "Network Flow Controller";
+    // 控制器视图模型不发布 Title，卡片自己起名 —— 与这套设计的 Avalonia / WinUI / MAUI 三张卡同字
+    protected override string TitleFor(IWorkflowNodeViewModel node) => "Controller";
 
-    protected override string InitialStatus(IWorkflowNodeViewModel node)
-        => node is ControllerViewModel { IsActive: true } ? "Running" : "Idle";
+    // 这张卡没有状态胶囊：设计里头部只有类型色条 + 标题（原来是右上角一颗 Running/Idle 的灰字）
+    protected override string InitialStatus(IWorkflowNodeViewModel node) => string.Empty;
 
     protected override void Build(IWorkflowNodeViewModel node, Grid content)
     {
         var vm = (ControllerViewModel)node;
-        var body = new StackPanel { Margin = new Thickness(12), Spacing = 8 };
 
-        body.Children.Add(new TextBlock { Text = "Seed", Foreground = NodeChrome.SubFg, FontSize = 11 });
-        var seedBox = new TextBox
-        {
-            Text = vm.SeedPayload,
-            FontSize = 11,
-            Foreground = new SolidColorBrush(Colors.White),
-            Background = new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x14)),
-            Padding = new Thickness(6, 4),
-        };
-        seedBox.TextChanged += (_, _) => { if (vm is not null) vm.SeedPayload = seedBox.Text ?? string.Empty; };
-        body.Children.Add(seedBox);
+        // 主体 * / 66：上面是可编辑的种子，下面那条是动作区（与设计稿同一副骨架）
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.FromPixels(66) });
 
-        var compileBtn = NodeChrome.MakeButton("Compile", new SolidColorBrush(Color.FromRgb(0x1E, 0x3A, 0x5F)), new SolidColorBrush(Colors.White), NodeChrome.AccentBlue);
-        compileBtn.Click += (_, _) => vm.CompileCommand.Execute(null);
+        var seedPanel = new StackPanel { Margin = new Thickness(12, 9), Spacing = 5 };
+        seedPanel.Children.Add(NodeChrome.Label("SEED"));
 
-        _runButton = NodeChrome.MakeButton("Run", new SolidColorBrush(Color.FromRgb(0x1E, 0x5F, 0x2E)), new SolidColorBrush(Colors.White), NodeChrome.AccentGreen);
-        _runButton.IsEnabled = vm.HasCompiledGraphs;
-        _runButton.Click += (_, _) => vm.RunCommand.Execute(null);
+        _seed = NodeChrome.Field();
+        _seed.Text = vm.SeedPayload;
+        _seed.TextChanged += (_, _) => vm.SeedPayload = _seed.Text ?? string.Empty;
+        seedPanel.Children.Add(_seed);
 
-        var stopBtn = NodeChrome.MakeButton("Stop", new SolidColorBrush(Color.FromRgb(0x5F, 0x1E, 0x1E)), new SolidColorBrush(Colors.White), NodeChrome.AccentYellow);
-        stopBtn.Click += (_, _) => vm.StopCommand.Execute(null);
+        Grid.SetRow(seedPanel, 0);
+        content.Children.Add(seedPanel);
 
-        var closeBtn = NodeChrome.MakeButton("Close", NodeChrome.HeaderBg, NodeChrome.SubFg, NodeChrome.DefaultBorder);
-        closeBtn.Click += (_, _) => vm.CloseWorkflowCommand.Execute(null);
+        // 动作区上沿那条分隔线：与标题行下沿那条同一种线，只是贴在另一格的上沿
+        var divider = NodeChrome.Divider(atBottom: false);
+        Grid.SetRow(divider, 1);
+        content.Children.Add(divider);
 
-        var buttons = new Grid { Margin = new Thickness(0, 4, 0, 0) };
-        buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
-        buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
-        buttons.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        buttons.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        Grid.SetColumn(compileBtn, 0); Grid.SetRow(compileBtn, 0); compileBtn.Margin = new Thickness(0, 0, 3, 3);
-        Grid.SetColumn(_runButton, 1); Grid.SetRow(_runButton, 0); _runButton.Margin = new Thickness(3, 0, 0, 3);
-        Grid.SetColumn(stopBtn, 0); Grid.SetRow(stopBtn, 1); stopBtn.Margin = new Thickness(0, 3, 3, 0);
-        Grid.SetColumn(closeBtn, 1); Grid.SetRow(closeBtn, 1); closeBtn.Margin = new Thickness(3, 3, 0, 0);
-        buttons.Children.Add(compileBtn);
-        buttons.Children.Add(_runButton);
-        buttons.Children.Add(stopBtn);
-        buttons.Children.Add(closeBtn);
-        body.Children.Add(buttons);
+        var actions = new Grid { Margin = new Thickness(12, 7), ColumnSpacing = 6, RowSpacing = 6 };
+        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+        actions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+        actions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
 
-        content.Children.Add(body);
+        var compile = NodeChrome.Ghost("Compile", CardPalette.GhostCompileText);
+        compile.Click += (_, _) => vm.CompileCommand.Execute(null);
+
+        _run = NodeChrome.Ghost("Run", CardPalette.GhostRunText);
+        _run.Click += (_, _) => vm.RunCommand.Execute(null);
+        NodeChrome.SetGhostEnabled(_run, CardPalette.GhostRunText, vm.HasCompiledGraphs);
+
+        var stop = NodeChrome.Ghost("Stop", CardPalette.GhostStopText);
+        stop.Click += (_, _) => vm.StopCommand.Execute(null);
+
+        var close = NodeChrome.Ghost("Close", CardPalette.GhostCloseText);
+        close.Click += (_, _) => vm.CloseWorkflowCommand.Execute(null);
+
+        Place(actions, compile, 0, 0);
+        Place(actions, _run, 0, 1);
+        Place(actions, stop, 1, 0);
+        Place(actions, close, 1, 1);
+
+        Grid.SetRow(actions, 1);
+        content.Children.Add(actions);
     }
 
     protected override void OnNodePropertyChanged(string propertyName)
@@ -76,14 +83,17 @@ internal sealed class ControllerView : NodeViewBase
             return;
         }
 
-        if (propertyName is nameof(ControllerViewModel.IsActive) && StatusText is not null)
+        // Run 只在编译出图之后才亮；禁用态只压暗边与字，形状不变（见 NodeChrome.SetGhostEnabled）
+        if (propertyName is nameof(ControllerViewModel.HasCompiledGraphs) && _run is not null)
         {
-            StatusText.Text = vm.IsActive ? "Running" : "Idle";
+            NodeChrome.SetGhostEnabled(_run, CardPalette.GhostRunText, vm.HasCompiledGraphs);
         }
+    }
 
-        if (propertyName is nameof(ControllerViewModel.HasCompiledGraphs) && _runButton is not null)
-        {
-            _runButton.IsEnabled = vm.HasCompiledGraphs;
-        }
+    private static void Place(Grid grid, FrameworkElement child, int row, int column)
+    {
+        Grid.SetRow(child, row);
+        Grid.SetColumn(child, column);
+        grid.Children.Add(child);
     }
 }

@@ -138,7 +138,7 @@
 	<Grid ColumnDefinitions="2*,auto,8*">
 		<!-- Node editor rendering (virtualization support + minimap thumbnail) -->
 		<Grid Grid.Column="2" x:Name="WorkflowContainer">
-			<Border x:Name="PART_SurfaceBorder" BorderBrush="White" BorderThickness="1" CornerRadius="3">
+			<Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="3">
 			   <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
 				  <ScrollViewer HorizontalScrollBarVisibility="Auto"
 								 x:Name="PART_ScrollViewer">

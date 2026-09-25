@@ -1,64 +1,86 @@
-﻿<UserControl x:Class="Demo.Views.Workflow.ControllerView"
+<UserControl x:Class="Demo.Views.Workflow.ControllerView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-              xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
-              xmlns:local="clr-namespace:Demo.Views.Workflow"
-              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:Demo.Views.Workflow"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
              mc:Ignorable="d"
              ClipToBounds="False"
-             d:DesignHeight="340" d:DesignWidth="220"
-              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
-              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
-              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+             d:DesignHeight="170" d:DesignWidth="230"
+             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
+             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
 
-	<!-- Viewbox: content scales to the collapsed node size; child pins to the design size (scale 1) so the factor is 1/scale. -->
-	<Viewbox Stretch="Uniform">
-    <Grid ClipToBounds="False" Width="220" Height="340">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="52" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="88" />
-        </Grid.RowDefinitions>
+    <!-- 卡片的色值与字级都来自 Themes/CardTheme.xaml（App.xaml 里挂上的），这里只取具名 Style。
+         尺寸必须与 [DefaultSize] 一致，否则 Viewbox 会把设计整体缩放。 -->
+    <Viewbox Stretch="Uniform" ClipToBounds="False">
+        <Grid Width="230" Height="170" ClipToBounds="False" Background="Transparent">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="66" />
+            </Grid.RowDefinitions>
 
-        <Border Grid.RowSpan="3"
-                CornerRadius="5"
-                BorderThickness="1"
-                BorderBrush="White"
-                Background="#2D2D2D" />
+            <Border Grid.RowSpan="3" Style="{StaticResource CardBorderStyle}" />
 
-        <Border Grid.Row="0"
-                CornerRadius="5,5,0,0"
-                Background="#2D2D2D"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <TextBlock Text="Network Flow Controller"
-                       VerticalAlignment="Center"
-                       HorizontalAlignment="Center"
-                       Foreground="White" />
-        </Border>
+            <!-- 标题行：左对齐 + 左侧 2px 类型色条。原来是居中白字压在自己的灰带上 -->
+            <Border Grid.Row="0"
+                    Background="Transparent"
+                    behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                    behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="#38BDF8" />
+                    <TextBlock Grid.Column="1"
+                               Style="{StaticResource CardTitleTextStyle}"
+                               Text="Controller"
+                               Margin="12,0,0,0" />
+                </Grid>
+            </Border>
+            <Border Grid.Row="0" Style="{StaticResource CardDividerStyle}" />
 
-        <Border Grid.Row="1"
-                Background="#252525"
-                Padding="12">
-            <ScrollViewer>
-            <StackPanel>
-                <TextBlock Text="Seed" Foreground="#DCDCDC" FontSize="11" />
-                <TextBox Margin="0,4,0,0" FontSize="11"
-                         Text="{Binding SeedPayload, UpdateSourceTrigger=PropertyChanged}" />
-            </StackPanel>
-            </ScrollViewer>
-        </Border>
+            <Border Grid.Row="1" Padding="12,9">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CardLabelTextStyle}" Text="SEED" />
+                    <!-- WPF 的 TextBox 没有 PlaceholderText（Avalonia / WinUI 都有），
+                         所以占位是一层压在输入框上的灰字，靠 Text 为空这条数据触发器收放。 -->
+                    <Grid Margin="0,5,0,0">
+                        <TextBox x:Name="SeedBox"
+                                 Style="{StaticResource CardFieldTextBoxStyle}"
+                                 Text="{Binding SeedPayload, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="payload"
+                                   Foreground="{StaticResource CardDisabledTextBrush}"
+                                   FontSize="11.5"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SeedBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </StackPanel>
+            </Border>
+            <Border Grid.Row="2" BorderBrush="{StaticResource CardDividerBrush}" BorderThickness="0,1,0,0" />
 
-        <Border Grid.Row="2"
-                Background="#2D2D2D"
-                CornerRadius="0,0,5,5"
-                Padding="8">
-            <Grid>
+            <!-- 动作：2×2 的同形「幽灵按钮」，语义只体现在文字颜色上。原来是一排四块高饱和色块。
+                 WPF 的 Grid 没有 RowSpacing / ColumnSpacing（那是 UWP 起才有的），6 单位的缝由
+                 每格两个方向的 3 单位外边距拼出来 -->
+            <Grid Grid.Row="2" Margin="12,7">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="*" />
@@ -68,32 +90,41 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Button Grid.Row="0" Grid.Column="0" Margin="0,0,3,3"
-                        Content="Compile" Background="#1E3A5F" Foreground="White"
+                        Style="{StaticResource CardGhostButtonStyle}"
+                        Content="Compile"
+                        Foreground="{StaticResource CardActionCompileBrush}"
                         Command="{Binding CompileCommand}" />
                 <Button Grid.Row="0" Grid.Column="1" Margin="3,0,0,3"
-                        Content="Run" Background="#1E5F2E" Foreground="White"
+                        Style="{StaticResource CardGhostButtonStyle}"
+                        Content="Run"
+                        Foreground="{StaticResource CardActionRunBrush}"
                         IsEnabled="{Binding HasCompiledGraphs}"
                         Command="{Binding RunCommand}" />
                 <Button Grid.Row="1" Grid.Column="0" Margin="0,3,3,0"
-                        Content="Stop" Background="#5F1E1E" Foreground="White"
+                        Style="{StaticResource CardGhostButtonStyle}"
+                        Content="Stop"
+                        Foreground="{StaticResource CardActionStopBrush}"
                         Command="{Binding StopCommand}" />
                 <Button Grid.Row="1" Grid.Column="1" Margin="3,3,0,0"
-                        Content="Close" Background="#1E1E1E" Foreground="White"
+                        Style="{StaticResource CardGhostButtonStyle}"
+                        Content="Close"
+                        Foreground="{StaticResource CardActionCloseBrush}"
                         Command="{Binding CloseWorkflowCommand}" />
             </Grid>
-        </Border>
 
-        <local:SlotView x:Name="PART_OutputSlot"
-                        Width="20"
-                        Height="20"
-                        Grid.RowSpan="3"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Margin="0,0,-10,0"
-                        DataContext="{Binding OutputSlot}"
-                        Visibility="{Binding HasOutputSlot, Converter={StaticResource BooleanToVisibilityConverter}}"
-                        PinDirection="Out"
-                        SlotState="{Binding State}" />
-    </Grid>
-	</Viewbox>
+            <!-- ZIndex：端口有一半压在卡片上，不给序就会被卡面盖掉内侧那一半。Timer 那家早就这么做了，
+                 这里原来漏了。尺寸从 20 提到 32（字形设计单位），外边距跟着取一半，端口中心仍落在卡边上 -->
+            <local:SlotView x:Name="PART_OutputSlot"
+                            Width="32"
+                            Height="32"
+                            Panel.ZIndex="6"
+                            Grid.RowSpan="3"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,-16,0"
+                            DataContext="{Binding OutputSlot}"
+                            SlotState="{Binding State}"
+                            Channel="{Binding Channel}" />
+        </Grid>
+    </Viewbox>
 </UserControl>

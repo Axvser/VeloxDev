@@ -29,8 +29,8 @@ public class EnumSelectorHelper : NodeHelper<EnumSelectorNodeViewModel>
         routeValue ??= Component.SelectedValue;
 
         Component.LastRouted = routeValue is not null ? $"[{routeValue}]" : "[?]";
-        // Record the routing trace only; do not write LastExecutionOrder — the number badge belongs to the compiled run, and non-compiler starts must not disturb it.
-        context.RecordExecution(Component.LastRouted, out _);
+        // Do not write LastExecutionOrder here: the number badge belongs to the compiled run, and a
+        // non-compiler start must not disturb it.
 
         // Auto-forward downstream (AutoBroadcast, default true): in stateless mode, broadcast only along the branch matching the **currently selected value**.
         if (Component.AutoBroadcast && routeValue is not null)

@@ -1,20 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    端口字形：一个细环 + 一个小芯 + 一道会走的波纹。
+
+    字形本身在 SlotView.xaml.cs 里算（比例、周期、方向语义都在那边，与 Avalonia 的
+    Views/Workflow/SlotView.cs 一一对应），这里只是四个能改尺寸的圆。
+
+    为什么是四个 Ellipse 而不是一个自绘面：WinUI 没有 OnRender，Avalonia 那版在
+    Render(DrawingContext) 里逐帧画，这里只能落到保留模式上。四个同心圆正好一形一元素，
+    颜色只有一种（GlyphBrush，由 SlotState 决定），每帧变的只有直径与不透明度 ——
+    每帧一次的量级因此是「四个元素的 Width/Height 与 Opacity」，不是一条重画指令。
+
+    这里没有走「一个 Path + EllipseGeometry，只改 Center/Radius」那条更省布局的路：
+    形状是 Fill 模式、椭圆自己的框就是它画的全部内容，尺寸怎么写都落在自己的框内，
+    任何一层裁剪都碰不到它。换成 Path 就得反过来确认 Path 的排布框能不能装下几何。
+    四个圆各自的框都在端口里，只有靠尺寸换观感，代价可忽略。
+
+    Ellipse 用 HorizontalAlignment/VerticalAlignment="Center" 自动居中，所以每帧只写
+    Width/Height，不用再算 Canvas.Left/Top。
+
+    全部 IsHitTestVisible="False"：命中面是控件自己的 Background，圆不该把指针挡在
+    连接行为之外。
+-->
 <UserControl
     x:Class="Demo.Views.SlotView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:Demo.Views"
-    xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
     mc:Ignorable="d"
+    Clip="{x:Null}"
     Background="#01000000"
     behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
 
-    <Grid Background="Transparent">
-        <Viewbox>
-            <Path x:Name="RootPath"
-                  Data="M517.3248,511.488 m-123.6992,0 a123.6992,123.6992 0 1 0 247.3984,0 a123.6992,123.6992 0 1 0 -247.3984,0 Z M366.848,991.5904 a47.2064,47.2064 0 0 1 -15.36,-2.5088 A506.368,506.368 0 0 1 32.8704,655.36 a46.08,46.08 0 1 1 88.32,-26.2144 A414.0544,414.0544 0 0 0 383.9616,928.2048 a46.08,46.08 0 0 1 -15.104,89.6 Z M648.2944,997.888 a46.08,46.08 0 0 1 -13.1072,-90.2656 A413.952,413.952 0 0 0 920.9344,646.8608 a46.08,46.08 0 1 1 87.04,30.208 A506.3168,506.3168 0 0 1 674.5088,996.9408 a45.2608,45.2608 0 0 1 -13.1072,1.9456 Z M957.44,426.5984 a46.08,46.08 0 0 1 -44.1344,-32.9728 A414.0544,414.0544 0 0 0 652.544,120.9728 a46.08,46.08 0 1 1 30.1568,-87.04 A506.368,506.368 0 0 1 991.6416,467.3984 a46.08,46.08 0 0 1 -31.0272,57.2928 a45.2608,45.2608 0 0 1 -13.1584,1.8944 Z M83.3024,407.0912 a46.08,46.08 0 0 1 -43.5712,-61.44 A506.4704,506.4704 0 0 1 373.248,26.9824 a46.08,46.08 0 1 1 26.112,88.3712 A413.952,413.952 0 0 0 100.7104,367.0528 a46.08,46.08 0 0 1 -43.52,31.0272 Z" />
-        </Viewbox>
+    <Grid x:Name="Root" Background="Transparent" Clip="{x:Null}">
+        <!-- 波纹在环下面，外散/内聚各一条；方向不声明时收起来 -->
+        <Ellipse x:Name="RippleOut"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsHitTestVisible="False" Visibility="Collapsed" />
+        <Ellipse x:Name="RippleIn"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsHitTestVisible="False" Visibility="Collapsed" />
+        <Ellipse x:Name="Ring"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsHitTestVisible="False" />
+        <Ellipse x:Name="Core"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsHitTestVisible="False" />
     </Grid>
 </UserControl>

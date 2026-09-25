@@ -5,14 +5,44 @@
 @if (Slot is not null)
 {
     <WorkflowSlotConnectionBehavior Slot="Slot" Tree="Tree" IsEnabled="true" Style="@Style">
+        @* A fine ring, a small core, and ONE travelling ripple. SVG rather than the old filled
+           glyph path: the ripple's radius and its opacity are rewritten every frame, and a
+           circle's r is a number the browser re-rasterises for free, where a path's d is not.
+           Three circles is the whole drawing, in paint order — ripple, ring, core — because the
+           ring and core have to land on top of the ripple rather than under it. *@
         <svg class="veloxdev-wf-slot-svg"
-             width="@(SlotSizeCss)" height="@(SlotSizeCss)"
-             viewBox="0 0 1024 1024">
-            <path d="M517.3248,511.488 m-123.6992,0 a123.6992,123.6992 0 1 0 247.3984,0 a123.6992,123.6992 0 1 0 -247.3984,0 Z M366.848,991.5904 a47.2064,47.2064 0 0 1 -15.36,-2.5088 A506.368,506.368 0 0 1 32.8704,655.36 a46.08,46.08 0 1 1 88.32,-26.2144 A414.0544,414.0544 0 0 0 383.9616,928.2048 a46.08,46.08 0 0 1 -15.104,89.6 Z M648.2944,997.888 a46.08,46.08 0 0 1 -13.1072,-90.2656 A413.952,413.952 0 0 0 920.9344,646.8608 a46.08,46.08 0 1 1 87.04,30.208 A506.3168,506.3168 0 0 1 674.5088,996.9408 a45.2608,45.2608 0 0 1 -13.1072,1.9456 Z M957.44,426.5984 a46.08,46.08 0 0 1 -44.1344,-32.9728 A414.0544,414.0544 0 0 0 652.544,120.9728 a46.08,46.08 0 1 1 30.1568,-87.04 A506.368,506.368 0 0 1 991.6416,467.3984 a46.08,46.08 0 0 1 -31.0272,57.2928 a45.2608,45.2608 0 0 1 -13.1584,1.8944 Z M83.3024,407.0912 a46.08,46.08 0 0 1 -43.5712,-61.44 A506.4704,506.4704 0 0 1 373.248,26.9824 a46.08,46.08 0 1 1 26.112,88.3712 A413.952,413.952 0 0 0 100.7104,367.0528 a46.08,46.08 0 0 1 -43.52,31.0272 Z"
-                  fill="@FillColor"
-                  stroke="@StrokeColor"
-                  stroke-width="8"
-                  stroke-linejoin="round" />
+             width="@SizeCss" height="@SizeCss"
+             viewBox="0 0 @SizeCss @SizeCss"
+             @onmouseenter="OnPointerEnter"
+             @onmouseleave="OnPointerExit">
+            @if (HasRipple)
+            {
+                @* 能发＝外散（越远越淡）；能收＝内聚（外缘淡、环上实）；双向＝同屏两道。 *@
+                if (CanSend)
+                {
+                    <circle cx="@CentreCss" cy="@CentreCss" r="@SendRadiusCss"
+                            fill="none"
+                            stroke="@ColorCss"
+                            stroke-width="@RippleThicknessCss"
+                            stroke-opacity="@SendOpacityCss" />
+                }
+                if (CanReceive)
+                {
+                    <circle cx="@CentreCss" cy="@CentreCss" r="@ReceiveRadiusCss"
+                            fill="none"
+                            stroke="@ColorCss"
+                            stroke-width="@RippleThicknessCss"
+                            stroke-opacity="@ReceiveOpacityCss" />
+                }
+            }
+            <circle cx="@CentreCss" cy="@CentreCss" r="@RingRadiusCss"
+                    fill="none"
+                    stroke="@ColorCss"
+                    stroke-width="@RingThicknessCss"
+                    stroke-opacity="@RingOpacityCss" />
+            <circle cx="@CentreCss" cy="@CentreCss" r="@CoreRadiusCss"
+                    fill="@ColorCss"
+                    fill-opacity="@CoreOpacityCss" />
         </svg>
     </WorkflowSlotConnectionBehavior>
 }

@@ -25,11 +25,12 @@ internal sealed class NodeEditorSurface : Canvas
     private const double GridStep = 40;
     private const double MajorStep = 200;
     private const double RulerThickness = 36;
-    private const double Phi = 0.6180339887;
     private const double LinkThickness = 2;
 
-    // 所有链接的颜色：光带沿它行进，两支笔也由它建
-    private static readonly Color LinkColor = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
+    // 所有链接的颜色。白是这套设计里链接的落点色：Avalonia 的 WorkflowView 给 BezierCurveView 传白，
+    // 七家的连线本体色统一到 Avalonia 参考实现的 #CC38BDF8：彗星是「尾梢=本体色、亮头=白」，
+    // 白色本体下整条彗星都是白的，色相变化就没了 —— 只剩 alpha 一层
+    private static readonly Color LinkColor = Color.FromArgb(0xCC, 0x38, 0xBD, 0xF8);
     private static readonly SolidColorBrush s_surfaceBrush = new(Color.FromRgb(0x1E, 0x1E, 0x1E));
     private static readonly SolidColorBrush s_gridMinor = new(Color.FromRgb(0x2A, 0x2D, 0x2E));
     private static readonly SolidColorBrush s_gridMajor = new(Color.FromRgb(0x3A, 0x3D, 0x40));
@@ -59,6 +60,10 @@ internal sealed class NodeEditorSurface : Canvas
     private readonly HashSet<IWorkflowSlotViewModel> _slotSubs = new();
     private ScrollViewer? _scrollViewer;
 
+    // 指针搭在哪颗端口上。端口是表面画的，所以悬停反馈也只能由表面自己记 ——
+    // 没有端口控件可以替它答「指针在我身上吗」
+    private IWorkflowSlotViewModel? _hoverSlot;
+
     private enum DragKind { None, Node, Link, Pan }
     private DragKind _dragKind;
     private IWorkflowNodeViewModel? _dragNode;
@@ -79,11 +84,21 @@ internal sealed class NodeEditorSurface : Canvas
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
         AddHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnZoomMouseWheel));
 
-        // 表面自己画链接，故只有它能持有链接的动画；光带是整个表面一个周期，生命周期就这两处
+        // 表面自己画链接与端口，故只有它能持有动画；相位是整个表面一个周期，生命周期就这两处
         // Loaded 起、Unloaded 停（见下面的 flow 区）
         Loaded += (_, _) => StartFlow();
 
         Unloaded += (_, _) => StopFlow();
+
+        // 指针离开表面就把悬停清掉：端口的悬停反馈是表面画的，没有人会替它发 PointerExited
+        MouseLeave += (_, _) =>
+        {
+            if (_hoverSlot is not null)
+            {
+                _hoverSlot = null;
+                InvalidateVisual();
+            }
+        };
     }
 
     /// <summary>Ctrl + mouse wheel zooms the workspace: each node collapses toward the world origin
@@ -156,6 +171,8 @@ internal sealed class NodeEditorSurface : Canvas
         _tree = tree;
         _cards.Clear();
         Children.Clear();
+        // 换了树，上一棵树那些链接的弧长表就没人认领了（Links 变更不会通知到它们）
+        _curves.Clear();
 
         // 这里不停光带：周期是表面的而非某条链接或某棵树的，换树不影响它，新树的链接由已在跑的周期画
         // 也不用重起——树是在已上屏的表面上换的，而周期只在 Loaded 起
@@ -323,7 +340,6 @@ internal sealed class NodeEditorSurface : Canvas
         Canvas.SetLeft(card, node.Anchor.Horizontal + _tree.Layout.ActualOffset.Horizontal);
         Canvas.SetTop(card, node.Anchor.Vertical + _tree.Layout.ActualOffset.Vertical);
         SubscribeNode(node);
-        UpdateAllPortColors();
     }
 
     private void RemoveCard(IWorkflowNodeViewModel node)
@@ -403,10 +419,28 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // 链接增删不用拆也不用起：光带是表面的、是被画那条链接上的一段长度，下次绘制照旧处理新集合
+        // 链接增删不用拆也不用起：相位是表面的，彗星是画在当次那条链接上的一段弧长，
+        // 下次绘制照旧处理新集合。这里只顺手把已经不存在的链接的弧长表丢掉，表不跟着集合长
+        PruneCurves();
         InvalidateVisual();
-        UpdateAllPortColors();
         Changed?.Invoke();
+    }
+
+    private void PruneCurves()
+    {
+        if (_tree is null || _curves.Count == 0)
+        {
+            return;
+        }
+
+        var alive = new HashSet<IWorkflowLinkViewModel>(_tree.Links);
+        foreach (var link in _curves.Keys.ToArray())
+        {
+            if (!alive.Contains(link))
+            {
+                _curves.Remove(link);
+            }
+        }
     }
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
@@ -434,9 +468,10 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void OnSlotChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.State))
+        // 端口的状态颜色现在每次绘制现算，所以这两个属性只需催一次重绘（Channel 决定波纹朝哪边走）
+        if (e.PropertyName is nameof(IWorkflowSlotViewModel.State) or nameof(IWorkflowSlotViewModel.Channel))
         {
-            UpdateAllPortColors();
+            InvalidateVisual();
         }
     }
 
@@ -554,16 +589,163 @@ internal sealed class NodeEditorSurface : Canvas
     protected override void OnPostRender(DrawingContext dc)
     {
         base.OnPostRender(dc);
-        // The ruler bands are viewport-fixed (absolute floating): drawn after the child views so they
-        // sit on top, positioned at the scroll offset so they never leave the viewport while panning.
-        DrawRulers(dc);
+
+        // 端口排在卡片之后画：卡片是表面的子元素，OnPostRender 整段在它们之后，
+        // 于是「端口压过卡面」是白拿的，不必再问 ZIndex 在这台机子上认不认（Avalonia 那边要靠 ZIndex=6）
+        DrawPorts(dc);
 
         if (_dragKind == DragKind.Link && _dragFrom is { } from && _tree is { VirtualLink.IsVisible: true })
         {
             var start = ToCanvas(GetPortCenter(from.Node, from.OutputIndex).X, GetPortCenter(from.Node, from.OutputIndex).Y);
             var end = ToCanvas(_tree.VirtualLink.Receiver.Anchor.Horizontal, _tree.VirtualLink.Receiver.Anchor.Vertical);
-            DrawLink(dc, s_virtualPen, start, end);
+            _virtualCurve.Ensure(start, end);
+            dc.DrawGeometry(null, s_virtualPen, _virtualCurve.Segment(0, _virtualCurve.Length));
         }
+
+        // 标尺带视口固定（绝对浮贴），排在最后：滚动时它永远贴着视口，也永远在最上面
+        DrawRulers(dc);
+    }
+
+    // ── Ports (the ring + its ripples) ─────────────────────────────────────
+
+    /// <summary>
+    /// 画一个节点上的每颗端口：字形（环 + 芯）与它的端口名。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 为什么端口在表面上画，而不是像 Avalonia 那样放进卡片自己：这一家的渲染器按<b>布局盒</b>裁剪子元素
+    /// （<c>Visual.ShouldRenderChild</c> 只看布局盒、不看画出来的内容，见 Jalium Trimmed 那个 LinkView 的注释）——
+    /// 端口有一半骑在卡边外，放进卡里就等于把外溢的那一半交给一个刚好到此为止的盒子去决定；
+    /// 而 Enum 卡根上那个裁到圆角的主体区（<c>NodeChrome</c> 给卡片设了 <c>ClipToBounds</c>）会直接切掉它。
+    /// 表面自己的盒子覆盖整个视口，端口因此永远不越界，也不用像 Avalonia 那样逐卡去挪 ScrollViewer 的视口。
+    /// </para>
+    /// <para>
+    /// 位置仍是 <see cref="NodePorts"/> 那<b>一处</b>给的（连线端点与命中测试读的也是它），
+    /// 所以字形、名字、连线三者不可能对不齐。
+    /// </para>
+    /// </remarks>
+    private void DrawPorts(DrawingContext dc)
+    {
+        if (_tree is null)
+        {
+            return;
+        }
+
+        double phase = FlowPhase;
+
+        foreach (var (node, card) in _cards)
+        {
+            if (!NearViewport(node, card))
+            {
+                continue;
+            }
+
+            // 设计坐标 → 画布：卡片被 Viewbox 按 node.Size/设计尺寸 缩放，端口的字形跟着同一比例走
+            double scale = PortScale(node, card);
+            double box = NodePorts.PortBoxSize(node) * scale;
+            if (box <= 2)
+            {
+                continue;
+            }
+
+            var inputs = NodePorts.Inputs(node);
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                if (inputs[i].Slot is not { } slot)
+                {
+                    continue;
+                }
+
+                var local = InputPortCenter(node, i);
+                var center = ToCanvas(local.X, local.Y);
+                PortGlyph.Draw(dc, center, box, InputPortState(node, i),
+                    slot.Channel, phase, ReferenceEquals(_hoverSlot, slot));
+
+                if (inputs[i].Name.Length > 0)
+                {
+                    DrawSlotName(dc, inputs[i].Name, center, scale, NodePorts.SlotNameInset, input: true, node);
+                }
+            }
+
+            var outputs = NodePorts.Outputs(node);
+            for (int i = 0; i < outputs.Count; i++)
+            {
+                if (outputs[i].Slot is not { } slot)
+                {
+                    continue;
+                }
+
+                var local = GetOutputPortCenter(node, i);
+                var center = ToCanvas(local.X, local.Y);
+                PortGlyph.Draw(dc, center, box, OutputPortState(node, i),
+                    slot.Channel, phase, ReferenceEquals(_hoverSlot, slot));
+
+                if (outputs[i].Name.Length > 0)
+                {
+                    DrawSlotName(dc, outputs[i].Name, center, scale, NodePorts.SlotNameInset, input: false, node);
+                }
+            }
+        }
+    }
+
+    /// <summary>端口名：行内那颗小字，居中在它那口的行上，往卡里缩 <paramref name="inset"/> 设计单位。</summary>
+    private static void DrawSlotName(DrawingContext dc, string name, Point center, double scale, double inset,
+        bool input, IWorkflowNodeViewModel node)
+    {
+        var text = new FormattedText(name, "Segoe UI", CardPalette.SlotNameSize * scale)
+        {
+            Foreground = AccentBrushOf(node),
+            FontWeight = FontWeights.SemiBold.ToOpenTypeWeight(),
+        };
+        TextMeasurement.MeasureText(text);
+
+        double x = input ? center.X + (inset * scale) : center.X - (inset * scale) - text.Width;
+        dc.DrawText(text, new Point(x, center.Y - (text.Height / 2)));
+    }
+
+    // 端口名取节点自己的类型色（Python/Timer 的天蓝、Enum 的紫），与标题行那条色条同一个来源。
+    // 画刷建好留着：这份映射只有四种结果，而端口名是每帧重画的
+    private static readonly SolidColorBrush s_slotNameTimerPython = new(CardPalette.AccentTimerPython);
+    private static readonly SolidColorBrush s_slotNameEnum = new(CardPalette.AccentEnum);
+    private static readonly SolidColorBrush s_slotNameController = new(CardPalette.AccentController);
+    private static readonly SolidColorBrush s_slotNameFallback = new(CardPalette.AccentFallback);
+
+    private static Brush AccentBrushOf(IWorkflowNodeViewModel node) => node switch
+    {
+        PythonScriptNodeViewModel or TimerNodeViewModel => s_slotNameTimerPython,
+        EnumSelectorNodeViewModel => s_slotNameEnum,
+        ControllerViewModel => s_slotNameController,
+        _ => s_slotNameFallback,
+    };
+
+    /// <summary>卡片当前被缩放的比例：Viewbox 是等比缩放的，取两轴的较小者才与它一致。</summary>
+    private static double PortScale(IWorkflowNodeViewModel node, NodeViewBase card)
+    {
+        double sx = card.DesignWidth <= 0 ? 1 : node.Size.Width / card.DesignWidth;
+        double sy = card.DesignHeight <= 0 ? 1 : node.Size.Height / card.DesignHeight;
+        return Math.Min(sx, sy);
+    }
+
+    /// <summary>
+    /// 视口粗筛。端口画在表面自己的坐标里，不受「子元素布局盒」那套剔除影响，但逐个画整棵树的端口在
+    /// 缩到很远时是白费力气 —— 卡片在视口之外就整块跳过（留一点余量给外溢的那半个口）。
+    /// </summary>
+    private bool NearViewport(IWorkflowNodeViewModel node, NodeViewBase card)
+    {
+        if (_scrollViewer is not { } viewer)
+        {
+            return true;
+        }
+
+        double pad = (NodePorts.PortBoxSize(node) / 2) + 16;
+        double x0 = node.Anchor.Horizontal + OriginX;
+        double y0 = node.Anchor.Vertical + OriginY;
+        double vx = viewer.HorizontalOffset, vy = viewer.VerticalOffset;
+
+        return x0 + node.Size.Width + pad >= vx
+            && x0 - pad <= vx + viewer.ViewportWidth
+            && y0 + node.Size.Height + pad >= vy
+            && y0 - pad <= vy + viewer.ViewportHeight;
     }
 
     private void DrawGrid(DrawingContext dc)
@@ -660,259 +842,378 @@ internal sealed class NodeEditorSurface : Canvas
                 continue;
             }
 
-            var p0 = ToCanvas(GetSlotPortCenter(link.Sender).X, GetSlotPortCenter(link.Sender).Y);
-            var p1 = ToCanvas(GetSlotPortCenter(link.Receiver).X, GetSlotPortCenter(link.Receiver).Y);
+            var from = GetSlotPortCenter(link.Sender);
+            var to = GetSlotPortCenter(link.Receiver);
+            var p0 = ToCanvas(from.X, from.Y);
+            var p1 = ToCanvas(to.X, to.Y);
 
-            // 两个常量色 + 其上再画一段链接长度，而不是一条渐变描边——原因见 flow 声明处
-            // 长度的起止是表面自己的状态，故每条链接沿自己的轴带同一条光带；端口每次绘制现读，拖节点不通知链接
-            DrawLink(dc, s_dimPen, p0, p1);
-            DrawBand(dc, s_litPen, p0, p1, BandCentre, BandHalf);
-            DrawArrowhead(dc, s_arrowBrush, p0, p1);
-        }
-    }
-
-    // 链接折线的四个点（画布坐标，黄金比走线）：[from, (from.X+stub, from.Y), (to.X−stub, to.Y), to]，stub = dx/2·(1−φ)
-    // 与光带共用而非写进绘制里：光带按同样这四个点裁剪，算一遍两者才不会走偏
-    private static Point[] LinkPoints(Point from, Point to)
-    {
-        double dx = to.X - from.X;
-        double stub = dx / 2.0 * (1.0 - Phi);
-        return
-        [
-            from,
-            new Point(from.X + stub, from.Y),
-            new Point(to.X - stub, to.Y),
-            to,
-        ];
-    }
-
-    private static void DrawLink(DrawingContext dc, Pen pen, Point from, Point to)
-    {
-        var points = LinkPoints(from, to);
-
-        var figure = new PathFigure { StartPoint = points[0], IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { points[1], points[2], points[3] }, true));
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
-        dc.DrawGeometry(null, pen, geometry);
-    }
-
-    // 描出光带：链接自身的折线，裁到光带覆盖的一段（自发送端量起）——实测亮段 2–4px 读 255，静息 169
-    // 裁剪按长度走三段，故光带跟着拐弯而不是横跨过去；绘制用几何而非描边渐变的原因见 flow 声明
-    private static void DrawBand(DrawingContext dc, Pen pen, Point from, Point to, double centre, double half)
-    {
-        // 光带即表面那两个数描述的一段：中心加减半宽，并夹在链接内，周期末尾停在链接端点而不是越过去
-        var bandStart = Math.Max(0d, centre - half);
-        var bandEnd = Math.Min(1d, centre + half);
-
-        if (bandEnd <= bandStart)
-        {
-            return;
-        }
-
-        var points = LinkPoints(from, to);
-        var runs = new double[3];
-        var total = 0d;
-        for (var i = 0; i < 3; i++)
-        {
-            var dx = points[i + 1].X - points[i].X;
-            var dy = points[i + 1].Y - points[i].Y;
-            runs[i] = Math.Sqrt((dx * dx) + (dy * dy));
-            total += runs[i];
-        }
-
-        if (total <= 0d)
-        {
-            return;
-        }
-
-        var start = bandStart * total;
-        var end = bandEnd * total;
-        var clipped = new List<Point>();
-        var travelled = 0d;
-
-        for (var i = 0; i < 3; i++)
-        {
-            var runStart = travelled;
-            var runEnd = travelled + runs[i];
-            travelled = runEnd;
-
-            if (runEnd < start || runStart > end || runs[i] <= 0d)
+            // 视口之外的链接整条跳过。这一条在这里比在别处更要紧：彗星每帧要按弧长切出十几段几何
+            // （尾段 × 两遍），是整块绘制里最贵的一处，而它只在画得到的地方才有意义
+            if (!CrossesViewport(p0, p1))
             {
                 continue;
             }
 
-            var a = (Math.Max(runStart, start) - runStart) / runs[i];
-            var b = (Math.Min(runEnd, end) - runStart) / runs[i];
-
-            if (clipped.Count == 0)
+            // 线体是静息的，光不在时它只是一根暗线 —— 有了对比，沿它跑的那段彗星才亮得出来。
+            // 端点每次绘制现读：拖节点只动 Anchor，链接本身收不到通知，所以几何按端点缓存（见 LinkCurve）
+            var curve = CurveFor(link, p0, p1);
+            if (curve.Length <= 0)
             {
-                clipped.Add(new Point(
-                    points[i].X + ((points[i + 1].X - points[i].X) * a),
-                    points[i].Y + ((points[i + 1].Y - points[i].Y) * a)));
+                continue;
             }
 
-            clipped.Add(new Point(
-                points[i].X + ((points[i + 1].X - points[i].X) * b),
-                points[i].Y + ((points[i + 1].Y - points[i].Y) * b)));
+            DrawLink(dc, curve, LinkColor, LinkThickness);
+            DrawComet(dc, curve, LinkColor, LinkThickness);
         }
-
-        if (clipped.Count < 2)
-        {
-            return;
-        }
-
-        var head = clipped[0];
-        clipped.RemoveAt(0);
-
-        var figure = new PathFigure { StartPoint = head, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(clipped.ToArray(), true));
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
-        dc.DrawGeometry(null, pen, geometry);
     }
 
-    private static void DrawArrowhead(DrawingContext dc, Brush brush, Point from, Point to)
+    /// <summary>
+    /// 一条链接是否可能出现在视口里。两点都落在视口外也照样可能穿过视口（贝塞尔是弯的），
+    /// 所以判的是<b>两点连线</b>的包围盒与视口相交，再往外留一段余量把控制点拉出去的弧度也算进去。
+    /// </summary>
+    private bool CrossesViewport(Point a, Point b)
     {
-        // Segment-aligned 12x8 arrowhead (matching WPF/WinUI/Avalonia/WinForms/MAUI).
-        const double al = 12, aw = 8;
-        double tx = to.X - from.X, ty = to.Y - from.Y;
-        double len2 = tx * tx + ty * ty;
-        if (len2 < 0.001)
+        if (_scrollViewer is not { } viewer)
+        {
+            return true;
+        }
+
+        // 控制点水平拉出 max(40, |dx|·0.5)，所以曲线最多比两端连线多探出约 |dx| 的一半
+        double pad = Math.Max(40, Math.Abs(b.X - a.X) * 0.5);
+        double vx = viewer.HorizontalOffset, vy = viewer.VerticalOffset;
+        double vr = vx + viewer.ViewportWidth, vb = vy + viewer.ViewportHeight;
+
+        return Math.Max(a.X, b.X) + pad >= vx
+            && Math.Min(a.X, b.X) - pad <= vr
+            && Math.Max(a.Y, b.Y) >= vy
+            && Math.Min(a.Y, b.Y) <= vb;
+    }
+
+    // ── 链接几何（三次贝塞尔 + 弧长表） ────────────────────────────────────
+
+    /// <summary>
+    /// 一条链接的弧长表：<see cref="SampleCount"/> 段的采样点 + 累计长度 + 全长。
+    /// <para>
+    /// 为什么要存表而不是每帧现算：彗星是按<b>弧长</b>切的（头与尾各取一段长度），而贝塞尔的 t 与弧长
+    /// 并不成正比 —— 现算的话光在弯道上会忽快忽慢，正是这个 demo 换掉折线时想修掉的观感。表只在端点
+    /// 变化时重建，判据就是建表时的那两个端点。
+    /// </para>
+    /// <para>
+    /// 用 <see cref="PathGeometry"/> + <see cref="PolyLineSegment"/> 而不是 <c>StreamGeometry</c>：
+    /// 后者的上下文接口（BeginFigure / LineTo 的重载）在本平台上没有文档，前者是这个仓库里已经在跑的组合。
+    /// </para>
+    /// </summary>
+    private sealed class LinkCurve
+    {
+        private readonly Point[] _samples = new Point[SampleCount + 1];
+        private readonly double[] _cumulative = new double[SampleCount + 1];
+        private Point _from;
+        private Point _to;
+        private double _length;
+
+        public double Length => _length;
+
+        /// <summary>端点变了就重建弧长表，否则原样留着。返回是否重建过。</summary>
+        public bool Ensure(Point from, Point to)
+        {
+            if (_length > 0
+                && from.X == _from.X && from.Y == _from.Y
+                && to.X == _to.X && to.Y == _to.Y)
+            {
+                return false;
+            }
+
+            _from = from;
+            _to = to;
+            for (int i = 0; i <= SampleCount; i++)
+            {
+                _samples[i] = At(i / (double)SampleCount);
+            }
+
+            _cumulative[0] = 0;
+            for (int i = 1; i <= SampleCount; i++)
+            {
+                double dx = _samples[i].X - _samples[i - 1].X;
+                double dy = _samples[i].Y - _samples[i - 1].Y;
+                _cumulative[i] = _cumulative[i - 1] + Math.Sqrt((dx * dx) + (dy * dy));
+            }
+
+            _length = _cumulative[SampleCount];
+            return true;
+        }
+
+        // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角。
+        // 最小拉出量那条不是装饰：两个端口靠得很近时 0.5·dx 会让曲线退化成一条直线段，
+        // 失去「从端口水平出来」的形状
+        private (Point C1, Point C2) Controls()
+        {
+            double dx = _to.X - _from.X;
+            double pull = Math.Max(40, Math.Abs(dx) * 0.5);
+            return (new Point(_from.X + pull, _from.Y), new Point(_to.X - pull, _to.Y));
+        }
+
+        private Point At(double t)
+        {
+            var (c1, c2) = Controls();
+            double u = 1 - t;
+            double a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+
+            return new Point(
+                (a * _from.X) + (b * c1.X) + (c * c2.X) + (d * _to.X),
+                (a * _from.Y) + (b * c1.Y) + (c * c2.Y) + (d * _to.Y));
+        }
+
+        /// <summary>弧长 → 点。二分找所在采样段再线性插值，所以取点精确到亚像素，不受采样密度限制。</summary>
+        public Point AtLength(double len)
+        {
+            if (_length <= 0)
+            {
+                return _from;
+            }
+
+            len = Math.Clamp(len, 0, _length);
+
+            int lo = 0, hi = _cumulative.Length - 1;
+            while (hi - lo > 1)
+            {
+                int mid = (lo + hi) / 2;
+                if (_cumulative[mid] <= len)
+                {
+                    lo = mid;
+                }
+                else
+                {
+                    hi = mid;
+                }
+            }
+
+            double span = _cumulative[hi] - _cumulative[lo];
+            double t = span <= 0 ? 0 : (len - _cumulative[lo]) / span;
+
+            return new Point(
+                _samples[lo].X + ((_samples[hi].X - _samples[lo].X) * t),
+                _samples[lo].Y + ((_samples[hi].Y - _samples[lo].Y) * t));
+        }
+
+        /// <summary>[from, to] 这一段弧长上的折线几何：两端各自插值到精确位置，中间用现成采样点。</summary>
+        public Geometry Segment(double from, double to)
+        {
+            to = Math.Min(to, _length);
+            from = Math.Clamp(from, 0, _length);
+
+            var points = new List<Point>(SampleCount + 2) { AtLength(from) };
+            for (int i = 1; i < _samples.Length - 1; i++)
+            {
+                double l = _cumulative[i];
+                if (l <= from || l >= to)
+                {
+                    continue;
+                }
+
+                points.Add(_samples[i]);
+            }
+
+            points.Add(AtLength(to));
+
+            var figure = new PathFigure { StartPoint = points[0], IsClosed = false, IsFilled = false };
+            figure.Segments.Add(new PolyLineSegment(points, true));
+            var geometry = new PathGeometry();
+            geometry.Figures.Add(figure);
+            return geometry;
+        }
+    }
+
+    // 弧长表按链接缓存：端点一变就重建，否则每帧只是两次比较。链接被删时条目在 Links 变更里一起丢掉
+    private readonly Dictionary<IWorkflowLinkViewModel, LinkCurve> _curves = new();
+
+    // 虚拟连线（指针下那根橡皮筋）也有自己的一条曲线，复用同一个实例：同时只会有一根
+    private readonly LinkCurve _virtualCurve = new();
+
+    private LinkCurve CurveFor(IWorkflowLinkViewModel link, Point from, Point to)
+    {
+        if (!_curves.TryGetValue(link, out var curve))
+        {
+            curve = new LinkCurve();
+            _curves[link] = curve;
+        }
+
+        curve.Ensure(from, to);
+        return curve;
+    }
+
+    private static void DrawLink(DrawingContext dc, LinkCurve curve, Color color, double thickness)
+    {
+        var body = curve.Segment(0, curve.Length);
+
+        // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。
+        // 圆头：两端才不像被截断的横截面
+        dc.DrawGeometry(null, Capped(new Pen(CardPalette.Alpha(color, 0.10), thickness + 9)), body);
+        dc.DrawGeometry(null, Capped(new Pen(CardPalette.Alpha(color, 0.16), thickness + 4)), body);
+        dc.DrawGeometry(null, Capped(new Pen(CardPalette.Alpha(color, 0.55), thickness)), body);
+    }
+
+    private static Pen Capped(Pen pen)
+    {
+        pen.StartLineCap = PenLineCap.Round;
+        pen.EndLineCap = PenLineCap.Round;
+        return pen;
+    }
+
+    /// <summary>
+    /// 彗星：沿弧长切出 [头−尾, 头] 这一段，再分若干小段画，每段一个递减的透明度与一个向白偏的颜色。
+    /// <para>
+    /// 不用渐变刷有两个理由，第二个才是新的：本平台的渐变写停靠点不出帧（见 flow 声明），所以原先那版
+    /// 流光只能画成「裁剪几何 + 宽度动画」；而且渐变刷的轴是两端之间的直线，在曲线上会把光打偏 ——
+    /// 亮度不再跟着弯走，绕弯时看着忽快忽慢。改成按弧长切出来的几何之后，这两条一起消失：
+    /// 几何本来就是切出来的，不再依赖渐变刷。
+    /// </para>
+    /// </summary>
+    private void DrawComet(DrawingContext dc, LinkCurve curve, Color color, double thickness)
+    {
+        double intensity = CometIntensity(FlowPhase);
+        if (intensity <= 0.004 || curve.Length <= 0)
         {
             return;
         }
-        double len = Math.Sqrt(len2);
-        tx /= len;
-        ty /= len;
-        double nx = -ty, ny = tx;
-        double baseX = to.X - tx * al, baseY = to.Y - ty * al;
 
-        var figure = new PathFigure { StartPoint = to, IsClosed = true, IsFilled = true };
-        figure.Segments.Add(new LineSegment(new Point(baseX + nx * (aw / 2), baseY + ny * (aw / 2)), true));
-        figure.Segments.Add(new LineSegment(new Point(baseX - nx * (aw / 2), baseY - ny * (aw / 2)), true));
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
-        dc.DrawGeometry(brush, null, geometry);
+        double head = Math.Clamp(FlowPhase, 0, 1) * curve.Length;
+        double tail = TailFraction * curve.Length;
+
+        // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来。
+        // 光晕只跟亮头那半段：尾梢那半边按 f0² 已经淡到看不见，画它只是白开几何
+        for (int pass = 0; pass < 2; pass++)
+        {
+            bool bloom = pass == 0;
+
+            for (int k = bloom ? TailSegments / 2 : 0; k < TailSegments; k++)
+            {
+                double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
+                double f1 = (k + 1) / (double)TailSegments;
+
+                double l0 = head - (tail * (1 - f0));
+                double l1 = head - (tail * (1 - f1));
+                if (l1 <= 0 || l0 >= curve.Length)
+                {
+                    continue;
+                }
+
+                // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
+                double a = intensity * f0 * f0;
+                if (a <= 0.004)
+                {
+                    continue;
+                }
+
+                // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部
+                var c = Mix(color, Colors.White, f0);
+
+                dc.DrawGeometry(null,
+                    bloom
+                        ? new Pen(CardPalette.Alpha(c, a * 0.22), thickness + 9)
+                        : Capped(new Pen(CardPalette.Alpha(c, a), thickness * (0.45 + (0.95 * f0)))),
+                    curve.Segment(l0, l1));
+            }
+        }
     }
 
-    // ── Link flow (the travelling band) ────────────────────────────────────
+    /// <summary>
+    /// 一个周期里彗星有多亮：头部从发送端出发时升起来（占前 30% 路程），到达接收端之前落下去
+    /// （占后 22%）。两端都是「没有光」，所以循环接缝看不出来。
+    /// </summary>
+    /// <remarks>
+    /// Avalonia 那版把这三段写成三条相位（成形 / 行进 / 退去）。这里从一个相位推出来，是因为本平台
+    /// 一个控件上只能跑一条转换（<c>Transition.Exit</c> 按目标停，两条会互相打断），相位一多就必然要
+    /// 第二条 —— 所以只留一个 double，其余全从它算。
+    /// </remarks>
+    private static double CometIntensity(double phase)
+    {
+        double p = Math.Clamp(phase, 0, 1);
+        return Math.Min(1, p / HeadFormed) * Math.Min(1, (1 - p) / ExitSpan);
+    }
 
-    // 光带半宽（占链接长度的比例）：与其它 demo 同一种运动，只是换成本平台的单位
-    private const double BandHalfWidth = 0.04;
+    // 两色之间线性混合（含 alpha），用于尾梢到头部那一段渐变
+    private static Color Mix(Color from, Color to, double t)
+    {
+        byte L(byte a, byte b) => (byte)Math.Round(a + ((b - a) * t));
 
-    // 三段相位各自结束时光带中心的位置：成形、全亮行进、缩小退去；动画写的就是这些中心，外加宽度
-    private const double BandStart = 0.06;
-    private const double BandFormed = 0.34;
-    private const double BandLeaving = 0.66;
-    private const double BandExit = 0.94;
+        return Color.FromArgb(L(from.A, to.A), L(from.R, to.R), L(from.G, to.G), L(from.B, to.B));
+    }
 
-    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(550);
-    private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(650);
-    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(550);
+    // ── Flow: one clock, and everything on the surface is a function of it ──
 
-    // 光带与箭头的颜色：链接本色提到全不透明
-    private static readonly Color Lit = LitOf(LinkColor);
+    // 弧长表的分辨率。128 段放到缩放上限（Layout.Scale 0.1，即放大约十倍）也看不出折线感
+    private const int SampleCount = 128;
 
-    // 链接的静息色：亮色按 alpha 变暗到约 62%
-    private static readonly Color Dim = DimOf(Lit);
+    // 拖尾占全长的比例。彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑
+    private const double TailFraction = 0.30;
 
-    // 每条链接都用这两支笔：静息的一支与描光带的一支
-    // 颜色取自表面唯一的 LinkColor，无按链接的内容故共享；建好不再写——本 build 认的正是这种画刷（实测）
-    private static readonly Pen s_dimPen = new(new SolidColorBrush(Dim), LinkThickness);
-    private static readonly Pen s_litPen = new(new SolidColorBrush(Lit), LinkThickness);
+    // 拖尾分几段画。每段一个透明度，衰减因此是连续的，也就不需要渐变刷
+    private const int TailSegments = 16;
 
-    // 箭头填充用光带的颜色，而不是线体的静息色：否则线体暗着，箭头就成了唯一读不出流动的一段
-    private static readonly SolidColorBrush s_arrowBrush = new(Lit);
+    // 头部走到这个比例时已经升到全亮 —— 从发送端出发的那一段
+    private const double HeadFormed = 0.30;
+
+    // 头部走到这里开始收暗，到终点正好归零 —— 循环接缝才看不出来
+    private const double HeadLeaving = 0.78;
+
+    private const double ExitSpan = 1.0 - HeadLeaving;
+
+    // 一个周期。波纹与彗星共用它：两者都由同一个相位推出来，见 FlowPhase
+    private static readonly TimeSpan FlowPeriod = TimeSpan.FromMilliseconds(2300);
 
     // 周期是否在跑，停只要停一次
     private bool _running;
 
-    private double _bandCentre;
-    private double _bandHalf;
+    private double _flowPhase;
 
     /// <summary>
-    /// Where the band is: the fraction of a link's length, measured from its sender's end, that the band's
-    /// centre sits at. Written by the cycle every frame and read by every link as it is drawn.
+    /// 表面的相位，0 到 1 循环：<b>这是全表面唯一的动画状态</b>，沿链接跑的彗星与端口上的波纹都从它推出来。
     /// </summary>
     /// <remarks>
-    /// A member of the surface rather than of anything per link, because this surface paints every link in one
-    /// pass and there is no per-link view for an animation to write into: these two numbers are the whole of the
-    /// animated state and the whole surface shares them, so every link carries its band at the same point of its
-    /// own length at any moment. Writing either repaints, because the band is drawn by this surface's own
-    /// <c>OnRender</c> and nothing else would tell it that the band moved — one repaint per frame is the price
-    /// of animating something the surface draws itself, and the transitions tick at 60fps.
+    /// <para>
+    /// 一个 double 而不是几个，有两个理由。其一，本平台一个控件上只能跑一条转换（<c>Transition.Exit</c>
+    /// 按目标停，两条会互相打断），相位一多就必然要有第二条 —— 唯一能做的就是让它们全是同一个相位的函数。
+    /// 其二，它属于表面而不是属于链接：这个表面一笔画完所有链接、又画完所有端口（端口也归它画，
+    /// 理由见 DrawPorts），没有 per-link 的视图可写，所以这一个成员就是全部的动画状态。
+    /// 写它就重绘，因为画它的是表面自己的 OnRender / OnPostRender，没有别人会告诉它光走了 ——
+    /// 一帧一次重绘是「动画画在表面自己身上」的代价，转换本来就按 60fps 走。
+    /// </para>
+    /// <para>
+    /// 2300ms 这个周期照的是 Avalonia 那版端口的波纹；彗星因此一个周期走完整条链接（那边是三段相位拼出
+    /// 1600ms）。两个动效一个节拍读起来是同一件事在发生，代价是彗星比 Avalonia 慢一档 ——
+    /// 这是「一个控件一条时钟」的必然结果，不是随手挑的数。
+    /// </para>
     /// </remarks>
-    public double BandCentre
+    public double FlowPhase
     {
-        get => _bandCentre;
+        get => _flowPhase;
         set
         {
-            _bandCentre = value;
-            InvalidateVisual();
-        }
-    }
-
-    /// <summary>
-    /// Half the band's width, on the same scale as <see cref="BandCentre"/>: the rest of the animated state, and
-    /// this platform's own answer to the flow's phases.
-    /// </summary>
-    /// <remarks>
-    /// The other six demos carry a phase as a colour mix between the link's two colours; here it is the band's
-    /// size, because a band on this platform is a length of the link drawn as geometry rather than a gradient on
-    /// it (the note on the declaration below says why). So the cycle grows this while the band enters and takes
-    /// it back to nothing while the band leaves, and a phase reads as a band appearing and disappearing rather
-    /// than as the line lighting up. The band's own colour is never mixed: it is stroked lit throughout, and
-    /// what changes about it is how much of the link it covers.
-    /// </remarks>
-    public double BandHalf
-    {
-        get => _bandHalf;
-        set
-        {
-            _bandHalf = value;
+            _flowPhase = value;
             InvalidateVisual();
         }
     }
 
     // 整个表面一条声明而非每条链接一条：写的都是表面自己的值，端点全常量故可 static readonly；匀速故不用缓动
-    // 本 build 只认每帧变化的几何——渐变写停靠点/换整组/移轴/每帧新刷子截图全同（实测），故光带画成几何的一段
+    // LoopTime = int.MaxValue 是这套系统唯一的「永久」，且时长不能为零 —— 零长度的一趟不消耗时间，
+    // 于是永久循环会空转而不是循环，Transition.Exit 也就再打断不了它
+    // 本 build 只认每帧变化的几何——渐变写停靠点/换整组/移轴/每帧新刷子截图全同（实测），
+    // 所以流光画成按弧长切出来的一段几何，不靠渐变刷（见 DrawComet）
     private static readonly Transition<NodeEditorSurface> Flow =
         Transition<NodeEditorSurface>.Create()
-            // 相位一：一边成形一边进入（走三分之一路程，宽度由零到满，是显现而非从链接外滑入）
-            .Property(s => s.BandCentre, BandFormed)
-            .Property(s => s.BandHalf, BandHalfWidth)
+            .Property(s => s.FlowPhase, 1d)
             .Effect(new TransitionEffect()
             {
-                Duration = EnterDuration,
+                Duration = FlowPeriod,
+                LoopTime = int.MaxValue,
                 Ease = Eases.Default,
-            })
-            .Then()
-            // 相位二：保持全亮只移动——这一段读起来才是流动而非脉冲
-            .Property(s => s.BandCentre, BandLeaving)
-            .Effect(new TransitionEffect()
-            {
-                Duration = TravelDuration,
-                Ease = Eases.Default,
-            })
-            .Then()
-            // 相位三：一边把宽度收回零一边离开；周期两端宽度都是零，循环接缝才看不出来
-            .Property(s => s.BandCentre, BandExit)
-            .Property(s => s.BandHalf, 0d)
-            .Effect(new TransitionEffect()
-            {
-                Duration = ExitDuration,
-                Ease = Eases.Default,
-            })
-            .Repeat(int.MaxValue);
+            });
 
-    // 起周期：光带在每条链接的发送端、宽度为零
+    // 起周期：相位回到 0
     // 转换从目标读起值，Execute 前要先回到周期起点；循环在每个接缝重放这份抓到的起值
     private void StartFlow()
     {
-        BandCentre = BandStart;
-        BandHalf = 0d;
-
+        FlowPhase = 0;
         Flow.Execute(this);
         _running = true;
     }
@@ -930,22 +1231,19 @@ internal sealed class NodeEditorSurface : Canvas
         _running = false;
     }
 
-    // 亮色：链接本色各通道向白抬 45% 并置全不透明（白链接也留出更亮处）
-    private static Color LitOf(Color color)
-    {
-        const double lift = 0.45;
-
-        byte Up(byte channel) => (byte)Math.Round(channel + (255 - channel) * lift);
-
-        return Color.FromArgb(255, Up(color.R), Up(color.G), Up(color.B));
-    }
-
-    // 静息色：亮色按 alpha 变暗到约 62%，光带才读得出来
-    // 往白里提不行：Jalium 的链接本就白，抬亮与静息同像素；青线上也只差三个通道里的一个（实测）
-    private static Color DimOf(Color color) => Color.FromArgb(
-        (byte)Math.Round(color.A * 0.62), color.R, color.G, color.B);
-
     // ── Hit testing (world coords) ─────────────────────────────────────────
+
+    /// <summary>
+    /// 端口的抓取半径（画布单位）：跟着字形一起被缩放 —— 口本身就是按设计尺寸画的，
+    /// 缩到很远时还按固定像素去抓，就会出现「看得见的口抓不住、看不见的地方抓着空」。
+    /// 输出口给得比输入口小一点：拉线从输出口起，误抓一颗粒代价比多试一次大。
+    /// </summary>
+    private double PortHitRadius(IWorkflowNodeViewModel node, double factor)
+    {
+        _cards.TryGetValue(node, out var card);
+        double scale = card is null ? 1 : PortScale(node, card);
+        return Math.Max(6, (NodePorts.PortBoxSize(node) / 2) * scale * factor);
+    }
 
     private (IWorkflowNodeViewModel Node, int OutputIndex)? HitTestOutputPort(Point pos)
     {
@@ -954,11 +1252,12 @@ internal sealed class NodeEditorSurface : Canvas
         {
             var node = _tree.Nodes[n];
             var outputs = NodePorts.Outputs(node);
+            double radius = PortHitRadius(node, 0.75);
             for (int i = 0; i < outputs.Count; i++)
             {
                 var c = GetOutputPortCenter(node, i);
                 double dx = pos.X - c.X, dy = pos.Y - c.Y;
-                if (dx * dx + dy * dy <= 12 * 12)
+                if (dx * dx + dy * dy <= radius * radius)
                 {
                     return (node, i);
                 }
@@ -975,11 +1274,12 @@ internal sealed class NodeEditorSurface : Canvas
         {
             var node = _tree.Nodes[n];
             var inputs = NodePorts.Inputs(node);
+            double radius = PortHitRadius(node, 0.9);
             for (int i = 0; i < inputs.Count; i++)
             {
                 var c = InputPortCenter(node, i);
                 double dx = pos.X - c.X, dy = pos.Y - c.Y;
-                if (dx * dx + dy * dy <= 14 * 14)
+                if (dx * dx + dy * dy <= radius * radius)
                 {
                     return (node, i);
                 }
@@ -1047,7 +1347,6 @@ internal sealed class NodeEditorSurface : Canvas
             _dropTarget = null;
             CaptureMouse();
             _tree.SendConnectionCommand.Execute(NodePorts.Outputs(output.Node)[output.OutputIndex].Slot);
-            UpdateAllPortColors();
             InvalidateVisual();
             Changed?.Invoke();
             e.Handled = true;
@@ -1126,7 +1425,6 @@ internal sealed class NodeEditorSurface : Canvas
                 var world = new Point(pos.X - OriginX, pos.Y - OriginY);
                 _dropTarget = HitTestInputPort(world);
                 _tree.SetPointerCommand.Execute(new Anchor(world.X, world.Y, 0));
-                UpdateAllPortColors();
                 InvalidateVisual();
                 Changed?.Invoke();
                 e.Handled = true;
@@ -1168,7 +1466,43 @@ internal sealed class NodeEditorSurface : Canvas
                 e.Handled = true;
                 break;
             }
+
+            // 没在拖任何东西：只更新端口悬停。端口小，没有这点反馈就不知道指针到底有没有搭上它
+            default:
+                UpdatePortHover(e.GetPosition(this));
+                break;
         }
+    }
+
+    /// <summary>指针落在哪颗端口上（画布坐标进，插槽视图模型出）。只改状态、只在真的换了口时重绘。</summary>
+    private void UpdatePortHover(Point canvasPos)
+    {
+        if (_tree is null)
+        {
+            return;
+        }
+
+        var world = new Point(canvasPos.X - OriginX, canvasPos.Y - OriginY);
+        IWorkflowSlotViewModel? hovered = null;
+
+        if (HitTestOutputPort(world) is { } output)
+        {
+            var outputs = NodePorts.Outputs(output.Node);
+            hovered = output.OutputIndex < outputs.Count ? outputs[output.OutputIndex].Slot : null;
+        }
+        else if (HitTestInputPort(world) is { } input)
+        {
+            var inputs = NodePorts.Inputs(input.Node);
+            hovered = input.InputIndex < inputs.Count ? inputs[input.InputIndex].Slot : null;
+        }
+
+        if (ReferenceEquals(hovered, _hoverSlot))
+        {
+            return;
+        }
+
+        _hoverSlot = hovered;
+        InvalidateVisual();
     }
 
     private void OnMouseUp(object? sender, MouseButtonEventArgs e)
@@ -1205,8 +1539,7 @@ internal sealed class NodeEditorSurface : Canvas
                 _dropTarget = null;
                 _dragKind = DragKind.None;
                 ReleaseMouseCapture();
-                UpdateAllPortColors();
-                InvalidateVisual();
+                    InvalidateVisual();
                 Changed?.Invoke();
                 e.Handled = true;
                 break;
@@ -1231,7 +1564,6 @@ internal sealed class NodeEditorSurface : Canvas
         _dragFrom = null;
         _dropTarget = null;
         _tree?.ResetVirtualLinkCommand.Execute(null);
-        UpdateAllPortColors();
         InvalidateVisual();
         Changed?.Invoke();
     }
@@ -1258,39 +1590,44 @@ internal sealed class NodeEditorSurface : Canvas
 
     // ── Port slot colors ───────────────────────────────────────────────────
 
-    private void UpdateAllPortColors()
+    // 端口的状态现在由 DrawPorts 在绘制时现算（每个口问一次），端口画在表面上就没有「推给卡片」那一步，
+    // 也就不需要一份缓存的数组去记它。
+    //
+    // 口径与本平台的惯例一致 —— 节点视图模型自己维护 State（Trimmed demo 直接读 slot.State）——
+    // 再把拖拽预览那条补上：正在拉线的那颗输出口是 PreviewSender，指针压着的那颗输入口是 PreviewReceiver。
+    // 预览刻意不写成 Sender/Receiver：那两个是「已经连上了」的语义（Tomato / Lime），
+    // 而正在拉的那一头在 Avalonia 那套设计里是保持白色的 —— 它的反馈在呼吸与波纹上，不在颜色上。
+
+    private SlotState OutputPortState(IWorkflowNodeViewModel node, int outputIndex)
     {
-        if (_tree is null)
+        var state = SlotState.StandBy;
+        if (_dragFrom is { } f && f.Node == node && f.OutputIndex == outputIndex)
         {
-            return;
+            state |= SlotState.PreviewSender;
         }
 
-        foreach (var (node, card) in _cards)
+        if (IsSenderPort(node, outputIndex))
         {
-            var outputs = NodePorts.Outputs(node);
-            var outputStates = new SlotState[outputs.Count];
-            for (int i = 0; i < outputStates.Length; i++)
-            {
-                outputStates[i] = ToState(IsSenderPort(node, i), receiver: false);
-            }
-
-            var inputs = NodePorts.Inputs(node);
-            var inputStates = new SlotState[inputs.Count];
-            for (int i = 0; i < inputStates.Length; i++)
-            {
-                inputStates[i] = ToState(sender: false, IsReceiverPort(node, i));
-            }
-
-            card.SetPortStates(inputStates, outputStates);
+            state |= SlotState.Sender;
         }
+
+        return state;
     }
 
-    private static SlotState ToState(bool sender, bool receiver)
+    private SlotState InputPortState(IWorkflowNodeViewModel node, int inputIndex)
     {
-        var s = SlotState.StandBy;
-        if (sender) s |= SlotState.Sender;
-        if (receiver) s |= SlotState.Receiver;
-        return s;
+        var state = SlotState.StandBy;
+        if (_dropTarget is { } t && t.Node == node && t.InputIndex == inputIndex)
+        {
+            state |= SlotState.PreviewReceiver;
+        }
+
+        if (IsReceiverPort(node, inputIndex))
+        {
+            state |= SlotState.Receiver;
+        }
+
+        return state;
     }
 
     private bool IsSenderPort(IWorkflowNodeViewModel node, int outputIndex)
@@ -1298,11 +1635,6 @@ internal sealed class NodeEditorSurface : Canvas
         if (_tree is null)
         {
             return false;
-        }
-
-        if (_dragFrom is { } f && f.Node == node && f.OutputIndex == outputIndex)
-        {
-            return true;
         }
 
         var slot = NodePorts.Outputs(node)[outputIndex].Slot;
@@ -1327,11 +1659,6 @@ internal sealed class NodeEditorSurface : Canvas
         if (_tree is null)
         {
             return false;
-        }
-
-        if (_dropTarget is { } t && t.Node == node && t.InputIndex == inputIndex)
-        {
-            return true;
         }
 
         var input = NodePorts.Inputs(node)[inputIndex].Slot;

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Demo.ViewModels;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;
 
@@ -10,7 +11,14 @@ namespace Demo.Components.Workflow;
 /// re-measures its slots via <c>WorkflowSlotLayoutBehavior</c> (both wired in the
 /// .razor markup). Slots are supplied through <see cref="InputSlots"/> and
 /// <see cref="OutputSlots"/> render fragments so consumers can drop slot views
-/// (see <c>SlotView</c>) or full connection behaviors into the hosts.
+/// (see <c>TemplateSlotView</c>) or full connection behaviors into the hosts.
+/// <para>
+/// The chrome itself — surface, hairline, the 2px type accent, the 32px title row, the
+/// readout capsules — is the shared card design system in <c>app.css</c>, ported from the
+/// Avalonia demo. A card names its type through <see cref="Accent"/> and never paints its
+/// own surface; the five cards therefore cannot drift apart, which is why the palette is
+/// declared once rather than five times.
+/// </para>
 /// </summary>
 public partial class TemplateNodeView : ComponentBase, IDisposable
 {
@@ -38,15 +46,38 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     [Parameter]
     public string? Title { get; set; }
 
-    /// <summary>Gets or sets an optional card background override (defaults to <c>#DDFFFFFF</c>).</summary>
+    /// <summary>
+    /// Gets or sets the 2px type accent drawn at the head of the title row. Comes from the node's
+    /// own card, exactly as each Avalonia card hands its own accent to CardTheme: Controller is
+    /// <c>var(--wf-accent-controller)</c>, a worker (Timer/Python) <c>var(--wf-accent-worker)</c>,
+    /// the enum router <c>var(--wf-accent-enum)</c>, and a foreign type falls back to the neutral
+    /// slate. Defaults to that slate, because a card with no type to declare should not claim one.
+    /// </summary>
+    [Parameter]
+    public string? Accent { get; set; }
+
+    /// <summary>Gets or sets an optional right-hand status capsule (a word, not a number).</summary>
+    [Parameter]
+    public string? StatusText { get; set; }
+
+    /// <summary>
+    /// Gets or sets the name of a node property to read as the status capsule when <see cref="StatusText"/>
+    /// is not given. A live capsule has to be read on the node's own change notification — the page that
+    /// hosts the card does not re-render when a node's status changes, so a value handed down as a
+    /// parameter would freeze at whatever it was when the page last rendered.
+    /// </summary>
+    [Parameter]
+    public string? StatusProperty { get; set; }
+
+    /// <summary>Gets or sets an optional card background override (defaults to the shared card surface).</summary>
     [Parameter]
     public string? Background { get; set; }
 
-    /// <summary>Gets or sets an optional header foreground override (defaults to <c>#DD1E1E1E</c>).</summary>
+    /// <summary>Gets or sets an optional header foreground override.</summary>
     [Parameter]
     public string? Foreground { get; set; }
 
-    /// <summary>Gets or sets an optional border brush override (defaults to <c>#331E1E1E</c>).</summary>
+    /// <summary>Gets or sets an optional border brush override (defaults to the shared hairline).</summary>
     [Parameter]
     public string? BorderBrush { get; set; }
 
@@ -54,7 +85,7 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     [Parameter]
     public string? BorderThickness { get; set; }
 
-    /// <summary>Gets or sets an optional corner radius override (defaults to <c>6</c>).</summary>
+    /// <summary>Gets or sets an optional corner radius override (defaults to <c>8</c>).</summary>
     [Parameter]
     public string? CornerRadius { get; set; }
 
@@ -63,29 +94,23 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     public bool AllowOverflow { get; set; }
 
     private INotifyPropertyChanged? _notifier;
+    private TreeViewModel? _tree;
     private string _title = "";
 
-    // Execution feedback: read reflectively from the node view-model (present on the demo's
-    // remaining node view-models, e.g. EnumSelector) so any card can show which step it ran in
-    // (#N order badge) and glow while it is executing, mirroring the XAML adapters.
+    // Execution feedback. The order badge and the status capsule come off the node view-model
+    // (looked up reflectively, same as the title); "running" does NOT — it comes off the tree,
+    // because that is where the flag lives and where it is written. See SyncExecutionState.
     private bool _isRunning;
     private bool _hasOrderBadge;
     private string _orderText = "";
-    private bool _hasLoadBadge;
-    private string _loadText = "";
-
-    // Colors mirror the demo's running chrome (#FFD54A accent on amber-tinted surfaces) so
-    // the Blazor card matches the WinForms/WPF running look.
-    private const string RunningAccent = "#FFD54A";
-    private const string RunningHeader = "#413612";
-    private const string RunningCardBg = "#2D2817";
-    private const string RunningDivider = "rgba(255,213,74,0.35)";
+    private string _statusText = "";
 
     private bool IsRunning => _isRunning;
     private bool HasOrderBadge => _hasOrderBadge;
     private string OrderText => _orderText;
-    private bool HasLoadBadge => _hasLoadBadge;
-    private string LoadText => _loadText;
+
+    /// <summary>The capsule text: the explicit override, else the live property, else nothing.</summary>
+    private string StatusValue => StatusText ?? _statusText;
 
     // Design-canvas geometry: the card is authored at the node type's DESIGN size and uniformly
     // scaled into the collapsed Node.Size host via a CSS transform (the Blazor equivalent of the
@@ -95,11 +120,29 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     private IWorkflowNodeViewModel? _designNode;
     private (double Width, double Height) _design = (260, 180);
 
-    private string BackgroundCss => Background ?? ToCss("#DDFFFFFF");
-    private string ForegroundCss => Foreground ?? ToCss("#DD1E1E1E");
-    private string BorderBrushCss => _isRunning ? RunningAccent : (BorderBrush ?? ToCss("#331E1E1E"));
-    private string BorderThicknessCss => WithCssUnits(BorderThickness ?? "1", "px");
-    private string CornerRadiusCss => WithCssUnits(CornerRadius ?? "6", "px");
+    /// <summary>The type accent, or the neutral slate when the card declares no type.</summary>
+    private string AccentCss => string.IsNullOrWhiteSpace(Accent) ? "var(--wf-accent-fallback)" : Accent!;
+
+    /// <summary>Only the ports' host is allowed to paint outside the card, and every card asks for it.</summary>
+    private string OverflowCss => AllowOverflow ? "visible" : "hidden";
+
+    /// <summary>
+    /// The card's surface, edge and corner all come from the shared <c>.wf-card</c> class; these
+    /// parameters exist only to let a one-off card override them without a new stylesheet rule.
+    /// Leaving them unset is the normal case, and then not one of them reaches the DOM.
+    /// </summary>
+    private string SurfaceOverrideCss
+    {
+        get
+        {
+            var css = "";
+            if (Background is not null) css += $"background:{ToCss(Background)};";
+            if (BorderBrush is not null) css += $"border-color:{ToCss(BorderBrush)};";
+            if (BorderThickness is not null) css += $"border-width:{WithCssUnits(BorderThickness, "px")};";
+            if (CornerRadius is not null) css += $"border-radius:{WithCssUnits(CornerRadius, "px")};";
+            return css;
+        }
+    }
 
     private (double Width, double Height) Design
     {
@@ -148,9 +191,6 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
 
         return (260, 180);
     }
-    private string CardBackgroundCss => _isRunning ? RunningCardBg : BackgroundCss;
-    private string HeaderBackgroundCss => _isRunning ? RunningHeader : "transparent";
-    private string HeaderDividerCss => _isRunning ? RunningDivider : "rgba(255,255,255,0.08)";
 
     /// <summary>
     /// Appends <paramref name="suffix"/> to a CSS length placeholder unless it already carries
@@ -238,17 +278,38 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     }
 
     /// <summary>
-    /// Reads the node's execution feedback state. <see cref="IWorkflowNodeViewModel"/> does not
-    /// expose it, so the common properties are looked up reflectively (same pattern as
-    /// <see cref="SyncTitle"/>); missing properties simply stay at their defaults.
+    /// Reads the node's execution feedback state.
     /// </summary>
+    /// <remarks>
+    /// The order badge and the status capsule come off the node view-model reflectively (same pattern as
+    /// <see cref="SyncTitle"/>). <c>IsRunning</c> does not: no node view-model has such a property — the flag
+    /// belongs to the tree, and the engine drives nodes one at a time without reporting a per-node event a
+    /// card could read. So the pill says "a run is in progress on this canvas", which is the only thing that
+    /// is actually known here.
+    /// </remarks>
     private void SyncExecutionState()
     {
-        _isRunning = ReadBool("IsRunning");
+        // Re-resolved every pass: a card is recycled for another node, and its tree comes with it.
+        var tree = Node?.Parent as TreeViewModel;
+        if (!ReferenceEquals(_tree, tree))
+        {
+            if (_tree is not null) _tree.PropertyChanged -= OnTreeChanged;
+            _tree = tree;
+            if (_tree is not null) _tree.PropertyChanged += OnTreeChanged;
+        }
+
+        _isRunning = tree?.IsWorkflowRunning == true;
         _hasOrderBadge = ReadBool("HasExecutionOrder");
         _orderText = ReadString("ExecutionOrderText");
-        _hasLoadBadge = ReadBool("HasWorkLoad");
-        _loadText = ReadString("WorkLoadText");
+        _statusText = StatusProperty is null ? "" : ReadString(StatusProperty);
+    }
+
+    private void OnTreeChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not nameof(TreeViewModel.IsWorkflowRunning)) return;
+
+        SyncExecutionState();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private object? Read(string property)
@@ -284,6 +345,12 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
         {
             _notifier.PropertyChanged -= OnNodeChanged;
             _notifier = null;
+        }
+
+        if (_tree is not null)
+        {
+            _tree.PropertyChanged -= OnTreeChanged;
+            _tree = null;
         }
     }
 }

@@ -6,14 +6,21 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>The "real computation" showcase node: title + status in the header, a purpose description,
-/// an editable script (bound to <see cref="PythonScriptNodeViewModel.Script"/>), and a last-run · status
-/// bar. Input/output port circles are drawn by the base at the NodePorts centers.</summary>
+/// <summary>
+/// 「真正在算」的那个节点：标题行（标题 + 执行序号 + 状态胶囊）、一条用途描述、一块可编辑的脚本。
+/// 骨架照这套设计（Avalonia PythonNodeView.axaml）：32 / 描述带 / 主体，主体三列 64 / * / 64
+/// —— 中间是脚本区（自己一块更深的底），两边那两列是端口名的通道。
+/// <para>
+/// 端口名由表面画，不在这棵树里：表面才知道端口行落在哪一行（位置由 <see cref="NodePorts"/> 一处给出），
+/// 名字与字形因此不可能分家。
+/// </para>
+/// </summary>
 internal sealed class PythonNodeView : NodeViewBase
 {
-    private TextBlock? _runLine;
+    protected override Color Accent => CardPalette.AccentTimerPython;
 
-    protected override Brush Accent => NodeChrome.AccentBlue;
+    protected override string InitialExecOrder(IWorkflowNodeViewModel node)
+        => node is PythonScriptNodeViewModel { HasExecutionOrder: true } vm ? vm.ExecutionOrderText : string.Empty;
 
     protected override string InitialStatus(IWorkflowNodeViewModel node)
         => (node as PythonScriptNodeViewModel)?.LastStatus ?? string.Empty;
@@ -21,59 +28,42 @@ internal sealed class PythonNodeView : NodeViewBase
     protected override void Build(IWorkflowNodeViewModel node, Grid content)
     {
         var vm = (PythonScriptNodeViewModel)node;
+
+        // 描述带固定这么高：端口行要让开它，而端口行的位置是表面事先算出来的 ——
+        // 两边读的是同一个常量（NodePorts.DescriptorHeight）
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.FromPixels(NodePorts.DescriptorHeight) });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+
+        var description = NodeChrome.Text(vm.Description, 10.5, CardPalette.LabelBrush, FontWeights.Normal);
+        description.TextWrapping = TextWrapping.Wrap;
+        var descriptionStrip = new Border
+        {
+            Padding = new Thickness(12, 5),
+            // 固定高的描述带 + 自己裁：描述长过两条就在这里截住，不会压到下面的端口行
+            ClipToBounds = true,
+            Child = description,
+        };
+        Grid.SetRow(descriptionStrip, 0);
+        content.Children.Add(descriptionStrip);
+
+        var descriptionDivider = NodeChrome.Divider();
+        Grid.SetRow(descriptionDivider, 0);
+        content.Children.Add(descriptionDivider);
+
+        // 主体三列：两个边列是端口名的通道，中间是脚本区
         var body = new Grid();
-        body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
-        body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.FromPixels(NodePorts.PortColumnWidth) });
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.FromPixels(NodePorts.PortColumnWidth) });
 
-        if (!string.IsNullOrEmpty(vm.Description))
-        {
-            var desc = new TextBlock
-            {
-                Text = vm.Description,
-                Foreground = NodeChrome.SubFg,
-                FontSize = 10,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(12, 6, 12, 4),
-            };
-            Grid.SetRow(desc, 0);
-            body.Children.Add(desc);
-        }
+        var code = NodeChrome.CodeBox(out var editor);
+        code.Margin = new Thickness(4, 6);
+        editor.Text = vm.Script;
+        editor.TextChanged += (_, _) => vm.Script = editor.Text ?? string.Empty;
+        Grid.SetColumn(code, 1);
+        body.Children.Add(code);
 
-        var scriptBox = new TextBox
-        {
-            Text = vm.Script,
-            AcceptsReturn = true,
-            TextWrapping = TextWrapping.NoWrap,
-            FontSize = 12,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0xED, 0xF3)),
-            Background = NodeChrome.EditorBg,
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(6, 4),
-        };
-        scriptBox.TextChanged += (_, _) => { if (vm is not null) vm.Script = scriptBox.Text ?? string.Empty; };
-        var editor = new Border
-        {
-            Margin = new Thickness(12, 6, 12, 6),
-            Background = NodeChrome.EditorBg,
-            BorderBrush = NodeChrome.SubBorder,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4),
-            Child = scriptBox,
-        };
-        Grid.SetRow(editor, 1);
-        body.Children.Add(editor);
-
-        _runLine = new TextBlock
-        {
-            Text = $"{vm.LastRun} · {vm.LastStatus}",
-            Foreground = NodeChrome.SubFg,
-            FontSize = 10,
-            Margin = new Thickness(12, 0, 12, 6),
-        };
-        Grid.SetRow(_runLine, 2);
-        body.Children.Add(_runLine);
-
+        Grid.SetRow(body, 1);
         content.Children.Add(body);
     }
 
@@ -86,15 +76,12 @@ internal sealed class PythonNodeView : NodeViewBase
 
         if (propertyName is nameof(PythonScriptNodeViewModel.LastRun) or nameof(PythonScriptNodeViewModel.LastStatus))
         {
-            if (StatusText is not null)
-            {
-                StatusText.Text = vm.LastStatus;
-            }
+            SetStatus(vm.LastStatus);
+        }
 
-            if (_runLine is not null)
-            {
-                _runLine.Text = $"{vm.LastRun} · {vm.LastStatus}";
-            }
+        if (propertyName is nameof(PythonScriptNodeViewModel.ExecutionOrderText))
+        {
+            SetExecOrder(vm.HasExecutionOrder ? vm.ExecutionOrderText : string.Empty);
         }
     }
 }

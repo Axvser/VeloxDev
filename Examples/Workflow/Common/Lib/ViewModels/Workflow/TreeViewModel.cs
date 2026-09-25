@@ -32,17 +32,6 @@ public partial class TreeViewModel
 
     [VeloxProperty] private bool useStreamingAgentResponse = true;
 
-    /// <summary>
-    /// Global monotonic execution sequence number for the non-compiler path. Starting a node on its own
-    /// (node card Run → ReceiveCommand) no longer resets from 01 each time — every independent start keeps
-    /// incrementing on the same canvas, so badges and the execution log stay ordered.
-    /// The compiler path is unaffected (it uses fixed CompileContext.Order numbers).
-    /// </summary>
-    private long _executionSequence;
-
-    /// <summary>Gets the next global execution sequence number (non-compiler path).</summary>
-    public int NextExecutionSequence() => (int)Interlocked.Increment(ref _executionSequence);
-
     [VeloxCommand]
     public async Task AskAsync(object? parameter, CancellationToken ct)
     {
@@ -104,11 +93,6 @@ public partial class TreeViewModel
         SetWorkflowRunning(true);
     }
 
-    public void EndWorkflowRun()
-    {
-        SetWorkflowRunning(false);
-    }
-
     public void RefreshWorkflowRunningState()
     {
         var isRunning = Nodes.OfType<ControllerViewModel>().Any(c => c.IsActive);
@@ -118,17 +102,7 @@ public partial class TreeViewModel
     public void ResetExecutionLog()
     {
         ExecutionLog.Clear();
-        _executionSequence = 0;
         SetWorkflowRunning(false);
-    }
-
-    public void AppendExecutionLog(string entry)
-    {
-        if (string.IsNullOrWhiteSpace(entry))
-        {
-            return;
-        }
-        ExecutionLog.Add(entry);
     }
 
     public void AppendAgentLog(string entry)

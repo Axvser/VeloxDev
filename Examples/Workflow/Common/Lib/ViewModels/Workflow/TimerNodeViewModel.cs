@@ -39,10 +39,6 @@ public partial class TimerNodeViewModel : ICompileTimeRouter, ICompileTimeAware
     [AgentContext(AgentLanguages.English, "Timestamp of the most recent tick.")]
     [VeloxProperty] private string lastTick = "-";
 
-    [AgentContext(AgentLanguages.Chinese, "无状态模式下是否显示 Run/Forward 按钮")]
-    [AgentContext(AgentLanguages.English, "Whether to show the Run/Forward buttons in stateless mode.")]
-    [VeloxProperty] private bool showActionButtons = false;
-
     public bool HasInputSlot => _inputSlot is not null;
     public bool HasOutputSlot => _outputSlot is not null;
 

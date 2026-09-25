@@ -22,14 +22,16 @@ public sealed class WorkflowGridDecorator : Panel, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    private static readonly IBrush SurfaceBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#141922"));
-    private static readonly IBrush RulerBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#C81C2330"));
-    private static readonly IBrush LabelBrush = new ImmutableSolidColorBrush(Color.Parse("#94A3B8"));
-    private static readonly Pen MinorGridPen = new(new ImmutableSolidColorBrush(Color.Parse("#223043")), 1);
-    private static readonly Pen MajorGridPen = new(new ImmutableSolidColorBrush(Color.Parse("#31445C")), 1);
-    private static readonly Pen AxisPen = new(new ImmutableSolidColorBrush(Color.Parse("#38BDF8")), 1.2);
-    private static readonly Pen TickPen = new(new ImmutableSolidColorBrush(Color.Parse("#64748B")), 1);
-    private static readonly Pen DividerPen = new(new ImmutableSolidColorBrush(Color.Parse("#475569")), 1);
+    // 中性灰一套，与 Trimmed demo（模板的默认调色板）逐字相同。原先这套是青蓝的——画布 #141922、
+    // 轴用 #38BDF8——七家非 Trimmed 里有四家共用它。对齐的只有画布层：节点卡的逐类型配色是刻意保留的。
+    private static readonly IBrush SurfaceBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#1E1E1E"));
+    private static readonly IBrush RulerBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#C8252526"));
+    private static readonly IBrush LabelBrush = new ImmutableSolidColorBrush(Color.Parse("#888888"));
+    private static readonly Pen MinorGridPen = new(new ImmutableSolidColorBrush(Color.Parse("#2A2D2E")), 1);
+    private static readonly Pen MajorGridPen = new(new ImmutableSolidColorBrush(Color.Parse("#3A3D40")), 1);
+    private static readonly Pen AxisPen = new(new ImmutableSolidColorBrush(Color.Parse("#4D4D4D")), 1.2);
+    private static readonly Pen TickPen = new(new ImmutableSolidColorBrush(Color.Parse("#555555")), 1);
+    private static readonly Pen DividerPen = new(new ImmutableSolidColorBrush(Color.Parse("#3A3D40")), 1);
 
     private readonly GridLayer _gridLayer;
     private readonly RulerLayer _rulerLayer;

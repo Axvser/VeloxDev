@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    节点卡共用的一套：简笔、暗色、靠字重与留白分区。
+
+    与 Avalonia 的 Views/Workflow/CardTheme.axaml 同源。那边是 <Styles> + CSS 风格的选择器
+    （Border.card、TextBlock.card-title、Button.ghost:pointerover ……），WinUI 没有类选择器，
+    所以这里的一一对应物是「一组具名 Brush + 一组 x:Key 的 Style」，卡片用
+    Style="{StaticResource ...}" 取用 —— 色值仍然只有这一份，五张卡不各自写。
+
+    打开它的地方是 App.xaml 的 MergedDictionaries，与 Avalonia 把 StyleInclude 挂在
+    Application.Styles 上同一个位置。
+
+    色板：
+      卡面 #161B22 ／ 边框 #2A313C（1px，圆角 8）／ 分隔线 #222A34
+      标题 #E6EAF2 12.5 SemiBold ／ 标签 #7C8798 10 ／ 正文 #D6DCE6 11.5
+      输入底 #0E1218 ／ 悬停底 #1E2731 ／ 禁用字 #5A6474
+    类型色条由各卡自己给（Controller #38BDF8、Timer/Python #6EC6FF、Enum #D6A0FF、兜底 #94A3B8）。
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        ThemeDictionaries 必须排在这个字典的第一个子元素上。
+
+        它在下面那堆色板与 Style 中间也读得通（XAML 解析器自己不在意顺序），但 XamlCompiler 会
+        直接崩掉 —— 不报任何错，只甩一句 MSB3073「XamlCompiler.exe 已退出，代码为 1」，
+        而它连 output.json 都不写，所以看不到任何行号。实测：只放这一块能编过，只放样式能编过，
+        把 ThemeDictionaries 放到样式后面就必崩。改动这个文件时别把它挪下去。
+    -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="TextControlBackground"                 Color="#0E1218" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver"      Color="#141A22" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused"          Color="#0E1218" />
+            <SolidColorBrush x:Key="TextControlBackgroundDisabled"         Color="#141A22" />
+            <SolidColorBrush x:Key="TextControlBorderBrush"                Color="#2A313C" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver"     Color="#3A4553" />
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused"         Color="#38BDF8" />
+            <SolidColorBrush x:Key="TextControlBorderBrushDisabled"        Color="#232A34" />
+            <SolidColorBrush x:Key="TextControlForeground"                 Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlForegroundPointerOver"      Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlForegroundFocused"          Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlForegroundDisabled"         Color="#5A6474" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground"      Color="#5A6474" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#7C8798" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#5A6474" />
+            <SolidColorBrush x:Key="TextControlButtonForeground"           Color="#7C8798" />
+            <SolidColorBrush x:Key="TextControlButtonForegroundPointerOver" Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlButtonForegroundPressed"    Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlButtonBackground"           Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlButtonBackgroundPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlButtonBackgroundPressed"    Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlSelectionHighlightColor"    Color="#38BDF8" />
+
+            <SolidColorBrush x:Key="ComboBoxBackground"                    Color="#0E1218" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver"         Color="#141A22" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed"             Color="#141A22" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundDisabled"            Color="#141A22" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused"           Color="#0E1218" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush"                   Color="#2A313C" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver"        Color="#3A4553" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPressed"            Color="#38BDF8" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled"           Color="#232A34" />
+            <SolidColorBrush x:Key="ComboBoxForeground"                    Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxForegroundPointerOver"         Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxForegroundPressed"             Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxForegroundDisabled"            Color="#5A6474" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground"            Color="#161B22" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush"           Color="#2A313C" />
+            <SolidColorBrush x:Key="ComboBoxDropDownForeground"            Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxItemForeground"                Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxItemForegroundSelected"        Color="#E6EAF2" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver"     Color="#1E2731" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected"        Color="#1E2731" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#252F3B" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#252F3B" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="TextControlBackground"                 Color="#0E1218" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver"      Color="#141A22" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused"          Color="#0E1218" />
+            <SolidColorBrush x:Key="TextControlBackgroundDisabled"         Color="#141A22" />
+            <SolidColorBrush x:Key="TextControlBorderBrush"                Color="#2A313C" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver"     Color="#3A4553" />
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused"         Color="#38BDF8" />
+            <SolidColorBrush x:Key="TextControlBorderBrushDisabled"        Color="#232A34" />
+            <SolidColorBrush x:Key="TextControlForeground"                 Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlForegroundPointerOver"      Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlForegroundFocused"          Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlForegroundDisabled"         Color="#5A6474" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground"      Color="#5A6474" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#7C8798" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#5A6474" />
+            <SolidColorBrush x:Key="TextControlButtonForeground"           Color="#7C8798" />
+            <SolidColorBrush x:Key="TextControlButtonForegroundPointerOver" Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlButtonForegroundPressed"    Color="#D6DCE6" />
+            <SolidColorBrush x:Key="TextControlButtonBackground"           Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlButtonBackgroundPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlButtonBackgroundPressed"    Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlSelectionHighlightColor"    Color="#38BDF8" />
+
+            <SolidColorBrush x:Key="ComboBoxBackground"                    Color="#0E1218" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver"         Color="#141A22" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed"             Color="#141A22" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundDisabled"            Color="#141A22" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused"           Color="#0E1218" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush"                   Color="#2A313C" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver"        Color="#3A4553" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPressed"            Color="#38BDF8" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled"           Color="#232A34" />
+            <SolidColorBrush x:Key="ComboBoxForeground"                    Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxForegroundPointerOver"         Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxForegroundPressed"             Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxForegroundDisabled"            Color="#5A6474" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground"            Color="#161B22" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush"           Color="#2A313C" />
+            <SolidColorBrush x:Key="ComboBoxDropDownForeground"            Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxItemForeground"                Color="#D6DCE6" />
+            <SolidColorBrush x:Key="ComboBoxItemForegroundSelected"        Color="#E6EAF2" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver"     Color="#1E2731" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected"        Color="#1E2731" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#252F3B" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#252F3B" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- ── 色板 ───────────────────────────────────────────────────────────── -->
+
+    <SolidColorBrush x:Key="CardSurfaceBrush"        Color="#161B22" />
+    <SolidColorBrush x:Key="CardBorderBrush"         Color="#2A313C" />
+    <SolidColorBrush x:Key="CardBorderHoverBrush"    Color="#3A4553" />
+    <SolidColorBrush x:Key="CardBorderDisabledBrush" Color="#232A34" />
+    <SolidColorBrush x:Key="CardDividerBrush"        Color="#222A34" />
+    <SolidColorBrush x:Key="CardTitleBrush"          Color="#E6EAF2" />
+    <SolidColorBrush x:Key="CardLabelBrush"          Color="#7C8798" />
+    <SolidColorBrush x:Key="CardValueBrush"          Color="#D6DCE6" />
+    <SolidColorBrush x:Key="CardFieldBrush"          Color="#0E1218" />
+    <SolidColorBrush x:Key="CardHoverBrush"          Color="#1E2731" />
+    <SolidColorBrush x:Key="CardDisabledTextBrush"   Color="#5A6474" />
+
+    <!-- 动作按钮的语义色。Avalonia 那边写在每张卡的 Foreground 上，这里同理，只是顺带留个名字 -->
+    <SolidColorBrush x:Key="CardActionCompileBrush" Color="#7EC8FF" />
+    <SolidColorBrush x:Key="CardActionRunBrush"     Color="#6EE7A8" />
+    <SolidColorBrush x:Key="CardActionStopBrush"    Color="#FCA5A5" />
+    <SolidColorBrush x:Key="CardActionCloseBrush"   Color="#9AA6B5" />
+
+    <!-- ── 卡面 ───────────────────────────────────────────────────────────── -->
+
+    <Style x:Key="CardBorderStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="Background" Value="{StaticResource CardSurfaceBrush}" />
+    </Style>
+
+    <Style x:Key="CardDividerStyle" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{StaticResource CardDividerBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <!-- 标题行左侧那条 2px 类型色条。圆角只削左上，与卡面左上角对齐。
+         宽由所在列的 "2" 给（与 Avalonia 那边一样），所以这里只说形状 -->
+    <Style x:Key="CardAccentStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="8,0,0,0" />
+    </Style>
+
+    <!-- ── 字级 ───────────────────────────────────────────────────────────── -->
+
+    <Style x:Key="CardTitleTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource CardTitleBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- Avalonia 的 LetterSpacing 是设备无关像素，WinUI 的 CharacterSpacing 是 1/1000 em。
+         标签字号 10，0.6px = 0.06em，所以这里是 60，不是 0.6 —— 同一个观感，不同的单位。 -->
+    <Style x:Key="CardLabelTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{StaticResource CardLabelBrush}" />
+        <Setter Property="CharacterSpacing" Value="60" />
+    </Style>
+
+    <Style x:Key="CardValueTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{StaticResource CardValueBrush}" />
+    </Style>
+
+    <!--
+        ── 输入 ─────────────────────────────────────────────────────────────
+
+        TextBox / ComboBox 的字段外观没有做成 x:Key 的 Style，只在卡里就地写属性
+        （FontSize="11.5" Padding="7,4" CornerRadius="6" Background="{StaticResource CardFieldBrush}"
+        BorderBrush="{StaticResource CardBorderBrush}"）。原因不是懒，是 WinUI 的一个硬性差别：
+
+        一个元素的 Style 只能有一份。控件显式设了 Style，主题里那条隐式 Style 就不再套用 ——
+        而 TextBox 的 ControlTemplate 正是写在那条隐式 Style 里的。所以自定义一条不 BasedOn
+        的 Style 会让输入框连模板都没有（变成空白），而 BasedOn="{StaticResource DefaultTextBoxStyle}"
+        又要求合并进来的字典能在解析期查到 XamlControlsResources 里的键，那取决于 App.xaml 的
+        合并顺序是否已经生效 —— 那是个只会在运行时炸的赌注，不值得为一个 Padding 去赌。
+
+        所以：形状就地写，色值仍然只有这一份（CardFieldBrush / CardBorderBrush / CardValueBrush）。
+        各状态的底与边在下面按主题覆盖。
+    -->
+
+    <!--
+        输入框各状态的底与边。
+
+        Avalonia 的 TextBox 在 Fluent 主题下 PointerOver / Focused 仍然读控件自己的
+        Background / BorderBrush，所以那边一条 Style 就够了。WinUI 不是：默认模板的
+        CommonStates 直接写 ThemeResource TextControlBackgroundPointerOver 之类的键，
+        只设 Background 的话，指针一压上去底就跳成系统灰、聚焦时边还会变主题色 —— 那正是
+        这套设计明确不要的。所以这几个键必须在这里按同一份色板覆盖。
+
+        放在 ThemeDictionaries 里而不是外面：这些键本身是「按主题取不同值」的键，直接写在
+        字典正文里对已存在的主题键不生效，必须落到具体的主题表上。Default（暗）与 Light
+        都写同一份值 —— 这套卡是固定暗色，不跟随系统明暗，和 Avalonia 那边 RequestedTheme
+        无关地写着固定十六进制是同一个决定。
+
+        代价是这几个键是 TextBox/PasswordBox/RichEditBox/AutoSuggestBox 共享的（微软文档
+        明说 resources that start with "TextControl" are shared by ...），所以本 demo 里
+        所有文本输入都变成卡字段的样子。左侧面板的 Agent 输入框显式设了自己的底色，仍然赢，
+        只是它悬停时也会落到这里的 #0E1218 上 —— 那是同一族颜色，看不出来。
+    -->
+
+
+    <!--
+        动作按钮：同形的「幽灵按钮」，语义只体现在各卡给的前景色上，不靠高饱和色块。
+
+        这里必须换掉整个 ControlTemplate，不能只覆盖 ButtonBackground / ButtonBackgroundPointerOver
+        那几个主题键：那几个键是全应用共享的，改了之后左侧面板的 Undo / Redo / Save / Load /
+        发送 也一起变成透明底 —— 它们本来是默认样式的浅色按钮，会直接看不见。Avalonia 那边
+        靠的是 Button.ghost 这个类选择器，WinUI 里最接近的对应物就是一条具名的 Style +
+        自带模板。
+
+        禁用态只压暗边与字，形状不变。默认模板的 Disabled 会把 ContentPresenter 填成
+        ButtonBackgroundDisabled（一块实灰），在一排幽灵按钮里格外突兀 —— 所以这里是自己写
+        的模板，Disabled 显式给 Transparent 底。
+    -->
+    <Style x:Key="CardGhostButtonStyle" TargetType="Button">
+        <!-- 换掉模板会连主题样式里的 UseSystemFocusVisuals 一起丢掉（它写在 Button 的隐式样式里，
+             默认值是 false），键盘焦点的方框会消失。这里补回来 —— 幽灵按钮仍然要是可聚焦的按钮 -->
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                            <ContentPresenter x:Name="Presenter"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              FontSize="{TemplateBinding FontSize}"
+                                              Padding="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+
+                                <!-- 悬停只抬边框与底，不换色 —— 动作语义已经写在各自的前景色里了 -->
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{StaticResource CardHoverBrush}" />
+                                        <Setter Target="Root.BorderBrush" Value="{StaticResource CardBorderHoverBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{StaticResource CardBorderDisabledBrush}" />
+                                        <Setter Target="Root.BorderBrush" Value="{StaticResource CardBorderHoverBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="Transparent" />
+                                        <Setter Target="Root.BorderBrush" Value="{StaticResource CardBorderDisabledBrush}" />
+                                        <Setter Target="Presenter.Foreground" Value="{StaticResource CardDisabledTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

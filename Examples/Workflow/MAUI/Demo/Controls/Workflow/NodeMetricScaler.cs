@@ -23,6 +23,7 @@ public sealed class NodeMetricScaler
     private readonly Dictionary<object, double> _fontOriginal = new();
     private readonly Dictionary<object, double> _widthOriginal = new();
     private readonly Dictionary<object, double> _heightOriginal = new();
+    private readonly Dictionary<object, Thickness> _marginOriginal = new();
     private bool _rowsCaptured;
 
     public NodeMetricScaler(double designWidth)
@@ -95,6 +96,11 @@ public sealed class NodeMetricScaler
                     slot.HeightRequest = Scale(_heightOriginal, slot, slot.HeightRequest, k);
                 }
 
+                // 端口的边距也要跟着缩。字形是按设计单位给定的（32 或 24），靠一半宽度的负边距
+                // 骑在卡边上；只缩字形不缩边距的话，k ≠ 1 时端口就会从卡边上漂走 ——
+                // 而端口的位置正是连线两端锚点取的地方（行为量的是控件的真实中心）。
+                slot.Margin = Scale(_marginOriginal, slot, slot.Margin, k);
+
                 break;
             }
         }
@@ -117,6 +123,17 @@ public sealed class NodeMetricScaler
         }
 
         return System.Math.Max(2, design * k);
+    }
+
+    private static Thickness Scale(Dictionary<object, Thickness> originals, object element, Thickness current, double k)
+    {
+        if (!originals.TryGetValue(element, out var design))
+        {
+            design = current;
+            originals[element] = design;
+        }
+
+        return new Thickness(design.Left * k, design.Top * k, design.Right * k, design.Bottom * k);
     }
 
     private static IEnumerable<Element> Children(Element element)

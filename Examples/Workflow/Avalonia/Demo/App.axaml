@@ -11,5 +11,7 @@
   
     <Application.Styles>
         <FluentTheme />
+        <!-- 节点卡共用的一套（卡面、字级、幽灵按钮）。五张卡都从它取类名，不各自写色值。 -->
+        <StyleInclude Source="avares://Demo/Views/Workflow/CardTheme.axaml" />
     </Application.Styles>
 </Application>

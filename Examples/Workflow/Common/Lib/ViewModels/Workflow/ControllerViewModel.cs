@@ -6,9 +6,9 @@ using VeloxDev.WorkflowSystem;
 namespace Demo.ViewModels;
 
 [AgentContext(AgentLanguages.Chinese, "派生的Node组件之一，作为任务发起者")]
-[AgentContext(AgentLanguages.English, "A derived Node component that acts as a workflow initiator/controller. Default size: 300×260. Never use Size(0,0).")]
+[AgentContext(AgentLanguages.English, "A derived Node component that acts as a workflow initiator/controller. Default size: 230×170. Never use Size(0,0).")]
 [WorkflowBuilder.Node<NodeHelper>]
-[DefaultSize(220, 340)]
+[DefaultSize(230, 170)]
 public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
 {
     public ControllerViewModel() => InitializeWorkflow();
@@ -42,6 +42,12 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         var graph = Compiler.Graphs.FirstOrDefault();
         if (graph is null) return;
 
+        // IsActive 是这里写、别处读的：Blazor 的状态栏与 Stop 按钮直接绑它，树的 IsWorkflowRunning 由它推导。
+        // 在此之前它从没被写过，所以状态栏永远显示 Idle、Stop 永远禁用。
+        var tree = Parent as TreeViewModel;
+        IsActive = true;
+        tree?.BeginWorkflowRun();
+
         var context = new RuntimeContext { IsRunning = true };
         RuntimeContext = context;
         OnPropertyChanged(nameof(RuntimeContext));
@@ -55,6 +61,11 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         {
             _runCts.Dispose();
             _runCts = null;
+
+            // 先清自己的标志再让树重新推导 —— RefreshWorkflowRunningState 读的正是 IsActive，
+            // 而同一棵树上可能有多个控制器，只有全部停下才算停
+            IsActive = false;
+            tree?.RefreshWorkflowRunningState();
         }
     }
 
@@ -76,7 +87,8 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         await Parent.GetHelper().CloseAsync();
         if (Parent is TreeViewModel tree)
         {
-            tree.EndWorkflowRun();
+            IsActive = false;
+            tree.RefreshWorkflowRunningState();
         }
     }
 
