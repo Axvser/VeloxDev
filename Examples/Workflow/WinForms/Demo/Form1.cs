@@ -110,6 +110,7 @@ namespace Demo
                 _demo.Tree.ExecutionLog.CollectionChanged -= OnExecutionLogCollectionChanged;
                 _demo.Tree.AgentLog.CollectionChanged -= OnAgentLogCollectionChanged;
                 _demo.Tree.Nodes.CollectionChanged -= OnNodesCollectionChanged;
+                _demo.Tree.GetHelper().VisibleItems.CollectionChanged -= OnVisibleItemsChanged;
                 UnsubscribeHelper(_demo);
             }
 
@@ -120,6 +121,8 @@ namespace Demo
             _demo.Tree.Nodes.CollectionChanged += OnNodesCollectionChanged;
             SubscribeHelper(_demo);
             SetupMcpStatusTab();
+
+            _demo.Tree.GetHelper().VisibleItems.CollectionChanged += OnVisibleItemsChanged;
 
             _controllerBindingSource.DataSource = _demo.Controller;
 
@@ -283,6 +286,13 @@ namespace Demo
         }
 
         private void OnNodesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (InvokeRequired) { BeginInvoke(UpdateControllerState); return; }
+            UpdateControllerState();
+        }
+
+        // 可见集随缩放/平移/滚动在变，而 Nodes 不动 —— 少了这一条，工具栏那个计数会一直停在启动时的值
+        private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             if (InvokeRequired) { BeginInvoke(UpdateControllerState); return; }
             UpdateControllerState();
