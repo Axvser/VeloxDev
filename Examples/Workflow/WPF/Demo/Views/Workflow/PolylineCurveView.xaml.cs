@@ -49,7 +49,7 @@ namespace Demo.Views.Workflow;
 /// not drawn a polyline since the geometry was replaced.
 /// </para>
 /// <para>
-/// Supports click-to-select (highlighted) and <c>Delete</c> to remove.
+/// Supports click-to-select (highlighted), <c>Delete</c> and a right-click menu to remove.
 /// </para>
 /// </summary>
 public partial class PolylineCurveView : UserControl
@@ -102,6 +102,12 @@ public partial class PolylineCurveView : UserControl
         MouseEnter += (_, _) => { IsHighlighted = true; Focus(); };
         MouseLeave += (_, _) => IsHighlighted = false;
         MouseMove += OnHoverMouseMove;
+
+        // 右键：菜单由 WPF 自己在右键抬起时开，这里只做两件事 —— 不在线上的那次取消掉，以及把菜单要删的
+        // 那条线选中。视图的命中面是画出来的描边（最外那圈辉光），而「不在线上」那次仍要自己取消 ——
+        // 命中面一旦被改粗（例如给视图加上背景），空白处也会触发
+        ContextMenu = BuildMenu();
+        ContextMenuOpening += OnContextMenuOpening;
 
         // 悬停取焦点会连带触发 WPF 的默认行为：拿到焦点的元素请求「把自己滚进视口」，ScrollViewer 照办 ——
         // 鼠标一碰到线画布就跳一段，跳多远看当时的偏移。焦点本身要留着（Delete 键靠它），所以只吃掉这条请求。
@@ -480,15 +486,44 @@ public partial class PolylineCurveView : UserControl
         else if (!over && IsHighlighted) IsHighlighted = false;
     }
 
+    private void OnContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        // 不在线上：这次右键不是这条线的，菜单不开（画布上空白处右键因此什么也不弹）
+        if (!HitTestLine(Mouse.GetPosition(this)))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        // 未选中先选中 —— 菜单里的删除作用于当前这条线
+        IsHighlighted = true;
+        Focus();
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
         if (e.Key == Key.Delete && IsHighlighted)
         {
-            if (DataContext is IWorkflowLinkViewModel vm)
-                vm.DeleteCommand.Execute(null);
+            DeleteLink();
             e.Handled = true;
         }
+    }
+
+    // 菜单只有一项，且不绑命令：WPF 的 ContextMenu 是独立视觉树，DataContext 不会自己跟过来；
+    // 视图又会被池化改绑给另一条链接，所以菜单项在点击那一刻才去读视图自己的 DataContext
+    private ContextMenu BuildMenu()
+    {
+        var item = new MenuItem { Header = "删除连线" };
+        item.Click += (_, _) => DeleteLink();
+
+        return new ContextMenu { Items = { item } };
+    }
+
+    private void DeleteLink()
+    {
+        if (DataContext is IWorkflowLinkViewModel vm)
+            vm.DeleteCommand.Execute(null);
     }
 
     private bool HitTestLine(Point pt)

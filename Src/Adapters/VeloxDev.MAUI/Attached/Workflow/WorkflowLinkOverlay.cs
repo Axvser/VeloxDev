@@ -30,10 +30,25 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// gradient, but the comet never needed one: it is geometry sampled by arc length, tinted per piece, so the
 /// light tracks the bend instead of the straight line between the two ends.
 /// </para>
+/// <para>
+/// The layer is a painting surface only: its own <see cref="VisualElement.InputTransparent"/> stays
+/// <see langword="true"/>, because a viewport-sized view that took input would swallow every canvas gesture
+/// (pan, wheel zoom, node drag, slot drag) for the whole surface. Interaction is driven instead by
+/// <see cref="InteractionSource"/> — a view that is already on the surface's input path — and the hit test is
+/// geometric, walking each drawn curve's sample table: a link was never a view, so no platform hit test can
+/// see it, and the drawn body is the only thing that answers. Hovering a link selects it (drawn in
+/// <see cref="SelectedLinkColor"/>), <c>Delete</c> removes it through
+/// <see cref="IWorkflowLinkViewModel.DeleteCommand"/>, and a right-click on it opens a one-item menu that
+/// removes it.
+/// </para>
 /// </summary>
 public sealed class WorkflowLinkOverlay : GraphicsView
 {
     private const double CullMargin = 24d;
+
+    // 命中半径与其它六家一致（WPF / WinUI / Avalonia 都是 6px）。
+    // 别拿整层包围盒当命中面：那会把画布空白处也算成「在线上了」。
+    private const double HitRadius = 6d;
 
     private static readonly Color DefaultWhite = Color.FromArgb("#DDFFFFFF");
 
@@ -68,6 +83,12 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public static readonly BindableProperty LinkFlowEnabledProperty = BindableProperty.Create(
         nameof(LinkFlowEnabled), typeof(bool), typeof(WorkflowLinkOverlay), false, propertyChanged: OnLinkFlowEnabledChanged);
 
+    public static readonly BindableProperty InteractionSourceProperty = BindableProperty.Create(
+        nameof(InteractionSource), typeof(View), typeof(WorkflowLinkOverlay), null, propertyChanged: OnInteractionSourceChanged);
+
+    public static readonly BindableProperty SelectedLinkColorProperty = BindableProperty.Create(
+        nameof(SelectedLinkColor), typeof(Color), typeof(WorkflowLinkOverlay), Colors.OrangeRed, propertyChanged: OnVisualPropertyChanged);
+
     private IWorkflowTreeViewModel? _tree;
     private IWorkflowLinkViewModel? _virtualLink;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
@@ -77,14 +98,47 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private double _bandCentre;
     private double _bandMix;
 
+    // 指针事件源（见 InteractionSource）；输入本身不落在这层上，所以它是外部元素
+    private View? _interactionSource;
+#if !WINDOWS
+    private PointerGestureRecognizer? _pointer;
+#endif
+    private IWorkflowLinkViewModel? _selectedLink;
+    private Point? _lastPointer;
+
+    // 命中测试专用采样表：与绘制共用同一套贝塞尔参数，但独立成一份，
+    // 免得指针经过时把正在绘制的那张表改掉
+    private readonly PointF[] _hitSamples = new PointF[SampleCount + 1];
+
+#if WINDOWS
+    private Microsoft.UI.Xaml.UIElement? _hookElement;
+    // 菜单一开，指针就离开这层（飞出物接管指针），PointerExited 会到 —— 那一下不能当成「移开了」，
+    // 否则契约里的「右键保持选中」在菜单弹出的瞬间就被自己抹掉
+    private bool _menuOpen;
+    private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverMovedHandler;
+    private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverExitedHandler;
+    private Microsoft.UI.Xaml.Input.PointerEventHandler? _secondaryPressedHandler;
+    private Microsoft.UI.Xaml.Input.KeyEventHandler? _keyHandler;
+    private Microsoft.UI.Xaml.Controls.MenuFlyout? _deleteMenu;
+#endif
+
     public WorkflowLinkOverlay()
     {
         InputTransparent = true;
         Drawable = new LinkOverlayDrawable(this);
 
-        // 逐帧动画要在 UI 线程上从 Loaded 起动、Unloaded 停止；移出树后不能还留着帧到达链接层
-        Loaded += (_, _) => StartFlow();
-        Unloaded += (_, _) => StopFlow();
+        // 逐帧动画要在 UI 线程上从 Loaded 起动、Unloaded 停止；移出树后不能还留着帧到达链接层。
+        // 输入同理：挂到源平台元素上的键盘钩子会反向持有这层，离树时必须解掉
+        Loaded += (_, _) =>
+        {
+            AttachInteractionSource(InteractionSource);
+            StartFlow();
+        };
+        Unloaded += (_, _) =>
+        {
+            DetachInteractionSource();
+            StopFlow();
+        };
     }
 
     public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
@@ -100,6 +154,19 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// <summary>Whether a settled link carries the travelling highlight that shows which way its data
     /// flows. Off by default, because it is decoration: a minimal editor draws plain links.</summary>
     public bool LinkFlowEnabled { get => (bool)GetValue(LinkFlowEnabledProperty); set => SetValue(LinkFlowEnabledProperty, value); }
+
+    /// <summary>The view whose pointer and keyboard input drives link interaction.
+    /// <para>
+    /// It must be a view that already sits on the surface's input path (an ancestor of the canvas), NOT this
+    /// layer: this layer is viewport-sized and <see cref="VisualElement.InputTransparent"/>, so taking input
+    /// here would swallow every canvas gesture. Set to <see langword="null"/> (the default) the layer stays
+    /// purely visual, which is what the passive hosts want.
+    /// </para>
+    /// </summary>
+    public View? InteractionSource { get => (View?)GetValue(InteractionSourceProperty); set => SetValue(InteractionSourceProperty, value); }
+
+    /// <summary>Colour a hovered link is drawn in, so the selected one reads as picked rather than resting.</summary>
+    public Color? SelectedLinkColor { get => (Color?)GetValue(SelectedLinkColorProperty); set => SetValue(SelectedLinkColorProperty, value); }
 
     /// <summary>Where the band is, as a fraction of a link's length from its sender's end. Written by the
     /// flow every frame; each link derives its geometry and colours from it while drawing.</summary>
@@ -252,24 +319,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// </summary>
     private void BuildCurve(float startX, float startY, float endX, float endY)
     {
-        var pull = MathF.Max(PullMinimum, MathF.Abs(endX - startX) * 0.5f);
-        var control1X = startX + pull;
-        var control2X = endX - pull;
-
-        for (var i = 0; i <= SampleCount; i++)
-        {
-            var t = i / (float)SampleCount;
-            var u = 1 - t;
-            var a = u * u * u;
-            var b = 3 * u * u * t;
-            var c = 3 * u * t * t;
-            var d = t * t * t;
-
-            // 两端各有两条控制点落在同一 y 上（c1 跟起点、c2 跟终点），所以 y 上那两个系数相加
-            _samples[i] = new PointF(
-                (a * startX) + (b * control1X) + (c * control2X) + (d * endX),
-                ((a + b) * startY) + ((c + d) * endY));
-        }
+        SampleBezier(startX, startY, endX, endY, _samples);
 
         _cumulative[0] = 0;
         for (var i = 1; i <= SampleCount; i++)
@@ -292,6 +342,35 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         _body = body;
     }
+
+    // 一条三次贝塞尔的采样点：两个控制点各按水平方向拉出 max(PullMinimum, |dx|·0.5)。
+    // 绘制与命中测试读的是同一份参数 —— 两处各推一遍几何，弯的地方命中就会对不上手指
+    private static void SampleBezier(float startX, float startY, float endX, float endY, PointF[] samples)
+    {
+        var pull = MathF.Max(PullMinimum, MathF.Abs(endX - startX) * 0.5f);
+        var control1X = startX + pull;
+        var control2X = endX - pull;
+
+        for (var i = 0; i <= SampleCount; i++)
+        {
+            var t = i / (float)SampleCount;
+            var u = 1 - t;
+            var a = u * u * u;
+            var b = 3 * u * u * t;
+            var c = 3 * u * t * t;
+            var d = t * t * t;
+
+            // 两端各有两条控制点落在同一 y 上（c1 跟起点、c2 跟终点），所以 y 上那两个系数相加
+            samples[i] = new PointF(
+                (a * startX) + (b * control1X) + (c * control2X) + (d * endX),
+                ((a + b) * startY) + ((c + d) * endY));
+        }
+    }
+
+    // 画布局部锚点 → 视口像素：px = Ruler + 锚点 + 内容偏移 − 滚动偏移（与网格 drawable 同一身份）。
+    // 命中测试必须走同一条变换，否则它会去点一条和画出来的不是同一条的线
+    private static float ToViewport(double ruler, double contentOffset, double scrollOffset, float anchor)
+        => (float)(ruler + anchor + contentOffset - scrollOffset);
 
     /// <summary>Whole-curve bounding box against the viewport, expanded by the cull margin.</summary>
     private bool IntersectsViewport(float left, float right, float top, float bottom)
@@ -434,6 +513,397 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     #endregion
 
+    #region Interaction
+
+    private static void OnInteractionSourceChanged(BindableObject bindable, object? oldValue, object? newValue)
+    {
+        if (bindable is WorkflowLinkOverlay overlay)
+        {
+            overlay.AttachInteractionSource(newValue as View);
+        }
+    }
+
+    // 换源只解绑旧的，不重建状态：宿主重复绑定同一个源时不该把选中丢掉
+    private void AttachInteractionSource(View? source)
+    {
+        if (ReferenceEquals(_interactionSource, source))
+        {
+            return;
+        }
+
+        DetachInteractionSource();
+
+        _interactionSource = source;
+        if (source is null)
+        {
+            return;
+        }
+
+#if WINDOWS
+        // 源自己的平台元素要等它的 handler 建好；HandlerChanged 会在那之后来一发
+        source.HandlerChanged += OnInteractionSourceHandlerChanged;
+        source.HandlerChanging += OnInteractionSourceHandlerChanging;
+        AttachPlatformHooks();
+#else
+        // 这层自己是 InputTransparent，收不到指针；改由表面已有的输入路径上的元素代收。
+        // PointerGestureRecognizer 只是监听，不置 Handled，画布手势因此不受影响
+        _pointer = new PointerGestureRecognizer
+        {
+            Buttons = ButtonsMask.Primary | ButtonsMask.Secondary,
+        };
+        _pointer.PointerMoved += OnGesturePointerMoved;
+        _pointer.PointerExited += OnGesturePointerExited;
+        _pointer.PointerPressed += OnGesturePointerPressed;
+        source.GestureRecognizers.Add(_pointer);
+#endif
+    }
+
+    private void DetachInteractionSource()
+    {
+#if !WINDOWS
+        if (_pointer is not null && _interactionSource is not null)
+        {
+            _interactionSource.GestureRecognizers.Remove(_pointer);
+        }
+
+        _pointer?.PointerMoved -= OnGesturePointerMoved;
+        _pointer?.PointerExited -= OnGesturePointerExited;
+        _pointer?.PointerPressed -= OnGesturePointerPressed;
+        _pointer = null;
+#endif
+
+#if WINDOWS
+        if (_interactionSource is not null)
+        {
+            _interactionSource.HandlerChanged -= OnInteractionSourceHandlerChanged;
+            _interactionSource.HandlerChanging -= OnInteractionSourceHandlerChanging;
+        }
+
+        DetachPlatformHooks();
+#endif
+
+        _interactionSource = null;
+        _lastPointer = null;
+        SelectLink(null);
+    }
+
+#if WINDOWS
+    private void OnInteractionSourceHandlerChanged(object? sender, EventArgs e) => AttachPlatformHooks();
+
+    private void OnInteractionSourceHandlerChanging(object? sender, HandlerChangingEventArgs e) => DetachPlatformHooks();
+#endif
+
+    // 悬停落在哪条线上：换条连线就换选中。拉线时指针下面正挂着橡皮筋，
+    // 逐帧判悬停只会把沿途那些实连线点亮
+    private void OnHoverMoved(Point point)
+    {
+        if (WorkflowSlotConnectionBehavior.IsDraggingConnection)
+        {
+            return;
+        }
+
+        // 同一位置的重复消息（子元素进出会连发）不必再算一遍几何
+        if (_lastPointer is { } last
+            && Math.Abs(last.X - point.X) < 0.5
+            && Math.Abs(last.Y - point.Y) < 0.5)
+        {
+            return;
+        }
+
+        _lastPointer = point;
+        SelectLink(HitTestLink(point.X, point.Y));
+    }
+
+    // 指针离开整块输入面：选中跟着走 —— 高亮留在身后会让「现在按 Delete 删哪条」变得没有答案。
+    // 菜单弹出引起的那一次离开不算（见 _menuOpen）
+    private void OnHoverExited()
+    {
+#if WINDOWS
+        if (_menuOpen)
+        {
+            return;
+        }
+#endif
+
+        SelectLink(null);
+    }
+
+    private void OnSecondaryPressed(Point onOverlay, Point onSource)
+    {
+        var link = HitTestLink(onOverlay.X, onOverlay.Y);
+        if (link is null)
+        {
+            // 空白处右键不是这条线的事：不置 Handled，也不弹菜单
+            return;
+        }
+
+        SelectLink(link);
+        ShowDeleteMenu(onSource);
+    }
+
+#if !WINDOWS
+    private void OnGesturePointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (e.GetPosition(this) is { } point)
+        {
+            OnHoverMoved(point);
+        }
+    }
+
+    private void OnGesturePointerExited(object? sender, PointerEventArgs e) => OnHoverExited();
+
+    private void OnGesturePointerPressed(object? sender, PointerEventArgs e)
+    {
+        if (e.Button == ButtonsMask.Secondary
+            && _interactionSource is not null
+            && e.GetPosition(this) is { } onOverlay
+            && e.GetPosition(_interactionSource) is { } onSource)
+        {
+            OnSecondaryPressed(onOverlay, onSource);
+        }
+    }
+#endif
+
+    // 命中只认画出来的那一段：沿每条的采样折线逐段判距，半径 = 描边量级。
+    // 代价是 O(可见连线数 × 采样数) 一次指针移动，与其它六家逐视图自判的代价同阶
+    private IWorkflowLinkViewModel? HitTestLink(double x, double y)
+    {
+        var tree = _tree;
+        if (tree is null)
+        {
+            return null;
+        }
+
+        // 输入面通常比这层大（可能是整页），落在层外的点一律不算命中
+        if (x < 0 || y < 0 || x > Width || y > Height)
+        {
+            return null;
+        }
+
+        var ruler = Math.Max(0d, RulerThickness);
+        var ox = ContentOffsetX;
+        var oy = ContentOffsetY;
+        var scrollX = ScrollOffsetX;
+        var scrollY = ScrollOffsetY;
+
+        foreach (var link in EnumerateVisibleLinks(tree))
+        {
+            // 橡皮筋在指针底下，不该被自己点亮；端点没排完版的连线也不该能点中
+            if (IsVirtualLink(link) || !TryGetEndpoints(link, out var csx, out var csy, out var cex, out var cey))
+            {
+                continue;
+            }
+
+            SampleBezier(
+                ToViewport(ruler, ox, scrollX, csx),
+                ToViewport(ruler, oy, scrollY, csy),
+                ToViewport(ruler, ox, scrollX, cex),
+                ToViewport(ruler, oy, scrollY, cey),
+                _hitSamples);
+
+            for (var i = 1; i <= SampleCount; i++)
+            {
+                if (DistanceToSegment(x, y, _hitSamples[i - 1], _hitSamples[i]) <= HitRadius)
+                {
+                    return link;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static double DistanceToSegment(double x, double y, PointF a, PointF b)
+    {
+        var abx = b.X - a.X;
+        var aby = b.Y - a.Y;
+        var lengthSquared = (abx * abx) + (aby * aby);
+        if (lengthSquared < 0.0001f)
+        {
+            var dx = x - a.X;
+            var dy = y - a.Y;
+            return Math.Sqrt((dx * dx) + (dy * dy));
+        }
+
+        var t = Math.Clamp((((x - a.X) * abx) + ((y - a.Y) * aby)) / lengthSquared, 0d, 1d);
+        var px = a.X + (t * abx);
+        var py = a.Y + (t * aby);
+        return Math.Sqrt(((x - px) * (x - px)) + ((y - py) * (y - py)));
+    }
+
+    private void SelectLink(IWorkflowLinkViewModel? link)
+    {
+        if (ReferenceEquals(_selectedLink, link))
+        {
+            return;
+        }
+
+        _selectedLink = link;
+
+        // 选中是「上色」，Delete 要的是键盘焦点 —— 两者必须同时发生：只上色不取焦点的版本会让
+        // 键事件落在别处（焦点不在源里，KeyDown 就不会经过挂钩子的那个元素），于是必须先点一下才删得掉
+        if (link is not null)
+        {
+            _interactionSource?.Focus();
+        }
+
+        ScheduleInvalidate();
+    }
+
+    private void DeleteSelectedLink()
+    {
+        var link = _selectedLink;
+        if (link is null)
+        {
+            return;
+        }
+
+        _selectedLink = null;
+        if (link.DeleteCommand.CanExecute(null))
+        {
+            link.DeleteCommand.Execute(null);
+        }
+
+        ScheduleInvalidate();
+    }
+
+#if WINDOWS
+    // 指针与键盘都挂在源自己的平台元素上，而且只监听、不置 Handled —— 画布的手势因此一点不受影响。
+    // 为什么不走 MAUI 的 PointerGestureRecognizer：它在 Windows 上不派发 PointerMoved（悬停因此永远不亮），
+    // 而这层又不可能自己收指针事件（InputTransparent，且它压在滚动视图下面）
+    private void AttachPlatformHooks()
+    {
+        if (_interactionSource?.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement element
+            || _hookElement == element)
+        {
+            return;
+        }
+
+        DetachPlatformHooks();
+        _hoverMovedHandler = (_, e) =>
+        {
+            if (ToOverlayPoint(e) is { } point)
+            {
+                OnHoverMoved(point);
+            }
+        };
+        _hoverExitedHandler = (_, _) => OnHoverExited();
+        _secondaryPressedHandler = (_, e) =>
+        {
+            if (e.GetCurrentPoint(element).Properties.IsRightButtonPressed
+                && ToOverlayPoint(e) is { } onOverlay
+                && ToElementPoint(e, element) is { } onSource)
+            {
+                OnSecondaryPressed(onOverlay, onSource);
+            }
+        };
+
+        // 键盘挂同一处：MAUI 没有跨平台的按键事件，而 Delete 要的是「悬停已经选中了哪条」。
+        // handledEventsToo 取 false 是故意的 —— 聚焦的输入框吃掉 Delete 改自己的光标时必须让它赢
+        _keyHandler = OnSourceKeyDown;
+
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerMovedEvent, _hoverMovedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerExitedEvent, _hoverExitedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, _secondaryPressedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler, false);
+        _hookElement = element;
+    }
+
+    private void DetachPlatformHooks()
+    {
+        if (_hookElement is null)
+        {
+            return;
+        }
+
+        if (_hoverMovedHandler is not null)
+        {
+            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerMovedEvent, _hoverMovedHandler);
+        }
+
+        if (_hoverExitedHandler is not null)
+        {
+            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerExitedEvent, _hoverExitedHandler);
+        }
+
+        if (_secondaryPressedHandler is not null)
+        {
+            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, _secondaryPressedHandler);
+        }
+
+        if (_keyHandler is not null)
+        {
+            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler);
+        }
+
+        _hookElement = null;
+        _hoverMovedHandler = null;
+        _hoverExitedHandler = null;
+        _secondaryPressedHandler = null;
+        _keyHandler = null;
+    }
+
+    /// <summary>
+    /// The pointer position in this layer's own coordinates — the frame the draw pass works in.
+    /// <para>
+    /// Asked of the platform element directly, not of MAUI: the overlay's platform element is what
+    /// <see cref="ICanvas"/> draws into, so its space is the drawn one by construction.
+    /// </para>
+    /// </summary>
+    private Point? ToOverlayPoint(Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => this.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement overlay && ToElementPoint(e, overlay) is { } point
+            ? point
+            : null;
+
+    private static Point? ToElementPoint(Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e, Microsoft.UI.Xaml.UIElement element)
+    {
+        var position = e.GetCurrentPoint(element).Position;
+        return new Point(position.X, position.Y);
+    }
+
+    private void OnSourceKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Delete || _selectedLink is null)
+        {
+            return;
+        }
+
+        DeleteSelectedLink();
+        e.Handled = true;
+    }
+
+    // 删除菜单：只有一项、落在右键处，且只在右键点在连线上时弹。
+    // 用平台的 MenuFlyout 而不是 MAUI 那个 —— 后者只能当 ContextFlyout 挂，右键落在哪都弹，
+    // 落在空白处也取消不了，而这条契约要求「只有点在连线上才弹」
+    private void ShowDeleteMenu(Point onSource)
+    {
+        if (_interactionSource?.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement element)
+        {
+            return;
+        }
+
+        if (_deleteMenu is null)
+        {
+            var item = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = "删除连线" };
+            item.Click += (_, _) => DeleteSelectedLink();
+            _deleteMenu = new Microsoft.UI.Xaml.Controls.MenuFlyout();
+            _deleteMenu.Items.Add(item);
+            _deleteMenu.Closed += (_, _) => _menuOpen = false;
+        }
+
+        _menuOpen = true;
+        _deleteMenu.ShowAt(element, new Windows.Foundation.Point(onSource.X, onSource.Y));
+    }
+#else
+    // 右键菜单是这家平台侧的能力缺口：MAUI 的跨平台 MenuFlyout 只能整层挂成 ContextFlyout，
+    // 无法「只在连线上弹」。其余平台因此只有悬停高亮与 Delete
+    private void ShowDeleteMenu(Point onSource)
+    {
+    }
+#endif
+
+    #endregion
+
     private static void OnWorkflowTreeChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         if (bindable is WorkflowLinkOverlay overlay)
@@ -462,6 +932,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         Unsubscribe();
         _tree = tree;
+        // 换树时旧的选中项已经不属于这棵树了，留着它会让 Delete 去打一个不在场上的连线
+        _selectedLink = null;
         if (tree is null)
         {
             return;
@@ -666,6 +1138,11 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 if (i is IWorkflowLinkViewModel l)
                 {
                     UnsubscribeLink(l);
+                    // 删掉的正好是选中的那条（Delete、右键菜单、撤销都走这里）—— 选中必须跟着消失
+                    if (ReferenceEquals(_selectedLink, l))
+                    {
+                        _selectedLink = null;
+                    }
                 }
             }
         }
@@ -803,9 +1280,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
             // Transform each collapsed canvas-local anchor c to viewport pixels:
             // px = Ruler + c + ContentOffset − ScrollOffset (shared with the grid drawable).
-            float ToX(float c) => (float)(ruler + c + ox - scrollX);
-            float ToY(float c) => (float)(ruler + c + oy - scrollY);
-
             foreach (var link in EnumerateVisibleLinks(tree))
             {
                 if (!TryGetEndpoints(link, out var csx, out var csy, out var cex, out var cey))
@@ -814,16 +1288,20 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 }
 
                 var isVirtual = IsVirtualLink(link);
-                var color = isVirtual ? virtualColor : linkColor;
+                // 选中的线换成选中色并加粗 1.5：与其它六家同一种读法（高亮 = 偏红 + 更粗）
+                var isSelected = ReferenceEquals(link, owner._selectedLink);
+                var color = isSelected
+                    ? owner.SelectedLinkColor ?? Colors.OrangeRed
+                    : isVirtual ? virtualColor : linkColor;
                 if (color is null)
                 {
                     continue;
                 }
 
-                var startX = ToX(csx);
-                var startY = ToY(csy);
-                var endX = ToX(cex);
-                var endY = ToY(cey);
+                var startX = ToViewport(ruler, ox, scrollX, csx);
+                var startY = ToViewport(ruler, oy, scrollY, csy);
+                var endX = ToViewport(ruler, ox, scrollX, cex);
+                var endY = ToViewport(ruler, oy, scrollY, cey);
 
                 // 三次贝塞尔按弧长采样建表：几何与控制点（水平各拉出 max(40, |dx|·0.5)）都在这一趟定下来
                 owner.BuildCurve(startX, startY, endX, endY);
@@ -843,34 +1321,37 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 canvas.StrokeDashPattern = isVirtual ? [4f, 2f] : null;
                 canvas.StrokeLineCap = LineCap.Round;
 
+                // 选中的线整条（管壁与彗星都在内）加粗 1.5，与 Avalonia / WPF 的选中读法一致
+                var thickness = isSelected ? strokeWidth + 1.5f : strokeWidth;
+
                 // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
                 // 两端才不像被截断的横截面
                 canvas.StrokeColor = Fade(color, 0.10);
-                canvas.StrokeSize = strokeWidth + 9;
+                canvas.StrokeSize = thickness + 9;
                 canvas.DrawPath(owner.Body);
 
                 canvas.StrokeColor = Fade(color, 0.16);
-                canvas.StrokeSize = strokeWidth + 4;
+                canvas.StrokeSize = thickness + 4;
                 canvas.DrawPath(owner.Body);
 
                 // 虚拟连线是指针下的橡皮筋：虚线、不流动
                 if (isVirtual)
                 {
                     canvas.StrokeColor = Fade(color, 0.75);
-                    canvas.StrokeSize = strokeWidth;
+                    canvas.StrokeSize = thickness;
                     canvas.DrawPath(owner.Body);
                     canvas.StrokeDashPattern = null;
                     continue;
                 }
 
                 // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
-                canvas.StrokeColor = Fade(color, 0.55);
-                canvas.StrokeSize = strokeWidth;
+                canvas.StrokeColor = Fade(color, isSelected ? 0.85 : 0.55);
+                canvas.StrokeSize = thickness;
                 canvas.DrawPath(owner.Body);
 
                 if (owner.LinkFlowEnabled && owner.BandMix > 0.001)
                 {
-                    owner.DrawComet(canvas, color, strokeWidth);
+                    owner.DrawComet(canvas, color, thickness);
                 }
 
                 canvas.StrokeDashPattern = null;

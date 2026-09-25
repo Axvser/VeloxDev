@@ -325,10 +325,20 @@ internal sealed class MainWindow : Window
     // ── Workflow load ───────────────────────────────────────────────────────
 
     /// <summary>Window-level preview key: fires for every key regardless of which child has focus.
-    /// Zoom the workspace with + / - ; the viewport center is held fixed (ViewportCenter zoom keeps
-    /// the world point under the viewport center on-screen while scaling).</summary>
+    /// Delete removes the link under the pointer; zoom the workspace with + / - (the viewport center is
+    /// held fixed — ViewportCenter zoom keeps the world point under the viewport center on-screen while
+    /// scaling).</summary>
     protected override bool OnPreviewWindowKeyDown(Key key, ModifierKeys modifiers, bool isRepeat)
     {
+        // Delete 删掉指针下的那条连线。表面自己也会处理，这里是兜底：焦点可能不在它身上
+        // （比如刚在侧栏的 Agent 输入框里打过字，或者表面没能拿到焦点）。
+        // 这里不看焦点而是看有没有选中：悬停即选中，所以「指针搭在连线上」本身就说明了这一下 Delete
+        // 是冲那条连线来的；指针不在连线上时没有选中，按键原样落回输入框
+        if (key == Key.Delete)
+        {
+            return _surface.DeleteSelectedLink();
+        }
+
         // Ctrl + '+' zooms in, Ctrl + '-' zooms out (mirrors Ctrl + wheel; plain +/- stays unhandled
         // so it can't fire by accident). Scale is a collapse factor — higher Scale renders nodes smaller
         // (zoom out) — so zoom-in divides Scale and zoom-out multiplies it.

@@ -1,6 +1,7 @@
 ﻿using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
@@ -42,7 +43,13 @@ namespace Demo.Views;
 /// not drawn a polyline since the geometry was replaced.
 /// </para>
 /// <para>
-/// Supports hover highlight and <c>Delete</c> to remove.
+/// The hit surface is the widest drawn stroke of the resting line — nothing else. The view is canvas sized
+/// so every link in view overlaps, but only the halo layer is <see cref="UIElement.IsHitTestVisible"/>, which
+/// is what lets "the drawn part responds to the pointer" and "an empty canvas still pans" hold at once.
+/// Give the view a <c>Background</c> instead and the whole canvas rectangle would swallow the pan.
+/// </para>
+/// <para>
+/// Supports hover highlight, <c>Delete</c> and a right-click menu to remove.
 /// </para>
 /// </summary>
 public sealed partial class PolylineCurveView : UserControl
@@ -140,9 +147,12 @@ public sealed partial class PolylineCurveView : UserControl
         // 自绘的，从来没有裁剪这回事。
         _container = new Grid { Clip = null };
 
-        _halo = CreateRestingStroke(_container, LineThickness + 9);
-        _glow = CreateRestingStroke(_container, LineThickness + 4);
-        _line = CreateRestingStroke(_container, LineThickness);
+        // 只有最外那层可命中：这个视图是整块画布大小，但可命中的只有它画出来的描边，
+        // 所以「画出来的部分响应鼠标」与「画布空白处照常平移」可以同时成立。
+        // 不要改成给视图加 Background —— 那是整块画布的矩形，会把画布平移整个吃掉（SlotView 那种小控件才那么写）。
+        _halo = CreateRestingStroke(_container, LineThickness + 9, true);
+        _glow = CreateRestingStroke(_container, LineThickness + 4, false);
+        _line = CreateRestingStroke(_container, LineThickness, false);
         _resting = [_halo, _glow, _line];
 
         for (var i = 0; i < TailSegments; i++)
@@ -169,6 +179,8 @@ public sealed partial class PolylineCurveView : UserControl
         PointerEntered += (_, _) => { IsHighlighted = true; Focus(FocusState.Pointer); };
         PointerExited += (_, _) => IsHighlighted = false;
         PointerMoved += OnHoverPointerMoved;
+        // 右键菜单。WinUI 没有右键「按下」这一档，RightTapped 是抬起时给的
+        RightTapped += OnRightTapped;
         UpdateInteractivity();
     }
 
@@ -631,8 +643,11 @@ public sealed partial class PolylineCurveView : UserControl
         strip.End.Point = PointAtLength(b);
     }
 
-    // 静息线的一层：自己的几何 + 自己的路径，颜色与厚度都归调用方（UpdateRestingLine）写
-    private static RestingStroke CreateRestingStroke(Grid host, double thickness)
+    // 静息线的一层：自己的几何 + 自己的路径，颜色与厚度都归调用方（UpdateRestingLine）写。
+    // hitTestable 只给最外那层（halo）开：命中面因此正好是画出来的最外圈描边（本体 + 9 ⇒ 半宽 5.5），
+    // 与 Avalonia/WPF 由框架对描边做命中测试得到的带宽同量级。内侧两层落在它里面，
+    // 开了只会多付命中测试、不增命中面积。
+    private static RestingStroke CreateRestingStroke(Grid host, double thickness, bool hitTestable)
     {
         var segment = new BezierSegment();
         var figure = new PathFigure { IsClosed = false };
@@ -651,7 +666,7 @@ public sealed partial class PolylineCurveView : UserControl
             // 圆头：两端因此不像被截断的横截面
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round,
-            IsHitTestVisible = false,
+            IsHitTestVisible = hitTestable,
             Clip = null,
         };
 
@@ -688,6 +703,8 @@ public sealed partial class PolylineCurveView : UserControl
             // 圆头：头部因此是一个逐渐收拢的圆端，而不是截断的一刀；相邻两段也自然接得上
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round,
+            // 彗星不参与命中：它整段落在静息线那圈描边之内（不增命中面积），而它的几何每帧都在改写 ——
+            // 让它可命中只会让命中面跟着光跑。命中面由静息线的 halo 一层给（见 CreateRestingStroke）。
             IsHitTestVisible = false,
             Clip = null,
         };
@@ -738,12 +755,52 @@ public sealed partial class PolylineCurveView : UserControl
         base.OnKeyDown(e);
         if (e.Key == Windows.System.VirtualKey.Delete && IsHighlighted)
         {
-            if (DataContext is IWorkflowLinkViewModel vm)
-            {
-                vm.DeleteCommand.Execute(null);
-            }
-
+            DeleteLink();
             e.Handled = true;
+        }
+    }
+
+    private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        var pt = e.GetPosition(this);
+
+        // 只有落在画出来的线上的右键才算这条线的：沿弧长表逐段判距（半径 6）。
+        // 视图的命中面就是画出来的那圈描边（只开了 halo 一层），两者同带宽；这条判据留着是为了命中面
+        // 被改粗时（例如按 SlotView 那样给视图加 Background）也不会在空白处弹出菜单
+        if (!HitTestLine(pt))
+        {
+            return;
+        }
+
+        // 未选中先选中 —— 菜单里的删除作用于当前这条线
+        IsHighlighted = true;
+        Focus(FocusState.Pointer);
+
+        _menu ??= BuildMenu();
+
+        // 代码建的 MenuFlyout 不属于任何元素，XamlRoot 得自己给它；视图此刻已上屏，拿到的就是它所在的那一棵
+        _menu.XamlRoot = XamlRoot;
+        _menu.ShowAt(this, new FlyoutShowOptions { Position = pt });
+
+        e.Handled = true;
+    }
+
+    // 菜单只有一项，且不绑命令：视图会被池化改绑给另一条链接，菜单项在点击那一刻才去读视图自己的 DataContext
+    private MenuFlyout? _menu;
+
+    private MenuFlyout BuildMenu()
+    {
+        var item = new MenuFlyoutItem { Text = "删除连线" };
+        item.Click += (_, _) => DeleteLink();
+
+        return new MenuFlyout { Items = { item } };
+    }
+
+    private void DeleteLink()
+    {
+        if (DataContext is IWorkflowLinkViewModel vm)
+        {
+            vm.DeleteCommand.Execute(null);
         }
     }
 

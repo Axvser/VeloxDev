@@ -192,8 +192,12 @@
                     <!-- Viewport-sized link layer: a sibling of the scroll viewer (NOT inside the
                          growing world canvas, so it never hits the Win2D texture cap). Renders every
                          connection in one GraphicsView at px = Ruler + anchor + ContentOffset − Scroll.
-                         Child order gives z: grid background < links < node views < ruler bands. -->
+                         Child order gives z: grid background < links < node views < ruler bands.
+                         This layer stays input-transparent and never takes the pointer: hit testing is
+                         geometric, driven by the input the page root already receives — that is what keeps
+                         link hover (highlight, Delete, right-click delete menu) from eating canvas gestures. -->
                     <behaviors:WorkflowLinkOverlay WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
+                                                  InteractionSource="{x:Reference Root}"
                                                   ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
                                                   ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
                                                   ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"

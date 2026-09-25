@@ -17,6 +17,11 @@ public partial class BezierCurveView : Control
         IsHitTestVisible = true;
         Focusable = true;
 
+        // 与 Polyline 那条同款：悬停取焦点（Delete 需要）会连带触发 ScrollViewer 的「把焦点元素滚进视口」
+        // （BringIntoViewOnFocusChange 默认 true），而本视图是整块画布大小 ⇒ 鼠标碰到线画布就跳一段。
+        // 在发源地吃掉这条请求，节点卡的自动滚进视口不受影响。
+        AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);
+
         CurveSelectionManager.SelectionChanged += owner =>
         {
             if (owner != this && IsSelected)
@@ -191,6 +196,10 @@ public partial class BezierCurveView : Control
         base.OnPointerEntered(e);
         IsSelected = true;
         CurveSelectionManager.Select(this);
+
+        // 与 Polyline 那条同款：选中是「上色」，Delete 要的是键盘焦点，两者必须同时发生，
+        // 否则 OnKeyDown 收不到键、得先点一下线才拿得到焦点。
+        Focus();
     }
 
     protected override void OnPointerExited(PointerEventArgs e)
@@ -218,15 +227,52 @@ public partial class BezierCurveView : Control
         }
     }
 
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+
+        if (!e.GetCurrentPoint(this).Properties.IsRightButtonPressed) return;
+
+        // 只有落在画出来的线上的右键才算这条线的：沿 40 段折线逼近判距（半径 6）。
+        // 框架只把指针事件送给画出来的描边，这条判据与它同带宽；留着它是为了命中面被改粗时也不在空白处弹菜单
+        if (!HitTestCurve(e.GetPosition(this))) return;
+
+        // 未选中先选中：菜单里的删除作用于当前这条线。悬停选中与它无关，菜单弹出后指针就落到菜单上
+        IsSelected = true;
+        CurveSelectionManager.Select(this);
+        Focus();
+
+        _menu ??= BuildMenu();
+        _menu.Open(this);
+
+        e.Handled = true;
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
         if (e.Key == Key.Delete && IsSelected)
         {
-            if (DataContext is IWorkflowLinkViewModel vm)
-                vm.DeleteCommand.Execute(null);
+            DeleteLink();
             e.Handled = true;
         }
+    }
+
+    // 菜单只有一项，且不绑命令：视图会被池化改绑给另一条链接，菜单项在点击那一刻才去读 DataContext
+    private ContextMenu? _menu;
+
+    private ContextMenu BuildMenu()
+    {
+        var item = new MenuItem { Header = "删除连线" };
+        item.Click += (_, _) => DeleteLink();
+
+        return new ContextMenu { Items = { item } };
+    }
+
+    private void DeleteLink()
+    {
+        if (DataContext is IWorkflowLinkViewModel vm)
+            vm.DeleteCommand.Execute(null);
     }
 
     private bool HitTestCurve(Point pt)

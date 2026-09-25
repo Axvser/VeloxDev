@@ -26,6 +26,14 @@ public partial class Workflow : ComponentBase, IDisposable
     private string _canvasLayoutSize = "";
     private INotifyPropertyChanged? _subscribedVirtualLink;
 
+    // ── Link selection / context menu ──────────────────────────────────────
+    // 选中的那条线：悬停即选中，移开即取消（右键弹出菜单时保留）。它同时是 Delete 的作用对象
+    private IWorkflowLinkViewModel? _selectedLink;
+    private IWorkflowLinkViewModel? _menuLink;
+    private int _menuLeft;
+    private int _menuTop;
+    private ElementReference _linksLayer;
+
     // ── Agent interaction modals (RequestSelection / RequestConfirmation) ──
     private SelectionRequest? _selection;
     private ConfirmationRequest? _confirmation;
@@ -340,6 +348,63 @@ public partial class Workflow : ComponentBase, IDisposable
         if (_confirmation is not { } conf) return;
         conf.Result = result;
         conf.Completion.TrySetResult(true);
+    }
+
+    // ── Link selection handlers ────────────────────────────────────────────
+
+    // 悬停即选中，并顺手把键盘焦点收进连线层 —— Delete 只在这层有焦点时才到得了页面
+    // （与 Avalonia/WPF/WinUI 同形：命中是先决条件，取焦点是同一件事的另一半）。
+    // preventScroll：连线层和整张画布一样大，让它自己滚进来会把画布拽走
+    private async Task OnLinkHoverChanged(IWorkflowLinkViewModel link, bool entered)
+    {
+        if (entered)
+        {
+            _selectedLink = link;
+            await _linksLayer.FocusAsync(preventScroll: true);
+            return;
+        }
+
+        // 菜单开着时不取消：指针离开线体是去点菜单，不是改变选择
+        if (_menuLink is null && ReferenceEquals(_selectedLink, link))
+            _selectedLink = null;
+    }
+
+    private void OnLinkContextMenu(IWorkflowLinkViewModel link, MouseEventArgs e)
+    {
+        _selectedLink = link;
+        _menuLink = link;
+        // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它
+        _menuLeft = (int)Math.Round(e.ClientX);
+        _menuTop = (int)Math.Round(e.ClientY);
+        StateHasChanged();
+    }
+
+    private void CloseLinkMenu()
+    {
+        if (_menuLink is null) return;
+        _menuLink = null;
+        StateHasChanged();
+    }
+
+    private void DeleteLinkFromMenu() => DeleteLink(_menuLink);
+
+    private void OnLinksKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Delete")
+            DeleteLink(_selectedLink);
+        else if (e.Key == "Escape")
+            CloseLinkMenu();
+    }
+
+    private void DeleteLink(IWorkflowLinkViewModel? link)
+    {
+        _menuLink = null;
+        if (ReferenceEquals(_selectedLink, link))
+            _selectedLink = null;
+
+        // 与另外六家一致：不看 CanExecute。命令自己会排队或拒绝，调用方替它做判断只会让两边不一致
+        link?.DeleteCommand.Execute(null);
+        StateHasChanged();
     }
 
     public void Dispose()

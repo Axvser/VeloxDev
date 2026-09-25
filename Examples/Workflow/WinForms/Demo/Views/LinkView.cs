@@ -25,15 +25,24 @@ namespace Demo.Views;
 /// length needs none of that — each slice is given its own colour and width.
 /// </para>
 /// <para>
-/// Passive visual only — no hover, highlight, or keyboard interaction. The link is rendered by the host canvas
-/// (<see cref="Render"/>) rather than as a child window, so it never participates in WinForms' fragile
-/// transparent compositing.
+/// The host canvas draws this link (<see cref="Render"/>) rather than showing it as a child window, so it never
+/// participates in WinForms' fragile transparent compositing. Having no window, it can be neither hovered nor
+/// focused: both live in the host. The canvas asks this view where its curve is (<see cref="HitTest"/>, answered
+/// from the same sample table <see cref="Render"/> strokes), sets <see cref="IsHighlighted"/> for the selection
+/// colour, and handles the <c>Delete</c> key itself.
 /// </para>
 /// </summary>
 public sealed class LinkView : Control
 {
     // 弧长表的分辨率。128 段在缩放上限下也看不出折线感，而每帧重建它只是几百次算术。
     private const int SampleCount = 128;
+
+    // 线宽；选中时加 1.5，与其它六家的连线一致
+    private const float LineThickness = 2f;
+    private const float HighlightThickness = 3.5f;
+
+    // 选中色沿用其它六家（OrangeRed）。色值写字面量是因为 System.Drawing 的 KnownColor 表里没有它
+    private static readonly Color HighlightColor = Color.FromArgb(255, 255, 69, 0);
 
     // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
     private const double TailFraction = 0.30;
@@ -52,6 +61,7 @@ public sealed class LinkView : Control
     private float _endTop;
     private bool _canRender = true;
     private bool _isVirtual;
+    private bool _isHighlighted;
     private Color _lineColor = CardTheme.FromHex("#CC38BDF8");
 
     // 本帧彗星的头部走到全长的几成、以及它有多亮：每次 Render 前由画布从它的时钟推入（SetFlow）——
@@ -102,6 +112,24 @@ public sealed class LinkView : Control
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; RequestPaint(); } }
+
+    /// <summary>
+    /// Whether the pointer is on this link. A highlighted link carries the selection colour instead of its own,
+    /// one and a half pixels more of it, and a less transparent body — the reading the other six demos' link
+    /// views give the link that is about to be deleted.
+    /// </summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool IsHighlighted
+    {
+        get => _isHighlighted;
+        set
+        {
+            if (_isHighlighted == value) return;
+            _isHighlighted = value;
+            RequestPaint();
+        }
+    }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -328,8 +356,8 @@ public sealed class LinkView : Control
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        var color = _lineColor;
-        const float thickness = 2f;
+        var color = _isHighlighted ? HighlightColor : _lineColor;
+        var thickness = _isHighlighted ? HighlightThickness : LineThickness;
 
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
         // 两端才不像被截断的横截面
@@ -345,8 +373,8 @@ public sealed class LinkView : Control
             return;
         }
 
-        // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
-        DrawSegment(g, 0, _length, Fade(color, 0.55), thickness);
+        // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来；选中时抬透明度，线更实
+        DrawSegment(g, 0, _length, Fade(color, _isHighlighted ? 0.85 : 0.55), thickness);
 
         if (_bandIntensity > 0.001)
         {
@@ -419,6 +447,47 @@ public sealed class LinkView : Control
         points.Add(PointAtLength(to));
         path.AddLines(points.ToArray());
         return path;
+    }
+
+    // ── Hit testing ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Whether <paramref name="worldPoint"/> lies within <paramref name="radius"/> of the curve, measured against
+    /// the very sample table <see cref="Render"/> strokes — so the reachable strip bends with the curve instead of
+    /// following the straight line between the two ends.
+    /// </summary>
+    /// <remarks>
+    /// The point is in the world coordinates <see cref="Render"/> is given: a host that draws this view inside its
+    /// own <c>OnPaint</c> produces one by subtracting its own pan and scroll from a mouse position.
+    /// </remarks>
+    public bool HitTest(PointF worldPoint, float radius)
+    {
+        // 虚拟连线是指针下的橡皮筋，永远贴在指针上；量不到端点的线没有采样表，也没有可命中的几何
+        if (!_canRender || _isVirtual || _samples.Length < 2 || _length <= 0) return false;
+
+        for (int i = 1; i < _samples.Length; i++)
+        {
+            if (DistanceToSegment(worldPoint, _samples[i - 1], _samples[i]) <= radius) return true;
+        }
+
+        return false;
+    }
+
+    private static float DistanceToSegment(PointF p, PointF a, PointF b)
+    {
+        float abx = b.X - a.X, aby = b.Y - a.Y;
+        var len2 = (abx * abx) + (aby * aby);
+        if (len2 < 0.0001f) return Distance(p, a);
+
+        var t = Math.Clamp((((p.X - a.X) * abx) + ((p.Y - a.Y) * aby)) / len2, 0f, 1f);
+        return Distance(p, new PointF(a.X + (t * abx), a.Y + (t * aby)));
+    }
+
+    private static float Distance(PointF p, PointF q)
+    {
+        var dx = p.X - q.X;
+        var dy = p.Y - q.Y;
+        return MathF.Sqrt((dx * dx) + (dy * dy));
     }
 
     // ── Geometry ─────────────────────────────────────────────────────────────────

@@ -29,14 +29,25 @@
          data-veloxdev-sender-slot="@wfSenderSlotId"
          data-veloxdev-receiver-slot="@wfReceiverSlotId"
          style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;">
-        <g fill="none" stroke-linecap="round">
+
+        @* The svg stays click-through, so every canvas gesture still reaches the layer below. Hit
+           testing is handed back on the painted strokes alone — what is drawn is what responds, and
+           the browser does the distance maths. The outer halo is the widest thing drawn, so that is
+           the reach of the target; a virtual link stays untouched, because it is the rubber band
+           under the pointer and must not intercept the drag that is producing it. *@
+        <g fill="none" stroke-linecap="round"
+           pointer-events="@HitTargetCss"
+           @onmouseenter="OnPointerEnter"
+           @onmouseleave="OnPointerExit"
+           @oncontextmenu="OnContextMenu"
+           @oncontextmenu:preventDefault="true">
             @* 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上 *@
             <path d="@BodyPath"
-                  stroke="@LineColor"
+                  stroke="@LitColor"
                   stroke-opacity="0.10"
                   stroke-width="@N(HaloOuterWidth)" />
             <path d="@BodyPath"
-                  stroke="@LineColor"
+                  stroke="@LitColor"
                   stroke-opacity="0.16"
                   stroke-width="@N(HaloInnerWidth)" />
 
@@ -51,11 +62,12 @@
             }
             else
             {
-                @* 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来 *@
+                @* The resting curve is dim: with the light absent it is only a dark line, and that is
+                   what lets the comet read as contrast. Selected, it turns OrangeRed and grows 1.5. *@
                 <path d="@BodyPath"
-                      stroke="@LineColor"
-                      stroke-opacity="0.55"
-                      stroke-width="@ThicknessCss" />
+                      stroke="@LitColor"
+                      stroke-opacity="@BodyOpacity"
+                      stroke-width="@LitThicknessCss" />
 
                 @* 彗星：光晕一遍（更宽更淡）在前，本体一遍在后，两遍都跟着头走。
                    段数固定，够不着的那几段只是把不透明度压到零 —— 元素数不变，DOM 才稳定。 *@

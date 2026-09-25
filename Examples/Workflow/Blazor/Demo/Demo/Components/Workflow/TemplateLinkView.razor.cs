@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 
@@ -84,6 +85,23 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     [Parameter]
     public bool? CanRenderOverride { get; set; }
 
+    /// <summary>Gets or sets whether the owning surface holds this link as its current selection.</summary>
+    /// <remarks>
+    /// The surface owns the selection because Delete and the right-click menu both act on it; this view
+    /// only reports hover. The selection has to outlive the hover or the highlight would drop the moment
+    /// the pointer leaves the curve for the menu.
+    /// </remarks>
+    [Parameter]
+    public bool IsSelected { get; set; }
+
+    /// <summary>Raised when the pointer enters or leaves the painted link, <c>true</c> on enter.</summary>
+    [Parameter]
+    public EventCallback<bool> OnHoverChanged { get; set; }
+
+    /// <summary>Raised when the link is right-clicked, carrying the pointer position the menu should use.</summary>
+    [Parameter]
+    public EventCallback<MouseEventArgs> OnContextMenuRequested { get; set; }
+
     private INotifyPropertyChanged? _notifier;
     private INotifyPropertyChanged? _senderNotifier;
     private INotifyPropertyChanged? _receiverNotifier;
@@ -145,8 +163,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private string CanvasWidthCss => N(CanvasWidth);
     private string CanvasHeightCss => N(CanvasHeight);
     private string ThicknessCss => N(Thickness);
-    private double HaloOuterWidth => Thickness + 9;
-    private double HaloInnerWidth => Thickness + 4;
+    private double HaloOuterWidth => LitThickness + 9;
+    private double HaloInnerWidth => LitThickness + 4;
 
     private static string N(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
@@ -462,8 +480,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         double head = Math.Clamp(Head, 0, 1) * _length;
         double tail = TailFraction * _length;
 
-        // 复用同一批颜色，别每段都解析一次
-        var body = ParseColor(LineColorOverride ?? "#CC38BDF8");
+        // 复用同一批颜色，别每段都解析一次。选中时彗星跟线体一起换色，否则红线上会套一层蓝光
+        var body = ParseColor(IsLit ? SelectedColor : (LineColorOverride ?? "#CC38BDF8"));
 
         // 光晕一遍在前
         for (int k = 0; k < TailSegments; k++)
@@ -546,6 +564,45 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return string.Create(CultureInfo.InvariantCulture,
             $"rgb({L(from.R)},{L(from.G)},{L(from.B)})");
     }
+
+    #endregion
+
+    #region Interaction
+
+    // 选中色与增量沿用另外六家：OrangeRed，线宽 +1.5，线体不透明度 0.55 → 0.85。
+    // 写成 ARGB 是为了让 ToCss 与 ParseColor 都能读同一个常量 —— 管壁与彗星跟线体同源
+    private const string SelectedColor = "#FFFF4500";
+    private const double SelectedWidthBonus = 1.5;
+
+    private bool _hover;
+
+    // 亮起来的两个理由：指针在线上，或页面把这条线选住了（右键菜单开着时指针已经不在线上）
+    private bool IsLit => _hover || IsSelected;
+
+    private string LitColor => IsLit ? ToCss(SelectedColor) : LineColor;
+    private double LitThickness => IsLit ? Thickness + SelectedWidthBonus : Thickness;
+    private string LitThicknessCss => N(LitThickness);
+    private string BodyOpacity => IsLit ? "0.85" : "0.55";
+
+    // 命中交回描边：只有真正画出来的那圈参与命中（最宽的是外层管壁），距离判定由浏览器做。
+    // 虚拟连线整层不参与 —— 它是指针下的橡皮筋，命中了就会抢掉正在拖它的那次手势
+    private string HitTargetCss => EffectiveIsVirtual ? "none" : "stroke";
+
+    private async Task OnPointerEnter()
+    {
+        _hover = true;
+        await InvokeAsync(StateHasChanged);
+        await OnHoverChanged.InvokeAsync(true);
+    }
+
+    private async Task OnPointerExit()
+    {
+        _hover = false;
+        await InvokeAsync(StateHasChanged);
+        await OnHoverChanged.InvokeAsync(false);
+    }
+
+    private Task OnContextMenu(MouseEventArgs e) => OnContextMenuRequested.InvokeAsync(e);
 
     #endregion
 

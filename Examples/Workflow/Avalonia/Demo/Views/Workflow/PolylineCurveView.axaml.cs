@@ -25,7 +25,7 @@ namespace Demo;
 /// not drawn a polyline since the geometry was replaced.
 /// </para>
 /// <para>
-/// Supports click-to-select (highlighted) and <c>Delete</c> to remove.
+/// Supports click-to-select (highlighted), <c>Delete</c> and a right-click menu to remove.
 /// </para>
 /// </summary>
 public partial class PolylineCurveView : Control
@@ -61,6 +61,11 @@ public partial class PolylineCurveView : Control
         InitializeComponent();
         IsHitTestVisible = true;
         Focusable = true;
+
+        // 悬停即取焦点（Delete 需要），而 Avalonia 的 ScrollViewer 默认会把「获得焦点的元素」滚进视口
+        // （BringIntoViewOnFocusChange 默认 true），本视图又是整块画布大小 ⇒ 鼠标一碰到线画布就跳一段。
+        // 这条请求只对本视图有意义，所以在发源地吃掉；节点卡里输入框的自动滚进视口不受影响。
+        AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);
 
         RefreshGeometry();
 
@@ -439,55 +444,74 @@ public partial class PolylineCurveView : Control
         IsSelected = false;
     }
 
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+
+        if (!e.GetCurrentPoint(this).Properties.IsRightButtonPressed) return;
+
+        // 只有落在画出来的线上的右键才算这条线的：沿弧长表逐段判距（半径 6）。
+        // 框架本就只把指针事件送给画出来的那圈描边（实测：从窗口外进来停在离线约 19px 处不触发 PointerEntered），
+        // 所以这条判据与它同带宽；留着它是为了命中面被改粗时（例如给视图加上背景）也不会在空白处弹出菜单
+        if (!HitTestLine(e.GetPosition(this))) return;
+
+        // 未选中先选中：菜单里的删除作用于当前这条线。悬停选中与它无关，菜单弹出后指针就落到菜单上
+        IsSelected = true;
+        CurveSelectionManager.Select(this);
+        Focus();
+
+        _menu ??= BuildMenu();
+        _menu.Open(this);
+
+        e.Handled = true;
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
         if (e.Key == Key.Delete && IsSelected)
         {
-            if (DataContext is IWorkflowLinkViewModel vm)
-                vm.DeleteCommand.Execute(null);
+            DeleteLink();
             e.Handled = true;
         }
     }
 
+    // 菜单只有一项，且不绑命令：视图会被池化改绑给另一条链接，菜单项在点击那一刻才去读 DataContext
+    private ContextMenu? _menu;
+
+    private ContextMenu BuildMenu()
+    {
+        var item = new MenuItem { Header = "删除连线" };
+        item.Click += (_, _) => DeleteLink();
+
+        return new ContextMenu { Items = { item } };
+    }
+
+    private void DeleteLink()
+    {
+        if (DataContext is IWorkflowLinkViewModel vm)
+            vm.DeleteCommand.Execute(null);
+    }
+
+    // 命中沿同一张弧长表走：曲线换了之后，按老的四点折线判命中会在弯的地方对不上手指
     private bool HitTestLine(Point pt)
     {
         const double hitRadius = 6.0;
 
         for (int i = 1; i < _samples.Length; i++)
         {
-            if (DistanceToSegment(pt, _samples[i - 1], _samples[i]) <= hitRadius)
-                return true;
+            if (DistSegment(pt, _samples[i - 1], _samples[i]) <= hitRadius) return true;
         }
 
         return false;
     }
 
-    protected override void OnPointerMoved(PointerEventArgs e)
-    {
-        base.OnPointerMoved(e);
-        var pt = e.GetPosition(this);
-        bool over = HitTestLine(pt);
-        if (over && !IsSelected)
-        {
-            IsSelected = true;
-            CurveSelectionManager.Select(this);
-            Focus();
-        }
-        else if (!over && IsSelected)
-        {
-            CurveSelectionManager.Deselect(this);
-            IsSelected = false;
-        }
-    }
-
-    private static double DistanceToSegment(Point p, Point a, Point b)
+    private static double DistSegment(Point p, Point a, Point b)
     {
         var ab = b - a;
         double len2 = (ab.X * ab.X) + (ab.Y * ab.Y);
         if (len2 < 0.0001) return new Vector(p.X - a.X, p.Y - a.Y).Length;
-        double t = (((p.X - a.X) * ab.X) + ((p.Y - a.Y) * ab.Y)) / len2;
-        t = Math.Clamp(t, 0.0, 1.0);
+        double t = Math.Clamp((((p.X - a.X) * ab.X) + ((p.Y - a.Y) * ab.Y)) / len2, 0, 1);
         var proj = new Point(a.X + (t * ab.X), a.Y + (t * ab.Y));
         return new Vector(p.X - proj.X, p.Y - proj.Y).Length;
     }

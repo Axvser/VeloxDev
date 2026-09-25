@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Demo.ViewModels;
 using Jalium.UI;
 using Jalium.UI.Controls;
+using Jalium.UI.Controls.Primitives;
 using Jalium.UI.Input;
 using Jalium.UI.Interop;
 using Jalium.UI.Media;
@@ -26,6 +27,13 @@ internal sealed class NodeEditorSurface : Canvas
     private const double MajorStep = 200;
     private const double RulerThickness = 36;
     private const double LinkThickness = 2;
+
+    // 选中（＝指针搭上）的连线：加粗 1.5，与其它六家的连线一致
+    private const double SelectedLinkThickness = LinkThickness + 1.5;
+
+    // 连线的命中半径。取值与其它六家的连线命中一致：6 个画布像素 —— 那是一个指针能稳定指到的宽度，
+    // 而描边半宽（1px）要求像素级对齐，稍一挪动就落空，读起来像「看得见却抓不住」
+    private const double LinkHitRadius = 6.0;
 
     // 所有链接的颜色。白是这套设计里链接的落点色：Avalonia 的 WorkflowView 给 BezierCurveView 传白，
     // 七家的连线本体色统一到 Avalonia 参考实现的 #CC38BDF8：彗星是「尾梢=本体色、亮头=白」，
@@ -64,6 +72,20 @@ internal sealed class NodeEditorSurface : Canvas
     // 没有端口控件可以替它答「指针在我身上吗」
     private IWorkflowSlotViewModel? _hoverSlot;
 
+    // 当前选中的连线。链接和端口一样是表面画的，没有控件能担任这个角色；
+    // 悬停即选中（与其它六家一致），Delete 与右键菜单都打在它身上
+    private IWorkflowLinkViewModel? _selectedLink;
+
+    // 右键菜单复用一份实例，同时只会开一个。它删的是「开菜单时的那条」而不是「此刻悬停的那条」：
+    // 指针移进弹层去点菜单项时，悬停早已离开那条连线
+    private readonly ContextMenu _linkMenu = new();
+    private IWorkflowLinkViewModel? _menuTarget;
+
+    // 菜单开着时，指针移出表面（移向弹层）不算「离开连线」—— 否则 MouseLeave 会先把选中抹掉，
+    // 点下去的菜单项就没有了目标。判据直接读弹层自己的 IsOpen 而不是另立一个标志：
+    // 标志一旦漏掉回落（比如 Closed 没来）就会永久卡住，悬停从此不再更新
+    private bool MenuOpen => _linkMenu.IsOpen;
+
     private enum DragKind { None, Node, Link, Pan }
     private DragKind _dragKind;
     private IWorkflowNodeViewModel? _dragNode;
@@ -84,6 +106,19 @@ internal sealed class NodeEditorSurface : Canvas
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
         AddHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnZoomMouseWheel));
 
+        // 表面整块就是画布，所以「把表面滚进视口」这条请求在这里吃掉：焦点一变，Jalium 的 Window 会在
+        // 该元素的下一次 LayoutUpdated 上对它调 BringIntoView（Window.ScrollFocusedEditorIntoViewAfterLayout），
+        // 而 2000+ 见方的画布一旦被滚进视口就是直接跳到原点 —— 用户报的「极小概率滚动」走的正是这条路。
+        // 只吃目标就是表面自己的那一次：卡片里的输入框该滚进视口照常滚。
+        AddHandler(RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler(OnRequestBringIntoView));
+
+        // 表面自己也处理 Delete（KeyDown），所以它保持可聚焦；但**悬停不再收焦点**了
+        // （收焦点会把整块画布卷进视口，见 RequestBringIntoView 那段），主路径是 MainWindow 的窗口级预览，
+        // 这一条只是第二道闸 —— 焦点在卡片里的控件上时按键会冒泡到这里
+        Focusable = true;
+        AddHandler(KeyDownEvent, new KeyEventHandler(OnKeyDown));
+        BuildLinkMenu();
+
         // 表面自己画链接与端口，故只有它能持有动画；相位是整个表面一个周期，生命周期就这两处
         // Loaded 起、Unloaded 停（见下面的 flow 区）
         Loaded += (_, _) => StartFlow();
@@ -93,12 +128,168 @@ internal sealed class NodeEditorSurface : Canvas
         // 指针离开表面就把悬停清掉：端口的悬停反馈是表面画的，没有人会替它发 PointerExited
         MouseLeave += (_, _) =>
         {
-            if (_hoverSlot is not null)
+            if (MenuOpen)
             {
-                _hoverSlot = null;
-                InvalidateVisual();
+                return;
             }
+
+            if (_hoverSlot is null && _selectedLink is null)
+            {
+                return;
+            }
+
+            _hoverSlot = null;
+            _selectedLink = null;
+            InvalidateVisual();
         };
+    }
+
+    // ── Link selection: hover highlight, the Delete key, the right-click menu ──
+
+    // 选中色与其它六家一致（OrangeRed）。白是静息色的落点（见 LinkColor），选中就换一整套线体与彗星的颜色：
+    // 只改粗细不改色的话，指针搭上一条浅蓝的线几乎看不出来
+    private static readonly Color SelectedLinkColor = Colors.OrangeRed;
+
+    /// <summary>Delete the link currently under the pointer, as a <c>Delete</c> key press does.
+    /// Returns whether there was one to delete.</summary>
+    public bool DeleteSelectedLink()
+    {
+        if (_selectedLink is null)
+        {
+            return false;
+        }
+
+        DeleteLink(_selectedLink);
+        return true;
+    }
+
+    // 删除只有一条路：走连线自己的命令，删完把指向它的选中清掉。
+    // 集合的变更通知会把绘制与弧长表带上（见 OnLinksChanged），这里只管选中这一个成员
+    private void DeleteLink(IWorkflowLinkViewModel? link)
+    {
+        if (link is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_selectedLink, link))
+        {
+            _selectedLink = null;
+        }
+
+        // 菜单开着时按 Delete 也删：删完菜单不能还杵在画布上指着一条已经不在的线
+        _linkMenu.IsOpen = false;
+        link.DeleteCommand.Execute(null);
+        InvalidateVisual();
+        Changed?.Invoke();
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Delete && DeleteSelectedLink())
+        {
+            e.Handled = true;
+        }
+    }
+
+    // 只拦目标是自己（整块画布）的那一次滚进视口；节点卡里的控件发起的请求照旧往上冒
+    private void OnRequestBringIntoView(object? sender, RequestBringIntoViewEventArgs e)
+    {
+        if (ReferenceEquals(e.TargetObject, this))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// 菜单只一项。这一家的连线不是控件，它没有自己的 <c>ContextMenu</c> 可挂 —— 菜单只能由画它的表面
+    /// 代开，删的是开菜单那一刻记下的那条（<see cref="_menuTarget"/>）。
+    /// </summary>
+    private void BuildLinkMenu()
+    {
+        // 删的是开菜单那一刻记下的那条（_menuTarget），而不是 Closed 之后再查 —— 这一家点菜单项时
+        // 先收菜单再发 Click，目标若在 Closed 里清掉，Click 拿到的就是 null
+        var item = new MenuItem { Header = "删除连线" };
+        item.Click += (_, _) =>
+        {
+            // 这一家的菜单项点完不自己收：不显式关，删掉连线之后菜单还杵在画布上挡着看得见的东西
+            _linkMenu.IsOpen = false;
+            DeleteLink(_menuTarget);
+        };
+        _linkMenu.Items.Add(item);
+    }
+
+    private void OnLinkRightClick(MouseButtonEventArgs e)
+    {
+        var pos = e.GetPosition(this);
+        if (HitTestLink(pos) is not { } link)
+        {
+            return;
+        }
+
+        // 右键先把它选上再开菜单：菜单项删的是这条，而高亮让「删的到底是哪条」在点之前就看得见
+        _selectedLink = link;
+        _menuTarget = link;
+        InvalidateVisual();
+
+        // 先摆好位置再开：弹层一起来指针就算「离开」了表面，那条 MouseLeave 会连选中一起抹掉，
+        // 用户看到的就是「菜单开着、线不亮」
+        _linkMenu.Placement = PlacementMode.MousePoint;
+        _linkMenu.PlacementTarget = this;
+        _linkMenu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// 指针下最上面那条连线（画布坐标进，链接视图模型出）。逐个采样段量点到折线的距离，
+    /// 量与画读的是同一张弧长表（见 <see cref="CurveFor"/>），所以只有画出来的那一道笔画能命中 ——
+    /// 两端之间的空当不算。
+    /// </summary>
+    private IWorkflowLinkViewModel? HitTestLink(Point canvasPos)
+    {
+        if (_tree is null)
+        {
+            return null;
+        }
+
+        // 后画的压在上面，所以从集合尾部往前找
+        for (int i = _tree.Links.Count - 1; i >= 0; i--)
+        {
+            var link = _tree.Links[i];
+            if (!link.IsVisible)
+            {
+                continue;
+            }
+
+            var from = GetSlotPortCenter(link.Sender);
+            var to = GetSlotPortCenter(link.Receiver);
+            var curve = CurveFor(link, ToCanvas(from.X, from.Y), ToCanvas(to.X, to.Y));
+            if (curve.DistanceTo(canvasPos) <= LinkHitRadius)
+            {
+                return link;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>悬停即「当前选中」，移开即取消 —— 与其它六家的连线一致。</summary>
+    private void UpdateLinkHover(Point canvasPos)
+    {
+        // 菜单开着时指针在弹层上，那段移动不该改选中（见 MenuOpen）
+        if (MenuOpen)
+        {
+            return;
+        }
+
+        var hovered = HitTestLink(canvasPos);
+        if (ReferenceEquals(hovered, _selectedLink))
+        {
+            return;
+        }
+
+        _selectedLink = hovered;
+        InvalidateVisual();
     }
 
     /// <summary>Ctrl + mouse wheel zooms the workspace: each node collapses toward the world origin
@@ -173,6 +364,7 @@ internal sealed class NodeEditorSurface : Canvas
         Children.Clear();
         // 换了树，上一棵树那些链接的弧长表就没人认领了（Links 变更不会通知到它们）
         _curves.Clear();
+        _selectedLink = null;
 
         // 这里不停光带：周期是表面的而非某条链接或某棵树的，换树不影响它，新树的链接由已在跑的周期画
         // 也不用重起——树是在已上屏的表面上换的，而周期只在 Loaded 起
@@ -428,12 +620,26 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void PruneCurves()
     {
-        if (_tree is null || _curves.Count == 0)
+        if (_tree is null)
         {
             return;
         }
 
         var alive = new HashSet<IWorkflowLinkViewModel>(_tree.Links);
+
+        // 选中的那条也可能已经不在了：删除不止表面这一条路（Agent、Undo 都会删连线）。
+        // 留着一个不在树上的选中，下一次 Delete 就打在空气上
+        if (_selectedLink is not null && !alive.Contains(_selectedLink))
+        {
+            _selectedLink = null;
+        }
+
+        // 菜单记着的那条同理：它已经不在了，菜单项再点也不该去动一条不在树上的线
+        if (_menuTarget is not null && !alive.Contains(_menuTarget))
+        {
+            _menuTarget = null;
+        }
+
         foreach (var link in _curves.Keys.ToArray())
         {
             if (!alive.Contains(link))
@@ -862,8 +1068,13 @@ internal sealed class NodeEditorSurface : Canvas
                 continue;
             }
 
-            DrawLink(dc, curve, LinkColor, LinkThickness);
-            DrawComet(dc, curve, LinkColor, LinkThickness);
+            // 选中（＝指针搭上）的那条整条换色加粗，彗星跟着走：它跑在这条线上，亮着红尾巴的蓝线读起来像两条线
+            bool selected = ReferenceEquals(link, _selectedLink);
+            var color = selected ? SelectedLinkColor : LinkColor;
+            double thickness = selected ? SelectedLinkThickness : LinkThickness;
+
+            DrawLink(dc, curve, color, thickness);
+            DrawComet(dc, curve, color, thickness);
         }
     }
 
@@ -993,6 +1204,46 @@ internal sealed class NodeEditorSurface : Canvas
             return new Point(
                 _samples[lo].X + ((_samples[hi].X - _samples[lo].X) * t),
                 _samples[lo].Y + ((_samples[hi].Y - _samples[lo].Y) * t));
+        }
+
+        /// <summary>点到这条曲线的最近距离，按现成的采样折线量 —— 命中测试因此与绘制读同一张表。</summary>
+        public double DistanceTo(Point p)
+        {
+            if (_length <= 0)
+            {
+                return double.MaxValue;
+            }
+
+            double best = double.MaxValue;
+            for (int i = 1; i < _samples.Length; i++)
+            {
+                double d = DistanceToSegment(p, _samples[i - 1], _samples[i]);
+                if (d < best)
+                {
+                    best = d;
+                }
+            }
+
+            return best;
+        }
+
+        private static double DistanceToSegment(Point p, Point a, Point b)
+        {
+            double abx = b.X - a.X, aby = b.Y - a.Y;
+            double len2 = (abx * abx) + (aby * aby);
+            if (len2 < 0.0001)
+            {
+                return Distance(p, a);
+            }
+
+            double t = Math.Clamp((((p.X - a.X) * abx) + ((p.Y - a.Y) * aby)) / len2, 0, 1);
+            return Distance(p, new Point(a.X + (t * abx), a.Y + (t * aby)));
+        }
+
+        private static double Distance(Point p, Point q)
+        {
+            double dx = p.X - q.X, dy = p.Y - q.Y;
+            return Math.Sqrt((dx * dx) + (dy * dy));
         }
 
         /// <summary>[from, to] 这一段弧长上的折线几何：两端各自插值到精确位置，中间用现成采样点。</summary>
@@ -1325,7 +1576,20 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void OnMouseDown(object? sender, MouseButtonEventArgs e)
     {
-        if (_tree is null || e.ChangedButton != MouseButton.Left)
+        if (_tree is null)
+        {
+            return;
+        }
+
+        // 右键只在连线上有含义（弹出删除菜单），落在别处什么也不做：这一家的自动化右键路径不认单条连线，
+        // 菜单由表面代开（见 OnLinkRightClick）
+        if (e.ChangedButton == MouseButton.Right)
+        {
+            OnLinkRightClick(e);
+            return;
+        }
+
+        if (e.ChangedButton != MouseButton.Left)
         {
             return;
         }
@@ -1467,9 +1731,12 @@ internal sealed class NodeEditorSurface : Canvas
                 break;
             }
 
-            // 没在拖任何东西：只更新端口悬停。端口小，没有这点反馈就不知道指针到底有没有搭上它
+            // 没在拖任何东西：只更新端口与连线的悬停。端口小，没有这点反馈就不知道指针到底有没有搭上它；
+            // 连线长，它的悬停同时就是「当前选中」，Delete 与右键菜单读的是它
             default:
-                UpdatePortHover(e.GetPosition(this));
+                var canvasPos = e.GetPosition(this);
+                UpdatePortHover(canvasPos);
+                UpdateLinkHover(canvasPos);
                 break;
         }
     }

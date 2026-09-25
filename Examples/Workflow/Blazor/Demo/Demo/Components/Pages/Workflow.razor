@@ -158,12 +158,25 @@
                     </Minimap>
                     <ChildContent Context="sc">
                         @* Links layer: one full-canvas TemplateLinkView per connection (template product,
-                           absolute, overflow visible). Each link draws the golden-ratio orthogonal polyline. *@
+                           absolute, overflow visible). Each link draws the golden-ratio orthogonal polyline.
+                           The layer itself stays click-through — each link hands hit testing back on its own
+                           strokes — and it is also the keyboard host: focus lands here on hover so Delete
+                           reaches the page without a click first. *@
                         <div class="veloxdev-wf-links"
-                             style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;">
+                             tabindex="0"
+                             @ref="_linksLayer"
+                             @onkeydown="OnLinksKeyDown"
+                             style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;outline:none;">
                             @foreach (var link in tree.Links)
                             {
-                                <TemplateLinkView Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
+                                @* Keyed by the link itself: a view carries per-link state that only
+                                   OnInitialized seeds (visibility, endpoint subscriptions) plus the
+                                   hover flag, and a positional diff would hand all of it to the
+                                   neighbouring link whenever one is deleted. *@
+                                <TemplateLinkView @key="link" Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height"
+                                                  IsSelected="@(_menuLink == link)"
+                                                  OnHoverChanged="@(entered => OnLinkHoverChanged(link, entered))"
+                                                  OnContextMenuRequested="@(e => OnLinkContextMenu(link, e))" />
                             }
                             @if (tree.VirtualLink.IsVisible)
                             {
@@ -255,6 +268,20 @@
             </div>
         }
     </main>
+
+    @* Link context menu: one item, at the pointer. The backdrop is what makes click-away dismiss work
+       with no JS, and while it is up it swallows canvas gestures — which is what a menu should do.
+       It sits under the agent modals on purpose, so a modal still wins if one opens behind it. *@
+    @if (_menuLink is not null)
+    {
+        <div class="wf-link-menu-backdrop"
+             @onclick="CloseLinkMenu"
+             @oncontextmenu="CloseLinkMenu"
+             @oncontextmenu:preventDefault="true"></div>
+        <div class="wf-link-menu" style="left:@_menuLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)px;top:@_menuTop.ToString(System.Globalization.CultureInfo.InvariantCulture)px;">
+            <button class="wf-link-menu-item" @onclick="DeleteLinkFromMenu">删除连线</button>
+        </div>
+    }
 
     <!-- Agent interaction modals (RequestSelection / RequestConfirmation) -->
     @if (_selection is { } sel)

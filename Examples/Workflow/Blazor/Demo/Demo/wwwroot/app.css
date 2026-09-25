@@ -909,6 +909,41 @@ html, body {
 .wf-btn-once   { background: #0f3460; border-color: #7ec8ff; color: #7ec8ff; }
 .wf-btn-always { background: #0d3b1a; border-color: #6bffb8; color: #6bffb8; }
 
+/* ── Link context menu (right-click a connection on the canvas) ──────────── */
+/* Backdrop under the agent modals (z 1000) so a modal still wins if one opens behind the menu. */
+.wf-link-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+}
+.wf-link-menu {
+    position: fixed;
+    z-index: 901;
+    min-width: 116px;
+    padding: 4px;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.wf-link-menu-item {
+    display: block;
+    width: 100%;
+    padding: 7px 14px;
+    background: none;
+    border: 0;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-family: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+.wf-link-menu-item:hover {
+    background: #3b0000;
+    color: #ff6b6b;
+}
+
 /* ── Canvas-info HUD (floating decorator layer, bottom-left) ─────────────── */
 .veloxdev-wf-info {
     position: absolute;

@@ -22,6 +22,8 @@ namespace Demo.Controls;
 ///     is invoked continuously in MouseMove and the card is re-laid out
 ///   - Slot anchors: computed directly from control screen coordinates before each layout/draw, no separate Behavior needed
 ///   - Canvas size: computed dynamically from node coordinates; scrollbars appear when content exceeds the window area
+///   - Links have no view of their own, so their interaction lives here too: the pointer on a curve selects it
+///     (the renderer highlights), <c>Delete</c> removes it, and a right-click on it opens the one-item menu
 /// </summary>
 public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 {
@@ -33,6 +35,12 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // looked too small visually, so it was enlarged to 36px.
     private const int RulerThickness = 36;
 
+    // 连线命中半径。保留模式那三家（WPF/WinUI/Avalonia）的 HitTestLine 里 6.0 在悬停路径上够不到（被
+    // !IsSelected 那条守卫挡死），但它们命中的是**画出来的最外圈辉光管壁**（本家 Render 同样是 thickness+9，
+    // 半宽 5.5px）⇒ 带宽 ≈ ±5.5px；Blazor 实测同值、MAUI 与 Jalium 取 6px。6px 落在本家画出的辉光之内，
+    // 与六家一致，也仍然等于「只有画出来的部分能命中」
+    private const float LinkHitRadius = 6f;
+
     // ── State ──────────────────────────────────────────────────────────────────
     private WorkflowDemoSession? _session;
     private readonly Dictionary<IWorkflowNodeViewModel, WorkflowNodeCard> _cards = [];
@@ -42,6 +50,18 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // canvas OnPaint — this avoids overlapping full-size transparent sibling windows in
     // WinForms being clipped by WS_CLIPSIBLINGS (only the topmost one would be drawn).
     private readonly List<Views.LinkView> _linkRenderers = [];
+
+    // 悬停命中的那条连线（渲染器不在控件树里，选中只能记在这里）。Delete 与右键菜单都作用在它身上。
+    // 渲染器每次重建都换新对象，所以只在两次重建之间有效——RebuildLinkRenderers 会清掉它
+    private Views.LinkView? _selectedLink;
+
+    // 右键菜单只在连线上弹，所以不能挂成画布的 ContextMenuStrip（那会变成右键画布任意处都弹）
+    private ContextMenuStrip? _linkMenu;
+
+    // 指针最近一次的客户区位置，以及它是否还在画布上：平移/滚动/缩放挪的是几何而指针没动，
+    // 命中会变，得拿这两个值重判一次
+    private Point _lastPointerClient;
+    private bool _pointerInside;
 
     // Panning
     private bool _isPanning;
@@ -184,6 +204,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(this, true);
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetZoomEnabled(this, true);
 
+        // Panel 默认不可获焦，而没有焦点就收不到 Delete：选中连线时要把焦点取过来。
+        // TabStop 留 false —— 要的是「选中时拿得到焦点」，不是往制表位里塞一站
+        SetStyle(ControlStyles.Selectable, true);
+        TabStop = false;
+
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
@@ -312,6 +337,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     private void RebuildLinkRenderers()
     {
+        // 选中项指向的是一个即将被 Dispose 的渲染器，且指针下的几何已经换了一批，旧选中不再成立
+        SetSelectedLink(null);
+
         foreach (var lv in _linkRenderers) lv.Dispose();
         _linkRenderers.Clear();
         if (_session is null) return;
@@ -460,6 +488,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         s.Tree.Links.CollectionChanged -= OnLinksChanged;
         s.Controller.PropertyChanged -= OnControllerPropertyChanged;
 
+        SetSelectedLink(null);
         foreach (var lv in _linkRenderers) lv.Dispose();
         _linkRenderers.Clear();
 
@@ -585,6 +614,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         {
             _zoomCanvasRefreshPending = false;
             if (IsDisposed || !IsHandleCreated) return;
+            // 缩放把几何挪到了指针之外或之下，命中同样要重判
+            RefreshLinkHover();
             Invalidate();
             Update();
         }
@@ -717,6 +748,20 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
+
+        // 右键只对连线有意义：命中才选中并弹菜单；画布空白处右键什么也不做
+        if (e.Button == MouseButtons.Right)
+        {
+            var over = FindLinkAt(ClientToWorld(e.Location));
+            if (over is not null)
+            {
+                SetSelectedLink(over);
+                ShowLinkMenu(e.Location);
+            }
+
+            return;
+        }
+
         if (e.Button != MouseButtons.Left) return;
 
         if (_session?.Tree.VirtualLink.IsVisible == true)
@@ -741,6 +786,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        _lastPointerClient = e.Location;
 
         if (_isPanning)
         {
@@ -751,6 +797,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             RelayoutAllCards();
             return;
         }
+
+        // 悬停即选中：连线是画布代画的，命中只能在画布的指针处理里做，判的是画它的那张采样表
+        SetSelectedLink(_session is null ? null : FindLinkAt(ClientToWorld(e.Location)));
 
         // Mouse tracking in link mode is handled by WorkflowSlotConnectionBehavior; no need to repeat it here
     }
@@ -763,6 +812,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         {
             _isPanning = false;
             Capture = false;
+            // 平移把整张图挪了，而指针位置没动 —— 按下时选中的那条线已经不在指针下了
+            RefreshLinkHover();
             return;
         }
     }
@@ -775,6 +826,104 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             _isPanning = false;
             // Link state is managed separately by WorkflowSlotConnectionBehavior; not cleared here
         }
+    }
+
+    protected override void OnMouseEnter(EventArgs e)
+    {
+        base.OnMouseEnter(e);
+        _pointerInside = true;
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _pointerInside = false;
+
+        // 菜单弹出后指针就落在了菜单上，但那不叫「移开」—— 还没点就取消选中是在反悔
+        if (_linkMenu?.Visible == true) return;
+
+        // 移开就取消选中（其它六家同）
+        SetSelectedLink(null);
+    }
+
+    // ── Link selection ───────────────────────────────────────────────────────────
+
+    // 指针下的连线。判命中用的是画线用的同一张采样表（LinkView.HitTest），线弯到哪里命中面就在哪里；
+    // 虚拟连线是指针下的橡皮筋，它不参与选中
+    private Views.LinkView? FindLinkAt(Anchor world)
+    {
+        var point = new PointF((float)world.Horizontal, (float)world.Vertical);
+        foreach (var lv in _linkRenderers)
+        {
+            if (lv.HitTest(point, LinkHitRadius)) return lv;
+        }
+
+        return null;
+    }
+
+    private void SetSelectedLink(Views.LinkView? link)
+    {
+        if (ReferenceEquals(_selectedLink, link)) return;
+        if (_selectedLink is not null) _selectedLink.IsHighlighted = false;
+        _selectedLink = link;
+        if (link is null) return;
+
+        link.IsHighlighted = true;
+
+        // 选中是「上色」，Delete 要的是键盘焦点 —— 两者必须同时发生：只上色不取焦点的版本里
+        // 键盘消息进不到这块画布，Delete 得先用鼠标点一下（那一下才给焦点）
+        Focus();
+    }
+
+    // 平移/滚动/缩放挪的是几何而不是指针：指针没动，命中却变了，所以拿最近一次位置重判一次
+    private void RefreshLinkHover()
+    {
+        if (!_pointerInside || _session is null)
+        {
+            SetSelectedLink(null);
+            return;
+        }
+
+        SetSelectedLink(FindLinkAt(ClientToWorld(_lastPointerClient)));
+    }
+
+    // 删除走连线模型自己的命令：这条线是画布代画的，画布上没有它的控件可摘
+    private bool DeleteSelectedLink()
+    {
+        if (_selectedLink?.ViewModel is not { } link) return false;
+
+        SetSelectedLink(null);
+        if (link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
+        return true;
+    }
+
+    private void ShowLinkMenu(Point clientPoint)
+    {
+        // 每次右键自己一个菜单：一次性对象不必管理状态，也不会在下一次右键时弹出上一条连线的旧菜单
+        _linkMenu?.Dispose();
+
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("删除连线", null, (_, _) => DeleteSelectedLink());
+        menu.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_linkMenu, menu)) _linkMenu = null;
+            // 关掉即弃，但不在 Closed 里直接 Dispose —— 那还在菜单自己的方法里，销毁要在它收完尾之后
+            if (!IsDisposed) BeginInvoke(new Action(menu.Dispose));
+        };
+
+        _linkMenu = menu;
+        menu.Show(this, clientPoint);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        // 没选中就不要吃掉这个键
+        if (e.KeyCode != Keys.Delete || !DeleteSelectedLink()) return;
+
+        e.Handled = true;
+        e.SuppressKeyPress = true;
     }
 
     // ── Drawing ──────────────────────────────────────────────────────────────────
@@ -1006,6 +1155,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         base.OnScroll(se);
         // Link renderers are not part of the control tree; panning/scrolling is handled uniformly
         // by the canvas OnPaint origin transform.
+        RefreshLinkHover();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         RefreshOverlays();
         SyncRulerOverlay();
@@ -1021,6 +1171,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             }
 
             DetachSession(_session);
+
+            _linkMenu?.Dispose();
+            _linkMenu = null;
 
             if (_rulerOverlay is not null)
             {
