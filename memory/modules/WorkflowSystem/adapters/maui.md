@@ -22,7 +22,7 @@
 | 插槽布局 | `WorkflowSlotLayoutBehavior.cs` | 见 §二·5 |
 | 网格装饰器 / 小地图 | 小地图有 `WorkflowMinimapOverlay.cs`；**装饰器适配器不提供**，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`） | 与 WPF/Avalonia/WinUI/WinForms 同为「不带装饰器」；Jalium 与 Razor 自带一个 |
 
-**另有第八个类，它不是七角色里的任何一个，但删不掉**：`WorkflowLinkOverlay.cs` —— 全图链接层，见 §三·2。
+**另有第八个类，它不是七角色里的任何一个，但删不掉**：`WorkflowLinkOverlay.cs` —— 链接层（画 Core 的可见集），见 §三·2。
 
 本家必须自己写、且别家写法不能照搬的成员就三处：`WorkflowSurfaceBehavior` 里的平移/滚动提交顺序（§二·6/§二·7）、
 `WorkflowSlotLayoutBehavior` 的重同步信号源（§二·5）、`WorkflowLinkOverlay` 的整层绘制与裁剪（§二·9/§二·8）。
@@ -60,8 +60,16 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 `WorkflowLinkOverlay.cs:9-24` 的类文档：**画布尺寸**的 `GraphicsView` 在深缩放下超过 Win2D 纹理上限，整层**静默消失**。
 于是链接层取**视口尺寸**、住在装饰器坐标系里（网格/标尺用的同一身份：
 `px = RulerThickness + c + ContentOffset − ScrollOffset`，`:19`），并因此**必须自己做包围盒裁剪**
-（`CullMargin = 24`，`:29`，裁剪判定 `:654-657`）。别家可以照抄「一个视口尺寸的 overlay」，但**不能省掉裁剪**：
-这一层永远是满屏尺寸、内容永远是全图。
+（`CullMargin = 24`，`:36`，裁剪判定 `:838`）。别家可以照抄「一个视口尺寸的 overlay」，但**不能省掉裁剪**：
+这一层永远是满屏尺寸 —— 满屏的是**视口**，不是内容。
+**每帧画哪些线由枚举源决定**：`EnumerateVisibleLinks`（`:746-763`）取 Core 的虚拟化可见集（`tree.GetHelper().VisibleItems`
+里过滤出 `IWorkflowLinkViewModel`），因此是 O(可见) 而不是 O(全部) —— 与其余六家同源。包围盒裁剪留作第二道筛子：
+可见集用的是「两端节点包围盒的并集」，比曲线本身粗，并集擦过视口时曲线仍可能落在外面。
+虚拟连线不在 `tree.Links` 里（可见集里那份是同一个实例），所以它从可见集里排除、单独补在最后 —— 橡皮筋要压在实连线之上。
+**按可见集裁剪不会漏画真在视口里的线**：`NodePairBoundsProvider.CalculateBounds()` 取的是两端节点包围盒的**并集**
+（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Virtualization/NodePairBoundsProvider.cs` 的 `Viewport.Union(bA, bB)`），
+而本家的贝塞尔控制点只在两端之间横向拉开 ⇒ 曲线恒在这四点的凸包内、也就恒在该并集内 ⇒ 并集不与视口相交时曲线也不可能可见。
+（对「自定义链接视图画出并集之外的东西」才不成立 —— 其余六家同样如此，属已知局限。）
 
 ### 5. 托管的 `SizeChanged` 是 **arrange 途中**，不是 arrange 之后
 
@@ -105,12 +113,13 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 - **换 handler 必须摘钩子**：`OnHandlerChanging` 里把 `PointerPressed/Moved/Released/Canceled/CaptureLost` 逐个 `RemoveHandler`
   （`WorkflowMinimapOverlay.cs:176-203`），否则页面导航后泄漏。
 
-### 9. 本版 `ICanvas` 只有 `SetFillPaint`，没有描边 paint
+### 9. 本版 `ICanvas` 没有描边渐变，所以「流光」是采样出来的几何而不是渐变笔
 
-`WorkflowLinkOverlay.cs:230-231`：「本版 ICanvas 只有 SetFillPaint、无描边等价物，渐变描边不可表达；沿链长度采样也让光带能跟着肘部拐角走」。
-实现形态：光带是 `FlowSegments = 24`（`:220-221`）段 `DrawLine`，每段按它在**链上里程**（横档 → 斜线 → 横档，`:248-256`）取
-中点颜色再逐段设 `StrokeColor`（`:260-290`），箭头颜色取亮色（`:292`）。
-**这条历史断言今天仍然成立**（注释与实现都在）。
+类文档 `WorkflowLinkOverlay.cs:25-32`：本版 `ICanvas` 没有描边渐变的等价物（`SetFillPaint` 只在填充侧），
+彗星因此是**按弧长切出来的几何**：曲线先按 `SampleCount = 128` 采样成弧长表（`:216`、`BuildCurve :253-294`），
+再在表上取头与尾，用 `TailSegments = 16` 段、每段一个透明度的 `DrawLine` 画出来
+（`:223`、`DrawComet :391-433`；两遍：先光晕后本体）。**这条限制带来的好处仍在**：按弧长走的光会跟着弯走，
+而渐变刷的轴是两端的连线（弦），光在弯链上会离开绳子跑到弦上。
 
 ### 10. 非 Windows 上拿不到原生指针捕获
 
@@ -133,16 +142,17 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
    每一项的落位由 `ViewManager` 每帧 `AbsoluteLayout.SetLayoutBounds`（`ViewManager.cs:387-409`）写。
    **照抄点**：`view-layer.md:50-61` 那条「变换绑定必须挂在 `DataTemplate` 根上」的坑在 MAUI 上**不适用** ——
    这里根本没有那个附着属性可绑。
-2. **全图链接是「一层」而不是「每线一视图」，且这一层是本家唯一的链接动画宿主。** 这与 WPF/Avalonia/WinUI 的
-   每线一视图（demo 的 `PolylineCurveView`，光带写 `GradientStops[i].Offset` / `.Color`）是两条不同路线：
+2. **链接是「一层」而不是「每线一视图」，且这一层是本家唯一的链接动画宿主。** 枚举源与其余六家同源
+   （Core 的可见集），差别只在喂给谁：别家把可见集喂给每线一视图，本家喂给这唯一一层。
+   这与 WPF/Avalonia/WinUI 的每线一视图（demo 的 `PolylineCurveView`，光带写 `GradientStops[i].Offset` / `.Color`）是两条不同路线：
    本家把 `FlowBrush` 换成两个标量 `BandCentre`/`BandMix`，由**一个** `Transition<WorkflowLinkOverlay>` 链驱动
-   （`WorkflowLinkOverlay.cs:97-100`、`:132-161` 三段 550/650/550ms 结尾 `Repeat(int.MaxValue)`、`:79-80` 与 `:164-179` 起动/停止），
-   每帧所有线读同一对值（`:244-245`）。**所以本家没有「每条线各自起一条链」的问题，也不该照抄那份做法**。
+   （`WorkflowLinkOverlay.cs:106-126`、`:145-172` 三段 450/700/450ms 结尾 `Repeat(int.MaxValue)`、`:175-186` 起动、`:189-190` 停止），
+   每帧所有线读同一对值（`:393-394`）。**所以本家没有「每条线各自起一条链」的问题，也不该照抄那份做法**。
    视图池因此只物化节点：模板选择器里只有 `NodeTemplate`，`LinkTemplate` 已废
    （`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml:14-17`）。
-3. **光带颜色的两个端点色来自「静息色/亮色」规则，而不是换色**：静息色是亮色按 alpha 降到约 62%、色相不变
-   （`WorkflowLinkOverlay.cs:210-212` 注释：往白里提在青线上几乎看不出，实测过），亮色是把本色抬向白 45%（`:200-208`）。
-   与 `view-layer.md:104-107` 的通则一致，但本家的实现落点在 overlay 的两个标量上。
+3. **流光的颜色规则是「本色往白里提」，不是换色**：线体本身是静息的暗线（本色 alpha 降到 55%，`:867`），
+   彗星的每段由本色与白按它在尾上的位置插值、透明度按位置平方衰减、再叠一层更宽更淡的光晕
+   （`WorkflowLinkOverlay.cs:400-432`）。与 `view-layer.md:104-107` 的通则一致，但本家的实现落点在 overlay 的两个标量上。
 4. **小地图拖动 = 按下的点直接成为视口中心，没有抓取锚点**。`:535-542` 的注释明写「Match the Jalium adapter」。
 5. **节点拖拽按 TFM 分叉**：Windows 走原生 `PointerRoutedEventArgs`（`WorkflowNodeDragBehavior.cs:129-257`），
    非 Windows 走 `PanGestureRecognizer`（`:98-103` + `:275-331`），并且**刻意不加** `PointerGestureRecognizer`
@@ -174,11 +184,11 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
    （`../extension.md` §3.9-4）：`Viewport`/`Virtualize` 那条路上 NaN 会让**整批 VisibleItems 被清空**
    （`WorkflowSurfaceBehavior.cs:1081-1100` 的注释：`NaN <= 0` 是 false，所以 Core 的守卫抓不到）；
    小地图是成组的（`:414-418` 的节点锚点、`:423-429` 的视口、`:469-475` 的 fit 缩放与原点、`:508-511` 的矩形），
-   链接层则在 `TryGetEndpoints` 出口判 NaN（`WorkflowLinkOverlay.cs:626-628`）。
+   链接层则在 `TryGetEndpoints` 出口判 NaN（`WorkflowLinkOverlay.cs:765-774`）。
 5. **给链接层或小地图加新的视觉 DP 却不加 `propertyChanged`** → 改了属性不重画；加了但不合并 → 一帧内多个 DP 写入各发一次
-   `Invalidate`（`WorkflowLinkOverlay.cs:306-312` 与 `:582-599` 的合流；小地图 `MarkDirty`/`FlushInvalidate` `WorkflowMinimapOverlay.cs:373-399`）。
+   `Invalidate`（`WorkflowLinkOverlay.cs:725-740` 的合流；小地图 `MarkDirty`/`FlushInvalidate` `WorkflowMinimapOverlay.cs:373-399`）。
    `ApplyVisibleRegion` 一帧就连写 6 个 DP（`WorkflowSurfaceBehavior.cs:1102-1115`），合并不是优化而是必需。
-6. **去掉 `WorkflowLinkOverlay.InputTransparent = true`**（`:75`）→ 这层满屏盖在节点上，会吞掉全部节点交互。
+6. **去掉 `WorkflowLinkOverlay.InputTransparent = true`**（`:82`）→ 这层满屏盖在节点上，会吞掉全部节点交互。
    它在树里的 z 序靠 XAML 位置（装饰器内、`ScrollView` 之前，`TreeView.xaml:26-37`），挪位置等于改层序。
 7. **删掉 `x:Name="Root"`** → 链接层的 `WorkflowTree`/`ScrollOffset*`/`ContentOffset*`/`RulerThickness` 全是
    `Source={x:Reference Root}` 的绑定（`TreeView.xaml:8`、`:30-36`），全部解析不到（`skills/veloxdev-create-workflow/references/gui/maui.md:57` 同结论）。
@@ -188,6 +198,9 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 9. **忘了取消在飞的滚动** → `PanCts` 一旦漏取消，`ScrollToAsync` 会叠起来（`:899-902`、`:367-368` 的清理）。
 10. **删掉 `Refresh` 的 `IsRefreshing` 重入守卫** → 画布扩张 → `Refresh` → 再扩张的级联（`:134-141` 的注释记了
     「每次扩张级联 2-3 次 Refresh，正反馈减速螺旋」）。
+11. **给链接层加「可见集之外也要补画」的兜底**（最典型的是把全量 `tree.Links` 再拉回来做差分）→ 又和其余六家分叉，
+    而且不需要：新连线进可见集的时机就是 Core 的「量完才画」，与 WinUI 那条修好的行为一致。这条窗口真出问题时
+    要报出来，不是在绘制侧绕过。
 
 ---
 

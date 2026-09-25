@@ -41,9 +41,14 @@
    而适配器的 `WorkflowTreeView.GridDecorator` setter 要的正是**实例**
    （`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowTreeView.cs:32-42`）。
    ⇒ **这个条目只对模板那套表面有用**（见 §二·1）。
-3. **selector 条目的产物是工厂方法而不是类**：宿主写 `TemplateSelector.CreateSelector()`
-   （demo `MainWindow.cs:39`），拿到的实例只认**两种** item（link/node，`:16-21`），
-   插槽与树 item 会抛 `InvalidOperationException`（`:20`）。
+3. **selector 条目的产物是工厂方法而不是类**：tree-view 条目**自己**在属性默认值里调它
+   （`tree-view:104` 的 `= TemplateNamespace.TemplateSelector.CreateSelector()`），所以七份产物
+   生成完就已经接上；宿主再调一次只是覆盖（demo `MainWindow.cs:39`）。拿到的实例只认**两种** item
+   （link/node，`:16-21`），插槽与树 item 会抛 `InvalidOperationException`（`:20`）。
+   **这个默认值不能是 `null`**（2026-09-25 前它曾是）：`ViewPool` 要 `ItemsSource` 与 `TemplateSelector`
+   **都非空**才建 `ViewManager`（`memory/modules/WorkflowSystem/adapters/jalium.md:95`），null 时走
+   `Detach()`、`AddItem` 静默返回（同文件 `:107`）⇒ **生成出来的项目画布全空、不报错**。
+   当年只有 demo 能跑起来（`MainWindow.cs:39` 从外面赋了值），这正是「demo 好、模板坏」的样本。
 
 ---
 
@@ -70,7 +75,7 @@
 
 | # | 宿主必须做 | 依据 |
 |---|---|---|
-| 1 | `new TreeView { TemplateSelector = TemplateSelector.CreateSelector() }` | `MainWindow.cs:37-40` |
+| 1 | `new TreeView { TemplateSelector = TemplateSelector.CreateSelector() }` —— **可省**：tree-view 的 `TemplateSelector` 属性自带默认选择器（`tree-view:104`），这一句只是把它换成另一份等价实例 | `MainWindow.cs:37-40` |
 | 2 | 放进 `ScrollViewer`，且 `PanningMode = PanningMode.None`（**表面自己处理鼠标平移**） | `MainWindow.cs:43-49` |
 | 3 | `surface.AttachScrollViewer(viewer)` —— **必须在 `SetTree` 之前**，注释 `tree-view:86-88` 说明了原因（视口尺寸在 `SetTree` 时就要可读，否则第一次虚拟化要等一次可能不来的 `ScrollChanged`） | `MainWindow.cs:51-54` |
 | 4 | `surface.SetTree(tree)` | `MainWindow.cs:55` |
@@ -84,11 +89,12 @@
 `AttachScrollViewer`/`SetTree`/`NotifyZoomCommitted`/`Changed` 都是生成产物上的公开成员，
 所以"模板不含入口"这件事的代价在这一家是**八个步骤的手写装配**。
 
-### 2.3 跨条目的**编译期**耦合：tree 少生成两条兄弟就编译不过
+### 2.3 跨条目的**编译期**耦合：tree 少生成一条兄弟就编译不过
 
-tree-view 正文里出现这些兄弟条目的静态成员：`GridDecorator.RulerThickness`（`:38-39,203`）与
-`SlotView.*`（`:249-258,359,389,423,533`）。selector 引用 `new NodeView()` / `new LinkView()`（`:18-19`）。
-⇒ **只生成 `jalium-v-tree` 会 CS0246**（缺 `GridDecorator` 与 `SlotView` 两个类型），
+tree-view 正文里出现这些兄弟条目的静态成员：`GridDecorator.RulerThickness`（`:38-39,203`）、
+`SlotView.*`（`:249-258,359,389,423,533`），以及 selector 条目的工厂（`:104` 的属性默认值）。
+selector 条目引用 `new NodeView()` / `new LinkView()`（`:18-19`）。
+⇒ **只生成 `jalium-v-tree` 会 CS0246**（缺 `GridDecorator`、`SlotView`、`TemplateSelector` 三个类型），
 只生成 `jalium-v-selector` 会缺 `NodeView`/`LinkView`。
 与 WinForms 那条同源但覆盖面更大（那家是 `IWorkflowMinimapScrollSource` 一个类型），
 见 `../architecture.md` §五 与 `winforms.md` §三·P1。
@@ -178,7 +184,7 @@ tree-view 正文里出现这些兄弟条目的静态成员：`GridDecorator.Rule
 | 撞什么 | 依据 |
 |---|---|
 | 生成的 `TreeView` 与框架自带的 `Jalium.UI.Controls.TreeView` | demo 用 `using WorkflowTreeView = Demo.Views.Workflow.TreeView;` 绕开（`MainWindow.cs:11-12,24`） |
-| 宿主那句 `surface.TemplateSelector = TemplateSelector.CreateSelector();` 里**属性名 == 类型名** | 属性在 `tree-view:104`，类型由 selector 条目产出（`template-selector:9`） |
+| 宿主那句 `surface.TemplateSelector = TemplateSelector.CreateSelector();` 里**属性名 == 类型名**（属性在 `tree-view:104`，类型由 selector 条目产出，`template-selector:9`） | **类内部同名会挡住类型名**（简单名先命中成员），所以 tree-view 自己那行默认值只能写成全限定的 `TemplateNamespace.TemplateSelector.CreateSelector()`（`tree-view:104`） |
 | `Size` / `Offset` / `Anchor` 这些 Core 类型与 Jalium 自带的重名 | demo 里显式 `using Size = VeloxDev.WorkflowSystem.Size;`（`MainWindow.cs:13`） |
 
 ### P7 · 两处"初始尺寸/兜底"是刻意的

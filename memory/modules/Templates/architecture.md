@@ -111,11 +111,11 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
 |---|---|---|
 | WPF | `workflowViews:NodeView` / `LinkView` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay`；前缀指向本命名空间 | `workflow-tree-view/TemplateClass.xaml:17,25,36,46,65` |
 | WinUI | `local:NodeView` / `LinkView` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay` | `workflow-tree-view/TemplateClass.xaml:17,27,35,45,64` |
-| Avalonia | `local:NodeView` / `LinkView` / `GridDecorator` / `MinimapOverlay`；**没有 `TemplateSelector` 这一条**（改用隐式 `DataTemplate`） | `workflow-tree-view/TemplateClass.axaml:27,34,50,67` |
+| Avalonia | `local:NodeView` / `LinkView` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay`（2026-09-25 起把视图模板挪成 keyed 资源 + 声明选择器；此前是隐式 `DataTemplate`、不引用 selector 条目） | `workflow-tree-view/TemplateClass.axaml:27,34,43,55,70` |
 | MAUI | `local:NodeView` / `TemplateSelector` / `GridDecorator` / `LinkView` | `workflow-tree-view/TemplateClass.xaml:18,23,32,36` |
-| Razor | 组件标签 `<GridDecorator>` / `<LinkView>` / `<MinimapOverlay>` / `<TemplateSelector>` / `<NodeView>` | `workflow-tree-view/TemplateClass.razor:17,26,35,46,60` |
+| Razor | 组件标签 `<GridDecorator>` / `<LinkView>` / `<MinimapOverlay>` / `<TemplateSelector>` / `<NodeView>` | `workflow-tree-view/TemplateClass.razor:17,26,34,46,56` |
 | WinForms | `new TemplateSelector()`、`List<LinkView>` 字段、`NodeViewFactory`；**不引用 `GridDecorator`**（`PART_GridDecorator => PART_Canvas`），小地图只经接口引用 | `workflow-tree-view/TemplateClass.cs:55,70,96,150` |
-| Jalium | 静态类/属性：`GridDecorator.RulerThickness`（`:38-39`）、`SlotView.*`（端口数学，`:249-258,359,389,423,533`）；`TemplateSelector` 是**宿主赋值的属性**（`:104`），它的类型由 selector 条目产出 | `workflow-tree-view/TemplateClass.cs:38,104,249` |
+| Jalium | 静态类/属性：`GridDecorator.RulerThickness`（`:38-39`）、`SlotView.*`（端口数学，`:249-258,359,389,423,533`）；`TemplateSelector` 的类型由 selector 条目产出，属性**自带默认值**（`:104`，宿主可覆盖） | `workflow-tree-view/TemplateClass.cs:38,104,249` |
 
 ⇒ **改名是这里唯一会断的地方**：用户在生成时给某一条传了非默认 `-n`，必须回 tree-view 的手写照改。
 没有任何工具、测试或编译器会提示你漏改了哪一处。
@@ -140,15 +140,15 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   **`Src/Core/` 与 `Src/Adapters/` 里零命中** —— 所以它不是契约，而是 WinForms 一族各自手写的同名接口：
   每多一个消费者就多一份声明，改名只会在这一族内部一起改。
 - 对照：**WinForms 的 tree-view 喂给池的是全量 `Nodes`**（`ViewPool.SetItemsSource(PART_Canvas, _tree?.Nodes)`，`:728`），
-  其余五家（WPF/WinUI/Avalonia/MAUI/Jalium）喂 `Helper.VisibleItems`；`Helper.VisibleItems` 在
+  其余六家（WPF/WinUI/Avalonia/MAUI/Jalium/Razor）喂 `Helper.VisibleItems`；`Helper.VisibleItems` 在
   `Src/Adapters/VeloxDev.WinForms/` 里零命中，demo 同形
   （`Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.cs:736`）。
-  **Razor 与 WinForms 同族**：`workflow-tree-view/TemplateClass.razor:46` 的 `Items="Tree.Nodes"`，
-  整个 Razor 模板目录零 `VisibleItems` 命中（demo 里它唯一的消费者是模板会删掉的 `InfoOverlay`，
-  见 `adapters/razor.md` §二·6）。
+  **Razor 也喂 `Helper.VisibleItems`**（`workflow-tree-view/TemplateClass.razor:34-36` 的
+  `Items="Tree.GetHelper().VisibleItems"`，节点与连线共用一个选择器，见 `adapters/razor.md` §二·6）；
+  MAUI 那家虽然也叫 `VisibleItems`，但喂的是**去掉连线**的包装（`NodeOnlyVisibleItems`，连线交给共享 overlay）。
 - **Jalium 的 tree-view 还多耦合一个 `SlotView`**（端口数学与命中都用它的静态常量/方法，
-  见本节上表），所以"少生成一条兄弟就编译不过"在这家覆盖两条：`GridDecorator` 与 `SlotView`
-  （见 `adapters/jalium.md` §二·3）。
+  见本节上表），所以"少生成一条兄弟就编译不过"在这家覆盖三条：`GridDecorator`、`SlotView`
+  与 `TemplateSelector`（`:104` 的属性默认值就调 selector 条目的工厂，见 `adapters/jalium.md` §二·3）。
 
 ---
 

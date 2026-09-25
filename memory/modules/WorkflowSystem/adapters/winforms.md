@@ -36,6 +36,7 @@
 - **静态 `Get/Set` + `ConditionalWeakTable`**：每个 Behavior 都是 `sealed class`（或 `static class`）+ 一对 `GetXxx/SetXxx(Control, …)`，状态放 CWT（`WorkflowSurfaceBehavior.cs:119`、`WorkflowSlotLayoutBehavior.cs:33`、`WorkflowNodeDragBehavior.cs` 的 `DragState`、`ViewPool.cs:20` 的 `PoolState`）。⇒ **`ConditionalWeakTable` 不可枚举**，所以任何需要「遍历所有已挂载控件」的地方都得另存一个普通列表：`WorkflowMinimapOverlay.cs:34-37` 明写这一点（`BoundControls` 普通 `List<Control>`，注释：「ConditionalWeakTable 在某些目标框架上不可枚举」）。
 - **没有 `DataContext` ⇒ 反射填上下文**：`ViewManager.ApplyContext` 先 `view.Tag = item`，再对 `"ViewModel"` / `"DataContext"` / `"BindingContext"` 三个属性名做反射 `SetValue`（`ViewManager.cs:223-237`）。⇒ **视图控件想拿到 VM，要么读 `Tag`，要么有那三个名字之一的属性**；其它名字静默拿不到（不报错）。
 - **没有 `DataTemplate` ⇒ `IWorkflowTemplateSelector`**：一个自定义接口，`Control CreateView(object item)`（`ViewManager.cs:14-20`）。契约要求由用户实现并把选择器交给 `ViewManager.SetTemplateSelector`（`:48-51`）。
+- **池不安排 z 序**：`ViewManager.AddItem` 在 `Controls.Add` 之后无条件 `view.BringToFront()`（`ViewManager.cs:171`），`Controls[i]` 的序号 0 是最前面（`Add` 追加到末尾 = 最后面）。⇒ **凡是进池的视图，`Controls` 的顺序只反映「谁最后被物化」**；需要"永远待在后面"的视图（如这一家的连线）只能由宿主在每次可见集变化后自己 `SendToBack` —— 别家靠 `Panel.ZIndex`，这家没有对应物。
 
 ### 2.2 没有路由/隧道事件 ⇒ `Application.AddMessageFilter`，而且是**进程级单例**
 

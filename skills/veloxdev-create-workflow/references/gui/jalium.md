@@ -52,7 +52,7 @@ This matters because **Jalium's renderer culls child elements by layout box**. A
 
 ## Item templates — `VeloxDev.Jalium.Templates`
 
-**Generates code only** — all seven items are a single `.cs` file, no XAML anywhere. Siblings are referenced as **static members**, not markup aliases: the generated tree calls `GridDecorator.RulerThickness`, `SlotView.DesignWidth`, `SlotView.InputPortX`, `GridDecorator.DrawGrid(...)` and `ViewPool.SetTemplateSelector(this, TemplateSelector)`.
+**Generates code only** — all seven items are a single `.cs` file, no XAML anywhere. Siblings are referenced as **static members**, not markup aliases: the generated tree calls `GridDecorator.RulerThickness`, `SlotView.DesignWidth`, `SlotView.InputPortX`, `GridDecorator.DrawGrid(...)`, `ViewPool.SetTemplateSelector(this, TemplateSelector)` and — for that property's own default value — `TemplateSelector.CreateSelector()`. Generate the selector item as well: without it the tree does not compile.
 
 ⚙ **The tree template wires the virtualize inset and the committed-zoom state machine for you** (`SetVirtualizeInset(GridDecorator.RulerThickness)`, `_zoomPin`, a pinned `UpdateViewport()`), and **removes the demo's `Ctrl`+`+`/`-` key handler** — the host owns zoom and is expected to call `NotifyZoomCommitted()`. Keep that split when you edit it.
 

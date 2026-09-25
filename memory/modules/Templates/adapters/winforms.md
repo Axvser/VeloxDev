@@ -19,8 +19,8 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| tree-view | `UserControl` + 程序化搭壳，内部两个私有嵌套类：`SurfaceCanvas : Panel, IWorkflowGridDecorator` 与 `RulerOverlayForm : Form` | `:32`、`:121-146`、`:181`、`:354` |
-| link-view | `Control`，但**从不作为子窗口存在** —— 由宿主画布在自己的 `OnPaint` 里代画 | `:18`、`:262`（`public void Render(Graphics)`） |
+| tree-view | `UserControl` + 程序化搭壳，内部两个私有嵌套类：`SurfaceCanvas : Panel, IWorkflowGridDecorator` 与 `RulerOverlayForm : Form` | `:34`、`:99`、`:177`、`:332` |
+| link-view | `Control`，**池化子窗口**：窗口区域被雕成描边带（`Region`），自己画自己、自己算自己的盒子 | `:29`、`:52`、`:184`（`RebuildGeometry`）、`:250`（`ApplyRegion`）、`:261`（`IsDrawable`）、`:282`（`OnPaint`） |
 | node-view | `UserControl` + 三个私有嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` / `DoubleBufferedPanel`） | `:28`、`:129`、`:219`、`:282` |
 | slot-view | `Control` + 一个手写的 SVG 路径解析器（嵌套 `static class SvgPathParser`） | `:22`、`:198` |
 | grid-decorator | `Panel, IWorkflowGridDecorator`，网格与标尺**画在 `OnPaintBackground`**，`OnPaint` 是空的 | `:17`、`:70-83` |
@@ -51,20 +51,27 @@
    其余四家有标记语言的平台写 `CoordinateHostName="PART_Canvas"`
    （如 `Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-node-view/TemplateClass.xaml:10,29`）。
    ⇒ **抄这段时不要把 `typeof(Panel)` 换成一个字符串**：这一家的附着属性根本没有"名字"这一档。
-5. **池的数据源是整棵 `Nodes`，且只给一个工厂**：`ViewPool.SetItemsSource(PART_Canvas, _tree?.Nodes)`
-   与 `ViewPool.SetTemplateSelector(PART_Canvas, _selector)`（`:728-729`）成对出现；
-   `_selector` 只在构造时赋了 `NodeViewFactory`（`:150-151`），**另外三个工厂保持 `null`**。
-   连线不进池（由渲染器列表代画）、插槽由节点卡片自己建，所以池只会遇到节点；
-   一旦有非节点对象流进池，`CreateView` 会抛 `InvalidOperationException`（selector 的 `:22-31`）。
-   ⚠ 与其余六家的**结构差异**：别家喂的是 `Helper.VisibleItems`（空间窗口），这一家喂的是全量 `Nodes`。
-   ⚠ `Helper.VisibleItems` 在 `Src/Adapters/VeloxDev.WinForms/` 里**零命中**，只被用来算
-   `SetVirtualizeInset`（`:990`）→ **这一家模板不发散虚拟化，池只是个回收缓存**。demo 同形：
-   `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.cs:736` 是同一行代码。
-6. **连线渲染器列表的装配顺序与生命周期**：`_linkRenderers`（`:96`）在构造时交给画布（`:143`），
-   画布用它 `OnPaint` 逐条 `lv.Render(g)`（`:264-276`，注释 `:91-95` 说明为什么不做子窗口）；
-   `RebuildLinkRenderers` 先 `Dispose` 全部旧的再重建（`:746-764`），顺序是
-   **`_tree.VirtualLink` 在前、真实连线随后**；每条渲染器的 `ExternalInvalidate` 指向画布（`:779-784`）。
-   ⇒ 改"连线怎么画"要动的是 host 的 `OnPaint` 与 `Render` 两侧，不是某个标记里的形状。
+5. **池的数据源是树的可见集，两个工厂都接**：`AttachTree` 里
+   `ViewPool.SetItemsSource(PART_Canvas, _tree?.GetHelper().VisibleItems)` 与
+   `ViewPool.SetTemplateSelector(PART_Canvas, _selector)`（`:695-696`）成对出现；
+   `_selector` 在构造时同时赋 `NodeViewFactory` 与 `LinkViewFactory`（`:148-149`），
+   **另两个工厂保持 `null`**（插槽由节点卡片自己建，没有树视图条目流动）。
+   ⇒ 节点与连线**都是池化子窗口**（与其余六家同构）；一旦有插槽/树对象流进池，
+   `CreateView` 会抛 `InvalidOperationException`（selector 的 `:22-31`）。
+   ⚠ **可见集由 `helper.Viewport` 驱动，而 Viewport 是模板在 `ApplyPan` 里写的**（`:941-947`）
+   —— 不写 Viewport，`VisibleItems` 只有一个 `VirtualLink`，画布全空（别的家由适配器写）。
+   ⚠ `Helper.VisibleItems` 在 `Src/Adapters/VeloxDev.WinForms/` 里**零命中**：
+   **这家模板自己发散虚拟化**，适配器不管。demo 同形
+   （`Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.cs`）。
+6. **连线层改了架构之后的三条手写契约**（z 序、订阅顺序、自己画自己）：
+   - **池会把每个它物化或复用的视图 front 一次**（`ViewManager.AddItem` 里 `Controls.Add` 之后紧跟 `BringToFront()`），
+     而 `VisibleItems` 的顺序是 `VirtualLink → 节点 → 连线`，所以**每次可见集变化后连线都会跑到节点之上**。
+     修法：`OnVisibleItemsChanged` → `ArrangeLinkViews()`（`:725-741`，`SendToBack` 全部 `LinkView`）。
+   - **这个钩子必须注册在池的处理函数之后**，所以 `AttachVisibleItems` 只允许在
+     `SetItemsSource/SetTemplateSelector` 之后调用，而且每次都退订重订（`:709-722`）。
+   - 连线视图的窗口区域雕成描边带（见 §三 P9），**它自己不再接受画布的任何代画**：
+     `LinkView` 没有 `Render(Graphics)`、没有 `ExternalInvalidate`、几何不再由外部写
+     —— 改"连线怎么画"只动 link-view 一个文件。
 7. **小地图是"设属性"而不是"写标记"**：`MinimapOverlay` 属性的 setter 负责
    `value.Name = "PART_MinimapOverlay"`、`Controls.Add`、`BringToFront`、
    `WorkflowSurfaceBehavior.SetMinimapOverlayName(this, "PART_MinimapOverlay")`，并订阅/退订
@@ -93,9 +100,9 @@
 ### P2 · 六个 `ParseColor` 副本，而且这一家多一条 `Color.FromName` 兜底
 
 `private static Color ParseColor` 在 `workflow-{grid-decorator,link-view,minimap-overlay,node-view,slot-view,tree-view}`
-六处各一份（`:253`、`:296`、`:299`、`:751`、`:149`、`:1090`），只有 `template-selector` 没有。
+六处各一份（`:253`、`:320`、`:299`、`:751`、`:149`、`:1046`），只有 `template-selector` 没有。
 这一家的实现**比其他平台多一个兜底**：解析不出 `#RRGGBB`/`#AARRGGBB` 时
-`return Color.FromName(value);`（`workflow-link-view/TemplateClass.cs:320`，其余五份同形）。
+`return Color.FromName(value);`（`workflow-link-view/TemplateClass.cs:344`，其余五份同形）。
 ⇒ 占位符写错（少一位、拼错名字）时**不抛也不报**，`Color.FromName` 对未知名字返回
 ARGB 全 0 的透明黑 —— 表现是"这条线/这个背景不见了"。改解析规则要动六处。
 
@@ -162,14 +169,34 @@ WPF/WinUI/Avalonia/Jalium 四家是空转参数（`../architecture.md` §7.1）�
 
 | | 独立条目 `workflow-grid-decorator` | tree-view 内部的 `SurfaceCanvas` |
 |---|---|---|
-| 画在哪 | `OnPaintBackground` 里 `Render`，`OnPaint` 空（`:70-83`） | `OnPaintBackground` 画网格（`:243-262`），`OnPaint` 画连线（`:264-276`） |
-| 标尺 | **自己画**：填充两条带 + `DrawRulers`（`:103-106`、`:142`） | **不画**：`RulerBand => 0`（`:241`），交给 `RulerOverlayForm` |
-| `RulerThickness` | 有，默认 36（`:21`、`:49`） | 没有这个属性（浮层窗体持有 `RulerThickness`，`:823`） |
-| 调色板 | 八个 `Template*` 占位符（`:23-32`） | 网格背景用 `TemplateSurfaceBackground`，其余三个**硬编码字面量**（`:191-193` 的 `#2A2D2E`/`#3A3D40`/`#4D4D4D`） |
+| 画在哪 | `OnPaintBackground` 里 `Render`，`OnPaint` 空（`:70-83`） | `OnPaintBackground` 画网格（`:235-254`）；**没有 `OnPaint`** —— 连线由各自的池化视图自己画 |
+| 标尺 | **自己画**：填充两条带 + `DrawRulers`（`:103-106`、`:142`） | **不画**：`RulerBand => 0`（`:233`），交给 `RulerOverlayForm` |
+| `RulerThickness` | 有，默认 36（`:21`、`:49`） | 没有这个属性（浮层窗体持有 `RulerThickness`，`:392`） |
+| 调色板 | 八个 `Template*` 占位符（`:23-32`） | 网格背景用 `TemplateSurfaceBackground`（`:65`），其余三个**硬编码字面量**（`:187-189` 的 `#2A2D2E`/`#3A3D40`/`#4D4D4D`） |
 
 ⇒ `RulerBand => 0` 是这一家 tree-view 的**正确**取值（标尺不占内容内缩，是浮层），
 别照着独立装饰器的 `RulerBand => RulerThickness`（`workflow-grid-decorator/TemplateClass.cs:68`）
 "修"成一致；两者是不同角色的两个对象。
+
+### P9 · 连线的"雕窗"是这一家能把连线池化的前提，动几何就动它
+
+WinForms 的子窗口**不透明、也不与兄弟合成**，所以连线视图不能像其余六家那样用一张透明
+全幅画布去放：一旦做成矩形窗口，它要么盖掉网格，要么（透明版）把下面的兄弟一起擦掉 ——
+这正是这一家早年放弃子窗口、改成"画布代画"的原因（`WorkflowSystem/adapters/winforms.md` 里
+没有这条，只在旧注释里）。现在的做法是**把窗口区域雕成折线的描边带**：
+
+- `RebuildGeometry`（`link-view/TemplateClass.cs:184`）：`AddLines` 四点 → `Widen(厚度 + 2×RegionPad)`
+  → 取 `GetBounds` 落在整像素上（`Location/Size`），路径平移到窗口局部后交给 `Region`（`:250`）。
+  ⇒ **窗口只在线的位置上存在**，网格在它周围照常可见，命中测试也只落在线上（视图还 `Enabled = false`）。
+- `BackColor` 必须是**画布网格底色**（`:56`）：雕出来的带子会被自己的背景填满，颜色不一致就是一条可见的缝。
+- `RegionPad = 1.5f`（`:35`）：给抗锯齿留的余量。调大 → 带子变宽，网格线被擦掉的缺口变明显；
+  调小 → 线边缘被区域裁掉，看着发毛。
+- ⚠ **零长度折线（连线手势的第一帧）`Widen` 会抛 `ExternalException`**（GDI+ 拒绝无法描边的路径），
+  异常会从 `IsVisible` 的 setter 里冒到消息泵 —— 所以有 `IsDrawable`（`:261`）兜住零长度与 NaN 两种。
+  改这一带时不要删掉它。
+
+⇒ 结论：**连线的"一个视图一个窗口"是靠区域雕出来的，不是靠透明**。改厚度/折线形状/抗锯齿时，
+三处要一起看：`_thickness`、`RegionPad`、`IsDrawable`。
 
 ---
 

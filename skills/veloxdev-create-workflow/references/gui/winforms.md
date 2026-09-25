@@ -40,7 +40,23 @@ If you add content, add its scaling to that same path. Do not introduce a render
 
 ## Links
 
-Self-drawn in the consumer's `OnPaint` — `DrawLines` over the four-point polyline, endpoints from `Sender.Anchor` / `Receiver.Anchor`.
+Pooled like the nodes: `ViewPool` materializes one `LinkView` per link in the tree's **visible set**
+(`Helper.VisibleItems`, the gesture's virtual link included) and recycles them as that set changes.
+Each view paints its own four-point polyline (`DrawLines`, endpoints from `Sender.Anchor` /
+`Receiver.Anchor`) — nothing draws links on behalf of another control.
+
+⚙ **A link view is an opaque child window, so it carves its own window region to the stroke band of
+the polyline** (padded by the antialiasing fringe). A bounding box would paint over the grid, and a
+full-size transparent sibling window does not composite here at all — WinForms clips it so only the
+topmost one paints. Give it a `BackColor` equal to the surface's grid background, and keep the region
+in step when the thickness or the polyline changes.
+
+⚙ **The pool fronts every view it materializes or recycles, so links must be sent to the back after
+each visible-set change** — otherwise they end up over the node cards. The tree view does that in one
+pass, from a hook registered behind the pool's own collection handler.
+
+⚙ A zero-length polyline (the connection gesture's first frame) has no stroke to widen and GDI+ throws
+on it — skip the region instead of widening.
 
 ⚙ Use a synchronous `Invalidate()` + `Update()` after changing geometry. An asynchronous invalidate leaves trails during a drag, which is why the adapter also applies `WS_CLIPCHILDREN` / `WS_EX_COMPOSITED` window styling — and why it skips that styling above roughly a hundred descendants.
 
@@ -48,7 +64,7 @@ Self-drawn in the consumer's `OnPaint` — `DrawLines` over the four-point polyl
 
 ## Item templates — `VeloxDev.WinForms.Templates`
 
-**Generates code only.** All seven items are a single `.cs` file — no markup at all. Node and slot views are `UserControl` subclasses with `OnPaint`; the tree draws the surface itself.
+**Generates code only.** All seven items are a single `.cs` file — no markup at all. Node and slot views are `UserControl` subclasses with `OnPaint`; node, slot, and link views are all pooled children, and the tree paints the grid surface itself.
 
 ⚙ **This is the only fully-wired pack.** Every declared parameter, including all four slot colours and `slotPath`, has a consumer here — which makes it the pack to read when you want to know what a parameter is supposed to do on a framework where it is inert.
 
