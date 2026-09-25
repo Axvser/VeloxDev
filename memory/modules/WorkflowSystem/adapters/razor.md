@@ -236,3 +236,29 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 2. **区域设置陷阱仍然成立，且比历史说法记的范围更大**：见 §4·1 —— 写侧 6 组位置（含 `WorkflowCanvasTransformBehavior.ToCss`
    这个**公开静态 API**）、解析侧 1 处，**全在适配器里**；demo 侧那 2 处已按不变文化修好。
    「只修 demo」是不够的，适配器才是消费方会直接踩到的那一层。
+
+---
+
+## 六、非 Trimmed demo 的连线交互（悬停命中 / Delete / 右键菜单）
+
+**只做在 `Examples/Workflow/Blazor/Demo/`（非 Trimmed）；模板与 `Blazor Trimmed` 仍是 `pointer-events:none` 的被动视觉** —— 这条背离是刻意的，见 `memory/specifications/item-template-specifications.md` §五。
+
+| 事 | 落点 |
+|---|---|
+| 命中 | `Components/Workflow/TemplateLinkView.razor:36-43` —— 只给画线的 `<g>` 一层 `pointer-events="@HitTargetCss"`（`"stroke"`；虚拟连线 `"none"`）；`<svg>` 与整层 wrapper 的 `pointer-events:none` **一行未动** |
+| 选中视觉 | `Components/Workflow/TemplateLinkView.razor.cs:574-605`（`SelectedColor = "#FFFF4500"`、线宽 +1.5、线体 alpha 0.55→0.85、管壁与彗星底色一起跟） |
+| 键盘焦点 | `Components/Pages/Workflow.razor:165-179` 给连线层 `tabindex="0"` + 悬停时 `FocusAsync(preventScroll: true)` |
+| 右键菜单 | `Components/Pages/Workflow.razor:274-283`（透明 backdrop + `position:fixed` 单按钮面板「删除连线」）、样式 `wwwroot/app.css:912-943`、处理 `Components/Pages/Workflow.razor.cs:352-405` |
+
+三条结论：
+
+1. **命中半径 = 画出来的最外圈管壁的半宽（实测 ±5.5px）**，靠浏览器原生的 `pointer-events: stroke` 拿到，**没有加任何额外的透明宽描边、也没有加元素**。实测（无头 Chrome + CDP 真手势）：沿弧长中点做法向二分，边界正好 `stroke-width: 11px` 的一半；8px / 20px 处 `elementFromPoint` 落到 `<div>`；整块 svg 盒子（2580×1252px）的左上角也落到 `<div>` ⇒ **不是包围盒**。七家一致的不是半径数值，而是「不超出画出来的范围」。
+2. **`@foreach (var link in tree.Links)` 必须带 `@key="link"`**（`Components/Pages/Workflow.razor:165-179`）。没有它时删掉一条连线，DOM 会**少两个** svg —— `TemplateLinkView` 的 `CanRender` / `IsVirtual` / 端点订阅只在 `OnInitialized` 里 `Sync(Link)` 播种，按位置复用会把这几样连同悬停状态交给**旁边那条线**；模型只少 1 条（`tree.Serialize()` 可证）。原 demo 没有任何删连线入口，所以这是个**触发不到**的潜伏 bug，被本次的删除功能踩了出来。
+3. `FocusAsync` 的 **`preventScroll: true` 是必须的**：这一层和画布一样大，让它自己滚进来会把画布拽走。另外 `outline:none` 也是必须的（否则整张画布套一个巨大焦点框；选中线的橙红就是焦点指示）。
+
+已知代价（不是缺陷，别当 bug 修）：菜单打开时那层**透明 backdrop 会吞掉画布手势**（这正是菜单该做的），于是此时右键另一条线只是先关掉菜单；悬停会触发一次整页重渲染（回调是 `EventCallback`）。
+
+## 七、核不到的东西（写下来免得下一个人重找）
+
+- **多 circuit（Blazor Server）下的选中/菜单状态**：`_selectedLink` / `_menuLink` 是页面实例字段（刻意不是 static，避开 Avalonia 那种进程级 static 在 Server 上串户），但只跑了单标签页。
+- **触摸/笔**：CDP 只打了鼠标；`pointer-events: stroke` 本身与指针类型无关，未实测。

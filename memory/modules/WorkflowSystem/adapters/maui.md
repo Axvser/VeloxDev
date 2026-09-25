@@ -204,6 +204,52 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 
 ---
 
+## 五、非 Trimmed demo 连线层的三件事（悬停命中 / Delete / 右键菜单）
+
+本家与另外六家不同形：**连线不是视图**，是满屏 `GraphicsView` 一趟画完（§二·4）。所以三件事全落在
+`WorkflowLinkOverlay.cs` 里，命中靠**自己算几何**，不靠平台命中测试。
+
+| 事 | 落点 | 依据 |
+|---|---|---|
+| 谁来收输入 | DP `InteractionSource`（`View`）；宿主绑**页面根**，不绑这层自己 —— 这层是 `InputTransparent` 且压在 `ScrollViewer` 下，收不到指针 | `WorkflowLinkOverlay.cs:86`；`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml:200` |
+| 命中 | `HitTestLink`：每条链的锚点走与绘制**同一条**变换（`ToViewport`）采成折线，逐段判距，半径 6（与其余六家同值） | `:669`、`:372`、`:51` |
+| 高亮 | 选中那条换 `SelectedLinkColor`（默认 `Colors.OrangeRed`）并把线宽 +1.5（管壁、彗星一起） | `:1294`、`:1325` |
+| 删除 | `DeleteSelectedLink` → `DeleteCommand`；连线离开 `Links` 时把选中一并清掉（撤销/别处删也走这条） | `:753`、`:1121` |
+| 右键 | 命中才 `SelectLink` + 平台 `MenuFlyout`（一项「删除连线」） | `:631`、`:885` |
+| 取焦点会不会带滚画布 | **不会** —— `Focus()` 打在 `InteractionSource`（页面根）上，而它是画布 `ScrollView` 的**祖先**；WinUI 的 bring-into-view 只从**焦点元素往上冒**，画布那个 `ScrollViewer` 根本不在那条路上 | `:747`；`WorkflowView.xaml:200`（`Root` 是 ContentView 根，`PART_ScrollViewer` 在它里面） |
+
+五条结论（都是这台机器上实测出来的，不是推导）：
+
+1. **Windows 上不能用 `PointerGestureRecognizer` 收悬停**：挂上去之后 `PointerMoved` 一次都不来（同一次会话里改成
+   `AddHandler(UIElement.PointerMovedEvent, …, handledEventsToo: true)` 挂到**同一个** `ContentPanel` 上立刻就有）。
+   所以 `AttachPlatformHooks`（`:774`）走原生路由事件，`PointerGestureRecognizer` 只留在 `#if !WINDOWS`（`:646-663`）。
+   方向与 `WorkflowNodeDragBehavior.cs:93-97` 的注释一致 —— 那边也是嫌它不可靠才不用。别照抄「用 PointerGestureRecognizer 做 hover」的通用建议。
+2. **`SelectLink` 里必须 `Focus()`**（`:747`）：键事件从**焦点元素**冒泡，焦点不在源子树里时 `KeyDown` 不经过挂勾子的那个元素。
+   实测同一段代码：加之前按 Delete 只看到 `PointerExited`、没有 `KeyDown`；加了之后立刻到。`handledEventsToo` 取 `false` 是刻意的 ——
+   输入框吃掉 Delete 改自己的光标时得让它赢。
+3. **菜单一开就会来一发 `PointerExited`**（飞出物把指针接管走），不认这一下就会在菜单弹出的瞬间把选中抹掉、违反「右键保持选中」。
+   做法是 `_menuOpen` 标记 + `MenuFlyout.Closed` 复位（`:117`、`:622`、`:891`）。**与 WPF/Avalonia 的选择相反**（那两家在
+   `MouseLeave`/`PointerExited` 里**不**跳过，理由是 popup 关掉后没有配对的 Entered/Moved、高亮会永久留下）——
+   本家能跳过是因为悬停由 `PointerMoved` 驱动：指针一动就重判一次，复位走的是「下一条消息」而不是「配对的 Entered」。
+4. **菜单用平台的 `MenuFlyout`，不用 MAUI 那个**（`:885`）：跨平台 `MenuFlyout` 只能整层挂成 `ContextFlyout` ——
+   右键落在哪都弹、落在空白处也取消不了（`FlyoutBase.Opening` 在 MAUI 侧不暴露），而契约要求「只有点在连线上才弹」。
+   代价写清楚：**非 Windows 上右键菜单是空的**（`ShowDeleteMenu` 的 `#else` 是空实现），那两个平台只剩悬停高亮与 Delete。
+5. **悬停取焦点不会带滚画布（Avalonia/Jalium 那条缺陷在本家不存在，实测）**。画布滚到非零偏移
+   （HUD 读作 `视口(画布) 320, 195`）后：`SelectLink` → `Focus()` 走 5 轮、外加 3 秒连打，滚动在
+   **同一回合 / +250ms / +750ms** 三处都一位没动，HUD 那行逐字相同；真指针 hover（`SendInput` 走完，
+   先确认应用收到了指针：`_lastPointer` 从 nil 变成那个点）同样一次没动，而选中确实生效 —— 截图里同一条线
+   从静息蓝变成 `OrangeRed`。**原因是结构而非运气**：见上表最后一行，焦点元素是画布的祖先而不是后代。
+   反例（说明这套检测看得出「焦点带来的滚」）：往 `PART_Canvas` 里塞一个 `Entry` 放在画布 (2400,120) 再 `Focus()`，
+   画布**同一回合**就从 `320,194.667` 跳到 `1292.667,148` ⇒ 这条 `ScrollView` 的「焦点就滚」是**开着**的
+   （MAUI 没碰 `BringIntoViewOnFocusChange`，MAUI 的程序集里根本没引用过这个名字）。
+   **所以别为了「保险」去关掉自动滚进视口**：节点卡里的输入框仍该滚进来，本家不需要任何修补。
+   同一轮也验了 Delete 没退化：按 hover 那条路选中之后真按一次 Delete，`Links` 12 → 11。
+
+改这块时的两条禁令：**别去掉 `InputTransparent = true`**（`:82`，同 §四·6）；**别把命中半径放大成整层包围盒** ——
+那会让画布空白处每一次移动都命中某条线（原文的「别把整块画布都算命中」就是这个意思）。
+
+---
+
 ## 附：写这份档案时**没能验证 / 不确定**的
 
 - §二·4 的「~16k 设备像素」是代码注释里的数字（`WorkflowLinkOverlay.cs:15-16`），没有在本仓库实测复现；
@@ -212,3 +258,14 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
   只有代码依据，没有找到运行期验证记录。
 - 本家没有 `WorkflowGridDecorator`（见 §一），所以「装饰器的 `RulerBand` 必须转发给虚拟化 inset」这条
   （`WorkflowSurfaceBehavior.cs:1130-1132`）在本仓库里只由 demo 的实现验证过。
+
+### 验证这块时用到的两个事实（下次还要跑真 demo 的话）
+
+- **合成指针输入必须走 `SendInput`**：`SetCursorPos` 能把光标挪过去，但 WinUI 不为它派发 `PointerMoved` ——
+  按钮不亮、hover 不触发，看起来像功能的锅。同一段测试改用 `SendInput`（`MOUSEEVENTF_MOVE|ABSOLUTE`）后立刻正常。
+- **这台机器上同时跑着别家的 demo**，压在下面的窗口收不到指针：测之前要把自己的窗口抬到最上（`SetWindowPos` 带 `HWND_TOPMOST`），
+  否则点击与移动全落到别人窗口上。注意 `SetWindowPos` 的 `HWND` 形参必须按指针宽度传（ctypes 里不声明 argtypes 会把 `-1` 当 32 位传，调用静默失效）。
+  另外 `WindowFromPoint` 给的是**最深的子窗口**，WinUI 会在顶层窗口下挂子 HWND —— 比「这块是不是我的」要用 `GetAncestor(hwnd, GA_ROOT)`。
+- **别家的注入式测试也在驱动同一个物理指针**：光标会被抢走（写进去的位置，下次读回来已经不是它），所以「悬停选中」这类断言
+  **必须先断言应用收到了指针**（读 overlay 的 `_lastPointer`），否则会把「输入没到」误判成「功能坏了」。本家这条结论
+  （§五·5）是三路互证：`SelectLink` 直调 5 轮 + 3 秒连打、真指针 hover 成功那一轮、以及焦点反例 —— 不依赖任何单次 hover。

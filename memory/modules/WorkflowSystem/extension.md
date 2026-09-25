@@ -57,6 +57,7 @@
 | 19b | 在 `ReceiveAsync` 里改共享状态后指望并行安全 | `RunParallelAsync` 在每条分支前恢复 `sourceData`（`CompilerEx/Runtime/RuntimeEngine.cs:205,211`）—— 共享的 `IRuntimeContext` **不是线程安全的**，没有真并行 | 状态走 `context.Set/TryGet`；不要假设分支并发 | `CompilerEx/Runtime/RuntimeEngine.cs:205-213` |
 | 20 | 在适配器里 `new` 一个自己的 Tree/Node | 视图必须绑定到**已经 `InitializeWorkflow()` 过**的组件；适配器只负责视图池化与几何 | 组件由用户 ViewModel 层提供，适配器只消费 | `Templates/ViewModels/*.cs` 的构造即 `InitializeWorkflow()` |
 | 21 | `[SlotSelectors]` 标了却还想让 Agent 用 `PatchNodeProperties` 改它 | 工具面**主动拒绝**并指向专用工具 | 用 `SetEnumSlotCollection` | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/ComponentPatcher.cs:127-134` |
+| 22 | 连线视图在悬停时取键盘焦点（为了让 Delete 生效），却不拦平台随之而来的「把焦点元素滚进视口」 | 连线视图的框往往是**整块画布大小** ⇒ 焦点一落上去，滚动容器就把画布跳一段。三家机制不同：Avalonia 是 `ScrollViewer.BringIntoViewOnFocusChange`（默认 true）、WPF 是 `RequestBringIntoView`、Jalium 是平台的安全区/软键盘事件分支延迟发的 `BringIntoView`（**极小概率**：需「表面持有焦点 + 该事件 + 其后一次布局」同时成立） | 在**该视图自己**身上吃掉这条请求（`AddHandler(RequestBringIntoViewEvent, …, e => e.Handled = true)`；Jalium 那种要按 `TargetObject == this` 收窄）。**不要**关掉整块画布的自动滚进视口 —— 节点卡里输入框的同类请求仍该生效 | 七家非 Trimmed demo 的实测见各自 `adapters/<平台>.md` §五；Avalonia 的因果 A/B 与 Jalium 的 IL 级机制链都记在那里 |
 
 ---
 

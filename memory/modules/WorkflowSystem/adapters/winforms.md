@@ -36,7 +36,7 @@
 - **静态 `Get/Set` + `ConditionalWeakTable`**：每个 Behavior 都是 `sealed class`（或 `static class`）+ 一对 `GetXxx/SetXxx(Control, …)`，状态放 CWT（`WorkflowSurfaceBehavior.cs:119`、`WorkflowSlotLayoutBehavior.cs:33`、`WorkflowNodeDragBehavior.cs` 的 `DragState`、`ViewPool.cs:20` 的 `PoolState`）。⇒ **`ConditionalWeakTable` 不可枚举**，所以任何需要「遍历所有已挂载控件」的地方都得另存一个普通列表：`WorkflowMinimapOverlay.cs:34-37` 明写这一点（`BoundControls` 普通 `List<Control>`，注释：「ConditionalWeakTable 在某些目标框架上不可枚举」）。
 - **没有 `DataContext` ⇒ 反射填上下文**：`ViewManager.ApplyContext` 先 `view.Tag = item`，再对 `"ViewModel"` / `"DataContext"` / `"BindingContext"` 三个属性名做反射 `SetValue`（`ViewManager.cs:223-237`）。⇒ **视图控件想拿到 VM，要么读 `Tag`，要么有那三个名字之一的属性**；其它名字静默拿不到（不报错）。
 - **没有 `DataTemplate` ⇒ `IWorkflowTemplateSelector`**：一个自定义接口，`Control CreateView(object item)`（`ViewManager.cs:14-20`）。契约要求由用户实现并把选择器交给 `ViewManager.SetTemplateSelector`（`:48-51`）。
-- **池不安排 z 序**：`ViewManager.AddItem` 在 `Controls.Add` 之后无条件 `view.BringToFront()`（`ViewManager.cs:171`），`Controls[i]` 的序号 0 是最前面（`Add` 追加到末尾 = 最后面）。⇒ **凡是进池的视图，`Controls` 的顺序只反映「谁最后被物化」**；需要"永远待在后面"的视图（如这一家的连线）只能由宿主在每次可见集变化后自己 `SendToBack` —— 别家靠 `Panel.ZIndex`，这家没有对应物。
+- **池不安排 z 序**：`ViewManager.AddItem` 在 `Controls.Add` 之后无条件 `view.BringToFront()`（`ViewManager.cs:171`），`Controls[i]` 的序号 0 是最前面（`Add` 追加到末尾 = 最后面）。⇒ **凡是进池的视图，`Controls` 的顺序只反映「谁最后被物化」**；需要"永远待在后面"的视图（如 Trimmed 那家的连线 —— 非 Trimmed 的 demo 根本不物化连线视图，它由画布代画，见 §4.9）只能由宿主在每次可见集变化后自己 `SendToBack` —— 别家靠 `Panel.ZIndex`，这家没有对应物。
 
 ### 2.2 没有路由/隧道事件 ⇒ `Application.AddMessageFilter`，而且是**进程级单例**
 
@@ -84,7 +84,9 @@
 
 ### 2.8 没有命中测试的「透明背景」问题，但有「哪个子控件被按住」的问题
 
-WinForms 的每个控件都是真窗口，所以不存在 WPF 那种「无背景的 `Grid` 收不到命中」的问题（对照 `memory/workflow-node-drag-hit-test.md`）。反过来它多一道工序：**递归遍历节点卡片的整棵控件树、逐个挂鼠标事件**（`HookControlTree`，`WorkflowNodeDragBehavior.cs:320-351`），并用排除表决定哪些子控件不算拖拽把手（`IsDragHandle`，`:379-384`）：
+WinForms 的每个控件都是真窗口，所以对**本身就是控件**的内容不存在 WPF 那种「无背景的 `Grid` 收不到命中」的问题（对照 `memory/workflow-node-drag-hit-test.md`）。**这只到「内容有窗口」为止**：非 Trimmed 的 demo 把连线画在画布的 `OnPaint` 里，那条线没有窗口，于是 WPF 那个问题原样存在 —— 命中必须在画布的指针处理里手写（§4.9）；反过来，被不透明卡片或浮层的真窗口盖住的那一段连线，画布收不到鼠标消息，也就不可能被命中。
+
+对控件内容，它比别家多一道工序：**递归遍历节点卡片的整棵控件树、逐个挂鼠标事件**（`HookControlTree`，`WorkflowNodeDragBehavior.cs:320-351`），并用排除表决定哪些子控件不算拖拽把手（`IsDragHandle`，`:379-384`）：
 
 ```
 control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
@@ -155,6 +157,25 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 ### 4.8 子控件数超过 100 就换渲染策略
 
 见 §2.6：`CountDescendants(top) > CompositedMaxControlCount`（100）时不上 `WS_EX_COMPOSITED`（`NativeWindowStyleHelper.cs:138-139`）。⇒ 在小图上验收通过的效果，在大图上可能不同；这是**已知的阈值**，不是随机闪烁。
+
+### 4.9 非 Trimmed demo 的连线交互整个落在画布的指针处理里
+
+这家的非 Trimmed demo **不物化连线视图**（`LinkView` 只是几何载体，不在控件树里，由画布 `OnPaint` 统一绘制），所以「悬停高亮 / Delete 删除 / 右键菜单」三件事都写在同一块画布上 —— 没有连线的窗口可挂。
+
+| 事 | 落点 | 依据 |
+|---|---|---|
+| 命中测试 | 画布指针 → 世界坐标 → 逐渲染器 `LinkView.HitTest`；**判的就是绘制用的那张弧长采样表**，所以线弯到哪命中面就到哪 | `Examples/Workflow/WinForms/Demo/Controls/WorkflowCanvas.cs:851-860`、`Examples/Workflow/WinForms/Demo/Views/LinkView.cs:463-474` |
+| 命中半径 | `LinkHitRadius = 6f`（≈ 最外圈辉光管壁的半宽 5.5px） | `WorkflowCanvas.cs:40` |
+| 选中即取焦点 | `SetSelectedLink` 里与上色同一步 `Focus()` | `WorkflowCanvas.cs:862-874`（`Focus()` 在 `:873`）、`:207-208` |
+| 删除 | 走连线的 `DeleteCommand`，**不是**摘控件 | `WorkflowCanvas.cs:889-896`、`:916-926` |
+| 右键菜单 | 自建 `Control`-less 的 `ContextMenuStrip`（只有「删除连线」一项）在命中点 `Show`，**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹） | `WorkflowCanvas.cs:898-913` |
+
+四条要记住的结论：
+
+1. **`LinkHitRadius = 6f`，带宽 ≈ ±5.5px，不是线体那 2px**。那三家文件里 `HitTestLine` 的 `hitRadius = 6.0` 在**悬停路径上不可达**（`OnPointerEntered`/`MouseEnter` 先置选中，带 `!IsSelected` 的移动分支永远进不去）—— 但**不能由此推出它们的命中面只有线体宽度**：保留模式下**画出来的每一层描边都是可命中内容**，悬停命中的是**最外那圈辉光管壁**（`thickness + 9`，半宽 5.5px），Blazor 实测同值、MAUI 与 Jalium 取 6px。本家 `LinkView.Render` 画的就是同样两层辉光，所以 6px 落在这圈之内：七家一致，且都等于「只有画出来的部分能命中」。
+2. **虚拟连线与端点未量出的线不参与命中**：前者是指针下的橡皮筋（永远贴在指针上，选中它没有意义），后者采样表为空（`IsLinkRenderReady` 那条门的另一面）。判据写在 `LinkView.HitTest` 的第一行。
+3. **焦点必须与「上色」同一步发生**（`SetSelectedLink` 里），画布靠 `ControlStyles.Selectable` 才获焦、靠 `TabStop = false` 不进制表位。写成「被点击才给焦点」就会重演 Avalonia 那个 bug：悬停变红但 Delete 要先点一下（见 `adapters/avalonia.md`）。这一家没有 WPF 那种「拿到焦点就把自己滚进视口」的副作用 —— 平移在宿主手里，实测悬停前后 `_panOffset` 不变。
+4. **已知代价：连线被卡片/浮层窗口盖住的那一段不可悬停**。指针落在卡片（或小地图/HUD）的真窗口上时画布收不到 `MouseMove`，只有画在空白画布上的那段可命中。这是「画布代画连线」这一形状的固有代价 —— 换成 Trimmed demo 那种「一条线一个窗口」的形状才有全段命中，而那种形状要付 §2.1 的 z 序与 §2.3 的透明代价。
 
 ---
 

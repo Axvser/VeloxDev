@@ -182,3 +182,28 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 9. **`SyncSlot` 在 `Bounds` 未测量时直接返回**（`:276`：`control.Bounds.Width <= 0 || control.Bounds.Height <= 0`）。这是这家版的「NaN 锚点 = 未测量」门（Core 那边是 `WorkflowSlotUpdateGate`）；**不要**在这里改成「用 0 兜底」，那会让连线先在节点原点画一帧再跳走。
 
 10. **池建视图时传的是 VM，不是 `null` —— 传 `null` 会让自定义 `IDataTemplate` 选择器整个失效。** 那一行现在是 `template?.Build(viewModel)`（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs:168`，2026-09-25 从 `Build(null)` 改来）。原因：Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的若是个**选择器**，轮到 `Build` 时才是它挑内层模板的时候；传 `null` 它无从下手（`workflow-template-selector` 的 `SelectTemplate(null)` 抛 `InvalidOperationException`）⇒ **视图一个都不建、画布空着、不报错**。实测（Avalonia Trimmed demo，装记录仪）：`Build(null)` 时 5 次 Build 全失败（1 条连线 + 4 个节点，正好对应基线的 4 张卡），截图是空画布；改成传 VM 后日志为 `Build NodeViewModel -> NodeView`×4 与 `Build LinkDefaultViewModel -> LinkView`，卡片回来。**别把它「简化」回 `Build(null)`** —— 其余三家（WPF/WinUI/MAUI）没有这个问题，因为它们的 `DataTemplateSelector` 只负责「选」，建由适配器 `LoadContent()`/`CreateContent()` 做。
+
+---
+
+## 五、非 Trimmed demo 连线视图的三件事落点（含右键菜单）
+
+两个自绘连线视图各有一份，**都要改** —— demo 的 `WorkflowView.axaml` 按 `LinkViewModel.UsePolyline`（默认 `true`）在两者之间切换，不是死代码：
+
+| 事 | `PolylineCurveView.axaml.cs` | `BezierCurveView.axaml.cs` |
+|---|---|---|
+| 命中 | `HitTestLine`，沿弧长表逐段判距，`hitRadius = 6.0`（`:492`） | `HitTestCurve`，40 段折线逼近，半径 6（`:269`，改动前就有） |
+| 右键 | `OnPointerPressed` 判 `IsRightButtonPressed` → 命中才 `_menu.Open(this)`（`:442`） | 同形（`:221`） |
+| 选中即取焦点 | `OnPointerEntered` 里 `IsSelected = true` + `CurveSelectionManager.Select` + `Focus()`（`:424`） | 同形（`:189`）+ `OnPointerMoved` 里再判一次（`:203`） |
+| 删除 | 菜单项 `Click` → 读视图**当时的** `DataContext` 的 `DeleteCommand`；Delete 键走同一个 `DeleteLink()`（`:477`/`:485`） | 同形（`:255`/`:263`） |
+
+三条结论：
+
+1. **命中面是画出来的那圈描边，不是整块画布框**（实测 2026-09-26，SendInput 从窗口外跳到「离线约 19px 的空画布」上：线体保持静息青色、`PointerEntered` 不触发；压到线上才高亮）。所以「悬停＝选中」的实义就是「指针压进描边范围」。右键那条判据（`HitTestLine`，半径 6）与框架给的带宽同量级、今天不会再挡掉什么 —— 留着它是**防线**：命中面一旦被改粗（例如给视图加上背景）也不会在空白处弹出菜单。**别按「整块画布都会命中」这条错读去改这层逻辑**（本节早先就是这么写的，已按实测改正）。
+2. **菜单项不绑命令是刻意的**：视图会被池化改绑给另一条链接，`Click` 处理器在点击那一刻才读 `DataContext`，绑定则可能指着旧 VM。菜单现建（`_menu ??= BuildMenu()`）、用 `ContextMenu.Open(this)` 打开。
+3. **弹菜单那一刻高亮会掉，属既有悬停规则的必然结果**：popup 把指针从视图上拿走 ⇒ `OnPointerExited` ⇒ 取消选中。删除不受影响（第 2 条）。曾试过在 `OnPointerExited` 里按「菜单是否打开」跳过取消 —— 实测会把某条线的高亮永久留在画布上（`Closed` 后没有配对的 `Entered`），已回退；要动这块得先想清楚谁来复位。
+
+**实测（2026-09-26，SendInput + 闭环伺服取点，每一步先断言）**：指针经伺服落在线体上（48×48 邻域内体色像素 ≈25–160 → 同一点变暖色 ≈340 = 高亮，说明框架认的是「画出来的描边」而不是整块画布框）→ 合成右键 → **原生 `ContextMenu` 弹出，只有「删除连线」一项** → 合成左键点该项 → 那条线消失（两端端口由白/绿变灰）。`hitRadius = 6.0` 与框架给的带宽同量级（最外那圈辉光是本体 + 9px，半宽 ≈ 5.5px），既不放宽也不收窄实际命中面；它对右键这条路径是活的判据。
+
+**悬停取焦点的连带代价 = `ScrollViewer` 的 `BringIntoViewOnFocusChange`（默认 `true`）。** 连线视图是整块画布大小，于是「焦点一落到它身上，画布就跳一段」—— 用户报的就是这个（与 WPF 那次同源，触发点是**悬停里的 `Focus()`**）。拦法：**在发源地吃掉这条请求**，两个连线视图的构造函数里各写一次 `AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);` —— 作用域刻意收在连线视图上，节点卡里输入框被聚焦时照样滚进视口。**不要**改成 `protected override void OnRequestBringIntoView(...)`：那个符号不是可继承的虚方法，编译报 `CS0115`。**实测（2026-09-26，同一套断言链）**：先把画布滚到非零偏移 `视口(画布) 210, 42`（并断言按下点无线体），再悬停一条线 —— 同一点由体色变暖色（高亮）、随后 `VK_DELETE` 把那条线删掉（浮层「连线 N/M」总数 12 → 11）= 焦点确实拿到了，而 `视口(画布)` 前后都是 **210, 42**（离悬停点较远的画布区域 0 个像素变化）；指针移开到空白处后仍是 210, 42。
+
+**给别人量这块时的两个坑**：(a) **一份没关掉的菜单会吞掉之后的全部悬停** —— 视图再也收不到 Enter/Move，量出来像是「悬停坏了」；下一次测量前必须先把菜单关掉（`Esc`）并断言它真的关了。(b) **Avalonia 的 UIA 树里看不到 `ContextMenu` 的菜单项**（`AutomationElement.RootElement` 下按名字找不到「删除连线」），所以「菜单有没有弹」在这家只能靠像素/肉眼判，别把 UIA 查不到当成没弹。

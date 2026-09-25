@@ -150,7 +150,30 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 ---
 
-## 五、这份文件没写的东西
+## 五、非 Trimmed demo 连线视图的三件事落点（含右键菜单）
+
+`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs` 一个文件里三件事：
+
+| 事 | 落点 | 依据 |
+|---|---|---|
+| 命中 | `HitTestLine(Mouse.GetPosition(this))` —— 沿弧长表逐段判距，`hitRadius = 6.0` | `:529`（右键那一层）、`:481`（`OnHoverMouseMove`） |
+| 选中即取焦点 | `MouseEnter` 与 `OnContextMenuOpening` 里各 `Focus()` 一次 | `:102`、`:489` |
+| 右键菜单 | **用 WPF 自带的开启时机**：`ContextMenu = BuildMenu()` 挂上属性，再由 `ContextMenuOpening` 在「不在线上」时 `e.Handled = true` 取消 | `:108-109`（挂载）、`:489`（取消） |
+| 删除 | 菜单项 `Click` → 读视图**当时的** `DataContext` 的 `DeleteCommand`；Delete 键走同一个 `DeleteLink()` | `:515`（建菜单）、`:523` |
+
+三条结论：
+
+1. **菜单项不绑命令是刻意的**：`ContextMenu` 是独立视觉树，`DataContext` 不会自己跟过来；而视图会被池化改绑给另一条链接，绑定会指向旧 VM。`Click` 处理器读 `DataContext` 则无论何时改绑都对。
+2. **必须自己取消「不在线上」的那次开启**。视图的框虽然是整块画布（模板里 `Width/Height` 绑的是 `Canvas.ActualWidth/Height`），但**命中面是画出来的描边**：实测（2026-09-26）从窗口外跳到离线约 20px 的空画布上，线体保持青色（`body=104, warm=44` —— 那 44 个暖色像素是同框的端口环），压到线上才是 `body=0, warm=408` 的高亮。取消那一步因此是**防线**：命中面一旦被改粗（例如给视图加上背景），空白处也会开菜单。**不要改成手工 `IsOpen = true`**，那会丢掉 WPF 自带的「鼠标点、键盘 Shift+F10 也认」。
+3. **弹菜单那一刻高亮会掉，这是既有悬停规则的必然结果，不是 bug**：popup 把指针从视图上拿走 ⇒ `MouseLeave` ⇒ `IsHighlighted = false`。删除不受影响（第 1 条）。曾试过在 `MouseLeave` 里按「菜单是否打开」跳过取消高亮 —— 实测会把某条线的高亮**永久留在画布上**（popup 关闭后不再有配对的 `MouseEnter`），已回退；要动这块必须先想清楚谁来复位。
+
+**实测（2026-09-26，SendInput + 闭环伺服取点，每一步先断言）**：指针经伺服落在线体上（48×48 邻域内体色像素 ≈160，说明框架确实认的是「画出来的描边」；随后同一点变暖色 ≈280 = 高亮）→ 合成右键 → **原生 `ContextMenu` 弹出，只有「删除连线」一项**（菜单左上角就是鼠标点）→ 合成左键点该项 → **那条线消失**：两端端口由橙/绿变灰、左栏「可见组件数（Node / Link）」16 → 15。也就是说三件事在这家**都真的跑得通**，且「命中的是人画出来的描边」这一点由伺服日志本身佐证。
+
+`hitRadius = 6.0` 与框架给的带宽同量级（框架认的是最外那圈描边 —— 静息线三层里最外的辉光是本体 + 9px，半宽 ≈ 5.5px），所以它既不放大也不缩小实际命中范围；它对**右键**这条路径是活的判据（`OnContextMenuOpening` 直接调它）。
+
+---
+
+## 六、这份文件没写的东西
 
 - 七个角色各自要暴露什么成员、附着属性叫什么名字、`PART_*` 命名约定 —— 在 `memory/modules/WorkflowSystem/extension.md` §3.9 与 `skills/veloxdev-create-workflow/references/view-layer.md`。
 - 怎么在 WPF 上从零搭一个工作流视图（XAML 片段、绑定写法、demo 位置）—— 在 `skills/veloxdev-create-workflow/references/gui/wpf.md`（其中「本适配器**没有**连线交互 helper」那条也以那份为准）。

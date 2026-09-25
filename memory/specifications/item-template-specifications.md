@@ -49,3 +49,4 @@
 - **Avalonia 此前确实没接**，而且它的症结不在 tree-view，在适配器：池是 `template.Build(null)` 建视图（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs:168`），而 Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的是选择器自己，轮到 `Build` 时它才去挑内层模板；传 `null` 就无从下手（选择器的 `SelectTemplate(null)` 抛异常）⇒ **视图一个都不建，且不报错**（画布空白）。现在传的是 VM，选择器因此可用。
 - **判定顺序**（四家 `FindDataTemplate` 同形）：按 VM **类型**的缓存 → 选择器 → 平台自带的查找（Avalonia：`ViewManager.cs:233` 缓存 → `:235` 选择器 → `:242`/`:248`/`:259` 面板/祖先/`Application`）⇒ 「选择器命中就跳过平台机制、没命中就退化到平台机制」成立；但选择器若**按实例**判定，第一个实例的判定会被整个类型沿用。
 - **WinForms 是例外**：它的池没有平台兜底可谈 —— 选择器是唯一的创建路径（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs:161` 的 `_selector.CreateView(item)`），所以「退化」在那家不存在。
+- **连线交互是 demo 层的东西，模板与 Trimmed demo 保持被动**（2026-09-26 用户明确划定）：七家**非** Trimmed demo 的连线要做「只有画出来的部分能命中 + Delete 删除 + 右键菜单删除」，而模板与 Trimmed demo 的连线视图仍然是 `IsHitTestVisible = false` / `pointer-events:none` 的被动视觉。⇒ 看到「demo 有交互、模板没有」**不要**按 §一 去把它推进模板；这条背离是刻意的（生成出来的项目不该默认吃画布手势）。
