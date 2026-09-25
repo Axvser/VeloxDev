@@ -26,7 +26,11 @@
 
 契约要求「`Viewport` 是画布局部坐标、且只有适配器写」：这一家写在 `WorkflowSurfaceBehavior.ApplyVisibleRegion`
 （`:607-625`，同时写 `Layout.ViewportOffset`），触发链路是 `UpdateVisibleRegion` → `ApplyVisibleRegion`。
-契约要求「连线视图首行过渲染就绪门」：那行在视图侧，本家见 `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`。
+契约要求「连线视图首行过渲染就绪门」：那行在视图侧。本家两个 demo 的实现不同 ——
+`Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/LinkView.xaml.cs` 只有 `CanRender`（绑定到 `IsVisible`），
+**没有 NaN 那半**；`Examples/Workflow/WinUI/Demo/Views/Workflow/PolylineCurveView.xaml.cs` 的 `RenderReady`
+（`// RenderReady => CanRender && 四端点非 NaN`，2026-09 那次修链接「新连线有时不出现」时加的）两半都在。
+按渲染就绪门改哪一份，先核这一句 —— 别以为 Trimmed 就是齐全的。
 
 ---
 
@@ -189,6 +193,24 @@ skill 文档 `gui/winui.md:5` 指的参考实现就是这个 Trimmed 目录。
 
 **P7 · 空白处按下的判定对类型名字符串敏感**（§二·L8）。重命名演示里的 `BezierCurveView`/`PolylineCurveView`
 会静默改变手势归属。
+
+**P8 · 保留模式下「写进去的几何 = 画出来的东西」，所以连线视图必须在每个入口都重算一遍渲染状态。**
+本家没有 `OnRender`，`PolylineCurveView` 的整幅画面（3 条静息线的 `BezierSegment` + 24 条彗星段的
+`PathFigure`/`LineSegment`，共 27 个 `Path`）只由「依赖属性变更」这一个入口驱动重写。
+Avalonia/WPF/Jalium 的同一份视图是每帧重算的（`Render`/`OnRender`），所以那边
+`_length <= 0` 这类守卫即使被 NaN 穿过，最多错一帧；**这边错的是永远** —— 写进去什么就一直画什么。
+同一个视图还有两个不触发 `Loaded`/`Unloaded` 的入口必须自己挂：`DataContextChanged`
+（池化视图改绑/回收，`ViewManager.cs:182-203` 只改 `Visibility` + `DataContext`，从不摘树 —— 见 §五），
+以及「本帧没有属性变化」这件事本身。
+两条硬规则：**几何里不许出现 NaN**（未测量的 slot 锚点就是 NaN，`WorkflowSlotUpdateGate` 的约定；
+NaN 参与的比较全是 false，`_length <= 0`、`lo >= _length` 这类守卫一条都拦不住，而 NaN 点画不出任何东西）；
+**「停周期」不能只挂在 `Unloaded` 上**（池化视图永远等不到它，旧链接的 `Transition` 会一直按帧写那 27 个 `Path`，
+这正是「整体有一点点不流畅」的来源）。
+改这一份视图时按这两条自查：`Examples/Workflow/WinUI/Demo/Views/Workflow/PolylineCurveView.xaml.cs` 的
+`Refresh()` 是唯一入口，`RenderReady` 是唯一门。参照写法在 Trimmed 的
+`Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`：它挂了 `DataContextChanged`
+（`:60,122-128`，注释明写池化复用与「hide 会先给一个 null 的 DataContext」）却**没有** NaN 门。
+两个 demo 的 `SlotView` 同为保留模式改写、也各有周期，但**没核过**它们是否也漏了某个入口 —— 动到再看。
 
 ---
 
