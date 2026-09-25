@@ -100,8 +100,8 @@ public class TemplateClass : Canvas
     /// <summary>The bound workflow tree (for overlays like the minimap).</summary>
     public IWorkflowTreeViewModel? Tree => _tree;
 
-    /// <summary>Template selector for the ViewPool (node → NodeView, link → LinkView); assign before <see cref="SetTree"/>.</summary>
-    public IWorkflowTemplateSelector? TemplateSelector { get; set; }
+    /// <summary>Template selector for the ViewPool (node → NodeView, link → LinkView); defaults to the generated selector, assign before <see cref="SetTree"/> to replace it.</summary>
+    public IWorkflowTemplateSelector? TemplateSelector { get; set; } = TemplateNamespace.TemplateSelector.CreateSelector();
 
     public void SetTree(IWorkflowTreeViewModel? tree)
     {

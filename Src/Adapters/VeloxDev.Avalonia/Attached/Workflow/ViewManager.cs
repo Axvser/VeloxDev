@@ -165,7 +165,9 @@ public sealed class ViewManager(Panel panel)
             if (!FindDataTemplate(viewModel, out var template))
                 throw new InvalidOperationException($"No DataTemplate found for type: {viewType.FullName}");
 
-            view = (Control?)template?.Build(null);
+            // Avalonia 的 IDataTemplate 是「既选又建」：Match 挑出的是选择器自己，Build 时才轮到它挑内层模板
+            // —— 这里传 null 会让选择器无从下手（它 Throw），自定义选择器因此整个用不了。传 VM。
+            view = (Control?)template?.Build(viewModel);
             if (view == null)
                 throw new InvalidOperationException($"DataTemplate returned null for {viewType.FullName}");
 
