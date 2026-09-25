@@ -140,6 +140,14 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 12. **`UpdateVisibleRegion` 同时写 `Viewport` 和 `Layout.ViewportOffset`**（`:577-595`，后者在 `:594`）—— 后者是为了序列化往返保留视口位置。⇒ 只写 `Viewport` 的话视图是对的，但保存再加载会丢掉「上次看到哪」。
 
+13. **悬停连线会让画布自己滚一段 —— 是「取焦点」带来的 WPF 默认行为，不是本仓库的代码。** 连线视图在指针进入、或指针落到线身上时 `Focus()`（`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs:102`、`:479`；焦点是 `OnKeyDown` 的 Delete 需要的，`:483`）；WPF 的 `FrameworkElement` 在获得焦点时替它请求 `RequestBringIntoView`，`ScrollContentPresenter` 的类处理照办 ⇒ `ScrollViewer` 偏移跳变，**与按键无关**（实测 `left=Released`）。跳多远由当时的偏移与 extent 决定，不是固定值：连线视图的尺寸绑的是祖先 `Canvas`（`Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml:68-69`）⇒ 它的包围盒就是整块画布。
+
+    实测（完整版 demo，extent 2400×850、viewport 969×723）：纯悬停扫过线身 4 次，偏移跳 **28 / 412.8 / 362 / 502.1 px**；每跳一次 extent 还被撑大（**850 → 1293 → 1487**，平移越边扩张的连带效应），所以画布会越跳越大。修法是**在发源地吃掉这条请求**（`:108` 的 `AddHandler(RequestBringIntoViewEvent, … e.Handled = true)`）—— 保留焦点、只拦滚动；**不要改成 `Focusable = false`**，那会连带废掉 Delete 键。修后同一把尺子复测：纯悬停滚动 **4 → 0**，由连线焦点引起的二次抛出 **4 → 0**（另有 1 次 `REQ target=ScrollViewer` 是同一轮里人按鼠标那下带来的，`left=Pressed`，与连线无关）。
+
+    **量这条时的两个坑**：(a) 先用 `ScrollTo*` 把偏移预设到别处再悬停 ⇒ 症状被掩盖（它依赖当时的偏移），要照真实用法从启动状态扫；(b) 合成光标（`SetCursorPos`）**必须**先 `SetWindowPos(HWND_TOPMOST)` + `SetForegroundWindow` 把窗口推到最前，否则一次都命不中、日志里连 `over ->` 都没有 —— 我第一次就是这样量到「0 次」的。
+
+    **别家（未核）**：WinUI 的 `ScrollViewer.BringIntoViewOnFocusChange` 默认同为 `true`，而这家的连线视图也在悬停时 `Focus(FocusState.Pointer)`（`Examples/Workflow/WinUI/Demo/Views/Workflow/PolylineCurveView.xaml.cs:169`）⇒ 同一症状在 WinUI 上可能存在，实测前别断言没有。Avalonia 无此默认行为，同形的 `Focus()`（`Examples/Workflow/Avalonia/Demo/Views/Workflow/PolylineCurveView.axaml.cs:471`）未见此症状。
+
 ---
 
 ## 五、这份文件没写的东西

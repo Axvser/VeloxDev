@@ -32,6 +32,10 @@ public partial class PolylineCurveView : UserControl
         MouseEnter += (_, _) => { IsHighlighted = true; Focus(); };
         MouseLeave += (_, _) => IsHighlighted = false;
         MouseMove += OnHoverMouseMove;
+
+        // 悬停取焦点会连带触发 WPF 的默认行为：拿到焦点的元素请求「把自己滚进视口」，ScrollViewer 照办 ——
+        // 鼠标一碰到线画布就跳一段，跳多远看当时的偏移。焦点本身要留着（Delete 键靠它），所以只吃掉这条请求。
+        AddHandler(RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler((_, e) => e.Handled = true));
     }
 
     #region Dependency properties
