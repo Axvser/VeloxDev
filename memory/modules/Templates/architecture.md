@@ -363,9 +363,9 @@ tree-view 直接用它做模式匹配（`workflow-tree-view/TemplateClass.cs:674
 
 ---
 
-## 九、Demo 视图层的两个坑：端口被裁一半、删 axaml 会连带删掉交互
+## 九、视图层的三个坑：端口被裁一半、删 axaml 会连带删掉交互、`Slot.State` 静默失败
 
-这两个坑都不报错 —— 编译通过、端口照样画出来，只是**半边不见了**或**再也拖不动**。2026-09-25 一次自绘改造里同时踩到。
+这三个坑都不报错 —— 编译通过、端口照样画出来，只是**半边不见了**、**再也拖不动**、或**状态永远不变**。2026-09-25 一次自绘改造里同时踩到。
 
 ### 9.1 端口有一半骑在卡外，所以它上方不能有裁剪面
 
@@ -392,6 +392,16 @@ tree-view 直接用它做模式匹配（`workflow-tree-view/TemplateClass.cs:674
 两样都不报错：端口照样画得好好的，只是静默失去交互。现在两者都写在 `SlotView` 的**构造函数**里（外加一个近透明的子 `Border` 作实在的命中面 —— 依赖 `UserControl` 自己的 `Background` 能否被命中是一层推断，落一个真元素就不是了），卡片忘了也不会再丢。
 
 ⇒ **把标记语言控件改成自绘之前，先列出被删掉的那个根元素上都挂了什么。** 附着属性、`Background`、`x:Name`（会被别处按名字找）都算。
+
+### 9.3 输出槽的 `SlotState` 写成 `Slot.State` 会静默失败
+
+输出槽在 `DataTemplate` 里（`ItemsSource="{Binding OutputSlots.Items}"`），那个 `DataTemplate` 的 DataContext 是**包装项**（成员是 `Slot` 与 `Name`，模板里两个都用到过）。所以 `DataContext="{Binding Slot}"` / `BindingContext="{Binding Slot}"` 是对的 —— 槽视图的上下文就该是槽自己。
+
+错的是**同一个元素上**再写 `SlotState="{Binding Slot.State}"`：`DataContext` 一被设成槽 VM，这一行就改在槽 VM 里求值，而 `IWorkflowSlotViewModel` 的成员只有 `Targets` / `Sources` / `Channel` / `State` / `Anchor`（`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/SlotDefaultViewModel.cs:28-33`），**没有 `Slot`** ⇒ 绑定失败、槽永远拿不到自己的状态，而**不报错**：编译通过、槽照常画出来。
+
+正确写法是 `SlotState="{Binding State}"`（与输入槽那行 `{Binding State}` 同形 —— 输入槽的上下文本来就是槽）。
+
+**模板与 demo 各有一份，必须一起改**：三家模板的 `workflow-node-view/TemplateClass.xaml` 输出槽那一行（MAUI `:53`、WPF `:62`、WinUI `:63`）与三个 Trimmed demo 的 `NodeView`。**方向是改模板** —— Trimmed demo 与模板对应，不单独改它们，否则两边分叉。Avalonia 模板不设 `SlotState`（`TemplateClass.axaml:39`、`:59` 只给 DataContext），所以这家没有这个问题。
 
 ---
 
