@@ -59,7 +59,7 @@
                                    Margin="0,0,10,0"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Center" />
-                        <local:SlotView DataContext="{Binding Slot}" SlotState="{Binding Slot.State}"
+                        <local:SlotView DataContext="{Binding Slot}" SlotState="{Binding State}"
                                                 Grid.Column="1"
                                                 Width="14"
                                                 Height="14"
