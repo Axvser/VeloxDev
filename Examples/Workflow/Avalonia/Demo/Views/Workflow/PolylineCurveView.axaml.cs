@@ -426,6 +426,10 @@ public partial class PolylineCurveView : Control
         base.OnPointerEntered(e);
         IsSelected = true;
         CurveSelectionManager.Select(this);
+
+        // 选中是「上色」，Delete 要的是键盘焦点 —— 两者必须同时发生：只在悬停上色而不取焦点的版本
+        // 会让 OnKeyDown 收不到键，于是必须先用鼠标点一下（那一下才给焦点）。本视图命中面就是画出来的线本身。
+        Focus();
     }
 
     protected override void OnPointerExited(PointerEventArgs e)
