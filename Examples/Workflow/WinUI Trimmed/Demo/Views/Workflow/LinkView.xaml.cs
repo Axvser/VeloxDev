@@ -140,12 +140,33 @@ public sealed partial class LinkView : UserControl
 
         var tree = link.Sender?.Parent?.Parent as IWorkflowTreeViewModel
                    ?? link.Receiver?.Parent?.Parent as IWorkflowTreeViewModel;
+
+        // 虚拟连线的两端**故意**没有父节点（IsVirtualLink 就是按这个判的），上面那条路必然返回 null，
+        // 视图于是永远学不到画布尺寸 —— 而盒子的尺寸就是这个视图防裁剪的唯一手段（见 UpdatePath 的注释）：
+        // 没有尺寸时保留模式的 Path 会被元素边界剪掉，橡皮筋从按下第一帧起就不可能出现。这里退回到
+        // 宿主链上找承载它的树（画布及其后代都继承同一份 DataContext）。
+        tree ??= FindHostTree();
+
         if (tree?.Layout is { } layout)
         {
             _layout = layout;
             _layoutHandler = OnLayoutPropertyChanged;
             _layout.PropertyChanged += _layoutHandler;
         }
+    }
+
+    // 从本视图往上找承载它的树：虚拟连线没有端点可走，只能沿宿主链找
+    private IWorkflowTreeViewModel? FindHostTree()
+    {
+        for (var p = Parent as FrameworkElement; p is not null; p = p.Parent as FrameworkElement)
+        {
+            if (p.DataContext is IWorkflowTreeViewModel tree)
+            {
+                return tree;
+            }
+        }
+
+        return null;
     }
 
     private void UnsubscribeLayout()

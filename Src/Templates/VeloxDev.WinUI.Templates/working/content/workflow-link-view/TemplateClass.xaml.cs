@@ -143,12 +143,30 @@ public sealed partial class TemplateClass : UserControl
 
         var tree = link.Sender?.Parent?.Parent as IWorkflowTreeViewModel
                    ?? link.Receiver?.Parent?.Parent as IWorkflowTreeViewModel;
+
+        // A virtual link's endpoints are deliberately parentless, so this must not be the only way to
+        // find the tree: fall back to the host chain.
+        tree ??= FindHostTree();
         if (tree?.Layout is { } layout)
         {
             _layout = layout;
             _layoutHandler = OnLayoutPropertyChanged;
             _layout.PropertyChanged += _layoutHandler;
         }
+    }
+
+    // Walk the host chain for the tree that carries this view; a virtual link has no endpoints to walk.
+    private IWorkflowTreeViewModel? FindHostTree()
+    {
+        for (var p = Parent as FrameworkElement; p is not null; p = p.Parent as FrameworkElement)
+        {
+            if (p.DataContext is IWorkflowTreeViewModel tree)
+            {
+                return tree;
+            }
+        }
+
+        return null;
     }
 
     private void UnsubscribeLayout()
