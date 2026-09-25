@@ -16,7 +16,7 @@
 |---|---|
 | `Interpolator` | 一行 `RegisterInterpolator` + `CreateScheduler`（`Interpolator.cs:9`、`:12-15`） |
 | `UIThreadInspector` | **五个覆写全都要**：`IsAlive`/`ThreadFor`/`IsCurrentFor`/`IsCurrentThread`/`PostCore`（`UIThreadInspector.cs:51-84`）—— 这家是七家里唯一覆写 `IsCurrentFor` 的 |
-| `TransitionInterpreter` | 一个 `CreateFramePacer`（`TransitionInterpreter.cs:9-10`） |
+| `TransitionInterpreter` | 一个 `CreateFramePacer`（`TransitionInterpreter.cs:20-21`）+ 私有的 `PostedFramePacer`（`:23-94`，这家唯一一个不能照抄别家的 pacer，见 §2.2） |
 | `State` / `TransitionScheduler` / `TransitionEffect` / `TransitionEffects` / 非泛型 `Transition` | 空壳（`State.cs:3`、`TransitionScheduler.cs:3-9`、`TransitionEffect.cs:3`、`TransitionEffects.cs:3-17` 只给三个样本、`Transition.cs:5-8` 连体都没有）——**不要以为漏写了什么** |
 
 `TPriorityCore` 填 `NonPriority`（`Transition.cs:17`）。这一个决定牵动两处：`Transition<T>` 的第七个型参，与 `CreateScheduler` 里的 cast（`Interpolator.cs:13`）。第二处写错 ⇒ 主题切换静默变瞬切（`extension.md` §二·3）。
@@ -45,22 +45,30 @@
 
 `_isAppAlive` 是静态字段，只在捕获成功那一刻挂上 `Application.ApplicationExit` 去关它（`UIThreadInspector.cs:40`，初值 `:10`），`IsAlive => _isAppAlive`（`:51`）。对照有 dispatcher 的家：WPF/Jalium 直接问 `dispatcher.HasShutdownStarted`、WinUI 问 `queue.TryEnqueue` 的返回值（见 `wpf.md` §2.1）。**没有东西可问，所以必须自己记** —— 这不是风格选择。同一形状的还有 MAUI 与 Razor。
 
-### 2.2 `System.Windows.Forms.Timer` 只能在其要 tick 的线程上创建 ⇒ 这是七家里唯一「有条件地」取 pacer 的一家
+### 2.2 帧源不能是 WM_TIMER ⇒ 这家的 pacer 是「线程池定时器 + 投递到控件」
 
-`CreateFramePacer` 写成 `affinity.IsCurrent(target) ? new FormsFramePacer() : null`（`TransitionInterpreter.cs:9-10`，理由写在 `:7-8`）：
+**`WM_TIMER` 是这个平台上唯一不能用来当帧时钟的机制。** Windows 只在消息队列空无一物时才合成它，而那一刻只有一个「空闲时刻」——哪个到期定时器先被问到就归谁（这家进程里每个 `Transition` 都有一条自己的定时器）。两处实测（workflow demo，`Examples/Workflow/WinForms/Demo/`，16 ms 帧间隔）：
 
-- 对照：WPF / Avalonia / WinUI / MAUI / Jalium 五家**一律**从 `affinity.ThreadFor(target)` 派生（WPF 是 `affinity.ThreadFor(target).TryGet<Dispatcher>(out var d) ? new DispatcherFramePacer(d) : null`，`Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs:8-11`；其余四家同形，只换 `TryGet` 的类型）；Razor 干脆不覆写，注释写着「Blazor 没有在渲染器自己线程上触发的定时器」（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs:4`）。
-- **WinForms 走第三条路**：不派生、不放弃，而是**问「现在在不在目标的线程上」**，在就建，不在就返回 `null`。这不是可选的写法 —— `System.Windows.Forms.Timer` 的 `Tick` 在创建它的线程上触发，跨线程 `Start()` 不抛异常但**永远不会 tick**，它结构上做不到「A 线程建、B 线程跑」。
+- **拖画布期间 0 帧**：拖拽的每个 `WM_MOUSEMOVE` 都被回以一次同步重画（`WorkflowSurfaceBehavior.Refresh` 的 `host.Capture → Update()`、`WorkflowNodeDragBehavior.cs:222-229`），队列里永远躺着下一条鼠标消息 ⇒ 3 秒拖拽里 **0 次 WM_TIMER、流光 0 次写入**，而同一期间的 BeginInvoke 投递保持 11–15 次/200 ms（≈64/s，与空闲时相同）—— 队列不忙，只有 WM_TIMER 被饿死。
+- **空闲时同一条规则把帧率压到 1/4**：该进程 ~16 条定时器（画布 1 + 每个 `SlotView` 波纹 1）分 ~57 次 WM_TIMER/200 ms ⇒ 画布流光的写入从 60/s 掉到 ~15/s。
+
+所以 `CreateFramePacer` 是 `affinity.IsCurrent(target) ? new PostedFramePacer(target as Control) : null`（`TransitionInterpreter.cs:20-21`）：续体由 `System.Threading.Timer` 到期后经 `Control.BeginInvoke` 投回目标窗口（`:63-81`）。投递出去的消息按 FIFO 送达，不等队列空；续体仍在控件线程上恢复 ⇒ 属性写入照旧直写、`Update`/`LateUpdate` 仍在该线程（pacer 存在的理由不变）。
+
+- 对照：WPF / Avalonia / WinUI / MAUI / Jalium 五家**一律**从 `affinity.ThreadFor(target)` 派生（WPF 是 `affinity.ThreadFor(target).TryGet<Dispatcher>(out var d) ? new DispatcherFramePacer(d) : null`，`Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs:8-11`；其余四家同形，只换 `TryGet` 的类型）——它们的 `DispatcherTimer` 是**按优先级排队的队列项**，不受这条规则影响；Razor 干脆不覆写，注释写着「Blazor 没有在渲染器自己线程上触发的定时器」（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs:4`）。
+- **仍然「有条件地」取**（七家里唯一，见 §三·4），但判据的含义变了：不再是因为「Forms 定时器只能在自己线程上 tick」，而是「续体要投到哪个控件的窗口上，只有已经在它线程上时才认这个前提」。
 - `IsCurrent(target)` 走基类的 `IsCurrentFor(target, ThreadFor(target))`（`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs:15`），而这家覆写了 `IsCurrentFor`（见 §三·1）。
 - **后果（要记住）**：从非 UI 线程**首次**发起一段动画 ⇒ 没有 pacer ⇒ 回落到 `ArmNextFrame` 的默认实现（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:94`），而 `FrameWait` **不还原 `SynchronizationContext`**（`extension.md` §F 已写）⇒ `Update`/`LateUpdate` 会漂到线程池线程上跑。所以「确保第一次触碰发生在 UI 线程」在这家不是优化，是前提。
+- **代价（换来的东西不是白给的）**：每帧多一次 `BeginInvoke`（一次小对象分配 + 一条投递消息）。空闲实测：16 条动画 60 fps 下 ~1300 次投递/秒，同时队列里还有 ~770 次 WM_PAINT/200 ms，画布每次重画 ~4 ms —— 都在余量内。CPU 全忙时帧会排队变慢而不是停止：`SamplerSet.Apply` 在执行时读的是最新时刻，所以积压的帧落地时画的是当前位置。
 
-### 2.3 `Interval` 是 `int` 毫秒，且必须大于 0
+### 2.3 目标无句柄 / 非控件时的退路
 
-`timer.Interval = (int)Math.Max(1d, interval.TotalMilliseconds);`（`TransitionInterpreter.cs:20`，注释 `:19`）。两条都是 API 事实：`Interval` 是 `int`，且 `Interval <= 0` 时 `Start()` 抛。别家拿到的是 `TimeSpan`（WPF 直接 `timer.Interval = interval;`）。
+`PostedFramePacer.OnDue` 在目标不是 `Control`、或 `IsHandleCreated == false` 时就地 `Fire()`（`TransitionInterpreter.cs:63-81`）——**即退回到默认的线程池等待语义**：续体在工作线程上恢复，`Update`/`LateUpdate` 也就漂到那里，属性写入各自编组（`Post` → `PostCore` → `BeginInvoke`）。这不是缺陷而是刻意的：pacer 只在「有窗口可投」时才值得存在，其余情况用它只会多一层等待。句柄在检查与投递之间消失（`BeginInvoke` 抛 `InvalidOperationException`，已释放控件抛其派生类 `ObjectDisposedException`）走同一条退路。
 
 ### 2.4 平台定时器是 `IDisposable`，而基类不管释放
 
-`Dispose` 必须 `base.Dispose()` 之后 `_timer.Tick -= OnTick; _timer.Dispose(); _timer = null;`（`TransitionInterpreter.cs:35-46`，注释 `:39` 明写「基类只管停表与放行续体」）。WPF 那家的 `Dispose` **只停表、不释放**（见 `wpf.md` §2.2）——**别把两家互相照抄**：WPF 的 `DispatcherTimer` 生命周期归 dispatcher 管，这家的 `Timer` 必须自己 dispose，否则 tick 回调与 WM 定时器一起泄漏。
+`Dispose` 必须 `_disposed = true; timer = _timer; _timer = null; base.Dispose(); timer?.Dispose();`（`TransitionInterpreter.cs:84-93`）：基类先停表并放行挂着的续体，之后这块表才轮到被释放。WPF 那家的 `Dispose` **只停表、不释放**（见 `wpf.md` §2.2）——**别把两家互相照抄**：WPF 的 `DispatcherTimer` 生命周期归 dispatcher 管，这家的 `System.Threading.Timer` 必须自己 dispose，否则它自己的线程池回调（以及那条对已死窗口的投递尝试）会一直活下去。
+
+`Arm` 在已释放时必须 `Fire()` 放行而不是直接 return（`:38-45`）：基类 `Dispose` 就是靠「唤醒挂着的续体」让采样循环收尾的，丢掉它等于把循环永久停在一次等不到的唤醒上（宿主侧表现为「不报错、也再没有帧」）。
 
 ### 2.5 捕获是惰性的，而且「按类型名认亲」
 
@@ -77,7 +85,7 @@
 | 1 | **`IsCurrentFor` 被覆写（七家里唯一）**：先问目标 `Control.InvokeRequired`，拿不到控件才回落到基类。WinForms 没有任何 API 能「查一个 `Control` 属于哪个线程」，但 `Control` 自己答得出「调用方在不在我的线程上」——**同一个问题的对偶问法**。这不只是查询优化：`ThreadDispatcherBase.Post`（`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs:49-50`）在 `IsCurrentFor` 为真时直接 `RunInline`，所以覆写它等于让 UI 线程上的写完全绕开消息泵。 | `UIThreadInspector.cs:59-66` |
 | 2 | **`PostCore` 优先走目标 `Control.BeginInvoke`（七家里唯一）**：别家一律从 `thread` 里 `TryGet<TDispatcher/TSyncContext>`。这家先看目标本身是不是一个已建句柄的 `Control`（`ControlDispatcher`，`:48-49`），是就直接投。所以**即使从未捕获过 UI 上下文、即使首次调用来自后台线程**，只要 `target` 是 `Control`，写也落对线程（`:43-47` 的注释明写这一点）。基类专门声明这是被允许的自由（`ThreadDispatcherBase.cs:33-36`：需要 target 而不是 thread 的宿主可以忽略 `thread`）。 | `UIThreadInspector.cs:72-84` |
 | 3 | **`ThreadFor` 返回「已捕获的上下文」，不为调用方造一个**：`ThreadRef.From(_uiSyncContext)`（`:53-57`）。没捕获过就是 `From(null)`。Razor 那家给的是「当下看到的」`SynchronizationContext.Current ?? 捕获值`——**两家在「调用方不在 UI 线程时给什么」上是相反的选择**。基类契约禁止「造一个」（`extension.md` §二·6），这家与 Razor 的分歧在于「拿什么当兜底」。 | `UIThreadInspector.cs:53-57` |
-| 4 | **pacer 在七家里唯一「有条件地」取得**（见 §2.2）：别家要么给、要么不给，这家先问线程再决定。 | `TransitionInterpreter.cs:9-10` |
+| 4 | **pacer 在七家里唯一「有条件地」取得**（见 §2.2）：别家要么给、要么不给，这家先问线程再决定；而且它是七家里唯一**不拿平台定时器当帧源**的 pacer（线程池定时器 + `Control.BeginInvoke`，因为 WM_TIMER 会被输入饿死）。 | `TransitionInterpreter.cs:20-21`、`:63-81` |
 | 5 | **`TransitionEffect` 连 `Priority` 默认值都不用给**：`TransitionEffect : TransitionEffectCore` 是纯空壳（`TransitionEffect.cs:3`），因为 `NonPriority` 是空结构体，`default!` 就是全部答案（`ThreadDispatcherBase.cs:39-44`）。WPF 那家必须在这里给一个 `DispatcherPriority`。 | `TransitionEffect.cs` |
 
 （**不改的**：`State : StateCore` 空壳、`TransitionScheduler` 非泛型空壳（`TransitionScheduler.cs:3-9`）、`ThemeValueConverters.cs` —— 六家都有这一份，Jalium 才没有，所以它不构成背离。）

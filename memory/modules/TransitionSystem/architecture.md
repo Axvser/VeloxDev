@@ -106,7 +106,7 @@ TimeLine (TransitionEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicat
 `ExecuteSamplingLoopAsync`（`TransitionInterpreter.cs:157`）：
 
 - `frameSet.SetCancellation(cts)`；`startCycle = run.Cycle`（**每段按自己的起点计**，否则链里第二段一上来计数就越过 `LoopTime`，报 Start/Completed 却一帧不写，见 `TransitionInterpreter.cs:170-172`）。
-- `_pacer ??= CreateFramePacer(target, frameSet.Host)` —— 解析发生在**第一个 await 之前**，必须仍在启动线程上（Avalonia 的 `DispatcherTimer`、WinForms 的 `Timer` 只能在创建线程上 tick）。`_pacerResolved` 是必要的，因为 `null` 是有意义的答案（「问过，答案是不」）。
+- `_pacer ??= CreateFramePacer(target, frameSet.Host)` —— 解析发生在**第一个 await 之前**，必须仍在启动线程上（Avalonia 的 `DispatcherTimer` 只能在创建线程上 tick；WinForms 那家要在目标控件的线程上才认得出「往哪个窗口投帧」，见 `adapters/winforms.md` §2.2）。`_pacerResolved` 是必要的，因为 `null` 是有意义的答案（「问过，答案是不」）。
 - `Start` → `while(true)`：`run.Cycle - startCycle > effect.LoopTime` 则 break → `RunPassAsync(forward: true)`，`IsAutoReverse` 再来一趟 `forward: false` → `run.NextCycle()`。
 - `Completed`；`OperationCanceledException` → `Canceled`；其它异常 → `Error("Run")` + `Canceled`；`finally` → `Finally` + `ReleaseLoopResources()`（**嵌套 try**，回调抛异常不能带走 loop 自己的资源）。
 
