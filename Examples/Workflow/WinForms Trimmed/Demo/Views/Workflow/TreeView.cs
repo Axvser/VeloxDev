@@ -4,7 +4,7 @@
 // start rendering. Generate the NodeView/SlotView/LinkView templates and wire
 // their factories below when you rename the generated types.
 using System;
-using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
@@ -27,7 +27,9 @@ namespace Demo.Views.Workflow;
 /// A workflow tree surface composing a surface chrome, grid decorator, scroll
 /// viewer, absolute-positioned canvas, minimap overlay, and pooled view manager.
 /// Set <see cref="ViewModel"/> to a <see cref="IWorkflowTreeViewModel"/> to start
-/// rendering nodes, slots, and links with the generated views.
+/// rendering nodes, slots, and links with the generated views. The pool is bound to
+/// the tree's visible set, so node <em>and</em> link views are materialized and
+/// recycled as that set changes.
 /// </summary>
 public sealed class TreeView : UserControl
 {
@@ -40,10 +42,10 @@ public sealed class TreeView : UserControl
     public ScrollableControl PART_ScrollViewer { get; }
 
     /// <summary>
-    /// Absolute-positioned canvas that hosts pooled node views and paints links.
-    /// The canvas is opaque and draws the grid, rulers, and links itself (WinForms
-    /// has no reliable transparent compositing, so the tree no longer layers a
-    /// transparent canvas over a separate grid decorator).
+    /// Absolute-positioned canvas that hosts the pooled node and link views and draws the
+    /// grid/rulers in its own paint cycle. Links are pooled views here too, so the canvas no
+    /// longer paints them; the canvas is opaque and clips its children, so a link view shapes
+    /// its own window region instead of relying on transparency (see the link view).
     /// </summary>
     public Panel PART_Canvas { get; }
 
@@ -91,13 +93,10 @@ public sealed class TreeView : UserControl
     // this into the canvas + grid + minimap on every layout (see ScheduleLayout).
     private Point _panOffset = new(0, 0);
 
-    // Link renderers (VirtualLink + all real links) painted by the canvas OnPaint.
-    // They are deliberately NOT child controls — mirroring the full demo, which draws
-    // links on the canvas to avoid overlapping full-size transparent sibling windows
-    // being clipped by WinForms WS_CLIPSIBLINGS (only the topmost paints), which is
-    // what made nodes vanish during a connection drag.
-    private readonly List<LinkView> _linkRenderers = [];
-    private IWorkflowTreeViewModel? _linksSubscribedTree;
+    // The visible set the pool is bound to (one view per visible node/link, the gesture's
+    // virtual link included). It is hooked only for z-order: the pool fronts every view it
+    // materializes or recycles, which would otherwise put links over the node cards.
+    private ObservableCollection<IWorkflowViewModel>? _visibleItems;
 
     /// <summary>Creates a workflow tree surface and wires the attached behaviors.</summary>
     public TreeView()
@@ -129,29 +128,27 @@ public sealed class TreeView : UserControl
             Name = "PART_ScrollViewer",
         };
 
-        // Canvas: viewport-sized host for pooled node views. It stays docked over
-        // the viewport; the pan is expressed as a world-origin translation applied
-        // to each node view (see ApplyPan / NodeView.ApplyPosition). A content-sized
-        // sheet that moves with the pan instead clipped nodes whose canvas-local
-        // position went negative, which made the left/top/top-left regions appear to
-        // have no canvas at all. The canvas is opaque and paints the grid, rulers,
-        // and links in one pass — no transparent siblings to clip (WS_CLIPSIBLINGS)
-        // and no multi-pass compositing that flickers during drags.
+        // Canvas: viewport-sized host for the pooled node and link views. It stays
+        // docked over the viewport; the pan is expressed as a world-origin translation
+        // applied to each node view (see ApplyPan / NodeView.ApplyPosition). A
+        // content-sized sheet that moves with the pan instead clipped nodes whose
+        // canvas-local position went negative, which made the left/top/top-left
+        // regions appear to have no canvas at all. The canvas is opaque and paints the
+        // grid in one pass; the link views are children of it and paint themselves.
         var canvas = new SurfaceCanvas
         {
             Dock = DockStyle.Fill,
             Location = Point.Empty,
             Name = "PART_Canvas",
         };
-        canvas.LinkRenderers = _linkRenderers;
         PART_Canvas = canvas;
         PART_ScrollViewer.Controls.Add(PART_Canvas);
         Controls.Add(PART_ScrollViewer);
 
-        // View pool: nodes go into the canvas; links are painted as renderers by the
-        // canvas OnPaint (see RebuildLinkRenderers), so only the node factory is needed.
+        // View pool: nodes and links both go into the canvas, so both factories are set.
         _selector = new TemplateSelector();
         _selector.NodeViewFactory = CreateNodeView;
+        _selector.LinkViewFactory = CreateLinkView;
 
         WorkflowSurfaceBehavior.SetIsEnabled(this, true);
         WorkflowSurfaceBehavior.SetZoomEnabled(this, true);
@@ -177,13 +174,11 @@ public sealed class TreeView : UserControl
     }
 
     /// <summary>
-    /// The canvas layer: an opaque surface that hosts pooled node views and paints
-    /// the grid, rulers, and link renderers in a single paint pass. Node cards are
-    /// children of the canvas and repaint after it, so links render behind the nodes.
-    /// There is no transparency anywhere in this stack — WinForms has no reliable
-    /// transparent compositing, and an opaque single-layer canvas avoids both the
-    /// multi-pass flicker of transparent layering and the WS_CLIPSIBLINGS clipping
-    /// of overlapping full-size sibling windows.
+    /// The canvas layer: an opaque surface that hosts the pooled node and link views and
+    /// paints the grid in <c>OnPaintBackground</c> — node cards and link views are children
+    /// and repaint after it. There is no transparency anywhere in this stack: WinForms has no
+    /// reliable transparent compositing, so a link view is carved to the stroke band of its
+    /// polyline instead of being a transparent sibling window.
     /// </summary>
     private sealed class SurfaceCanvas : Panel, IWorkflowGridDecorator
     {
@@ -210,10 +205,6 @@ public sealed class TreeView : UserControl
                 ControlStyles.UserPaint,
                 true);
         }
-
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public List<LinkView>? LinkRenderers { get; set; }
 
         /// <summary>
         /// Current signed pan offset (world-origin translation). Node views read
@@ -249,10 +240,10 @@ public sealed class TreeView : UserControl
 
         protected override void OnPaintBackground(PaintEventArgs e)
         {
-            // The grid renders in the background pass so it sits under the node cards
-            // (child windows) exactly like the old grid decorator layer, but in the
-            // same opaque surface as the links. The floating translucent ruler bands,
-            // ticks, and labels are drawn by the RulerOverlayForm — a WS_EX_LAYERED
+            // The grid renders in the background pass so it sits under the node cards and the
+            // carved link bands (child windows) exactly like the old grid decorator layer. The
+            // floating translucent ruler bands, ticks, and labels are drawn by the
+            // RulerOverlayForm — a WS_EX_LAYERED
             // owned popup that composites ABOVE the node cards at per-pixel alpha, the
             // one WinForms mechanism that can genuinely dim cards scrolling under the
             // band (cards dimmed, matching WPF/Avalonia/WinUI/MAUI/Razor). The grid is
@@ -266,20 +257,6 @@ public sealed class TreeView : UserControl
             g.FillRectangle(bgBrush, bounds);
 
             DrawGrid(g, bounds);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-            var renderers = LinkRenderers;
-            if (renderers is null || renderers.Count == 0) return;
-
-            var g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            foreach (var lv in renderers)
-            {
-                lv.Render(g);
-            }
         }
 
         private void DrawGrid(Graphics g, RectangleF bounds)
@@ -717,26 +694,18 @@ public sealed class TreeView : UserControl
     {
         WorkflowSurfaceBehavior.SetWorkflowTree(this, _tree);
 
-        // Keep the links subscription tied to the current tree across swaps.
-        if (!ReferenceEquals(_linksSubscribedTree, _tree))
-        {
-            if (_linksSubscribedTree is not null)
-            {
-                _linksSubscribedTree.Links.CollectionChanged -= OnLinksCollectionChanged;
-            }
-
-            _linksSubscribedTree = _tree;
-            if (_tree is not null)
-            {
-                _tree.Links.CollectionChanged += OnLinksCollectionChanged;
-            }
-        }
-
-        // Reconfigure the node pool (detaches the previous manager, then re-attaches).
-        ViewPool.SetItemsSource(PART_Canvas, _tree?.Nodes);
+        // Reconfigure the pool (detaches the previous manager, then re-attaches). The items
+        // source is the tree's visible set, which the surface keeps current through
+        // helper.Viewport (see ApplyPan), so the pool materializes and recycles one view per
+        // visible node and link. Both factories are wired in the constructor.
+        var visibleItems = _tree?.GetHelper().VisibleItems;
+        ViewPool.SetItemsSource(PART_Canvas, visibleItems);
         ViewPool.SetTemplateSelector(PART_Canvas, _selector);
 
-        RebuildLinkRenderers();
+        // Subscribed after the pool, so this hook always runs after the manager has applied
+        // the change — see ArrangeLinkViews.
+        AttachVisibleItems(visibleItems);
+        ArrangeLinkViews();
 
         if (_tree is not null && PART_MinimapOverlay is not null)
         {
@@ -744,55 +713,36 @@ public sealed class TreeView : UserControl
         }
     }
 
+    private void AttachVisibleItems(ObservableCollection<IWorkflowViewModel>? items)
+    {
+        // Always re-subscribe, even for the same collection: the hook must stay registered
+        // behind the pool's own handler, and re-attaching re-registers the pool's.
+        if (_visibleItems is not null)
+        {
+            _visibleItems.CollectionChanged -= OnVisibleItemsChanged;
+        }
+
+        _visibleItems = items;
+        if (items is not null)
+        {
+            items.CollectionChanged += OnVisibleItemsChanged;
+        }
+    }
+
+    private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ArrangeLinkViews();
+
     /// <summary>
-    /// Rebuilds the canvas link renderers: the VirtualLink gesture first, then every
-    /// real link. Renderers are <see cref="LinkView"/> objects bound to a link but
-    /// never added to the control tree — the canvas paints them in OnPaint, mirroring
-    /// the full demo (avoids overlapping full-size transparent sibling windows being
-    /// clipped by WS_CLIPSIBLINGS). Rebuilt on any tree.Links change.
+    /// Puts the link views behind everything else on the canvas. The pool fronts the view of
+    /// every item it materializes or recycles, so without this the newest links would sit over
+    /// the node cards — the canvas used to paint them behind the cards instead.
     /// </summary>
-    private void RebuildLinkRenderers()
+    private void ArrangeLinkViews()
     {
-        foreach (var lv in _linkRenderers)
+        // Snapshot first: re-ordering mutates the child collection.
+        foreach (var linkView in PART_Canvas.Controls.OfType<LinkView>().ToArray())
         {
-            lv.Dispose();
+            linkView.SendToBack();
         }
-
-        _linkRenderers.Clear();
-        if (_tree is not null)
-        {
-            _linkRenderers.Add(CreateLinkRenderer(_tree.VirtualLink));
-            foreach (var link in _tree.Links)
-            {
-                _linkRenderers.Add(CreateLinkRenderer(link));
-            }
-        }
-
-        PART_Canvas.Invalidate();
-    }
-
-    private void OnLinksCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (InvokeRequired)
-        {
-            BeginInvoke(new NotifyCollectionChangedEventHandler(OnLinksCollectionChanged), sender, e);
-            return;
-        }
-
-        RebuildLinkRenderers();
-    }
-
-    private LinkView CreateLinkRenderer(IWorkflowLinkViewModel link)
-    {
-        var view = new LinkView
-        {
-            ExternalInvalidate = () =>
-            {
-                if (!IsDisposed) PART_Canvas.Invalidate();
-            },
-        };
-        view.Bind(link);
-        return view;
     }
 
     private void OnTreeChanged(object? sender, PropertyChangedEventArgs e)
@@ -895,7 +845,7 @@ public sealed class TreeView : UserControl
     }
 
     /// <summary>
-    /// Applies the signed pan offset by moving the canvas + links host and pushing
+    /// Applies the signed pan offset by moving the canvas + its pooled views and pushing
     /// the resulting world origin into the grid decorator, minimap, and tree
     /// viewport. The surface behavior only refreshes these on layout cycles, so a
     /// pan needs an explicit push to keep the rulers/grid and minimap viewport
@@ -927,12 +877,12 @@ public sealed class TreeView : UserControl
 
         // The canvas stays fixed over the viewport; the pan is a world-origin
         // translation applied to every node view. Publish it for node views added
-        // later, reposition existing ones, then re-measure slot anchors so links
-        // track the pan (the layout behavior computes anchors from the slots' screen
-        // position, which changed when the nodes moved). Repositioning is synchronous
-        // here and each ApplyPosition re-measures its slots synchronously (SyncNow);
-        // the anchors are therefore fresh before the forced synchronous repaint below,
-        // so links never paint one frame at stale endpoints.
+        // later, reposition existing ones, then re-measure slot anchors so the link
+        // views track the pan (the layout behavior computes anchors from the slots'
+        // screen position, which changed when the nodes moved). Repositioning is
+        // synchronous here and each ApplyPosition re-measures its slots synchronously
+        // (SyncNow), so the anchors — and therefore the link windows — are fresh
+        // before the forced synchronous repaint below.
         ((SurfaceCanvas)PART_Canvas).PanOffset = _panOffset;
         foreach (Control child in PART_Canvas.Controls)
         {
@@ -986,8 +936,8 @@ public sealed class TreeView : UserControl
         PART_Canvas.Invalidate();
 
         // Invalidate only queues; during high-frequency panning WM_PAINT is deferred, so old
-        // node positions and old links are not erased in time and leave ghost trails. Sync-redraw
-        // the canvas (links) and grid decorator to keep every frame clean.
+        // node positions and old grid are not erased in time and leave ghost trails. Sync-redraw
+        // the canvas (grid) and grid decorator to keep every frame clean.
         PART_Canvas.Update();
         PART_GridDecorator.Update();
 
@@ -1073,6 +1023,11 @@ public sealed class TreeView : UserControl
         return view;
     }
 
+    private Control CreateLinkView(IWorkflowLinkViewModel link)
+        // The link view owns its geometry, its window region, and its paint, so there is nothing
+        // to wire here; keep ArrangeLinkViews in mind when you change how links are layered.
+        => new LinkView { ViewModel = link };
+
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         var g = e.Graphics;
@@ -1131,18 +1086,7 @@ public sealed class TreeView : UserControl
         {
             ViewPool.SetItemsSource(PART_Canvas, null);
             ViewPool.SetTemplateSelector(PART_Canvas, null);
-            if (_linksSubscribedTree is not null)
-            {
-                _linksSubscribedTree.Links.CollectionChanged -= OnLinksCollectionChanged;
-                _linksSubscribedTree = null;
-            }
-
-            foreach (var lv in _linkRenderers)
-            {
-                lv.Dispose();
-            }
-
-            _linkRenderers.Clear();
+            AttachVisibleItems(null);
 
             if (_notifier is not null)
             {

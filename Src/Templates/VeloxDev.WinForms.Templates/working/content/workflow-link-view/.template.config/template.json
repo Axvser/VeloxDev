@@ -39,6 +39,13 @@
       "description": "Link line thickness.",
       "defaultValue": "2",
       "replaces": "TemplateLinkThickness"
+    },
+    "surfaceBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Workflow surface background color. Must match the tree view's surface background.",
+      "defaultValue": "#1E1E1E",
+      "replaces": "TemplateSurfaceBackground"
     }
   },
   "primaryOutputs": [

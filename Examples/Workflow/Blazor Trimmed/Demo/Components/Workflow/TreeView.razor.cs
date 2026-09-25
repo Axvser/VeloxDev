@@ -9,16 +9,15 @@ namespace Demo.Components.Workflow;
 
 /// <summary>
 /// A Razor/Blazor workflow tree surface composing the surface behavior, grid decorator,
-/// minimap, links layer, and a pooled node view layer. Set <see cref="Tree"/> to an
-/// <see cref="IWorkflowTreeViewModel"/> to render. Node cards are rendered by the
-/// generated <c>NodeView</c> (or <see cref="NodeTemplate"/>), with input/output slot
+/// minimap, and a pooled node/link view layer. Set <see cref="Tree"/> to an
+/// <see cref="IWorkflowTreeViewModel"/> to render. The pooled layer is fed the tree's
+/// visible items and renders one generated <c>LinkView</c> per link; node cards are rendered
+/// by the generated <c>NodeView</c> (or <see cref="NodeTemplate"/>), with input/output slot
 /// hosts populated generically from <c>Node.Slots</c> (channel-based input/output split).
 ///
 /// Blazor has no data-binding auto-refresh, so this component subscribes to the tree model
 /// (nodes/links collections, tree, virtual link, and node anchor/position changes) and
-/// re-renders when connections are added, removed, or dragged. Without it, a newly created
-/// link would never appear: the <c>@foreach (var link in Tree.Links)</c> layer is re-run
-/// only when this component calls <c>StateHasChanged</c>.
+/// re-renders when connections are added, removed, or dragged.
 /// </summary>
 public partial class TreeView : ComponentBase, IDisposable
 {
@@ -149,7 +148,7 @@ public partial class TreeView : ComponentBase, IDisposable
 
     private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Node add/remove changes the per-node subscription set; links change the links layer.
+        // Node add/remove changes the per-node subscription set; both feed the pooled layer.
         UnsubscribeNodeChanges();
         if (Tree is not null) SubscribeNodeChanges(Tree);
         InvokeAsync(StateHasChanged);

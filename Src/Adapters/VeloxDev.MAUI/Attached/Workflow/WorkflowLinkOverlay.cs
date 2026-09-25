@@ -7,8 +7,8 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// Viewport-sized single-draw link overlay for a workflow surface. Renders every real link
-/// (plus the in-progress virtual connection) in ONE <see cref="GraphicsView"/> draw pass that
+/// Viewport-sized single-draw link overlay for a workflow surface. Renders the tree's visible
+/// links (plus the in-progress virtual connection) in ONE <see cref="GraphicsView"/> draw pass that
 /// lives in the decorator's coordinate space — the same frame the grid and ruler use.
 ///
 /// It deliberately does NOT live inside the scrolling world canvas (which grows by 1/Scale on
@@ -741,17 +741,22 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     // ── Drawing ──────────────────────────────────────────────────────────────
 
+    // 枚举源是 Core 的虚拟化可见集，不是全量的 tree.Links —— 每帧代价是 O(可见) 而不是 O(全部)。
+    // 按可见集裁剪不会漏画：曲线恒在两端节点包围盒的并集内（NodePairBoundsProvider），并集不与视口相交时它也不可能可见。
     private static IEnumerable<IWorkflowLinkViewModel> EnumerateVisibleLinks(IWorkflowTreeViewModel tree)
     {
-        foreach (var link in tree.Links)
+        var virtualLink = tree.VirtualLink;
+
+        foreach (var item in tree.GetHelper().VisibleItems)
         {
-            if (link.IsVisible)
+            // 可见集里也带着当前虚拟连线（Virtualize 把它放在首位）；它由下面单独补在最后 —— 橡皮筋要压在实连线之上
+            if (item is IWorkflowLinkViewModel link && link.IsVisible && !ReferenceEquals(link, virtualLink))
             {
                 yield return link;
             }
         }
 
-        if (tree.VirtualLink is { IsVisible: true } virtualLink)
+        if (virtualLink is { IsVisible: true })
         {
             yield return virtualLink;
         }

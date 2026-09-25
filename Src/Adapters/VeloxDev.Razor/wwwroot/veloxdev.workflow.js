@@ -250,9 +250,9 @@ window.veloxdevWorkflow = (() => {
         return glyph ? glyph.getBoundingClientRect() : el.getBoundingClientRect();
     }
 
-    // Resolves a link's live <polyline> by its stamped data-veloxdev-link-id. Link SVGs are not
-    // pooled, but Blazor diffs attributes in place across re-renders, so the element identity
-    // survives and a per-pass re-query is all this costs.
+    // Resolves a link's live <polyline> by its stamped data-veloxdev-link-id. Pooled link views are
+    // reused for a different link each time and Blazor re-stamps the attributes in place, so the
+    // element identity survives while the id changes — hence a per-pass re-query rather than a cache.
     function resolveLinkPolyline(host, linkId) {
         if (!host || !linkId) return null;
         const svg = host.querySelector('[data-veloxdev-link-id="' + linkId + '"]');

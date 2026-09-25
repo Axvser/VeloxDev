@@ -1,4 +1,5 @@
-// VeloxDev customization: Customize line geometry, color, and thickness here.
+// VeloxDev customization: Customize line geometry, color, and thickness here. The window
+// region follows the stroke, so keep it in step when you change the polyline or the thickness.
 using System;
 using System.ComponentModel;
 using System.Drawing;
@@ -12,85 +13,73 @@ using Size = System.Drawing.Size;
 namespace TemplateNamespace;
 
 /// <summary>
-/// Orthogonal (polyline) connection with golden-ratio stubs.
-/// Passive visual only — no hover, highlight, or keyboard interaction.
+/// Orthogonal (polyline) connection with golden-ratio stubs. Materialized and recycled by
+/// <see cref="ViewPool"/> (one view per visible link, the drag preview included) and paints
+/// itself — passive visual only, no hover, highlight, or keyboard interaction.
 /// </summary>
+/// <remarks>
+/// <para>A WinForms child window is opaque and cannot composite over its siblings, so the
+/// window region is carved to the stroke band of the polyline instead of a bounding box: the
+/// grid behind stays visible around the line and only the line area can ever cover the canvas.
+/// Keep <see cref="BackColor"/> equal to the surface's grid background, or the carved band
+/// becomes a visible seam.</para>
+/// <para>The view sits behind the node cards. Re-ordering pooled views is the surface's job
+/// (the pool fronts every view it materializes) — see the tree view's link-layer arrangement.</para>
+/// </remarks>
 public sealed class TemplateClass : Control
 {
     private const double Phi = 0.6180339887;
+
+    // Extra width the region gets on each side of the stroke, so the antialiased edge of the
+    // line is not clipped by the region boundary.
+    private const float RegionPad = 1.5f;
 
     private IWorkflowLinkViewModel? _link;
     private INotifyPropertyChanged? _notifier;
     private INotifyPropertyChanged? _senderNotifier;
     private INotifyPropertyChanged? _receiverNotifier;
 
-    private float _startLeft;
-    private float _startTop;
-    private float _endLeft;
-    private float _endTop;
     private bool _canRender = true;
     private bool _isVirtual;
     private Color _lineColor = ParseColor("TemplateLinkColor");
+    private float _thickness = float.Parse("TemplateLinkThickness", CultureInfo.InvariantCulture);
+
+    // Current frame: the polyline in window-local coordinates, plus the window origin it was
+    // translated by. Null when there is nothing to paint.
+    private PointF[]? _windowPoints;
+    private Region? _windowRegion;
 
     public TemplateClass()
     {
-        // Passive overlay: no hit-testing, sits behind the nodes. The link is
-        // rendered by the host canvas (Render) rather than as a child window, and
-        // uses an opaque background so it never participates in WinForms' fragile
-        // transparent compositing.
+        // Opaque fill matching the grid the window is carved out of: the window covers exactly
+        // the stroke band, so this fill has to be invisible against the canvas.
+        BackColor = ParseColor("TemplateSurfaceBackground");
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
             ControlStyles.UserPaint,
             true);
-        // No BackColor assignment: the link is rendered by the host canvas (Render)
-        // and never shown as a child window, so it keeps the default opaque
-        // background (a translucent BackColor would throw in .NET 10).
+        // Disabled: the stroke band must not swallow mouse input meant for the canvas
+        // underneath (pan) or for the connection gesture.
         TabStop = false;
         Enabled = false;
+        ApplyRegion(null);
     }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float StartLeft { get => _startLeft; set { _startLeft = value; RequestPaint(); } }
-
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float StartTop { get => _startTop; set { _startTop = value; RequestPaint(); } }
-
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float EndLeft { get => _endLeft; set { _endLeft = value; RequestPaint(); } }
-
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float EndTop { get => _endTop; set { _endTop = value; RequestPaint(); } }
-
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool CanRender { get => _canRender; set { _canRender = value; RequestPaint(); } }
-
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; RequestPaint(); } }
-
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color LineColor { get => _lineColor; set { _lineColor = value; RequestPaint(); } }
+    public Color LineColor { get => _lineColor; set { _lineColor = value; Invalidate(); } }
 
     /// <summary>
-    /// Optional callback invoked instead of <see cref="Control.Invalidate"/> when link
-    /// geometry or visibility changes. Surfaces that render links inside their own
-    /// <c>OnPaint</c> use this to invalidate the host canvas instead.
+    /// View-model accessor honored by <see cref="ViewManager"/> when a pooled
+    /// view is recycled. Setting it re-binds this view to the new link.
     /// </summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Action? ExternalInvalidate { get; set; }
-
-    private void RequestPaint()
+    public IWorkflowLinkViewModel? ViewModel
     {
-        if (ExternalInvalidate is { } external) external();
-        else Invalidate();
+        get => _link;
+        set => Bind(value);
     }
 
     /// <summary>Wires a link model so anchor/visibility changes repaint this view.</summary>
@@ -121,6 +110,15 @@ public sealed class TemplateClass : Control
 
         SubscribeEndpoints();
         Sync(link);
+    }
+
+    /// <summary>Re-reads this view's link and re-carves the window. Called on bind and on recycle.</summary>
+    public void Sync(IWorkflowLinkViewModel? link)
+    {
+        if (link is null) return;
+
+        _canRender = link.IsVisible;
+        RebuildGeometry();
     }
 
     private void SubscribeEndpoints()
@@ -161,19 +159,7 @@ public sealed class TemplateClass : Control
             return;
         }
 
-        SyncEndpoints();
-    }
-
-    /// <summary>
-    /// View-model accessor honored by <see cref="ViewManager"/> when a pooled
-    /// view is recycled. Setting it re-binds this view to the new link.
-    /// </summary>
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IWorkflowLinkViewModel? ViewModel
-    {
-        get => _link;
-        set => Bind(value);
+        RebuildGeometry();
     }
 
     private void OnLinkChanged(object? sender, PropertyChangedEventArgs e)
@@ -186,51 +172,132 @@ public sealed class TemplateClass : Control
 
         if (e.PropertyName is nameof(IWorkflowLinkViewModel.IsVisible) or null or "")
         {
-            CanRender = _link?.IsVisible == true;
+            _canRender = _link?.IsVisible == true;
         }
 
-        if (e.PropertyName is nameof(IWorkflowLinkViewModel.Sender)
-            or nameof(IWorkflowLinkViewModel.Receiver)
-            or null or "")
-        {
-            SyncEndpoints();
-        }
+        RebuildGeometry();
     }
 
-    private void SyncEndpoints()
+    // Rebuilds the window box and region from the current endpoints. Endpoints are canvas-local
+    // (the slot layout writes them from each slot control's on-screen position), so the box is
+    // used as-is, without the pan the node views add themselves.
+    private void RebuildGeometry()
     {
-        if (_link is null) return;
-
-        var sender = _link.Sender;
-        var receiver = _link.Receiver;
-        if (sender is not null)
+        var link = _link;
+        // NaN gate: slot anchors are NaN until the canvas measures them; skip real links until
+        // ready. Virtual-link placeholders (Parent is null) are exempt.
+        if (link is null || !_canRender || !WorkflowSlotUpdateGate.IsLinkRenderReady(link))
         {
-            StartLeft = (float)sender.Anchor.Horizontal;
-            StartTop = (float)sender.Anchor.Vertical;
+            _windowPoints = null;
+            ApplyRegion(null);
+            return;
         }
 
-        if (receiver is not null)
+        var sender = link.Sender;
+        var receiver = link.Receiver;
+        if (sender is null || receiver is null)
         {
-            EndLeft = (float)receiver.Anchor.Horizontal;
-            EndTop = (float)receiver.Anchor.Vertical;
+            _windowPoints = null;
+            ApplyRegion(null);
+            return;
         }
 
-        IsVirtual = IsVirtualLink(_link);
-        RequestPaint();
+        // Fresh compute, never a cached value: a pooled view recycled from a virtual (gesture)
+        // link onto a real link must not keep painting dashed.
+        _isVirtual = sender.Parent is null && receiver.Parent is null;
+
+        var points = BuildPoints(sender.Anchor, receiver.Anchor);
+        if (!IsDrawable(points))
+        {
+            _windowPoints = null;
+            ApplyRegion(null);
+            return;
+        }
+
+        using var strokePen = new Pen(Color.Black, _thickness + 2 * RegionPad) { LineJoin = LineJoin.Miter };
+        using var strokePath = new GraphicsPath();
+        strokePath.AddLines(points);
+        strokePath.Widen(strokePen);
+
+        var bounds = strokePath.GetBounds();
+        var originX = (float)Math.Floor(bounds.Left);
+        var originY = (float)Math.Floor(bounds.Top);
+        using (var shift = new Matrix(1f, 0f, 0f, 1f, -originX, -originY))
+        {
+            strokePath.Transform(shift);
+        }
+
+        // Land on whole pixels so the drawn line keeps the canvas-local path it had when the
+        // canvas painted it; the fractional remainder stays in the point coordinates.
+        Location = new Point((int)originX, (int)originY);
+        Size = new Size(
+            Math.Max(1, (int)Math.Ceiling(bounds.Right) - (int)originX + 1),
+            Math.Max(1, (int)Math.Ceiling(bounds.Bottom) - (int)originY + 1));
+
+        var local = new PointF[points.Length];
+        for (var i = 0; i < points.Length; i++)
+        {
+            local[i] = new PointF(points[i].X - originX, points[i].Y - originY);
+        }
+
+        _windowPoints = local;
+        ApplyRegion(strokePath);
+        Invalidate();
     }
 
-    public void Sync(IWorkflowLinkViewModel? link)
+    // Hands the carved shape to the window. WinForms copies the region into the window, so the
+    // previous managed region is ours to dispose.
+    private void ApplyRegion(GraphicsPath? strokePath)
     {
-        if (link is null) return;
-
-        CanRender = link.IsVisible;
-        SyncEndpoints();
+        var next = strokePath is null ? new Region() : new Region(strokePath);
+        var previous = _windowRegion;
+        _windowRegion = next;
+        Region = next;
+        previous?.Dispose();
     }
 
-    // Fresh compute, never a cached _isVirtual: a pooled view recycled from a virtual
-    // (gesture) link onto a real link must not keep painting dashed.
-    private bool IsVirtualLink(IWorkflowLinkViewModel link)
-        => link.Sender?.Parent is null && link.Receiver?.Parent is null;
+    // GDI+ refuses to widen a path it cannot stroke: a line whose endpoints land on the same
+    // pixel (the connection gesture's first frame) or whose anchors are unmeasured (NaN).
+    private static bool IsDrawable(PointF[] points)
+    {
+        foreach (var point in points)
+        {
+            if (!float.IsFinite(point.X) || !float.IsFinite(point.Y)) return false;
+        }
+
+        return Math.Abs(points[0].X - points[^1].X) >= 0.5f || Math.Abs(points[0].Y - points[^1].Y) >= 0.5f;
+    }
+
+    private PointF[] BuildPoints(Anchor sender, Anchor receiver)
+    {
+        var s = new PointF((float)sender.Horizontal, (float)sender.Vertical);
+        var e = new PointF((float)receiver.Horizontal, (float)receiver.Vertical);
+        double dx = e.X - s.X;
+        double stub = dx / 2.0 * (1.0 - Phi);
+        var p1 = new PointF(s.X + (float)stub, s.Y);
+        var p4 = new PointF(e.X - (float)stub, e.Y);
+        return [s, p1, p4, e];
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+
+        var points = _windowPoints;
+        if (points is null || points.Length < 2) return;
+
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        using var pen = new Pen(_lineColor, _thickness);
+        if (_isVirtual)
+        {
+            pen.DashStyle = DashStyle.Dash;
+            pen.DashPattern = [4f, 2f];
+        }
+
+        g.DrawLines(pen, points);
+    }
 
     protected override void Dispose(bool disposing)
     {
@@ -242,55 +309,12 @@ public sealed class TemplateClass : Control
                 _notifier.PropertyChanged -= OnLinkChanged;
                 _notifier = null;
             }
+
+            _windowRegion?.Dispose();
+            _windowRegion = null;
         }
 
         base.Dispose(disposing);
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        Render(e.Graphics);
-    }
-
-    /// <summary>
-    /// Renders the connection geometry onto an arbitrary <see cref="Graphics"/> surface.
-    /// Hosts write all slot anchors first, then call this per link in world coordinates
-    /// (links are not child windows — WinForms clips overlapping siblings). A standalone
-    /// control's <c>OnPaint</c> uses the same path.
-    /// </summary>
-    public void Render(Graphics g)
-    {
-        if (!_canRender) return;
-
-        // NaN gate: slot anchors are NaN until the canvas measures them; skip real links
-        // until ready. Virtual-link placeholders (Parent is null) are exempt.
-        if (_link is not null && !WorkflowSlotUpdateGate.IsLinkRenderReady(_link)) return;
-
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-
-        var points = BuildPoints();
-        if (points.Length < 2) return;
-
-        using var pen = new Pen(_lineColor, float.Parse("TemplateLinkThickness", CultureInfo.InvariantCulture));
-        if (_isVirtual)
-        {
-            pen.DashStyle = DashStyle.Dash;
-            pen.DashPattern = [4f, 2f];
-        }
-
-        g.DrawLines(pen, points);
-    }
-
-    private PointF[] BuildPoints()
-    {
-        var s = new PointF(_startLeft, _startTop);
-        var e = new PointF(_endLeft, _endTop);
-        double dx = _endLeft - _startLeft;
-        double stub = dx / 2.0 * (1.0 - Phi);
-        var p1 = new PointF(s.X + (float)stub, s.Y);
-        var p4 = new PointF(e.X - (float)stub, e.Y);
-        return [s, p1, p4, e];
     }
 
     private static Color ParseColor(string hex)

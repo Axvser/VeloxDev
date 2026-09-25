@@ -29,28 +29,24 @@
             <InfoOverlay Tree="Tree" Viewport="vp" />
         </Minimap>
         <ChildContent Context="sc">
-            @* Links layer: one full-canvas link view per connection (absolute, overflow visible). *@
-            <div class="veloxdev-wf-links" style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;">
-                @foreach (var link in Tree.Links)
-                {
-                    <LinkView Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
-                }
-                @if (Tree.VirtualLink.IsVisible)
-                {
-                    <LinkView Link="Tree.VirtualLink" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
-                }
-            </div>
-
-            @* Nodes layer: pooled node views dispatched by the template selector.
-               The selector uses the caller's NodeTemplate override, or falls back to the
-               generically-populated NodeView slot hosts below. *@
-            <CustomTemplateSelector Items="Tree.Nodes" KeySelector="n => n"
-                                    NodeTemplate="NodeTemplate ?? RenderGenericNode" />
+            @* VeloxDev customization: assign the view each component gets here — the pooled layer below
+               renders every visible node and link (the gesture's virtual link included); swap the selector
+               or the two templates to change which view a component gets. *@
+            <CustomTemplateSelector Items="Tree.GetHelper().VisibleItems" KeySelector="i => i"
+                                    NodeTemplate="NodeTemplate ?? RenderGenericNode"
+                                    LinkTemplate="RenderGenericLink(sc)" />
         </ChildContent>
     </WorkflowSurfaceBehavior>
 }
 
 @code {
+    // Link template for the pooled layer: swap it for your own markup, and keep the wrapper
+    // non-interactive — the surface's canvas gestures rely on that.
+    private static RenderFragment<IWorkflowLinkViewModel> RenderGenericLink(SurfaceCanvas canvas)
+        => link => @<div style="display:contents;pointer-events:none;">
+                        <LinkView Link="link" CanvasWidth="@canvas.Width" CanvasHeight="@canvas.Height" />
+                    </div>;
+
     /// <summary>
     /// Default node template used when the caller does not supply <see cref="TreeView.NodeTemplate"/>:
     /// the generated <c>NodeView</c> with input/output slot hosts populated generically
