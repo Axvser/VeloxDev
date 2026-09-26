@@ -290,6 +290,8 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 
 **2026-09-25 第四次改（度量那一批，节点从一行变两行、树顶多了一个根节点），构建与启动复核一次通过**：`dotnet build-server shutdown` → `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **0 错误、1 个既有警告** → 启动 14 s 后读到 `MainWindowHandle=1246990` / `Responding=True` / `MainWindowTitle=Demo`。
 
+**2026-09-26 起上面那条「1 个既有警告」的基线作废**：`WorkflowAgentToolkit.cs:2050` 的 CS8602 已随 `TryGetNode` 加 `[NotNullWhen(true)]` 而消失（`netstandard2.0` 没有这个特性，靠本程序集内 `Compat/NotNullWhenAttribute.cs` 的 internal 补丁提供），同批退掉的还有 26 处 `node!` 与 2 处 `slot!`。现在 `VeloxDev.Core.Extension` 与其测试项目都是 **0 警告 0 错误** —— 所以此后读到本文任何「N 个既有警告」都是**历史观测**，不是当下基线。
+
 **同日发现：截图是可以读回来的 —— 「视觉复核做不了」这条从前的结论作废。** 用 PowerShell 的 `System.Drawing` 抓窗口（`GetWindowRect` + `Graphics.CopyFromScreen`）存 PNG，再用 `Read` 读它，**能看清内容**（`PrintWindow` 不行：对这块 GPU 合成的窗口会返回缺元素的残帧，实测两次得到的画面都是不完整的，别用它）。这条能力的**边界**同样实测过：
 
 | 能做 | 不能做 |

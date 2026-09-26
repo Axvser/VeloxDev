@@ -1,7 +1,7 @@
 # AI — 架构
 
 > 代码：`Src/Core/VeloxDev.Core/AI/`（13 个 .cs）。**目录名 `AI`，命名空间是 `VeloxDev.AI`** —— 两者不同名，`grep VeloxDev.AI` 会连带命中消费方。
-> 消费方：`Src/Core/VeloxDev.Core.Extension/Agent/`（**44** 个 .cs，命名空间同样以 `VeloxDev.AI` 起头：`VeloxDev.AI.Pipelines`、`VeloxDev.AI.Workflow`、`VeloxDev.AI.MCP`、`VeloxDev.AI.Skills`）。**别把 `Agent/` 与整个 `VeloxDev.Core.Extension` 项目搞混**：整个项目是 106 个 .cs，`Agent/` 只是其中 44 个（其余是框架侧的 `WorkflowSystem` 辅助、`TransitionSystem`、`MVVM` 等，与本模块无关）。**依赖方向单向：Extension → Core**。Core/AI 不引用 Extension 的任何东西，也不引用 `VeloxDev.WorkflowSystem` 的类型 —— 唯一一处提及是 `SlotSelectorsAttribute.cs:4` 的 XML 注释 `cref`（同程序集，所以能解析，但不是编译期依赖）。
+> 消费方：`Src/Core/VeloxDev.Core.Extension/Agent/`（**52** 个 .cs，命名空间同样以 `VeloxDev.AI` 起头：`VeloxDev.AI.Pipelines`、`VeloxDev.AI.Workflow`、`VeloxDev.AI.MCP`、`VeloxDev.AI.Skills`）。**别把 `Agent/` 与整个 `VeloxDev.Core.Extension` 项目搞混**：整个项目是 55 个 .cs（2026-09-26 实测；含 `Compat/NotNullWhenAttribute.cs` 这类非 Agent/ 下的文件），`Agent/` 只是其中 52 个（其余是框架侧的 `WorkflowSystem` 辅助、`TransitionSystem`、`MVVM` 等，与本模块无关）。**依赖方向单向：Extension → Core**。Core/AI 不引用 Extension 的任何东西，也不引用 `VeloxDev.WorkflowSystem` 的类型 —— 唯一一处提及是 `SlotSelectorsAttribute.cs:4` 的 XML 注释 `cref`（同程序集，所以能解析，但不是编译期依赖）。
 > 平台差异：**本模块没有平台轴**。整个 `AI/` 只 `using System.Reflection` 与 `System.Windows.Input`（后者在 .NET Core 由 `System.ObjectModel` 提供，不是 WPF 依赖）。所以本模块没有 `adapters/`。
 
 本文只写「读完 13 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。

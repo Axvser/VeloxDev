@@ -22,8 +22,10 @@
 | 宿主提供只读工具 | `WithQueryTools(promptContext, tools…)` | `WorkflowAgentScope.cs:200` | 是（计入读预算、不标脏） |
 | 宿主提供任意工具 | `WithTools(promptContext, tools…)` | `WorkflowAgentScope.cs:185` | 是（计入写预算、可标脏） |
 | 宿主接对话记录 | `WithTranscript(AgentTranscript)` | `WorkflowAgentScope.cs:1558` | **只能设一次**，重复抛 `InvalidOperationException` |
+| 出 OpenTelemetry 埋点 | `UseAgentTelemetry(AIAgentBuilder, 源名?, 敏感数据?)` / `WithAgentTelemetry(AIAgent, …)` | `AgentTelemetryExtensions.cs` | 库自己**不产出任何埋点**，只是把框架的接线收成一次调用；宿主仍须自己 `AddSource(源名)` 与持有导出器。默认 `EnableSensitiveData = false` |
+| 写工具要人工批准 | `WithToolApproval(bool enabled = true)` | `WorkflowAgentScope.cs` 的 `WithToolApproval` + `ToolPipeline.Confirm` + `WorkflowAgentToolkit.ConfirmMutationAsync` | 默认关。开启了就**没有 handler 也拒绝**（fail-closed）。以**工具名**为键，`AllowAlways` 对该工具整会话生效 |
 
-**七个能力闸门，逐个确认是「代码挡」还是「提示说」。** 本模块的立场是**代码挡**（`WorkflowAgentScope.cs:282` 的小节标题就是这句话）：
+**八个能力闸门，逐个确认是「代码挡」还是「提示说」。** 本模块的立场是**代码挡**（`WorkflowAgentScope.cs:282` 的小节标题就是这句话）：
 
 | 闸门 | 默认 | 代码在哪拒 |
 |---|---|---|
@@ -34,6 +36,7 @@
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | 无上限 | `WorkflowAgentToolkit.CheckBudget` `:277` |
 | `WithToolEnabled` / `SetToolEnabled` | 全开 | `CreateTools` 的 `.Where`（`:75`）**加** `CheckBudget` 的第一条（`:283`） |
 | **一个子代理的额度** | 从父那里取一份**份额**，不是另开一口锅 | 授权在 `SubAgentScope.TrySpawn`（`SubAgentScope.cs:370`）就被夹紧，执行期由 `CheckBudget` 的根账本一条（`WorkflowAgentToolkit.cs:296-302`）兜底 |
+| `WithToolApproval(bool)` | **`false`（不问）** | `ToolPipeline.Confirm` → `WorkflowAgentToolkit.ConfirmMutationAsync`；进门判定复用 `IsQueryTool`（「不改变图」），所以 `CompileWorkflow` 这类不进、**MCP 工具一律进**。**它不进提示词，因此不 `BumpVersion()`** |
 
 **「被关掉」是两层，不是一层**（`WorkflowAgentToolkit.cs:279-282`）：过滤只到得了工作流内置工具；`CheckBudget` 的钩子被所有切片共享，所以一个开关能到达 MCP 与技能的工具。**只做过滤会让 `WithToolEnabled("ListSkills")` 静默无效。**
 

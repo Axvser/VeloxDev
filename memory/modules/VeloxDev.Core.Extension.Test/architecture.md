@@ -81,7 +81,7 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **382**（含 `Agent/SubAgents/SubAgentLiveTests.cs` 的 5 条门控实测） |
+| 测试条数 | **399**（2026-09-26 实测 `[TestMethod]` 计数与通过数一致；含 `Agent/SubAgents/SubAgentLiveTests.cs` 的 **6** 条门控实测 —— 本条此前在三个文件里分别写成 382/5 与 391，均以 `grep -c '\[TestMethod\]'` 为准） |
 | 耗时 | **5–9 s**（有 `API_KEY_DEEPSEEK`，那 5 条真的走网络；实测连续 6 轮为 5/5/5/6/7/7/8 s，2026-09-22 加第 5 条门控后为 **9 s**）/ 无 key 时全量会在跑到 122~246 条之间**中止**（见下），而 `--filter FullyQualifiedName~Agent.SubAgents` 无 key 只需 **0.42–0.45 s**（2026-09-22 五次实测 441/423/440/431/451 ms） |
 | 失败 | 0 |
 
