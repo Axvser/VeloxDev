@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -530,7 +531,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Zero-based index of the node.")] int nodeIndex)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        return BuildNodeDetailJson(node!, nodeIndex);
+        return BuildNodeDetailJson(node, nodeIndex);
     }
 
     [Description("Gets full detail of a node by runtime ID. Stable across add/remove.")]
@@ -636,7 +637,7 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var n = node!;
+        var n = node;
         var newAnchor = new Anchor(n.Anchor.Horizontal + offsetX, n.Anchor.Vertical + offsetY, n.Anchor.Layer);
         var completion = WaitForExitedAsync(n.SetAnchorCommand, cancellationToken);
         n.SetAnchorCommand.Execute(newAnchor);
@@ -653,7 +654,7 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var completion = WaitForExitedAsync(node!.SetAnchorCommand, cancellationToken);
+        var completion = WaitForExitedAsync(node.SetAnchorCommand, cancellationToken);
         node.SetAnchorCommand.Execute(new Anchor(left, top, layer));
         await completion;
         return Ok($"Position {nodeIndex} → ({left},{top},{layer}).");
@@ -667,7 +668,7 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var n = node!;
+        var n = node;
         var oldSize = new Size(n.Size.Width, n.Size.Height);
         var newSize = new Size(width, height);
         if (oldSize.Width == newSize.Width && oldSize.Height == newSize.Height)
@@ -684,7 +685,7 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var completion = WaitForExitedAsync(node!.DeleteCommand, cancellationToken);
+        var completion = WaitForExitedAsync(node.DeleteCommand, cancellationToken);
         node.DeleteCommand.Execute(null);
         await completion;
         return Ok($"Node {nodeIndex} deleted.");
@@ -697,7 +698,7 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
     {
         if (!TryGetSlot(nodeIndex, slotIndex, out var slot, out var error)) return error;
-        var completion = WaitForExitedAsync(slot!.DeleteCommand, cancellationToken);
+        var completion = WaitForExitedAsync(slot.DeleteCommand, cancellationToken);
         slot.DeleteCommand.Execute(null);
         await completion;
         return Ok($"Slot [{nodeIndex}][{slotIndex}] deleted.");
@@ -809,7 +810,7 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node!.ReceiveCommand, new TaskContext(data: parameter), cancellationToken);
+            await WaitForCommandAsync(node.ReceiveCommand, new TaskContext(data: parameter), cancellationToken);
             return Ok($"Receive on node {nodeIndex} completed.");
         }
         catch (OperationCanceledException)
@@ -833,7 +834,7 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node!.BroadcastCommand, parameter, cancellationToken);
+            await WaitForCommandAsync(node.BroadcastCommand, parameter, cancellationToken);
             return Ok($"Broadcast on node {nodeIndex} completed.");
         }
         catch (Exception ex)
@@ -887,8 +888,8 @@ public sealed class WorkflowAgentToolkit
         [Description("JSON patch object, e.g. '{\"Title\":\"New\"}'.")] string jsonPatch)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var result = ComponentPatcher.ApplyPatch(node!, jsonPatch);
-        RefreshSlotAnchorsIfEnumSlotNode(node!);
+        var result = ComponentPatcher.ApplyPatch(node, jsonPatch);
+        RefreshSlotAnchorsIfEnumSlotNode(node);
         return result;
     }
 
@@ -946,7 +947,7 @@ public sealed class WorkflowAgentToolkit
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
 
-        var cmds = CommandInvoker.DiscoverCommands(node!);
+        var cmds = CommandInvoker.DiscoverCommands(node);
         var arr = new JArray();
         foreach (var cmd in cmds)
         {
@@ -998,8 +999,8 @@ public sealed class WorkflowAgentToolkit
         if (!_scope.IsGenericCommandAllowed(commandName))
             return Error($"Generic command execution is disabled by host policy. The host must allowlist '{commandName}' via WithAllowedGenericCommands.");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var result = CommandInvoker.Invoke(node!, commandName, jsonParameter);
-        RefreshSlotAnchorsIfEnumSlotNode(node!);
+        var result = CommandInvoker.Invoke(node, commandName, jsonParameter);
+        RefreshSlotAnchorsIfEnumSlotNode(node);
         return result;
     }
 
@@ -1152,7 +1153,7 @@ public sealed class WorkflowAgentToolkit
             var slot = (IWorkflowSlotViewModel)Activator.CreateInstance(type);
             if (Enum.TryParse<SlotChannel>(channel, true, out var ch))
                 slot.Channel = ch;
-            node!.CreateSlotCommand.Execute(slot);
+            node.CreateSlotCommand.Execute(slot);
             return JsonConvert.SerializeObject(new
             {
                 status = "ok",
@@ -1174,7 +1175,7 @@ public sealed class WorkflowAgentToolkit
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var result = new JArray();
-        var type = node!.GetType();
+        var type = node.GetType();
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!prop.CanRead) continue;
@@ -1269,7 +1270,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Channel: 'OneSender','OneReceiver','OneBoth','ManySender','ManyReceiver','ManyBoth'.")] string channel = "MultipleBoth")
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var prop = node!.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
         if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
         if (!IsSlotCollection(prop.PropertyType, out _))
             return Error($"Property '{propertyName}' is not a slot collection.");
@@ -1323,7 +1324,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Runtime ID of the slot to remove.")] string slotRuntimeId)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var prop = node!.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
         if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
         if (!IsSlotCollection(prop.PropertyType, out _))
             return Error($"Property '{propertyName}' is not a slot collection.");
@@ -1350,7 +1351,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Only required for non-enum ISlotProvider selectors: the fully-qualified .NET type name. Call GetTypeSchema with this name first to inspect structure before constructing JSON. Leave empty for enum/bool selectors.")] string nonEnumTypeName = "")
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var type = node!.GetType();
+        var type = node.GetType();
         var prop = type.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
         if (prop == null) return Error($"Property '{propertyName}' not found on {type.Name}.");
 
@@ -1604,7 +1605,7 @@ public sealed class WorkflowAgentToolkit
         Func<IWorkflowNodeViewModel, bool>? predicate = null;
         if (!string.IsNullOrEmpty(typeName))
             predicate = n => n.GetType().Name.IndexOf(typeName, StringComparison.OrdinalIgnoreCase) >= 0;
-        var found = node!.SearchForwardNodes(predicate, maxDepth);
+        var found = node.SearchForwardNodes(predicate, maxDepth);
         return BuildNodeListResult(found);
     }
 
@@ -1618,7 +1619,7 @@ public sealed class WorkflowAgentToolkit
         Func<IWorkflowNodeViewModel, bool>? predicate = null;
         if (!string.IsNullOrEmpty(typeName))
             predicate = n => n.GetType().Name.IndexOf(typeName, StringComparison.OrdinalIgnoreCase) >= 0;
-        var found = node!.SearchReverseNodes(predicate, maxDepth);
+        var found = node.SearchReverseNodes(predicate, maxDepth);
         return BuildNodeListResult(found);
     }
 
@@ -1632,7 +1633,7 @@ public sealed class WorkflowAgentToolkit
         Func<IWorkflowNodeViewModel, bool>? predicate = null;
         if (!string.IsNullOrEmpty(typeName))
             predicate = n => n.GetType().Name.IndexOf(typeName, StringComparison.OrdinalIgnoreCase) >= 0;
-        var found = node!.SearchAllRelativeNodes(predicate, maxDepth);
+        var found = node.SearchAllRelativeNodes(predicate, maxDepth);
         return BuildNodeListResult(found);
     }
 
@@ -1740,7 +1741,7 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node!.ReverseBroadcastCommand, parameter, cancellationToken);
+            await WaitForCommandAsync(node.ReverseBroadcastCommand, parameter, cancellationToken);
             return Ok($"Reverse broadcast on node {nodeIndex} completed.");
         }
         catch (Exception ex)
@@ -1783,7 +1784,7 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetSlot(nodeIndex, slotIndex, out var slot, out var error)) return error;
         if (!Enum.TryParse<SlotChannel>(channel, true, out var ch))
             return Error($"Invalid channel '{channel}'. Valid: {string.Join(", ", Enum.GetNames(typeof(SlotChannel)))}.");
-        slot!.SetChannelCommand.Execute(ch);
+        slot.SetChannelCommand.Execute(ch);
         return Ok($"Slot [{nodeIndex}][{slotIndex}] channel → {ch}.");
     }
 
@@ -1794,7 +1795,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Condition value: enum name or True/False")] string conditionValue)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var prop = node!.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
         if (prop == null || !IsSlotEnumeratorProperty(prop.PropertyType, out _))
             return Error($"'{propertyName}' is not SlotEnumerator on node [{nodeIndex}]");
 
@@ -2028,7 +2029,7 @@ public sealed class WorkflowAgentToolkit
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node!, role);
+            var graphs = await compiler.CompileAsync(node, role);
             if (graphs.Count == 0)
                 return Error(role == CompileRole.Terminal
                     ? "Compile produced no graph for this terminal node."
@@ -2246,7 +2247,7 @@ public sealed class WorkflowAgentToolkit
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node!, role);
+            var graphs = await compiler.CompileAsync(node, role);
 
             var entries = new JArray();
             foreach (var g in graphs)
@@ -2426,7 +2427,10 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Helpers ──────────────────────────
 
-    private bool TryGetNode(int index, out IWorkflowNodeViewModel? node, out string error)
+    // [NotNullWhen] 是这套索引工具的地基：调用点清一色写 `if (!TryGetNode(...)) return ...;`，
+    // 标了它之后 node 在那条守卫之后就是非空，25 处 `node` 才退得掉。netstandard2.0 没有这个
+    // 特性，所以本程序集自带一份 —— 见 Compat/NotNullWhenAttribute.cs。
+    private bool TryGetNode(int index, [NotNullWhen(true)] out IWorkflowNodeViewModel? node, out string error)
     {
         node = null;
         error = string.Empty;
@@ -2439,10 +2443,10 @@ public sealed class WorkflowAgentToolkit
         return true;
     }
 
-    private bool TryGetSlot(int nodeIndex, int slotIndex, out IWorkflowSlotViewModel? slot, out string error)
+    private bool TryGetSlot(int nodeIndex, int slotIndex, [NotNullWhen(true)] out IWorkflowSlotViewModel? slot, out string error)
     {
         slot = null;
-        if (!TryGetNode(nodeIndex, out var node, out error) || node is null) return false;
+        if (!TryGetNode(nodeIndex, out var node, out error)) return false;
         if (slotIndex < 0 || slotIndex >= node.Slots.Count)
         {
             error = Error($"Slot index {slotIndex} out of range [0,{node.Slots.Count}) on node {nodeIndex}.");
@@ -2637,7 +2641,7 @@ public sealed class WorkflowAgentToolkit
         [Description("For collection properties, the zero-based index within the collection. Ignored for single-slot properties.")] int collectionIndex = 0)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var prop = node!.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
         if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
 
         if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))

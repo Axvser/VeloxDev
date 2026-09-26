@@ -46,8 +46,10 @@ public class SubAgentTreeViewModelTests
 
         Assert.AreEqual(2, tree.Roots.Count, "the grandchild is not a root");
         Assert.AreEqual(3, tree.TotalCount, "but it is counted");
+        Assert.IsTrue(tree.Roots.All(n => n.Row is not null),
+            "every root here is a real spawn; only the synthetic scope root carries no row");
         CollectionAssert.AreEqual(
-            new[] { "alpha", "beta" }, tree.Roots.Select(n => n.Row.Name).ToArray(),
+            new[] { "alpha", "beta" }, tree.Roots.Select(n => n.Row!.Name).ToArray(),
             "roots keep spawn order, so the tree does not reshuffle under the user");
 
         var parent = tree.Roots[0];
@@ -105,7 +107,9 @@ public class SubAgentTreeViewModelTests
         Assert.AreEqual(0, tree.RunningCount);
         Assert.IsTrue(tree.IsIdle);
         Assert.IsFalse(tree.HasFailed);
-        Assert.AreEqual("the answer", tree.Roots.Single().Row.Result);
+        var single = tree.Roots.Single().Row;
+        Assert.IsNotNull(single, "the only root is a real spawn, so it carries a row");
+        Assert.AreEqual("the answer", single.Result);
     }
 
     [TestMethod]
@@ -151,6 +155,7 @@ public class SubAgentTreeViewModelTests
         Assert.AreEqual(0, tree.CancelledCount, "a failure is not a stop either way round");
 
         var row = tree.Roots.Single().Row;
+        Assert.IsNotNull(row, "the only root is a real spawn, so it carries a row");
         Assert.IsTrue(row.HasError, "the row says something went wrong");
         StringAssert.Contains(row.Error, "the model is unreachable",
             "and carries the reason rather than only the fact, which is what a panel shows");
