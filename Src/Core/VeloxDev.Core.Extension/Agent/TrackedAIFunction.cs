@@ -64,6 +64,17 @@ internal sealed class TrackedAIFunction(
             return Error(refusal);
         }
 
+        // ── Pre-flight: a call the owner wants a person to approve ──
+        // Awaited without ConfigureAwait(false) on purpose: this runs inside the block InvokeCoreAsync already
+        // marshalled onto the host's context, and the work after the await (reporting, and the tool body when
+        // it is approved) must stay on that same thread. A confirmation handler that shows a dialog depends
+        // on it. Reported as Refused, like the budget gate: the call never ran.
+        if (await _tools.CheckConfirmationAsync(Name, cancellationToken) is { } denial)
+        {
+            await ReportAsync(denial, AgentToolOutcome.Refused, TimeSpan.Zero, cancellationToken);
+            return Error(denial);
+        }
+
         var elapsed = Stopwatch.StartNew();
         if (_pipeline is not null)
             await _pipeline.PublishAsync(new AgentToolCallStarted(Name), cancellationToken);

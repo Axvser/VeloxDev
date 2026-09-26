@@ -243,7 +243,41 @@ public sealed class WorkflowAgentToolkit
     internal ToolPipeline Tools => _tools ??= new ToolPipeline(() => _scope.Transcript, () => _scope.UIContext)
     {
         Refuse = CheckBudget,
+        Confirm = ConfirmMutationAsync,
     };
+
+    /// <summary>
+    /// The human gate. Asked after the budget gate and before the body, for anything that is not a read-only
+    /// query — a read has nothing to approve, and asking about one would train the user to click through
+    /// dialogs.
+    /// <para>
+    /// Lives on this shared policy rather than in each slice, so a single switch reaches the workflow
+    /// built-ins, the host's own tools and every MCP server's tools alike, exactly as
+    /// <see cref="CheckBudget"/> does. A denial is reported as <see cref="AgentToolOutcome.Refused"/> and
+    /// never reaches the body.
+    /// </para>
+    /// <para>
+    /// The key handed to the confirmation handler is the tool name, so a host answering "allow for the
+    /// session" approves that tool for the rest of the session rather than one call. Coarser than the
+    /// framework's per-argument approval, and the right granularity here: the host is answering "may the
+    /// Agent use this capability", not auditing a particular argument list.
+    /// </para>
+    /// </summary>
+    private async ValueTask<string?> ConfirmMutationAsync(string toolName, CancellationToken cancellationToken)
+    {
+        if (!_scope.ToolApproval) return null;
+        if (IsQueryTool(toolName)) return null;
+
+        var description = $"The Agent wants to call the tool '{toolName}'.";
+        if (await _scope.ResolveConfirmationAsync(toolName, description))
+            return null;
+
+        // Same shape as the budget refusals: say what happened, and close the two ways round it — retrying,
+        // and finding another tool that makes the same change.
+        return $"'{toolName}' was not approved by the user. The call did not run. "
+             + "Do not retry it, and do not look for another tool that makes the same change — "
+             + "ask the user what they want instead.";
+    }
 
     /// <summary>
     /// The stage that turns a completed call into conversation state: it counts the call against the three

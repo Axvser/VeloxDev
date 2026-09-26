@@ -554,6 +554,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// </summary>
     private int _interactionSafety = 1;
 
+    /// <summary>Whether non-query calls need the host's approval first. Off by default; see WithToolApproval.</summary>
+    private bool _toolApproval;
+
     /// <summary>
     /// Custom prompt text per safety level (1–3). Level 0 is always the built-in silent rule.
     /// Key = level (1/2/3), Value = full body text to embed in the "Interaction Safety Policy" section.
@@ -572,6 +575,46 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         BumpVersion();
         return this;
     }
+
+    /// <summary>
+    /// Requires a human to approve every tool call that is not a read-only query, before it runs. Off by
+    /// default.
+    /// </summary>
+    /// <param name="enabled">
+    /// <c>true</c> to put each such call to <see cref="WithConfirmationHandler"/>; <c>false</c> to remove the
+    /// step again. Takes effect on the next call, including mid-session.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>This is a code gate, not a prompt one.</b> The refusal happens inside the tool wrapper, so a model
+    /// that is misaligned, confused or steered by injected content cannot skip it by declining to ask — which
+    /// is exactly the hole <c>RequestConfirmation</c> leaves, since that is a tool the model has to remember
+    /// to call. It complements <see cref="WithInteractionSafety"/> rather than replacing it: that one shapes
+    /// what the model is <i>told</i> to ask about, this one decides what it may do.
+    /// </para>
+    /// <para>
+    /// The host keeps the decision. <see cref="WithConfirmationHandler"/> sees a key and a description per
+    /// call and answers allow-once, allow-for-the-session or deny; a host that never registers one denies
+    /// every such call, because an unanswerable prompt denies.
+    /// </para>
+    /// <para>
+    /// What counts as a query is the same classification the budgets use (the toolkit's read-only set,
+    /// which already folds in the skill and sub-agent tool names). It is a judgement about the
+    /// <i>workflow</i>: a tool that does not change the graph passes. Tools contributed by an MCP server are
+    /// third-party code and are treated as mutations, so they are gated as well.
+    /// </para>
+    /// <para>
+    /// No version bump: nothing this contributes reaches the prompt, so no per-turn render depends on it.
+    /// </para>
+    /// </remarks>
+    public WorkflowAgentScope WithToolApproval(bool enabled = true)
+    {
+        _toolApproval = enabled;
+        return this;
+    }
+
+    /// <summary>Whether non-query calls are put to the host's confirmation handler before they run.</summary>
+    internal bool ToolApproval => _toolApproval;
 
     /// <summary>
     /// Overrides the prompt body text injected into the system prompt for the specified safety level (1–3).

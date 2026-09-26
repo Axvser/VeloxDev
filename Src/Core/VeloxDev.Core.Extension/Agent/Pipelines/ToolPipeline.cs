@@ -39,6 +39,19 @@ public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func
     /// </summary>
     public Func<string, string?>? Refuse { get; set; }
 
+    /// <summary>
+    /// Consulted after <see cref="Refuse"/> and before a tool runs, for calls the owner wants a human to
+    /// approve. Returning a message refuses the call the same way <see cref="Refuse"/> does; <c>null</c>
+    /// lets it run.
+    /// <para>
+    /// Separate from <see cref="Refuse"/> because it is expected to take as long as a person does, and
+    /// because it is the one gate that must not be reachable by the model: a tool the model has to remember
+    /// to call is not a gate at all. Runs inside the marshalled block, so an implementation that shows a
+    /// dialog is already on the thread the dialog belongs to.
+    /// </para>
+    /// </summary>
+    public Func<string, CancellationToken, ValueTask<string?>>? Confirm { get; set; }
+
     /// <summary>The thread the wrapper should marshal a call onto, resolved now.</summary>
     internal SynchronizationContext? ResolveContext() => MarshalTo?.Invoke();
 
@@ -46,6 +59,12 @@ public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func
     /// Asks the gate whether this call may run. Returns the refusal, or <c>null</c> to allow it.
     /// </summary>
     internal string? CheckRefusal(string toolName) => Refuse?.Invoke(toolName);
+
+    /// <summary>
+    /// Asks the human gate whether this call may run. Returns the refusal, or <c>null</c> to allow it.
+    /// </summary>
+    internal ValueTask<string?> CheckConfirmationAsync(string toolName, CancellationToken cancellationToken)
+        => Confirm is null ? new ValueTask<string?>((string?)null) : Confirm(toolName, cancellationToken);
 
     /// <inheritdoc />
     public async ValueTask OnEventAsync(
