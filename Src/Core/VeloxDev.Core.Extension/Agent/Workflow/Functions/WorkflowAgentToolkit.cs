@@ -663,7 +663,7 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Mutation Functions ──────────────────────────
 
-    [Description("Moves a node by relative offset. Coordinate system: +offsetX = rightward, +offsetY = downward (origin is top-left). Mirrors GUI node-drag: dispatches SetAnchorCommand, which is NOT undoable (Core's move command has no undo entry).")]
+    [Description("Moves a node by relative offset. Coordinate system: +offsetX = rightward, +offsetY = downward (origin is top-left). Mirrors GUI node-drag exactly: dispatches MoveCommand with an Offset delta, so the delta is applied in view space and scaled to world, and the node's z-order (Anchor.Layer) is preserved. NOT undoable (Core's move has no undo entry).")]
     private async Task<string> MoveNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Horizontal offset px.")] double offsetX,
@@ -672,26 +672,37 @@ public sealed class WorkflowAgentToolkit
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var n = node;
-        var newAnchor = new Anchor(n.Anchor.Horizontal + offsetX, n.Anchor.Vertical + offsetY, n.Anchor.Layer);
-        var completion = WaitForExitedAsync(n.SetAnchorCommand, cancellationToken);
-        n.SetAnchorCommand.Execute(newAnchor);
+        // MoveCommand, not SetAnchorCommand: `node.Anchor`'s getter returns the value *collapsed* by the
+        // canvas Scale, so reading it and writing the sum back as an absolute anchor lands the node at
+        // roughly half the intended distance whenever the user is zoomed out — which is exactly when an
+        // agent is arranging a large graph. MoveCommand is the path a drag takes, so the offset is
+        // interpreted as view-space and converted with the live scale.
+        var completion = WaitForExitedAsync(n.MoveCommand, cancellationToken);
+        n.MoveCommand.Execute(new Offset(offsetX, offsetY));
         await completion;
+        RefreshSlotAnchors(n);
         return Ok($"Moved {nodeIndex} by ({offsetX},{offsetY}).");
     }
 
-    [Description("Sets absolute position of a node. Coordinate system: origin (0,0) is top-left; left (X) increases rightward, top (Y) increases downward. Mirrors GUI node placement: dispatches SetAnchorCommand, which is NOT undoable (Core's move command has no undo entry).")]
+    [Description("Sets absolute position of a node. Coordinate system: origin (0,0) is top-left; left (X) increases rightward, top (Y) increases downward. Mirrors GUI node placement: dispatches SetAnchorCommand, which is NOT undoable (Core's move command has no undo entry). Z-order is left alone unless you pass layer.")]
     private async Task<string> SetNodePosition(
         [Description("Node index.")] int nodeIndex,
         [Description("Left px.")] double left,
         [Description("Top px.")] double top,
-        [Description("Layer (z-order).")] int layer = 0,
+        [Description("Layer (z-order). Omit to keep the node's current layer — passing a value replaces it.")] int? layer = null,
         CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var completion = WaitForExitedAsync(node.SetAnchorCommand, cancellationToken);
-        node.SetAnchorCommand.Execute(new Anchor(left, top, layer));
+        var n = node;
+        // An omitted layer keeps the current one. Defaulting it to 0 would silently drop every positioned
+        // node to the bottom of the z-order, which reads as a rendering bug rather than a tool result.
+        // Safe to read: Anchor.Collapse keeps Layer, only Horizontal/Vertical are scale-dependent.
+        var effectiveLayer = layer ?? n.Anchor.Layer;
+        var completion = WaitForExitedAsync(n.SetAnchorCommand, cancellationToken);
+        n.SetAnchorCommand.Execute(new Anchor(left, top, effectiveLayer));
         await completion;
-        return Ok($"Position {nodeIndex} → ({left},{top},{layer}).");
+        RefreshSlotAnchors(n);
+        return Ok($"Position {nodeIndex} → ({left},{top},{effectiveLayer}).");
     }
 
     [Description("Resizes a node. Dispatches SetSizeCommand, which is NOT undoable (mirrors Core's resize semantics).")]
@@ -710,6 +721,7 @@ public sealed class WorkflowAgentToolkit
         var completion = WaitForExitedAsync(n.SetSizeCommand, cancellationToken);
         n.SetSizeCommand.Execute(newSize);
         await completion;
+        RefreshSlotAnchors(n);
         return Ok($"Resized {nodeIndex} → ({width},{height}).");
     }
 
