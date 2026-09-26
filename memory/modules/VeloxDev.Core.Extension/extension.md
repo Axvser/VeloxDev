@@ -79,7 +79,8 @@
 4. **若它会在提示里被点名**：`WorkflowAgentScope.ProvideProgressiveContextPrompt`（`:1126`）与 `ProvideAllContexts`（`:1070`）；失败协议里的工具名清单在 `:692`。**另加**：闸门 / 关闭开关 / 预算上限若属于这个工具的语义，包络（`RenderEnvelope`，`:1926`）也要跟着说。
 5. **若它属于某个能力闸门**：闸门判定在 `WorkflowAgentScope.cs`（`AllowNodeExecution` / `IsGenericCommandAllowed` / `IsInteractionAllowed`），注册的条件也在这里判断，不是「注册了再拒」——见 `WorkflowAgentToolkit.cs:188-195` 的写法。
 6. 文档同步：`skills/veloxdev-drive-workflow-with-ai/references/tools.md` 与 `Src/Core/VeloxDev.Core.Extension/README.md`（README 里写着工具数量，`Description` 属性里也有）。
-7. 测试：`VeloxDev.Core.Extension.Test` 里按 `ProvideTools().Single(t => t.Name == "…")` 拿工具（`Agent/Workflow/Functions/ToolThreadAffinityTests.cs` 是范式）。**别绕过 `ProvideTools()`** —— 它是「公开注册路径」，`WorkflowLifecycleFidelityTests.cs:23` 的注释就是为这条写的。
+7. 测试：`VeloxDev.Core.Extension.Test` 里按 `ProvideTools().Single(t => t.Name == "…")` 拿工具（`Agent/Workflow/Functions/ToolThreadAffinityTests.cs` 是范式）。**别绕过 `ProvideTools()`** —— 它是「公开注册路径」，`WorkflowLifecycleFidelityTests.cs:23` 的注释就是为这条写的。工具调用助手现有一份共用的 `WorkflowToolInvoker.Invoke`（同目录）。
+8. **若它改几何**（位置 / 尺寸 / 层级）：相对移动用 `MoveCommand(new Offset(...))` 而不是自己算绝对锚点（`node.Anchor` 的 getter 是缩放坍缩值，读回来再写回去必错），改完补 `RefreshSlotAnchors(node)` —— 否则节点卡片动了、线还停在旧端点。**详见 [geometry-tools.md](geometry-tools.md)。**
 
 ### B. 加一个内置技能
 
