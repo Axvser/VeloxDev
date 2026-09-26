@@ -1,6 +1,6 @@
 # VeloxDev.Core.Generator — 架构
 
-> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**16 个 .cs、5113 行**（`Base/Analizer.cs` 982、`Writers/WorkflowWriter.cs` 1708、`Writers/MVVMWriter.cs` 945、`Theme.cs` 422、`Writers/WriterBase.cs` 224、`Writers/CommandWriter.cs` 191、`AopInterface.cs` 157、`Writers/MonoWriter.cs` 125、`Writers/AopWriter.cs` 89、`Base/AnalizeHelper.cs` 67、`AopProxy.cs` 41、`MVVM.cs` 38、`Command.cs` / `MonoBehaviour.cs` / `Workflow.cs` 各 37、`Base/ICodeWriter.cs` 13）。
+> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**16 个 .cs、5079 行**（`Base/Analizer.cs` 948、`Writers/WorkflowWriter.cs` 1708、`Writers/MVVMWriter.cs` 945、`Theme.cs` 422、`Writers/WriterBase.cs` 224、`Writers/CommandWriter.cs` 191、`AopInterface.cs` 157、`Writers/MonoWriter.cs` 125、`Writers/AopWriter.cs` 89、`Base/AnalizeHelper.cs` 67、`AopProxy.cs` 41、`MVVM.cs` 38、`Command.cs` / `MonoBehaviour.cs` / `Workflow.cs` 各 37、`Base/ICodeWriter.cs` 13）。
 > 打包成 NuGet 分析器包，不产出运行期程序集；`TargetFramework=netstandard2.0`（`VeloxDev.Core.Generator.csproj:6`）。
 
 本文只写「读完这 16 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
@@ -147,7 +147,7 @@ context.RegisterSourceOutput(
 | `Examples/MVVM/Avalonia/Demo/Demo.csproj` | `:35` | `:39` |
 | `Examples/MonoBehaviour/WPF/Demo/Demo.csproj` | `:17` | `:21` |
 
-**共 9 处 `PackageReference`、9 处 `ProjectReference`，全部 `Version="9.0.0"`。** （任务书里说的「11 处」在树里复核不到：全仓 grep `VeloxDev.Core.Generator` 命中引用点就是上表 18 条，另有 `VeloxDev.Core.Generator.csproj:10/37/38` 是包自己；`9.0.153` 在任何构建文件里都不存在，只出现在 `Src/Generators/VeloxDev.Core.Generator/bin/Release/netstandard2.0/VeloxDev.Core.Generator.deps.json:10` 这个构建产物里。以代码为准。）
+**共 9 处 `PackageReference`、9 处 `ProjectReference`，全部 `Version="9.0.0"`；而包自己的 `<Version>` 是 `9.0.228`（`VeloxDev.Core.Generator.csproj:11`）。两者不相等是刻意的，见 [extension.md](extension.md) §四。** （任务书里说的「11 处」在树里复核不到：全仓 grep `VeloxDev.Core.Generator` 命中引用点就是上表 18 条，另有 `VeloxDev.Core.Generator.csproj:10/37/38` 是包自己；`9.0.153` 在任何构建文件里都不存在，只出现在 `Src/Generators/VeloxDev.Core.Generator/bin/Release/netstandard2.0/VeloxDev.Core.Generator.deps.json:10` 这个构建产物里。以代码为准。）
 
 **「两者必须互斥」是被注释明确写下的硬约束**（`Examples/Workflow/Directory.Build.props:4`）：两条同时生效会**生成器执行两次、报重复成员**。另外 `Examples/Workflow/Directory.Build.props:5` 提醒路径基准是导入方项目目录，必须走 `MSBuildThisFileDirectory`。
 

@@ -20,7 +20,7 @@
 
 | 不在模块内 | 实际归谁 |
 |---|---|
-| 属性变更通知本身（`INotifyPropertyChanged` 的收发） | **不产生事件实现**。生成器只发 `OnPropertyChanging` / `OnPropertyChanged` 的**调用**，事件与 `partial void` 声明由**用户基类**给（`Examples/MVVM/WPF/Demo/ObservableViewModelBase.cs`）。所以一个不继承任何基类的 `[VeloxProperty]` 类**编译不过** |
+| 属性变更通知的实现本身 | 生成器**只在没人提供时才自举**：基类链上没有 `PropertyChanged` 事件、宿主框架也没给，它就自己补事件 + `INotifyPropertyChanged` / `INotifyPropertyChanging` 接口 + `OnPropertyChanged(string)` / `OnPropertyChanging(string)` 虚方法（`Writers/MVVMWriter.cs:198-312` 决策、`:856-877` 落笔）。**所以不继承任何基类也能编译** —— 产物依据：`Src/Core/VeloxDev.Core.Extension/obj/Debug/netstandard2.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.MVVM/McpStatusViewModel_VeloxDev_AI_MCP_MVVM.g.cs`，该类 `Symbol.BaseType` 是 `object`，产物里自带了事件与两个虚方法。基类已提供时生成器只发 `OnPropertyChanging(...)` / `OnPropertyChanged(...)` 的**调用**（`Examples/MVVM/WPF/Demo/ObservableViewModelBase.cs` 就是这种情形） |
 | 视图模型之外的「命令参数校验」 | 只有 `canValidate: true` 时才生成 `private partial bool CanExecute{名}Command(object? parameter);`（`CommandWriter.cs:167`）；不实现它就是空钩子，`CanExecute` 恒真 |
 | 集合变更的**语义**（谁加了谁） | `ObservableCollectionTracker` 只负责「订上」；语义在生成器发的 `OnItemAddedTo{名}` 等 `partial void` 里（`Analizer.cs:814-817`） |
 | 平台适配 | **零适配器**。`VeloxCommand` 实现的是 `System.Windows.Input.ICommand`，XAML 绑定不需要任何平台代码 —— 这是它跟 `TransitionSystem` / `WorkflowSystem` 最大的结构差异（那两个有 7 家 `adapters/`） |
@@ -133,8 +133,8 @@ OnExecutionCompletedAsync(item)
 **三件读代码才知道的事：**
 
 - **`[VeloxProperty]` 有两条路，产物不同。** 标在**字段**上（`:96-114`，要求 `global::VeloxDev.MVVM.VeloxPropertyAttribute` 全名精确匹配）走 `MVVMFieldAnalizer`；标在**partial 属性**上（`:122-140`）走 `MVVMPropertyAnalizer`，且 `ShouldGeneratePartialProperty` 会挡掉非 partial 的。两条路都能用，但 `HasSetter` 的推导不同（`Analizer.cs:405-408` vs `:427`）。
-- **类型是 View 时不发通知。** `Generate()` 分派 `IsView ? GenerateProxy() : GenerateViewModel()`（`Analizer.cs:890`）：View 只生成 `get => 字段; set => 字段 = value;` 的透传（`:893-914`），**没有** `OnPropertyChanged`。
-- **`CanWrite()` 里含 `IsWorkflowComponent`** ⇒ 一个 Workflow 组件类即使零个 `[VeloxProperty]` 也会拿到一份 MVVM 产物，里面是 `CreateWorkflowSlot<T>` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved`（`MVVMWriter.cs:895-925`）。这是与 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/` 的耦合点。
+- **没有「View 只透传、不发通知」这条路径** —— 曾经有（`IsView` / `GenerateProxy()`），2026-09-26 因从未被走到而整体删除（`Writers/MVVMWriter.cs:105`、`:131` 两处构造一直传 `isView: false`）。现在 `MVVMPropertyFactory.Generate()`（`Base/Analizer.cs:583`，原名 `GenerateViewModel`）是唯一出口，**所有** `[VeloxProperty]` 都按 ViewModel 形态生成通知。
+- **`CanWrite()` 里含 `IsWorkflowComponent`**（`MVVMWriter.cs:845`）⇒ 一个 `[Node]` / `[Tree]` 类即使零个 `[VeloxProperty]` 也会拿到一份 MVVM 产物，但里面**不是**槽位三件套：`MVVMWriter.cs:895` 那段的条件是 `!_hasBaseWorkflowSlotInfrastructure && !IsWorkflowComponent && 任一属性 UseWorkflowSlotLifecycle`，**把 workflow 组件本身排除了**，它只服务「非组件、但继承链上有带槽位属性的类」这一种情况。真正 workflow 组件的 `CreateWorkflowSlot<T>` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved` 由 `Writers/WorkflowWriter.cs:899-917` 写。这是与 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/` 的耦合点。
 
 **`[VeloxCommand]` 的方法签名决定它可不可取消**：`CommandWriter.ParseConstructorType`（`:78-116`）只认三种签名 —— 单参数返回 `Task`/`Task<T>` 且参数是 `object`（→ `CreateTaskOnlyWithParameter`）、单参数是 `CancellationToken`（→ `CreateTaskOnlyWithCancellationToken`）、其余（→ `new VeloxCommand(...)` 指向 `Func<object?, CancellationToken, Task>` 主构造）。**只有第二种能拿到 token**，也就只有它生成的命令 `Interrupt`/`Clear` 真能打断（见 §五·1）。
 
@@ -161,7 +161,7 @@ OnExecutionCompletedAsync(item)
 
 ## 八、陷阱（带依据）
 
-1. **不继承基类的 `[VeloxProperty]` 编译不过。** 生成器只发 `OnPropertyChanging(...)` / `OnPropertyChanged(...)` 的**调用**（`Analizer.cs:608-610` 只发 `partial void On{X}Changing/Changed` 声明），`PropertyChanged` 事件本身要基类给（`MVVMWriter.cs:874-881` 只在需要时补发）。漏了基类 → 生成代码报「找不到方法」。
+1. **「不继承基类就编译不过」已经过期 —— 生成器会自举通知基础设施。** `MVVMWriter.ConfigurePropertyNotificationInfrastructure`（`:198-258`）在「基类链上没有 `PropertyChanged` 事件 + 宿主框架/上层 Velox 类都没提供」时，把 `_generatePropertyChangedEvent` / `_addNotifyPropertyChangedInterface` 置真，产物因此自带事件、接口与 `OnPropertyChanged(string)`（`GenerateBody` `:874-881`、`GenerateBaseInterfaces` `:856-864`）。**判据是符号，不是「有没有基类」。** 基类存在时生成器仍然只发**调用**（`Analizer.cs:608-610` 发 `partial void On{X}Changing/Changed` 声明），事件与 `OnPropertyChanged` 由基类给。
 2. **`ObservableCollectionTracker.Unsubscribe` 的文档注释与代码不一致**：注释说「removes its tracking entry so the subscription is not accidentally restored later」（`ObservableCollectionTracker.cs:38-42`），但代码只做了两件事 —— `-= handler` 与 `entry.Remove(handler)`（`:50-54`），**没有**移除表项（`Entry` 也没有被删，`ConditionalWeakTable` 的表项随集合被回收）。**以代码为准**：`Unsubscribe` 之后再 `EnsureSubscribed` 同一 handler 会**重新订阅**，因为 `Entry` 还在且 `TryAdd` 会返回 true。
 3. **`Unsubscribe` 的减法依赖委托等价**：`-=` 用的是 `Delegate.Equals`（方法 + 目标的**值**比较），而 tracker 自己的去重用的是 `ReferenceEquals(Target)`（`:104`）。对普通视图模型两者一致；对 `Target` 被重写过 `Equals` 的类型，两条判定会分叉 —— 一行注释也没写，属于**只从代码看出的不一致**。
 4. **`Clear` 之后再 `Continue` 没用**：`ClearAsync` 已经把 `_pendingQueue` 掏空（`:294-299`），`ContinueAsync` 只是再踢一次空队列。想「暂停队列」该用 `Lock()`。

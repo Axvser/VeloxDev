@@ -76,7 +76,9 @@
 
 ## 四、改这里的代价（版本锁：9 处必须一起改）
 
-`VeloxDev.Core.Generator.csproj:11` 是 `<Version>9.0.0</Version>`；这个版本号同时被**硬编码在 9 个 `PackageReference` 里**，全部是 `Version="9.0.0"`：
+**当前状态：包版本 `9.0.228`，而 9 处引用仍是 `9.0.0` —— 这是刻意的，不要「顺手修平」。** 依据：2026-09-26 的决定 —— 生成器包拉到 `9.0.228`，Core 与其余库统一停在 `9.0.0`，**只保证 Debug 能跑**。Debug 走 `ProjectReference`，包版本号根本不参与；Release 会解析到 NuGet 上已发布的 `9.0.0` 生成器，即**不含这条线上任何后续本地改动的那一版**。所以看到 `9.0.228` 与 `9.0.0` 并存时，第一反应不该是补齐，而是先确认「这一轮是不是仍然只要 Debug」。
+
+`VeloxDev.Core.Generator.csproj:11` 是 `<Version>9.0.228</Version>`；下面 9 处 `PackageReference` 目前全部是 `Version="9.0.0"`：
 
 | # | 文件:行 |
 |---|---|
@@ -141,4 +143,5 @@
 | `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | `Base/AnalizeHelper.cs:12-17` | **没有调用者**。实际用的是同名的符号重载 `:43-46`（调用点 `AopInterface.cs:28`、`Writers/AopWriter.cs:24`）。语法版只扫**单份声明**的成员，是符号版之前的写法；留着但无效 |
 | `Generators.AgentCatalog` | `Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` | **源码里已不存在**。当前 16 个 `.cs` 无此类，当前 Debug 产物 DLL 中 `AgentCatalog` 命中 0 次。`obj/` 里那份 149 KB 是陈旧产物，别拿它当现状 |
 | `GenerateBaseTypes()` | `Writers/AopWriter.cs:41`、`Writers/CommandWriter.cs:119`、`Writers/MonoWriter.cs:124`、`Writers/MVVMWriter.cs:866` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:65` 真正用到了它 |
+| MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：两处构造一直传 `isView: false`（`Writers/MVVMWriter.cs:105`、`:131`），这条分支从未被走到，于是连同同样没人读的 `modifies` 参数与 `Modifies` 属性一并移除。现在 `MVVMPropertyFactory` 只有 `MVVMPropertyFactory(analyzer)` 一个参数，`Generate()`（原 `GenerateViewModel` 改名）是唯一出口。**要恢复 View 支持，必须同时改构造签名、`Generate()` 与调用点** —— 别再只加参数不加分支 |
 | `VeloxDev.Core.Generator.targets` 的版本门槛 | `VeloxDev.Core.Generator.targets:8-19` | **活着，但条件刻意放宽**：`RoslynVersion` 为空时**跳过检查**（`:13-15` 的注释：现代宿主上的 netframework TFM 拿不到该属性，跳过以免误报）。所以这条诊断**不会**在每个项目上都出现 |
