@@ -62,6 +62,12 @@ Minimum recommended gaps:
 - `gapX` (between layers): **80 px**
 - `gapY` (between nodes within a layer): **40 px**
 
+**Wide layers must wrap — never stack a whole layer in one column.** A layer's height grows linearly with its node count, and every edge then fans across all of it; the result is a tall, sparse graph where a reader cannot tell which edge goes where. For a generated fan-out (one hub → N processors → one sink) this is the difference between a readable ribbon and a hangman's rope.
+
+- Wrap a layer into **sub-columns** when it holds more than **8 nodes**, or when its accumulated height would exceed **~1600 px** — whichever comes first. Overflow continues in the next sub-column, `gapX` to the right, keeping the node order.
+- For *N* nodes sharing one layer between a hub and its sink, prefer a grid of `ceil(sqrt(N))` sub-columns and `ceil(N / sub-columns)` rows, **centered on the hub's Y**, so the fan spreads symmetrically instead of hanging below it.
+- Keep the finished bounding box near **3:2**. Much taller than wide means wrap harder; much wider than tall means the layering is too shallow to be worth the walk.
+
 After positioning, verify **no two nodes overlap** by checking bounding box intersections:
 - Node A rect: `(ax, ay, ax+aw, ay+ah)`, Node B rect: `(bx, by, bx+bw, by+bh)`
 - Overlap if: `ax < bx+bw AND ax+aw > bx AND ay < by+bh AND ay+ah > by`
