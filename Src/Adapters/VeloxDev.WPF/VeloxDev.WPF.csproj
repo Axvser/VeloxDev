@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<NoWarn>1573</NoWarn>
-		<NoWarn>1591</NoWarn>
+		<!-- 一个属性，不要拆两行：MSBuild 后写覆盖前写，拆开会静默丢掉前一个 ID。 -->
+		<NoWarn>1573;1591</NoWarn>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
