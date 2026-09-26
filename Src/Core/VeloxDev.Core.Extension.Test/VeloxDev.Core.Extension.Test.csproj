@@ -5,6 +5,9 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- MSTEST0037 是「用更明确的断言」这类风格建议，兄弟项目 VeloxDev.Core.Test 早已同样压掉；
+         这里只压真正会报的那一个 ID。 -->
+    <NoWarn>$(NoWarn);MSTEST0037</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
