@@ -102,7 +102,7 @@ namespace VeloxDev.Generators.Writers
                     .Select(field =>
                     {
                         var analizer = new MVVMFieldAnalizer(field);
-                        var factory = new MVVMPropertyFactory(analizer, "public", false)
+                        var factory = new MVVMPropertyFactory(analizer)
                         {
                             FrameworkSetterMode = setterMode,
                             SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
@@ -128,7 +128,7 @@ namespace VeloxDev.Generators.Writers
                     .Select(property =>
                     {
                         var analizer = new MVVMPropertyAnalizer(property);
-                        var factory = new MVVMPropertyFactory(analizer, "public", false)
+                        var factory = new MVVMPropertyFactory(analizer)
                         {
                             FrameworkSetterMode = setterMode,
                             SetteringBody = analizer.HasSetter ? [$"OnPropertyChanging(nameof({analizer.PropertyName}));"] : [],

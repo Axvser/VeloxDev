@@ -395,15 +395,13 @@ namespace VeloxDev.Generators.Base
         {
             const string RETRACT = "   ";
 
-            // Construct from a field
-            public MVVMPropertyFactory(MVVMFieldAnalizer fieldAnalizer, string modifies, bool isView)
+            // 从字段构造：属性名由字段名推导，读写器必定齐全
+            public MVVMPropertyFactory(MVVMFieldAnalizer fieldAnalizer)
             {
-                Modifies = modifies;
                 FullTypeName = fieldAnalizer.TypeName;
                 SourceName = $"this.{fieldAnalizer.FieldName}";
                 PropertyName = fieldAnalizer.PropertyName;
                 IsNullable = fieldAnalizer.IsNullable;
-                IsView = isView;
                 IsFromField = true;
                 HasGetter = true;
                 HasSetter = true;
@@ -415,15 +413,13 @@ namespace VeloxDev.Generators.Base
                 SetterAccessModifier = string.Empty;
             }
 
-            // Construct from a property
-            public MVVMPropertyFactory(MVVMPropertyAnalizer propertyAnalizer, string modifies, bool isView)
+            // 从 partial 属性构造：读写器与可访问性照用户写的那份保留
+            public MVVMPropertyFactory(MVVMPropertyAnalizer propertyAnalizer)
             {
-                Modifies = modifies;
                 FullTypeName = propertyAnalizer.TypeName;
                 SourceName = propertyAnalizer.FieldName;
                 PropertyName = propertyAnalizer.PropertyName;
                 IsNullable = propertyAnalizer.IsNullable;
-                IsView = isView;
                 IsFromField = false;
                 HasGetter = propertyAnalizer.HasGetter;
                 HasSetter = propertyAnalizer.HasSetter;
@@ -435,7 +431,6 @@ namespace VeloxDev.Generators.Base
                 SetterAccessModifier = propertyAnalizer.SetterAccessModifier;
             }
 
-            public string Modifies { get; private set; }
             public string FullTypeName { get; private set; }
             public string SourceName { get; private set; }
             public string PropertyName { get; private set; }
@@ -464,8 +459,6 @@ namespace VeloxDev.Generators.Base
 
             public List<string> SetteringBody { get; set; } = [];
             public List<string> SetteredBody { get; set; } = [];
-
-            private bool IsView { get; set; }
 
             /// <summary>
         /// The full setter body lines, resolved according to <see cref="FrameworkSetterMode"/>.
@@ -580,7 +573,7 @@ namespace VeloxDev.Generators.Base
                 };
             }
 
-            public string GenerateViewModel()
+            public string Generate()
             {
                 // Generate the property accessors, fully preserving the modifiers the user wrote
                 var getter = HasGetter ? GenerateGetter() : string.Empty;
@@ -885,33 +878,6 @@ namespace VeloxDev.Generators.Base
                     """;
             }
 
-            public string Generate()
-            {
-                return IsView ? GenerateProxy() : GenerateViewModel();
-            }
-
-            public string GenerateProxy()
-            {
-                // Generate the property accessors, fully preserving the modifiers the user wrote
-                var getter = HasGetter ?
-                    $"{RETRACT}    {(!string.IsNullOrEmpty(GetterAccessModifier) ? GetterAccessModifier + " " : "")}get => {SourceName};" :
-                    string.Empty;
-
-                var setter = HasSetter ?
-                    $"{RETRACT}    {(!string.IsNullOrEmpty(SetterAccessModifier) ? SetterAccessModifier + " " : "")}set => {SourceName} = value;" :
-                    string.Empty;
-
-                // If it's a partial property, add the partial modifier
-                var partialModifier = IsPartial ? "partial " : string.Empty;
-
-                return $$"""
-                    {{RETRACT}}{{PropertyAccessModifier}} {{partialModifier}}{{FullTypeName}} {{PropertyName}}
-                    {{RETRACT}}{
-                    {{getter}}
-                    {{setter}}
-                    {{RETRACT}}}
-                    """;
-            }
         }
 
         private static bool IsPartialClass(SyntaxNode node)
