@@ -46,6 +46,30 @@ await.** Register it while on the UI thread. The prompt, by contrast, is rendere
 thread: bind `Mcp.Status.Servers` / `Skills.Status.Skills` from your UI, and read their `Snapshot`
 counterparts from anywhere else.
 
+## Telemetry
+
+Nothing in this library emits telemetry: `AgentEvent` and `AgentTranscript` are the in-process surface, and
+neither leaves the process. Traces and metrics come from the Agent Framework — this only makes the wiring one
+call. The host still owns the provider, the exporter, flushing and shutdown.
+
+```csharp
+var agent = chatClient.AsAIAgent(new ChatClientAgentOptions { /* … */ })
+    .WithAgentTelemetry("MyApp.WorkflowAgent");
+// or, when already using a builder: .AsBuilder().UseAgentTelemetry("MyApp.WorkflowAgent").Build()
+
+// Register the same source name yourself — the framework creates the activities, it does not export them.
+using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+    .AddSource("MyApp.WorkflowAgent")
+    .AddOtlpExporter()
+    .Build();
+```
+
+⚙ `EnableSensitiveData` is **off** by default. Turned on, the spans carry the whole conversation — prompts,
+responses, tool arguments and their results — so it belongs in development and testing only.
+
+⚙ Instrument the agent **or** the chat client, not both under one source name: the chat context would be
+captured by each instrumented layer and every span would appear twice.
+
 ## MCP and Skills on their own
 
 Neither subsystem needs the workflow layer. Each exports its own context provider, which contributes its
