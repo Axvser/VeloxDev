@@ -5,8 +5,6 @@ using System.Runtime.CompilerServices;
 
 namespace VeloxDev.WorkflowSystem.StandardEx;
 
-#pragma warning disable
-
 public static class WorkflowSpatialEx
 {
     private static readonly ConditionalWeakTable<object, WorkflowSpatialManager> SpatialManagers = new();

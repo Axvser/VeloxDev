@@ -5,8 +5,6 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem.StandardEx;
 
-#pragma warning disable
-
 public static class WorkflowTreeEx
 {
     private static readonly ConditionalWeakTable<IWorkflowTreeViewModel, TreeCache> _cache = new();
