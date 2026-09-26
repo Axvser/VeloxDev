@@ -7,9 +7,8 @@ namespace VeloxDev.TransitionSystem.Abstractions;
 
 public class TransitionEffectCore<TPriorityCore> : TransitionEffectCore, ITransitionEffect<TPriorityCore>
 {
-#pragma warning disable CS8618
-    public virtual TPriorityCore Priority { get; set; }
-#pragma warning restore CS8618
+    // 无约束的 TPriorityCore 无法给非空初值，默认值即原行为。
+    public virtual TPriorityCore Priority { get; set; } = default!;
 
     public new ITransitionEffect<TPriorityCore> Clone()
     {
