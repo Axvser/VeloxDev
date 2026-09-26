@@ -656,7 +656,7 @@ public class McpScope
 
     // ── Remote (Http) OAuth redirect ─────────────────────────────────────────
 
-    private AuthorizationRedirectDelegate? _oauthAuthorizationRedirect;
+    private Func<Uri, Uri, CancellationToken, Task<string?>>? _oauthAuthorizationRedirect;
 
     /// <summary>
     /// Registers the OAuth authorization-redirect handler for remote (<see cref="McpServerRunMode.Http"/>)
@@ -665,10 +665,77 @@ public class McpScope
     /// redirect URL carrying the auth code (as a string). When not set, the MCP SDK's default console-input
     /// handler is used (headless scenarios should always register this). Replaces any previously registered handler.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The returned URL must carry the <c>state</c> parameter</b>, and the <c>iss</c> parameter whenever the
+    /// authorization server sends one. The SDK matches <c>state</c> against the value it sent before it will
+    /// exchange the code, and validates <c>iss</c> per
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc9207">RFC 9207</see> when present; a response that
+    /// omits <c>state</c> is rejected. Both checks exist to bind the response to the request that started the
+    /// flow, which is what mitigates authorization-response mix-up and CSRF.
+    /// </para>
+    /// <para>
+    /// This is stricter than the pre-9.0.228 behaviour, where the returned URL was handed to the SDK as-is and
+    /// neither parameter was verified.
+    /// </para>
+    /// </remarks>
     public McpScope WithOAuthAuthorizationRedirect(Func<Uri, Uri, CancellationToken, Task<string?>> handler)
     {
-        _oauthAuthorizationRedirect = handler is null ? null : new AuthorizationRedirectDelegate(handler);
+        _oauthAuthorizationRedirect = handler;
         return this;
+    }
+
+    /// <summary>
+    /// Adapts the host's "return the final redirect URL" hook to the SDK's response-bound callback.
+    /// <para>
+    /// The host keeps returning a URL; this pulls <c>code</c>, <c>state</c> and <c>iss</c> out of it. That split
+    /// exists because the SDK's obsolete redirect delegate delivered only the code, so <c>state</c> and the
+    /// RFC 9207 issuer were skipped — see <see cref="WithOAuthAuthorizationRedirect"/>.
+    /// </para>
+    /// </summary>
+    private static Func<AuthorizationCallbackContext, CancellationToken, Task<AuthorizationResult?>>
+        BuildAuthorizationCallbackHandler(Func<Uri, Uri, CancellationToken, Task<string?>> handler)
+        => async (context, cancellationToken) =>
+        {
+            var callback = await handler(context.AuthorizationUri, context.RedirectUri, cancellationToken)
+                .ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(callback))
+                return new AuthorizationResult { Code = string.Empty, State = string.Empty };
+
+            // The host may hand back either the whole callback URL or just its query. Try the URL first and
+            // fall back to treating the rest as a query, so both shapes work.
+            var query = Uri.TryCreate(callback, UriKind.Absolute, out var callbackUri)
+                ? callbackUri.Query
+                : callback;
+
+            return new AuthorizationResult
+            {
+                Code = ReadQueryParameter(query, "code") ?? string.Empty,
+                State = ReadQueryParameter(query, "state") ?? string.Empty,
+                Iss = ReadQueryParameter(query, "iss"),
+            };
+        };
+
+    /// <summary>
+    /// Reads one parameter out of a query string. Absent and empty are both <c>null</c>: the SDK treats a
+    /// missing <c>state</c> as a mismatch, and an empty string would be indistinguishable from a real one.
+    /// </summary>
+    private static string? ReadQueryParameter(string? query, string name)
+    {
+        // 显式判空而不是 string.IsNullOrEmpty：netstandard2.0 上后者没有 [NotNullWhen(false)]，不会缩小可空性。
+        if (query is null || query.Length == 0) return null;
+
+        foreach (var pair in query.TrimStart('?').Split('&'))
+        {
+            var separator = pair.IndexOf('=');
+            if (separator <= 0) continue;
+            if (!string.Equals(pair.Substring(0, separator), name, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var value = Uri.UnescapeDataString(pair.Substring(separator + 1).Replace('+', ' '));
+            return value.Length == 0 ? null : value;
+        }
+
+        return null;
     }
 
     // ── Execution ──────────────────────────────────────────────────────────
@@ -1116,7 +1183,11 @@ public class McpScope
                 // RedirectUri is a `required` member of ClientOAuthOptions; fall back to a loopback default when the config omits it.
                 RedirectUri = redirectUri is not null ? new Uri(redirectUri) : new Uri("http://localhost/oauth/callback"),
                 Scopes = o["scopes"]?.ToObject<string[]>(),
-                AuthorizationRedirectDelegate = _oauthAuthorizationRedirect,
+                // Set the callback handler, never the obsolete redirect delegate: the two are mutually
+                // exclusive on ClientOAuthOptions, and only the former carries state/iss back to the SDK.
+                AuthorizationCallbackHandler = _oauthAuthorizationRedirect is null
+                    ? null
+                    : BuildAuthorizationCallbackHandler(_oauthAuthorizationRedirect),
             };
         }
 

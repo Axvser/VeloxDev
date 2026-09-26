@@ -55,14 +55,16 @@ public class McpRemoteTests
     }
 
     [TestMethod]
-    public async Task HttpMode_OAuth_ConfiguresClientOAuthOptions_AndWiresRedirect()
+    public async Task HttpMode_OAuth_ConfiguresClientOAuthOptions_AndWiresCallbackHandler()
     {
         var scope = new McpScope();
-        bool redirectCalled = false;
+        Uri? seenAuthorizationUri = null;
         scope.WithOAuthAuthorizationRedirect((authUri, redirectUri, ct) =>
         {
-            redirectCalled = true;
-            return Task.FromResult("http://localhost:1179/callback?code=abc123");
+            seenAuthorizationUri = authUri;
+            // state and iss are what the SDK validates the response against; the host owes it both.
+            return Task.FromResult<string?>(
+                "http://localhost:1179/callback?code=abc123&state=xyz789&iss=https%3A%2F%2Fauth.example.com");
         });
         var config = HttpConfig(configure: c =>
             c.Options = new
@@ -85,15 +87,28 @@ public class McpRemoteTests
         Assert.AreEqual("http://localhost:1179/callback", options.OAuth.RedirectUri!.ToString());
         Assert.IsNotNull(options.OAuth.Scopes);
         CollectionAssert.AreEquivalent(new[] { "mcp.read", "mcp.write" }, new List<string>(options.OAuth.Scopes!));
-        Assert.IsNotNull(options.OAuth.AuthorizationRedirectDelegate,
-            "the host redirect hook must be wired into ClientOAuthOptions");
+        // The obsolete delegate is deliberately not asserted on: reading it is what raises MCP9007, and the
+        // SDK's own rule is that the two are mutually exclusive — setting only the handler is the guarantee.
+        Assert.IsNotNull(options.OAuth.AuthorizationCallbackHandler,
+            "the host callback hook must be wired into ClientOAuthOptions");
 
-        // The wired delegate must actually be invocable by the SDK.
-        await options.OAuth.AuthorizationRedirectDelegate!(
-            new Uri("https://auth.example.com/authorize"),
-            new Uri("http://localhost:1179/callback"),
+        // The wired handler must be invocable by the SDK, and must carry back everything the SDK validates.
+        var result = await options.OAuth.AuthorizationCallbackHandler!(
+            new AuthorizationCallbackContext
+            {
+                AuthorizationUri = new Uri("https://auth.example.com/authorize"),
+                RedirectUri = new Uri("http://localhost:1179/callback"),
+            },
             CancellationToken.None);
-        Assert.IsTrue(redirectCalled, "the host redirect delegate must be invoked");
+
+        Assert.IsNotNull(result, "the handler must return an authorization result");
+        Assert.AreEqual(new Uri("https://auth.example.com/authorize"), seenAuthorizationUri,
+            "the host hook must receive the authorization URI");
+        Assert.AreEqual("abc123", result.Code);
+        Assert.AreEqual("xyz789", result.State,
+            "state must survive the round trip, or the SDK's response binding can never pass");
+        Assert.AreEqual("https://auth.example.com", result.Iss,
+            "iss must survive the round trip so RFC 9207 validation can run");
     }
 
     [TestMethod]
