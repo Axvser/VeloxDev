@@ -115,7 +115,16 @@ public sealed class ViewManager(Panel panel)
         }
 
         _isSchedulingRender = true;
-        _panel.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, ProcessNextBatch);
+
+        // 入队被拒（队列正在关闭）时必须把旗标放回去：它是在 ProcessNextBatch 里清的，而那个回调只有在被接受
+        // 时才会跑。旗标一旦永远立着，之后每次调用都在上面那行返回 —— **画布一个视图都不会再加**，而小地图照旧
+        // 画（它读的是模型，不是这批视图）。症状因此是「节点/连线消失且不再回来」。
+        if (!_panel.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, ProcessNextBatch))
+        {
+            _isSchedulingRender = false;
+            System.Diagnostics.Debug.WriteLine(
+                "ViewManager: the dispatcher refused the render batch; no view can be added until the next change.");
+        }
     }
 
     private void ProcessNextBatch()

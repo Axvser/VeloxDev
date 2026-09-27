@@ -589,7 +589,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         state.IsVisibleRegionUpdateQueued = true;
-        host.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+
+        var accepted = host.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             state.IsVisibleRegionUpdateQueued = false;
 
@@ -602,6 +603,15 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
             ApplyVisibleRegion(host, state);
         });
+
+        // 入队被拒时旗标要立刻放回 —— 它是在回调里清的，而回调只有被接受才会跑。否则这次拒绝会变成永久：
+        // 可见区域从此再也不重算，画布停在旧的一批视图上（或干脆空着）。
+        if (!accepted)
+        {
+            state.IsVisibleRegionUpdateQueued = false;
+            System.Diagnostics.Debug.WriteLine(
+                "WorkflowSurfaceBehavior: the dispatcher refused the visible-region update; the canvas keeps the views it has.");
+        }
     }
 
     private static void ApplyVisibleRegion(UserControl host, SurfaceState state)
