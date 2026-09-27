@@ -22,15 +22,21 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
     public override async Task<object?> ReceiveAsync(ITaskContext ctx, CancellationToken ct)
     {
         if (Component is null) return null;
+        var runtime = ctx as IRuntimeContext;
+
+        // Every drive starts here: drop the fallback target the last script left behind, and count this drive.
+        Component.RedirectTo = null;
+        var drive = Drive(runtime);
+
         if (string.IsNullOrWhiteSpace(Component.Script))
         {
             // A warning: the other thirty branches still have a script, so the run carries on with the null this
             // returns. The async pair is also what hands the host's IExecutionErrorSink a record.
-            if (ctx is IRuntimeContext rc) await rc.WarnAsync("Python script is empty; nothing to run.");
+            if (runtime is not null) await runtime.WarnAsync("Python script is empty; nothing to run.");
             return null;
         }
 
-        var payload = BuildInputPayload(ctx);
+        var payload = BuildInputPayload(ctx, runtime, drive);
         Component.LastStatus = "Running";
         try
         {
@@ -39,8 +45,11 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
             Component.LastStatus = "Completed";
             Component.LastRun = DateTime.Now.ToString("HH:mm:ss");
             Component.LastOutput = Truncate(raw);
-            if (ctx is IRuntimeContext rc)
-                rc.Log($"Python finished in {Component.LastRun}: {Truncate(raw, 200)}");
+            if (runtime is not null)
+            {
+                runtime.Log($"Python finished in {Component.LastRun}: {Truncate(raw, 200)}");
+                await ReportAsync(runtime, parsed);
+            }
             return parsed;
         }
         catch (OperationCanceledException)
@@ -50,13 +59,55 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
         }
         catch (Exception ex)
         {
+            // Thrown, not reported-and-swallowed. A script that fails is what INodeRetryPolicy exists for: the
+            // engine logs it, offers it to the policy, and only gives up when the retries run out. Swallowing it
+            // into an `Error` would instead be a stop the moment the script hiccups once.
             Component.LastStatus = "Failed";
             Component.LastOutput = ex.Message;
-            // An error: the interpreter itself failed, which no downstream node can work around — this ends the run.
-            if (ctx is IRuntimeContext rc)
-                await rc.ErrorAsync($"Python execution failed: {ex.Message}");
-            return null;
+            throw;
         }
+    }
+
+    /// <summary>
+    /// How many times this node has been driven in the current run — a retry increments it, a redirect pass does
+    /// not. Reset when the session changes, since each run of the demo is a fresh session.
+    /// </summary>
+    /// <remarks>Handed to the script as <c>_drive</c>; see <see cref="BuildInputPayload"/>.</remarks>
+    private int Drive(IRuntimeContext? runtime)
+    {
+        if (runtime is null) return ++_drives;
+        if (_runUid != runtime.Uid)
+        {
+            _runUid = runtime.Uid;
+            _drives = 0;
+        }
+        return ++_drives;
+    }
+
+    private Guid _runUid;
+    private int _drives;
+
+    /// <summary>
+    /// Turns the diagnostics a script put in its own result into a session report:
+    /// <c>"warn"</c> → a warning (the run carries on), <c>"redirect"</c> → the node to fall back to, by title, and
+    /// <c>"error"</c> → an error (which ends the run unless a redirect target is named).
+    /// </summary>
+    /// <remarks>
+    /// A script cannot call the runtime, so it says what it wants in the data it returns. Keeping the convention
+    /// here — in the helper, one place — is what lets a script decide the flow without a node type of its own.
+    /// </remarks>
+    private async Task ReportAsync(IRuntimeContext runtime, object? parsed)
+    {
+        if (parsed is not IDictionary<string, object?> output) return;
+
+        if (output.TryGetValue("warn", out var warn) && warn is string warnText)
+            await runtime.WarnAsync(warnText);
+
+        if (output.TryGetValue("redirect", out var redirect) && redirect is string title)
+            Component!.RedirectTo = title;
+
+        if (output.TryGetValue("error", out var error) && error is string errorText)
+            await runtime.ErrorAsync(errorText);
     }
 
     /// <summary>
@@ -65,20 +116,40 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
     /// <c>{ portName: sourceOutput }</c> so the script sees meaningful field names. Otherwise the single upstream
     /// output is passed through as-is.
     /// </summary>
-    public object? BuildInputPayload(ITaskContext ctx)
+    /// <remarks>
+    /// <b>Two keys are added when that payload is an object</b> — <c>_attempt</c> (which pass over the graph this
+    /// is) and <c>_drive</c> (which time this node has been driven) — because a script has no other way to see the
+    /// run's own state. They are what let the demo's generator write a quick set on the first pass and the full one
+    /// after a redirect, and let its publish step fail once and succeed on the retry. A scalar or array payload is
+    /// passed through untouched: there is nowhere to put them, and a script that receives an array is clearly not
+    /// reading keys.
+    /// </remarks>
+    public object? BuildInputPayload(ITaskContext ctx, IRuntimeContext? runtime = null, int drive = 0)
     {
+        var map = new Dictionary<string, object?>();
         if (ctx.Data is IGroupData group && Component?.InputSlots is { } inputSlots)
         {
-            var map = new Dictionary<string, object?>();
             foreach (var item in inputSlots.Items)
             {
                 var source = item.Slot?.Sources?.FirstOrDefault()?.Parent;
                 if (source is not null && group.TryGetValue(source, out var value))
                     map[item.Name] = value;
             }
-            return map;
         }
-        return ctx.Data;
+        else if (ctx.Data is IDictionary<string, object?> payload)
+        {
+            // Copied rather than mutated: the dictionary is the upstream node's own output, and the engine state
+            // the script is about to read has no business appearing in another node's result.
+            foreach (var entry in payload) map[entry.Key] = entry.Value;
+        }
+        else
+        {
+            return ctx.Data;
+        }
+
+        map["_attempt"] = runtime?.Attempt ?? 1;
+        map["_drive"] = drive;
+        return map;
     }
 
     /// <summary>

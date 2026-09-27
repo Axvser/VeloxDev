@@ -20,6 +20,25 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     /// <summary>Current runtime execution session (created on Run; the UI can bind to its progress).</summary>
     public IRuntimeContext? RuntimeContext { get; private set; }
 
+    private Action<RuntimeContext>? _configureSession;
+
+    /// <summary>
+    /// Registers a hook that configures the session just before it is driven — the log writer, the pause gate, the
+    /// observer, the retry policy, the error sink, the compensator, the checkpoint store. Left unregistered, a run
+    /// is the plain one, which is what a host that wants none of them should do.
+    /// </summary>
+    /// <param name="configure">Called once per run, on the session the run is about to use.</param>
+    /// <remarks>
+    /// A method rather than a public property on purpose: the serializer writes every writable property, and a
+    /// delegate written out cannot be read back — loading a saved tree would throw instead. The same reason
+    /// <see cref="RuntimeContext"/> and <see cref="CompileContext"/> are get-only.
+    /// <para>
+    /// A hook rather than properties on this node, because those capabilities are the host's policy and not the
+    /// controller's state: the demo graph builder registers one for every platform.
+    /// </para>
+    /// </remarks>
+    public void ConfigureSessionWith(Action<RuntimeContext> configure) => _configureSession = configure;
+
     private CancellationTokenSource? _runCts;
 
     /// <summary>Whether at least one graph has been compiled (enables the Run button).</summary>
@@ -56,6 +75,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         // 而 Agent 侧的 RunCompiledWorkflow 是传的（WorkflowAgentToolkit 的 `Data = seed`）。现在两边一致：
         // 原样传入，空串就是空负载（与给 Agent 传 seed: "" 等价），不做 null 转换。
         var context = new RuntimeContext { IsRunning = true, Data = SeedPayload };
+        _configureSession?.Invoke(context);
         RuntimeContext = context;
         OnPropertyChanged(nameof(RuntimeContext));
 

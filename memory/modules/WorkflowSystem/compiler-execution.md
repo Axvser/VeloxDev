@@ -153,7 +153,13 @@
 
 测试：`Core.Test/…/ExecutionCheckpointTests.cs`（5 条）+ `Core.Extension.Test/Serialization/ExecutionCheckpointSerializationTests.cs`（5 条）。判别性最强的一条是「半途停 → 恢复」：断言既要求没跑过的分支被驱动，也要求**被跳过的那个节点在汇合点里仍读得到它当初的产物** —— 只测「跳过了」的话，产物铺没铺回去是看不出来的。
 
-## 十二、未做（别当成遗漏）
+## 十二、重定向与分支的三处边界（2026-09-27 实测，做 demo 那张展示图时撞出来的）
+
+1. **目标落进（嵌套）分支内部时，整条分支会被跳过。** `RunBranchAsync` 的判断是 `if (redirectTarget is int t && routerOrder < t) return false;` —— 注释写的是「目标在分支之前则整条跳过」，条件表达的却是「路由器在目标之前」。于是目标若位于该分支**内部**（`routerOrder < target` 成立），分支被整个跳过 ⇒ 目标永远到不了，这一趟**一个节点都不会重跑**。实测：demo 把目标写成 `Generate Dataset`（order 3，在 Source Selector 分支内，该分支路由器 order 2）→ 日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`。**可行的目标是包住它的那条分支之前**的节点（demo 改指 order 1 的 `Ticker` ⇒ 整条管线从头重跑）。
+2. **一条分支的所有选项都通向的节点，只会被编进其中一个选项。** demo 里 `Publish` 原本挂在三个报告节点之后 ⇒ 编译器把它编进遍历时先遇到的那个选项（实测它的 order 11 只属于 `Zero` 选项）⇒ 路由到 `Low` 的那一轮它根本不跑。想「分支之后再收拢」的步骤，得放到分支**之前**。
+3. **报错的那一趟给下游留 null，而重定向不会中断当趟。** 报错的驱动记 `null`（§六）＋ `RunExecuteAsync` 记下回退目标后继续走完这条链 ⇒ 被拒绝的那一趟，**尾巴拿到的全是 null**。demo 的尾巴脚本因此按「空载荷就记一行 warning 返回」写 —— 否则一次拒绝会换来一屏堆栈。
+
+## 十三、未做（别当成遗漏）
 
 | 未做 | 说明 |
 |---|---|

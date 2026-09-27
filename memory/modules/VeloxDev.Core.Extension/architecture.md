@@ -175,3 +175,5 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 2. **`WritablePropertiesOnlyResolver`** 把「有无参构造函数 + 可写属性」的 `IEnumerable` 类型当**普通对象**处理，而不是当集合 —— 这是让 `ObservableCollection<…>` 这类带额外状态的集合能按属性序列化的关键。序列化工作流的缩放/锚点相关契约（`_owner` 反写、`[OnSerializing]` 展开世界坐标）在 `memory/modules/WorkflowSystem/` 里，不在这里重复。
 3. **`AllowListSerializationBinder` 是被刻意移除的**，文件结尾有注释说明。`WithTypeNameHandling(...)` 仍然开放（`:40`）—— 宿主打开它就等于接受类型名反序列化的攻击面，这是**宿主的选择**，不是模块的默认。
 
+**⚠ 公开可写的属性一律会被写出去，包括委托。** `WritablePropertiesOnlyResolver` 只看「能不能写」，不看类型 ⇒ 一个 `public Action<T>? Hook { get; set; }` 会被序列化成一段委托，而**读回来时构造委托直接抛**（`Delegate.DelegateConstruct` → `ArgumentNullException: method`）。2026-09-27 实测：`ControllerViewModel` 上加了这样一个钩子，三条编译图快照测试当场红 —— 而这条路径七家 demo 的**保存**都会走。运行期状态用 `{ get; private set; }`（`RuntimeContext`/`CompileContext` 都是），需要外部可设就用**方法**而不是属性。
+
