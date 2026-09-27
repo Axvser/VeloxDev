@@ -45,9 +45,26 @@ public partial class WorkflowView : UserControl
     /// </summary>
     private DispatcherTimer? _subAgentTick;
 
+    /// <summary>
+    /// Collapses a burst of "the surface is stale" requests into one refresh.
+    /// <para>
+    /// An Agent turn makes dozens of tool calls and every one of them asks for a refresh, and a refresh here is
+    /// total — so without this the editor spent the whole turn running them back to back, which the user
+    /// measured as "very very slowly" (2026-09-27). One per view rather than one per request: the merging is
+    /// the point. It stays valid across a session swap, since the refresh resolves the tree at call time.
+    /// </para>
+    /// </summary>
+    private readonly CoalescedRefresh _surfaceRefresh;
+
     public WorkflowView()
     {
         InitializeComponent();
+
+        // The hop is Background on purpose — the priority this view already used for the agent's own updates —
+        // so a burst of them can never get ahead of input.
+        _surfaceRefresh = new CoalescedRefresh(
+            () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this),
+            action => Dispatcher.UIThread.Post(action, DispatcherPriority.Background));
 
         // Keep the canvas-info HUD current on every scroll / viewport change: it reads helper.Viewport,
         // which the surface behaviour refreshes, and subscribes to the model for the rest.
@@ -651,15 +668,11 @@ public partial class WorkflowView : UserControl
         args.Result = result;
     }
 
-    private void OnAgentToolCalled()
-    {
-        Dispatcher.UIThread.Post(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
-    }
+    // Both entry points land here — a tool call and an explicit visual-refresh request mean the same thing to
+    // the surface, so they share the one coalescer.
+    private void OnAgentToolCalled() => _surfaceRefresh.Request();
 
-    private void OnVisualRefreshRequested()
-    {
-        Dispatcher.UIThread.Post(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this), DispatcherPriority.Background);
-    }
+    private void OnVisualRefreshRequested() => _surfaceRefresh.Request();
 
     private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

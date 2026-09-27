@@ -39,6 +39,10 @@ internal sealed class MainWindow : Window
 
     private TreeViewModel _tree = new();
     private WorkflowDemoSession? _demo;
+
+    // 一次 Agent 对话里每个工具调用都要求刷新，而刷新是全量的（重新定位命名控件、跑布局、重算可见区）。
+    // 合并之后一轮只刷新一次 —— 刷新本身是幂等的，后来的请求要的正是前一次即将看到的状态。
+    private CoalescedRefresh? _surfaceRefresh;
     private Button? _continueFromCheckpoint;
     private McpStatusViewModel? _mcpStatus;
     private readonly HashSet<McpServerStatusViewModel> _mcpServerSubs = new();
@@ -541,6 +545,11 @@ internal sealed class MainWindow : Window
         vm.Nodes.CollectionChanged += OnTreeCollectionsChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
+            // 一个 surface 一个合并器：换树会重新走到这里，但合并器跟着窗口走，不该重建。
+            _surfaceRefresh ??= new CoalescedRefresh(
+                RefreshSurface,
+                action => _uiDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => action())));
+
             helper.SelectionHandler = args => AgentDialogs.ShowSelectionAsync(_uiDispatcher, args);
             helper.ConfirmationHandler = args => AgentDialogs.ShowConfirmationAsync(_uiDispatcher, args);
             helper.ToolCalled += OnAgentToolCalled;
@@ -611,17 +620,15 @@ internal sealed class MainWindow : Window
         _agentInput.Text = string.Empty;
     }
 
-    private void OnAgentToolCalled() => RefreshSurface();
+    private void OnAgentToolCalled() => _surfaceRefresh?.Request();
 
-    private void OnVisualRefreshRequested() => RefreshSurface();
+    private void OnVisualRefreshRequested() => _surfaceRefresh?.Request();
 
+    // 合并器排到 UI 线程上跑的就是这里；线程跳在合并器那边。
     private void RefreshSurface()
     {
-        _uiDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-        {
-            _surface.InvalidateVisual();
-            _surface.Changed?.Invoke();
-        }));
+        _surface.InvalidateVisual();
+        _surface.Changed?.Invoke();
     }
 
     // ── Save / Select ───────────────────────────────────────────────────────

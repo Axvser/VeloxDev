@@ -92,6 +92,23 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 ---
 
+### 三之末、每一次工具调用，宿主都要付一次账（2026-09-27 实测）
+
+`WorkflowAgentScope.RaiseToolCalledAsync`（`:789`）**每完成一次工具调用**就发一次 `ToolCalled`。宿主侧通常拿它刷新画布 ——
+而**全量刷新**（重解析命名控件 + 跑布局 + 重算可见集）是幂等的重活：一轮 Agent 回合几十次调用 ⇒ 几十次全量刷新 ⇒
+用户实测「对话中节点编辑器的显示响应**非常非常慢**」。修法不是在库里节流（库不知道宿主什么时候算"settle"），而是**宿主把
+请求合并**：demo 侧的统一件是 `Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/CoalescedRefresh.cs`（首次请求排队、
+其余落在同一趟里；旗标**在刷新执行之前**清，所以刷新期间来的请求会再排一次 —— 那一轮才代表刷新后的最新状态）。
+
+**七家的现状是三种，不是一种**（2026-09-27 逐家核过）：Avalonia / WPF / WinUI / WinForms / Jalium **每调用一次就全量刷新**
+（本次接上合并器）；**MAUI 早就自己做了同一件事** —— `ScheduleRefresh()`（`Controls/Workflow/WorkflowView.xaml.cs:453`）用一个
+`bool _layoutRefreshPending` 门控 + `MainThread.BeginInvokeOnMainThread`，而且同样是**先清旗标再刷新**，与 `CoalescedRefresh`
+的契约逐条一致（差别只在门是普通 `bool`、非原子；眼下都从主线程来，所以行为正确）⇒ **不要再叠第二套**；**Blazor 压根不
+在这两个事件上刷新**（页面只订阅了 `MCP.Status.PropertyChanged`，画布靠模型变更通知反应式重渲），所以那条前提在它身上不成立。
+
+**顺带一条零调用者**：`AgentHelper.VisualRefreshRequested`（demo 的 Lib，`Helper/AgentHelper.cs:180`）**声明了、七家都订阅了、
+从来没有人 raise**。所以七家那份订阅一直是空的 —— 真正的触发只有 `ToolCalled`。（这类"声明了没人发"的面，本模块 §六 有专节。）
+
 ## 三点五、编译运行的控制面（2026-09-27 起）
 
 `RunCompiledWorkflow` 是**跑到完才返回**的，所以模型说什么都到不了"还在跑的那一轮"。新增一条后台入口 + 一组控制工具后，六个编译执行能力里"需要有人按一下"的那两件（暂停门、检查点）才真的能被 Agent 用：

@@ -15,6 +15,10 @@ namespace Demo
         private readonly BindingSource _controllerBindingSource = [];
         private WorkflowDemoSession? _demo;
 
+        // Agent 一轮里每个工具调用都要求刷新，而一次刷新是全量的（重新定位命名控件、跑布局、重算可见区）。
+        // 合并之后一轮只刷新一次 —— 刷新本身是幂等的，后来的请求要的正是前一次即将看到的状态。
+        private ViewModels.Workflow.Helper.CoalescedRefresh? _surfaceRefresh;
+
         public Form1()
         {
             InitializeComponent();
@@ -144,6 +148,14 @@ namespace Demo
         private void SubscribeHelper(WorkflowDemoSession session)
         {
             if (session.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+
+            // 一个 surface 一个合并器：换演示会话会重新订阅，但合并器跟着窗体走，不该重建。
+            // 这里的线程跳必须异步：BeginInvoke 只把委托排进消息泵，调用方立刻返回，
+            // 排进去的刷新才有机会把中间那些请求吃掉。
+            _surfaceRefresh ??= new ViewModels.Workflow.Helper.CoalescedRefresh(
+                () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(workflowSurfaceControl),
+                action => BeginInvoke(action));
+
             helper.SelectionHandler = ShowSelectionDialogAsync;
             helper.ConfirmationHandler = ShowConfirmationDialogAsync;
             helper.ToolCalled += OnAgentToolCalled;
@@ -243,11 +255,7 @@ namespace Demo
                 await helper.LoadMcpServersAsync();
         }
 
-        private void OnAgentToolCalled()
-        {
-            if (InvokeRequired) { BeginInvoke(OnAgentToolCalled); return; }
-            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(workflowSurfaceControl);
-        }
+        private void OnAgentToolCalled() => _surfaceRefresh?.Request();
 
         private Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
         {

@@ -188,6 +188,10 @@ namespace Demo.Views
         /// </summary>
         private WorkflowDemoSession? _demo;
 
+        // Agent 一轮里每个工具调用都要求刷新，而一次刷新是全量的（重新定位命名控件、跑布局、重算可见区）。
+        // 合并之后一轮只刷新一次 —— 刷新本身是幂等的，后来的请求要的正是前一次即将看到的状态。
+        private CoalescedRefresh? _surfaceRefresh;
+
         // 门与检查点都在会话上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做。
         private void RefreshRunControls()
         {
@@ -295,6 +299,11 @@ namespace Demo.Views
             vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
             if (vm.GetHelper() is AgentHelper helper)
             {
+                // 一个 surface 一个合并器：换树会重新走到这里，但合并器跟着视图走，不该重建。
+                _surfaceRefresh ??= new CoalescedRefresh(
+                    () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this),
+                    action => DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => action()));
+
                 helper.SelectionHandler = ShowSelectionDialogAsync;
                 helper.ConfirmationHandler = ShowConfirmationDialogAsync;
                 helper.ToolCalled += OnAgentToolCalled;
@@ -524,15 +533,9 @@ namespace Demo.Views
             args.Result = await tcs.Task;
         }
 
-        private void OnAgentToolCalled()
-        {
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
-        }
+        private void OnAgentToolCalled() => _surfaceRefresh?.Request();
 
-        private void OnVisualRefreshRequested()
-        {
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
-        }
+        private void OnVisualRefreshRequested() => _surfaceRefresh?.Request();
 
         private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
