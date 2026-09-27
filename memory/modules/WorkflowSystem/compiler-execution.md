@@ -79,7 +79,11 @@
 
 **两种模式的代价（已写进 `CompiledGraphEx` 的文档）**：默认**快照** = 段结构 + 每个节点自身的状态，**不可回灌**（还原节点无 `Parent` ⇒ 几何不再按缩放坍缩、移动不再标脏）；`includeTree: true` = 保留外向引用、可回灌，但 payload ≈ 整棵树 + 连通分量。两种模式下**还原节点的 `RuntimeId` 都是新的、编译身份都不在**（两者都不可写 ⇒ 被 resolver 丢掉），即第四节那条静默降级。
 
-**未验：**「还原后的图能直接跑」没有端到端测过（需要一张不真跑 python 的图）。键的**类型序列**已证往返保真，动态分支的比较因此成立，但端到端未测。
+**列表视图有两条路**：嵌套模板直接绑 `Entries` / `Options` / `Branches`；想一次看到整张结构就用 `CompiledOutline.Of(graph)`（Core 的纯函数 → `Depth`/`Kind`/`Label`/`Nodes`，段类型词 `Execute`/`Branch`/`Parallel` 与 Agent 侧那份投影一致）。图在编译后冻结，所以拍平只需算一次。demo 的 Avalonia 侧栏已按后者做了一个面板：控制器编译后**推**给树（`TreeViewModel.RefreshCompiledStructure`，与 `Run` 推 `BeginWorkflowRun` 同一约定 —— 树不订阅控制器的属性变化），**其余六家只差同一段 XAML**。
+
+**验证强度（照实记）**：数据通路有单测（编译经控制器命令 → 填充树上的列表、重编译替换而非追加）；XAML 绑定由 Avalonia 的编译绑定在**构建期**校验；**像素层未验** —— demo 的交互无法用合成输入驱动（实测两次点击、连 native 签名都修对了，仍到不了 Avalonia 的输入管线，`Run` 始终置灰），所以面板显示出来的样子仍需人眼。
+
+**端到端「还原后的图能跑」已验**（2026-09-27 补）：`CompiledGraphSerializationTests.ARestoredGraph_DynamicallyRoutesOnItsEnumKey` —— 一张**动态 + 枚举键**的分支图，序列化→反序列化→`RuntimeEngine.RunAsync` 仍路由到正确那一支。这条**故意做成能判别**：把 `BranchOption` 的 `[OnDeserialized]` 临时去掉后它必然失败，日志给出正是那个失败模式 —— `Branch 'Low' has no downstream node; the run ends.`（运行期解析出真枚举、还原的选项键还是 `long`，一个都不匹配）。
 
 ## 九、日志 sink 与上限（`ILogWriter`）
 

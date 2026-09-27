@@ -144,6 +144,11 @@ implement `ICompileTimeAware` already shows.
 of an enum inside an `object` member, measured, and `TypeNameHandling.All` does not help — which would leave a
 *dynamic* branch matching no option at all. The compiler therefore records the key's type beside it.
 
+⚙ **A flat outline is one call away.** `CompiledOutline.Of(graph)` returns one read-only row per segment — its depth,
+its kind (`Execute` / `Branch` / `Parallel`), a label and the nodes it names — for a list that shows the whole
+structure at once rather than a nested `ItemsControl`. The graph is frozen once compiled, so the outline is computed
+once and never has to be kept in step.
+
 ## Compiled-run logs
 
 ```csharp
