@@ -88,11 +88,12 @@ internal sealed class TestSlot : IWorkflowSlotViewModel
 /// </summary>
 internal sealed class ProbeHelper : NodeHelper<ProbeNode>
 {
-    public override Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
+    public override async Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
     {
         var owner = Component;
-        if (owner is null) return Task.FromResult<object?>(null);
+        if (owner is null) return null;
 
+        // 记录发生在任何 await 之前：载荷是「驱动那一刻」的值，这也是并行下断言分支各自载荷的依据。
         var call = new ProbeCall(
             owner,
             Attempt: context is IRuntimeContext rc ? rc.Attempt : 0,
@@ -100,9 +101,12 @@ internal sealed class ProbeHelper : NodeHelper<ProbeNode>
             Compiled: context is IRuntimeContext);
         owner.Calls.Add(call);
 
+        // AsyncHandler 用于需要「真的挂起」的测试(证明扇出分支重叠);没有它就是原来的同步 Handler。
+        if (owner.AsyncHandler is { } asyncHandler) return await asyncHandler(context, ct);
+
         // 节点的业务逻辑;抛出异常由引擎按重定向语义接管(DriveAsync 先记 Error 再抛)。
         object? result = owner.Handler?.Invoke(context, ct);
-        return Task.FromResult(result);
+        return result;
     }
 
     public override Task<bool> AccessAsync(IAccessContext context, CancellationToken ct)
@@ -125,6 +129,12 @@ internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAw
 
     /// <summary>Node business logic: input context → return value (written to context.Data for downstream).</summary>
     public Func<ITaskContext, CancellationToken, object?>? Handler { get; set; }
+
+    /// <summary>
+    /// Awaitable variant of <see cref="Handler"/>, for tests that need the drive to actually suspend — proving a
+    /// fan-out's branches are in flight at the same time needs a node that yields. Takes precedence when set.
+    /// </summary>
+    public Func<ITaskContext, CancellationToken, Task<object?>>? AsyncHandler { get; set; }
 
     /// <summary>Edge validation gate; returning false treats the edge as unconnected.</summary>
     public Func<IAccessContext, bool>? AccessGate { get; set; }

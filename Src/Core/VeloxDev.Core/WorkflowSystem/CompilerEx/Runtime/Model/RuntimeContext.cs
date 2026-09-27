@@ -67,6 +67,21 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// <summary>Whether the flow ended early because "the node errored but does not implement <see cref="IRedirectable"/>" (status set to -1).</summary>
     public bool EndedWithError { get; set; }
 
+    /// <summary>
+    /// How many branches of one fan-out may be in flight at once; <c>null</c> (the default) means no cap.
+    /// </summary>
+    /// <remarks>
+    /// A fan-out starts its branches concurrently, so a wide one — thirty processors, say — starts thirty
+    /// pieces of work at once. Set this when the branches are heavy (each one spawning a process, holding a
+    /// large buffer) and the machine would rather work through them in waves.
+    /// <para>
+    /// Not on <see cref="IRuntimeContext"/> on purpose: adding a member to that contract would break every
+    /// external implementation, and this is engine policy rather than session state. A custom context simply
+    /// gets the uncapped behaviour.
+    /// </para>
+    /// </remarks>
+    public int? MaxParallelBranches { get; set; }
+
     /// <summary>The engine-requested redirect target Order (may be cross-chain). RunAsync re-runs the whole graph with it.</summary>
     public int? PendingRedirectTarget { get; set; }
 

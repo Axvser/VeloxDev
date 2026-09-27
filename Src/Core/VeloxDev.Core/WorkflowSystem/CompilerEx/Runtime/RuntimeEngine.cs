@@ -196,21 +196,102 @@ public sealed class RuntimeEngine
     }
 
     /// <summary>
-    /// Fan-out group: executes all branch subgraphs in order — the order carries the "wait for all
-    /// upstreams to arrive" merge semantics (the shared IRuntimeContext blackboard is not thread-safe,
-    /// so there is no true parallelism). Every branch is a downstream of the SAME fan-out source, so the
-    /// source payload is restored before each branch — otherwise the previous branch's output would leak
-    /// into the next branch as its input. A terminal branch hit inside any branch ends the whole run.
+    /// Fan-out group: the branches run **concurrently**, as interleaved async operations rather than threads.
+    /// Every branch starts on the caller's context and each await inside it yields to its siblings, so I/O-bound
+    /// branches — a node invoking a process, say — overlap while the group stays on the host's
+    /// SynchronizationContext. That last part is why this is not thread parallelism: a branch that burns CPU
+    /// still occupies the thread in turn, and moving bodies to the pool would break the contract that components
+    /// are UI-bound (the same contract <c>TrackedAIFunction</c> exists to keep).
+    /// <para>
+    /// Safety comes from each branch getting its own <see cref="BranchRuntimeContext"/>: payload, redirect
+    /// request and log buffer are per branch, while identity, progress, the output registry and the shared
+    /// variables stay on the host's single session. Every branch is a downstream of the SAME fan-out source, so
+    /// each one starts from the source payload and can never see a sibling's output.
+    /// </para>
+    /// <para>
+    /// Determinism, in branch order: each branch's logs are merged as one block, and when several branches ask to
+    /// redirect the first in order wins while the rest are logged and ignored — first by *order*, not by wall
+    /// clock, so a run stays reproducible. The payload left in the session is the last branch's, which is what
+    /// the sequential loop used to leave there. A terminal branch hit inside any branch ends the whole run. One
+    /// deliberate change: a branch that throws no longer aborts its siblings mid-flight — the exception surfaces
+    /// once the group has finished.
+    /// </para>
     /// </summary>
     private async Task<bool> RunParallelAsync(ParallelSegment parallel, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
         var sourceData = context.Data;   // the fan-out source's output, broadcast to every branch
-        foreach (var branch in parallel.Branches)
+        var branches = parallel.Branches;
+        var count = branches.Count;
+
+        // No branch, or one: nothing to interleave and nothing to merge, so keep the plain path.
+        if (count == 0) return false;
+        if (count == 1)
         {
-            context.Data = sourceData;   // each branch reads the same source payload, not the previous branch's output
-            if (await RunGraphAsync(branch, context, ct, redirectTarget)) return true;
+            context.Data = sourceData;
+            return await RunGraphAsync(branches[0], context, ct, redirectTarget);
         }
+
+        // The cap is per group, and read off the host's session when that is the concrete type. Deliberately not
+        // a member of IRuntimeContext: adding one would break every external implementation of the contract.
+        var limit = (context as RuntimeContext)?.MaxParallelBranches;
+        using var gate = limit is int n && n > 0 ? new SemaphoreSlim(n, n) : null;
+
+        var branchContexts = new BranchRuntimeContext[count];
+        var tasks = new Task<bool>[count];
+        for (int i = 0; i < count; i++)
+        {
+            branchContexts[i] = new BranchRuntimeContext(context) { Data = sourceData };
+            tasks[i] = RunOneBranchAsync(branches[i], branchContexts[i], ct, redirectTarget, gate);
+        }
+
+        var terminated = await Task.WhenAll(tasks);
+
+        // Merge in branch order, logs first so the engine's own remarks about the group read as a footer.
+        for (int i = 0; i < count; i++)
+            foreach (var line in branchContexts[i].Logs)
+                context.Logs.Add(line);
+
+        int? winner = null;
+        var winnerIndex = -1;
+        for (int i = 0; i < count; i++)
+        {
+            if (branchContexts[i].PendingRedirectTarget is not int requested) continue;
+            if (winner is null)
+            {
+                winner = requested;
+                winnerIndex = i;
+            }
+            else
+            {
+                context.Log($"Redirect request to #{requested} from branch {i} was ignored; branch {winnerIndex} already asked for #{winner}.");
+            }
+        }
+        if (winner is int target) context.PendingRedirectTarget = target;
+
+        context.Data = branchContexts[count - 1].Data;   // what the sequential loop used to leave behind
+
+        foreach (var ended in terminated)
+            if (ended) return true;
         return false;
+    }
+
+    /// <summary>
+    /// Runs one branch against its own <see cref="BranchRuntimeContext"/>, waiting on the group's concurrency
+    /// gate first when the host set a cap (the cap bounds one fan-out, not the run).
+    /// </summary>
+    private async Task<bool> RunOneBranchAsync(
+        CompiledGraph branch, BranchRuntimeContext branchContext, CancellationToken ct, int? redirectTarget,
+        SemaphoreSlim? gate)
+    {
+        if (gate is not null) await gate.WaitAsync(ct);
+        try
+        {
+            return await RunGraphAsync(branch, branchContext, ct, redirectTarget);
+        }
+        finally
+        {
+            gate?.Release();
+        }
     }
 
     /// <summary>The node's compile-state Order (-1 when it does not implement ICompileTimeAware).</summary>
