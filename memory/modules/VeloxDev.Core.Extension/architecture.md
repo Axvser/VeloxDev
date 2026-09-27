@@ -165,6 +165,8 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 `Src/Core/VeloxDev.Core.Extension/ComponentModelEx.cs` 的命名空间是 **`VeloxDev.MVVM.Serialization`**，不是 `VeloxDev.AI.*`。它在本项目里的原因只是「需要一个带 Newtonsoft 依赖的地方」，而 `VeloxDev.Core` 是零依赖的。
 
+**同一命名空间下还有两个「物理在本项目、语义属于别的模块」的文件**，不要按目录去找它们：`CompiledGraphEx.cs`（编译图存/读，见 [`WorkflowSystem/compiler-execution.md`](../WorkflowSystem/compiler-execution.md) §八）与 `CheckpointEx.cs`（运行检查点存/读 + `FileCheckpointStore`，见同文件 §十一）。**公开的 `Serialize<T>` / `Deserialize<T>` 一族被 `where T : INotifyPropertyChanged` 约束住了** —— 那是为 VM 写的面；纯数据 DTO（如 `ExecutionCheckpoint`）走同程序集 `internal` 的 `ComponentModelEx.CreateJsonSerializer()`，于是继承下面那套默认设置而不用把自己伪装成 VM。
+
 **它是所有 demo 存/读工作流走的那条路**：`TreeViewModel.cs:316` 的 `this.Serialize()`，以及 Avalonia / Blazor / Jalium / MAUI / WinUI 五家的 `TryDeserialize<TreeViewModel>(...)`。
 
 **读这个文件时值得知道的三点：**

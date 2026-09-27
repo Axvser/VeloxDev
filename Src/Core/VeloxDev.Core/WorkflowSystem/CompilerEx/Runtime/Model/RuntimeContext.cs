@@ -156,6 +156,13 @@ public sealed partial class RuntimeContext : IRuntimeContext
     public IExecutionCompensation? Compensation { get; set; }
 
     /// <summary>
+    /// Where the run's place is written down after each node succeeds; <c>null</c> (the default) keeps no place.
+    /// Pair it with <see cref="RuntimeEngine.RunAsync"/>'s <c>resumeFrom</c> to carry a run across a stop.
+    /// </summary>
+    /// <seealso cref="IExecutionCheckpointStore"/>
+    public IExecutionCheckpointStore? CheckpointStore { get; set; }
+
+    /// <summary>
     /// How the last run ended, as a precise reading of <see cref="Status"/> + <see cref="EndedWithError"/>;
     /// <see cref="RunOutcome.Unknown"/> until a run ends.
     /// </summary>
@@ -168,6 +175,62 @@ public sealed partial class RuntimeContext : IRuntimeContext
 
     // 本轮的成功列表（含产物），补偿器按它逆序回调。
     internal IReadOnlyList<(IWorkflowNodeViewModel Node, object? Output)> CompletedThisRun => [.. _completed];
+
+    // 检查点用：这次运行那张图的「节点 → 键」有序表，RunAsync 开头算一次。形状与键都从它来。
+    internal IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)>? CheckpointNodes { get; set; }
+
+    // 把当前状态打成一份检查点：本 pass 的产物 + 重定向保留的前缀，外加运行自身的状态（Attempt / 跳过的目标 / 载荷）。
+    internal ExecutionCheckpoint Snapshot()
+    {
+        var nodes = CheckpointNodes;
+        var outputs = new Dictionary<string, object?>();
+        if (nodes is not null)
+        {
+            // 显式取 Key/Value：KeyValuePair 的 Deconstruct 在 netstandard2.0 / net461 上不存在。
+            foreach (var pair in _outputs)
+            {
+                if (!IsCurrentPassOrPreserved(pair.Key, pair.Value)) continue;
+                if (!TryKeyOf(nodes, pair.Key, out var key)) continue;
+                outputs[key] = Normalize(pair.Value.Value, nodes);
+            }
+        }
+
+        return new ExecutionCheckpoint
+        {
+            Attempt = Attempt,
+            ActiveRedirectTarget = ActiveRedirectTarget,
+            Data = Normalize(Data, nodes),
+            Outputs = outputs,
+            Shape = nodes is null ? [] : [.. nodes.Select(entry => entry.Key)],
+        };
+    }
+
+    private static bool TryKeyOf(
+        IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)> nodes, IWorkflowNodeViewModel node, out string key)
+    {
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            if (!ReferenceEquals(nodes[i].Node, node)) continue;
+            key = nodes[i].Key;
+            return true;
+        }
+        key = string.Empty;
+        return false;
+    }
+
+    // 汇合载荷是按「节点引用」键的字典 ⇒ 写进检查点前必须换成节点键：引用写不进文件，而序列化会顺着它把
+    // 整棵树拖进去（与 CompiledGraphEx 排除 Parent 同一个坑）。运行中的对象不动，只换快照里这一份。
+    private static object? Normalize(object? value, IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)>? nodes)
+    {
+        if (value is not IGroupData group || nodes is null) return value;
+        var map = new Dictionary<string, object?>();
+        foreach (var entry in group)
+        {
+            if (TryKeyOf(nodes, entry.Key, out var key))
+                map[key] = Normalize(entry.Value, nodes);
+        }
+        return map;
+    }
 
     /// <summary>Raised when <see cref="LogWriter"/> throws. The line is still kept in <see cref="Logs"/> and the run
     /// carries on — diagnostics never change what the run does.</summary>

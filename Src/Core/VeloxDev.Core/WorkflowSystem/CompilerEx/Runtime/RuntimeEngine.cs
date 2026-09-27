@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
@@ -32,12 +33,33 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </summary>
 public sealed class RuntimeEngine
 {
-    public async Task RunAsync(CompiledGraph graph, IRuntimeContext context, CancellationToken ct)
+    /// <summary>
+    /// Drives the graph to its end: every entry is walked, the nodes a redirect puts before its target are skipped,
+    /// and how it ended is written to <see cref="RuntimeContext.Outcome"/>.
+    /// </summary>
+    /// <param name="graph">The compiled graph to drive.</param>
+    /// <param name="context">The session to drive it with.</param>
+    /// <param name="ct">The host's token: cancelling stops the run at the next node boundary.</param>
+    /// <param name="resumeFrom">
+    /// A checkpoint to carry on from, usually the one its <see cref="RuntimeContext.CheckpointStore"/> holds. The
+    /// nodes it records as done are not driven again, and its <see cref="ExecutionCheckpoint.Shape"/> has to match
+    /// this graph.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="resumeFrom"/> was taken over a different graph. Refused before the session is touched, since
+    /// the alternative is driving the wrong nodes with someone else's outputs.
+    /// </exception>
+    public async Task RunAsync(CompiledGraph graph, IRuntimeContext context, CancellationToken ct, ExecutionCheckpoint? resumeFrom = null)
     {
         if (graph is null || context is null) return;
         const int MaxRedirects = 50;
         var session = Session(context);
         var startedAt = Stopwatch.GetTimestamp();
+
+        // 形状先校验、后动会话：不符就抛，会话一个字段都不碰（Status 还停在 "Idle"，不是谎称在跑）。
+        var nodes = ExecutionCheckpoint.NodesOf(graph);
+        if (resumeFrom is not null) RequireSameShape(nodes, resumeFrom);
+
         context.IsRunning = true;
         context.Status = "Running";
         // Each RunAsync clears the output registry once; redirect re-runs do not clear it, stale
@@ -45,6 +67,11 @@ public sealed class RuntimeEngine
         // contract-preserved prefix before the redirect target).
         context.ResetOutputs();
         context.TargetReached = false;
+
+        // 恢复放在清空之后：ResetOutputs 会把产物表清掉，检查点要在这之后再铺回去。
+        if (session is not null) session.CheckpointNodes = nodes;
+        var done = resumeFrom is null ? null : Restore(context, nodes, resumeFrom);
+
         int? redirectTarget = null;
         var redirects = 0;
         try
@@ -53,12 +80,15 @@ public sealed class RuntimeEngine
             // nodes before the target are skipped (possibly cross-chain).
             while (true)
             {
-                context.Attempt = redirects + 1;   // graph re-run count (increments per redirect)
+                // 恢复的那一轮**原样沿用**检查点里的 Attempt，不是加一：产物表按它盖戳，铺回去的产物就是「这一轮」的，
+                // 加一等于把它们降级成陈旧产物 —— 汇合点立刻读不到它们。此后的重定向照旧一轮加一。
+                context.Attempt = resumeFrom is null ? redirects + 1 : resumeFrom.Attempt + redirects;   // graph re-run count (increments per redirect)
                 if (redirects == 0)
                     await ObserveAsync(session, context, ExecutionObservationKind.RunStarted, null, null, TimeSpan.Zero, ct);
                 context.PendingRedirectTarget = null;
                 context.ActiveRedirectTarget = redirectTarget;   // null on the first pass; output collection uses it to tell contract-preserved prefix from stale branches
-                var terminated = await RunGraphAsync(graph, context, ct, redirectTarget);
+                // 已经做完的节点只在恢复的那一轮跳过；重定向要的就是重新驱动，从那一轮起交回按 Order 的旧规则。
+                var terminated = await RunGraphAsync(graph, context, ct, redirectTarget, redirects == 0 ? done : null);
                 if (!terminated && context.PendingRedirectTarget is { } next)
                 {
                     redirects++;
@@ -98,7 +128,7 @@ public sealed class RuntimeEngine
     }
 
     /// <summary>Drives every entry of a graph. Returns true when the run ends here (terminal branch or error termination).</summary>
-    private async Task<bool> RunGraphAsync(CompiledGraph? graph, IRuntimeContext? context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunGraphAsync(CompiledGraph? graph, IRuntimeContext? context, CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
     {
         if (graph is null || context is null) return false;
         foreach (var entry in graph.Entries)
@@ -109,13 +139,13 @@ public sealed class RuntimeEngine
             switch (entry)
             {
                 case ChainSegment exec:
-                    terminated = await RunExecuteAsync(exec, context, ct, redirectTarget);
+                    terminated = await RunExecuteAsync(exec, context, ct, redirectTarget, done);
                     break;
                 case BranchSegment branch:
-                    terminated = await RunBranchAsync(branch, context, ct, redirectTarget);
+                    terminated = await RunBranchAsync(branch, context, ct, redirectTarget, done);
                     break;
                 case ParallelSegment parallel:
-                    terminated = await RunParallelAsync(parallel, context, ct, redirectTarget);
+                    terminated = await RunParallelAsync(parallel, context, ct, redirectTarget, done);
                     break;
                 default:
                     terminated = false;
@@ -133,7 +163,7 @@ public sealed class RuntimeEngine
     /// <see cref="IRuntimeContext.PendingRedirectTarget"/> so RunAsync re-runs the whole graph with that target;
     /// without it the flow ends with status -1. Returns true when the flow ends early.
     /// </summary>
-    private async Task<bool> RunExecuteAsync(ChainSegment exec, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunExecuteAsync(ChainSegment exec, IRuntimeContext context, CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
     {
         var session = Session(context);
         for (int i = 0; i < exec.Nodes.Count; i++)
@@ -145,6 +175,11 @@ public sealed class RuntimeEngine
 
             // Cross-chain redirect skip semantics: nodes before the target are not driven.
             if (redirectTarget is int t && order < t)
+                continue;
+
+            // 恢复：检查点里已经做完的节点不再驱动 —— 它的效果已经在那儿了，重跑只会把副作用做第二遍。
+            // 注意这里按「节点」而不是按 Order：扇出里几个分支的 Order 是交错的，一个阈值会连带跳过没跑过的兄弟。
+            if (done?.Contains(node) == true)
                 continue;
 
             context.NodeIndex = i;
@@ -216,7 +251,7 @@ public sealed class RuntimeEngine
     /// branch is skipped; when the target is the router itself → **re-route only**, without recomputing
     /// (the router's ReceiveAsync is not driven); the branch is selected directly by the runtime key.
     /// </summary>
-    private async Task<bool> RunBranchAsync(BranchSegment branch, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunBranchAsync(BranchSegment branch, IRuntimeContext context, CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
     {
         if (branch.Router is null) return false;
         var session = Session(context);
@@ -261,7 +296,7 @@ public sealed class RuntimeEngine
                 return true;
             }
             if (chosen.Graph is not null)
-                return await RunGraphAsync(chosen.Graph, context, ct, redirectTarget);
+                return await RunGraphAsync(chosen.Graph, context, ct, redirectTarget, done);
         }
         return false;
     }
@@ -293,7 +328,7 @@ public sealed class RuntimeEngine
     /// stay meaningful; do not reintroduce a per-branch buffer.
     /// </para>
     /// </summary>
-    private async Task<bool> RunParallelAsync(ParallelSegment parallel, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunParallelAsync(ParallelSegment parallel, IRuntimeContext context, CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
     {
         var sourceData = context.Data;   // the fan-out source's output, broadcast to every branch
         var branches = parallel.Branches;
@@ -304,7 +339,7 @@ public sealed class RuntimeEngine
         if (count == 1)
         {
             context.Data = sourceData;
-            return await RunGraphAsync(branches[0], context, ct, redirectTarget);
+            return await RunGraphAsync(branches[0], context, ct, redirectTarget, done);
         }
 
         // The cap is per group, and read off the host's session when that is the concrete type. Deliberately not
@@ -317,7 +352,7 @@ public sealed class RuntimeEngine
         for (int i = 0; i < count; i++)
         {
             branchContexts[i] = new BranchRuntimeContext(context) { Data = sourceData };
-            tasks[i] = RunOneBranchAsync(branches[i], branchContexts[i], i, ct, redirectTarget, gate);
+            tasks[i] = RunOneBranchAsync(branches[i], branchContexts[i], i, ct, redirectTarget, done, gate);
         }
 
         var terminated = await Task.WhenAll(tasks);
@@ -355,13 +390,13 @@ public sealed class RuntimeEngine
     /// </summary>
     private async Task<bool> RunOneBranchAsync(
         CompiledGraph branch, BranchRuntimeContext branchContext, int index, CancellationToken ct, int? redirectTarget,
-        SemaphoreSlim? gate)
+        HashSet<IWorkflowNodeViewModel>? done, SemaphoreSlim? gate)
     {
         if (gate is not null) await gate.WaitAsync(ct);
         try
         {
             await ObserveAsync(Session(branchContext), branchContext, ExecutionObservationKind.BranchStarted, null, $"branch {index}", TimeSpan.Zero, ct);
-            return await RunGraphAsync(branch, branchContext, ct, redirectTarget);
+            return await RunGraphAsync(branch, branchContext, ct, redirectTarget, done);
         }
         finally
         {
@@ -440,6 +475,7 @@ public sealed class RuntimeEngine
                 context.RegisterOutput(node, result);   // register the output after driving, for downstream join points to aggregate
                 context.Data = result;
                 await ObserveAsync(session, context, ExecutionObservationKind.NodeSucceeded, node, null, ElapsedSince(startedAt), ct);
+                await SaveCheckpointAsync(session, context, ct);
                 return;
             }
             catch (OperationCanceledException)
@@ -574,6 +610,59 @@ public sealed class RuntimeEngine
             // 还在跑，或者根本没跑起来 —— 异常穿出 RunAsync 时 Status 就停在这个分支上。
             _ => RunOutcome.Unknown,
         };
+
+    // 形状不符就明确拒绝：恢复要驱动的是「同一个图的同一些节点」，形状对不上时继续下去只会拿别人的产物喂错节点。
+    private static void RequireSameShape(IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)> nodes, ExecutionCheckpoint checkpoint)
+    {
+        var limit = Math.Min(nodes.Count, checkpoint.Shape.Count);
+        for (var i = 0; i < limit; i++)
+        {
+            if (string.Equals(nodes[i].Key, checkpoint.Shape[i], StringComparison.Ordinal)) continue;
+            throw new InvalidOperationException(
+                $"The checkpoint does not belong to this graph: node {i} is '{nodes[i].Key}' here and '{checkpoint.Shape[i]}' in the checkpoint. " +
+                "Resuming would drive the wrong nodes with someone else's outputs.");
+        }
+
+        if (nodes.Count != checkpoint.Shape.Count)
+            throw new InvalidOperationException(
+                $"The checkpoint does not belong to this graph: it covers {checkpoint.Shape.Count} nodes and this graph has {nodes.Count}. " +
+                "Resuming would drive the wrong nodes with someone else's outputs.");
+    }
+
+    // 把检查点铺回会话：运行状态 + 产物表，并交出「已经做完的节点」集合。
+    // 产物按节点键还原（RuntimeId，或没有身份时的类型#位置）—— 键不能是节点引用，那东西过不了序列化。
+    private static HashSet<IWorkflowNodeViewModel> Restore(
+        IRuntimeContext context, IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)> nodes, ExecutionCheckpoint checkpoint)
+    {
+        context.Attempt = checkpoint.Attempt;
+        context.ActiveRedirectTarget = checkpoint.ActiveRedirectTarget;
+        context.Data = checkpoint.Data;
+
+        var done = new HashSet<IWorkflowNodeViewModel>(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        if (checkpoint.Outputs.Count == 0) return done;
+
+        foreach (var (node, key) in nodes)
+        {
+            if (!checkpoint.Outputs.TryGetValue(key, out var value)) continue;
+            context.RegisterOutput(node, value);
+            done.Add(node);
+        }
+        return done;
+    }
+
+    // 每成功驱动一个节点就把位置写下来（配了 store 才做）。写不下来不改变运行：一行日志，照常往下走。
+    private static async Task SaveCheckpointAsync(RuntimeContext? session, IRuntimeContext context, CancellationToken ct)
+    {
+        if (session?.CheckpointStore is not { } store) return;
+        try
+        {
+            await store.SaveAsync(session.Snapshot(), ct);
+        }
+        catch (Exception ex)
+        {
+            context.Log($"[Checkpoint] the run's place was not saved: {ex.Message}");
+        }
+    }
 
     // 这次驱动报的级别：门面自带一份（分支私有，与 Data 同理），不在门面上时读会话。
     private static ExecutionReportLevel? ReportedLevel(IRuntimeContext context, RuntimeContext? session)

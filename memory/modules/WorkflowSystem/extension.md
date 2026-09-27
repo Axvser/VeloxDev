@@ -19,6 +19,7 @@
 | 读编译身份 | 实现 `ICompileTimeAware`（`CompileContext.Order/ChainIndex/Offset/InputNodes`） | `CompilerEx/Compile/Contracts/ICompileTimeAware.cs` |
 | 运行期读上下文 | 实现 `IRuntimeAware`（`AttachRuntimeContext`） | `CompilerEx/Runtime/Contracts/IRuntimeAware.cs` |
 | 重定向（回退到更早的 Order 重跑） | 实现 `IRedirectable`（`ResolveRedirectAsync`） | `CompilerEx/Runtime/Contracts/IRedirectable.cs` |
+| 运行要能**中途存盘、之后再接着跑** | 配 `RuntimeContext.CheckpointStore`（`IExecutionCheckpointStore`，Core 自带 `InMemoryCheckpointStore`，落盘用 `Core.Extension` 的 `FileCheckpointStore`）；恢复把 store 里的 `ExecutionCheckpoint` 传给 `RuntimeEngine.RunAsync(graph, context, ct, resumeFrom)`。**图必须是同一张**（指纹不符会拒），序列化往返过的图恢复不了 | `CompilerEx/Runtime/Contracts/IExecutionCheckpointStore.cs`；[compiler-execution.md](compiler-execution.md) §十一 |
 | 运行要能暂停 / 观察 / 重试 / 收结构化错误 / 失败后补偿 | **不是实现接口，是往会话插一个对象**：`RuntimeContext` 的 `ExecutionGate` / `Observer` / `RetryPolicy` / `ErrorSink` / `Compensation`。五个契约都随库带默认实现（`ManualExecutionGate`、`ExponentialBackoffRetry`…）与委托适配器，不配置就什么都没有 | `CompilerEx/Runtime/Model/RuntimeContext.cs`（「可选能力」一节）；语义见 [compiler-execution.md](compiler-execution.md) §十 |
 | 数量可变的端口集合 | `[VeloxProperty] [SlotSelectors(typeof(...))] public partial SlotEnumerator<TSlot> X { get; set; }` | `SelectorEx/SlotEnumerator.cs:11`；`Src/Core/VeloxDev.Core/AI/SlotSelectorsAttribute.cs:38` |
 | 自定义空间索引 | 实现 `ISpatialBoundsProvider`（`Bounds` + `INotifyPropertyChanged`）/ `ISpatialMap<T>` | `Interfaces/WorkflowSystem/ISpatialBoundsProvider.cs`、`ISpatialMap.cs:12` |

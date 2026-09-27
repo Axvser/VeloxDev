@@ -75,7 +75,7 @@
 
 ## 七、测试在哪、什么没测
 
-- 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，**15 文件 / 72 条**（2026-09-27 实测；同日从 44 条经「五个可选能力契约」涨到 66，再经「报告不打断运行」涨到 72）。**全部用手写探针**（`ProbeNode` 实现了全部三个契约）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
+- 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，**16 文件 / 77 条**（2026-09-27 实测；同日从 44 条经「五个可选能力契约」涨到 66、「报告不打断运行」到 72、「检查点与恢复」到 77）。**全部用手写探针**（`ProbeNode` 实现了全部三个契约）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
 - 并发契约由 `ParallelExecutionTests` 钉住（5 条）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。**做法是先写测试**：其中两条在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`），改完才绿 —— 这类「先让测试证明它能判别」的次序值得沿用。
 - 日志 sink 与上限另由 `CompilerLogWriterTests`（`Core.Test`）钉住：writer 与 `Logs` 逐行同序、上限只裁内存（`0` = 只落 writer）、**writer 抛异常不改变运行**（吞掉并报 `LogWriteFailed`）、分支的 `Warn` 不置会话的 `RedirectRequested`；Agent 路径那条在 `Core.Extension.Test` 的 `WorkflowLifecycleFidelityTests.WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink`。
 - **没测**（2026-09-27 更新：**取消已补测**，见第十节）：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 三个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值；重定向上限（50 次）那条路只有代码审查，没有测试跑进去过。
@@ -130,7 +130,30 @@
 
 **注释风格别照抄**：`CompilerEx` 的 `internal`/`private` 成员上还是规范生效前写的英语 `///`（`RuntimeEngine` 里那几个老私有方法、`BranchRuntimeContext` 整份）。本轮新写的行按手册 §二 用中文 `//`，所以文件里两种并存 —— **以手册为准，不要拿旁边的老注释当标准**。
 
-## 十一、未做（别当成遗漏）
+## 十一、检查点与恢复（2026-09-27 起）
+
+一个契约 + 一个 DTO + 一个默认实现，全在 `CompilerEx/Runtime/`；落盘实现（JSON 与文件）在 `Core.Extension` 的 `CheckpointEx.cs`（与 `CompiledGraphEx` 同一种处境：命名空间属 `VeloxDev.MVVM.Serialization`，物理在 Extension 项目）。
+
+| 件 | 位置 | 说明 |
+|---|---|---|
+| `IExecutionCheckpointStore` | `Runtime/Contracts/` | `SaveAsync` / `LoadAsync`。一个 store 一个运行，只存「最后一次」；`LoadAsync` 是宿主自己调的，引擎不会去读 |
+| `ExecutionCheckpoint` | `Runtime/Model/ExecutionCheckpoints.cs` | `Attempt` / `ActiveRedirectTarget` / `Data` / `Outputs`（节点键 → 产物）/ `Shape`（指纹） |
+| `InMemoryCheckpointStore` | 同上 | 默认实现，保留对象图本身 |
+| `CheckpointEx` + `FileCheckpointStore` | `Extensions/CheckpointEx.cs` | JSON 往返 + 文件 store（写入串行化） |
+
+- 配置点是 `RuntimeContext.CheckpointStore`（具体类成员，同其它能力）；恢复入口是 `RuntimeEngine.RunAsync(graph, context, ct, resumeFrom)` 的**第四个参数**（可选，老调用点不受影响）。
+- **保存**在 `DriveAsync` 里每次「成功驱动」之后（`Snapshot()`）。失败那次不写 —— 于是恢复会**重新驱动那个节点**，宿主多半正是修好了它才恢复的。
+- **跳过按节点、不按 Order**：`RunGraphAsync` 多带一个「已完成节点集合」。用 Order 阈值在扇出里是错的 —— 几个分支的 Order 交错，一个阈值会连带跳过没跑过的兄弟（这与重定向的按 Order 跳过不同：那是「契约保留前缀」，一刀切本来就是它的语义）。该集合只作用于恢复的那一轮，一旦发生重定向就交回按 Order 的旧规则。
+- **恢复的那一轮原样沿用检查点里的 `Attempt`，不是加一**：产物表按 `Attempt` 盖戳，加一等于把铺回去的产物降级成陈旧产物，汇合点立刻读不到它们 —— 这条是实测撞出来的（`Resuming_SkipsWhatTheCheckpointRecords_...` 当场红）。此后的重定向照旧一轮加一。
+- **形状不符直接拒**，而且在动会话之前抛 `InvalidOperationException`（`Status` 仍停在 `Idle`，不是谎称在跑）—— `RequireSameShape`。
+- **节点键**是 `RuntimeId`（节点实现 `IWorkflowIdentifiable` 时），否则 `类型名#序号`。后者让测试探针也能用；代价是**序列化往返过的图恢复不了**：还原节点的 `RuntimeId` 全是新的，形状对不上 ⇒ 拒绝。这正是想要的 —— 那些确实是不同的节点对象，把旧产物喂给它们就是猜。
+- **`IGroupData` 归一化**：`Snapshot()` 把载荷与产物里的 `IGroupData` 换成**以节点键为键的普通字典**。节点引用写不进文件，而且序列化会顺着它把整棵树拖进去（与 `CompiledGraphEx` 排除 `Parent` 同一个坑）。运行中的对象不动，只换快照里那一份。
+- **数字不保类型（实测）**：载荷是 `object`，JSON 只有一种整数 ⇒ `int` 回来是 `long`、`float` 是 `double`，`TypeNameHandling.All` **也救不回来**（试过了）。引擎自己的字段精确；`InMemoryCheckpointStore` 没有这个缺口。三个 TFM 里 `KeyValuePair` 也没有 `Deconstruct`，遍历产物表要显式取 `Key`/`Value`。
+- DTO 是**纯数据**，所以不走 `ComponentModelEx` 的公开序列化面（那一面被 `INotifyPropertyChanged` 约束住了，它是为 VM 写的），而是用同程序集 `internal` 的 `CreateJsonSerializer()` —— 于是它继承库里的全部默认设置（保留引用、循环忽略、字典键转换器）。
+
+测试：`Core.Test/…/ExecutionCheckpointTests.cs`（5 条）+ `Core.Extension.Test/Serialization/ExecutionCheckpointSerializationTests.cs`（5 条）。判别性最强的一条是「半途停 → 恢复」：断言既要求没跑过的分支被驱动，也要求**被跳过的那个节点在汇合点里仍读得到它当初的产物** —— 只测「跳过了」的话，产物铺没铺回去是看不出来的。
+
+## 十二、未做（别当成遗漏）
 
 | 未做 | 说明 |
 |---|---|
@@ -138,5 +161,4 @@
 | 只编译的两个工具纳入闸门 | Agent 侧的 `CompileWorkflow`/`CompileNodeResult` 会写节点编译身份却不受 `WithAllowNodeExecution` 约束 —— 属 `VeloxDev.Core.Extension` 模块 |
 | 编译执行时补 `Sender`/`Receiver` | 第五节的不对称仍未消 |
 | `ExecuteCommandOnNode` 的完成语义 | Agent 侧它同步返回、不等完成，而同族的 `ExecuteNode` 会等 `Exited` —— 属 Extension 模块 |
-| 检查点 / 恢复（第十节那条路的阶段 3） | 契约与 DTO 放 Core 的 `CompilerEx`、落盘实现放 `Core.Extension`（同 `CompiledGraphEx` 的做法）。**用户要先看过接口形状再动**，所以没跟着这轮做 |
 | 七家 demo 的暂停按钮 | 本轮只到引擎与契约层。除 Avalonia 外像素层验不了（合成输入进不了输入管线，已实测），而 WinForms 连 `ControllerView` 都没有（四个按钮在 `Form1.cs:336-343` 命令式搭的）⇒「加一个按钮」是七处彼此独立的改动 |

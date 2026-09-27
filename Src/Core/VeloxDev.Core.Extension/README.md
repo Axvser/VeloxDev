@@ -7,7 +7,7 @@
 | Module | Description |
 |---|---|
 | **Workflow Agent** | `WorkflowAgentScope` + `WorkflowAgentToolkit`: 60+ function-calling tools that let an Agent add/remove nodes & links, patch properties, execute nodes, compile routing, and lay out the canvas |
-| **Compiler support** | `CompileWorkflow` / `GetCompileStatus` / `RunCompiledWorkflow` (chain-level execution) / `GetExecutionLog` |
+| **Compiler support** | `CompileWorkflow` / `GetCompileStatus` / `RunCompiledWorkflow` (chain-level execution) / `GetExecutionLog`; checkpointing a run and resuming from one (`CheckpointEx`, `FileCheckpointStore`) |
 | **MCP** | `McpScope` (stdio local + remote Streamable HTTP), `McpAgentToolkit` (Agent-managed servers), global bindable status VM (`McpStatusViewModel`) — **usable on its own** via `McpScope.CreateContextProvider()` |
 | **Skills** | `SkillScope` + `ISkillSource` (embedded documents, or Agent-Skills folders on disk), per-skill enable/disable, bindable `SkillsViewModel` — **usable on its own** via `SkillScope.CreateContextProvider()` |
 | **Bilingual skills/references** | `Resources/Workflow/{en,zh}/Skills|References|Safety`, embedded and merged into the Agent system prompt |
@@ -171,6 +171,38 @@ Diagnostics never change what a run does.
 
 ⚙ `Write` is called on the thread driving the run (normally the UI thread). Queue the line inside your writer if that
 IO must not happen there; `TextWriterLogWriter.For` flushes per line, so a host reading the file sees it immediately.
+
+## Checkpointing a run
+
+```csharp
+var store = new FileCheckpointStore("run.place.json");
+var session = new RuntimeContext { CheckpointStore = store };
+
+await new RuntimeEngine().RunAsync(graph, session, ct);        // writes its place after each node succeeds
+// … the process stops, the app closes, the host decides to carry on tomorrow …
+var place = await store.LoadAsync(ct);
+await new RuntimeEngine().RunAsync(graph, newSession, ct, place);
+```
+
+⚙ **Resume skips by node, not by position.** The checkpoint records which nodes are done; those are not driven
+again, and what they produced is restored for the nodes behind them. Position would have been simpler and wrong — a
+fan-out's branches carry interleaved compile orders, so any single threshold skips siblings that never ran.
+
+⚙ **A checkpoint belongs to one graph.** Its `Shape` is the graph's nodes in drive order, and resuming onto a graph
+whose shape differs is refused with an `InvalidOperationException` *before the session is touched* — the alternative
+is driving these nodes with that graph's outputs.
+
+⚙ **A graph that came back from serialization cannot be resumed onto.** Restoring a graph gives every node a fresh
+`RuntimeId`, so the shape no longer matches. The refusal is the point: those really are different node objects.
+
+⚙ **Saving is best effort.** The store is written from inside the drive, so a fan-out's branches can save at once
+(they interleave rather than run on threads, but an `await` is enough to overlap them) — implementations serialise
+their own writes, and `FileCheckpointStore` does. A store that throws costs one log line and changes nothing else.
+
+⚙ **What a file does not keep.** Payload values round-trip through JSON, which has one integer type: an `int` comes
+back as a `long`, a `float` as a `double` (measured — `TypeNameHandling.All` does not change it). The engine's own
+fields are exact, and `InMemoryCheckpointStore` keeps the object graph as it is. A group payload is filed by node
+key, since a node reference cannot be written down.
 
 ## MCP servers
 
