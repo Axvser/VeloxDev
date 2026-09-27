@@ -1,4 +1,7 @@
+using System;
 using System.ComponentModel;
+using System.Runtime.Serialization;
+using Newtonsoft.Json;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -25,6 +28,107 @@ public class ComponentModelExTests
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
+    }
+
+    private enum ProbeKind { Alpha, Beta, Gamma }
+
+    /// <summary>Stands in for <c>BranchSegment.CompileKey</c> / <c>BranchOption.Key</c>: an enum in an object member.</summary>
+    private sealed class KeyHolder : INotifyPropertyChanged
+    {
+        private object? _key;
+
+        public object? Key
+        {
+            get => _key;
+            set { _key = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Key))); }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+    }
+
+    /// <summary>Mirrors the fix the compiled graph's branch keys need: remember the key's type, restore it on load.</summary>
+    private sealed class KeyHolderWithTypeName : INotifyPropertyChanged
+    {
+        private object? _key;
+        private string? _keyTypeName;
+
+        public object? Key
+        {
+            get => _key;
+            set { _key = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Key))); }
+        }
+
+        public string? KeyTypeName
+        {
+            get => _keyTypeName;
+            set { _keyTypeName = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(KeyTypeName))); }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        [OnDeserialized]
+        internal void NormalizeKey(StreamingContext _)
+        {
+            if (_key is long number
+                && _keyTypeName is { Length: > 0 } name
+                && Type.GetType(name) is { IsEnum: true } type)
+            {
+                _key = Enum.ToObject(type, number);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Establishes, against the real serializer, the fact the compiled-graph document is built around: an enum in an
+    /// <c>object?</c> member comes back as its number. This is why <c>BranchSegment.CompileKey</c> and
+    /// <c>BranchOption.Key</c> carry a type-name side channel — without one, a restored graph's <i>dynamic</i>
+    /// branch compares a live enum against a restored <c>long</c> and never matches.
+    /// </summary>
+    /// <remarks>
+    /// The repo already recorded the same behaviour for <c>ConditionalSlot.Value</c>
+    /// (<c>Core.Test/WorkflowSystem/SlotEnumeratorTests.cs:384-387</c>), which is why <c>SlotEnumerator</c> has
+    /// <c>SelectorTypeName</c>. This pins it for an <c>object?</c> member at the serializer level.
+    /// </remarks>
+    [TestMethod]
+    public void AnEnumInAnObjectMember_ComesBackAsItsNumber()
+    {
+        var json = new KeyHolder { Key = ProbeKind.Beta }.Serialize();
+
+        Assert.IsTrue(json.TryDeserialize<KeyHolder>(out var restored));
+        Assert.AreEqual(typeof(long), restored!.Key!.GetType(),
+            $"measured behaviour: the enum degrades to its underlying number; json was: {json}");
+        Assert.AreEqual(1L, restored.Key);
+    }
+
+    /// <summary>
+    /// A dead end worth pinning so nobody "simplifies" to it: asking for type names on every value does not rescue
+    /// the enum either — measured, the round trip still yields <see cref="long"/>.
+    /// </summary>
+    [TestMethod]
+    public void AnEnumInAnObjectMember_IsNotRescuedByTypeNamesOnEveryValue()
+    {
+        var options = SerializationOptions.Create().WithTypeNameHandling(TypeNameHandling.All);
+        var json = new KeyHolder { Key = ProbeKind.Beta }.Serialize(options);
+
+        Assert.IsTrue(json.TryDeserialize(options, out KeyHolder? restored));
+        Assert.AreEqual(typeof(long), restored!.Key!.GetType(),
+            $"WithTypeNameHandling(All) does not help; json was: {json}");
+    }
+
+    /// <summary>The type-name side channel does work — proved in miniature before being applied to the segment types.</summary>
+    [TestMethod]
+    public void AnEnumInAnObjectMember_WithATypeNameBesideIt_RoundTrips()
+    {
+        var original = new KeyHolderWithTypeName
+        {
+            Key = ProbeKind.Beta,
+            KeyTypeName = typeof(ProbeKind).AssemblyQualifiedName,
+        };
+
+        var restored = original.Serialize().Deserialize<KeyHolderWithTypeName>();
+
+        Assert.AreEqual(ProbeKind.Beta, restored.Key,
+            "an [OnDeserialized] normalizer plus the type name is what the compiled graph's keys rely on");
     }
 
     [TestMethod]

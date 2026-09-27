@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.Serialization;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
@@ -17,4 +18,19 @@ public sealed partial class BranchSegment : CompileSegment
     [VeloxProperty] private ObservableCollection<BranchOption> _options = [];
     [VeloxProperty] private bool _isDynamic;
     [VeloxProperty] private object? _compileKey;
+
+    /// <summary>
+    /// <see cref="CompileKey"/>'s type, recorded by the compiler only when the key is an enum — see
+    /// <see cref="CompileKeyNormalizer"/>. <c>null</c> for every other key kind, which needs no side channel.
+    /// </summary>
+    [VeloxProperty] private string? _compileKeyTypeName;
+
+    /// <summary>
+    /// Restores an enum key after loading. Runs as a Newtonsoft callback rather than in the generated property
+    /// setter: all properties are populated before the callback, whereas a setter would fire during the compiler's
+    /// own assignment and, on load, before a type-name member declared later in the document had been read.
+    /// </summary>
+    [OnDeserialized]
+    internal void NormalizeCompileKey(StreamingContext _)
+        => CompileKey = CompileKeyNormalizer.Normalize(CompileKey, CompileKeyTypeName);
 }

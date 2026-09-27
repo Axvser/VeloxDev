@@ -45,6 +45,25 @@ public sealed class SerializationOptions
     /// <summary>Override <see cref="Newtonsoft.Json.DefaultValueHandling"/>.</summary>
     public SerializationOptions WithDefaultValueHandling(DefaultValueHandling value) { DefaultValueHandling = value; return this; }
 
+    /// <summary>
+    /// Omits every property whose <b>declared</b> type is one of <paramref name="types"/>, everywhere in the graph.
+    /// </summary>
+    /// <param name="types">The declared property types to drop. Exact matches only.</param>
+    /// <remarks>
+    /// The use it exists for: serializing a compiled graph without dragging in the tree it came from. A node's
+    /// <c>Parent</c> is a writable property of type <c>IWorkflowTreeViewModel</c>, so the reference graph reaches the
+    /// whole document from any single node. Unlike a name-based rule this cannot hit a slot's parent (which is its
+    /// node and is forward-needed), and it is inert for the tree's own round trip because that path passes no
+    /// exclusions.
+    /// </remarks>
+    public SerializationOptions WithExcludedPropertyTypes(params Type[] types)
+    {
+        ExcludedPropertyTypes = types is { Length: > 0 } ? types : null;
+        return this;
+    }
+
+    internal Type[]? ExcludedPropertyTypes { get; private set; }
+
     }
 
 public static class ComponentModelEx
@@ -123,7 +142,7 @@ public static class ComponentModelEx
             ReferenceLoopHandling        = ReferenceLoopHandling.Ignore,
             NullValueHandling            = options.NullValueHandling     ?? NullValueHandling.Include,
             DefaultValueHandling         = options.DefaultValueHandling  ?? DefaultValueHandling.Include,
-            ContractResolver             = new WritablePropertiesOnlyResolver(),
+            ContractResolver             = new WritablePropertiesOnlyResolver(options.ExcludedPropertyTypes),
             Converters                   = [new DictionaryKeyConverter()],
         };
         return s;
@@ -437,8 +456,12 @@ internal sealed class DictionaryKeyConverter : JsonConverter
     public override bool CanRead => true;
 }
 
-internal class WritablePropertiesOnlyResolver : DefaultContractResolver
+internal class WritablePropertiesOnlyResolver(IReadOnlyCollection<Type>? excludedPropertyTypes = null)
+    : DefaultContractResolver
 {
+    // A set for O(1) lookups: CreateProperties runs for every serialized type.
+    private readonly HashSet<Type>? _excluded = excludedPropertyTypes is { Count: > 0 } ? [.. excludedPropertyTypes] : null;
+
     protected override JsonContract CreateContract(Type objectType)
     {
         // Types that implement IEnumerable but also have a default constructor
@@ -459,8 +482,17 @@ internal class WritablePropertiesOnlyResolver : DefaultContractResolver
     protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
     {
         IList<JsonProperty> props = base.CreateProperties(type, memberSerialization);
-        return [.. props.Where(p => p.Writable)];
+        return [.. props.Where(p => p.Writable && !IsExcluded(p))];
     }
+
+    /// <summary>
+    /// Whether the property's <b>declared</b> type is one of the excluded ones. Matched by exact type rather than by
+    /// name or assignability: the callers exclude a back-pointer and a collection of a specific interface, and a
+    /// name match would also hit unrelated members that happen to be called <c>Parent</c> while being forward-needed
+    /// (a slot's parent is its node, not the tree).
+    /// </summary>
+    private bool IsExcluded(JsonProperty property)
+        => _excluded is not null && property.PropertyType is { } declared && _excluded.Contains(declared);
 
     // Returns true for BCL collection types that should keep their default
     // array/dictionary contract (List<T>, ObservableCollection<T>, Dictionary<,>, …).

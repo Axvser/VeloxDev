@@ -104,7 +104,14 @@ public sealed partial class CompilerViewModel
                     var label = kv.Key?.ToString() ?? "?";
                     if (kv.Value is null || kv.Value.Count == 0)
                     {
-                        options.Add(new BranchOption { Key = kv.Key, Label = label, Graph = null, IsTerminal = true });
+                        options.Add(new BranchOption
+                        {
+                            Key = kv.Key,
+                            KeyTypeName = CompileKeyNormalizer.TypeNameOf(kv.Key),
+                            Label = label,
+                            Graph = null,
+                            IsTerminal = true,
+                        });
                         continue;
                     }
                     if (kv.Value.Count == 1)
@@ -112,7 +119,13 @@ public sealed partial class CompilerViewModel
                         var target = kv.Value[0];
                         if (target is null) continue;
                         var sub = await CompileGraphAsync(target, state, ct);
-                        options.Add(new BranchOption { Key = kv.Key, Label = label, Graph = sub });
+                        options.Add(new BranchOption
+                        {
+                            Key = kv.Key,
+                            KeyTypeName = CompileKeyNormalizer.TypeNameOf(kv.Key),
+                            Label = label,
+                            Graph = sub,
+                        });
                         exits.Add(LastNode(sub));
                         continue;
                     }
@@ -129,6 +142,7 @@ public sealed partial class CompilerViewModel
                     options.Add(new BranchOption
                     {
                         Key = kv.Key,
+                        KeyTypeName = CompileKeyNormalizer.TypeNameOf(kv.Key),
                         Label = label,
                         Graph = new CompiledGraph
                         {
@@ -166,6 +180,9 @@ public sealed partial class CompilerViewModel
                     // Route key locked at compile-time: in Static mode runtime relies on it (the value selected at
                     // compile time); in Dynamic mode it is null and re-resolved at runtime.
                     CompileKey = currentKey,
+                    // Recorded beside the key because an enum cannot survive an object member's round trip — see
+                    // CompileKeyNormalizer. Null for every other key kind.
+                    CompileKeyTypeName = CompileKeyNormalizer.TypeNameOf(currentKey),
                 });
 
                 // The join point after a branch: the next node all active branch exits jointly point to.
