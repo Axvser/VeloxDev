@@ -63,8 +63,21 @@ public sealed class TextWriterLogWriter : ILogWriter, IDisposable
     {
         var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
         return new TextWriterLogWriter(
-            new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)), ownsWriter: true);
+            new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)), ownsWriter: true)
+        {
+            Path = System.IO.Path.GetFullPath(path),
+        };
     }
+
+    /// <summary>
+    /// The file this writer appends to, as an absolute path — <c>null</c> for one wrapped around a
+    /// <see cref="TextWriter"/> the host already owned.
+    /// </summary>
+    /// <remarks>
+    /// It is here so a host can tell somebody <i>where</i> the log went without also handing over the writer: an
+    /// Agent asked to read a run's log needs a path to open, and it has no other way to learn one.
+    /// </remarks>
+    public string? Path { get; private init; }
 
     /// <summary>Appends one line and flushes, so a host reading the file sees it without waiting for a buffer.</summary>
     /// <param name="line">The line, without a terminator.</param>

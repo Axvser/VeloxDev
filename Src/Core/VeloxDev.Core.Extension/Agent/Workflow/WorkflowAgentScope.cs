@@ -516,6 +516,59 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
+    /// <summary>
+    /// The file <see cref="LogWriter"/> appends to, when it was opened from one — <c>null</c> when the lines are
+    /// memory-only or the writer was wrapped around a stream the host already owned.
+    /// </summary>
+    /// <remarks>
+    /// The Agent reports this path back with a run's result. That is the whole of the file-log story from the
+    /// model's side: with a path it can open the file with whatever file tool the host gave it, and without one
+    /// the run's own <c>logs</c> are the record.
+    /// </remarks>
+    internal string? LogFilePath => (LogWriter as VeloxDev.Core.WorkflowSystem.CompilerEx.TextWriterLogWriter)?.Path;
+
+    /// <summary>
+    /// Where compiled runs write their place down, so one can be carried on from instead of started over.
+    /// </summary>
+    /// <remarks>
+    /// <c>null</c> (the default) means the scope keeps its own in-memory store: a run still leaves a place, and
+    /// <c>ContinueCompiledWorkflow</c> still works, but it dies with the process. Pair it with
+    /// <c>FileCheckpointStore</c> when the place must outlive the session.
+    /// </remarks>
+    public VeloxDev.Core.WorkflowSystem.CompilerEx.IExecutionCheckpointStore? CheckpointStore { get; private set; }
+
+    /// <summary>Sets where compiled runs write their place down.</summary>
+    /// <param name="store">The store, or <c>null</c> to go back to this scope's own in-memory one.</param>
+    public WorkflowAgentScope WithCheckpointStore(VeloxDev.Core.WorkflowSystem.CompilerEx.IExecutionCheckpointStore? store)
+    {
+        CheckpointStore = store;
+        return this;
+    }
+
+    /// <summary>The store compiled runs use — the host's, or this scope's own.</summary>
+    internal VeloxDev.Core.WorkflowSystem.CompilerEx.IExecutionCheckpointStore EffectiveCheckpointStore
+        => CheckpointStore ??= new VeloxDev.Core.WorkflowSystem.CompilerEx.InMemoryCheckpointStore();
+
+    /// <summary>
+    /// A hook that configures the session a compiled run is about to use — the retry policy, the observer, the
+    /// error sink, the compensator, the pause gate, the checkpoint store, the log writer.
+    /// </summary>
+    /// <remarks>
+    /// The Agent's own runs build their session inside the toolkit, so without this a host could only configure
+    /// the capabilities by driving <c>RuntimeEngine</c> itself. It runs <b>after</b> the scope's own settings and
+    /// <b>before</b> the ones the tools need to work: a capability the host set is left alone (the Agent's pause
+    /// gate and checkpoint store only fill in what is still <c>null</c>), and the failure records the Agent
+    /// reports are collected alongside whatever sink the host installed.
+    /// </remarks>
+    public WorkflowAgentScope WithSessionConfiguration(Action<VeloxDev.Core.WorkflowSystem.CompilerEx.RuntimeContext> configure)
+    {
+        SessionConfiguration = configure;
+        return this;
+    }
+
+    /// <summary>What <see cref="WithSessionConfiguration"/> registered, if anything.</summary>
+    internal Action<VeloxDev.Core.WorkflowSystem.CompilerEx.RuntimeContext>? SessionConfiguration { get; private set; }
+
     private Func<AgentToolCallEventArgs, Task>? _toolCallHandler;
 
     /// <summary>

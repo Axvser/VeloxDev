@@ -159,7 +159,14 @@ public sealed class WorkflowAgentToolkit
             // (the demo's Run path). Distinct from ExecuteNode (node-level EXEC).
             T(RunCompiledWorkflow, nameof(RunCompiledWorkflow)),
             // Terminal/result entry: compute a single node's result from its ancestor cone.
-            T(GetNodeResult, nameof(GetNodeResult)));
+            T(GetNodeResult, nameof(GetNodeResult)),
+            // The same run, but handed back as a handle so the Agent can hold / let go / stop / follow it.
+            T(StartCompiledWorkflow, nameof(StartCompiledWorkflow)),
+            T(ContinueCompiledWorkflow, nameof(ContinueCompiledWorkflow)),
+            T(GetCompiledRunStatus, nameof(GetCompiledRunStatus)),
+            T(PauseCompiledRun, nameof(PauseCompiledRun)),
+            T(ResumeCompiledRun, nameof(ResumeCompiledRun)),
+            T(StopCompiledRun, nameof(StopCompiledRun)));
 
         // ── Generic command execution (gated by WithAllowedGenericCommands) ──
         Add(WorkflowToolCategory.Command,
@@ -2039,6 +2046,99 @@ public sealed class WorkflowAgentToolkit
         return result.ToString(Formatting.None);
     }
 
+    // ────────────────────────── Compiled runs the Agent holds ──────────────────────────
+    // RunCompiledWorkflow waits for the end; a run the Agent must be able to hold, let go or stop cannot. So a
+    // second entry starts one and returns a handle, and these tools act on it. One registry per toolkit, i.e. per
+    // scope — a handle means nothing outside the scope that started it.
+
+    private sealed class CompiledRun(string handle, ManualExecutionGate gate)
+    {
+        public string Handle { get; } = handle;
+        public ManualExecutionGate Gate { get; } = gate;
+        public RuntimeContext? Context { get; set; }
+        public CancellationTokenSource Cts { get; } = new();
+        public Task Task { get; set; } = Task.CompletedTask;
+
+        /// <summary>What the run recorded, as records — the same failures the session logged, as data.</summary>
+        public List<ExecutionError> Failures { get; } = [];
+
+        /// <summary>Set only when the engine itself let an exception escape — a host contract that threw.</summary>
+        public Exception? Escaped { get; set; }
+    }
+
+    /// <summary>Keeps every failure the run records, and passes it on to the host's own sink when there is one.</summary>
+    private sealed class RecordingErrorSink(List<ExecutionError> failures, IExecutionErrorSink? downstream) : IExecutionErrorSink
+    {
+        public async Task OnErrorAsync(ExecutionError error, CancellationToken cancellationToken)
+        {
+            failures.Add(error);
+            if (downstream is not null) await downstream.OnErrorAsync(error, cancellationToken);
+        }
+    }
+
+    private readonly Dictionary<string, CompiledRun> _runs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _runsGate = new();
+    private int _runCounter;
+
+    private string NextHandle() => $"run-{Interlocked.Increment(ref _runCounter)}";
+
+    private bool TryGetRun(string handle, out CompiledRun run, out string error)
+    {
+        lock (_runsGate)
+        {
+            if (_runs.TryGetValue(handle, out var found))
+            {
+                run = found;
+                error = string.Empty;
+                return true;
+            }
+        }
+        run = null!;
+        error = Error($"Unknown run handle '{handle}'. Handles come from StartCompiledWorkflow / ContinueCompiledWorkflow and belong to one scope; list the run you started rather than inventing one.");
+        return false;
+    }
+
+    /// <summary>
+    /// The session a compiled run uses. The order is the contract: the scope's own settings first, then whatever
+    /// the host registered with <c>WithSessionConfiguration</c>, then the two things these tools need — and each
+    /// of those only fills in what is still unset, so a capability the host configured is never overwritten.
+    /// </summary>
+    private RuntimeContext NewSession(object? seed, IWorkflowNodeViewModel? target, CompiledRun run)
+    {
+        var context = new RuntimeContext
+        {
+            Data = seed,
+            Target = target,
+            LogWriter = _scope.LogWriter,
+        };
+
+        _scope.SessionConfiguration?.Invoke(context);
+
+        context.ExecutionGate ??= run.Gate;                                  // PauseCompiledRun / ResumeCompiledRun act on this one
+        context.CheckpointStore ??= _scope.EffectiveCheckpointStore;          // so ContinueCompiledWorkflow has a place to read
+        context.ErrorSink = new RecordingErrorSink(run.Failures, context.ErrorSink);
+        return context;
+    }
+
+    private static JObject FailureJson(ExecutionError failure) => new()
+    {
+        ["phase"] = failure.Phase.ToString(),
+        ["level"] = failure.Level.ToString(),
+        ["message"] = failure.Message,
+        ["error"] = failure.Error?.Message is { } message ? message : JValue.CreateNull(),
+        ["attempt"] = failure.Attempt,
+        ["order"] = failure.Order,
+    };
+
+    /// <summary>The last lines of a session's log — a status answer is not the place to paste a thousand of them.</summary>
+    private const int RunStatusLogTail = 40;
+
+    private static JArray LogTail(IEnumerable<string> lines)
+    {
+        var all = lines.ToList();
+        return new JArray(all.Skip(Math.Max(0, all.Count - RunStatusLogTail)));
+    }
+
     // ────────────────────────── Chain Execution (Compiler) ──────────────────────────
 
     /// <summary>
@@ -2050,7 +2150,7 @@ public sealed class WorkflowAgentToolkit
     /// NOT auto-broadcast (the engine owns downstream dispatch). This is the chain-level entry,
     /// distinct from <see cref="ExecuteNode"/> (node-level EXEC via ReceiveCommand).
     /// </summary>
-    [Description("Runs the compiled workflow (chain-level execution) from a start node, typically a controller. Compiles the reachable sub-graph, creates a runtime session (IRuntimeContext), and drives the whole chain via the execution engine — the same entry the demo's Run button uses. Nodes execute their ReceiveAsync with an IRuntimeContext (compiled-step semantics; no auto-broadcast — the engine drives the chain). Returns the session outcome: runStatus (Completed/Stopped), execution log, final data, attempts, and whether it ended with an error. DIFFERENT from ExecuteNode, which executes a single node via ReceiveCommand (node-level EXEC). Disabled by default: requires WithAllowNodeExecution(true).")]
+    [Description("Runs the compiled workflow (chain-level execution) from a start node, typically a controller. Compiles the reachable sub-graph, creates a runtime session (IRuntimeContext), and drives the whole chain via the execution engine — the same entry the demo's Run button uses. Nodes execute their ReceiveAsync with an IRuntimeContext (compiled-step semantics; no auto-broadcast — the engine drives the chain). Returns the session outcome: runStatus (Completed/Stopped), outcome (Completed/Cancelled/Failed — the precise reading, since runStatus has to share 'Stopped' between a failure and a cancellation), execution log, final data, attempts, whether it ended with an error, failures (the same failures as records: phase/level/message/attempt/order), and logFile (an absolute path, present only when the host sent the lines to a file — open it with your own file tool to read the whole log rather than the returned excerpt). DIFFERENT from ExecuteNode, which executes a single node via ReceiveCommand (node-level EXEC). Disabled by default: requires WithAllowNodeExecution(true).")]
     private Task<string> RunCompiledWorkflow(
         [Description("Node index of the compile entry point (usually a controller).")] int startNodeIndex,
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
@@ -2063,6 +2163,140 @@ public sealed class WorkflowAgentToolkit
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
         CancellationToken cancellationToken = default)
         => RunCompiledRoleAsync(nodeIndex, CompileRole.Terminal, nameof(GetNodeResult), seed, cancellationToken);
+
+    [Description("Starts a compiled workflow run (chain-level, same compile + engine path as RunCompiledWorkflow) and returns AT ONCE with a handle, instead of waiting for the run to end. Use it when the run may be long or may need holding: the handle is what PauseCompiledRun / ResumeCompiledRun / StopCompiledRun / GetCompiledRunStatus take. The run keeps going on the host's thread while you do other things — status is polled with GetCompiledRunStatus, whose 'outcome' tells you how it ended. Disabled by default: requires WithAllowNodeExecution(true).")]
+    private Task<string> StartCompiledWorkflow(
+        [Description("Node index of the compile entry point (usually a controller).")] int startNodeIndex,
+        [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null)
+        => StartCompiledAsync(startNodeIndex, seed, resume: false, nameof(StartCompiledWorkflow));
+
+    [Description("Starts a compiled run that CARRIES ON from the last place a previous run left in the scope's checkpoint store, instead of starting over: the nodes that place records as done are not driven again and what they produced is restored for the nodes behind them. Returns a handle at once, exactly like StartCompiledWorkflow. Use it after a run was stopped (StopCompiledRun) or ended badly, once whatever it needed has been fixed. Errors when there is no checkpoint to carry on from — run the workflow once first. Disabled by default: requires WithAllowNodeExecution(true).")]
+    private Task<string> ContinueCompiledWorkflow(
+        [Description("Node index of the compile entry point (usually a controller) — the same graph the checkpoint was taken over.")] int startNodeIndex,
+        [Description("Optional seed payload injected into the runtime session.")] string? seed = null)
+        => StartCompiledAsync(startNodeIndex, seed, resume: true, nameof(ContinueCompiledWorkflow));
+
+    /// <summary>Shared body of the two background entries: compile, build the session, start driving, return a handle.</summary>
+    private async Task<string> StartCompiledAsync(int nodeIndex, string? seed, bool resume, string toolName)
+    {
+        if (!_scope.AllowNodeExecution)
+            return Error($"{toolName} is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+
+        try
+        {
+            ExecutionCheckpoint? place = null;
+            if (resume)
+            {
+                place = await _scope.EffectiveCheckpointStore.LoadAsync(CancellationToken.None);
+                if (place is null)
+                    return Error("There is no checkpoint to carry on from: nothing has been written yet. Run the workflow once (StartCompiledWorkflow) and stop it mid-way, then continue.");
+            }
+
+            var graphs = await new CompilerViewModel().CompileAsync(node, CompileRole.Root);
+            if (graphs.Count == 0) return Error("Compile produced no graphs from this start node.");
+
+            var run = new CompiledRun(NextHandle(), new ManualExecutionGate());
+            run.Context = NewSession(seed, target: null, run);
+            lock (_runsGate) _runs[run.Handle] = run;
+            run.Task = DriveAsync(graphs[0], run, place);
+
+            return JsonConvert.SerializeObject(new
+            {
+                status = "ok",
+                handle = run.Handle,
+                resumed = resume,
+                message = resume
+                    ? "Carrying on from the last checkpoint. Poll GetCompiledRunStatus with the handle."
+                    : "Run started. Poll GetCompiledRunStatus with the handle.",
+            }, Formatting.None);
+        }
+        catch (Exception ex)
+        {
+            return Error($"Run failed to start: {ex.Message}");
+        }
+    }
+
+    /// <summary>The run itself, in the background. An exception the engine lets escape is a host contract that threw.</summary>
+    private static async Task DriveAsync(CompiledGraph graph, CompiledRun run, ExecutionCheckpoint? place)
+    {
+        try
+        {
+            await new RuntimeEngine().RunAsync(graph, run.Context!, run.Cts.Token, place);
+        }
+        catch (Exception ex)
+        {
+            run.Escaped = ex;
+        }
+    }
+
+    [Description("Reports on a run started by StartCompiledWorkflow / ContinueCompiledWorkflow: isRunning, runStatus, outcome (Completed / Cancelled / Failed — the precise reading, since runStatus shares 'Stopped' between a failure and a cancellation), isPaused, attempts, endedWithError, the final data, failures (the failures the run recorded, as records: phase / level / message / attempt / order), the last lines of the log, and logFile (an absolute path when the host sent the lines to a file — open it with your own file tool for the whole log). Also the way to learn a run has finished: a completed run's outcome stops being 'Unknown'. Pure query.")]
+    private async Task<string> GetCompiledRunStatus(
+        [Description("The handle returned when the run was started.")] string handle)
+    {
+        if (!TryGetRun(handle, out var run, out var error)) return error;
+        await Task.CompletedTask;
+
+        var context = run.Context!;
+        var status = new JObject
+        {
+            ["status"] = "ok",
+            ["handle"] = run.Handle,
+            ["isRunning"] = context.IsRunning,
+            ["runStatus"] = context.Status,
+            ["outcome"] = context.Outcome.ToString(),
+            ["isPaused"] = run.Gate.IsPaused,
+            ["attempts"] = context.Attempt,
+            ["endedWithError"] = context.EndedWithError,
+            ["data"] = context.Data is not null ? JToken.FromObject(context.Data) : JValue.CreateNull(),
+            ["failureCount"] = run.Failures.Count,
+            ["failures"] = new JArray(run.Failures.Select(FailureJson)),
+            ["logCount"] = context.Logs.Count,
+            ["logs"] = LogTail(context.Logs),
+            ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : JValue.CreateNull(),
+        };
+        if (run.Escaped is { } escaped)
+            status["escaped"] = escaped.Message;
+
+        // A finished run is dropped once it has been reported: the handle has told its story, and the task and the
+        // cancellation source go with it. Asking again afterwards is an unknown handle, which is the honest answer.
+        if (run.Task.IsCompleted)
+        {
+            lock (_runsGate) _runs.Remove(run.Handle);
+            run.Cts.Dispose();
+        }
+        return status.ToString(Formatting.None);
+    }
+
+    [Description("Holds a running compiled workflow at its next node boundary: the node being driven finishes, nothing new starts, and runStatus becomes 'Paused'. The same gate the host may have configured itself — this only fills in when the host left it unset. Idempotent. Nothing else about the run changes.")]
+    private string PauseCompiledRun(
+        [Description("The handle returned when the run was started.")] string handle)
+    {
+        if (!TryGetRun(handle, out var run, out var error)) return error;
+
+        run.Gate.Pause();
+        return Ok($"Run '{run.Handle}' is held at its next node boundary (currently {run.Context!.Status}). Release it with ResumeCompiledRun.");
+    }
+
+    [Description("Lets a held compiled workflow go again from where it stopped. A no-op when it was not held.")]
+    private string ResumeCompiledRun(
+        [Description("The handle returned when the run was started.")] string handle)
+    {
+        if (!TryGetRun(handle, out var run, out var error)) return error;
+
+        run.Gate.Resume();
+        return Ok($"Run '{run.Handle}' is going again (currently {run.Context!.Status}).");
+    }
+
+    [Description("Stops a running compiled workflow: the node being driven finishes, the run ends at that boundary with outcome Cancelled, and the checkpoint it left stays in the scope's store — ContinueCompiledWorkflow can carry on from it. Different from PauseCompiledRun, which holds the run without ending it.")]
+    private string StopCompiledRun(
+        [Description("The handle returned when the run was started.")] string handle)
+    {
+        if (!TryGetRun(handle, out var run, out var error)) return error;
+
+        run.Cts.Cancel();
+        return Ok($"Run '{run.Handle}' was asked to stop; it ends at the current node boundary.");
+    }
 
     /// <summary>Shared chain-run body for the two compile roles (RunCompiledWorkflow = Root, GetNodeResult = Terminal).</summary>
     private async Task<string> RunCompiledRoleAsync(
@@ -2081,13 +2315,11 @@ public sealed class WorkflowAgentToolkit
                     ? "Compile produced no graph for this terminal node."
                     : "Compile produced no graphs from this start node.");
 
-            var context = new RuntimeContext
-            {
-                Data = seed,
-                Target = role == CompileRole.Terminal ? node : null,
-                // Carried by the scope because this session never surfaces to the host (see WithLogWriter).
-                LogWriter = _scope.LogWriter,
-            };
+            // The same session a background run gets — the scope's log writer, the host's configuration, the
+            // checkpoint place, the failure records — apart from a gate, which this entry has no use for: it waits
+            // for the end, so there is nothing to hold.
+            var run = new CompiledRun(NextHandle(), new ManualExecutionGate());
+            var context = NewSession(seed, role == CompileRole.Terminal ? node : null, run);
             await new RuntimeEngine().RunAsync(graphs[0], context, ct);
 
             // Forward-consistent semantics: a Terminal run only reports a result when the target node was
@@ -2106,10 +2338,16 @@ public sealed class WorkflowAgentToolkit
                 ["status"] = "ok",
                 ["role"] = role.ToString(),
                 ["runStatus"] = context.Status,
+                // How it ended, precisely: Status has to share "Stopped" between a failure and a cancellation.
+                ["outcome"] = context.Outcome.ToString(),
                 ["endedWithError"] = context.EndedWithError,
                 ["attempts"] = context.Attempt,
                 ["data"] = context.Data is not null ? JToken.FromObject(context.Data) : JValue.CreateNull(),
+                // The same failures the log carries, as records: phase / level / message / attempt / order.
+                ["failures"] = new JArray(run.Failures.Select(FailureJson)),
                 ["logs"] = new JArray(context.Logs),
+                // Present only when the host sent the lines to a file; an absolute path the model can open itself.
+                ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : JValue.CreateNull(),
             };
             // targetReached is meaningful only for Terminal (result) runs; a Root chain run has no target.
             if (role == CompileRole.Terminal)

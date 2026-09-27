@@ -92,6 +92,22 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 ---
 
+## 三点五、编译运行的控制面（2026-09-27 起）
+
+`RunCompiledWorkflow` 是**跑到完才返回**的，所以模型说什么都到不了"还在跑的那一轮"。新增一条后台入口 + 一组控制工具后，六个编译执行能力里"需要有人按一下"的那两件（暂停门、检查点）才真的能被 Agent 用：
+
+| 工具 | 作用 |
+|---|---|
+| `StartCompiledWorkflow` | 与 `RunCompiledWorkflow` 同一条编译+引擎路径，但**立刻**返回一个句柄 |
+| `PauseCompiledRun` / `ResumeCompiledRun` | 门：停在下一个节点边界 / 放行 |
+| `StopCompiledRun` | 取消（`outcome = Cancelled`），留下的位置仍在 store 里 |
+| `GetCompiledRunStatus` | `isRunning` / `outcome` / `isPaused` / `failures` / 日志尾 / `logFile`；**看到结束时它会把这个句柄退休**，之后再问就是未知句柄 |
+| `ContinueCompiledWorkflow` | 从 store 里最后一次检查点起新一轮（已完成的节点不再驱动） |
+
+两条 `With*` 是宿主的口子：`WithCheckpointStore`（默认给每个 scope 一个内存 store，所以 Continue 开箱可用）与 `WithSessionConfiguration(Action<RuntimeContext>)`（重试策略 / 观察者 / sink / 补偿 / 门 / 检查点，一次配齐）。**填充顺序是契约**：scope 自己的设置 → 宿主钩子 → 工具需要的（门与 store 只在仍是 `null` 时补 ✗ 不覆盖宿主）✓；失败记录与宿主的 sink **并存**（`RecordingErrorSink` 转发 ✓）。
+
+**日志读取取决于宿主的配置，而结果会把答案带出来**：配了文件 `ILogWriter` ⇒ 结果里有 `logFile`（**绝对路径**）⇒ 模型用它自己的文件工具打开即可；默认的内存日志 ⇒ 结果里的 `logs` 就是记录，不需要任何文件工具。`TextWriterLogWriter.Path`（`For(path)` 时填、包装外部 `TextWriter` 时为 null）就是为这一条加的。
+
 ## 四、四条承重的不变量
 
 1. **工具只从 provider 出，不从 `ChatOptions.Tools` 出。** 理由见上（并集不去重）。

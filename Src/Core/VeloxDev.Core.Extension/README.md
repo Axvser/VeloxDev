@@ -7,7 +7,7 @@
 | Module | Description |
 |---|---|
 | **Workflow Agent** | `WorkflowAgentScope` + `WorkflowAgentToolkit`: 60+ function-calling tools that let an Agent add/remove nodes & links, patch properties, execute nodes, compile routing, and lay out the canvas |
-| **Compiler support** | `CompileWorkflow` / `GetCompileStatus` / `RunCompiledWorkflow` (chain-level execution) / `GetExecutionLog`; checkpointing a run and resuming from one (`CheckpointEx`, `FileCheckpointStore`) |
+| **Compiler support** | `CompileWorkflow` / `GetCompileStatus` / `RunCompiledWorkflow` (chain-level execution) / `GetExecutionLog`; **holding and carrying on** a run (`StartCompiledWorkflow`, `PauseCompiledRun`, `ResumeCompiledRun`, `StopCompiledRun`, `GetCompiledRunStatus`, `ContinueCompiledWorkflow`) together with the checkpointing behind them (`CheckpointEx`, `FileCheckpointStore`) |
 | **MCP** | `McpScope` (stdio local + remote Streamable HTTP), `McpAgentToolkit` (Agent-managed servers), global bindable status VM (`McpStatusViewModel`) — **usable on its own** via `McpScope.CreateContextProvider()` |
 | **Skills** | `SkillScope` + `ISkillSource` (embedded documents, or Agent-Skills folders on disk), per-skill enable/disable, bindable `SkillsViewModel` — **usable on its own** via `SkillScope.CreateContextProvider()` |
 | **Bilingual skills/references** | `Resources/Workflow/{en,zh}/Skills|References|Safety`, embedded and merged into the Agent system prompt |
@@ -109,12 +109,47 @@ channels reaches the model twice. Leaving the parameter out makes that mistake u
 parameters are ordered providers-first because MAF's own `AsAIAgent(this IChatClient, string
 instructions = null, …)` would otherwise capture a single-string call.)
 
-## Two execution entries (do not confuse them)
+## Execution entries (do not confuse them)
 
 | Entry | Tool | Semantics |
 |---|---|---|
 | **Node-level** | `ExecuteNode` | A single node's `ReceiveCommand` (EXEC/RECV) |
-| **Chain-level** | `RunCompiledWorkflow` | Drive the whole compiled chain via `CompilerViewModel` + `RuntimeEngine` |
+| **Chain-level, waits** | `RunCompiledWorkflow` | Drive the whole compiled chain via `CompilerViewModel` + `RuntimeEngine`, and return when it is over |
+| **Chain-level, returns a handle** | `StartCompiledWorkflow` | The same run, handed back as a handle while it is still going |
+
+## Holding a run
+
+`RunCompiledWorkflow` only returns once the run is over, so nothing the model could say would reach a run in flight.
+`StartCompiledWorkflow` starts the same run and returns a handle at once; the tools below act on it — this is how the
+Agent drives the capabilities that need a hand (`IExecutionGate`, the checkpoint store), rather than only the ones
+that configure themselves.
+
+```text
+StartCompiledWorkflow(startNodeIndex)        → { handle }
+PauseCompiledRun(handle)                     → held at the next node boundary
+ResumeCompiledRun(handle)                    → let go
+StopCompiledRun(handle)                      → ends as Cancelled, its place stays in the store
+GetCompiledRunStatus(handle)                 → isRunning / outcome / isPaused / failures / log tail / logFile
+ContinueCompiledWorkflow(startNodeIndex)     → a new run from the last checkpoint: the nodes it records as done are not driven again
+```
+
+⚙ **`outcome` is the precise ending, `runStatus` is not.** `Status` has to share one word — `"Stopped"` — between a
+failure and a cancellation, so a result carries both and the Agent reads `outcome`
+(Completed / Cancelled / Failed).
+
+⚙ **Failures travel as records, not only as lines.** Every result and status carries `failures`: phase, level
+(Warning / Error), message, attempt and compile order. What a failure *means* is the host's business, so the library
+hands over the fields and stops there.
+
+⚙ **Reading the log depends on how the host configured it, and the result says which.** With a file-backed
+`ILogWriter` the result carries `logFile` — an absolute path — and the model opens it with whatever file tool its host
+gave it; there is nothing special for the library to do, because a path is a path. With the default in-memory log the
+run's `logs` are the record, and no file tool is needed at all.
+
+⚙ **The host's session configuration reaches Agent runs.** `WithSessionConfiguration(context => ...)` sets the retry
+policy, the observer, the error sink, the compensator, the gate and the checkpoint store on the session a run is about
+to use — they are host policy, not the model's to guess. What the tools need is only filled in where the host left it
+unset: the pause gate and the checkpoint store are the Agent's own only when nobody else set one.
 
 ## The compiled graph as a document
 
