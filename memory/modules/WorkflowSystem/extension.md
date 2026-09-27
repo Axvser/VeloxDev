@@ -19,6 +19,7 @@
 | 读编译身份 | 实现 `ICompileTimeAware`（`CompileContext.Order/ChainIndex/Offset/InputNodes`） | `CompilerEx/Compile/Contracts/ICompileTimeAware.cs` |
 | 运行期读上下文 | 实现 `IRuntimeAware`（`AttachRuntimeContext`） | `CompilerEx/Runtime/Contracts/IRuntimeAware.cs` |
 | 重定向（回退到更早的 Order 重跑） | 实现 `IRedirectable`（`ResolveRedirectAsync`） | `CompilerEx/Runtime/Contracts/IRedirectable.cs` |
+| 运行要能暂停 / 观察 / 重试 / 收结构化错误 / 失败后补偿 | **不是实现接口，是往会话插一个对象**：`RuntimeContext` 的 `ExecutionGate` / `Observer` / `RetryPolicy` / `ErrorSink` / `Compensation`。五个契约都随库带默认实现（`ManualExecutionGate`、`ExponentialBackoffRetry`…）与委托适配器，不配置就什么都没有 | `CompilerEx/Runtime/Model/RuntimeContext.cs`（「可选能力」一节）；语义见 [compiler-execution.md](compiler-execution.md) §十 |
 | 数量可变的端口集合 | `[VeloxProperty] [SlotSelectors(typeof(...))] public partial SlotEnumerator<TSlot> X { get; set; }` | `SelectorEx/SlotEnumerator.cs:11`；`Src/Core/VeloxDev.Core/AI/SlotSelectorsAttribute.cs:38` |
 | 自定义空间索引 | 实现 `ISpatialBoundsProvider`（`Bounds` + `INotifyPropertyChanged`）/ `ISpatialMap<T>` | `Interfaces/WorkflowSystem/ISpatialBoundsProvider.cs`、`ISpatialMap.cs:12` |
 | 网格装饰器 / 小地图 | 实现 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs:15`、`IWorkflowMinimapOverlay.cs:18` |
@@ -60,6 +61,7 @@
 | 22 | 连线视图在悬停时取键盘焦点（为了让 Delete 生效），却不拦平台随之而来的「把焦点元素滚进视口」 | 连线视图的框往往是**整块画布大小** ⇒ 焦点一落上去，滚动容器就把画布跳一段。三家机制不同：Avalonia 是 `ScrollViewer.BringIntoViewOnFocusChange`（默认 true）、WPF 是 `RequestBringIntoView`、Jalium 是平台的安全区/软键盘事件分支延迟发的 `BringIntoView`（**极小概率**：需「表面持有焦点 + 该事件 + 其后一次布局」同时成立） | 在**该视图自己**身上吃掉这条请求（`AddHandler(RequestBringIntoViewEvent, …, e => e.Handled = true)`；Jalium 那种要按 `TargetObject == this` 收窄）。**不要**关掉整块画布的自动滚进视口 —— 节点卡里输入框的同类请求仍该生效 | 七家非 Trimmed demo 的实测见各自 `adapters/<平台>.md` §五；Avalonia 的因果 A/B 与 Jalium 的 IL 级机制链都记在那里 |
 | 23 | 在节点里 `Warn` 一句当作「只是提醒」 | `Warn` 与 `Error` 一样置 `RedirectRequested`；节点没实现 `IRedirectable` 时引擎**直接结束整个流程**（`CurrentOrder = -1`、`EndedWithError = true`）。而**全仓生产代码没有一个 `IRedirectable` 实现者**（只有测试探针） | 想提示用 `Log`；`Warn`/`Error` 按「结束本轮」用 | `CompilerEx/Runtime/Model/RuntimeContext.cs:102-113`；`CompilerEx/Runtime/RuntimeEngine.cs:138-144` |
 | 24 | 写自研节点时不实现 `ICompileTimeAware` / `IRuntimeAware` | 三个契约**都不在** `IWorkflowNodeViewModel` 的继承链上，Core 的 `NodeDefaultViewModel` 也不实现、生成器也不补 ⇒ **静默降级**：`Order` 恒 `-1`、多输入汇合点拿不到 `GroupData`、重定向重跑里不会被驱动。只有 demo 的节点实现了它们 | 需要编译身份/汇合聚合/重定向就显式实现；照着 demo 的节点写 | `Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:9`；[compiler-execution.md](compiler-execution.md) §四 |
+| 25 | 自己写一个 `IRuntimeContext` 实现（或从别处拿一个），指望暂停 / 观察 / 重试 / 错误 sink / 补偿照旧生效 | 那五个是 `RuntimeContext` 的**具体类成员**，引擎按 `context as RuntimeContext`（扇出内透过 `BranchRuntimeContext.Session`）取 —— 换掉实现就**静默**一个也拿不到。与 `MaxParallelBranches`、`LogWriter` 同样的取舍（给 `IRuntimeContext` 加成员会破坏每个外部实现） | 要用这几条就 `new RuntimeContext(...)` 并把对象插上去；自定义实现只在确实不需要它们时用 | `CompilerEx/Runtime/RuntimeEngine.cs` 的 `Session(IRuntimeContext)`；`CompilerEx/Runtime/Model/RuntimeContext.cs` 的「可选能力」一节 |
 
 ---
 

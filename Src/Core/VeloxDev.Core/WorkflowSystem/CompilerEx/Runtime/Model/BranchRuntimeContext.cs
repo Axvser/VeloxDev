@@ -30,6 +30,14 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
 {
     private readonly IRuntimeContext _session = session;
 
+    /// <summary>
+    /// The session this branch belongs to. The engine reads it so a capability configured on the session — the
+    /// pause gate, the observer, the retry policy, the error sink, the compensator — keeps working <i>inside</i> a
+    /// fan-out: without this, a cast to <see cref="RuntimeContext"/> would come up empty in exactly the place a
+    /// wide graph spends its time.
+    /// </summary>
+    internal IRuntimeContext Session => _session;
+
     /// <summary>Always false: only the compile phase is true. Not forwarded — it is a constant.</summary>
     public bool IsCompilePhase => false;
 

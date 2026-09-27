@@ -1,0 +1,129 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
+
+namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
+
+/// <summary>
+/// <see cref="IExecutionCompensation"/>: a run that ends badly hands back the nodes it already drove, most recent
+/// first. The engine rolls nothing back itself — it cannot know what a node's effects were — so what these tests
+/// pin is the list, its order, and that a compensating host never makes things worse.
+/// </summary>
+[TestClass]
+public class ExecutionCompensationTests
+{
+    private static (List<string> Names, List<object?> Outputs) Recording(RuntimeContext context)
+    {
+        var names = new List<string>();
+        var outputs = new List<object?>();
+        context.Compensation = new DelegateExecutionCompensation(c =>
+        {
+            names.Add(((ProbeNode)c.Node).Name);
+            outputs.Add(c.Output);
+        });
+        return (names, outputs);
+    }
+
+    [TestMethod]
+    public async Task AFailedRun_HandsBackItsSuccesses_MostRecentFirst()
+    {
+        var s = new ProbeNode("s") { Handler = (_, _) => "S" };
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var b = new ProbeNode("b") { Handler = (_, _) => throw new InvalidOperationException("boom") };
+        ProbeGraph.Wire(s, a);
+        ProbeGraph.Wire(a, b);
+
+        var context = new RuntimeContext();
+        var (names, outputs) = Recording(context);
+
+        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(s), context, CancellationToken.None);
+
+        Assert.AreEqual(RunOutcome.Failed, context.Outcome);
+        CollectionAssert.AreEqual(new[] { "a", "s" }, names,
+            $"compensation walks the successes backwards, and the failed node is not among them; got: {string.Join(", ", names)}");
+        CollectionAssert.AreEqual(new object?[] { "A", "S" }, outputs, "each node comes back with what it produced");
+    }
+
+    [TestMethod]
+    public async Task ACompletedRun_HandsBackNothing()
+    {
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var context = new RuntimeContext();
+        var (names, _) = Recording(context);
+
+        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
+
+        Assert.AreEqual(RunOutcome.Completed, context.Outcome);
+        Assert.IsEmpty(names, "nothing to undo: a completed run compensates nothing");
+    }
+
+    [TestMethod]
+    public async Task ACompensatorThatThrows_DoesNotStopTheNodesBehindIt()
+    {
+        var s = new ProbeNode("s") { Handler = (_, _) => "S" };
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var b = new ProbeNode("b") { Handler = (_, _) => throw new InvalidOperationException("boom") };
+        ProbeGraph.Wire(s, a);
+        ProbeGraph.Wire(a, b);
+
+        var names = new List<string>();
+        var context = new RuntimeContext
+        {
+            Compensation = new DelegateExecutionCompensation(c =>
+            {
+                var name = ((ProbeNode)c.Node).Name;
+                names.Add(name);
+                if (name == "a") throw new InvalidOperationException("cannot undo");
+            }),
+        };
+
+        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(s), context, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { "a", "s" }, names,
+            $"best effort: one node that cannot be undone must not strand the rest; got: {string.Join(", ", names)}");
+        Assert.AreEqual(RunOutcome.Failed, context.Outcome, "the original failure stays the headline");
+        Assert.IsTrue(context.Logs.Any(l => l.Contains("[Compensation]", StringComparison.Ordinal)),
+            $"the node that could not be undone has to be visible; got: {string.Join(" | ", context.Logs)}");
+    }
+
+    /// <summary>
+    /// `s0 → s1 → r → x`, where r asks for a re-run toward s1 on the first pass and x then fails on the second:
+    /// s0 is the prefix the redirect preserves — driven once, never driven again — and it is still something the
+    /// run has to answer for. s1 is driven twice and comes back once, at its latest position.
+    /// </summary>
+    [TestMethod]
+    public async Task AfterARedirect_ASkippedPrefixNode_IsStillHandedBack_AndAReDrivenNodeOnlyOnce()
+    {
+        var s0 = new ProbeNode("s0") { Handler = (_, _) => "S0" };
+        var s1 = new ProbeNode("s1") { Handler = (_, _) => "S1" };
+        var r = new RedirectableNode("r");
+        var x = new ProbeNode("x");
+        ProbeGraph.Wire(s0, s1);
+        ProbeGraph.Wire(s1, r);
+        ProbeGraph.Wire(r, x);
+
+        r.Handler = (ctx, _) =>
+        {
+            if (((IRuntimeContext)ctx).Attempt == 1) ((IRuntimeContext)ctx).Error("ask for a re-run");
+            return "R";
+        };
+        r.Resolve = ctx => ctx.Attempt == 1 ? 1 : null;   // s1 的 Order：重跑时 s0 会被跳过
+        x.Handler = (ctx, _) => ((IRuntimeContext)ctx).Attempt == 2
+            ? throw new InvalidOperationException("boom")
+            : "X";
+
+        var context = new RuntimeContext();
+        var (names, _) = Recording(context);
+
+        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(s0), context, CancellationToken.None);
+
+        Assert.AreEqual(2, context.Attempt, "the graph was walked twice");
+        Assert.HasCount(1, s0.Calls, "s0 is the preserved prefix: driven in the first pass and never again");
+        Assert.AreEqual(RunOutcome.Failed, context.Outcome);
+        CollectionAssert.AreEqual(new[] { "r", "s1", "x", "s0" }, names,
+            $"reverse drive order, one entry per node — s1 was driven twice and appears once; got: {string.Join(", ", names)}");
+    }
+}

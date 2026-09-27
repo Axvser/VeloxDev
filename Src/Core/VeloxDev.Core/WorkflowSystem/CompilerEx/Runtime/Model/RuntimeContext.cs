@@ -119,6 +119,47 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// </remarks>
     public int? MaxRetainedLogs { get; set; }
 
+    // ── 可选能力 ─────────────────────────────────────────────────────────────
+    // 默认全关，且刻意不放进 IRuntimeContext：给那个契约加成员会破坏每个外部实现（与上面几条策略同理）。
+    // 引擎靠转型到具体类取它们 —— 宿主自带 IRuntimeContext 实现时一个也拿不到，与 MaxParallelBranches 同样的取舍。
+
+    /// <summary>Where the run pauses between nodes; <c>null</c> (the default) means it never pauses.</summary>
+    /// <seealso cref="IExecutionGate"/>
+    public IExecutionGate? ExecutionGate { get; set; }
+
+    /// <summary>Watches what the run does; <c>null</c> (the default) observes nothing.</summary>
+    /// <seealso cref="IExecutionObserver"/>
+    public IExecutionObserver? Observer { get; set; }
+
+    /// <summary>Decides whether a node that threw gets another go; <c>null</c> (the default) means it does not.</summary>
+    /// <seealso cref="INodeRetryPolicy"/>
+    public INodeRetryPolicy? RetryPolicy { get; set; }
+
+    /// <summary>Receives every failure as a record; <c>null</c> (the default) leaves them as log lines only.</summary>
+    /// <seealso cref="IExecutionErrorSink"/>
+    public IExecutionErrorSink? ErrorSink { get; set; }
+
+    /// <summary>
+    /// Told about the nodes a run that ends badly already drove, most recent first; <c>null</c> (the default) tells
+    /// nobody.
+    /// </summary>
+    /// <seealso cref="IExecutionCompensation"/>
+    public IExecutionCompensation? Compensation { get; set; }
+
+    /// <summary>
+    /// How the last run ended, as a precise reading of <see cref="Status"/> + <see cref="EndedWithError"/>;
+    /// <see cref="RunOutcome.Unknown"/> until a run ends.
+    /// </summary>
+    public RunOutcome Outcome { get; set; } = RunOutcome.Unknown;
+
+    // 本轮成功驱动的节点及其产物，按驱动序，补偿按它逆序走。
+    // 有次序（_outputs 没有），且每个节点只占一条：重定向会重跑，重跑过的节点移到末尾，而不是记两条、补偿两次。
+    // 只有 ResetOutputs 清它，绝不按趟清 —— 于是重定向跳过的前缀（第一趟驱动过、之后再不驱动）也仍在这一轮该负责的范围内。
+    private readonly List<(IWorkflowNodeViewModel Node, object? Output)> _completed = [];
+
+    // 本轮的成功列表（含产物），补偿器按它逆序回调。
+    internal IReadOnlyList<(IWorkflowNodeViewModel Node, object? Output)> CompletedThisRun => [.. _completed];
+
     /// <summary>Raised when <see cref="LogWriter"/> throws. The line is still kept in <see cref="Logs"/> and the run
     /// carries on — diagnostics never change what the run does.</summary>
     public event EventHandler<LogWriteFailedEventArgs>? LogWriteFailed;
@@ -174,10 +215,23 @@ public sealed partial class RuntimeContext : IRuntimeContext
     {
         if (node is null) return;
         _outputs[node] = (Attempt, value);
+
+        // 登记即「这个节点本轮成功了」，补偿走的就是这个信号。放在这里而不是引擎的调用点上，是因为这个方法
+        // 本身就是成功信号 —— 引擎在驱动不带异常返回后紧接着写它。重跑把它移到末尾：一轮结束时还立着的效果，
+        // 是这个节点最近一次成功留下的那个。
+        _completed.RemoveAll(entry => ReferenceEquals(entry.Node, node));
+        _completed.Add((node, value));
     }
 
-    /// <summary>Clears the output registry (once at the start of each RunAsync; redirect re-runs do not clear it → stale outputs are filtered by pass stamp).</summary>
-    public void ResetOutputs() => _outputs.Clear();
+    /// <summary>
+    /// Clears the output registry (once at the start of each RunAsync; redirect re-runs do not clear it → stale
+    /// outputs are filtered by pass stamp, and <see cref="CompletedThisRun"/> keeps the whole run's successes).
+    /// </summary>
+    public void ResetOutputs()
+    {
+        _outputs.Clear();
+        _completed.Clear();
+    }
 
     /// <summary>
     /// Collects the outputs of a group of input nodes into a read-only dictionary; unregistered nodes are absent

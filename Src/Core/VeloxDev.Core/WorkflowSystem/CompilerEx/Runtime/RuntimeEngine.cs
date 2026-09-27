@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
@@ -15,6 +16,12 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// when the target is a Router it only re-routes without recomputing.
 /// If the node does not implement IRedirectable, the whole flow ends with the standard -1 status.
 /// Before each drive the engine injects <see cref="IRuntimeContext"/> into <see cref="IRuntimeAware"/> nodes.
+/// <para>
+/// Five capabilities are optional and read off the host's <see cref="RuntimeContext"/> — the pause gate, the
+/// observer, the retry policy, the error sink and the compensator. Every one of them is a bypass: with none
+/// configured, the run behaves exactly as it did before they existed, down to the log lines and the number of
+/// drives. They are resolved through <c>Session</c>, so they also work inside a fan-out.
+/// </para>
 /// </summary>
 public sealed class RuntimeEngine
 {
@@ -22,6 +29,8 @@ public sealed class RuntimeEngine
     {
         if (graph is null || context is null) return;
         const int MaxRedirects = 50;
+        var session = Session(context);
+        var startedAt = Stopwatch.GetTimestamp();
         context.IsRunning = true;
         context.Status = "Running";
         // Each RunAsync clears the output registry once; redirect re-runs do not clear it, stale
@@ -38,6 +47,8 @@ public sealed class RuntimeEngine
             while (true)
             {
                 context.Attempt = redirects + 1;   // graph re-run count (increments per redirect)
+                if (redirects == 0)
+                    await ObserveAsync(session, context, ExecutionObservationKind.RunStarted, null, null, TimeSpan.Zero, ct);
                 context.PendingRedirectTarget = null;
                 context.ActiveRedirectTarget = redirectTarget;   // null on the first pass; output collection uses it to tell contract-preserved prefix from stale branches
                 var terminated = await RunGraphAsync(graph, context, ct, redirectTarget);
@@ -46,7 +57,12 @@ public sealed class RuntimeEngine
                     redirects++;
                     if (redirects > MaxRedirects)
                     {
-                        context.Error($"Redirected more than {MaxRedirects} times. Aborting.");
+                        // 先结束再抛：这条路上 Status 原本停在 "Running"，异常一路穿出去时会话还在说「在跑」。
+                        context.CurrentOrder = -1;
+                        context.EndedWithError = true;
+                        context.Status = "Stopped";
+                        await ReportErrorAsync(session, context, ExecutionFailurePhase.Run, null,
+                            $"Redirected more than {MaxRedirects} times. Aborting.", null, ct);
                         throw new InvalidOperationException($"Redirected more than {MaxRedirects} times. Aborting.");
                     }
                     context.Log($"Redirecting to compile state #{next} (skipping prior nodes, re-executing).");
@@ -57,13 +73,20 @@ public sealed class RuntimeEngine
             }
             context.Status = context.EndedWithError ? "Stopped" : "Completed";
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             context.Status = "Stopped";
+            // 只报给 sink，不写日志：宿主自己停的运行不是失败，加一行 [Error] 会让以后读 Logs 的人以为出过错。
+            await NotifyErrorAsync(session, context, ExecutionFailurePhase.Run, null, "The run was cancelled.", ex, CancellationToken.None);
         }
         finally
         {
             context.IsRunning = false;
+            var outcome = OutcomeOf(context);
+            if (session is not null) session.Outcome = outcome;   // 只有具体类装得下；宿主自带的会话没地方放
+            await CompensateAsync(session, context, outcome);
+            // 放在最后：宿主在 RunEnded 里收尾时，补偿已经走完。不传运行令牌 —— 取消之后它已取消，观察者会拒掉这条唯一能收束的观察。
+            await ObserveAsync(session, context, ExecutionObservationKind.RunEnded, null, null, ElapsedSince(startedAt), CancellationToken.None);
         }
     }
 
@@ -105,6 +128,7 @@ public sealed class RuntimeEngine
     /// </summary>
     private async Task<bool> RunExecuteAsync(ChainSegment exec, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
+        var session = Session(context);
         for (int i = 0; i < exec.Nodes.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
@@ -140,13 +164,32 @@ public sealed class RuntimeEngine
             {
                 context.CurrentOrder = -1;
                 context.EndedWithError = true;
-                context.Error("Node reported an error but does not implement IRedirectable; the flow ends (status -1).");
+                await ReportErrorAsync(session, context, ExecutionFailurePhase.Node, node,
+                    "Node reported an error but does not implement IRedirectable; the flow ends (status -1).", null, ct);
                 return true;
             }
 
             // With IRedirectable → its interface decides the redirect target (possibly cross-chain).
             // Only a predecessor state (Order < current) is accepted.
-            var target = await redirectable.ResolveRedirectAsync(context, ct);
+            int? target;
+            try
+            {
+                target = await redirectable.ResolveRedirectAsync(context, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // IRedirectable 是宿主实现的契约，它的 bug 与节点体抛异常同一种失败。原先没有守卫，异常会穿出
+                // RunAsync 并把 Status 停在 "Running" —— 明明什么都没在跑，会话却说还在跑。
+                context.CurrentOrder = -1;
+                context.EndedWithError = true;
+                await ReportErrorAsync(session, context, ExecutionFailurePhase.Redirect, node, ex.Message, ex, ct);
+                return true;
+            }
+
             if (target is { } targetOrder && targetOrder < order)
             {
                 context.PendingRedirectTarget = targetOrder;
@@ -167,6 +210,7 @@ public sealed class RuntimeEngine
     private async Task<bool> RunBranchAsync(BranchSegment branch, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
         if (branch.Router is null) return false;
+        var session = Session(context);
         var routerOrder = NodeOrder(branch.Router);
 
         // Cross-chain redirect: target before the branch → skip the whole branch.
@@ -180,8 +224,26 @@ public sealed class RuntimeEngine
 
         if (branch.Router is ICompileTimeRouter router)
         {
-            // Static: uses the compile-time locked key (the selected value at compile time); Dynamic: re-resolves at runtime.
-            var key = branch.IsDynamic ? await router.ResolveRouteKey(context) : branch.CompileKey;
+            object? key;
+            try
+            {
+                // 静态：用编译期锁定的键（编译那一刻的选中值）；动态：运行期重新解析。
+                key = branch.IsDynamic ? await router.ResolveRouteKey(context) : branch.CompileKey;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // 另一处宿主钩子（见 RunExecuteAsync 的重定向解析）：原来同样会穿出 RunAsync 并把 Status 停在
+                // "Running"。没有键就没有可走的路，所以在这里结束，而不是随便挑一条。
+                context.CurrentOrder = -1;
+                context.EndedWithError = true;
+                await ReportErrorAsync(session, context, ExecutionFailurePhase.Router, branch.Router, ex.Message, ex, ct);
+                return true;
+            }
+
             context.BranchKey = key;
             var chosen = branch.Options.FirstOrDefault(o => o is not null && Equals(o.Key, key));
             if (chosen is null || chosen.IsTerminal)
@@ -246,7 +308,7 @@ public sealed class RuntimeEngine
         for (int i = 0; i < count; i++)
         {
             branchContexts[i] = new BranchRuntimeContext(context) { Data = sourceData };
-            tasks[i] = RunOneBranchAsync(branches[i], branchContexts[i], ct, redirectTarget, gate);
+            tasks[i] = RunOneBranchAsync(branches[i], branchContexts[i], i, ct, redirectTarget, gate);
         }
 
         var terminated = await Task.WhenAll(tasks);
@@ -283,12 +345,13 @@ public sealed class RuntimeEngine
     /// gate first when the host set a cap (the cap bounds one fan-out, not the run).
     /// </summary>
     private async Task<bool> RunOneBranchAsync(
-        CompiledGraph branch, BranchRuntimeContext branchContext, CancellationToken ct, int? redirectTarget,
+        CompiledGraph branch, BranchRuntimeContext branchContext, int index, CancellationToken ct, int? redirectTarget,
         SemaphoreSlim? gate)
     {
         if (gate is not null) await gate.WaitAsync(ct);
         try
         {
+            await ObserveAsync(Session(branchContext), branchContext, ExecutionObservationKind.BranchStarted, null, $"branch {index}", TimeSpan.Zero, ct);
             return await RunGraphAsync(branch, branchContext, ct, redirectTarget);
         }
         finally
@@ -301,37 +364,106 @@ public sealed class RuntimeEngine
     private static int NodeOrder(IWorkflowNodeViewModel node)
         => (node as ICompileTimeAware)?.CompileContext?.Order ?? -1;
 
-    /// <summary>
-    /// Drives a single node: injects IRuntimeContext, executes the node through the unified data-flow
-    /// entry <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/>, and writes the return value back to
-    /// <see cref="IRuntimeContext.Data"/> for downstream chain passing.
-    /// A node exception is pushed to the log via <see cref="IRuntimeContext.Error"/> and then rethrown
-    /// (handled by RunExecuteAsync).
-    /// </summary>
+    // 驱动一个节点：注入 IRuntimeContext、经 ReceiveAsync 执行、把返回值写回 Data 供下游链式传递。
+    // 异常照旧记 Error 再抛（RunExecuteAsync 接管）—— 除非配了重试策略并愿意再给一次机会。
+    // 整次驱动被几个可选能力夹住，都不配就与从前逐字相同：一次驱动、一行日志、一条错误路径。
     private static async Task DriveAsync(IWorkflowNodeViewModel node, IRuntimeContext context, CancellationToken ct)
     {
         if (node is null || context is null) return;
+        var session = Session(context);
+
+        // 暂停点：每个节点驱动前问一次，节点体内绝不打断（与工具层「半个变更不允许中途丢弃」同一条规矩）。
+        // 只在门真的关上时才写 Status —— 开着的门不该让会话每过一个节点闪一次 "Paused"。
+        if (session?.ExecutionGate is { } gate)
+        {
+            var wait = gate.WaitAsync(ct);
+            if (wait.IsCompleted)
+            {
+                await wait;   // 门开着：不产生 await 让位，也不动 Status
+            }
+            else
+            {
+                context.Status = "Paused";
+                try { await wait; }
+                finally { context.Status = "Running"; }
+            }
+        }
+
         if (context.Target is { } target && ReferenceEquals(node, target))
             context.TargetReached = true;
-        if (node is IRuntimeAware aware)
-            aware.AttachRuntimeContext(context);
         // Execution status code = compile-time fixed number (stop nodes with Order = -1 are not driven, but keep the status code).
         var cc = (node as ICompileTimeAware)?.CompileContext;
         if (cc is not null)
             context.CurrentOrder = cc.Order;
         context.Log(node.GetType().Name);
 
+        // 节点即将收到的载荷。留一份是为了重试从同一个输入开始，而不是接着失败那次留下的半成品。
+        var input = context.Data;
+        var failures = 0;
+        while (true)
+        {
+            var startedAt = Stopwatch.GetTimestamp();
+            await ObserveAsync(session, context, ExecutionObservationKind.NodeStarted, node, null, TimeSpan.Zero, ct);
+
+            try
+            {
+                // 注入放在失败纪律之内，而不是之前：宿主实现的 AttachRuntimeContext 抛异常时会落进
+                // RunExecuteAsync 的空 catch —— 节点被无声跳过，没有日志、没有重定向，状态看着还正常。
+                if (node is IRuntimeAware aware)
+                    aware.AttachRuntimeContext(context);
+
+                // Join injection: when compile-time registered inputs are plural (Count > 1) → the bare Data is
+                // overridden with a read-only "source Node → output" dictionary; the node reads each upstream
+                // result in ReceiveAsync via context.Data is IGroupData.
+                if (cc?.InputNodes is { Count: > 1 } inputs)
+                    context.Data = new GroupData(context.CollectGroupedInputs(inputs));
+
+                var result = await node.GetHelper().ReceiveAsync(context, ct);
+                context.RegisterOutput(node, result);   // register the output after driving, for downstream join points to aggregate
+                context.Data = result;
+                await ObserveAsync(session, context, ExecutionObservationKind.NodeSucceeded, node, null, ElapsedSince(startedAt), ct);
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;   // 取消从不重试
+            }
+            catch (Exception ex)
+            {
+                failures++;
+                var elapsed = ElapsedSince(startedAt);
+                await ObserveAsync(session, context, ExecutionObservationKind.NodeFailed, node, ex.Message, elapsed, ct);
+
+                var delay = await NextRetryAsync(session, context, node, ex, failures, elapsed, ct);
+                if (delay is { } wait)
+                {
+                    // 重试不是新一轮：Attempt 数的是「过图的趟数」，同时是产物表的戳，重试时动它会让汇合聚合跟着变。
+                    context.Log($"[Retry {failures}] {node.GetType().Name}: {ex.Message}");
+                    await ObserveAsync(session, context, ExecutionObservationKind.NodeRetried, node, failures.ToString(), TimeSpan.Zero, ct);
+                    await Task.Delay(wait, ct);
+                    context.Data = input;
+                    continue;
+                }
+
+                await ReportErrorAsync(session, context, ExecutionFailurePhase.Node, node, ex.Message, ex, ct);
+                throw;
+            }
+        }
+    }
+
+    // 问一次重试策略：失败的那次还能不能再来一次。返回等待时长 = 再来，null = 交回引擎原有路径。
+    // 只有抛出的异常会被问，而且节点自己请求过重定向时不问 —— Error()/Warn() 是节点选择的控制流，不是待重试的失败。
+    // 策略自己抛异常当作「不再试」：宿主的 bug 不该顶替节点本来的失败。
+    private static async Task<TimeSpan?> NextRetryAsync(
+        RuntimeContext? session, IRuntimeContext context, IWorkflowNodeViewModel node, Exception error, int failures,
+        TimeSpan elapsed, CancellationToken ct)
+    {
+        if (context.RedirectRequested) return null;
+        if (session?.RetryPolicy is not { } policy) return null;
+
         try
         {
-            // Join injection: when compile-time registered inputs are plural (Count > 1) → the bare Data is
-            // overridden with a read-only "source Node → output" dictionary; the node reads each upstream
-            // result in ReceiveAsync via context.Data is IGroupData.
-            if (cc?.InputNodes is { Count: > 1 } inputs)
-                context.Data = new GroupData(context.CollectGroupedInputs(inputs));
-
-            var result = await node.GetHelper().ReceiveAsync(context, ct);
-            context.RegisterOutput(node, result);   // register the output after driving, for downstream join points to aggregate
-            context.Data = result;
+            return await policy.NextRetryAsync(new NodeFailure(node, error, failures, elapsed), ct);
         }
         catch (OperationCanceledException)
         {
@@ -339,8 +471,102 @@ public sealed class RuntimeEngine
         }
         catch (Exception ex)
         {
-            context.Error(ex.Message);
-            throw;
+            context.Log($"[Retry] {node.GetType().Name} was not retried: the policy failed to decide ({ex.Message}).");
+            return null;
         }
     }
+
+    // 按引擎原有方式记一次失败（一行日志），并把同一条失败交给可选的 sink。
+    private static async Task ReportErrorAsync(
+        RuntimeContext? session, IRuntimeContext context, ExecutionFailurePhase phase, IWorkflowNodeViewModel? node,
+        string message, Exception? error, CancellationToken ct)
+    {
+        context.Error(message);
+        await NotifyErrorAsync(session, context, phase, node, message, error, ct);
+    }
+
+    // 只交给 sink、不写日志：日志里已经有这条失败，或者本就不该有（宿主主动取消不是错误）。
+    private static async Task NotifyErrorAsync(
+        RuntimeContext? session, IRuntimeContext context, ExecutionFailurePhase phase, IWorkflowNodeViewModel? node,
+        string message, Exception? error, CancellationToken ct)
+    {
+        if (session?.ErrorSink is not { } sink) return;
+        var record = new ExecutionError(phase, node, message, error, context.Attempt, node is null ? -1 : NodeOrder(node));
+        try
+        {
+            await sink.OnErrorAsync(record, ct);
+        }
+        catch (Exception ex)
+        {
+            context.Log($"[ErrorSink] the failure was not recorded: {ex.Message}");   // 报告失败不能自己添一条失败
+        }
+    }
+
+    // 把这一轮成功驱动的节点按逆序交给可选的补偿器 —— 前提是运行以 Failed/Cancelled 收尾。
+    // 引擎自己什么都不回滚：一个节点的副作用是什么、哪些可逆，只有宿主知道。
+    private static async Task CompensateAsync(RuntimeContext? session, IRuntimeContext context, RunOutcome outcome)
+    {
+        if (session?.Compensation is not { } compensation) return;
+        if (outcome is not (RunOutcome.Failed or RunOutcome.Cancelled)) return;
+
+        var completed = session.CompletedThisRun;
+        for (var i = completed.Count - 1; i >= 0; i--)
+        {
+            var (node, output) = completed[i];
+            try
+            {
+                // 不传运行令牌：取消之后它已取消，而清理恰恰是仍然必须发生的那件事。
+                await compensation.CompensateAsync(new NodeCompensation(node, output, NodeOrder(node)), CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // 尽力而为：一个节点撤不回来，既不能盖住最初那次失败，也不能连累后面还没撤的节点。
+                context.Log($"[Compensation] {node.GetType().Name} was not compensated: {ex.Message}");
+            }
+        }
+    }
+
+    // 发一条观察给可选的观察者，它拿它做什么都不影响运行：抛异常只换回一行日志。
+    // 与日志写入器的契约正好相反（那边失败本身就是证据，必须上报），观察不是证据。
+    private static async Task ObserveAsync(
+        RuntimeContext? session, IRuntimeContext context, ExecutionObservationKind kind, IWorkflowNodeViewModel? node,
+        string? detail, TimeSpan elapsed, CancellationToken ct)
+    {
+        if (session?.Observer is not { } observer) return;
+        var observation = new ExecutionObservation(kind, node, detail, context.Attempt, elapsed);
+        try
+        {
+            await observer.OnObservedAsync(observation, ct);
+        }
+        catch (Exception ex)
+        {
+            context.Log($"[Observer] {kind} was not observed: {ex.Message}");
+        }
+    }
+
+    // 运行结局：把 Status 与 EndedWithError 这两个老成员读准。
+    private static RunOutcome OutcomeOf(IRuntimeContext context)
+        => context.Status switch
+        {
+            "Completed" => RunOutcome.Completed,
+            // "Stopped" 一个词担着两种收尾，靠 EndedWithError 分开。
+            "Stopped" => context.EndedWithError ? RunOutcome.Failed : RunOutcome.Cancelled,
+            // 还在跑，或者根本没跑起来 —— 异常穿出 RunAsync 时 Status 就停在这个分支上。
+            _ => RunOutcome.Unknown,
+        };
+
+    // 引擎手里那个上下文背后的宿主会话。扇出分支拿到的是 BranchRuntimeContext 门面，
+    // 能力要透过它去取，否则门/观察者恰好在宽图最花时间的地方静默失效。
+    // 宿主自带 IRuntimeContext 实现时返回 null —— 与 MaxParallelBranches 同样的取舍：拿不到这些可选能力。
+    private static RuntimeContext? Session(IRuntimeContext context)
+        => context switch
+        {
+            RuntimeContext session => session,
+            BranchRuntimeContext branch => branch.Session as RuntimeContext,
+            _ => null,
+        };
+
+    // 距某个 Stopwatch.GetTimestamp 读数过了多久，供观察事件用。
+    private static TimeSpan ElapsedSince(long timestamp)
+        => TimeSpan.FromSeconds((Stopwatch.GetTimestamp() - timestamp) / (double)Stopwatch.Frequency);
 }

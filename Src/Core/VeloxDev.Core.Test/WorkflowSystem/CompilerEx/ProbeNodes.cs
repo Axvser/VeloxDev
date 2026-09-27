@@ -193,7 +193,15 @@ internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAw
     public void AttachCompileTimeContext(ICompileContext context) => CompileContext = context;
 
     // ── IRuntimeAware ──
-    public void AttachRuntimeContext(IRuntimeContext context) => AttachedContexts.Add(context);
+
+    // 注入时先跑它、再记录上下文。测试可以在这里抛异常，钉住「宿主契约出错时引擎怎么办」。
+    public Action<IRuntimeContext>? AttachGate { get; set; }
+
+    public void AttachRuntimeContext(IRuntimeContext context)
+    {
+        AttachGate?.Invoke(context);
+        AttachedContexts.Add(context);
+    }
 
     // ── IWorkflowViewModel 基础设施 ──
     public event PropertyChangingEventHandler? PropertyChanging;
@@ -227,8 +235,13 @@ internal sealed class RouterNode : ProbeNode, ICompileTimeRouter
 
     public RouterNode(string? name = null) : base(name) { }
 
+    // 整个替换掉解析，用于 Selection 表达不了的情形：运行期抛异常的宿主钩子。
+    // 要在编译之后再设 —— 编译期也会解析一次（payload 为 null）。
+    public Func<object?, Task<object?>>? ResolveOverride { get; set; }
+
     public Task<object?> ResolveRouteKey(object? payload)
     {
+        if (ResolveOverride is { } resolve) return resolve(payload);
         // Dynamic + 编译期 payload(null) → 不可编译判定;Static 恒返回当前选中。
         if (CompileMode == RouterCompileMode.Dynamic && payload is null)
             return Task.FromResult<object?>(null);
@@ -267,8 +280,14 @@ internal sealed class RedirectableNode : ProbeNode, IRedirectable
     /// <summary>Redirect decision: given the runtime context, returns the target Order (null = continue).</summary>
     public Func<IRuntimeContext, int?>? Resolve { get; set; }
 
+    // 设了就抛这个异常，而不是给出任何决定。
+    public Exception? ResolveThrows { get; set; }
+
     public RedirectableNode(string? name = null) : base(name) { }
 
     public Task<int?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
-        => Task.FromResult(Resolve?.Invoke(context));
+    {
+        if (ResolveThrows is { } error) throw error;
+        return Task.FromResult(Resolve?.Invoke(context));
+    }
 }

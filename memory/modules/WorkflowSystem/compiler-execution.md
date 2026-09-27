@@ -1,6 +1,6 @@
 # WorkflowSystem — 编译执行引擎（CompilerEx）的并发模型与契约
 
-> 代码：`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/`（`Compile/` 8 文件 + `Runtime/` 6 文件）。
+> 代码：`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/`（`Compile/` 16 文件 + `Runtime/` 20 文件）。
 > 提交标签用 `[Compiler]`（提交规范把它列为独立模块名），但记忆按模块粒度落在 `WorkflowSystem/` 下。
 > 编译/运行的**流程与段类型**见 [architecture.md](architecture.md) §3.3；本文只写流程之外、读代码才知道的东西。
 
@@ -63,10 +63,10 @@
 
 ## 七、测试在哪、什么没测
 
-- 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，8 文件 / **31 条**（2026-09-27 实测）。**全部用手写探针**（`ProbeNode` 实现了全部三个契约）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
+- 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，**14 文件 / 66 条**（2026-09-27 实测；同日加完五个可选能力契约后从 44 条涨上来）。**全部用手写探针**（`ProbeNode` 实现了全部三个契约）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
 - 并发契约由 `ParallelExecutionTests` 钉住（5 条）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。**做法是先写测试**：其中两条在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`），改完才绿 —— 这类「先让测试证明它能判别」的次序值得沿用。
 - 日志 sink 与上限另由 `CompilerLogWriterTests`（`Core.Test`）钉住：writer 与 `Logs` 逐行同序、上限只裁内存（`0` = 只落 writer）、**writer 抛异常不改变运行**（吞掉并报 `LogWriteFailed`）、分支的 `Warn` 不置会话的 `RedirectRequested`；Agent 路径那条在 `Core.Extension.Test` 的 `WorkflowLifecycleFidelityTests.WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink`。
-- **没测**：编译运行的**取消**（非默认 `CancellationToken` 传进 `RunAsync`）；`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 三个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值。
+- **没测**（2026-09-27 更新：**取消已补测**，见第十节）：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 三个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值；重定向上限（50 次）那条路只有代码审查，没有测试跑进去过。
 
 ## 八、编译图作为可序列化文档（2026-09-27 起）
 
@@ -92,7 +92,33 @@
 - **writer 抛异常不改变运行**：`AppendLog` 吞掉并报 `LogWriteFailed`。不吞的话异常会逃出节点帧、被引擎当成重定向请求 —— 诊断不得改变控制流（同 `AgentPipeline` 隔离 stage 的立场）。
 - 上限默认 `null` = 不限：唯一读者是 Agent 工具（整份进结果 JSON），默认裁剪会静默改变模型看到的内容；`0` + writer 即「只落文件」。
 
-## 十、未做（别当成遗漏）
+## 十、五个可选能力契约：暂停 / 观察 / 重试 / 结构化错误 / 补偿（2026-09-27 起）
+
+一次改动把「引擎没有的那几条轴」做成五个**彼此独立**的契约，一家一个接口。契约全在 `Runtime/Contracts/`，默认实现在 `Runtime/Model/`（一族的委托适配器一个文件，照 `LogWriters.cs` 的先例）；配置点一律是 `RuntimeContext` 的**具体类成员**，不进 `IRuntimeContext`（加成员会破坏每个外部实现，`MaxParallelBranches`/`LogWriter` 已是先例）。**不配置 = 从前行为逐字不变**：没有日志行、没有多一次 `await`、每个节点派发次数照旧。
+
+| 契约 | 轴 | 挂点 | 配了会多出什么 |
+|---|---|---|---|
+| `IExecutionGate` | 暂停 | `DriveAsync` 顶部 | `Status` 出现第四个值 `"Paused"` |
+| `IExecutionObserver` | 可观测 | run 起止 / 每节点 / 每分支 | 一行不写日志的观察流（`ExecutionObservation`） |
+| `INodeRetryPolicy` | 异常→重试 | `DriveAsync` 的 catch 内 | `[Retry n]` 日志行 |
+| `IExecutionErrorSink` | 结构化错误 | 引擎每次记错误处 | `ExecutionError` 记录（取消也送一条） |
+| `IExecutionCompensation` | 补偿 | `RunAsync` 的 finally，逆序 | 失败/取消收尾时的逐节点回调 |
+
+**解析点只有一个**：`RuntimeEngine.Session(IRuntimeContext)`。扇出里节点拿到的是 `BranchRuntimeContext` 门面，能力必须透过它的 `Session` 去取 —— 直接 `context as RuntimeContext` 会在**最花时间的地方**静默失效。这条做过判别实验：把解析改回裸转型，`ExecutionGateTests.AClosedGate_AlsoHoldsTheBranchesOfAFanOut` 当场失败，症状正是「门关着，两条分支都跑了」。
+
+其余几条容易记错的：
+
+- **重试不是新一轮**。`Attempt` 数的是过图的趟数，同时是产物表的戳（`RuntimeContext.cs` 的 `_outputs` 与 `CollectGroupedInputs`），重试绝不碰它；重试只对**抛出的异常**生效，节点自己 `Error()`/`Warn()` 是刻意的重定向请求、不重试（`RuntimeEngine.NextRetryAsync` 先看 `RedirectRequested`）。
+- **`ExponentialBackoffRetry` 的 `maxAttempts` 是总尝试次数（含首次）**。实现原先 `RetryNumber + 1 >= maxAttempts` 少给一次，与它自己的文档矛盾；本轮按文档改成 `RetryNumber >= maxAttempts`，两条重试测试正是被它咬出来的。
+- **补偿看的是整轮、不是单趟**。列表是 `RuntimeContext.CompletedThisRun`（按驱动序、每节点一条、重跑移到末尾），只有 `ResetOutputs` 清它 —— 重定向跳过的前缀只被驱动过一趟，若按趟清就永远补偿不到它。`ExecutionCompensationTests.AfterARedirect_...` 钉住这条（顺序 `r, s1, x, s0`）。
+- **取消只进 sink，不进日志**：宿主自己停的运行不是失败，写一行 `[Error]` 会让以后读 `Logs` 的人以为出过错。`RunOutcome` 才是把 `"Stopped"` 拆成 Failed / Cancelled 的那个成员（`RunOutcome.Unknown` = 取消之外没跑完，例如异常穿出 `RunAsync`）。
+- **观察者与 sink 抛异常都不改运行**（各留一行日志）；补偿器抛异常不掩盖原始失败、也不中断其余节点；重试策略抛异常当作「不再试」。
+
+**同笔修掉的两处宿主契约缺陷（行为变更）**：`ResolveRouteKey` 与 `ResolveRedirectAsync` 原先无守卫，宿主实现一抛异常就穿出 `RunAsync`、`Status` 停在 `"Running"`（会话谎称还在跑）；`IRuntimeAware.AttachRuntimeContext` 在 `try` 之外调用，异常落进空 catch ⇒ 节点被**无声跳过**。现在三者都走与节点体同一套失败纪律（记 Error → 重定向或结束），`EngineHostContractFailureTests` 三条分别钉住。重定向上限那条路也顺手补了 `Status = "Stopped"`（原先同样停在 `"Running"`），但它**只有代码审查、没有测试**跑进去过。
+
+**注释风格别照抄**：`CompilerEx` 的 `internal`/`private` 成员上还是规范生效前写的英语 `///`（`RuntimeEngine` 里那几个老私有方法、`BranchRuntimeContext` 整份）。本轮新写的行按手册 §二 用中文 `//`，所以文件里两种并存 —— **以手册为准，不要拿旁边的老注释当标准**。
+
+## 十一、未做（别当成遗漏）
 
 | 未做 | 说明 |
 |---|---|
@@ -100,3 +126,5 @@
 | 只编译的两个工具纳入闸门 | Agent 侧的 `CompileWorkflow`/`CompileNodeResult` 会写节点编译身份却不受 `WithAllowNodeExecution` 约束 —— 属 `VeloxDev.Core.Extension` 模块 |
 | 编译执行时补 `Sender`/`Receiver` | 第五节的不对称仍未消 |
 | `ExecuteCommandOnNode` 的完成语义 | Agent 侧它同步返回、不等完成，而同族的 `ExecuteNode` 会等 `Exited` —— 属 Extension 模块 |
+| 检查点 / 恢复（第十节那条路的阶段 3） | 契约与 DTO 放 Core 的 `CompilerEx`、落盘实现放 `Core.Extension`（同 `CompiledGraphEx` 的做法）。**用户要先看过接口形状再动**，所以没跟着这轮做 |
+| 七家 demo 的暂停按钮 | 本轮只到引擎与契约层。除 Avalonia 外像素层验不了（合成输入进不了输入管线，已实测），而 WinForms 连 `ControllerView` 都没有（四个按钮在 `Form1.cs:336-343` 命令式搭的）⇒「加一个按钮」是七处彼此独立的改动 |
