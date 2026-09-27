@@ -219,11 +219,51 @@ public partial class WorkflowView : UserControl
     private void InitializeNetworkDemo()
     {
         UnsubscribeAutoScroll(_workflowViewModel);
-        _workflowViewModel = WorkflowDemoSession.Create().Tree;
+        _demo = WorkflowDemoSession.Create();
+        _workflowViewModel = _demo.Tree;
         DataContext = _workflowViewModel;
         SubscribeAutoScroll(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+
+        // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。
+        _demo.Controller.RunCommand.Exited += _ => RefreshRunControls();
+        _demo.Controller.ResumeCommand.Exited += _ => RefreshRunControls();
+        RefreshRunControls();
+    }
+
+    /// <summary>
+    /// The demo session behind the tree on screen — <c>null</c> when the tree came from a file instead of from
+    /// <see cref="WorkflowDemoSession.Create"/>. The run controls live on it, not on the tree.
+    /// </summary>
+    private WorkflowDemoSession? _demo;
+
+    // 门与检查点都在会话上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做。
+    private void RefreshRunControls()
+    {
+        ContinueFromCheckpointButton.IsEnabled = _demo?.HasCheckpoint == true;
+        RunGateState.Text = _demo?.Gate.IsPaused == true ? "已暂停" : "空闲";
+    }
+
+    private void PauseWorkflow(object? sender, RoutedEventArgs e)
+    {
+        if (_demo is null) return;
+        _demo.Gate.Pause();
+        RunGateState.Text = "已暂停：停在下一个节点边界";
+    }
+
+    private void ResumeWorkflow(object? sender, RoutedEventArgs e)
+    {
+        if (_demo is null) return;
+        _demo.Gate.Resume();
+        RunGateState.Text = "运行中";
+    }
+
+    private async void ContinueFromCheckpoint(object? sender, RoutedEventArgs e)
+    {
+        if (_demo is null) return;
+        RunGateState.Text = "从检查点继续…";
+        await _demo.Controller.ResumeCommand.ExecuteAsync(null);
     }
 
     private void OnSendToAgent(object? sender, RoutedEventArgs e)

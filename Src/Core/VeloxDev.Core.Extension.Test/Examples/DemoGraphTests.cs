@@ -8,6 +8,7 @@ using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
+using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -41,6 +42,21 @@ public class DemoGraphTests
         /// <summary>One line per invocation — what the node was handed, which is what a failure here is about.</summary>
         public List<string> Trail { get; } = [];
 
+        /// <summary>
+        /// When positive, the invocation with this number stops the run the way a host's Stop does. The engine reads
+        /// an <see cref="OperationCanceledException"/> as cancellation rather than failure, so the run ends at that
+        /// node boundary and everything already driven stays in the checkpoint.
+        /// </summary>
+        public int CancelAtInvocation { get; set; } = -1;
+
+        private int _invocations;
+
+        /// <summary>
+        /// Called on this stub's own invocation number — a run is held or stopped from inside it, which is where a
+        /// host's Pause and Stop land anyway: the engine only ever looks at the gate at a node boundary.
+        /// </summary>
+        public Action<int>? OnInvocation { get; set; }
+
         public int Drives(string title) => _drives.TryGetValue(title, out var n) ? n : 0;
 
         protected override Task<string> InvokePythonAsync(string script, object? payload, string pythonExe, CancellationToken ct)
@@ -51,6 +67,11 @@ public class DemoGraphTests
             var drive = Read(input, "_drive");
             _drives[title] = drive;
             Trail.Add($"{title}|drive={drive}|attempt={attempt}|payload={payload?.GetType().Name ?? "null"}");
+
+            var invocation = ++_invocations;
+            OnInvocation?.Invoke(invocation);
+            if (CancelAtInvocation > 0 && invocation >= CancelAtInvocation)
+                throw new OperationCanceledException(ct);
 
             // A failed delivery, not a reported one: the point of this node is the retry policy, and only a throw
             // reaches it — a script that reports an error is asking the run to stop, which is a different thing.
@@ -112,21 +133,67 @@ public class DemoGraphTests
         }
     }
 
-    private static async Task<WorkflowDemoSession> RunAsync()
+    /// <summary>One scratch directory per test: the checkpoint and the log are per-run files, not shared state.</summary>
+    private readonly List<string> _scratch = [];
+
+    private readonly List<WorkflowDemoSession> _sessions = [];
+
+    // 先释放会话再删目录：日志是会话开的文件，句柄还开着时目录删不掉。
+    [TestCleanup]
+    public void Cleanup()
     {
-        var session = WorkflowDemoSession.Create();
+        foreach (var session in _sessions) session.Dispose();
+        _sessions.Clear();
+        foreach (var directory in _scratch)
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        _scratch.Clear();
+    }
+
+    private string Scratch()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"veloxdev-demo-graph-{Guid.NewGuid():N}");
+        _scratch.Add(directory);
+        return directory;
+    }
+
+    private WorkflowDemoSession Stubbed()
+    {
+        var session = WorkflowDemoSession.Create(Scratch());
+        _sessions.Add(session);
         foreach (var node in session.Tree.Nodes.OfType<PythonScriptNodeViewModel>())
             node.SetHelper(new StubPythonHelper());
-
-        await session.Controller.CompileCommand.ExecuteAsync(null);
-
-        // ExecuteAsync queues the work and returns; the command's Exited event is the completion signal (the same one
-        // the Agent's ExecuteNode waits on).
-        var finished = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        session.Controller.RunCommand.Exited += _ => finished.TrySetResult(true);
-        await session.Controller.RunCommand.ExecuteAsync(null);
-        await finished.Task.WaitAsync(TimeSpan.FromSeconds(60));
         return session;
+    }
+
+    private static IEnumerable<StubPythonHelper> Stubs(WorkflowDemoSession session)
+        => session.Tree.Nodes.OfType<PythonScriptNodeViewModel>().Select(n => (StubPythonHelper)n.GetHelper());
+
+    private static int Drives(WorkflowDemoSession session) => Stubs(session).Sum(h => h.Trail.Count);
+
+    /// <summary>
+    /// Runs through the controller's own command. <c>ExecuteAsync</c> queues the work and returns; the command's
+    /// <c>Exited</c> event is the completion signal (the same one the Agent's <c>ExecuteNode</c> waits on).
+    /// </summary>
+    private static async Task RunCommandAsync(IVeloxCommand command)
+    {
+        var finished = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        command.Exited += _ => finished.TrySetResult(true);
+        await command.ExecuteAsync(null);
+        await finished.Task.WaitAsync(TimeSpan.FromSeconds(60));
+    }
+
+    private static async Task<WorkflowDemoSession> RunAsync(WorkflowDemoSession session)
+    {
+        await CompileAsync(session);
+        await RunCommandAsync(session.Controller.RunCommand);
+        return session;
+    }
+
+    /// <summary>Compiles and waits for the command to have really finished — <c>ExecuteAsync</c> only queues it.</summary>
+    private static async Task CompileAsync(WorkflowDemoSession session)
+    {
+        await RunCommandAsync(session.Controller.CompileCommand);
+        Assert.IsNotEmpty(session.Controller.Compiler.Graphs, "the demo graph must compile before it can be driven");
     }
 
     private static PythonScriptNodeViewModel PythonNode(WorkflowDemoSession session, string title)
@@ -160,8 +227,8 @@ public class DemoGraphTests
     [TestMethod]
     public async Task TheCompiledGraph_CarriesEveryShapeTheEngineDrives()
     {
-        var session = WorkflowDemoSession.Create();
-        await session.Controller.CompileCommand.ExecuteAsync(null);
+        var session = WorkflowDemoSession.Create(Scratch());
+        await CompileAsync(session);
         var graph = session.Controller.Compiler.Graphs.First();
 
         var branches = Segments(graph).OfType<BranchSegment>().ToList();
@@ -183,7 +250,7 @@ public class DemoGraphTests
     [TestMethod]
     public async Task OneRun_ShowsEveryCapabilityTheGraphWasBuiltFor()
     {
-        var session = await RunAsync();
+        var session = await RunAsync(Stubbed());
         var runtime = Assert.IsInstanceOfType<RuntimeContext>(session.Controller.RuntimeContext);
 
         // It finished, and it finished on the second pass: the validator sent it back.
@@ -232,4 +299,85 @@ public class DemoGraphTests
         Assert.AreEqual("Completed", audit.LastStatus);
         Assert.IsNull(audit.RedirectTo, "the fallback target is cleared at the start of the drive that follows");
     }
+
+    /// <summary>
+    /// The pause control the demo's sidebar binds: the session hands its gate to every run, and a held gate stops
+    /// the run before the first node rather than somewhere arbitrary inside one.
+    /// </summary>
+    [TestMethod]
+    public async Task TheDemoSessionsGate_HoldsTheRun_UntilItIsLetGo()
+    {
+        var session = Stubbed();
+        await CompileAsync(session);
+
+        // Pause from inside the second node: the gate is only ever read at a node boundary, so that is exactly
+        // where a host's Pause button takes effect too.
+        StubOf(session, "Numeric Stats").OnInvocation = n => { if (n == 1) session.Gate.Pause(); };
+
+        var run = RunCommandAsync(session.Controller.RunCommand);
+        await Task.Delay(300);
+        Assert.AreEqual(2, Drives(session), "a held run stops at the boundary after the node that paused it");
+        Assert.IsFalse(run.IsCompleted, "and it is parked, not finished");
+        Assert.IsTrue(session.Gate.IsPaused);
+
+        session.Gate.Resume();
+        await run;
+
+        Assert.IsTrue(Drives(session) > 5, "letting it go carries the run on");
+        Assert.AreEqual("Completed", ((RuntimeContext)session.Controller.RuntimeContext!).Status);
+        Assert.IsFalse(session.Gate.IsPaused);
+    }
+
+    /// <summary>
+    /// Stop in the middle, then continue: the two controls the sidebar offers for a run that did not finish. What
+    /// the stopped run had already driven is not driven again, and the nodes behind it still see those outputs.
+    /// <para>
+    /// The stop lands in the second pass on purpose. This graph's first pass is the quick set the audit is built to
+    /// refuse, so everything it produced is thrown away by the redirect — the place worth carrying on from is the
+    /// one the second pass left behind.
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    public async Task StoppingARun_AndContinuingFromItsCheckpoint_SkipsWhatWasAlreadyDone()
+    {
+        var session = Stubbed();
+        await CompileAsync(session);
+
+        // The anomaly scan stops the run on its second drive — the one that belongs to the pass the redirect
+        // started. An OperationCanceledException is read as cancellation, so the run ends at that node boundary and
+        // what came before stays in the checkpoint. (The counter is per stub: each node counts its own drives.)
+        StubOf(session, "Anomaly Scan").CancelAtInvocation = 2;
+        await RunCommandAsync(session.Controller.RunCommand);
+
+        var stopped = Assert.IsInstanceOfType<RuntimeContext>(session.Controller.RuntimeContext);
+        Assert.AreEqual(RunOutcome.Cancelled, stopped.Outcome, "the run stopped, it did not fail");
+        Assert.AreEqual(2, stopped.Attempt, "it had already been sent back once by the audit");
+        Assert.IsTrue(session.HasCheckpoint, "and it left its place behind — that is what the Resume control reads");
+
+        var place = await session.Checkpoints.LoadAsync(CancellationToken.None);
+        Assert.IsNotNull(place);
+        var generatorKey = ((IWorkflowIdentifiable)PythonNode(session, "Generate Dataset")).RuntimeId;
+        Assert.IsTrue(place.Outputs.ContainsKey(generatorKey),
+            "the place files the generator's success under its own identity, not under a position");
+
+        var generateBefore = StubOf(session, "Generate Dataset").Trail.Count;
+        var mergeBefore = StubOf(session, "Merge Report").Trail.Count;
+        Assert.AreEqual(2, generateBefore, "precondition: both passes drove the generator");
+        Assert.AreEqual(1, mergeBefore, "precondition: the merge ran on the first pass only — the second was stopped");
+
+        StubOf(session, "Anomaly Scan").CancelAtInvocation = -1;
+        await RunCommandAsync(session.Controller.ResumeCommand);
+
+        var resumed = Assert.IsInstanceOfType<RuntimeContext>(session.Controller.RuntimeContext);
+        Assert.AreEqual("Completed", resumed.Status);
+        Assert.AreEqual(2, resumed.Attempt, "the resume carries on in the pass the checkpoint was taken in");
+        Assert.AreEqual(generateBefore, StubOf(session, "Generate Dataset").Trail.Count,
+            "the generator is not driven again: the checkpoint records it as done, and the restored report is the " +
+            "full one, so the audit has no reason to send the run back this time");
+        Assert.AreEqual(mergeBefore + 1, StubOf(session, "Merge Report").Trail.Count,
+            "the merge had not run when the run stopped, so the resume drives it");
+    }
+
+    private static StubPythonHelper StubOf(WorkflowDemoSession session, string title)
+        => (StubPythonHelper)PythonNode(session, title).GetHelper();
 }

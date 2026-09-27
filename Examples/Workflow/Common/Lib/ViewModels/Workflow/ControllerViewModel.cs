@@ -56,19 +56,35 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         (Parent as TreeViewModel)?.RefreshCompiledStructure(this);
     }
 
+    /// <summary>
+    /// Where a <see cref="ResumeCommand"/> finds the run's last place. Registered by whoever put the checkpoint
+    /// store on the session; with none registered there is nothing to carry on from.
+    /// </summary>
+    /// <remarks>
+    /// <c>internal</c> on purpose: the serializer writes every <b>public</b> writable property, and a delegate
+    /// written out cannot be read back — loading a saved tree would throw instead.
+    /// </remarks>
+    internal Func<CancellationToken, Task<ExecutionCheckpoint?>>? CheckpointSource { get; set; }
+
     [AgentContext(AgentLanguages.Chinese, "运行：用编译图 + 执行引擎驱动整条链")]
     [AgentContext(AgentLanguages.English, "Run: drive the compiled graph with the execution engine.")]
     [VeloxCommand]
-    private async Task Run(object? parameters, CancellationToken ct)
+    private Task Run(object? parameters, CancellationToken ct) => DriveAsync(resume: false, ct);
+
+    /// <summary>Carries on from the run's last checkpoint instead of starting over.</summary>
+    /// <remarks>
+    /// The same graph, a fresh session, and the place a previous run wrote down: the nodes that place
+    /// records as done are not driven again, and what they produced is restored for the nodes behind them.
+    /// </remarks>
+    [AgentContext(AgentLanguages.Chinese, "继续：从上次运行的检查点接着跑（已完成的节点不再驱动，产物照旧交给下游）")]
+    [AgentContext(AgentLanguages.English, "Resume: carry on from the previous run's checkpoint — done nodes are not driven again, their outputs are restored.")]
+    [VeloxCommand]
+    private Task Resume(object? parameters, CancellationToken ct) => DriveAsync(resume: true, ct);
+
+    private async Task DriveAsync(bool resume, CancellationToken ct)
     {
         var graph = Compiler.Graphs.FirstOrDefault();
         if (graph is null) return;
-
-        // IsActive 是这里写、别处读的：Blazor 的状态栏与 Stop 按钮直接绑它，树的 IsWorkflowRunning 由它推导。
-        // 在此之前它从没被写过，所以状态栏永远显示 Idle、Stop 永远禁用。
-        var tree = Parent as TreeViewModel;
-        IsActive = true;
-        tree?.BeginWorkflowRun();
 
         // 种子必须在这里进会话。`SeedPayload` 的契约（见它自己的 AgentContext 文本）是「执行开始时注入工作流
         // 上下文」，可它此前从没被写进 RuntimeContext —— 七个平台的输入框都双向绑着它，却对运行没有任何影响；
@@ -76,13 +92,32 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         // 原样传入，空串就是空负载（与给 Agent 传 seed: "" 等价），不做 null 转换。
         var context = new RuntimeContext { IsRunning = true, Data = SeedPayload };
         _configureSession?.Invoke(context);
+
+        // 会话先挂上去，下面「没有检查点」的那行才有人看得到。
         RuntimeContext = context;
         OnPropertyChanged(nameof(RuntimeContext));
+
+        ExecutionCheckpoint? place = null;
+        if (resume)
+        {
+            place = CheckpointSource is { } source ? await source(ct) : null;
+            if (place is null)
+            {
+                context.Log("Resume: no checkpoint to carry on from — run once first.");
+                return;
+            }
+        }
+
+        // IsActive 是这里写、别处读的：Blazor 的状态栏与 Stop 按钮直接绑它，树的 IsWorkflowRunning 由它推导。
+        // 在此之前它从没被写过，所以状态栏永远显示 Idle、Stop 永远禁用。
+        var tree = Parent as TreeViewModel;
+        IsActive = true;
+        tree?.BeginWorkflowRun();
 
         _runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
         {
-            await new RuntimeEngine().RunAsync(graph, context, _runCts.Token);
+            await new RuntimeEngine().RunAsync(graph, context, _runCts.Token, place);
         }
         finally
         {

@@ -153,6 +153,8 @@
 
 测试：`Core.Test/…/ExecutionCheckpointTests.cs`（5 条）+ `Core.Extension.Test/Serialization/ExecutionCheckpointSerializationTests.cs`（5 条）。判别性最强的一条是「半途停 → 恢复」：断言既要求没跑过的分支被驱动，也要求**被跳过的那个节点在汇合点里仍读得到它当初的产物** —— 只测「跳过了」的话，产物铺没铺回去是看不出来的。
 
+**demo 侧已接（2026-09-27）**：门与检查点是六个能力里唯一「得有人按一下」的两件（其余四件在运行里自己生效），所以它们在 demo 里有可点的东西 —— `WorkflowDemoSession.Gate` 交给每一轮运行、`HasCheckpoint` 给按钮判可用；`ControllerViewModel` 因此有了 `ResumeCommand`（`Run`/`Resume` 共用 `DriveAsync`，`CheckpointSource` 由会话注册且是 `internal`，所以不进序列化）。Avalonia demo 的侧栏有一块「运行控制」（Pause / Resume / 从检查点继续），**其余六家还差同一块**。两点值得记：`ConfigureRun` 每次都 `Gate.Resume()`（一轮运行不带着上一轮的暂停开始）⇒ **「运行前先暂停」不成立**，暂停只能在运行中途按（也正是 UI 的用法）；以及会话的暂存目录可指定（`Create(scratchDirectory)`）—— 并行测试各自一个目录，否则日志与检查点这两条**固定路径**会互相踩。
+
 ## 十二、重定向与分支的三处边界（2026-09-27 实测，做 demo 那张展示图时撞出来的）
 
 1. **目标落进（嵌套）分支内部时，整条分支会被跳过。** `RunBranchAsync` 的判断是 `if (redirectTarget is int t && routerOrder < t) return false;` —— 注释写的是「目标在分支之前则整条跳过」，条件表达的却是「路由器在目标之前」。于是目标若位于该分支**内部**（`routerOrder < target` 成立），分支被整个跳过 ⇒ 目标永远到不了，这一趟**一个节点都不会重跑**。实测：demo 把目标写成 `Generate Dataset`（order 3，在 Source Selector 分支内，该分支路由器 order 2）→ 日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`。**可行的目标是包住它的那条分支之前**的节点（demo 改指 order 1 的 `Ticker` ⇒ 整条管线从头重跑）。

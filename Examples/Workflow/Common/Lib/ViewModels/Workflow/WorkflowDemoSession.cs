@@ -24,7 +24,7 @@ namespace Demo.Workflow;
 ///
 /// The Python nodes execute real scripts via CliWrap; their input/output ports are dynamic (PythonPortProvider).
 /// </summary>
-public sealed class WorkflowDemoSession
+public sealed class WorkflowDemoSession : IDisposable
 {
     // ── Built-in Python scripts (the "valuable" demo content) ──────────────────
     // Contract: python <script.py> <input.json> <output.json>; the script reads input.json and writes its
@@ -218,11 +218,14 @@ public sealed class WorkflowDemoSession
         json.dump(d, open(sys.argv[2], 'w', encoding='utf-8'))
         """;
 
-    private WorkflowDemoSession(TreeViewModel tree, ControllerViewModel primary)
+    private WorkflowDemoSession(TreeViewModel tree, ControllerViewModel primary, string scratchDirectory)
     {
         Tree = tree;
         Controller = primary;
+        LogPath = Path.Combine(scratchDirectory, "workflow.log");
+        CheckpointPath = Path.Combine(scratchDirectory, "checkpoint.json");
         Checkpoints = new FileCheckpointStore(CheckpointPath);
+        primary.CheckpointSource = ct => Checkpoints.LoadAsync(ct);
 
         // The run's capabilities are configured where the graph is built, so every platform demo's Run button shows
         // the same thing without a line of per-platform code.
@@ -237,21 +240,39 @@ public sealed class WorkflowDemoSession
     public ObservableCollection<ExecutionError> Diagnostics { get; } = [];
 
     /// <summary>Where the run's log is appended (the writer is the complete record; the in-memory view is what the UI binds).</summary>
-    public string LogPath { get; } = Path.Combine(AppContext.BaseDirectory, "pycache", "workflow.log");
+    public string LogPath { get; }
 
     /// <summary>Where the run's place is written after each node succeeds — the file an interrupted run resumes from.</summary>
-    public string CheckpointPath { get; } = Path.Combine(AppContext.BaseDirectory, "pycache", "checkpoint.json");
+    public string CheckpointPath { get; }
 
     /// <summary>
-    /// The store the run checkpoints into. Read it back and hand the checkpoint to
-    /// <see cref="RuntimeEngine.RunAsync"/> to carry a stopped run on from where it stopped — the demo writes the
-    /// place, and no view offers the button yet.
+    /// The store the run checkpoints into. The controller's <c>ResumeCommand</c> reads it back and hands the
+    /// checkpoint to <see cref="RuntimeEngine.RunAsync"/>, so a stopped run carries on from where it stopped.
     /// </summary>
     public IExecutionCheckpointStore Checkpoints { get; }
 
-    private ILogWriter? _logWriter;
+    /// <summary>Whether a checkpoint is on disk to carry on from — what a view enables its Resume control by.</summary>
+    public bool HasCheckpoint => File.Exists(CheckpointPath);
+
+    /// <summary>
+    /// The pause point of a run: <see cref="ManualExecutionGate.Pause"/> holds it at the next node boundary,
+    /// <see cref="ManualExecutionGate.Resume"/> lets it go. Releasable from any thread, including the one driving.
+    /// </summary>
+    public ManualExecutionGate Gate { get; } = new();
+
+    private TextWriterLogWriter? _logWriter;   // 具体类型：接口上没有 Dispose，而文件是会话开的
     private int _nodesDriven;
     private int _retries;
+
+    /// <summary>
+    /// Closes the log this session opened. Who opened the file closes it — see <see cref="TextWriterLogWriter.For"/>
+    /// — and the session is the one that did, so a host that swaps its tree should let the old session go.
+    /// </summary>
+    public void Dispose()
+    {
+        _logWriter?.Dispose();
+        _logWriter = null;
+    }
 
     /// <summary>
     /// Configures the session one Run drives. Nothing here is required by the engine — with all of it unset a run
@@ -264,6 +285,10 @@ public sealed class WorkflowDemoSession
         // 目录要先建出来：pycache 原本是第一个 python 节点跑起来才有的，而 writer 在运行之前就要开文件。
         _logWriter ??= TextWriterLogWriter.For(Scratch(LogPath));
         context.LogWriter = _logWriter;
+
+        // 一次运行绝不带着上一次留下的暂停开始：门是宿主的手，而每次 Run 都是新的一轮。
+        Gate.Resume();
+        context.ExecutionGate = Gate;
 
         // The publish node's first delivery fails on purpose; this is what gets it through.
         context.RetryPolicy = new ExponentialBackoffRetry(maxAttempts: 3, baseDelayMs: 200, factor: 2.0);
@@ -306,8 +331,16 @@ public sealed class WorkflowDemoSession
         return path;
     }
 
-    public static WorkflowDemoSession Create()
+    /// <summary>Creates the demo's session.</summary>
+    /// <param name="scratchDirectory">
+    /// Where the run's log and checkpoint are written. Defaults to <c>pycache</c> beside the executable — next to
+    /// the Python nodes' own scratch files, and never the working tree, which an IDE launch would otherwise dirty.
+    /// Pass one when several runs must not share a place (a test suite, say).
+    /// </param>
+    public static WorkflowDemoSession Create(string? scratchDirectory = null)
     {
+        scratchDirectory ??= Path.Combine(AppContext.BaseDirectory, "pycache");
+
         var tree = new TreeViewModel();
         tree.Layout.OriginSize = new Size(3600, 1000);
         var helper = tree.GetHelper();
@@ -464,7 +497,7 @@ public sealed class WorkflowDemoSession
 
         controllers.Add(controller);
 
-        return new WorkflowDemoSession(tree, controller);
+        return new WorkflowDemoSession(tree, controller, scratchDirectory);
     }
 
     /// <summary>
@@ -488,10 +521,10 @@ public sealed class WorkflowDemoSession
     /// Creates a session from an already-deserialized <see cref="TreeViewModel"/>.
     /// The primary controller is the first <see cref="ControllerViewModel"/> in the tree.
     /// </summary>
-    public static WorkflowDemoSession FromTree(TreeViewModel tree)
+    public static WorkflowDemoSession FromTree(TreeViewModel tree, string? scratchDirectory = null)
     {
         var controllers = tree.Nodes.OfType<ControllerViewModel>().ToList();
         var controller = controllers.FirstOrDefault() ?? new ControllerViewModel();
-        return new WorkflowDemoSession(tree, controller);
+        return new WorkflowDemoSession(tree, controller, scratchDirectory ?? Path.Combine(AppContext.BaseDirectory, "pycache"));
     }
 }

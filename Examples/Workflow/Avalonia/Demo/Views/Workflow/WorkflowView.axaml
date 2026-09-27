@@ -210,6 +210,28 @@
 						<ToggleSwitch Grid.Column="1"
 									  IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}" />
 					</Grid>
+
+					<!-- 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
+					     （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
+					     按钮走 code-behind 而不是 Command 绑定：侧栏的 DataContext 是树，而门与检查点都在
+					     会话上、不在树上 —— 与同栏的 Save / Load 同一个理由。 -->
+					<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
+						<StackPanel Spacing="6">
+							<Grid ColumnDefinitions="*,Auto">
+								<TextBlock Grid.Column="0" Text="运行控制" Foreground="#E2E8F0" FontWeight="SemiBold" />
+								<TextBlock Grid.Column="1" x:Name="RunGateState" Text="空闲" Foreground="#a0a0a0" />
+							</Grid>
+							<Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+								<Button Grid.Column="0" Content="Pause" Click="PauseWorkflow" HorizontalAlignment="Stretch" />
+								<Button Grid.Column="1" Content="Resume" Click="ResumeWorkflow" HorizontalAlignment="Stretch" />
+							</Grid>
+							<Button x:Name="ContinueFromCheckpointButton"
+									Content="从检查点继续"
+									Click="ContinueFromCheckpoint"
+									HorizontalAlignment="Stretch"
+									IsEnabled="False" />
+						</StackPanel>
+					</Border>
 						<!-- Agent chat -->
 						<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
 							<StackPanel Spacing="6">
