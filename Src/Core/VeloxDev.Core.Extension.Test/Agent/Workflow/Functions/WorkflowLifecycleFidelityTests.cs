@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -146,6 +147,30 @@ public class WorkflowLifecycleFidelityTests
         Assert.IsTrue(json["targetReached"]?.Value<bool>() ?? false,
             "the queried node itself must be reported as reached");
         Assert.IsFalse(json["endedWithError"]?.Value<bool>() ?? true);
+    }
+
+    /// <summary>
+    /// The scope is the only carrier a host has for a compiled run's log sink: the session a chain run creates is a
+    /// local inside the toolkit and never surfaces, so without this the feature would be unreachable from the Agent
+    /// path.
+    /// </summary>
+    [TestMethod]
+    public void WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var lines = new List<string>();
+        var scope = new WorkflowAgentScope(tree)
+            .WithAllowNodeExecution(true)
+            .WithLogWriter(new DelegateLogWriter(lines.Add));
+
+        var result = InvokeTool(scope, "GetNodeResult", ("nodeIndex", 0));
+
+        Assert.AreEqual("ok", JObject.Parse(result)["status"]?.Value<string>());
+        Assert.IsTrue(lines.Count > 0, "the run's lines must reach the writer the host registered");
+        Assert.IsTrue(lines.Any(l => l.Contains(nameof(NodeDefaultViewModel))),
+            $"the engine's per-node line should be among them; got: {string.Join(" | ", lines)}");
     }
 
     [TestMethod]

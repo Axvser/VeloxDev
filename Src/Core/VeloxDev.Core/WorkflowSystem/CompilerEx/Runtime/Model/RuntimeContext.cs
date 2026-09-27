@@ -95,20 +95,67 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// <summary>Gets the next execution sequence number (auto-incremented).</summary>
     public int Next() => Interlocked.Increment(ref _sequence);
 
+    /// <summary>
+    /// Where the run's lines are diverted to, in addition to <see cref="Logs"/>; <c>null</c> (the default) keeps
+    /// them in memory only. Set it to a file-backed writer to stop trading memory for history — see
+    /// <see cref="ILogWriter"/> for the threading contract.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not on <see cref="IRuntimeContext"/>: adding a member there would break every external
+    /// implementation, and this is host policy rather than session state (a custom context simply keeps the
+    /// in-memory behaviour).
+    /// </remarks>
+    public ILogWriter? LogWriter { get; set; }
+
+    /// <summary>
+    /// How many lines <see cref="Logs"/> keeps — the oldest are dropped first. <c>null</c> (the default) keeps
+    /// everything; <c>0</c> keeps none while <see cref="LogWriter"/> still receives every line.
+    /// </summary>
+    /// <remarks>
+    /// Pair it with <see cref="LogWriter"/>: the writer is the full-fidelity record, this is the bounded view a
+    /// host can leave in memory. Unbounded by default on purpose — the Agent's <c>RunCompiledWorkflow</c> tool
+    /// serializes <see cref="Logs"/> into its result, so trimming by default would silently change what the model
+    /// is shown.
+    /// </remarks>
+    public int? MaxRetainedLogs { get; set; }
+
+    /// <summary>Raised when <see cref="LogWriter"/> throws. The line is still kept in <see cref="Logs"/> and the run
+    /// carries on — diagnostics never change what the run does.</summary>
+    public event EventHandler<LogWriteFailedEventArgs>? LogWriteFailed;
+
+    /// <summary>Appends one line: the writer first (it is the complete record), then the retained view.</summary>
+    private void AppendLog(string line)
+    {
+        // The line is handed to the writer before the retention check, and a writer that throws is not allowed to
+        // reach the run: AppendLog runs inside node frames, so an escaping exception would surface as a *node*
+        // failure and the engine would read it as a redirect request. AgentPipeline isolates its stages for the
+        // same reason; here the equivalent is to report and drop.
+        if (LogWriter is { } writer)
+        {
+            try { writer.Write(line); }
+            catch (Exception ex) { LogWriteFailed?.Invoke(this, new LogWriteFailedEventArgs(line, ex)); }
+        }
+
+        _logs.Add(line);
+
+        if (MaxRetainedLogs is int cap && cap >= 0)
+            while (_logs.Count > cap) _logs.RemoveAt(0);
+    }
+
     /// <summary>Nodes/the engine push a plain log line (with a sequence prefix).</summary>
-    public void Log(string entry) => _logs.Add($"{Next():00}. {entry}");
+    public void Log(string entry) => AppendLog($"{Next():00}. {entry}");
 
     /// <summary>Nodes/the engine push an exception/error message (sequence prefix with an [Error] marker). Also requests a redirect.</summary>
     public void Error(string message)
     {
-        _logs.Add($"{Next():00}. [Error] {message}");
+        AppendLog($"{Next():00}. [Error] {message}");
         RedirectRequested = true;
     }
 
     /// <summary>Nodes/the engine push a warning message (sequence prefix with a [Warning] marker). Also requests a redirect.</summary>
     public void Warn(string message)
     {
-        _logs.Add($"{Next():00}. [Warning] {message}");
+        AppendLog($"{Next():00}. [Warning] {message}");
         RedirectRequested = true;
     }
 

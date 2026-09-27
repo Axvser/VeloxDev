@@ -209,12 +209,17 @@ public sealed class RuntimeEngine
     /// each one starts from the source payload and can never see a sibling's output.
     /// </para>
     /// <para>
-    /// Determinism, in branch order: each branch's logs are merged as one block, and when several branches ask to
-    /// redirect the first in order wins while the rest are logged and ignored — first by *order*, not by wall
-    /// clock, so a run stays reproducible. The payload left in the session is the last branch's, which is what
-    /// the sequential loop used to leave there. A terminal branch hit inside any branch ends the whole run. One
-    /// deliberate change: a branch that throws no longer aborts its siblings mid-flight — the exception surfaces
-    /// once the group has finished.
+    /// Determinism, in branch order: when several branches ask to redirect the first in order wins while the rest
+    /// are logged and ignored — first by *order*, not by wall clock, so a run stays reproducible. The payload left
+    /// in the session is the last branch's, which is what the sequential loop used to leave there. A terminal
+    /// branch hit inside any branch ends the whole run. One deliberate change: a branch that throws no longer
+    /// aborts its siblings mid-flight — the exception surfaces once the group has finished.
+    /// </para>
+    /// <para>
+    /// <b>Logs are not merged per branch.</b> Each branch writes straight into the session, so the lines read in
+    /// the order they actually happened — which is what makes a file-backed <see cref="ILogWriter"/> and
+    /// <see cref="IRuntimeContext.Logs"/> agree line for line. That ordering is the reason the sequence prefixes
+    /// stay meaningful; do not reintroduce a per-branch buffer.
     /// </para>
     /// </summary>
     private async Task<bool> RunParallelAsync(ParallelSegment parallel, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
@@ -246,10 +251,8 @@ public sealed class RuntimeEngine
 
         var terminated = await Task.WhenAll(tasks);
 
-        // Merge in branch order, logs first so the engine's own remarks about the group read as a footer.
-        for (int i = 0; i < count; i++)
-            foreach (var line in branchContexts[i].Logs)
-                context.Logs.Add(line);
+        // No log merging: each branch writes straight into the session (see BranchRuntimeContext.Logs), so the
+        // run's lines read in the order they happened even though the branches interleaved.
 
         int? winner = null;
         var winnerIndex = -1;

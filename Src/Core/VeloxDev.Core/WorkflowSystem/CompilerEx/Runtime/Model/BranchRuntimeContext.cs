@@ -13,10 +13,12 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// attempt at this change failed exactly there, and the engine's existing redirect/prefix tests caught it.
 /// </para>
 /// <para>
-/// So each branch gets its own object instead. It owns the payload, the redirect request and a private log
-/// buffer; everything else — identity, progress, the output registry, the shared variables — is forwarded to the
-/// session the host created. That is what keeps the host's single session meaningful (the UI still binds one
-/// session) and keeps join points aggregating one registry.
+/// So each branch gets its own object instead. It owns the payload and the redirect request; everything else —
+/// identity, progress, the log, the output registry, the shared variables — is forwarded to the session the host
+/// created. Forwarding the log rather than buffering it is deliberate: the run's lines must read in the order they
+/// happened, interleaved branches included, so that a file-backed <see cref="ILogWriter"/> and
+/// <see cref="IRuntimeContext.Logs"/> tell exactly the same story. That is also what keeps the host's single
+/// session meaningful (the UI still binds one session) and keeps join points aggregating one registry.
 /// </para>
 /// <para>
 /// Only nodes inside a fan-out see this type, and always as <see cref="IRuntimeContext"/>; a linear chain still
@@ -45,11 +47,15 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
 
     /// <inheritdoc />
     /// <remarks>
-    /// Buffered rather than forwarded: the engine merges the branches' logs in branch order once the group has
-    /// finished, so a fan-out reads as one block per branch. Sequence prefixes still come from the session's
-    /// shared counter, which keeps them unique — at the cost of no longer running in display order.
+    /// Forwarded to the session, not buffered per branch: the run's lines must read in the order they actually
+    /// happened — interleaved branches included — so that a file-backed <see cref="ILogWriter"/> and
+    /// <see cref="IRuntimeContext.Logs"/> tell exactly the same story.
     /// </remarks>
-    public ObservableCollection<string> Logs { get; set; } = [];
+    public ObservableCollection<string> Logs
+    {
+        get => _session.Logs;
+        set => _session.Logs = value;
+    }
 
     // ── Forwarded to the session ─────────────────────────────────────────────
 
@@ -113,19 +119,23 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
         => _session is RuntimeContext concrete ? concrete.Next() : System.Threading.Interlocked.Increment(ref _localSequence);
 
     /// <inheritdoc />
-    public void Log(string entry) => Logs.Add($"{Next():00}. {entry}");
+    public void Log(string entry) => _session.Log(entry);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The line goes through the session — one formatting rule, one sequence counter, one writer — but the
+    /// redirect request stays on this branch, so a sibling never sees it.
+    /// </remarks>
     public void Error(string message)
     {
-        Logs.Add($"{Next():00}. [Error] {message}");
+        _session.Log($"[Error] {message}");
         RedirectRequested = true;
     }
 
     /// <inheritdoc />
     public void Warn(string message)
     {
-        Logs.Add($"{Next():00}. [Warning] {message}");
+        _session.Log($"[Warning] {message}");
         RedirectRequested = true;
     }
 

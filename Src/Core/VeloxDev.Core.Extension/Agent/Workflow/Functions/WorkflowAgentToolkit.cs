@@ -2085,6 +2085,8 @@ public sealed class WorkflowAgentToolkit
             {
                 Data = seed,
                 Target = role == CompileRole.Terminal ? node : null,
+                // Carried by the scope because this session never surfaces to the host (see WithLogWriter).
+                LogWriter = _scope.LogWriter,
             };
             await new RuntimeEngine().RunAsync(graphs[0], context, ct);
 

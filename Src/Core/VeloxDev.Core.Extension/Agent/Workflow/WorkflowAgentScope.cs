@@ -483,6 +483,39 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
+    // ── Compiled-run logging ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Where a compiled run's log lines are diverted to, in addition to the session's own
+    /// <see cref="VeloxDev.Core.WorkflowSystem.CompilerEx.IRuntimeContext.Logs"/>; <c>null</c> (the default) keeps
+    /// them in memory only.
+    /// </summary>
+    /// <remarks>
+    /// Carried on the scope because the session a chain run creates is a local inside the toolkit and never
+    /// surfaces to the host — without this, only a host that drives <c>RuntimeEngine</c> itself could set a
+    /// writer.
+    /// </remarks>
+    internal VeloxDev.Core.WorkflowSystem.CompilerEx.ILogWriter? LogWriter { get; private set; }
+
+    /// <summary>
+    /// Sends the compiled run's log lines to <paramref name="writer"/> as well as to the in-memory session log.
+    /// </summary>
+    /// <param name="writer">
+    /// The sink, or <c>null</c> to go back to keeping lines in memory only. See
+    /// <see cref="VeloxDev.Core.WorkflowSystem.CompilerEx.ILogWriter"/> for the threading contract — writes happen
+    /// on the thread driving the run.
+    /// </param>
+    /// <remarks>
+    /// This is the file-backed story: pair it with
+    /// <see cref="VeloxDev.Core.WorkflowSystem.CompilerEx.TextWriterLogWriter.For"/> so a long session stops
+    /// trading memory for history. Lines arrive in the order they happened, interleaved branches included.
+    /// </remarks>
+    public WorkflowAgentScope WithLogWriter(VeloxDev.Core.WorkflowSystem.CompilerEx.ILogWriter? writer)
+    {
+        LogWriter = writer;
+        return this;
+    }
+
     private Func<AgentToolCallEventArgs, Task>? _toolCallHandler;
 
     /// <summary>

@@ -111,21 +111,52 @@ public class ParallelExecutionTests
         Assert.AreEqual("SRC", seenByB, "a sibling's output must never arrive as another branch's input");
     }
 
+    /// <summary>
+    /// Logs follow real time, not branch order. The interleaving is forced rather than timed: A logs, waits for B
+    /// to have logged, then logs again — so the only order that can come out is A1, B1, A2. That is exactly what a
+    /// per-branch buffer destroys (it would emit A1, A2, B1), and it is also what makes a file-backed
+    /// <see cref="ILogWriter"/> agree with <c>Logs</c>.
+    /// <para>
+    /// The only assumption is that the engine starts branch 0 before branch 1, which its loop guarantees: A runs
+    /// synchronously up to its await before B is started at all.
+    /// </para>
+    /// </summary>
     [TestMethod]
-    public async Task EachBranchesLogLines_StayTogether()
+    public async Task LogLines_KeepTheOrderTheyHappened()
     {
         var (s, a, b, _) = FanOut();
-        a.Handler = (ctx, _) => { var rc = (IRuntimeContext)ctx; rc.Log("A1"); rc.Log("A2"); return "A"; };
-        b.Handler = (ctx, _) => { var rc = (IRuntimeContext)ctx; rc.Log("B1"); rc.Log("B2"); return "B"; };
+        var aHasLoggedFirst = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        a.AsyncHandler = async (ctx, _) =>
+        {
+            ((IRuntimeContext)ctx).Log("A1");
+            await aHasLoggedFirst.Task;
+            ((IRuntimeContext)ctx).Log("A2");
+            return "A";
+        };
+        b.AsyncHandler = (ctx, _) =>
+        {
+            ((IRuntimeContext)ctx).Log("B1");
+            aHasLoggedFirst.TrySetResult(true);
+            return Task.FromResult<object?>("B");
+        };
 
         var session = await ProbeGraph.RunAsync(ProbeGraph.Compile(s));
 
-        var logs = session.Logs.ToList();
-        var lastOfA = logs.FindIndex(l => l.Contains("A2"));
-        var firstOfB = logs.FindIndex(l => l.Contains("B1"));
-        Assert.IsTrue(lastOfA >= 0 && firstOfB >= 0, "both branches must have logged");
-        Assert.IsTrue(lastOfA < firstOfB,
-            $"one fan-out should read as one block per branch, not as interleaved streams; got: {string.Join(" | ", logs)}");
+        var lines = session.Logs.ToList();
+        var indexOfA1 = lines.FindIndex(l => l.Contains("A1"));
+        var indexOfB1 = lines.FindIndex(l => l.Contains("B1"));
+        var indexOfA2 = lines.FindIndex(l => l.Contains("A2"));
+
+        Assert.IsTrue(indexOfA1 >= 0 && indexOfB1 >= 0 && indexOfA2 >= 0,
+            $"all three lines must be present; got: {string.Join(" | ", lines)}");
+        Assert.IsTrue(indexOfA1 < indexOfB1 && indexOfB1 < indexOfA2,
+            $"the log must read in the order the lines happened (A1, B1, A2) — a per-branch buffer reads A1, A2, B1; got: {string.Join(" | ", lines)}");
+
+        // Second, cheaper guard: the prefix is stamped when the line is written, so it must ascend as stored.
+        var numbers = lines.Select(l => int.Parse(l.Substring(0, l.IndexOf('.')))).ToList();
+        CollectionAssert.AreEqual(numbers.OrderBy(n => n).ToList(), numbers,
+            $"prefixes must ascend in collection order; got: {string.Join(" | ", lines)}");
     }
 
     [TestMethod]
