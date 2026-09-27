@@ -227,8 +227,10 @@ fan-out's branches carry interleaved compile orders, so any single threshold ski
 whose shape differs is refused with an `InvalidOperationException` *before the session is touched* — the alternative
 is driving these nodes with that graph's outputs.
 
-⚙ **A graph that came back from serialization cannot be resumed onto.** Restoring a graph gives every node a fresh
-`RuntimeId`, so the shape no longer matches. The refusal is the point: those really are different node objects.
+⚙ **A graph that came back from serialization is refused — until it is re-keyed.** Restoring a graph gives every node
+a fresh `RuntimeId`, so the shape no longer matches, and the refusal is right: those really are different node
+objects. `ExecutionCheckpoint.Rekey(place, restoredGraph)` is the opt-in that says *I know they are, and here is the
+mapping* — positional, checked against the node types in drive order. That is the shape a crash recovery has.
 
 ⚙ **Saving is best effort.** The store is written from inside the drive, so a fan-out's branches can save at once
 (they interleave rather than run on threads, but an `await` is enough to overlap them) — implementations serialise

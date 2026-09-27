@@ -202,6 +202,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
             Data = Normalize(Data, nodes),
             Outputs = outputs,
             Shape = nodes is null ? [] : [.. nodes.Select(entry => entry.Key)],
+            Types = nodes is null ? [] : [.. nodes.Select(entry => entry.Node.GetType().Name)],
         };
     }
 

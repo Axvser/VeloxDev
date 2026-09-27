@@ -146,7 +146,7 @@
 - **跳过按节点、不按 Order**：`RunGraphAsync` 多带一个「已完成节点集合」。用 Order 阈值在扇出里是错的 —— 几个分支的 Order 交错，一个阈值会连带跳过没跑过的兄弟（这与重定向的按 Order 跳过不同：那是「契约保留前缀」，一刀切本来就是它的语义）。该集合只作用于恢复的那一轮，一旦发生重定向就交回按 Order 的旧规则。
 - **恢复的那一轮原样沿用检查点里的 `Attempt`，不是加一**：产物表按 `Attempt` 盖戳，加一等于把铺回去的产物降级成陈旧产物，汇合点立刻读不到它们 —— 这条是实测撞出来的（`Resuming_SkipsWhatTheCheckpointRecords_...` 当场红）。此后的重定向照旧一轮加一。
 - **形状不符直接拒**，而且在动会话之前抛 `InvalidOperationException`（`Status` 仍停在 `Idle`，不是谎称在跑）—— `RequireSameShape`。
-- **节点键**是 `RuntimeId`（节点实现 `IWorkflowIdentifiable` 时），否则 `类型名#序号`。后者让测试探针也能用；代价是**序列化往返过的图恢复不了**：还原节点的 `RuntimeId` 全是新的，形状对不上 ⇒ 拒绝。这正是想要的 —— 那些确实是不同的节点对象，把旧产物喂给它们就是猜。
+- **节点键**是 `RuntimeId`（节点实现 `IWorkflowIdentifiable` 时），否则 `类型名#序号`。后者让测试探针也能用。**序列化往返过的图**（还原节点的 `RuntimeId` 全是新的）默认被拒 —— 那些确实是不同的节点对象，把旧产物喂给它们就是猜；**要接上就显式迁移**：`ExecutionCheckpoint.Rekey(place, graph)` 按**位置**重新归档（先核结构：节点数与**节点类型**的驱动序都要一致，`Types` 是为此新加的成员），返回一份新的检查点，引擎的形状核对随之通过。这就是崩溃恢复的形状（存盘 → 重载图 → 接着跑），`Core.Extension.Test/Serialization/ExecutionCheckpointMigrationTests.cs` 钉住：原样传被拒、re-key 后通过且已完成节点不再驱动。
 - **`IGroupData` 归一化**：`Snapshot()` 把载荷与产物里的 `IGroupData` 换成**以节点键为键的普通字典**。节点引用写不进文件，而且序列化会顺着它把整棵树拖进去（与 `CompiledGraphEx` 排除 `Parent` 同一个坑）。运行中的对象不动，只换快照里那一份。
 - **数字不保类型（实测）**：载荷是 `object`，JSON 只有一种整数 ⇒ `int` 回来是 `long`、`float` 是 `double`，`TypeNameHandling.All` **也救不回来**（试过了）。引擎自己的字段精确；`InMemoryCheckpointStore` 没有这个缺口。三个 TFM 里 `KeyValuePair` 也没有 `Deconstruct`，遍历产物表要显式取 `Key`/`Value`。
 - DTO 是**纯数据**，所以不走 `ComponentModelEx` 的公开序列化面（那一面被 `INotifyPropertyChanged` 约束住了，它是为 VM 写的），而是用同程序集 `internal` 的 `CreateJsonSerializer()` —— 于是它继承库里的全部默认设置（保留引用、循环忽略、字典键转换器）。
@@ -157,7 +157,7 @@
 
 ## 十二、重定向与分支的三处边界（2026-09-27 实测，做 demo 那张展示图时撞出来的）
 
-1. **目标落进（嵌套）分支内部时，整条分支会被跳过。** `RunBranchAsync` 的判断是 `if (redirectTarget is int t && routerOrder < t) return false;` —— 注释写的是「目标在分支之前则整条跳过」，条件表达的却是「路由器在目标之前」。于是目标若位于该分支**内部**（`routerOrder < target` 成立），分支被整个跳过 ⇒ 目标永远到不了，这一趟**一个节点都不会重跑**。实测：demo 把目标写成 `Generate Dataset`（order 3，在 Source Selector 分支内，该分支路由器 order 2）→ 日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`。**可行的目标是包住它的那条分支之前**的节点（demo 改指 order 1 的 `Ticker` ⇒ 整条管线从头重跑）。
+1. ~~**目标落进（嵌套）分支内部时，整条分支会被跳过。**~~ **已修（2026-09-27，同一笔）。** 原先 `RunBranchAsync` 写的是 `if (redirectTarget is int t && routerOrder < t) return false;` —— 注释说「目标在分支之前则整条跳过」，条件表达的却是「路由器在目标之前」⇒ 目标落在分支内部时整条被跳过，这一趟**一个节点都不会重跑**（实测：日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`）。**修法是删掉这条整分支跳过**：分支一律进，让「**目标之前不驱动**」这条统一规则去跳节点；顺带把路由器的驱动条件改成 `target < routerOrder` —— 目标在路由器之后（含落在分支内部）时，路由器属于保留前缀，**不再驱动**（原先会驱动，违反同一条规则）。`RuntimeRedirectTests.RedirectIntoABranch_EntersIt_AndDrivesFromTheTargetInside` 是判别测试：修复前该分支里那个目标只被驱动 1 次，修复后 2 次。demo 那张图原本为此把回退目标从 `Generate Dataset` 绕成 `Ticker`，现在两种写法都对。
 2. **一条分支的所有选项都通向的节点，只会被编进其中一个选项。** demo 里 `Publish` 原本挂在三个报告节点之后 ⇒ 编译器把它编进遍历时先遇到的那个选项（实测它的 order 11 只属于 `Zero` 选项）⇒ 路由到 `Low` 的那一轮它根本不跑。想「分支之后再收拢」的步骤，得放到分支**之前**。
 3. **报错的那一趟给下游留 null，而重定向不会中断当趟。** 报错的驱动记 `null`（§六）＋ `RunExecuteAsync` 记下回退目标后继续走完这条链 ⇒ 被拒绝的那一趟，**尾巴拿到的全是 null**。demo 的尾巴脚本因此按「空载荷就记一行 warning 返回」写 —— 否则一次拒绝会换来一屏堆栈。
 
