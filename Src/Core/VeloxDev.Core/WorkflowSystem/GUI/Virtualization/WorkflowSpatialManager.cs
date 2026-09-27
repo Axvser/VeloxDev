@@ -80,6 +80,10 @@ public sealed class WorkflowSpatialManager : IDisposable
     {
         if (viewport.IsEmpty) yield break;
 
+        // 暂存的连线只靠 NodeAdded 补挂 —— 若此后没有新节点，它们就永远进不了网格，而查询是唯一必须说真话的
+        // 地方。补挂本身很便宜（正常时集合是空的）。
+        RetryPendingLinks();
+
         // 1. Collect directly visible pairs from spatial grid
         var seenPairs = new HashSet<NodePairBoundsProvider>();
         var seenNodes = new HashSet<IWorkflowNodeViewModel>();

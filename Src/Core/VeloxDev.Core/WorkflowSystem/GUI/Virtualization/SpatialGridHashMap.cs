@@ -15,6 +15,10 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
     private readonly Dictionary<T, Viewport> _trackedItems = [];
     private readonly double _cellSize = Math.Max(1d, cellSize);
     private readonly HashSet<T> _queryScratch = [];
+
+    // 登记了、边界却还是空的条目（视图还没测量）：它们不在网格里，因而**任何查询都碰不到**。
+    // 留着它们是为了在查询时补一次 —— 见 EnsureIndexed。
+    private readonly HashSet<T> _unindexed = [];
     private Viewport _bounds;
     private bool _boundsDirty;
     private bool _reindexing;
@@ -64,7 +68,14 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         // until bounds become meaningful. OnItemPropertyChanged handles the transition
         // when PropertyChanged fires after the view layer positions the item.
         if (!b.IsEmpty)
+        {
             IndexItem(item, b);
+        }
+        else
+        {
+            _unindexed.Add(item);
+        }
+
         InvalidateBounds();
     }
 
@@ -75,6 +86,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         UnregisterItem(item);
         if (!b.IsEmpty)
             DeindexItem(item, b);
+        _unindexed.Remove(item);
         _trackedItems.Remove(item);
         InvalidateBounds();
     }
@@ -82,6 +94,13 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
     public IEnumerable<T> Query(Viewport viewport)
     {
         if (viewport.IsEmpty) yield break;
+
+        // 查询是唯一「必须说真话」的地方，所以先把索引补齐再算：
+        //  · 重入守卫延后的那次重算只在**下一次** bounds 变化时才会跑（ResyncGrid 之后没有循环）；
+        //  · 边界曾经为空的条目只靠 PropertyChanged 进网格，而那个事件可能压根不来、或正好落在别人那一趟里
+        //    ⇒ 它就永远不在任何格子里 ⇒ **视口怎么移都查不到它**（2026-09-27 用户报的「Agent 对话进行中
+        //    节点/连线概率消失，且重入 Viewport 也救不回来」）。
+        EnsureIndexed();
 
         _queryScratch.Clear();
         foreach (var cell in GetCells(viewport))
@@ -115,6 +134,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         _trackedItems.Clear();
         _grid.Clear();
         _queryScratch.Clear();
+        _unindexed.Clear();
         _bounds = Viewport.Empty;
         _boundsDirty = false;
     }
@@ -174,6 +194,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
             }
 
             _trackedItems[item] = newBounds;
+            if (newBounds.IsEmpty) _unindexed.Add(item); else _unindexed.Remove(item);
             InvalidateBounds();
         }
         finally
@@ -196,10 +217,11 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         try
         {
             _grid.Clear();
+            _unindexed.Clear();
             foreach (var pair in _trackedItems.ToArray())
             {
-                if (!pair.Value.IsEmpty)
-                    IndexItem(pair.Key, pair.Value);
+                if (pair.Value.IsEmpty) _unindexed.Add(pair.Key);
+                else IndexItem(pair.Key, pair.Value);
             }
             _queryScratch.Clear();
         }
@@ -207,6 +229,48 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         {
             _reindexing = false;
         }
+    }
+
+    /// <summary>
+    /// Brings the grid up to date before an answer is computed: flushes a deferred rebuild, then gives every entry
+    /// whose bounds were empty one more look — the view layer may have measured it since, with no event to say so.
+    /// </summary>
+    /// <remarks>
+    /// A query that returned a stale answer used to be indistinguishable from a correct one, and no amount of
+    /// panning or zooming could recover the missing entries, because they were never in a cell to begin with.
+    /// </remarks>
+    private void EnsureIndexed()
+    {
+        // 有被延后的重算就先补上；补的过程中又来了改动就再补一轮（有界，避免病态振荡）。
+        for (var round = 0; round < 4 && _rerunPending; round++)
+        {
+            _rerunPending = false;
+            ResyncGrid();
+        }
+
+        if (_unindexed.Count == 0) return;
+
+        var settled = false;
+        _reindexing = true;
+        try
+        {
+            foreach (var item in _unindexed.ToArray())
+            {
+                var bounds = item.Bounds;
+                if (bounds.IsEmpty) continue;
+
+                _unindexed.Remove(item);
+                _trackedItems[item] = bounds;
+                IndexItem(item, bounds);
+                settled = true;
+            }
+        }
+        finally
+        {
+            _reindexing = false;
+        }
+
+        if (settled) InvalidateBounds();
     }
 
     private void IndexItem(T item, Viewport bounds)

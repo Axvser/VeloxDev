@@ -143,6 +143,7 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps MonoBehaviour tick  Templates
 - **只有 `TreeHelper(double cellSize)` 这个构造开虚拟化**，无参构造把 `useVirtualization = false`（`Templates/Helpers/TreeHelper.cs:34-46`）。「图每次都全渲染」十有八九是用了无参构造。
 - 索引有两张：节点网格 `_nodeMap` 与节点对（连线）网格 `_nodePairMap`（`WorkflowSpatialManager.cs:11-12`）。连线在两端都还没被索引时进 `_pendingLinks` 暂存，节点插入后 `RetryPendingLinks()` 补挂（`:22,249`）。
 - 查询是 `QueryAgentBounds(viewport, expansionDepth: 1)`（`:79`），扩张一层是为了把「刚好在视口外但连线要穿过视口」的端点也捞出来。
+- **查询之前索引必须补齐（2026-09-27 起）。** `SpatialGridHashMap.Query` 先跑一次 `EnsureIndexed()`：① 把重入守卫延后的那次 `ResyncGrid` 补上（原先它只在下一次 bounds 变化时才跑）；② 给**边界曾经为空**的条目（视图还没测量 ⇒ 登记了但**不在任何格子里**）再读一次 `Bounds`，变成真的就补进网格。不补的后果是**永久性**的：那类条目任何查询都碰不到 ⇒ **视口怎么移都救不回来**（用户实测：Agent 对话进行中节点/连线概率消失，重入 Viewport 无效）。判别测试 `SpatialIndexFreshnessTests.AnItemMeasuredSilently_IsFoundByTheNextQuery`（把 `EnsureIndexed()` 注释掉即红）。同族的 `WorkflowSpatialManager.QueryAgentBounds` 也在查询前补一次 `RetryPendingLinks()` —— 那条暂存原本**只**由 `NodeAdded` 触发，此后没有新节点就永远挂着。
 - 重入守卫、bounds 空/脏态、resync：`GUI/Virtualization/SpatialGridHashMap.cs:20-21,32,193`，以及 `WorkflowSpatialEx.cs:14-24` 的 `ConditionalWeakTable` 重入表。
 - 视口修正 `RulerBand` → `SetVirtualizeInset`（`WorkflowSpatialEx.cs:236`）：只影响 `Virtualize` 内部的查询膨胀，**不动权威的 `Viewport`**。
 
