@@ -102,11 +102,14 @@ public sealed class WorkflowDemoSession
         """;
 
     private const string ReportScript = """
-        import json, sys, csv
+        import json, sys, csv, os
         # final report: dump the stats summary to CSV (Python file/table handling)
         d = json.load(open(sys.argv[1], encoding='utf-8'))
         grade = d.get('grade', 'unknown')
-        path = f"report_{grade.lower()}.csv"
+        # Beside this run's own scratch files: argv[2] is the node's output.json, which the host places under its
+        # own pycache. A bare relative name would land in whatever directory the host process was started from --
+        # the repository root, when a demo is launched from an IDE -- and dirty the working tree.
+        path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[2])), f"report_{grade.lower()}.csv")
         with open(path, 'w', newline='', encoding='utf-8') as f:
             w = csv.writer(f)
             w.writerow(['metric', 'value'])
