@@ -13,8 +13,8 @@ namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 /// <summary>
 /// The session's log sink: an <see cref="ILogWriter"/> receives every line, in the same order and with the same
 /// text as <see cref="IRuntimeContext.Logs"/>, and the in-memory view can be capped without costing the writer a
-/// line. Also pins the two things a writer must not change: the default behaviour, and the redirect semantics of
-/// <c>Warn</c>/<c>Error</c>.
+/// line. Also pins the two things a writer must not change: the default behaviour, and what a node's
+/// <c>Warn</c>/<c>Error</c> means for the run — a report, not a stop.
 /// </summary>
 [TestClass]
 public class CompilerLogWriterTests
@@ -100,8 +100,9 @@ public class CompilerLogWriterTests
     }
 
     /// <summary>
-    /// A writer is a sink, not a filter: <c>Warn</c> still marks the run, so a run whose node warns still ends the
-    /// flow (no node here implements <c>IRedirectable</c>).
+    /// A writer is a sink, not a filter: adding one changes nothing about what the run does with a node's warning.
+    /// The line lands in both places, and the chain carries on — no node here implements <c>IRedirectable</c>, so
+    /// there is no handler to place the run instead.
     /// </summary>
     [TestMethod]
     public async Task AWriter_DoesNotChangeWarnSemantics()
@@ -113,9 +114,10 @@ public class CompilerLogWriterTests
         var session = await RunAsync(ProbeGraph.Compile(first), writer);
 
         Assert.IsTrue(writer.Lines.Any(l => l.Contains("[Warning] careful")), "the warning still reaches the writer");
-        Assert.IsTrue(session.EndedWithError, "a node that warns without IRedirectable still ends the flow");
-        Assert.AreEqual("Stopped", session.Status);
-        Assert.IsEmpty(second.Calls, "the flow must not have continued to the next node");
+        Assert.IsTrue(session.Logs.Any(l => l.Contains("[Warning] careful")), "and the run's own log");
+        Assert.IsFalse(session.EndedWithError, "a warning is a report, not a stop");
+        Assert.AreEqual("Completed", session.Status);
+        Assert.HasCount(1, second.Calls, "the flow carries on to the next node");
     }
 
     /// <summary>A sink that always fails, standing in for a full disk or a revoked path.</summary>
@@ -160,8 +162,8 @@ public class CompilerLogWriterTests
     }
 
     /// <summary>
-    /// Inside a fan-out the line goes to the session (one log, one order) but the redirect request stays on the
-    /// branch — if it leaked, a sibling would be judged to have asked for a redirect it never asked for.
+    /// Inside a fan-out the line goes to the session (one log, one order) but the report stays on the branch — if
+    /// it leaked, the session would carry a sibling's warning into how the whole run is judged.
     /// </summary>
     [TestMethod]
     public async Task ABranchsWarn_MarksTheBranch_NotTheSession()
@@ -183,7 +185,8 @@ public class CompilerLogWriterTests
             $"the warning must still reach the session's log; got: {string.Join(" | ", session.Logs)}");
         Assert.IsFalse(session.RedirectRequested,
             "the request belongs to the branch that made it — the session must not be marked");
-        Assert.IsTrue(session.EndedWithError, "the run's outcome, by contrast, is global");
+        Assert.IsFalse(session.EndedWithError, "and a branch's warning never reaches the run's outcome");
+        Assert.AreEqual("Completed", session.Status);
     }
 
     /// <summary>The shipped writer appends to a <see cref="TextWriter"/>, one line each, UTF-8 without a BOM.</summary>

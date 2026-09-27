@@ -14,7 +14,12 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// it is treated as a redirect request: if the node implements <see cref="IRedirectable"/>, the engine re-runs the
 /// whole graph with the returned compile state (CompileContext.Order), skipping nodes before the target (possibly cross-chain);
 /// when the target is a Router it only re-routes without recomputing.
-/// If the node does not implement IRedirectable, the whole flow ends with the standard -1 status.
+/// <para>
+/// <b>Nothing a node does ends the run.</b> A reported problem or a thrown exception is written to the log, and the
+/// drive counts as having produced a null; whoever implements <see cref="IRedirectable"/> gets to place the run
+/// instead, and everyone else carries on. What still ends a run early is the engine's own machinery, which has no
+/// answer to give: a router or redirect contract that throws, and the redirect cap.
+/// </para>
 /// Before each drive the engine injects <see cref="IRuntimeContext"/> into <see cref="IRuntimeAware"/> nodes.
 /// <para>
 /// Five capabilities are optional and read off the host's <see cref="RuntimeContext"/> — the pause gate, the
@@ -124,7 +129,8 @@ public sealed class RuntimeEngine
     /// a node error (Error/Warn/exception) is treated as a redirect request:
     /// with <see cref="IRedirectable"/> the node returns a redirect target (possibly cross-chain), which is set on
     /// <see cref="IRuntimeContext.PendingRedirectTarget"/> so RunAsync re-runs the whole graph with that target;
-    /// without it the flow ends with status -1. Returns true when the flow ends early.
+    /// without it the chain simply carries on with the null <see cref="DriveAsync"/> recorded. Returns true only
+    /// when the engine's own machinery gives up (a host contract that throws).
     /// </summary>
     private async Task<bool> RunExecuteAsync(ChainSegment exec, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
@@ -142,32 +148,26 @@ public sealed class RuntimeEngine
 
             context.NodeIndex = i;
             context.RedirectRequested = false;
+            bool reported;
             try
             {
                 await DriveAsync(node, context, ct);
+                reported = context.RedirectRequested;
             }
             catch (OperationCanceledException)
             {
-                throw;   // cancellation is not a redirect
+                throw;   // cancellation is not a report
             }
             catch (Exception)
             {
-                // A node exception in ReceiveAsync → DriveAsync already recorded context.Error and set
-                // RedirectRequested; caught here to flow into the "redirect or end flow" logic below,
-                // instead of aborting the whole graph.
+                // DriveAsync 已在 catch 里记过 Error、问过重试策略，并把 Data 置空；这里只接管「谁来安排下一步」。
+                reported = true;
             }
 
-            if (!context.RedirectRequested) continue;
+            if (!reported) continue;
 
-            // Node errored but does not implement IRedirectable → the whole flow ends with status -1.
-            if (node is not IRedirectable redirectable)
-            {
-                context.CurrentOrder = -1;
-                context.EndedWithError = true;
-                await ReportErrorAsync(session, context, ExecutionFailurePhase.Node, node,
-                    "Node reported an error but does not implement IRedirectable; the flow ends (status -1).", null, ct);
-                return true;
-            }
+            // 没有配置任何处理就什么都不打断：DriveAsync 已把这次驱动记成「返回 null」，日志也已经写下，运行照常往下走。
+            if (node is not IRedirectable redirectable) continue;
 
             // With IRedirectable → its interface decides the redirect target (possibly cross-chain).
             // Only a predecessor state (Order < current) is accepted.
@@ -365,8 +365,8 @@ public sealed class RuntimeEngine
         => (node as ICompileTimeAware)?.CompileContext?.Order ?? -1;
 
     // 驱动一个节点：注入 IRuntimeContext、经 ReceiveAsync 执行、把返回值写回 Data 供下游链式传递。
-    // 异常照旧记 Error 再抛（RunExecuteAsync 接管）—— 除非配了重试策略并愿意再给一次机会。
-    // 整次驱动被几个可选能力夹住，都不配就与从前逐字相同：一次驱动、一行日志、一条错误路径。
+    // 抛异常照旧记 Error 再抛（RunExecuteAsync 决定谁来安排下一步）—— 除非配了重试策略并愿意再给一次机会。
+    // 没干净返回的驱动一律记成「返回 null」：报了错/警告的、以及抛异常的，都按这个口径交给下游。
     private static async Task DriveAsync(IWorkflowNodeViewModel node, IRuntimeContext context, CancellationToken ct)
     {
         if (node is null || context is null) return;
@@ -397,6 +397,11 @@ public sealed class RuntimeEngine
             context.CurrentOrder = cc.Order;
         context.Log(node.GetType().Name);
 
+        // 记下这次驱动的是哪个节点：节点经 context.ErrorAsync/WarnAsync 报错时要带进结构化记录。
+        // 扇出里必须写在门面上 —— 写在会话上会被交错的分支互相覆盖。
+        if (context is BranchRuntimeContext branch) branch.CurrentNode = node;
+        else if (session is not null) session.CurrentNode = node;
+
         // 节点即将收到的载荷。留一份是为了重试从同一个输入开始，而不是接着失败那次留下的半成品。
         var input = context.Data;
         var failures = 0;
@@ -419,6 +424,10 @@ public sealed class RuntimeEngine
                     context.Data = new GroupData(context.CollectGroupedInputs(inputs));
 
                 var result = await node.GetHelper().ReceiveAsync(context, ct);
+
+                // 节点自己报了错/警告 ⇒ 这一次驱动视为返回 null：日志已经忠实记下，数据既不产生也不阻断下游。
+                if (context.RedirectRequested) result = null;
+
                 context.RegisterOutput(node, result);   // register the output after driving, for downstream join points to aggregate
                 context.Data = result;
                 await ObserveAsync(session, context, ExecutionObservationKind.NodeSucceeded, node, null, ElapsedSince(startedAt), ct);
@@ -446,6 +455,8 @@ public sealed class RuntimeEngine
                 }
 
                 await ReportErrorAsync(session, context, ExecutionFailurePhase.Node, node, ex.Message, ex, ct);
+                context.RegisterOutput(node, null);   // 同上：抛异常的这次驱动同样记为「返回 null」
+                context.Data = null;
                 throw;
             }
         }

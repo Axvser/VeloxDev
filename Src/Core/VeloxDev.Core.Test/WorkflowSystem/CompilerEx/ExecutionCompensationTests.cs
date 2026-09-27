@@ -28,22 +28,24 @@ public class ExecutionCompensationTests
     }
 
     [TestMethod]
-    public async Task AFailedRun_HandsBackItsSuccesses_MostRecentFirst()
+    public async Task AStoppedRun_HandsBackItsSuccesses_MostRecentFirst()
     {
+        using var cts = new CancellationTokenSource();
         var s = new ProbeNode("s") { Handler = (_, _) => "S" };
-        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
-        var b = new ProbeNode("b") { Handler = (_, _) => throw new InvalidOperationException("boom") };
+        var a = new ProbeNode("a") { Handler = (_, _) => { cts.Cancel(); return "A"; } };   // 宿主在节点里把运行停掉
+        var b = new ProbeNode("b");
         ProbeGraph.Wire(s, a);
         ProbeGraph.Wire(a, b);
 
         var context = new RuntimeContext();
         var (names, outputs) = Recording(context);
 
-        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(s), context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(s), context, cts.Token);
 
-        Assert.AreEqual(RunOutcome.Failed, context.Outcome);
+        Assert.AreEqual(RunOutcome.Cancelled, context.Outcome);
+        Assert.IsEmpty(b.Calls, "the run stops at the next node boundary, so b never ran");
         CollectionAssert.AreEqual(new[] { "a", "s" }, names,
-            $"compensation walks the successes backwards, and the failed node is not among them; got: {string.Join(", ", names)}");
+            $"compensation walks the successes backwards, and the node that never ran is not among them; got: {string.Join(", ", names)}");
         CollectionAssert.AreEqual(new object?[] { "A", "S" }, outputs, "each node comes back with what it produced");
     }
 
@@ -63,9 +65,10 @@ public class ExecutionCompensationTests
     [TestMethod]
     public async Task ACompensatorThatThrows_DoesNotStopTheNodesBehindIt()
     {
+        using var cts = new CancellationTokenSource();
         var s = new ProbeNode("s") { Handler = (_, _) => "S" };
-        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
-        var b = new ProbeNode("b") { Handler = (_, _) => throw new InvalidOperationException("boom") };
+        var a = new ProbeNode("a") { Handler = (_, _) => { cts.Cancel(); return "A"; } };
+        var b = new ProbeNode("b");
         ProbeGraph.Wire(s, a);
         ProbeGraph.Wire(a, b);
 
@@ -80,19 +83,23 @@ public class ExecutionCompensationTests
             }),
         };
 
-        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(s), context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(s), context, cts.Token);
 
         CollectionAssert.AreEqual(new[] { "a", "s" }, names,
             $"best effort: one node that cannot be undone must not strand the rest; got: {string.Join(", ", names)}");
-        Assert.AreEqual(RunOutcome.Failed, context.Outcome, "the original failure stays the headline");
+        Assert.AreEqual(RunOutcome.Cancelled, context.Outcome, "the ending that caused the cleanup stays the headline");
         Assert.IsTrue(context.Logs.Any(l => l.Contains("[Compensation]", StringComparison.Ordinal)),
             $"the node that could not be undone has to be visible; got: {string.Join(" | ", context.Logs)}");
     }
 
     /// <summary>
-    /// `s0 → s1 → r → x`, where r asks for a re-run toward s1 on the first pass and x then fails on the second:
-    /// s0 is the prefix the redirect preserves — driven once, never driven again — and it is still something the
-    /// run has to answer for. s1 is driven twice and comes back once, at its latest position.
+    /// `s0 → s1 → r → x`: r asks for a re-run toward s1 on the first pass, and on the second x throws while its
+    /// own redirect contract is what breaks — the one failure the engine cannot work around, which is how a run
+    /// gets to end badly at all now that a node's own failures only produce a null.
+    /// <para>
+    /// s0 is the prefix the redirect preserves — driven once, never again — and it is still something the run has
+    /// to answer for; s1 is driven twice and comes back once, at its latest position.
+    /// </para>
     /// </summary>
     [TestMethod]
     public async Task AfterARedirect_ASkippedPrefixNode_IsStillHandedBack_AndAReDrivenNodeOnlyOnce()
@@ -100,7 +107,7 @@ public class ExecutionCompensationTests
         var s0 = new ProbeNode("s0") { Handler = (_, _) => "S0" };
         var s1 = new ProbeNode("s1") { Handler = (_, _) => "S1" };
         var r = new RedirectableNode("r");
-        var x = new ProbeNode("x");
+        var x = new RedirectableNode("x") { ResolveThrows = new InvalidOperationException("resolve boom") };
         ProbeGraph.Wire(s0, s1);
         ProbeGraph.Wire(s1, r);
         ProbeGraph.Wire(r, x);
@@ -122,8 +129,8 @@ public class ExecutionCompensationTests
 
         Assert.AreEqual(2, context.Attempt, "the graph was walked twice");
         Assert.HasCount(1, s0.Calls, "s0 is the preserved prefix: driven in the first pass and never again");
-        Assert.AreEqual(RunOutcome.Failed, context.Outcome);
-        CollectionAssert.AreEqual(new[] { "r", "s1", "x", "s0" }, names,
+        Assert.AreEqual(RunOutcome.Failed, context.Outcome, "the run ends on the engine's machinery giving up");
+        CollectionAssert.AreEqual(new[] { "x", "r", "s1", "s0" }, names,
             $"reverse drive order, one entry per node — s1 was driven twice and appears once; got: {string.Join(", ", names)}");
     }
 }

@@ -24,7 +24,9 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
         if (Component is null) return null;
         if (string.IsNullOrWhiteSpace(Component.Script))
         {
-            if (ctx is IRuntimeContext rc) rc.Warn("Python script is empty; nothing to run.");
+            // The async pair is the one that also hands the host's IExecutionErrorSink a record; either way the run
+            // carries on with the null this returns.
+            if (ctx is IRuntimeContext rc) await rc.WarnAsync("Python script is empty; nothing to run.");
             return null;
         }
 
@@ -51,7 +53,7 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
             Component.LastStatus = "Failed";
             Component.LastOutput = ex.Message;
             if (ctx is IRuntimeContext rc)
-                rc.Error($"Python execution failed: {ex.Message}");
+                await rc.ErrorAsync($"Python execution failed: {ex.Message}");
             return null;
         }
     }

@@ -10,35 +10,82 @@ namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 /// <summary>
 /// <see cref="IExecutionErrorSink"/> and <see cref="RunOutcome"/>: the same failures the log already carries, as
 /// records a host can count, store or show — plus the ending that used to share one word with the other.
+/// <para>
+/// Two ways in, and the difference is the point: the engine reports what it sees itself (a node that threw, a host
+/// contract that gave up, the cap, a cancellation), a node reports its own through
+/// <see cref="IRuntimeContext.ErrorAsync"/>/<see cref="IRuntimeContext.WarnAsync"/>.
+/// </para>
 /// </summary>
 [TestClass]
 public class ExecutionErrorSinkTests
 {
+    private static (RuntimeContext Context, List<ExecutionError> Records) Recording()
+    {
+        var records = new List<ExecutionError>();
+        return (new RuntimeContext { ErrorSink = new DelegateExecutionErrorSink(records.Add) }, records);
+    }
+
     [TestMethod]
-    public async Task EveryFailureTheEngineRecords_ReachesTheSinkAsARecord()
+    public async Task ANodeThatThrows_ReachesTheSinkWithTheNodeAndTheException()
     {
         var a = new ProbeNode("a") { Handler = (_, _) => "A" };
         var b = new ProbeNode("b") { Handler = (_, _) => throw new InvalidOperationException("boom") };
         ProbeGraph.Wire(a, b);
-
-        var records = new List<ExecutionError>();
-        var context = new RuntimeContext { ErrorSink = new DelegateExecutionErrorSink(records.Add) };
+        var (context, records) = Recording();
 
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
 
-        // 两条是刻意的：先是节点自己的失败，再是引擎「无处可重定向的错误结束流程」这个判断 —— 数失败的宿主两条都要。
-        Assert.HasCount(2, records);
-
+        Assert.HasCount(1, records, "one drive, one failure — what the engine decides to do about it is not a second one");
         Assert.AreEqual(ExecutionFailurePhase.Node, records[0].Phase);
         Assert.AreSame(b, records[0].Node);
         Assert.AreEqual("boom", records[0].Message);
         Assert.IsInstanceOfType<InvalidOperationException>(records[0].Error);
+        Assert.AreEqual(ExecutionReportLevel.Error, records[0].Level);
         Assert.AreEqual(1, records[0].Attempt);
         Assert.AreEqual(1, records[0].Order, "the node's compile order travels with the record");
+    }
 
-        Assert.AreEqual(ExecutionFailurePhase.Node, records[1].Phase);
-        Assert.AreSame(b, records[1].Node);
-        Assert.IsNull(records[1].Error, "an engine decision has no exception behind it");
+    [TestMethod]
+    public async Task ANodeReportedError_ReachesTheSink_AsTheNodeThatMadeIt()
+    {
+        var a = new ProbeNode("a");
+        a.AsyncHandler = async (ctx, _) =>
+        {
+            await ((IRuntimeContext)ctx).ErrorAsync("python is not installed");
+            return "A";
+        };
+        var (context, records) = Recording();
+
+        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
+
+        Assert.HasCount(1, records);
+        Assert.AreEqual(ExecutionFailurePhase.Node, records[0].Phase);
+        Assert.AreSame(a, records[0].Node, "a record without the node that made it is not worth handing to a host");
+        Assert.AreEqual("python is not installed", records[0].Message);
+        Assert.AreEqual(ExecutionReportLevel.Error, records[0].Level);
+        Assert.AreEqual(0, records[0].Order);
+        Assert.IsNull(records[0].Error, "the node reported a message, not an exception");
+        Assert.AreEqual("Completed", context.Status, "and the run carries on");
+    }
+
+    [TestMethod]
+    public async Task ANodeReportedWarning_IsRecorded_AsAWarning()
+    {
+        var a = new ProbeNode("a");
+        a.AsyncHandler = async (ctx, _) =>
+        {
+            await ((IRuntimeContext)ctx).WarnAsync("script is empty");
+            return null;
+        };
+        var (context, records) = Recording();
+
+        await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
+
+        Assert.HasCount(1, records);
+        Assert.AreEqual(ExecutionReportLevel.Warning, records[0].Level, "a warning is not a failure");
+        Assert.AreSame(a, records[0].Node);
+        Assert.IsTrue(context.Logs.Any(l => l.Contains("[Warning] script is empty", StringComparison.Ordinal)),
+            $"the line is still written; got: {string.Join(" | ", context.Logs)}");
     }
 
     /// <summary>
@@ -55,9 +102,7 @@ public class ExecutionErrorSinkTests
         };
         var b = new ProbeNode("b") { Handler = (_, _) => "B" };
         ProbeGraph.Wire(a, b);
-
-        var records = new List<ExecutionError>();
-        var context = new RuntimeContext { ErrorSink = new DelegateExecutionErrorSink(records.Add) };
+        var (context, records) = Recording();
 
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, cts.Token);
 
@@ -75,23 +120,27 @@ public class ExecutionErrorSinkTests
     }
 
     [TestMethod]
-    public async Task Outcome_ReadsFailed_WhenANodeEndsTheFlowWithAnError()
+    public async Task Outcome_ReadsUnknownUntilARunEnds()
     {
-        var a = new ProbeNode("a") { Handler = (_, _) => throw new InvalidOperationException("boom") };
+        Assert.AreEqual(RunOutcome.Unknown, new RuntimeContext().Outcome, "a session that never ran has no outcome");
+
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
         var context = new RuntimeContext();
 
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
 
-        Assert.AreEqual(RunOutcome.Unknown, new RuntimeContext().Outcome, "a session that never ran has no outcome");
-        Assert.AreEqual("Stopped", context.Status);
-        Assert.IsTrue(context.EndedWithError);
-        Assert.AreEqual(RunOutcome.Failed, context.Outcome);
+        Assert.AreEqual(RunOutcome.Completed, context.Outcome);
     }
 
     [TestMethod]
     public async Task AThrowingErrorSink_DoesNotAddAFailureToTheRun()
     {
-        var a = new ProbeNode("a") { Handler = (_, _) => throw new InvalidOperationException("boom") };
+        var a = new ProbeNode("a");
+        a.AsyncHandler = async (ctx, _) =>
+        {
+            await ((IRuntimeContext)ctx).ErrorAsync("boom");
+            return "A";
+        };
         var context = new RuntimeContext
         {
             ErrorSink = new DelegateExecutionErrorSink(_ => throw new InvalidOperationException("sink boom")),
@@ -99,7 +148,7 @@ public class ExecutionErrorSinkTests
 
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
 
-        Assert.AreEqual(RunOutcome.Failed, context.Outcome, "the run's own failure stays the headline");
+        Assert.AreEqual(RunOutcome.Completed, context.Outcome, "a broken sink must not reach the run that reported");
         Assert.IsTrue(context.Logs.Any(l => l.Contains("[ErrorSink]", StringComparison.Ordinal)),
             $"the sink's own failure has to be visible somewhere; got: {string.Join(" | ", context.Logs)}");
     }

@@ -49,12 +49,11 @@ public class ExecutionRetryTests
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
 
         Assert.HasCount(2, a.Calls, "exactly the attempts the policy allows, and no more");
-        Assert.IsTrue(context.EndedWithError);
-        Assert.AreEqual("Stopped", context.Status);
-        Assert.AreEqual(RunOutcome.Failed, context.Outcome);
         Assert.AreEqual(1, context.Attempt);
         Assert.IsTrue(context.Logs.Any(l => l.Contains("[Error]", StringComparison.Ordinal) && l.Contains("boom")),
             "the last failure still reaches the log exactly as it did before the policy existed");
+        Assert.AreEqual("Completed", context.Status, "running out of retries is not a reason to abandon the run");
+        Assert.IsFalse(context.EndedWithError);
     }
 
     /// <summary>

@@ -186,18 +186,64 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// <summary>Nodes/the engine push a plain log line (with a sequence prefix).</summary>
     public void Log(string entry) => AppendLog($"{Next():00}. {entry}");
 
-    /// <summary>Nodes/the engine push an exception/error message (sequence prefix with an [Error] marker). Also requests a redirect.</summary>
+    /// <inheritdoc />
     public void Error(string message)
     {
         AppendLog($"{Next():00}. [Error] {message}");
         RedirectRequested = true;
     }
 
-    /// <summary>Nodes/the engine push a warning message (sequence prefix with a [Warning] marker). Also requests a redirect.</summary>
+    /// <inheritdoc />
     public void Warn(string message)
     {
         AppendLog($"{Next():00}. [Warning] {message}");
         RedirectRequested = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The line and the record, in that order: the log is the complete record of the run and must keep it even
+    /// when no sink is configured or the sink fails.
+    /// </remarks>
+    public async Task ErrorAsync(string message)
+    {
+        Error(message);
+        await ReportNodeAsync(CurrentNode, ExecutionReportLevel.Error, message);
+    }
+
+    /// <inheritdoc />
+    public async Task WarnAsync(string message)
+    {
+        Warn(message);
+        await ReportNodeAsync(CurrentNode, ExecutionReportLevel.Warning, message);
+    }
+
+    /// <summary>
+    /// The node being driven right now, written by the engine before each drive. A node's own report needs it: a
+    /// structured record without the node that made it is not worth handing to a host.
+    /// </summary>
+    /// <remarks>
+    /// The engine writes it on whichever context it is driving with, so a fan-out's branches keep their own — see
+    /// <see cref="BranchRuntimeContext.CurrentNode"/>, and the same reason <see cref="Data"/> is branch-local.
+    /// </remarks>
+    internal IWorkflowNodeViewModel? CurrentNode { get; set; }
+
+    // 把节点自己报的这条交给宿主的 sink。node 由调用方给出，不查会话 —— 扇出里门面自带当前节点，
+    // 问会话要会被交错的分支互相覆盖。报告不得失败：sink 抛异常只换回一行日志（同 NotifyErrorAsync）。
+    // 令牌恒为 None：这是记录而不是可打断的工作，且这条调用发生在节点帧里、拿不到运行令牌。
+    internal async Task ReportNodeAsync(IWorkflowNodeViewModel? node, ExecutionReportLevel level, string message)
+    {
+        if (ErrorSink is not { } sink) return;
+        var order = (node as ICompileTimeAware)?.CompileContext?.Order ?? -1;
+        var record = new ExecutionError(ExecutionFailurePhase.Node, node, message, null, Attempt, order, level);
+        try
+        {
+            await sink.OnErrorAsync(record, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"{Next():00}. [ErrorSink] the report was not recorded: {ex.Message}");
+        }
     }
 
     /// <summary>Writes a shared variable (ignored when the key is empty).</summary>

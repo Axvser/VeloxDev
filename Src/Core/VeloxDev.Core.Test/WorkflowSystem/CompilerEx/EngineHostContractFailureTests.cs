@@ -10,8 +10,12 @@ namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 /// <summary>
 /// What happens when a contract the <b>host</b> implements throws. These three are the engine's outward calls that
 /// used to be unguarded, and each one failed in its own quiet way: a run whose session claimed it was still going,
-/// and a node that vanished without a line in the log. They are contract failures like any other, so they get the
-/// same discipline as a node body: an error, a redirect if there is one, otherwise the flow ends.
+/// and a node that vanished without a line in the log.
+/// <para>
+/// Two of them are the engine's own machinery and end the run, because there is no answer to give — a router with
+/// no key has no branch to take, a redirect with no target has nowhere to go. The third rides inside the drive, so
+/// it follows the node's rule instead: report it, count the drive as a null, carry on.
+/// </para>
 /// </summary>
 [TestClass]
 public class EngineHostContractFailureTests
@@ -64,8 +68,13 @@ public class EngineHostContractFailureTests
         Assert.AreSame(a, records[0].Node);
     }
 
+    /// <summary>
+    /// The injection happens inside the drive, so a throw there is the drive's own failure: the node body never
+    /// runs, the drive counts as null, and the chain carries on — where it used to swallow the node whole, with no
+    /// line in the log and a status that looked healthy.
+    /// </summary>
     [TestMethod]
-    public async Task AnAttachThatThrows_EndsTheRun_InsteadOfSilentlySkippingTheNode()
+    public async Task AnAttachThatThrows_IsReported_AndTheRunCarriesOnWithNull()
     {
         var s = new ProbeNode("s") { Handler = (_, _) => "S" };
         var a = new ProbeNode("a")
@@ -83,9 +92,10 @@ public class EngineHostContractFailureTests
 
         Assert.HasCount(1, s.Calls);
         Assert.IsEmpty(a.Calls, "the node body must not run when the injection failed");
-        Assert.IsEmpty(b.Calls, "the node must not be skipped in silence — the run ends here instead");
-        Assert.AreEqual("Stopped", context.Status);
-        Assert.IsTrue(context.EndedWithError);
+        Assert.HasCount(1, b.Calls, "the run carries on — the failure is reported, not fatal");
+        Assert.IsNull(b.Calls[0].Data, "the failed drive counts as having produced null");
+        Assert.AreEqual("Completed", context.Status);
+        Assert.IsFalse(context.EndedWithError);
         Assert.IsTrue(context.Logs.Any(l => l.Contains("attach boom", StringComparison.Ordinal)),
             $"the failure has to reach the log; got: {string.Join(" | ", context.Logs)}");
     }

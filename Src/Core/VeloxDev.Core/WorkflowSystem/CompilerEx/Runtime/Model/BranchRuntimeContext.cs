@@ -147,6 +147,30 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
         RedirectRequested = true;
     }
 
+    /// <summary>The node being driven in this branch right now — this branch's own, so siblings cannot overwrite it.</summary>
+    internal IWorkflowNodeViewModel? CurrentNode { get; set; }
+
+    /// <inheritdoc />
+    public Task ErrorAsync(string message) => ReportAsync(ExecutionReportLevel.Error, message);
+
+    /// <inheritdoc />
+    public Task WarnAsync(string message) => ReportAsync(ExecutionReportLevel.Warning, message);
+
+    /// <remarks>
+    /// The record is built on the session (one sink, one counter) with <b>this</b> branch's node handed over: the
+    /// session's own <c>CurrentNode</c> belongs to whichever branch was driven last. A session that is not the
+    /// concrete type has no sink to reach — the line is still written, which is all a custom context ever gets.
+    /// </remarks>
+    private Task ReportAsync(ExecutionReportLevel level, string message)
+    {
+        if (level == ExecutionReportLevel.Warning) Warn(message);
+        else Error(message);
+
+        return _session is RuntimeContext session
+            ? session.ReportNodeAsync(CurrentNode, level, message)
+            : Task.CompletedTask;
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// Shared, not private: these are the run's blackboard, documented as readable and writable by nodes, the

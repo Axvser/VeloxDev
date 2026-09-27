@@ -35,7 +35,7 @@
 - **日志**：**严格按真实时序**，分支直写会话、不按分支归块（2026-09-27 改，推翻了此前「按分支成块合并」的做法）。所以序号在 `Logs` 里单调递增，而文件 sink（`ILogWriter`）与 `Logs` 逐行一致 —— 这是拿日志文件对时序的前提，不要为「读起来整齐」再把缓冲加回来。
 - **重定向**：多个分支同时请求时**分支序最先者胜**，其余写一行日志忽略。注意「最先」实现为**按编译顺序**而非按墙钟先到，为的是让一轮运行可复现。
 - **`Data`**：跑完留下**最后一支**的载荷，与串行时留下的残留值逐字一致（Agent 工具在 `RunAsync` 返回后读它，见 `WorkflowAgentToolkit` 的结果 JSON）。
-- **语义变化**：`Task.WhenAll` 下一个分支抛异常不再立即中止兄弟，而是整组跑完再抛。节点异常本就被 `DriveAsync` 转成重定向请求，实际影响面小 —— 已写进方法注释。
+- **语义变化**：`Task.WhenAll` 下一个分支抛异常不再立即中止兄弟，而是整组跑完再抛。节点异常在它自己的驱动里就被消化成「报告 + 记 null」（§六），本来也到不了 `Task.WhenAll`，所以实际影响面小 —— 已写进方法注释。
 - 汇合点仍在整组之后，且分支是**单线程交错**（不是线程并行），所以产物表 `_outputs` **没有加锁**、也不需要 —— 这一点此前记错过（写成「加锁就够」），以代码为准。前提是宿主把运行钉在一个 `SynchronizationContext` 上；节点内部若自己 `Task.Run` 就会破坏这个前提。
 
 ## 四、三个契约是**可选**实现的，而 Core 自带的节点一个都没实现
@@ -55,15 +55,26 @@
 | `context.Sender` / `Receiver` | 由 `Templates/Helpers/TreeHelper.cs:155-156` 填上真实上下游 slot | **恒为 `null`** —— `DriveAsync` 从不给 `RuntimeContext` 的 `_sender`/`_receiver` 赋值（代码级核对；未做运行时验证） |
 | 多输入节点的输入 | 按 slot 广播 | 只有 `InputNodes.Count > 1` 才聚合成 `GroupData`，否则是单值 `Data` |
 
-## 六、`Warn` / `Error` 会**结束流程**，不是日志
+## 六、节点的报告不打断运行（2026-09-27 改，此前是「一句 `Warn` 终止整轮」）
 
-`Warn` 与 `Error` 一样置 `RedirectRequested`（`RuntimeContext.cs:102-113`）；节点若没实现 `IRedirectable`，`RunExecuteAsync` 就 `CurrentOrder = -1`、`EndedWithError = true` 并**结束整个流程**（`RuntimeEngine.cs:138-144`）。而**全仓生产代码没有一个 `IRedirectable` 实现者**（只有测试探针 `Core.Test/WorkflowSystem/CompilerEx/ProbeNodes.cs:265`）。
+`Error` / `Warn` / **抛异常**都是**报告**，一回事：写日志、这次驱动记为「返回 null」、运行继续。唯一会改变走向的是**配置过的处理** —— 节点实现 `IRedirectable` 时引擎问它要目标，给了就重定向（目标必须是更早的 `Order`），没给就照常往下走；没实现这个契约就没人可问，同样往下走。
 
-⇒ **一句 `Warn` 足以终止一次编译运行。** demo 的 `PythonHelper.ReceiveAsync` 在脚本为空时正是写 `rc.Warn(...)` —— 30 个分支里有一个没写脚本，整轮就结束。
+| 节点做了什么 | 有 `IRedirectable` | 没有 |
+|---|---|---|
+| 调 `Warn`/`Error`，正常返回 | 问它的决定 → 重定向或继续 | 记 null，继续 |
+| 抛异常（重试耗尽后） | 同上 | 记 null，继续 |
+
+- **数据口径**在 `DriveAsync` 一处：报告过的那次驱动 `RegisterOutput(node, null)` + `Data = null`。所以汇合点看到的是「这个来源在、值为 null」，不是「少了一个来源」——作者特意连了那个节点，它的沉默是信息。
+- **`EndedWithError` / `RunOutcome.Failed` 现在只由引擎自己的机制产生**：`ResolveRouteKey` 或 `ResolveRedirectAsync` 抛异常（宿主契约坏了，没有可走的路）、以及重定向上限 50（`RuntimeEngine.RunAsync`）。节点做什么都不会让一整轮停下来。
+- 改的理由：demo 的 [`PythonHelper.cs:27`](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 在脚本为空时 `Warn`、[:54](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 在 python 失败时 `Error`，**两处都 `return null`** —— 那本来就是「报一句、给 null、继续」的写法，而旧规则让「30 个分支里有一个没写脚本」直接结束整轮。全仓至今**没有一个生产 `IRedirectable` 实现者**（只有测试探针），所以旧规则的默认后果就是终止。
+- **同步那对只写日志，异步那对才记录到宿主**：`ErrorAsync`/`WarnAsync` = 同步那对 + 把 `ExecutionError` 交给 `IExecutionErrorSink`（带 `ExecutionReportLevel`，警告与错误分得开）。同步的 `Error`/`Warn` 必须保持 `void`（`ILogWriter.Write` 是同步的，节点帧里不能阻塞），所以它不碰 sink —— 想要宿主记录就 `await` 异步那对，demo 的 `PythonHelper` 已经换成它。
+- 节点自己报的记录里带 `CurrentNode`：**扇出里存在分支门面上**，写在会话上会被交错的分支互相覆盖（与 `Data` 同理）。
+
+测试：`NodeReportTests`（4 条：Warn/Error/抛异常都不阻断、报告过的节点在汇合点里是 null 而非缺席、有 `IRedirectable` 时报告仍交给契约）。
 
 ## 七、测试在哪、什么没测
 
-- 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，**14 文件 / 66 条**（2026-09-27 实测；同日加完五个可选能力契约后从 44 条涨上来）。**全部用手写探针**（`ProbeNode` 实现了全部三个契约）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
+- 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，**15 文件 / 72 条**（2026-09-27 实测；同日从 44 条经「五个可选能力契约」涨到 66，再经「报告不打断运行」涨到 72）。**全部用手写探针**（`ProbeNode` 实现了全部三个契约）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
 - 并发契约由 `ParallelExecutionTests` 钉住（5 条）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。**做法是先写测试**：其中两条在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`），改完才绿 —— 这类「先让测试证明它能判别」的次序值得沿用。
 - 日志 sink 与上限另由 `CompilerLogWriterTests`（`Core.Test`）钉住：writer 与 `Logs` 逐行同序、上限只裁内存（`0` = 只落 writer）、**writer 抛异常不改变运行**（吞掉并报 `LogWriteFailed`）、分支的 `Warn` 不置会话的 `RedirectRequested`；Agent 路径那条在 `Core.Extension.Test` 的 `WorkflowLifecycleFidelityTests.WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink`。
 - **没测**（2026-09-27 更新：**取消已补测**，见第十节）：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 三个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值；重定向上限（50 次）那条路只有代码审查，没有测试跑进去过。
@@ -101,7 +112,7 @@
 | `IExecutionGate` | 暂停 | `DriveAsync` 顶部 | `Status` 出现第四个值 `"Paused"` |
 | `IExecutionObserver` | 可观测 | run 起止 / 每节点 / 每分支 | 一行不写日志的观察流（`ExecutionObservation`） |
 | `INodeRetryPolicy` | 异常→重试 | `DriveAsync` 的 catch 内 | `[Retry n]` 日志行 |
-| `IExecutionErrorSink` | 结构化错误 | 引擎每次记错误处 | `ExecutionError` 记录（取消也送一条） |
+| `IExecutionErrorSink` | 结构化错误 | 引擎每次记错误处 + 节点自己调 `ErrorAsync`/`WarnAsync` 时 | `ExecutionError` 记录（取消也送一条，带 `ExecutionReportLevel`，见 §六） |
 | `IExecutionCompensation` | 补偿 | `RunAsync` 的 finally，逆序 | 失败/取消收尾时的逐节点回调 |
 
 **解析点只有一个**：`RuntimeEngine.Session(IRuntimeContext)`。扇出里节点拿到的是 `BranchRuntimeContext` 门面，能力必须透过它的 `Session` 去取 —— 直接 `context as RuntimeContext` 会在**最花时间的地方**静默失效。这条做过判别实验：把解析改回裸转型，`ExecutionGateTests.AClosedGate_AlsoHoldsTheBranchesOfAFanOut` 当场失败，症状正是「门关着，两条分支都跑了」。

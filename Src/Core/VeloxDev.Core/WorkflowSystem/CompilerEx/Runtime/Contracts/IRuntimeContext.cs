@@ -61,10 +61,17 @@ public interface IRuntimeContext : ITaskContext
     /// </summary>
     new object? Data { get; set; }
 
-    /// <summary>Whether the node requested a redirect during this drive (called <see cref="Error"/> or <see cref="Warn"/>). The engine clears it before each drive and checks after.</summary>
+    /// <summary>
+    /// Whether this drive did not come back cleanly — the node called <see cref="Error"/>/<see cref="Warn"/>, or
+    /// it threw. The engine clears it before each drive and reads it after, and a node that implements
+    /// <see cref="IRedirectable"/> gets asked where to go next because of it.
+    /// </summary>
     bool RedirectRequested { get; set; }
 
-    /// <summary>Whether the flow ended early because "the node errored but does not implement <see cref="IRedirectable"/>" (status set to -1).</summary>
+    /// <summary>
+    /// Whether the engine's own machinery gave up on the run, leaving it <c>"Stopped"</c> (status code <c>-1</c>):
+    /// a router or redirect contract that threw, or the redirect cap. A node's report or exception never sets this.
+    /// </summary>
     bool EndedWithError { get; set; }
 
     /// <summary>The engine-requested redirect target Order (may be cross-chain). <see cref="RuntimeEngine.RunAsync"/> re-runs the whole graph with it.</summary>
@@ -82,11 +89,35 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>Pushes a plain log line (with a sequence prefix).</summary>
     void Log(string entry);
 
-    /// <summary>Pushes an exception/error log line (sequence prefix with an [Error] marker). Also marks "redirect requested" — the engine decides, based on whether the node implements IRedirectable, to redirect or end.</summary>
+    /// <summary>
+    /// Pushes an exception/error log line (sequence prefix with an [Error] marker). A report, not a stop: the
+    /// engine writes the line, treats this drive as having produced <c>null</c>, and carries on — unless the node
+    /// implements <see cref="IRedirectable"/>, whose answer then decides where the run goes.
+    /// </summary>
+    /// <remarks>
+    /// Synchronous and void on purpose: this runs inside a node's frame and must never block or throw. Use
+    /// <see cref="ErrorAsync"/> to also hand the host's <see cref="IExecutionErrorSink"/> a record.
+    /// </remarks>
     void Error(string message);
 
-    /// <summary>Pushes a warning log line (sequence prefix with a [Warning] marker). Also marks "redirect requested" — the engine decides, based on whether the node implements IRedirectable, to redirect or end.</summary>
+    /// <summary>Pushes a warning log line (sequence prefix with a [Warning] marker). Reported exactly like <see cref="Error"/> — the marker is the only difference.</summary>
     void Warn(string message);
+
+    /// <summary>
+    /// <see cref="Error"/> plus the host's record: writes the line and awaits
+    /// <see cref="IExecutionErrorSink.OnErrorAsync"/> with <see cref="ExecutionReportLevel.Error"/>.
+    /// </summary>
+    /// <remarks>
+    /// Awaiting is the point — it keeps the host's records in the order the run made them, and tells the node that
+    /// its report landed. A sink that throws is swallowed and logged; a report never fails the run that made it.
+    /// </remarks>
+    Task ErrorAsync(string message);
+
+    /// <summary>
+    /// <see cref="Warn"/> plus the host's record: writes the line and awaits
+    /// <see cref="IExecutionErrorSink.OnErrorAsync"/> with <see cref="ExecutionReportLevel.Warning"/>.
+    /// </summary>
+    Task WarnAsync(string message);
 
     /// <summary>Writes a shared variable (ignored when the key is empty).</summary>
     void Set(string key, object? value);
