@@ -13,7 +13,14 @@ namespace VeloxDev.Core.Extension.Test.Agent;
 /// Covers the two promises <see cref="AgentTelemetryExtensions"/> makes: a run is recorded under the source
 /// the host names, and the recording carries no prompt text unless the host asked for it.
 /// </summary>
+/// <remarks>
+/// <b>Not parallelised, and it cannot be.</b> <see cref="ActivitySource.AddActivityListener"/> registers a
+/// listener for the whole process, and these tests all listen on the same source name — so two of them running at
+/// once collect each other's spans into their own lists. That is a flake about the test method's isolation, not
+/// about the extension: 2026-09-27 it failed this way inside a full run and passed alone.
+/// </remarks>
 [TestClass]
+[DoNotParallelize]
 public class AgentTelemetryExtensionsTests
 {
     private const string Source = "veloxdev-test-agent-telemetry";
