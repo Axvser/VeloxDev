@@ -114,7 +114,58 @@ instructions = null, …)` would otherwise capture a single-string call.)
 | Entry | Tool | Semantics |
 |---|---|---|
 | **Node-level** | `ExecuteNode` | A single node's `ReceiveCommand` (EXEC/RECV) |
-| **Chain-level** | `RunCompiledWorkflow` | Drive the whole compiled chain via `CompilerEngine` + `RuntimeContext` |
+| **Chain-level** | `RunCompiledWorkflow` | Drive the whole compiled chain via `CompilerViewModel` + `RuntimeEngine` |
+
+## The compiled graph as a document
+
+`CompiledGraph` is an ordinary VeloxDev view model — segments holding nodes in `ObservableCollection`s, with no slots
+and no links of its own. So it binds to a list (nested `ItemsControl`s over `Entries`, `BranchSegment.Options` and
+`ParallelSegment.Branches`) and it serializes:
+
+```csharp
+var json = graph.SerializeCompiledGraph();                    // snapshot — the default
+var restored = json.DeserializeCompiledGraph();
+
+var full = graph.SerializeCompiledGraph(includeTree: true);   // keeps what a re-mount needs
+```
+
+⚙ **A snapshot is not re-mountable.** It drops the two outward edges — a node's `Parent` (which would otherwise drag
+the whole tree in, and come back as a second, orphan tree) and a slot's `Targets`/`Sources` (which would otherwise
+drag in every node connected to the graph) — so the document is the segment structure plus each node's own state. The
+restored nodes have no `Parent`: their geometry no longer collapses for the canvas zoom, and moving them no longer
+marks a tree dirty. Reach for `includeTree: true` when the result must go back onto a canvas, and expect that
+document to cost about the size of the tree.
+
+⚙ **A restored node gets a fresh `RuntimeId` and carries no compile identity.** Neither member is writable, so a round
+trip cannot preserve them — `Order` is `-1` on a restored node, the same silent degradation a node that does not
+implement `ICompileTimeAware` already shows.
+
+⚙ **Branch keys are the exception that is repaired.** An enum key would come back as its number — JSON has no notion
+of an enum inside an `object` member, measured, and `TypeNameHandling.All` does not help — which would leave a
+*dynamic* branch matching no option at all. The compiler therefore records the key's type beside it.
+
+## Compiled-run logs
+
+```csharp
+// Through the Agent:
+var scope = tree.AsAgentScope().WithLogWriter(TextWriterLogWriter.For("workflow.log"));
+
+// Or driving the engine yourself:
+var session = new RuntimeContext { LogWriter = TextWriterLogWriter.For("workflow.log"), MaxRetainedLogs = 500 };
+```
+
+Lines reach the writer **in the order they happened** — a fan-out's branches interleave — and the same lines land in
+the session's `Logs` in the same order, so the file and the in-memory view compare line for line.
+
+⚙ `MaxRetainedLogs` bounds only the in-memory copy (`0` keeps none, the writer still gets everything). The default is
+unbounded on purpose: the Agent's `RunCompiledWorkflow` reports `Logs` back to the model, so trimming by default would
+quietly change what the model is shown.
+
+⚙ A writer that throws does not break the run — the line is dropped and `RuntimeContext.LogWriteFailed` reports it.
+Diagnostics never change what a run does.
+
+⚙ `Write` is called on the thread driving the run (normally the UI thread). Queue the line inside your writer if that
+IO must not happen there; `TextWriterLogWriter.For` flushes per line, so a host reading the file sees it immediately.
 
 ## MCP servers
 
