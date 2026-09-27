@@ -96,7 +96,7 @@ internal sealed class StubPythonHelper : PythonHelper
         // The audit: refuses the thin set by naming the node to fall back to, and passes the report through
         // untouched once the data is good (the selector below routes on the flags it carries).
         "Audit" => Read(input, "sample_count") < 20
-            ? """{"verified":false,"sample_count":2,"error":"too few samples got published, run the pipeline again","redirect":"Ticker"}"""
+            ? """{"verified":false,"sample_count":2,"error":"too few samples got published, run the pipeline again","redirect":"Generate Dataset"}"""
             : Forward(input, new() { ["verified"] = true }),
 
         // The payload is null when the audit sent the run back, and the real script warns instead of crashing.

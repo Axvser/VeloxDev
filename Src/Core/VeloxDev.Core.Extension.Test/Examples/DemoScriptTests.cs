@@ -127,7 +127,7 @@ public class DemoScriptTests
             Assert.IsTrue(rejected.Ok);
             Assert.IsFalse(Convert.ToBoolean(rejected.Output["verified"]));
             Assert.IsTrue(rejected.Output.ContainsKey("error"), "an error is the complaint");
-            Assert.AreEqual("Ticker", rejected.Output["redirect"], "and a name is where the run should fall back to");
+            Assert.AreEqual("Generate Dataset", rejected.Output["redirect"], "and a name is where the run should fall back to");
 
             // The audit left null behind it, and the report script warns instead of crashing on that.
             var nothingToArchive = Run(scripts["Report Zero"], null, directory);

@@ -158,10 +158,10 @@ public sealed class WorkflowDemoSession : IDisposable
         # in its result -- "error" is the complaint, "redirect" names the node to fall back to. The engine re-runs
         # the whole graph from there, which is how this graph loops without a cycle in it.
         #
-        # Why the tick and not the generator: a redirect falls back along the chain that reported, and everything
-        # downstream of the source selector -- the generator included -- sits inside that selector's branch, out of
-        # reach from here. Naming the tick re-runs the whole pipeline, generator and all, and the generator then
-        # sees _attempt == 2 and produces the full set.
+        # The generator is named by title, not by order: a node that sits inside a branch is still reachable from
+        # here (the engine enters the branch and leaves the router alone, since the router is before the target),
+        # so the run falls back to exactly the step that has to do the work again. It then sees _attempt == 2 and
+        # produces the full set.
         #
         # It is the last node before the grade selector on purpose: a node that reports an error leaves null behind
         # it for the rest of that pass, so everything downstream of this one has to cope with an empty payload --
@@ -171,7 +171,7 @@ public sealed class WorkflowDemoSession : IDisposable
         if count < 20:
             json.dump({'verified': False, 'sample_count': count,
                        'error': f'only {count} samples got published: too few to conclude anything from, run the pipeline again',
-                       'redirect': 'Ticker'}, open(sys.argv[2], 'w', encoding='utf-8'))
+                       'redirect': 'Generate Dataset'}, open(sys.argv[2], 'w', encoding='utf-8'))
         else:
             # Pass the report through untouched: the selector below routes on the grade flags it carries.
             d['verified'] = True

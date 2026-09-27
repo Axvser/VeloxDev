@@ -157,7 +157,7 @@
 
 ## 十二、重定向与分支的三处边界（2026-09-27 实测，做 demo 那张展示图时撞出来的）
 
-1. ~~**目标落进（嵌套）分支内部时，整条分支会被跳过。**~~ **已修（2026-09-27，同一笔）。** 原先 `RunBranchAsync` 写的是 `if (redirectTarget is int t && routerOrder < t) return false;` —— 注释说「目标在分支之前则整条跳过」，条件表达的却是「路由器在目标之前」⇒ 目标落在分支内部时整条被跳过，这一趟**一个节点都不会重跑**（实测：日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`）。**修法是删掉这条整分支跳过**：分支一律进，让「**目标之前不驱动**」这条统一规则去跳节点；顺带把路由器的驱动条件改成 `target < routerOrder` —— 目标在路由器之后（含落在分支内部）时，路由器属于保留前缀，**不再驱动**（原先会驱动，违反同一条规则）。`RuntimeRedirectTests.RedirectIntoABranch_EntersIt_AndDrivesFromTheTargetInside` 是判别测试：修复前该分支里那个目标只被驱动 1 次，修复后 2 次。demo 那张图原本为此把回退目标从 `Generate Dataset` 绕成 `Ticker`，现在两种写法都对。
+1. ~~**目标落进（嵌套）分支内部时，整条分支会被跳过。**~~ **已修（2026-09-27，同一笔）。** 原先 `RunBranchAsync` 写的是 `if (redirectTarget is int t && routerOrder < t) return false;` —— 注释说「目标在分支之前则整条跳过」，条件表达的却是「路由器在目标之前」⇒ 目标落在分支内部时整条被跳过，这一趟**一个节点都不会重跑**（实测：日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`）。**修法是删掉这条整分支跳过**：分支一律进，让「**目标之前不驱动**」这条统一规则去跳节点；顺带把路由器的驱动条件改成 `target < routerOrder` —— 目标在路由器之后（含落在分支内部）时，路由器属于保留前缀，**不再驱动**（原先会驱动，违反同一条规则）。`RuntimeRedirectTests.RedirectIntoABranch_EntersIt_AndDrivesFromTheTargetInside` 是判别测试：修复前该分支里那个目标只被驱动 1 次，修复后 2 次。demo 那张图一度为此把回退目标绕成分支之外的 `Ticker`，修好后已改回 `Generate Dataset`（注释也一并订正 —— 它原本写着「分支内部的节点够不到」，那句话现在不成立）。
 2. **一条分支的所有选项都通向的节点，只会被编进其中一个选项。** demo 里 `Publish` 原本挂在三个报告节点之后 ⇒ 编译器把它编进遍历时先遇到的那个选项（实测它的 order 11 只属于 `Zero` 选项）⇒ 路由到 `Low` 的那一轮它根本不跑。想「分支之后再收拢」的步骤，得放到分支**之前**。
 3. **报错的那一趟给下游留 null，而重定向不会中断当趟。** 报错的驱动记 `null`（§六）＋ `RunExecuteAsync` 记下回退目标后继续走完这条链 ⇒ 被拒绝的那一趟，**尾巴拿到的全是 null**。demo 的尾巴脚本因此按「空载荷就记一行 warning 返回」写 —— 否则一次拒绝会换来一屏堆栈。
 
