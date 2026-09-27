@@ -100,6 +100,42 @@ public class RuntimeRedirectTests
         Assert.AreEqual("B", session.BranchKey, "branch re-selection must honour the runtime key");
     }
 
+    /// <summary>
+    /// A redirect aimed at a node <b>inside</b> a branch, i.e. one the router precedes. The branch must be entered
+    /// with the router left alone: it sits before the target, so it is the preserved prefix. This used to be the
+    /// case no test covered — the branch was skipped wholesale, the log said `Redirecting to #N`, and the second
+    /// pass drove nothing at all.
+    /// </summary>
+    [TestMethod]
+    public async Task RedirectIntoABranch_EntersIt_AndDrivesFromTheTargetInside()
+    {
+        // Router(0) 分支 A: x(1) → y(2)。y 第一次抛错并请求回到 x(Order=1)—— 目标落在分支内部。
+        var router = new RouterNode("router") { CompileMode = RouterCompileMode.Dynamic, Selection = "A" };
+        var x = new ProbeNode("x") { Handler = (_, _) => "X" };
+        var y = new RedirectableNode("y");
+        router.RouteTable["A"] = [x];
+        ProbeGraph.Wire(router, x);
+        ProbeGraph.Wire(x, y);
+        var graph = ProbeGraph.Compile(router);
+
+        var xOrder = (x as ICompileTimeAware)?.CompileContext?.Order;
+        Assert.AreEqual(1, xOrder, "precondition: the target sits after the router, inside its branch");
+        y.Handler = (ctx, _) =>
+        {
+            if (OnAttempt(ctx, 1)) throw new InvalidOperationException("go back to x");
+            return "Y";
+        };
+        y.Resolve = _ => xOrder;
+
+        var session = await ProbeGraph.RunAsync(graph);
+
+        Assert.AreEqual(2, session.Attempt, "the redirect was accepted, so the graph was walked twice");
+        Assert.HasCount(2, x.Calls, "the target is inside the branch — pass 2 must drive it again");
+        Assert.HasCount(2, y.Calls, "and the node behind it too");
+        Assert.HasCount(1, router.Calls, "the router is before the target: preserved prefix, not driven again");
+        Assert.AreEqual("Completed", session.Status);
+    }
+
     [TestMethod]
     public void RedirectLoopsExceedingLimit_AbortWithException()
     {

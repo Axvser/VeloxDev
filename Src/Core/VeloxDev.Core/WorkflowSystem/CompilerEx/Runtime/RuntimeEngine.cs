@@ -247,9 +247,9 @@ public sealed class RuntimeEngine
     }
 
     /// <summary>
-    /// Drives a branch. On a cross-chain redirect: when the target is before the branch → the whole
-    /// branch is skipped; when the target is the router itself → **re-route only**, without recomputing
-    /// (the router's ReceiveAsync is not driven); the branch is selected directly by the runtime key.
+    /// Drives a branch. A redirect that points at or before the router leaves the router alone — the router is a
+    /// node before the target, and nodes before the target are the preserved prefix — while a redirect aimed
+    /// <b>inside</b> the branch still enters it, so the nodes at and after the target are driven again.
     /// </summary>
     private async Task<bool> RunBranchAsync(BranchSegment branch, IRuntimeContext context, CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
     {
@@ -257,13 +257,11 @@ public sealed class RuntimeEngine
         var session = Session(context);
         var routerOrder = NodeOrder(branch.Router);
 
-        // Cross-chain redirect: target before the branch → skip the whole branch.
-        if (redirectTarget is int t && routerOrder < t)
-            return false;
-
-        // Target is the router itself → re-route only, without recomputing.
-        var reRouteOnly = redirectTarget is int t2 && t2 == routerOrder;
-        if (!reRouteOnly)
+        // 目标在路由器之后（含落在这条分支内部）⇒ 路由器属于目标之前的前缀，不驱动它。**但分支要进**：
+        // 这里原先写的是「routerOrder < 目标 ⇒ 整条分支跳过」，方向反了 —— 目标落在分支内部时整条被吃掉，
+        // 日志里有 `Redirecting to #3`，第二趟却一个节点都没驱动（2026-09-27 实测，做 demo 那张图时撞上）。
+        // 目标正好是路由器时也走这一支：**只重选路、不重算**（路由器自己的 ReceiveAsync 不驱动）。
+        if (redirectTarget is not int target || target < routerOrder)
             await DriveAsync(branch.Router, context, ct);
 
         if (branch.Router is ICompileTimeRouter router)
