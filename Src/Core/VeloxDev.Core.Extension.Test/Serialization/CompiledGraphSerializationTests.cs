@@ -1,12 +1,52 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Demo.ViewModels;
 using Demo.Workflow;
+using VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.Core.Extension.Test.Serialization;
+
+/// <summary>The grade the probe router routes on — an enum, i.e. the key kind a round trip degrades.</summary>
+public enum ProbeGrade { Low, High }
+
+/// <summary>
+/// A router that executes nothing (the default <c>NodeHelper.ReceiveAsync</c> returns <c>null</c>), so a restored graph
+/// can be driven in a test without running a script — while still routing on an enum key that is resolved <b>at run
+/// time</b>. That is the case a degraded key breaks: the run-time key is a real enum and a restored <c>long</c> matches
+/// no option.
+/// </summary>
+[WorkflowBuilder.Node<NodeHelper<ProbeRouterNode>>(workSemaphore: 1)]
+public partial class ProbeRouterNode : ICompileTimeRouter
+{
+    public ProbeRouterNode() => InitializeWorkflow();
+
+    /// <summary>Where each grade routes.</summary>
+    public IWorkflowNodeViewModel? LowBranch { get; set; }
+    public IWorkflowNodeViewModel? HighBranch { get; set; }
+
+    /// <summary>The grade resolved at run time.</summary>
+    public ProbeGrade Resolved { get; set; } = ProbeGrade.High;
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
+        => Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>>(
+            new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
+            {
+                [ProbeGrade.Low] = LowBranch is null ? [] : [LowBranch],
+                [ProbeGrade.High] = HighBranch is null ? [] : [HighBranch],
+            });
+
+    /// <inheritdoc />
+    /// <remarks>Null at compile time — which is what makes the compiled branch <b>dynamic</b> — and the grade at run time.</remarks>
+    public Task<object?> ResolveRouteKey(object? payload)
+        => Task.FromResult<object?>(payload is null ? null : Resolved);
+}
 
 /// <summary>
 /// The compiled graph as a document. Until now nothing in the repo had ever round-tripped one — these are the first
@@ -76,8 +116,6 @@ public class CompiledGraphSerializationTests
     /// <summary>Renders a key for a comparison message: its type then its value.</summary>
     private static string Show(object? key) => key is null ? "(null)" : $"{key.GetType().Name}:{key}";
 
-    private enum ProbeGrade { Low, High }
-
     /// <summary>
     /// A number that matches no member must not throw: it becomes an undefined enum value, exactly like a live run
     /// handed a key no option names — the flow ends where it ends, with nothing fabricated.
@@ -114,6 +152,42 @@ public class CompiledGraphSerializationTests
         var restored = option.Serialize().Deserialize<BranchOption>();
 
         Assert.AreEqual(7L, restored.Key, "an unresolvable type name must not change the value");
+    }
+
+    /// <summary>
+    /// The end-to-end claim the key side channel exists for: a snapshot of a <b>dynamic, enum-keyed</b> branch still
+    /// routes after a round trip, and drives the branch the run-time key names — not its sibling.
+    /// <para>
+    /// Without the type name the restored option key would be a number, the run-time key is a real enum, no option
+    /// would match, and the run would end before driving any branch node: the negative assertion below is what
+    /// catches that, and the two branches deliberately have <i>different</i> node types so the log can tell them
+    /// apart.
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    public async Task ARestoredGraph_DynamicallyRoutesOnItsEnumKey()
+    {
+        var router = new ProbeRouterNode { Resolved = ProbeGrade.Low };
+        router.LowBranch = new NodeDefaultViewModel();
+        router.HighBranch = new TestEnumNode();
+
+        var graphs = await new CompilerViewModel().CompileAsync(router, CompileRole.Root);
+        var graph = graphs.Single();
+        var branch = graph.Entries.OfType<BranchSegment>().Single();
+        Assert.IsTrue(branch.IsDynamic,
+            "precondition: the branch must be dynamic, or its key is never compared at run time");
+        Assert.IsNull(branch.CompileKey, "precondition: a dynamic branch locks no compile-time key");
+
+        var restored = graph.SerializeCompiledGraph().DeserializeCompiledGraph();
+        var session = new RuntimeContext();
+        await new RuntimeEngine().RunAsync(restored!, session, CancellationToken.None);
+
+        Assert.AreEqual("Completed", session.Status);
+        Assert.IsFalse(session.EndedWithError);
+        Assert.IsTrue(session.Logs.Any(l => l.Contains(nameof(NodeDefaultViewModel))),
+            $"the Low branch must have been driven; logs were: {string.Join(" | ", session.Logs)}");
+        Assert.IsFalse(session.Logs.Any(l => l.Contains(nameof(TestEnumNode))),
+            "the High branch must not have been driven");
     }
 
     /// <summary>

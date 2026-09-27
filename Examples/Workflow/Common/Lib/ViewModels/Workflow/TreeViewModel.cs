@@ -5,6 +5,7 @@ using System.Collections.Specialized;
 using System.Text;
 using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
@@ -303,5 +304,29 @@ public partial class TreeViewModel
         {
             controller.IsActive = isRunning;
         }
+    }
+
+    // ── 编译结构（侧栏列表）──────────────────────────────────────────────────
+
+    /// <summary>
+    /// The compiled structure of the tree's controller, flattened for a list view — one row per segment, indented by
+    /// <see cref="CompiledOutlineRow.Depth"/>. Empty until something compiles.
+    /// </summary>
+    /// <remarks>
+    /// Owned by the tree rather than read through <c>Nodes[...]</c> so a side panel can bind it with a plain path.
+    /// The controller pushes into it (see <see cref="RefreshCompiledStructure"/>) the same way it already pushes
+    /// <c>BeginWorkflowRun</c>/<c>RefreshWorkflowRunningState</c> — this view model has no subscription to a
+    /// controller's property changes, and adding one just for this would be a second mechanism for the same news.
+    /// </remarks>
+    public ObservableCollection<CompiledOutlineRow> CompiledStructure { get; } = [];
+
+    /// <summary>Rebuilds <see cref="CompiledStructure"/> from <paramref name="controller"/>'s compiled graphs.</summary>
+    /// <param name="controller">The controller that just compiled.</param>
+    internal void RefreshCompiledStructure(ControllerViewModel controller)
+    {
+        CompiledStructure.Clear();
+        if (controller.Compiler.Graphs.FirstOrDefault() is not { } graph) return;
+
+        foreach (var row in CompiledOutline.Of(graph)) CompiledStructure.Add(row);
     }
 }

@@ -10,6 +10,7 @@
 			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
 			 xmlns:mcp="using:VeloxDev.AI.MCP"
 			 xmlns:sub="using:VeloxDev.AI.SubAgents"
+			 xmlns:cex="using:VeloxDev.Core.WorkflowSystem.CompilerEx"
 			 xmlns:md="clr-namespace:AvalonMarkdown.Views;assembly=AvalonMarkdown"
 			 x:DataType="vm:TreeViewModel"
              behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
@@ -29,6 +30,7 @@
 		<SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="Transparent" />
 		<SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="Transparent" />
 		<SolidColorBrush x:Key="TreeViewItemBackgroundPointerOver" Color="Transparent" />
+		<local:DepthIndentConverter x:Key="DepthIndent" />
 	</UserControl.Resources>
 
 	<!-- 子代理树的展开状态由库里那一行自己持有（SubAgentTreeNodeViewModel.IsExpanded，默认展开），而
@@ -263,6 +265,26 @@
 												<TextBlock Text="{Binding Error}" Foreground="#ff6b6b" FontSize="11" TextWrapping="Wrap"
 														   IsVisible="{Binding IsError}" Margin="14,0,0,0"/>
 											</StackPanel>
+										</DataTemplate>
+									</ItemsControl.ItemTemplate>
+								</ItemsControl>
+							</StackPanel>
+						</Border>
+						<!-- 编译结构：一段一行、按 Depth 缩进，读起来就是它描述的那棵树。内容由控制器在编译后推给树
+						     填充（TreeViewModel.RefreshCompiledStructure），这块面板不订阅控制器的属性变化。 -->
+						<Border x:Name="CompiledStructurePanel" Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
+							<StackPanel Spacing="6">
+								<Grid ColumnDefinitions="*,Auto">
+									<TextBlock Text="编译结构" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
+									<TextBlock Grid.Column="1" Text="{Binding CompiledStructure.Count, StringFormat={}{0} 段}" Foreground="#a0a0a0"/>
+								</Grid>
+								<ItemsControl ItemsSource="{Binding CompiledStructure}">
+									<ItemsControl.ItemTemplate>
+										<DataTemplate x:DataType="cex:CompiledOutlineRow">
+											<Grid ColumnDefinitions="Auto,*" Margin="{Binding Depth, Converter={StaticResource DepthIndent}}">
+												<TextBlock Text="{Binding Kind}" Foreground="#f0c674" FontSize="11" Width="58"/>
+												<TextBlock Grid.Column="1" Text="{Binding Label}" Foreground="#e0e0e0" FontSize="11" TextWrapping="Wrap"/>
+											</Grid>
 										</DataTemplate>
 									</ItemsControl.ItemTemplate>
 								</ItemsControl>

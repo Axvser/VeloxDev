@@ -32,6 +32,9 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     {
         await Compiler.CompileAsync(this, CompileRole.Root);
         OnPropertyChanged(nameof(HasCompiledGraphs));
+
+        // 推给树，和 Run 推 BeginWorkflowRun 是同一套：树不订阅控制器的属性变化。
+        (Parent as TreeViewModel)?.RefreshCompiledStructure(this);
     }
 
     [AgentContext(AgentLanguages.Chinese, "运行：用编译图 + 执行引擎驱动整条链")]
