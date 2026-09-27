@@ -35,7 +35,9 @@ public class ExecutionErrorSinkTests
 
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
 
-        Assert.HasCount(1, records, "one drive, one failure — what the engine decides to do about it is not a second one");
+        // Two, and deliberately so: the node's own failure, then the engine's decision that an error with nowhere
+        // to redirect ends the flow. A host counting failures wants both.
+        Assert.HasCount(2, records);
         Assert.AreEqual(ExecutionFailurePhase.Node, records[0].Phase);
         Assert.AreSame(b, records[0].Node);
         Assert.AreEqual("boom", records[0].Message);
@@ -43,6 +45,10 @@ public class ExecutionErrorSinkTests
         Assert.AreEqual(ExecutionReportLevel.Error, records[0].Level);
         Assert.AreEqual(1, records[0].Attempt);
         Assert.AreEqual(1, records[0].Order, "the node's compile order travels with the record");
+
+        Assert.AreEqual(ExecutionFailurePhase.Node, records[1].Phase);
+        Assert.AreSame(b, records[1].Node);
+        Assert.IsNull(records[1].Error, "an engine decision has no exception behind it");
     }
 
     [TestMethod]
@@ -58,14 +64,14 @@ public class ExecutionErrorSinkTests
 
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
 
-        Assert.HasCount(1, records);
+        Assert.HasCount(2, records, "the node's own record first, then the engine's decision about the flow");
         Assert.AreEqual(ExecutionFailurePhase.Node, records[0].Phase);
         Assert.AreSame(a, records[0].Node, "a record without the node that made it is not worth handing to a host");
         Assert.AreEqual("python is not installed", records[0].Message);
         Assert.AreEqual(ExecutionReportLevel.Error, records[0].Level);
         Assert.AreEqual(0, records[0].Order);
         Assert.IsNull(records[0].Error, "the node reported a message, not an exception");
-        Assert.AreEqual("Completed", context.Status, "and the run carries on");
+        Assert.AreEqual("Stopped", context.Status, "and an error nobody can place ends the run");
     }
 
     [TestMethod]
@@ -132,13 +138,17 @@ public class ExecutionErrorSinkTests
         Assert.AreEqual(RunOutcome.Completed, context.Outcome);
     }
 
+    /// <summary>
+    /// A broken sink must not become the report: had the exception escaped into the node's frame, a warning would
+    /// have come back out as a throw — and a throw ends the run.
+    /// </summary>
     [TestMethod]
-    public async Task AThrowingErrorSink_DoesNotAddAFailureToTheRun()
+    public async Task AThrowingErrorSink_DoesNotTurnAWarningIntoAFailure()
     {
         var a = new ProbeNode("a");
         a.AsyncHandler = async (ctx, _) =>
         {
-            await ((IRuntimeContext)ctx).ErrorAsync("boom");
+            await ((IRuntimeContext)ctx).WarnAsync("script is empty");
             return "A";
         };
         var context = new RuntimeContext
@@ -149,6 +159,7 @@ public class ExecutionErrorSinkTests
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(a), context, CancellationToken.None);
 
         Assert.AreEqual(RunOutcome.Completed, context.Outcome, "a broken sink must not reach the run that reported");
+        Assert.IsFalse(context.EndedWithError);
         Assert.IsTrue(context.Logs.Any(l => l.Contains("[ErrorSink]", StringComparison.Ordinal)),
             $"the sink's own failure has to be visible somewhere; got: {string.Join(" | ", context.Logs)}");
     }

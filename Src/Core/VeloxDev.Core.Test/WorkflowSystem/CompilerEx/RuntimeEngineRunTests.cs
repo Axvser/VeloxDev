@@ -131,34 +131,29 @@ public class RuntimeEngineRunTests
     }
 
     /// <summary>
-    /// A node that throws is a report, not a stop: the line is written, the drive counts as having produced
-    /// <c>null</c>, and the chain carries on. (Was <c>NodeError_WithoutIRedirectable_EndsWithStatusMinusOne</c>
-    /// until 2026-09-27 — the old name is what made "Error ends the flow" look like the contract.)
+    /// An uncaught exception is the same level as <c>Error</c>: the line is written and, with nobody to redirect
+    /// through, the flow ends at that node.
     /// </summary>
     [TestMethod]
-    public async Task ANodeThatThrows_IsLogged_AndTheChainCarriesOnWithNull()
+    public async Task ANodeThatThrows_WithoutIRedirectable_EndsTheFlowWithStatusMinusOne()
     {
         var a = new ProbeNode("a") { Handler = (_, _) => "A" };
         var b = new ProbeNode("b")
         {
             Handler = (_, _) => throw new InvalidOperationException("boom"),
         };
-        object? seenByC = "unset";
-        var c = new ProbeNode("c") { Handler = (ctx, _) => { seenByC = ctx.Data; return "C"; } };
         ProbeGraph.Wire(a, b);
-        ProbeGraph.Wire(b, c);
         var graph = ProbeGraph.Compile(a);
 
         var session = await ProbeGraph.RunAsync(graph);
 
+        Assert.IsTrue(session.EndedWithError, "an error-level failure with no IRedirectable must end the run");
+        Assert.AreEqual("Stopped", session.Status);
+        Assert.AreEqual(-1, session.CurrentOrder, "status code should drop to -1 (absolute stop)");
         Assert.HasCount(1, a.Calls);
         Assert.HasCount(1, b.Calls, "the failing node itself is driven once");
-        Assert.HasCount(1, c.Calls, "the flow must reach the node after it");
-        Assert.IsNull(seenByC, "the failed drive counts as having produced null");
         Assert.IsTrue(session.Logs.Any(l => l.Contains("[Error]", StringComparison.Ordinal) && l.Contains("boom")),
             "the error must be surfaced on the session log");
-        Assert.IsFalse(session.EndedWithError, "nothing a node does ends the run by itself");
-        Assert.AreEqual("Completed", session.Status);
-        Assert.AreEqual(RunOutcome.Completed, session.Outcome);
+        Assert.AreEqual(RunOutcome.Failed, session.Outcome);
     }
 }

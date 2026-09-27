@@ -2,9 +2,11 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 /// <summary>
 /// A redirectable node: while executing, decides whether to fall back to an earlier compile state in its chain based
-/// on <see cref="IRuntimeContext"/>. <see cref="RuntimeEngine"/> calls its <see cref="ResolveRedirectAsync"/> after
-/// driving a node in the chain; a non-null <see cref="CompileContext.Order"/> means falling back to that state and
-/// re-executing (in-chain redirect, v1). The compiled graph itself is acyclic; redirect is purely a runtime contract.
+/// on <see cref="IRuntimeContext"/>. <see cref="RuntimeEngine"/> calls its <see cref="ResolveRedirectAsync"/> when a
+/// drive reports an <see cref="IRuntimeContext.Error"/> or throws — it is the one configured answer to a failure,
+/// and without it that failure ends the flow. A non-null <see cref="CompileContext.Order"/> means falling back to
+/// that state and re-executing (in-chain redirect, v1). The compiled graph itself is acyclic; redirect is purely a
+/// runtime contract.
 /// </summary>
 public interface IRedirectable
 {

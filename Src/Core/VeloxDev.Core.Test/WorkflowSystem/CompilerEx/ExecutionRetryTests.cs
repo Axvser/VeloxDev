@@ -52,8 +52,9 @@ public class ExecutionRetryTests
         Assert.AreEqual(1, context.Attempt);
         Assert.IsTrue(context.Logs.Any(l => l.Contains("[Error]", StringComparison.Ordinal) && l.Contains("boom")),
             "the last failure still reaches the log exactly as it did before the policy existed");
-        Assert.AreEqual("Completed", context.Status, "running out of retries is not a reason to abandon the run");
-        Assert.IsFalse(context.EndedWithError);
+        Assert.IsTrue(context.EndedWithError, "giving up on the retries leaves the failure at error level");
+        Assert.AreEqual("Stopped", context.Status);
+        Assert.AreEqual(RunOutcome.Failed, context.Outcome);
     }
 
     /// <summary>

@@ -47,8 +47,15 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
     /// <inheritdoc />
     public object? Data { get; set; }
 
+    // 这次驱动报了什么级别。分支私有，与 Data / RedirectRequested 同理：两个分支交错时报的级别不是同一个。
+    internal ExecutionReportLevel? ReportedLevel { get; set; }
+
     /// <inheritdoc />
-    public bool RedirectRequested { get; set; }
+    public bool RedirectRequested
+    {
+        get => ReportedLevel is not null;
+        set => ReportedLevel = value ? ExecutionReportLevel.Error : null;
+    }
 
     /// <inheritdoc />
     public int? PendingRedirectTarget { get; set; }
@@ -137,14 +144,14 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
     public void Error(string message)
     {
         _session.Log($"[Error] {message}");
-        RedirectRequested = true;
+        ReportedLevel = ExecutionReportLevel.Error;
     }
 
     /// <inheritdoc />
     public void Warn(string message)
     {
         _session.Log($"[Warning] {message}");
-        RedirectRequested = true;
+        ReportedLevel = ExecutionReportLevel.Warning;
     }
 
     /// <summary>The node being driven in this branch right now — this branch's own, so siblings cannot overwrite it.</summary>

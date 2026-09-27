@@ -58,11 +58,20 @@ public sealed partial class RuntimeContext : IRuntimeContext
     private readonly Dictionary<IWorkflowNodeViewModel, (int Attempt, object? Value)> _outputs =
         new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
 
+    // 这次驱动报了什么级别：null = 干净返回，Warning = Warn()，Error = Error() 或抛异常。
+    // 引擎按它决定停不停 —— Warning 完全不影响控制流（值照常传下去），Error 在没有处理者时结束整轮。
+    internal ExecutionReportLevel? ReportedLevel { get; set; }
+
     /// <summary>
-    /// Whether the node called <see cref="Error"/> or <see cref="Warn"/> during this drive (a redirect request).
-    /// The engine clears it before each drive and checks it after. Read/written via <see cref="IRuntimeContext"/>.
+    /// Whether this drive reported anything at all — a warning, an error, or a throw. The engine clears it before
+    /// each drive; what it reported is what decides where the run goes.
     /// </summary>
-    public bool RedirectRequested { get; set; }
+    /// <remarks>The setter is here because the contract declares one; assigning <c>true</c> counts as the gravest reading, an error.</remarks>
+    public bool RedirectRequested
+    {
+        get => ReportedLevel is not null;
+        set => ReportedLevel = value ? ExecutionReportLevel.Error : null;
+    }
 
     /// <summary>Whether the flow ended early because "the node errored but does not implement <see cref="IRedirectable"/>" (status set to -1).</summary>
     public bool EndedWithError { get; set; }
@@ -190,14 +199,14 @@ public sealed partial class RuntimeContext : IRuntimeContext
     public void Error(string message)
     {
         AppendLog($"{Next():00}. [Error] {message}");
-        RedirectRequested = true;
+        ReportedLevel = ExecutionReportLevel.Error;
     }
 
     /// <inheritdoc />
     public void Warn(string message)
     {
         AppendLog($"{Next():00}. [Warning] {message}");
-        RedirectRequested = true;
+        ReportedLevel = ExecutionReportLevel.Warning;
     }
 
     /// <inheritdoc />

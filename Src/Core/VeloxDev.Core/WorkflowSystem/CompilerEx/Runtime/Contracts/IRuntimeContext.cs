@@ -62,15 +62,15 @@ public interface IRuntimeContext : ITaskContext
     new object? Data { get; set; }
 
     /// <summary>
-    /// Whether this drive did not come back cleanly — the node called <see cref="Error"/>/<see cref="Warn"/>, or
-    /// it threw. The engine clears it before each drive and reads it after, and a node that implements
-    /// <see cref="IRedirectable"/> gets asked where to go next because of it.
+    /// Whether this drive reported anything at all — a warning, an error, or an exception the node did not catch.
+    /// The engine clears it before each drive; <b>what</b> was reported is what decides where the run goes.
     /// </summary>
     bool RedirectRequested { get; set; }
 
     /// <summary>
-    /// Whether the engine's own machinery gave up on the run, leaving it <c>"Stopped"</c> (status code <c>-1</c>):
-    /// a router or redirect contract that threw, or the redirect cap. A node's report or exception never sets this.
+    /// Whether the flow ended early, leaving the run <c>"Stopped"</c> with status code <c>-1</c>: an
+    /// <see cref="Error"/> (or an uncaught exception) that no <see cref="IRedirectable"/> could place, a router or
+    /// redirect contract that threw, or the redirect cap.
     /// </summary>
     bool EndedWithError { get; set; }
 
@@ -90,9 +90,9 @@ public interface IRuntimeContext : ITaskContext
     void Log(string entry);
 
     /// <summary>
-    /// Pushes an exception/error log line (sequence prefix with an [Error] marker). A report, not a stop: the
-    /// engine writes the line, treats this drive as having produced <c>null</c>, and carries on — unless the node
-    /// implements <see cref="IRedirectable"/>, whose answer then decides where the run goes.
+    /// Pushes an exception/error log line (sequence prefix with an [Error] marker) and <b>stops the run</b>: the
+    /// engine treats this drive as having produced <c>null</c> and ends the whole flow with status -1 — unless the
+    /// node implements <see cref="IRedirectable"/>, whose answer then decides where the run goes instead.
     /// </summary>
     /// <remarks>
     /// Synchronous and void on purpose: this runs inside a node's frame and must never block or throw. Use
@@ -100,7 +100,12 @@ public interface IRuntimeContext : ITaskContext
     /// </remarks>
     void Error(string message);
 
-    /// <summary>Pushes a warning log line (sequence prefix with a [Warning] marker). Reported exactly like <see cref="Error"/> — the marker is the only difference.</summary>
+    /// <summary>
+    /// Pushes a warning log line (sequence prefix with a [Warning] marker). <b>A note, not a stop:</b> the run
+    /// carries on with whatever the node returned — that value is not discarded, and no redirect is asked for.
+    /// </summary>
+    /// <remarks>Use <see cref="Error"/> for a failure that should end the run, and <see cref="Log"/> for something
+    /// that is not worth a marker. <see cref="WarnAsync"/> adds the host's record.</remarks>
     void Warn(string message);
 
     /// <summary>

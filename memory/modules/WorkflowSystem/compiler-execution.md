@@ -55,22 +55,23 @@
 | `context.Sender` / `Receiver` | 由 `Templates/Helpers/TreeHelper.cs:155-156` 填上真实上下游 slot | **恒为 `null`** —— `DriveAsync` 从不给 `RuntimeContext` 的 `_sender`/`_receiver` 赋值（代码级核对；未做运行时验证） |
 | 多输入节点的输入 | 按 slot 广播 | 只有 `InputNodes.Count > 1` 才聚合成 `GroupData`，否则是单值 `Data` |
 
-## 六、节点的报告不打断运行（2026-09-27 改，此前是「一句 `Warn` 终止整轮」）
-
-`Error` / `Warn` / **抛异常**都是**报告**，一回事：写日志、这次驱动记为「返回 null」、运行继续。唯一会改变走向的是**配置过的处理** —— 节点实现 `IRedirectable` 时引擎问它要目标，给了就重定向（目标必须是更早的 `Order`），没给就照常往下走；没实现这个契约就没人可问，同样往下走。
+## 六、两档报告：`Warn` 只是提醒，`Error`（与未捕获的异常）主动停止（2026-09-27 定）
 
 | 节点做了什么 | 有 `IRedirectable` | 没有 |
 |---|---|---|
-| 调 `Warn`/`Error`，正常返回 | 问它的决定 → 重定向或继续 | 记 null，继续 |
-| 抛异常（重试耗尽后） | 同上 | 记 null，继续 |
+| 干净返回 | — | 值传下去 |
+| `Warn()`（正常返回） | **不改变走向**（连问都不问） | 值照常传下去，运行继续 |
+| `Error()`，或抛异常（重试耗尽后） | 问它的决定 → 重定向或继续 | **整轮结束**：`CurrentOrder = -1`、`EndedWithError = true`、Status `"Stopped"`、Outcome `Failed` |
 
-- **数据口径**在 `DriveAsync` 一处：报告过的那次驱动 `RegisterOutput(node, null)` + `Data = null`。所以汇合点看到的是「这个来源在、值为 null」，不是「少了一个来源」——作者特意连了那个节点，它的沉默是信息。
-- **`EndedWithError` / `RunOutcome.Failed` 现在只由引擎自己的机制产生**：`ResolveRouteKey` 或 `ResolveRedirectAsync` 抛异常（宿主契约坏了，没有可走的路）、以及重定向上限 50（`RuntimeEngine.RunAsync`）。节点做什么都不会让一整轮停下来。
-- 改的理由：demo 的 [`PythonHelper.cs:27`](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 在脚本为空时 `Warn`、[:54](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 在 python 失败时 `Error`，**两处都 `return null`** —— 那本来就是「报一句、给 null、继续」的写法，而旧规则让「30 个分支里有一个没写脚本」直接结束整轮。全仓至今**没有一个生产 `IRedirectable` 实现者**（只有测试探针），所以旧规则的默认后果就是终止。
-- **同步那对只写日志，异步那对才记录到宿主**：`ErrorAsync`/`WarnAsync` = 同步那对 + 把 `ExecutionError` 交给 `IExecutionErrorSink`（带 `ExecutionReportLevel`，警告与错误分得开）。同步的 `Error`/`Warn` 必须保持 `void`（`ILogWriter.Write` 是同步的，节点帧里不能阻塞），所以它不碰 sink —— 想要宿主记录就 `await` 异步那对，demo 的 `PythonHelper` 已经换成它。
-- 节点自己报的记录里带 `CurrentNode`：**扇出里存在分支门面上**，写在会话上会被交错的分支互相覆盖（与 `Data` 同理）。
+- 判据是 `RuntimeContext.ReportedLevel`（`ExecutionReportLevel?`：null / Warning / Error），由 `Error()`/`Warn()` 写；**抛异常那支由 `DriveAsync` 的 catch 调 `context.Error(...)` 写同一档** —— 所以异常没有单独的通道，它就是 Error 档。`IRuntimeContext.RedirectRequested` 现在是从 `ReportedLevel` **派生**的（契约上的 bool 没动，赋 `true` 按 Error 算）。
+- **警告不吃掉结果**：`DriveAsync` 只在 Error 档把这次驱动记成「返回 null」+ `RegisterOutput(node, null)`；Warn 档节点返回什么，下游就收到什么（汇合点里读到的是那个值，不是 null）。
+- **级别是分支私有的**：门面自带一份（与 `Data`/`CurrentNode` 同理）—— 写在会话上，交错的两个分支会互相覆盖。引擎读它走 `RuntimeEngine.ReportedLevel(context, session)`。
+- 与 2026-09-27 之前那条「一句 `Warn` 终止整轮」比，**只有 Warn 这一格变了**；Error 与抛异常的行为逐字回到旧规则。
+- 分档的理由：demo 的 [`PythonHelper.cs:27`](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 与 [:54](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 正好是两种意图 —— 脚本为空是「这一支没东西可跑」（30 个分支里有一个没写脚本不该拖垮整轮），python 进程失败是「没有任何下游能绕过它」。而全仓**没有一个生产 `IRedirectable` 实现者**（只有测试探针），所以 Error 档的默认后果就是终止。
+- **同步那对只写日志，异步那对才记录到宿主**：`ErrorAsync`/`WarnAsync` = 同步那对 + 把 `ExecutionError` 交给 `IExecutionErrorSink`（带 `ExecutionReportLevel`，见 §十），**档位语义完全继承**（`ErrorAsync` 一样停）。同步的 `Error`/`Warn` 必须保持 `void`（`ILogWriter.Write` 是同步的，节点帧里不能阻塞），所以它不碰 sink。
+- 节点自己报的记录里带 `CurrentNode`：**扇出里存在分支门面上**，与级别同一个理由。
 
-测试：`NodeReportTests`（4 条：Warn/Error/抛异常都不阻断、报告过的节点在汇合点里是 null 而非缺席、有 `IRedirectable` 时报告仍交给契约）。
+测试：`NodeReportTests`（4 条：Warn 让值流过、Error 无处理者时结束整轮、Error 有 `IRedirectable` 时由契约安排、警告后的值与汇合点）；抛异常那两条是 `RuntimeEngineRunTests.ANodeThatThrows_WithoutIRedirectable_EndsTheFlowWithStatusMinusOne` 与 `EngineHostContractFailureTests.AnAttachThatThrows_EndsTheRun_InsteadOfSilentlySkippingTheNode`。
 
 ## 七、测试在哪、什么没测
 
