@@ -48,7 +48,11 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         IsActive = true;
         tree?.BeginWorkflowRun();
 
-        var context = new RuntimeContext { IsRunning = true };
+        // 种子必须在这里进会话。`SeedPayload` 的契约（见它自己的 AgentContext 文本）是「执行开始时注入工作流
+        // 上下文」，可它此前从没被写进 RuntimeContext —— 七个平台的输入框都双向绑着它，却对运行没有任何影响；
+        // 而 Agent 侧的 RunCompiledWorkflow 是传的（WorkflowAgentToolkit 的 `Data = seed`）。现在两边一致：
+        // 原样传入，空串就是空负载（与给 Agent 传 seed: "" 等价），不做 null 转换。
+        var context = new RuntimeContext { IsRunning = true, Data = SeedPayload };
         RuntimeContext = context;
         OnPropertyChanged(nameof(RuntimeContext));
 
