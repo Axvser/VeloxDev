@@ -76,20 +76,24 @@ public class CompiledRunControlTests
         => JObject.Parse(WorkflowToolInvoker.Invoke(scope, "GetCompiledRunStatus", ("handle", handle)));
 
     /// <summary>
-    /// Polls until the run is no longer running. The call that sees the end also retires the handle, so the status
-    /// it returns is the last word on that run.
+    /// Polls until the run is no longer running. The call that sees the end also retires the handle, so an unknown
+    /// handle means the run finished and the previous answer was the last word on it — the race between the tool's
+    /// own status and the retirement is the tool's to keep, not the test's to time.
     /// </summary>
     private static async Task<JObject> WaitForEndAsync(WorkflowAgentScope scope, string handle, int seconds = 30)
     {
+        JObject? last = null;
         var deadline = DateTime.UtcNow.AddSeconds(seconds);
         while (DateTime.UtcNow < deadline)
         {
-            var status = Status(scope, handle);
+            var status = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "GetCompiledRunStatus", ("handle", handle)));
+            if (status["status"]?.Value<string>() != "ok")
+                return last ?? status;
+            last = status;
             if (status["isRunning"]?.Value<bool>() == false) return status;
             await Task.Delay(25);
         }
-        var stuck = Status(scope, handle);
-        Assert.Fail($"run '{handle}' did not finish in {seconds}s; last status: {stuck.ToString(Formatting.None)}");
+        Assert.Fail($"run '{handle}' did not finish in {seconds}s; last status: {last?.ToString(Formatting.None)}");
         return null!;
     }
 

@@ -20,9 +20,9 @@ namespace Demo;
 /// <summary>The full WorkflowSystem demo on Jalium: the voltage-analysis chain
 /// (WorkflowDemoSession.Create) rendered through the SAME NodeEditorSurface the trimmed demo uses
 /// (drag / connect / pan / auto-grow / minimap all identical), plus a control sidebar (Controller
-/// Compile/Run/Stop/Close, Undo/Redo/Save/Select/Load, node counts, Agent chat, MCP status,
-/// execution log). The Agent/MCP panels mirror the WPF/Avalonia full demos; the Agent only responds
-/// when an OpenAI-compatible key is configured.</summary>
+/// Compile/Run/Stop/Close, Undo/Redo/Save/Select/Load, node counts, run controls (pause gate +
+/// checkpoint resume), Agent chat, MCP status, execution log). The Agent/MCP panels mirror the
+/// WPF/Avalonia full demos; the Agent only responds when an OpenAI-compatible key is configured.</summary>
 internal sealed class MainWindow : Window
 {
     private readonly NodeEditorSurface _surface;
@@ -35,8 +35,11 @@ internal sealed class MainWindow : Window
     private readonly TextBox _agentInput = new();
     private readonly TextBlock _mcpSummary = new();
     private readonly StackPanel _mcpServers = new() { Spacing = 3 };
+    private readonly TextBlock _runGateState = new();
 
     private TreeViewModel _tree = new();
+    private WorkflowDemoSession? _demo;
+    private Button? _continueFromCheckpoint;
     private McpStatusViewModel? _mcpStatus;
     private readonly HashSet<McpServerStatusViewModel> _mcpServerSubs = new();
 
@@ -152,18 +155,6 @@ internal sealed class MainWindow : Window
     {
         var panel = new StackPanel { Spacing = 10 };
 
-        static Button ActionButton(string text) => new()
-        {
-            Content = text,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            Height = 40,
-            FontSize = 13,
-            Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D)),
-            Foreground = new SolidColorBrush(Colors.White),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x4B, 0x4B, 0x4B)),
-            BorderThickness = new Thickness(1),
-        };
-
         // ── Workflow actions ───────────────────────────────────────────────
         var undo = ActionButton("Undo");
         undo.Click += (_, _) => _tree.UndoCommand.Execute(null);
@@ -184,6 +175,7 @@ internal sealed class MainWindow : Window
         _visibleCount.Foreground = new SolidColorBrush(Colors.White);
         panel.Children.Add(_visibleCount);
 
+        panel.Children.Add(BuildRunControlsPanel());
         panel.Children.Add(BuildAgentChatPanel());
         panel.Children.Add(BuildMcpPanel());
         panel.Children.Add(BuildExecutionLogPanel());
@@ -194,6 +186,103 @@ internal sealed class MainWindow : Window
             Content = panel,
         };
         return scroller;
+    }
+
+    private static Button ActionButton(string text) => new()
+    {
+        Content = text,
+        HorizontalAlignment = HorizontalAlignment.Stretch,
+        Height = 40,
+        FontSize = 13,
+        Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D)),
+        Foreground = new SolidColorBrush(Colors.White),
+        BorderBrush = new SolidColorBrush(Color.FromRgb(0x4B, 0x4B, 0x4B)),
+        BorderThickness = new Thickness(1),
+    };
+
+    /// <summary>The two capabilities a run cannot press by itself: the pause gate and the checkpoint a
+    /// later run carries on from. Both live on the session, so these controls act on the window's
+    /// <see cref="WorkflowDemoSession"/> rather than on the tree — the way the Avalonia demo's sidebar
+    /// panel does.</summary>
+    private FrameworkElement BuildRunControlsPanel()
+    {
+        var body = new StackPanel { Spacing = 6 };
+
+        var headerRow = new Grid();
+        headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+        headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var header = new TextBlock { Text = "运行控制", Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)), FontWeight = FontWeights.Bold };
+        _runGateState.Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E));
+        _runGateState.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(header, 0);
+        Grid.SetColumn(_runGateState, 1);
+        headerRow.Children.Add(header);
+        headerRow.Children.Add(_runGateState);
+        body.Children.Add(headerRow);
+
+        var pause = ActionButton("Pause");
+        pause.Click += (_, _) => PauseWorkflow();
+        var resume = ActionButton("Resume");
+        resume.Click += (_, _) => ResumeWorkflow();
+        var gateRow = new Grid { ColumnSpacing = 6 };
+        gateRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+        gateRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+        Grid.SetColumn(pause, 0);
+        Grid.SetColumn(resume, 1);
+        gateRow.Children.Add(pause);
+        gateRow.Children.Add(resume);
+        body.Children.Add(gateRow);
+
+        _continueFromCheckpoint = ActionButton("从检查点继续");
+        _continueFromCheckpoint.IsEnabled = false;
+        _continueFromCheckpoint.Click += (_, _) => _ = ContinueFromCheckpointAsync();
+        body.Children.Add(_continueFromCheckpoint);
+
+        return Section("", body);
+    }
+
+    private void PauseWorkflow()
+    {
+        if (_demo is null)
+        {
+            return;
+        }
+
+        _demo.Gate.Pause();
+        _runGateState.Text = "已暂停：停在下一个节点边界";
+    }
+
+    private void ResumeWorkflow()
+    {
+        if (_demo is null)
+        {
+            return;
+        }
+
+        _demo.Gate.Resume();
+        _runGateState.Text = "运行中";
+    }
+
+    private async Task ContinueFromCheckpointAsync()
+    {
+        if (_demo is null)
+        {
+            return;
+        }
+
+        _runGateState.Text = "从检查点继续…";
+        await _demo.Controller.ResumeCommand.ExecuteAsync(null);
+    }
+
+    // A checkpoint is only on disk once a run has ended, so this is refreshed when a run's command exits.
+    private void RefreshRunControls()
+    {
+        if (_continueFromCheckpoint is not null)
+        {
+            _continueFromCheckpoint.IsEnabled = _demo?.HasCheckpoint == true;
+        }
+
+        _runGateState.Text = _demo?.Gate.IsPaused == true ? "已暂停" : "空闲";
     }
 
     private FrameworkElement BuildAgentChatPanel()
@@ -431,11 +520,18 @@ internal sealed class MainWindow : Window
     private void LoadNetworkDemo()
     {
         UnsubscribeTree(_tree);
-        _tree = WorkflowDemoSession.Create().Tree;
+        _demo = WorkflowDemoSession.Create();
+        _tree = _demo.Tree;
         _surface.SetTree(_tree);
         SubscribeTree(_tree);
         UpdateCounts();
         CenterViewport();
+
+        // A run writes its checkpoint on the way out — the continue control follows both commands' exit.
+        // Exited is raised on a pool thread, so the refresh lands back on ours.
+        _demo.Controller.RunCommand.Exited += _ => _uiDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshRunControls));
+        _demo.Controller.ResumeCommand.Exited += _ => _uiDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshRunControls));
+        RefreshRunControls();
     }
 
     private void SubscribeTree(TreeViewModel vm)
@@ -581,6 +677,11 @@ internal sealed class MainWindow : Window
         _tree = result;
         _surface.SetTree(_tree);
         SubscribeTree(_tree);
+
+        // A tree from a file has no session behind it — no gate, no checkpoint store — so the run controls
+        // have nothing to act on and fall back to their idle state.
+        _demo = null;
+        RefreshRunControls();
         _ = _uiDispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
             var offset = _tree.Layout.ActualOffset;

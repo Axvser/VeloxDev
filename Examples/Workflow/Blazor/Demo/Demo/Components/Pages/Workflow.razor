@@ -33,6 +33,26 @@
 
         <div class="sb-divider"></div>
 
+        @* 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
+           （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
+           按钮走 code-behind 而不是 Command 绑定：门与检查点都在会话上、不在树上
+           —— 与同栏的 Save / Load 同一个理由。 *@
+        <div class="sb-panel">
+            <div class="sb-panel-header">
+                <span>运行控制</span>
+                <span style="color:#a0a0a0;font-weight:normal;">@_runGateState</span>
+            </div>
+            <div style="display:flex;gap:6px;">
+                <button class="sb-btn" style="flex:1;" @onclick="PauseWorkflow">Pause</button>
+                <button class="sb-btn" style="flex:1;" @onclick="ResumeWorkflow">Resume</button>
+            </div>
+            <button class="sb-btn" @onclick="ContinueFromCheckpoint" disabled="@(!_hasCheckpoint)">
+                从检查点继续
+            </button>
+        </div>
+
+        <div class="sb-divider"></div>
+
         <!-- Agent Chat Panel -->
         <div class="sb-panel">
             <div class="sb-panel-header">

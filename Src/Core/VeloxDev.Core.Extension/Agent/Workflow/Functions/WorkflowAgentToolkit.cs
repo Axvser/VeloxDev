@@ -2231,18 +2231,22 @@ public sealed class WorkflowAgentToolkit
     }
 
     [Description("Reports on a run started by StartCompiledWorkflow / ContinueCompiledWorkflow: isRunning, runStatus, outcome (Completed / Cancelled / Failed — the precise reading, since runStatus shares 'Stopped' between a failure and a cancellation), isPaused, attempts, endedWithError, the final data, failures (the failures the run recorded, as records: phase / level / message / attempt / order), the last lines of the log, and logFile (an absolute path when the host sent the lines to a file — open it with your own file tool for the whole log). Also the way to learn a run has finished: a completed run's outcome stops being 'Unknown'. Pure query.")]
-    private async Task<string> GetCompiledRunStatus(
+    private string GetCompiledRunStatus(
         [Description("The handle returned when the run was started.")] string handle)
     {
         if (!TryGetRun(handle, out var run, out var error)) return error;
-        await Task.CompletedTask;
 
         var context = run.Context!;
+
+        // 只读一次：这一次调用回答的是「结束了吗」，退休的也是同一件事。分两次读会给出自相矛盾的答案
+        // —— 「还在跑」的回答配上一具已经被退休的句柄，再问就成了未知句柄。
+        // 读任务而不是 context.IsRunning：后者是引擎在后台线程里才置起来的，抢在同一瞬会读到「没在跑」。
+        var finished = run.Task.IsCompleted;
         var status = new JObject
         {
             ["status"] = "ok",
             ["handle"] = run.Handle,
-            ["isRunning"] = context.IsRunning,
+            ["isRunning"] = !finished,
             ["runStatus"] = context.Status,
             ["outcome"] = context.Outcome.ToString(),
             ["isPaused"] = run.Gate.IsPaused,
@@ -2260,7 +2264,7 @@ public sealed class WorkflowAgentToolkit
 
         // A finished run is dropped once it has been reported: the handle has told its story, and the task and the
         // cancellation source go with it. Asking again afterwards is an unknown handle, which is the honest answer.
-        if (run.Task.IsCompleted)
+        if (finished)
         {
             lock (_runsGate) _runs.Remove(run.Handle);
             run.Cts.Dispose();

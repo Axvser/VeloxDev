@@ -95,6 +95,42 @@ public partial class WorkflowView : ContentView
         LoadNetworkDemo();
     }
 
+    // ── Run controls ────────────────────────────────────────────────────────
+
+    // The gate and the checkpoint live on the session, not on the tree, so these controls are only
+    // usable when one is attached — and with none there is nothing to hold or to carry on.
+    private void RefreshRunControls()
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            ContinueFromCheckpointButton.IsEnabled = Session?.HasCheckpoint == true;
+            RunGateState.Text = Session?.Gate.IsPaused == true ? "已暂停" : "空闲";
+        });
+    }
+
+    private void OnRunCommandExited(CommandEventArgs e) => RefreshRunControls();
+
+    private void OnPauseClicked(object? sender, EventArgs e)
+    {
+        if (Session is not { } session) return;
+        session.Gate.Pause();
+        RunGateState.Text = "已暂停：停在下一个节点边界";
+    }
+
+    private void OnResumeClicked(object? sender, EventArgs e)
+    {
+        if (Session is not { } session) return;
+        session.Gate.Resume();
+        RunGateState.Text = "运行中";
+    }
+
+    private async void OnContinueFromCheckpointClicked(object? sender, EventArgs e)
+    {
+        if (Session is not { } session) return;
+        RunGateState.Text = "从检查点继续…";
+        await session.Controller.ResumeCommand.ExecuteAsync(null);
+    }
+
     public static readonly BindableProperty SessionProperty = BindableProperty.Create(
         nameof(Session),
         typeof(WorkflowDemoSession),
@@ -146,7 +182,11 @@ public partial class WorkflowView : ContentView
     private void AttachSession(WorkflowDemoSession? oldSession, WorkflowDemoSession? newSession)
     {
         if (oldSession is not null)
+        {
             UnsubscribeAutoScroll(oldSession.Tree);
+            oldSession.Controller.RunCommand.Exited -= OnRunCommandExited;
+            oldSession.Controller.ResumeCommand.Exited -= OnRunCommandExited;
+        }
 
         // Capture ViewportOffset BEFORE setting BindingContext, because
         // BindingContext change triggers OnBindingContextChanged →
@@ -180,7 +220,14 @@ public partial class WorkflowView : ContentView
                 _ = helper.LoadMcpServersAsync();
             }
             newSession.Tree.Layout.UpdateCommand.Execute(null);
+
+            // A run only writes its checkpoint on the way out, so the continue button's availability
+            // follows the run's exits rather than anything the tree raises.
+            newSession.Controller.RunCommand.Exited += OnRunCommandExited;
+            newSession.Controller.ResumeCommand.Exited += OnRunCommandExited;
         }
+
+        RefreshRunControls();
 
         // Delay refresh to after layout settles, then restore the saved viewport
         // position (or center the content if no saved position exists).

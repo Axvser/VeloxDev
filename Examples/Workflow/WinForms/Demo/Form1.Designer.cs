@@ -48,6 +48,11 @@
             saveButton = new Button();
             selectButton = new Button();
             loadDemoButton = new Button();
+            pauseButton = new Button();
+            resumeButton = new Button();
+            continueFromCheckpointButton = new Button();
+            runGateStateLabel = new Label();
+            runControlLabel = new Label();
             nodeCountLabel = new Label();
             visibleCountLabel = new Label();
             nodeCountCaptionLabel = new Label();
@@ -92,6 +97,11 @@
             toolbarPanel.Controls.Add(saveButton);
             toolbarPanel.Controls.Add(selectButton);
             toolbarPanel.Controls.Add(loadDemoButton);
+            toolbarPanel.Controls.Add(pauseButton);
+            toolbarPanel.Controls.Add(resumeButton);
+            toolbarPanel.Controls.Add(continueFromCheckpointButton);
+            toolbarPanel.Controls.Add(runGateStateLabel);
+            toolbarPanel.Controls.Add(runControlLabel);
             toolbarPanel.Controls.Add(nodeCountCaptionLabel);
             toolbarPanel.Controls.Add(nodeCountLabel);
             toolbarPanel.Controls.Add(visibleCountCaptionLabel);
@@ -102,7 +112,7 @@
             toolbarPanel.Dock = DockStyle.Top;
             toolbarPanel.Location = new Point(12, 12);
             toolbarPanel.Name = "toolbarPanel";
-            toolbarPanel.Size = new Size(376, 248);
+            toolbarPanel.Size = new Size(376, 320);
             toolbarPanel.TabIndex = 0;
             // 
             // statusValueLabel
@@ -205,6 +215,53 @@
             loadDemoButton.UseVisualStyleBackColor = true;
             loadDemoButton.Click += LoadNetworkDemo;
             // 
+            // pauseButton
+            // 
+            pauseButton.Location = new Point(4, 272);
+            pauseButton.Name = "pauseButton";
+            pauseButton.Size = new Size(80, 32);
+            pauseButton.TabIndex = 20;
+            pauseButton.Text = "Pause";
+            pauseButton.UseVisualStyleBackColor = true;
+            pauseButton.Click += PauseWorkflow;
+            // 
+            // resumeButton
+            // 
+            resumeButton.Location = new Point(90, 272);
+            resumeButton.Name = "resumeButton";
+            resumeButton.Size = new Size(80, 32);
+            resumeButton.TabIndex = 21;
+            resumeButton.Text = "Resume";
+            resumeButton.UseVisualStyleBackColor = true;
+            resumeButton.Click += ResumeWorkflow;
+            // 
+            // continueFromCheckpointButton
+            // 
+            continueFromCheckpointButton.Enabled = false;
+            continueFromCheckpointButton.Location = new Point(176, 272);
+            continueFromCheckpointButton.Name = "continueFromCheckpointButton";
+            continueFromCheckpointButton.Size = new Size(166, 32);
+            continueFromCheckpointButton.TabIndex = 22;
+            continueFromCheckpointButton.Text = "从检查点继续";
+            continueFromCheckpointButton.UseVisualStyleBackColor = true;
+            continueFromCheckpointButton.Click += ContinueFromCheckpoint;
+            // 
+            // runControlLabel
+            // 
+            runControlLabel.AutoSize = true;
+            runControlLabel.Location = new Point(4, 246);
+            runControlLabel.Name = "runControlLabel";
+            runControlLabel.TabIndex = 23;
+            runControlLabel.Text = "运行控制：";
+            //
+            // runGateStateLabel
+            //
+            runGateStateLabel.AutoSize = true;
+            runGateStateLabel.Location = new Point(80, 246);
+            runGateStateLabel.Name = "runGateStateLabel";
+            runGateStateLabel.TabIndex = 24;
+            runGateStateLabel.Text = "空闲";
+            //
             // nodeCountCaptionLabel
             // 
             nodeCountCaptionLabel.AutoSize = true;
@@ -383,6 +440,11 @@
         private Button saveButton;
         private Button selectButton;
         private Button loadDemoButton;
+        private Button pauseButton;
+        private Button resumeButton;
+        private Button continueFromCheckpointButton;
+        private Label runControlLabel;
+        private Label runGateStateLabel;
         private Label nodeCountCaptionLabel;
         private Label nodeCountLabel;
         private Label visibleCountCaptionLabel;

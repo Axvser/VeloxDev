@@ -227,8 +227,10 @@ public partial class WorkflowView : UserControl
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
 
         // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。
-        _demo.Controller.RunCommand.Exited += _ => RefreshRunControls();
-        _demo.Controller.ResumeCommand.Exited += _ => RefreshRunControls();
+        // 要跳回 UI 线程：命令体是以 ConfigureAwait(false) 等的，Exited 落在池线程上，
+        // 在那里写控件的属性要么抛、要么被 RaiseCommandEvent 的 try/catch 吞掉（按钮就永远置灰）。
+        _demo.Controller.RunCommand.Exited += _ => Dispatcher.UIThread.Post(RefreshRunControls);
+        _demo.Controller.ResumeCommand.Exited += _ => Dispatcher.UIThread.Post(RefreshRunControls);
         RefreshRunControls();
     }
 

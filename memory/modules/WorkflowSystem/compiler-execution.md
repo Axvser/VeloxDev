@@ -153,7 +153,7 @@
 
 测试：`Core.Test/…/ExecutionCheckpointTests.cs`（5 条）+ `Core.Extension.Test/Serialization/ExecutionCheckpointSerializationTests.cs`（5 条）。判别性最强的一条是「半途停 → 恢复」：断言既要求没跑过的分支被驱动，也要求**被跳过的那个节点在汇合点里仍读得到它当初的产物** —— 只测「跳过了」的话，产物铺没铺回去是看不出来的。
 
-**demo 侧已接（2026-09-27）**：门与检查点是六个能力里唯一「得有人按一下」的两件（其余四件在运行里自己生效），所以它们在 demo 里有可点的东西 —— `WorkflowDemoSession.Gate` 交给每一轮运行、`HasCheckpoint` 给按钮判可用；`ControllerViewModel` 因此有了 `ResumeCommand`（`Run`/`Resume` 共用 `DriveAsync`，`CheckpointSource` 由会话注册且是 `internal`，所以不进序列化）。Avalonia demo 的侧栏有一块「运行控制」（Pause / Resume / 从检查点继续），**其余六家还差同一块**。两点值得记：`ConfigureRun` 每次都 `Gate.Resume()`（一轮运行不带着上一轮的暂停开始）⇒ **「运行前先暂停」不成立**，暂停只能在运行中途按（也正是 UI 的用法）；以及会话的暂存目录可指定（`Create(scratchDirectory)`）—— 并行测试各自一个目录，否则日志与检查点这两条**固定路径**会互相踩。
+**demo 侧已接（2026-09-27）**：门与检查点是六个能力里唯一「得有人按一下」的两件（其余四件在运行里自己生效），所以它们在 demo 里有可点的东西 —— `WorkflowDemoSession.Gate` 交给每一轮运行、`HasCheckpoint` 给按钮判可用；`ControllerViewModel` 因此有了 `ResumeCommand`（`Run`/`Resume` 共用 `DriveAsync`，`CheckpointSource` 由会话注册且是 `internal`，所以不进序列化）。**七家 demo 现在都有**一块「运行控制」（Pause / Resume / 从检查点继续）：Avalonia / WPF / WinUI / MAUI / Blazor / Jalium 放在各自宿主外壳的侧栏，WinForms 放在 `Form1` 的工具栏（与「停止工作流 / 重置示例」同一排）。**放在外壳而不是节点卡上**是有理由的：门与检查点是**会话级**的，而节点卡（如 WinForms 的 `Controls/WorkflowNodeCard.cs:654-658`，那四个 Compile/Run/Stop/Close 按钮所在处）上下文只有节点 VM，要够到会话得顺着 `Parent` 往上爬。两点值得记：`ConfigureRun` 每次都 `Gate.Resume()`（一轮运行不带着上一轮的暂停开始）⇒ **「运行前先暂停」不成立**，暂停只能在运行中途按（也正是 UI 的用法）；以及会话的暂存目录可指定（`Create(scratchDirectory)`）—— 并行测试各自一个目录，否则日志与检查点这两条**固定路径**会互相踩。
 
 ## 十二、重定向与分支的三处边界（2026-09-27 实测，做 demo 那张展示图时撞出来的）
 
@@ -169,4 +169,4 @@
 | 只编译的两个工具纳入闸门 | Agent 侧的 `CompileWorkflow`/`CompileNodeResult` 会写节点编译身份却不受 `WithAllowNodeExecution` 约束 —— 属 `VeloxDev.Core.Extension` 模块 |
 | 编译执行时补 `Sender`/`Receiver` | 第五节的不对称仍未消 |
 | `ExecuteCommandOnNode` 的完成语义 | Agent 侧它同步返回、不等完成，而同族的 `ExecuteNode` 会等 `Exited` —— 属 Extension 模块 |
-| 七家 demo 的暂停按钮 | 本轮只到引擎与契约层。除 Avalonia 外像素层验不了（合成输入进不了输入管线，已实测），而 WinForms 连 `ControllerView` 都没有（四个按钮在 `Form1.cs:336-343` 命令式搭的）⇒「加一个按钮」是七处彼此独立的改动 |
+| 七家 demo 的运行控制**在像素层仍未验** | 七家的控件与处理器都已接上、构建 0 错误，但**点下去的样子**没人看过：除 Avalonia 外合成输入进不了输入管线（已实测），而且这七处是七种 UI 栈（两家还是命令式搭界面）⇒ 只能人眼验。**依据订正（2026-09-27）**：WinForms 的四个控制器按钮**不在** `Form1.cs:336-343`（那里是 `UpdateControllerState`），而在节点卡 `Controls/WorkflowNodeCard.cs:654-658` —— 那条旧依据写错了文件与行号 |

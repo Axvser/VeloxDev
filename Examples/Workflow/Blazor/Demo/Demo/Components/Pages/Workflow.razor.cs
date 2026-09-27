@@ -7,6 +7,7 @@ using Microsoft.JSInterop;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using VeloxDev.AI;
+using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -25,6 +26,13 @@ public partial class Workflow : ComponentBase, IDisposable
         => (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;
     private string _canvasLayoutSize = "";
     private INotifyPropertyChanged? _subscribedVirtualLink;
+
+    /// <summary>What the run-controls card says about the gate — 空闲 / 已暂停 / …</summary>
+    private string _runGateState = "空闲";
+
+    /// <summary>Whether the session has a checkpoint to carry on from. Cached rather than read per
+    /// render: the page re-renders on every node/link change, and <c>HasCheckpoint</c> hits the disk.</summary>
+    private bool _hasCheckpoint;
 
     // ── Link selection / context menu ──────────────────────────────────────
     // 选中的那条线：悬停即选中，移开即取消（右键弹出菜单时保留）。它同时是 Delete 的作用对象
@@ -74,6 +82,10 @@ public partial class Workflow : ComponentBase, IDisposable
         _session.Tree.Nodes.CollectionChanged += OnNodesOrLinksChanged;
         _session.Tree.Links.CollectionChanged += OnNodesOrLinksChanged;
         _session.Controller.PropertyChanged += OnControllerPropertyChanged;
+        // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。
+        _session.Controller.RunCommand.Exited += OnRunCommandExited;
+        _session.Controller.ResumeCommand.Exited += OnRunCommandExited;
+        RefreshRunControls();
         if (_session.Tree is INotifyPropertyChanged np)
             np.PropertyChanged += OnTreePropertyChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
@@ -115,6 +127,8 @@ public partial class Workflow : ComponentBase, IDisposable
         _session.Tree.Nodes.CollectionChanged -= OnNodesOrLinksChanged;
         _session.Tree.Links.CollectionChanged -= OnNodesOrLinksChanged;
         _session.Controller.PropertyChanged -= OnControllerPropertyChanged;
+        _session.Controller.RunCommand.Exited -= OnRunCommandExited;
+        _session.Controller.ResumeCommand.Exited -= OnRunCommandExited;
         if (_session.Tree is INotifyPropertyChanged np)
             np.PropertyChanged -= OnTreePropertyChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
@@ -172,6 +186,41 @@ public partial class Workflow : ComponentBase, IDisposable
     {
         if (_session is null) return;
         await _session.Controller.CloseWorkflowCommand.ExecuteAsync(null);
+    }
+
+    // ── Run controls ───────────────────────────────────────────────────────
+    // 门与检查点都在会话上、不在树上，所以这三件事只有拿得到会话时才可按；换过会话就跟着新的走。
+    private void RefreshRunControls()
+    {
+        _hasCheckpoint = _session?.HasCheckpoint == true;
+        _runGateState = _session?.Gate.IsPaused == true ? "已暂停" : "空闲";
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnRunCommandExited(CommandEventArgs e) => RefreshRunControls();
+
+    private void PauseWorkflow()
+    {
+        if (_session is null) return;
+        _session.Gate.Pause();
+        _runGateState = "已暂停：停在下一个节点边界";
+        StateHasChanged();
+    }
+
+    private void ResumeWorkflow()
+    {
+        if (_session is null) return;
+        _session.Gate.Resume();
+        _runGateState = "运行中";
+        StateHasChanged();
+    }
+
+    private async Task ContinueFromCheckpoint()
+    {
+        if (_session is null) return;
+        _runGateState = "从检查点继续…";
+        StateHasChanged();
+        await _session.Controller.ResumeCommand.ExecuteAsync(null);
     }
 
     private async Task ResetDemo()

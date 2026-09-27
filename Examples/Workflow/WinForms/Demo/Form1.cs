@@ -4,6 +4,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -107,6 +108,8 @@ namespace Demo
             if (_demo is not null)
             {
                 _demo.Controller.PropertyChanged -= OnControllerPropertyChanged;
+                _demo.Controller.RunCommand.Exited -= OnRunCommandExited;
+                _demo.Controller.ResumeCommand.Exited -= OnRunCommandExited;
                 _demo.Tree.ExecutionLog.CollectionChanged -= OnExecutionLogCollectionChanged;
                 _demo.Tree.AgentLog.CollectionChanged -= OnAgentLogCollectionChanged;
                 _demo.Tree.Nodes.CollectionChanged -= OnNodesCollectionChanged;
@@ -116,6 +119,8 @@ namespace Demo
 
             _demo = session;
             _demo.Controller.PropertyChanged += OnControllerPropertyChanged;
+            _demo.Controller.RunCommand.Exited += OnRunCommandExited;
+            _demo.Controller.ResumeCommand.Exited += OnRunCommandExited;
             _demo.Tree.ExecutionLog.CollectionChanged += OnExecutionLogCollectionChanged;
             _demo.Tree.AgentLog.CollectionChanged += OnAgentLogCollectionChanged;
             _demo.Tree.Nodes.CollectionChanged += OnNodesCollectionChanged;
@@ -133,6 +138,7 @@ namespace Demo
 
             ReloadExecutionLog();
             UpdateControllerState();
+            RefreshRunControls();
         }
 
         private void SubscribeHelper(WorkflowDemoSession session)
@@ -340,6 +346,41 @@ namespace Demo
             statusValueLabel.Text = isActive ? "运行中" : "空闲";
             nodeCountLabel.Text = (_demo?.Tree.Nodes.Count ?? 0).ToString();
             visibleCountLabel.Text = (_demo?.Tree.Helper?.VisibleItems?.Count ?? 0).ToString();
+        }
+
+        // 门与检查点都在会话上、不在树上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做
+        private void RefreshRunControls()
+        {
+            continueFromCheckpointButton.Enabled = _demo?.HasCheckpoint == true;
+            runGateStateLabel.Text = _demo?.Gate.IsPaused == true ? "已暂停" : "空闲";
+        }
+
+        // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。Exited 是在线程池上发的，所以回到 UI 线程再改控件
+        private void OnRunCommandExited(CommandEventArgs e)
+        {
+            if (InvokeRequired) { BeginInvoke(RefreshRunControls); return; }
+            RefreshRunControls();
+        }
+
+        private void PauseWorkflow(object? sender, EventArgs e)
+        {
+            if (_demo is null) return;
+            _demo.Gate.Pause();
+            runGateStateLabel.Text = "已暂停：停在下一个节点边界";
+        }
+
+        private void ResumeWorkflow(object? sender, EventArgs e)
+        {
+            if (_demo is null) return;
+            _demo.Gate.Resume();
+            runGateStateLabel.Text = "运行中";
+        }
+
+        private async void ContinueFromCheckpoint(object? sender, EventArgs e)
+        {
+            if (_demo is null) return;
+            runGateStateLabel.Text = "从检查点继续…";
+            await _demo.Controller.ResumeCommand.ExecuteAsync(null);
         }
 
         private async Task ExecuteAsync(Func<Task> action, string title)

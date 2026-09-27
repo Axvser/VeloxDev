@@ -250,6 +250,14 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 
 ---
 
+## 六、demo 的界面控件放在哪：`MainPage` 是裸宿主
+
+2026-09-27 把「运行控制」（Pause / Resume / 从检查点继续）接进七家时的一条：**MAUI 的 `MainPage.xaml` 只是一个满屏宿主**（`<controls:WorkflowView x:Name="WorkflowSurface" Session="{Binding DemoSession}" />`，全文件十来行），demo 自己的命令（Save / Select / Load Workflow Demo）与整条侧栏都在**被它托管的 `Controls/Workflow/WorkflowView.xaml`** 里。
+
+⇒ 新控件放 `WorkflowView.xaml`，处理器也只能放**它自己的** code-behind：XAML 的 `Clicked` 处理器必须声明在写出这个名字的那个 XAML 文件的 code-behind 中，所以「标记一处、处理器另一处」是编译不过的。会话经 `WorkflowView.Session` 传进来（`MainPage` 把它设成 `_demo`），与 `MainPage` 手里那个是同一个对象。
+
+（对比：`Avalonia` / `WPF` / `WinUI` / `Blazor` / `Jalium` 的控件放各自宿主外壳的侧栏，`WinForms` 放 `Form1` 的工具栏。**不要放节点卡上** —— 卡（`Controls/WorkflowNodeCard.cs`）的上下文只有节点 VM，而门与检查点是会话级的。）
+
 ## 附：写这份档案时**没能验证 / 不确定**的
 
 - §二·4 的「~16k 设备像素」是代码注释里的数字（`WorkflowLinkOverlay.cs:15-16`），没有在本仓库实测复现；

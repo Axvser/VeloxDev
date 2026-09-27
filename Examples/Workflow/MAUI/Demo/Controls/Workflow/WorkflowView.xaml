@@ -96,6 +96,46 @@
                        FontSize="13" />
                 <BoxView HeightRequest="1"
                          Color="#333344" />
+
+                <!-- 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
+                     （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
+                     按钮走 Clicked 而不是 Command 绑定：侧栏的 BindingContext 是树，而门与检查点都在
+                     会话上、不在树上 —— 与同栏的 Save / Select 同一个理由。 -->
+                <Border Margin="0,12,0,0"
+                        Padding="10"
+                        BackgroundColor="#202020"
+                        Stroke="#4C4C4C"
+                        StrokeThickness="1"
+                        StrokeShape="RoundRectangle 4">
+                    <VerticalStackLayout Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="运行控制" TextColor="#7EC8FF" FontAttributes="Bold" VerticalOptions="Center"/>
+                            <Label x:Name="RunGateState" Grid.Column="1" Text="空闲" TextColor="#B0B0B0" VerticalOptions="Center"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                            <Button Text="Pause"
+                                    HeightRequest="40"
+                                    BackgroundColor="#0f3460"
+                                    TextColor="White"
+                                    Clicked="OnPauseClicked"/>
+                            <Button Grid.Column="1"
+                                    Text="Resume"
+                                    HeightRequest="40"
+                                    BackgroundColor="#0f3460"
+                                    TextColor="White"
+                                    Clicked="OnResumeClicked"/>
+                        </Grid>
+                        <Button x:Name="ContinueFromCheckpointButton"
+                                Text="从检查点继续"
+                                HeightRequest="40"
+                                BackgroundColor="#0f3460"
+                                TextColor="White"
+                                IsEnabled="False"
+                                Clicked="OnContinueFromCheckpointClicked"/>
+                    </VerticalStackLayout>
+                </Border>
+                <BoxView HeightRequest="1"
+                         Color="#333344" />
                 <!-- Agent Chat -->
                 <Label Text="Agent 对话"
                        FontAttributes="Bold"
