@@ -101,17 +101,19 @@ CompiledGraph { Entries: CompileSegment[] }                CompilerEx/Compile/Mo
                                                            CompilerViewModel.cs:246
   ↓
 RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/RuntimeEngine.cs:21
-  → RunGraphAsync → RunExecuteAsync / RunBranchAsync / RunParallelAsync
-  → DriveAsync(node) → node.GetHelper().ReceiveAsync(context, ct)   :227
+  → RunGraphAsync :71 → RunExecuteAsync :106 / RunBranchAsync :167 / RunParallelAsync :220
+  → DriveAsync(node) → node.GetHelper().ReceiveAsync(context, ct)   :308/:329
 ```
+
+**扇出是并发的**（2026-09-27 起）：`RunParallelAsync` 用 `Task.WhenAll` 让分支交错执行（不是线程并行，也不离开宿主的 `SynchronizationContext`），每分支一个 `BranchRuntimeContext` 门面。**并发的取舍、确定性政策、以及「为什么不能用 `AsyncLocal`」——见 [compiler-execution.md](compiler-execution.md)。**
 
 编译期的三个身份：`Order`（全局执行序，**`-1` = 绝对停止**）、`ChainIndex`（链内下标）、`Offset`（子图入口偏移）。定义在 `CompilerEx/Compile/Contracts/ICompileContext.cs`。
 
 **Router 的静态/动态是运行期判定的**：编译器调 `router.ResolveRouteKey(null)`（`CompilerViewModel.cs:94`），返回 `null` 就是动态（`isDynamic = currentKey is null`，`:95`）。`RouterCompileMode` 枚举（`CompilerEx/Compile/Contracts/RouterCompileMode.cs:11`）**只是给用户代码/Agent 面用的标签，编译器从不读它** —— `Src/Core/VeloxDev.Core/` 下除定义外零引用；其余引用只在测试（`VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`）、demo（`Examples/Workflow/`）与 AI 工具面的 scope 声明（`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs:33`）。
 
-**redirect 不是环**：编译产物一定是无环的。redirect 是运行期契约 —— `IRedirectable.ResolveRedirectAsync` 返回一个更早的 `Order`，`RuntimeEngine` 就以这个 target **重跑整张图**（`RuntimeEngine.cs:24-50`），最多 `MaxRedirects = 50`。每轮 `context.Attempt = redirects + 1`（`:40`），输出按 `Attempt` 戳 + `ActiveRedirectTarget` 前缀双重过滤（`CompilerEx/Runtime/Model/RuntimeContext.cs:147-149`）。
+**redirect 不是环**：编译产物一定是无环的。redirect 是运行期契约 —— `IRedirectable.ResolveRedirectAsync` 返回一个更早的 `Order`，`RuntimeEngine` 就以这个 target **重跑整张图**（`RuntimeEngine.cs:24-57`），最多 `MaxRedirects = 50`。每轮 `context.Attempt = redirects + 1`（`:40`），输出按 `Attempt` 戳 + `ActiveRedirectTarget` 前缀双重过滤（`CompilerEx/Runtime/Model/RuntimeContext.cs:162`）。**注意：生产代码里没有一个 `IRedirectable` 实现者**，所以节点一旦 `Warn`/`Error`，流程就是直接结束（见 [compiler-execution.md](compiler-execution.md) §六）。
 
-**汇合聚合**：`CompileContext.InputNodes.Count > 1` 时，`DriveAsync` 注入 `new GroupData(context.CollectGroupedInputs(inputs))` 作为 `Data`（`RuntimeEngine.cs:246`），它是一个只读字典 `IReadOnlyDictionary<IWorkflowNodeViewModel, object?>`（`CompilerEx/Runtime/Model/GroupData.cs:17,26`），Key = 来源 Node 的**引用身份**（比较器是 `WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>`，`GUI/Virtualization/WorkflowSpatialEx.cs:339`）。单输入时 `Data` 保持裸链式传递，`InputNodes` 为 `null`。
+**汇合聚合**：`CompileContext.InputNodes.Count > 1` 时，`DriveAsync` 注入 `new GroupData(context.CollectGroupedInputs(inputs))` 作为 `Data`（`RuntimeEngine.cs:327`），它是一个只读字典 `IReadOnlyDictionary<IWorkflowNodeViewModel, object?>`（`CompilerEx/Runtime/Model/GroupData.cs:17,26`），Key = 来源 Node 的**引用身份**（比较器是 `WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>`，`GUI/Virtualization/WorkflowSpatialEx.cs:339`）。单输入时 `Data` 保持裸链式传递，`InputNodes` 为 `null`。
 
 ### 3.4 渲染（几何）
 
