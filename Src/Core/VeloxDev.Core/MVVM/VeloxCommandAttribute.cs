@@ -7,29 +7,30 @@ namespace VeloxDev.MVVM
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The marked method must satisfy one of the following signatures (return value must be <see cref="Task"/> or <see langword="true"/>):
+    /// The marked method may take <c>(object? parameter)</c>, <c>(CancellationToken ct)</c>, <c>(object? parameter, CancellationToken ct)</c> or nothing, and may return either <see cref="Task"/> or <see langword="void"/>.
     /// </para>
-    /// <list type="bullet">
-    ///   <item><c>Task MethodName(object? parameter, CancellationToken ct)</c></item>
-    ///   <item><c>Task MethodName(object? parameter)</c></item>
-    ///   <item><c>Task MethodName(CancellationToken ct)</c></item>
-    ///   <item><c>Task MethodName()</c></item>
-    ///   <item><c>void MethodName(object? parameter)</c></item>
-    ///   <item><c>void MethodName()</c></item>
-    /// </list>
     /// <para>
-    /// The framework will automatically adapt and wrap it into an asynchronous command based on the actual signature, supporting cancellation, concurrency control, and complete lifecycle events.
+    /// Only a <see cref="CancellationToken"/> parameter lets the command actually stop the body: the other shapes
+    /// build a command whose body never receives a token, so an interrupted execution reports
+    /// <see cref="CommandEventType.Canceled"/> while the body runs on to completion. See
+    /// <see cref="VeloxCommand.CreateTaskOnlyWithParameter"/>.
+    /// </para>
+    /// <para>
+    /// A generated <c>{Name}Command</c> property is built lazily on first read, so the command object does not
+    /// exist until something asks for it.
     /// </para>
     /// </remarks>
     /// <param name="name">
     /// The name of the command. If set to <c>"Auto"</c> (default), the command property name is automatically generated from the method name (e.g., <c>MyMethod</c> → <c>MyCommand</c>).
     /// </param>
     /// <param name="canValidate">
-    /// Whether to enable command executability validation. If set to <see langword="true"/>, a corresponding Boolean property or method named <c>CanXxx</c> must be provided (e.g., <c>CanSave</c> corresponds to <c>SaveCommand</c>).
+    /// Whether to enable command executability validation. If set to <see langword="true"/>, the hosting class must also implement a
+    /// <c>private partial bool CanExecute{Name}Command(object? parameter)</c> for each generated command (e.g., <c>CanExecuteSaveCommand</c> accompanies <c>SaveCommand</c>).
+    /// That partial declaration is <c>private</c> and returns a value, so omitting the implementation is a compile error rather than a command that is silently always executable.
     /// </param>
     /// <param name="semaphore">
     /// The maximum number of concurrent executions for the command (semaphore capacity). Default is 1 (serial execution). Setting it to a value greater than 1 allows multiple instances to run in parallel.
-    /// Must be ≥ 1.
+    /// Must be ≥ 1; a smaller value makes reading the generated <c>{Name}Command</c> property throw <see cref="ArgumentOutOfRangeException"/>.
     /// </param>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
     public sealed class VeloxCommandAttribute(

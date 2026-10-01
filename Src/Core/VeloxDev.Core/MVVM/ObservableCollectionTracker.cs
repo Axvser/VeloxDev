@@ -37,9 +37,13 @@ public static class ObservableCollectionTracker
 
     /// <summary>
     /// Called from the generated property setter when a collection is replaced.
-    /// Unsubscribes the handler from the old collection value and removes its
-    /// tracking entry so the subscription is not accidentally restored later.
+    /// Detaches <paramref name="handler"/> from <paramref name="collection"/>.
     /// </summary>
+    /// <remarks>
+    /// This removes the subscription, not the record of it: the entry survives, so a later
+    /// <see cref="EnsureSubscribed"/> with the same handler subscribes to that collection again. That is the
+    /// behaviour the generated getter depends on, since it calls <see cref="EnsureSubscribed"/> on every read.
+    /// </remarks>
     public static void Unsubscribe(
         object? collection,
         NotifyCollectionChangedEventHandler handler)
