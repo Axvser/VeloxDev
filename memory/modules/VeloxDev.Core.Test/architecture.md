@@ -84,9 +84,9 @@ Core 是四目标项目；**两个测试项目都是单目标 `net10.0`**（`Vel
 
 | 项 | 值 |
 |---|---|
-| 测试条数 | **726** |
-| 全量耗时 | **28–31 s** |
-| 8 次连跑的失败次数 | **1**（原因见 §六） |
+| 测试条数 | **835**（2026-10-01 实测） |
+| 全量耗时 | **30 s** |
+| 8 次连跑的失败次数 | **1**（原因见 §六）——但 **`MVVM/` 已不是来源**：2026-10-01 重写为 TCS 门控后，MVVM 过滤集连跑 10 次全绿、每次约 60 ms |
 
 `TestResults/` 被 `.gitignore` 的 `[Tt]est[Rr]esult*/` 排除 —— 里面 `.trx` 是本地产物，**不可作为依据**。
 
@@ -105,7 +105,7 @@ Core 是四目标项目；**两个测试项目都是单目标 `net10.0`**（`Vel
 | `TimeLine/` | 4 | MonoBehaviour 总线与管理器 |
 | `WeakTypes/` | 4 | 弱引用集合 |
 | `DynamicTheme/` | 2 | 主题切换 |
-| `MVVM/` | 1 | 只有 `VeloxCommand` |
+| `MVVM/` | 10（另有 `CommandTestKit.cs`，不是测试而是共享工具） | `VeloxCommand` 全语义（并发/排队/锁/中断/取消/8 事件时序/异常路径/CTS 释放）+ `ObservableCollectionTracker` + `CommandEventArgs` |
 | 根目录 | 3 | `GlobalUsings.cs`、`MSTestSettings.cs`、`TestHosts.cs`（三者都不是测试） |
 
 **哪三个 Core 主题目录没有对应测试目录**：
@@ -122,7 +122,7 @@ Core 是四目标项目；**两个测试项目都是单目标 `net10.0`**（`Vel
 |---|---|
 | `RotationDirection`（`Src/Core/VeloxDev.Core/TransitionSystem/`） | 两个测试项目里**零引用**；只有适配器采样器（如 `Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Samplers/TransformSampler.cs`）与 `Examples/` 演示消费它 —— 测它等于测适配器，而适配器不在引用图里 |
 | `TransitionCoreEx.AwaitThen` / `.Await`（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionEx.cs:6-38`） | 两个测试项目里零调用；只出现在七家 `Examples/` 演示里。`Repeat` / `Then` 是唯一被间接走到的（经 `ChainRepeatTests.cs:66` 的 `ChainNode`） |
-| `MVVM/` 的 `ObservableCollectionTracker.cs`、`VeloxCommandAttribute.cs`、`VeloxPropertyAttribute.cs` | `MVVM/` 只有 1 个测试文件，只测 `VeloxCommand` |
+| `MVVM/` 的 `VeloxCommandAttribute.cs`、`VeloxPropertyAttribute.cs` | 两个纯声明特性，没有行为可测 —— 它们的效果全在生成器产物里 |
 | `AI/` 的 13 个源文件中的 6 个 | 13 源 vs 7 测试文件 |
 
 ---
@@ -147,14 +147,14 @@ Src/Core/VeloxDev.Core.Test/MSTestSettings.cs:1
 | 实时动画 / 时钟 | `Timing/TimeSourceContractTests.cs:15`、`TransitionSystem/FramePacerTests.cs:17`、`TransitionSystem/TimelineControlTests.cs:18`、`TransitionSystem/TransitionRunThreadAffinityTests.cs:18`、`TransitionSystem/TransitionSchedulerAwakeTests.cs:16`、`TransitionSystem/TransitionSchedulerPrepareTests.cs:16` | `TimelineControlTests.cs:8-18` 写明：观察的是实时运行的动画，断言是比值不是绝对时间 |
 | 纵深防御 | `TransitionSystem/InterpolatorCoreTests.cs:13` | 注释（`:9-12`）自己写明：这些断言与并行无关，保留 `[DoNotParallelize]` 纯粹是防御 |
 
-**「用真实时钟但没摘出去」的 4 个类 —— 这就是偶发失败的全部来源：**
+**「用真实时钟但没摘出去」的类 —— 这就是偶发失败的全部来源**（原为 4 个，`MVVM/` 于 2026-10-01 消除，剩 3 个）：
 
 | 类 | 真实时钟用法 | `[DoNotParallelize]` |
 |---|---|---|
 | `Timing/CompensatingTimeSamplerTests.cs` | `:271` `Thread.Sleep(60)`；`:284` 断言余数 `< 11ms` | ✗ |
 | `Timing/UncompensatedTimeSamplerTests.cs` | `:154` `Thread.Sleep(30)`；`:157` 断言落在 20–200ms | ✗ |
 | `TransitionSystem/ChainRepeatTests.cs` | `:194/:215/:233/:248/:270/:302` 固定 `Task.Delay(80)` 稳定窗；`:332`+`:334` 再断言精确顺序 | ✗ |
-| `MVVM/VeloxCommandTests.cs` | `:15/:26` `Task.Delay(100)`、`:41` `Task.Delay(200)`、`:79` `Thread.Sleep(100)` | ✗ |
+| ~~`MVVM/VeloxCommandTests.cs`~~ | **2026-10-01 已消除**：该文件重写为 TCS 门控，MVVM 目录新增的 10 个文件也全部走 `CommandTestKit` 的信号等待，无一处真实时钟 | — |
 
 （`TransitionSystem/EaseOvershootTests.cs:48` 用了真实 120ms 时长，但断言走 `FixedEase`，与帧时序无关 —— 不是风险源。）
 

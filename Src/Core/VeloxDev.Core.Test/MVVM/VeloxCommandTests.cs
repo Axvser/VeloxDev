@@ -1,61 +1,79 @@
+using System.Threading;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Core.Test.MVVM;
 
+/// <summary>
+/// Construction and the plain execution path: every overload builds a command, and a call to one of them
+/// reaches the body with the argument it was given.
+/// <para>
+/// These waits are gated on the lifecycle rather than on a clock — <c>Execute</c> returns as soon as the call is
+/// accepted, so a sleep would be the only other way to know the body ran, and a sleep is a flake waiting to
+/// happen.
+/// </para>
+/// </summary>
 [TestClass]
 public class VeloxCommandTests
 {
     [TestMethod]
     public async Task Execute_SyncAction_Completes()
     {
-        bool called = false;
-        var cmd = new VeloxCommand(() => called = true);
+        var called = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = new VeloxCommand(() => called.TrySetResult(true));
+        var recorder = new CommandEventRecorder(command);
 
-        cmd.Execute(null);
-        await Task.Delay(100);
-        Assert.IsTrue(called);
+        command.Execute(null);
+        await recorder.FirstExit;
+
+        Assert.IsTrue(called.Task.IsCompleted, "the body ran to completion");
     }
 
     [TestMethod]
     public async Task Execute_ActionWithParameter_ReceivesParameter()
     {
         object? received = null;
-        var cmd = new VeloxCommand((Action<object?>)(p => received = p));
+        var command = new VeloxCommand((Action<object?>)(p => received = p));
+        var recorder = new CommandEventRecorder(command);
 
-        cmd.Execute("hello");
-        await Task.Delay(100);
+        command.Execute("hello");
+        await recorder.FirstExit;
+
         Assert.AreEqual("hello", received);
     }
 
     [TestMethod]
     public async Task Execute_AsyncFunc_Completes()
     {
-        bool called = false;
-        var cmd = new VeloxCommand(async () =>
+        var called = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = new VeloxCommand(async () =>
         {
-            await Task.Delay(10);
-            called = true;
+            await Task.Yield();
+            called.TrySetResult(true);
         });
+        var recorder = new CommandEventRecorder(command);
 
-        cmd.Execute(null);
-        await Task.Delay(200);
-        Assert.IsTrue(called);
+        command.Execute(null);
+        await recorder.FirstExit;
+
+        Assert.IsTrue(called.Task.IsCompleted, "an async body is awaited, not abandoned");
     }
 
     [TestMethod]
     public void CanExecute_NoPredicate_ReturnsTrue()
     {
-        var cmd = new VeloxCommand(() => { });
-        Assert.IsTrue(cmd.CanExecute(null));
+        var command = new VeloxCommand(() => { });
+
+        Assert.IsTrue(command.CanExecute(null));
     }
 
     [TestMethod]
     public void CanExecute_WithPredicate_RespectsIt()
     {
-        var cmd = new VeloxCommand(() => { }, canExecute: p => p is string s && s == "yes");
-        Assert.IsTrue(cmd.CanExecute("yes"));
-        Assert.IsFalse(cmd.CanExecute("no"));
-        Assert.IsFalse(cmd.CanExecute(null));
+        var command = new VeloxCommand(() => { }, canExecute: p => p is string s && s == "yes");
+
+        Assert.IsTrue(command.CanExecute("yes"));
+        Assert.IsFalse(command.CanExecute("no"));
+        Assert.IsFalse(command.CanExecute(null));
     }
 
     [TestMethod]
@@ -65,18 +83,19 @@ public class VeloxCommandTests
     }
 
     [TestMethod]
-    public void CreateTaskOnlyWithParameter_Works()
+    public async Task CreateTaskOnlyWithParameter_Works()
     {
         object? received = null;
-        var cmd = VeloxCommand.CreateTaskOnlyWithParameter(async p =>
+        var command = VeloxCommand.CreateTaskOnlyWithParameter(p =>
         {
             received = p;
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         });
+        var recorder = new CommandEventRecorder(command);
 
-        cmd.Execute("test");
-        // Give async a moment
-        Thread.Sleep(100);
+        command.Execute("test");
+        await recorder.FirstExit;
+
         Assert.AreEqual("test", received);
     }
 }
