@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 
@@ -49,6 +49,21 @@ public sealed class WorkflowSurfaceBehavior
         /// No longer gates OnScrolled or the decorator writers — those are always active now so
         /// grid + content track the native offset together. Kept for the diagnostic trace.</summary>
         public bool PanGestureActive { get; set; }
+
+        /// <summary>True while the Windows pointer-driven pan owns the pointer (see
+        /// <c>OnPlatformPanPressed</c>).</summary>
+        public bool PointerPanActive { get; set; }
+
+        /// <summary>Pointer position at the pan anchor, in the press source's coordinate space.
+        /// The pointer's distance from the anchor is the same quantity the gesture's TotalX/TotalY
+        /// carried.</summary>
+        public double PointerAnchorX { get; set; }
+        public double PointerAnchorY { get; set; }
+
+#if WINDOWS
+        /// <summary>The press source's platform element with the native pointer handlers attached.</summary>
+        public Microsoft.UI.Xaml.UIElement? PlatformPressSource { get; set; }
+#endif
     }
 
     public static readonly BindableProperty IsEnabledProperty = BindableProperty.CreateAttached(
@@ -320,9 +335,18 @@ public sealed class WorkflowSurfaceBehavior
             state.PointerPressSource = control.FindByName<View>(pointerPressSourceName);
             if (state.PointerPressSource is not null)
             {
+#if WINDOWS
+                // 平移走原生指针事件，不用 PanGestureRecognizer：只要还在用 manipulation，
+                // 原生 ScrollViewer 就会在松手那一刻把它自己累积的偏移补上（实测 423→186，
+                // 见 OnScrollViewerHandlerChanged）。指针事件不产生 manipulation，它便无从插手。
+                PlatformPanHosts[state.PointerPressSource] = state;
+                state.PointerPressSource.HandlerChanged += OnPointerPressSourceHandlerChanged;
+                HookPlatformPan(state.PointerPressSource);
+#else
                 state.PanGesture = new PanGestureRecognizer();
                 state.PanGesture.PanUpdated += OnPanUpdated;
                 state.PointerPressSource.GestureRecognizers.Add(state.PanGesture);
+#endif
             }
         }
 
@@ -357,10 +381,19 @@ public sealed class WorkflowSurfaceBehavior
             state.Canvas.ChildRemoved -= OnCanvasChildRemoved;
         }
 
-        if (state.PointerPressSource is not null && state.PanGesture is not null)
+        if (state.PointerPressSource is not null)
         {
-            state.PanGesture.PanUpdated -= OnPanUpdated;
-            state.PointerPressSource.GestureRecognizers.Remove(state.PanGesture);
+#if WINDOWS
+            state.PointerPressSource.HandlerChanged -= OnPointerPressSourceHandlerChanged;
+            PlatformPanHosts.Remove(state.PointerPressSource);
+            UnhookPlatformPan(state);
+#else
+            if (state.PanGesture is not null)
+            {
+                state.PanGesture.PanUpdated -= OnPanUpdated;
+                state.PointerPressSource.GestureRecognizers.Remove(state.PanGesture);
+            }
+#endif
         }
 
         UnhookZoom(state);
@@ -775,9 +808,12 @@ public sealed class WorkflowSurfaceBehavior
         if (viewer.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer sv)
         {
             sv.IsScrollInertiaEnabled = false;
-            sv.ManipulationMode = Microsoft.UI.Xaml.Input.ManipulationModes.TranslateX
-                | Microsoft.UI.Xaml.Input.ManipulationModes.TranslateY
-                | Microsoft.UI.Xaml.Input.ManipulationModes.Scale;
+            // None，而不是「去掉 System 再给三个轴」：TranslateX/TranslateY 正是 ScrollViewer
+            // 用来做操纵滚动的那两个轴，留着它们它就还是第二个滚动驱动者，并在松手时把累积量补上
+            // （实测 423→186，60ms 后）。平移已经改走指针事件、不再需要任何 manipulation，
+            // 所以这里可以彻底关掉 —— 早先「None 会让平移失灵」的结论只对「平移仍靠 manipulation」
+            // 那套成立。ChangeView 是程序化的，不受 ManipulationMode 影响。
+            sv.ManipulationMode = Microsoft.UI.Xaml.Input.ManipulationModes.None;
         }
 #endif
     }
@@ -890,6 +926,209 @@ public sealed class WorkflowSurfaceBehavior
 
     private static async Task ApplyPanAsync(ContentView host, SurfaceState state, PanUpdatedEventArgs e)
     {
+        // Absolute target from the pan anchor — the same math WPF uses (startOffset + pointer
+        // movement since the anchor). Reading the actual ScrollX each frame is what caused the
+        // flash-back; accumulating a per-delta offset is what jittered (a clamped ScrollToAsync
+        // lets the bookkeeping drift from the real position, so the content sticks then jumps).
+        // The anchor only moves in Started, node-drag suppression, and the edge re-anchor below,
+        // so it never accumulates error.
+        await ApplyPanTargetAsync(
+            host, state,
+            state.PanAccumulatedX - (e.TotalX - state.PanAnchorTotalX),
+            state.PanAccumulatedY - (e.TotalY - state.PanAnchorTotalY),
+            e.TotalX, e.TotalY);
+    }
+
+    /// <summary>
+    /// Applies an absolute pan target. Shared by the gesture path (non-Windows) and the native
+    /// pointer path (Windows) — both end up with "where should the offset be" and "how far has the
+    /// pointer travelled from the anchor", which is all this needs.
+    /// </summary>
+#if WINDOWS
+    private static readonly Dictionary<Microsoft.UI.Xaml.UIElement, SurfaceState> PlatformPanStates = [];
+
+    /// <summary>Press-source views that belong to a surface, so the handler can find its state.
+    /// The state lives on the host <c>ContentView</c>, NOT on the press source — reading
+    /// <c>StateProperty</c> off the press source always yields null.</summary>
+    private static readonly Dictionary<View, SurfaceState> PlatformPanHosts = [];
+
+    private static void OnPointerPressSourceHandlerChanged(object? sender, EventArgs e)
+    {
+        if (sender is View view)
+        {
+            HookPlatformPan(view);
+        }
+    }
+
+    private static void HookPlatformPan(View view)
+    {
+        if (!PlatformPanHosts.TryGetValue(view, out var state))
+        {
+            return;
+        }
+
+        UnhookPlatformPan(state);
+
+        if (view.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement element)
+        {
+            return;
+        }
+
+        element.PointerPressed += OnPlatformPanPressed;
+        element.PointerMoved += OnPlatformPanMoved;
+        element.PointerReleased += OnPlatformPanReleased;
+        element.PointerCaptureLost += OnPlatformPanCaptureLost;
+        PlatformPanStates[element] = state;
+        state.PlatformPressSource = element;
+    }
+
+    private static void UnhookPlatformPan(SurfaceState state)
+    {
+        if (state.PlatformPressSource is null)
+        {
+            return;
+        }
+
+        state.PlatformPressSource.PointerPressed -= OnPlatformPanPressed;
+        state.PlatformPressSource.PointerMoved -= OnPlatformPanMoved;
+        state.PlatformPressSource.PointerReleased -= OnPlatformPanReleased;
+        state.PlatformPressSource.PointerCaptureLost -= OnPlatformPanCaptureLost;
+        PlatformPanStates.Remove(state.PlatformPressSource);
+        state.PlatformPressSource = null;
+    }
+
+    private static void OnPlatformPanPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is not Microsoft.UI.Xaml.UIElement element
+            || !PlatformPanStates.TryGetValue(element, out var state)
+            || state.ScrollViewer is null)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(null);
+        if (!point.Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        // 节点/插槽拖拽优先：按下落在它们身上时画布不动
+        if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
+        {
+            state.PointerPanActive = false;
+            return;
+        }
+
+        state.PanAccumulatedX = state.ScrollViewer.ScrollX;
+        state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+        // The anchor is the same shape the gesture path keeps: PanAnchorTotal* is the cumulative
+        // pointer travel AT the anchor, which is zero here because the pointer anchor is this point.
+        state.PanAnchorTotalX = 0;
+        state.PanAnchorTotalY = 0;
+        state.PointerAnchorX = point.Position.X;
+        state.PointerAnchorY = point.Position.Y;
+        state.PointerPanActive = true;
+        state.PanGestureActive = true;
+        element.CapturePointer(e.Pointer);
+    }
+
+    private static async void OnPlatformPanMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not Microsoft.UI.Xaml.UIElement element
+                || !PlatformPanStates.TryGetValue(element, out var state)
+                || !state.PointerPanActive
+                || state.ScrollViewer is null
+                || state.Host is null)
+            {
+                return;
+            }
+
+            var point = e.GetCurrentPoint(null);
+            if (!point.Properties.IsLeftButtonPressed)
+            {
+                EndPlatformPan(state, element, e);
+                return;
+            }
+
+            if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
+            {
+                // 拖节点那一段画布不跟着走；把锚点贴到当前位置，手势结束时才不会补跳一段
+                state.PanAccumulatedX = state.ScrollViewer.ScrollX;
+                state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+                state.PanAnchorTotalX = 0;
+                state.PanAnchorTotalY = 0;
+                state.PointerAnchorX = point.Position.X;
+                state.PointerAnchorY = point.Position.Y;
+                return;
+            }
+
+            var totalX = point.Position.X - state.PointerAnchorX;
+            var totalY = point.Position.Y - state.PointerAnchorY;
+
+            // Same form as the gesture path: the core re-anchors PanAnchorTotal* on overscroll, and
+            // a target of "anchor - total" would then add the travel again on every later frame.
+            await ApplyPanTargetAsync(
+                state.Host, state,
+                state.PanAccumulatedX - (totalX - state.PanAnchorTotalX),
+                state.PanAccumulatedY - (totalY - state.PanAnchorTotalY),
+                totalX, totalY);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[WorkflowSurfaceBehavior] Pointer pan error: {ex.Message}");
+        }
+    }
+
+    private static void OnPlatformPanReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is Microsoft.UI.Xaml.UIElement element
+            && PlatformPanStates.TryGetValue(element, out var state))
+        {
+            EndPlatformPan(state, element, e);
+        }
+    }
+
+    private static void OnPlatformPanCaptureLost(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is Microsoft.UI.Xaml.UIElement element
+            && PlatformPanStates.TryGetValue(element, out var state))
+        {
+            Settle(state);
+        }
+    }
+
+    private static void EndPlatformPan(
+        SurfaceState state, Microsoft.UI.Xaml.UIElement element, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (!state.PointerPanActive)
+        {
+            return;
+        }
+
+        Settle(state);
+        element.ReleasePointerCapture(e.Pointer);
+    }
+
+    private static void Settle(SurfaceState state)
+    {
+        state.PointerPanActive = false;
+        state.PanGestureActive = false;
+        state.PanCts?.Cancel();
+        state.PanCts = null;
+
+        if (state.ScrollViewer is not null)
+        {
+            state.PanAccumulatedX = state.ScrollViewer.ScrollX;
+            state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+        }
+    }
+#endif
+
+    private static async Task ApplyPanTargetAsync(
+        ContentView host, SurfaceState state, double desiredX, double desiredY, double totalX, double totalY)
+    {
         var viewModel = ResolveTreeViewModel(host, state);
         if (viewModel is null || state.ScrollViewer is null)
         {
@@ -901,14 +1140,8 @@ public sealed class WorkflowSurfaceBehavior
         state.PanCts = new CancellationTokenSource();
         var ct = state.PanCts.Token;
 
-        // Absolute target from the pan anchor — the same math WPF uses (startOffset + pointer
-        // movement since the anchor). Reading the actual ScrollX each frame is what caused the
-        // flash-back; accumulating a per-delta offset is what jittered (a clamped ScrollToAsync
-        // lets the bookkeeping drift from the real position, so the content sticks then jumps).
-        // The anchor only moves in Started, node-drag suppression, and the edge re-anchor below,
-        // so it never accumulates error.
-        var desiredX = state.PanAccumulatedX - (e.TotalX - state.PanAnchorTotalX);
-        var desiredY = state.PanAccumulatedY - (e.TotalY - state.PanAnchorTotalY);
+        // The absolute target arrives already resolved (gesture deltas on non-Windows, raw pointer
+        // travel on Windows); everything below is the shared clamp / expand / apply.
         var maxH = GetHorizontalScrollMaximum(state);
         var maxV = GetVerticalScrollMaximum(state);
         // layoutChanged = the desired offset overshoots [0, max] on either axis, which is
@@ -962,8 +1195,8 @@ public sealed class WorkflowSurfaceBehavior
             // the bookkeeping stays exactly where the content will actually land this frame.
             state.PanAccumulatedX = appliedOffsetX;
             state.PanAccumulatedY = appliedOffsetY;
-            state.PanAnchorTotalX = e.TotalX;
-            state.PanAnchorTotalY = e.TotalY;
+            state.PanAnchorTotalX = totalX;
+            state.PanAnchorTotalY = totalY;
         }
 
         // The decorators are NOT written from the requested target: ChangeView is fire-and-forget

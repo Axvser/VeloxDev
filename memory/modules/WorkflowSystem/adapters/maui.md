@@ -1,4 +1,4 @@
-# MAUI — WorkflowSystem 适配器
+﻿# MAUI — WorkflowSystem 适配器
 
 > 代码：`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/`。
 > 七个视图角色的职责、附着属性命名约定、绑定挂哪儿，在 `../extension.md` §3.9 与
@@ -162,11 +162,14 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
    `TryGetCenterRelativeTo` 走父链求和，且 `GetLeftInParent/GetTopInParent` 优先取 `AbsoluteLayout.GetLayoutBounds`
    （`Translation` 不在其中，`:459-485`）。**用 `SlotAnchorFromVisualCenter` 会把 `ActualOffset` 减两次**，每条线整体偏移
    （`skills/veloxdev-create-workflow/references/gui/maui.md:39` 同结论）。
-7. **Windows 上把原生 `ScrollViewer` 降级成被动容器**：`IsScrollInertiaEnabled = false` 且
-   `ManipulationMode = TranslateX | TranslateY | Scale`（`WorkflowSurfaceBehavior.cs:774-781`）。理由在 `:747-766`：
-   原生 ScrollViewer 是 manipulation 能力的控件，用默认 `System` 模式会抢走容器身份、带惯性自己滚，与我们程序化的
-   `ChangeView` 打架，并在松手时施加它自己累积的偏移（「松手跳」的根因）。**注释明确警告不要用 `ManipulationModes.None`**
-   —— 那会让平移彻底失灵（`:766` 记了这次回归）。
+7. **Windows 上原生 `ScrollViewer` 是彻底被动的，且平移不再走 manipulation（2026-10-01 重做，见 §五）。**
+   `IsScrollInertiaEnabled = false` 且 **`ManipulationMode = None`**（`WorkflowSurfaceBehavior.cs` 的
+   `OnScrollViewerHandlerChanged`）。
+   **订正**：这里原先写的是「降级成 `ManipulationMode = TranslateX|TranslateY|Scale` 就够，并警告不要用 `None`」——
+   那是错的，两半都错。`TranslateX|TranslateY` 正是 ScrollViewer 用来做**操纵滚动**的那两个轴，留着它们它就还是
+   第二个滚动驱动者，并会在松手那一刻把自己累积的偏移补上（实测：松手后 60ms 从 423 跳到 186）；
+   而 `None` 会让平移失灵这条，只对「平移仍靠 manipulation」那套成立 —— 平移现在改走原生指针事件，
+   全树不再需要任何 manipulation，`None` 因此是它该有的取值。详见 §五。
 8. **平移用绝对锚点，不用每帧增量累积**：`SurfaceState` 里那组 `PanAccumulated*` / `PanAnchorTotal*`（`:25-37` 的注释）
    在 `Started` 记一次锚，每次 `Running` 用 `anchor − (Total − anchorTotal)` 算绝对目标（`:904-911`），
    并让**在飞的上一笔 `ScrollToAsync` 被取消**（`PanCts`，`:44-46`、`:899-902`）。注释给的教训：读每帧实际 `ScrollX` 会闪回，
@@ -257,6 +260,58 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 ⇒ 新控件放 `WorkflowView.xaml`，处理器也只能放**它自己的** code-behind：XAML 的 `Clicked` 处理器必须声明在写出这个名字的那个 XAML 文件的 code-behind 中，所以「标记一处、处理器另一处」是编译不过的。会话经 `WorkflowView.Session` 传进来（`MainPage` 把它设成 `_demo`），与 `MainPage` 手里那个是同一个对象。
 
 （对比：`Avalonia` / `WPF` / `WinUI` / `Blazor` / `Jalium` 的控件放各自宿主外壳的侧栏，`WinForms` 放 `Form1` 的工具栏。**不要放节点卡上** —— 卡（`Controls/WorkflowNodeCard.cs`）的上下文只有节点 VM，而门与检查点是会话级的。）
+
+## 七、松手回弹：原生 `ScrollViewer` 是第二个滚动驱动者（2026-10-01 实测确诊并修复）
+
+**症状**：非 Trimmed demo 拖动画布，**松开鼠标后画布弹回一段**（用户报告；Trimmed 无此问题）。
+
+**复现**（可重复，4/4）：窗口先最大化（`SetWindowPos` TOPMOST + `ShowWindow(SW_MAXIMIZE)` —— 不这么做别的窗口会压在截图区域上，
+测出假的「位移」）；脚本用小步鼠标拖拽（`SendInput` 绝对坐标；一步瞬移不派发 pointer 移动）；在按下前 / 保持时 / 松开后各截一帧，
+用采样均差比较（每 6px 取一点，累加两帧的 L1 距离）。结果：
+
+| demo | drag（按下→保持） | 松手后（保持→松开） |
+|---|---|---|
+| 非 Trimmed | 6.4–8.1 | **6.7–8.3 —— 又动了一次，4/4** |
+| Trimmed | 16–60 | **0 —— 不动，4/4** |
+
+**机制**（临时探针写 `%TEMP%` 日志，做法同 §四）：松手 60ms 后原生 ScrollViewer 自己滚了一次 ——
+
+```
+PAN released now=(423,171)
+SCROLLED (423,153)
+SCROLLED (186,153)      ← X 423 → 186
+```
+
+适配器自己的三处 `ScrollToAsync`（平移 / 视口恢复 / 缩放回中）一处都没跑。是**原生 ScrollViewer 在手势结束时把它自己累积的操纵偏移补上**。
+
+**六种改法全部实测证伪，别再试**：
+
+1. 去掉 demo 的 `ScrollView` 上的 `BackgroundColor="Transparent"` —— 无效（MAUI 自己会补画刷）。
+2. 关掉 demo 载入后的居中 `ScrollToAsync` —— 无效。
+3. `ManipulationMode = Scale`（去掉 Translate 两个轴）—— 回弹没了，**平移也彻底失灵**（drag 7.6 → 0.2）。
+4. 保留 Translate + `Horizontal/VerticalScrollMode = Disabled` —— 无效。
+5. 把 Translate 给**画布**（验证过确实生效：`LayoutPanel` 的 mode 已改）—— 无效，它照样滚。
+6. 画布给 Translate + ScrollViewer 给 `None` —— 无效。
+
+⇒ **它响应的是冒泡到它身上的 manipulation 事件，与管理它自己的 `ManipulationMode` 无关**：只要树里还有 manipulation，它就会滚。
+
+**修法**：让整棵树不再产生 manipulation —— Windows 上平移改走**原生指针事件**（`PART_SurfaceBorder` 的平台元素上的
+`PointerPressed/Moved/Released/CaptureLost`，与 `WorkflowNodeDragBehavior` 的 Windows 分支同一个套路），
+ScrollViewer 这才可以设成 `ManipulationMode = None`。非 Windows 仍走 `PanGestureRecognizer`，未改动。
+效果：非 Trimmed 松手后 6.7–8.3 → **0.4–0.5**（彗星动画的噪声地板），Trimmed 不变（0，且平移照常）。
+`ApplyPanTargetAsync` 是从原 `ApplyPanAsync` 里抽出来的核心，两条路径共用夹取 / 扩张 / 应用那段。
+
+**实现时踩到的两个坑（都不是 MAUI 的锅，是写错了）**：
+
+- **`StateProperty` 挂在宿主 `ContentView` 上，不在 press source 上。** 照 `WorkflowNodeDragBehavior` 的样子在处理器里读
+  `view.GetValue(StateProperty)`，对那个 Border 恒为 `null` ⇒ 钩子静默不装、平移全死、而且**不报错**。
+  改成订阅时用一张 `Dictionary<View, SurfaceState>` 登记。
+- **绝对目标的写法必须与手势路径同形。** 核心在越界重锚时会写 `PanAnchorTotal* = total`，所以目标要写成
+  `anchor − (total − anchorTotal)`；写成 `anchor − total` 会在每次重锚之后再叠加一遍行程 ——
+  实测同一次指针位移下 desired 一路 1601 → 2001 → 2401，画布飞出几个屏。
+
+**顺带一条测量陷阱**：探针里「值变了吗」的守卫若写成 `Math.Abs(x - NaN) > 1`，**第一次调用就永远不记录**
+（NaN 参与的比较恒为 false，哨兵永远是 NaN）—— 与 §四 那条 NaN 守卫同源，哨兵要用 `double.MinValue`。
 
 ## 附：写这份档案时**没能验证 / 不确定**的
 
