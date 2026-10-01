@@ -3176,33 +3176,24 @@ public sealed class WorkflowAgentToolkit
     }
 
     /// <summary>
-    /// Dispatches a command and waits until it actually completes. <c>VeloxCommand.ExecuteAsync</c>
-    /// is fire-and-forget, so without this the Agent could never observe when node work really finished.
+    /// Dispatches a command and waits until it actually completes. <c>ExecuteAsync</c> is fire-and-forget, so
+    /// without this the Agent could never observe when node work really finished.
     /// Throws on failure (or cancellation) so the caller can return a structured error.
     /// </summary>
     private static async Task WaitForCommandAsync(IVeloxCommand command, object? parameter, CancellationToken ct)
     {
-        Exception? failure = null;
-        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
+        var completion = await command.ExecuteAndWaitAsync(parameter, ct).ConfigureAwait(false);
+
+        if (completion.Exception is not null)
         {
-            CommandEventHandler onExited = _ => tcs.TrySetResult(null);
-            CommandEventHandler onFailed = e => failure = e.Exception;
-            command.Exited += onExited;
-            command.Failed += onFailed;
-            try
-            {
-                await command.ExecuteAsync(parameter);
-                await tcs.Task;
-            }
-            finally
-            {
-                command.Exited -= onExited;
-                command.Failed -= onFailed;
-            }
+            throw completion.Exception;
         }
-        if (failure is not null)
-            throw failure;
+
+        if (!completion.Succeeded)
+        {
+            // 以前这一支会永久挂起：被锁挡下或排队时被 Clear 的调用不发 Exited，等待者永远等不到。
+            throw new OperationCanceledException($"The command did not run to completion ({completion.Outcome}).");
+        }
     }
 
     /// <summary>
@@ -3211,6 +3202,12 @@ public sealed class WorkflowAgentToolkit
     /// completion is observable; awaiting afterwards guarantees the mutation has actually been applied
     /// before the tool returns (no stale-state window for the next tool call).
     /// </summary>
+    /// <remarks>
+    /// Kept separate from <see cref="WaitForCommandAsync"/> on purpose: this is a subscribe-before-dispatch
+    /// contract, and <c>ExecuteAndWaitAsync</c> dispatches as part of waiting, so it cannot express "watch the
+    /// next dispatch that somebody else makes". Prefer <c>ExecuteAndWaitAsync</c> at any call site that owns its
+    /// own dispatch.
+    /// </remarks>
     private static async Task WaitForExitedAsync(IVeloxCommand command, CancellationToken ct)
     {
         var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -3233,49 +3230,13 @@ public sealed class WorkflowAgentToolkit
     }
 
     /// <summary>
-    /// Subscribes to a shared command's <c>Exited</c> and returns a task that completes once
-    /// <paramref name="count"/> dispatches have finished. Use for commands dispatched multiple times
-    /// per tool call (e.g. the tree's CreateNodeCommand / SendConnectionCommand / ReceiveConnectionCommand),
-    /// where <see cref="WaitForExitedAsync"/> cannot map a handler to one specific dispatch.
-    /// </summary>
-    private static Task WaitForNDispatchesAsync(IVeloxCommand command, int count, CancellationToken ct)
-    {
-        if (count <= 0) return Task.CompletedTask;
-        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        int remaining = count;
-        CommandEventHandler onExited = _ =>
-        {
-            if (Interlocked.Decrement(ref remaining) == 0)
-                tcs.TrySetResult(null);
-        };
-        CommandEventHandler onFailed = e => tcs.TrySetException(e.Exception);
-        command.Exited += onExited;
-        command.Failed += onFailed;
-        var registration = ct.Register(() => tcs.TrySetCanceled(ct));
-        return tcs.Task.ContinueWith(
-            _ =>
-            {
-                command.Exited -= onExited;
-                command.Failed -= onFailed;
-                registration.Dispose();
-            },
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
-    }
-
-    /// <summary>
     /// Dispatches the tree's Send then Receive connection commands and awaits both completions, so a
     /// connection tool returns only after the connection is actually created.
     /// </summary>
     private async Task SendReceiveAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, CancellationToken ct)
-    {
-        var sendCompletion = WaitForExitedAsync(Tree.SendConnectionCommand, ct);
-        var recvCompletion = WaitForExitedAsync(Tree.ReceiveConnectionCommand, ct);
-        Tree.SendConnectionCommand.Execute(sender);
-        Tree.ReceiveConnectionCommand.Execute(receiver);
-        await Task.WhenAll(sendCompletion, recvCompletion);
-    }
+        => await Task.WhenAll(
+            Tree.SendConnectionCommand.ExecuteAndWaitAsync(sender, ct),
+            Tree.ReceiveConnectionCommand.ExecuteAndWaitAsync(receiver, ct)).ConfigureAwait(false);
 
     /// <summary>
     /// Applies a set of anchor changes as a SINGLE undoable action and waits until the anchors are
