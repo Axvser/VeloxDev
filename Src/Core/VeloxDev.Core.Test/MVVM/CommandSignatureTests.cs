@@ -53,6 +53,46 @@ public class CommandSignatureTests
             "a ValueTask body must still be cancellable - accepting the token is the whole point");
     }
 
+    [TestMethod]
+    public async Task AViewModelWithoutANamespace_StillGenerates()
+    {
+        // 全局命名空间曾让生成器整个崩掉（见该视图模型文件顶部的说明）。
+        var vm = new GlobalNamespaceCommandViewModel();
+
+        await RunToCompletionAsync(vm.RunCommand);
+
+        Assert.IsTrue(vm.Ran, "a class in the global namespace must generate a working command");
+    }
+
+    [TestMethod]
+    public async Task AParameterOnlyBody_GetsNoCancellationTokenSource_ForEitherReturnType()
+    {
+        var vm = new CommandSignatureViewModel();
+
+        var fromTask = await CaptureStartedSourceAsync(vm.ParameterOnlyCommand);
+        var fromValueTask = await CaptureStartedSourceAsync(vm.VtParameterOnlyCommand);
+
+        Assert.IsNull(fromTask, "a body that cannot observe a token needs no source");
+        Assert.IsNull(fromValueTask,
+            "the ValueTask form must match the Task form - its thunk is a one-parameter lambda precisely so that it binds the same entry point");
+    }
+
+    private static async Task<CancellationTokenSource?> CaptureStartedSourceAsync(IVeloxCommand command)
+    {
+        CancellationTokenSource? captured = null;
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        command.Started += e =>
+        {
+            captured = e.Cts;
+            started.TrySetResult(true);
+        };
+
+        _ = command.ExecuteAsync(null);
+        await started.Task.WaitAsync(CommandTestKit.Timeout);
+
+        return captured;
+    }
+
     private static IVeloxCommand[] AllCommands(CommandSignatureViewModel vm) =>
     [
         vm.BothCommand, vm.ParameterOnlyCommand, vm.TokenOnlyCommand, vm.NothingCommand, vm.TaskOfTCommand,

@@ -29,14 +29,14 @@ namespace VeloxDev.Generators.Writers
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null) return string.Empty;
-            return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_AOP.g.cs";
+            return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_AOP.g.cs";
         }
 
         // ── Output 1: partial class (preserves the interface implementation contract) ──
 
         public override string[] GenerateBaseInterfaces() =>
         [
-            $"{NAMESPACE_VELOX_AOP}.{Syntax?.Identifier.Text}_{Symbol?.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop"
+            $"{NAMESPACE_VELOX_AOP}.{Syntax?.Identifier.Text}_{NamespaceFileSegment()}_Aop"
         ];
         public override string[] GenerateBaseTypes() => [];
 
@@ -47,7 +47,7 @@ namespace VeloxDev.Generators.Writers
         public string GetExtensionFileName()
         {
             if (Syntax == null || Symbol == null) return string.Empty;
-            return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_AopExt.g.cs";
+            return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_AopExt.g.cs";
         }
 
         public string WriteExtension()

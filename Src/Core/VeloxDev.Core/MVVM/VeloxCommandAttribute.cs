@@ -7,7 +7,14 @@ namespace VeloxDev.MVVM
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The marked method may take <c>(object? parameter)</c>, <c>(CancellationToken ct)</c>, <c>(object? parameter, CancellationToken ct)</c> or nothing, and may return either <see cref="Task"/> or <see langword="void"/>.
+    /// The marked method may take nothing, <c>(object? parameter)</c>, <c>(CancellationToken ct)</c>, or
+    /// <c>(object? parameter, CancellationToken ct)</c>, and may return <see cref="Task"/>, <c>Task&lt;T&gt;</c>,
+    /// <c>ValueTask</c>, <c>ValueTask&lt;T&gt;</c>, or <see langword="void"/>.
+    /// </para>
+    /// <para>
+    /// One combination of those is rejected: a <see langword="void"/> method that takes a
+    /// <see cref="CancellationToken"/>. Nothing a synchronous body could do with the token, and the generated
+    /// code does not compile — return <see cref="Task"/> when the body is meant to observe cancellation.
     /// </para>
     /// <para>
     /// Only a <see cref="CancellationToken"/> parameter lets the command actually stop the body: the other shapes

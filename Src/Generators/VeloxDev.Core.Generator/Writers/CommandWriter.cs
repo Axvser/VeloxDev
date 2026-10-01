@@ -108,11 +108,11 @@ namespace VeloxDev.Generators.Writers
             bool isTask = returnTypeName == TASK || returnTypeName.StartsWith(TASK + "<");
             bool isValueTask = returnTypeName == VALUE_TASK || returnTypeName.StartsWith(VALUE_TASK + "<");
 
-            // ValueTask 一律走主构造 + 转换 thunk，见 CommandSpec 的说明。
-            if (isValueTask && TryBuildValueTaskThunk(methodSymbol, out string thunk))
+            // ValueTask 需要转换 thunk，见 CommandSpec 的说明。thunk 的形参个数同时决定构造入口。
+            if (isValueTask && TryBuildValueTaskThunk(methodSymbol, out string thunk, out int valueTaskType))
             {
                 commandExpression = thunk;
-                return 0;
+                return valueTaskType;
             }
 
             if (parameters.Length != 1) return 0;
@@ -146,9 +146,19 @@ namespace VeloxDev.Generators.Writers
 
         // 只认 [VeloxCommand] 文档承诺的四种形参形态。其余形态返回 false，
         // 于是方法组原样落地 —— 编不过，但报错方式与改动前一致，不会静默生成错东西。
-        private static bool TryBuildValueTaskThunk(IMethodSymbol methodSymbol, out string thunk)
+        //
+        // thunk 的形参个数决定了它绑到哪个构造入口，所以这里必须同时给出 constructorType：
+        //   0 参        → Func<Task>（`new VeloxCommand` 的 0 参重载）
+        //   1 参 object? → CreateTaskOnlyWithParameter —— 与 `Task (object?)` 一致，**不建 CTS**
+        //   1 参 ct      → CreateTaskOnlyWithCancellationToken —— token 真能到达命令体
+        //   2 参        → 主构造 —— token 真能到达命令体
+        // 早先 1 参也一律走主构造，于是 `ValueTask (object?)` 每次执行白建一个命令体看不到的 CTS，
+        // 与 `Task (object?)` 不一致。改成单参 lambda 后两边对齐。
+        private static bool TryBuildValueTaskThunk(
+            IMethodSymbol methodSymbol, out string thunk, out int constructorType)
         {
             thunk = string.Empty;
+            constructorType = 0;
             var parameters = methodSymbol.Parameters;
             string name = methodSymbol.Name;
 
@@ -163,10 +173,12 @@ namespace VeloxDev.Generators.Writers
                     thunk = $"() => {name}().AsTask()";
                     return true;
                 case 1 when IsObject(parameters[0]):
-                    thunk = $"(parameter, _) => {name}(parameter).AsTask()";
+                    thunk = $"parameter => {name}(parameter).AsTask()";
+                    constructorType = 1;
                     return true;
                 case 1 when IsToken(parameters[0]):
-                    thunk = $"(_, ct) => {name}(ct).AsTask()";
+                    thunk = $"ct => {name}(ct).AsTask()";
+                    constructorType = 2;
                     return true;
                 case 2 when IsObject(parameters[0]) && IsToken(parameters[1]):
                     thunk = $"(parameter, ct) => {name}(parameter, ct).AsTask()";
@@ -187,7 +199,7 @@ namespace VeloxDev.Generators.Writers
             }
 
             return
-                $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Commands.g.cs";
+                $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_Commands.g.cs";
         }
 
         public override string GenerateBody()

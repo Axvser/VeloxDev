@@ -58,7 +58,7 @@ namespace VeloxDev.Generators.Writers
                 return string.Empty;
             }
 
-            return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Mono.g.cs";
+            return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_Mono.g.cs";
         }
 
         public override string[] GenerateBaseInterfaces()

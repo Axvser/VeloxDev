@@ -124,12 +124,34 @@ context.RegisterSourceOutput(
 | `void` | 方法组本身 | 1 参绑 `Action<object?>`、0 参绑 `Action` |
 | `ValueTask` / `ValueTask<T>` | **`.AsTask()` 转换 thunk** | 见下 |
 
-`ValueTask` 既不能隐式转 `Task`，也不像 `Task<T>` 那样能靠协变（协变要求返回类型之间本身有引用转换，而 `ValueTask` 是结构体），所以**必须显式 thunk**：`(parameter, ct) => Foo(parameter, ct).AsTask()`。
+`ValueTask` 既不能隐式转 `Task`，也不像 `Task<T>` 那样能靠协变（协变要求返回类型之间本身有引用转换，而 `ValueTask` 是结构体），所以**必须显式 thunk**。
+
+**thunk 的形参个数同时决定绑到哪个构造入口** —— 2026-10-01 起让四种形态与 `Task` 那四种**一一对称**：
+
+| 形参 | thunk | 构造入口 | `_isCtsNeeded` |
+|---|---|---|---|
+| `()` | `() => Foo().AsTask()` | `Func<Task>` | false |
+| `(object?)` | `parameter => Foo(parameter).AsTask()` | `CreateTaskOnlyWithParameter` | false |
+| `(CancellationToken)` | `ct => Foo(ct).AsTask()` | `CreateTaskOnlyWithCancellationToken` | **true** |
+| `(object?, CancellationToken)` | `(parameter, ct) => Foo(parameter, ct).AsTask()` | 主构造 | **true** |
+
+前两行是单参 lambda、后一行是双参，**这个差别是刻意的**：早先 1 参一律发双参 lambda，只能绑主构造，于是 `ValueTask (object?)` 每次执行白建一个命令体根本看不到的 `CancellationTokenSource`（72 B），与 `Task (object?)` 不一致。`AParameterOnlyBody_GetsNoCancellationTokenSource_ForEitherReturnType` 钉住了这个对称性。
 
 - thunk 产出 `Func<object?, CancellationToken, Task>` —— **这个签名在四个 TFM 上都存在**，所以生成代码不依赖运行时的 ValueTask 入口，`netstandard2.0` / `net461` 的生成目标照样编得过。**不要**给生成器加 TFM 感知或 MSBuild 属性管线，那是多余的。
 - **不要**把 `Foo(...)` 提到 lambda 外面再 `AsTask()`：`IValueTaskSource` 只能消费一次，第二次执行会抛 `InvalidOperationException`。
 - 只认四种形参形态（0 / `object?` / `CancellationToken` / `object?`+`CancellationToken`）；其余返回 `false`，方法组原样落地 —— 编不过，但报错方式与改动前一致，不会静默生成错东西。
-- 零参形态 `() => Foo().AsTask()` **实测无二义性**（红队曾断言它会 CS0121，**是错的**）：它绑到 `Func<Task>`，命令体确实被 await，且拿到 `_isCtsNeeded = false`。 |
+- 零参形态 `() => Foo().AsTask()` **实测无二义性**（红队曾断言它会 CS0121，**是错的**）：它绑到 `Func<Task>`，命令体确实被 await，且拿到 `_isCtsNeeded = false`。
+
+### 全局命名空间：`ContainingNamespace` 有两个陷阱
+
+`Symbol.ContainingNamespace.ToDisplayString()` 在全局命名空间下返回的是字面量 `"<global namespace>"` —— 那个尖括号既是**非法文件名字符**也是**非法标识符字符**。2026-10-01 之前有**两处**会因此炸，而且报错都指向别处：
+
+1. **文件名**（`GetFileName`）—— 拼进 hintName 会让生成器整个抛 `ArgumentException`，宿主只报一句 `CS8785 生成器"Command"未能生成源`，跟命名空间毫不相干。`WriterBase.NamespaceFileSegment()` 统一兜底成 `"Global"`；**五个调用点**（`CommandWriter`/`MVVMWriter`/`AopWriter` ×2/`MonoWriter`）都改用它。`MVVMWriter` 原先自己处理过，现在是同一份。
+2. **生成文件内容**（`WriterBase.Write`）—— 无条件写 `namespace {ContainingNamespace};`，全局命名空间下产出 `namespace <global namespace>;`，**非法语法，产物编不过**。`WriterBase.AppendNamespace()` 在全局命名空间时什么都不写。
+
+`AopWriter` 还有第三处：生成的接口**类型名**里也拼了这个片段（`:39`），同样走 `NamespaceFileSegment()`。
+
+回归守卫：`Src/Core/VeloxDev.Core.Test/MVVM/GlobalNamespaceCommandViewModel.cs` 故意不写命名空间，它一存在，上面两处任何一处回退都会让构建立刻失败。
 | `Writers/MonoWriter.cs` | `InitializeMonoBehaviour` / `CloseMonoBehaviour` / 5 个 `partial void` 钩子 | `MonoBehaviourAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeMonoBehaviour()` 等于什么都没发生 |
 | `Writers/AopWriter.cs` | AOP 接口实现 + `Aop()` 扩展方法 | — | 见 §三 |
 | `AopInterface.cs` | AOP 接口本身（`VeloxDev.AopInterfaces` 命名空间） | — | 它**不在 `Writers/` 下**，是唯一一个把生成逻辑直接写在生成器类里的 |

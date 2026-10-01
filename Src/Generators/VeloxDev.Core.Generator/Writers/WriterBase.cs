@@ -22,6 +22,15 @@ namespace VeloxDev.Generators.Writers
         public INamedTypeSymbol? Symbol { get; protected set; }
         public List<ClassDeclarationSyntax>? OuterClasses { get; protected set; }
 
+        // 拼进生成物文件名与生成类型名的命名空间片段。
+        // 全局命名空间的 ToDisplayString() 返回 "<global namespace>" —— 那个尖括号是非法的文件名与标识符字符，
+        // 直接拼进去会让生成器整个抛 ArgumentException（宿主只报 CS8785「生成器未能生成源」），
+        // 报错跟命名空间毫无关系，极难查。用 "Global" 占位。
+        protected string NamespaceFileSegment()
+            => Symbol is null || Symbol.ContainingNamespace.IsGlobalNamespace
+                ? "Global"
+                : Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_');
+
         public virtual void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             Syntax = classDeclaration;
@@ -35,6 +44,20 @@ namespace VeloxDev.Generators.Writers
                 OuterClasses.Insert(0, outerClass);
                 parent = parent.Parent;
             }
+        }
+
+        // 全局命名空间不能写成 `namespace X;`：ContainingNamespace.ToDisplayString() 给的是
+        // "<global namespace>"，拼出来是 `namespace <global namespace>;` —— 非法语法，产物编不过。
+        // 什么都不写才是对的。
+        private void AppendNamespace(StringBuilder builder)
+        {
+            if (Symbol is null || Symbol.ContainingNamespace.IsGlobalNamespace)
+            {
+                return;
+            }
+
+            builder.AppendLine($"namespace {Symbol.ContainingNamespace};");
+            builder.AppendLine();
         }
 
         public virtual string Write()
@@ -60,8 +83,7 @@ namespace VeloxDev.Generators.Writers
             // If it's not a nested class, or the outermost class isn't in a namespace, add the namespace
             if (OuterClasses == null || OuterClasses.Count == 0)
             {
-                sourceBuilder.AppendLine($"namespace {Symbol.ContainingNamespace};");
-                sourceBuilder.AppendLine();
+                AppendNamespace(sourceBuilder);
             }
 
             // If this is a nested class, generate the outer classes
@@ -69,8 +91,7 @@ namespace VeloxDev.Generators.Writers
             {
                 // Start from the outermost class
                 var outermostClass = OuterClasses[0];
-                sourceBuilder.AppendLine($"namespace {Symbol.ContainingNamespace};");
-                sourceBuilder.AppendLine();
+                AppendNamespace(sourceBuilder);
 
                 // Format the modifiers, ensuring the partial keyword is positioned correctly
                 var modifiers = FormatModifiers(outermostClass.Modifiers.ToString());

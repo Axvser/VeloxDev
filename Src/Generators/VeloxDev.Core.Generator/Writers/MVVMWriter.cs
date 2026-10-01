@@ -847,10 +847,7 @@ namespace VeloxDev.Generators.Writers
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null) return string.Empty;
-            var namespaceName = Symbol.ContainingNamespace.IsGlobalNamespace
-                ? "Global"
-                : Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_');
-            return $"{Syntax.Identifier.Text}_{namespaceName}_MVVM.g.cs";
+            return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_MVVM.g.cs";
         }
 
         public override string[] GenerateBaseInterfaces()
