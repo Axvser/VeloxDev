@@ -155,6 +155,16 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 **结论**：这不是「加 `[DoNotParallelize]`」能解决的，也不是线程池饿死（隔离跑同样红）。它是一个待查的引擎缺陷，归 `WorkflowSystem/CompilerEx`。
 
+#### 2026-10-01 的排查：已排除四项，另发现一处真实缺陷，**根因仍未定位**
+
+**排除的（都读过代码，不是猜的）**：`ManualExecutionGate` 本身写得很扎实（锁外完成、TCS 替换而非原地完成、取消安全）；重试路径不走（`session?.RetryPolicy is not {} policy` 直接返回，测试没配策略）；并行分支的 `SemaphoreSlim` `WaitAsync`/`Release` 配平；`SaveCheckpointAsync` 无 store 时早退、有异常时吞掉。`WorkflowDemoSession.Observe` 是纯同步的计数器。
+
+**顺手发现的一处真实缺陷**（与本次挂起**无关**，但独立成立）：`WorkflowAgentToolkit` 用 `context.ExecutionGate ??= run.Gate;` 挂门，而 `WorkflowDemoSession` 已经在自己的配置里写过 `context.ExecutionGate = Gate;`（`WorkflowDemoSession.cs:291`）。配置顺序是「宿主自己的设置在前」，所以 `??=` **永远不生效** —— `PauseCompiledRun`/`ResumeCompiledRun` 作用的是 `run.Gate`，而引擎等的是会话那把门。两个工具都报 ok、`isPaused` 也如实反映 `run.Gate`，**但运行根本没被停住**。测试因此「通过」，却是因为运行压根没被暂停。
+
+**插桩行不通，原因记在这儿**：给每个节点加两条 `context.Log` 后，失败率从约 40% 变成 **0/8** —— 典型 Heisenbug，日志本身把调度改到足以掩盖挂起。改用「只在久无进展时才写一行」的看门狗也没抓到：第一版用了静态时间戳，被**别的并发运行**不断刷新（全量跑时不止一个引擎在动），改成按 `RuntimeContext` 用 `ConditionalWeakTable` 记也没抓到 —— 具体为什么没响**没有查清**，这里如实记下，别当成「看门狗证明它没卡」。
+
+**下一步该看的地方**（都没看过）：`RunExecuteAsync` 的重定向收尾（`ResolveRedirectAsync`）、`BranchRuntimeContext` 的产物收集、以及重定向后那一轮 `context.Attempt` 与产物表戳的交互 —— 挂起总发生在**审计重定向之后**。
+
 ---
 
 ## 六、组织与覆盖
