@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading;
 using VeloxDev.MVVM;
 
@@ -114,6 +115,37 @@ public partial class CommandSignatureViewModel
         Ran.Add(nameof(VtOfTAsync));
         return new ValueTask<int>(1);
     }
+
+    // ---- 单个非 object? 形参：命令参数在 thunk 里被强转后交给命令体 ----
+    // （刻意不写进 Ran：上面那条「每个签名各跑一遍」的用例不传参数，这里需要带着实参断言。）
+
+    /// <summary>每一次强转后命令体实际收到的值，按执行顺序。</summary>
+    internal List<string?> TypedSeen { get; } = [];
+
+    [VeloxCommand]
+    private Task TypedStringAsync(string value)
+    {
+        TypedSeen.Add(value);
+        return Task.CompletedTask;
+    }
+
+    [VeloxCommand]
+    private Task TypedStringWithTokenAsync(string value, CancellationToken ct)
+    {
+        _ = ct;
+        TypedSeen.Add(value);
+        return Task.CompletedTask;
+    }
+
+    [VeloxCommand]
+    private ValueTask TypedNumberAsync(int number)
+    {
+        TypedSeen.Add(number.ToString(CultureInfo.InvariantCulture));
+        return default;
+    }
+
+    [VeloxCommand]
+    private void TypedVoidAsync(string value) => TypedSeen.Add(value);
 }
 
 /// <summary>

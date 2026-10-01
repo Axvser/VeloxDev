@@ -37,7 +37,10 @@
 | `public Task FooAsync(object? p)` | `CreateTaskOnlyWithParameter`（`CommandWriter.cs:135`） | false（`VeloxCommandAttribute.cs` 无关，`VeloxCommand.cs:77`） | **不能** —— 只有 `Canceled` 事件，task 继续跑 |
 | `public Task FooAsync(CancellationToken ct)` | `CreateTaskOnlyWithCancellationToken`（`:139-141`） | **true** | 能 |
 | `public ValueTask FooAsync(object? p)` 等 | 按形参走对应的 `.AsTask()` thunk（`CommandWriter.cs:149-178`）—— 四种形态与 `Task` 那四种一一对称 | `(CancellationToken)` / `(object?, CancellationToken)` 两种为 **true**，其余 false | 带 token 的两种**能** |
+| `public Task FooAsync(string s, CancellationToken ct)` | `new VeloxCommand(command: (parameter, ct) => Foo((string)parameter!, ct), …)` —— **thunk 里强转** | **true** | 能 |
 | `[VeloxCommand]` 标在别的签名上 | `new VeloxCommand(command: 方法名, ...)`（`:207`） | 视重载 | 视重载 |
+
+**强转是运行期的**：`FooCommand.Execute(42)` 不会编译报错，而是变成一次 `Failed` 执行（`InvalidCastException`）。多值场景**不要**指望我们自动组元组 —— 走 DTO：`Task FooAsync(MoveArgs args, CancellationToken ct)`，同样是单参数，但编译期安全、实例可复用（零分配）。
 
 **错的捷径**：写 `Task FooAsync(object? p)` 然后指望「取消」生效 —— 编译过、跑得动、`Canceled` 事件照发，但底层工作**不会停**。判定点在 `VeloxCommand.cs:30`（工厂里唯一的 `_isCtsNeeded = false`）。
 

@@ -99,94 +99,103 @@ namespace VeloxDev.Generators.Writers
         private const string CANCEL_TOKEN = "global::System.Threading.CancellationToken";
 
         // 返回值决定「值怎么变成 Task」，形参决定「走哪个构造入口」。两件事分开判。
+        private static bool IsObject(IParameterSymbol p) => p.Type.SpecialType == SpecialType.System_Object;
+
+        private static bool IsToken(IParameterSymbol p) =>
+            p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == CANCEL_TOKEN;
+
+        // 形状判定：**返回类型**决定「值怎么变成 Task」，**形参**决定「走哪个构造入口」。
+        //
+        // 前导形参只支持 0 个或 1 个，末尾可再跟一个 CancellationToken：
+        //   0 个      → 命令参数用不上（token 只有在末尾才有意义）
+        //   1 个      → 命令参数就是它：是 object? 就原样传方法组，否则在 thunk 里强转
+        // 多于 1 个前导形参不在这里支持 —— 那要求调用方传元组或 DTO，是另一个设计；
+        // 让方法组原样落地去报错，不会静默生成错东西。
+        //
+        // constructorType：0 = new VeloxCommand（主构造 / Func<Task> / Action），
+        //                  1 = CreateTaskOnlyWithParameter，
+        //                  2 = CreateTaskOnlyWithCancellationToken。
         private int ParseConstructorType(IMethodSymbol methodSymbol, out string commandExpression)
         {
-            commandExpression = methodSymbol.Name;
+            string name = methodSymbol.Name;
+            commandExpression = name;
+
             var parameters = methodSymbol.Parameters;
             string returnTypeName = methodSymbol.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
             bool isTask = returnTypeName == TASK || returnTypeName.StartsWith(TASK + "<");
             bool isValueTask = returnTypeName == VALUE_TASK || returnTypeName.StartsWith(VALUE_TASK + "<");
+            bool isVoid = methodSymbol.ReturnsVoid;
 
-            // ValueTask 需要转换 thunk，见 CommandSpec 的说明。thunk 的形参个数同时决定构造入口。
-            if (isValueTask && TryBuildValueTaskThunk(methodSymbol, out string thunk, out int valueTaskType))
+            // 自定义可等待类型等：不认识，交给方法组去报错。
+            if (!isTask && !isValueTask && !isVoid) return 0;
+
+            // 不用 `[^1]`：那是 System.Index，netstandard2.0 上没有。
+            bool hasToken = parameters.Length > 0 && IsToken(parameters[parameters.Length - 1]);
+            int leading = parameters.Length - (hasToken ? 1 : 0);
+
+            if (leading > 1) return 0;
+
+            bool isObjectParam = leading == 1 && IsObject(parameters[0]);
+
+            // 非 object? 的单参数要在 thunk 里强转；object? 则整段省掉，方法组能直接绑。
+            // 只在 leading == 1 时读 parameters[0] —— 零参方法读它会 IndexOutOfRange。
+            string argument = leading == 0
+                ? string.Empty
+                : isObjectParam
+                    ? "parameter"
+                    : $"({parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})parameter!";
+
+            if (isVoid)
             {
-                commandExpression = thunk;
-                return valueTaskType;
+                // void 体观察不到 token，所以带尾随 CancellationToken 的形态一律不支持 ——
+                // 那正是「接受一个永远用不上的 token」。
+                if (hasToken) return 0;
+
+                if (leading == 1 && !isObjectParam)
+                {
+                    commandExpression = $"parameter => {name}({argument})";
+                }
+
+                return 0;   // Action / Action<object?>
             }
 
-            if (parameters.Length != 1) return 0;
-            if (!isTask) return 0;
-
-            var paramType = parameters[0].Type;
-            string paramTypeName = paramType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-            // Check the object? type precisely
-            // Method 1: check the nullable object type
-            bool isObjectOrNullableObject =
-                paramType.SpecialType == SpecialType.System_Object ||
-                (paramType.NullableAnnotation == NullableAnnotation.Annotated &&
-                 paramType.SpecialType == SpecialType.System_Object) ||
-                paramTypeName == "global::System.Object" ||
-                paramTypeName == "global::System.Object?";
-
-            if (isObjectOrNullableObject)
+            if (isTask)
             {
-                return 1;  // CreateTaskOnlyWithParameter
+                if (leading == 0)
+                {
+                    return hasToken ? 2 : 0;    // 方法组：Func<Task> 或 Func<CancellationToken, Task>
+                }
+
+                if (isObjectParam)
+                {
+                    return hasToken ? 0 : 1;    // 方法组：主构造 或 CreateTaskOnlyWithParameter
+                }
+
+                // 非 object?：方法组转不过去，必须强转
+                commandExpression = hasToken
+                    ? $"(parameter, ct) => {name}({argument}, ct)"
+                    : $"parameter => {name}({argument})";
+                return hasToken ? 0 : 1;
             }
 
-            // Check for CancellationToken
-            if (paramTypeName == CANCEL_TOKEN)
+            // ValueTask：没有到 Task 的隐式转换，也不能像 Task<T> 那样靠协变（它是结构体），
+            // 所以一律需要 .AsTask() 转换 thunk。末尾的 ct 必须留在 lambda 的最后。
+            if (leading == 0)
             {
-                return 2;  // CreateTaskOnlyWithCancellationToken
+                commandExpression = hasToken
+                    ? $"ct => {name}(ct).AsTask()"
+                    : $"() => {name}().AsTask()";
+                return hasToken ? 2 : 0;
             }
 
-            return 0;
+            commandExpression = hasToken
+                ? $"(parameter, ct) => {name}({argument}, ct).AsTask()"
+                : $"parameter => {name}({argument}).AsTask()";
+            return hasToken ? 0 : 1;
         }
 
-        // 只认 [VeloxCommand] 文档承诺的四种形参形态。其余形态返回 false，
-        // 于是方法组原样落地 —— 编不过，但报错方式与改动前一致，不会静默生成错东西。
-        //
-        // thunk 的形参个数决定了它绑到哪个构造入口，所以这里必须同时给出 constructorType：
-        //   0 参        → Func<Task>（`new VeloxCommand` 的 0 参重载）
-        //   1 参 object? → CreateTaskOnlyWithParameter —— 与 `Task (object?)` 一致，**不建 CTS**
-        //   1 参 ct      → CreateTaskOnlyWithCancellationToken —— token 真能到达命令体
-        //   2 参        → 主构造 —— token 真能到达命令体
-        // 早先 1 参也一律走主构造，于是 `ValueTask (object?)` 每次执行白建一个命令体看不到的 CTS，
-        // 与 `Task (object?)` 不一致。改成单参 lambda 后两边对齐。
-        private static bool TryBuildValueTaskThunk(
-            IMethodSymbol methodSymbol, out string thunk, out int constructorType)
-        {
-            thunk = string.Empty;
-            constructorType = 0;
-            var parameters = methodSymbol.Parameters;
-            string name = methodSymbol.Name;
-
-            static bool IsObject(IParameterSymbol p) => p.Type.SpecialType == SpecialType.System_Object;
-
-            static bool IsToken(IParameterSymbol p) =>
-                p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == CANCEL_TOKEN;
-
-            switch (parameters.Length)
-            {
-                case 0:
-                    thunk = $"() => {name}().AsTask()";
-                    return true;
-                case 1 when IsObject(parameters[0]):
-                    thunk = $"parameter => {name}(parameter).AsTask()";
-                    constructorType = 1;
-                    return true;
-                case 1 when IsToken(parameters[0]):
-                    thunk = $"ct => {name}(ct).AsTask()";
-                    constructorType = 2;
-                    return true;
-                case 2 when IsObject(parameters[0]) && IsToken(parameters[1]):
-                    thunk = $"(parameter, ct) => {name}(parameter, ct).AsTask()";
-                    return true;
-                default:
-                    return false;
-            }
-        }
+        // （转换 thunk 的构造已并入 ParseConstructorType —— 形参个数与返回类型要一起判。）
 
         public override bool CanWrite() => CommandConfig.Count > 0;
         public override string[] GenerateBaseTypes() => [];

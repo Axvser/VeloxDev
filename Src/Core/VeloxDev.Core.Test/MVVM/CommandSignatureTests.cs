@@ -54,6 +54,16 @@ public class CommandSignatureTests
     }
 
     [TestMethod]
+    public async Task ANestedClassInsideAGenericOuterClass_StillGenerates()
+    {
+        var inner = new GenericOuter<int>.Inner();
+
+        await RunToCompletionAsync(inner.RunCommand);
+
+        Assert.IsTrue(inner.Ran, "the outer class's type parameter must survive into the generated partial");
+    }
+
+    [TestMethod]
     public async Task AViewModelWithoutANamespace_StillGenerates()
     {
         // 全局命名空间曾让生成器整个崩掉（见该视图模型文件顶部的说明）。
@@ -101,11 +111,38 @@ public class CommandSignatureTests
     ];
 
     // ExecuteAsync 只等到入队；要等「命令真的跑完」得看 Exited。
-    private static async Task RunToCompletionAsync(IVeloxCommand command)
+    [TestMethod]
+    public async Task ASingleTypedParameter_IsUnpackedAndHandedToTheBody()
+    {
+        var vm = new CommandSignatureViewModel();
+
+        await RunToCompletionAsync(vm.TypedStringCommand, "hello");
+        await RunToCompletionAsync(vm.TypedStringWithTokenCommand, "world");
+        await RunToCompletionAsync(vm.TypedNumberCommand, 42);
+        await RunToCompletionAsync(vm.TypedVoidCommand, "void");
+
+        CollectionAssert.AreEqual(new[] { "hello", "world", "42", "void" }, vm.TypedSeen,
+            "every return type must unpack the same way, and void must too");
+    }
+
+    [TestMethod]
+    public async Task ATypedParameterOfTheWrongType_FailsTheExecutionInsteadOfSilentlyDoingNothing()
+    {
+        // 强转是运行期的 —— 这条钉住的正是它的代价：传错类型不会静默，但也不是编译错误。
+        var vm = new CommandSignatureViewModel();
+
+        var completion = await vm.TypedStringCommand.ExecuteAndWaitAsync(42);
+
+        Assert.AreEqual(CommandOutcome.Failed, completion.Outcome);
+        Assert.IsInstanceOfType<InvalidCastException>(completion.Exception);
+        Assert.IsEmpty(vm.TypedSeen, "the body must not run with a bogus value");
+    }
+
+    private static async Task RunToCompletionAsync(IVeloxCommand command, object? parameter = null)
     {
         var exited = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         command.Exited += _ => exited.TrySetResult(true);
-        await command.ExecuteAsync(null);
+        await command.ExecuteAsync(parameter);
         await exited.Task.WaitAsync(CommandTestKit.Timeout);
     }
 }

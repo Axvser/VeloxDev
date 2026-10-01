@@ -126,6 +126,18 @@ context.RegisterSourceOutput(
 
 `ValueTask` 既不能隐式转 `Task`，也不像 `Task<T>` 那样能靠协变（协变要求返回类型之间本身有引用转换，而 `ValueTask` 是结构体），所以**必须显式 thunk**。
 
+**形参这一维**（2026-10-01 起）：前导形参只支持 **0 个或 1 个**，末尾可再跟一个 `CancellationToken`。
+
+| 前导形参 | 生成物 |
+|---|---|
+| 0 个 | 方法组原样落地（`Func<Task>` / `Action`），或用 `ct =>` thunk |
+| 1 个 `object?` | 方法组原样落地 —— **不变**，与改动前逐字节一致 |
+| 1 个其它类型 `T` | `parameter => M((T)parameter!)` —— **在 thunk 里强转**，方法组转不过去 |
+
+**强转是运行期的**：传错类型不会静默，但也不是编译错误 —— 它会变成一次 `Failed` 执行，`Exception` 是 `InvalidCastException`。`ATypedParameterOfTheWrongType_FailsTheExecutionInsteadOfSilentlyDoingNothing` 钉住了这个代价。
+
+**多于 1 个前导形参不做支持**：那要求调用方传元组或 DTO。元组方案实测可行（`ValueTuple` 前 7 个不用嵌套），但代价是调用方**每次 32 B**（结构体装箱进 `object?`，box 逃逸进 `CommandEventArgs`，JIT 消不掉）、参数形状只能回去翻签名（传错是运行期 `InvalidCastException`）、生成器判定面再扩一个量级。多值场景走 DTO 即可 —— 编译期安全、可复用实例零分配、类型自解释。
+
 **thunk 的形参个数同时决定绑到哪个构造入口** —— 2026-10-01 起让四种形态与 `Task` 那四种**一一对称**：
 
 | 形参 | thunk | 构造入口 | `_isCtsNeeded` |
@@ -152,6 +164,14 @@ context.RegisterSourceOutput(
 `AopWriter` 还有第三处：生成的接口**类型名**里也拼了这个片段（`:39`），同样走 `NamespaceFileSegment()`。
 
 回归守卫：`Src/Core/VeloxDev.Core.Test/MVVM/GlobalNamespaceCommandViewModel.cs` 故意不写命名空间，它一存在，上面两处任何一处回退都会让构建立刻失败。
+
+### 外层类必须原样带上类型形参
+
+`WriterBase.Write()` 生成嵌套类时会重写外层类声明。2026-10-01 之前它只写 `class {标识符}` —— **把 `<T>` 丢了**。`partial class Outer` 与 `partial class Outer<T>` 是两个 arity 不同的类型，不会合并；编译器另造一个空的 `Outer`，于是内层类的方法全成了「当前上下文中不存在该名称」（**CS0103**），报错指向生成文件，极难反推。现在由 `OuterClassHeader()` 统一带上 `TypeParameterList` 与 `ConstraintClauses`。
+
+**泛型类本身与普通嵌套类都没问题**（实测已可用），坏的只有「泛型外类 + 嵌套类」这一个组合。
+
+**泛型方法则本质不支持**：生成的方法组 `Foo` 无法从 `(object?, CancellationToken)` 推断出 `T`（实测 CS0411 + CS0029），除非要求作者在特性里显式给出类型实参 —— 那是另一个设计，目前不做。
 | `Writers/MonoWriter.cs` | `InitializeMonoBehaviour` / `CloseMonoBehaviour` / 5 个 `partial void` 钩子 | `MonoBehaviourAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeMonoBehaviour()` 等于什么都没发生 |
 | `Writers/AopWriter.cs` | AOP 接口实现 + `Aop()` 扩展方法 | — | 见 §三 |
 | `AopInterface.cs` | AOP 接口本身（`VeloxDev.AopInterfaces` 命名空间） | — | 它**不在 `Writers/` 下**，是唯一一个把生成逻辑直接写在生成器类里的 |

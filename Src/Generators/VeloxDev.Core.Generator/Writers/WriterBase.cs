@@ -46,6 +46,20 @@ namespace VeloxDev.Generators.Writers
             }
         }
 
+        // 外层类必须**原样带上类型形参**：`partial class Outer` 与 `partial class Outer<T>` 是两个 arity
+        // 不同的类型，不合并 —— 编译器会另造一个空的 `Outer`，里面什么都没有，于是内层类的方法全成了
+        // 「当前上下文中不存在该名称」（CS0103），而报错指向生成文件，极难反推。
+        private string OuterClassHeader(ClassDeclarationSyntax outerClass)
+        {
+            string modifiers = FormatModifiers(outerClass.Modifiers.ToString());
+            string typeParameters = outerClass.TypeParameterList?.ToString() ?? string.Empty;
+            string constraints = outerClass.ConstraintClauses.Count > 0
+                ? " " + string.Join(" ", outerClass.ConstraintClauses)
+                : string.Empty;
+
+            return $"{modifiers}class {outerClass.Identifier.Text}{typeParameters}{constraints}";
+        }
+
         // 全局命名空间不能写成 `namespace X;`：ContainingNamespace.ToDisplayString() 给的是
         // "<global namespace>"，拼出来是 `namespace <global namespace>;` —— 非法语法，产物编不过。
         // 什么都不写才是对的。
@@ -94,16 +108,13 @@ namespace VeloxDev.Generators.Writers
                 AppendNamespace(sourceBuilder);
 
                 // Format the modifiers, ensuring the partial keyword is positioned correctly
-                var modifiers = FormatModifiers(outermostClass.Modifiers.ToString());
-                sourceBuilder.AppendLine($"{modifiers}class {outermostClass.Identifier.Text}");
+                sourceBuilder.AppendLine(OuterClassHeader(outermostClass));
                 sourceBuilder.AppendLine("{");
 
                 // Generate the inner classes
                 for (int i = 1; i < OuterClasses.Count; i++)
                 {
-                    var outerClass = OuterClasses[i];
-                    modifiers = FormatModifiers(outerClass.Modifiers.ToString());
-                    sourceBuilder.AppendLine($"{modifiers}class {outerClass.Identifier.Text}");
+                    sourceBuilder.AppendLine(OuterClassHeader(OuterClasses[i]));
                     sourceBuilder.AppendLine("{");
                 }
             }
