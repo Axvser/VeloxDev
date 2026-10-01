@@ -183,7 +183,9 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 
 **另一处独立缺陷（仍未修）**：`WorkflowAgentToolkit` 用 `context.ExecutionGate ??= run.Gate;` 挂门，而 `WorkflowDemoSession` 已在自己的配置里写过 `context.ExecutionGate = Gate;`。配置顺序是「宿主自己的设置在先」，所以 `??=` **永远不生效** —— `PauseCompiledRun`/`ResumeCompiledRun` 作用的是 `run.Gate`，引擎等的却是会话那把门。两个工具都报 ok、`isPaused` 也如实反映 `run.Gate`，**但运行根本没被停住**。
 
-**剩下的抖动**：`SubAgentLiveTests.ARealModel_*` 走**真实模型**（从环境变量取 key），其中 `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo` 是对模型行为的**硬断言**（它的消息自己写着「If this fails, the mandate is not strong enough」）—— 那是提示词措辞测试，本就不确定。它失败几次与上面这条挂起无关。
+**`SubAgentLiveTests` 的采样噪声已按「重试」处理（2026-10-01）**：这一族走**真实模型**（从环境变量 `API_KEY_DEEPSEEK` 取 key），其中 `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo` 断言的是**不被指示时的默示委派** —— 它是这条的唯一覆盖，没有同族那样的兜底（同族其它几条在「这次没派子代理」时会 `Assert.Inconclusive`，把这件事推给 `ARealModel_DispatchesAChildAtAll`，而那条测的是**明确要求时**的委派，是另一件事）。
+
+它单次采样约 1/6 红。改成**同一场景跑 3 次、任一次委派即通过**：断言的东西没变，只是把一次采样换成三次里的任意一次 —— 指令真的变弱时三次全会失败，仍然抓得住；而单次失手不再把套件染红。失败信息照旧带上每一次的工具调用数、读取数与模型回答。
 
 ---
 
