@@ -24,7 +24,7 @@ file sealed class StubCommand : IVeloxCommand
     public bool CanExecute(object? parameter) => true;
     public void Execute(object? parameter) { }
     public void Lock() { }
-    public void UnLock() { }
+    public void Unlock() { }
     public void Notify() { }
     public void Clear() { }
     public void Interrupt() { }
@@ -32,7 +32,7 @@ file sealed class StubCommand : IVeloxCommand
     public void ChangeSemaphore(int semaphore) { }
     public Task ExecuteAsync(object? parameter) => Task.CompletedTask;
     public Task LockAsync() => Task.CompletedTask;
-    public Task UnLockAsync() => Task.CompletedTask;
+    public Task UnlockAsync() => Task.CompletedTask;
     public Task ClearAsync() => Task.CompletedTask;
     public Task InterruptAsync() => Task.CompletedTask;
     public Task ContinueAsync() => Task.CompletedTask;
@@ -87,7 +87,7 @@ file sealed class StubNode : IWorkflowNodeViewModel
                 owner.CreatedSlots.Add(slot);
         }
         public void Lock() { }
-        public void UnLock() { }
+        public void Unlock() { }
         public void Notify() { }
         public void Clear() { }
         public void Interrupt() { }
@@ -95,7 +95,7 @@ file sealed class StubNode : IWorkflowNodeViewModel
         public void ChangeSemaphore(int semaphore) { }
         public Task ExecuteAsync(object? parameter) => Task.CompletedTask;
         public Task LockAsync() => Task.CompletedTask;
-        public Task UnLockAsync() => Task.CompletedTask;
+        public Task UnlockAsync() => Task.CompletedTask;
         public Task ClearAsync() => Task.CompletedTask;
         public Task InterruptAsync() => Task.CompletedTask;
         public Task ContinueAsync() => Task.CompletedTask;

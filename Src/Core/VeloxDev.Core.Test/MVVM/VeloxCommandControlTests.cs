@@ -4,7 +4,7 @@ using VeloxDev.MVVM;
 namespace VeloxDev.Core.Test.MVVM;
 
 /// <summary>
-/// The queue controls - <c>Lock</c>, <c>UnLock</c>, <c>Interrupt</c>, <c>Clear</c>, <c>Continue</c>.
+/// The queue controls - <c>Lock</c>, <c>Unlock</c>, <c>Interrupt</c>, <c>Clear</c>, <c>Continue</c>.
 /// <para>
 /// The load-bearing rule these pin down: the lock is a single flag that belongs to the caller, so a control
 /// that temporarily locks the command to do its work must put the flag back the way it found it. Otherwise
@@ -49,13 +49,13 @@ public class VeloxCommandControlTests
     }
 
     [TestMethod]
-    public async Task UnLock_LetsANewExecutionThrough()
+    public async Task Unlock_LetsANewExecutionThrough()
     {
         var gate = new CommandGate();
         var command = new VeloxCommand(gate.RunAsync, semaphore: 1);
 
         await command.LockAsync();
-        await command.UnLockAsync();
+        await command.UnlockAsync();
         Assert.IsTrue(command.CanExecute(null), "unlocking restores executability");
 
         _ = command.ExecuteAsync(null);
@@ -128,9 +128,9 @@ public class VeloxCommandControlTests
 
         // Interrupt 与 Clear 的分界就在这里：排队项没有被取消，只是被放行去跑。
         await gate.WaitForStartedAsync(2);
-        await CommandTestKit.WaitUntilAsync(() => recorder.Of(CommandEventType.Canceled).Length >= 2);
-        Assert.HasCount(2, recorder.Of(CommandEventType.Canceled),
-            "the interrupt raises one cancel, and the body's own OperationCanceledException raises the second");
+        await CommandTestKit.WaitUntilAsync(() => recorder.Of(CommandEventType.Canceled).Length >= 1);
+        Assert.HasCount(1, recorder.Of(CommandEventType.Canceled),
+            "a cancelled execution reports it once, however many places wanted to report it");
         Assert.HasCount(0, recorder.Of(CommandEventType.Failed), "cancelling the running body must not fail the queued one");
 
         gate.Release(2);
@@ -157,8 +157,8 @@ public class VeloxCommandControlTests
 
         // 等到正在跑的那个真正收尾：它的第二次 Canceled 也在那之前发完，这样计数就没有竞态。
         await CommandTestKit.WaitUntilAsync(() => recorder.ExitCount >= 1);
-        Assert.HasCount(4, recorder.Of(CommandEventType.Canceled),
-            "one cancel per queued call, plus two for the running one - Clear's own and its body's OperationCanceledException");
+        Assert.HasCount(3, recorder.Of(CommandEventType.Canceled),
+            "one cancel per queued call, plus one for the running one - Clear and its body both want to report it, the first wins");
     }
 
     [TestMethod]

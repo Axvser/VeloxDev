@@ -41,7 +41,7 @@ internal sealed class TestCommand : IVeloxCommand
         _onExecute?.Invoke(parameter);
     }
     public void Lock() { }
-    public void UnLock() { }
+    public void Unlock() { }
     public void Notify() { }
     public void Clear() { }
     public void Interrupt() { }
@@ -49,7 +49,7 @@ internal sealed class TestCommand : IVeloxCommand
     public void ChangeSemaphore(int semaphore) { }
     public Task ExecuteAsync(object? parameter) => Task.CompletedTask;
     public Task LockAsync() => Task.CompletedTask;
-    public Task UnLockAsync() => Task.CompletedTask;
+    public Task UnlockAsync() => Task.CompletedTask;
     public Task ClearAsync() => Task.CompletedTask;
     public Task InterruptAsync() => Task.CompletedTask;
     public Task ContinueAsync() => Task.CompletedTask;

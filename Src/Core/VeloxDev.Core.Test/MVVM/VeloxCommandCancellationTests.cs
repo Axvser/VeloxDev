@@ -62,7 +62,7 @@ public class VeloxCommandCancellationTests
     }
 
     [TestMethod]
-    public async Task InterruptingARunningBody_ReportsCanceledTwice()
+    public async Task InterruptingARunningBody_ReportsCanceledExactlyOnce()
     {
         var gate = new CommandGate();
         var command = VeloxCommand.CreateTaskOnlyWithCancellationToken(ct => gate.RunWithTokenAsync(ct));
@@ -74,8 +74,8 @@ public class VeloxCommandCancellationTests
         await command.InterruptAsync();
         await CommandTestKit.WaitUntilAsync(() => recorder.ExitCount >= 1);
 
-        Assert.HasCount(2, recorder.Of(CommandEventType.Canceled),
-            "the interrupt raises one cancel and the body's own OperationCanceledException raises the second");
+        Assert.HasCount(1, recorder.Of(CommandEventType.Canceled),
+            "the interrupt and the body's own OperationCanceledException both want to report it - the first wins");
     }
 
     [TestMethod]

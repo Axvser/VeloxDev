@@ -125,7 +125,7 @@
 
 ### 改 `_stateLock` 的持锁范围
 
-见 [architecture.md](architecture.md) §三。规则：**任何用户回调都不许在锁内**。新增一个 `XxxAsync` 控制方法时，照 `InterruptAsync`（`VeloxCommand.cs:255-279`）与 `ClearAsync`（`:281-313`）的写法：`LockAsync` → 锁内只摘列表 → 出锁后才 `Cancel` + 发事件 → `UnLockAsync`。
+见 [architecture.md](architecture.md) §三。规则：**任何用户回调都不许在锁内**。新增一个 `XxxAsync` 控制方法时，照 `InterruptAsync`（`VeloxCommand.cs:255-279`）与 `ClearAsync`（`:281-313`）的写法：`LockAsync` → 锁内只摘列表 → 出锁后才 `Cancel` + 发事件 → `UnlockAsync`。
 
 ### 与别的模块的联动
 

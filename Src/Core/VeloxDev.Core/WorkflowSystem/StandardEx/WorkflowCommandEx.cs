@@ -40,7 +40,7 @@ public static class WorkflowCommandEx
     {
         foreach (var command in commands)
         {
-            command.UnLock();
+            command.Unlock();
         }
     }
 
@@ -48,7 +48,7 @@ public static class WorkflowCommandEx
     {
         foreach (var command in commands)
         {
-            await command.UnLockAsync().ConfigureAwait(false);
+            await command.UnlockAsync().ConfigureAwait(false);
         }
     }
 }

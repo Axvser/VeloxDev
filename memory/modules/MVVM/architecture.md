@@ -34,7 +34,7 @@
 **多出来的四件事**（都不在 `ICommand` 里）：
 
 1. **并发上限**：构造时给 `semaphore`（默认 1）。超过上限的调用**不丢弃**，而是进 `_pendingQueue` 排队。
-2. **队列控制**：`Lock` / `UnLock` / `Interrupt` / `Clear` / `Continue` / `ChangeSemaphore`（各带一个 async 孪生，`:251-261` 的同步版全是 `_ = XxxAsync()`）。
+2. **队列控制**：`Lock` / `Unlock` / `Interrupt` / `Clear` / `Continue` / `ChangeSemaphore`（各带一个 async 孪生，`:251-261` 的同步版全是 `_ = XxxAsync()`）。
 3. **取消**：内部给每个 item 配 `CancellationTokenSource`，`Interrupt` / `Clear` 靠它打断正在跑的命令。
 4. **8 个生命周期事件**（`CommandEventType`，`:20-32`），每个带 `CommandEventArgs`。
 
@@ -70,7 +70,7 @@ OnExecutionCompletedAsync(item)
 
 - **`CanExecute` 与节流无关**。它只读谓词与 `_isForceLocked`（`:241-242`），**不看 `_active.Count`**。所以「队列满了」不会让按钮变灰 —— 想把「忙」反映到 UI，只能自己调 `Lock()`（它才写 `_isForceLocked`）。
 - **`Notify()` 在 `ExecuteAsync` 的末尾**（`:331`，不再是 `finally`）：`Execute` 返回前 `CanExecuteChanged` 一定发过一次，**哪怕这条命令只是进了队列**。
-- **同一个 item 可以收到两次 `Canceled`**：`InterruptAsync` 主动 `Cancel()` 后自己发一条（`:456`），被中断的命令随后在 `catch (OperationCanceledException)` 里**又发一条**（`:352`）。`ClearAsync` 亦然（`:499` + `:514`）。⇒ **被 `Clear` 清掉的一次「正在跑 + 两个排队」会产生 4 条 `Canceled`**（两个排队项各 1，正在跑的那个 2）。写 handler 按 `CommandEventType` 计数时要注意。
+- **同一次执行只报一条 `Canceled`**（2026-10-01 起）。`InterruptAsync`/`ClearAsync` 会主动报（及时），被中断的命令体随后在 `catch (OperationCanceledException)` 里**还会想再报一条**（晚到）—— 由 `CommandEventArgs.TryMarkCancelReported()` 的 `Interlocked.Exchange` 挡掉，**先到的那条胜出**。以前两条都发，按 `CommandEventType` 计数的 handler 会多数一次。
 - **`ExecuteCoreAsync` 是 fire-and-forget**（`:328`、`:592`）：`Execute`/`ExecuteAsync` 返回时命令**可能还没跑**（排队中）或**刚跑完**。要等结果只能用 `Completed` / `Exited` 事件，不能 await `ExecuteAsync` 的返回 —— 它只等到「入队成功」。
 
 ---
@@ -81,7 +81,7 @@ OnExecutionCompletedAsync(item)
 |---|---|---|
 | `_active`（正在跑的） | `_stateLock` | `ExecuteAsync` `:300` 加、`OnExecutionCompletedAsync` `:373` 减、`InterruptAsync` `:438` / `ClearAsync` `:477` 清空 |
 | `_pendingQueue` | `_stateLock` | `ExecuteAsync` `:305` 入队、`TryStartPendingAsync` `:579` 出队、`ClearAsync` `:481` 全部出队 |
-| `_isForceLocked` | `_stateLock` | `LockCoreAsync` `:400-401`（`LockAsync` 与 `Interrupt`/`Clear` 都经它）/ `UnLockAsync` `:416` |
+| `_isForceLocked` | `_stateLock` | `LockCoreAsync` `:400-401`（`LockAsync` 与 `Interrupt`/`Clear` 都经它）/ `UnlockAsync` `:416` |
 | `_maxConcurrency` | `_stateLock` | `ChangeSemaphoreAsync` `:558`；构造时 `:159` 校验 `semaphore >= 1`，否则抛 |
 | `item.Cts` | `TakeCts()` 的 `Interlocked.Exchange` | `ExecuteAsync` 构造时 `:281`（`internal set`，`CommandEventArgs` `:619`）；取出即置 null |
 | `_isCtsNeeded` | **不可变** | 只在构造/工厂里写（`:76`、`:108`、`:127`、`:146`） |
@@ -118,7 +118,7 @@ OnExecutionCompletedAsync(item)
 1. **`_isCtsNeeded == false` ⇒ 命令不可打断。** 五种构造路径会把 `item.Cts` 留成 `null`：`CreateTaskOnlyWithParameter`（`:70`）与三个 `Action`/`Func<Task>` 重载（`:108`、`:127`、`:146` 写 `_isCtsNeeded = false`）。此时 `Interrupt` / `Clear` 仍然会发 `Canceled` 事件、仍然会从 `_active` 摘掉它，但**底层那个 task 继续跑到底**（`it.Cts?.Cancel()` 是 null 条件调用）。只有 `CreateTaskOnlyWithCancellationToken` 拿得到真 token —— 而它**目前全仓没有任何调用方**（生成器只走 `new VeloxCommand(...)` 那条路），所以「真取消」这条路径在生产代码里是死的，只有测试覆盖。
 2. **事件 handler 抛异常被吞掉，但不再无出口。** `RaiseCanExecuteChanged`（`:216`）与 `RaiseCommandEvent`（`:228`）仍然 `catch` 住不往外抛 —— 这是刻意的：`Exited` 的 handler 若把异常漏出去，`OnExecutionCompletedAsync` 会中断，**队列永远停摆**；`Completed` 的 handler 漏出去则会被 `ExecuteCoreAsync` 的 `catch (Exception)` 抓住，把一次成功误报成 `Failed`。2026-10-01 起新增静态钩子 `VeloxCommand.HandlerException`（`:182`），默认不订阅 ⇒ 行为与从前逐字节一致。**钩子自身也被 `catch` 包住**（`ReportHandlerException` `:203`），否则一个坏掉的诊断订阅者就能制造上面两种事故。
 3. **`semaphore < 1` 抛 `ArgumentOutOfRangeException`**（2026-10-01 改）：构造 `:159` 的字段初始化器、`ChangeSemaphoreAsync` `:550` 开头、以及同步入口 `ChangeSemaphore` `:263` 各校验一次。**同步版必须自己校验** —— 它是 `_ = ChangeSemaphoreAsync(...)`，异常若只在 async 方法里抛就没人接得住，会变成未观察异常。以前这里是静默夹紧/静默 no-op。
-4. **`Interrupt` / `Clear` 不再清掉调用方已有的锁。** 两者都经 `LockCoreAsync` `:395`，它返回「此前是否已锁」，只有此前**未**锁时才在结尾 `UnLockAsync`（`:428` 起 / `:466` 起）。2026-10-01 之前它们无条件 `UnLockAsync()`，于是对一个本来锁着的命令调 `Interrupt()` 会「取消在跑的 + 解锁 + 经 `TryStartPendingAsync` 放行整个排队队列」—— 与 `Interrupt` 的字面语义相反。仓库自带的 WPF/Avalonia demo（`Examples/MVVM/*/Demo/*ViewModel.cs` 的 `Lock(); Interrupt(); Clear(); UnLock();`）注释里假设的就是现在的语义。
+4. **`Interrupt` / `Clear` 不再清掉调用方已有的锁。** 两者都经 `LockCoreAsync` `:395`，它返回「此前是否已锁」，只有此前**未**锁时才在结尾 `UnlockAsync`（`:428` 起 / `:466` 起）。2026-10-01 之前它们无条件 `UnlockAsync()`，于是对一个本来锁着的命令调 `Interrupt()` 会「取消在跑的 + 解锁 + 经 `TryStartPendingAsync` 放行整个排队队列」—— 与 `Interrupt` 的字面语义相反。仓库自带的 WPF/Avalonia demo（`Examples/MVVM/*/Demo/*ViewModel.cs` 的 `Lock(); Interrupt(); Clear(); Unlock();`）注释里假设的就是现在的语义。
 5. **`Interrupt` 与 `Clear` 的差别只在排队项**：`InterruptAsync` 只清 `_active`（`:438`），`_pendingQueue` 原封不动、稍后被放行；`ClearAsync` 把两者都清（`:477-483`），先给每个排队项发 `Dequeued`（`:492`）再统一发 `Canceled`。
 6. **`ContinueAsync` 在锁着时是空操作**（`:524` 起，读到已锁就直接 return）。它的存在意义是「解锁之外再踢一次队列」。
 7. **`ExecuteAsync` 自己不抛**：内层 `catch` 都在 `ExecuteCoreAsync` 里。但注意 `Notify()` 已从 `finally` 挪到末尾（`:331`）—— 中间那段现在只有赋值和 `RaiseCommandEvent`（自己吞异常），所以仍不会漏发。
@@ -154,14 +154,17 @@ OnExecutionCompletedAsync(item)
 
 ## 七、入口：我要改 X，先打开哪个文件
 
+> **行号锚点核对于 2026-10-01。** `VeloxCommand.cs` 改动频繁，行号会漂 —— 每个锚点旁都写了符号名，
+> **按符号名核**，行号只当快速定位用。
+
 | 想改的东西 | 先打开 |
 |---|---|
-| 并发/排队/锁/中断的语义 | `VeloxCommand.cs`（`ExecuteAsync` `:276`、`TryStartPendingAsync` `:568`、`InterruptAsync` `:428`、`ClearAsync` `:466`） |
-| 事件在什么时候发、发几次 | 同上，`CommandEventType` `:20-32` + 两个 `Raise*` `:216`/`:228` + 各 stage 的调用点 |
-| 锁的语义 / 「持锁期间不许干什么」 | `LockCoreAsync` `:395`（返回「此前是否已锁」）+ §三 |
-| CancellationTokenSource 谁释放 | `TakeCts()` `:657` + `ExecuteCoreAsync` 的 `finally` `:364` + `ClearAsync` `:500` + §五·9 |
-| handler 抛异常去哪了 | `ReportHandlerException` `:203` + `VeloxCommand.HandlerException` `:182` |
-| 「这个命令能不能取消」 | `_isCtsNeeded` 的四个写入点（`:76`、`:108`、`:127`、`:146`）+ `CommandWriter.ParseConstructorType` `:78` |
+| 并发/排队/锁/中断的语义 | `VeloxCommand.cs`（`ExecuteAsync` `:442`、`ExecuteAndWaitAsync` `:452`、`TryStartPendingAsync` `:794`、`InterruptAsync` `:642`、`ClearAsync` `:686`） |
+| 事件在什么时候发、发几次 | 同上，`CommandEventType` `:20-32` + `RaiseCanExecuteChanged` `:328` / `RaiseCommandEvent` `:353` / `RaiseCommandEventAs` `:373` / `RaiseCanceled` `:398` + 各 stage 的调用点 |
+| 锁的语义 / 「持锁期间不许干什么」 | `LockCoreAsync` `:609`（返回「此前是否已锁」）+ §三 |
+| CancellationTokenSource 谁释放 | `TakeCts()` `:888` + `ExecuteCoreAsync` 的 `finally` `:577` + `ClearAsync` `:721` + §五·9 |
+| handler 抛异常去哪了 | `ReportHandlerException` `:285` + `VeloxCommand.HandlerException` `:223` |
+| 「这个命令能不能取消」 | `_isCtsNeeded` 的五个写入点（`:77`、`:114`、`:148`、`:167`、`:186`）+ `CommandWriter.ParseConstructorType` `:78` |
 | `[VeloxProperty]` 生成出什么 | `Base/Analizer.cs` 的 `MVVMPropertyFactory`（getter `:630`、setter 前后 `:672`/`:693`、集合成员 `:761`） |
 | 集合订阅的兜底 | `ObservableCollectionTracker.cs` + 上表三处生成点 |
 | `[VeloxCommand]` 的命名与构造选择 | `Writers/CommandWriter.cs:64`（命名）、`:78`（构造选择）、`:140`（模板） |
@@ -180,9 +183,10 @@ OnExecutionCompletedAsync(item)
    推导：`ExecuteAsync` 造出的那个 `item`（`:278`）`Exception` 恒为 `null`，且**全程不被改写** —— 所有 `With(...)` 都返回**新实例**并且只喂给 `RaiseCommandEvent`。所以 `:198` 那条 `With(..., ex)` 里的 `ex ?? Exception` 里，接收者的 `Exception` 永远是 null，内部**没有任何一处**触发过它。
    `With` 的 `ex ?? Exception`（`:672`）本身是**粘性**的：对一份已带异常的 args 再 `With(别的 stage)` 会继承下去。命令自己走不到（它只从「出厂 args」投影），只有**外部手工链式调用 `With`** 才会碰到 —— 所以它是 `With` 的契约细节，不是运行时行为。
    `VeloxCommandLifecycleTests` / `CommandEventArgsTests` 把这两条都钉住了。
-6. **`CommandEventArgs.Cts` 是 `internal set`**（`:391`），外部只能读。想给自定义命令传 CTS 没有公开口子，只能在 `_command` 闭包里自己接 `CancellationToken`。
-7. **`_active` 用 `List<T>.Remove`（`:211`）而非 `HashSet`**：`O(n)`，且依赖 `CommandEventArgs` 的**引用**相等（它是普通 class，没有重写 `Equals`）。这没问题，但意味着并发数很大时 `OnExecutionCompletedAsync` 是线性开销。
-8. **`Exited` 在池线程上触发 —— UI 处理器必须自己跳回界面线程，而且它抛的异常会被吞掉（现在至少能被钩子看见）。** `ExecuteCoreAsync` 以 `ConfigureAwait(false)` 等待命令体，所以 `RaiseCommandEvent` 发出的事件不在 UI 线程上；而它把处理器包在 `try/catch` 里**静默吞掉**异常 ⇒ 一个在 `Exited` 里写控件属性的 WPF/WinUI 处理器会抛 `InvalidOperationException`、被吞、**界面看起来只是"什么都没发生"**（典型症状：按钮永远不亮）。2026-09-27 实测（把 demo 的运行控制接进七家时撞上）：WPF 用 `Dispatcher.InvokeAsync`、WinUI 用 `DispatcherQueue.TryEnqueue`、Avalonia 用 `Dispatcher.UIThread.Post`、Blazor 用 `InvokeAsync(StateHasChanged)`、MAUI 用 `MainThread.BeginInvokeOnMainThread`。**2026-10-01 起**这些被吞的异常会经 `VeloxCommand.HandlerException` 报出来（订阅它即可定位「代码没跑也不报错」），但**吞掉本身没有变**。**要读 `CommandEventArgs` 也顺手**：委托是 `CommandEventHandler(CommandEventArgs e)` —— 一个参数，写 `+= (_, _)` 编译不过。
+6. **`CommandEventArgs.Cts` 整个是 `internal`**（2026-10-01 起，此前是公开 getter + `internal set`）。理由：命令在本次执行结束时就把它释放掉，公开读只会让人从 `Exited` 里拿到一个正在失效的对象 —— 实测全仓**零外部读取**。要让自定义命令拿到 CTS，只能在 `_command` 闭包里自己接 `CancellationToken`。
+7. **`VeloxCommand` 实现了 `IDisposable`**（2026-10-01 新增），只释放 `_stateLock`。**只在确认没有在执行时调用** —— 有排队或正在跑的调用时释放，会让它的下一次取锁抛 `ObjectDisposedException`。只是被丢弃的命令**不需要**释放：那把锁没有非托管资源。生成出来的命令属性是惰性缓存的，没有谁会去释放它们，所以这个 API 目前是**给手动 teardown 用的**。
+8. **`_active` 是 `HashSet<CommandEventArgs>`**（2026-10-01 由 `List<T>` 改）。`OnExecutionCompletedAsync` 的按项摘除是热路径，`List.Remove` 是 O(n) 而 `HashSet` 是 O(1)。`CommandEventArgs` 没重写 `Equals`/`GetHashCode`，所以仍是引用语义，与改动前一致。**代价**：`Interrupt`/`Clear` 收集多个在跑项时顺序不再确定 —— 但仓库里 `semaphore` 恒为 1，`_active` 至多一项。
+9. **`Exited` 在池线程上触发 —— UI 处理器必须自己跳回界面线程，而且它抛的异常会被吞掉（现在至少能被钩子看见）。** `ExecuteCoreAsync` 以 `ConfigureAwait(false)` 等待命令体，所以 `RaiseCommandEvent` 发出的事件不在 UI 线程上；而它把处理器包在 `try/catch` 里**静默吞掉**异常 ⇒ 一个在 `Exited` 里写控件属性的 WPF/WinUI 处理器会抛 `InvalidOperationException`、被吞、**界面看起来只是"什么都没发生"**（典型症状：按钮永远不亮）。2026-09-27 实测（把 demo 的运行控制接进七家时撞上）：WPF 用 `Dispatcher.InvokeAsync`、WinUI 用 `DispatcherQueue.TryEnqueue`、Avalonia 用 `Dispatcher.UIThread.Post`、Blazor 用 `InvokeAsync(StateHasChanged)`、MAUI 用 `MainThread.BeginInvokeOnMainThread`。**2026-10-01 起**这些被吞的异常会经 `VeloxCommand.HandlerException` 报出来（订阅它即可定位「代码没跑也不报错」），但**吞掉本身没有变**。**要读 `CommandEventArgs` 也顺手**：委托是 `CommandEventHandler(CommandEventArgs e)` —— 一个参数，写 `+= (_, _)` 编译不过。
 
 ---
 

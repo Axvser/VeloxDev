@@ -55,7 +55,7 @@ public enum CommandEventType : int
 /// </remarks>
 public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
                     Predicate<object?>? canExecute = null,
-                    int semaphore = 1) : IVeloxCommand, IVeloxCommandCompletion, IVeloxCommandStatus
+                    int semaphore = 1) : IVeloxCommand, IVeloxCommandCompletion, IVeloxCommandStatus, IDisposable
 {
     /// <summary>
     /// Creates a command from a body that takes the parameter but cannot be cancelled.
@@ -194,7 +194,8 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     // 所有 RaiseCommandEvent 都在 Release() 之后；RaiseCanExecuteChanged 同理。
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly Queue<CommandEventArgs> _pendingQueue = new();
-    private readonly List<CommandEventArgs> _active = [];
+    // HashSet 而非 List：OnExecutionCompletedAsync 按项摘除，是热路径；顺序无关紧要。
+    private readonly HashSet<CommandEventArgs> _active = [];
 
     private int _maxConcurrency = semaphore >= 1
         ? semaphore
@@ -391,6 +392,17 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         }
     }
 
+    // 一次执行最多报一条 Canceled。Interrupt/Clear 会主动报（及时），命令体随后自己抛出的
+    // OperationCanceledException 还会想再报一条（晚到）—— 后到的被 TryMarkCancelReported 挡掉，
+    // 于是「先到的那条胜出」。不挡的话，按 CommandEventType 计数的 handler 会多数一次。
+    private void RaiseCanceled(CommandEventArgs item)
+    {
+        if (item.TryMarkCancelReported())
+        {
+            RaiseCommandEventAs(Canceled, item, CommandEventType.Canceled);
+        }
+    }
+
     /// <inheritdoc />
     public bool CanExecute(object? parameter)
         => (_canExecute?.Invoke(parameter) ?? true) && !_isForceLocked;
@@ -404,7 +416,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     /// <inheritdoc />
     public void Lock() => _ = LockAsync();
     /// <inheritdoc />
-    public void UnLock() => _ = UnLockAsync();
+    public void Unlock() => _ = UnlockAsync();
     /// <inheritdoc />
     public void Interrupt() => _ = InterruptAsync();
     /// <inheritdoc />
@@ -501,7 +513,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         if (forceLocked)
         {
             item.Cts?.Cancel();
-            RaiseCommandEventAs(Canceled, item, CommandEventType.Canceled);
+            RaiseCanceled(item);
             // 这条路径不经过 ExecuteCoreAsync，所以由这里负责释放与收尾。
             item.TakeCts()?.Dispose();
             item.Complete(CommandOutcome.Refused, null);
@@ -541,7 +553,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         catch (OperationCanceledException)
         {
             outcome = CommandOutcome.Canceled;
-            RaiseCommandEventAs(Canceled, item, CommandEventType.Canceled);
+            RaiseCanceled(item);
         }
         catch (Exception ex)
         {
@@ -610,7 +622,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     }
 
     /// <inheritdoc />
-    public async Task UnLockAsync()
+    public async Task UnlockAsync()
     {
         await _stateLock.WaitAsync().ConfigureAwait(false);
         try
@@ -657,16 +669,16 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             catch (AggregateException)
             {
                 // 命令体在 token 上注册的取消回调抛了异常。这里必须吞掉：让它逃逸会跳过下面的
-                // UnLockAsync，命令就永久锁死，此后每个排队项都再也跑不起来。
+                // UnlockAsync，命令就永久锁死，此后每个排队项都再也跑不起来。
             }
 
             // 不给 sink 收尾：这一项的命令体还会自己走完 ExecuteCoreAsync 的 finally。
-            RaiseCommandEventAs(Canceled, it, CommandEventType.Canceled);
+            RaiseCanceled(it);
         }
 
         if (!wasLocked)
         {
-            await UnLockAsync().ConfigureAwait(false);
+            await UnlockAsync().ConfigureAwait(false);
         }
     }
 
@@ -705,7 +717,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             // 排队项从未进入 ExecuteCoreAsync，所以源、收尾、信号三者都只能在这里做。
             // 它们的 token 没交给过任何命令体，所以 Cancel() 上没有用户回调，不会抛。
             it.Cts?.Cancel();
-            RaiseCommandEventAs(Canceled, it, CommandEventType.Canceled);
+            RaiseCanceled(it);
             it.TakeCts()?.Dispose();
             it.Complete(CommandOutcome.Canceled, null);
         }
@@ -722,15 +734,15 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             }
             catch (AggregateException)
             {
-                // 与 InterruptAsync 同理：回调抛异常不能逃逸，否则 UnLockAsync 被跳过、命令永久锁死。
+                // 与 InterruptAsync 同理：回调抛异常不能逃逸，否则 UnlockAsync 被跳过、命令永久锁死。
             }
 
-            RaiseCommandEventAs(Canceled, it, CommandEventType.Canceled);
+            RaiseCanceled(it);
         }
 
         if (!wasLocked)
         {
-            await UnLockAsync().ConfigureAwait(false);
+            await UnlockAsync().ConfigureAwait(false);
         }
     }
 
@@ -808,6 +820,16 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
 
         RaiseCanExecuteChanged();
     }
+
+    /// <summary>
+    /// Releases the command's internal lock.
+    /// </summary>
+    /// <remarks>
+    /// For teardown, and only once nothing is in flight — disposing while a call is queued or running makes that
+    /// call's next lock acquisition throw. A command that is merely dropped needs no teardown: the lock holds no
+    /// unmanaged resource. Disposal is final; a disposed command cannot be used again.
+    /// </remarks>
+    public void Dispose() => _stateLock.Dispose();
 }
 
 /// <summary>
@@ -847,18 +869,13 @@ public sealed class CommandEventArgs(
     /// <summary>The lifecycle stage this instance reports.</summary>
     public CommandEventType EventType { get; } = type;
 
-    /// <summary>
-    /// The cancellation source of this execution, or <see langword="null"/> for a command whose body never
-    /// receives a token.
-    /// </summary>
-    /// <remarks>
-    /// The command releases this source once the execution is over, so it is only usable while a body is in
-    /// flight. <c>Interrupt</c> and <c>Clear</c> cancel through it; nothing outside the command takes it.
-    /// </remarks>
-    public CancellationTokenSource? Cts
+    // 这次执行的取消源；命令体的形参里没有 token 的形态下为 null。
+    // 故意不公开：命令在本次执行结束时就会把它释放掉，暴露出去只会让人从 Exited 里读到一个正在失效的对象。
+    // Interrupt/Clear 经它取消，命令之外没有第二个取用者。
+    internal CancellationTokenSource? Cts
     {
         get => _cts;
-        internal set => _cts = value;
+        set => _cts = value;
     }
 
     /// <summary>
@@ -872,6 +889,11 @@ public sealed class CommandEventArgs(
 
     // 等结果的槽，只有 ExecuteAndWaitAsync 会挂上它。With() 产生的副本不带 —— 副本不该能收尾。
     internal TaskCompletionSource<CommandCompletion>? Completion { get; set; }
+
+    private int _cancelReported;
+
+    // 首次声明者胜，用来让一次执行只报一条 Canceled。理由见 VeloxCommand.RaiseCanceled。
+    internal bool TryMarkCancelReported() => Interlocked.Exchange(ref _cancelReported, 1) == 0;
 
     // 恰好收尾一次。没有等的人在时是空操作。
     internal void Complete(CommandOutcome outcome, Exception? exception)

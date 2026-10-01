@@ -163,7 +163,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         MinusCommand.Interrupt();    // interrupt the current command
         MinusCommand.Clear();        // interrupt the current command and all queued commands
 
-        MinusCommand.UnLock(); // release the lock
+        MinusCommand.Unlock(); // release the lock
     }
 
     /* Awaitable interrupt */
@@ -175,7 +175,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         await MinusCommand.InterruptAsync();    // interrupt the current command
         await MinusCommand.ClearAsync(); // interrupt the current command and all queued commands
 
-        MinusCommand.UnLock(); // release the lock
+        MinusCommand.Unlock(); // release the lock
     }
 
     partial void OnItemAddedToItems(IEnumerable<string> items)

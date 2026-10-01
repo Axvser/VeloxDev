@@ -14,7 +14,7 @@ namespace VeloxDev.MVVM
         public event CommandEventHandler? Dequeued;
 
         public void Lock();
-        public void UnLock();
+        public void Unlock();
         public void Notify();
         public void Clear();
         public void Interrupt();
@@ -23,7 +23,7 @@ namespace VeloxDev.MVVM
 
         public Task ExecuteAsync(object? parameter);
         public Task LockAsync();
-        public Task UnLockAsync();
+        public Task UnlockAsync();
         public Task ClearAsync();
         public Task InterruptAsync();
         public Task ContinueAsync();
