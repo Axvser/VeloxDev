@@ -684,9 +684,7 @@ public sealed class WorkflowAgentToolkit
         // roughly half the intended distance whenever the user is zoomed out — which is exactly when an
         // agent is arranging a large graph. MoveCommand is the path a drag takes, so the offset is
         // interpreted as view-space and converted with the live scale.
-        var completion = WaitForExitedAsync(n.MoveCommand, cancellationToken);
-        n.MoveCommand.Execute(new Offset(offsetX, offsetY));
-        await completion;
+        await WaitForCommandAsync(n.MoveCommand, new Offset(offsetX, offsetY), cancellationToken);
         RefreshSlotAnchors(n);
         return Ok($"Moved {nodeIndex} by ({offsetX},{offsetY}).");
     }
@@ -705,9 +703,7 @@ public sealed class WorkflowAgentToolkit
         // node to the bottom of the z-order, which reads as a rendering bug rather than a tool result.
         // Safe to read: Anchor.Collapse keeps Layer, only Horizontal/Vertical are scale-dependent.
         var effectiveLayer = layer ?? n.Anchor.Layer;
-        var completion = WaitForExitedAsync(n.SetAnchorCommand, cancellationToken);
-        n.SetAnchorCommand.Execute(new Anchor(left, top, effectiveLayer));
-        await completion;
+        await WaitForCommandAsync(n.SetAnchorCommand, new Anchor(left, top, effectiveLayer), cancellationToken);
         RefreshSlotAnchors(n);
         return Ok($"Position {nodeIndex} → ({left},{top},{effectiveLayer}).");
     }
@@ -725,9 +721,7 @@ public sealed class WorkflowAgentToolkit
         var newSize = new Size(width, height);
         if (oldSize.Width == newSize.Width && oldSize.Height == newSize.Height)
             return Ok($"Resized {nodeIndex} → ({width},{height}).");
-        var completion = WaitForExitedAsync(n.SetSizeCommand, cancellationToken);
-        n.SetSizeCommand.Execute(newSize);
-        await completion;
+        await WaitForCommandAsync(n.SetSizeCommand, newSize, cancellationToken);
         RefreshSlotAnchors(n);
         return Ok($"Resized {nodeIndex} → ({width},{height}).");
     }
@@ -738,9 +732,7 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var completion = WaitForExitedAsync(node.DeleteCommand, cancellationToken);
-        node.DeleteCommand.Execute(null);
-        await completion;
+        await WaitForCommandAsync(node.DeleteCommand, null, cancellationToken);
         return Ok($"Node {nodeIndex} deleted.");
     }
 
@@ -751,9 +743,7 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
     {
         if (!TryGetSlot(nodeIndex, slotIndex, out var slot, out var error)) return error;
-        var completion = WaitForExitedAsync(slot.DeleteCommand, cancellationToken);
-        slot.DeleteCommand.Execute(null);
-        await completion;
+        await WaitForCommandAsync(slot.DeleteCommand, null, cancellationToken);
         return Ok($"Slot [{nodeIndex}][{slotIndex}] deleted.");
     }
 
@@ -844,9 +834,7 @@ public sealed class WorkflowAgentToolkit
 
         if (Tree.LinksMap.TryGetValue(senderSlot!, out var dic) && dic.TryGetValue(receiverSlot!, out var link))
         {
-            var completion = WaitForExitedAsync(link.DeleteCommand, cancellationToken);
-            link.DeleteCommand.Execute(null);
-            await completion;
+            await WaitForCommandAsync(link.DeleteCommand, null, cancellationToken);
             return Ok($"Disconnected [{senderNodeIndex}][{senderSlotIndex}]✕[{receiverNodeIndex}][{receiverSlotIndex}].");
         }
         return Error("No connection found between the specified slots.");
@@ -1816,9 +1804,7 @@ public sealed class WorkflowAgentToolkit
 
         if (Tree.LinksMap.TryGetValue(sender, out var dic) && dic.TryGetValue(receiver, out var link))
         {
-            var completion = WaitForExitedAsync(link.DeleteCommand, cancellationToken);
-            link.DeleteCommand.Execute(null);
-            await completion;
+            await WaitForCommandAsync(link.DeleteCommand, null, cancellationToken);
             return Ok($"Disconnected {senderSlotId}→{receiverSlotId}.");
         }
         return Error("No connection found between the specified slots.");
@@ -3178,7 +3164,7 @@ public sealed class WorkflowAgentToolkit
     /// <summary>
     /// Dispatches a command and waits until it actually completes. <c>ExecuteAsync</c> is fire-and-forget, so
     /// without this the Agent could never observe when node work really finished.
-    /// Throws on failure (or cancellation) so the caller can return a structured error.
+    /// Throws on failure so the caller can return a structured error.
     /// </summary>
     private static async Task WaitForCommandAsync(IVeloxCommand command, object? parameter, CancellationToken ct)
     {
@@ -3189,44 +3175,15 @@ public sealed class WorkflowAgentToolkit
             throw completion.Exception;
         }
 
-        if (!completion.Succeeded)
+        if (completion.Outcome == CommandOutcome.Refused)
         {
-            // 以前这一支会永久挂起：被锁挡下或排队时被 Clear 的调用不发 Exited，等待者永远等不到。
-            throw new OperationCanceledException($"The command did not run to completion ({completion.Outcome}).");
+            // 以前这一支会永久挂起：被 Lock 挡下的调用不发 Exited，等待者永远等不到。
+            // 抛出去是把「永远等不到」换成一句能返回给 Agent 的话。
+            throw new OperationCanceledException("The command was refused because it is locked.");
         }
-    }
 
-    /// <summary>
-    /// Subscribes to a command's <c>Exited</c>/<c>Failed</c> and returns a task that completes when the
-    /// NEXT dispatch finishes. Call this BEFORE dispatching (e.g. inside a Submit redo closure) so the
-    /// completion is observable; awaiting afterwards guarantees the mutation has actually been applied
-    /// before the tool returns (no stale-state window for the next tool call).
-    /// </summary>
-    /// <remarks>
-    /// Kept separate from <see cref="WaitForCommandAsync"/> on purpose: this is a subscribe-before-dispatch
-    /// contract, and <c>ExecuteAndWaitAsync</c> dispatches as part of waiting, so it cannot express "watch the
-    /// next dispatch that somebody else makes". Prefer <c>ExecuteAndWaitAsync</c> at any call site that owns its
-    /// own dispatch.
-    /// </remarks>
-    private static async Task WaitForExitedAsync(IVeloxCommand command, CancellationToken ct)
-    {
-        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using (ct.Register(() => tcs.TrySetCanceled(ct)))
-        {
-            CommandEventHandler onExited = _ => tcs.TrySetResult(null);
-            CommandEventHandler onFailed = e => tcs.TrySetException(e.Exception);
-            command.Exited += onExited;
-            command.Failed += onFailed;
-            try
-            {
-                await tcs.Task;
-            }
-            finally
-            {
-                command.Exited -= onExited;
-                command.Failed -= onFailed;
-            }
-        }
+        // Canceled 照常返回：被中断的运行是「跑过了，结果是被取消」，不是失败 ——
+        // Agent 要能从一次自己停掉的运行里接着往下走。这与旧的 Exited 语义一致。
     }
 
     /// <summary>
