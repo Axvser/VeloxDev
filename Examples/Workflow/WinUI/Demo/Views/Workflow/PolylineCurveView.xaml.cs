@@ -1,11 +1,14 @@
 ﻿using Microsoft.UI;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
+using System.Numerics;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 using Windows.Foundation;
@@ -81,15 +84,15 @@ public sealed partial class PolylineCurveView : UserControl
 
     private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
 
-    // 一条「按弧长切出来的描边」在保留模式里的全部家当：一个 Path、一份可复用的几何、一支可改色的画刷。
-    // 三者都只建一次，之后每帧只写 3 个点、1 个颜色、1 个厚度。
-    private sealed class StrokeStrip
+    // 一条「按弧长切出来的描边」在合成层里的全部家当：一个 sprite shape、一份可动端点的线段几何、一支可改色的画刷。
+    // 三者都只建一次，之后每帧只写两个端点与一个颜色。
+    // 用合成对象而不是 XAML 的 Path，是因为合成对象不参与 XAML 布局：Path 一改几何就向上失效整个画布的测量
+    // （实测：空闲不动时每秒仍要重排 60 次），而这里一次都不会有。
+    private sealed class CometStrip
     {
-        public required Path Path { get; init; }
-        public required PathFigure Figure { get; init; }
-        public required LineSegment Mid { get; init; }
-        public required LineSegment End { get; init; }
-        public required SolidColorBrush Brush { get; init; }
+        public required CompositionSpriteShape Shape { get; init; }
+        public required CompositionLineGeometry Geometry { get; init; }
+        public required CompositionColorBrush Brush { get; init; }
     }
 
     /// <summary>
@@ -122,8 +125,12 @@ public sealed partial class PolylineCurveView : UserControl
     // 三层一起改的那一份：端点一变，三条曲线要同步写一次
     private readonly RestingStroke[] _resting;
 
-    private readonly StrokeStrip[] _tail = new StrokeStrip[TailSegments];
-    private readonly StrokeStrip[] _bloom = new StrokeStrip[BloomSegments];
+    // 彗星整层挂在合成树上，所以这里多一层什么都不画的 Grid 当载体：它排在静息线之后，
+    // 合成子视觉因此盖在静息线之上（子视觉与 XAML 内容的先后不好赌，用一个末位的空元素把顺序钉死）
+    private readonly Grid _cometLayer = new() { Clip = null, IsHitTestVisible = false };
+    private ShapeVisual? _cometVisual;
+    private CometStrip[]? _tail;
+    private CometStrip[]? _bloom;
 
     // 弧长表：_cumulative[i] 是 _samples[0..i] 的累计长度，_length 是全长。
     // 三者只在端点变化时重建 —— 每帧渲染要按弧长取点，现算不划算。
@@ -155,18 +162,11 @@ public sealed partial class PolylineCurveView : UserControl
         _line = CreateRestingStroke(_container, LineThickness, false);
         _resting = [_halo, _glow, _line];
 
-        for (var i = 0; i < TailSegments; i++)
-        {
-            // 初始厚度只是个占位：每一帧都会按段重新给，头那一段比尾梢粗一倍
-            _tail[i] = CreateStrip(_container, LineThickness);
-        }
-
-        for (var i = 0; i < BloomSegments; i++)
-        {
-            _bloom[i] = CreateStrip(_container, BloomWidth);
-        }
+        // 彗星那 24 段不进 XAML 树，只留这一层当载体；真正建在 Loaded 里（合成器要等元素有了视觉才有）
+        _container.Children.Add(_cometLayer);
 
         Content = _container;
+        SizeChanged += (_, _) => SyncCometSize();
 
         // 先按依赖属性的默认值画一遍：端点要等绑定推下来，那时 OnChanged 会再跑
         Refresh();
@@ -358,7 +358,70 @@ public sealed partial class PolylineCurveView : UserControl
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = true;
+        EnsureComet();
         Refresh();
+    }
+
+    // 彗星的 24 段在合成层里建一次。端点变化只改已有的几何对象，不重建任何东西 —— 这也是它不再进布局的原因
+    private void EnsureComet()
+    {
+        if (_cometVisual is not null)
+        {
+            SyncCometSize();
+            return;
+        }
+
+        var visual = ElementCompositionPreview.GetElementVisual(_cometLayer);
+        var compositor = visual.Compositor;
+
+        _cometVisual = compositor.CreateShapeVisual();
+
+        _tail = new CometStrip[TailSegments];
+        for (var i = 0; i < TailSegments; i++)
+        {
+            _tail[i] = CreateCometStrip(compositor, (float)LineThickness, out var shape);
+            _cometVisual.Shapes.Add(shape);
+        }
+
+        _bloom = new CometStrip[BloomSegments];
+        for (var i = 0; i < BloomSegments; i++)
+        {
+            _bloom[i] = CreateCometStrip(compositor, (float)BloomWidth, out var shape);
+            _cometVisual.Shapes.Add(shape);
+        }
+
+        ElementCompositionPreview.SetElementChildVisual(_cometLayer, _cometVisual);
+        SyncCometSize();
+    }
+
+    // 线段几何在承载元素自己的坐标系里，视觉尺寸必须跟着视图走，否则会被裁掉
+    private void SyncCometSize()
+    {
+        if (_cometVisual is null)
+        {
+            return;
+        }
+
+        var width = ActualWidth;
+        var height = ActualHeight;
+        if (width > 0 && height > 0)
+        {
+            _cometVisual.Size = new Vector2((float)width, (float)height);
+        }
+    }
+
+    private static CometStrip CreateCometStrip(Compositor compositor, float thickness, out CompositionSpriteShape shape)
+    {
+        var geometry = compositor.CreateLineGeometry();
+        var brush = compositor.CreateColorBrush(Colors.Transparent);
+        shape = compositor.CreateSpriteShape(geometry);
+        shape.StrokeBrush = brush;
+        shape.StrokeThickness = thickness;
+        // 圆头：头部因此是一个逐渐收拢的圆端，而不是截断的一刀；相邻两段也自然接得上
+        shape.StrokeStartCap = CompositionStrokeCap.Round;
+        shape.StrokeEndCap = CompositionStrokeCap.Round;
+
+        return new CometStrip { Shape = shape, Geometry = geometry, Brush = brush };
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -546,6 +609,41 @@ public sealed partial class PolylineCurveView : UserControl
         _line.Brush.Color = WithAlpha(color, IsHighlighted ? 0.85 : 0.55);
         _line.Path.StrokeThickness = thickness;
         _line.Path.StrokeDashArray = IsVirtual ? VirtualStrokeDashArray : null;
+
+        UpdateStripThickness();
+    }
+
+    // 彗星各段的粗细只由「整体粗细」与「该段在尾巴上的位置」决定，两者都不是逐帧量：位置是每段固定的，
+    // 整体粗细只在悬停/换色时变。所以它写在这里而不是每帧的重画里 —— StrokeThickness 是布局属性，
+    // 每帧写 24 次就是每帧让整块画布重排一次（实测：空闲状态下 60 次/秒）。
+    // 缓存一道是因为 Refresh() 在拖端点时每帧都跑，不能让这条路径变成新的逐帧写。
+    private double _stripThickness = double.NaN;
+
+    private void UpdateStripThickness()
+    {
+        var thickness = CurrentThickness;
+        if (thickness == _stripThickness)
+        {
+            return;
+        }
+
+        _stripThickness = thickness;
+
+        if (_tail is null || _bloom is null)
+        {
+            return;
+        }
+
+        for (var k = 0; k < TailSegments; k++)
+        {
+            _tail[k].Shape.StrokeThickness = (float)(thickness * (0.45 + (0.95 * (k / (double)TailSegments))));
+        }
+
+        var bloomThickness = (float)(thickness + BloomWidth);
+        for (var k = 0; k < BloomSegments; k++)
+        {
+            _bloom[k].Shape.StrokeThickness = bloomThickness;
+        }
     }
 
     private double CurrentThickness => IsHighlighted ? LineThickness + 1.5 : LineThickness;
@@ -554,14 +652,13 @@ public sealed partial class PolylineCurveView : UserControl
     // 不用渐变刷是因为它的轴是两端之间的直线，在曲线上会把光打偏（见类注释）。
     private void RedrawComet()
     {
-        if (!RenderReady || _length <= 0 || IsVirtual || _bandIntensity <= 0.001)
+        if (!RenderReady || _length <= 0 || IsVirtual || _bandIntensity <= 0.001 || _tail is null || _bloom is null)
         {
             HideComet();
             return;
         }
 
         var color = IsHighlighted ? Colors.OrangeRed : LineColor;
-        var thickness = CurrentThickness;
 
         var head = Math.Clamp(_bandHead, 0, 1) * _length;
         var tail = TailFraction * _length;
@@ -579,16 +676,15 @@ public sealed partial class PolylineCurveView : UserControl
 
             // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
             var a = _bandIntensity * f0 * f0;
+            // 出窗的段收成透明而不是收起：合成层里没有 Visibility，也不该有 —— 它是个布局概念
             if (l1 <= 0 || l0 >= _length || a <= 0.004)
             {
-                strip.Path.Visibility = Visibility.Collapsed;
+                strip.Brush.Color = Colors.Transparent;
                 continue;
             }
 
-            strip.Path.Visibility = Visibility.Visible;
             SetStrip(strip, l0, l1);
             strip.Brush.Color = WithAlpha(Mix(color, Colors.White, f0), a);
-            strip.Path.StrokeThickness = thickness * (0.45 + (0.95 * f0));
         }
 
         // 光晕：更宽更淡的一层，跟着头走，所以动感在光晕上也读得出来。
@@ -607,41 +703,45 @@ public sealed partial class PolylineCurveView : UserControl
             var a = _bandIntensity * mid * mid * BloomAlpha;
             if (l1 <= 0 || l0 >= _length || a <= 0.004)
             {
-                strip.Path.Visibility = Visibility.Collapsed;
+                strip.Brush.Color = Colors.Transparent;
                 continue;
             }
 
-            strip.Path.Visibility = Visibility.Visible;
             SetStrip(strip, l0, l1);
             strip.Brush.Color = WithAlpha(Mix(color, Colors.White, mid), a);
-            strip.Path.StrokeThickness = thickness + BloomWidth;
         }
     }
 
     private void HideComet()
     {
-        for (var k = 0; k < TailSegments; k++)
+        if (_tail is null || _bloom is null)
         {
-            _tail[k].Path.Visibility = Visibility.Collapsed;
+            return;
         }
 
-        for (var k = 0; k < BloomSegments; k++)
+        foreach (var strip in _tail)
         {
-            _bloom[k].Path.Visibility = Visibility.Collapsed;
+            strip.Brush.Color = Colors.Transparent;
+        }
+
+        foreach (var strip in _bloom)
+        {
+            strip.Brush.Color = Colors.Transparent;
         }
     }
 
     // 一段弧长上的描边。三点（起、中、末）足够：每段只有几像素长，而两端都是用 PointAtLength
     // 精确取出来的，比 Avalonia 那版「采样点 + 两端插值」还准一点，元素数却是固定的一比三。
-    private void SetStrip(StrokeStrip strip, double from, double to)
+    private void SetStrip(CometStrip strip, double from, double to)
     {
         var a = Math.Clamp(from, 0, _length);
         var b = Math.Clamp(to, 0, _length);
 
-        strip.Figure.StartPoint = PointAtLength(a);
-        strip.Mid.Point = PointAtLength((a + b) * 0.5);
-        strip.End.Point = PointAtLength(b);
+        strip.Geometry.Start = ToVector(PointAtLength(a));
+        strip.Geometry.End = ToVector(PointAtLength(b));
     }
+
+    private static Vector2 ToVector(Point point) => new((float)point.X, (float)point.Y);
 
     // 静息线的一层：自己的几何 + 自己的路径，颜色与厚度都归调用方（UpdateRestingLine）写。
     // hitTestable 只给最外那层（halo）开：命中面因此正好是画出来的最外圈描边（本体 + 9 ⇒ 半宽 5.5），
@@ -680,38 +780,6 @@ public sealed partial class PolylineCurveView : UserControl
             Segment = segment,
             Brush = brush,
         };
-    }
-
-    private static StrokeStrip CreateStrip(Grid host, double thickness)
-    {
-        var figure = new PathFigure { IsClosed = false };
-        var mid = new LineSegment();
-        var end = new LineSegment();
-        figure.Segments.Add(mid);
-        figure.Segments.Add(end);
-
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
-
-        var brush = new SolidColorBrush(Colors.Transparent);
-        var path = new Path
-        {
-            Data = geometry,
-            Stroke = brush,
-            StrokeThickness = thickness,
-            StrokeLineJoin = PenLineJoin.Round,
-            // 圆头：头部因此是一个逐渐收拢的圆端，而不是截断的一刀；相邻两段也自然接得上
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            // 彗星不参与命中：它整段落在静息线那圈描边之内（不增命中面积），而它的几何每帧都在改写 ——
-            // 让它可命中只会让命中面跟着光跑。命中面由静息线的 halo 一层给（见 CreateRestingStroke）。
-            IsHitTestVisible = false,
-            Clip = null,
-        };
-
-        host.Children.Add(path);
-
-        return new StrokeStrip { Path = path, Figure = figure, Mid = mid, End = end, Brush = brush };
     }
 
     // 两色之间线性混合（含 alpha），用于尾梢到头部的那一段渐变

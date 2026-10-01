@@ -76,6 +76,18 @@ namespace Demo.Views
         // 四个圆共用一支画刷：字形只有一个颜色，改它比改四个 Fill/Stroke 便宜
         private readonly SolidColorBrush _glyphBrush = new(Microsoft.UI.Colors.White);
 
+        // 每帧只改这四个 ScaleTransform，不改 Width/Height。这是本家与 Avalonia 那版最大的写法差别，
+        // 也是它能不能跑得动的分水岭：Width/Height 是布局属性，每帧写一次就是让整块画布每帧重排一次
+        // （实测：不给它降频时，空闲状态下 PART_Canvas 每秒仍要重排 60 次）。RenderTransform 的子属性
+        // 不进布局，官方「独立动画」清单里点名的就有它。
+        private readonly ScaleTransform _ringScale = new();
+        private readonly ScaleTransform _coreScale = new();
+        private readonly ScaleTransform _rippleOutScale = new();
+        private readonly ScaleTransform _rippleInScale = new();
+
+        // 四个圆当前的基准直径（像素）。只在控件尺寸变化时重写，之后每帧只是按它算比例
+        private double _baseSize;
+
         // 每视图构建（不是 static readonly）：Transition<T> 首次被触碰时会把它的调度器建在当时的线程上，
         // 静态字段的初始化线程取决于谁的构造先跑到那里；挂在实例上就一定是 UI 线程。同一控件上也只跑这一条链
         // —— Transition.Exit 按目标停，两条会互相打断。
@@ -97,6 +109,12 @@ namespace Demo.Views
             Core.Fill = _glyphBrush;
             RippleOut.Stroke = _glyphBrush;
             RippleIn.Stroke = _glyphBrush;
+
+            // 绕自己的中心缩放，四个圆本来就靠对齐居中，缩放后仍然同心
+            AttachScale(Ring, _ringScale);
+            AttachScale(Core, _coreScale);
+            AttachScale(RippleOut, _rippleOutScale);
+            AttachScale(RippleIn, _rippleInScale);
 
             SizeChanged += (_, _) => Render();
             PointerEntered += (_, _) => { _pointerOver = true; Render(); };
@@ -227,6 +245,12 @@ namespace Demo.Views
                 return;
             }
 
+            // 尺寸变了才重建基准（宽高与描边粗细都只在这里写），每帧走的是下面的 ScaleTransform
+            if (size != _baseSize)
+            {
+                ApplyBaseSize(size);
+            }
+
             UpdateGlyphColor();
 
             bool aiming = IsAiming;
@@ -245,12 +269,11 @@ namespace Demo.Views
             // 可以直接读，WinUI 的 UIElement 上没有这个属性（会编译不过），所以自己跟一对进出事件。
             double lit = (aiming || connected ? 0.75 : 0.45) + (0.25 * breath) + (_pointerOver ? 0.2 : 0);
 
-            Ring.StrokeThickness = Math.Max(0.6, size * RingThicknessRatio);
-            SetDiameter(Ring, ringRadius);
+            SetRadius(_ringScale, ringRadius, _baseSize);
             Ring.Opacity = Math.Min(1, lit);
 
             double coreScale = (aiming ? 1.2 : 1.0) + (0.3 * breath);
-            SetDiameter(Core, size * CoreRadiusRatio * coreScale);
+            SetRadius(_coreScale, size * CoreRadiusRatio * coreScale, _baseSize);
             Core.Opacity = Math.Min(1, lit + 0.2);
 
             DrawRipples(size, ringRadius, aiming, connected);
@@ -286,7 +309,6 @@ namespace Demo.Views
                 return;
             }
 
-            double thickness = Math.Max(0.8, size * RippleThicknessRatio);
             double strength = aiming || connected ? 1.0 : 0.6;
 
             for (int k = 0; k < RippleCount; k++)
@@ -297,8 +319,7 @@ namespace Demo.Views
                 {
                     // 外散：在环上冒出来（12% 的路程升到全亮），越往外越淡
                     double appear = Math.Min(1, p / RippleAttack);
-                    RippleOut.StrokeThickness = thickness;
-                    SetDiameter(RippleOut, inner + ((outer - inner) * p));
+                    SetRadius(_rippleOutScale, inner + ((outer - inner) * p), _baseSize);
                     RippleOut.Opacity = appear * (1 - p) * 0.7 * strength;
                 }
 
@@ -308,19 +329,47 @@ namespace Demo.Views
                     // （RippleInnerRatio = 1.0）：最后那一下是并进环里而不是凭空消失，所以从
                     // 「最深」跳回「外缘的淡」读起来是新的一波从外面过来，而不是刚才那只环炸掉
                     double arrive = ReceiveOuterAlpha + ((ReceiveInnerAlpha - ReceiveOuterAlpha) * p);
-                    RippleIn.StrokeThickness = thickness;
-                    SetDiameter(RippleIn, outer - ((outer - inner) * p));
+                    SetRadius(_rippleInScale, outer - ((outer - inner) * p), _baseSize);
                     RippleIn.Opacity = arrive * strength;
                 }
             }
         }
 
-        // Ellipse 在 Grid 里居中，所以半径就是全部位置信息：给直径，别的一概不用管
-        private static void SetDiameter(Ellipse ellipse, double radius)
+        // 基准尺寸变了才重建：四个圆一律按 size×size 建，描边粗细也一并定下来，
+        // 于是每帧只剩 ScaleTransform 与 Opacity 要写
+        private void ApplyBaseSize(double size)
         {
-            double diameter = radius * 2;
-            ellipse.Width = diameter;
-            ellipse.Height = diameter;
+            _baseSize = size;
+            Prepare(Ring, size, Math.Max(0.6, size * RingThicknessRatio));
+            Prepare(Core, size, 0);
+            var ripple = Math.Max(0.8, size * RippleThicknessRatio);
+            Prepare(RippleOut, size, ripple);
+            Prepare(RippleIn, size, ripple);
+        }
+
+        private static void Prepare(Ellipse ellipse, double size, double strokeThickness)
+        {
+            ellipse.Width = size;
+            ellipse.Height = size;
+            if (strokeThickness > 0)
+            {
+                ellipse.StrokeThickness = strokeThickness;
+            }
+        }
+
+        private static void AttachScale(Ellipse ellipse, ScaleTransform scale)
+        {
+            ellipse.RenderTransform = scale;
+            ellipse.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+        }
+
+        // Ellipse 在 Grid 里居中，所以半径就是全部位置信息：给半径，ScaleTransform 绕中心把它放大到该有的直径。
+        // 比例 = 目标直径 / 基准直径，与 SizeChanged 无关，缩放因此不改布局
+        private static void SetRadius(ScaleTransform scale, double radius, double baseSize)
+        {
+            var ratio = (radius * 2) / baseSize;
+            scale.ScaleX = ratio;
+            scale.ScaleY = ratio;
         }
 
         // 端口颜色仍按 SlotState 给：默认白、发送端 Tomato、接收端 Lime、两头都通 Violet。

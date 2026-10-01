@@ -87,6 +87,15 @@ WinUI 是七家里唯一需要挂两级的。
 **这张表是这一家最值得抄的东西**：在任何「异步重算 + 下一帧才生效」的宿主上，
 「排到低优先级」与「落地时确认自己还是当前那份状态」必须成对出现。
 
+**这张表有一个代价，记在这里免得下次再推一遍**：`Low` 只在 Normal 队列空的时候才跑，所以**任何一直不停、
+每帧都在干活的动画都会把上表全部饿住**（TransitionSystem 对可见性一无所知，见 §四·P8；每个动画还各占一个
+自己重装填的 `DispatcherQueueTimer`，没有任何合并）。症状因此不是「画错了」，而是**延迟**：画布上节点/连线
+物化慢一拍、可见区域重算落在后面、新连线不出现 —— 而且**「迟迟不出现」和「一直看不到」是同一个开关**，
+只是排队时长不同。
+**这一条是推断，不是实测**（2026-10-01 有过一轮把它当成因的改动，改完用户说更卡，已全部回退）。
+要把它坐实只需一件事：给 `ScheduleNextBatchRender` 与 `ProcessNextBatch` 各打一个带时间戳的日志，
+量「排进去到跑起来」隔了多久。别在没量到之前再按它改代码。
+
 **L7 · WinRT 控件只能在有 XAML 运行时、且在 UI 线程上构造。** 小地图 ctor 里
 `DispatcherQueue.GetForCurrentThread()?.CreateTimer()` 用 `?.` + `catch (COMException)` 兜住
 （`:174-202`，吞异常在 `:189-191`）：在非 UI 线程构造就是**永不重绘且不报错**；
@@ -231,7 +240,79 @@ NaN 参与的比较全是 false，`_length <= 0`、`lo >= _length` 这类守卫�
 `Refresh()` 是唯一入口，`RenderReady` 是唯一门。参照写法在 Trimmed 的
 `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`：它挂了 `DataContextChanged`
 （`:60,122-128`，注释明写池化复用与「hide 会先给一个 null 的 DataContext」）却**没有** NaN 门。
-两个 demo 的 `SlotView` 同为保留模式改写、也各有周期，但**没核过**它们是否也漏了某个入口 —— 动到再看。
+**`SlotView` 核过了：确实漏，且至今未修。** 它就是上面「停周期不能只挂在 `Unloaded` 上」的第二个受害者 ——
+非 Trimmed 的 `Examples/Workflow/WinUI/Demo/Views/Workflow/SlotView.xaml.cs` 在 `Loaded` 里起波纹周期、
+只在 `Unloaded` 里停，而池化节点视图永远等不到 `Unloaded` ⇒ **每个曾物化过的节点都把它的端口波纹一直画下去**
+（每帧约 16 次属性写入，写进一个 `Collapsed` 的元素；每个 SlotView 还各占一个 60 fps 的 `DispatcherQueueTimer`）。
+Trimmed 的 `SlotView` 与 `Src/Templates/VeloxDev.WinUI.Templates/` 的那份**都没有周期**，所以这一条只属于非 Trimmed 这个 demo。
+
+**这一条仍然开着，而且真正该修的不是「周期没停」，是「每帧写布局属性」。** 2026-10-01 实测（见下节）把这条
+从「怀疑」推到了「确诊」，但确诊的东西不是泄漏本身 —— 见下面「每帧写布局属性」那一节。
+
+**「端口自己被折叠」那一路不用单独管**：`TimerNodeView` / `EnumSelectorNodeView` 的端口用
+`Visibility="{Binding DataContext.HasInputSlot, ElementName=Root, …}"` 收起，而 `HasInputSlot => _inputSlot is not null`
+（`TimerNodeViewModel.cs:42`、`EnumSelectorNodeViewModel.cs:98`）—— 折叠与 `InputSlot is null` 是同一件事。
+**祖辈（节点视图）被折叠对子元素完全不可观察**：`Visibility` 不继承、`IsLoaded` 仍为 true、
+`EffectiveViewportChanged` 在祖辈 `Collapsed` 时根本不触发 —— 所以「被回收」这件事只有 `DataContext` 一个入口。
+
+### P9 · 每帧写「布局属性」＝ 每帧让整块画布重排一次（2026-10-01 实测确诊并已修）
+
+**这是这一家所有「卡顿」报告的第一嫌疑人，先量它再谈别的。** XAML 里改 `Shape` 的几何（`PathGeometry`
+的点）或 `Width/Height`/`StrokeThickness`，会让该元素的**测量**失效，而失效会一路向上冒到画布
+⇒ 整个 `PART_Canvas` 重排一次。视图是不是喂给池、是不是 `Collapsed`，都拦不住 —— 只要它还挂在树上。
+
+**实测方法**（探针已删，需要时照这个重建）：`PART_Canvas.LayoutUpdated` 计数 + 一个 1s 的
+`DispatcherQueueTimer` 把计数写进 `%TEMP%` 的日志文件；demo 里两处动画各加一行计数。
+用文件而不是 `Debug.WriteLine`，是为了能在**不挂调试器**的情况下启动、跑十几秒、再杀掉读文件。
+
+**实测结果（空闲、鼠标不动，画布重排次数/秒）：**
+
+| 状态 | 重排/秒 |
+|---|---|
+| 原始（两条动画都跑） | ~60 |
+| 只关彗星 | ~60（分量来自 SlotView） |
+| 只关波纹 | ~60（分量来自彗星） |
+| 两条都关 | **0** |
+
+⇒ 两条动画**各自单独**就足以把画布按帧重排。**每一个几何重画换一次整块画布的重排**，所以彗星那条的
+曲线是：FPS 60 → ~65、30 → ~75、15 → ~65、2 → ~6、1 → ~4、关掉 → 0（高 FPS 段被帧率钉在 ~60 天花板）。
+
+**改法（两处，都已落地）：**
+
+1. **`SlotView`：`Width/Height` → `ScaleTransform`。** 官方那份性能指南点名的就是这一条
+   （「animate `ScaleTransform.ScaleX`/`ScaleY` instead of the `Width` and `Height` of an object」）。
+   四个圆按基准尺寸建一次，每帧只写 `ScaleX/ScaleY` 与 `Opacity` —— 都在「独立动画」清单上。
+   **实测：~930 次/秒的端口重画，重排从 60–108/s 降到 0。**
+2. **`PolylineCurveView` 的彗星：从 XAML `Path` 搬到合成层。** 24 段改成
+   `ShapeVisual` + 24 个 `CompositionSpriteShape`，几何用 `CompositionLineGeometry` 的
+   `Start`/`End`（每帧写两个 `Vector2`）。**合成对象不参与 XAML 布局**，所以这条路径一次重排都不会有。
+   实测：两条动画全开、彗星仍以 60 fps 重画，**重排 0–3/s**。
+
+**搬运时踩到/需要知道的四件事：**
+
+- **`CompositionPathGeometry` + `TrimStart`/`TrimEnd` 在这条路上走不通**，别照着别人 UWP 的写法直接抄：
+  它要 `CompositionPath`，而 `CompositionPath` 要一个 `IGeometrySource2D` —— C# 里只有 Win2D 的
+  `CanvasGeometry` 能提供，不引 Win2D 就得写一个实现 `IGeometrySource2DInterop` 的 C++/WinRT 类。
+  **`CompositionLineGeometry` 是纯 C# 可达的那一个**，而且它和原来的画法一一对应（原来那 24 段本来
+  就是直线段）。代价是每段只有一条直线（原来是「起-中-末」三点），段足够短时看不出差别。
+- **子视觉与 XAML 内容谁在上不好赌**：多插一层什么都不画的末位 `Grid` 当载体，用它的子视觉把顺序钉死。
+- **合成层里没有 `Visibility`**（那是布局概念）。出窗的段改成把画刷 `Color` 写成透明。
+- **`ShapeVisual.Size` 要跟着视图尺寸走**，否则线段会被裁掉；`SizeChanged` 里同步一次。
+
+**由此得到的通用判据**：这一家任何「每帧都在动」的东西，先问一句「它写的是不是布局属性」。
+是 → 它在按帧重排整个画布，任何微优化都救不了（实测过：把 24 次恒定 `StrokeThickness` 写入挪出逐帧路径
+不减重排；把每条 `Path` 的 Width/Height 钉死也不减 —— `Shape` 只要几何变了就无条件失效测量）。
+不是 → 它可能是免费的（`SlotView` 改完之后就是这样）。
+
+**还有一条与上面并列、但这一轮没证的**：`PolylineCurveView` 的链上只该有一个动画标量。`BandHead` +
+`BandIntensity` 两个 setter 各自调 `RedrawComet()`，相位一/三相每帧重画两次（加权 ≈1.56 次/帧）。
+改成只动画 `BandHead`、亮度由头部比例分段推出是精确等价的，但在几何搬运之后这条的收益已经很小
+（重画不再进布局），而且它是**一处刻意背离**（另外六家仍旧动画第二个标量），所以没做。
+
+**教训（写给下一个拿到「卡顿」报告的人）**：这一轮前面三次全是**没有一次实测**的推断，方向全错，
+其中一次还把 demo 改得更卡。官方那套「先量基线 → 选一项改 → 再量」在这里不是流程洁癖：
+症状是「延迟」时**先数一遍『现在有多少东西每帧在写布局属性』**，一个探针十几行、一次运行十几秒，
+比再回退一版便宜得多。
 
 ---
 
