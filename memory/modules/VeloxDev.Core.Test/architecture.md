@@ -84,7 +84,7 @@ Core 是四目标项目；**两个测试项目都是单目标 `net10.0`**（`Vel
 
 | 项 | 值 |
 |---|---|
-| 测试条数 | **835**（2026-10-01 实测） |
+| 测试条数 | **857**（2026-10-01 实测；另有 Extension.Test 的 437） |
 | 全量耗时 | **30 s** |
 | 8 次连跑的失败次数 | **1**（原因见 §六）——但 **`MVVM/` 已不是来源**：2026-10-01 重写为 TCS 门控后，MVVM 过滤集连跑 10 次全绿、每次约 60 ms |
 
@@ -105,7 +105,7 @@ Core 是四目标项目；**两个测试项目都是单目标 `net10.0`**（`Vel
 | `TimeLine/` | 4 | MonoBehaviour 总线与管理器 |
 | `WeakTypes/` | 4 | 弱引用集合 |
 | `DynamicTheme/` | 2 | 主题切换 |
-| `MVVM/` | 10（另有 `CommandTestKit.cs`，不是测试而是共享工具） | `VeloxCommand` 全语义（并发/排队/锁/中断/取消/8 事件时序/异常路径/CTS 释放）+ `ObservableCollectionTracker` + `CommandEventArgs` |
+| `MVVM/` | 15（另有 `CommandTestKit.cs`、`CommandSignatureViewModel.cs` 两个非测试文件） | `VeloxCommand` 全语义（并发/排队/锁/中断/取消/8 事件时序/异常路径/CTS 释放/完成等待/忙碌状态/事件编组/分配回归）+ 生成器签名覆盖 + `ObservableCollectionTracker` + `CommandEventArgs` |
 | 根目录 | 3 | `GlobalUsings.cs`、`MSTestSettings.cs`、`TestHosts.cs`（三者都不是测试） |
 
 **哪三个 Core 主题目录没有对应测试目录**：

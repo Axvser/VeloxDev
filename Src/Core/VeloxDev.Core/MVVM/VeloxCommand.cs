@@ -47,14 +47,15 @@ public enum CommandEventType : int
 /// <see cref="Failed"/> or <see cref="Exited"/>.
 /// </para>
 /// <para>
-/// Nothing here marshals to a UI thread, and event subscribers run on whatever thread the pipeline happens to
-/// be on. A handler that touches UI must dispatch back itself. A subscriber that throws does not disturb the
-/// command; subscribe to <see cref="HandlerException"/> to observe such failures.
+/// Event subscribers run on whatever thread the pipeline happens to be on, so a handler that touches UI must
+/// dispatch back itself — unless <see cref="EventContext"/> is set, which makes the command post them there
+/// for you. A subscriber that throws does not disturb the command; subscribe to <see cref="HandlerException"/>
+/// to observe such failures.
 /// </para>
 /// </remarks>
 public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
                     Predicate<object?>? canExecute = null,
-                    int semaphore = 1) : IVeloxCommand
+                    int semaphore = 1) : IVeloxCommand, IVeloxCommandCompletion, IVeloxCommandStatus
 {
     /// <summary>
     /// Creates a command from a body that takes the parameter but cannot be cancelled.
@@ -88,6 +89,45 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             async (_, ct) => { await command(ct).ConfigureAwait(false); },
             canExecute,
             semaphore);
+
+#if !NETSTANDARD2_0 && !NETFRAMEWORK
+    /// <summary>
+    /// Creates a command from a body that takes the parameter and returns a <see cref="ValueTask"/>.
+    /// </summary>
+    /// <remarks>
+    /// Named rather than an overload of <see cref="CreateTaskOnlyWithParameter"/>. A
+    /// <c>Func&lt;object?, ValueTask&gt;</c> sitting next to the <c>Task</c> one would make every
+    /// <c>async</c> lambda call site ambiguous (CS0121) — and <c>async p =&gt; { … }</c> is how callers of this
+    /// library write commands. It also stays <c>null</c>-token like its <c>Task</c> sibling: the body cannot be
+    /// stopped, it can only be told that it was.
+    /// </remarks>
+    public static VeloxCommand CreateTaskOnlyWithValueTaskParameter(
+        Func<object?, ValueTask> command,
+        Predicate<object?>? canExecute = null,
+        int semaphore = 1)
+        =>
+        new(
+            async (parameter, _) => { await command(parameter).ConfigureAwait(false); },
+            canExecute,
+            semaphore)
+        {
+            _isCtsNeeded = false
+        };
+
+    /// <summary>
+    /// Creates a command from a body that takes only the cancellation token and returns a
+    /// <see cref="ValueTask"/>, so it really can be cancelled.
+    /// </summary>
+    public static VeloxCommand CreateTaskOnlyWithValueTaskCancellationToken(
+        Func<CancellationToken, ValueTask> command,
+        Predicate<object?>? canExecute = null,
+        int semaphore = 1)
+        =>
+        new(
+            async (_, ct) => { await command(ct).ConfigureAwait(false); },
+            canExecute,
+            semaphore);
+#endif
 
     /// <summary>
     /// Creates a command from a body that takes nothing.
@@ -200,6 +240,47 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     /// <inheritdoc />
     public event CommandEventHandler? Exited;
 
+    /// <summary>
+    /// The context lifecycle events are raised on, or <see langword="null"/> (the default) to raise them on
+    /// whatever thread the pipeline happens to be on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set this to the UI framework's context so subscribers stop marshalling by hand. It is off by default
+    /// because raising on the pipeline's thread is what the command has always done, and because a subscriber
+    /// that already marshals would otherwise pay for it twice.
+    /// </para>
+    /// <para>
+    /// Raising through a context is asynchronous: events are posted in order, but one can reach its handler
+    /// after the call that raised it has already returned. Leave this <see langword="null"/> where a handler
+    /// must observe the command at the exact moment the event is raised.
+    /// </para>
+    /// </remarks>
+    public SynchronizationContext? EventContext { get; set; }
+
+    /// <summary>
+    /// Whether an execution is running or waiting for a free slot.
+    /// </summary>
+    /// <remarks>
+    /// Read without taking the command's own lock, so a concurrent update can leave this one step stale — that
+    /// is deliberate, since a property getter must not block.
+    /// </remarks>
+    public bool IsBusy => _active.Count > 0 || _pendingQueue.Count > 0;
+
+    /// <summary>How many executions are running right now.</summary>
+    /// <remarks>
+    /// Read without taking the command's own lock, so a concurrent update can leave this one step stale — that
+    /// is deliberate, since a property getter must not block.
+    /// </remarks>
+    public int ActiveCount => _active.Count;
+
+    /// <summary>How many calls are waiting for a free slot.</summary>
+    /// <remarks>
+    /// Read without taking the command's own lock, so a concurrent update can leave this one step stale — that
+    /// is deliberate, since a property getter must not block.
+    /// </remarks>
+    public int PendingCount => _pendingQueue.Count;
+
     private static void ReportHandlerException(Exception exception)
     {
         try
@@ -213,7 +294,50 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         }
     }
 
+    // 事件默认在管线所在线程上直接发（零额外分配）；只有显式设了 EventContext
+    // 且当前不在该上下文上时才 Post 过去。Post 是异步的，所以编组路径只该用在真正的 UI 场景。
+    private bool RaisesInline(SynchronizationContext? context)
+        => context is null || ReferenceEquals(context, SynchronizationContext.Current);
+
+    private static void PostEvent(
+        SynchronizationContext context,
+        VeloxCommand command,
+        CommandEventHandler handler,
+        CommandEventArgs args)
+        => context.Post(
+            static state =>
+            {
+                var (target, h, a) = ((VeloxCommand, CommandEventHandler, CommandEventArgs))state!;
+                target.Invoke(h, a);
+            },
+            (command, handler, args));
+
+    private void Invoke(CommandEventHandler handler, CommandEventArgs args)
+    {
+        try
+        {
+            handler(args);
+        }
+        catch (Exception ex)
+        {
+            ReportHandlerException(ex);
+        }
+    }
+
     private void RaiseCanExecuteChanged()
+    {
+        var context = EventContext;
+        if (RaisesInline(context))
+        {
+            InvokeCanExecuteChanged();
+        }
+        else
+        {
+            context!.Post(static state => ((VeloxCommand)state!).InvokeCanExecuteChanged(), this);
+        }
+    }
+
+    private void InvokeCanExecuteChanged()
     {
         try
         {
@@ -225,15 +349,45 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         }
     }
 
-    private static void RaiseCommandEvent(CommandEventHandler? handler, CommandEventArgs args)
+    private void RaiseCommandEvent(CommandEventHandler? handler, CommandEventArgs args)
     {
-        try
+        if (handler is null)
         {
-            handler?.Invoke(args);
+            return;
         }
-        catch (Exception ex)
+
+        var context = EventContext;
+        if (RaisesInline(context))
         {
-            ReportHandlerException(ex);
+            Invoke(handler, args);
+        }
+        else
+        {
+            PostEvent(context!, this, handler, args);
+        }
+    }
+
+    // 除 Created 外的每个 stage 都要一份换过 EventType 的副本，而副本是纯开销：
+    // 没人订阅就不构造。（订阅全部 8 个与一个都不订，改动前的每执行分配完全相同 —— 副本是无条件的。）
+    private void RaiseCommandEventAs(
+        CommandEventHandler? handler,
+        CommandEventArgs item,
+        CommandEventType type,
+        Exception? ex = null)
+    {
+        if (handler is null)
+        {
+            return;
+        }
+
+        var context = EventContext;
+        if (RaisesInline(context))
+        {
+            Invoke(handler, item.With(type, ex));
+        }
+        else
+        {
+            PostEvent(context!, this, handler, item.With(type, ex));
         }
     }
 
@@ -273,9 +427,41 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     }
 
     /// <inheritdoc />
-    public async Task ExecuteAsync(object? parameter)
+    public Task ExecuteAsync(object? parameter) => ExecuteCore(parameter, sink: null);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Completes when <em>this</em> execution has ended, including the calls that never run: one refused by a
+    /// lock reports <see cref="CommandOutcome.Refused"/>, and one dropped from the queue by
+    /// <see cref="ClearAsync"/> reports <see cref="CommandOutcome.Canceled"/>. Neither raises
+    /// <see cref="Exited"/>, so neither is observable through the events at all.
+    /// </remarks>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> fired first.</exception>
+    public async Task<CommandCompletion> ExecuteAndWaitAsync(
+        object? parameter, CancellationToken cancellationToken = default)
     {
-        var item = new CommandEventArgs(parameter, CommandEventType.Created);
+        var sink = new TaskCompletionSource<CommandCompletion>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // 这个 token 只放弃等待，不取消执行 —— 取消执行是 Interrupt / Clear 的职责，
+        // 它们会连带清空整个命令，不该由一次调用的 token 触发。
+        using var registration = cancellationToken.CanBeCanceled
+            ? cancellationToken.Register(
+                static state =>
+                {
+                    var (source, token) = ((TaskCompletionSource<CommandCompletion>, CancellationToken))state!;
+                    source.TrySetCanceled(token);
+                },
+                (sink, cancellationToken))
+            : default;
+
+        await ExecuteCore(parameter, sink).ConfigureAwait(false);
+        return await sink.Task.ConfigureAwait(false);
+    }
+
+    // ExecuteAsync 与 ExecuteAndWaitAsync 的唯一差别，就是有没有一个在等结果的 sink。
+    private async Task ExecuteCore(object? parameter, TaskCompletionSource<CommandCompletion>? sink)
+    {
+        var item = new CommandEventArgs(parameter, CommandEventType.Created) { Completion = sink };
         if (_isCtsNeeded)
         {
             item.Cts = new();
@@ -315,13 +501,14 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         if (forceLocked)
         {
             item.Cts?.Cancel();
-            RaiseCommandEvent(Canceled, item.With(CommandEventType.Canceled));
-            // 这条路径不经过 ExecuteCoreAsync，所以由这里负责释放。
+            RaiseCommandEventAs(Canceled, item, CommandEventType.Canceled);
+            // 这条路径不经过 ExecuteCoreAsync，所以由这里负责释放与收尾。
             item.TakeCts()?.Dispose();
+            item.Complete(CommandOutcome.Refused, null);
         }
         else if (enqueued)
         {
-            RaiseCommandEvent(Enqueued, item.With(CommandEventType.Enqueued));
+            RaiseCommandEventAs(Enqueued, item, CommandEventType.Enqueued);
         }
         else if (startNow)
         {
@@ -333,7 +520,11 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
 
     private async Task ExecuteCoreAsync(CommandEventArgs item)
     {
-        RaiseCommandEvent(Started, item.With(CommandEventType.Started));
+        RaiseCommandEventAs(Started, item, CommandEventType.Started);
+
+        // 结局在这里算出来，而不是从事件或 item 上读回来：等结果的 sink 不能依赖「有人订阅了 Failed」。
+        var outcome = CommandOutcome.Completed;
+        Exception? failure = null;
 
         try
         {
@@ -345,23 +536,34 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             {
                 await _command(item.Parameter, _defct).ConfigureAwait(false);
             }
-            RaiseCommandEvent(Completed, item.With(CommandEventType.Completed));
+            RaiseCommandEventAs(Completed, item, CommandEventType.Completed);
         }
         catch (OperationCanceledException)
         {
-            RaiseCommandEvent(Canceled, item.With(CommandEventType.Canceled));
+            outcome = CommandOutcome.Canceled;
+            RaiseCommandEventAs(Canceled, item, CommandEventType.Canceled);
         }
         catch (Exception ex)
         {
-            RaiseCommandEvent(Failed, item.With(CommandEventType.Failed, ex));
+            outcome = CommandOutcome.Failed;
+            failure = ex;
+            RaiseCommandEventAs(Failed, item, CommandEventType.Failed, ex);
         }
         finally
         {
-            await OnExecutionCompletedAsync(item).ConfigureAwait(false);
-
-            // 走到这里命令体一定已经结束 —— 无论它成功、失败还是被取消，也无论它是否已被
-            // Interrupt/Clear 从 _active 摘走。所以这里是可以确定「没人再观察 token」的唯一位置。
-            item.TakeCts()?.Dispose();
+            // 走到这里命令体一定已经结束 —— 无论成功、失败还是被取消，也无论它是否已被
+            // Interrupt/Clear 从 _active 摘走。这是唯一一个「跑过的」执行都必经的收尾点，
+            // 所以既在这里释放 token 源，也在这里给 sink 收尾。
+            try
+            {
+                await OnExecutionCompletedAsync(item).ConfigureAwait(false);
+            }
+            finally
+            {
+                // 嵌一层 finally：OnExecutionCompletedAsync 抛异常时，收尾与释放一步都不能被跳过。
+                item.Complete(outcome, failure);
+                item.TakeCts()?.Dispose();
+            }
         }
     }
 
@@ -377,7 +579,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             _stateLock.Release();
         }
 
-        RaiseCommandEvent(Exited, completed.With(CommandEventType.Exited));
+        RaiseCommandEventAs(Exited, completed, CommandEventType.Exited);
 
         // 不在这里 RaiseCanExecuteChanged：紧接着的 TryStartPendingAsync 结尾一定会发一次。
         await TryStartPendingAsync().ConfigureAwait(false);
@@ -452,8 +654,14 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             {
                 // 命令体可能已经自行跑完并释放了源 —— 那就不用取消了。
             }
+            catch (AggregateException)
+            {
+                // 命令体在 token 上注册的取消回调抛了异常。这里必须吞掉：让它逃逸会跳过下面的
+                // UnLockAsync，命令就永久锁死，此后每个排队项都再也跑不起来。
+            }
 
-            RaiseCommandEvent(Canceled, it.With(CommandEventType.Canceled));
+            // 不给 sink 收尾：这一项的命令体还会自己走完 ExecuteCoreAsync 的 finally。
+            RaiseCommandEventAs(Canceled, it, CommandEventType.Canceled);
         }
 
         if (!wasLocked)
@@ -489,15 +697,17 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         // 保持与排空一致的顺序：先给每个排队项发 Dequeued，再统一发 Canceled。
         foreach (var it in pendingToCancel)
         {
-            RaiseCommandEvent(Dequeued, it.With(CommandEventType.Dequeued));
+            RaiseCommandEventAs(Dequeued, it, CommandEventType.Dequeued);
         }
 
         foreach (var it in pendingToCancel)
         {
-            // 排队项从未进入 ExecuteCoreAsync，所以它们的源只能在这里释放。
+            // 排队项从未进入 ExecuteCoreAsync，所以源、收尾、信号三者都只能在这里做。
+            // 它们的 token 没交给过任何命令体，所以 Cancel() 上没有用户回调，不会抛。
             it.Cts?.Cancel();
-            RaiseCommandEvent(Canceled, it.With(CommandEventType.Canceled));
+            RaiseCommandEventAs(Canceled, it, CommandEventType.Canceled);
             it.TakeCts()?.Dispose();
+            it.Complete(CommandOutcome.Canceled, null);
         }
 
         foreach (var it in activeToCancel)
@@ -510,8 +720,12 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             {
                 // 同上：命令体已经跑完并释放过源。
             }
+            catch (AggregateException)
+            {
+                // 与 InterruptAsync 同理：回调抛异常不能逃逸，否则 UnLockAsync 被跳过、命令永久锁死。
+            }
 
-            RaiseCommandEvent(Canceled, it.With(CommandEventType.Canceled));
+            RaiseCommandEventAs(Canceled, it, CommandEventType.Canceled);
         }
 
         if (!wasLocked)
@@ -588,7 +802,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
 
         foreach (var next in toStart)
         {
-            RaiseCommandEvent(Dequeued, next.With(CommandEventType.Dequeued));
+            RaiseCommandEventAs(Dequeued, next, CommandEventType.Dequeued);
             _ = ExecuteCoreAsync(next);
         }
 
@@ -655,6 +869,13 @@ public sealed class CommandEventArgs(
     /// once. The winner is responsible for disposing it.
     /// </remarks>
     internal CancellationTokenSource? TakeCts() => Interlocked.Exchange(ref _cts, null);
+
+    // 等结果的槽，只有 ExecuteAndWaitAsync 会挂上它。With() 产生的副本不带 —— 副本不该能收尾。
+    internal TaskCompletionSource<CommandCompletion>? Completion { get; set; }
+
+    // 恰好收尾一次。没有等的人在时是空操作。
+    internal void Complete(CommandOutcome outcome, Exception? exception)
+        => Completion?.TrySetResult(new CommandCompletion(outcome, exception));
 
     /// <summary>
     /// Projects this instance onto another lifecycle stage, keeping the parameter, the cancellation source and —

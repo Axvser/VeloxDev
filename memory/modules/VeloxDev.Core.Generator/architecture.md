@@ -114,7 +114,22 @@ context.RegisterSourceOutput(
 |---|---|---|---|
 | `Writers/WorkflowWriter.cs`（1708 行，最大） | `TreeAttribute/NodeAttribute/SlotAttribute/LinkAttribute` 四种模型；`WorkflowType` 1..4 分派；另支持一个**没贴特性、只重声明节点默认值**的子类路径 | 四个特性的构造参数 | 节点布局/尺寸/`RuntimeId` 的初始化代码都在这里 |
 | `Writers/MVVMWriter.cs`（945 行） | 属性的 setter 体、通知事件、集合订阅、Workflow 槽位生命周期 | `VeloxPropertyAttribute` + `DetectSetterMode()`（`:42-89`）探测基类 | 见下 |
-| `Writers/CommandWriter.cs` | 懒建 `IVeloxCommand` 属性 + 可选 `CanExecute{名}Command` partial 钩子 | `VeloxCommandAttribute`，**位置参数先读、具名参数覆盖**（`:47-61`）；名字为 `"Auto"` 时取方法名去掉 `Async`（`:64-67`） | 三段构造器选择 `ParseConstructorType`（`:78-116`） |
+| `Writers/CommandWriter.cs` | 懒建 `IVeloxCommand` 属性 + 可选 `CanExecute{名}Command` partial 钩子 | `VeloxCommandAttribute`，**位置参数先读、具名参数覆盖**；名字为 `"Auto"` 时取方法名去掉 `Async` | 构造选择 `ParseConstructorType` + `TryBuildValueTaskThunk` |
+
+**返回类型决定「值怎么变成 `Task`」，形参决定「走哪个构造入口」，两件事分开判**（2026-10-01 起）：
+
+| 返回类型 | 生成物 | 说明 |
+|---|---|---|
+| `Task` / `Task<T>` | 方法组本身 | `Task<T>` 靠**委托协变**落进 `Func<..., Task>`，`T` 被包装 lambda 丢弃 |
+| `void` | 方法组本身 | 1 参绑 `Action<object?>`、0 参绑 `Action` |
+| `ValueTask` / `ValueTask<T>` | **`.AsTask()` 转换 thunk** | 见下 |
+
+`ValueTask` 既不能隐式转 `Task`，也不像 `Task<T>` 那样能靠协变（协变要求返回类型之间本身有引用转换，而 `ValueTask` 是结构体），所以**必须显式 thunk**：`(parameter, ct) => Foo(parameter, ct).AsTask()`。
+
+- thunk 产出 `Func<object?, CancellationToken, Task>` —— **这个签名在四个 TFM 上都存在**，所以生成代码不依赖运行时的 ValueTask 入口，`netstandard2.0` / `net461` 的生成目标照样编得过。**不要**给生成器加 TFM 感知或 MSBuild 属性管线，那是多余的。
+- **不要**把 `Foo(...)` 提到 lambda 外面再 `AsTask()`：`IValueTaskSource` 只能消费一次，第二次执行会抛 `InvalidOperationException`。
+- 只认四种形参形态（0 / `object?` / `CancellationToken` / `object?`+`CancellationToken`）；其余返回 `false`，方法组原样落地 —— 编不过，但报错方式与改动前一致，不会静默生成错东西。
+- 零参形态 `() => Foo().AsTask()` **实测无二义性**（红队曾断言它会 CS0121，**是错的**）：它绑到 `Func<Task>`，命令体确实被 await，且拿到 `_isCtsNeeded = false`。 |
 | `Writers/MonoWriter.cs` | `InitializeMonoBehaviour` / `CloseMonoBehaviour` / 5 个 `partial void` 钩子 | `MonoBehaviourAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeMonoBehaviour()` 等于什么都没发生 |
 | `Writers/AopWriter.cs` | AOP 接口实现 + `Aop()` 扩展方法 | — | 见 §三 |
 | `AopInterface.cs` | AOP 接口本身（`VeloxDev.AopInterfaces` 命名空间） | — | 它**不在 `Writers/` 下**，是唯一一个把生成逻辑直接写在生成器类里的 |

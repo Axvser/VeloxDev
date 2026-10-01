@@ -98,4 +98,39 @@ public class VeloxCommandTests
 
         Assert.AreEqual("test", received);
     }
+
+    [TestMethod]
+    public async Task CreateTaskOnlyWithValueTaskParameter_Works()
+    {
+        object? received = null;
+        var command = VeloxCommand.CreateTaskOnlyWithValueTaskParameter(p =>
+        {
+            received = p;
+            return default;
+        });
+        var recorder = new CommandEventRecorder(command);
+
+        command.Execute("test");
+        await recorder.FirstExit;
+
+        Assert.AreEqual("test", received);
+    }
+
+    [TestMethod]
+    public async Task CreateTaskOnlyWithValueTaskCancellationToken_ReallyReceivesTheToken()
+    {
+        var gate = new CommandGate();
+        var command = VeloxCommand.CreateTaskOnlyWithValueTaskCancellationToken(
+            ct => new ValueTask(gate.RunWithTokenAsync(ct)));
+        var recorder = new CommandEventRecorder(command);
+
+        _ = command.ExecuteAsync(null);
+        await gate.WaitForStartedAsync();
+
+        await command.InterruptAsync();
+        await CommandTestKit.WaitUntilAsync(() => recorder.ExitCount >= 1);
+
+        Assert.HasCount(0, recorder.Of(CommandEventType.Failed),
+            "a ValueTask body that honours the token is cancelled, not failed");
+    }
 }

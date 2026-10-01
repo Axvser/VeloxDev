@@ -20,6 +20,17 @@
     <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
   </ItemGroup>
 
+  <!-- 签名覆盖测试要用 [VeloxCommand]，而 analyzer 不随 ProjectReference 传递。
+       与 VeloxDev.Core.Extension.Test 用同一对：Debug 走生成器源码，Release 走已发布包。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Generators\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0"
+                      Condition="'$(Configuration)' != 'Debug'" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>

@@ -19,6 +19,10 @@
 | 命令参数校验 | `canValidate: true` 时生成的 `private partial bool CanExecute{名}Command(object? parameter)`（`Writers/CommandWriter.cs:167`） | 用户实现 |
 | 手工催 `CanExecuteChanged` | `IVeloxCommand.Notify()`（`Src/Core/VeloxDev.Core/Interfaces/MVVM/IVeloxCommand.cs:18`） | 用户调用 |
 | 观察被吞掉的 handler 异常 | `VeloxCommand.HandlerException`（静态 `Action<Exception>?`，`VeloxCommand.cs:182`） | 用户订阅 |
+| 等「这一次执行真的结束」 | `VeloxCommandExtensions.ExecuteAndWaitAsync`（`MVVM/VeloxCommandExtensions.cs`）→ `IVeloxCommandCompletion` | 用户调用 |
+| 读忙碌 / 排队状态 | `VeloxCommandExtensions.{IsBusy,ActiveCount,PendingCount}` → `IVeloxCommandStatus` | 用户调用 |
+| 让事件自己编组回 UI 线程 | `VeloxCommand.EventContext`（`SynchronizationContext?`，**默认 `null` = 不编组**） | 用户设置 |
+| ValueTask 命令体 | `CreateTaskOnlyWithValueTaskParameter` / `...CancellationToken`，**只在 `netcoreapp3.0`/`net5.0` 上有**（`#if !NETSTANDARD2_0 && !NETFRAMEWORK`） | 用户调用 |
 | 「类算不算 MVVM 目标」 | `Base/Analizer.cs:82-94` 的 `TriggerAttributes` | 生成器作者 |
 | setter 写哪套通知方法 | `MVVMWriter.DetectSetterMode`（`:42-89`） | 生成器作者 |
 

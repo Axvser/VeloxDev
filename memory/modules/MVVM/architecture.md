@@ -13,6 +13,7 @@
 | 半边 | 归谁 | 本质 |
 |---|---|---|
 | 命令的**运行期语义** | `VeloxCommand.cs`（`VeloxCommand` + `CommandEventArgs` + `CommandEventType`） | 一个比 `ICommand` 重得多的实现：**上限并发 + 排队 + 强制锁 + 8 个生命周期事件 + 可取消的异步执行** |
+| 命令的**可等待**与**忙碌读模型** | `CommandCompletion.cs` + `Interfaces/MVVM/IVeloxCommandCompletion.cs`、`IVeloxCommandStatus.cs` + `VeloxCommandExtensions.cs` | 2026-10-01 新增。**故意不放进 `IVeloxCommand`** —— 往接口上加成员会打碎仓内 4 个手写实现方（`WorkflowTestKit.cs:14`、`SlotEnumeratorTests.cs:12/71`、`ProbeNodes.cs:20`）以及所有库外实现方，而 `net461`/`netstandard2.0` 上没法用默认接口成员兜底。见 §九 |
 | 集合属性的**订阅兜底** | `ObservableCollectionTracker.cs` | 一个静态去重订阅器，用来补「字段初始化器绕过 setter」这个洞 |
 | 两者的**声明方式** | 生成器（`MVVMWriter` / `CommandWriter`）+ 两个特性 | `[VeloxProperty]` / `[VeloxCommand]` —— 都只是**给生成器看的信号**，运行期不认识它们 |
 
@@ -182,3 +183,48 @@ OnExecutionCompletedAsync(item)
 6. **`CommandEventArgs.Cts` 是 `internal set`**（`:391`），外部只能读。想给自定义命令传 CTS 没有公开口子，只能在 `_command` 闭包里自己接 `CancellationToken`。
 7. **`_active` 用 `List<T>.Remove`（`:211`）而非 `HashSet`**：`O(n)`，且依赖 `CommandEventArgs` 的**引用**相等（它是普通 class，没有重写 `Equals`）。这没问题，但意味着并发数很大时 `OnExecutionCompletedAsync` 是线性开销。
 8. **`Exited` 在池线程上触发 —— UI 处理器必须自己跳回界面线程，而且它抛的异常会被吞掉（现在至少能被钩子看见）。** `ExecuteCoreAsync` 以 `ConfigureAwait(false)` 等待命令体，所以 `RaiseCommandEvent` 发出的事件不在 UI 线程上；而它把处理器包在 `try/catch` 里**静默吞掉**异常 ⇒ 一个在 `Exited` 里写控件属性的 WPF/WinUI 处理器会抛 `InvalidOperationException`、被吞、**界面看起来只是"什么都没发生"**（典型症状：按钮永远不亮）。2026-09-27 实测（把 demo 的运行控制接进七家时撞上）：WPF 用 `Dispatcher.InvokeAsync`、WinUI 用 `DispatcherQueue.TryEnqueue`、Avalonia 用 `Dispatcher.UIThread.Post`、Blazor 用 `InvokeAsync(StateHasChanged)`、MAUI 用 `MainThread.BeginInvokeOnMainThread`。**2026-10-01 起**这些被吞的异常会经 `VeloxCommand.HandlerException` 报出来（订阅它即可定位「代码没跑也不报错」），但**吞掉本身没有变**。**要读 `CommandEventArgs` 也顺手**：委托是 `CommandEventHandler(CommandEventArgs e)` —— 一个参数，写 `+= (_, _)` 编译不过。
+
+---
+
+## 九、`ExecuteAndWaitAsync`：把「这一次执行真的结束」变成可等待的
+
+**为什么需要它。** `ExecuteAsync` 只等到入队，调用方只能自己配对 `Exited` + `Failed` —— 而**那两条不进 `ExecuteCoreAsync` 的路径根本不发 `Exited`**，配对者会永久挂起（`WorkflowAgentToolkit` 的等待助手在 2026-10-01 之前就是这样）。
+
+**全部终止点，一个都不能漏** —— 漏一个就是一条永久挂起的路径：
+
+| 路径 | 发信号的人 | `CommandOutcome` | 发 `Exited` 吗 |
+|---|---|---|---|
+| 立刻跑完 / 排队后跑完 | `ExecuteCoreAsync` 的 `finally`（嵌在 `OnExecutionCompletedAsync` 外层） | `Completed` / `Failed` | 会 |
+| 跑着被 `Interrupt` 打断，命令体仍收尾 | 同上 | `Canceled` | 会（体结束时） |
+| 排队时被 `Clear` 丢弃 | `ClearAsync` 的排队项循环 | `Canceled` | **不会** |
+| 被 `Lock` 挡下 | `ExecuteCore` 的拒绝分支 | `Refused` | **不会** |
+
+判据：一个 item 任一时刻只处于「被拒 / 在 `_pendingQueue` / 在 `_active`」三者之一，而**凡进过 `_active` 的，`ExecuteCoreAsync` 必被调用一次且必走完 `finally`**。所以只有那两条不进 `_active` 的路径要在别处补信号。
+
+三条纪律：
+
+- **`InterruptAsync`/`ClearAsync` 对正在跑的项不发信号** —— 它们的命令体会自己走完 `finally`。若那里也发，一次「体不理会 token 的中断」会先被记成 `Canceled`，等体真跑完时正确的 `Completed` 已经输给 `TrySetResult`，**报出错的结局**。
+- **`Failed` 的异常在 `catch` 里算出来往下传**，不从 `item` 或事件上读回来：等结果不能依赖「恰好有人订阅了 `Failed`」。`CommandEventArgs.Exception` 恒为 null（§八·5）。
+- **信号在 `finally` 里，且嵌一层** —— `OnExecutionCompletedAsync` 抛异常时收尾与释放都不能被跳过。
+
+`With(...)` 产生的副本**不带**信号槽，这是有意的：副本不该能收尾。`CommandEventArgs.Completion` 是 `internal`，公开面不变。
+
+---
+
+## 十、`EventContext`：事件编组（默认关）
+
+非空且与 `SynchronizationContext.Current` 不是同一实例时，事件改走 `Post`。
+
+- **默认关 ⇒ 行为逐字节不变**（`VeloxCommandEventContextTests` 第一条用例钉的就是这个）。
+- 开启后**发事件变成异步的**：`Post` 有序，但事件可能在其触发调用返回之后才到达处理器。需要处理器「在事件触发那一刻」观察命令的话，不要开。
+- 编组路径每次 `Post` 一次装箱分配；未开启时零额外分配（快路径只做一次字段读 + 引用比较）。
+
+---
+
+## 十一、忙碌读模型
+
+`IsBusy` / `ActiveCount` / `PendingCount` —— `VeloxCommand` 上是属性，`IVeloxCommand` 上是 `VeloxCommandExtensions` 的扩展方法。
+
+**为什么需要**：`CanExecute` 只读谓词与 `_isForceLocked`，**完全不看队列**（§二），所以槽位占满时按钮照样显示为可执行。`VeloxCommandStatusTests` 有一条专门把这个反直觉行为钉住。
+
+**无锁读**：直接读 `_active.Count` / `_pendingQueue.Count`，并发下可能差一步 —— 刻意如此，属性 getter 不能阻塞在 `SemaphoreSlim` 上。
