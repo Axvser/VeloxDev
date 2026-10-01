@@ -12,7 +12,7 @@
 	  <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 
-	<!-- 本项目用 [MonoBehaviour]，analyzer 不随 ProjectReference 传递。 -->
+	<!-- 本项目用 [Tickable]，analyzer 不随 ProjectReference 传递。 -->
 	<ItemGroup>
 		<ProjectReference Include="..\..\..\..\Src\Generators\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
 		                  OutputItemType="Analyzer"

@@ -1,4 +1,4 @@
-# WorkflowSystem — Avalonia
+﻿# WorkflowSystem — Avalonia
 
 > 代码：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/`（9 个类）。
 > 契约、注册位置、七角色职责表在 `memory/modules/WorkflowSystem/extension.md` §3.9 与
@@ -70,7 +70,7 @@ WPF 的对应写法是 `state.ScrollViewer.PreviewMouseWheel += …`（WPF `Work
 `public override void Render(DrawingContext context)`（`WorkflowMinimapOverlay.cs:529`），用 `context.PushClip` / `FillRectangle(brush, rect, cornerRadius)` / `DrawRectangle(null, new Pen(…), rect, cr)` 画（`:549-551` 起）；重绘靠静态构造里登记 `AffectsRender<WorkflowMinimapOverlay>(…)` 列出全部相关属性（`:169-183`，约 25 个），属性一变自动 `InvalidateVisual`。WPF 那份是 `FrameworkElement` + `OnRender` + `DrawingContext`。
 
 - **改这家的自绘时不要去找 `OnRender`**，也不要在属性 setter 里手写 `InvalidateVisual`：属性已在 `AffectsRender` 名单里就够；名单外的属性（例如只在 `Render` 内部读的派生值）才需要手动 `InvalidateVisual`。
-- 小地图的 `InstanceMarkDirty`（`:376-387`）是例外：它可能在**非 UI 线程**被调用（注释：`OnNodePropChanged` 可能来自 `MonoBehaviourManager` 的循环线程），所以先 `Dispatcher.UIThread.CheckAccess()`，不行才 `Post(InvalidateVisual)`。`InvalidateVisual` 要求 UI 线程，这是平台硬约束。
+- 小地图的 `InstanceMarkDirty`（`:376-387`）是例外：它可能在**非 UI 线程**被调用（注释：`OnNodePropChanged` 可能来自 `TickManager` 的循环线程），所以先 `Dispatcher.UIThread.CheckAccess()`，不行才 `Post(InvalidateVisual)`。`InvalidateVisual` 要求 UI 线程，这是平台硬约束。
 
 ### 6. 布局 pass 走**渲染循环**，不在 dispatcher 优先队列上 —— 两个后果
 

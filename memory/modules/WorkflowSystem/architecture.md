@@ -1,4 +1,4 @@
-# WorkflowSystem 架构
+﻿# WorkflowSystem 架构
 
 > 模块位置：`Src/Core/VeloxDev.Core/WorkflowSystem/`
 > 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（17 个文件，命名空间 `VeloxDev.WorkflowSystem`）
@@ -135,7 +135,7 @@ RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/Ru
 ```
 TreeHelper.Install → tree.EnableMap(CellSize, VisibleItems)       Templates/Helpers/TreeHelper.cs:109
                    → WorkflowSpatialManager 建立空间网格            GUI/Virtualization/WorkflowSpatialManager.cs:29
-TreeHelper.Viewport 写入 / MarkDirty() → 10fps MonoBehaviour tick  Templates/Helpers/TreeHelper.cs:56
+TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Helpers/TreeHelper.cs:56
                    → Virtualize(Viewport) → VisibleItems 更新       GUI/Virtualization/WorkflowSpatialEx.cs:99
                    → BroadcastVisibleItemLayout()（对每个可见节点重发 Anchor/Size）
 ```

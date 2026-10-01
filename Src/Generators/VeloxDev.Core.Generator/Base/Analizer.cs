@@ -76,7 +76,7 @@ namespace VeloxDev.Generators.Base
             /// Metadata names of every attribute that makes a class a codegen target. Class-level
             /// attributes are listed first so that, for a type split over several partial files, the
             /// declaration carrying the class-level attribute becomes the representative one: the
-            /// syntax-scoped writers (<c>MonoWriter</c>, <c>AopWriter</c>, <c>AopInterface</c>) read
+            /// syntax-scoped writers (<c>TickWriter</c>, <c>AopWriter</c>, <c>AopInterface</c>) read
             /// their attribute off the declaration they are handed.
             /// </summary>
             private static readonly string[] TriggerAttributes =
@@ -87,7 +87,7 @@ namespace VeloxDev.Generators.Base
                 "VeloxDev.WorkflowSystem.WorkflowBuilder+LinkAttribute`1",
                 "VeloxDev.WorkflowSystem.DefaultAnchorAttribute",
                 "VeloxDev.WorkflowSystem.DefaultSizeAttribute",
-                "VeloxDev.TimeLine.MonoBehaviourAttribute",
+                "VeloxDev.TimeLine.TickableAttribute",
                 "VeloxDev.MVVM.VeloxPropertyAttribute",
                 "VeloxDev.MVVM.VeloxCommandAttribute",
                 "VeloxDev.AspectOriented.AspectOrientedAttribute",

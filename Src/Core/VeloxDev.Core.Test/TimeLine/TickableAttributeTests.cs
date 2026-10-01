@@ -1,15 +1,15 @@
-using VeloxDev.TimeLine;
+﻿using VeloxDev.TimeLine;
 
 namespace VeloxDev.Core.Test.TimeLine;
 
 [TestClass]
-public class MonoBehaviourAttributeTests
+public class TickableAttributeTests
 {
     [TestMethod]
     public void AttributeUsage_ClassOnly()
     {
         var usage = (AttributeUsageAttribute?)Attribute.GetCustomAttribute(
-            typeof(MonoBehaviourAttribute), typeof(AttributeUsageAttribute));
+            typeof(TickableAttribute), typeof(AttributeUsageAttribute));
         Assert.IsNotNull(usage);
         Assert.AreEqual(AttributeTargets.Class, usage.ValidOn);
         Assert.IsFalse(usage.AllowMultiple);
@@ -19,7 +19,7 @@ public class MonoBehaviourAttributeTests
     [TestMethod]
     public void CanInstantiate()
     {
-        var attr = new MonoBehaviourAttribute();
+        var attr = new TickableAttribute();
         Assert.IsNotNull(attr);
     }
 }

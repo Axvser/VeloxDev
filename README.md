@@ -55,7 +55,7 @@ Three ideas hold the whole project together:
 | 🎞️ **Transition** | Cross-platform interpolation animation with easing & Fluent API — smooth visual feedback for workflow state changes | [Platform Adapter Package](#platform-adapter-packages) |
 | 🎨 **Theme** | Runtime theme switching with animated transitions — instant visual identity for your editor | [Platform Adapter Package](#platform-adapter-packages) |
 | 🌀 **AOP** | Generated aspect interfaces with runtime proxies — intercept node members for logging or validation without modifying business logic | |
-| ⚙️ **MonoBehaviour** | Frame-driven lifecycle loop — tick-based node simulation or real-time graph execution | |
+| ⚙️ **Tickable** | Frame-driven lifecycle loop — tick-based node simulation or real-time graph execution | |
 
 ### Platform adapter packages
 
@@ -263,7 +263,7 @@ VeloxDev/
 │   ├── MVVM/         # WPF · Avalonia
 │   ├── Transition/   # WPF · Avalonia · WinUI · WinForms · MAUI · Razor · Jalium
 │   ├── Theme/ · AOP/ # WPF · Avalonia
-│   └── MonoBehaviour/# WPF
+│   └── Tickable/        # WPF
 └── Docs/
     └── VeloxDev.Docs # Documentation site (WebAssembly: online/local wiki)
 ```

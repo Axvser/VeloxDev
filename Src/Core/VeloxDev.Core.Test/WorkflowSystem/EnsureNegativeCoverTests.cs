@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
@@ -76,7 +76,7 @@ public class EnsureNegativeCoverTests
     }
 
     [TestMethod]
-    public void EnsureNegativeCover_DeepZoomGrowth_IsMonotonicAndTracksNewMin()
+    public void EnsureNegativeCover_DeepZoomGrowth_IsTickabletonicAndTracksNewMin()
     {
         var tree = new StubTree();
         // Scale 0.5: world −140 collapses to −280.

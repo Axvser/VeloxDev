@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Demo"
         mc:Ignorable="d"
-        Title="MonoBehaviour — 两条泵的自对比" Height="980" Width="1260"
+        Title="Tickable — 两条泵的自对比" Height="980" Width="1260"
         Background="#1e1e1e">
     <Grid Margin="6">
         <Grid.RowDefinitions>

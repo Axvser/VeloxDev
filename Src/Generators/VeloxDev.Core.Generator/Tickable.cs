@@ -10,7 +10,7 @@ using VeloxDev.Generators.Writers;
 namespace VeloxDev.Generators
 {
     [Generator(LanguageNames.CSharp)]
-    public class MonoBehaviour : IIncrementalGenerator
+    public class Tickable : IIncrementalGenerator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -23,7 +23,7 @@ namespace VeloxDev.Generators
         {
             foreach (var (syntax, symbol) in Analizer.Filters.Resolve(input.Targets, input.Compilation))
             {
-                var writer = new MonoWriter();
+                var writer = new TickWriter();
                 writer.Initialize(syntax, symbol);
                 if (writer.CanWrite())
                 {

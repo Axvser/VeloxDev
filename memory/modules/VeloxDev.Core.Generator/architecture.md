@@ -1,6 +1,6 @@
-# VeloxDev.Core.Generator — 架构
+﻿# VeloxDev.Core.Generator — 架构
 
-> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**16 个 .cs、5079 行**（`Base/Analizer.cs` 948、`Writers/WorkflowWriter.cs` 1708、`Writers/MVVMWriter.cs` 945、`Theme.cs` 422、`Writers/WriterBase.cs` 224、`Writers/CommandWriter.cs` 191、`AopInterface.cs` 157、`Writers/MonoWriter.cs` 125、`Writers/AopWriter.cs` 89、`Base/AnalizeHelper.cs` 67、`AopProxy.cs` 41、`MVVM.cs` 38、`Command.cs` / `MonoBehaviour.cs` / `Workflow.cs` 各 37、`Base/ICodeWriter.cs` 13）。
+> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**16 个 .cs、5079 行**（`Base/Analizer.cs` 948、`Writers/WorkflowWriter.cs` 1708、`Writers/MVVMWriter.cs` 945、`Theme.cs` 422、`Writers/WriterBase.cs` 224、`Writers/CommandWriter.cs` 191、`AopInterface.cs` 157、`Writers/TickWriter.cs` 125、`Writers/AopWriter.cs` 89、`Base/AnalizeHelper.cs` 67、`AopProxy.cs` 41、`MVVM.cs` 38、`Command.cs` / `Tickable.cs` / `Workflow.cs` 各 37、`Base/ICodeWriter.cs` 13）。
 > 打包成 NuGet 分析器包，不产出运行期程序集；`TargetFramework=netstandard2.0`（`VeloxDev.Core.Generator.csproj:6`）。
 
 本文只写「读完这 16 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
@@ -17,7 +17,7 @@
 |---|---|---|
 | WorkflowSystem | `WorkflowBuilder+TreeAttribute` / `+NodeAttribute` / `+SlotAttribute` / `+LinkAttribute` / `DefaultAnchorAttribute` / `DefaultSizeAttribute` | `Workflow.cs` |
 | MVVM | `VeloxPropertyAttribute` / `VeloxCommandAttribute` | `MVVM.cs` + `Command.cs` |
-| TimeLine | `MonoBehaviourAttribute` | `MonoBehaviour.cs` |
+| TimeLine | `TickableAttribute` | `Tickable.cs` |
 | AspectOriented | `AspectOrientedAttribute` | `AopInterface.cs` + `AopProxy.cs` |
 | DynamicTheme | `ThemeConfigAttribute\`3..\`7`（5 个元数） | `Theme.cs` |
 
@@ -39,7 +39,7 @@
 
 ## 二、三个阶段的边界：筛选 → 解析 → 写
 
-除 `Theme.cs` 外，6 个生成器的 `Initialize` 是同一行形状（`MVVM.cs:17-19`、`AopProxy.cs:17-19`、`Command.cs:17`、`MonoBehaviour.cs:17`、`Workflow.cs:17`）：
+除 `Theme.cs` 外，6 个生成器的 `Initialize` 是同一行形状（`MVVM.cs:17-19`、`AopProxy.cs:17-19`、`Command.cs:17`、`Tickable.cs:17`、`Workflow.cs:17`）：
 
 ```csharp
 context.RegisterSourceOutput(
@@ -67,13 +67,13 @@ context.RegisterSourceOutput(
 - 给某个 writer 加「读更多语义」的逻辑是**安全**的 —— 它本来就拿到的是新鲜 symbol。
 - 给 `GeneratorTarget` 加 symbol 字段是**不安全**的，且不会立刻报错，只会在增量场景下偶发错码。要加信息就加 `TypeKey` 这类字符串。
 
-`Deduplicate`（`:187`）**按 `TypeKey` 去重，不按 symbol 去重**：`remarks`（`:174-182`）说明按 symbol 去重会让同一个类型在两条缓存条目持不同 `Compilation` 的 symbol 时进来两次，第二次 `AddSource` 会因为 hint name 重复被拒。一个类拆成多个 partial、每个 partial 各贴一个触发特性时，只有**一个代表**进入 writer；谁当代表由 `IsClassLevelAttribute` 决定（类级特性优先，`:76-81` 说明理由：`Writers/MonoWriter.cs`、`Writers/AopWriter.cs`、`AopInterface.cs` 是从**拿到的那份声明**上读特性的）。**所以「代表是哪份声明」会直接影响这三个生成器的输出。**
+`Deduplicate`（`:187`）**按 `TypeKey` 去重，不按 symbol 去重**：`remarks`（`:174-182`）说明按 symbol 去重会让同一个类型在两条缓存条目持不同 `Compilation` 的 symbol 时进来两次，第二次 `AddSource` 会因为 hint name 重复被拒。一个类拆成多个 partial、每个 partial 各贴一个触发特性时，只有**一个代表**进入 writer；谁当代表由 `IsClassLevelAttribute` 决定（类级特性优先，`:76-81` 说明理由：`Writers/TickWriter.cs`、`Writers/AopWriter.cs`、`AopInterface.cs` 是从**拿到的那份声明**上读特性的）。**所以「代表是哪份声明」会直接影响这三个生成器的输出。**
 
 ### 阶段 3：写 —— 各生成器的 `GenerateSource`
 
 固定四步：`new XxxWriter()` → `Initialize(syntax, symbol)` → `CanWrite()` 闸门 → 写。
 
-闸门是**静默**的：`CanWrite()` 返回 false 就不 `AddSource`，没有诊断、没有空文件。`Writers/MVVMWriter.cs:845`、`Writers/CommandWriter.cs:118`、`Writers/MonoWriter.cs:70`、`Writers/AopWriter.cs` 的 `CanWrite()` 都是符号判定。
+闸门是**静默**的：`CanWrite()` 返回 false 就不 `AddSource`，没有诊断、没有空文件。`Writers/MVVMWriter.cs:845`、`Writers/CommandWriter.cs:118`、`Writers/TickWriter.cs:70`、`Writers/AopWriter.cs` 的 `CanWrite()` 都是符号判定。
 
 `Theme.cs` 是唯一不走 `Targets/Resolve` 的（它自己建 5 条流，`:32-55`，按 `ThemeConfigAttribute` 的 5 个元数分别订阅），**且只对 `partial` 类发**（`:112-118`），没有可用属性注册时返回 `string.Empty`（`:261-264`）—— 同样是静默无输出。
 
@@ -85,7 +85,7 @@ context.RegisterSourceOutput(
 | AOP partial + 扩展（**同一 writer 写两份，两句 `AddSource`**） | `{类}_{命名空间下划线}_AOP.g.cs` / `{类}_{命名空间下划线}_AopExt.g.cs` | `Writers/AopWriter.cs:32`、`:50`；`AopProxy.cs:31/36` |
 | Command | `{类}_{命名空间下划线}_Commands.g.cs` | `Writers/CommandWriter.cs:129` |
 | MVVM | `{类}_{命名空间下划线\|Global}_MVVM.g.cs` | `Writers/MVVMWriter.cs:847-854` |
-| Mono | `{类}_{命名空间下划线}_Mono.g.cs` | `Writers/MonoWriter.cs:61` |
+| Mono | `{类}_{命名空间下划线}_Tick.g.cs` | `Writers/TickWriter.cs:61` |
 | Theme | `{类}_{命名空间下划线}_ThemeConfig.g.cs` | `Theme.cs:99` |
 | Workflow | 见 `Writers/WorkflowWriter.cs` | — |
 
@@ -170,7 +170,7 @@ context.RegisterSourceOutput(
 
 `Symbol.ContainingNamespace.ToDisplayString()` 在全局命名空间下返回的是字面量 `"<global namespace>"` —— 那个尖括号既是**非法文件名字符**也是**非法标识符字符**。2026-10-01 之前有**两处**会因此炸，而且报错都指向别处：
 
-1. **文件名**（`GetFileName`）—— 拼进 hintName 会让生成器整个抛 `ArgumentException`，宿主只报一句 `CS8785 生成器"Command"未能生成源`，跟命名空间毫不相干。`WriterBase.NamespaceFileSegment()` 统一兜底成 `"Global"`；**五个调用点**（`CommandWriter`/`MVVMWriter`/`AopWriter` ×2/`MonoWriter`）都改用它。`MVVMWriter` 原先自己处理过，现在是同一份。
+1. **文件名**（`GetFileName`）—— 拼进 hintName 会让生成器整个抛 `ArgumentException`，宿主只报一句 `CS8785 生成器"Command"未能生成源`，跟命名空间毫不相干。`WriterBase.NamespaceFileSegment()` 统一兜底成 `"Global"`；**五个调用点**（`CommandWriter`/`MVVMWriter`/`AopWriter` ×2/`TickWriter`）都改用它。`MVVMWriter` 原先自己处理过，现在是同一份。
 2. **生成文件内容**（`WriterBase.Write`）—— 无条件写 `namespace {ContainingNamespace};`，全局命名空间下产出 `namespace <global namespace>;`，**非法语法，产物编不过**。`WriterBase.AppendNamespace()` 在全局命名空间时什么都不写。
 
 `AopWriter` 还有第三处：生成的接口**类型名**里也拼了这个片段（`:39`），同样走 `NamespaceFileSegment()`。
@@ -184,7 +184,7 @@ context.RegisterSourceOutput(
 **泛型类本身与普通嵌套类都没问题**（实测已可用），坏的只有「泛型外类 + 嵌套类」这一个组合。
 
 **泛型方法则本质不支持**：生成的方法组 `Foo` 无法从 `(object?, CancellationToken)` 推断出 `T`（实测 CS0411 + CS0029），除非要求作者在特性里显式给出类型实参 —— 那是另一个设计，目前不做。
-| `Writers/MonoWriter.cs` | `InitializeMonoBehaviour` / `CloseMonoBehaviour` / 5 个 `partial void` 钩子 | `MonoBehaviourAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeMonoBehaviour()` 等于什么都没发生 |
+| `Writers/TickWriter.cs` | `InitializeTickable` / `CloseTickable` / 5 个 `partial void` 钩子 | `TickableAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeTickable()` 等于什么都没发生 |
 | `Writers/AopWriter.cs` | AOP 接口实现 + `Aop()` 扩展方法 | — | 见 §三 |
 | `AopInterface.cs` | AOP 接口本身（`VeloxDev.AopInterfaces` 命名空间） | — | 它**不在 `Writers/` 下**，是唯一一个把生成逻辑直接写在生成器类里的 |
 | `Theme.cs` | `IThemeObject` 实现、主题缓存、`SetThemeValue<T>` 一族 | 5 个 `ThemeConfigAttribute` 元数 | 只对 `partial` 类发 |
@@ -214,7 +214,7 @@ context.RegisterSourceOutput(
 | `Examples/AOP/Avalonia/Demo/Demo.csproj` | `:35` | `:39` |
 | `Examples/MVVM/WPF/Demo/Demo.csproj` | `:17` | `:21` |
 | `Examples/MVVM/Avalonia/Demo/Demo.csproj` | `:35` | `:39` |
-| `Examples/MonoBehaviour/WPF/Demo/Demo.csproj` | `:17` | `:21` |
+| `Examples/Tickable/WPF/Demo/Demo.csproj` | `:17` | `:21` |
 
 **共 9 处 `PackageReference`、9 处 `ProjectReference`，全部 `Version="9.0.0"`；而包自己的 `<Version>` 是 `9.0.228`（`VeloxDev.Core.Generator.csproj:11`）。两者不相等是刻意的，见 [extension.md](extension.md) §四。** （任务书里说的「11 处」在树里复核不到：全仓 grep `VeloxDev.Core.Generator` 命中引用点就是上表 18 条，另有 `VeloxDev.Core.Generator.csproj:10/37/38` 是包自己；`9.0.153` 在任何构建文件里都不存在，只出现在 `Src/Generators/VeloxDev.Core.Generator/bin/Release/netstandard2.0/VeloxDev.Core.Generator.deps.json:10` 这个构建产物里。以代码为准。）
 
@@ -224,7 +224,7 @@ context.RegisterSourceOutput(
 
 ## 六、陷阱（带依据）
 
-1. **全局命名空间会生成出非法 namespace。** `Writers/WriterBase.cs:63` 与 `:72` 无条件写 `namespace {Symbol.ContainingNamespace};` —— 而 `INamespaceSymbol.ToDisplayString()` 对全局命名空间返回字面量 `"<global namespace>"`，于是产物里出现 `namespace <global namespace>;`。同理，`Writers/AopWriter.cs:32/39/50`、`AopInterface.cs:35`、`Writers/CommandWriter.cs:129`、`Writers/MonoWriter.cs:61` 都直接用 `ToDisplayString().Replace('.', '_')`，不含全局命名空间分支 —— 全局命名空间的类会得到 `{类}_<global namespace>_Aop` 这种文件名/接口名。**全模块只有 `Writers/MVVMWriter.cs:850-853` 处理了这一情形**（`IsGlobalNamespace ? "Global"`）。**行为已存在，不要以为某处有统一的守卫。**
+1. **全局命名空间会生成出非法 namespace。** `Writers/WriterBase.cs:63` 与 `:72` 无条件写 `namespace {Symbol.ContainingNamespace};` —— 而 `INamespaceSymbol.ToDisplayString()` 对全局命名空间返回字面量 `"<global namespace>"`，于是产物里出现 `namespace <global namespace>;`。同理，`Writers/AopWriter.cs:32/39/50`、`AopInterface.cs:35`、`Writers/CommandWriter.cs:129`、`Writers/TickWriter.cs:61` 都直接用 `ToDisplayString().Replace('.', '_')`，不含全局命名空间分支 —— 全局命名空间的类会得到 `{类}_<global namespace>_Aop` 这种文件名/接口名。**全模块只有 `Writers/MVVMWriter.cs:850-853` 处理了这一情形**（`IsGlobalNamespace ? "Global"`）。**行为已存在，不要以为某处有统一的守卫。**
 2. **生成器不发任何诊断。** 特性名拼错、类忘了写 `partial`（`Base/Analizer.cs:160-165`）、`CanWrite()` 为 false、`Theme.cs` 没注册属性 —— 四种情况都表现为「编译通过、什么都没生成」。排查时先看 `obj/<配置>/<TFM>/generated/...` 下有没有产物，别指望错误列表。
 3. **`TriggerAttributes` 只有 10 条且硬编码**（`Base/Analizer.cs:82-94`）。新特性不进去，生成器对该类型**完全无感且不报错**。
 4. **`AopProxy.cs` 一个类连着两次 `AddSource`**（`:31`、`:36`）。加第三份产物必须自己保证 hint name 不撞。

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using System.Threading;
@@ -54,45 +54,45 @@ public partial class MainWindow : Window
         {
             // 先注册,再配帧率,最后启动。注册只入队一个动作,由更新循环在它的第一帧体里取走并触发 Awake/Start,
             // 所以顺序不影响「生命周期先于第一帧」这条结论 —— 参数里的 -1 也让注册永远不会覆写下面这个帧率。
-            InitializeMonoBehaviour();
+            InitializeTickable();
             _registered = true;
-            MonoBehaviourManager.SetTargetFPS(30, DemoChannel.Name);
-            MonoBehaviourManager.Start(DemoChannel.Name);
+            TickManager.SetTargetFPS(30, DemoChannel.Name);
+            TickManager.Start(DemoChannel.Name);
             _poll.Start();
         };
 
         Closing += (_, _) =>
         {
             _poll.Stop();
-            if (_registered) CloseMonoBehaviour();
+            if (_registered) CloseTickable();
             // 不 await:窗口关掉之后进程就结束了,两条泵都是后台线程。等一个 Join 只会让关闭看起来卡了一下。
-            _ = MonoBehaviourManager.StopAsync(DemoChannel.Name);
+            _ = TickManager.StopAsync(DemoChannel.Name);
         };
     }
 
     #region Controls
 
-    private void Fps60(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetTargetFPS(60, DemoChannel.Name);
+    private void Fps60(object sender, RoutedEventArgs e) => TickManager.SetTargetFPS(60, DemoChannel.Name);
 
-    private void Fps30(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetTargetFPS(30, DemoChannel.Name);
+    private void Fps30(object sender, RoutedEventArgs e) => TickManager.SetTargetFPS(30, DemoChannel.Name);
 
-    private void Fps10(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetTargetFPS(10, DemoChannel.Name);
+    private void Fps10(object sender, RoutedEventArgs e) => TickManager.SetTargetFPS(10, DemoChannel.Name);
 
-    private void Fps2(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetTargetFPS(2, DemoChannel.Name);
+    private void Fps2(object sender, RoutedEventArgs e) => TickManager.SetTargetFPS(2, DemoChannel.Name);
 
-    private void Step16(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetFixedUpdateInterval(16, DemoChannel.Name);
+    private void Step16(object sender, RoutedEventArgs e) => TickManager.SetFixedUpdateInterval(16, DemoChannel.Name);
 
-    private void Step33(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetFixedUpdateInterval(33, DemoChannel.Name);
+    private void Step33(object sender, RoutedEventArgs e) => TickManager.SetFixedUpdateInterval(33, DemoChannel.Name);
 
-    private void Step50(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetFixedUpdateInterval(50, DemoChannel.Name);
+    private void Step50(object sender, RoutedEventArgs e) => TickManager.SetFixedUpdateInterval(50, DemoChannel.Name);
 
-    private void Rate0(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetTimeScale(0f, DemoChannel.Name);
+    private void Rate0(object sender, RoutedEventArgs e) => TickManager.SetTimeScale(0f, DemoChannel.Name);
 
-    private void Rate1(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetTimeScale(1f, DemoChannel.Name);
+    private void Rate1(object sender, RoutedEventArgs e) => TickManager.SetTimeScale(1f, DemoChannel.Name);
 
-    private void Rate2(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetTimeScale(2f, DemoChannel.Name);
+    private void Rate2(object sender, RoutedEventArgs e) => TickManager.SetTimeScale(2f, DemoChannel.Name);
 
-    private void Rate4(object sender, RoutedEventArgs e) => MonoBehaviourManager.SetTimeScale(4f, DemoChannel.Name);
+    private void Rate4(object sender, RoutedEventArgs e) => TickManager.SetTimeScale(4f, DemoChannel.Name);
 
     private void HitchUpdate(object sender, RoutedEventArgs e) => Interlocked.Exchange(ref _state.UpdateHitchMs, 300);
 
@@ -100,13 +100,13 @@ public partial class MainWindow : Window
 
     private void HitchForgive(object sender, RoutedEventArgs e) => Interlocked.Exchange(ref _state.FixedHitchMs, 1500);
 
-    private void StartChannel(object sender, RoutedEventArgs e) => MonoBehaviourManager.Start(DemoChannel.Name);
+    private void StartChannel(object sender, RoutedEventArgs e) => TickManager.Start(DemoChannel.Name);
 
-    private void StopChannel(object sender, RoutedEventArgs e) => _ = MonoBehaviourManager.StopAsync(DemoChannel.Name);
+    private void StopChannel(object sender, RoutedEventArgs e) => _ = TickManager.StopAsync(DemoChannel.Name);
 
-    private void PauseChannel(object sender, RoutedEventArgs e) => MonoBehaviourManager.Pause(DemoChannel.Name);
+    private void PauseChannel(object sender, RoutedEventArgs e) => TickManager.Pause(DemoChannel.Name);
 
-    private void ResumeChannel(object sender, RoutedEventArgs e) => MonoBehaviourManager.Resume(DemoChannel.Name);
+    private void ResumeChannel(object sender, RoutedEventArgs e) => TickManager.Resume(DemoChannel.Name);
 
     /// <summary>
     /// Takes the behaviour off the channel. The next registration re-runs Awake and Start on it.
@@ -120,7 +120,7 @@ public partial class MainWindow : Window
     /// </remarks>
     private void Unregister(object sender, RoutedEventArgs e)
     {
-        CloseMonoBehaviour();
+        CloseTickable();
         _registered = false;
         BtnUnregister.IsEnabled = false;
         BtnRegister.IsEnabled = true;
@@ -128,7 +128,7 @@ public partial class MainWindow : Window
 
     private void RegisterAgain(object sender, RoutedEventArgs e)
     {
-        MonoBehaviourManager.RegisterBehaviour(this, DemoChannel.Name);
+        TickManager.RegisterBehaviour(this, DemoChannel.Name);
         _registered = true;
         BtnUnregister.IsEnabled = true;
         BtnRegister.IsEnabled = false;
@@ -304,16 +304,16 @@ public partial class MainWindow : Window
             $"  ({(step > 0 ? unspent / step : 0),5:F2} 步 · 稳态应在 [0, h) 内)" +
             $"  ·  有效步长比 {ratio:F3}  (实测 D/h {measured:F3})";
 
-        var bus = MonoBehaviourManager.Bus(DemoChannel.Name);
+        var bus = TickManager.Bus(DemoChannel.Name);
         ChannelLine.Text =
             $"通道      {DemoChannel.Name}" +
             $"  IsAdvancing {bus?.IsAdvancing}  IsPaused {bus?.IsPaused}  Epoch {bus?.Epoch}" +
             $"  Rate {bus?.Rate ?? 0:F2}×" +
-            $"  TargetFPS {MonoBehaviourManager.TargetFPS(DemoChannel.Name)}" +
-            $"  CurrentFPS {MonoBehaviourManager.CurrentFPS(DemoChannel.Name)}" +
-            $"  SystemStatus {MonoBehaviourManager.SystemStatus(DemoChannel.Name)}" +
-            $"  Threads {Alive(MonoBehaviourManager.IsUpdateThreadAlive(DemoChannel.Name))}" +
-            $"/{Alive(MonoBehaviourManager.IsFixedUpdateThreadAlive(DemoChannel.Name))}";
+            $"  TargetFPS {TickManager.TargetFPS(DemoChannel.Name)}" +
+            $"  CurrentFPS {TickManager.CurrentFPS(DemoChannel.Name)}" +
+            $"  SystemStatus {TickManager.SystemStatus(DemoChannel.Name)}" +
+            $"  Threads {Alive(TickManager.IsUpdateThreadAlive(DemoChannel.Name))}" +
+            $"/{Alive(TickManager.IsFixedUpdateThreadAlive(DemoChannel.Name))}";
 
         HandledLine.Text =
             $"Handled   复选框 {(ChkHandled.IsChecked == true ? "开" : "关")}" +
@@ -385,7 +385,7 @@ public partial class MainWindow : Window
 
     private void DrawPayload(BallReport update, BallReport fixedReport)
     {
-        var bus = MonoBehaviourManager.Bus(DemoChannel.Name);
+        var bus = TickManager.Bus(DemoChannel.Name);
         var step = fixedReport.DtMilliseconds;
 
         Payload.Text = string.Join(';',

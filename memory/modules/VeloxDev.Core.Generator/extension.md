@@ -1,4 +1,4 @@
-# VeloxDev.Core.Generator — 扩展
+﻿# VeloxDev.Core.Generator — 扩展
 
 > 代码：`Src/Generators/VeloxDev.Core.Generator/`。**本文件里不写全路径的文件名都指这个目录**（`Base/Analizer.cs`、`Writers/MVVMWriter.cs`、`Theme.cs` …）。
 > 架构与流向见 [architecture.md](architecture.md)。
@@ -92,7 +92,7 @@
 | 6 | `Examples/AOP/Avalonia/Demo/Demo.csproj:39` |
 | 7 | `Examples/MVVM/WPF/Demo/Demo.csproj:21` |
 | 8 | `Examples/MVVM/Avalonia/Demo/Demo.csproj:39` |
-| 9 | `Examples/MonoBehaviour/WPF/Demo/Demo.csproj:21` |
+| 9 | `Examples/Tickable/WPF/Demo/Demo.csproj:21` |
 
 **为什么每处都要重复写**：Debug 走 `ProjectReference`、Release 走包，而**分析器不随 `ProjectReference` 传递**（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj:30-31` 的注释原文：「Debug 用本地生成器源码，Release 用包。analyzer 不随 ProjectReference 传递，所以用到生成器特性的项目都要各自重复这一对。」）。`Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj:30` 又重复了一遍同样的理由。
 
@@ -100,7 +100,7 @@
 
 **升版本的完整动作**：`VeloxDev.Core.Generator.csproj:11` → 上表 9 处 `Version=` 全改 → 想清 Release 会不会静默还原旧包（Debug 看不出问题）。路径基准注意 `Examples/Workflow/Directory.Build.props:5` 的说法：基准是导入方项目目录，必须走 `MSBuildThisFileDirectory`。
 
-> **复核口径**：全仓 grep `VeloxDev.Core.Generator` 的引用点就是上表 9 条 `PackageReference` + 同样 9 个文件里的 `ProjectReference`（`VeloxDev.Core.csproj:33`、`VeloxDev.Core.Extension.csproj:32`、`VeloxDev.Core.Extension.Test.csproj:26`、`Examples/Workflow/Directory.Build.props:6`、四个 Demo 的 `:35/:17/:35/:17`、`Examples/MonoBehaviour/WPF/Demo/Demo.csproj:17`）。**「11 处」在树里复核不到；`9.0.153` 也不在任何构建文件里**，只在 `Src/Generators/VeloxDev.Core.Generator/bin/Release/netstandard2.0/VeloxDev.Core.Generator.deps.json:10` 这个构建产物中出现。
+> **复核口径**：全仓 grep `VeloxDev.Core.Generator` 的引用点就是上表 9 条 `PackageReference` + 同样 9 个文件里的 `ProjectReference`（`VeloxDev.Core.csproj:33`、`VeloxDev.Core.Extension.csproj:32`、`VeloxDev.Core.Extension.Test.csproj:26`、`Examples/Workflow/Directory.Build.props:6`、四个 Demo 的 `:35/:17/:35/:17`、`Examples/Tickable/WPF/Demo/Demo.csproj:17`）。**「11 处」在树里复核不到；`9.0.153` 也不在任何构建文件里**，只在 `Src/Generators/VeloxDev.Core.Generator/bin/Release/netstandard2.0/VeloxDev.Core.Generator.deps.json:10` 这个构建产物中出现。
 
 ---
 
@@ -144,6 +144,6 @@
 |---|---|---|
 | `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | `Base/AnalizeHelper.cs:12-17` | **没有调用者**。实际用的是同名的符号重载 `:43-46`（调用点 `AopInterface.cs:28`、`Writers/AopWriter.cs:24`）。语法版只扫**单份声明**的成员，是符号版之前的写法；留着但无效 |
 | `Generators.AgentCatalog` | `Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` | **源码里已不存在**。当前 16 个 `.cs` 无此类，当前 Debug 产物 DLL 中 `AgentCatalog` 命中 0 次。`obj/` 里那份 149 KB 是陈旧产物，别拿它当现状 |
-| `GenerateBaseTypes()` | `Writers/AopWriter.cs:41`、`Writers/CommandWriter.cs:119`、`Writers/MonoWriter.cs:124`、`Writers/MVVMWriter.cs:866` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:65` 真正用到了它 |
+| `GenerateBaseTypes()` | `Writers/AopWriter.cs:41`、`Writers/CommandWriter.cs:119`、`Writers/TickWriter.cs:124`、`Writers/MVVMWriter.cs:866` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:65` 真正用到了它 |
 | MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：两处构造一直传 `isView: false`（`Writers/MVVMWriter.cs:105`、`:131`），这条分支从未被走到，于是连同同样没人读的 `modifies` 参数与 `Modifies` 属性一并移除。现在 `MVVMPropertyFactory` 只有 `MVVMPropertyFactory(analyzer)` 一个参数，`Generate()`（原 `GenerateViewModel` 改名）是唯一出口。**要恢复 View 支持，必须同时改构造签名、`Generate()` 与调用点** —— 别再只加参数不加分支 |
 | `VeloxDev.Core.Generator.targets` 的版本门槛 | `VeloxDev.Core.Generator.targets:8-19` | **活着，但条件刻意放宽**：`RoslynVersion` 为空时**跳过检查**（`:13-15` 的注释：现代宿主上的 netframework TFM 拿不到该属性，跳过以免误报）。所以这条诊断**不会**在每个项目上都出现 |

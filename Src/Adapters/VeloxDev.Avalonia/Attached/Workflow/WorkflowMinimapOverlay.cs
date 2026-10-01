@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -378,7 +378,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         _pendingRefresh = true;
         if (!IsVisible) return;
 
-        // OnNodePropChanged can fire from the MonoBehaviourManager loop thread.
+        // OnNodePropChanged can fire from the TickManager loop thread.
         // InvalidateVisual requires the UI thread — dispatch if needed.
         if (Dispatcher.UIThread.CheckAccess())
             InvalidateVisual();

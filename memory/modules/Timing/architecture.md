@@ -1,4 +1,4 @@
-# Timing 架构
+﻿# Timing 架构
 
 > 代码：`Src/Core/VeloxDev.Core/Timing/`（5 个 .cs）、契约在 `Src/Core/VeloxDev.Core/Interfaces/Timing/`（6 个文件）。
 > 这是**全仓库唯一的时间权威**。任何「现在几点、走了多远、还走不走」的问题，答案只在这里。
@@ -139,8 +139,8 @@
 
 | 调用 | 位置 |
 |---|---|
-| `TimerCore.CreateTimeSource<ITimeSourceControl>()` | `TransitionSystem/Transition.cs:386`（默认时间轴）、`TransitionSystem/SamplerSet.cs:78`（没人控制得住的私有时间轴）、`DynamicTheme/ThemeManager.cs:236`（整场共享一条轴）、`TimeLine/MonoBehaviourManager.cs:117`（每个 channel 一条总线） |
-| `TimerCore.CreateTimeSampler<...>` | `TimeLine/MonoBehaviourManager.cs:164-167`（两个采样器，显式 16ms 步长） |
+| `TimerCore.CreateTimeSource<ITimeSourceControl>()` | `TransitionSystem/Transition.cs:386`（默认时间轴）、`TransitionSystem/SamplerSet.cs:78`（没人控制得住的私有时间轴）、`DynamicTheme/ThemeManager.cs:236`（整场共享一条轴）、`TimeLine/TickManager.cs:117`（每个 channel 一条总线） |
+| `TimerCore.CreateTimeSampler<...>` | `TimeLine/TickManager.cs:164-167`（两个采样器，显式 16ms 步长） |
 
 也就是说 **Timing 只服务 `TransitionSystem` 与 `TimeLine` 两个模块**。`Src/Adapters/` 下七家 GUI 适配器**一家都不直接引用 Timing**（它们经 `Transition<T>`/`TransitionHostBase` 间接用）。
 

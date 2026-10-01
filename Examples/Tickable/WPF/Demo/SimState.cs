@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Threading;
 using VeloxDev.TimeLine;
 
@@ -18,7 +18,7 @@ internal static class DemoChannel
     /// and the frame rate it configured never existed. A channel is named here, started here, and read back on
     /// screen; that is what makes the numbers below mean what they say.
     /// </remarks>
-    public const string Name = MonoBehaviourManager.DEFAULT_CHANNEL;
+    public const string Name = TickManager.DEFAULT_CHANNEL;
 
     /// <summary>Gravity the balls integrate under, m/s². Chosen so one fall takes about 1.6 s.</summary>
     public const double Gravity = 1.2;

@@ -1,4 +1,4 @@
-# WorkflowSystem 扩展
+﻿# WorkflowSystem 扩展
 
 > 配套阅读：`architecture.md`（本目录）；平台差异见 `adapters/<平台>.md`；连接/视图层的**逐平台做法**见
 > `skills/veloxdev-create-workflow/references/new-adapter.md` 与 `references/view-layer.md`。本文**不重复**平台差异。
@@ -119,7 +119,7 @@
 
 ```csharp
 public TreeHelper()                { useVirtualization = false; }   // 不开虚拟化，也不起 10fps tick
-public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且启动 MonoBehaviour "TreeHelper"
+public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且启动 Tickable "TreeHelper"
 ```
 依据：`Templates/Helpers/TreeHelper.cs:34-46`。自定义 Helper 若要虚拟化，**必须**自己选 `useVirtualization = true` 并调 `tree.EnableMap(CellSize, VisibleItems)`（参考 `:109`），否则 `Virtualize` 抛 `ArgumentNullException`（`GUI/Virtualization/WorkflowSpatialEx.cs:128`）。
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -307,7 +307,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         if (!IsVisible) return;
 
         // OnNodePropChanged / OnSlotPropChanged can fire from the
-        // MonoBehaviourManager loop thread (via BroadcastVisibleItemLayout).
+        // TickManager loop thread (via BroadcastVisibleItemLayout).
         // InvalidateVisual requires the UI thread — dispatch if needed.
         if (Dispatcher.CheckAccess())
             InvalidateVisual();

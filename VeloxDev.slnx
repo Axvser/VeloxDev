@@ -28,9 +28,9 @@
   <Folder Name="/Examples/AOP/WPF/">
     <Project Path="Examples/AOP/WPF/Demo/Demo.csproj" />
   </Folder>
-  <Folder Name="/Examples/MonoBehaviour/" />
-  <Folder Name="/Examples/MonoBehaviour/WPF/">
-    <Project Path="Examples/MonoBehaviour/WPF/Demo/Demo.csproj" />
+  <Folder Name="/Examples/Tickable/" />
+  <Folder Name="/Examples/Tickable/WPF/">
+    <Project Path="Examples/Tickable/WPF/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/MVVM/" />
   <Folder Name="/Examples/MVVM/Avalonia/">

@@ -1,4 +1,4 @@
-# WorkflowSystem — WPF
+﻿# WorkflowSystem — WPF
 
 > **读法**：契约（七个视图角色、附着属性、注册位置、联动清单）在 `memory/modules/WorkflowSystem/extension.md` §3.9 与 §4.3，
 > 本文不重复；人面向的「怎么搭一个 WPF 工作流视图」在 `skills/veloxdev-create-workflow/references/gui/wpf.md`，
@@ -76,7 +76,7 @@ if (Dispatcher.CheckAccess()) InvalidateVisual();
 else Dispatcher.BeginInvoke(InvalidateVisual);
 ```
 
-理由在注释 `:309-311`：节点的 `PropertyChanged` 可能从 MonoBehaviourManager 的循环线程到达（`BroadcastVisibleItemLayout` 那条路）。**这是 Core 驱动的、与平台无关的原因** —— 任何订阅节点 `PropertyChanged` 去做渲染的适配器都要处理它，只是各家的分发 API 不同。
+理由在注释 `:309-311`：节点的 `PropertyChanged` 可能从 TickManager 的循环线程到达（`BroadcastVisibleItemLayout` 那条路）。**这是 Core 驱动的、与平台无关的原因** —— 任何订阅节点 `PropertyChanged` 去做渲染的适配器都要处理它，只是各家的分发 API 不同。
 
 ### 2.6 立即模式渲染：小地图自己画，也因此要自己解决命中测试
 

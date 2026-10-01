@@ -1,10 +1,10 @@
 ﻿namespace VeloxDev.TimeLine
 {
     /// <summary>
-    /// Enables the instance to run MonoBehaviour-like lifecycle methods in the TimeLine system.
+    /// Enables the instance to run tick-based lifecycle methods in the TimeLine system.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-    public sealed class MonoBehaviourAttribute(string channel = MonoBehaviourManager.DEFAULT_CHANNEL, int fps = -1) : Attribute
+    public sealed class TickableAttribute(string channel = TickManager.DEFAULT_CHANNEL, int fps = -1) : Attribute
     {
         /// <summary>
         /// The named channel this behaviour will be registered to.

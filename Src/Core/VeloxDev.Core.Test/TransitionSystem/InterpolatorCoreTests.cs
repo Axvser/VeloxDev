@@ -1,4 +1,4 @@
-using VeloxDev.TransitionSystem.Abstractions;
+﻿using VeloxDev.TransitionSystem.Abstractions;
 using VeloxDev.TransitionSystem.NativeSamplers;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
@@ -7,7 +7,7 @@ namespace VeloxDev.Core.Test.TransitionSystem;
 // Each test writes only its own private Type key and always removes it in finally, so tests
 // are order-independent and never clobber each other or the native defaults — the identity
 // assertions hold regardless of parallelization. [DoNotParallelize] is kept purely as
-// defense-in-depth for the shared static registry (matching MonoBehaviourManagerTests),
+// defense-in-depth for the shared static registry (matching TickManagerTests),
 // not because the tests require serial execution.
 [TestClass]
 [DoNotParallelize]

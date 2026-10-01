@@ -1,4 +1,4 @@
-# Interfaces — 扩展
+﻿# Interfaces — 扩展
 
 > 契约分层与归属规则在 `architecture.md`，本文只回答「我要加一个新契约，照哪套来」。
 > 写法提醒：文件名与命名空间**不同步**（`Interfaces/Timing/ITimeSource.cs` 的命名空间是 `VeloxDev.Timing`），所以本文里凡是说「放哪个目录」都指**路径**，不是命名空间。
@@ -11,9 +11,9 @@
 |---|---|---|
 | 1. 有几个「实现方家族」？ | ≥2（Core 一份 + 应用/适配器/生成器各自一份） | 只有 1 个 → 跟实现同住（`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/*/Contracts/` 那 6 个就是这样） |
 | 2. 它是不是某份 EventArgs / 某个具体类型的附属？ | 不是，可独立命名 | 是 → 与宿主同文件（`Src/Core/VeloxDev.Core/AI/AgentConfirmationEventArgs.cs:37` 的 `IAgentConfirmationNotifier`） |
-| 3. 它的实现方里有没有**生成器**？ | 有 → 必须进 `Interfaces/`，因为生成器按**字符串全名**引用（`Src/Generators/VeloxDev.Core.Generator/Theme.cs:18-20`、`Writers/MonoWriter.cs:66`），放哪儿都得是稳定路径 | 没有 → 按 1、2 判断 |
+| 3. 它的实现方里有没有**生成器**？ | 有 → 必须进 `Interfaces/`，因为生成器按**字符串全名**引用（`Src/Generators/VeloxDev.Core.Generator/Theme.cs:18-20`、`Writers/TickWriter.cs:66`），放哪儿都得是稳定路径 | 没有 → 按 1、2 判断 |
 
-三问都过，再选子目录：**子目录 = 它服务的模块**（`AspectOriented`/`DynamicTheme`/`MVVM`/`MonoBehaviour`/`Timing`/`TransitionSystem`/`WorkflowSystem`），不是按「契约种类」分。一个新模块的契约就新开一个子目录。
+三问都过，再选子目录：**子目录 = 它服务的模块**（`AspectOriented`/`DynamicTheme`/`MVVM`/`Tickable`/`Timing`/`TransitionSystem`/`WorkflowSystem`），不是按「契约种类」分。一个新模块的契约就新开一个子目录。
 
 **判据的可执行版本**：`grep -rn "public interface" Src/Core/VeloxDev.Core/Interfaces/` 得到 44 条 —— 每一条都能指名它的 ≥2 个实现方家族；做不到的那 13 条都在 `Interfaces/` 外（清单见 `architecture.md` §二）。当前分布：`WorkflowSystem` 17 文件 / `TransitionSystem` 9 / `Timing` 5 / `DynamicTheme` 3 / 其余各 1。
 
@@ -43,7 +43,7 @@
 |---|---|
 | `ITransitionEffect.cs:36` 的 `InvokeCancled` | 拼写错（`Canceled` 在 `:24` 是对的，`InvokeCancled` 少一个 `c`）。**改名是破坏性变更**：`Src/Core/VeloxDev.Core/TransitionSystem/TransitionEffect.cs:49` 的私有字段也叫 `_cancled`。新契约别复制这个拼写 |
 | `IVeloxCommand`（`IVeloxCommand.cs:5`） | 它 `: System.Windows.Input.ICommand` —— 契约直接继承了一个 BCL 接口，于是实现方必须同时满足两边。只在「所有实现方本来就都要实现 BCL 接口」时才这么做 |
-| `Interfaces/MonoBehaviour/IMonoBehaviour​.cs` | 文件名与标识符里有 U+200B（`:5` 声明、`:7` 成员）。**新契约绝对不要**：编译器忽略它，所以能编译，但裸路径打不开、`grep -l` 漏、文档生成器可能崩 |
+| `Interfaces/Tickable/ITickable.cs` | 名字里曾有 U+200B，**2026-10-01 已清除**（见 architecture.md §八·9）。**新契约绝对不要**引入 Cf 类字符：编译器忽略它，所以能编译，但裸路径打不开、`grep -l` 漏、文档生成器可能崩 —— 而代码评审看不出来 |
 | `IWorkflowViewModel.cs:9` | 单个文件里声明 2–3 个接口（`ITransitionScheduler.cs` 3 个、四族 VM 各 2 个）是既有做法，但代价是**按文件名找接口会失效**；新契约优先一文件一接口 |
 
 ---
@@ -106,7 +106,7 @@
 
 ### 4. 改契约名/挪命名空间 = 改一个**字符串常量**，编译器不会提醒你
 
-生成器侧按硬编码全名匹配（`Theme.cs:18-20` 三条 `"global::VeloxDev.DynamicTheme.ITheme"` 之类、`Writers/MonoWriter.cs:66`、`AopInterface.cs:41`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`）。改名后 Core 编译通过、**生成器静默不生成**，症状是「类型上少了个属性/方法」，报错点离病因很远。所以：改名必须同时 `grep -n "<旧全名>" Src/Generators/`。
+生成器侧按硬编码全名匹配（`Theme.cs:18-20` 三条 `"global::VeloxDev.DynamicTheme.ITheme"` 之类、`Writers/TickWriter.cs:66`、`AopInterface.cs:41`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`）。改名后 Core 编译通过、**生成器静默不生成**，症状是「类型上少了个属性/方法」，报错点离病因很远。所以：改名必须同时 `grep -n "<旧全名>" Src/Generators/`。
 
 ### 5. 异步成员：官方是「换行 + 取消参数放最后」，别自己造 `AsyncResult`
 
@@ -122,10 +122,10 @@
 
 | # | 联动点 | 漏了会怎样 |
 |---|---|---|
-| 1 | `Src/Generators/VeloxDev.Core.Generator/` 里的**字符串全名**（`Theme.cs`、`AopInterface.cs`、`Writers/{MonoWriter,CommandWriter,WorkflowWriter}.cs`） | 改名后静默不生成，症状远离病因 |
+| 1 | `Src/Generators/VeloxDev.Core.Generator/` 里的**字符串全名**（`Theme.cs`、`AopInterface.cs`、`Writers/{TickWriter,CommandWriter,WorkflowWriter}.cs`） | 改名后静默不生成，症状远离病因 |
 | 2 | 七家适配器 `Src/Adapters/<平台>/PlatformAdapters/`（`UIThreadInspector` / `Samplers/` / `ThemeValueConverters` / `Attached/Workflow/*`） | 编译失败（好情况）或漏一家（见 §五·1 的规模差异） |
 | 3 | Core 侧的**默认实现**：`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/*DefaultViewModel.cs`、`TransitionSystem/{TransitionInterpreter,TransitionScheduler,TransitionEffect,TransitionProperty}.cs` | 编译失败 |
 | 4 | `Src/Templates/*/working/content/<契约名>/` 与 `Examples/`（`IWorkflowGridDecorator`/`IWorkflowMinimapOverlay` 在这两处有实现，不在适配器本体的那 5 家只能在这里补） | 该平台的示例/模板缺能力 |
 | 5 | 若是注册表键：`TimerCore.RegisterTimeSource<…>` 的所有调用点（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs` 定义，`TransitionSystem/SamplerSet.cs:78`、`Transition.cs:386` 消费） | 运行期抛「未注册」，编译期无感 |
-| 6 | `Tests`：`Src/Core/VeloxDev.Core.Test/` 下的手写实现（`DynamicTheme/ThemeTransitionTests.cs:48`、`TimeLine/MonoBehaviourBusTests.cs:46` 是 `IThemeObject`/`IMonoBehaviour` 仅存的手写实现） | 测试编译失败 |
+| 6 | `Tests`：`Src/Core/VeloxDev.Core.Test/` 下的手写实现（`DynamicTheme/ThemeTransitionTests.cs:48`、`TimeLine/TickableBusTests.cs:46` 是 `IThemeObject`/`ITickable` 仅存的手写实现） | 测试编译失败 |
 | 7 | **不必**动：`Interfaces/` 内的目录结构（挪文件不改命名空间，见 `architecture.md` §一），也不影响任何 `using` | — |

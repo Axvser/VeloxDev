@@ -1,4 +1,4 @@
-# AspectOriented — 架构
+﻿# AspectOriented — 架构
 
 > 代码：`Src/Core/VeloxDev.Core/AspectOriented/`（5 个 .cs），契约在 `Src/Core/VeloxDev.Core/Interfaces/AspectOriented/`（只有 `IAspectOriented.cs`，一个空标记接口）。
 > 生成器：`Src/Generators/VeloxDev.Core.Generator/`。**下文不带路径的文件名都指这个目录**：`AopInterface.cs`、`AopProxy.cs`（根）、`Writers/AopWriter.cs`、`Base/Analizer.cs`、`Base/AnalizeHelper.cs`。它们**不在本模块目录下**，别在 `AspectOriented/` 里找。
@@ -47,7 +47,7 @@
 | `AopWriter` 决定「要不要出接口 + Aop()」 | **按符号**（`IsAopClass(symbol)`，跨全部分片部分类看） | `Base/AnalizeHelper.cs:43-46`、`Writers/AopWriter.cs:22-25` |
 
 - 走符号的理由写在 `AnalizeHelper.cs:19-22`：成员可能落在**另一个**分片部分类文件上，只看手上这一份会整类静默不产出。`Analizer.cs:100-106` 的备注把同一件事再说了一遍（「Attributes are resolved as symbols rather than matched by name」）。
-- **但「哪一份分片被交给 writer」另有一条规定**：`Analizer.cs:75-81` 说明**类级特性排在清单前面**，目的是让「带类级特性的那一份声明」成为部分类型的**代表**——因为 `MonoWriter`、`AopWriter`、`AopInterface` 是**语法作用域**的 writer，从它们拿到的那一份声明上读特性。`AopWriter` 明知这一点仍走符号（`AopWriter.cs:19-21` 与 `:24`），于是「代表是哪一份」只影响它产出的**文件名**（`Syntax.Identifier.Text` + 命名空间），不影响判定结果。
+- **但「哪一份分片被交给 writer」另有一条规定**：`Analizer.cs:75-81` 说明**类级特性排在清单前面**，目的是让「带类级特性的那一份声明」成为部分类型的**代表**——因为 `TickWriter`、`AopWriter`、`AopInterface` 是**语法作用域**的 writer，从它们拿到的那一份声明上读特性。`AopWriter` 明知这一点仍走符号（`AopWriter.cs:19-21` 与 `:24`），于是「代表是哪一份」只影响它产出的**文件名**（`Syntax.Identifier.Text` + 命名空间），不影响判定结果。
 - 走文本的后果：一个**别的**叫 `AspectOriented` 的特性同样会被当成标记；反过来，字段那条路认的 MVVM 特性也是文本匹配 `Contains("Observable") || Contains("Property")`（`AopInterface.cs:47-48`）—— `[VeloxProperty]` 与 CommunityToolkit 的 `[ObservableProperty]` 都算。
 - 字段标记后，接口里出现的是**推导出的属性名**（`_name` → `Name`，`AnalizeHelper.cs:55-65`），且接口一律给 `{ get; set; }`（`AopInterface.cs:57-67`）。
 

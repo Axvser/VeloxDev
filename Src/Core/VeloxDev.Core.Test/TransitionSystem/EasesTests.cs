@@ -1,4 +1,4 @@
-using VeloxDev.TransitionSystem;
+﻿using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
 
@@ -53,7 +53,7 @@ public class EasesTests
     }
 
     [TestMethod]
-    public void QuadIn_IsMonotonicallyIncreasing()
+    public void QuadIn_IsTickabletonicallyIncreasing()
     {
         var ease = Eases.Quad.In;
         double prev = 0;

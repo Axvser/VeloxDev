@@ -27,7 +27,7 @@ public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 /// [ Component Helper ] Provide standard supports for Tree Component
 /// </summary>
 /// <typeparam name="T">The type of the Tree ViewModel that this helper is designed for.</typeparam>
-[MonoBehaviour(channel: nameof(TreeHelper), fps: 10)]
+[Tickable(channel: nameof(TreeHelper), fps: 10)]
 public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
     where T : class, IWorkflowTreeViewModel
 {
@@ -40,9 +40,9 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
     {
         useVirtualization = true;
         CellSize = cellSize;
-        if (!MonoBehaviourManager.IsRunning(nameof(TreeHelper)))
+        if (!TickManager.IsRunning(nameof(TreeHelper)))
         {
-            MonoBehaviourManager.Start(nameof(TreeHelper));
+            TickManager.Start(nameof(TreeHelper));
         }
     }
 
@@ -120,7 +120,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
         {
             Debug.Fail("EnableMap did not return a non-negative value as expected. Please check the implementation of EnableMap in the IWorkflowTreeViewModel.");
         }
-        InitializeMonoBehaviour();
+        InitializeTickable();
     }
 
     public virtual void Uninstall(IWorkflowTreeViewModel tree)
@@ -137,7 +137,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
             Debug.WriteLine("ClearMap did not return 5 as expected. Please check the implementation of ClearMap in the IWorkflowTreeViewModel.");
         }
         VisibleItems.Clear();
-        CloseMonoBehaviour();
+        CloseTickable();
     }
 
     public virtual void Closing() => commands.StandardClosing();

@@ -1,6 +1,6 @@
-# Interfaces — 架构
+﻿# Interfaces — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/Interfaces/`（**38 个 .cs**，44 个接口声明），7 个子目录按模块分：`AspectOriented/`(1)、`DynamicTheme/`(3)、`MVVM/`(1)、`MonoBehaviour/`(1)、`Timing/`(5)、`TransitionSystem/`(9)、`WorkflowSystem/`(17) —— 这七项加起来是 **37**，即「含接口声明的文件数」；第 38 个文件是 `Timing/TimeSample.cs`（一个 `readonly struct`，不是契约）。
+> 代码：`Src/Core/VeloxDev.Core/Interfaces/`（**38 个 .cs**，44 个接口声明），7 个子目录按模块分：`AspectOriented/`(1)、`DynamicTheme/`(3)、`MVVM/`(1)、`Tickable/`(1)、`Timing/`(5)、`TransitionSystem/`(9)、`WorkflowSystem/`(17) —— 这七项加起来是 **37**，即「含接口声明的文件数」；第 38 个文件是 `Timing/TimeSample.cs`（一个 `readonly struct`，不是契约）。
 > 本文与其他模块的 `architecture.md` 写法不同：**这里没有实现，只有契约的集中地**。所以本文不写「这个模块做什么」，只写**契约的分层与归属规则** —— 哪个接口该谁实现、为什么集中在一个目录、跨模块在哪儿咬合。
 > 契约**成员语义**归各实现模块：`ITimeSource`/`ITimeSampler` 看 `memory/modules/Timing/`，过渡相关看 `memory/modules/TransitionSystem/`，工作流相关看 `memory/modules/WorkflowSystem/`。平台差异**不在这里重复七遍**，看 `memory/modules/TransitionSystem/adapters/<平台>.md` 与 `memory/modules/WorkflowSystem/adapters/<平台>.md`。
 
@@ -49,7 +49,7 @@
 |---|---|---|
 | `IAspectOriented` | **只有生成器**（生成 `VeloxDev.AopInterfaces.*` 接口 + partial 代理） | `Src/Generators/VeloxDev.Core.Generator/AopInterface.cs:41`；仓内唯一可见实现是 `Examples/AOP/WPF/Demo/obj/aopgen/…/TeamViewModel_Demo_Aop.g.cs:3` |
 | `IThemeObject` | **生成器**，除非基类已实现（那时只补 `base.` 调用） | `Src/Generators/VeloxDev.Core.Generator/Theme.cs:121-126`、`:151-154`；手写实现只有测试 `Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs:48` |
-| `IMonoBehaviour` | **生成器**（`MonoWriter` 给带 `[MonoBehaviour]` 的类型补 7 个成员） | `Src/Generators/VeloxDev.Core.Generator/Writers/MonoWriter.cs:66`；手写实现只有测试 `Src/Core/VeloxDev.Core.Test/TimeLine/MonoBehaviourBusTests.cs:46` |
+| `ITickable` | **生成器**（`TickWriter` 给带 `[Tickable]` 的类型补 7 个成员） | `Src/Generators/VeloxDev.Core.Generator/Writers/TickWriter.cs:66`；手写实现只有测试 `Src/Core/VeloxDev.Core.Test/TimeLine/TickableBusTests.cs:46` |
 | `IVeloxCommand` | 实现是 Core 的 `Src/Core/VeloxDev.Core/MVVM/VeloxCommand.cs:18`；**声明方是生成器**（生成 `XXCommand` 属性，类型为 `IVeloxCommand`） | `Src/Generators/VeloxDev.Core.Generator/Writers/CommandWriter.cs:155-174`、`Writers/WorkflowWriter.cs:664+` |
 | `IWorkflow*ViewModel` 四族 | 模板/demo/应用实现（生成器补 commands 与属性通知） | `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/{Tree,Node,Slot,Link}DefaultViewModel.cs:9`、`Src/Templates/*/…/TemplateClass.xaml.cs:52`、`Src/Generators/…/Writers/WorkflowWriter.cs:342-357` |
 | `IWorkflowActionPair`、`ITheme`、`ISlotProvider` | 应用实现 | `Src/Core/VeloxDev.Core/DynamicTheme/{Light,Dark}.cs:3`；`Examples/Workflow/Common/Lib/ViewModels/Workflow/PythonPortProvider.cs:18`（全仓唯一的 `ISlotProvider` 实例） |
@@ -88,7 +88,7 @@
 
 四条，都能在代码里指到：
 
-1. **生成器用字符串全名引用契约。** `Src/Generators/VeloxDev.Core.Generator/Theme.cs:18-20`（`"global::VeloxDev.DynamicTheme.ITheme"` 等三条）、`Writers/MonoWriter.cs:66`、`AopInterface.cs:41`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`。契约一旦改名或换命名空间，生成器**不会**跟着重构（它只认字符串），所以契约必须住在一个稳定、被所有下游共享的位置。
+1. **生成器用字符串全名引用契约。** `Src/Generators/VeloxDev.Core.Generator/Theme.cs:18-20`（`"global::VeloxDev.DynamicTheme.ITheme"` 等三条）、`Writers/TickWriter.cs:66`、`AopInterface.cs:41`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`。契约一旦改名或换命名空间，生成器**不会**跟着重构（它只认字符串），所以契约必须住在一个稳定、被所有下游共享的位置。
 2. **七家适配器要共享同一份定义。** 这件事在本仓真的发生过：`IWorkflowGridDecorator.cs:9-11` 与 `IWorkflowMinimapOverlay.cs:12-14` 的 XML 明说以前每家各有一份相同副本（Jalium 那份还是派生形状），统一到 Core 后由七家共同实现。
 3. **契约是注册表的键。** `TimerCore.CreateTimeSource<TContract>() where TContract : class, ITimeSourceControl`（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs:109`）按**精确契约类型**查表，且 XML 明说不做宽/窄回退（`:102-107`）。契约类型本身是 API 的一部分。
 4. **契约层不引用任何 GUI。** `Interfaces/` 的全部 `using` 只有 3 个系统命名空间（`System.Reflection`/`System.Linq.Expressions`/`System.ComponentModel`）与 6 个仓内模块（见 §五）。`IVeloxCommand : ICommand` 用的是 `System.Windows.Input`（`IVeloxCommand.cs:1`），在 .NET Core 上由 `System.ObjectModel` 提供，不是 WPF 依赖。
@@ -103,7 +103,7 @@
 |---|---|---|
 | `VeloxDev.AI` | 10 | `[AgentContext]`/`[AgentCommandParameter]` 标在 WorkflowSystem 的契约上（`IWorkflowViewModel.cs:7-8`、`IWorkflowTreeViewModel.cs:31-33`、`IContext.cs:10-11` 等）。读取规则见 `memory/modules/AI/architecture.md` |
 | `VeloxDev.MVVM` | 5 | `IVeloxCommand` 作为契约的属性类型（`IWorkflowViewModel.cs:26`、`IWorkflowTreeViewModel.cs:34` 等 22 个命令属性） |
-| `VeloxDev.TimeLine` | 2 | `IMonoBehaviour.cs:1`（`FrameEventArgs`）、`ITransitionEffect.cs:1`（`TransitionEventArgs`） |
+| `VeloxDev.TimeLine` | 2 | `ITickable.cs:1`（`FrameEventArgs`）、`ITransitionEffect.cs:1`（`TransitionEventArgs`） |
 | `VeloxDev.Threading` | 1 | `ITransitionHost.cs:14` 的 `IThreadDispatcher<TPriorityCore>` |
 | `VeloxDev.Lifetime` | 1 | `ITransitionHost.cs:14` 的 `IApplicationState` |
 | `VeloxDev.TransitionSystem.Abstractions` | 2 | `ITransitionScheduler.cs:1`（`InterpolatorCore`）、`ITransitionInterpreter.cs:1`（`SamplerSet<TPriorityCore>`）—— **契约引用了具体类**，见 §八·4 |
@@ -122,7 +122,8 @@
 6. **命令属性的数量按语义给，不按对称**：`IVeloxCommand` 属性在五个契约里是 1（基）/8（Tree）/8（Node）/4（Slot）/1（Link），共 22 个。
 7. **异步成员一律把取消参数放最后**，但默认值不统一：`ITimeSource.cs:100`（`CancellationToken cancellationToken = default`）与 `ITransitionScheduler.cs:11`/`:24`（`CancellationTokenSource? externCts = default`）给默认值，WorkflowSystem 的 `ReceiveAsync`/`BroadcastAsync`/`ReverseBroadcastAsync`/`AccessAsync`（`IWorkflowNodeViewModel.cs:92-107`）不给，必须显式传。
 8. **契约里的拼写错误会被固化。** `ITransitionEffectCore` 有 `Canceled` 事件（`:24`）却只有 `InvokeCancled(...)`（`:36`，少一个 `c`），全仓按错拼写用（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionEffect.cs:49` 的字段就叫 `_cancled`）。
-9. **`IMonoBehaviour` 的文件名与两个标识符都含 U+200B（零宽空格）**：文件名 `Interfaces/MonoBehaviour/IMonoBehaviour​.cs`，声明在 `:5`，成员 `InitializeMonoBehaviour​()` 在 `:7`。生成器发的是**不带** ZWSP 的拼写（`Src/Generators/…/Writers/MonoWriter.cs:66`、生成的 `Src/Core/VeloxDev.Core/obj/Debug/net5.0/generated/…/TreeHelper_VeloxDev_WorkflowSystem_Mono.g.cs:7,9`），而 net5.0 构建 **0 错误** → 编译器忽略 Cf 类字符，两种拼写**是同一个标识符**，DLL 里落地的是无 ZWSP 的写法。坑**只在人这一侧**：用裸路径 `…/IMonoBehaviour.cs` 打开文件会直接失败（实测 `FileNotFoundError`），任何按名字做字符串匹配的工具（脚本、文档生成、`grep -l`）也会漏。**连 `git ls-files` 都受影响**：它会给这个路径加引号并转义成 `"…/IMonoBehaviour\342\200\213.cs"`，于是 `git ls-files Src/Core/VeloxDev.Core/Interfaces/ | grep -c '\.cs$'` 数出的是 **37 而不是 38** —— 数这个目录的文件数时别用这一手（本目录的 38 是 `git ls-files` 不带过滤的行数）。
+9. **`ITickable` 的名字里曾藏着一个 U+200B 零宽空格 —— 2026-10-01 随重命名一并清除**（当时它还叫 `IMonoBehaviour`）。记录留下是因为它**编译得过、代码评审看不出来**，值一条纪律：文件名与 `ITickable` / `InitializeTickable` 两个标识符里各有一个，而编译器忽略 Cf 类字符 ⇒ 两种拼写**是同一个标识符**，元数据里落地的还是无 ZWSP 的写法。坑**全在人这一侧**：裸路径打不开文件（实测 `FileNotFoundError`）、`grep -l` 漏、**连 `git ls-files` 都把路径转义成 `"…\342\200\213.cs"`**，于是 `git ls-files … | grep -c '\.cs$'` 数出 37 而不是 38。
+   **现在这些都不成立了** —— 名字就是普通的 `ITickable`，上面的数法也正常了。**纪律**：新契约的名字里绝不允许出现 Cf 类字符；它编译得过，所以唯一的防线是知道这件事。
 
 ---
 
@@ -134,6 +135,6 @@
 | 平台必须实现哪些成员 | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs`（数据交换契约，逐家实现），以及 `Interfaces/TransitionSystem/ITransitionHost.cs`（组合契约，无成员） |
 | 节点/树/槽/链的数据形状 | `Interfaces/WorkflowSystem/IWorkflow{Tree,Node,Slot,Link}ViewModel.cs`（4 族各含 VM + Helper 两个接口） |
 | 一次数据流访问的入参 | `Interfaces/WorkflowSystem/IAccessContext.cs`（编译期/运行期共用，靠 `IsCompilePhase` 区分） |
-| 生成器会注入哪些成员、注入到哪个接口 | `Src/Generators/VeloxDev.Core.Generator/Writers/`（`MonoWriter.cs:66`、`WorkflowWriter.cs:342-357`、`CommandWriter.cs:155-174`、`Theme.cs:121-154`、`AopInterface.cs:41`） |
+| 生成器会注入哪些成员、注入到哪个接口 | `Src/Generators/VeloxDev.Core.Generator/Writers/`（`TickWriter.cs:66`、`WorkflowWriter.cs:342-357`、`CommandWriter.cs:155-174`、`Theme.cs:121-154`、`AopInterface.cs:41`） |
 | Agent 能否看见这个契约 | `Interfaces/WorkflowSystem/*.cs` 里的 `[AgentContext]`（`IWorkflowTreeViewModel.cs:7-8` 是范式），读取规则在 `memory/modules/AI/architecture.md` |
 | 平台差异（不要在这里找） | `memory/modules/TransitionSystem/adapters/<平台>.md`、`memory/modules/WorkflowSystem/adapters/<平台>.md` |

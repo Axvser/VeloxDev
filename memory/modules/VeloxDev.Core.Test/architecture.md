@@ -1,4 +1,4 @@
-# VeloxDev.Core.Test — 架构
+﻿# VeloxDev.Core.Test — 架构
 
 > 代码：`Src/Core/VeloxDev.Core.Test/`（82 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；75 个 `[TestClass]`）
 > 被测：`Src/Core/VeloxDev.Core/`（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj:5` 是四目标 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0`）
@@ -102,7 +102,7 @@ Core 是四目标项目；**两个测试项目都是单目标 `net10.0`**（`Vel
 | `WorkflowSystem/` | 29（21 直接 + 7 `CompilerEx/` + 1 `Support/`） | 树 / 节点 / slot 枚举 / 虚拟化数学 / 编译运行 |
 | `AI/` | 7 | 工具调用与上下文拼装 |
 | `Timing/` | 6 | 时钟、两类采样器 |
-| `TimeLine/` | 4 | MonoBehaviour 总线与管理器 |
+| `TimeLine/` | 4 | Tickable 总线与管理器 |
 | `WeakTypes/` | 4 | 弱引用集合 |
 | `DynamicTheme/` | 2 | 主题切换 |
 | `MVVM/` | 15（另有 `CommandTestKit.cs`、`CommandSignatureViewModel.cs` 两个非测试文件） | `VeloxCommand` 全语义（并发/排队/锁/中断/取消/8 事件时序/异常路径/CTS 释放/完成等待/忙碌状态/事件编组/分配回归）+ 生成器签名覆盖 + `ObservableCollectionTracker` + `CommandEventArgs` |
@@ -142,7 +142,7 @@ Src/Core/VeloxDev.Core.Test/MSTestSettings.cs:1
 
 | 档 | 类（`文件:行`） | 为什么 |
 |---|---|---|
-| 进程级静态状态 | `TimeLine/MonoBehaviourBusTests.cs:24`、`TimeLine/MonoBehaviourManagerTests.cs:10`、`DynamicTheme/ThemeTransitionTests.cs:19`、`Timing/TimerCoreRegistryTests.cs:16` | 静态注册表 / 总线。`TimerCoreRegistryTests.cs:9-16` 自己写明：覆盖 `ITimeSourceControl` 会把「时钟永不动」的源交给每个并发动画，而停在冻结时钟上的动画**不报错，它挂起** |
+| 进程级静态状态 | `TimeLine/TickableBusTests.cs:24`、`TimeLine/TickManagerTests.cs:10`、`DynamicTheme/ThemeTransitionTests.cs:19`、`Timing/TimerCoreRegistryTests.cs:16` | 静态注册表 / 总线。`TimerCoreRegistryTests.cs:9-16` 自己写明：覆盖 `ITimeSourceControl` 会把「时钟永不动」的源交给每个并发动画，而停在冻结时钟上的动画**不报错，它挂起** |
 | 进程级测量 | `TransitionSystem/ReusableTimerWaitTests.cs:15` | 分配断言量的是 `GC.GetTotalAllocatedBytes`（进程级），并行时别的方法的分配会落进测量窗口，best-of-2 只是缓解 |
 | 实时动画 / 时钟 | `Timing/TimeSourceContractTests.cs:15`、`TransitionSystem/FramePacerTests.cs:17`、`TransitionSystem/TimelineControlTests.cs:18`、`TransitionSystem/TransitionRunThreadAffinityTests.cs:18`、`TransitionSystem/TransitionSchedulerAwakeTests.cs:16`、`TransitionSystem/TransitionSchedulerPrepareTests.cs:16` | `TimelineControlTests.cs:8-18` 写明：观察的是实时运行的动画，断言是比值不是绝对时间 |
 | 纵深防御 | `TransitionSystem/InterpolatorCoreTests.cs:13` | 注释（`:9-12`）自己写明：这些断言与并行无关，保留 `[DoNotParallelize]` 纯粹是防御 |

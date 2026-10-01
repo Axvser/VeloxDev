@@ -4,30 +4,30 @@ using System.Linq;
 
 namespace VeloxDev.Generators.Writers
 {
-    public class MonoWriter : WriterBase
+    public class TickWriter : WriterBase
     {
-        private bool IsMono { get; set; } = false;
+        private bool IsTickable { get; set; } = false;
         private string Channel { get; set; } = "default";
         private int TargetFPS { get; set; } = -1;
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
-            ReadMonoConfig(namedTypeSymbol);
+            ReadTickableConfig(namedTypeSymbol);
         }
 
-        private void ReadMonoConfig(INamedTypeSymbol symbol)
+        private void ReadTickableConfig(INamedTypeSymbol symbol)
         {
             var attributeData = symbol.GetAttributes()
                 .FirstOrDefault(ad =>
                     ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-                    NAMESPACE_VELOX_TIMELINE + ".MonoBehaviourAttribute" &&
+                    NAMESPACE_VELOX_TIMELINE + ".TickableAttribute" &&
                     ad.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax attrSyntax &&
                     attrSyntax.Parent?.Parent is ClassDeclarationSyntax
                 );
-            IsMono = attributeData != null;
+            IsTickable = attributeData != null;
 
-            if (IsMono && attributeData != null)
+            if (IsTickable && attributeData != null)
             {
                 // Read positional constructor arguments: (string channel, int fps)
                 var ctorArgs = attributeData.ConstructorArguments;
@@ -49,7 +49,7 @@ namespace VeloxDev.Generators.Writers
             }
         }
 
-        public override bool CanWrite() => IsMono;
+        public override bool CanWrite() => IsTickable;
 
         public override string GetFileName()
         {
@@ -58,34 +58,34 @@ namespace VeloxDev.Generators.Writers
                 return string.Empty;
             }
 
-            return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_Mono.g.cs";
+            return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_Tick.g.cs";
         }
 
         public override string[] GenerateBaseInterfaces()
         {
-            return IsMono ? ["global::VeloxDev.MonoBehaviour.IMonoBehaviour"] : [];
+            return IsTickable ? ["global::VeloxDev.TimeLine.ITickable"] : [];
         }
 
         public override string GenerateBody()
         {
-            if (Syntax == null || Symbol == null || !IsMono)
+            if (Syntax == null || Symbol == null || !IsTickable)
             {
                 return string.Empty;
             }
 
             var setFpsLine = TargetFPS >= 1
-                ? $"{NAMESPACE_VELOX_TIMELINE}.MonoBehaviourManager.SetTargetFPS({TargetFPS}, \"{Channel}\");\n                    "
+                ? $"{NAMESPACE_VELOX_TIMELINE}.TickManager.SetTargetFPS({TargetFPS}, \"{Channel}\");\n                    "
                 : string.Empty;
 
             return $$"""
-                public void InitializeMonoBehaviour()
+                public void InitializeTickable()
                 {
-                    {{setFpsLine}}{{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.RegisterBehaviour(this, "{{Channel}}");
+                    {{setFpsLine}}{{NAMESPACE_VELOX_TIMELINE}}.TickManager.RegisterBehaviour(this, "{{Channel}}");
                 }
 
-                public void CloseMonoBehaviour()
+                public void CloseTickable()
                 {
-                    {{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.UnregisterBehaviour(this, "{{Channel}}");
+                    {{NAMESPACE_VELOX_TIMELINE}}.TickManager.UnregisterBehaviour(this, "{{Channel}}");
                 }
 
                 public void InvokeAwake()

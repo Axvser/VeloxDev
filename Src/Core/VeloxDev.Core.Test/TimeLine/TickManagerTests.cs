@@ -1,14 +1,14 @@
-using VeloxDev.TimeLine;
+﻿using VeloxDev.TimeLine;
 
 namespace VeloxDev.Core.Test.TimeLine;
 
 /// <summary>
-/// MonoBehaviourManager operates on shared static state (the _channels dictionary),
+/// TickManager operates on shared static state (the _channels dictionary),
 /// so these tests cannot run in parallel.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
-public class MonoBehaviourManagerTests
+public class TickManagerTests
 {
     private const string TestChannel = "UseAsyncLoopTestChannel";
     private static readonly string UniqueChannel = $"MBBTest_{Guid.NewGuid():N}";
@@ -19,12 +19,12 @@ public class MonoBehaviourManagerTests
     [TestCleanup]
     public async Task Cleanup()
     {
-        if (MonoBehaviourManager.IsRunning(TestChannel))
-            await MonoBehaviourManager.StopAsync(TestChannel);
+        if (TickManager.IsRunning(TestChannel))
+            await TickManager.StopAsync(TestChannel);
 
         // Clean up any extra channels this test class created
-        if (MonoBehaviourManager.IsRunning(UniqueChannel))
-            await MonoBehaviourManager.StopAsync(UniqueChannel);
+        if (TickManager.IsRunning(UniqueChannel))
+            await TickManager.StopAsync(UniqueChannel);
     }
 
     // ───────── SetUseAsyncLoop ─────────
@@ -33,16 +33,16 @@ public class MonoBehaviourManagerTests
     public void SetUseAsyncLoop_BeforeStart_Succeeds()
     {
         // Setting the override before the channel starts → must not throw
-        MonoBehaviourManager.SetUseAsyncLoop(true, TestChannel);
+        TickManager.SetUseAsyncLoop(true, TestChannel);
     }
 
     [TestMethod]
     public void SetUseAsyncLoop_BeforeStart_MultipleCalls_Succeeds()
     {
         // Setting the override multiple times → must not throw
-        MonoBehaviourManager.SetUseAsyncLoop(true, TestChannel);
-        MonoBehaviourManager.SetUseAsyncLoop(false, TestChannel);
-        MonoBehaviourManager.SetUseAsyncLoop(true, TestChannel);
+        TickManager.SetUseAsyncLoop(true, TestChannel);
+        TickManager.SetUseAsyncLoop(false, TestChannel);
+        TickManager.SetUseAsyncLoop(true, TestChannel);
     }
 
     [TestMethod]
@@ -50,24 +50,24 @@ public class MonoBehaviourManagerTests
     {
         // Use a dedicated channel to avoid colliding with other tests
         const string ch = "MBBTest_AfterStart_Throws";
-        MonoBehaviourManager.Start(ch);
+        TickManager.Start(ch);
 
         // Setting the override after the channel started → must throw InvalidOperationException
         Assert.Throws<InvalidOperationException>(() =>
-            MonoBehaviourManager.SetUseAsyncLoop(true, ch));
+            TickManager.SetUseAsyncLoop(true, ch));
 
-        await MonoBehaviourManager.StopAsync(ch);
+        await TickManager.StopAsync(ch);
     }
 
     [TestMethod]
     public async Task SetUseAsyncLoop_AfterStop_Succeeds()
     {
         const string ch = "MBBTest_AfterStop";
-        MonoBehaviourManager.Start(ch);
-        await MonoBehaviourManager.StopAsync(ch);
+        TickManager.Start(ch);
+        await TickManager.StopAsync(ch);
 
         // Setting the override after the channel stopped → must not throw
-        MonoBehaviourManager.SetUseAsyncLoop(true, ch);
+        TickManager.SetUseAsyncLoop(true, ch);
     }
 
     [TestMethod]
@@ -76,13 +76,13 @@ public class MonoBehaviourManagerTests
         const string ch = "MBBTest_Recycle";
 
         // Verifies that modifying the override after a stop and restarting does not throw (the override takes effect at start)
-        MonoBehaviourManager.SetUseAsyncLoop(true, ch);
-        MonoBehaviourManager.Start(ch);
-        await MonoBehaviourManager.StopAsync(ch);
+        TickManager.SetUseAsyncLoop(true, ch);
+        TickManager.Start(ch);
+        await TickManager.StopAsync(ch);
 
-        MonoBehaviourManager.SetUseAsyncLoop(false, ch);
-        MonoBehaviourManager.Start(ch);
-        await MonoBehaviourManager.StopAsync(ch);
+        TickManager.SetUseAsyncLoop(false, ch);
+        TickManager.Start(ch);
+        await TickManager.StopAsync(ch);
     }
 
     // ───────── ClearUseAsyncLoopOverride ─────────
@@ -90,16 +90,16 @@ public class MonoBehaviourManagerTests
     [TestMethod]
     public void ClearUseAsyncLoopOverride_BeforeStart_Succeeds()
     {
-        MonoBehaviourManager.SetUseAsyncLoop(true, TestChannel);
+        TickManager.SetUseAsyncLoop(true, TestChannel);
         // Clearing the override → must not throw
-        MonoBehaviourManager.ClearUseAsyncLoopOverride(TestChannel);
+        TickManager.ClearUseAsyncLoopOverride(TestChannel);
     }
 
     [TestMethod]
     public void ClearUseAsyncLoopOverride_WithoutSetting_DoesNotThrow()
     {
         // Clearing when no override was ever set → must not throw
-        MonoBehaviourManager.ClearUseAsyncLoopOverride(TestChannel);
+        TickManager.ClearUseAsyncLoopOverride(TestChannel);
     }
 
     [TestMethod]
@@ -108,14 +108,14 @@ public class MonoBehaviourManagerTests
         const string ch = "MBBTest_Clear_AfterStart";
 
         // Set the override first
-        MonoBehaviourManager.SetUseAsyncLoop(true, ch);
-        MonoBehaviourManager.Start(ch);
+        TickManager.SetUseAsyncLoop(true, ch);
+        TickManager.Start(ch);
 
         // Clearing the override after the channel started → must throw InvalidOperationException
         Assert.Throws<InvalidOperationException>(() =>
-            MonoBehaviourManager.ClearUseAsyncLoopOverride(ch));
+            TickManager.ClearUseAsyncLoopOverride(ch));
 
-        await MonoBehaviourManager.StopAsync(ch);
+        await TickManager.StopAsync(ch);
     }
 
     [TestMethod]
@@ -123,12 +123,12 @@ public class MonoBehaviourManagerTests
     {
         const string ch = "MBBTest_Clear_AfterStop";
 
-        MonoBehaviourManager.SetUseAsyncLoop(true, ch);
-        MonoBehaviourManager.Start(ch);
-        await MonoBehaviourManager.StopAsync(ch);
+        TickManager.SetUseAsyncLoop(true, ch);
+        TickManager.Start(ch);
+        await TickManager.StopAsync(ch);
 
         // Clearing the override after the channel stopped → must not throw
-        MonoBehaviourManager.ClearUseAsyncLoopOverride(ch);
+        TickManager.ClearUseAsyncLoopOverride(ch);
     }
 
     // ───────── Channel isolation ─────────
@@ -139,16 +139,16 @@ public class MonoBehaviourManagerTests
         const string chA = "MBBTest_Isolation_A";
         const string chB = "MBBTest_Isolation_B";
 
-        MonoBehaviourManager.Start(chA);
+        TickManager.Start(chA);
 
         // Channel A is running → must throw
         Assert.Throws<InvalidOperationException>(() =>
-            MonoBehaviourManager.SetUseAsyncLoop(true, chA));
+            TickManager.SetUseAsyncLoop(true, chA));
 
         // Channel B is not running → must succeed
-        MonoBehaviourManager.SetUseAsyncLoop(false, chB);
+        TickManager.SetUseAsyncLoop(false, chB);
 
-        await MonoBehaviourManager.StopAsync(chA);
+        await TickManager.StopAsync(chA);
     }
 
     [TestMethod]
@@ -158,16 +158,16 @@ public class MonoBehaviourManagerTests
         const string chB = "MBBTest_Isolation_Clear_B";
 
         // Set an override on channel B
-        MonoBehaviourManager.SetUseAsyncLoop(true, chB);
-        MonoBehaviourManager.Start(chA);
+        TickManager.SetUseAsyncLoop(true, chB);
+        TickManager.Start(chA);
 
         // Channel A has no override but is running → clearing must also throw
         Assert.Throws<InvalidOperationException>(() =>
-            MonoBehaviourManager.ClearUseAsyncLoopOverride(chA));
+            TickManager.ClearUseAsyncLoopOverride(chA));
 
         // Channel B is not started but has an override → clearing must succeed
-        MonoBehaviourManager.ClearUseAsyncLoopOverride(chB);
+        TickManager.ClearUseAsyncLoopOverride(chB);
 
-        await MonoBehaviourManager.StopAsync(chA);
+        await TickManager.StopAsync(chA);
     }
 }

@@ -1,12 +1,11 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using VeloxDev.MonoBehaviour;
 using VeloxDev.Timing;
 
 namespace VeloxDev.TimeLine
 {
-    public static class MonoBehaviourManager
+    public static class TickManager
     {
         #region Constants
 
@@ -39,11 +38,11 @@ namespace VeloxDev.TimeLine
 
         private sealed class BehaviorWrapper
         {
-            public IMonoBehaviour? Behavior;
+            public ITickable? Behavior;
             public int ExecutionOrder;
             public volatile bool IsActive;
 
-            public void Reset(IMonoBehaviour behavior, int order)
+            public void Reset(ITickable behavior, int order)
             {
                 Behavior = behavior;
                 ExecutionOrder = order;
@@ -102,8 +101,8 @@ namespace VeloxDev.TimeLine
             public readonly string Name;
 
             private readonly ConcurrentDictionary<int, BehaviorWrapper> _behaviors = new();
-            private readonly ConcurrentQueue<IMonoBehaviour> _addQueue = new();
-            private readonly ConcurrentQueue<IMonoBehaviour> _removeQueue = new();
+            private readonly ConcurrentQueue<ITickable> _addQueue = new();
+            private readonly ConcurrentQueue<ITickable> _removeQueue = new();
             private readonly ConcurrentQueue<ConfigChangeRequest> _configQueue = new();
             private readonly ConcurrentQueue<Action> _mainThreadQueue = new();
 
@@ -147,7 +146,7 @@ namespace VeloxDev.TimeLine
             private Task? _updateTask;
             private Task? _fixedUpdateTask;
 
-            // Per-channel override of UseAsyncLoop; falls back to MonoBehaviourManager.UseAsyncLoop when null
+            // Per-channel override of UseAsyncLoop; falls back to TickManager.UseAsyncLoop when null
             private bool? _useAsyncLoopOverride;
 
             private readonly ObjectPool<FrameEventArgs> _frameEventArgsPool = new(DEFAULT_OBJECT_POOL_SIZE);
@@ -242,7 +241,7 @@ namespace VeloxDev.TimeLine
 
             /// <summary>
             /// Sets whether the current channel uses async/await instead of native Threads to drive the frame loop.
-            /// When null, falls back to the global <see cref="MonoBehaviourManager.UseAsyncLoop"/>.
+            /// When null, falls back to the global <see cref="TickManager.UseAsyncLoop"/>.
             /// </summary>
             /// <exception cref="InvalidOperationException">Thrown when the channel is already running.</exception>
             public void SetUseAsyncLoop(bool useAsyncLoop)
@@ -255,7 +254,7 @@ namespace VeloxDev.TimeLine
 
             /// <summary>
             /// Clears the current channel's independent override, falling back to the global
-            /// <see cref="MonoBehaviourManager.UseAsyncLoop"/>.
+            /// <see cref="TickManager.UseAsyncLoop"/>.
             /// </summary>
             /// <exception cref="InvalidOperationException">Thrown when the channel is already running.</exception>
             public void ClearUseAsyncLoopOverride()
@@ -266,7 +265,7 @@ namespace VeloxDev.TimeLine
                 _useAsyncLoopOverride = null;
             }
 
-            private bool EffectiveUseAsyncLoop => _useAsyncLoopOverride ?? MonoBehaviourManager.UseAsyncLoop;
+            private bool EffectiveUseAsyncLoop => _useAsyncLoopOverride ?? TickManager.UseAsyncLoop;
 
             #endregion
 
@@ -428,12 +427,12 @@ namespace VeloxDev.TimeLine
                 Start();
             }
 
-            public void RegisterBehaviour(IMonoBehaviour behavior)
+            public void RegisterBehaviour(ITickable behavior)
             {
                 if (behavior != null) _addQueue.Enqueue(behavior);
             }
 
-            public void UnregisterBehaviour(IMonoBehaviour behavior)
+            public void UnregisterBehaviour(ITickable behavior)
             {
                 if (behavior != null) _removeQueue.Enqueue(behavior);
             }
@@ -1022,10 +1021,10 @@ namespace VeloxDev.TimeLine
             return _channels.GetOrAdd(name, n =>
             {
                 var ch = new LoopChannel(n);
-                ch.Started += (s, e) => OnChannelStarted?.Invoke(s, new MonoBehaviourChannelEventArgs(n));
-                ch.Paused += (s, e) => OnChannelPaused?.Invoke(s, new MonoBehaviourChannelEventArgs(n));
-                ch.Resumed += (s, e) => OnChannelResumed?.Invoke(s, new MonoBehaviourChannelEventArgs(n));
-                ch.Stopped += (s, e) => OnChannelStopped?.Invoke(s, new MonoBehaviourChannelEventArgs(n));
+                ch.Started += (s, e) => OnChannelStarted?.Invoke(s, new TickChannelEventArgs(n));
+                ch.Paused += (s, e) => OnChannelPaused?.Invoke(s, new TickChannelEventArgs(n));
+                ch.Resumed += (s, e) => OnChannelResumed?.Invoke(s, new TickChannelEventArgs(n));
+                ch.Stopped += (s, e) => OnChannelStopped?.Invoke(s, new TickChannelEventArgs(n));
                 return ch;
             });
         }
@@ -1037,10 +1036,10 @@ namespace VeloxDev.TimeLine
 
         #region Global events
 
-        public static event EventHandler<MonoBehaviourChannelEventArgs>? OnChannelStarted;
-        public static event EventHandler<MonoBehaviourChannelEventArgs>? OnChannelPaused;
-        public static event EventHandler<MonoBehaviourChannelEventArgs>? OnChannelResumed;
-        public static event EventHandler<MonoBehaviourChannelEventArgs>? OnChannelStopped;
+        public static event EventHandler<TickChannelEventArgs>? OnChannelStarted;
+        public static event EventHandler<TickChannelEventArgs>? OnChannelPaused;
+        public static event EventHandler<TickChannelEventArgs>? OnChannelResumed;
+        public static event EventHandler<TickChannelEventArgs>? OnChannelStopped;
 
         #endregion
 
@@ -1064,10 +1063,10 @@ namespace VeloxDev.TimeLine
         public static void TogglePause(string channel = DEFAULT_CHANNEL)
             => GetOrCreateChannel(channel).TogglePause();
 
-        public static void RegisterBehaviour(IMonoBehaviour behavior, string channel = DEFAULT_CHANNEL)
+        public static void RegisterBehaviour(ITickable behavior, string channel = DEFAULT_CHANNEL)
             => GetOrCreateChannel(channel).RegisterBehaviour(behavior);
 
-        public static void UnregisterBehaviour(IMonoBehaviour behavior, string channel = DEFAULT_CHANNEL)
+        public static void UnregisterBehaviour(ITickable behavior, string channel = DEFAULT_CHANNEL)
             => GetOrCreateChannel(channel).UnregisterBehaviour(behavior);
 
         #endregion
@@ -1157,7 +1156,7 @@ namespace VeloxDev.TimeLine
         #endregion
     }
 
-    public sealed class MonoBehaviourChannelEventArgs(string channelName) : EventArgs
+    public sealed class TickChannelEventArgs(string channelName) : EventArgs
     {
         public string ChannelName { get; } = channelName;
     }

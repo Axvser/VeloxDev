@@ -1,5 +1,5 @@
-// ---------------------------------------------------------------------------------------------------------------------
-// MonoBehaviour Part ↓
+﻿// ---------------------------------------------------------------------------------------------------------------------
+// Tickable part ↓
 //
 // The demo. One class, one channel, and the five hooks the generator declares.
 //
@@ -27,7 +27,7 @@ using VeloxDev.TimeLine;
 
 namespace Demo;
 
-[MonoBehaviour(DemoChannel.Name)]
+[Tickable(DemoChannel.Name)]
 public partial class MainWindow
 {
     private readonly DemoState _state = new();
@@ -53,7 +53,7 @@ public partial class MainWindow
     {
         Interlocked.Increment(ref _state.AwakeCount);
         _state.AwakeAtUpdateCount = Volatile.Read(ref _state.UpdateCount);
-        _state.AwakeFrameOrdinal = MonoBehaviourManager.TotalFrames(DemoChannel.Name);
+        _state.AwakeFrameOrdinal = TickManager.TotalFrames(DemoChannel.Name);
         _state.Record(HookKind.Awake, _state.AwakeAtUpdateCount, 0, 0, false, HookNote.None);
     }
 
@@ -192,7 +192,7 @@ public partial class MainWindow
     /// </remarks>
     private BallReport Report(BallBody ball, int index, int batch, double dtMilliseconds, HookNote note)
     {
-        var bus = MonoBehaviourManager.Bus(DemoChannel.Name);
+        var bus = TickManager.Bus(DemoChannel.Name);
         var unspentMs = bus is null
             ? 0
             : (bus.Position - TimeSpan.FromSeconds(ball.DriveTime)).TotalMilliseconds;

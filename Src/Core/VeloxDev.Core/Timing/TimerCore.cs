@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 
 namespace VeloxDev.Timing;
 
@@ -28,7 +28,7 @@ namespace VeloxDev.Timing;
 /// Every lookup builds a new instance, and a host with one clock keeps that shape: return a fresh wrapper over the
 /// one feed per call rather than a shared singleton, so each consumer keeps its own pause and rate. A singleton
 /// registered here would make pausing one channel pause every channel — the opposite of what the per-channel
-/// sources in <c>MonoBehaviourManager</c> are for.
+/// sources in <c>TickManager</c> are for.
 /// </para>
 /// <para>
 /// The keys are private and never handed out: a subclass or a caller replacing the dictionary wholesale would drop

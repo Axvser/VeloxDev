@@ -1,11 +1,11 @@
 ﻿using VeloxDev.TimeLine;
 
-namespace VeloxDev.MonoBehaviour;
+namespace VeloxDev.TimeLine;
 
-public interface IMonoBehaviour​
+public interface ITickable
 {
-    void InitializeMonoBehaviour​();
-    void CloseMonoBehaviour();
+    void InitializeTickable();
+    void CloseTickable();
     void InvokeAwake();
     void InvokeStart();
     void InvokeUpdate(FrameEventArgs e);

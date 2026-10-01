@@ -1,4 +1,4 @@
-# Timing 扩展
+﻿# Timing 扩展
 
 > 契约：`Src/Core/VeloxDev.Core/Interfaces/Timing/`。实现与注册表：`Src/Core/VeloxDev.Core/Timing/`。
 > 架构与不变量见同目录 `architecture.md`。
@@ -64,7 +64,7 @@
 | | 做法 | 结果 |
 |---|---|---|
 | ✅ 官方 | `static () => new Wrapper(OneSharedFeed)` —— 每次返回新实例，包着同一份 feed | 每个消费者有自己的 pause / rate |
-| ❌ 捷径 | `static () => singleton` 返回共享实例 | 暂停一个 channel 暂停**所有** channel，与 `MonoBehaviourManager` 的每 channel 一条总线正好相反（`TimerCore.cs:27-32`） |
+| ❌ 捷径 | `static () => singleton` 返回共享实例 | 暂停一个 channel 暂停**所有** channel，与 `TickManager` 的每 channel 一条总线正好相反（`TimerCore.cs:27-32`） |
 
 ### 5. 负数 rate —— 让它抛，不要 clamp
 
@@ -123,9 +123,9 @@
 
 | 改动 | 联动 |
 |---|---|
-| 加/改 `Times/TimeSourceCore` 的控制调用语义 | `Src/Core/VeloxDev.Core/TimeLine/MonoBehaviourManager.cs`（`SetTimeScale` = `_bus.SetRate` 逐字转发，`:239`；`Pause`/`Resume` 受 `_isRunning` 门控，`:385-403`）、`Src/Core/VeloxDev.Core/TransitionSystem/SamplerSet.cs:78` |
+| 加/改 `Times/TimeSourceCore` 的控制调用语义 | `Src/Core/VeloxDev.Core/TimeLine/TickManager.cs`（`SetTimeScale` = `_bus.SetRate` 逐字转发，`:239`；`Pause`/`Resume` 受 `_isRunning` 门控，`:385-403`）、`Src/Core/VeloxDev.Core/TransitionSystem/SamplerSet.cs:78` |
 | 加/改采样器契约 | `Interfaces/Timing/` + `Timing/TimerCore.cs:46-52` + `TimerCoreRegistryTests.cs` |
-| 改 `Scale` 或 `DefaultTicksPerSecond` | 消费者侧的 `TimeConversion` 调用会静默改变量纲（`Src/Core/VeloxDev.Core/Timing/TimeSourceCore.cs:9-12` 的 remarks 写明「quietly used Stopwatch.Frequency would be wrong by orders of magnitude with no symptom」）；消费点如 `TimeLine/MonoBehaviourManager.cs:665-667,746,846,935-937`、`TransitionSystem/Transition.cs:171,176,529` |
+| 改 `Scale` 或 `DefaultTicksPerSecond` | 消费者侧的 `TimeConversion` 调用会静默改变量纲（`Src/Core/VeloxDev.Core/Timing/TimeSourceCore.cs:9-12` 的 remarks 写明「quietly used Stopwatch.Frequency would be wrong by orders of magnitude with no symptom」）；消费点如 `TimeLine/TickManager.cs:665-667,746,846,935-937`、`TransitionSystem/Transition.cs:171,176,529` |
 | 改 `Advance` 的溢出守卫 | `TimeSourceContractTests.cs` / `HostTimeSourceTests.cs` |
 | 让某个契约注册变得「可选」 | `CreateTimeSource` 无回退（`TimerCore.cs:102-107`），去掉默认注册会让**所有**消费者在运行时抛 |
 
