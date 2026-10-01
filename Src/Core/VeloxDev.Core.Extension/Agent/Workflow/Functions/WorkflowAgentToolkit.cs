@@ -2040,7 +2040,11 @@ public sealed class WorkflowAgentToolkit
     private sealed class CompiledRun(string handle, ManualExecutionGate gate)
     {
         public string Handle { get; } = handle;
-        public ManualExecutionGate Gate { get; } = gate;
+        /// <summary>
+        /// The gate the engine is actually waiting on. Settled once the session is built: a host that brings its
+        /// own is adopted, so that pausing the run pauses the gate the run is parked on.
+        /// </summary>
+        public ManualExecutionGate Gate { get; set; } = gate;
         public RuntimeContext? Context { get; set; }
         public CancellationTokenSource Cts { get; } = new();
         public Task Task { get; set; } = Task.CompletedTask;
@@ -2088,6 +2092,15 @@ public sealed class WorkflowAgentToolkit
 
     private string NextHandle() => $"run-{Interlocked.Increment(ref _runCounter)}";
 
+    // 工具操作的门必须就是引擎在等的那把。宿主配了一把我们驱动不了的门时（`DelegateExecutionGate` 之类），
+    // 暂停会作用在一把没人等的门上 —— 报 ok 却什么都没停住，比报错更糟，所以这里明说。
+    private static bool RunsOnOurGate(CompiledRun run)
+        => ReferenceEquals(run.Context?.ExecutionGate, run.Gate);
+
+    private static string GateNotOurs(CompiledRun run)
+        => Error($"Run '{run.Handle}' is held by an execution gate this tool cannot drive — the host brought its own. " +
+                 "Pause and resume it through the host's controls; StopCompiledRun still works.");
+
     private bool TryGetRun(string handle, out CompiledRun run, out string error)
     {
         lock (_runsGate)
@@ -2120,7 +2133,18 @@ public sealed class WorkflowAgentToolkit
 
         _scope.SessionConfiguration?.Invoke(context);
 
-        context.ExecutionGate ??= run.Gate;                                  // PauseCompiledRun / ResumeCompiledRun act on this one
+        // PauseCompiledRun / ResumeCompiledRun 操作的是 run.Gate，所以 run.Gate 必须**就是引擎在等的那把**。
+        // 宿主自己的设置在上一行刚跑完：它带了门时，`??=` 会让我们的门整个用不上 ——
+        // 两个工具照样报 ok、`isPaused` 也如实反映那把没人等的门，**而运行根本没被停住**。
+        if (context.ExecutionGate is ManualExecutionGate hostGate)
+        {
+            run.Gate = hostGate;                                             // 宿主自带：接过来，工具才操作得动
+        }
+        else
+        {
+            context.ExecutionGate ??= run.Gate;                              // 宿主没给：用我们的
+        }
+
         context.CheckpointStore ??= _scope.EffectiveCheckpointStore;          // so ContinueCompiledWorkflow has a place to read
         context.ErrorSink = new RecordingErrorSink(run, context.ErrorSink);
         return context;
@@ -2283,6 +2307,7 @@ public sealed class WorkflowAgentToolkit
         [Description("The handle returned when the run was started.")] string handle)
     {
         if (!TryGetRun(handle, out var run, out var error)) return error;
+        if (!RunsOnOurGate(run)) return GateNotOurs(run);
 
         run.Gate.Pause();
         return Ok($"Run '{run.Handle}' is held at its next node boundary (currently {run.Context!.Status}). Release it with ResumeCompiledRun.");
@@ -2293,6 +2318,7 @@ public sealed class WorkflowAgentToolkit
         [Description("The handle returned when the run was started.")] string handle)
     {
         if (!TryGetRun(handle, out var run, out var error)) return error;
+        if (!RunsOnOurGate(run)) return GateNotOurs(run);
 
         run.Gate.Resume();
         return Ok($"Run '{run.Handle}' is going again (currently {run.Context!.Status}).");
