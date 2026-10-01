@@ -2045,19 +2045,39 @@ public sealed class WorkflowAgentToolkit
         public CancellationTokenSource Cts { get; } = new();
         public Task Task { get; set; } = Task.CompletedTask;
 
+        // 引擎在跑的同时 `GetCompiledRunStatus` 会来读这份记录：`List<T>` 两边都用就会互相踩
+        // （枚举中被 Append 会抛 "Collection was modified"）。写与读都从这把锁过。
+        private readonly object _failuresGate = new();
+        private readonly List<ExecutionError> _failures = [];
+
         /// <summary>What the run recorded, as records — the same failures the session logged, as data.</summary>
-        public List<ExecutionError> Failures { get; } = [];
+        public void AddFailure(ExecutionError error)
+        {
+            lock (_failuresGate) _failures.Add(error);
+        }
+
+        /// <summary>How many failures the run has recorded so far.</summary>
+        public int FailureCount
+        {
+            get { lock (_failuresGate) return _failures.Count; }
+        }
+
+        /// <summary>A point-in-time copy of the recorded failures, safe to enumerate while the run is recording.</summary>
+        public ExecutionError[] SnapshotFailures()
+        {
+            lock (_failuresGate) return [.. _failures];
+        }
 
         /// <summary>Set only when the engine itself let an exception escape — a host contract that threw.</summary>
         public Exception? Escaped { get; set; }
     }
 
     /// <summary>Keeps every failure the run records, and passes it on to the host's own sink when there is one.</summary>
-    private sealed class RecordingErrorSink(List<ExecutionError> failures, IExecutionErrorSink? downstream) : IExecutionErrorSink
+    private sealed class RecordingErrorSink(CompiledRun run, IExecutionErrorSink? downstream) : IExecutionErrorSink
     {
         public async Task OnErrorAsync(ExecutionError error, CancellationToken cancellationToken)
         {
-            failures.Add(error);
+            run.AddFailure(error);
             if (downstream is not null) await downstream.OnErrorAsync(error, cancellationToken);
         }
     }
@@ -2102,7 +2122,7 @@ public sealed class WorkflowAgentToolkit
 
         context.ExecutionGate ??= run.Gate;                                  // PauseCompiledRun / ResumeCompiledRun act on this one
         context.CheckpointStore ??= _scope.EffectiveCheckpointStore;          // so ContinueCompiledWorkflow has a place to read
-        context.ErrorSink = new RecordingErrorSink(run.Failures, context.ErrorSink);
+        context.ErrorSink = new RecordingErrorSink(run, context.ErrorSink);
         return context;
     }
 
@@ -2239,10 +2259,10 @@ public sealed class WorkflowAgentToolkit
             ["attempts"] = context.Attempt,
             ["endedWithError"] = context.EndedWithError,
             ["data"] = context.Data is not null ? JToken.FromObject(context.Data) : JValue.CreateNull(),
-            ["failureCount"] = run.Failures.Count,
-            ["failures"] = new JArray(run.Failures.Select(FailureJson)),
+            ["failureCount"] = run.FailureCount,
+            ["failures"] = new JArray(run.SnapshotFailures().Select(FailureJson)),
             ["logCount"] = context.Logs.Count,
-            ["logs"] = LogTail(context.Logs),
+            ["logs"] = LogTail(context.SnapshotLogs()),
             ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : JValue.CreateNull(),
         };
         if (run.Escaped is { } escaped)
@@ -2334,7 +2354,7 @@ public sealed class WorkflowAgentToolkit
                 ["attempts"] = context.Attempt,
                 ["data"] = context.Data is not null ? JToken.FromObject(context.Data) : JValue.CreateNull(),
                 // The same failures the log carries, as records: phase / level / message / attempt / order.
-                ["failures"] = new JArray(run.Failures.Select(FailureJson)),
+                ["failures"] = new JArray(run.SnapshotFailures().Select(FailureJson)),
                 ["logs"] = new JArray(context.Logs),
                 // Present only when the host sent the lines to a file; an absolute path the model can open itself.
                 ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : JValue.CreateNull(),

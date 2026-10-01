@@ -155,15 +155,35 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 **结论**：这不是「加 `[DoNotParallelize]`」能解决的，也不是线程池饿死（隔离跑同样红）。它是一个待查的引擎缺陷，归 `WorkflowSystem/CompilerEx`。
 
-#### 2026-10-01 的排查：已排除四项，另发现一处真实缺陷，**根因仍未定位**
+#### 2026-10-01 已修复：根因是**日志集合被并发读写**
 
-**排除的（都读过代码，不是猜的）**：`ManualExecutionGate` 本身写得很扎实（锁外完成、TCS 替换而非原地完成、取消安全）；重试路径不走（`session?.RetryPolicy is not {} policy` 直接返回，测试没配策略）；并行分支的 `SemaphoreSlim` `WaitAsync`/`Release` 配平；`SaveCheckpointAsync` 无 store 时早退、有异常时吞掉。`WorkflowDemoSession.Observe` 是纯同步的计数器。
+**根因**：`RuntimeContext._logs` 是 `ObservableCollection<string>`（**不是线程安全的**），引擎在跑的同时 `GetCompiledRunStatus` 会读它。`LogTail` 的 `lines.ToList()` 先读 `Count` 再 `CopyTo`，中间只要有一次写入，目标数组就不够大：
 
-**顺手发现的一处真实缺陷**（与本次挂起**无关**，但独立成立）：`WorkflowAgentToolkit` 用 `context.ExecutionGate ??= run.Gate;` 挂门，而 `WorkflowDemoSession` 已经在自己的配置里写过 `context.ExecutionGate = Gate;`（`WorkflowDemoSession.cs:291`）。配置顺序是「宿主自己的设置在前」，所以 `??=` **永远不生效** —— `PauseCompiledRun`/`ResumeCompiledRun` 作用的是 `run.Gate`，而引擎等的是会话那把门。两个工具都报 ok、`isPaused` 也如实反映 `run.Gate`，**但运行根本没被停住**。测试因此「通过」，却是因为运行压根没被暂停。
+```
+ArgumentOutOfRangeException: Source array was not long enough.
+Check the source index, length, and the array's lower bounds. (Parameter 'sourceArray')
+```
 
-**插桩行不通，原因记在这儿**：给每个节点加两条 `context.Log` 后，失败率从约 40% 变成 **0/8** —— 典型 Heisenbug，日志本身把调度改到足以掩盖挂起。改用「只在久无进展时才写一行」的看门狗也没抓到：第一版用了静态时间戳，被**别的并发运行**不断刷新（全量跑时不止一个引擎在动），改成按 `RuntimeContext` 用 `ConditionalWeakTable` 记也没抓到 —— 具体为什么没响**没有查清**，这里如实记下，别当成「看门狗证明它没卡」。
+工具把它包成一次调用失败，于是**运行结束了却永远报不出来** —— 这一个 bug 同时解释了修复前后的两种症状：
 
-**下一步该看的地方**（都没看过）：`RunExecuteAsync` 的重定向收尾（`ResolveRedirectAsync`）、`BranchRuntimeContext` 的产物收集、以及重定向后那一轮 `context.Attempt` 与产物表戳的交互 —— 挂起总发生在**审计重定向之后**。
+- **修复前**：旧助手把「非 ok」当放弃、交回上一份快照 → 报「`outcome` 不对」，实际是 `Unknown` + `isRunning: true`。
+- **修复后**：助手继续重试，但异常持续 → 报「运行 30 秒没结束」。
+
+而观察通道显示引擎其实已经 **`RunEnded`** 了。**「挂起」从来不在引擎里** —— 是工具读不出结束。
+
+`MaxRetainedLogs` 的裁剪（`RemoveAt(0)`）让集合**收缩**，这是让 `CopyTo` 必然炸的那一半；只追加不删除会掩盖一半的竞态，所以回归测试特意开了裁剪。
+
+**修法**：`RuntimeContext` 加 `_logsGate`，读写都从它过；新增 `SnapshotLogs()` 供跨线程读取。`WorkflowAgentToolkit` 那一侧同样处理了 `CompiledRun.Failures`（`List<ExecutionError>`，同样的读写并发，只是会抛 `Collection was modified` 而不是数组越界）。**没有改任何接口** —— `SnapshotLogs()` 挂在具体类型上，`IRuntimeContext` 不动。
+
+**回归守卫**：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/RuntimeContextLogConcurrencyTests.cs`。去掉锁重跑，它以 `System.Array.Copy` 失败 —— 与真实故障同一个异常。
+
+**排查过程中被证伪的**（留个记录，别再查一遍）：`ManualExecutionGate` 写得很扎实；重试路径不走（`session?.RetryPolicy is not {} policy` 直接返回）；并行分支的 `SemaphoreSlim` 配平；`SaveCheckpointAsync` 无 store 早退、有异常吞掉；`WorkflowDemoSession.Observe` 是纯同步计数器。`FileCheckpointStore` 的锁也配平。
+
+**插桩的教训**：给每个节点加两条 `context.Log` 后失败率从约 40% 变成 **0/8** —— 典型 Heisenbug，日志本身把调度改到足以掩盖竞态。最终靠的是**在测试侧装一个只追加字符串的观察者**（比日志便宜一个数量级），它给出的关键线索是「引擎 `RunEnded` 了」——那直接指向「问题在读者一侧而不是引擎」。
+
+**另一处独立缺陷（仍未修）**：`WorkflowAgentToolkit` 用 `context.ExecutionGate ??= run.Gate;` 挂门，而 `WorkflowDemoSession` 已在自己的配置里写过 `context.ExecutionGate = Gate;`。配置顺序是「宿主自己的设置在先」，所以 `??=` **永远不生效** —— `PauseCompiledRun`/`ResumeCompiledRun` 作用的是 `run.Gate`，引擎等的却是会话那把门。两个工具都报 ok、`isPaused` 也如实反映 `run.Gate`，**但运行根本没被停住**。
+
+**剩下的抖动**：`SubAgentLiveTests.ARealModel_*` 走**真实模型**（从环境变量取 key），其中 `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo` 是对模型行为的**硬断言**（它的消息自己写着「If this fails, the mandate is not strong enough」）—— 那是提示词措辞测试，本就不确定。它失败几次与上面这条挂起无关。
 
 ---
 

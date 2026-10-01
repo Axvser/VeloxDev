@@ -237,6 +237,25 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// carries on — diagnostics never change what the run does.</summary>
     public event EventHandler<LogWriteFailedEventArgs>? LogWriteFailed;
 
+    // `ObservableCollection<T>` 不是线程安全的，而引擎一边跑、工具一边来读快照。
+    // 不加这把锁的话，`Logs` 的读取方（`Enumerable.ToList`）会先读 `Count` 再 `CopyTo`，
+    // 中间任何一次 Add / RemoveAt 都会让目标数组不够大，抛
+    // "Source array was not long enough ... (Parameter 'sourceArray')" —— 而工具把它包成一次调用失败，
+    // 于是「运行结束了」这件事永远报不出来。写与读都必须从这把锁过。
+    private readonly object _logsGate = new();
+
+    /// <summary>
+    /// A point-in-time copy of <see cref="Logs"/>, safe to enumerate while the run is appending.
+    /// </summary>
+    /// <remarks>
+    /// For anything outside the run's own thread — the run keeps writing while you read, and the live collection
+    /// must not be enumerated across that.
+    /// </remarks>
+    public string[] SnapshotLogs()
+    {
+        lock (_logsGate) return [.. _logs];
+    }
+
     /// <summary>Appends one line: the writer first (it is the complete record), then the retained view.</summary>
     private void AppendLog(string line)
     {
@@ -250,10 +269,13 @@ public sealed partial class RuntimeContext : IRuntimeContext
             catch (Exception ex) { LogWriteFailed?.Invoke(this, new LogWriteFailedEventArgs(line, ex)); }
         }
 
-        _logs.Add(line);
+        lock (_logsGate)
+        {
+            _logs.Add(line);
 
-        if (MaxRetainedLogs is int cap && cap >= 0)
-            while (_logs.Count > cap) _logs.RemoveAt(0);
+            if (MaxRetainedLogs is int cap && cap >= 0)
+                while (_logs.Count > cap) _logs.RemoveAt(0);
+        }
     }
 
     /// <summary>Nodes/the engine push a plain log line (with a sequence prefix).</summary>
