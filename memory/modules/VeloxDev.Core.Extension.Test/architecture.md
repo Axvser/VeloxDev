@@ -143,6 +143,18 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 **推论**：往这里加一条测试时，如果引入了「进程级静态状态」或「毫秒级真实时钟断言」，`[DoNotParallelize]` 得**由你自己加** —— 本项目没有先例可抄，抄要去姊妹模块抄（`memory/modules/VeloxDev.Core.Test/architecture.md` §六 列了 12 个类各自的理由）。
 
+### ⚠ 2026-10-01：`CompiledRunControlTests` 的「抖动」其实是**产品挂起**，不是测试问题
+
+约 **40%** 的失败率（并行与**隔离**跑都一样；隔离实测 10 次红 4 次）。**根因不在测试里**：
+
+`GetCompiledRunStatus` 报告 `isRunning: true / runStatus: "Running"` 整整 30 秒不结束，而日志里最后**四个 `PythonScriptNodeViewModel` 全部只记了「开始」没有「finished」** —— `run.Task` 永不完成，即 `RuntimeEngine.RunAsync` 卡在某次 `await` 上不返回。
+
+触发点在**审计重定向之后的重试路径**上（`RuntimeEngine.cs:105` 那条 `Redirecting to compile state #…` 之后）。重定向本身是有界的（`MaxRedirects` 守着），日志里也只出现一次，所以**不是重定向死循环**，是那一轮里卡住。
+
+**测试侧顺带修掉的那半**：`WaitForEndAsync` 原来把「非 ok」当成终点、交回上一份快照，于是调用方拿到的是 `outcome: "Unknown"` 的中途状态 —— 报出来的是「outcome 不对」，把挂起盖住了。现在它只认 `isRunning == false` 才返回，非 ok 继续轮询，超时才失败并带上最后一份状态。**改完失败率没变**（仍约 40%），变的是失败信息从「断言不符」变成「运行 30 秒没结束」—— 这才是真相。
+
+**结论**：这不是「加 `[DoNotParallelize]`」能解决的，也不是线程池饿死（隔离跑同样红）。它是一个待查的引擎缺陷，归 `WorkflowSystem/CompilerEx`。
+
 ---
 
 ## 六、组织与覆盖

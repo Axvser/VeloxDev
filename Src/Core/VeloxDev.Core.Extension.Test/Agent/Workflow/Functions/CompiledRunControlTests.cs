@@ -80,6 +80,21 @@ public class CompiledRunControlTests
     /// handle means the run finished and the previous answer was the last word on it — the race between the tool's
     /// own status and the retirement is the tool's to keep, not the test's to time.
     /// </summary>
+    /// <summary>
+    /// Polls a run until it has actually ended.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A non-ok answer is <b>not</b> an ending. <c>GetCompiledRunStatus</c> retires a handle as soon as it has
+    /// reported that run as finished — so a poll landing after that gets "unknown handle", which is the tool
+    /// being honest, not the run ending. Returning the previous snapshot there is what made this helper hand
+    /// callers a mid-run status (outcome <c>Unknown</c>, <c>isRunning: true</c>) to assert on, once in a few runs.
+    /// </para>
+    /// <para>
+    /// So the only exit below is <c>isRunning == false</c>; everything else keeps polling until the deadline,
+    /// and a deadline reached with nothing to show fails with whatever the last good answer was.
+    /// </para>
+    /// </remarks>
     private static async Task<JObject> WaitForEndAsync(WorkflowAgentScope scope, string handle, int seconds = 30)
     {
         JObject? last = null;
@@ -87,13 +102,17 @@ public class CompiledRunControlTests
         while (DateTime.UtcNow < deadline)
         {
             var status = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "GetCompiledRunStatus", ("handle", handle)));
-            if (status["status"]?.Value<string>() != "ok")
-                return last ?? status;
-            last = status;
-            if (status["isRunning"]?.Value<bool>() == false) return status;
+            if (status["status"]?.Value<string>() == "ok")
+            {
+                last = status;
+                if (status["isRunning"]?.Value<bool>() == false) return status;
+            }
+
             await Task.Delay(25);
         }
-        Assert.Fail($"run '{handle}' did not finish in {seconds}s; last status: {last?.ToString(Formatting.None)}");
+
+        Assert.Fail(handle + " did not finish in " + seconds + "s"
+            + (last is null ? " (no status ever came back ok)" : "; last status: " + last.ToString(Formatting.None)));
         return null!;
     }
 
