@@ -25,6 +25,14 @@ namespace VeloxDev.Generators
             {
                 var writer = new CommandWriter();
                 writer.Initialize(syntax, symbol);
+
+                // 先报诊断：不支持的签名不会进产物，作者该看到的是这一条，
+                // 而不是生成文件里那句「方法组无法转换为 Func<…>」。
+                foreach (var diagnostic in writer.Diagnostics)
+                {
+                    context.ReportDiagnostic(diagnostic);
+                }
+
                 if (writer.CanWrite())
                 {
                     context.AddSource(

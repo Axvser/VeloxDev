@@ -126,6 +126,18 @@ context.RegisterSourceOutput(
 
 `ValueTask` 既不能隐式转 `Task`，也不像 `Task<T>` 那样能靠协变（协变要求返回类型之间本身有引用转换，而 `ValueTask` 是结构体），所以**必须显式 thunk**。
 
+### 不支持的形态发 `VELOXCMD001`（2026-10-01）
+
+判定失败时**报诊断并跳过该方法**，不再让它落进产物：
+
+- 报的是 `VELOXCMD001`（Error），位置是**用户那一行**，消息里点名方法并说明改法。
+- 跳过是因为产物**注定编不过** —— 再冒一个 CS1503 只会把真正的错误埋掉。全部方法都被拒时 `CanWrite()` 为假，**整个文件都不生成**。
+- 这与之前的行为差别很大：以前报的是生成文件里的 `CS1503 无法从"方法组"转换…`，作者看到的是一个自己没写过的方法组和构造签名。
+
+被拒的四种（消息里的措辞就是「该怎么改」）：泛型**方法**、返回类型不认识、前导形参多于 1 个、`void` 带 `CancellationToken`。
+
+`DiagnosticDescriptor` 在 `Diagnostics.cs`；`CommandWriter.Diagnostics` 收集，`Command.cs` 用 `context.ReportDiagnostic` 报出去。**这是本仓库第一个 Roslyn 诊断**（此前只有 `.targets` 里的 `VELOXCFG0001` 那条 MSBuild 警告）。
+
 **形参这一维**（2026-10-01 起）：前导形参只支持 **0 个或 1 个**，末尾可再跟一个 `CancellationToken`。
 
 | 前导形参 | 生成物 |

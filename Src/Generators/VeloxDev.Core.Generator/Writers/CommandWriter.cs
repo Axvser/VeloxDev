@@ -29,6 +29,12 @@ namespace VeloxDev.Generators.Writers
 
         private List<CommandSpec> CommandConfig { get; set; } = [];
 
+        /// <summary>
+        /// What could not be turned into a command. The generator reports these so the error lands on the
+        /// author's own line instead of inside the generated file.
+        /// </summary>
+        public List<Diagnostic> Diagnostics { get; } = [];
+
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
@@ -85,7 +91,16 @@ namespace VeloxDev.Generators.Writers
                 }
 
                 // Analyze the construction mode
-                int constructorType = ParseConstructorType(methodSymbol, out string commandExpression);
+                if (!TryBuildCommandExpression(methodSymbol, out string commandExpression, out int constructorType, out string reason))
+                {
+                    // 跳过它，不生成注定编不过的东西：产物里再冒一个 CS1503 只会把真正的错误埋掉。
+                    Diagnostics.Add(Diagnostic.Create(
+                        VeloxDev.Generators.Diagnostics.UnsupportedCommandSignature,
+                        methodSymbol.Locations.FirstOrDefault(),
+                        methodSymbol.Name,
+                        reason));
+                    continue;
+                }
 
                 // Record the context
                 list.Add(new CommandSpec(commandName, canValidate, Math.Max(1, semaphore), commandExpression, constructorType));
@@ -115,10 +130,16 @@ namespace VeloxDev.Generators.Writers
         // constructorType：0 = new VeloxCommand（主构造 / Func<Task> / Action），
         //                  1 = CreateTaskOnlyWithParameter，
         //                  2 = CreateTaskOnlyWithCancellationToken。
-        private int ParseConstructorType(IMethodSymbol methodSymbol, out string commandExpression)
+        private bool TryBuildCommandExpression(
+            IMethodSymbol methodSymbol,
+            out string commandExpression,
+            out int constructorType,
+            out string reason)
         {
             string name = methodSymbol.Name;
             commandExpression = name;
+            constructorType = 0;
+            reason = string.Empty;
 
             var parameters = methodSymbol.Parameters;
             string returnTypeName = methodSymbol.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -127,16 +148,37 @@ namespace VeloxDev.Generators.Writers
             bool isValueTask = returnTypeName == VALUE_TASK || returnTypeName.StartsWith(VALUE_TASK + "<");
             bool isVoid = methodSymbol.ReturnsVoid;
 
-            // 自定义可等待类型等：不认识，交给方法组去报错。
-            if (!isTask && !isValueTask && !isVoid) return 0;
+            // 泛型方法：生成的方法组无法从 (object?, CancellationToken) 推断出类型实参（CS0411）。
+            // 泛型**类**不受影响 —— 那条路走的是 partial 声明，不是方法组。
+            if (methodSymbol.IsGenericMethod)
+            {
+                reason = "it is a generic method; the generated command cannot infer its type arguments from a single object? argument, so give it a concrete parameter type (a generic class is fine - it is the method type parameters that cannot be supplied)";
+                return false;
+            }
+
+            if (!isTask && !isValueTask && !isVoid)
+            {
+                reason = $"it returns '{methodSymbol.ReturnType.ToDisplayString()}', but a command body must return Task, Task<T>, ValueTask, ValueTask<T> or void";
+                return false;
+            }
 
             // 不用 `[^1]`：那是 System.Index，netstandard2.0 上没有。
             bool hasToken = parameters.Length > 0 && IsToken(parameters[parameters.Length - 1]);
             int leading = parameters.Length - (hasToken ? 1 : 0);
 
-            if (leading > 1) return 0;
+            if (leading > 1)
+            {
+                reason = "it takes more than one parameter before the optional CancellationToken, and a command carries a single argument; take one type of your own instead (a record or a tuple both work)";
+                return false;
+            }
 
             bool isObjectParam = leading == 1 && IsObject(parameters[0]);
+
+            if (isVoid && hasToken)
+            {
+                reason = "it returns void and takes a CancellationToken, which nothing in a synchronous body can observe; return Task when the body is meant to be cancellable, or drop the parameter";
+                return false;
+            }
 
             // 非 object? 的单参数要在 thunk 里强转；object? 则整段省掉，方法组能直接绑。
             // 只在 leading == 1 时读 parameters[0] —— 零参方法读它会 IndexOutOfRange。
@@ -148,35 +190,34 @@ namespace VeloxDev.Generators.Writers
 
             if (isVoid)
             {
-                // void 体观察不到 token，所以带尾随 CancellationToken 的形态一律不支持 ——
-                // 那正是「接受一个永远用不上的 token」。
-                if (hasToken) return 0;
-
                 if (leading == 1 && !isObjectParam)
                 {
                     commandExpression = $"parameter => {name}({argument})";
                 }
 
-                return 0;   // Action / Action<object?>
+                return true;   // Action / Action<object?>
             }
 
             if (isTask)
             {
                 if (leading == 0)
                 {
-                    return hasToken ? 2 : 0;    // 方法组：Func<Task> 或 Func<CancellationToken, Task>
+                    constructorType = hasToken ? 2 : 0;    // 方法组：Func<Task> 或 Func<CancellationToken, Task>
+                    return true;
                 }
 
                 if (isObjectParam)
                 {
-                    return hasToken ? 0 : 1;    // 方法组：主构造 或 CreateTaskOnlyWithParameter
+                    constructorType = hasToken ? 0 : 1;    // 方法组：主构造 或 CreateTaskOnlyWithParameter
+                    return true;
                 }
 
                 // 非 object?：方法组转不过去，必须强转
                 commandExpression = hasToken
                     ? $"(parameter, ct) => {name}({argument}, ct)"
                     : $"parameter => {name}({argument})";
-                return hasToken ? 0 : 1;
+                constructorType = hasToken ? 0 : 1;
+                return true;
             }
 
             // ValueTask：没有到 Task 的隐式转换，也不能像 Task<T> 那样靠协变（它是结构体），
@@ -186,13 +227,15 @@ namespace VeloxDev.Generators.Writers
                 commandExpression = hasToken
                     ? $"ct => {name}(ct).AsTask()"
                     : $"() => {name}().AsTask()";
-                return hasToken ? 2 : 0;
+                constructorType = hasToken ? 2 : 0;
+                return true;
             }
 
             commandExpression = hasToken
                 ? $"(parameter, ct) => {name}({argument}, ct).AsTask()"
                 : $"parameter => {name}({argument}).AsTask()";
-            return hasToken ? 0 : 1;
+            constructorType = hasToken ? 0 : 1;
+            return true;
         }
 
         // （转换 thunk 的构造已并入 ParseConstructorType —— 形参个数与返回类型要一起判。）

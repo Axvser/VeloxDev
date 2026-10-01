@@ -21,14 +21,14 @@
   </ItemGroup>
 
   <!-- 签名覆盖测试要用 [VeloxCommand]，而 analyzer 不随 ProjectReference 传递。
-       与 VeloxDev.Core.Extension.Test 用同一对：Debug 走生成器源码，Release 走已发布包。 -->
+       这里与别的项目不同，**不分 Debug/Release**：本项目的测试对象就是生成器源码本身，
+       测一个已发布的快照等于没测。同时保留程序集引用（ReferenceOutputAssembly 默认 true），
+       CommandSignatureDiagnosticsTests 要直接驱动 Command 生成器来断言它报的诊断。 -->
   <ItemGroup>
     <ProjectReference Include="..\..\Generators\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false"
-                      Condition="'$(Configuration)' == 'Debug'" />
-    <PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0"
-                      Condition="'$(Configuration)' != 'Debug'" />
+                      OutputItemType="Analyzer" />
+    <!-- 版本与生成器自身编译所依赖的一致（见 VeloxDev.Core.Generator.csproj）；该版本在本机缓存中。 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" />
   </ItemGroup>
 
   <ItemGroup>
