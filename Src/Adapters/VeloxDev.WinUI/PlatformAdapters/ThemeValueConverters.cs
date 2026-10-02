@@ -3,7 +3,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using System;
-using System.ComponentModel;
 using System.Globalization;
 using Windows.Foundation;
 using Windows.UI;
@@ -251,10 +250,9 @@ namespace VeloxDev.DynamicTheme
                     return brushConverter.Convert(targetType, propertyName, parameters);
                 }
 
-                // Generic converter.
-                var converter = TypeDescriptor.GetConverter(targetType);
-                if (converter.CanConvertFrom(typeof(string)))
-                    return converter.ConvertFromString(null, CultureInfo.InvariantCulture, str);
+                // 到此为止 —— 平台自己的类型由上面几步负责，其它类型不再支持。
+                // 自定义类型（含可插值的那些）由宿主自己写一个 IThemeValueConverter，声明在
+                // [ThemeConfig<...>] 上：那是本模块记录在案的扩展点，也是这里不再需要反射的原因。
             }
             catch { }
 

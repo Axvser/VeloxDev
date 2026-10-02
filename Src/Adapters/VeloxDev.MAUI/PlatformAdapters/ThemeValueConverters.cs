@@ -294,13 +294,9 @@ namespace VeloxDev.DynamicTheme
                     return resource;
                 }
 
-                // 2. Use the .NET type converter
-                TypeConverter converter = TypeDescriptor.GetConverter(targetType);
-                if (converter?.CanConvertFrom(typeof(string)) == true)
-                {
-                    return converter.ConvertFromInvariantString(strValue);
-                }
-
+                // 到此为止 —— 平台自己的类型由上面几步负责，其它类型不再支持。
+                // 自定义类型（含可插值的那些）由宿主自己写一个 IThemeValueConverter，声明在
+                // [ThemeConfig<...>] 上：那是本模块记录在案的扩展点，也是这里不再需要反射的原因。
                 // 3. Special-case MAUI-specific types
                 if (targetType == typeof(Point))
                 {
