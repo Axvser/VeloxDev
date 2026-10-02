@@ -17,6 +17,7 @@ public class MVVMPropertyPairingTests
 {
     private const string Prop1 = "VELOX_MVVM_PROP001";
     private const string Prop2 = "VELOX_MVVM_PROP002";
+    private const string Prop3 = "VELOX_MVVM_PROP003";
 
     // ── 字段路：不变量 ──
 
@@ -190,6 +191,38 @@ public class MVVMPropertyPairingTests
         Assert.AreEqual(1, CountOf(generated, "public System.String Id"), "only one of them can own the name");
     }
 
+    // ── 无 partial 的属性：补全无从下手 ──
+
+    [TestMethod]
+    public void ANonPartialProperty_IsReportedRatherThanSilentlySkipped()
+    {
+        // 少了 partial 就补不了访问器。以前什么也不说，属性悄悄退化成普通自动属性，
+        // 症状要等到绑定处才浮现。
+        var (diagnostics, generated) = Run("[VeloxProperty] public string Name { get; set; }");
+
+        Assert.HasCount(1, diagnostics, GeneratorProbe.Describe(diagnostics));
+        Assert.AreEqual(Prop3, diagnostics[0].Id);
+        Assert.AreEqual(DiagnosticSeverity.Warning, diagnostics[0].Severity);
+        Assert.IsEmpty(generated, "nothing can be generated from a property that is already complete");
+    }
+
+    [TestMethod]
+    public void ANonPartialPropertyClaimedByAnotherGenerator_StaysSilent()
+    {
+        // 把属性让给 CommunityToolkit 的 [ObservableProperty] 是合法写法 —— 那不是笔误，不该报警。
+        var (diagnostics, _) = Run(
+            "[VeloxProperty] [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty] public string Name { get; set; }",
+            preamble: """
+                namespace CommunityToolkit.Mvvm.ComponentModel
+                {
+                    public class ObservableObjectAttribute : System.Attribute { }
+                    public class ObservablePropertyAttribute : System.Attribute { }
+                }
+                """);
+
+        Assert.IsEmpty(diagnostics, GeneratorProbe.Describe(diagnostics));
+    }
+
     [TestMethod]
     public void TheGeneratorNeverCopiesAttributesIntoItsOutput()
     {
@@ -204,10 +237,12 @@ public class MVVMPropertyPairingTests
     }
 
     private static (IReadOnlyList<Diagnostic> Diagnostics, string Generated) Run(
-        string members, string? baseClass = null)
+        string members, string? baseClass = null, string? preamble = null)
     {
         var source = $$"""
             using VeloxDev.MVVM;
+
+            {{preamble}}
 
             namespace Probe;
 

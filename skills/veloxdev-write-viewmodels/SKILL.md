@@ -9,7 +9,9 @@ Write a class that the compile-time generators turn into a full ViewModel — pr
 
 Package: **`VeloxDev.Core`**. No GUI adapter is needed and the behaviour is identical on every platform.
 
-⚙ **Read this first: the class must be `partial`.** Every generator in the repository matches on the `partial` modifier, and **the generator project contains no diagnostics at all** — a missing `partial` produces no file, no warning and no error. The member you expected simply is not there. If `[VeloxProperty]` "does nothing", this is why.
+⚙ **Read this first: the class must be `partial`.** Every generator in the repository matches on the `partial` modifier, and a non-partial **class** still produces no file, no warning and no error — the member you expected simply is not there. If `[VeloxProperty]` "does nothing", this is why.
+
+⚙ **A non-partial `[VeloxProperty]` property is the same trap, and it now warns.** The generator only ever *adds* code, so it cannot complete accessors you already wrote — mark the property `partial` or drop the attribute. This one reports `VELOX_MVVM_PROP003` rather than passing silently; the rest of the `VELOX_MVVM_PROP*` family is documented in the `VeloxDev.Core.Generator` module memory.
 
 ⚙ **The generator only sees the class if the file it is in compiles as syntax** — the same `partial` check runs before anything else, so a class in an excluded file or behind a bad preprocessor branch is skipped too.
 

@@ -29,7 +29,7 @@
 |---|---|
 | 生成出来的代码**跑起来是什么行为** | 全在 Core。生成器只写声明与转发（例如 `OnWorkflowSlotAdded` 的**声明**由 `Writers/MVVMWriter.cs` 写，`CreateWorkflowSlot<T>()` 的**骨架**也由它写，但生命周期归 `WorkflowSystem`） |
 | 「哪些类会被处理」 | `Base/Analizer.cs:82-94` 那张**硬编码 10 条**的 `TriggerAttributes` 表。自定义特性、第三方特性一律不认 |
-| 编译错误 / 诊断 | 生成器自己发三类（`Diagnostics.cs`；2026-10-02 起 ID 统一成 `VELOX_MVVM_*`）：`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）。另有 MSBuild 侧的 `VELOXCFG0001`：`VeloxDev.Core.Generator.targets:16-19` |
+| 编译错误 / 诊断 | 生成器自己发四类（`Diagnostics.cs`；2026-10-02 起 ID 统一成 `VELOX_MVVM_*`）：`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）、`VELOX_MVVM_PROP003`（`[VeloxProperty]` 属性没写 `partial`，Warning）。另有 MSBuild 侧的 `VELOXCFG0001`：`VeloxDev.Core.Generator.targets:16-19` |
 | 依赖注入、服务定位、注册表 | 完全不生成。生成的是「这个类自己怎么把自己装起来」，不是容器配置 |
 | 平台差异 | 零。见上 |
 | 版本与发布 | 见 `extension.md` §四「改这里的代价」 |

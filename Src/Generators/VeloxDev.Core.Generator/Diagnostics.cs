@@ -69,5 +69,21 @@ namespace VeloxDev.Generators
             category: Category,
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// A <c>[VeloxProperty]</c> property the generator cannot complete the accessors of.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error: the declaration is legal C# and compiles on its own — it just never gets the
+        /// notification wiring, which surfaces later at a binding rather than at this line. The generator can only
+        /// add code, so a property whose accessors are already written cannot be rewritten into a notifying one.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor NonPartialProperty = new(
+            id: "VELOX_MVVM_PROP003",
+            title: "Uncompletable [VeloxProperty] property",
+            messageFormat: "'{0}' cannot be generated: {1}",
+            category: Category,
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
     }
 }

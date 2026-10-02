@@ -60,7 +60,7 @@ Open your GUI's reference alongside whichever of the above you are reading — i
 
 ## The rules that decide whether your code works
 
-⚙ **`partial` on every component class, or nothing happens.** Every generator — `[VeloxProperty]`, `[VeloxCommand]`, `[WorkflowBuilder.*]`, `[MonoBehaviour]` — matches on the `partial` modifier, and there is not one diagnostic in the whole generator project. A missing `partial` produces no file, no warning, and a puzzling error ten minutes later at the use site.
+⚙ **`partial` on every component class, or nothing happens.** Every generator — `[VeloxProperty]`, `[VeloxCommand]`, `[WorkflowBuilder.*]`, `[MonoBehaviour]` — matches on the `partial` modifier, and this class-level check is silent: a missing `partial` produces no file, no warning, and a puzzling error ten minutes later at the use site. (`[VeloxProperty]` members have diagnostics of their own — `VELOX_MVVM_PROP*` — but those fire on the member, not on the class.)
 
 ⚙ **Call `InitializeWorkflow()` from your own constructor.** The generator does not emit one.
 

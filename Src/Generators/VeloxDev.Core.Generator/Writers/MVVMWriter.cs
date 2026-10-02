@@ -160,9 +160,26 @@ namespace VeloxDev.Generators.Writers
                 .OfType<IPropertySymbol>()
                 .Where(property => property.GetAttributes().Any(attr =>
                     attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-                    NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
-                .Where(ShouldGeneratePartialProperty))
+                    NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute")))
             {
+                // 属性体已经写死时补全无从下手 —— 生成器只能新增代码，改不进已有的访问器。
+                // 「有竞争生成器特性」是另一回事：那是把这份职责让给了别人，合法的跳过，不报。
+                if (!ShouldGeneratePartialProperty(property))
+                {
+                    if (!HasCompetingPropertyGeneratorAttribute(property))
+                    {
+                        Report(
+                            VeloxDev.Generators.Diagnostics.NonPartialProperty,
+                            property,
+                            property.Name,
+                            property.IsIndexer
+                                ? "an indexer cannot carry generated accessors"
+                                : "the property is not declared 'partial', so its accessors cannot be completed");
+                    }
+
+                    continue;
+                }
+
                 var analizer = new MVVMPropertyAnalizer(property);
                 var factory = new MVVMPropertyFactory(analizer)
                 {
