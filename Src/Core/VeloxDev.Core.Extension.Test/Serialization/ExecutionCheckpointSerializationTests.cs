@@ -13,9 +13,10 @@ namespace VeloxDev.Core.Extension.Test.Serialization;
 /// Persisting a run's place: the JSON form of <see cref="ExecutionCheckpoint"/> and the file-backed store.
 /// <para>
 /// The point of the round trip is the payloads — a checkpoint carries whatever the graph's nodes produced, and
-/// <see cref="object"/>-typed values are exactly what a serializer loses first (a dictionary comes back as a
-/// <c>JObject</c>, a number as a <c>JValue</c>) — so these use payloads of several kinds rather than the strings a
-/// JSON writer handles for free.
+/// <see cref="object"/>-typed values are the ones the format reshapes rather than copies: JSON has a single
+/// integer type, so an integer payload comes back as a <see cref="long"/>, and a node that produced null has to
+/// come back as null rather than absent. So these use payloads of several kinds rather than the strings a JSON
+/// writer handles for free.
 /// </para>
 /// </summary>
 [TestClass]
@@ -47,7 +48,7 @@ public class ExecutionCheckpointSerializationTests
         CollectionAssert.AreEqual(new[] { "n1", "n2", "n3", "n4" }, restored.Shape);
 
         var payload = Assert.IsInstanceOfType<Dictionary<string, object?>>(restored.Data,
-            "a dictionary payload has to come back as a dictionary, not as a JObject");
+            "a dictionary payload has to come back as a dictionary");
         Assert.AreEqual("A", payload["n1"]);
         var n2 = Assert.IsInstanceOfType<long>(payload["n2"], "JSON has one integer type — see the note on CheckpointEx");
         Assert.AreEqual(42L, n2);
