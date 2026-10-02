@@ -32,7 +32,9 @@
   <Folder Name="/Examples/Tickable/WPF/">
     <Project Path="Examples/Tickable/WPF/Demo/Demo.csproj" />
   </Folder>
-  <Folder Name="/Examples/MVVM/" />
+  <Folder Name="/Examples/MVVM/">
+    <Project Path="Examples/MVVM/Common/Lib/Lib.csproj" />
+  </Folder>
   <Folder Name="/Examples/MVVM/Avalonia/">
     <Project Path="Examples/MVVM/Avalonia/Demo/Demo.csproj" />
   </Folder>

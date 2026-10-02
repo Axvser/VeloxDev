@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Demo.ViewModels"
+        xmlns:cmd="using:Demo.Commands"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="640"
@@ -44,6 +45,30 @@
                     <ListBox Height="220"
                              ItemsSource="{Binding Items}"
                              SelectedItem="{Binding SelectedItem}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="命令签名画廊" FontSize="18" FontWeight="SemiBold"/>
+                    <TextBlock TextWrapping="Wrap"
+                               Text="每个按钮是一条生成出来的命令。灰掉的按钮是它们各自的校验回调返回了 false：HandleNote 要求 Weight &gt; 0，NotifyWeight 要求 &gt; 0，GetStoreCommand&lt;T&gt;() 要求实参非 null。"/>
+                    <ItemsControl ItemsSource="{Binding Gallery.Samples}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="cmd:CommandSample">
+                                <Button Margin="0,0,8,8" Padding="12,6"
+                                        Content="{Binding Name}"
+                                        Command="{Binding Command}"
+                                        CommandParameter="{Binding Parameter}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ListBox Height="200" ItemsSource="{Binding Gallery.Log}"/>
                 </StackPanel>
             </Border>
         </StackPanel>

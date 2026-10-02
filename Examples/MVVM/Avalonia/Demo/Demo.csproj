@@ -28,6 +28,8 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+	  <!-- 命令签名画廊与 WPF 侧共用同一份代码，例子不会两边漂移。 -->
+	  <ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
 	</ItemGroup>
 
 	<!-- 本项目用 [VeloxProperty]，analyzer 不随 ProjectReference 传递。 -->

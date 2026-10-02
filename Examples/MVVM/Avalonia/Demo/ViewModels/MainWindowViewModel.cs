@@ -4,6 +4,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Demo.Commands;
 using VeloxDev.MVVM;
 
 namespace Demo.ViewModels;
@@ -13,6 +14,10 @@ namespace Demo.ViewModels;
    provides complete MVVM support and inheriting another MVVM base may conflict with it. */
 public partial class MainWindowViewModel : ObservableViewModelBase
 {
+    /* Every [VeloxCommand] signature, one command each, with its validator. Lives in the shared library so the
+       WPF demo shows the exact same set. See section "命令签名画廊" in the window. */
+    public CommandGalleryViewModel Gallery { get; } = new();
+
     public MainWindowViewModel()
     {
         Items =
@@ -79,7 +84,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         return Task.CompletedTask;
     }
     /* This partial method must be implemented at this point */
-    private partial bool CanExecuteMinusCommand(object? parameter)
+    private partial bool CanExecuteMinusCommand(object? sender)
     {
         return _index > 0;
     }
@@ -114,7 +119,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         return Task.CompletedTask;
     }
 
-    private partial bool CanExecuteRemoveSelectedItemCommand(object? parameter)
+    private partial bool CanExecuteRemoveSelectedItemCommand(object? sender)
     {
         return !string.IsNullOrWhiteSpace(_selectedItem) && _items.Contains(_selectedItem);
     }
@@ -132,7 +137,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         return Task.CompletedTask;
     }
 
-    private partial bool CanExecuteMoveLastToFirstCommand(object? parameter)
+    private partial bool CanExecuteMoveLastToFirstCommand(object? sender)
     {
         return _items.Count > 1;
     }

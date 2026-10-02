@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- 跟两个 Demo 一致。netstandard2.0 也能编译，但 ValueTask 在那边要额外引
+		     System.Threading.Tasks.Extensions —— 命令体想返回 ValueTask 就得付这一笔。 -->
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<LangVersion>latest</LangVersion>
+		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+	</ItemGroup>
+
+	<!-- 本项目用 [VeloxCommand]，analyzer 不随 ProjectReference 传递，所以这里也要有那一对。 -->
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\..\Src\Generators\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false"
+		                  Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0"
+		                  Condition="'$(Configuration)' != 'Debug'" />
+	</ItemGroup>
+
+</Project>
