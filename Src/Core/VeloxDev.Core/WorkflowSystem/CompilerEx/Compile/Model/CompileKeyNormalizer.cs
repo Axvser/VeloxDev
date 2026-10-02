@@ -34,8 +34,11 @@ internal static class CompileKeyNormalizer
     /// with a key no option names — it selects nothing and the flow ends where it ends, with no fabricated result.
     /// </para>
     /// </summary>
-    // 按名字还原路由键的类型。与 SlotEnumerator 那处同因：键是宿主的枚举，没有成员的声明类型是它，
-    // 所以它不在 Agent 目录里，只能按名字找。宿主必须自己保住那个枚举的元数据。
+    // 按名字还原路由键的类型。**实测过换成目录查询**：967 条 Core 测试全过，但 Extension 侧 4 条编译图
+    // 序列化测试当场红，症状正是这段注释要防的那一个 —— 「Branch 'Low' has no downstream node」，
+    // 因为目录里没有这个枚举，ResolveType 返回 null，键停在 long，动态分支谁都不匹配。
+    // 路由键的枚举出现在宿主 ResolveRouteKey 的实现里，没有任何成员的声明类型是它，所以生成器收录不到。
+    // 代价：宿主必须自己保住那个枚举的元数据。
 #pragma warning disable IL2057, IL2026 // 按名字解析类型：见上
     internal static object? Normalize(object? key, string? typeName)
     {

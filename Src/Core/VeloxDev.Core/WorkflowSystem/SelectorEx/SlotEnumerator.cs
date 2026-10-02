@@ -656,7 +656,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         // Otherwise EnumType/EnumValues read the stale default type and the dropdown reverts.
         if (!string.IsNullOrEmpty(SelectorTypeName))
         {
-            var resolved = ResolveTypeByName(SelectorTypeName);
+            var resolved = VeloxDev.AI.AgentTypeResolver.ResolveType(SelectorTypeName);
             if (resolved is not null)
             {
                 SelectorType = resolved;
@@ -729,23 +729,17 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
             yield return item.Slot;
     }
 
-    // 按名字还原选择器类型。这是加载路径上唯一一处必须读元数据的地方：`SelectorTypeName` 是存档里
-    // 唯一留下的东西，而选择器类型是宿主自己的枚举（demo 里的 VoltageRange），它不在 Agent 目录里
-    // —— 没有任何成员的声明类型是它，所以生成器收录不到，也就查不出来。
-    //
-    // 代价是真实的：裁剪器看不到这个字符串指向谁，宿主必须自己保住那个枚举的元数据。
-    // 不换成目录查询，是因为那会把「目录里没有就还原不出来」变成默认结果，而它今天能还原出来。
-#pragma warning disable IL2026, IL2025 // 按名字解析类型：见上
+    /// <summary>
+    /// 按名字还原选择器类型 —— 走编译期目录，不扫程序集。
+    /// </summary>
+    /// <remarks>
+    /// 存档里只留下 <c>SelectorTypeName</c>，而按名字找类型正是目录在做的事：它按类型全名索引，
+    /// 而这里存的正是 <c>FullName</c>。选择器类型是宿主的枚举，但只要它出现在某个成员的声明类型上
+    /// （demo 的 <c>VoltageRange</c> 就是 <c>EnumSelectorNodeViewModel.SelectedValue</c> 的类型），
+    /// 目录就收录得到。查不到就是闭世界的老答案：那个类型没进目录，还原不出来。
+    /// </remarks>
     private static Type? ResolveTypeByName(string fullName)
-    {
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            var t = asm.GetType(fullName, throwOnError: false, ignoreCase: false);
-            if (t is not null) return t;
-        }
-        return null;
-    }
-#pragma warning restore IL2026, IL2025
+        => VeloxDev.AI.AgentTypeResolver.ResolveType(fullName);
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
