@@ -49,8 +49,8 @@ public class ExecutionCheckpointSerializationTests
         var payload = Assert.IsInstanceOfType<Dictionary<string, object?>>(restored.Data,
             "a dictionary payload has to come back as a dictionary, not as a JObject");
         Assert.AreEqual("A", payload["n1"]);
-        Assert.AreEqual(42L, payload["n2"], "JSON has one integer type — see the note on CheckpointEx");
-        Assert.AreEqual(typeof(long), payload["n2"].GetType());
+        var n2 = Assert.IsInstanceOfType<long>(payload["n2"], "JSON has one integer type — see the note on CheckpointEx");
+        Assert.AreEqual(42L, n2);
 
         Assert.AreEqual("A", restored.Outputs["n1"]);
         Assert.AreEqual(42L, restored.Outputs["n2"]);
