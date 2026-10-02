@@ -101,6 +101,16 @@ public enum AIContextRefKind : byte
 
     /// <summary>A type argument, such as the <c>T</c> of a slot enumerator.</summary>
     GenericArgument = 4,
+
+    /// <summary>
+    /// The entry's base type, so a caller can walk the inheritance chain.
+    /// </summary>
+    /// <remarks>
+    /// Present because the reflection path enumerates inherited members too — a derived component's rendering
+    /// shows the properties it gets from its base. A renderer that only read an entry's own members would lose
+    /// them, so the chain has to be walkable from the tree.
+    /// </remarks>
+    BaseType = 5,
 }
 
 /// <summary>

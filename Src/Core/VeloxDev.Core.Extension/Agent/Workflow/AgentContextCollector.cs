@@ -24,7 +24,18 @@ public static class AgentContextCollector
     public static string[] GetAgentContext(MemberInfo member, AgentLanguages language)
         => AgentContextReader.GetContexts(member, language);
 
+    /// <summary>
+    /// Renders an enum's context, from the compiled tree when the type is in it.
+    /// </summary>
+    /// <param name="enumType">The enum.</param>
+    /// <param name="language">The language to render descriptions in.</param>
+    /// <returns>The Markdown block.</returns>
     public static string GetEnumContext(Type enumType, AgentLanguages language)
+        => AgentContextTreeRenderer.TryEntry(enumType, out var entry)
+            ? AgentContextTreeRenderer.Enum(entry, language)
+            : GetEnumContextByReflection(enumType, language);
+
+    public static string GetEnumContextByReflection(Type enumType, AgentLanguages language)
     {
         var result = new StringBuilder();
 
@@ -64,11 +75,25 @@ public static class AgentContextCollector
         return result.ToString();
     }
 
+    /// <summary>
+    /// Renders an interface's context, from the compiled tree when the type is in it.
+    /// </summary>
+    /// <param name="type">The interface.</param>
+    /// <param name="language">The language to render descriptions in.</param>
+    /// <returns>The Markdown block.</returns>
+    /// <exception cref="ArgumentException"><paramref name="type"/> is not an interface.</exception>
     public static string GetInterfaceContext(Type type, AgentLanguages language)
     {
         if (!type.IsInterface)
             throw new ArgumentException("Type must be an interface.", nameof(type));
 
+        return AgentContextTreeRenderer.TryEntry(type, out var entry)
+            ? AgentContextTreeRenderer.Interface(entry, language)
+            : GetInterfaceContextByReflection(type, language);
+    }
+
+    public static string GetInterfaceContextByReflection(Type type, AgentLanguages language)
+    {
         var result = new StringBuilder();
 
         result.AppendLine("---");
@@ -129,7 +154,18 @@ public static class AgentContextCollector
         return result.ToString();
     }
 
+    /// <summary>
+    /// Renders a component's context, from the compiled tree when the type is in it.
+    /// </summary>
+    /// <param name="type">The component type.</param>
+    /// <param name="language">The language to render descriptions in.</param>
+    /// <returns>The Markdown block.</returns>
     public static string GetClassContext(Type type, AgentLanguages language)
+        => AgentContextTreeRenderer.TryEntry(type, out var entry)
+            ? AgentContextTreeRenderer.Class(entry, language)
+            : GetClassContextByReflection(type, language);
+
+    public static string GetClassContextByReflection(Type type, AgentLanguages language)
     {
         var result = new StringBuilder();
 
@@ -274,6 +310,11 @@ public static class AgentContextCollector
     /// the Agent understands the data structure without any operational noise.
     /// </summary>
     public static string GetDataContext(Type type, AgentLanguages language)
+        => AgentContextTreeRenderer.TryEntry(type, out var entry)
+            ? AgentContextTreeRenderer.Data(entry, language)
+            : GetDataContextByReflection(type, language);
+
+    public static string GetDataContextByReflection(Type type, AgentLanguages language)
     {
         var result = new StringBuilder();
 

@@ -233,8 +233,16 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine("        =>");
             builder.AppendLine("    [");
 
+            // 类型条目自己就是它那个子节点 —— 不能再出一个同名的 Directory 占位，否则同一个目录里
+            // 两个节点同名，查表时只会剩一个（而且剩哪个取决于去重方向）。
+            var typePaths = new HashSet<string>(
+                directory.TypeEntries.Select(static t => t.Path),
+                System.StringComparer.Ordinal);
+
             foreach (var child in directory.Children.OrderBy(static c => c.Path, System.StringComparer.Ordinal))
             {
+                if (typePaths.Contains(child.Path)) continue;
+
                 builder.AppendLine($"        new global::VeloxDev.AI.AIContextNode(\"{Escape(LastSegment(child.Path))}\", global::VeloxDev.AI.AIContextNodeKind.Directory),");
             }
 
@@ -261,10 +269,42 @@ namespace VeloxDev.Generators.Writers
                 _ => "DataType",
             };
 
+            // 框架侧还是客户侧由路径前缀决定（Framework/ 与 Customer/），不需要再记一个标志。
             return $"new global::VeloxDev.AI.AIContextNode(\"{Escape(type.FullName)}\", "
                  + $"global::VeloxDev.AI.AIContextNodeKind.{kind}, "
                  + $"\"{Escape(type.FullName)}\", null, global::VeloxDev.AI.AIContextFlags.None, 0, "
-                 + $"{RenderTexts(type.Descriptions)}, null, null)";
+                 + $"{RenderTexts(type.Descriptions)}, {RenderTypeRefs(type)}, null)";
+        }
+
+        /// <summary>
+        /// The named types a type entry points at: its base interfaces, and — for an enum — its underlying type.
+        /// </summary>
+        /// <remarks>
+        /// Both are facts the rendered tables print but that a node otherwise has no home for; they ride on the
+        /// reference machinery rather than widening the node with two one-off fields.
+        /// </remarks>
+        private static string RenderTypeRefs(AIContextType type)
+        {
+            var parts = new List<string>();
+
+            foreach (var name in type.BaseInterfaceNames)
+            {
+                parts.Add($"new global::VeloxDev.AI.AIContextRef(global::VeloxDev.AI.AIContextRefKind.BaseInterface, \"\", \"{Escape(name)}\")");
+            }
+
+            if (type.EnumUnderlyingType is not null)
+            {
+                parts.Add($"new global::VeloxDev.AI.AIContextRef(global::VeloxDev.AI.AIContextRefKind.MemberType, \"\", \"{Escape(type.EnumUnderlyingType)}\")");
+            }
+
+            // 基类型只在树里能找到时才给路径；找不到（比如它的程序集没有分片）就只留名字，
+            // 渲染器据此知道「还有一层，但这一层不在目录里」。
+            if (type.BaseTypeName is not null)
+            {
+                parts.Add($"new global::VeloxDev.AI.AIContextRef(global::VeloxDev.AI.AIContextRefKind.BaseType, \"\", \"{Escape(type.BaseTypeName)}\")");
+            }
+
+            return parts.Count == 0 ? "null" : "[" + string.Join(", ", parts) + "]";
         }
 
         private static string RenderMemberNode(AIContextType owner, AIContextMember member)
@@ -284,6 +324,8 @@ namespace VeloxDev.Generators.Writers
             if (member.HasVeloxCommand) flags.Add("HasVeloxCommand");
             if (member.HasSlotSelectors) flags.Add("HasSlotSelectors");
             if (member.IsPromotedField) flags.Add("IsPromotedField");
+            if (member.IsSlotEnumerator) flags.Add("IsSlotEnumerator");
+            if (member.IsSingleSlot) flags.Add("IsSingleSlot");
 
             var flagText = flags.Count == 0
                 ? "global::VeloxDev.AI.AIContextFlags.None"
@@ -292,7 +334,25 @@ namespace VeloxDev.Generators.Writers
             return $"new global::VeloxDev.AI.AIContextNode(\"{Escape(member.Name)}\", "
                  + $"global::VeloxDev.AI.AIContextNodeKind.{kind}, "
                  + $"\"{Escape(member.DeclaredType)}\", \"{Escape(owner.FullName)}\", {flagText}, {member.Ordinal}, "
-                 + $"{RenderTexts(member.Descriptions)}, {RenderSlotRefs(member)}, {RenderParameterNodes(member)})";
+                 + $"{RenderTexts(member.Descriptions)}, {RenderMemberRefs(member)}, {RenderParameterNodes(member)})";
+        }
+
+        /// <summary>The named types a member points at: its slot selectors, and a command's parameter type.</summary>
+        private static string RenderMemberRefs(AIContextMember member)
+        {
+            var parts = new List<string>();
+
+            foreach (var name in member.SlotSelectorNames)
+            {
+                parts.Add($"new global::VeloxDev.AI.AIContextRef(global::VeloxDev.AI.AIContextRefKind.SlotSelectorType, \"\", \"{Escape(name)}\")");
+            }
+
+            if (member.CommandParameterTypeName is not null)
+            {
+                parts.Add($"new global::VeloxDev.AI.AIContextRef(global::VeloxDev.AI.AIContextRefKind.CommandParameterType, \"\", \"{Escape(member.CommandParameterTypeName)}\")");
+            }
+
+            return parts.Count == 0 ? "null" : "[" + string.Join(", ", parts) + "]";
         }
 
         private static string RenderParameterNodes(AIContextMember member)
@@ -302,16 +362,6 @@ namespace VeloxDev.Generators.Writers
             var parts = member.Parameters.Select(p =>
                 $"new global::VeloxDev.AI.AIContextNode(\"{Escape(p.Name)}\", global::VeloxDev.AI.AIContextNodeKind.Parameter, "
                 + $"\"{Escape(p.DeclaredType)}\", null, global::VeloxDev.AI.AIContextFlags.None, 0, null, null, null)");
-
-            return "[" + string.Join(", ", parts) + "]";
-        }
-
-        private static string RenderSlotRefs(AIContextMember member)
-        {
-            if (member.SlotSelectorNames.Count == 0) return "null";
-
-            var parts = member.SlotSelectorNames.Select(name =>
-                $"new global::VeloxDev.AI.AIContextRef(global::VeloxDev.AI.AIContextRefKind.SlotSelectorType, \"\", \"{Escape(name)}\")");
 
             return "[" + string.Join(", ", parts) + "]";
         }

@@ -108,6 +108,15 @@ namespace VeloxDev.Generators.Base
         /// <summary>The symbol the member came from, kept so a notice can point at the author's own line.</summary>
         internal ISymbol? Symbol { get; set; }
 
+        /// <summary>A command's declared parameter type, or null when it takes none — what the tables print.</summary>
+        internal string? CommandParameterTypeName { get; set; }
+
+        /// <summary>Whether the member's type is a <c>SlotEnumerator&lt;T&gt;</c>.</summary>
+        internal bool IsSlotEnumerator { get; set; }
+
+        /// <summary>Whether the member's type is a single slot.</summary>
+        internal bool IsSingleSlot { get; set; }
+
         /// <summary>An enum member's underlying value; zero for anything else.</summary>
         internal long Ordinal { get; set; }
         internal bool IsCommand { get; }
@@ -182,7 +191,9 @@ namespace VeloxDev.Generators.Base
             AIContextTypeKind kind,
             IReadOnlyList<string> segments,
             IReadOnlyList<AIContextText> descriptions,
-            IReadOnlyList<AIContextMember> members)
+            IReadOnlyList<AIContextMember> members,
+            IReadOnlyList<string> baseInterfaceNames,
+            string? enumUnderlyingType)
         {
             Symbol = symbol;
             FullName = fullName;
@@ -191,6 +202,8 @@ namespace VeloxDev.Generators.Base
             Segments = segments;
             Descriptions = descriptions;
             Members = members;
+            BaseInterfaceNames = baseInterfaceNames;
+            EnumUnderlyingType = enumUnderlyingType;
         }
 
         internal INamedTypeSymbol Symbol { get; }
@@ -202,6 +215,21 @@ namespace VeloxDev.Generators.Base
         internal string Path { get; }
 
         internal AIContextTypeKind Kind { get; }
+
+        /// <summary>
+        /// The full names of every interface the type implements.
+        /// </summary>
+        /// <remarks>
+        /// Full names rather than simple ones: a renderer prints only the last segment, but it needs the full name
+        /// to resolve the interface's own entry and pick up the members this type inherits from it.
+        /// </remarks>
+        internal IReadOnlyList<string> BaseInterfaceNames { get; }
+
+        /// <summary>For an enum, the display name of its underlying integral type; null otherwise.</summary>
+        internal string? EnumUnderlyingType { get; }
+
+        /// <summary>The base type's full name, or null when it is <see cref="object"/> or there is none.</summary>
+        internal string? BaseTypeName { get; set; }
 
         /// <summary>
         /// The directories this entry sits under, between its root and its own name —
@@ -428,8 +456,32 @@ namespace VeloxDev.Generators.Base
                 _ => ["Data"],
             };
 
-            var fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                                 .Replace("global::", string.Empty);
+            // 必须是 `Type.FullName` 的形状，不是 Roslyn 的显示名：嵌套类型前者用 `+`、后者用 `.`，
+            // 而这个字符串既是索引键也是渲染出来那一行。泛型已被排除，所以不用管反引号元数。
+            var fullName = ReflectionFullName(symbol);
+
+            // 顺序照 Roslyn 给的，不排序：渲染器要复现反射的 `GetInterfaces()`，而那是未定义的顺序 ——
+            // 一排序就和它不一样了。测试会逐字对比两边。
+            //
+            // 名字用 `Type.Name` 的形状：泛型要带反引号元数（IReadOnlyDictionary`2），而 Roslyn 的 `Name`
+            // 不带。渲染器直接印这个名字，不再从全名里切 —— 泛型实参里也有 `.`，切出来是垃圾。
+            var baseInterfaceNames = symbol.TypeKind == TypeKind.Enum
+                ? []
+                : symbol.AllInterfaces
+                        .Select(static i => i.TypeParameters.Length > 0 ? i.Name + "`" + i.TypeParameters.Length : i.Name)
+                        .Distinct(System.StringComparer.Ordinal)
+                        .ToArray();
+
+            // 与 Enum.GetUnderlyingType(t).ToString() 同形：System.Byte 而不是 byte。
+            // ToDisplayString 默认会把 System.Int32 印成 int，TableType 不特殊化关键字。
+            var enumUnderlyingType = symbol.TypeKind == TypeKind.Enum && symbol.EnumUnderlyingType is not null
+                ? TableType(symbol.EnumUnderlyingType)
+                : null;
+
+            var baseTypeName = symbol.BaseType is { SpecialType: not SpecialType.System_Object } baseType
+                               && baseType.TypeKind == TypeKind.Class
+                ? baseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty)
+                : null;
 
             return new AIContextType(
                 symbol,
@@ -438,7 +490,28 @@ namespace VeloxDev.Generators.Base
                 kind,
                 segments,
                 typeTexts,
-                members);
+                members,
+                baseInterfaceNames,
+                enumUnderlyingType)
+            { BaseTypeName = baseTypeName };
+        }
+
+        /// <summary>
+        /// The type's name in the shape <see cref="System.Type.FullName"/> reports.
+        /// </summary>
+        /// <remarks>
+        /// Nested types are joined with <c>+</c>, not <c>.</c> — and the tree's index key, the accessor's
+        /// <c>TypeName</c> and the rendered <c>Type:</c> line all have to agree with what reflection prints.
+        /// </remarks>
+        private static string ReflectionFullName(INamedTypeSymbol symbol)
+        {
+            var name = symbol.Name;
+
+            if (symbol.ContainingType is not null)
+                return ReflectionFullName(symbol.ContainingType) + "+" + name;
+
+            var ns = symbol.ContainingNamespace;
+            return ns is null || ns.IsGlobalNamespace ? name : ns.ToDisplayString() + "." + name;
         }
 
         /// <summary>
@@ -580,9 +653,22 @@ namespace VeloxDev.Generators.Base
         {
             var members = new List<AIContextMember>();
 
+            // MVVM 生成器产出的属性就在同一个编译里，所以 `symbol.GetMembers()` 里既有那个私有字段、
+            // 又有它提升出来的公开属性。提升字段已经代表了这个成员 —— 不把生成的那份再收一遍，
+            // 否则目录里每个 [VeloxProperty] 都会出现两次，顺序也会被生成的那一份带偏。
+            var promotedNames = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var candidate in symbol.GetMembers().OfType<IFieldSymbol>())
+            {
+                if (!AIContextNaming.HasAttribute(candidate, VeloxPropertyAttributeName)) continue;
+
+                var name = AIContextNaming.PromotedPropertyName(candidate.Name);
+                if (name.Length > 0) promotedNames.Add(name);
+            }
+
             foreach (var member in symbol.GetMembers())
             {
                 if (member.IsImplicitlyDeclared) continue;
+                if (member is IPropertySymbol skipped && promotedNames.Contains(skipped.Name)) continue;
 
                 switch (member)
                 {
@@ -595,6 +681,16 @@ namespace VeloxDev.Generators.Base
                     case IFieldSymbol field when AIContextNaming.HasAttribute(field, VeloxPropertyAttributeName):
                         var promoted = AIContextNaming.PromotedPropertyName(field.Name);
                         if (promoted.Length > 0) members.Add(BuildPromotedProperty(field, promoted));
+                        break;
+
+                    // 只带 [AgentContext] 的私有/受保护字段：会出现在描述表格里，但**没有生成属性**，
+                    // 所以访问器够不着它 —— 描述-only，读写都标 false，否则生成的 `t.X` 编不过。
+                    case IFieldSymbol field when field.DeclaredAccessibility != Accessibility.Public
+                                                 && !field.IsConst
+                                                 && field.AssociatedSymbol is null
+                                                 && AIContextNaming.HasAttribute(field, AgentContextAttributeName):
+                        var described = AIContextNaming.PromotedPropertyName(field.Name);
+                        if (described.Length > 0) members.Add(BuildDescribedOnlyField(field, described));
                         break;
 
                     case IFieldSymbol field when field.DeclaredAccessibility == Accessibility.Public
@@ -634,7 +730,7 @@ namespace VeloxDev.Generators.Base
             return new AIContextMember(
                 property.Name,
                 property.Type,
-                DisplayType(property.Type),
+                TableType(property.Type),
                 isMethod: false,
                 isCommand: isCommand,
                 canRead: property.GetMethod is not null && property.GetMethod.DeclaredAccessibility == Accessibility.Public,
@@ -643,21 +739,53 @@ namespace VeloxDev.Generators.Base
                           && property.SetMethod.DeclaredAccessibility == Accessibility.Public
                           && !property.SetMethod.IsInitOnly,
                 isStatic: property.IsStatic,
-                hasVeloxProperty: false,
+                hasVeloxProperty: HasAttribute(property, VeloxPropertyAttributeName),
                 hasVeloxCommand: false,
                 isPromotedField: false,
                 hasSlotSelectors: HasAttribute(property, SlotSelectorsAttributeName),
                 descriptions: ReadTexts(property),
                 slotSelectorNames: ReadSlotSelectorNames(property),
                 parameters: [])
-            { Symbol = property };
+            {
+                Symbol = property,
+                IsSlotEnumerator = IsSlotEnumeratorType(property.Type),
+                IsSingleSlot = IsSingleSlotType(property.Type),
+                // 命令的参数类型标在属性上（接口那一路），方法那一路才标在方法上 —— 两边都要读。
+                CommandParameterTypeName = ReadCommandParameterType(property),
+            };
+        }
+
+        /// <summary>Whether the type is <c>VeloxDev.WorkflowSystem.SlotEnumerator&lt;T&gt;</c>.</summary>
+        private static bool IsSlotEnumeratorType(ITypeSymbol type)
+            => type is INamedTypeSymbol named
+               && named.OriginalDefinition.Name == "SlotEnumerator"
+               && named.OriginalDefinition.ContainingNamespace?.ToDisplayString() == "VeloxDev.WorkflowSystem";
+
+        /// <summary>Whether the type is a single workflow slot — the interface itself counts, as it does for <c>IsAssignableFrom</c>.</summary>
+        private static bool IsSingleSlotType(ITypeSymbol type)
+        {
+            const string slotInterface = "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel";
+
+            if (type is not INamedTypeSymbol named) return false;
+
+            return named.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty) == slotInterface
+                   || ImplementsInterface(named, slotInterface);
+        }
+
+        /// <summary>The type named by <c>[AgentCommandParameter]</c>, or null when the command takes none.</summary>
+        private static string? ReadCommandParameterType(ISymbol symbol)
+        {
+            var attribute = symbol.GetAttributes().FirstOrDefault(a => AttributeName(a) == AgentCommandParameterAttributeName);
+            if (attribute is null || attribute.ConstructorArguments.Length == 0) return null;
+
+            return attribute.ConstructorArguments[0].Value is ITypeSymbol type ? DisplayType(type) : null;
         }
 
         private static AIContextMember BuildField(IFieldSymbol field)
             => new(
                 field.Name,
                 field.Type,
-                DisplayType(field.Type),
+                TableType(field.Type),
                 isMethod: false,
                 isCommand: false,
                 canRead: true,
@@ -684,7 +812,7 @@ namespace VeloxDev.Generators.Base
             => new(
                 promotedName,
                 field.Type,
-                DisplayType(field.Type),
+                TableType(field.Type),
                 isMethod: false,
                 isCommand: false,
                 canRead: true,
@@ -697,7 +825,37 @@ namespace VeloxDev.Generators.Base
                 descriptions: ReadTexts(field),
                 slotSelectorNames: ReadSlotSelectorNames(field),
                 parameters: [])
-            { Symbol = field };
+            {
+                Symbol = field,
+                IsSlotEnumerator = IsSlotEnumeratorType(field.Type),
+                IsSingleSlot = IsSingleSlotType(field.Type),
+            };
+
+        /// <summary>
+        /// A non-public field that carries only <c>[AgentContext]</c>.
+        /// </summary>
+        /// <remarks>
+        /// Describable but not reachable: no generator promotes it to a property, so there is nothing for an
+        /// accessor to read or write. Recorded so the rendered tables keep the row they print today.
+        /// </remarks>
+        private static AIContextMember BuildDescribedOnlyField(IFieldSymbol field, string describedName)
+            => new(
+                describedName,
+                field.Type,
+                TableType(field.Type),
+                isMethod: false,
+                isCommand: false,
+                canRead: false,
+                canWrite: false,
+                isStatic: field.IsStatic,
+                hasVeloxProperty: false,
+                hasVeloxCommand: false,
+                isPromotedField: false,
+                hasSlotSelectors: false,
+                descriptions: ReadTexts(field),
+                slotSelectorNames: [],
+                parameters: [])
+            { IsField = true, Symbol = field };
 
         /// <summary>
         /// A <c>[VeloxCommand]</c> method as the Agent meets it: the command property the writer emits.
@@ -723,13 +881,16 @@ namespace VeloxDev.Generators.Base
                 descriptions: ReadTexts(method),
                 slotSelectorNames: [],
                 parameters: [])
-            { Symbol = method };
+            {
+                Symbol = method,
+                CommandParameterTypeName = ReadCommandParameterType(method),
+            };
 
         private static AIContextMember BuildMethod(IMethodSymbol method)
             => new(
                 method.Name,
                 method.ReturnType,
-                DisplayType(method.ReturnType),
+                TableType(method.ReturnType),
                 isMethod: true,
                 isCommand: false,
                 canRead: false,
@@ -744,10 +905,14 @@ namespace VeloxDev.Generators.Base
                 parameters: [.. method.Parameters.Select(static p => new AIContextParameter(
                     p.Name,
                     p.Type,
-                    DisplayType(p.Type),
+                    TableType(p.Type),
                     p.IsOptional,
                     p.RefKind))])
-            { ReturnsVoid = method.ReturnsVoid, Symbol = method };
+            {
+                ReturnsVoid = method.ReturnsVoid,
+                Symbol = method,
+                CommandParameterTypeName = ReadCommandParameterType(method),
+            };
 
         private static IReadOnlyList<string> ReadSlotSelectorNames(ISymbol symbol)
         {
@@ -785,5 +950,18 @@ namespace VeloxDev.Generators.Base
 
         /// <summary>The type as it should appear in a description — the form the collector prints today.</summary>
         internal static string DisplayType(ITypeSymbol type) => Analizer.DisplayFullTypeName(type);
+
+        /// <summary>
+        /// The type as a rendered table's first column spells it.
+        /// </summary>
+        /// <remarks>
+        /// No nullable modifier: those tables print <c>Type.FullName</c>, which never carries <c>?</c>. The
+        /// accessor's conversions never read this string — they work from the symbol — so dropping the
+        /// annotation here costs nothing and is what makes the two renderers agree.
+        /// </remarks>
+        private static string TableType(ITypeSymbol type)
+            => type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(new SymbolDisplayFormat(
+                typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters));
     }
 }

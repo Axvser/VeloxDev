@@ -120,18 +120,21 @@ public static class AIContextTreeRegistry
         var path = Normalize(directoryPath);
         if (path.Length == 0) return Roots();
 
+        // 保持分片给的顺序，不排序：那是声明顺序，而渲染出来的表格逐字复现反射的输出。
+        // 跨分片时按注册顺序拼接 —— 一个类型只属于一个分片，所以这里不会真的交错。
         var fragments = Fragments;
-        var byName = new SortedDictionary<string, AIContextNode>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var children = new List<AIContextNode>();
 
         foreach (var fragment in fragments)
         {
             foreach (var child in fragment.ChildrenOf(path))
             {
-                byName[child.Name] = child;
+                if (seen.Add(child.Name)) children.Add(child);
             }
         }
 
-        return [.. byName.Values];
+        return children;
     }
 
     /// <summary>
