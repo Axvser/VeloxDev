@@ -16,10 +16,15 @@ namespace VeloxDev.Generators.Base
     /// </remarks>
     internal sealed class VeloxJsonAssembly
     {
-        internal VeloxJsonAssembly(string assemblyName, IReadOnlyList<VeloxJsonType> types, IReadOnlyList<Diagnostic> notices)
+        internal VeloxJsonAssembly(
+            string assemblyName,
+            IReadOnlyList<VeloxJsonType> types,
+            IReadOnlyList<VeloxJsonContainer> containers,
+            IReadOnlyList<Diagnostic> notices)
         {
             AssemblyName = assemblyName;
             Types = types;
+            Containers = containers;
             Notices = notices;
         }
 
@@ -27,8 +32,40 @@ namespace VeloxDev.Generators.Base
 
         internal IReadOnlyList<VeloxJsonType> Types { get; }
 
+        // 嵌在另一个容器里的容器，每个都要登记一句构造方式。
+        // 成员自己那一层容器由它的生成 reader 就地填；再深一层就没有「就地」了，值得先被造出来，
+        // 而按 Type 造一个泛型容器只能靠反射 —— 所以由见过这个关闭组合的那一方提供。
+        internal IReadOnlyList<VeloxJsonContainer> Containers { get; }
+
         /// <summary>What the walk could not represent faithfully — reported rather than dropped in silence.</summary>
         internal IReadOnlyList<Diagnostic> Notices { get; }
+    }
+
+    // 文档里嵌在别的容器里的一个容器。
+    internal sealed class VeloxJsonContainer
+    {
+        internal VeloxJsonContainer(INamedTypeSymbol symbol, VeloxJsonMemberKind kind, ITypeSymbol? keyType, ITypeSymbol elementType, bool interfaceKeys)
+        {
+            Symbol = symbol;
+            Kind = kind;
+            KeyType = keyType;
+            ElementType = elementType;
+            InterfaceKeys = interfaceKeys;
+        }
+
+        // 声明类型本身：Dictionary<K, V>、List<T> 这种。
+        internal INamedTypeSymbol Symbol { get; }
+
+        // 字典还是序列，决定读的时候走 ReadMap 还是 ReadArray。
+        internal VeloxJsonMemberKind Kind { get; }
+
+        // 字典的键类型；序列为 null。
+        internal ITypeSymbol? KeyType { get; }
+
+        // 每个值 / 元素按哪个类型读。
+        internal ITypeSymbol ElementType { get; }
+
+        internal bool InterfaceKeys { get; }
     }
 
     /// <summary>How a member's value reaches the document.</summary>
@@ -204,7 +241,64 @@ namespace VeloxDev.Generators.Base
 
             if (types.Count == 0) return null;
 
-            return new VeloxJsonAssembly(compilation.AssemblyName ?? "Assembly", types, []);
+            return new VeloxJsonAssembly(compilation.AssemblyName ?? "Assembly", types, CollectNestedContainers(types), []);
+        }
+
+        // 收出所有嵌在别的容器里的容器，一直收到嵌套见底。
+        // 起点是每个成员的元素 / 值类型，绝不是成员自己的类型 —— 外面那一层由成员的生成 reader 就地填。
+        private static IReadOnlyList<VeloxJsonContainer> CollectNestedContainers(IReadOnlyList<VeloxJsonType> types)
+        {
+            var containers = new List<VeloxJsonContainer>();
+            var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            var queue = new Queue<INamedTypeSymbol>();
+
+            foreach (var type in types)
+                foreach (var member in type.Members)
+                    if (member.ElementType is INamedTypeSymbol element) queue.Enqueue(element);
+
+            while (queue.Count > 0)
+            {
+                var candidate = queue.Dequeue();
+                var (kind, element, interfaceKeyed) = Classify(candidate);
+
+                // 不是容器就到此为止；读不回来的也不登记 —— 声明那一层本来就跳过了它。
+                if (kind is not (VeloxJsonMemberKind.Dictionary or VeloxJsonMemberKind.Collection)) continue;
+                if (!IsContainerReadable(candidate, kind)) continue;
+                if (!seen.Add(candidate)) continue;
+
+                containers.Add(new VeloxJsonContainer(
+                    candidate,
+                    kind,
+                    kind == VeloxJsonMemberKind.Dictionary ? candidate.TypeArguments[0] : null,
+                    element!,
+                    interfaceKeyed));
+
+                if (element is INamedTypeSymbol inner) queue.Enqueue(inner);
+            }
+
+            return containers
+                .OrderBy(static c => c.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
+                .ToList();
+        }
+
+        // 嵌容器读不读得回来 —— 生成器造得出的实例，得真的装得进文档声明的那个类型。
+        // 字典一律可以（Dictionary<K,V> 满足分类器认识的每一种字典）；序列只在 List<T> 能顶替它时才行，
+        // 因为读进来的集合是按 IList 追加的。
+        private static bool IsContainerReadable(INamedTypeSymbol symbol, VeloxJsonMemberKind kind)
+        {
+            if (kind == VeloxJsonMemberKind.Dictionary) return true;
+
+            if (symbol.TypeKind == TypeKind.Interface)
+            {
+                // List<T> 满足这五个泛型接口，正好是 IsSequenceType 认的那几个接口名。
+                var definition = symbol.OriginalDefinition;
+                return definition.ContainingNamespace?.ToDisplayString().StartsWith("System.Collections") == true
+                       && definition.Name is "IList" or "ICollection" or "IEnumerable"
+                           or "IReadOnlyList" or "IReadOnlyCollection";
+            }
+
+            return HasPublicParameterlessConstructor(symbol)
+                   && ImplementsInterface(symbol, "System.Collections.IList");
         }
 
         /// <summary>The component contracts a builder-shaped type draws its members from.</summary>

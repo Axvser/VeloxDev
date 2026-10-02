@@ -255,3 +255,43 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 `public Action<T>? Hook { get; set; }` 写出去没问题，**读回来时构造委托会抛**。运行期状态用
 `{ get; private set; }`，需要外部可设就用**方法**而不是属性。2026-09-27 实测过一次（`ControllerViewModel`
 加了这样的钩子，三条编译图快照测试当场红），那条结论不受引擎更换影响。
+
+### 八·四、嵌在容器里的容器：写得出、读不回（2026-10-03 修）
+
+**写侧对容器是按形状递归的**（`VeloxJsonSerializer.WriteValue` 的 `IDictionary` / `IEnumerable` 两条
+分支），所以任何嵌套都写得出去。**读侧没有这条分支**：一个成员自己那层容器由该成员的生成 reader 就地填
+（`VeloxJsonCodeWriter.ReadMember` 发 `ReadArray` / `ReadMap`），再往里一层就没有「就地」了 ——
+`ReadValue` 落到 `ReadObjectValue`，而容器类型不会有生成条目，于是抛
+`'…' has no registered JSON reader`。
+
+**症状是「带连接的树存下来读不回去」**：`IWorkflowTreeViewModel.LinksMap` 是
+`Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>>`
+（`WorkflowTreeEx` 那一片都在读写它）。`TryDeserialize` 会把这个异常吞成 `false`，所以七个 demo 的
+「加载工作流」看起来只是按钮没反应。**框架树和 demo 树同病** —— 两边生成的是同一句
+`ReadMap(reader, map, typeof(…IWorkflowSlotViewModel), typeof(Dictionary<…>), interfaceKeys: true)`。
+
+**修法：登记构造，不登记 reader。** 生成器为它见过的每个嵌容器组合发一句
+`VeloxJsonRegistry.RegisterContainerFactory(typeof(闭容器), () => new …())`；读侧 `ReadValue` 命中就先造实例、
+再按声明类型推形状递归读（`ReadValue` 里那一段 + 私有 `ReadContainer`）。形状规则因此只有一处，
+和写侧同源。
+
+**为什么不能顺手用反射造**：`Activator.CreateInstance(Type)` / `MakeGenericType` 正是这套东西要躲开的 ——
+同一条理由让 `ReadValue` 连顶层数组入口都不给（`Array.CreateInstance` 是 `RequiresDynamicCode`）。
+生成器侧落点：`VeloxJsonModelBuilder.CollectNestedContainers`（起点是成员的 `ElementType`，**不是**
+`DeclaredType` —— 外面那层由成员自己读）、`IsContainerReadable`（序列只在 `List<T>` 顶得住时才登记，
+`HashSet` / `Queue` / `Stack` 不是 `IList`，声明处本来就跳过）、`VeloxJsonCodeWriter.ContainerFactory`
+（接口类型落到 `Dictionary<K,V>` / `List<T>`）。
+
+**守卫只有两处，`Golden/tree.json` 不守这条**（那棵树是 `SerializationGoldenTests.BuildTree` 建的，
+**没有连接**，`LinksMap` 恰好是 `{}`）：`Serialization/DemoTreeRoundTripTests.cs` 三条
+（空树 / 单节点 / 带连接）与 `Agent/Workflow/Functions/WorkflowSerializationTests.cs` 的
+`TreeWithAConnection_RoundTripsItsLinksMap`。改容器的写读两侧之前先看它们。
+
+**一个连带依赖**：接口键的 map 靠 `reader.ResolveReference(int.Parse(成员名))` 解键，所以键对象必须
+**先于**这张 map 被登记 —— 文档里 `Nodes` 排在 `LinksMap` 前面才成立；成员顺序反过来会静默丢条目
+（`ReadMap` 里 `key is null → SkipValue`）。
+
+**⚠ 修的是生成器，所以 Release 不受益。** `VeloxJsonRegistry` / `ReadValue` 那半边在源码里、两种配置都生效；
+但**工厂是生成代码**，而 Release 走的是 NuGet 包（`VeloxDev.Core.csproj:48` 的 `Version="9.0.0"`、
+`VeloxDev.Core.Extension.Test.csproj` 的 `9.5.0`）—— 不升包，Release 下带连接的树仍然读不回来。
+哪几处要一起升见 [`VeloxDev.Core.Generator/extension.md`](../VeloxDev.Core.Generator/extension.md) §四。

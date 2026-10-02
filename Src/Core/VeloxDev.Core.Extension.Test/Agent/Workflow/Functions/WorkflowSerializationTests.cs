@@ -63,6 +63,40 @@ public class WorkflowSerializationTests
     }
 
     /// <summary>
+    /// A tree whose two nodes are connected round-trips its <c>LinksMap</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>LinksMap</c> is a map of maps — <c>Dictionary&lt;slot, Dictionary&lt;slot, link&gt;&gt;</c> — and the
+    /// inner map is the one container shape nothing declares, so no generated reader exists for it and creating
+    /// it from a <see cref="System.Type"/> alone would take reflection. The frozen golden tree is built without
+    /// connections, which is why nothing caught an empty read here before.
+    /// </remarks>
+    [TestMethod]
+    public void TreeWithAConnection_RoundTripsItsLinksMap()
+    {
+        var tree = new TreeDefaultViewModel();
+        var source = new NodeDefaultViewModel();
+        var sink = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(source);
+        tree.GetHelper().CreateNode(sink);
+
+        source.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneTarget });
+        sink.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneSource });
+        tree.GetHelper().SendConnection(source.Slots[0]);
+        tree.GetHelper().ReceiveConnection(sink.Slots[0]);
+
+        Assert.HasCount(1, tree.Links, "precondition: the nodes are connected before saving");
+        Assert.HasCount(1, tree.LinksMap, "precondition: the map index was filled");
+
+        var restored = tree.Serialize().Deserialize<TreeDefaultViewModel>();
+
+        Assert.HasCount(1, restored.Links, "the connection must survive");
+        Assert.HasCount(1, restored.LinksMap, "the map-of-maps index must survive, not just the flat list");
+        Assert.IsTrue(restored.Nodes.Contains(restored.Links[0].Sender.Parent!),
+            "the restored link's endpoints must belong to the restored tree");
+    }
+
+    /// <summary>
     /// CurrentValue is UI-friendly: getter returns the string form; setter accepts a string, an enum,
     /// or an underlying numeric value and stores the normalized selector-typed value.
     /// </summary>

@@ -1,6 +1,7 @@
 # VeloxDev.Core.Extension.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（37 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；34 个 `[TestClass]`）
+> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（60 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；54 个 `[TestClass]`）
+> —— 2026-10-03 复核。本文其余处若与新的计数冲突，以本条为准。
 > 被测：`Src/Core/VeloxDev.Core.Extension/`（AI 工具面，命名空间 `VeloxDev.AI.*`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Test/`。两者只共享「逐字相同的一行并行设置」，其余差异很大 —— 见 §六那张对照表。
 
@@ -81,7 +82,7 @@ csproj 只有 MSTest + coverlet 两个 `PackageReference`(`:11-15`)。
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **399**（2026-09-26 实测 `[TestMethod]` 计数与通过数一致；含 `Agent/SubAgents/SubAgentLiveTests.cs` 的 **6** 条门控实测 —— 本条此前在三个文件里分别写成 382/5 与 391，均以 `grep -c '\[TestMethod\]'` 为准） |
+| 测试条数 | **472**（2026-10-03 实测：`grep -c '\[TestMethod\]'` = 472，全量跑通过 472 / 跳过 0 —— 0 跳过说明 `API_KEY_DEEPSEEK` 在测试环境里是配着的。含 `Agent/SubAgents/SubAgentLiveTests.cs` 的 **6** 条门控实测。旧读数 399/391/382 都已过期） |
 | 耗时 | **5–9 s**（有 `API_KEY_DEEPSEEK`，那 5 条真的走网络；实测连续 6 轮为 5/5/5/6/7/7/8 s，2026-09-22 加第 5 条门控后为 **9 s**）/ 无 key 时全量会在跑到 122~246 条之间**中止**（见下），而 `--filter FullyQualifiedName~Agent.SubAgents` 无 key 只需 **0.42–0.45 s**（2026-09-22 五次实测 441/423/440/431/451 ms） |
 | 失败 | 0 |
 
@@ -114,7 +115,7 @@ System.InvalidOperationException: Environment variable 'API_KEY_DEEPSEEK' is not
 那么为什么**以前不红**：抛出的时机是竞态的 —— 异常从 `async void` 逃逸后由线程池接住，只有它恰好落在测试宿主收集结果的窗口内才会崩掉整轮。本模块原有的 281 条跑完只要 0.45 s，不够久也不够忙；加了 90 条子代理测试（它们各自在 `Thread.Sleep(5)` 轮询、把整轮拉长了十几倍）之后，它稳定地落进来了。**是「时长」还是「线程池压力」在起决定作用，我没有单独隔离**，能确定的是子代理那一批就是那个差。三条独立实验钉住这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除门控测试、只留下子代理那批（当时 94 条），仍然红**。
 
 **结论**：本模块自己的门控约定是成立的 —— `SubAgentLiveTests` 缺 key 时 `Assert.Inconclusive`，MSTest 4.0.2 下报成**已跳过**（`--filter FullyQualifiedName~Agent.SubAgents` 无 key = 96 通过 + 5 跳过，0 失败，0.42–0.45 s）。红的是全量轮次，根因在 `Examples/` 的 `async void`。**修它要动 demo，本仓库当前的选择是不动** —— 所以这条要一直记着，别把它误判成本模块的回归。
-**「281 条其余」这个数一直没变**：382 − 101（子代理那批 = 96 离线 + 5 门控）= 281，与 379 − 98、371 − 90 同值 —— 历轮改的都是子代理那批，别处的条数未动。
+**「子代理那批」现在是 110 条 `[TestMethod]`**（2026-10-03 实测 `grep -c` 于 `Agent/SubAgents/*.cs`，含 6 条门控），其余 **362** 条（472 − 110）。旧读数（281 其余 / 101 或 96 子代理）已过期；那条「历轮只动子代理那批」的观察本身仍然成立。
 
 ---
 
@@ -197,7 +198,7 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 |---|---|---|
 | `Agent/` | 34 | 含 `Workflow/` 11（7 直接 + `Functions/` 4）、`SubAgents/` 9（8 个 `[TestClass]` + 1 个替身文件）、`MCP/` 5、`Skills/` 3、`Pipelines/` 3、`Dashboard/` 1，以及直接放在 `Agent/` 下的 2 |
 | `Examples/` | 1 | `AgentTranscriptTests.cs`（守 demo 面板的契约，见 §一；**也是 §四那个无 key 崩溃的触发者**） |
-| `Serialization/` | 1 | `ComponentModelExTests.cs` |
+| `Serialization/` | 8 | 守 `ComponentModelEx` 一族与新的生成式引擎：`ComponentModelExTests`、`VeloxJsonSerializerTests`、`SerializationGoldenTests`（+ `Golden/` 四份冻结文档）、`SerializationOrderTests`、`CompiledGraphSerializationTests`、`ExecutionCheckpointSerializationTests`、`ExecutionCheckpointMigrationTests`，以及 `DemoTreeRoundTripTests`（2026-10-03 加；守 demo 自己那棵树，含带连接的一条）。**golden 的 `tree.json` 没有连接**，容器的嵌套读法只能靠 `DemoTreeRoundTripTests` 与 `Agent/…/WorkflowSerializationTests` 守 —— 见 [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八·四 |
 | 根 | 1 | `MSTestSettings.cs` |
 
 **与姊妹模块的结构性差异**（加测试时最容易踩的四个反直觉点）：

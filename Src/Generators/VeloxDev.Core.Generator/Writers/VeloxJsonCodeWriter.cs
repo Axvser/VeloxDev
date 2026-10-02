@@ -292,8 +292,31 @@ namespace VeloxDev.Generators.Writers
                 builder.AppendLine($"        global::{SerializationNamespace}.VeloxJsonRegistry.RegisterName(typeof({target}), \"{Escape(type.WrittenName)}\");");
             }
 
+            // 嵌套容器没有生成条目 —— 它按形状读，缺的只是「谁来 new」。所以登记的是一句构造，
+            // 而不是一个 IVeloxJsonReader：形状规则留在序列化器一处，和写侧同源。
+            foreach (var container in assembly.Containers)
+            {
+                builder.AppendLine($"        global::{SerializationNamespace}.VeloxJsonRegistry.RegisterContainerFactory(typeof({FullTypeOf(container.Symbol)}), {ContainerFactory(container)});");
+            }
+
             builder.AppendLine("    }");
             builder.AppendLine("}");
+        }
+
+        // 造一个嵌容器的表达式。声明成接口的（IReadOnlyDictionary<K,V>、IList<T>）new 不出来，
+        // 落到分类器已经当作它形状的那个具体实现上。
+        private static string ContainerFactory(VeloxJsonContainer container)
+        {
+            if (container.Symbol.TypeKind == TypeKind.Interface)
+            {
+                var element = FullTypeOf(container.ElementType);
+
+                return container.Kind == VeloxJsonMemberKind.Dictionary
+                    ? $"() => new global::System.Collections.Generic.Dictionary<{FullTypeOf(container.KeyType!)}, {element}>()"
+                    : $"() => new global::System.Collections.Generic.List<{element}>()";
+            }
+
+            return $"() => new {FullTypeOf(container.Symbol)}()";
         }
 
         /// <summary>

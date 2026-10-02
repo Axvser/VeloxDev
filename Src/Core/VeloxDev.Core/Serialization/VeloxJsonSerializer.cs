@@ -300,6 +300,12 @@ public static class VeloxJsonSerializer
         // 运行期才知道的标量（集合的元素、字典的值）：按声明类型读那一个原语。
         if (TryReadScalar(reader, declaredType) is { } scalar) return scalar;
 
+        // 容器里的容器。顶层容器由声明它的那个成员就地填，嵌一层之后就没有「就地」了 —— 而按声明类型
+        // 造一个泛型容器只能靠反射，所以生成器为它见过的每个组合登记了构造方式。形状与写侧同源，
+        // 都从声明类型推。
+        if (VeloxJsonRegistry.ContainerFactoryFor(declaredType) is { } createContainer)
+            return ReadContainer(reader, declaredType, existing, createContainer);
+
         // 顶层数组没有入口：集合成员由它自己的生成 reader 就地填，而按运行期类型造一个数组
         // 需要类型系统（Array.CreateInstance(Type, …) 是 RequiresDynamicCode），正是这套东西要躲开的。
         // 要读一段数组文本，走 VeloxJsonValue.Parse，它按形状给出树。
@@ -448,6 +454,27 @@ public static class VeloxJsonSerializer
             target[key] = ReadValue(reader, valueType, target.Contains(key) ? target[key] : null);
         }
         reader.FinishObject();
+    }
+
+    // 读一个嵌在别的容器里的容器。实例只有生成代码造得出来（见 VeloxJsonRegistry.RegisterContainerFactory），
+    // 形状与写侧同源：字典写成对象、序列写成数组，键是不是接口决定这张图用引用 id 当成员名。
+    private static object ReadContainer(
+        VeloxJsonReader reader,
+        Type declaredType,
+        object? existing,
+        Func<object> create)
+    {
+        var container = existing is not null && declaredType.IsInstanceOfType(existing) ? existing : create();
+
+        if (container is System.Collections.IDictionary map)
+        {
+            var keyType = FirstTypeArgument(declaredType) ?? typeof(object);
+            ReadMap(reader, map, keyType, ValueTypeOf(declaredType) ?? typeof(object), keyType.IsInterface);
+            return container;
+        }
+
+        ReadArray(reader, (System.Collections.IList)container, ElementTypeOf(declaredType) ?? typeof(object));
+        return container;
     }
 
     /// <summary>

@@ -113,8 +113,37 @@ public static class VeloxJsonRegistry
     private static readonly object Gate = new();
     private static readonly Dictionary<Type, IVeloxJsonWriter> Writers = [];
     private static readonly Dictionary<Type, IVeloxJsonReader> Readers = [];
+    private static readonly Dictionary<Type, Func<object>> ContainerFactories = [];
     private static readonly Dictionary<Type, string> Names = [];
     private static readonly Dictionary<string, Type> TypesByName = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Registers how to construct a container the document holds as a nested value.
+    /// </summary>
+    /// <param name="type">The container's declared type — <c>Dictionary&lt;K, V&gt;</c>, <c>List&lt;T&gt;</c>.</param>
+    /// <param name="factory">Creates an empty instance the value can be read into.</param>
+    /// <remarks>
+    /// A container at the top of a member is filled in place by that member's generated reader. One nested inside
+    /// another — the tree's <c>LinksMap</c> is a map of maps — has nowhere to be filled, and constructing a
+    /// generic container from a <see cref="Type"/> alone takes <c>Activator</c>, which the format exists to avoid.
+    /// So the generator, which met the closed combination, registers how to make one.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
+    public static void RegisterContainerFactory(Type type, Func<object> factory)
+    {
+        if (type is null) throw new ArgumentNullException(nameof(type));
+        if (factory is null) throw new ArgumentNullException(nameof(factory));
+
+        lock (Gate) ContainerFactories[type] = factory;
+    }
+
+    /// <summary>The factory for a nested container type, or <see langword="null"/> when it has none.</summary>
+    /// <param name="type">The type.</param>
+    /// <returns>The factory, or <see langword="null"/>.</returns>
+    public static Func<object>? ContainerFactoryFor(Type type)
+    {
+        lock (Gate) return ContainerFactories.TryGetValue(type, out var factory) ? factory : null;
+    }
 
     /// <summary>
     /// Registers one type's writer.
