@@ -1,4 +1,4 @@
-# DynamicTheme — 架构
+﻿# DynamicTheme — 架构
 
 > 代码：`Src/Core/VeloxDev.Core/DynamicTheme/`（5 个 .cs），契约在 `Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/`（`ITheme.cs` / `IThemeObject.cs` / `IThemeValueConverter.cs`）。
 > 生成器：`Src/Generators/VeloxDev.Core.Generator/Theme.cs`。**下文不带路径的 `Theme.cs` 指这一个**（注意：本模块目录下**没有** `Theme.cs`，别在 `DynamicTheme/` 里找；运行期那 5 个文件是 `Dark.cs` / `Light.cs` / `ThemeCache.cs` / `ThemeConfigAttribute.cs` / `ThemeManager.cs`）。
@@ -19,7 +19,7 @@
 |---|---|
 | 主题是什么 | **空标记类型**。Core 只提供 `Dark.cs` / `Light.cs` 两个空类，`ITheme` 也是空接口（`Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/ITheme.cs`）。主题的身份就是 **`Type` 对象本身**，可以自定义 |
 | 属性变更通知 | 不产生。`SetThemeValue` 走生成器的 `UpdatePropertyToCurrentTheme` → `propertyInfo.SetValue`（`Theme.cs:372`），**绕过 setter 的语义**（对 `[VeloxProperty]` 属性来说就是绕过生成的通知） |
-| 字符串/画刷怎么变成值 | `IThemeValueConverter`，实现全在**适配器**（各家的 `PlatformAdapters/ThemeValueConverters.cs`）。Core 一个也不带 |
+| 字符串/画刷怎么变成值 | `IThemeValueConverter`，实现全在**适配器**（各家的 `PlatformAdapters/ThemeValueConverters.cs`）。Core 一个也不带。**可声明的类型是有界的**（平台原生类型的构造 ＋ 可插值的自定义类型），而**这条界只在可 AOT 的三家成立**——WPF/WinForms 保留宽的那条，理由见 [extension.md](extension.md) §四·1 |
 | 动画的采样、缓动、帧、时间轴 | TransitionSystem。本模块只用它的 `TransitionSchedulerCore.Track/Execute/Untrack`、`TransitionRun`、`StateCore`、`TransitionProperty` |
 | 什么时候能动、什么时候不能（哪家平台画得出来） | 各家的 `Interpolator.CreateScheduler`。**这就是「主题切换为什么在这个平台不动」的答案所在** —— 判定在适配器，不在本模块 |
 | 反播、暂停/Seek 的**额外**控制面 | 不新增。整场共用一条时间轴，于是既有的 `Transition.Pause/Seek/SetRate` 对整场生效（`ThemeManager.cs:234-235` 的注释） |

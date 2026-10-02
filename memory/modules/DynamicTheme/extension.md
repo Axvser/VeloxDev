@@ -1,4 +1,4 @@
-# DynamicTheme — 扩展
+﻿# DynamicTheme — 扩展
 
 > 面向「我要加一个主题 / 一个转换器 / 一个平台」和「我要让这个属性跟着主题动」。架构见 [architecture.md](architecture.md)。
 > 依据只写树里的 `文件:行`。
@@ -86,6 +86,19 @@
 | 3 | 类名要能作为特性泛型实参直接写 | 用户在 `[ThemeConfig<BrushConverter, ...>]` 里裸写类名（demo `:36-37`），所以命名空间必须能被 `using VeloxDev.DynamicTheme;` 覆盖 |
 
 **Jalium 没有 `ThemeValueConverters.cs`** —— 这家要么不用主题、要么把转换器写在别处。核对时以 `Src/Adapters/VeloxDev.Jalium/` 为准。
+
+**主题能声明的类型是**——**有界的**（2026-10-03 起，见架构 §二 那条的注）：
+
+> **平台原生类型的构造**（各家 `ThemeValueConverters.cs` 里具名的那些 + 资源查找 + Brush 特例）
+> **＋ 可插值的自定义类型**（作者用 `[ThemeConfig<MyConverter, …>]` 指定自己的转换器，就是上面的扩展点）。
+> **其它不支持。**
+
+原来 `ObjectConverter` 用 `TypeDescriptor.GetConverter(targetType)` 兜底，「任何带 TypeConverter 的 .NET 类型」
+都算数 —— 无界，裁剪器跟不了。**这条界只落在可 AOT 的三家**（Avalonia / MAUI / WinUI，已删）；
+**WPF 与 WinForms 保留宽的那条**：在那两家 `TypeDescriptor` 是**主路径**（`return converter.ConvertFrom(strValue)`），
+删掉是实打实的能力缩减，而 Windows Desktop 不能 NativeAOT，删了换不来任何 AOT 收益。
+**所以这不是漏改，是判过之后留的分歧。** 哪天要收窄那两家，先在**那两家**选一条：接受能力缩减，
+或者把该家主题真正用到的类型列成具名转换器（先盘清 demo 与宿主声明了哪些类型）。
 
 ### 2. 加一个主题类型（例如 `Solarized`）
 
