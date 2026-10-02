@@ -83,9 +83,8 @@ namespace VeloxDev.Generators.Base
             /// <summary>
             /// Metadata names of every attribute that makes a class a codegen target. Class-level
             /// attributes are listed first so that, for a type split over several partial files, the
-            /// declaration carrying the class-level attribute becomes the representative one: the
-            /// syntax-scoped writers (<c>TickWriter</c>, <c>AopWriter</c>, <c>AopInterface</c>) read
-            /// their attribute off the declaration they are handed.
+            /// declaration carrying the class-level attribute becomes the representative one — the one
+            /// every writer is handed.
             /// </summary>
             private static readonly string[] TriggerAttributes =
             [

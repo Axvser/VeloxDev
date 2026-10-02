@@ -32,13 +32,12 @@ namespace VeloxDev.Generators.Writers
             return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_AOP.g.cs";
         }
 
-        // ── Output 1: partial class (preserves the interface implementation contract) ──
-
-        public override string[] GenerateBaseInterfaces() =>
-        [
-            $"{NAMESPACE_VELOX_AOP}.{Syntax?.Identifier.Text}_{NamespaceFileSegment()}_Aop"
-        ];
+        // 不再往用户类上注入那个接口。曾经需要它，只是为了让 CreateProxy<接口>(x) 编译得过；
+        // 改用编译期实现类之后 new {Proxy}(x) 不需要任何转换，而生成的接口现在多了一个**带成员的**
+        // 基接口 IAopHookTarget —— 继续让用户类实现它，用户类就必须自己实现 SetHooks，那是荒谬的。
         public override string[] GenerateBaseTypes() => [];
+
+        public override string[] GenerateBaseInterfaces() => [];
 
         public override string GenerateBody() => string.Empty;
 
@@ -56,10 +55,12 @@ namespace VeloxDev.Generators.Writers
                 return string.Empty;
 
             var className = Syntax.Identifier.Text;
-            var ns = Symbol.ContainingNamespace.ToDisplayString();
-            var nsParts = ns.Replace('.', '_');
-            var aopInterface = $"global::VeloxDev.AopInterfaces.{className}_{nsParts}_Aop";
-            var fullClass = $"global::{ns}.{className}";
+            var nsParts = AopNames.Segment(Symbol);
+            // 名字统一走 AopNames：接口、代理实现、这个扩展类三者必须对同一个类给出一致的名字。
+            var aopInterface = $"global::{AopNames.InterfaceNamespace}.{AopNames.InterfaceFor(Symbol)}";
+            var aopProxy = $"global::{AopNames.InterfaceNamespace}.{AopNames.ProxyFor(Symbol)}";
+            // 用符号的完全限定名，而不是拼命名空间 —— 全局命名空间下前者是 "<global namespace>.<类>"，非法。
+            var fullClass = $"global::{Symbol.ToDisplayString()}";
 
             var extClassName = $"{className}_{nsParts}_AopExtensions";
 
@@ -79,7 +80,7 @@ namespace VeloxDev.Generators.Writers
             sb.AppendLine($"            instance,");
             sb.AppendLine($"            static x =>");
             sb.AppendLine($"            {{");
-            sb.AppendLine($"                var p = global::VeloxDev.AspectOriented.ProxyEx.CreateProxy<{aopInterface}>(x);");
+            sb.AppendLine($"                var p = new {aopProxy}(x);");
             sb.AppendLine($"                global::VeloxDev.AspectOriented.Aop.Map(p, x);");
             sb.AppendLine($"                return p;");
             sb.AppendLine($"            }});");

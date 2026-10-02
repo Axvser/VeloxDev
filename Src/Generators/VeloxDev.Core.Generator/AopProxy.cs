@@ -27,12 +27,7 @@ namespace VeloxDev.Generators
                 writer.Initialize(syntax, symbol);
                 if (!writer.CanWrite()) continue;
 
-                // Source 1: partial class (preserves the interface implementation contract)
-                context.AddSource(
-                    writer.GetFileName(),
-                    SourceText.From(writer.Write(), Encoding.UTF8));
-
-                // Source 2: extension method (the Aop() entry point)
+                // 只出扩展方法。那句 bodyless partial 已经不需要了 —— 见 AopWriter 上的注释。
                 context.AddSource(
                     writer.GetExtensionFileName(),
                     SourceText.From(writer.WriteExtension(), Encoding.UTF8));

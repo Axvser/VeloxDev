@@ -1,103 +1,77 @@
-﻿#if NET
-
-using System.Reflection;
-using VeloxDev.AspectOriented;
+#if NET
 
 namespace VeloxDev.AspectOriented
 {
+    /// <summary>
+    /// Which accessor of a member an aspect is being installed on.
+    /// </summary>
     public enum ProxyMembers
     {
+        /// <summary>The property's getter.</summary>
         Getter,
+
+        /// <summary>The property's setter.</summary>
         Setter,
+
+        /// <summary>A method.</summary>
         Method
     }
 
+    /// <summary>
+    /// Installs aspects on the proxy a generated <c>Aop()</c> returns.
+    /// </summary>
+    /// <remarks>
+    /// A property's getter and setter are separate members and take separate aspects, which is why
+    /// <see cref="ProxyMembers"/> exists rather than one call covering the property.
+    /// </remarks>
     public static class ProxyEx
     {
-        public static T CreateProxy<T>(this T target) where T : IAspectOriented
+        /// <summary>
+        /// Installs the three stages on one member of <paramref name="target"/>.
+        /// </summary>
+        /// <typeparam name="T">The generated AOP interface.</typeparam>
+        /// <param name="target">The proxy — what <c>Aop()</c> returned, never the object behind it.</param>
+        /// <param name="memberType">Which accessor of the member is being hooked.</param>
+        /// <param name="memberName">The member's plain name, as written in the class.</param>
+        /// <param name="start">Runs before the member, or <see langword="null"/>.</param>
+        /// <param name="coverage">Replaces the member when it is not <see langword="null"/>.</param>
+        /// <param name="end">Runs after the member, or <see langword="null"/>.</param>
+        /// <exception cref="InvalidOperationException">
+        /// <paramref name="target"/> is the original object rather than a proxy. Aspects installed there would
+        /// never run, so this is refused instead of ignored.
+        /// </exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="memberName"/> is not an interceptable member of the proxied type.
+        /// </exception>
+        /// <remarks>
+        /// Installing on a member twice <em>replaces</em> its aspects rather than stacking them: all three
+        /// stages are always written together.
+        /// </remarks>
+        public static void SetProxy<T>(
+            this T target,
+            ProxyMembers memberType,
+            string memberName,
+            ProxyHandler? start,
+            ProxyHandler? coverage,
+            ProxyHandler? end)
+            where T : IAspectOriented
         {
-            var type = typeof(T);
-            dynamic proxy = DispatchProxy.Create<T, ProxyInstance>() ?? throw new InvalidOperationException();
-            proxy._target = target;
-            proxy._targetType = type;
-            ProxyInstance.ProxyIDs.Add(proxy, proxy._localid);
-            return proxy;
-        }
-        public static void SetProxy<T>(this T target, ProxyMembers memberType, string memberName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end)
-           where T : class, IAspectOriented
-        {
-            switch (memberType)
+            // 挂在真身上时，代理永远不会经过它 —— 那是个不会报错的失效，所以这里拒绝而不是忽略。
+            if (target is not IAopHookTarget hookTarget)
             {
-                case ProxyMembers.Getter:
-                    SetPropertyGetter(target, memberName, start, coverage, end);
-                    break;
-                case ProxyMembers.Setter:
-                    SetPropertySetter(target, memberName, start, coverage, end);
-                    break;
-                case ProxyMembers.Method:
-                    SetMethod(target, memberName, start, coverage, end);
-                    break;
+                throw new InvalidOperationException(
+                    $"'{target?.GetType().Name ?? "null"}' is not an AOP proxy. " +
+                    "Install aspects on the instance Aop() returns, not on the object behind it.");
             }
-        }
 
-        internal static T SetPropertyGetter<T>(this T source, string propertyName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IAspectOriented
-        {
-            if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
+            string memberKey = memberType switch
             {
-                return source;
-            }
-            if (ProxyInstance.ProxyInstances.TryGetValue(id, out var instance))
-            {
-                var Name = $"get_{propertyName}";
-                if (instance.GetterActions.ContainsKey(Name))
-                {
-                    instance.GetterActions[Name] = Tuple.Create(start, coverage, end);
-                }
-                else
-                {
-                    instance.GetterActions.Add(Name, Tuple.Create(start, coverage, end));
-                }
-            }
-            return source;
-        }
-        internal static T SetPropertySetter<T>(this T source, string propertyName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IAspectOriented
-        {
-            if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
-            {
-                return source;
-            }
-            if (ProxyInstance.ProxyInstances.TryGetValue(id, out var instance))
-            {
-                var Name = $"set_{propertyName}";
-                if (instance.SetterActions.ContainsKey(Name))
-                {
-                    instance.SetterActions[Name] = Tuple.Create(start, coverage, end);
-                }
-                else
-                {
-                    instance.SetterActions.Add(Name, Tuple.Create(start, coverage, end));
-                }
-            }
-            return source;
-        }
-        internal static T SetMethod<T>(this T source, string methodName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IAspectOriented
-        {
-            if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
-            {
-                return source;
-            }
-            if (ProxyInstance.ProxyInstances.TryGetValue(id, out var instance))
-            {
-                if (instance.MethodActions.ContainsKey(methodName))
-                {
-                    instance.MethodActions[methodName] = Tuple.Create(start, coverage, end);
-                }
-                else
-                {
-                    instance.MethodActions.Add(methodName, Tuple.Create(start, coverage, end));
-                }
-            }
-            return source;
+                ProxyMembers.Getter => "get_" + memberName,
+                ProxyMembers.Setter => "set_" + memberName,
+                _ => memberName,
+            };
+
+            hookTarget.SetHooks(memberKey, new AspectHooks(start, coverage, end));
         }
     }
 }
