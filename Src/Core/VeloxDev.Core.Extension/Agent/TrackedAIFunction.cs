@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.AI;
-using Newtonsoft.Json;
+using VeloxDev.Serialization;
 using System;
 using System.Diagnostics;
 using System.Threading;
@@ -139,5 +139,5 @@ internal sealed class TrackedAIFunction(
     /// shape the tool bodies use, so a caller cannot tell a wrapper failure from a tool failure by format.
     /// </summary>
     private static string Error(string message)
-        => JsonConvert.SerializeObject(new { status = "error", message }, Formatting.None);
+        => new VeloxJsonObject { ["status"] = "error", ["message"] = message }.ToJson();
 }
