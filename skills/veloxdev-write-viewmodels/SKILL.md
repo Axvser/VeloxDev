@@ -1,8 +1,7 @@
 ---
 name: veloxdev-write-viewmodels
-description: Write ViewModels with VeloxDev's source generators — observable properties with [VeloxProperty], async commands with [VeloxCommand], collection change hooks, interoperating with CommunityToolkit/Prism/ReactiveUI/Caliburn, and the [MonoBehaviour] frame loop
+description: Write ViewModels with VeloxDev's source generators — observable properties with [VeloxProperty], async commands with [VeloxCommand], collection change hooks, and interoperating with CommunityToolkit/Prism/ReactiveUI/Caliburn
 ---
-
 ## Responsibility
 
 Write a class that the compile-time generators turn into a full ViewModel — properties that notify, commands with cancellation and a semaphore, collection hooks — without hand-writing `INotifyPropertyChanged` plumbing or a `RelayCommand`.
@@ -22,6 +21,7 @@ Two forms, both valid, and which one you use is a convention rather than a rule:
 ```csharp
 [VeloxProperty] private string _name = string.Empty;          // field form
 ```
+
 ```csharp
 [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }   // property form
 ```
@@ -144,53 +144,13 @@ Since there are no diagnostics, these are the failure modes to know by name:
 
 ⚙ **A competing MVVM attribute** is present — skipped by design.
 
-⚙ **`[MonoBehaviour]` must be the real attribute.** The generator matches the full name `VeloxDev.TimeLine.MonoBehaviourAttribute`; a user-defined attribute with the same short name is ignored without a word.
-
-⚙ **Two workflow classes with the same name in different namespaces collide**, because that one generator names its file `{ClassName}.g.cs` without a namespace. The MVVM, command and mono generators include the namespace and are unaffected.
-
-## `[MonoBehaviour]` — a frame loop on any class
-
-```csharp
-[MonoBehaviour(channel: "physics", fps: 60)]
-public partial class PhysicsComponent
-{
-    public PhysicsComponent() => InitializeMonoBehaviour();
-
-    partial void Awake() { }
-    partial void Update(FrameEventArgs e) { … }
-    partial void FixedUpdate(FrameEventArgs e) { … }
-}
-
-MonoBehaviourManager.Start("physics");
-```
-
-Gives a POCO a Unity-style lifecycle — `Awake` / `Start` / `Update` / `LateUpdate` / `FixedUpdate` — on its own background thread, with no UI framework involved. `FrameEventArgs` carries `DeltaTime`, `TotalTime`, `CurrentFPS`, `TargetFPS` and `Handled`.
-
-⚙ **The attribute alone does nothing.** You must call `InitializeMonoBehaviour()` (conventionally from the constructor) **and** start the channel with `MonoBehaviourManager.Start(channel)`. A behaviour that never ticks is almost always a missing `Start`.
-
-⚙ **The `partial void` name and parameter type must match exactly**, or the hook is never invoked — silently. `Update(FrameEventArgs e)` is the signature.
-
-⚙ The channel defaults to `"default"`; `fps <= 0` means "use whatever the channel is already set to" (the manager's default is 60).
-
-⚙ **Exceptions inside a behaviour are swallowed** to `Debug.WriteLine`. A `Update` that throws contributes nothing and reports nothing.
-
-⚙ Setting `e.Handled = true` stops the remaining behaviours for that frame.
-
-`MonoBehaviourManager` also offers `StopAsync`, `Pause`/`Resume`/`TogglePause`, `RestartAsync`, `SetTargetFPS`, `SetFixedUpdateInterval`, `SetTimeScale`, `ExecuteOnMainThread`, `Bus` (the channel's time source — hand it to `Transition.Execute` to put an animation on the loop's clock), and the queries `IsRunning`, `IsPaused`, `ActiveBehaviorCount`, `SystemStatus`.
-
-⚙ `SetTimeScale` is the channel's playback **rate**, verbatim: it moves `DeltaTime` and `TotalTime` together, a negative value throws, and `0` freezes the clock — no frames arrive at all rather than frames carrying a zero delta.
-
-⚙ **`IMonoBehaviour` and `InitializeMonoBehaviour` contain a zero-width space (U+200B) in their names.** C# ignores formatting characters when comparing identifiers, so typing them normally binds correctly — but the names do not survive a copy-paste, a rename tool or a highlight-search. If you implement the interface by hand, retype it rather than pasting it.
-
-⚙ **The one real consumer in the library is `TreeHelper<T>`**, which runs the workflow canvas's virtualization at 10 fps on a `TreeHelper` channel. That is the pattern to copy when a graph needs a periodic view concern: a helper deriving from a generated `partial` class, its `Update` doing the work, and the host owning start and stop.
+⚙ **Two workflow classes with the same name in different namespaces collide**, because that one generator names its file `{ClassName}.g.cs` without a namespace. The MVVM, command and tick generators include the namespace and are unaffected.
 
 ## Reference
 
 ⚙ `Examples/MVVM/WPF/Demo` and `Examples/MVVM/Avalonia/Demo` — the richest MVVM sample: observable properties, collections with every hook, seven commands, and the lock / interrupt / clear lifecycle.
 
-⚙ `Examples/MonoBehaviour/WPF/Demo` — one window that is **itself** the `[MonoBehaviour]`: the attribute is on `MainWindow`, `MonoBehaviourManager.Start` runs on load, and close calls `CloseMonoBehaviour()` and then a deliberately **un-awaited** `StopAsync` (the pumps are background threads, so awaiting would only make the close look stuck).
-
-⚙ `Src/Generators/VeloxDev.Core.Generator/Writers/` — `MVVMWriter.cs`, `CommandWriter.cs`, `MonoWriter.cs`. The generated shape is exactly what these emit, and reading the setter body is faster than guessing.
+⚙ `Src/Generators/VeloxDev.Core.Generator/Writers/` — `MVVMWriter.cs`, `CommandWriter.cs`. The generated shape is exactly what these emit, and reading the setter body is faster than guessing.
 
 ⚙ `Src/Core/VeloxDev.Core/MVVM/` — `VeloxPropertyAttribute`, `VeloxCommandAttribute`, `VeloxCommand`, `ObservableCollectionTracker`.
 

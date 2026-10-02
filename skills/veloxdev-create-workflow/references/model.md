@@ -180,7 +180,7 @@ public TreeHelper(double cellSize) { useVirtualization = true; … }  // ON, and
 | `NodeAdded` / `NodeRemoved` / `LinkAdded` / `LinkRemoved` | structural events |
 | `Submit` / `Undo` / `Redo` / `ClearHistory` | thin forwards to the `StandardEx` layer |
 
-⚙ The deferred loop runs at **10 fps** (`[MonoBehaviour(channel: nameof(TreeHelper), fps: 10)]`) and only when dirty. `MarkDirty` is called for you by `SetAnchor`/`SetSize`/`Move`, by the scale tracker and by node/link collection changes.
+⚙ The deferred loop runs at **10 fps** (`[Tickable(channel: nameof(TreeHelper), fps: 10)]`) and only when dirty. `MarkDirty` is called for you by `SetAnchor`/`SetSize`/`Move`, by the scale tracker and by node/link collection changes.
 
 ⚙ `BroadcastVisibleItemLayout()` re-raises `Anchor` and `Size` on every visible node. It exists because those getters are computed — after a re-virtualization the views have to be told to re-read them.
 

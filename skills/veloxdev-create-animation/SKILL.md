@@ -79,7 +79,7 @@ Fade.Execute(rect);
 
 ⚙ **Never cache a declaration that reads a local.** A captured local becomes part of the path's identity and is shared by every later `Execute` — the second call would silently animate the first call's value. Locals belong in the create-and-discard form below.
 
-⚙ `Execute(target, timeline)` anchors several animations to one `ITimeSourceControl` when they must share one transport (pause / rate / seek act on it as a unit). The parameter is positional — it is named `timeline`, not `source`. The default implementation is `TimeSourceCore` (`VeloxDev.Timing`), and `TimerCore.CreateTimeSource<ITimeSourceControl>()` is what resolves it — a platform can register its own there. A `MonoBehaviour` channel's own source comes from `MonoBehaviourManager.Bus(channel)`, which is how an animation shares the frame loop's clock: one `Pause` then stops the frames and the animation together.
+⚙ `Execute(target, timeline)` anchors several animations to one `ITimeSourceControl` when they must share one transport (pause / rate / seek act on it as a unit). The parameter is positional — it is named `timeline`, not `source`. The default implementation is `TimeSourceCore` (`VeloxDev.Timing`), and `TimerCore.CreateTimeSource<ITimeSourceControl>()` is what resolves it — a platform can register its own there. A tick channel's own source comes from `TickManager.Bus(channel)`, which is how an animation shares the frame loop's clock: one `Pause` then stops the frames and the animation together.
 
 ## Created on the spot, discarded
 

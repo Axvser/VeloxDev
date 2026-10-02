@@ -60,7 +60,7 @@ Open your GUI's reference alongside whichever of the above you are reading — i
 
 ## The rules that decide whether your code works
 
-⚙ **`partial` on every component class, or nothing happens.** Every generator — `[VeloxProperty]`, `[VeloxCommand]`, `[WorkflowBuilder.*]`, `[MonoBehaviour]` — matches on the `partial` modifier, and this class-level check is silent: a missing `partial` produces no file, no warning, and a puzzling error ten minutes later at the use site. (`[VeloxProperty]` members have diagnostics of their own — `VELOX_MVVM_PROP*` — but those fire on the member, not on the class.)
+⚙ **`partial` on every component class, or nothing happens.** Every generator — `[VeloxProperty]`, `[VeloxCommand]`, `[WorkflowBuilder.*]`, `[Tickable]` — matches on the `partial` modifier, and this class-level check is silent: a missing `partial` produces no file, no warning, and a puzzling error ten minutes later at the use site. (`[VeloxProperty]` members have diagnostics of their own — `VELOX_MVVM_PROP*` — but those fire on the member, not on the class.)
 
 ⚙ **Call `InitializeWorkflow()` from your own constructor.** The generator does not emit one.
 
@@ -88,7 +88,7 @@ VeloxDev is meant to be extended, and each of these is the seam the library expe
 | Add a property that changes with the theme | `[ThemeConfig]` — see the theme skill | branch on the theme in the view |
 | Animate a value VeloxDev cannot interpolate | `ISampler` for a type, or `ISampleable` on your own type — see the animation skill | rebuild the value per frame by hand |
 | Intercept a member without editing it | `[AspectOriented]` + `Aop()` — see the aspects skill | wrap the class in a decorator |
-| Put a periodic view concern on a timer | `[MonoBehaviour]` on your helper, the way `TreeHelper` does | a `DispatcherTimer` beside the graph |
+| Put a periodic view concern on a timer | `[Tickable]` on your helper, the way `TreeHelper` does | a `DispatcherTimer` beside the graph |
 | Run on a GUI that has no adapter | write one — [references/new-adapter.md](references/new-adapter.md) | fork Core, or reimplement the canvas |
 | Let an LLM operate the graph | a `WorkflowAgentScope` on the tree | call your own commands from a tool wrapper |
 
