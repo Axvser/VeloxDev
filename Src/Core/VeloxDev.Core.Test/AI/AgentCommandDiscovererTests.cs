@@ -6,10 +6,10 @@ namespace VeloxDev.Core.Test.AI;
 [TestClass]
 public class AgentCommandDiscovererTests
 {
-    internal sealed class FakeCommand(Action<object?> execute) : ICommand
+    internal sealed class FakeCommand(Action<object?> execute, bool canExecute = true) : ICommand
     {
         public event EventHandler? CanExecuteChanged;
-        public bool CanExecute(object? parameter) => true;
+        public bool CanExecute(object? parameter) => canExecute;
         public void Execute(object? parameter) => execute(parameter);
     }
 
@@ -21,7 +21,23 @@ public class AgentCommandDiscovererTests
         [AgentContext(AgentLanguages.English, "Deletes data")]
         public ICommand DeleteCommand { get; } = new FakeCommand(_ => { });
 
+        [AgentContext(AgentLanguages.English, "Reports it cannot run")]
+        public ICommand ConditionalCommand { get; set; } = new FakeCommand(_ => { }, canExecute: false);
+
         public string NotACommand { get; set; } = "";
+    }
+
+    /// <summary>The shape the workflow runtime uses: the annotations live on the interface, not the class.</summary>
+    internal interface IConditionalContract
+    {
+        [AgentContext(AgentLanguages.English, "Described by the contract")]
+        [AgentCommandParameter(typeof(int))]
+        ICommand ContractCommand { get; }
+    }
+
+    internal sealed class ContractImplementation : IConditionalContract
+    {
+        public ICommand ContractCommand { get; } = new FakeCommand(_ => { });
     }
 
     [TestMethod]
@@ -66,6 +82,33 @@ public class AgentCommandDiscovererTests
         var cmds = AgentCommandDiscoverer.DiscoverCommands(new ViewModel(), AgentLanguages.Japanese);
         var save = cmds.First(c => c.Name == "SaveCommand");
         CollectionAssert.Contains((System.Collections.ICollection)save.AgentDescriptions, "Saves data");
+    }
+
+    [TestMethod]
+    public void DiscoverCommands_TakesItsAnnotationsFromTheInterface()
+    {
+        // 命令的说明与参数类型官方写在接口上；实现类自己那个属性上是空的，目录要把接口的那份带过来。
+        var command = AgentCommandDiscoverer
+            .DiscoverCommands(new ContractImplementation())
+            .First(c => c.Name == "ContractCommand");
+
+        CollectionAssert.Contains((System.Collections.ICollection)command.AgentDescriptions, "Described by the contract");
+        Assert.AreEqual("System.Int32", command.ParameterType);
+    }
+
+    [TestMethod]
+    public void CanExecute_IsReportedAndNeverEnforced()
+    {
+        var ran = false;
+        var vm = new ViewModel { ConditionalCommand = new FakeCommand(_ => ran = true, canExecute: false) };
+
+        var command = AgentCommandDiscoverer.DiscoverCommands(vm).First(c => c.Name == "ConditionalCommand");
+        Assert.IsFalse(command.CanExecute, "a disabled command is reported as not executable");
+        Assert.IsFalse(AgentCommandDiscoverer.CanExecuteCommand(vm, "Conditional"));
+
+        // 报告归报告，执行不查它 —— 要拦只能由工具层自己拦。
+        Assert.IsTrue(AgentCommandDiscoverer.Execute(vm, "Conditional").Success);
+        Assert.IsTrue(ran);
     }
 
     [TestMethod]

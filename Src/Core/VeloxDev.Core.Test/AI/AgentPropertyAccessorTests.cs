@@ -5,11 +5,34 @@ namespace VeloxDev.Core.Test.AI;
 [TestClass]
 public class AgentPropertyAccessorTests
 {
+    /// <summary>
+    /// The tree carries only types an author opted into, so the class annotation is what puts this one in it.
+    /// </summary>
+    [AgentContext(AgentLanguages.English, "A sample target")]
     internal sealed class SampleTarget
     {
         public string? Name { get; set; } = "Initial";
         public int Count { get; set; } = 5;
         public double ReadOnly => 3.14;
+    }
+
+    /// <summary>Nothing opts this type in, so the tree has no entry for it — the reverse control.</summary>
+    internal sealed class UnannotatedTarget
+    {
+        public string? Name { get; set; }
+    }
+
+    [AgentContext(AgentLanguages.English, "A base target")]
+    internal class BaseTarget
+    {
+        public string? Inherited { get; set; } = "from base";
+    }
+
+    /// <summary>A derived type carries its own entry, and reaches the base's members through the tree's base link.</summary>
+    [AgentContext(AgentLanguages.English, "A derived target")]
+    internal sealed class DerivedTarget : BaseTarget
+    {
+        public int Own { get; set; } = 1;
     }
 
     /// <summary>
@@ -66,8 +89,45 @@ public class AgentPropertyAccessorTests
     public void DiscoverProperties_WithFilter_ExcludesFiltered()
     {
         var target = new SampleTarget();
-        var props = AgentPropertyAccessor.DiscoverProperties(target, filter: p => p.Name != "Count");
+        var props = AgentPropertyAccessor.DiscoverProperties(target, filter: name => name != "Count");
         Assert.IsFalse(props.Any(p => p.Name == "Count"));
+    }
+
+    [TestMethod]
+    public void DiscoverProperties_TypeOutsideTheTree_ReturnsEmpty()
+    {
+        // 反向对照：目录是唯一事实源。没被标注过的类型不进目录，于是既列不出属性，也读不出值。
+        var target = new UnannotatedTarget { Name = "Hidden" };
+
+        Assert.AreEqual(0, AgentPropertyAccessor.DiscoverProperties(target).Count);
+        Assert.IsNull(AgentPropertyAccessor.GetPropertyValue(target, "Name"));
+        Assert.IsFalse(AgentPropertyAccessor.SetPropertyValue(target, "Name", "Written").Success);
+    }
+
+    [TestMethod]
+    public void DiscoverProperties_WalksTheBaseChain()
+    {
+        // 目录只录类型自己声明的成员，继承来的靠 BaseType 链接过去 —— 派生类型的属性面不能因此变窄。
+        var target = new DerivedTarget { Inherited = "reached" };
+        var props = AgentPropertyAccessor.DiscoverProperties(target);
+
+        Assert.IsTrue(props.Any(p => p.Name == "Own"));
+        Assert.IsTrue(props.Any(p => p.Name == "Inherited"), "a base type's property must still be discoverable");
+
+        // 读也要能走通：基类成员由基类那个访问器执行，派生类型自己的访问器里没有它的 case。
+        Assert.AreEqual("reached", AgentPropertyAccessor.GetPropertyValue(target, "Inherited"));
+
+        var set = AgentPropertyAccessor.SetPropertyValue(target, "Inherited", "written");
+        Assert.IsTrue(set.Success, set.Error);
+        Assert.AreEqual("written", target.Inherited);
+    }
+
+    [TestMethod]
+    public void PropertyDescriptor_CarriesTheDeclaredTypeAsATextName()
+    {
+        // 目录里存的是声明类型的全名，描述符不再发放 Type —— 那正是裁剪器跟不上的东西。
+        var props = AgentPropertyAccessor.DiscoverProperties(new SampleTarget());
+        Assert.AreEqual("System.Int32", props.First(p => p.Name == "Count").PropertyType);
     }
 
     [TestMethod]

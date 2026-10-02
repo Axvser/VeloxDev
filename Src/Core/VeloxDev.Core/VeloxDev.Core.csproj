@@ -2,14 +2,17 @@
 
 	<PropertyGroup>
 		<NoWarn>1573;1591;NU5104</NoWarn>
-		<TargetFrameworks>netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0</TargetFrameworks>
+		<TargetFrameworks>netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<IsTrimmable>false</IsTrimmable>
+		<!-- net8.0 那一档是裁剪/AOT 契约的载体：IL2xxx/IL3xxx 在这里常开，
+		     把「这个包在裁剪与 NativeAOT 下可用」写进程序集元数据交给消费方。
+		     旧的几档不支持分析器，只能靠 net8.0 这一档替它们守。 -->
+		<IsAotCompatible Condition="'$(TargetFramework)' == 'net8.0'">true</IsAotCompatible>
 		<!-- 本程序集的 Agent 面属于框架侧：生成的分片挂在 Framework/ 根下，而不是 Customer/。 -->
 		<VeloxAgentContextTreeRoot>Framework</VeloxAgentContextTreeRoot>
 		<Title>VeloxDev.Core</Title>

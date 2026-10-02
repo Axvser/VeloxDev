@@ -111,11 +111,19 @@ namespace VeloxDev.Generators.Base
         /// <summary>A command's declared parameter type, or null when it takes none — what the tables print.</summary>
         internal string? CommandParameterTypeName { get; set; }
 
+        /// <summary>
+        /// The command parameter's symbol — kept so the accessor can name the type in a <c>typeof</c> literal.
+        /// </summary>
+        internal ITypeSymbol? CommandParameterTypeSymbol { get; set; }
+
         /// <summary>Whether the member's type is a <c>SlotEnumerator&lt;T&gt;</c>.</summary>
         internal bool IsSlotEnumerator { get; set; }
 
         /// <summary>Whether the member's type is a single slot.</summary>
         internal bool IsSingleSlot { get; set; }
+
+        /// <summary>Whether the member's type is a collection of slots.</summary>
+        internal bool IsSlotCollection { get; set; }
 
         /// <summary>An enum member's underlying value; zero for anything else.</summary>
         internal long Ordinal { get; set; }
@@ -478,9 +486,11 @@ namespace VeloxDev.Generators.Base
                 ? TableType(symbol.EnumUnderlyingType)
                 : null;
 
+            // 必须是索引键那个形状（`ReflectionFullName`，嵌套用 `+`）：BaseType 引用要拿它去查目录，
+            // 用 Roslyn 的 `global::A.B.C` 形状对嵌套基类型永远查不到，继承来的成员就整条丢掉。
             var baseTypeName = symbol.BaseType is { SpecialType: not SpecialType.System_Object } baseType
                                && baseType.TypeKind == TypeKind.Class
-                ? baseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty)
+                ? ReflectionFullName(baseType)
                 : null;
 
             return new AIContextType(
@@ -724,8 +734,12 @@ namespace VeloxDev.Generators.Base
 
         private static AIContextMember BuildProperty(IPropertySymbol property)
         {
-            var isCommand = ImplementsInterface(property.Type as INamedTypeSymbol ?? property.ContainingType, "System.Windows.Input.ICommand")
-                            || property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty) == "System.Windows.Input.ICommand";
+            var isCommand = IsCommandType(property.Type);
+
+            // 命令的说明与参数类型以接口上的声明为准 —— 反射那条先扫接口，具体类同名的那个根本不会被读到。
+            var contract = isCommand ? InterfaceCommandProperty(property.ContainingType, property.Name) : null;
+            var annotations = (ISymbol?)contract ?? property;
+            var commandParameter = ReadCommandParameterType(annotations);
 
             return new AIContextMember(
                 property.Name,
@@ -743,23 +757,100 @@ namespace VeloxDev.Generators.Base
                 hasVeloxCommand: false,
                 isPromotedField: false,
                 hasSlotSelectors: HasAttribute(property, SlotSelectorsAttributeName),
-                descriptions: ReadTexts(property),
+                descriptions: ReadTexts(annotations),
                 slotSelectorNames: ReadSlotSelectorNames(property),
                 parameters: [])
             {
                 Symbol = property,
                 IsSlotEnumerator = IsSlotEnumeratorType(property.Type),
+                IsSlotCollection = IsSlotCollectionType(property.Type),
                 IsSingleSlot = IsSingleSlotType(property.Type),
                 // 命令的参数类型标在属性上（接口那一路），方法那一路才标在方法上 —— 两边都要读。
-                CommandParameterTypeName = ReadCommandParameterType(property),
+                CommandParameterTypeName = commandParameter.Name,
+                CommandParameterTypeSymbol = commandParameter.Symbol,
             };
         }
 
-        /// <summary>Whether the type is <c>VeloxDev.WorkflowSystem.SlotEnumerator&lt;T&gt;</c>.</summary>
+        /// <summary>
+        /// The <c>ICommand</c> property an interface declares under <paramref name="name"/>, or null when the type
+        /// implements no such contract.
+        /// </summary>
+        /// <remarks>
+        /// A command's <c>[AgentContext]</c> and <c>[AgentCommandParameter]</c> belong on the interface — that is
+        /// where the workflow runtime declares them, and the accessor's implementation is generated under a name
+        /// this generator has to reproduce. So the interface is asked for the annotations, exactly as the
+        /// reflective discoverer did when it scanned interfaces before the concrete type.
+        /// </remarks>
+        private static IPropertySymbol? InterfaceCommandProperty(INamedTypeSymbol type, string name)
+        {
+            // 接口自己的条目按名字读自己的属性，不能去 AllInterfaces 里找同名的 —— 那会把标注挪到别的契约上。
+            if (type.TypeKind == TypeKind.Interface) return null;
+
+            foreach (var contract in type.AllInterfaces)
+            {
+                foreach (var member in contract.GetMembers(name))
+                {
+                    if (member is not IPropertySymbol property || property.IsIndexer) continue;
+                    if (IsCommandType(property.Type)) return property;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>Whether a member declared as <paramref name="type"/> is an <c>ICommand</c> property.</summary>
+        private static bool IsCommandType(ITypeSymbol type)
+        {
+            if (type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty) == "System.Windows.Input.ICommand")
+                return true;
+
+            return type is INamedTypeSymbol named && ImplementsInterface(named, "System.Windows.Input.ICommand");
+        }
+
+        /// <summary>
+        /// Whether the type is a slot enumerator: <c>SlotEnumerator&lt;T&gt;</c>, the contract it implements, or
+        /// anything else implementing that contract.
+        /// </summary>
         private static bool IsSlotEnumeratorType(ITypeSymbol type)
-            => type is INamedTypeSymbol named
-               && named.OriginalDefinition.Name == "SlotEnumerator"
-               && named.OriginalDefinition.ContainingNamespace?.ToDisplayString() == "VeloxDev.WorkflowSystem";
+        {
+            if (type is not INamedTypeSymbol named) return false;
+            if (IsSlotEnumeratorContract(named)) return true;
+
+            return named.AllInterfaces.Any(IsSlotEnumeratorContract);
+        }
+
+        /// <summary>Whether the type is <c>SlotEnumerator&lt;T&gt;</c> or its interface, unresolved by argument.</summary>
+        private static bool IsSlotEnumeratorContract(INamedTypeSymbol type)
+        {
+            var definition = type.OriginalDefinition;
+            if (definition.ContainingNamespace?.ToDisplayString() != "VeloxDev.WorkflowSystem") return false;
+
+            return definition.Name is "SlotEnumerator" or "IConditionalSlotProvider";
+        }
+
+        /// <summary>Whether the type is a collection the agent should treat as a group of slots.</summary>
+        private static bool IsSlotCollectionType(ITypeSymbol type)
+        {
+            if (type is not INamedTypeSymbol named) return false;
+
+            // 一个类型实参、类型本身可枚举、且实参是插槽 —— `ObservableCollection<TSlot>`、`List<TSlot>` …
+            if (named.TypeArguments.Length == 1
+                && named.AllInterfaces.Any(static i => i.SpecialType == SpecialType.System_Collections_IEnumerable)
+                && IsSingleSlotType(named.TypeArguments[0]))
+            {
+                return true;
+            }
+
+            // 否则看它实现的那个 `ICollection<TSlot>`。
+            foreach (var contract in named.AllInterfaces)
+            {
+                if (contract.OriginalDefinition.SpecialType != SpecialType.None) continue;
+                if (contract.OriginalDefinition.Name != "ICollection" || contract.TypeArguments.Length != 1) continue;
+                if (IsSingleSlotType(contract.TypeArguments[0])) return true;
+            }
+
+            return false;
+        }
 
         /// <summary>Whether the type is a single workflow slot — the interface itself counts, as it does for <c>IsAssignableFrom</c>.</summary>
         private static bool IsSingleSlotType(ITypeSymbol type)
@@ -773,12 +864,19 @@ namespace VeloxDev.Generators.Base
         }
 
         /// <summary>The type named by <c>[AgentCommandParameter]</c>, or null when the command takes none.</summary>
-        private static string? ReadCommandParameterType(ISymbol symbol)
+        /// <remarks>
+        /// Both forms are returned: the accessor needs the symbol to write a <c>typeof</c> literal, the rendered
+        /// tables need the name. An argument-free <c>[AgentCommandParameter]</c> declares "no parameter" and
+        /// answers with neither.
+        /// </remarks>
+        private static (string? Name, ITypeSymbol? Symbol) ReadCommandParameterType(ISymbol symbol)
         {
             var attribute = symbol.GetAttributes().FirstOrDefault(a => AttributeName(a) == AgentCommandParameterAttributeName);
-            if (attribute is null || attribute.ConstructorArguments.Length == 0) return null;
+            if (attribute is null || attribute.ConstructorArguments.Length == 0) return (null, null);
 
-            return attribute.ConstructorArguments[0].Value is ITypeSymbol type ? DisplayType(type) : null;
+            return attribute.ConstructorArguments[0].Value is ITypeSymbol type
+                ? (DisplayType(type), type)
+                : (null, null);
         }
 
         private static AIContextMember BuildField(IFieldSymbol field)
@@ -829,6 +927,7 @@ namespace VeloxDev.Generators.Base
                 Symbol = field,
                 IsSlotEnumerator = IsSlotEnumeratorType(field.Type),
                 IsSingleSlot = IsSingleSlotType(field.Type),
+                IsSlotCollection = IsSlotCollectionType(field.Type),
             };
 
         /// <summary>
@@ -865,8 +964,15 @@ namespace VeloxDev.Generators.Base
         /// this generator cannot see that type, but every command property implements this one.
         /// </remarks>
         private static AIContextMember BuildPromotedCommand(IMethodSymbol method)
-            => new(
-                AIContextNaming.CommandPropertyName(method),
+        {
+            // 命令属性由 CommandWriter 产出，它实现的那个接口属性才带着标注 —— 接口上写了就用接口的。
+            var name = AIContextNaming.CommandPropertyName(method);
+            var contract = InterfaceCommandProperty(method.ContainingType, name);
+            var annotations = (ISymbol?)contract ?? method;
+            var commandParameter = ReadCommandParameterType(annotations);
+
+            return new AIContextMember(
+                name,
                 method.ReturnType,
                 "VeloxDev.MVVM.IVeloxCommand",
                 isMethod: false,
@@ -878,16 +984,21 @@ namespace VeloxDev.Generators.Base
                 hasVeloxCommand: true,
                 isPromotedField: false,
                 hasSlotSelectors: false,
-                descriptions: ReadTexts(method),
+                descriptions: ReadTexts(annotations),
                 slotSelectorNames: [],
                 parameters: [])
             {
                 Symbol = method,
-                CommandParameterTypeName = ReadCommandParameterType(method),
+                CommandParameterTypeName = commandParameter.Name,
+                CommandParameterTypeSymbol = commandParameter.Symbol,
             };
+        }
 
         private static AIContextMember BuildMethod(IMethodSymbol method)
-            => new(
+        {
+            var commandParameter = ReadCommandParameterType(method);
+
+            return new AIContextMember(
                 method.Name,
                 method.ReturnType,
                 TableType(method.ReturnType),
@@ -911,8 +1022,10 @@ namespace VeloxDev.Generators.Base
             {
                 ReturnsVoid = method.ReturnsVoid,
                 Symbol = method,
-                CommandParameterTypeName = ReadCommandParameterType(method),
+                CommandParameterTypeName = commandParameter.Name,
+                CommandParameterTypeSymbol = commandParameter.Symbol,
             };
+        }
 
         private static IReadOnlyList<string> ReadSlotSelectorNames(ISymbol symbol)
         {

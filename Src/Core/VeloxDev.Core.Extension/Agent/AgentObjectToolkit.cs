@@ -12,12 +12,18 @@ using System.Threading.Tasks;
 namespace VeloxDev.AI;
 
 /// <summary>
-/// Wraps any .NET object as a set of MAF-compatible <see cref="AITool"/> instances,
+/// Wraps a .NET object as a set of MAF-compatible <see cref="AITool"/> instances,
 /// using <see cref="AgentPropertyAccessor"/>, <see cref="AgentMethodInvoker"/>,
 /// <see cref="AgentCommandDiscoverer"/>, and <see cref="AgentContextReader"/> from Core.
 /// <para>
 /// This is a generic, non-workflow toolkit. For workflow-specific tools, use
 /// <c>WorkflowAgentToolkit</c> instead.
+/// </para>
+/// <para>
+/// Those helpers read a compiled context tree, so only a type the VeloxDev generator admitted — annotated,
+/// or carrying an <c>ICommand</c> property, or implementing one of the four workflow component interfaces —
+/// can be described or acted on. Any other object still gets the ten tools, and every one of them answers
+/// that the type is not in the tree. That closed world is what makes the surface trimmable.
 /// </para>
 /// </summary>
 /// <remarks>
@@ -144,7 +150,7 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
             var obj = new JObject
             {
                 ["name"] = p.Name,
-                ["type"] = p.PropertyType.Name,
+                ["type"] = p.PropertyType,
                 ["canRead"] = p.CanRead,
                 ["canWrite"] = p.CanWrite,
             };
@@ -221,7 +227,7 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
             var obj = new JObject
             {
                 ["name"] = c.Name,
-                ["paramType"] = c.ParameterType?.Name,
+                ["paramType"] = c.ParameterType,
                 ["canExecute"] = c.CanExecute,
             };
             if (c.AgentDescriptions.Count > 0)
@@ -253,8 +259,8 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
             var obj = new JObject
             {
                 ["name"] = m.Name,
-                ["returnType"] = m.ReturnType.Name,
-                ["params"] = new JArray(m.Parameters.Select(p => $"{p.ParameterType.Name} {p.Name}{(p.IsOptional ? "?" : "")}").ToArray()),
+                ["returnType"] = m.ReturnType,
+                ["params"] = new JArray(m.Parameters.Select(p => $"{p.ParameterType} {p.Name}{(p.IsOptional ? "?" : "")}").ToArray()),
             };
             if (m.AgentDescriptions.Count > 0)
                 obj["descriptions"] = new JArray(m.AgentDescriptions.ToArray());

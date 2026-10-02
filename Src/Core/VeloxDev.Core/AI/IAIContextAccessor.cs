@@ -37,6 +37,28 @@ public interface IAIContextAccessor
     object Create();
 
     /// <summary>
+    /// The declared type of one property or field.
+    /// </summary>
+    /// <param name="member">The member's name.</param>
+    /// <returns>
+    /// The type, from a <c>typeof</c> literal, or <see langword="null"/> when this type declares no such member.
+    /// </returns>
+    /// <remarks>
+    /// A caller that needs a <see cref="Type"/> — to hand to a serializer, or to close a generic call — gets one
+    /// here rather than by reflecting over the instance. The literal is what roots the type, so unlike a
+    /// reflection lookup this stays meaningful after trimming. Members with no declared type of their own (a
+    /// method, a promoted command) answer with the type the member is exposed as.
+    /// </remarks>
+    Type? MemberType(string member);
+
+    /// <summary>
+    /// The declared type of one command's parameter.
+    /// </summary>
+    /// <param name="commandName">The command property's name.</param>
+    /// <returns>The parameter type, or <see langword="null"/> when the command takes none.</returns>
+    Type? ParameterType(string commandName);
+
+    /// <summary>
     /// Reads one property or field.
     /// </summary>
     /// <param name="target">The instance to read from.</param>

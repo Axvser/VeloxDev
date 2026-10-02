@@ -1,11 +1,19 @@
-using System.Reflection;
-
 namespace VeloxDev.AI;
 
 /// <summary>
-/// Provides generic reflection-based method discovery and invocation for Agent scenarios.
-/// Framework-agnostic — works with any .NET object.
+/// Describes and invokes an object's methods through the compiled agent context tree.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Framework-agnostic — works with any object the tree carries an entry for. Nothing here reflects: the method
+/// list, its return type, its parameters and their optionality were recorded when the declaring assembly was
+/// compiled, and the call goes through that type's generated <see cref="IAIContextAccessor"/>.
+/// </para>
+/// <para>
+/// <see cref="Invoke"/> matches an overload by argument count. A call that omits trailing optional parameters is
+/// completed by the generated call site, which leaves them out and lets the compiler supply the declared defaults.
+/// </para>
+/// </remarks>
 public static class AgentMethodInvoker
 {
     /// <summary>
@@ -14,9 +22,13 @@ public static class AgentMethodInvoker
     public sealed class MethodDescriptor
     {
         public string Name { get; set; } = string.Empty;
-        public Type ReturnType { get; set; } = typeof(void);
+
+        /// <summary>
+        /// The return type's full name as the tree records it — e.g. <c>System.Int32</c>, or <c>System.Void</c>.
+        /// </summary>
+        public string ReturnType { get; set; } = "System.Void";
+
         public IReadOnlyList<ParameterDescriptor> Parameters { get; set; } = [];
-        public bool IsStatic { get; set; }
         public IReadOnlyList<string> AgentDescriptions { get; set; } = [];
     }
 
@@ -26,9 +38,8 @@ public static class AgentMethodInvoker
     public sealed class ParameterDescriptor
     {
         public string Name { get; set; } = string.Empty;
-        public Type ParameterType { get; set; } = typeof(object);
+        public string ParameterType { get; set; } = "System.Object";
         public bool IsOptional { get; set; }
-        public object? DefaultValue { get; set; }
     }
 
     /// <summary>
@@ -42,156 +53,73 @@ public static class AgentMethodInvoker
     }
 
     /// <summary>
-    /// Discovers public methods on the target object, excluding property accessors and
-    /// common <see cref="object"/> methods (ToString, GetHashCode, Equals, GetType).
+    /// Discovers the public instance methods the tree records for the target object, including the ones it
+    /// inherits. Property accessors and the common <see cref="object"/> methods are not in the tree to begin with.
     /// </summary>
     /// <param name="target">The object to inspect.</param>
-    /// <param name="language">Language for <see cref="AgentContextAttribute"/> lookup.</param>
-    /// <param name="includeStatic">Whether to include static methods.</param>
-    /// <param name="filter">Optional predicate to exclude methods.</param>
+    /// <param name="language">Language for <c>[AgentContext]</c> lookup.</param>
+    /// <param name="filter">Optional predicate over the method name (return <c>false</c> to skip).</param>
+    /// <returns>The descriptors; empty when the target is <c>null</c> or its type has no entry in the tree.</returns>
+    /// <remarks>
+    /// One descriptor per method name. The tree keys a member by name, so two overloads of one name cannot both
+    /// appear; <see cref="Invoke"/> still reaches every one of them by argument count.
+    /// </remarks>
     public static IReadOnlyList<MethodDescriptor> DiscoverMethods(
         object target,
         AgentLanguages language = AgentLanguages.English,
-        bool includeStatic = false,
-        Func<MethodInfo, bool>? filter = null)
+        Func<string, bool>? filter = null)
     {
-        if (target == null) return [];
-
-        var type = target.GetType();
-        var flags = BindingFlags.Public | BindingFlags.Instance;
-        if (includeStatic) flags |= BindingFlags.Static;
+        if (AIContextMembers.TypeNameOf(target) is not { } typeName) return [];
 
         var result = new List<MethodDescriptor>();
-        var objectMethods = new HashSet<string> { "ToString", "GetHashCode", "Equals", "GetType" };
 
-        foreach (var method in type.GetMethods(flags))
+        foreach (var node in AIContextDirectory.Shared.MembersAcross(typeName, "Methods"))
         {
-            if (method.IsSpecialName) continue; // skip property accessors, event add/remove
-            if (objectMethods.Contains(method.Name)) continue;
-            if (filter != null && !filter(method)) continue;
+            if (filter != null && !filter(node.Name)) continue;
 
-            var desc = new MethodDescriptor
+            result.Add(new MethodDescriptor
             {
-                Name = method.Name,
-                ReturnType = method.ReturnType,
-                IsStatic = method.IsStatic,
-                AgentDescriptions = AgentContextReader.GetContexts(method, language),
-                Parameters = [.. method.GetParameters().Select(p => new ParameterDescriptor
+                Name = node.Name,
+                ReturnType = node.TypeName ?? string.Empty,
+                AgentDescriptions = AIContextMembers.DescriptionsFor(node, language),
+                Parameters = [.. node.Children.Select(p => new ParameterDescriptor
                 {
-                    Name = p.Name ?? string.Empty,
-                    ParameterType = p.ParameterType,
-                    IsOptional = p.IsOptional,
-                    DefaultValue = p.HasDefaultValue ? p.DefaultValue : null,
+                    Name = p.Name,
+                    ParameterType = p.TypeName ?? string.Empty,
+                    IsOptional = p.Has(AIContextFlags.Optional),
                 })],
-            };
-
-            result.Add(desc);
+            });
         }
 
         return result;
     }
 
     /// <summary>
-    /// Invokes a named public method on the target object with the given arguments.
-    /// Supports overload resolution by parameter count.
+    /// Invokes a named method on the target object with the given arguments.
     /// </summary>
     /// <param name="target">The object on which to invoke the method.</param>
     /// <param name="methodName">The name of the method.</param>
     /// <param name="args">Arguments to pass. If <c>null</c>, invokes with no arguments.</param>
+    /// <returns>The result, carrying the reason when the call did not run.</returns>
     public static InvokeResult Invoke(object target, string methodName, params object?[]? args)
     {
         if (target == null)
             return new InvokeResult { Error = "Target is null." };
 
-        var type = target.GetType();
-        args ??= [];
+        if (AIContextMembers.TypeNameOf(target) is not { } typeName)
+            return new InvokeResult { Error = $"Type of '{methodName}' target is not in the agent context tree." };
 
-        // Find best matching method by name and parameter count
-        var candidates = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Where(m => m.Name == methodName && !m.IsSpecialName)
-            .ToArray();
+        var node = AIContextMembers.Find(typeName, "Methods", methodName);
+        if (node == null)
+            return new InvokeResult { Error = $"Method '{methodName}' is not in the agent context tree for type '{typeName}'." };
 
-        if (candidates.Length == 0)
-            return new InvokeResult { Error = $"Method '{methodName}' not found on type '{type.FullName}'." };
+        var accessor = AIContextMembers.AccessorFor(node);
+        if (accessor == null)
+            return new InvokeResult { Error = $"No accessor is registered for type '{node.OwnerTypeName}'." };
 
-        MethodInfo? best = candidates.FirstOrDefault(m => m.GetParameters().Length == args.Length)
-                        ?? candidates.FirstOrDefault(m => m.GetParameters().Count(p => !p.IsOptional) <= args.Length
-                                                       && m.GetParameters().Length >= args.Length);
+        if (!accessor.TryInvoke(target, methodName, args ?? [], out var returnValue, out var error))
+            return new InvokeResult { Error = error };
 
-        if (best == null)
-            return new InvokeResult { Error = $"No overload of '{methodName}' matches {args.Length} argument(s)." };
-
-        try
-        {
-            // Pad with defaults if needed
-            var parameters = best.GetParameters();
-            if (args.Length < parameters.Length)
-            {
-                var padded = new object?[parameters.Length];
-                Array.Copy(args, padded, args.Length);
-                for (int i = args.Length; i < parameters.Length; i++)
-                    padded[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-                args = padded;
-            }
-
-            // Attempt type conversion for each argument
-            for (int i = 0; i < args.Length && i < parameters.Length; i++)
-            {
-                if (args[i] != null && !parameters[i].ParameterType.IsAssignableFrom(args[i]!.GetType()))
-                {
-                    try { args[i] = Convert.ChangeType(args[i], parameters[i].ParameterType); }
-                    catch { /* let it fail at invoke time */ }
-                }
-            }
-
-            var returnValue = best.Invoke(target, args);
-            return new InvokeResult { Success = true, ReturnValue = returnValue };
-        }
-        catch (TargetInvocationException ex)
-        {
-            return new InvokeResult { Error = $"Method '{methodName}' threw: {ex.InnerException?.Message ?? ex.Message}" };
-        }
-        catch (Exception ex)
-        {
-            return new InvokeResult { Error = $"Failed to invoke '{methodName}': {ex.Message}" };
-        }
-    }
-
-    /// <summary>
-    /// Invokes a named static method on the specified type.
-    /// </summary>
-    public static InvokeResult InvokeStatic(Type type, string methodName, params object?[]? args)
-    {
-        if (type == null)
-            return new InvokeResult { Error = "Type is null." };
-
-        args ??= [];
-
-        var candidates = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .Where(m => m.Name == methodName && !m.IsSpecialName)
-            .ToArray();
-
-        if (candidates.Length == 0)
-            return new InvokeResult { Error = $"Static method '{methodName}' not found on type '{type.FullName}'." };
-
-        var best = candidates.FirstOrDefault(m => m.GetParameters().Length == args.Length)
-                ?? candidates.FirstOrDefault();
-
-        if (best == null)
-            return new InvokeResult { Error = $"No overload of static '{methodName}' matches {args.Length} argument(s)." };
-
-        try
-        {
-            var returnValue = best.Invoke(null, args);
-            return new InvokeResult { Success = true, ReturnValue = returnValue };
-        }
-        catch (TargetInvocationException ex)
-        {
-            return new InvokeResult { Error = $"Static method '{methodName}' threw: {ex.InnerException?.Message ?? ex.Message}" };
-        }
-        catch (Exception ex)
-        {
-            return new InvokeResult { Error = $"Failed to invoke static '{methodName}': {ex.Message}" };
-        }
+        return new InvokeResult { Success = true, ReturnValue = returnValue };
     }
 }

@@ -17,7 +17,11 @@ namespace VeloxDev.Core.Extension.Test.Agent;
 [TestClass]
 public class AgentObjectToolkitTests
 {
-    /// <summary>The object under test — records how often its method actually ran.</summary>
+    /// <summary>
+    /// The object under test — records how often its method actually ran. The annotation is what puts it in the
+    /// agent context tree, without which its methods are not reachable at all.
+    /// </summary>
+    [AgentContext(AgentLanguages.English, "A probe that counts the calls it receives")]
     public sealed class Probe
     {
         public int Calls { get; private set; }
@@ -115,6 +119,22 @@ public class AgentObjectToolkitTests
     }
 
     [TestMethod]
+    public void TheListTools_ReportTheTypeNamesTheTreeCarries()
+    {
+        // 描述符不再发放 Type —— 工具输出里的类型现在就是目录里那个全名字符串，逐条锁住它。
+        var toolkit = new AgentObjectToolkit(new Probe());
+
+        var properties = JArray.Parse(Invoke(Tool(toolkit, "ListProperties")));
+        var calls = properties.Single(p => p["name"]?.Value<string>() == "Calls");
+        Assert.AreEqual("System.Int32", calls["type"]?.Value<string>());
+
+        var methods = JArray.Parse(Invoke(Tool(toolkit, "ListMethods")));
+        var echo = methods.Single(m => m["name"]?.Value<string>() == "Echo");
+        Assert.AreEqual("System.String", echo["returnType"]?.Value<string>());
+        Assert.AreEqual("System.String message", (string?)echo["params"]?[0]);
+    }
+
+    [TestMethod]
     public void WithoutAContext_TheToolRunsOnTheCallingThread()
     {
         // The toolkit registers no marshalling: an arbitrary object has no thread it must run on.
@@ -132,6 +152,7 @@ public class AgentObjectToolkitTests
     }
 
     /// <summary>Same shape as <see cref="Probe"/>, but records the calling thread.</summary>
+    [AgentContext(AgentLanguages.English, "A target that reports the thread its method ran on")]
     public sealed class Target(Func<string, string> onEcho)
     {
         public string Echo(string message) => onEcho(message);

@@ -2,72 +2,47 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Windows.Input;
-using VeloxDev.MVVM;
 
 namespace VeloxDev.AI.Workflow.Functions;
 
 /// <summary>
-/// Discovers and invokes <see cref="IVeloxCommand"/> properties on workflow components.
-/// Supports parameter deserialization based on <see cref="AgentCommandParameterAttribute"/>.
+/// Discovers and invokes the command properties of a workflow component, through its compiled context tree entry
+/// and generated accessor.
 /// </summary>
+/// <remarks>
+/// <para>
+/// A command's parameter type is the one <c>[AgentCommandParameter]</c> declared on it, handed over as a
+/// <c>typeof</c> literal by the accessor — the same shape the tree gives every declared type, and one the
+/// trimmer can follow.
+/// </para>
+/// <para>
+/// <see cref="Invoke"/> deserializes the model's JSON with Newtonsoft, which is the one piece of reflection this
+/// path keeps on purpose: turning a JSON payload into a component type is serialization, not discovery.
+/// </para>
+/// </remarks>
 public static class CommandInvoker
 {
     /// <summary>
-    /// Discovers all <see cref="ICommand"/>-typed properties on a component,
-    /// including their expected parameter types from <see cref="AgentCommandParameterAttribute"/>.
+    /// Discovers the command properties the context tree records for a component, including the ones it
+    /// inherits.
     /// </summary>
+    /// <param name="component">The component to inspect.</param>
+    /// <returns>The descriptors; empty when the component is <c>null</c> or its type is not in the tree.</returns>
     public static IReadOnlyList<CommandDescriptor> DiscoverCommands(object component)
     {
-        if (component == null) return [];
+        var accessor = AIContextTreeRegistry.FindAccessor(component);
+        if (accessor is null) return [];
 
         var result = new List<CommandDescriptor>();
-        var type = component.GetType();
 
-        // Scan interface command properties
-        foreach (var iface in type.GetInterfaces())
+        foreach (var node in AIContextDirectory.Shared.MembersAcross(accessor.TypeName, "Commands"))
         {
-            foreach (var prop in iface.GetProperties())
-            {
-                if (!typeof(ICommand).IsAssignableFrom(prop.PropertyType)) continue;
-
-                var paramAttr = prop.GetCustomAttribute<AgentCommandParameterAttribute>();
-                var contexts = prop.GetCustomAttributes<AgentContextAttribute>()
-                    .Select(a => new KeyValuePair<AgentLanguages, string>(a.Language, a.Context))
-                    .ToList();
-
-                result.Add(new CommandDescriptor
-                {
-                    Name = prop.Name,
-                    ParameterType = paramAttr?.ParameterType,
-                    Descriptions = contexts,
-                });
-            }
-        }
-
-        // Also scan the concrete type's own command properties (from [VeloxCommand])
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-        {
-            if (!typeof(ICommand).IsAssignableFrom(prop.PropertyType)) continue;
-            if (result.Any(c => c.Name == prop.Name)) continue; // skip duplicates from interfaces
-
-            var paramAttr = prop.GetCustomAttribute<AgentCommandParameterAttribute>();
-            // Also check the backing method for VeloxCommand
-            var methodName = prop.Name.Replace("Command", "");
-            var method = type.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-            if (paramAttr == null && method != null)
-            {
-                paramAttr = method.GetCustomAttribute<AgentCommandParameterAttribute>();
-            }
-
-            var contexts = AgentContextCollector.GetAgentContext(prop, AgentLanguages.English);
-
             result.Add(new CommandDescriptor
             {
-                Name = prop.Name,
-                ParameterType = paramAttr?.ParameterType,
-                Descriptions = [.. contexts.Select(c => new KeyValuePair<AgentLanguages, string>(AgentLanguages.English, c))],
+                Name = node.Name,
+                ParameterType = accessor.ParameterType(node.Name),
+                Descriptions = [.. node.Descriptions.Select(static t => new KeyValuePair<AgentLanguages, string>(t.Language, t.Text))],
             });
         }
 
@@ -75,30 +50,37 @@ public static class CommandInvoker
     }
 
     /// <summary>
-    /// Invokes a named command on a component, deserializing the JSON parameter
-    /// to the type specified by <see cref="AgentCommandParameterAttribute"/>.
+    /// Invokes a named command on a component, deserializing the JSON parameter to the type
+    /// <c>[AgentCommandParameter]</c> declared for it. The command name gets a <c>Command</c> suffix when it
+    /// does not already have one.
     /// </summary>
+    /// <param name="component">The component that owns the command.</param>
+    /// <param name="commandName">The command property name, with or without the <c>Command</c> suffix.</param>
+    /// <param name="jsonParameter">The parameter as JSON, or <c>null</c>.</param>
+    /// <returns>A JSON status object.</returns>
+    /// <remarks>
+    /// The command's own <c>CanExecute</c> is not consulted — a command that reports it cannot run is still run.
+    /// </remarks>
     public static string Invoke(object component, string commandName, string? jsonParameter)
     {
-        if (component == null)
-            return JsonConvert.SerializeObject(new { status = "error", message = "Component is null." });
+        var accessor = AIContextTreeRegistry.FindAccessor(component);
+        if (accessor is null)
+            return Error("Component is null, or its type is not in the agent context tree.");
 
         // Normalize command name
         if (!commandName.EndsWith("Command"))
             commandName += "Command";
 
-        var type = component.GetType();
-        var prop = FindCommandProperty(type, commandName);
-        if (prop == null)
-            return JsonConvert.SerializeObject(new { status = "error", message = $"Command '{commandName}' not found on type '{type.FullName}'." });
+        var node = AIContextDirectory.Shared.MemberAcross(accessor.TypeName, "Commands", commandName);
+        if (node is null)
+            return Error($"Command '{commandName}' not found on type '{accessor.TypeName}'.");
 
-        if (prop.GetValue(component) is not ICommand command)
-            return JsonConvert.SerializeObject(new { status = "error", message = $"Command '{commandName}' is null." });
+        if (!accessor.TryGet(component, commandName, out var value) || value is not ICommand command)
+            return Error($"Command '{commandName}' is null.");
 
         // Resolve parameter
         object? parameter = null;
-        var paramAttr = FindCommandParameterAttribute(type, commandName);
-        var paramType = paramAttr?.ParameterType;
+        var paramType = accessor.ParameterType(commandName);
 
         if (paramType != null && !string.IsNullOrWhiteSpace(jsonParameter))
         {
@@ -108,7 +90,7 @@ public static class CommandInvoker
             }
             catch (Exception ex)
             {
-                return JsonConvert.SerializeObject(new { status = "error", message = $"Failed to deserialize parameter as '{paramType.FullName}': {ex.Message}" });
+                return Error($"Failed to deserialize parameter as '{paramType.FullName}': {ex.Message}");
             }
         }
         else if (!string.IsNullOrWhiteSpace(jsonParameter) && paramType == null)
@@ -128,49 +110,24 @@ public static class CommandInvoker
         }
     }
 
-    private static PropertyInfo? FindCommandProperty(Type type, string commandName)
-    {
-        // Search on concrete type
-        var prop = type.GetProperty(commandName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop != null && typeof(ICommand).IsAssignableFrom(prop.PropertyType))
-            return prop;
-
-        // Search on interfaces
-        foreach (var iface in type.GetInterfaces())
-        {
-            prop = iface.GetProperty(commandName);
-            if (prop != null && typeof(ICommand).IsAssignableFrom(prop.PropertyType))
-                return prop;
-        }
-
-        return null;
-    }
-
-    private static AgentCommandParameterAttribute? FindCommandParameterAttribute(Type type, string commandName)
-    {
-        // Check property on interfaces
-        foreach (var iface in type.GetInterfaces())
-        {
-            var prop = iface.GetProperty(commandName);
-            var attr = prop?.GetCustomAttribute<AgentCommandParameterAttribute>();
-            if (attr != null) return attr;
-        }
-
-        // Check property on concrete type
-        var concreteProp = type.GetProperty(commandName, BindingFlags.Public | BindingFlags.Instance);
-        var concreteAttr = concreteProp?.GetCustomAttribute<AgentCommandParameterAttribute>();
-        if (concreteAttr != null) return concreteAttr;
-
-        // Check backing method
-        var methodName = commandName.Replace("Command", "");
-        var method = type.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-        return method?.GetCustomAttribute<AgentCommandParameterAttribute>();
-    }
+    private static string Error(string message)
+        => JsonConvert.SerializeObject(new { status = "error", message });
 }
 
+/// <summary>
+/// One command property a component exposes to the agent.
+/// </summary>
 public class CommandDescriptor
 {
+    /// <summary>The command property's name.</summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The parameter type <c>[AgentCommandParameter]</c> declared, or <see langword="null"/> when the command
+    /// takes no parameter. A <c>typeof</c> literal from the accessor, not a reflection lookup.
+    /// </summary>
     public Type? ParameterType { get; set; }
+
+    /// <summary>The command's descriptions, each with the language it was written in.</summary>
     public IReadOnlyList<KeyValuePair<AgentLanguages, string>> Descriptions { get; set; } = [];
 }

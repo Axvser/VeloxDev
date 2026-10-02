@@ -252,35 +252,7 @@ internal static class AgentContextTreeRenderer
 
     /// <summary>A type entry's own members, plus those of every base type the tree can follow.</summary>
     private static IReadOnlyList<AIContextNode> MembersAcross(AIContextNode entry, string memberDirectory)
-    {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var members = new List<AIContextNode>();
-
-        foreach (var node in SelfAndBases(entry))
-        {
-            foreach (var member in Sort(MembersOf(PathOf(node), memberDirectory)))
-            {
-                // 派生类隐藏基类同名成员时，反射只给最派生那一个 —— 去重顺序要相同。
-                if (seen.Add(member.Name)) members.Add(member);
-            }
-        }
-
-        return members;
-    }
-
-    private static IEnumerable<AIContextNode> SelfAndBases(AIContextNode entry)
-    {
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var current = entry;
-
-        while (current is not null && visited.Add(current.TypeName ?? current.Name))
-        {
-            yield return current;
-
-            var baseRef = current.References.FirstOrDefault(static r => r.Kind == AIContextRefKind.BaseType);
-            current = baseRef.DeclaredName is null ? null! : Directory.Resolve(baseRef);
-        }
-    }
+        => entry.TypeName is null ? [] : Directory.MembersAcross(entry.TypeName, memberDirectory);
 
     private static IReadOnlyList<AIContextNode> MembersOf(string entryPath, string memberDirectory)
         => Directory.Members(entryPath, memberDirectory);

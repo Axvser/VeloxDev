@@ -53,10 +53,10 @@ public class AgentContextTreeParityTests
     private static string? RenderByReflection(AIContextNode entry, Type type, AgentLanguages language)
         => entry.Kind switch
         {
-            AIContextNodeKind.EnumType => AgentContextCollector.GetEnumContextByReflection(type, language),
-            AIContextNodeKind.InterfaceType => AgentContextCollector.GetInterfaceContextByReflection(type, language),
-            AIContextNodeKind.ComponentType => AgentContextCollector.GetClassContextByReflection(type, language),
-            AIContextNodeKind.DataType => AgentContextCollector.GetDataContextByReflection(type, language),
+            AIContextNodeKind.EnumType => ReflectionContextOracle.EnumBlock(type, language),
+            AIContextNodeKind.InterfaceType => ReflectionContextOracle.InterfaceBlock(type, language),
+            AIContextNodeKind.ComponentType => ReflectionContextOracle.ClassBlock(type, language),
+            AIContextNodeKind.DataType => ReflectionContextOracle.DataBlock(type, language),
             _ => null,
         };
 

@@ -23,7 +23,7 @@
 
 | 不在本模块内 | 实际归谁 |
 |---|---|
-| 命令发现、参数绑定、属性读写、按名解析类型 | 大多在 `Src/Core/VeloxDev.Core/AI/`（`AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor` / `AgentTypeResolver`）。**但「命令的发现/调用」与「属性写入」在本模块各有一份分叉实现**：`.../Agent/Workflow/Functions/CommandInvoker.cs:21`（自带的 `DiscoverCommands` 与自带 `CommandDescriptor`，`:171`）、`.../Agent/Workflow/Functions/ComponentPatcher.cs:236`（自带的 `CopyScalarProperties`）。改 Core 的这两条**不会**影响这里实际跑的路径；详见 `memory/modules/AI/architecture.md` |
+| 命令发现、参数绑定、属性读写、按名解析类型 | 大多在 `Src/Core/VeloxDev.Core/AI/`（`AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor` / `AgentTypeResolver`）。**但「命令的发现/调用」与「属性写入」在本模块各有一份分叉实现**：`.../Agent/Workflow/Functions/CommandInvoker.cs`（自带的 `DiscoverCommands` 与自带 `CommandDescriptor`）、`.../Agent/Workflow/Functions/ComponentPatcher.cs`（自带的 `CopyScalarProperties`）。改 Core 的这两条**不会**影响这里实际跑的路径；详见 `memory/modules/AI/architecture.md` |
 | undo/redo 栈 | Core。这是**没有复合工具**的理由 —— 见 `WorkflowAgentToolkit.cs:185-186`：「每个操作都是单个组件命令步骤，这样 undo 栈不会被绕过或重复提交」 |
 | 对话历史 / 会话状态 | `Microsoft.Agents.AI` 的 `AgentSession`。`AgentTranscript` 不是它，见 `pipelines.md` |
 | 模型调用与 tool-calling 循环 | `Microsoft.Agents.AI` |

@@ -222,10 +222,36 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 | 网格索引的数据结构 | `GUI/Virtualization/SpatialGridHashMap.cs`（注意 `:146` 的注释：重入时改 `Dictionary` 会毁内部状态） |
 | 可见集变化后怎么让视图刷新 | `Templates/Helpers/TreeHelper.cs` 的 `BroadcastVisibleItemLayout()`（对每个可见节点重发 `Anchor`/`Size`） |
 | 撤销/重做栈 | `StandardEx/WorkflowTreeEx.cs:193-260`（`StandardRedo`/`StandardSubmit`/`StandardUndo`/`StandardClearHistory`） |
-| slot 数量可变的节点（选择器） | `SelectorEx/SlotEnumerator.cs`、`SelectorEx/ConditionalSlot.cs`、`Interfaces/WorkflowSystem/IConditionalSlotProvider.cs` |
+| slot 数量可变的节点（选择器） | `SelectorEx/SlotEnumerator.cs`、`SelectorEx/ConditionalSlot.cs`、`Interfaces/WorkflowSystem/IConditionalSlotProvider.cs`（**两个重载：泛型 + 非泛型，见下**） |
 | 网格装饰器 / 小地图的 Core 契约 | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs` |
 
 ---
+
+## 六点五、选择器有两个「视野」：泛型一个，非泛型一个
+
+`SlotEnumerator<TSlot>` 与 `ConditionalSlot<TSlot>` 是泛型，所以**只拿到一个 object 的调用方打不开它们** ——
+而 Agent 工具面（`WorkflowAgentToolkit`）正是那种调用方。以前它靠反射读 `Items` / `SelectorType` /
+`Slot` / `TrySelect`，那在裁剪下站不住。
+
+2026-10-03 起两对接口并存，泛型类**显式实现**非泛型那个：
+
+| 泛型 | 非泛型 | 擦掉的是什么 |
+|---|---|---|
+| `IConditionalSlotProvider<TSlot>` | `IConditionalSlotProvider`（`Interfaces/WorkflowSystem/IConditionalSlotProvider.cs`） | `TSlot`：留 `Parent` / `SelectorTypeName` / `SelectorType` / `Slots`（`IReadOnlyList<IConditionalSlot>`）/ `TrySelect(object, out IWorkflowSlotViewModel?)` / `SetSelector(object?)` |
+| `ConditionalSlot<TSlot>` | `IConditionalSlot`（`SelectorEx/ConditionalSlot.cs`） | `TSlot`：留 `Name` / `Value` / `Slot`（`IWorkflowSlotViewModel`） |
+
+**三处必须显式实现，别想着改成隐式**：`Slots`（属性类型不协变，`Items` 是
+`ObservableCollection<ConditionalSlot<TSlot>>`）、`IConditionalSlot.Slot`（提升出来的 `Slot` 是 `TSlot`，
+接口要的是 `IWorkflowSlotViewModel`）、`IConditionalSlotProvider.TrySelect`（`out` 参数的类型不参与重载
+解析，与泛型版同名共存只能是显式）。`Parent` / `SelectorTypeName` / `SelectorType` / `CurrentValue` /
+`SetSelector` 类型一致，隐式实现即可。
+
+**非泛型的 `Slots` 是投影不是副本**：`IReadOnlyList<out T>` 协变，`Items` 直接赋给它，改 `Items` 立刻可见。
+
+**为什么值得**：`WorkflowAgentToolkit` 里原来那些 `GetProperty("Items")` / `GetProperty("Slot")` /
+`GetMethod("TrySelect")` / `GetMethod("SetSelector")` 现在都是一次转型。`GetEnumSlotByValue` 也因此改成
+**按标签匹配条目**（`item.Value.ToString()`，忽略大小写），而不是把名字 `Enum.Parse(Type, …)` 回枚举值 ——
+后者正是要绕开的那类反射。
 
 ## 七、`CompilerViewModel` 的两个已知硬约束
 

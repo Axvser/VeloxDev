@@ -215,9 +215,8 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         var scope = tree.AsAgentScope()
             .WithPromptLanguage(AgentLanguages.English)   // default prompt language
             .WithOutputLanguage(AgentLanguages.Chinese)   // default output language
-            // Auto-discover components from assemblies
-            .WithAutoDiscovery(assemblyName: "VeloxDev.Core")
-            .WithAutoDiscovery(assemblyName: "Lib") 
+            // Auto-discover every component the compiled agent context tree carries
+            .WithAutoDiscovery()
             .WithAutoMarkDirty(false)               // whether the view auto-marks itself dirty
             .WithMaxToolCalls(200)                  // maximum tool call count
             .WithAllowNodeExecution(true)           // explicitly allow the Agent to run node business code (safely off by default; the demo needs it)

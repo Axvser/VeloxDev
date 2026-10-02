@@ -270,9 +270,14 @@ namespace VeloxDev.Generators.Writers
             };
 
             // 框架侧还是客户侧由路径前缀决定（Framework/ 与 Customer/），不需要再记一个标志。
+            // 值类型是目录要额外记的一条：`DataType` 把 struct 与 class 收在一起，而 schema 要分开报。
+            var flags = type.Symbol.TypeKind == TypeKind.Struct
+                ? "global::VeloxDev.AI.AIContextFlags.IsValueType"
+                : "global::VeloxDev.AI.AIContextFlags.None";
+
             return $"new global::VeloxDev.AI.AIContextNode(\"{Escape(type.FullName)}\", "
                  + $"global::VeloxDev.AI.AIContextNodeKind.{kind}, "
-                 + $"\"{Escape(type.FullName)}\", null, global::VeloxDev.AI.AIContextFlags.None, 0, "
+                 + $"\"{Escape(type.FullName)}\", null, {flags}, 0, "
                  + $"{RenderTexts(type.Descriptions)}, {RenderTypeRefs(type)}, null)";
         }
 
@@ -326,6 +331,7 @@ namespace VeloxDev.Generators.Writers
             if (member.IsPromotedField) flags.Add("IsPromotedField");
             if (member.IsSlotEnumerator) flags.Add("IsSlotEnumerator");
             if (member.IsSingleSlot) flags.Add("IsSingleSlot");
+            if (member.IsSlotCollection) flags.Add("IsSlotCollection");
 
             var flagText = flags.Count == 0
                 ? "global::VeloxDev.AI.AIContextFlags.None"
@@ -361,7 +367,9 @@ namespace VeloxDev.Generators.Writers
 
             var parts = member.Parameters.Select(p =>
                 $"new global::VeloxDev.AI.AIContextNode(\"{Escape(p.Name)}\", global::VeloxDev.AI.AIContextNodeKind.Parameter, "
-                + $"\"{Escape(p.DeclaredType)}\", null, global::VeloxDev.AI.AIContextFlags.None, 0, null, null, null)");
+                + $"\"{Escape(p.DeclaredType)}\", null, "
+                + (p.IsOptional ? "global::VeloxDev.AI.AIContextFlags.Optional" : "global::VeloxDev.AI.AIContextFlags.None")
+                + ", 0, null, null, null)");
 
             return "[" + string.Join(", ", parts) + "]";
         }
@@ -391,10 +399,16 @@ namespace VeloxDev.Generators.Writers
         private static void WriteAccessor(StringBuilder builder, AIContextType type, string safeAssembly, int index)
         {
             var fullType = FullTypeOf(type.Symbol);
-            var canCreate = type.Symbol.TypeKind == TypeKind.Class
-                            && !type.Symbol.IsAbstract
-                            && type.Symbol.InstanceConstructors.Any(static c =>
-                                   c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public);
+
+            // 值类型恒有无参构造（`new Anchor()` 合法），但它进不了 `object Create()` 的只有 ref struct。
+            var canCreate = type.Symbol.TypeKind switch
+            {
+                TypeKind.Struct => !type.Symbol.IsRefLikeType,
+                TypeKind.Class => !type.Symbol.IsAbstract
+                                  && type.Symbol.InstanceConstructors.Any(static c =>
+                                         c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public),
+                _ => false,
+            };
 
             builder.AppendLine("/// <summary>");
             builder.AppendLine($"/// Acts on <c>{Escape(type.FullName)}</c> without reflection.");
@@ -414,6 +428,8 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine("    }");
             builder.AppendLine();
 
+            WriteMemberTypes(builder, type);
+            builder.AppendLine();
             WriteTryGet(builder, type, fullType);
             builder.AppendLine();
             WriteSet(builder, type, fullType);
@@ -428,6 +444,62 @@ namespace VeloxDev.Generators.Writers
 
             builder.AppendLine("}");
         }
+
+        /// <summary>
+        /// Emits the two <c>typeof</c> lookups: a member's declared type, and a command's parameter type.
+        /// </summary>
+        /// <remarks>
+        /// These are the only places a <see cref="System.Type"/> leaves the accessor, and every one of them is a
+        /// literal — which is the whole point: a caller that needs a type to hand to a serializer or to close a
+        /// generic call gets one the trimmer already rooted, instead of reflecting for it.
+        /// </remarks>
+        private static void WriteMemberTypes(StringBuilder builder, AIContextType type)
+        {
+            builder.AppendLine("    public global::System.Type? MemberType(string member)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        switch (member)");
+            builder.AppendLine("        {");
+
+            // 同名成员只出一个 case（提升字段与声明属性可能同名），否则 switch 撞出重复标签。
+            var emitted = new HashSet<string>(System.StringComparer.Ordinal);
+
+            foreach (var member in type.Members)
+            {
+                if (member.IsMethod || !emitted.Add(member.Name)) continue;
+
+                builder.AppendLine($"            case \"{Escape(member.Name)}\": return typeof({MemberTypeOf(member)});");
+            }
+
+            builder.AppendLine("            default: return null;");
+            builder.AppendLine("        }");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+
+            builder.AppendLine("    public global::System.Type? ParameterType(string commandName)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        switch (commandName)");
+            builder.AppendLine("        {");
+
+            var emittedCommands = new HashSet<string>(System.StringComparer.Ordinal);
+
+            foreach (var member in type.Members)
+            {
+                if (member.CommandParameterTypeSymbol is null || !emittedCommands.Add(member.Name)) continue;
+
+                builder.AppendLine($"            case \"{Escape(member.Name)}\": return typeof({FullTypeOf(member.CommandParameterTypeSymbol)});");
+            }
+
+            builder.AppendLine("            default: return null;");
+            builder.AppendLine("        }");
+            builder.AppendLine("    }");
+        }
+
+        /// <summary>The type a member is exposed as, for its <c>typeof</c> literal.</summary>
+        private static string MemberTypeOf(AIContextMember member)
+            // 由 [VeloxCommand] 方法提升出来的命令：成员上那个类型是方法的返回类型，属性上的是命令接口。
+            => member.Symbol is IMethodSymbol
+                ? "global::VeloxDev.MVVM.IVeloxCommand"
+                : FullTypeOf(member.DeclaredTypeSymbol);
 
         private static void WriteTryGet(StringBuilder builder, AIContextType type, string fullType)
         {
@@ -487,10 +559,10 @@ namespace VeloxDev.Generators.Writers
 
             foreach (var member in type.Members.Where(static m => m.IsCommand))
             {
+                // 不查 CanExecute：它只被报告，从不被拦 —— 要拦由工具层自己拦。
                 builder.AppendLine($"            case \"{Escape(member.Name)}\":");
                 builder.AppendLine("            {");
                 builder.AppendLine($"                if (t.{member.Name} is not global::System.Windows.Input.ICommand c) {{ error = \"{Escape(member.Name)} is null.\"; return false; }}");
-                builder.AppendLine($"                if (!c.CanExecute(parameter)) {{ error = \"{Escape(member.Name)} cannot execute.\"; return false; }}");
                 builder.AppendLine("                c.Execute(parameter);");
                 builder.AppendLine("                error = null;");
                 builder.AppendLine("                return true;");
@@ -541,42 +613,22 @@ namespace VeloxDev.Generators.Writers
 
             foreach (var group in byName)
             {
-                var overloads = group.ToList();
                 builder.AppendLine($"            case \"{Escape(group.Key)}\":");
                 builder.AppendLine("            {");
+                builder.AppendLine("                switch (args.Length)");
+                builder.AppendLine("                {");
 
-                if (overloads.Count == 1)
+                foreach (var entry in ArityPlan(group.ToList()))
                 {
-                    builder.AppendLine($"                if (args.Length != {overloads[0].Parameters.Count}) break;");
-                    WriteInvokeBody(builder, type, overloads[0], "                ");
-                }
-                else
-                {
-                    // 同元数的重载运行期本来就分不开（旧实现取反射枚举到的第一个），所以按元数去重：
-                    // 一个元数只留一个 case，否则 switch 会撞出重复标签。
-                    var byArity = new SortedDictionary<int, AIContextMember>();
-                    foreach (var overload in overloads)
-                    {
-                        if (!byArity.ContainsKey(overload.Parameters.Count))
-                        {
-                            byArity[overload.Parameters.Count] = overload;
-                        }
-                    }
-
-                    builder.AppendLine("                switch (args.Length)");
-                    builder.AppendLine("                {");
-                    foreach (var entry in byArity)
-                    {
-                        builder.AppendLine($"                    case {entry.Key}:");
-                        builder.AppendLine("                    {");
-                        WriteInvokeBody(builder, type, entry.Value, "                        ");
-                        builder.AppendLine("                    }");
-                    }
-                    builder.AppendLine("                    default: break;");
-                    builder.AppendLine("                }");
-                    builder.AppendLine("                break;");
+                    builder.AppendLine($"                    case {entry.Key}:");
+                    builder.AppendLine("                    {");
+                    WriteInvokeBody(builder, type, entry.Value.Member, "                        ", entry.Value.Arity);
+                    builder.AppendLine("                    }");
                 }
 
+                builder.AppendLine("                    default: break;");
+                builder.AppendLine("                }");
+                builder.AppendLine("                break;");
                 builder.AppendLine("            }");
             }
 
@@ -587,14 +639,48 @@ namespace VeloxDev.Generators.Writers
         }
 
         /// <summary>
+        /// Which overload serves which argument count, given that trailing optional parameters may be omitted.
+        /// </summary>
+        /// <remarks>
+        /// The call the accessor emits simply leaves the omitted arguments out: C# then supplies each parameter's
+        /// own default, so nothing here has to know what those defaults are.
+        /// </remarks>
+        private static SortedDictionary<int, (AIContextMember Member, int Arity)> ArityPlan(IReadOnlyList<AIContextMember> overloads)
+        {
+            var plan = new SortedDictionary<int, (AIContextMember Member, int Arity)>();
+
+            // 实参给全的那个重载先占住自己的个数，同元数的重载本来就分不开（旧实现取反射枚举到的第一个）。
+            foreach (var overload in overloads)
+            {
+                if (!plan.ContainsKey(overload.Parameters.Count))
+                {
+                    plan[overload.Parameters.Count] = (overload, overload.Parameters.Count);
+                }
+            }
+
+            // 剩下的个数交给「必填数 ≤ 个数 < 总数」的那个重载；尾部缺的由编译器取默认值。
+            foreach (var overload in overloads)
+            {
+                var required = overload.Parameters.Count(static p => !p.IsOptional);
+                for (var arity = required; arity < overload.Parameters.Count; arity++)
+                {
+                    if (!plan.ContainsKey(arity)) plan[arity] = (overload, arity);
+                }
+            }
+
+            return plan;
+        }
+
+        /// <summary>
         /// Emits one overload's invocation: convert the arguments, call, and turn a failure into a message.
         /// </summary>
-        private static void WriteInvokeBody(StringBuilder builder, AIContextType type, AIContextMember member, string indent)
+        /// <param name="arity">How many arguments the caller supplied — the rest are left to the compiler.</param>
+        private static void WriteInvokeBody(StringBuilder builder, AIContextType type, AIContextMember member, string indent, int arity)
         {
             var arguments = new List<string>();
             var writeBack = new List<string>();
 
-            for (var i = 0; i < member.Parameters.Count; i++)
+            for (var i = 0; i < arity && i < member.Parameters.Count; i++)
             {
                 var parameter = member.Parameters[i];
 

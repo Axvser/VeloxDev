@@ -1,13 +1,25 @@
-using System.Reflection;
-using System.Windows.Input;
-
 namespace VeloxDev.AI;
 
 /// <summary>
-/// Provides generic <see cref="ICommand"/> discovery and execution for Agent scenarios.
-/// Framework-agnostic — works with any object that exposes <see cref="ICommand"/> properties,
-/// including MVVM ViewModels, workflow nodes, or any custom component.
+/// Provides generic <c>ICommand</c> discovery and execution for Agent scenarios, through the compiled agent
+/// context tree.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Framework-agnostic — works with any object the tree carries an entry for, including MVVM ViewModels, workflow
+/// nodes, or any custom component. Nothing here reflects: which properties are commands, what they are described
+/// as and what parameter they take were all recorded when the declaring assembly was compiled.
+/// </para>
+/// <para>
+/// A command written on an interface is the shape the workflow runtime uses, and it is the interface's
+/// annotations that count — the context tree generator copies them onto the implementing type's command when it
+/// builds the entry, so a descriptor reads the same either way.
+/// </para>
+/// <para>
+/// <c>CanExecute</c> is reported and never enforced: <see cref="Execute"/> does not consult it, so a caller that
+/// wants to refuse a disabled command has to check <see cref="CommandDescriptor.CanExecute"/> first.
+/// </para>
+/// </remarks>
 public static class AgentCommandDiscoverer
 {
     /// <summary>
@@ -18,18 +30,18 @@ public static class AgentCommandDiscoverer
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
-        /// The expected parameter type from <see cref="AgentCommandParameterAttribute"/>,
-        /// or <c>null</c> if the command takes no parameter.
+        /// The parameter type's full name from <c>[AgentCommandParameter]</c>, or <c>null</c> if the command takes
+        /// no parameter.
         /// </summary>
-        public Type? ParameterType { get; set; }
+        public string? ParameterType { get; set; }
 
         /// <summary>
-        /// Agent context descriptions (from <see cref="AgentContextAttribute"/>) for the command.
+        /// Agent context descriptions (from <c>[AgentContext]</c>) for the command.
         /// </summary>
         public IReadOnlyList<string> AgentDescriptions { get; set; } = [];
 
         /// <summary>
-        /// Whether CanExecute currently returns true (checked with null parameter if no ParameterType).
+        /// Whether <c>CanExecute</c> currently returns true, checked with a null parameter.
         /// </summary>
         public bool CanExecute { get; set; }
     }
@@ -45,62 +57,29 @@ public static class AgentCommandDiscoverer
     }
 
     /// <summary>
-    /// Discovers all <see cref="ICommand"/>-typed properties on the target object,
-    /// including both interface-declared and concrete type properties.
-    /// Reads <see cref="AgentCommandParameterAttribute"/> and <see cref="AgentContextAttribute"/>.
+    /// Discovers every <c>ICommand</c> property the tree records for the target object, including the ones it
+    /// inherits.
     /// </summary>
     /// <param name="target">The object to inspect.</param>
-    /// <param name="language">Language for <see cref="AgentContextAttribute"/> lookup.</param>
+    /// <param name="language">Language for <c>[AgentContext]</c> lookup.</param>
+    /// <returns>The descriptors; empty when the target is <c>null</c> or its type has no entry in the tree.</returns>
     public static IReadOnlyList<CommandDescriptor> DiscoverCommands(
         object target,
         AgentLanguages language = AgentLanguages.English)
     {
         if (target == null) return [];
+        if (AIContextMembers.TypeNameOf(target) is not { } typeName) return [];
 
-        var type = target.GetType();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
         var result = new List<CommandDescriptor>();
 
-        // Scan interface properties first (these carry the authoritative attributes)
-        foreach (var iface in type.GetInterfaces())
+        foreach (var node in AIContextDirectory.Shared.MembersAcross(typeName, "Commands"))
         {
-            foreach (var prop in iface.GetProperties())
-            {
-                if (!typeof(ICommand).IsAssignableFrom(prop.PropertyType)) continue;
-                if (!seen.Add(prop.Name)) continue;
-
-                var paramAttr = prop.GetCustomAttribute<AgentCommandParameterAttribute>();
-                var descriptions = AgentContextReader.GetContexts(prop, language);
-
-                var command = GetCommandInstance(target, type, prop.Name);
-
-                result.Add(new CommandDescriptor
-                {
-                    Name = prop.Name,
-                    ParameterType = paramAttr?.ParameterType,
-                    AgentDescriptions = descriptions,
-                    CanExecute = command != null && TryCanExecute(command, paramAttr?.ParameterType),
-                });
-            }
-        }
-
-        // Scan concrete type properties
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-        {
-            if (!typeof(ICommand).IsAssignableFrom(prop.PropertyType)) continue;
-            if (!seen.Add(prop.Name)) continue;
-
-            var paramAttr = FindParameterAttribute(type, prop.Name);
-            var descriptions = AgentContextReader.GetContexts(prop, language);
-
-            var command = GetCommandInstance(target, type, prop.Name);
-
             result.Add(new CommandDescriptor
             {
-                Name = prop.Name,
-                ParameterType = paramAttr?.ParameterType,
-                AgentDescriptions = descriptions,
-                CanExecute = command != null && TryCanExecute(command, paramAttr?.ParameterType),
+                Name = node.Name,
+                ParameterType = AIContextMembers.ReferenceName(node, AIContextRefKind.CommandParameterType),
+                AgentDescriptions = AIContextMembers.DescriptionsFor(node, language),
+                CanExecute = CanExecute(target, node, null),
             });
         }
 
@@ -114,6 +93,10 @@ public static class AgentCommandDiscoverer
     /// <param name="target">The object that owns the command.</param>
     /// <param name="commandName">The command property name (e.g. "Delete" or "DeleteCommand").</param>
     /// <param name="parameter">The parameter to pass to Execute. Can be <c>null</c>.</param>
+    /// <returns>The result, carrying the reason when the command did not run.</returns>
+    /// <remarks>
+    /// The command's own <c>CanExecute</c> is not consulted — a command that reports it cannot run is still run.
+    /// </remarks>
     public static ExecuteResult Execute(object target, string commandName, object? parameter = null)
     {
         var normalized = NormalizeCommandName(commandName);
@@ -125,18 +108,34 @@ public static class AgentCommandDiscoverer
             return result;
         }
 
-        var type = target.GetType();
-        var command = GetCommandInstance(target, type, normalized);
-
-        if (command == null)
+        if (AIContextMembers.TypeNameOf(target) is not { } typeName)
         {
-            result.Error = $"Command '{normalized}' not found or is null on type '{type.FullName}'.";
+            result.Error = $"Type of '{normalized}' target is not in the agent context tree.";
+            return result;
+        }
+
+        var node = AIContextMembers.Find(typeName, "Commands", normalized);
+        if (node == null)
+        {
+            result.Error = $"Command '{normalized}' is not in the agent context tree for type '{typeName}'.";
+            return result;
+        }
+
+        var accessor = AIContextMembers.AccessorFor(node);
+        if (accessor == null)
+        {
+            result.Error = $"No accessor is registered for type '{node.OwnerTypeName}'.";
             return result;
         }
 
         try
         {
-            command.Execute(parameter);
+            if (!accessor.TryExecuteCommand(target, normalized, parameter, out var error))
+            {
+                result.Error = error;
+                return result;
+            }
+
             result.Success = true;
         }
         catch (Exception ex)
@@ -150,15 +149,19 @@ public static class AgentCommandDiscoverer
     /// <summary>
     /// Checks whether a named command can execute with the given parameter.
     /// </summary>
+    /// <param name="target">The object that owns the command.</param>
+    /// <param name="commandName">The command property name (e.g. "Delete" or "DeleteCommand").</param>
+    /// <param name="parameter">The parameter that would be passed. Can be <c>null</c>.</param>
+    /// <returns><see langword="false"/> when the command is not in the tree or reports it cannot run.</returns>
     public static bool CanExecuteCommand(object target, string commandName, object? parameter = null)
     {
         if (target == null) return false;
-        var normalized = NormalizeCommandName(commandName);
-        var command = GetCommandInstance(target, target.GetType(), normalized);
-        if (command == null) return false;
 
-        try { return command.CanExecute(parameter); }
-        catch { return false; }
+        var normalized = NormalizeCommandName(commandName);
+        if (AIContextMembers.TypeNameOf(target) is not { } typeName) return false;
+
+        var node = AIContextMembers.Find(typeName, "Commands", normalized);
+        return node != null && CanExecute(target, node, parameter);
     }
 
     /// <summary>
@@ -169,20 +172,11 @@ public static class AgentCommandDiscoverer
     /// <returns>The command property name if found, <c>null</c> otherwise.</returns>
     public static string? FindBackingCommand(Type type, string propertyName)
     {
-        var candidates = new[] { $"Set{propertyName}Command", $"{propertyName}Command" };
+        if (type?.FullName is not { } typeName) return null;
 
-        foreach (var cmdName in candidates)
+        foreach (var candidate in new[] { $"Set{propertyName}Command", $"{propertyName}Command" })
         {
-            var cmdProp = type.GetProperty(cmdName, BindingFlags.Public | BindingFlags.Instance);
-            if (cmdProp != null && typeof(ICommand).IsAssignableFrom(cmdProp.PropertyType))
-                return cmdName;
-
-            foreach (var iface in type.GetInterfaces())
-            {
-                cmdProp = iface.GetProperty(cmdName);
-                if (cmdProp != null && typeof(ICommand).IsAssignableFrom(cmdProp.PropertyType))
-                    return cmdName;
-            }
+            if (AIContextMembers.Find(typeName, "Commands", candidate) != null) return candidate;
         }
 
         return null;
@@ -193,51 +187,13 @@ public static class AgentCommandDiscoverer
     private static string NormalizeCommandName(string name)
         => name.EndsWith("Command") ? name : name + "Command";
 
-    private static ICommand? GetCommandInstance(object target, Type type, string commandName)
+    /// <summary>Asks the declaring accessor whether a command node would run, never letting a throw escape.</summary>
+    private static bool CanExecute(object target, AIContextNode node, object? parameter)
     {
-        // Search concrete type
-        var prop = type.GetProperty(commandName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop != null && typeof(ICommand).IsAssignableFrom(prop.PropertyType))
-            return prop.GetValue(target) as ICommand;
+        var accessor = AIContextMembers.AccessorFor(node);
+        if (accessor == null) return false;
 
-        // Search interfaces
-        foreach (var iface in type.GetInterfaces())
-        {
-            prop = iface.GetProperty(commandName);
-            if (prop != null && typeof(ICommand).IsAssignableFrom(prop.PropertyType))
-            {
-                var concreteProp = type.GetProperty(commandName, BindingFlags.Public | BindingFlags.Instance);
-                return concreteProp?.GetValue(target) as ICommand;
-            }
-        }
-
-        return null;
-    }
-
-    private static AgentCommandParameterAttribute? FindParameterAttribute(Type type, string commandName)
-    {
-        // Check interfaces
-        foreach (var iface in type.GetInterfaces())
-        {
-            var prop = iface.GetProperty(commandName);
-            var attr = prop?.GetCustomAttribute<AgentCommandParameterAttribute>();
-            if (attr != null) return attr;
-        }
-
-        // Check concrete property
-        var concreteProp = type.GetProperty(commandName, BindingFlags.Public | BindingFlags.Instance);
-        var concreteAttr = concreteProp?.GetCustomAttribute<AgentCommandParameterAttribute>();
-        if (concreteAttr != null) return concreteAttr;
-
-        // Check backing method
-        var methodName = commandName.Replace("Command", "");
-        var method = type.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-        return method?.GetCustomAttribute<AgentCommandParameterAttribute>();
-    }
-
-    private static bool TryCanExecute(ICommand command, Type? paramType)
-    {
-        try { return command.CanExecute(paramType == null ? null : (object?)null); }
+        try { return accessor.CanExecuteCommand(target, node.Name, parameter); }
         catch { return false; }
     }
 }

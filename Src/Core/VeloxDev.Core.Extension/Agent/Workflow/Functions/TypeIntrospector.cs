@@ -1,65 +1,96 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 namespace VeloxDev.AI.Workflow.Functions;
 
 /// <summary>
-/// Resolves .NET types by full name across loaded assemblies and produces
-/// a JSON schema description suitable for Agent consumption.
+/// Describes a type the agent context tree carries, as a JSON schema the Agent can read.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Everything here comes from the compiled context tree and that type's generated
+/// <see cref="IAIContextAccessor"/>: which members exist, what they are typed as, which enum members there are,
+/// and whether a default instance can be built. No metadata is reflected over.
+/// </para>
+/// <para>
+/// The schema is a description, not a contract: <c>defaultJson_runtimeOnly</c> is a zero-initialized instance
+/// rather than the author's intended defaults, which is why <c>developerInstructions</c> is the field a caller
+/// should trust.
+/// </para>
+/// </remarks>
 public static class TypeIntrospector
 {
     /// <summary>
-    /// Delegates to <see cref="AgentTypeResolver.ResolveType"/> in Core.
+    /// Resolves a <see cref="Type"/> by its full name from the context tree.
     /// </summary>
+    /// <param name="fullTypeName">The type's full name, as <see cref="Type.FullName"/> reports it.</param>
+    /// <returns>The type, or <see langword="null"/> when the tree carries no such type — a closed world.</returns>
     public static Type? ResolveType(string fullTypeName)
         => AgentTypeResolver.ResolveType(fullTypeName);
 
     /// <summary>
-    /// Produces a JSON schema-like description of a type including its properties,
-    /// fields, base type, interfaces, and (for enums) values.
+    /// Produces a JSON schema-like description of a type including its members, base type, interfaces,
+    /// and (for enums) its values.
     /// </summary>
+    /// <param name="type">The type to describe.</param>
+    /// <returns>The schema as indented JSON.</returns>
     public static string GetTypeSchema(Type type)
     {
-        var obj = new JObject
+        var fullName = type.FullName ?? type.Name;
+        var obj = new JObject { ["fullName"] = fullName };
+
+        var path = AIContextDirectory.Shared.PathFor(fullName);
+        var entry = path is null ? null : AIContextDirectory.Shared.Entry(path);
+        if (entry is null) return obj.ToString(Formatting.Indented);
+
+        obj["kind"] = entry.Kind switch
         {
-            ["fullName"] = type.FullName,
-            ["kind"] = type.IsEnum ? "enum" : type.IsInterface ? "interface" : type.IsValueType ? "struct" : "class",
-            ["baseType"] = type.BaseType?.FullName,
-            ["interfaces"] = new JArray(type.GetInterfaces().Select(i => i.FullName).ToArray()),
+            AIContextNodeKind.EnumType => "enum",
+            AIContextNodeKind.InterfaceType => "interface",
+            _ => entry.Has(AIContextFlags.IsValueType) ? "struct" : "class",
         };
 
-        if (type.IsEnum)
+        var baseType = ReferenceName(entry, AIContextRefKind.BaseType);
+        if (baseType is not null) obj["baseType"] = baseType;
+
+        obj["interfaces"] = new JArray(
+            entry.References
+                .Where(static r => r.Kind == AIContextRefKind.BaseInterface)
+                .Select(static r => r.DeclaredName)
+                .ToArray());
+
+        if (entry.Kind == AIContextNodeKind.EnumType)
         {
             var values = new JObject();
-            foreach (var name in Enum.GetNames(type))
+            foreach (var member in AIContextDirectory.Shared.Members(path!, "Members"))
             {
-                values[name] = Convert.ToInt64(Enum.Parse(type, name));
+                values[member.Name] = member.Ordinal;
             }
             obj["values"] = values;
         }
         else
         {
+            var accessor = AIContextTreeRegistry.FindAccessor(fullName);
             var props = new JArray();
-            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+
+            foreach (var member in AIContextDirectory.Shared.MembersAcross(fullName, "Properties"))
             {
-                var propObj = new JObject
+                props.Add(new JObject
                 {
-                    ["name"] = prop.Name,
-                    ["type"] = FriendlyTypeName(prop.PropertyType),
-                    ["canRead"] = prop.CanRead,
-                    ["canWrite"] = prop.CanWrite,
-                };
-                props.Add(propObj);
+                    ["name"] = member.Name,
+                    ["type"] = FriendlyTypeName(accessor?.MemberType(member.Name)),
+                    ["canRead"] = member.Has(AIContextFlags.CanRead),
+                    ["canWrite"] = member.Has(AIContextFlags.CanWrite),
+                });
             }
+
             obj["properties"] = props;
         }
 
-        // Inject [AgentContext] class-level descriptions — these are the developer's
-        // authoritative instructions and override any runtime defaults.
+        // 每条语言各取一次 —— 说明文字按语言分开存，这里不做回退挑选，全部倒出来。
         var agentDescs = new JArray();
         foreach (AgentLanguages lang in Enum.GetValues(typeof(AgentLanguages)))
         {
@@ -74,19 +105,16 @@ public static class TypeIntrospector
         // Always prefer developerInstructions over defaultJson.
         try
         {
-            if (!type.IsAbstract && !type.IsInterface && !type.IsEnum)
+            var instance = AIContextTreeRegistry.FindAccessor(fullName)?.Create();
+            if (instance is not null)
             {
-                var instance = Activator.CreateInstance(type);
-                if (instance != null)
+                var json = JsonConvert.SerializeObject(instance, Formatting.Indented, new JsonSerializerSettings
                 {
-                    var json = JsonConvert.SerializeObject(instance, Formatting.Indented, new JsonSerializerSettings
-                    {
-                        ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                        MaxDepth = 3,
-                        Error = (s, e) => e.ErrorContext.Handled = true,
-                    });
-                    obj["defaultJson_runtimeOnly"] = JToken.Parse(json);
-                }
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                    MaxDepth = 3,
+                    Error = (s, e) => e.ErrorContext.Handled = true,
+                });
+                obj["defaultJson_runtimeOnly"] = JToken.Parse(json);
             }
         }
         catch { /* default instance not available */ }
@@ -94,8 +122,17 @@ public static class TypeIntrospector
         return obj.ToString(Formatting.Indented);
     }
 
-    private static string FriendlyTypeName(Type t)
+    /// <summary>The name a cross-link carries, or <see langword="null"/> when the entry has no such link.</summary>
+    private static string? ReferenceName(AIContextNode entry, AIContextRefKind kind)
+        => entry.References
+                .Where(r => r.Kind == kind)
+                .Select(static r => r.DeclaredName)
+                .FirstOrDefault(static name => name.Length > 0);
+
+    /// <summary>The short, C#-flavoured spelling of a type: <c>int</c>, <c>string</c>, <c>List&lt;int&gt;</c>.</summary>
+    private static string FriendlyTypeName(Type? t)
     {
+        if (t is null) return string.Empty;
         if (t == typeof(string)) return "string";
         if (t == typeof(int)) return "int";
         if (t == typeof(double)) return "double";

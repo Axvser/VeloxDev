@@ -47,7 +47,7 @@ public class AgentMethodInvokerTests
     public void DiscoverMethods_WithFilter_Filters()
     {
         var target = new Calculator();
-        var methods = AgentMethodInvoker.DiscoverMethods(target, filter: m => m.Name == "Add");
+        var methods = AgentMethodInvoker.DiscoverMethods(target, filter: name => name == "Add");
         Assert.AreEqual(1, methods.Count);
         Assert.AreEqual("Add", methods[0].Name);
     }
@@ -60,7 +60,12 @@ public class AgentMethodInvokerTests
         var add = methods.First(m => m.Name == "Add");
         Assert.AreEqual(2, add.Parameters.Count);
         Assert.AreEqual("a", add.Parameters[0].Name);
-        Assert.AreEqual(typeof(int), add.Parameters[0].ParameterType);
+        Assert.AreEqual("System.Int32", add.Parameters[0].ParameterType);
+        Assert.IsFalse(add.Parameters[0].IsOptional);
+
+        var withDefault = methods.First(m => m.Name == "WithDefault");
+        Assert.IsFalse(withDefault.Parameters[0].IsOptional);
+        Assert.IsTrue(withDefault.Parameters[1].IsOptional, "a parameter with a default is reported as optional");
     }
 
     [TestMethod]
@@ -127,9 +132,21 @@ public class AgentMethodInvokerTests
     }
 
     [TestMethod]
-    public void InvokeStatic_NullType_Fails()
+    public void DiscoverMethods_TypeOutsideTheTree_ReturnsEmpty()
     {
-        var result = AgentMethodInvoker.InvokeStatic(null!, "Whatever");
+        // 反向对照：目录是唯一事实源。没有条目就没有可列举的方法，也就调不动。
+        var target = new UnannotatedCalculator();
+
+        Assert.AreEqual(0, AgentMethodInvoker.DiscoverMethods(target).Count);
+
+        var result = AgentMethodInvoker.Invoke(target, "Echo", 1);
         Assert.IsFalse(result.Success);
+        Assert.IsNotNull(result.Error);
+    }
+
+    /// <summary>Nothing opts this type in — the reverse control.</summary>
+    internal sealed class UnannotatedCalculator
+    {
+        public int Echo(int value) => value;
     }
 }

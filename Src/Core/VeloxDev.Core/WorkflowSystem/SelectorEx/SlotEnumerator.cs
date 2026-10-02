@@ -8,7 +8,7 @@ using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem;
 
-public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, System.ComponentModel.INotifyPropertyChanged
+public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IConditionalSlotProvider, System.ComponentModel.INotifyPropertyChanged
     where TSlot : IWorkflowSlotViewModel, new()
 {
     public SlotEnumerator()
@@ -609,6 +609,17 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, Sy
         conditionMap.Clear();
         for (int i = Items.Count - 1; i >= 0; i--)
             Items.RemoveAt(i);
+    }
+
+    // 非泛型视图：TSlot 擦掉之后给拿不到类型实参的调用方用（Agent 工具面）。
+    // Slots 与 TrySelect 显式实现 —— 属性类型不协变，且 out 参数的类型不参与重载解析。
+    IReadOnlyList<IConditionalSlot> IConditionalSlotProvider.Slots => Items;
+
+    bool IConditionalSlotProvider.TrySelect(object value, out IWorkflowSlotViewModel? slot)
+    {
+        var found = TrySelect(value, out TSlot? typed);
+        slot = typed;
+        return found;
     }
 
     [OnDeserializing]

@@ -5,7 +5,6 @@ using Microsoft.Extensions.AI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,23 +30,32 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     private const string SystemName = "Workflow";
 
-    internal static readonly Type[] FrameworkEnums =
-        [typeof(SlotChannel), typeof(SlotState), typeof(RouterCompileMode)];
+    /// <summary>
+    /// Whether a type is one of the framework's own enums.
+    /// </summary>
+    /// <remarks>
+    /// The framework's types used to be listed here by hand, one <c>Type[]</c> per kind. The context tree already
+    /// files them under <c>Framework/</c> by kind, so this asks the tree instead of an array that could drift
+    /// from it.
+    /// </remarks>
+    internal static bool IsFrameworkEnum(Type t) => IsUnder(t, "Enums");
 
-    internal static bool IsFrameworkEnum(Type t) => FrameworkEnums.Contains(t);
+    private static bool IsUnder(Type type, string directory)
+    {
+        var path = AIContextDirectory.Shared.PathFor(type.FullName ?? type.Name);
+        return path is not null
+            && path.StartsWith($"{AIContextTreeRegistry.FrameworkRoot}/{directory}/", StringComparison.Ordinal);
+    }
 
-    private static readonly Type[] FrameworkInterfaces =
-        [typeof(IWorkflowTreeViewModel), typeof(IWorkflowNodeViewModel), typeof(IWorkflowSlotViewModel), typeof(IWorkflowLinkViewModel), typeof(IWorkflowViewModel)];
-
-    private static readonly Type[] FrameworkComponents =
-        [typeof(TreeDefaultViewModel), typeof(NodeDefaultViewModel), typeof(SlotDefaultViewModel), typeof(LinkDefaultViewModel)];
-
-    internal static readonly Type[] FrameworkData =
-        [typeof(Anchor), typeof(Offset), typeof(Size),
-         typeof(IAccessContext), typeof(ITaskContext), typeof(TaskContext),
-         // Compiler contexts: rendered as data so the Agent understands the dataflow access edge gate,
-         // compile identity (Order/ChainIndex/Offset) and the runtime session contract during compiled runs.
-         typeof(ICompileContext), typeof(IRuntimeContext)];
+    /// <summary>The full names of the type entries directly under one directory.</summary>
+    internal static IEnumerable<string> TreeTypeNames(string directoryPath)
+    {
+        foreach (var node in AIContextDirectory.Shared.List(directoryPath))
+        {
+            if (node.Kind == AIContextNodeKind.Directory) continue;
+            if (node.TypeName is { Length: > 0 } name) yield return name;
+        }
+    }
 
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerEnums = [];
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerInterfaces = [];
@@ -86,25 +94,6 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// </summary>
     internal bool IsQueryOnlyCustomTool(string toolName)
         => _queryOnlyCustomToolNames.Contains(toolName);
-
-    /// <summary>
-    /// Distinct assemblies of all types registered via <see cref="WithComponents"/>, <see cref="WithEnums"/>,
-    /// <see cref="WithInterfaces"/>, <see cref="WithData"/>, or <see cref="WithAutoDiscovery"/>. Used by
-    /// ListCreatableTypes to surface creatable types from registered libraries even before any node
-    /// instance exists in the tree.
-    /// </summary>
-    internal IEnumerable<Assembly> CustomerAssemblies
-    {
-        get
-        {
-            var seen = new HashSet<Assembly>();
-            foreach (var set in CustomerComponents.Values) foreach (var t in set) seen.Add(t.Assembly);
-            foreach (var set in CustomerEnums.Values) foreach (var t in set) seen.Add(t.Assembly);
-            foreach (var set in CustomerInterfaces.Values) foreach (var t in set) seen.Add(t.Assembly);
-            foreach (var set in CustomerData.Values) foreach (var t in set) seen.Add(t.Assembly);
-            return seen;
-        }
-    }
 
     /// <summary>
     /// Sets the global default language used when a per-call <c>language</c> argument is <c>null</c>.
@@ -941,289 +930,57 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     }
 
     /// <summary>
-    /// Scans <paramref name="assembly"/> and automatically registers all workflow-related types,
-    /// then deeply inspects each discovered component to infer additional related types.
-    /// <list type="bullet">
-    ///   <item>Concrete workflow component classes → <see cref="WithComponents"/>.</item>
-    ///   <item>Enum types referenced by <c>[SlotSelectors]</c> or any property/field/parameter → <see cref="WithEnums"/>.</item>
-    ///   <item>Interface types used as property/field types on any component → <see cref="WithInterfaces"/>.</item>
-    ///   <item>Custom parameter types referenced by <c>[AgentCommandParameter]</c> on any method → <see cref="WithData"/>.</item>
-    ///   <item>Non-workflow classes/structs decorated with <c>[AgentContext]</c> → <see cref="WithData"/>.</item>
-    ///   <item>Non-primitive value-object structs found on component properties → <see cref="WithData"/>.</item>
-    /// </list>
-    /// Already-registered types and framework built-in types are never re-added.
+    /// Registers every type the compiled agent context tree carries under the customer root: its components
+    /// (filed by the four component interfaces), its enums, its interfaces and its data types.
     /// </summary>
-    /// <param name="assembly">The assembly to scan.</param>
     /// <param name="language">Override language for this call; if <c>null</c> the global default set by <see cref="WithPromptLanguage"/> is used.</param>
-    public WorkflowAgentScope WithAutoDiscovery(Assembly assembly, AgentLanguages? language = null)
+    /// <remarks>
+    /// <para>
+    /// Discovery used to mean scanning an assembly's types and then walking their members to infer the enums,
+    /// interfaces and value objects they reference. The context tree is built by walking the compilation and
+    /// already classifies types by the same four component interfaces, so this is a set of directory listings.
+    /// </para>
+    /// <para>
+    /// What gets registered is what the generator admitted. A type nothing annotated, no component interface
+    /// reaches and no member references is not in the tree, and it is not registered here either — there would be
+    /// no context to render for it.
+    /// </para>
+    /// <para>
+    /// Framework types are never registered as customer types: they live under <c>Framework/</c>, and only
+    /// <c>Customer/</c> is read.
+    /// </para>
+    /// </remarks>
+    public WorkflowAgentScope WithAutoDiscovery(AgentLanguages? language = null)
     {
-        if (assembly is null) throw new ArgumentNullException(nameof(assembly));
         var lang = Resolve(language);
 
-        var workflowBase = typeof(IWorkflowViewModel);
-        var nodeBase     = typeof(IWorkflowNodeViewModel);
-        var slotBase     = typeof(IWorkflowSlotViewModel);
-        var linkBase     = typeof(IWorkflowLinkViewModel);
-        var treeBase     = typeof(IWorkflowTreeViewModel);
+        RegisterDiscovered(lang, CustomerEnums, $"{AIContextTreeRegistry.CustomerRoot}/Enums");
+        RegisterDiscovered(lang, CustomerInterfaces, $"{AIContextTreeRegistry.CustomerRoot}/Interfaces");
+        RegisterDiscovered(lang, CustomerData, $"{AIContextTreeRegistry.CustomerRoot}/Data");
 
-        // Pass 1: register components and [AgentContext] data types.
-        // Only types actually registered here are marked in _globallyDiscoveredTypes.
-        // Enums / interfaces / data referenced by component members are marked by TryRegister*
-        // during Pass 2 — if Pass 1 marked every concrete type, Pass 2's "already registered?"
-        // guard would reject them all and no member-inferred type would ever register.
-        foreach (var type in assembly.GetTypes())
+        // 组件按四个接口分成四个目录，逐个收。
+        foreach (var kind in AIContextDirectory.Shared.List($"{AIContextTreeRegistry.CustomerRoot}/Components"))
         {
-            if (type.IsAbstract || type.IsInterface) continue;
-            if (_globallyDiscoveredTypes.Contains(type)) continue; // already registered by a prior call
-
-            bool isWorkflowComponent = nodeBase.IsAssignableFrom(type)
-                || slotBase.IsAssignableFrom(type)
-                || linkBase.IsAssignableFrom(type)
-                || treeBase.IsAssignableFrom(type);
-
-            if (isWorkflowComponent)
-            {
-                // Framework built-ins (e.g. NodeDefaultViewModel when scanning VeloxDev.Core)
-                // are never "customer" components — skip them so they do not pollute the
-                // customer context or get deep-scanned as if they were host-authored.
-                if (!IsFrameworkBuiltin(type))
-                {
-                    _globallyDiscoveredTypes.Add(type);
-                    WithComponents([type], lang);
-                }
-            }
-            else if (type.IsEnum && type.GetCustomAttributes<AgentContextAttribute>().Any())
-            {
-                // [AgentContext]-annotated enums are rendered by GetEnumContext — never as data
-                // (GetDataContext would present an enum's members as properties). Register them
-                // as enums here so their documentation surfaces even if no component member
-                // references them. Unannotated enums are discovered during Pass 2 member scanning.
-                if (!IsFrameworkBuiltin(type))
-                {
-                    _globallyDiscoveredTypes.Add(type);
-                    WithEnums([type], lang);
-                }
-            }
-            else if (type.GetCustomAttributes<AgentContextAttribute>().Any() && !IsFrameworkBuiltin(type))
-            {
-                _globallyDiscoveredTypes.Add(type);
-                WithData([type], lang);
-            }
+            if (kind.Kind != AIContextNodeKind.Directory) continue;
+            RegisterDiscovered(lang, CustomerComponents, $"{AIContextTreeRegistry.CustomerRoot}/Components/{kind.Name}");
         }
-
-        // Pass 2: deep-scan every registered component to infer Enums / Interfaces / Data
-        var registeredComponents = CustomerComponents.TryGetValue(lang, out var cs) ? cs : (IEnumerable<Type>)[];
-        foreach (var type in registeredComponents.ToArray())
-            ScanComponentMembers(type, lang, workflowBase);
 
         BumpVersion();
         return this;
     }
 
-    /// <summary>
-    /// Scans <paramref name="assemblyName"/> and automatically registers all workflow-related types.
-    /// </summary>
-    /// <param name="assemblyName">Simple name of the assembly to scan (e.g. <c>"Lib"</c>).</param>
-    /// <param name="language">Override language for this call; if <c>null</c> the global default set by <see cref="WithPromptLanguage"/> is used.</param>
-    public WorkflowAgentScope WithAutoDiscovery(string assemblyName, AgentLanguages? language = null)
+    /// <summary>Registers every type entry under one directory into one of the customer sets.</summary>
+    private void RegisterDiscovered(AgentLanguages lang, Dictionary<AgentLanguages, HashSet<Type>> sets, string directoryPath)
     {
-        var assembly = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(a => a.GetName().Name == assemblyName);
-        return assembly == null
-            ? throw new ArgumentException($"Assembly '{assemblyName}' not found in current AppDomain.", nameof(assemblyName))
-            : WithAutoDiscovery(assembly, language);
-    }
-
-    private void ScanComponentMembers(Type type, AgentLanguages lang, Type workflowBase)
-    {
-        const BindingFlags allInstance = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-
-        // --- Properties ---
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        foreach (var name in TreeTypeNames(directoryPath))
         {
-            // Prefer attributes declared on implemented interfaces when present (interface attributes are authoritative).
-            SlotSelectorsAttribute? selAttr = prop.GetCustomAttribute<SlotSelectorsAttribute>();
-            AgentCommandParameterAttribute? paramAttr = prop.GetCustomAttribute<AgentCommandParameterAttribute>();
+            // 目录里的类型一定注册过访问器，所以这里拿到的是 typeof 字面量，不是反射查找的结果。
+            if (AgentTypeResolver.ResolveType(name) is not { } type) continue;
+            if (!_globallyDiscoveredTypes.Add(type)) continue; // 已经注册过（含换语言重复调用）
 
-            if (selAttr == null || paramAttr == null)
-            {
-                foreach (var iface in type.GetInterfaces())
-                {
-                    var ip = iface.GetProperty(prop.Name);
-                    if (ip == null) continue;
-                    selAttr ??= ip.GetCustomAttribute<SlotSelectorsAttribute>();
-                    paramAttr ??= ip.GetCustomAttribute<AgentCommandParameterAttribute>();
-                    if (selAttr != null && paramAttr != null) break;
-                }
-            }
-
-            CollectSlotSelectorTypes(selAttr, lang);
-            if (paramAttr?.ParameterType is { } ppt)
-            {
-                TryRegisterData(ppt, lang, workflowBase);
-                RegisterGenericTypeArguments(ppt, lang, workflowBase);
-            }
-            TryRegisterMemberType(prop.PropertyType, lang, workflowBase);
-            RegisterGenericTypeArguments(prop.PropertyType, lang, workflowBase);
+            if (sets.TryGetValue(lang, out var set)) set.Add(type);
+            else sets[lang] = [type];
         }
-
-        // --- Fields (backing fields of [VeloxProperty]; attributes allowed there too) ---
-        foreach (var field in type.GetFields(allInstance))
-        {
-            CollectSlotSelectorTypes(field.GetCustomAttribute<SlotSelectorsAttribute>(), lang);
-            if (field.GetCustomAttribute<AgentCommandParameterAttribute>()?.ParameterType is { } fpt)
-            {
-                TryRegisterData(fpt, lang, workflowBase);
-                RegisterGenericTypeArguments(fpt, lang, workflowBase);
-            }
-            TryRegisterMemberType(field.FieldType, lang, workflowBase);
-            RegisterGenericTypeArguments(field.FieldType, lang, workflowBase);
-        }
-
-        // --- Methods: [AgentCommandParameter] + declared parameter types ---
-        foreach (var method in type.GetMethods(allInstance))
-        {
-            if (method.GetCustomAttribute<AgentCommandParameterAttribute>()?.ParameterType is { } mpt)
-            {
-                TryRegisterData(mpt, lang, workflowBase);
-                RegisterGenericTypeArguments(mpt, lang, workflowBase);
-            }
-            foreach (var p in method.GetParameters())
-            {
-                TryRegisterMemberType(p.ParameterType, lang, workflowBase);
-                RegisterGenericTypeArguments(p.ParameterType, lang, workflowBase);
-            }
-        }
-    }
-
-    private void CollectSlotSelectorTypes(SlotSelectorsAttribute? sel, AgentLanguages lang)
-    {
-        if (sel == null) return;
-        foreach (var et in sel.AllowedEnumTypes)
-            TryRegisterEnum(et, lang);
-        // String-based constructor: AllowedEnumTypes is empty; resolve names best-effort
-        if (sel.AllowedEnumTypes.Length == 0)
-        {
-            foreach (var name in sel.AllowedEnumTypeNames)
-            {
-                if (string.IsNullOrEmpty(name)) continue;
-                var resolved = Type.GetType(name, throwOnError: false);
-                if (resolved != null)
-                    TryRegisterEnum(resolved, lang);
-            }
-        }
-    }
-
-    private void TryRegisterMemberType(Type type, AgentLanguages lang, Type workflowBase)
-    {
-        type = UnwrapGeneric(type);
-
-        if (type == null || type == typeof(object) || type == typeof(string) || type.IsPrimitive)
-            return;
-
-        if (workflowBase.IsAssignableFrom(type))
-            return;   // workflow components already handled in Pass 1
-
-        if (IsFrameworkBuiltin(type))
-            return;
-
-        if (type.IsEnum)      { TryRegisterEnum(type, lang);               return; }
-        if (type.IsInterface) { TryRegisterInterface(type, lang);           return; }
-        if (type.IsValueType) { TryRegisterData(type, lang, workflowBase); return; }
-
-        // Reference class carrying [AgentContext] → Data
-        if (type.GetCustomAttributes<AgentContextAttribute>().Any())
-            TryRegisterData(type, lang, workflowBase);
-    }
-
-    private static Type UnwrapGeneric(Type type)
-    {
-        if (!type.IsGenericType) return type;
-
-        var def  = type.GetGenericTypeDefinition();
-        var args = type.GetGenericArguments();
-
-        if (args.Length != 1) return type;
-
-        var defName = def.FullName ?? string.Empty;
-        if (def == typeof(Nullable<>)
-            || defName == "System.Collections.Generic.IEnumerable`1"
-            || defName == "System.Collections.Generic.IList`1"
-            || defName == "System.Collections.Generic.ICollection`1"
-            || defName == "System.Collections.Generic.IReadOnlyList`1"
-            || defName == "System.Collections.Generic.IReadOnlyCollection`1"
-            || defName == "System.Collections.Generic.List`1"
-            || defName == "System.Threading.Tasks.Task`1"
-            || defName == "System.Threading.Tasks.ValueTask`1")
-        {
-            return UnwrapGeneric(args[0]);
-        }
-
-        return type;
-    }
-
-    private static bool IsFrameworkBuiltin(Type type)
-    {
-        if (FrameworkEnums.Contains(type)) return true;
-        if (FrameworkData.Contains(type)) return true;
-        foreach (var fi in FrameworkInterfaces) if (fi == type) return true;
-        foreach (var fc in FrameworkComponents) if (fc == type) return true;
-        var ns = type.Namespace ?? string.Empty;
-        return ns.StartsWith("System")
-            || ns.StartsWith("Microsoft")
-            || ns.StartsWith("VeloxDev.WorkflowSystem")
-            // Framework MVVM plumbing (VeloxDev.MVVM: IVeloxCommand, base view models, …) must
-            // never surface as a customer interface when a component's command properties are
-            // deep-scanned.
-            || ns.StartsWith("VeloxDev.MVVM")
-            // Compiler/engine plumbing under VeloxDev.Core.WorkflowSystem (e.g. CompilerEx enums
-            // like RouterCompileMode, RuntimeContext, CompileContext) is framework-internal — it
-            // must never surface in the Agent's customer context. Note this is a distinct prefix
-            // from VeloxDev.WorkflowSystem (the public component namespace) — both are excluded.
-            || ns.StartsWith("VeloxDev.Core.WorkflowSystem");
-    }
-
-    /// <summary>
-    /// Recursively extracts all generic type arguments from a type and registers them.
-    /// Handles multi-parameter generics (e.g. Dictionary&lt;string, MyEnum&gt;) that
-    /// <see cref="UnwrapGeneric"/> cannot fully unwrap.
-    /// </summary>
-    private void RegisterGenericTypeArguments(Type type, AgentLanguages lang, Type workflowBase)
-    {
-        if (!type.IsGenericType) return;
-        foreach (var arg in type.GetGenericArguments())
-        {
-            TryRegisterMemberType(arg, lang, workflowBase);
-            // Recurse in case the argument itself is generic (e.g. List&lt;Dictionary&lt;string, MyEnum&gt;&gt;)
-            RegisterGenericTypeArguments(arg, lang, workflowBase);
-        }
-    }
-
-    private void TryRegisterEnum(Type type, AgentLanguages lang)
-    {
-        if (!type.IsEnum || IsFrameworkBuiltin(type)) return;
-        if (CustomerEnums.TryGetValue(lang, out var set) && set.Contains(type)) return;
-        if (!_globallyDiscoveredTypes.Add(type)) return; // already registered under a different language
-        WithEnums([type], lang);
-    }
-
-    private void TryRegisterInterface(Type type, AgentLanguages lang)
-    {
-        if (!type.IsInterface || IsFrameworkBuiltin(type)) return;
-        if (CustomerInterfaces.TryGetValue(lang, out var set) && set.Contains(type)) return;
-        if (!_globallyDiscoveredTypes.Add(type)) return; // already registered under a different language
-        WithInterfaces([type], lang);
-    }
-
-    private void TryRegisterData(Type type, AgentLanguages lang, Type workflowBase)
-    {
-        if (type.IsPrimitive || type == typeof(string) || type == typeof(object)) return;
-        if (type.IsEnum || type.IsInterface || IsFrameworkBuiltin(type)) return;
-        if (workflowBase.IsAssignableFrom(type)) return;
-        if (CustomerComponents.TryGetValue(lang, out var cs) && cs.Contains(type)) return;
-        if (CustomerData.TryGetValue(lang, out var ds) && ds.Contains(type)) return;
-        if (!_globallyDiscoveredTypes.Add(type)) return; // already registered under a different language
-        WithData([type], lang);
     }
 
     /// <summary>
@@ -1370,12 +1127,16 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
         result.AppendLine("## Registered Component Types");
         result.AppendLine();
-        foreach (var t in FrameworkInterfaces)
-            result.AppendLine($"- `{t.FullName}` (framework interface)");
-        foreach (var t in FrameworkComponents)
-            result.AppendLine($"- `{t.FullName}` (framework base class)");
-        foreach (var t in FrameworkData)
-            result.AppendLine($"- `{t.FullName}` (framework data)");
+        foreach (var name in TreeTypeNames($"{AIContextTreeRegistry.FrameworkRoot}/Interfaces"))
+            result.AppendLine($"- `{name}` (framework interface)");
+        foreach (var kind in AIContextDirectory.Shared.List($"{AIContextTreeRegistry.FrameworkRoot}/Components"))
+        {
+            if (kind.Kind != AIContextNodeKind.Directory) continue;
+            foreach (var name in TreeTypeNames($"{AIContextTreeRegistry.FrameworkRoot}/Components/{kind.Name}"))
+                result.AppendLine($"- `{name}` (framework base class)");
+        }
+        foreach (var name in TreeTypeNames($"{AIContextTreeRegistry.FrameworkRoot}/Data"))
+            result.AppendLine($"- `{name}` (framework data)");
         foreach (var kvp in CustomerEnums)
         {
             foreach (var t in kvp.Value)
@@ -1450,21 +1211,39 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine($"> This rule overrides any language implied by the source material or documentation.");
     }
 
+    /// <summary>
+    /// Renders the framework's own context blocks: its enums, its component interfaces and its components.
+    /// </summary>
+    /// <param name="language">The language to render descriptions in.</param>
+    /// <returns>The Markdown blocks, concatenated.</returns>
+    /// <remarks>
+    /// The set of types is the tree's <c>Framework/</c> directories rather than a hand-kept list, so a framework
+    /// type that gains an <c>[AgentContext]</c> shows up here without anyone remembering to add it.
+    /// </remarks>
     public string ProvideFrameworkContext(AgentLanguages language = AgentLanguages.English)
     {
         var result = new StringBuilder();
+        var root = AIContextTreeRegistry.FrameworkRoot;
 
-        foreach (var framework in FrameworkEnums)
+        foreach (var name in TreeTypeNames($"{root}/Enums"))
         {
-            result.AppendLine(AgentContextCollector.GetEnumContext(framework, language));
+            if (AgentTypeResolver.ResolveType(name) is { } t)
+                result.AppendLine(AgentContextCollector.GetEnumContext(t, language));
         }
-        foreach (var framework in FrameworkInterfaces)
+        foreach (var name in TreeTypeNames($"{root}/Interfaces"))
         {
-            result.AppendLine(AgentContextCollector.GetInterfaceContext(framework, language));
+            if (AgentTypeResolver.ResolveType(name) is { } t)
+                result.AppendLine(AgentContextCollector.GetInterfaceContext(t, language));
         }
-        foreach (var framework in FrameworkComponents)
+        foreach (var kind in AIContextDirectory.Shared.List($"{root}/Components"))
         {
-            result.AppendLine(AgentContextCollector.GetClassContext(framework, language));
+            if (kind.Kind != AIContextNodeKind.Directory) continue;
+
+            foreach (var name in TreeTypeNames($"{root}/Components/{kind.Name}"))
+            {
+                if (AgentTypeResolver.ResolveType(name) is { } t)
+                    result.AppendLine(AgentContextCollector.GetClassContext(t, language));
+            }
         }
 
         return result.ToString();
@@ -2390,8 +2169,11 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public string ProvideFrameworkDataContext(AgentLanguages language = AgentLanguages.English)
     {
         var result = new StringBuilder();
-        foreach (var t in FrameworkData)
-            result.AppendLine(AgentContextCollector.GetDataContext(t, language));
+        foreach (var name in TreeTypeNames($"{AIContextTreeRegistry.FrameworkRoot}/Data"))
+        {
+            if (AgentTypeResolver.ResolveType(name) is { } t)
+                result.AppendLine(AgentContextCollector.GetDataContext(t, language));
+        }
         return result.ToString();
     }
 

@@ -77,6 +77,79 @@ public sealed class AIContextDirectory
         => List(entryPath + "/" + memberDirectory);
 
     /// <summary>
+    /// Lists one of a type's member directories including everything it inherits, walking the base-type chain
+    /// the tree records.
+    /// </summary>
+    /// <param name="typeFullName">The type's full name.</param>
+    /// <param name="memberDirectory">The member directory's name.</param>
+    /// <returns>
+    /// The members, most-derived first. A name declared more than once in the chain appears once — the derived
+    /// declaration hides the base one, which is what a caller enumerating the type's members would see.
+    /// </returns>
+    /// <remarks>
+    /// The walk stops at the first base type the tree does not carry: a base outside the compiled tree contributes
+    /// nothing, since nothing downstream could act on it either.
+    /// </remarks>
+    public IReadOnlyList<AIContextNode> MembersAcross(string typeFullName, string memberDirectory)
+    {
+        if (typeFullName is null) throw new ArgumentNullException(nameof(typeFullName));
+        if (memberDirectory is null) throw new ArgumentNullException(nameof(memberDirectory));
+
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var members = new List<AIContextNode>();
+
+        var current = typeFullName;
+        while (current is not null && visited.Add(current))
+        {
+            var path = PathFor(current);
+            if (path is null) break;
+
+            foreach (var member in List(path + "/" + memberDirectory))
+            {
+                if (seen.Add(member.Name)) members.Add(member);
+            }
+
+            current = BaseTypeNameOf(path);
+        }
+
+        return members;
+    }
+
+    /// <summary>
+    /// Finds one member of a type by name, in one member directory, including what the type inherits.
+    /// </summary>
+    /// <param name="typeFullName">The type's full name.</param>
+    /// <param name="memberDirectory">The member directory to search — <c>Properties</c>, <c>Commands</c>, …</param>
+    /// <param name="memberName">The member's name.</param>
+    /// <returns>The node, or <see langword="null"/> when the type has no such member.</returns>
+    public AIContextNode? MemberAcross(string typeFullName, string memberDirectory, string memberName)
+    {
+        foreach (var member in MembersAcross(typeFullName, memberDirectory))
+        {
+            if (string.Equals(member.Name, memberName, StringComparison.Ordinal)) return member;
+        }
+
+        return null;
+    }
+
+    /// <summary>The full name of the entry's base type, or <see langword="null"/> when the tree records none.</summary>
+    private static string? BaseTypeNameOf(string entryPath)
+    {
+        var entry = AIContextTreeRegistry.FindEntry(entryPath);
+        if (entry is null) return null;
+
+        foreach (var reference in entry.References)
+        {
+            if (reference.Kind != AIContextRefKind.BaseType) continue;
+
+            return reference.DeclaredName.Length > 0 ? reference.DeclaredName : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Finds one member of a type entry by name, wherever it sits.
     /// </summary>
     /// <param name="typeFullName">The declaring type's full name.</param>

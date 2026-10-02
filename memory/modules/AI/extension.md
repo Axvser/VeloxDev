@@ -12,10 +12,10 @@
 
 | 我要扩展… | 扩展点 | 具体位置 |
 |---|---|---|
-| 给类型/属性/方法/命令补说明文字 | `[AgentContext]` | 声明 `AgentContextAttribute.cs:4`；读取入口 `AgentContextReader.GetContexts`（类型 / 成员两个重载），规则在私有 `Select`；四个助手转调它（`architecture.md` §二） |
-| 声明一个命令要吃什么参数 | `[AgentCommandParameter]` | 声明 `AgentCommandParameterAttribute.cs:10`；**Core 里唯一读取点** `AgentCommandDiscoverer.cs:223` |
-| 限定 `SlotEnumerator<TSlot>` 允许哪些 selector 类型 | `[SlotSelectors]` | 声明 `SlotSelectorsAttribute.cs:38`；**Core 零读取**，全在消费方 |
-| 控制 Agent 能写哪些属性 | `rejected` 集合 | `AgentPropertyAccessor.SetProperties`（`AgentPropertyAccessor.cs:138`）；由消费方构造时传（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:29`） |
+| 给类型/属性/方法/命令补说明文字 | `[AgentContext]` | 声明 `AgentContextAttribute.cs:4`；**运行期没有读取点** —— 生成器在编译期把它渲染成 `AgentText` 存进目录；语言与回退规则唯一在 `AgentTextSelection.Select`（`AgentText.cs`），节点侧入口 `AIContextMembers.DescriptionsFor`，`Type`/`MemberInfo` 侧入口 `AgentContextReader`（`architecture.md` §二） |
+| 声明一个命令要吃什么参数 | `[AgentCommandParameter]` | 声明 `AgentCommandParameterAttribute.cs:10`；**只有生成器读**（`AIContextModel.ReadCommandParameterType`），存成节点上一条 `CommandParameterType` 引用 |
+| 限定 `SlotEnumerator<TSlot>` 允许哪些 selector 类型 | `[SlotSelectors]` | 声明 `SlotSelectorsAttribute.cs:38`；**Core 零读取**（生成器读，存成 `SlotSelectorType` 引用），判断全在消费方 |
+| 控制 Agent 能写哪些属性 | `rejected` 集合 | `AgentPropertyAccessor.SetProperties`；由消费方构造时传（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:29`） |
 | 加一个语言 | `AgentLanguages` 枚举 + 码表 + 两个 switch | `AgentLanguages.cs:3-39`、`:43-86`、`:88`、`:163`；另有消费方第二张码表（见 §四·1） |
 | 把一个新的对象整体暴露成工具面 | `AsAgentToolkit()` / `AsAgentTools()` | `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:340`、`:349` |
 | 给确认/选择接自己的交互 | `Func<..., Task>` handler | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs:494`、`:521` |
@@ -29,11 +29,12 @@
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 把 `[AgentContext]` 写在具体类上，指望接口/基类的能带下来 | 每次读取都传 `inherit: false`，**没有继承**；而且属性/方法路径**不扫接口** | `AgentContextReader.cs:20`、`:27`、`:34`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63` |
-| 只写英文，就以为中文/日文界面下这个成员没有说明 | **有语言回退，但是整目标、全有或全无**：该目标一条目标语言都没有时整体退回英文；只要命中 ≥ 1 条目标语言，就不再夹带英文 | `AgentContextReader.cs:63-67`；测试 `.../AgentContextReaderTests.cs` 的 `..._FallsBackToEnglish` / `..._FallbackIsAllOrNothing` |
-| 只写了中文，指望英文界面也能看到 | **英文无处可退**：`language == English` 时直接返回命中集（可能为空） | `AgentContextReader.cs:64`；测试 `..._EnglishRequestNeverFallsBack` |
+| 把 `[AgentContext]` 写在基类上，指望派生类的属性/方法带下来 | 属性与方法**不继承**：目录按类型分别收录成员，派生类型读自己那份（基类的成员只能通过基类链被"发现"，不会把说明挪到派生类型的同名成员上） | `AIContextModel.ReadMembers`（只读 `symbol.GetMembers()`） |
+| 给**命令**补说明时写在具体类的属性上 | 对 `ICommand` 而言**接口上的才算数** —— 生成器按同名属性回查接口，接口上写了就用接口的（与旧反射路径先扫接口一致） | 生成器 `AIContextModel.InterfaceCommandProperty` |
+| 给**普通属性/方法**补说明时写在接口上 | **不生效**：只有命令那条路会回查接口，属性/方法不扫接口（旧反射路径也一样） | 同上，`InterfaceCommandProperty` 只在 `isCommand` 时调用 |
+| 只写英文，就以为中文/日文界面下这个成员没有说明 | **有语言回退，但是整目标、全有或全无**：该目标一条目标语言都没有时整体退回英文；只要命中 ≥ 1 条目标语言，就不再夹带英文 | `AgentTextSelection.Select`（`AgentText.cs`）；测试 `.../AgentContextReaderTests.cs` 的 `..._FallsBackToEnglish` / `..._FallbackIsAllOrNothing` |
+| 只写了中文，指望英文界面也能看到 | **英文无处可退**：`language == English` 时直接返回命中集（可能为空） | 同上；测试 `..._EnglishRequestNeverFallsBack` |
 | 写 `[AgentContext("说明")]` | **编译不过**：位置参数第一位是 `AgentLanguages` | `AgentContextAttribute.cs:4` |
-| 给命令补说明时写在具体类的属性上 | 对 `ICommand` 而言**接口上的才算数**（先扫接口 + 按名字去重，具体类同名的那个根本不会被扫到） | `AgentCommandDiscoverer.cs:64-88`、`:90-94` |
 
 **官方**：命令的说明与参数类型标在**接口**上（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:33` 那一族是范本）；其它成员标在**声明它的那个类**上。想支持几种语言就写几条 —— 但**不必为回退而写**：整目标缺该语言时会自动退回英文。
 
@@ -43,29 +44,32 @@
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 以为 `canExecute: false` 会挡住执行 | **`CanExecute` 只被报告，从不被强制** —— `Execute` 不查它，消费方的 `ExecuteCommand` 也不查 | `AgentCommandDiscoverer.cs:123-154`、`:159-168`；`.../Agent/AgentObjectToolkit.cs:225`、`:240` |
-| 用 `FindBackingCommand` 当通用的「属性→命令」映射 | 它只认两种命名：`Set{X}Command` 与 `{X}Command`；别的命名返回 `null`（调用方通常据此当成「没有命令」） | `AgentCommandDiscoverer.cs:176-195` |
-| 用 `Execute(target, "saveCommand")` 之类的大小写变体 | 规范化是 `EndsWith("Command")`，大小写敏感 → 拼成 `saveCommandCommand` 然后找不到 | `AgentCommandDiscoverer.cs:199-200` |
-| 让命令属性抛异常 | 异常被吞成 `ExecuteResult.Error` 字符串，**栈不保留**（只留 `ex.Message`） | `AgentCommandDiscoverer.cs:148-151` |
+| 以为 `canExecute: false` 会挡住执行 | **`CanExecute` 只被报告，从不被强制** —— `Execute` 不查它，消费方的 `ExecuteCommand` 也不查。生成器那条 `if (!c.CanExecute(parameter)) return false;` 已经删掉（它曾经与这条不变量矛盾） | `AgentCommandDiscoverer.cs` 的 `Execute` / `CanExecuteCommand`；`.../Agent/AgentObjectToolkit.cs:225`、`:240` |
+| 用 `FindBackingCommand` 当通用的「属性→命令」映射 | 它只认两种命名：`Set{X}Command` 与 `{X}Command`；别的命名返回 `null`（调用方通常据此当成「没有命令」）。形参仍是 `Type`，但只读它的 `FullName` 查目录 | `AgentCommandDiscoverer.FindBackingCommand` |
+| 用 `Execute(target, "saveCommand")` 之类的大小写变体 | 规范化是 `EndsWith("Command")`，大小写敏感 → 拼成 `saveCommandCommand` 然后找不到 | `AgentCommandDiscoverer.NormalizeCommandName` |
+| 让命令属性抛异常 | 异常被吞成 `ExecuteResult.Error` 字符串，**栈不保留**（只留 `ex.Message`） | `AgentCommandDiscoverer.cs` 的 `Execute` 的 try/catch |
+| 把命令体写成**显式接口实现** | 目录只收录公开成员，显式实现的那个属性不算 —— 命令整个消失（旧反射路径也读不到它） | `AIContextModel.ReadMembers` 的 `Accessibility.Public` 过滤 |
 
 ### 3. 让 Agent 改属性
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 用 `SetProperties` 的 `rejected` 做通配/前缀屏蔽 | 它是**精确名字**比对的 `ISet<string>`，没有模式匹配 | `AgentPropertyAccessor.cs:149` |
-| 用 `CopyScalarProperties` 做「同名字段对拷」并期待类型自适应 | 白名单只有 11 种标量 + 枚举，**且不做转换**：类型不同的同名属性会在 `SetValue` 抛然后被吞 | `AgentPropertyAccessor.cs:183-185`、`:187-188` |
-| 靠 `SetPropertyValue` 报错来兜住非法值 | 它先 `ConvertValue` 再写：枚举**能从字符串（`ignoreCase`）或数字进来**，其它不受支持的转换会抛、并被吞成 `SetResult.Error`（不会有异常逃出到调用方） | `AgentPropertyAccessor.cs:196-218`、`:124-127` |
+| 用 `SetProperties` 的 `rejected` 做通配/前缀屏蔽 | 它是**精确名字**比对的 `ISet<string>`，没有模式匹配 | `AgentPropertyAccessor.SetProperties` |
+| 用 `CopyScalarProperties` 做「同名字段对拷」并期待类型自适应 | 名不副实：它转调访问器的 `CopyScalarFrom`，搬的是**两个类型共有的、可写的全部成员**（不再限标量），类型不同就在生成代码里硬转失败、被吞掉。**零生产调用者** —— 真正跑的是 `ComponentPatcher` 那份自带白名单的分叉 | `AgentPropertyAccessor.CopyScalarProperties`；`.../Functions/ComponentPatcher.cs` |
+| 靠 `SetPropertyValue` 报错来兜住非法值 | 它查目录拿 `CanWrite` 再写：枚举**能从字符串（`ignoreCase`）或数字进来**，其它不受支持的转换会抛、并被吞成 `SetResult.Error`（不会有异常逃出到调用方）。「不在目录里」与「只读」现在是两条不同的错误文案 | `AgentPropertyAccessor.SetPropertyValue`；`AIContextConvert` |
+| 以为写一个**不在目录里**的属性会悄悄失败 | 会失败，但原因是闭世界：**类型本身**不在目录里时，连属性列表都是空的 | `AIContextMembers.TypeNameOf`；`architecture.md` §七 |
 
 ### 4. 方法调用
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 以为 `Invoke` 会按**类型**挑重载 | 它按**实参个数**挑，同个数重载取反射枚举到的第一个（顺序未定义） | `AgentMethodInvoker.cs:119-121` |
-| 经 `InvokeMethod` 传枚举参数 | `Convert.ChangeType` 认不了枚举 → 被 `catch {}` 吞掉 → 最终以参数不匹配失败。JSON 整数是 `Int64`，必然踩 | `AgentMethodInvoker.cs:144-146`、`:149` |
-| 以为 `InvokeStatic` 和 `Invoke` 一样会补默认值/转类型 | 它两样都不做；匹配失败还会**随便挑一个同名重载**再抛 | `AgentMethodInvoker.cs:165-198`、`:180` |
-| 用 `DiscoverMethods` 的输出当「唯一的方法集合」 | 它按 `MethodInfo` 逐条输出，**同名的每个重载各占一条** | `AgentMethodInvoker.cs:67-91` |
+| 以为 `Invoke` 会按**类型**挑重载 | 它按**实参个数**挑：生成期排好的元数表里，精确元数优先，其余元数由「必填数 ≤ 个数 < 总数」的那个重载接手。同元数的重载分不开 | 生成器 `Writers/AIContextTreeWriter.cs` 的 `ArityPlan` |
+| 以为传少了参数会失败 | 缺的尾部可选参数由生成代码**省略实参**、编译器补默认值 —— 这条是保住的 | 同上，`WriteInvokeBody` |
+| 传一个目录里认不出的参数类型 | 转换表就是生成期那张 `RenderConversion`（`AIContextConvert`）：字符串 / 数字 / bool / 日期 / `Guid` / `TimeSpan` / 枚举，其余一律 `(T)value!` 硬转，转不过就返回一句错误 | `AgentMethodInvoker.cs` 的 `Invoke` |
+| 用 `DiscoverMethods` 的输出当「唯一的方法集合」 | **一个方法名只报一条**（目录按名字去重），虽然 `Invoke` 支持该名字的全部元数 | `AgentMethodInvoker.DiscoverMethods` |
+| 在目录里找**静态**方法 | 没有：目录不录静态方法，访问器只对实例做事。`InvokeStatic` / `includeStatic` 已删除，没有回退 | `architecture.md` §五·6 |
 
-**官方**：需要枚举/复杂参数时，给目标对象加一个**收 `string`/`int` 的包装方法**，让转换发生在你自己的代码里 —— 不要指望反射层代劳。
+**官方**：枚举参数现在能直接传（`AIContextConvert.ToEnum<T>`，按名字或底层值）。需要更复杂的参数时，仍然推荐给目标对象加一个**收 `string`/`int` 的包装方法** —— 那让转换发生在你自己的代码里，比依赖生成期那张表可控。
 
 ### 5. `[SlotSelectors]`
 
@@ -79,7 +83,9 @@
 
 ### 6. 新增一种「特性 + 反射读取」
 
-**官方**：特性类 + **一个读取助手**，读取语义（语言、回退、inherit）写在那一个助手里。说明文字的这条规则已经从「内联复制在每一处」改成了集中实现 —— `AgentCommandDiscoverer`（`:73`、`:94`）、`AgentMethodInvoker`（`:78`）、`AgentPropertyAccessor`（`:63`）现在都只是转调 `AgentContextReader.GetContexts(member, language)`（`PropertyInfo`/`MethodInfo` 都是 `MemberInfo`），过滤条件只在 `AgentContextReader.Select`（`:59`）里有一份。新增一种读取语义（「回退英文」正是这次的例子）改 `Select` 一处即可；**新写一个助手时要照这个形状走**，再把过滤条件抄一遍就又回到了「漏一处没有编译错误、只有行为不一致」的老问题。
+**官方**：特性类 + **生成期的一个读取点**。特性本身在运行期已经没有任何读者 —— 说明文字在编译期被渲染成 `AgentText` 存进目录，运行期只是取值，规则唯一在 `AgentTextSelection.Select`（`AgentText.cs`）。两条取值入口都是转调：节点侧 `AIContextMembers.DescriptionsFor(node, language)`（三个助手用），`Type`/`MemberInfo` 侧 `AgentContextReader`（消费方与表格用）。要新增一种读取语义（「回退英文」正是上一次的例子）改 `Select` 一处即可；**新写一个助手时要照这个形状走**，再把过滤条件抄一遍就又回到了「漏一处没有编译错误、只有行为不一致」的老问题。
+
+**新增一个标注特性**（比上面多一步）：特性类 + `AIContextModel` 里的一处读取 + 目录节点上的承载方式（要么进 `AIContextFlags`，要么进 `AIContextRefKind`）—— 三个特性各自是这三样的一种组合，照抄最近的那个。
 
 ### 7. 「我改 Core 的助手，为什么跑起来没变化」
 
@@ -87,14 +93,14 @@
 
 | 行为 | Core 那条 | Workflow 那条 |
 |---|---|---|
-| 列出/执行命令 | `AgentCommandDiscoverer.cs:54`、`:123` | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/CommandInvoker.cs:21`、`:81` |
+| 列出/执行命令 | `AgentCommandDiscoverer.DiscoverCommands` / `Execute`（读目录） | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/CommandInvoker.cs`（**也读目录**了，但仍是一份独立实现：自带 `CommandDescriptor`、参数走 Newtonsoft 反序列化、不按语言过滤） |
 | 批量写属性 | `AgentPropertyAccessor.cs:138` | `.../Workflow/Functions/ComponentPatcher.cs`（`ApplyPatch`） |
-| 标量对拷 | `AgentPropertyAccessor.cs:169`（无调用者） | `.../Workflow/Functions/ComponentPatcher.cs:236` |
+| 标量对拷 | `AgentPropertyAccessor.CopyScalarProperties`（**零生产调用者**；转调访问器，搬全部可写成员） | `.../Workflow/Functions/ComponentPatcher.cs:236`（自带标量白名单，实际跑的是这份） |
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
 | 在 Core 里改命令的命名规范化/语言过滤，期待 Workflow 工具跟着变 | Workflow 工具走 `CommandInvoker`，不与 Core 共享任何一行实现 —— 改 Core 只影响 `AgentObjectToolkit`（通用对象）那条路 | `AgentObjectToolkit.cs:240` vs `WorkflowAgentToolkit.cs:921` |
-| 以为 Core 的 `Convert.ChangeType` 限制也管着 Workflow | Workflow 那条用 `JsonConvert.DeserializeObject(json, paramType)`，**枚举参数能进** | `CommandInvoker.cs:107` vs `AgentMethodInvoker.cs:144` |
+| 以为 Core 的转换表也管着 Workflow | 两条各有各的：Core 走**生成期那张表**（`AIContextConvert`，需要重新生成才会变），Workflow 那条走 `JsonConvert.DeserializeObject(json, paramType)`（运行期，改了立刻生效） | `CommandInvoker.cs:107` vs `AIContextConvert.cs` |
 | 以为「命令描述符」是同一个类型 | 有两个同名类：Core 的嵌套 `AgentCommandDiscoverer.CommandDescriptor` 与 `VeloxDev.AI.Workflow.Functions.CommandDescriptor`（`CommandInvoker.cs:171`）；字段也不同（后者带 `Descriptions` 的 `KeyValuePair<AgentLanguages,string>`） | 同上 |
 
 **要一起改的两处**（改命令语义时）：`AgentCommandDiscoverer.cs`（通用路径）与 `CommandInvoker.cs`（Workflow 路径）。反过来说，**只**想要 Workflow 行为变、通用路径不变，也是可行的 —— 那就只改后者。
@@ -115,7 +121,8 @@
 1. 目标类型（通常是接口）上加一个 `ICommand` 公开属性，命名以 `Command` 结尾。
 2. 需要参数就在同一位置加 `[AgentCommandParameter(typeof(T))]`；参数类型里出现的自定义类型会被消费方自动注册（`.../Agent/Workflow/WorkflowAgentScope.cs:810`）。
 3. 不要在 `CanExecute` 上寄托拦截 —— 要拦就在工具层拦。
-4. 命令体抛出的异常会变成一句错误字符串，**要保栈要自己 catch 后写日志**（`AgentCommandDiscoverer.cs:148-151`）。
+4. 命令体抛出的异常会变成一句错误字符串，**要保栈要自己 catch 后写日志**（`AgentCommandDiscoverer.Execute` 的 try/catch）。
+5. 别写成**显式接口实现**：目录只收公开成员，显式实现的命令整个不出现。
 
 ### C. 给 `SlotEnumerator` 属性加白名单
 
@@ -125,6 +132,7 @@
 
 ### D. 把一个新的对象类型整体暴露成工具面
 
+0. **目标类型必须先被生成器收录**（闭世界）：它自己被 `[AgentContext]` 标注过，或它的某个成员带标注，或它有一个 `ICommand` 属性，或它实现了四个工作流组件接口之一。否则 10 个工具照样建出来，但每一个都只回「不在目录里」。
 1. 消费方调用 `obj.AsAgentToolkit(language, rejectedProperties)`（`.../Agent/AgentObjectToolkit.cs:340`），得到 10 个基础工具（`:54-66`）。
 2. `rejectedProperties` 只影响 `PatchProperties` 一路，**不影响** `SetProperty`（单属性写，`:181`）—— 要屏蔽必须两条都走 `rejected`，或不在工具面暴露写工具。核对：`SetProperty` 调 `SetPropertyValue`（无 rejected 参数）。
 3. 目标若绑在某条 UI 线程上，**必须自己设 `ToolPipeline.MarshalTo`**：Core 不注册任何编组（`architecture.md` §一表）。
@@ -155,13 +163,13 @@
 
 ### 4.2 加一个 `[AgentContext]` 的读取点（新助手 / 新发现器）
 
-**转调 `AgentContextReader.GetContexts(...)` 就完了** —— 语言与回退规则只在 `AgentContextReader.Select`（`:59`）里一份。今天的调用点是 `AgentCommandDiscoverer.cs:73`、`:94`、`AgentMethodInvoker.cs:78`、`AgentPropertyAccessor.cs:63`，全都是转调。**不要**在这些助手内部再写一次 `Where(a => a.Language == language)`：那正是这次修掉的历史形态，它会静默地不回退。
+**转调 `AgentTextSelection.Select(...)` 就完了** —— 语言与回退规则只在那一个方法里。今天的两条取值入口是 `AIContextMembers.DescriptionsFor(node, language)`（三个助手用）与 `AgentContextReader`（`Type`/`MemberInfo` 用），都是转调。**不要**在助手内部再写一次 `Where(a => a.Language == language)`：那正是这次修掉的历史形态，它会静默地不回退。
 
 ### 4.3 给发现器加一个字段（例如 `CommandDescriptor` 上再挂一个属性）
 
 | # | 位置 | 漏了会怎样 |
 |---|---|---|
-| 1 | `AgentCommandDiscoverer.cs` 的 `CommandDescriptor` + 两个扫描分支（`:80`、`:104`） | **两条分支都要加**：接口分支与具体类型分支是两段独立代码 |
+| 1 | `AgentCommandDiscoverer.CommandDescriptor` + `DiscoverCommands` 里的填充 | 描述符上多出来的字段**必须有一个数据来源**：目录里没有的事实，得先加生成器（`AIContextFlags` 或 `AIContextRefKind`），Core 这边才有东西可读 |
 | 2 | 消费方的工具输出 `.../Agent/AgentObjectToolkit.cs:221-229` / `.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs` 的对应 `JObject` | Core 加了字段，工具输出里**不会自动出现** |
 
 ### 4.4 加一个 `SlotSelectors` 的消费者
@@ -174,7 +182,8 @@
 
 ### 4.6 本模块**不需要**联动的东西（省掉无谓的搜索）
 
-- ~~**没有生成器**~~ —— **2026-10-03 起不再成立。** `Src/Generators/VeloxDev.Core.Generator/AIContextTree.cs` 会往每个程序集里加一个只读的上下文分片与一组访问器（见 `architecture.md` §七）。但**反射那五个助手一行都没动**：改 `AgentContextReader` / `AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor` / `AgentTypeResolver` 的行为，仍然不需要碰生成器，也**不会**改变今天消费方实际跑的路径。两者只有一条交叉线：命名规则抽在生成器的 `Base/AIContextNaming.cs`，`MVVMFieldAnalizer` 与 `CommandWriter` 都转调它。
+- ~~**没有生成器**~~ —— **2026-10-03 起不但有，而且它就是这套东西的行为来源。** `Src/Generators/VeloxDev.Core.Generator/AIContextTree.cs` 往每个程序集里加一个只读的上下文分片与一组访问器（见 `architecture.md` §七），五个助手全部读它。**所以「哪些成员进 Agent 面」「命令叫什么」「说明与参数类型从哪来」这些问题要改生成器，改 Core 的助手改不动它们**；反过来，改助手的拒绝文案/错误形状只动 Core。两条交叉线：命名规则抽在生成器的 `Base/AIContextNaming.cs`（`MVVMFieldAnalizer` 与 `CommandWriter` 都转调它），成员遍历抽在 Core 的 `AIContextDirectory.MembersAcross`（渲染器与三个助手都转调它）。
+- **Release 构建用的是 NuGet 上的 `VeloxDev.Core.Generator` 包，不是本地源码**（`Condition="'$(Configuration)' != 'Debug'"`）。生成器改了而包没重发，Release 下的目录仍是旧形状 —— Debug（含 `dotnet test` 默认配置）才跑本地生成器。
 - **没有平台适配器**：加一家 GUI 不需要在本模块改任何一行；交互 UI 归各 demo。
 - **没有序列化契约**：`AgentLanguages` 是 `byte` 枚举，但没有任何地方对它做自定义序列化；跨进程传的是它自己的值。
 
@@ -186,11 +195,12 @@
 
 | 成员 | 位置 | 说明 |
 |---|---|---|
-| `AgentCommandDiscoverer.CanExecuteCommand` | `AgentCommandDiscoverer.cs:159` | 零非测试调用者；发现路径用的是私有的 `TryCanExecute`（`:244`） |
-| `AgentMethodInvoker.InvokeStatic` | `AgentMethodInvoker.cs:165` | 零非测试调用者 |
-| `AgentPropertyAccessor.CopyScalarProperties` | `AgentPropertyAccessor.cs:169` | 零非测试调用者；**消费方另写了一份同名实现在 `.../Agent/Workflow/Functions/ComponentPatcher.cs:236`**（没有转调 Core）—— 改 Core 那份不会影响实际跑的路径 |
-| `AgentContextReader.HasAgentContext` | `AgentContextReader.cs:32` | 零非测试调用者 |
+| `AgentPropertyAccessor.CopyScalarProperties` | `AgentPropertyAccessor.cs` | 零生产调用者（转调访问器的 `CopyScalarFrom`）；**消费方另写了一份同名实现在 `.../Agent/Workflow/Functions/ComponentPatcher.cs:236`**（自带标量白名单，没有转调 Core）—— 改 Core 那份不会影响实际跑的路径 |
+| `IAIContextAccessor.CopyScalarFrom` | 生成代码里，每个访问器一份 | 目前唯一的调用者就是上面那个零调用者的包装 —— 等到 `ComponentPatcher` 那条分叉也搬过来才有真实用途 |
+| `AgentContextReader.HasAgentContext` | `AgentContextReader.cs` | 零非测试调用者 |
 | `AgentLanguagesExtensions.ParseLanguageCode` | `AgentLanguages.cs:153` | **零调用者**（连测试都没有；测试用的是 `TryParseLanguageCode`）。`ToLanguageCode`/`GetDisplayName` 相反，消费方在用（`.../Agent/Workflow/WorkflowAgentScope.cs:1203`、`:1204`） |
 | `IAgentConfirmationNotifier` / `IAgentSelectionNotifier` | `AgentConfirmationEventArgs.cs:37`、`AgentSelectionEventArgs.cs:60` | **全仓零实现者**。三个 `IAgent*Notifier` 里只有 `IAgentToolCallNotifier` 被实现了（`.../Agent/AgentObjectToolkit.cs:29`、`.../Agent/Workflow/WorkflowAgentScope.cs:20`）。确认/选择的实际通路是消费方的 `Func<..., Task>` handler —— 因为 `EventHandler` 没法表达「等用户点完」 |
 
-唯一有非测试调用者的替身入口是 `AgentCommandDiscoverer.FindBackingCommand`（`AgentCommandDiscoverer.cs:176`），调用者是 `.../Agent/Workflow/Functions/ComponentPatcher.cs:230` 的一层薄委托。
+**已经不在这个表里的**（2026-10-03 删除或改变了地位）：`AgentMethodInvoker.InvokeStatic`（删除）、`DiscoverMethods(includeStatic:)`（删除）、`AgentCommandDiscoverer.CanExecuteCommand`（不再零调用者 —— `DiscoverCommands` 与它自己都走它）。
+
+唯一有非测试调用者的替身入口仍是 `AgentCommandDiscoverer.FindBackingCommand`，调用者是 `.../Agent/Workflow/Functions/ComponentPatcher.cs:230` 的一层薄委托。

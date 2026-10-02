@@ -2,8 +2,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Windows.Input;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -59,6 +57,7 @@ public static class ComponentPatcher
         }
 
         var type = target.GetType();
+        var accessor = AIContextTreeRegistry.FindAccessor(type.FullName ?? type.Name);
 
         // Reject unmounted targets explicitly instead of mutating state outside the
         // command/lifecycle pipeline: an unmounted component has no parent chain, so the
@@ -80,8 +79,8 @@ public static class ComponentPatcher
         foreach (var kv in patch)
         {
             var propName = kv.Key;
-            var prop = type.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
-            if (prop == null || !prop.CanWrite)
+            var prop = accessor is null ? null : AIContextDirectory.Shared.MemberAcross(accessor.TypeName, "Properties", propName);
+            if (prop == null || !prop.Has(AIContextFlags.CanWrite))
             {
                 results.Add(new JObject { ["property"] = propName, ["status"] = "skipped", ["reason"] = prop == null ? "not found" : "read-only" });
                 continue;
@@ -113,7 +112,7 @@ public static class ComponentPatcher
             }
 
             // Reject slot-typed properties — these are auto-created by source generator
-            if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+            if (prop.Has(AIContextFlags.IsSingleSlot))
             {
                 results.Add(new JObject
                 {
@@ -125,7 +124,7 @@ public static class ComponentPatcher
             }
 
             // Reject [SlotSelectors]-marked properties — must use SetEnumSlotCollection tool
-            if (prop.GetCustomAttribute<SlotSelectorsAttribute>() != null)
+            if (prop.Has(AIContextFlags.HasSlotSelectors))
             {
                 results.Add(new JObject
                 {
@@ -138,9 +137,17 @@ public static class ComponentPatcher
 
             try
             {
+                // 声明的类型来自访问器的 typeof 字面量 —— Newtonsoft 要一个 Type，这里给得出，且不必反射。
+                var propertyType = accessor!.MemberType(propName);
+                if (propertyType is null)
+                {
+                    results.Add(new JObject { ["property"] = propName, ["status"] = "skipped", ["reason"] = "not found" });
+                    continue;
+                }
+
                 object? value;
                 // Special handling: if the property is System.Type, resolve from type name string
-                if (prop.PropertyType == typeof(Type))
+                if (propertyType == typeof(Type))
                 {
                     var typeName = kv.Value?.ToString();
                     if (string.IsNullOrEmpty(typeName))
@@ -159,9 +166,9 @@ public static class ComponentPatcher
                 }
                 else
                 {
-                    value = kv.Value?.DeserializeToType(prop.PropertyType);
+                    value = kv.Value?.DeserializeToType(propertyType);
                 }
-                var oldValue = prop.GetValue(target);
+                var oldValue = accessor.TryGet(target, propName, out var current) ? current : null;
                 if (Equals(oldValue, value))
                 {
                     // Writing the same value would create a no-op undo entry (redo and undo both
@@ -169,7 +176,14 @@ public static class ComponentPatcher
                     results.Add(new JObject { ["property"] = propName, ["status"] = "skipped", ["reason"] = "unchanged" });
                     continue;
                 }
-                prop.SetValue(target, value);
+
+                var error = accessor.Set(target, propName, value);
+                if (error is not null)
+                {
+                    results.Add(new JObject { ["property"] = propName, ["status"] = "error", ["reason"] = error });
+                    continue;
+                }
+
                 successCount++;
                 results.Add(new JObject { ["property"] = propName, ["status"] = "ok" });
             }
@@ -236,25 +250,25 @@ public static class ComponentPatcher
     public static void CopyScalarProperties(object source, object target)
     {
         if (source == null || target == null) return;
-        var type = source.GetType();
 
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        var from = AIContextTreeRegistry.FindAccessor(source);
+        var to = AIContextTreeRegistry.FindAccessor(target);
+        if (from is null || to is null) return;
+
+        var sourceType = source.GetType();
+
+        foreach (var member in AIContextDirectory.Shared.MembersAcross(to.TypeName, "Properties"))
         {
-            if (!prop.CanRead || !prop.CanWrite) continue;
-            if (typeof(ICommand).IsAssignableFrom(prop.PropertyType)) continue;
-            if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType)) continue;
-            if (FrameworkManagedProperties.Contains(prop.Name)) continue;
-            if (FindBackingCommand(type, prop.Name) != null) continue;
+            if (!member.Has(AIContextFlags.CanRead) || !member.Has(AIContextFlags.CanWrite)) continue;
+            if (FrameworkManagedProperties.Contains(member.Name)) continue;
+            if (FindBackingCommand(sourceType, member.Name) != null) continue;
 
-            var pt = prop.PropertyType;
+            var pt = to.MemberType(member.Name);
+            if (pt is null) continue;
             if (pt == typeof(string) || pt == typeof(int) || pt == typeof(double) || pt == typeof(bool) ||
                 pt == typeof(long) || pt == typeof(float) || pt == typeof(decimal) || pt.IsEnum)
             {
-                try
-                {
-                    prop.SetValue(target, prop.GetValue(source));
-                }
-                catch { /* skip inaccessible */ }
+                if (from.TryGet(source, member.Name, out var value)) to.Set(target, member.Name, value);
             }
         }
     }

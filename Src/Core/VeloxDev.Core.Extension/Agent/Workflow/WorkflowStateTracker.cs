@@ -2,7 +2,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Threading;
 using VeloxDev.WorkflowSystem;
 
@@ -80,7 +79,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
             {
                 ["index"] = i,
                 ["id"] = GetRuntimeId(node),
-                ["type"] = node.GetType().Name,
+                ["type"] = AgentTypeNames.SimpleOf(node),
                 ["left"] = node.Anchor.Horizontal,
                 ["top"] = node.Anchor.Vertical,
                 ["layer"] = node.Anchor.Layer,
@@ -231,35 +230,39 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         if (component is IWorkflowIdentifiable identifiable)
             return identifiable.RuntimeId;
         throw new InvalidOperationException(
-            $"'{component.GetType().Name}' does not implement IWorkflowIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
+            $"'{AgentTypeNames.SimpleOf(component)}' does not implement IWorkflowIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
     }
 
+    /// <summary>
+    /// Captures the scalar and enum properties the context tree records for a component.
+    /// </summary>
+    /// <remarks>
+    /// The member list, their read/write status and their declared types all come from the tree; only the values
+    /// are read from the live object, through its generated accessor.
+    /// </remarks>
     private static void AppendScalarProps(JObject obj, object target)
     {
-        foreach (var prop in target.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        var accessor = AIContextTreeRegistry.FindAccessor(target);
+        if (accessor is null) return;
+
+        foreach (var member in AIContextDirectory.Shared.MembersAcross(accessor.TypeName, "Properties"))
         {
-            if (!prop.CanRead) continue;
-            var pt = prop.PropertyType;
-            if (pt == typeof(string) || pt == typeof(int) || pt == typeof(double) || pt == typeof(bool) ||
-                pt == typeof(long) || pt == typeof(float) || pt == typeof(decimal))
+            if (!member.Has(AIContextFlags.CanRead)) continue;
+            if (accessor.MemberType(member.Name) is not { } memberType) continue;
+
+            if (memberType == typeof(string) || memberType == typeof(int) || memberType == typeof(double) ||
+                memberType == typeof(bool) || memberType == typeof(long) || memberType == typeof(float) ||
+                memberType == typeof(decimal))
             {
-                try
-                {
-                    var val = prop.GetValue(target);
-                    obj[prop.Name] = val != null ? JToken.FromObject(val) : JValue.CreateNull();
-                }
-                catch { }
+                if (accessor.TryGet(target, member.Name, out var val))
+                    obj[member.Name] = val != null ? JToken.FromObject(val) : JValue.CreateNull();
             }
-            else if (pt.IsEnum)
+            else if (memberType.IsEnum)
             {
                 // Enum-typed properties (e.g. selector/routing state) are captured as their
                 // name string so diff output stays human-readable and detects changes.
-                try
-                {
-                    var val = prop.GetValue(target);
-                    obj[prop.Name] = val != null ? val.ToString() : JValue.CreateNull();
-                }
-                catch { }
+                if (accessor.TryGet(target, member.Name, out var val))
+                    obj[member.Name] = val != null ? val.ToString() : JValue.CreateNull();
             }
         }
     }

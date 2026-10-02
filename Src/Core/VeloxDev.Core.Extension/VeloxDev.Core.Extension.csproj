@@ -1,11 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>netstandard2.0</TargetFramework>
+		<TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
 		<LangVersion>latest</LangVersion>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<IsTrimmable>false</IsTrimmable>
+		<!-- 见 VeloxDev.Core.csproj：net8.0 那一档承载裁剪/AOT 契约，分析器常开。 -->
+		<IsAotCompatible Condition="'$(TargetFramework)' == 'net8.0'">true</IsAotCompatible>
 		<Title>VeloxDev.Core.Extension</Title>
 		<Version>9.0.0</Version>
 		<Authors>Axvser</Authors>

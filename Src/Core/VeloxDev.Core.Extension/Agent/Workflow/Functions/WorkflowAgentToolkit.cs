@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI.Skills;
@@ -1076,14 +1075,18 @@ public sealed class WorkflowAgentToolkit
         if (!typeof(IWorkflowNodeViewModel).IsAssignableFrom(type))
             return Error($"'{fullTypeName}' does not implement IWorkflowNodeViewModel.");
 
+        var nodeAccessor = AIContextTreeRegistry.FindAccessor(type.FullName ?? type.Name);
+        if (nodeAccessor is null) return Error($"Type '{fullTypeName}' is not in the agent context tree.");
+        if (!nodeAccessor.HasPublicParameterlessConstructor)
+            return Error($"'{fullTypeName}' cannot be created with no arguments.");
+
         // Resolve a non-zero size: the caller's explicit value wins; otherwise read the node's real
         // default baked into the field initializer by the generator ([DefaultSize]), which survives
-        // Activator.CreateInstance. Only fall back to the deterministic 300×260 if the type declares
-        // no default at all.
+        // construction. Only fall back to the deterministic 300×260 if the type declares no default at all.
         IWorkflowNodeViewModel node;
         try
         {
-            node = (IWorkflowNodeViewModel)Activator.CreateInstance(type);
+            node = (IWorkflowNodeViewModel)nodeAccessor.Create();
             if (width <= 0) width = node.Size.Width > 0 ? node.Size.Width : 300;
             if (height <= 0) height = node.Size.Height > 0 ? node.Size.Height : 260;
         }
@@ -1189,9 +1192,14 @@ public sealed class WorkflowAgentToolkit
         if (!typeof(IWorkflowSlotViewModel).IsAssignableFrom(type))
             return Error($"'{fullSlotTypeName}' does not implement IWorkflowSlotViewModel.");
 
+        var slotAccessor = AIContextTreeRegistry.FindAccessor(type.FullName ?? type.Name);
+        if (slotAccessor is null) return Error($"Type '{fullSlotTypeName}' is not in the agent context tree.");
+        if (!slotAccessor.HasPublicParameterlessConstructor)
+            return Error($"'{fullSlotTypeName}' cannot be created with no arguments.");
+
         try
         {
-            var slot = (IWorkflowSlotViewModel)Activator.CreateInstance(type);
+            var slot = (IWorkflowSlotViewModel)slotAccessor.Create();
             if (Enum.TryParse<SlotChannel>(channel, true, out var ch))
                 slot.Channel = ch;
             node.CreateSlotCommand.Execute(slot);
@@ -1216,59 +1224,45 @@ public sealed class WorkflowAgentToolkit
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var result = new JArray();
-        var type = node.GetType();
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+
+        foreach (var prop in PropertiesOf(node))
         {
             if (!prop.CanRead) continue;
 
             // SlotEnumerator<TSlot>
-            if (IsSlotEnumeratorProperty(prop.PropertyType, out _))
+            if (prop.IsSlotEnumerator)
             {
-                try
+                if (prop.Get(node) is not IConditionalSlotProvider enumerator) continue;
+
+                var ids = new JArray();
+                foreach (var item in enumerator.Slots)
                 {
-                    var enumerator = prop.GetValue(node);
-                    if (enumerator == null) continue;
-                    var enumPropType = enumerator.GetType();
-                    var selectorTypeName = enumPropType.GetProperty("SelectorTypeName")?.GetValue(enumerator) as string;
-                    var ids = new JArray();
-                    if (enumPropType.GetProperty("Items")?.GetValue(enumerator) is IEnumerable items)
-                    {
-                        foreach (var item in items)
-                        {
-                            var slotProp = item?.GetType().GetProperty("Slot");
-                            if (slotProp?.GetValue(item) is IWorkflowSlotViewModel s)
-                                ids.Add(GetComponentId(s));
-                        }
-                    }
-                    var entry = new JObject
-                    {
-                        ["name"] = prop.Name,
-                        ["collection"] = true,
-                        ["slotEnumerator"] = true,
-                        ["count"] = ids.Count,
-                        ["ids"] = ids,
-                        ["currentSelectorType"] = selectorTypeName,
-                        ["hint"] = "Use SetEnumSlotCollection to set or change the enum/bool type.",
-                    };
-
-                    // Expose allowed selector types from [SlotSelectors] on the enumerator property itself.
-                    var slotSelectorsAttr = prop.GetCustomAttribute<SlotSelectorsAttribute>();
-                    if (slotSelectorsAttr != null)
-                    {
-                        var allowedNames = GetAllowedEnumTypeDisplayNames(slotSelectorsAttr);
-                        if (!string.IsNullOrEmpty(allowedNames))
-                            entry["allowedSelectorTypes"] = new JArray(allowedNames.Split([", "], StringSplitOptions.RemoveEmptyEntries));
-                    }
-
-                    result.Add(entry);
+                    if (item.Slot is { } s) ids.Add(GetComponentId(s));
                 }
-                catch { /* skip inaccessible */ }
+
+                var entry = new JObject
+                {
+                    ["name"] = prop.Name,
+                    ["collection"] = true,
+                    ["slotEnumerator"] = true,
+                    ["count"] = ids.Count,
+                    ["ids"] = ids,
+                    ["currentSelectorType"] = enumerator.SelectorTypeName,
+                    ["hint"] = "Use SetEnumSlotCollection to set or change the enum/bool type.",
+                };
+
+                // Expose allowed selector types from [SlotSelectors] on the enumerator property itself.
+                var allowedNames = GetAllowedEnumTypeDisplayNames(prop.Node);
+                if (!string.IsNullOrEmpty(allowedNames))
+                    entry["allowedSelectorTypes"] = new JArray(allowedNames.Split([", "], StringSplitOptions.RemoveEmptyEntries));
+
+                result.Add(entry);
                 continue;
             }
 
-            if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+            if (prop.IsSingleSlot)
             {
-                var slot = prop.GetValue(node) as IWorkflowSlotViewModel;
+                var slot = prop.Get(node) as IWorkflowSlotViewModel;
                 result.Add(new JObject
                 {
                     ["name"] = prop.Name,
@@ -1277,9 +1271,9 @@ public sealed class WorkflowAgentToolkit
                     ["ch"] = slot?.Channel.ToString(),
                 });
             }
-            else if (IsSlotCollection(prop.PropertyType, out _))
+            else if (prop.IsSlotCollection)
             {
-                var col = prop.GetValue(node) as IList;
+                var col = prop.Get(node) as IList;
                 var ids = new JArray();
                 if (col != null)
                 {
@@ -1311,32 +1305,26 @@ public sealed class WorkflowAgentToolkit
         [Description("Channel: 'OneSender','OneReceiver','OneBoth','ManySender','ManyReceiver','ManyBoth'.")] string channel = "MultipleBoth")
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
-        if (!IsSlotCollection(prop.PropertyType, out _))
+        var prop = FindProperty(node, propertyName);
+        if (prop is null) return Error($"Property '{propertyName}' not found on {AgentTypeNames.SimpleOf(node)}.");
+        if (!prop.Value.IsSlotCollection)
             return Error($"Property '{propertyName}' is not a slot collection.");
 
-        if (prop.GetValue(node) is not IList col) return Error($"Collection '{propertyName}' is null.");
+        if (prop.Value.Get(node) is not IList col) return Error($"Collection '{propertyName}' is null.");
 
         var slotType = TypeIntrospector.ResolveType(fullSlotTypeName);
         if (slotType == null) return Error($"Type '{fullSlotTypeName}' not found.");
         if (!typeof(IWorkflowSlotViewModel).IsAssignableFrom(slotType))
             return Error($"'{fullSlotTypeName}' does not implement IWorkflowSlotViewModel.");
 
+        var slotAccessor = AIContextTreeRegistry.FindAccessor(slotType.FullName ?? slotType.Name);
+        if (slotAccessor is null) return Error($"Type '{fullSlotTypeName}' is not in the agent context tree.");
+        if (!slotAccessor.HasPublicParameterlessConstructor)
+            return Error($"Type '{fullSlotTypeName}' cannot be created with no arguments.");
+
         try
         {
-            // Use CreateWorkflowSlot<T> via reflection to leverage node's infrastructure
-            var createMethod = node.GetType().GetMethod("CreateWorkflowSlot");
-            IWorkflowSlotViewModel slot;
-            if (createMethod != null)
-            {
-                var generic = createMethod.MakeGenericMethod(slotType);
-                slot = (IWorkflowSlotViewModel)generic.Invoke(node, null)!;
-            }
-            else
-            {
-                slot = (IWorkflowSlotViewModel)Activator.CreateInstance(slotType);
-            }
+            var slot = (IWorkflowSlotViewModel)slotAccessor.Create();
             if (Enum.TryParse<SlotChannel>(channel, true, out var ch))
                 slot.Channel = ch;
 
@@ -1365,12 +1353,12 @@ public sealed class WorkflowAgentToolkit
         [Description("Runtime ID of the slot to remove.")] string slotRuntimeId)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
-        if (!IsSlotCollection(prop.PropertyType, out _))
+        var prop = FindProperty(node, propertyName);
+        if (prop is null) return Error($"Property '{propertyName}' not found on {AgentTypeNames.SimpleOf(node)}.");
+        if (!prop.Value.IsSlotCollection)
             return Error($"Property '{propertyName}' is not a slot collection.");
 
-        if (prop.GetValue(node) is not IList col) return Error($"Collection '{propertyName}' is null.");
+        if (prop.Value.Get(node) is not IList col) return Error($"Collection '{propertyName}' is null.");
 
         for (int i = 0; i < col.Count; i++)
         {
@@ -1392,15 +1380,14 @@ public sealed class WorkflowAgentToolkit
         [Description("Only required for non-enum ISlotProvider selectors: the fully-qualified .NET type name. Call GetTypeSchema with this name first to inspect structure before constructing JSON. Leave empty for enum/bool selectors.")] string nonEnumTypeName = "")
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var type = node.GetType();
-        var prop = type.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop == null) return Error($"Property '{propertyName}' not found on {type.Name}.");
+        var prop = FindProperty(node, propertyName);
+        if (prop is null) return Error($"Property '{propertyName}' not found on {AgentTypeNames.SimpleOf(node)}.");
 
         // SlotEnumerator<TSlot> path
-        if (IsSlotEnumeratorProperty(prop.PropertyType, out _))
+        if (prop.Value.IsSlotEnumerator)
         {
-            var enumerator = prop.GetValue(node);
-            if (enumerator == null) return Error($"SlotEnumerator '{propertyName}' is null.");
+            if (prop.Value.Get(node) is not IConditionalSlotProvider enumerator)
+                return Error($"SlotEnumerator '{propertyName}' is null.");
 
             // Determine whether we are in enum/bool mode or arbitrary-object mode
             bool isNonEnum = !string.IsNullOrWhiteSpace(nonEnumTypeName);
@@ -1412,10 +1399,9 @@ public sealed class WorkflowAgentToolkit
                 if (targetType == null) return Error($"Type '{nonEnumTypeName}' not found.");
 
                 // Validate against [SlotSelectors] whitelist when present.
-                var selectorsAttrNE = prop.GetCustomAttribute<SlotSelectorsAttribute>();
-                if (selectorsAttrNE != null && !IsEnumTypeAllowed(selectorsAttrNE, targetType))
+                if (prop.Value.Node.Has(AIContextFlags.HasSlotSelectors) && !IsEnumTypeAllowed(prop.Value.Node, targetType))
                 {
-                    var allowed = GetAllowedEnumTypeDisplayNames(selectorsAttrNE);
+                    var allowed = GetAllowedEnumTypeDisplayNames(prop.Value.Node);
                     return Error($"Selector type '{nonEnumTypeName}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
                 }
 
@@ -1463,12 +1449,11 @@ public sealed class WorkflowAgentToolkit
             // Validate against [SlotSelectors] allowed types if present on the enumerator property.
             // Framework-owned enum types (SlotChannel, SlotState, …) are always valid regardless of
             // any developer-specified whitelist — they must never be blocked by [SlotSelectors].
-            var selectorsAttr2 = prop.GetCustomAttribute<SlotSelectorsAttribute>();
-            if (selectorsAttr2 != null && !WorkflowAgentScope.IsFrameworkEnum(selectorType))
+            if (prop.Value.Node.Has(AIContextFlags.HasSlotSelectors) && !WorkflowAgentScope.IsFrameworkEnum(selectorType))
             {
-                if (!IsEnumTypeAllowed(selectorsAttr2, selectorType))
+                if (!IsEnumTypeAllowed(prop.Value.Node, selectorType))
                 {
-                    var allowed = GetAllowedEnumTypeDisplayNames(selectorsAttr2);
+                    var allowed = GetAllowedEnumTypeDisplayNames(prop.Value.Node);
                     return Error($"Selector type '{selectorTypeOrJson}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
                 }
             }
@@ -1487,17 +1472,13 @@ public sealed class WorkflowAgentToolkit
                 return Error($"SetSelector failed: {ex.Message}");
             }
 
-            var enumNames = selectorType == typeof(bool)
-                ? ["False", "True"]
-                : Enum.GetNames(selectorType);
+            var enumNames = SelectorLabels(selectorType);
             var slotIds = new JArray();
-            if (enumerator.GetType().GetProperty("Items")?.GetValue(enumerator) is IEnumerable items)
             {
                 int i = 0;
-                foreach (var item in items)
+                foreach (var item in enumerator.Slots)
                 {
-                    var slotProp = item?.GetType().GetProperty("Slot");
-                    if (slotProp?.GetValue(item) is IWorkflowSlotViewModel s)
+                    if (item.Slot is { } s)
                     {
                         slotIds.Add(new JObject
                         {
@@ -1527,112 +1508,39 @@ public sealed class WorkflowAgentToolkit
     private static Dictionary<IWorkflowSlotViewModel, string> BuildSlotPropertyMap(IWorkflowNodeViewModel node)
     {
         var map = new Dictionary<IWorkflowSlotViewModel, string>();
-        foreach (var prop in node.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+
+        foreach (var prop in PropertiesOf(node))
         {
             if (!prop.CanRead) continue;
-            try
+
+            if (prop.IsSingleSlot)
             {
-                if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+                if (prop.Get(node) is IWorkflowSlotViewModel slot)
+                    map[slot] = prop.Name;
+            }
+            else if (prop.IsSlotEnumerator)
+            {
+                if (prop.Get(node) is not IConditionalSlotProvider enumerator) continue;
+
+                for (int i = 0; i < enumerator.Slots.Count; i++)
                 {
-                    if (prop.GetValue(node) is IWorkflowSlotViewModel slot)
-                        map[slot] = prop.Name;
+                    if (enumerator.Slots[i].Slot is { } s) map[s] = $"{prop.Name}[{i}]";
                 }
-                else if (IsSlotEnumeratorProperty(prop.PropertyType, out _))
+            }
+            else if (prop.IsSlotCollection)
+            {
+                if (prop.Get(node) is IList col)
                 {
-                    var enumerator = prop.GetValue(node);
-                    if (enumerator?.GetType().GetProperty("Items")?.GetValue(enumerator) is IEnumerable items)
+                    for (int i = 0; i < col.Count; i++)
                     {
-                        int i = 0;
-                        foreach (var item in items)
-                        {
-                            var slotProp = item?.GetType().GetProperty("Slot");
-                            if (slotProp?.GetValue(item) is IWorkflowSlotViewModel s)
-                                map[s] = $"{prop.Name}[{i}]";
-                            i++;
-                        }
-                    }
-                }
-                else if (IsSlotCollection(prop.PropertyType, out _))
-                {
-                    if (prop.GetValue(node) is IList col)
-                    {
-                        for (int i = 0; i < col.Count; i++)
-                        {
-                            if (col[i] is IWorkflowSlotViewModel s)
-                                map[s] = $"{prop.Name}[{i}]";
-                        }
+                        if (col[i] is IWorkflowSlotViewModel s)
+                            map[s] = $"{prop.Name}[{i}]";
                     }
                 }
             }
-            catch { /* skip inaccessible */ }
         }
         return map;
     }
-
-    private static bool IsSlotEnumeratorProperty(Type type, out Type? slotType)
-    {
-        slotType = null;
-        if (!type.IsGenericType) return false;
-
-        // 1. Exact match: SlotEnumerator<TSlot>
-        var def = type.GetGenericTypeDefinition();
-        if (def.Name.StartsWith("SlotEnumerator`") && def.Namespace == "VeloxDev.WorkflowSystem")
-        {
-            slotType = type.GetGenericArguments()[0];
-            return true;
-        }
-
-        // 2. The type IS IConditionalSlotProvider<TSlot> itself
-        if (def.Name.StartsWith("IConditionalSlotProvider`") && def.Namespace == "VeloxDev.WorkflowSystem")
-        {
-            slotType = type.GetGenericArguments()[0];
-            return true;
-        }
-
-        // 3. The type implements IConditionalSlotProvider<TSlot>
-        foreach (var iface in type.GetInterfaces())
-        {
-            if (!iface.IsGenericType) continue;
-            var ifaceDef = iface.GetGenericTypeDefinition();
-            if (ifaceDef.Name.StartsWith("IConditionalSlotProvider`") && ifaceDef.Namespace == "VeloxDev.WorkflowSystem")
-            {
-                slotType = iface.GetGenericArguments()[0];
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsSlotCollection(Type type, out Type? itemType)
-    {
-        itemType = null;
-        if (type.IsGenericType)
-        {
-            var args = type.GetGenericArguments();
-            if (args.Length == 1 && typeof(IWorkflowSlotViewModel).IsAssignableFrom(args[0])
-                && typeof(IEnumerable).IsAssignableFrom(type))
-            {
-                itemType = args[0];
-                return true;
-            }
-        }
-        foreach (var iface in type.GetInterfaces())
-        {
-            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(ICollection<>))
-            {
-                var args = iface.GetGenericArguments();
-                if (args.Length == 1 && typeof(IWorkflowSlotViewModel).IsAssignableFrom(args[0]))
-                {
-                    itemType = args[0];
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-
 
     // ────────────────────────── Graph Traversal Functions ──────────────────────────
 
@@ -1822,7 +1730,7 @@ public sealed class WorkflowAgentToolkit
     {
         if (!TryGetSlot(nodeIndex, slotIndex, out var slot, out var error)) return error;
         if (!Enum.TryParse<SlotChannel>(channel, true, out var ch))
-            return Error($"Invalid channel '{channel}'. Valid: {string.Join(", ", Enum.GetNames(typeof(SlotChannel)))}.");
+            return Error($"Invalid channel '{channel}'. Valid: {string.Join(", ", SelectorLabels(typeof(SlotChannel)))}.");
         slot.SetChannelCommand.Execute(ch);
         return Ok($"Slot [{nodeIndex}][{slotIndex}] channel → {ch}.");
     }
@@ -1834,37 +1742,30 @@ public sealed class WorkflowAgentToolkit
         [Description("Condition value: enum name or True/False")] string conditionValue)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop == null || !IsSlotEnumeratorProperty(prop.PropertyType, out _))
+        var prop = FindProperty(node, propertyName);
+        if (prop is null || !prop.Value.IsSlotEnumerator)
             return Error($"'{propertyName}' is not SlotEnumerator on node [{nodeIndex}]");
 
-        var enumerator = prop.GetValue(node);
-        if (enumerator == null) return Error($"SlotEnumerator '{propertyName}' is null");
+        if (prop.Value.Get(node) is not IConditionalSlotProvider enumerator)
+            return Error($"SlotEnumerator '{propertyName}' is null");
 
-        var selectorType = enumerator.GetType().GetProperty("SelectorType")?.GetValue(enumerator) as Type;
-        if (selectorType == null)
+        if (enumerator.SelectorType is null)
             return Error($"No SelectorType set. Call SetEnumSlotCollection first");
 
-        object? value;
-        if (selectorType == typeof(bool))
+        // 按标签匹配，而不是把名字解析成枚举值再查表：每个条目自己就带着它的选择器值，
+        // 而把它从字符串变回枚举需要 `Enum.Parse(Type, …)` —— 那正是这里要绕开的反射。
+        IWorkflowSlotViewModel? slot = null;
+        foreach (var item in enumerator.Slots)
         {
-            if (conditionValue.Equals("True", StringComparison.OrdinalIgnoreCase)) value = true;
-            else if (conditionValue.Equals("False", StringComparison.OrdinalIgnoreCase)) value = false;
-            else return Error($"Invalid bool: '{conditionValue}'. Use True/False");
-        }
-        else if (selectorType.IsEnum)
-        {
-            try { value = Enum.Parse(selectorType, conditionValue, true); }
-            catch { return Error($"'{conditionValue}' not valid for {selectorType.Name}"); }
-        }
-        else return Error($"Selector type {selectorType.Name} neither bool nor enum");
+            if (item.Value is null) continue;
+            if (!string.Equals(item.Value.ToString(), conditionValue, StringComparison.OrdinalIgnoreCase)) continue;
 
-        var trySelect = enumerator.GetType().GetMethod("TrySelect");
-        if (trySelect == null) return Error("TrySelect not found");
-        var args = new object?[] { value, null };
-        if (!(bool)trySelect.Invoke(enumerator, args)!)
+            slot = item.Slot;
+            break;
+        }
+
+        if (slot is null)
             return Error($"'{conditionValue}' not found in SlotEnumerator");
-        if (args[1] is not IWorkflowSlotViewModel slot) return Error("TrySelect returned null slot");
 
         return new JObject
         {
@@ -1938,10 +1839,10 @@ public sealed class WorkflowAgentToolkit
         }
         else
         {
-            var prop = receiverNode!.GetType().GetProperty(receiverSlot, BindingFlags.Public | BindingFlags.Instance);
-            if (prop == null || !typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+            var prop = FindProperty(receiverNode!, receiverSlot);
+            if (prop is null || !prop.Value.IsSingleSlot)
                 return Error($"'{receiverSlot}' not a slot on node [{receiverNodeIndex}]");
-            receiver = prop.GetValue(receiverNode) as IWorkflowSlotViewModel;
+            receiver = prop.Value.Get(receiverNode!) as IWorkflowSlotViewModel;
             if (receiver == null) return Error($"Slot '{receiverSlot}' is null");
         }
 
@@ -2443,57 +2344,39 @@ public sealed class WorkflowAgentToolkit
         }, Formatting.None);
     }
 
-    [Description("Lists all node and slot types that can be created. Scans assemblies for concrete types implementing IWorkflowNodeViewModel/IWorkflowSlotViewModel with parameterless constructors.")]
+    [Description("Lists all node and slot types that can be created: the concrete workflow component types the context tree carries that have a parameterless constructor.")]
     private string ListCreatableTypes()
     {
         var nodeTypes = new JArray();
         var slotTypes = new JArray();
 
-        // Scan assemblies of registered customer components + the tree's own assembly
-        var assemblies = new HashSet<Assembly>
-        {
-            Tree.GetType().Assembly
-        };
-        foreach (var node in Tree.Nodes)
-            assemblies.Add(node.GetType().Assembly);
-        foreach (var asm in _scope.CustomerAssemblies)
-            assemblies.Add(asm);
-
-        foreach (var asm in assemblies)
-        {
-            try
-            {
-                foreach (var type in asm.GetTypes())
-                {
-                    if (type.IsAbstract || type.IsInterface) continue;
-                    if (type.GetConstructor(Type.EmptyTypes) == null) continue;
-
-                    if (typeof(IWorkflowNodeViewModel).IsAssignableFrom(type))
-                    {
-                        nodeTypes.Add(new JObject
-                        {
-                            ["fullName"] = type.FullName,
-                            ["name"] = type.Name,
-                        });
-                    }
-                    else if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(type))
-                    {
-                        slotTypes.Add(new JObject
-                        {
-                            ["fullName"] = type.FullName,
-                            ["name"] = type.Name,
-                        });
-                    }
-                }
-            }
-            catch { /* skip assemblies that fail to enumerate */ }
-        }
+        // 目录已经按四个组件接口分好了类，这里只要再问一句「能不能无参构造」。
+        AppendCreatable("Nodes", nodeTypes);
+        AppendCreatable("Slots", slotTypes);
 
         return new JObject
         {
             ["nodeTypes"] = nodeTypes,
             ["slotTypes"] = slotTypes,
         }.ToString(Formatting.None);
+
+        void AppendCreatable(string kind, JArray into)
+        {
+            foreach (var root in new[] { AIContextTreeRegistry.FrameworkRoot, AIContextTreeRegistry.CustomerRoot })
+            {
+                foreach (var name in WorkflowAgentScope.TreeTypeNames($"{root}/Components/{kind}"))
+                {
+                    var accessor = AIContextTreeRegistry.FindAccessor(name);
+                    if (accessor is null || !accessor.HasPublicParameterlessConstructor) continue;
+
+                    into.Add(new JObject
+                    {
+                        ["fullName"] = name,
+                        ["name"] = AgentTypeNames.Simple(name),
+                    });
+                }
+            }
+        }
     }
 
     [Description("Validates the workflow: checks for unconnected slots, nodes without connections, nodes with zero size, and other potential issues. Returns a list of warnings.")]
@@ -2601,18 +2484,14 @@ public sealed class WorkflowAgentToolkit
     private string GetExecutionLog()
     {
         var logs = new JArray();
-        try
+
+        // The tree's execution log is a convention-named public property on the concrete tree view
+        // model (e.g. TreeViewModel.ExecutionLog). The context tree is what says whether it is there.
+        if (FindProperty(Tree, "ExecutionLog") is { } prop && prop.Get(Tree) is System.Collections.IEnumerable entries)
         {
-            // The tree's execution log is a convention-named public property on the concrete
-            // tree view model (e.g. TreeViewModel.ExecutionLog). Read it if present.
-            var prop = Tree.GetType().GetProperty("ExecutionLog");
-            if (prop?.GetValue(Tree) is System.Collections.IEnumerable entries)
-            {
-                foreach (var e in entries)
-                    if (e is not null) logs.Add(e.ToString());
-            }
+            foreach (var e in entries)
+                if (e is not null) logs.Add(e.ToString());
         }
-        catch { /* tree exposes no ExecutionLog — return empty */ }
 
         return new JObject { ["status"] = "ok", ["entryCount"] = logs.Count, ["entries"] = logs }.ToString(Formatting.None);
     }
@@ -2834,89 +2713,132 @@ public sealed class WorkflowAgentToolkit
             $"'{component.GetType().Name}' does not implement IWorkflowIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
     }
 
+    /// <summary>
+    /// One property of a live component, as the context tree describes it.
+    /// </summary>
+    /// <remarks>
+    /// The accessor is the one belonging to the type that <i>declares</i> the member, not the target's own: the
+    /// tree lists a derived type's inherited members through its base link, and only the declaring type's
+    /// generated switch has a case for them.
+    /// </remarks>
+    private readonly struct TreeProperty(string name, AIContextNode node, IAIContextAccessor accessor)
+    {
+        internal string Name => name;
+        internal AIContextNode Node => node;
+        internal IAIContextAccessor Accessor => accessor;
+
+        internal bool CanRead => node.Has(AIContextFlags.CanRead);
+        internal bool CanWrite => node.Has(AIContextFlags.CanWrite);
+        internal bool IsSlotEnumerator => node.Has(AIContextFlags.IsSlotEnumerator);
+        internal bool IsSingleSlot => node.Has(AIContextFlags.IsSingleSlot);
+        internal bool IsSlotCollection => node.Has(AIContextFlags.IsSlotCollection);
+
+        /// <summary>The declared type, from the accessor's <c>typeof</c> literal.</summary>
+        internal Type? Type => accessor.MemberType(name);
+
+        /// <summary>
+        /// Reads the member, treating a throwing getter the way the reflective walk did: as nothing to report.
+        /// </summary>
+        internal object? Get(object target)
+        {
+            try { return accessor.TryGet(target, name, out var value) ? value : null; }
+            catch { return null; }
+        }
+    }
+
+    /// <summary>Every property the tree records for an object, including the ones it inherits.</summary>
+    private static IEnumerable<TreeProperty> PropertiesOf(object target)
+    {
+        var accessor = AIContextTreeRegistry.FindAccessor(target);
+        if (accessor is null) yield break;
+
+        foreach (var node in AIContextDirectory.Shared.MembersAcross(accessor.TypeName, "Properties"))
+        {
+            var declaring = node.OwnerTypeName is { Length: > 0 } owner
+                ? AIContextTreeRegistry.FindAccessor(owner) ?? accessor
+                : accessor;
+
+            yield return new TreeProperty(node.Name, node, declaring);
+        }
+    }
+
+    /// <summary>One property by name, or <see langword="null"/> when the tree records none.</summary>
+    private static TreeProperty? FindProperty(object target, string name)
+    {
+        foreach (var property in PropertiesOf(target))
+        {
+            if (string.Equals(property.Name, name, StringComparison.Ordinal)) return property;
+        }
+
+        return null;
+    }
+
     private static void AppendScalarProperties(JObject obj, object target)
     {
-        foreach (var prop in target.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        foreach (var prop in PropertiesOf(target))
         {
             if (!prop.CanRead) continue;
-            var pt = prop.PropertyType;
+
+            var pt = prop.Type;
+            if (pt is null) continue;
+
             if (pt == typeof(string) || pt == typeof(int) || pt == typeof(double) || pt == typeof(bool) ||
                 pt == typeof(long) || pt == typeof(float) || pt == typeof(decimal))
             {
-                try
-                {
-                    var val = prop.GetValue(target);
-                    obj[prop.Name] = val != null ? JToken.FromObject(val) : JValue.CreateNull();
-                }
-                catch { /* skip inaccessible */ }
+                var val = prop.Get(target);
+                obj[prop.Name] = val != null ? JToken.FromObject(val) : JValue.CreateNull();
             }
             else if (pt == typeof(Type))
             {
-                try
-                {
-                    var val = prop.GetValue(target) as Type;
-                    obj[prop.Name] = val?.FullName;
-                }
-                catch { /* skip inaccessible */ }
+                obj[prop.Name] = (prop.Get(target) as Type)?.FullName;
             }
             else if (pt.IsEnum)
             {
-                try
-                {
-                    var val = prop.GetValue(target);
-                    obj[prop.Name] = val?.ToString();
-                }
-                catch { /* skip inaccessible */ }
+                obj[prop.Name] = prop.Get(target)?.ToString();
             }
         }
     }
 
     /// <summary>
-    /// Checks if a given selector type is allowed by the <see cref="SlotSelectorsAttribute"/>.
-    /// Supports both <see cref="SlotSelectorsAttribute.AllowedEnumTypes"/> (Type[]) and
-    /// <see cref="SlotSelectorsAttribute.AllowedEnumTypeNames"/> (string[]).
-    /// Returns <c>true</c> if no constraints are specified (both arrays empty).
+    /// Checks whether a selector type is allowed by a member's <c>[SlotSelectors]</c> whitelist.
     /// </summary>
-    private static bool IsEnumTypeAllowed(SlotSelectorsAttribute attr, Type enumType)
+    /// <param name="member">The enumerator property, as the tree records it.</param>
+    /// <param name="selectorType">The selector type being proposed.</param>
+    /// <returns><see langword="true"/> when the member declares no whitelist, or the type is on it.</returns>
+    private static bool IsEnumTypeAllowed(AIContextNode member, Type selectorType)
     {
-        bool hasTypeConstraints = attr.AllowedEnumTypes.Length > 0;
-        bool hasNameConstraints = attr.AllowedEnumTypeNames.Length > 0;
+        var fullName = selectorType.FullName ?? selectorType.Name;
+        var constrained = false;
 
-        if (!hasTypeConstraints && !hasNameConstraints)
-            return true; // No constraints — any enum is allowed
-
-        // Check Type[] first
-        if (hasTypeConstraints && attr.AllowedEnumTypes.Contains(enumType))
-            return true;
-
-        // Check string[] (FullName match)
-        if (hasNameConstraints)
+        foreach (var reference in member.References)
         {
-            var fullName = enumType.FullName;
-            foreach (var name in attr.AllowedEnumTypeNames)
-            {
-                if (string.Equals(name, fullName, StringComparison.Ordinal))
-                    return true;
-            }
+            if (reference.Kind != AIContextRefKind.SlotSelectorType) continue;
+
+            constrained = true;
+            if (string.Equals(reference.DeclaredName, fullName, StringComparison.Ordinal)) return true;
         }
 
-        return false;
+        // 一条白名单都没有 = 不设限。
+        return !constrained;
     }
 
-    /// <summary>
-    /// Returns a comma-separated display string of all allowed enum type names from the attribute.
-    /// Merges both <see cref="SlotSelectorsAttribute.AllowedEnumTypes"/> and
-    /// <see cref="SlotSelectorsAttribute.AllowedEnumTypeNames"/>.
-    /// </summary>
-    private static string GetAllowedEnumTypeDisplayNames(SlotSelectorsAttribute attr)
+    /// <summary>The labels a selector type's slots carry, in the order the slots are created.</summary>
+    private static string[] SelectorLabels(Type selectorType)
     {
-        var names = new HashSet<string>();
-        foreach (var t in attr.AllowedEnumTypes)
-            names.Add(t.FullName);
-        foreach (var n in attr.AllowedEnumTypeNames)
-            names.Add(n);
-        return string.Join(", ", names);
+        if (selectorType == typeof(bool)) return ["False", "True"];
+
+        var path = AIContextDirectory.Shared.PathFor(selectorType.FullName ?? selectorType.Name);
+        if (path is null) return [];
+
+        return [.. AIContextDirectory.Shared.List(path + "/Members").Select(static m => m.Name)];
     }
+
+    /// <summary>All allowed selector type names a member declares, comma-separated.</summary>
+    private static string GetAllowedEnumTypeDisplayNames(AIContextNode member)
+        => string.Join(", ", member.References
+            .Where(static r => r.Kind == AIContextRefKind.SlotSelectorType)
+            .Select(static r => r.DeclaredName)
+            .Distinct(StringComparer.Ordinal));
 
     [Description("Finds nodes by type name (substring match) or property value. Returns compact list like ListNodes but filtered. Saves tokens vs. ListNodes + manual filtering.")]
     private string FindNodes(
@@ -2936,10 +2858,9 @@ public sealed class WorkflowAgentToolkit
 
             if (!string.IsNullOrEmpty(propertyName))
             {
-                var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-                if (prop == null || !prop.CanRead) continue;
-                var val = prop.GetValue(node);
-                var valStr = val?.ToString() ?? "";
+                var prop = FindProperty(node, propertyName!);
+                if (prop is null || !prop.Value.CanRead) continue;
+                var valStr = prop.Value.Get(node)?.ToString() ?? "";
                 if (propertyValue != null && !string.Equals(valStr, propertyValue, StringComparison.OrdinalIgnoreCase))
                     continue;
             }
@@ -2963,17 +2884,17 @@ public sealed class WorkflowAgentToolkit
         [Description("For collection properties, the zero-based index within the collection. Ignored for single-slot properties.")] int collectionIndex = 0)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
+        var prop = FindProperty(node, propertyName);
+        if (prop is null) return Error($"Property '{propertyName}' not found on {AgentTypeNames.SimpleOf(node)}.");
 
-        if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+        if (prop.Value.IsSingleSlot)
         {
-            if (prop.GetValue(node) is not IWorkflowSlotViewModel slot) return Error($"Slot property '{propertyName}' is null.");
+            if (prop.Value.Get(node) is not IWorkflowSlotViewModel slot) return Error($"Slot property '{propertyName}' is null.");
             return JsonConvert.SerializeObject(new { status = "ok", id = GetComponentId(slot), prop = propertyName }, Formatting.None);
         }
-        else if (IsSlotCollection(prop.PropertyType, out _))
+        else if (prop.Value.IsSlotCollection)
         {
-            if (prop.GetValue(node) is not IList col || collectionIndex < 0 || collectionIndex >= col.Count)
+            if (prop.Value.Get(node) is not IList col || collectionIndex < 0 || collectionIndex >= col.Count)
                 return Error($"Collection property '{propertyName}' index {collectionIndex} out of range or null.");
             if (col[collectionIndex] is not IWorkflowSlotViewModel slot2)
                 return Error($"Element at [{collectionIndex}] is not a slot.");
@@ -3073,30 +2994,23 @@ public sealed class WorkflowAgentToolkit
     private IWorkflowSlotViewModel? ResolveSlotFromProperty(int nodeIndex, string propertyName, int collectionIndex = 0)
     {
         if (!TryGetNode(nodeIndex, out var node, out _) || node == null) return null;
-        var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop == null || !prop.CanRead) return null;
+        var prop = FindProperty(node, propertyName);
+        if (prop is null || !prop.Value.CanRead) return null;
 
-        if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
-            return prop.GetValue(node) as IWorkflowSlotViewModel;
+        if (prop.Value.IsSingleSlot)
+            return prop.Value.Get(node) as IWorkflowSlotViewModel;
 
-        if (IsSlotEnumeratorProperty(prop.PropertyType, out _))
+        if (prop.Value.IsSlotEnumerator)
         {
-            var enumerator = prop.GetValue(node);
-            if (enumerator == null) return null;
-            if (enumerator.GetType().GetProperty("Items")?.GetValue(enumerator) is not IEnumerable items) return null;
-            int i = 0;
-            foreach (var item in items)
-            {
-                if (i == collectionIndex)
-                    return item?.GetType().GetProperty("Slot")?.GetValue(item) as IWorkflowSlotViewModel;
-                i++;
-            }
-            return null;
+            if (prop.Value.Get(node) is not IConditionalSlotProvider enumerator) return null;
+            if (collectionIndex < 0 || collectionIndex >= enumerator.Slots.Count) return null;
+
+            return enumerator.Slots[collectionIndex].Slot;
         }
 
-        if (IsSlotCollection(prop.PropertyType, out _))
+        if (prop.Value.IsSlotCollection)
         {
-            if (prop.GetValue(node) is not IList col || collectionIndex < 0 || collectionIndex >= col.Count)
+            if (prop.Value.Get(node) is not IList col || collectionIndex < 0 || collectionIndex >= col.Count)
                 return null;
             return col[collectionIndex] as IWorkflowSlotViewModel;
         }
@@ -3116,11 +3030,7 @@ public sealed class WorkflowAgentToolkit
     }
 
     private static bool HasSlotEnumerator(IWorkflowNodeViewModel node)
-    {
-        return node.GetType()
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Any(p => IsSlotEnumeratorProperty(p.PropertyType, out _));
-    }
+        => PropertiesOf(node).Any(static p => p.IsSlotEnumerator);
 
     /// <summary>
     /// Verifies a SlotEnumerator is actually installed on the given node before mutating it.
@@ -3128,33 +3038,22 @@ public sealed class WorkflowAgentToolkit
     /// explicit error instead (matching the framework's no-silent-failures contract).
     /// </summary>
     private static bool IsEnumeratorInstalled(object enumerator, IWorkflowNodeViewModel node)
-    {
-        return enumerator.GetType().GetProperty("Parent")?.GetValue(enumerator) is IWorkflowNodeViewModel parent
-            && ReferenceEquals(parent, node);
-    }
+        => enumerator is IConditionalSlotProvider provider && ReferenceEquals(provider.Parent, node);
 
     /// <summary>
-    /// Invokes Core's <c>IConditionalSlotProvider&lt;T&gt;.SetSelector</c> — the native channel for
-    /// switching a SlotEnumerator's selector — instead of reflecting the concrete type's method.
-    /// Routing through the interface keeps the call correct for any provider implementation
-    /// (including custom ones with an explicit interface implementation), and is more robust under
-    /// trimming/AOT than <c>GetMethod</c> on the runtime type.
+    /// Switches a SlotEnumerator's selector through Core's non-generic <c>IConditionalSlotProvider</c> view.
     /// </summary>
+    /// <remarks>
+    /// The enumerator is generic, so a caller holding one as an object cannot name its slot type — the
+    /// non-generic interface is what makes this an ordinary call instead of a reflective lookup of
+    /// <c>SetSelector</c> on whichever <c>IConditionalSlotProvider&lt;T&gt;</c> the concrete type implements.
+    /// </remarks>
     private static void InvokeSetSelector(object enumerator, object? selector)
     {
-        var type = enumerator.GetType();
-        foreach (var iface in type.GetInterfaces())
-        {
-            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IConditionalSlotProvider<>))
-            {
-                var setSelector = iface.GetMethod("SetSelector");
-                if (setSelector is null)
-                    throw new InvalidOperationException("IConditionalSlotProvider<T> does not expose SetSelector.");
-                setSelector.Invoke(enumerator, [selector]);
-                return;
-            }
-        }
-        throw new InvalidOperationException($"'{type.FullName}' does not implement IConditionalSlotProvider<T>.");
+        if (enumerator is not IConditionalSlotProvider provider)
+            throw new InvalidOperationException($"'{AgentTypeNames.SimpleOf(enumerator)}' does not implement IConditionalSlotProvider<T>.");
+
+        provider.SetSelector(selector);
     }
 
     private static void RefreshSlotAnchorsIfEnumSlotNode(IWorkflowNodeViewModel node)

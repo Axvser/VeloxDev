@@ -1,11 +1,20 @@
-using System.Reflection;
-
 namespace VeloxDev.AI;
 
 /// <summary>
-/// Provides generic reflection-based property read/write capabilities for Agent scenarios.
-/// Framework-agnostic — works with any .NET object, not limited to workflow components.
+/// Describes and edits an object's properties through the compiled agent context tree.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Framework-agnostic — works with any object the tree carries an entry for, not limited to workflow components.
+/// Nothing here reflects: the property list, its types and its read/write status were all recorded when the
+/// declaring assembly was compiled, and the write goes through that type's generated
+/// <see cref="IAIContextAccessor"/>.
+/// </para>
+/// <para>
+/// The consequence is a closed world. A type whose assembly was not compiled with the context tree generator has
+/// no entry, so it is neither describable nor writable — the answer is an empty list or a refusal, never a guess.
+/// </para>
+/// </remarks>
 public static class AgentPropertyAccessor
 {
     /// <summary>
@@ -14,7 +23,13 @@ public static class AgentPropertyAccessor
     public sealed class PropertyDescriptor
     {
         public string Name { get; set; } = string.Empty;
-        public Type PropertyType { get; set; } = typeof(object);
+
+        /// <summary>
+        /// The declared type's full name, as the tree records it — e.g. <c>System.Int32</c>. Never a
+        /// <see cref="System.Type"/>, which is what keeps the descriptor trimmable.
+        /// </summary>
+        public string PropertyType { get; set; } = "System.Object";
+
         public bool CanRead { get; set; }
         public bool CanWrite { get; set; }
         public object? CurrentValue { get; set; }
@@ -32,41 +47,41 @@ public static class AgentPropertyAccessor
     }
 
     /// <summary>
-    /// Discovers all public instance properties on the target object.
-    /// Optionally filters by a predicate and attaches <see cref="AgentContextAttribute"/> descriptions.
+    /// Discovers the public instance properties the tree records for the target object, including the ones it
+    /// inherits. Optionally filters by a predicate and attaches <c>[AgentContext]</c> descriptions.
     /// </summary>
     /// <param name="target">The object to inspect.</param>
-    /// <param name="language">Language for <see cref="AgentContextAttribute"/> lookup.</param>
-    /// <param name="filter">Optional predicate to exclude properties (return <c>false</c> to skip).</param>
-    /// <param name="includeValues">If <c>true</c>, reads current property values (may throw on some properties).</param>
+    /// <param name="language">Language for <c>[AgentContext]</c> lookup.</param>
+    /// <param name="filter">Optional predicate over the property name (return <c>false</c> to skip).</param>
+    /// <param name="includeValues">If <c>true</c>, reads current property values.</param>
+    /// <returns>The descriptors; empty when the target is <c>null</c> or its type has no entry in the tree.</returns>
     public static IReadOnlyList<PropertyDescriptor> DiscoverProperties(
         object target,
         AgentLanguages language = AgentLanguages.English,
-        Func<PropertyInfo, bool>? filter = null,
+        Func<string, bool>? filter = null,
         bool includeValues = false)
     {
-        if (target == null) return [];
+        if (AIContextMembers.TypeNameOf(target) is not { } typeName) return [];
 
-        var type = target.GetType();
         var result = new List<PropertyDescriptor>();
 
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        foreach (var node in AIContextDirectory.Shared.MembersAcross(typeName, "Properties"))
         {
-            if (filter != null && !filter(prop)) continue;
+            if (filter != null && !filter(node.Name)) continue;
 
             var desc = new PropertyDescriptor
             {
-                Name = prop.Name,
-                PropertyType = prop.PropertyType,
-                CanRead = prop.CanRead,
-                CanWrite = prop.CanWrite,
-                AgentDescriptions = AgentContextReader.GetContexts(prop, language),
+                Name = node.Name,
+                PropertyType = node.TypeName ?? string.Empty,
+                CanRead = node.Has(AIContextFlags.CanRead),
+                CanWrite = node.Has(AIContextFlags.CanWrite),
+                AgentDescriptions = AIContextMembers.DescriptionsFor(node, language),
             };
 
-            if (includeValues && prop.CanRead)
+            if (includeValues && desc.CanRead)
             {
-                try { desc.CurrentValue = prop.GetValue(target); }
-                catch { /* inaccessible */ }
+                var accessor = AIContextMembers.AccessorFor(node);
+                if (accessor != null && accessor.TryGet(target, node.Name, out var value)) desc.CurrentValue = value;
             }
 
             result.Add(desc);
@@ -76,54 +91,59 @@ public static class AgentPropertyAccessor
     }
 
     /// <summary>
-    /// Gets the value of a named property via reflection.
+    /// Gets the value of a named property.
     /// </summary>
-    /// <returns>The property value, or <c>null</c> if not found or not readable.</returns>
+    /// <returns>The value, or <c>null</c> when the property is not in the tree or is not readable.</returns>
     public static object? GetPropertyValue(object target, string propertyName)
     {
-        if (target == null) return null;
-        var prop = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop == null || !prop.CanRead) return null;
-        return prop.GetValue(target);
+        if (AIContextMembers.TypeNameOf(target) is not { } typeName) return null;
+
+        var node = AIContextMembers.Find(typeName, "Properties", propertyName);
+        if (node == null || !node.Has(AIContextFlags.CanRead)) return null;
+
+        var accessor = AIContextMembers.AccessorFor(node);
+        return accessor != null && accessor.TryGet(target, propertyName, out var value) ? value : null;
     }
 
     /// <summary>
-    /// Sets the value of a named property via reflection.
+    /// Sets the value of a named property, converting the value to the property's own type.
     /// </summary>
+    /// <param name="target">The object to write to.</param>
+    /// <param name="propertyName">The property's name.</param>
+    /// <param name="value">The value to write.</param>
+    /// <returns>A result carrying the reason when the write was refused.</returns>
     public static SetResult SetPropertyValue(object target, string propertyName, object? value)
     {
         var result = new SetResult { PropertyName = propertyName };
 
-        if (target == null)
+        if (AIContextMembers.TypeNameOf(target) is not { } typeName)
         {
-            result.Error = "Target is null.";
+            result.Error = "Target is null, or its type is not in the agent context tree.";
             return result;
         }
 
-        var prop = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (prop == null)
+        var node = AIContextMembers.Find(typeName, "Properties", propertyName);
+        if (node == null)
         {
-            result.Error = $"Property '{propertyName}' not found on type '{target.GetType().FullName}'.";
+            result.Error = $"Property '{propertyName}' is not in the agent context tree for type '{typeName}'.";
             return result;
         }
 
-        if (!prop.CanWrite)
+        if (!node.Has(AIContextFlags.CanWrite))
         {
             result.Error = $"Property '{propertyName}' is read-only.";
             return result;
         }
 
-        try
+        var accessor = AIContextMembers.AccessorFor(node);
+        if (accessor == null)
         {
-            var converted = ConvertValue(value, prop.PropertyType);
-            prop.SetValue(target, converted);
-            result.Success = true;
-        }
-        catch (Exception ex)
-        {
-            result.Error = $"Failed to set '{propertyName}': {ex.Message}";
+            result.Error = $"No accessor is registered for type '{node.OwnerTypeName}'.";
+            return result;
         }
 
+        result.Error = accessor.Set(target, propertyName, value);
+        result.Success = result.Error == null;
         return result;
     }
 
@@ -161,57 +181,15 @@ public static class AgentPropertyAccessor
     }
 
     /// <summary>
-    /// Copies all writable scalar properties from source to target.
-    /// Skips properties that match the <paramref name="skip"/> predicate.
+    /// Copies the writable properties two objects have in common from source to target, by name.
     /// </summary>
-    public static void CopyScalarProperties(
-        object source,
-        object target,
-        Func<PropertyInfo, bool>? skip = null)
+    /// <param name="source">The object to read from. It must be in the tree too.</param>
+    /// <param name="target">The object to write to.</param>
+    /// <returns>The number of properties copied.</returns>
+    public static int CopyScalarProperties(object source, object target)
     {
-        if (source == null || target == null) return;
-        var type = source.GetType();
+        if (source == null || target == null) return 0;
 
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-        {
-            if (!prop.CanRead || !prop.CanWrite) continue;
-            if (skip != null && skip(prop)) continue;
-
-            var pt = prop.PropertyType;
-            if (pt == typeof(string) || pt == typeof(int) || pt == typeof(double) || pt == typeof(bool) ||
-                pt == typeof(long) || pt == typeof(float) || pt == typeof(decimal) || pt.IsEnum ||
-                pt == typeof(byte) || pt == typeof(short) || pt == typeof(char))
-            {
-                try { prop.SetValue(target, prop.GetValue(source)); }
-                catch { /* skip inaccessible */ }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Attempts basic type conversion for common primitives and enums.
-    /// </summary>
-    private static object? ConvertValue(object? value, Type targetType)
-    {
-        if (value == null)
-        {
-            if (targetType.IsValueType && Nullable.GetUnderlyingType(targetType) == null)
-                throw new InvalidCastException($"Cannot assign null to non-nullable type '{targetType.FullName}'.");
-            return null;
-        }
-
-        var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
-
-        if (underlying.IsAssignableFrom(value.GetType()))
-            return value;
-
-        if (underlying.IsEnum)
-        {
-            if (value is string s)
-                return Enum.Parse(underlying, s, ignoreCase: true);
-            return Enum.ToObject(underlying, value);
-        }
-
-        return Convert.ChangeType(value, underlying);
+        return AIContextTreeRegistry.FindAccessor(target)?.CopyScalarFrom(source, target) ?? 0;
     }
 }

@@ -80,6 +80,15 @@ public enum AIContextFlags
 
     /// <summary>The entry describes a framework type rather than one from the consuming assembly.</summary>
     IsFramework = 1024,
+
+    /// <summary>A parameter that may be omitted by the caller.</summary>
+    Optional = 2048,
+
+    /// <summary>The entry describes a value type rather than a reference type.</summary>
+    IsValueType = 4096,
+
+    /// <summary>The member is a collection of slots rather than one slot.</summary>
+    IsSlotCollection = 8192,
 }
 
 /// <summary>
