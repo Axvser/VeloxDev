@@ -1,6 +1,7 @@
 # AI — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/AI/`（13 个 .cs）。**目录名 `AI`，命名空间是 `VeloxDev.AI`** —— 两者不同名，`grep VeloxDev.AI` 会连带命中消费方。
+> 代码：`Src/Core/VeloxDev.Core/AI/`（18 个 .cs）。**目录名 `AI`，命名空间是 `VeloxDev.AI`** —— 两者不同名，`grep VeloxDev.AI` 会连带命中消费方。
+> **两条并存的路径**：`AgentContextReader` / `AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor` / `AgentTypeResolver` 是运行期反射那一条（下面 §一~§五 讲的就是它）；`AIContextTree.cs` / `AIContextTreeRegistry.cs` / `AgentText.cs` / `IAIContextAccessor.cs` / `AIContextConvert.cs` 是**编译期静态目录**那一条（见 §七）。两条今天都活着，消费方还在走反射那条。
 > 消费方：`Src/Core/VeloxDev.Core.Extension/Agent/`（**52** 个 .cs，命名空间同样以 `VeloxDev.AI` 起头：`VeloxDev.AI.Pipelines`、`VeloxDev.AI.Workflow`、`VeloxDev.AI.MCP`、`VeloxDev.AI.Skills`）。**别把 `Agent/` 与整个 `VeloxDev.Core.Extension` 项目搞混**：整个项目是 55 个 .cs（2026-09-26 实测；含 `Compat/NotNullWhenAttribute.cs` 这类非 Agent/ 下的文件），`Agent/` 只是其中 52 个（其余是框架侧的 `WorkflowSystem` 辅助、`TransitionSystem`、`MVVM` 等，与本模块无关）。**依赖方向单向：Extension → Core**。Core/AI 不引用 Extension 的任何东西，也不引用 `VeloxDev.WorkflowSystem` 的类型 —— 唯一一处提及是 `SlotSelectorsAttribute.cs:4` 的 XML 注释 `cref`（同程序集，所以能解析，但不是编译期依赖）。
 > 平台差异：**本模块没有平台轴**。整个 `AI/` 只 `using System.Reflection` 与 `System.Windows.Input`（后者在 .NET Core 由 `System.ObjectModel` 提供，不是 WPF 依赖）。所以本模块没有 `adapters/`。
 
@@ -107,7 +108,7 @@ SetProperty(obj, "Name", v)     → ConvertValue → prop.SetValue → SetResult
 7. **`FindParameterAttribute` 会猜「后备方法」**：`commandName.Replace("Command", "")`（`:239`）—— `Replace` 替换**所有**出现，`"CommandHistoryCommand"` 会变成 `"History"`。
 8. **`DiscoverCommands` 的输出顺序未定义**（`type.GetInterfaces()` 的顺序不是规范）；两次调用之间、两台机器之间都可能不同。名字本身会被去重，顺序不会。
 9. **`AgentContextReader.HasAgentContext` 不看语言**（`:32-35`）：只要有任何语言的 `[AgentContext]` 就为 true。
-10. **反射未加裁剪注解。** `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 TargetFrameworks 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0` 且 `IsTrimmable=false`；`AI/` 里 `RequiresUnreferencedCode`/`DynamicallyAccessedMembers` 零处。也就是说这套反射**没有 AOT/裁剪契约**；消费方要裁剪就必须自己保住元数据。
+10. **反射未加裁剪注解。** `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 TargetFrameworks 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0` 且 `IsTrimmable=false`；反射那条路径里 `RequiresUnreferencedCode`/`DynamicallyAccessedMembers` 零处。也就是说这套反射**没有 AOT/裁剪契约**；消费方要裁剪就必须自己保住元数据。**这正是 §七 那棵静态目录要取代的东西** —— 但目录今天还没有消费方，所以这条仍然成立。
 
 ---
 
@@ -124,3 +125,58 @@ SetProperty(obj, "Name", v)     → ConvertValue → prop.SetValue → SetResult
 | 确认 / 选择 / 工具调用的事件负载 | `AgentConfirmationEventArgs.cs`、`AgentSelectionEventArgs.cs`、`AgentToolCallEventArgs.cs` |
 | `SlotSelectors` 的行为 | **不在本模块** —— `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1293`、`.../Functions/ComponentPatcher.cs:128` |
 | 工具面的整体装配（谁把描述符变成工具） | `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs`（通用对象）、`.../Agent/Workflow/WorkflowAgentScope.cs`（工作流） |
+
+---
+
+## 七、AIContextTree：编译期静态目录（Stage 0，尚无消费方）
+
+**为什么有它。** §五·10 记的那条 —— 整套 Agent 面靠运行期反射，没有任何裁剪/AOT 契约。`AIContextTree` 是把「Agent 面是什么」和「怎么对一个对象动手」都前移到编译期的那条路，目标就是让这套东西在 NativeAOT 下工作。**今天它是死代码**：生成器在产出、注册表在注册，但 `AgentContextCollector` 与 `WorkflowAgentScope` 仍走反射那条。
+
+### 两半，必须分开理解
+
+| | 装什么 | 为什么 |
+|---|---|---|
+| `AIContextTree`（目录） | 字符串、枚举、整数、数组。**没有** `Type` / `MemberInfo` / 委托 | 模型被**告知**什么。它里面任何东西都不 root 元数据，所以可裁剪 |
+| `IAIContextAccessor`（访问器） | 每个类型一个生成的类，含 `Type TargetType => typeof(T)` 与成员操作 | 对对象**做**什么。`typeof` 字面量裁剪安全，且恰好 root 访问器真正碰到的成员 |
+
+目录之所以能只装数据，是因为**类型身份全由访问器承担**。一个只以字符串出现在目录里的类型（如 `[SlotSelectors("Some.Type")]`），不由目录 root，而由它自己那个访问器 root。
+
+### 一个「引用」是 `(kind, path, declaredName)` 三元组
+
+`AIContextRef`（`AIContextTree.cs`）不装结点、不装委托：委托是指向生成代码的托管指针，会让裁剪行为依赖委托构造。`Path` 是稳定可读的路径（`Framework/Components/Slots/<类型全名>`），解析是注册表里一次字典查找；为空时回退到 `DeclaredName`，那是 `[SlotSelectors("…")]` 允许写编译期不存在的名字时唯一还能报告的东西。
+
+### 目录的形状
+
+```
+Framework/                          ← Core 自己产的分片（VeloxAgentContextTreeRoot=Framework）
+  Components/{Nodes,Slots,Links,Trees}/<类型全名>/{Properties,Fields,Commands,Methods}
+  Interfaces/<类型全名>/Properties     Enums/<类型全名>/Members     Data/<类型全名>/…
+Customer/                           ← 每个消费者程序集一个分片（默认根）
+  …同上
+```
+
+`Components` 下四分不是发明的：`WorkflowAgentScope` 的自动发现本来就按这四个接口分类。四个默认视图模型、框架枚举/接口/数据也都在 `Framework/` 里，`WorkflowAgentScope` 那四个手维护的 `Type[]`（`:34-50`）是它们的手写前身。
+
+### 惰性：一个目录一个 `Lazy`
+
+生成器**逐目录**产出 `Lazy<AIContextNode[]>`，`ChildrenOf(path)` 是一个按路径字符串分派的 `switch`。列一个目录只构建那个目录；解析一个 `Ref` 是独立调用，没有任何遍历会为了它走进子目录。类型名索引同样是首次访问时才建字典。
+
+### 生成器：`Src/Generators/VeloxDev.Core.Generator/AIContextTree.cs`
+
+**它不套用 `Analizer.Filters.Targets`**，三处独立的理由：那个管线只接受 `ClassDeclarationSyntax` 且要求 `partial`（接口与枚举进不来，而它们是目录的一等公民）；它的触发集 `TriggerAttributes` 不含三个 Agent 特性；而组件的身份是**实现了哪个接口**，特性触发表达不了。它走一次编译级遍历，一次 `AddSource`。两条守卫：编译单元里没有 `VeloxDev.AI.AgentContextAttribute` 就整体不产出；`VeloxAgentContextTree=false` 可整体关闭。
+
+**框架分片必须在 Core 内部生成。** 决定性理由：`GetClassContext` 渲染带 `[VeloxProperty]` 的**私有实例字段**（`AgentContextCollector.cs:160-168` 用 `BindingFlags.NonPublic`），而 Roslyn **引用程序集里没有私有成员** —— 消费者侧去读引用程序集符号会静默丢掉每一个字段行。
+
+### 三条必须记住的坑
+
+1. **生成器之间看不见彼此的产物。** 目录里的 `Channel` 是 MVVM 生成器写出来的属性，`SaveCommand` 是 CommandWriter 写出来的 —— `AIContextTree` 生成器**看不到它们**，只能复现命名规则。所以规则抽在 `Base/AIContextNaming.cs`，`MVVMFieldAnalizer`（`Analizer.cs`）与 `CommandWriter.cs:153` 都改为转调它。**改命名规则只改那一处；改一处漏一处会让目录开始命名不存在的成员，报错落在消费方编译里。**
+2. **`[VeloxCommand]` 方法在实现类里普遍是 `private`。** 生成出来的命令属性却是公开的，所以命令的收录**不能按方法可见性过滤** —— 按 `Public` 过滤会把整个命令面漏掉（`SlotDefaultViewModel` 的四条命令全是 private）。
+3. **访问器够不着别的类型的 `private` 成员。** 提升属性靠的是**生成出来的那个属性**（同一个类里，编得过），不是字段本身。
+
+### 明确不在目录里的东西（都不是漏，是判过）
+
+泛型类型与泛型方法（`T` 在生成的 cast 里没有绑定）、静态类（`(Static)target` 编不过）、`private`/`protected`/`file` 类型、编译器生成的名字。同元数的重载只留一个 —— 运行期本来也分不开。
+
+### 验证在哪
+
+`Src/Core/VeloxDev.Core.Test/AI/AIContextTreeTests.cs`（8 条）。含**反向对照**：一个没被标注的类型必须查不到路径也没有访问器 —— 目录一旦放宽收录规则，那条会先红。

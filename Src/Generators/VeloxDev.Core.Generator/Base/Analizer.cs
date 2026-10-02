@@ -253,25 +253,9 @@ namespace VeloxDev.Generators.Base
                 return typeSymbol.NullableAnnotation == NullableAnnotation.Annotated;
             }
 
+            // 规则本体在 AIContextNaming：上下文树的生成器看不见这里的产物，只能复现同一个命名规则。
             private static string GetPropertyNameFromFieldName(string fieldName)
-            {
-                var start = fieldName.StartsWith("_") ? 1 : 0;
-
-                // 单字符 "_" 会越界；首字符不是字母/下划线（如 "_1x"）推不出合法标识符。
-                // 两种情况都返回空串，由调用方报诊断 —— 生成器不能带着非法名字往下走。
-                if (start >= fieldName.Length)
-                {
-                    return string.Empty;
-                }
-
-                var first = fieldName[start];
-                if (!char.IsLetter(first) && first != '_')
-                {
-                    return string.Empty;
-                }
-
-                return char.ToUpper(first) + fieldName.Substring(start + 1);
-            }
+                => AIContextNaming.PromotedPropertyName(fieldName);
         }
 
         public sealed class MVVMPropertyAnalizer

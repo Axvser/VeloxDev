@@ -35,35 +35,15 @@ public static class AgentContextReader
     }
 
     /// <summary>
-    /// Picks the annotations for <paramref name="language"/> out of an already-read attribute set, falling
-    /// back to the English ones when it has none of its own.
-    /// <para>
-    /// This is the one place the rule lives. Which of a target's descriptions reach the model is a single
-    /// decision, whether the attributes came off a type, a property, a field or a method — the readers that
-    /// fetch them by reflection call in here rather than repeating the filter.
-    /// </para>
-    /// <para>
-    /// The language a host runs in chooses which descriptions reach the model — it is not a claim that every
-    /// annotated member has been translated. Without the fallback a member documented only in English would
-    /// reach a Chinese-language agent undescribed, which is worse than reaching it in English: an annotation
-    /// in the wrong language still names the members and still states the rules, while a missing one leaves
-    /// the model to guess. This mirrors how the embedded prompt documents resolve
-    /// (<c>Resources/{system}/{lang}/</c> falls back to <c>en</c>).
-    /// </para>
-    /// <para>
-    /// The fallback is all-or-nothing per target, never mixed: a target that has <i>some</i> Chinese
-    /// annotations keeps exactly those, so one translated description cannot cause its untranslated siblings
-    /// to arrive as well. English itself has nowhere to fall back to.
-    /// </para>
+    /// Picks the annotations for <paramref name="language"/> out of an already-read attribute set.
     /// </summary>
+    /// <remarks>
+    /// The rule itself lives in <see cref="AgentTextSelection.Select(IEnumerable{AgentText}, AgentLanguages)"/>,
+    /// which a compiled context tree calls too — a target's fallback to English has to be the same decision
+    /// whether its descriptions arrived as attributes or as data.
+    /// </remarks>
     private static string[] Select(IEnumerable<AgentContextAttribute> attributes, AgentLanguages language)
-    {
-        var annotated = attributes.ToArray();
-
-        var localized = annotated.Where(c => c.Language == language).ToArray();
-        if (localized.Length > 0 || language == AgentLanguages.English)
-            return [.. localized.Select(c => c.Context)];
-
-        return [.. annotated.Where(c => c.Language == AgentLanguages.English).Select(c => c.Context)];
-    }
+        => AgentTextSelection.Select(
+            attributes.Select(static c => new AgentText(c.Language, c.Context)),
+            language);
 }

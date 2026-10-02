@@ -10,6 +10,8 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsTrimmable>false</IsTrimmable>
+		<!-- 本程序集的 Agent 面属于框架侧：生成的分片挂在 Framework/ 根下，而不是 Customer/。 -->
+		<VeloxAgentContextTreeRoot>Framework</VeloxAgentContextTreeRoot>
 		<Title>VeloxDev.Core</Title>
 		<Version>9.0.0</Version>
 		<Authors>Axvser</Authors>
@@ -25,6 +27,12 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
+	</ItemGroup>
+
+	<!-- MSBuild 属性默认不透给分析器，必须显式声明，否则生成器读到的永远是默认值。 -->
+	<ItemGroup>
+		<CompilerVisibleProperty Include="VeloxAgentContextTreeRoot" />
+		<CompilerVisibleProperty Include="VeloxAgentContextTree" />
 	</ItemGroup>
 
 	<!-- Debug 用本地生成器源码，Release 用包。analyzer 不随 ProjectReference 传递，

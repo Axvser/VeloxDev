@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using VeloxDev.Generators.Base;
 
 namespace VeloxDev.Generators.Writers
 {
@@ -150,7 +151,8 @@ namespace VeloxDev.Generators.Writers
                 // Auto naming rule
                 if (commandName == "Auto")
                 {
-                    commandName = methodSymbol.Name.Replace("Async", "");
+                    // 规则本体在 AIContextNaming：上下文树的生成器看不见这里的产物，只能复现同一个命名规则。
+                    commandName = AIContextNaming.CommandBaseName(methodSymbol);
                 }
 
                 // Analyze the construction mode

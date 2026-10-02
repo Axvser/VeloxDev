@@ -1,9 +1,9 @@
 ﻿# VeloxDev.Core.Generator — 架构
 
-> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**18 个 .cs、6193 行**（`Writers/WorkflowWriter.cs` 1708、`Writers/MVVMWriter.cs` 1086、`Base/Analizer.cs` 961、`Writers/CommandWriter.cs` 752、`Theme.cs` 422、`AopSurface.cs` 398、`Writers/WriterBase.cs` 256、`Writers/TickWriter.cs` 125、`Writers/AopWriter.cs` 90、`Diagnostics.cs` 89、`Base/AnalizeHelper.cs` 67、`MVVM.cs` / `Command.cs` 各 45、`Workflow.cs` / `Tickable.cs` 各 37、`AopProxy.cs` 36、`Base/AopNames.cs` 26、`Base/ICodeWriter.cs` 13）。
+> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**22 个 .cs、7775 行**（`Writers/WorkflowWriter.cs` 1708、`Writers/MVVMWriter.cs` 1086、`Base/Analizer.cs` 945、`Writers/CommandWriter.cs` 754、`Base/AIContextModel.cs` 733、`Writers/AIContextTreeWriter.cs` 676、`Theme.cs` 422、`AopSurface.cs` 398、`Writers/WriterBase.cs` 256、`Writers/TickWriter.cs` 125、`Base/AIContextNaming.cs` 104、`Writers/AopWriter.cs` 90、`Diagnostics.cs` 89、`AIContextTree.cs` 83、`Base/AnalizeHelper.cs` 67、`MVVM.cs` / `Command.cs` 各 45、`Workflow.cs` / `Tickable.cs` 各 37、`AopProxy.cs` 36、`Base/AopNames.cs` 26、`Base/ICodeWriter.cs` 13）。
 > 打包成 NuGet 分析器包，不产出运行期程序集；`TargetFramework=netstandard2.0`（`VeloxDev.Core.Generator.csproj:6`）。
 
-本文只写「读完这 18 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+本文只写「读完这 22 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
@@ -19,6 +19,7 @@
 | MVVM | `VeloxPropertyAttribute` / `VeloxCommandAttribute` | `MVVM.cs` + `Command.cs` |
 | TimeLine | `TickableAttribute` | `Tickable.cs` |
 | AspectOriented | `AspectOrientedAttribute` | `AopSurface.cs`（接口 + 代理实现）+ `AopProxy.cs`（扩展方法） |
+| AI（AIContextTree，2026-10-03 起） | `AgentContextAttribute` 等三个 Agent 特性 | `AIContextTree.cs` —— **全程序集遍历，一次 `AddSource`**，不被任何特性触发，见 §三·四 |
 | DynamicTheme | `ThemeConfigAttribute\`3..\`7`（5 个元数） | `Theme.cs` |
 
 **这七家 GUI 适配器在本模块里是零代码 —— 这正是「契约不该重复七遍」的实例。** 适配器全都不做特性解析、不写生成逻辑，**源码里也一个生成器特性都不用**（`grep -rn 'VeloxProperty\|\[Velox' Src/Adapters/ --include=*.cs` 零命中），因此它们**一个都不引用这个分析器包** —— 七份 `Src/Adapters/*/*.csproj` 只引用 `VeloxDev.Core` 加各家自己的 GUI 包，而 §五 那张 9 对 `PackageReference`/`ProjectReference` 的表里**没有任何适配器**；`[VeloxProperty]` 在 WPF、Avalonia、WinUI、MAUI、WinForms、Razor、Jalium 上生成的东西**逐字相同**，因为生成器读的是符号语义，从不问平台（`Base/AnalizeHelper.cs` 全文没有平台概念，`VeloxDev.Core.Generator.csproj` 也没有任何 GUI 引用）。要改「生成的属性长什么样」，改这一处就同时改了七家；要改「某家在某个平台上怎么渲染」，与本模块无关 —— 那是 `memory/modules/<WorkflowSystem|TransitionSystem>/adapters/<平台>.md` 的事。**所以本模块没有 `adapters/` 子目录，也不该有。**
@@ -77,6 +78,14 @@ context.RegisterSourceOutput(
 
 `Theme.cs` 是唯一不走 `Targets/Resolve` 的（它自己建 5 条流，`:32-55`，按 `ThemeConfigAttribute` 的 5 个元数分别订阅），**且只对 `partial` 类发**（`:112-118`），没有可用属性注册时返回 `string.Empty`（`:261-264`）—— 同样是静默无输出。
 
+#### 三·四、`AIContextTree.cs`：第二个不走 `Targets` 的生成器
+
+它订阅 `CompilationProvider`，自己走一遍**整个程序集**（`Base/AIContextModel.cs` 的 `EnumerateTypes`），一次 `AddSource` 出全部产物。理由有三处是独立的：`Targets` 的 `IsCandidateClass` 只接受 `ClassDeclarationSyntax` 且要求 `partial`，**接口与枚举根本进不来**；它的触发集 `TriggerAttributes` 不含三个 Agent 特性；而「是不是组件」由**实现了哪个接口**决定（`IWorkflowNode{Trees,Slots,Links}ViewModel` 四选一），特性触发表达不了。
+
+两条守卫：`AIContextModelBuilder.Applies` 要求编译单元里有 `VeloxDev.AI.AgentContextAttribute`，否则连遍历都不做；MSBuild 属性 `VeloxAgentContextTree=false` 可整体关闭。**根由 `VeloxAgentContextTreeRoot` 决定**（Core 自己设成 `Framework`，其余默认 `Customer`）—— 这个属性必须在消费工程的 `<ItemGroup>` 里用 **`<CompilerVisibleProperty Include="…" />`** 声明，否则分析器读到的永远是默认值（MSBuild 属性默认不透给分析器）。
+
+产物一份文件里两半：一个 `…_AIContextFragment`（只含数据的目录，逐目录一个 `Lazy`）与每组 `…_Accessor{i}`（`switch` 加转型，无反射），末尾一个 `[ModuleInitializer]` 自注册。**它复现 `MVVMWriter` 与 `CommandWriter` 的命名规则**（见 `Base/AIContextNaming.cs`）—— 生成器之间看不见彼此的产物，只能复现规则。
+
 ### 产物命名（hint name = 文件名）
 
 | 生成器 | 文件名模板 | 依据 |
@@ -84,6 +93,7 @@ context.RegisterSourceOutput(
 | AOP 接口 | `{类}_{命名空间下划线}_Aop` | `Base/AopNames.cs:15`（唯一算法）；`AopSurface.cs:164` 的 `AddSource` |
 | AOP 代理实现（**与接口同一次遍历产出**） | `{同一个接口名}Proxy` | `Base/AopNames.cs:18`；`AopSurface.cs:168` 的 `AddSource` |
 | AOP 扩展方法 | `{类}_{命名空间下划线}_AopExt.g.cs` | `Writers/AopWriter.cs:49`；`AopProxy.cs:31` |
+| AI 上下文树（**每个程序集一份**，不是每个类一份） | `{程序集名}_AIContextTree.g.cs` | `AIContextTree.cs` 的 `AddSource` |
 | Command | `{类}_{命名空间下划线}_Commands.g.cs` | `Writers/CommandWriter.cs:129` |
 | MVVM | `{类}_{命名空间下划线\|Global}_MVVM.g.cs` | `Writers/MVVMWriter.cs:847-854` |
 | Mono | `{类}_{命名空间下划线}_Tick.g.cs` | `Writers/TickWriter.cs:61` |

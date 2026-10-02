@@ -174,7 +174,7 @@
 
 ### 4.6 本模块**不需要**联动的东西（省掉无谓的搜索）
 
-- **没有生成器**：`Src/Generators/VeloxDev.Core.Generator/` 不参与 AI 模块（对比 WorkflowSystem 的 Helper/命令是靠生成器写出来的）。
+- ~~**没有生成器**~~ —— **2026-10-03 起不再成立。** `Src/Generators/VeloxDev.Core.Generator/AIContextTree.cs` 会往每个程序集里加一个只读的上下文分片与一组访问器（见 `architecture.md` §七）。但**反射那五个助手一行都没动**：改 `AgentContextReader` / `AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor` / `AgentTypeResolver` 的行为，仍然不需要碰生成器，也**不会**改变今天消费方实际跑的路径。两者只有一条交叉线：命名规则抽在生成器的 `Base/AIContextNaming.cs`，`MVVMFieldAnalizer` 与 `CommandWriter` 都转调它。
 - **没有平台适配器**：加一家 GUI 不需要在本模块改任何一行；交互 UI 归各 demo。
 - **没有序列化契约**：`AgentLanguages` 是 `byte` 枚举，但没有任何地方对它做自定义序列化；跨进程传的是它自己的值。
 
