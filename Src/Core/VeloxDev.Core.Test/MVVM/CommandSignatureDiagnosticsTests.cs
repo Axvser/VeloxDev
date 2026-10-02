@@ -1,8 +1,5 @@
-using System.IO;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using VeloxDev.Generators;
-using VeloxDev.MVVM;
 
 namespace VeloxDev.Core.Test.MVVM;
 
@@ -11,14 +8,14 @@ namespace VeloxDev.Core.Test.MVVM;
 /// <para>
 /// Everything else in this folder proves a supported shape <em>works</em>; nothing could prove an unsupported one
 /// is <em>refused</em>, because a refused shape used to surface as CS1503 in a generated file — invisible to any
-/// assertion. <c>VELOXCMD001</c> gives it a name, and this drives the generator directly so the diagnostic can be
-/// asserted without going through the compiler.
+/// assertion. <c>VELOX_MVVM_CMD001</c> gives it a name, and this drives the generator directly so the diagnostic
+/// can be asserted without going through the compiler.
 /// </para>
 /// </summary>
 [TestClass]
 public class CommandSignatureDiagnosticsTests
 {
-    private const string Id = "VELOXCMD001";
+    private const string Id = "VELOX_MVVM_CMD001";
 
     [TestMethod]
     public void AVoidBodyTakingAToken_IsRefusedWithItsOwnDiagnostic()
@@ -121,27 +118,9 @@ public class CommandSignatureDiagnosticsTests
             }
             """;
 
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator)
-            .Select(static path => (MetadataReference)MetadataReference.CreateFromFile(path))
-            .Append(MetadataReference.CreateFromFile(typeof(VeloxCommand).Assembly.Location));
-
-        var compilation = CSharpCompilation.Create(
-            "CommandSignatureProbe",
-            [CSharpSyntaxTree.ParseText(source)],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-
-        var result = CSharpGeneratorDriver.Create(new Command())
-            .RunGenerators(compilation)
-            .GetRunResult();
-
-        var diagnostics = result.Diagnostics.Where(d => d.Id == Id).ToArray();
-        var generated = string.Join("\n", result.Results.SelectMany(static r => r.GeneratedSources)
-                                                        .Select(static s => s.SourceText.ToString()));
-        return (diagnostics, generated);
+        var (diagnostics, generated) = GeneratorProbe.Run(new Command(), source, "CommandSignatureProbe");
+        return (diagnostics.Where(d => d.Id == Id).ToArray(), generated);
     }
 
-    private static string Describe(IReadOnlyList<Diagnostic> diagnostics) =>
-        diagnostics.Count == 0 ? "(no diagnostics)" : string.Join(" | ", diagnostics.Select(static d => d.ToString()));
+    private static string Describe(IReadOnlyList<Diagnostic> diagnostics) => GeneratorProbe.Describe(diagnostics);
 }

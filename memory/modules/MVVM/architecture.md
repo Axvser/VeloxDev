@@ -1,6 +1,6 @@
 # MVVM — 架构
 
-> 运行期：`Src/Core/VeloxDev.Core/MVVM/`（4 个 .cs），契约在 `Src/Core/VeloxDev.Core/Interfaces/MVVM/`（只有 `IVeloxCommand.cs`）。
+> 运行期：`Src/Core/VeloxDev.Core/MVVM/`（6 个 .cs），契约在 `Src/Core/VeloxDev.Core/Interfaces/MVVM/`（`IVeloxCommand.cs` + 两个可选扩展接口 `IVeloxCommandCompletion.cs` / `IVeloxCommandStatus.cs`）。
 > 生成器：`Src/Generators/VeloxDev.Core.Generator/`。**下文不带路径的文件名都指这个目录**：`Writers/MVVMWriter.cs`、`Writers/CommandWriter.cs`、`Base/Analizer.cs`（配置读取与代码模板在它的 `MVVM*` 部分）。它们**不在本模块目录下**，别在 `MVVM/` 里找。
 > 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
@@ -141,6 +141,14 @@ OnExecutionCompletedAsync(item)
 **三件读代码才知道的事：**
 
 - **`[VeloxProperty]` 有两条路，产物不同。** 标在**字段**上（`:96-114`，要求 `global::VeloxDev.MVVM.VeloxPropertyAttribute` 全名精确匹配）走 `MVVMFieldAnalizer`；标在**partial 属性**上（`:122-140`）走 `MVVMPropertyAnalizer`，且 `ShouldGeneratePartialProperty` 会挡掉非 partial 的。两条路都能用，但 `HasSetter` 的推导不同（`Analizer.cs:405-408` vs `:427`）。
+- **两半可以同时声明，认成同一个逻辑属性（2026-10-02）。** 字段 `_id` + `partial` 属性 `Id` 同时标 `[VeloxProperty]` 时：字段路被 `ShouldGenerateFieldProperty` 挡掉（它扫**整条继承链**找同名属性，正是配对所依赖的行为，**2026-10-02 起没有改动**），属性路照常跑，但**不再声明 backing 字段** —— 它去复用那个已存在的字段。于是「默认值/初始化器放字段、访问形态与修饰符放属性」成立，而字段专属特性与属性专属特性各自留在原位。
+- **复用的判据在 `MVVMWriter.ResolveBackingStorage`（新增）。** 按 `_camelCase(属性名)` 推出字段名，用 `FindFieldInHierarchy`（照同文件 `FindEventInHierarchy` / `FindMethodInHierarchy` 的范式）沿基类上溯，再用既有的 `IsAccessibleFromTarget`（`:470-486`）判可访问性。**字段标不标 `[VeloxProperty]` 都算** —— 只写属性、字段是手写私有时也复用。可用性再过滤 `static`/`const`/`readonly`（`CanBackProperty`：只读属性连 `readonly`/`const` 都能用，可写属性不能）。
+- **`MVVMPropertyFactory.ShouldEmitField`（新增）取代 `IsFromField` 当发出判据。** `IsFromField` 仍然存在但已不再被 `GenerateFieldDeclaration` 读 —— 字段路恒 `false`、属性路默认 `true`，复用命中时置 `false`。`SourceName` **不做 `this.` 统一**：属性路它是裸名，同时兼任字段声明名与读写表达式，改成 `this._x` 会写出非法的 `private T this._x`。
+- **类型比较必须走 `Analizer.DisplayFullTypeName`（新增的共享方法）。** 两个 analyzers 原先各写一份私有 `GetFullyQualifiedTypeName`，而字段复用处若改用 `SymbolDisplayFormat.FullyQualifiedFormat` 去比，得到的是 `string` 而 `FullTypeName` 是 `System.String` —— **每一次复用都会被误判成类型冲突**（2026-10-02 实测踩到）。现在两处私有方法都委托给这一个共享实现。
+- **非法字段名不再是崩溃或坏产物。** 单字符字段名 `_` 以前会走 `fieldName[1]` 越界，把生成器整个打崩（AD0001）；`_1x` 以前会生成一个 `1x` 属性（编不过）。现在 `GetPropertyNameFromFieldName` 推不出合法标识符时返回空串，调用方报 `VELOX_MVVM_PROP002`（Warning）并跳过。
+- **诊断三件套（2026-10-02，ID 由 `VELOXCMD001` 改名并扩充）**：`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突：字段/属性类型不一致、两个字段推出同一属性名、字段不可作 backing、同名非字段成员，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）。都在 `Diagnostics.cs`；`MVVMWriter.Diagnostics` 收集、`MVVM.cs` 在 `CanWrite()` **之前**报出去 —— 被拒的声明不会进产物，只能这样让作者看到。**注意 `Diagnostics` 这个实例属性会遮蔽同名静态类**，所以 writer 里引用描述符要全限定 `VeloxDev.Generators.Diagnostics.X`（`CommandWriter` 早就是这么写的）。
+- **命名是功能性判据，不是风格判据。** 只写字段时不要求下划线：`name` → `Name` 是良构的，**不报警**。按风格严查会在仓库自己的代码里炸出约 130 条告警（实测：字段带下划线 64 处、不带 130 处），这是刻意的取舍。
+- **不做特性复制/投射/去重。** 生成器只新增代码，改不了用户已写的源文件；两半上的特性各留原位。MVVM 路径下所有 `GetAttributes()` 都是**探测**用途，产物里不含任何特性。
 - **没有「View 只透传、不发通知」这条路径** —— 曾经有（`IsView` / `GenerateProxy()`），2026-09-26 因从未被走到而整体删除（`Writers/MVVMWriter.cs:105`、`:131` 两处构造一直传 `isView: false`）。现在 `MVVMPropertyFactory.Generate()`（`Base/Analizer.cs:583`，原名 `GenerateViewModel`）是唯一出口，**所有** `[VeloxProperty]` 都按 ViewModel 形态生成通知。
 - **`CanWrite()` 里含 `IsWorkflowComponent`**（`MVVMWriter.cs:845`）⇒ 一个 `[Node]` / `[Tree]` 类即使零个 `[VeloxProperty]` 也会拿到一份 MVVM 产物，但里面**不是**槽位三件套：`MVVMWriter.cs:895` 那段的条件是 `!_hasBaseWorkflowSlotInfrastructure && !IsWorkflowComponent && 任一属性 UseWorkflowSlotLifecycle`，**把 workflow 组件本身排除了**，它只服务「非组件、但继承链上有带槽位属性的类」这一种情况。真正 workflow 组件的 `CreateWorkflowSlot<T>` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved` 由 `Writers/WorkflowWriter.cs:899-917` 写。这是与 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/` 的耦合点。
 

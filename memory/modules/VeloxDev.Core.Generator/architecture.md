@@ -29,7 +29,7 @@
 |---|---|
 | 生成出来的代码**跑起来是什么行为** | 全在 Core。生成器只写声明与转发（例如 `OnWorkflowSlotAdded` 的**声明**由 `Writers/MVVMWriter.cs` 写，`CreateWorkflowSlot<T>()` 的**骨架**也由它写，但生命周期归 `WorkflowSystem`） |
 | 「哪些类会被处理」 | `Base/Analizer.cs:82-94` 那张**硬编码 10 条**的 `TriggerAttributes` 表。自定义特性、第三方特性一律不认 |
-| 编译错误 / 诊断 | 生成器**一个 `Diagnostic` 都不发**（全源 grep `Diagnostic` 零命中）。唯一的诊断 `VELOXCFG0001` 来自 MSBuild：`VeloxDev.Core.Generator.targets:16-19` |
+| 编译错误 / 诊断 | 生成器自己发三类（`Diagnostics.cs`；2026-10-02 起 ID 统一成 `VELOX_MVVM_*`）：`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）。另有 MSBuild 侧的 `VELOXCFG0001`：`VeloxDev.Core.Generator.targets:16-19` |
 | 依赖注入、服务定位、注册表 | 完全不生成。生成的是「这个类自己怎么把自己装起来」，不是容器配置 |
 | 平台差异 | 零。见上 |
 | 版本与发布 | 见 `extension.md` §四「改这里的代价」 |
@@ -126,11 +126,11 @@ context.RegisterSourceOutput(
 
 `ValueTask` 既不能隐式转 `Task`，也不像 `Task<T>` 那样能靠协变（协变要求返回类型之间本身有引用转换，而 `ValueTask` 是结构体），所以**必须显式 thunk**。
 
-### 不支持的形态发 `VELOXCMD001`（2026-10-01）
+### 不支持的形态发 `VELOX_MVVM_CMD001`（2026-10-01；2026-10-02 由 `VELOXCMD001` 改名）
 
 判定失败时**报诊断并跳过该方法**，不再让它落进产物：
 
-- 报的是 `VELOXCMD001`（Error），位置是**用户那一行**，消息里点名方法并说明改法。
+- 报的是 `VELOX_MVVM_CMD001`（Error），位置是**用户那一行**，消息里点名方法并说明改法。
 - 跳过是因为产物**注定编不过** —— 再冒一个 CS1503 只会把真正的错误埋掉。全部方法都被拒时 `CanWrite()` 为假，**整个文件都不生成**。
 - 这与之前的行为差别很大：以前报的是生成文件里的 `CS1503 无法从"方法组"转换…`，作者看到的是一个自己没写过的方法组和构造签名。
 

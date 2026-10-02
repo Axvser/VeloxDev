@@ -12,6 +12,8 @@
 | 扩展点 | 具体成员 / 位置 | 类型 |
 |---|---|---|
 | 声明可观察属性 | `[VeloxProperty]`（`VeloxPropertyAttribute.cs:25`，`AttributeUsage(Field \| Property)`） | 用户 |
+| 字段与属性**成对**声明同一个逻辑属性 | 同一条 `[VeloxProperty]` 同时标在字段与 `partial` 属性上：字段承载默认值与**字段专属特性**，属性承载访问形态与**属性专属特性**。属性路会复用那个字段，不再自己声明（`MVVMWriter.ResolveBackingStorage`，2026-10-02） | 用户 |
+| 读生成器报出的声明冲突 | `VELOX_MVVM_PROP001`（Error）/ `VELOX_MVVM_PROP002`（Warning），见 `Diagnostics.cs`；命令侧是 `VELOX_MVVM_CMD001` | 用户读诊断 |
 | 声明命令 | `[VeloxCommand(name="Auto", canValidate=false, semaphore=1)]`（`VeloxCommandAttribute.cs:35-44`） | 用户 |
 | 集合项级钩子 | 四个 `partial void OnItemAddedTo{名} / OnItemRemovedFrom{名} / OnItemMovedIn{名} / OnItemsResetIn{名}`（`Base/Analizer.cs:814-817`） | 用户实现 |
 | 属性级钩子 | `partial void On{名}Changing/Changed(old, new)`（`Analizer.cs:606-610`，仅当 `HasSetter`） | 用户实现 |
@@ -78,6 +80,8 @@
 
 1. 类必须是 **`partial`**，且继承一个提供 `OnPropertyChanging` / `OnPropertyChanged` / `PropertyChanged` 的基类。
 2. 字段版：`[VeloxProperty] private string _name = string.Empty;`；属性版：`[VeloxProperty] public partial string Name { get; set; }`。
+   **两半可以同时写**（2026-10-02）：`[VeloxProperty] private string _name = "默认值";` + `[VeloxProperty] public partial string Name { get; protected set; }` ⇒ 默认值取字段、访问器取属性、字段不重复声明。属性路**只按约定名**（`_camelCase(属性名)`）找字段，找到可访问的就复用 —— **字段标不标 `[VeloxProperty]` 都算**。名字不合约定（`m_id` 之类）不会被复用，会另声明一个 `_name`，与手写的 `m_id` 并存，互不干扰。
+   名称的检查是**功能性**的：`name` → `Name` 良构、不报警；只有推不出合法标识符（`_`、`_1x`）才报 `VELOX_MVVM_PROP002`。冲突（类型不一致 / 两字段撞同一属性名 / 字段是 `readonly`·`const`·`static` 却要支撑可写属性）报 `VELOX_MVVM_PROP001` 并**不生成**。
 3. 集合类型（实现 `INotifyCollectionChanged`）**必须**有 setter，否则生成器不发集合成员（`Analizer.cs:763-766` 的 `!HasSetter` 早退）—— 但 getter 侧仍会发 `EnsureSubscribed(...)`（`:634-637` 只看 `IsNotifyCollectionChanged`）⇒ **get-only 的集合 partial 属性会让生成代码引用一个没声明的 `On{名}CollectionChanged`**。这一步**未能编译验证**，见 §五。
 4. 需要集合项级反应就实现 `partial void OnItemAddedTo{名}(IEnumerable<T> items)` 等四个（签名里的元素类型由生成器从类型的泛型 `IEnumerable<T>` 推出，`Analizer.cs:932-940`）。
 5. 构建，产物 `<类>_<命名空间>_MVVM.g.cs`。

@@ -69,18 +69,20 @@
 | 从 writer 里读 `partial` 的其它声明 | `Base/AnalizeHelper.cs:23-36` 的 `Declarations`/`Members` | 只看 `Initialize` 拿到的那一份 `ClassDeclarationSyntax` | 拆成多个 partial 文件时**静默少生成**；`Writers/AopWriter.cs:19-21` 的注释就是为这条写的 |
 | 命名产物 | `GetFileName()` 返回 `{类}_{命名空间}_X.g.cs` | 用 `ToDisplayString()` 拼完事 | 全局命名空间会生成出 `{类}_<global namespace>_Aop`；`Writers/WriterBase.cs:63/72` 更会写出非法的 `namespace <global namespace>;`。**唯一正确的样板是 `Writers/MVVMWriter.cs:850-853`** |
 | 加基础接口 | 返回 `GenerateBaseInterfaces()` 数组 | 在 `GenerateBody()` 或模板串里手写 `: IFoo` | 类型声明由 `Writers/WriterBase.cs:92` 一处拼出，模板串里写的会出现在类体里 ⇒ 语法错误 |
-| 让生成器报错 | **目前的不变量是「一个诊断都不发」** | 随手 `context.ReportDiagnostic(...)` | 需要自己定义 `DiagnosticDescriptor` 并声明 `SupportedDiagnostics`；本项目已开 `EnforceExtendedAnalyzerRules`（`VeloxDev.Core.Generator.csproj:5`），会额外报 RS1036/RS2008 类规范告警 |
+| 让生成器报错 | 在 `Diagnostics.cs` 加一条 `DiagnosticDescriptor`，照 `CommandWriter.cs:36` + `Command.cs:31-33` 那一对（writer 收集 `List<Diagnostic> Diagnostics`，生成器类在 `CanWrite()` **之前**逐条 `ReportDiagnostic`） | 随手 `context.ReportDiagnostic(...)` | 诊断号要按模块+种类命名（`VELOX_MVVM_CMD…` / `VELOX_MVVM_PROP…`，2026-10-02 起）。`EnforceExtendedAnalyzerRules`（`VeloxDev.Core.Generator.csproj:5`）已开但当前**零告警** —— 因为分析器是 `IIncrementalGenerator`，不需要 `SupportedDiagnostics`，也没有 `AnalyzerReleases.*` 文件被要求 |
 | 发版 | 改 `VeloxDev.Core.Generator.csproj:11` 的 `<Version>` **并且**改 §四那 9 处引用 | 只改 csproj | Debug 走源码仍是对的，Release **静默**还原旧包 —— 本地怎么调都复现不出来 |
 
 ---
 
 ## 四、改这里的代价（版本锁：9 处必须一起改）
 
-**当前状态：包版本 `9.1.0`，而 9 处引用仍是 `9.0.0` —— 落差是刻意的，不要「顺手修平」。** 依据：2026-09-26 的决定 —— Core 与其余库统一停在 `9.0.0`，**只保证 Debug 能跑**。Debug 走 `ProjectReference`，包版本号根本不参与；Release 会解析到 NuGet 上已发布的 `9.0.0` 生成器，即**不含这条线上任何后续本地改动的那一版**。所以看到源码版本与 `9.0.0` 并存时，第一反应不该是补齐，而是先确认「这一轮是不是仍然只要 Debug」。
+**当前状态：包版本 `9.2.0`，而 9 处引用仍是 `9.0.0` —— 落差是刻意的，不要「顺手修平」。** 依据：2026-09-26 的决定 —— Core 与其余库统一停在 `9.0.0`，**只保证 Debug 能跑**。Debug 走 `ProjectReference`，包版本号根本不参与；Release 会解析到 NuGet 上已发布的 `9.0.0` 生成器，即**不含这条线上任何后续本地改动的那一版**。所以看到源码版本与 `9.0.0` 并存时，第一反应不该是补齐，而是先确认「这一轮是不是仍然只要 Debug」。
 
 **2026-10-01：源码版本由 `9.0.228` 提到 `9.1.0`**（用户决定）。理由是按 SemVer 把「新增支持的命令签名」归为 feature 而非补丁。那 9 处引用**仍然不动** —— 它们要等包真正重新发布后才对齐，本轮只改源码版本号。这一版新增的是 `ValueTask` / `ValueTask<T>` 命令体支持（见 [architecture.md](architecture.md) 的返回类型表）。
 
-`VeloxDev.Core.Generator.csproj:11` 是 `<Version>9.1.0</Version>`；下面 9 处 `PackageReference` 目前全部是 `Version="9.0.0"`：
+**2026-10-02：源码版本由 `9.1.0` 提到 `9.2.0`**（用户决定）。按 SemVer 把「`[VeloxProperty]` 字段与 partial 属性可同时声明」归为 feature。那 9 处引用**仍然不动**，理由同上。
+
+`VeloxDev.Core.Generator.csproj:11` 是 `<Version>9.2.0</Version>`；下面 9 处 `PackageReference` 目前全部是 `Version="9.0.0"`：
 
 | # | 文件:行 |
 |---|---|

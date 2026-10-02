@@ -55,7 +55,7 @@ Core 是四目标项目；**两个测试项目都是单目标 `net10.0`**（`Vel
 | mock 库 | **没有**。没有 Moq / NSubstitute / FakeItEasy | 全 csproj 只有上面两个 `PackageReference` |
 | 断言命名空间 | 全局注入 `Microsoft.VisualStudio.TestTools.UnitTesting` | `:24` |
 | 全局 using | 只有两条：`VeloxDev.Threading`、`VeloxDev.TimeLine` | `GlobalUsings.cs` |
-| 源生成器 | **没有引用** → 本模块写不出生成器类型（对比姊妹模块） | csproj 只有一条 ProjectReference |
+| 源生成器 | **已引用**（2026-10-02 起）→ 可以 `new VeloxDev.Generators.MVVM()` / `new Command()` 直驱生成器；csproj 把生成器项目同时以 `OutputItemType="Analyzer"` 与普通 `Reference` 引入，并钉 `Microsoft.CodeAnalysis.CSharp` 4.3.1 | `VeloxDev.Core.Test.csproj:27-32` |
 | `NoWarn` | `MSTEST0032`、`MSTEST0037`、`CS0067` | `:8` |
 
 **手写替身才是本模块的基础设施**（没有 mock 库的替代品）：

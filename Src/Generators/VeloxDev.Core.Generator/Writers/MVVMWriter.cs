@@ -24,6 +24,18 @@ namespace VeloxDev.Generators.Writers
         private bool _hasBaseCollectionNotificationInfrastructure = false;
         private bool _hasBaseWorkflowSlotInfrastructure = false;
 
+        /// <summary>
+        /// The problems found while reading the type, reported by the generator whether or not a file is written.
+        /// </summary>
+        /// <remarks>
+        /// A declaration the writer refuses produces no file of its own, so these have to be reported separately;
+        /// otherwise the author sees a generated file that simply does not mention their member.
+        /// </remarks>
+        public List<Diagnostic> Diagnostics { get; } = [];
+
+        private void Report(DiagnosticDescriptor descriptor, ISymbol target, params object?[] args)
+            => Diagnostics.Add(Diagnostic.Create(descriptor, target.Locations.FirstOrDefault(), args));
+
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
@@ -91,53 +103,168 @@ namespace VeloxDev.Generators.Writers
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
         {
             var setterMode = DetectSetterMode(symbol);
-            MVVMProperties =
-            [
-                .. symbol.GetMembers()
-                    .OfType<IFieldSymbol>()
-                    .Where(field => field.GetAttributes().Any(attr =>
-                        attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-                        NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
-                    .Where(field => ShouldGenerateFieldProperty(symbol, field))
-                    .Select(field =>
-                    {
-                        var analizer = new MVVMFieldAnalizer(field);
-                        var factory = new MVVMPropertyFactory(analizer)
-                        {
-                            FrameworkSetterMode = setterMode,
-                            SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
-                            SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
-                        };
-                        ConfigureWorkflowSlotProperty(factory, field, field.Type);
-                        return factory;
-                    })
-            ];
+            MVVMProperties = [];
+
+            // 两个字段推出同一个属性名会在产物里撞成 CS0102，所以按属性名去重并报错。
+            var claimed = new Dictionary<string, IFieldSymbol>(System.StringComparer.Ordinal);
+
+            foreach (var field in symbol.GetMembers()
+                .OfType<IFieldSymbol>()
+                .Where(field => field.GetAttributes().Any(attr =>
+                    attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                    NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
+                .Where(field => ShouldGenerateFieldProperty(symbol, field)))
+            {
+                var analizer = new MVVMFieldAnalizer(field);
+
+                // 名字推不出合法标识符时产物本身就编不过，报一条警告跳过，别把错误埋进生成文件。
+                if (analizer.PropertyName.Length == 0)
+                {
+                    Report(
+                        VeloxDev.Generators.Diagnostics.UnusablePropertyName,
+                        field,
+                        field.Name,
+                        "it maps to no valid property name");
+                    continue;
+                }
+
+                if (claimed.TryGetValue(analizer.PropertyName, out var already))
+                {
+                    Report(
+                        VeloxDev.Generators.Diagnostics.ConflictingPropertyDeclaration,
+                        field,
+                        field.Name,
+                        $"it and '{already.Name}' both map to the property '{analizer.PropertyName}'");
+                    continue;
+                }
+
+                claimed[analizer.PropertyName] = field;
+
+                var factory = new MVVMPropertyFactory(analizer)
+                {
+                    FrameworkSetterMode = setterMode,
+                    SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
+                    SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
+                };
+                ConfigureWorkflowSlotProperty(factory, field, field.Type);
+                MVVMProperties.Add(factory);
+            }
         }
 
         private void ReadAutoProperties(INamedTypeSymbol symbol)
         {
             var setterMode = DetectSetterMode(symbol);
-            AutoProperties =
-            [
-                .. symbol.GetMembers()
-                    .OfType<IPropertySymbol>()
-                    .Where(property => property.GetAttributes().Any(attr =>
-                        attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-                        NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
-                    .Where(ShouldGeneratePartialProperty)
-                    .Select(property =>
-                    {
-                        var analizer = new MVVMPropertyAnalizer(property);
-                        var factory = new MVVMPropertyFactory(analizer)
-                        {
-                            FrameworkSetterMode = setterMode,
-                            SetteringBody = analizer.HasSetter ? [$"OnPropertyChanging(nameof({analizer.PropertyName}));"] : [],
-                            SetteredBody = analizer.HasSetter ? [$"OnPropertyChanged(nameof({analizer.PropertyName}));"] : [],
-                        };
-                        ConfigureWorkflowSlotProperty(factory, property, property.Type);
-                        return factory;
-                    })
-            ];
+            AutoProperties = [];
+
+            foreach (var property in symbol.GetMembers()
+                .OfType<IPropertySymbol>()
+                .Where(property => property.GetAttributes().Any(attr =>
+                    attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                    NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
+                .Where(ShouldGeneratePartialProperty))
+            {
+                var analizer = new MVVMPropertyAnalizer(property);
+                var factory = new MVVMPropertyFactory(analizer)
+                {
+                    FrameworkSetterMode = setterMode,
+                    SetteringBody = analizer.HasSetter ? [$"OnPropertyChanging(nameof({analizer.PropertyName}));"] : [],
+                    SetteredBody = analizer.HasSetter ? [$"OnPropertyChanged(nameof({analizer.PropertyName}));"] : [],
+                };
+                ConfigureWorkflowSlotProperty(factory, property, property.Type);
+
+                if (!ResolveBackingStorage(symbol, property, factory))
+                {
+                    continue;
+                }
+
+                AutoProperties.Add(factory);
+            }
+        }
+
+        // 决定补全出来的属性读写哪个字段，以及还要不要声明字段。
+        // 名字合约定的字段一律复用 —— 标没标 [VeloxProperty] 都一样，这正是「字段写默认值 + 属性写访问形态」
+        // 这种成对声明成立的原因。
+        // 返回 false 表示已报冲突、该属性不能生成。
+        private bool ResolveBackingStorage(INamedTypeSymbol symbol, IPropertySymbol property, MVVMPropertyFactory factory)
+        {
+            var fieldName = factory.SourceName;
+            var existing = FindFieldInHierarchy(symbol, fieldName);
+
+            if (existing is null)
+            {
+                // 同名的非字段成员会让生成的字段撞成 CS0102。
+                if (symbol.GetMembers(fieldName).Any(member => member is not IFieldSymbol and not IPropertySymbol))
+                {
+                    Report(
+                        VeloxDev.Generators.Diagnostics.ConflictingPropertyDeclaration,
+                        property,
+                        property.Name,
+                        $"a member named '{fieldName}' already exists on this type");
+                    return false;
+                }
+
+                factory.ShouldEmitField = true;
+                return true;
+            }
+
+            if (!IsAccessibleFromTarget(existing, symbol))
+            {
+                // 基类里的私有字段用不上，在本类声明一个新的是合法的（隐藏基类成员，不冲突）。
+                factory.ShouldEmitField = true;
+                return true;
+            }
+
+            if (!CanBackProperty(existing, factory.HasSetter))
+            {
+                Report(
+                    VeloxDev.Generators.Diagnostics.ConflictingPropertyDeclaration,
+                    property,
+                    property.Name,
+                    $"the existing field '{existing.Name}' is {(existing.IsConst ? "const" : existing.IsStatic ? "static" : "readonly")} and cannot back a writable property");
+                return false;
+            }
+
+            var existingType = Analizer.DisplayFullTypeName(existing.Type);
+            if (existingType != factory.FullTypeName)
+            {
+                Report(
+                    VeloxDev.Generators.Diagnostics.ConflictingPropertyDeclaration,
+                    property,
+                    property.Name,
+                    $"the existing field '{existing.Name}' is '{existingType}', but the property is '{factory.FullTypeName}'");
+                return false;
+            }
+
+            factory.ShouldEmitField = false;
+            return true;
+        }
+
+        // 只读属性只读字段，const/readonly 都能用；可写属性要往字段赋值，两者都不行。
+        private static bool CanBackProperty(IFieldSymbol field, bool hasSetter)
+        {
+            if (field.IsStatic)
+            {
+                return false;
+            }
+
+            return !hasSetter || (!field.IsReadOnly && !field.IsConst);
+        }
+
+        private IFieldSymbol? FindFieldInHierarchy(INamedTypeSymbol symbol, string fieldName)
+        {
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                var field = current.GetMembers(fieldName).OfType<IFieldSymbol>().FirstOrDefault();
+                if (field != null)
+                {
+                    return field;
+                }
+
+                current = current.BaseType;
+            }
+
+            return null;
         }
 
         private bool ShouldGenerateFieldProperty(INamedTypeSymbol symbol, IFieldSymbol field)

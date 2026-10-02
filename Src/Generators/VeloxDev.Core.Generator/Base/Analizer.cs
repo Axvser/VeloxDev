@@ -12,6 +12,14 @@ namespace VeloxDev.Generators.Base
 {
     public static class Analizer
     {
+        // 类型名的唯一写法。字段类型比较若用另一种 SymbolDisplayFormat，'string' 与 'System.String'
+        // 会被判成不同类型 —— 所有字段复用都会因此被误报为冲突。
+        internal static string DisplayFullTypeName(ITypeSymbol typeSymbol) =>
+            typeSymbol.ToDisplayString(new SymbolDisplayFormat(
+                typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+                miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier));
+
         public static class Filters
         {
             /// <summary>
@@ -232,15 +240,8 @@ namespace VeloxDev.Generators.Base
             public bool IsNotifyCollectionChanged { get; private set; }
             public string? CollectionItemTypeName { get; private set; }
 
-            private static string GetFullyQualifiedTypeName(ITypeSymbol typeSymbol)
-            {
-                var displayFormat = new SymbolDisplayFormat(
-                    typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-                    genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-                    miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
-
-                return typeSymbol.ToDisplayString(displayFormat);
-            }
+            private static string GetFullyQualifiedTypeName(ITypeSymbol typeSymbol) =>
+                Analizer.DisplayFullTypeName(typeSymbol);
 
             private static bool IsNullableType(ITypeSymbol typeSymbol)
             {
@@ -255,14 +256,22 @@ namespace VeloxDev.Generators.Base
 
             private static string GetPropertyNameFromFieldName(string fieldName)
             {
-                if (fieldName.StartsWith("_"))
+                var start = fieldName.StartsWith("_") ? 1 : 0;
+
+                // 单字符 "_" 会越界；首字符不是字母/下划线（如 "_1x"）推不出合法标识符。
+                // 两种情况都返回空串，由调用方报诊断 —— 生成器不能带着非法名字往下走。
+                if (start >= fieldName.Length)
                 {
-                    return char.ToUpper(fieldName[1]) + fieldName.Substring(2);
+                    return string.Empty;
                 }
-                else
+
+                var first = fieldName[start];
+                if (!char.IsLetter(first) && first != '_')
                 {
-                    return char.ToUpper(fieldName[0]) + fieldName.Substring(1);
+                    return string.Empty;
                 }
+
+                return char.ToUpper(first) + fieldName.Substring(start + 1);
             }
         }
 
@@ -357,15 +366,8 @@ namespace VeloxDev.Generators.Base
                 return false;
             }
 
-            private static string GetFullyQualifiedTypeName(ITypeSymbol typeSymbol)
-            {
-                var displayFormat = new SymbolDisplayFormat(
-                    typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-                    genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-                    miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
-
-                return typeSymbol.ToDisplayString(displayFormat);
-            }
+            private static string GetFullyQualifiedTypeName(ITypeSymbol typeSymbol) =>
+                Analizer.DisplayFullTypeName(typeSymbol);
 
             private static bool IsNullableType(ITypeSymbol typeSymbol)
             {
@@ -403,6 +405,7 @@ namespace VeloxDev.Generators.Base
                 PropertyName = fieldAnalizer.PropertyName;
                 IsNullable = fieldAnalizer.IsNullable;
                 IsFromField = true;
+                ShouldEmitField = false;
                 HasGetter = true;
                 HasSetter = true;
                 IsPartial = false;
@@ -421,6 +424,7 @@ namespace VeloxDev.Generators.Base
                 PropertyName = propertyAnalizer.PropertyName;
                 IsNullable = propertyAnalizer.IsNullable;
                 IsFromField = false;
+                ShouldEmitField = true;
                 HasGetter = propertyAnalizer.HasGetter;
                 HasSetter = propertyAnalizer.HasSetter;
                 IsPartial = propertyAnalizer.IsPartial;
@@ -436,6 +440,15 @@ namespace VeloxDev.Generators.Base
             public string PropertyName { get; private set; }
             public bool IsNullable { get; private set; }
             public bool IsFromField { get; private set; }
+            /// <summary>
+            /// Whether the generated code must declare the backing field itself.
+            /// </summary>
+            /// <remarks>
+            /// False whenever the storage already exists in the user's source: the field form supplies its own
+            /// field, and the property form reuses any accessible field of the conventional name instead of
+            /// declaring a second one of the same name.
+            /// </remarks>
+            public bool ShouldEmitField { get; internal set; }
             public bool HasGetter { get; private set; }
             public bool HasSetter { get; private set; }
             public bool IsPartial { get; private set; }
@@ -550,7 +563,8 @@ namespace VeloxDev.Generators.Base
 
             public string GenerateFieldDeclaration()
             {
-                if (IsFromField) return string.Empty;
+                // 复用已有字段（见 MVVMWriter.ResolveBackingStorage）时不再声明，否则同名成员会撞成 CS0102。
+                if (!ShouldEmitField) return string.Empty;
 
                 var defaultValue = GetDefaultValue();
                 return $"{RETRACT}private {FullTypeName} {SourceName} = {defaultValue};";
