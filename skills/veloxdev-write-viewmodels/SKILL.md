@@ -87,15 +87,22 @@ void M(object? parameter);
 void M();
 ```
 
-**A concrete parameter type makes the command strongly typed.** `Task M(MoveArgs a)` produces `IVeloxCommand<MoveArgs>` instead of `IVeloxCommand`, and the `canValidate` hook takes `MoveArgs` rather than `object?`. If the type argument comes from the *containing class* (`partial class Vm<T>` with `Task M(T value)`), the property carries it too.
+**A concrete parameter type makes the command strongly typed.** `Task M(MoveArgs a)` produces `IVeloxCommand<MoveArgs, object?>` instead of `IVeloxCommand`, and the `canValidate` hook takes `MoveArgs` rather than `object?`. If the type argument comes from the *containing class* (`partial class Vm<T>` with `Task M(T value)`), the property carries it too.
+
+**Up to 15 parameters, and no tuple in sight.** A method with several parameters gets an arity-typed command — `IVeloxCommand<TParam1, …, TParamN, TResult>`, the last type argument always being the result — and you still call it with the arguments:
 
 ```csharp
-[VeloxCommand] private Task MoveAsync(MoveArgs a, CancellationToken ct);  // → IVeloxCommand<MoveArgs> MoveCommand
+[VeloxCommand] private Task<int> AddAsync(int left, int right);      // → IVeloxCommand<int, int, int>
+int sum = await vm.AddCommand.ExecuteAsync(2, 3, ct);                // no ValueTuple at the call site
 ```
+
+The tuple that carries them is an implementation detail between the facade and the pipeline, and being a `ValueTuple` it allocates nothing. The cap is 15: the body delegate is `Func<T1..Tn, CancellationToken, Task<TResult>>`, which is n + 2 type arguments against `Func`'s limit of 17 — more than 15 is refused with `VELOX_MVVM_CMD001`.
 
 ⚙ **A generic method works only when its type parameter appears in the parameter type.** `Task M<T>(T value)` produces a *method* `IVeloxCommand<T> GetMCommand<T>()` — not a property, so it cannot be bound, and each closed `T` gets its own command with its own queue, lock and concurrency cap. `Task M<T>(object? p)` is refused with `VELOX_MVVM_CMD001`: a command instance fixes its type argument when it is built.
 
-⚠ **Strong typing is type information, not a compile-time guarantee.** `IVeloxCommand<T>` derives from `IVeloxCommand`, so the `object?` overloads stay reachable — `vm.MoveCommand.Execute(42)` still compiles and still fails at runtime with `InvalidCastException`. Value types still box. Read it as documentation the consumer can see, not as a check.
+⚠ **Strong typing is not a compile-time guarantee, but it is genuinely cheaper.** `IVeloxCommand<T>` derives from `IVeloxCommand`, so the `object?` overloads stay reachable — `vm.MoveCommand.Execute(42)` still compiles and still fails at runtime with `InvalidCastException`. What it buys is the typed signature *and* an unboxed path: the pipeline is generic, so `CanExecute(T)`, `Execute(T)`, `ExecuteAsync(T)`, `ExecuteAsync(T, ct)`, `Execute(T, out TR)` carry a value-type argument and result without boxing. Two things that path does not change: a call through `ICommand` (including every binding, whose `CommandParameter` is already an `object`) still boxes, and the boxed result channel `CommandCompletion.Result` is `object?` by contract.
+
+⚙ **A typed command can also be subscribed to without boxing**, through `IVeloxCommandEvents<TP, TR>`: the eight stage events with `CommandEventArgs<TP, TR>`, whose `TypedParameter` and `TypedResult` are in their own types. Subscribe through a reference typed as that interface — the class-level `Created` and friends stay the `object?`-shaped ones that binding needs.
 
 ⚙ **An interface declaring the property as plain `IVeloxCommand` forces the untyped form back.** That is why the workflow view-model interfaces keep working: the generator detects the contract and emits `IVeloxCommand` for the property while everything else stays typed.
 

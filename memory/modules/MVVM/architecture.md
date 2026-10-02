@@ -174,14 +174,39 @@ OnExecutionCompletedAsync(item)
 
 **判据必须按符号身份，不能按名字**：`class Vm<T> { Task M<T>(T x) }` 里方法的 `T` 遮蔽了类的 `T`，按名字判会错生成情形 1。四条实测结论（Roslyn 4.3.1 实编，反直觉，别推翻）：
 
-1. **派生接口给不了编译期检查。** `IVeloxCommand<T> : IVeloxCommand` 时 `c.Execute(42)` 仍然编译通过（基接口的 `object?` 重载始终可达），加 `new` 隐藏也照样通过。强类型买到的是**类型信息**，不是保证 —— 这一点写在 `IVeloxCommand{T}.cs` 的 XML 注释里。
-2. **属性类型改成 `IVeloxCommand<P>` 会打断接口实现。** `IWorkflow{Node,Slot,Tree,Link}ViewModel` 里约 20 个命令属性声明为非强类型 `IVeloxCommand`，派生接口类型**不会**隐式实现它（CS0738）。所以 `RequiresUntypedProperty` 命中时只把**属性类型**退回非强类型，缓冲字段与构造保持强类型，getter 上转。
-3. **三个强类型成员上不能加 `new`** —— CS0109（`T` 是类型参数，`Execute(T)` 与 `Execute(object)` 是两个不同重载，谈不上隐藏）。
-4. **`_isCtsNeeded` 可以在基类静态工厂里用对象初始化器写**（`new VeloxCommand<T>(…) { _isCtsNeeded = false }`），所以强类型工厂不需要额外的 protected 构造。
+1. **派生接口给不了编译期检查。** `IVeloxCommand<TParam, TResult> : IVeloxCommand` 时 `c.Execute(42)` 仍然编译通过（基接口的 `object?` 重载始终可达），加 `new` 隐藏也照样通过。强类型买到的是**类型信息**，不是保证 —— 这一点写在 `IVeloxCommand{TParam,TResult}.cs` 的 XML 注释里。
+2. **属性类型改成强类型会打断接口实现。** `IWorkflow{Node,Slot,Tree,Link}ViewModel` 里约 20 个命令属性声明为非强类型 `IVeloxCommand`，派生接口类型**不会**隐式实现它（CS0738）。所以 `RequiresUntypedProperty` 命中时只把**属性类型**退回声明的那个类型，缓冲字段与构造保持强类型，getter 上转。
+3. **强类型成员上不能加 `new`** —— CS0109（形参类型是类型参数，`Execute(T)` 与 `Execute(object)` 是两个不同重载，谈不上隐藏）。
+4. **`_isCtsNeeded` 走构造参数**，不是对象初始化器 —— 管道泛型化之后 `private` 字段跨闭合类型不可写，而且构造里本来就有这个参数。
 
 **情形 2 的访问器不可绑定**（是方法不是属性），且**每个封闭 `T` 一套队列/锁/并发上限** —— `GetXCommand<int>().Lock()` 不影响 `GetXCommand<string>()`。缓存键覆盖**全部**类型参数：只按第一个索引会让 `M<T, U>` 的不同 `U` 共用同一个实例。约束逐字抄源码文本（`where T : U` 依赖书写顺序，符号渲染容易改错）。
 
-**值类型仍然装箱**：`CommandEventArgs.Parameter` 是 `object?`，管道改不动 —— 强类型不是「零装箱」。
+**命令支持最多 15 个形参（2026-10-02）**。命令只有一个实参槽，而 C# 没有可变泛型 —— 所以 N 个形参只能靠一个**载体**共享管道。载体是 `ValueTuple`（结构体，任意元数都不分配；>7 时嵌套的 `TRest` 也是结构体内联存储），外面套一层**薄门面**把它挡在公开面之外：调用点写 `cmd.ExecuteAsync(a, b, ct)`，永远看不到元组。
+
+- **元数 = 形参个数 + 1**，最后一个类型参数永远是结果 —— 与 `Func<TResult>`、`Func<T1, TResult>` 同一套排法。上限 **15 个形参**：体是 `Func<T1..Tn, CancellationToken, Task<TResult>>`，共 n+2 个类型实参，而 `Func` 最多 17 个。
+- **最小形状是两个泛型参数**：`IVeloxCommand<TParam, TResult>`。无返回值时 `TResult = object?` 且恒为 null。**1-arity 的 `IVeloxCommand<T>` 与 `VeloxCommand<T>` 已删除** —— 它们的存在会让「1 形参无结果」与「结果族」在元数上撞车。1-arity 的成员（`CanExecute/Execute/ExecuteAsync` 单参版）折进了 2-arity。
+- **族是生成的**：`Src/Core/VeloxDev.Core/MVVM/CommandArities.cs`（2..15 形参，接口 + 门面各 14 个）。内容是机械的 —— 新增一档就是照抄相邻那档、把元数整体加一。上限 15 个形参，因为体是 `Func<T1..Tn, CancellationToken, Task<TResult>>` 而 `Func` 最多 17 个类型实参。
+- **void 通道只留给「单形参 + 无返回值」**：arity 族没有无返回体的公开入口，多形参的 void / `Task` / `ValueTask` 体只能包一层 `async` lambda 进结果通道。**必须显式 `return default!`** —— `async` lambda 落到 `Task<T>` 目标时不允许从末尾漏出去（**CS1643**，与 `async Task<T>` 方法不同，实测过）。同步跑完的 async 由编译器缓存状态机，所以这条不额外分配。
+- **校验器的形参表跟着源方法走**（类型与名字都是），`canValidate: false` 时交给构造的恒真谓词**也要跟着元数**（arity 族收 `Func<T1..Tn, bool>`，写死 `_ => true` 是 CS1593）。
+
+**强类型入口已经不装箱了（2026-10-02）**。管道本身泛型化成了 `CommandPipeline<TParam, TResult>`，三个类做**兄弟**（它抽出来当共同基类，因为 `VeloxCommand : VeloxCommand<object?,object?>` 写不出来 —— 泛型叶子上 `IVeloxCommand<object?,object?>.ExecuteAsync(object?, ct)` 与继承来的 `IVeloxCommandResult.ExecuteAsync(object?, ct)` 同签名不同返回，CS0111）：
+
+| 类 | 是什么 |
+|---|---|
+| `CommandPipeline<TParam, TResult>` | 抽象，**唯一**的管道实现：队列、锁、并发、8 个事件、两个 sink 全按 `TParam`/`TResult` 定型 |
+| `VeloxCommand` | `= CommandPipeline<object?, object?>`，兜底面，构造/工厂都在这 |
+| `VeloxCommand<TP,TR>` | 强类型入口 + `IVeloxCommand<TP,TR>` |
+| `VeloxCommand<T>` | `: VeloxCommand<T, object?>`，参数强类型、无返回值；单独存在是因为它的体不收 token，塞进 `Task<TResult>` 会给每次执行加一层 async 包装分配 |
+
+**免装箱的只有六个强类型入口**：`CanExecute(T)`、`Execute(T)`、`ExecuteAsync(T)`、`ExecuteAsync(T, ct)`、`Execute(T, out TR)`、强类型事件投递。`ICommand`/`IVeloxCommand`/`IVeloxCommandResult`/`IVeloxCommandCompletion` 的重载、`e.Parameter`、`CommandCompletion.Result` 按契约就是 `object?`，**仍然装箱** —— 那是兜底面。**从 XAML 绑定过来的值本来就已装箱**（`CommandParameter` 是 `object`），所以省下的只对**代码调用点**有效。
+
+**证明而不是断言**：`CommandBoxingTests` 拿两条结构完全相同、只差 `T` 是值类型还是引用类型的命令做差分，值类型那侧不得高于引用类型那侧。它用 `GC.GetTotalAllocatedBytes(precise: true)` 而不是按线程计数 —— 管道把续体排在池线程上，按线程计数会漏掉要找的那次分配。
+
+**事件的两副面孔**：一个类不能有两个同名公开事件，所以强类型那 8 个走 `IVeloxCommandEvents<TParam,TResult>` 的**显式实现**，类上的名字留给兜底形状。投递时**只建一份副本**，两副面孔共用；一边都没订阅就一份都不建。8 个槽是每个命令实例一份，不是每次执行。
+
+**`HandlerException` 不能进泛型类型**：它是 static 事件，泛型类型上的静态成员是每个闭合类型一份，搬进去就等于让订阅者只收到自己那个形状的命令上报的异常。它留在非泛型的 `CommandDiagnostics` 上，`VeloxCommand` 那边的同名事件转发过去。
+
+**兜底路径的代价略升**：每次执行的 item 现在是 `CommandEventArgs<TParam,TResult>`，强类型命令还要多带一个 `object?` 原始参数槽（用 `object?` 入口进来时值已经装箱了，但转换必须推迟到命令体调用那一刻，否则传错类型会变成同步抛而不是 `Failed`）。记忆里旧版「既有路径逐字节不变」的说法**不再成立**。
 
 **命令体的返回值现在交得出来（2026-10-02）**。此前 `_command` 是 `Func<object?, CancellationToken, Task>`，`Task<T>` 靠**返回类型协变**绑定进来，`T` 在委托绑定那一刻就没了 —— 生成器每个 `Task<T>` 形态发的都是丢值的表达式。
 

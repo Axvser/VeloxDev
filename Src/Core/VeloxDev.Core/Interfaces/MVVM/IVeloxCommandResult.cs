@@ -22,7 +22,7 @@ namespace VeloxDev.MVVM;
 /// The value belongs to one execution, never to the command: two overlapping calls get their own.
 /// </para>
 /// </remarks>
-/// <seealso cref="IVeloxCommand{TP,TR}"/>
+/// <seealso cref="IVeloxCommand{TParam,TResult}"/>
 public interface IVeloxCommandResult
 {
     /// <summary>

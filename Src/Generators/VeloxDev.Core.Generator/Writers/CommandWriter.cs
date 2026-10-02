@@ -51,7 +51,8 @@ namespace VeloxDev.Generators.Writers
             CommandConstruction construction,
             string? parameterTypeName,
             string resultTypeName,
-            string validatorParameterName,
+            string validatorParameterList,
+            string alwaysTruePredicate,
             string methodTypeParameterList,
             string methodConstraintClauses,
             string[] methodTypeParameterNames,
@@ -70,8 +71,13 @@ namespace VeloxDev.Generators.Writers
             // 命令体的返回值类型；没有返回值时是 object?（恒 null）—— 结果通道始终在，只是空。
             public string ResultTypeName { get; } = resultTypeName;
 
-            // 校验器形参名跟随源方法的形参名 —— 生成器声明什么名字，用户就得写什么名字（否则 CS8826）。
-            public string ValidatorParameterName { get; } = validatorParameterName;
+            // 校验器的形参表：类型与名字都跟随源方法 —— 生成器声明什么，用户就得写什么（否则 CS8826）。
+            // 零前导形参时为 object? parameter。
+            public string ValidatorParameterList { get; } = validatorParameterList;
+
+            // canValidate: false 时交给构造的恒真谓词。元数必须跟着形参个数走 ——
+            // arity 族的构造收 Func<T1..Tn, bool>，写死 `_ => true` 是 CS1593。
+            public string AlwaysTruePredicate { get; } = alwaysTruePredicate;
 
             public string MethodTypeParameterList { get; } = methodTypeParameterList;
             public string MethodConstraintClauses { get; } = methodConstraintClauses;
@@ -167,6 +173,10 @@ namespace VeloxDev.Generators.Writers
             CommandConfig = list;
         }
 
+        // 命令体能带多少前导形参。上限由委托决定：体是 Func<T1..Tn, CancellationToken, Task<TResult>>，
+        // 共 n + 2 个类型实参，而 Func 最多 17 个 —— 15 是 token 与结果都占一格后的最大值。
+        private const int MaxLeadingParameters = 15;
+
         private const string TASK = "global::System.Threading.Tasks.Task";
         private const string VALUE_TASK = "global::System.Threading.Tasks.ValueTask";
         private const string CANCEL_TOKEN = "global::System.Threading.CancellationToken";
@@ -217,8 +227,8 @@ namespace VeloxDev.Generators.Writers
             // 泛型方法：类型实参由调用点选定，而一个命令实例的 T 在构造时就固定了。
             // 只有 T 出现在参数类型里，生成的访问器才有办法把它作为自己的类型参数暴露出去。
             bool methodTypeParamsInParameter = methodSymbol.IsGenericMethod
-                && leading == 1
-                && CollectTypeParameters(parameters[0].Type).Any(candidate =>
+                && leading >= 1
+                && parameters.Take(leading).SelectMany(static parameter => CollectTypeParameters(parameter.Type)).Any(candidate =>
                     methodSymbol.TypeParameters.Any(tp => SymbolEqualityComparer.Default.Equals(tp, candidate)));
 
             if (methodSymbol.IsGenericMethod && !methodTypeParamsInParameter)
@@ -227,9 +237,9 @@ namespace VeloxDev.Generators.Writers
                 return null;
             }
 
-            if (leading > 1)
+            if (leading > MaxLeadingParameters)
             {
-                reason = "it takes more than one parameter before the optional CancellationToken, and a command carries a single argument; take one type of your own instead (a record or a tuple both work)";
+                reason = $"it takes {leading} parameters before the optional CancellationToken, and the generated command carries at most {MaxLeadingParameters}; take one type of your own instead (a record or a tuple both work)";
                 return null;
             }
 
@@ -256,20 +266,23 @@ namespace VeloxDev.Generators.Writers
             // 两边必须用同一种渲染，否则同一种类型会因为拼写不同被判成不可赋值。
             string resultTypeName = valueType ?? "global::System.Object?";
 
-            // 校验器的形参名跟随源方法的形参名：生成器声明什么，用户就得写什么（否则 CS8826）。
-            // 零形参与仅 token 的方法没有源形参名可抄，只能用 parameter。
-            string validatorParameterName = "parameter";
-            if (leading == 1)
-            {
-                var sourceName = parameters[0].Name;
-                validatorParameterName = SyntaxFacts.GetKeywordKind(sourceName) != SyntaxKind.None
-                    ? "@" + sourceName
-                    : sourceName;
-            }
+            // 校验器的形参表跟随源方法：类型与名字都是源方法自己的（否则 CS8826）。
+            // 零前导形参的方法没有源形参可抄，只能用 object? parameter。
+            string alwaysTruePredicate = leading >= 2
+                ? $"({string.Join(", ", System.Linq.Enumerable.Range(0, leading).Select(static _ => "_"))}) => true"
+                : "_ => true";
+
+            string validatorParameterList = leading == 0
+                ? "object? parameter"
+                : string.Join(", ", parameters.Take(leading).Select(static parameter =>
+                    $"{FullyQualifiedWithNullability(parameter.Type)} {(SyntaxFacts.GetKeywordKind(parameter.Name) != SyntaxKind.None ? "@" + parameter.Name : parameter.Name)}"));
 
             // object? 形参维持今天的非强类型形态 —— 它本来就没有类型可强。
-            bool isTyped = leading == 1 && !isObjectParam;
-            string? parameterType = isTyped ? FullyQualifiedWithNullability(parameters[0].Type) : null;
+            // 单个 object? 形参维持非强类型（它本来就没有类型可强）；其余一律强类型，元数 >= 2 走 arity 族。
+            bool isTyped = leading >= 1 && !(leading == 1 && isObjectParam);
+            string? parameterType = isTyped
+                ? string.Join(", ", parameters.Take(leading).Select(static parameter => FullyQualifiedWithNullability(parameter.Type)))
+                : null;
 
             var shape = !isTyped
                 ? CommandShape.UntypedProperty
@@ -313,27 +326,52 @@ namespace VeloxDev.Generators.Writers
 
             if (isTyped)
             {
-                // lambda 的形参已经是 P，不再需要强转。无 token 的一律走 CreateTypedTaskOnlyWithParameter ——
-                // 它保持 _isCtsNeeded = false，与今天的 CreateTaskOnlyWithParameter 对称；否则每条这样的命令
-                // 都会白分配一个命令体根本观察不到的 CancellationTokenSource。
-                construction = hasToken ? CommandConstruction.TypedMainCtor : CommandConstruction.TypedParameterOnlyFactory;
+                // lambda 的形参已经是 P，不再需要强转。无 token 的一律走保持 _isCtsNeeded = false 的入口，
+                // 否则每条这样的命令都会白分配一个命令体根本观察不到的 CancellationTokenSource。
+                // 只有「单形参 + 无返回值」还能走 void 通道。arity 族没有无返回体的公开入口，
+                // 多形参的 void 体只能包一层 async lambda，从结果入口走。
+                var useResultChannel = valueType is not null || leading >= 2;
+                construction = useResultChannel
+                    ? (hasToken ? CommandConstruction.TypedResultMainCtor : CommandConstruction.TypedResultParameterOnlyFactory)
+                    : (hasToken ? CommandConstruction.TypedMainCtor : CommandConstruction.TypedParameterOnlyFactory);
 
-                if (isVoid)
+                // 单形参沿用 value，产物文本与从前逐字一致；多形参用 v1..vn。
+                var values = leading == 1
+                    ? "value"
+                    : string.Join(", ", System.Linq.Enumerable.Range(1, leading).Select(static i => $"v{i}"));
+                var lambda = leading == 1 ? values : $"({values})";
+                var lambdaWithToken = leading == 1 ? $"(value, ct)" : $"({values}, ct)";
+
+                if (leading >= 2 && valueType is null)
                 {
-                    // VeloxCommand<T> 没有 Action<T> 重载，语句体 lambda 把同步体包成 Func<P, Task>。
+                    // 多形参、无返回值：arity 族没有无返回体的公开入口，而结果通道要 Task<TResult>，
+                    // 只能包一层 async lambda。必须显式 return —— async lambda 落到 Task<T> 目标时
+                    // 不允许从末尾漏出去（CS1643），这一点与 async Task<T> 方法不同，实测过。
+                    // 同步跑完的 async 由编译器缓存状态机，所以这条不额外分配。
+                    var statement = isVoid
+                        ? $"{methodName}({values});"
+                        : hasToken
+                            ? $"await {methodName}({values}, ct).ConfigureAwait(false);"
+                            : $"await {methodName}({values}).ConfigureAwait(false);";
+                    var header = hasToken ? lambdaWithToken : lambda;
+                    commandExpression = $"async {header} => {{ {statement} return default!; }}";
+                }
+                else if (isVoid)
+                {
+                    // 单形参、无返回值：语句体 lambda 包成 Func<P, Task>，走无 token 工厂（void 带 token 已被拒）。
                     commandExpression = $"value => {{ {methodName}(value); return global::System.Threading.Tasks.Task.CompletedTask; }}";
                 }
                 else if (isValueTask)
                 {
                     commandExpression = hasToken
-                        ? $"(value, ct) => {methodName}(value, ct).AsTask()"
-                        : $"value => {methodName}(value).AsTask()";
+                        ? $"{lambdaWithToken} => {methodName}({values}, ct).AsTask()"
+                        : $"{lambda} => {methodName}({values}).AsTask()";
                 }
                 else
                 {
                     commandExpression = hasToken
-                        ? $"(value, ct) => {methodName}(value, ct)"
-                        : $"value => {methodName}(value)";
+                        ? $"{lambdaWithToken} => {methodName}({values}, ct)"
+                        : $"{lambda} => {methodName}({values})";
                 }
             }
             else
@@ -376,38 +414,24 @@ namespace VeloxDev.Generators.Writers
 
             // 有返回值时换用带结果的构造入口，并把表达式重写成「装箱后交出去」的形式 ——
             // 今天的表达式靠返回类型协变绑定，T 在那一跳就被丢掉了。
-            if (valueType is not null)
+            // 非强类型、但有返回值：结果要装箱成 object? 才穿得过通道。
+            // 强类型那一半（含多形参）已经在上面按 useResultChannel 选好构造与表达式，这里不能再碰 ——
+            // 碰了就会把多形参的产物覆盖回单形参写法（CS1593）。
+            if (valueType is not null && !isTyped)
             {
-                // 按 hasToken 选，不能按原构造值升级 —— 无 token 的工厂收单参委托，带 token 的收双参，
-                // 元数对不上就是 CS1593。
-                construction = (isTyped, hasToken) switch
-                {
-                    (true, true) => CommandConstruction.TypedResultMainCtor,
-                    (true, false) => CommandConstruction.TypedResultParameterOnlyFactory,
-                    (false, true) => CommandConstruction.UntypedResultMainCtor,
-                    (false, false) => CommandConstruction.UntypedResultParameterOnlyFactory,
-                };
+                construction = hasToken
+                    ? CommandConstruction.UntypedResultMainCtor
+                    : CommandConstruction.UntypedResultParameterOnlyFactory;
 
-                if (isTyped)
+                // 元数必须与工厂收的委托一致：无 token 的两个工厂收单参 Func<object?, Task<object?>>，
+                // 带 token 的收双参 —— 零形参的命令体也得套一层丢掉实参的 lambda 才绑得上。
+                commandExpression = (leading, hasToken) switch
                 {
-                    // 强类型：lambda 的形参已经是 P，委托类型与命令体一致，不需要装箱。
-                    commandExpression = isValueTask
-                        ? (hasToken ? $"(value, ct) => {methodName}(value, ct).AsTask()" : $"value => {methodName}(value).AsTask()")
-                        : (hasToken ? $"(value, ct) => {methodName}(value, ct)" : $"value => {methodName}(value)");
-                }
-                else
-                {
-                    // 非强类型：结果要装箱成 object? 才穿得过通道。ValueTask 也能直接 await，不必先 AsTask。
-                    // 元数必须与工厂收的委托一致：无 token 的两个工厂收单参 Func<object?, Task<object?>>，
-                    // 带 token 的收双参 —— 零形参的命令体也得套一层丢掉实参的 lambda 才绑得上。
-                    commandExpression = (leading, hasToken) switch
-                    {
-                        (0, false) => $"async _ => (object?)await {methodName}()",
-                        (0, true) => $"async (_, ct) => (object?)await {methodName}(ct)",
-                        (_, false) => $"async parameter => (object?)await {methodName}(parameter)",
-                        (_, true) => $"async (parameter, ct) => (object?)await {methodName}(parameter, ct)",
-                    };
-                }
+                    (0, false) => $"async _ => (object?)await {methodName}()",
+                    (0, true) => $"async (_, ct) => (object?)await {methodName}(ct)",
+                    (_, false) => $"async parameter => (object?)await {methodName}(parameter)",
+                    (_, true) => $"async (parameter, ct) => (object?)await {methodName}(parameter, ct)",
+                };
             }
 
             var (typeParameterList, constraintClauses) = methodTypeParamsInParameter
@@ -427,7 +451,8 @@ namespace VeloxDev.Generators.Writers
                 construction,
                 parameterType,
                 resultTypeName,
-                validatorParameterName,
+                validatorParameterList,
+                alwaysTruePredicate,
                 typeParameterList,
                 constraintClauses,
                 typeParameterNames,
@@ -552,15 +577,14 @@ namespace VeloxDev.Generators.Writers
             return null;
         }
 
-        // 生成的 2-arity 属性能不能赋给接口声明的那个类型。两条继承链撑得起前两种：
-        // IVeloxCommand<TP,TR> : IVeloxCommand<TP> : IVeloxCommand（注意 TR 没有声明逆变，
-        // 所以结果类型不同的 2-arity 之间不可转换）。
+        // 生成的强类型属性能不能赋给接口声明的那个类型。
+        // 继承链只有一条：IVeloxCommand<TParam1..TParamN, TResult> : IVeloxCommand（没有声明逆变，
+        // 所以元数或结果类型不同的两个强类型之间互不可转换）。
         private static bool CanUpcastTo(string declared, string parameterType, string resultType)
         {
             const string untyped = NAMESPACE_VELOX_MVVM + ".IVeloxCommand";
 
             return declared == untyped
-                || declared == $"{untyped}<{parameterType}>"
                 || declared == $"{untyped}<{parameterType}, {resultType}>";
         }
 
@@ -633,7 +657,7 @@ namespace VeloxDev.Generators.Writers
                 CommandConstruction.UntypedParameterOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithParameter(",
                 CommandConstruction.UntypedTokenOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithCancellationToken(",
                 CommandConstruction.TypedParameterOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTypedTaskOnlyWithParameter<{parameterType}>(",
-                CommandConstruction.TypedMainCtor => $"new {NAMESPACE_VELOX_MVVM}.VeloxCommand<{parameterType}>(",
+                CommandConstruction.TypedMainCtor => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTypedWithParameter<{parameterType}>(",
                 CommandConstruction.UntypedResultMainCtor => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskWithResult(",
                 CommandConstruction.UntypedResultParameterOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithResult(",
                 CommandConstruction.TypedResultMainCtor => $"new {NAMESPACE_VELOX_MVVM}.VeloxCommand<{parameterType}, {config.ResultTypeName}>(",
@@ -668,7 +692,7 @@ namespace VeloxDev.Generators.Writers
                                                     return _buffer_{{config.Name}}Command;
                                                 }
                                             }
-                                            private partial bool CanExecute{{config.Name}}Command({{config.ParameterTypeName ?? "object?"}} {{config.ValidatorParameterName}});
+                                            private partial bool CanExecute{{config.Name}}Command({{config.ValidatorParameterList}});
                                          """);
             }
             else
@@ -681,7 +705,7 @@ namespace VeloxDev.Generators.Writers
                                                 {
                                                     _buffer_{{config.Name}}Command ??= {{constructor}}
                                                         command: {{config.CommandExpression}},
-                                                        canExecute: _ => true,
+                                                        canExecute: {{config.AlwaysTruePredicate}},
                                                         semaphore: {{config.Semaphore}});
                                                     return _buffer_{{config.Name}}Command;
                                                 }
@@ -721,7 +745,7 @@ namespace VeloxDev.Generators.Writers
 
             if (config.CanValidate)
             {
-                builder.AppendLine($"        private partial bool CanExecute{config.Name}Command{config.MethodTypeParameterList}({parameterType} {config.ValidatorParameterName}){config.MethodConstraintClauses};");
+                builder.AppendLine($"        private partial bool CanExecute{config.Name}Command{config.MethodTypeParameterList}({config.ValidatorParameterList}){config.MethodConstraintClauses};");
             }
         }
     }

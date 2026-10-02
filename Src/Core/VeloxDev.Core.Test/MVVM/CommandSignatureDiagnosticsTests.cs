@@ -69,14 +69,28 @@ public class CommandSignatureDiagnosticsTests
     }
 
     [TestMethod]
-    public void MoreThanOneLeadingParameter_IsRefusedWithItsOwnDiagnostic()
+    public void SeveralLeadingParameters_ProduceTheArityFamilyCommand()
     {
-        var (diagnostics, _) = Run(
+        // 两个前导形参不再是拒绝：arity 族的元数就是「形参个数 + 结果」。
+        var (diagnostics, generated) = Run(
             "private Task M(string a, string b) { _ = a; _ = b; return Task.CompletedTask; }");
+
+        Assert.IsEmpty(diagnostics, Describe(diagnostics));
+        StringAssert.Contains(
+            generated,
+            "IVeloxCommand<global::System.String, global::System.String, global::System.Object?>");
+    }
+
+    [TestMethod]
+    public void MoreLeadingParametersThanTheDelegateAllows_IsRefused()
+    {
+        // 上限由委托决定：体是 Func<T1..Tn, CancellationToken, Task<TResult>>，Func 最多 17 个类型实参。
+        var many = string.Join(", ", System.Linq.Enumerable.Range(1, 16).Select(static i => $"int p{i}"));
+        var (diagnostics, _) = Run($"private Task M({many}) => Task.CompletedTask;");
 
         Assert.HasCount(1, diagnostics, Describe(diagnostics));
         Assert.AreEqual(Id, diagnostics[0].Id);
-        StringAssert.Contains(diagnostics[0].GetMessage(), "more than one parameter");
+        StringAssert.Contains(diagnostics[0].GetMessage(), "carries at most");
     }
 
     [TestMethod]
@@ -139,7 +153,7 @@ public class CommandSignatureDiagnosticsTests
         Assert.IsEmpty(diagnostics, Describe(diagnostics));
         Assert.IsNotEmpty(generated, "and all of them must still produce a file");
 
-        // 类自己的类型参数（情形 1）：参数类型里出现的是类的 T，属性类型写得出 IVeloxCommand<T>。
+        // 类自己的类型参数（情形 1）：参数类型里出现的是类的 T，属性类型写得出 IVeloxCommand<T, object?>。
         var (classDiagnostics, classGenerated) = Run(
             "private Task H1(T v) { _ = v; return Task.CompletedTask; }", genericClass: true);
         Assert.IsEmpty(classDiagnostics, Describe(classDiagnostics));
@@ -196,7 +210,6 @@ public class CommandSignatureDiagnosticsTests
         StringAssert.Contains(diagnostics[0].GetMessage(), "only a property can satisfy");
     }
 
-    [DataRow("IVeloxCommand<string>", "IVeloxCommand<global::System.String> RunCommand")]
     [DataRow("IVeloxCommand<string, object?>", "IVeloxCommand<global::System.String, global::System.Object?> RunCommand")]
     [TestMethod]
     public void AnInterfaceCommandProperty_MakesThePropertyKeepTheDeclaredType(

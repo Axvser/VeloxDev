@@ -14,6 +14,7 @@
 | 声明可观察属性 | `[VeloxProperty]`（`VeloxPropertyAttribute.cs:25`，`AttributeUsage(Field \| Property)`） | 用户 |
 | 字段与属性**成对**声明同一个逻辑属性 | 同一条 `[VeloxProperty]` 同时标在字段与 `partial` 属性上：字段承载默认值与**字段专属特性**，属性承载访问形态与**属性专属特性**。属性路会复用那个字段，不再自己声明（`MVVMWriter.ResolveBackingStorage`，2026-10-02） | 用户 |
 | 命令参数是具体类型 → 属性变**强类型** | `[VeloxCommand] Task M(MoveArgs a)` ⇒ 属性类型 `IVeloxCommand<MoveArgs, object?>`，`canValidate` 的 partial 也拿到 `MoveArgs`（2026-10-02） | 用户 |
+| 命令有**多个**形参 | 最多 15 个前导形参（+ 可选尾随 `CancellationToken`）⇒ 元数族 `IVeloxCommand<TParam1..TParamN, TResult>`。调用点写 `cmd.ExecuteAsync(a, b, ct)`，元组只在门面与管道之间（2026-10-02） | 用户 |
 | 取命令体的**返回值** | 命令体返回 `Task<R>`/`ValueTask<R>` ⇒ 属性类型 `IVeloxCommand<P, R>`：`await cmd.ExecuteAsync(p, ct)` 直接得 `R`；非强类型命令走 `IVeloxCommandResult.ExecuteAsync(object?, ct)`（装箱）。**失败即抛**（`Failed` 重抛原异常、`Canceled`/`Refused` 各抛对应类型）。无返回值时 `R = object?` 恒 null（2026-10-02） | 用户 |
 | 同步取返回值 | `Execute(p, out r)` —— 阻塞调用线程到本次执行结束。**在命令体内部对自己调用会自锁** | 用户 |
 | 泛型方法（T 在参数类型里）→ **访问器方法** | `[VeloxCommand] Task M<T>(T x)` ⇒ `IVeloxCommand<T> GetMCommand<T>()`，按类型实参缓存。**不可绑定**，每个封闭 T 一套队列/锁（2026-10-02） | 用户 |
@@ -49,7 +50,7 @@
 | `public Task FooAsync(MoveArgs a, CancellationToken ct)` | `new VeloxCommand<MoveArgs>(…)`，属性类型 `IVeloxCommand<MoveArgs>` | **true** | 能 |
 | `public Task FooAsync<T>(T x) where T : class` | `IVeloxCommand<T> GetFooCommand<T>()`，`ConcurrentDictionary` 按 `typeof(T)` 缓存 | false | **不能** |
 
-**强类型不是「编译期保证」**（2026-10-02 实测）：`IVeloxCommand<T>` 派生自非强类型接口，`c.Execute(42)` 仍然编译通过、仍然只在运行期 `Failed`。它给的是类型信息与强类型校验钩子。**值类型也仍然装箱** —— 管道是 `object?`。**情形 2 的访问器不可绑定**，且每个封闭 `T` 独立持有队列/锁/并发上限。
+**强类型不是「编译期保证」**（2026-10-02 实测）：`IVeloxCommand<T>` 派生自非强类型接口，`c.Execute(42)` 仍然编译通过、仍然只在运行期 `Failed`。它给的是类型信息与强类型校验钩子。**但强类型入口确实不装箱了**（2026-10-02 起，管道已泛型化为 `CommandPipeline<TParam,TResult>`）—— 六个入口：`CanExecute(T)`、`Execute(T)`、`ExecuteAsync(T)`、`ExecuteAsync(T, ct)`、`Execute(T, out TR)`、强类型事件投递。兜底面（`ICommand`/`IVeloxCommand*`/`e.Parameter`/`Completion.Result`）按契约仍是 `object?`，仍然装箱；**绑定过来的值本来就已装箱**，所以省下的只对代码调用点有效。**情形 2 的访问器不可绑定**，且每个封闭 `T` 独立持有队列/锁/并发上限。
 
 **返回值的四条注意**（2026-10-02）：
 
