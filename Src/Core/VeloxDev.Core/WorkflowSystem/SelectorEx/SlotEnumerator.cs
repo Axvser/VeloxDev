@@ -729,6 +729,13 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
             yield return item.Slot;
     }
 
+    // 按名字还原选择器类型。这是加载路径上唯一一处必须读元数据的地方：`SelectorTypeName` 是存档里
+    // 唯一留下的东西，而选择器类型是宿主自己的枚举（demo 里的 VoltageRange），它不在 Agent 目录里
+    // —— 没有任何成员的声明类型是它，所以生成器收录不到，也就查不出来。
+    //
+    // 代价是真实的：裁剪器看不到这个字符串指向谁，宿主必须自己保住那个枚举的元数据。
+    // 不换成目录查询，是因为那会把「目录里没有就还原不出来」变成默认结果，而它今天能还原出来。
+#pragma warning disable IL2026, IL2025 // 按名字解析类型：见上
     private static Type? ResolveTypeByName(string fullName)
     {
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -738,6 +745,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         }
         return null;
     }
+#pragma warning restore IL2026, IL2025
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

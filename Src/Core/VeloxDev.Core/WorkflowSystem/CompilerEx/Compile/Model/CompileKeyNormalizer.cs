@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
@@ -34,6 +34,9 @@ internal static class CompileKeyNormalizer
     /// with a key no option names — it selects nothing and the flow ends where it ends, with no fabricated result.
     /// </para>
     /// </summary>
+    // 按名字还原路由键的类型。与 SlotEnumerator 那处同因：键是宿主的枚举，没有成员的声明类型是它，
+    // 所以它不在 Agent 目录里，只能按名字找。宿主必须自己保住那个枚举的元数据。
+#pragma warning disable IL2057, IL2026 // 按名字解析类型：见上
     internal static object? Normalize(object? key, string? typeName)
     {
         if (key is null || typeName is not { Length: > 0 }) return key;
@@ -44,3 +47,5 @@ internal static class CompileKeyNormalizer
         return type is null || !type.IsEnum ? key : Enum.ToObject(type, Convert.ToInt64(key));
     }
 }
+
+#pragma warning restore IL2057, IL2026
