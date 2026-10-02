@@ -1,18 +1,12 @@
-<Project>
+﻿<Project>
 	<!-- MSBuild imports only the nearest Directory.Build.props, so the
 		 parent's roots must be imported explicitly or they are shadowed. -->
 	<Import Project="..\Directory.Build.props" />
 
-	<ItemGroup>
-		<!--
-			This demo tree references VeloxDev.Core.Extension by ProjectReference,
-			so the NuGet package's buildTransitive props never load for it (a
-			project reference does not import the package's props). Root the
-			assembly here so its reflection metadata survives trimmed publishes.
-			Scoped to this tree: the other Workflow demos do not reference
-			Core.Extension at all, and an absent root could trip the trimmer.
-			Inert when trimming is disabled.
-		-->
-		<TrimmerRootAssembly Include="VeloxDev.Core.Extension" />
-	</ItemGroup>
+	<!--
+		This tree used to root VeloxDev.Core.Extension so its reflection metadata survived a trimmed
+		publish. It no longer needs to: the assembly resolves everything it used to reflect for out of the
+		compiled agent context tree and the generated archive serializer, and it has no trim warnings left.
+		Rooting it now would keep metadata alive that nothing reads.
+	-->
 </Project>

@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -351,6 +351,11 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     /// by reference does not survive the interface/implementation split (an <c>IList&lt;T&gt;</c> call and the
     /// <c>List&lt;T&gt;</c> property are different <see cref="MethodInfo"/> instances).
     /// </summary>
+    // 找 get_Item 所属的索引器属性。这一步要读声明类型的属性元数据，而且是**必须**的：
+    // 写路径是 `Expression.Assign(<成员访问>, value)`，而索引器的读必须是一个可赋值的成员访问
+    // （`Expression.MakeIndex` 要的就是这个 PropertyInfo）——换成 `Expression.Call(getter, …)`
+    // 会让这一整条写路径编不出来。
+#pragma warning disable IL2070 // 索引器的读写都要属性元数据，见上；宿主必须保住被动画类型的属性
     private static PropertyInfo? FindIndexer(MethodCallExpression call)
     {
         var method = call.Method;
@@ -389,6 +394,7 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
             return null;
         }
     }
+#pragma warning restore IL2070
 
     private static IndexArgument[]? BuildArguments(IReadOnlyList<Expression> expressions, ParameterExpression? parameter)
     {

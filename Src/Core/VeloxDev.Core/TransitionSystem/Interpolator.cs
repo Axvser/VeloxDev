@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Drawing;
 using System.Numerics;
 using VeloxDev.TransitionSystem.NativeSamplers;
@@ -65,20 +65,23 @@ public abstract class InterpolatorCore
         ISampler? matched = null;
         string? matchedName = null;
 
-        foreach (var contract in type.GetInterfaces())
+        // 反过来遍历注册表而不是 `type.GetInterfaces()`：那条调用要求调用方保住 type 的接口元数据，
+        // 而 `IsAssignableFrom` 不要求任何东西，两边问的是同一件事 —— 查到的契约本来就都在 type 的
+        // 接口集合里（基类那一步已经先走过了，所以这里只会命中接口）。名字序的挑选规则不变。
+        foreach (var registered in Interpolators)
         {
-            if (!Interpolators.TryGetValue(contract, out var candidate) || candidate is null)
+            if (registered.Value is null || !registered.Key.IsAssignableFrom(type))
             {
                 continue;
             }
 
-            var name = contract.FullName ?? contract.Name;
+            var name = registered.Key.FullName ?? registered.Key.Name;
             if (matchedName is not null && string.CompareOrdinal(name, matchedName) >= 0)
             {
                 continue;
             }
 
-            matched = candidate;
+            matched = registered.Value;
             matchedName = name;
         }
 
