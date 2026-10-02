@@ -13,7 +13,8 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Authentication;
 using ModelContextProtocol.Client;
-using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
+using VeloxDev.Serialization;
 
 namespace VeloxDev.AI.MCP;
 
@@ -1135,9 +1136,9 @@ public class McpScope
         var j = ParseOptions(config.Options);
         EnsureKnownKeys(j, StdioOptionKeys, config.Name);
         if (TryGetOption(j, "env", out var env))
-            stdioOptions.EnvironmentVariables = env.ToObject<Dictionary<string, string?>>();
+            stdioOptions.EnvironmentVariables = ReadStringMap(env, "env");
         if (TryGetOption(j, "workingDirectory", out var wd))
-            stdioOptions.WorkingDirectory = wd.Value<string>();
+            stdioOptions.WorkingDirectory = (wd as VeloxJsonScalar)?.AsString();
 
         return stdioOptions;
     }
@@ -1171,18 +1172,18 @@ public class McpScope
         EnsureKnownKeys(j, HttpOptionKeys, config.Name);
 
         if (TryGetOption(j, "headers", out var headersToken))
-            options.AdditionalHeaders = headersToken.ToObject<Dictionary<string, string>>() ?? [];
+            options.AdditionalHeaders = ReadHeaderMap(headersToken);
 
-        if (TryGetOption(j, "oauth", out var oauthToken) && oauthToken is JObject o)
+        if (TryGetOption(j, "oauth", out var oauthToken) && oauthToken is VeloxJsonObject o)
         {
-            var redirectUri = o["redirectUri"]?.Value<string>();
+            var redirectUri = (o["redirectUri"] as VeloxJsonScalar)?.AsString();
             options.OAuth = new ClientOAuthOptions
             {
-                ClientId = o["clientId"]?.Value<string>() ?? string.Empty,
-                ClientSecret = o["clientSecret"]?.Value<string>(),
+                ClientId = (o["clientId"] as VeloxJsonScalar)?.AsString() ?? string.Empty,
+                ClientSecret = (o["clientSecret"] as VeloxJsonScalar)?.AsString(),
                 // RedirectUri is a `required` member of ClientOAuthOptions; fall back to a loopback default when the config omits it.
                 RedirectUri = redirectUri is not null ? new Uri(redirectUri) : new Uri("http://localhost/oauth/callback"),
-                Scopes = o["scopes"]?.ToObject<string[]>(),
+                Scopes = o["scopes"] is VeloxJsonArray scopes ? ReadStringArray(scopes) : null,
                 // Set the callback handler, never the obsolete redirect delegate: the two are mutually
                 // exclusive on ClientOAuthOptions, and only the former carries state/iss back to the SDK.
                 AuthorizationCallbackHandler = _oauthAuthorizationRedirect is null
@@ -1197,10 +1198,10 @@ public class McpScope
         else if (ConnectionTimeout is { } globalTimeout)
             options.ConnectionTimeout = globalTimeout;
         if (TryGetOption(j, "transportMode", out var tm)
-            && Enum.TryParse<HttpTransportMode>(tm.Value<string>(), ignoreCase: true, out var mode))
+            && Enum.TryParse<HttpTransportMode>((tm as VeloxJsonScalar)?.AsString(), ignoreCase: true, out var mode))
             options.TransportMode = mode;
         if (TryGetOption(j, "ownsSession", out var os))
-            options.OwnsSession = os.Value<bool>();
+            options.OwnsSession = os is VeloxJsonScalar ownsSession && ownsSession.AsBoolean();
 
         return options;
     }
@@ -1210,31 +1211,37 @@ public class McpScope
     private static readonly string[] HttpOptionKeys = ["headers", "oauth", "connectionTimeout", "transportMode", "ownsSession"];
     private static readonly string[] StdioOptionKeys = ["env", "workingDirectory"];
 
-    /// <summary>Parses Options (an anonymous object or JSON string) into a JObject; null → an empty object.</summary>
-    private static JObject ParseOptions(object? options)
+    // 解析 Options（匿名对象或 JSON 字符串）为 VeloxJsonObject；null 返回空对象。
+    private static VeloxJsonObject ParseOptions(object? options)
     {
-        if (options is null) return new JObject();
-        JToken token = options is string s ? JToken.Parse(s) : JToken.FromObject(options);
-        if (token is not JObject obj)
+        if (options is null) return new VeloxJsonObject();
+        // 匿名声明的 Options 没有生成的写入器，先由 Newtonsoft 写成 JSON 文本，再读成树。
+        VeloxJsonValue token = options is string s
+            ? VeloxJsonValue.Parse(s)
+            : VeloxJsonValue.Parse(JsonConvert.SerializeObject(options));
+        if (token is not VeloxJsonObject obj)
             throw new InvalidOperationException("McpServerConfiguration.Options must be an object (anonymous object), not a scalar or an array.");
         return obj;
     }
 
-    private static bool TryGetOption(JObject j, string key, out JToken token)
+    private static bool TryGetOption(VeloxJsonObject j, string key, out VeloxJsonValue token)
     {
-        if (j.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var value) && value.Type != JTokenType.Null)
+        foreach (var member in j)
         {
-            token = value;
-            return true;
+            // 键名大小写不敏感：Options 是手工写的配置，大小写不该成为陷阱。
+            if (string.Equals(member.Key, key, StringComparison.OrdinalIgnoreCase) && !member.Value.IsNull)
+            {
+                token = member.Value;
+                return true;
+            }
         }
-        token = JValue.CreateNull();
+        token = VeloxJsonValue.Null;
         return false;
     }
 
-    private static void EnsureKnownKeys(JObject j, IEnumerable<string> allowed, string serverName)
+    private static void EnsureKnownKeys(VeloxJsonObject j, IEnumerable<string> allowed, string serverName)
     {
-        var unknown = j.Properties()
-            .Select(p => p.Name)
+        var unknown = j.Names
             .Where(n => !allowed.Contains(n, StringComparer.OrdinalIgnoreCase))
             .ToList();
         if (unknown.Count > 0)
@@ -1242,15 +1249,43 @@ public class McpScope
                 $"MCP server '{serverName}' has unknown Options key(s): {string.Join(", ", unknown)}. Allowed: {string.Join(", ", allowed)}.");
     }
 
-    private static TimeSpan ParseTimeSpan(JToken token)
+    private static TimeSpan ParseTimeSpan(VeloxJsonValue token)
     {
-        if (token.Type is JTokenType.Integer or JTokenType.Float)
-            return TimeSpan.FromSeconds(token.Value<double>());
-        var s = token.Value<string>();
+        if (token is VeloxJsonScalar number && number.IsNumber)
+            return TimeSpan.FromSeconds(double.Parse(number.AsString()!, System.Globalization.CultureInfo.InvariantCulture));
+        var s = (token as VeloxJsonScalar)?.AsString();
         if (s is not null && TimeSpan.TryParse(s, out var ts))
             return ts;
-        throw new InvalidOperationException($"Invalid connectionTimeout value: {token}.");
+        throw new InvalidOperationException($"Invalid connectionTimeout value: {token.ToJson()}.");
     }
+
+    // 把配置里的一层对象读成字符串映射，env 的值允许为 null。
+    private static Dictionary<string, string?> ReadStringMap(VeloxJsonValue value, string option)
+    {
+        if (value is not VeloxJsonObject obj)
+            throw new InvalidOperationException($"MCP Options '{option}' must be an object.");
+
+        var map = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var member in obj)
+            map[member.Key] = (member.Value as VeloxJsonScalar)?.AsString();
+        return map;
+    }
+
+    // headers 的值按非空字符串读。
+    private static Dictionary<string, string> ReadHeaderMap(VeloxJsonValue value)
+    {
+        if (value is not VeloxJsonObject obj)
+            throw new InvalidOperationException("MCP Options 'headers' must be an object.");
+
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var member in obj)
+            map[member.Key] = (member.Value as VeloxJsonScalar)?.AsString() ?? string.Empty;
+        return map;
+    }
+
+    // 把配置里的字符串数组读成 string[]。
+    private static string[] ReadStringArray(VeloxJsonArray array)
+        => [.. array.Select(item => (item as VeloxJsonScalar)?.AsString() ?? string.Empty)];
 
     /// <summary>Per-server connection timeout: Options.connectionTimeout (seconds or a TimeSpan string) overrides the global value.</summary>
     internal TimeSpan? GetEffectiveConnectionTimeout(McpServerConfiguration config)

@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.AI;
 using VeloxDev.AI.Pipelines;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using VeloxDev.Serialization;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -176,7 +175,7 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         {
             try
             {
-                arguments = [.. JArray.Parse(argumentsJson!).Select(t => t.Value<string>()).OfType<string>()];
+                arguments = [.. ((VeloxJsonArray)VeloxJsonValue.Parse(argumentsJson!)).Select(t => (t as VeloxJsonScalar)?.AsString()).OfType<string>()];
             }
             catch (Exception ex)
             {
@@ -202,30 +201,32 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             // Awaited without ConfigureAwait: this tool is registered through the scope, so it runs on the
             // UI thread, and everything after this point reads the UI-bound status collection.
             if (!await _scope.ConfirmationResolver($"mcp-add:{name}", description))
-                return JsonConvert.SerializeObject(
-                    new { status = "denied", message = "The user declined to add this server. Do not retry without asking them." },
-                    Formatting.None);
+                return new VeloxJsonObject
+                {
+                    ["status"] = "denied",
+                    ["message"] = "The user declined to add this server. Do not retry without asking them.",
+                }.ToJson();
         }
 
         var tools = await _scope.AddAsync(config, ct);
         var status = _scope.Status.Servers.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
 
-        return JsonConvert.SerializeObject(new
+        return new VeloxJsonObject
         {
-            status = tools.Length > 0 ? "ok" : "error",
-            server = name,
-            runMode = mode.ToString(),
-            toolCount = tools.Length,
-            state = status?.State.ToString(),
-            error = status?.Error,
-            message = tools.Length > 0
+            ["status"] = tools.Length > 0 ? "ok" : "error",
+            ["server"] = name,
+            ["runMode"] = mode.ToString(),
+            ["toolCount"] = tools.Length,
+            ["state"] = status?.State.ToString(),
+            ["error"] = status?.Error,
+            ["message"] = tools.Length > 0
                 ? $"'{name}' connected — its {tools.Length} tool(s) are available now."
                 : $"'{name}' could not be connected. See 'error'.",
-        }, Formatting.None);
+        }.ToJson();
     }
 
     private static string Error(string message)
-        => JsonConvert.SerializeObject(new { status = "error", message }, Formatting.None);
+        => new VeloxJsonObject { ["status"] = "error", ["message"] = message }.ToJson();
 
     /// <summary>
     /// Exports a connected MCP server's tool capabilities as plain prompts — each tool's name and
@@ -240,18 +241,24 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         // A server switched off by the host still has its tools loaded, but they are not offered to the
         // model — describing them here would advertise a capability this turn does not carry.
         if (!_scope.IsServerEnabled(serverName))
-            return JsonConvert.SerializeObject(
-                new { status = "error", message = $"Server '{serverName}' is switched off by host policy; its tools are not offered. The host can switch it back on." }, Formatting.None);
+            return new VeloxJsonObject
+            {
+                ["status"] = "error",
+                ["message"] = $"Server '{serverName}' is switched off by host policy; its tools are not offered. The host can switch it back on.",
+            }.ToJson();
 
         var tools = _scope.GetServerTools(serverName);
         if (tools.Count == 0)
-            return JsonConvert.SerializeObject(
-                new { status = "error", message = $"Server '{serverName}' has no loaded tools (not connected)." }, Formatting.None);
+            return new VeloxJsonObject
+            {
+                ["status"] = "error",
+                ["message"] = $"Server '{serverName}' has no loaded tools (not connected).",
+            }.ToJson();
 
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         foreach (var tool in tools)
         {
-            var obj = new JObject
+            var obj = new VeloxJsonObject
             {
                 ["name"] = tool.Name,
                 ["description"] = tool.Description,
@@ -259,7 +266,7 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             // An MCP tool's JSON Schema (parameter structure) can be exported from AIFunction's Declaration; here the name + description are sufficient as a prompt.
             arr.Add(obj);
         }
-        return new JObject { ["status"] = "ok", ["server"] = serverName, ["toolCount"] = arr.Count, ["tools"] = arr }.ToString(Formatting.None);
+        return new VeloxJsonObject { ["status"] = "ok", ["server"] = serverName, ["toolCount"] = arr.Count, ["tools"] = arr }.ToJson();
     }
 
     /// <summary>
@@ -272,23 +279,21 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         [Description("Server name to unload, e.g. \"Microsoft Learn\".")] string serverName)
     {
         var removed = await _scope.UnloadServerAsync(serverName);
-        return JsonConvert.SerializeObject(
-            new
-            {
-                status = removed ? "ok" : "not-found",
-                message = removed ? $"Unloaded '{serverName}' — its tools are removed from the Agent tool set." : $"No loaded tools found for '{serverName}'.",
-            },
-            Formatting.None);
+        return new VeloxJsonObject
+        {
+            ["status"] = removed ? "ok" : "not-found",
+            ["message"] = removed ? $"Unloaded '{serverName}' — its tools are removed from the Agent tool set." : $"No loaded tools found for '{serverName}'.",
+        }.ToJson();
     }
 
     [Description("Lists the configured MCP servers and their current status: name, run mode, state (NotStarted/Installing/Connecting/Connected/Error), tool count, whether the host has switched it on, and error message. A server can be connected but switched off by the host — its tools are then NOT available to you even though it is alive. Also returns aggregate counts (connected/error). Pure query — call it first to see which servers are alive, still installing, connecting, or failed.")]
     private string ListServers()
     {
         var status = _scope.Status;
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         foreach (var s in status.Servers)
         {
-            arr.Add(new JObject
+            arr.Add(new VeloxJsonObject
             {
                 ["name"] = s.Name,
                 ["runMode"] = s.RunMode.ToString(),
@@ -303,14 +308,14 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             });
         }
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["status"] = "ok",
             ["serverCount"] = status.Servers.Count,
             ["connectedCount"] = status.ConnectedCount,
             ["errorCount"] = status.ErrorCount,
             ["servers"] = arr,
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     /// <summary>
@@ -329,8 +334,8 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             try
             {
                 var names = new HashSet<string>(
-                    JArray.Parse(namesJson!)
-                        .Select(t => t.Value<string>())
+                    ((VeloxJsonArray)VeloxJsonValue.Parse(namesJson!))
+                        .Select(t => (t as VeloxJsonScalar)?.AsString())
                         .OfType<string>()
                         .Where(n => !string.IsNullOrWhiteSpace(n)),
                     StringComparer.OrdinalIgnoreCase);
@@ -338,28 +343,33 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             }
             catch (Exception ex)
             {
-                return JsonConvert.SerializeObject(
-                    new { status = "error", message = $"Invalid names JSON: {ex.Message}" }, Formatting.None);
+                return new VeloxJsonObject { ["status"] = "error", ["message"] = $"Invalid names JSON: {ex.Message}" }.ToJson();
             }
         }
 
         if (subset.Count == 0)
-            return JsonConvert.SerializeObject(
-                new { status = "error", message = "No matching server(s) to load." }, Formatting.None);
+            return new VeloxJsonObject { ["status"] = "error", ["message"] = "No matching server(s) to load." }.ToJson();
 
         var tools = await _scope.LoadAsync(subset, ct);
-        var loaded = _scope.Status.Servers
-            .Where(s => subset.Any(c => string.Equals(c.Name, s.Name, StringComparison.OrdinalIgnoreCase)))
-            .Select(s => new
+        var servers = new VeloxJsonArray();
+        foreach (var s in _scope.Status.Servers.Where(
+            s => subset.Any(c => string.Equals(c.Name, s.Name, StringComparison.OrdinalIgnoreCase))))
+        {
+            servers.Add(new VeloxJsonObject
             {
-                name = s.Name,
-                state = s.State.ToString(),
-                stateText = s.StateText,
-                toolCount = s.ToolCount,
-                error = s.Error,
+                ["name"] = s.Name,
+                ["state"] = s.State.ToString(),
+                ["stateText"] = s.StateText,
+                ["toolCount"] = s.ToolCount,
+                ["error"] = s.Error,
             });
+        }
 
-        return JsonConvert.SerializeObject(
-            new { status = "ok", loadedToolCount = tools.Length, servers = loaded }, Formatting.None);
+        return new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["loadedToolCount"] = tools.Length,
+            ["servers"] = servers,
+        }.ToJson();
     }
 }

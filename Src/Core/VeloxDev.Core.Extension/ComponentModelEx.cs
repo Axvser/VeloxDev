@@ -1,7 +1,4 @@
-﻿using Newtonsoft.Json;
-using VeloxDev.Serialization;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
+﻿using VeloxDev.Serialization;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -22,29 +19,17 @@ namespace VeloxDev.MVVM.Serialization;
 /// </summary>
 public sealed class SerializationOptions
 {
-    internal Formatting? Formatting { get; private set; }
-    internal TypeNameHandling? TypeNameHandling { get; private set; }
-    internal NullValueHandling? NullValueHandling { get; private set; }
-    internal DefaultValueHandling? DefaultValueHandling { get; private set; }
+    internal VeloxJsonFormat? Formatting { get; private set; }
     private SerializationOptions() { }
 
     /// <summary>Creates a new blank options builder.</summary>
     public static SerializationOptions Create() => new();
 
     /// <summary>Produce indented (human-readable) JSON output.</summary>
-    public SerializationOptions WithIndented() { Formatting = Newtonsoft.Json.Formatting.Indented; return this; }
+    public SerializationOptions WithIndented() { Formatting = VeloxJsonFormat.Indented; return this; }
 
     /// <summary>Produce compact JSON output (no extra whitespace).</summary>
-    public SerializationOptions WithCompact() { Formatting = Newtonsoft.Json.Formatting.None; return this; }
-
-    /// <summary>Override <see cref="Newtonsoft.Json.TypeNameHandling"/>.</summary>
-    public SerializationOptions WithTypeNameHandling(TypeNameHandling value) { TypeNameHandling = value; return this; }
-
-    /// <summary>Override <see cref="Newtonsoft.Json.NullValueHandling"/>.</summary>
-    public SerializationOptions WithNullValueHandling(NullValueHandling value) { NullValueHandling = value; return this; }
-
-    /// <summary>Override <see cref="Newtonsoft.Json.DefaultValueHandling"/>.</summary>
-    public SerializationOptions WithDefaultValueHandling(DefaultValueHandling value) { DefaultValueHandling = value; return this; }
+    public SerializationOptions WithCompact() { Formatting = VeloxJsonFormat.Compact; return this; }
 
     /// <summary>
     /// Omits every property whose <b>declared</b> type is one of <paramref name="types"/>, everywhere in the graph.
@@ -69,86 +54,6 @@ public sealed class SerializationOptions
 
 public static class ComponentModelEx
 {
-    // Settings (and their ContractResolver) are cached: Newtonsoft.Json caches
-    // JsonContract objects on the resolver instance, so re-creating the resolver
-    // per call defeats the cache and causes the type system to be re-reflected
-    // on every (de)serialization.
-    private static readonly object _settingsGate = new();
-    private static JsonSerializerSettings? _indentedSettingsCache;
-    private static JsonSerializerSettings? _compactSettingsCache;
-
-    private static JsonSerializerSettings BuildSettings(Formatting formatting) => new()
-    {
-        Formatting = formatting,
-        TypeNameHandling = TypeNameHandling.Auto,
-        PreserveReferencesHandling = PreserveReferencesHandling.Objects,
-        ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-        NullValueHandling = NullValueHandling.Include,
-        DefaultValueHandling = DefaultValueHandling.Include,
-        ContractResolver = new WritablePropertiesOnlyResolver(),
-        Converters = [new DictionaryKeyConverter()]
-    };
-
-    // Both settings variants are cached so the resolver's contract cache is
-    // reused across calls.
-    private static JsonSerializerSettings IndentedSettings
-    {
-        get
-        {
-            var cached = _indentedSettingsCache;
-            if (cached is not null)
-                return cached;
-
-            lock (_settingsGate)
-            {
-                return _indentedSettingsCache ??= BuildSettings(Formatting.Indented);
-            }
-        }
-    }
-
-    private static JsonSerializerSettings CompactSettings
-    {
-        get
-        {
-            var cached = _compactSettingsCache;
-            if (cached is not null)
-                return cached;
-
-            lock (_settingsGate)
-            {
-                return _compactSettingsCache ??= BuildSettings(Formatting.None);
-            }
-        }
-    }
-
-    internal static JsonSerializer CreateJsonSerializer()
-        => JsonSerializer.Create(IndentedSettings);
-
-    /// <summary>
-    /// Applies a <see cref="SerializationOptions"/> on top of the global base settings,
-    /// returning a fresh (non-cached) settings object for one-off use.
-    /// When <paramref name="options"/> is null the cached IndentedSettings are returned.
-    /// </summary>
-    private static JsonSerializerSettings ResolveSettings(SerializationOptions? options)
-    {
-        if (options == null)
-            return IndentedSettings;
-
-        // Start from the current global indented baseline so defaults are consistent.
-        var s = new JsonSerializerSettings
-        {
-            Formatting                   = options.Formatting           ?? Formatting.Indented,
-            TypeNameHandling             = options.TypeNameHandling      ?? TypeNameHandling.Auto,
-            PreserveReferencesHandling   = PreserveReferencesHandling.Objects,
-            ReferenceLoopHandling        = ReferenceLoopHandling.Ignore,
-            NullValueHandling            = options.NullValueHandling     ?? NullValueHandling.Include,
-            DefaultValueHandling         = options.DefaultValueHandling  ?? DefaultValueHandling.Include,
-            ContractResolver             = new WritablePropertiesOnlyResolver(options.ExcludedPropertyTypes),
-            Converters                   = [new DictionaryKeyConverter()],
-        };
-        return s;
-    }
-
     // 三个核心入口都走 VeloxDev 自己的序列化器：格式逐字节一致，但不再依赖运行期反射，
     // 因此裁剪与 NativeAOT 下都成立。公开面一行没变。
     private static string SerializeCore<T>(T workflow, SerializationOptions? options = null)
@@ -157,7 +62,7 @@ public static class ComponentModelEx
         if (workflow == null)
             throw new ArgumentNullException(nameof(workflow), "Workflow object cannot be null for serialization");
 
-        return VeloxJsonSerializer.Serialize(workflow, options?.Formatting != Formatting.None, options?.ExcludedPropertyTypes);
+        return VeloxJsonSerializer.Serialize(workflow, options?.Formatting != VeloxJsonFormat.Compact, options?.ExcludedPropertyTypes);
     }
 
     private static bool TryDeserializeCore<T>(string json, out T? workflow, SerializationOptions? options = null)
@@ -185,16 +90,18 @@ public static class ComponentModelEx
         return result;
     }
 
-    internal static object? DeserializeToType(this JToken token, Type targetType)
+    /// <summary>Reads one JSON tree into an instance of <paramref name="targetType"/>.</summary>
+    /// <param name="value">The tree.</param>
+    /// <param name="targetType">The type to read into; it must be one the generator carried.</param>
+    /// <returns>The instance, or <see langword="null"/> when the tree is the JSON literal.</returns>
+    internal static object? DeserializeToType(this VeloxJsonValue value, Type targetType)
     {
-        if (token == null)
-            throw new ArgumentNullException(nameof(token));
+        if (value == null)
+            throw new ArgumentNullException(nameof(value));
         if (targetType == null)
             throw new ArgumentNullException(nameof(targetType));
 
-        return token.Type == JTokenType.Null
-            ? null
-            : VeloxJsonSerializer.Deserialize(token.ToString(Formatting.None), targetType);
+        return value.IsNull ? null : VeloxJsonSerializer.Deserialize(value.ToJson(), targetType);
     }
 
     #region Synchronous Methods
@@ -399,129 +306,3 @@ public static class ComponentModelEx
 
     #endregion
 }
-
-internal sealed class DictionaryKeyConverter : JsonConverter
-{
-    public override bool CanConvert(Type objectType)
-    {
-        return objectType.IsGenericType &&
-               objectType.GetGenericTypeDefinition() == typeof(Dictionary<,>) &&
-               objectType.GetGenericArguments()[0].IsInterface;
-    }
-
-    public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
-    {
-        if (value == null)
-            throw new ArgumentNullException(nameof(value), "Dictionary value cannot be null during JSON serialization");
-
-        if (value is not IDictionary dict)
-            throw new ArgumentException($"Expected IDictionary but got {value.GetType().Name}", nameof(value));
-
-        if (serializer.ReferenceResolver == null)
-            throw new InvalidOperationException("JSON serializer ReferenceResolver is not configured");
-
-        writer.WriteStartObject();
-        foreach (var key in dict.Keys)
-        {
-            if (key == null)
-                throw new JsonSerializationException("Dictionary key cannot be null during serialization");
-
-            string refId = serializer.ReferenceResolver.GetReference(serializer, key);
-            writer.WritePropertyName(refId);
-            serializer.Serialize(writer, dict[key]);
-        }
-        writer.WriteEndObject();
-    }
-
-    public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
-    {
-        if (serializer.ReferenceResolver == null)
-            throw new InvalidOperationException("JSON serializer ReferenceResolver is not configured");
-
-        var valueType = objectType.GetGenericArguments()[1];
-        var jo = Newtonsoft.Json.Linq.JObject.Load(reader);
-
-        if (Activator.CreateInstance(objectType) is not IDictionary dict)
-            throw new JsonSerializationException($"Failed to create dictionary instance of type {objectType.Name}");
-
-        foreach (var prop in jo.Properties())
-        {
-            string refId = prop.Name;
-            var keyObject = serializer.ReferenceResolver.ResolveReference(serializer, refId) ?? throw new JsonSerializationException($"Failed to resolve dictionary key reference: {refId}");
-            var valueObject = prop.Value?.ToObject(valueType, serializer);
-            dict.Add(keyObject, valueObject);
-        }
-
-        return dict;
-    }
-
-    public override bool CanWrite => true;
-    public override bool CanRead => true;
-}
-
-internal class WritablePropertiesOnlyResolver(IReadOnlyCollection<Type>? excludedPropertyTypes = null)
-    : DefaultContractResolver
-{
-    // A set for O(1) lookups: CreateProperties runs for every serialized type.
-    private readonly HashSet<Type>? _excluded = excludedPropertyTypes is { Count: > 0 } ? [.. excludedPropertyTypes] : null;
-
-    protected override JsonContract CreateContract(Type objectType)
-    {
-        // Types that implement IEnumerable but also have a default constructor
-        // and writable properties (e.g. SlotEnumerator<T>) must be treated as
-        // plain objects, not as JSON arrays.
-        if (typeof(System.Collections.IEnumerable).IsAssignableFrom(objectType)
-            && objectType != typeof(string)
-            && objectType.GetConstructor(Type.EmptyTypes) != null
-            && !(objectType.IsArray)
-            && !IsNativeCollection(objectType))
-        {
-            return base.CreateObjectContract(objectType);
-        }
-
-        return base.CreateContract(objectType);
-    }
-
-    protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
-    {
-        IList<JsonProperty> props = base.CreateProperties(type, memberSerialization);
-        return [.. props.Where(p => p.Writable && !IsExcluded(p))];
-    }
-
-    /// <summary>
-    /// Whether the property's <b>declared</b> type is one of the excluded ones. Matched by exact type rather than by
-    /// name or assignability: the callers exclude a back-pointer and a collection of a specific interface, and a
-    /// name match would also hit unrelated members that happen to be called <c>Parent</c> while being forward-needed
-    /// (a slot's parent is its node, not the tree).
-    /// </summary>
-    private bool IsExcluded(JsonProperty property)
-        => _excluded is not null && property.PropertyType is { } declared && _excluded.Contains(declared);
-
-    // Returns true for BCL collection types that should keep their default
-    // array/dictionary contract (List<T>, ObservableCollection<T>, Dictionary<,>, …).
-    private static bool IsNativeCollection(Type type)
-    {
-        if (type.IsGenericType)
-        {
-            var def = type.GetGenericTypeDefinition();
-            if (def == typeof(System.Collections.Generic.List<>)
-                || def == typeof(System.Collections.ObjectModel.ObservableCollection<>)
-                || def == typeof(System.Collections.Generic.Dictionary<,>)
-                || def == typeof(System.Collections.Generic.HashSet<>)
-                || def == typeof(System.Collections.Generic.Queue<>)
-                || def == typeof(System.Collections.Generic.Stack<>))
-                return true;
-        }
-
-        var ns = type.Namespace;
-        return ns != null
-            && (ns.StartsWith("System.Collections", StringComparison.Ordinal)
-                || ns.StartsWith("System.Linq", StringComparison.Ordinal));
-    }
-}
-
-// AllowListSerializationBinder intentionally removed.
-// VeloxDev serialization targets local workflow files authored by the same
-// application, not untrusted network payloads, so the default Newtonsoft.Json
-// binder (DefaultSerializationBinder) is the right choice: it resolves every
-// loaded type without any prefix restrictions, matching the 4x behaviour.

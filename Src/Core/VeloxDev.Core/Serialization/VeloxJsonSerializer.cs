@@ -300,6 +300,14 @@ public static class VeloxJsonSerializer
         // 运行期才知道的标量（集合的元素、字典的值）：按声明类型读那一个原语。
         if (TryReadScalar(reader, declaredType) is { } scalar) return scalar;
 
+        // 顶层数组没有入口：集合成员由它自己的生成 reader 就地填，而按运行期类型造一个数组
+        // 需要类型系统（Array.CreateInstance(Type, …) 是 RequiresDynamicCode），正是这套东西要躲开的。
+        // 要读一段数组文本，走 VeloxJsonValue.Parse，它按形状给出树。
+        if (reader.NextIsArray() && !declaredType.IsArray)
+            throw new InvalidOperationException(
+                $"'{declaredType.FullName}' is not what a top-level array reads as. A collection member is filled " +
+                "by the generated reader for the type that declares it; to read an array as a tree, use Parse.");
+
         return ReadObjectValue(reader, declaredType, existing);
     }
 
@@ -346,6 +354,8 @@ public static class VeloxJsonSerializer
             : VeloxJsonRegistry.TypeOf(typeName) ?? declaredType;
 
         var registered = VeloxJsonRegistry.ReaderFor(actualType);
+        if (registered is null && declaredType != typeof(object)) throw MissingReader(actualType, typeName);
+
         if (registered is null)
         {
             // 没有条目：按文档的形状读成普通容器。`object` 成员里放的就是这些 —— 一个载荷字典、

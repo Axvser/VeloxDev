@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.WorkflowSystem;
 
@@ -54,8 +54,13 @@ public class TypeIntrospectorTests
         var schema = JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(CellKey)))!;
         Assert.AreEqual("struct", schema["kind"]?.GetValue<string>());
 
-        // 值类型恒能无参构造，所以默认实例那条路对它同样成立。
-        Assert.IsNotNull(schema["defaultJson_runtimeOnly"], "a struct has a default instance to serialize");
+        // 值类型恒能无参构造，所以默认实例那条路对它同样成立 —— 前提是这个类型在存档闭包里。
+        // CellKey 在目录里（所以上面报得出 struct），但没有任何文档会写到它，因此生成器没为它发条目。
+        Assert.IsNull(schema["defaultJson_runtimeOnly"], "a type outside the archive closure has no default instance to serialize");
+
+        // 收录过的类型才拿得出默认实例。
+        var layout = JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(CanvasLayout)))!;
+        Assert.IsNotNull(layout["defaultJson_runtimeOnly"], "a type the archive carries can be written");
     }
 
     [TestMethod]

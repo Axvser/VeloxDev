@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.AI;
 using VeloxDev.AI.Pipelines;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using VeloxDev.Serialization;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -130,12 +129,12 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     {
         var type = _target.GetType();
         var contexts = AgentContextReader.GetContexts(type, _language);
-        var obj = new JObject
+        var obj = new VeloxJsonObject
         {
             ["type"] = type.FullName,
-            ["descriptions"] = new JArray(contexts),
+            ["descriptions"] = ToJsonArray(contexts),
         };
-        return obj.ToString(Formatting.None);
+        return obj.ToJson();
     }
 
     // ────────────────────────── Properties ──────────────────────────
@@ -144,10 +143,10 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     private string ListProperties()
     {
         var props = AgentPropertyAccessor.DiscoverProperties(_target, _language, includeValues: true);
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         foreach (var p in props)
         {
-            var obj = new JObject
+            var obj = new VeloxJsonObject
             {
                 ["name"] = p.Name,
                 ["type"] = p.PropertyType,
@@ -155,15 +154,15 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
                 ["canWrite"] = p.CanWrite,
             };
             if (p.AgentDescriptions.Count > 0)
-                obj["descriptions"] = new JArray(p.AgentDescriptions.ToArray());
+                obj["descriptions"] = ToJsonArray(p.AgentDescriptions);
             if (p.CurrentValue != null)
             {
-                try { obj["value"] = JToken.FromObject(p.CurrentValue); }
+                try { obj["value"] = VeloxJsonValue.From(p.CurrentValue); }
                 catch { obj["value"] = p.CurrentValue.ToString(); }
             }
             arr.Add(obj);
         }
-        return arr.ToString(Formatting.None);
+        return arr.ToJson();
     }
 
     [Description("Gets the current value of a named property.")]
@@ -171,15 +170,14 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
         [Description("Property name.")] string propertyName)
     {
         var value = AgentPropertyAccessor.GetPropertyValue(_target, propertyName);
-        if (value == null) return JsonConvert.SerializeObject(new { status = "ok", value = (object?)null });
+        if (value == null) return new VeloxJsonObject { ["status"] = "ok", ["value"] = VeloxJsonValue.Null }.ToJson();
         try
         {
-            return JsonConvert.SerializeObject(new { status = "ok", value }, Formatting.None,
-                new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore, MaxDepth = 3 });
+            return new VeloxJsonObject { ["status"] = "ok", ["value"] = VeloxJsonValue.From(value) }.ToJson();
         }
         catch
         {
-            return JsonConvert.SerializeObject(new { status = "ok", value = value.ToString() });
+            return new VeloxJsonObject { ["status"] = "ok", ["value"] = value.ToString() }.ToJson();
         }
     }
 
@@ -190,29 +188,32 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     {
         object? value = ParseJsonValue(jsonValue);
         var result = AgentPropertyAccessor.SetPropertyValue(_target, propertyName, value);
-        return JsonConvert.SerializeObject(new { status = result.Success ? "ok" : "error", result.Error }, Formatting.None);
+        return new VeloxJsonObject { ["status"] = result.Success ? "ok" : "error", ["Error"] = result.Error }.ToJson();
     }
 
     [Description("Sets multiple properties at once from a JSON object. Rejected properties are skipped with an error.")]
     private string PatchProperties(
         [Description("JSON object with property names and values, e.g. '{\"Title\":\"New\",\"Count\":5}'.")] string jsonPatch)
     {
-        JObject patch;
-        try { patch = JObject.Parse(jsonPatch); }
-        catch (Exception ex) { return JsonConvert.SerializeObject(new { status = "error", message = $"Invalid JSON: {ex.Message}" }); }
+        VeloxJsonObject patch;
+        try { patch = (VeloxJsonObject)VeloxJsonValue.Parse(jsonPatch); }
+        catch (Exception ex) { return new VeloxJsonObject { ["status"] = "error", ["message"] = $"Invalid JSON: {ex.Message}" }.ToJson(); }
 
         var dict = new Dictionary<string, object?>();
         foreach (var kv in patch)
-            dict[kv.Key] = kv.Value?.Type == JTokenType.Null ? null : kv.Value?.ToObject<object>();
+            dict[kv.Key] = kv.Value.IsNull ? null : JsonToClrValue(kv.Value);
 
         var results = AgentPropertyAccessor.SetProperties(_target, dict, _rejectedProperties);
         var successCount = results.Count(r => r.Success);
-        return JsonConvert.SerializeObject(new
+        var details = new VeloxJsonArray();
+        foreach (var r in results)
+            details.Add(new VeloxJsonObject { ["PropertyName"] = r.PropertyName, ["Success"] = r.Success, ["Error"] = r.Error });
+        return new VeloxJsonObject
         {
-            status = successCount > 0 ? "ok" : "error",
-            message = $"{successCount}/{results.Count} properties set.",
-            details = results.Select(r => new { r.PropertyName, r.Success, r.Error }),
-        }, Formatting.None);
+            ["status"] = successCount > 0 ? "ok" : "error",
+            ["message"] = $"{successCount}/{results.Count} properties set.",
+            ["details"] = details,
+        }.ToJson();
     }
 
     // ────────────────────────── Commands ──────────────────────────
@@ -221,20 +222,20 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     private string ListCommands()
     {
         var cmds = AgentCommandDiscoverer.DiscoverCommands(_target, _language);
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         foreach (var c in cmds)
         {
-            var obj = new JObject
+            var obj = new VeloxJsonObject
             {
                 ["name"] = c.Name,
                 ["paramType"] = c.ParameterType,
                 ["canExecute"] = c.CanExecute,
             };
             if (c.AgentDescriptions.Count > 0)
-                obj["descriptions"] = new JArray(c.AgentDescriptions.ToArray());
+                obj["descriptions"] = ToJsonArray(c.AgentDescriptions);
             arr.Add(obj);
         }
-        return arr.ToString(Formatting.None);
+        return arr.ToJson();
     }
 
     [Description("Executes a named ICommand on the component. Appends 'Command' suffix automatically if missing.")]
@@ -244,7 +245,7 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     {
         object? parameter = jsonParameter != null ? ParseJsonValue(jsonParameter) : null;
         var result = AgentCommandDiscoverer.Execute(_target, commandName, parameter);
-        return JsonConvert.SerializeObject(new { status = result.Success ? "ok" : "error", result.Error }, Formatting.None);
+        return new VeloxJsonObject { ["status"] = result.Success ? "ok" : "error", ["Error"] = result.Error }.ToJson();
     }
 
     // ────────────────────────── Methods ──────────────────────────
@@ -253,20 +254,20 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     private string ListMethods()
     {
         var methods = AgentMethodInvoker.DiscoverMethods(_target, _language);
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         foreach (var m in methods)
         {
-            var obj = new JObject
+            var obj = new VeloxJsonObject
             {
                 ["name"] = m.Name,
                 ["returnType"] = m.ReturnType,
-                ["params"] = new JArray(m.Parameters.Select(p => $"{p.ParameterType} {p.Name}{(p.IsOptional ? "?" : "")}").ToArray()),
+                ["params"] = ToJsonArray(m.Parameters.Select(p => $"{p.ParameterType} {p.Name}{(p.IsOptional ? "?" : "")}")),
             };
             if (m.AgentDescriptions.Count > 0)
-                obj["descriptions"] = new JArray(m.AgentDescriptions.ToArray());
+                obj["descriptions"] = ToJsonArray(m.AgentDescriptions);
             arr.Add(obj);
         }
-        return arr.ToString(Formatting.None);
+        return arr.ToJson();
     }
 
     [Description("Invokes a named public method on the component with the given JSON arguments array.")]
@@ -277,26 +278,25 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
         object?[] args;
         try
         {
-            var arr = JArray.Parse(jsonArgs);
-            args = [.. arr.Select(t => t.Type == JTokenType.Null ? null : t.ToObject<object>())];
+            var arr = (VeloxJsonArray)VeloxJsonValue.Parse(jsonArgs);
+            args = [.. arr.Select(t => t.IsNull ? null : JsonToClrValue(t))];
         }
         catch (Exception ex)
         {
-            return JsonConvert.SerializeObject(new { status = "error", message = $"Invalid args JSON: {ex.Message}" });
+            return new VeloxJsonObject { ["status"] = "error", ["message"] = $"Invalid args JSON: {ex.Message}" }.ToJson();
         }
 
         var result = AgentMethodInvoker.Invoke(_target, methodName, args);
         if (!result.Success)
-            return JsonConvert.SerializeObject(new { status = "error", result.Error }, Formatting.None);
+            return new VeloxJsonObject { ["status"] = "error", ["Error"] = result.Error }.ToJson();
 
         try
         {
-            return JsonConvert.SerializeObject(new { status = "ok", returnValue = result.ReturnValue }, Formatting.None,
-                new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore, MaxDepth = 3 });
+            return new VeloxJsonObject { ["status"] = "ok", ["returnValue"] = VeloxJsonValue.From(result.ReturnValue) }.ToJson();
         }
         catch
         {
-            return JsonConvert.SerializeObject(new { status = "ok", returnValue = result.ReturnValue?.ToString() });
+            return new VeloxJsonObject { ["status"] = "ok", ["returnValue"] = result.ReturnValue?.ToString() }.ToJson();
         }
     }
 
@@ -308,15 +308,15 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     {
         var type = AgentTypeResolver.ResolveType(fullTypeName);
         if (type == null)
-            return JsonConvert.SerializeObject(new { status = "error", message = $"Type '{fullTypeName}' not found." });
+            return new VeloxJsonObject { ["status"] = "error", ["message"] = $"Type '{fullTypeName}' not found." }.ToJson();
 
-        return JsonConvert.SerializeObject(new
+        return new VeloxJsonObject
         {
-            status = "ok",
-            fullName = type.FullName,
-            kind = type.IsEnum ? "enum" : type.IsInterface ? "interface" : type.IsValueType ? "struct" : "class",
-            baseType = type.BaseType?.FullName,
-        }, Formatting.None);
+            ["status"] = "ok",
+            ["fullName"] = type.FullName,
+            ["kind"] = type.IsEnum ? "enum" : type.IsInterface ? "interface" : type.IsValueType ? "struct" : "class",
+            ["baseType"] = type.BaseType?.FullName,
+        }.ToJson();
     }
 
     // ────────────────────────── Helpers ──────────────────────────
@@ -325,13 +325,29 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     {
         try
         {
-            var token = JToken.Parse(jsonValue);
-            return token.Type == JTokenType.Null ? null : token.ToObject<object>();
+            var token = VeloxJsonValue.Parse(jsonValue);
+            return token.IsNull ? null : JsonToClrValue(token);
         }
         catch
         {
             return jsonValue; // fallback: treat as raw string
         }
+    }
+
+    /// <summary>
+    /// Turns a parsed JSON node into the loosely typed value the property accessor converts from: a scalar
+    /// comes back as its text, which is what every conversion the accessor performs reads, and a container is
+    /// handed over as the tree itself.
+    /// </summary>
+    private static object? JsonToClrValue(VeloxJsonValue value)
+        => value is VeloxJsonScalar scalar ? (object?)scalar.Text : value;
+
+    /// <summary>Builds a JSON array of strings.</summary>
+    private static VeloxJsonArray ToJsonArray(IEnumerable<string> items)
+    {
+        var array = new VeloxJsonArray();
+        foreach (var item in items) array.Add(VeloxJsonValue.From(item));
+        return array;
     }
 }
 

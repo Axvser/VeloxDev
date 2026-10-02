@@ -1,8 +1,7 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow;
@@ -15,7 +14,7 @@ namespace VeloxDev.AI.Workflow;
 public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
 {
     private readonly IWorkflowTreeViewModel _tree = tree ?? throw new ArgumentNullException(nameof(tree));
-    private JObject? _lastSnapshot;
+    private VeloxJsonObject? _lastSnapshot;
     private long _version;
 
     /// <summary>
@@ -32,7 +31,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         var snapshot = BuildSnapshot();
         _lastSnapshot = snapshot;
         Interlocked.Increment(ref _version);
-        return snapshot.ToString(Formatting.Indented);
+        return snapshot.ToJson(VeloxJsonFormat.Indented);
     }
 
     /// <summary>
@@ -48,34 +47,34 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         {
             _lastSnapshot = current;
             Interlocked.Increment(ref _version);
-            return JsonConvert.SerializeObject(new
+            return new VeloxJsonObject
             {
-                status = "full",
-                message = "No previous snapshot; returning full state.",
-                version = _version,
-                state = current
-            }, Formatting.Indented);
+                ["status"] = "full",
+                ["message"] = "No previous snapshot; returning full state.",
+                ["version"] = _version,
+                ["state"] = current,
+            }.ToJson(VeloxJsonFormat.Indented);
         }
 
         var diff = ComputeDiff(_lastSnapshot, current);
         _lastSnapshot = current;
         Interlocked.Increment(ref _version);
 
-        return JsonConvert.SerializeObject(new
+        return new VeloxJsonObject
         {
-            status = "diff",
-            version = _version,
-            changes = diff
-        }, Formatting.Indented);
+            ["status"] = "diff",
+            ["version"] = _version,
+            ["changes"] = diff,
+        }.ToJson(VeloxJsonFormat.Indented);
     }
 
-    private JObject BuildSnapshot()
+    private VeloxJsonObject BuildSnapshot()
     {
-        var nodes = new JArray();
+        var nodes = new VeloxJsonArray();
         for (int i = 0; i < _tree.Nodes.Count; i++)
         {
             var node = _tree.Nodes[i];
-            var nObj = new JObject
+            var nObj = new VeloxJsonObject
             {
                 ["index"] = i,
                 ["id"] = GetRuntimeId(node),
@@ -92,7 +91,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
             AppendScalarProps(nObj, node);
 
             // Capture slot IDs
-            var slotIds = new JArray();
+            var slotIds = new VeloxJsonArray();
             foreach (var slot in node.Slots)
                 slotIds.Add(GetRuntimeId(slot));
             nObj["slotIds"] = slotIds;
@@ -100,12 +99,12 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
             nodes.Add(nObj);
         }
 
-        var links = new JArray();
+        var links = new VeloxJsonArray();
         for (int i = 0; i < _tree.Links.Count; i++)
         {
             var link = _tree.Links[i];
             if (!link.IsVisible) continue;
-            links.Add(new JObject
+            links.Add(new VeloxJsonObject
             {
                 ["id"] = GetRuntimeId(link),
                 ["senderId"] = GetRuntimeId(link.Sender),
@@ -113,7 +112,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
             });
         }
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["nodeCount"] = _tree.Nodes.Count,
             ["linkCount"] = _tree.Links.Count,
@@ -122,17 +121,17 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         };
     }
 
-    private static JObject ComputeDiff(JObject previous, JObject current)
+    private static VeloxJsonObject ComputeDiff(VeloxJsonObject previous, VeloxJsonObject current)
     {
-        var diff = new JObject();
+        var diff = new VeloxJsonObject();
 
         // Nodes diff by RuntimeId
-        var prevNodes = IndexById(previous["nodes"] as JArray);
-        var currNodes = IndexById(current["nodes"] as JArray);
+        var prevNodes = IndexById(previous["nodes"] as VeloxJsonArray);
+        var currNodes = IndexById(current["nodes"] as VeloxJsonArray);
 
-        var addedNodes = new JArray();
-        var removedNodes = new JArray();
-        var modifiedNodes = new JArray();
+        var addedNodes = new VeloxJsonArray();
+        var removedNodes = new VeloxJsonArray();
+        var modifiedNodes = new VeloxJsonArray();
 
         foreach (var kvp in currNodes)
         {
@@ -153,7 +152,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         foreach (var kvp in prevNodes)
         {
             if (!currNodes.ContainsKey(kvp.Key))
-                removedNodes.Add(new JObject { ["id"] = kvp.Key });
+                removedNodes.Add(new VeloxJsonObject { ["id"] = kvp.Key });
         }
 
         if (addedNodes.Count > 0) diff["addedNodes"] = addedNodes;
@@ -161,11 +160,11 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         if (modifiedNodes.Count > 0) diff["modifiedNodes"] = modifiedNodes;
 
         // Links diff by RuntimeId
-        var prevLinks = IndexById(previous["links"] as JArray);
-        var currLinks = IndexById(current["links"] as JArray);
+        var prevLinks = IndexById(previous["links"] as VeloxJsonArray);
+        var currLinks = IndexById(current["links"] as VeloxJsonArray);
 
-        var addedLinks = new JArray();
-        var removedLinks = new JArray();
+        var addedLinks = new VeloxJsonArray();
+        var removedLinks = new VeloxJsonArray();
 
         foreach (var kvp in currLinks)
         {
@@ -175,7 +174,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         foreach (var kvp in prevLinks)
         {
             if (!currLinks.ContainsKey(kvp.Key))
-                removedLinks.Add(new JObject { ["id"] = kvp.Key });
+                removedLinks.Add(new VeloxJsonObject { ["id"] = kvp.Key });
         }
 
         if (addedLinks.Count > 0) diff["addedLinks"] = addedLinks;
@@ -190,28 +189,28 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         return diff;
     }
 
-    private static Dictionary<string, JObject> IndexById(JArray? arr)
+    private static Dictionary<string, VeloxJsonObject> IndexById(VeloxJsonArray? arr)
     {
-        var dict = new Dictionary<string, JObject>();
+        var dict = new Dictionary<string, VeloxJsonObject>();
         if (arr == null) return dict;
         foreach (var item in arr)
         {
-            if (item is JObject obj && obj["id"] != null)
-                dict[obj["id"]!.ToString()] = obj;
+            if (item is VeloxJsonObject obj && obj["id"] is VeloxJsonScalar id && id.AsString() is { } key)
+                dict[key] = obj;
         }
         return dict;
     }
 
-    private static JObject DiffProperties(JObject prev, JObject curr)
+    private static VeloxJsonObject DiffProperties(VeloxJsonObject prev, VeloxJsonObject curr)
     {
-        var diff = new JObject();
+        var diff = new VeloxJsonObject();
         foreach (var kvp in curr)
         {
             if (kvp.Key == "id") continue;
             var prevVal = prev[kvp.Key];
-            if (prevVal == null || !JToken.DeepEquals(prevVal, kvp.Value))
+            if (prevVal == null || !prevVal.DeepEquals(kvp.Value))
             {
-                diff[kvp.Key] = new JObject
+                diff[kvp.Key] = new VeloxJsonObject
                 {
                     ["from"] = prevVal,
                     ["to"] = kvp.Value,
@@ -240,7 +239,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
     /// The member list, their read/write status and their declared types all come from the tree; only the values
     /// are read from the live object, through its generated accessor.
     /// </remarks>
-    private static void AppendScalarProps(JObject obj, object target)
+    private static void AppendScalarProps(VeloxJsonObject obj, object target)
     {
         var accessor = AIContextTreeRegistry.FindAccessor(target);
         if (accessor is null) return;
@@ -255,14 +254,14 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
                 memberType == typeof(decimal))
             {
                 if (accessor.TryGet(target, member.Name, out var val))
-                    obj[member.Name] = val != null ? JToken.FromObject(val) : JValue.CreateNull();
+                    obj[member.Name] = val != null ? VeloxJsonValue.From(val) : VeloxJsonValue.Null;
             }
             else if (memberType.IsEnum)
             {
                 // Enum-typed properties (e.g. selector/routing state) are captured as their
                 // name string so diff output stays human-readable and detects changes.
                 if (accessor.TryGet(target, member.Name, out var val))
-                    obj[member.Name] = val != null ? val.ToString() : JValue.CreateNull();
+                    obj[member.Name] = val != null ? VeloxJsonValue.From(val.ToString()) : VeloxJsonValue.Null;
             }
         }
     }

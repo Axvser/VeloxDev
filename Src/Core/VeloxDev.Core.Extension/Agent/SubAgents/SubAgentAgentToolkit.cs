@@ -1,6 +1,4 @@
 using Microsoft.Extensions.AI;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -9,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using VeloxDev.AI.Pipelines;
 using VeloxDev.AI.Workflow;
+using VeloxDev.Serialization;
 
 namespace VeloxDev.AI.SubAgents;
 
@@ -121,7 +120,8 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             return Refused(refusal ?? "The sub-agent was not dispatched.");
 
         var row = _scope.Snapshot.FirstOrDefault(s => s.Id == id);
-        return new JObject
+        var dropped = row?.DroppedRequests ?? [];
+        return new VeloxJsonObject
         {
             ["status"] = "ok",
             ["id"] = id,
@@ -131,11 +131,11 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             ["grantedToolCount"] = row?.GrantedToolCount ?? 0,
             ["grantedSkillCount"] = row?.GrantedSkillCount ?? 0,
             ["grantedMcpServerCount"] = row?.GrantedMcpServerCount ?? 0,
-            ["dropped"] = new JArray(row?.DroppedRequests ?? []),
-            ["message"] = (row?.DroppedRequests.Count ?? 0) > 0
+            ["dropped"] = VeloxJsonValue.From(dropped),
+            ["message"] = dropped.Count > 0
                 ? "Dispatched, but not with everything you asked for — read \"dropped\". Call WaitSubAgents to collect its report."
                 : "Dispatched. Call WaitSubAgents to collect its report.",
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     [Description("Waits for sub-agents you dispatched to finish, then returns each one's state and the report of every one that completed. "
@@ -148,10 +148,10 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         var timeout = Math.Max(0, timeoutMs ?? 60_000);
         var (rows, timedOut) = await _scope.WaitAsync(ids, timeout).ConfigureAwait(false);
 
-        var agents = new JArray();
+        var agents = new VeloxJsonArray();
         foreach (var row in rows)
         {
-            var agent = new JObject
+            var agent = new VeloxJsonObject
             {
                 ["id"] = row.Id,
                 ["name"] = row.Name,
@@ -168,12 +168,12 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
                 if (truncated) agent["truncated"] = true;
             }
             if (row.Error is { Length: > 0 } error) agent["error"] = error;
-            if (row.DroppedRequests.Count > 0) agent["dropped"] = new JArray(row.DroppedRequests);
+            if (row.DroppedRequests.Count > 0) agent["dropped"] = VeloxJsonValue.From(row.DroppedRequests);
 
             agents.Add(agent);
         }
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["status"] = "ok",
             ["timedOut"] = timedOut,
@@ -183,7 +183,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
                 : timedOut
                     ? "The timeout elapsed before every sub-agent finished; the ones still running are marked as such. Wait again to collect them."
                     : "Every sub-agent you waited for has finished.",
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     [Description("Reads one sub-agent's current state and, once it has finished, its full report — untruncated, unlike the preview WaitSubAgents returns. "
@@ -197,11 +197,11 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
     private Task<string> ListSubAgents()
     {
         var rows = _scope.List();
-        var agents = new JArray();
+        var agents = new VeloxJsonArray();
         foreach (var row in rows)
         {
             var (task, _) = Truncate(row.Task, 120);
-            agents.Add(new JObject
+            agents.Add(new VeloxJsonObject
             {
                 ["id"] = row.Id,
                 ["name"] = row.Name,
@@ -213,13 +213,13 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             });
         }
 
-        return Task.FromResult(new JObject
+        return Task.FromResult(new VeloxJsonObject
         {
             ["status"] = "ok",
             ["count"] = rows.Count,
             ["running"] = rows.Count(r => r.IsRunning),
             ["agents"] = agents,
-        }.ToString(Formatting.None));
+        }.ToJson());
     }
 
     [Description("Stops a sub-agent you dispatched. Its work up to that point is discarded and it reports as Cancelled rather than as a failure — a cancellation is not an error. "
@@ -379,7 +379,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         if (row is null)
             return Refused($"No sub-agent with id '{id}' was dispatched by you. Call ListSubAgents to see the ones you dispatched.");
 
-        var result = new JObject
+        var result = new VeloxJsonObject
         {
             ["status"] = "ok",
             ["id"] = row.Id,
@@ -394,11 +394,11 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             ["grantedMcpServerCount"] = row.GrantedMcpServerCount,
         };
 
-        if (row.DroppedRequests.Count > 0) result["dropped"] = new JArray(row.DroppedRequests);
+        if (row.DroppedRequests.Count > 0) result["dropped"] = VeloxJsonValue.From(row.DroppedRequests);
         if (row.Result is { Length: > 0 }) result["result"] = row.Result;
         if (row.Error is { Length: > 0 }) result["error"] = row.Error;
 
-        return result.ToString(Formatting.None);
+        return result.ToJson();
     }
 
     /// <summary>
@@ -412,5 +412,5 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             : (text[..limit] + $"\n…[truncated: {text.Length - limit} more characters — call GetSubAgentResult for the whole report]", true);
 
     private static string Refused(string message)
-        => JsonConvert.SerializeObject(new { status = "refused", message }, Formatting.None);
+        => new VeloxJsonObject { ["status"] = "refused", ["message"] = message }.ToJson();
 }

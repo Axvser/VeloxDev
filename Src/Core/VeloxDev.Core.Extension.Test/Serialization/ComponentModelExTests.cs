@@ -80,21 +80,6 @@ public partial class ComponentModelExTests
         Assert.AreEqual(1L, restored.Key);
     }
 
-    /// <summary>
-    /// A dead end worth pinning so nobody "simplifies" to it: asking for type names on every value does not rescue
-    /// the enum either — measured, the round trip still yields <see cref="long"/>.
-    /// </summary>
-    [TestMethod]
-    public void AnEnumInAnObjectMember_IsNotRescuedByTypeNamesOnEveryValue()
-    {
-        var options = SerializationOptions.Create().WithTypeNameHandling(TypeNameHandling.All);
-        var json = new KeyHolder { Key = ProbeKind.Beta }.Serialize(options);
-
-        Assert.IsTrue(json.TryDeserialize(options, out KeyHolder? restored));
-        Assert.AreEqual(typeof(long), restored!.Key!.GetType(),
-            $"WithTypeNameHandling(All) does not help; json was: {json}");
-    }
-
     /// <summary>The type-name side channel does work — proved in miniature before being applied to the segment types.</summary>
     [TestMethod]
     public void AnEnumInAnObjectMember_WithATypeNameBesideIt_RoundTrips()

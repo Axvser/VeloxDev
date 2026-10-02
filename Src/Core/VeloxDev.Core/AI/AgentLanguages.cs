@@ -85,6 +85,18 @@ public static class AgentLanguagesExtensions
         ["fa"] = AgentLanguages.Persian,
     };
 
+    /// <summary>
+    /// Every language the code table knows, once each and in the enum's own order.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the table rather than from <c>Enum.GetValues</c>: the latter is RequiresDynamicCode, and a
+    /// hand-kept list would be one more place to forget when a language is added.
+    /// </remarks>
+    public static IReadOnlyList<AgentLanguages> AllLanguages { get; } =
+        [.. LanguageCodeMap.Keys.Select(LanguageCodeMap_Value).Distinct().OrderBy(static language => (int)language)];
+
+    private static AgentLanguages LanguageCodeMap_Value(string code) => LanguageCodeMap[code];
+
     public static string ToLanguageCode(this AgentLanguages language)
     {
         return language switch

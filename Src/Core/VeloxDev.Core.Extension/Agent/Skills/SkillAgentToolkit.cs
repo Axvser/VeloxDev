@@ -1,12 +1,11 @@
 ﻿using Microsoft.Extensions.AI;
 using VeloxDev.AI.Pipelines;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using VeloxDev.AI;
+using VeloxDev.Serialization;
 
 namespace VeloxDev.AI.Skills;
 
@@ -76,10 +75,10 @@ public sealed class SkillAgentToolkit(SkillScope scope)
     [Description("Lists every discovered skill with its source (Embedded/File), state (NotStarted/Loading/Ready/Error), whether it is currently enabled, its bundled resource count and any error. Also returns aggregate counts. Pure query — call it first to see what is available and what is already switched on. Embedded skills are injected in full when enabled; file skills are advertised only, so use load_skill to read one.")]
     private string ListSkills()
     {
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         foreach (var skill in _scope.Status.Skills.OrderBy(s => s.Source).ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
         {
-            arr.Add(new JObject
+            arr.Add(new VeloxJsonObject
             {
                 ["name"] = skill.Name,
                 ["description"] = skill.Description,
@@ -92,14 +91,14 @@ public sealed class SkillAgentToolkit(SkillScope scope)
             });
         }
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["status"] = "ok",
             ["skillCount"] = _scope.Status.Skills.Count,
             ["activeCount"] = _scope.Status.ActiveCount,
             ["errorCount"] = _scope.Status.ErrorCount,
             ["skills"] = arr,
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     [Description("Loads a skill's full text and switches it on, so its guidance applies from this point. Use ListSkills to see what is available. For a file skill this is the only way to read its body — only its name and description are advertised. For an embedded skill the text is already in your instructions, but loading returns it anyway. Read any referenced resource afterwards with read_skill_resource.")]
@@ -118,14 +117,14 @@ public sealed class SkillAgentToolkit(SkillScope scope)
         if (string.IsNullOrWhiteSpace(body))
             return Error($"Skill '{skillName}' is marked ready but produced no text.");
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["status"] = "ok",
             ["skill"] = skill.Name,
             ["source"] = skill.Source.ToString(),
             ["resourceCount"] = skill.ResourceCount,
             ["content"] = body,
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     [Description("Switches a skill off: it stops contributing to your instructions from this point, without unloading or rediscovering anything. Use it to drop guidance that no longer applies and keep the context focused. The skill can be switched back on later with load_skill.")]
@@ -137,8 +136,12 @@ public sealed class SkillAgentToolkit(SkillScope scope)
             return Error($"Skill '{skillName}' not found. Use ListSkills to see the available skills.");
 
         _scope.Disable(skill.Name);
-        return JsonConvert.SerializeObject(
-            new { status = "ok", skill = skill.Name, message = $"'{skill.Name}' switched off." }, Formatting.None);
+        return new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["skill"] = skill.Name,
+            ["message"] = $"'{skill.Name}' switched off.",
+        }.ToJson();
     }
 
     [Description("Reads a resource bundled with a skill — a reference document, schema or data file shipped beside the skill. Pass the skill name and the resource path as the skill lists it (e.g. \"references/model.md\"). Only meaningful for file skills; embedded skills ship no per-skill resources.")]
@@ -156,16 +159,16 @@ public sealed class SkillAgentToolkit(SkillScope scope)
         if (content is null)
             return Error($"Resource '{relativePath}' not found in skill '{skillName}'.");
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["status"] = "ok",
             ["skill"] = skill.Name,
             ["resource"] = relativePath,
             ["content"] = content,
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     /// <summary>Shared error envelope: <c>{"status":"error","message":…}</c>.</summary>
     private static string Error(string message)
-        => JsonConvert.SerializeObject(new { status = "error", message }, Formatting.None);
+        => new VeloxJsonObject { ["status"] = "error", ["message"] = message }.ToJson();
 }

@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.AI;
 using VeloxDev.AI.Pipelines;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using VeloxDev.Serialization;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -22,7 +21,7 @@ namespace VeloxDev.AI.Workflow.Functions;
 /// <summary>
 /// Provides MAF-compatible <see cref="AITool"/> instances that give an Agent
 /// full operational control over a single <see cref="IWorkflowTreeViewModel"/>.
-/// All JSON output uses <see cref="Formatting.None"/> to minimize token consumption.
+/// All JSON output uses <see cref="VeloxJsonFormat.Compact"/> to minimize token consumption.
 /// </summary>
 public sealed class WorkflowAgentToolkit
 {
@@ -438,11 +437,11 @@ public sealed class WorkflowAgentToolkit
         // agreement, and a budget may only be reopened with it — so this denies rather than asking a
         // question the host said it does not want.
         if (!_scope.IsInteractionAllowed)
-            return JsonConvert.SerializeObject(new
+            return new VeloxJsonObject
             {
-                status = "denied",
-                message = "The host has switched interaction off for this session, so the user cannot be asked. Stop calling tools and report what remains.",
-            }, Formatting.None);
+                ["status"] = "denied",
+                ["message"] = "The host has switched interaction off for this session, so the user cannot be asked. Stop calling tools and report what remains.",
+            }.ToJson();
 
         // Asking is the whole safety property: the Agent cannot widen its own budget, it can only put the
         // question to the user. With no confirmation handler registered the answer is no — an unanswerable
@@ -452,11 +451,11 @@ public sealed class WorkflowAgentToolkit
             $"Agent 已达到工具调用上限（{exhausted}）。是否允许重置额度让它继续？").ConfigureAwait(false);
 
         if (!allowed)
-            return JsonConvert.SerializeObject(new
+            return new VeloxJsonObject
             {
-                status = "denied",
-                message = "The user did not allow more tool calls. Stop calling tools and report what you have done and what remains.",
-            }, Formatting.None);
+                ["status"] = "denied",
+                ["message"] = "The user did not allow more tool calls. Stop calling tools and report what you have done and what remains.",
+            }.ToJson();
 
         // The whole chain, not this scope's share alone: the user agreed to reopen the budget, and a
         // session whose root allowance is still spent would refuse the very next call — the extension would
@@ -544,11 +543,11 @@ public sealed class WorkflowAgentToolkit
     private string ListNodes()
     {
         var nodes = Tree.Nodes;
-        var result = new JArray();
+        var result = new VeloxJsonArray();
         for (int i = 0; i < nodes.Count; i++)
         {
             var node = nodes[i];
-            var obj = new JObject
+            var obj = new VeloxJsonObject
             {
                 ["i"] = i,
                 ["id"] = GetComponentId(node),
@@ -563,7 +562,7 @@ public sealed class WorkflowAgentToolkit
             AppendScalarProperties(obj, node);
             result.Add(obj);
         }
-        return result.ToString(Formatting.None);
+        return result.ToJson();
     }
 
     [Description("Gets full detail of a node by index: properties, slots with connections. Use ListComponentCommands for commands.")]
@@ -585,7 +584,7 @@ public sealed class WorkflowAgentToolkit
 
     private string BuildNodeDetailJson(IWorkflowNodeViewModel node, int nodeIndex)
     {
-        var obj = new JObject
+        var obj = new VeloxJsonObject
         {
             ["i"] = nodeIndex,
             ["id"] = GetComponentId(node),
@@ -603,11 +602,11 @@ public sealed class WorkflowAgentToolkit
         // Build slot→property name mapping for richer context
         var slotPropertyMap = BuildSlotPropertyMap(node);
 
-        var slotsArr = new JArray();
+        var slotsArr = new VeloxJsonArray();
         for (int s = 0; s < node.Slots.Count; s++)
         {
             var slot = node.Slots[s];
-            var slotObj = new JObject
+            var slotObj = new VeloxJsonObject
             {
                 ["si"] = s,
                 ["id"] = GetComponentId(slot),
@@ -619,7 +618,7 @@ public sealed class WorkflowAgentToolkit
 
             if (slot.Targets.Count > 0)
             {
-                var targets = new JArray();
+                var targets = new VeloxJsonArray();
                 foreach (var t in slot.Targets)
                 {
                     if (t.Parent != null)
@@ -630,7 +629,7 @@ public sealed class WorkflowAgentToolkit
 
             if (slot.Sources.Count > 0)
             {
-                var sources = new JArray();
+                var sources = new VeloxJsonArray();
                 foreach (var src in slot.Sources)
                 {
                     if (src.Parent != null)
@@ -644,27 +643,27 @@ public sealed class WorkflowAgentToolkit
         }
         obj["slots"] = slotsArr;
 
-        return obj.ToString(Formatting.None);
+        return obj.ToJson();
     }
 
     [Description("Lists all visible connections only (compact, with link ids). GetFullTopology also returns connections alongside full node/slot detail — prefer it for the whole graph; use this only when you need links without node detail.")]
     private string ListConnections()
     {
         var links = Tree.Links;
-        var result = new JArray();
+        var result = new VeloxJsonArray();
         for (int i = 0; i < links.Count; i++)
         {
             var link = links[i];
             if (!link.IsVisible) continue;
 
-            result.Add(new JObject
+            result.Add(new VeloxJsonObject
             {
                 ["id"] = GetComponentId(link),
                 ["sid"] = link.Sender != null ? GetComponentId(link.Sender) : null,
                 ["rid"] = link.Receiver != null ? GetComponentId(link.Receiver) : null,
             });
         }
-        return result.ToString(Formatting.None);
+        return result.ToJson();
     }
 
     // ────────────────────────── Mutation Functions ──────────────────────────
@@ -768,17 +767,17 @@ public sealed class WorkflowAgentToolkit
         bool connected = VerifyConnection(senderSlot!, receiverSlot!);
         if (!connected)
         {
-            var rejected = JObject.Parse(ConnectionRejected(senderSlot!, receiverSlot!,
+            var rejected = (VeloxJsonObject)VeloxJsonValue.Parse(ConnectionRejected(senderSlot!, receiverSlot!,
                 $"[{senderNodeIndex}][{senderSlotIndex}]", $"[{receiverNodeIndex}][{receiverSlotIndex}]"));
             if (senderPropHint != null)
                 rejected["senderProperty"] = senderPropHint;
             if (receiverPropHint != null)
                 rejected["receiverProperty"] = receiverPropHint;
             rejected["preferredAlternative"] = $"ConnectByProperty senderNode={senderNodeIndex} senderProperty={senderPropHint ?? "?"} receiverNode={receiverNodeIndex} receiverProperty={receiverPropHint ?? "?"}";
-            return rejected.ToString(Formatting.None);
+            return rejected.ToJson();
         }
 
-        var result = new JObject
+        var result = new VeloxJsonObject
         {
             ["status"] = "ok",
             ["message"] = $"Connected [{senderNodeIndex}][{senderSlotIndex}]→[{receiverNodeIndex}][{receiverSlotIndex}].",
@@ -787,7 +786,7 @@ public sealed class WorkflowAgentToolkit
         if (receiverPropHint != null) result["receiverProperty"] = receiverPropHint;
         if (senderPropHint != null && receiverPropHint != null)
             result["preferPropertyRoute"] = $"Next time use ConnectByProperty senderNode={senderNodeIndex} senderProperty={senderPropHint} receiverNode={receiverNodeIndex} receiverProperty={receiverPropHint}";
-        return result.ToString(Formatting.None);
+        return result.ToJson();
     }
 
     [Description("Connects two slots by their runtime IDs. IDs are stable across UI redraws but NOT across SlotEnumerator reconfiguration. Prefer ConnectByProperty for SlotEnumerator and generated slot collections; use this only with IDs obtained after the latest collection configuration. The framework may silently reject: check 'connected' in the response.")]
@@ -808,16 +807,16 @@ public sealed class WorkflowAgentToolkit
         bool connected = VerifyConnection(sender, receiver);
         if (!connected)
         {
-            var rejected = JObject.Parse(ConnectionRejected(sender, receiver, senderSlotId, receiverSlotId));
+            var rejected = (VeloxJsonObject)VeloxJsonValue.Parse(ConnectionRejected(sender, receiver, senderSlotId, receiverSlotId));
             if (senderPropHint != null) rejected["senderProperty"] = senderPropHint;
             if (receiverPropHint != null) rejected["receiverProperty"] = receiverPropHint;
-            return rejected.ToString(Formatting.None);
+            return rejected.ToJson();
         }
 
-        var result = new JObject { ["status"] = "ok", ["message"] = $"Connected {senderSlotId}→{receiverSlotId}." };
+        var result = new VeloxJsonObject { ["status"] = "ok", ["message"] = $"Connected {senderSlotId}→{receiverSlotId}." };
         if (senderPropHint != null) result["senderProperty"] = senderPropHint;
         if (receiverPropHint != null) result["receiverProperty"] = receiverPropHint;
-        return result.ToString(Formatting.None);
+        return result.ToJson();
     }
 
     [Description("Removes a connection between two slots by node/slot indices.")]
@@ -952,15 +951,15 @@ public sealed class WorkflowAgentToolkit
     private string GetWorkflowSummary()
     {
         var nodeTypes = Tree.Nodes.Select(n => n.GetType().Name).Distinct().ToArray();
-        var obj = new JObject
+        var obj = new VeloxJsonObject
         {
             ["treeId"] = GetComponentId(Tree),
             ["treeType"] = Tree.GetType().Name,
             ["nodeCount"] = Tree.Nodes.Count,
             ["linkCount"] = Tree.Links.Count(l => l.IsVisible),
-            ["nodeTypes"] = new JArray(nodeTypes),
+            ["nodeTypes"] = VeloxJsonValue.From(nodeTypes),
         };
-        return obj.ToString(Formatting.None);
+        return obj.ToJson();
     }
 
     [Description("Gets AgentContext docs for a .NET type. Use to learn about properties/commands on demand.")]
@@ -988,16 +987,16 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
 
         var cmds = CommandInvoker.DiscoverCommands(node);
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         foreach (var cmd in cmds)
         {
-            arr.Add(new JObject
+            arr.Add(new VeloxJsonObject
             {
                 ["n"] = cmd.Name,
                 ["p"] = cmd.ParameterType?.Name,
             });
         }
-        return arr.ToString(Formatting.None);
+        return arr.ToJson();
     }
 
     // ────────────────────────── State Tracking / Diff Functions ──────────────────────────
@@ -1006,13 +1005,13 @@ public sealed class WorkflowAgentToolkit
     private string TakeSnapshot()
     {
         _tracker.TakeSnapshot();
-        return JsonConvert.SerializeObject(new
+        return new VeloxJsonObject
         {
-            status = "ok",
-            version = _tracker.Version,
-            nodeCount = Tree.Nodes.Count,
-            linkCount = Tree.Links.Count(l => l.IsVisible),
-        }, Formatting.None);
+            ["status"] = "ok",
+            ["version"] = _tracker.Version,
+            ["nodeCount"] = Tree.Nodes.Count,
+            ["linkCount"] = Tree.Links.Count(l => l.IsVisible),
+        }.ToJson();
     }
 
     [Description("Returns diff since last snapshot: added/removed/modified nodes and links only.")]
@@ -1158,7 +1157,7 @@ public sealed class WorkflowAgentToolkit
             // bounds and miss the viewport check, causing it to never enter VisibleItems.
             node.Size = new Size(width, height);
             Tree.CreateNodeCommand.Execute(node);
-            var result = new JObject
+            var result = new VeloxJsonObject
             {
                 ["status"] = "ok",
                 ["id"] = GetComponentId(node),
@@ -1170,7 +1169,7 @@ public sealed class WorkflowAgentToolkit
             };
             if (moved)
                 result["repositioned"] = true;
-            return result.ToString(Formatting.None);
+            return result.ToJson();
         }
         catch (Exception ex)
         {
@@ -1203,12 +1202,12 @@ public sealed class WorkflowAgentToolkit
             if (Enum.TryParse<SlotChannel>(channel, true, out var ch))
                 slot.Channel = ch;
             node.CreateSlotCommand.Execute(slot);
-            return JsonConvert.SerializeObject(new
+            return new VeloxJsonObject
             {
-                status = "ok",
-                id = GetComponentId(slot),
-                si = node.Slots.IndexOf(slot),
-            }, Formatting.None);
+                ["status"] = "ok",
+                ["id"] = GetComponentId(slot),
+                ["si"] = node.Slots.IndexOf(slot),
+            }.ToJson();
         }
         catch (Exception ex)
         {
@@ -1223,7 +1222,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Node index.")] int nodeIndex)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var result = new JArray();
+        var result = new VeloxJsonArray();
 
         foreach (var prop in PropertiesOf(node))
         {
@@ -1234,13 +1233,13 @@ public sealed class WorkflowAgentToolkit
             {
                 if (prop.Get(node) is not IConditionalSlotProvider enumerator) continue;
 
-                var ids = new JArray();
+                var ids = new VeloxJsonArray();
                 foreach (var item in enumerator.Slots)
                 {
                     if (item.Slot is { } s) ids.Add(GetComponentId(s));
                 }
 
-                var entry = new JObject
+                var entry = new VeloxJsonObject
                 {
                     ["name"] = prop.Name,
                     ["collection"] = true,
@@ -1254,7 +1253,7 @@ public sealed class WorkflowAgentToolkit
                 // Expose allowed selector types from [SlotSelectors] on the enumerator property itself.
                 var allowedNames = GetAllowedEnumTypeDisplayNames(prop.Node);
                 if (!string.IsNullOrEmpty(allowedNames))
-                    entry["allowedSelectorTypes"] = new JArray(allowedNames.Split([", "], StringSplitOptions.RemoveEmptyEntries));
+                    entry["allowedSelectorTypes"] = VeloxJsonValue.From(allowedNames.Split([", "], StringSplitOptions.RemoveEmptyEntries));
 
                 result.Add(entry);
                 continue;
@@ -1263,7 +1262,7 @@ public sealed class WorkflowAgentToolkit
             if (prop.IsSingleSlot)
             {
                 var slot = prop.Get(node) as IWorkflowSlotViewModel;
-                result.Add(new JObject
+                result.Add(new VeloxJsonObject
                 {
                     ["name"] = prop.Name,
                     ["collection"] = false,
@@ -1274,7 +1273,7 @@ public sealed class WorkflowAgentToolkit
             else if (prop.IsSlotCollection)
             {
                 var col = prop.Get(node) as IList;
-                var ids = new JArray();
+                var ids = new VeloxJsonArray();
                 if (col != null)
                 {
                     foreach (var item in col)
@@ -1283,7 +1282,7 @@ public sealed class WorkflowAgentToolkit
                             ids.Add(GetComponentId(s));
                     }
                 }
-                var entry = new JObject
+                var entry = new VeloxJsonObject
                 {
                     ["name"] = prop.Name,
                     ["collection"] = true,
@@ -1294,7 +1293,7 @@ public sealed class WorkflowAgentToolkit
                 result.Add(entry);
             }
         }
-        return result.ToString(Formatting.None);
+        return result.ToJson();
     }
 
     [Description("Adds a new slot to a collection property on a node (e.g. OutputSlots). The slot is created via the node's CreateWorkflowSlot infrastructure and registered through the node's CreateSlotCommand (the native slot-mount path).")]
@@ -1333,12 +1332,12 @@ public sealed class WorkflowAgentToolkit
             // undo entry — the toolkit never Submit()s its own gesture.
             node.CreateSlotCommand.Execute(slot);
 
-            return JsonConvert.SerializeObject(new
+            return new VeloxJsonObject
             {
-                status = "ok",
-                id = GetComponentId(slot),
-                count = col.Count,
-            }, Formatting.None);
+                ["status"] = "ok",
+                ["id"] = GetComponentId(slot),
+                ["count"] = col.Count,
+            }.ToJson();
         }
         catch (Exception ex)
         {
@@ -1408,7 +1407,7 @@ public sealed class WorkflowAgentToolkit
                 object? selectorValue;
                 try
                 {
-                    selectorValue = JsonConvert.DeserializeObject(selectorTypeOrJson, targetType);
+                    selectorValue = VeloxJsonSerializer.Deserialize(selectorTypeOrJson, targetType);
                 }
                 catch (Exception ex)
                 {
@@ -1430,12 +1429,12 @@ public sealed class WorkflowAgentToolkit
                     return Error($"SetSelector failed: {ex.Message}");
                 }
 
-                return new JObject
+                return new VeloxJsonObject
                 {
                     ["ok"] = true,
                     ["selectorType"] = targetType.FullName,
                     ["property"] = propertyName,
-                }.ToString(Formatting.None);
+                }.ToJson();
             }
 
             // Enum/bool path (original behaviour)
@@ -1473,14 +1472,14 @@ public sealed class WorkflowAgentToolkit
             }
 
             var enumNames = SelectorLabels(selectorType);
-            var slotIds = new JArray();
+            var slotIds = new VeloxJsonArray();
             {
                 int i = 0;
                 foreach (var item in enumerator.Slots)
                 {
                     if (item.Slot is { } s)
                     {
-                        slotIds.Add(new JObject
+                        slotIds.Add(new VeloxJsonObject
                         {
                             ["id"] = GetComponentId(s),
                             ["label"] = i < enumNames.Length ? enumNames[i] : "?",
@@ -1489,14 +1488,14 @@ public sealed class WorkflowAgentToolkit
                     i++;
                 }
             }
-            return new JObject
+            return new VeloxJsonObject
             {
                 ["ok"] = true,
                 ["selectorType"] = selectorType.FullName,
                 ["property"] = propertyName,
                 ["count"] = slotIds.Count,
                 ["slots"] = slotIds,
-            }.ToString(Formatting.None);
+            }.ToJson();
         }
 
         return Error($"Property '{propertyName}' is not a SlotEnumerator.");
@@ -1607,7 +1606,7 @@ public sealed class WorkflowAgentToolkit
             connected = srcNode!.SearchReverseNodes(n => ReferenceEquals(n, tgtNode)).Any();
         }
 
-        return JsonConvert.SerializeObject(new { status = "ok", connected, direction }, Formatting.None);
+        return new VeloxJsonObject { ["status"] = "ok", ["connected"] = connected, ["direction"] = direction }.ToJson();
     }
 
     [Description("Finds the shortest forward path between two nodes. Returns ordered list of node IDs/indices from source to target, or empty if no path exists.")]
@@ -1648,33 +1647,33 @@ public sealed class WorkflowAgentToolkit
         }
 
         if (!found)
-            return JsonConvert.SerializeObject(new { status = "ok", found = false, path = Array.Empty<object>() }, Formatting.None);
+            return new VeloxJsonObject { ["status"] = "ok", ["found"] = false, ["path"] = new VeloxJsonArray() }.ToJson();
 
         // Reconstruct path
-        var path = new List<object>();
+        var path = new List<VeloxJsonValue>();
         var step = tgtNode!;
         while (step != null)
         {
-            path.Add(new { i = IndexOfNode(step), id = GetComponentId(step), t = step.GetType().Name });
+            path.Add(new VeloxJsonObject { ["i"] = IndexOfNode(step), ["id"] = GetComponentId(step), ["t"] = step.GetType().Name });
             visited.TryGetValue(step, out step!);
         }
         path.Reverse();
-        return JsonConvert.SerializeObject(new { status = "ok", found = true, length = path.Count, path }, Formatting.None);
+        return new VeloxJsonObject { ["status"] = "ok", ["found"] = true, ["length"] = path.Count, ["path"] = VeloxJsonValue.From(path) }.ToJson();
     }
 
     private string BuildNodeListResult(IEnumerable<IWorkflowNodeViewModel> nodes)
     {
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         foreach (var n in nodes)
         {
-            arr.Add(new JObject
+            arr.Add(new VeloxJsonObject
             {
                 ["i"] = IndexOfNode(n),
                 ["id"] = GetComponentId(n),
                 ["t"] = n.GetType().Name,
             });
         }
-        return arr.ToString(Formatting.None);
+        return arr.ToJson();
     }
 
     // ────────────────────────── Reverse Broadcast ──────────────────────────
@@ -1767,7 +1766,7 @@ public sealed class WorkflowAgentToolkit
         if (slot is null)
             return Error($"'{conditionValue}' not found in SlotEnumerator");
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["ok"] = true,
             ["nodeIndex"] = nodeIndex,
@@ -1775,7 +1774,7 @@ public sealed class WorkflowAgentToolkit
             ["condition"] = conditionValue,
             ["slotId"] = GetComponentId(slot),
             ["channel"] = slot.Channel.ToString()
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     [Description("Sets SlotChannel of slot inside SlotEnumerator by condition value")]
@@ -1786,10 +1785,10 @@ public sealed class WorkflowAgentToolkit
         [Description("New channel")] string channel)
     {
         var getResult = GetEnumSlotByValue(nodeIndex, propertyName, conditionValue);
-        var parsed = JObject.Parse(getResult);
-        if (parsed["ok"]?.Value<bool>() != true) return getResult;
+        var parsed = (VeloxJsonObject)VeloxJsonValue.Parse(getResult);
+        if ((parsed["ok"] as VeloxJsonScalar)?.AsBoolean() != true) return getResult;
 
-        var slotId = parsed["slotId"]?.ToString();
+        var slotId = (parsed["slotId"] as VeloxJsonScalar)?.Text;
         if (string.IsNullOrEmpty(slotId)) return Error("No slotId returned");
         if (slotId is null || FindComponentById(slotId) is not IWorkflowSlotViewModel slot) return Error($"Slot '{slotId}' not found");
         if (!Enum.TryParse<SlotChannel>(channel, true, out var ch))
@@ -1811,10 +1810,10 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
     {
         var senderResult = GetEnumSlotByValue(senderNodeIndex, senderProperty, senderCondition);
-        var senderParsed = JObject.Parse(senderResult);
-        if (senderParsed["ok"]?.Value<bool>() != true) return senderResult;
+        var senderParsed = (VeloxJsonObject)VeloxJsonValue.Parse(senderResult);
+        if ((senderParsed["ok"] as VeloxJsonScalar)?.AsBoolean() != true) return senderResult;
 
-        var senderSlotId = senderParsed["slotId"]?.ToString();
+        var senderSlotId = (senderParsed["slotId"] as VeloxJsonScalar)?.Text;
         if (string.IsNullOrEmpty(senderSlotId)) return Error("No sender slotId");
         if (senderSlotId is null || FindComponentById(senderSlotId) is not IWorkflowSlotViewModel sender) return Error($"Sender '{senderSlotId}' not found");
 
@@ -1825,9 +1824,9 @@ public sealed class WorkflowAgentToolkit
         {
             // Receiver is also a SlotEnumerator slot — resolve by condition value.
             var receiverResult = GetEnumSlotByValue(receiverNodeIndex, receiverSlot, receiverCondition!);
-            var receiverParsed = JObject.Parse(receiverResult);
-            if (receiverParsed["ok"]?.Value<bool>() != true) return receiverResult;
-            var receiverSlotId = receiverParsed["slotId"]?.ToString();
+            var receiverParsed = (VeloxJsonObject)VeloxJsonValue.Parse(receiverResult);
+            if ((receiverParsed["ok"] as VeloxJsonScalar)?.AsBoolean() != true) return receiverResult;
+            var receiverSlotId = (receiverParsed["slotId"] as VeloxJsonScalar)?.Text;
             if (string.IsNullOrEmpty(receiverSlotId)) return Error("No receiver slotId");
             if (receiverSlotId is null || FindComponentById(receiverSlotId) is not IWorkflowSlotViewModel enumReceiver)
                 return Error($"Receiver '{receiverSlotId}' not found");
@@ -1865,7 +1864,7 @@ public sealed class WorkflowAgentToolkit
     {
         if (FindComponentById(linkId) is not IWorkflowLinkViewModel component) return Error($"Link '{linkId}' not found.");
 
-        var obj = new JObject
+        var obj = new VeloxJsonObject
         {
             ["id"] = linkId,
             ["visible"] = component.IsVisible,
@@ -1873,7 +1872,7 @@ public sealed class WorkflowAgentToolkit
 
         if (component.Sender != null)
         {
-            obj["sender"] = new JObject
+            obj["sender"] = new VeloxJsonObject
             {
                 ["slotId"] = GetComponentId(component.Sender),
                 ["nodeId"] = component.Sender.Parent != null ? GetComponentId(component.Sender.Parent) : null,
@@ -1882,7 +1881,7 @@ public sealed class WorkflowAgentToolkit
         }
         if (component.Receiver != null)
         {
-            obj["receiver"] = new JObject
+            obj["receiver"] = new VeloxJsonObject
             {
                 ["slotId"] = GetComponentId(component.Receiver),
                 ["nodeId"] = component.Receiver.Parent != null ? GetComponentId(component.Receiver.Parent) : null,
@@ -1891,7 +1890,7 @@ public sealed class WorkflowAgentToolkit
         }
 
         AppendScalarProperties(obj, component);
-        return obj.ToString(Formatting.None);
+        return obj.ToJson();
     }
 
     // ────────────────────────── Bulk Operations ──────────────────────────
@@ -1905,11 +1904,11 @@ public sealed class WorkflowAgentToolkit
         if (!_scope.AllowNodeExecution)
             return Error("ExecuteNodes is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
         int[] indices;
-        try { indices = [.. JArray.Parse(nodeIndicesJson).Select(t => t.Value<int>())]; }
+        try { indices = [.. ((VeloxJsonArray)VeloxJsonValue.Parse(nodeIndicesJson)).Select(t => ((VeloxJsonScalar)t).AsInt32())]; }
         catch (Exception ex) { return Error($"Invalid JSON array: {ex.Message}"); }
 
         int completed = 0;
-        var errors = new JArray();
+        var errors = new VeloxJsonArray();
         foreach (var idx in indices)
         {
             if (idx < 0 || idx >= Tree.Nodes.Count)
@@ -1928,9 +1927,9 @@ public sealed class WorkflowAgentToolkit
             }
         }
 
-        var result = new JObject { ["status"] = "ok", ["completed"] = completed };
+        var result = new VeloxJsonObject { ["status"] = "ok", ["completed"] = completed };
         if (errors.Count > 0) result["errors"] = errors;
-        return result.ToString(Formatting.None);
+        return result.ToJson();
     }
 
     // ────────────────────────── Compiled runs the Agent holds ──────────────────────────
@@ -2051,12 +2050,12 @@ public sealed class WorkflowAgentToolkit
         return context;
     }
 
-    private static JObject FailureJson(ExecutionError failure) => new()
+    private static VeloxJsonObject FailureJson(ExecutionError failure) => new()
     {
         ["phase"] = failure.Phase.ToString(),
         ["level"] = failure.Level.ToString(),
         ["message"] = failure.Message,
-        ["error"] = failure.Error?.Message is { } message ? message : JValue.CreateNull(),
+        ["error"] = failure.Error?.Message is { } message ? message : VeloxJsonValue.Null,
         ["attempt"] = failure.Attempt,
         ["order"] = failure.Order,
     };
@@ -2064,10 +2063,12 @@ public sealed class WorkflowAgentToolkit
     /// <summary>The last lines of a session's log — a status answer is not the place to paste a thousand of them.</summary>
     private const int RunStatusLogTail = 40;
 
-    private static JArray LogTail(IEnumerable<string> lines)
+    private static VeloxJsonArray LogTail(IEnumerable<string> lines)
     {
         var all = lines.ToList();
-        return new JArray(all.Skip(Math.Max(0, all.Count - RunStatusLogTail)));
+        var tail = new VeloxJsonArray();
+        foreach (var line in all.Skip(Math.Max(0, all.Count - RunStatusLogTail))) tail.Add(line);
+        return tail;
     }
 
     // ────────────────────────── Chain Execution (Compiler) ──────────────────────────
@@ -2132,15 +2133,15 @@ public sealed class WorkflowAgentToolkit
             lock (_runsGate) _runs[run.Handle] = run;
             run.Task = DriveAsync(graphs[0], run, place);
 
-            return JsonConvert.SerializeObject(new
+            return new VeloxJsonObject
             {
-                status = "ok",
-                handle = run.Handle,
-                resumed = resume,
-                message = resume
+                ["status"] = "ok",
+                ["handle"] = run.Handle,
+                ["resumed"] = resume,
+                ["message"] = resume
                     ? "Carrying on from the last checkpoint. Poll GetCompiledRunStatus with the handle."
                     : "Run started. Poll GetCompiledRunStatus with the handle.",
-            }, Formatting.None);
+            }.ToJson();
         }
         catch (Exception ex)
         {
@@ -2173,7 +2174,7 @@ public sealed class WorkflowAgentToolkit
         // —— 「还在跑」的回答配上一具已经被退休的句柄，再问就成了未知句柄。
         // 读任务而不是 context.IsRunning：后者是引擎在后台线程里才置起来的，抢在同一瞬会读到「没在跑」。
         var finished = run.Task.IsCompleted;
-        var status = new JObject
+        var status = new VeloxJsonObject
         {
             ["status"] = "ok",
             ["handle"] = run.Handle,
@@ -2183,12 +2184,12 @@ public sealed class WorkflowAgentToolkit
             ["isPaused"] = run.Gate.IsPaused,
             ["attempts"] = context.Attempt,
             ["endedWithError"] = context.EndedWithError,
-            ["data"] = context.Data is not null ? JToken.FromObject(context.Data) : JValue.CreateNull(),
+            ["data"] = context.Data is not null ? VeloxJsonValue.From(context.Data) : VeloxJsonValue.Null,
             ["failureCount"] = run.FailureCount,
-            ["failures"] = new JArray(run.SnapshotFailures().Select(FailureJson)),
+            ["failures"] = VeloxJsonValue.From(run.SnapshotFailures().Select(FailureJson)),
             ["logCount"] = context.Logs.Count,
             ["logs"] = LogTail(context.SnapshotLogs()),
-            ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : JValue.CreateNull(),
+            ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : VeloxJsonValue.Null,
         };
         if (run.Escaped is { } escaped)
             status["escaped"] = escaped.Message;
@@ -2200,7 +2201,7 @@ public sealed class WorkflowAgentToolkit
             lock (_runsGate) _runs.Remove(run.Handle);
             run.Cts.Dispose();
         }
-        return status.ToString(Formatting.None);
+        return status.ToJson();
     }
 
     [Description("Holds a running compiled workflow at its next node boundary: the node being driven finishes, nothing new starts, and runStatus becomes 'Paused'. The same gate the host may have configured itself — this only fills in when the host left it unset. Idempotent. Nothing else about the run changes.")]
@@ -2270,7 +2271,7 @@ public sealed class WorkflowAgentToolkit
                     "No result was produced.");
             }
 
-            var outcome = new JObject
+            var outcome = new VeloxJsonObject
             {
                 ["status"] = "ok",
                 ["role"] = role.ToString(),
@@ -2279,17 +2280,17 @@ public sealed class WorkflowAgentToolkit
                 ["outcome"] = context.Outcome.ToString(),
                 ["endedWithError"] = context.EndedWithError,
                 ["attempts"] = context.Attempt,
-                ["data"] = context.Data is not null ? JToken.FromObject(context.Data) : JValue.CreateNull(),
+                ["data"] = context.Data is not null ? VeloxJsonValue.From(context.Data) : VeloxJsonValue.Null,
                 // The same failures the log carries, as records: phase / level / message / attempt / order.
-                ["failures"] = new JArray(run.SnapshotFailures().Select(FailureJson)),
-                ["logs"] = new JArray(context.Logs),
+                ["failures"] = VeloxJsonValue.From(run.SnapshotFailures().Select(FailureJson)),
+                ["logs"] = VeloxJsonValue.From(context.Logs),
                 // Present only when the host sent the lines to a file; an absolute path the model can open itself.
-                ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : JValue.CreateNull(),
+                ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : VeloxJsonValue.Null,
             };
             // targetReached is meaningful only for Terminal (result) runs; a Root chain run has no target.
             if (role == CompileRole.Terminal)
                 outcome["targetReached"] = context.TargetReached;
-            return outcome.ToString(Formatting.None);
+            return outcome.ToJson();
         }
         catch (OperationCanceledException)
         {
@@ -2329,38 +2330,38 @@ public sealed class WorkflowAgentToolkit
             }
         }
 
-        return JsonConvert.SerializeObject(new
+        return new VeloxJsonObject
         {
-            status = "ok",
-            nodeIndex,
-            id = GetComponentId(node),
-            type = node.GetType().Name,
-            inDegree,
-            outDegree,
-            totalConnections = inDegree + outDegree,
-            connectedNodes = connectedNodeIds.Count,
-            slotCount = node.Slots.Count,
-            connectedNodeIds = connectedNodeIds.ToArray(),
-        }, Formatting.None);
+            ["status"] = "ok",
+            ["nodeIndex"] = nodeIndex,
+            ["id"] = GetComponentId(node),
+            ["type"] = node.GetType().Name,
+            ["inDegree"] = inDegree,
+            ["outDegree"] = outDegree,
+            ["totalConnections"] = inDegree + outDegree,
+            ["connectedNodes"] = connectedNodeIds.Count,
+            ["slotCount"] = node.Slots.Count,
+            ["connectedNodeIds"] = VeloxJsonValue.From(connectedNodeIds.ToArray()),
+        }.ToJson();
     }
 
     [Description("Lists all node and slot types that can be created: the concrete workflow component types the context tree carries that have a parameterless constructor.")]
     private string ListCreatableTypes()
     {
-        var nodeTypes = new JArray();
-        var slotTypes = new JArray();
+        var nodeTypes = new VeloxJsonArray();
+        var slotTypes = new VeloxJsonArray();
 
         // 目录已经按四个组件接口分好了类，这里只要再问一句「能不能无参构造」。
         AppendCreatable("Nodes", nodeTypes);
         AppendCreatable("Slots", slotTypes);
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["nodeTypes"] = nodeTypes,
             ["slotTypes"] = slotTypes,
-        }.ToString(Formatting.None);
+        }.ToJson();
 
-        void AppendCreatable(string kind, JArray into)
+        void AppendCreatable(string kind, VeloxJsonArray into)
         {
             foreach (var root in new[] { AIContextTreeRegistry.FrameworkRoot, AIContextTreeRegistry.CustomerRoot })
             {
@@ -2369,7 +2370,7 @@ public sealed class WorkflowAgentToolkit
                     var accessor = AIContextTreeRegistry.FindAccessor(name);
                     if (accessor is null || !accessor.HasPublicParameterlessConstructor) continue;
 
-                    into.Add(new JObject
+                    into.Add(new VeloxJsonObject
                     {
                         ["fullName"] = name,
                         ["name"] = AgentTypeNames.Simple(name),
@@ -2382,7 +2383,7 @@ public sealed class WorkflowAgentToolkit
     [Description("Validates the workflow: checks for unconnected slots, nodes without connections, nodes with zero size, and other potential issues. Returns a list of warnings.")]
     private string ValidateWorkflow()
     {
-        var warnings = new JArray();
+        var warnings = new VeloxJsonArray();
 
         for (int i = 0; i < Tree.Nodes.Count; i++)
         {
@@ -2391,7 +2392,7 @@ public sealed class WorkflowAgentToolkit
 
             // Check zero size
             if (node.Size.Width <= 0 || node.Size.Height <= 0)
-                warnings.Add(new JObject { ["level"] = "error", ["node"] = i, ["id"] = nodeId, ["msg"] = $"Node has zero/negative size ({node.Size.Width}×{node.Size.Height})." });
+                warnings.Add(new VeloxJsonObject { ["level"] = "error", ["node"] = i, ["id"] = nodeId, ["msg"] = $"Node has zero/negative size ({node.Size.Width}×{node.Size.Height})." });
 
             // Check isolated node (no connections at all)
             bool hasAnyConnection = false;
@@ -2404,11 +2405,11 @@ public sealed class WorkflowAgentToolkit
                 }
             }
             if (!hasAnyConnection && node.Slots.Count > 0)
-                warnings.Add(new JObject { ["level"] = "warn", ["node"] = i, ["id"] = nodeId, ["msg"] = "Node is isolated (has slots but no connections)." });
+                warnings.Add(new VeloxJsonObject { ["level"] = "warn", ["node"] = i, ["id"] = nodeId, ["msg"] = "Node is isolated (has slots but no connections)." });
 
             // Check node with no slots
             if (node.Slots.Count == 0)
-                warnings.Add(new JObject { ["level"] = "info", ["node"] = i, ["id"] = nodeId, ["msg"] = "Node has no slots." });
+                warnings.Add(new VeloxJsonObject { ["level"] = "info", ["node"] = i, ["id"] = nodeId, ["msg"] = "Node has no slots." });
         }
 
         // Check for duplicate connections
@@ -2418,17 +2419,17 @@ public sealed class WorkflowAgentToolkit
             if (!link.IsVisible) continue;
             var key = $"{GetComponentId(link.Sender)}→{GetComponentId(link.Receiver)}";
             if (!seenLinks.Add(key))
-                warnings.Add(new JObject { ["level"] = "warn", ["id"] = GetComponentId(link), ["msg"] = $"Duplicate connection: {key}." });
+                warnings.Add(new VeloxJsonObject { ["level"] = "warn", ["id"] = GetComponentId(link), ["msg"] = $"Duplicate connection: {key}." });
         }
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["status"] = "ok",
             ["nodeCount"] = Tree.Nodes.Count,
             ["linkCount"] = Tree.Links.Count(l => l.IsVisible),
             ["warningCount"] = warnings.Count,
             ["warnings"] = warnings,
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     // ────────────────────────── Compiler Functions ──────────────────────────
@@ -2454,18 +2455,18 @@ public sealed class WorkflowAgentToolkit
             var compiler = new CompilerViewModel();
             var graphs = await compiler.CompileAsync(node, role);
 
-            var entries = new JArray();
+            var entries = new VeloxJsonArray();
             foreach (var g in graphs)
                 AppendGraphEntries(entries, g, 0);
 
-            return new JObject
+            return new VeloxJsonObject
             {
                 ["status"] = "ok",
                 ["role"] = role.ToString(),
                 ["graphCount"] = graphs.Count,
                 ["entries"] = entries,
                 ["nodeOrders"] = BuildCompileOrders(),
-            }.ToString(Formatting.None);
+            }.ToJson();
         }
         catch (Exception ex)
         {
@@ -2477,13 +2478,13 @@ public sealed class WorkflowAgentToolkit
     private string GetCompileStatus()
     {
         var orders = BuildCompileOrders();
-        return new JObject { ["status"] = "ok", ["compiledNodes"] = orders.Count, ["nodes"] = orders }.ToString(Formatting.None);
+        return new VeloxJsonObject { ["status"] = "ok", ["compiledNodes"] = orders.Count, ["nodes"] = orders }.ToJson();
     }
 
     [Description("Returns the tree's aggregate execution log — the chronological record of direct (non-compiler) executions appended by nodes (e.g. '01. EXEC Load Seed'). For the compiler run-session log (with sequence numbers and [Warning] / [Error] markers), use RunCompiledWorkflow's 'logs' field instead. Pure query.")]
     private string GetExecutionLog()
     {
-        var logs = new JArray();
+        var logs = new VeloxJsonArray();
 
         // The tree's execution log is a convention-named public property on the concrete tree view
         // model (e.g. TreeViewModel.ExecutionLog). The context tree is what says whether it is there.
@@ -2493,18 +2494,18 @@ public sealed class WorkflowAgentToolkit
                 if (e is not null) logs.Add(e.ToString());
         }
 
-        return new JObject { ["status"] = "ok", ["entryCount"] = logs.Count, ["entries"] = logs }.ToString(Formatting.None);
+        return new VeloxJsonObject { ["status"] = "ok", ["entryCount"] = logs.Count, ["entries"] = logs }.ToJson();
     }
 
-    private JArray BuildCompileOrders()
+    private VeloxJsonArray BuildCompileOrders()
     {
-        var arr = new JArray();
+        var arr = new VeloxJsonArray();
         for (int i = 0; i < Tree.Nodes.Count; i++)
         {
             var n = Tree.Nodes[i];
             if (n is ICompileTimeAware aware && aware.CompileContext is { } cc)
             {
-                arr.Add(new JObject
+                arr.Add(new VeloxJsonObject
                 {
                     ["i"] = i,
                     ["id"] = GetComponentId(n),
@@ -2519,30 +2520,30 @@ public sealed class WorkflowAgentToolkit
         return arr;
     }
 
-    private static void AppendGraphEntries(JArray entries, CompiledGraph graph, int depth)
+    private static void AppendGraphEntries(VeloxJsonArray entries, CompiledGraph graph, int depth)
     {
         foreach (var entry in graph.Entries)
             AppendEntry(entries, entry, depth);
     }
 
-    private static void AppendEntry(JArray entries, CompileSegment entry, int depth)
+    private static void AppendEntry(VeloxJsonArray entries, CompileSegment entry, int depth)
     {
-        var obj = new JObject { ["depth"] = depth };
+        var obj = new VeloxJsonObject { ["depth"] = depth };
         switch (entry)
         {
             case ChainSegment exec:
                 obj["type"] = "Execute";
-                obj["nodes"] = new JArray(exec.Nodes.Select(n => n.GetType().Name));
+                obj["nodes"] = VeloxJsonValue.From(exec.Nodes.Select(n => n.GetType().Name));
                 break;
             case BranchSegment branch:
                 obj["type"] = "Branch";
                 obj["router"] = branch.Router?.GetType().Name;
                 obj["isDynamic"] = branch.IsDynamic;
                 if (branch.CompileKey is { } ck) obj["compileKey"] = ck.ToString();
-                var options = new JArray();
+                var options = new VeloxJsonArray();
                 foreach (var o in branch.Options)
                 {
-                    options.Add(new JObject
+                    options.Add(new VeloxJsonObject
                     {
                         ["key"] = o.Key?.ToString(),
                         ["label"] = o.Label,
@@ -2576,7 +2577,7 @@ public sealed class WorkflowAgentToolkit
         [Description("When true, the user may select MULTIPLE options (checkboxes). When false (default), the user selects exactly one option (radio-buttons).")] bool allowMultiSelect = false)
     {
         string[] options;
-        try { options = JsonConvert.DeserializeObject<string[]>(optionsJson) ?? []; }
+        try { options = [.. ((VeloxJsonArray)VeloxJsonValue.Parse(optionsJson)).Select(t => ((VeloxJsonScalar)t).AsString()!)]; }
         catch (Exception ex) { return Error($"Invalid options JSON: {ex.Message}"); }
 
         if (options.Length == 0) return Error("No options provided.");
@@ -2590,12 +2591,12 @@ public sealed class WorkflowAgentToolkit
         {
             var selected = result.SelectedOptions?.Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? [];
             var freeText = result.FreeTextResponse;
-            return JsonConvert.SerializeObject(new
+            return new VeloxJsonObject
             {
-                status = selected.Count > 0 || !string.IsNullOrWhiteSpace(freeText) ? "ok" : "cancelled",
-                chosenList = selected,
-                freeText,
-            }, Formatting.None);
+                ["status"] = selected.Count > 0 || !string.IsNullOrWhiteSpace(freeText) ? "ok" : "cancelled",
+                ["chosenList"] = VeloxJsonValue.From(selected),
+                ["freeText"] = freeText,
+            }.ToJson();
         }
         else
         {
@@ -2603,12 +2604,12 @@ public sealed class WorkflowAgentToolkit
             if (chosen == null && string.IsNullOrWhiteSpace(result.FreeTextResponse))
                 return Error("User rejected the selection.");
 
-            return JsonConvert.SerializeObject(new
+            return new VeloxJsonObject
             {
-                status = "ok",
-                chosen = chosen ?? result.FreeTextResponse,
-                freeText = result.FreeTextResponse,
-            }, Formatting.None);
+                ["status"] = "ok",
+                ["chosen"] = chosen ?? result.FreeTextResponse,
+                ["freeText"] = result.FreeTextResponse,
+            }.ToJson();
         }
     }
 
@@ -2621,9 +2622,9 @@ public sealed class WorkflowAgentToolkit
 
         var allowed = await _scope.ResolveConfirmationAsync(operationKey, description);
         if (!allowed)
-            return JsonConvert.SerializeObject(new { status = "denied", message = "User denied the operation. Do NOT proceed." }, Formatting.None);
+            return new VeloxJsonObject { ["status"] = "denied", ["message"] = "User denied the operation. Do NOT proceed." }.ToJson();
 
-        return JsonConvert.SerializeObject(new { status = "ok", message = "User confirmed. Proceed." }, Formatting.None);
+        return new VeloxJsonObject { ["status"] = "ok", ["message"] = "User confirmed. Proceed." }.ToJson();
     }
 
     // ────────────────────────── Helpers ──────────────────────────
@@ -2773,7 +2774,7 @@ public sealed class WorkflowAgentToolkit
         return null;
     }
 
-    private static void AppendScalarProperties(JObject obj, object target)
+    private static void AppendScalarProperties(VeloxJsonObject obj, object target)
     {
         foreach (var prop in PropertiesOf(target))
         {
@@ -2786,7 +2787,7 @@ public sealed class WorkflowAgentToolkit
                 pt == typeof(long) || pt == typeof(float) || pt == typeof(decimal))
             {
                 var val = prop.Get(target);
-                obj[prop.Name] = val != null ? JToken.FromObject(val) : JValue.CreateNull();
+                obj[prop.Name] = val != null ? VeloxJsonValue.From(val) : VeloxJsonValue.Null;
             }
             else if (pt == typeof(Type))
             {
@@ -2847,7 +2848,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Optional property value (string) to match.")] string? propertyValue = null)
     {
         var nodes = Tree.Nodes;
-        var result = new JArray();
+        var result = new VeloxJsonArray();
         for (int i = 0; i < nodes.Count; i++)
         {
             var node = nodes[i];
@@ -2865,7 +2866,7 @@ public sealed class WorkflowAgentToolkit
                     continue;
             }
 
-            var obj = new JObject
+            var obj = new VeloxJsonObject
             {
                 ["i"] = i,
                 ["id"] = GetComponentId(node),
@@ -2874,7 +2875,7 @@ public sealed class WorkflowAgentToolkit
             AppendScalarProperties(obj, node);
             result.Add(obj);
         }
-        return result.ToString(Formatting.None);
+        return result.ToJson();
     }
 
     [Description("Resolves a slot's runtime ID from its owning property name on a node. For collections, specify the index. Avoids needing GetNodeDetail just to get a slot ID.")]
@@ -2890,7 +2891,7 @@ public sealed class WorkflowAgentToolkit
         if (prop.Value.IsSingleSlot)
         {
             if (prop.Value.Get(node) is not IWorkflowSlotViewModel slot) return Error($"Slot property '{propertyName}' is null.");
-            return JsonConvert.SerializeObject(new { status = "ok", id = GetComponentId(slot), prop = propertyName }, Formatting.None);
+            return new VeloxJsonObject { ["status"] = "ok", ["id"] = GetComponentId(slot), ["prop"] = propertyName }.ToJson();
         }
         else if (prop.Value.IsSlotCollection)
         {
@@ -2898,7 +2899,7 @@ public sealed class WorkflowAgentToolkit
                 return Error($"Collection property '{propertyName}' index {collectionIndex} out of range or null.");
             if (col[collectionIndex] is not IWorkflowSlotViewModel slot2)
                 return Error($"Element at [{collectionIndex}] is not a slot.");
-            return JsonConvert.SerializeObject(new { status = "ok", id = GetComponentId(slot2), prop = propertyName, index = collectionIndex }, Formatting.None);
+            return new VeloxJsonObject { ["status"] = "ok", ["id"] = GetComponentId(slot2), ["prop"] = propertyName, ["index"] = collectionIndex }.ToJson();
         }
         return Error($"Property '{propertyName}' is not a slot or slot collection.");
     }
@@ -2935,12 +2936,12 @@ public sealed class WorkflowAgentToolkit
     [Description("Returns the full topology: all nodes with their slots (including property names and IDs), plus all connections. One call replaces ListNodes + GetNodeDetail×N + ListConnections. Use for complex multi-node operations.")]
     private string GetFullTopology()
     {
-        var nodesArr = new JArray();
+        var nodesArr = new VeloxJsonArray();
         for (int i = 0; i < Tree.Nodes.Count; i++)
         {
             var node = Tree.Nodes[i];
             var slotPropertyMap = BuildSlotPropertyMap(node);
-            var nodeObj = new JObject
+            var nodeObj = new VeloxJsonObject
             {
                 ["i"] = i,
                 ["id"] = GetComponentId(node),
@@ -2948,11 +2949,11 @@ public sealed class WorkflowAgentToolkit
             };
             AppendScalarProperties(nodeObj, node);
 
-            var slotsArr = new JArray();
+            var slotsArr = new VeloxJsonArray();
             for (int s = 0; s < node.Slots.Count; s++)
             {
                 var slot = node.Slots[s];
-                var slotObj = new JObject
+                var slotObj = new VeloxJsonObject
                 {
                     ["si"] = s,
                     ["id"] = GetComponentId(slot),
@@ -2966,11 +2967,11 @@ public sealed class WorkflowAgentToolkit
             nodesArr.Add(nodeObj);
         }
 
-        var linksArr = new JArray();
+        var linksArr = new VeloxJsonArray();
         foreach (var link in Tree.Links)
         {
             if (!link.IsVisible) continue;
-            linksArr.Add(new JObject
+            linksArr.Add(new VeloxJsonObject
             {
                 ["id"] = GetComponentId(link),
                 ["sid"] = link.Sender != null ? GetComponentId(link.Sender) : null,
@@ -2978,11 +2979,11 @@ public sealed class WorkflowAgentToolkit
             });
         }
 
-        return new JObject
+        return new VeloxJsonObject
         {
             ["nodes"] = nodesArr,
             ["links"] = linksArr,
-        }.ToString(Formatting.None);
+        }.ToJson();
     }
 
     /// <summary>
@@ -3097,13 +3098,13 @@ public sealed class WorkflowAgentToolkit
         if (reasons.Count == 0)
             reasons.Add("developer ValidateConnection rule or channel capacity limit");
 
-        return JsonConvert.SerializeObject(new
+        return new VeloxJsonObject
         {
-            status = "rejected",
-            message = $"Connection {senderLabel}→{receiverLabel} was rejected by the framework.",
-            reasons,
-            hint = "Do NOT retry the same connection. Check slot channels and ValidateConnection rules, or choose different slots."
-        }, Formatting.None);
+            ["status"] = "rejected",
+            ["message"] = $"Connection {senderLabel}→{receiverLabel} was rejected by the framework.",
+            ["reasons"] = VeloxJsonValue.From(reasons),
+            ["hint"] = "Do NOT retry the same connection. Check slot channels and ValidateConnection rules, or choose different slots."
+        }.ToJson();
     }
 
     /// <summary>
@@ -3146,6 +3147,6 @@ public sealed class WorkflowAgentToolkit
     /// one undo entry for the whole layout. Nodes whose anchor already equals the target are excluded,
     /// so an alignment/layout that doesn't actually move anything does not create a no-op undo entry.
     /// </summary>
-    private static string Ok(string message) => JsonConvert.SerializeObject(new { status = "ok", message }, Formatting.None);
-    private static string Error(string message) => JsonConvert.SerializeObject(new { status = "error", message }, Formatting.None);
+    private static string Ok(string message) => new VeloxJsonObject { ["status"] = "ok", ["message"] = message }.ToJson();
+    private static string Error(string message) => new VeloxJsonObject { ["status"] = "error", ["message"] = message }.ToJson();
 }

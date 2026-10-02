@@ -53,6 +53,17 @@ public abstract class VeloxJsonValue
     /// <summary>Whether this value is the JSON <c>null</c> literal.</summary>
     public virtual bool IsNull => false;
 
+    /// <summary>
+    /// Whether two trees say the same thing, member for member and element for element.
+    /// </summary>
+    /// <param name="other">The other tree.</param>
+    /// <returns><see langword="true"/> when they are equal in shape and content.</returns>
+    /// <remarks>
+    /// Used to tell one state snapshot from the next; the members' order is not part of the answer, because two
+    /// snapshots of the same state are built in the same order anyway and a reordering is not a change.
+    /// </remarks>
+    public virtual bool DeepEquals(VeloxJsonValue? other) => ReferenceEquals(this, other) || Equals(other);
+
     /// <summary>Writes this value.</summary>
     /// <param name="writer">Where the document is written.</param>
     /// <param name="format">Whether to lay it out over lines.</param>
@@ -144,6 +155,16 @@ public abstract class VeloxJsonValue
     {
         if (reader.NextIsNull()) { reader.SkipValue(); return Null; }
 
+        if (reader.NextIsArray())
+        {
+            var node = new VeloxJsonArray();
+            reader.BeginArray();
+            while (reader.NextElement()) node.Add(ReadNode(reader));
+            reader.FinishArray();
+
+            return node;
+        }
+
         if (reader.NextIsObject())
         {
             var node = new VeloxJsonObject();
@@ -232,6 +253,21 @@ public sealed class VeloxJsonScalar : VeloxJsonValue
     /// <returns>The value, or <see langword="false"/> when it is not one.</returns>
     public bool AsBoolean() => _text == "true";
 
+    /// <summary>Whether this scalar is a bare number rather than text.</summary>
+    /// <remarks>
+    /// "Bare" is the whole answer: a numeric <i>string</i> came from a document with quotes around it and stays
+    /// text, which is why the kind is recorded rather than guessed from the contents.
+    /// </remarks>
+    public bool IsNumber => _kind == VeloxJsonScalarKind.Literal && double.TryParse(
+        _text, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+
+    /// <summary>Whether this scalar is text rather than a bare literal.</summary>
+    public bool IsText => _kind == VeloxJsonScalarKind.Text;
+
+    /// <inheritdoc />
+    public override bool DeepEquals(VeloxJsonValue? other)
+        => other is VeloxJsonScalar scalar && _kind == scalar._kind && string.Equals(_text, scalar._text, StringComparison.Ordinal);
+
     internal override void WriteTo(TextWriter writer, VeloxJsonFormat format, int depth)
     {
         if (_kind == VeloxJsonScalarKind.Null) { writer.Write("null"); return; }
@@ -272,6 +308,12 @@ public sealed class VeloxJsonArray : VeloxJsonValue, IEnumerable<VeloxJsonValue>
     public IEnumerator<VeloxJsonValue> GetEnumerator() => _items.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
+
+    /// <inheritdoc />
+    public override bool DeepEquals(VeloxJsonValue? other)
+        => other is VeloxJsonArray array
+           && array._items.Count == _items.Count
+           && !_items.Where((item, i) => !item.DeepEquals(array._items[i])).Any();
 
     internal override void WriteTo(TextWriter writer, VeloxJsonFormat format, int depth)
     {
@@ -353,6 +395,24 @@ public sealed class VeloxJsonObject : VeloxJsonValue, IEnumerable<KeyValuePair<s
     {
         _index.Clear();
         for (var i = from; i < _members.Count; i++) _index[_members[i].Key] = i;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A member the other object does not have makes them different; a member the other has and this one does not
+    /// does too. Order does not.
+    /// </remarks>
+    public override bool DeepEquals(VeloxJsonValue? other)
+    {
+        if (other is not VeloxJsonObject obj || obj._members.Count != _members.Count) return false;
+
+        foreach (var member in _members)
+        {
+            var theirs = obj[member.Key];
+            if (theirs is null || !member.Value.DeepEquals(theirs)) return false;
+        }
+
+        return true;
     }
 
     internal override void WriteTo(TextWriter writer, VeloxJsonFormat format, int depth)

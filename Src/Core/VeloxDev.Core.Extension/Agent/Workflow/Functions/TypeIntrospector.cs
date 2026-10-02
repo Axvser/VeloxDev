@@ -1,8 +1,7 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using VeloxDev.Serialization;
 
 namespace VeloxDev.AI.Workflow.Functions;
 
@@ -40,11 +39,11 @@ public static class TypeIntrospector
     public static string GetTypeSchema(Type type)
     {
         var fullName = type.FullName ?? type.Name;
-        var obj = new JObject { ["fullName"] = fullName };
+        var obj = new VeloxJsonObject { ["fullName"] = fullName };
 
         var path = AIContextDirectory.Shared.PathFor(fullName);
         var entry = path is null ? null : AIContextDirectory.Shared.Entry(path);
-        if (entry is null) return obj.ToString(Formatting.Indented);
+        if (entry is null) return obj.ToJson(VeloxJsonFormat.Indented);
 
         obj["kind"] = entry.Kind switch
         {
@@ -56,7 +55,7 @@ public static class TypeIntrospector
         var baseType = ReferenceName(entry, AIContextRefKind.BaseType);
         if (baseType is not null) obj["baseType"] = baseType;
 
-        obj["interfaces"] = new JArray(
+        obj["interfaces"] = VeloxJsonValue.From(
             entry.References
                 .Where(static r => r.Kind == AIContextRefKind.BaseInterface)
                 .Select(static r => r.DeclaredName)
@@ -64,7 +63,7 @@ public static class TypeIntrospector
 
         if (entry.Kind == AIContextNodeKind.EnumType)
         {
-            var values = new JObject();
+            var values = new VeloxJsonObject();
             foreach (var member in AIContextDirectory.Shared.Members(path!, "Members"))
             {
                 values[member.Name] = member.Ordinal;
@@ -74,11 +73,11 @@ public static class TypeIntrospector
         else
         {
             var accessor = AIContextTreeRegistry.FindAccessor(fullName);
-            var props = new JArray();
+            var props = new VeloxJsonArray();
 
             foreach (var member in AIContextDirectory.Shared.MembersAcross(fullName, "Properties"))
             {
-                props.Add(new JObject
+                props.Add(new VeloxJsonObject
                 {
                     ["name"] = member.Name,
                     ["type"] = FriendlyTypeName(accessor?.MemberType(member.Name)),
@@ -91,8 +90,8 @@ public static class TypeIntrospector
         }
 
         // 每条语言各取一次 —— 说明文字按语言分开存，这里不做回退挑选，全部倒出来。
-        var agentDescs = new JArray();
-        foreach (AgentLanguages lang in Enum.GetValues(typeof(AgentLanguages)))
+        var agentDescs = new VeloxJsonArray();
+        foreach (var lang in AgentLanguagesExtensions.AllLanguages)
         {
             foreach (var desc in AgentContextCollector.GetAgentContext(type, lang))
                 agentDescs.Add(desc);
@@ -100,26 +99,18 @@ public static class TypeIntrospector
         if (agentDescs.Count > 0)
             obj["developerInstructions"] = agentDescs;
 
-        // Try to create a default instance and serialize it
+        // Try to create a default instance and serialize it through the generated serializer.
         // NOTE: These are runtime zero-initialized values, NOT the intended defaults.
         // Always prefer developerInstructions over defaultJson.
         try
         {
             var instance = AIContextTreeRegistry.FindAccessor(fullName)?.Create();
             if (instance is not null)
-            {
-                var json = JsonConvert.SerializeObject(instance, Formatting.Indented, new JsonSerializerSettings
-                {
-                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                    MaxDepth = 3,
-                    Error = (s, e) => e.ErrorContext.Handled = true,
-                });
-                obj["defaultJson_runtimeOnly"] = JToken.Parse(json);
-            }
+                obj["defaultJson_runtimeOnly"] = VeloxJsonValue.From(instance);
         }
         catch { /* default instance not available */ }
 
-        return obj.ToString(Formatting.Indented);
+        return obj.ToJson(VeloxJsonFormat.Indented);
     }
 
     /// <summary>The name a cross-link carries, or <see langword="null"/> when the entry has no such link.</summary>
