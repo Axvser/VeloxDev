@@ -172,7 +172,24 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, Sy
         if (type is null) return null;
         if (type == typeof(bool)) return false;
         if (!type.IsEnum) return null;
-        return Enum.GetValues(type).Cast<object>().FirstOrDefault();
+        return EnumMembersOf(type).FirstOrDefault();
+    }
+
+    // 成员顺序与 Enum.GetValues(type) 一致，但不用它：那条带 RequiresDynamicCode，AOT 下抛
+    // NotSupportedException（IL3050）。Enum.GetValues<T>() 是 .NET 5 起、GetValuesAsUnderlyingType
+    // 是 .NET 8 起，而本程序集的目标档含 netstandard2.0 / net461 —— 所以走 GetNames + Parse，
+    // 这两个全档可用且都无标注。GetNames 与 GetValues 同样按常量的二进制值排序，逐位对应。
+    private static object[] EnumMembersOf(Type type)
+    {
+        var names = Enum.GetNames(type);
+        var values = new object[names.Length];
+
+        for (var i = 0; i < names.Length; i++)
+        {
+            values[i] = Enum.Parse(type, names[i]);
+        }
+
+        return values;
     }
 
     private object? ValidateCurrentValue(object? value)
@@ -208,7 +225,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, Sy
                 // name does not exist — fall through to the first-member default
             }
 
-            var first = Enum.GetValues(targetType).Cast<object>().FirstOrDefault();
+            var first = EnumMembersOf(targetType).FirstOrDefault();
             return first is not null && ConditionMap.ContainsKey(first) ? first : null;
         }
 
@@ -317,7 +334,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, Sy
 
             var rawValues = selectorType == typeof(bool)
                 ? [false, true]
-                : Enumerable.Cast<object>(Enum.GetValues(selectorType)).ToArray();
+                : EnumMembersOf(selectorType);
 
             newType = selectorType;
             newTypeName = typeFullName;

@@ -135,6 +135,10 @@ file sealed class StubNode : IWorkflowNodeViewModel
 
 file enum BranchKind { Yes, No }
 file enum AlternateBranchKind { First, Second, Third }
+
+// 常量用 | 拼出来，是 GetNames/GetValues 排序最容易对不上的一类
+[Flags]
+file enum BranchFlags { None = 0, One = 1, Two = 2, Both = One | Two }
 file enum KindWithNo { No, Maybe }
 file enum ThirdKind { Yes, Maybe }
 
@@ -730,5 +734,38 @@ public class SlotEnumeratorTests
         enumerator.SetSelector(typeof(BranchKind));
         Assert.AreEqual("No", enumerator.CurrentValue,
             "a transient null write must not poison the credential's remembered value");
+    }
+
+    /// <summary>
+    /// The slots built for a selector type come out in the same member order <c>Enum.GetValues</c> produced.
+    /// </summary>
+    /// <remarks>
+    /// The implementation no longer calls <c>Enum.GetValues(Type)</c> — it is <c>RequiresDynamicCode</c> and throws
+    /// under NativeAOT — and enumerates through <c>Enum.GetNames</c> instead. The two must agree on order, which is
+    /// the whole reason the substitution is safe. The oracle is the generic <c>Enum.GetValues&lt;T&gt;()</c> overload
+    /// precisely because that is the AOT-safe one; asserting against the unsafe call would inherit the problem.
+    /// </remarks>
+    [TestMethod]
+    public void SlotsComeOutInTheOrderEnumGetValuesProduces()
+    {
+        var node = new StubNode();
+
+        var plain = new SlotEnumerator<StubSlot>();
+        plain.Install(node, "OutputSlots");
+        plain.SetSelector(typeof(AlternateBranchKind));
+
+        CollectionAssert.AreEqual(
+            Enum.GetValues<AlternateBranchKind>().Select(v => v.ToString()).ToArray(),
+            plain.Items.Select(i => i.Name).ToArray(),
+            "a plain enum's slots follow its members' order");
+
+        var flags = new SlotEnumerator<StubSlot>();
+        flags.Install(node, "OutputSlots");
+        flags.SetSelector(typeof(BranchFlags));
+
+        CollectionAssert.AreEqual(
+            Enum.GetValues<BranchFlags>().Select(v => v.ToString()).ToArray(),
+            flags.Items.Select(i => i.Name).ToArray(),
+            "and so does a flags enum whose constants are built with |");
     }
 }

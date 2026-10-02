@@ -106,6 +106,8 @@
 4. `SetSelector` 三种入参形态：`Type`（enum/bool）、全名 `string`、`ISlotProvider`（`SelectorEx/SlotEnumerator.cs:260`）。
 5. **撤销语义**：`SetSelector` 自提交一对 undo；选择器类型内部再改值属于 live state，不是时间线点。
 6. **已知延迟**：`[SlotSelectors]` 属性的 slot-anchor 通知**故意晚一帧**，等容器生成完再发。
+7. **枚举成员一律走 `SlotEnumerator.EnumMembersOf`，不要改回 `Enum.GetValues(Type)`**。后者带 `RequiresDynamicCode`：AOT 下 `SetSelector` 直接抛 `NotSupportedException: '…[]' is missing native code or metadata` —— **有 slot selector 的工作流树在 NativeAOT 下根本建不起来**（实测：还原成旧代码后同一个探针必抛）。`GetValuesAsUnderlyingType` 要 .NET 8、`Enum.GetValues<T>()` 要 .NET 5，而本程序集含 `netstandard2.0`，所以实现走 `GetNames` + `Parse` —— 两者都无标注且全档可用，顺序也与 `GetValues` 一致（都由 `SlotEnumeratorTests.SlotsComeOutInTheOrderEnumGetValuesProduces` 钉住，含用 `|` 拼出来的 flags 枚举）。
+8. **`SetSelector` 的 `string` 重载仍然不安全**：它走 `Type.GetType(全名)`（`SelectorEx/SlotEnumerator.cs:315`），是 IL2057 —— 裁剪器无法保证那个类型还在。要 AOT 就用 `Type` 或 `ISlotProvider` 形态，别传字符串。
 
 ### 3.4 加一个自定义 Link 类型
 
