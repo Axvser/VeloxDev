@@ -85,5 +85,22 @@ namespace VeloxDev.Generators
             category: Category,
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// Two methods share a name and an argument count, so the agent context tree can expose only one.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error: the tree is a description of the surface, and losing one of two
+        /// indistinguishable overloads is a smaller loss than failing the build. It is still worth saying out
+        /// loud — the reflection path picks whichever the runtime happened to enumerate first, so the two
+        /// disagree silently otherwise.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor AmbiguousMethodOverload = new(
+            id: "VELOX_AI_TREE001",
+            title: "Ambiguous method overload in the agent context tree",
+            messageFormat: "'{0}' takes {1} argument(s) in more than one overload; only the first is reachable through the agent context tree",
+            category: "VeloxDev.AI",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
     }
 }

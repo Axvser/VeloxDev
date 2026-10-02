@@ -62,6 +62,12 @@ namespace VeloxDev.Generators
             var assembly = AIContextModelBuilder.Build(compilation, root);
             if (assembly is null) return;
 
+            // 报告而不是静默丢弃：目录表达不了的东西，作者应该在自己那行看到。
+            foreach (var notice in assembly.Notices)
+            {
+                context.ReportDiagnostic(notice);
+            }
+
             var source = AIContextTreeWriter.Write(assembly, root, context.CancellationToken);
 
             context.AddSource(

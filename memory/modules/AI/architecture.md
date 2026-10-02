@@ -175,7 +175,20 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 ### 明确不在目录里的东西（都不是漏，是判过）
 
-泛型类型与泛型方法（`T` 在生成的 cast 里没有绑定）、静态类（`(Static)target` 编不过）、`private`/`protected`/`file` 类型、编译器生成的名字。同元数的重载只留一个 —— 运行期本来也分不开。
+泛型类型与泛型方法（`T` 在生成的 cast 里没有绑定）、静态类（`(Static)target` 编不过）、`private`/`protected`/`file` 类型、编译器生成的名字、`object` 的四个成员（`ToString`/`GetHashCode`/`Equals`/`GetType` —— 与 `AgentMethodInvoker.DiscoverMethods` 跳过的是同一批，理由也一样：没有作者想把它们放进 Agent 面）。同元数的重载只留一个，并报 `VELOX_AI_TREE001`。
+
+**`VELOX_AI_TREE001` 差点变成噪音，值得记一笔。** 它第一次跑就报了 8 条，全在 `Anchor`/`Offset`/`Size`/`Scale`/`Viewport`/`CellKey`/`ThreadRef` 上 —— 报的是 `Equals(object)` 与 `Equals(T)` 那一对。每个带强类型 `Equals` 的值类型都会中，而没人想重载 `Equals` 给 Agent 用。**先把 `object` 的四个成员滤掉，诊断才只剩真正需要作者知道的东西**；顺序反了的话，这条警告的下场就是被整仓 `NoWarn` 掉。
+
+### 生成器开销（2026-10-03 实测，单次墙钟，非基准）
+
+| 工程 | 生成器开 | 生成器关 | 差 |
+|---|---|---|---|
+| Core（分片 453KB）clean | 3121 ms | 2613 ms | +508 ms |
+| Core **touch 增量** | 2534–2796 ms | 2281–2335 ms | **+280 ms（~12%）** |
+| `Examples/Workflow/Common/Lib`（分片 145KB）clean | 3535 ms | 3123 ms | +412 ms |
+| 同上 **touch 增量** | 1965–2054 ms | 1944–2015 ms | **+8 ms（噪声级）** |
+
+**代价集中在 Core**，因为它自己的分片最大。消费方的增量代价落在噪声里。关掉的方式是 `-p:VeloxAgentContextTree=false`。这几个数是单次墙钟、NuGet 已预热，当量级看，别当基准。
 
 ### 验证在哪
 

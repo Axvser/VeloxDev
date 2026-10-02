@@ -21,10 +21,11 @@ namespace VeloxDev.Generators.Base
     /// </remarks>
     internal sealed class AIContextAssembly
     {
-        internal AIContextAssembly(string assemblyName, IReadOnlyList<AIContextType> types)
+        internal AIContextAssembly(string assemblyName, IReadOnlyList<AIContextType> types, IReadOnlyList<Diagnostic> notices)
         {
             AssemblyName = assemblyName;
             Types = types;
+            Notices = notices;
         }
 
         /// <summary>The assembly the fragment describes.</summary>
@@ -32,6 +33,9 @@ namespace VeloxDev.Generators.Base
 
         /// <summary>Every type the fragment carries an entry for.</summary>
         internal IReadOnlyList<AIContextType> Types { get; }
+
+        /// <summary>What the walk could not represent faithfully — reported rather than dropped in silence.</summary>
+        internal IReadOnlyList<Diagnostic> Notices { get; }
     }
 
     /// <summary>Which of the collector's shapes a type entry is rendered as.</summary>
@@ -100,6 +104,9 @@ namespace VeloxDev.Generators.Base
 
         /// <summary>Whether a method returns nothing. Read off the symbol, not the rendered type name.</summary>
         internal bool ReturnsVoid { get; set; }
+
+        /// <summary>The symbol the member came from, kept so a notice can point at the author's own line.</summary>
+        internal ISymbol? Symbol { get; set; }
 
         /// <summary>An enum member's underlying value; zero for anything else.</summary>
         internal long Ordinal { get; set; }
@@ -272,7 +279,40 @@ namespace VeloxDev.Generators.Base
             if (types.Count == 0) return null;
 
             types.Sort(static (a, b) => string.CompareOrdinal(a.Path, b.Path));
-            return new AIContextAssembly(compilation.AssemblyName ?? "Assembly", types);
+            return new AIContextAssembly(compilation.AssemblyName ?? "Assembly", types, DetectNotices(types));
+        }
+
+        /// <summary>
+        /// Finds the places the tree cannot represent faithfully, so they are reported instead of vanishing.
+        /// </summary>
+        /// <remarks>
+        /// Today that is one thing: two methods sharing a name and an argument count. The tree keys a call by
+        /// name and argument count, so only one of them can be reached — and which one is arbitrary, where the
+        /// reflection path's answer is equally arbitrary but different.
+        /// </remarks>
+        private static IReadOnlyList<Diagnostic> DetectNotices(IReadOnlyList<AIContextType> types)
+        {
+            var notices = new List<Diagnostic>();
+
+            foreach (var type in types)
+            {
+                var ambiguous = type.Members
+                    .Where(static m => m.IsMethod)
+                    .GroupBy(static m => m.Name + "|" + m.Parameters.Count, System.StringComparer.Ordinal)
+                    .Where(static g => g.Count() > 1);
+
+                foreach (var group in ambiguous)
+                {
+                    var first = group.First();
+                    notices.Add(Diagnostic.Create(
+                        VeloxDev.Generators.Diagnostics.AmbiguousMethodOverload,
+                        first.Symbol?.Locations.FirstOrDefault() ?? type.Symbol.Locations.FirstOrDefault(),
+                        type.FullName + "." + first.Name,
+                        first.Parameters.Count));
+                }
+            }
+
+            return notices;
         }
 
         /// <summary>
@@ -486,6 +526,17 @@ namespace VeloxDev.Generators.Base
         }
 
         /// <summary>
+        /// The four members every type inherits from <see cref="object"/>.
+        /// </summary>
+        /// <remarks>
+        /// Skipped for the same reason <c>AgentMethodInvoker.DiscoverMethods</c> skips them: no author means them
+        /// to be part of the agent surface. They are also what an overload diagnostic would otherwise fire on —
+        /// every value type with a typed <c>Equals</c> — which is how a warning earns a blanket suppression.
+        /// </remarks>
+        private static bool IsObjectMember(IMethodSymbol method)
+            => method.Name is "ToString" or "GetHashCode" or "Equals" or "GetType";
+
+        /// <summary>
         /// Enum members, which are const fields — the property/field walk deliberately skips consts, so an enum
         /// needs its own pass or it would come out with no members at all.
         /// </summary>
@@ -516,6 +567,7 @@ namespace VeloxDev.Generators.Base
                 {
                     IsField = true,
                     Ordinal = System.Convert.ToInt64(field.ConstantValue),
+                    Symbol = field,
                 };
 
                 members.Add(member);
@@ -557,7 +609,8 @@ namespace VeloxDev.Generators.Base
                     case IMethodSymbol method when method.MethodKind == MethodKind.Ordinary
                                                     && !method.IsStatic
                                                     && !method.IsImplicitlyDeclared
-                                                    && method.TypeParameters.Length == 0:
+                                                    && method.TypeParameters.Length == 0
+                                                    && !IsObjectMember(method):
                         // [VeloxCommand] 提升出的命令属性是公开的，哪怕方法自己是 private ——
                         // 实现类里的命令体普遍写成 private，按方法可见性过滤会把整个命令面漏掉。
                         if (AIContextNaming.HasAttribute(method, VeloxCommandAttributeName))
@@ -596,7 +649,8 @@ namespace VeloxDev.Generators.Base
                 hasSlotSelectors: HasAttribute(property, SlotSelectorsAttributeName),
                 descriptions: ReadTexts(property),
                 slotSelectorNames: ReadSlotSelectorNames(property),
-                parameters: []);
+                parameters: [])
+            { Symbol = property };
         }
 
         private static AIContextMember BuildField(IFieldSymbol field)
@@ -616,7 +670,7 @@ namespace VeloxDev.Generators.Base
                 descriptions: ReadTexts(field),
                 slotSelectorNames: ReadSlotSelectorNames(field),
                 parameters: [])
-            { IsField = true };
+            { IsField = true, Symbol = field };
 
         /// <summary>
         /// A <c>[VeloxProperty]</c> field as the Agent meets it: the property the MVVM generator promotes it to.
@@ -642,7 +696,8 @@ namespace VeloxDev.Generators.Base
                 hasSlotSelectors: AIContextNaming.HasAttribute(field, SlotSelectorsAttributeName),
                 descriptions: ReadTexts(field),
                 slotSelectorNames: ReadSlotSelectorNames(field),
-                parameters: []);
+                parameters: [])
+            { Symbol = field };
 
         /// <summary>
         /// A <c>[VeloxCommand]</c> method as the Agent meets it: the command property the writer emits.
@@ -667,7 +722,8 @@ namespace VeloxDev.Generators.Base
                 hasSlotSelectors: false,
                 descriptions: ReadTexts(method),
                 slotSelectorNames: [],
-                parameters: []);
+                parameters: [])
+            { Symbol = method };
 
         private static AIContextMember BuildMethod(IMethodSymbol method)
             => new(
@@ -691,7 +747,7 @@ namespace VeloxDev.Generators.Base
                     DisplayType(p.Type),
                     p.IsOptional,
                     p.RefKind))])
-            { ReturnsVoid = method.ReturnsVoid };
+            { ReturnsVoid = method.ReturnsVoid, Symbol = method };
 
         private static IReadOnlyList<string> ReadSlotSelectorNames(ISymbol symbol)
         {
