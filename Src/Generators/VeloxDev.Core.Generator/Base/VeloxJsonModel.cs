@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -124,6 +124,22 @@ namespace VeloxDev.Generators.Base
         ];
 
         /// <summary>
+        /// Which component contract each <c>[WorkflowBuilder.*]</c> attribute shapes a type into.
+        /// </summary>
+        /// <remarks>
+        /// The Workflow generator emits a component's members itself, so this one cannot read them off the class
+        /// — it has to reproduce them. The interface is where that shape is written down, and the Workflow
+        /// generator mirrors it too, so both read the same source rather than one copying the other.
+        /// </remarks>
+        private static readonly Dictionary<string, string> BuilderContracts = new(System.StringComparer.Ordinal)
+        {
+            ["TreeAttribute"] = "VeloxDev.WorkflowSystem.IWorkflowTreeViewModel",
+            ["NodeAttribute"] = "VeloxDev.WorkflowSystem.IWorkflowNodeViewModel",
+            ["SlotAttribute"] = "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel",
+            ["LinkAttribute"] = "VeloxDev.WorkflowSystem.IWorkflowLinkViewModel",
+        };
+
+        /// <summary>
         /// True when the compilation takes part in the archive format at all.
         /// </summary>
         /// <remarks>
@@ -135,6 +151,7 @@ namespace VeloxDev.Generators.Base
 
         internal static VeloxJsonAssembly? Build(Compilation compilation)
         {
+            var contracts = ResolveContracts(compilation);
             var candidates = EnumerateTypes(compilation.Assembly.GlobalNamespace).ToList();
             var roots = candidates.Where(s => IsRoot(s, compilation.Assembly)).ToList();
             if (roots.Count == 0) return null;
@@ -149,7 +166,7 @@ namespace VeloxDev.Generators.Base
                 var symbol = queue.Dequeue();
                 if (!included.Add(symbol)) continue;
 
-                foreach (var member in ReadMembers(symbol))
+                foreach (var member in ReadMembers(symbol, contracts))
                 {
                     foreach (var reachable in Reachable(member))
                     {
@@ -178,7 +195,7 @@ namespace VeloxDev.Generators.Base
             }
 
             var types = included
-                .Select(static s => BuildType(s))
+                .Select(s => BuildType(s, contracts))
                 .Where(static t => t is not null)
                 .Select(static t => t!)
                 .OrderBy(static t => t.FullName, System.StringComparer.Ordinal)
@@ -187,6 +204,20 @@ namespace VeloxDev.Generators.Base
             if (types.Count == 0) return null;
 
             return new VeloxJsonAssembly(compilation.AssemblyName ?? "Assembly", types, []);
+        }
+
+        /// <summary>The component contracts a builder-shaped type draws its members from.</summary>
+        private static IReadOnlyDictionary<string, INamedTypeSymbol> ResolveContracts(Compilation compilation)
+        {
+            var resolved = new Dictionary<string, INamedTypeSymbol>(System.StringComparer.Ordinal);
+
+            foreach (var entry in BuilderContracts)
+            {
+                if (compilation.GetTypeByMetadataName(entry.Value) is { } contract)
+                    resolved[entry.Key] = contract;
+            }
+
+            return resolved;
         }
 
         /// <summary>
@@ -201,12 +232,12 @@ namespace VeloxDev.Generators.Base
 
             // 组件的接口是 Workflow 生成器加上去的，而生成器之间看不见彼此的产物 —— 所以这里认的是
             // 作者写下的那个特性，而不是最终会出现的接口。
+            //
+            // 按包含类型判而不是按名字前缀：`WorkflowBuilder.Slot<T>` 是泛型嵌套特性，`ToDisplayString`
+            // 把嵌套类型渲染成 `.` 而不是元数据里的 `+`，前缀匹配永远匹配不上。
             foreach (var attribute in symbol.GetAttributes())
             {
-                var name = attribute.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                    .Replace("global::", string.Empty) ?? string.Empty;
-
-                if (name.StartsWith("VeloxDev.WorkflowSystem.WorkflowBuilder+", System.StringComparison.Ordinal)) return true;
+                if (IsWorkflowBuilderAttribute(attribute.AttributeClass)) return true;
             }
 
             return symbol.GetMembers().OfType<IFieldSymbol>()
@@ -235,16 +266,43 @@ namespace VeloxDev.Generators.Base
 
             // 抽象类型没有实例可写：它的值总是某个具体类型，而那个类型有自己的条目。
             if (symbol.IsAbstract) return false;
-            if (!SymbolEqualityComparer.Default.Equals(symbol.ContainingAssembly, assembly)) return false;
 
             // 开放泛型生成不出来：`(SlotEnumerator<T>)value` 里的 T 没有绑定。
+            //
+            // 判据是**类型实参里还有类型参数**，不是 `TypeParameters.Length` —— 后者对封闭实例照样返回
+            // 定义上的那些参数，用它会把 `SlotEnumerator<SlotDefaultViewModel>` 一起挡掉。
             for (var current = symbol; current is not null; current = current.ContainingType)
             {
-                if (current.TypeParameters.Length > 0) return false;
+                if (current.IsUnboundGenericType) return false;
+                if (current.TypeArguments.Any(static argument => argument.TypeKind == TypeKind.TypeParameter)) return false;
             }
 
-            return IsAccessible(symbol);
+            if (!IsAccessible(symbol)) return false;
+
+            if (SymbolEqualityComparer.Default.Equals(symbol.ContainingAssembly, assembly)) return true;
+
+            // 别的程序集里的**封闭**泛型：`SlotEnumerator<SlotDefaultViewModel>` 的定义在 Core，但只有见过
+            // 这个实例的消费方才发得出它的条目 —— 声明它的那一侧永远不会知道有这么一个组合。
+            // 门槛与旧的契约解析器一致：有公开无参构造、且不是框架容器（容器由运行时写成数组/对象）。
+            return symbol.IsGenericType
+                   && !IsNativeCollection(symbol.OriginalDefinition)
+                   && HasPublicParameterlessConstructor(symbol);
         }
+
+        /// <summary>Whether a type is one of the framework containers the serializer writes by shape.</summary>
+        private static bool IsNativeCollection(INamedTypeSymbol definition)
+        {
+            var ns = definition.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+            if (ns.StartsWith("System.Collections", System.StringComparison.Ordinal)) return true;
+            if (ns.StartsWith("System.Linq", System.StringComparison.Ordinal)) return true;
+
+            return definition.Name is "List" or "ObservableCollection" or "Dictionary" or "HashSet" or "Queue" or "Stack";
+        }
+
+        private static bool HasPublicParameterlessConstructor(INamedTypeSymbol symbol)
+            => symbol.TypeKind == TypeKind.Struct
+               || symbol.InstanceConstructors.Any(static c =>
+                      c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public);
 
         /// <summary>Whether generated code in this assembly can name the type — it and every type containing it.</summary>
         private static bool IsAccessible(INamedTypeSymbol symbol)
@@ -277,9 +335,9 @@ namespace VeloxDev.Generators.Base
             return false;
         }
 
-        private static VeloxJsonType? BuildType(INamedTypeSymbol symbol)
+        private static VeloxJsonType? BuildType(INamedTypeSymbol symbol, IReadOnlyDictionary<string, INamedTypeSymbol> contracts)
         {
-            var members = ReadMembers(symbol).ToList();
+            var members = ReadMembers(symbol, contracts).ToList();
             if (members.Count == 0) return null;
 
             return new VeloxJsonType(
@@ -299,7 +357,9 @@ namespace VeloxDev.Generators.Base
         /// serializer: it writes the author's own properties first because they live in the author's file, and
         /// the promoted ones after because the compiler appends the generated partial.
         /// </remarks>
-        private static IEnumerable<VeloxJsonMember> ReadMembers(INamedTypeSymbol symbol)
+        private static IEnumerable<VeloxJsonMember> ReadMembers(
+            INamedTypeSymbol symbol,
+            IReadOnlyDictionary<string, INamedTypeSymbol> contracts)
         {
             var promoted = new HashSet<string>(System.StringComparer.Ordinal);
             var fields = new List<(IFieldSymbol Field, string Name)>();
@@ -316,19 +376,85 @@ namespace VeloxDev.Generators.Base
                 }
             }
 
+            var emitted = new HashSet<string>(System.StringComparer.Ordinal);
+
             foreach (var member in symbol.GetMembers())
             {
                 if (member is not IPropertySymbol property) continue;
                 if (property.IsIndexer || property.IsStatic) continue;
                 if (promoted.Contains(property.Name)) continue;
                 if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
+                if (!emitted.Add(property.Name)) continue;
 
                 yield return BuildMember(property.Name, property.Type);
             }
 
             foreach (var (field, name) in fields)
             {
+                if (!emitted.Add(name)) continue;
                 yield return BuildMember(name, field.Type);
+            }
+
+            // 组件的成员由 Workflow 生成器写出，本生成器看不见 —— 按作者写下的 [WorkflowBuilder.*]
+            // 认到契约接口，再把接口上的可写属性按声明顺序补上。生成器之间看不见彼此，所以两边都照
+            // 接口这条同一份来源走，而不是互相抄。
+            foreach (var member in ContractMembers(symbol, contracts))
+            {
+                if (!emitted.Add(member.Name)) continue;
+                yield return member;
+            }
+
+            // 继承来的成员排在后面：反射报告的是「自己的属性在前、基类的在后」，派生类型隐藏同名成员时
+            // 只留最派生那一个。每一层都用同一条规则 —— 先它自己写的属性，再它提升出来的字段。
+            for (var baseType = symbol.BaseType; baseType is not null; baseType = baseType.BaseType)
+            {
+                if (baseType.SpecialType == SpecialType.System_Object) break;
+
+                foreach (var member in baseType.GetMembers())
+                {
+                    if (member is not IPropertySymbol property) continue;
+                    if (property.IsIndexer || property.IsStatic) continue;
+                    if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
+                    if (!emitted.Add(property.Name)) continue;
+
+                    yield return BuildMember(property.Name, property.Type);
+                }
+
+                foreach (var member in baseType.GetMembers())
+                {
+                    if (member is not IFieldSymbol field) continue;
+                    if (!AIContextNaming.HasAttribute(field, VeloxPropertyAttributeName)) continue;
+
+                    var name = AIContextNaming.PromotedPropertyName(field.Name);
+                    if (name.Length == 0 || !emitted.Add(name)) continue;
+
+                    yield return BuildMember(name, field.Type);
+                }
+            }
+        }
+
+        /// <summary>The writable properties a component contract contributes to a builder-shaped type.</summary>
+        private static IEnumerable<VeloxJsonMember> ContractMembers(
+            INamedTypeSymbol symbol,
+            IReadOnlyDictionary<string, INamedTypeSymbol> contracts)
+        {
+            foreach (var attribute in symbol.GetAttributes())
+            {
+                if (attribute.AttributeClass is not { } attributeClass) continue;
+                if (!IsWorkflowBuilder(attributeClass.ContainingType)) continue;
+                if (!contracts.TryGetValue(attributeClass.Name, out var contract)) continue;
+
+                for (var current = contract; current is not null; current = current.BaseType)
+                {
+                    foreach (var member in current.GetMembers())
+                    {
+                        if (member is not IPropertySymbol property) continue;
+                        if (property.IsIndexer || property.IsStatic) continue;
+                        if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
+
+                        yield return BuildMember(property.Name, property.Type);
+                    }
+                }
             }
         }
 
@@ -411,9 +537,18 @@ namespace VeloxDev.Generators.Base
             if (attribute is null) return false;
 
             return symbol.GetAttributes().Any(a =>
-                a.AttributeClass?.Name == attribute
-                && a.AttributeClass.ContainingType?.Name == "WorkflowBuilder");
+                a.AttributeClass is { } attributeClass
+                && attributeClass.Name == attribute
+                && IsWorkflowBuilder(attributeClass.ContainingType));
         }
+
+        /// <summary>Whether a type is one of the workflow builder's component attributes.</summary>
+        private static bool IsWorkflowBuilderAttribute(INamedTypeSymbol? attributeClass)
+            => attributeClass is not null && IsWorkflowBuilder(attributeClass.ContainingType);
+
+        private static bool IsWorkflowBuilder(INamedTypeSymbol? containingType)
+            => containingType?.Name == "WorkflowBuilder"
+               && containingType.ContainingNamespace?.ToDisplayString() == "VeloxDev.WorkflowSystem";
 
         /// <summary>Whether a type is the contract itself, implements it, or derives from it.</summary>
         private static bool Implements(INamedTypeSymbol symbol, INamedTypeSymbol contract)

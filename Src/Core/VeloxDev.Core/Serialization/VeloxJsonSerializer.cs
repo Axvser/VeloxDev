@@ -20,20 +20,55 @@ namespace VeloxDev.Serialization;
 public static class VeloxJsonSerializer
 {
     /// <summary>
+    /// Members whose declared type is one of these are left out of the document, whatever their value.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The compiled-graph snapshot uses it to keep a node's <c>Parent</c> and a slot collection out of the file:
+    /// a node reference would drag the entire tree in behind it. The rule is the old contract resolver's — the
+    /// declared type is compared exactly, so a member declared as an interface is dropped while a concrete one is
+    /// not.
+    /// </para>
+    /// <para>
+    /// Ambient rather than a parameter because the writers are generated: a per-call parameter would have to be
+    /// threaded through every one of them. One thread writes one document, and the scope clears on the way out.
+    /// </para>
+    /// </remarks>
+    [ThreadStatic]
+    private static System.Collections.Generic.HashSet<Type>? _excludedTypes;
+
+    /// <summary>Whether a member declared as <paramref name="declaredType"/> is left out of the current document.</summary>
+    /// <param name="declaredType">The member's declared type.</param>
+    /// <returns><see langword="true"/> when the current write excludes it.</returns>
+    public static bool IsExcluded(Type declaredType)
+        => _excludedTypes is not null && _excludedTypes.Contains(declaredType);
+
+    /// <summary>
     /// Writes a value as a document.
     /// </summary>
     /// <param name="value">The value to write.</param>
     /// <param name="indented">Whether to lay the document out over lines. The archive format does.</param>
+    /// <param name="excludedTypes">Member types to leave out, or <see langword="null"/> for all of them.</param>
     /// <returns>The document.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The value's type has no registered writer.</exception>
-    public static string Serialize(object value, bool indented = true)
+    public static string Serialize(object value, bool indented = true, System.Collections.Generic.IReadOnlyCollection<Type>? excludedTypes = null)
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
 
-        using var text = new StringWriter();
-        WriteTo(text, value, indented);
-        return text.ToString();
+        var previous = _excludedTypes;
+        _excludedTypes = excludedTypes is { Count: > 0 } ? [.. excludedTypes] : null;
+
+        try
+        {
+            using var text = new StringWriter();
+            WriteTo(text, value, indented);
+            return text.ToString();
+        }
+        finally
+        {
+            _excludedTypes = previous;
+        }
     }
 
     /// <summary>
@@ -75,6 +110,15 @@ public static class VeloxJsonSerializer
 
         if (TryWriteScalar(writer, value)) return;
 
+        // 生成了条目的类型优先：`SlotEnumerator<T>` 实现 IEnumerable，但契约一贯把它写成**对象**而不是
+        // 数组（那条规则是 WritablePropertiesOnlyResolver 定下的，既有文档就是这么存的）。
+        var type = value.GetType();
+        if (VeloxJsonRegistry.WriterFor(type) is { } registered)
+        {
+            registered.Write(writer, value, declaredType);
+            return;
+        }
+
         // 容器没有生成的条目，它们是框架类型：形状由声明类型与值一起决定。
         if (value is System.Collections.IDictionary map)
         {
@@ -99,11 +143,7 @@ public static class VeloxJsonSerializer
             return;
         }
 
-        var type = value.GetType();
-        var registered = VeloxJsonRegistry.WriterFor(type);
-        if (registered is null) throw MissingWriter(type);
-
-        registered.Write(writer, value, declaredType);
+        throw MissingWriter(type);
     }
 
     /// <summary>The first type argument of a declared type, or <see langword="null"/>.</summary>

@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using VeloxDev.Serialization;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using System;
@@ -148,13 +149,15 @@ public static class ComponentModelEx
         return s;
     }
 
+    // 三个核心入口都走 VeloxDev 自己的序列化器：格式逐字节一致，但不再依赖运行期反射，
+    // 因此裁剪与 NativeAOT 下都成立。公开面一行没变。
     private static string SerializeCore<T>(T workflow, SerializationOptions? options = null)
         where T : INotifyPropertyChanged
     {
         if (workflow == null)
             throw new ArgumentNullException(nameof(workflow), "Workflow object cannot be null for serialization");
 
-        return JsonConvert.SerializeObject(workflow, ResolveSettings(options));
+        return VeloxJsonSerializer.Serialize(workflow, options?.Formatting != Formatting.None, options?.ExcludedPropertyTypes);
     }
 
     private static bool TryDeserializeCore<T>(string json, out T? workflow, SerializationOptions? options = null)
@@ -162,7 +165,7 @@ public static class ComponentModelEx
     {
         try
         {
-            workflow = JsonConvert.DeserializeObject<T>(json, ResolveSettings(options));
+            workflow = (T?)VeloxJsonSerializer.Deserialize(json, typeof(T));
             return workflow != null;
         }
         catch
@@ -175,9 +178,9 @@ public static class ComponentModelEx
     private static T DeserializeCore<T>(string json, SerializationOptions? options = null)
         where T : INotifyPropertyChanged
     {
-        var result = JsonConvert.DeserializeObject<T>(json, ResolveSettings(options));
+        var result = (T?)VeloxJsonSerializer.Deserialize(json, typeof(T));
         if (result == null)
-            throw new JsonSerializationException($"Deserialization of JSON to type {typeof(T).Name} resulted in null. The JSON may be invalid or incompatible with the target type.");
+            throw new InvalidOperationException($"Deserialization of JSON to type {typeof(T).Name} resulted in null. The JSON may be invalid or incompatible with the target type.");
 
         return result;
     }
@@ -191,7 +194,7 @@ public static class ComponentModelEx
 
         return token.Type == JTokenType.Null
             ? null
-            : token.ToObject(targetType, CreateJsonSerializer());
+            : VeloxJsonSerializer.Deserialize(token.ToString(Formatting.None), targetType);
     }
 
     #region Synchronous Methods

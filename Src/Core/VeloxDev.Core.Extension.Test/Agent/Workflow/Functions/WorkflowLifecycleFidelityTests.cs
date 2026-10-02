@@ -1,9 +1,10 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
 using Newtonsoft.Json.Linq;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.MVVM;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
@@ -18,7 +19,7 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 /// so state (node.Slots, undo history) stays consistent.
 /// </summary>
 [TestClass]
-public class WorkflowLifecycleFidelityTests
+public partial class WorkflowLifecycleFidelityTests
 {
     /// <summary>
     /// Invokes a workflow tool through its PUBLIC registration path (scope.ProvideTools() →
@@ -259,12 +260,14 @@ public class WorkflowLifecycleFidelityTests
         Assert.AreEqual(1, syncCount, $"tool call should have been marshalled once through the UI context (PostCount={syncCount})");
     }
 
-    private sealed class SlotEnumeratorHolder : System.ComponentModel.INotifyPropertyChanged
+    /// <summary>
+    /// A fixture the archive format has to know about, so it takes part the way a real one does: visible to
+    /// generated code and carrying a <c>[VeloxProperty]</c> field. A hand-written class with only plain
+    /// properties is outside the serializer's closed world.
+    /// </summary>
+    internal sealed partial class SlotEnumeratorHolder
     {
-        public SlotEnumerator<SlotDefaultViewModel>? Enumerator { get; set; }
-#pragma warning disable CS0067 // event never used; required only to satisfy INotifyPropertyChanged for serialization
-        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-#pragma warning restore CS0067
+        [VeloxProperty] private SlotEnumerator<SlotDefaultViewModel>? enumerator;
     }
 
     private sealed class TestSynchronizationContext : SynchronizationContext

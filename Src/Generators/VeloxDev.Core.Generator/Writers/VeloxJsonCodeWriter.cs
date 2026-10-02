@@ -102,9 +102,15 @@ namespace VeloxDev.Generators.Writers
         /// </remarks>
         private static void WriteMember(StringBuilder builder, VeloxJsonMember member)
         {
-            builder.AppendLine($"        writer.WriteMemberName(\"{Escape(member.Name)}\");");
-            builder.AppendLine($"        global::{SerializationNamespace}.VeloxJsonSerializer.WriteValue(");
-            builder.AppendLine($"            writer, t.{member.Name}, typeof({FullTypeOf(member.DeclaredType)}));");
+            var declaredType = FullTypeOf(member.DeclaredType);
+
+            // 被排除的成员连名字都不写：快照模式靠这条把节点引用挡在文件外。
+            builder.AppendLine($"        if (!global::{SerializationNamespace}.VeloxJsonSerializer.IsExcluded(typeof({declaredType})))");
+            builder.AppendLine("        {");
+            builder.AppendLine($"            writer.WriteMemberName(\"{Escape(member.Name)}\");");
+            builder.AppendLine($"            global::{SerializationNamespace}.VeloxJsonSerializer.WriteValue(");
+            builder.AppendLine($"                writer, t.{member.Name}, typeof({declaredType}));");
+            builder.AppendLine("        }");
         }
 
         /// <summary>

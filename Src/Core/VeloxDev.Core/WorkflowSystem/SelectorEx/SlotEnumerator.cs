@@ -4,11 +4,13 @@ using System.Diagnostics;
 using System.Runtime.Serialization;
 using System.Threading;
 using VeloxDev.MVVM;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem;
 
-public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IConditionalSlotProvider, System.ComponentModel.INotifyPropertyChanged
+public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IConditionalSlotProvider, System.ComponentModel.INotifyPropertyChanged,
+    IVeloxJsonDeserializing, IVeloxJsonDeserialized
     where TSlot : IWorkflowSlotViewModel, new()
 {
     public SlotEnumerator()
@@ -622,8 +624,14 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         return found;
     }
 
+    // 两个序列化器并存期间，Newtonsoft 的特性与 VeloxDev 的接口共用同一个函数体。
     [OnDeserializing]
-    private void OnDeserializing(StreamingContext context)
+    private void OnDeserializing(StreamingContext context) => ((IVeloxJsonDeserializing)this).OnDeserializing();
+
+    [OnDeserialized]
+    private void OnDeserialized(StreamingContext context) => ((IVeloxJsonDeserialized)this).OnDeserialized();
+
+    void IVeloxJsonDeserializing.OnDeserializing()
     {
         _isDeserializing = true;
 
@@ -636,8 +644,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         Items.Clear();
     }
 
-    [OnDeserialized]
-    private void OnDeserialized(StreamingContext context)
+    void IVeloxJsonDeserialized.OnDeserialized()
     {
         _isDeserializing = false;
 

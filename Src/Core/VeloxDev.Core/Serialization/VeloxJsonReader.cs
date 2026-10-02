@@ -443,6 +443,17 @@ public sealed class VeloxJsonReader
         if (_depth > 0) _counts[_depth - 1] = value;
     }
 
+    /// <summary>
+    /// The error a malformed document produces, quoting the spot — a bare offset is not enough to see what the
+    /// reader tripped over.
+    /// </summary>
     private FormatException Malformed(string what)
-        => new($"Malformed archive document: {what} (at offset {_position}).");
+    {
+        var start = _position > 40 ? _position - 40 : 0;
+        var length = System.Math.Min(80, _text.Length - start);
+        var context = _text.Substring(start, length).Replace("\r", "\\r").Replace("\n", "\\n");
+
+        return new FormatException(
+            $"Malformed archive document: {what} (at offset {_position}). Around there: …{context}…");
+    }
 }
