@@ -1,12 +1,14 @@
 ﻿using System.Runtime.Serialization;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
+using VeloxDev.Serialization;
 
 namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "用于在工作流系统中描述组件的空间位置")]
 [AgentContext(AgentLanguages.English, "Used to describe the spatial position of components in the workflow system")]
-public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0) : ICloneable, IEquatable<Anchor>
+public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0)
+    : ICloneable, IEquatable<Anchor>, IVeloxJsonSerializing, IVeloxJsonSerialized, IVeloxJsonDeserialized
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "水平坐标，单位为像素")]
@@ -53,8 +55,15 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
         return new Anchor(Horizontal * sx, Vertical * sy, Layer) { _collapseScale = scale, _owner = this };
     }
 
+    // 两个序列化器并存期间，Newtonsoft 的特性与 VeloxDev 的接口共用同一个函数体：
+    // ComponentModelEx 接到新序列化器上之后，特性那一对就可以删了。
     [OnSerializing]
-    private void OnSerializing(StreamingContext context)
+    private void OnSerializing(StreamingContext context) => ((IVeloxJsonSerializing)this).OnSerializing();
+
+    [OnSerialized]
+    private void OnSerialized(StreamingContext context) => ((IVeloxJsonSerialized)this).OnSerialized();
+
+    void IVeloxJsonSerializing.OnSerializing()
     {
         // Expand the collapsed transient back to raw/world values so the JSON file stores world coordinates.
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
@@ -67,8 +76,7 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
         }
     }
 
-    [OnSerialized]
-    private void OnSerialized(StreamingContext context)
+    void IVeloxJsonSerialized.OnSerialized()
     {
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
         {
@@ -81,9 +89,11 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
     }
 
     [OnDeserialized]
-    private void OnDeserialized(StreamingContext context)
+    private void OnDeserialized(StreamingContext context) => ((IVeloxJsonDeserialized)this).OnDeserialized();
+
+    void IVeloxJsonDeserialized.OnDeserialized()
     {
-        // Newtonsoft populated this transient (read through the node's getter) with the raw JSON value but
+        // The reader populated this transient (read through the node's getter) with the raw JSON value but
         // skipped the setter; push the restored value back into the field it was collapsed from.
         if (_owner is not null)
         {

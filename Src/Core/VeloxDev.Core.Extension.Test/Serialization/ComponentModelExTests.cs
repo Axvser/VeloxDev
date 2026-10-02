@@ -1,79 +1,59 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Runtime.Serialization;
 using Newtonsoft.Json;
+using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Test.Serialization;
 
 [TestClass]
-public class ComponentModelExTests
+public partial class ComponentModelExTests
 {
-    private sealed class TestModel : INotifyPropertyChanged
+    /// <summary>
+    /// A minimal ViewModel: it takes part in the archive format because a <c>[VeloxProperty]</c> field asks for
+    /// it. A hand-written class with only plain properties has nothing the generator knows about, and the
+    /// serializer's closed world refuses it — which is the point of the attribute.
+    /// </summary>
+    internal sealed partial class TestModel
     {
-        private string? _name;
-        private int _count;
-
-        public string? Name
-        {
-            get => _name;
-            set { _name = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name))); }
-        }
-
-        public int Count
-        {
-            get => _count;
-            set { _count = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Count))); }
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
+        [VeloxProperty] private string? name;
+        [VeloxProperty] private int count;
     }
 
-    private enum ProbeKind { Alpha, Beta, Gamma }
+    internal enum ProbeKind { Alpha, Beta, Gamma }
 
     /// <summary>Stands in for <c>BranchSegment.CompileKey</c> / <c>BranchOption.Key</c>: an enum in an object member.</summary>
-    private sealed class KeyHolder : INotifyPropertyChanged
+    internal sealed partial class KeyHolder
     {
-        private object? _key;
-
-        public object? Key
-        {
-            get => _key;
-            set { _key = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Key))); }
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
+        [VeloxProperty] private object? key;
     }
 
     /// <summary>Mirrors the fix the compiled graph's branch keys need: remember the key's type, restore it on load.</summary>
-    private sealed class KeyHolderWithTypeName : INotifyPropertyChanged
+    internal sealed partial class KeyHolderWithTypeName : VeloxDev.Serialization.IVeloxJsonDeserialized
     {
-        private object? _key;
-        private string? _keyTypeName;
+        [VeloxProperty] private object? key;
+        [VeloxProperty] private string? keyTypeName;
 
-        public object? Key
-        {
-            get => _key;
-            set { _key = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Key))); }
-        }
-
-        public string? KeyTypeName
-        {
-            get => _keyTypeName;
-            set { _keyTypeName = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(KeyTypeName))); }
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
+        /// <summary>
+        /// Runs after every member has been read, which is the only moment the type name beside the key is
+        /// guaranteed to be there — a generated setter would fire before it.
+        /// </summary>
+        /// <remarks>
+        /// Both hooks are wired while the two serializers coexist, sharing one body: the attribute is what the
+        /// Newtonsoft path calls, the interface is what the VeloxDev serializer calls.
+        /// </remarks>
         [OnDeserialized]
-        internal void NormalizeKey(StreamingContext _)
+        internal void NormalizeKey(StreamingContext _) => ((VeloxDev.Serialization.IVeloxJsonDeserialized)this).OnDeserialized();
+
+        void VeloxDev.Serialization.IVeloxJsonDeserialized.OnDeserialized()
         {
-            if (_key is long number
-                && _keyTypeName is { Length: > 0 } name
+            if (Key is long number
+                && KeyTypeName is { Length: > 0 } name
                 && Type.GetType(name) is { IsEnum: true } type)
             {
-                _key = Enum.ToObject(type, number);
+                Key = Enum.ToObject(type, number);
             }
         }
     }

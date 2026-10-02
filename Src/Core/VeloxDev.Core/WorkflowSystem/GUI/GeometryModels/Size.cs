@@ -1,12 +1,14 @@
 ﻿using System.Runtime.Serialization;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
+using VeloxDev.Serialization;
 
 namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "表示一个二维尺寸")]
 [AgentContext(AgentLanguages.English, "Represents a two-dimensional size")]
-public sealed partial class Size(double width = 0d, double height = 0d) : ICloneable, IEquatable<Size>
+public sealed partial class Size(double width = 0d, double height = 0d)
+    : ICloneable, IEquatable<Size>, IVeloxJsonSerializing, IVeloxJsonSerialized, IVeloxJsonDeserialized
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "宽度，像素单位")]
@@ -47,8 +49,17 @@ public sealed partial class Size(double width = 0d, double height = 0d) : IClone
         return new Size(Width * sx, Height * sy) { _collapseScale = scale, _owner = this };
     }
 
+    // 两个序列化器并存期间，Newtonsoft 的特性与 VeloxDev 的接口共用同一个函数体。
     [OnSerializing]
-    private void OnSerializing(StreamingContext context)
+    private void OnSerializing(StreamingContext context) => ((IVeloxJsonSerializing)this).OnSerializing();
+
+    [OnSerialized]
+    private void OnSerialized(StreamingContext context) => ((IVeloxJsonSerialized)this).OnSerialized();
+
+    [OnDeserialized]
+    private void OnDeserialized(StreamingContext context) => ((IVeloxJsonDeserialized)this).OnDeserialized();
+
+    void IVeloxJsonSerializing.OnSerializing()
     {
         // Expand the collapsed transient back to raw/world values so the JSON file stores world coordinates.
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
@@ -61,8 +72,7 @@ public sealed partial class Size(double width = 0d, double height = 0d) : IClone
         }
     }
 
-    [OnSerialized]
-    private void OnSerialized(StreamingContext context)
+    void IVeloxJsonSerialized.OnSerialized()
     {
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
         {
@@ -74,10 +84,9 @@ public sealed partial class Size(double width = 0d, double height = 0d) : IClone
         }
     }
 
-    [OnDeserialized]
-    private void OnDeserialized(StreamingContext context)
+    void IVeloxJsonDeserialized.OnDeserialized()
     {
-        // Newtonsoft populated this transient (read through the node's getter) with the raw JSON value but
+        // The reader populated this transient (read through the node's getter) with the raw JSON value but
         // skipped the setter; push the restored value back into the field it was collapsed from.
         if (_owner is not null)
         {

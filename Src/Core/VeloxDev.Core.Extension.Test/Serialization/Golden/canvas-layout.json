@@ -1,0 +1,45 @@
+{
+  "$id": "1",
+  "OriginSize": {
+    "$id": "2",
+    "Width": 1920.0,
+    "Height": 1080.0
+  },
+  "PositiveOffset": {
+    "$id": "3",
+    "Horizontal": 0.0,
+    "Vertical": 0.0
+  },
+  "NegativeOffset": {
+    "$id": "4",
+    "Horizontal": 50.0,
+    "Vertical": 30.0
+  },
+  "Scale": {
+    "$id": "5",
+    "Horizontal": 2.5,
+    "Vertical": 3.5
+  },
+  "ActualSize": {
+    "$id": "6",
+    "Width": 1970.0,
+    "Height": 1110.0
+  },
+  "ActualOffset": {
+    "$id": "7",
+    "Horizontal": 50.0,
+    "Vertical": 30.0
+  },
+  "ViewportOffset": {
+    "$id": "8",
+    "Horizontal": 0.0,
+    "Vertical": 0.0
+  },
+  "ZoomCenter": 1,
+  "CollapsePivot": {
+    "$id": "9",
+    "Horizontal": 0.0,
+    "Vertical": 0.0,
+    "Layer": 0
+  }
+}

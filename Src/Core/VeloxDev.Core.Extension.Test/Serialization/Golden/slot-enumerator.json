@@ -1,0 +1,10 @@
+{
+  "$id": "1",
+  "Items": [],
+  "CurrentValue": null,
+  "Parent": null,
+  "SelectorTypeName": "",
+  "ConditionMap": {
+    "$id": "2"
+  }
+}

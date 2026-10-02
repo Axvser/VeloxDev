@@ -1,0 +1,161 @@
+{
+  "$id": "1",
+  "Layout": {
+    "$id": "2",
+    "OriginSize": {
+      "$id": "3",
+      "Width": 1920.0,
+      "Height": 1080.0
+    },
+    "PositiveOffset": {
+      "$id": "4",
+      "Horizontal": 0.0,
+      "Vertical": 0.0
+    },
+    "NegativeOffset": {
+      "$id": "5",
+      "Horizontal": 0.0,
+      "Vertical": 0.0
+    },
+    "Scale": {
+      "$id": "6",
+      "Horizontal": 2.0,
+      "Vertical": 2.0
+    },
+    "ActualSize": {
+      "$id": "7",
+      "Width": 1920.0,
+      "Height": 1080.0
+    },
+    "ActualOffset": {
+      "$id": "8",
+      "Horizontal": 0.0,
+      "Vertical": 0.0
+    },
+    "ViewportOffset": {
+      "$id": "9",
+      "Horizontal": 0.0,
+      "Vertical": 0.0
+    },
+    "ZoomCenter": 1,
+    "CollapsePivot": {
+      "$id": "10",
+      "Horizontal": 0.0,
+      "Vertical": 0.0,
+      "Layer": 0
+    }
+  },
+  "VirtualLink": {
+    "$id": "11",
+    "$type": "VeloxDev.WorkflowSystem.LinkDefaultViewModel, VeloxDev.Core",
+    "Sender": {
+      "$id": "12",
+      "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
+      "Targets": [],
+      "Sources": [],
+      "Parent": null,
+      "Channel": 3,
+      "State": 1,
+      "Anchor": {
+        "$id": "13",
+        "Horizontal": "NaN",
+        "Vertical": "NaN",
+        "Layer": 0
+      }
+    },
+    "Receiver": {
+      "$id": "14",
+      "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
+      "Targets": [],
+      "Sources": [],
+      "Parent": null,
+      "Channel": 3,
+      "State": 1,
+      "Anchor": {
+        "$id": "15",
+        "Horizontal": "NaN",
+        "Vertical": "NaN",
+        "Layer": 0
+      }
+    },
+    "IsVisible": false
+  },
+  "Nodes": [
+    {
+      "$id": "16",
+      "$type": "VeloxDev.WorkflowSystem.NodeDefaultViewModel, VeloxDev.Core",
+      "Anchor": {
+        "$id": "17",
+        "Horizontal": 1400.0,
+        "Vertical": 900.0,
+        "Layer": 0
+      },
+      "Size": {
+        "$id": "18",
+        "Width": 300.0,
+        "Height": 200.0
+      },
+      "Parent": {
+        "$ref": "1"
+      },
+      "Slots": [
+        {
+          "$id": "19",
+          "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
+          "Targets": [],
+          "Sources": [],
+          "Parent": {
+            "$ref": "16"
+          },
+          "Channel": 1,
+          "State": 1,
+          "Anchor": {
+            "$id": "20",
+            "Horizontal": "NaN",
+            "Vertical": "NaN",
+            "Layer": 0
+          }
+        }
+      ]
+    },
+    {
+      "$id": "21",
+      "$type": "VeloxDev.WorkflowSystem.NodeDefaultViewModel, VeloxDev.Core",
+      "Anchor": {
+        "$id": "22",
+        "Horizontal": 200.0,
+        "Vertical": 100.0,
+        "Layer": 0
+      },
+      "Size": {
+        "$id": "23",
+        "Width": 0.0,
+        "Height": 0.0
+      },
+      "Parent": {
+        "$ref": "1"
+      },
+      "Slots": [
+        {
+          "$id": "24",
+          "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
+          "Targets": [],
+          "Sources": [],
+          "Parent": {
+            "$ref": "21"
+          },
+          "Channel": 2,
+          "State": 1,
+          "Anchor": {
+            "$id": "25",
+            "Horizontal": "NaN",
+            "Vertical": "NaN",
+            "Layer": 0
+          }
+        }
+      ]
+    }
+  ],
+  "Links": [],
+  "LinksMap": {}
+}

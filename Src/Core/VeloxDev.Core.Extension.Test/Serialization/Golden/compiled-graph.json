@@ -1,0 +1,12 @@
+{
+  "$id": "1",
+  "Entries": [
+    {
+      "$id": "2",
+      "$type": "VeloxDev.Core.WorkflowSystem.CompilerEx.ChainSegment, VeloxDev.Core",
+      "Nodes": [],
+      "Id": "11111111-1111-1111-1111-111111111111",
+      "Depth": 0
+    }
+  ]
+}
