@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 
 namespace VeloxDev.Serialization;
@@ -411,8 +411,9 @@ public static class VeloxJsonSerializer
         {
             // 接口键：键写成它自己的引用 id，映射本身不拿 id —— 这是既有文档的形状。
             writer.WriteStartObjectWithoutReference();
-            foreach (System.Collections.DictionaryEntry entry in map)
+            foreach (var raw in map)
             {
+                if (raw is not System.Collections.DictionaryEntry entry) continue;
                 if (entry.Key is null) continue;
 
                 writer.WriteMemberName(writer.GetOrAddReference(entry.Key).ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -423,8 +424,9 @@ public static class VeloxJsonSerializer
         {
             if (!writer.WriteStartObject(map, declaredType)) return;
 
-            foreach (System.Collections.DictionaryEntry entry in map)
+            foreach (var raw in map)
             {
+                if (raw is not System.Collections.DictionaryEntry entry) continue;
                 if (entry.Key is null) continue;
 
                 writer.WriteMemberName(entry.Key.ToString() ?? string.Empty);

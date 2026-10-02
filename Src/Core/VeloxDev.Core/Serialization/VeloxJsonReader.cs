@@ -169,6 +169,13 @@ public sealed class VeloxJsonReader
 
     // ── Scalars ──────────────────────────────────────────────────────────────────────────────────────
 
+    /// <summary>Whether the next token is a quoted string.</summary>
+    public bool NextIsString()
+    {
+        SkipWhitespace();
+        return Peek() == '"';
+    }
+
     /// <summary>Whether the next token opens an object.</summary>
     public bool NextIsObject()
     {
