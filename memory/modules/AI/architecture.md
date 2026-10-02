@@ -1,4 +1,4 @@
-# AI — 架构
+﻿# AI — 架构
 
 > 代码：`Src/Core/VeloxDev.Core/AI/`（19 个 .cs）。**目录名 `AI`，命名空间是 `VeloxDev.AI`** —— 两者不同名，`grep VeloxDev.AI` 会连带命中消费方。
 > **这个模块已经一行反射都没有了**（2026-10-03 起）。五个助手全部读编译期目录 `AIContextTree`（见 §七），动作经每类型生成的 `IAIContextAccessor` 落地：`AgentContextReader` / `AgentTypeResolver` / `AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor`。三个标注特性**在 Core 里已经没有读取点**，只有生成器读它们。**下面 §一~§六 仍然成立**（讲的是可观察行为，那些基本都保住了），但凡涉及「怎么做的」的句子都以 §七 为准；已经过期的具体行在 §七 末尾逐条列出。
@@ -262,13 +262,24 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 **AOT 警告数本轮没有重测**（要动 `IsAotCompatible` 影子工程）。第一站的基线是 `VeloxDev.Core` 28 → 26、`VeloxDev.Core.Extension` 225（162 条 Newtonsoft + 63 条自身反射）—— 那两个数现在都过期了。
 
-### 还剩下什么（决策已定：**不留反射回退**）
+### 现在警告清零了（2026-10-03，第三个里程碑）
 
-**Agent 面已经搬完**，剩下的都不是它：
+**`VeloxDev.Core` 与 `VeloxDev.Core.Extension` 的 IL2xxx/IL3050 都是 0。** 收尾的两步都不在本模块：
 
-1. **Newtonsoft 那 162 条**。要归零得换 `System.Text.Json` 源生成 —— 另一个量级的活，而且是「序列化」，按定义不在本轮范围。
-2. **`VeloxDev.Core` 的 4 条**：`CompileKeyNormalizer` 与 `SlotEnumerator.ResolveTypeByName` 是**反序列化**按名字还原类型（`Type.GetType` / `Assembly.GetType`），另两条在 `TransitionSystem`（另一个模块，有自己的记忆）。
-3. **`IsTrimmable` / `IsAotCompatible` 还没正式开**。两个工程的 csproj 仍是 `IsTrimmable=false`；本轮的测量是临时多目标做出来的，没有留在仓库里。要正式开，得先决定 net8.0（或 net10.0）这一档进不进 `TargetFrameworks`。
+1. **Newtonsoft 走了。** 工具面（`JObject`/`JArray`/`JsonConvert`，~280 处 / 13 文件）与存档路径一起换到
+   `VeloxDev.Serialization` —— 一个生成式的 JSON 读写器加一套不反射的 JSON 树。**162 条 Newtonsoft 不是
+   终点，可以不是**：当时写「要归零得换 `System.Text.Json` 源生成」，实际走的是自己生成的那条路。
+   形状、闭世界、逐字节兼容、以及读入侧**实测确认消不掉的两处**，记在
+   [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八。
+2. **Core 那 4 条**：`SlotEnumerator.ResolveTypeByName` 换成了目录查询（**实测**全绿，见上）；另三条
+   （`CompileKeyNormalizer` 的路由键、`TransitionProperty.FindIndexer`、`Interpolator`）也都各自处理完了 ——
+   前两处的换法**实测过会红**，所以是「按需声明」而不是消除，理由写在各自的注释里。
+
+**还没做的**：`IsTrimmable` / `IsAotCompatible` 仍未正式开（两个工程的 csproj 都不是）；本轮的测量是临时
+多目标 + `-p:EnableTrimAnalyzer=true` 做出来的，没进仓库。`Examples/Workflow/Avalonia Trimmed/
+Directory.Build.props` 里那条 `TrimmerRootAssembly` **已经删了**，但端到端的裁剪发布没验过 —— 桌面那条路
+被 `NETSDK1124` 挡着（`-p:PublishTrimmed=true` 是全局属性，会泄漏给多目标的 Core/Extension），
+真正配了裁剪的是 Browser/Android 两条。
 
 ### 这一轮踩到的坑（都在测试里钉住了）
 

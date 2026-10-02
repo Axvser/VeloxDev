@@ -1,4 +1,4 @@
-# VeloxDev.Core.Extension — 架构
+﻿# VeloxDev.Core.Extension — 架构
 
 > 代码：`Src/Core/VeloxDev.Core.Extension/`（53 个源 .cs，`Agent/` 4 + `Agent/MCP/` 8 + `Agent/Skills/` 11 + `Agent/SubAgents/` 6 + `Agent/Pipelines/` 7 + `Agent/Dashboard/` 5 + `Agent/Workflow/` 4 + `Agent/Workflow/Functions/` 6，外加根目录 `AgentEx.cs`、`ComponentModelEx.cs`）。
 > **依赖**：`Src/Core/VeloxDev.Core/AI/`（命名空间 `VeloxDev.AI`，13 个文件）。本模块**是它的调用方**，Core 对本科目零引用。
@@ -194,19 +194,64 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 ---
 
-## 八、附：`ComponentModelEx.cs`（物理上在本项目，名字属于 MVVM）
+## 八、附：序列化的入口 `ComponentModelEx.cs`（引擎在 Core）
 
-`Src/Core/VeloxDev.Core.Extension/ComponentModelEx.cs` 的命名空间是 **`VeloxDev.MVVM.Serialization`**，不是 `VeloxDev.AI.*`。它在本项目里的原因只是「需要一个带 Newtonsoft 依赖的地方」，而 `VeloxDev.Core` 是零依赖的。
+`Src/Core/VeloxDev.Core.Extension/ComponentModelEx.cs` 的命名空间是 **`VeloxDev.MVVM.Serialization`**。
+**2026-10-03 起它只是入口，引擎在 `VeloxDev.Core` 的 `VeloxDev.Serialization`（见 §八·一）** ——
+本项目**已经没有 Newtonsoft 依赖**（包引用也删了），整个 Agent 面的 IL 裁剪警告从 160 降到 0。
 
-**同一命名空间下还有两个「物理在本项目、语义属于别的模块」的文件**，不要按目录去找它们：`CompiledGraphEx.cs`（编译图存/读，见 [`WorkflowSystem/compiler-execution.md`](../WorkflowSystem/compiler-execution.md) §八）与 `CheckpointEx.cs`（运行检查点存/读 + `FileCheckpointStore`，见同文件 §十一）。**公开的 `Serialize<T>` / `Deserialize<T>` 一族被 `where T : INotifyPropertyChanged` 约束住了** —— 那是为 VM 写的面；纯数据 DTO（如 `ExecutionCheckpoint`）走同程序集 `internal` 的 `ComponentModelEx.CreateJsonSerializer()`，于是继承下面那套默认设置而不用把自己伪装成 VM。
+**公开面一行没变**：`Serialize<T>` / `TryDeserialize<T>` / `Deserialize<T>` 一族（同步 / 异步 / 流 / 字节 /
+`TextWriter`），全部 `where T : INotifyPropertyChanged`，交给新的序列化器执行。它是所有 demo 存/读工作流
+走的那条路（`TreeViewModel.cs` 的 `this.Serialize()`）。
 
-**它是所有 demo 存/读工作流走的那条路**：`TreeViewModel.cs:316` 的 `this.Serialize()`，以及 Avalonia / Blazor / Jalium / MAUI / WinUI 五家的 `TryDeserialize<TreeViewModel>(...)`。
+**`SerializationOptions` 只剩两个开关**：`WithIndented` / `WithCompact`（`VeloxJsonFormat`），以及
+`WithExcludedPropertyTypes`（`CompiledGraphEx` 用它把节点引用挡在快照外）。三个 Newtonsoft 时代的开关
+（`WithTypeNameHandling` / `WithNullValueHandling` / `WithDefaultValueHandling`）随引擎一起删了 ——
+它们配的是一个已经不在的库。
 
-**读这个文件时值得知道的三点：**
+**同一命名空间下还有两个「物理在本项目、语义属于别的模块」的文件**：`CompiledGraphEx.cs`
+（编译图存/读，见 [`WorkflowSystem/compiler-execution.md`](../WorkflowSystem/compiler-execution.md) §八）
+与 `CheckpointEx.cs`（运行检查点存/读 + `FileCheckpointStore`，见同文件 §十一）。
 
-1. **`IndentedSettings` / `CompactSettings` 是缓存的静态实例**（`:74`、`:89`）。理由是 Newtonsoft 的合约缓存挂在 `JsonSerializerSettings` 实例上，每次 `new` 一份就是每次重建整套合约。不带 `SerializationOptions` 的调用返回**缓存实例本身**（`:115`），所以**不要改返回值的属性**。
-2. **`WritablePropertiesOnlyResolver`** 把「有无参构造函数 + 可写属性」的 `IEnumerable` 类型当**普通对象**处理，而不是当集合 —— 这是让 `ObservableCollection<…>` 这类带额外状态的集合能按属性序列化的关键。序列化工作流的缩放/锚点相关契约（`_owner` 反写、`[OnSerializing]` 展开世界坐标）在 `memory/modules/WorkflowSystem/` 里，不在这里重复。
-3. **`AllowListSerializationBinder` 是被刻意移除的**，文件结尾有注释说明。`WithTypeNameHandling(...)` 仍然开放（`:40`）—— 宿主打开它就等于接受类型名反序列化的攻击面，这是**宿主的选择**，不是模块的默认。
+### 八·一、闭世界：什么类型能进文档
 
-**⚠ 公开可写的属性一律会被写出去，包括委托。** `WritablePropertiesOnlyResolver` 只看「能不能写」，不看类型 ⇒ 一个 `public Action<T>? Hook { get; set; }` 会被序列化成一段委托，而**读回来时构造委托直接抛**（`Delegate.DelegateConstruct` → `ArgumentNullException: method`）。2026-09-27 实测：`ControllerViewModel` 上加了这样一个钩子，三条编译图快照测试当场红 —— 而这条路径七家 demo 的**保存**都会走。运行期状态用 `{ get; private set; }`（`RuntimeContext`/`CompileContext` 都是），需要外部可设就用**方法**而不是属性。
+**一个类型能进文档，当且仅当生成器为它编出了读写器**。收录条件是：它是四个组件接口之一的实现、
+或带 `[VeloxProperty]` / `[VeloxCommand]`、或带 `[VeloxSerializable]`（**非 ViewModel 的普通文档类型
+用它自报家门**，`ExecutionCheckpoint` 就是），或者能从这些类型出发沿**成员的声明类型**走到。
+生成器走整编译遍历而不是特性触发集：组件的身份是「实现了哪个接口」，特性触发表达不了。
 
+**代价是真的**：一个没被标注、又没有成员声明它的普通 POCO 进不了文档 —— 写它会抛
+`MissingWriter`（错误信息直接写着为什么）。这不是 bug，是这套东西能裁剪的前提。
+
+**两条契约由此而来**（都在 `memory/modules/AI/architecture.md` §七 记着，这里只给结论）：
+- 组件接口是**另一个生成器**加上去的，所以收录认的是作者写下的 `[WorkflowBuilder.*]` 特性，不是最终接口。
+- 泛型类型（`SlotEnumerator<T>` 这类）只有**封闭实例**才有条目，而条目由**见过那个组合的那一边**发出。
+
+### 八·二、逐字节兼容
+
+新引擎的输出与旧 Newtonsoft 引擎**逐字节相同**，这是硬要求（用户机器上已有存档）。冻结在
+`Src/Core/VeloxDev.Core.Extension.Test/Serialization/Golden/` 的四份文档是契约，由
+`VeloxJsonSerializerTests` 逐字节比对。**成员顺序是最难的一条**，量出来的规则是：
+
+> 手写的可写属性按声明顺序在前，`[VeloxProperty]` 提升出来的属性按字段顺序在后。
+
+`SerializationOrderTests` 对六个代表形状（含 `SlotEnumerator<TSlot>` 这种混合的）钉住它。**改生成器的
+成员收录顺序会直接打翻这条**，改之前先看那份测试。
+
+### 八·三、读入侧只有两处按名字找类型（实测确认消不掉）
+
+`SlotEnumerator` 的选择器类型走的是**目录查询**（`AgentTypeResolver.ResolveType`，实测换过去全绿）。
+另外两处**实测过**换不掉，注释里写着实测结果：
+
+| 处 | 换过去会怎样 |
+|---|---|
+| `CompileKeyNormalizer` 的路由键 | Extension 4 条编译图序列化测试当场红，症状 `Branch 'Low' has no downstream node` —— 键停在 `long`，动态分支谁都不匹配 |
+| `TransitionProperty.FindIndexer` 的索引器属性 | `Expression must be writeable (Parameter 'left')` —— 写路径是 `Expression.Assign(<成员访问>, value)`，方法调用不是可赋值的左值 |
+
+两处都是「宿主在运行期选定的类型、编译单元里没有任何地方提到它」，所以目录收录不到。**代价写在各自的
+注释里**：宿主必须自己保住那些类型的元数据。
+
+**⚠ 一个可写属性会被写出去，包括委托。** 新引擎同样只看「能不能写」：一个
+`public Action<T>? Hook { get; set; }` 写出去没问题，**读回来时构造委托会抛**。运行期状态用
+`{ get; private set; }`，需要外部可设就用**方法**而不是属性。2026-09-27 实测过一次（`ControllerViewModel`
+加了这样的钩子，三条编译图快照测试当场红），那条结论不受引擎更换影响。
