@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -174,6 +174,13 @@ public sealed class VeloxJsonReader
     {
         SkipWhitespace();
         return Peek() == '"';
+    }
+
+    /// <summary>Whether the next token opens an array.</summary>
+    public bool NextIsArray()
+    {
+        SkipWhitespace();
+        return Peek() == '[';
     }
 
     /// <summary>Whether the next token opens an object.</summary>

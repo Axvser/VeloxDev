@@ -1,5 +1,5 @@
-using Newtonsoft.Json;
-using System;
+﻿using System;
+using VeloxDev.Serialization;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Input;
@@ -17,8 +17,8 @@ namespace VeloxDev.AI.Workflow.Functions;
 /// trimmer can follow.
 /// </para>
 /// <para>
-/// <see cref="Invoke"/> deserializes the model's JSON with Newtonsoft, which is the one piece of reflection this
-/// path keeps on purpose: turning a JSON payload into a component type is serialization, not discovery.
+/// <see cref="Invoke"/> deserializes the model's JSON through the generated serializer, so the parameter's
+/// type is one the archive format already knows rather than one looked up at run time.
 /// </para>
 /// </remarks>
 public static class CommandInvoker
@@ -86,7 +86,7 @@ public static class CommandInvoker
         {
             try
             {
-                parameter = JsonConvert.DeserializeObject(jsonParameter!, paramType);
+                parameter = VeloxJsonSerializer.Deserialize(jsonParameter!, paramType);
             }
             catch (Exception ex)
             {
@@ -102,16 +102,16 @@ public static class CommandInvoker
         try
         {
             command.Execute(parameter);
-            return JsonConvert.SerializeObject(new { status = "ok", message = $"Command '{commandName}' executed." });
+            return new VeloxJsonObject { ["status"] = "ok", ["message"] = $"Command '{commandName}' executed." }.ToJson();
         }
         catch (Exception ex)
         {
-            return JsonConvert.SerializeObject(new { status = "error", message = $"Command execution failed: {ex.Message}" });
+            return new VeloxJsonObject { ["status"] = "error", ["message"] = $"Command execution failed: {ex.Message}" }.ToJson();
         }
     }
 
     private static string Error(string message)
-        => JsonConvert.SerializeObject(new { status = "error", message });
+        => new VeloxJsonObject { ["status"] = "error", ["message"] = message }.ToJson();
 }
 
 /// <summary>

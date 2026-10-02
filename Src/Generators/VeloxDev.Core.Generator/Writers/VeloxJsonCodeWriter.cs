@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -219,6 +219,11 @@ namespace VeloxDev.Generators.Writers
         /// <summary>The read that produces one scalar, chosen from its declared type.</summary>
         private static string ScalarRead(ITypeSymbol type)
         {
+            // 可空值类型：缺值时文档里就是 null，读法与底层类型一样，只是结果可能为空。
+            var underlying = VeloxJsonModelBuilder.UnwrapNullable(type);
+            if (!SymbolEqualityComparer.Default.Equals(underlying, type))
+                return $"(reader.NextIsNull() ? null : {ScalarRead(underlying)})";
+
             if (type.TypeKind == TypeKind.Enum)
                 return $"({FullTypeOf(type)})reader.ReadInt64()";
 

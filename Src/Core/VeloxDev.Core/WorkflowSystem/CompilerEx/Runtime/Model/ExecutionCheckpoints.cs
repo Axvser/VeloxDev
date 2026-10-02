@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
@@ -23,6 +24,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </para>
 /// </remarks>
 /// <seealso cref="IExecutionCheckpointStore"/>
+[VeloxSerializable]
 public sealed class ExecutionCheckpoint
 {
     /// <summary>The pass the run was on when this was taken — <see cref="IRuntimeContext.Attempt"/>.</summary>

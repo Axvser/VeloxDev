@@ -114,6 +114,7 @@ namespace VeloxDev.Generators.Base
     internal static class VeloxJsonModelBuilder
     {
         private const string VeloxPropertyAttributeName = "VeloxDev.MVVM.VeloxPropertyAttribute";
+        private const string VeloxSerializableAttributeName = "VeloxDev.Serialization.VeloxSerializableAttribute";
 
         private static readonly string[] ComponentInterfaces =
         [
@@ -229,6 +230,9 @@ namespace VeloxDev.Generators.Base
             if (!IsWritableType(symbol, assembly)) return false;
 
             if (ComponentInterfaces.Any(contract => ImplementsInterface(symbol, contract))) return true;
+
+            // 不是 ViewModel 的普通文档类型靠一个特性自报家门 —— 检查点就是这种。
+            if (AIContextNaming.HasAttribute(symbol, VeloxSerializableAttributeName)) return true;
 
             // 组件的接口是 Workflow 生成器加上去的，而生成器之间看不见彼此的产物 —— 所以这里认的是
             // 作者写下的那个特性，而不是最终会出现的接口。
@@ -491,9 +495,23 @@ namespace VeloxDev.Generators.Base
             return (VeloxJsonMemberKind.Object, null, false);
         }
 
+        /// <summary>
+        /// A nullable value type as its underlying type, so <c>int?</c> is spelled like <c>int</c>.
+        /// </summary>
+        /// <remarks>
+        /// An absent value is handled by every scalar read already — <c>null</c> is a token like any other — so
+        /// the only thing the nullable wrapper changes is that the member may be null.
+        /// </remarks>
+        internal static ITypeSymbol UnwrapNullable(ITypeSymbol type)
+            => type is INamedTypeSymbol named
+               && named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+               && named.TypeArguments.Length == 1
+                ? named.TypeArguments[0]
+                : type;
+
         /// <summary>Whether a type is one of the scalars the format writes with a dedicated primitive.</summary>
         private static bool IsScalar(ITypeSymbol type)
-            => type.SpecialType switch
+            => UnwrapNullable(type).SpecialType switch
             {
                 SpecialType.System_String or SpecialType.System_Int32 or SpecialType.System_Int64
                     or SpecialType.System_Double or SpecialType.System_Single or SpecialType.System_Decimal

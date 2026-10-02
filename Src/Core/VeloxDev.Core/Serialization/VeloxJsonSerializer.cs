@@ -255,7 +255,17 @@ public static class VeloxJsonSerializer
         if (reader.NextIsNull()) { reader.SkipValue(); return null; }
 
         // 对象成员要靠文档里的类型名才落得下去 —— 这正是两个分支类型带侧信道的原因。
-        if (reader.NextIsObject()) return ReadValue(reader, typeof(object), null);
+        if (reader.NextIsObject()) return ReadObjectValue(reader, typeof(object), null);
+
+        if (reader.NextIsArray())
+        {
+            var list = new System.Collections.Generic.List<object?>();
+            reader.BeginArray();
+            while (reader.NextElement()) list.Add(ReadUnknown(reader));
+            reader.FinishArray();
+
+            return list;
+        }
 
         var text = reader.ReadText();
         if (bool.TryParse(text, out var flag)) return flag;
@@ -282,8 +292,52 @@ public static class VeloxJsonSerializer
         if (reader is null) throw new ArgumentNullException(nameof(reader));
         if (declaredType is null) throw new ArgumentNullException(nameof(declaredType));
 
+        // 声明类型是 object 的成员：值可能是标量、数组或对象，只有 token 知道是哪种。
+        if (declaredType == typeof(object)) return ReadUnknown(reader);
+
         if (reader.NextIsNull()) { reader.SkipValue(); return null; }
 
+        // 运行期才知道的标量（集合的元素、字典的值）：按声明类型读那一个原语。
+        if (TryReadScalar(reader, declaredType) is { } scalar) return scalar;
+
+        return ReadObjectValue(reader, declaredType, existing);
+    }
+
+    /// <summary>
+    /// Reads one scalar whose type is only known at run time.
+    /// </summary>
+    /// <remarks>
+    /// An enum is deliberately not handled here: turning a number back into an enum member needs the enum's
+    /// metadata, and generated code does it with a cast instead. A collection of enums is therefore read by the
+    /// member's own generated reader, not through this path.
+    /// </remarks>
+    private static object? TryReadScalar(VeloxJsonReader reader, Type declaredType)
+    {
+        var underlying = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
+
+        if (underlying.IsEnum) return null;
+        if (underlying == typeof(string)) return reader.ReadString();
+        if (underlying == typeof(bool)) return reader.ReadBoolean();
+        if (underlying == typeof(int)) return reader.ReadInt32();
+        if (underlying == typeof(long)) return reader.ReadInt64();
+        if (underlying == typeof(double)) return reader.ReadDouble();
+        if (underlying == typeof(float)) return reader.ReadSingle();
+        if (underlying == typeof(decimal)) return reader.ReadDecimal();
+        if (underlying == typeof(byte)) return (byte)reader.ReadInt32();
+        if (underlying == typeof(short)) return (short)reader.ReadInt32();
+        if (underlying == typeof(char)) return reader.ReadText()[0];
+        if (underlying == typeof(Guid)) return reader.ReadGuid();
+        if (underlying == typeof(DateTime))
+            return DateTime.Parse(reader.ReadText(), System.Globalization.CultureInfo.InvariantCulture);
+        if (underlying == typeof(TimeSpan))
+            return TimeSpan.Parse(reader.ReadText(), System.Globalization.CultureInfo.InvariantCulture);
+
+        return null;
+    }
+
+    /// <summary>Reads an object's members into an instance, or into a plain map when nothing registered it.</summary>
+    private static object? ReadObjectValue(VeloxJsonReader reader, Type declaredType, object? existing)
+    {
         if (!reader.BeginObject(out var referenceId, out var typeName))
             return reader.ResolveReference(referenceId);
 
@@ -292,7 +346,12 @@ public static class VeloxJsonSerializer
             : VeloxJsonRegistry.TypeOf(typeName) ?? declaredType;
 
         var registered = VeloxJsonRegistry.ReaderFor(actualType);
-        if (registered is null) throw MissingReader(actualType, typeName);
+        if (registered is null)
+        {
+            // 没有条目：按文档的形状读成普通容器。`object` 成员里放的就是这些 —— 一个载荷字典、
+            // 一串产物 —— 而它们的类型名是 BCL 的，永远不会有生成出来的条目。
+            return ReadByShape(reader, referenceId);
+        }
 
         var instance = existing is not null && actualType.IsInstanceOfType(existing)
             ? existing
@@ -303,6 +362,26 @@ public static class VeloxJsonSerializer
 
         registered.Read(reader, instance);
         return instance;
+    }
+
+    /// <summary>
+    /// Reads a value whose type nothing registered, by the shape the document gives it.
+    /// </summary>
+    /// <param name="reader">The document, positioned just inside the object.</param>
+    /// <param name="referenceId">The value's reference id, registered so a later <c>$ref</c> resolves.</param>
+    /// <returns>A dictionary for an object, a list for an array.</returns>
+    private static object? ReadByShape(VeloxJsonReader reader, int referenceId)
+    {
+        var map = new System.Collections.Generic.Dictionary<string, object?>(System.StringComparer.Ordinal);
+        reader.RegisterReference(referenceId, map);
+
+        while (reader.NextMember(out var name))
+        {
+            map[name] = ReadUnknown(reader);
+        }
+        reader.FinishObject();
+
+        return map;
     }
 
     /// <summary>

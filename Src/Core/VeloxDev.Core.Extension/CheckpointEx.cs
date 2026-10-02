@@ -1,9 +1,8 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using VeloxDev.Serialization;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 namespace VeloxDev.MVVM.Serialization;
@@ -30,6 +29,7 @@ namespace VeloxDev.MVVM.Serialization;
 /// <para>
 /// <b>A checkpoint is a plain document, not a view model</b>, which is why it does not go through
 /// <c>ComponentModelEx.Serialize</c>: that surface is constrained to <see cref="System.ComponentModel.INotifyPropertyChanged"/>.
+/// It takes part in the archive format by declaring itself serializable — see <see cref="VeloxSerializableAttribute"/>.
 /// </para>
 /// <para>
 /// Like <see cref="CompiledGraphEx"/>, this lives here rather than in Core because Core has no serializer.
@@ -38,8 +38,6 @@ namespace VeloxDev.MVVM.Serialization;
 /// <seealso cref="FileCheckpointStore"/>
 public static class CheckpointEx
 {
-    private static JsonSerializer Serializer() => ComponentModelEx.CreateJsonSerializer();
-
     /// <summary>Writes a checkpoint as JSON.</summary>
     /// <param name="checkpoint">The checkpoint to write.</param>
     /// <returns>The JSON text, indented — it is a file a person may end up opening.</returns>
@@ -47,7 +45,7 @@ public static class CheckpointEx
     public static string SerializeCheckpoint(this ExecutionCheckpoint checkpoint)
     {
         if (checkpoint is null) throw new ArgumentNullException(nameof(checkpoint));
-        return JToken.FromObject(checkpoint, Serializer()).ToString(Formatting.Indented);
+        return VeloxJsonSerializer.Serialize(checkpoint, indented: true);
     }
 
     /// <summary>Reads a checkpoint back.</summary>
@@ -59,7 +57,7 @@ public static class CheckpointEx
 
         try
         {
-            return JToken.Parse(json).ToObject<ExecutionCheckpoint>(Serializer());
+            return VeloxJsonSerializer.Deserialize<ExecutionCheckpoint>(json);
         }
         catch
         {
