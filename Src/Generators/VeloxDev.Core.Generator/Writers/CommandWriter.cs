@@ -1,4 +1,5 @@
 ﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
@@ -17,14 +18,70 @@ namespace VeloxDev.Generators.Writers
         // 于是生成代码不依赖运行时的 ValueTask 入口，netstandard2.0 / net461 的生成目标不受影响。
         // 用普通 class 而不是 record：本项目是 netstandard2.0，位置记录需要
         // System.Runtime.CompilerServices.IsExternalInit，而该类型在 ns2.0 上不存在。
+        // 属性形态由「参数类型里出现的类型参数是谁声明的」决定。
+        // 类的类型参数在类作用域里写得出 -> TypedProperty；方法的类型参数只在访问器里才有 -> TypedGenericAccessor。
+        private enum CommandShape
+        {
+            UntypedProperty,
+            TypedProperty,
+            TypedGenericAccessor,
+        }
+
+        // 构造入口。原先是 0/1/2 三个 int，加上强类型分支后组合太多，int 的注释已经自解释不下去。
+        // Result 后缀的四个是「命令体有返回值」时用的 —— 它们把值接住，交给 IVeloxCommandResult。
+        private enum CommandConstruction
+        {
+            UntypedMainCtor,
+            UntypedParameterOnlyFactory,
+            UntypedTokenOnlyFactory,
+            TypedMainCtor,
+            TypedParameterOnlyFactory,
+            UntypedResultMainCtor,
+            UntypedResultParameterOnlyFactory,
+            TypedResultMainCtor,
+            TypedResultParameterOnlyFactory,
+        }
+
         private sealed class CommandSpec(
-            string name, bool canValidate, int semaphore, string commandExpression, int constructorType)
+            string name,
+            bool canValidate,
+            int semaphore,
+            string commandExpression,
+            CommandShape shape,
+            CommandConstruction construction,
+            string? parameterTypeName,
+            string resultTypeName,
+            string validatorParameterName,
+            string methodTypeParameterList,
+            string methodConstraintClauses,
+            string[] methodTypeParameterNames,
+            string? forcedPropertyTypeName)
         {
             public string Name { get; } = name;
             public bool CanValidate { get; } = canValidate;
             public int Semaphore { get; } = semaphore;
             public string CommandExpression { get; } = commandExpression;
-            public int ConstructorType { get; } = constructorType;
+            public CommandShape Shape { get; } = shape;
+            public CommandConstruction Construction { get; } = construction;
+
+            // 强类型面才有的：参数类型（带 global:: 前缀）、方法类型参数表与约束子句。
+            public string? ParameterTypeName { get; } = parameterTypeName;
+
+            // 命令体的返回值类型；没有返回值时是 object?（恒 null）—— 结果通道始终在，只是空。
+            public string ResultTypeName { get; } = resultTypeName;
+
+            // 校验器形参名跟随源方法的形参名 —— 生成器声明什么名字，用户就得写什么名字（否则 CS8826）。
+            public string ValidatorParameterName { get; } = validatorParameterName;
+
+            public string MethodTypeParameterList { get; } = methodTypeParameterList;
+            public string MethodConstraintClauses { get; } = methodConstraintClauses;
+
+            // 缓存的键要覆盖**全部**类型参数 —— 只按第一个索引会让 M<T, U> 的不同 U 串在一起。
+            public string[] MethodTypeParameterNames { get; } = methodTypeParameterNames;
+
+            // 属性类型被接口实现逼回某个已声明类型时，这里是那个类型的全名；否则为 null。
+            // 缓冲字段与构造仍是强类型的，只有属性类型与 getter 的返回类型跟着它走。
+            public string? ForcedPropertyTypeName { get; } = forcedPropertyTypeName;
         }
 
         private List<CommandSpec> CommandConfig { get; set; } = [];
@@ -91,7 +148,9 @@ namespace VeloxDev.Generators.Writers
                 }
 
                 // Analyze the construction mode
-                if (!TryBuildCommandExpression(methodSymbol, out string commandExpression, out int constructorType, out string reason))
+                var spec = BuildSpec(symbol, methodSymbol, commandName, canValidate, Math.Max(1, semaphore), out string reason);
+
+                if (spec is null)
                 {
                     // 跳过它，不生成注定编不过的东西：产物里再冒一个 CS1503 只会把真正的错误埋掉。
                     Diagnostics.Add(Diagnostic.Create(
@@ -102,8 +161,7 @@ namespace VeloxDev.Generators.Writers
                     continue;
                 }
 
-                // Record the context
-                list.Add(new CommandSpec(commandName, canValidate, Math.Max(1, semaphore), commandExpression, constructorType));
+                list.Add(spec);
             }
 
             CommandConfig = list;
@@ -119,26 +177,29 @@ namespace VeloxDev.Generators.Writers
         private static bool IsToken(IParameterSymbol p) =>
             p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == CANCEL_TOKEN;
 
-        // 形状判定：**返回类型**决定「值怎么变成 Task」，**形参**决定「走哪个构造入口」。
+        // 形状判定：**返回类型**决定「值怎么变成 Task」，**形参**决定「走哪个构造入口」与「属性强不强类型」。
         //
         // 前导形参只支持 0 个或 1 个，末尾可再跟一个 CancellationToken：
         //   0 个      → 命令参数用不上（token 只有在末尾才有意义）
-        //   1 个      → 命令参数就是它：是 object? 就原样传方法组，否则在 thunk 里强转
+        //   1 个      → 命令参数就是它
         // 多于 1 个前导形参不在这里支持 —— 那要求调用方传元组或 DTO，是另一个设计；
         // 让方法组原样落地去报错，不会静默生成错东西。
         //
-        // constructorType：0 = new VeloxCommand（主构造 / Func<Task> / Action），
-        //                  1 = CreateTaskOnlyWithParameter，
-        //                  2 = CreateTaskOnlyWithCancellationToken。
-        private bool TryBuildCommandExpression(
+        // 强类型只在「T 已知」时成立，分两种：
+        //   情形 1  参数类型里的类型参数全由所属类声明 -> 属性类型写得出 IVeloxCommand<P>
+        //   情形 2  参数类型里出现了方法自己的类型参数   -> 类作用域里没有它，只能生成
+        //                                                   Get{名}Command<T>() 访问器
+        // 判据按**符号身份**判，不按名字 —— `class Vm<T> { Task M<T>(T x) }` 里方法的 T 遮蔽了类的 T，
+        // 按名字判会把它错当成情形 1，生成一个能编译但语义错的产物。
+        private CommandSpec? BuildSpec(
+            INamedTypeSymbol containingType,
             IMethodSymbol methodSymbol,
-            out string commandExpression,
-            out int constructorType,
+            string name,
+            bool canValidate,
+            int semaphore,
             out string reason)
         {
-            string name = methodSymbol.Name;
-            commandExpression = name;
-            constructorType = 0;
+            string methodName = methodSymbol.Name;
             reason = string.Empty;
 
             var parameters = methodSymbol.Parameters;
@@ -148,94 +209,376 @@ namespace VeloxDev.Generators.Writers
             bool isValueTask = returnTypeName == VALUE_TASK || returnTypeName.StartsWith(VALUE_TASK + "<");
             bool isVoid = methodSymbol.ReturnsVoid;
 
-            // 泛型方法：生成的方法组无法从 (object?, CancellationToken) 推断出类型实参（CS0411）。
-            // 泛型**类**不受影响 —— 那条路走的是 partial 声明，不是方法组。
-            if (methodSymbol.IsGenericMethod)
+            // 不用 `[^1]`：那是 System.Index，netstandard2.0 上没有。
+            bool hasToken = parameters.Length > 0 && IsToken(parameters[parameters.Length - 1]);
+            int leading = parameters.Length - (hasToken ? 1 : 0);
+            bool isObjectParam = leading == 1 && IsObject(parameters[0]);
+
+            // 泛型方法：类型实参由调用点选定，而一个命令实例的 T 在构造时就固定了。
+            // 只有 T 出现在参数类型里，生成的访问器才有办法把它作为自己的类型参数暴露出去。
+            bool methodTypeParamsInParameter = methodSymbol.IsGenericMethod
+                && leading == 1
+                && CollectTypeParameters(parameters[0].Type).Any(candidate =>
+                    methodSymbol.TypeParameters.Any(tp => SymbolEqualityComparer.Default.Equals(tp, candidate)));
+
+            if (methodSymbol.IsGenericMethod && !methodTypeParamsInParameter)
             {
-                reason = "it is a generic method; the generated command cannot infer its type arguments from a single object? argument, so give it a concrete parameter type (a generic class is fine - it is the method type parameters that cannot be supplied)";
-                return false;
+                reason = "it is a generic method whose type parameters do not appear in its parameter type; a command instance fixes its type argument when it is built, so the generated accessor has no way to carry one - put the type parameters in the parameter type (M<T>(T value)) or make the method non-generic";
+                return null;
+            }
+
+            if (leading > 1)
+            {
+                reason = "it takes more than one parameter before the optional CancellationToken, and a command carries a single argument; take one type of your own instead (a record or a tuple both work)";
+                return null;
             }
 
             if (!isTask && !isValueTask && !isVoid)
             {
                 reason = $"it returns '{methodSymbol.ReturnType.ToDisplayString()}', but a command body must return Task, Task<T>, ValueTask, ValueTask<T> or void";
-                return false;
+                return null;
             }
-
-            // 不用 `[^1]`：那是 System.Index，netstandard2.0 上没有。
-            bool hasToken = parameters.Length > 0 && IsToken(parameters[parameters.Length - 1]);
-            int leading = parameters.Length - (hasToken ? 1 : 0);
-
-            if (leading > 1)
-            {
-                reason = "it takes more than one parameter before the optional CancellationToken, and a command carries a single argument; take one type of your own instead (a record or a tuple both work)";
-                return false;
-            }
-
-            bool isObjectParam = leading == 1 && IsObject(parameters[0]);
 
             if (isVoid && hasToken)
             {
                 reason = "it returns void and takes a CancellationToken, which nothing in a synchronous body can observe; return Task when the body is meant to be cancellable, or drop the parameter";
-                return false;
+                return null;
             }
 
-            // 非 object? 的单参数要在 thunk 里强转；object? 则整段省掉，方法组能直接绑。
-            // 只在 leading == 1 时读 parameters[0] —— 零参方法读它会 IndexOutOfRange。
-            string argument = leading == 0
-                ? string.Empty
-                : isObjectParam
-                    ? "parameter"
-                    : $"({parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})parameter!";
+            // 命令体的返回值。Task<T>/ValueTask<T> 才有值，Task/ValueTask/void 取不到。
+            string? valueType = (isTask || isValueTask)
+                && methodSymbol.ReturnType is INamedTypeSymbol { TypeArguments.Length: 1 } returnNamed
+                    ? FullyQualifiedWithNullability(returnNamed.TypeArguments[0])
+                    : null;
 
-            if (isVoid)
+            // 没有返回值时结果类型仍是 object?（恒 null）—— 结果通道始终在，只是空。
+            // 写成渲染后的形式而不是字面 "object?"：属性类型要与接口声明的类型做字符串比较，
+            // 两边必须用同一种渲染，否则同一种类型会因为拼写不同被判成不可赋值。
+            string resultTypeName = valueType ?? "global::System.Object?";
+
+            // 校验器的形参名跟随源方法的形参名：生成器声明什么，用户就得写什么（否则 CS8826）。
+            // 零形参与仅 token 的方法没有源形参名可抄，只能用 parameter。
+            string validatorParameterName = "parameter";
+            if (leading == 1)
             {
-                if (leading == 1 && !isObjectParam)
-                {
-                    commandExpression = $"parameter => {name}({argument})";
-                }
-
-                return true;   // Action / Action<object?>
+                var sourceName = parameters[0].Name;
+                validatorParameterName = SyntaxFacts.GetKeywordKind(sourceName) != SyntaxKind.None
+                    ? "@" + sourceName
+                    : sourceName;
             }
 
-            if (isTask)
+            // object? 形参维持今天的非强类型形态 —— 它本来就没有类型可强。
+            bool isTyped = leading == 1 && !isObjectParam;
+            string? parameterType = isTyped ? FullyQualifiedWithNullability(parameters[0].Type) : null;
+
+            var shape = !isTyped
+                ? CommandShape.UntypedProperty
+                : methodTypeParamsInParameter
+                    ? CommandShape.TypedGenericAccessor
+                    : CommandShape.TypedProperty;
+
+            string propertyName = $"{name}Command";
+
+            // 同名成员已存在时，今天的产物会在生成文件里撞成 CS0102 —— 报出来比埋掉好。
+            if (containingType.GetMembers(propertyName).Length > 0)
             {
-                if (leading == 0)
-                {
-                    constructorType = hasToken ? 2 : 0;    // 方法组：Func<Task> 或 Func<CancellationToken, Task>
-                    return true;
-                }
-
-                if (isObjectParam)
-                {
-                    constructorType = hasToken ? 0 : 1;    // 方法组：主构造 或 CreateTaskOnlyWithParameter
-                    return true;
-                }
-
-                // 非 object?：方法组转不过去，必须强转
-                commandExpression = hasToken
-                    ? $"(parameter, ct) => {name}({argument}, ct)"
-                    : $"parameter => {name}({argument})";
-                constructorType = hasToken ? 0 : 1;
-                return true;
+                reason = $"a member named '{propertyName}' already exists on this type, and the generated command would be a second definition of it";
+                return null;
             }
 
-            // ValueTask：没有到 Task 的隐式转换，也不能像 Task<T> 那样靠协变（它是结构体），
-            // 所以一律需要 .AsTask() 转换 thunk。末尾的 ct 必须留在 lambda 的最后。
-            if (leading == 0)
+            // 接口/基类里的命令属性声明成的那个类型（IVeloxCommand 或 IVeloxCommand<X>）。
+            // 强类型属性不会隐式实现它（CS0738），所以必须退回**声明的那个类型**。
+            string? requiredPropertyType = DeclaredCommandPropertyTypeInHierarchy(containingType, propertyName);
+
+            if (shape == CommandShape.TypedGenericAccessor && requiredPropertyType is not null)
             {
-                commandExpression = hasToken
-                    ? $"ct => {name}(ct).AsTask()"
-                    : $"() => {name}().AsTask()";
-                constructorType = hasToken ? 2 : 0;
-                return true;
+                reason = $"it is refused because its type parameter belongs to the method, so the generated accessor is a method - while this type (or a base) already declares '{propertyName}' as a command property, which only a property can satisfy";
+                return null;
             }
 
-            commandExpression = hasToken
-                ? $"(parameter, ct) => {name}({argument}, ct).AsTask()"
-                : $"parameter => {name}({argument}).AsTask()";
-            constructorType = hasToken ? 0 : 1;
-            return true;
+            // 命中时只把**属性类型**退回，缓冲字段与构造保持强类型，getter 上转即可 ——
+            // 但那个上转必须真的存在，否则生成的文件里是 CS0266。
+            if (shape == CommandShape.TypedProperty
+                && requiredPropertyType is not null
+                && !CanUpcastTo(requiredPropertyType, parameterType!, resultTypeName))
+            {
+                reason = $"it is refused because this type (or a base) declares '{propertyName}' as '{requiredPropertyType}', and a command built from a '{parameterType}' parameter returning '{resultTypeName}' cannot be assigned to it";
+                return null;
+            }
+
+            string? forcedPropertyType = shape == CommandShape.TypedProperty ? requiredPropertyType : null;
+
+            string commandExpression;
+            CommandConstruction construction;
+
+            if (isTyped)
+            {
+                // lambda 的形参已经是 P，不再需要强转。无 token 的一律走 CreateTypedTaskOnlyWithParameter ——
+                // 它保持 _isCtsNeeded = false，与今天的 CreateTaskOnlyWithParameter 对称；否则每条这样的命令
+                // 都会白分配一个命令体根本观察不到的 CancellationTokenSource。
+                construction = hasToken ? CommandConstruction.TypedMainCtor : CommandConstruction.TypedParameterOnlyFactory;
+
+                if (isVoid)
+                {
+                    // VeloxCommand<T> 没有 Action<T> 重载，语句体 lambda 把同步体包成 Func<P, Task>。
+                    commandExpression = $"value => {{ {methodName}(value); return global::System.Threading.Tasks.Task.CompletedTask; }}";
+                }
+                else if (isValueTask)
+                {
+                    commandExpression = hasToken
+                        ? $"(value, ct) => {methodName}(value, ct).AsTask()"
+                        : $"value => {methodName}(value).AsTask()";
+                }
+                else
+                {
+                    commandExpression = hasToken
+                        ? $"(value, ct) => {methodName}(value, ct)"
+                        : $"value => {methodName}(value)";
+                }
+            }
+            else
+            {
+                // 走到这里的只可能是「零个前导形参」或「object? 形参」—— 非 object 的单参数一律是强类型。
+                commandExpression = methodName;
+                construction = CommandConstruction.UntypedMainCtor;
+
+                if (isTask)
+                {
+                    if (leading == 0)
+                    {
+                        construction = hasToken ? CommandConstruction.UntypedTokenOnlyFactory : CommandConstruction.UntypedMainCtor;
+                    }
+                    else if (isObjectParam)
+                    {
+                        construction = hasToken ? CommandConstruction.UntypedMainCtor : CommandConstruction.UntypedParameterOnlyFactory;
+                    }
+                }
+                else if (isValueTask)
+                {
+                    // 没有到 Task 的隐式转换，也不能像 Task<T> 那样靠协变（它是结构体），
+                    // 所以一律需要 .AsTask() 转换 thunk。末尾的 ct 必须留在 lambda 的最后。
+                    if (leading == 0)
+                    {
+                        commandExpression = hasToken
+                            ? $"ct => {methodName}(ct).AsTask()"
+                            : $"() => {methodName}().AsTask()";
+                        construction = hasToken ? CommandConstruction.UntypedTokenOnlyFactory : CommandConstruction.UntypedMainCtor;
+                    }
+                    else
+                    {
+                        commandExpression = hasToken
+                            ? $"(parameter, ct) => {methodName}(parameter, ct).AsTask()"
+                            : $"parameter => {methodName}(parameter).AsTask()";
+                        construction = hasToken ? CommandConstruction.UntypedMainCtor : CommandConstruction.UntypedParameterOnlyFactory;
+                    }
+                }
+            }
+
+            // 有返回值时换用带结果的构造入口，并把表达式重写成「装箱后交出去」的形式 ——
+            // 今天的表达式靠返回类型协变绑定，T 在那一跳就被丢掉了。
+            if (valueType is not null)
+            {
+                // 按 hasToken 选，不能按原构造值升级 —— 无 token 的工厂收单参委托，带 token 的收双参，
+                // 元数对不上就是 CS1593。
+                construction = (isTyped, hasToken) switch
+                {
+                    (true, true) => CommandConstruction.TypedResultMainCtor,
+                    (true, false) => CommandConstruction.TypedResultParameterOnlyFactory,
+                    (false, true) => CommandConstruction.UntypedResultMainCtor,
+                    (false, false) => CommandConstruction.UntypedResultParameterOnlyFactory,
+                };
+
+                if (isTyped)
+                {
+                    // 强类型：lambda 的形参已经是 P，委托类型与命令体一致，不需要装箱。
+                    commandExpression = isValueTask
+                        ? (hasToken ? $"(value, ct) => {methodName}(value, ct).AsTask()" : $"value => {methodName}(value).AsTask()")
+                        : (hasToken ? $"(value, ct) => {methodName}(value, ct)" : $"value => {methodName}(value)");
+                }
+                else
+                {
+                    // 非强类型：结果要装箱成 object? 才穿得过通道。ValueTask 也能直接 await，不必先 AsTask。
+                    // 元数必须与工厂收的委托一致：无 token 的两个工厂收单参 Func<object?, Task<object?>>，
+                    // 带 token 的收双参 —— 零形参的命令体也得套一层丢掉实参的 lambda 才绑得上。
+                    commandExpression = (leading, hasToken) switch
+                    {
+                        (0, false) => $"async _ => (object?)await {methodName}()",
+                        (0, true) => $"async (_, ct) => (object?)await {methodName}(ct)",
+                        (_, false) => $"async parameter => (object?)await {methodName}(parameter)",
+                        (_, true) => $"async (parameter, ct) => (object?)await {methodName}(parameter, ct)",
+                    };
+                }
+            }
+
+            var (typeParameterList, constraintClauses) = methodTypeParamsInParameter
+                ? TypeParametersOf(methodSymbol)
+                : (string.Empty, string.Empty);
+
+            var typeParameterNames = methodTypeParamsInParameter
+                ? methodSymbol.TypeParameters.Select(static tp => tp.Name).ToArray()
+                : [];
+
+            return new CommandSpec(
+                name,
+                canValidate,
+                semaphore,
+                commandExpression,
+                shape,
+                construction,
+                parameterType,
+                resultTypeName,
+                validatorParameterName,
+                typeParameterList,
+                constraintClauses,
+                typeParameterNames,
+                forcedPropertyType);
+        }
+
+        // 递归收集类型里出现的全部类型参数，数组/指针/泛型实参都要下钻。
+        private static IEnumerable<ITypeParameterSymbol> CollectTypeParameters(ITypeSymbol type)
+        {
+            switch (type)
+            {
+                case ITypeParameterSymbol typeParameter:
+                    yield return typeParameter;
+                    break;
+                case IArrayTypeSymbol array:
+                    foreach (var element in CollectTypeParameters(array.ElementType)) yield return element;
+                    break;
+                case IPointerTypeSymbol pointer:
+                    foreach (var pointed in CollectTypeParameters(pointer.PointedAtType)) yield return pointed;
+                    break;
+                case INamedTypeSymbol named:
+                    foreach (var argument in named.TypeArguments)
+                        foreach (var nested in CollectTypeParameters(argument)) yield return nested;
+                    break;
+            }
+        }
+
+        // 带 global:: 前缀且保留可空注解的类型名。不能用 SymbolDisplayFormat.FullyQualifiedFormat：
+        // 它不带 global::（可能与用户命名空间撞名），也不稳定地带可空注解。
+        private static string FullyQualifiedWithNullability(ITypeSymbol type) =>
+            type.ToDisplayString(new SymbolDisplayFormat(
+                globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+                typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+                miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier));
+
+        // 情形 2 的访问器必须把类型参数表与约束原样搬过去，否则调用方法会 CS0314/CS0452。
+        // 优先抄源码文本 —— `where T : U` 依赖类型参数的书写顺序，符号渲染容易改错顺序。
+        private static (string List, string Constraints) TypeParametersOf(IMethodSymbol method)
+        {
+            foreach (var reference in method.DeclaringSyntaxReferences)
+            {
+                if (reference.GetSyntax() is MethodDeclarationSyntax syntax)
+                {
+                    string list = syntax.TypeParameterList?.ToString() ?? string.Empty;
+                    string constraints = syntax.ConstraintClauses.Count == 0
+                        ? string.Empty
+                        : " " + string.Join(" ", syntax.ConstraintClauses.Select(static clause => clause.ToString()));
+
+                    return (list, constraints);
+                }
+            }
+
+            var rendered = method.TypeParameters.Select(RenderTypeParameter).Where(static text => text.Length > 0).ToArray();
+
+            return (
+                "<" + string.Join(", ", method.TypeParameters.Select(static tp => tp.Name)) + ">",
+                rendered.Length == 0 ? string.Empty : " " + string.Join(" ", rendered));
+        }
+
+        private static string RenderTypeParameter(ITypeParameterSymbol typeParameter)
+        {
+            var parts = new List<string>();
+
+            if (typeParameter.HasReferenceTypeConstraint)
+            {
+                parts.Add(typeParameter.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "class?" : "class");
+            }
+
+            if (typeParameter.HasUnmanagedTypeConstraint)
+            {
+                parts.Add("unmanaged");
+            }
+            else if (typeParameter.HasValueTypeConstraint)
+            {
+                parts.Add("struct");
+            }
+
+            if (typeParameter.HasNotNullConstraint)
+            {
+                parts.Add("notnull");
+            }
+
+            foreach (var constraint in typeParameter.ConstraintTypes)
+            {
+                parts.Add(constraint.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            }
+
+            if (typeParameter.HasConstructorConstraint)
+            {
+                parts.Add("new()");
+            }
+
+            return parts.Count == 0 ? string.Empty : $"where {typeParameter.Name} : {string.Join(", ", parts)}";
+        }
+
+        // 接口（含基类贡献的）与基类里是否已经有一个命令属性，返回它**声明成的那个类型**。
+        // 强类型属性不会隐式实现声明的 IVeloxCommand 或 IVeloxCommand<X>（CS0738），所以命中时
+        // 属性类型必须退回这个字符串，而不是随便退成 IVeloxCommand。
+        private static string? DeclaredCommandPropertyTypeInHierarchy(INamedTypeSymbol type, string propertyName)
+        {
+            foreach (var contract in type.AllInterfaces)
+            {
+                var declared = DeclaredCommandPropertyType(contract, propertyName);
+                if (declared is not null)
+                {
+                    return declared;
+                }
+            }
+
+            for (var baseType = type.BaseType;
+                 baseType != null && baseType.SpecialType != SpecialType.System_Object;
+                 baseType = baseType.BaseType)
+            {
+                var declared = DeclaredCommandPropertyType(baseType, propertyName);
+                if (declared is not null)
+                {
+                    return declared;
+                }
+            }
+
+            return null;
+        }
+
+        // 生成的 2-arity 属性能不能赋给接口声明的那个类型。两条继承链撑得起前两种：
+        // IVeloxCommand<TP,TR> : IVeloxCommand<TP> : IVeloxCommand（注意 TR 没有声明逆变，
+        // 所以结果类型不同的 2-arity 之间不可转换）。
+        private static bool CanUpcastTo(string declared, string parameterType, string resultType)
+        {
+            const string untyped = NAMESPACE_VELOX_MVVM + ".IVeloxCommand";
+
+            return declared == untyped
+                || declared == $"{untyped}<{parameterType}>"
+                || declared == $"{untyped}<{parameterType}, {resultType}>";
+        }
+
+        private static string? DeclaredCommandPropertyType(INamedTypeSymbol type, string propertyName)
+        {
+            const string untyped = NAMESPACE_VELOX_MVVM + ".IVeloxCommand";
+
+            foreach (var property in type.GetMembers(propertyName).OfType<IPropertySymbol>())
+            {
+                // 用保留可空注解的那个格式：FullyQualifiedFormat 会把 object? 抹成 object。
+                var declared = FullyQualifiedWithNullability(property.Type);
+                if (declared == untyped || declared.StartsWith(untyped + "<"))
+                {
+                    return declared;
+                }
+            }
+
+            return null;
         }
 
         // （转换 thunk 的构造已并入 ParseConstructorType —— 形参个数与返回类型要一起判。）
@@ -268,50 +611,118 @@ namespace VeloxDev.Generators.Writers
 
             foreach (var config in CommandConfig)
             {
-                string constructor = config.ConstructorType switch
+                if (config.Shape == CommandShape.TypedGenericAccessor)
                 {
-                    1 => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithParameter(",
-                    2 => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithCancellationToken(",
-                    _ => $"new {NAMESPACE_VELOX_MVVM}.VeloxCommand("
-                };
-                if (config.CanValidate)
-                {
-                    builder.AppendLine($$"""
-                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Name}}Command = null;
-                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Name}}Command
-                                                {
-                                                    get
-                                                    {
-                                                        _buffer_{{config.Name}}Command ??= {{constructor}}
-                                                            command: {{config.CommandExpression}},
-                                                            canExecute: CanExecute{{config.Name}}Command,
-                                                            semaphore: {{config.Semaphore}});
-                                                        return _buffer_{{config.Name}}Command;
-                                                    }
-                                                }
-                                                private partial bool CanExecute{{config.Name}}Command(object? parameter);
-                                             """);
+                    AppendTypeParameterAccessor(builder, config);
                 }
                 else
                 {
-                    builder.AppendLine($$"""
-                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Name}}Command = null;
-                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Name}}Command
-                                                {
-                                                    get
-                                                    {
-                                                        _buffer_{{config.Name}}Command ??= {{constructor}}
-                                                            command: {{config.CommandExpression}},
-                                                            canExecute: _ => true,
-                                                            semaphore: {{config.Semaphore}});
-                                                        return _buffer_{{config.Name}}Command;
-                                                    }
-                                                }
-                                             """);
+                    AppendProperty(builder, config);
                 }
             }
 
             return builder.ToString();
+        }
+
+        private static string ConstructionPrefix(CommandSpec config)
+        {
+            string parameterType = config.ParameterTypeName ?? string.Empty;
+
+            return config.Construction switch
+            {
+                CommandConstruction.UntypedParameterOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithParameter(",
+                CommandConstruction.UntypedTokenOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithCancellationToken(",
+                CommandConstruction.TypedParameterOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTypedTaskOnlyWithParameter<{parameterType}>(",
+                CommandConstruction.TypedMainCtor => $"new {NAMESPACE_VELOX_MVVM}.VeloxCommand<{parameterType}>(",
+                CommandConstruction.UntypedResultMainCtor => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskWithResult(",
+                CommandConstruction.UntypedResultParameterOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithResult(",
+                CommandConstruction.TypedResultMainCtor => $"new {NAMESPACE_VELOX_MVVM}.VeloxCommand<{parameterType}, {config.ResultTypeName}>(",
+                CommandConstruction.TypedResultParameterOnlyFactory => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand<{parameterType}, {config.ResultTypeName}>.CreateTaskOnlyWithResult(",
+                _ => $"new {NAMESPACE_VELOX_MVVM}.VeloxCommand("
+            };
+        }
+
+        private static void AppendProperty(StringBuilder builder, CommandSpec config)
+        {
+            // 缓冲字段始终是强类型的那一份；只有属性类型可能被接口实现逼回非强类型，那时 getter 隐式上转。
+            // 强类型一律写成 2-arity：无返回值的命令 ResultTypeName 是 object?（恒 null），
+            // VeloxCommand<P> 正是靠实现 IVeloxCommand<P, object?> 让这一条统一成立。
+            string typed = config.ParameterTypeName is null
+                ? $"{NAMESPACE_VELOX_IMVVM}.IVeloxCommand"
+                : $"{NAMESPACE_VELOX_IMVVM}.IVeloxCommand<{config.ParameterTypeName}, {config.ResultTypeName}>";
+            string propertyType = config.ForcedPropertyTypeName ?? typed;
+            string constructor = ConstructionPrefix(config);
+
+            if (config.CanValidate)
+            {
+                builder.AppendLine($$"""
+                                            private {{typed}}? _buffer_{{config.Name}}Command = null;
+                                            public {{propertyType}} {{config.Name}}Command
+                                            {
+                                                get
+                                                {
+                                                    _buffer_{{config.Name}}Command ??= {{constructor}}
+                                                        command: {{config.CommandExpression}},
+                                                        canExecute: CanExecute{{config.Name}}Command,
+                                                        semaphore: {{config.Semaphore}});
+                                                    return _buffer_{{config.Name}}Command;
+                                                }
+                                            }
+                                            private partial bool CanExecute{{config.Name}}Command({{config.ParameterTypeName ?? "object?"}} {{config.ValidatorParameterName}});
+                                         """);
+            }
+            else
+            {
+                builder.AppendLine($$"""
+                                            private {{typed}}? _buffer_{{config.Name}}Command = null;
+                                            public {{propertyType}} {{config.Name}}Command
+                                            {
+                                                get
+                                                {
+                                                    _buffer_{{config.Name}}Command ??= {{constructor}}
+                                                        command: {{config.CommandExpression}},
+                                                        canExecute: _ => true,
+                                                        semaphore: {{config.Semaphore}});
+                                                    return _buffer_{{config.Name}}Command;
+                                                }
+                                            }
+                                         """);
+            }
+        }
+
+        // 情形 2：类型参数属于方法，类作用域里没有它，属性写不出来，只能给访问器方法。
+        // 名字加 Get 前缀是必需的 —— 同一类型里属性与方法同名是 CS0102，而 {名}Command 已被属性形式占用。
+        private static void AppendTypeParameterAccessor(StringBuilder builder, CommandSpec config)
+        {
+            string parameterType = config.ParameterTypeName!;
+            string constructor = ConstructionPrefix(config);
+            string canExecute = config.CanValidate ? $"CanExecute{config.Name}Command" : "_ => true";
+
+            // 缓存的键覆盖全部类型参数。只按第一个索引会让 M<T, U> 的不同 U 共用同一个命令实例。
+            string keyType = config.MethodTypeParameterNames.Length == 1
+                ? "global::System.Type"
+                : "(" + string.Join(", ", config.MethodTypeParameterNames.Select(static _ => "global::System.Type")) + ")";
+            string keyExpression = config.MethodTypeParameterNames.Length == 1
+                ? $"typeof({config.MethodTypeParameterNames[0]})"
+                : "(" + string.Join(", ", config.MethodTypeParameterNames.Select(static name => $"typeof({name})")) + ")";
+
+            builder.AppendLine($$"""
+                                        private readonly global::System.Collections.Concurrent.ConcurrentDictionary<{{keyType}}, {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand> _buffer_{{config.Name}}Command = new();
+                                        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand<{{parameterType}}, {{config.ResultTypeName}}> Get{{config.Name}}Command{{config.MethodTypeParameterList}}(){{config.MethodConstraintClauses}}
+                                        {
+                                            return ({{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand<{{parameterType}}, {{config.ResultTypeName}}>)_buffer_{{config.Name}}Command.GetOrAdd(
+                                                {{keyExpression}},
+                                                _ => ({{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand){{constructor}}
+                                                    command: {{config.CommandExpression}},
+                                                    canExecute: {{canExecute}},
+                                                    semaphore: {{config.Semaphore}}));
+                                        }
+                                     """);
+
+            if (config.CanValidate)
+            {
+                builder.AppendLine($"        private partial bool CanExecute{config.Name}Command{config.MethodTypeParameterList}({parameterType} {config.ValidatorParameterName}){config.MethodConstraintClauses};");
+            }
         }
     }
 }

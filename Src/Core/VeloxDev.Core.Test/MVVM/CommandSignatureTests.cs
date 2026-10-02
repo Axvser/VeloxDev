@@ -87,6 +87,120 @@ public class CommandSignatureTests
             "the ValueTask form must match the Task form - its thunk is a one-parameter lambda precisely so that it binds the same entry point");
     }
 
+    [TestMethod]
+    public void ATypedParameter_ProducesAStronglyTypedCommand()
+    {
+        var vm = new CommandSignatureViewModel();
+
+        // 不带 cast 的赋值就是断言：属性若还是非强类型的 IVeloxCommand，这几行编译不过。
+        IVeloxCommand<string> text = vm.TypedStringCommand;
+        IVeloxCommand<string> textWithToken = vm.TypedStringWithTokenCommand;
+        IVeloxCommand<int> number = vm.TypedNumberCommand;
+        IVeloxCommand<string> fromVoid = vm.TypedVoidCommand;
+
+        Assert.IsNotNull(text);
+        Assert.IsNotNull(textWithToken);
+        Assert.IsNotNull(number);
+        Assert.IsNotNull(fromVoid);
+    }
+
+    [TestMethod]
+    public async Task ATypedParameterOnlyBody_GetsNoCancellationTokenSource()
+    {
+        var vm = new CommandSignatureViewModel();
+
+        var fromTask = await CaptureStartedSourceAsync(vm.TypedStringCommand);
+        var fromValueTask = await CaptureStartedSourceAsync(vm.TypedNumberCommand);
+
+        Assert.IsNull(fromTask, "a typed body that cannot observe a token needs no source either");
+        Assert.IsNull(fromValueTask,
+            "the typed ValueTask form has to reach the same null-token entry point as the typed Task form");
+    }
+
+    [TestMethod]
+    public async Task ATypeArgumentFromTheContainingClass_IsCarriedByTheProperty()
+    {
+        var vm = new TypedGenericViewModel<string>();
+
+        IVeloxCommand<string> typed = vm.StoreCommand;
+        await RunToCompletionAsync(typed, "a");
+
+        CollectionAssert.AreEqual(new[] { "a" }, vm.Seen);
+    }
+
+    [TestMethod]
+    public void ATypedValidator_IsDeclaredWithTheParameterType()
+    {
+        var vm = new ValidatedTypedCommandViewModel();
+        IVeloxCommand<string> typed = vm.FilterCommand;
+
+        Assert.IsTrue(typed.CanExecute("ok"), "the validator receives the query, not a boxed argument");
+        Assert.IsFalse(typed.CanExecute(""), "and its answer is what the command reports");
+    }
+
+    [TestMethod]
+    public async Task ACommandSatisfyingAnUntypedInterfaceProperty_KeepsTheUntypedType()
+    {
+        // MoveCommand 的参数是具体类型，但接口把属性声明为非强类型 —— 生成器必须让属性退回去，
+        // 否则这里 CS0738，整个测试工程编译不过。
+        var vm = new MoveCommandHolderViewModel();
+        IHasMoveCommand contract = vm;
+
+        await RunToCompletionAsync(contract.MoveCommand, new MovePayload { Value = 7 });
+
+        CollectionAssert.AreEqual(new[] { 7 }, vm.Seen);
+    }
+
+    [TestMethod]
+    public async Task AGenericMethod_GivesOneCommandPerTypeArgument()
+    {
+        var vm = new GenericMethodCommandViewModel();
+
+        IVeloxCommand<string> forString = vm.GetStoreCommand<string>();
+        IVeloxCommand<Uri> forUri = vm.GetStoreCommand<Uri>();
+
+        Assert.AreNotSame((object)forString, (object)forUri, "each closed type argument owns its own command, queue and lock");
+
+        await RunToCompletionAsync(forString, "a");
+        await RunToCompletionAsync(forUri, new Uri("https://example.invalid/"));
+
+        CollectionAssert.AreEqual(new[] { "a", "https://example.invalid/" }, vm.Seen);
+    }
+
+    [TestMethod]
+    public void AGenericMethodWithAValidator_UsesTheGenericValidator()
+    {
+        var vm = new ValidatedGenericMethodCommandViewModel();
+
+        // 约束与类型参数都被搬运到了 CanExecuteStoreCommand<T> 上 —— 这个类型能编译就是断言。
+        Assert.IsTrue(vm.GetStoreCommand<string>().CanExecute("ok"));
+        Assert.IsFalse(vm.GetStoreCommand<Uri>().CanExecute(null!), "and the validator's answer is what it reports");
+    }
+
+    [TestMethod]
+    public void CanExecuteWithANullArgument_AnswersFalseForAValueTypeParameter()
+    {
+        // ICommand.CanExecute(null) 是常态，不是异常路径 —— WPF 在应用按钮模板时会带着 null 调一次。
+        // 值类型的 (T)value 在那种情况下会抛，所以这里必须答 false 而不是把异常扔给调用方。
+        var vm = new ValidatedValueTypeCommandViewModel();
+        IVeloxCommand<int> typed = vm.NotifyCountCommand;
+
+        Assert.IsFalse(typed.CanExecute(null!), "a null argument can never satisfy a value-typed command");
+        Assert.IsTrue(typed.CanExecute(1));
+        Assert.IsFalse(typed.CanExecute(0), "and the validator still decides the real cases");
+    }
+
+    [TestMethod]
+    public void CanExecuteWithANullArgument_ReachesAReferenceTypeValidator()
+    {
+        // 引用类型的 T 则原样把 null 交给校验器 —— 所以校验器自己必须 null 检查。
+        // 这正是「强类型是类型信息、不是保证」在实践中的样子。
+        var vm = new ValidatedTypedCommandViewModel();
+        IVeloxCommand<string> typed = vm.FilterCommand;
+
+        Assert.IsFalse(typed.CanExecute(null!));
+    }
+
     private static async Task<CancellationTokenSource?> CaptureStartedSourceAsync(IVeloxCommand command)
     {
         CancellationTokenSource? captured = null;
@@ -128,7 +242,9 @@ public class CommandSignatureTests
     [TestMethod]
     public async Task ATypedParameterOfTheWrongType_FailsTheExecutionInsteadOfSilentlyDoingNothing()
     {
-        // 强转是运行期的 —— 这条钉住的正是它的代价：传错类型不会静默，但也不是编译错误。
+        // 强转是运行期的。属性虽然已经强类型了，但 IVeloxCommand<T> 派生自 IVeloxCommand，
+        // 基接口的 object? 重载始终可达 —— 传错类型仍然编译通过，仍然只在运行期失败。
+        // 这条钉住的正是那个代价，也是「强类型只是类型信息，不是编译期保证」的现场证据。
         var vm = new CommandSignatureViewModel();
 
         var completion = await vm.TypedStringCommand.ExecuteAndWaitAsync(42);

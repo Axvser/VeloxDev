@@ -13,6 +13,10 @@
 |---|---|---|
 | 声明可观察属性 | `[VeloxProperty]`（`VeloxPropertyAttribute.cs:25`，`AttributeUsage(Field \| Property)`） | 用户 |
 | 字段与属性**成对**声明同一个逻辑属性 | 同一条 `[VeloxProperty]` 同时标在字段与 `partial` 属性上：字段承载默认值与**字段专属特性**，属性承载访问形态与**属性专属特性**。属性路会复用那个字段，不再自己声明（`MVVMWriter.ResolveBackingStorage`，2026-10-02） | 用户 |
+| 命令参数是具体类型 → 属性变**强类型** | `[VeloxCommand] Task M(MoveArgs a)` ⇒ 属性类型 `IVeloxCommand<MoveArgs, object?>`，`canValidate` 的 partial 也拿到 `MoveArgs`（2026-10-02） | 用户 |
+| 取命令体的**返回值** | 命令体返回 `Task<R>`/`ValueTask<R>` ⇒ 属性类型 `IVeloxCommand<P, R>`：`await cmd.ExecuteAsync(p, ct)` 直接得 `R`；非强类型命令走 `IVeloxCommandResult.ExecuteAsync(object?, ct)`（装箱）。**失败即抛**（`Failed` 重抛原异常、`Canceled`/`Refused` 各抛对应类型）。无返回值时 `R = object?` 恒 null（2026-10-02） | 用户 |
+| 同步取返回值 | `Execute(p, out r)` —— 阻塞调用线程到本次执行结束。**在命令体内部对自己调用会自锁** | 用户 |
+| 泛型方法（T 在参数类型里）→ **访问器方法** | `[VeloxCommand] Task M<T>(T x)` ⇒ `IVeloxCommand<T> GetMCommand<T>()`，按类型实参缓存。**不可绑定**，每个封闭 T 一套队列/锁（2026-10-02） | 用户 |
 | 读生成器报出的声明冲突 | `VELOX_MVVM_PROP001`（Error）/ `VELOX_MVVM_PROP002`、`VELOX_MVVM_PROP003`（Warning），见 `Diagnostics.cs`；命令侧是 `VELOX_MVVM_CMD001` | 用户读诊断 |
 | 声明命令 | `[VeloxCommand(name="Auto", canValidate=false, semaphore=1)]`（`VeloxCommandAttribute.cs:35-44`） | 用户 |
 | 集合项级钩子 | 四个 `partial void OnItemAddedTo{名} / OnItemRemovedFrom{名} / OnItemMovedIn{名} / OnItemsResetIn{名}`（`Base/Analizer.cs:814-817`） | 用户实现 |
@@ -41,6 +45,18 @@
 | `public ValueTask FooAsync(object? p)` 等 | 按形参走对应的 `.AsTask()` thunk（`CommandWriter.cs:149-178`）—— 四种形态与 `Task` 那四种一一对称 | `(CancellationToken)` / `(object?, CancellationToken)` 两种为 **true**，其余 false | 带 token 的两种**能** |
 | `public Task FooAsync(string s, CancellationToken ct)` | `new VeloxCommand(command: (parameter, ct) => Foo((string)parameter!, ct), …)` —— **thunk 里强转** | **true** | 能 |
 | `[VeloxCommand]` 标在别的签名上 | `new VeloxCommand(command: 方法名, ...)`（`:207`） | 视重载 | 视重载 |
+| `public Task FooAsync(string s)`（具体类型，无 token） | `CreateTypedTaskOnlyWithParameter<string>`，属性类型 `IVeloxCommand<string>` | false | **不能** |
+| `public Task FooAsync(MoveArgs a, CancellationToken ct)` | `new VeloxCommand<MoveArgs>(…)`，属性类型 `IVeloxCommand<MoveArgs>` | **true** | 能 |
+| `public Task FooAsync<T>(T x) where T : class` | `IVeloxCommand<T> GetFooCommand<T>()`，`ConcurrentDictionary` 按 `typeof(T)` 缓存 | false | **不能** |
+
+**强类型不是「编译期保证」**（2026-10-02 实测）：`IVeloxCommand<T>` 派生自非强类型接口，`c.Execute(42)` 仍然编译通过、仍然只在运行期 `Failed`。它给的是类型信息与强类型校验钩子。**值类型也仍然装箱** —— 管道是 `object?`。**情形 2 的访问器不可绑定**，且每个封闭 `T` 独立持有队列/锁/并发上限。
+
+**返回值的四条注意**（2026-10-02）：
+
+1. **校验器形参名必须跟源方法一致** —— `HandleNote(NotePayload note)` 生成的是 `CanExecuteHandleNoteCommand(NotePayload note)`；写别的名字报 **CS8826**（警告，不报错但会挂着）。零形参与仅 token 的方法只能叫 `parameter`。
+2. **参数类型必须可见** —— 生成的命令属性一律 `public`，强类型属性把参数类型带进签名，参数类型不可见就是 **CS0053**。这是本轮新出现的约束（以前 `object?` 形参不暴露任何类型）。
+3. **`Task<TR>` 那条与前两轮的取用方式不同**：`ExecuteAndWaitAsync` **不抛**、只报 `CommandCompletion` 结局；`ExecuteAsync(p, ct)` / `GetResultOrThrow` **抛**。按调用点想要哪种反应来选。
+4. **同步 `Execute(p, out r)` 会阻塞**（含排队与等锁），且不能从命令体内部对自己调用。
 
 **强转是运行期的**：`FooCommand.Execute(42)` 不会编译报错，而是变成一次 `Failed` 执行（`InvalidCastException`）。多值场景**不要**指望我们自动组元组 —— 走 DTO：`Task FooAsync(MoveArgs args, CancellationToken ct)`，同样是单参数，但编译期安全、实例可复用（零分配）。
 

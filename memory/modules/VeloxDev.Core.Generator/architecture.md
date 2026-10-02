@@ -134,7 +134,7 @@ context.RegisterSourceOutput(
 - 跳过是因为产物**注定编不过** —— 再冒一个 CS1503 只会把真正的错误埋掉。全部方法都被拒时 `CanWrite()` 为假，**整个文件都不生成**。
 - 这与之前的行为差别很大：以前报的是生成文件里的 `CS1503 无法从"方法组"转换…`，作者看到的是一个自己没写过的方法组和构造签名。
 
-被拒的四种（消息里的措辞就是「该怎么改」）：泛型**方法**、返回类型不认识、前导形参多于 1 个、`void` 带 `CancellationToken`。
+被拒的四种（消息里的措辞就是「该怎么改」）：**类型参数不出现在参数类型里的**泛型方法、返回类型不认识、前导形参多于 1 个、`void` 带 `CancellationToken`。2026-10-02 起又加了两条同 ID 的理由：情形 2 的泛型方法撞上「接口已声明非强类型命令属性」（只能给方法、接口要属性，无法退让）、以及 `{名}Command` 已被同名成员占用（此前会静默产出 CS0102）。
 
 `DiagnosticDescriptor` 在 `Diagnostics.cs`；`CommandWriter.Diagnostics` 收集，`Command.cs` 用 `context.ReportDiagnostic` 报出去。**这是本仓库第一个 Roslyn 诊断**（此前只有 `.targets` 里的 `VELOXCFG0001` 那条 MSBuild 警告）。
 
@@ -183,7 +183,7 @@ context.RegisterSourceOutput(
 
 **泛型类本身与普通嵌套类都没问题**（实测已可用），坏的只有「泛型外类 + 嵌套类」这一个组合。
 
-**泛型方法则本质不支持**：生成的方法组 `Foo` 无法从 `(object?, CancellationToken)` 推断出 `T`（实测 CS0411 + CS0029），除非要求作者在特性里显式给出类型实参 —— 那是另一个设计，目前不做。
+**泛型方法只在「类型参数不出现在参数类型里」时才拒绝**（2026-10-02 放宽）：那种情况下生成的方法组 `Foo` 无法从 `(object?, CancellationToken)` 推断出 `T`（实测 CS0411 + CS0029）。`M<T>(T value)` 这类现在**支持** —— 生成的访问器 `Get{名}Command<T>()` 自带类型参数，见 [MVVM 架构](../../MVVM/architecture.md) §六。
 | `Writers/TickWriter.cs` | `InitializeTickable` / `CloseTickable` / 5 个 `partial void` 钩子 | `TickableAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeTickable()` 等于什么都没发生 |
 | `Writers/AopWriter.cs` | AOP 接口实现 + `Aop()` 扩展方法 | — | 见 §三 |
 | `AopInterface.cs` | AOP 接口本身（`VeloxDev.AopInterfaces` 命名空间） | — | 它**不在 `Writers/` 下**，是唯一一个把生成逻辑直接写在生成器类里的 |

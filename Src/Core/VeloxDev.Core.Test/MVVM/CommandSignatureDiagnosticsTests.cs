@@ -30,7 +30,7 @@ public class CommandSignatureDiagnosticsTests
     }
 
     [TestMethod]
-    public void AGenericMethod_IsRefusedWithItsOwnDiagnostic()
+    public void AGenericMethodWhoseTypeParametersMissItsParameter_IsRefusedWithItsOwnDiagnostic()
     {
         var (diagnostics, generated) = Run(
             "private Task<int> M<T>(object? p) { _ = p; return Task.FromResult(1); }");
@@ -38,11 +38,34 @@ public class CommandSignatureDiagnosticsTests
         Assert.HasCount(1, diagnostics, Describe(diagnostics));
         Assert.AreEqual(Id, diagnostics[0].Id);
         StringAssert.Contains(diagnostics[0].GetMessage(), "generic");
+        Assert.IsEmpty(generated, "a refused method must not reach the generated file either");
 
         // 泛型**类**是另一回事：它走 partial 声明，不该被这条诊断波及（见 GenericOuterNestedCommandViewModel）。
         var (classDiagnostics, _) = Run(
             "private Task M(object? p) { _ = p; return Task.CompletedTask; }", genericClass: true);
         Assert.IsEmpty(classDiagnostics, "a generic class must not be refused - only a generic method is");
+    }
+
+    [TestMethod]
+    public void AGenericMethodWhoseTypeParameterIsItsParameter_IsAccepted()
+    {
+        // 拒绝条件放宽了：T 出现在参数类型里，访问器就能把它作为自己的类型参数带出去。
+        var (diagnostics, generated) = Run(
+            "private Task M<T>(T value) where T : class { _ = value; return Task.CompletedTask; }");
+
+        Assert.IsEmpty(diagnostics, Describe(diagnostics));
+        StringAssert.Contains(generated, "GetMCommand<T>() where T : class");
+        StringAssert.Contains(generated, "IVeloxCommand<T, global::System.Object?>");
+    }
+
+    [TestMethod]
+    public void AConcreteParameter_EmitsATypedPropertyAndItsMatchingConstructor()
+    {
+        var (diagnostics, generated) = Run("private Task M(string value) { _ = value; return Task.CompletedTask; }");
+
+        Assert.IsEmpty(diagnostics, Describe(diagnostics));
+        StringAssert.Contains(generated, "IVeloxCommand<global::System.String, global::System.Object?>");
+        StringAssert.Contains(generated, "CreateTypedTaskOnlyWithParameter<global::System.String>");
     }
 
     [TestMethod]
@@ -80,6 +103,152 @@ public class CommandSignatureDiagnosticsTests
 
         Assert.IsEmpty(diagnostics, Describe(diagnostics));
         Assert.IsNotEmpty(generated, "and all of them must still produce a file");
+    }
+
+    [TestMethod]
+    public void EveryTypedAndGenericShape_IsAcceptedSilently()
+    {
+        // 与 EverySupportedShape_IsAcceptedSilently 互补：那一份钉非强类型形态，这一份钉强类型与泛型形态。
+        const string body = """
+            private Task<string> T1() => Task.FromResult("x");
+            private Task<string> T2(object? p) { _ = p; return Task.FromResult("x"); }
+            private Task<string> T3(CancellationToken ct) { _ = ct; return Task.FromResult("x"); }
+            private Task<string> T4(object? p, CancellationToken ct) { _ = p; _ = ct; return Task.FromResult("x"); }
+            private Task<string> T5(string s) { _ = s; return Task.FromResult("x"); }
+            private Task<string> T6(string s, CancellationToken ct) { _ = s; _ = ct; return Task.FromResult("x"); }
+            private ValueTask<string> T7() => new("x");
+            private ValueTask<string> T8(object? p) { _ = p; return new("x"); }
+            private ValueTask<string> T9(CancellationToken ct) { _ = ct; return new("x"); }
+            private ValueTask<string> T10(object? p, CancellationToken ct) { _ = p; _ = ct; return new("x"); }
+            private ValueTask<int> T11(int n) => new(n);
+            private ValueTask<int> T12(int n, CancellationToken ct) { _ = ct; return new(n); }
+            private Task G1<T>(T v) { _ = v; return Task.CompletedTask; }
+            private Task G2<T>(T v, CancellationToken ct) { _ = v; _ = ct; return Task.CompletedTask; }
+            private ValueTask G3<T>(T v) { _ = v; return default; }
+            private ValueTask G4<T>(T v, CancellationToken ct) { _ = v; _ = ct; return default; }
+            private void G5<T>(T v) { _ = v; }
+            private Task G6<T>(T[] v) { _ = v; return Task.CompletedTask; }
+            private Task G7<T>((T, T) v) { _ = v; return Task.CompletedTask; }
+            private Task G8<T, U>((T, U) v) { _ = v; return Task.CompletedTask; }
+            private Task G9<T>(T v) where T : class { _ = v; return Task.CompletedTask; }
+            private Task G10<T>(T v) where T : struct { _ = v; return Task.CompletedTask; }
+            """;
+
+        var (diagnostics, generated) = Run(body);
+
+        Assert.IsEmpty(diagnostics, Describe(diagnostics));
+        Assert.IsNotEmpty(generated, "and all of them must still produce a file");
+
+        // 类自己的类型参数（情形 1）：参数类型里出现的是类的 T，属性类型写得出 IVeloxCommand<T>。
+        var (classDiagnostics, classGenerated) = Run(
+            "private Task H1(T v) { _ = v; return Task.CompletedTask; }", genericClass: true);
+        Assert.IsEmpty(classDiagnostics, Describe(classDiagnostics));
+        StringAssert.Contains(classGenerated, "IVeloxCommand<T, global::System.Object?>");
+    }
+
+    [TestMethod]
+    public void ACommandNameAlreadyTakenOnTheType_IsRefused()
+    {
+        // 以前这会静默产出 CS0102 —— 生成文件里冒出第二个 RunCommand。
+        var (diagnostics, generated) = GeneratorProbe.Run(new Command(), """
+            using System;
+            using System.Threading.Tasks;
+            using VeloxDev.MVVM;
+
+            namespace Probe;
+
+            public partial class Vm
+            {
+                public IVeloxCommand RunCommand => throw new NotSupportedException();
+                [VeloxCommand] private Task Run() => Task.CompletedTask;
+            }
+            """, "NameClashProbe");
+
+        Assert.HasCount(1, diagnostics, GeneratorProbe.Describe(diagnostics));
+        Assert.AreEqual(Id, diagnostics[0].Id);
+        StringAssert.Contains(diagnostics[0].GetMessage(), "already exists");
+        Assert.IsEmpty(generated, "nothing can be generated for a name that is taken");
+    }
+
+    [TestMethod]
+    public void AGenericAccessorBesideAnInterfaceCommandProperty_IsRefused()
+    {
+        // 接口要的是属性，泛型访问器只能给方法 —— 没有可退让的余地。
+        var (diagnostics, _) = GeneratorProbe.Run(new Command(), """
+            using System.Threading.Tasks;
+            using VeloxDev.MVVM;
+
+            namespace Probe;
+
+            public interface IHasRun
+            {
+                IVeloxCommand RunCommand { get; }
+            }
+
+            public partial class Vm : IHasRun
+            {
+                [VeloxCommand] private Task Run<T>(T value) { _ = value; return Task.CompletedTask; }
+            }
+            """, "GenericAccessorContractProbe");
+
+        Assert.HasCount(1, diagnostics, GeneratorProbe.Describe(diagnostics));
+        Assert.AreEqual(Id, diagnostics[0].Id);
+        StringAssert.Contains(diagnostics[0].GetMessage(), "only a property can satisfy");
+    }
+
+    [DataRow("IVeloxCommand<string>", "IVeloxCommand<global::System.String> RunCommand")]
+    [DataRow("IVeloxCommand<string, object?>", "IVeloxCommand<global::System.String, global::System.Object?> RunCommand")]
+    [TestMethod]
+    public void AnInterfaceCommandProperty_MakesThePropertyKeepTheDeclaredType(
+        string declared, string expectedProperty)
+    {
+        // 接口声明的类型必须被原样采用：退成别的形状是 CS0738，退成不可转换的形状是 CS0266。
+        // 两条继承链撑得起这两行 —— 2-arity 派生自 1-arity，1-arity 派生自 IVeloxCommand。
+        var (diagnostics, generated) = GeneratorProbe.Run(new Command(), $$"""
+            using System.Threading.Tasks;
+            using VeloxDev.MVVM;
+
+            namespace Probe;
+
+            public interface IHasRun
+            {
+                {{declared}} RunCommand { get; }
+            }
+
+            public partial class Vm : IHasRun
+            {
+                [VeloxCommand] private Task Run(string value) { _ = value; return Task.CompletedTask; }
+            }
+            """, "TypedContractProbe");
+
+        Assert.IsEmpty(diagnostics, GeneratorProbe.Describe(diagnostics));
+        Assert.IsTrue(generated.Contains(expectedProperty), generated);
+    }
+
+    [TestMethod]
+    public void AnInterfaceCommandPropertyWithADifferentResultType_IsRefused()
+    {
+        // 声明的是 object?，命令体返回 int —— 没有声明逆变，这个上转不存在，生成出来就是 CS0266。
+        var (diagnostics, _) = GeneratorProbe.Run(new Command(), """
+            using System.Threading.Tasks;
+            using VeloxDev.MVVM;
+
+            namespace Probe;
+
+            public interface IHasRun
+            {
+                IVeloxCommand<string, object?> RunCommand { get; }
+            }
+
+            public partial class Vm : IHasRun
+            {
+                [VeloxCommand] private Task<int> Run(string value) { _ = value; return Task.FromResult(1); }
+            }
+            """, "TypedContractMismatchProbe");
+
+        Assert.HasCount(1, diagnostics, GeneratorProbe.Describe(diagnostics));
+        Assert.AreEqual(Id, diagnostics[0].Id);
+        StringAssert.Contains(diagnostics[0].GetMessage(), "cannot be assigned to it");
     }
 
     [TestMethod]

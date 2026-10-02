@@ -42,9 +42,11 @@ public enum CommandEventType : int
 /// <see cref="CommandEventType"/> stages.
 /// </para>
 /// <para>
-/// <see cref="Execute"/> and <see cref="ExecuteAsync"/> return once the execution has been accepted — queued
-/// or started — not once the body has finished. To act on the result, subscribe to <see cref="Completed"/>,
-/// <see cref="Failed"/> or <see cref="Exited"/>.
+/// <see cref="Execute(object?)"/> and <see cref="ExecuteAsync(object?)"/> return once the execution has been
+/// accepted — queued or started — not once the body has finished. To act on the result, subscribe to
+/// <see cref="Completed"/>, <see cref="Failed"/> or <see cref="Exited"/>, or use
+/// <see cref="IVeloxCommandResult.ExecuteAsync(object?, System.Threading.CancellationToken)"/> when the body
+/// returns a value.
 /// </para>
 /// <para>
 /// Event subscribers run on whatever thread the pipeline happens to be on, so a handler that touches UI must
@@ -53,10 +55,84 @@ public enum CommandEventType : int
 /// to observe such failures.
 /// </para>
 /// </remarks>
-public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
+public class VeloxCommand(Func<object?, CancellationToken, Task> command,
                     Predicate<object?>? canExecute = null,
-                    int semaphore = 1) : IVeloxCommand, IVeloxCommandCompletion, IVeloxCommandStatus, IDisposable
+                    int semaphore = 1) : IVeloxCommand, IVeloxCommandCompletion, IVeloxCommandStatus, IVeloxCommandResult, IDisposable
 {
+    // 命令体返回值的通道。为 null 时一切照旧 —— 既有构造路径全部不碰它，行为与分配逐字节不变。
+    // 只有 VeloxCommand<T> / VeloxCommand<TP,TR> 会经下面那个 protected 构造把它填上。
+    private readonly Func<object?, CancellationToken, Task<object?>>? _resultCommand;
+
+    /// <summary>
+    /// Creates a command whose body returns a value, so <c>ExecuteAsync(parameter, cancellationToken)</c> can
+    /// hand it back to the caller.
+    /// </summary>
+    /// <param name="command">The body, with its value discarded. Used only if <paramref name="resultCommand"/> is never consulted.</param>
+    /// <param name="resultCommand">The body, with its value preserved.</param>
+    /// <param name="canExecute">The predicate behind <c>CanExecute</c>, or <see langword="null"/> to always allow.</param>
+    /// <param name="semaphore">How many executions may run at once; further calls queue rather than drop.</param>
+    /// <param name="isCtsNeeded">
+    /// Whether each execution gets a <see cref="CancellationTokenSource"/>. Pass <see langword="false"/> when the
+    /// body takes no token — it cannot observe cancellation anyway, and the source would be pure allocation.
+    /// </param>
+    /// <remarks>
+    /// The value is read at the single place the pipeline invokes the body, so it belongs to exactly one
+    /// execution and is never kept on the command itself.
+    /// </remarks>
+    protected VeloxCommand(
+        Func<object?, CancellationToken, Task> command,
+        Func<object?, CancellationToken, Task<object?>> resultCommand,
+        Predicate<object?>? canExecute,
+        int semaphore,
+        bool isCtsNeeded = true)
+        : this(command, canExecute, semaphore)
+    {
+        _resultCommand = resultCommand;
+        _isCtsNeeded = isCtsNeeded;
+    }
+
+    /// <summary>
+    /// Creates a command from a body that takes the parameter and returns a value, but cannot be cancelled.
+    /// </summary>
+    /// <param name="command">The body. Its value is what <see cref="IVeloxCommandResult"/> hands back.</param>
+    /// <param name="canExecute">The predicate behind <c>CanExecute</c>, or <see langword="null"/> to always allow.</param>
+    /// <param name="semaphore">How many executions may run at once; further calls queue rather than drop.</param>
+    /// <returns>A command whose executions report their value.</returns>
+    /// <remarks>
+    /// The <c>null</c>-token twin of <see cref="CreateTaskWithResult"/> — same contract as
+    /// <see cref="CreateTaskOnlyWithParameter"/>, so a body returning a value does not silently acquire a
+    /// cancellation source it can never observe.
+    /// </remarks>
+    public static VeloxCommand CreateTaskOnlyWithResult(
+        Func<object?, Task<object?>> command,
+        Predicate<object?>? canExecute = null,
+        int semaphore = 1)
+        =>
+        new(
+            async (parameter, _) => { await command(parameter).ConfigureAwait(false); },
+            async (parameter, _) => await command(parameter).ConfigureAwait(false),
+            canExecute,
+            semaphore,
+            isCtsNeeded: false);
+
+    /// <summary>
+    /// Creates a command from a body that takes the parameter and the cancellation token, and returns a value.
+    /// </summary>
+    /// <param name="command">The body. Its value is what <see cref="IVeloxCommandResult"/> hands back.</param>
+    /// <param name="canExecute">The predicate behind <c>CanExecute</c>, or <see langword="null"/> to always allow.</param>
+    /// <param name="semaphore">How many executions may run at once; further calls queue rather than drop.</param>
+    /// <returns>A command whose executions report their value.</returns>
+    public static VeloxCommand CreateTaskWithResult(
+        Func<object?, CancellationToken, Task<object?>> command,
+        Predicate<object?>? canExecute = null,
+        int semaphore = 1)
+        =>
+        new(
+            async (parameter, ct) => { await command(parameter, ct).ConfigureAwait(false); },
+            command,
+            canExecute,
+            semaphore);
+
     /// <summary>
     /// Creates a command from a body that takes the parameter but cannot be cancelled.
     /// </summary>
@@ -67,6 +143,28 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     public static VeloxCommand CreateTaskOnlyWithParameter(
         Func<object?, Task> command,
         Predicate<object?>? canExecute = null,
+        int semaphore = 1)
+        =>
+        new(
+            async (parameter, _) => { await command(parameter).ConfigureAwait(false); },
+            canExecute,
+            semaphore)
+        {
+            _isCtsNeeded = false
+        };
+
+    /// <summary>
+    /// Creates a command from a body that takes a strongly typed parameter but cannot be cancelled.
+    /// </summary>
+    /// <remarks>
+    /// The typed counterpart of <see cref="CreateTaskOnlyWithParameter"/>, carrying the same
+    /// <c>null</c>-token contract. It exists so that a <c>[VeloxCommand]</c> method whose parameter is a
+    /// concrete type keeps that contract rather than silently acquiring a cancellable
+    /// <see cref="CancellationTokenSource"/> the body has no way to observe.
+    /// </remarks>
+    public static VeloxCommand<T> CreateTypedTaskOnlyWithParameter<T>(
+        Func<T, Task> command,
+        Predicate<T>? canExecute = null,
         int semaphore = 1)
         =>
         new(
@@ -441,6 +539,14 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     /// <inheritdoc />
     public Task ExecuteAsync(object? parameter) => ExecuteCore(parameter, sink: null);
 
+    /// <inheritdoc cref="IVeloxCommandResult.ExecuteAsync(object?, CancellationToken)"/>
+    public async Task<object?> ExecuteAsync(object? parameter, CancellationToken cancellationToken)
+        => (await ExecuteAndWaitAsync(parameter, cancellationToken).ConfigureAwait(false)).GetResultOrThrow();
+
+    /// <inheritdoc cref="IVeloxCommandResult.Execute(object?, out object?)"/>
+    public void Execute(object? parameter, out object? result)
+        => result = ExecuteAsync(parameter, CancellationToken.None).GetAwaiter().GetResult();
+
     /// <inheritdoc />
     /// <remarks>
     /// Completes when <em>this</em> execution has ended, including the calls that never run: one refused by a
@@ -538,9 +644,18 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         var outcome = CommandOutcome.Completed;
         Exception? failure = null;
 
+        // 命令体的返回值。这里只读一次 —— 管道调用命令体也只有这一处，所以它天然属于本次执行。
+        object? result = null;
+
         try
         {
-            if (_isCtsNeeded)
+            if (_resultCommand is not null)
+            {
+                result = _isCtsNeeded
+                    ? await _resultCommand(item.Parameter, (item.Cts ?? new()).Token).ConfigureAwait(false)
+                    : await _resultCommand(item.Parameter, _defct).ConfigureAwait(false);
+            }
+            else if (_isCtsNeeded)
             {
                 await _command(item.Parameter, (item.Cts ?? new()).Token).ConfigureAwait(false);
             }
@@ -573,7 +688,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             finally
             {
                 // 嵌一层 finally：OnExecutionCompletedAsync 抛异常时，收尾与释放一步都不能被跳过。
-                item.Complete(outcome, failure);
+                item.Complete(outcome, failure, result);
                 item.TakeCts()?.Dispose();
             }
         }
@@ -896,8 +1011,8 @@ public sealed class CommandEventArgs(
     internal bool TryMarkCancelReported() => Interlocked.Exchange(ref _cancelReported, 1) == 0;
 
     // 恰好收尾一次。没有等的人在时是空操作。
-    internal void Complete(CommandOutcome outcome, Exception? exception)
-        => Completion?.TrySetResult(new CommandCompletion(outcome, exception));
+    internal void Complete(CommandOutcome outcome, Exception? exception, object? result = null)
+        => Completion?.TrySetResult(new CommandCompletion(outcome, exception, result));
 
     /// <summary>
     /// Projects this instance onto another lifecycle stage, keeping the parameter, the cancellation source and —

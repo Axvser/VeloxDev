@@ -87,9 +87,36 @@ void M(object? parameter);
 void M();
 ```
 
+**A concrete parameter type makes the command strongly typed.** `Task M(MoveArgs a)` produces `IVeloxCommand<MoveArgs>` instead of `IVeloxCommand`, and the `canValidate` hook takes `MoveArgs` rather than `object?`. If the type argument comes from the *containing class* (`partial class Vm<T>` with `Task M(T value)`), the property carries it too.
+
+```csharp
+[VeloxCommand] private Task MoveAsync(MoveArgs a, CancellationToken ct);  // → IVeloxCommand<MoveArgs> MoveCommand
+```
+
+⚙ **A generic method works only when its type parameter appears in the parameter type.** `Task M<T>(T value)` produces a *method* `IVeloxCommand<T> GetMCommand<T>()` — not a property, so it cannot be bound, and each closed `T` gets its own command with its own queue, lock and concurrency cap. `Task M<T>(object? p)` is refused with `VELOX_MVVM_CMD001`: a command instance fixes its type argument when it is built.
+
+⚠ **Strong typing is type information, not a compile-time guarantee.** `IVeloxCommand<T>` derives from `IVeloxCommand`, so the `object?` overloads stay reachable — `vm.MoveCommand.Execute(42)` still compiles and still fails at runtime with `InvalidCastException`. Value types still box. Read it as documentation the consumer can see, not as a check.
+
+⚙ **An interface declaring the property as plain `IVeloxCommand` forces the untyped form back.** That is why the workflow view-model interfaces keep working: the generator detects the contract and emits `IVeloxCommand` for the property while everything else stays typed.
+
 ⚙ **`name: "Auto"` (the default) derives the command name as `methodName.Replace("Async", "")`** — and that replaces *every* occurrence, not just the suffix. Two methods whose names collapse to the same stem produce duplicate members, which is a compile error.
 
-⚙ **`canValidate: true` requires `private partial bool CanExecute{Name}Command(object? parameter)`** — you must implement it, and the build fails loudly until you do.
+**A body that returns `Task<T>` or `ValueTask<T>` hands its value back.** `Task<MoveArgs> Build()` produces `IVeloxCommand<object?, MoveArgs>`, and `await cmd.ExecuteAsync(p, cancellationToken)` yields the `T`:
+
+```csharp
+[VeloxCommand] private Task<int> MeasureAsync(NotePayload note, CancellationToken ct);  // → IVeloxCommand<NotePayload, int>
+int weight = await vm.MeasureCommand.ExecuteAsync(note, CancellationToken.None);
+```
+
+⚠ **That await throws when the execution did not complete.** `Failed` rethrows the body's own exception, a cancelled execution throws `OperationCanceledException`, and a call refused by `Lock()` throws `InvalidOperationException`. If you would rather read the outcome than catch, use `ExecuteAndWaitAsync`, which never throws and reports a `CommandCompletion` whose `Result` holds the value.
+
+⚙ **A command with no return value still has the result channel, and always yields `null`** — `TR` is `object?`. So a `null` result cannot be told apart from "this command has no value".
+
+⚙ **The parameter type must be at least as visible as the generated property, which is always `public`.** A `[VeloxCommand]` method taking an `internal` type now fails to compile with CS0053, because the value-returning property names that type in its signature.
+
+⚙ **`Execute(parameter, out result)`** is the blocking form. It waits for a free slot as well as for the body, so it occupies the calling thread — and calling it from inside the body of the same command deadlocks on the command's own lock.
+
+⚙ **`canValidate: true` requires `private partial bool CanExecute{Name}Command(<parameter type> <source parameter name>)`** — the type follows the command's parameter (`object?` for an untyped command, the concrete type otherwise), and **the name must match the method's own parameter**. `MoveAsync(MoveArgs args)` needs `CanExecuteMoveCommand(MoveArgs args)`; any other name is CS8826. A method with no leading parameter has no source name to mirror, so there it stays `parameter`. You must implement it, and the build fails loudly until you do.
 
 ⚠ **The attribute's own documentation says the required member is called `CanXxx`.** It is not; the generator requires `CanExecuteXxxCommand(object?)`. Trust the generator, not the XML comment.
 

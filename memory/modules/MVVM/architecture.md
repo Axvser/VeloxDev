@@ -22,7 +22,7 @@
 | 不在模块内 | 实际归谁 |
 |---|---|
 | 属性变更通知的实现本身 | 生成器**只在没人提供时才自举**：基类链上没有 `PropertyChanged` 事件、宿主框架也没给，它就自己补事件 + `INotifyPropertyChanged` / `INotifyPropertyChanging` 接口 + `OnPropertyChanged(string)` / `OnPropertyChanging(string)` 虚方法（`Writers/MVVMWriter.cs:198-312` 决策、`:856-877` 落笔）。**所以不继承任何基类也能编译** —— 产物依据：`Src/Core/VeloxDev.Core.Extension/obj/Debug/netstandard2.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.MVVM/McpStatusViewModel_VeloxDev_AI_MCP_MVVM.g.cs`，该类 `Symbol.BaseType` 是 `object`，产物里自带了事件与两个虚方法。基类已提供时生成器只发 `OnPropertyChanging(...)` / `OnPropertyChanged(...)` 的**调用**（`Examples/MVVM/WPF/Demo/ObservableViewModelBase.cs` 就是这种情形） |
-| 视图模型之外的「命令参数校验」 | 只有 `canValidate: true` 时才生成 `private partial bool CanExecute{名}Command(object? parameter);`（`CommandWriter.cs:167`）。该声明带 `private` 修饰符且返回非 `void` ⇒ **必须写实现体，不写就是 CS8795 编译失败**（2026-10-01 最小复现验证过）。`canValidate: false` 时传的是 `canExecute: _ => true`（`CommandWriter.cs:180`），**不是 `null`** |
+| 视图模型之外的「命令参数校验」 | 只有 `canValidate: true` 时才生成 `private partial bool CanExecute{名}Command(<参数类型> parameter);`。**2026-10-02 起参数类型跟随命令**：非 `object?` 的参数生成 `P`，`object?` 的仍生成 `object?` —— 所以校验钩子改强类型只影响「具体类型形参 + canValidate」这一种组合（仓内零处），库外是实现者要改签名的破坏性变更。该声明带 `private` 修饰符且返回非 `void` ⇒ **必须写实现体，不写就是 CS8795**（2026-10-01 最小复现验证过）。`canValidate: false` 时传的是 `canExecute: _ => true`，**不是 `null`** |
 | 集合变更的**语义**（谁加了谁） | `ObservableCollectionTracker` 只负责「订上」；语义在生成器发的 `OnItemAddedTo{名}` 等 `partial void` 里（`Analizer.cs:814-817`） |
 | 平台适配 | **零适配器**。`VeloxCommand` 实现的是 `System.Windows.Input.ICommand`，XAML 绑定不需要任何平台代码 —— 这是它跟 `TransitionSystem` / `WorkflowSystem` 最大的结构差异（那两个有 7 家 `adapters/`） |
 | 跨线程编组 | 默认不解决。`VeloxCommand` 全用 `ConfigureAwait(false)`（`:490`、`:545`、`:584` 等），**不还原同步上下文**；事件回调在哪个线程发就看你从哪调 `Execute` |
@@ -136,7 +136,7 @@ OnExecutionCompletedAsync(item)
 | 产物 | writer | 触发条件 | 内容 |
 |---|---|---|---|
 | `_MVVM.g.cs` | `MVVMWriter` | `MVVMProperties.Count > 0 \|\| AutoProperties.Count > 0 \|\| IsWorkflowComponent`（`MVVMWriter.cs:845`） | 属性/字段重写 + 通知调用 + 集合钩子 + 可能的事件声明 |
-| `_Commands.g.cs` | `CommandWriter` | 有 `[VeloxCommand]` 方法（`CommandWriter.cs:179`） | 惰性 `{名}Command` 属性 |
+| `_Commands.g.cs` | `CommandWriter` | 有 `[VeloxCommand]` 方法（`CommandWriter.cs:179`） | 惰性 `{名}Command` 属性；参数类型是具体类型时为 `IVeloxCommand<P>`；方法的类型参数出现在参数类型里时改为 `Get{名}Command<T>()` 访问器（2026-10-02） |
 
 **三件读代码才知道的事：**
 
@@ -153,7 +153,57 @@ OnExecutionCompletedAsync(item)
 - **没有「View 只透传、不发通知」这条路径** —— 曾经有（`IsView` / `GenerateProxy()`），2026-09-26 因从未被走到而整体删除（`Writers/MVVMWriter.cs:105`、`:131` 两处构造一直传 `isView: false`）。现在 `MVVMPropertyFactory.Generate()`（`Base/Analizer.cs:583`，原名 `GenerateViewModel`）是唯一出口，**所有** `[VeloxProperty]` 都按 ViewModel 形态生成通知。
 - **`CanWrite()` 里含 `IsWorkflowComponent`**（`MVVMWriter.cs:845`）⇒ 一个 `[Node]` / `[Tree]` 类即使零个 `[VeloxProperty]` 也会拿到一份 MVVM 产物，但里面**不是**槽位三件套：`MVVMWriter.cs:895` 那段的条件是 `!_hasBaseWorkflowSlotInfrastructure && !IsWorkflowComponent && 任一属性 UseWorkflowSlotLifecycle`，**把 workflow 组件本身排除了**，它只服务「非组件、但继承链上有带槽位属性的类」这一种情况。真正 workflow 组件的 `CreateWorkflowSlot<T>` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved` 由 `Writers/WorkflowWriter.cs:899-917` 写。这是与 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/` 的耦合点。
 
-**`[VeloxCommand]` 的方法签名决定它可不可取消**：`CommandWriter.ParseConstructorType`（`:102-146`）只认三种签名 —— 单参数返回 `Task`/`Task<T>` 且参数是 `object`（→ `CreateTaskOnlyWithParameter`）、单参数是 `CancellationToken`（→ `CreateTaskOnlyWithCancellationToken`）、其余（→ `new VeloxCommand(...)` 指向 `Func<object?, CancellationToken, Task>` 主构造）。**只有第二种能拿到 token**，也就只有它生成的命令 `Interrupt`/`Clear` 真能打断（见 §五·1）。
+**`[VeloxCommand]` 的方法签名决定它可不可取消**：判定在 `CommandWriter.BuildSpec`（2026-10-02 由 `ParseConstructorType` 改名并扩充），返回类型决定「值怎么变成 Task」，形参决定「走哪个构造入口」与「属性强不强类型」。入口枚举 `CommandConstruction`：
+
+| 入口 | 何时 |
+|---|---|
+| `UntypedMainCtor`（`new VeloxCommand`） | 带 token 的方法组；`void` 走 `Action`/`Action<object?>` 重载 |
+| `UntypedParameterOnlyFactory` | 单参数是 `object?`、无 token、返回 `Task` |
+| `UntypedTokenOnlyFactory` | 单参数是 `CancellationToken` |
+| `TypedMainCtor`（`new VeloxCommand<P>`） | 具体类型形参 + token |
+| `TypedParameterOnlyFactory`（`CreateTypedTaskOnlyWithParameter<P>`） | 具体类型形参、无 token |
+
+**只有形参里带 token 的两种拿得到真 token**，其余生成的命令 `Interrupt`/`Clear` 打不断（见 §五·1）。`TypedParameterOnlyFactory` 不是可选项：无 token 的强类型命令若走主构造，`_isCtsNeeded` 会从 `false` 变成 `true`，每次执行白分配一个命令体根本观察不到的 `CancellationTokenSource`，并打破 `AParameterOnlyBody_GetsNoCancellationTokenSource_ForEitherReturnType` 钉住的对称性。
+
+**强类型只在「T 已知」时成立，分两种（2026-10-02）**：
+
+| | T 从哪来 | 产物 | 判据 |
+|---|---|---|---|
+| 情形 1 | 所属类（`class Vm<T> { Task M(T x) }`） | 属性类型 `IVeloxCommand<P>`，P 可直接写出 | `CollectTypeParameters(P)` 里没有**方法**声明的类型参数 |
+| 情形 2 | 方法（`Task M<T>(T x)`） | 只能生成方法 `Get{名}Command<T>()`，按类型实参用 `ConcurrentDictionary` 缓存 | 参数类型里出现了方法自己的类型参数 |
+
+**判据必须按符号身份，不能按名字**：`class Vm<T> { Task M<T>(T x) }` 里方法的 `T` 遮蔽了类的 `T`，按名字判会错生成情形 1。四条实测结论（Roslyn 4.3.1 实编，反直觉，别推翻）：
+
+1. **派生接口给不了编译期检查。** `IVeloxCommand<T> : IVeloxCommand` 时 `c.Execute(42)` 仍然编译通过（基接口的 `object?` 重载始终可达），加 `new` 隐藏也照样通过。强类型买到的是**类型信息**，不是保证 —— 这一点写在 `IVeloxCommand{T}.cs` 的 XML 注释里。
+2. **属性类型改成 `IVeloxCommand<P>` 会打断接口实现。** `IWorkflow{Node,Slot,Tree,Link}ViewModel` 里约 20 个命令属性声明为非强类型 `IVeloxCommand`，派生接口类型**不会**隐式实现它（CS0738）。所以 `RequiresUntypedProperty` 命中时只把**属性类型**退回非强类型，缓冲字段与构造保持强类型，getter 上转。
+3. **三个强类型成员上不能加 `new`** —— CS0109（`T` 是类型参数，`Execute(T)` 与 `Execute(object)` 是两个不同重载，谈不上隐藏）。
+4. **`_isCtsNeeded` 可以在基类静态工厂里用对象初始化器写**（`new VeloxCommand<T>(…) { _isCtsNeeded = false }`），所以强类型工厂不需要额外的 protected 构造。
+
+**情形 2 的访问器不可绑定**（是方法不是属性），且**每个封闭 `T` 一套队列/锁/并发上限** —— `GetXCommand<int>().Lock()` 不影响 `GetXCommand<string>()`。缓存键覆盖**全部**类型参数：只按第一个索引会让 `M<T, U>` 的不同 `U` 共用同一个实例。约束逐字抄源码文本（`where T : U` 依赖书写顺序，符号渲染容易改错）。
+
+**值类型仍然装箱**：`CommandEventArgs.Parameter` 是 `object?`，管道改不动 —— 强类型不是「零装箱」。
+
+**命令体的返回值现在交得出来（2026-10-02）**。此前 `_command` 是 `Func<object?, CancellationToken, Task>`，`Task<T>` 靠**返回类型协变**绑定进来，`T` 在委托绑定那一刻就没了 —— 生成器每个 `Task<T>` 形态发的都是丢值的表达式。
+
+- **不改 `_command`**，另加第二条内部委托 `private readonly Func<object?, CancellationToken, Task<object?>>? _resultCommand`，**默认 null**；既有 5 个构造/工厂一律不碰它，所以既有路径的行为与分配逐字节不变（`CommandAllocationTests` 是护栏）。只有 `VeloxCommand<T>` / `VeloxCommand<TP,TR>` 经一个 `protected` 构造把它填上。
+- **捕获点只有一处**：`ExecuteCoreAsync` 里那两处 `await _command(...)`；返回值顺着 `item.Complete(outcome, failure, result)` 流进 sink。所以值天然属于**本次执行**，从不上命令字段。
+- `CommandCompletion` 加 `object? Result` + `GetResultOrThrow()` / `GetResultOrThrow<TR>()`。它是 `public readonly struct` —— **加字段会改尺寸，对已编译的消费者是二进制破坏**。
+- **接口**：`IVeloxCommandResult`（装箱通道：`Task<object?> ExecuteAsync(object?, ct)` + `void Execute(object?, out object?)`，由 `VeloxCommand` 实现，所以每条命令都有）；`IVeloxCommand<TP,TR> : IVeloxCommand<TP>`（参数与结果都不装箱）。
+- **2-arity 不继承 `IVeloxCommandResult`**：两者都声明双参 `ExecuteAsync`，同时实现时除 `TP = object` 外都合法，而那正是不会生成强类型命令的组合。
+- **失败语义**：`Task<TR>` / `GetResultOrThrow` **失败即抛** —— `Failed` 用 `ExceptionDispatchInfo` 重抛**原异常实例**（保栈），`Canceled` 抛 `OperationCanceledException`，`Refused` 抛 `InvalidOperationException`。这与 `ExecuteAndWaitAsync` 的「不抛、只报结局」是**两种取用方式**，不是替代。
+- **同步 `Execute(p, out r)` 会阻塞调用线程**（含排队与等锁），命令内部全程 `ConfigureAwait(false)` 所以不会因同步上下文死锁，但在命令体内部对自己调用会自锁。
+- **三条 C# 硬约束**（实测）：`async` + `out` 是 CS1988，所以「带 out 的 `ExecuteAsync`」写不出来，`out` 只能落在同步方法上；同名、形参相同、只有返回类型不同是 CS0111，所以异步那半必须靠**元数**区分；同名不同元数合法。
+
+**校验器的形参名跟随源方法（2026-10-02，破坏性）**：生成的是 `CanExecute{名}Command({P} {源形参名})` —— `HandleNote(NotePayload note)` ⇒ `note`。零形参与仅 token 的方法没有源形参名可抄，仍用 `parameter`。**既有校验器若用了别的名字（仓内两个 demo 原本用 `sender`）会立刻报 CS8826**，同一笔提交里已全部改名。
+
+**参数类型的可访问性现在会外溢（2026-10-02）**：生成的命令属性一律 `public`，而强类型属性的类型里现在带着参数类型 —— 参数类型若不可见（`internal`）就是 **CS0053**。以前 `object?` 形参不暴露任何类型，所以这条约束是新出现的。
+
+**`CanExecute` 始终可能收到 null 实参，这不是异常路径**（2026-10-02 由 Demo 实跑暴露）：`ICommand.CanExecute(object?)` 是公开的，**WPF 在应用按钮模板时会带着 null 调一次**。于是强类型校验器有两档命运：
+
+- **值类型的 T**：`(T)value` 在 `VeloxCommand<T>` 的适配器里就抛，校验器根本没机会执行。`CanExecute` 的异常落在 UI 线程上会**直接崩掉整个应用**。所以 `VeloxCommand<T>` 里那条校验适配器在「实参为 null 且 `default(T) is not null`」时一律答 `false`。
+- **引用类型的 T**：null 原样交给校验器 —— **用户写的校验器必须自己 null 检查**（`parameter is not null && …`）。不写就是 UI 线程上的 NRE。
+
+这是「强类型是类型信息、不是保证」在实践中的具体形态：类型签名说 `NotePayload` 非空，运行时照样能收到 null。
 
 **`[VeloxCommand]` 的命名**：`name = "Auto"` 时用 `方法名.Replace("Async", "")`（`:84`）—— 是**全局替换**，`GetAsyncDataAsync` 会变成 `GetData`；且位置参数先读、具名参数覆盖（`:56-79`）。
 
