@@ -1,4 +1,4 @@
-using Newtonsoft.Json.Linq;
+﻿using VeloxDev.Serialization;
 using System;
 using VeloxDev.MVVM;
 
@@ -91,7 +91,7 @@ public partial class AgentMessageViewModel
         if (string.IsNullOrWhiteSpace(result)) return null;
         try
         {
-            return JObject.Parse(result!)["status"]?.ToString();
+            return (VeloxJsonValue.Parse(result!) as VeloxJsonObject)?["status"] is VeloxJsonScalar status ? status.Text : null;
         }
         catch (Exception)
         {

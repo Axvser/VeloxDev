@@ -1,4 +1,4 @@
-# VeloxDev.Core.Extension
+﻿# VeloxDev.Core.Extension
 
 > **MAF (Microsoft.Extensions.AI) Workflow Agent + MCP support** — the optional companion to [VeloxDev.Core](https://www.nuget.org/packages/VeloxDev.Core) for building **AI-controllable visual workflow editors**. Works with WPF / Avalonia / WinUI / MAUI / WinForms / Blazor.
 
@@ -256,7 +256,7 @@ var configs = new[]
         RunMode = McpServerRunMode.Npx,
         Package = "@modelcontextprotocol/server-filesystem",
         Arguments = ["C:/data"],                                   // allowed directories
-        Options = new { env = new { FILESYSTEM_ROOT = "C:/data" } },  // per-server env vars
+        Options = Map(("env", Map(("FILESYSTEM_ROOT", "C:/data")))),    // per-server env vars
     },
 };
 var tools = await mcp.LoadAsync(configs);
@@ -270,15 +270,15 @@ new McpServerConfiguration
     Name = "Microsoft Learn",
     RunMode = McpServerRunMode.Http,
     Endpoint = "https://learn.microsoft.com/api/mcp",
-    Options = new { connectionTimeout = 30 },                      // seconds
+    Options = Map(("connectionTimeout", 30)),                       // seconds
 };
 // With auth:
-Options = new
-{
-    headers = new { Authorization = "Bearer <token>" },            // header-based auth
-    // or OAuth 2.0 (PKCE):
-    // oauth = new { clientId = "...", clientSecret = "...", redirectUri = "...", scopes = new[] { "read" } },
-};
+Options = Map(
+    ("headers", Map(("Authorization", "Bearer <token>"))));        // header-based auth
+// or OAuth 2.0 (PKCE):
+// Options = Map(("oauth", Map(
+//     ("clientId", "..."), ("clientSecret", "..."),
+//     ("redirectUri", "..."), ("scopes", new[] { "read" }))));
 // For OAuth the host must register the authorization redirect:
 mcp.WithOAuthAuthorizationRedirect(async (authUri, redirectUri, ct) =>
 {
@@ -287,7 +287,7 @@ mcp.WithOAuthAuthorizationRedirect(async (authUri, redirectUri, ct) =>
 });
 ```
 
-> `McpServerConfiguration.Options` is the serialization of an anonymous object. Known keys: `headers` (HTTP headers), `oauth` (OAuth2), `connectionTimeout` (seconds or TimeSpan string), `transportMode` (`AutoDetect`/`StreamableHttp`/`Sse`), `ownsSession`, `env` (stdio environment variables), `workingDirectory`. **Unknown keys are rejected** (throws, never silently ignored).
+> `McpServerConfiguration.Options` is a name → value map (`IReadOnlyDictionary<string, object?>`) — a nested map for a sub-section, an array for a list. Known keys: `headers` (HTTP headers), `oauth` (OAuth2), `connectionTimeout` (seconds or TimeSpan string), `transportMode` (`AutoDetect`/`StreamableHttp`/`Sse`), `ownsSession`, `env` (stdio environment variables), `workingDirectory`. **Unknown keys are rejected** (throws, never silently ignored).
 
 ### Agent-managed servers
 

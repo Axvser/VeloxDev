@@ -1,5 +1,6 @@
-using VeloxDev.MVVM;
+﻿using VeloxDev.MVVM;
 
+using System.Collections.Generic;
 namespace VeloxDev.AI.MCP;
 
 public partial class McpServerConfiguration
@@ -42,22 +43,31 @@ public partial class McpServerConfiguration
     public string? Endpoint { get; set; }
 
     /// <summary>
-    /// Arbitrary server options — the serialized result of an anonymous object. The host can pass an
-    /// anonymous object directly:
+    /// Arbitrary server options, keyed by the option's name. A value is a primitive, a nested
+    /// <see cref="IReadOnlyDictionary{TKey, TValue}"/> for a sub-section, or an array of primitives.
     /// <code>
-    /// Options = new
+    /// Options = new Dictionary&lt;string, object?&gt;
     /// {
-    ///     headers = new { Authorization = "Bearer x", "X-Custom" = "v" },   // HTTP extra headers
-    ///     env = new { FILESYSTEM_ROOT = "C:/data", API_KEY = "k" },          // stdio per-server environment variables
-    ///     connectionTimeout = 30,                                            // seconds (or a TimeSpan string); overrides McpScope.WithConnectionTimeout
-    ///     transportMode = "StreamableHttp",                                  // Http: AutoDetect/StreamableHttp/Sse
-    ///     ownsSession = true,                                                // Http: whether to hold the MCP session (stateful)
-    ///     workingDirectory = "C:/data",                                      // stdio working directory
-    ///     oauth = new { clientId = "id", clientSecret = "s",                 // Http: OAuth 2.0 (PKCE)
-    ///                  redirectUri = "http://localhost:1179/cb", scopes = new[] { "read" } },
+    ///     ["headers"] = new Dictionary&lt;string, object?&gt; { ["Authorization"] = "Bearer x", ["X-Custom"] = "v" },
+    ///     ["env"] = new Dictionary&lt;string, object?&gt; { ["FILESYSTEM_ROOT"] = "C:/data", ["API_KEY"] = "k" },
+    ///     ["connectionTimeout"] = 30,                // seconds (or a TimeSpan string)
+    ///     ["transportMode"] = "StreamableHttp",      // Http: AutoDetect/StreamableHttp/Sse
+    ///     ["ownsSession"] = true,                    // Http: whether to hold the MCP session (stateful)
+    ///     ["workingDirectory"] = "C:/data",          // stdio working directory
+    ///     ["oauth"] = new Dictionary&lt;string, object?&gt;
+    ///     {
+    ///         ["clientId"] = "id", ["clientSecret"] = "s",
+    ///         ["redirectUri"] = "http://localhost:1179/cb", ["scopes"] = new[] { "read" },
+    ///     },
     /// };
     /// </code>
-    /// Unknown keys are rejected by <see cref="McpScope"/> (an error rather than a silent ignore), so typos surface immediately.
+    /// A dictionary rather than an anonymous object because the archive format's world is closed: the set of
+    /// types it can write is the set the generator was compiled over, and an anonymous type is in neither. A map
+    /// says the same thing and needs no reflection to read.
     /// </summary>
-    public object? Options { get; set; }
+    /// <remarks>
+    /// Unknown keys are rejected by <see cref="McpScope"/> — an error rather than a silent ignore — so typos
+    /// surface immediately.
+    /// </remarks>
+    public IReadOnlyDictionary<string, object?>? Options { get; set; }
 }

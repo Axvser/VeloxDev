@@ -1,8 +1,7 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using CliWrap;
 using CliWrap.Buffered;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using VeloxDev.Serialization;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
 
@@ -167,7 +166,7 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
         var outputPath = Path.Combine(dir, $"output-{id}.json");
 
         File.WriteAllText(scriptPath, script);
-        File.WriteAllText(inputPath, JsonConvert.SerializeObject(payload));
+        File.WriteAllText(inputPath, VeloxJsonValue.From(payload).ToJson());
 
         try
         {
@@ -194,7 +193,7 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
         }
     }
 
-    /// <summary>Parses the raw script result: JSON object → dictionary; other JSON → JToken; non-JSON → the raw string.</summary>
+    /// <summary>Parses the raw script result: JSON object → dictionary; other JSON → its CLR value; non-JSON → the raw string.</summary>
     public static object? ParseResult(string? raw)
     {
         if (raw is null) return null;
@@ -202,12 +201,10 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
         if (trimmed.Length == 0) return null;
         try
         {
-            var token = JToken.Parse(trimmed);
-            return token.Type == JTokenType.Object
-                ? token.ToObject<Dictionary<string, object?>>()
-                : (object?)token;
+            // 对象物化成字典、其它 JSON 物化成对应的 CLR 值 —— 与旧实现给出的一样。
+            return VeloxJsonValue.Parse(trimmed).Materialize();
         }
-        catch (JsonReaderException)
+        catch (FormatException)
         {
             return trimmed;
         }

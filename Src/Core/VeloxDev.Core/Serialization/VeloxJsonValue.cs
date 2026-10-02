@@ -54,6 +54,21 @@ public abstract class VeloxJsonValue
     public virtual bool IsNull => false;
 
     /// <summary>
+    /// Turns the value into ordinary CLR values: a map, a list, or a scalar.
+    /// </summary>
+    /// <returns>
+    /// <see langword="null"/> for the JSON literal; a <see cref="string"/> for text; a <see cref="bool"/>, a
+    /// <see cref="long"/> or a <see cref="double"/> for a bare literal; a
+    /// <see cref="Dictionary{TKey, TValue}"/> for an object; a <see cref="List{T}"/> for an array.
+    /// </returns>
+    /// <remarks>
+    /// For a caller that wants the payload rather than the tree — a script result, an untyped configuration
+    /// value. Numbers come back as <see cref="long"/> when they are integral, which is the same widening the
+    /// archive reader applies.
+    /// </remarks>
+    public virtual object? Materialize() => this;
+
+    /// <summary>
     /// Whether two trees say the same thing, member for member and element for element.
     /// </summary>
     /// <param name="other">The other tree.</param>
@@ -111,6 +126,14 @@ public abstract class VeloxJsonValue
             case DateTime moment: return moment.ToString("O", CultureInfo.InvariantCulture);
             case TimeSpan span: return span.ToString();
             case Enum enumeration: return Convert.ToInt64(enumeration, CultureInfo.InvariantCulture);
+        }
+
+        // 以接口形状传进来的字典（配置袋就是这样）：`IReadOnlyDictionary` 不是 `IDictionary`。
+        if (value is IReadOnlyDictionary<string, object?> readOnlyMap)
+        {
+            var node = new VeloxJsonObject();
+            foreach (var member in readOnlyMap) node[member.Key] = From(member.Value);
+            return node;
         }
 
         if (value is IDictionary map)
@@ -268,6 +291,19 @@ public sealed class VeloxJsonScalar : VeloxJsonValue
     public override bool DeepEquals(VeloxJsonValue? other)
         => other is VeloxJsonScalar scalar && _kind == scalar._kind && string.Equals(_text, scalar._text, StringComparison.Ordinal);
 
+    /// <inheritdoc />
+    public override object? Materialize()
+    {
+        if (_kind == VeloxJsonScalarKind.Null) return null;
+        if (_kind == VeloxJsonScalarKind.Text) return _text;
+
+        if (_text == "true") return true;
+        if (_text == "false") return false;
+        if (long.TryParse(_text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var integer)) return integer;
+
+        return double.TryParse(_text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? number : _text;
+    }
+
     internal override void WriteTo(TextWriter writer, VeloxJsonFormat format, int depth)
     {
         if (_kind == VeloxJsonScalarKind.Null) { writer.Write("null"); return; }
@@ -308,6 +344,14 @@ public sealed class VeloxJsonArray : VeloxJsonValue, IEnumerable<VeloxJsonValue>
     public IEnumerator<VeloxJsonValue> GetEnumerator() => _items.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
+
+    /// <inheritdoc />
+    public override object? Materialize()
+    {
+        var items = new List<object?>(_items.Count);
+        foreach (var item in _items) items.Add(item.Materialize());
+        return items;
+    }
 
     /// <inheritdoc />
     public override bool DeepEquals(VeloxJsonValue? other)
@@ -414,6 +458,19 @@ public sealed class VeloxJsonObject : VeloxJsonValue, IEnumerable<KeyValuePair<s
 
         return true;
     }
+
+    /// <inheritdoc />
+    public override object? Materialize()
+    {
+        var map = new Dictionary<string, object?>(_members.Count, StringComparer.Ordinal);
+        foreach (var member in _members) map[member.Key] = member.Value.Materialize();
+        return map;
+    }
+
+    /// <summary>Turns this object into an ordinary map — the shape most callers actually want.</summary>
+    /// <returns>The members' materialized values, keyed by name.</returns>
+    public Dictionary<string, object?> ToDictionary()
+        => (Dictionary<string, object?>)Materialize()!;
 
     internal override void WriteTo(TextWriter writer, VeloxJsonFormat format, int depth)
     {

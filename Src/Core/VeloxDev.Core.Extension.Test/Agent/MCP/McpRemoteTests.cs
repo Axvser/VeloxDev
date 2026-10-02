@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModelContextProtocol.Authentication;
 using ModelContextProtocol.Client;
 using System;
@@ -17,6 +17,17 @@ namespace VeloxDev.Core.Extension.Test.Agent.MCP;
 [TestClass]
 public class McpRemoteTests
 {
+    /// <summary>
+    /// Builds an options bag the way a host now writes one. A map says exactly what the anonymous object said,
+    /// and unlike an anonymous type it is a shape the archive format can write.
+    /// </summary>
+    private static Dictionary<string, object?> Map(params (string Key, object? Value)[] members)
+    {
+        var map = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var (key, value) in members) map[key] = value;
+        return map;
+    }
+
     private static McpServerConfiguration HttpConfig(string? endpoint = "https://mcp.example.com/mcp", Action<McpServerConfiguration>? configure = null)
     {
         var c = new McpServerConfiguration
@@ -43,7 +54,7 @@ public class McpRemoteTests
     {
         var scope = new McpScope();
         var config = HttpConfig(configure: c =>
-            c.Options = new { headers = new { Authorization = "Bearer abc" } });
+            c.Options = Map(("headers", Map(("Authorization", "Bearer abc")))));
 
         var options = scope.BuildHttpTransportOptions(config);
 
@@ -67,16 +78,11 @@ public class McpRemoteTests
                 "http://localhost:1179/callback?code=abc123&state=xyz789&iss=https%3A%2F%2Fauth.example.com");
         });
         var config = HttpConfig(configure: c =>
-            c.Options = new
-            {
-                oauth = new
-                {
-                    clientId = "demo-client",
-                    clientSecret = "demo-secret",
-                    redirectUri = "http://localhost:1179/callback",
-                    scopes = new[] { "mcp.read", "mcp.write" },
-                },
-            });
+            c.Options = Map(("oauth", Map(
+                ("clientId", "demo-client"),
+                ("clientSecret", "demo-secret"),
+                ("redirectUri", "http://localhost:1179/callback"),
+                ("scopes", new[] { "mcp.read", "mcp.write" })))));
 
         var options = scope.BuildHttpTransportOptions(config);
 
@@ -164,7 +170,7 @@ public class McpRemoteTests
     public void PerServerConnectionTimeout_OverridesScopeDefault()
     {
         var scope = new McpScope().WithConnectionTimeout(TimeSpan.FromSeconds(7));
-        var config = HttpConfig(configure: c => c.Options = new { connectionTimeout = 2 }); // seconds
+        var config = HttpConfig(configure: c => c.Options = Map(("connectionTimeout", 2))); // seconds
 
         var options = scope.BuildHttpTransportOptions(config);
 
@@ -177,7 +183,7 @@ public class McpRemoteTests
     {
         var scope = new McpScope();
         var config = HttpConfig(configure: c =>
-            c.Options = new { transportMode = "StreamableHttp", ownsSession = true });
+            c.Options = Map(("transportMode", "StreamableHttp"), ("ownsSession", true)));
 
         var options = scope.BuildHttpTransportOptions(config);
 
@@ -189,7 +195,7 @@ public class McpRemoteTests
     public void UnknownOptionsKey_IsRejected()
     {
         var scope = new McpScope();
-        var config = HttpConfig(configure: c => c.Options = new { typoKey = "oops" });
+        var config = HttpConfig(configure: c => c.Options = Map(("typoKey", "oops")));
 
         Assert.ThrowsExactly<InvalidOperationException>(() => scope.BuildHttpTransportOptions(config));
     }
@@ -202,7 +208,7 @@ public class McpRemoteTests
             Name = "fs",
             RunMode = McpServerRunMode.Npx,
             Package = "@modelcontextprotocol/server-filesystem",
-            Options = new { env = new { FILESYSTEM_ROOT = "C:/data", API_KEY = "k" }, workingDirectory = "C:/data" },
+            Options = Map(("env", Map(("FILESYSTEM_ROOT", "C:/data"), ("API_KEY", "k"))), ("workingDirectory", "C:/data")),
         };
 
         var options = McpScope.BuildStdioTransportOptions(config, System.IO.Path.GetTempPath());

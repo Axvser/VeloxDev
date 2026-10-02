@@ -100,7 +100,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             Description = "微软官方文档检索（远程 Streamable HTTP）",
             RunMode = McpServerRunMode.Http,
             Endpoint = "https://learn.microsoft.com/api/mcp",
-            Options = new { connectionTimeout = 30 },   // seconds
+            Options = Options(("connectionTimeout", 30)),   // seconds
         },
         new()
         {
@@ -108,11 +108,9 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             Description = "远程 Streamable HTTP 服务器",
             RunMode = McpServerRunMode.Http,
             Endpoint = "https://mcp.example.invalid/mcp",
-            Options = new
-            {
-                connectionTimeout = 8,
-                headers = new { Authorization = "Bearer demo-token" },
-            },
+            Options = Options(
+                ("connectionTimeout", 8),
+                ("headers", Options(("Authorization", "Bearer demo-token")))),
         },
         new()
         {
@@ -121,9 +119,20 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             RunMode = McpServerRunMode.Npx,
             Package = "@modelcontextprotocol/server-filesystem",
             Arguments = [AppContext.BaseDirectory],
-            Options = new { env = new { FILESYSTEM_ROOT = AppContext.BaseDirectory } },
+            Options = Options(("env", Options(("FILESYSTEM_ROOT", AppContext.BaseDirectory)))),
         },
     ];
+
+    /// <summary>
+    /// Builds a server's options bag. A map rather than an anonymous object: the archive format's world is
+    /// closed, and an anonymous type is in neither.
+    /// </summary>
+    private static Dictionary<string, object?> Options(params (string Key, object? Value)[] members)
+    {
+        var map = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var (key, value) in members) map[key] = value;
+        return map;
+    }
 
     /// <summary>Loads all pre-registered MCP servers (status is driven live through <see cref="Mcp"/>).</summary>
     public async Task LoadMcpServersAsync() => await Mcp.LoadAsync(McpServers);

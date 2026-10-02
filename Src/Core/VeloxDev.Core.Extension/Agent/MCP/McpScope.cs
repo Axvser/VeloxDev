@@ -13,7 +13,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Authentication;
 using ModelContextProtocol.Client;
-using Newtonsoft.Json;
 using VeloxDev.Serialization;
 
 namespace VeloxDev.AI.MCP;
@@ -1211,17 +1210,12 @@ public class McpScope
     private static readonly string[] HttpOptionKeys = ["headers", "oauth", "connectionTimeout", "transportMode", "ownsSession"];
     private static readonly string[] StdioOptionKeys = ["env", "workingDirectory"];
 
-    // 解析 Options（匿名对象或 JSON 字符串）为 VeloxJsonObject；null 返回空对象。
-    private static VeloxJsonObject ParseOptions(object? options)
+    // 把 Options 的键值对读成树；null 返回空对象。
+    private static VeloxJsonObject ParseOptions(IReadOnlyDictionary<string, object?>? options)
     {
         if (options is null) return new VeloxJsonObject();
-        // 匿名声明的 Options 没有生成的写入器，先由 Newtonsoft 写成 JSON 文本，再读成树。
-        VeloxJsonValue token = options is string s
-            ? VeloxJsonValue.Parse(s)
-            : VeloxJsonValue.Parse(JsonConvert.SerializeObject(options));
-        if (token is not VeloxJsonObject obj)
-            throw new InvalidOperationException("McpServerConfiguration.Options must be an object (anonymous object), not a scalar or an array.");
-        return obj;
+
+        return (VeloxJsonObject)VeloxJsonValue.From(options);
     }
 
     private static bool TryGetOption(VeloxJsonObject j, string key, out VeloxJsonValue token)
