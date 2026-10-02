@@ -6,14 +6,14 @@ namespace VeloxDev.Core.Test.AI;
 [TestClass]
 public class AgentCommandDiscovererTests
 {
-    private sealed class FakeCommand(Action<object?> execute) : ICommand
+    internal sealed class FakeCommand(Action<object?> execute) : ICommand
     {
         public event EventHandler? CanExecuteChanged;
         public bool CanExecute(object? parameter) => true;
         public void Execute(object? parameter) => execute(parameter);
     }
 
-    private sealed class ViewModel
+    internal sealed class ViewModel
     {
         [AgentContext(AgentLanguages.English, "Saves data")]
         public ICommand SaveCommand { get; } = new FakeCommand(_ => { });
@@ -117,7 +117,7 @@ public class AgentCommandDiscovererTests
         Assert.IsNull(result);
     }
 
-    private sealed class ViewModelWithAction
+    internal sealed class ViewModelWithAction
     {
         public ICommand ActionCommand { get; }
         public ViewModelWithAction(Action<object?> action) => ActionCommand = new FakeCommand(action);

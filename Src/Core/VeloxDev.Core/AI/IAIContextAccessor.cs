@@ -65,6 +65,20 @@ public interface IAIContextAccessor
     bool TryExecuteCommand(object target, string commandName, object? parameter, out string? error);
 
     /// <summary>
+    /// Asks whether a command would run, without running it.
+    /// </summary>
+    /// <param name="target">The instance holding the command.</param>
+    /// <param name="commandName">The command property's name.</param>
+    /// <param name="parameter">The parameter that would be passed, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the command exists and reports it can run.</returns>
+    /// <remarks>
+    /// The answer is runtime state, so it cannot come from the tree the way the rest of a descriptor does. It is
+    /// reported and never enforced — <see cref="TryExecuteCommand"/> does not consult it, matching the behaviour
+    /// the reflection path has always had.
+    /// </remarks>
+    bool CanExecuteCommand(object target, string commandName, object? parameter);
+
+    /// <summary>
     /// Invokes one method, matching an overload by name and argument count.
     /// </summary>
     /// <param name="target">The instance to invoke on.</param>

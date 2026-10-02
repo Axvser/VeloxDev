@@ -5,7 +5,7 @@ namespace VeloxDev.Core.Test.AI;
 [TestClass]
 public class AgentMethodInvokerTests
 {
-    private sealed class Calculator
+    internal sealed class Calculator
     {
         [AgentContext(AgentLanguages.English, "Adds two numbers")]
         public int Add(int a, int b) => a + b;

@@ -5,7 +5,7 @@ namespace VeloxDev.Core.Test.AI;
 [TestClass]
 public class AgentPropertyAccessorTests
 {
-    private sealed class SampleTarget
+    internal sealed class SampleTarget
     {
         public string? Name { get; set; } = "Initial";
         public int Count { get; set; } = 5;
@@ -16,7 +16,7 @@ public class AgentPropertyAccessorTests
     /// One property, annotated in English only — the shape a Chinese- or Japanese-language agent meets
     /// whenever a member has not been translated yet.
     /// </summary>
-    private sealed class AnnotatedTarget
+    internal sealed class AnnotatedTarget
     {
         public int Untouched { get; set; }
 

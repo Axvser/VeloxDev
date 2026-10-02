@@ -77,6 +77,39 @@ public sealed class AIContextDirectory
         => List(entryPath + "/" + memberDirectory);
 
     /// <summary>
+    /// Finds one member of a type entry by name, wherever it sits.
+    /// </summary>
+    /// <param name="typeFullName">The declaring type's full name.</param>
+    /// <param name="memberName">The member's name.</param>
+    /// <returns>The member node, or <see langword="null"/> when the tree has no such member.</returns>
+    /// <remarks>
+    /// Searches the member directories rather than taking one, because a caller holding a
+    /// <see cref="System.Reflection.MemberInfo"/> knows the member's declaring type and name but not which table
+    /// the renderer would have put it in. A command property is the case that matters: it lives under
+    /// <c>Commands</c>, not <c>Properties</c>.
+    /// </remarks>
+    public AIContextNode? Member(string typeFullName, string memberName)
+    {
+        if (typeFullName is null || memberName is null) return null;
+
+        var path = PathFor(typeFullName);
+        if (path is null) return null;
+
+        foreach (var directory in MemberDirectories)
+        {
+            foreach (var member in List(path + "/" + directory))
+            {
+                if (string.Equals(member.Name, memberName, StringComparison.Ordinal)) return member;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The directory names a type entry's members can live under.</summary>
+    private static readonly string[] MemberDirectories = ["Properties", "Fields", "Commands", "Methods", "Members"];
+
+    /// <summary>
     /// Resolves a cross-link to the node it names.
     /// </summary>
     /// <param name="reference">The reference, taken from a node's <see cref="AIContextNode.References"/>.</param>

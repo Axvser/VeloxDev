@@ -420,6 +420,8 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine();
             WriteTryExecuteCommand(builder, type, fullType);
             builder.AppendLine();
+            WriteCanExecuteCommand(builder, type, fullType);
+            builder.AppendLine();
             WriteTryInvoke(builder, type, fullType);
             builder.AppendLine();
             WriteCopyScalarFrom(builder, type, fullType);
@@ -496,6 +498,28 @@ namespace VeloxDev.Generators.Writers
             }
 
             builder.AppendLine($"            default: error = \"Command '\" + commandName + \"' is not registered on {Escape(type.FullName)}.\"; return false;");
+            builder.AppendLine("        }");
+            builder.AppendLine("    }");
+        }
+
+        private static void WriteCanExecuteCommand(StringBuilder builder, AIContextType type, string fullType)
+        {
+            builder.AppendLine("    public bool CanExecuteCommand(object target, string commandName, object? parameter)");
+            builder.AppendLine("    {");
+            builder.AppendLine($"        var t = ({fullType})target;");
+            builder.AppendLine("        switch (commandName)");
+            builder.AppendLine("        {");
+
+            foreach (var member in type.Members.Where(static m => m.IsCommand))
+            {
+                // 每个 case 各起一个作用域：模式变量 `c` 否则会在同一个 switch 里撞名（CS0128）。
+                builder.AppendLine($"            case \"{Escape(member.Name)}\":");
+                builder.AppendLine("            {");
+                builder.AppendLine($"                return t.{member.Name} is global::System.Windows.Input.ICommand command && command.CanExecute(parameter);");
+                builder.AppendLine("            }");
+            }
+
+            builder.AppendLine("            default: return false;");
             builder.AppendLine("        }");
             builder.AppendLine("    }");
         }
@@ -660,7 +684,7 @@ namespace VeloxDev.Generators.Writers
             if (type.TypeKind == TypeKind.Enum)
                 return $"global::VeloxDev.AI.AIContextConvert.ToEnum<{FullTypeOf(type)}>({value})";
 
-            return type.SpecialType switch
+            var fromSpecialType = type.SpecialType switch
             {
                 SpecialType.System_String => $"global::VeloxDev.AI.AIContextConvert.ToText({value})",
                 SpecialType.System_Int32 => $"global::VeloxDev.AI.AIContextConvert.ToInt32({value})",
@@ -669,9 +693,24 @@ namespace VeloxDev.Generators.Writers
                 SpecialType.System_Decimal => $"global::VeloxDev.AI.AIContextConvert.ToDecimal({value})",
                 SpecialType.System_Single => $"(float)global::VeloxDev.AI.AIContextConvert.ToDouble({value})",
                 SpecialType.System_Boolean => $"global::VeloxDev.AI.AIContextConvert.ToBoolean({value})",
-                // 没有枚举也没有标量转换的类型：直接转型。拿到的东西对就过，不对就抛 —— 由调用方
-                // 变成一条拒绝说明。比悄悄写一个默认值好：那个默认值调用方从没提过。
-                _ => $"({FullTypeOf(type)}){value}!",
+                SpecialType.System_Byte => $"global::VeloxDev.AI.AIContextConvert.ToByte({value})",
+                SpecialType.System_Int16 => $"global::VeloxDev.AI.AIContextConvert.ToInt16({value})",
+                SpecialType.System_Char => $"global::VeloxDev.AI.AIContextConvert.ToChar({value})",
+                _ => null,
+            };
+
+            if (fromSpecialType is not null) return fromSpecialType;
+
+            // 少数几个由 BCL 类型识别的常见形状。没有回退之后这张表就是全部写入能力，所以宁可写全。
+            var full = FullTypeOf(type);
+            return full switch
+            {
+                "global::System.DateTime" => $"global::VeloxDev.AI.AIContextConvert.ToDateTime({value})",
+                "global::System.TimeSpan" => $"global::VeloxDev.AI.AIContextConvert.ToTimeSpan({value})",
+                "global::System.Guid" => $"global::VeloxDev.AI.AIContextConvert.ToGuid({value})",
+                // 其余类型直接转型：拿到的东西对就过，不对就抛 —— 由调用方变成一条拒绝说明。
+                // 比悄悄写一个默认值好：那个默认值调用方从没提过。
+                _ => $"({full}){value}!",
             };
         }
 

@@ -61,6 +61,56 @@ public static class AIContextConvert
     public static bool ToBoolean(object? value)
         => Convert.ToBoolean(Require(value), CultureInfo.InvariantCulture);
 
+    /// <summary>Converts to <see cref="byte"/>.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="InvalidCastException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static byte ToByte(object? value)
+        => Convert.ToByte(Require(value), CultureInfo.InvariantCulture);
+
+    /// <summary>Converts to <see cref="short"/>.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="InvalidCastException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static short ToInt16(object? value)
+        => Convert.ToInt16(Require(value), CultureInfo.InvariantCulture);
+
+    /// <summary>Converts to <see cref="char"/>.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="InvalidCastException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static char ToChar(object? value)
+        => Convert.ToChar(Require(value), CultureInfo.InvariantCulture);
+
+    /// <summary>Converts to <see cref="DateTime"/>.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="InvalidCastException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static DateTime ToDateTime(object? value)
+        => Convert.ToDateTime(Require(value), CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Converts to <see cref="TimeSpan"/> — from another span, or from its invariant text form.
+    /// </summary>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="InvalidCastException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static TimeSpan ToTimeSpan(object? value)
+        => Require(value) is TimeSpan span
+            ? span
+            : TimeSpan.Parse(Convert.ToString(Require(value), CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Converts to <see cref="Guid"/> — from another id, or from its text form.
+    /// </summary>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="InvalidCastException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static Guid ToGuid(object? value)
+        => Require(value) is Guid guid
+            ? guid
+            : Guid.Parse(Convert.ToString(Require(value), CultureInfo.InvariantCulture)!);
+
     /// <summary>
     /// Converts to an enum, either from a member name or from its underlying number.
     /// </summary>

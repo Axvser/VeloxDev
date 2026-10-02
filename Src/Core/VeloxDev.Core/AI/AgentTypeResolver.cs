@@ -1,33 +1,31 @@
 namespace VeloxDev.AI;
 
 /// <summary>
-/// Resolves .NET types by full name across all loaded assemblies.
-/// Generic utility — not tied to any specific framework or domain.
+/// Resolves .NET types by full name from the compiled context tree.
 /// </summary>
+/// <remarks>
+/// <para>
+/// A name is resolved by finding the accessor registered for it, which is also what roots the type for the
+/// trimmer. There is deliberately no assembly scan behind this: <c>Assembly.GetType</c> is exactly the operation
+/// that cannot be made trim-safe, and an assembly scan answers with types whose members nothing has guaranteed
+/// are still there.
+/// </para>
+/// <para>
+/// The consequence is a closed world — a type the tree does not carry does not resolve. That is the same trade
+/// the rest of the agent surface makes, and it is what makes the answer trustworthy under NativeAOT.
+/// </para>
+/// </remarks>
 public static class AgentTypeResolver
 {
     /// <summary>
-    /// Resolves a <see cref="Type"/> by its full name, searching all loaded assemblies
-    /// if <see cref="Type.GetType(string)"/> fails.
+    /// Resolves a <see cref="Type"/> by its full name.
     /// </summary>
-    /// <returns>The resolved type, or <c>null</c> if not found.</returns>
+    /// <param name="fullTypeName">The type's full name, as <see cref="Type.FullName"/> reports it.</param>
+    /// <returns>The resolved type, or <see langword="null"/> when the tree carries no such type.</returns>
     public static Type? ResolveType(string fullTypeName)
     {
         if (string.IsNullOrWhiteSpace(fullTypeName)) return null;
 
-        var type = Type.GetType(fullTypeName);
-        if (type != null) return type;
-
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            try
-            {
-                type = asm.GetType(fullTypeName, throwOnError: false);
-                if (type != null) return type;
-            }
-            catch { /* skip unloadable assemblies */ }
-        }
-
-        return null;
+        return AIContextTreeRegistry.FindAccessor(fullTypeName)?.TargetType;
     }
 }

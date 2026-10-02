@@ -5,10 +5,12 @@ namespace VeloxDev.Core.Test.AI;
 [TestClass]
 public class AgentContextReaderTests
 {
+    // internal 而不是 private：生成器跳过 private / protected / file 类型，而目录现在是唯一来源 ——
+    // 夹具不可见就等于没有说明。
     [AgentContext(AgentLanguages.English, "Test class for AI")]
     [AgentContext(AgentLanguages.Chinese, "AI测试类")]
     [AgentContext(AgentLanguages.English, "Second English context")]
-    private sealed class DecoratedType
+    internal sealed class DecoratedType
     {
         [AgentContext(AgentLanguages.English, "A test property")]
         public int TestProp { get; set; }
@@ -18,7 +20,7 @@ public class AgentContextReaderTests
 
     /// <summary>A type documented in one language only, so the fallback has somewhere to run out.</summary>
     [AgentContext(AgentLanguages.Chinese, "只有中文的说明")]
-    private sealed class ChineseOnlyType
+    internal sealed class ChineseOnlyType
     {
         [AgentContext(AgentLanguages.Chinese, "只有中文的属性说明")]
         public int TestProp { get; set; }
