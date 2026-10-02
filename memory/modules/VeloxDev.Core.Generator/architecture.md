@@ -1,9 +1,9 @@
 ﻿# VeloxDev.Core.Generator — 架构
 
-> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**16 个 .cs、5079 行**（`Base/Analizer.cs` 948、`Writers/WorkflowWriter.cs` 1708、`Writers/MVVMWriter.cs` 945、`Theme.cs` 422、`Writers/WriterBase.cs` 224、`Writers/CommandWriter.cs` 191、`AopInterface.cs` 157、`Writers/TickWriter.cs` 125、`Writers/AopWriter.cs` 89、`Base/AnalizeHelper.cs` 67、`AopProxy.cs` 41、`MVVM.cs` 38、`Command.cs` / `Tickable.cs` / `Workflow.cs` 各 37、`Base/ICodeWriter.cs` 13）。
+> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**18 个 .cs、6193 行**（`Writers/WorkflowWriter.cs` 1708、`Writers/MVVMWriter.cs` 1086、`Base/Analizer.cs` 961、`Writers/CommandWriter.cs` 752、`Theme.cs` 422、`AopSurface.cs` 398、`Writers/WriterBase.cs` 256、`Writers/TickWriter.cs` 125、`Writers/AopWriter.cs` 90、`Diagnostics.cs` 89、`Base/AnalizeHelper.cs` 67、`MVVM.cs` / `Command.cs` 各 45、`Workflow.cs` / `Tickable.cs` 各 37、`AopProxy.cs` 36、`Base/AopNames.cs` 26、`Base/ICodeWriter.cs` 13）。
 > 打包成 NuGet 分析器包，不产出运行期程序集；`TargetFramework=netstandard2.0`（`VeloxDev.Core.Generator.csproj:6`）。
 
-本文只写「读完这 16 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+本文只写「读完这 18 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
@@ -18,7 +18,7 @@
 | WorkflowSystem | `WorkflowBuilder+TreeAttribute` / `+NodeAttribute` / `+SlotAttribute` / `+LinkAttribute` / `DefaultAnchorAttribute` / `DefaultSizeAttribute` | `Workflow.cs` |
 | MVVM | `VeloxPropertyAttribute` / `VeloxCommandAttribute` | `MVVM.cs` + `Command.cs` |
 | TimeLine | `TickableAttribute` | `Tickable.cs` |
-| AspectOriented | `AspectOrientedAttribute` | `AopInterface.cs` + `AopProxy.cs` |
+| AspectOriented | `AspectOrientedAttribute` | `AopSurface.cs`（接口 + 代理实现）+ `AopProxy.cs`（扩展方法） |
 | DynamicTheme | `ThemeConfigAttribute\`3..\`7`（5 个元数） | `Theme.cs` |
 
 **这七家 GUI 适配器在本模块里是零代码 —— 这正是「契约不该重复七遍」的实例。** 适配器全都不做特性解析、不写生成逻辑，**源码里也一个生成器特性都不用**（`grep -rn 'VeloxProperty\|\[Velox' Src/Adapters/ --include=*.cs` 零命中），因此它们**一个都不引用这个分析器包** —— 七份 `Src/Adapters/*/*.csproj` 只引用 `VeloxDev.Core` 加各家自己的 GUI 包，而 §五 那张 9 对 `PackageReference`/`ProjectReference` 的表里**没有任何适配器**；`[VeloxProperty]` 在 WPF、Avalonia、WinUI、MAUI、WinForms、Razor、Jalium 上生成的东西**逐字相同**，因为生成器读的是符号语义，从不问平台（`Base/AnalizeHelper.cs` 全文没有平台概念，`VeloxDev.Core.Generator.csproj` 也没有任何 GUI 引用）。要改「生成的属性长什么样」，改这一处就同时改了七家；要改「某家在某个平台上怎么渲染」，与本模块无关 —— 那是 `memory/modules/<WorkflowSystem|TransitionSystem>/adapters/<平台>.md` 的事。**所以本模块没有 `adapters/` 子目录，也不该有。**
@@ -67,7 +67,7 @@ context.RegisterSourceOutput(
 - 给某个 writer 加「读更多语义」的逻辑是**安全**的 —— 它本来就拿到的是新鲜 symbol。
 - 给 `GeneratorTarget` 加 symbol 字段是**不安全**的，且不会立刻报错，只会在增量场景下偶发错码。要加信息就加 `TypeKey` 这类字符串。
 
-`Deduplicate`（`:187`）**按 `TypeKey` 去重，不按 symbol 去重**：`remarks`（`:174-182`）说明按 symbol 去重会让同一个类型在两条缓存条目持不同 `Compilation` 的 symbol 时进来两次，第二次 `AddSource` 会因为 hint name 重复被拒。一个类拆成多个 partial、每个 partial 各贴一个触发特性时，只有**一个代表**进入 writer；谁当代表由 `IsClassLevelAttribute` 决定（类级特性优先，`:76-81` 说明理由：`Writers/TickWriter.cs`、`Writers/AopWriter.cs`、`AopInterface.cs` 是从**拿到的那份声明**上读特性的）。**所以「代表是哪份声明」会直接影响这三个生成器的输出。**
+`Deduplicate`（`:187`）**按 `TypeKey` 去重，不按 symbol 去重**：`remarks`（`:174-182`）说明按 symbol 去重会让同一个类型在两条缓存条目持不同 `Compilation` 的 symbol 时进来两次，第二次 `AddSource` 会因为 hint name 重复被拒。一个类拆成多个 partial、每个 partial 各贴一个触发特性时，只有**一个代表**进入 writer；谁当代表由 `IsClassLevelAttribute` 决定（类级特性优先，`:76-81`）。**AOP 这一侧现在已经不受它影响**：`AopSurface.cs:69` 与 `Writers/AopWriter.cs:24` 都走符号（`AnalizeHelper.Members` / `IsAopClass`），代表是哪份声明只决定产物的**文件名**。`TickWriter` 同理走符号（`Writers/TickWriter.cs:21`）—— 所以「代表」当前影响的是字段名与文件名这类表面，别再照抄旧记忆里「三个生成器都按声明读特性」的说法。
 
 ### 阶段 3：写 —— 各生成器的 `GenerateSource`
 
@@ -81,8 +81,9 @@ context.RegisterSourceOutput(
 
 | 生成器 | 文件名模板 | 依据 |
 |---|---|---|
-| AOP 接口 | `{类}_{命名空间下划线}_Aop` | `AopInterface.cs:35`、`AddSource` `:125` |
-| AOP partial + 扩展（**同一 writer 写两份，两句 `AddSource`**） | `{类}_{命名空间下划线}_AOP.g.cs` / `{类}_{命名空间下划线}_AopExt.g.cs` | `Writers/AopWriter.cs:32`、`:50`；`AopProxy.cs:31/36` |
+| AOP 接口 | `{类}_{命名空间下划线}_Aop` | `Base/AopNames.cs:15`（唯一算法）；`AopSurface.cs:164` 的 `AddSource` |
+| AOP 代理实现（**与接口同一次遍历产出**） | `{同一个接口名}Proxy` | `Base/AopNames.cs:18`；`AopSurface.cs:168` 的 `AddSource` |
+| AOP 扩展方法 | `{类}_{命名空间下划线}_AopExt.g.cs` | `Writers/AopWriter.cs:49`；`AopProxy.cs:31` |
 | Command | `{类}_{命名空间下划线}_Commands.g.cs` | `Writers/CommandWriter.cs:129` |
 | MVVM | `{类}_{命名空间下划线\|Global}_MVVM.g.cs` | `Writers/MVVMWriter.cs:847-854` |
 | Mono | `{类}_{命名空间下划线}_Tick.g.cs` | `Writers/TickWriter.cs:61` |
@@ -186,7 +187,7 @@ context.RegisterSourceOutput(
 **泛型方法只在「类型参数不出现在参数类型里」时才拒绝**（2026-10-02 放宽）：那种情况下生成的方法组 `Foo` 无法从 `(object?, CancellationToken)` 推断出 `T`（实测 CS0411 + CS0029）。`M<T>(T value)` 这类现在**支持** —— 生成的访问器 `Get{名}Command<T>()` 自带类型参数，见 [MVVM 架构](../../MVVM/architecture.md) §六。
 | `Writers/TickWriter.cs` | `InitializeTickable` / `CloseTickable` / 5 个 `partial void` 钩子 | `TickableAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeTickable()` 等于什么都没发生 |
 | `Writers/AopWriter.cs` | AOP 接口实现 + `Aop()` 扩展方法 | — | 见 §三 |
-| `AopInterface.cs` | AOP 接口本身（`VeloxDev.AopInterfaces` 命名空间） | — | 它**不在 `Writers/` 下**，是唯一一个把生成逻辑直接写在生成器类里的 |
+| `AopSurface.cs` | AOP 接口**与代理实现**（`VeloxDev.AopInterfaces` 命名空间） | — | 它**不在 `Writers/` 下**，是唯一一个把生成逻辑直接写在生成器类里的；两个产物从同一次遍历渲染，所以接口与实现的签名不会漂移 |
 | `Theme.cs` | `IThemeObject` 实现、主题缓存、`SetThemeValue<T>` 一族 | 5 个 `ThemeConfigAttribute` 元数 | 只对 `partial` 类发 |
 
 **两处会咬人的耦合：**
@@ -224,9 +225,13 @@ context.RegisterSourceOutput(
 
 ## 六、陷阱（带依据）
 
-1. **全局命名空间会生成出非法 namespace。** `Writers/WriterBase.cs:63` 与 `:72` 无条件写 `namespace {Symbol.ContainingNamespace};` —— 而 `INamespaceSymbol.ToDisplayString()` 对全局命名空间返回字面量 `"<global namespace>"`，于是产物里出现 `namespace <global namespace>;`。同理，`Writers/AopWriter.cs:32/39/50`、`AopInterface.cs:35`、`Writers/CommandWriter.cs:129`、`Writers/TickWriter.cs:61` 都直接用 `ToDisplayString().Replace('.', '_')`，不含全局命名空间分支 —— 全局命名空间的类会得到 `{类}_<global namespace>_Aop` 这种文件名/接口名。**全模块只有 `Writers/MVVMWriter.cs:850-853` 处理了这一情形**（`IsGlobalNamespace ? "Global"`）。**行为已存在，不要以为某处有统一的守卫。**
-2. **生成器不发任何诊断。** 特性名拼错、类忘了写 `partial`（`Base/Analizer.cs:160-165`）、`CanWrite()` 为 false、`Theme.cs` 没注册属性 —— 四种情况都表现为「编译通过、什么都没生成」。排查时先看 `obj/<配置>/<TFM>/generated/...` 下有没有产物，别指望错误列表。
-3. **`TriggerAttributes` 只有 10 条且硬编码**（`Base/Analizer.cs:82-94`）。新特性不进去，生成器对该类型**完全无感且不报错**。
+1. **全局命名空间过去会生成出非法产物；现在有两条统一的守卫，走错一条等于没有。**
+   - **文件名段**：所有 writer 都走 `Writers/WriterBase.cs:29-32` 的 `NamespaceFileSegment()`（全局命名空间返回 `Global`）。
+   - **`namespace` 声明那一句**另有守卫（`Writers/WriterBase.cs:63-73`）：全局命名空间时整个 namespace 块不写。
+   - **AOP 不走上面两条**，走 `Base/AopNames.cs` 的 `Segment`（`:21-24`，同样返回 `Global`）—— 因为代理实现类必须与接口**同名同命名空间**，这两处名字只能有一个算法。
+   新增一个产物名字时，挑一种走，**不要再手写 `ToDisplayString().Replace('.', '_')`**：`INamespaceSymbol.ToDisplayString()` 对全局命名空间返回字面量 `"<global namespace>"`，尖括号与空格都是非法的标识符与文件名。
+2. **生成器不发任何诊断。** 特性名拼错、类忘了写 `partial`（`Base/Analizer.cs:165-169`）、`CanWrite()` 为 false、`Theme.cs` 没注册属性 —— 四种情况都表现为「编译通过、什么都没生成」。排查时先看 `obj/<配置>/<TFM>/generated/...` 下有没有产物，别指望错误列表。
+3. **`TriggerAttributes` 只有 10 条且硬编码**（`Base/Analizer.cs:90-102`）。新特性不进去，生成器对该类型**完全无感且不报错**。
 4. **`AopProxy.cs` 一个类连着两次 `AddSource`**（`:31`、`:36`）。加第三份产物必须自己保证 hint name 不撞。
 5. **`Theme.cs` 只对 `partial` 类发**（`:112-118`），且无属性注册时返回空串（`:261-264`）。
 6. **`Writers/WriterBase.cs:190-217` 的修饰符重排是「不报重复定义」的依赖**，不是格式化洁癖。

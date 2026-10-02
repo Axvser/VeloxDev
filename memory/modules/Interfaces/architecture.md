@@ -47,7 +47,7 @@
 
 | 契约 | 谁实现它 | 依据 |
 |---|---|---|
-| `IAspectOriented` | **只有生成器**（生成 `VeloxDev.AopInterfaces.*` 接口 + partial 代理） | `Src/Generators/VeloxDev.Core.Generator/AopInterface.cs:41`；仓内唯一可见实现是 `Examples/AOP/WPF/Demo/obj/aopgen/…/TeamViewModel_Demo_Aop.g.cs:3` |
+| `IAspectOriented` | **只有生成器**（生成 `VeloxDev.AopInterfaces.*` 接口，再由同一文件产出的 `<接口>Proxy` 实现） | `Src/Generators/VeloxDev.Core.Generator/AopSurface.cs:83`（写基接口那一句）、`:216`（实现类）；钉住这一点的测试是 `Src/Core/VeloxDev.Core.Test/AspectOriented/AopProxyTests.cs`。**用户类不再实现它**（2026-10-02 起）—— 所以「把切面装在真身上」从运行期静默失效变成了编译错误 |
 | `IThemeObject` | **生成器**，除非基类已实现（那时只补 `base.` 调用） | `Src/Generators/VeloxDev.Core.Generator/Theme.cs:121-126`、`:151-154`；手写实现只有测试 `Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs:48` |
 | `ITickable` | **生成器**（`TickWriter` 给带 `[Tickable]` 的类型补 7 个成员） | `Src/Generators/VeloxDev.Core.Generator/Writers/TickWriter.cs:66`；手写实现只有测试 `Src/Core/VeloxDev.Core.Test/TimeLine/TickableBusTests.cs:46` |
 | `IVeloxCommand` | 实现是 Core 的 `Src/Core/VeloxDev.Core/MVVM/VeloxCommand.cs:18`；**声明方是生成器**（生成 `XXCommand` 属性，类型为 `IVeloxCommand`） | `Src/Generators/VeloxDev.Core.Generator/Writers/CommandWriter.cs:155-174`、`Writers/WorkflowWriter.cs:664+` |
@@ -88,7 +88,7 @@
 
 四条，都能在代码里指到：
 
-1. **生成器用字符串全名引用契约。** `Src/Generators/VeloxDev.Core.Generator/Theme.cs:18-20`（`"global::VeloxDev.DynamicTheme.ITheme"` 等三条）、`Writers/TickWriter.cs:66`、`AopInterface.cs:41`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`。契约一旦改名或换命名空间，生成器**不会**跟着重构（它只认字符串），所以契约必须住在一个稳定、被所有下游共享的位置。
+1. **生成器用字符串全名引用契约。** `Src/Generators/VeloxDev.Core.Generator/Theme.cs:18-20`（`"global::VeloxDev.DynamicTheme.ITheme"` 等三条）、`Writers/TickWriter.cs:66`、`AopSurface.cs:83`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`。契约一旦改名或换命名空间，生成器**不会**跟着重构（它只认字符串），所以契约必须住在一个稳定、被所有下游共享的位置。
 2. **七家适配器要共享同一份定义。** 这件事在本仓真的发生过：`IWorkflowGridDecorator.cs:9-11` 与 `IWorkflowMinimapOverlay.cs:12-14` 的 XML 明说以前每家各有一份相同副本（Jalium 那份还是派生形状），统一到 Core 后由七家共同实现。
 3. **契约是注册表的键。** `TimerCore.CreateTimeSource<TContract>() where TContract : class, ITimeSourceControl`（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs:109`）按**精确契约类型**查表，且 XML 明说不做宽/窄回退（`:102-107`）。契约类型本身是 API 的一部分。
 4. **契约层不引用任何 GUI。** `Interfaces/` 的全部 `using` 只有 3 个系统命名空间（`System.Reflection`/`System.Linq.Expressions`/`System.ComponentModel`）与 6 个仓内模块（见 §五）。`IVeloxCommand : ICommand` 用的是 `System.Windows.Input`（`IVeloxCommand.cs:1`），在 .NET Core 上由 `System.ObjectModel` 提供，不是 WPF 依赖。
@@ -135,6 +135,6 @@
 | 平台必须实现哪些成员 | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs`（数据交换契约，逐家实现），以及 `Interfaces/TransitionSystem/ITransitionHost.cs`（组合契约，无成员） |
 | 节点/树/槽/链的数据形状 | `Interfaces/WorkflowSystem/IWorkflow{Tree,Node,Slot,Link}ViewModel.cs`（4 族各含 VM + Helper 两个接口） |
 | 一次数据流访问的入参 | `Interfaces/WorkflowSystem/IAccessContext.cs`（编译期/运行期共用，靠 `IsCompilePhase` 区分） |
-| 生成器会注入哪些成员、注入到哪个接口 | `Src/Generators/VeloxDev.Core.Generator/Writers/`（`TickWriter.cs:66`、`WorkflowWriter.cs:342-357`、`CommandWriter.cs:155-174`、`Theme.cs:121-154`、`AopInterface.cs:41`） |
+| 生成器会注入哪些成员、注入到哪个接口 | `Src/Generators/VeloxDev.Core.Generator/Writers/`（`TickWriter.cs:66`、`WorkflowWriter.cs:342-357`、`CommandWriter.cs:155-174`、`Theme.cs:121-154`、`AopSurface.cs:83`） |
 | Agent 能否看见这个契约 | `Interfaces/WorkflowSystem/*.cs` 里的 `[AgentContext]`（`IWorkflowTreeViewModel.cs:7-8` 是范式），读取规则在 `memory/modules/AI/architecture.md` |
 | 平台差异（不要在这里找） | `memory/modules/TransitionSystem/adapters/<平台>.md`、`memory/modules/WorkflowSystem/adapters/<平台>.md` |

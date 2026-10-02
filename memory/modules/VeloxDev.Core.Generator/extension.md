@@ -52,7 +52,7 @@
 
 `Base/AnalizeHelper.cs` 里有两个同名重载：
 
-- `:43-46` `IsAopClass(INamedTypeSymbol)` —— **实际被用的**（`AopInterface.cs:28`、`Writers/AopWriter.cs:24`），走 `Members(symbol)` 扫**所有 partial 声明**。
+- `:43-46` `IsAopClass(INamedTypeSymbol)` —— **实际被用的**（`AopSurface.cs:64`、`Writers/AopWriter.cs:24`），走 `Members(symbol)` 扫**所有 partial 声明**。
 - `:12-17` `IsAopClass(ClassDeclarationSyntax)` —— **没有任何调用者**（全源 grep 只命中定义本身）。见 §六。
 
 判定用的名字是**裸字符串**比较：`HasAspectOriented`（`:48-53`）判 `attribute.Name.ToString() == NAME_ASPECTORIENTED`（`NAME_ASPECTORIENTED = "AspectOriented"`，`:10`）—— **不是全限定名**。所以任何**恰好叫 `AspectOriented`** 的成员特性（哪怕来自别的命名空间、别的库）都会把类判成 AOP 类。**改用全限定名比较会收紧行为，属于会改变现有输出的改动。**
@@ -150,7 +150,7 @@
 
 | 东西 | 位置 | 现状 |
 |---|---|---|
-| `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | `Base/AnalizeHelper.cs:12-17` | **没有调用者**。实际用的是同名的符号重载 `:43-46`（调用点 `AopInterface.cs:28`、`Writers/AopWriter.cs:24`）。语法版只扫**单份声明**的成员，是符号版之前的写法；留着但无效 |
+| `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | `Base/AnalizeHelper.cs:12-17` | **没有调用者**。实际用的是同名的符号重载 `:43-46`（调用点 `AopSurface.cs:64`、`Writers/AopWriter.cs:24`）。语法版只扫**单份声明**的成员，是符号版之前的写法；留着但无效 |
 | `Generators.AgentCatalog` | `Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` | **源码里已不存在**。当前 16 个 `.cs` 无此类，当前 Debug 产物 DLL 中 `AgentCatalog` 命中 0 次。`obj/` 里那份 149 KB 是陈旧产物，别拿它当现状 |
 | `GenerateBaseTypes()` | `Writers/AopWriter.cs:41`、`Writers/CommandWriter.cs:119`、`Writers/TickWriter.cs:124`、`Writers/MVVMWriter.cs:866` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:65` 真正用到了它 |
 | MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：两处构造一直传 `isView: false`（`Writers/MVVMWriter.cs:105`、`:131`），这条分支从未被走到，于是连同同样没人读的 `modifies` 参数与 `Modifies` 属性一并移除。现在 `MVVMPropertyFactory` 只有 `MVVMPropertyFactory(analyzer)` 一个参数，`Generate()`（原 `GenerateViewModel` 改名）是唯一出口。**要恢复 View 支持，必须同时改构造签名、`Generate()` 与调用点** —— 别再只加参数不加分支 |

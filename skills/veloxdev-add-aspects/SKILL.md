@@ -5,11 +5,11 @@ description: Add aspects to VeloxDev classes with compile-time proxies — mark 
 
 ## Responsibility
 
-Wrap behaviour around an existing member — log it, veto it, replace it, react to it — **without editing that member's code**. The mechanism is a compile-time proxy: a source generator writes an interface for the marked members, and `Aop()` hands you a `DispatchProxy` implementing it.
+Wrap behaviour around an existing member — log it, veto it, replace it, react to it — **without editing that member's code**. The mechanism is a compile-time proxy: a source generator writes an interface for the marked members plus a class implementing it, and `Aop()` hands you an instance of that generated class.
 
 ## What it is, and what it is not
 
-⚙ **Compile-time.** The generator emits the interface and the `Aop()` entry point while the project builds. There is no assembly scanning, no runtime subclassing, and no reflection to set up.
+⚙ **Compile-time, and reflection-free.** The generator emits the interface, the implementing class and the `Aop()` entry point while the project builds. There is no assembly scanning, no runtime subclassing, no `Reflection.Emit` and no `dynamic` — so a NativeAOT-published app can use this, and an intercepted call costs no reflection lookup.
 
 ⚙ **Only the members you mark exist on the proxy.** Everything else on the class is simply not reachable through it.
 
@@ -56,7 +56,9 @@ var p = data.Aop();
 
 ⚙ `Aop()` is **generated for every class that has at least one marked member** — do not write it. It returns the generated interface, whose type name you never need to spell.
 
-⚙ **One proxy per instance, cached**, and the proxy-to-target lookup is a `ConditionalWeakTable`. Do not read that as a lifetime guarantee, though — the proxy is *also* registered in a static map and holds its target, so it, and the instance it wraps, live until the process ends (see Pitfalls). Call `Aop()` wherever you need it rather than storing it.
+⚙ **The class has to be `partial`.** The generator only runs over partial classes; on a class without it, `Aop()` is simply not generated and the call fails to compile.
+
+⚙ **One proxy per instance, cached.** Both directions of the proxy-to-target lookup are weak tables, so the proxy goes away once your code drops the instance — nothing is held for the life of the process. Caching still means you can call `Aop()` wherever you need it rather than storing it.
 
 ⚙ `Aop.GetTarget<T>(proxy)` goes the other way, from a proxy back to the instance it wraps.
 
@@ -174,12 +176,14 @@ public MainWindow()
 
 ⚙ **Expecting `end` to shape the result.** It cannot — see the table above.
 
-⚙ **Do not mark an overloaded method.** The proxy resolves the target's member by name alone, so two methods sharing a name make the lookup ambiguous and the intercepted call fails instead of running.
+⚙ **Do not mark an overloaded method.** A member's hook slot is named after the member alone, so two methods sharing a name collide — the generated proxy class then fails to compile with `CS0102`, and the error points into generated code rather than at your method.
 
-⚙ The proxy holds a reference to the target and the registry of proxies is a plain static map, so proxies are not collected before the process ends even though the proxy-to-target lookup is weak. Registering aspects on a very large number of short-lived objects is the case to watch.
+⚙ **Do not mark an expression-bodied property** (`public string X => …`). Only accessor lists are recognised, so a property written that way reaches the proxy with neither accessor and fails to compile with `CS0548`. Give it an accessor list — `{ get; }` is enough — or mark something else.
+
+⚙ **Installing aspects on the object itself no longer compiles.** `SetProxy` requires the generated interface, which only the generated proxy implements, so `data.SetProxy(…)` is a compile error rather than a silently ignored aspect. The hooks belong on what `Aop()` returned.
 
 ## Reference
 
 ⚙ `Examples/AOP/WPF/Demo` and `Examples/AOP/Avalonia/Demo` — two runnable demos of everything above: fields and methods marked for interception, a getter hook, a setter hook, a method that is vetoed, and handlers extended into a collection's add and remove.
 
-⚙ `Src/Core/VeloxDev.Core/AspectOriented/` — the runtime: `ProxyInstance` (the `DispatchProxy` and the three stage tables), `ProxyEx` (creating a proxy and installing hooks), `AopCache` (the per-instance cache), `Aop` (proxy-to-target lookup).
+⚙ `Src/Core/VeloxDev.Core/AspectOriented/` — the runtime: `AspectHooks` (the handler shape and the installation surface), `ProxyEx` (installing hooks), `AopCache` (the per-instance cache), `Aop` (proxy-to-target lookup). The proxy class itself is generated code, not runtime infrastructure.

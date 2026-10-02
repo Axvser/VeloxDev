@@ -98,7 +98,7 @@
 
 ### 2. 平台差异：官方是七家各写一份，不是 Core 里 `#if` 平台宏
 
-`Interfaces/` 里唯一的条件编译是 `IAspectOriented.cs:1`/`:11` 的 `#if NET`，那是**框架**差异（该接口依赖 `DispatchProxy`，`netstandard2.0`/`net461` 没有），不是**平台 GUI** 差异。GUI 差异一律落在 `Src/Adapters/<平台>/`，所以契约里**不该**出现任何平台枚举、`RuntimeInformation`、`#if WINDOWS` 之类。
+`Interfaces/` 里唯一的条件编译是 `IAspectOriented.cs:1`/`:11` 的 `#if NET`，那是**框架**差异（该接口与整个 AOP 运行期绑在一起，`netstandard2.0`/`net461` 上这个命名空间不存在），不是**平台 GUI** 差异。GUI 差异一律落在 `Src/Adapters/<平台>/`，所以契约里**不该**出现任何平台枚举、`RuntimeInformation`、`#if WINDOWS` 之类。
 
 ### 3. 别在契约里放「哪些平台支持」的知识
 
@@ -106,7 +106,7 @@
 
 ### 4. 改契约名/挪命名空间 = 改一个**字符串常量**，编译器不会提醒你
 
-生成器侧按硬编码全名匹配（`Theme.cs:18-20` 三条 `"global::VeloxDev.DynamicTheme.ITheme"` 之类、`Writers/TickWriter.cs:66`、`AopInterface.cs:41`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`）。改名后 Core 编译通过、**生成器静默不生成**，症状是「类型上少了个属性/方法」，报错点离病因很远。所以：改名必须同时 `grep -n "<旧全名>" Src/Generators/`。
+生成器侧按硬编码全名匹配（`Theme.cs:18-20` 三条 `"global::VeloxDev.DynamicTheme.ITheme"` 之类、`Writers/TickWriter.cs:66`、`AopSurface.cs:83`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`）。改名后 Core 编译通过、**生成器静默不生成**，症状是「类型上少了个属性/方法」，报错点离病因很远。所以：改名必须同时 `grep -n "<旧全名>" Src/Generators/`。
 
 ### 5. 异步成员：官方是「换行 + 取消参数放最后」，别自己造 `AsyncResult`
 
@@ -122,7 +122,7 @@
 
 | # | 联动点 | 漏了会怎样 |
 |---|---|---|
-| 1 | `Src/Generators/VeloxDev.Core.Generator/` 里的**字符串全名**（`Theme.cs`、`AopInterface.cs`、`Writers/{TickWriter,CommandWriter,WorkflowWriter}.cs`） | 改名后静默不生成，症状远离病因 |
+| 1 | `Src/Generators/VeloxDev.Core.Generator/` 里的**字符串全名**（`Theme.cs`、`AopSurface.cs`、`Writers/{TickWriter,CommandWriter,WorkflowWriter}.cs`） | 改名后静默不生成，症状远离病因 |
 | 2 | 七家适配器 `Src/Adapters/<平台>/PlatformAdapters/`（`UIThreadInspector` / `Samplers/` / `ThemeValueConverters` / `Attached/Workflow/*`） | 编译失败（好情况）或漏一家（见 §五·1 的规模差异） |
 | 3 | Core 侧的**默认实现**：`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/*DefaultViewModel.cs`、`TransitionSystem/{TransitionInterpreter,TransitionScheduler,TransitionEffect,TransitionProperty}.cs` | 编译失败 |
 | 4 | `Src/Templates/*/working/content/<契约名>/` 与 `Examples/`（`IWorkflowGridDecorator`/`IWorkflowMinimapOverlay` 在这两处有实现，不在适配器本体的那 5 家只能在这里补） | 该平台的示例/模板缺能力 |
