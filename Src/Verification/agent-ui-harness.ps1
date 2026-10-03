@@ -24,7 +24,9 @@ be read straight off a captured frame. Supported:
 
   shot:<name>                 save <OutDir>\<name>.png
   probe:<x>,<y>               log the pixel colour at that point (assert colour state in the log)
-  move:<x>,<y>                move the pointer there
+  move:<x>,<y>                move the pointer there (SetCursorPos)
+  moveto:<x>,<y>              same, but through SendInput — the form that generates a real mouse-move message,
+                              which is what node drags and WinUI hover need
   click:<x>,<y>               left click
   rclick:<x>,<y>              right click
   dblclick:<x>,<y>            double left click
@@ -98,6 +100,18 @@ public class Ui {
     var a = new INPUT[1]; a[0].type = 0; a[0].mi.flags = flags;
     SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
   }
+  // Absolute move through SendInput rather than SetCursorPos: SetCursorPos relocates the cursor without the
+  // OS generating a mouse-move message, so frameworks that listen for their own pointer messages (WinUI,
+  // and anything hooked natively) never see it. SendInput does generate them.
+  public static uint MoveAbs(int screenX, int screenY) {
+    var vx = GetSystemMetrics(0); var vy = GetSystemMetrics(1);
+    var a = new INPUT[1]; a[0].type = 0;
+    a[0].mi.flags = MOVE | ABSOLUTE;
+    a[0].mi.dx = (int)Math.Round(screenX * 65535.0 / Math.Max(1, vx - 1));
+    a[0].mi.dy = (int)Math.Round(screenY * 65535.0 / Math.Max(1, vy - 1));
+    return SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
+  }
+  [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
   // One wheel notch carries the distance in data (not in dx/dy), and the sign is the direction:
   // positive is away from the user, which every framework reads as "scroll up / zoom in".
   public static uint Wheel(int delta) {
@@ -233,6 +247,17 @@ foreach ($action in ($Actions -split ';')) {
             $p = $arg -split ','
             ToClient ([int]$p[0]) ([int]$p[1])
             Add-Content $log "move $arg"
+        }
+        'moveto' {
+            # Same coordinates as move:, but through SendInput — the only form the frameworks that read their
+            # own pointer messages actually see (node drags, hover on WinUI). Optional third field is the
+            # settle time in ms (default 90); drop it to ~10 to emulate a real mouse and see whether the app
+            # keeps up with the event rate.
+            $p = $arg -split ','
+            [void][Ui]::MoveAbs($ox + [int]$p[0], $oy + [int]$p[1])
+            $settle = if ($p.Count -ge 3) { [int]$p[2] } else { 90 }
+            Start-Sleep -Milliseconds $settle
+            Add-Content $log "moveto $arg"
         }
         'click' {
             $p = $arg -split ','
