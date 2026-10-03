@@ -123,12 +123,28 @@ if ($exeFull -and [System.IO.Path]::GetFileNameWithoutExtension($exeFull) -ne 'd
     Start-Sleep -Milliseconds 400
 }
 
+$launchedAt = Get-Date
 $proc = if ($ExeArgs.Count -gt 0) { Start-Process -FilePath $Exe -ArgumentList $ExeArgs -PassThru }
         else { Start-Process -FilePath $Exe -PassThru }
 Start-Sleep -Seconds $WaitSeconds
+
+# Do not assume the window belongs to the process we started: `dotnet Foo.dll` may hand it to another
+# process, and the launcher itself can exit. Prefer our own process, then fall back to "a window that
+# appeared after we launched".
+$h = [IntPtr]::Zero
 $proc.Refresh()
-$h = $proc.MainWindowHandle
-if ($h -eq [IntPtr]::Zero) { Add-Content $log 'NO_WINDOW'; Write-Output 'NO_WINDOW'; exit 1 }
+if (-not $proc.HasExited) { $h = $proc.MainWindowHandle }
+for ($i = 0; $i -lt 40 -and ($h -eq [IntPtr]::Zero -or $h -eq $null); $i++) {
+    $h = Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { try { $_.MainWindowHandle -ne 0 -and $_.StartTime -ge $launchedAt } catch { $false } } |
+        Sort-Object StartTime -Descending |
+        Select-Object -First 1 -ExpandProperty MainWindowHandle
+    if ($null -eq $h) { $h = [IntPtr]::Zero }
+    if ($h -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 500 }
+}
+
+if ($null -eq $h -or $h -eq [IntPtr]::Zero) { Add-Content $log 'NO_WINDOW'; Write-Output 'NO_WINDOW'; exit 1 }
+Add-Content $log "window handle $h"
 
 [void][Ui]::SetWindowPos($h, [IntPtr]::Zero, $X, $Y, $Width, $Height, 0x0040)   # SWP_SHOWWINDOW
 [void][Ui]::SetForegroundWindow($h)

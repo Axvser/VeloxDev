@@ -41,6 +41,10 @@
 >   -Exe <demo.exe> -Actions "drag:687,399,757,433; wait:600; move:724,414; wait:700; probe:724,414; key:Delete; wait:900; probe:724,414"
 > ```
 > 坐标是**窗口相对**（直接照着截图读），`probe` 报一个像素的颜色，所以可以断言状态而不是靠看。两个坑都踩过且已修：进程必须 **DPI aware**（否则三套坐标互相错位，输入看着像「没到」）；`INPUT` 结构必须是 **40 字节**（并集按最大成员算），小一号时 `SendInput` **静默**返回 0，所有按键凭空消失 —— 脚本现在会报 REJECTED。
+>
+> **Razor 那一家它够不着，用 `Src/Verification/agent-web-harness.ps1`**（CDP 驱动浏览器）：Blazor 是页，`SendInput` 打进的是浏览器外壳而不是文档，而这一家的 Delete 恰恰由页面自己的 `@onkeydown` 处理。那套的动作里 `eval`（在页面里跑 JS，断言直接是数字）与 `cursor:<js>`（把指针移到**页面自己算出来**的点）比像素探针强得多 —— 打一条画在带变换的 SVG 里、又被卡片压住的曲线时，猜坐标必然打偏。
+>
+> ⚠ **验证时的进程陷阱**：`pkill -f <项目名>` 只杀 `dotnet run` 的包装进程，**子进程会活着继续占端口** —— 之后每一次「重新构建再测」都是**旧二进制**在回答（我因此白查了好几轮 Razor 语法）。要按进程名杀（或按端口 PID）。
 | 给 AI 工具面加工具 | 在 `WorkflowAgentToolkit` 加 `[AgentCommand]` 方法，并用 `WorkflowToolCategory` 分类 | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs`；`WorkflowToolCategory.cs:1` |
 
 > `[SlotSelectors]` **不在** `WorkflowSystem` 命名空间下，它在 `Src/Core/VeloxDev.Core/AI/SlotSelectorsAttribute.cs:38`（`VeloxDev.AI`）。别去 WorkflowSystem 目录里找。
