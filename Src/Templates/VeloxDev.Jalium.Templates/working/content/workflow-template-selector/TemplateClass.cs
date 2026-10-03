@@ -1,23 +1,25 @@
-using Jalium.UI;
-using VeloxDev.WorkflowSystem;
+// VeloxDev customization: The view selector. The adapter's WorkflowTemplateSelector owns the dispatch and the
+// unsupported-item diagnostics; this file says which view each item kind gets. Rename the view types below if you
+// renamed those items, and add SlotViewFactory / TreeViewFactory if your host pools slots or whole trees.
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;
 
-/// <summary>Routes workflow items to their views for the node-editor surface's ViewPool
-/// (node → NodeView, link → LinkView). Customize per item type here.</summary>
+/// <summary>
+/// The view selector the node-editor surface's view pool uses.
+/// </summary>
 public static class TemplateClass
 {
-    /// <summary>Selector the TreeView surface's ViewPool uses.</summary>
-    public static IWorkflowTemplateSelector CreateSelector() => new WorkflowViewSelector();
+    /// <summary>Creates a selector wired to this project's node and link views.</summary>
+    /// <returns>The selector.</returns>
+    public static IWorkflowTemplateSelector CreateSelector() => new Selector();
 
-    private sealed class WorkflowViewSelector : IWorkflowTemplateSelector
+    private sealed class Selector : WorkflowTemplateSelector
     {
-        public FrameworkElement CreateView(object item) => item switch
+        public Selector()
         {
-            IWorkflowLinkViewModel => new LinkView(),
-            IWorkflowNodeViewModel => new NodeView(),
-            _ => throw new InvalidOperationException($"No view registered for {item.GetType()}"),
-        };
+            NodeViewFactory = _ => new NodeView();
+            LinkViewFactory = _ => new LinkView();
+        }
     }
 }

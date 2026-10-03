@@ -1,30 +1,30 @@
 <#
 .SYNOPSIS
-Verifies the WinForms workflow item templates: that they pack and install, that all seven generate and compile
+Verifies the Jalium workflow item templates: that they pack and install, that all seven generate and compile
 together against the adapter, and that each generated file still matches its mirror under
-Examples/Workflow/WinForms Trimmed/.
+Examples/Workflow/Jalium Trimmed/.
 
 .DESCRIPTION
 Nothing in the repository compiles the template text — the template projects set EnableDefaultCompileItems=false
 and IncludeBuildOutput=false, so `dotnet build` over them does nothing and a generated file that does not compile
-is invisible to every other check. This script is that check.
+is invisible to every other check. This script is that check, the Jalium counterpart of
+verify-workflow-item-templates.ps1.
 
 It proves: the seven CLI short names and their aliases resolve; every primaryOutputs entry is present; the seven
-generated files compile together against the adapter (including the base class and the interfaces the tree
-depends on); and template text still equals the mirror.
+generated files compile together against the adapter (including the base classes they derive from); and template
+text still equals the mirror.
 
-It cannot prove: anything about runtime behaviour (drawing, panning, the ruler overlay compositing, designer
-support), and it cannot tell a wrong colour from a right one — a wrong colour still compiles. Run a demo for that.
+It cannot prove anything about runtime behaviour — drawing, the connection gesture, the zoom pin, the self-bounding
+of link views. Run a demo for that.
 
 .PARAMETER Strict
-Makes template/mirror drift fatal. Off by default because the first run found pre-existing drift in four items —
-see the summary it prints. Turn it on once that is cleared, and this becomes a gate.
+Makes template/mirror drift fatal.
 
 .PARAMETER KeepProbe
 Leaves the probe project on disk for inspection instead of deleting it.
 
 .EXAMPLE
-powershell -NoProfile -ExecutionPolicy Bypass -File Src/Verification/verify-workflow-item-templates.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File Src/Verification/verify-jalium-item-templates.ps1
 #>
 [CmdletBinding()]
 param(
@@ -35,20 +35,19 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-$templateProject = Join-Path $repoRoot 'Src\Templates\VeloxDev.WinForms.Templates\working\VeloxDev.WinForms.Templates.csproj'
-$adapterProject = Join-Path $repoRoot 'Src\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj'
-$mirrorRoot = Join-Path $repoRoot 'Examples\Workflow\WinForms Trimmed\Demo\Views\Workflow'
+$templateProject = Join-Path $repoRoot 'Src\Templates\VeloxDev.Jalium.Templates\VeloxDev.Jalium.Templates.csproj'
+$adapterProject = Join-Path $repoRoot 'Src\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj'
+$mirrorRoot = Join-Path $repoRoot 'Examples\Workflow\Jalium Trimmed\Demo\Views\Workflow'
 
-# CLI short name -> the class name the mirror uses for it. The mirror is the checked-in, hand-edited copy of the
-# same item; generating with these names and this namespace is what makes the two comparable.
+# CLI short name -> the class name the mirror uses for it.
 $items = [ordered]@{
-    'winforms-v-tree'      = 'TreeView'
-    'winforms-v-node'      = 'NodeView'
-    'winforms-v-slot'      = 'SlotView'
-    'winforms-v-link'      = 'LinkView'
-    'winforms-v-decorator' = 'GridDecorator'
-    'winforms-v-minimap'   = 'MinimapOverlay'
-    'winforms-v-selector'  = 'TemplateSelector'
+    'jalium-v-tree'      = 'TreeView'
+    'jalium-v-node'      = 'NodeView'
+    'jalium-v-slot'      = 'SlotView'
+    'jalium-v-link'      = 'LinkView'
+    'jalium-v-decorator' = 'GridDecorator'
+    'jalium-v-minimap'   = 'MinimapOverlay'
+    'jalium-v-selector'  = 'TemplateSelector'
 }
 
 $mirrorNamespace = 'Demo.Views.Workflow'
@@ -65,10 +64,28 @@ function Invoke-Step([string] $what, [scriptblock] $body) {
 function Uninstall-TemplatePack {
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    try { dotnet new uninstall VeloxDev.WinForms.Templates 2>&1 | Out-Null } catch { } finally { $ErrorActionPreference = $previous }
+    try { dotnet new uninstall VeloxDev.Jalium.Templates 2>&1 | Out-Null } catch { } finally { $ErrorActionPreference = $previous }
 }
 
-$probe = Join-Path ([System.IO.Path]::GetTempPath()) ("veloxdev-template-probe-" + [guid]::NewGuid().ToString('N'))
+# The Jalium templates spell their palette as `ColorConverter.ConvertFromString("#RRGGBB")` because a `dotnet new`
+# symbol is text; the mirror spells the same colour as `Color.FromRgb(...)` / `Colors.White`. Normalise both sides
+# so the comparison sees the shape, not the spelling.
+function Normalize-Lines([string] $path, [string] $ns) {
+    # -Encoding UTF8 is load-bearing: Windows PowerShell 5.1 otherwise decodes BOM-less UTF-8 as the system ANSI
+    # code page, and the mis-decoded Chinese comments swallow the following newline — which reads as two lines
+    # having been joined.
+    $text = ((Get-Content $path -Encoding UTF8) -join "`n").Replace($ns, '<ns>')
+    $text = [regex]::Replace($text, 'ColorConverter\.ConvertFromString\("[^"]*"\)', '<color>')
+    $text = [regex]::Replace($text, 'Color\.FromArgb\([^()]*\)', '<color>')
+    $text = [regex]::Replace($text, 'Color\.FromRgb\([^()]*\)', '<color>')
+    $text = [regex]::Replace($text, 'Colors\.\w+', '<color>')
+    # The template's cast is only there because ConvertFromString returns object; the mirror's factory returns a
+    # Color already, so drop the cast before comparing.
+    $text = $text.Replace('(Color)<color>', '<color>')
+    return ($text -split "`n")
+}
+
+$probe = Join-Path ([System.IO.Path]::GetTempPath()) ("veloxdev-jalium-probe-" + [guid]::NewGuid().ToString('N'))
 $nupkgs = Join-Path $probe 'nupkgs'
 
 try {
@@ -79,15 +96,27 @@ try {
     $nupkg = Get-ChildItem $nupkgs -Filter '*.nupkg' | Select-Object -First 1
     if (-not $nupkg) { throw "no .nupkg was produced in $nupkgs" }
 
-    # Uninstall first so a stale pack from an earlier run cannot shadow this one.
     Uninstall-TemplatePack
     Invoke-Step 'install' { dotnet new install $nupkg.FullName | Out-Null }
 
     Write-Host 'Generating into a throwaway project' -ForegroundColor Cyan
-    Invoke-Step 'new winforms' { dotnet new winforms -n Probe -o $probe | Out-Null }
-    Invoke-Step 'reference the adapter' {
-        dotnet add (Join-Path $probe 'Probe.csproj') reference $adapterProject | Out-Null
-    }
+    # Jalium has no `dotnet new` project template, so the probe shell is written by hand — the minimum a Jalium app
+    # needs: the desktop entry package plus the adapter.
+    $probeCsproj = @"
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
+    <ProjectReference Include="$adapterProject" />
+  </ItemGroup>
+</Project>
+"@
+    Set-Content -Path (Join-Path $probe 'Probe.csproj') -Value $probeCsproj -Encoding UTF8
 
     Push-Location $probe
     try {
@@ -114,15 +143,9 @@ try {
         $mirror = Join-Path $mirrorRoot "$class.cs"
         if (-not (Test-Path $mirror)) { Write-Warning "no mirror at $mirror"; continue }
 
-        # Normalise both sides to the same namespace so the only remaining differences are edits the mirror is
-        # allowed to carry: the symbol values it spells out instead of parsing, and the demo-only HUD.
-        # -Encoding UTF8 is load-bearing: Windows PowerShell 5.1 otherwise decodes BOM-less UTF-8 as the system
-        # ANSI code page, and a mis-decoded multi-byte sequence can swallow the following newline.
-        $a = (Get-Content $generated -Raw -Encoding UTF8).Replace($probeNamespace, '<ns>').Replace("`r", '') -split "`n"
-        $b = (Get-Content $mirror -Raw -Encoding UTF8).Replace($mirrorNamespace, '<ns>').Replace("`r", '') -split "`n"
+        $a = Normalize-Lines $generated $probeNamespace
+        $b = Normalize-Lines $mirror $mirrorNamespace
 
-        # A positional comparison, not a set comparison: one inserted line must read as one insertion, not as
-        # every following line drifting.
         $firstDiff = -1
         for ($i = 0; $i -lt [Math]::Min($a.Count, $b.Count); $i++) {
             if ($a[$i] -ne $b[$i]) { $firstDiff = $i; break }
@@ -133,21 +156,15 @@ try {
             continue
         }
 
+        $mismatches++
         $where = if ($firstDiff -lt 0) { "line counts differ ($($a.Count) generated vs $($b.Count) mirror)" } else { "first difference at line $($firstDiff + 1)" }
-
-        # The tree view's mirror carries the demo's canvas-info HUD, which the item template deliberately omits
-        # (one of the five mechanical edits). Report it rather than fail; a human reads the hunk.
-        $isTree = $shortName -eq 'winforms-v-tree'
-        if (-not $isTree) { $mismatches++ }
-        $colour = if ($isTree) { 'Yellow' } else { 'Red' }
-        $label = if ($isTree) { 'differs (expected: the mirror carries the demo HUD)' } else { 'DIFFERS' }
-        Write-Host "  $shortName $label — $where" -ForegroundColor $colour
+        Write-Host "  $shortName DIFFERS — $where" -ForegroundColor Red
 
         $from = [Math]::Max(0, $firstDiff - 3)
         for ($i = $from; $i -lt [Math]::Min($b.Count, $firstDiff + 6); $i++) {
             if ($i -ge $a.Count -or $a[$i] -ne $b[$i]) {
-                Write-Host "    gen | $($a[$i])" -ForegroundColor $colour
-                Write-Host "    mir | $($b[$i])" -ForegroundColor $colour
+                Write-Host "    gen | $($a[$i])" -ForegroundColor Red
+                Write-Host "    mir | $($b[$i])" -ForegroundColor Red
             }
         }
     }

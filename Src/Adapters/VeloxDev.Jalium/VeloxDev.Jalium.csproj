@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>1573;1591;8605;8604</NoWarn>
+    <NoWarn>1573;1591</NoWarn>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>VeloxDev.Jalium</PackageId>
     <Title>VeloxDev.Jalium</Title>

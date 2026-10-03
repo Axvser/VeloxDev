@@ -164,7 +164,7 @@ Scroll below `0` grows `NegativeOffset`; above `max` it grows `PositiveOffset`. 
 | `SlotAnchorFromCanvasLocal(x, y, layer)` | `(x, y, layer)` — identity | **already collapsed**, because the host applies the canvas translation itself |
 | `SlotAnchorFromNode(nodeX, nodeY, localX, localY, layer)` | `(nodeX + localX, nodeY + localY, layer)` | a **collapsed node anchor plus a local offset** — no coordinate host at all |
 
-All three return a **collapsed** value. WPF and Avalonia use the first, WinUI/MAUI/WinForms the second, Jalium the third; all fall back to `SlotAnchorFromNode`.
+All three return a **collapsed** value. WPF and Avalonia use the first, WinUI/MAUI/WinForms the second; all fall back to `SlotAnchorFromNode`. **Jalium uses none of them** — it computes port centres straight from model geometry in the adapter's `WorkflowPortGeometry` (and never writes `slot.Anchor`).
 
 ⚙ WinForms' own comment states the failure mode exactly: using `SlotAnchorFromVisualCenter` there subtracts `ActualOffset` a second time and shifts every link by `−ActualOffset`.
 

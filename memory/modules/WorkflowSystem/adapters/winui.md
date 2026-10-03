@@ -150,7 +150,7 @@ WPF/Avalonia 的做法是「适配器设一个附着属性，节点与连线视�
 **D5 · 网格装饰器**不在适配器里**，但它的虚拟化接线**在适配器里**。**
 适配器目录里没有 `WorkflowGridDecorator`，装饰器是示例/模板产物
 （`Examples/Workflow/WinUI/Demo/Views/Workflow/WorkflowGridDecorator.cs:28`）；
-Razor 则把它放进了适配器（Jalium 那份已删除）
+Razor 与 Jalium 则把它放进了适配器（Jalium 发的是可继承基类 `WorkflowGridDecorator`）
 （`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowGridDecorator.razor.cs:14`）。
 但契约要求的 `RulerBand → SetVirtualizeInset` 转发**由适配器做**
 （`WorkflowSurfaceBehavior.cs:658`：`SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand)`）。

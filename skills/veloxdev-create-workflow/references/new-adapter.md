@@ -63,7 +63,7 @@ The single highest-risk choice in the whole adapter. Ask: **what frame is the me
 |---|---|---|
 | a screen-space centre, and nothing has applied the canvas pan for you | `SlotAnchorFromVisualCenter` | WPF, Avalonia |
 | a centre already inside the canvas-local frame (the host applies the pan itself) | `SlotAnchorFromCanvasLocal` | WinUI, MAUI, WinForms |
-| no coordinate host at all; you can only compute from model geometry | `SlotAnchorFromNode` | Jalium |
+| no coordinate host at all; you can only compute from model geometry | compute the centre in your adapter (Jalium's `WorkflowPortGeometry` derives it from `node.Anchor` + design-local · `node.Size/DesignSize`) | Jalium |
 | a value from outside the process, already canvas-local (e.g. JavaScript) | `SlotAnchorFromCanvasLocal` | Blazor |
 
 ⚙ **Get this wrong and every link in the graph is off by a constant** — by `−ActualOffset` in the visual-centre/identity mix-up. There is no exception, no log and no visual clue other than the offset.

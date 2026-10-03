@@ -16,7 +16,7 @@
 | 你以为在这里 | 其实在哪 |
 |---|---|
 | 怎么画节点/连线 | 七家适配器 `Src/Adapters/VeloxDev.*/Attached/Workflow/`，Core 只给坐标数学 |
-| 鼠标命中、拖拽、滚轮 | 适配器的七个角色行为（`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSurfaceBehavior` 等；**Jalium 这几个已删除，改在模板产物 `workflow-tree-view` 里**） |
+| 鼠标命中、拖拽、滚轮 | 适配器的七个角色行为（`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSurfaceBehavior` 等；**Jalium 这几个角色现在在适配器的 `WorkflowTreeView` 等可继承基类里，见 `adapters/jalium.md`**） |
 | 持久化格式 | **2026-10-03 起由生成代码定义**（`VeloxDev.Serialization`，入口 `ComponentModelEx`，见 [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八）。本模块只保留**序列化钩子**，且已从 Newtonsoft 特性改为接口：`Anchor` / `Size` 的 `IVeloxJsonSerializing` / `Serialized` / `Deserialized`（`GUI/GeometryModels/Anchor.cs`、`Size.cs`），`SlotEnumerator` 的 `IVeloxJsonDeserializing` / `Deserialized`（`SelectorEx/SlotEnumerator.cs`），`BranchOption` / `BranchSegment` 的 `IVeloxJsonDeserialized`（`CompilerEx/Compile/Model/`） |
 | 撤销栈的存储 | 栈是 `TreeHelper<T>` 的私有字段；Core 只定义「一对 Redo/Undo 委托」`WorkflowActionPair.cs:6` |
 | 节点「算什么」 | 用户实现 `IWorkflowNodeViewModelHelper.ReceiveAsync`（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:92`）。默认实现返回 `null`，**什么都不往下传**（`Templates/Helpers/NodeHelper.cs:57`） |

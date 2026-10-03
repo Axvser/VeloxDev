@@ -58,7 +58,7 @@ RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type lo
 
 ⚙ **This binding must sit on the `DataTemplate` root, never on an element inside an item.** An ancestor lookup made from inside an item resolves against that item's own visual tree and silently finds nothing — which looks exactly like "the canvas does not pan".
 
-⚙ MAUI does not ship this behaviour at all, and Jalium mirrors the transform onto the pooled views rather than the host. Your GUI's reference says which applies.
+⚙ MAUI does not ship this behaviour at all, and Jalium has no transform carrier either — its base view (`WorkflowNodeView`) positions each card at its final canvas location and links bound themselves, so a transform set on the host never reaches the pooled views. Your GUI's reference says which applies.
 
 ## What a node view is made of
 
