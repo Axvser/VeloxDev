@@ -428,7 +428,7 @@ public sealed class WorkflowSurfaceBehavior
 
         var state = GetState(host);
         var tree = ResolveTree(host);
-        var scrollOffset = ResolveScrollOffset(host, tree);
+        var scrollOffset = ResolveScrollOffset(host, tree, out var measuredScroll);
         var clientSize = ResolveClientSize(host);
         var contentOffset = tree?.Layout?.ActualOffset ?? new Offset();
 
@@ -447,6 +447,14 @@ public sealed class WorkflowSurfaceBehavior
             catch
             {
                 // The tree helper may not support viewport writes on some hosts; ignore.
+            }
+
+            // Persist the same world position the viewport above was given, so the canvas position survives a
+            // save/load. Guarded on `measuredScroll`: an unmeasured offset came from ViewportOffset itself.
+            if (measuredScroll)
+            {
+                tree.Layout.ViewportOffset = WorkflowSurfaceMath.ViewportOffsetFromScroll(
+                    scrollOffset.Horizontal, scrollOffset.Vertical, tree.Layout);
             }
         }
 
@@ -519,6 +527,11 @@ public sealed class WorkflowSurfaceBehavior
     }
 
     private static Offset ResolveScrollOffset(Control host, IWorkflowTreeViewModel? tree)
+        => ResolveScrollOffset(host, tree, out _);
+
+    // 解析宿主的有效滚动位置。measured 表示它来自真实的平移量、而不是 ViewportOffset 那条兜底 ——
+    // 只有量到的才允许写回：兜底返回的就是要写的那个值本身，写回去等于让它穿过一次下面注释警告过的那次相减。
+    private static Offset ResolveScrollOffset(Control host, IWorkflowTreeViewModel? tree, out bool measured)
     {
         // Effective scroll = the negative of the host's world-origin translate (pan), so
         // WorldAtViewportCenter sees scroll space consistent with node positioning. The node views
@@ -530,6 +543,7 @@ public sealed class WorkflowSurfaceBehavior
             // Full demo host: node translate = _panOffset + AutoScrollPosition; the scroll range
             // is clamped >= 0, so the pivot can only be reached within it (overscroll clamps).
             var pan = ResolvePanOffset(host) ?? new System.Drawing.Point();
+            measured = true;
             return new Offset(-(pan.X + scrollable.AutoScrollPosition.X), -(pan.Y + scrollable.AutoScrollPosition.Y));
         }
 
@@ -538,10 +552,12 @@ public sealed class WorkflowSurfaceBehavior
         var signedPan = ResolvePanOffset(host);
         if (signedPan is not null)
         {
+            measured = true;
             return new Offset(-signedPan.Value.X, -signedPan.Value.Y);
         }
 
         // No pan translate exposed: fall back to the persisted viewport offset (world space).
+        measured = false;
         return tree?.Layout?.ViewportOffset ?? new Offset();
     }
 
