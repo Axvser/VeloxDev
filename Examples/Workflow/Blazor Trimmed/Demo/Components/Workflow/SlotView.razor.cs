@@ -36,7 +36,8 @@ public partial class SlotView : ComponentBase, IDisposable
 
     private INotifyPropertyChanged? _notifier;
 
-    private string SlotSizeCss => SlotSize.ToString("0.#");
+    // The SVG width/height attributes are parsed by the browser — keep the '.' decimal separator.
+    private string SlotSizeCss => SlotSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
 
     private string FillColor => SlotStateColor(Slot?.State ?? SlotState.StandBy);
     private string StrokeColor => ToCss("#FFFFFFFF");
@@ -78,7 +79,8 @@ public partial class SlotView : ComponentBase, IDisposable
             if (byte.TryParse(alpha, System.Globalization.NumberStyles.HexNumber,
                     System.Globalization.CultureInfo.InvariantCulture, out var a))
             {
-                return $"rgba({HexByte(rgb, 0)},{HexByte(rgb, 2)},{HexByte(rgb, 4)},{a / 255d:0.###})";
+                return FormattableString.Invariant(
+                    $"rgba({HexByte(rgb, 0)},{HexByte(rgb, 2)},{HexByte(rgb, 4)},{a / 255d:0.###})");
             }
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
@@ -141,10 +142,12 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     // Unitless lengths are invalid inside a CSS style="" attribute (the browser drops them,
     // collapsing the element to 0×0). These feed the inline width/height style; the px suffix is
     // also accepted by the SVG width/height attributes below.
-    private string WidthCss => Width.ToString("0.#") + "px";
-    private string HeightCss => Height.ToString("0.#") + "px";
-    private string NodeRadiusCss => NodeRadius.ToString("0.#");
-    private string ViewportStrokeWidthCss => ViewportStrokeWidth.ToString("0.#");
+    // Invariant and '.'-separated: these feed style="" attributes and SVG length attributes, where a
+    // comma-decimal culture would serialize a value the browser cannot parse.
+    private string WidthCss => Width.ToString("0.#", CultureInfo.InvariantCulture) + "px";
+    private string HeightCss => Height.ToString("0.#", CultureInfo.InvariantCulture) + "px";
+    private string NodeRadiusCss => NodeRadius.ToString("0.#", CultureInfo.InvariantCulture);
+    private string ViewportStrokeWidthCss => ViewportStrokeWidth.ToString("0.#", CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     protected override void OnParametersSet()
@@ -445,9 +448,9 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     private sealed record Mapped(double X, double Y, double W, double H)
     {
-        public string XCss => X.ToString("0.#");
-        public string YCss => Y.ToString("0.#");
-        public string WCss => W.ToString("0.#");
-        public string HCss => H.ToString("0.#");
+        public string XCss => X.ToString("0.#", CultureInfo.InvariantCulture);
+        public string YCss => Y.ToString("0.#", CultureInfo.InvariantCulture);
+        public string WCss => W.ToString("0.#", CultureInfo.InvariantCulture);
+        public string HCss => H.ToString("0.#", CultureInfo.InvariantCulture);
     }
 }

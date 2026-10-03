@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
@@ -130,8 +131,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         get
         {
             var spacing = Math.Max(8, GridSpacing);
+            // The grid spacing is read back out of this custom property by the JS grid painter, so it has to
+            // stay parseable — invariant, with a '.', whatever the culture.
             return $"background-color:{Background};" +
-                   $"--veloxdev-gs:{spacing.ToString("0.#")}px;" +
+                   $"--veloxdev-gs:{spacing.ToString("0.#", CultureInfo.InvariantCulture)}px;" +
                    $"--veloxdev-gc:{GridColor};--veloxdev-mgc:{MajorGridColor};--veloxdev-ac:{AxisColor};";
         }
     }

@@ -148,7 +148,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 
 ## 四、改这里时最容易踩的坑（带依据）
 
-### 1. 区域设置陷阱：把 `double` 写进 CSS/SVG —— **仍在，且有两侧**
+### 1. 区域设置陷阱：把 `double` 写进 CSS/SVG —— **2026-10-03 已清零，规则仍在**
 
 这是这家最贵的一条，也是全仓库唯一有这一类 bug 的平台（别家动画产物是 CLR 值，不用格式化进字符串）。
 **为什么会有这类 bug**：C# 把 `double` 格式化成 CSS 属性值，在逗号小数点的区域下写出 `translateX(28,5px)`，
@@ -158,7 +158,8 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 **已修（做对的范本，改这类代码照这几处抄）：**
 - `Attached/Workflow/WorkflowNodeDragBehavior.razor.cs:66` —— 节点位置串走 `InvariantCulture`。
 - `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:315-318` —— 推给 JS 的节点几何数组走 `InvariantCulture`。
-- `Attached/Workflow/WorkflowGridDecorator.razor.cs:175-183` —— 标尺**文字**走 `InvariantCulture`（与下面同文件的那几处并存，同一文件里一半对一半错）。
+- `Attached/Workflow/WorkflowGridDecorator.razor.cs:175-183` —— 标尺**文字**走 `InvariantCulture`
+  （这个文件曾是「一半对一半错」的样本：文字对了、同一文件里算位置的几处没对；现在全对）。
 - demo 侧：`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateLinkView.razor.cs:128` 的注释
   把这条规则写成了显式约定（「Razor 用当前区域写裸 double，逗号小数点会写出浏览器读不了的 SVG 属性」），
   `N()`/`Css()` 都走不变文化（同文件 `:317` 与 `:312-315`；alpha 那处的理由写在 `:311`：「它是周期的一个端点」）。
@@ -170,20 +171,21 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
   （`wwwroot/veloxdev.workflow.js:295`），JS 恒用 `.`，两边格式一旦分叉，settle 守卫每一帧都会把值改回去，
   表现为缩放期间曲线反复闪。
 
-**仍然活着（写侧，用当前区域 `"0.#"` / `"0.###"`，没有 `InvariantCulture`）：**
-- `Attached/Workflow/WorkflowGridDecorator.razor.cs:79,87,88,90`（标尺厚度、两条 transform、刻度长度）
-- `Attached/Workflow/WorkflowGridDecorator.razor:11,26`（刻度标签的 `style="left:@tick.Pos.ToString("0.#")px"`）
-- `Attached/Workflow/WorkflowMinimapOverlay.razor.cs:144-147`（宽高、节点半径、视口描边宽）
-- `Attached/Workflow/WorkflowMinimapOverlay.razor.cs:448-451`（映射后的 `XCss/YCss/WCss/HCss`）
-- `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:128`（`--veloxdev-gs` 网格间距 CSS 变量）
-- `Attached/Workflow/WorkflowCanvasTransformBehavior.cs:23`（`ToCss`，这个静态助手是**公开 API**，消费方会直接用来拼 style）
+**2026-10-03 清掉的 7 处（原来「仍然活着」的两张清单，现已为空）：**
 
-**仍然活着（解析侧，JS 送来的 `.` 被当前区域解析）：**
-- `Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:70`：`double.TryParse(entry[1], out var x)` **没有**传
-  `CultureInfo.InvariantCulture`，而送来的值由 JS 的 `toFixed(2)` 生成、**恒定用 `.`**
-  （`wwwroot/veloxdev.workflow.js:1023-1024`）。在逗号小数点的服务端区域下，`double.TryParse` 的默认风格含
-  `AllowThousands`，`.` 会被当成**千位分隔符** —— 结果是**静默量错**（不是抛异常，也不是零），
-  插槽锚点整体错位。**修一处不够，两侧都要修。**
+- 写侧：`WorkflowGridDecorator.razor.cs` 的标尺厚度/两条 transform/刻度长度（收进一个新的 `Css(double)` 助手，
+  `.razor:11,26` 那两处内联 `style` 也改走它）、`WorkflowMinimapOverlay.razor.cs` 的宽高/节点半径/视口描边宽与
+  映射后的 `XCss/YCss/WCss/HCss`、`WorkflowSurfaceBehavior.razor.cs` 的 `--veloxdev-gs` 网格间距 CSS 变量、
+  **`WorkflowCanvasTransformBehavior.ToCss`**（公开静态 API，消费方会直接拿来拼 `style`）。
+- 解析侧：`WorkflowSlotLayoutBehavior.razor.cs:70`。原来 `double.TryParse(entry[1], out var x)` 不传 provider，
+  而值是 JS 的 `toFixed(2)` 生成的、**恒定用 `.`**（`wwwroot/veloxdev.workflow.js:1023-1024`）；逗号小数点区域的
+  默认风格含 `AllowThousands`，`.` 被当成**千位分隔符** ⇒ **静默量错**（不抛异常、也不是零），插槽锚点整体错位。
+  现在传 `NumberStyles.Float, CultureInfo.InvariantCulture` —— 顺带把 `AllowThousands` 也去掉了。
+- 模板与镜像：六个条目各自的 `ToCss` rgba 副本（`grid-decorator`/`minimap-overlay`/`node-view`/`slot-view`/`tree-view`
+  ＋`link-view`）与 `slot-view` 的 `SlotSizeCss`（进 SVG `width`/`height` 属性）。
+
+**刻意保留的 1 处**：`Examples/Workflow/*/{InfoOverlay}` 的 `scale.ToString("0.00")` 是 HUD 的**显示文字**，
+不进 CSS 属性、不被任何代码解析，七家各一份。它按当前区域显示「1,25」是显示层的事 —— 要统一属于另一件事。
 
 **判据（给下一个改这里的人）**：在 Razor 适配器里搜索 `ToString("0` 与 `double.TryParse`，
 每一处都要能回答「这个值会不会进 DOM / 来自 DOM」。会，就必须显式带 `InvariantCulture`。
@@ -247,9 +249,10 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
    `Src/Adapters/VeloxDev.Razor/` 下**没有任何** `LateUpdate` 使用；这条是 demo 侧的用法，不是适配器的机制。
    顺带：这条 demo 里**动画对象就是那个 `.razor` 组件自身**（`Transition<TemplateLinkView>`，
    `:158` 的 `BuildFlow()`），所以它的属性写入与它的重渲染在同一对象上 —— 这在别家是常态，在这家是特例。
-2. **区域设置陷阱仍然成立，且比历史说法记的范围更大**：见 §4·1 —— 写侧 6 组位置（含 `WorkflowCanvasTransformBehavior.ToCss`
-   这个**公开静态 API**）、解析侧 1 处，**全在适配器里**；demo 侧那 2 处已按不变文化修好。
-   「只修 demo」是不够的，适配器才是消费方会直接踩到的那一层。
+2. **区域设置陷阱已清零（2026-10-03）**：见 §4·1 —— 写侧 6 组位置（含 `WorkflowCanvasTransformBehavior.ToCss`
+   这个**公开静态 API**）与解析侧那 1 处全部改成不变文化，模板与镜像的 `ToCss`/`SlotSizeCss` 同批修完。
+   **规则不变、位置变了**：以前是「适配器里有 7 处雷」，现在是「写这类代码必须带 `InvariantCulture`，
+   判据与漏掉的表现见 §4·1」。新增/改动任何进 CSS/SVG/JS 的数字时照着那张判据自查。
 
 ---
 

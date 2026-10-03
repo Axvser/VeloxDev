@@ -240,7 +240,8 @@ public partial class TreeView : ComponentBase, IDisposable
             if (byte.TryParse(alpha, System.Globalization.NumberStyles.HexNumber,
                     System.Globalization.CultureInfo.InvariantCulture, out var a))
             {
-                return $"rgba({HexByte(rgb, 0)},{HexByte(rgb, 2)},{HexByte(rgb, 4)},{a / 255d:0.###})";
+                return FormattableString.Invariant(
+                    $"rgba({HexByte(rgb, 0)},{HexByte(rgb, 2)},{HexByte(rgb, 4)},{a / 255d:0.###})");
             }
         }
 

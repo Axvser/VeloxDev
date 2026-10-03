@@ -8,7 +8,7 @@
         <div class="veloxdev-wf-ruler-inner" style="transform:@TopTransform;">
             @foreach (var tick in TopTicks)
             {
-                <span class="veloxdev-wf-ruler-label" style="left:@tick.Pos.ToString("0.#")px;">
+                <span class="veloxdev-wf-ruler-label" style="left:@Css(tick.Pos)px;">
                     <span class="veloxdev-wf-ruler-tickline" style="height:@TickLengthCss(tick.IsMajor);background:@(tick.IsZero ? AxisColorCss : TickColor);"></span>
                     @if (tick.IsMajor)
                     {
@@ -23,7 +23,7 @@
         <div class="veloxdev-wf-ruler-inner" style="transform:@LeftTransform;">
             @foreach (var tick in LeftTicks)
             {
-                <span class="veloxdev-wf-ruler-label" style="top:@tick.Pos.ToString("0.#")px;">
+                <span class="veloxdev-wf-ruler-label" style="top:@Css(tick.Pos)px;">
                     <span class="veloxdev-wf-ruler-tickline" style="width:@TickLengthCss(tick.IsMajor);background:@(tick.IsZero ? AxisColorCss : TickColor);"></span>
                     @if (tick.IsMajor)
                     {

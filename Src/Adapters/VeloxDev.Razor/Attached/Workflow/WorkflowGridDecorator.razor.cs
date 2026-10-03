@@ -76,7 +76,11 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
 
     // The corner/band inline styles need an explicit px unit — a unitless length (e.g. "28") is
     // invalid CSS and the browser drops it, collapsing the corner, bands, and tick lines to 0×0.
-    private string RulerThicknessCss => RulerThickness.ToString("0.#") + "px";
+    private string RulerThicknessCss => Css(RulerThickness) + "px";
+
+    // Every length that reaches a style="" attribute goes through here: invariant, and always with a '.'
+    // decimal separator, or a comma-decimal culture makes the browser drop the declaration entirely.
+    private static string Css(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
 
     // The bands span the full surface width/height (background always covers the strip); only the
     // tick layer translates. The viewport is reported in canonical coordinates (ScrollOffset = raw
@@ -84,10 +88,10 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     // physical grid/axis line for world v sits at v + ContentOffset + RulerThickness - ScrollOffset
     // (the RulerThickness reserve is a visual-only canvas translate). Translate the tick layer by that
     // term and draw a world tick at band-local v to land exactly on the physical grid line.
-    private string TopTransform => $"translateX({(ContentOffsetX + RulerThickness - ScrollOffsetX).ToString("0.#")}px)";
-    private string LeftTransform => $"translateY({(ContentOffsetY + RulerThickness - ScrollOffsetY).ToString("0.#")}px)";
+    private string TopTransform => $"translateX({Css(ContentOffsetX + RulerThickness - ScrollOffsetX)}px)";
+    private string LeftTransform => $"translateY({Css(ContentOffsetY + RulerThickness - ScrollOffsetY)}px)";
     private string TickLengthCss(bool isMajor)
-        => (isMajor ? Math.Max(0, RulerThickness - 6) : Math.Max(6, RulerThickness * 0.35)).ToString("0.#") + "px";
+        => Css(isMajor ? Math.Max(0, RulerThickness - 6) : Math.Max(6, RulerThickness * 0.35)) + "px";
     private string AxisColorCss => string.IsNullOrEmpty(AxisColor) ? TickColor : AxisColor;
 
     /// <inheritdoc />

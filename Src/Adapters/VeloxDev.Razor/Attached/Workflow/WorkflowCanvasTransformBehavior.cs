@@ -19,8 +19,13 @@ public static class WorkflowCanvasTransformBehavior
     /// <summary>
     /// Renders a translate offset as a CSS <c>transform</c> value, e.g. <c>translate(0px, 0px)</c>.
     /// </summary>
+    /// <remarks>
+    /// The result is always invariant-formatted, because it is meant to be written into a <c>style</c> attribute:
+    /// under a culture whose decimal separator is a comma the browser would drop the whole declaration.
+    /// </remarks>
     public static string ToCss(Offset offset)
-        => $"translate({offset.Horizontal.ToString("0.###")}px, {offset.Vertical.ToString("0.###")}px)";
+        => FormattableString.Invariant(
+            $"translate({offset.Horizontal:0.###}px, {offset.Vertical:0.###}px)");
 
     /// <summary>
     /// Renders the workflow tree's content translate offset as a CSS <c>transform</c> value.

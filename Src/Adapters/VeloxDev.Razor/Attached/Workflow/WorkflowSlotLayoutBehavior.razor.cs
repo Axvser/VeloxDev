@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
@@ -67,7 +68,11 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
             }
 
             var id = entry[0];
-            if (!double.TryParse(entry[1], out var x) || !double.TryParse(entry[2], out var y))
+            // The batch comes from the measuring JS, which formats with toFixed() and is therefore always
+            // '.'-separated. Parsed with the current culture instead, a comma-decimal server would read the
+            // '.' as a thousands separator and silently place the anchor wrong — no exception, no zero.
+            if (!double.TryParse(entry[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+                || !double.TryParse(entry[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var y))
             {
                 continue;
             }
