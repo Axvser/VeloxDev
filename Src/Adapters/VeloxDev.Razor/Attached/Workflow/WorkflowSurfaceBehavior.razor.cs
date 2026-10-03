@@ -106,6 +106,12 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private double _offsetY;
     private SurfaceViewport _viewport = null!;
 
+    // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的渲染不再把用户滚回去。
+    private IWorkflowTreeViewModel? _lastRestoreTree;
+    private bool _hasPendingRestore;
+    private double _pendingScrollX;
+    private double _pendingScrollY;
+
     // Broadcasts the latest viewport snapshot to cheap overlay consumers (grid decorator) so they
     // can re-render without dragging the node/link content subtree along. See SurfaceViewportFeed.
     private readonly SurfaceViewportFeed _feed = new();
@@ -141,6 +147,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _offsetX = Math.Max(_offsetX, RulerThickness);
         _offsetY = Math.Max(_offsetY, RulerThickness);
 
+        CaptureViewportRestore();
+
         if (Tree is not null)
         {
             var (w, h) = ComputeCanvasSize();
@@ -162,13 +170,24 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             var layout = Tree?.Layout;
             var contentX = layout?.ActualOffset.Horizontal ?? 0;
             var contentY = layout?.ActualOffset.Vertical ?? 0;
+            // The restore rides in on the initial surface rather than a follow-up call, so the very first
+            // report already carries the saved position instead of the origin.
             _handle = await _module.InvokeAsync<IJSObjectReference>("initSurface",
-                _scroller, _canvasHost, _dotNetRef, _canvasW, _canvasH, contentX, contentY, _offsetX, _offsetY);
+                _scroller, _canvasHost, _dotNetRef, _canvasW, _canvasH, contentX, contentY, _offsetX, _offsetY,
+                _hasPendingRestore ? _pendingScrollX : 0, _hasPendingRestore ? _pendingScrollY : 0);
+            _hasPendingRestore = false;
 
             if (ZoomEnabled)
             {
                 _wheelHandle = await _module.InvokeAsync<IJSObjectReference>("initWheelZoom", _scroller, _dotNetRef);
             }
+        }
+        else if (_hasPendingRestore && IsEnabled && _module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
+        {
+            // A tree swapped in after the surface was already live: scroll is JS-owned, so the restore is
+            // a JS call. No delay needed — the module is initialized and the DOM is laid out by now.
+            _hasPendingRestore = false;
+            await _module.InvokeVoidAsync("scrollToPosition", ScrollViewerId, _pendingScrollX, _pendingScrollY);
         }
     }
 
@@ -476,6 +495,26 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// growth beyond the reserved ruler (which is a visual translate, like the XAML adapters).</summary>
     private double EffectiveContentX => (Tree?.Layout?.ActualOffset.Horizontal ?? 0) + Math.Max(0, _offsetX - RulerThickness);
     private double EffectiveContentY => (Tree?.Layout?.ActualOffset.Vertical ?? 0) + Math.Max(0, _offsetY - RulerThickness);
+
+    // 树刚换过且不是上一棵：把存档视口换算成本家的滚动目标。
+    // 本家的滚动空间比别的家多一段「超出 ruler 预留的平移」（见 OnSurfaceScroll 的 effX/effY），
+    // 恢复必须加上同一个量，否则位置会差出 ruler 那一段。
+    private void CaptureViewportRestore()
+    {
+        if (ReferenceEquals(Tree, _lastRestoreTree)) return;
+
+        _lastRestoreTree = Tree;
+        _hasPendingRestore = false;
+
+        if (Tree is null || !WorkflowSurfaceMath.HasViewportRestore(Tree.Layout)) return;
+
+        var layout = Tree.Layout;
+        _pendingScrollX = layout.ViewportOffset.Horizontal + layout.ActualOffset.Horizontal
+                          + Math.Max(0, _offsetX - RulerThickness);
+        _pendingScrollY = layout.ViewportOffset.Vertical + layout.ActualOffset.Vertical
+                          + Math.Max(0, _offsetY - RulerThickness);
+        _hasPendingRestore = true;
+    }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

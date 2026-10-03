@@ -537,7 +537,7 @@ window.veloxdevWorkflow = (() => {
     // canvas bookkeeping after it mutates translate + host size + scroll in one block.
     const surfaceReporters = {};
 
-    function initSurface(scrollerEl, canvasHostEl, dotnetRef, initialW, initialH, contentX, contentY, initialOffsetX, initialOffsetY) {
+    function initSurface(scrollerEl, canvasHostEl, dotnetRef, initialW, initialH, contentX, contentY, initialOffsetX, initialOffsetY, initialScrollX, initialScrollY) {
         if (!scrollerEl || !canvasHostEl) return null;
         let panState = null;
         let spaceHeld = false;
@@ -753,6 +753,11 @@ window.veloxdevWorkflow = (() => {
         // from the first frame and the ruler ticks align with the grid.
         ensureRulerReserve();
 
+        // Restore a saved viewport before the first report, so the restored position is what gets
+        // reported rather than the origin. Absent arguments mean "open at the origin".
+        if (initialScrollX) scrollerEl.scrollLeft = Math.max(0, initialScrollX);
+        if (initialScrollY) scrollerEl.scrollTop = Math.max(0, initialScrollY);
+
         // Initial report (fills viewport size before the user interacts).
         report();
 
@@ -827,8 +832,10 @@ window.veloxdevWorkflow = (() => {
         el.scrollTop = ratioY * Math.max(0, el.scrollHeight - el.clientHeight);
     }
 
-    // Restores an absolute world scroll position (used after loading a workflow whose viewport
-    // was persisted in CanvasLayout.ViewportOffset).
+    // Sets the scroller to an absolute scroll position in pixels — NOT a world coordinate. The caller
+    // converts (world + ActualOffset + the ruler overscroll) before calling; passing a raw
+    // CanvasLayout.ViewportOffset here is a coordinate-space mistake that only shows when the canvas
+    // has been translated.
     function scrollToPosition(scrollerId, x, y) {
         const el = document.getElementById(scrollerId);
         if (!el) return;
