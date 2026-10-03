@@ -66,7 +66,7 @@ on it — skip the region instead of widening.
 
 **Generates code only.** All seven items are a single `.cs` file — no markup at all. Node and slot views are `UserControl` subclasses with `OnPaint`; node, slot, and link views are all pooled children, and the tree paints the grid surface itself.
 
-⚙ **Five of the seven items are thin.** They derive from a control the adapter ships and supply only what is yours:
+⚙ **All seven items are thin.** Every one derives from a control the adapter ships and supplies only what is yours:
 
 | item | derives from | you supply |
 |---|---|---|
@@ -75,6 +75,11 @@ on it — skip the region instead of widening.
 | slot | `WorkflowSlotView` | the glyph path and its colours |
 | link | `WorkflowLinkView` | `LineColor` / `Thickness` / `SurfaceBackground` |
 | minimap | `WorkflowMinimapOverlay` | the four palette colours |
+| grid-decorator | `WorkflowGridDecorator` | eight colours, the spacing, how many lines make a major one |
+| template-selector | `WorkflowTemplateSelector` | which view each item kind gets (the generated file wires node and link) |
+
+Three helpers are shared by all of them: `WorkflowSurfaceColors.Parse`, `WorkflowSurfaceGraphics.RoundedRectangle`,
+`WorkflowSurfaceGrid` (grid-line classification and ruler-label formatting).
 
 The node card implements `IWorkflowSurfaceNodeView` so the surface can place it on every pan — keep that when you edit it. The card is the one item that stays large: what it looks like is yours, and there is no markup language to carry it.
 

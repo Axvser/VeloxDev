@@ -93,8 +93,15 @@
 
 | 平台 | 有基类 | 还缺 |
 |---|---|---|
-| **WinForms** | tree-view / node-view / slot-view / link-view / minimap-overlay | **grid-decorator**（279 行）、**template-selector**（36 行） |
-| **Jalium** | **一个都没有**（2026-10-03 刚删掉包里那批零消费者的死代码，那批不是基类、是另一套设计的遗骸） | 全部七项：tree 553、link 261、node 217、decorator 117、slot 77、selector 23、minimap 14 |
+| **WinForms** | **七项全有**（2026-10-03 完成） | —— |
+| **Jalium** | **一个都没有** | 全部七项：tree 553、link 261、node 217、decorator 117、slot 77、selector 23、minimap 14 |
+
+**WinForms 的七个基类**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）与它们把模板压到的行数：
+`WorkflowTreeView` 45、`WorkflowNodeView` 404、`WorkflowSlotView` 22、`WorkflowLinkView` 21、
+`WorkflowGridDecorator` 41、`WorkflowMinimapOverlay` 22、`WorkflowTemplateSelector` 19 —— 合计 **574**（原 3257）。
+另有三个共用件：`WorkflowSurfaceColors`（颜色解析）、`WorkflowSurfaceGraphics`（圆角矩形）、
+`WorkflowSurfaceGrid`（网格线判定与刻度标签格式化，此前在包内有**两份**逐字相同的私有副本）。
+校验：`Src/Verification/verify-workflow-item-templates.ps1 -Strict` 全绿。
 
 Jalium 的 tree-view 是两家加起来的最大一块，而且它比别人的纠结点多一条：**它的模板自带完整的连线交互**
 （命中、拖拽、虚拟连线预览），而仓库另有「连线交互归 demo、模板保持被动」的划定

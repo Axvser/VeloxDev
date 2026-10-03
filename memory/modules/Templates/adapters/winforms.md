@@ -23,9 +23,9 @@
 | link-view | **2026-10-03 起**：`sealed class : WorkflowLinkView`（21 行）——调色板。雕窗口区域、端点订阅、几何全在基类 | 基类见左 |
 | node-view | **2026-10-03 起**：`sealed class : WorkflowNodeView`（417 行）——三个私有嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` / `DoubleBufferedPanel`）、`OnNodeRebound`、`OnCollapseChanged`、绘制。绑定/定位/折叠/反射读名字在基类 | 基类见左 |
 | slot-view | **2026-10-03 起**：`sealed class : WorkflowSlotView`（22 行）——图形 + 三个调色值。**那个 182 行的 `SvgPathParser` 搬进了适配器** | 基类见左 |
-| grid-decorator | `Panel, IWorkflowGridDecorator`，网格与标尺**画在 `OnPaintBackground`**，`OnPaint` 是空的。**刻意没动**：279 行落在其余六家 110–535 之间，不是离群值 | `:17`、`:70-83` |
+| grid-decorator | **2026-10-03 起**：`sealed class : WorkflowGridDecorator`（41 行）——八个颜色 + 间距 + 每几条一条主线。网格与标尺的绘制（含 `OnPaintBackground` 那一趟）在基类 | 基类见左 |
 | minimap-overlay | **2026-10-03 起**：`sealed class : WorkflowMinimapOverlay`（22 行）——4 个调色值。定位、拖拽映射、布局数学全在基类（它并实现了 `IWorkflowMinimapScrollSource`，那个接口也搬进了适配器） | 基类见左 |
-| template-selector | 实现适配器的 `IWorkflowTemplateSelector`（**自定义接口，不是 `DataTemplateSelector`**），四个 `Func<…, Control>` 工厂。**树视图不再引用它**——基类自带一个记录视图角色的选择器 | `:12`、`:14-17` |
+| template-selector | **2026-10-03 起**：`sealed class : WorkflowTemplateSelector`（19 行）——构造函数里给 node / link 两个工厂赋值。四个 `Func<…, Control>` 工厂、分流与诊断都在基类。**树视图不再引用它**——树的基类自带一个记录视图角色的选择器 | 基类见左 |
 
 ---
 
@@ -104,8 +104,10 @@ NodeView 与 LinkView，而 `verify-workflow-item-templates.ps1` 会把七条一
 
 ### P2 · 六个 `ParseColor` 副本，而且这一家多一条 `Color.FromName` 兜底
 
-`private static Color ParseColor` 在 `workflow-{grid-decorator,link-view,minimap-overlay,node-view,slot-view,tree-view}`
-六处各一份（`:253`、`:320`、`:299`、`:751`、`:149`、`:1046`），只有 `template-selector` 没有。
+**2026-10-03 起这六份没了**：解析器只有一处 —— 适配器的 `WorkflowSurfaceColors.Parse`
+（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceColors.cs`），模板通过各自基类的
+`protected static ParseColor` 调它。下面这段记的是修复前的形状，**结论（`Color.FromName` 兜底会静默吃掉写错的占位符）仍然成立**：
+
 这一家的实现**比其他平台多一个兜底**：解析不出 `#RRGGBB`/`#AARRGGBB` 时
 `return Color.FromName(value);`（`workflow-link-view/TemplateClass.cs:344`，其余五份同形）。
 ⇒ 占位符写错（少一位、拼错名字）时**不抛也不报**，`Color.FromName` 对未知名字返回
@@ -163,24 +165,27 @@ WPF/WinUI/Avalonia/Jalium 四家是空转参数（`../architecture.md` §7.1）�
 
 ### P7 · `ApplyPan` 会把越界的 pan "折进" `NegativeOffset` 并原地改写拖拽原点
 
-`:905-914`：只要 `_panOffset` 的正分量存在，就 `layout.NegativeOffset += grow`，
-然后 **同步减去** `_panOffsetAtPress` 与 `_panOffset` 的同一分量，注释 `:910-911` 写明理由：
+`WorkflowTreeView.cs:504-511`：只要 `_panOffset` 的正分量存在，就 `layout.NegativeOffset += grow`，
+然后 **同步减去** `_panOffsetAtPress` 与 `_panOffset` 的同一分量，注释写明理由：
 "否则每次同一绝对增量的重入 `ApplyPan` 都会再折一次，平移会跑飞"。
-⇒ 这一家的"静止时滚动偏移恒为 0、只有越过原点才长世界"是由模板保证的（对照
+⇒ 这一家的"静止时滚动偏移恒为 0、只有越过原点才长世界"是**基类**保证的（对照
 `memory/modules/WorkflowSystem/adapters/winforms.md` §2.4 说的两套平移模型），
 **改动这一段要同时验算"折进"与"回写 pan"两件事，只改一半的表现是平移加速或原点弹跳**。
 
 ### P8 · 同一家内部两个"网格装饰器"的语义不同
 
-| | 独立条目 `workflow-grid-decorator` | tree-view 内部的 `SurfaceCanvas` |
+2026-10-03 起两者都在适配器里：独立角色是 `WorkflowGridDecorator.cs`，tree 内部那个是
+`WorkflowTreeView.cs` 的私有嵌套 `SurfaceCanvas`。
+
+| | `WorkflowGridDecorator`（独立角色） | `SurfaceCanvas`（tree 内部） |
 |---|---|---|
-| 画在哪 | `OnPaintBackground` 里 `Render`，`OnPaint` 空（`:70-83`） | `OnPaintBackground` 画网格（`:235-254`）；**没有 `OnPaint`** —— 连线由各自的池化视图自己画 |
-| 标尺 | **自己画**：填充两条带 + `DrawRulers`（`:103-106`、`:142`） | **不画**：`RulerBand => 0`（`:233`），交给 `RulerOverlayForm` |
-| `RulerThickness` | 有，默认 36（`:21`、`:49`） | 没有这个属性（浮层窗体持有 `RulerThickness`，`:392`） |
-| 调色板 | 八个 `Template*` 占位符（`:23-32`） | 网格背景用 `TemplateSurfaceBackground`（`:65`），其余三个**硬编码字面量**（`:187-189` 的 `#2A2D2E`/`#3A3D40`/`#4D4D4D`） |
+| 画在哪 | `OnPaintBackground` 里 `Render`，`OnPaint` 空（`WorkflowGridDecorator.cs:168`） | `OnPaintBackground` 画网格（`WorkflowTreeView.cs:790`）；**没有 `OnPaint`** —— 连线由各自的池化视图自己画 |
+| 标尺 | **自己画**：填充两条带 + `DrawRulers`（`WorkflowGridDecorator.cs:238`） | **不画**：`RulerBand => 0`（`WorkflowTreeView.cs:772`），交给 `RulerOverlayForm` |
+| `RulerThickness` | 有，默认 36（`WorkflowGridDecorator.cs:31`、`:142`） | 没有这个属性（浮层窗体持有 `RulerThickness`） |
+| 调色板 | 八个可设属性，默认即模板默认（`WorkflowGridDecorator.cs:33-41`） | 网格背景跟随 `SurfaceBackground`，其余三个**硬编码字面量**（`WorkflowTreeView.cs` 的 `#2A2D2E`/`#3A3D40`/`#4D4D4D`） |
 
 ⇒ `RulerBand => 0` 是这一家 tree-view 的**正确**取值（标尺不占内容内缩，是浮层），
-别照着独立装饰器的 `RulerBand => RulerThickness`（`workflow-grid-decorator/TemplateClass.cs:68`）
+别照着独立装饰器的 `RulerBand => RulerThickness`（`WorkflowGridDecorator.cs:165`）
 "修"成一致；两者是不同角色的两个对象。
 
 ### P9 · 连线的"雕窗"是这一家能把连线池化的前提，动几何就动它

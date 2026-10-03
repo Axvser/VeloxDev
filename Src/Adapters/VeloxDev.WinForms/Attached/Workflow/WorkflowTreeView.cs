@@ -713,7 +713,6 @@ public abstract class WorkflowTreeView : UserControl
         internal const double DefaultRulerThickness = 36;
         private const double GridSpacing = 40;
         private const int MajorFreq = 5;
-        private const double Eps = 0.001;
 
         private readonly WorkflowTreeView _owner;
         private readonly Color _minorGridColor = ParseColor("#2A2D2E");
@@ -807,7 +806,7 @@ public abstract class WorkflowTreeView : UserControl
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
                 var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, 0);
-                var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
+                var pen = WorkflowSurfaceGrid.SelectPen(value, majorStep, minorPen, majorPen, axisPen);
                 g.DrawLine(pen, x, 0, x, bounds.Height);
             }
 
@@ -815,37 +814,9 @@ public abstract class WorkflowTreeView : UserControl
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
                 var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, 0);
-                var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
+                var pen = WorkflowSurfaceGrid.SelectPen(value, majorStep, minorPen, majorPen, axisPen);
                 g.DrawLine(pen, 0, y, bounds.Width, y);
             }
-        }
-
-        private Pen SelectPen(double value, double majorStep, Pen minorPen, Pen majorPen, Pen axisPen)
-            => IsNearZero(value) ? axisPen : IsMajorLine(value, majorStep) ? majorPen : minorPen;
-
-        private static bool IsMajorLine(double value, double majorStep)
-            => majorStep > 0
-                && (Math.Abs(value % majorStep) < Eps
-                    || Math.Abs(value % majorStep - majorStep) < Eps
-                    || Math.Abs(value % majorStep + majorStep) < Eps);
-
-        private static bool IsNearZero(double value)
-            => Math.Abs(value) < Eps;
-
-        private static string FormatGridValue(double value)
-        {
-            var abs = Math.Abs(value);
-            if (abs < 10000)
-            {
-                return Math.Round(value).ToString(CultureInfo.InvariantCulture);
-            }
-
-            if (abs < 1000000)
-            {
-                return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
-            }
-
-            return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
         }
     }
 
@@ -868,7 +839,6 @@ public abstract class WorkflowTreeView : UserControl
 
         private const double GridSpacing = 40;
         private const int MajorFreq = 5;
-        private const double Eps = 0.001;
 
         // 与表面同一套配色。alpha 取 0x70（WinForms 的偏离）：带子合成在卡片**和**网格之上，若按其它框架的
         // 0xC8，带下的网格只剩约 3.5 个亮度、看不出来；0x70 既留着色调，又让网格从带下可见地穿过。
@@ -987,14 +957,14 @@ public abstract class WorkflowTreeView : UserControl
                     continue;
                 }
 
-                var isMajor = IsMajorLine(value, majorStep);
+                var isMajor = WorkflowSurfaceGrid.IsMajorLine(value, majorStep);
                 var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
-                var pen = IsNearZero(value) ? axisPen : tickPen;
+                var pen = WorkflowSurfaceGrid.IsNearZero(value) ? axisPen : tickPen;
                 g.DrawLine(pen, x, ruler, x, (float)(ruler - tickLength));
 
                 if (isMajor)
                 {
-                    g.DrawString(FormatGridValue(value), _labelFont, labelBrush, x + 3, 2, format);
+                    g.DrawString(WorkflowSurfaceGrid.FormatGridValue(value), _labelFont, labelBrush, x + 3, 2, format);
                 }
             }
 
@@ -1008,14 +978,14 @@ public abstract class WorkflowTreeView : UserControl
                     continue;
                 }
 
-                var isMajor = IsMajorLine(value, majorStep);
+                var isMajor = WorkflowSurfaceGrid.IsMajorLine(value, majorStep);
                 var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
-                var pen = IsNearZero(value) ? axisPen : tickPen;
+                var pen = WorkflowSurfaceGrid.IsNearZero(value) ? axisPen : tickPen;
                 g.DrawLine(pen, ruler, y, (float)(ruler - tickLength), y);
 
                 if (isMajor)
                 {
-                    g.DrawString(FormatGridValue(value), _labelFont, labelBrush, 3, y + 2, format);
+                    g.DrawString(WorkflowSurfaceGrid.FormatGridValue(value), _labelFont, labelBrush, 3, y + 2, format);
                 }
             }
         }
@@ -1048,30 +1018,6 @@ public abstract class WorkflowTreeView : UserControl
             }
         }
 
-        private static bool IsMajorLine(double value, double majorStep)
-            => majorStep > 0
-                && (Math.Abs(value % majorStep) < Eps
-                    || Math.Abs(value % majorStep - majorStep) < Eps
-                    || Math.Abs(value % majorStep + majorStep) < Eps);
-
-        private static bool IsNearZero(double value)
-            => Math.Abs(value) < Eps;
-
-        private static string FormatGridValue(double value)
-        {
-            var abs = Math.Abs(value);
-            if (abs < 10000)
-            {
-                return Math.Round(value).ToString(CultureInfo.InvariantCulture);
-            }
-
-            if (abs < 1000000)
-            {
-                return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
-            }
-
-            return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
-        }
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT { public int X; public int Y; }

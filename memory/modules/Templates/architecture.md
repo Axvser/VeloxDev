@@ -209,27 +209,31 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 装饰器/小地图只能由用户代码提供 —— 推理链在 `memory/modules/WorkflowSystem/adapters/winforms.md` §一，
 此处只指路。Jalium 那 14 行是七家里最薄的（一个空构造器：`workflow-minimap-overlay/TemplateClass.cs`）。
 
-**2026-10-03：这条轴上的四个角色一起翻面了。** WinForms 现在把「机制」都收进适配器包，模板只剩策略：
+**2026-10-03：WinForms 的七项全部翻面。** 适配器包为**每一个**角色提供可重写基类，模板只剩策略：
 
 | 角色 | 之前 | 现在 | 其余六家同角色 |
 |---|---|---|---|
-| tree-view | 1095 | **45** | 62–81（XAML 家；Razor 79） |
-| minimap | 325 | **22** | 14–42 |
+| tree-view | 1095 | **45** | 62–81（XAML 家；Razor 339） |
+| node-view | 790 | **404** | 82–242 |
 | slot-view | 379 | **22** | 27–143 |
 | link-view | 346 | **21** | 68–319 |
-| node-view | 790 | **417** | 82–242 |
-| grid-decorator | 279 | 281 | 110–535 | 
-| **合计** | **3257** | **844** | — |
+| grid-decorator | 279 | **41** | 110–535 |
+| minimap-overlay | 325 | **22** | 14–42 |
+| template-selector | 36 | **19** | 23–67 |
+| **合计** | **3257** | **574** | — |
 
-包内新增五个控件共 2668 行（`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` /
-`WorkflowLinkView` / `WorkflowMinimapOverlay`，都在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）。
+包内七个控件在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`，另有三个共用件
+（`WorkflowSurfaceColors` / `WorkflowSurfaceGraphics` / `WorkflowSurfaceGrid`）。
 
-**两条要记住的判断**：
-- **`grid-decorator` 是故意没动的**（279 行落在其余六家 110–535 的中间）——那个角色本来就归用户，
-  不是离群值。同一把尺子：其余五个都是离群值才收的。
-- **`node-view` 仍是最高的**（417 vs 其余最多 242），因为收掉的只有机制（绑定/定位/折叠/反射读名字），
-  **卡片长什么样是用户的设计**：里面三个嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` /
-  `DoubleBufferedPanel`）与 `OnPaintBackground` 是它的视觉，不该进包。
+**这一条把「离群值」那把尺子换掉了。** 中途我曾用「`grid-decorator` 279 行落在其余六家 110–535 的中间、
+不是离群值」当理由没做它 —— 那是**错的**：判据是「**这一段是不是用户该改的扩展点**」，
+不是「这个角色像不像用户的」。该角色含平台机制（网格线的世界坐标换算、刻度与标签排版、每帧重绘），
+用户该拿到的是派生 + 调色板。用户 2026-10-03 把这条定成规范，见
+[`adapter-base-class-specifications.md`](../../specifications/adapter-base-class-specifications.md) §2.2。
+
+**唯一还高的是 `node-view`**（404 vs 其余最多 242）：收掉的只有机制（绑定/定位/折叠/反射读名字），
+**卡片长什么样是用户的设计** —— 里面三个嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` /
+`DoubleBufferedPanel`）与 `OnPaintBackground` 是它的视觉，按 §2.1 不该进包。
 
 Jalium 的 tree-view 仍 553 行自绘；适配器里那份零消费者的 `WorkflowTreeView` 已删除，这块迁移等于没做。见 `extension.md` §4.1。
 

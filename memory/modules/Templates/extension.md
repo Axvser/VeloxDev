@@ -140,14 +140,17 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 用户自己装包，minimap 这个角色在六家就是「包里发控件 + 模板薄派生」（WPF 24 / Avalonia 25 / WinUI 42 /
 MAUI 21 / Jalium 14 / Razor 15 行）。
 
-**2026-10-03 起 WinForms 的四个角色也走这条**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）：
+**2026-10-03 起 WinForms 的七项全部走这条**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）：
 `WorkflowTreeView`（装配、网格、分层窗口标尺、平移引擎、视图池）、`WorkflowNodeView`（绑定、定位、缩放折叠、
 反射读标题/输入口/插槽标签）、`WorkflowSlotView`（含那个 182 行的 SVG 路径解析器）、`WorkflowLinkView`
-（雕窗口区域、端点订阅、几何）、`WorkflowMinimapOverlay`。判据是**「这段代码是不是用户该改的扩展点」**：
+（雕窗口区域、端点订阅、几何）、`WorkflowMinimapOverlay`、`WorkflowGridDecorator`（网格与标尺的绘制）、
+`WorkflowTemplateSelector`（四个工厂与分流）。判据是**「这段代码是不是用户该改的扩展点」**：
 平台硬限制与机械装配进包，策略（调色板、卡片长什么样、用哪个图形）留在模板里。
-**判据的边界也要记住**：`grid-decorator` 六家都在 110–535 行、WinForms 279 行**不是离群值** ——
-那个角色本来就是「你自己的网格」，所以没动它。同一把尺子量出来的结论：
-tree 1095、slot 379、minimap 325、link 346、node 790 都是离群值（其余六家同角色最多 242），它们才是该收的。
+
+⚠ **判据不是「这个角色像不像用户的」，也不是「离群不离群」**。中途曾用后者当理由跳过 `grid-decorator`
+（279 行落在其余六家 110–535 的中间），那是错的 —— 那个角色照样含平台机制。用户随后把
+「每一个需要 item template 的角色都要有可重写基类」定成了规范，见
+[`adapter-base-class-specifications.md`](../../specifications/adapter-base-class-specifications.md)。
 
 ⇒ 已经"抽"过的公共物只有一件：`TemplateSlotPath` 那段 SVG。它是**每个条目的 `template.json` 里各存一份字面量**
 （七个平台的 `defaultValue` 逐字节相同，viewBox 1024×1024），**改图标要改七处**，

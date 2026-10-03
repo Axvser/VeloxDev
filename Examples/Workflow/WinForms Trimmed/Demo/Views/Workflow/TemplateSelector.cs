@@ -1,36 +1,19 @@
-using System;
+// VeloxDev customization: The view selector. The adapter's WorkflowTemplateSelector owns the dispatch and the
+// unsupported-item diagnostics; this file says which view each item kind gets. Rename the view types below if you
+// renamed those items, and add SlotViewFactory / TreeViewFactory if your host pools slots or whole trees.
 using System.Windows.Forms;
-using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>
-/// Assign the four view factories, then use this selector with
-/// <c>ViewPool.SetTemplateSelector</c> to materialize workflow item views.
+/// The view selector: the adapter's <see cref="WorkflowTemplateSelector"/> with this project's node and link views.
 /// </summary>
-public sealed class TemplateSelector : IWorkflowTemplateSelector
+public sealed class TemplateSelector : WorkflowTemplateSelector
 {
-    public Func<IWorkflowNodeViewModel, Control>? NodeViewFactory { get; set; }
-    public Func<IWorkflowSlotViewModel, Control>? SlotViewFactory { get; set; }
-    public Func<IWorkflowLinkViewModel, Control>? LinkViewFactory { get; set; }
-    public Func<IWorkflowTreeViewModel, Control>? TreeViewFactory { get; set; }
-
-    public Control CreateView(object item)
-        => item switch
-        {
-            IWorkflowLinkViewModel link => LinkViewFactory is not null
-                ? LinkViewFactory(link)
-                : throw new InvalidOperationException("LinkViewFactory is not set."),
-            IWorkflowSlotViewModel slot => SlotViewFactory is not null
-                ? SlotViewFactory(slot)
-                : throw new InvalidOperationException("SlotViewFactory is not set."),
-            IWorkflowNodeViewModel node => NodeViewFactory is not null
-                ? NodeViewFactory(node)
-                : throw new InvalidOperationException("NodeViewFactory is not set."),
-            IWorkflowTreeViewModel tree => TreeViewFactory is not null
-                ? TreeViewFactory(tree)
-                : throw new InvalidOperationException("TreeViewFactory is not set."),
-            _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
-        };
+    public TemplateSelector()
+    {
+        NodeViewFactory = node => new NodeView { ViewModel = node };
+        LinkViewFactory = link => new LinkView { ViewModel = link };
+    }
 }
