@@ -58,6 +58,7 @@ Context records: `SurfaceViewport`, `SurfaceCanvas`.
 | `ScrollViewerId` / `CanvasId` | `veloxdev-wf-scroll` / `veloxdev-wf-canvas` | Element ids used by the JS gesture layer. |
 | `GridDecorator` / `Minimap` | — | `RenderFragment<SurfaceViewport>` — the decorator/minimap components. |
 | `ChildContent` | — | `RenderFragment<SurfaceCanvas>` — nodes, links, slots; receives the computed canvas size. |
+| `LinkMenu` | — | `RenderFragment<IWorkflowLinkViewModel>` — the entries of the link context menu. The surface renders the chrome and owns the whole wiring (right press, positioning, open/close, hub reporting); each entry binds the link it receives, e.g. `@onclick="() => link.DeleteCommand.Execute(null)"`. |
 | `Background` / `GridColor` / `GridSpacing` | `#0B1120` / `#2A2D2E` / `40` | Canvas styling. |
 
 **Behavior:** middle-mouse / space+left / left-on-blank panning; scroll reporting that updates

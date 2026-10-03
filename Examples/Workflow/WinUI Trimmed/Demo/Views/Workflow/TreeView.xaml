@@ -9,7 +9,8 @@
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
              behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
-             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+             behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
     <UserControl.Resources>
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView Width="{Binding Size.Width}"

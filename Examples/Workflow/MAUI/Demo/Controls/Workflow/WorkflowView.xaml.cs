@@ -1,14 +1,12 @@
 using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
-using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
 using System.Windows.Input;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
-using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
@@ -18,18 +16,6 @@ public partial class WorkflowView : ContentView
     private TreeViewModel _workflowViewModel = new();
     private bool _layoutRefreshPending;
     private Page MainPage => Application.Current?.Windows[0].Page ?? throw new InvalidOperationException();
-
-    // 右键菜单挂在树的 hub 上；换会话/换树时先解绑，旧 hub 才不会继续握着这个控件的委托。
-    private LinkInteraction? _interaction;
-
-    // 当前弹出层作用的那条连线；没有弹出层时为 null。也是 ContextMenuDismissRequested 的判据：
-    // 只有指着同一条线的菜单才会被收起。
-    private IWorkflowLinkViewModel? _menuLink;
-
-#if WINDOWS
-    // Windows 上正在弹的原生 flyout；hub 收不了它，由宿主 Hide，并在它的 Closed 里清掉。
-    private Microsoft.UI.Xaml.Controls.MenuFlyout? _openFlyout;
-#endif
 
     public WorkflowView()
     {
@@ -156,35 +142,6 @@ public partial class WorkflowView : ContentView
         set => SetValue(SessionProperty, value);
     }
 
-    /// <summary>
-    /// View-model collection fed to the canvas <c>ViewPool</c>. Mirrors
-    /// <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/> but drops link view
-    /// models — links are rendered by the shared link overlay, so the
-    /// pool must not materialize one GraphicsView per link.
-    /// </summary>
-    public static readonly BindableProperty NodeItemsSourceProperty = BindableProperty.Create(
-        nameof(NodeItemsSource),
-        typeof(INotifyCollectionChanged),
-        typeof(WorkflowView),
-        null);
-
-    public INotifyCollectionChanged? NodeItemsSource
-    {
-        get => (INotifyCollectionChanged?)GetValue(NodeItemsSourceProperty);
-        set => SetValue(NodeItemsSourceProperty, value);
-    }
-
-    private void UpdateNodeItemsSource(TreeViewModel? tree)
-    {
-        if (NodeItemsSource is NodeOnlyVisibleItems wrapper)
-        {
-            wrapper.Detach();
-        }
-
-        var visible = tree?.GetHelper()?.VisibleItems;
-        NodeItemsSource = visible is null ? null : new NodeOnlyVisibleItems(visible);
-    }
-
     private static void OnSessionChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         var view = (WorkflowView)bindable;
@@ -206,8 +163,6 @@ public partial class WorkflowView : ContentView
         // BindingContext on individual child elements — that breaks the natural
         // inheritance chain and can cause missed binding updates.
         BindingContext = _workflowViewModel;
-        UpdateNodeItemsSource(newSession?.Tree);
-        UpdateInteraction(newSession?.Tree);
         // Propagate the tree to the HUD explicitly so its BindingContextChanged fires even if
         // inheritance does not reach the nested overlay.
         InfoOverlay.BindingContext = _workflowViewModel;
@@ -468,269 +423,5 @@ public partial class WorkflowView : ContentView
     private void OnAgentInputCompleted(object? sender, EventArgs e)
     {
         OnSendToAgent(sender, e);
-    }
-
-    // ── Link context menu ───────────────────────────────────────────────────
-
-    // 一棵树一个 hub：换会话时旧的退订、新的订阅。空白画布（Link 为 null）不弹菜单。
-    private void UpdateInteraction(TreeViewModel? tree)
-    {
-        if (_interaction is not null)
-        {
-            _interaction.ContextMenuRequested -= OnContextMenuRequested;
-            _interaction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
-            _interaction = null;
-        }
-
-        if (tree is not null)
-        {
-            _interaction = LinkInteraction.For(tree);
-            _interaction.ContextMenuRequested += OnContextMenuRequested;
-            _interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
-        }
-    }
-
-    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
-    {
-        if (e.Link is null)
-        {
-            return;
-        }
-
-        ShowLinkMenu(e.Link, e.Position);
-    }
-
-    // 条目自带 Command 就用它（绑定上下文是那条连线，弹出前设好）；没有就落到默认动作：删掉这条连线。
-    private static void RunItem(MenuFlyoutItem item, IWorkflowLinkViewModel link)
-    {
-        if (item.Command is { } command)
-        {
-            var parameter = item.CommandParameter ?? link;
-            if (command.CanExecute(parameter))
-            {
-                command.Execute(parameter);
-            }
-
-            return;
-        }
-
-        if (link.DeleteCommand.CanExecute(null))
-        {
-            link.DeleteCommand.Execute(null);
-        }
-    }
-
-#if WINDOWS
-    // 菜单条目在 XAML 的 LinkContextMenu 里声明；这里只管定位与弹出。
-    // 画布坐标 → 视口像素：px = Ruler + 锚点 + 内容偏移 − 滚动偏移（与链接层绘制/命中共用同一条换算）。
-    private void ShowLinkMenu(IWorkflowLinkViewModel link, Anchor position)
-    {
-        if (PART_GridDecorator.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement host)
-        {
-            return;
-        }
-
-        var ruler = Math.Max(0d, PART_GridDecorator.RulerThickness);
-        var x = ruler + position.Horizontal + PART_GridDecorator.ContentOffsetX - PART_GridDecorator.ScrollOffsetX;
-        var y = ruler + position.Vertical + PART_GridDecorator.ContentOffsetY - PART_GridDecorator.ScrollOffsetY;
-
-        var flyout = BuildPlatformMenu((MenuFlyout)Resources["LinkContextMenu"], link);
-
-        _menuLink = link;
-        _openFlyout = flyout;
-
-        // 开合报回 hub：菜单开着时指针飞到菜单上，也不该清掉这次选中的连线。
-        flyout.Closed += (_, _) =>
-        {
-            _openFlyout = null;
-            _menuLink = null;
-            _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, position, link));
-        };
-        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, position, link));
-
-        flyout.ShowAt(host, new Windows.Foundation.Point(x, y));
-    }
-
-    // 菜单指着的那条线已经离开树：hub 收不了原生 flyout，由宿主 Hide。收起照常报 Closed，挂起随之放开。
-    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
-    {
-        if (!ReferenceEquals(_menuLink, e.Link)) return;
-        _openFlyout?.Hide();
-    }
-
-    // MAUI 没有能在指定点弹出的跨平台菜单；只有 Windows 的原生 MenuFlyout 能做到，所以把声明的条目翻成它。
-    private static Microsoft.UI.Xaml.Controls.MenuFlyout BuildPlatformMenu(MenuFlyout declared, IWorkflowLinkViewModel link)
-    {
-        var flyout = new Microsoft.UI.Xaml.Controls.MenuFlyout();
-        foreach (var element in declared)
-        {
-            switch (element)
-            {
-                // MenuFlyoutSeparator derives from MenuFlyoutItem, so it must be matched first.
-                case MenuFlyoutSeparator:
-                    flyout.Items.Add(new Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator());
-                    break;
-
-                case MenuFlyoutItem item:
-                    item.BindingContext = link;
-                    var native = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem
-                    {
-                        Text = item.Text,
-                        IsEnabled = item.IsEnabled,
-                    };
-                    native.Click += (_, _) => RunItem(item, link);
-                    flyout.Items.Add(native);
-                    break;
-            }
-        }
-
-        return flyout;
-    }
-#else
-    // 非 Windows 没有能在指定点弹出的跨平台菜单，所以把声明的条目填进 PART_LinkMenuLayer 这个浮层里，
-    // 落在长按处。长按本身由链接层翻译成右键交给 hub；这里只负责呈现。
-    private void ShowLinkMenu(IWorkflowLinkViewModel link, Anchor position)
-    {
-        _menuLink = link;
-
-        var declared = (MenuFlyout)Resources["LinkContextMenu"];
-        PART_LinkMenuItems.Children.Clear();
-        foreach (var element in declared)
-        {
-            switch (element)
-            {
-                case MenuFlyoutSeparator:
-                    PART_LinkMenuItems.Children.Add(new BoxView
-                    {
-                        HeightRequest = 1,
-                        Color = Color.FromArgb("#40FFFFFF"),
-                        Margin = new Thickness(6, 2),
-                    });
-                    break;
-
-                case MenuFlyoutItem item:
-                    item.BindingContext = link;
-                    var button = new Button
-                    {
-                        Text = item.Text,
-                        IsEnabled = item.IsEnabled,
-                        BackgroundColor = Colors.Transparent,
-                        TextColor = Colors.White,
-                        HeightRequest = 36,
-                        Padding = new Thickness(12, 0),
-                        HorizontalOptions = LayoutOptions.Fill,
-                    };
-                    var captured = item;
-                    button.Clicked += (_, _) => SelectMenuItem(captured);
-                    PART_LinkMenuItems.Children.Add(button);
-                    break;
-            }
-        }
-
-        var ruler = Math.Max(0d, PART_GridDecorator.RulerThickness);
-        var x = ruler + position.Horizontal + PART_GridDecorator.ContentOffsetX - PART_GridDecorator.ScrollOffsetX;
-        var y = ruler + position.Vertical + PART_GridDecorator.ContentOffsetY - PART_GridDecorator.ScrollOffsetY;
-
-        PART_LinkMenuHost.Margin = new Thickness(Math.Max(0d, x), Math.Max(0d, y), 0, 0);
-        PART_LinkMenuLayer.IsVisible = true;
-        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, position, link));
-    }
-
-    private void SelectMenuItem(MenuFlyoutItem item)
-    {
-        var link = _menuLink;
-        DismissLinkMenu();
-        if (link is not null)
-        {
-            RunItem(item, link);
-        }
-    }
-
-    // 菜单指着的那条线已经离开树：hub 收不了这个浮层，由宿主收起（收起照常报 Closed，挂起随之放开）。
-    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
-    {
-        if (!ReferenceEquals(_menuLink, e.Link)) return;
-        DismissLinkMenu();
-    }
-#endif
-
-    // 收起弹出层，并告诉 hub 菜单已经关掉。关闭时位置没有意义。
-    private void DismissLinkMenu()
-    {
-        if (!PART_LinkMenuLayer.IsVisible)
-        {
-            return;
-        }
-
-        PART_LinkMenuLayer.IsVisible = false;
-        var link = _menuLink;
-        _menuLink = null;
-        if (link is not null)
-        {
-            _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, new Anchor(), link));
-        }
-    }
-
-    private void OnLinkMenuScrimTapped(object? sender, TappedEventArgs e) => DismissLinkMenu();
-
-    /// <summary>
-    /// Mirrors <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/> but drops link
-    /// view models, so the node ViewPool only ever materializes node views. Links are
-    /// rendered by the shared link overlay instead of one GraphicsView per link.
-    /// </summary>
-    private sealed class NodeOnlyVisibleItems : ObservableCollection<IWorkflowViewModel>
-    {
-        private readonly ObservableCollection<IWorkflowViewModel> _source;
-
-        public NodeOnlyVisibleItems(ObservableCollection<IWorkflowViewModel> source)
-        {
-            _source = source;
-            _source.CollectionChanged += OnSourceChanged;
-            foreach (var item in source)
-            {
-                if (item is not IWorkflowLinkViewModel)
-                {
-                    Add(item);
-                }
-            }
-        }
-
-        /// <summary>Unsubscribes from the source so this wrapper can be garbage-collected on session change.</summary>
-        public void Detach() => _source.CollectionChanged -= OnSourceChanged;
-
-        private void OnSourceChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        {
-            switch (e.Action)
-            {
-                case NotifyCollectionChangedAction.Add:
-                    foreach (var item in e.NewItems ?? Array.Empty<object>())
-                    {
-                        if (item is not IWorkflowLinkViewModel)
-                        {
-                            Add((IWorkflowViewModel)item);
-                        }
-                    }
-                    break;
-                case NotifyCollectionChangedAction.Remove:
-                    foreach (var item in e.OldItems ?? Array.Empty<object>())
-                    {
-                        if (item is not IWorkflowLinkViewModel)
-                        {
-                            Remove((IWorkflowViewModel)item);
-                        }
-                    }
-                    break;
-                case NotifyCollectionChangedAction.Reset:
-                    Clear();
-                    foreach (var item in _source)
-                    {
-                        if (item is not IWorkflowLinkViewModel)
-                        {
-                            Add(item);
-                        }
-                    }
-                    break;
-            }
-        }
     }
 }

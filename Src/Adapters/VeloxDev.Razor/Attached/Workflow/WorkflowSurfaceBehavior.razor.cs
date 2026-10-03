@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -51,6 +53,19 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// <summary>Gets or sets the canvas content (nodes, links, slots). Receives the computed canvas size.</summary>
     [Parameter]
     public RenderFragment<SurfaceCanvas>? ChildContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets the entries of the link context menu. The fragment receives the link the menu is
+    /// about, so a host binds it directly in its buttons (for example
+    /// <c>@onclick="() =&gt; link.DeleteCommand.Execute(null)"</c>) and writes no other wiring: the
+    /// surface renders the chrome, positions the menu, opens and closes it, and reports both to the
+    /// interaction hub.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<IWorkflowLinkViewModel>? LinkMenu { get; set; }
+
+    /// <summary>Gets the link the open context menu is about, or <see langword="null"/> when none is open.</summary>
+    public IWorkflowLinkViewModel? MenuLink { get; private set; }
 
     /// <summary>Gets or sets the canvas background color.</summary>
     [Parameter]
@@ -108,6 +123,21 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private double _offsetY;
     private SurfaceViewport _viewport = null!;
 
+    // 树模型不会自动刷新视图：这里订上节点/连线集合、树自身、虚拟连线与每个节点的锚点/尺寸，
+    // 变化时重渲染表面。ChildContent 随表面重渲染重新执行，模板的标记因此跟着刷新。
+    private readonly List<IWorkflowNodeViewModel> _subscribedNodes = [];
+    private IWorkflowTreeViewModel? _subscribedTreeModel;
+    private INotifyPropertyChanged? _subscribedTreeNotifier;
+    private INotifyPropertyChanged? _subscribedVirtualLink;
+
+    // 连线右键菜单：条目由宿主以 LinkMenu 传入，接线全在这里 —— 订中枢、弹出、开合报回去。
+    private LinkInteraction? _menuHub;
+    private EventHandler<ContextMenuRequestedEventArgs>? _menuRequested;
+    private EventHandler<ContextMenuDismissRequestedEventArgs>? _menuDismissed;
+    private Anchor _menuPosition = new();
+    private int _menuLeft;
+    private int _menuTop;
+
     // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的渲染不再把用户滚回去。
     private IWorkflowTreeViewModel? _lastRestoreTree;
     private bool _hasPendingRestore;
@@ -129,10 +159,17 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// While <see cref="LinkInteraction.IsSuspended"/> is set (a menu is open) the hub itself keeps
     /// the hovered link, so moving onto the menu does not clear the hover the menu acts on.
     /// </remarks>
-    // The surface itself is the key host (see the .razor tabindex), so Delete has a route in a generated
-    // project with no host code. The hub still decides which link: this only forwards the key.
+    // The surface itself is the key host (see the .razor tabindex), so Delete and Escape have a route in a
+    // generated project with no host code. The hub still decides which link: this only forwards the key.
     private async Task OnSurfaceKeyDown(KeyboardEventArgs e)
     {
+        // Escape 与菜单同层：菜单由表面弹，也由表面收，宿主不必再绑一次。
+        if (e.Key == "Escape")
+        {
+            CloseLinkMenu();
+            return;
+        }
+
         if (e.Key is not ("Delete" or "Del") || Tree is not { } tree) return;
 
         var interaction = LinkInteraction.For(tree);
@@ -140,6 +177,192 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
         interaction.Publish(new KeyEvent(InputKey.Delete));
     }
+
+    // 视口坐标是右键那一刻记下的；菜单相对视口定位，与画布坐标无关。
+    private string MenuLeftCss => _menuLeft.ToString(CultureInfo.InvariantCulture);
+    private string MenuTopCss => _menuTop.ToString(CultureInfo.InvariantCulture);
+
+    // 右键落在表面上：屏幕坐标只有 DOM 事件知道（先记下），再把这次右键喂进枢纽 ——
+    // 枢纽命中连线才报 ContextMenuRequested，菜单据此弹出；空白画布不给菜单。
+    private async Task OnSurfaceContextMenu(MouseEventArgs e)
+    {
+        // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它。
+        _menuLeft = (int)Math.Round(e.ClientX);
+        _menuTop = (int)Math.Round(e.ClientY);
+
+        await ForwardPointerAsync(PointerPhase.Pressed, e.ClientX, e.ClientY, PointerButtonKind.Right);
+    }
+
+    // 换树才重接：按模型实例比对，同一棵树在重复的 OnParametersSet 里不再动订阅。
+    private void SyncTreeSubscriptions()
+    {
+        if (ReferenceEquals(_subscribedTreeModel, Tree)) return;
+        UnsubscribeTree();
+        SubscribeTree(Tree);
+    }
+
+    private void SubscribeTree(IWorkflowTreeViewModel? tree)
+    {
+        if (tree is null) return;
+
+        _subscribedTreeModel = tree;
+
+        if (tree is INotifyPropertyChanged np)
+        {
+            _subscribedTreeNotifier = np;
+            np.PropertyChanged += OnTreePropertyChanged;
+        }
+
+        tree.Nodes.CollectionChanged += OnNodesOrLinksChanged;
+        tree.Links.CollectionChanged += OnNodesOrLinksChanged;
+
+        // 虚拟连线自己发 PropertyChanged（Send/Receive/Reset 只改它、不改树），所以直接订它重画手势。
+        if (tree.VirtualLink is INotifyPropertyChanged vp)
+        {
+            _subscribedVirtualLink = vp;
+            vp.PropertyChanged += OnVirtualLinkPropertyChanged;
+        }
+
+        SubscribeNodeChanges(tree);
+    }
+
+    private void UnsubscribeTree()
+    {
+        if (_subscribedTreeNotifier is not null)
+        {
+            _subscribedTreeNotifier.PropertyChanged -= OnTreePropertyChanged;
+            _subscribedTreeNotifier = null;
+        }
+
+        if (_subscribedTreeModel is not null)
+        {
+            _subscribedTreeModel.Nodes.CollectionChanged -= OnNodesOrLinksChanged;
+            _subscribedTreeModel.Links.CollectionChanged -= OnNodesOrLinksChanged;
+            _subscribedTreeModel = null;
+        }
+
+        if (_subscribedVirtualLink is not null)
+        {
+            _subscribedVirtualLink.PropertyChanged -= OnVirtualLinkPropertyChanged;
+            _subscribedVirtualLink = null;
+        }
+
+        UnsubscribeNodeChanges();
+    }
+
+    private void SubscribeNodeChanges(IWorkflowTreeViewModel tree)
+    {
+        foreach (var node in tree.Nodes)
+        {
+            if (node is INotifyPropertyChanged npc)
+            {
+                npc.PropertyChanged += OnNodePropertyChanged;
+                _subscribedNodes.Add(node);
+            }
+        }
+    }
+
+    private void UnsubscribeNodeChanges()
+    {
+        foreach (var node in _subscribedNodes)
+        {
+            if (node is INotifyPropertyChanged npc)
+                npc.PropertyChanged -= OnNodePropertyChanged;
+        }
+        _subscribedNodes.Clear();
+    }
+
+    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // 拖拽中的节点位置与连线实时更新（Anchor/Size 变化）。缩放时表面已用 JS 同步盖上折叠后的
+        // 节点几何与连线（applyZoomSurface），这里若重渲染整棵树，会用往返回来的旧值重建节点/连线层，
+        // 缩放中途闪一下。
+        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        {
+            if (WorkflowGeometryScope.IsZooming) return;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // 节点增删会改变逐节点订阅集合；两者都喂给池化层。
+        UnsubscribeNodeChanges();
+        if (_subscribedTreeModel is not null) SubscribeNodeChanges(_subscribedTreeModel);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
+    private void OnVirtualLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
+    // 订中枢：右键请求与「菜单指着的那条线离树」两相都在这。枢纽按树取用（Core 缓存），
+    // 换树就换实例，所以按实例比对重新接。
+    private void WireLinkMenu()
+    {
+        var hub = Tree is { } tree ? LinkInteraction.For(tree) : null;
+        if (ReferenceEquals(hub, _menuHub)) return;
+
+        if (_menuHub is not null)
+        {
+            UnsubscribeMenuHub();
+            // 菜单还开着就换树：把 Closed 报回旧枢纽，它的挂起状态不会留在那儿。
+            if (MenuLink is not null)
+            {
+                _menuHub.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, MenuLink));
+                MenuLink = null;
+            }
+        }
+
+        _menuHub = hub;
+        if (hub is null) return;
+
+        _menuRequested = (_, e) => ShowLinkMenu(e);
+        _menuDismissed = (_, e) =>
+        {
+            if (!ReferenceEquals(MenuLink, e.Link)) return;
+            CloseLinkMenu();
+        };
+        hub.ContextMenuRequested += _menuRequested;
+        hub.ContextMenuDismissRequested += _menuDismissed;
+    }
+
+    private void UnsubscribeMenuHub()
+    {
+        if (_menuHub is null) return;
+        if (_menuRequested is not null) _menuHub.ContextMenuRequested -= _menuRequested;
+        if (_menuDismissed is not null) _menuHub.ContextMenuDismissRequested -= _menuDismissed;
+        _menuRequested = null;
+        _menuDismissed = null;
+    }
+
+    // 命中连线且宿主真的给了条目才开菜单：空白处枢纽也会报一次（Link 为 null），在这里挡掉。
+    private void ShowLinkMenu(ContextMenuRequestedEventArgs e)
+    {
+        if (e.Link is null || LinkMenu is null) return;
+
+        MenuLink = e.Link;
+        _menuPosition = e.Position;
+        // 报回枢纽：菜单在屏期间挂起悬停，指针移到菜单上不会清掉这次选中的连线。
+        _menuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    // 收起照常报 Closed，挂起随之放开。点条目、点背景、按 Escape 都走这里。
+    private void CloseLinkMenu()
+    {
+        if (MenuLink is null) return;
+
+        var link = MenuLink;
+        MenuLink = null;
+        _menuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, link));
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    // 点面板里任何一处都收起菜单 —— 与平台原生的右键菜单一致：条目一击即散。
+    private void OnMenuPanelClick() => CloseLinkMenu();
 
     public async Task ForwardPointerAsync(PointerPhase phase, double clientX, double clientY, PointerButtonKind button = PointerButtonKind.None)
     {
@@ -225,6 +448,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _offsetX = Math.Max(_offsetX, RulerThickness);
         _offsetY = Math.Max(_offsetY, RulerThickness);
 
+        SyncTreeSubscriptions();
+        WireLinkMenu();
         CaptureViewportRestore();
 
         if (Tree is not null)
@@ -597,6 +822,19 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        // 先摘模型订阅，拆 JS 句柄期间不再有回调进来要求重渲染。
+        UnsubscribeTree();
+
+        // 菜单还开着就收尾：把 Closed 报回去，旧枢纽的挂起状态不会留在那儿。
+        if (MenuLink is not null)
+        {
+            _menuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, MenuLink));
+            MenuLink = null;
+        }
+
+        UnsubscribeMenuHub();
+        _menuHub = null;
+
         if (_handle is not null)
         {
             try

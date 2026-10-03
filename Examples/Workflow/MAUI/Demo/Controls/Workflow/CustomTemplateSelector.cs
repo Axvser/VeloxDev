@@ -21,10 +21,9 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
             PythonScriptNodeViewModel => PythonTemplate ?? throw new InvalidOperationException("PythonTemplate is not set."),
             // Any other workflow node type falls back to the generic node card.
             IWorkflowNodeViewModel => NodeTemplate ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            // Links are NOT pooled anymore — the single LinkLayerView renders them.
-            // WorkflowView.NodeItemsSource filters them out, so a link reaching this
-            // selector means the pool was fed an unfiltered collection.
-            IWorkflowLinkViewModel => throw new InvalidOperationException("LinkViewModels must not be pooled; the LinkLayerView renders links."),
+            // 连线不进池：由共享链接层绘制。适配器的 ViewManager 会按选择器把连线筛掉，
+            // 走到这里说明池被喂了未过滤的集合 —— 契约被破坏。
+            IWorkflowLinkViewModel => throw new InvalidOperationException("LinkViewModels must not be pooled; the shared link layer renders links."),
             _ => throw new InvalidOperationException($"Unknown data type: {item?.GetType().Name}")
         };
 }

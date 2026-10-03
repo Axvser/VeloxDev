@@ -62,9 +62,27 @@ public sealed class WorkflowSurfaceBehavior
         public double PointerAnchorX { get; set; }
         public double PointerAnchorY { get; set; }
 
+        // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、开合上报都在这里。
+        public MenuFlyout? LinkMenu { get; set; }
+        public IWorkflowLinkViewModel? MenuLink { get; set; }
+        public Anchor MenuPosition { get; set; } = new();
+        public LinkInteraction? MenuHub { get; set; }
+        public EventHandler<ContextMenuRequestedEventArgs>? MenuRequested { get; set; }
+        public EventHandler<ContextMenuDismissRequestedEventArgs>? MenuDismissed { get; set; }
+
 #if WINDOWS
         /// <summary>The press source's platform element with the native pointer handlers attached.</summary>
         public Microsoft.UI.Xaml.UIElement? PlatformPressSource { get; set; }
+
+        // Windows 上正在弹的原生 flyout；hub 收不了它，由这里 Hide，并在它的 Closed 里清掉。
+        public Microsoft.UI.Xaml.Controls.MenuFlyout? OpenFlyout { get; set; }
+#else
+        // 非 Windows 没有点弹出物：条目物化进这个由适配器自建的浮层（模板不再携带它）。
+        public Grid? LinkMenuLayer { get; set; }
+        public Grid? LinkMenuScrim { get; set; }
+        public Border? LinkMenuHost { get; set; }
+        public VerticalStackLayout? LinkMenuItems { get; set; }
+        public EventHandler<TappedEventArgs>? MenuScrimTapped { get; set; }
 #endif
     }
 
@@ -112,6 +130,22 @@ public sealed class WorkflowSurfaceBehavior
         false,
         propertyChanged: OnZoomEnabledChanged);
 
+    /// <summary>
+    /// Resource key of the context menu a right press on a link opens. The entries are the user's — declare a
+    /// <see cref="MenuFlyout"/> resource under that key, put its items in it, and name the key here; the surface
+    /// resolves the menu by key, feeds the pressed link to each item, positions it, opens it, and reports
+    /// open/close to the interaction hub.
+    /// <para>
+    /// A key rather than the menu itself: this property sits on the surface's own root element, and a
+    /// <c>{StaticResource}</c> there would be resolved before the very resource dictionary that defines it.
+    /// </para>
+    /// </summary>
+    public static readonly BindableProperty LinkMenuKeyProperty = BindableProperty.CreateAttached(
+        "LinkMenuKey",
+        typeof(string),
+        typeof(WorkflowSurfaceBehavior),
+        null);
+
     private static readonly BindableProperty StateProperty = BindableProperty.CreateAttached(
         "State",
         typeof(SurfaceState),
@@ -133,6 +167,12 @@ public sealed class WorkflowSurfaceBehavior
     public static string? GetMinimapOverlayName(BindableObject element) => (string?)element.GetValue(MinimapOverlayNameProperty);
     public static void SetMinimapOverlayName(BindableObject element, string? value) => element.SetValue(MinimapOverlayNameProperty, value);
 
+    /// <summary>Gets the resource key of the link context menu declared for <paramref name="element"/>.</summary>
+    public static string? GetLinkMenuKey(BindableObject element) => (string?)element.GetValue(LinkMenuKeyProperty);
+
+    /// <summary>Sets the resource key of the link context menu declared for <paramref name="element"/>.</summary>
+    public static void SetLinkMenuKey(BindableObject element, string? value) => element.SetValue(LinkMenuKeyProperty, value);
+
     public static void Refresh(ContentView host)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -147,6 +187,8 @@ public sealed class WorkflowSurfaceBehavior
         {
             return;
         }
+
+        WireLinkMenu(host, state);
 
         // Re-entrancy guard: prevent cascading Refresh cycles when canvas expansion
         // during ApplyLayout triggers Scrolled/SizeChanged which call Refresh again.
@@ -169,6 +211,325 @@ public sealed class WorkflowSurfaceBehavior
             state.IsRefreshing = false;
         }
     }
+
+    // 连线右键菜单：**条目由模板声明**（挂在 LinkMenuKey 上），**接线在这里** —— 订中枢、定位、弹出、
+    // 把开合报回去，模板因此没有一行交互代码。菜单指着的那条线离树时中枢发 DismissRequested，这里收自己那份。
+    // MAUI 的 MenuFlyout 是资源、不是可视物，也没有 Opened/Closed，所以开合由两条呈现路径各自上报。
+    private static void WireLinkMenu(ContentView host, SurfaceState state)
+    {
+        // 资源在 attach 之后才一定就绪（第一次 Refresh 可能早于 Resources 解析完），所以每次 Refresh 都重查一次。
+        var key = GetLinkMenuKey(host);
+        state.LinkMenu = key is { Length: > 0 } ? FindLinkMenuResource(host, key) : null;
+
+        var hub = ResolveTreeViewModel(host, state) is { } tree ? LinkInteraction.For(tree) : null;
+        if (ReferenceEquals(hub, state.MenuHub))
+        {
+            return;
+        }
+
+        if (state.MenuHub is not null)
+        {
+            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
+            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
+        }
+
+        state.MenuHub = hub;
+        state.MenuRequested = null;
+        state.MenuDismissed = null;
+        if (hub is null)
+        {
+            return;
+        }
+
+        state.MenuRequested = (_, e) => ShowLinkMenu(host, state, e);
+        state.MenuDismissed = (_, e) =>
+        {
+            if (!ReferenceEquals(state.MenuLink, e.Link)) return;
+#if WINDOWS
+            // 隐藏原生 flyout；它的 Closed 处理器照常把 Closed 报回 hub，挂起随之放开。
+            state.OpenFlyout?.Hide();
+#else
+            DismissLinkMenu(state);
+#endif
+        };
+        hub.ContextMenuRequested += state.MenuRequested;
+        hub.ContextMenuDismissRequested += state.MenuDismissed;
+    }
+
+    private static void UnwireLinkMenu(SurfaceState state)
+    {
+        if (state.MenuHub is not null)
+        {
+            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
+            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
+            state.MenuHub = null;
+        }
+
+        state.MenuRequested = null;
+        state.MenuDismissed = null;
+        state.LinkMenu = null;
+
+#if WINDOWS
+        // 先摘 hub 再收弹窗：Closed 处理器里 state.MenuHub 已为空，不会往 hub 补发一发。
+        state.OpenFlyout?.Hide();
+        state.OpenFlyout = null;
+#else
+        // 浮层是适配器加的，摘挂时连同 Tap 手势一起从宿主布局里移走，免得重复 attach 叠层。
+        if (state.LinkMenuLayer is { } layer)
+        {
+            layer.IsVisible = false;
+            if (layer.Parent is Layout layout) layout.Children.Remove(layer);
+        }
+
+        state.LinkMenuLayer = null;
+        state.LinkMenuScrim = null;
+        state.LinkMenuHost = null;
+        state.LinkMenuItems = null;
+        state.MenuScrimTapped = null;
+#endif
+
+        state.MenuLink = null;
+    }
+
+    // 条目自带 Command 就用它（绑定上下文是那条连线，弹出前设好）；没有就落到默认动作：删掉这条连线。
+    private static void RunItem(MenuFlyoutItem item, IWorkflowLinkViewModel link)
+    {
+        if (item.Command is { } command)
+        {
+            var parameter = item.CommandParameter ?? link;
+            if (command.CanExecute(parameter))
+            {
+                command.Execute(parameter);
+            }
+
+            return;
+        }
+
+        if (link.DeleteCommand.CanExecute(null))
+        {
+            link.DeleteCommand.Execute(null);
+        }
+    }
+
+    // 资源先查宿主自己的字典，再沿父链往上，最后落到 Application（与 ViewManager 查 DataTemplate 同一条路）。
+    private static MenuFlyout? FindLinkMenuResource(Element host, string key)
+    {
+        for (Element? current = host; current is not null; current = current.Parent)
+        {
+            if (current is VisualElement visualElement
+                && visualElement.Resources.TryGetValue(key, out var resource)
+                && resource is MenuFlyout menu)
+            {
+                return menu;
+            }
+        }
+
+        return Application.Current?.Resources.TryGetValue(key, out var appResource) == true
+            && appResource is MenuFlyout appMenu
+                ? appMenu
+                : null;
+    }
+
+#if WINDOWS
+    // 菜单条目在 LinkMenuKey 指向的资源里声明；这里只管定位与弹出。
+    // 画布坐标 → 视口像素：px = Ruler + 锚点 + 内容偏移 − 滚动偏移（与链接层绘制/命中共用同一条换算）。
+    private static void ShowLinkMenu(ContentView host, SurfaceState state, ContextMenuRequestedEventArgs e)
+    {
+        // 空白画布没有可操作的对象，不给菜单。
+        var menu = state.LinkMenu;
+        var gridDecorator = state.GridDecorator;
+        if (e.Link is null || menu is null || gridDecorator is null) return;
+        if (ResolveTreeViewModel(host, state) is null) return;
+        if (gridDecorator is not IWorkflowGridDecorator decorator) return;
+        if (gridDecorator.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement hostElement) return;
+
+        state.MenuLink = e.Link;
+        state.MenuPosition = e.Position;
+
+        var flyout = BuildPlatformMenu(menu, e.Link);
+        state.OpenFlyout = flyout;
+
+        // 开合报回 hub：菜单开着时指针飞到菜单上，也不该清掉这次选中的连线。
+        flyout.Closed += (_, _) =>
+        {
+            state.OpenFlyout = null;
+            state.MenuLink = null;
+            state.MenuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, state.MenuPosition, e.Link));
+        };
+        state.MenuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, state.MenuPosition, e.Link));
+
+        var ruler = Math.Max(0d, decorator.RulerBand);
+        var x = ruler + e.Position.Horizontal + decorator.ContentOffsetX - decorator.ScrollOffsetX;
+        var y = ruler + e.Position.Vertical + decorator.ContentOffsetY - decorator.ScrollOffsetY;
+        flyout.ShowAt(hostElement, new Windows.Foundation.Point(x, y));
+    }
+
+    // MAUI 没有能在指定点弹出的跨平台菜单；只有 Windows 的原生 MenuFlyout 能做到，所以把声明的条目翻成它。
+    private static Microsoft.UI.Xaml.Controls.MenuFlyout BuildPlatformMenu(MenuFlyout declared, IWorkflowLinkViewModel link)
+    {
+        var flyout = new Microsoft.UI.Xaml.Controls.MenuFlyout();
+        foreach (var element in declared)
+        {
+            switch (element)
+            {
+                // MenuFlyoutSeparator derives from MenuFlyoutItem, so it must be matched first.
+                case MenuFlyoutSeparator:
+                    flyout.Items.Add(new Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator());
+                    break;
+
+                case MenuFlyoutItem item:
+                    // 平台条目没有 DataContext，逐条把这条连线喂给它，条目里的绑定才解析得到。
+                    item.BindingContext = link;
+                    var native = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem
+                    {
+                        Text = item.Text,
+                        IsEnabled = item.IsEnabled,
+                    };
+                    native.Click += (_, _) => RunItem(item, link);
+                    flyout.Items.Add(native);
+                    break;
+            }
+        }
+
+        return flyout;
+    }
+#else
+    // 非 Windows 没有能在指定点弹出的跨平台菜单，所以把声明的条目物化进适配器自建的浮层，
+    // 落在长按处。长按本身由链接层翻译成右键交给 hub；这里只负责呈现。
+    private static void ShowLinkMenu(ContentView host, SurfaceState state, ContextMenuRequestedEventArgs e)
+    {
+        // 空白画布没有可操作的对象，不给菜单。
+        var menu = state.LinkMenu;
+        var gridDecorator = state.GridDecorator;
+        if (e.Link is null || menu is null || gridDecorator is null) return;
+        if (ResolveTreeViewModel(host, state) is null) return;
+        if (gridDecorator is not IWorkflowGridDecorator decorator) return;
+
+        EnsureLinkMenuLayer(state);
+        var layer = state.LinkMenuLayer;
+        var menuHost = state.LinkMenuHost;
+        var items = state.LinkMenuItems;
+        if (layer is null || menuHost is null || items is null) return;
+
+        state.MenuLink = e.Link;
+        state.MenuPosition = e.Position;
+
+        items.Children.Clear();
+        foreach (var element in menu)
+        {
+            switch (element)
+            {
+                case MenuFlyoutSeparator:
+                    items.Children.Add(new BoxView
+                    {
+                        HeightRequest = 1,
+                        Color = Color.FromArgb("#40FFFFFF"),
+                        Margin = new Thickness(6, 2),
+                    });
+                    break;
+
+                case MenuFlyoutItem item:
+                    item.BindingContext = e.Link;
+                    var button = new Button
+                    {
+                        Text = item.Text,
+                        IsEnabled = item.IsEnabled,
+                        BackgroundColor = Colors.Transparent,
+                        TextColor = Colors.White,
+                        HeightRequest = 36,
+                        Padding = new Thickness(12, 0),
+                        HorizontalOptions = LayoutOptions.Fill,
+                    };
+                    var captured = item;
+                    button.Clicked += (_, _) => SelectMenuItem(state, captured);
+                    items.Children.Add(button);
+                    break;
+            }
+        }
+
+        var ruler = Math.Max(0d, decorator.RulerBand);
+        var x = ruler + e.Position.Horizontal + decorator.ContentOffsetX - decorator.ScrollOffsetX;
+        var y = ruler + e.Position.Vertical + decorator.ContentOffsetY - decorator.ScrollOffsetY;
+
+        menuHost.Margin = new Thickness(Math.Max(0d, x), Math.Max(0d, y), 0, 0);
+        layer.IsVisible = true;
+        state.MenuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
+    }
+
+    // 条目被点：先收起（收起会报 Closed），再执行条目自己的动作。
+    private static void SelectMenuItem(SurfaceState state, MenuFlyoutItem item)
+    {
+        var link = state.MenuLink;
+        DismissLinkMenu(state);
+        if (link is not null)
+        {
+            RunItem(item, link);
+        }
+    }
+
+    private static void DismissLinkMenu(SurfaceState state)
+    {
+        if (state.LinkMenuLayer is not { IsVisible: true } layer) return;
+
+        layer.IsVisible = false;
+        var link = state.MenuLink;
+        state.MenuLink = null;
+        if (link is not null)
+        {
+            state.MenuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, new Anchor(), link));
+        }
+    }
+
+    // 浮层是呈现，归适配器：条目物化在这里，模板不再携带这层标记。挂到装饰器**外**最近的一层 Layout 上
+    // （装饰器自己也是 Grid，从它起步会把浮层塞进装饰器、压在它 ZIndex=10 的标尺下面），
+    // 与装饰器共用原点，菜单的 Margin 才和算出来的画布坐标对得上。
+    private static void EnsureLinkMenuLayer(SurfaceState state)
+    {
+        if (state.LinkMenuLayer is not null) return;
+
+        Layout? parent = null;
+        for (Element? current = state.GridDecorator?.Parent; current is not null; current = current.Parent)
+        {
+            if (current is Layout layout)
+            {
+                parent = layout;
+                break;
+            }
+        }
+
+        if (parent is null) return;
+
+        var items = new VerticalStackLayout { Spacing = 2 };
+        var menuHost = new Border
+        {
+            HorizontalOptions = LayoutOptions.Start,
+            VerticalOptions = LayoutOptions.Start,
+            Padding = new Thickness(4),
+            BackgroundColor = Color.FromArgb("#F22B2B2B"),
+            Stroke = Color.FromArgb("#40FFFFFF"),
+            StrokeThickness = 1,
+            StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = new CornerRadius(6) },
+            Content = items,
+        };
+
+        var scrim = new Grid { BackgroundColor = Colors.Transparent };
+        var tapped = (EventHandler<TappedEventArgs>)((_, _) => DismissLinkMenu(state));
+        var tap = new TapGestureRecognizer();
+        tap.Tapped += tapped;
+        scrim.GestureRecognizers.Add(tap);
+
+        var layer = new Grid { IsVisible = false };
+        layer.Children.Add(scrim);
+        layer.Children.Add(menuHost);
+        parent.Children.Add(layer);
+
+        state.LinkMenuLayer = layer;
+        state.LinkMenuScrim = scrim;
+        state.LinkMenuHost = menuHost;
+        state.LinkMenuItems = items;
+        state.MenuScrimTapped = tapped;
+    }
+#endif
 
     // 树刚被挂上来且不是上一棵：把它存档里的视口位置排进待恢复。
     // 必须在紧随其后的 Refresh 之前调用 —— 那次 UpdateVisibleRegion 会拿控件当前（还没滚过去的）位置
@@ -273,6 +634,7 @@ public sealed class WorkflowSurfaceBehavior
         {
             UnsubscribeResolvedControls(state);
             UnsubscribeLayout(state);
+            UnwireLinkMenu(state);
             state.Host = null;
         }
 

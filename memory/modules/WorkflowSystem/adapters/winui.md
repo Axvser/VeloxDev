@@ -320,7 +320,12 @@ Trimmed 的 `SlotView` 与 `Src/Templates/VeloxDev.WinUI.Templates/` 的那份**
 
 ---
 
-## 五、非 Trimmed demo 的连线交互落点（命中 / 焦点 / 右键菜单）
+## 五、连线交互落点（命中在 Core，右键菜单接线在适配器）
+
+**2026-10-03 起右键菜单的接线不再在表面 code-behind，而在适配器 `WorkflowSurfaceBehavior` 的
+`WireLinkMenu` / `ShowLinkMenu` / `UnwireLinkMenu`（挂附着属性 `LinkMenuKey`）** —— 模板与两个 demo 的
+code-behind 因此只剩 `InitializeComponent()`（Trimmed / 模板）或自身设置（非 Trimmed），
+菜单条目仍由用户在该表面的 `<UserControl.Resources>` 里声明。下面的行号据此更新。
 
 **命中在 Core，不在元素上。** 连线视图本身**整块不可命中**：`PolylineCurveView` 在
 `UpdateInteractivity` 里恒置 `IsHitTestVisible = false`（`PolylineCurveView.xaml.cs:243-247`），
@@ -331,25 +336,25 @@ Trimmed 的 `SlotView` 与 `Src/Templates/VeloxDev.WinUI.Templates/` 的那份**
 半径 `LinkHitTestEx.DefaultHitRadius = 6d`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:18`，
 画布单位、**不随缩放放大**，见 `:14-17`）。带宽因此 ≈±6px —— 与旧版「把 halo 描边设成可命中」得到的 ±5.5px
 同量级，但机制完全不同。**输入仍要够得着宿主**：`PART_Canvas` 自身 `Background="Transparent"`
-（`TreeView.xaml:105`）提供元素级命中面，画布手势与连线判定都靠它把指针事件冒泡到 `UserControl`；
-行为侧 `PointerMoved += OnPointerMoved`（`WorkflowSurfaceBehavior.cs:191`）、按下走
-`AddHandler(..., handledEventsToo: true)`（`:195`）。
+（`TreeView.xaml:106`）提供元素级命中面，画布手势与连线判定都靠它把指针事件冒泡到 `UserControl`；
+行为侧 `PointerMoved += OnPointerMoved`（`WorkflowSurfaceBehavior.cs:352`）、按下走
+`AddHandler(..., handledEventsToo: true)`（`:356`）。
 
 | 事 | 代码落点 | 依据 |
 |---|---|---|
 | 命中 | Core 几何判定 `HitTestVisibleLinks`（半径 6，跳过橡皮筋与被节点卡盖住的线）；视图只发布曲线、全程不可命中 | `LinkInteraction.cs:275`、`LinkHitTestEx.cs:18,81-88`；`PolylineCurveView.xaml.cs:243-247,483-484` |
-| 选中即取焦点 | 归适配器：`OnPointerMoved`／`OnLinkPointerPressed` 里各 `Focus(FocusState.Pointer)` 一次（悬停到线上即取，不用先点一下） | `WorkflowSurfaceBehavior.cs:512-515`、`:586-590` |
-| 右键菜单 | 表面订 `ContextMenuRequested` → 取 `x:Key="LinkContextMenu"` 资源 `MenuFlyout` → 画布坐标转表面坐标 → 逐条喂 `DataContext` → 报 `Opened` → `ShowAt(PART_SurfaceBorder, …)`；收起在 `MenuFlyout.Closed` 里报 `Closed`。**菜单指着的那条线一离开 `tree.Links`（Agent、Undo、别处删都算）就由 Core 发 `ContextMenuDismissRequested` 请宿主收 —— 宿主只做 `menu.Hide()` 收自己的弹窗，收不了弹窗这件事不在宿主这一侧判** | `TreeView.xaml.cs:88,103-147`、`:57`；XAML `TreeView.xaml:75-78` |
-| 删除 | 菜单项 `Command="{Binding DeleteCommand}"`（条目 DataContext 就是被按的连线）；Delete 键走适配器 `OnLinkKeyDown` → Core `AutoDelete` | `TreeView.xaml:77`、`TreeView.xaml.cs:122-129`；`WorkflowSurfaceBehavior.cs:594-614`、`LinkInteraction.cs:234` |
+| 选中即取焦点 | 归适配器：`OnPointerMoved`／`OnLinkPointerPressed` 里各 `Focus(FocusState.Pointer)` 一次（悬停到线上即取，不用先点一下） | `WorkflowSurfaceBehavior.cs:676`、`:751` |
+| 右键菜单 | **接线在适配器 `WorkflowSurfaceBehavior.WireLinkMenu`**：表面按 `LinkMenuKey` 解析 `x:Key="LinkContextMenu"` 资源 `MenuFlyout`、订中枢 `ContextMenuRequested`/`ContextMenuDismissRequested`；弹出时画布坐标转锚点坐标、逐条喂 `DataContext`、`ShowAt(PART_SurfaceBorder, …)`，`Opened`/`Closed` 直接订在 `MenuFlyout` 上报回中枢。**菜单指着的那条线一离开 `tree.Links`（Agent、Undo、别处删都算）就由 Core 发 `ContextMenuDismissRequested` 请表面收 —— 表面只做 `state.LinkMenu?.Hide()` 收自己的弹窗，收不了弹窗这件事不在表面这一侧判** | `WorkflowSurfaceBehavior.cs:161-217`（`WireLinkMenu`）、`:243-271`（`ShowLinkMenu`）、`:219-241`（`UnwireLinkMenu`）、`:273-286`（`FindResource`）；资源仍在 XAML：`TreeView.xaml:77`（非 Trimmed）/`:38`（Trimmed）/模板 `:38` |
+| 删除 | 菜单项 `Command="{Binding DeleteCommand}"`（条目 DataContext 由适配器在 `ShowAt` 前逐条喂成被按的连线）；Delete 键走适配器 `OnLinkKeyDown` → Core `AutoDelete` | `TreeView.xaml:78`；`WorkflowSurfaceBehavior.cs:756-776`、`LinkInteraction.cs:234` |
 
 四条要记住的：
 
 1. **视图整块不可命中是有意的，别再给它加元素级命中面。** 给连线视图加 `Background` 仍然是错的：它是**整块画布大小**（§四·P3），加了背景就会把画布平移整个吃掉 —— 这正是现在恒置 `IsHitTestVisible = false` 的原因（理由自陈 `PolylineCurveView.xaml.cs:154-155`）。`SlotView.xaml:21,33` 那句「命中面是控件自己的 `Background`」是给**小控件**的规矩，别照抄到连线视图上；命中落在 Core 的曲线判定上。
 2. **历史坑（元素命中的那一版，已被 Core 几何判定取代）**：修之前根 `UserControl` 没有 `Background`，画出来的内容全是 `Path` 且逐个 `IsHitTestVisible = false`，容器 `Grid` 也无背景 ⇒ 元素命中面为空，`PointerEntered`/`PointerMoved`/`RightTapped` 一个都不会派发。**实测（2026-09-26，SendInput + 闭环伺服取点）**：指针停在线体正上方（48×48 邻域内体色像素 120–186）线体仍是静息青色；从窗口外跳进来再压线体也没有高亮（`PointerEntered` 是无条件置高亮的，所以没高亮就是没派发）；同一窗口里空画布左键拖动照常平移 —— 窗口收得到输入，是**这个视图**收不到。判别法仍有用：**一旦又回到元素命中，「窗口收得到、这个视图收不到」照旧成立。**
-3. **右键入口是表面的 `PointerPressed`（右键），不是 `RightTapped`**：`WorkflowSurfaceBehavior` 冒泡转发按下（`AddHandler(PointerPressedEvent, handledEventsToo: true)`，`:195`、`:560-584`），中枢在 `LinkInteraction.Publish(PointerEvent.Pressed)` 里 hit-test 后报 `ContextMenuRequested`（`LinkInteraction.cs:199-201`）。**否决菜单归 `ContextMenuRequesting`（Preview 相）**：到得了 `Requested` 的必是没被拒绝的，所以宿主**不再读** `e.Handle.PreventDefault`（`:261-272`）。
-4. **WinUI 特有的两件**：(a) **`MenuFlyout` 继承 `FlyoutBase` → `DependencyObject`，不是 `FrameworkElement`，因而没有 `DataContext`** —— 资源里的菜单不在可视树上，绑定拿不到上下文，代码因此在 `ShowAt` 之前**逐条**把这条连线喂给条目（`foreach (var item in menu.Items) if (item is FrameworkElement element) element.DataContext = link;`，`TreeView.xaml.cs:122-129`）；用户只要在 `MenuFlyoutItem` 上写 `Command="{Binding …}"` 就行（`TreeView.xaml:77`）—— **这一版和旧版相反：条目现在绑命令**。(b) **资源 `MenuFlyout` 仍要自己给 `XamlRoot`**：它不属于任何元素，只有 `ShowAt(element)` 的 `element` 在树上，所以在 `ShowAt` 之前写一次 `menu.XamlRoot = XamlRoot`（`TreeView.xaml.cs:120`）；`MenuFlyout.Closed` 是**唯一的收起通知**，收在 `:57` 挂的处理器里（`:144-147`）。(c) **弹窗的寿命由 Core 判、宿主只收自己的弹窗**：菜单指着的那条线一离开 `tree.Links`（Agent、Undo、别处删都算），`ContextMenuDismissRequested` 就到达表面；宿主只在 `ReferenceEquals(_menuLink, e.Link)` 时对自己的 `MenuFlyout` 调 `menu.Hide()`（`:137-141`），收起照常走上面那条 `Closed` 报 `Closed`、`IsSuspended` 由 hub 放开。**「树」与「打开的菜单」只有 hub 同时知道，所以「该不该收」不在宿主这一侧判。**
+3. **右键入口是表面的 `PointerPressed`（右键），不是 `RightTapped`**：`WorkflowSurfaceBehavior` 冒泡转发按下（`AddHandler(PointerPressedEvent, handledEventsToo: true)`，`:356`、`:722-753`），中枢在 `LinkInteraction.Publish(PointerEvent.Pressed)` 里 hit-test 后报 `ContextMenuRequested`（`LinkInteraction.cs:199-201`）。**否决菜单归 `ContextMenuRequesting`（Preview 相）**：到得了 `Requested` 的必是没被拒绝的，所以表面**不再读** `e.Handle.PreventDefault`（`:261-272`）。
+4. **WinUI 特有的四件（现在都落在适配器里）**：(a) **`MenuFlyout` 继承 `FlyoutBase` → `DependencyObject`，不是 `FrameworkElement`，因而没有 `DataContext`** —— 资源里的菜单不在可视树上，绑定拿不到上下文，所以 `ShowLinkMenu` 在 `ShowAt` 之前**逐条**把这条连线喂给条目（`foreach (var item in state.LinkMenu.Items) if (item is FrameworkElement element) element.DataContext = e.Link;`，`WorkflowSurfaceBehavior.cs:261-268`）；用户只要在 `MenuFlyoutItem` 上写 `Command="{Binding …}"` 就行（`TreeView.xaml:78`）—— **这一版和旧版相反：条目现在绑命令**。(b) **资源 `MenuFlyout` 仍要自己给 `XamlRoot`**：它不属于任何元素，只有 `ShowAt(element)` 的 `element` 在树上，所以在 `ShowAt` 之前写一次 `state.LinkMenu.XamlRoot = host.XamlRoot`（`:259`）；`MenuFlyout.Closed` 是**唯一的收起通知**，订在 `WireLinkMenu` 里报 `Closed`（`:182-185`）。(c) **弹窗的寿命由 Core 判、表面只收自己的弹窗**：菜单指着的那条线一离开 `tree.Links`（Agent、Undo、别处删都算），`ContextMenuDismissRequested` 就到达表面；表面只在 `ReferenceEquals(state.MenuLink, e.Link)` 时对自己的 `MenuFlyout` 调 `Hide()`（`:210-214`），收起照常走上面那条 `Closed` 报 `Closed`、`IsSuspended` 由 hub 放开。**「树」与「打开的菜单」只有 hub 同时知道，所以「该不该收」不在表面这一侧判。** (d) **WinUI 没有 `TryFindResource`**：`FindResource` 从宿主沿父链逐级查 `Resources`、最后落到 `Application.Current.Resources`（`:273-286`）；菜单资源声明在该表面自己的 `<UserControl.Resources>` 里，第一站就是宿主本身，所以这条查找对模板产物同样成立。
 
-**这家没有「悬停取焦点 ⇒ 画布跳一段」这条代价**（即 Avalonia/WPF 那个 `ScrollViewer.BringIntoViewOnFocusChange` 症状）。焦点现在由适配器给：悬停到线上时 `OnPointerMoved` 对宿主 `UserControl` 做一次 `Focus(FocusState.Pointer)`（`WorkflowSurfaceBehavior.cs:512-515`；按下时在 `:586-590` 再来一次）。**实测（2026-09-26）**：把视口滚到非零偏移（`视口(画布) 1998, 421`）后，让指针**走**到线上（伺服逐步逼近）→ 同一点由体色（105 像素）变暖色（306）= 高亮，随后 `VK_DELETE` 把那条线删掉（浮层「元素 节点 8/11 · 连线 6/10」，总数由 11 降 10）= `Focus(FocusState.Pointer)` 确实拿到了焦点，而 `视口(画布)` 前后都是 **1998, 421**（视口用 UI Automation 读浮层文本得到，不依赖哪个窗口在最前）。⇒ WinUI 这条路径对「指针焦点 + 比视口大的元素」没有实际动作；**没查到官方文档里的明确条件**（测的时候这台机器取不到 learn.microsoft.com），所以只留实测结论。连线视图如今 `IsTabStop = false`（`PolylineCurveView.xaml.cs:246`），Tab 聚焦不到它、焦点只会落在宿主上；若日后有人改这条路径，可用的单行防线仍是 `ScrollViewer.SetBringIntoViewOnFocusChange(…)`（别把整块画布的自动滚进视口关掉）。
+**这家没有「悬停取焦点 ⇒ 画布跳一段」这条代价**（即 Avalonia/WPF 那个 `ScrollViewer.BringIntoViewOnFocusChange` 症状）。焦点现在由适配器给：悬停到线上时 `OnPointerMoved` 对宿主 `UserControl` 做一次 `Focus(FocusState.Pointer)`（`WorkflowSurfaceBehavior.cs:676`；按下时在 `:751` 再来一次）。**实测（2026-09-26）**：把视口滚到非零偏移（`视口(画布) 1998, 421`）后，让指针**走**到线上（伺服逐步逼近）→ 同一点由体色（105 像素）变暖色（306）= 高亮，随后 `VK_DELETE` 把那条线删掉（浮层「元素 节点 8/11 · 连线 6/10」，总数由 11 降 10）= `Focus(FocusState.Pointer)` 确实拿到了焦点，而 `视口(画布)` 前后都是 **1998, 421**（视口用 UI Automation 读浮层文本得到，不依赖哪个窗口在最前）。⇒ WinUI 这条路径对「指针焦点 + 比视口大的元素」没有实际动作；**没查到官方文档里的明确条件**（测的时候这台机器取不到 learn.microsoft.com），所以只留实测结论。连线视图如今 `IsTabStop = false`（`PolylineCurveView.xaml.cs:246`），Tab 聚焦不到它、焦点只会落在宿主上；若日后有人改这条路径，可用的单行防线仍是 `ScrollViewer.SetBringIntoViewOnFocusChange(…)`（别把整块画布的自动滚进视口关掉）。
 **虚拟连接（橡皮筋）的可见性：先分清「被卡挡住」与「没画出来」**（2026-09-26 实测）。
 
 - **「被卡挡住」是合法的**：橡皮筋在连线层，而连线层在节点卡之下（非 Trimmed `Canvas.SetZIndex(this, -100)`，Trimmed 模板 `Canvas.ZIndex="-1"`）⇒ 指针还压在卡上时它本来就被挡住，「越过一段距离才看到」的距离 = 从插槽到**卡外**。实测（非 Trimmed，输出插槽在卡右边缘）：向上/向下拖第 20px 就看到；向卡内拖到 650px 看不到；卡外开阔处另有正面对照。

@@ -143,9 +143,7 @@
 
         @if (_session?.Tree is { } tree)
         {
-            <div class="wf-canvas-wrapper"
-                 @oncontextmenu="OnSurfaceContextMenu"
-                 @oncontextmenu:preventDefault="true">
+            <div class="wf-canvas-wrapper">
                 <WorkflowSurfaceBehavior @ref="_surface"
                                          Tree="tree"
                                          IsEnabled="true"
@@ -183,12 +181,9 @@
                         @* Links layer: one full-canvas TemplateLinkView per connection (template product,
                            absolute, overflow visible). Each link draws a cubic curve with a light running
                            along it by arc length. The layer itself stays click-through — each link hands hit
-                           testing back on its own strokes — and it is also the keyboard host: focus lands
-                           here on hover so Delete reaches the page without a click first. *@
+                           testing back on its own strokes — and the surface's root is the keyboard host:
+                           focus lands there on hover so Delete reaches the page without a click first. *@
                         <div class="veloxdev-wf-links"
-                             tabindex="0"
-                             @ref="_linksLayer"
-                             @onkeydown="OnLinksKeyDown"
                              style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;outline:none;">
                             @foreach (var link in tree.Links)
                             {
@@ -197,7 +192,7 @@
                                    hover flag, and a positional diff would hand all of it to the
                                    neighbouring link whenever one is deleted. *@
                                 <TemplateLinkView @key="link" Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height"
-                                                  IsSelected="@(_menuLink == link)" />
+                                                  IsSelected="@(_surface?.MenuLink == link)" />
                             }
                             @if (tree.VirtualLink.IsVisible)
                             {
@@ -285,29 +280,16 @@
                             </ItemTemplate>
                         </ViewPool>
                     </ChildContent>
+                    <LinkMenu Context="link">
+                        @* VeloxDev customization: add or remove the item buttons here. The menu chrome,
+                           its position, and the hub wiring all live in the surface; each entry just
+                           receives the link it acts on. *@
+                        <button class="wf-link-menu-item" @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>
+                    </LinkMenu>
                 </WorkflowSurfaceBehavior>
             </div>
         }
     </main>
-
-    @* Link context menu: one item, at the pointer. The backdrop is what makes click-away dismiss work
-       with no JS, and while it is up it swallows canvas gestures — which is what a menu should do.
-       It sits under the agent modals on purpose, so a modal still wins if one opens behind it. *@
-    @if (_menuLink is not null)
-    {
-        <div class="wf-link-menu-backdrop"
-             @onclick="CloseContextMenu"
-             @oncontextmenu="CloseContextMenu"
-             @oncontextmenu:preventDefault="true"
-             @oncontextmenu:stopPropagation="true"></div>
-        <div class="wf-link-menu"
-             style="left:@_menuLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)px;top:@_menuTop.ToString(System.Globalization.CultureInfo.InvariantCulture)px;"
-             @oncontextmenu:preventDefault="true"
-             @oncontextmenu:stopPropagation="true">
-            @* VeloxDev customization: add or remove the item buttons here. *@
-            <button class="wf-link-menu-item" @onclick="DeleteLinkFromMenu">Delete</button>
-        </div>
-    }
 
     <!-- Agent interaction modals (RequestSelection / RequestConfirmation) -->
     @if (_selection is { } sel)

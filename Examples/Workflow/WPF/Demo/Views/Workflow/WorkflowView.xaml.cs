@@ -7,13 +7,11 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using VeloxDev.AI;
 using VeloxDev.MVVM.Serialization;
-using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
@@ -21,13 +19,6 @@ namespace Demo.Views.Workflow;
 public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
-
-    // 当前这棵树的中枢（每棵树一个，见 LinkInteraction.For）。换树就是另一棵树的中枢，所以订阅跟着 DataContext 换。
-    private LinkInteraction? _linkInteraction;
-
-    // 本次菜单对应的连线与画布坐标：条目由 XAML 声明，动作靠菜单的 DataContext 拿到这条连线。
-    private IWorkflowLinkViewModel? _menuLink;
-    private Anchor _menuPosition = new();
 
     public WorkflowView()
     {
@@ -38,92 +29,9 @@ public partial class WorkflowView : UserControl
         // from the grid decorator's DPs, which WorkflowSurfaceBehavior pushes on this same event.
         PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
 
-        // 菜单的开合报回 hub：它据此收放 IsSuspended，宿主不必自己记账。
-        if (Resources["LinkContextMenu"] is ContextMenu menu)
-        {
-            menu.Opened += (_, _) => _linkInteraction?.Publish(
-                new ContextMenuEvent(ContextMenuPhase.Opened, _menuPosition, _menuLink));
-            menu.Closed += (_, _) => _linkInteraction?.Publish(
-                new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, _menuLink));
-        }
-
-        // 中枢跟着 DataContext 换：For(tree) 拿到那棵树唯一的 hub，适配器转发进去的是同一个。
-        DataContextChanged += (_, _) => AttachLinkInteraction();
-
         DataContext = _workflowViewModel;
         InitializeNetworkDemo();
         InitializeMcp();
-    }
-
-    // 高亮由 hub 直接写连线可视对象的 IsHighlighted，Delete 由 hub 的 AutoDelete 执行；宿主只剩右键菜单这一件事 ——
-    // 菜单是独立的视觉树，只有宿主能给。
-    private void AttachLinkInteraction()
-    {
-        var interaction = DataContext is IWorkflowTreeViewModel tree ? LinkInteraction.For(tree) : null;
-        if (ReferenceEquals(interaction, _linkInteraction))
-        {
-            return;
-        }
-
-        if (_linkInteraction is not null)
-        {
-            _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
-            _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
-        }
-
-        _linkInteraction = interaction;
-
-        if (_linkInteraction is not null)
-        {
-            _linkInteraction.ContextMenuRequested += OnContextMenuRequested;
-            _linkInteraction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
-        }
-    }
-
-    // 右键落在表面上，而弹出要屏幕坐标；只有表面同时知道画布与屏幕两件事，所以菜单由表面弹。
-    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
-    {
-        // 空白画布没有可操作的对象，不给菜单。
-        if (e.Link is null || DataContext is not IWorkflowTreeViewModel tree)
-        {
-            return;
-        }
-
-        if (Resources["LinkContextMenu"] is not ContextMenu menu)
-        {
-            return;
-        }
-
-        _menuLink = e.Link;
-        _menuPosition = e.Position;
-        menu.DataContext = e.Link;
-
-        // 画布坐标 → 设备坐标：先按适配器那套逆变换（world + ActualOffset）回到画布局部，再由画布
-        // 换到屏幕；AbsolutePoint 用 DIP，所以最后按 DPI 折回去。
-        var local = WorkflowSurfaceMath.ToScreen(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
-        var device = PART_Canvas.PointToScreen(new Point(local.Horizontal, local.Vertical));
-        var dpi = VisualTreeHelper.GetDpi(PART_Canvas);
-
-        menu.PlacementTarget = this;
-        menu.Placement = PlacementMode.AbsolutePoint;
-        menu.HorizontalOffset = device.X / dpi.DpiScaleX;
-        menu.VerticalOffset = device.Y / dpi.DpiScaleY;
-        menu.IsOpen = true;
-    }
-
-    // 菜单作用的那条连线已离开树，中枢因此请求把菜单收起来 —— 它自己关不掉宿主的 popup。
-    // 关闭会上报 Closed，照常释放被挂起的悬停。
-    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
-    {
-        if (!ReferenceEquals(_menuLink, e.Link))
-        {
-            return;
-        }
-
-        if (Resources["LinkContextMenu"] is ContextMenu menu)
-        {
-            menu.IsOpen = false;
-        }
     }
 
     private void InitializeMcp()

@@ -14,6 +14,7 @@ public sealed class ViewManager
     private readonly List<ControlItem> _activeViews = [];
     private readonly List<object> _pendingViews = [];
     private readonly Dictionary<Type, DataTemplate> _templateMap = [];
+    private readonly HashSet<Type> _unsupportedTypes = [];
     private INotifyCollectionChanged? _currentCollection;
     private IEnumerable<object>? _currentEnumerable;
     private bool _isSchedulingRender;
@@ -52,7 +53,15 @@ public sealed class ViewManager
         _currentCollection.CollectionChanged += OnCollectionChanged;
 
         _pendingViews.Clear();
-        _pendingViews.AddRange(_currentEnumerable);
+        // 入队前先筛：选择器给不出模板的项（典型是只有 NodeTemplate 的选择器遇到连线）不进池。
+        foreach (var item in _currentEnumerable)
+        {
+            if (CanMaterialize(item))
+            {
+                _pendingViews.Add(item);
+            }
+        }
+
         Log($"Attach: layout={_layout.GetType().Name}, items={_pendingViews.Count}, selector={ViewPool.GetTemplateSelector(_layout)?.GetType().Name ?? "null"}");
         ScheduleNextBatchRender();
     }
@@ -85,7 +94,10 @@ public sealed class ViewManager
                     foreach (object item in e.NewItems)
                     {
                         RemoveReference(_pendingViews, item);
-                        _pendingViews.Add(item);
+                        if (CanMaterialize(item))
+                        {
+                            _pendingViews.Add(item);
+                        }
                     }
 
                     ScheduleNextBatchRender();
@@ -109,7 +121,7 @@ public sealed class ViewManager
                     var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
                     foreach (var item in _currentEnumerable)
                     {
-                        if (seen.Add(item))
+                        if (seen.Add(item) && CanMaterialize(item))
                         {
                             _pendingViews.Add(item);
                         }
@@ -136,7 +148,7 @@ public sealed class ViewManager
         // This prevents UI freezes when loading 100+ workflow nodes.
         _batchTimer?.Stop();
         _batchTimer = _layout.Dispatcher.CreateTimer();
-        _batchTimer.Interval = TimeSpan.FromMilliseconds(16); // ��1 frame
+        _batchTimer.Interval = TimeSpan.FromMilliseconds(16); // ��1 frame
         _batchTimer.IsRepeating = false;
         _batchTimer.Tick += OnBatchTimerTick;
         _batchTimer.Start();
@@ -170,12 +182,12 @@ public sealed class ViewManager
 
             if (_pendingViews.Count > 0)
             {
-                // More views to create �� schedule the next batch.
+                // More views to create �� schedule the next batch.
                 ScheduleNextBatchRender();
             }
             else if (!_slotSyncQueued)
             {
-                // All views created �� schedule a single deferred pass to sync
+                // All views created �� schedule a single deferred pass to sync
                 // node slot layouts (equivalent to WPF's LayoutUpdated).
                 // This avoids the per-node SizeChanged cascade that MAUI triggers.
                 _slotSyncQueued = true;
@@ -209,7 +221,7 @@ public sealed class ViewManager
     private void AddOrReuseView(object viewModel)
     {
         // Use HashSet-style lookup for O(1) duplicate check.
-        // _activeViews is a List, so we scan �� but LinkBuilder deduplicates,
+        // _activeViews is a List, so we scan �� but LinkBuilder deduplicates,
         // and the pending queue filters duplicates, so this is rarely triggered.
         if (_activeViews.Count > 0)
         {
@@ -233,8 +245,13 @@ public sealed class ViewManager
 
         if (view is null)
         {
-            var template = FindDataTemplate(viewModel)
-                ?? throw new InvalidOperationException($"No DataTemplate found for type: {viewType.FullName}");
+            var template = FindDataTemplate(viewModel);
+            if (template is null)
+            {
+                // 入队时已筛过，这里是兜底：选择器给不出模板的项直接跳过，别打断这一批。
+                Log($"AddOrReuseView.skip.unsupported: {viewType.Name}");
+                return;
+            }
 
             view = (View?)template.CreateContent()
                 ?? throw new InvalidOperationException($"DataTemplate returned null for {viewType.FullName}");
@@ -411,6 +428,10 @@ public sealed class ViewManager
 
 
 
+    // 选择器能否为这一项产出模板。给不出模板的项不该进池 —— MAUI 的连线由共享链接层绘制，
+    // 模板的选择器往往只声明 NodeTemplate，遇到连线会抛 "LinkTemplate is not set."。
+    private bool CanMaterialize(object viewModel) => FindDataTemplate(viewModel) is not null;
+
     private DataTemplate? FindDataTemplate(object context)
     {
         var contextType = context.GetType();
@@ -420,12 +441,33 @@ public sealed class ViewManager
             return cached;
         }
 
-        var selector = ViewPool.GetTemplateSelector(_layout);
-        if (selector?.SelectTemplate(context, _layout) is DataTemplate selected)
+        if (_unsupportedTypes.Contains(contextType))
         {
-            _templateMap[contextType] = selected;
-            Log($"FindDataTemplate.selector: vm={contextType.Name}, selector={selector.GetType().Name}, template={selected.GetType().Name}");
-            return selected;
+            return null;
+        }
+
+        var selector = ViewPool.GetTemplateSelector(_layout);
+        if (selector is not null)
+        {
+            DataTemplate? selected;
+            try
+            {
+                selected = selector.SelectTemplate(context, _layout);
+            }
+            catch (Exception ex)
+            {
+                // 选择器抛异常 = 它不认识这一类。按类型记下来，之后同类项直接跳过，不重复抛。
+                _unsupportedTypes.Add(contextType);
+                Log($"FindDataTemplate.unsupported: vm={contextType.Name}, selector={selector.GetType().Name}, ex={ex.GetType().Name}");
+                return null;
+            }
+
+            if (selected is not null)
+            {
+                _templateMap[contextType] = selected;
+                Log($"FindDataTemplate.selector: vm={contextType.Name}, selector={selector.GetType().Name}, template={selected.GetType().Name}");
+                return selected;
+            }
         }
 
         if (TryFindTemplateByResourceKey(context, out var resourceTemplate) && resourceTemplate is not null)
@@ -435,6 +477,7 @@ public sealed class ViewManager
             return resourceTemplate;
         }
 
+        _unsupportedTypes.Add(contextType);
         Log($"FindDataTemplate.miss: vm={contextType.Name}");
         return null;
     }

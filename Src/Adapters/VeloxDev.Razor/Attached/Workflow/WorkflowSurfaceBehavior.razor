@@ -4,10 +4,12 @@
    the tree's LinkInteraction hub (see ForwardPointerAsync). *@
 <CascadingValue TValue="WorkflowSurfaceBehavior" Value="@this" IsFixed="true">
 <CascadingValue TValue="SurfaceViewportFeed" Value="_feed">
-    @* tabindex + keydown: the surface is the key host, so Delete can reach the interaction hub from a
-       generated project without any host code. Focused on link hover (see ForwardPointerAsync) with
-       preventScroll, which is this platform's guard against the focus-scroll jump. *@
-    <div class="veloxdev-wf-surface" tabindex="0" onkeydown="@OnSurfaceKeyDown" @ref="_surfaceRoot"
+    @* tabindex + keydown: the surface is the key host, so Delete reaches the interaction hub and
+       Escape closes the link menu from a generated project without any host code. Focused on link
+       hover (see ForwardPointerAsync) with preventScroll, which is this platform's guard against the
+       focus-scroll jump. The contextmenu handler is the menu's one entry point (see OnSurfaceContextMenu). *@
+    <div class="veloxdev-wf-surface" tabindex="0" @onkeydown="OnSurfaceKeyDown" @ref="_surfaceRoot"
+         @oncontextmenu="OnSurfaceContextMenu" @oncontextmenu:preventDefault="true"
          style="outline:none;">
         <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">
             @* Canvas host owns the pixel size (grows via edge expansion) and is set ONLY by JS, so a
@@ -34,6 +36,29 @@
         @if (Minimap is not null && _viewport is not null)
         {
             @Minimap(_viewport)
+        }
+        @* Link context menu: the chrome lives here (and is styled by veloxdev.workflow.css), while the
+           entries are the host's — passed in as LinkMenu. The backdrop is what makes click-away dismiss
+           work with no JS, and while it is up it swallows canvas gestures — which is what a menu should
+           do. *@
+        @if (MenuLink is not null)
+        {
+            <div class="wf-link-menu-backdrop"
+                 @onclick="CloseLinkMenu"
+                 @oncontextmenu="CloseLinkMenu"
+                 @oncontextmenu:preventDefault="true"
+                 @oncontextmenu:stopPropagation="true"></div>
+            <div class="wf-link-menu"
+                 style="left:@MenuLeftCss;top:@MenuTopCss;"
+                 @onclick="OnMenuPanelClick"
+                 @oncontextmenu="CloseLinkMenu"
+                 @oncontextmenu:preventDefault="true"
+                 @oncontextmenu:stopPropagation="true">
+                @if (LinkMenu is not null)
+                {
+                    @LinkMenu(MenuLink)
+                }
+            </div>
         }
     </div>
 </CascadingValue>

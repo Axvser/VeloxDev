@@ -26,7 +26,6 @@ public partial class Workflow : ComponentBase, IDisposable
     private VeloxDev.AI.MCP.McpStatusViewModel? McpStatus
         => (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;
     private string _canvasLayoutSize = "";
-    private INotifyPropertyChanged? _subscribedVirtualLink;
 
     /// <summary>What the run-controls card says about the gate — 空闲 / 已暂停 / …</summary>
     private string _runGateState = "空闲";
@@ -35,20 +34,9 @@ public partial class Workflow : ComponentBase, IDisposable
     /// render: the page re-renders on every node/link change, and <c>HasCheckpoint</c> hits the disk.</summary>
     private bool _hasCheckpoint;
 
-    // ── Link selection / context menu ──────────────────────────────────────
-    // 悬停/选中归 Core 的交互枢纽（见 BindInteraction）；页面只留右键菜单这一份浏览器侧状态
-    private IWorkflowLinkViewModel? _menuLink;
-    private Anchor _menuPosition = new();
-    private int _menuLeft;
-    private int _menuTop;
-    private ElementReference _linksLayer;
-
-    // 右键落在表面外层的画布容器上（见 Workflow.razor）：把这次右键喂进枢纽，枢纽命中后报
-    // ContextMenuRequested，页面据此弹菜单 —— 与模板/Trimmed 同一形状。
+    // ── Link selection ─────────────────────────────────────────────────────
+    // 菜单的接线整个在表面组件里（右键入口、定位、开合上报）；页面只读它选中的那条线，画选中态。
     private WorkflowSurfaceBehavior? _surface;
-
-    // 当前树那一个交互枢纽（Core 按树缓存）。换过树就换实例，所以订阅按实例比对重新接
-    private LinkInteraction? _subscribedInteraction;
 
     // ── Agent interaction modals (RequestSelection / RequestConfirmation) ──
     private SelectionRequest? _selection;
@@ -84,79 +72,6 @@ public partial class Workflow : ComponentBase, IDisposable
         UpdateCanvasSize();
     }
 
-    // 枢纽按树取用；换树换成另一个实例，所以订阅按实例比对重新接
-    protected override Task OnAfterRenderAsync(bool firstRender)
-    {
-        BindInteraction();
-        return base.OnAfterRenderAsync(firstRender);
-    }
-
-    private void BindInteraction()
-    {
-        var interaction = _session?.Tree is { } tree ? LinkInteraction.For(tree) : null;
-        if (ReferenceEquals(interaction, _subscribedInteraction)) return;
-
-        if (_subscribedInteraction is not null)
-        {
-            _subscribedInteraction.HoverChanged -= OnHubHoverChanged;
-            _subscribedInteraction.ContextMenuRequested -= OnContextMenuRequested;
-            _subscribedInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
-        }
-
-        _subscribedInteraction = interaction;
-        if (interaction is not null)
-        {
-            interaction.HoverChanged += OnHubHoverChanged;
-            interaction.ContextMenuRequested += OnContextMenuRequested;
-            interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
-        }
-    }
-
-    // 悬停后把键盘焦点收进连线层 —— Delete 只在这层有焦点时才到得了页面。
-    // 不触发重渲染：高亮是每条线自己的本地悬停态，枢纽只负责给 Delete 一个答案
-    private void OnHubHoverChanged(object? sender, LinkHoverEventArgs e)
-    {
-        if (e.Link is not null)
-        {
-            _ = _linksLayer.FocusAsync(preventScroll: true);
-        }
-    }
-
-    // 右键落在画布容器上：屏幕坐标只有 DOM 事件知道（先记下），再把这次右键喂进枢纽。
-    // 空白画布也会走到这里，但那里不给菜单。
-    private async Task OnSurfaceContextMenu(MouseEventArgs e)
-    {
-        // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它
-        _menuLeft = (int)Math.Round(e.ClientX);
-        _menuTop = (int)Math.Round(e.ClientY);
-
-        if (_surface is not null)
-        {
-            await _surface.ForwardPointerAsync(PointerPhase.Pressed, e.ClientX, e.ClientY, PointerButtonKind.Right);
-        }
-    }
-
-    // ContextMenuRequested 是「谁弹菜单谁订」的那一相：空白处右键也会报，只是 Link 为 null，宿主据此不弹。
-    // 否决归 ContextMenuRequesting，这里不查 PreventDefault。
-    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
-    {
-        if (e.Link is null) return;
-
-        _menuLink = e.Link;
-        _menuPosition = e.Position;
-        // 报回枢纽：菜单在屏期间挂起悬停，指针移到菜单上不会清掉这次选中的连线。
-        _subscribedInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
-        InvokeAsync(StateHasChanged);
-    }
-
-    // 菜单指着的那条线已经不在树上：hub 请宿主收起这份菜单（它收不了宿主的弹窗）。
-    // 收起照常报 Closed，挂起随之放开。
-    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
-    {
-        if (!ReferenceEquals(_menuLink, e.Link)) return;
-        CloseContextMenu();
-    }
-
     private void SubscribeSession()
     {
         if (_session is null) return;
@@ -167,17 +82,8 @@ public partial class Workflow : ComponentBase, IDisposable
         _session.Controller.RunCommand.Exited += OnRunCommandExited;
         _session.Controller.ResumeCommand.Exited += OnRunCommandExited;
         RefreshRunControls();
-        if (_session.Tree is INotifyPropertyChanged np)
-            np.PropertyChanged += OnTreePropertyChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
             lp.PropertyChanged += OnLayoutPropertyChanged;
-        // The VirtualLink raises its own PropertyChanged (Send/Receive/Reset only mutate the
-        // VirtualLink object, not the tree), so subscribe directly to add/remove the gesture view.
-        if (_session.Tree.VirtualLink is INotifyPropertyChanged vp)
-        {
-            vp.PropertyChanged += OnVirtualLinkPropertyChanged;
-            _subscribedVirtualLink = vp;
-        }
         if (_session.Tree.GetHelper() is AgentHelper helper)
         {
             helper.Mcp.Status.PropertyChanged += OnMcpStatusChanged;
@@ -210,15 +116,8 @@ public partial class Workflow : ComponentBase, IDisposable
         _session.Controller.PropertyChanged -= OnControllerPropertyChanged;
         _session.Controller.RunCommand.Exited -= OnRunCommandExited;
         _session.Controller.ResumeCommand.Exited -= OnRunCommandExited;
-        if (_session.Tree is INotifyPropertyChanged np)
-            np.PropertyChanged -= OnTreePropertyChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
             lp.PropertyChanged -= OnLayoutPropertyChanged;
-        if (_subscribedVirtualLink is not null)
-        {
-            _subscribedVirtualLink.PropertyChanged -= OnVirtualLinkPropertyChanged;
-            _subscribedVirtualLink = null;
-        }
         if (_session.Tree.GetHelper() is AgentHelper helper)
         {
             helper.SelectionHandler = null;
@@ -244,24 +143,12 @@ public partial class Workflow : ComponentBase, IDisposable
         }
     }
 
+    // 树/连线的重渲染归表面组件；页面订阅只是为了让侧栏的节点数、连接数跟着变。
     private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
-
-    private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
-        => InvokeAsync(StateHasChanged);
-
-    private void OnVirtualLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        // The per-move coordinate changes are handled by the VirtualLink's own TemplateLinkView
-        // subscription; the page only needs to add/remove the gesture view when IsVisible flips.
-        if (e.PropertyName is nameof(IWorkflowLinkViewModel.IsVisible) or null or "")
-        {
-            InvokeAsync(StateHasChanged);
-        }
-    }
 
     private async Task StopWorkflow()
     {
@@ -472,49 +359,8 @@ public partial class Workflow : ComponentBase, IDisposable
         conf.Completion.TrySetResult(true);
     }
 
-    // ── Link selection handlers ────────────────────────────────────────────
-
-    private void CloseContextMenu()
-    {
-        if (_menuLink is null) return;
-
-        var link = _menuLink;
-        _menuLink = null;
-        // 报回枢纽：菜单收起，挂起的悬停随之解封。
-        _subscribedInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, link));
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void DeleteLinkFromMenu()
-    {
-        var link = _menuLink;
-        CloseContextMenu();
-
-        // 与另外六家一致：不看 CanExecute。命令自己会排队或拒绝，调用方替它做判断只会让两边不一致
-        link?.DeleteCommand.Execute(null);
-    }
-
-    private void OnLinksKeyDown(KeyboardEventArgs e)
-    {
-        // Delete 不在这里转发：表面的根元素自己绑了 keydown（那是适配器给的默认按键路由，生成出来的
-        // 工程零代码就有），而这个链接层就在表面之内 —— 两边都转发时，一次按键会删两遍，第二遍打在
-        // 一条已经不在树上的连线上。这里只留菜单那条策略。
-        if (e.Key == "Escape")
-        {
-            CloseContextMenu();
-        }
-    }
-
     public void Dispose()
     {
-        if (_subscribedInteraction is not null)
-        {
-            _subscribedInteraction.HoverChanged -= OnHubHoverChanged;
-            _subscribedInteraction.ContextMenuRequested -= OnContextMenuRequested;
-            _subscribedInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
-            _subscribedInteraction = null;
-        }
-
         UnsubscribeSession();
     }
 }

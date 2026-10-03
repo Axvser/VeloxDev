@@ -110,7 +110,7 @@
    **搜 `ViewPool.TemplateSelector` 在本家恒空**。
    同族对照：WPF / WinUI / Avalonia / Jalium 同样喂 `Helper.VisibleItems`；**WinForms 喂全量 `Nodes`**
    （`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-tree-view/TemplateClass.cs:728`）；
-   MAUI 喂的是去掉连线的包装（`NodeOnlyVisibleItems`，连线交给共享 overlay 画）。
+   MAUI 也直接喂 `Helper.VisibleItems`（连线由适配器 `ViewManager` 在入队前筛掉，交给共享 overlay 画）。
 
 7. **输入/输出插槽是模板自己按通道拆的**：`InputSlotsOf`（只带 source 标志、带任何 target 标志的都排除）与
    `OutputSlotsOf`（带 target 标志）（`workflow-tree-view/TemplateClass.razor.cs:183-192`），

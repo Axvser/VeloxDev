@@ -148,10 +148,15 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   （`Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.cs:736`）。
   **Razor 也喂 `Helper.VisibleItems`**（`workflow-tree-view/TemplateClass.razor:34-36` 的
   `Items="Tree.GetHelper().VisibleItems"`，节点与连线共用一个选择器，见 `adapters/razor.md` §二·6）；
-  MAUI 那家虽然也叫 `VisibleItems`，但喂的是**去掉连线**的包装（`NodeOnlyVisibleItems`，连线交给共享 overlay）。
-  ⚠ **2026-10-03 起 `workflow-tree-view` 条目还带「连线的右键菜单」**：菜单**声明在模板里**（有标记语言的
-  四家是资源里的 `MenuFlyout`/`ContextMenu` 或 `.razor` 里的按钮，WinForms/Jalium 是基类的 `OnBuildLinkMenu`
-  钩子），由表面在 hub 的 `ContextMenuRequested` 上弹出、并用 `Publish(ContextMenuEvent)` 报开合。
+  **MAUI 也直接喂 `Helper.VisibleItems`**（`workflow-tree-view/TemplateClass.xaml:57`）—— 它的连线由适配器
+  `ViewManager` 在入队前筛掉（选择器给不出 `LinkTemplate`），交给共享 overlay 画
+  （见 `adapters/maui.md` §2.2 与 `WorkflowSystem/adapters/maui.md` §二·1）。
+  ⚠ **2026-10-03 起 `workflow-tree-view` 条目还带「连线的右键菜单」**：**条目**声明在模板里（标记五家是资源里的
+  `MenuFlyout`/`ContextMenu` 或 `.razor` 里的按钮，WinForms/Jalium 是基类的 `OnBuildLinkMenu` 钩子），
+  而**接线在适配层**（2026-10-03 用户改定）：标记五家只多一行附着属性
+  `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="<资源键>"`，适配器按这个键取菜单、包办订阅 / 定位 / 弹出 /
+  开合上报，**模板 code-behind 因此只剩 `InitializeComponent()`**。传键不传菜单本身，是因为这个属性挂在表面
+  自己的根元素上，`{StaticResource}` 会在定义它的资源字典之前求值（见 [item-template-specifications.md](../../specifications/item-template-specifications.md) §五）。
   **落点是 tree-view 而不是 link-view**：右键落在表面上（很多家的连线视图不吃指针），而弹出要屏幕坐标、
   模型给的是画布坐标 —— 只有表面同时知道这两件事。
   ⚠ **条目是「声明 + 绑定」，不是「声明 + 处理器」**（2026-10-03 第二轮定）：弹出前把**菜单自己的上下文设成那条连线**
@@ -160,12 +165,12 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   即成一个新动作。Avalonia 因为资源里没有 `x:DataType`、而 demo 开了编译绑定，必须写 `{ReflectionBinding …}`，不能退回 `Click`。
   Razor 没有绑定那一套，保留内联 `@onclick`（条目仍要一眼可增删）；WinForms/Jalium 的条目在 `OnBuildLinkMenu` 里增删。
   ⚠ **MAUI 的一份菜单有两副面孔**：Windows 上把声明的 `MenuFlyout` 翻成原生 flyout；非 Windows **没有任意点弹出**，
-  翻成模板内的浮层（`PART_LinkMenuLayer`，按算出来的 `Margin` 落位 —— 不翻转、不出窗口、不是 OS 菜单、嵌套项会拍平）。
-  非 Windows 的「请求菜单」手势是**长按**（`LongPressDelay = 500` ms，位移超过 `LongPressMoveSlop = 8` 设备无关单位即取消），
-  由链接层翻译成一次合成右键交给 hub —— 菜单仍由宿主弹。
-  ⚠ **菜单不会活得比它指着的那条线久**（2026-10-03）：模板里那对 `ContextMenuDismissRequested` 订阅要照抄 ——
-  hub 在「菜单开着、那条线却离开树」时发它，宿主只管关掉自己的弹窗并照常报 `Closed`；**别改成各平台自己去盯
-  `tree.Links`**（判定归 Core，`WorkflowSystem/architecture.md`）。
+  翻成一层**由适配器自己搭的浮层**（2026-10-03 起：原来那层 `PART_LinkMenuLayer` 标记长在模板 XAML 里，
+  它是呈现、不是声明，已随接线一起搬进 `WorkflowSurfaceBehavior.EnsureLinkMenuLayer`；不翻转、不出窗口、
+  不是 OS 菜单、嵌套项会拍平）。非 Windows 的「请求菜单」手势是**长按**（`LongPressDelay = 500` ms，
+  位移超过 `LongPressMoveSlop = 8` 设备无关单位即取消），由链接层翻译成一次合成右键交给 hub。
+  ⚠ **菜单不会活得比它指着的那条线久**（2026-10-03）：判定归 Core —— hub 在「菜单开着、那条线却离开树」时发
+  `ContextMenuDismissRequested`；**接线在适配层，模板不参与**（`WorkflowSystem/architecture.md`）。
   ⚠ **模板里的注释一律英文**（2026-10-03 用户定，见 [code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五）：
   只标扩展点、一行说清，函数体注释也算在内 —— 不是每个成员都配得上一行。
   ⚠ **2026-10-03 起 MAUI 的 Trimmed demo 与它的模板故意分叉了**：demo 已经改成**每线一视图**

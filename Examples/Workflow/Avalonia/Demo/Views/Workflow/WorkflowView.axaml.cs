@@ -3,7 +3,6 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
-using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -22,7 +21,6 @@ using VeloxDev.AI.MCP;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
-using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo;
@@ -74,87 +72,9 @@ public partial class WorkflowView : UserControl
         DataContext = _workflowViewModel;
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
 
-        // 菜单的开合报回 hub：它据此收放 IsSuspended，宿主不必自己记账。
-        _linkMenu = this.TryFindResource("WorkflowTreeMenu", out var menuResource) ? menuResource as ContextMenu : null;
-        if (_linkMenu is not null)
-        {
-            _linkMenu.Opened += (_, _) => _linkInteraction?.Publish(
-                new ContextMenuEvent(ContextMenuPhase.Opened, _menuPosition, _menuLink));
-            _linkMenu.Closed += (_, _) => _linkInteraction?.Publish(
-                new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, _menuLink));
-        }
-
-        // 换树会重建连线交互中枢（它按树构造），所以每次 DataContext 变化都重新取一次并重订。
-        DataContextChanged += (_, _) => WireLinkInteraction();
-
         SubscribeAutoScroll(_workflowViewModel);
         InitializeNetworkDemo();
         InitializeMcp();
-    }
-
-    // ── Link interaction (hover / right-click menu / Delete) ──────────────────
-    // 命中、悬停与「按 Delete 删哪条」都在 Core 里裁决（hub 用 LinkInteraction.For 取）。本视图只做宿主
-    // 那件事：订 hub 的 ContextMenuRequested，用声明的菜单资源弹出，再把开合报回 hub。
-
-    private LinkInteraction? _linkInteraction;
-    private ContextMenu? _linkMenu;
-    // 菜单当前针对的那条线：菜单被复用，弹出那一刻再读，条目靠菜单的 DataContext 绑定它。
-    private IWorkflowLinkViewModel? _menuLink;
-    private Anchor _menuPosition = new();
-
-    private void WireLinkInteraction()
-    {
-        // hub 按树取：适配器也在同一个 LinkInteraction.For(tree) 上转发，宿主与它拿到的必然是同一个。
-        var interaction = DataContext is IWorkflowTreeViewModel tree ? LinkInteraction.For(tree) : null;
-        if (ReferenceEquals(interaction, _linkInteraction)) return;
-
-        UnwireLinkInteraction();
-        _linkInteraction = interaction;
-        if (interaction is null) return;
-
-        interaction.ContextMenuRequested += OnContextMenuRequested;
-        interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
-    }
-
-    private void UnwireLinkInteraction()
-    {
-        if (_linkInteraction is null) return;
-
-        _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
-        _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
-        _linkInteraction = null;
-    }
-
-    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
-    {
-        // 空白画布没有可操作的对象，不给菜单。
-        if (e.Link is null || _linkMenu is null) return;
-        if (DataContext is not IWorkflowTreeViewModel tree) return;
-        if (this.FindControl<Canvas>("PART_Canvas") is not { } canvas) return;
-
-        // 画布坐标 → 屏幕上的一点：先按适配器那套逆变换（world + ActualOffset）回到画布局部，
-        // 再由画布换到本控件（宿主）的坐标 —— 菜单的 PlacementRect 正是相对 PlacementTarget 的局部坐标。
-        var screen = WorkflowSurfaceMath.ToScreen(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
-        var point = canvas.TranslatePoint(new Point(screen.Horizontal, screen.Vertical), this)
-                    ?? new Point(screen.Horizontal, screen.Vertical);
-
-        _menuLink = e.Link;
-        _menuPosition = e.Position;
-
-        // 菜单的 DataContext 就是这条连线，条目据此绑定命令。
-        _linkMenu.DataContext = e.Link;
-        _linkMenu.Placement = PlacementMode.AnchorAndGravity;
-        _linkMenu.PlacementAnchor = PopupAnchor.TopLeft;
-        _linkMenu.PlacementGravity = PopupGravity.BottomRight;
-        _linkMenu.PlacementRect = new Rect(point.X, point.Y, 0, 0);
-        _linkMenu.Open(this);
-    }
-
-    // 菜单指着的那条线已经不在树上：hub 请宿主收起这份菜单（它收不了宿主的弹窗）。收起照常报 Closed，挂起随之放开。
-    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
-    {
-        if (!ReferenceEquals(_menuLink, e.Link)) return;
-        _linkMenu?.Close();
     }
 
     private void InitializeMcp()

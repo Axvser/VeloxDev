@@ -233,3 +233,37 @@
 .veloxdev-wf-slot-svg {
     display: block;
 }
+
+/* Link context menu chrome. The surface renders it and the entries are the host's (see
+   WorkflowSurfaceBehavior.LinkMenu); restyle by overriding these classes. The backdrop makes
+   click-away dismiss work with no JS and swallows canvas gestures while the menu is up. */
+.wf-link-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+}
+
+.wf-link-menu {
+    position: fixed;
+    z-index: 901;
+    min-width: 116px;
+    padding: 4px;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.wf-link-menu-item {
+    display: block;
+    width: 100%;
+    padding: 7px 14px;
+    background: none;
+    border: 0;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-family: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}

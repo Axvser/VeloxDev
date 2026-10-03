@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
@@ -25,6 +26,16 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public FrameworkElement? MinimapOverlay { get; set; }
         public FrameworkElement? PointerPressSource { get; set; }
         public PointerEventHandler? ZoomHandler { get; set; }
+
+        // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、开合上报都在这里。
+        public MenuFlyout? LinkMenu { get; set; }
+        public IWorkflowLinkViewModel? MenuLink { get; set; }
+        public Anchor MenuPosition { get; set; } = new();
+        public LinkInteraction? MenuHub { get; set; }
+        public EventHandler<ContextMenuRequestedEventArgs>? MenuRequested { get; set; }
+        public EventHandler<ContextMenuDismissRequestedEventArgs>? MenuDismissed { get; set; }
+        public EventHandler<object>? MenuOpened { get; set; }
+        public EventHandler<object>? MenuClosed { get; set; }
 
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
         public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
@@ -75,6 +86,22 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(false, OnZoomEnabledChanged));
 
+    /// <summary>
+    /// Resource key of the context menu a right press on a link opens. The entries are the user's — declare a
+    /// <see cref="MenuFlyout"/> resource under that key, put its items in it, and name the key here; the surface
+    /// resolves the menu by key, feeds the pressed link to each item, positions it, opens it, and reports
+    /// open/close to the interaction hub.
+    /// <para>
+    /// A key rather than the menu itself: this property sits on the surface's own root element, and a
+    /// <c>{StaticResource}</c> there would be resolved before the very resource dictionary that defines it.
+    /// </para>
+    /// </summary>
+    public static readonly DependencyProperty LinkMenuKeyProperty = DependencyProperty.RegisterAttached(
+        "LinkMenuKey",
+        typeof(string),
+        typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null));
+
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
         typeof(SurfaceState),
@@ -109,6 +136,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     public static void SetMinimapOverlayName(DependencyObject element, string? value) => element.SetValue(MinimapOverlayNameProperty, value);
 
+    public static string? GetLinkMenuKey(DependencyObject element) => element.GetValue(LinkMenuKeyProperty) as string;
+
+    public static void SetLinkMenuKey(DependencyObject element, string? value) => element.SetValue(LinkMenuKeyProperty, value);
+
     public static void Refresh(UserControl host)
     {
         if (!GetIsEnabled(host))
@@ -119,9 +150,139 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var state = host.GetValue(StateProperty) as SurfaceState ?? new SurfaceState();
         host.SetValue(StateProperty, state);
         ResolveNamedControls(host, state);
+        WireLinkMenu(host, state);
         CaptureViewportRestore(host, state);
         ApplyLayout(host, state);
         UpdateVisibleRegion(host, state);
+    }
+
+    // 连线右键菜单：**条目由模板声明**（挂在 LinkMenuKey 上），**接线在这里** —— 订中枢、定位、弹出、
+    // 把开合报回去，模板因此没有一行交互代码。菜单指着的那条线离树时中枢发 DismissRequested，这里收自己那份。
+    private static void WireLinkMenu(UserControl host, SurfaceState state)
+    {
+        // 资源在 attach 之后才一定就绪（第一次 Refresh 可能早于 Resources 解析完），所以每次 Refresh 都重查一次。
+        var key = GetLinkMenuKey(host);
+        var menu = key is { Length: > 0 } ? FindResource(host, key) as MenuFlyout : null;
+
+        if (!ReferenceEquals(menu, state.LinkMenu))
+        {
+            if (state.LinkMenu is not null)
+            {
+                if (state.MenuOpened is not null) state.LinkMenu.Opened -= state.MenuOpened;
+                if (state.MenuClosed is not null) state.LinkMenu.Closed -= state.MenuClosed;
+            }
+
+            state.LinkMenu = menu;
+            state.MenuOpened = null;
+            state.MenuClosed = null;
+            if (menu is not null)
+            {
+                state.MenuOpened = (_, _) => state.MenuHub?.Publish(
+                    new ContextMenuEvent(ContextMenuPhase.Opened, state.MenuPosition, state.MenuLink));
+                state.MenuClosed = (_, _) => state.MenuHub?.Publish(
+                    new ContextMenuEvent(ContextMenuPhase.Closed, state.MenuPosition, state.MenuLink));
+                menu.Opened += state.MenuOpened;
+                menu.Closed += state.MenuClosed;
+            }
+        }
+
+        var hub = host.DataContext is IWorkflowTreeViewModel tree ? LinkInteraction.For(tree) : null;
+        if (ReferenceEquals(hub, state.MenuHub))
+        {
+            return;
+        }
+
+        if (state.MenuHub is not null)
+        {
+            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
+            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
+        }
+
+        state.MenuHub = hub;
+        state.MenuRequested = null;
+        state.MenuDismissed = null;
+        if (hub is null)
+        {
+            return;
+        }
+
+        state.MenuRequested = (_, e) => ShowLinkMenu(host, state, e);
+        state.MenuDismissed = (_, e) =>
+        {
+            if (!ReferenceEquals(state.MenuLink, e.Link)) return;
+            state.LinkMenu?.Hide();
+        };
+        hub.ContextMenuRequested += state.MenuRequested;
+        hub.ContextMenuDismissRequested += state.MenuDismissed;
+    }
+
+    private static void UnwireLinkMenu(SurfaceState state)
+    {
+        if (state.LinkMenu is not null)
+        {
+            if (state.MenuOpened is not null) state.LinkMenu.Opened -= state.MenuOpened;
+            if (state.MenuClosed is not null) state.LinkMenu.Closed -= state.MenuClosed;
+            state.LinkMenu = null;
+        }
+
+        state.MenuOpened = null;
+        state.MenuClosed = null;
+
+        if (state.MenuHub is not null)
+        {
+            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
+            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
+            state.MenuHub = null;
+        }
+
+        state.MenuRequested = null;
+        state.MenuDismissed = null;
+        state.MenuLink = null;
+    }
+
+    // 右键落在表面上，而弹出要相对某个元素；表面同时知道画布与自己的位置，所以菜单由表面弹。
+    private static void ShowLinkMenu(UserControl host, SurfaceState state, ContextMenuRequestedEventArgs e)
+    {
+        // 空白画布没有可操作的对象，不给菜单。
+        if (e.Link is null || state.LinkMenu is null || state.Canvas is null) return;
+        if (host.DataContext is not IWorkflowTreeViewModel) return;
+
+        var anchor = state.PointerPressSource ?? (FrameworkElement)host;
+
+        // 画布坐标 → 锚点坐标：画布自带渲染平移（刻度带）与合成平移，TransformToVisual 一并算进去。
+        var point = state.Canvas.TransformToVisual(anchor)
+            .TransformPoint(new Windows.Foundation.Point(e.Position.Horizontal, e.Position.Vertical));
+
+        state.MenuLink = e.Link;
+        state.MenuPosition = e.Position;
+
+        state.LinkMenu.XamlRoot = host.XamlRoot;
+
+        // MenuFlyout 继承 FlyoutBase → DependencyObject，不在可视树上也没有 DataContext，逐条把这条连线喂给条目。
+        foreach (var item in state.LinkMenu.Items)
+        {
+            if (item is FrameworkElement element)
+            {
+                element.DataContext = e.Link;
+            }
+        }
+
+        state.LinkMenu.ShowAt(anchor, new FlyoutShowOptions { Position = point });
+    }
+
+    // WinUI 没有 TryFindResource：从宿主沿父链逐级查 Resources，最后落到 Application 资源。
+    // 模板把菜单资源声明在自己的 <UserControl.Resources> 里，所以第一站就是宿主本身。
+    private static object? FindResource(DependencyObject host, string key)
+    {
+        for (var current = host; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is FrameworkElement element && element.Resources.TryGetValue(key, out var found))
+            {
+                return found;
+            }
+        }
+
+        return Application.Current?.Resources.TryGetValue(key, out var appFound) == true ? appFound : null;
     }
 
     // 树刚挂上来且不是上一棵：把它存档里的视口位置排进待恢复（世界 → 滚动）。
@@ -212,6 +373,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
             UnsubscribeResolvedControls(state);
+            UnwireLinkMenu(state);
         }
 
         control.ClearValue(StateProperty);

@@ -58,6 +58,13 @@
     理由直说 —— **条目列表本身就是用户要改的东西**，「改模板增删菜单条目」比「读库的文档再自己接一套」直接得多。
   - 落点是 **`workflow-tree-view` 条目**、不是 `workflow-link-view`：右键落在**表面**上（连线视图在很多家不吃指针），
     而弹出位置要**屏幕坐标**（模型给的是画布坐标），只有表面同时知道这两件事。
+  - **接线必须在适配层，模板只声明**（2026-10-03 用户改定）：**条目**归用户（声明在 `workflow-tree-view` 的资源里），
+    而**订阅 / 定位 / 弹出 / 开合上报一行都不许留在模板**。标记五家走一个附着属性
+    —— `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="<资源键>"`，与 `ViewPool.TemplateSelector` 同一条线；
+    适配器按这个键取菜单、把全部接线干完；无标记语言的两家走基类钩子（见下一条）。
+    ⇒ **模板产物的 code-behind 因此只剩 `InitializeComponent()`。**
+    **为什么传资源键、不传菜单本身**：这个属性挂在表面**自己的根元素**上，`{StaticResource}` 在那里会在
+    定义它的那个资源字典之前求值；键交给适配器在挂载之后解析，绕开这个顺序。
   - 触发点是 hub 的 `ContextMenuRequested`（**可取消**：宿主 `PreventDefault` 就是「这里不给菜单」），
     开合用 `Publish(ContextMenuEvent)` 报回 hub —— 挂起状态因此不用各家的代码自己记账。
   - **无标记语言的两家（WinForms / Jalium）**：菜单的条目由**基类的可重写钩子**给出（`WorkflowTreeView` 上

@@ -14,7 +14,7 @@
 
 | 角色 | 本家的实现 | 说明 |
 |---|---|---|
-| 画布宿主 | `WorkflowSurfaceBehavior.cs` | 唯一的「知晓一切」的类（1203 行）：解析命名控件、喂装饰器、平移、缩放、可见区 |
+| 画布宿主 | `WorkflowSurfaceBehavior.cs` | 唯一的「知晓一切」的类（1822 行）：解析命名控件、喂装饰器、平移、缩放、可见区、连线右键菜单接线 |
 | 画布变换 | —— **本家没有这个类** | 见 §三·1；职责由宿主 + `ViewManager` 分担 |
 | 视图池 | `ViewPool.cs` / `ViewManager.cs` | 见 §二·1 |
 | 节点拖拽 | `WorkflowNodeDragBehavior.cs` | 见 §三·5 |
@@ -35,14 +35,19 @@
 ### 1. MAUI 没有 `DispatcherPriority`，所以视图物化与槽位同步都靠 16ms 一次性定时器
 
 - 视图池：`BatchSize = 8`，用一个**非重复**的 16ms `IDispatcherTimer` 逐帧分批建视图，理由写在
-  `ViewManager.cs:124-143`（「MAUI lacks WPF's DispatcherPriority.Background，所以用逐帧定时器把视图创建摊到多帧」）。
-  分批跑完若还有待建项，**自己再排下一次**（`:171-175`）。
+  `ViewManager.cs:145-157`（「MAUI lacks WPF's DispatcherPriority.Background，所以用逐帧定时器把视图创建摊到多帧」）。
+  分批跑完若还有待建项，**自己再排下一次**（`:185-189`）。
+- **选择器物化不了的项在入队前就筛掉**（2026-10-03）：`ViewManager.CanMaterialize`（`ViewManager.cs:433`）问一次选择器，
+  拿到模板才进 `_pendingViews`；选择器抛异常（典型：只声明 `NodeTemplate` 的选择器遇到连线）或返回 null 的，
+  按类型记进 `_unsupportedTypes`（`:17`）跳过 —— 不排队、不重复抛。于是**只有节点模板的 demo/模板可以把
+  `ViewPool.ItemsSource` 直绑 `Helper.VisibleItems`**，连线交给共享链接层画，池不再需要模板侧的过滤包装
+  （原 `NodeOnlyVisibleItems` 已从模板与两个 demo 删除）。
 - 槽位同步：同样 16ms，但语义是**合并**（同一控件多次请求只留一次 `Sync`），`WorkflowSlotLayoutBehavior.cs:321-366`。
 - **这两个 `IsRepeating = false` 与 Transition 侧 pacer 的 `IsRepeating = true` 不矛盾**：pacer 的定时器每拍由
   `FramePacerCore.Fire()` 先 `Disarm()`，重复正是为了让下一拍还在；这两个是「干完这一批就停、需要时再排」。
   照抄 `IsRepeating` 的取值前先确认你要的是哪一种（对位：`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/TransitionInterpreter.cs:40-43`）。
 - 两个定时器的 `Tick` 都必须自带 try：`IDispatcherTimer.Tick` 抛出的异常 MAUI 不接，直接冒到 WinUI 的
-  `UnhandledException`（dotnet/maui #12245，`ViewManager.cs:189-194`、`WorkflowSlotLayoutBehavior.cs:355-362`）。
+  `UnhandledException`（dotnet/maui #12245，`ViewManager.cs:203-208`、`WorkflowSlotLayoutBehavior.cs:355-362`）。
 
 ### 2. `GraphicsView` 的 `Draw` 回调没有异常保护
 
@@ -146,7 +151,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
    「Uses layout-only changes (no render transforms) so the slot-layout behavior's layout-position measurement keeps producing
    correct link anchors」）。于是平移改由两处**代码写几何**承担：整块画布 `TranslationX/Y = Layout.ActualOffset`
    （`WorkflowSurfaceBehavior.cs:796-812`，注释说明为什么是画布级而不是逐子元素：同级平移才能让节点/连线/网格同帧一致），
-   每一项的落位由 `ViewManager` 每帧 `AbsoluteLayout.SetLayoutBounds`（`ViewManager.cs:387-409`）写。
+   每一项的落位由 `ViewManager` 每帧 `AbsoluteLayout.SetLayoutBounds`（`ViewManager.cs:404-426`）写。
    **照抄点**：`view-layer.md:50-61` 那条「变换绑定必须挂在 `DataTemplate` 根上」的坑在 MAUI 上**不适用** ——
    这里根本没有那个附着属性可绑。
 2. **连线正在从「一层」走向「每线一视图」，两条路线现在同时在仓库里（2026-10-03 起）。**
@@ -159,6 +164,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
      `Helper.VisibleItems` 物化（节点与连线共用一个池，选择器同时给 `NodeTemplate` 与 `LinkTemplate`）。
      它发布曲线、实现 `ILinkHighlight`，**自己不处理任何输入**。
    - **完整版 demo 仍是「一层」**：它没有每线视图，于是 overlay 照旧画全部连线 —— 包括光带。
+     它的池数据源直绑 `Helper.VisibleItems`，选择器没有 `LinkTemplate`，连线由 §二·1 的入队过滤自动跳过。
    两条路线共用同一个 hub（`LinkInteraction.For(tree)`）与同一份命中几何，所以交互行为一致。
    **光带仍然只有 overlay 有**（`BandCentre`/`BandMix` 两个标量 + `Transition<WorkflowLinkOverlay>`，
    三段 450/700/450ms 结尾 `Repeat(int.MaxValue)`）：每线视图要光带就得自己按弧长画彗星，**还没做**。
@@ -209,7 +215,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 7. **删掉 `x:Name="Root"`** → 链接层的 `WorkflowTree`/`ScrollOffset*`/`ContentOffset*`/`RulerThickness` 全是
    `Source={x:Reference Root}` 的绑定（`TreeView.xaml:8`、`:46-50`），全部解析不到（`skills/veloxdev-create-workflow/references/gui/maui.md:57` 同结论）。
 8. **把隐藏视图从 `_layout.Children` 里 `Remove`** → 本家刻意保留子元素、只 `IsVisible=false` + `ZIndex=-100`
-   （`ViewManager.cs:279-284`、`ResetAllViews` `:295-317` 的注释：移除会触发昂贵的 MAUI 重排）。
+   （`ViewManager.cs:296-301`、`ResetAllViews` `:312-334` 的注释：移除会触发昂贵的 MAUI 重排）。
    相应地，隐藏视图仍在树上 —— 遍历子元素时别假设「看不见 = 不在」。
 9. **忘了取消在飞的滚动** → `PanCts` 一旦漏取消，`ScrollToAsync` 会叠起来（`:899-902`、`:367-368` 的清理）。
 10. **删掉 `Refresh` 的 `IsRefreshing` 重入守卫** → 画布扩张 → `Refresh` → 再扩张的级联（`:134-141` 的注释记了
@@ -255,6 +261,8 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 **把每条可见链的曲线按 canvas-local 发布给 Core 当命中几何**、**把指针/按键翻译成标准输入事件转发进 hub**
 （`AttachInteraction` `:923-932`）。命中裁决、高亮互斥、删除与右键请求全归 Core 的 `LinkInteraction`
 （一棵树一个 hub，`:50-54`），七家共用一个答案 —— 本层**自己不算命中**（旧的 `HitTestLink` 已删）。
+非 Trimmed demo 的池因此不物化连线（数据源直绑 `Helper.VisibleItems`，由 §二·1 的入队过滤跳过），
+模板/demo 的 code-behind 里没有一行过滤代码。
 
 | 事 | 落点 | 依据 |
 |---|---|---|
@@ -262,7 +270,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 | 命中 | 本层在绘制时把曲线按 **canvas-local** 发布（`PublishCurve`，不带 visual）；指针经 `ToCanvasLocal`（`ToViewport` 的逆）转成同一坐标系交给 hub，hub 用 `HitTestVisibleLinks` 逐条判距，半径 6（七家同一个 `DefaultHitRadius`） | `:1312-1314`、`:622-629`；Core `LinkHitTestEx.cs:18`、`LinkInteraction.cs:274-275` |
 | 高亮 | 本层没有「每线的可视对象」，hub 的 `AutoHighlight` 无处可点；改由本层订阅 `HoverChanged`，选中那条换 `SelectedLinkColor`（默认**白** `#FFFFFFFF`，不是红）并整条加粗 1.5（管壁、彗星一起） | `:930`、`:945`、`:1300-1304`、`:1337`、`:54` |
 | 删除 | 本层只把 Delete 键翻成 `KeyEvent` 交给 hub（仅当 `HoveredLink` 非空）；hub 的 `AutoDelete` 执行 `DeleteCommand` —— 本层不再订 `LinkDeleteRequested`。连线离开 `Links` 时把选中一并清掉（撤销/别处删也走这条） | `:861-876`、`:926`；Core `LinkInteraction.cs:234`；`:1146` |
-| 菜单 | 本层不懂菜单：右键（或非 Windows 的长按）发进 hub 后由 hub 报 `ContextMenuRequested`，宿主（demo/模板）从声明的 `LinkContextMenu` 资源弹菜单；菜单指着的那条线离开 `tree.Links`（Agent / Undo / 别处删都算）时 hub 再报 `ContextMenuDismissRequested`，**宿主只负责收起自己那份弹窗**（弹窗是平台的，Core 收不了），收起照常报 `Closed` | `:601-603`、`:675-683`；Core `LinkInteraction.cs:261-272`、`:180`、`:284-292`；`WorkflowView.xaml.cs:485-493`、`WorkflowView.xaml:45-47` |
+| 菜单 | 本层不懂菜单：右键（或非 Windows 的长按）发进 hub 后由 hub 报 `ContextMenuRequested`。**接线在适配层**（2026-10-03 用户改定）：表面 `WorkflowSurfaceBehavior` 按附着属性 `LinkMenuKey` 从模板声明的 `LinkContextMenu` 资源取菜单，自己订 `ContextMenuRequested` / `ContextMenuDismissRequested`、按 `RulerBand + 锚点 + 内容偏移 − 滚动偏移` 定位、弹出、并把 `Opened`/`Closed` 报回 hub。菜单指着的那条线离开 `tree.Links`（Agent / Undo / 别处删都算）时 hub 报 `ContextMenuDismissRequested`，**表面只负责收起自己那份弹窗**（弹窗是平台的，Core 收不了），收起照常报 `Closed`。模板/demo 的 code-behind 因此没有一行菜单代码 | `WorkflowSurfaceBehavior.cs:143`（属性）、`:218`（`WireLinkMenu`）、`:336`/`:399`（两条 `ShowLinkMenu`）、`:470`（`DismissLinkMenu`）；Core `LinkInteraction.cs:261-272`、`:180`、`:284-292`；`WorkflowView.xaml:16`（`LinkMenuKey`）、`:601-603`/`:675-683`（本层转发） |
 | 取焦点会不会带滚画布 | **不会** —— `Focus()` 打在 `InteractionSource`（页面根）上，而它是画布 `ScrollView` 的**祖先**；WinUI 的 bring-into-view 只从**焦点元素往上冒**，画布那个 `ScrollViewer` 根本不在那条路上 | `:722`、`:614-617`；`WorkflowView.xaml:245`（`Root` 是 ContentView 根，`PART_ScrollViewer` 在它里面 `:255`） |
 
 七条结论（凡标「实测」的都是这台机器上跑出来的，不是推导）：
@@ -278,28 +286,32 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 3. **非 Windows 的菜单手势是长按，不是右键（2026-10-03 新增）**：`#if !WINDOWS` 下左键按下起一个非重复定时器，
    `LongPressDelay = 500` ms（`:112`）；位移超过 `LongPressMoveSlop = 8` 设备无关单位或松开就取消计时
    （`:640-644`、`:671`）。到点 `OnLongPressTick` 发一个**合成右键** `PointerEvent(Pressed, canvasLocal, Right)`
-   （`:681`）—— 与 Windows 的真右键同义，hub 照常判命中并报 `ContextMenuRequested`，菜单本身仍由宿主弹。
+   （`:681`）—— 与 Windows 的真右键同义，hub 照常判命中并报 `ContextMenuRequested`，菜单本身仍由**表面（适配器）**弹。
    右键按下不走长按（本来就是菜单手势，`:663-666`）。Windows 不变：右键即弹，原生 flyout。
 4. **菜单一开的那发 `PointerExited` 现在由 Core 收**：本层 `OnHoverExited` 无条件发 `Exited`（`:589-592`），
-   由 hub 的 `IsSuspended` 挡掉（`LinkInteraction.cs:167-170`）。挂起/恢复由宿主报：弹出时
-   `Publish(ContextMenuEvent(Opened))`、关掉时 `Publish(..., Closed)`（`WorkflowView.xaml.cs:533`、`:640`；
-   Core `:242-256`）。**本层的 `_menuOpen` 与平台侧 `IsSuspended` 守卫都已删除** —— 这个状态只能有一个家，现在在 hub 上。
+   由 hub 的 `IsSuspended` 挡掉（`LinkInteraction.cs:167-170`）。挂起/恢复由**表面**报：弹出时
+   `Publish(ContextMenuEvent(Opened))`、关掉时 `Publish(..., Closed)`（`WorkflowSurfaceBehavior.cs` 的 `ShowLinkMenu` /
+   `DismissLinkMenu`；Core `:242-256`）。**本层的 `_menuOpen` 与平台侧 `IsSuspended` 守卫都已删除** —— 这个状态只能有一个家，现在在 hub 上。
    **菜单不得比它作用的连线活得久，这条守卫也在 Core**：那条线离开 `tree.Links` 时 hub 报 `ContextMenuDismissRequested`
-   （Core `:180`、`:284-292`），宿主按 `ReferenceEquals(_menuLink, e.Link)` 判定后收自己那份弹窗 —— Windows 把记在本地的
-   `_openFlyout` 调 `Hide()`，非 Windows 走 `DismissLinkMenu()`。随后照常报 `Closed`，`IsSuspended` 由此放开；
+   （Core `:180`、`:284-292`），表面按 `ReferenceEquals(state.MenuLink, e.Link)` 判定后收自己那份弹窗 —— Windows 调原生
+   flyout 的 `Hide()`，非 Windows 走 `DismissLinkMenu(state)`。随后照常报 `Closed`，`IsSuspended` 由此放开；
    hub 刻意不自己放这个状态，单一责任人不变。
-5. **菜单条目来自声明的资源，不再由本层硬编码**：全量 demo/模板在 XAML 里声明 `LinkContextMenu`
-   （`WorkflowView.xaml:45-47`：只有一条 `MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"`），
-   宿主订阅 `ContextMenuRequested`（`WorkflowView.xaml.cs:485-493`）。弹出分两路：
-   - **Windows**：把声明的条目翻成原生 `Microsoft.UI.Xaml.Controls.MenuFlyout`（`BuildPlatformMenu` `:539-565`）
-     再 `ShowAt`（`:535`）—— 只有原生 flyout 能在指定点弹。这份 flyout 现在记在 `_openFlyout` 字段里（`Hide()` 得用它，
-     在它的 `Closed` 里清掉），`_menuLink` 也在 Windows 上置上，供 `ContextMenuDismissRequested` 的同一判据用。
-   - **非 Windows**：没有跨平台的点弹出物，于是把同一声明物化进模板自己的浮层 `PART_LinkMenuLayer`
-     （`WorkflowView.xaml:284-303`，填进 `PART_LinkMenuItems`，用算出来的 `Margin` 定位，`WorkflowView.xaml.cs:569-614`）。
-     收起只有 `DismissLinkMenu()` 一条路：用户选择、点 scrim、以及 `ContextMenuDismissRequested` 都走它。
-   **这份浮层的局限都是设计取舍、不是待修的缺陷**：它是画布 Grid 的子元素、不是窗口级弹出物（没有平台样式与键盘语义）；
-   `Margin` 只在负值时夹到 0、不做贴边翻转（`:611`）；`MenuFlyoutSubItem` 会被 `case MenuFlyoutItem` 吃掉、当成一个
-   平铺按钮渲染，嵌套项不展开（`:588-603`）。`ShowDefaultContextMenu` / `ShowDeleteMenu` 那套内置「删除连线」已删除 ——
+5. **菜单条目来自声明的资源，接线与呈现都在适配层（2026-10-03 改定）**：模板/demo 在 XAML 里声明 `LinkContextMenu`
+   （`WorkflowView.xaml:16` 的 `LinkMenuKey="LinkContextMenu"` 属性 + 资源里那条
+   `MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"`），表面按这个键取菜单。
+   **模板/demo 的 code-behind 因此没有一行菜单代码**：`UpdateInteraction` / `ShowLinkMenu` / `BuildPlatformMenu` / `RunItem` /
+   `SelectMenuItem` / `DismissLinkMenu` / `OnLinkMenuScrimTapped` 那整套都已删，落进 `WorkflowSurfaceBehavior.cs` 的
+   `WireLinkMenu` / `ShowLinkMenu` / `RunItem`。弹出分两路：
+   - **Windows**：把声明的条目翻成原生 `Microsoft.UI.Xaml.Controls.MenuFlyout`（`BuildPlatformMenu`）
+     再 `ShowAt` —— 只有原生 flyout 能在指定点弹。这份 flyout 记在 `state.OpenFlyout` 里（`Hide()` 得用它，
+     在它的 `Closed` 里清掉），`state.MenuLink` 也在 Windows 上置上，供 `ContextMenuDismissRequested` 的同一判据用。
+   - **非 Windows**：没有跨平台的点弹出物，于是把同一声明物化进**适配器自建**的浮层（`EnsureLinkMenuLayer:486`：
+     建 `Grid`（scrim + `Border`）挂到装饰器最近的一层 `Layout` 上，条目填进 `state.LinkMenuItems`，用算出来的 `Margin` 定位）。
+     **`PART_LinkMenuLayer` 那层标记已从模板与两个 demo 的 XAML 里删除** —— 它本来就是呈现，归适配器。
+     收起只有 `DismissLinkMenu(state)` 一条路：用户选择、点 scrim、以及 `ContextMenuDismissRequested` 都走它。
+   **这份浮层的局限都是设计取舍、不是待修的缺陷**：它是宿主 Layout 的子元素、不是窗口级弹出物（没有平台样式与键盘语义）；
+   `Margin` 只在负值时夹到 0、不做贴边翻转；`MenuFlyoutSubItem` 会被 `case MenuFlyoutItem` 吃掉、当成一个
+   平铺按钮渲染，嵌套项不展开。`ShowDefaultContextMenu` / `ShowDeleteMenu` 那套内置「删除连线」已删除 ——
    条目就是用户在资源里写的那些，没声明就没条目。
 6. **悬停取焦点不会带滚画布（Avalonia/Jalium 那条缺陷在本家不存在，实测）**。画布滚到非零偏移
    （HUD 读作 `视口(画布) 320, 195`）后：`SelectLink` → `Focus()` 走 5 轮、外加 3 秒连打，滚动在

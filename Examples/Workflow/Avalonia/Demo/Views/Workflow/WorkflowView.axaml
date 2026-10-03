@@ -18,7 +18,8 @@
 			 behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
 			 behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
 			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
-			 behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
+			 behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+			 behaviors:WorkflowSurfaceBehavior.LinkMenuKey="WorkflowTreeMenu">
 
 	<!-- 子代理树是只读的：没有任何东西会因为「某一行被选中」而改变，所以选中与悬停都不该画出色块。
 	     Fluent 的主题会画，而 SelectionMode 没有 None 这一档（只有 Single/Multiple/Toggle/AlwaysSelected），

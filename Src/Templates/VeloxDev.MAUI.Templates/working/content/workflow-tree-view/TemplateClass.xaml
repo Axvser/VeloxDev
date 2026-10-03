@@ -12,7 +12,8 @@
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
              behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
-             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+             behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
     <ContentView.Resources>
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView WidthRequest="{Binding Size.Width}" HeightRequest="{Binding Size.Height}" />
@@ -53,7 +54,7 @@
                                     TranslationY="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}">
                         <AbsoluteLayout x:Name="PART_Canvas"
                                         BackgroundColor="Transparent"
-                                        behaviors:ViewPool.ItemsSource="{Binding NodeItemsSource, Source={x:Reference Root}}"
+                                        behaviors:ViewPool.ItemsSource="{Binding BindingContext.Helper.VisibleItems, Source={x:Reference Root}}"
                                         behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
                     </AbsoluteLayout>
                 </ScrollView>
@@ -64,27 +65,5 @@
                               VerticalOptions="Start"
                               Margin="0,12,12,0"
                               ScrollViewerName="PART_ScrollViewer" />
-        <!-- Off Windows there is no point popup, so the declared LinkContextMenu is materialized here at
-             the long-press point. Windows opens the native flyout instead and never shows this layer. -->
-        <Grid x:Name="PART_LinkMenuLayer"
-              IsVisible="False">
-            <Grid x:Name="PART_LinkMenuScrim"
-                  BackgroundColor="Transparent">
-                <Grid.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnLinkMenuScrimTapped" />
-                </Grid.GestureRecognizers>
-            </Grid>
-            <Border x:Name="PART_LinkMenuHost"
-                    HorizontalOptions="Start"
-                    VerticalOptions="Start"
-                    Padding="4"
-                    BackgroundColor="#F22B2B2B"
-                    Stroke="#40FFFFFF"
-                    StrokeThickness="1"
-                    StrokeShape="RoundRectangle 6">
-                <VerticalStackLayout x:Name="PART_LinkMenuItems"
-                                     Spacing="2" />
-            </Border>
-        </Grid>
     </Grid>
 </ContentView>

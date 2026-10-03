@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Input;
 using Avalonia.Input.GestureRecognizers;
 using Avalonia.Interactivity;
@@ -41,6 +42,16 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         // 宿主本身：悬停焦点在连线可视对象不可聚焦时的落点（模板/Trimmed 的连线视图就是这种）。
         public UserControl? Host { get; set; }
+
+        // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuProperty），订阅、定位、弹出、开合上报都在这里。
+        public ContextMenu? LinkMenu { get; set; }
+        public IWorkflowLinkViewModel? MenuLink { get; set; }
+        public Anchor MenuPosition { get; set; } = new();
+        public LinkInteraction? MenuHub { get; set; }
+        public EventHandler<ContextMenuRequestedEventArgs>? MenuRequested { get; set; }
+        public EventHandler<ContextMenuDismissRequestedEventArgs>? MenuDismissed { get; set; }
+        public EventHandler<RoutedEventArgs>? MenuOpened { get; set; }
+        public EventHandler<RoutedEventArgs>? MenuClosed { get; set; }
     }
 
     public static readonly AttachedProperty<bool> IsEnabledProperty =
@@ -71,6 +82,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     {
         IsEnabledProperty.Changed.AddClassHandler<UserControl>(OnIsEnabledChanged);
         ZoomEnabledProperty.Changed.AddClassHandler<UserControl>(OnZoomEnabledChanged);
+        // 菜单键可能在 IsEnabled 之后才写到元素上（XAML 属性顺序），所以它自己也要触发一次重查。
+        LinkMenuKeyProperty.Changed.AddClassHandler<UserControl>((control, _) => Refresh(control));
     }
 
     public static bool GetIsEnabled(AvaloniaObject element) => element.GetValue(IsEnabledProperty);
@@ -80,6 +93,18 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     public static bool GetZoomEnabled(AvaloniaObject element) => element.GetValue(ZoomEnabledProperty);
 
     public static void SetZoomEnabled(AvaloniaObject element, bool value) => element.SetValue(ZoomEnabledProperty, value);
+
+    /// <summary>
+    /// Resource key of the context menu a right press on a link opens. The entries are the user's — declare a
+    /// <see cref="ContextMenu"/> resource under that key, put its items in it, and name the key here; the surface
+    /// resolves which link, positions the menu, opens it, and reports open/close to the interaction hub.
+    /// <para>
+    /// A key rather than the menu itself: this property sits on the surface's own root element, and a
+    /// <c>{StaticResource}</c> there would be resolved before the very resource dictionary that defines it.
+    /// </para>
+    /// </summary>
+    public static readonly AttachedProperty<string?> LinkMenuKeyProperty =
+        AvaloniaProperty.RegisterAttached<WorkflowSurfaceBehavior, UserControl, string?>("LinkMenuKey");
 
     public static string? GetScrollViewerName(AvaloniaObject element) => element.GetValue(ScrollViewerNameProperty);
 
@@ -101,6 +126,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
     public static void SetMinimapOverlayName(AvaloniaObject element, string? value) => element.SetValue(MinimapOverlayNameProperty, value);
 
+    public static string? GetLinkMenuKey(AvaloniaObject element) => element.GetValue(LinkMenuKeyProperty);
+
+    public static void SetLinkMenuKey(AvaloniaObject element, string? value) => element.SetValue(LinkMenuKeyProperty, value);
+
     public static void Refresh(UserControl host)
     {
         if (!GetIsEnabled(host))
@@ -109,10 +138,123 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         var state = host.GetValue(StateProperty) ?? new SurfaceState();
         host.SetValue(StateProperty, state);
         ResolveNamedControls(host, state);
+        WireLinkMenu(host, state);
         CaptureViewportRestore(host, state);
         ApplyLayout(host, state);
         UpdateVisibleRegion(host, state);
         QueueViewportRestore(host, state);
+    }
+
+    // 连线右键菜单：**条目由模板声明**（挂在 LinkMenuProperty 上），**接线在这里** —— 订中枢、定位、弹出、
+    // 把开合报回去，模板因此没有一行交互代码。菜单指着的那条线离树时中枢发 DismissRequested，这里收自己那份。
+    private static void WireLinkMenu(UserControl host, SurfaceState state)
+    {
+        // 资源在 attach 之后才一定就绪（第一次 Refresh 可能早于 Resources 解析完），所以每次 Refresh 都重查一次。
+        var key = GetLinkMenuKey(host);
+        ContextMenu? menu = null;
+        if (key is { Length: > 0 } && host.TryFindResource(key, out var found))
+        {
+            menu = found as ContextMenu;
+        }
+
+        if (!ReferenceEquals(menu, state.LinkMenu))
+        {
+            if (state.LinkMenu is not null)
+            {
+                if (state.MenuOpened is not null) state.LinkMenu.Opened -= state.MenuOpened;
+                if (state.MenuClosed is not null) state.LinkMenu.Closed -= state.MenuClosed;
+            }
+
+            state.LinkMenu = menu;
+            state.MenuOpened = null;
+            state.MenuClosed = null;
+            if (menu is not null)
+            {
+                state.MenuOpened = (_, _) => state.MenuHub?.Publish(
+                    new ContextMenuEvent(ContextMenuPhase.Opened, state.MenuPosition, state.MenuLink));
+                state.MenuClosed = (_, _) => state.MenuHub?.Publish(
+                    new ContextMenuEvent(ContextMenuPhase.Closed, state.MenuPosition, state.MenuLink));
+                menu.Opened += state.MenuOpened;
+                menu.Closed += state.MenuClosed;
+            }
+        }
+
+        var hub = host.DataContext is IWorkflowTreeViewModel tree ? LinkInteraction.For(tree) : null;
+        if (ReferenceEquals(hub, state.MenuHub))
+        {
+            return;
+        }
+
+        if (state.MenuHub is not null)
+        {
+            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
+            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
+        }
+
+        state.MenuHub = hub;
+        state.MenuRequested = null;
+        state.MenuDismissed = null;
+        if (hub is null)
+        {
+            return;
+        }
+
+        state.MenuRequested = (_, e) => ShowLinkMenu(host, state, e);
+        state.MenuDismissed = (_, e) =>
+        {
+            if (!ReferenceEquals(state.MenuLink, e.Link)) return;
+            state.LinkMenu?.Close();
+        };
+        hub.ContextMenuRequested += state.MenuRequested;
+        hub.ContextMenuDismissRequested += state.MenuDismissed;
+    }
+
+    private static void UnwireLinkMenu(SurfaceState state)
+    {
+        if (state.LinkMenu is not null)
+        {
+            if (state.MenuOpened is not null) state.LinkMenu.Opened -= state.MenuOpened;
+            if (state.MenuClosed is not null) state.LinkMenu.Closed -= state.MenuClosed;
+            state.LinkMenu = null;
+        }
+
+        state.MenuOpened = null;
+        state.MenuClosed = null;
+
+        if (state.MenuHub is not null)
+        {
+            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
+            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
+            state.MenuHub = null;
+        }
+
+        state.MenuRequested = null;
+        state.MenuDismissed = null;
+        state.MenuLink = null;
+    }
+
+    // 右键落在表面上，而弹出要屏幕坐标；只有表面同时知道画布与屏幕两件事，所以菜单由表面弹。
+    private static void ShowLinkMenu(UserControl host, SurfaceState state, ContextMenuRequestedEventArgs e)
+    {
+        // 空白画布没有可操作的对象，不给菜单。
+        if (e.Link is null || state.LinkMenu is null || state.Canvas is null) return;
+        if (host.DataContext is not IWorkflowTreeViewModel tree) return;
+
+        // 画布坐标 → 宿主局部的一点：先按逆变换回到画布局部，再由画布换到宿主 —— PlacementRect 相对宿主。
+        var screen = WorkflowSurfaceMath.ToScreen(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
+        var point = state.Canvas.TranslatePoint(new Point(screen.Horizontal, screen.Vertical), host)
+                    ?? new Point(screen.Horizontal, screen.Vertical);
+
+        state.MenuLink = e.Link;
+        state.MenuPosition = e.Position;
+
+        // 菜单的 DataContext 就是这条连线，条目据此绑定命令。
+        state.LinkMenu.DataContext = e.Link;
+        state.LinkMenu.Placement = PlacementMode.AnchorAndGravity;
+        state.LinkMenu.PlacementAnchor = PopupAnchor.TopLeft;
+        state.LinkMenu.PlacementGravity = PopupGravity.BottomRight;
+        state.LinkMenu.PlacementRect = new Rect(point.X, point.Y, 0, 0);
+        state.LinkMenu.Open(host);
     }
 
     // 指针位置换算到连线发布曲线的那个坐标系（canvas-local 锚点空间）：指针在 Canvas 的局部坐标里，
@@ -240,6 +382,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
             UnsubscribeResolvedControls(state);
+            UnwireLinkMenu(state);
         }
 
         control.ClearValue(StateProperty);
