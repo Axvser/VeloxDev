@@ -23,6 +23,7 @@
 | 提交信息 | [memory/specifications/commit-message-specifications.md](memory/specifications/commit-message-specifications.md) | **每次 `git commit` 之前** —— 首行是 `[类型][模块] 英文标题`，body 是 `[what]`/`[why]`/`[how]` 三段中文；不合规就是不合规，不要凭习惯写 |
 | 模块记忆维护 | [memory/specifications/memory-maintenance-specifications.md](memory/specifications/memory-maintenance-specifications.md) | **每次任务收尾时** —— 把这一轮学到的东西落进对应模块；以及开始任务、需要先理解某个模块之前 |
 | .NET Item Template | [memory/specifications/item-template-specifications.md](memory/specifications/item-template-specifications.md) | 改动 `Src/Templates/` 下任何文件之前；判断「这处改动该落在模板还是 demo」之前；新增 / 改名 / 删除一个模板项之前 |
+| 无标记语言平台的适配器基类 | [memory/specifications/adapter-base-class-specifications.md](memory/specifications/adapter-base-class-specifications.md) | 改 **WinForms / Jalium**（判据见 §一：这一家的模板产物里没有标记文件）的适配器或它的 item template 之前；判断「这段代码该进适配器包还是留在模板里」之前 |
 
 ---
 
