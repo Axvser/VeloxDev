@@ -462,12 +462,10 @@ public partial class Workflow : ComponentBase, IDisposable
 
     private void OnLinksKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Delete")
-        {
-            // 键也过 Core：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠页面自记选中
-            _subscribedInteraction?.Publish(new KeyEvent(InputKey.Delete));
-        }
-        else if (e.Key == "Escape")
+        // Delete 不在这里转发：表面的根元素自己绑了 keydown（那是适配器给的默认按键路由，生成出来的
+        // 工程零代码就有），而这个链接层就在表面之内 —— 两边都转发时，一次按键会删两遍，第二遍打在
+        // 一条已经不在树上的连线上。这里只留菜单那条策略。
+        if (e.Key == "Escape")
         {
             CloseLinkMenu();
         }

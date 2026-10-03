@@ -7,7 +7,7 @@
     @* tabindex + keydown: the surface is the key host, so Delete can reach the interaction hub from a
        generated project without any host code. Focused on link hover (see ForwardPointerAsync) with
        preventScroll, which is this platform's guard against the focus-scroll jump. *@
-    <div class="veloxdev-wf-surface" tabindex="0" @ref="_surfaceRoot" @onkeydown="OnSurfaceKeyDown"
+    <div class="veloxdev-wf-surface" tabindex="0" onkeydown="@OnSurfaceKeyDown" @ref="_surfaceRoot"
          style="outline:none;">
         <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">
             @* Canvas host owns the pixel size (grows via edge expansion) and is set ONLY by JS, so a
