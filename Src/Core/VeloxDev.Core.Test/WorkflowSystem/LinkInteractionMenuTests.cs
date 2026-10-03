@@ -147,4 +147,58 @@ public sealed class LinkInteractionMenuTests : LinkInteractionTestBase
         interaction.Publish(Move(500, 500));
         Assert.IsNull(interaction.HoveredLink);
     }
+
+    [TestMethod]
+    public void ContextMenuDismissRequested_LinkLeavesTheTreeWhileItsMenuIsOpen_AsksTheHostToClose()
+    {
+        // 「树」与「打开的那份菜单」同时知道的只有 hub，所以判定只能在这一处；菜单是宿主的弹窗，
+        // 这里收不了，只请宿主收。
+        var tree = DeletableTree(out var link);
+        var interaction = new LinkInteraction(tree);
+        interaction.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, new Anchor(0, 0, 0), link));
+        ContextMenuDismissRequestedEventArgs? seen = null;
+        interaction.ContextMenuDismissRequested += (_, e) => seen = e;
+
+        tree.Links.Remove(link);
+
+        Assert.IsNotNull(seen);
+        Assert.AreSame(link, seen!.Link);
+
+        // 挂起不在这里放开：宿主收起菜单后照常报 Closed，放开仍然只有 hub 一个责任人。
+        Assert.IsTrue(interaction.IsSuspended, "请宿主收菜单，不等于替它收");
+    }
+
+    [TestMethod]
+    public void ContextMenuDismissRequested_AnotherLinkLeaves_DoesNotAsk()
+    {
+        var tree = DeletableTree(out var link);
+        var a = tree.Nodes[0];
+        var b = tree.Nodes[1];
+        var other = new LinkDefaultViewModel { Sender = a.Slots[0], Receiver = b.Slots[0], IsVisible = true };
+        tree.Links.Add(other);
+
+        var interaction = new LinkInteraction(tree);
+        interaction.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, new Anchor(0, 0, 0), link));
+        var asked = 0;
+        interaction.ContextMenuDismissRequested += (_, _) => asked++;
+
+        tree.Links.Remove(other);
+
+        Assert.AreEqual(0, asked, "菜单指着的是 link，别的线离开与它无关");
+    }
+
+    [TestMethod]
+    public void ContextMenuDismissRequested_MenuAlreadyClosed_DoesNotAsk()
+    {
+        var tree = DeletableTree(out var link);
+        var interaction = new LinkInteraction(tree);
+        interaction.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, new Anchor(0, 0, 0), link));
+        interaction.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, new Anchor(0, 0, 0), link));
+        var asked = 0;
+        interaction.ContextMenuDismissRequested += (_, _) => asked++;
+
+        tree.Links.Remove(link);
+
+        Assert.AreEqual(0, asked, "菜单已经收起了，没有要收的东西");
+    }
 }

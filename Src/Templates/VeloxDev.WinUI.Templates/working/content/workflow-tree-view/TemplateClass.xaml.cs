@@ -39,6 +39,7 @@ public sealed partial class TemplateClass : UserControl
         if (interaction is not null)
         {
             interaction.ContextMenuRequested += OnContextMenuRequested;
+            interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
         }
     }
 
@@ -47,6 +48,7 @@ public sealed partial class TemplateClass : UserControl
         if (_linkInteraction is not null)
         {
             _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+            _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
             _linkInteraction = null;
         }
     }
@@ -80,6 +82,14 @@ public sealed partial class TemplateClass : UserControl
 
         _linkInteraction.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
         menu.ShowAt(PART_SurfaceBorder, new FlyoutShowOptions { Position = point });
+    }
+
+    // The link the open menu was about has left the tree: the hub asks the host to close its own popup.
+    // Closing it reports Closed as usual, which releases the suspension.
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        if (Resources["LinkContextMenu"] is MenuFlyout menu) menu.Hide();
     }
 
     // Report the close so the hub releases the suspended hover.

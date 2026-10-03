@@ -163,6 +163,9 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   翻成模板内的浮层（`PART_LinkMenuLayer`，按算出来的 `Margin` 落位 —— 不翻转、不出窗口、不是 OS 菜单、嵌套项会拍平）。
   非 Windows 的「请求菜单」手势是**长按**（`LongPressDelay = 500` ms，位移超过 `LongPressMoveSlop = 8` 设备无关单位即取消），
   由链接层翻译成一次合成右键交给 hub —— 菜单仍由宿主弹。
+  ⚠ **菜单不会活得比它指着的那条线久**（2026-10-03）：模板里那对 `ContextMenuDismissRequested` 订阅要照抄 ——
+  hub 在「菜单开着、那条线却离开树」时发它，宿主只管关掉自己的弹窗并照常报 `Closed`；**别改成各平台自己去盯
+  `tree.Links`**（判定归 Core，`WorkflowSystem/architecture.md`）。
   ⚠ **模板里的注释一律英文**（2026-10-03 用户定，见 [code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五）：
   只标扩展点、一行说清，函数体注释也算在内 —— 不是每个成员都配得上一行。
   ⚠ **2026-10-03 起 MAUI 的 Trimmed demo 与它的模板故意分叉了**：demo 已经改成**每线一视图**

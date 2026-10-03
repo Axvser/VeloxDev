@@ -57,6 +57,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // 右键菜单只在连线上弹，所以不能挂成画布的 ContextMenuStrip（那会变成右键画布任意处都弹）
     private ContextMenuStrip? _linkMenu;
 
+    // 当前这份菜单指着的那条线：hub 报「这条线离树了」时用它认领是不是自己这份菜单，认领了才收。
+    private IWorkflowLinkViewModel? _menuLink;
+
     // 指针最近一次的客户区位置，以及它是否还在画布上：平移/滚动/缩放挪的是几何而指针没动，
     // 命中会变，得拿这两个值重判一次
     private Point _lastPointerClient;
@@ -871,6 +874,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // 菜单归表面：条目见 OnBuildLinkMenu，开合报回 hub（Publish(ContextMenuEvent)），挂起状态由 Core 记账。
         // 宿主想否决某一次，订 ContextMenuRequesting（Preview 相）即可 —— 它在 Requested 之前发出，与订阅先后无关。
         interaction.ContextMenuRequested += OnContextMenuRequested;
+        // 菜单指着的那条线离树时，hub 发这个；宿主收不了自己的弹窗，只负责把它关掉。
+        interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
         _linkInteraction = interaction;
     }
 
@@ -880,6 +885,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         _linkInteraction.HoverChanged -= OnLinkHoverChanged;
         _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+        _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
 
         // 会话结束菜单还挂着的话先收起：Closed 会顺手把 hub 的挂起放开，换会话时不至于一直停在不接收移动。
         _linkMenu?.Close();
@@ -919,16 +925,28 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         {
             // 收起报回 hub：它自己放开 IsSuspended，宿主不用记这一笔账。
             _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, e.Position, link));
-            if (ReferenceEquals(_linkMenu, menu)) _linkMenu = null;
+            if (ReferenceEquals(_linkMenu, menu))
+            {
+                _linkMenu = null;
+                _menuLink = null;
+            }
             // 关掉即弃，但不在 Closed 里直接 Dispose —— 那还在菜单自己的方法里，销毁要在它收完尾之后。
             if (!IsDisposed) BeginInvoke(new Action(menu.Dispose));
         };
 
         _linkMenu = menu;
+        _menuLink = link;
 
         // 菜单一开指针就飞到菜单上去：先报 Opened，hub 把悬停挂起，那之后的移动不会清掉这次选中的线。
         _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
         menu.Show(screen);
+    }
+
+    // 菜单指着的那条线已经不在树上：hub 请宿主收起这份菜单（它收不了宿主的弹窗）。收起照常报 Closed，挂起随之放开。
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        _linkMenu?.Close();
     }
 
     // 条目在这里增删。与 WorkflowTreeView 基类的 OnBuildLinkMenu 同一角色：这块画布是自绘的 Panel、

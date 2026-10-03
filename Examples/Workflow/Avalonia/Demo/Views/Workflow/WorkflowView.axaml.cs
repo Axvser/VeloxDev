@@ -113,6 +113,7 @@ public partial class WorkflowView : UserControl
         if (interaction is null) return;
 
         interaction.ContextMenuRequested += OnContextMenuRequested;
+        interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
     }
 
     private void UnwireLinkInteraction()
@@ -120,6 +121,7 @@ public partial class WorkflowView : UserControl
         if (_linkInteraction is null) return;
 
         _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+        _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
         _linkInteraction = null;
     }
 
@@ -146,6 +148,13 @@ public partial class WorkflowView : UserControl
         _linkMenu.PlacementGravity = PopupGravity.BottomRight;
         _linkMenu.PlacementRect = new Rect(point.X, point.Y, 0, 0);
         _linkMenu.Open(this);
+    }
+
+    // 菜单指着的那条线已经不在树上：hub 请宿主收起这份菜单（它收不了宿主的弹窗）。收起照常报 Closed，挂起随之放开。
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        _linkMenu?.Close();
     }
 
     private void InitializeMcp()

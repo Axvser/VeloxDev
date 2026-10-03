@@ -84,6 +84,9 @@ internal sealed class NodeEditorSurface : Canvas
     // 字段只用来挡住重复请求与换树时收尾
     private ContextMenu? _linkMenu;
 
+    // 这份菜单指着的那条线。收起请求会带着 hub 记的那条线来，比对上才收 —— 同刻只会开一份菜单，但判定照守。
+    private IWorkflowLinkViewModel? _menuLink;
+
     private enum DragKind { None, Node, Link, Pan }
     private DragKind _dragKind;
     private IWorkflowNodeViewModel? _dragNode;
@@ -210,6 +213,7 @@ internal sealed class NodeEditorSurface : Canvas
         var hub = LinkInteraction.For(_tree);
         hub.HoverChanged += OnLinkHoverChanged;
         hub.ContextMenuRequested += OnContextMenuRequested;
+        hub.ContextMenuDismissRequested += OnContextMenuDismissRequested;
         _interaction = hub;
     }
 
@@ -222,6 +226,7 @@ internal sealed class NodeEditorSurface : Canvas
 
         hub.HoverChanged -= OnLinkHoverChanged;
         hub.ContextMenuRequested -= OnContextMenuRequested;
+        hub.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
         // 换树/解绑时菜单还开着就先收：Closed 会顺手把 hub 的挂起放开
         _linkMenu?.Close();
         _interaction = null;
@@ -262,13 +267,22 @@ internal sealed class NodeEditorSurface : Canvas
             // 收起报回 hub：它自己放开挂起，表面不用记这一笔账
             _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, e.Position, link));
             if (ReferenceEquals(_linkMenu, menu)) _linkMenu = null;
+            if (ReferenceEquals(_menuLink, link)) _menuLink = null;
         };
 
         _linkMenu = menu;
+        _menuLink = link;
 
         // 菜单一开指针就飞到弹层上去：先报 Opened，hub 把悬停挂起，那之后的移动不会清掉这次选中的线
         _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
         menu.Open(ToMenuPosition(e.Position));
+    }
+
+    // 菜单指着的那条线已经不在树上：hub 请宿主收起这份菜单（它收不了宿主的弹窗）。收起照常报 Closed，挂起随之放开。
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        _linkMenu?.Close();
     }
 
     // 条目在这里增删。与 WorkflowTreeView 基类的 OnBuildLinkMenu 同一角色：这块画布是自绘的 Canvas、

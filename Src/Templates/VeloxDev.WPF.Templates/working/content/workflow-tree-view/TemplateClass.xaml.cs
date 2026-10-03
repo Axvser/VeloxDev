@@ -44,6 +44,7 @@ public partial class TemplateClass : UserControl
         if (_linkInteraction is not null)
         {
             _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+            _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
         }
 
         _linkInteraction = interaction;
@@ -51,6 +52,7 @@ public partial class TemplateClass : UserControl
         if (_linkInteraction is not null)
         {
             _linkInteraction.ContextMenuRequested += OnContextMenuRequested;
+            _linkInteraction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
         }
     }
 
@@ -59,6 +61,7 @@ public partial class TemplateClass : UserControl
         if (_linkInteraction is not null)
         {
             _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+            _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
         }
 
         _linkInteraction = null;
@@ -91,5 +94,20 @@ public partial class TemplateClass : UserControl
         menu.HorizontalOffset = device.X / dpi.DpiScaleX;
         menu.VerticalOffset = device.Y / dpi.DpiScaleY;
         menu.IsOpen = true;
+    }
+
+    // The link this menu acts on has left the tree, so the hub asks for the menu to come down — it cannot close
+    // the host's popup itself. Closing reports Closed, which releases the suspended hover as usual.
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link))
+        {
+            return;
+        }
+
+        if (Resources["LinkContextMenu"] is ContextMenu menu)
+        {
+            menu.IsOpen = false;
+        }
     }
 }

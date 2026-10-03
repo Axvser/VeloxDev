@@ -212,6 +212,15 @@ IWorkflowTreeEvents : Connecting/Connected
 `LinkPressed` 改成订 `ContextMenuRequested`，因此 **`LinkPressed` 今天没有订阅者**（事件仍在，留给兼容与自定义）。
 ⚠ **否决只在 Preview 相有效**：`Requested` 那一相读 `e.Handle.PreventDefault` 永远是 false。
 
+**「菜单不能比它指着的那条线活得久」也归 hub**（2026-10-03 用户定）：hub 记下 `Opened` 报来的那条线，
+盯 `tree.Links.CollectionChanged`；它一离开（Delete 键、Undo、Agent 改树都算）就发
+`ContextMenuDismissRequested`（`GUI/Events/Menu/ContextMenuDismissRequestedEventArgs.cs`，带 `Link`）。
+hub 收不了宿主的弹窗，所以这是**请**不是做：宿主关掉自己的菜单、照常报 `Closed`，挂起随之放开 ——
+`IsSuspended` 的责任人仍然只有 hub 一个。**判定只此一处**，所以七家天然一致；此前只有 Jalium 完整 demo
+自己带过一份（WinForms 一侧没有），那种按平台各写一遍的正是漂移的成因。⚠ 已知边界：订阅是构造时
+一次性订在当前那个 `Links` 实例上，若有人整体替换 `tree.Links`（只有生成的 AIContext 反序列化会），
+这条会静默失效 —— `TreeHelper.Install` 有同一个边界，真要修得连它一起修。
+
 要点：
 
 - **hub 只有一个位置**：`LinkInteraction.For(tree)`（`GUI/Events/LinkInteraction.cs`），一棵树一个实例、`ConditionalWeakTable` 缓存。适配器只**转发**，宿主与连线视图都用这同一个调用取它 —— 没有「每个表面各持一个」这种说法。

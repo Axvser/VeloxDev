@@ -32,6 +32,7 @@
 | **把模型事件交给宿主，按平台族分三种**（2026-10-03 用户定，**不要 hub**） | ①**有附加属性的四家**（WPF/Avalonia/WinUI/MAUI）：附加属性 + 绑定一个 sink 对象 —— `behaviors:WorkflowEvents.Node="{Binding NodeEvents}"`（`.Slot` / `.Tree` 同形）；②**Razor**（类 XAML）：沿用订阅；③**无标记语言的两家**（WinForms/Jalium）：**适配器基类提供 `protected virtual OnXxx(args)` 钩子**，宿主重写即得 | `GUI/Events/IWorkflow*EventSink.cs`、`GUI/Events/WorkflowEventRelay.cs`；WPF 参考实现 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowEvents.cs` |
 | **连线的右键菜单** | **归模板**（2026-10-03 用户定，推翻原先「菜单是 demo 策略」那条）：条目声明在 `workflow-tree-view` 条目里，用户改模板增删；无标记语言的两家由 `WorkflowTreeView` 基类的 `OnBuildLinkMenu` 钩子给出 | [item-template-specifications.md](../specifications/item-template-specifications.md) §五 |
 | 右键菜单的请求与开合 | **菜单本身是宿主的**（要选位置、要平台弹出物）：**否决订 `ContextMenuRequesting`（Preview 相）**，弹出订 `ContextMenuRequested`；用 `Publish(ContextMenuEvent)` 把 Opened/Closed 报回来 —— hub 据此自动收放 `IsSuspended`。⚠ **在 `Requested` 上读 `e.Handle.PreventDefault` 是无效的**：Core 只在两相之间查一次句柄，`Requested` 那一相它必为 false —— 七家 2026-10-03 已把这类判断删净，别再写回去 | `GUI/Events/LinkInteraction.cs`、`GUI/Events/Menu/*` |
+| **让菜单不活得比它的线久**（Delete 键外的删除也算：Undo、Agent 改树） | **不要自己盯 `tree.Links`**：开菜单照常报 `Opened`（带上那条线），hub 自己盯；那条线一离开就发 `ContextMenuDismissRequested`（`e.Link`），宿主订它、关掉自己的弹窗、照常报 `Closed` —— 挂起仍由 hub 放开 | `GUI/Events/LinkInteraction.cs`（`OnLinksChanged`）、`GUI/Events/Menu/ContextMenuDismissRequestedEventArgs.cs` |
 
 > ⚠ **别把连线视图做成吃掉整块画布的命中面**（给它加背景、或让容器接指针）—— 那会吞掉画布手势。命中面必须仍然只是**画出来的那道描边**；hub 也是按发布的那条曲线判距的。
 > ⚠ **组件落位的事件里，`Anchor` 必须是完整落位 —— 图层（`Anchor.Layer`）跟着走。**（2026-10-03 用户定）

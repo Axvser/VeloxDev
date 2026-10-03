@@ -113,14 +113,18 @@ Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产�
 框架内部右键路径传的也是 `e.GetPosition(null)`。直接把 `PointToScreen` 的结果喂进去，菜单会整体偏移一个窗口原点。
 
 另外两条。其一：Jalium 的 `MenuItem` **不会自己关菜单** —— 点完要显式 `menu.Close()` 再执行删除
-（基类 `WorkflowTreeView.cs:288-289` 的 `menu.Close(); link.DeleteCommand.Execute(null);`；完整 demo 同款，
-`NodeEditorSurface.cs:282-283` 的 `menu.Close(); DeleteLink(link);`）。其二：**菜单开着时不再需要平台侧提前返回**。
-`WorkflowTreeView.OnMouseLeave` 现在只管原样转发 `Exited`（`WorkflowTreeView.cs:476-483`），同样地完整 demo 的
-`MouseLeave` 也只清端口悬停 + 转发（`NodeEditorSurface.cs:127-132`）；挂起由 Core 承担 ——
-`LinkInteraction.Publish(PointerEvent)` 在 `IsSuspended` 时同时忽略 `Exited` 与 `Moved`
-（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:167-176`）。`OnMouseLeave` 里旧那层
-`if (_linkMenu?.IsOpen == true) return;` 已随本轮删除，别再加回来（`OnContextMenuRequested` 里那句同形的
-`if (_linkMenu?.IsOpen == true) return;` 是另一回事：它挡的是同一时刻开第二个菜单，`WorkflowTreeView.cs:449`）。
+（基类 `WorkflowTreeView.cs:291-292` 的 `menu.Close(); link.DeleteCommand.Execute(null);`；完整 demo 同款，
+`NodeEditorSurface.cs:296-297` 的 `menu.Close(); DeleteLink(link);`）。其二：**菜单开着时不再需要平台侧提前返回，
+也不用平台自己记「菜单指着的那条线没了」**。`WorkflowTreeView.OnMouseLeave` 现在只管原样转发 `Exited`
+（`WorkflowTreeView.cs:490-497`），同样地完整 demo 的 `MouseLeave` 也只清端口悬停 + 转发
+（`NodeEditorSurface.cs:130-135`）；挂起由 Core 承担 —— `LinkInteraction.Publish(PointerEvent)` 在 `IsSuspended`
+时同时忽略 `Exited` 与 `Moved`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:187-196`）。
+`OnMouseLeave` 里旧那层 `if (_linkMenu?.IsOpen == true) return;` 已删除，别再加回来（`OnContextMenuRequested`
+里那句同形的 `if (_linkMenu?.IsOpen == true) return;` 是另一回事：它挡的是同一时刻开第二个菜单，
+`WorkflowTreeView.cs:454`）。线被别处删掉（Agent / Undo / …）时收菜单这一件同样归 Core —— hub 在开着的菜单
+指着的那条线离开 `tree.Links` 时发 `ContextMenuDismissRequested`，宿主只收自己这份弹窗（先与 `_menuLink` 比对，
+再 `_linkMenu?.Close()`：基类 `WorkflowTreeView.cs:476-480`、demo `NodeEditorSurface.cs:282-286`），收起后照常报
+`Closed`、挂起随之放开；**平台仍然不记任何账**。
 
 ## 五、非 Trimmed demo 连线三件事的落点（表面自绘，含右键菜单）
 
@@ -133,7 +137,7 @@ Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产�
 | 滚进视口 | 表面吃掉「把表面自己滚进视口」的请求 | `:111`（挂 `RequestBringIntoViewEvent`）、`:188-194`（处理，目标是自己才拦） |
 | 高亮 | 选中那条整条换 `SelectedLinkColor`（白）并加粗 1.5，彗星跟着换 | `:139`（色）、`:31`（粗）、`:1073-1075`（绘制分支） |
 | Delete | 表面 `OnKeyDown` 把键发布进 hub（`AutoDelete` 执行命令），加 `MainWindow` 的窗口级预览兜底 | `:175-185`（`OnKeyDown`）、`Examples/Workflow/Jalium/Demo/MainWindow.cs:424-433`、`:158`（`DeleteLink`） |
-| 右键菜单 | 订阅 hub 的 `ContextMenuRequested`，**每次右键现建**一份原生 `ContextMenu`（本地 `OnBuildLinkMenu` 一项 `Delete`），开/收 `Publish(ContextMenuEvent)` 交 hub 管挂起，`menu.Open(ToMenuPosition(...))` 定位 | `:212`（订阅）、`:252-272`（建+开+上报）、`:276-286`（本地建菜单）、`:289-293`（表面→屏幕→根视觉） |
+| 右键菜单 | 订阅 hub 的 `ContextMenuRequested`，**每次右键现建**一份原生 `ContextMenu`（本地 `OnBuildLinkMenu` 一项 `Delete`），开/收 `Publish(ContextMenuEvent)` 交 hub 管挂起，`menu.Open(ToMenuPosition(...))` 定位 | `:215`（订阅）、`:257-286`（建+开+上报）、`:290-300`（本地建菜单）、`:303-307`（表面→屏幕→根视觉） |
 
 > 行号写法沿用本文开头的约定：**裸 `:NNN` 都指 `Examples/Workflow/Jalium/Demo/Views/Workflow/NodeEditorSurface.cs`**（除非同格已写全路径或另注文件名）。
 
@@ -141,7 +145,7 @@ Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产�
 
 1. **命中量与画读的是同一条曲线。** 表面画线用的就是 `CurveFor`（`:1118`）取的那条 `LinkCurve`，并在同一处 `link.PublishCurve(curve)` 发布给 Core（`:1065-1066`）；命中的裁定在 Core —— `tree.HitTestVisibleLinks(...)` 逐条量已发布曲线（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:274-275`），半径 6 是 `LinkHitTestEx.DefaultHitRadius`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:18`）。所以**只有画出来的那一道笔画能命中**：两端之间的空当不算，缩放后端点按 `node.Size/DesignSize` 折叠也不会错位。**不要去写第二套几何**：两份几何只要有一处不同，就会出现"看得见抓不住 / 抓得住看不见"。命中半径的不变式是**"不超出画出来的范围"**：6 与最宽那层辉光同量级（`thickness + 9` 即 11px 宽 ⇒ 半宽 5.5px，见 `DrawLink` 的 `:1179`），读作"辉光能到的地方就能抓"。
 2. **Delete 靠窗口级预览兜底，悬停因此不必收焦点（曾经收过，见结论 5）。** 表面仍 `Focusable = true`（`:116`）并有自己的 `OnKeyDown`（`:175-185`），但那只是**第二道闸**：真正的主路径是 `Examples/Workflow/Jalium/Demo/MainWindow.cs:424-433`（`OnPreviewWindowKeyDown`）的窗口级预览，且**故意不看焦点**：判据是"有没有选中"—— 悬停即选中，"指针搭在连线上"本身就说明这一下 Delete 是冲那条线来的；指针不在线上时没有选中，`DeleteSelectedLink()`（`:143-153`）返回 `false`，按键原样落回输入框。**改回"焦点不是 TextBox 才处理"会让悬停-按 Delete 在焦点落到输入框时静默失效**（实测：焦点停在侧栏输入框时按 Delete，HUD 的连线数 12→11，画布偏移不变）。⇒ 因此悬停那条路（`ForwardPointer` + hub 的 `HoverChanged`）**从不调 `Focus()`**：收了焦点就多出一条"滚进视口"（结论 5），而 Delete 根本不需要它。
-3. **菜单的挂起来自 Core，不是表面自己记的标志。** 表面开菜单前 `Publish(ContextMenuEvent(Opened, ...))`（`:270`）、收起时报 `Closed`（`:263`），`LinkInteraction` 据此置/放 `IsSuspended`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:242-257`）；于是弹层起来后指针"离开表面"的那一发 `Exited` 被 hub 忽略（`LinkInteraction.cs:167-171`），菜单开着时那条线仍亮着。**别在表面另立 `MenuOpen` / 读 `IsOpen` 去挡 `MouseLeave`**：旧实现里的 `MenuOpen`、`_menuTarget`、"在 `PruneCurves` 里收菜单"本轮全删了，挡两遍只会多一份会漏的账。其二：**菜单项点完不会自己收** —— 不显式关，删掉线菜单还杵在画布上（本地钩子 `:282` 的 `menu.Close(); DeleteLink(link);`；基类同款 `WorkflowTreeView.cs:288-289`）。其三：**`Closed` 与 `Click` 的先后不再有害** —— 旧实现把目标存在 `_menuTarget` 字段里、`Closed` 一清字段 `Click` 就拿到 `null`（"菜单关了、线没删"）；现在菜单每次现建、`link` 由闭包捕获在条目里（`:278-284`），时序无关，**别再回到"存一个目标字段、收起时清掉"的写法**。收尾：换树/解绑时菜单还开着就先 `Close()`（`:226`，`Closed` 会顺手放开 hub 的挂起），`Closed` 里把 `_linkMenu` 归零（`:264`）。
+3. **菜单的挂起来自 Core，不是表面自己记的标志。** 表面开菜单前 `Publish(ContextMenuEvent(Opened, ...))`（`:277`）、收起时报 `Closed`（`:268`），`LinkInteraction` 据此置/放 `IsSuspended`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:262-278`）；于是弹层起来后指针"离开表面"的那一发 `Exited` 被 hub 忽略（`LinkInteraction.cs:187-191`），菜单开着时那条线仍亮着。**别在表面另立 `MenuOpen` / 读 `IsOpen` 去挡 `MouseLeave`**：旧实现里的 `MenuOpen`、`_menuTarget`、"在 `PruneCurves` 里收菜单"本轮全删了，挡两遍只会多一份会漏的账。这些删除仍成立 —— 「菜单指着的那条线从别处（Agent / Undo / …）离开了树」这件守卫现在由 Core 守：hub 在开着的菜单指着的那条线离开 `tree.Links` 时发 `ContextMenuDismissRequested`，宿主只收自己这份弹窗（与 `_menuLink` 比对后 `_linkMenu?.Close()`），收起照常报 `Closed`；**别把这件守卫搬回 `PruneCurves`，平台不记任何账**。其二：**菜单项点完不会自己收** —— 不显式关，删掉线菜单还杵在画布上（本地钩子 `:296` 的 `menu.Close(); DeleteLink(link);`；基类同款 `WorkflowTreeView.cs:291-292`）。其三：**`Closed` 与 `Click` 的先后不再有害** —— 旧实现把目标存在 `_menuTarget` 字段里、`Closed` 一清字段 `Click` 就拿到 `null`（"菜单关了、线没删"）；现在菜单每次现建、`link` 由闭包捕获在条目里（`:293-298`），时序无关，**别再回到"存一个目标字段、收起时清掉"的写法**。收尾：换树/解绑时菜单还开着就先 `Close()`（`:231`，`Closed` 会顺手放开 hub 的挂起），`Closed` 里把 `_linkMenu` 归零（`:269`）。
 4. **这家有完整的原生菜单栈，仓库里此前零使用**（反射 `Jalium.UI.Managed.dll` 查到；`Jalium.UI.Controls.dll` 只是转发程序集）：`Jalium.UI.Controls.ContextMenu : MenuBase`（带 `IsOpen` / `Open(Point)` / `StaysOpen` / `Placement` / `PlacementTarget`）、`MenuItem`（`Header` / `Click` / `Command`）、`MenuFlyout : Primitives.FlyoutBase`、`Primitives.Popup`，外加 `FrameworkElement.ContextMenu` + `ContextMenuService.TryOpen/Open` 这套 WPF 式接线，菜单主题也在（`Jalium.UI.Managed` 里的 `_Dict_..._Themes_Controls_MenusToolbars`）。**别把"仓库里没人用过"读成"这家没有"** —— 下一个人不必再反射一遍。但这根线要自己接：`FrameworkElement.ContextMenu` 的自动右键路径认的是**元素**，连线不是元素、表面又是整块画布，直接挂上去等于"画布任意处右键都弹删除菜单"。这里的做法是**由 hub 决定**：`OnMouseDown` 的右键分支只转发按下（`:1461-1470`），命中了 hub 才发 `ContextMenuRequested`，表面订阅后现建并 `Open`（`:212`、`:252-272`）。
 
 5. **「悬停取焦点」曾经会滚动画布，因为表面整块就是画布。** 链路（IL 级证据，反射 `Jalium.UI.Managed.dll`）：`Window.OnPlatformEvent` 里处理安全区/软键盘那个分支先 `InvalidateMeasure()`，紧接着调 `Window.ScrollFocusedEditorIntoViewAfterLayout()`；后者取 `Keyboard.FocusedElement`，在它的**下一次 `LayoutUpdated`** 上对它调 `FrameworkElement.BringIntoView()`（`Jalium.UI.Window+<>c__DisplayClass784_0::<ScrollFocusedEditorIntoViewAfterLayout>b__0`）；`BringIntoView` 抛出 `RequestBringIntoViewEvent`，冒泡到 `ScrollViewer.HandleRequestBringIntoView` → `MakeVisible(TargetObject, TargetRect)` + `e.Handled = true`。⇒ **焦点只要落在表面上，画布就会被滚进视口**，而 2000+ 见方的画布"滚进视口"只能是**跳到原点**（实测：HUD 的 `视口(画布)` 从 `712, 61` 一步跳到 `0, 0`）。这就是用户报的「**极小概率触发滚动**」：要同时满足「表面上恰好有键盘焦点」+「平台事件（安全区/软键盘，台式机上很少见）」+「其后有一次布局」。**别把这条当成"悬停会滚"去复现**——它不依赖悬停本身，依赖的是焦点：

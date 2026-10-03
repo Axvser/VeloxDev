@@ -11,8 +11,15 @@ public partial class TemplateClass : ContentView
     // keep holding this control's delegate.
     private LinkInteraction? _interaction;
 
-    // The link the open popup acts on; null while no popup is shown (off Windows only).
+    // The link the open popup acts on; null while no popup is shown. Also the guard for
+    // ContextMenuDismissRequested, so a dismissal only closes the menu that matches.
     private IWorkflowLinkViewModel? _menuLink;
+
+#if WINDOWS
+    // The native flyout currently up (Windows only); Core cannot close it, so the host hides it and
+    // clears this in the flyout's Closed handler.
+    private Microsoft.UI.Xaml.Controls.MenuFlyout? _openFlyout;
+#endif
 
     public TemplateClass()
     {
@@ -63,6 +70,7 @@ public partial class TemplateClass : ContentView
         if (_interaction is not null)
         {
             _interaction.ContextMenuRequested -= OnContextMenuRequested;
+            _interaction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
             _interaction = null;
         }
 
@@ -70,6 +78,7 @@ public partial class TemplateClass : ContentView
         {
             _interaction = LinkInteraction.For(tree);
             _interaction.ContextMenuRequested += OnContextMenuRequested;
+            _interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
         }
     }
 
@@ -121,11 +130,27 @@ public partial class TemplateClass : ContentView
 
         var flyout = BuildPlatformMenu((MenuFlyout)Resources["LinkContextMenu"], link);
 
+        _menuLink = link;
+        _openFlyout = flyout;
+
         // Report open/close to the hub so the pointer travelling onto the menu does not clear the link.
-        flyout.Closed += (_, _) => _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, position, link));
+        flyout.Closed += (_, _) =>
+        {
+            _openFlyout = null;
+            _menuLink = null;
+            _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, position, link));
+        };
         _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, position, link));
 
         flyout.ShowAt(host, new Windows.Foundation.Point(x, y));
+    }
+
+    // The link this menu acts on left the tree: Core cannot close the native flyout, so hide it here.
+    // Closed then reports ContextMenuPhase.Closed as usual, releasing the suspension.
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        _openFlyout?.Hide();
     }
 
     // MAUI has no cross-platform menu that opens at a point; only the Windows native MenuFlyout can, so the
@@ -216,6 +241,14 @@ public partial class TemplateClass : ContentView
         {
             RunItem(item, link);
         }
+    }
+
+    // The link this menu acts on left the tree: Core cannot close this overlay, so dismiss it here.
+    // Dismissal reports ContextMenuPhase.Closed as usual, releasing the suspension.
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        DismissLinkMenu();
     }
 #endif
 

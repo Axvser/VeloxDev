@@ -198,7 +198,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 | 事 | 现在归谁 | 锚点 |
 |---|---|---|
 | 命中 | Core：沿发布曲线的采样段逐段判点到线段距离，`DefaultHitRadius = 6d` | `LinkHitTestEx.cs:18`、`LinkCurve.cs:252-267`、`LinkHelper.cs:39-40`；`HitTestVisibleLinks`（`LinkHitTestEx.cs:75-92`）从 `VisibleItems` **末尾往前**、跳过 `VirtualLink`、被节点卡盖住的不算 |
-| 右键菜单 | 适配器把按下（含 `ButtonOf`）转发进 hub → hub 报 `ContextMenuRequested` → 宿主弹声明的菜单资源 | 适配器 `WorkflowSurfaceBehavior.cs:446-457`、`:515-522`；宿主 `WorkflowView.axaml.cs:126-149` |
+| 右键菜单 | 适配器把按下（含 `ButtonOf`）转发进 hub → hub 报 `ContextMenuRequested` → 宿主弹声明的菜单资源；菜单指着的那条线离树时 hub 报 `ContextMenuDismissRequested`，宿主只收自己的弹窗 | 适配器 `WorkflowSurfaceBehavior.cs:446-457`、`:515-522`；宿主 `WorkflowView.axaml.cs:126-149`（弹出）、`OnContextMenuDismissRequested`（收起） |
 | 悬停高亮 / 取焦点 | Core 的 `AutoHighlight` 写 `ILinkHighlight.IsHighlighted`；适配器 `FocusHoveredLink` 把键盘焦点交给画线的控件，不可聚焦时退回宿主 | `LinkInteraction.cs:280-312`；`WorkflowSurfaceBehavior.cs:137-150`（宿主 `Focusable = true` 在 `:216`） |
 | 删除 | Core 的 `AutoDelete` 执行 `link.DeleteCommand`，菜单项绑的就是它 | `LinkInteraction.cs:84`、`:234`；`WorkflowView.axaml:36` |
 
@@ -206,7 +206,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 1. **命中面是画出来的那圈描边，不是整块画布框**（实测 2026-09-26，SendInput 从窗口外跳到「离线约 19px 的空画布」上：线体保持静息青色、`PointerEntered` 不触发；压到线上才高亮）。现在这条由 Core 落实：只有 `PublishCurve` 出去的那条曲线在、且点落在其半径带内才算命中（`LinkHitTestEx.cs:53-57`）；视图在没画的时候（`!IsVisible`）`PublishCurve(null)` 撤回曲线（`PolylineCurveView.axaml.cs:260-268`），空白处因此不会命中。半径 6 与框架给的带宽同量级（最外那圈辉光是本体 + 9px，半宽 ≈ 5.5px），既不放宽也不收窄实际命中面。**别按「整块画布都会命中」这条错读去改这层逻辑**。
 2. **菜单项绑命令是刻意的**：菜单是 XAML 里的声明资源 `WorkflowTreeMenu`（`WorkflowView.axaml:34-37`），弹出前把菜单的 `DataContext` 设成那条连线，条目写 `Command="{ReflectionBinding DeleteCommand}"`。**必须用 `{ReflectionBinding}` 而非 `{Binding}`** —— 这家的 `AvaloniaUseCompiledBindingsByDefault=true`（`Examples/Workflow/Avalonia/Demo/Demo/Demo.csproj:8`），而资源里的 `ContextMenu` 没有 `x:DataType` 作用域，编译绑定在此无从下手。删除由 Core 的 `AutoDelete` 执行（`LinkInteraction.cs:234`），菜单只负责发命令。
-3. **弹菜单不再把高亮弄掉**：popup 把指针从视图上拿走，仍会触发 `OnPointerExited` → 适配器照发 `PointerPhase.Exited`（`WorkflowSurfaceBehavior.cs:490-496`），但菜单开着时 hub 的 `IsSuspended` 为真，Core 的 `Publish` 直接忽略 `Exited`（`LinkInteraction.cs:167-171`），这条线的选中/高亮留着。`IsSuspended` 由宿主把菜单的 `Opened`/`Closed` 报回 hub 来收放（`WorkflowView.axaml.cs:81-85`），宿主与适配器都不再自己记账（适配器侧的 `IsSuspended` 守卫已删）。曾试过在视图的 `OnPointerExited` 里按「菜单是否打开」跳过取消 —— 实测会把某条线的高亮永久留在画布上（`Closed` 后没有配对的 `Entered`），已回退；现在这条改由 hub 的 `IsSuspended` 统一兜住，别退回视图级开关。
+3. **弹菜单不再把高亮弄掉**：popup 把指针从视图上拿走，仍会触发 `OnPointerExited` → 适配器照发 `PointerPhase.Exited`（`WorkflowSurfaceBehavior.cs:490-496`），但菜单开着时 hub 的 `IsSuspended` 为真，Core 的 `Publish` 直接忽略 `Exited`（`LinkInteraction.cs:167-171`），这条线的选中/高亮留着。`IsSuspended` 由宿主把菜单的 `Opened`/`Closed` 报回 hub 来收放（`WorkflowView.axaml.cs:81-85`），宿主与适配器都不再自己记账（适配器侧的 `IsSuspended` 守卫已删）。**菜单不许比它针对的线活得久**这条判据同样在 Core：菜单开着时那条线从 `tree.Links` 离树（Delete 键 / Agent / Undo 任何删除路径），hub 检测到并报 `ContextMenuDismissRequested`（Core 不自行放开 `IsSuspended`）；宿主收到后只 `_linkMenu?.Close()` 收自己的弹窗，`Closed` 照常报回、挂起随之释放 —— 判据与执行分开，宿主不再自己比 `_menuLink` 之外的东西。曾试过在视图的 `OnPointerExited` 里按「菜单是否打开」跳过取消 —— 实测会把某条线的高亮永久留在画布上（`Closed` 后没有配对的 `Entered`），已回退；现在这条改由 hub 的 `IsSuspended` 统一兜住，别退回视图级开关。
 
 **实测（2026-09-26，SendInput + 闭环伺服取点，每一步先断言）**：指针经伺服落在线体上（48×48 邻域内体色像素 ≈25–160 → 同一点变暖色 ≈340 = 高亮，说明框架认的是「画出来的描边」而不是整块画布框）→ 合成右键 → **原生 `ContextMenu` 弹出，只有一项**（当时标题是「删除连线」，2026-10-03 起英文 `Delete`，`WorkflowView.axaml:36`）→ 合成左键点该项 → 那条线消失（两端端口由白/绿变灰）。`hitRadius = 6.0` 与框架给的带宽同量级（最外那圈辉光是本体 + 9px，半宽 ≈ 5.5px），既不放宽也不收窄实际命中面；它对右键这条路径是活的判据。
 

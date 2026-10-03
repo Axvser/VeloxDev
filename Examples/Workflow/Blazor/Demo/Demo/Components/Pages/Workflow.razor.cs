@@ -100,6 +100,7 @@ public partial class Workflow : ComponentBase, IDisposable
         {
             _subscribedInteraction.HoverChanged -= OnHubHoverChanged;
             _subscribedInteraction.ContextMenuRequested -= OnContextMenuRequested;
+            _subscribedInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
         }
 
         _subscribedInteraction = interaction;
@@ -107,6 +108,7 @@ public partial class Workflow : ComponentBase, IDisposable
         {
             interaction.HoverChanged += OnHubHoverChanged;
             interaction.ContextMenuRequested += OnContextMenuRequested;
+            interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
         }
     }
 
@@ -145,6 +147,14 @@ public partial class Workflow : ComponentBase, IDisposable
         // 报回枢纽：菜单在屏期间挂起悬停，指针移到菜单上不会清掉这次选中的连线。
         _subscribedInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
         InvokeAsync(StateHasChanged);
+    }
+
+    // 菜单指着的那条线已经不在树上：hub 请宿主收起这份菜单（它收不了宿主的弹窗）。
+    // 收起照常报 Closed，挂起随之放开。
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        CloseContextMenu();
     }
 
     private void SubscribeSession()
@@ -501,6 +511,7 @@ public partial class Workflow : ComponentBase, IDisposable
         {
             _subscribedInteraction.HoverChanged -= OnHubHoverChanged;
             _subscribedInteraction.ContextMenuRequested -= OnContextMenuRequested;
+            _subscribedInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
             _subscribedInteraction = null;
         }
 

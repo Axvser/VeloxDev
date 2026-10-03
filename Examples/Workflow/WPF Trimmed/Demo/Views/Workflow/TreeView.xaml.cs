@@ -43,6 +43,7 @@ public partial class TreeView : UserControl
         if (_linkInteraction is not null)
         {
             _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+            _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
         }
 
         _linkInteraction = interaction;
@@ -50,6 +51,7 @@ public partial class TreeView : UserControl
         if (_linkInteraction is not null)
         {
             _linkInteraction.ContextMenuRequested += OnContextMenuRequested;
+            _linkInteraction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
         }
     }
 
@@ -58,6 +60,7 @@ public partial class TreeView : UserControl
         if (_linkInteraction is not null)
         {
             _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+            _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
         }
 
         _linkInteraction = null;
@@ -90,5 +93,20 @@ public partial class TreeView : UserControl
         menu.HorizontalOffset = device.X / dpi.DpiScaleX;
         menu.VerticalOffset = device.Y / dpi.DpiScaleY;
         menu.IsOpen = true;
+    }
+
+    // 菜单作用的那条连线已离开树，中枢因此请求把菜单收起来 —— 它自己关不掉宿主的 popup。
+    // 关闭会上报 Closed，照常释放被挂起的悬停。
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link))
+        {
+            return;
+        }
+
+        if (Resources["LinkContextMenu"] is ContextMenu menu)
+        {
+            menu.IsOpen = false;
+        }
     }
 }

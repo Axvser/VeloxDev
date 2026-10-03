@@ -174,15 +174,15 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 ### 4.9 非 Trimmed demo 的连线交互整个落在画布的指针处理里
 
-这家的非 Trimmed demo **不物化连线视图**（`LinkView` 只是几何载体，不在控件树里，由画布 `OnPaint` 统一绘制），所以「悬停高亮 / Delete 删除 / 右键菜单」的平台输入都只能落在同一块画布上 —— 没有连线的窗口可挂。命中、高亮、删除都由 Core 的 `LinkInteraction` hub 裁决；画布只做平台那一半：把指针/按键翻译成标准输入事件转发进去、命中时给画布取焦点、右键时弹菜单（`Examples/Workflow/WinForms/Demo/Controls/WorkflowCanvas.cs:861-875`）。
+这家的非 Trimmed demo **不物化连线视图**（`LinkView` 只是几何载体，不在控件树里，由画布 `OnPaint` 统一绘制），所以「悬停高亮 / Delete 删除 / 右键菜单」的平台输入都只能落在同一块画布上 —— 没有连线的窗口可挂。命中、高亮、删除都由 Core 的 `LinkInteraction` hub 裁决；画布只做平台那一半：把指针/按键翻译成标准输入事件转发进去、命中时给画布取焦点、右键时弹菜单、菜单的目标线离树时把菜单收起来 —— 后两件事各有 Core 的一个事件驱动（`ContextMenuRequested` / `ContextMenuDismissRequested`），画布只负责平台侧（`Examples/Workflow/WinForms/Demo/Controls/WorkflowCanvas.cs:865-879`）。
 
 | 事 | 落点 | 依据 |
 |---|---|---|
-| 命中测试 | 画布把指针翻成**世界坐标**（`ClientToWorld`）转发给 hub，hub 走 `tree.HitTestVisibleLinks` 对每条线 `PublishCurve` 上来的 `LinkCurve` 逐条测（曲线存进 Core 的 `LinkHelper`）；**判的就是绘制用的那条曲线**，所以线弯到哪命中面就到哪 | `WorkflowCanvas.cs:894-895`、`:1158-1165`、`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:75-91`（`:53` 的 `Contains` 落到 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/LinkHelper.cs:18`）、`Examples/Workflow/WinForms/Demo/Views/LinkView.cs:488-489` |
-| 命中半径 | `LinkHitRadius = 6f`（≈ 最外圈辉光管壁的半宽 5.5px），建 hub 时写进 `interaction.HitRadius` | `WorkflowCanvas.cs:41`、`:869` |
-| 选中即取焦点 | hub 的 `HoverChanged` 一到就 `Focus()`（上色由 hub 写 `ILinkHighlight`，取焦点是画布补的平台一半） | `WorkflowCanvas.cs:899-902`（`Focus()` 在 `:901`）、`:208`（`ControlStyles.Selectable`） |
-| 删除 | 走连线的 `DeleteCommand`，**不是**摘控件：Delete 键由 hub 的 AutoDelete 执行，菜单项在本地 `OnBuildLinkMenu` 里直接 `Execute` | `WorkflowCanvas.cs:954-964`、`:936-939` |
-| 右键菜单 | 每次右键**现建**一个 `ContextMenuStrip`，条目由本地 `OnBuildLinkMenu` 填（只有「删除连线」一项）；本画布发布的指针是**世界坐标**，所以弹出位置须经 `WorldToClient` 落回客户区再 `PointToScreen`（适配器基类发布的却是**客户区坐标**，那边直接 `PointToScreen`、没有这个逆变换 —— 两家的坐标约定相反，别互相照抄）；开合经 `Publish(ContextMenuEvent)` 报回 hub、挂起由 Core 记账；**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹） | `WorkflowCanvas.cs:906-932`、`:936-939`、`:1168-1174`、`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:598-599`、`:660-662` |
+| 命中测试 | 画布把指针翻成**世界坐标**（`ClientToWorld`）转发给 hub，hub 走 `tree.HitTestVisibleLinks` 对每条线 `PublishCurve` 上来的 `LinkCurve` 逐条测（曲线存进 Core 的 `LinkHelper`）；**判的就是绘制用的那条曲线**，所以线弯到哪命中面就到哪 | `WorkflowCanvas.cs:900-901`、`:1176-1183`、`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:75-91`（`:53` 的 `Contains` 落到 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/LinkHelper.cs:18`）、`Examples/Workflow/WinForms/Demo/Views/LinkView.cs:488-489` |
+| 命中半径 | `LinkHitRadius = 6f`（≈ 最外圈辉光管壁的半宽 5.5px），建 hub 时写进 `interaction.HitRadius` | `WorkflowCanvas.cs:41`、`:872` |
+| 选中即取焦点 | hub 的 `HoverChanged` 一到就 `Focus()`（上色由 hub 写 `ILinkHighlight`，取焦点是画布补的平台一半） | `WorkflowCanvas.cs:905-908`（`Focus()` 在 `:907`）、`:208`（`ControlStyles.Selectable`） |
+| 删除 | 走连线的 `DeleteCommand`，**不是**摘控件：Delete 键由 hub 的 AutoDelete 执行，菜单项在本地 `OnBuildLinkMenu` 里直接 `Execute` | `WorkflowCanvas.cs:972-982`、`:954-957` |
+| 右键菜单 | 每次右键**现建**一个 `ContextMenuStrip`，条目由本地 `OnBuildLinkMenu` 填（只有「删除连线」一项）；本画布发布的指针是**世界坐标**，所以弹出位置须经 `WorldToClient` 落回客户区再 `PointToScreen`（适配器基类发布的却是**客户区坐标**，那边直接 `PointToScreen`、没有这个逆变换 —— 两家的坐标约定相反，别互相照抄）；开合经 `Publish(ContextMenuEvent)` 报回 hub、挂起由 Core 记账；**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹）。**菜单不得比它作用的那条线活得久**：那条线离开 `tree.Links`（Delete 键 / Agent / Undo 任一删除路径）时 Core 发 `ContextMenuDismissRequested`，宿主用记录菜单目标线的字段（本家 `_menuLink`）认领是不是自己这份菜单，认领了才 `_linkMenu?.Close()` —— 收起照常报 `Closed`，`IsSuspended` 仍由 Core 放开，Core 不代关弹窗；这一对接线在两处：适配器基类 `AttachLinkInteraction`/`DetachLinkInteraction`（模板产物与 Trimmed 继承它，自动具备）与这块自绘画布各自的 attach/detach 对 | `WorkflowCanvas.cs:912-943`、`:945-950`、`:954-957`、`:1186-1192`、`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:601-602`、`:655-696` |
 
 四条要记住的结论：
 
@@ -196,13 +196,15 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 `WorkflowTreeView` 现在还有：`OnConnecting` / `OnConnected`（连接建立前后）、`OnBuildLinkMenu(menu, link)`
 （填连线右键菜单，基类默认只放一项 `Delete`，`WorkflowTreeView.cs:280-283`）。前者由基类用
 `WorkflowEventRelay` 接模型事件、转发进钩子；后者的**弹出、定位、开合上报全在基类**
-（`OnContextMenuRequested`，`WorkflowTreeView.cs:651-678`），模板产物只重写这一处来增删条目。
+（`OnContextMenuRequested`，`WorkflowTreeView.cs:655-689`），模板产物只重写这一处来增删条目。
 
-⚠ **基类订阅 `ContextMenuRequested` 就在 `AttachLinkInteraction` 里**（`WorkflowTreeView.cs:621`），
+⚠ **基类订阅 `ContextMenuRequested` 与 `ContextMenuDismissRequested` 就在 `AttachLinkInteraction` 里**
+（`WorkflowTreeView.cs:624-626`；`Detach` 在同一方法的相反方向卸，
+`DetachLinkInteraction`，`:635-636`），
 已无单独的 `AttachLinkMenu` 步骤，也不再依赖订阅先后：否决归 `ContextMenuRequesting`（Preview 相），
 Core 在 `Requested` 之前按构造顺序发出，被否决时 `Requested` 根本不发
 （`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:261-272`）；因此
-`OnContextMenuRequested` 里不再读 `e.Handle.PreventDefault`（`WorkflowTreeView.cs:653`）。
+`OnContextMenuRequested` 里不再读 `e.Handle.PreventDefault`（`WorkflowTreeView.cs:659`）。
 宿主想否决某一次，订 `ContextMenuRequesting` 即可，与基类订阅的先后无关。
 
 （校验脚本的真名是 `Src/Verification/verify-workflow-item-templates.ps1` —— 不是 `verify-winforms-…`。）

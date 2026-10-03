@@ -38,6 +38,7 @@ public sealed partial class TreeView : UserControl
         if (interaction is not null)
         {
             interaction.ContextMenuRequested += OnContextMenuRequested;
+            interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
         }
     }
 
@@ -46,6 +47,7 @@ public sealed partial class TreeView : UserControl
         if (_linkInteraction is not null)
         {
             _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+            _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
             _linkInteraction = null;
         }
     }
@@ -80,6 +82,14 @@ public sealed partial class TreeView : UserControl
 
         _linkInteraction.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
         menu.ShowAt(PART_SurfaceBorder, new FlyoutShowOptions { Position = point });
+    }
+
+    // 菜单指着的那条线已经不在树上：中枢请宿主收起这份菜单（它收不了宿主的弹窗）。
+    // 收起照常报 Closed，挂起随之放开。
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        if (Resources["LinkContextMenu"] is MenuFlyout menu) menu.Hide();
     }
 
     // 收起时报回中枢，挂起状态由它自己放开 —— 表面不用记账。

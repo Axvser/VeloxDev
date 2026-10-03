@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 
 namespace VeloxDev.WorkflowSystem;
@@ -41,6 +42,10 @@ public sealed class LinkInteraction
     private readonly IWorkflowTreeViewModel tree;
     private IWorkflowLinkViewModel? hovered;
 
+    // 菜单开着时它针对的是哪条线。开合由宿主报（ContextMenuEvent），这里只记；一旦它离开 tree.Links，
+    // 就该请宿主收起那份菜单 —— 「树」与「打开的菜单」只有 hub 同时知道，判定只能在这一处。
+    private IWorkflowLinkViewModel? menuLink;
+
     /// <summary>
     /// The one interaction hub for this tree, created on first use and kept as long as the tree lives.
     ///
@@ -61,6 +66,9 @@ public sealed class LinkInteraction
     {
         this.tree = tree ?? throw new ArgumentNullException(nameof(tree));
         HitRadius = hitRadius;
+
+        // hub 与树同寿（Hubs 按树缓存），所以订在构造里即可，没有要摘的时刻。
+        tree.Links.CollectionChanged += OnLinksChanged;
     }
 
     /// <summary>The link the pointer is currently on, or <see langword="null"/>.</summary>
@@ -159,6 +167,18 @@ public sealed class LinkInteraction
     /// </summary>
     public event EventHandler<ContextMenuClosedEventArgs>? ContextMenuClosed;
 
+    /// <summary>
+    /// Raised when the link an open menu was about has left the tree, so a host still showing that menu can take
+    /// it down. The <c>sender</c> is this hub.
+    /// <para>
+    /// The menu is the platform's own object and cannot be closed from here, so this asks rather than does: the
+    /// host closes it and reports <see cref="ContextMenuPhase.Closed"/> through
+    /// <see cref="Publish(ContextMenuEvent)"/>, which releases <see cref="IsSuspended"/> as usual. Handled on
+    /// every platform by the same guard, so a menu never outlives the link it acts on.
+    /// </para>
+    /// </summary>
+    public event EventHandler<ContextMenuDismissRequestedEventArgs>? ContextMenuDismissRequested;
+
     /// <summary>Feeds one translated pointer event in.</summary>
     public void Publish(PointerEvent e)
     {
@@ -246,14 +266,29 @@ public sealed class LinkInteraction
             case ContextMenuPhase.Opened:
                 // 指针一弹菜单就飞到菜单上去了：那之后的移动与离开都不该改这次选中的东西
                 IsSuspended = true;
+                menuLink = e.Link;
                 ContextMenuOpened?.Invoke(this, new ContextMenuOpenedEventArgs(e.Link, e.Position));
                 break;
 
             case ContextMenuPhase.Closed:
                 IsSuspended = false;
+                menuLink = null;
                 ContextMenuClosed?.Invoke(this, new ContextMenuClosedEventArgs(e.Link));
                 break;
         }
+    }
+
+    // 菜单指着的那条线离开了树（Agent、Undo、别处删都算）：那份菜单不能再留着，否则它的条目会打在一条
+    // 已经不在树上的线上。菜单是宿主的弹窗，收不了，所以这里只请宿主收 —— 收起后宿主照常报 Closed，
+    // 挂起随之放开（单一责任人仍是 hub）。
+    private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (menuLink is not { } link || tree.Links.Contains(link))
+        {
+            return;
+        }
+
+        ContextMenuDismissRequested?.Invoke(this, new ContextMenuDismissRequestedEventArgs(link));
     }
 
     // 右键请求：菜单是宿主的（要选位置、要平台自己的弹出物），所以这里只报事实 + 给否决权 ——

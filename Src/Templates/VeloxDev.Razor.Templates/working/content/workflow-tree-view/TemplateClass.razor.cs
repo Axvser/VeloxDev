@@ -96,6 +96,7 @@ public partial class TemplateClass : ComponentBase, IDisposable
 
         _interaction = LinkInteraction.For(tree);
         _interaction.ContextMenuRequested += OnContextMenuRequested;
+        _interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
 
         // The VirtualLink raises its own PropertyChanged (Send/Receive/Reset only mutate the
         // VirtualLink object, not the tree), so subscribe directly to redraw the gesture.
@@ -125,6 +126,7 @@ public partial class TemplateClass : ComponentBase, IDisposable
         if (_interaction is not null)
         {
             _interaction.ContextMenuRequested -= OnContextMenuRequested;
+            _interaction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
             // A menu still open when the tree is swapped or torn down: report Closed so the old hub's
             // suspended state does not linger.
             if (_menuLink is not null)
@@ -222,6 +224,14 @@ public partial class TemplateClass : ComponentBase, IDisposable
         // pointer onto the menu does not clear the link the menu acts on.
         _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
         InvokeAsync(StateHasChanged);
+    }
+
+    // The link the menu was about has left the tree: the hub asks the host to dismiss the menu (it cannot
+    // close the host's popup). Dismissing reports Closed as usual, which releases the suspension.
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        CloseContextMenu();
     }
 
     private void CloseContextMenu()

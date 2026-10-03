@@ -46,6 +46,7 @@ public partial class TemplateClass : UserControl
         if (interaction is null) return;
 
         interaction.ContextMenuRequested += OnContextMenuRequested;
+        interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
     }
 
     private void UnwireLinkInteraction()
@@ -53,6 +54,7 @@ public partial class TemplateClass : UserControl
         if (_linkInteraction is null) return;
 
         _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+        _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
         _linkInteraction = null;
     }
 
@@ -76,5 +78,13 @@ public partial class TemplateClass : UserControl
         _linkMenu.PlacementGravity = PopupGravity.BottomRight;
         _linkMenu.PlacementRect = new Rect(point.X, point.Y, 0, 0);
         _linkMenu.Open(this);
+    }
+
+    // The link this menu acts on has left the tree, so the hub asks for the menu to come down — it cannot
+    // close the host's popup itself. Closing reports Closed, which releases the suspended hover as usual.
+    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    {
+        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        _linkMenu?.Close();
     }
 }
