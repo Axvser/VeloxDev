@@ -36,6 +36,8 @@ public sealed class WorkflowSurfaceBehavior
         /// <summary>Gesture TotalY at the pan anchor (vertical).</summary>
         public double PanAnchorTotalY { get; set; }
         public bool HasPendingScrollRestore { get; set; }
+        // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
+        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
         public bool IsRefreshing { get; set; }
         public bool IsVisibleRegionUpdateQueued { get; set; }
         public double PendingViewportX { get; set; }
@@ -168,6 +170,24 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 
+    // 树刚被挂上来且不是上一棵：把它存档里的视口位置排进待恢复。
+    // 必须在紧随其后的 Refresh 之前调用 —— 那次 UpdateVisibleRegion 会拿控件当前（还没滚过去的）位置
+    // 把 ViewportOffset 覆盖掉，存档位置就此消失。
+    // 传进来的是世界坐标，与 RequestViewportRestore 同一个约定。
+    private static void CaptureViewportRestore(ContentView control, SurfaceState state)
+    {
+        if (ResolveTreeViewModel(control, state) is not { } viewModel) return;
+        if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
+
+        state.LastRestoreTree = viewModel;
+
+        if (!WorkflowSurfaceMath.HasViewportRestore(viewModel.Layout)) return;
+
+        state.PendingViewportX = viewModel.Layout.ViewportOffset.Horizontal;
+        state.PendingViewportY = viewModel.Layout.ViewportOffset.Vertical;
+        state.HasPendingScrollRestore = true;
+    }
+
     public static void RequestViewportRestore(ContentView host, double viewportX, double viewportY)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -238,6 +258,7 @@ public sealed class WorkflowSurfaceBehavior
         control.SizeChanged += OnHostSizeChanged;
         ResolveNamedControls(control, state);
         UpdateLayoutSubscription(control, state);
+        CaptureViewportRestore(control, state);
         Refresh(control);
     }
 
@@ -264,6 +285,7 @@ public sealed class WorkflowSurfaceBehavior
         {
             ResolveNamedControls(control, state);
             UpdateLayoutSubscription(control, state);
+            CaptureViewportRestore(control, state);
             Refresh(control);
         }
     }
@@ -284,6 +306,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         UpdateLayoutSubscription(control, state);
+        CaptureViewportRestore(control, state);
         Refresh(control);
     }
 
