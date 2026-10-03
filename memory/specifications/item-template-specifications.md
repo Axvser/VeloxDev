@@ -53,5 +53,14 @@
   - 命中判定归 Core（`LinkHitTestEx` 对着已发布的曲线判距，半径 `LinkHitTestEx.DefaultHitRadius`）；
   - hub 只有一个位置：`LinkInteraction.For(tree)`（一棵树一个实例），适配器只往里转发指针与 Delete，宿主与连线视图都用同一个调用取它；
   - 悬停高亮由 hub 通过 **`ILinkHighlight`** 直接点亮（`AutoHighlight`），删除由 hub 直接执行（`AutoDelete`）——**都不需要宿主写订阅**。
-  ⇒ 新的判据是「这个角色**有没有指针源**」：任何一家只要它的连线视图或表面把指针位置喂给了 hub，生成的工程就开箱有命中/高亮/删除。**右键菜单仍是 demo 的策略**（它要选位置、要平台自己的弹出物），不要往模板里推。
+  ⇒ 新的判据是「这个角色**有没有指针源**」：任何一家只要它的连线视图或表面把指针位置喂给了 hub，生成的工程就开箱有命中/高亮/删除。
+  - **连线的右键菜单也归模板**（2026-10-03 用户改定，推翻本条原来那句「右键菜单仍是 demo 的策略，不要往模板里推」）：
+    理由直说 —— **条目列表本身就是用户要改的东西**，「改模板增删菜单条目」比「读库的文档再自己接一套」直接得多。
+  - 落点是 **`workflow-tree-view` 条目**、不是 `workflow-link-view`：右键落在**表面**上（连线视图在很多家不吃指针），
+    而弹出位置要**屏幕坐标**（模型给的是画布坐标），只有表面同时知道这两件事。
+  - 触发点是 hub 的 `ContextMenuRequested`（**可取消**：宿主 `PreventDefault` 就是「这里不给菜单」），
+    开合用 `Publish(ContextMenuEvent)` 报回 hub —— 挂起状态因此不用各家的代码自己记账。
+  - **无标记语言的两家（WinForms / Jalium）**：菜单的条目由**基类的可重写钩子**给出（`WorkflowTreeView` 上
+    一个 `protected virtual` 的建菜单方法，基类负责订阅、定位、弹出），模板产物派生之后增删条目即可 ——
+    与这两家其余的扩展点同一条线（见 [adapter-base-class-specifications.md](adapter-base-class-specifications.md) §2）。
   ⇒ 反过来，**不要**为了「能点到连线」把连线视图改成吃掉整块画布的命中面（那会吞掉画布手势）；命中面必须仍然只是画出来的那道描边。

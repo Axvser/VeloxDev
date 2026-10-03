@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -51,6 +52,14 @@ public partial class TreeView : ComponentBase, IDisposable
     private INotifyPropertyChanged? _subscribedTree;
     private INotifyPropertyChanged? _subscribedVirtualLink;
 
+    // 右键菜单由表面弹：屏幕坐标只有这里的 DOM 事件知道，画布坐标由 hub 的 ContextMenuRequested 带回。
+    private WorkflowSurfaceBehavior? _surface;
+    private LinkInteraction? _interaction;
+    private IWorkflowLinkViewModel? _menuLink;
+    private Anchor _menuPosition = new();
+    private int _menuLeft;
+    private int _menuTop;
+
     /// <inheritdoc />
     protected override void OnInitialized()
     {
@@ -83,6 +92,9 @@ public partial class TreeView : ComponentBase, IDisposable
         tree.Nodes.CollectionChanged += OnNodesOrLinksChanged;
         tree.Links.CollectionChanged += OnNodesOrLinksChanged;
 
+        _interaction = LinkInteraction.For(tree);
+        _interaction.ContextMenuRequested += OnContextMenuRequested;
+
         // The VirtualLink raises its own PropertyChanged (Send/Receive/Reset only mutate the
         // VirtualLink object, not the tree), so subscribe directly to redraw the gesture.
         if (tree.VirtualLink is INotifyPropertyChanged vp)
@@ -107,6 +119,19 @@ public partial class TreeView : ComponentBase, IDisposable
             Tree.Nodes.CollectionChanged -= OnNodesOrLinksChanged;
             Tree.Links.CollectionChanged -= OnNodesOrLinksChanged;
         }
+
+        if (_interaction is not null)
+        {
+            _interaction.ContextMenuRequested -= OnContextMenuRequested;
+            // 菜单还开着就换树 / 收尾：把 Closed 报回去，旧枢纽的挂起状态不会留在那儿。
+            if (_menuLink is not null)
+            {
+                _interaction.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, _menuLink));
+            }
+            _interaction = null;
+        }
+
+        _menuLink = null;
 
         if (_subscribedVirtualLink is not null)
         {
@@ -165,6 +190,57 @@ public partial class TreeView : ComponentBase, IDisposable
 
     private void OnVirtualLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
+
+    // 右键落在表面上：DOM 事件给出屏幕坐标（先记下），把这次右键喂进 hub 后由 hub 命中并报
+    // ContextMenuRequested。菜单因此跟着指针弹；空白画布也会走到这里，但那里不给菜单。
+    private async Task OnSurfaceContextMenu(MouseEventArgs e)
+    {
+        // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它
+        _menuLeft = (int)Math.Round(e.ClientX);
+        _menuTop = (int)Math.Round(e.ClientY);
+
+        if (_surface is not null)
+        {
+            await _surface.ForwardPointerAsync(PointerPhase.Pressed, e.ClientX, e.ClientY, PointerButtonKind.Right);
+        }
+    }
+
+    // ContextMenuRequested 是可以被宿主 PreventDefault 的请求，本模板照单全收：命中连线就弹，
+    // Position 是画布坐标（报回 hub 用），屏幕坐标用上面右键时记下的那两个。
+    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
+    {
+        if (e.Link is null) return;
+
+        _menuLink = e.Link;
+        _menuPosition = e.Position;
+        // 报回 hub：菜单在屏期间挂起悬停，指针移到菜单上不会清掉这次选中的连线。
+        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void CloseContextMenu()
+    {
+        if (_menuLink is null) return;
+
+        var link = _menuLink;
+        _menuLink = null;
+        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, link));
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void DeleteLinkFromMenu()
+    {
+        var link = _menuLink;
+        CloseContextMenu();
+        // 与其余平台一致：不看 CanExecute，命令自己会排队或拒绝。
+        link?.DeleteCommand.Execute(null);
+    }
+
+    // 包在表面外的一层：表面根的键盘宿主只认 Delete，Escape 在这里收口，两边的按键路由互不打扰。
+    private void OnSurfaceMenuKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") CloseContextMenu();
+    }
 
     /// <inheritdoc />
     public void Dispose()

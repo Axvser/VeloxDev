@@ -33,6 +33,10 @@
         <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
                                       NodeTemplate="{StaticResource NodeTemplate}"
                                       LinkTemplate="{StaticResource LinkTemplate}" />
+        <!-- Add or remove the link menu's entries here; each item acts on the link that was right-clicked. -->
+        <MenuFlyout x:Key="LinkContextMenu">
+            <MenuFlyoutItem Text="Delete" Click="OnDeleteLink" />
+        </MenuFlyout>
     </UserControl.Resources>
     <Grid>
         <Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="3" Background="#1E1E1E">

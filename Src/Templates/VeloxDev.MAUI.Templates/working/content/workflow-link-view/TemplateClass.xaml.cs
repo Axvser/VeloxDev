@@ -38,6 +38,8 @@ public partial class TemplateClass : ContentView
         nameof(VirtualLineColor), typeof(Color), typeof(TemplateClass), Color.FromArgb("TemplateLinkColor"));
     public static readonly BindableProperty StrokeWidthProperty = BindableProperty.Create(
         nameof(StrokeWidth), typeof(double), typeof(TemplateClass), (double)TemplateLinkThickness);
+    public static readonly BindableProperty ShowDefaultContextMenuProperty = BindableProperty.Create(
+        nameof(ShowDefaultContextMenu), typeof(bool), typeof(TemplateClass), true);
 
     public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
     public View? InteractionSource { get => (View?)GetValue(InteractionSourceProperty); set => SetValue(InteractionSourceProperty, value); }
@@ -49,4 +51,5 @@ public partial class TemplateClass : ContentView
     public Color LinkLineColor { get => (Color)GetValue(LinkLineColorProperty); set => SetValue(LinkLineColorProperty, value); }
     public Color VirtualLineColor { get => (Color)GetValue(VirtualLineColorProperty); set => SetValue(VirtualLineColorProperty, value); }
     public double StrokeWidth { get => (double)GetValue(StrokeWidthProperty); set => SetValue(StrokeWidthProperty, value); }
+    public bool ShowDefaultContextMenu { get => (bool)GetValue(ShowDefaultContextMenuProperty); set => SetValue(ShowDefaultContextMenuProperty, value); }
 }

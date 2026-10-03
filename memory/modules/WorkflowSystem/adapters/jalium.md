@@ -102,6 +102,20 @@ Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产�
 
 ---
 
+### 4.x 连线右键菜单：`ContextMenu.Open(Point)` 吃的是**根视觉坐标**，不是屏幕像素（2026-10-03 实测）
+
+基类 `WorkflowTreeView` 新增 `OnBuildLinkMenu(menu, link)`（模板派生后增删条目）与
+`OnConnecting`/`OnConnected`；菜单的订阅、定位、开合上报都在基类。定位那条链值得记：
+
+`e.Position`（画布局部）→ `PointToScreen`（物理像素）→ **`root.PointFromScreen(...)`（根视觉局部）** → `menu.Open(...)`。
+最后那一步不能省：反编译 `Jalium.UI.Controls` 26.10.8 可见 `ContextMenu.Open` 把点**直接写进**
+`Popup.HorizontalOffset/VerticalOffset`，而 `Popup` 按**根视觉/窗口客户区**解释它们、自己再转屏幕；
+框架内部右键路径传的也是 `e.GetPosition(null)`。直接把 `PointToScreen` 的结果喂进去，菜单会整体偏移一个窗口原点。
+
+另外两条：Jalium 的 `MenuItem` **不会自己关菜单**（点完要显式 `menu.Close()`，与完整 demo 里那句
+`IsOpen = false` 同因）；`OnMouseLeave` 在菜单开着时要提前返回 —— 那一条是为了躲 `LinkInteraction` 的
+`Exited` 不认 `IsSuspended` 的老毛病（Core 已修，这层拦截现在冗余）。
+
 ## 五、非 Trimmed demo 连线三件事的落点（表面自绘，含右键菜单）
 
 **先分清一件事：这家的非 Trimmed demo 没有连线视图。** §2.1 与 §四 里那些"连线视图自盒化"说的是 **适配器的 `WorkflowLinkView` 与 Trimmed demo 的派生版**；`Examples/Workflow/Jalium/Demo/` 下连线、端口、网格、标尺**全由 `Examples/Workflow/Jalium/Demo/Views/Workflow/NodeEditorSurface.cs` 自己画**（`:24` `NodeEditorSurface : Canvas`），没有 `LinkView`、不用 `ViewPool`、也不派生适配器基类（`MainWindow` 直接 new 表面 + `ScrollViewer` + 缩略图/信息浮层）。⇒ **没有控件可以承担"某一条连线的悬停/焦点/右键"**，三件事只能由画它的表面代管。

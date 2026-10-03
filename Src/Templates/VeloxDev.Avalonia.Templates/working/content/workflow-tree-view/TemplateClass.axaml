@@ -43,6 +43,11 @@
         <local:TemplateSelector x:Key="WorkflowTemplateSelector"
                                 NodeTemplate="{StaticResource NodeTemplate}"
                                 LinkTemplate="{StaticResource LinkTemplate}" />
+
+        <!-- VeloxDev customization: add or remove the link menu's items here. -->
+        <ContextMenu x:Key="WorkflowTreeMenu">
+            <MenuItem Header="Delete" Click="OnDeleteLinkClick" />
+        </ContextMenu>
     </UserControl.Resources>
 
     <!-- Render Node Editor -->

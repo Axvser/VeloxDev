@@ -191,6 +191,19 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 3. **焦点必须与「上色」同一步发生**（`SetSelectedLink` 里），画布靠 `ControlStyles.Selectable` 才获焦、靠 `TabStop = false` 不进制表位。写成「被点击才给焦点」就会重演 Avalonia 那个 bug：悬停变红但 Delete 要先点一下（见 `adapters/avalonia.md`）。这一家没有 WPF 那种「拿到焦点就把自己滚进视口」的副作用 —— 平移在宿主手里，实测悬停前后 `_panOffset` 不变。
 4. **已知代价：连线被卡片/浮层窗口盖住的那一段不可悬停**。指针落在卡片（或小地图/HUD）的真窗口上时画布收不到 `MouseMove`，只有画在空白画布上的那段可命中。这是「画布代画连线」这一形状的固有代价 —— 换成 Trimmed demo 那种「一条线一个窗口」的形状才有全段命中，而那种形状要付 §2.1 的 z 序与 §2.3 的透明代价。
 
+### 4.11 基类上的两处 `protected virtual`（2026-10-03）
+
+`WorkflowTreeView` 现在还有：`OnConnecting` / `OnConnected`（连接建立前后）、`OnBuildLinkMenu(menu, link)`
+（填连线右键菜单，基类默认只放一项 `Delete`）。前者由基类用 `WorkflowEventRelay` 接模型事件、转发进钩子；
+后者的**弹出、定位、开合上报全在基类**，模板产物只重写这一处来增删条目。
+
+⚠ **基类订阅 `ContextMenuRequested` 的时刻在 `OnTreeAttached(value)` **之后**（`ViewModel` setter 里那个顺序）**：
+多播事件按订阅顺序派发，基类排最后，宿主先订的否决才有机会先生效。**不要把那两行调换**，否则宿主的
+`PreventDefault` 永远晚于基类的弹出。（`ContextMenuRequesting` 那一相补上之后，这条顺序约束已经不是必须的，
+但调换回去只会让行为更微妙，不值得。）
+
+（校验脚本的真名是 `Src/Verification/verify-workflow-item-templates.ps1` —— 不是 `verify-winforms-…`。）
+
 ### 4.10 `new Region()` 是**无限**区域，不是空的 —— 用户报的「黑色盒子」就是它（2026-10-03 修）
 
 **症状**：画布上偶尔出现一个**没有网格线的深色方框**，尺寸正好是某条连线**最后一次**的盒子（用户原话：「黑色的盒子，盒子疑似是某个时刻连线的盒子残留的」）。

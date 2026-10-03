@@ -41,7 +41,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// see it, and the drawn body is the only thing that answers. Hovering a link selects it (drawn in
 /// <see cref="SelectedLinkColor"/>), <c>Delete</c> removes it through
 /// <see cref="IWorkflowLinkViewModel.DeleteCommand"/>, and a right-click on it opens a one-item menu that
-/// removes it.
+/// removes it (see <see cref="ShowDefaultContextMenu"/> to let a host surface open its own instead).
 /// </para>
 /// </summary>
 public sealed class WorkflowLinkOverlay : GraphicsView
@@ -86,6 +86,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     public static readonly BindableProperty InteractionSourceProperty = BindableProperty.Create(
         nameof(InteractionSource), typeof(View), typeof(WorkflowLinkOverlay), null, propertyChanged: OnInteractionSourceChanged);
+
+    public static readonly BindableProperty ShowDefaultContextMenuProperty = BindableProperty.Create(
+        nameof(ShowDefaultContextMenu), typeof(bool), typeof(WorkflowLinkOverlay), true);
 
     // 高亮是「一团白而模糊的光」，不是换色：静息线本来就是近白的，所以靠**更亮 + 更粗 + 外面那圈光晕**
     // 读出来，而不是靠换一个色相。七家都用白（`#FFFFFFFF`）—— 其它色相都试过，红像告警、青像另一条线。
@@ -175,6 +178,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     /// <summary>Colour a hovered link is drawn in, so the selected one reads as picked rather than resting.</summary>
     public Color? SelectedLinkColor { get => (Color?)GetValue(SelectedLinkColorProperty); set => SetValue(SelectedLinkColorProperty, value); }
+
+    /// <summary>
+    /// Whether this layer opens its own one-item <c>Delete</c> menu when a link is right-pressed. Leave it on for a
+    /// surface that draws no menu of its own; set it to <see langword="false"/> when the surface host opens its own
+    /// menu from <see cref="LinkInteraction.ContextMenuRequested"/>, so the two do not appear together.
+    /// </summary>
+    public bool ShowDefaultContextMenu { get => (bool)GetValue(ShowDefaultContextMenuProperty); set => SetValue(ShowDefaultContextMenuProperty, value); }
 
     /// <summary>Where the band is, as a fraction of a link's length from its sender's end. Written by the
     /// flow every frame; each link derives its geometry and colours from it while drawing.</summary>
@@ -612,7 +622,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             MainThread.BeginInvokeOnMainThread(() => source.Focus());
         }
 
-        if (button is PointerButtonKind.Right)
+        if (button is PointerButtonKind.Right && ShowDefaultContextMenu)
         {
             ShowDeleteMenu(onSource);
         }

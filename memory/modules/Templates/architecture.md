@@ -149,6 +149,11 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   **Razor 也喂 `Helper.VisibleItems`**（`workflow-tree-view/TemplateClass.razor:34-36` 的
   `Items="Tree.GetHelper().VisibleItems"`，节点与连线共用一个选择器，见 `adapters/razor.md` §二·6）；
   MAUI 那家虽然也叫 `VisibleItems`，但喂的是**去掉连线**的包装（`NodeOnlyVisibleItems`，连线交给共享 overlay）。
+  ⚠ **2026-10-03 起 `workflow-tree-view` 条目还带「连线的右键菜单」**：菜单**声明在模板里**（有标记语言的
+  四家是资源里的 `MenuFlyout`/`ContextMenu` 或 `.razor` 里的按钮，WinForms/Jalium 是基类的 `OnBuildLinkMenu`
+  钩子），由表面在 hub 的 `ContextMenuRequested` 上弹出、并用 `Publish(ContextMenuEvent)` 报开合。
+  **落点是 tree-view 而不是 link-view**：右键落在表面上（很多家的连线视图不吃指针），而弹出要屏幕坐标、
+  模型给的是画布坐标 —— 只有表面同时知道这两件事。
   ⚠ **2026-10-03 起 MAUI 的 Trimmed demo 与它的模板故意分叉了**：demo 已经改成**每线一视图**
   （`Demo/Controls/Workflow/LinkView.xaml(.cs)`，节点与连线共用一个池、选择器给 `LinkTemplate`），
   而 `workflow-link-view` / `workflow-tree-view` 两个模板**还是旧的 overlay 形态**。

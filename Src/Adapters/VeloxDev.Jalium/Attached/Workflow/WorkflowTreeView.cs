@@ -39,6 +39,11 @@ public class WorkflowTreeView : Canvas
     private TreeEventSink? _eventSink;
     private ScrollViewer? _scrollViewer;
 
+    // 连线交互 hub 归 Core（每棵树一个，见 LinkInteraction.For）：本类只订它的右键请求，命中与高亮/删除
+    // 仍由 hub 自己完成。菜单每次右键现建、收起即弃 —— 复用一份会带着上一次那条链接的捕获。
+    private LinkInteraction? _linkInteraction;
+    private ContextMenu? _linkMenu;
+
     /// <summary>
     /// Committed zoom scroll target.
     /// </summary>
@@ -182,11 +187,14 @@ public class WorkflowTreeView : Canvas
     {
         _treeEvents?.Dispose();
         _treeEvents = null;
+        DetachInteraction();
         _tree = tree;
         if (_tree is null)
         {
             return;
         }
+
+        AttachInteraction();
 
         // 模型事件由 Core 的 relay 接一次，转发到本类的可重写钩子；Helper 不提供事件时 Attach 返回 null。
         _treeEvents = WorkflowEventRelay.Attach(_tree, EventSink);
@@ -259,6 +267,29 @@ public class WorkflowTreeView : Canvas
     /// <summary>Called once the link exists.</summary>
     /// <param name="e">The two ports the connection joined.</param>
     protected virtual void OnConnected(ConnectionEventArgs e) { }
+
+    /// <summary>
+    /// Fills the context menu the surface shows for a link. The base adds a single <c>Delete</c> item; override it
+    /// to add or remove entries.
+    /// </summary>
+    /// <param name="menu">The menu being built; the surface shows it once this returns.</param>
+    /// <param name="link">The link the menu is about.</param>
+    /// <remarks>
+    /// The menu is built anew for every right press, so an edit here takes effect the next time it opens. The
+    /// surface opens it only when a link was hit; a right press on empty canvas raises the request with no link
+    /// and is not shown.
+    /// </remarks>
+    protected virtual void OnBuildLinkMenu(ContextMenu menu, IWorkflowLinkViewModel link)
+    {
+        var item = new MenuItem { Header = "Delete" };
+        item.Click += (_, _) =>
+        {
+            // 本平台的菜单项点完不自己收：不显式关，删掉连线后菜单还杵在画布上挡着看得见的东西。
+            menu.Close();
+            link.DeleteCommand.Execute(null);
+        };
+        menu.Items.Add(item);
+    }
 
     // 换绑定树时复用同一个 sink；sink 只把调用转给可重写钩子，不持有额外状态。
     private TreeEventSink EventSink => _eventSink ??= new TreeEventSink(this);
@@ -387,9 +418,70 @@ public class WorkflowTreeView : Canvas
         LinkInteraction.For(tree).Publish(new PointerEvent(phase, new Anchor(canvasPos.X, canvasPos.Y, 0), button));
     }
 
+    // 订阅与解订 hub：本体只碰右键菜单请求，高亮/删除仍由 hub 的 AutoHighlight / AutoDelete 完成。
+    private void AttachInteraction()
+    {
+        DetachInteraction();
+        if (_tree is not { } tree) return;
+
+        var hub = LinkInteraction.For(tree);
+        hub.ContextMenuRequested += OnContextMenuRequested;
+        _linkInteraction = hub;
+    }
+
+    private void DetachInteraction()
+    {
+        if (_linkInteraction is not { } hub) return;
+
+        hub.ContextMenuRequested -= OnContextMenuRequested;
+        // 换树/解绑时菜单还开着就先收：Closed 会顺手把 hub 的挂起放开。
+        _linkMenu?.Close();
+        _linkInteraction = null;
+    }
+
+    // 右键菜单归表面、不归连线视图：右键落在表面上（这一家的连线是表面一笔画出来的、不吃指针），
+    // 而弹出要根视觉（窗口客户区）坐标、模型给的是画布坐标 —— 只有表面同时知道这两件事。
+    // 条目由 OnBuildLinkMenu 给出（基类默认一项 Delete）。
+    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
+    {
+        // 别的订阅方（宿主）把这一次拒绝掉了：这里是「不给菜单」的意思，照办。
+        if (e.Handle.PreventDefault) return;
+        if (e.Link is not { } link) return;
+        if (_linkMenu?.IsOpen == true) return;
+
+        var menu = new ContextMenu();
+        OnBuildLinkMenu(menu, link);
+
+        menu.Closed += (_, _) =>
+        {
+            // 收起报回 hub：它自己放开 IsSuspended，宿主不用记这一笔账。
+            _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, e.Position, link));
+            if (ReferenceEquals(_linkMenu, menu)) _linkMenu = null;
+        };
+
+        _linkMenu = menu;
+
+        // 菜单一开指针就飞到弹层上去：先报 Opened，hub 把悬停挂起，那之后的移动不会清掉这次选中的线。
+        _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
+        menu.Open(ToMenuPosition(e.Position));
+    }
+
+    // e.Position 是表面自己的坐标（指针位置的发布就是原样转发的表面坐标），换成屏幕坐标、再回到
+    // ContextMenu.Open 要的根视觉坐标 —— 菜单最终由平台的 Popup 换算成屏幕位置。
+    private Point ToMenuPosition(Anchor position)
+    {
+        var screen = PointToScreen(new Point(position.Horizontal, position.Vertical));
+        return VisualTreeHelper.GetRoot(this) is Visual root ? root.PointFromScreen(screen) : screen;
+    }
+
     private void OnMouseLeave(object? sender, MouseEventArgs e)
     {
         if (_tree is not { } tree) return;
+
+        // 菜单开着时指针是飞到弹层上去了，不是真的离开：这一发 Exited 会把选中清掉，菜单就不再指着任何
+        // 一条线。挂起状态由 hub 记（Publish(ContextMenuEvent) 已报过 Opened）。
+        if (_linkMenu?.IsOpen == true) return;
+
         LinkInteraction.For(tree).Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
     }
 

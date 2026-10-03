@@ -36,6 +36,10 @@
         <workflowViews:TemplateSelector x:Key="WorkflowTemplateSelector"
                                         NodeTemplate="{StaticResource NodeTemplate}"
                                         LinkTemplate="{StaticResource LinkTemplate}" />
+        <!-- Right-click menu for a link; its DataContext is that link. Add or remove entries here. -->
+        <ContextMenu x:Key="LinkContextMenu">
+            <MenuItem Header="Delete" Command="{Binding DeleteCommand}" />
+        </ContextMenu>
     </UserControl.Resources>
     <Grid>
         <Border x:Name="PART_SurfaceBorder"

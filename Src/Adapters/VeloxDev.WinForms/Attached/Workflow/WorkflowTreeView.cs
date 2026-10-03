@@ -89,6 +89,9 @@ public abstract class WorkflowTreeView : UserControl
 
             AttachTree();
             OnTreeAttached(value);
+            // 菜单的订阅放在宿主钩子之后：宿主若要对某些链接「不给菜单」，会在 OnTreeAttached 里订
+            // ContextMenuRequested 并置 PreventDefault；订阅顺序决定谁先跑，基类必须后订才读得到这次否决。
+            AttachLinkMenu();
             ScheduleLayout();
         }
     }
@@ -266,6 +269,22 @@ public abstract class WorkflowTreeView : UserControl
     {
     }
 
+    /// <summary>
+    /// Fills the context menu the surface shows for a link. The base adds a single <c>Delete</c> item; override it
+    /// to add or remove entries.
+    /// </summary>
+    /// <param name="menu">The menu being built; the surface shows it once this returns.</param>
+    /// <param name="link">The link the menu is about.</param>
+    /// <remarks>
+    /// The menu is built anew for every right press, so an edit here takes effect the next time it opens. The
+    /// surface opens it only when a link was hit; a right press on empty canvas raises the request with no link
+    /// and is not shown.
+    /// </remarks>
+    protected virtual void OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)
+    {
+        menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null));
+    }
+
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
@@ -289,6 +308,9 @@ public abstract class WorkflowTreeView : UserControl
     // 连线交互 hub 归 Core（每棵树一个，见 LinkInteraction.For）：本家只做平台的两件事 —— 翻译指针/按键、
     // 悬停命中时给画布取键盘焦点。高亮与删除都由 hub 的 AutoHighlight / AutoDelete 负责。
     private LinkInteraction? _linkInteraction;
+
+    // 当前弹出的连线菜单。每次右键现建、收起即弃 —— 复用一份会带着上一次那条链接的捕获。
+    private ContextMenuStrip? _linkMenu;
 
     // 最近一次指针位置与它是否还在画布上：平移/缩放挪的是几何而指针没动，命中会变，得拿这两个值重判。
     private Point _lastPointerClient;
@@ -600,11 +622,23 @@ public abstract class WorkflowTreeView : UserControl
         _linkInteraction = interaction;
     }
 
+    // 右键菜单进 hub 的订阅单独一步（见 ViewModel setter 的调用点）：必须排在宿主订阅之后，宿主的
+    // PreventDefault 才否决得了这一次。
+    private void AttachLinkMenu()
+    {
+        if (_linkInteraction is null) return;
+        _linkInteraction.ContextMenuRequested += OnContextMenuRequested;
+    }
+
     private void DetachLinkInteraction()
     {
         if (_linkInteraction is null) return;
 
         _linkInteraction.HoverChanged -= OnLinkHoverChanged;
+        _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+
+        // 会话结束菜单还挂着的话先收起：Closed 会顺手把 hub 的挂起放开，换一棵树时不至于一直停在不接收移动。
+        _linkMenu?.Close();
 
         // 解绑前清掉悬停：hub 跟着树活着，比这次绑定久 —— 不清的话换一棵树、或重新绑同一棵时，
         // 上一条线还亮着。Exited 不走 IsSuspended，一定生效；AutoHighlight 顺手把高亮熄灭。
@@ -618,6 +652,38 @@ public abstract class WorkflowTreeView : UserControl
     {
         if (e.Link is null || !PART_Canvas.CanFocus) return;
         PART_Canvas.Focus();
+    }
+
+    // 右键菜单归表面、不归连线视图：右键落在表面上（别家的连线视图甚至不吃指针），而弹出要屏幕坐标、
+    // 模型给的是画布坐标 —— 只有表面同时知道这两件事。条目由 OnBuildLinkMenu 给出（基类默认一项 Delete）。
+    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
+    {
+        // 别的订阅方（宿主）把这一次拒绝掉了：这里是「不给菜单」的意思，照办。
+        if (e.Handle.PreventDefault) return;
+        if (e.Link is not { } link) return;
+        if (_linkMenu?.Visible == true) return;
+
+        var menu = new ContextMenuStrip();
+        OnBuildLinkMenu(menu, link);
+
+        // e.Position 是画布客户区坐标（指针位置的发布就是原样转发的 PART_Canvas 客户区坐标），换成屏幕坐标再弹。
+        var screen = PART_Canvas.PointToScreen(
+            new Point((int)e.Position.Horizontal, (int)e.Position.Vertical));
+
+        menu.Closed += (_, _) =>
+        {
+            // 收起报回 hub：它自己放开 IsSuspended，宿主不用记这一笔账。
+            _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, e.Position, link));
+            if (ReferenceEquals(_linkMenu, menu)) _linkMenu = null;
+            // 关掉即弃，但不在 Closed 里直接 Dispose —— 那还在菜单自己的方法里，销毁要在它收完尾之后。
+            if (!IsDisposed) BeginInvoke(new Action(menu.Dispose));
+        };
+
+        _linkMenu = menu;
+
+        // 菜单一开指针就飞到菜单上去：先报 Opened，hub 把悬停挂起，那之后的移动不会清掉这次选中的线。
+        _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
+        menu.Show(screen);
     }
 
     // 应用有符号平移量：重摆卡片，把得到的世界原点推给网格、浮层、小地图与树的视口。
@@ -793,6 +859,9 @@ public abstract class WorkflowTreeView : UserControl
 
             _modelEvents?.Dispose();
             _modelEvents = null;
+
+            _linkMenu?.Dispose();
+            _linkMenu = null;
 
             if (_rulerOverlay is not null)
             {

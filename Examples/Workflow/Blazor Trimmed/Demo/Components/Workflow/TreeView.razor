@@ -5,38 +5,61 @@
 
 @if (Tree is not null)
 {
-    <WorkflowSurfaceBehavior Tree="Tree"
-                             IsEnabled="true"
-                             ZoomEnabled="true"
-                             ScrollViewerId="@ScrollViewerId"
-                             CanvasId="@CanvasId"
-                             GridSpacing="@GridSpacing"
-                             GridColor="@MinorGridColor"
-                             Background="@Background">
-        <GridDecorator Context="vp">
-            <GridDecorator Viewport="vp"
-                           RulerThickness="28"
-                           GridSpacing="@GridSpacing"
-                           RulerBackground="@RulerBackground"
-                           RulerTickColor="@RulerTickColor"
-                           RulerDividerColor="@RulerDividerColor" />
-        </GridDecorator>
-        <Minimap Context="vp">
-            <MinimapOverlay Viewport="vp"
-                            Width="180" Height="120"
-                            ScrollViewerId="@ScrollViewerId" />
-            @* Realtime canvas-info HUD (bottom-left floating text + copy button). *@
-            <InfoOverlay Tree="Tree" Viewport="vp" />
-        </Minimap>
-        <ChildContent Context="sc">
-            @* VeloxDev customization: assign the view each component gets here — the pooled layer below
-               renders every visible node and link (the gesture's virtual link included); swap the selector
-               or the two templates to change which view a component gets. *@
-            <CustomTemplateSelector Items="Tree.GetHelper().VisibleItems" KeySelector="i => i"
-                                    NodeTemplate="NodeTemplate ?? RenderGenericNode"
-                                    LinkTemplate="RenderGenericLink(sc)" />
-        </ChildContent>
-    </WorkflowSurfaceBehavior>
+    <div style="position:relative;width:100%;height:100%;"
+         @oncontextmenu="OnSurfaceContextMenu"
+         @oncontextmenu:preventDefault="true"
+         @onkeydown="OnSurfaceMenuKeyDown">
+        <WorkflowSurfaceBehavior @ref="_surface"
+                                 Tree="Tree"
+                                 IsEnabled="true"
+                                 ZoomEnabled="true"
+                                 ScrollViewerId="@ScrollViewerId"
+                                 CanvasId="@CanvasId"
+                                 GridSpacing="@GridSpacing"
+                                 GridColor="@MinorGridColor"
+                                 Background="@Background">
+            <GridDecorator Context="vp">
+                <GridDecorator Viewport="vp"
+                               RulerThickness="28"
+                               GridSpacing="@GridSpacing"
+                               RulerBackground="@RulerBackground"
+                               RulerTickColor="@RulerTickColor"
+                               RulerDividerColor="@RulerDividerColor" />
+            </GridDecorator>
+            <Minimap Context="vp">
+                <MinimapOverlay Viewport="vp"
+                                Width="180" Height="120"
+                                ScrollViewerId="@ScrollViewerId" />
+                @* Realtime canvas-info HUD (bottom-left floating text + copy button). *@
+                <InfoOverlay Tree="Tree" Viewport="vp" />
+            </Minimap>
+            <ChildContent Context="sc">
+                @* VeloxDev customization: assign the view each component gets here — the pooled layer below
+                   renders every visible node and link (the gesture's virtual link included); swap the selector
+                   or the two templates to change which view a component gets. *@
+                <CustomTemplateSelector Items="Tree.GetHelper().VisibleItems" KeySelector="i => i"
+                                        NodeTemplate="NodeTemplate ?? RenderGenericNode"
+                                        LinkTemplate="RenderGenericLink(sc)" />
+            </ChildContent>
+        </WorkflowSurfaceBehavior>
+
+        @* VeloxDev customization: the link context menu. Add or remove the item buttons here. *@
+        @if (_menuLink is not null)
+        {
+            <div style="position:fixed;inset:0;z-index:1000;"
+                 @onclick="CloseContextMenu"
+                 @oncontextmenu="CloseContextMenu"
+                 @oncontextmenu:preventDefault="true"
+                 @oncontextmenu:stopPropagation="true"></div>
+            <div style="position:fixed;z-index:1001;min-width:140px;padding:4px;background:#1F1F1F;border:1px solid #3A3D40;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.5);left:@(_menuLeft.ToString(System.Globalization.CultureInfo.InvariantCulture))px;top:@(_menuTop.ToString(System.Globalization.CultureInfo.InvariantCulture))px;"
+                 @oncontextmenu:preventDefault="true"
+                 @oncontextmenu:stopPropagation="true">
+                <button type="button"
+                        style="display:block;width:100%;padding:6px 12px;border:none;border-radius:3px;background:transparent;color:#DDDDDD;font:13px 'Segoe UI',sans-serif;text-align:left;cursor:pointer;"
+                        @onclick="DeleteLinkFromMenu">Delete</button>
+            </div>
+        }
+    </div>
 }
 
 @code {
