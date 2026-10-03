@@ -122,8 +122,11 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private Microsoft.UI.Xaml.UIElement? _hookElement;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverMovedHandler;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverExitedHandler;
-    private Microsoft.UI.Xaml.Input.PointerEventHandler? _secondaryPressedHandler;
+    private Microsoft.UI.Xaml.Input.PointerEventHandler? _pressedHandler;
     private Microsoft.UI.Xaml.Input.KeyEventHandler? _keyHandler;
+
+    // 键盘钩子实际挂在哪（窗口根，或 XamlRoot 还没就绪时的交互源），与指针钩子分开记，摘的时候才拆得干净
+    private Microsoft.UI.Xaml.UIElement? _keyHost;
     private Microsoft.UI.Xaml.Controls.MenuFlyout? _deleteMenu;
 #endif
 
@@ -564,6 +567,10 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         _lastPointer = point;
+#if WINDOWS
+        // 键盘钩子要升级到窗口根，而 XamlRoot 在挂钩子那会儿还没就绪（见 AttachKeyHook 的注释）
+        TryUpgradeKeyHook();
+#endif
         _interaction?.Publish(new PointerEvent(PointerPhase.Moved, ToCanvasLocal(point)));
     }
 
@@ -579,18 +586,36 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         _interaction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
     }
 
-    private void OnSecondaryPressed(Point onOverlay, Point onSource)
+    /// <summary>
+    /// One press on the surface, translated and forwarded. Both buttons are forwarded — the hub's rule is
+    /// "the one you pressed is the one that gets selected", and a left press is the only event a click on a
+    /// link produces.
+    /// </summary>
+    /// <param name="onOverlay">Where the press landed, in this layer's coordinates.</param>
+    /// <param name="onSource">Same point in the input source's coordinates, for the menu's placement.</param>
+    /// <param name="button">Which button.</param>
+    private void OnPressed(Point onOverlay, Point onSource, PointerButtonKind button)
     {
-        _interaction?.Publish(new PointerEvent(
-            PointerPhase.Pressed, ToCanvasLocal(onOverlay), PointerButtonKind.Right));
+        _interaction?.Publish(new PointerEvent(PointerPhase.Pressed, ToCanvasLocal(onOverlay), button));
 
         if (_interaction?.HoveredLink is null)
         {
-            // 空白处右键不是这条线的事：不置 Handled，也不弹菜单
+            // 空白处按下不是这条线的事：不置 Handled，也不弹菜单
             return;
         }
 
-        ShowDeleteMenu(onSource);
+        // 命中连线时把焦点收回交互源，延后一拍（平台在处理这次按下时会自己设焦点，当场设会被它盖掉）。
+        // 这是第二道保险：主修法是把键盘钩子挂到窗口根上（见 AttachKeyHook），键路由因此不再依赖焦点落点。
+        // 只在命中连线时收 —— 否则点节点卡里的输入框也会被抢走焦点。
+        if (_interactionSource is { } source)
+        {
+            MainThread.BeginInvokeOnMainThread(() => source.Focus());
+        }
+
+        if (button is PointerButtonKind.Right)
+        {
+            ShowDeleteMenu(onSource);
+        }
     }
 
     // 视口像素 → canvas-local 锚点：ToViewport 的逆（一条纯平移，所以逐轴减回去就是）。
@@ -617,13 +642,19 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnGesturePointerPressed(object? sender, PointerEventArgs e)
     {
-        if (e.Button == ButtonsMask.Secondary
-            && _interactionSource is not null
-            && e.GetPosition(this) is { } onOverlay
-            && e.GetPosition(_interactionSource) is { } onSource)
+        var button = e.Button == ButtonsMask.Secondary ? PointerButtonKind.Right
+            : e.Button == ButtonsMask.Primary ? PointerButtonKind.Left
+            : (PointerButtonKind?)null;
+
+        if (button is null
+            || _interactionSource is not { } source
+            || e.GetPosition(this) is not { } onOverlay
+            || e.GetPosition(source) is not { } onSource)
         {
-            OnSecondaryPressed(onOverlay, onSource);
+            return;
         }
+
+        OnPressed(onOverlay, onSource, button.Value);
     }
 #endif
 
@@ -684,25 +715,65 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             }
         };
         _hoverExitedHandler = (_, _) => OnHoverExited();
-        _secondaryPressedHandler = (_, e) =>
+        _pressedHandler = (_, e) =>
         {
-            if (e.GetCurrentPoint(element).Properties.IsRightButtonPressed
+            var properties = e.GetCurrentPoint(element).Properties;
+            var button = properties.IsRightButtonPressed ? PointerButtonKind.Right
+                : properties.IsLeftButtonPressed ? PointerButtonKind.Left
+                : (PointerButtonKind?)null;
+
+            if (button is not null
                 && ToOverlayPoint(e) is { } onOverlay
                 && ToElementPoint(e, element) is { } onSource)
             {
-                OnSecondaryPressed(onOverlay, onSource);
+                OnPressed(onOverlay, onSource, button.Value);
             }
         };
 
-        // 键盘挂同一处：MAUI 没有跨平台的按键事件，而 Delete 要的是「悬停已经选中了哪条」。
-        // handledEventsToo 取 false 是故意的 —— 聚焦的输入框吃掉 Delete 改自己的光标时必须让它赢
-        _keyHandler = OnSourceKeyDown;
-
         element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerMovedEvent, _hoverMovedHandler, true);
         element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerExitedEvent, _hoverExitedHandler, true);
-        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, _secondaryPressedHandler, true);
-        element.AddHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler, false);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, _pressedHandler, true);
+
         _hookElement = element;
+        AttachKeyHook(element);
+    }
+
+    // 键盘挂在**窗口根**上，不是交互源上：键事件只从「焦点所在的那个元素」往上冒，而平台在按下时会把焦点
+    // 挪到被点的元素上 —— 实测点击连线之后，Delete 再也冒不到交互源那棵子树里的钩子（悬停能删、点一下再删
+    // 就不行）。挂窗口根就不依赖焦点落在哪，只在命中连线时才会去删。
+    // handledEventsToo 取 false 仍然是刻意的：聚焦的输入框吃掉 Delete 改自己的光标时，必须让它赢。
+    private void AttachKeyHook(Microsoft.UI.Xaml.UIElement sourceElement)
+    {
+        var host = sourceElement.XamlRoot?.Content as Microsoft.UI.Xaml.UIElement ?? sourceElement;
+        if (ReferenceEquals(_keyHost, host))
+        {
+            return;
+        }
+
+        if (_keyHost is not null && _keyHandler is not null)
+        {
+            _keyHost.RemoveHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler);
+        }
+
+        _keyHandler ??= OnSourceKeyDown;
+        _keyHost = host;
+        host.AddHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler, false);
+    }
+
+    // 挂窗口根需要 XamlRoot，而它在 Attach 那一刻还是 null（实测），所以升级交给指针移动 ——
+    // 指针进得来就说明窗口早就就绪了。每次移动只做一次引用比较。
+    private void TryUpgradeKeyHook()
+    {
+        if (_hookElement is not { } element)
+        {
+            return;
+        }
+
+        var host = element.XamlRoot?.Content as Microsoft.UI.Xaml.UIElement;
+        if (host is not null && !ReferenceEquals(_keyHost, host))
+        {
+            AttachKeyHook(element);
+        }
     }
 
     private void DetachPlatformHooks()
@@ -722,20 +793,21 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerExitedEvent, _hoverExitedHandler);
         }
 
-        if (_secondaryPressedHandler is not null)
+        if (_pressedHandler is not null)
         {
-            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, _secondaryPressedHandler);
+            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, _pressedHandler);
         }
 
-        if (_keyHandler is not null)
+        if (_keyHandler is not null && _keyHost is not null)
         {
-            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler);
+            _keyHost.RemoveHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler);
         }
 
         _hookElement = null;
+        _keyHost = null;
         _hoverMovedHandler = null;
         _hoverExitedHandler = null;
-        _secondaryPressedHandler = null;
+        _pressedHandler = null;
         _keyHandler = null;
     }
 

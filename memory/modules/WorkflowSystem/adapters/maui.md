@@ -283,6 +283,22 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
    **所以别为了「保险」去关掉自动滚进视口**：节点卡里的输入框仍该滚进来，本家不需要任何修补。
    同一轮也验了 Delete 没退化：按 hover 那条路选中之后真按一次 Delete，`Links` 12 → 11。
 
+6. **键盘必须挂在「窗口根」上，不能挂在交互源上（2026-10-03 修，用户报「点一下再 Delete 删不掉」）**。
+   - **症状**：悬停 → Delete 能删；**点一下连线再按 Delete，无声无息**。
+   - **根因**：键事件只从**焦点所在的那个元素**往上冒，而平台在处理按下时会把焦点挪到被点的元素上
+     （临时探针实测：点击前后焦点都是某个 `MauiButton`）。键钩子原来挂在交互源的元素上，焦点离开那棵
+     子树之后 Delete 就不再经过它 —— 而且**不报错**。`SelectLink` 里那次 `Focus()` 也救不回来：
+     它返回 `true`，焦点却没动。
+   - **顺带补的第二处**：本家原来只转发**右键**（`OnSecondaryPressed`），而六家（WPF/Avalonia/WinUI/WinForms）
+     左右键都转发 —— 契约是「按下的那条就是选中的那条」，左键才是「点一下连线」产生的事件。现在 `OnPressed`
+     左右都发，右键那条再走菜单。
+   - **修法**（`WorkflowLinkOverlay.cs` 的 `AttachKeyHook` / `TryUpgradeKeyHook`）：把 `KeyDownEvent` 挂到
+     `element.XamlRoot.Content`（窗口根），键路由因此不再依赖焦点落在哪；`XamlRoot` 在 Attach 那一刻**还是
+     `null`**（实测），所以升级交给第一次指针移动（每次移动只做一次引用比较），拿不到窗口根就回退到交互源。
+     `handledEventsToo: false` 保持不变 —— 聚焦的输入框吃掉 Delete 改自己光标时必须让它赢。
+   - **验证**：点击 → Delete（HUD `连线 1/1 → 0/0`）、悬停 → Delete、右键仍弹「删除连线」；
+     适配器五个 TFM + 两个 demo 0 警告 0 错误、Core 1012 测试全过。
+
 改这块时的两条禁令：**别去掉 `InputTransparent = true`**（`:82`，同 §四·6）；**别把命中半径放大成整层包围盒** ——
 那会让画布空白处每一次移动都命中某条线（原文的「别把整块画布都算命中」就是这个意思）。
 
