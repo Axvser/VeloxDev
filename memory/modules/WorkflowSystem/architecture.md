@@ -192,6 +192,17 @@ IWorkflowTreeEvents : Connecting/Connected
 
 **凡是交给宿主的组件落位（`Anchor`），都是完整落位 —— 图层跟着走。** 最典型是 `NodeMoveEventArgs.From/To`：宿主若拿 `To` 自己落位、或存 `From` 撤销，不能把图层抹成 0。指针位置没有图层（例外）；指针成为虚拟连线终点时，图层由 `StandardSetPointer` 统一取起点那一端。
 
+**右键菜单是这条链上唯一一个「默认动作由订阅方做」的动作，所以它也有 Preview 相**（2026-10-03）：
+`ContextMenuRequesting`（可否决）→ `ContextMenuRequested`（谁弹菜单谁订这一相）。两相**共用同一个 args 与句柄**。
+为什么非要有：别的动作的「默认」是框架自己干的，框架当然在事件**之后**才动手；而菜单的默认是**订阅方**去弹，
+没有 Preview 相的话，「否决」与「弹出」就靠**订阅顺序**决胜负 —— 谁先订谁说了算，后订的否决白否决。
+补上这一相之后顺序由构造保证，**七家一行都不用改**（它们订的都是「弹」那一相）。
+
+⚠ **`IsSuspended` 要到 `Exited` 也认**（2026-10-03 由 Jalium 那家实测逼出来）：原来只有 `Moved` 分支判挂起，
+于是菜单一开、指针飞到菜单上，`Exited` 照样把 hover 清掉 —— 菜单正要作用的那条线瞬间不再高亮。
+现在两处同一条判据。各家自己额外拦过 `Exited`（Razor、MAUI overlay、Jalium 的 `OnMouseLeave`）的，
+那些拦截现在是**冗余**的，可以删。
+
 **右键菜单三事件也在同一个 hub 上**：`ContextMenuRequested`（可否决 —— 这就是「这里不给菜单」的写法）+ `ContextMenuOpened` / `ContextMenuClosed`。菜单**本身仍是宿主的**（要选位置、要平台自己的弹出物），宿主用 `Publish(ContextMenuEvent)` 报回开合，hub 据此自动收放 `IsSuspended` —— 七家原先各自手工记账那一段（WPF `:583`、Avalonia `:499`、WinUI `:550`、Razor `:154`、WinForms `:590`、MAUI overlay `:867/:872`、Jalium）应当逐步换成这个上报。**`ContextMenuRequested` 不压掉 `LinkPressed`** —— 六个 demo 是从后者弹菜单的，压掉会让它们一按弹两次。
 
 要点：

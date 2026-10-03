@@ -127,9 +127,19 @@ public sealed class LinkInteraction
     public event EventHandler<PreviewLinkDeleteRequestedEventArgs>? PreviewLinkDeleteRequested;
 
     /// <summary>
-    /// Raised on a right press, before anything opens, with the link the menu would be about (or
-    /// <see langword="null"/> on empty canvas). The menu is the host's, so this is a notification with a veto:
-    /// <see cref="WorkflowEventHandle.PreventDefault"/> means "no menu for this press".
+    /// Raised on a right press <b>before</b> anything opens, with the link the menu would be about (or
+    /// <see langword="null"/> on empty canvas): this is where a host refuses the menu for this press.
+    /// </summary>
+    /// <remarks>
+    /// It is the Preview phase of <see cref="ContextMenuRequested"/> and carries the same argument object, so a
+    /// refusal here suppresses that event too. It exists because the menu's "default action" is performed by a
+    /// <b>subscriber</b> (whoever shows the popup), not by the framework: without a preview phase, a refusal would
+    /// race with the opening and depend on subscription order. With it, the order is fixed by construction.
+    /// </remarks>
+    public event EventHandler<ContextMenuRequestedEventArgs>? ContextMenuRequesting;
+
+    /// <summary>
+    /// Raised on a right press, before anything opens, for whoever shows the menu.
     /// <para>
     /// <see cref="LinkPressed"/> still fires afterwards, so hosts that open their menu from there keep working.
     /// A host that migrates to this event should stop opening from <see cref="LinkPressed"/>.
@@ -155,7 +165,9 @@ public sealed class LinkInteraction
         switch (e.Phase)
         {
             case PointerPhase.Exited:
-                SetHovered(null);
+                // 挂起期间（菜单开着）指针是飞到菜单上去了，不是移开了这条线 —— 那一下不能把
+                // 菜单正作用着的那条清掉。与 Moved 分支同一条判据，别只挡一边。
+                if (!IsSuspended) SetHovered(null);
                 break;
 
             case PointerPhase.Entered:
@@ -248,11 +260,15 @@ public sealed class LinkInteraction
     // hub 自己没有默认动作可跳，宿主读到 PreventDefault 就不弹。
     private void RequestContextMenu(IWorkflowLinkViewModel? link, Anchor position)
     {
-        if (ContextMenuRequested is null) return;
+        if (ContextMenuRequesting is null && ContextMenuRequested is null) return;
 
-        ContextMenuRequested.Invoke(
-            link is null ? null : VisualOf(link),
-            new ContextMenuRequestedEventArgs(link, position, new WorkflowEventHandle()));
+        // 两相共用一个 args（也共用一个句柄）：Requesting 里拒绝就到此为止，菜单不开、Requested 也不报。
+        // 顺序因此由构造保证 —— 不依赖「谁先订阅」，也就不会出现「否决晚于弹出、白否决」那颗雷。
+        var args = new ContextMenuRequestedEventArgs(link, position, new WorkflowEventHandle());
+        ContextMenuRequesting?.Invoke(link is null ? null : VisualOf(link), args);
+        if (args.Handle.PreventDefault) return;
+
+        ContextMenuRequested?.Invoke(link is null ? null : VisualOf(link), args);
     }
 
     private IWorkflowLinkViewModel? Find(Anchor position)

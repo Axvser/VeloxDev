@@ -39,6 +39,44 @@ public sealed class LinkInteractionMenuTests : LinkInteractionTestBase
     }
 
     [TestMethod]
+    public void ContextMenuRequesting_PreventDefault_SuppressesTheRequestToo()
+    {
+        // 菜单的「默认动作」是订阅方自己去弹，所以它需要一个 Preview 相：否决发生在这一相，
+        // 弹出那一相根本不会来 —— 不再依赖「谁先订阅」，也就不会出现否决晚于弹出的那颗雷。
+        var link = ReadyLink(0, 0, 100, 0);
+        var interaction = new LinkInteraction(TreeWith(link));
+        var requested = 0;
+        var requesting = 0;
+        WorkflowEventHandle? seen = null;
+        interaction.ContextMenuRequesting += (_, e) =>
+        {
+            requesting++;
+            seen = e.Handle;
+            e.Handle.PreventDefault = true;
+        };
+        interaction.ContextMenuRequested += (_, _) => requested++;
+
+        interaction.Publish(new PointerEvent(PointerPhase.Pressed, new Anchor(50, 0, 0), PointerButtonKind.Right));
+
+        Assert.AreEqual(1, requesting);
+        Assert.AreEqual(0, requested, "被拒绝之后弹出那一相不报");
+        Assert.IsTrue(seen!.IsDefaultPrevented);
+    }
+
+    [TestMethod]
+    public void ContextMenuRequesting_NoSubscriber_StillRaisesRequested()
+    {
+        var link = ReadyLink(0, 0, 100, 0);
+        var interaction = new LinkInteraction(TreeWith(link));
+        var requested = 0;
+        interaction.ContextMenuRequested += (_, _) => requested++;
+
+        interaction.Publish(new PointerEvent(PointerPhase.Pressed, new Anchor(50, 0, 0), PointerButtonKind.Right));
+
+        Assert.AreEqual(1, requested);
+    }
+
+    [TestMethod]
     public void ContextMenuRequested_LeftPress_IsNotRaised()
     {
         var link = ReadyLink(0, 0, 100, 0);
@@ -81,9 +119,12 @@ public sealed class LinkInteractionMenuTests : LinkInteractionTestBase
         Assert.IsNotNull(opened);
         Assert.AreSame(link, opened!.Link);
 
-        // 菜单开着时指针飞到菜单上去了：那之后的移动不该把这次选中清掉。
+        // 菜单开着时指针飞到菜单上去了：那之后的**移动**与**离开**都不该把这次选中清掉
+        //（离开这一路是 Jalium 那家实测逼出来的：Exited 原来不认挂起，菜单一开高亮就没了）。
         interaction.Publish(Move(500, 500));
         Assert.AreSame(link, interaction.HoveredLink);
+        interaction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor(500, 500, 0)));
+        Assert.AreSame(link, interaction.HoveredLink, "挂起时 Exited 也不清选中");
     }
 
     [TestMethod]
