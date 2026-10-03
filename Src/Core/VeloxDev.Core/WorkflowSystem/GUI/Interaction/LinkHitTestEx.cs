@@ -63,6 +63,10 @@ public static class LinkHitTestEx
     /// <c>VisibleItems</c> — the virtualized set, not the tree — from the back, because the last drawn link is
     /// the one on top, and skips the tree's own drag preview: the rubber band sits under the pointer by
     /// construction and must never be the thing that answers.
+    ///
+    /// A node card is opaque, so a link that passes underneath one is not drawn there and does not answer
+    /// either — see <see cref="IsCoveredByANode"/>. A link's own port is the exception: the port is drawn on
+    /// the card's edge, and stopping on it still means "this link".
     /// </summary>
     /// <param name="tree">The tree to search.</param>
     /// <param name="x">Point x, in the same space the links published their curves in.</param>
@@ -79,9 +83,58 @@ public static class LinkHitTestEx
         {
             if (items[i] is not IWorkflowLinkViewModel link) continue;
             if (ReferenceEquals(link, dragPreview)) continue;
-            if (link.HitTest(x, y, radius)) return link;
+            if (!link.HitTest(x, y, radius)) continue;
+            if (IsCoveredByANode(items, link, x, y, radius)) continue;
+            return link;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Whether a node card is drawn over <paramref name="x"/>/<paramref name="y"/>, in which case the link
+    /// underneath is not the thing the pointer is on.
+    /// </summary>
+    /// <remarks>
+    /// Only the realized set is consulted — being in <c>VisibleItems</c> is itself the evidence that the node is
+    /// on screen, so a node that is not in it cannot cover anything. A point within <paramref name="radius"/> of the link's <b>own</b> ports is never
+    /// covered: ports are drawn on the card's edge, and stopping on one is still aiming at this link.
+    /// </remarks>
+    private static bool IsCoveredByANode(
+        IList<IWorkflowViewModel> items, IWorkflowLinkViewModel link, double x, double y, double radius)
+    {
+        if (NearOwnPort(link, x, y, radius))
+        {
+            return false;
+        }
+
+        for (var i = items.Count - 1; i >= 0; i--)
+        {
+            if (items[i] is not IWorkflowNodeViewModel node)
+            {
+                continue;
+            }
+
+            var left = node.Anchor.Horizontal;
+            var top = node.Anchor.Vertical;
+            if (x >= left && x <= left + node.Size.Width && y >= top && y <= top + node.Size.Height)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool NearOwnPort(IWorkflowLinkViewModel link, double x, double y, double radius)
+        => Within(link.Sender, x, y, radius) || Within(link.Receiver, x, y, radius);
+
+    private static bool Within(IWorkflowSlotViewModel? slot, double x, double y, double radius)
+    {
+        if (slot is null) return false;
+
+        var dx = x - slot.Anchor.Horizontal;
+        var dy = y - slot.Anchor.Vertical;
+        return (dx * dx) + (dy * dy) <= radius * radius;
     }
 }

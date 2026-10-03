@@ -29,6 +29,7 @@
 | 改连线的命中/高亮/删除策略 | 取 `LinkInteraction.For(tree)`（**hub 只有这一个位置**）改 `AutoHighlight` / `AutoDelete` / `HitRadius`，或订 `HoverChanged` / `LinkPressed` / `LinkDeleteRequested` | `GUI/Events/LinkInteraction.cs` |
 
 > ⚠ **别把连线视图做成吃掉整块画布的命中面**（给它加背景、或让容器接指针）—— 那会吞掉画布手势。命中面必须仍然只是**画出来的那道描边**；hub 也是按发布的那条曲线判距的。
+> ⚠ **命中还要避开节点框（2026-10-03 起）**：卡片是不透明的，压在它下面的那段线**没画出来**，因此也不应答 —— `LinkHitTestEx.HitTestVisibleLinks` 在返回之前查一次「这点上面盖着哪张卡」。**端口是例外**：离这条线自己端口 `DefaultHitRadius` 以内仍然算命中（端口就画在卡片边缘上，停在端口上就是冲着这条线去的）。这条修的是「在节点上操作，命中的却是它下面那条线」。
 > ⚠ **别把命中门改回 `IsRenderReady()`**（要求锚点已测量）。Jalium 按设计从不写 `slot.Anchor`，那样会让它整家连线静默失效 —— 用「曲线有没有被发布」当门。
 > ⚠ **Delete 需要一条「焦点路由」，而它和命中是两件事**（2026-10-03 实测踩过，七家里五家缺）。Delete 是键盘事件：它只会沿着**焦点所在的元素**往上冒泡。所以适配器必须①能持有焦点、②在悬停到连线上时**把焦点收到自己身上/那个可视对象上**。只做①不做②的话「悬停（不点）后按 Delete」没有任何路由，而且**不报错**。完整 demo 掩盖了这个缺口 —— 它们有窗口级预览兜底（`MainWindow.OnPreviewWindowKeyDown`），生成出来的工程没有。
 > - 各家已落地的形态：WPF/Avalonia「焦点给画线的控件，控件不可聚焦时**退回宿主**」、WinUI/WinForms「焦点给宿主/画布」、Razor「表面根 `tabindex` + 悬停 `FocusAsync(preventScroll: true)`」、MAUI「焦点给交互源」、Jalium「`Focusable` + 悬停收焦点，并用 `RequestBringIntoView` 吃掉那次『把整块画布卷进视口』」。
