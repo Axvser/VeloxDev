@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Input.GestureRecognizers;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System;
 using System.Linq;
@@ -27,6 +28,13 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public Control? PointerPressSource { get; set; }
         public Control? MinimapOverlay { get; set; }
         public EventHandler<PointerWheelEventArgs>? ZoomHandler { get; set; }
+
+        // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
+        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
+        public bool HasPendingRestore { get; set; }
+        public bool RestoreQueued { get; set; }
+        public double PendingRestoreX { get; set; }
+        public double PendingRestoreY { get; set; }
     }
 
     public static readonly AttachedProperty<bool> IsEnabledProperty =
@@ -95,8 +103,54 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         var state = host.GetValue(StateProperty) ?? new SurfaceState();
         host.SetValue(StateProperty, state);
         ResolveNamedControls(host, state);
+        CaptureViewportRestore(host, state);
         ApplyLayout(host, state);
         UpdateVisibleRegion(host, state);
+        QueueViewportRestore(host, state);
+    }
+
+    // 树刚挂上来且不是上一棵：把它存档里的视口位置排进待恢复（世界 → 滚动）。
+    // 必须在 UpdateVisibleRegion 之前 —— 那一步会拿控件当前（还没滚过去的）位置覆盖 ViewportOffset。
+    private static void CaptureViewportRestore(UserControl host, SurfaceState state)
+    {
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+        if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
+
+        state.LastRestoreTree = viewModel;
+
+        if (!WorkflowSurfaceMath.HasViewportRestore(viewModel.Layout)) return;
+
+        var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(viewModel.Layout);
+        state.PendingRestoreX = scroll.Horizontal;
+        state.PendingRestoreY = scroll.Vertical;
+        state.HasPendingRestore = true;
+    }
+
+    // 布局稳定后再滚：DataContext 变化这一刻控件往往还没排版，Extent 还是 0，直接滚会被夹没。
+    // 控件也还没解析出来时就不清标记 —— 下一次 Refresh 会再排一次，这就是重试。
+    private static void QueueViewportRestore(UserControl host, SurfaceState state)
+    {
+        if (!state.HasPendingRestore || state.RestoreQueued) return;
+
+        state.RestoreQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            state.RestoreQueued = false;
+
+            if (!state.HasPendingRestore || !GetIsEnabled(host) || state.ScrollViewer is not { } viewer)
+                return;
+
+            state.HasPendingRestore = false;
+
+            var maxH = GetHorizontalScrollMaximum(viewer);
+            var maxV = GetVerticalScrollMaximum(viewer);
+            viewer.Offset = new Vector(
+                WorkflowSurfaceMath.ClampValue(state.PendingRestoreX, 0, maxH),
+                WorkflowSurfaceMath.ClampValue(state.PendingRestoreY, 0, maxV));
+
+            // 恢复后的位置立刻写回模型，免得控件与 Layout.ViewportOffset 各说各话。
+            UpdateVisibleRegion(host, state);
+        }, DispatcherPriority.Loaded);
     }
 
     private static void OnIsEnabledChanged(UserControl control, AvaloniaPropertyChangedEventArgs e)

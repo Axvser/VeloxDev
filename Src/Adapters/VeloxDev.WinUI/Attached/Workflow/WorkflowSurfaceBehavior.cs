@@ -25,6 +25,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public FrameworkElement? MinimapOverlay { get; set; }
         public FrameworkElement? PointerPressSource { get; set; }
         public PointerEventHandler? ZoomHandler { get; set; }
+
+        // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
+        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
+        public bool HasPendingRestore { get; set; }
+        public double PendingRestoreX { get; set; }
+        public double PendingRestoreY { get; set; }
     }
 
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
@@ -113,8 +119,44 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var state = host.GetValue(StateProperty) as SurfaceState ?? new SurfaceState();
         host.SetValue(StateProperty, state);
         ResolveNamedControls(host, state);
+        CaptureViewportRestore(host, state);
         ApplyLayout(host, state);
         UpdateVisibleRegion(host, state);
+    }
+
+    // 树刚挂上来且不是上一棵：把它存档里的视口位置排进待恢复（世界 → 滚动）。
+    // 必须在 UpdateVisibleRegion 之前 —— 那次排队的 ApplyVisibleRegion 会用控件当前（还没滚过去的）
+    // 位置覆盖 ViewportOffset。
+    private static void CaptureViewportRestore(UserControl host, SurfaceState state)
+    {
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+        if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
+
+        state.LastRestoreTree = viewModel;
+
+        if (!WorkflowSurfaceMath.HasViewportRestore(viewModel.Layout)) return;
+
+        var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(viewModel.Layout);
+        state.PendingRestoreX = scroll.Horizontal;
+        state.PendingRestoreY = scroll.Vertical;
+        state.HasPendingRestore = true;
+    }
+
+    // 有待恢复就把滚动交给宿主，并让这一次回调跳过 ApplyVisibleRegion。
+    // ChangeView 是异步的：此刻读 HorizontalOffset 拿到的还是旧偏移，写回去就把存档位置抹了；
+    // 滚动落地会触发 ViewChanged → Refresh → 再排一次队列，那一次读到的才是恢复后的位置。
+    private static bool ApplyPendingViewportRestore(SurfaceState state)
+    {
+        if (!state.HasPendingRestore || state.ScrollViewer is not { } viewer) return false;
+
+        state.HasPendingRestore = false;
+
+        viewer.ChangeView(
+            WorkflowSurfaceMath.ClampValue(state.PendingRestoreX, 0, GetHorizontalScrollMaximum(viewer)),
+            WorkflowSurfaceMath.ClampValue(state.PendingRestoreY, 0, GetVerticalScrollMaximum(viewer)),
+            null,
+            disableAnimation: true);
+        return true;
     }
 
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -597,6 +639,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             if (!GetIsEnabled(host)
                 || host.GetValue(StateProperty) is not SurfaceState currentState
                 || !ReferenceEquals(currentState, state))
+            {
+                return;
+            }
+
+            if (ApplyPendingViewportRestore(state))
             {
                 return;
             }
