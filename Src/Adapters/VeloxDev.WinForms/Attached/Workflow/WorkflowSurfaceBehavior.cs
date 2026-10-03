@@ -23,6 +23,13 @@ public sealed class WorkflowSurfaceBehavior
         public string? MinimapOverlayName { get; set; }
         public IWorkflowTreeViewModel? WorkflowTree { get; set; }
 
+        // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
+        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
+        public bool HasPendingRestore { get; set; }
+        public bool RestoreQueued { get; set; }
+        public double PendingRestoreX { get; set; }
+        public double PendingRestoreY { get; set; }
+
         private const int WmMouseWheel = 0x020A;
         internal Control? _filterHost;
 
@@ -428,6 +435,7 @@ public sealed class WorkflowSurfaceBehavior
 
         var state = GetState(host);
         var tree = ResolveTree(host);
+        CaptureViewportRestore(tree, state);
         var scrollOffset = ResolveScrollOffset(host, tree, out var measuredScroll);
         var clientSize = ResolveClientSize(host);
         var contentOffset = tree?.Layout?.ActualOffset ?? new Offset();
@@ -499,6 +507,46 @@ public sealed class WorkflowSurfaceBehavior
         {
             host.Update();
         }
+
+        QueueViewportRestore(host, state);
+    }
+
+    // 树刚挂上来且不是上一棵：把它存档里的视口位置排进待恢复（世界 → 有效滚动）。
+    // 必须在写 Viewport / ViewportOffset 之前 —— 那一步会拿宿主当前（还没滚过去的）位置把它覆盖掉。
+    private static void CaptureViewportRestore(IWorkflowTreeViewModel? tree, SurfaceState state)
+    {
+        if (ReferenceEquals(tree, state.LastRestoreTree)) return;
+
+        state.LastRestoreTree = tree;
+        state.HasPendingRestore = false;
+
+        if (tree is null || !WorkflowSurfaceMath.HasViewportRestore(tree.Layout)) return;
+
+        var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(tree.Layout);
+        state.PendingRestoreX = scroll.Horizontal;
+        state.PendingRestoreY = scroll.Vertical;
+        state.HasPendingRestore = true;
+    }
+
+    // 布局稳定后再滚：挂树这一刻宿主往往还没创建句柄（没排版，可滚范围还是 0，滚了会被夹没）。
+    // 句柄没创建时留着标记不清 —— HandleCreated / InitialSync 那两条路会再走一次 Refresh，那时才排。
+    private static void QueueViewportRestore(Control host, SurfaceState state)
+    {
+        if (!state.HasPendingRestore || state.RestoreQueued || !host.IsHandleCreated) return;
+
+        state.RestoreQueued = true;
+        host.BeginInvoke(new Action(() =>
+        {
+            state.RestoreQueued = false;
+
+            if (!state.HasPendingRestore || !state.IsEnabled) return;
+
+            state.HasPendingRestore = false;
+            ApplyScrollOffset(host, state.PendingRestoreX, state.PendingRestoreY);
+
+            // 滚动落地后立刻把位置写回模型，免得控件与 Layout.ViewportOffset 各说各话。
+            Refresh(host);
+        }));
     }
 
     private static IWorkflowTreeViewModel? ResolveTree(Control host)
