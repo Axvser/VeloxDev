@@ -63,8 +63,12 @@ Context records: `SurfaceViewport`, `SurfaceCanvas`.
 **Behavior:** middle-mouse / space+left / left-on-blank panning; scroll reporting that updates
 `Helper.Viewport` and persists `Layout.ViewportOffset` (survives save/load); **auto-expansion in
 all four directions** — right/down grows the canvas, left/up grows it and shifts the content
-layer so world coordinates stay put. Call `scrollToPosition(scrollerId, x, y)` from JS after
-loading to restore a saved viewport.
+layer so world coordinates stay put.
+
+**Viewport restore is automatic.** When a new `Tree` reaches the component, the surface scrolls
+the host back to the tree's saved `Layout.ViewportOffset` — no host code. You do **not** call
+`scrollToPosition` after loading; that function takes raw scroll pixels, not the world coordinate
+`ViewportOffset` holds.
 
 ---
 

@@ -55,7 +55,13 @@ WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(canvas, tree);
 `BindingContext`, or `Tag`.
 
 **Scroll resolution:** a `ScrollableControl` with `AutoScroll` is read via `AutoScrollPosition`;
-otherwise the persisted `Layout.ViewportOffset` is used.
+otherwise the persisted `Layout.ViewportOffset` is used. Only a measured offset (one of those two
+pan sources) is written back into `Layout.ViewportOffset` — the fallback *is* that value, and
+writing it back would subtract `ActualOffset` a second time.
+
+**Viewport restore is automatic.** When a tree is handed over (`SetWorkflowTree`) the surface
+scrolls the host back to the tree's saved `Layout.ViewportOffset`, deferred until the handle
+exists. You do **not** restore the position yourself.
 
 > Because WinForms has no change-notification pipeline, **you call `Refresh(host)` after each
 > mutation** (node moved, tree loaded, session changed). This is the deliberate pull model.

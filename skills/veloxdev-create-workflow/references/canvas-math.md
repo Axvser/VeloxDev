@@ -234,4 +234,6 @@ Plus `WorkflowBounds` — a struct with `FromNode`, `FromNodes`, `Union`, `IsEmp
 
 ⚙ None of this is thread-safe, and the tree is UI-bound — zoom, pan and virtualization all run on the UI thread.
 
-⚙ **The viewport is not the canvas offset.** `ViewportOffset` is the world position of the visible region (used to restore scroll); `ActualOffset` is the canvas translation. WinForms synthesizes scroll from `ViewportOffset` because it has no scroll host — that is the only place the two are conflated, and it is deliberate.
+⚙ **The viewport is not the canvas offset.** `ViewportOffset` is the world position of the visible region (used to restore scroll); `ActualOffset` is the canvas translation. WinForms falls back to `ViewportOffset` when it cannot read a pan translate because it has no scroll host — that is the only place the two are conflated, and it is deliberate.
+
+⚙ **Both ends of the round trip belong to the surface, not the host.** The adapter persists `ViewportOffset` on every measured scroll and puts the host back on it when a tree arrives, so a load path scrolls nothing (`new-adapter.md` §1; contract in `WorkflowSystem/extension.md` §3.9-10). The conversions are `ViewportOffsetFromScroll` (world) and `ViewportRestoreScroll` (scroll) — the pair exists to make the direction impossible to get wrong at a call site.

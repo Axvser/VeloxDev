@@ -211,7 +211,8 @@ Undoable: create node, create/delete slot, connect, delete node, delete link, `S
 
 ## Serialization
 
-It lives in `VeloxDev.Core.Extension`, namespace `VeloxDev.MVVM.Serialization`, and is Newtonsoft-based.
+It lives in `VeloxDev.Core.Extension`, namespace `VeloxDev.MVVM.Serialization`; the engine is
+`VeloxDev.Serialization` in `VeloxDev.Core`. **There is no Newtonsoft anywhere.**
 
 ```csharp
 var json = tree.Serialize();
@@ -224,13 +225,25 @@ WorkflowSurfaceBehavior.Refresh(view);                     // re-bind the views
 
 ⚙ **Add `VeloxDev.Core.Extension` to save or load a graph.** `VeloxDev.Core` alone has no serializer.
 
-⚙ Settings are `TypeNameHandling.Auto` + `PreserveReferencesHandling.Objects` + `WritablePropertiesOnlyResolver` + a `DictionaryKeyConverter`. The last two are load-bearing: the resolver drops every read-only member, and the converter is what lets `LinksMap` — a dictionary keyed by *slot interfaces* — round-trip by `$ref` id instead of by string.
+⚙ **The world is closed.** A type takes part in the document when the generator compiled a writer for it: a
+workflow component, a type carrying `[VeloxProperty]` / `[VeloxCommand]` / `[VeloxSerializable]`, or a type
+reachable from one of those along a member's *declared* type. A plain POCO that nothing declares cannot be
+written at all — it throws `MissingWriter`. That closure is what removes the reflection, and it is why a type
+you want in the file must either carry `[VeloxSerializable]` or be declared from something that is already in.
 
-⚙ **The JSON stores world coordinates**, not collapsed ones. `Anchor`/`Size` expand themselves back to world in `[OnSerializing]` and collapse again in `[OnSerialized]`, and push the deserialized values back through the owning node in `[OnDeserialized]` (because Newtonsoft writes the transient copy in place and skips the node's setter).
+⚙ **Only writable members are written.** A `{ get; private set; }` property is runtime state the document never
+sees. A writable property of a delegate type is written but cannot be read back — keep hooks out of writable
+properties.
 
-⚙ `SlotEnumerator` has its own `[OnDeserializing]` (clear `Items`/`ConditionMap` — JSON.NET *appends* to an existing collection) and `[OnDeserialized]` (re-resolve `SelectorType` by name over the loaded assemblies, rebuild `ConditionMap`, re-register each slot with its parent node).
+⚙ **The JSON stores world coordinates**, not collapsed ones: `Anchor`/`Size` expand to world when written and
+collapse again when read.
 
-⚙ The tree's default constructor runs `InitializeWorkflow()` during Newtonsoft construction, so the helper is already installed before properties are populated — do not fight it.
+⚙ `SlotEnumerator` re-resolves its selector type from the serialized `SelectorTypeName` on read — the
+constructor's default does not survive.
+
+⚙ **The saved viewport comes back by itself.** The surface restores `Layout.ViewportOffset` when the tree is
+handed to it, so a load path scrolls nothing itself — see `WorkflowSystem/extension.md` §3.9-10. What the host
+still owes is the two lines above (`UpdateCommand` + `Refresh`, and the binding that delivers the tree).
 
 ## Pitfalls
 

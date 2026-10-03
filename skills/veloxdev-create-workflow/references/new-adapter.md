@@ -35,6 +35,15 @@ If it does not — a self-drawn surface, or a framework with no scroll viewer �
 
 ⚙ Whichever you choose, `Viewport` is written **only by the adapter**, and always in canvas-local coordinates.
 
+⚙ **Two more members are the adapter's, and they come in a pair:** persist `Layout.ViewportOffset` whenever the
+scroll is measured (`WorkflowSurfaceMath.ViewportOffsetFromScroll`, world coordinates), and restore the host to
+it when a tree arrives (`HasViewportRestore` → `ViewportRestoreScroll` → clamp). Half of that pair is not an
+implementation — without the restore a saved graph opens at the origin, without the persist the file records
+nothing. Capture the offset **before** your own first refresh: the refresh writes `ViewportOffset` from the
+control's current position and would erase it. One restore per tree, keyed on the tree reference. Centering a
+graph with no saved position is the host's call, not yours. Every adapter here is a worked example —
+`WorkflowSystem/extension.md` §3.9-10 is the contract.
+
 ### 2. Scale container
 
 `Viewbox` if the framework has one — the three XAML adapters and Jalium all use it, with the node's content pinned to its design size so the factor is exactly `1/Scale`.
