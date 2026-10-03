@@ -32,6 +32,8 @@ public abstract class WorkflowNodeView : Canvas
     private INotifyPropertyChanged? _layoutNotify;
     private PropertyChangedEventHandler? _layoutHandler;
     private INotifyCollectionChanged? _slotsNotify;
+    private IDisposable? _nodeEvents;
+    private NodeEventSink? _eventSink;
 
     /// <summary>Creates the card.</summary>
     protected WorkflowNodeView()
@@ -94,6 +96,33 @@ public abstract class WorkflowNodeView : Canvas
     /// <summary>Repaints the card.</summary>
     protected void InvalidateCard() => _layer.InvalidateVisual();
 
+    /// <summary>Called before the node is placed somewhere new; refuse that placement via the argument's handle.</summary>
+    /// <param name="e">The placement, both anchors complete.</param>
+    protected virtual void OnMoving(NodeMoveEventArgs e) { }
+
+    /// <summary>Called after the node was placed.</summary>
+    /// <param name="e">The placement that happened.</param>
+    protected virtual void OnMoved(NodeMoveEventArgs e) { }
+
+    /// <summary>Called before the node's size changes; refuse that resize via the argument's handle.</summary>
+    /// <param name="e">The resize that is about to happen.</param>
+    protected virtual void OnResizing(NodeResizeEventArgs e) { }
+
+    /// <summary>Called after the node's size changed.</summary>
+    /// <param name="e">The resize that happened.</param>
+    protected virtual void OnResized(NodeResizeEventArgs e) { }
+
+    /// <summary>Called before the node is torn down; refuse that deletion via the argument's handle.</summary>
+    /// <param name="e">The node about to be deleted.</param>
+    protected virtual void OnDeleting(NodeEventArgs e) { }
+
+    /// <summary>Called after the node was torn down.</summary>
+    /// <param name="e">The node that was deleted.</param>
+    protected virtual void OnDeleted(NodeEventArgs e) { }
+
+    // 视图换宿主时复用同一个 sink；sink 只把调用转给可重写钩子，不持有额外状态。
+    private NodeEventSink EventSink => _eventSink ??= new NodeEventSink(this);
+
     // 每个端口一个槽位视图，摆在 PortLayout 说的位置上。卡片自己只画外壳与文字 —— 端口是视图，不是画出来的圆点，
     // 这样用户的 slot-view 条目才有东西可改。
     private void RebuildSlotViews()
@@ -132,9 +161,13 @@ public abstract class WorkflowNodeView : Canvas
         if (_node is INotifyPropertyChanged old) old.PropertyChanged -= OnNodeChanged;
         UnsubscribeLayout();
         UnsubscribeSlots();
+        UnsubscribeNodeEvents();
 
         _node = DataContext as IWorkflowNodeViewModel;
         if (_node is INotifyPropertyChanged notify) notify.PropertyChanged += OnNodeChanged;
+
+        // 模型事件由 Core 的 relay 接一次，转发到本类的可重写钩子；Helper 不提供事件时 Attach 返回 null。
+        _nodeEvents = _node is null ? null : WorkflowEventRelay.Attach(_node, EventSink);
 
         // 工作区缩放会改 ActualOffset，卡片要跟着移位。
         if (_node?.Parent?.Layout is INotifyPropertyChanged layout)
@@ -190,6 +223,12 @@ public abstract class WorkflowNodeView : Canvas
             _layoutNotify = null;
             _layoutHandler = null;
         }
+    }
+
+    private void UnsubscribeNodeEvents()
+    {
+        _nodeEvents?.Dispose();
+        _nodeEvents = null;
     }
 
     private void OnSlotsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -250,5 +289,21 @@ public abstract class WorkflowNodeView : Canvas
         public NodeCardLayer(WorkflowNodeView owner) => _owner = owner;
 
         protected override void OnRender(DrawingContext dc) => _owner.DrawCard(dc);
+    }
+
+    // relay 的宿主：把每个 sink 方法原样转给对应的 protected virtual，派生类只需重写钩子。
+    private sealed class NodeEventSink(WorkflowNodeView owner) : IWorkflowNodeEventSink
+    {
+        public void OnMoving(NodeMoveEventArgs e) => owner.OnMoving(e);
+
+        public void OnMoved(NodeMoveEventArgs e) => owner.OnMoved(e);
+
+        public void OnResizing(NodeResizeEventArgs e) => owner.OnResizing(e);
+
+        public void OnResized(NodeResizeEventArgs e) => owner.OnResized(e);
+
+        public void OnDeleting(NodeEventArgs e) => owner.OnDeleting(e);
+
+        public void OnDeleted(NodeEventArgs e) => owner.OnDeleted(e);
     }
 }

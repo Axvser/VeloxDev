@@ -253,6 +253,19 @@ public abstract class WorkflowTreeView : UserControl
     {
     }
 
+    /// <summary>Called before a connection is made between two of the bound tree's ports.</summary>
+    /// <param name="e">The two ports the connection would join.</param>
+    /// <remarks>Set <see cref="WorkflowEventHandle.PreventDefault"/> on the argument's handle to cancel this one drag.</remarks>
+    protected virtual void OnConnecting(ConnectionEventArgs e)
+    {
+    }
+
+    /// <summary>Called once a connection was made and the link exists.</summary>
+    /// <param name="e">The two ports the connection joined.</param>
+    protected virtual void OnConnected(ConnectionEventArgs e)
+    {
+    }
+
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
@@ -267,6 +280,8 @@ public abstract class WorkflowTreeView : UserControl
 
     private IWorkflowTreeViewModel? _tree;
     private INotifyPropertyChanged? _notifier;
+    private IDisposable? _modelEvents;
+    private readonly IWorkflowTreeEventSink _eventSink;
     private IWorkflowTemplateSelector? _templateSelector;
     private ViewFactorySelector _poolSelector;
     private bool _layoutPending;
@@ -299,6 +314,7 @@ public abstract class WorkflowTreeView : UserControl
     /// <summary>Creates the surface and wires the attached behaviours.</summary>
     protected WorkflowTreeView()
     {
+        _eventSink = new TreeEventSink(this);
         DoubleBuffered = true;
         BackColor = _surfaceBackground;
 
@@ -374,6 +390,10 @@ public abstract class WorkflowTreeView : UserControl
 
     private void AttachTree()
     {
+        // 学到所管的树这一处接上模型事件；先摘掉上一份订阅再按新树接。
+        _modelEvents?.Dispose();
+        _modelEvents = _tree is null ? null : WorkflowEventRelay.Attach(_tree, _eventSink);
+
         WorkflowSurfaceBehavior.SetWorkflowTree(this, _tree);
 
         // 重新配置池（先摘掉上一个管理器再挂上）。条目源是树的可见集，由 ApplyPan 经 helper.Viewport 保持
@@ -771,6 +791,9 @@ public abstract class WorkflowTreeView : UserControl
                 _notifier = null;
             }
 
+            _modelEvents?.Dispose();
+            _modelEvents = null;
+
             if (_rulerOverlay is not null)
             {
                 _rulerOverlay.Dispose();
@@ -785,6 +808,13 @@ public abstract class WorkflowTreeView : UserControl
     {
         public bool IsLink { get; set; }
         public bool IsNode { get; set; }
+    }
+
+    // 基类自己接模型事件、自己摘订阅，把每条转发进对应的可重写钩子；宿主只重写钩子，不碰 Helper。
+    private sealed class TreeEventSink(WorkflowTreeView owner) : IWorkflowTreeEventSink
+    {
+        public void OnConnecting(ConnectionEventArgs e) => owner.OnConnecting(e);
+        public void OnConnected(ConnectionEventArgs e) => owner.OnConnected(e);
     }
 
     // 把宿主给的两个工厂（或宿主自带的 selector）包起来，顺手记下每个视图的角色。

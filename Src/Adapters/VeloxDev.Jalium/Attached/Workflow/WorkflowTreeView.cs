@@ -35,6 +35,8 @@ public class WorkflowTreeView : Canvas
     public const double CanvasHeight = 2000;
 
     private IWorkflowTreeViewModel? _tree;
+    private IDisposable? _treeEvents;
+    private TreeEventSink? _eventSink;
     private ScrollViewer? _scrollViewer;
 
     /// <summary>
@@ -178,11 +180,16 @@ public class WorkflowTreeView : Canvas
     /// <param name="tree">The tree, or <see langword="null"/> to unbind.</param>
     public void SetTree(IWorkflowTreeViewModel? tree)
     {
+        _treeEvents?.Dispose();
+        _treeEvents = null;
         _tree = tree;
         if (_tree is null)
         {
             return;
         }
+
+        // 模型事件由 Core 的 relay 接一次，转发到本类的可重写钩子；Helper 不提供事件时 Attach 返回 null。
+        _treeEvents = WorkflowEventRelay.Attach(_tree, EventSink);
 
         ViewPool.SetTemplateSelector(this, TemplateSelector);
         ViewPool.SetItemsSource(this, _tree.GetHelper().VisibleItems);
@@ -244,6 +251,17 @@ public class WorkflowTreeView : Canvas
         _scrollViewer.ScrollToHorizontalOffset(targetH);
         _scrollViewer.ScrollToVerticalOffset(targetV);
     }
+
+    /// <summary>Called before a connection is made; refuse that drag via the argument's handle.</summary>
+    /// <param name="e">The two ports the connection would join.</param>
+    protected virtual void OnConnecting(ConnectionEventArgs e) { }
+
+    /// <summary>Called once the link exists.</summary>
+    /// <param name="e">The two ports the connection joined.</param>
+    protected virtual void OnConnected(ConnectionEventArgs e) { }
+
+    // 换绑定树时复用同一个 sink；sink 只把调用转给可重写钩子，不持有额外状态。
+    private TreeEventSink EventSink => _eventSink ??= new TreeEventSink(this);
 
     /// <inheritdoc />
     protected override void OnRender(DrawingContext dc)
@@ -685,5 +703,13 @@ public class WorkflowTreeView : Canvas
         UpdateCanvasSize();
         InvalidateVisual();
         Changed?.Invoke();
+    }
+
+    // relay 的宿主：把每个 sink 方法原样转给对应的 protected virtual，派生类只需重写钩子。
+    private sealed class TreeEventSink(WorkflowTreeView owner) : IWorkflowTreeEventSink
+    {
+        public void OnConnecting(ConnectionEventArgs e) => owner.OnConnecting(e);
+
+        public void OnConnected(ConnectionEventArgs e) => owner.OnConnected(e);
     }
 }

@@ -22,6 +22,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 public class WorkflowSlotView : FrameworkElement
 {
     private IWorkflowSlotViewModel? _slot;
+    private IDisposable? _slotEvents;
+    private SlotEventSink? _eventSink;
 
     private static readonly Brush SenderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x63, 0x47));
     private static readonly Brush ReceiverBrush = new SolidColorBrush(Color.FromRgb(0x32, 0xCD, 0x32));
@@ -90,6 +92,17 @@ public class WorkflowSlotView : FrameworkElement
     /// <summary>The slot this glyph is showing, taken from the <c>DataContext</c>.</summary>
     protected IWorkflowSlotViewModel? Slot => _slot;
 
+    /// <summary>Called before the slot's channel changes; refuse that change via the argument's handle.</summary>
+    /// <param name="e">The change that is about to happen.</param>
+    protected virtual void OnChannelChanging(SlotChannelEventArgs e) { }
+
+    /// <summary>Called after the slot's channel changed.</summary>
+    /// <param name="e">The change that happened.</param>
+    protected virtual void OnChannelChanged(SlotChannelEventArgs e) { }
+
+    // 视图换宿主时复用同一个 sink；sink 只把调用转给可重写钩子，不持有额外状态。
+    private SlotEventSink EventSink => _eventSink ??= new SlotEventSink(this);
+
     /// <inheritdoc />
     protected override void OnRender(DrawingContext dc)
     {
@@ -102,10 +115,15 @@ public class WorkflowSlotView : FrameworkElement
     private void OnDataContextChanged(object? sender, DependencyPropertyChangedEventArgs e)
     {
         if (_slot is INotifyPropertyChanged old) old.PropertyChanged -= OnSlotChanged;
+        _slotEvents?.Dispose();
+        _slotEvents = null;
 
         _slot = DataContext as IWorkflowSlotViewModel;
 
         if (_slot is INotifyPropertyChanged notify) notify.PropertyChanged += OnSlotChanged;
+
+        // 模型事件由 Core 的 relay 接一次，转发到本类的可重写钩子；Helper 不提供事件时 Attach 返回 null。
+        _slotEvents = _slot is null ? null : WorkflowEventRelay.Attach(_slot, EventSink);
 
         ResizeToGlyph();
         InvalidateVisual();
@@ -137,5 +155,13 @@ public class WorkflowSlotView : FrameworkElement
         if (sender) return SenderBrush;
         if (receiver) return ReceiverBrush;
         return new SolidColorBrush(_standbyColor);
+    }
+
+    // relay 的宿主：把每个 sink 方法原样转给对应的 protected virtual，派生类只需重写钩子。
+    private sealed class SlotEventSink(WorkflowSlotView owner) : IWorkflowSlotEventSink
+    {
+        public void OnChannelChanging(SlotChannelEventArgs e) => owner.OnChannelChanging(e);
+
+        public void OnChannelChanged(SlotChannelEventArgs e) => owner.OnChannelChanged(e);
     }
 }

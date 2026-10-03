@@ -25,11 +25,14 @@ public abstract class WorkflowNodeView : UserControl, IWorkflowSurfaceNodeView
 {
     private IWorkflowNodeViewModel? _node;
     private readonly ModelChangeRelay _relay;
+    private readonly IWorkflowNodeEventSink _eventSink;
+    private IDisposable? _modelEvents;
 
     /// <summary>Creates the card.</summary>
     protected WorkflowNodeView()
     {
         _relay = new ModelChangeRelay(this, OnNodePropertyChanged);
+        _eventSink = new NodeEventSink(this);
 
         // 不透明底色：WinForms 里没有可靠的透明合成，卡片自己擦成不透明色。alpha 强制 255 —— .NET 10 上给
         // BackColor 一个半透明值会抛（没有 SupportsTransparentBackColor 时要求 A == 0xFF）。
@@ -58,6 +61,8 @@ public abstract class WorkflowNodeView : UserControl, IWorkflowSurfaceNodeView
             _node = value;
             Tag = value;
             _relay.Set(value as INotifyPropertyChanged);
+            // 基类在学到自己所管的节点这一处接上模型事件；换绑时 UnsubscribeNode 已经摘掉上一份订阅。
+            _modelEvents = value is null ? null : WorkflowEventRelay.Attach(value, _eventSink);
 
             if (_node?.Slots is INotifyCollectionChanged slots)
             {
@@ -136,6 +141,45 @@ public abstract class WorkflowNodeView : UserControl, IWorkflowSurfaceNodeView
     /// <summary>Called when the zoom collapse factor changes; re-flow the card's fixed metrics here.</summary>
     /// <param name="collapse">1/Scale.</param>
     protected virtual void OnCollapseChanged(double collapse)
+    {
+    }
+
+    /// <summary>Called before the bound node is placed somewhere new.</summary>
+    /// <param name="e">The placement that is about to happen, both anchors complete.</param>
+    /// <remarks>Set <see cref="WorkflowEventHandle.PreventDefault"/> on the argument's handle to refuse this one move.</remarks>
+    protected virtual void OnMoving(NodeMoveEventArgs e)
+    {
+    }
+
+    /// <summary>Called after the bound node was placed.</summary>
+    /// <param name="e">The placement that happened.</param>
+    protected virtual void OnMoved(NodeMoveEventArgs e)
+    {
+    }
+
+    /// <summary>Called before the bound node's size changes.</summary>
+    /// <param name="e">The resize that is about to happen.</param>
+    /// <remarks>Set <see cref="WorkflowEventHandle.PreventDefault"/> on the argument's handle to keep the current size.</remarks>
+    protected virtual void OnResizing(NodeResizeEventArgs e)
+    {
+    }
+
+    /// <summary>Called after the bound node's size changed.</summary>
+    /// <param name="e">The resize that happened.</param>
+    protected virtual void OnResized(NodeResizeEventArgs e)
+    {
+    }
+
+    /// <summary>Called before the bound node is torn down.</summary>
+    /// <param name="e">The node about to be deleted.</param>
+    /// <remarks>Set <see cref="WorkflowEventHandle.PreventDefault"/> on the argument's handle to keep it in the tree.</remarks>
+    protected virtual void OnDeleting(NodeEventArgs e)
+    {
+    }
+
+    /// <summary>Called after the bound node was torn down.</summary>
+    /// <param name="e">The node that was deleted.</param>
+    protected virtual void OnDeleted(NodeEventArgs e)
     {
     }
 
@@ -256,6 +300,8 @@ public abstract class WorkflowNodeView : UserControl, IWorkflowSurfaceNodeView
     private void UnsubscribeNode()
     {
         _relay.Clear();
+        _modelEvents?.Dispose();
+        _modelEvents = null;
 
         if (_node?.Slots is INotifyCollectionChanged slots)
         {
@@ -362,5 +408,16 @@ public abstract class WorkflowNodeView : UserControl, IWorkflowSurfaceNodeView
         }
 
         return null;
+    }
+
+    // 基类自己接模型事件、自己摘订阅，把每条转发进对应的可重写钩子；宿主只重写钩子，不碰 Helper。
+    private sealed class NodeEventSink(WorkflowNodeView owner) : IWorkflowNodeEventSink
+    {
+        public void OnMoving(NodeMoveEventArgs e) => owner.OnMoving(e);
+        public void OnMoved(NodeMoveEventArgs e) => owner.OnMoved(e);
+        public void OnResizing(NodeResizeEventArgs e) => owner.OnResizing(e);
+        public void OnResized(NodeResizeEventArgs e) => owner.OnResized(e);
+        public void OnDeleting(NodeEventArgs e) => owner.OnDeleting(e);
+        public void OnDeleted(NodeEventArgs e) => owner.OnDeleted(e);
     }
 }

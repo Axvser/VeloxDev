@@ -25,6 +25,8 @@ public class WorkflowSlotView : Control
 {
     private IWorkflowSlotViewModel? _slot;
     private readonly ModelChangeRelay _relay;
+    private readonly IWorkflowSlotEventSink _eventSink;
+    private IDisposable? _modelEvents;
     private GraphicsPath? _iconPath;
     private string _slotPath = string.Empty;
     private float _pathViewBox = 1024f;
@@ -36,6 +38,7 @@ public class WorkflowSlotView : Control
     public WorkflowSlotView()
     {
         _relay = new ModelChangeRelay(this, _ => Invalidate());
+        _eventSink = new SlotEventSink(this);
 
         // 全名限定：本文件的命名空间嵌在 VeloxDev.WorkflowSystem 里，裸写 `Size` 会解析成模型的那个 Size。
         Size = new System.Drawing.Size(20, 20);
@@ -69,6 +72,10 @@ public class WorkflowSlotView : Control
             Tag = value;
             Visible = value is not null;
             _relay.Set(value as INotifyPropertyChanged);
+
+            // 学到所管的插槽这一处接上模型事件；先摘掉上一份订阅再按新模型接。
+            _modelEvents?.Dispose();
+            _modelEvents = value is null ? null : WorkflowEventRelay.Attach(value, _eventSink);
 
             Invalidate();
         }
@@ -142,6 +149,19 @@ public class WorkflowSlotView : Control
     /// <returns>The colour.</returns>
     protected static Color ParseColor(string hex) => WorkflowSurfaceColors.Parse(hex);
 
+    /// <summary>Called before the bound slot's channel changes.</summary>
+    /// <param name="e">The change that is about to happen.</param>
+    /// <remarks>Set <see cref="WorkflowEventHandle.PreventDefault"/> on the argument's handle to keep the current channel.</remarks>
+    protected virtual void OnChannelChanging(SlotChannelEventArgs e)
+    {
+    }
+
+    /// <summary>Called after the bound slot's channel changed.</summary>
+    /// <param name="e">The change that happened.</param>
+    protected virtual void OnChannelChanged(SlotChannelEventArgs e)
+    {
+    }
+
     // 不透明底色：WinForms 没有可靠的透明合成，所以插槽擦成父控件（不透明）的底色，而不是声明
     // SupportsTransparentBackColor 去走那条半透明合成链。擦成 Parent.BackColor 是安全的 —— 每个宿主面板都不
     // 透明，Clear 永远看不到 Color.Transparent（GDI 会把它画成黑）。
@@ -211,6 +231,8 @@ public class WorkflowSlotView : Control
         if (disposing)
         {
             _relay.Clear();
+            _modelEvents?.Dispose();
+            _modelEvents = null;
             DisposeIconPath();
         }
 
@@ -404,5 +426,12 @@ public class WorkflowSlotView : Control
 
             return tokens;
         }
+    }
+
+    // 基类自己接模型事件、自己摘订阅，把每条转发进对应的可重写钩子；宿主只重写钩子，不碰 Helper。
+    private sealed class SlotEventSink(WorkflowSlotView owner) : IWorkflowSlotEventSink
+    {
+        public void OnChannelChanging(SlotChannelEventArgs e) => owner.OnChannelChanging(e);
+        public void OnChannelChanged(SlotChannelEventArgs e) => owner.OnChannelChanged(e);
     }
 }
