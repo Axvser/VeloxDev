@@ -150,12 +150,34 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Help
 
 ### 3.6 交互（命中测试）
 
-Core 这边**没有命中测试代码**。链路是：
+分两层，别把第二层当成第一层：
+
+**① 手势那层仍然没有 Core 代码** —— 命中谁、拖动还是连线，判断在适配器的 Behavior 里，判断完调组件的 `IVeloxCommand`：
 
 ```
 适配器 Behavior 的 pointer 事件 → 决定命中谁 → 调组件的 IVeloxCommand（如 node.MoveCommand / slot.SendConnectionCommand）
                                 → StandardEx → 改模型状态 → 属性变更通知 → 视图重绘
 ```
+
+**② 连线的命中/高亮/删除现在归 Core**（2026-10-03 起）。链路是：
+
+```
+连线视图画完 → link.PublishCurve(曲线, 自己)      // 视图是形状的所有者
+适配器表面把原生指针翻译成 PointerEvent → LinkInteraction.For(tree).Publish(...)
+    → 对着已发布的曲线判距（LinkHitTestEx / LinkCurve）→ 得到 HoveredLink
+    → AutoHighlight：通过 ILinkHighlight 点亮那个「自己」
+    → AutoDelete：Delete 键直接执行 link.DeleteCommand
+    → 同时报 HoverChanged / LinkPressed / LinkDeleteRequested 给宿主
+```
+
+要点：
+
+- **hub 只有一个位置**：`LinkInteraction.For(tree)`（`GUI/Events/LinkInteraction.cs`），一棵树一个实例、`ConditionalWeakTable` 缓存。适配器只**转发**，宿主与连线视图都用这同一个调用取它 —— 没有「每个表面各持一个」这种说法。
+- **命中判据是「已发布的曲线」**，不是「锚点测没测到」。视图画不出来时用 `PublishCurve(null)` 撤回，所以「没有曲线」就等于「那里没有东西」。**不要**改回按 `IsRenderReady()` 判 —— Jalium 按设计从不写 `slot.Anchor`，那样会让它整家连线静默失效。
+- **命中面只是画出来的那道描边**，不是整块画布：曲线就是视图画的那条，半径 `LinkHitTestEx.DefaultHitRadius`（6）。
+- **曲线是运行期几何，永远不序列化**（别把它挂上任何 `IVeloxJson*` 路径）。
+
+⇒ 「加一个新的连线交互动作」（比如双击重命名）现在也是改 Core 或宿主，不是改七家 demo —— 但**手势**（拖动、连线）仍是适配器的事。
 
 节点命令共 9 个（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:30-65`），Tree 9 个（`IWorkflowTreeViewModel.cs:34-69`），Slot 4 个（`IWorkflowSlotViewModel.cs:38-53`），Link 1 个（`IWorkflowLinkViewModel.cs:25`），另有全部组件共有的 `CloseCommand`（`IWorkflowViewModel.cs:26`）。
 

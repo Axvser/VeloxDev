@@ -17,32 +17,32 @@ namespace Demo.Views;
 /// a travelling comet so the direction of data flow is readable at a glance.
 /// <para>
 /// The comet — a bright head, a tail that fades behind it, and a halo that follows the head — is cut out of the
-/// curve <b>by arc length</b> rather than by a gradient brush, and that is the whole reason this view keeps its
-/// own sample table. GDI+ made the difference plain: a <see cref="LinearGradientBrush"/>'s axis is the straight
-/// line between the two ends, so on a curve it lights the string rather than the rope; its stops can only be
-/// given at construction and are refused unless they span the whole axis; and a pen keeps the stops of the brush
-/// it was built from, so the band had to be re-plumbed every frame. Cutting the tail out of the geometry by arc
-/// length needs none of that — each slice is given its own colour and width.
+/// curve <b>by arc length</b> rather than by a gradient brush. GDI+ made the difference plain: a
+/// <see cref="LinearGradientBrush"/>'s axis is the straight line between the two ends, so on a curve it lights the
+/// string rather than the rope; its stops can only be given at construction and are refused unless they span the
+/// whole axis; and a pen keeps the stops of the brush it was built from, so the band had to be re-plumbed every
+/// frame. Cutting the tail out of the geometry by arc length needs none of that — each slice is given its own
+/// colour and width. The flattened curve, its arc-length table and the hit test all come from Core's
+/// <see cref="LinkCurve"/> now; this view only draws it and submits it through <see cref="LinkHitTestEx.PublishCurve"/>.
 /// </para>
 /// <para>
 /// The host canvas draws this link (<see cref="Render"/>) rather than showing it as a child window, so it never
 /// participates in WinForms' fragile transparent compositing. Having no window, it can be neither hovered nor
-/// focused: both live in the host. The canvas asks this view where its curve is (<see cref="HitTest"/>, answered
-/// from the same sample table <see cref="Render"/> strokes), sets <see cref="IsHighlighted"/> for the selection
-/// colour, and handles the <c>Delete</c> key itself.
+/// focused: both live in the host. The Core interaction hub sets <see cref="IsHighlighted"/> through
+/// <see cref="ILinkHighlight"/> and handles the <c>Delete</c> key itself.
 /// </para>
 /// </summary>
-public sealed class LinkView : Control
+public sealed class LinkView : Control, ILinkHighlight
 {
-    // 弧长表的分辨率。128 段在缩放上限下也看不出折线感，而每帧重建它只是几百次算术。
-    private const int SampleCount = 128;
+    // 曲线的最小水平拉出量（画布单位）：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
+    private const double PullMinimum = 40d;
 
     // 线宽；选中时加 1.5，与其它六家的连线一致
     private const float LineThickness = 2f;
     private const float HighlightThickness = 3.5f;
 
-    // 选中色沿用其它六家（OrangeRed）。色值写字面量是因为 System.Drawing 的 KnownColor 表里没有它
-    private static readonly Color HighlightColor = Color.FromArgb(255, 255, 69, 0);
+    // 选中色：柔和的淡青高光（与适配器 hub 的默认同色）。橙红太刺眼，用户明确否掉了。
+    private static readonly Color HighlightColor = Color.FromArgb(255, 0xFF, 0xFF, 0xFF);
 
     // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
     private const double TailFraction = 0.30;
@@ -69,11 +69,9 @@ public sealed class LinkView : Control
     private double _bandHead;
     private double _bandIntensity;
 
-    // 弧长表：_cumulative[i] 是 _samples[0..i] 的累计长度，_length 是全长。
-    // 三者只在端点变化时重建 —— 每帧渲染要按弧长取点，现算不划算。
-    private PointF[] _samples = [];
-    private double[] _cumulative = [];
-    private double _length;
+    // 本帧这条线的扁平化几何（画布/世界坐标，与指针同一系）。弧长、包围盒与命中判定都归它 ——
+    // 本视图不再自存采样表。端点变化时重建一次。
+    private LinkCurve? _curve;
 
     public LinkView()
     {
@@ -113,11 +111,7 @@ public sealed class LinkView : Control
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; RequestPaint(); } }
 
-    /// <summary>
-    /// Whether the pointer is on this link. A highlighted link carries the selection colour instead of its own,
-    /// one and a half pixels more of it, and a less transparent body — the reading the other six demos' link
-    /// views give the link that is about to be deleted.
-    /// </summary>
+    /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool IsHighlighted
@@ -176,6 +170,9 @@ public sealed class LinkView : Control
             _notifier.PropertyChanged -= OnLinkChanged;
             _notifier = null;
         }
+
+        // 换绑另一条线：旧连线不能再指着这个渲染器，否则它会把一条已经不由这里画的线报成可命中。
+        _link?.PublishCurve(null);
 
         _link = link;
         Tag = link;
@@ -304,6 +301,9 @@ public sealed class LinkView : Control
     {
         if (disposing)
         {
+            // 渲染器要走了：撤掉它发布的曲线，免得一条已经不画的线继续可命中。
+            _link?.PublishCurve(null);
+
             UnsubscribeEndpoints();
             if (_notifier is not null)
             {
@@ -352,7 +352,9 @@ public sealed class LinkView : Control
         // a stale frame at NaN/origin before measurement lands. Placeholder endpoints (Parent
         // is null, e.g. the VirtualLink gesture) are exempt and render immediately.
         if (_link is not null && !WorkflowSlotUpdateGate.IsLinkRenderReady(_link)) return;
-        if (_samples.Length < 2 || _length <= 0) return;
+        var curve = _curve;
+        if (curve is null || curve.Length <= 0) return;
+        var length = curve.Length;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -361,20 +363,20 @@ public sealed class LinkView : Control
 
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
         // 两端才不像被截断的横截面
-        DrawSegment(g, 0, _length, Fade(color, 0.10), thickness + 9);
-        DrawSegment(g, 0, _length, Fade(color, 0.16), thickness + 4);
+        DrawSegment(g, 0, length, Fade(color, 0.10), thickness + 9);
+        DrawSegment(g, 0, length, Fade(color, 0.16), thickness + 4);
 
         // 虚拟连线是指针下的橡皮筋：虚线、不流动
         if (_isVirtual)
         {
             using var pen = new Pen(Fade(color, 0.75), thickness) { DashStyle = DashStyle.Custom, DashPattern = [4f, 2f] };
-            using var path = BuildPath(0, _length);
+            using var path = BuildPath(0, length);
             g.DrawPath(pen, path);
             return;
         }
 
         // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来；选中时抬透明度，线更实
-        DrawSegment(g, 0, _length, Fade(color, _isHighlighted ? 0.85 : 0.55), thickness);
+        DrawSegment(g, 0, length, Fade(color, _isHighlighted ? 0.85 : 0.55), thickness);
 
         if (_bandIntensity > 0.001)
         {
@@ -386,8 +388,9 @@ public sealed class LinkView : Control
     // 不用渐变刷是因为它的轴是两端之间的直线，在曲线上会把光打偏（见类注释）。
     private void DrawComet(Graphics g, Color color, float thickness)
     {
-        double head = Math.Clamp(_bandHead, 0, 1) * _length;
-        double tail = TailFraction * _length;
+        var curve = _curve!;
+        double head = Math.Clamp(_bandHead, 0, 1) * curve.Length;
+        double tail = TailFraction * curve.Length;
 
         // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来
         for (int pass = 0; pass < 2; pass++)
@@ -401,7 +404,7 @@ public sealed class LinkView : Control
 
                 double l0 = head - (tail * (1 - f0));
                 double l1 = head - (tail * (1 - f1));
-                if (l1 <= 0 || l0 >= _length) continue;
+                if (l1 <= 0 || l0 >= curve.Length) continue;
 
                 // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
                 double a = _bandIntensity * f0 * f0;
@@ -431,17 +434,18 @@ public sealed class LinkView : Control
     private GraphicsPath BuildPath(double from, double to)
     {
         var path = new GraphicsPath();
-        if (_samples.Length < 2) return path;
+        var curve = _curve;
+        if (curve is null || curve.Length <= 0) return path;
 
-        to = Math.Min(to, _length);
-        from = Math.Clamp(from, 0, _length);
+        to = Math.Min(to, curve.Length);
+        from = Math.Clamp(from, 0, curve.Length);
 
-        var points = new List<PointF>(_samples.Length + 2) { PointAtLength(from) };
-        for (int i = 0; i < _samples.Length; i++)
+        var points = new List<PointF>(curve.Count + 2) { PointAtLength(from) };
+        for (int i = 0; i < curve.Count; i++)
         {
-            double l = _cumulative[i];
+            double l = curve.LengthAt(i);
             if (l <= from || l >= to) continue;
-            points.Add(_samples[i]);
+            points.Add(new PointF((float)curve.XAt(i), (float)curve.YAt(i)));
         }
 
         points.Add(PointAtLength(to));
@@ -453,7 +457,7 @@ public sealed class LinkView : Control
 
     /// <summary>
     /// Whether <paramref name="worldPoint"/> lies within <paramref name="radius"/> of the curve, measured against
-    /// the very sample table <see cref="Render"/> strokes — so the reachable strip bends with the curve instead of
+    /// the very geometry <see cref="Render"/> strokes — so the reachable strip bends with the curve instead of
     /// following the straight line between the two ends.
     /// </summary>
     /// <remarks>
@@ -462,110 +466,37 @@ public sealed class LinkView : Control
     /// </remarks>
     public bool HitTest(PointF worldPoint, float radius)
     {
-        // 虚拟连线是指针下的橡皮筋，永远贴在指针上；量不到端点的线没有采样表，也没有可命中的几何
-        if (!_canRender || _isVirtual || _samples.Length < 2 || _length <= 0) return false;
-
-        for (int i = 1; i < _samples.Length; i++)
-        {
-            if (DistanceToSegment(worldPoint, _samples[i - 1], _samples[i]) <= radius) return true;
-        }
-
-        return false;
-    }
-
-    private static float DistanceToSegment(PointF p, PointF a, PointF b)
-    {
-        float abx = b.X - a.X, aby = b.Y - a.Y;
-        var len2 = (abx * abx) + (aby * aby);
-        if (len2 < 0.0001f) return Distance(p, a);
-
-        var t = Math.Clamp((((p.X - a.X) * abx) + ((p.Y - a.Y) * aby)) / len2, 0f, 1f);
-        return Distance(p, new PointF(a.X + (t * abx), a.Y + (t * aby)));
-    }
-
-    private static float Distance(PointF p, PointF q)
-    {
-        var dx = p.X - q.X;
-        var dy = p.Y - q.Y;
-        return MathF.Sqrt((dx * dx) + (dy * dy));
+        // 虚拟连线是指针下的橡皮筋，永远贴在指针上；量不到端点的线没有几何可命中
+        if (!_canRender || _isVirtual || _curve is not { Length: > 0 }) return false;
+        return _curve.Contains(worldPoint.X, worldPoint.Y, radius);
     }
 
     // ── Geometry ─────────────────────────────────────────────────────────────────
 
-    // 弧长表。端点变化时重建，渲染时只读。
+    // 端点变化时重建这条线的扁平化几何，并提交给 Core（LinkHelper 持有它做命中）。
+    // 画与命中共用同一条曲线 —— 本视图不再各自推一遍采样点与弧长。
     private void RefreshGeometry()
     {
         if (!float.IsFinite(_startLeft) || !float.IsFinite(_startTop)
             || !float.IsFinite(_endLeft) || !float.IsFinite(_endTop))
         {
-            _samples = [];
-            _cumulative = [];
-            _length = 0;
+            _curve = null;
+            _link?.PublishCurve(null);
             return;
         }
 
-        var samples = new PointF[SampleCount + 1];
-        for (int i = 0; i <= SampleCount; i++)
-        {
-            samples[i] = BezierAt(i / (double)SampleCount);
-        }
-
-        var cumulative = new double[SampleCount + 1];
-        for (int i = 1; i <= SampleCount; i++)
-        {
-            double dx = samples[i].X - samples[i - 1].X;
-            double dy = samples[i].Y - samples[i - 1].Y;
-            cumulative[i] = cumulative[i - 1] + Math.Sqrt((dx * dx) + (dy * dy));
-        }
-
-        _samples = samples;
-        _cumulative = cumulative;
-        _length = cumulative[SampleCount];
+        _curve = LinkCurve.BuildCubic(_startLeft, _startTop, _endLeft, _endTop, PullMinimum);
+        _link?.PublishCurve(_curve, this);
     }
 
-    // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角
-    private (PointF C1, PointF C2) BezierControls()
-    {
-        double dx = _endLeft - _startLeft;
-
-        // 最小拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，失去「从端口水平出来」的形状
-        double pull = Math.Max(40, Math.Abs(dx) * 0.5);
-
-        return (new PointF((float)(_startLeft + pull), _startTop), new PointF((float)(_endLeft - pull), _endTop));
-    }
-
-    private PointF BezierAt(double t)
-    {
-        var (c1, c2) = BezierControls();
-        double u = 1 - t;
-        double a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
-
-        return new PointF(
-            (float)((a * _startLeft) + (b * c1.X) + (c * c2.X) + (d * _endLeft)),
-            (float)((a * _startTop) + (b * c1.Y) + (c * c2.Y) + (d * _endTop)));
-    }
-
-    // 弧长 → 点。二分找所在采样段再线性插值，所以取点是精确到亚像素的，不受采样密度限制
+    // 弧长 → 点：取点归曲线（内部二分 + 段内插值，精确到亚像素），这里只转换坐标类型。
     private PointF PointAtLength(double len)
     {
-        if (_length <= 0 || _cumulative.Length == 0) return new PointF(_startLeft, _startTop);
+        var curve = _curve;
+        if (curve is null || curve.Length <= 0) return new PointF(_startLeft, _startTop);
 
-        len = Math.Clamp(len, 0, _length);
-
-        int lo = 0, hi = _cumulative.Length - 1;
-        while (hi - lo > 1)
-        {
-            int mid = (lo + hi) / 2;
-            if (_cumulative[mid] <= len) lo = mid;
-            else hi = mid;
-        }
-
-        double span = _cumulative[hi] - _cumulative[lo];
-        double t = span <= 0 ? 0 : (len - _cumulative[lo]) / span;
-
-        return new PointF(
-            _samples[lo].X + (float)((_samples[hi].X - _samples[lo].X) * t),
-            _samples[lo].Y + (float)((_samples[hi].Y - _samples[lo].Y) * t));
+        var (x, y) = curve.PointAtLength(len);
+        return new PointF((float)x, (float)y);
     }
 
     // 两色之间线性混合（含 alpha），用于尾梢到头部的那一段

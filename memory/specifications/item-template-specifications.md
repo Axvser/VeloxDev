@@ -49,4 +49,9 @@
 - **Avalonia 此前确实没接**，而且它的症结不在 tree-view，在适配器：池是 `template.Build(null)` 建视图（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs:168`），而 Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的是选择器自己，轮到 `Build` 时它才去挑内层模板；传 `null` 就无从下手（选择器的 `SelectTemplate(null)` 抛异常）⇒ **视图一个都不建，且不报错**（画布空白）。现在传的是 VM，选择器因此可用。
 - **判定顺序**（四家 `FindDataTemplate` 同形）：按 VM **类型**的缓存 → 选择器 → 平台自带的查找（Avalonia：`ViewManager.cs:233` 缓存 → `:235` 选择器 → `:242`/`:248`/`:259` 面板/祖先/`Application`）⇒ 「选择器命中就跳过平台机制、没命中就退化到平台机制」成立；但选择器若**按实例**判定，第一个实例的判定会被整个类型沿用。
 - **WinForms 是例外**：它的池没有平台兜底可谈 —— 选择器是唯一的创建路径（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs:161` 的 `_selector.CreateView(item)`），所以「退化」在那家不存在。
-- **连线交互是 demo 层的东西，模板与 Trimmed demo 保持被动**（2026-09-26 用户明确划定）：七家**非** Trimmed demo 的连线要做「只有画出来的部分能命中 + Delete 删除 + 右键菜单删除」，而模板与 Trimmed demo 的连线视图仍然是 `IsHitTestVisible = false` / `pointer-events:none` 的被动视觉。⇒ 看到「demo 有交互、模板没有」**不要**按 §一 去把它推进模板；这条背离是刻意的（生成出来的项目不该默认吃画布手势）。
+- **连线的命中、高亮与删除是库能力，模板与 Trimmed demo 默认就有**（2026-10-03 用户改定，推翻 2026-09-26 那条「连线交互是 demo 层、模板保持被动」的划定）：连线视图只负责**画出自己那条曲线并把它发布出去**，其余由 Core 与适配器承担 ——
+  - 命中判定归 Core（`LinkHitTestEx` 对着已发布的曲线判距，半径 `LinkHitTestEx.DefaultHitRadius`）；
+  - hub 只有一个位置：`LinkInteraction.For(tree)`（一棵树一个实例），适配器只往里转发指针与 Delete，宿主与连线视图都用同一个调用取它；
+  - 悬停高亮由 hub 通过 **`ILinkHighlight`** 直接点亮（`AutoHighlight`），删除由 hub 直接执行（`AutoDelete`）——**都不需要宿主写订阅**。
+  ⇒ 新的判据是「这个角色**有没有指针源**」：任何一家只要它的连线视图或表面把指针位置喂给了 hub，生成的工程就开箱有命中/高亮/删除。**右键菜单仍是 demo 的策略**（它要选位置、要平台自己的弹出物），不要往模板里推。
+  ⇒ 反过来，**不要**为了「能点到连线」把连线视图改成吃掉整块画布的命中面（那会吞掉画布手势）；命中面必须仍然只是画出来的那道描边。

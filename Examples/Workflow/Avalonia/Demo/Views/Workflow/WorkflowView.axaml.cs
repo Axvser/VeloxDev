@@ -73,9 +73,72 @@ public partial class WorkflowView : UserControl
         DataContext = _workflowViewModel;
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
 
+        // 换树会重建连线交互中枢（它按树构造），所以每次 DataContext 变化都重新取一次并重订。
+        DataContextChanged += (_, _) => WireLinkInteraction();
+
         SubscribeAutoScroll(_workflowViewModel);
         InitializeNetworkDemo();
         InitializeMcp();
+    }
+
+    // ── Link interaction (hover / right-click menu / Delete) ──────────────────
+    // 命中、悬停与「按 Delete 删哪条」都在 Core 里裁决（hub 用 LinkInteraction.For 取）；这里只做宿主的
+    // 一件事：把 LinkPressed 接到右键菜单上。悬停高亮由 hub 直接点在连线的可视对象上（ILinkHighlight），
+    // 删除由 hub 的 AutoDelete 执行，都不经过本视图。
+
+    private LinkInteraction? _linkInteraction;
+    private ContextMenu? _linkMenu;
+    // 菜单当前针对的那条线：菜单被复用，点击那一刻再读，而不是绑定（池化的视图那时可能已改绑别的链接）。
+    private IWorkflowLinkViewModel? _menuLink;
+
+    private void WireLinkInteraction()
+    {
+        // hub 按树取：适配器也在同一个 LinkInteraction.For(tree) 上转发，宿主与它拿到的必然是同一个。
+        var interaction = DataContext is IWorkflowTreeViewModel tree ? LinkInteraction.For(tree) : null;
+        if (ReferenceEquals(interaction, _linkInteraction)) return;
+
+        UnwireLinkInteraction();
+        _linkInteraction = interaction;
+        if (interaction is null) return;
+
+        interaction.LinkPressed += OnLinkPressed;
+    }
+
+    private void UnwireLinkInteraction()
+    {
+        if (_linkInteraction is null) return;
+
+        _linkInteraction.LinkPressed -= OnLinkPressed;
+        _linkInteraction = null;
+    }
+
+    private void OnLinkPressed(object? sender, LinkPressedEventArgs e)
+    {
+        if (e.Button != PointerButtonKind.Right) return;
+
+        _menuLink = e.Link;
+        _linkMenu ??= BuildLinkMenu();
+
+        // 菜单一开指针就落到菜单上，那之后的移动不该把菜单针对的这条取消选中。
+        if (_linkInteraction is not null) _linkInteraction.IsSuspended = true;
+        if (sender is Control visual) _linkMenu.Open(visual);
+    }
+
+    private ContextMenu BuildLinkMenu()
+    {
+        var item = new MenuItem { Header = "删除连线" };
+        item.Click += (_, _) =>
+        {
+            if (_menuLink is { } link && link.DeleteCommand.CanExecute(null))
+                link.DeleteCommand.Execute(null);
+        };
+
+        var menu = new ContextMenu { Items = { item } };
+        menu.Closed += (_, _) =>
+        {
+            if (_linkInteraction is not null) _linkInteraction.IsSuspended = false;
+        };
+        return menu;
     }
 
     private void InitializeMcp()

@@ -12,7 +12,11 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <remarks>
 /// <para>
 /// Materialized and recycled by <see cref="ViewPool"/> — one view per visible link, the drag preview included —
-/// and paints itself: a passive visual, with no hover, highlight or keyboard interaction.
+/// and paints itself. It is a passive visual: it takes no pointer or keyboard input of its own. The interaction
+/// itself is driven by <see cref="WorkflowTreeView"/>, which publishes a <see cref="LinkCurve"/> for every drawn
+/// link (through <see cref="LinkHitTestEx.PublishCurve"/>, using this control as the curve's visual); the Core
+/// interaction hub (<see cref="VeloxDev.WorkflowSystem.LinkInteraction"/>) turns <see cref="IsHighlighted"/> on
+/// for the one the pointer is over, through <see cref="ILinkHighlight"/>.
 /// </para>
 /// <para>
 /// A WinForms child window is opaque and cannot composite over its siblings, so the window region is carved to the
@@ -25,7 +29,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <see cref="WorkflowTreeView"/>'s link-layer arrangement.
 /// </para>
 /// </remarks>
-public class WorkflowLinkView : Control
+public class WorkflowLinkView : Control, ILinkHighlight
 {
     /// <summary>Extra width the region gets on each side of the stroke, so the antialiased edge is not clipped.</summary>
     private const float RegionPad = 1.5f;
@@ -33,9 +37,15 @@ public class WorkflowLinkView : Control
     private IWorkflowLinkViewModel? _link;
     private readonly ModelChangeRelay _relay;
 
+    // 选中色的缺省值：柔和的淡青高光（与其它家的 hub 默认同色），不是橙红 —— 悬停的反馈该是一层光，
+    // 不是报警。保留可改写。
+    private static readonly Color DefaultHighlightColor = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+
     private bool _canRender = true;
     private bool _isVirtual;
+    private bool _isHighlighted;
     private Color _lineColor = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
+    private Color _highlightColor = DefaultHighlightColor;
     private float _thickness = 1.5f;
     private float _pullMinimum = 40f;
     private Color _surfaceBackground = Color.FromArgb(0x1E, 0x1E, 0x1E);
@@ -116,6 +126,30 @@ public class WorkflowLinkView : Control
         }
     }
 
+    /// <inheritdoc />
+    public bool IsHighlighted
+    {
+        get => _isHighlighted;
+        set
+        {
+            if (_isHighlighted == value) return;
+            _isHighlighted = value;
+            Invalidate();
+        }
+    }
+
+    /// <summary>Colour a highlighted link is drawn in.</summary>
+    public Color HighlightColor
+    {
+        get => _highlightColor;
+        set
+        {
+            if (_highlightColor == value) return;
+            _highlightColor = value;
+            Invalidate();
+        }
+    }
+
     /// <summary>
     /// View-model accessor honored by <see cref="ViewManager"/> when a pooled view is recycled. Setting it
     /// re-binds this view to the new link.
@@ -137,6 +171,9 @@ public class WorkflowLinkView : Control
             Sync(link);
             return;
         }
+
+        // 池把这个视图回收给另一条线：旧连线不能再指着这个控件，否则它会把一条已经不由这里画的线报成可命中
+        RetractCurve();
 
         _link = link;
         Tag = link;
@@ -176,6 +213,7 @@ public class WorkflowLinkView : Control
         if (link is null || !_canRender || !WorkflowSlotUpdateGate.IsLinkRenderReady(link))
         {
             _windowCurve = null;
+            RetractCurve();
             ApplyRegion(null);
             return;
         }
@@ -185,6 +223,7 @@ public class WorkflowLinkView : Control
         if (sender is null || receiver is null)
         {
             _windowCurve = null;
+            RetractCurve();
             ApplyRegion(null);
             return;
         }
@@ -196,9 +235,17 @@ public class WorkflowLinkView : Control
         if (!IsDrawable(points))
         {
             _windowCurve = null;
+            RetractCurve();
             ApplyRegion(null);
             return;
         }
+
+        // 把这条线画出来的几何提交给 Core：命中判定与绘制从此共用同一条曲线，不再各推一遍。
+        // 坐标是画布局部坐标（slot.Anchor 的空间），也是表面指针事件所在的空间 —— 两边必须同系。
+        link.PublishCurve(
+            LinkCurve.BuildCubic(
+                points[0].X, points[0].Y, points[3].X, points[3].Y, _pullMinimum),
+            this);
 
         using var strokePen = new Pen(Color.Black, _thickness + 2 * RegionPad) { LineJoin = LineJoin.Miter };
         using var strokePath = new GraphicsPath();
@@ -229,6 +276,9 @@ public class WorkflowLinkView : Control
         ApplyRegion(strokePath);
         Invalidate();
     }
+
+    // 撤销这条线发布的曲线：画不出来时它不该再回答命中。曲线撤掉，LinkHelper 里那个 Visual 也跟着清。
+    private void RetractCurve() => _link?.PublishCurve(null);
 
     // 把雕好的形状交给窗口。WinForms 会把区域拷贝进窗口，所以上一个托管 Region 归我们处置。
     private void ApplyRegion(GraphicsPath? strokePath)
@@ -282,7 +332,11 @@ public class WorkflowLinkView : Control
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        using var pen = new Pen(_lineColor, _thickness);
+        // 选中（悬停命中）那条换成高亮色并加粗 1.5，与其它六家同一种读法
+        var color = _isHighlighted ? _highlightColor : _lineColor;
+        var thickness = _isHighlighted ? _thickness + 1.5f : _thickness;
+
+        using var pen = new Pen(color, thickness);
         if (_isVirtual)
         {
             pen.DashStyle = DashStyle.Dash;
@@ -299,6 +353,7 @@ public class WorkflowLinkView : Control
     {
         if (disposing)
         {
+            RetractCurve();
             _relay.Clear();
             _windowRegion?.Dispose();
             _windowRegion = null;

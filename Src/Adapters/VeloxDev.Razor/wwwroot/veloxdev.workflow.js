@@ -57,6 +57,22 @@ window.veloxdevWorkflow = (() => {
         return { x: 0, y: 0 };
     }
 
+    // Converts a viewport (client) point into a surface's canvas-local space — the space the link
+    // views publish their curves in and the slot anchors live in. Mirrors linkCurveFromSlotElements'
+    // measurement (client − canvas rect − content-wrapper offset); the content wrapper is a plain
+    // translate, so no scale factor applies. Returns null when the surface is not in the DOM.
+    function toCanvasLocal(scrollerId, clientX, clientY) {
+        const el = document.getElementById(scrollerId);
+        if (!el) return null;
+        const canvasEl = el.querySelector('.veloxdev-wf-canvas');
+        if (!canvasEl) return null;
+        const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
+        const rect = canvasEl.getBoundingClientRect();
+        const contentX = contentEl ? contentEl.offsetLeft : 0;
+        const contentY = contentEl ? contentEl.offsetTop : 0;
+        return [clientX - rect.left - contentX, clientY - rect.top - contentY];
+    }
+
     // ════════════════════════════════════════════════════════════
     // SURFACE — canvas pan (middle mouse / space+left / left on blank),
     // scroll reporting, and auto-expansion near edges.
@@ -1336,6 +1352,7 @@ window.veloxdevWorkflow = (() => {
 
     return {
         getCanvasTranslate,
+        toCanvasLocal,
         initSurface,
         getViewportSize,
         scrollToRatio,
@@ -1359,6 +1376,7 @@ window.veloxdevWorkflow = (() => {
 // Named exports so Blazor components can call these via the imported module
 // namespace (module.InvokeAsync("initNodeDrag", ...)).
 export const getCanvasTranslate = window.veloxdevWorkflow.getCanvasTranslate;
+export const toCanvasLocal = window.veloxdevWorkflow.toCanvasLocal;
 export const initSurface = window.veloxdevWorkflow.initSurface;
 export const getViewportSize = window.veloxdevWorkflow.getViewportSize;
 export const scrollToRatio = window.veloxdevWorkflow.scrollToRatio;

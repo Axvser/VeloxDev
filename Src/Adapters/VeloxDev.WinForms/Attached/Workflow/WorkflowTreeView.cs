@@ -159,6 +159,22 @@ public abstract class WorkflowTreeView : UserControl
         }
     }
 
+    /// <summary>
+    /// The link interaction hub for the currently bound tree — the same instance Core gives every other surface
+    /// over that tree (see <see cref="VeloxDev.WorkflowSystem.LinkInteraction.For"/>); <see langword="null"/>
+    /// until a tree is bound.
+    /// </summary>
+    /// <remarks>
+    /// The hub already turns the hover into a highlight and performs the Delete request, so a host only
+    /// subscribes here to add a policy of its own (a context menu, say). The surface's own contribution is
+    /// platform input translation plus taking keyboard focus when the hover changes. The hit test walks the
+    /// curves the pooled <see cref="WorkflowLinkView"/>s published, in the canvas-local space the pointer is
+    /// translated to.
+    /// </remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public LinkInteraction? LinkInteraction => _linkInteraction;
+
     /// <summary>Surface background, behind the grid and the cards.</summary>
     public Color SurfaceBackground
     {
@@ -255,6 +271,14 @@ public abstract class WorkflowTreeView : UserControl
     private ViewFactorySelector _poolSelector;
     private bool _layoutPending;
 
+    // 连线交互 hub 归 Core（每棵树一个，见 LinkInteraction.For）：本家只做平台的两件事 —— 翻译指针/按键、
+    // 悬停命中时给画布取键盘焦点。高亮与删除都由 hub 的 AutoHighlight / AutoDelete 负责。
+    private LinkInteraction? _linkInteraction;
+
+    // 最近一次指针位置与它是否还在画布上：平移/缩放挪的是几何而指针没动，命中会变，得拿这两个值重判。
+    private Point _lastPointerClient;
+    private bool _pointerInside;
+
     // 平移状态。画布固定盖住视口，平移表现为每个卡片的世界原点位移 —— 见 ApplyPan。
     private bool _isPanning;
     private Point _panPressScreen;
@@ -323,6 +347,9 @@ public abstract class WorkflowTreeView : UserControl
         PART_Canvas.MouseMove += OnCanvasMouseMove;
         PART_Canvas.MouseUp += OnCanvasMouseUp;
         PART_Canvas.MouseCaptureChanged += OnCanvasMouseCaptureChanged;
+        PART_Canvas.MouseEnter += OnCanvasMouseEnter;
+        PART_Canvas.MouseLeave += OnCanvasMouseLeave;
+        PART_Canvas.KeyDown += OnCanvasKeyDown;
 
         HandleCreated += OnHandleCreated;
         Resize += OnSurfaceResize;
@@ -363,6 +390,8 @@ public abstract class WorkflowTreeView : UserControl
         {
             WorkflowSurfaceBehavior.Refresh(this);
         }
+
+        AttachLinkInteraction();
     }
 
     private void AttachVisibleItems(ObservableCollection<IWorkflowViewModel>? items)
@@ -453,7 +482,16 @@ public abstract class WorkflowTreeView : UserControl
 
     private void OnCanvasMouseDown(object? sender, MouseEventArgs e)
     {
+        // 右键对连线有意义：转发给交互后由宿主决定弹不弹菜单。空白处右键不启动平移。
+        if (e.Button == MouseButtons.Right)
+        {
+            PublishPointer(PointerPhase.Pressed, e.Location, PointerButtonKind.Right);
+            return;
+        }
+
         if (e.Button != MouseButtons.Left || _isPanning) return;
+
+        PublishPointer(PointerPhase.Pressed, e.Location, PointerButtonKind.Left);
 
         _isPanning = true;
         _panPressScreen = Cursor.Position;
@@ -463,13 +501,20 @@ public abstract class WorkflowTreeView : UserControl
 
     private void OnCanvasMouseMove(object? sender, MouseEventArgs e)
     {
-        if (!_isPanning) return;
+        _lastPointerClient = e.Location;
 
-        var current = Cursor.Position;
-        _panOffset = new Point(
-            _panOffsetAtPress.X + (current.X - _panPressScreen.X),
-            _panOffsetAtPress.Y + (current.Y - _panPressScreen.Y));
-        ApplyPan();
+        if (_isPanning)
+        {
+            var current = Cursor.Position;
+            _panOffset = new Point(
+                _panOffsetAtPress.X + (current.X - _panPressScreen.X),
+                _panOffsetAtPress.Y + (current.Y - _panPressScreen.Y));
+            ApplyPan();
+            return;
+        }
+
+        // 悬停即选中：命中由 Core 裁决，这里只把指针位置翻译过去。
+        PublishPointer(PointerPhase.Moved, e.Location);
     }
 
     private void OnCanvasMouseUp(object? sender, MouseEventArgs e)
@@ -488,6 +533,71 @@ public abstract class WorkflowTreeView : UserControl
         {
             _isPanning = false;
         }
+    }
+
+    private void OnCanvasMouseEnter(object? sender, EventArgs e) => _pointerInside = true;
+
+    private void OnCanvasMouseLeave(object? sender, EventArgs e)
+    {
+        _pointerInside = false;
+        _linkInteraction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+    }
+
+    // 键也过 Core：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠各家各记一个选中。
+    // 只处理 Delete：这块画布只有在悬停选中它时才拿得到焦点，落在别处的键不受影响。
+    private void OnCanvasKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode != Keys.Delete) return;
+        if (_linkInteraction?.HoveredLink is null) return;
+
+        _linkInteraction.Publish(new KeyEvent(InputKey.Delete));
+        e.Handled = true;
+        e.SuppressKeyPress = true;
+    }
+
+    // 画布客户区坐标就是 slot.Anchor 的空间（见 WorkflowSlotLayoutBehavior 的坐标宿主），与发布的曲线同系。
+    private void PublishPointer(PointerPhase phase, Point client, PointerButtonKind button = PointerButtonKind.None)
+        => _linkInteraction?.Publish(new PointerEvent(phase, new Anchor(client.X, client.Y, 0), button));
+
+    // 平移/缩放把几何挪到了指针之外或之下：指针没动，命中却变了，拿最近一次位置重判一次。
+    private void RefreshLinkHover()
+    {
+        if (!_pointerInside || _linkInteraction is null) return;
+
+        PublishPointer(PointerPhase.Moved, _lastPointerClient);
+    }
+
+    // 交互归 Core：本家只做平台的事 —— 把画布的指针/按键翻译成标准输入事件转发进去，命中时给画布取焦点。
+    // 高亮（AutoHighlight）与删除（AutoDelete）由 hub 自己完成，本家不再各自实现一份。
+    private void AttachLinkInteraction()
+    {
+        DetachLinkInteraction();
+        if (_tree is null) return;
+
+        // hub 由 Core 按树缓存：这里取到的就是同一棵树在任意界面上的那一个，本家不再自己造实例。
+        var interaction = VeloxDev.WorkflowSystem.LinkInteraction.For(_tree);
+        interaction.HoverChanged += OnLinkHoverChanged;
+        _linkInteraction = interaction;
+    }
+
+    private void DetachLinkInteraction()
+    {
+        if (_linkInteraction is null) return;
+
+        _linkInteraction.HoverChanged -= OnLinkHoverChanged;
+
+        // 解绑前清掉悬停：hub 跟着树活着，比这次绑定久 —— 不清的话换一棵树、或重新绑同一棵时，
+        // 上一条线还亮着。Exited 不走 IsSuspended，一定生效；AutoHighlight 顺手把高亮熄灭。
+        _linkInteraction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+        _linkInteraction = null;
+    }
+
+    // 高亮由 hub 经 ILinkHighlight 写到命中那条线的控件上（池化的 WorkflowLinkView 实现了它）；
+    // 本家在这里只补平台欠的那件事：命中时给画布键盘焦点，Delete 才进得来（同其它六家）。
+    private void OnLinkHoverChanged(object? sender, LinkHoverEventArgs e)
+    {
+        if (e.Link is null || !PART_Canvas.CanFocus) return;
+        PART_Canvas.Focus();
     }
 
     // 应用有符号平移量：重摆卡片，把得到的世界原点推给网格、浮层、小地图与树的视口。
@@ -589,6 +699,7 @@ public abstract class WorkflowTreeView : UserControl
         }
 
         OnSurfaceRefreshed();
+        RefreshLinkHover();
     }
 
     private void ScheduleLayout()
@@ -649,6 +760,7 @@ public abstract class WorkflowTreeView : UserControl
     {
         if (disposing)
         {
+            DetachLinkInteraction();
             ViewPool.SetItemsSource(PART_Canvas, null);
             ViewPool.SetTemplateSelector(PART_Canvas, null);
             AttachVisibleItems(null);
@@ -727,8 +839,12 @@ public abstract class WorkflowTreeView : UserControl
                 ControlStyles.AllPaintingInWmPaint |
                 ControlStyles.OptimizedDoubleBuffer |
                 ControlStyles.ResizeRedraw |
-                ControlStyles.UserPaint,
+                ControlStyles.UserPaint |
+                ControlStyles.Selectable,
                 true);
+            // 悬停选中要能收 Delete：Panel 默认不可获焦，没有焦点键就进不来。TabStop 留 false —— 要的是
+            // 「选中时拿得到焦点」，不是往制表位里塞一站。
+            TabStop = false;
         }
 
         /// <summary>

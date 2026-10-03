@@ -1,7 +1,9 @@
 using System.ComponentModel;
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Components.Workflow;
 
@@ -11,7 +13,7 @@ namespace Demo.Components.Workflow;
 /// endpoint slot anchors; it spans the whole canvas so links are absolutely positioned
 /// (overflow visible) and redraw whenever the endpoints move.
 /// </summary>
-public partial class LinkView : ComponentBase, IDisposable
+public partial class LinkView : ComponentBase, IDisposable, ILinkHighlight
 {
     // Minimum control-point pull: two ports close together would otherwise degenerate the curve
     // into a straight segment and lose the horizontal exit at each end.
@@ -45,9 +47,41 @@ public partial class LinkView : ComponentBase, IDisposable
     [Parameter]
     public bool? CanRenderOverride { get; set; }
 
+    // The surface cascades itself down, so a link view drawn inside one can forward the pointer
+    // into the shared interaction hub; null when the view is rendered outside a surface.
+    [CascadingParameter]
+    private WorkflowSurfaceBehavior? Surface { get; set; }
+
+    // The hit area is only the painted stroke: the canvas-sized svg itself stays click-through, and a
+    // virtual link (the rubber band under the pointer) is not a target at all.
+    private string HitTargetCss => EffectiveIsVirtual ? "none" : "stroke";
+
     private INotifyPropertyChanged? _notifier;
     private INotifyPropertyChanged? _senderNotifier;
     private INotifyPropertyChanged? _receiverNotifier;
+    private LinkCurve? _curve;
+
+    // 悬停高亮：柔光（浅青）而不是刺目的红。只改这一条 path 的描边 —— 新增元素拿不到
+    // data-veloxdev-link-curve，缩放的 JS 不跟它，会画出一条不跟手的重影。
+    private const string HighlightColor = "#FFFFFFFF";
+    private const double HighlightWidthBonus = 1.5;
+
+    private bool _hover;
+
+    /// <summary>
+    /// Whether the pointer is on this link. The tree's <see cref="LinkInteraction"/> hub drives it
+    /// through <see cref="ILinkHighlight"/> as it resolves the hovered link.
+    /// </summary>
+    public bool IsHighlighted
+    {
+        get => _hover;
+        set
+        {
+            if (_hover == value) return;
+            _hover = value;
+            _ = InvokeAsync(StateHasChanged);
+        }
+    }
 
     private string LineColor => LineColorOverride ?? ToCss("#DDFFFFFF");
     private double Thickness
@@ -106,6 +140,10 @@ public partial class LinkView : ComponentBase, IDisposable
     private string CanvasWidthCss => CanvasWidth.ToString("0.#", CultureInfo.InvariantCulture);
     private string CanvasHeightCss => CanvasHeight.ToString("0.#", CultureInfo.InvariantCulture);
     private string ThicknessCss => Thickness.ToString("0.#", CultureInfo.InvariantCulture);
+
+    // 高亮只换这条 path 的颜色与线宽：线本身是白的这版，高亮取更亮的浅青
+    private string StrokeColor => _hover ? HighlightColor : LineColor;
+    private string StrokeWidthCss => (_hover ? Thickness + HighlightWidthBonus : Thickness).ToString("0.#", CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     protected override void OnInitialized()
@@ -180,7 +218,8 @@ public partial class LinkView : ComponentBase, IDisposable
     // Extension point: the control points set the curve's shape. Both are pulled horizontally by
     // max(PullMinimum, |dx| / 2), which is what makes the line leave each port horizontally — keep
     // that property if you replace the formula, and mirror any change in the adapter's zoom JS,
-    // which re-formats this same curve while a wheel zoom collapses the nodes.
+    // which re-formats this same curve while a wheel zoom collapses the nodes. The same control
+    // points also feed the LinkCurve published for hit testing, so keep the two in step.
     private string BuildCurve()
     {
         var link = Link;
@@ -188,7 +227,11 @@ public partial class LinkView : ComponentBase, IDisposable
 
         var sender = link.Sender;
         var receiver = link.Receiver;
-        if (sender is null || receiver is null) return "";
+        if (sender is null || receiver is null)
+        {
+            link.PublishCurve(null);
+            return "";
+        }
 
         // NaN gate: slot anchors default to NaN (unmeasured placeholder). Rendering before
         // the GUI measures the endpoints would serialize NaN coordinates and paint a stale
@@ -196,7 +239,11 @@ public partial class LinkView : ComponentBase, IDisposable
         // adapters guard against via WorkflowLinkRenderEx.IsRenderReady(). Skip until both
         // non-virtual endpoints are measured. Placeholder endpoints (Parent is null, e.g. the
         // VirtualLink gesture) are exempt and render immediately.
-        if (!WorkflowSlotUpdateGate.IsLinkRenderReady(link)) return "";
+        if (!WorkflowSlotUpdateGate.IsLinkRenderReady(link))
+        {
+            link.PublishCurve(null);
+            return "";
+        }
 
         double sx = sender.Anchor.Horizontal;
         double sy = sender.Anchor.Vertical;
@@ -206,10 +253,17 @@ public partial class LinkView : ComponentBase, IDisposable
         // Placeholder endpoints (VirtualLink gesture) can still carry NaN anchors on the
         // reset intermediate frames (Reset nulls the anchors before clearing IsVisible), which
         // would serialize a "NaN,NaN" path. Suppress until the coordinates are real.
-        if (double.IsNaN(sx) || double.IsNaN(sy) || double.IsNaN(ex) || double.IsNaN(ey)) return "";
+        if (double.IsNaN(sx) || double.IsNaN(sy) || double.IsNaN(ex) || double.IsNaN(ey))
+        {
+            link.PublishCurve(null);
+            return "";
+        }
 
         double dx = ex - sx;
         double pull = Math.Max(PullMinimum, Math.Abs(dx) * 0.5);
+
+        _curve = LinkCurve.BuildCubic(sx, sy, ex, ey, PullMinimum, LinkCurve.DefaultSampleCount);
+        link.PublishCurve(_curve, this);
 
         // Invariant: the path is SVG, and the adapter's zoom JS rewrites this same attribute with
         // '.' separators — a culture-dependent format would make the two disagree every frame.
@@ -217,9 +271,30 @@ public partial class LinkView : ComponentBase, IDisposable
             $"M {sx:F1},{sy:F1} C {sx + pull:F1},{sy:F1} {ex - pull:F1},{ey:F1} {ex:F1},{ey:F1}");
     }
 
+    // Forwarding the pointer into the hub is what makes the link interactive: the hub decides which link
+    // is under the pointer, lights it (AutoHighlight) and deletes it on Delete (AutoDelete). Nothing here
+    // decides anything — the browser's stroke-only hit region is the outer gate, and the hub is the judge.
+    private async Task OnPointerEnter(MouseEventArgs e)
+    {
+        if (Surface is not null)
+        {
+            await Surface.ForwardPointerAsync(PointerPhase.Entered, e.ClientX, e.ClientY);
+        }
+    }
+
+    private async Task OnPointerExit(MouseEventArgs e)
+    {
+        if (Surface is not null)
+        {
+            await Surface.ForwardPointerAsync(PointerPhase.Exited, e.ClientX, e.ClientY);
+        }
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
+        Link?.PublishCurve(null);
+
         if (_notifier is not null)
         {
             _notifier.PropertyChanged -= OnLinkChanged;

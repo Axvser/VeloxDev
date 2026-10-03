@@ -24,6 +24,23 @@
 | 数量可变的端口集合 | `[VeloxProperty] [SlotSelectors(typeof(...))] public partial SlotEnumerator<TSlot> X { get; set; }` | `SelectorEx/SlotEnumerator.cs:11`；`Src/Core/VeloxDev.Core/AI/SlotSelectorsAttribute.cs:38` |
 | 自定义空间索引 | 实现 `ISpatialBoundsProvider`（`Bounds` + `INotifyPropertyChanged`）/ `ISpatialMap<T>` | `Interfaces/WorkflowSystem/ISpatialBoundsProvider.cs`、`ISpatialMap.cs:12` |
 | 网格装饰器 / 小地图 | 实现 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs:15`、`IWorkflowMinimapOverlay.cs:18` |
+| 让连线可被命中 / 自定义它的曲线 | **不实现接口，是发布**：连线视图画完调 `link.PublishCurve(LinkCurve, this)`；形状归视图（Core 不假定贝塞尔），判定归 Core | `GUI/Interaction/LinkHitTestEx.cs`、`GUI/Interaction/LinkCurve.cs` |
+| 让悬停能看见 / 让连线响应 hover 外观 | 视图实现 `ILinkHighlight`（`IsHighlighted`）—— hub 的 `AutoHighlight` 会直接点亮它，**不要**自己订 `HoverChanged` 去设颜色 | `GUI/Interaction/ILinkHighlight.cs` |
+| 改连线的命中/高亮/删除策略 | 取 `LinkInteraction.For(tree)`（**hub 只有这一个位置**）改 `AutoHighlight` / `AutoDelete` / `HitRadius`，或订 `HoverChanged` / `LinkPressed` / `LinkDeleteRequested` | `GUI/Events/LinkInteraction.cs` |
+
+> ⚠ **别把连线视图做成吃掉整块画布的命中面**（给它加背景、或让容器接指针）—— 那会吞掉画布手势。命中面必须仍然只是**画出来的那道描边**；hub 也是按发布的那条曲线判距的。
+> ⚠ **别把命中门改回 `IsRenderReady()`**（要求锚点已测量）。Jalium 按设计从不写 `slot.Anchor`，那样会让它整家连线静默失效 —— 用「曲线有没有被发布」当门。
+> ⚠ **Delete 需要一条「焦点路由」，而它和命中是两件事**（2026-10-03 实测踩过，七家里五家缺）。Delete 是键盘事件：它只会沿着**焦点所在的元素**往上冒泡。所以适配器必须①能持有焦点、②在悬停到连线上时**把焦点收到自己身上/那个可视对象上**。只做①不做②的话「悬停（不点）后按 Delete」没有任何路由，而且**不报错**。完整 demo 掩盖了这个缺口 —— 它们有窗口级预览兜底（`MainWindow.OnPreviewWindowKeyDown`），生成出来的工程没有。
+> - 各家已落地的形态：WPF/Avalonia「焦点给画线的控件，控件不可聚焦时**退回宿主**」、WinUI/WinForms「焦点给宿主/画布」、Razor「表面根 `tabindex` + 悬停 `FocusAsync(preventScroll: true)`」、MAUI「焦点给交互源」、Jalium「`Focusable` + 悬停收焦点，并用 `RequestBringIntoView` 吃掉那次『把整块画布卷进视口』」。
+> - **取焦点一定会带来「平台把画布卷进视口」的连带效应**，各家都要挡：WPF/Avalonia/Jalium 是吃掉 `RequestBringIntoView`，Razor 是 `preventScroll`。
+> - ⚠ **`UserControl` / `Control` 的 `Focusable` 默认是 `false`**（WPF、Avalonia 都是）。所以「退回宿主」这条兜底曾经是**空的** —— 焦点落不到宿主上，键也就不来。WPF/Avalonia 的适配器现在在 Attach 里自己开 `control.Focusable = true`，**不要删**。WinUI 没有这个属性（用 `Focus(FocusState)`，宿主本来就能拿焦点）。
+
+> 🧪 **怎么验这一类东西：`Src/Verification/agent-ui-harness.ps1`。** 「悬停一下再按 Delete」用构建验不了、读代码也读不出来 —— 上面那五家的缺口正是这么漏的。这个脚本用真实输入驱动桌面 demo 并截图：
+> ```
+> powershell -NoProfile -ExecutionPolicy Bypass -File Src/Verification/agent-ui-harness.ps1 `
+>   -Exe <demo.exe> -Actions "drag:687,399,757,433; wait:600; move:724,414; wait:700; probe:724,414; key:Delete; wait:900; probe:724,414"
+> ```
+> 坐标是**窗口相对**（直接照着截图读），`probe` 报一个像素的颜色，所以可以断言状态而不是靠看。两个坑都踩过且已修：进程必须 **DPI aware**（否则三套坐标互相错位，输入看着像「没到」）；`INPUT` 结构必须是 **40 字节**（并集按最大成员算），小一号时 `SendInput` **静默**返回 0，所有按键凭空消失 —— 脚本现在会报 REJECTED。
 | 给 AI 工具面加工具 | 在 `WorkflowAgentToolkit` 加 `[AgentCommand]` 方法，并用 `WorkflowToolCategory` 分类 | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs`；`WorkflowToolCategory.cs:1` |
 
 > `[SlotSelectors]` **不在** `WorkflowSystem` 命名空间下，它在 `Src/Core/VeloxDev.Core/AI/SlotSelectorsAttribute.cs:38`（`VeloxDev.AI`）。别去 WorkflowSystem 目录里找。

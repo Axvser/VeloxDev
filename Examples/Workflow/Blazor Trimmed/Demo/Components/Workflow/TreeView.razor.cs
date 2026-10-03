@@ -41,6 +41,12 @@ public partial class TreeView : ComponentBase, IDisposable
     [Parameter]
     public double GridSpacing { get; set; } = 40;
 
+    /// <summary>
+    /// The tree's link interaction hub, or <see langword="null"/> until a <see cref="Tree"/> is set.
+    /// Subscribe to it to turn link hover, press and the Delete key into app policy.
+    /// </summary>
+    public LinkInteraction? Interaction => Tree is null ? null : LinkInteraction.For(Tree);
+
     private readonly List<IWorkflowNodeViewModel> _subscribedNodes = [];
     private INotifyPropertyChanged? _subscribedTree;
     private INotifyPropertyChanged? _subscribedVirtualLink;

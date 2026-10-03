@@ -1,0 +1,87 @@
+namespace VeloxDev.WorkflowSystem;
+
+/// <summary>
+/// How a view publishes its curve and how a surface asks whether the pointer is on a link.
+///
+/// Both sides go through here so the capability probe lives in exactly one place, and so neither side has to
+/// know which Helper type a given project uses. A link whose Helper does not implement
+/// <see cref="ILinkHitTestable"/> answers <see langword="false"/> and is simply never hit — that is the whole
+/// cost of not opting in.
+/// </summary>
+public static class LinkHitTestEx
+{
+    /// <summary>
+    /// How far from the drawn line a point still counts as on the link, in canvas units — the radius every
+    /// adapter's hand-rolled test used, now defined once. It is deliberately not scaled by zoom: a pointer is a
+    /// physical thing, and the demos never scaled it either.
+    /// </summary>
+    public const double DefaultHitRadius = 6d;
+
+    /// <summary>
+    /// The link's hit-test capability, or <see langword="null"/> when its Helper does not implement one.
+    /// </summary>
+    public static ILinkHitTestable? HitTarget(this IWorkflowLinkViewModel link)
+        => link.GetHelper() as ILinkHitTestable;
+
+    /// <summary>
+    /// Publishes the curve this link's view drew, so surfaces can hit-test it.
+    ///
+    /// Call it wherever the view (re)builds its geometry — publishing is a reference store, not a copy, so it
+    /// is safe to call on every render. The curve's coordinates must be in the space the surface will query in.
+    /// </summary>
+    /// <param name="link">The link being drawn.</param>
+    /// <param name="curve">The flattened curve, or <see langword="null"/> to retract it.</param>
+    /// <param name="visual">
+    /// The control that drew it, when the platform has one per link — it becomes the <c>sender</c> of
+    /// <see cref="LinkInteraction"/>'s events. Leave it <see langword="null"/> where one surface draws every link.
+    /// </param>
+    /// <code>
+    /// link.PublishCurve(LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, pullMinimum), this);
+    /// </code>
+    public static void PublishCurve(this IWorkflowLinkViewModel link, LinkCurve? curve, object? visual = null)
+        => link.HitTarget()?.SetCurve(curve, visual);
+
+    /// <summary>
+    /// Whether the point lies on this link, within <paramref name="radius"/>.
+    ///
+    /// Gated on visibility plus a published curve, and deliberately <b>not</b> on anchor measurement: the
+    /// published curve is the evidence that something was painted there, because every link view retracts it
+    /// (<see cref="PublishCurve"/>(<see langword="null"/>)) on the paths where it draws nothing. Asking whether
+    /// the endpoints were measured instead would answer for the model, not for the drawing — and at least one
+    /// platform derives its port positions from the model and never writes a slot anchor at all.
+    /// </summary>
+    public static bool HitTest(this IWorkflowLinkViewModel link, double x, double y, double radius = DefaultHitRadius)
+    {
+        if (!link.IsVisible) return false;
+        return link.HitTarget()?.Contains(x, y, radius) ?? false;
+    }
+
+    /// <summary>
+    /// The topmost link under the point among the tree's currently realized links, or <see langword="null"/>.
+    ///
+    /// This is the whole per-surface loop the seven demos used to write for themselves. It walks
+    /// <c>VisibleItems</c> — the virtualized set, not the tree — from the back, because the last drawn link is
+    /// the one on top, and skips the tree's own drag preview: the rubber band sits under the pointer by
+    /// construction and must never be the thing that answers.
+    /// </summary>
+    /// <param name="tree">The tree to search.</param>
+    /// <param name="x">Point x, in the same space the links published their curves in.</param>
+    /// <param name="y">Point y, same space.</param>
+    /// <param name="radius">Reach either side of the drawn line; <see cref="DefaultHitRadius"/> by default.</param>
+    public static IWorkflowLinkViewModel? HitTestVisibleLinks(
+        this IWorkflowTreeViewModel tree, double x, double y, double radius = DefaultHitRadius)
+    {
+        var items = tree.GetHelper()?.VisibleItems;
+        if (items is null) return null;
+
+        var dragPreview = tree.VirtualLink;
+        for (var i = items.Count - 1; i >= 0; i--)
+        {
+            if (items[i] is not IWorkflowLinkViewModel link) continue;
+            if (ReferenceEquals(link, dragPreview)) continue;
+            if (link.HitTest(x, y, radius)) return link;
+        }
+
+        return null;
+    }
+}

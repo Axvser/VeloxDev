@@ -26,17 +26,22 @@
             <path d="@d"
                   data-veloxdev-link-curve="1"
                   fill="none"
-                  stroke="@LineColor"
-                  stroke-width="@ThicknessCss"
+                  stroke="@StrokeColor"
+                  stroke-width="@StrokeWidthCss"
                   stroke-dasharray="@dash" />
         }
         else
         {
+            @* pointer-events=stroke: only the painted line answers the pointer, and these two
+               handlers are the only pointer source the hub needs. *@
             <path d="@d"
                   data-veloxdev-link-curve="1"
+                  pointer-events="@HitTargetCss"
+                  @onmouseenter="OnPointerEnter"
+                  @onmouseleave="OnPointerExit"
                   fill="none"
-                  stroke="@LineColor"
-                  stroke-width="@ThicknessCss" />
+                  stroke="@StrokeColor"
+                  stroke-width="@StrokeWidthCss" />
         }
     </svg>
 }

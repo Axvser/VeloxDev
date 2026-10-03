@@ -25,6 +25,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public FrameworkElement? MinimapOverlay { get; set; }
         public FrameworkElement? PointerPressSource { get; set; }
 
+        // 宿主本身：悬停焦点在连线可视对象不可聚焦时的落点（模板/Trimmed 的连线视图就是这种）。
+        public UserControl? Host { get; set; }
+
+        // 当前持有键盘焦点的连线可视对象（悬停焦点）。只在换了对象时才 Focus，避免每帧重复取焦点。
+        public IInputElement? HoverFocus { get; set; }
+
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
         public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
         public bool HasPendingRestore { get; set; }
@@ -181,12 +187,20 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     {
         Detach(control);
 
-        var state = new SurfaceState();
+        var state = new SurfaceState { Host = control };
         control.SetValue(StateProperty, state);
+
+        // 宿主必须能拿焦点，悬停焦点才有落点、Delete 才有路由。`UserControl` 的 `Focusable` 默认是
+        // **false**，所以这里由适配器自己打开 —— 不能指望模板/宿主去设（生成出来的工程不会）。
+        control.Focusable = true;
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.DataContextChanged += OnDataContextChanged;
         control.PreviewMouseMove += OnPreviewMouseMove;
+        control.PreviewMouseDown += OnLinkPointerPressed;
+        control.MouseEnter += OnLinkPointerEntered;
+        control.MouseLeave += OnLinkPointerExited;
+        control.KeyDown += OnLinkKeyDown;
         control.AddHandler(UIElement.MouseUpEvent, MouseUpHandler, true);
         ResolveNamedControls(control, state);
         Refresh(control);
@@ -198,6 +212,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.Unloaded -= OnUnloaded;
         control.DataContextChanged -= OnDataContextChanged;
         control.PreviewMouseMove -= OnPreviewMouseMove;
+        control.PreviewMouseDown -= OnLinkPointerPressed;
+        control.MouseEnter -= OnLinkPointerEntered;
+        control.MouseLeave -= OnLinkPointerExited;
+        control.KeyDown -= OnLinkKeyDown;
         control.RemoveHandler(UIElement.MouseUpEvent, MouseUpHandler);
 
         if (control.GetValue(StateProperty) is SurfaceState state)
@@ -512,8 +530,143 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var point = e.GetPosition(state.Canvas);
-        viewModel.SetPointerCommand.Execute(
-            WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout));
+        var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout);
+        viewModel.SetPointerCommand.Execute(anchor);
+
+        // 悬停归 Core：曲线发布在 canvas-local 空间（子控件的画布平移之内），指针要过同一次逆变换
+        // 才能和曲线比。拉线时指针下正挂着橡皮筋，那段时间不转发，否则沿途实连线会一路亮起。
+        if (!viewModel.VirtualLink.IsVisible)
+        {
+            var interaction = LinkInteraction.For(viewModel);
+            interaction.Publish(new PointerEvent(PointerPhase.Moved, anchor));
+            FocusHoveredLink(interaction, state);
+        }
+    }
+
+    // 悬停到连线上的指针消息：进入与移动走同一条翻译 —— Core 只看点在哪，不看事件叫什么。
+    private static void OnLinkPointerEntered(object sender, MouseEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (state.Canvas is null
+            || host.DataContext is not IWorkflowTreeViewModel viewModel
+            || viewModel.VirtualLink.IsVisible)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(state.Canvas);
+        var interaction = LinkInteraction.For(viewModel);
+        interaction.Publish(new PointerEvent(
+            PointerPhase.Entered,
+            WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout)));
+        FocusHoveredLink(interaction, state);
+    }
+
+    // 指针离开整块输入面：选中跟着走。菜单弹出引起的那一次离开不算（指针飞到菜单上，不是移开了这条线）。
+    private static void OnLinkPointerExited(object sender, MouseEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        var interaction = LinkInteraction.For(viewModel);
+        if (interaction.IsSuspended)
+        {
+            return;
+        }
+
+        interaction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+        FocusHoveredLink(interaction, state);
+    }
+
+    // 按下哪条线由 Core 判（它拿到的是同一空间里的指针），这里只把左右中键翻译过去，不置 Handled ——
+    // 平移与端口拖线仍要照常收到这次按下。
+    private static void OnLinkPointerPressed(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (state.Canvas is null
+            || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        var button = e.ChangedButton switch
+        {
+            MouseButton.Left => PointerButtonKind.Left,
+            MouseButton.Right => PointerButtonKind.Right,
+            MouseButton.Middle => PointerButtonKind.Middle,
+            _ => PointerButtonKind.None,
+        };
+        if (button == PointerButtonKind.None)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(state.Canvas);
+        var interaction = LinkInteraction.For(viewModel);
+        interaction.Publish(new PointerEvent(
+            PointerPhase.Pressed,
+            WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout),
+            button));
+        FocusHoveredLink(interaction, state);
+    }
+
+    // 悬停把键盘焦点交给能接住它的东西：Delete 才能沿焦点所在子树冒泡到宿主的键路由。
+    // 优先交给画出那条线的控件；它不可聚焦时（**模板与 Trimmed 的连线视图默认就是**）退回宿主本身 ——
+    // 否则「悬停 + Delete」在生成出来的工程里根本没有路由，而且不报错。
+    // 节点卡里的输入框自己处理 Delete 时事件已被标记、冒泡到宿主前就被吃掉，编辑文本不受影响。
+    private static void FocusHoveredLink(LinkInteraction interaction, SurfaceState state)
+    {
+        var hovered = interaction.HoveredLink?.HitTarget()?.Visual as UIElement;
+        IInputElement? target = hovered is null
+            ? null
+            : hovered is { Focusable: true } ? hovered : state.Host;
+
+        if (ReferenceEquals(state.HoverFocus, target))
+        {
+            return;
+        }
+
+        state.HoverFocus = target;
+        target?.Focus();
+    }
+
+    // Delete 走冒泡而不是隧穿：聚焦的输入框先吃掉它改自己的光标时必须让它赢。
+    private static void OnLinkKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete || sender is not UserControl host
+            || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        var interaction = LinkInteraction.For(viewModel);
+        if (interaction.HoveredLink is null)
+        {
+            return;
+        }
+
+        interaction.Publish(new KeyEvent(InputKey.Delete));
+        e.Handled = true;
     }
 
     private static void OnMouseUp(object sender, MouseButtonEventArgs e)

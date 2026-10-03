@@ -1,6 +1,5 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
@@ -9,8 +8,23 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo;
 
-public partial class BezierCurveView : Control
+/// <summary>
+/// Cubic Bézier connection that leaves each port horizontally.
+/// <para>
+/// The no-band counterpart of <see cref="PolylineCurveView"/>: same curve, without the travelling light. It
+/// flattens that curve into a <see cref="LinkCurve"/> and publishes it to the link's helper, so the surface
+/// hit-tests the exact shape this view painted; hover, press, Delete and the highlight state all come from
+/// Core, and <see cref="ILinkHighlight.IsHighlighted"/> here only decides how lit it looks.
+/// </para>
+/// </summary>
+public partial class BezierCurveView : Control, ILinkHighlight
 {
+    // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
+    private const double PullMinimum = 40;
+
+    // Core 的扁平化曲线，与命中契约共享；本视图只拿它判「画出来的这条」。
+    private LinkCurve? _curve;
+
     public BezierCurveView()
     {
         InitializeComponent();
@@ -22,11 +36,7 @@ public partial class BezierCurveView : Control
         // 在发源地吃掉这条请求，节点卡的自动滚进视口不受影响。
         AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);
 
-        CurveSelectionManager.SelectionChanged += owner =>
-        {
-            if (owner != this && IsSelected)
-                IsSelected = false;
-        };
+        RefreshGeometry();
     }
 
     #region Avalonia property definitions
@@ -43,8 +53,11 @@ public partial class BezierCurveView : Control
     public static readonly StyledProperty<double> EndTopProperty =
         AvaloniaProperty.Register<BezierCurveView, double>(nameof(EndTop));
 
-    public static readonly StyledProperty<bool> IsSelectedProperty =
-        AvaloniaProperty.Register<BezierCurveView, bool>(nameof(IsSelected), false);
+    public static readonly StyledProperty<bool> IsHighlightedProperty =
+        AvaloniaProperty.Register<BezierCurveView, bool>(nameof(IsHighlighted), false);
+
+    public static readonly StyledProperty<Color> HighlightColorProperty =
+        AvaloniaProperty.Register<BezierCurveView, Color>(nameof(HighlightColor), Color.Parse("#FFFFFFFF"));
 
     public static readonly StyledProperty<bool> CanRenderProperty =
         AvaloniaProperty.Register<BezierCurveView, bool>(nameof(CanRender), true);
@@ -85,10 +98,16 @@ public partial class BezierCurveView : Control
         set => SetValue(EndTopProperty, value);
     }
 
-    public bool IsSelected
+    public bool IsHighlighted
     {
-        get => GetValue(IsSelectedProperty);
-        set => SetValue(IsSelectedProperty, value);
+        get => GetValue(IsHighlightedProperty);
+        set => SetValue(IsHighlightedProperty, value);
+    }
+
+    public Color HighlightColor
+    {
+        get => GetValue(HighlightColorProperty);
+        set => SetValue(HighlightColorProperty, value);
     }
 
     public bool CanRender
@@ -126,10 +145,49 @@ public partial class BezierCurveView : Control
         AffectsRender<BezierCurveView>(
             StartLeftProperty, StartTopProperty, EndLeftProperty, EndTopProperty,
             CanRenderProperty, IsVirtualProperty, LineColorProperty,
-            LineThicknessProperty, DashArrayProperty, IsSelectedProperty);
+            LineThicknessProperty, DashArrayProperty, IsHighlightedProperty, HighlightColorProperty);
     }
 
     #endregion
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        PublishCurve();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == StartLeftProperty || change.Property == StartTopProperty
+            || change.Property == EndLeftProperty || change.Property == EndTopProperty)
+        {
+            RefreshGeometry();
+        }
+
+        if (change.Property == DataContextProperty)
+        {
+            // 池化改绑：旧链接不能留着一条指向本视图的曲线，否则它的命中会答在一个已经画着别人的控件上。
+            if (change.OldValue is IWorkflowLinkViewModel old && !ReferenceEquals(old, change.NewValue))
+            {
+                old.PublishCurve(null);
+            }
+
+            PublishCurve();
+        }
+
+        // UsePolyline 在两个视图之间切换显示；接手显示的那个要把曲线（与 sender）重新挂到自己身上。
+        if (change.Property == IsVisibleProperty)
+        {
+            PublishCurve();
+        }
+    }
 
     public override void Render(DrawingContext context)
     {
@@ -145,8 +203,8 @@ public partial class BezierCurveView : Control
 
     private void DrawBezierLine(DrawingContext context, StreamGeometry geometry)
     {
-        var color = IsSelected ? Colors.OrangeRed : LineColor;
-        var thickness = IsSelected ? LineThickness + 1.5 : LineThickness;
+        var color = IsHighlighted ? HighlightColor : LineColor;
+        var thickness = IsHighlighted ? LineThickness + 1.5 : LineThickness;
         var brush = new ImmutableSolidColorBrush(color);
 
         Pen pen;
@@ -160,7 +218,7 @@ public partial class BezierCurveView : Control
             pen = new Pen(brush, thickness);
         }
 
-        if (IsSelected)
+        if (IsHighlighted)
         {
             var glowPen = new Pen(new ImmutableSolidColorBrush(color, 0.25), thickness + 6);
             context.DrawGeometry(null, glowPen, geometry);
@@ -169,13 +227,32 @@ public partial class BezierCurveView : Control
         context.DrawGeometry(null, pen, geometry);
     }
 
+    // 曲线由 Core 构建一次并发布给命中契约；绘制仍用同一条公式画平滑贝塞尔（与 LinkCurve 同一拉出量）。
+    private void RefreshGeometry()
+    {
+        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        PublishCurve();
+    }
+
+    // 把画出来的形状交给链接的 Helper，界面据此判命中（见 ILinkHitTestable）。
+    // 同一链接由两个视图轮流显示（UsePolyline）：没有在显示的那个不能发布 —— 命中契约只存一个
+    // Visual，菜单等事件的 sender 必须落在真正被看到的那个控件上，否则菜单会挂在隐藏控件上。
+    private void PublishCurve()
+    {
+        if (!IsVisible || DataContext is not IWorkflowLinkViewModel link)
+        {
+            return;
+        }
+
+        link.PublishCurve(_curve, this);
+    }
+
     // 两个控制点各自水平拉开 max(40, |dx|·0.5)：连线因此从两端水平出线、中间平滑过渡，没有折角。
-    // 40px 下限让两个端口靠得很近时曲线不退化成直线段（与 PolylineCurveView 同一条曲线）。
-    // 画与命中读的是同一份参数 —— 两处各推一遍几何，弯的地方命中就会对不上指针。
+    // 与 LinkCurve.BuildCubic 用同一个拉出量 —— 两处若各推一遍几何，弯的地方命中就会对不上指针。
     private (Point C1, Point C2) Controls()
     {
         var diffx = EndLeft - StartLeft;
-        var pull = Math.Max(40, Math.Abs(diffx) * 0.5);
+        var pull = Math.Max(PullMinimum, Math.Abs(diffx) * 0.5);
         return (new Point(StartLeft + pull, StartTop), new Point(EndLeft - pull, EndTop));
     }
 
@@ -191,130 +268,4 @@ public partial class BezierCurveView : Control
         }
         return geometry;
     }
-
-    #region Interaction
-
-    protected override void OnPointerEntered(PointerEventArgs e)
-    {
-        base.OnPointerEntered(e);
-        IsSelected = true;
-        CurveSelectionManager.Select(this);
-
-        // 与 Polyline 那条同款：选中是「上色」，Delete 要的是键盘焦点，两者必须同时发生，
-        // 否则 OnKeyDown 收不到键、得先点一下线才拿得到焦点。
-        Focus();
-    }
-
-    protected override void OnPointerExited(PointerEventArgs e)
-    {
-        base.OnPointerExited(e);
-        CurveSelectionManager.Deselect(this);
-        IsSelected = false;
-    }
-
-    protected override void OnPointerMoved(PointerEventArgs e)
-    {
-        base.OnPointerMoved(e);
-        var pt = e.GetPosition(this);
-        bool over = HitTestCurve(pt);
-        if (over && !IsSelected)
-        {
-            IsSelected = true;
-            CurveSelectionManager.Select(this);
-            Focus();
-        }
-        else if (!over && IsSelected)
-        {
-            CurveSelectionManager.Deselect(this);
-            IsSelected = false;
-        }
-    }
-
-    protected override void OnPointerPressed(PointerPressedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-
-        if (!e.GetCurrentPoint(this).Properties.IsRightButtonPressed) return;
-
-        // 只有落在画出来的线上的右键才算这条线的：沿 40 段折线逼近判距（半径 6）。
-        // 框架只把指针事件送给画出来的描边，这条判据与它同带宽；留着它是为了命中面被改粗时也不在空白处弹菜单
-        if (!HitTestCurve(e.GetPosition(this))) return;
-
-        // 未选中先选中：菜单里的删除作用于当前这条线。悬停选中与它无关，菜单弹出后指针就落到菜单上
-        IsSelected = true;
-        CurveSelectionManager.Select(this);
-        Focus();
-
-        _menu ??= BuildMenu();
-        _menu.Open(this);
-
-        e.Handled = true;
-    }
-
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        base.OnKeyDown(e);
-        if (e.Key == Key.Delete && IsSelected)
-        {
-            DeleteLink();
-            e.Handled = true;
-        }
-    }
-
-    // 菜单只有一项，且不绑命令：视图会被池化改绑给另一条链接，菜单项在点击那一刻才去读 DataContext
-    private ContextMenu? _menu;
-
-    private ContextMenu BuildMenu()
-    {
-        var item = new MenuItem { Header = "删除连线" };
-        item.Click += (_, _) => DeleteLink();
-
-        return new ContextMenu { Items = { item } };
-    }
-
-    private void DeleteLink()
-    {
-        if (DataContext is IWorkflowLinkViewModel vm)
-            vm.DeleteCommand.Execute(null);
-    }
-
-    private bool HitTestCurve(Point pt)
-    {
-        const double hitRadius = 6.0;
-        const int segments = 40;
-
-        var (cp1, cp2) = Controls();
-        var p0 = new Point(StartLeft, StartTop);
-        var p3 = new Point(EndLeft, EndTop);
-
-        Point Eval(double t)
-        {
-            double mt = 1 - t;
-            return new Point(
-                mt * mt * mt * p0.X + 3 * mt * mt * t * cp1.X + 3 * mt * t * t * cp2.X + t * t * t * p3.X,
-                mt * mt * mt * p0.Y + 3 * mt * mt * t * cp1.Y + 3 * mt * t * t * cp2.Y + t * t * t * p3.Y);
-        }
-
-        var prev = Eval(0);
-        for (int i = 1; i <= segments; i++)
-        {
-            var next = Eval((double)i / segments);
-            if (DistanceToSegment(pt, prev, next) <= hitRadius) return true;
-            prev = next;
-        }
-        return false;
-    }
-
-    private static double DistanceToSegment(Point p, Point a, Point b)
-    {
-        var ab = b - a;
-        double len2 = ab.X * ab.X + ab.Y * ab.Y;
-        if (len2 < 0.0001) return new Vector(p.X - a.X, p.Y - a.Y).Length;
-        double t = ((p.X - a.X) * ab.X + (p.Y - a.Y) * ab.Y) / len2;
-        t = Math.Clamp(t, 0.0, 1.0);
-        var proj = new Point(a.X + t * ab.X, a.Y + t * ab.Y);
-        return new Vector(p.X - proj.X, p.Y - proj.Y).Length;
-    }
-
-    #endregion
 }

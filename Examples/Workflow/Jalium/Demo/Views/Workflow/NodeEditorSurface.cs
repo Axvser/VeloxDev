@@ -31,9 +31,9 @@ internal sealed class NodeEditorSurface : Canvas
     // 选中（＝指针搭上）的连线：加粗 1.5，与其它六家的连线一致
     private const double SelectedLinkThickness = LinkThickness + 1.5;
 
-    // 连线的命中半径。取值与其它六家的连线命中一致：6 个画布像素 —— 那是一个指针能稳定指到的宽度，
-    // 而描边半宽（1px）要求像素级对齐，稍一挪动就落空，读起来像「看得见却抓不住」
-    private const double LinkHitRadius = 6.0;
+    // 控制点的最小水平拉出量（画布单位）：两个端口靠得很近时 0.5·dx 会让曲线退化成一条直线段，
+    // 失去「从端口水平出来」的形状。发布给 Core 的曲线与这里画的是同一个值
+    private const double PullMinimum = 40;
 
     // 所有链接的颜色。白是这套设计里链接的落点色：Avalonia 的 WorkflowView 给 BezierCurveView 传白，
     // 七家的连线本体色统一到 Avalonia 参考实现的 #CC38BDF8：彗星是「尾梢=本体色、亮头=白」，
@@ -72,9 +72,14 @@ internal sealed class NodeEditorSurface : Canvas
     // 没有端口控件可以替它答「指针在我身上吗」
     private IWorkflowSlotViewModel? _hoverSlot;
 
-    // 当前选中的连线。链接和端口一样是表面画的，没有控件能担任这个角色；
-    // 悬停即选中（与其它六家一致），Delete 与右键菜单都打在它身上
+    // 当前被点亮的连线。链接和端口一样是表面画的，没有控件能担任这个角色；
+    // 悬停即点亮（与其它六家一致），它只决定绘制时给哪条上高亮色。
+    // 由 hub 的 HoverChanged 驱动（见 OnLinkHoverChanged），表面自己不再判命中；Delete 由 hub 按 HoveredLink 裁决
     private IWorkflowLinkViewModel? _selectedLink;
+
+    // 连线的命中与输入裁决归 Core（见 LinkInteraction）：表面只负责把指针/按键翻译成标准输入事件转发进去，
+    // 并订阅结果（选中上色、右键菜单、删除请求）。命中的算法不在这家
+    private LinkInteraction? _interaction;
 
     // 右键菜单复用一份实例，同时只会开一个。它删的是「开菜单时的那条」而不是「此刻悬停的那条」：
     // 指针移进弹层去点菜单项时，悬停早已离开那条连线
@@ -125,7 +130,8 @@ internal sealed class NodeEditorSurface : Canvas
 
         Unloaded += (_, _) => StopFlow();
 
-        // 指针离开表面就把悬停清掉：端口的悬停反馈是表面画的，没有人会替它发 PointerExited
+        // 指针离开表面：端口的悬停反馈是表面画的（这里直接清），连线的悬停转成 Core 的 PointerExited。
+        // 菜单开着时指针是飞到弹层上去了、不是移开连线，那一次不转发（否则选中会在菜单弹起的一瞬被抹掉）
         MouseLeave += (_, _) =>
         {
             if (MenuOpen)
@@ -133,38 +139,35 @@ internal sealed class NodeEditorSurface : Canvas
                 return;
             }
 
-            if (_hoverSlot is null && _selectedLink is null)
-            {
-                return;
-            }
-
             _hoverSlot = null;
-            _selectedLink = null;
+            ForwardPointer(PointerPhase.Exited, default);
             InvalidateVisual();
         };
     }
 
     // ── Link selection: hover highlight, the Delete key, the right-click menu ──
 
-    // 选中色与其它六家一致（OrangeRed）。白是静息色的落点（见 LinkColor），选中就换一整套线体与彗星的颜色：
-    // 只改粗细不改色的话，指针搭上一条浅蓝的线几乎看不出来
-    private static readonly Color SelectedLinkColor = Colors.OrangeRed;
+    // 选中＝指针搭上的那条，换成白色并加粗。七家统一用白：它读起来是「这条线被点亮了」，而不是「被重新
+    // 上了个色」；红像告警、青像另一条线，都试过，用户否掉了
+    private static readonly Color SelectedLinkColor = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
 
     /// <summary>Delete the link currently under the pointer, as a <c>Delete</c> key press does.
     /// Returns whether there was one to delete.</summary>
     public bool DeleteSelectedLink()
     {
-        if (_selectedLink is null)
+        // 「哪条在指针下」归 hub：窗口级预览走的就是这一条，与表面自己的 KeyDown 得到同一个答案
+        if (_interaction?.HoveredLink is not { } link)
         {
             return false;
         }
 
-        DeleteLink(_selectedLink);
+        DeleteLink(link);
         return true;
     }
 
-    // 删除只有一条路：走连线自己的命令，删完把指向它的选中清掉。
-    // 集合的变更通知会把绘制与弧长表带上（见 OnLinksChanged），这里只管选中这一个成员
+    // 宿主侧的删除（窗口级 Delete、菜单项）：走连线自己的命令，删完把指向它的选中清掉。
+    // 表面自己的 KeyDown 不走这里 —— 它把键转发给 hub，由 hub 的 AutoDelete 执行命令，
+    // 集合变更后再由 PruneCurves 收拾选中与菜单
     private void DeleteLink(IWorkflowLinkViewModel? link)
     {
         if (link is null)
@@ -186,10 +189,14 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Delete && DeleteSelectedLink())
+        // 键也过 Core：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠表面另记一个选中
+        if (e.Key != Key.Delete || _interaction?.HoveredLink is null)
         {
-            e.Handled = true;
+            return;
         }
+
+        _interaction.Publish(new KeyEvent(InputKey.Delete));
+        e.Handled = true;
     }
 
     // 只拦目标是自己（整块画布）的那一次滚进视口；节点卡里的控件发起的请求照旧往上冒
@@ -219,77 +226,83 @@ internal sealed class NodeEditorSurface : Canvas
         _linkMenu.Items.Add(item);
     }
 
-    private void OnLinkRightClick(MouseButtonEventArgs e)
+    // ── Link interaction (forwarded to Core) ───────────────────────────────
+
+    // hub 归 Core（同树同实例，见 LinkInteraction.For）—— 表面不持有实例，只把事件转进去、订它的结果。
+    // 这家一个表面画完所有线、没有「每线的可视对象」，所以 hub 的 AutoHighlight 没有东西可点：选中由这里
+    // 订阅 HoverChanged 自己画（别家是视觉实现 ILinkHighlight、由 hub 直接点亮）。删除归 hub 的 AutoDelete，
+    // 本家不再订 LinkDeleteRequested。
+    private void AttachInteraction()
     {
-        var pos = e.GetPosition(this);
-        if (HitTestLink(pos) is not { } link)
+        DetachInteraction();
+        if (_tree is null)
         {
             return;
         }
 
-        // 右键先把它选上再开菜单：菜单项删的是这条，而高亮让「删的到底是哪条」在点之前就看得见
-        _selectedLink = link;
+        var hub = LinkInteraction.For(_tree);
+        hub.HoverChanged += OnLinkHoverChanged;
+        hub.LinkPressed += OnLinkPressed;
+        _interaction = hub;
+    }
+
+    private void DetachInteraction()
+    {
+        if (_interaction is not { } hub)
+        {
+            return;
+        }
+
+        hub.HoverChanged -= OnLinkHoverChanged;
+        hub.LinkPressed -= OnLinkPressed;
+        _interaction = null;
+    }
+
+    // 指针位置就是表面自己的坐标（= ToCanvas 的画布系），与发布给 Core 的曲线用的是同一个系。
+    // 菜单开着时把它映射成 hub 的挂起：那几帧指针在弹层上，不该改悬停
+    private void ForwardPointer(PointerPhase phase, Point canvasPos, PointerButtonKind button = PointerButtonKind.None)
+    {
+        if (_interaction is not { } hub)
+        {
+            return;
+        }
+
+        hub.IsSuspended = MenuOpen;
+        hub.Publish(new PointerEvent(phase, new Anchor(canvasPos.X, canvasPos.Y, 0), button));
+    }
+
+    // 悬停即「当前选中」，移开即取消 —— 与其它六家的连线一致
+    private void OnLinkHoverChanged(object? sender, LinkHoverEventArgs e)
+    {
+        _selectedLink = e.Link;
+        InvalidateVisual();
+    }
+
+    private void OnLinkPressed(object? sender, LinkPressedEventArgs e)
+    {
+        if (e.Button == PointerButtonKind.Right)
+        {
+            ShowLinkMenu(e.Link);
+        }
+    }
+
+    /// <summary>
+    /// 菜单只一项。这一家的连线不是控件，它没有自己的 <c>ContextMenu</c> 可挂 —— 菜单只能由画它的表面
+    /// 代开，删的是开菜单那一刻记下的那条（<see cref="_menuTarget"/>）。
+    /// </summary>
+    private void ShowLinkMenu(IWorkflowLinkViewModel link)
+    {
+        // 右键那一发已经经过 hub：按下即选中（HoverChanged 先到），所以这里只记目标、开菜单，
+        // 高亮让「删的到底是哪条」在点之前就看得见
         _menuTarget = link;
         InvalidateVisual();
 
         // 先摆好位置再开：弹层一起来指针就算「离开」了表面，那条 MouseLeave 会连选中一起抹掉，
-        // 用户看到的就是「菜单开着、线不亮」
+        // 用户看到的就是「菜单开着、线不亮」。MouseLeave 与 ForwardPointer 都看 MenuOpen，
+        // 所以这里读的是弹层自己的 IsOpen，不另立标志
         _linkMenu.Placement = PlacementMode.MousePoint;
         _linkMenu.PlacementTarget = this;
         _linkMenu.IsOpen = true;
-        e.Handled = true;
-    }
-
-    /// <summary>
-    /// 指针下最上面那条连线（画布坐标进，链接视图模型出）。逐个采样段量点到折线的距离，
-    /// 量与画读的是同一张弧长表（见 <see cref="CurveFor"/>），所以只有画出来的那一道笔画能命中 ——
-    /// 两端之间的空当不算。
-    /// </summary>
-    private IWorkflowLinkViewModel? HitTestLink(Point canvasPos)
-    {
-        if (_tree is null)
-        {
-            return null;
-        }
-
-        // 后画的压在上面，所以从集合尾部往前找
-        for (int i = _tree.Links.Count - 1; i >= 0; i--)
-        {
-            var link = _tree.Links[i];
-            if (!link.IsVisible)
-            {
-                continue;
-            }
-
-            var from = GetSlotPortCenter(link.Sender);
-            var to = GetSlotPortCenter(link.Receiver);
-            var curve = CurveFor(link, ToCanvas(from.X, from.Y), ToCanvas(to.X, to.Y));
-            if (curve.DistanceTo(canvasPos) <= LinkHitRadius)
-            {
-                return link;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>悬停即「当前选中」，移开即取消 —— 与其它六家的连线一致。</summary>
-    private void UpdateLinkHover(Point canvasPos)
-    {
-        // 菜单开着时指针在弹层上，那段移动不该改选中（见 MenuOpen）
-        if (MenuOpen)
-        {
-            return;
-        }
-
-        var hovered = HitTestLink(canvasPos);
-        if (ReferenceEquals(hovered, _selectedLink))
-        {
-            return;
-        }
-
-        _selectedLink = hovered;
-        InvalidateVisual();
     }
 
     /// <summary>Ctrl + mouse wheel zooms the workspace: each node collapses toward the world origin
@@ -373,6 +386,7 @@ internal sealed class NodeEditorSurface : Canvas
             return;
         }
 
+        AttachInteraction();
         _tree.Nodes.CollectionChanged += OnNodesChanged;
         _tree.Links.CollectionChanged += OnLinksChanged;
         SubscribeLayout();
@@ -452,6 +466,7 @@ internal sealed class NodeEditorSurface : Canvas
             return;
         }
 
+        DetachInteraction();
         UnsubscribeLayout();
         _tree.Nodes.CollectionChanged -= OnNodesChanged;
         _tree.Links.CollectionChanged -= OnLinksChanged;
@@ -502,6 +517,7 @@ internal sealed class NodeEditorSurface : Canvas
             return default;
         }
 
+        // 这家不写 slot.Anchor：Core 的命中只认表面画出来时发布的那条曲线，anchor 不再是就绪证据
         if (NodePorts.IndexOf(node, slot) is { } found)
         {
             return found.IsInput
@@ -627,17 +643,21 @@ internal sealed class NodeEditorSurface : Canvas
 
         var alive = new HashSet<IWorkflowLinkViewModel>(_tree.Links);
 
-        // 选中的那条也可能已经不在了：删除不止表面这一条路（Agent、Undo 都会删连线）。
-        // 留着一个不在树上的选中，下一次 Delete 就打在空气上
-        if (_selectedLink is not null && !alive.Contains(_selectedLink))
+        // 悬停的那条也可能已经不在了：删除不止表面这一条路（Agent、Undo 都会删连线）。
+        // 选中由 hub 的 HoverChanged 驱动，所以要清的是 hub 的悬停 —— 发一次 Exited 让它把选中一起带走，
+        // 否则留着一条不在树上的选中，下一次 Delete 就打在空气上
+        if (_interaction?.HoveredLink is { } hovered && !alive.Contains(hovered))
         {
-            _selectedLink = null;
+            _interaction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
         }
 
-        // 菜单记着的那条同理：它已经不在了，菜单项再点也不该去动一条不在树上的线
+        // 菜单记着的那条同理：它已经不在了，菜单项再点也不该去动一条不在树上的线。
+        // 顺手把菜单收掉 —— 删除现在由 hub 的 AutoDelete 执行，这条路径不再经过 DeleteLink，
+        // 不收菜单它会杵在画布上指着一条已经不在的线
         if (_menuTarget is not null && !alive.Contains(_menuTarget))
         {
             _menuTarget = null;
+            _linkMenu.IsOpen = false;
         }
 
         foreach (var link in _curves.Keys.ToArray())
@@ -802,10 +822,11 @@ internal sealed class NodeEditorSurface : Canvas
 
         if (_dragKind == DragKind.Link && _dragFrom is { } from && _tree is { VirtualLink.IsVisible: true })
         {
-            var start = ToCanvas(GetPortCenter(from.Node, from.OutputIndex).X, GetPortCenter(from.Node, from.OutputIndex).Y);
+            var center = GetPortCenter(from.Node, from.OutputIndex);
+            var start = ToCanvas(center.X, center.Y);
             var end = ToCanvas(_tree.VirtualLink.Receiver.Anchor.Horizontal, _tree.VirtualLink.Receiver.Anchor.Vertical);
-            _virtualCurve.Ensure(start, end);
-            dc.DrawGeometry(null, s_virtualPen, _virtualCurve.Segment(0, _virtualCurve.Length));
+            var preview = VirtualCurve(start, end);
+            dc.DrawGeometry(null, s_virtualPen, LinkSegment(preview, 0, preview.Length));
         }
 
         // 标尺带视口固定（绝对浮贴），排在最后：滚动时它永远贴着视口，也永远在最上面
@@ -1061,8 +1082,10 @@ internal sealed class NodeEditorSurface : Canvas
             }
 
             // 线体是静息的，光不在时它只是一根暗线 —— 有了对比，沿它跑的那段彗星才亮得出来。
-            // 端点每次绘制现读：拖节点只动 Anchor，链接本身收不到通知，所以几何按端点缓存（见 LinkCurve）
+            // 端点每次绘制现读：拖节点只动 Anchor，链接本身收不到通知，所以几何按端点缓存。
+            // 这条曲线同时发布给 Core 做命中，画出来的与能点中的是同一条（退化成一点的不发布，免得被当可命中）
             var curve = CurveFor(link, p0, p1);
+            link.PublishCurve(curve.Length > 0 ? curve : null);
             if (curve.Length <= 0)
             {
                 continue;
@@ -1100,201 +1123,78 @@ internal sealed class NodeEditorSurface : Canvas
             && Math.Min(a.Y, b.Y) <= vb;
     }
 
-    // ── 链接几何（三次贝塞尔 + 弧长表） ────────────────────────────────────
+    // ── 链接几何（发布给 Core 的扁曲线 + 弧长取段）────────────────────────
 
-    /// <summary>
-    /// 一条链接的弧长表：<see cref="SampleCount"/> 段的采样点 + 累计长度 + 全长。
-    /// <para>
-    /// 为什么要存表而不是每帧现算：彗星是按<b>弧长</b>切的（头与尾各取一段长度），而贝塞尔的 t 与弧长
-    /// 并不成正比 —— 现算的话光在弯道上会忽快忽慢，正是这个 demo 换掉折线时想修掉的观感。表只在端点
-    /// 变化时重建，判据就是建表时的那两个端点。
-    /// </para>
-    /// <para>
-    /// 用 <see cref="PathGeometry"/> + <see cref="PolyLineSegment"/> 而不是 <c>StreamGeometry</c>：
-    /// 后者的上下文接口（BeginFigure / LineTo 的重载）在本平台上没有文档，前者是这个仓库里已经在跑的组合。
-    /// </para>
-    /// </summary>
-    private sealed class LinkCurve
-    {
-        private readonly Point[] _samples = new Point[SampleCount + 1];
-        private readonly double[] _cumulative = new double[SampleCount + 1];
-        private Point _from;
-        private Point _to;
-        private double _length;
+    // 每条链接当前发布给 Core 的曲线。Core 的 LinkCurve 一旦建好就不可变，端点变了就换一条；
+    // 缓存只为省下每帧的采样开销，判据就是建曲线时的那两个端点。
+    private readonly Dictionary<IWorkflowLinkViewModel, (Point From, Point To, LinkCurve Curve)> _curves = new();
 
-        public double Length => _length;
+    // 虚拟连线（指针下那根橡皮筋）也有自己的一条曲线：同时只会有一根，端点一变就重算
+    private (Point From, Point To, LinkCurve Curve)? _virtualPreview;
 
-        /// <summary>端点变了就重建弧长表，否则原样留着。返回是否重建过。</summary>
-        public bool Ensure(Point from, Point to)
-        {
-            if (_length > 0
-                && from.X == _from.X && from.Y == _from.Y
-                && to.X == _to.X && to.Y == _to.Y)
-            {
-                return false;
-            }
-
-            _from = from;
-            _to = to;
-            for (int i = 0; i <= SampleCount; i++)
-            {
-                _samples[i] = At(i / (double)SampleCount);
-            }
-
-            _cumulative[0] = 0;
-            for (int i = 1; i <= SampleCount; i++)
-            {
-                double dx = _samples[i].X - _samples[i - 1].X;
-                double dy = _samples[i].Y - _samples[i - 1].Y;
-                _cumulative[i] = _cumulative[i - 1] + Math.Sqrt((dx * dx) + (dy * dy));
-            }
-
-            _length = _cumulative[SampleCount];
-            return true;
-        }
-
-        // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角。
-        // 最小拉出量那条不是装饰：两个端口靠得很近时 0.5·dx 会让曲线退化成一条直线段，
-        // 失去「从端口水平出来」的形状
-        private (Point C1, Point C2) Controls()
-        {
-            double dx = _to.X - _from.X;
-            double pull = Math.Max(40, Math.Abs(dx) * 0.5);
-            return (new Point(_from.X + pull, _from.Y), new Point(_to.X - pull, _to.Y));
-        }
-
-        private Point At(double t)
-        {
-            var (c1, c2) = Controls();
-            double u = 1 - t;
-            double a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
-
-            return new Point(
-                (a * _from.X) + (b * c1.X) + (c * c2.X) + (d * _to.X),
-                (a * _from.Y) + (b * c1.Y) + (c * c2.Y) + (d * _to.Y));
-        }
-
-        /// <summary>弧长 → 点。二分找所在采样段再线性插值，所以取点精确到亚像素，不受采样密度限制。</summary>
-        public Point AtLength(double len)
-        {
-            if (_length <= 0)
-            {
-                return _from;
-            }
-
-            len = Math.Clamp(len, 0, _length);
-
-            int lo = 0, hi = _cumulative.Length - 1;
-            while (hi - lo > 1)
-            {
-                int mid = (lo + hi) / 2;
-                if (_cumulative[mid] <= len)
-                {
-                    lo = mid;
-                }
-                else
-                {
-                    hi = mid;
-                }
-            }
-
-            double span = _cumulative[hi] - _cumulative[lo];
-            double t = span <= 0 ? 0 : (len - _cumulative[lo]) / span;
-
-            return new Point(
-                _samples[lo].X + ((_samples[hi].X - _samples[lo].X) * t),
-                _samples[lo].Y + ((_samples[hi].Y - _samples[lo].Y) * t));
-        }
-
-        /// <summary>点到这条曲线的最近距离，按现成的采样折线量 —— 命中测试因此与绘制读同一张表。</summary>
-        public double DistanceTo(Point p)
-        {
-            if (_length <= 0)
-            {
-                return double.MaxValue;
-            }
-
-            double best = double.MaxValue;
-            for (int i = 1; i < _samples.Length; i++)
-            {
-                double d = DistanceToSegment(p, _samples[i - 1], _samples[i]);
-                if (d < best)
-                {
-                    best = d;
-                }
-            }
-
-            return best;
-        }
-
-        private static double DistanceToSegment(Point p, Point a, Point b)
-        {
-            double abx = b.X - a.X, aby = b.Y - a.Y;
-            double len2 = (abx * abx) + (aby * aby);
-            if (len2 < 0.0001)
-            {
-                return Distance(p, a);
-            }
-
-            double t = Math.Clamp((((p.X - a.X) * abx) + ((p.Y - a.Y) * aby)) / len2, 0, 1);
-            return Distance(p, new Point(a.X + (t * abx), a.Y + (t * aby)));
-        }
-
-        private static double Distance(Point p, Point q)
-        {
-            double dx = p.X - q.X, dy = p.Y - q.Y;
-            return Math.Sqrt((dx * dx) + (dy * dy));
-        }
-
-        /// <summary>[from, to] 这一段弧长上的折线几何：两端各自插值到精确位置，中间用现成采样点。</summary>
-        public Geometry Segment(double from, double to)
-        {
-            to = Math.Min(to, _length);
-            from = Math.Clamp(from, 0, _length);
-
-            var points = new List<Point>(SampleCount + 2) { AtLength(from) };
-            for (int i = 1; i < _samples.Length - 1; i++)
-            {
-                double l = _cumulative[i];
-                if (l <= from || l >= to)
-                {
-                    continue;
-                }
-
-                points.Add(_samples[i]);
-            }
-
-            points.Add(AtLength(to));
-
-            var figure = new PathFigure { StartPoint = points[0], IsClosed = false, IsFilled = false };
-            figure.Segments.Add(new PolyLineSegment(points, true));
-            var geometry = new PathGeometry();
-            geometry.Figures.Add(figure);
-            return geometry;
-        }
-    }
-
-    // 弧长表按链接缓存：端点一变就重建，否则每帧只是两次比较。链接被删时条目在 Links 变更里一起丢掉
-    private readonly Dictionary<IWorkflowLinkViewModel, LinkCurve> _curves = new();
-
-    // 虚拟连线（指针下那根橡皮筋）也有自己的一条曲线，复用同一个实例：同时只会有一根
-    private readonly LinkCurve _virtualCurve = new();
+    // 建一条 Core 的扁曲线：控制点水平拉出 max(PullMinimum, 0.5·dx)，与这里画出来的是同一条贝塞尔。
+    // 命中、取弧长都读它，表面不再自存一份采样表
+    private static LinkCurve BuildCurve(Point from, Point to)
+        => LinkCurve.BuildCubic(from.X, from.Y, to.X, to.Y, PullMinimum, LinkCurve.DefaultSampleCount);
 
     private LinkCurve CurveFor(IWorkflowLinkViewModel link, Point from, Point to)
     {
-        if (!_curves.TryGetValue(link, out var curve))
+        if (_curves.TryGetValue(link, out var entry) && entry.From == from && entry.To == to)
         {
-            curve = new LinkCurve();
-            _curves[link] = curve;
+            return entry.Curve;
         }
 
-        curve.Ensure(from, to);
+        var curve = BuildCurve(from, to);
+        _curves[link] = (from, to, curve);
         return curve;
     }
 
+    private LinkCurve VirtualCurve(Point from, Point to)
+    {
+        if (_virtualPreview is { } entry && entry.From == from && entry.To == to)
+        {
+            return entry.Curve;
+        }
+
+        var curve = BuildCurve(from, to);
+        _virtualPreview = (from, to, curve);
+        return curve;
+    }
+
+    // 从 Core 的扁曲线切出 [from, to] 这段弧长的折线几何：两端各插值到精确位置，中间用现成采样点。
+    // 几何由发布给 Core 的那条曲线切出来，画与取点因此共享同一张弧长表。
+    // 用 PathGeometry + PolyLineSegment 而不是 StreamGeometry：后者的上下文接口在本平台没有文档。
+    private static Geometry LinkSegment(LinkCurve curve, double from, double to)
+    {
+        to = Math.Min(to, curve.Length);
+        from = Math.Clamp(from, 0, curve.Length);
+
+        var points = new List<Point>(curve.Count + 2) { ToPoint(curve.PointAtLength(from)) };
+        for (var i = 1; i < curve.Count - 1; i++)
+        {
+            var l = curve.LengthAt(i);
+            if (l <= from || l >= to)
+            {
+                continue;
+            }
+
+            points.Add(new Point(curve.XAt(i), curve.YAt(i)));
+        }
+
+        points.Add(ToPoint(curve.PointAtLength(to)));
+
+        var figure = new PathFigure { StartPoint = points[0], IsClosed = false, IsFilled = false };
+        figure.Segments.Add(new PolyLineSegment(points, true));
+        var geometry = new PathGeometry();
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    private static Point ToPoint((double X, double Y) p) => new(p.X, p.Y);
+
     private static void DrawLink(DrawingContext dc, LinkCurve curve, Color color, double thickness)
     {
-        var body = curve.Segment(0, curve.Length);
+        var body = LinkSegment(curve, 0, curve.Length);
 
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。
         // 圆头：两端才不像被截断的横截面
@@ -1362,7 +1262,7 @@ internal sealed class NodeEditorSurface : Canvas
                     bloom
                         ? new Pen(CardPalette.Alpha(c, a * 0.22), thickness + 9)
                         : Capped(new Pen(CardPalette.Alpha(c, a), thickness * (0.45 + (0.95 * f0)))),
-                    curve.Segment(l0, l1));
+                    LinkSegment(curve, l0, l1));
             }
         }
     }
@@ -1391,9 +1291,6 @@ internal sealed class NodeEditorSurface : Canvas
     }
 
     // ── Flow: one clock, and everything on the surface is a function of it ──
-
-    // 弧长表的分辨率。128 段放到缩放上限（Layout.Scale 0.1，即放大约十倍）也看不出折线感
-    private const int SampleCount = 128;
 
     // 拖尾占全长的比例。彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑
     private const double TailFraction = 0.30;
@@ -1582,10 +1479,16 @@ internal sealed class NodeEditorSurface : Canvas
         }
 
         // 右键只在连线上有含义（弹出删除菜单），落在别处什么也不做：这一家的自动化右键路径不认单条连线，
-        // 菜单由表面代开（见 OnLinkRightClick）
+        // 菜单由表面代开（见 ShowLinkMenu）。命中的裁决在 hub —— 按下转发进去，命中了它才发 LinkPressed，
+        // 表面订阅后弹菜单；空白处右键不置 Handled
         if (e.ChangedButton == MouseButton.Right)
         {
-            OnLinkRightClick(e);
+            ForwardPointer(PointerPhase.Pressed, e.GetPosition(this), PointerButtonKind.Right);
+            if (_interaction?.HoveredLink is not null)
+            {
+                e.Handled = true;
+            }
+
             return;
         }
 
@@ -1731,12 +1634,12 @@ internal sealed class NodeEditorSurface : Canvas
                 break;
             }
 
-            // 没在拖任何东西：只更新端口与连线的悬停。端口小，没有这点反馈就不知道指针到底有没有搭上它；
-            // 连线长，它的悬停同时就是「当前选中」，Delete 与右键菜单读的是它
+            // 没在拖任何东西：更新端口与连线的悬停。端口是表面自己画的，就地更新；连线的悬停转发给 hub，
+            // 由 Core 裁决后经 HoverChanged 回到 OnLinkHoverChanged（悬停即选中）
             default:
                 var canvasPos = e.GetPosition(this);
                 UpdatePortHover(canvasPos);
-                UpdateLinkHover(canvasPos);
+                ForwardPointer(PointerPhase.Moved, canvasPos);
                 break;
         }
     }

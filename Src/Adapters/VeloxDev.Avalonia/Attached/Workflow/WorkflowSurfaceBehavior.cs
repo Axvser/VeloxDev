@@ -35,6 +35,12 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public bool RestoreQueued { get; set; }
         public double PendingRestoreX { get; set; }
         public double PendingRestoreY { get; set; }
+
+        // 悬停时取焦点的那个连线控件（引用比较，避免每次指针移动都重复 Focus）。
+        public Control? HoverFocus { get; set; }
+
+        // 宿主本身：悬停焦点在连线可视对象不可聚焦时的落点（模板/Trimmed 的连线视图就是这种）。
+        public UserControl? Host { get; set; }
     }
 
     public static readonly AttachedProperty<bool> IsEnabledProperty =
@@ -109,6 +115,40 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         QueueViewportRestore(host, state);
     }
 
+    // 指针位置换算到连线发布曲线的那个坐标系（canvas-local 锚点空间）：指针在 Canvas 的局部坐标里，
+    // 减去 ActualOffset 即连线视图自身的几何空间（见 WorkflowSurfaceMath / 各连线视图的 StartLeft 绑定）。
+    // 中枢按树取（LinkInteraction.For）：适配器只把平台指针翻成标准事件转发，不再自己持有实例。
+    private static void ForwardLinkPointer(UserControl host, SurfaceState state, PointerEventArgs e, PointerPhase phase, PointerButtonKind button = PointerButtonKind.None)
+    {
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.Canvas is null)
+            return;
+
+        var point = e.GetPosition(state.Canvas);
+        var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout);
+        var interaction = LinkInteraction.For(viewModel);
+        interaction.Publish(new PointerEvent(phase, anchor, button));
+        FocusHoveredLink(interaction, state);
+    }
+
+    // 悬停把键盘焦点交给能接住它的东西：Delete 才能沿焦点所在子树冒泡到宿主的键路由。
+    // 优先交给画出那条线的控件；它不可聚焦时（**模板与 Trimmed 的连线视图默认就是**）退回宿主本身 ——
+    // 否则「悬停 + Delete」在生成出来的工程里根本没有路由，而且不报错。
+    // 输入框自己处理 Delete 时事件已被标记、冒泡到宿主前被吃掉，所以编辑文本不受影响。
+    private static void FocusHoveredLink(LinkInteraction interaction, SurfaceState state)
+    {
+        var hovered = interaction.HoveredLink?.HitTarget()?.Visual as IInputElement;
+        IInputElement? target = hovered is null
+            ? null
+            : hovered is { Focusable: true } ? hovered : state.Host;
+
+        if (ReferenceEquals(state.HoverFocus, target))
+            return;
+
+        state.HoverFocus = target as Control;
+        if (target is { Focusable: true })
+            target.Focus();
+    }
+
     // 树刚挂上来且不是上一棵：把它存档里的视口位置排进待恢复（世界 → 滚动）。
     // 必须在 UpdateVisibleRegion 之前 —— 那一步会拿控件当前（还没滚过去的）位置覆盖 ViewportOffset。
     private static void CaptureViewportRestore(UserControl host, SurfaceState state)
@@ -168,14 +208,20 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     {
         Detach(control);
 
-        var state = new SurfaceState();
+        var state = new SurfaceState { Host = control };
         control.SetValue(StateProperty, state);
+
+        // 宿主必须能拿焦点，悬停焦点才有落点、Delete 才有路由。`UserControl` 的 `Focusable` 默认是
+        // **false**，所以这里由适配器自己打开 —— 不能指望模板/宿主去设（生成出来的工程不会）。
+        control.Focusable = true;
         control.AttachedToVisualTree += OnAttachedToVisualTree;
         control.DetachedFromVisualTree += OnDetachedFromVisualTree;
         control.DataContextChanged += OnDataContextChanged;
         control.PointerMoved += OnPointerMoved;
+        control.PointerExited += OnPointerExited;
         control.PointerReleased += OnPointerReleased;
         control.PointerCaptureLost += OnPointerCaptureLost;
+        control.KeyDown += OnKeyDown;
         ResolveNamedControls(control, state);
         Refresh(control);
     }
@@ -186,11 +232,15 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         control.DetachedFromVisualTree -= OnDetachedFromVisualTree;
         control.DataContextChanged -= OnDataContextChanged;
         control.PointerMoved -= OnPointerMoved;
+        control.PointerExited -= OnPointerExited;
         control.PointerReleased -= OnPointerReleased;
         control.PointerCaptureLost -= OnPointerCaptureLost;
+        control.KeyDown -= OnKeyDown;
 
         if (control.GetValue(StateProperty) is SurfaceState state)
+        {
             UnsubscribeResolvedControls(state);
+        }
 
         control.ClearValue(StateProperty);
     }
@@ -402,6 +452,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (host is null || host.GetValue(StateProperty) is not SurfaceState state || state.ScrollViewer is null)
             return;
 
+        // 按下先过 Core：按在哪条连线上由它裁。左键落在连线上时下面照样会起一次平移（连线算空白），
+        // 两者互不冲突 —— Core 只报「按到了哪条」，平移是这层的另一件事。
+        ForwardLinkPointer(host, state, e, PointerPhase.Pressed, ButtonOf(e, state));
+
         if (!ShouldStartPan(e, state))
             return;
 
@@ -427,6 +481,51 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         var point = e.GetPosition(state.Canvas);
         viewModel.SetPointerCommand.Execute(
             WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout));
+
+        // 连线建立过程中橡皮筋就在指针底下，逐帧判悬停只会把沿途那些实连线点亮（VirtualLink 仅在拖时可见）。
+        if (viewModel.VirtualLink is not { IsVisible: true })
+            ForwardLinkPointer(host, state, e, PointerPhase.Moved);
+    }
+
+    private static void OnPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+            return;
+
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+            return;
+
+        // 菜单弹出引起的那一次离开不算：指针是飞到菜单上，不是移开了这条线。
+        if (LinkInteraction.For(viewModel).IsSuspended)
+            return;
+
+        ForwardLinkPointer(host, state, e, PointerPhase.Exited);
+    }
+
+    private static void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+            return;
+
+        if (e.Key != Key.Delete || host.DataContext is not IWorkflowTreeViewModel viewModel)
+            return;
+
+        // 键也过 Core：现在按 Delete 删哪条与其它六家是同一个答案（hub 的 AutoDelete 自己执行命令）。
+        var interaction = LinkInteraction.For(viewModel);
+        if (interaction.HoveredLink is null)
+            return;
+
+        interaction.Publish(new KeyEvent(InputKey.Delete));
+        e.Handled = true;
+    }
+
+    private static PointerButtonKind ButtonOf(PointerPressedEventArgs e, SurfaceState state)
+    {
+        var properties = e.GetCurrentPoint(state.ScrollViewer!).Properties;
+        if (properties.IsRightButtonPressed) return PointerButtonKind.Right;
+        if (properties.IsLeftButtonPressed) return PointerButtonKind.Left;
+        if (properties.IsMiddleButtonPressed) return PointerButtonKind.Middle;
+        return PointerButtonKind.None;
     }
 
     private static void OnPointerReleased(object? sender, PointerReleasedEventArgs e)

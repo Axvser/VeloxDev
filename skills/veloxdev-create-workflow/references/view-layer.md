@@ -90,6 +90,29 @@ A link whose endpoints have not been measured must draw nothing. Some adapters s
 
 ⚙ **Never hand a renderer an unbounded coordinate or a whole-world canvas size.** If you customize a link view on a framework with a size limit, keep the geometry local — your GUI's reference describes the technique its adapter uses (viewport-sized overlay, offset frame, or self-bounding).
 
+### Making a link interactive
+
+Links are hit-testable, highlight on hover and delete on Delete **by default** — you get that by drawing your curve and handing it over, not by writing hit-testing code. Two lines in the view:
+
+```csharp
+if (DataContext is IWorkflowLinkViewModel link)
+    link.PublishCurve(curve, this);   // the curve you just drew, and the control that drew it
+```
+
+Then, if you want the hover to be *visible*, implement `ILinkHighlight` on that control:
+
+```csharp
+public bool IsHighlighted { get => ...; set { ...; InvalidateVisual(); } }   // repaint, nothing else
+```
+
+⚙ **Core decides, the view draws.** `LinkInteraction.For(tree)` is the one interaction hub — one instance per tree. The adapter surface translates the platform's pointer and Delete key into it; the hub resolves which link is under the pointer against the published curves, lights it through `ILinkHighlight` (its `AutoHighlight`), and deletes it through `link.DeleteCommand` (its `AutoDelete`). **Do not subscribe to `HoverChanged` just to change a colour, and do not write your own distance-to-curve test** — both were per-platform copies before and are now one implementation.
+
+⚙ **The hit area is the painted stroke, not the view's box.** Publish the curve you actually draw, and keep the view's own hit region on the stroke (a `Path`/geometry with no background, or `pointer-events: stroke`) — a link that answers over its whole canvas-sized box swallows every canvas gesture.
+
+⚙ **Retract when you draw nothing.** Call `PublishCurve(null)` on the same paths that draw nothing (hidden, endpoints not measured, pooled view rebound to another link). A published curve *is* the answer to "is there something here", so a stale one makes a link hittable where nothing is painted.
+
+⚙ **The curve is runtime geometry — never serialize it.** It belongs to the view, not to the model.
+
 ### Which way the data goes
 
 A settled link carries a **travelling highlight**, so its direction is read from the motion rather than from a mark that is a few pixels wide and invisible at 40% zoom. Every full demo does this; the Trimmed suites deliberately do not, because it is decoration rather than part of the editor.

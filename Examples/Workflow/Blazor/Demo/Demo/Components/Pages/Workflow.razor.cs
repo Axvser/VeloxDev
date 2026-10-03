@@ -10,6 +10,7 @@ using VeloxDev.AI;
 using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Components.Pages;
 
@@ -35,12 +36,14 @@ public partial class Workflow : ComponentBase, IDisposable
     private bool _hasCheckpoint;
 
     // ── Link selection / context menu ──────────────────────────────────────
-    // 选中的那条线：悬停即选中，移开即取消（右键弹出菜单时保留）。它同时是 Delete 的作用对象
-    private IWorkflowLinkViewModel? _selectedLink;
+    // 悬停/选中归 Core 的交互枢纽（见 BindInteraction）；页面只留右键菜单这一份浏览器侧状态
     private IWorkflowLinkViewModel? _menuLink;
     private int _menuLeft;
     private int _menuTop;
     private ElementReference _linksLayer;
+
+    // 当前树那一个交互枢纽（Core 按树缓存）。换过树就换实例，所以订阅按实例比对重新接
+    private LinkInteraction? _subscribedInteraction;
 
     // ── Agent interaction modals (RequestSelection / RequestConfirmation) ──
     private SelectionRequest? _selection;
@@ -74,6 +77,52 @@ public partial class Workflow : ComponentBase, IDisposable
         _session = WorkflowDemoSession.Create();
         SubscribeSession();
         UpdateCanvasSize();
+    }
+
+    // 枢纽按树取用；换树换成另一个实例，所以订阅按实例比对重新接
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        BindInteraction();
+        return base.OnAfterRenderAsync(firstRender);
+    }
+
+    private void BindInteraction()
+    {
+        var interaction = _session?.Tree is { } tree ? LinkInteraction.For(tree) : null;
+        if (ReferenceEquals(interaction, _subscribedInteraction)) return;
+
+        if (_subscribedInteraction is not null)
+        {
+            _subscribedInteraction.HoverChanged -= OnHubHoverChanged;
+            _subscribedInteraction.LinkPressed -= OnHubLinkPressed;
+        }
+
+        _subscribedInteraction = interaction;
+        if (interaction is not null)
+        {
+            interaction.HoverChanged += OnHubHoverChanged;
+            interaction.LinkPressed += OnHubLinkPressed;
+        }
+    }
+
+    // 悬停后把键盘焦点收进连线层 —— Delete 只在这层有焦点时才到得了页面。
+    // 不触发重渲染：高亮是每条线自己的本地悬停态，枢纽只负责给 Delete 一个答案
+    private void OnHubHoverChanged(object? sender, LinkHoverEventArgs e)
+    {
+        if (e.Link is not null)
+        {
+            _ = _linksLayer.FocusAsync(preventScroll: true);
+        }
+    }
+
+    // 右键菜单由 hub 的 LinkPressed 驱动：只有命中连线才会发，落在空白处不会有事件
+    private void OnHubLinkPressed(object? sender, LinkPressedEventArgs e)
+    {
+        if (e.Button != PointerButtonKind.Right) return;
+        _menuLink = e.Link;
+        // 菜单一开指针就落到菜单上，那之后的进出都不该取消菜单针对的这条线
+        if (_subscribedInteraction is not null) _subscribedInteraction.IsSuspended = true;
+        StateHasChanged();
     }
 
     private void SubscribeSession()
@@ -393,36 +442,18 @@ public partial class Workflow : ComponentBase, IDisposable
 
     // ── Link selection handlers ────────────────────────────────────────────
 
-    // 悬停即选中，并顺手把键盘焦点收进连线层 —— Delete 只在这层有焦点时才到得了页面
-    // （与 Avalonia/WPF/WinUI 同形：命中是先决条件，取焦点是同一件事的另一半）。
-    // preventScroll：连线层和整张画布一样大，让它自己滚进来会把画布拽走
-    private async Task OnLinkHoverChanged(IWorkflowLinkViewModel link, bool entered)
+    // 菜单位置只有浏览器事件知道：这里只记下按下点，开菜单交给 hub 的 LinkPressed
+    private void OnLinkContextMenu(MouseEventArgs e)
     {
-        if (entered)
-        {
-            _selectedLink = link;
-            await _linksLayer.FocusAsync(preventScroll: true);
-            return;
-        }
-
-        // 菜单开着时不取消：指针离开线体是去点菜单，不是改变选择
-        if (_menuLink is null && ReferenceEquals(_selectedLink, link))
-            _selectedLink = null;
-    }
-
-    private void OnLinkContextMenu(IWorkflowLinkViewModel link, MouseEventArgs e)
-    {
-        _selectedLink = link;
-        _menuLink = link;
         // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它
         _menuLeft = (int)Math.Round(e.ClientX);
         _menuTop = (int)Math.Round(e.ClientY);
-        StateHasChanged();
     }
 
     private void CloseLinkMenu()
     {
         if (_menuLink is null) return;
+        if (_subscribedInteraction is not null) _subscribedInteraction.IsSuspended = false;
         _menuLink = null;
         StateHasChanged();
     }
@@ -432,16 +463,19 @@ public partial class Workflow : ComponentBase, IDisposable
     private void OnLinksKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Delete")
-            DeleteLink(_selectedLink);
+        {
+            // 键也过 Core：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠页面自记选中
+            _subscribedInteraction?.Publish(new KeyEvent(InputKey.Delete));
+        }
         else if (e.Key == "Escape")
+        {
             CloseLinkMenu();
+        }
     }
 
     private void DeleteLink(IWorkflowLinkViewModel? link)
     {
         _menuLink = null;
-        if (ReferenceEquals(_selectedLink, link))
-            _selectedLink = null;
 
         // 与另外六家一致：不看 CanExecute。命令自己会排队或拒绝，调用方替它做判断只会让两边不一致
         link?.DeleteCommand.Execute(null);
@@ -450,6 +484,13 @@ public partial class Workflow : ComponentBase, IDisposable
 
     public void Dispose()
     {
+        if (_subscribedInteraction is not null)
+        {
+            _subscribedInteraction.HoverChanged -= OnHubHoverChanged;
+            _subscribedInteraction.LinkPressed -= OnHubLinkPressed;
+            _subscribedInteraction = null;
+        }
+
         UnsubscribeSession();
     }
 }

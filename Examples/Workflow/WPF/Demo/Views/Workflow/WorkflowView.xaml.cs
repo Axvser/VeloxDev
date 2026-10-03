@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using VeloxDev.AI;
 using VeloxDev.MVVM.Serialization;
+using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
@@ -19,6 +20,9 @@ namespace Demo.Views.Workflow;
 public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
+
+    // 当前这棵树的中枢（每棵树一个，见 LinkInteraction.For）。换树就是另一棵树的中枢，所以订阅跟着 DataContext 换。
+    private LinkInteraction? _linkInteraction;
 
     public WorkflowView()
     {
@@ -29,9 +33,77 @@ public partial class WorkflowView : UserControl
         // from the grid decorator's DPs, which WorkflowSurfaceBehavior pushes on this same event.
         PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
 
+        // 中枢跟着 DataContext 换：For(tree) 拿到那棵树唯一的 hub，适配器转发进去的是同一个。
+        DataContextChanged += (_, _) => AttachLinkInteraction();
+
         DataContext = _workflowViewModel;
         InitializeNetworkDemo();
         InitializeMcp();
+    }
+
+    // 高亮由 hub 直接写连线可视对象的 IsHighlighted，Delete 由 hub 的 AutoDelete 执行；宿主只剩右键菜单这一件事 ——
+    // 菜单是独立的视觉树，只有宿主能给。
+    private void AttachLinkInteraction()
+    {
+        var interaction = DataContext is IWorkflowTreeViewModel tree ? LinkInteraction.For(tree) : null;
+        if (ReferenceEquals(interaction, _linkInteraction))
+        {
+            return;
+        }
+
+        if (_linkInteraction is not null)
+        {
+            _linkInteraction.LinkPressed -= OnLinkPressed;
+        }
+
+        _linkInteraction = interaction;
+
+        if (_linkInteraction is not null)
+        {
+            _linkInteraction.LinkPressed += OnLinkPressed;
+        }
+    }
+
+    private void OnLinkPressed(object? sender, LinkPressedEventArgs e)
+    {
+        // 只有右键开菜单；左键的按下 Core 已经落成选中（悬停高亮），这里没有第二件事要做。
+        if (e.Button == PointerButtonKind.Right)
+        {
+            ShowLinkMenu(e.Link);
+        }
+    }
+
+    // 菜单里只有「删除」一项，落在右键处；菜单开着时指针在菜单上，那段时间的移出不能把菜单针对的这条线取消选中。
+    private void ShowLinkMenu(IWorkflowLinkViewModel link)
+    {
+        if (_linkInteraction is not null)
+        {
+            _linkInteraction.IsSuspended = true;
+        }
+
+        var item = new MenuItem { Header = "删除连线" };
+        item.Click += (_, _) =>
+        {
+            if (link.DeleteCommand.CanExecute(null))
+            {
+                link.DeleteCommand.Execute(null);
+            }
+        };
+
+        var menu = new ContextMenu
+        {
+            Items = { item },
+            PlacementTarget = this,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint,
+        };
+        menu.Closed += (_, _) =>
+        {
+            if (_linkInteraction is not null)
+            {
+                _linkInteraction.IsSuspended = false;
+            }
+        };
+        menu.IsOpen = true;
     }
 
     private void InitializeMcp()

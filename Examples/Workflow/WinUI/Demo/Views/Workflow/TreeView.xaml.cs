@@ -3,6 +3,7 @@ using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
@@ -53,8 +54,90 @@ namespace Demo.Views
             // ScrollViewer reports through ViewChanged — there is no ScrollChanged on this framework.
             PART_ScrollViewer.ViewChanged += (_, _) => InfoOverlay.Refresh();
 
+            // 连线交互中枢由 Core 按树缓存（LinkInteraction.For），跟着 DataContext 重订一次即可。
+            DataContextChanged += (_, _) => AttachLinkInteraction();
+            // 右键菜单要落在按下处：记下最后一个按下点，等中枢报出 LinkPressed 时用它定位。
+            PART_SurfaceBorder.AddHandler(UIElement.PointerPressedEvent,
+                new PointerEventHandler(OnSurfacePointerPressed), true);
+
             WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, Resources["NodeSelector"] as DataTemplateSelector);
             InitializeNetworkDemo();
+        }
+
+        // ── Link interaction (surface hub) ────────────────────────────────────
+
+        private LinkInteraction? _linkInteraction;
+        private MenuFlyout? _linkMenu;
+        private IWorkflowLinkViewModel? _linkMenuTarget;
+        private Windows.Foundation.Point _surfacePressPoint;
+
+        // 中枢是「一棵树一个」的共享实例（LinkInteraction.For）；引用没变就不动，避免重复订阅。
+        private void AttachLinkInteraction()
+        {
+            var tree = DataContext as IWorkflowTreeViewModel;
+            var interaction = tree is null ? null : LinkInteraction.For(tree);
+            if (ReferenceEquals(_linkInteraction, interaction))
+            {
+                return;
+            }
+
+            if (_linkInteraction is not null)
+            {
+                _linkInteraction.LinkPressed -= OnLinkPressed;
+            }
+
+            _linkInteraction = interaction;
+            if (interaction is not null)
+            {
+                interaction.LinkPressed += OnLinkPressed;
+            }
+        }
+
+        private void OnSurfacePointerPressed(object sender, PointerRoutedEventArgs e)
+            => _surfacePressPoint = e.GetCurrentPoint(PART_SurfaceBorder).Position;
+
+        // 只有 Core 报出「按在连线上」时才弹菜单 —— 落在空白处不会有事件，菜单因此不会出现。
+        private void OnLinkPressed(object? sender, LinkPressedEventArgs e)
+        {
+            if (e.Button != PointerButtonKind.Right)
+            {
+                return;
+            }
+
+            _linkMenuTarget = e.Link;
+            _linkMenu ??= BuildLinkMenu();
+
+            // 菜单一开指针就落到菜单上，这期间的移动/离开不该把菜单针对的这条线取消选中
+            if (_linkInteraction is not null)
+            {
+                _linkInteraction.IsSuspended = true;
+            }
+
+            _linkMenu.XamlRoot = XamlRoot;
+            _linkMenu.ShowAt(PART_SurfaceBorder, new FlyoutShowOptions { Position = _surfacePressPoint });
+        }
+
+        private MenuFlyout BuildLinkMenu()
+        {
+            var item = new MenuFlyoutItem { Text = "删除连线" };
+            item.Click += (_, _) =>
+            {
+                if (_linkMenuTarget is { } link && link.DeleteCommand.CanExecute(null))
+                {
+                    link.DeleteCommand.Execute(null);
+                }
+            };
+
+            var menu = new MenuFlyout { Items = { item } };
+            menu.Closed += (_, _) =>
+            {
+                if (_linkInteraction is not null)
+                {
+                    _linkInteraction.IsSuspended = false;
+                }
+            };
+
+            return menu;
         }
 
         private async void SaveWorkflow(object sender, RoutedEventArgs e)

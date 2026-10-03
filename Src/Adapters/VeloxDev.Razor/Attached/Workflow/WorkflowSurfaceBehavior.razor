@@ -1,7 +1,14 @@
 @namespace VeloxDev.WorkflowSystem.AttachedBehaviors
 
+@* The surface cascades itself so a link view nested in ChildContent can forward pointer input into
+   the tree's LinkInteraction hub (see ForwardPointerAsync). *@
+<CascadingValue TValue="WorkflowSurfaceBehavior" Value="@this" IsFixed="true">
 <CascadingValue TValue="SurfaceViewportFeed" Value="_feed">
-    <div class="veloxdev-wf-surface">
+    @* tabindex + keydown: the surface is the key host, so Delete can reach the interaction hub from a
+       generated project without any host code. Focused on link hover (see ForwardPointerAsync) with
+       preventScroll, which is this platform's guard against the focus-scroll jump. *@
+    <div class="veloxdev-wf-surface" tabindex="0" @ref="_surfaceRoot" @onkeydown="OnSurfaceKeyDown"
+         style="outline:none;">
         <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">
             @* Canvas host owns the pixel size (grows via edge expansion) and is set ONLY by JS, so a
                Blazor re-render can never shrink the canvas under the content. The canvas inside is
@@ -29,4 +36,5 @@
             @Minimap(_viewport)
         }
     </div>
+</CascadingValue>
 </CascadingValue>

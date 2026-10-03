@@ -9,14 +9,32 @@ namespace Demo;
 
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
-/// Passive visual only — no hover, highlight, or keyboard interaction.
+/// The surface's interaction hub lights <see cref="IsHighlighted"/> while the pointer is over this link.
 /// </summary>
-public partial class LinkView : Control
+public partial class LinkView : Control, ILinkHighlight
 {
+    // Horizontal pull shared by the drawn curve and the hit-test curve, so both describe the same shape.
+    private const double PullMinimum = 40;
+
+    // The flattened curve published to the link's helper; the surface hit-tests this exact shape
+    // (see ILinkHitTestable / LinkHitTestEx).
+    private LinkCurve? _curve;
+
     public LinkView()
     {
         InitializeComponent();
-        IsHitTestVisible = false;
+        // The link is interactive by default: hit-testable so the hover can find it, focusable so Delete
+        // reaches the adapter's key route. Only the painted stroke answers — this control draws a geometry
+        // and has no background, so the framework's hit test is the stroke, not the canvas-sized box.
+        IsHitTestVisible = true;
+        Focusable = true;
+
+        // 取焦点的连带代价：本视图是整块画布大小，Avalonia 的 BringIntoViewOnFocusChange 会在焦点落到
+        // 它身上时替它请求「滚进视口」，鼠标一碰到线画布就跳一段。在发源地吃掉这条请求 —— 节点卡里
+        // 输入框被聚焦时照样滚进视口，作用域刻意只收在这里。
+        AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);
+
+        RefreshGeometry();
     }
 
     #region Avalonia property definitions
@@ -44,6 +62,12 @@ public partial class LinkView : Control
 
     public static readonly StyledProperty<double> LineThicknessProperty =
         AvaloniaProperty.Register<LinkView, double>(nameof(LineThickness), 2.0);
+
+    public static readonly StyledProperty<bool> IsHighlightedProperty =
+        AvaloniaProperty.Register<LinkView, bool>(nameof(IsHighlighted), false);
+
+    public static readonly StyledProperty<Color> HighlightColorProperty =
+        AvaloniaProperty.Register<LinkView, Color>(nameof(HighlightColor), Color.Parse("#FFFFFFFF"));
 
     public double StartLeft
     {
@@ -93,15 +117,58 @@ public partial class LinkView : Control
         set => SetValue(LineThicknessProperty, value);
     }
 
+    // Set by the surface's interaction hub while the pointer is over this link; the render below repaints on change.
+    public bool IsHighlighted
+    {
+        get => GetValue(IsHighlightedProperty);
+        set => SetValue(IsHighlightedProperty, value);
+    }
+
+    // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
+    // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
+    public Color HighlightColor
+    {
+        get => GetValue(HighlightColorProperty);
+        set => SetValue(HighlightColorProperty, value);
+    }
+
     static LinkView()
     {
         AffectsRender<LinkView>(
             StartLeftProperty, StartTopProperty, EndLeftProperty, EndTopProperty,
             CanRenderProperty, IsVirtualProperty, LineColorProperty,
-            LineThicknessProperty);
+            LineThicknessProperty, IsHighlightedProperty, HighlightColorProperty);
     }
 
     #endregion
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        // The curve follows the endpoints, and the control is pooled: a rebound control must retract the old
+        // link's curve before it publishes its own, or the old link answers the pointer at the new control.
+        if (change.Property == DataContextProperty
+            && change.OldValue is IWorkflowLinkViewModel old && !ReferenceEquals(old, change.NewValue))
+        {
+            old.PublishCurve(null);
+        }
+
+        if (change.Property == StartLeftProperty || change.Property == StartTopProperty
+            || change.Property == EndLeftProperty || change.Property == EndTopProperty
+            || change.Property == DataContextProperty)
+        {
+            RefreshGeometry();
+        }
+    }
+
+    // The one geometry build: it feeds both the drawn curve and the published hit-test curve, so the two can
+    // never describe different shapes.
+    private void RefreshGeometry()
+    {
+        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        (DataContext as IWorkflowLinkViewModel)?.PublishCurve(_curve, this);
+    }
 
     public override void Render(DrawingContext context)
     {
@@ -109,24 +176,33 @@ public partial class LinkView : Control
 
         if (!CanRender) return;
 
-        var color = LineColor;
-        var thickness = LineThickness;
+        var color = IsHighlighted ? HighlightColor : LineColor;
+        var thickness = IsHighlighted ? LineThickness + 1.5 : LineThickness;
         var brush = new ImmutableSolidColorBrush(color);
 
         var pen = IsVirtualLink
             ? new Pen(brush, thickness) { DashStyle = new DashStyle([4.0, 2.0], 0) }
             : new Pen(brush, thickness);
 
-        context.DrawGeometry(null, pen, BuildCurve(StartLeft, StartTop, EndLeft, EndTop));
+        var geometry = BuildCurve(StartLeft, StartTop, EndLeft, EndTop);
+
+        // Extension point: the halo painted under the line while highlighted. Widen or fade the pen here.
+        if (IsHighlighted)
+        {
+            var glowPen = new Pen(new ImmutableSolidColorBrush(color, 0.25), thickness + 6);
+            context.DrawGeometry(null, glowPen, geometry);
+        }
+
+        context.DrawGeometry(null, pen, geometry);
     }
 
     // Extension point: the control points set the curve's shape. Both are pulled horizontally by
-    // max(40, |dx| / 2), which is what makes the line leave each port horizontally — keep that
+    // max(PullMinimum, |dx| / 2), which is what makes the line leave each port horizontally — keep that
     // property if you replace the formula.
     private static StreamGeometry BuildCurve(double startLeft, double startTop, double endLeft, double endTop)
     {
         var dx = endLeft - startLeft;
-        var pull = Math.Max(40, Math.Abs(dx) * 0.5);
+        var pull = Math.Max(PullMinimum, Math.Abs(dx) * 0.5);
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {

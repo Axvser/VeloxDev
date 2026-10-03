@@ -181,11 +181,19 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         var state = new SurfaceState();
         control.SetValue(StateProperty, state);
+
+        // 这一家没有可设的 `Focusable`（WinUI 是 `IsTabStop` + `Focus(FocusState)`）：宿主本来就能拿焦点，
+        // 悬停时 `Focus(FocusState.Pointer)` 收得回来，Delete 的按键事件因此经过它。
+
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.DataContextChanged += OnDataContextChanged;
         control.PointerMoved += OnPointerMoved;
+        control.PointerExited += OnPointerExited;
         control.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleased), true);
+        // 连线交互要看到整个 surface 上的按下与按键，包括被其它处理器标记为 Handled 的那些
+        control.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnLinkPointerPressed), true);
+        control.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnLinkKeyDown), false);
         ResolveNamedControls(control, state);
         Refresh(control);
     }
@@ -196,7 +204,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.Unloaded -= OnUnloaded;
         control.DataContextChanged -= OnDataContextChanged;
         control.PointerMoved -= OnPointerMoved;
+        control.PointerExited -= OnPointerExited;
         control.RemoveHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleased));
+        control.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnLinkPointerPressed));
+        control.RemoveHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnLinkKeyDown));
 
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
@@ -489,25 +500,123 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var point = e.GetCurrentPoint(state.ScrollViewer).Position;
-        // The canvas carries its own render translate (e.g. the ruler-band offset in the
-        // WinUI demo), so a node at canvas-local (world) coordinates renders at
-        // world + canvasTranslate + ActualOffset in scroll space. Scroll-viewer pointer
-        // coordinates are already scroll-space; compensate for the canvas translate so the
-        // virtual-link end lands exactly under the cursor. (WPF gets this for free via
-        // GetPosition(canvas) inverting the canvas transform; WinUI must compensate here.)
+        var anchor = ToCanvasLocalAnchor(state, e, viewModel.Layout);
+        viewModel.SetPointerCommand.Execute(anchor);
+
+        // 悬停归 Core：把同一份 canvas-local 坐标转发进去，命中的曲线就是各连线视图发布的那条。
+        var interaction = LinkInteraction.For(viewModel);
+        interaction.Publish(new PointerEvent(PointerPhase.Moved, anchor));
+
+        // 悬停到连线上就把焦点收到宿主：Delete 要的按键事件经过它，而「悬停（不点）就能删」是契约。
+        // 只在按下时取焦点的话，生成出来的工程得先点一下连线才删得掉 —— 与其余六家的手感不一致。
+        if (interaction.HoveredLink is not null)
+        {
+            host.Focus(FocusState.Pointer);
+        }
+    }
+
+    // 指针 → canvas-local（槽锚点所在的坐标系）。画布自带 RenderTransform（WinUI demo 里的刻度带）
+    // 与 ActualOffset 平移，所以鼠标进入连线所在的坐标系要逐段减回去；曲线也是以这个坐标系发布的，
+    // 少减一段不会报错，只会在平移/缩放后命中另一条线。
+    private static Anchor ToCanvasLocalAnchor(SurfaceState state, PointerRoutedEventArgs e, CanvasLayout layout)
+    {
+        var point = e.GetCurrentPoint(state.ScrollViewer!).Position;
         var canvasTranslateX = 0d;
         var canvasTranslateY = 0d;
-        if (state.Canvas?.RenderTransform is TranslateTransform tt)
+        if (state.Canvas?.RenderTransform is TranslateTransform transform)
         {
-            canvasTranslateX = tt.X;
-            canvasTranslateY = tt.Y;
+            canvasTranslateX = transform.X;
+            canvasTranslateY = transform.Y;
         }
-        viewModel.SetPointerCommand.Execute(WorkflowSurfaceMath.ToWorldAnchor(
-            state.ScrollViewer.HorizontalOffset + point.X - canvasTranslateX,
-            state.ScrollViewer.VerticalOffset + point.Y - canvasTranslateY,
+
+        return WorkflowSurfaceMath.ToWorldAnchor(
+            state.ScrollViewer!.HorizontalOffset + point.X - canvasTranslateX,
+            state.ScrollViewer!.VerticalOffset + point.Y - canvasTranslateY,
             0,
-            viewModel.Layout));
+            layout);
+    }
+
+    // 指针真的离开宿主边界（而不是在子元素之间移动 —— 那条 PointerExited 也会冒泡到这里）。
+    private static void OnPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not UserControl host || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        var interaction = LinkInteraction.For(viewModel);
+
+        // 菜单开着时指针「离开」是飞到菜单上去了，不是移开了这条线
+        if (interaction.IsSuspended)
+        {
+            return;
+        }
+
+        var position = e.GetCurrentPoint(host).Position;
+        if (position.X >= 0 && position.Y >= 0
+            && position.X <= host.ActualWidth && position.Y <= host.ActualHeight)
+        {
+            return;
+        }
+
+        interaction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+    }
+
+    // 按下：转发给 Core 裁决（是否落在某条连线上、哪个键）。不置 Handled —— 画布手势照旧。
+    private static void OnLinkPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.ScrollViewer is null)
+        {
+            return;
+        }
+
+        var properties = e.GetCurrentPoint(host).Properties;
+        var button = properties.IsRightButtonPressed ? PointerButtonKind.Right
+            : properties.IsMiddleButtonPressed ? PointerButtonKind.Middle
+            : properties.IsLeftButtonPressed ? PointerButtonKind.Left
+            : PointerButtonKind.None;
+        if (button == PointerButtonKind.None)
+        {
+            return;
+        }
+
+        var interaction = LinkInteraction.For(viewModel);
+        interaction.Publish(new PointerEvent(
+            PointerPhase.Pressed, ToCanvasLocalAnchor(state, e, viewModel.Layout), button));
+
+        // 命中一条线就把焦点收到本宿主：Delete 要的按键事件经过它，悬停高亮才删得掉。
+        if (interaction.HoveredLink is not null)
+        {
+            host.Focus(FocusState.Pointer);
+        }
+    }
+
+    // Delete 归 Core：本层只把按键翻译过去，由它决定「现在悬停的哪条线」要删。
+    private static void OnLinkKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not UserControl host || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        if (e.Key != VirtualKey.Delete)
+        {
+            return;
+        }
+
+        var interaction = LinkInteraction.For(viewModel);
+        if (interaction.HoveredLink is null)
+        {
+            return;
+        }
+
+        interaction.Publish(new KeyEvent(InputKey.Delete));
+        e.Handled = true;
     }
 
     private static void OnPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -791,11 +900,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     private static bool IsWorkflowNodeOrSlotVisual(DependencyObject source)
         => source is FrameworkElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
 
+    // Link identification for the pan-blank heuristic only: which link is under the pointer is decided by
+    // the hub (LinkInteraction). DataContext is enough here — a link view's content inherits it — and the
+    // former class-name fallback was redundant with it and made this path stringly typed.
     private static bool IsWorkflowLinkVisual(DependencyObject source)
-        => source is FrameworkElement element
-            && (element.DataContext is IWorkflowLinkViewModel
-                || string.Equals(element.GetType().Name, "BezierCurveView", StringComparison.Ordinal)
-                || string.Equals(element.GetType().Name, "PolylineCurveView", StringComparison.Ordinal));
+        => source is FrameworkElement { DataContext: IWorkflowLinkViewModel };
 
     private static IEnumerable<DependencyObject> EnumerateVisualAncestors(DependencyObject source)
     {

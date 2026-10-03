@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
@@ -113,9 +114,88 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private double _pendingScrollX;
     private double _pendingScrollY;
 
+    /// <summary>
+    /// Feeds one pointer event into the tree's <see cref="LinkInteraction"/> hub, converting the
+    /// viewport coordinates the browser reports into the canvas-local space the link curves are
+    /// published in.
+    /// </summary>
+    /// <param name="phase">What the pointer did.</param>
+    /// <param name="clientX">Viewport x of the pointer, as reported by the browser.</param>
+    /// <param name="clientY">Viewport y of the pointer, as reported by the browser.</param>
+    /// <param name="button">Which button, for a press or a release; <see cref="PointerButtonKind.None"/> by default.</param>
+    /// <remarks>
+    /// A link view's <c>mouseenter</c>/<c>mouseleave</c> fires per DOM element, but the hub decides
+    /// which link is topmost from the position, so the element it fired on is not passed through.
+    /// While <see cref="LinkInteraction.IsSuspended"/> is set (a menu is open) an exit is dropped,
+    /// so moving onto the menu does not clear the hover the menu acts on.
+    /// </remarks>
+    // The surface itself is the key host (see the .razor tabindex), so Delete has a route in a generated
+    // project with no host code. The hub still decides which link: this only forwards the key.
+    private async Task OnSurfaceKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is not ("Delete" or "Del") || Tree is not { } tree) return;
+
+        var interaction = LinkInteraction.For(tree);
+        if (interaction.HoveredLink is null) return;
+
+        interaction.Publish(new KeyEvent(InputKey.Delete));
+    }
+
+    public async Task ForwardPointerAsync(PointerPhase phase, double clientX, double clientY, PointerButtonKind button = PointerButtonKind.None)
+    {
+        // 枢纽按树取用（Core 只保留一处）：本家不持有实例，换树自然换枢纽
+        if (Tree is not { } tree)
+        {
+            return;
+        }
+
+        var interaction = LinkInteraction.For(tree);
+
+        if (phase == PointerPhase.Exited && interaction.IsSuspended)
+        {
+            return;
+        }
+
+        if (await ToCanvasLocalAsync(clientX, clientY) is not { } local)
+        {
+            return;
+        }
+
+        interaction.Publish(new PointerEvent(phase, new Anchor(local[0], local[1], 0), button));
+
+        // 悬停到连线上就把焦点收到表面根：Delete 才有路由，而「悬停（不点）就能删」是契约。
+        // preventScroll 是本家对那一次「焦点把画布卷进视口」的防护 —— 不用它，鼠标碰到线画布就跳一段。
+        if (interaction.HoveredLink is not null)
+        {
+            await _surfaceRoot.FocusAsync(preventScroll: true);
+        }
+    }
+
+    // 视口坐标 → canvas-local：容器是纯平移，所以换算整个交给 JS（与槽口锚点测量同一公式）。
+    // 模块未加载（IsEnabled 关掉）时没有可转发的位置，直接放弃。
+    private async Task<double[]?> ToCanvasLocalAsync(double clientX, double clientY)
+    {
+        if (_module is null || string.IsNullOrWhiteSpace(ScrollViewerId))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _module.InvokeAsync<double[]?>("toCanvasLocal", ScrollViewerId, clientX, clientY);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // Broadcasts the latest viewport snapshot to cheap overlay consumers (grid decorator) so they
     // can re-render without dragging the node/link content subtree along. See SurfaceViewportFeed.
     private readonly SurfaceViewportFeed _feed = new();
+
+    // 表面的根元素（见 .razor 的 tabindex）：悬停到连线上时把焦点收到它，Delete 才有路由
+    private ElementReference _surfaceRoot;
 
     private double ContentWidth => Math.Max(1, _canvasW - _offsetX);
     private double ContentHeight => Math.Max(1, _canvasH - _offsetY);

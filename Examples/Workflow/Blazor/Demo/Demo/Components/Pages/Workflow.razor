@@ -195,8 +195,7 @@
                                    neighbouring link whenever one is deleted. *@
                                 <TemplateLinkView @key="link" Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height"
                                                   IsSelected="@(_menuLink == link)"
-                                                  OnHoverChanged="@(entered => OnLinkHoverChanged(link, entered))"
-                                                  OnContextMenuRequested="@(e => OnLinkContextMenu(link, e))" />
+                                                  OnContextMenuRequested="@OnLinkContextMenu" />
                             }
                             @if (tree.VirtualLink.IsVisible)
                             {

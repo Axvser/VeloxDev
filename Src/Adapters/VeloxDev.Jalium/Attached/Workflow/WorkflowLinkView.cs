@@ -26,17 +26,22 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// same in every host.
 /// </para>
 /// </remarks>
-public class WorkflowLinkView : FrameworkElement
+public class WorkflowLinkView : FrameworkElement, ILinkHighlight
 {
     // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，
     // 失去「从端口水平出来」的形状。
     private const double PullMinimum = 40;
+
+    // 高亮时在静息粗细上加的量：静息线本就偏白，只换个浅色而不加粗，指针搭上去几乎看不出来。
+    private const double HighlightExtraThickness = 1.5;
 
     /// <summary>Pen half-width plus antialias air, so the box always covers the stroke.</summary>
     private const double BoxPad = 6;
 
     private Color _linkColor = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
     private double _thickness = 2;
+    private Color _highlightColor = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+    private bool _isHighlighted;
 
     private IWorkflowLinkViewModel? _link;
     private INotifyPropertyChanged? _layoutNotify;
@@ -97,6 +102,37 @@ public class WorkflowLinkView : FrameworkElement
         }
     }
 
+    /// <summary>
+    /// The stroke colour while the pointer is on the link. The default is white — the highlight is meant to read
+    /// as the line being <i>lit</i>, not recoloured: the resting stroke is already near white, so the change is
+    /// carried by a brighter, thicker stroke rather than by a hue.
+    /// </summary>
+    public Color HighlightColor
+    {
+        get => _highlightColor;
+        set
+        {
+            if (_highlightColor == value) return;
+            _highlightColor = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Whether the pointer is on this link. Set by <see cref="LinkInteraction"/> through
+    /// <see cref="ILinkHighlight"/> while <see cref="LinkInteraction.AutoHighlight"/> is on; changing it repaints.
+    /// </summary>
+    public bool IsHighlighted
+    {
+        get => _isHighlighted;
+        set
+        {
+            if (_isHighlighted == value) return;
+            _isHighlighted = value;
+            InvalidateVisual();
+        }
+    }
+
     /// <summary>The link this view is showing, taken from the <c>DataContext</c>.</summary>
     protected IWorkflowLinkViewModel? Link => _link;
 
@@ -105,15 +141,36 @@ public class WorkflowLinkView : FrameworkElement
     {
         base.OnRender(dc);
 
-        if (_link is null || !_link.IsVisible || IsDragPreview(_link)) return;
-        if (EndpointsCanvasLocal() is not { } ep) return;
+        if (_link is null || !_link.IsVisible || IsDragPreview(_link))
+        {
+            // 不画就把曲线撤掉：留着上一条等于让一个已经不画线的位置继续可命中
+            _link?.PublishCurve(null);
+            return;
+        }
+
+        if (EndpointsCanvasLocal() is not { } ep)
+        {
+            _link.PublishCurve(null);
+            return;
+        }
+
+        // 画出来的这条曲线同时发布给 Core 做命中：坐标是 EndpointsCanvasLocal 的画布局部系（与表面的
+        // 指针同一系），控件随曲线一起交出去，命中事件的 sender 因此是真正画它的这个视图。绘制仍走
+        // BezierSegment —— 发布给 Core 的采样折线同是这一条三次贝塞尔，两边不会有第二种几何。
+        _link.PublishCurve(
+            LinkCurve.BuildCubic(ep.FromP.X, ep.FromP.Y, ep.ToP.X, ep.ToP.Y, PullMinimum, LinkCurve.DefaultSampleCount),
+            this);
 
         // 把画布局部的几何烘焙回元素局部：元素被摆在 (_viewX,_viewY)，所以 local = canvas − (_viewX,_viewY)。
         // 这一步抵消掉 UpdateBounds 里的重定位，屏幕上的输出与画在 (0,0) 完全一样 —— 曲线只会在盒子过期时才
         // 跑出元素自己的盒子，而现在按构造成立那不可能。
         var from = new Point(ep.FromP.X - _viewX, ep.FromP.Y - _viewY);
         var to = new Point(ep.ToP.X - _viewX, ep.ToP.Y - _viewY);
-        var pen = new Pen(new SolidColorBrush(_linkColor), _thickness);
+
+        // 高亮由 hub 经 ILinkHighlight 点亮：换成白色并加粗一点，指针搭在哪条上一眼可见。
+        var color = _isHighlighted ? _highlightColor : _linkColor;
+        var thickness = _isHighlighted ? _thickness + HighlightExtraThickness : _thickness;
+        var pen = new Pen(new SolidColorBrush(color), thickness);
 
         // 与其它 GUI 一致的三次贝塞尔（镜像 workflow-tree-view）：两个控制点各自水平拉开，
         // 连线因此从两端水平出线、中间平滑过渡，没有折角。

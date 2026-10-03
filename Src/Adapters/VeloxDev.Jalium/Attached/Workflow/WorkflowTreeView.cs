@@ -76,6 +76,24 @@ public class WorkflowTreeView : Canvas
         AddHandler(MouseMoveEvent, new MouseEventHandler(OnMouseMove));
         AddHandler(MouseUpEvent, new MouseButtonEventHandler(OnMouseUp));
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
+
+        // 指针离开表面、或按键冒泡到表面（卡片里的控件拿去焦点时），都翻译成 Core 的输入事件转给 hub。
+        // 表面必须能拿焦点：Delete 只有这一条到达本层的路（Trimmed demo 与生成出来的树视图都没有
+        // 窗口级兜底）。代价是平台会把「整块画布」卷进视口、画布跳原点 —— 所以在发源地吃掉
+        // 「目标是自己」的那一次请求，卡片里控件的请求照旧上冒。
+        Focusable = true;
+        AddHandler(RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler(OnRequestBringIntoView));
+        MouseLeave += OnMouseLeave;
+        AddHandler(KeyDownEvent, new KeyEventHandler(OnSurfaceKeyDown));
+    }
+
+    // 只拦目标是自己（整块画布）的那一次滚进视口；卡片里的控件发起的请求照旧往上冒
+    private void OnRequestBringIntoView(object? sender, RequestBringIntoViewEventArgs e)
+    {
+        if (ReferenceEquals(e.TargetObject, this))
+        {
+            e.Handled = true;
+        }
     }
 
     /// <summary>Raised after any model change, so overlays (rulers, minimap) can redraw.</summary>
@@ -340,11 +358,50 @@ public class WorkflowTreeView : Canvas
         return false;
     }
 
+    // ── 连线交互（转发给 Core）────────────────────────────────────────────
+
+    // 指针位置就是表面自己的坐标（= 画布塌缩系），与 WorkflowLinkView 发布曲线用的是同一个系。
+    // 拖拽中（节点/连线/平移）不转发移动，免得沿途把经过的实连线点亮。
+    // hub 归 Core（同树同实例，见 LinkInteraction.For）—— 适配器不持有实例，只把事件转进去。
+    private void ForwardPointer(PointerPhase phase, Point canvasPos, PointerButtonKind button = PointerButtonKind.None)
+    {
+        if (_tree is not { } tree) return;
+        LinkInteraction.For(tree).Publish(new PointerEvent(phase, new Anchor(canvasPos.X, canvasPos.Y, 0), button));
+    }
+
+    private void OnMouseLeave(object? sender, MouseEventArgs e)
+    {
+        if (_tree is not { } tree) return;
+        LinkInteraction.For(tree).Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+    }
+
+    // Delete 只在指针下有连线时才转发：键从卡片里的控件冒泡上来也一样，hub 会据悬停裁决删哪条
+    private void OnSurfaceKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete || _tree is not { } tree) return;
+
+        var hub = LinkInteraction.For(tree);
+        if (hub.HoveredLink is null) return;
+
+        hub.Publish(new KeyEvent(InputKey.Delete));
+        e.Handled = true;
+    }
+
     // ── 鼠标交互（基于模型）────────────────────────────────────────────────
 
     private void OnMouseDown(object? sender, MouseButtonEventArgs e)
     {
-        if (_tree is null || e.ChangedButton != MouseButton.Left) return;
+        if (_tree is null) return;
+
+        // 右键只在连线上有含义：转发按下让 hub 裁决，宿主要弹菜单就订阅 LinkPressed。
+        // 表面自己不置 Handled —— 它没有菜单，占掉这一下只会挡住宿主的默认右键路径
+        if (e.ChangedButton == MouseButton.Right)
+        {
+            ForwardPointer(PointerPhase.Pressed, e.GetPosition(this), PointerButtonKind.Right);
+            return;
+        }
+
+        if (e.ChangedButton != MouseButton.Left) return;
 
         var pos = e.GetPosition(this);
         var world = new Point(pos.X - OriginX, pos.Y - OriginY);
@@ -451,6 +508,17 @@ public class WorkflowTreeView : Canvas
                 e.Handled = true;
                 break;
             }
+
+            // 没在拖任何东西：指针移动交给 hub，悬停落在哪条线上由 Core 裁决。
+            // 悬停到连线上时把焦点收到表面 —— 这是 Delete 到达本层的唯一路径；跳原点的问题已在
+            // 构造里被 RequestBringIntoView 那道闸挡住
+            default:
+                ForwardPointer(PointerPhase.Moved, e.GetPosition(this));
+                if (_tree is { } tree && LinkInteraction.For(tree).HoveredLink is not null)
+                {
+                    Focus();
+                }
+                break;
         }
     }
 

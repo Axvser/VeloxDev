@@ -1,10 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
-using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 
@@ -15,29 +13,26 @@ namespace Demo;
 /// <para>
 /// The light travelling along it is a comet — a bright head, a tail that fades behind it, and a halo that
 /// follows the head — and it is cut out of the curve <b>by arc length</b> rather than by a gradient brush.
-/// That is the whole reason this view keeps its own sample table: a <see cref="LinearGradientBrush"/>'s axis
-/// is the straight line between the two ends, so on a curve it lights the string rather than the rope. The
-/// brightness stops tracking the bend, the light appears to speed up and slow down as it goes round, and the
-/// kink where the old stub met its diagonal reads as a kink in the light itself.
+/// That is why the curve is sampled: a <see cref="LinearGradientBrush"/>'s axis is the straight line between
+/// the two ends, so on a curve it lights the string rather than the rope.
 /// </para>
 /// <para>
-/// The type keeps the name <c>PolylineCurveView</c> because the surface template binds it by that name; it has
-/// not drawn a polyline since the geometry was replaced.
-/// </para>
-/// <para>
-/// Supports click-to-select (highlighted), <c>Delete</c> and a right-click menu to remove.
+/// The flattened curve comes from <see cref="LinkCurve"/> and is published to the link's own helper, so the
+/// surface hit-tests the exact shape this view painted (see <see cref="LinkHitTestEx"/>). The view keeps no
+/// hit-testing, input handling or hub subscription of its own: hover, press and Delete are resolved once, in
+/// Core, and <see cref="ILinkHighlight.IsHighlighted"/> is set there — this view only decides how lit it looks.
 /// </para>
 /// </summary>
-public partial class PolylineCurveView : Control
+public partial class PolylineCurveView : Control, ILinkHighlight
 {
-    // 弧长表的分辨率。128 段在缩放上限（Scale 10）下也看不出折线感，而每帧重建它只是几百次算术。
-    private const int SampleCount = 128;
-
     // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
     private const double TailFraction = 0.30;
 
     // 拖尾分几段画。每段一个透明度，衰减因此是连续的而不需要渐变刷。
     private const int TailSegments = 16;
+
+    // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
+    private const double PullMinimum = 40;
 
     // 三段相位各自结束时头部走过的比例：出发、行进、到达
     private const double BandFormed = 0.30;
@@ -47,11 +42,8 @@ public partial class PolylineCurveView : Control
     private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(700);
     private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(450);
 
-    // 弧长表：_cumulative[i] 是 _samples[0..i] 的累计长度，_length 是全长。
-    // 三者只在端点变化时重建 —— 每帧渲染要按弧长取点，现算不划算。
-    private Point[] _samples = [];
-    private double[] _cumulative = [];
-    private double _length;
+    // Core 的扁平化曲线：采样、弧长、包围盒都归它，本视图只读。端点变化时重建并发布给命中契约。
+    private LinkCurve? _curve;
 
     private Transition<PolylineCurveView>? _flow;
     private bool _running;
@@ -68,14 +60,6 @@ public partial class PolylineCurveView : Control
         AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);
 
         RefreshGeometry();
-
-        CurveSelectionManager.SelectionChanged += owner =>
-        {
-            if (owner != this && IsSelected)
-            {
-                IsSelected = false;
-            }
-        };
     }
 
     #region Styled properties
@@ -96,14 +80,16 @@ public partial class PolylineCurveView : Control
         AvaloniaProperty.Register<PolylineCurveView, Color>(nameof(LineColor), Color.Parse("#CC38BDF8"));
     public static readonly StyledProperty<double> LineThicknessProperty =
         AvaloniaProperty.Register<PolylineCurveView, double>(nameof(LineThickness), 2.0);
-    public static readonly StyledProperty<bool> IsSelectedProperty =
-        AvaloniaProperty.Register<PolylineCurveView, bool>(nameof(IsSelected), false);
+    public static readonly StyledProperty<bool> IsHighlightedProperty =
+        AvaloniaProperty.Register<PolylineCurveView, bool>(nameof(IsHighlighted), false);
+    public static readonly StyledProperty<Color> HighlightColorProperty =
+        AvaloniaProperty.Register<PolylineCurveView, Color>(nameof(HighlightColor), Color.Parse("#FFFFFFFF"));
 
     /// <summary>How far along the link the comet's head has travelled, as a fraction of its length.</summary>
     /// <remarks>
     /// Animated rather than computed, and registered with <see cref="AffectsRender{T}"/> so each frame the
     /// transition writes is also a frame this view repaints. The value carries no geometry of its own — the
-    /// arc-length table turns it into a point — which is what lets the light follow a curve.
+    /// published arc-length table turns it into a point — which is what lets the light follow a curve.
     /// </remarks>
     public static readonly StyledProperty<double> BandHeadProperty =
         AvaloniaProperty.Register<PolylineCurveView, double>(nameof(BandHead));
@@ -120,7 +106,8 @@ public partial class PolylineCurveView : Control
     public bool IsVirtual { get => GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Color LineColor { get => GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
     public double LineThickness { get => GetValue(LineThicknessProperty); set => SetValue(LineThicknessProperty, value); }
-    public bool IsSelected { get => GetValue(IsSelectedProperty); set => SetValue(IsSelectedProperty, value); }
+    public bool IsHighlighted { get => GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
+    public Color HighlightColor { get => GetValue(HighlightColorProperty); set => SetValue(HighlightColorProperty, value); }
     public double BandHead { get => GetValue(BandHeadProperty); set => SetValue(BandHeadProperty, value); }
     public double BandIntensity { get => GetValue(BandIntensityProperty); set => SetValue(BandIntensityProperty, value); }
 
@@ -129,7 +116,7 @@ public partial class PolylineCurveView : Control
         AffectsRender<PolylineCurveView>(
             StartLeftProperty, StartTopProperty, EndLeftProperty, EndTopProperty,
             CanRenderProperty, IsVirtualProperty, LineColorProperty,
-            LineThicknessProperty, IsSelectedProperty,
+            LineThicknessProperty, IsHighlightedProperty, HighlightColorProperty,
             BandHeadProperty, BandIntensityProperty);
     }
 
@@ -202,6 +189,7 @@ public partial class PolylineCurveView : Control
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        PublishCurve();
         StartFlow();
     }
 
@@ -222,6 +210,17 @@ public partial class PolylineCurveView : Control
             RefreshGeometry();
         }
 
+        if (change.Property == DataContextProperty)
+        {
+            // 池化改绑：旧链接不能留着一条指向本视图的曲线，否则它的命中会答在一个已经画着别人的控件上。
+            if (change.OldValue is IWorkflowLinkViewModel old && !ReferenceEquals(old, change.NewValue))
+            {
+                old.PublishCurve(null);
+            }
+
+            PublishCurve();
+        }
+
         // A link becomes drawable only once both endpoints have been measured, and the flow has nothing to
         // travel along before that — while a virtual one is the rubber band under the pointer, which has no
         // settled connection to describe.
@@ -236,100 +235,68 @@ public partial class PolylineCurveView : Control
                 StartFlow();
             }
         }
+
+        // UsePolyline 在两个视图之间切换显示；接手显示的那个要把曲线（与 sender）重新挂到自己身上。
+        if (change.Property == IsVisibleProperty)
+        {
+            PublishCurve();
+        }
     }
 
     #endregion
 
     #region Geometry
 
-    // 弧长表。端点变化时重建，渲染时只读。
+    // 曲线由 Core 构建一次：与绘制读的是同一次构建，所以命中与画出来的永远是一条。
     private void RefreshGeometry()
     {
-        var samples = new Point[SampleCount + 1];
-        for (int i = 0; i <= SampleCount; i++)
-        {
-            samples[i] = BezierAt(i / (double)SampleCount);
-        }
-
-        var cumulative = new double[SampleCount + 1];
-        for (int i = 1; i <= SampleCount; i++)
-        {
-            var d = samples[i] - samples[i - 1];
-            cumulative[i] = cumulative[i - 1] + Math.Sqrt((d.X * d.X) + (d.Y * d.Y));
-        }
-
-        _samples = samples;
-        _cumulative = cumulative;
-        _length = cumulative[SampleCount];
+        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        PublishCurve();
     }
 
-    // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角
-    private (Point C1, Point C2) Controls()
+    // 把画出来的形状交给链接的 Helper，界面据此判命中（见 ILinkHitTestable）。
+    // 同一链接由两个视图轮流显示（UsePolyline）：没有在显示的那个不能发布 —— 命中契约只存一个
+    // Visual，菜单等事件的 sender 必须落在真正被看到的那个控件上，否则菜单会挂在隐藏控件上。
+    private void PublishCurve()
     {
-        double dx = EndLeft - StartLeft;
-
-        // 最小拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，失去「从端口水平出来」的形状
-        double pull = Math.Max(40, Math.Abs(dx) * 0.5);
-
-        return (new Point(StartLeft + pull, StartTop), new Point(EndLeft - pull, EndTop));
-    }
-
-    private Point BezierAt(double t)
-    {
-        var (c1, c2) = Controls();
-        double u = 1 - t;
-        double a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
-
-        return new Point(
-            (a * StartLeft) + (b * c1.X) + (c * c2.X) + (d * EndLeft),
-            (a * StartTop) + (b * c1.Y) + (c * c2.Y) + (d * EndTop));
-    }
-
-    // 弧长 → 点。二分找所在采样段再线性插值，所以取点是精确到亚像素的，不受采样密度限制
-    private Point PointAtLength(double len)
-    {
-        if (_length <= 0) return new Point(StartLeft, StartTop);
-
-        len = Math.Clamp(len, 0, _length);
-
-        int lo = 0, hi = _cumulative.Length - 1;
-        while (hi - lo > 1)
+        if (!IsVisible || DataContext is not IWorkflowLinkViewModel link)
         {
-            int mid = (lo + hi) / 2;
-            if (_cumulative[mid] <= len) lo = mid;
-            else hi = mid;
+            return;
         }
 
-        double span = _cumulative[hi] - _cumulative[lo];
-        double t = span <= 0 ? 0 : (len - _cumulative[lo]) / span;
-
-        return new Point(
-            _samples[lo].X + ((_samples[hi].X - _samples[lo].X) * t),
-            _samples[lo].Y + ((_samples[hi].Y - _samples[lo].Y) * t));
+        link.PublishCurve(_curve, this);
     }
 
     // 取 [from, to] 这一段弧长上的折线几何。两端各自插值到精确位置，中间用现成采样点
     private StreamGeometry BuildSegment(double from, double to)
     {
-        to = Math.Min(to, _length);
-        from = Math.Clamp(from, 0, _length);
+        var curve = _curve!;
+        to = Math.Min(to, curve.Length);
+        from = Math.Clamp(from, 0, curve.Length);
 
         var geo = new StreamGeometry();
         using (var ctx = geo.Open())
         {
             ctx.BeginFigure(PointAtLength(from), false);
 
-            for (int i = 0; i < _samples.Length; i++)
+            for (int i = 0; i < curve.Count; i++)
             {
-                double l = _cumulative[i];
+                double l = curve.LengthAt(i);
                 if (l <= from || l >= to) continue;
-                ctx.LineTo(_samples[i]);
+                ctx.LineTo(new Point(curve.XAt(i), curve.YAt(i)));
             }
 
             ctx.LineTo(PointAtLength(to));
         }
 
         return geo;
+    }
+
+    // 弧长 → 点（Core 二分 + 段内插值，精确到亚像素，不受采样密度限制）
+    private Point PointAtLength(double len)
+    {
+        var (x, y) = _curve!.PointAtLength(len);
+        return new Point(x, y);
     }
 
     #endregion
@@ -339,12 +306,11 @@ public partial class PolylineCurveView : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        if (!CanRender) return;
-        if (_samples.Length < 2 || _length <= 0) return;
+        if (!CanRender || _curve is not { Length: > 0 } curve) return;
 
-        var color = IsSelected ? Colors.OrangeRed : LineColor;
-        var thickness = IsSelected ? LineThickness + 1.5 : LineThickness;
-        var body = BuildSegment(0, _length);
+        var color = IsHighlighted ? HighlightColor : LineColor;
+        var thickness = IsHighlighted ? LineThickness + 1.5 : LineThickness;
+        var body = BuildSegment(0, curve.Length);
 
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
         // 两端才不像被截断的横截面
@@ -363,7 +329,7 @@ public partial class PolylineCurveView : Control
         }
 
         // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
-        var bodyAlpha = IsSelected ? 0.85 : 0.55;
+        var bodyAlpha = IsHighlighted ? 0.85 : 0.55;
         context.DrawGeometry(null,
             new Pen(new ImmutableSolidColorBrush(color, bodyAlpha), thickness) { LineCap = PenLineCap.Round }, body);
 
@@ -377,8 +343,9 @@ public partial class PolylineCurveView : Control
     // 不用渐变刷是因为它的轴是两端之间的直线，在曲线上会把光打偏（见类注释）。
     private void DrawComet(DrawingContext context, Color color, double thickness)
     {
-        double head = Math.Clamp(BandHead, 0, 1) * _length;
-        double tail = TailFraction * _length;
+        var curve = _curve!;
+        double head = Math.Clamp(BandHead, 0, 1) * curve.Length;
+        double tail = TailFraction * curve.Length;
 
         // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来
         for (int pass = 0; pass < 2; pass++)
@@ -392,7 +359,7 @@ public partial class PolylineCurveView : Control
 
                 double l0 = head - (tail * (1 - f0));
                 double l1 = head - (tail * (1 - f1));
-                if (l1 <= 0 || l0 >= _length) continue;
+                if (l1 <= 0 || l0 >= curve.Length) continue;
 
                 // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
                 double a = BandIntensity * f0 * f0;
@@ -420,100 +387,6 @@ public partial class PolylineCurveView : Control
         byte L(byte a, byte b) => (byte)Math.Round(a + ((b - a) * t));
 
         return Color.FromArgb(L(from.A, to.A), L(from.R, to.R), L(from.G, to.G), L(from.B, to.B));
-    }
-
-    #endregion
-
-    #region Interaction
-
-    protected override void OnPointerEntered(PointerEventArgs e)
-    {
-        base.OnPointerEntered(e);
-        IsSelected = true;
-        CurveSelectionManager.Select(this);
-
-        // 选中是「上色」，Delete 要的是键盘焦点 —— 两者必须同时发生：只在悬停上色而不取焦点的版本
-        // 会让 OnKeyDown 收不到键，于是必须先用鼠标点一下（那一下才给焦点）。本视图命中面就是画出来的线本身。
-        Focus();
-    }
-
-    protected override void OnPointerExited(PointerEventArgs e)
-    {
-        base.OnPointerExited(e);
-        CurveSelectionManager.Deselect(this);
-        IsSelected = false;
-    }
-
-    protected override void OnPointerPressed(PointerPressedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-
-        if (!e.GetCurrentPoint(this).Properties.IsRightButtonPressed) return;
-
-        // 只有落在画出来的线上的右键才算这条线的：沿弧长表逐段判距（半径 6）。
-        // 框架本就只把指针事件送给画出来的那圈描边（实测：从窗口外进来停在离线约 19px 处不触发 PointerEntered），
-        // 所以这条判据与它同带宽；留着它是为了命中面被改粗时（例如给视图加上背景）也不会在空白处弹出菜单
-        if (!HitTestLine(e.GetPosition(this))) return;
-
-        // 未选中先选中：菜单里的删除作用于当前这条线。悬停选中与它无关，菜单弹出后指针就落到菜单上
-        IsSelected = true;
-        CurveSelectionManager.Select(this);
-        Focus();
-
-        _menu ??= BuildMenu();
-        _menu.Open(this);
-
-        e.Handled = true;
-    }
-
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        base.OnKeyDown(e);
-        if (e.Key == Key.Delete && IsSelected)
-        {
-            DeleteLink();
-            e.Handled = true;
-        }
-    }
-
-    // 菜单只有一项，且不绑命令：视图会被池化改绑给另一条链接，菜单项在点击那一刻才去读 DataContext
-    private ContextMenu? _menu;
-
-    private ContextMenu BuildMenu()
-    {
-        var item = new MenuItem { Header = "删除连线" };
-        item.Click += (_, _) => DeleteLink();
-
-        return new ContextMenu { Items = { item } };
-    }
-
-    private void DeleteLink()
-    {
-        if (DataContext is IWorkflowLinkViewModel vm)
-            vm.DeleteCommand.Execute(null);
-    }
-
-    // 命中沿同一张弧长表走：曲线换了之后，按老的四点折线判命中会在弯的地方对不上手指
-    private bool HitTestLine(Point pt)
-    {
-        const double hitRadius = 6.0;
-
-        for (int i = 1; i < _samples.Length; i++)
-        {
-            if (DistSegment(pt, _samples[i - 1], _samples[i]) <= hitRadius) return true;
-        }
-
-        return false;
-    }
-
-    private static double DistSegment(Point p, Point a, Point b)
-    {
-        var ab = b - a;
-        double len2 = (ab.X * ab.X) + (ab.Y * ab.Y);
-        if (len2 < 0.0001) return new Vector(p.X - a.X, p.Y - a.Y).Length;
-        double t = Math.Clamp((((p.X - a.X) * ab.X) + ((p.Y - a.Y) * ab.Y)) / len2, 0, 1);
-        var proj = new Point(a.X + (t * ab.X), a.Y + (t * ab.Y));
-        return new Vector(p.X - proj.X, p.Y - proj.Y).Length;
     }
 
     #endregion

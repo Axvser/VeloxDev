@@ -28,6 +28,7 @@
                      world canvas → no Win2D texture cap on deep zoom). One GraphicsView draw at
                      px = Ruler + anchor + ContentOffset − Scroll. z order: grid < links < nodes < rulers. -->
                 <behaviors:WorkflowLinkOverlay WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
+                                              InteractionSource="{x:Reference Root}"
                                               ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
                                               ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
                                               ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"

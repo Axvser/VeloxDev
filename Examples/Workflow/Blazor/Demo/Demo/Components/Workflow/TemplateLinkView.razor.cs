@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Components.Workflow;
 
@@ -30,10 +31,10 @@ namespace Demo.Components.Workflow;
 /// which for a path means no path at all.
 /// </para>
 /// </summary>
-public partial class TemplateLinkView : ComponentBase, IDisposable
+public partial class TemplateLinkView : ComponentBase, IDisposable, ILinkHighlight
 {
-    // 弧长表的分辨率。128 段在缩放上限下也看不出折线感，而每段重建它只是几百次算术。
-    private const int SampleCount = 128;
+    // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
+    private const double PullMinimum = 40;
 
     // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
     private const double TailFraction = 0.30;
@@ -87,20 +88,20 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
     /// <summary>Gets or sets whether the owning surface holds this link as its current selection.</summary>
     /// <remarks>
-    /// The surface owns the selection because Delete and the right-click menu both act on it; this view
-    /// only reports hover. The selection has to outlive the hover or the highlight would drop the moment
-    /// the pointer leaves the curve for the menu.
+    /// The surface owns the selection because Delete and the right-click menu both act on it. This view
+    /// keeps only a local hover flag for the highlight; the selection has to outlive the hover, or the
+    /// highlight would drop the moment the pointer leaves the curve for the menu.
     /// </remarks>
     [Parameter]
     public bool IsSelected { get; set; }
 
-    /// <summary>Raised when the pointer enters or leaves the painted link, <c>true</c> on enter.</summary>
-    [Parameter]
-    public EventCallback<bool> OnHoverChanged { get; set; }
-
     /// <summary>Raised when the link is right-clicked, carrying the pointer position the menu should use.</summary>
     [Parameter]
     public EventCallback<MouseEventArgs> OnContextMenuRequested { get; set; }
+
+    // 表面把自身级联下来，本视图据此把指针事件转发进它的连线交互枢纽；画在表面之外时为 null
+    [CascadingParameter]
+    private WorkflowSurfaceBehavior? Surface { get; set; }
 
     private INotifyPropertyChanged? _notifier;
     private INotifyPropertyChanged? _senderNotifier;
@@ -296,12 +297,11 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
     #region Geometry
 
-    // 弧长表：_cumulative[i] 是 _samples[0..i] 的累计长度，_length 是全长。
-    // 只在端点变化时重建 —— 每帧渲染要按弧长取点，现算不划算。
-    private (double X, double Y)[] _samples = [];
-    private double[] _cumulative = [];
-    private double _length;
+    // 画出来的几何与弧长都问 LinkCurve；本视图不再各存一份采样点、累计长度与取点实现。
+    private LinkCurve? _curve;
 
+    // 端点缓存：同一条链接端点没动就不重建曲线，也不重复发布。
+    private IWorkflowLinkViewModel? _cacheLink;
     private double _cacheSx = double.NaN;
     private double _cacheSy;
     private double _cacheEx;
@@ -322,16 +322,21 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     {
         if (!TryEndpoints(out var sx, out var sy, out var ex, out var ey))
         {
+            Link?.PublishCurve(null);
             return false;
         }
 
-        if (sx != _cacheSx || sy != _cacheSy || ex != _cacheEx || ey != _cacheEy)
+        // 换链接也要重建：池中视图可能被复用，端点凑巧相同不代表曲线属于新那条。
+        if (!ReferenceEquals(_cacheLink, Link)
+            || sx != _cacheSx || sy != _cacheSy || ex != _cacheEx || ey != _cacheEy)
         {
+            _cacheLink = Link;
             _cacheSx = sx;
             _cacheSy = sy;
             _cacheEx = ex;
             _cacheEy = ey;
-            RefreshGeometry(sx, sy, ex, ey);
+            _curve = LinkCurve.BuildCubic(sx, sy, ex, ey, PullMinimum, LinkCurve.DefaultSampleCount);
+            Link?.PublishCurve(_curve, this);
         }
 
         BuildComet();
@@ -367,95 +372,29 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return !double.IsNaN(sx) && !double.IsNaN(sy) && !double.IsNaN(ex) && !double.IsNaN(ey);
     }
 
-    // 弧长表。端点变化时重建，渲染时只读。
-    private void RefreshGeometry(double sx, double sy, double ex, double ey)
-    {
-        var samples = new (double X, double Y)[SampleCount + 1];
-        for (int i = 0; i <= SampleCount; i++)
-        {
-            samples[i] = BezierAt(i / (double)SampleCount, sx, sy, ex, ey);
-        }
-
-        var cumulative = new double[SampleCount + 1];
-        for (int i = 1; i <= SampleCount; i++)
-        {
-            double dx = samples[i].X - samples[i - 1].X;
-            double dy = samples[i].Y - samples[i - 1].Y;
-            cumulative[i] = cumulative[i - 1] + Math.Sqrt((dx * dx) + (dy * dy));
-        }
-
-        _samples = samples;
-        _cumulative = cumulative;
-        _length = cumulative[SampleCount];
-    }
-
-    // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角。
-    // 控制点的纵坐标跟着各自那一端，所以出线方向是水平的。
-    private (double X, double Y, double X2, double Y2) Controls(double sx, double sy, double ex, double ey)
-    {
-        double dx = ex - sx;
-
-        // 最小拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，
-        // 失去「从端口水平出来」的形状
-        double pull = Math.Max(40, Math.Abs(dx) * 0.5);
-
-        return (sx + pull, sy, ex - pull, ey);
-    }
-
-    private (double X, double Y) BezierAt(double t, double sx, double sy, double ex, double ey)
-    {
-        var (c1x, c1y, c2x, c2y) = Controls(sx, sy, ex, ey);
-        double u = 1 - t;
-        double a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
-
-        return (
-            (a * sx) + (b * c1x) + (c * c2x) + (d * ex),
-            (a * sy) + (b * c1y) + (c * c2y) + (d * ey));
-    }
-
-    // 弧长 → 点。二分找所在采样段再线性插值，所以取点是精确到亚像素的，不受采样密度限制
-    private (double X, double Y) PointAtLength(double len)
-    {
-        if (_length <= 0 || _samples.Length < 2) return (0, 0);
-
-        len = Math.Clamp(len, 0, _length);
-
-        int lo = 0, hi = _cumulative.Length - 1;
-        while (hi - lo > 1)
-        {
-            int mid = (lo + hi) / 2;
-            if (_cumulative[mid] <= len) lo = mid;
-            else hi = mid;
-        }
-
-        double span = _cumulative[hi] - _cumulative[lo];
-        double t = span <= 0 ? 0 : (len - _cumulative[lo]) / span;
-
-        return (
-            _samples[lo].X + ((_samples[hi].X - _samples[lo].X) * t),
-            _samples[lo].Y + ((_samples[hi].Y - _samples[lo].Y) * t));
-    }
-
     // 取 [from, to] 这一段弧长上的折线。两端各自插值到精确位置，中间用现成采样点。
     // 返回 SVG 的 path d —— 一段拖尾就是一个独立的元素，才能各带各的颜色与不透明度
     private string SegmentPath(double from, double to)
     {
-        to = Math.Min(to, _length);
-        from = Math.Clamp(from, 0, _length);
+        var curve = _curve;
+        if (curve is null) return "";
+
+        to = Math.Min(to, curve.Length);
+        from = Math.Clamp(from, 0, curve.Length);
         if (to <= from) return "";
 
         var sb = new StringBuilder();
-        var start = PointAtLength(from);
+        var start = curve.PointAtLength(from);
         sb.Append('M').Append(N(start.X)).Append(',').Append(N(start.Y));
 
-        for (int i = 0; i < _samples.Length; i++)
+        for (int i = 0; i < curve.Count; i++)
         {
-            double l = _cumulative[i];
+            double l = curve.LengthAt(i);
             if (l <= from || l >= to) continue;
-            sb.Append('L').Append(N(_samples[i].X)).Append(',').Append(N(_samples[i].Y));
+            sb.Append('L').Append(N(curve.XAt(i))).Append(',').Append(N(curve.YAt(i)));
         }
 
-        var end = PointAtLength(to);
+        var end = curve.PointAtLength(to);
         sb.Append('L').Append(N(end.X)).Append(',').Append(N(end.Y));
         return sb.ToString();
     }
@@ -470,18 +409,20 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private void BuildComet()
     {
         _comet.Clear();
-        BodyPath = _length > 0 ? SegmentPath(0, _length) : "";
+        var curve = _curve;
+        double length = curve?.Length ?? 0;
+        BodyPath = length > 0 ? SegmentPath(0, length) : "";
 
-        if (_length <= 0 || EffectiveIsVirtual)
+        if (curve is null || length <= 0 || EffectiveIsVirtual)
         {
             return;
         }
 
         double intensity = Intensity;
-        double head = Math.Clamp(Head, 0, 1) * _length;
-        double tail = TailFraction * _length;
+        double head = Math.Clamp(Head, 0, 1) * length;
+        double tail = TailFraction * length;
 
-        // 复用同一批颜色，别每段都解析一次。选中时彗星跟线体一起换色，否则红线上会套一层蓝光
+        // 复用同一批颜色，别每段都解析一次。选中时彗星跟线体一起换色，否则高亮的线上会套一层原色光
         var body = ParseColor(IsLit ? SelectedColor : (LineColorOverride ?? "#CC38BDF8"));
 
         // 光晕一遍在前
@@ -495,7 +436,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
             // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
             double a = intensity * f0 * f0;
-            if (l1 <= 0 || l0 >= _length || a <= 0.004)
+            if (l1 <= 0 || l0 >= length || a <= 0.004)
             {
                 _comet.Add(new CometStop("", LineColor, "0", N(HaloOuterWidth)));
                 continue;
@@ -519,7 +460,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
             double l1 = head - (tail * (1 - f1));
 
             double a = intensity * f0 * f0;
-            if (l1 <= 0 || l0 >= _length || a <= 0.004)
+            if (l1 <= 0 || l0 >= length || a <= 0.004)
             {
                 _comet.Add(new CometStop("", LineColor, "0", ThicknessCss));
                 continue;
@@ -570,12 +511,27 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
     #region Interaction
 
-    // 选中色与增量沿用另外六家：OrangeRed，线宽 +1.5，线体不透明度 0.55 → 0.85。
+    // 选中色与增量沿用另外六家：柔光（浅青）而不是刺目的红，线宽 +1.5，线体不透明度 0.55 → 0.85。
     // 写成 ARGB 是为了让 ToCss 与 ParseColor 都能读同一个常量 —— 管壁与彗星跟线体同源
-    private const string SelectedColor = "#FFFF4500";
+    private const string SelectedColor = "#FFFFFFFF";
     private const double SelectedWidthBonus = 1.5;
 
     private bool _hover;
+
+    /// <summary>
+    /// Whether the pointer is on this link. The tree's <see cref="LinkInteraction"/> hub drives it
+    /// through <see cref="ILinkHighlight"/> as it resolves the hovered link.
+    /// </summary>
+    public bool IsHighlighted
+    {
+        get => _hover;
+        set
+        {
+            if (_hover == value) return;
+            _hover = value;
+            _ = InvokeAsync(StateHasChanged);
+        }
+    }
 
     // 亮起来的两个理由：指针在线上，或页面把这条线选住了（右键菜单开着时指针已经不在线上）
     private bool IsLit => _hover || IsSelected;
@@ -589,21 +545,40 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     // 虚拟连线整层不参与 —— 它是指针下的橡皮筋，命中了就会抢掉正在拖它的那次手势
     private string HitTargetCss => EffectiveIsVirtual ? "none" : "stroke";
 
-    private async Task OnPointerEnter()
+    // 悬停高亮：本视图进入即先亮（这张脸是逐元素的，浏览器进出即可，不必等枢纽走一圈），
+    // 枢纽随后按命中把 IsHighlighted 落在真正在最上的那条上 —— 本视图转发的只是位置，
+    // 哪条线在最上由枢纽裁决，它不替枢纽下结论。
+    private async Task OnPointerEnter(MouseEventArgs e)
     {
         _hover = true;
         await InvokeAsync(StateHasChanged);
-        await OnHoverChanged.InvokeAsync(true);
+        if (Surface is not null)
+        {
+            await Surface.ForwardPointerAsync(PointerPhase.Entered, e.ClientX, e.ClientY);
+        }
     }
 
-    private async Task OnPointerExit()
+    private async Task OnPointerExit(MouseEventArgs e)
     {
         _hover = false;
         await InvokeAsync(StateHasChanged);
-        await OnHoverChanged.InvokeAsync(false);
+        if (Surface is not null)
+        {
+            await Surface.ForwardPointerAsync(PointerPhase.Exited, e.ClientX, e.ClientY);
+        }
     }
 
-    private Task OnContextMenu(MouseEventArgs e) => OnContextMenuRequested.InvokeAsync(e);
+    private async Task OnContextMenu(MouseEventArgs e)
+    {
+        // 菜单落在指针处：位置只有浏览器事件知道，枢纽的事件参数不带坐标 —— 先交给宿主记下按下点
+        await OnContextMenuRequested.InvokeAsync(e);
+
+        // 再把这次右键转发进去：命中后由 hub 报 LinkPressed，宿主据此开菜单
+        if (Surface is not null)
+        {
+            await Surface.ForwardPointerAsync(PointerPhase.Pressed, e.ClientX, e.ClientY, PointerButtonKind.Right);
+        }
+    }
 
     #endregion
 
@@ -683,6 +658,9 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        // 视图走了就不再画这条线，撤掉发布出去的曲线，免得它继续替一条不存在的线回答命中
+        Link?.PublishCurve(null);
+
         // 已释放的视图不能继续流动：那会一直向已经走掉的渲染器发 StateHasChanged
         StopFlow();
 

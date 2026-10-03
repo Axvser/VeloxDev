@@ -52,6 +52,8 @@ Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产�
 
 - ⇒ **这条与另外六家全部相反**：六家的插槽布局在视觉坐标系里量（`TranslatePoint` / `TransformToVisual` / `GetCenterRelativeTo` + `SlotAnchorFromVisualCenter` / `SlotAnchorFromCanvasLocal`）；Jalium 连 `WorkflowSurfaceMath.SlotAnchorFromNode` 这类 helper 都**没有调用者**（`git grep` 源码零命中；只有 `bin/` 的编译产物残留符号）。**别把纯模型路径当模板抄到需要视觉测量的平台，反之亦然。**
 - 端口枚举（哪个属性是输入口、`SlotEnumerator<T>` 怎么展开）也是按**属性名反射**读的（`WorkflowPortGeometry.cs:37-62,123-124`）—— 这是节点 view-model 里接口没描述的那部分，改属性名会让端口与命中静默错位。
+- ⚠ **它从不写 `slot.Anchor`，而连线的命中判定不该要求它写**（2026-10-03 起）。`LinkHitTestEx.HitTest` 的门是「`IsVisible` + 已发布的曲线」，**不是** `IsRenderReady()`（那道门要求锚点非 NaN）。曾经有人为绕开那道门让 Jalium 开始写 `slot.Anchor`，那是错的：那条路线上每一条连线都会被静默拒掉（构建全绿、悬停与 Delete 全死）。**判据永远是曲线在不在，别把这家的不变量改回去。**
+  - 在**跑起来的**完整 demo 里核过（不是读代码）：把指针位置喂给 `LinkInteraction.For(tree)` 后 `HoveredLink` 非空、再喂 `KeyEvent(Delete)` 树上的连线从 16 条掉到 15 条 —— 即「不写锚点 ⇒ 连线可命中」是成立的。
 
 ### 2.4 画布变换通道不存在
 

@@ -1,4 +1,4 @@
-// VeloxDev customization: Customize line geometry, color, and thickness here.
+// VeloxDev customization: Customize line geometry, color, thickness, and highlight here.
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,9 +14,11 @@ namespace Demo.Views.Workflow;
 
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
-/// Passive visual only — no hover, highlight, or keyboard interaction.
+/// Passive visual only — never hit-testable, so it cannot swallow canvas gestures. It publishes the curve it
+/// draws, in raw canvas-local DP values, so the surface can hit-test it, and implements
+/// <see cref="ILinkHighlight"/> so the surface lights it on hover; keep the curve in sync with the drawn shape.
 /// </summary>
-public sealed partial class LinkView : UserControl
+public sealed partial class LinkView : UserControl, ILinkHighlight
 {
     private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
 
@@ -31,6 +33,10 @@ public sealed partial class LinkView : UserControl
     private PropertyChangedEventHandler? _layoutHandler;
     private double _offsetX;
     private double _offsetY;
+
+    // The drawn curve, published un-baked (raw canvas-local DP values) so a surface can hit-test it.
+    private LinkCurve? _curve;
+    private IWorkflowLinkViewModel? _boundLink;
 
     // Offset-frame origin actually applied: the geometry is baked +(_offsetX,_offsetY) and this element
     // is placed at −(_offsetX,_offsetY), so an endpoint's DRAWN canvas-local coordinate still equals its
@@ -77,6 +83,10 @@ public sealed partial class LinkView : UserControl
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(LinkView), new PropertyMetadata(ParseColor("#DDFFFFFF"), OnChanged));
+    public static readonly DependencyProperty IsHighlightedProperty =
+        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnChanged));
+    public static readonly DependencyProperty HighlightColorProperty =
+        DependencyProperty.Register(nameof(HighlightColor), typeof(Windows.UI.Color), typeof(LinkView), new PropertyMetadata(ParseColor("#FFFFFFFF"), OnChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -85,6 +95,10 @@ public sealed partial class LinkView : UserControl
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Windows.UI.Color LineColor { get => (Windows.UI.Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
+    public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
+    // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
+    // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
+    public Windows.UI.Color HighlightColor { get => (Windows.UI.Color)GetValue(HighlightColorProperty); set => SetValue(HighlightColorProperty, value); }
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -117,10 +131,19 @@ public sealed partial class LinkView : UserControl
         _isLoaded = false;
         _updatePending = false;
         UnsubscribeLayout();
+        _boundLink?.PublishCurve(null);
     }
 
     private void OnDataContextChanged(object sender, DataContextChangedEventArgs args)
     {
+        var link = args.NewValue as IWorkflowLinkViewModel;
+        if (!ReferenceEquals(_boundLink, link))
+        {
+            // Pool reuse / hide: retract the previous link's curve, or it keeps answering hit tests.
+            _boundLink?.PublishCurve(null);
+            _boundLink = link;
+        }
+
         // Pool reuse re-assigns DataContext (and hides show a null DataContext first), so the layout
         // subscription is rebound here every time — the layout it must follow is the TREE's layout.
         UpdateLayoutSubscription();
@@ -233,6 +256,7 @@ public sealed partial class LinkView : UserControl
         if (!CanRender)
         {
             _path.Data = null;
+            PublishCurve();
             return;
         }
 
@@ -264,8 +288,10 @@ public sealed partial class LinkView : UserControl
         }
 
         BuildCurve(ox, oy);
-        var color = LineColor;
-        var thickness = 2;
+        // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
+    // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
+        var color = IsHighlighted ? HighlightColor : LineColor;
+        var thickness = IsHighlighted ? 3.5 : 2;
         _strokeBrush.Color = color;
         _path.StrokeThickness = thickness;
 
@@ -288,6 +314,22 @@ public sealed partial class LinkView : UserControl
         _segment.Point1 = new Point(StartLeft + pull + ox, StartTop + oy);
         _segment.Point2 = new Point(EndLeft - pull + ox, EndTop + oy);
         _segment.Point3 = new Point(EndLeft + ox, EndTop + oy);
+
+        // Publish the UN-baked curve for hit-testing — keep it built from the same control points as the
+        // geometry above, and in the raw DP (canvas-local) space, if you replace the formula.
+        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, 40);
+        PublishCurve();
+    }
+
+    // Extension point: drop the published curve when the endpoints are not measured, so nothing can hit an
+    // undrawn line.
+    private void PublishCurve()
+    {
+        var ready = CanRender
+            && !double.IsNaN(StartLeft) && !double.IsNaN(StartTop)
+            && !double.IsNaN(EndLeft) && !double.IsNaN(EndTop);
+
+        _boundLink?.PublishCurve(ready ? _curve : null, this);
     }
 
     private static Windows.UI.Color ParseColor(string hex)

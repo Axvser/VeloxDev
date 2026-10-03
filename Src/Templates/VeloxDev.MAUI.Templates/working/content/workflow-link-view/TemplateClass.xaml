@@ -12,6 +12,7 @@
              x:Name="Root"
              InputTransparent="True">
     <behaviors:WorkflowLinkOverlay WorkflowTree="{Binding WorkflowTree, Source={x:Reference Root}}"
+                                   InteractionSource="{Binding InteractionSource, Source={x:Reference Root}}"
                                    ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference Root}}"
                                    ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference Root}}"
                                    ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference Root}}"

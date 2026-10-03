@@ -46,11 +46,10 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 {
     private const double CullMargin = 24d;
 
-    // 命中半径与其它六家一致（WPF / WinUI / Avalonia 都是 6px）。
-    // 别拿整层包围盒当命中面：那会把画布空白处也算成「在线上了」。
-    private const double HitRadius = 6d;
-
     private static readonly Color DefaultWhite = Color.FromArgb("#DDFFFFFF");
+
+    // 七家统一的默认高亮色：白色。与 Core 的 LinkInteraction 默认高亮同义，只是这里是平台的颜色类型。
+    private static readonly Color DefaultHighlight = Color.FromArgb("#FFFFFFFF");
 
     public static readonly BindableProperty WorkflowTreeProperty = BindableProperty.Create(
         nameof(WorkflowTree), typeof(IWorkflowTreeViewModel), typeof(WorkflowLinkOverlay), null,
@@ -86,8 +85,10 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public static readonly BindableProperty InteractionSourceProperty = BindableProperty.Create(
         nameof(InteractionSource), typeof(View), typeof(WorkflowLinkOverlay), null, propertyChanged: OnInteractionSourceChanged);
 
+    // 高亮是「一团白而模糊的光」，不是换色：静息线本来就是近白的，所以靠**更亮 + 更粗 + 外面那圈光晕**
+    // 读出来，而不是靠换一个色相。七家都用白（`#FFFFFFFF`）—— 其它色相都试过，红像告警、青像另一条线。
     public static readonly BindableProperty SelectedLinkColorProperty = BindableProperty.Create(
-        nameof(SelectedLinkColor), typeof(Color), typeof(WorkflowLinkOverlay), Colors.OrangeRed, propertyChanged: OnVisualPropertyChanged);
+        nameof(SelectedLinkColor), typeof(Color), typeof(WorkflowLinkOverlay), DefaultHighlight, propertyChanged: OnVisualPropertyChanged);
 
     private IWorkflowTreeViewModel? _tree;
     private IWorkflowLinkViewModel? _virtualLink;
@@ -106,15 +107,17 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private IWorkflowLinkViewModel? _selectedLink;
     private Point? _lastPointer;
 
-    // 命中测试专用采样表：与绘制共用同一套贝塞尔参数，但独立成一份，
-    // 免得指针经过时把正在绘制的那张表改掉
-    private readonly PointF[] _hitSamples = new PointF[SampleCount + 1];
+    // 当前这条链接的几何：canvas-local 的曲线（发布给 Core 做命中）+ 把它平移到视口的那一个偏移。
+    // 绘制、弧长取点、命中三边共用这一份 —— 各处自己推一遍几何，弯的地方就会互相对不上。
+    private LinkCurve? _curve;
+    private float _curveOffsetX;
+    private float _curveOffsetY;
+
+    // 指针与键盘翻译成 Core 的标准输入事件后交给它裁决；本层只负责「把事件转发进去、把结果画出来」
+    private LinkInteraction? _interaction;
 
 #if WINDOWS
     private Microsoft.UI.Xaml.UIElement? _hookElement;
-    // 菜单一开，指针就离开这层（飞出物接管指针），PointerExited 会到 —— 那一下不能当成「移开了」，
-    // 否则契约里的「右键保持选中」在菜单弹出的瞬间就被自己抹掉
-    private bool _menuOpen;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverMovedHandler;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverExitedHandler;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _secondaryPressedHandler;
@@ -279,9 +282,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     #region Geometry and comet
 
-    // 弧长表的分辨率。128 段在缩放上限（Scale 10）下也看不出折线感，而每帧重建它只是几百次算术。
-    private const int SampleCount = 128;
-
     // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
     private const double TailFraction = 0.30;
 
@@ -289,82 +289,53 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     // ICanvas 没有描边渐变，但彗星本来就是「按弧长切几何、逐段给颜色」，这条限制反而不成立了。
     private const int TailSegments = 16;
 
-    // 控制点的最小水平拉出量（视口像素）：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，
-    // 失去「从端口水平出来」的形状。
+    // 控制点的最小水平拉出量（canvas-local 单位）：两个端口靠得很近时，0.5·dx 会让曲线退化成
+    // 一条直线段，失去「从端口水平出来」的形状。
     private const float PullMinimum = 40f;
 
-    // 弧长表：_samples[i] 是贝塞尔在 i/SampleCount 处的点，_cumulative[i] 是走到它的累计长度，
-    // _length 是全长。三者只在一趟画一条链接时被重填（动画只写两个标量，几何不参与），
-    // 数组挂在宿主上复用，免得每帧每链接都分配一对。
-    private readonly PointF[] _samples = new PointF[SampleCount + 1];
-    private readonly float[] _cumulative = new float[SampleCount + 1];
+    // 曲线按 Core 的默认密度采样，这里只留一份平移后的视口副本给绘制用：
+    // 采样点、弧长、命中判定都归 LinkCurve，本层不再各存一份。
+    private readonly PointF[] _samples = new PointF[LinkCurve.DefaultSampleCount];
     private PathF? _body;
-    private float _length;
 
     /// <summary>The resting curve of the link currently in the table, as one strokeable path.</summary>
     private PathF Body => _body!;
 
     /// <summary>Whether the curve last built has any length to draw.</summary>
-    private bool HasCurve => _length > 0 && _body is not null;
+    private bool HasCurve => _curve is { Length: > 0 } && _body is not null;
 
     /// <summary>
-    /// Samples one link's cubic Bézier into the arc-length table.
-    /// <para>
-    /// Both control points are pulled out horizontally, so the curve leaves each port horizontally and turns
-    /// through the middle with no corner in it. The light then travels along <b>arc length</b>, not along the
-    /// straight line between the two ends: a gradient brush's axis is that straight line, so on a curve it
-    /// lights the string rather than the rope — the brightness stops tracking the bend and the light appears to
-    /// speed up and slow down as it goes round.
-    /// </para>
+    /// Prepares the viewport copy of one link's published curve for painting: the curve itself stays in
+    /// canvas-local coordinates (that is what Core hit-tests against) and only the draw path is translated.
     /// </summary>
-    private void BuildCurve(float startX, float startY, float endX, float endY)
+    /// <remarks>
+    /// The light travels along <b>arc length</b>, not along the straight line between the two ends: a gradient
+    /// brush's axis is that straight line, so on a curve it lights the string rather than the rope — the
+    /// brightness stops tracking the bend and the light appears to speed up and slow down as it goes round.
+    /// A translation does not change length, so the arc-length table stays the curve's and is read from there.
+    /// </remarks>
+    private void BuildViewportGeometry(LinkCurve curve, float offsetX, float offsetY)
     {
-        SampleBezier(startX, startY, endX, endY, _samples);
+        _curve = curve;
+        _curveOffsetX = offsetX;
+        _curveOffsetY = offsetY;
 
-        _cumulative[0] = 0;
-        for (var i = 1; i <= SampleCount; i++)
+        // 平移不改变弧长，所以弧长一律问曲线，本层不再自己累一份。
+        for (var i = 0; i < _samples.Length; i++)
         {
-            var dx = _samples[i].X - _samples[i - 1].X;
-            var dy = _samples[i].Y - _samples[i - 1].Y;
-            _cumulative[i] = _cumulative[i - 1] + MathF.Sqrt((dx * dx) + (dy * dy));
+            _samples[i] = new PointF((float)curve.XAt(i) + offsetX, (float)curve.YAt(i) + offsetY);
         }
-
-        _length = _cumulative[SampleCount];
 
         // PathF 没有「清空」：这条链接的曲线只能重新装一条。一帧一条链接一次分配，
         // 换来的是一次 DrawPath 覆盖整条曲线（而不是上百次 DrawLine）
         var body = new PathF();
         body.MoveTo(_samples[0]);
-        for (var i = 1; i <= SampleCount; i++)
+        for (var i = 1; i < _samples.Length; i++)
         {
             body.LineTo(_samples[i]);
         }
 
         _body = body;
-    }
-
-    // 一条三次贝塞尔的采样点：两个控制点各按水平方向拉出 max(PullMinimum, |dx|·0.5)。
-    // 绘制与命中测试读的是同一份参数 —— 两处各推一遍几何，弯的地方命中就会对不上手指
-    private static void SampleBezier(float startX, float startY, float endX, float endY, PointF[] samples)
-    {
-        var pull = MathF.Max(PullMinimum, MathF.Abs(endX - startX) * 0.5f);
-        var control1X = startX + pull;
-        var control2X = endX - pull;
-
-        for (var i = 0; i <= SampleCount; i++)
-        {
-            var t = i / (float)SampleCount;
-            var u = 1 - t;
-            var a = u * u * u;
-            var b = 3 * u * u * t;
-            var c = 3 * u * t * t;
-            var d = t * t * t;
-
-            // 两端各有两条控制点落在同一 y 上（c1 跟起点、c2 跟终点），所以 y 上那两个系数相加
-            samples[i] = new PointF(
-                (a * startX) + (b * control1X) + (c * control2X) + (d * endX),
-                ((a + b) * startY) + ((c + d) * endY));
-        }
     }
 
     // 画布局部锚点 → 视口像素：px = Ruler + 锚点 + 内容偏移 − 滚动偏移（与网格 drawable 同一身份）。
@@ -380,7 +351,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         var minY = float.MaxValue;
         var maxY = float.MinValue;
 
-        for (var i = 0; i <= SampleCount; i++)
+        for (var i = 0; i < _samples.Length; i++)
         {
             var point = _samples[i];
             if (point.X < minX) minX = point.X;
@@ -392,39 +363,19 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         return maxX >= left && minX <= right && maxY >= top && minY <= bottom;
     }
 
-    // 弧长 → 点。二分找所在采样段再线性插值，所以取点是精确到亚像素的，不受采样密度限制
+    // 弧长 → 视口点。取点归曲线（二分 + 段内插值，精确到亚像素），这里只补上那一个平移。
     private PointF PointAtLength(float length)
     {
-        length = Math.Clamp(length, 0, _length);
-
-        var lo = 0;
-        var hi = SampleCount;
-        while (hi - lo > 1)
-        {
-            var mid = (lo + hi) / 2;
-            if (_cumulative[mid] <= length)
-            {
-                lo = mid;
-            }
-            else
-            {
-                hi = mid;
-            }
-        }
-
-        var span = _cumulative[hi] - _cumulative[lo];
-        var t = span <= 0 ? 0f : (length - _cumulative[lo]) / span;
-
-        return new PointF(
-            _samples[lo].X + ((_samples[hi].X - _samples[lo].X) * t),
-            _samples[lo].Y + ((_samples[hi].Y - _samples[lo].Y) * t));
+        var (x, y) = _curve!.PointAtLength(length);
+        return new PointF((float)x + _curveOffsetX, (float)y + _curveOffsetY);
     }
 
     // 取 [from, to] 这一段弧长上的折线几何。两端各自插值到精确位置，中间用现成采样点
     private void StrokeSegment(ICanvas canvas, float from, float to)
     {
-        to = MathF.Min(to, _length);
-        from = Math.Clamp(from, 0, _length);
+        var total = (float)_curve!.Length;
+        to = MathF.Min(to, total);
+        from = Math.Clamp(from, 0, total);
         if (to <= from)
         {
             return;
@@ -432,9 +383,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         var previous = PointAtLength(from);
 
-        for (var i = 0; i <= SampleCount; i++)
+        for (var i = 0; i < _samples.Length; i++)
         {
-            var length = _cumulative[i];
+            var length = (float)_curve.LengthAt(i);
             if (length <= from || length >= to)
             {
                 continue;
@@ -469,8 +420,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// </summary>
     private void DrawComet(ICanvas canvas, Color color, float thickness)
     {
-        var head = (float)(Math.Clamp(_bandCentre, 0, 1) * _length);
-        var tail = (float)(TailFraction * _length);
+        var head = (float)(Math.Clamp(_bandCentre, 0, 1) * _curve!.Length);
+        var tail = (float)(TailFraction * _curve.Length);
         if (tail <= 0)
         {
             return;
@@ -488,7 +439,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
                 var l0 = head - (tail * (1 - f0));
                 var l1 = head - (tail * (1 - f1));
-                if (l1 <= 0 || l0 >= _length)
+                if (l1 <= 0 || l0 >= _curve.Length)
                 {
                     continue;
                 }
@@ -593,8 +544,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private void OnInteractionSourceHandlerChanging(object? sender, HandlerChangingEventArgs e) => DetachPlatformHooks();
 #endif
 
-    // 悬停落在哪条线上：换条连线就换选中。拉线时指针下面正挂着橡皮筋，
-    // 逐帧判悬停只会把沿途那些实连线点亮
+    // 悬停落在哪条线上由 Core 裁决（见 LinkInteraction）：本层只把指针翻译成标准事件转发进去。
+    // 拉线时指针下面正挂着橡皮筋，逐帧判悬停只会把沿途那些实连线点亮
     private void OnHoverMoved(Point point)
     {
         if (WorkflowSlotConnectionBehavior.IsDraggingConnection)
@@ -602,7 +553,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             return;
         }
 
-        // 同一位置的重复消息（子元素进出会连发）不必再算一遍几何
+        // 同一位置的重复消息（子元素进出会连发）不必再转发一次
         if (_lastPointer is { } last
             && Math.Abs(last.X - point.X) < 0.5
             && Math.Abs(last.Y - point.Y) < 0.5)
@@ -611,34 +562,44 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         _lastPointer = point;
-        SelectLink(HitTestLink(point.X, point.Y));
+        _interaction?.Publish(new PointerEvent(PointerPhase.Moved, ToCanvasLocal(point)));
     }
 
     // 指针离开整块输入面：选中跟着走 —— 高亮留在身后会让「现在按 Delete 删哪条」变得没有答案。
-    // 菜单弹出引起的那一次离开不算（见 _menuOpen）
+    // 菜单弹出引起的那一次离开不算：指针是飞到菜单上去了，不是移开了这条线
     private void OnHoverExited()
     {
-#if WINDOWS
-        if (_menuOpen)
+        if (_interaction?.IsSuspended == true)
         {
             return;
         }
-#endif
 
-        SelectLink(null);
+        _interaction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
     }
 
     private void OnSecondaryPressed(Point onOverlay, Point onSource)
     {
-        var link = HitTestLink(onOverlay.X, onOverlay.Y);
-        if (link is null)
+        _interaction?.Publish(new PointerEvent(
+            PointerPhase.Pressed, ToCanvasLocal(onOverlay), PointerButtonKind.Right));
+
+        if (_interaction?.HoveredLink is null)
         {
             // 空白处右键不是这条线的事：不置 Handled，也不弹菜单
             return;
         }
 
-        SelectLink(link);
         ShowDeleteMenu(onSource);
+    }
+
+    // 视口像素 → canvas-local 锚点：ToViewport 的逆（一条纯平移，所以逐轴减回去就是）。
+    // 指针只有过了这一步才能和发布给 Core 的曲线比 —— 两边不在一个坐标系里，命中的就是另一条线。
+    private Anchor ToCanvasLocal(Point point)
+    {
+        var ruler = Math.Max(0d, RulerThickness);
+        return new Anchor(
+            point.X - ruler - ContentOffsetX + ScrollOffsetX,
+            point.Y - ruler - ContentOffsetY + ScrollOffsetY,
+            0);
     }
 
 #if !WINDOWS
@@ -663,73 +624,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
     }
 #endif
-
-    // 命中只认画出来的那一段：沿每条的采样折线逐段判距，半径 = 描边量级。
-    // 代价是 O(可见连线数 × 采样数) 一次指针移动，与其它六家逐视图自判的代价同阶
-    private IWorkflowLinkViewModel? HitTestLink(double x, double y)
-    {
-        var tree = _tree;
-        if (tree is null)
-        {
-            return null;
-        }
-
-        // 输入面通常比这层大（可能是整页），落在层外的点一律不算命中
-        if (x < 0 || y < 0 || x > Width || y > Height)
-        {
-            return null;
-        }
-
-        var ruler = Math.Max(0d, RulerThickness);
-        var ox = ContentOffsetX;
-        var oy = ContentOffsetY;
-        var scrollX = ScrollOffsetX;
-        var scrollY = ScrollOffsetY;
-
-        foreach (var link in EnumerateVisibleLinks(tree))
-        {
-            // 橡皮筋在指针底下，不该被自己点亮；端点没排完版的连线也不该能点中
-            if (IsVirtualLink(link) || !TryGetEndpoints(link, out var csx, out var csy, out var cex, out var cey))
-            {
-                continue;
-            }
-
-            SampleBezier(
-                ToViewport(ruler, ox, scrollX, csx),
-                ToViewport(ruler, oy, scrollY, csy),
-                ToViewport(ruler, ox, scrollX, cex),
-                ToViewport(ruler, oy, scrollY, cey),
-                _hitSamples);
-
-            for (var i = 1; i <= SampleCount; i++)
-            {
-                if (DistanceToSegment(x, y, _hitSamples[i - 1], _hitSamples[i]) <= HitRadius)
-                {
-                    return link;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static double DistanceToSegment(double x, double y, PointF a, PointF b)
-    {
-        var abx = b.X - a.X;
-        var aby = b.Y - a.Y;
-        var lengthSquared = (abx * abx) + (aby * aby);
-        if (lengthSquared < 0.0001f)
-        {
-            var dx = x - a.X;
-            var dy = y - a.Y;
-            return Math.Sqrt((dx * dx) + (dy * dy));
-        }
-
-        var t = Math.Clamp((((x - a.X) * abx) + ((y - a.Y) * aby)) / lengthSquared, 0d, 1d);
-        var px = a.X + (t * abx);
-        var py = a.Y + (t * aby);
-        return Math.Sqrt(((x - px) * (x - px)) + ((y - py) * (y - py)));
-    }
 
     private void SelectLink(IWorkflowLinkViewModel? link)
     {
@@ -863,12 +757,18 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnSourceKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
-        if (e.Key != Windows.System.VirtualKey.Delete || _selectedLink is null)
+        if (e.Key != Windows.System.VirtualKey.Delete)
         {
             return;
         }
 
-        DeleteSelectedLink();
+        // 键也过 Core：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠各家各记一个 _selectedLink
+        if (_interaction?.HoveredLink is null)
+        {
+            return;
+        }
+
+        _interaction.Publish(new KeyEvent(InputKey.Delete));
         e.Handled = true;
     }
 
@@ -888,10 +788,14 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             item.Click += (_, _) => DeleteSelectedLink();
             _deleteMenu = new Microsoft.UI.Xaml.Controls.MenuFlyout();
             _deleteMenu.Items.Add(item);
-            _deleteMenu.Closed += (_, _) => _menuOpen = false;
+            _deleteMenu.Closed += (_, _) =>
+            {
+                if (_interaction is not null) _interaction.IsSuspended = false;
+            };
         }
 
-        _menuOpen = true;
+        // 菜单一开指针就落到菜单上，那之后的移动与离开都不该把菜单针对的这条线取消选中
+        if (_interaction is not null) _interaction.IsSuspended = true;
         _deleteMenu.ShowAt(element, new Windows.Foundation.Point(onSource.X, onSource.Y));
     }
 #else
@@ -931,6 +835,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         Unsubscribe();
+        DetachInteraction();
         _tree = tree;
         // 换树时旧的选中项已经不属于这棵树了，留着它会让 Delete 去打一个不在场上的连线
         _selectedLink = null;
@@ -939,8 +844,35 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             return;
         }
 
+        AttachInteraction(tree);
         Subscribe(tree);
     }
+
+    // 交互归 Core：本层只做两件平台的事 —— 把原生指针/按键翻译成标准输入事件转发进去，
+    // 再把裁决结果画出来（选中上色）。命中的算法不在这家。
+    private void AttachInteraction(IWorkflowTreeViewModel tree)
+    {
+        // hub 只有一个位置：同树同实例（别家也走这个调用，不再各自发明取用方式）。
+        // 删除归 hub 自己（AutoDelete）—— 本家不再订 LinkDeleteRequested。
+        var interaction = LinkInteraction.For(tree);
+        // 本家一个表面画完所有线、没有「每线的可视对象」，所以 hub 的 AutoHighlight 没有东西可点：
+        // 选中由这里订阅 HoverChanged 自己画。别家是视觉实现 ILinkHighlight、由 hub 直接点亮。
+        interaction.HoverChanged += OnHoverChanged;
+        _interaction = interaction;
+    }
+
+    private void DetachInteraction()
+    {
+        if (_interaction is not { } interaction)
+        {
+            return;
+        }
+
+        interaction.HoverChanged -= OnHoverChanged;
+        _interaction = null;
+    }
+
+    private void OnHoverChanged(object? sender, LinkHoverEventArgs e) => SelectLink(e.Link);
 
     private void Subscribe(IWorkflowTreeViewModel tree)
     {
@@ -1291,20 +1223,23 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 // 选中的线换成选中色并加粗 1.5：与其它六家同一种读法（高亮 = 偏红 + 更粗）
                 var isSelected = ReferenceEquals(link, owner._selectedLink);
                 var color = isSelected
-                    ? owner.SelectedLinkColor ?? Colors.OrangeRed
+                    ? owner.SelectedLinkColor ?? DefaultHighlight
                     : isVirtual ? virtualColor : linkColor;
                 if (color is null)
                 {
                     continue;
                 }
 
-                var startX = ToViewport(ruler, ox, scrollX, csx);
-                var startY = ToViewport(ruler, oy, scrollY, csy);
-                var endX = ToViewport(ruler, ox, scrollX, cex);
-                var endY = ToViewport(ruler, oy, scrollY, cey);
+                // 几何在 canvas-local 定下来：曲线发布给 Core 做命中，本层只把它平移到视口来画。
+                // 于是「画出来的」与「能点中的」是同一条曲线，不是两次各自推导的结果。
+                var curve = LinkCurve.BuildCubic(
+                    csx, csy, cex, cey, PullMinimum, LinkCurve.DefaultSampleCount);
+                link.PublishCurve(curve);
 
-                // 三次贝塞尔按弧长采样建表：几何与控制点（水平各拉出 max(40, |dx|·0.5)）都在这一趟定下来
-                owner.BuildCurve(startX, startY, endX, endY);
+                owner.BuildViewportGeometry(
+                    curve,
+                    ToViewport(ruler, ox, scrollX, 0),
+                    ToViewport(ruler, oy, scrollY, 0));
                 if (!owner.HasCurve)
                 {
                     continue;

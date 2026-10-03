@@ -119,5 +119,6 @@
 
 **连线交互那层归属已决**（此前是这一项最大的纠结点，见 [item-template-specifications.md](item-template-specifications.md) §五最后一条）：
 Jalium 的连线命中/拖拽/虚拟预览**进了包**（`WorkflowTreeView` 的手势与 `WorkflowLinkView` 的拖拽预览跳过），
-模板与 Trimmed demo 因此不必自绘那层 —— 这与「连线交互归 demo、模板保持被动」的划定不冲突，因为交互在**适配器基类**里，
+模板与 Trimmed demo 因此不必自绘那层 —— 这与「连线的命中/高亮/删除是库能力、模板默认就有」（见
+[item-template-specifications.md](item-template-specifications.md) §五，2026-10-03 起）一致，因为交互在**适配器基类**里，
 生成的模板拿到的仍是「被动视觉 + 可覆写画法」。
