@@ -65,7 +65,7 @@ public sealed class NodeView : WorkflowNodeView
 
 ⚙ **The canvas's `Width`/`Height` must track `Layout.ActualSize`.** A stale extent means that after zooming in, links fall outside the scrollable range. `WorkflowTreeView.UpdateCanvasSize` does this; if you derive a custom surface, keep it.
 
-⚙ **The link view keeps itself on its own polyline's bounding box** (`WorkflowLinkView`): it computes the endpoints in canvas-local space, moves the element to their bounds, and `OnRender` bakes back into element-local coordinates — recomputed on every layout or endpoint change. Your subclass only supplies the stroke:
+⚙ **The link view keeps itself on its own curve's bounding box** (`WorkflowLinkView`): it computes the endpoints in canvas-local space, moves the element to their bounds, and `OnRender` bakes back into element-local coordinates — recomputed on every layout or endpoint change. Your subclass only supplies the stroke:
 
 ```csharp
 public sealed class LinkView : WorkflowLinkView

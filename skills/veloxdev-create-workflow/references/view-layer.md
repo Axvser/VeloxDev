@@ -78,7 +78,7 @@ outer collapsed box      positioned at the node's Anchor, sized to its Size
 
 ## Links
 
-A link view binds its endpoints to `Sender.Anchor` / `Receiver.Anchor` and draws the four-point golden-stub elbow — the geometry is in [canvas-math.md](canvas-math.md#links).
+A link view binds its endpoints to `Sender.Anchor` / `Receiver.Anchor` and draws the shared cubic Bézier — the geometry is in [canvas-math.md](canvas-math.md#links).
 
 ⚙ **Every link view starts with the render-ready gate:**
 

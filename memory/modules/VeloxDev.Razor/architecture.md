@@ -96,7 +96,8 @@ import "./_content/VeloxDev.Razor/veloxdev.workflow.js"
 |---|---|---|
 | `.veloxdev-wf-node-card` | 模板/demo 的 node-view | 深缩放时卡片不跟着 wrapper 缩放（`applyNodeGeometry`：`:205-240`）与 settle 重断言（`:473-479`）；**不报错** |
 | `.veloxdev-wf-slot-svg` | 模板/demo 的 slot-view | `glyphRect` 退化成量整个插槽盒（`:247-250`），锚点会因内联 SVG 的基线间隙漂 |
-| `data-veloxdev-link-id` / `-sender-slot` / `-receiver-slot` | 模板/demo 的 link-view | 深缩放时 polyline 端点折不动（`resolveLinkPolyline:256`、`applyZoomLinkPoints:305`）；**不报错** |
+| `data-veloxdev-link-id` / `-sender-slot` / `-receiver-slot` | 模板/demo 的 link-view | 深缩放时曲线端点折不动（`resolveLinkCurve:261`、`applyZoomLinkCurves:310`）；**不报错** |
+| `data-veloxdev-link-curve` | 模板/demo 里画曲线的那一个元素 | 同上：JS 只写带这个标记的元素（`:264,323,499`），少了它那条线在缩放帧里停在旧端点；**不报错** |
 
 **（d）两个方向的载荷形状：**
 
@@ -129,7 +130,7 @@ C# 侧一个 `using var _zoomScope = WorkflowGeometryScope.Zoom()`（`:199`）�
 3. `await _module.InvokeVoidAsync("applyZoomSurface", …)`（`:269`）。
 
 JS 那一边（`:343-418`）在**一个同步块**里依次写：内容/网格/坐标轴平移 → 宿主尺寸增长 → 每个节点 wrapper 与卡片的
-折叠几何 → 用 `getBoundingClientRect` 现读槽位中心重写 polyline 端点 → `scrollLeft/Top` → 打戳 `surfaceZoomState` 并启动
+折叠几何 → 用 `getBoundingClientRect` 现读槽位中心重写曲线（只写带 `data-veloxdev-link-curve` 的元素）→ `scrollLeft/Top` → 打戳 `surfaceZoomState` 并启动
 settle 循环 → 回报 `surfaceReporters`。
 
 **为什么必须同帧**（注释 `:253-266`、`:375-396`）：节点几何与连线端点在 .NET 侧要经过「JS 测量 → `OnSlotLayoutBatch` 回传 →

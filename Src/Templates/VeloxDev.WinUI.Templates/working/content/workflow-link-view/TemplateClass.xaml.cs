@@ -16,7 +16,7 @@ using Windows.Foundation;
 namespace TemplateNamespace;
 
 /// <summary>
-/// Orthogonal (polyline) connection with golden-ratio stubs.
+/// Cubic Bézier connection that leaves each port horizontally.
 /// Passive visual only — no hover, highlight, or keyboard interaction.
 /// </summary>
 public sealed partial class TemplateClass : UserControl
@@ -27,7 +27,7 @@ public sealed partial class TemplateClass : UserControl
     private readonly SolidColorBrush _strokeBrush = new(ParseColor("TemplateLinkColor"));
     private readonly PathGeometry _pathGeometry = new();
     private readonly PathFigure _pathFigure = new() { IsClosed = false };
-    private readonly Point[] _points = new Point[4];
+    private readonly BezierSegment _segment = new();
     private bool _updatePending;
     private bool _isLoaded;
     private CanvasLayout? _layout;
@@ -48,7 +48,7 @@ public sealed partial class TemplateClass : UserControl
         Canvas.SetZIndex(this, -100);
         IsHitTestVisible = false;
 
-        // The polyline geometry is in raw collapsed (canvas-local) coordinates, so at deep zoom its
+        // The curve geometry is in raw collapsed (canvas-local) coordinates, so at deep zoom its
         // negative top/left half extends beyond this element's bounds. WinUI clips element content to
         // its bounds unless Clip is nulled — the same root/grid pattern NodeView uses for its
         // overhanging ports. WPF links are OnRender-drawn and never clipped, which is why they survive;
@@ -192,9 +192,9 @@ public sealed partial class TemplateClass : UserControl
 
     private void EnsureGeometry()
     {
-        while (_pathFigure.Segments.Count < _points.Length - 1)
+        if (_pathFigure.Segments.Count == 0)
         {
-            _pathFigure.Segments.Add(new LineSegment());
+            _pathFigure.Segments.Add(_segment);
         }
 
         if (_pathGeometry.Figures.Count == 0)
@@ -263,7 +263,7 @@ public sealed partial class TemplateClass : UserControl
             Height = h;
         }
 
-        BuildPoints(ox, oy);
+        BuildCurve(ox, oy);
         var color = LineColor;
         var thickness = TemplateLinkThickness;
         _strokeBrush.Color = color;
@@ -274,24 +274,20 @@ public sealed partial class TemplateClass : UserControl
         else
             _path.StrokeDashArray = null;
 
-        _pathFigure.StartPoint = _points[0];
-        for (int i = 1; i < _points.Length; i++)
-        {
-            ((LineSegment)_pathFigure.Segments[i - 1]).Point = _points[i];
-        }
-
         _path.Data = _pathGeometry;
     }
 
-    private void BuildPoints(double ox, double oy)
+    // Extension point: the control points set the curve's shape. Both are pulled horizontally by
+    // max(40, |dx| / 2), which is what makes the line leave each port horizontally — keep that
+    // property if you replace the formula.
+    private void BuildCurve(double ox, double oy)
     {
         double dx = EndLeft - StartLeft;
-        const double phi = 0.6180339887;
-        double stub = dx / 2.0 * (1.0 - phi);
-        _points[0] = new Point(StartLeft + ox, StartTop + oy);
-        _points[1] = new Point(StartLeft + stub + ox, StartTop + oy);
-        _points[2] = new Point(EndLeft - stub + ox, EndTop + oy);
-        _points[3] = new Point(EndLeft + ox, EndTop + oy);
+        double pull = Math.Max(40, Math.Abs(dx) * 0.5);
+        _pathFigure.StartPoint = new Point(StartLeft + ox, StartTop + oy);
+        _segment.Point1 = new Point(StartLeft + pull + ox, StartTop + oy);
+        _segment.Point2 = new Point(EndLeft - pull + ox, EndTop + oy);
+        _segment.Point3 = new Point(EndLeft + ox, EndTop + oy);
     }
 
     private static Windows.UI.Color ParseColor(string hex)

@@ -7,7 +7,7 @@ using System.Windows.Forms;
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// An orthogonal (polyline) connection with golden-ratio stubs.
+/// A cubic Bézier connection that leaves each port horizontally.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,7 +16,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </para>
 /// <para>
 /// A WinForms child window is opaque and cannot composite over its siblings, so the window region is carved to the
-/// stroke band of the polyline instead of a bounding box: the grid behind stays visible around the line, and only
+/// stroke band of the curve instead of a bounding box: the grid behind stays visible around the line, and only
 /// the line's own area can ever cover the canvas. Keep <see cref="SurfaceBackground"/> equal to the surface's grid
 /// background, or the carved band shows up as a seam.
 /// </para>
@@ -37,11 +37,12 @@ public class WorkflowLinkView : Control
     private bool _isVirtual;
     private Color _lineColor = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
     private float _thickness = 1.5f;
-    private double _stubRatio = 0.6180339887;
+    private float _pullMinimum = 40f;
     private Color _surfaceBackground = Color.FromArgb(0x1E, 0x1E, 0x1E);
 
-    // 当前帧：窗口局部坐标下的折线，以及窗口被它平移过的原点。没东西可画时为 null。
-    private PointF[]? _windowPoints;
+    // 当前帧：窗口局部坐标下的四个曲线控制点（起点、两个控制点、终点），以及窗口被它平移过的原点。
+    // 没东西可画时为 null。
+    private PointF[]? _windowCurve;
     private Region? _windowRegion;
 
     /// <summary>Creates the link view.</summary>
@@ -83,16 +84,21 @@ public class WorkflowLinkView : Control
     }
 
     /// <summary>
-    /// How far the two horizontal stubs reach toward each other, as a fraction of the gap — the golden ratio by
-    /// default.
+    /// The least horizontal distance, in pixels, each control point is pulled away from its own endpoint — what
+    /// makes the curve leave both ports horizontally.
     /// </summary>
-    public double StubRatio
+    /// <remarks>
+    /// The pull actually used is the larger of this and half the horizontal gap between the endpoints, so two
+    /// ports close together do not degenerate the curve into a straight segment. Changing this re-carves the
+    /// window region on the next geometry rebuild.
+    /// </remarks>
+    public float PullMinimum
     {
-        get => _stubRatio;
+        get => _pullMinimum;
         set
         {
-            if (_stubRatio == value) return;
-            _stubRatio = value;
+            if (_pullMinimum == value || value < 0) return;
+            _pullMinimum = value;
             RebuildGeometry();
         }
     }
@@ -169,7 +175,7 @@ public class WorkflowLinkView : Control
         // NaN 门：插槽锚点在画布测量之前是 NaN，真实连线要等就绪；虚拟连线占位（Parent 为 null）豁免。
         if (link is null || !_canRender || !WorkflowSlotUpdateGate.IsLinkRenderReady(link))
         {
-            _windowPoints = null;
+            _windowCurve = null;
             ApplyRegion(null);
             return;
         }
@@ -178,7 +184,7 @@ public class WorkflowLinkView : Control
         var receiver = link.Receiver;
         if (sender is null || receiver is null)
         {
-            _windowPoints = null;
+            _windowCurve = null;
             ApplyRegion(null);
             return;
         }
@@ -186,17 +192,17 @@ public class WorkflowLinkView : Control
         // 每次都重算，绝不用缓存值：一个从虚拟（手势）连线回收来的池化视图，接着画真实连线时不能还画着虚线。
         _isVirtual = sender.Parent is null && receiver.Parent is null;
 
-        var points = BuildPoints(sender.Anchor, receiver.Anchor);
+        var points = BuildCurve(sender.Anchor, receiver.Anchor);
         if (!IsDrawable(points))
         {
-            _windowPoints = null;
+            _windowCurve = null;
             ApplyRegion(null);
             return;
         }
 
         using var strokePen = new Pen(Color.Black, _thickness + 2 * RegionPad) { LineJoin = LineJoin.Miter };
         using var strokePath = new GraphicsPath();
-        strokePath.AddLines(points);
+        strokePath.AddBezier(points[0], points[1], points[2], points[3]);
         strokePath.Widen(strokePen);
 
         var bounds = strokePath.GetBounds();
@@ -219,7 +225,7 @@ public class WorkflowLinkView : Control
             local[i] = new PointF(points[i].X - originX, points[i].Y - originY);
         }
 
-        _windowPoints = local;
+        _windowCurve = local;
         ApplyRegion(strokePath);
         Invalidate();
     }
@@ -251,15 +257,16 @@ public class WorkflowLinkView : Control
         return Math.Abs(points[0].X - last.X) >= 0.5f || Math.Abs(points[0].Y - last.Y) >= 0.5f;
     }
 
-    private PointF[] BuildPoints(Anchor sender, Anchor receiver)
+    // 起点、两个控制点、终点 —— AddBezier 要的那四个点。
+    // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角。
+    private PointF[] BuildCurve(Anchor sender, Anchor receiver)
     {
         var s = new PointF((float)sender.Horizontal, (float)sender.Vertical);
         var e = new PointF((float)receiver.Horizontal, (float)receiver.Vertical);
-        double dx = e.X - s.X;
-        double stub = dx / 2.0 * (1.0 - _stubRatio);
-        var p1 = new PointF(s.X + (float)stub, s.Y);
-        var p4 = new PointF(e.X - (float)stub, e.Y);
-        return [s, p1, p4, e];
+
+        // 最小拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，失去「从端口水平出来」的形状。
+        var pull = Math.Max(_pullMinimum, Math.Abs(e.X - s.X) * 0.5f);
+        return [s, new PointF(s.X + pull, s.Y), new PointF(e.X - pull, e.Y), e];
     }
 
     /// <inheritdoc />
@@ -269,8 +276,8 @@ public class WorkflowLinkView : Control
 
         base.OnPaint(e);
 
-        var points = _windowPoints;
-        if (points is null || points.Length < 2) return;
+        var points = _windowCurve;
+        if (points is null || points.Length < 4) return;
 
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -282,7 +289,9 @@ public class WorkflowLinkView : Control
             pen.DashPattern = [4f, 2f];
         }
 
-        g.DrawLines(pen, points);
+        using var curve = new GraphicsPath();
+        curve.AddBezier(points[0], points[1], points[2], points[3]);
+        g.DrawPath(pen, curve);
     }
 
     /// <inheritdoc />

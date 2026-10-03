@@ -19,11 +19,12 @@
        diagonal reads as a kink in the light itself. Cutting by arc length is also what gives each
        tail segment its own colour and opacity, so the tail is drawn as a run of separate elements.
 
-       Paths rather than <polyline>s on purpose: the adapter's zoom pass re-syncs every link's FIRST
-       <polyline> from the live slot boxes using the template's orthogonal golden-ratio formula, and
-       it would overwrite a bezier's geometry with an orthogonal route for the length of the zoom
-       settle. A <path> is not what that selector looks for, so the geometry here stays the only
-       thing that ever writes it. *@
+       None of these paths carries data-veloxdev-link-curve on purpose: the adapter's zoom pass
+       re-syncs every MARKED element from the live slot boxes using the template's plain-curve
+       formula, which for the length of the zoom settle would overwrite this geometry — the tail
+       segments are cut by arc length and a bare control-point rewrite cannot reproduce them. The
+       marker is how a view opts in; without it the geometry here stays the only thing that writes
+       these paths. *@
     <svg width="@CanvasWidthCss" height="@CanvasHeightCss"
          data-veloxdev-link-id="@wfLinkId"
          data-veloxdev-sender-slot="@wfSenderSlotId"

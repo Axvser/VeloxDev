@@ -191,14 +191,16 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 ## 五、非 Trimmed demo 连线视图的三件事落点（含右键菜单）
 
-两个自绘连线视图各有一份，**都要改** —— demo 的 `WorkflowView.axaml` 按 `LinkViewModel.UsePolyline`（默认 `true`）在两者之间切换，不是死代码：
+两个自绘连线视图各有一份，**都要改** —— demo 的 `WorkflowView.axaml` 按 `LinkViewModel.UsePolyline`（默认 `true`，字段在 `Examples/Workflow/Common/Lib/ViewModels/Workflow/LinkViewModel.cs:14`）在两者之间切换，不是死代码。**默认显示的是 `PolylineCurveView`**（带流动光带那个），`BezierCurveView` 是关掉光带的对照。
+
+两者的区别**只在有没有流动光带，不在曲线形状**：控制点都各自水平拉开 `max(40, |dx|·0.5)`，且都是「画」与「命中」读同一个 `Controls()` —— `BezierCurveView.axaml.cs:175`、`PolylineCurveView.axaml.cs:267`。改曲线要**两个 `Controls()` 一起改**，各改一半的话，弯的地方命中就对不上指针。
 
 | 事 | `PolylineCurveView.axaml.cs` | `BezierCurveView.axaml.cs` |
 |---|---|---|
-| 命中 | `HitTestLine`，沿弧长表逐段判距，`hitRadius = 6.0`（`:492`） | `HitTestCurve`，40 段折线逼近，半径 6（`:269`，改动前就有） |
-| 右键 | `OnPointerPressed` 判 `IsRightButtonPressed` → 命中才 `_menu.Open(this)`（`:442`） | 同形（`:221`） |
-| 选中即取焦点 | `OnPointerEntered` 里 `IsSelected = true` + `CurveSelectionManager.Select` + `Focus()`（`:424`） | 同形（`:189`）+ `OnPointerMoved` 里再判一次（`:203`） |
-| 删除 | 菜单项 `Click` → 读视图**当时的** `DataContext` 的 `DeleteCommand`；Delete 键走同一个 `DeleteLink()`（`:477`/`:485`） | 同形（`:255`/`:263`） |
+| 命中 | `HitTestLine`，沿弧长表逐段判距，`hitRadius = 6.0`（`:497`） | `HitTestCurve`，40 段折线逼近，半径 6（`:281`，改动前就有） |
+| 右键 | `OnPointerPressed` 判 `IsRightButtonPressed` → 命中才 `_menu.Open(this)`（`:447`） | 同形（`:233`） |
+| 选中即取焦点 | `OnPointerEntered` 里 `IsSelected = true` + `CurveSelectionManager.Select` + `Focus()`（`:429`） | 同形（`:197`）+ `OnPointerMoved` 里再判一次（`:215`） |
+| 删除 | 菜单项 `Click` → 读视图**当时的** `DataContext` 的 `DeleteCommand`（`:485`）；Delete 键与它走同一个 `DeleteLink()`（`:490`） | 同形（`:270`；`:275`，键在 `:254`） |
 
 三条结论：
 

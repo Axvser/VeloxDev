@@ -64,7 +64,7 @@ The tree's two `DataTemplate`s are where node positioning is declared:
 protected override void OnRender(DrawingContext dc)
 {
     if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;
-    // four-point golden-stub polyline from Sender.Anchor to Receiver.Anchor
+    // cubic Bézier from Sender.Anchor to Receiver.Anchor, both control points pulled horizontally
 }
 ```
 

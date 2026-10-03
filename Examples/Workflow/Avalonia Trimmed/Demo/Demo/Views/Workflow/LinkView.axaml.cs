@@ -3,13 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
-using System.Collections.Generic;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo;
 
 /// <summary>
-/// Orthogonal (polyline) connection with golden-ratio stubs.
+/// Cubic Bézier connection that leaves each port horizontally.
 /// Passive visual only — no hover, highlight, or keyboard interaction.
 /// </summary>
 public partial class LinkView : Control
@@ -110,9 +109,6 @@ public partial class LinkView : Control
 
         if (!CanRender) return;
 
-        var points = BuildPoints();
-        if (points.Count < 2) return;
-
         var color = LineColor;
         var thickness = LineThickness;
         var brush = new ImmutableSolidColorBrush(color);
@@ -121,8 +117,27 @@ public partial class LinkView : Control
             ? new Pen(brush, thickness) { DashStyle = new DashStyle([4.0, 2.0], 0) }
             : new Pen(brush, thickness);
 
-        for (int i = 0; i < points.Count - 1; i++)
-            context.DrawLine(pen, points[i], points[i + 1]);
+        context.DrawGeometry(null, pen, BuildCurve(StartLeft, StartTop, EndLeft, EndTop));
+    }
+
+    // Extension point: the control points set the curve's shape. Both are pulled horizontally by
+    // max(40, |dx| / 2), which is what makes the line leave each port horizontally — keep that
+    // property if you replace the formula.
+    private static StreamGeometry BuildCurve(double startLeft, double startTop, double endLeft, double endTop)
+    {
+        var dx = endLeft - startLeft;
+        var pull = Math.Max(40, Math.Abs(dx) * 0.5);
+        var geometry = new StreamGeometry();
+        using (var ctx = geometry.Open())
+        {
+            ctx.BeginFigure(new Point(startLeft, startTop), false);
+            ctx.CubicBezierTo(
+                new Point(startLeft + pull, startTop),
+                new Point(endLeft - pull, endTop),
+                new Point(endLeft, endTop));
+        }
+
+        return geometry;
     }
 
     private bool IsVirtualLink
@@ -132,17 +147,4 @@ public partial class LinkView : Control
                 Sender.Parent: null,
                 Receiver.Parent: null
             };
-
-    private IReadOnlyList<Point> BuildPoints()
-    {
-        double dx = EndLeft - StartLeft;
-        const double phi = 0.6180339887;
-        double stub = dx / 2.0 * (1.0 - phi);
-        return [
-            new Point(StartLeft, StartTop),
-            new Point(StartLeft + stub, StartTop),
-            new Point(EndLeft - stub, EndTop),
-            new Point(EndLeft, EndTop)
-        ];
-    }
 }

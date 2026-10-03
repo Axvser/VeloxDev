@@ -169,22 +169,25 @@ public partial class BezierCurveView : Control
         context.DrawGeometry(null, pen, geometry);
     }
 
-    private StreamGeometry? CreateBezierGeometry()
+    // 两个控制点各自水平拉开 max(40, |dx|·0.5)：连线因此从两端水平出线、中间平滑过渡，没有折角。
+    // 40px 下限让两个端口靠得很近时曲线不退化成直线段（与 PolylineCurveView 同一条曲线）。
+    // 画与命中读的是同一份参数 —— 两处各推一遍几何，弯的地方命中就会对不上指针。
+    private (Point C1, Point C2) Controls()
     {
         var diffx = EndLeft - StartLeft;
+        var pull = Math.Max(40, Math.Abs(diffx) * 0.5);
+        return (new Point(StartLeft + pull, StartTop), new Point(EndLeft - pull, EndTop));
+    }
 
-        // Compute the control points (a cubic Bézier curve needs two control points)
-        var cp1 = new Point(StartLeft + diffx * 0.3, StartTop);
-        var cp2 = new Point(EndLeft - diffx * 0.3, EndTop);
-
-        var startPoint = new Point(StartLeft, StartTop);
-        var endPoint = new Point(EndLeft, EndTop);
+    private StreamGeometry? CreateBezierGeometry()
+    {
+        var (cp1, cp2) = Controls();
 
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {
-            ctx.BeginFigure(startPoint, false);
-            ctx.CubicBezierTo(cp1, cp2, endPoint);
+            ctx.BeginFigure(new Point(StartLeft, StartTop), false);
+            ctx.CubicBezierTo(cp1, cp2, new Point(EndLeft, EndTop));
         }
         return geometry;
     }
@@ -280,9 +283,7 @@ public partial class BezierCurveView : Control
         const double hitRadius = 6.0;
         const int segments = 40;
 
-        var diffx = EndLeft - StartLeft;
-        var cp1 = new Point(StartLeft + diffx * 0.3, StartTop);
-        var cp2 = new Point(EndLeft - diffx * 0.3, EndTop);
+        var (cp1, cp2) = Controls();
         var p0 = new Point(StartLeft, StartTop);
         var p3 = new Point(EndLeft, EndTop);
 

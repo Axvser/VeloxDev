@@ -260,13 +260,13 @@ public class WorkflowTreeView : Canvas
 
     private void DrawLink(DrawingContext dc, Pen pen, Point from, Point to)
     {
-        // 与其它 GUI 一致的黄金比折线（镜像 workflow-link-view）。
-        double dx = to.X - from.X;
-        double stub = dx / 2.0 * (1.0 - 0.6180339887);
-        var p1 = new Point(from.X + stub, from.Y);
-        var p2 = new Point(to.X - stub, to.Y);
+        // 与其它 GUI 一致的三次贝塞尔（镜像 workflow-link-view）：两个控制点各自水平拉开。
+        // 最小拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
+        var pull = Math.Max(40, Math.Abs(to.X - from.X) * 0.5);
+        var c1 = new Point(from.X + pull, from.Y);
+        var c2 = new Point(to.X - pull, to.Y);
         var figure = new PathFigure { StartPoint = from, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, to }, true));
+        figure.Segments.Add(new BezierSegment(c1, c2, to, true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);

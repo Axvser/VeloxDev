@@ -20,7 +20,7 @@
 | 条目 | `.razor` 的形状 | 关键锚点（`.razor` / `.razor.cs`） |
 |---|---|---|
 | tree-view | 一个 `<WorkflowSurfaceBehavior>` + 三个**片段参数槽**（`GridDecorator` / `Minimap` / `ChildContent`），内容层只有**一个** `<TemplateSelector>`：节点与连线都由它物化 | `:7,9-16`、`:17,25,30` / `:23`、`:27-43` |
-| link-view | 一个 `<svg>` + `<polyline points="@points">`（虚线 `stroke-dasharray="6 4"`） | `:17-21,24,32` / `:173-202`（几何）、`:184,193`（两道守卫） |
+| link-view | 一个 `<svg>` + `<path d="@d" data-veloxdev-link-curve="1">`（虚线 `stroke-dasharray="6 4"`） | `:17-21,27,36` / `:179-205`（几何）、`:187,196`（两道守卫） |
 | node-view | 两层适配器行为包裹 + **定尺寸卡片 div**，`transform:scale()` 缩放 | `:8-10`、`:15-21` / `:77,81-90` |
 | slot-view | 一个 `<svg viewBox="0 0 1024 1024">` + `<path d="TemplateSlotPath">` | `:11,12,15` / `:19-20,42-65` |
 | grid-decorator | **薄壳**：`@if (Viewport is { } vp)` 后渲染适配器的 `<WorkflowGridDecorator>`（15 行） | `:4,6-14` / `:16,20,24,28` |
@@ -72,14 +72,17 @@
    `display:contents;pointer-events:none` 的 wrapper（**`pointer-events:none` 是必需的**：SVG 铺满整张画布，
    少了它画布的平移/手势会被它吃掉；`display:contents` 让 wrapper 不产生盒子，SVG 的定位祖先仍是内容层），
    并把 `SurfaceCanvas` 的 `Width/Height` 传下去（连线是整画布尺寸的绝对定位 SVG）。
-   虚线的 `stroke-dasharray` 仍是 link-view 条目里的字面量（`workflow-link-view/TemplateClass.razor:15`）；
+   虚线的 `stroke-dasharray` 仍是 link-view 条目里的字面量（`workflow-link-view/TemplateClass.razor:31`）；
    三个 `data-veloxdev-*` 属性（`link-view/TemplateClass.razor:18-20`）来自
    `WorkflowRuntimeIds.Get`（`:11-13`）—— 适配器把这个 API 设成 `public` **就是为了给模板/ demo 的
    link-view 用**（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowRuntimeIds.cs:11-13` 的 XML 明写）。
-   ⇒ 漏写这三个属性不会报错，代价在深缩放：JS 无法把这条 polyline 与折叠后的实时插槽对上
-   （机制见 `memory/modules/WorkflowSystem/adapters/razor.md` §二·1 / §二·2）。
+   ⇒ 漏写这三个属性不会报错，代价在深缩放：JS 无法把这条曲线与折叠后的实时插槽对上
+   （机制见 `memory/modules/WorkflowSystem/adapters/razor.md` §二·1 / §二·2）。**这四个属性之外还有第五个**：
+   画曲线的那一个元素必须带 `data-veloxdev-link-curve`（`:27,36`），JS 只写带它的元素
+   （`wwwroot/veloxdev.workflow.js:245,264`）—— 少了它不报错，缩放那一帧的曲线停在旧端点，
+   整条线在缩放期间不跟手；多画几个元素时**只标一个**是有意的，标记即"这个由 JS 接管"。
    ⚠ JS 侧 `wwwroot/veloxdev.workflow.js:253-255` 的注释已按"连线也进池"改写（原句 "Link SVGs are not
-   pooled" 已删）。**结论不变**：`resolveLinkPolyline` 每趟重新 query `[data-veloxdev-link-id]`、不缓存元素
+   pooled" 已删）。**结论不变**：`resolveLinkCurve` 每趟重新 query `[data-veloxdev-link-id]`、不缓存元素
    引用 —— 池化后元素随可见集进出 DOM，缓存本来也站不住。
 
 4. **slot-view 必须被 `WorkflowSlotConnectionBehavior` 包住，且只能包一层**
@@ -193,7 +196,7 @@ tree-view 实例化生成组件时**显式传了**哪些参数（`workflow-tree-
 ### P6 · link-view 的 `Sync` 只在 `OnInitialized` 跑 —— 现在由池的 `@key` 兜住
 
 `Sync(Link)`（订阅链自身与两个端点）**只从 `OnInitialized` 调用**（`workflow-link-view/TemplateClass.razor.cs:104-107`），
-`OnParametersSet` 只在有 override 参数时重渲染（`:153-160`）；而 `BuildPoints()` 与 `@if` 门用的是
+`OnParametersSet` 只在有 override 参数时重渲染（`:153-160`）；而 `BuildCurve()` 与 `@if` 门用的是
 `CanRender` / `IsVirtual` 两个**状态字段**（`:93-97`，由 `Sync` 写）。
 ⇒ 这里成立的前提是「一个 link 实例始终配同一个 `LinkView` 实例」。
 tree-view 现在把连线交给池（本文 §二·3 / §二·6），池对每个 item 下 `@key`（`KeySelector="i => i"`，

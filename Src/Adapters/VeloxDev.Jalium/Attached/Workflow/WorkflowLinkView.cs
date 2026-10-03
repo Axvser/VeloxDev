@@ -8,11 +8,11 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// A poolable link view: an orthogonal polyline with golden-ratio stubs, bounded to its own content.
+/// A poolable link view: a cubic Bézier that leaves each port horizontally, bounded to its own content.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The element is positioned at the polyline's own canvas-local bounding box and sized to it, and the render pass
+/// The element is positioned at the curve's own canvas-local bounding box and sized to it, and the render pass
 /// bakes the geometry back into element-local coordinates — so the layout box always equals the drawn content and
 /// travels with it through any zoom. That is not a stylistic choice: the renderer culls a child entirely when its
 /// layout box misses the viewport clip and never looks at the drawn content, so a full-canvas box that goes stale
@@ -28,7 +28,9 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </remarks>
 public class WorkflowLinkView : FrameworkElement
 {
-    private const double Phi = 0.6180339887;
+    // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，
+    // 失去「从端口水平出来」的形状。
+    private const double PullMinimum = 40;
 
     /// <summary>Pen half-width plus antialias air, so the box always covers the stroke.</summary>
     private const double BoxPad = 6;
@@ -107,20 +109,20 @@ public class WorkflowLinkView : FrameworkElement
         if (EndpointsCanvasLocal() is not { } ep) return;
 
         // 把画布局部的几何烘焙回元素局部：元素被摆在 (_viewX,_viewY)，所以 local = canvas − (_viewX,_viewY)。
-        // 这一步抵消掉 UpdateBounds 里的重定位，屏幕上的输出与画在 (0,0) 完全一样 —— 折线只会在盒子过期时才
+        // 这一步抵消掉 UpdateBounds 里的重定位，屏幕上的输出与画在 (0,0) 完全一样 —— 曲线只会在盒子过期时才
         // 跑出元素自己的盒子，而现在按构造成立那不可能。
         var from = new Point(ep.FromP.X - _viewX, ep.FromP.Y - _viewY);
         var to = new Point(ep.ToP.X - _viewX, ep.ToP.Y - _viewY);
         var pen = new Pen(new SolidColorBrush(_linkColor), _thickness);
 
-        // 与其它 GUI 一致的黄金比折线（镜像 workflow-tree-view）。
-        double dx = to.X - from.X;
-        double stub = dx / 2.0 * (1.0 - Phi);
-        var p1 = new Point(from.X + stub, from.Y);
-        var p2 = new Point(to.X - stub, to.Y);
+        // 与其它 GUI 一致的三次贝塞尔（镜像 workflow-tree-view）：两个控制点各自水平拉开，
+        // 连线因此从两端水平出线、中间平滑过渡，没有折角。
+        var pull = Math.Max(PullMinimum, Math.Abs(to.X - from.X) * 0.5);
+        var c1 = new Point(from.X + pull, from.Y);
+        var c2 = new Point(to.X - pull, to.Y);
 
         var figure = new PathFigure { StartPoint = from, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, to }, true));
+        figure.Segments.Add(new BezierSegment(c1, c2, to, true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);

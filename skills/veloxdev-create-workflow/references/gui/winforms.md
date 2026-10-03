@@ -42,20 +42,20 @@ If you add content, add its scaling to that same path. Do not introduce a render
 
 Pooled like the nodes: `ViewPool` materializes one `LinkView` per link in the tree's **visible set**
 (`Helper.VisibleItems`, the gesture's virtual link included) and recycles them as that set changes.
-Each view paints its own four-point polyline (`DrawLines`, endpoints from `Sender.Anchor` /
-`Receiver.Anchor`) — nothing draws links on behalf of another control.
+Each view paints its own cubic Bézier (`DrawPath` over an `AddBezier` path, endpoints from
+`Sender.Anchor` / `Receiver.Anchor`) — nothing draws links on behalf of another control.
 
 ⚙ **A link view is an opaque child window, so it carves its own window region to the stroke band of
-the polyline** (padded by the antialiasing fringe). A bounding box would paint over the grid, and a
+the curve** (padded by the antialiasing fringe). A bounding box would paint over the grid, and a
 full-size transparent sibling window does not composite here at all — WinForms clips it so only the
 topmost one paints. Give it a `BackColor` equal to the surface's grid background, and keep the region
-in step when the thickness or the polyline changes.
+in step when the thickness or the curve changes.
 
 ⚙ **The pool fronts every view it materializes or recycles, so links must be sent to the back after
 each visible-set change** — otherwise they end up over the node cards. The tree view does that in one
 pass, from a hook registered behind the pool's own collection handler.
 
-⚙ A zero-length polyline (the connection gesture's first frame) has no stroke to widen and GDI+ throws
+⚙ A zero-length curve (the connection gesture's first frame) has no stroke to widen and GDI+ throws
 on it — skip the region instead of widening.
 
 ⚙ Use a synchronous `Invalidate()` + `Update()` after changing geometry. An asynchronous invalidate leaves trails during a drag, which is why the adapter also applies `WS_CLIPCHILDREN` / `WS_EX_COMPOSITED` window styling — and why it skips that styling above roughly a hundred descendants.

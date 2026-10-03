@@ -1,6 +1,5 @@
 // VeloxDev customization: Customize line geometry, color, and thickness here.
 using System;
-using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -9,7 +8,7 @@ using VeloxDev.WorkflowSystem;
 namespace TemplateNamespace;
 
 /// <summary>
-/// Orthogonal (polyline) connection with golden-ratio stubs.
+/// Cubic Bézier connection that leaves each port horizontally.
 /// Passive visual only — no hover, highlight, or keyboard interaction.
 /// </summary>
 public partial class TemplateClass : UserControl
@@ -70,9 +69,6 @@ public partial class TemplateClass : UserControl
 
         if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;
 
-        var points = BuildPoints();
-        if (points.Count < 2) return;
-
         var color = LineColor;
         var thickness = TemplateLinkThickness;
         var brush = new SolidColorBrush(color);
@@ -81,20 +77,32 @@ public partial class TemplateClass : UserControl
             ? new Pen(brush, thickness) { DashStyle = new DashStyle(new double[] { 4, 2 }, 0) }
             : new Pen(brush, thickness);
 
-        for (int i = 0; i < points.Count - 1; i++)
-            ctx.DrawLine(pen, points[i], points[i + 1]);
+        ctx.DrawGeometry(null, pen, BuildCurve(StartLeft, StartTop, EndLeft, EndTop));
     }
 
-    private List<Point> BuildPoints()
+    // Extension point: the control points set the curve's shape. Both are pulled horizontally by
+    // max(40, |dx| / 2), which is what makes the line leave each port horizontally — keep that
+    // property if you replace the formula.
+    private static Geometry BuildCurve(double startLeft, double startTop, double endLeft, double endTop)
     {
-        var s = new Point(StartLeft, StartTop);
-        var e = new Point(EndLeft, EndTop);
-        double dx = EndLeft - StartLeft;
-        const double phi = 0.6180339887;
-        double stub = dx / 2.0 * (1.0 - phi);
-        var p1 = new Point(s.X + stub, s.Y);
-        var p4 = new Point(e.X - stub, e.Y);
-        return [s, p1, p4, e];
+        var dx = endLeft - startLeft;
+        var pull = Math.Max(40, Math.Abs(dx) * 0.5);
+        var figure = new PathFigure
+        {
+            StartPoint = new Point(startLeft, startTop),
+            IsClosed = false,
+            IsFilled = false,
+        };
+        figure.Segments.Add(new BezierSegment(
+            new Point(startLeft + pull, startTop),
+            new Point(endLeft - pull, endTop),
+            new Point(endLeft, endTop),
+            true));
+
+        var geometry = new PathGeometry();
+        geometry.Figures.Add(figure);
+        geometry.Freeze();
+        return geometry;
     }
 
     #endregion

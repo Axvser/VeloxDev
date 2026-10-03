@@ -178,10 +178,10 @@
                     </Minimap>
                     <ChildContent Context="sc">
                         @* Links layer: one full-canvas TemplateLinkView per connection (template product,
-                           absolute, overflow visible). Each link draws the golden-ratio orthogonal polyline.
-                           The layer itself stays click-through — each link hands hit testing back on its own
-                           strokes — and it is also the keyboard host: focus lands here on hover so Delete
-                           reaches the page without a click first. *@
+                           absolute, overflow visible). Each link draws a cubic curve with a light running
+                           along it by arc length. The layer itself stays click-through — each link hands hit
+                           testing back on its own strokes — and it is also the keyboard host: focus lands
+                           here on hover so Delete reaches the page without a click first. *@
                         <div class="veloxdev-wf-links"
                              tabindex="0"
                              @ref="_linksLayer"

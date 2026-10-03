@@ -173,17 +173,18 @@ All three return a **collapsed** value. WPF and Avalonia use the first, WinUI/MA
 ### Links
 
 ```csharp
-var s  = new Point(StartLeft, StartTop);      // sender slot anchor, collapsed
-var e  = new Point(EndLeft,   EndTop);        // receiver slot anchor, collapsed
+var s  = new Point(StartLeft, StartTop);          // sender slot anchor, collapsed
+var e  = new Point(EndLeft,   EndTop);            // receiver slot anchor, collapsed
 double dx = EndLeft - StartLeft;
-const double phi = 0.6180339887;              // 1/φ
-double stub = dx / 2.0 * (1.0 - phi);         // ≈ 0.190983 · dx
-var p1 = new Point(s.X + stub, s.Y);
-var p4 = new Point(e.X - stub, e.Y);
-// polyline: s → p1 → p4 → e
+double pull = Math.Max(40, Math.Abs(dx) * 0.5);   // 40px floor, else half the gap
+var c1 = new Point(s.X + pull, s.Y);              // control points, each horizontal
+var c2 = new Point(e.X - pull, e.Y);
+// cubic Bézier: s → (c1, c2) → e
 ```
 
-The four-point golden-stub elbow is the shared geometry — every adapter draws it.
+The cubic Bézier with both control points pulled horizontally is the shared geometry — every adapter draws it. It leaves each port horizontally and turns through the middle with no corner; the 40px floor keeps two ports close together from degenerating the curve into a straight segment.
+
+⚙ **That formula is duplicated wherever a platform needs the geometry outside its render pass, and the copies do not follow each other automatically.** Razor's adapter re-derives it in `wwwroot/veloxdev.workflow.js` to rewrite link curves in the same frame a wheel zoom collapses the nodes (it only touches elements marked `data-veloxdev-link-curve`); WinForms widens the same four points into the window region it carves out of the stroke band. Change the shape and all of them change with it.
 
 ⚙ **Never hand a renderer an unbounded absolute coordinate or a whole-world canvas size.** That is the contract that keeps links visible at deep zoom. A host with a size or coordinate limit needs one of: a viewport-sized overlay outside the growing canvas (MAUI), an offset frame that bakes the pan into the geometry (WinUI), or self-bounding geometry (Jalium).
 

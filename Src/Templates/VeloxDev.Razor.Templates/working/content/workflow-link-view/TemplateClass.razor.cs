@@ -1,18 +1,21 @@
 // VeloxDev customization: Customize line geometry, color, and thickness via the override parameters below.
 using System.ComponentModel;
+using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;
 
 namespace TemplateNamespace;
 
 /// <summary>
-/// A Blazor link view rendered as an orthogonal polyline with golden-ratio stubs,
-/// mirroring the WPF template's geometry. Points derive from the endpoint slot anchors;
-/// the polyline spans the whole canvas and redraws whenever the endpoints move.
+/// A Blazor link view rendered as a cubic Bézier that leaves each port horizontally,
+/// mirroring the WPF template's geometry. The curve derives from the endpoint slot anchors;
+/// it spans the whole canvas and redraws whenever the endpoints move.
 /// </summary>
 public partial class TemplateClass : ComponentBase, IDisposable
 {
-    private const double Phi = 0.6180339887;
+    // Minimum control-point pull: two ports close together would otherwise degenerate the curve
+    // into a straight segment and lose the horizontal exit at each end.
+    private const double PullMinimum = 40;
 
     /// <summary>Gets or sets the link rendered by this view.</summary>
     [Parameter]
@@ -52,13 +55,13 @@ public partial class TemplateClass : ComponentBase, IDisposable
         get
         {
             if (ThicknessOverride is not null
-                && double.TryParse(ThicknessOverride, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out var t))
+                && double.TryParse(ThicknessOverride, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var t))
             {
                 return t;
             }
 
-            return double.Parse("TemplateLinkThickness", System.Globalization.CultureInfo.InvariantCulture);
+            return double.Parse("TemplateLinkThickness", CultureInfo.InvariantCulture);
         }
     }
 
@@ -73,10 +76,11 @@ public partial class TemplateClass : ComponentBase, IDisposable
         {
             var alpha = text.Substring(1, 2);
             var rgb = text.Substring(3);
-            if (byte.TryParse(alpha, System.Globalization.NumberStyles.HexNumber,
-                    System.Globalization.CultureInfo.InvariantCulture, out var a))
+            if (byte.TryParse(alpha, NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture, out var a))
             {
-                return $"rgba({HexByte(rgb, 0)},{HexByte(rgb, 2)},{HexByte(rgb, 4)},{a / 255d:0.###})";
+                return FormattableString.Invariant(
+                    $"rgba({HexByte(rgb, 0)},{HexByte(rgb, 2)},{HexByte(rgb, 4)},{a / 255d:0.###})");
             }
         }
 
@@ -96,9 +100,11 @@ public partial class TemplateClass : ComponentBase, IDisposable
     private bool EffectiveCanRender => CanRenderOverride ?? CanRender;
     private bool EffectiveIsVirtual => IsVirtualOverride ?? IsVirtual;
 
-    private string CanvasWidthCss => CanvasWidth.ToString("0.#");
-    private string CanvasHeightCss => CanvasHeight.ToString("0.#");
-    private string ThicknessCss => Thickness.ToString("0.#");
+    // Keep these invariant — the strings land in SVG/CSS attributes, where a culture's comma decimal
+    // separator would serialize an unparseable value.
+    private string CanvasWidthCss => CanvasWidth.ToString("0.#", CultureInfo.InvariantCulture);
+    private string CanvasHeightCss => CanvasHeight.ToString("0.#", CultureInfo.InvariantCulture);
+    private string ThicknessCss => Thickness.ToString("0.#", CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     protected override void OnInitialized()
@@ -170,7 +176,11 @@ public partial class TemplateClass : ComponentBase, IDisposable
     private bool IsVirtualLink(IWorkflowLinkViewModel? link)
         => link is null || (link.Sender?.Parent is null && link.Receiver?.Parent is null);
 
-    private string BuildPoints()
+    // Extension point: the control points set the curve's shape. Both are pulled horizontally by
+    // max(PullMinimum, |dx| / 2), which is what makes the line leave each port horizontally — keep
+    // that property if you replace the formula, and mirror any change in the adapter's zoom JS,
+    // which re-formats this same curve while a wheel zoom collapses the nodes.
+    private string BuildCurve()
     {
         var link = Link;
         if (link is null) return "";
@@ -193,12 +203,12 @@ public partial class TemplateClass : ComponentBase, IDisposable
         if (double.IsNaN(sx) || double.IsNaN(sy) || double.IsNaN(ex) || double.IsNaN(ey)) return "";
 
         double dx = ex - sx;
-        // Signed stub keeps the orthogonal bend on the correct side when dragging leftward.
-        double stub = dx / 2.0 * (1.0 - Phi);
-        double p1x = sx + stub;
-        double p4x = ex - stub;
+        double pull = Math.Max(PullMinimum, Math.Abs(dx) * 0.5);
 
-        return $"{sx:F1},{sy:F1} {p1x:F1},{sy:F1} {p4x:F1},{ey:F1} {ex:F1},{ey:F1}";
+        // Invariant: the path is SVG, and the adapter's zoom JS rewrites this same attribute with
+        // '.' separators — a culture-dependent format would make the two disagree every frame.
+        return FormattableString.Invariant(
+            $"M {sx:F1},{sy:F1} C {sx + pull:F1},{sy:F1} {ex - pull:F1},{ey:F1} {ex:F1},{ey:F1}");
     }
 
     /// <inheritdoc />

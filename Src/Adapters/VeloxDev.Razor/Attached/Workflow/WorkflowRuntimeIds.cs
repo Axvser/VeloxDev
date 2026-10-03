@@ -10,7 +10,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// resolves back to the same object. The ids are stable across re-renders because the key is the
 /// component instance itself (reference equality, held weakly). Public so demo/template link views
 /// can stamp their endpoint slots with the same ids the adapter behaviors use for node/slot DOM
-/// elements — the zoom JS then re-syncs link polylines from those live slots in the collapse frame.
+/// elements — the zoom JS then re-syncs link curves from those live slots in the collapse frame.
 /// </summary>
 public static class WorkflowRuntimeIds
 {

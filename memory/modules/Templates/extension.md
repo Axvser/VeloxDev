@@ -195,7 +195,7 @@ Razor 的 `slotBackground` 就是这一类的正面样本：它的 `description`
 |---|---|
 | 标尺厚度（28 或 36） | **WinForms `workflow-node-view/TemplateClass.cs:419-420` 的字面量 `+ 36`**（该家 tree-view 的常量叫 `RulerReserve`，在 `workflow-tree-view/TemplateClass.cs:37`，两个文件没有共享类型所以只能各写一份）、Razor `workflow-tree-view/TemplateClass.razor:19` 的 `RulerThickness="28"`。**Jalium 不属于这一类**：它只有一个来源 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowGridDecorator.cs:25`，模板侧零副本 |
 | 节点设计尺寸 `260×180` | WPF/WinUI node-view 的 `Grid Width/Height`、MAUI `workflow-node-view/TemplateClass.xaml.cs:6` 的 `DesignWidth`、Razor `workflow-node-view/TemplateClass.razor.cs:77`、Jalium `workflow-slot-view/TemplateClass.cs:14-22` 的 `WorkflowPortLayout`（Jalium 的 node/link/tree 三处都读它） |
-| 黄金比 `0.6180339887` | 六个非 Bootstrap 派生的 link-view 与 Razor/MAUI 的 grid 代码各存一份 |
+| 连线控制点最小拉出量 `40`（配 `0.5·|dx|`） | 标记语言三家的 link-view **模板与镜像各存一份字面量**（Avalonia `TemplateClass.axaml.cs:130`／镜像 `LinkView.axaml.cs:129`，WPF `:89`／`:88`，WinUI `:286`／`:286`）；Razor 的 `PullMinimum`（`TemplateClass.razor.cs:17`／镜像 `LinkView.razor.cs:17`）**再加上适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js:246`）；三家无标记适配器各一份（WinForms `WorkflowLinkView.cs:268`、Jalium `WorkflowLinkView.cs:120` 与 `WorkflowTreeView.cs:265`、MAUI `WorkflowLinkOverlay.cs:350`）。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
 
 绑定式的那几家（WPF/Avalonia/WinUI/MAUI 的 tree-view 把 `TranslateTransform` 绑到
 `PART_GridDecorator.RulerThickness`）会自动跟随，**复制式的那几处不会**。
@@ -223,6 +223,6 @@ Razor 的 `slotBackground` 就是这一类的正面样本：它的 `description`
 2. 新加的 symbol 有 `replaces` 吗？模板文件里有对应的 token 吗？**两个都"是"才有效。**
 3. 新增的文件进 `primaryOutputs` 了吗？
 4. 动过某个条目的名字或公开形状吗？tree-view 里对它的引用改了吗？
-5. 动过标尺厚度 / 设计尺寸 / 黄金比吗？§4.5 表里那几处复制点都改了吗？
+5. 动过标尺厚度 / 设计尺寸 / 连线最小拉出量吗？§4.5 表里那几处复制点都改了吗？
 6. 七条命令的 `--namespace` 是不是同一个？
 7. 新增平台时，抄的那个平台与目标平台**同族**吗（`architecture.md` §六 的三条轴）？

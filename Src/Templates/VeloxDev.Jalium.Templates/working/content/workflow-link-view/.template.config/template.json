@@ -8,7 +8,7 @@
   ],
   "identity": "VeloxDev.Jalium.WorkflowLinkView",
   "name": "VeloxDev Jalium Workflow Link View",
-  "description": "An orthogonal link view for a Jalium.UI workflow surface.",
+  "description": "A minimal Jalium.UI view for a VeloxDev workflow link component.",
   "shortName": "jalium-v-link",
   "sourceName": "TemplateClass",
   "defaultName": "LinkView",

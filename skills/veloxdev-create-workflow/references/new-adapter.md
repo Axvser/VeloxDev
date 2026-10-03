@@ -78,11 +78,11 @@ Ask whether your renderer has a hard coordinate or size limit.
 - **A limit** → do not scale the drawing surface with the world:
   - a **viewport-sized overlay** that lives outside the growing canvas (MAUI — Win2D's ~16k texture cap),
   - an **offset frame**: bake the pan into the geometry and position the element at `−ActualOffset` so the geometry always lands in `[0, ActualSize]` (WinUI),
-  - or **self-bounding**: keep each element on its own polyline bounding box and bake back in `OnRender` (Jalium — the renderer culls by layout box).
+  - or **self-bounding**: keep each element on its own curve bounding box and bake back in `OnRender` (Jalium — the renderer culls by layout box).
 
 ⚙ **The rule behind all three**: never hand a renderer an unbounded absolute coordinate or a whole-world canvas size. This is the single most likely way to end up with links that vanish at deep zoom and work fine at 100%.
 
-⚙ Draw the same four-point golden-stub elbow as everyone else, and start the render with `link.IsRenderReady()` (or an equivalent `IsVisible` + NaN-anchor check).
+⚙ Draw the same cubic Bézier as everyone else, and start the render with `link.IsRenderReady()` (or an equivalent `IsVisible` + NaN-anchor check).
 
 ### 5. Zoom hook
 

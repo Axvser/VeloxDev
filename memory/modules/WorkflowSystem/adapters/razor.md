@@ -76,7 +76,7 @@
 ### 3. 渲染分趟且可能乱序 → 缩放闪烁，需要「手势期间所有人停手」
 
 **限制。** 一次缩放要改的东西分布在很多条独立的投递路径上：每个节点组件自己的 `SyncPosition`、
-每个卡片的重渲染、画布的 translate/scroll、连线折线点的重同步。在浏览器看来它们是**一帧一帧陆续到达的**
+每个卡片的重渲染、画布的 translate/scroll、连线曲线点的重同步。在浏览器看来它们是**一帧一帧陆续到达的**
 ——于是出现「节点先跳到新位置、画布还是旧的 translate」的中间帧，随后再跳回来。这就是**缩放闪烁**。
 
 **做法（三层，缺一层就漏）：**
@@ -162,6 +162,13 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 - demo 侧：`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateLinkView.razor.cs:128` 的注释
   把这条规则写成了显式约定（「Razor 用当前区域写裸 double，逗号小数点会写出浏览器读不了的 SVG 属性」），
   `N()`/`Css()` 都走不变文化（同文件 `:317` 与 `:312-315`；alpha 那处的理由写在 `:311`：「它是周期的一个端点」）。
+  2026-10-03：同文件 `ToCss` 的 rgba 那行（原来漏了）也补成 `FormattableString.Invariant`。
+- **连线 path 那条链（2026-10-03 全修）**：`workflow-link-view/TemplateClass.razor.cs` 与其镜像
+  `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/LinkView.razor.cs` —— `ToCss` 的 rgba、
+  `CanvasWidthCss`/`CanvasHeightCss`/`ThicknessCss`、以及 `BuildCurve()` 拼的 `M…C…` 全走不变文化。
+  这条链尤其不能漏 `BuildCurve`：**适配器的缩放 JS 会用自己的 `Math.max`/`toFixed` 重写同一个 `d` 属性**
+  （`wwwroot/veloxdev.workflow.js:295`），JS 恒用 `.`，两边格式一旦分叉，settle 守卫每一帧都会把值改回去，
+  表现为缩放期间曲线反复闪。
 
 **仍然活着（写侧，用当前区域 `"0.#"` / `"0.###"`，没有 `InvariantCulture`）：**
 - `Attached/Workflow/WorkflowGridDecorator.razor.cs:79,87,88,90`（标尺厚度、两条 transform、刻度长度）

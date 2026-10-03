@@ -228,17 +228,22 @@ window.veloxdevWorkflow = (() => {
     }
 
     // ════════════════════════════════════════════════════════════
-    // ZOOM LINK SYNC — rewrites link polylines from the live endpoint
+    // ZOOM LINK SYNC — rewrites link curves from the live endpoint
     // slots in the same frame the nodes collapse (Route A for Blazor).
     // ════════════════════════════════════════════════════════════
     // Link endpoints normally round-trip through .NET: initSlotLayout measures the slot DOM,
-    // reports OnSlotLayoutBatch, .NET writes slot.Anchor, and the LinkView re-renders the polyline.
+    // reports OnSlotLayoutBatch, .NET writes slot.Anchor, and the LinkView re-renders the curve.
     // That is inherently async (≥1 frame behind the node collapse), so during a wheel zoom the
     // links paint at the old scale under the already-collapsed nodes/scroll for a frame — the
-    // endpoint drift/flicker this path eliminates. The golden-ratio stub coefficient is mirrored
-    // from the .NET LinkView.BuildPoints so the JS-written points are pixel-identical to what a
-    // later .NET render produces once it re-measures the same geometry.
-    const LINK_PHI = 0.6180339887;
+    // endpoint drift/flicker this path eliminates. The control-point pull is mirrored from the
+    // .NET LinkView.BuildCurve so the JS-written curve is pixel-identical to what a later .NET
+    // render produces once it re-measures the same geometry.
+    //
+    // Only elements carrying LINK_CURVE_ATTR are touched. A link view that draws more than one
+    // element — the full demo cuts its comet out of the curve by arc length — marks none of them,
+    // so this pass can never overwrite a geometry .NET owns.
+    const LINK_CURVE_ATTR = 'data-veloxdev-link-curve';
+    const LINK_PULL_MIN = 40;
 
     // The on-screen box to measure for a slot: prefer the actual glyph (<svg.veloxdev-wf-slot-svg>)
     // inside the stamped wrapper, so link endpoints sit on the drawing's center and not on the wrapper
@@ -250,21 +255,22 @@ window.veloxdevWorkflow = (() => {
         return glyph ? glyph.getBoundingClientRect() : el.getBoundingClientRect();
     }
 
-    // Resolves a link's live <polyline> by its stamped data-veloxdev-link-id. Pooled link views are
+    // Resolves a link's live curve by its stamped data-veloxdev-link-id. Pooled link views are
     // reused for a different link each time and Blazor re-stamps the attributes in place, so the
     // element identity survives while the id changes — hence a per-pass re-query rather than a cache.
-    function resolveLinkPolyline(host, linkId) {
+    function resolveLinkCurve(host, linkId) {
         if (!host || !linkId) return null;
         const svg = host.querySelector('[data-veloxdev-link-id="' + linkId + '"]');
-        return svg ? svg.querySelector('polyline') : null;
+        return svg ? svg.querySelector('[' + LINK_CURVE_ATTR + ']') : null;
     }
 
     // Measures one link's endpoints from the LIVE slot elements using the same formula as
     // initSlotLayout's measure() (element center relative to the canvas, minus the content-wrapper
-    // translate) and formats the polyline with LinkView's signed golden-ratio stubs. Returns '' when
-    // an endpoint has no measurable slot DOM yet (virtual-gesture receiver, virtualized node, fresh
-    // mount) — .NET owns those links until a real measurement lands, so the caller leaves them alone.
-    function linkPointsFromSlotElements(host, senderSlotId, receiverSlotId) {
+    // translate) and formats the cubic curve with LinkView.BuildCurve's control points. Returns ''
+    // when an endpoint has no measurable slot DOM yet (virtual-gesture receiver, virtualized node,
+    // fresh mount) — .NET owns those links until a real measurement lands, so the caller leaves
+    // them alone.
+    function linkCurveFromSlotElements(host, senderSlotId, receiverSlotId) {
         if (!host || !senderSlotId || !receiverSlotId) return '';
         const canvasEl = host.querySelector('.veloxdev-wf-canvas');
         if (!canvasEl) return '';
@@ -284,25 +290,24 @@ window.veloxdevWorkflow = (() => {
         const ey = (rr.top + rr.height / 2) - rect.top - contentY;
         if (!isFinite(sx) || !isFinite(sy) || !isFinite(ex) || !isFinite(ey)) return '';
         const dx = ex - sx;
-        // Signed stub keeps the orthogonal bend on the correct side when dragging leftward.
-        const stub = dx / 2.0 * (1.0 - LINK_PHI);
-        const p1x = sx + stub;
-        const p4x = ex - stub;
-        return sx.toFixed(1) + ',' + sy.toFixed(1) + ' ' +
-            p1x.toFixed(1) + ',' + sy.toFixed(1) + ' ' +
-            p4x.toFixed(1) + ',' + ey.toFixed(1) + ' ' +
-            ex.toFixed(1) + ',' + ey.toFixed(1);
+        // Both control points pulled horizontally, as in LinkView.BuildCurve. The minimum pull keeps
+        // the curve from degenerating into a straight segment when the two ports are close.
+        const pull = Math.max(LINK_PULL_MIN, Math.abs(dx) * 0.5);
+        return 'M ' + sx.toFixed(1) + ',' + sy.toFixed(1) +
+            ' C ' + (sx + pull).toFixed(1) + ',' + sy.toFixed(1) +
+            ' ' + (ex - pull).toFixed(1) + ',' + ey.toFixed(1) +
+            ' ' + ex.toFixed(1) + ',' + ey.toFixed(1);
     }
 
-    // Writes every link's polyline points synchronously from its endpoints' CURRENT slot DOM. Runs
-    // inside applyZoomSurface immediately after applyNodeGeometry collapsed the node wrappers, so a
-    // zoom step paints nodes + links + scroll in ONE browser frame. Reading getBoundingClientRect
-    // after the geometry writes forces a synchronous layout, so the measured centers are exactly the
+    // Writes every link's curve synchronously from its endpoints' CURRENT slot DOM. Runs inside
+    // applyZoomSurface immediately after applyNodeGeometry collapsed the node wrappers, so a zoom
+    // step paints nodes + links + scroll in ONE browser frame. Reading getBoundingClientRect after
+    // the geometry writes forces a synchronous layout, so the measured centers are exactly the
     // collapsed values .NET will converge on — never a stale pre-collapse endpoint. Only links whose
     // endpoints are materialized and measurable are stamped; the rest (.NET-owned until measured)
-    // are skipped. Returns the stamped [{linkId, points}] records for the zoom settle guard to
-    // re-assert against stale async .NET renders.
-    function applyZoomLinkPoints(host) {
+    // are skipped. Returns the stamped [{linkId, d}] records for the zoom settle guard to re-assert
+    // against stale async .NET renders.
+    function applyZoomLinkCurves(host) {
         if (!host) return null;
         const linkEls = host.querySelectorAll('[data-veloxdev-link-id]');
         if (!linkEls.length) return null;
@@ -310,16 +315,16 @@ window.veloxdevWorkflow = (() => {
         for (let i = 0; i < linkEls.length; i++) {
             const svg = linkEls[i];
             const linkId = svg.getAttribute('data-veloxdev-link-id');
-            const points = linkPointsFromSlotElements(
+            const d = linkCurveFromSlotElements(
                 host,
                 svg.getAttribute('data-veloxdev-sender-slot'),
                 svg.getAttribute('data-veloxdev-receiver-slot'));
-            if (!points) continue;
-            const poly = svg.querySelector('polyline');
-            if (poly && poly.getAttribute('points') !== points) {
-                poly.setAttribute('points', points);
+            if (!d) continue;
+            const curve = svg.querySelector('[' + LINK_CURVE_ATTR + ']');
+            if (curve && curve.getAttribute('d') !== d) {
+                curve.setAttribute('d', d);
             }
-            stamped.push({ linkId: linkId, points: points });
+            stamped.push({ linkId: linkId, d: d });
         }
         return stamped.length ? stamped : null;
     }
@@ -389,10 +394,10 @@ window.veloxdevWorkflow = (() => {
             applyNodeGeometry(nodeWrappers, nodeGeometry);
             // Collapse the link endpoints in this same block: read each endpoint slot's live center
             // (getBoundingClientRect after the wrapper writes above forces the new layout) and write
-            // the polyline. Without this the links wait for the async measure→.NET anchor→render
+            // the curve. Without this the links wait for the async measure→.NET anchor→render
             // round trip and paint one or more frames at the old scale under the new nodes/scroll.
             const stampedLinks = (nodeGeometry && nodeGeometry.length)
-                ? applyZoomLinkPoints(host)
+                ? applyZoomLinkCurves(host)
                 : null;
             // Apply the effective scroll (add the edge reserve the effective value already excluded).
             el.scrollLeft = Math.max(0, edgeX + (scrollX || 0));
@@ -481,10 +486,10 @@ window.veloxdevWorkflow = (() => {
         return dirty;
     }
 
-    // Re-asserts a surface's stamped link points onto its live polylines, mirroring
+    // Re-asserts a surface's stamped link curves onto its live marked elements, mirroring
     // applyZoomGeometrySettle for nodes: a stale async .NET LinkView render (an older zoom step's
     // anchors landing after the newest step already applied) is overwritten with the stamped
-    // collapsed points before it can be painted. Returns true if any write actually changed the DOM.
+    // collapsed curve before it can be painted. Returns true if any write actually changed the DOM.
     function applyZoomLinkSettle(scrollerId) {
         const z = surfaceZoomState[scrollerId];
         const links = z ? z.links : null;
@@ -496,10 +501,10 @@ window.veloxdevWorkflow = (() => {
         let dirty = false;
         for (let i = 0; i < links.length; i++) {
             const l = links[i];
-            const poly = resolveLinkPolyline(host, l.linkId);
-            if (!poly) continue;
-            const cur = poly.getAttribute('points');
-            if (cur !== l.points) { poly.setAttribute('points', l.points); dirty = true; }
+            const curve = resolveLinkCurve(host, l.linkId);
+            if (!curve) continue;
+            const cur = curve.getAttribute('d');
+            if (cur !== l.d) { curve.setAttribute('d', l.d); dirty = true; }
         }
         return dirty;
     }

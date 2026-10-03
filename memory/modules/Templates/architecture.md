@@ -192,7 +192,7 @@ Jalium 的 36 **没有说明**（它在适配器基类里，见下）。
 |---|---|---|
 | **立即模式**：继承一个能覆写绘制入口的元素，XAML 只是空壳 | WPF、Avalonia、Jalium、WinForms | WPF `workflow-link-view/TemplateClass.xaml` 全文是一个空 `<UserControl>`（5 行），几何全在 `.xaml.cs:66` 的 `OnRender`；Avalonia 同理（`TemplateClass.axaml` 是空 `<Control>`，`Render` 在 code-behind）；Jalium 的几何在**适配器基类** `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkView.cs:89-114` 的 `OnRender`（模板只设线色/线宽）；WinForms 是 `Render(Graphics)`，由宿主调 |
 | **保留式几何在代码里构造**：XAML 是空壳，`Path` + `PathGeometry` 在构造函数里 new 出来 | WinUI | `workflow-link-view/TemplateClass.xaml` 只有 6 行（`Clip="{x:Null}"` 是全部内容）；`TemplateClass.xaml.cs:26-28` 是 `Path` / `PathGeometry` / `PathFigure` 字段，`:57-58` 在 ctor 里 new 并 `Children.Add`。原因是这一家**没有公共 `OnRender`**，理由见 `memory/modules/WorkflowSystem/adapters/winui.md` §二·L2，此处不抄 |
-| **标记语言里的元素 + 代码给几何字符串** | Razor | `workflow-link-view/TemplateClass.razor` 的 `<polyline points=…>`（虚线的 `stroke-dasharray="6 4"` 也在标记里） |
+| **标记语言里的元素 + 代码给几何字符串** | Razor | `workflow-link-view/TemplateClass.razor` 的 `<path d=…>`（虚线的 `stroke-dasharray="6 4"` 也在标记里）；`data-veloxdev-link-curve="1"` 是给适配器缩放 JS 认的标记，不是样式 —— 见 `adapters/razor.md` §2 |
 | **复用适配器的视口级图层** | MAUI | `workflow-link-view/TemplateClass.xaml:14` 直接放 `behaviors:WorkflowLinkOverlay`；文件头 `:2-7` 的注释写明取舍：**每条线一个 `GraphicsView` 会在深缩放下超出 Win2D 纹理上限并静默消失**，所以一个表面只放**一个** link 层 |
 
 ⇒ **WPF / WinUI 那一对容易看错**：WPF 的 tree-view 给 `LinkView` 绑了 `Width/Height` 到
