@@ -492,13 +492,6 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
-            return;
-
-        // 菜单弹出引起的那一次离开不算：指针是飞到菜单上，不是移开了这条线。
-        if (LinkInteraction.For(viewModel).IsSuspended)
-            return;
-
         ForwardLinkPointer(host, state, e, PointerPhase.Exited);
     }
 

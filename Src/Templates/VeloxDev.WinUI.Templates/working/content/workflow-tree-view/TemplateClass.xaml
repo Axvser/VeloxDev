@@ -21,9 +21,7 @@
                             Canvas.ZIndex="{Binding Anchor.Layer}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <!-- Width/Height are NOT bound here: LinkView drives its own box (position −ActualOffset,
-                 size = model ActualSize) in code so the box is authoritative and never lags an
-                 ElementName ActualWidth binding while the canvas grows during deep zoom. -->
+            <!-- Do not bind Width/Height here; LinkView sizes its own box. -->
             <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
                             StartTop="{Binding Sender.Anchor.Vertical}"
                             EndLeft="{Binding Receiver.Anchor.Horizontal}"
@@ -35,9 +33,9 @@
         <local:TemplateSelector x:Key="WorkflowTemplateSelector"
                                 NodeTemplate="{StaticResource NodeTemplate}"
                                 LinkTemplate="{StaticResource LinkTemplate}" />
-        <!-- Add or remove the link menu's entries here; each item acts on the link that was right-clicked. -->
+        <!-- Add or remove the link menu's entries here; each item is bound to the right-clicked link. -->
         <MenuFlyout x:Key="LinkContextMenu">
-            <MenuFlyoutItem Text="Delete" Click="OnDeleteLink" />
+            <MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}" />
         </MenuFlyout>
     </UserControl.Resources>
     <Grid>

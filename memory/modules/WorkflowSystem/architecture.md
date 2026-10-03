@@ -200,10 +200,17 @@ IWorkflowTreeEvents : Connecting/Connected
 
 ⚠ **`IsSuspended` 要到 `Exited` 也认**（2026-10-03 由 Jalium 那家实测逼出来）：原来只有 `Moved` 分支判挂起，
 于是菜单一开、指针飞到菜单上，`Exited` 照样把 hover 清掉 —— 菜单正要作用的那条线瞬间不再高亮。
-现在两处同一条判据。各家自己额外拦过 `Exited`（Razor、MAUI overlay、Jalium 的 `OnMouseLeave`）的，
-那些拦截现在是**冗余**的，可以删。
+现在两处同一条判据。各家自己额外拦过 `Exited` 的那一段，**2026-10-03 已从七家全删**：Razor
+`WorkflowSurfaceBehavior.razor.cs`、MAUI `WorkflowLinkOverlay.OnHoverExited`、Jalium `OnMouseLeave`
+（这三家是当初点名的），以及 WinUI / WPF / Avalonia / WinForms 四家的适配器（同一处冗余，一起清）。
+留着的坏处不是多一次判断，而是让人误以为「平台不清 hover 是平台的功劳」。
 
-**右键菜单三事件也在同一个 hub 上**：`ContextMenuRequested`（可否决 —— 这就是「这里不给菜单」的写法）+ `ContextMenuOpened` / `ContextMenuClosed`。菜单**本身仍是宿主的**（要选位置、要平台自己的弹出物），宿主用 `Publish(ContextMenuEvent)` 报回开合，hub 据此自动收放 `IsSuspended` —— 七家原先各自手工记账那一段（WPF `:583`、Avalonia `:499`、WinUI `:550`、Razor `:154`、WinForms `:590`、MAUI overlay `:867/:872`、Jalium）应当逐步换成这个上报。**`ContextMenuRequested` 不压掉 `LinkPressed`** —— 六个 demo 是从后者弹菜单的，压掉会让它们一按弹两次。
+**右键菜单三事件也在同一个 hub 上**：`ContextMenuRequesting`（Preview，可否决 —— 这就是「这里不给菜单」的写法）
+→ `ContextMenuRequested`（谁弹菜单谁订这一相）+ `ContextMenuOpened` / `ContextMenuClosed`。菜单**本身仍是宿主的**
+（要选位置、要平台自己的弹出物），宿主用 `Publish(ContextMenuEvent)` 报回开合，hub 据此自动收放 `IsSuspended`。
+七家原先各自手工 `IsSuspended = true/false` 那一段，**2026-10-03 已一处不剩**；六个完整 demo 也一并从
+`LinkPressed` 改成订 `ContextMenuRequested`，因此 **`LinkPressed` 今天没有订阅者**（事件仍在，留给兼容与自定义）。
+⚠ **否决只在 Preview 相有效**：`Requested` 那一相读 `e.Handle.PreventDefault` 永远是 false。
 
 要点：
 

@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives.PopupPositioning;
-using Avalonia.Interactivity;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo;
@@ -81,16 +80,12 @@ public partial class TreeView : UserControl
         _menuLink = e.Link;
         _menuPosition = e.Position;
 
+        // 菜单的 DataContext 就是这条连线，条目据此绑定命令。
+        _linkMenu.DataContext = e.Link;
         _linkMenu.Placement = PlacementMode.AnchorAndGravity;
         _linkMenu.PlacementAnchor = PopupAnchor.TopLeft;
         _linkMenu.PlacementGravity = PopupGravity.BottomRight;
         _linkMenu.PlacementRect = new Rect(point.X, point.Y, 0, 0);
         _linkMenu.Open(this);
-    }
-
-    private void OnDeleteLinkClick(object? sender, RoutedEventArgs e)
-    {
-        if (_menuLink is { } link && link.DeleteCommand.CanExecute(null))
-            link.DeleteCommand.Execute(null);
     }
 }

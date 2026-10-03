@@ -89,9 +89,6 @@ public abstract class WorkflowTreeView : UserControl
 
             AttachTree();
             OnTreeAttached(value);
-            // 菜单的订阅放在宿主钩子之后：宿主若要对某些链接「不给菜单」，会在 OnTreeAttached 里订
-            // ContextMenuRequested 并置 PreventDefault；订阅顺序决定谁先跑，基类必须后订才读得到这次否决。
-            AttachLinkMenu();
             ScheduleLayout();
         }
     }
@@ -619,15 +616,10 @@ public abstract class WorkflowTreeView : UserControl
         // hub 由 Core 按树缓存：这里取到的就是同一棵树在任意界面上的那一个，本家不再自己造实例。
         var interaction = VeloxDev.WorkflowSystem.LinkInteraction.For(_tree);
         interaction.HoverChanged += OnLinkHoverChanged;
+        // 菜单由基类弹（条目见 OnBuildLinkMenu）。宿主想否决某一次，订 ContextMenuRequesting（Preview 相）即可 ——
+        // 它在 Requested 之前由 Core 按构造顺序发出，与这里的订阅先后无关。
+        interaction.ContextMenuRequested += OnContextMenuRequested;
         _linkInteraction = interaction;
-    }
-
-    // 右键菜单进 hub 的订阅单独一步（见 ViewModel setter 的调用点）：必须排在宿主订阅之后，宿主的
-    // PreventDefault 才否决得了这一次。
-    private void AttachLinkMenu()
-    {
-        if (_linkInteraction is null) return;
-        _linkInteraction.ContextMenuRequested += OnContextMenuRequested;
     }
 
     private void DetachLinkInteraction()
@@ -658,8 +650,7 @@ public abstract class WorkflowTreeView : UserControl
     // 模型给的是画布坐标 —— 只有表面同时知道这两件事。条目由 OnBuildLinkMenu 给出（基类默认一项 Delete）。
     private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
-        // 别的订阅方（宿主）把这一次拒绝掉了：这里是「不给菜单」的意思，照办。
-        if (e.Handle.PreventDefault) return;
+        // 宿主的否决走 ContextMenuRequesting，那是 Preview 相：被否决时这个事件根本不会发出。这里不再读句柄。
         if (e.Link is not { } link) return;
         if (_linkMenu?.Visible == true) return;
 

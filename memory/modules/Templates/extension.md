@@ -79,6 +79,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 | 3 | **删掉 demo 的 `InfoOverlay` HUD 及其绑定** | 模板里没有任何 InfoOverlay；demo 每个平台都有（如 `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/InfoOverlay.razor`，模板 tree-view 只把它连同 `<InfoOverlay …>` 那一行一起拿掉） |
 | 4 | **兄弟类型改名**：demo 用 `WorkflowGridDecorator` / `CustomTemplateSelector`，模板条目必须叫 `GridDecorator` / `TemplateSelector` | WPF demo `TreeView.xaml` 里是 `<workflowViews:WorkflowGridDecorator>`，模板里是 `<workflowViews:GridDecorator>`；因为 tree-view 是按 `defaultName` 引用兄弟的（`architecture.md` §五） |
 | 5 | 头注释换成 `… VeloxDev customization: …` 那一句 | 每个条目文件的第一行 |
+| 6 | **把注释翻成英文**：demo 的注释是简体中文，模板产物一律英文、一行说清、只标扩展点 | [code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五；七家 `workflow-tree-view` 2026-10-03 已清到零中文 |
 
 ⇒ **要改一个条目的内容，第一步是打开 demo 的对应文件，不是打开模板文件**；
 两边不一致时，先判断是"模板落后于 demo"还是"模板刻意偏离"（第 3、4 类就是刻意的）。

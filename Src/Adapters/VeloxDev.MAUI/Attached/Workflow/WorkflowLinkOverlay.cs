@@ -40,8 +40,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// geometric, walking each drawn curve's sample table: a link was never a view, so no platform hit test can
 /// see it, and the drawn body is the only thing that answers. Hovering a link selects it (drawn in
 /// <see cref="SelectedLinkColor"/>), <c>Delete</c> removes it through
-/// <see cref="IWorkflowLinkViewModel.DeleteCommand"/>, and a right-click on it opens a one-item menu that
-/// removes it (see <see cref="ShowDefaultContextMenu"/> to let a host surface open its own instead).
+/// <see cref="IWorkflowLinkViewModel.DeleteCommand"/>, and a right press — or, off Windows, a long press —
+/// is forwarded to <see cref="LinkInteraction"/> so the host surface can open its own menu.
 /// </para>
 /// </summary>
 public sealed class WorkflowLinkOverlay : GraphicsView
@@ -87,9 +87,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public static readonly BindableProperty InteractionSourceProperty = BindableProperty.Create(
         nameof(InteractionSource), typeof(View), typeof(WorkflowLinkOverlay), null, propertyChanged: OnInteractionSourceChanged);
 
-    public static readonly BindableProperty ShowDefaultContextMenuProperty = BindableProperty.Create(
-        nameof(ShowDefaultContextMenu), typeof(bool), typeof(WorkflowLinkOverlay), true);
-
     // 高亮是「一团白而模糊的光」，不是换色：静息线本来就是近白的，所以靠**更亮 + 更粗 + 外面那圈光晕**
     // 读出来，而不是靠换一个色相。七家都用白（`#FFFFFFFF`）—— 其它色相都试过，红像告警、青像另一条线。
     public static readonly BindableProperty SelectedLinkColorProperty = BindableProperty.Create(
@@ -108,6 +105,14 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private View? _interactionSource;
 #if !WINDOWS
     private PointerGestureRecognizer? _pointer;
+
+    // 非 Windows 没有右键，长按是「请求菜单」这件手势的本家说法。按住时长超过 LongPressDelay 就算长按；
+    // 手指轻微抖动不算移动，所以容差是 LongPressMoveSlop（设备无关单位）—— 超出它说明这是拖拽/平移，
+    // 立即取消计时。两者都是判定「按住不动」的阈值：时间下限 + 位移上限。
+    private const int LongPressDelay = 500;
+    private const double LongPressMoveSlop = 8d;
+    private IDispatcherTimer? _longPressTimer;
+    private Point? _longPressOrigin;
 #endif
     private IWorkflowLinkViewModel? _selectedLink;
     private Point? _lastPointer;
@@ -130,7 +135,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     // 键盘钩子实际挂在哪（窗口根，或 XamlRoot 还没就绪时的交互源），与指针钩子分开记，摘的时候才拆得干净
     private Microsoft.UI.Xaml.UIElement? _keyHost;
-    private Microsoft.UI.Xaml.Controls.MenuFlyout? _deleteMenu;
 #endif
 
     public WorkflowLinkOverlay()
@@ -178,13 +182,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     /// <summary>Colour a hovered link is drawn in, so the selected one reads as picked rather than resting.</summary>
     public Color? SelectedLinkColor { get => (Color?)GetValue(SelectedLinkColorProperty); set => SetValue(SelectedLinkColorProperty, value); }
-
-    /// <summary>
-    /// Whether this layer opens its own one-item <c>Delete</c> menu when a link is right-pressed. Leave it on for a
-    /// surface that draws no menu of its own; set it to <see langword="false"/> when the surface host opens its own
-    /// menu from <see cref="LinkInteraction.ContextMenuRequested"/>, so the two do not appear together.
-    /// </summary>
-    public bool ShowDefaultContextMenu { get => (bool)GetValue(ShowDefaultContextMenuProperty); set => SetValue(ShowDefaultContextMenuProperty, value); }
 
     /// <summary>Where the band is, as a fraction of a link's length from its sender's end. Written by the
     /// flow every frame; each link derives its geometry and colours from it while drawing.</summary>
@@ -520,6 +517,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         _pointer.PointerMoved += OnGesturePointerMoved;
         _pointer.PointerExited += OnGesturePointerExited;
         _pointer.PointerPressed += OnGesturePointerPressed;
+        _pointer.PointerReleased += OnGesturePointerReleased;
         source.GestureRecognizers.Add(_pointer);
 #endif
     }
@@ -535,7 +533,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         _pointer?.PointerMoved -= OnGesturePointerMoved;
         _pointer?.PointerExited -= OnGesturePointerExited;
         _pointer?.PointerPressed -= OnGesturePointerPressed;
+        _pointer?.PointerReleased -= OnGesturePointerReleased;
         _pointer = null;
+        CancelLongPress();
 #endif
 
 #if WINDOWS
@@ -585,14 +585,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     }
 
     // 指针离开整块输入面：选中跟着走 —— 高亮留在身后会让「现在按 Delete 删哪条」变得没有答案。
-    // 菜单弹出引起的那一次离开不算：指针是飞到菜单上去了，不是移开了这条线
+    // 菜单弹出引起的那一次离开由 Core 自己挡（它认 IsSuspended），本层不再重复拦一遍。
     private void OnHoverExited()
     {
-        if (_interaction?.IsSuspended == true)
-        {
-            return;
-        }
-
         _interaction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
     }
 
@@ -602,15 +597,14 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// link produces.
     /// </summary>
     /// <param name="onOverlay">Where the press landed, in this layer's coordinates.</param>
-    /// <param name="onSource">Same point in the input source's coordinates, for the menu's placement.</param>
     /// <param name="button">Which button.</param>
-    private void OnPressed(Point onOverlay, Point onSource, PointerButtonKind button)
+    private void OnPressed(Point onOverlay, PointerButtonKind button)
     {
         _interaction?.Publish(new PointerEvent(PointerPhase.Pressed, ToCanvasLocal(onOverlay), button));
 
         if (_interaction?.HoveredLink is null)
         {
-            // 空白处按下不是这条线的事：不置 Handled，也不弹菜单
+            // 空白处按下不是这条线的事：不置 Handled，也不动焦点
             return;
         }
 
@@ -620,11 +614,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         if (_interactionSource is { } source)
         {
             MainThread.BeginInvokeOnMainThread(() => source.Focus());
-        }
-
-        if (button is PointerButtonKind.Right && ShowDefaultContextMenu)
-        {
-            ShowDeleteMenu(onSource);
         }
     }
 
@@ -642,10 +631,19 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 #if !WINDOWS
     private void OnGesturePointerMoved(object? sender, PointerEventArgs e)
     {
-        if (e.GetPosition(this) is { } point)
+        if (e.GetPosition(this) is not { } point)
         {
-            OnHoverMoved(point);
+            return;
         }
+
+        // 移动超出容差就不是长按（是拖拽/平移），先取消计时再处理悬停。
+        if (_longPressOrigin is { } origin
+            && (Math.Abs(origin.X - point.X) > LongPressMoveSlop || Math.Abs(origin.Y - point.Y) > LongPressMoveSlop))
+        {
+            CancelLongPress();
+        }
+
+        OnHoverMoved(point);
     }
 
     private void OnGesturePointerExited(object? sender, PointerEventArgs e) => OnHoverExited();
@@ -656,15 +654,55 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             : e.Button == ButtonsMask.Primary ? PointerButtonKind.Left
             : (PointerButtonKind?)null;
 
-        if (button is null
-            || _interactionSource is not { } source
-            || e.GetPosition(this) is not { } onOverlay
-            || e.GetPosition(source) is not { } onSource)
+        if (button is null || _interactionSource is null || e.GetPosition(this) is not { } onOverlay)
         {
             return;
         }
 
-        OnPressed(onOverlay, onSource, button.Value);
+        // 只有左键（触摸/鼠标）走长按；右键本身就是菜单手势，不需要等。
+        if (button is PointerButtonKind.Left)
+        {
+            StartLongPress(onOverlay);
+        }
+
+        OnPressed(onOverlay, button.Value);
+    }
+
+    private void OnGesturePointerReleased(object? sender, PointerEventArgs e) => CancelLongPress();
+
+    // 长按到点与 Windows 的右键同义：翻译成「在原处按了右键」交给 hub，hub 照常判命中并报
+    // ContextMenuRequested —— 菜单本身仍由宿主（模板）声明和弹出。
+    private void OnLongPressTick(object? sender, EventArgs e)
+    {
+        var origin = _longPressOrigin;
+        CancelLongPress();
+        if (origin is { } point)
+        {
+            _interaction?.Publish(new PointerEvent(PointerPhase.Pressed, ToCanvasLocal(point), PointerButtonKind.Right));
+        }
+    }
+
+    private void StartLongPress(Point origin)
+    {
+        CancelLongPress();
+        _longPressOrigin = origin;
+        _longPressTimer ??= CreateLongPressTimer();
+        _longPressTimer.Start();
+    }
+
+    private void CancelLongPress()
+    {
+        _longPressTimer?.Stop();
+        _longPressOrigin = null;
+    }
+
+    private IDispatcherTimer CreateLongPressTimer()
+    {
+        var timer = Dispatcher.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(LongPressDelay);
+        timer.IsRepeating = false;
+        timer.Tick += OnLongPressTick;
+        return timer;
     }
 #endif
 
@@ -682,23 +720,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         if (link is not null)
         {
             _interactionSource?.Focus();
-        }
-
-        ScheduleInvalidate();
-    }
-
-    private void DeleteSelectedLink()
-    {
-        var link = _selectedLink;
-        if (link is null)
-        {
-            return;
-        }
-
-        _selectedLink = null;
-        if (link.DeleteCommand.CanExecute(null))
-        {
-            link.DeleteCommand.Execute(null);
         }
 
         ScheduleInvalidate();
@@ -732,11 +753,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 : properties.IsLeftButtonPressed ? PointerButtonKind.Left
                 : (PointerButtonKind?)null;
 
-            if (button is not null
-                && ToOverlayPoint(e) is { } onOverlay
-                && ToElementPoint(e, element) is { } onSource)
+            if (button is not null && ToOverlayPoint(e) is { } onOverlay)
             {
-                OnPressed(onOverlay, onSource, button.Value);
+                OnPressed(onOverlay, button.Value);
             }
         };
 
@@ -854,39 +873,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         _interaction.Publish(new KeyEvent(InputKey.Delete));
         e.Handled = true;
-    }
-
-    // 删除菜单：只有一项、落在右键处，且只在右键点在连线上时弹。
-    // 用平台的 MenuFlyout 而不是 MAUI 那个 —— 后者只能当 ContextFlyout 挂，右键落在哪都弹，
-    // 落在空白处也取消不了，而这条契约要求「只有点在连线上才弹」
-    private void ShowDeleteMenu(Point onSource)
-    {
-        if (_interactionSource?.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement element)
-        {
-            return;
-        }
-
-        if (_deleteMenu is null)
-        {
-            var item = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = "Delete" };
-            item.Click += (_, _) => DeleteSelectedLink();
-            _deleteMenu = new Microsoft.UI.Xaml.Controls.MenuFlyout();
-            _deleteMenu.Items.Add(item);
-            _deleteMenu.Closed += (_, _) =>
-            {
-                if (_interaction is not null) _interaction.IsSuspended = false;
-            };
-        }
-
-        // 菜单一开指针就落到菜单上，那之后的移动与离开都不该把菜单针对的这条线取消选中
-        if (_interaction is not null) _interaction.IsSuspended = true;
-        _deleteMenu.ShowAt(element, new Windows.Foundation.Point(onSource.X, onSource.Y));
-    }
-#else
-    // 右键菜单是这家平台侧的能力缺口：MAUI 的跨平台 MenuFlyout 只能整层挂成 ContextFlyout，
-    // 无法「只在连线上弹」。其余平台因此只有悬停高亮与 Delete
-    private void ShowDeleteMenu(Point onSource)
-    {
     }
 #endif
 

@@ -7,8 +7,12 @@ namespace TemplateNamespace;
 
 public partial class TemplateClass : ContentView
 {
-    // 右键菜单挂在树的 hub 上；换树/摘树时先解绑，旧 hub 才不会继续握着这个控件的委托。
+    // The link menu lives on the tree's interaction hub; unbind it before rebinding so an old hub does not
+    // keep holding this control's delegate.
     private LinkInteraction? _interaction;
+
+    // The link the open popup acts on; null while no popup is shown (off Windows only).
+    private IWorkflowLinkViewModel? _menuLink;
 
     public TemplateClass()
     {
@@ -52,7 +56,8 @@ public partial class TemplateClass : ContentView
         NodeItemsSource = visible is null ? null : new NodeOnlyVisibleItems(visible);
     }
 
-    // 一棵树一个 hub：换树时旧的退订、新的订阅。空白画布（Link 为 null）不弹菜单。
+    // One hub per tree: unsubscribe the old tree, subscribe the new one. An empty canvas (Link is null)
+    // opens no menu.
     private void UpdateInteraction()
     {
         if (_interaction is not null)
@@ -70,68 +75,16 @@ public partial class TemplateClass : ContentView
 
     private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
-        if (e.Link is null || e.Handle.PreventDefault)
+        if (e.Link is null)
         {
             return;
         }
 
-#if WINDOWS
         ShowLinkMenu(e.Link, e.Position);
-#endif
     }
 
-#if WINDOWS
-    // 菜单条目在 XAML 的 LinkContextMenu 里声明；这里只管定位与弹出。
-    // 画布坐标 → 视口像素：px = Ruler + 锚点 + 内容偏移 − 滚动偏移（与链接层绘制/命中共用同一条换算）。
-    private void ShowLinkMenu(IWorkflowLinkViewModel link, Anchor position)
-    {
-        if (PART_GridDecorator.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement host)
-        {
-            return;
-        }
-
-        var ruler = Math.Max(0d, PART_GridDecorator.RulerThickness);
-        var x = ruler + position.Horizontal + PART_GridDecorator.ContentOffsetX - PART_GridDecorator.ScrollOffsetX;
-        var y = ruler + position.Vertical + PART_GridDecorator.ContentOffsetY - PART_GridDecorator.ScrollOffsetY;
-
-        var flyout = BuildPlatformMenu((MenuFlyout)Resources["LinkContextMenu"], link);
-
-        // 开合报回 hub：菜单开着时指针飞到菜单上，也不该清掉这次选中的连线。
-        flyout.Closed += (_, _) => _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, position, link));
-        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, position, link));
-
-        flyout.ShowAt(host, new Windows.Foundation.Point(x, y));
-    }
-
-    // MAUI 没有能在指定点弹出的跨平台菜单；只有 Windows 的原生 MenuFlyout 能做到，所以把声明的条目翻成它。
-    private static Microsoft.UI.Xaml.Controls.MenuFlyout BuildPlatformMenu(MenuFlyout declared, IWorkflowLinkViewModel link)
-    {
-        var flyout = new Microsoft.UI.Xaml.Controls.MenuFlyout();
-        foreach (var element in declared)
-        {
-            switch (element)
-            {
-                // MenuFlyoutSeparator derives from MenuFlyoutItem, so it must be matched first.
-                case MenuFlyoutSeparator:
-                    flyout.Items.Add(new Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator());
-                    break;
-
-                case MenuFlyoutItem item:
-                    var native = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem
-                    {
-                        Text = item.Text,
-                        IsEnabled = item.IsEnabled,
-                    };
-                    native.Click += (_, _) => RunItem(item, link);
-                    flyout.Items.Add(native);
-                    break;
-            }
-        }
-
-        return flyout;
-    }
-
-    // 条目自带 Command 就用它（参数默认是被点的连线）；没有就落到默认动作：删掉这条连线。
+    // An entry uses its own Command when it has one (its BindingContext is the link, set before showing);
+    // otherwise it falls back to deleting the link.
     private static void RunItem(MenuFlyoutItem item, IWorkflowLinkViewModel link)
     {
         if (item.Command is { } command)
@@ -150,7 +103,140 @@ public partial class TemplateClass : ContentView
             link.DeleteCommand.Execute(null);
         }
     }
+
+#if WINDOWS
+    // The entries are declared in the LinkContextMenu resource; this only places and opens them.
+    // Canvas-local anchor -> viewport pixels: px = Ruler + anchor + ContentOffset − ScrollOffset,
+    // the identity the link layer draws and hit-tests with.
+    private void ShowLinkMenu(IWorkflowLinkViewModel link, Anchor position)
+    {
+        if (PART_GridDecorator.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement host)
+        {
+            return;
+        }
+
+        var ruler = Math.Max(0d, PART_GridDecorator.RulerThickness);
+        var x = ruler + position.Horizontal + PART_GridDecorator.ContentOffsetX - PART_GridDecorator.ScrollOffsetX;
+        var y = ruler + position.Vertical + PART_GridDecorator.ContentOffsetY - PART_GridDecorator.ScrollOffsetY;
+
+        var flyout = BuildPlatformMenu((MenuFlyout)Resources["LinkContextMenu"], link);
+
+        // Report open/close to the hub so the pointer travelling onto the menu does not clear the link.
+        flyout.Closed += (_, _) => _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, position, link));
+        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, position, link));
+
+        flyout.ShowAt(host, new Windows.Foundation.Point(x, y));
+    }
+
+    // MAUI has no cross-platform menu that opens at a point; only the Windows native MenuFlyout can, so the
+    // declared entries are translated into it.
+    private static Microsoft.UI.Xaml.Controls.MenuFlyout BuildPlatformMenu(MenuFlyout declared, IWorkflowLinkViewModel link)
+    {
+        var flyout = new Microsoft.UI.Xaml.Controls.MenuFlyout();
+        foreach (var element in declared)
+        {
+            switch (element)
+            {
+                // MenuFlyoutSeparator derives from MenuFlyoutItem, so it must be matched first.
+                case MenuFlyoutSeparator:
+                    flyout.Items.Add(new Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator());
+                    break;
+
+                case MenuFlyoutItem item:
+                    item.BindingContext = link;
+                    var native = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem
+                    {
+                        Text = item.Text,
+                        IsEnabled = item.IsEnabled,
+                    };
+                    native.Click += (_, _) => RunItem(item, link);
+                    flyout.Items.Add(native);
+                    break;
+            }
+        }
+
+        return flyout;
+    }
+#else
+    // MAUI has no cross-platform point popup, so the declared entries are materialized into the
+    // PART_LinkMenuLayer overlay and placed at the anchor. The long press that asks for the menu is raised
+    // by the link layer as a right press; this is only the presentation.
+    private void ShowLinkMenu(IWorkflowLinkViewModel link, Anchor position)
+    {
+        _menuLink = link;
+
+        var declared = (MenuFlyout)Resources["LinkContextMenu"];
+        PART_LinkMenuItems.Children.Clear();
+        foreach (var element in declared)
+        {
+            switch (element)
+            {
+                case MenuFlyoutSeparator:
+                    PART_LinkMenuItems.Children.Add(new BoxView
+                    {
+                        HeightRequest = 1,
+                        Color = Color.FromArgb("#40FFFFFF"),
+                        Margin = new Thickness(6, 2),
+                    });
+                    break;
+
+                case MenuFlyoutItem item:
+                    item.BindingContext = link;
+                    var button = new Button
+                    {
+                        Text = item.Text,
+                        IsEnabled = item.IsEnabled,
+                        BackgroundColor = Colors.Transparent,
+                        TextColor = Colors.White,
+                        HeightRequest = 36,
+                        Padding = new Thickness(12, 0),
+                        HorizontalOptions = LayoutOptions.Fill,
+                    };
+                    var captured = item;
+                    button.Clicked += (_, _) => SelectMenuItem(captured);
+                    PART_LinkMenuItems.Children.Add(button);
+                    break;
+            }
+        }
+
+        var ruler = Math.Max(0d, PART_GridDecorator.RulerThickness);
+        var x = ruler + position.Horizontal + PART_GridDecorator.ContentOffsetX - PART_GridDecorator.ScrollOffsetX;
+        var y = ruler + position.Vertical + PART_GridDecorator.ContentOffsetY - PART_GridDecorator.ScrollOffsetY;
+
+        PART_LinkMenuHost.Margin = new Thickness(Math.Max(0d, x), Math.Max(0d, y), 0, 0);
+        PART_LinkMenuLayer.IsVisible = true;
+        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, position, link));
+    }
+
+    private void SelectMenuItem(MenuFlyoutItem item)
+    {
+        var link = _menuLink;
+        DismissLinkMenu();
+        if (link is not null)
+        {
+            RunItem(item, link);
+        }
+    }
 #endif
+
+    // Hides the popup and tells the hub the menu is gone. The position is ignored when closing.
+    private void DismissLinkMenu()
+    {
+        if (!PART_LinkMenuLayer.IsVisible)
+        {
+            return;
+        }
+
+        PART_LinkMenuLayer.IsVisible = false;
+        var link = _menuLink;
+        _menuLink = null;
+        if (link is not null)
+        {
+            _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, new Anchor(), link));
+        }
+    }
+
+    private void OnLinkMenuScrimTapped(object? sender, TappedEventArgs e) => DismissLinkMenu();
 
     /// <summary>
     /// Mirrors <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/> but drops link view

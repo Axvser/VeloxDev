@@ -72,6 +72,10 @@
                                       PythonTemplate="{StaticResource PythonTemplate}"
                                       TimerTemplate="{StaticResource TimerTemplate}"
                                       LinkTemplate="{StaticResource LinkTemplate}"/>
+        <!-- Add or remove the link menu's entries here; each item is bound to the right-clicked link. -->
+        <MenuFlyout x:Key="LinkContextMenu">
+            <MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}" />
+        </MenuFlyout>
     </UserControl.Resources>
 
     <Grid>

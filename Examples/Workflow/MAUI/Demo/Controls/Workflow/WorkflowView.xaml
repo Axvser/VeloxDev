@@ -40,6 +40,11 @@
                                          EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
                                          PythonTemplate="{StaticResource PythonTemplate}"
                                          TimerTemplate="{StaticResource TimerTemplate}" />
+        <!-- The link context menu: add or remove MenuFlyoutItem entries to change it. Each item's Command
+             binds to the pressed link, so a new entry needs no code. The surface below shows this menu. -->
+        <MenuFlyout x:Key="LinkContextMenu">
+            <MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}" />
+        </MenuFlyout>
     </ContentView.Resources>
 
     <Grid ColumnDefinitions="Auto,*">
@@ -235,7 +240,7 @@
                          Child order gives z: grid background < links < node views < ruler bands.
                          This layer stays input-transparent and never takes the pointer: hit testing is
                          geometric, driven by the input the page root already receives — that is what keeps
-                         link hover (highlight, Delete, right-click delete menu) from eating canvas gestures. -->
+                         link hover (highlight, Delete, the link menu) from eating canvas gestures. -->
                     <behaviors:WorkflowLinkOverlay WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
                                                   InteractionSource="{x:Reference Root}"
                                                   ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
@@ -274,6 +279,28 @@
                                   HorizontalOptions="Start"
                                   VerticalOptions="End"
                                   Margin="44,0,0,12" />
+            <!-- Off Windows there is no point popup, so the declared LinkContextMenu is materialized here at
+                 the long-press point. Windows opens the native flyout instead and never shows this layer. -->
+            <Grid x:Name="PART_LinkMenuLayer"
+                  IsVisible="False">
+                <Grid x:Name="PART_LinkMenuScrim"
+                      BackgroundColor="Transparent">
+                    <Grid.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnLinkMenuScrimTapped" />
+                    </Grid.GestureRecognizers>
+                </Grid>
+                <Border x:Name="PART_LinkMenuHost"
+                        HorizontalOptions="Start"
+                        VerticalOptions="Start"
+                        Padding="4"
+                        BackgroundColor="#F22B2B2B"
+                        Stroke="#40FFFFFF"
+                        StrokeThickness="1"
+                        StrokeShape="RoundRectangle 6">
+                    <VerticalStackLayout x:Name="PART_LinkMenuItems"
+                                         Spacing="2" />
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </ContentView>

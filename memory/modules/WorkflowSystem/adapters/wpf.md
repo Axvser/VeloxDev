@@ -116,7 +116,7 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 ## 四、坑（带依据）
 
-1. **`IsWorkflowLinkVisual` 靠类名白名单，改名就静默失效 —— 而且两个 demo 只有一个吃得到这条。** 那两个名字在 `Examples/Workflow/WPF/Demo/Views/Workflow/` 下确实存在（`BezierCurveView.xaml(.cs)`、`PolylineCurveView.xaml(.cs)`），所以**完整版 demo 里这条路是活的**；但 `Examples/Workflow/WPF Trimmed/Demo` 的连线视图叫 `LinkView` 且构造里 `IsHitTestVisible = false`（`Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/LinkView.xaml.cs:20`）⇒ **裁剪版 demo 里这条分支永远不中**。看到「某处代码在 demo 里没被走到」时，先确认你说的是哪个 demo。
+1. **`IsWorkflowLinkVisual` 靠类名白名单，改名就静默失效 —— 而且两个 demo 只有一个吃得到这条。** 那两个名字在 `Examples/Workflow/WPF/Demo/Views/Workflow/` 下确实存在（`BezierCurveView.xaml(.cs)`、`PolylineCurveView.xaml(.cs)`），所以**完整版 demo 里这条路是活的**；但 `Examples/Workflow/WPF Trimmed/Demo` 的连线视图叫 `LinkView` 且构造里 `IsHitTestVisible = false`（`Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/LinkView.xaml.cs:28`）⇒ **裁剪版 demo 里这条分支永远不中**。看到「某处代码在 demo 里没被走到」时，先确认你说的是哪个 demo。
 
 2. **`WorkflowMinimapOverlay.RulerThickness` 这个 DP 在本文件里从未被读**：DP 注册在 `:63-65`，CLR 访问器在 `:139`，而 `RulerBand` 硬编码返回 0（`:132`）。真正把标尺厚度接上的是**网格装饰器**（`Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-grid-decorator/TemplateClass.cs:134` 的 `RulerBand => RulerThickness`）。⇒ 想让小地图也避让标尺，得先在这里把 `:132` 换成读 DPs，而不是设一个没人读的 `RulerThickness`。
 
@@ -143,9 +143,9 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
     `QueueViewportRestore`（末尾排 `Dispatcher.BeginInvoke(…, DispatcherPriority.Loaded)`），滚到
     `ViewportRestoreScroll` 并按 `ClampValue` 夹到 `GetHorizontalScrollMaximum`。宿主不再自己滚。见 [../extension.md](../extension.md) §3.9-10。
 
-13. **悬停连线会让画布自己滚一段 —— 是「取焦点」带来的 WPF 默认行为，不是本仓库的代码。** 连线视图在指针进入、或指针落到线身上时 `Focus()`（`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs:102`、`:479`；焦点是 `OnKeyDown` 的 Delete 需要的，`:483`）；WPF 的 `FrameworkElement` 在获得焦点时替它请求 `RequestBringIntoView`，`ScrollContentPresenter` 的类处理照办 ⇒ `ScrollViewer` 偏移跳变，**与按键无关**（实测 `left=Released`）。跳多远由当时的偏移与 extent 决定，不是固定值：连线视图的尺寸绑的是祖先 `Canvas`（`Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml:68-69`）⇒ 它的包围盒就是整块画布。
+13. **悬停连线会让画布自己滚一段 —— 是「取焦点」带来的 WPF 默认行为，不是本仓库的代码。** 悬停取焦点的落点现在在适配器：`WorkflowSurfaceBehavior.FocusHoveredLink`（`WorkflowSurfaceBehavior.cs:627-641`，调用点 `:542`、`:566`、`:620`）在指针进入/移动/按下时把焦点交给画线的那台控件 —— 视图 `Focusable = true`（`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs:98`），它不可聚焦时才退回宿主；焦点是 Delete 能冒泡到宿主的 `OnLinkKeyDown`（`WorkflowSurfaceBehavior.cs:644-665`）需要的。WPF 的 `FrameworkElement` 在获得焦点时替它请求 `RequestBringIntoView`，`ScrollContentPresenter` 的类处理照办 ⇒ `ScrollViewer` 偏移跳变，**与按键无关**（实测 `left=Released`）。跳多远由当时的偏移与 extent 决定，不是固定值：连线视图的尺寸绑的是祖先 `Canvas`（`Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml:68-69`）⇒ 它的包围盒就是整块画布。
 
-    实测（完整版 demo，extent 2400×850、viewport 969×723）：纯悬停扫过线身 4 次，偏移跳 **28 / 412.8 / 362 / 502.1 px**；每跳一次 extent 还被撑大（**850 → 1293 → 1487**，平移越边扩张的连带效应），所以画布会越跳越大。修法是**在发源地吃掉这条请求**（`:108` 的 `AddHandler(RequestBringIntoViewEvent, … e.Handled = true)`）—— 保留焦点、只拦滚动；**不要改成 `Focusable = false`**，那会连带废掉 Delete 键。修后同一把尺子复测：纯悬停滚动 **4 → 0**，由连线焦点引起的二次抛出 **4 → 0**（另有 1 次 `REQ target=ScrollViewer` 是同一轮里人按鼠标那下带来的，`left=Pressed`，与连线无关）。
+    实测（完整版 demo，extent 2400×850、viewport 969×723）：纯悬停扫过线身 4 次，偏移跳 **28 / 412.8 / 362 / 502.1 px**；每跳一次 extent 还被撑大（**850 → 1293 → 1487**，平移越边扩张的连带效应），所以画布会越跳越大。修法是**在发源地吃掉这条请求**（`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs:113` 的 `AddHandler(RequestBringIntoViewEvent, … e.Handled = true)`）—— 保留焦点、只拦滚动。修后同一把尺子复测：纯悬停滚动 **4 → 0**，由连线焦点引起的二次抛出 **4 → 0**（另有 1 次 `REQ target=ScrollViewer` 是同一轮里人按鼠标那下带来的，`left=Pressed`，与连线无关）。
 
     **量这条时的两个坑**：(a) 先用 `ScrollTo*` 把偏移预设到别处再悬停 ⇒ 症状被掩盖（它依赖当时的偏移），要照真实用法从启动状态扫；(b) 合成光标（`SetCursorPos`）**必须**先 `SetWindowPos(HWND_TOPMOST)` + `SetForegroundWindow` 把窗口推到最前，否则一次都命不中、日志里连 `over ->` 都没有 —— 我第一次就是这样量到「0 次」的。
 
@@ -153,26 +153,28 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 ---
 
-## 五、非 Trimmed demo 连线视图的三件事落点（含右键菜单）
+## 五、非 Trimmed demo 的连线交互落点（含右键菜单）
 
-`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs` 一个文件里三件事：
+现在连线交互不再挤在连线视图里：视图只画线（构造里 `IsHitTestVisible = false`，`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs:97`），命中与高亮归 Core 的中枢，指针与按键的转发归适配器，菜单归画布宿主。裁剪版/模板已是同一形状（资源在 `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/TreeView.xaml:39-41`，宿主在 `TreeView.xaml.cs:67-93`），所以本节对两个 demo 都成立。
 
 | 事 | 落点 | 依据 |
 |---|---|---|
-| 命中 | `HitTestLine(Mouse.GetPosition(this))` —— 沿弧长表逐段判距，`hitRadius = 6.0` | `:529`（右键那一层）、`:481`（`OnHoverMouseMove`） |
-| 选中即取焦点 | `MouseEnter` 与 `OnContextMenuOpening` 里各 `Focus()` 一次 | `:102`、`:489` |
-| 右键菜单 | **用 WPF 自带的开启时机**：`ContextMenu = BuildMenu()` 挂上属性，再由 `ContextMenuOpening` 在「不在线上」时 `e.Handled = true` 取消 | `:108-109`（挂载）、`:489`（取消） |
-| 删除 | 菜单项 `Click` → 读视图**当时的** `DataContext` 的 `DeleteCommand`；Delete 键走同一个 `DeleteLink()` | `:515`（建菜单）、`:523` |
+| 命中 | Core：`LinkInteraction.Find` → `tree.HitTestVisibleLinks(x, y, HitRadius)`；被测的是视图发布的 `LinkCurve`（`PolylineCurveView.xaml.cs:314` 的 `link.PublishCurve(_curve, this)`） | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:275`；`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:53-92`；半径 `LinkHitTestEx.cs:18` 的 `DefaultHitRadius = 6d` |
+| 高亮 | Core：`SetHovered` 直接写可视对象的 `ILinkHighlight.IsHighlighted`（视图实现见 `PolylineCurveView.xaml.cs:57`，读它换色见 `:362`） | `LinkInteraction.cs:280-313` |
+| 悬停取焦点 | 适配器：`WorkflowSurfaceBehavior.FocusHoveredLink` 把焦点交给画线的那台控件，不可聚焦才退回宿主 | `WorkflowSurfaceBehavior.cs:627-641`；调用点 `:542`、`:566`、`:620` |
+| 右键菜单 | 宿主（表面）：订阅中枢 `ContextMenuRequested`，从声明的 XAML 资源取菜单、设 `DataContext` 后自己定位弹出 | `Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml.cs:77`、`:82-110`；资源 `WorkflowView.xaml:93-95` |
+| 删除 | 菜单项绑 `Command="{Binding DeleteCommand}"`；Delete 键走 Core 的 `AutoDelete` | `WorkflowView.xaml:94`；`LinkInteraction.cs:234` |
 
-三条结论：
+**四条结论：**
 
-1. **菜单项不绑命令是刻意的**：`ContextMenu` 是独立视觉树，`DataContext` 不会自己跟过来；而视图会被池化改绑给另一条链接，绑定会指向旧 VM。`Click` 处理器读 `DataContext` 则无论何时改绑都对。
-2. **必须自己取消「不在线上」的那次开启**。视图的框虽然是整块画布（模板里 `Width/Height` 绑的是 `Canvas.ActualWidth/Height`），但**命中面是画出来的描边**：实测（2026-09-26）从窗口外跳到离线约 20px 的空画布上，线体保持青色（`body=104, warm=44` —— 那 44 个暖色像素是同框的端口环），压到线上才是 `body=0, warm=408` 的高亮。取消那一步因此是**防线**：命中面一旦被改粗（例如给视图加上背景），空白处也会开菜单。**不要改成手工 `IsOpen = true`**，那会丢掉 WPF 自带的「鼠标点、键盘 Shift+F10 也认」。
-3. **弹菜单那一刻高亮会掉，这是既有悬停规则的必然结果，不是 bug**：popup 把指针从视图上拿走 ⇒ `MouseLeave` ⇒ `IsHighlighted = false`。删除不受影响（第 1 条）。曾试过在 `MouseLeave` 里按「菜单是否打开」跳过取消高亮 —— 实测会把某条线的高亮**永久留在画布上**（popup 关闭后不再有配对的 `MouseEnter`），已回退；要动这块必须先想清楚谁来复位。
+1. **菜单项现在是绑命令的，安全来自「每次弹出前重设菜单的 `DataContext`」。** 菜单是表面的**声明式带键资源**（`WorkflowView.xaml:93-95`），不挂在会被池化改绑的连线视图上，所以旧记忆担心的「独立视觉树 `DataContext` 不跟过来、绑定指向旧 VM」在这条路上不存在：宿主每次弹出前 `menu.DataContext = e.Link`（`WorkflowView.xaml.cs:97`），条目因此总绑到「这次右键的那条」。增删条目只改 XAML。
+2. **菜单是 `UserControl.Resources` 里的带键 `ContextMenu`，不是 `<Border.ContextMenu>`。** 后者会让 WPF 的 `ContextMenuService` 在任意右键自行弹出、绕开中枢；带键资源没人替它开，只有宿主在 `ContextMenuRequested` 里 `menu.IsOpen = true`（`WorkflowView.xaml.cs:109`）—— 那条「用 WPF 自带开启时机」的老路连同它的 `ContextMenuOpening` 取消一起消失了。**空白处仍不开菜单，但换了两道闸**：连线视图 `IsHitTestVisible = false`（`PolylineCurveView.xaml.cs:97`），WPF 不会从它身上弹；中枢在空白处也报一次 `Link == null` 的请求（`LinkInteraction.cs:184-187`），宿主读到 `e.Link is null` 直接返回（`WorkflowView.xaml.cs:85`）。否决这道闸在 Preview 相 `ContextMenuRequesting`（`LinkInteraction.cs:139`、`:269`），`Requested` 上的 `Handle.PreventDefault` 恒为 false，别去读它。**命中面仍是画出来的描边、不是视图的整块框**：视图的 `Width/Height` 绑的是 `Canvas.ActualWidth/Height`（`WorkflowView.xaml:68-69`），但命中由 Core 对发布曲线判距（半径见末段），离线约 20px 的空画布照样没有菜单 —— 视图框一旦变成命中面（例如把 `HitTest` 换成包围盒），这里先坏。
+3. **定位用 `PlacementMode.AbsolutePoint`，不是 `MousePoint`。** 画布坐标先经 `WorkflowSurfaceMath.ToScreen`（world + ActualOffset）回到画布局部（`WorkflowView.xaml.cs:101`；`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Math/WorkflowSurfaceMath.cs:47-48`），再由 `PART_Canvas.PointToScreen` 换设备像素（`:102`）；`AbsolutePoint` 吃 DIP，最后按 `VisualTreeHelper.GetDpi` 除回去（`:103`、`:107-108`）。二者会分开：`MousePoint` 拿的是屏幕点，而这里要的是「画布上那个世界点」，缩放/高 DPI 下不是同一个位置。
+4. **菜单开合报回中枢，`IsSuspended` 由 Core 拥有；菜单弹出把指针带走时高亮也不掉。** 构造里把菜单的 `Opened`/`Closed` 接到 `Publish(new ContextMenuEvent(Opened/Closed, _menuPosition, _menuLink))`（`WorkflowView.xaml.cs:42-48`），Core 在 `Opened` 置 `IsSuspended = true`、`Closed` 复位（`LinkInteraction.cs:242-257`）。挂起期间 `Publish(PointerEvent)` 连 `Exited` 一起忽略（`LinkInteraction.cs:167-176`）—— 菜单弹出确实把指针从画布上拿走（`Exited` 照发，`WorkflowSurfaceBehavior.cs:583`），但高亮**不再**因此掉（旧版本节说会掉，那是修复前的症状，`Src/Core/VeloxDev.Core.Test/WorkflowSystem/LinkInteractionMenuTests.cs:122-127` 已把它钉成测试）。适配器也不再自己挡：`OnLinkPointerExited` 现在无条件发 `Exited`（`WorkflowSurfaceBehavior.cs:583`），注释 `:569` 写明这次忽略交给 Core。**别再回到平台侧在 `MouseLeave` 里按「菜单是否打开」跳过取消高亮的老路** —— 那样 popup 关闭后没有配对的 `MouseEnter`，高亮会永久留在画布上；复位现在有唯一负责人（Core 的 `Closed`）。
 
-**实测（2026-09-26，SendInput + 闭环伺服取点，每一步先断言）**：指针经伺服落在线体上（48×48 邻域内体色像素 ≈160，说明框架确实认的是「画出来的描边」；随后同一点变暖色 ≈280 = 高亮）→ 合成右键 → **原生 `ContextMenu` 弹出，只有「删除连线」一项**（菜单左上角就是鼠标点）→ 合成左键点该项 → **那条线消失**：两端端口由橙/绿变灰、左栏「可见组件数（Node / Link）」16 → 15。也就是说三件事在这家**都真的跑得通**，且「命中的是人画出来的描边」这一点由伺服日志本身佐证。
+**实测（2026-09-26，SendInput + 闭环伺服取点，每一步先断言）**：指针经伺服落在线体上（48×48 邻域内体色像素 ≈160，佐证命中面是「画出来的描边」；随后同一点变暖色 ≈280 = 高亮）→ 合成右键 → **原生 `ContextMenu` 弹出，只有「Delete」一项**（菜单左上角就是鼠标点）→ 合成左键点该项 → **那条线消失**：两端端口由橙/绿变灰、左栏「可见组件数（Node / Link）」（`WorkflowView.xaml:161`）16 → 15。也就是说这几件事在这家**都真的跑得通**，且「命中的是人画出来的描边」这一点由伺服日志本身佐证。
 
-`hitRadius = 6.0` 与框架给的带宽同量级（框架认的是最外那圈描边 —— 静息线三层里最外的辉光是本体 + 9px，半宽 ≈ 5.5px），所以它既不放大也不缩小实际命中范围；它对**右键**这条路径是活的判据（`OnContextMenuOpening` 直接调它）。
+`hitRadius = 6.0` 现在是 Core 的 `LinkHitTestEx.DefaultHitRadius = 6d`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:18`），`LinkInteraction` 以它作默认 `HitRadius`（`LinkInteraction.cs:60`）。它与框架给的带宽同量级（最外那圈辉光是本体 + 9px，半宽 ≈ 5.5px），所以既不放大也不缩小实际命中范围；它对**右键**这条路径是活的判据 —— Core 在 `Pressed` 里用它 `Find`，命中为空则 `e.Link` 为 null，宿主据此不弹（`LinkInteraction.cs:180`、`:275`；`WorkflowView.xaml.cs:85`）。
 
 ---
 

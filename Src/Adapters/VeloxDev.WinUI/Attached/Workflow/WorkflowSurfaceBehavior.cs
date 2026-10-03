@@ -546,12 +546,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         var interaction = LinkInteraction.For(viewModel);
 
-        // 菜单开着时指针「离开」是飞到菜单上去了，不是移开了这条线
-        if (interaction.IsSuspended)
-        {
-            return;
-        }
-
         var position = e.GetCurrentPoint(host).Position;
         if (position.X >= 0 && position.Y >= 0
             && position.X <= host.ActualWidth && position.Y <= host.ActualHeight)

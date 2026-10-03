@@ -284,7 +284,7 @@ public sealed class NodeView : WorkflowNodeView
         // ResumeLayout(true) settles the panel synchronously, so SyncNow can write the
         // anchors back in this same turn — a deferred Refresh would drain only after
         // the surface's forced synchronous repaint, leaving links stale for one frame
-        // during zoom collapse (the Slot 双端 drift).
+        // during zoom collapse (both link endpoints drift).
         WorkflowSlotLayoutBehavior.SyncNow(this);
         Invalidate();
     }

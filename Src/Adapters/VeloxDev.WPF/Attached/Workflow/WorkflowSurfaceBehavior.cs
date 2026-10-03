@@ -566,7 +566,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         FocusHoveredLink(interaction, state);
     }
 
-    // 指针离开整块输入面：选中跟着走。菜单弹出引起的那一次离开不算（指针飞到菜单上，不是移开了这条线）。
+    // 指针离开整块输入面：选中跟着走。菜单弹出引起的那一次离开由 Core 按 IsSuspended 认出并忽略。
     private static void OnLinkPointerExited(object sender, MouseEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
@@ -580,11 +580,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var interaction = LinkInteraction.For(viewModel);
-        if (interaction.IsSuspended)
-        {
-            return;
-        }
-
         interaction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
         FocusHoveredLink(interaction, state);
     }

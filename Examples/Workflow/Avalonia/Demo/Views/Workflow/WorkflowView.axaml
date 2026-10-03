@@ -31,6 +31,10 @@
 		<SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="Transparent" />
 		<SolidColorBrush x:Key="TreeViewItemBackgroundPointerOver" Color="Transparent" />
 		<local:DepthIndentConverter x:Key="DepthIndent" />
+		<!-- 连线右键菜单：条目在此增删，弹出前把菜单的 DataContext 设成那条连线，条目据此绑定命令。 -->
+		<ContextMenu x:Key="WorkflowTreeMenu">
+			<MenuItem Header="Delete" Command="{ReflectionBinding DeleteCommand}" />
+		</ContextMenu>
 	</UserControl.Resources>
 
 	<!-- 子代理树的展开状态由库里那一行自己持有（SubAgentTreeNodeViewModel.IsExpanded，默认展开），而

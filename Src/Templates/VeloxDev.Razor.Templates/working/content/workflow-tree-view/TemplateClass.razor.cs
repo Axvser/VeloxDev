@@ -53,7 +53,8 @@ public partial class TemplateClass : ComponentBase, IDisposable
     private INotifyPropertyChanged? _subscribedTree;
     private INotifyPropertyChanged? _subscribedVirtualLink;
 
-    // 右键菜单由表面弹：屏幕坐标只有这里的 DOM 事件知道，画布坐标由 hub 的 ContextMenuRequested 带回。
+    // The menu is shown by the surface: only the DOM event here knows the screen coordinates, while
+    // the hub carries the canvas position back on ContextMenuRequested.
     private WorkflowSurfaceBehavior? _surface;
     private LinkInteraction? _interaction;
     private IWorkflowLinkViewModel? _menuLink;
@@ -124,7 +125,8 @@ public partial class TemplateClass : ComponentBase, IDisposable
         if (_interaction is not null)
         {
             _interaction.ContextMenuRequested -= OnContextMenuRequested;
-            // 菜单还开着就换树 / 收尾：把 Closed 报回去，旧枢纽的挂起状态不会留在那儿。
+            // A menu still open when the tree is swapped or torn down: report Closed so the old hub's
+            // suspended state does not linger.
             if (_menuLink is not null)
             {
                 _interaction.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, _menuLink));
@@ -192,11 +194,12 @@ public partial class TemplateClass : ComponentBase, IDisposable
     private void OnVirtualLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
 
-    // 右键落在表面上：DOM 事件给出屏幕坐标（先记下），把这次右键喂进 hub 后由 hub 命中并报
-    // ContextMenuRequested。菜单因此跟着指针弹；空白画布也会走到这里，但那里不给菜单。
+    // The right press lands on the surface: the DOM event gives the screen coordinates (recorded
+    // first), then the press is fed into the hub, which hit-tests and raises ContextMenuRequested —
+    // so the menu opens at the pointer. A right press on empty canvas also arrives here but shows none.
     private async Task OnSurfaceContextMenu(MouseEventArgs e)
     {
-        // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它
+        // Round the client coordinates: an integer string has no decimal separator, so no culture can touch it.
         _menuLeft = (int)Math.Round(e.ClientX);
         _menuTop = (int)Math.Round(e.ClientY);
 
@@ -206,15 +209,17 @@ public partial class TemplateClass : ComponentBase, IDisposable
         }
     }
 
-    // ContextMenuRequested 是可以被宿主 PreventDefault 的请求，本模板照单全收：命中连线就弹，
-    // Position 是画布坐标（报回 hub 用），屏幕坐标用上面右键时记下的那两个。
+    // ContextMenuRequested is the phase whoever shows the menu subscribes to; the veto belongs to
+    // ContextMenuRequesting, so nothing is refused here. Position is the canvas coordinate (reported
+    // back to the hub); the screen coordinates are the two recorded on the right press above.
     private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
         if (e.Link is null) return;
 
         _menuLink = e.Link;
         _menuPosition = e.Position;
-        // 报回 hub：菜单在屏期间挂起悬停，指针移到菜单上不会清掉这次选中的连线。
+        // Report back to the hub: the hover is suspended while the menu is on screen, so moving the
+        // pointer onto the menu does not clear the link the menu acts on.
         _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
         InvokeAsync(StateHasChanged);
     }
@@ -233,11 +238,12 @@ public partial class TemplateClass : ComponentBase, IDisposable
     {
         var link = _menuLink;
         CloseContextMenu();
-        // 与其余平台一致：不看 CanExecute，命令自己会排队或拒绝。
+        // Matches the other platforms: CanExecute is not consulted — the command queues or refuses itself.
         link?.DeleteCommand.Execute(null);
     }
 
-    // 包在表面外的一层：表面根的键盘宿主只认 Delete，Escape 在这里收口，两边的按键路由互不打扰。
+    // The layer outside the surface: the surface root's key host only knows Delete, so Escape is
+    // settled here and the two key routes do not disturb each other.
     private void OnSurfaceMenuKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Escape") CloseContextMenu();

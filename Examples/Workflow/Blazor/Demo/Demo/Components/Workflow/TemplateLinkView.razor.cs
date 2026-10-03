@@ -95,10 +95,6 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, ILinkHighlig
     [Parameter]
     public bool IsSelected { get; set; }
 
-    /// <summary>Raised when the link is right-clicked, carrying the pointer position the menu should use.</summary>
-    [Parameter]
-    public EventCallback<MouseEventArgs> OnContextMenuRequested { get; set; }
-
     // 表面把自身级联下来，本视图据此把指针事件转发进它的连线交互枢纽；画在表面之外时为 null
     [CascadingParameter]
     private WorkflowSurfaceBehavior? Surface { get; set; }
@@ -565,18 +561,6 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, ILinkHighlig
         if (Surface is not null)
         {
             await Surface.ForwardPointerAsync(PointerPhase.Exited, e.ClientX, e.ClientY);
-        }
-    }
-
-    private async Task OnContextMenu(MouseEventArgs e)
-    {
-        // 菜单落在指针处：位置只有浏览器事件知道，枢纽的事件参数不带坐标 —— 先交给宿主记下按下点
-        await OnContextMenuRequested.InvokeAsync(e);
-
-        // 再把这次右键转发进去：命中后由 hub 报 LinkPressed，宿主据此开菜单
-        if (Surface is not null)
-        {
-            await Surface.ForwardPointerAsync(PointerPhase.Pressed, e.ClientX, e.ClientY, PointerButtonKind.Right);
         }
     }
 

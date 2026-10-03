@@ -38,9 +38,14 @@ public partial class Workflow : ComponentBase, IDisposable
     // ── Link selection / context menu ──────────────────────────────────────
     // 悬停/选中归 Core 的交互枢纽（见 BindInteraction）；页面只留右键菜单这一份浏览器侧状态
     private IWorkflowLinkViewModel? _menuLink;
+    private Anchor _menuPosition = new();
     private int _menuLeft;
     private int _menuTop;
     private ElementReference _linksLayer;
+
+    // 右键落在表面外层的画布容器上（见 Workflow.razor）：把这次右键喂进枢纽，枢纽命中后报
+    // ContextMenuRequested，页面据此弹菜单 —— 与模板/Trimmed 同一形状。
+    private WorkflowSurfaceBehavior? _surface;
 
     // 当前树那一个交互枢纽（Core 按树缓存）。换过树就换实例，所以订阅按实例比对重新接
     private LinkInteraction? _subscribedInteraction;
@@ -94,14 +99,14 @@ public partial class Workflow : ComponentBase, IDisposable
         if (_subscribedInteraction is not null)
         {
             _subscribedInteraction.HoverChanged -= OnHubHoverChanged;
-            _subscribedInteraction.LinkPressed -= OnHubLinkPressed;
+            _subscribedInteraction.ContextMenuRequested -= OnContextMenuRequested;
         }
 
         _subscribedInteraction = interaction;
         if (interaction is not null)
         {
             interaction.HoverChanged += OnHubHoverChanged;
-            interaction.LinkPressed += OnHubLinkPressed;
+            interaction.ContextMenuRequested += OnContextMenuRequested;
         }
     }
 
@@ -115,14 +120,31 @@ public partial class Workflow : ComponentBase, IDisposable
         }
     }
 
-    // 右键菜单由 hub 的 LinkPressed 驱动：只有命中连线才会发，落在空白处不会有事件
-    private void OnHubLinkPressed(object? sender, LinkPressedEventArgs e)
+    // 右键落在画布容器上：屏幕坐标只有 DOM 事件知道（先记下），再把这次右键喂进枢纽。
+    // 空白画布也会走到这里，但那里不给菜单。
+    private async Task OnSurfaceContextMenu(MouseEventArgs e)
     {
-        if (e.Button != PointerButtonKind.Right) return;
+        // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它
+        _menuLeft = (int)Math.Round(e.ClientX);
+        _menuTop = (int)Math.Round(e.ClientY);
+
+        if (_surface is not null)
+        {
+            await _surface.ForwardPointerAsync(PointerPhase.Pressed, e.ClientX, e.ClientY, PointerButtonKind.Right);
+        }
+    }
+
+    // ContextMenuRequested 是「谁弹菜单谁订」的那一相：空白处右键也会报，只是 Link 为 null，宿主据此不弹。
+    // 否决归 ContextMenuRequesting，这里不查 PreventDefault。
+    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
+    {
+        if (e.Link is null) return;
+
         _menuLink = e.Link;
-        // 菜单一开指针就落到菜单上，那之后的进出都不该取消菜单针对的这条线
-        if (_subscribedInteraction is not null) _subscribedInteraction.IsSuspended = true;
-        StateHasChanged();
+        _menuPosition = e.Position;
+        // 报回枢纽：菜单在屏期间挂起悬停，指针移到菜单上不会清掉这次选中的连线。
+        _subscribedInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
+        InvokeAsync(StateHasChanged);
     }
 
     private void SubscribeSession()
@@ -442,23 +464,25 @@ public partial class Workflow : ComponentBase, IDisposable
 
     // ── Link selection handlers ────────────────────────────────────────────
 
-    // 菜单位置只有浏览器事件知道：这里只记下按下点，开菜单交给 hub 的 LinkPressed
-    private void OnLinkContextMenu(MouseEventArgs e)
-    {
-        // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它
-        _menuLeft = (int)Math.Round(e.ClientX);
-        _menuTop = (int)Math.Round(e.ClientY);
-    }
-
-    private void CloseLinkMenu()
+    private void CloseContextMenu()
     {
         if (_menuLink is null) return;
-        if (_subscribedInteraction is not null) _subscribedInteraction.IsSuspended = false;
+
+        var link = _menuLink;
         _menuLink = null;
-        StateHasChanged();
+        // 报回枢纽：菜单收起，挂起的悬停随之解封。
+        _subscribedInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, link));
+        InvokeAsync(StateHasChanged);
     }
 
-    private void DeleteLinkFromMenu() => DeleteLink(_menuLink);
+    private void DeleteLinkFromMenu()
+    {
+        var link = _menuLink;
+        CloseContextMenu();
+
+        // 与另外六家一致：不看 CanExecute。命令自己会排队或拒绝，调用方替它做判断只会让两边不一致
+        link?.DeleteCommand.Execute(null);
+    }
 
     private void OnLinksKeyDown(KeyboardEventArgs e)
     {
@@ -467,17 +491,8 @@ public partial class Workflow : ComponentBase, IDisposable
         // 一条已经不在树上的连线上。这里只留菜单那条策略。
         if (e.Key == "Escape")
         {
-            CloseLinkMenu();
+            CloseContextMenu();
         }
-    }
-
-    private void DeleteLink(IWorkflowLinkViewModel? link)
-    {
-        _menuLink = null;
-
-        // 与另外六家一致：不看 CanExecute。命令自己会排队或拒绝，调用方替它做判断只会让两边不一致
-        link?.DeleteCommand.Execute(null);
-        StateHasChanged();
     }
 
     public void Dispose()
@@ -485,7 +500,7 @@ public partial class Workflow : ComponentBase, IDisposable
         if (_subscribedInteraction is not null)
         {
             _subscribedInteraction.HoverChanged -= OnHubHoverChanged;
-            _subscribedInteraction.LinkPressed -= OnHubLinkPressed;
+            _subscribedInteraction.ContextMenuRequested -= OnContextMenuRequested;
             _subscribedInteraction = null;
         }
 

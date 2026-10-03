@@ -53,8 +53,8 @@ public sealed partial class TreeView : UserControl
     // 右键落在表面上：只有表面同时知道被按到的那条连线（画布坐标）与它自己在屏幕上的位置。
     private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
-        // 空白画布不弹菜单；被别的订阅者否决的那一次也不弹。
-        if (e.Link is not { } link || e.Handle.PreventDefault || _linkInteraction is null)
+        // 空白画布不弹菜单。
+        if (e.Link is not { } link || _linkInteraction is null)
         {
             return;
         }
@@ -68,16 +68,18 @@ public sealed partial class TreeView : UserControl
 
         var menu = (MenuFlyout)Resources["LinkContextMenu"];
         menu.XamlRoot = XamlRoot;
+
+        // 菜单是资源、不在可视树里，绑定拿不到 DataContext，逐条把这条连线喂给条目。
+        foreach (var item in menu.Items)
+        {
+            if (item is FrameworkElement element)
+            {
+                element.DataContext = link;
+            }
+        }
+
         _linkInteraction.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
         menu.ShowAt(PART_SurfaceBorder, new FlyoutShowOptions { Position = point });
-    }
-
-    private void OnDeleteLink(object sender, RoutedEventArgs e)
-    {
-        if (_menuLink is { } link && link.DeleteCommand.CanExecute(null))
-        {
-            link.DeleteCommand.Execute(null);
-        }
     }
 
     // 收起时报回中枢，挂起状态由它自己放开 —— 表面不用记账。

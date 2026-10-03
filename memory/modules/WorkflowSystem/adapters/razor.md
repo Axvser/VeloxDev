@@ -256,26 +256,33 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 
 ---
 
-## 六、非 Trimmed demo 的连线交互（悬停命中 / Delete / 右键菜单）
+## 六、连线交互（悬停命中 / Delete / 右键菜单）
 
-**只做在 `Examples/Workflow/Blazor/Demo/`（非 Trimmed）；模板与 `Blazor Trimmed` 仍是 `pointer-events:none` 的被动视觉** —— 这条背离是刻意的，见 `memory/specifications/item-template-specifications.md` §五。
+**自 2026-10-03 起这是库与模板的能力，不再是非 Trimmed demo 专属**：连线视图只负责画出曲线并发布出去，命中 / 高亮 / 删除 / 右键菜单由 Core 与适配器承担，`Blazor Trimmed` 与 Razor item template 因此同样开箱可用（判据与理由见 `memory/specifications/item-template-specifications.md` §五；模板落点在 `Src/Templates/VeloxDev.Razor.Templates/working/content/workflow-tree-view/TemplateClass.razor.cs:98,200,215`）。本节记 Razor 这一侧的落点；demo 与模板的差别只在菜单样式（demo 走 `.wf-link-menu*` 类，模板 / Trimmed 内联样式，`Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/TreeView.razor:46-61`）。
 
 | 事 | 落点 |
 |---|---|
-| 命中 | `Components/Workflow/TemplateLinkView.razor:36-43` —— 只给画线的 `<g>` 一层 `pointer-events="@HitTargetCss"`（`"stroke"`；虚拟连线 `"none"`）；`<svg>` 与整层 wrapper 的 `pointer-events:none` **一行未动** |
-| 选中视觉 | `Components/Workflow/TemplateLinkView.razor.cs:574-605`（`SelectedColor = "#FFFF4500"`、线宽 +1.5、线体 alpha 0.55→0.85、管壁与彗星底色一起跟） |
-| 键盘焦点 | `Components/Pages/Workflow.razor:165-179` 给连线层 `tabindex="0"` + 悬停时 `FocusAsync(preventScroll: true)` |
-| 右键菜单 | `Components/Pages/Workflow.razor:274-283`（透明 backdrop + `position:fixed` 单按钮面板「删除连线」）、样式 `wwwroot/app.css:912-943`、处理 `Components/Pages/Workflow.razor.cs:352-405` |
+| 命中 | `Components/Workflow/TemplateLinkView.razor:39-42` —— 只给画线的 `<g>` 一层 `pointer-events="@HitTargetCss"`（`"stroke"`，虚拟连线 `"none"`，`TemplateLinkView.razor.cs:542`）；`<svg>` 的 `pointer-events:none` **一行未动**（`TemplateLinkView.razor:32`） |
+| 悬停转发 | `Components/Workflow/TemplateLinkView.razor.cs:547-565` —— `OnPointerEnter/OnPointerExit` 把 `PointerPhase.Entered/Exited` 交给表面的 `ForwardPointerAsync`；**没有 IsSuspended 判断**（挂起改由 Core 在 `LinkInteraction.Publish(PointerEvent)` 内挡：`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:170,175`） |
+| 右键入口 | `Components/Pages/Workflow.razor:146-148` —— `div.wf-canvas-wrapper` 一层 `@oncontextmenu="OnSurfaceContextMenu"` + `@oncontextmenu:preventDefault="true"`；`OnSurfaceContextMenu`（`Workflow.razor.cs:125-135`）先记屏幕坐标（`:128-129`，取整成整数字符串避开区域设置），再把这次右键按 `PointerPhase.Pressed` / `PointerButtonKind.Right` 转发进表面（`:133`，表面实例 `@ref="_surface"` 在 `Workflow.razor:149`） |
+| 弹菜单 | 订阅枢纽 `ContextMenuRequested`（`Workflow.razor.cs:102,109`）→ `OnContextMenuRequested`（`:139-148`）：`e.Link is null` 直接返回（`:141`），否则记下 `_menuLink` / `_menuPosition` 并 `Publish(new ContextMenuEvent(ContextMenuPhase.Opened, …))` 报回枢纽（`:146`）。枢纽命中连线才给非 null（Core `LinkInteraction.cs:261-271`；空白处 hub 也会报一次 `Link=null`，由 `:141` 那道门挡掉）。**宿主不再订 `LinkPressed`**：Core 的 XML 写明迁到本相后就该从 `LinkPressed` 停手（`LinkInteraction.cs:144-145`） |
+| 收菜单 | `CloseContextMenu`（`Workflow.razor.cs:467-476`）清掉 `_menuLink` 后 `Publish(new ContextMenuEvent(ContextMenuPhase.Closed, …))`（`:474`）—— 开关都由页面报给枢纽，`IsSuspended` 归 Core 拥有（`LinkInteraction.cs:242-257`），页面不自己记账 |
+| 菜单 markup | `Components/Pages/Workflow.razor:296-310`（`.wf-link-menu-backdrop` + `.wf-link-menu` 单按钮面板）、样式 `wwwroot/app.css:912-945`、条目处标了 `@* VeloxDev customization: add or remove the item buttons here. *@`（`:307`） |
+| 选中视觉 | `Components/Workflow/TemplateLinkView.razor.cs:510-538`（`SelectedColor = "#FFFFFFFF"` `:512`、线宽 +1.5 `:513`、线体 alpha 0.55→0.85 `:538`；`IsLit` = `_hover` 或 `IsSelected` `:533`，管壁与彗星底色一起跟） |
+| 键盘焦点 | `Components/Pages/Workflow.razor:188-192` 给连线层 `tabindex="0"`，悬停时收焦点（`Workflow.razor.cs:113-121`，`FocusAsync(preventScroll: true)` 在 `:119`）；表面根同样在转发命中后被收焦点（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:163-166`）。**Delete 走表面根的 keydown**（同文件 `:134-142`，`Publish(new KeyEvent(InputKey.Delete))`），连线层只兜 Escape（`Workflow.razor.cs:487-496`） |
 
-三条结论：
+四条结论：
 
-1. **命中半径 = 画出来的最外圈管壁的半宽（实测 ±5.5px）**，靠浏览器原生的 `pointer-events: stroke` 拿到，**没有加任何额外的透明宽描边、也没有加元素**。实测（无头 Chrome + CDP 真手势）：沿弧长中点做法向二分，边界正好 `stroke-width: 11px` 的一半；8px / 20px 处 `elementFromPoint` 落到 `<div>`；整块 svg 盒子（2580×1252px）的左上角也落到 `<div>` ⇒ **不是包围盒**。七家一致的不是半径数值，而是「不超出画出来的范围」。
-2. **`@foreach (var link in tree.Links)` 必须带 `@key="link"`**（`Components/Pages/Workflow.razor:165-179`）。没有它时删掉一条连线，DOM 会**少两个** svg —— `TemplateLinkView` 的 `CanRender` / `IsVirtual` / 端点订阅只在 `OnInitialized` 里 `Sync(Link)` 播种，按位置复用会把这几样连同悬停状态交给**旁边那条线**；模型只少 1 条（`tree.Serialize()` 可证）。原 demo 没有任何删连线入口，所以这是个**触发不到**的潜伏 bug，被本次的删除功能踩了出来。
-3. `FocusAsync` 的 **`preventScroll: true` 是必须的**：这一层和画布一样大，让它自己滚进来会把画布拽走。另外 `outline:none` 也是必须的（否则整张画布套一个巨大焦点框；选中线的橙红就是焦点指示）。
+1. **命中半径 = 画出来的最外圈管壁的半宽（实测 ±5.5px）**，靠浏览器原生的 `pointer-events: stroke` 拿到，**没有加任何额外的透明宽描边、也没有加元素**。静止态最外层管壁宽 = `LitThickness + 9 = 11px`（`TemplateLinkView.razor.cs:164-165`），半宽 5.5；选中态 `LitThickness = 2 + 1.5` ⇒ 12.5px，命中面随画出来的范围一起变大。实测（无头 Chrome + CDP 真手势）：沿弧长中点做法向二分，边界正好 `stroke-width: 11px` 的一半；8px / 20px 处 `elementFromPoint` 落到 `<div>`；整块 svg 盒子（2580×1252px）的左上角也落到 `<div>` ⇒ **不是包围盒**。七家一致的不是半径数值，而是「不超出画出来的范围」。
+2. **`@foreach (var link in tree.Links)` 必须带 `@key="link"`**（`Components/Pages/Workflow.razor:193-201`）。没有它时删掉一条连线，DOM 会**少两个** svg —— `TemplateLinkView` 的 `CanRender` / `IsVirtual` / 端点订阅只在 `OnInitialized` 里 `Sync(Link)` 播种（`TemplateLinkView.razor.cs:570-600`），按位置复用会把这几样连同悬停状态交给**旁边那条线**；模型只少 1 条（`tree.Serialize()` 可证）。原 demo 没有任何删连线入口，所以这是个**触发不到**的潜伏 bug，被本次的删除功能踩了出来。
+3. `FocusAsync` 的 **`preventScroll: true` 是必须的**：这一层和画布一样大，让它自己滚进来会把画布拽走。另外 `outline:none` 也是必须的（否则整张画布套一个巨大焦点框；选中线的白色就是焦点指示）。**焦点这一路不触发页面重渲染** —— 枢纽的 `HoverChanged` 处理只收焦点（`Workflow.razor.cs:113-121`），高亮是每条线自己的本地态（`TemplateLinkView.razor.cs:547-552`）。
+4. **原生右键菜单被整个表面无条件压掉**：`@oncontextmenu:preventDefault="true"`（`Workflow.razor:147-148`）是**渲染期指令** —— 值在渲染时定死，没法按「这一次按下有没有命中连线」逐次决定，所以 wrapper 对整块画布一律 `preventDefault`，筛选只能放进事件里做（`e.Link is null` 才不弹，`Workflow.razor.cs:141`）。**否决菜单用 `ContextMenuRequesting` 这一相**（它是 `ContextMenuRequested` 的 Preview，两相共用一个 args，`LinkInteraction.cs:261-271`）；`ContextMenuRequested` 的处理里**不再读** `e.Handle.PreventDefault`（`Workflow.razor.cs:137-139`，Trimmed 同形 `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/TreeView.razor.cs:208-210`）。
 
-已知代价（不是缺陷，别当 bug 修）：菜单打开时那层**透明 backdrop 会吞掉画布手势**（这正是菜单该做的），于是此时右键另一条线只是先关掉菜单；悬停会触发一次整页重渲染（回调是 `EventCallback`）。
+**右键入口只留 wrapper 一条**：连线视图 `<g>` 上原有的 `@oncontextmenu` 与 `TemplateLinkView` 的 `OnContextMenuRequested` 参数都已删除（`TemplateLinkView.razor:39-42` 只剩 `pointer-events` / `onmouseenter` / `onmouseleave`）—— 留两条时同一次右键会被 `g` 与 wrapper 各喂枢纽一次，枢纽对同一回按下报两回。
+
+已知代价（不是缺陷，别当 bug 修）：菜单打开时那层**透明 backdrop 会吞掉画布手势**（这正是菜单该做的，`Workflow.razor:293-302`），于是此时右键另一条线只是先关掉菜单。悬停 / 选中的重绘只落在**连线视图自己**（`TemplateLinkView.razor.cs:527-528,547-552`），不会整页重渲染。
 
 ## 七、核不到的东西（写下来免得下一个人重找）
 
-- **多 circuit（Blazor Server）下的选中/菜单状态**：`_selectedLink` / `_menuLink` 是页面实例字段（刻意不是 static，避开 Avalonia 那种进程级 static 在 Server 上串户），但只跑了单标签页。
+- **多 circuit（Blazor Server）下的选中/菜单状态**：`_menuLink` 是页面实例字段（选中就是它，`IsSelected="@(_menuLink == link)"`，`Components/Pages/Workflow.razor:200`；刻意不是 static，避开 Avalonia 那种进程级 static 在 Server 上串户），但只跑了单标签页。
 - **触摸/笔**：CDP 只打了鼠标；`pointer-events: stroke` 本身与指针类型无关，未实测。

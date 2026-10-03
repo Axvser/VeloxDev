@@ -9,6 +9,9 @@ public partial class TreeView : ContentView
     // 右键菜单挂在树的 hub 上；换树/摘树时先解绑，旧 hub 才不会继续握着这个控件的委托。
     private LinkInteraction? _interaction;
 
+    // 非 Windows 那份弹出层当前作用的那条连线；没有弹层时为 null。
+    private IWorkflowLinkViewModel? _menuLink;
+
     public TreeView()
     {
         InitializeComponent();
@@ -65,14 +68,32 @@ public partial class TreeView : ContentView
 
     private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
-        if (e.Link is null || e.Handle.PreventDefault)
+        if (e.Link is null)
         {
             return;
         }
 
-#if WINDOWS
         ShowLinkMenu(e.Link, e.Position);
-#endif
+    }
+
+    // 条目自带 Command 就用它（绑定上下文是那条连线，弹出前设好）；没有就落到默认动作：删掉这条连线。
+    private static void RunItem(MenuFlyoutItem item, IWorkflowLinkViewModel link)
+    {
+        if (item.Command is { } command)
+        {
+            var parameter = item.CommandParameter ?? link;
+            if (command.CanExecute(parameter))
+            {
+                command.Execute(parameter);
+            }
+
+            return;
+        }
+
+        if (link.DeleteCommand.CanExecute(null))
+        {
+            link.DeleteCommand.Execute(null);
+        }
     }
 
 #if WINDOWS
@@ -112,6 +133,7 @@ public partial class TreeView : ContentView
                     break;
 
                 case MenuFlyoutItem item:
+                    item.BindingContext = link;
                     var native = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem
                     {
                         Text = item.Text,
@@ -125,25 +147,83 @@ public partial class TreeView : ContentView
 
         return flyout;
     }
-
-    // 条目自带 Command 就用它（参数默认是被点的连线）；没有就落到默认动作：删掉这条连线。
-    private static void RunItem(MenuFlyoutItem item, IWorkflowLinkViewModel link)
+#else
+    // 非 Windows 没有能在指定点弹出的跨平台菜单，所以把声明的条目填进 PART_LinkMenuLayer 这个浮层里，
+    // 落在长按处。长按本身由链接层翻译成右键交给 hub；这里只负责呈现。
+    private void ShowLinkMenu(IWorkflowLinkViewModel link, Anchor position)
     {
-        if (item.Command is { } command)
-        {
-            var parameter = item.CommandParameter ?? link;
-            if (command.CanExecute(parameter))
-            {
-                command.Execute(parameter);
-            }
+        _menuLink = link;
 
-            return;
+        var declared = (MenuFlyout)Resources["LinkContextMenu"];
+        PART_LinkMenuItems.Children.Clear();
+        foreach (var element in declared)
+        {
+            switch (element)
+            {
+                case MenuFlyoutSeparator:
+                    PART_LinkMenuItems.Children.Add(new BoxView
+                    {
+                        HeightRequest = 1,
+                        Color = Color.FromArgb("#40FFFFFF"),
+                        Margin = new Thickness(6, 2),
+                    });
+                    break;
+
+                case MenuFlyoutItem item:
+                    item.BindingContext = link;
+                    var button = new Button
+                    {
+                        Text = item.Text,
+                        IsEnabled = item.IsEnabled,
+                        BackgroundColor = Colors.Transparent,
+                        TextColor = Colors.White,
+                        HeightRequest = 36,
+                        Padding = new Thickness(12, 0),
+                        HorizontalOptions = LayoutOptions.Fill,
+                    };
+                    var captured = item;
+                    button.Clicked += (_, _) => SelectMenuItem(captured);
+                    PART_LinkMenuItems.Children.Add(button);
+                    break;
+            }
         }
 
-        if (link.DeleteCommand.CanExecute(null))
+        var ruler = Math.Max(0d, PART_GridDecorator.RulerThickness);
+        var x = ruler + position.Horizontal + PART_GridDecorator.ContentOffsetX - PART_GridDecorator.ScrollOffsetX;
+        var y = ruler + position.Vertical + PART_GridDecorator.ContentOffsetY - PART_GridDecorator.ScrollOffsetY;
+
+        PART_LinkMenuHost.Margin = new Thickness(Math.Max(0d, x), Math.Max(0d, y), 0, 0);
+        PART_LinkMenuLayer.IsVisible = true;
+        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, position, link));
+    }
+
+    private void SelectMenuItem(MenuFlyoutItem item)
+    {
+        var link = _menuLink;
+        DismissLinkMenu();
+        if (link is not null)
         {
-            link.DeleteCommand.Execute(null);
+            RunItem(item, link);
         }
     }
 #endif
+
+    // 收起弹出层，并告诉 hub 菜单已经关掉。关闭时位置没有意义。
+    private void DismissLinkMenu()
+    {
+        if (!PART_LinkMenuLayer.IsVisible)
+        {
+            return;
+        }
+
+        PART_LinkMenuLayer.IsVisible = false;
+        var link = _menuLink;
+        _menuLink = null;
+        if (link is not null)
+        {
+            _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, new Anchor(), link));
+        }
+    }
+
+    private void OnLinkMenuScrimTapped(object? sender, TappedEventArgs e) => DismissLinkMenu();
 }

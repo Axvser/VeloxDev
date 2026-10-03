@@ -39,9 +39,7 @@
         <g fill="none" stroke-linecap="round"
            pointer-events="@HitTargetCss"
            @onmouseenter="OnPointerEnter"
-           @onmouseleave="OnPointerExit"
-           @oncontextmenu="OnContextMenu"
-           @oncontextmenu:preventDefault="true">
+           @onmouseleave="OnPointerExit">
             @* 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上 *@
             <path d="@BodyPath"
                   stroke="@LitColor"

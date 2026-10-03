@@ -15,7 +15,7 @@
 
 | 角色 | 这家的类 | 形状要点（为什么） |
 |---|---|---|
-| 画布宿主 | `WorkflowSurfaceBehavior`（`sealed class : AvaloniaObject`，609 行） | 附着 8 个属性（7 公开 + 1 私有 `State`），命名控件靠 `control.FindControl<T>(name)` 解析 |
+| 画布宿主 | `WorkflowSurfaceBehavior`（`sealed class : AvaloniaObject`，755 行） | 附着 8 个属性（7 公开 + 1 私有 `State`），命名控件靠 `control.FindControl<T>(name)` 解析 |
 | 画布变换 | `WorkflowCanvasTransformBehavior`（**`sealed class : AvaloniaObject`**） | WPF/WinUI 的同名类是 `static class`，这家不行 —— 理由在 §二.1 |
 | 视图池 | `ViewPool`（`sealed class : AvaloniaObject`）+ `ViewManager`（普通 `sealed class`） | 池化器不是行为类、没有附着属性，所以不继承 `AvaloniaObject` |
 | 节点拖拽 | `WorkflowNodeDragBehavior`（`sealed class : AvaloniaObject`） | 只认左键；位移在**坐标宿主空间**里算，不是 Canvas 空间 |
@@ -189,27 +189,27 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 ---
 
-## 五、非 Trimmed demo 连线视图的三件事落点（含右键菜单）
+## 五、非 Trimmed demo 的连线：视图只画，命中 / 悬停 / 右键 / 删除全在 Core
 
 两个自绘连线视图各有一份，**都要改** —— demo 的 `WorkflowView.axaml` 按 `LinkViewModel.UsePolyline`（默认 `true`，字段在 `Examples/Workflow/Common/Lib/ViewModels/Workflow/LinkViewModel.cs:14`）在两者之间切换，不是死代码。**默认显示的是 `PolylineCurveView`**（带流动光带那个），`BezierCurveView` 是关掉光带的对照。
 
-两者的区别**只在有没有流动光带，不在曲线形状**：控制点都各自水平拉开 `max(40, |dx|·0.5)`，且都是「画」与「命中」读同一个 `Controls()` —— `BezierCurveView.axaml.cs:175`、`PolylineCurveView.axaml.cs:267`。改曲线要**两个 `Controls()` 一起改**，各改一半的话，弯的地方命中就对不上指针。
+**这两个视图现在都不碰输入、也不订阅 hub**：命中、悬停、右键、Delete 一律由 Core 的 `LinkInteraction` 裁决（hub 用 `LinkInteraction.For(tree)` 取，一棵树一个），视图只做两件事 —— 画，以及把画出来的曲线发布给命中契约。两者都把 `LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum)` 交给 `link.PublishCurve(_curve, this)`（`PolylineCurveView.axaml.cs:251-268`、`BezierCurveView.axaml.cs:231-248`；`PullMinimum = 40`），发布出去的那条就是命中用的唯一几何。**区别只在有没有流动光带，不在曲线形状**：`BezierCurveView` 绘制时另用一份 `Controls()` 拉控制点（`:252-257`），与 `LinkCurve.BuildCubic` 必须是同一个拉出量 —— 两处各推一遍几何的话，弯的地方命中就会对不上指针（`PolylineCurveView` 直接画 `_curve` 的采样，没有第二份）。
 
-| 事 | `PolylineCurveView.axaml.cs` | `BezierCurveView.axaml.cs` |
+| 事 | 现在归谁 | 锚点 |
 |---|---|---|
-| 命中 | `HitTestLine`，沿弧长表逐段判距，`hitRadius = 6.0`（`:497`） | `HitTestCurve`，40 段折线逼近，半径 6（`:281`，改动前就有） |
-| 右键 | `OnPointerPressed` 判 `IsRightButtonPressed` → 命中才 `_menu.Open(this)`（`:447`） | 同形（`:233`） |
-| 选中即取焦点 | `OnPointerEntered` 里 `IsSelected = true` + `CurveSelectionManager.Select` + `Focus()`（`:429`） | 同形（`:197`）+ `OnPointerMoved` 里再判一次（`:215`） |
-| 删除 | 菜单项 `Click` → 读视图**当时的** `DataContext` 的 `DeleteCommand`（`:485`）；Delete 键与它走同一个 `DeleteLink()`（`:490`） | 同形（`:270`；`:275`，键在 `:254`） |
+| 命中 | Core：沿发布曲线的采样段逐段判点到线段距离，`DefaultHitRadius = 6d` | `LinkHitTestEx.cs:18`、`LinkCurve.cs:252-267`、`LinkHelper.cs:39-40`；`HitTestVisibleLinks`（`LinkHitTestEx.cs:75-92`）从 `VisibleItems` **末尾往前**、跳过 `VirtualLink`、被节点卡盖住的不算 |
+| 右键菜单 | 适配器把按下（含 `ButtonOf`）转发进 hub → hub 报 `ContextMenuRequested` → 宿主弹声明的菜单资源 | 适配器 `WorkflowSurfaceBehavior.cs:446-457`、`:515-522`；宿主 `WorkflowView.axaml.cs:126-149` |
+| 悬停高亮 / 取焦点 | Core 的 `AutoHighlight` 写 `ILinkHighlight.IsHighlighted`；适配器 `FocusHoveredLink` 把键盘焦点交给画线的控件，不可聚焦时退回宿主 | `LinkInteraction.cs:280-312`；`WorkflowSurfaceBehavior.cs:137-150`（宿主 `Focusable = true` 在 `:216`） |
+| 删除 | Core 的 `AutoDelete` 执行 `link.DeleteCommand`，菜单项绑的就是它 | `LinkInteraction.cs:84`、`:234`；`WorkflowView.axaml:36` |
 
 三条结论：
 
-1. **命中面是画出来的那圈描边，不是整块画布框**（实测 2026-09-26，SendInput 从窗口外跳到「离线约 19px 的空画布」上：线体保持静息青色、`PointerEntered` 不触发；压到线上才高亮）。所以「悬停＝选中」的实义就是「指针压进描边范围」。右键那条判据（`HitTestLine`，半径 6）与框架给的带宽同量级、今天不会再挡掉什么 —— 留着它是**防线**：命中面一旦被改粗（例如给视图加上背景）也不会在空白处弹出菜单。**别按「整块画布都会命中」这条错读去改这层逻辑**（本节早先就是这么写的，已按实测改正）。
-2. **菜单项不绑命令是刻意的**：视图会被池化改绑给另一条链接，`Click` 处理器在点击那一刻才读 `DataContext`，绑定则可能指着旧 VM。菜单现建（`_menu ??= BuildMenu()`）、用 `ContextMenu.Open(this)` 打开。
-3. **弹菜单那一刻高亮会掉，属既有悬停规则的必然结果**：popup 把指针从视图上拿走 ⇒ `OnPointerExited` ⇒ 取消选中。删除不受影响（第 2 条）。曾试过在 `OnPointerExited` 里按「菜单是否打开」跳过取消 —— 实测会把某条线的高亮永久留在画布上（`Closed` 后没有配对的 `Entered`），已回退；要动这块得先想清楚谁来复位。
+1. **命中面是画出来的那圈描边，不是整块画布框**（实测 2026-09-26，SendInput 从窗口外跳到「离线约 19px 的空画布」上：线体保持静息青色、`PointerEntered` 不触发；压到线上才高亮）。现在这条由 Core 落实：只有 `PublishCurve` 出去的那条曲线在、且点落在其半径带内才算命中（`LinkHitTestEx.cs:53-57`）；视图在没画的时候（`!IsVisible`）`PublishCurve(null)` 撤回曲线（`PolylineCurveView.axaml.cs:260-268`），空白处因此不会命中。半径 6 与框架给的带宽同量级（最外那圈辉光是本体 + 9px，半宽 ≈ 5.5px），既不放宽也不收窄实际命中面。**别按「整块画布都会命中」这条错读去改这层逻辑**。
+2. **菜单项绑命令是刻意的**：菜单是 XAML 里的声明资源 `WorkflowTreeMenu`（`WorkflowView.axaml:34-37`），弹出前把菜单的 `DataContext` 设成那条连线，条目写 `Command="{ReflectionBinding DeleteCommand}"`。**必须用 `{ReflectionBinding}` 而非 `{Binding}`** —— 这家的 `AvaloniaUseCompiledBindingsByDefault=true`（`Examples/Workflow/Avalonia/Demo/Demo/Demo.csproj:8`），而资源里的 `ContextMenu` 没有 `x:DataType` 作用域，编译绑定在此无从下手。删除由 Core 的 `AutoDelete` 执行（`LinkInteraction.cs:234`），菜单只负责发命令。
+3. **弹菜单不再把高亮弄掉**：popup 把指针从视图上拿走，仍会触发 `OnPointerExited` → 适配器照发 `PointerPhase.Exited`（`WorkflowSurfaceBehavior.cs:490-496`），但菜单开着时 hub 的 `IsSuspended` 为真，Core 的 `Publish` 直接忽略 `Exited`（`LinkInteraction.cs:167-171`），这条线的选中/高亮留着。`IsSuspended` 由宿主把菜单的 `Opened`/`Closed` 报回 hub 来收放（`WorkflowView.axaml.cs:81-85`），宿主与适配器都不再自己记账（适配器侧的 `IsSuspended` 守卫已删）。曾试过在视图的 `OnPointerExited` 里按「菜单是否打开」跳过取消 —— 实测会把某条线的高亮永久留在画布上（`Closed` 后没有配对的 `Entered`），已回退；现在这条改由 hub 的 `IsSuspended` 统一兜住，别退回视图级开关。
 
-**实测（2026-09-26，SendInput + 闭环伺服取点，每一步先断言）**：指针经伺服落在线体上（48×48 邻域内体色像素 ≈25–160 → 同一点变暖色 ≈340 = 高亮，说明框架认的是「画出来的描边」而不是整块画布框）→ 合成右键 → **原生 `ContextMenu` 弹出，只有「删除连线」一项** → 合成左键点该项 → 那条线消失（两端端口由白/绿变灰）。`hitRadius = 6.0` 与框架给的带宽同量级（最外那圈辉光是本体 + 9px，半宽 ≈ 5.5px），既不放宽也不收窄实际命中面；它对右键这条路径是活的判据。
+**实测（2026-09-26，SendInput + 闭环伺服取点，每一步先断言）**：指针经伺服落在线体上（48×48 邻域内体色像素 ≈25–160 → 同一点变暖色 ≈340 = 高亮，说明框架认的是「画出来的描边」而不是整块画布框）→ 合成右键 → **原生 `ContextMenu` 弹出，只有一项**（当时标题是「删除连线」，2026-10-03 起英文 `Delete`，`WorkflowView.axaml:36`）→ 合成左键点该项 → 那条线消失（两端端口由白/绿变灰）。`hitRadius = 6.0` 与框架给的带宽同量级（最外那圈辉光是本体 + 9px，半宽 ≈ 5.5px），既不放宽也不收窄实际命中面；它对右键这条路径是活的判据。
 
-**悬停取焦点的连带代价 = `ScrollViewer` 的 `BringIntoViewOnFocusChange`（默认 `true`）。** 连线视图是整块画布大小，于是「焦点一落到它身上，画布就跳一段」—— 用户报的就是这个（与 WPF 那次同源，触发点是**悬停里的 `Focus()`**）。拦法：**在发源地吃掉这条请求**，两个连线视图的构造函数里各写一次 `AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);` —— 作用域刻意收在连线视图上，节点卡里输入框被聚焦时照样滚进视口。**不要**改成 `protected override void OnRequestBringIntoView(...)`：那个符号不是可继承的虚方法，编译报 `CS0115`。**实测（2026-09-26，同一套断言链）**：先把画布滚到非零偏移 `视口(画布) 210, 42`（并断言按下点无线体），再悬停一条线 —— 同一点由体色变暖色（高亮）、随后 `VK_DELETE` 把那条线删掉（浮层「连线 N/M」总数 12 → 11）= 焦点确实拿到了，而 `视口(画布)` 前后都是 **210, 42**（离悬停点较远的画布区域 0 个像素变化）；指针移开到空白处后仍是 210, 42。
+**悬停取焦点的连带代价 = `ScrollViewer` 的 `BringIntoViewOnFocusChange`（默认 `true`）。** 连线视图是整块画布大小，于是「焦点一落到它身上，画布就跳一段」—— 用户报的就是这个（与 WPF 那次同源，触发点是适配器悬停路径里的 `target.Focus()`，`WorkflowSurfaceBehavior.cs:149`）。拦法：**在发源地吃掉这条请求**，两个连线视图的构造函数里各写一次 `AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);`（`PolylineCurveView.axaml.cs:60`、`BezierCurveView.axaml.cs:37`）—— 作用域刻意收在连线视图上，节点卡里输入框被聚焦时照样滚进视口。**不要**改成 `protected override void OnRequestBringIntoView(...)`：那个符号不是可继承的虚方法，编译报 `CS0115`。**实测（2026-09-26，同一套断言链）**：先把画布滚到非零偏移 `视口(画布) 210, 42`（并断言按下点无线体），再悬停一条线 —— 同一点由体色变暖色（高亮）、随后 `VK_DELETE` 把那条线删掉（浮层「连线 N/M」总数 12 → 11）= 焦点确实拿到了，而 `视口(画布)` 前后都是 **210, 42**（离悬停点较远的画布区域 0 个像素变化）；指针移开到空白处后仍是 210, 42。
 
-**给别人量这块时的两个坑**：(a) **一份没关掉的菜单会吞掉之后的全部悬停** —— 视图再也收不到 Enter/Move，量出来像是「悬停坏了」；下一次测量前必须先把菜单关掉（`Esc`）并断言它真的关了。(b) **Avalonia 的 UIA 树里看不到 `ContextMenu` 的菜单项**（`AutomationElement.RootElement` 下按名字找不到「删除连线」），所以「菜单有没有弹」在这家只能靠像素/肉眼判，别把 UIA 查不到当成没弹。
+**给别人量这块时的两个坑**：(a) **一份没关掉的菜单会吞掉之后的全部悬停** —— 菜单开着时 hub 挂着 `IsSuspended`，适配器照发 Enter/Move、Core 却一律忽略（`LinkInteraction.cs:170`、`:175`），量出来像是「悬停坏了」；下一次测量前必须先把菜单关掉（`Esc`）并断言它真的关了。(b) **Avalonia 的 UIA 树里看不到 `ContextMenu` 的菜单项**（`AutomationElement.RootElement` 下按名字找不到 `Delete`），所以「菜单有没有弹」在这家只能靠像素/肉眼判，别把 UIA 查不到当成没弹。

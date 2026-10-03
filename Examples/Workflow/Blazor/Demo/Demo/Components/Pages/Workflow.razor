@@ -143,8 +143,11 @@
 
         @if (_session?.Tree is { } tree)
         {
-            <div class="wf-canvas-wrapper">
-                <WorkflowSurfaceBehavior Tree="tree"
+            <div class="wf-canvas-wrapper"
+                 @oncontextmenu="OnSurfaceContextMenu"
+                 @oncontextmenu:preventDefault="true">
+                <WorkflowSurfaceBehavior @ref="_surface"
+                                         Tree="tree"
                                          IsEnabled="true"
                                          ZoomEnabled="true"
                                          ScrollViewerId="wf-scroll"
@@ -194,8 +197,7 @@
                                    hover flag, and a positional diff would hand all of it to the
                                    neighbouring link whenever one is deleted. *@
                                 <TemplateLinkView @key="link" Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height"
-                                                  IsSelected="@(_menuLink == link)"
-                                                  OnContextMenuRequested="@OnLinkContextMenu" />
+                                                  IsSelected="@(_menuLink == link)" />
                             }
                             @if (tree.VirtualLink.IsVisible)
                             {
@@ -294,10 +296,15 @@
     @if (_menuLink is not null)
     {
         <div class="wf-link-menu-backdrop"
-             @onclick="CloseLinkMenu"
-             @oncontextmenu="CloseLinkMenu"
-             @oncontextmenu:preventDefault="true"></div>
-        <div class="wf-link-menu" style="left:@_menuLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)px;top:@_menuTop.ToString(System.Globalization.CultureInfo.InvariantCulture)px;">
+             @onclick="CloseContextMenu"
+             @oncontextmenu="CloseContextMenu"
+             @oncontextmenu:preventDefault="true"
+             @oncontextmenu:stopPropagation="true"></div>
+        <div class="wf-link-menu"
+             style="left:@_menuLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)px;top:@_menuTop.ToString(System.Globalization.CultureInfo.InvariantCulture)px;"
+             @oncontextmenu:preventDefault="true"
+             @oncontextmenu:stopPropagation="true">
+            @* VeloxDev customization: add or remove the item buttons here. *@
             <button class="wf-link-menu-item" @onclick="DeleteLinkFromMenu">Delete</button>
         </div>
     }

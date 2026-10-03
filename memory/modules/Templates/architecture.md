@@ -154,6 +154,17 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   钩子），由表面在 hub 的 `ContextMenuRequested` 上弹出、并用 `Publish(ContextMenuEvent)` 报开合。
   **落点是 tree-view 而不是 link-view**：右键落在表面上（很多家的连线视图不吃指针），而弹出要屏幕坐标、
   模型给的是画布坐标 —— 只有表面同时知道这两件事。
+  ⚠ **条目是「声明 + 绑定」，不是「声明 + 处理器」**（2026-10-03 第二轮定）：弹出前把**菜单自己的上下文设成那条连线**
+  （WPF/Avalonia 是 `DataContext`；MAUI 是 `BindingContext`；WinUI 是逐条给 `MenuFlyoutItem.DataContext`，
+  因为 `MenuFlyout : FlyoutBase : DependencyObject` **没有 `DataContext`**），条目写 `Command="{Binding DeleteCommand}"`
+  即成一个新动作。Avalonia 因为资源里没有 `x:DataType`、而 demo 开了编译绑定，必须写 `{ReflectionBinding …}`，不能退回 `Click`。
+  Razor 没有绑定那一套，保留内联 `@onclick`（条目仍要一眼可增删）；WinForms/Jalium 的条目在 `OnBuildLinkMenu` 里增删。
+  ⚠ **MAUI 的一份菜单有两副面孔**：Windows 上把声明的 `MenuFlyout` 翻成原生 flyout；非 Windows **没有任意点弹出**，
+  翻成模板内的浮层（`PART_LinkMenuLayer`，按算出来的 `Margin` 落位 —— 不翻转、不出窗口、不是 OS 菜单、嵌套项会拍平）。
+  非 Windows 的「请求菜单」手势是**长按**（`LongPressDelay = 500` ms，位移超过 `LongPressMoveSlop = 8` 设备无关单位即取消），
+  由链接层翻译成一次合成右键交给 hub —— 菜单仍由宿主弹。
+  ⚠ **模板里的注释一律英文**（2026-10-03 用户定，见 [code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五）：
+  只标扩展点、一行说清，函数体注释也算在内 —— 不是每个成员都配得上一行。
   ⚠ **2026-10-03 起 MAUI 的 Trimmed demo 与它的模板故意分叉了**：demo 已经改成**每线一视图**
   （`Demo/Controls/Workflow/LinkView.xaml(.cs)`，节点与连线共用一个池、选择器给 `LinkTemplate`），
   而 `workflow-link-view` / `workflow-tree-view` 两个模板**还是旧的 overlay 形态**。

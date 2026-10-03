@@ -7,6 +7,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -24,6 +25,10 @@ public partial class WorkflowView : UserControl
     // 当前这棵树的中枢（每棵树一个，见 LinkInteraction.For）。换树就是另一棵树的中枢，所以订阅跟着 DataContext 换。
     private LinkInteraction? _linkInteraction;
 
+    // 本次菜单对应的连线与画布坐标：条目由 XAML 声明，动作靠菜单的 DataContext 拿到这条连线。
+    private IWorkflowLinkViewModel? _menuLink;
+    private Anchor _menuPosition = new();
+
     public WorkflowView()
     {
         InitializeComponent();
@@ -32,6 +37,15 @@ public partial class WorkflowView : UserControl
         // the Core model itself (scale / actual size / visible items); the scroll and content offsets come
         // from the grid decorator's DPs, which WorkflowSurfaceBehavior pushes on this same event.
         PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
+
+        // 菜单的开合报回 hub：它据此收放 IsSuspended，宿主不必自己记账。
+        if (Resources["LinkContextMenu"] is ContextMenu menu)
+        {
+            menu.Opened += (_, _) => _linkInteraction?.Publish(
+                new ContextMenuEvent(ContextMenuPhase.Opened, _menuPosition, _menuLink));
+            menu.Closed += (_, _) => _linkInteraction?.Publish(
+                new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, _menuLink));
+        }
 
         // 中枢跟着 DataContext 换：For(tree) 拿到那棵树唯一的 hub，适配器转发进去的是同一个。
         DataContextChanged += (_, _) => AttachLinkInteraction();
@@ -53,56 +67,45 @@ public partial class WorkflowView : UserControl
 
         if (_linkInteraction is not null)
         {
-            _linkInteraction.LinkPressed -= OnLinkPressed;
+            _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
         }
 
         _linkInteraction = interaction;
 
         if (_linkInteraction is not null)
         {
-            _linkInteraction.LinkPressed += OnLinkPressed;
+            _linkInteraction.ContextMenuRequested += OnContextMenuRequested;
         }
     }
 
-    private void OnLinkPressed(object? sender, LinkPressedEventArgs e)
+    // 右键落在表面上，而弹出要屏幕坐标；只有表面同时知道画布与屏幕两件事，所以菜单由表面弹。
+    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
-        // 只有右键开菜单；左键的按下 Core 已经落成选中（悬停高亮），这里没有第二件事要做。
-        if (e.Button == PointerButtonKind.Right)
+        // 空白画布没有可操作的对象，不给菜单。
+        if (e.Link is null || DataContext is not IWorkflowTreeViewModel tree)
         {
-            ShowLinkMenu(e.Link);
-        }
-    }
-
-    // 菜单里只有「删除」一项，落在右键处；菜单开着时指针在菜单上，那段时间的移出不能把菜单针对的这条线取消选中。
-    private void ShowLinkMenu(IWorkflowLinkViewModel link)
-    {
-        if (_linkInteraction is not null)
-        {
-            _linkInteraction.IsSuspended = true;
+            return;
         }
 
-        var item = new MenuItem { Header = "Delete" };
-        item.Click += (_, _) =>
+        if (Resources["LinkContextMenu"] is not ContextMenu menu)
         {
-            if (link.DeleteCommand.CanExecute(null))
-            {
-                link.DeleteCommand.Execute(null);
-            }
-        };
+            return;
+        }
 
-        var menu = new ContextMenu
-        {
-            Items = { item },
-            PlacementTarget = this,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint,
-        };
-        menu.Closed += (_, _) =>
-        {
-            if (_linkInteraction is not null)
-            {
-                _linkInteraction.IsSuspended = false;
-            }
-        };
+        _menuLink = e.Link;
+        _menuPosition = e.Position;
+        menu.DataContext = e.Link;
+
+        // 画布坐标 → 设备坐标：先按适配器那套逆变换（world + ActualOffset）回到画布局部，再由画布
+        // 换到屏幕；AbsolutePoint 用 DIP，所以最后按 DPI 折回去。
+        var local = WorkflowSurfaceMath.ToScreen(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
+        var device = PART_Canvas.PointToScreen(new Point(local.Horizontal, local.Vertical));
+        var dpi = VisualTreeHelper.GetDpi(PART_Canvas);
+
+        menu.PlacementTarget = this;
+        menu.Placement = PlacementMode.AbsolutePoint;
+        menu.HorizontalOffset = device.X / dpi.DpiScaleX;
+        menu.VerticalOffset = device.Y / dpi.DpiScaleY;
         menu.IsOpen = true;
     }
 

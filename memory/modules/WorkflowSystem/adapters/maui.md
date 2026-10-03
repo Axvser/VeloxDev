@@ -204,10 +204,10 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 5. **给链接层或小地图加新的视觉 DP 却不加 `propertyChanged`** → 改了属性不重画；加了但不合并 → 一帧内多个 DP 写入各发一次
    `Invalidate`（`WorkflowLinkOverlay.cs:725-740` 的合流；小地图 `MarkDirty`/`FlushInvalidate` `WorkflowMinimapOverlay.cs:373-399`）。
    `ApplyVisibleRegion` 一帧就连写 6 个 DP（`WorkflowSurfaceBehavior.cs:1102-1115`），合并不是优化而是必需。
-6. **去掉 `WorkflowLinkOverlay.InputTransparent = true`**（`:82`）→ 这层满屏盖在节点上，会吞掉全部节点交互。
-   它在树里的 z 序靠 XAML 位置（装饰器内、`ScrollView` 之前，`TreeView.xaml:26-37`），挪位置等于改层序。
+6. **去掉 `WorkflowLinkOverlay.InputTransparent = true`**（`:142`）→ 这层满屏盖在节点上，会吞掉全部节点交互。
+   它在树里的 z 序靠 XAML 位置（装饰器内、`ScrollView` 之前，`TreeView.xaml:44-51`；`ScrollView` 在 `:52`），挪位置等于改层序。
 7. **删掉 `x:Name="Root"`** → 链接层的 `WorkflowTree`/`ScrollOffset*`/`ContentOffset*`/`RulerThickness` 全是
-   `Source={x:Reference Root}` 的绑定（`TreeView.xaml:8`、`:30-36`），全部解析不到（`skills/veloxdev-create-workflow/references/gui/maui.md:57` 同结论）。
+   `Source={x:Reference Root}` 的绑定（`TreeView.xaml:8`、`:46-50`），全部解析不到（`skills/veloxdev-create-workflow/references/gui/maui.md:57` 同结论）。
 8. **把隐藏视图从 `_layout.Children` 里 `Remove`** → 本家刻意保留子元素、只 `IsVisible=false` + `ZIndex=-100`
    （`ViewManager.cs:279-284`、`ResetAllViews` `:295-317` 的注释：移除会触发昂贵的 MAUI 重排）。
    相应地，隐藏视图仍在树上 —— 遍历子元素时别假设「看不见 = 不在」。
@@ -251,46 +251,61 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 
 ## 五、非 Trimmed demo 连线层的三件事（悬停命中 / Delete / 右键菜单）
 
-本家与另外六家不同形：**连线不是视图**，是满屏 `GraphicsView` 一趟画完（§二·4）。所以三件事全落在
-`WorkflowLinkOverlay.cs` 里，命中靠**自己算几何**，不靠平台命中测试。
+本家与另外六家不同形：**连线不是视图**，是满屏 `GraphicsView` 一趟画完（§二·4）。本层因此只做两件平台的事：
+**把每条可见链的曲线按 canvas-local 发布给 Core 当命中几何**、**把指针/按键翻译成标准输入事件转发进 hub**
+（`AttachInteraction` `:923-932`）。命中裁决、高亮互斥、删除与右键请求全归 Core 的 `LinkInteraction`
+（一棵树一个 hub，`:50-54`），七家共用一个答案 —— 本层**自己不算命中**（旧的 `HitTestLink` 已删）。
 
 | 事 | 落点 | 依据 |
 |---|---|---|
-| 谁来收输入 | DP `InteractionSource`（`View`）；宿主绑**页面根**，不绑这层自己 —— 这层是 `InputTransparent` 且压在 `ScrollViewer` 下，收不到指针 | `WorkflowLinkOverlay.cs:86`；`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml:200` |
-| 命中 | `HitTestLink`：每条链的锚点走与绘制**同一条**变换（`ToViewport`）采成折线，逐段判距，半径 6（与其余六家同值） | `:669`、`:372`、`:51` |
-| 高亮 | 选中那条换 `SelectedLinkColor`（默认 `Colors.OrangeRed`）并把线宽 +1.5（管壁、彗星一起） | `:1294`、`:1325` |
-| 删除 | `DeleteSelectedLink` → `DeleteCommand`；连线离开 `Links` 时把选中一并清掉（撤销/别处删也走这条） | `:753`、`:1121` |
-| 右键 | 命中才 `SelectLink` + 平台 `MenuFlyout`（一项「删除连线」） | `:631`、`:885` |
-| 取焦点会不会带滚画布 | **不会** —— `Focus()` 打在 `InteractionSource`（页面根）上，而它是画布 `ScrollView` 的**祖先**；WinUI 的 bring-into-view 只从**焦点元素往上冒**，画布那个 `ScrollViewer` 根本不在那条路上 | `:747`；`WorkflowView.xaml:200`（`Root` 是 ContentView 根，`PART_ScrollViewer` 在它里面） |
+| 谁来收输入 | DP `InteractionSource`（`View`）；宿主绑**页面根**，不绑这层自己 —— 这层 `InputTransparent` 且压在 `ScrollViewer` 下，收不到指针 | `WorkflowLinkOverlay.cs:87`、`:142`；`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml:245` |
+| 命中 | 本层在绘制时把曲线按 **canvas-local** 发布（`PublishCurve`，不带 visual）；指针经 `ToCanvasLocal`（`ToViewport` 的逆）转成同一坐标系交给 hub，hub 用 `HitTestVisibleLinks` 逐条判距，半径 6（七家同一个 `DefaultHitRadius`） | `:1312-1314`、`:622-629`；Core `LinkHitTestEx.cs:18`、`LinkInteraction.cs:274-275` |
+| 高亮 | 本层没有「每线的可视对象」，hub 的 `AutoHighlight` 无处可点；改由本层订阅 `HoverChanged`，选中那条换 `SelectedLinkColor`（默认**白** `#FFFFFFFF`，不是红）并整条加粗 1.5（管壁、彗星一起） | `:930`、`:945`、`:1300-1304`、`:1337`、`:54` |
+| 删除 | 本层只把 Delete 键翻成 `KeyEvent` 交给 hub（仅当 `HoveredLink` 非空）；hub 的 `AutoDelete` 执行 `DeleteCommand` —— 本层不再订 `LinkDeleteRequested`。连线离开 `Links` 时把选中一并清掉（撤销/别处删也走这条） | `:861-876`、`:926`；Core `LinkInteraction.cs:234`；`:1146` |
+| 菜单 | 本层不懂菜单：右键（或非 Windows 的长按）发进 hub 后由 hub 报 `ContextMenuRequested`，宿主（demo/模板）从声明的 `LinkContextMenu` 资源弹菜单 | `:601-603`、`:675-683`；Core `LinkInteraction.cs:261-272`；`WorkflowView.xaml.cs:485-493`、`WorkflowView.xaml:45-47` |
+| 取焦点会不会带滚画布 | **不会** —— `Focus()` 打在 `InteractionSource`（页面根）上，而它是画布 `ScrollView` 的**祖先**；WinUI 的 bring-into-view 只从**焦点元素往上冒**，画布那个 `ScrollViewer` 根本不在那条路上 | `:722`、`:614-617`；`WorkflowView.xaml:245`（`Root` 是 ContentView 根，`PART_ScrollViewer` 在它里面 `:255`） |
 
-五条结论（都是这台机器上实测出来的，不是推导）：
+七条结论（凡标「实测」的都是这台机器上跑出来的，不是推导）：
 
 1. **Windows 上不能用 `PointerGestureRecognizer` 收悬停**：挂上去之后 `PointerMoved` 一次都不来（同一次会话里改成
    `AddHandler(UIElement.PointerMovedEvent, …, handledEventsToo: true)` 挂到**同一个** `ContentPanel` 上立刻就有）。
-   所以 `AttachPlatformHooks`（`:774`）走原生路由事件，`PointerGestureRecognizer` 只留在 `#if !WINDOWS`（`:646-663`）。
-   方向与 `WorkflowNodeDragBehavior.cs:93-97` 的注释一致 —— 那边也是嫌它不可靠才不用。别照抄「用 PointerGestureRecognizer 做 hover」的通用建议。
-2. **`SelectLink` 里必须 `Focus()`**（`:747`）：键事件从**焦点元素**冒泡，焦点不在源子树里时 `KeyDown` 不经过挂勾子的那个元素。
-   实测同一段代码：加之前按 Delete 只看到 `PointerExited`、没有 `KeyDown`；加了之后立刻到。`handledEventsToo` 取 `false` 是刻意的 ——
-   输入框吃掉 Delete 改自己的光标时得让它赢。
-3. **菜单一开就会来一发 `PointerExited`**（飞出物把指针接管走），不认这一下就会在菜单弹出的瞬间把选中抹掉、违反「右键保持选中」。
-   做法是 `_menuOpen` 标记 + `MenuFlyout.Closed` 复位（`:117`、`:622`、`:891`）。**与 WPF/Avalonia 的选择相反**（那两家在
-   `MouseLeave`/`PointerExited` 里**不**跳过，理由是 popup 关掉后没有配对的 Entered/Moved、高亮会永久留下）——
-   本家能跳过是因为悬停由 `PointerMoved` 驱动：指针一动就重判一次，复位走的是「下一条消息」而不是「配对的 Entered」。
-4. **菜单用平台的 `MenuFlyout`，不用 MAUI 那个**（`:885`）：跨平台 `MenuFlyout` 只能整层挂成 `ContextFlyout` ——
-   右键落在哪都弹、落在空白处也取消不了（`FlyoutBase.Opening` 在 MAUI 侧不暴露），而契约要求「只有点在连线上才弹」。
-   代价写清楚：**非 Windows 上右键菜单是空的**（`ShowDeleteMenu` 的 `#else` 是空实现），那两个平台只剩悬停高亮与 Delete。
-5. **悬停取焦点不会带滚画布（Avalonia/Jalium 那条缺陷在本家不存在，实测）**。画布滚到非零偏移
+   所以 `AttachPlatformHooks`（`:732`）走原生路由事件（`PointerMovedEvent` 挂在 `:762`），`PointerGestureRecognizer`
+   只留在 `#if !WINDOWS`（`:513-521`，moved 回调 `:632`）。方向与 `WorkflowNodeDragBehavior.cs:93-97` 的注释一致 ——
+   那边也是嫌它不可靠才不用。别照抄「用 PointerGestureRecognizer 做 hover」的通用建议。
+2. **`SelectLink` / `OnPressed` 里仍 `Focus()`，但它已降级为第二道保险**（`:720-723`、`:611-617`）：主修法是结论 7
+   把键盘钩子挂到窗口根，键路由不再依赖焦点。保留 Focus 是因为「选中要能立刻接住 Delete」这条观感仍靠它，
+   而 `Focus()` 打在**页面根**上（画布的祖先，见上表最后一行），代价只是一次不可见的焦点移动。
+3. **非 Windows 的菜单手势是长按，不是右键（2026-10-03 新增）**：`#if !WINDOWS` 下左键按下起一个非重复定时器，
+   `LongPressDelay = 500` ms（`:112`）；位移超过 `LongPressMoveSlop = 8` 设备无关单位或松开就取消计时
+   （`:640-644`、`:671`）。到点 `OnLongPressTick` 发一个**合成右键** `PointerEvent(Pressed, canvasLocal, Right)`
+   （`:681`）—— 与 Windows 的真右键同义，hub 照常判命中并报 `ContextMenuRequested`，菜单本身仍由宿主弹。
+   右键按下不走长按（本来就是菜单手势，`:663-666`）。Windows 不变：右键即弹，原生 flyout。
+4. **菜单一开的那发 `PointerExited` 现在由 Core 收**：本层 `OnHoverExited` 无条件发 `Exited`（`:589-592`），
+   由 hub 的 `IsSuspended` 挡掉（`LinkInteraction.cs:167-170`）。挂起/恢复由宿主报：弹出时
+   `Publish(ContextMenuEvent(Opened))`、关掉时 `Publish(..., Closed)`（`WorkflowView.xaml.cs:533`、`:640`；
+   Core `:242-256`）。**本层的 `_menuOpen` 与平台侧 `IsSuspended` 守卫都已删除** —— 这个状态只能有一个家，现在在 hub 上。
+5. **菜单条目来自声明的资源，不再由本层硬编码**：全量 demo/模板在 XAML 里声明 `LinkContextMenu`
+   （`WorkflowView.xaml:45-47`：只有一条 `MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"`），
+   宿主订阅 `ContextMenuRequested`（`WorkflowView.xaml.cs:485-493`）。弹出分两路：
+   - **Windows**：把声明的条目翻成原生 `Microsoft.UI.Xaml.Controls.MenuFlyout`（`BuildPlatformMenu` `:539-565`）
+     再 `ShowAt`（`:535`）—— 只有原生 flyout 能在指定点弹。
+   - **非 Windows**：没有跨平台的点弹出物，于是把同一声明物化进模板自己的浮层 `PART_LinkMenuLayer`
+     （`WorkflowView.xaml:284-303`，填进 `PART_LinkMenuItems`，用算出来的 `Margin` 定位，`WorkflowView.xaml.cs:569-614`）。
+   **这份浮层的局限都是设计取舍、不是待修的缺陷**：它是画布 Grid 的子元素、不是窗口级弹出物（没有平台样式与键盘语义）；
+   `Margin` 只在负值时夹到 0、不做贴边翻转（`:611`）；`MenuFlyoutSubItem` 会被 `case MenuFlyoutItem` 吃掉、当成一个
+   平铺按钮渲染，嵌套项不展开（`:588-603`）。`ShowDefaultContextMenu` / `ShowDeleteMenu` 那套内置「删除连线」已删除 ——
+   条目就是用户在资源里写的那些，没声明就没条目。
+6. **悬停取焦点不会带滚画布（Avalonia/Jalium 那条缺陷在本家不存在，实测）**。画布滚到非零偏移
    （HUD 读作 `视口(画布) 320, 195`）后：`SelectLink` → `Focus()` 走 5 轮、外加 3 秒连打，滚动在
    **同一回合 / +250ms / +750ms** 三处都一位没动，HUD 那行逐字相同；真指针 hover（`SendInput` 走完，
    先确认应用收到了指针：`_lastPointer` 从 nil 变成那个点）同样一次没动，而选中确实生效 —— 截图里同一条线
-   从静息蓝变成 `OrangeRed`。**原因是结构而非运气**：见上表最后一行，焦点元素是画布的祖先而不是后代。
+   从静息蓝 `#CC38BDF8` 变成选中白 `#FFFFFFFF`。**原因是结构而非运气**：见上表最后一行，焦点元素是画布的祖先而不是后代。
    反例（说明这套检测看得出「焦点带来的滚」）：往 `PART_Canvas` 里塞一个 `Entry` 放在画布 (2400,120) 再 `Focus()`，
    画布**同一回合**就从 `320,194.667` 跳到 `1292.667,148` ⇒ 这条 `ScrollView` 的「焦点就滚」是**开着**的
    （MAUI 没碰 `BringIntoViewOnFocusChange`，MAUI 的程序集里根本没引用过这个名字）。
    **所以别为了「保险」去关掉自动滚进视口**：节点卡里的输入框仍该滚进来，本家不需要任何修补。
    同一轮也验了 Delete 没退化：按 hover 那条路选中之后真按一次 Delete，`Links` 12 → 11。
-
-6. **键盘必须挂在「窗口根」上，不能挂在交互源上（2026-10-03 修，用户报「点一下再 Delete 删不掉」）**。
+7. **键盘必须挂在「窗口根」上，不能挂在交互源上（2026-10-03 修，用户报「点一下再 Delete 删不掉」）**。
    - **症状**：悬停 → Delete 能删；**点一下连线再按 Delete，无声无息**。
    - **根因**：键事件只从**焦点所在的那个元素**往上冒，而平台在处理按下时会把焦点挪到被点的元素上
      （临时探针实测：点击前后焦点都是某个 `MauiButton`）。键钩子原来挂在交互源的元素上，焦点离开那棵
@@ -298,16 +313,17 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
      它返回 `true`，焦点却没动。
    - **顺带补的第二处**：本家原来只转发**右键**（`OnSecondaryPressed`），而六家（WPF/Avalonia/WinUI/WinForms）
      左右键都转发 —— 契约是「按下的那条就是选中的那条」，左键才是「点一下连线」产生的事件。现在 `OnPressed`
-     左右都发，右键那条再走菜单。
+     用同一个 `PointerButtonKind` 左右都发（`:601-603`；Windows 分支 `:752-754`、非 Windows `:653-655`）。
    - **修法**（`WorkflowLinkOverlay.cs` 的 `AttachKeyHook` / `TryUpgradeKeyHook`）：把 `KeyDownEvent` 挂到
-     `element.XamlRoot.Content`（窗口根），键路由因此不再依赖焦点落在哪；`XamlRoot` 在 Attach 那一刻**还是
-     `null`**（实测），所以升级交给第一次指针移动（每次移动只做一次引用比较），拿不到窗口根就回退到交互源。
-     `handledEventsToo: false` 保持不变 —— 聚焦的输入框吃掉 Delete 改自己光标时必须让它赢。
-   - **验证**：点击 → Delete（HUD `连线 1/1 → 0/0`）、悬停 → Delete、右键仍弹「删除连线」；
+     `element.XamlRoot.Content`（窗口根 `:776`），键路由因此不再依赖焦点落在哪；`XamlRoot` 在 Attach 那一刻**还是
+     `null`**（实测），所以升级交给第一次指针移动（`TryUpgradeKeyHook` `:794-806`，由 `OnHoverMoved` `:582` 调），
+     拿不到窗口根就回退到交互源（`:782-790`）。`handledEventsToo: false` 保持不变 —— 聚焦的输入框吃掉 Delete
+     改自己光标时必须让它赢（`:789`）。
+   - **验证**：点击 → Delete（HUD `连线 1/1 → 0/0`）、悬停 → Delete、右键/长按弹菜单；
      适配器五个 TFM + 两个 demo 0 警告 0 错误、Core 1012 测试全过。
 
-改这块时的两条禁令：**别去掉 `InputTransparent = true`**（`:82`，同 §四·6）；**别把命中半径放大成整层包围盒** ——
-那会让画布空白处每一次移动都命中某条线（原文的「别把整块画布都算命中」就是这个意思）。
+改这块时的两条禁令：**别去掉 `InputTransparent = true`**（`:142`，同 §四·6）；**别把命中半径放大**
+（Core `LinkHitTestEx.DefaultHitRadius = 6d`，`LinkHitTestEx.cs:18`）—— 那会让画布空白处每一次移动都命中某条线。
 
 ---
 

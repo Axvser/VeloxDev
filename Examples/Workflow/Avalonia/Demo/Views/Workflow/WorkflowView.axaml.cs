@@ -3,6 +3,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -73,6 +74,16 @@ public partial class WorkflowView : UserControl
         DataContext = _workflowViewModel;
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
 
+        // 菜单的开合报回 hub：它据此收放 IsSuspended，宿主不必自己记账。
+        _linkMenu = this.TryFindResource("WorkflowTreeMenu", out var menuResource) ? menuResource as ContextMenu : null;
+        if (_linkMenu is not null)
+        {
+            _linkMenu.Opened += (_, _) => _linkInteraction?.Publish(
+                new ContextMenuEvent(ContextMenuPhase.Opened, _menuPosition, _menuLink));
+            _linkMenu.Closed += (_, _) => _linkInteraction?.Publish(
+                new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, _menuLink));
+        }
+
         // 换树会重建连线交互中枢（它按树构造），所以每次 DataContext 变化都重新取一次并重订。
         DataContextChanged += (_, _) => WireLinkInteraction();
 
@@ -82,14 +93,14 @@ public partial class WorkflowView : UserControl
     }
 
     // ── Link interaction (hover / right-click menu / Delete) ──────────────────
-    // 命中、悬停与「按 Delete 删哪条」都在 Core 里裁决（hub 用 LinkInteraction.For 取）；这里只做宿主的
-    // 一件事：把 LinkPressed 接到右键菜单上。悬停高亮由 hub 直接点在连线的可视对象上（ILinkHighlight），
-    // 删除由 hub 的 AutoDelete 执行，都不经过本视图。
+    // 命中、悬停与「按 Delete 删哪条」都在 Core 里裁决（hub 用 LinkInteraction.For 取）。本视图只做宿主
+    // 那件事：订 hub 的 ContextMenuRequested，用声明的菜单资源弹出，再把开合报回 hub。
 
     private LinkInteraction? _linkInteraction;
     private ContextMenu? _linkMenu;
-    // 菜单当前针对的那条线：菜单被复用，点击那一刻再读，而不是绑定（池化的视图那时可能已改绑别的链接）。
+    // 菜单当前针对的那条线：菜单被复用，弹出那一刻再读，条目靠菜单的 DataContext 绑定它。
     private IWorkflowLinkViewModel? _menuLink;
+    private Anchor _menuPosition = new();
 
     private void WireLinkInteraction()
     {
@@ -101,44 +112,40 @@ public partial class WorkflowView : UserControl
         _linkInteraction = interaction;
         if (interaction is null) return;
 
-        interaction.LinkPressed += OnLinkPressed;
+        interaction.ContextMenuRequested += OnContextMenuRequested;
     }
 
     private void UnwireLinkInteraction()
     {
         if (_linkInteraction is null) return;
 
-        _linkInteraction.LinkPressed -= OnLinkPressed;
+        _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
         _linkInteraction = null;
     }
 
-    private void OnLinkPressed(object? sender, LinkPressedEventArgs e)
+    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
-        if (e.Button != PointerButtonKind.Right) return;
+        // 空白画布没有可操作的对象，不给菜单。
+        if (e.Link is null || _linkMenu is null) return;
+        if (DataContext is not IWorkflowTreeViewModel tree) return;
+        if (this.FindControl<Canvas>("PART_Canvas") is not { } canvas) return;
+
+        // 画布坐标 → 屏幕上的一点：先按适配器那套逆变换（world + ActualOffset）回到画布局部，
+        // 再由画布换到本控件（宿主）的坐标 —— 菜单的 PlacementRect 正是相对 PlacementTarget 的局部坐标。
+        var screen = WorkflowSurfaceMath.ToScreen(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
+        var point = canvas.TranslatePoint(new Point(screen.Horizontal, screen.Vertical), this)
+                    ?? new Point(screen.Horizontal, screen.Vertical);
 
         _menuLink = e.Link;
-        _linkMenu ??= BuildLinkMenu();
+        _menuPosition = e.Position;
 
-        // 菜单一开指针就落到菜单上，那之后的移动不该把菜单针对的这条取消选中。
-        if (_linkInteraction is not null) _linkInteraction.IsSuspended = true;
-        if (sender is Control visual) _linkMenu.Open(visual);
-    }
-
-    private ContextMenu BuildLinkMenu()
-    {
-        var item = new MenuItem { Header = "Delete" };
-        item.Click += (_, _) =>
-        {
-            if (_menuLink is { } link && link.DeleteCommand.CanExecute(null))
-                link.DeleteCommand.Execute(null);
-        };
-
-        var menu = new ContextMenu { Items = { item } };
-        menu.Closed += (_, _) =>
-        {
-            if (_linkInteraction is not null) _linkInteraction.IsSuspended = false;
-        };
-        return menu;
+        // 菜单的 DataContext 就是这条连线，条目据此绑定命令。
+        _linkMenu.DataContext = e.Link;
+        _linkMenu.Placement = PlacementMode.AnchorAndGravity;
+        _linkMenu.PlacementAnchor = PopupAnchor.TopLeft;
+        _linkMenu.PlacementGravity = PopupGravity.BottomRight;
+        _linkMenu.PlacementRect = new Rect(point.X, point.Y, 0, 0);
+        _linkMenu.Open(this);
     }
 
     private void InitializeMcp()

@@ -126,8 +126,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// <remarks>
     /// A link view's <c>mouseenter</c>/<c>mouseleave</c> fires per DOM element, but the hub decides
     /// which link is topmost from the position, so the element it fired on is not passed through.
-    /// While <see cref="LinkInteraction.IsSuspended"/> is set (a menu is open) an exit is dropped,
-    /// so moving onto the menu does not clear the hover the menu acts on.
+    /// While <see cref="LinkInteraction.IsSuspended"/> is set (a menu is open) the hub itself keeps
+    /// the hovered link, so moving onto the menu does not clear the hover the menu acts on.
     /// </remarks>
     // The surface itself is the key host (see the .razor tabindex), so Delete has a route in a generated
     // project with no host code. The hub still decides which link: this only forwards the key.
@@ -150,11 +150,6 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         }
 
         var interaction = LinkInteraction.For(tree);
-
-        if (phase == PointerPhase.Exited && interaction.IsSuspended)
-        {
-            return;
-        }
 
         if (await ToCanvasLocalAsync(clientX, clientY) is not { } local)
         {

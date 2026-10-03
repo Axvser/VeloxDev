@@ -44,7 +44,7 @@ public sealed class NodeView : WorkflowNodeView
         };
         dc.DrawText(title, new Point(12, 9));
 
-        // 端口（图形）由基类托管的 SlotView 画；这里只画输出行的文字。
+        // Port glyphs come from the base-hosted SlotView; only the output row text is drawn here.
         var outputs = WorkflowPortGeometry.Outputs(Node);
         for (int i = 0; i < outputs.Count; i++)
         {

@@ -441,11 +441,10 @@ public class WorkflowTreeView : Canvas
 
     // 右键菜单归表面、不归连线视图：右键落在表面上（这一家的连线是表面一笔画出来的、不吃指针），
     // 而弹出要根视觉（窗口客户区）坐标、模型给的是画布坐标 —— 只有表面同时知道这两件事。
+    // 否决归 Preview 相（ContextMenuRequesting）：到得了这里的请求必是没被拒绝的，所以这里不查 Handle。
     // 条目由 OnBuildLinkMenu 给出（基类默认一项 Delete）。
     private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
-        // 别的订阅方（宿主）把这一次拒绝掉了：这里是「不给菜单」的意思，照办。
-        if (e.Handle.PreventDefault) return;
         if (e.Link is not { } link) return;
         if (_linkMenu?.IsOpen == true) return;
 
@@ -478,10 +477,8 @@ public class WorkflowTreeView : Canvas
     {
         if (_tree is not { } tree) return;
 
-        // 菜单开着时指针是飞到弹层上去了，不是真的离开：这一发 Exited 会把选中清掉，菜单就不再指着任何
-        // 一条线。挂起状态由 hub 记（Publish(ContextMenuEvent) 已报过 Opened）。
-        if (_linkMenu?.IsOpen == true) return;
-
+        // 真正离开表面才报 Exited：菜单开着时那一发会被 hub 自己按挂起忽略（Publish(ContextMenuEvent)
+        // 已报过 Opened），表面不必再挡一次。
         LinkInteraction.For(tree).Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
     }
 
@@ -503,8 +500,9 @@ public class WorkflowTreeView : Canvas
     {
         if (_tree is null) return;
 
-        // 右键只在连线上有含义：转发按下让 hub 裁决，宿主要弹菜单就订阅 LinkPressed。
-        // 表面自己不置 Handled —— 它没有菜单，占掉这一下只会挡住宿主的默认右键路径
+        // 右键只在连线上有含义：转发按下让 hub 裁决（命中与高亮都在 Core）；命中了 hub 才报
+        // ContextMenuRequested，本表面据此弹菜单（条目见 OnBuildLinkMenu）。这里不置 Handled ——
+        // 占掉这一下只会挡住宿主的默认右键路径
         if (e.ChangedButton == MouseButton.Right)
         {
             ForwardPointer(PointerPhase.Pressed, e.GetPosition(this), PointerButtonKind.Right);

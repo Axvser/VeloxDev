@@ -205,8 +205,8 @@ public partial class TreeView : ComponentBase, IDisposable
         }
     }
 
-    // ContextMenuRequested 是可以被宿主 PreventDefault 的请求，本模板照单全收：命中连线就弹，
-    // Position 是画布坐标（报回 hub 用），屏幕坐标用上面右键时记下的那两个。
+    // ContextMenuRequested 是「谁弹菜单谁订」的那一相，否决归 ContextMenuRequesting，这里不查 PreventDefault。
+    // 命中连线就弹；Position 是画布坐标（报回 hub 用），屏幕坐标用上面右键时记下的那两个。
     private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
         if (e.Link is null) return;

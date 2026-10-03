@@ -765,7 +765,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         base.OnMouseDown(e);
 
-        // 右键只对连线有意义：转发给 Core，命中才由它报 LinkPressed，宿主再弹菜单；空白处右键不启动平移
+        // 右键只对连线有意义：转发给 Core，命中时它才发 ContextMenuRequested，表面据弹菜单；空白处右键不启动平移
         if (e.Button == MouseButtons.Right)
         {
             PublishPointer(PointerPhase.Pressed, e.Location, PointerButtonKind.Right);
@@ -851,10 +851,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         base.OnMouseLeave(e);
         _pointerInside = false;
 
-        // 菜单弹出后指针就落在了菜单上，但那不叫「移开」—— 还没点就取消选中是在反悔
-        if (_linkMenu?.Visible == true) return;
-
-        // 移开就取消选中（其它六家同）：Core 收到 Exited 会清掉悬停，选中跟着走
+        // 菜单开着时指针是飞到菜单上去了、不是移开这条线：Core 在 IsSuspended 下会忽略这次 Exited，不必自拦。
+        // 移开就取消选中（其它六家同）：Core 收到 Exited 会清掉悬停，选中跟着走。
         _linkInteraction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
     }
 
@@ -870,7 +868,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         var interaction = VeloxDev.WorkflowSystem.LinkInteraction.For(tree);
         interaction.HitRadius = LinkHitRadius;
         interaction.HoverChanged += OnLinkHoverChanged;
-        interaction.LinkPressed += OnLinkPressed;
+        // 菜单归表面：条目见 OnBuildLinkMenu，开合报回 hub（Publish(ContextMenuEvent)），挂起状态由 Core 记账。
+        // 宿主想否决某一次，订 ContextMenuRequesting（Preview 相）即可 —— 它在 Requested 之前发出，与订阅先后无关。
+        interaction.ContextMenuRequested += OnContextMenuRequested;
         _linkInteraction = interaction;
     }
 
@@ -879,11 +879,13 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (_linkInteraction is null) return;
 
         _linkInteraction.HoverChanged -= OnLinkHoverChanged;
-        _linkInteraction.LinkPressed -= OnLinkPressed;
+        _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
+
+        // 会话结束菜单还挂着的话先收起：Closed 会顺手把 hub 的挂起放开，换会话时不至于一直停在不接收移动。
+        _linkMenu?.Close();
 
         // 解绑前清掉悬停：hub 跟着树活着，比这次绑定久；不清的话重新绑同一棵树时上一条线还亮着。
-        // 顺带解除菜单的暂停：换会话时菜单若还开着，hub 会一直停在不接收移动的状态。
-        _linkInteraction.IsSuspended = false;
+        // Exited 不走 IsSuspended，一定生效；AutoHighlight 顺手把高亮熄灭。
         _linkInteraction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
         _linkInteraction = null;
     }
@@ -899,19 +901,41 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (e.Link is not null && CanFocus) Focus();
     }
 
-    private void OnLinkPressed(object? sender, LinkPressedEventArgs e)
+    // 右键菜单归表面、不归连线视图：右键落在表面上（连线是画布代画的，没有自己的控件），而弹出要屏幕坐标、
+    // 模型给的是世界坐标 —— 只有表面同时知道这两件事。
+    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
     {
-        if (e.Button != PointerButtonKind.Right || _linkMenu?.Visible == true) return;
+        // 弹着的时候再来一次：忽略，别把当前这份菜单连着的链接换掉。
+        if (_linkMenu?.Visible == true) return;
+        if (e.Link is not { } link) return;
 
-        // 菜单一开指针就落到菜单上：那之后的移动与离开不该把菜单针对的这条线取消选中。
-        if (_linkInteraction is not null) _linkInteraction.IsSuspended = true;
-        ShowLinkMenu(_lastPointerClient);
+        var menu = new ContextMenuStrip();
+        OnBuildLinkMenu(menu, link);
+
+        // e.Position 是世界坐标（指针就是这样发布的），换成屏幕坐标再弹。
+        var screen = PointToScreen(WorldToClient(e.Position));
+
+        menu.Closed += (_, _) =>
+        {
+            // 收起报回 hub：它自己放开 IsSuspended，宿主不用记这一笔账。
+            _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, e.Position, link));
+            if (ReferenceEquals(_linkMenu, menu)) _linkMenu = null;
+            // 关掉即弃，但不在 Closed 里直接 Dispose —— 那还在菜单自己的方法里，销毁要在它收完尾之后。
+            if (!IsDisposed) BeginInvoke(new Action(menu.Dispose));
+        };
+
+        _linkMenu = menu;
+
+        // 菜单一开指针就飞到菜单上去：先报 Opened，hub 把悬停挂起，那之后的移动不会清掉这次选中的线。
+        _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
+        menu.Show(screen);
     }
 
-    // 删除走连线模型自己的命令：这条线是画布代画的，画布上没有它的控件可摘。
-    private static void DeleteLink(IWorkflowLinkViewModel link)
+    // 条目在这里增删。与 WorkflowTreeView 基类的 OnBuildLinkMenu 同一角色：这块画布是自绘的 Panel、
+    // 不是 WorkflowTreeView，拿不到那个 protected 钩子，所以自带一份同形的扩展点（条目与 Trimmed demo 一致）。
+    private void OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)
     {
-        if (link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
+        menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null));
     }
 
     // 平移/滚动/缩放挪的是几何而不是指针：指针没动，命中却变了，所以拿最近一次位置重发一次。
@@ -925,29 +949,6 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         }
 
         PublishPointer(PointerPhase.Moved, _lastPointerClient);
-    }
-
-    private void ShowLinkMenu(Point clientPoint)
-    {
-        // 每次右键自己一个菜单：一次性对象不必管理状态，也不会在下一次右键时弹出上一条连线的旧菜单
-        _linkMenu?.Dispose();
-
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Delete", null, (_, _) =>
-        {
-            if (_linkInteraction?.HoveredLink is { } link) DeleteLink(link);
-        });
-        menu.Closed += (_, _) =>
-        {
-            if (ReferenceEquals(_linkMenu, menu)) _linkMenu = null;
-            // 菜单关掉，指针恢复自由：移动/离开重新参与悬停判定
-            if (_linkInteraction is not null) _linkInteraction.IsSuspended = false;
-            // 关掉即弃，但不在 Closed 里直接 Dispose —— 那还在菜单自己的方法里，销毁要在它收完尾之后
-            if (!IsDisposed) BeginInvoke(new Action(menu.Dispose));
-        };
-
-        _linkMenu = menu;
-        menu.Show(this, clientPoint);
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -1161,6 +1162,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             clientPt.X - _panOffset.X - scroll.X,
             clientPt.Y - _panOffset.Y - scroll.Y,
             0);
+    }
+
+    // ClientToWorld 的逆：hub 给的位置是世界坐标，弹菜单要先落回客户区才能取屏幕坐标。
+    private Point WorldToClient(Anchor world)
+    {
+        var scroll = AutoScrollPosition;
+        return new Point(
+            (int)Math.Round(world.Horizontal + _panOffset.X + scroll.X),
+            (int)Math.Round(world.Vertical + _panOffset.Y + scroll.Y));
     }
 
     // ── Canvas size ──────────────────────────────────────────────────────────────
