@@ -56,4 +56,4 @@ Retained views overriding `Render(DrawingContext)`, with the render-ready gate a
 
 ⚙ Siblings resolve by default class name in one namespace (`xmlns:local="using:<your -ns>"`), as on WPF.
 
-⚙ **Two slot parameters are silently inert on this pack:** `slotColor` (`-sc`) and `slotBorderColor` (`-bc`) are declared without being wired. This is the only pack where two slot colours both do nothing — edit the generated slot view directly.
+⚙ **Two slot parameters are inert on this pack:** `slotColor` (`-sc`) and `slotBorderColor` (`-bc`) are accepted for cross-GUI CLI parity, and now say so in the pack's own `template.json` — the slot view takes its colour from the control's `Foreground`, and it draws a filled path with no border element. This is the only pack where two slot colours both do nothing — edit the generated slot view directly.

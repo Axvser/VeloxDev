@@ -65,7 +65,7 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 
 ⚙ **A colour you pass may legitimately do nothing on some pack.** Where a framework has no consumer for a value, the parameter is still accepted so the command line stays uniform, and the pack says so in its own `template.json`. The ones to know: **Jalium's minimap colours** and **Razor's tree border and corner radius** are accepted and ignored, and **MAUI has no consumer for `slotPath`** because it draws its ports from geometry rather than from an SVG path. Each `gui/<gui>.md` lists its pack's inert parameters.
 
-⚙ A few declared parameters are inert **without** such a note — `slotBorderColor` on the WPF, WinUI and Avalonia slot templates, `slotColor` on Avalonia's, `slotPath` on MAUI's. If a slot colour refuses to appear, that is the likely reason: edit the generated file directly instead.
+⚙ A few slot parameters are inert for the same parity reason, and now say so in their own pack's `template.json` too: `slotBorderColor` on the WPF, WinUI and Avalonia slot templates (those slot views draw a filled path, with no border element), `slotColor` on Avalonia's (its slot takes its colour from the control's `Foreground`), and `slotPath` on MAUI's (it draws its port from geometry). If a slot colour refuses to appear, that is the likely reason: edit the generated file directly rather than the command line.
 
 ⚙ The colour symbols also appear inside comments in the generated files, so a substitution rewrites doc text as well. Cosmetic only.
 

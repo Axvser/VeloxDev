@@ -306,9 +306,12 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 | Razor | `workflow-tree-view` | `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius` |
 | Jalium | `workflow-tree-view` | 同上三个 |
 
-**只有其中一个自己承认了**：Razor 的 `workflow-slot-view` 里 `slotBackground` 的描述写着
-`Accepted for cross-GUI CLI parity; this GUI's slot has no separate background surface.`
-（`VeloxDev.Razor.Templates/working/content/workflow-slot-view/.template.config/template.json:54`）。
+**2026-10-04 起 24 个全都在自己的 `description` 里自陈**：`Accepted for cross-GUI CLI parity; <这家为什么没有消费者>`。
+⚠ **这是刻意的跨 GUI 契约，不是漏接**（[skills/veloxdev-create-workflow/references/templates.md](../../../skills/veloxdev-create-workflow/references/templates.md)
+「Style parameters」一节）：七家接受**同一套参数名、同一套默认值**，命令行因此能在 GUI 之间原样搬。
+**别因为「它不生效」就把它删掉** —— 删了 `dotnet new` 会对这条参数报未知参数，命令行就不通了。
+这 24 个里原先只有 Razor 的 `slotBackground` 写了那句话，其余 23 个只有一句「Slot border color.」之类的裸描述 ——
+补的是**说明**，不是删参数，也不是给它硬造一个样式点。
 其余 23 个都是静默的。
 
 分布上值得记住的两条：

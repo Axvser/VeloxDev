@@ -80,7 +80,7 @@ protected override void OnRender(DrawingContext dc)
 
 ⚙ **Siblings resolve by default class name through a markup namespace alias**, so all seven items must be generated into **one** namespace: the tree maps `xmlns:workflowViews="clr-namespace:<your -ns>"` and refers to `workflowViews:NodeView`, `workflowViews:LinkView`, `workflowViews:GridDecorator`, `workflowViews:TemplateSelector`, `workflowViews:MinimapOverlay`.
 
-⚙ **`slotBorderColor` (`-bc`) is accepted and discarded** on this pack — the slot template declares it without wiring it. If a slot border colour refuses to appear, edit the generated file rather than the command line.
+⚙ **`slotBorderColor` (`-bc`) is accepted and discarded** on this pack — the slot template declares it for cross-GUI CLI parity and says so in the pack's own `template.json`; the slot view draws a filled path and has no border element. If a slot border colour refuses to appear, edit the generated file rather than the command line.
 
 ⚙ **The tree's inline `LinkTemplate` hardcodes `LineColor="#DDFFFFFF"`.** The `linkColor` symbol reaches `LinkView`, so passing `-lc` changes the generated link view but not the tree's inline template — change both, or drop the inline one and reference `LinkView`'s own default.
 

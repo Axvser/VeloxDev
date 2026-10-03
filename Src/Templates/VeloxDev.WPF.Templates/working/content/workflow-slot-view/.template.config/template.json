@@ -51,7 +51,7 @@
     "slotBorderColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Slot border color.",
+      "description": "Slot border color. Accepted for cross-GUI CLI parity; this GUI's slot draws a filled path and has no border element.",
       "defaultValue": "#FFFFFFFF"
     }
   },

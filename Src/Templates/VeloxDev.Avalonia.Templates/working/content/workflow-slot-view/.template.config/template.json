@@ -44,13 +44,13 @@
     "slotColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Slot standby color.",
+      "description": "Slot standby color. Accepted for cross-GUI CLI parity; this GUI's slot takes its colour from the control's Foreground rather than from a template literal.",
       "defaultValue": "#DD1E1E1E"
     },
     "slotBorderColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Slot border color.",
+      "description": "Slot border color. Accepted for cross-GUI CLI parity; this GUI's slot draws a filled path and has no border element.",
       "defaultValue": "#FFFFFFFF"
     }
   },
