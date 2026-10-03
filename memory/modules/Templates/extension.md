@@ -25,10 +25,20 @@
 **并且**在模板文件里把对应字面量写成那个 token。只加 `symbols` 不写 token 就是
 `architecture.md` §7.1 那 24 个空转参数之一。
 
-**改动怎么验证**：没有自动化路径。模板项目虽然进了 `VeloxDev.slnx:166-173`，但
+**改动怎么验证**：模板项目虽然进了 `VeloxDev.slnx:166-173`，但
 `EnableDefaultCompileItems=false` + `IncludeBuildOutput=false`（`VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj:16,18`）
-⇒ 构建它等于什么都不做，**生成的代码编译不过不会被任何构建发现**。唯一可信的验证是
-`dotnet new install` 本地包 → 在真实项目里生成 → 对照该平台的 demo 看差异。
+⇒ 构建它等于什么都不做，**生成的代码编译不过不会被任何构建发现**。
+
+**2026-10-03 起 WinForms 有了一条自动化**：`Src/Verification/verify-workflow-item-templates.ps1`
+（装包 → 生成七个条目 → 一起编译 → 与 `WinForms Trimmed` 的镜像逐文件比对）。它证明七条 CLI 短名能解析、
+`primaryOutputs` 完整、七个生成文件能对着适配器一起编译、模板文本 == 镜像；证明不了任何运行期行为，也分不出
+颜色对不对（错的颜色照样编译）。其余六家仍只有手工路径：`dotnet new install` → 真实项目里生成 → 对照该平台的 demo。
+
+⚠ **它第一次跑就照出五对既有漂移**，其中 decorator 那处是**真的值差异**（模板 `#C8252526` vs 镜像
+`#70252526`）而不是措辞 —— 也就是说规格 §一「模板是源、镜像跟随」这条规则一直没有人执行过：
+从那以后没有任何东西检查过它们。**2026-10-03 已全部清掉**（decorator 按镜像的注释把**模板**的 symbol 默认值
+降到 0x70 并补上理由，其余是把镜像从模板机械派生一次）。现在七对里只有 tree-view 逐字不同 ——
+那是 `Examples` 侧的 HUD，属五类机械改动之一，脚本把它标成 expected 而不计入失败。⇒ **可以开 `-Strict` 了。**
 
 ### 1.1 那它们是从哪来的：**`Examples/Workflow/<GUI> Trimmed/` 的逐文件衍生**
 
@@ -124,6 +134,20 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 七份 csproj 里**零** `PackageReference` / `ProjectReference`。
 七个条目是**七个平级的文本产物**，它们只是碰巧共用同一个 `TemplateNamespace` token
 （WPF `workflow-tree-view/TemplateClass.xaml:5-6` 的两个 `xmlns` 前缀都指向它）。
+
+⚠ **这条只管「模板项目之内」。它不禁「适配器包发基类、生成代码继承」** —— 那是另一条通道，
+而且早就在用：生成文件引用适配器程序集（`TemplateClass.xaml:7` 的 `assembly=VeloxDev.WPF`）本来就要
+用户自己装包，minimap 这个角色在六家就是「包里发控件 + 模板薄派生」（WPF 24 / Avalonia 25 / WinUI 42 /
+MAUI 21 / Jalium 14 / Razor 15 行）。
+
+**2026-10-03 起 WinForms 的四个角色也走这条**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）：
+`WorkflowTreeView`（装配、网格、分层窗口标尺、平移引擎、视图池）、`WorkflowNodeView`（绑定、定位、缩放折叠、
+反射读标题/输入口/插槽标签）、`WorkflowSlotView`（含那个 182 行的 SVG 路径解析器）、`WorkflowLinkView`
+（雕窗口区域、端点订阅、几何）、`WorkflowMinimapOverlay`。判据是**「这段代码是不是用户该改的扩展点」**：
+平台硬限制与机械装配进包，策略（调色板、卡片长什么样、用哪个图形）留在模板里。
+**判据的边界也要记住**：`grid-decorator` 六家都在 110–535 行、WinForms 279 行**不是离群值** ——
+那个角色本来就是「你自己的网格」，所以没动它。同一把尺子量出来的结论：
+tree 1095、slot 379、minimap 325、link 346、node 790 都是离群值（其余六家同角色最多 242），它们才是该收的。
 
 ⇒ 已经"抽"过的公共物只有一件：`TemplateSlotPath` 那段 SVG。它是**每个条目的 `template.json` 里各存一份字面量**
 （七个平台的 `defaultValue` 逐字节相同，viewBox 1024×1024），**改图标要改七处**，

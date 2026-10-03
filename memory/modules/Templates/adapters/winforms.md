@@ -19,13 +19,13 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| tree-view | `UserControl` + 程序化搭壳，内部两个私有嵌套类：`SurfaceCanvas : Panel, IWorkflowGridDecorator` 与 `RulerOverlayForm : Form` | `:34`、`:99`、`:177`、`:332` |
-| link-view | `Control`，**池化子窗口**：窗口区域被雕成描边带（`Region`），自己画自己、自己算自己的盒子 | `:29`、`:52`、`:184`（`RebuildGeometry`）、`:250`（`ApplyRegion`）、`:261`（`IsDrawable`）、`:282`（`OnPaint`） |
-| node-view | `UserControl` + 三个私有嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` / `DoubleBufferedPanel`） | `:28`、`:129`、`:219`、`:282` |
-| slot-view | `Control` + 一个手写的 SVG 路径解析器（嵌套 `static class SvgPathParser`） | `:22`、`:198` |
-| grid-decorator | `Panel, IWorkflowGridDecorator`，网格与标尺**画在 `OnPaintBackground`**，`OnPaint` 是空的 | `:17`、`:70-83` |
-| minimap-overlay | `Panel, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource`，自带右上角定位与拖拽；**并在同一文件底部声明了 `IWorkflowMinimapScrollSource` 接口本身** | `:20`、`:78-85`、`:332-334` |
-| template-selector | 实现适配器的 `IWorkflowTemplateSelector`（**自定义接口，不是 `DataTemplateSelector`**），四个 `Func<…, Control>` 工厂 | `:12`、`:14-17` |
+| tree-view | **2026-10-03 起**：`sealed class TemplateClass : WorkflowTreeView`（约 55 行）——调色板 + `CreateNodeView` / `CreateLinkView`。搭壳、两个私有嵌套类（`SurfaceCanvas` / `RulerOverlayForm`）、平移引擎、视图池全在适配器的基类里：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` | 基类见左；模板只剩 `:15` 起的构造器与两个 override |
+| link-view | **2026-10-03 起**：`sealed class : WorkflowLinkView`（21 行）——调色板。雕窗口区域、端点订阅、几何全在基类 | 基类见左 |
+| node-view | **2026-10-03 起**：`sealed class : WorkflowNodeView`（417 行）——三个私有嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` / `DoubleBufferedPanel`）、`OnNodeRebound`、`OnCollapseChanged`、绘制。绑定/定位/折叠/反射读名字在基类 | 基类见左 |
+| slot-view | **2026-10-03 起**：`sealed class : WorkflowSlotView`（22 行）——图形 + 三个调色值。**那个 182 行的 `SvgPathParser` 搬进了适配器** | 基类见左 |
+| grid-decorator | `Panel, IWorkflowGridDecorator`，网格与标尺**画在 `OnPaintBackground`**，`OnPaint` 是空的。**刻意没动**：279 行落在其余六家 110–535 之间，不是离群值 | `:17`、`:70-83` |
+| minimap-overlay | **2026-10-03 起**：`sealed class : WorkflowMinimapOverlay`（22 行）——4 个调色值。定位、拖拽映射、布局数学全在基类（它并实现了 `IWorkflowMinimapScrollSource`，那个接口也搬进了适配器） | 基类见左 |
+| template-selector | 实现适配器的 `IWorkflowTemplateSelector`（**自定义接口，不是 `DataTemplateSelector`**），四个 `Func<…, Control>` 工厂。**树视图不再引用它**——基类自带一个记录视图角色的选择器 | `:12`、`:14-17` |
 
 ---
 
@@ -87,7 +87,12 @@
 
 ## 三、这一家模板特有的坑
 
-### P1 · 只生成 tree 不生成 minimap ⇒ **生成出来的代码编译不过**
+### P1 · 只生成 tree 不生成 minimap ⇒ **生成出来的代码编译不过** —— **2026-10-03 已修（对 tree-view）**
+
+⚠ 下面这段描述的是修复前的形状。那个接口已搬进适配器
+（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs`），tree 的基类引它、
+不再引 minimap 产物；minimap 模板与它的镜像都删掉了本地声明。现在 `winforms-v-tree` 的编译期兄弟只剩
+NodeView 与 LinkView，而 `verify-workflow-item-templates.ps1` 会把七条一起生成并编译，再出现这类漏依赖会当场红。
 
 `IWorkflowMinimapScrollSource` 这个接口**只存在于这一家的模板里**：它声明在
 `workflow-minimap-overlay/TemplateClass.cs:332-334`（文件末尾，`TemplateNamespace` 内），

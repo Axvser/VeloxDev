@@ -14,6 +14,51 @@ WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(myCanvas, tree);
 
 ---
 
+## Surface controls
+
+Five controls carry the platform machinery, so a host supplies only the things that are actually its own — a
+palette, a glyph, what a card looks like:
+
+| Control | Derive to give it | It owns |
+|---|---|---|
+| `WorkflowTreeView` | `CreateNodeView` / `CreateLinkView`, the four surface colours | Assembly, grid, floating rulers, signed-pan engine, view pool, layout scheduling |
+| `WorkflowNodeView` | the three `OnNodeRebound` / `OnCollapseChanged` / `OnTitleChanged` hooks, the card's paint | Binding, placement, zoom collapse, the reflective title / input-slot / slot-label lookups |
+| `WorkflowSlotView` | `SlotPath`, the glyph colours | Binding, painting, state tinting, SVG path parsing |
+| `WorkflowLinkView` | `LineColor` / `Thickness` / `SurfaceBackground` | Window-region carving, endpoint subscription, geometry |
+| `WorkflowMinimapOverlay` | `MinimapBackground` / `MinimapBorderBrush` / `NodeBrush` / `ViewportStroke` | Top-right anchoring, the layout maths, the drag mapping |
+
+`WorkflowSurfaceColors.Parse` turns the `#RRGGBB` / `#AARRGGBB` text a generated host carries into a colour; each
+base also exposes it as a `protected static ParseColor` for its own subclass.
+
+### `WorkflowTreeView`
+
+The assembled workflow surface. Derive from it and supply two factories — everything else is platform machinery
+that would be identical in every host.
+
+```csharp
+public sealed class TreeView : WorkflowTreeView
+{
+    public TreeView()
+    {
+        SurfaceBackground = ParseColor("#1E1E1E");
+        SurfaceBorderBrush = ParseColor("#33FFFFFF");
+    }
+
+    protected override Control CreateNodeView(IWorkflowNodeViewModel node) => new NodeView { ViewModel = node };
+    protected override Control CreateLinkView(IWorkflowLinkViewModel link) => new LinkView { ViewModel = link };
+}
+```
+
+| Member | Notes |
+|--------|-------|
+| `CreateNodeView` · `CreateLinkView` | **Required.** The card should implement `IWorkflowSurfaceNodeView` so the surface can place it on every pan; a link view needs nothing — its geometry follows its endpoints. |
+| `TemplateSelector` | Optional. Replaces the two factories; the surface still records each view's role from the item it was created for. |
+| `ViewModel` · `MinimapOverlay` | The tree, and an optional minimap (`IWorkflowMinimapOverlay`, plus `IWorkflowMinimapScrollSource` to have its viewport drags pan the surface). |
+| `SurfaceBackground` · `SurfaceBorderBrush` · `SurfaceBorderThickness` · `SurfaceCornerRadius` | Chrome styling, applied as they are set. |
+| `PART_ScrollViewer` · `PART_Canvas` · `PART_GridDecorator` · `PART_MinimapOverlay` | The named parts the surface behaviour resolves. |
+| `OnTreeAttached(tree)` · `OnSurfaceRefreshed()` | Optional hooks for host overlays — `OnSurfaceRefreshed` runs after every pan, zoom or layout. |
+| `ParseColor("…")` | Static helper for `#RRGGBB` / `#AARRGGBB` / named colours. |
+
 ## Behaviors
 
 | Behavior | Attach to | Purpose |

@@ -66,6 +66,18 @@ on it — skip the region instead of widening.
 
 **Generates code only.** All seven items are a single `.cs` file — no markup at all. Node and slot views are `UserControl` subclasses with `OnPaint`; node, slot, and link views are all pooled children, and the tree paints the grid surface itself.
 
+⚙ **Five of the seven items are thin.** They derive from a control the adapter ships and supply only what is yours:
+
+| item | derives from | you supply |
+|---|---|---|
+| tree | `WorkflowTreeView` | the palette, `CreateNodeView` / `CreateLinkView` (plus `OnTreeAttached` / `OnSurfaceRefreshed` if you add an overlay) |
+| node | `WorkflowNodeView` | the card itself — its panels, its paint — plus `OnNodeRebound` / `OnCollapseChanged` / `OnTitleChanged` |
+| slot | `WorkflowSlotView` | the glyph path and its colours |
+| link | `WorkflowLinkView` | `LineColor` / `Thickness` / `SurfaceBackground` |
+| minimap | `WorkflowMinimapOverlay` | the four palette colours |
+
+The node card implements `IWorkflowSurfaceNodeView` so the surface can place it on every pan — keep that when you edit it. The card is the one item that stays large: what it looks like is yours, and there is no markup language to carry it.
+
 ⚙ **This is the only fully-wired pack.** Every declared parameter, including all four slot colours and `slotPath`, has a consumer here — which makes it the pack to read when you want to know what a parameter is supposed to do on a framework where it is inert.
 
 ⚙ Siblings are referenced as **static members**, not through markup namespace aliases, so all seven items must still be generated into one namespace.

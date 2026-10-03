@@ -13,8 +13,8 @@ namespace Demo.Views.Workflow;
 /// elements materialized by the Core virtualization. Purely model-driven — it reads
 /// <see cref="IWorkflowTreeViewModelHelper.Viewport"/> (kept current by the surface's pan/layout
 /// pump), <see cref="CanvasLayout"/> and <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>.
-/// The TreeView host calls <see cref="Refresh"/> after each ApplyPan and binds the tree on ViewModel
-/// change; the 复制 button copies the current multi-line info to the clipboard.
+/// The TreeView host calls <see cref="UpdateText"/> from its surface-refresh hook and binds the tree in
+/// <see cref="Bind"/>; the 复制 button copies the current multi-line info to the clipboard.
 /// </summary>
 public sealed class InfoOverlay : Panel
 {

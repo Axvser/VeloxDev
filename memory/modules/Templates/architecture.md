@@ -19,6 +19,8 @@
 | 但仍然进解决方案 | `VeloxDev.slnx:166-173` 的 `/Templates/` 文件夹列了七个项目（Jalium 那行的路径没有 `working/`，见 §二） |
 
 ⇒ 由此得出第一件必须记住的事：**模板产物编译不过，本仓库的任何构建都不会发现**。
+（2026-10-03 起 WinForms 有了 `Src/Verification/verify-workflow-item-templates.ps1`：装包 → 生成七个条目 →
+一起编译 → 与镜像比对。其余六家仍靠手工。见 `extension.md` §一。）
 
 生成的 `workflow-tree-view/TemplateClass.xaml:7` 写着
 `xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"` ——
@@ -97,7 +99,7 @@
 | 七个条目**必须落进同一个命名空间**，机制是 tree-view 用 `xmlns:local` 与 `xmlns:workflowViews` **两个前缀指向同一个** `clr-namespace:TemplateNamespace` | `workflow-tree-view/TemplateClass.xaml:5-6`，随后 `:17,25,36,46,65` 都用 `workflowViews:` 取兄弟 |
 | `sourceName: "TemplateClass"` 是**全局文本替换的锚**：`-n` 同时改文件名、类名、`x:Class` 和别处的引用 | 49/49 个 `template.json` 的 `sourceName` 都是这个值 |
 | `preferNameDirectory: false` ⇒ 产物不建子目录 | 49/49 |
-| **改动无法验证**：模板没有构建产物、仓库里没有任何脚本或测试引用 `Src/Templates/` | §一 |
+| **改动无法验证**：模板没有构建产物、仓库里没有任何脚本或测试引用 `Src/Templates/`（**2026-10-03 起 WinForms 例外**：`Src/Verification/verify-workflow-item-templates.ps1`） | §一 |
 | 替换是**纯文本**的，所以颜色占位符也会被替换进生成文件的**注释**里 | 见 `skills/veloxdev-create-workflow/references/templates.md` 的同一条 |
 
 ---
@@ -206,6 +208,30 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 ⇒ **WinForms 那 335 行是唯一的例外**，原因是该家适配器里**没有"创建控件"的钩子**，
 装饰器/小地图只能由用户代码提供 —— 推理链在 `memory/modules/WorkflowSystem/adapters/winforms.md` §一，
 此处只指路。Jalium 那 14 行是七家里最薄的（一个空构造器：`workflow-minimap-overlay/TemplateClass.cs`）。
+
+**2026-10-03：这条轴上的四个角色一起翻面了。** WinForms 现在把「机制」都收进适配器包，模板只剩策略：
+
+| 角色 | 之前 | 现在 | 其余六家同角色 |
+|---|---|---|---|
+| tree-view | 1095 | **45** | 62–81（XAML 家；Razor 79） |
+| minimap | 325 | **22** | 14–42 |
+| slot-view | 379 | **22** | 27–143 |
+| link-view | 346 | **21** | 68–319 |
+| node-view | 790 | **417** | 82–242 |
+| grid-decorator | 279 | 281 | 110–535 | 
+| **合计** | **3257** | **844** | — |
+
+包内新增五个控件共 2668 行（`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` /
+`WorkflowLinkView` / `WorkflowMinimapOverlay`，都在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）。
+
+**两条要记住的判断**：
+- **`grid-decorator` 是故意没动的**（279 行落在其余六家 110–535 的中间）——那个角色本来就归用户，
+  不是离群值。同一把尺子：其余五个都是离群值才收的。
+- **`node-view` 仍是最高的**（417 vs 其余最多 242），因为收掉的只有机制（绑定/定位/折叠/反射读名字），
+  **卡片长什么样是用户的设计**：里面三个嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` /
+  `DoubleBufferedPanel`）与 `OnPaintBackground` 是它的视觉，不该进包。
+
+Jalium 的 tree-view 仍 553 行自绘，而且它包里那份 `WorkflowTreeView` 是**零消费者的死代码** —— 还没做。见 `extension.md` §4.1。
 
 ---
 
@@ -323,13 +349,17 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 六�
 
 ⇒ `WorkflowSystem/extension.md` 那条"连线视图首行过渲染就绪门"的契约，**模板侧只有三家落地**。
 
-### 7.6 WinForms 少生成一条兄弟条目 ⇒ 编译不过（且没有任何地方写明）
+### 7.6 WinForms 少生成一条兄弟条目 ⇒ 编译不过（且没有任何地方写明）—— **2026-10-03 已对 tree-view 消除**
 
 `IWorkflowMinimapScrollSource` 只在 minimap 条目的产物里声明（`workflow-minimap-overlay/TemplateClass.cs:332-334`），
 tree-view 直接用它做模式匹配（`workflow-tree-view/TemplateClass.cs:674,686`）。
 ⇒ 只生成 `winforms-v-tree` 得到的是**编译不过**的代码（CS0246）。详见 §五。
 这一条与 §7.3 的 Avalonia 不同：那一处的注释自己写明了"build fails HERE"，
 **这一处没有任何文件提到过**，只能读代码发现。
+
+**已修**：该接口搬进了适配器（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs`），
+基类与本条都不再依赖 minimap 产物 —— 现在 `winforms-v-tree` 的编译期兄弟只有 NodeView 与 LinkView。
+新的 `verify-workflow-item-templates.ps1` 会**一起生成并编译七条**，所以再出现这类漏依赖会当场红。
 
 ---
 

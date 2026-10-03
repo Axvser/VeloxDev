@@ -21,6 +21,8 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
     private const double DefaultRulerThickness = 36;
 
     private readonly Color _background = ParseColor("TemplateGridBackground");
+    // WinForms-specific alpha (mirror of TreeView.SurfaceCanvas): node cards paint opaque
+    // over the band, so lower opacity lets the grid read through it as the translucency.
     private readonly Color _rulerBackground = ParseColor("TemplateRulerBackground");
     private readonly Color _labelColor = ParseColor("TemplateRulerLabelColor");
     private readonly Color _minorGridColor = ParseColor("TemplateMinorGridColor");

@@ -146,6 +146,12 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 ⇒ **改宿主控件（模板或 demo）的成员名时，这里一定一起改；而且不会有任何编译错误或运行时异常提醒你。**
 
+**2026-10-03：这些名字现在有了一个真实来源。** 适配器包发了 `WorkflowTreeView`
+（`Attached/Workflow/WorkflowTreeView.cs`），生成模板与 `WinForms Trimmed` 的树视图都从它派生 ——
+`PanOffset`、`OnMinimapScrollRequested`、四个 `PART_*` 名不再靠用户代码碰巧起对名字，反射是对着包内类型解析的。
+⇒ 那三处反射**可以**改成真实接口（本轮没做）；在那之前，**基类上这些名字同样不能改名**，
+而且改坏不会有编译错误，只会让卡片不跟手、缩放枢轴漂移。
+
 **视口往返在这家是 2026-10-03 才补齐的**：此前 `Refresh` 只推 `helper.Viewport`，既不持久化
 `Layout.ViewportOffset`、也没有挂树恢复 —— 七家里唯一两半都缺的。现在：
 写回用 `WorkflowSurfaceMath.ViewportOffsetFromScroll`，**只在 `ResolveScrollOffset` 走真实 pan 来源时写**

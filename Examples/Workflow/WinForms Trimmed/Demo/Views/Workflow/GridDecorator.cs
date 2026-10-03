@@ -17,8 +17,7 @@ namespace Demo.Views.Workflow;
 public sealed class GridDecorator : Panel, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
-    // Other solutions' templates also use 28px, but users reported WinForms looked too
-    // small visually, so the default was enlarged to 36px.
+    // Other template code uses 28px, but WinForms reads visually smaller, so the default is enlarged to 36px.
     private const double DefaultRulerThickness = 36;
 
     private readonly Color _background = ParseColor("#1E1E1E");

@@ -1,20 +1,14 @@
 // VeloxDev customization: Customize node content, but keep PART_* names synchronized
-// with WorkflowSlotLayoutBehavior (SlotNames / SlotEnumeratorNames).
+// with WorkflowSlotLayoutBehavior (SlotNames / SlotEnumeratorNames). The adapter's WorkflowNodeView already owns
+// the binding, the placement, the zoom collapse and the reflective title/slot lookups; this file draws the card.
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
-using System.Reflection;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-// `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; the node
-// model's Size property is accessed through the interface, so a drawing alias
-// keeps `new Size(w, h)` unambiguous in generated code.
-using Size = System.Drawing.Size;
 
 namespace TemplateNamespace;
 
@@ -25,14 +19,12 @@ namespace TemplateNamespace;
 /// <c>PART_DynamicOutputs</c>, which <see cref="WorkflowSlotLayoutBehavior"/>
 /// measures for link anchoring. No slot hangs off the card edge.
 /// </summary>
-public sealed class TemplateClass : UserControl
+public sealed class TemplateClass : WorkflowNodeView
 {
     /// <summary>Inside-card host for the bare input port and the labeled output rows.</summary>
     public Panel PART_DynamicOutputs => _dynamicOutputs;
 
     private readonly DynamicOutputsPanel _dynamicOutputs;
-    private IWorkflowNodeViewModel? _node;
-    private INotifyPropertyChanged? _notifier;
     private readonly Color _background = ParseColor("TemplateNodeBackground");
     private readonly Color _foreground = ParseColor("TemplateNodeForeground");
     private readonly Color _border = ParseColor("TemplateNodeBorderBrush");
@@ -45,17 +37,12 @@ public sealed class TemplateClass : UserControl
     // through as faint ghosts and transparent children composite over garbage.
     // _opaqueBackground is the same color with its alpha forced to 255.
     private readonly Color _opaqueBackground;
-    // The host surface behind the card is opaque #1E1E1E (the tree template's
-    // default surface background); the rounded corners erase to this so they
-    // visually match the surface (the canvas between cards is transparent, so this
-    // card is the only opaque thing over it).
+    // The host surface behind the card is opaque #1E1E1E; the rounded corners erase
+    // to this so they visually match the surface (the canvas between cards is
+    // transparent, so this card is the only opaque thing over it).
     private readonly Color _cardBackdrop = ParseColor("#1E1E1E");
-    private string _title = "";
     // The header row (title + drag surface) — a field so zoom scaling can resize it.
     private readonly DoubleBufferedPanel _header;
-    // Current zoom collapse factor (1/Scale). Multiplies the design-size metrics so the
-    // header/rows/slots re-flow to the collapsed box instead of clipping at low scale.
-    private double _collapse = 1d;
 
     public TemplateClass()
     {
@@ -84,10 +71,10 @@ public sealed class TemplateClass : UserControl
             using var brush = new SolidBrush(_foreground);
             // Scale the title font and ellipsize so longer titles don't clip when the
             // card collapses on zoom.
-            using var font = new Font(Font.FontFamily, Math.Max(5f, 10f * (float)_collapse), FontStyle.Bold);
+            using var font = new Font(Font.FontFamily, Math.Max(5f, 10f * (float)Collapse), FontStyle.Bold);
             var rect = new RectangleF(12, 0, Math.Max(0, _header.Width - 24), _header.Height);
             using var format = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
-            g.DrawString(_title, font, brush, rect, format);
+            g.DrawString(NodeTitle, font, brush, rect, format);
         };
 
         // The input port and every output row render inside the card
@@ -121,7 +108,7 @@ public sealed class TemplateClass : UserControl
 
     /// <summary>
     /// Host for the node's bare input port and its labeled output rows. The input
-    /// port (a <see cref="SlotView"/> added by <see cref="RebuildSlots"/>) is
+    /// port (a <see cref="SlotView"/> added by <see cref="OnNodeRebound"/>) is
     /// positioned at the card's left edge, vertically centered; the output rows are
     /// stacked vertically and centered as a group. The input view is added last so
     /// it paints above the row labels.
@@ -130,12 +117,6 @@ public sealed class TemplateClass : UserControl
     {
         private SlotView? _inputView;
         private double _collapse = 1d;
-
-        public DynamicOutputsPanel()
-        {
-            // Opaque background set by the card ctor (the card's opaque color);
-            // no transparency anywhere.
-        }
 
         /// <summary>Scales the row heights, slot glyphs and port by the zoom collapse
         /// factor so they re-flow to the collapsed card, then re-lays-out.</summary>
@@ -292,157 +273,11 @@ public sealed class TemplateClass : UserControl
         }
     }
 
-    /// <summary>
-    /// Raised when the bound node's anchor or size changes (e.g. during a drag),
-    /// after this view has repositioned itself. The tree surface subscribes to keep
-    /// the minimap in sync, which otherwise only repaints on pan.
-    /// </summary>
-    public event Action? AnchorChanged;
-
-    /// <summary>Gets or sets the workflow node bound to this view.</summary>
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IWorkflowNodeViewModel? ViewModel
+    /// <inheritdoc />
+    protected override void OnCollapseChanged(double collapse)
     {
-        get => _node;
-        set
-        {
-            if (ReferenceEquals(_node, value)) return;
-
-            UnsubscribeNode();
-
-            _node = value;
-            Tag = value;
-
-            if (value is INotifyPropertyChanged n)
-            {
-                _notifier = n;
-                n.PropertyChanged += OnNodeChanged;
-            }
-
-            if (_node?.Slots is INotifyCollectionChanged slots)
-            {
-                slots.CollectionChanged += OnSlotsCollectionChanged;
-            }
-
-            RebuildSlots();
-            SyncTitle();
-            ApplyPosition();
-            Invalidate();
-        }
-    }
-
-    private void UnsubscribeNode()
-    {
-        if (_notifier is not null)
-        {
-            _notifier.PropertyChanged -= OnNodeChanged;
-            _notifier = null;
-        }
-
-        if (_node?.Slots is INotifyCollectionChanged slots)
-        {
-            slots.CollectionChanged -= OnSlotsCollectionChanged;
-        }
-    }
-
-    private void OnSlotsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (InvokeRequired)
-        {
-            BeginInvoke(new NotifyCollectionChangedEventHandler(OnSlotsCollectionChanged), sender, e);
-            return;
-        }
-
-        // Slot set changed (e.g. a SlotEnumerator switched its selector type): rebuild
-        // the dynamic output rows so names/glyphs match the current slot collection.
-        RebuildSlots();
-        ApplyPosition();
-        Invalidate();
-    }
-
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        ApplyPosition();
-    }
-
-    protected override void OnParentChanged(EventArgs e)
-    {
-        base.OnParentChanged(e);
-        ApplyPosition();
-    }
-
-    private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (InvokeRequired)
-        {
-            BeginInvoke(new PropertyChangedEventHandler(OnNodeChanged), sender, e);
-            return;
-        }
-
-        if (e.PropertyName is "Name" or "Title" or null or "")
-        {
-            SyncTitle();
-        }
-
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor)
-            or nameof(IWorkflowNodeViewModel.Size)
-            or null or "")
-        {
-            ApplyPosition();
-            AnchorChanged?.Invoke();
-        }
-
-        Invalidate();
-    }
-
-    /// <summary>
-    /// Positions this card at the node anchor plus the surface pan offset, inside
-    /// the coordinate host (the viewport-sized canvas). The canvas applies the
-    /// pan itself, so a negative world anchor is offset back into the viewport and
-    /// the card never falls off the canvas into an invisible region.
-    /// </summary>
-    internal void ApplyPosition()
-    {
-        if (_node is null || Parent is null) return;
-
-        var pan = GetCanvasPanOffset();
-        // The world origin is translated by the layout's ActualOffset (the grid axis lands at
-        // panOffset + ActualOffset); the node must share that origin so it collapses toward the
-        // axis on zoom instead of toward the bare pan offset. Falls back to (0,0) for hosts
-        // whose node has no tree yet.
-        // + the ruler reserve: content is inset below/right of the floating rulers so the world axes
-        // land on their inner corner (the tree feeds the grid/rulers the same visual origin).
-        var content = _node.Parent?.Layout?.ActualOffset ?? new Offset();
-        Location = new Point(
-            (int)Math.Round(_node.Anchor.Horizontal) + pan.X + (int)Math.Round(content.Horizontal) + 36,
-            (int)Math.Round(_node.Anchor.Vertical) + pan.Y + (int)Math.Round(content.Vertical) + 36);
-        Size = new Size(
-            (int)Math.Round(_node.Size.Width),
-            (int)Math.Round(_node.Size.Height));
-
-        // Re-flow the internal metrics by the zoom collapse factor (1/Scale) so the
-        // header/rows/slots shrink with the card instead of clipping at low scale.
-        _collapse = ComputeCollapseFactor();
-        ApplyScale();
-    }
-
-    /// <summary>1/Scale (identity at scale 1): the factor the card's fixed design
-    /// metrics must shrink by so nothing clips when the node collapses on zoom.</summary>
-    private double ComputeCollapseFactor()
-    {
-        var h = _node?.Parent?.Layout?.Scale?.Horizontal ?? 1d;
-        return h == 0d ? 1d : 1d / h;
-    }
-
-    /// <summary>Applies the current collapse factor to the header band and the dynamic
-    /// outputs panel (rows, glyphs, port), then re-measures the slot anchors so links
-    /// track the scaled glyphs and repaints.</summary>
-    private void ApplyScale()
-    {
-        _header.Height = Math.Max(14, (int)Math.Round(36 * _collapse));
-        _dynamicOutputs.SetCollapse(_collapse);
+        _header.Height = Math.Max(14, (int)Math.Round(36 * collapse));
+        _dynamicOutputs.SetCollapse(collapse);
         // Re-measure the slot views at their new (scaled) bounds so link endpoints
         // keep pointing at the glyphs — PointToScreen reads the actual control bounds,
         // so this must run after the resize above settles. SetCollapse's
@@ -455,43 +290,6 @@ public sealed class TemplateClass : UserControl
     }
 
     /// <summary>
-    /// Reads the <c>PanOffset</c> the tree surface pushes into the canvas, so this
-    /// card can translate its world anchor into canvas-local coordinates. Found via
-    /// reflection because the surface is a private nested control in the tree view;
-    /// returns (0,0) when no such property exists (safe for a plain canvas host).
-    /// </summary>
-    private Point GetCanvasPanOffset()
-    {
-        for (var p = Parent; p is not null; p = p.Parent)
-        {
-            var property = p.GetType().GetProperty("PanOffset");
-            if (property?.CanRead == true && property.PropertyType == typeof(Point))
-            {
-                return (Point)property.GetValue(p)!;
-            }
-        }
-
-        return Point.Empty;
-    }
-
-    /// <summary>
-    /// Reads the display title from the node. <see cref="IWorkflowNodeViewModel"/> does
-    /// not expose a name, so look up a <c>Name</c> or <c>Title</c> property reflectively
-    /// (works with any node view-model, including the built-in VeloxDev samples).
-    /// </summary>
-    private void SyncTitle()
-    {
-        if (_node is null)
-        {
-            _title = "";
-            return;
-        }
-
-        var property = _node.GetType().GetProperty("Name") ?? _node.GetType().GetProperty("Title");
-        _title = property?.GetValue(_node)?.ToString() ?? "";
-    }
-
-    /// <summary>
     /// Rebuilds the card's slot visuals from <see cref="IWorkflowNodeViewModel.Slots"/>.
     /// The node's fixed input slot renders as a bare port glyph at the card's left
     /// edge (mirroring the other frameworks' <c>PART_InputSlot</c>, which binds the
@@ -500,11 +298,9 @@ public sealed class TemplateClass : UserControl
     /// <c>PART_DynamicOutputs</c>, so no glyph hangs off the card edge. The input is
     /// identified from the node's own <c>InputSlot</c> property rather than the slot
     /// channel, so it never renders as a mislabeled output row even when the channel
-    /// is written asynchronously after binding. Runs whenever the node is bound and
-    /// whenever its <c>Slots</c> collection changes (e.g. a SlotEnumerator switching
-    /// its selector type).
+    /// is written asynchronously after binding.
     /// </summary>
-    private void RebuildSlots()
+    protected override void OnNodeRebound()
     {
         if (IsDisposed) return;
 
@@ -514,11 +310,12 @@ public sealed class TemplateClass : UserControl
         var rows = new List<DynamicSlotRow>();
         var inputSlot = ResolveInputSlot();
         SlotView? inputView = null;
+        var node = ViewModel;
 
-        if (_node is not null)
+        if (node is not null)
         {
             var outputIndex = 0;
-            foreach (var slot in _node.Slots)
+            foreach (var slot in node.Slots)
             {
                 if (inputSlot is not null && ReferenceEquals(slot, inputSlot))
                 {
@@ -582,137 +379,7 @@ public sealed class TemplateClass : UserControl
         WorkflowSlotLayoutBehavior.Refresh(this);
     }
 
-    /// <summary>
-    /// Finds the node's fixed input slot — the model property whose value is a
-    /// concrete <see cref="IWorkflowSlotViewModel"/> (a Slot property, not a
-    /// <see cref="SlotEnumerator{T}"/>). This mirrors the other frameworks' node
-    /// templates, which bind <c>PART_InputSlot</c> straight to the model's
-    /// <c>InputSlot</c> property. It is preferred over channel-based detection
-    /// because the input's channel can still be the generated default at render
-    /// time: setting it runs through an asynchronous command.
-    /// </summary>
-    private IWorkflowSlotViewModel? ResolveInputSlot()
-    {
-        if (_node is null) return null;
-
-        IWorkflowSlotViewModel? fallback = null;
-        foreach (var property in _node.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
-        {
-            IWorkflowSlotViewModel? slot;
-            try
-            {
-                slot = property.GetValue(_node) as IWorkflowSlotViewModel;
-            }
-            catch
-            {
-                // Some generated properties throw until initialized; skip them.
-                continue;
-            }
-
-            if (slot is null) continue;
-            if (string.Equals(property.Name, "InputSlot", StringComparison.OrdinalIgnoreCase))
-            {
-                return slot;
-            }
-
-            // Only fall back to a fixed slot that is clearly the input (source-capable
-            // but not target-capable); an output-only property must not become the port.
-            var hasSource = (slot.Channel & (SlotChannel.OneSource | SlotChannel.MultipleSources)) != 0;
-            var hasTarget = (slot.Channel & (SlotChannel.OneTarget | SlotChannel.MultipleTargets)) != 0;
-            if (hasSource && !hasTarget && fallback is null)
-            {
-                fallback = slot;
-            }
-        }
-
-        return fallback;
-    }
-
-    /// <summary>Disposes and removes every child of <paramref name="parent"/>.</summary>
-    private static void DisposeChildren(Control parent)
-    {
-        foreach (Control child in parent.Controls)
-        {
-            child.Dispose();
-        }
-        parent.Controls.Clear();
-    }
-
-    /// <summary>
-    /// Resolves the display label for an output slot. Enumerated slots carry their
-    /// name on the <see cref="ConditionalSlot{T}.Name"/> of the owning
-    /// <see cref="SlotEnumerator{T}"/> item, so reflect over the node's enumerator
-    /// properties to find the slot identity; fall back to a <c>Name</c>/<c>Title</c>
-    /// property, then a positional <c>Output N</c> label.
-    /// </summary>
-    private string ResolveSlotLabel(IWorkflowSlotViewModel slot, int index)
-    {
-        if (ReadReflectedName(slot) is { Length: > 0 } name)
-        {
-            return name;
-        }
-
-        var fallback = slot.GetType().GetProperty("Name") ?? slot.GetType().GetProperty("Title");
-        if (fallback?.GetValue(slot)?.ToString() is { Length: > 0 } text)
-        {
-            return text;
-        }
-
-        return $"Output {index + 1}";
-    }
-
-    /// <summary>
-    /// Searches the node view-model for <see cref="SlotEnumerator{T}"/> properties and
-    /// returns the item label for <paramref name="slot"/> if one references it.
-    /// </summary>
-    private string? ReadReflectedName(IWorkflowSlotViewModel slot)
-    {
-        if (_node is null) return null;
-
-        foreach (var property in _node.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
-        {
-            var value = property.GetValue(_node);
-            if (value is null) continue;
-
-            var enumeratorType = value.GetType();
-            if (!enumeratorType.IsGenericType
-                || enumeratorType.GetGenericTypeDefinition() != typeof(SlotEnumerator<>))
-            {
-                continue;
-            }
-
-            if (FindEnumeratorLabel(enumeratorType, value, slot) is { } label)
-            {
-                return label;
-            }
-        }
-
-        return null;
-    }
-
-    private static string? FindEnumeratorLabel(Type enumeratorType, object enumerator, IWorkflowSlotViewModel target)
-    {
-        var itemsProperty = enumeratorType.GetProperty("Items");
-        if (itemsProperty?.GetValue(enumerator) is not System.Collections.IEnumerable items)
-        {
-            return null;
-        }
-
-        foreach (var item in items)
-        {
-            var slotProperty = item.GetType().GetProperty("Slot");
-            if (slotProperty?.GetValue(item) is not IWorkflowSlotViewModel slot
-                || !ReferenceEquals(slot, target))
-            {
-                continue;
-            }
-
-            return item.GetType().GetProperty("Name")?.GetValue(item)?.ToString();
-        }
-
-        return null;
-    }
-
+    /// <inheritdoc />
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // Draw the rounded chrome here so the card paints as a single surface.
@@ -726,62 +393,12 @@ public sealed class TemplateClass : UserControl
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var bounds = new RectangleF(0, 0, Width, Height);
-        using var path = RoundRect(bounds, _cornerRadius);
+        using var path = WorkflowSurfaceGraphics.RoundedRectangle(bounds, _cornerRadius);
         using var backdrop = new SolidBrush(_cardBackdrop);
         using var brush = new SolidBrush(_opaqueBackground);
         using var pen = new Pen(_border, _borderThickness);
         g.FillRectangle(backdrop, bounds);
         g.FillPath(brush, path);
         g.DrawPath(pen, path);
-    }
-
-    private static GraphicsPath RoundRect(RectangleF bounds, float radius)
-    {
-        var path = new GraphicsPath();
-        var r = Math.Min(radius, Math.Min(bounds.Width, bounds.Height) / 2f);
-        var d = 2 * r;
-        path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-        path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-        path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-        path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
-    private static Color ParseColor(string hex)
-    {
-        var value = hex.Trim();
-        if (value.StartsWith("#", StringComparison.Ordinal))
-        {
-            var digits = value.Substring(1);
-            if (digits.Length == 8)
-            {
-                return Color.FromArgb(
-                    byte.Parse(digits.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(6, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
-            }
-
-            if (digits.Length == 6)
-            {
-                return Color.FromArgb(
-                    byte.Parse(digits.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                    byte.Parse(digits.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
-            }
-        }
-
-        return Color.FromName(value);
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            UnsubscribeNode();
-        }
-
-        base.Dispose(disposing);
     }
 }
