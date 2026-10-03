@@ -1342,10 +1342,12 @@ public sealed class WorkflowSurfaceBehavior
             double.IsNaN(viewportY) ? 0 : viewportY,
             svW, svH);
 
-        // Persist the viewport position so it survives serialization round-trip.
+        // Persist the viewport position so it survives serialization round-trip. World, like every other
+        // adapter and like the value just handed to Viewport above — the restore path reads it back as world
+        // (ApplyPendingScrollRestoreCore → ToScreen), so raw scroll here would be added to ActualOffset twice.
         viewModel.Layout.ViewportOffset = new Offset(
-            double.IsNaN(scrollX) ? 0 : scrollX,
-            double.IsNaN(scrollY) ? 0 : scrollY);
+            double.IsNaN(viewportX) ? 0 : viewportX,
+            double.IsNaN(viewportY) ? 0 : viewportY);
     }
 
     private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state, double scrollX, double scrollY)
