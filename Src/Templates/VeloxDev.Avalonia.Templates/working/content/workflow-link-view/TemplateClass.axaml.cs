@@ -30,9 +30,8 @@ public partial class TemplateClass : Control, ILinkHighlight
         IsHitTestVisible = true;
         Focusable = true;
 
-        // 取焦点的连带代价：本视图是整块画布大小，Avalonia 的 BringIntoViewOnFocusChange 会在焦点落到
-        // 它身上时替它请求「滚进视口」，鼠标一碰到线画布就跳一段。在发源地吃掉这条请求 —— 节点卡里
-        // 输入框被聚焦时照样滚进视口，作用域刻意只收在这里。
+        // Keep this handler: the view is canvas-sized, so focus would otherwise scroll the canvas on hover.
+        // It stays scoped to this view — a focused input inside a node card must still scroll in.
         AddHandler(RequestBringIntoViewEvent, (_, e) => e.Handled = true);
 
         RefreshGeometry();
