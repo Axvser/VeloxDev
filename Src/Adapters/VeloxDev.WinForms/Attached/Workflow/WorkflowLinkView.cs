@@ -260,12 +260,6 @@ public class WorkflowLinkView : Control, ILinkHighlight
             strokePath.Transform(shift);
         }
 
-        // 落在整像素上，好让画出来的线保持它原来在画布局部的那条路径；小数余量留在点的坐标里。
-        Location = new Point((int)originX, (int)originY);
-        Size = new System.Drawing.Size(
-            Math.Max(1, (int)Math.Ceiling(bounds.Right) - (int)originX + 1),
-            Math.Max(1, (int)Math.Ceiling(bounds.Bottom) - (int)originY + 1));
-
         var local = new PointF[points.Length];
         for (var i = 0; i < points.Length; i++)
         {
@@ -273,7 +267,17 @@ public class WorkflowLinkView : Control, ILinkHighlight
         }
 
         _windowCurve = local;
+
+        // 先雕形状、再挪窗口：区域是窗口客户区坐标（与窗口位置无关），而反过来的话，SetWindowPos 之后、
+        // 区域更新之前那一瞬，新露出来的矩形会先按 BackColor 画一次 —— 每帧闪一下方框。
         ApplyRegion(strokePath);
+
+        // 落在整像素上，好让画出来的线保持它原来在画布局部的那条路径；小数余量留在点的坐标里。
+        Location = new Point((int)originX, (int)originY);
+        Size = new System.Drawing.Size(
+            Math.Max(1, (int)Math.Ceiling(bounds.Right) - (int)originX + 1),
+            Math.Max(1, (int)Math.Ceiling(bounds.Bottom) - (int)originY + 1));
+
         Invalidate();
     }
 
@@ -281,9 +285,17 @@ public class WorkflowLinkView : Control, ILinkHighlight
     private void RetractCurve() => _link?.PublishCurve(null);
 
     // 把雕好的形状交给窗口。WinForms 会把区域拷贝进窗口，所以上一个托管 Region 归我们处置。
+    // 「什么都不画」必须是**空**区域：`new Region()` 是 GDI+ 的**无限**区域，窗口会整块露出来 ——
+    // 池化视图带着上一次的盒子走到这条路上时，画布上就留下一个 SurfaceBackground 色的方框
+    //（用户报的「黑色盒子」；实测能挂 1.8 秒，直到几何再次可画）。
     private void ApplyRegion(GraphicsPath? strokePath)
     {
         var next = strokePath is null ? new Region() : new Region(strokePath);
+        if (strokePath is null)
+        {
+            next.MakeEmpty();
+        }
+
         var previous = _windowRegion;
         _windowRegion = next;
         Region = next;

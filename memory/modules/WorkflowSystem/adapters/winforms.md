@@ -191,6 +191,23 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 3. **焦点必须与「上色」同一步发生**（`SetSelectedLink` 里），画布靠 `ControlStyles.Selectable` 才获焦、靠 `TabStop = false` 不进制表位。写成「被点击才给焦点」就会重演 Avalonia 那个 bug：悬停变红但 Delete 要先点一下（见 `adapters/avalonia.md`）。这一家没有 WPF 那种「拿到焦点就把自己滚进视口」的副作用 —— 平移在宿主手里，实测悬停前后 `_panOffset` 不变。
 4. **已知代价：连线被卡片/浮层窗口盖住的那一段不可悬停**。指针落在卡片（或小地图/HUD）的真窗口上时画布收不到 `MouseMove`，只有画在空白画布上的那段可命中。这是「画布代画连线」这一形状的固有代价 —— 换成 Trimmed demo 那种「一条线一个窗口」的形状才有全段命中，而那种形状要付 §2.1 的 z 序与 §2.3 的透明代价。
 
+### 4.10 `new Region()` 是**无限**区域，不是空的 —— 用户报的「黑色盒子」就是它（2026-10-03 修）
+
+**症状**：画布上偶尔出现一个**没有网格线的深色方框**，尺寸正好是某条连线**最后一次**的盒子（用户原话：「黑色的盒子，盒子疑似是某个时刻连线的盒子残留的」）。
+
+**根因**：`WorkflowLinkView.ApplyRegion(null)`（连线这一帧什么都不画）原来写的是 `new Region()`，而 GDI+ 的默认构造给出的是**无限**区域（隔离验证：`IsInfinite=True`，`IsEmpty=False`；要空必须 `MakeEmpty()`）。设置 `Control.Region` 就是 `SetWindowRgn` —— 无限区域 = **不做任何裁剪**，这扇不透明子窗口于是整块露出来，被 `BackColor`（= 表面底色 `#1E1E1E`）填满。底色与画布背景同色，所以看起来「背景还在、网格没了」，边界恰是盒子。
+
+**触发路径**：`RebuildGeometry` 的四条早退都会走到这里 —— 不可见（`_canRender=false`，橡皮筋收工时）、`WorkflowSlotUpdateGate.IsLinkRenderReady` 不过（端点还没量出来）、两端为 null、`IsDrawable` 为假（两端落在同一像素：**连线手势的第一帧**）。池化视图带着上一次的盒子走到这条路上就露出来；实测一次 49×33 的方框在屏幕上挂了 **1.8 秒**（直到几何再次可画）。
+
+**修法（`WorkflowLinkView.cs:287` 的 `ApplyRegion`）**：
+
+- 「什么都不画」用 `new Region()` + `MakeEmpty()`；
+- 并且**先雕区域、再写 `Location`/`Size`** —— 反过来的话，`SetWindowPos` 之后、区域更新之前那一瞬，新露出来的矩形会先按 `BackColor` 画一次，每帧闪一下方框。
+
+**验证判据（不依赖截图时机，两次都够用）**：临时探针在 `ApplyRegion` 里打 `next.IsEmpty(g)` / `IsInfinite(g)`。修完：`path=NULL` 的每一次都是 `empty=True infinite=False`（0 例反例），而同一条路径仍在正常触发（`size=49x33 screen=514,321 vis=True`）—— 也就是说状态还在，只是现在它不可见。隔离验证 `new Region()` 的语义用 PowerShell 三行就够（`IsInfinite` / `IsEmpty` 都要传一个 `Graphics`）。
+
+> 这条只在本家有：`Control.Region` 是 WinForms 的窗口裁剪机制，别家（保留模式的 `Clip`/`Bounds`、MAUI 的 `Path` 布局槽裁剪）没有「无限 vs 空」这个二选一，但都有各自的「画不出来时留下上一次的盒子」问题（MAUI 那条见 `adapters/maui.md` §四·12）。
+
 ---
 
 ## 五、这份文件没写的东西
