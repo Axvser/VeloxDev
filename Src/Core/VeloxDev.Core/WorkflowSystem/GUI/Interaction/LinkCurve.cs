@@ -107,17 +107,125 @@ public sealed class LinkCurve
     public static LinkCurve BuildCubic(
         double startX, double startY, double endX, double endY, double pullMinimum, int sampleCount = DefaultSampleCount)
     {
-        if (sampleCount < 2) sampleCount = DefaultSampleCount;
-
         var pull = Math.Max(pullMinimum, Math.Abs(endX - startX) * 0.5);
-        var c1X = startX + pull;
-        var c2X = endX - pull;
+        return Sample(startX, startY, startX + pull, startY, endX - pull, endY, endX, endY, sampleCount);
+    }
+
+    /// <summary>
+    /// The four control points of the curve between two ports, each one pulled along the <b>outward</b>
+    /// direction of its own port — the edge of its node that the port sits on.
+    ///
+    /// This is the same curve <see cref="BuildCubic"/> draws whenever both ports are on the usual sides
+    /// (sender on its node's right edge, receiver on the other's left edge): both outward directions are
+    /// horizontal, so the pull reduces to exactly the old one. It differs where the old rule was wrong —
+    /// a port on a top/bottom edge, and a link whose ends are the other way round, which used to pull one
+    /// control point <i>into</i> its node.
+    ///
+    /// The two ends are treated symmetrically: swapping them returns the same four points in reverse order,
+    /// so the curve does not depend on which end is called the sender. An end with no node contributes no
+    /// pull at all, which is what a drag preview needs: its far end is the pointer, not a port.
+    /// </summary>
+    /// <param name="start">The port the link leaves.</param>
+    /// <param name="end">The port it arrives at.</param>
+    /// <param name="pullMinimum">Least pull, in the view's units; see <paramref name="pullMinimum"/> on <see cref="BuildCubic"/>.</param>
+    /// <returns>Start, first control point, second control point, end.</returns>
+    /// <exception cref="ArgumentNullException">Either port is <see langword="null"/>.</exception>
+    public static (double X, double Y)[] PortCurvePoints(
+        IWorkflowSlotViewModel start, IWorkflowSlotViewModel end, double pullMinimum)
+    {
+        if (start is null) throw new ArgumentNullException(nameof(start));
+        if (end is null) throw new ArgumentNullException(nameof(end));
+
+        var (sx, sy) = (start.Anchor.Horizontal, start.Anchor.Vertical);
+        var (ex, ey) = (end.Anchor.Horizontal, end.Anchor.Vertical);
+        var (nx1, ny1) = PortOutward(start);
+        var (nx2, ny2) = PortOutward(end);
+
+        // 每个控制点沿**自己那个口**的法线拉：距离按该法线轴上的间距算，所以两端互相独立、交换不变。
+        var pull1 = Pull(sx, sy, ex, ey, nx1, ny1, pullMinimum);
+        var pull2 = Pull(sx, sy, ex, ey, nx2, ny2, pullMinimum);
+
+        return
+        [
+            (sx, sy),
+            (sx + (nx1 * pull1), sy + (ny1 * pull1)),
+            (ex + (nx2 * pull2), ey + (ny2 * pull2)),
+            (ex, ey),
+        ];
+    }
+
+    /// <summary>
+    /// Builds the curve between two ports with <see cref="PortCurvePoints"/> and samples it, so the drawn
+    /// curve and the hit-tested one come from one computation.
+    /// </summary>
+    /// <param name="start">The port the link leaves.</param>
+    /// <param name="end">The port it arrives at.</param>
+    /// <param name="pullMinimum">Least pull, in the view's units.</param>
+    /// <param name="sampleCount">Number of points; <see cref="DefaultSampleCount"/> when not positive.</param>
+    /// <exception cref="ArgumentNullException">Either port is <see langword="null"/>.</exception>
+    public static LinkCurve BuildPortCubic(
+        IWorkflowSlotViewModel start, IWorkflowSlotViewModel end, double pullMinimum, int sampleCount = DefaultSampleCount)
+    {
+        var points = PortCurvePoints(start, end, pullMinimum);
+        return Sample(
+            points[0].X, points[0].Y, points[1].X, points[1].Y, points[2].X, points[2].Y, points[3].X, points[3].Y, sampleCount);
+    }
+
+    /// <summary>
+    /// The direction a port's line should leave in: the outward normal of the node edge that port sits on,
+    /// taken as the edge nearest the port (normalised, so a wide node does not favour its horizontal edges).
+    /// <para>
+    /// A port with <b>no node</b> answers <c>(0, 0)</c> — no direction. That is the drag preview's free end:
+    /// nothing is known about what the pointer will land on, so assuming an edge for it would bend the line
+    /// around a target that does not exist yet. With no direction the end's control point collapses onto the
+    /// end itself and the curve arrives there <b>straight</b>; once the pointer is over a real port, that port
+    /// has a node and this answers its edge, so the preview bends the way the finished link will.
+    /// </para>
+    /// </summary>
+    /// <param name="slot">The port.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="slot"/> is <see langword="null"/>.</exception>
+    public static (double X, double Y) PortOutward(IWorkflowSlotViewModel slot)
+    {
+        if (slot is null) throw new ArgumentNullException(nameof(slot));
+        if (slot.Parent is not { } node) return (0, 0);
+
+        var halfWidth = Math.Max(1e-6, node.Size.Width * 0.5);
+        var halfHeight = Math.Max(1e-6, node.Size.Height * 0.5);
+        var dx = (slot.Anchor.Horizontal - (node.Anchor.Horizontal + halfWidth)) / halfWidth;
+        var dy = (slot.Anchor.Vertical - (node.Anchor.Vertical + halfHeight)) / halfHeight;
+
+        if (Math.Abs(dx) >= Math.Abs(dy))
+        {
+            return (dx >= 0 ? 1 : -1, 0);
+        }
+
+        return (0, dy >= 0 ? 1 : -1);
+    }
+
+    // 沿这个口的法线轴量两个端点的距离：水平口看 |dx|，垂直口看 |dy|。标准布局下两口都是水平口 ⇒
+    // 取的就是 |dx|，与旧公式逐字相同。
+    private static double Pull(double startX, double startY, double endX, double endY, double nx, double ny, double minimum)
+    {
+        // 没有方向（自由端）就不拉：控制点落在端点上，曲线到那里是平的。
+        if (nx == 0 && ny == 0)
+        {
+            return 0;
+        }
+
+        var gap = Math.Abs(nx != 0 ? endX - startX : endY - startY);
+        return Math.Max(minimum, gap * 0.5);
+    }
+
+    // 三次贝塞尔的采样。控制点的纵坐标不再假定等于自己那一端 —— 垂直口时它就是另一回事。
+    private static LinkCurve Sample(
+        double startX, double startY, double c1X, double c1Y, double c2X, double c2Y, double endX, double endY, int sampleCount)
+    {
+        if (sampleCount < 2) sampleCount = DefaultSampleCount;
 
         var px = new double[sampleCount];
         var py = new double[sampleCount];
         for (var i = 0; i < sampleCount; i++)
         {
-            // 两个控制点的纵坐标各自跟着自己那一端，所以两端出线方向是水平的。
             var t = (double)i / (sampleCount - 1);
             var u = 1 - t;
             var a = u * u * u;
@@ -126,7 +234,7 @@ public sealed class LinkCurve
             var d = t * t * t;
 
             px[i] = (a * startX) + (b * c1X) + (c * c2X) + (d * endX);
-            py[i] = ((a + b) * startY) + ((c + d) * endY);
+            py[i] = (a * startY) + (b * c1Y) + (c * c2Y) + (d * endY);
         }
 
         return Build(px, py);
