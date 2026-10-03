@@ -256,6 +256,69 @@ public class WorkflowSurfaceMathTests
         Assert.AreEqual(0d, WorkflowSurfaceMath.ScrollMax(100, 300));
     }
 
+    // ── Viewport round trip (persist / restore) ──────────────────────────────
+
+    [TestMethod]
+    public void HasViewportRestore_DefaultLayout_IsFalse()
+    {
+        Assert.IsFalse(WorkflowSurfaceMath.HasViewportRestore(new CanvasLayout()));
+    }
+
+    [TestMethod]
+    public void HasViewportRestore_SubPixelOffset_IsFalse()
+    {
+        // What a scroll viewer reports when it has not really moved. Treating it as a position would make
+        // every tree attach look like a restore.
+        var layout = new CanvasLayout { ViewportOffset = new Offset(0.4, -0.25) };
+        Assert.IsFalse(WorkflowSurfaceMath.HasViewportRestore(layout));
+    }
+
+    [TestMethod]
+    public void HasViewportRestore_EitherAxisMoved_IsTrue()
+    {
+        Assert.IsTrue(WorkflowSurfaceMath.HasViewportRestore(new CanvasLayout { ViewportOffset = new Offset(0, 12) }));
+        Assert.IsTrue(WorkflowSurfaceMath.HasViewportRestore(new CanvasLayout { ViewportOffset = new Offset(-12, 0) }));
+    }
+
+    [TestMethod]
+    public void ViewportRestoreScroll_AddsActualOffset()
+    {
+        var layout = new CanvasLayout
+        {
+            NegativeOffset = new Offset(50, 30),
+            ViewportOffset = new Offset(200, 120),
+        };
+
+        var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(layout);
+
+        Assert.AreEqual(250d, scroll.Horizontal);
+        Assert.AreEqual(150d, scroll.Vertical);
+    }
+
+    [TestMethod]
+    public void ViewportOffsetFromScroll_SubtractsActualOffset()
+    {
+        var layout = new CanvasLayout { NegativeOffset = new Offset(50, 30) };
+
+        var world = WorkflowSurfaceMath.ViewportOffsetFromScroll(250, 150, layout);
+
+        Assert.AreEqual(200d, world.Horizontal);
+        Assert.AreEqual(120d, world.Vertical);
+    }
+
+    [TestMethod]
+    public void ViewportRoundTrip_WorldToScrollAndBack_IsIdentity()
+    {
+        // The two directions composed, which is exactly what an adapter does across a save and a load.
+        var layout = new CanvasLayout { NegativeOffset = new Offset(50, 30) };
+        layout.ViewportOffset = WorkflowSurfaceMath.ViewportOffsetFromScroll(250, 150, layout);
+
+        var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(layout);
+
+        Assert.AreEqual(250d, scroll.Horizontal);
+        Assert.AreEqual(150d, scroll.Vertical);
+    }
+
     // ── Minimap mapping ──────────────────────────────────────────────────────
 
     [TestMethod]

@@ -47,6 +47,41 @@ public static class WorkflowSurfaceMath
     public static Offset ToScreen(double worldX, double worldY, CanvasLayout layout)
         => new(worldX + layout.ActualOffset.Horizontal, worldY + layout.ActualOffset.Vertical);
 
+    /// <summary>Below this, a coordinate is the scroll viewer reporting "has not moved" rather than a position.</summary>
+    private const double ViewportRestoreEpsilon = 0.5;
+
+    /// <summary>
+    /// Whether <paramref name="layout"/> carries a viewport position worth restoring — anything but the default
+    /// <c>(0, 0)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The predicate an adapter consults when a tree arrives. A layout with no saved position is left alone: the
+    /// scroll viewer already sits at the origin, which is that position.
+    /// </remarks>
+    public static bool HasViewportRestore(CanvasLayout layout)
+        => Math.Abs(layout.ViewportOffset.Horizontal) > ViewportRestoreEpsilon
+           || Math.Abs(layout.ViewportOffset.Vertical) > ViewportRestoreEpsilon;
+
+    /// <summary>
+    /// The scroll position that shows <paramref name="layout"/>'s saved viewport:
+    /// <c>screen = world + ActualOffset</c>. Inverse of <see cref="ViewportOffsetFromScroll"/>.
+    /// </summary>
+    public static Offset ViewportRestoreScroll(CanvasLayout layout)
+        => ToScreen(layout.ViewportOffset.Horizontal, layout.ViewportOffset.Vertical, layout);
+
+    /// <summary>
+    /// The world-space <see cref="CanvasLayout.ViewportOffset"/> to persist for a scroll position:
+    /// <c>world = scroll − ActualOffset</c>. Inverse of <see cref="ViewportRestoreScroll"/>.
+    /// </summary>
+    /// <remarks>
+    /// Adapters persist through this rather than calling <see cref="ToWorld"/> themselves, so that every write
+    /// site names its direction. Writing the raw scroll is a defect that stays invisible until
+    /// <see cref="CanvasLayout.ActualOffset"/> is non-zero — which is why it survived in one adapter.
+    /// </remarks>
+    public static Offset ViewportOffsetFromScroll(double scrollX, double scrollY, CanvasLayout layout)
+        => new(ToWorld(scrollX, layout.ActualOffset.Horizontal),
+               ToWorld(scrollY, layout.ActualOffset.Vertical));
+
     // ── ② Pan overscroll clamp ───────────────────────────────────────────────
 
     /// <summary>

@@ -63,6 +63,29 @@ public class WorkflowSerializationTests
     }
 
     /// <summary>
+    /// A saved viewport survives the round trip, and <c>Layout.UpdateCommand</c> does not clobber it.
+    /// </summary>
+    /// <remarks>
+    /// This is the premise the adapters restore from: the value has to still be there when the tree reaches the
+    /// view. <c>Update()</c> recomputes ActualSize/ActualOffset from OriginSize and the two offsets, and it must
+    /// leave ViewportOffset alone — otherwise a host that calls the command after loading (every demo does) would
+    /// erase the position before the adapter could read it.
+    /// </remarks>
+    [TestMethod]
+    public void TreeWithAViewport_RoundTripsItsViewportOffset()
+    {
+        var tree = new TreeDefaultViewModel();
+        tree.Layout.NegativeOffset = new Offset(50, 30);
+        tree.Layout.ViewportOffset = new Offset(420, 260);
+
+        var restored = tree.Serialize().Deserialize<TreeDefaultViewModel>();
+        restored.Layout.UpdateCommand.Execute(null);
+
+        Assert.AreEqual(420d, restored.Layout.ViewportOffset.Horizontal);
+        Assert.AreEqual(260d, restored.Layout.ViewportOffset.Vertical);
+    }
+
+    /// <summary>
     /// A tree whose two nodes are connected round-trips its <c>LinksMap</c>.
     /// </summary>
     /// <remarks>
