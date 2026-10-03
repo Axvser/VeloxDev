@@ -119,7 +119,7 @@ namespace Demo.Views
 
         private MenuFlyout BuildLinkMenu()
         {
-            var item = new MenuFlyoutItem { Text = "删除连线" };
+            var item = new MenuFlyoutItem { Text = "Delete" };
             item.Click += (_, _) =>
             {
                 if (_linkMenuTarget is { } link && link.DeleteCommand.CanExecute(null))

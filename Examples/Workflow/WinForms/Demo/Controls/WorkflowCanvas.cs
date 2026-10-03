@@ -933,7 +933,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         _linkMenu?.Dispose();
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add("删除连线", null, (_, _) =>
+        menu.Items.Add("Delete", null, (_, _) =>
         {
             if (_linkInteraction?.HoveredLink is { } link) DeleteLink(link);
         });

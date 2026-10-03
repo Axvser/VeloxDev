@@ -126,7 +126,7 @@ public partial class WorkflowView : UserControl
 
     private ContextMenu BuildLinkMenu()
     {
-        var item = new MenuItem { Header = "删除连线" };
+        var item = new MenuItem { Header = "Delete" };
         item.Click += (_, _) =>
         {
             if (_menuLink is { } link && link.DeleteCommand.CanExecute(null))

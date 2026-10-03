@@ -81,7 +81,7 @@ public partial class WorkflowView : UserControl
             _linkInteraction.IsSuspended = true;
         }
 
-        var item = new MenuItem { Header = "删除连线" };
+        var item = new MenuItem { Header = "Delete" };
         item.Click += (_, _) =>
         {
             if (link.DeleteCommand.CanExecute(null))

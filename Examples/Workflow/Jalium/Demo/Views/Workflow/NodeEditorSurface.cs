@@ -216,7 +216,7 @@ internal sealed class NodeEditorSurface : Canvas
     {
         // 删的是开菜单那一刻记下的那条（_menuTarget），而不是 Closed 之后再查 —— 这一家点菜单项时
         // 先收菜单再发 Click，目标若在 Closed 里清掉，Click 拿到的就是 null
-        var item = new MenuItem { Header = "删除连线" };
+        var item = new MenuItem { Header = "Delete" };
         item.Click += (_, _) =>
         {
             // 这一家的菜单项点完不自己收：不显式关，删掉连线之后菜单还杵在画布上挡着看得见的东西

@@ -858,7 +858,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         if (_deleteMenu is null)
         {
-            var item = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = "删除连线" };
+            var item = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = "Delete" };
             item.Click += (_, _) => DeleteSelectedLink();
             _deleteMenu = new Microsoft.UI.Xaml.Controls.MenuFlyout();
             _deleteMenu.Items.Add(item);
