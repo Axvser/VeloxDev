@@ -62,7 +62,7 @@
 | `ITransitionHost<TPriorityCore>` | **7/7**：`PlatformAdapters/UIThreadInspector.cs` 继承 Core 的 `TransitionHostBase<…>` | `Src/Core/VeloxDev.Core/TransitionSystem/TransitionHostBase.cs:9`；7 家分别 `Src/Adapters/<平台>/PlatformAdapters/UIThreadInspector.cs` |
 | `ISampler` | **7/7**，但规模差一个量级：Avalonia 14 个文件、WPF 12、MAUI 12、WinUI 10、Jalium 9、**Razor 1、WinForms 1**（`PlatformAdapters/Samplers/*.cs` 文件数） | 同名目录下每文件一个采样器类 |
 | `IWorkflowMinimapOverlay` | **6 家适配器本体**（Avalonia/Jalium/MAUI/Razor/WinUI/WPF 的 `Attached/Workflow/WorkflowMinimapOverlay.cs`），WinForms 落在模板与 demo（`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-minimap-overlay/TemplateClass.cs:20`、`Examples/Workflow/WinForms/Demo/Views/MinimapOverlay.cs:19`） | — |
-| `IWorkflowGridDecorator` | 适配器本体只有 Jalium（`Attached/Workflow/WorkflowGridDecorator.cs:13`）与 Razor（`…razor.cs:14`）；其余平台在 `Src/Templates/*/working/content/workflow-grid-decorator/TemplateClass.cs` 与 `Examples/Workflow/<平台>/…` 里实现 | 2/7 在适配器，5/7 在模板 —— **"七家适配器都实现"这个印象对本契约是错的** |
+| `IWorkflowGridDecorator` | 适配器本体只有 Razor（`…razor.cs:14`）；WPF/Avalonia/WinUI/MAUI/WinForms 在 `Src/Templates/*/working/content/workflow-grid-decorator/TemplateClass.cs` 与 `Examples/Workflow/<平台>/…` 里实现；**Jalium 一个实现都没有**（适配器那个随 `WorkflowGridDecorator.cs` 删除，模板产物是静态类，不接接口） | 1/7 在适配器，5/7 在模板/demo，1/7（Jalium）无 —— **"七家适配器都实现"这个印象对本契约是错的** |
 | `IThemeValueConverter` | **6/7**：`PlatformAdapters/ThemeValueConverters.cs`（Avalonia/MAUI/Razor/WinForms/WinUI/WPF），**Jalium 整个不接 DynamicTheme**（全目录 0 处引用） | 上列六家各一个 `Src/Adapters/VeloxDev.<平台>/PlatformAdapters/ThemeValueConverters.cs`；`Src/Adapters/VeloxDev.Jalium/` 的 `.cs` 里 grep `IThemeValueConverter` 零命中 |
 
 ### C 类：Core 内部管线（Core 自己实现，外部**不该**实现）
@@ -89,7 +89,7 @@
 四条，都能在代码里指到：
 
 1. **生成器用字符串全名引用契约。** `Src/Generators/VeloxDev.Core.Generator/Theme.cs:18-20`（`"global::VeloxDev.DynamicTheme.ITheme"` 等三条）、`Writers/TickWriter.cs:66`、`AopSurface.cs:83`、`Writers/CommandWriter.cs:155`、`Writers/WorkflowWriter.cs:342-357`。契约一旦改名或换命名空间，生成器**不会**跟着重构（它只认字符串），所以契约必须住在一个稳定、被所有下游共享的位置。
-2. **七家适配器要共享同一份定义。** 这件事在本仓真的发生过：`IWorkflowGridDecorator.cs:9-11` 与 `IWorkflowMinimapOverlay.cs:12-14` 的 XML 明说以前每家各有一份相同副本（Jalium 那份还是派生形状），统一到 Core 后由七家共同实现。
+2. **七家适配器要共享同一份定义。** 这件事在本仓真的发生过：`IWorkflowGridDecorator.cs:9-11` 与 `IWorkflowMinimapOverlay.cs:12-14` 的 XML 明说以前每家各有一份相同副本（Jalium 那份还是派生形状），统一到 Core 后由各平台实现（谁在适配器、谁在模板、谁没有实现见上表）。
 3. **契约是注册表的键。** `TimerCore.CreateTimeSource<TContract>() where TContract : class, ITimeSourceControl`（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs:109`）按**精确契约类型**查表，且 XML 明说不做宽/窄回退（`:102-107`）。契约类型本身是 API 的一部分。
 4. **契约层不引用任何 GUI。** `Interfaces/` 的全部 `using` 只有 3 个系统命名空间（`System.Reflection`/`System.Linq.Expressions`/`System.ComponentModel`）与 6 个仓内模块（见 §五）。`IVeloxCommand : ICommand` 用的是 `System.Windows.Input`（`IVeloxCommand.cs:1`），在 .NET Core 上由 `System.ObjectModel` 提供，不是 WPF 依赖。
 

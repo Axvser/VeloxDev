@@ -63,15 +63,6 @@ public sealed class ViewManager : IDisposable
     /// <inheritdoc />
     public void Dispose() => Detach();
 
-    /// <summary>Pushes a render transform onto every active view (the canvas content translate).</summary>
-    internal void UpdateRenderTransforms(Transform transform)
-    {
-        foreach (var item in _active)
-        {
-            item.View.RenderTransform = transform;
-        }
-    }
-
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         switch (e.Action)

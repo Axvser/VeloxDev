@@ -16,7 +16,7 @@
 | 角色 | 这家的类 | 形状要点（为什么） |
 |---|---|---|
 | 画布宿主 | `WorkflowSurfaceBehavior`（`sealed class : AvaloniaObject`，609 行） | 附着 8 个属性（7 公开 + 1 私有 `State`），命名控件靠 `control.FindControl<T>(name)` 解析 |
-| 画布变换 | `WorkflowCanvasTransformBehavior`（**`sealed class : AvaloniaObject`**） | WPF/WinUI/Jalium 的同名类是 `static class`，这家不行 —— 理由在 §二.1 |
+| 画布变换 | `WorkflowCanvasTransformBehavior`（**`sealed class : AvaloniaObject`**） | WPF/WinUI 的同名类是 `static class`，这家不行 —— 理由在 §二.1 |
 | 视图池 | `ViewPool`（`sealed class : AvaloniaObject`）+ `ViewManager`（普通 `sealed class`） | 池化器不是行为类、没有附着属性，所以不继承 `AvaloniaObject` |
 | 节点拖拽 | `WorkflowNodeDragBehavior`（`sealed class : AvaloniaObject`） | 只认左键；位移在**坐标宿主空间**里算，不是 Canvas 空间 |
 | 插槽连接 | `WorkflowSlotConnectionBehavior`（`sealed class : AvaloniaObject`，50 行） | 按下发送、同元素上松开接收；按下后**主动释放指针捕获**，见 §三.3 |
@@ -111,7 +111,7 @@ Avalonia 与 WPF 同族 → **同步写在 Avalonia 上成立的理由是 WPF �
 
 | 认左键 + 中键 | 只认左键 |
 |---|---|
-| Avalonia（`:560-565`）、WinUI（`VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:689-697`，逐字同形） | WPF（`if (e.ChangedButton != MouseButton.Left) return;`，`:392-395`）、Jalium（`VeloxDev.Jalium/…WorkflowSurfaceBehavior.cs:417`） |
+| Avalonia（`:560-565`）、WinUI（`VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:689-697`，逐字同形） | WPF（`if (e.ChangedButton != MouseButton.Left) return;`，`:392-395`） |
 
 **要注意的不是「Avalonia 特别」，而是「WPF 不是唯一参照」**：这家的形态与 WinUI 一致，代码与注释都没写理由（CAD/地图类界面把中键当平移是惯例）。副作用是：中键平移到一半、左键随便点一下，`IsPanStillActive` 仍为真，平移不会中断。**别按 WPF 那份去「修正」成只认左键** —— 先决定要哪一派。
 

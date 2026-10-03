@@ -165,7 +165,7 @@
 | `firstRender && IsEnabled` 的闸门 | **不能直接抄** —— 这是「没有 `IsEnabled` 回调」的结果；XAML 那几家有 `OnIsEnabledChanged`（WinForms 除外） |
 | `WorkflowGeometryScope`（`AsyncLocal` 深度计数）「缩放中让开」 | 思路可抄，**但它在 Core 侧**，别在适配器里复制一份 |
 | 原子提交顺序（枢轴 → `Scale` → `EnsureNegativeCover` → 重布局 → `PivotCenterScroll` → `ClampScrollOffset`） | 该抄的在这里 —— 但它是**契约**，见 `memory/modules/WorkflowSystem/extension.md` §3.9 与 `WorkflowSurfaceMath` |
-| `WorkflowGridDecorator` 放在**适配器**里（而非模板包） | 与 Jalium 同族的选择，可以对照；另五家把它放模板包（见 `WorkflowSystem/extension.md` §4.3 的对照表） |
+| `WorkflowGridDecorator` 放在**适配器**里（而非模板包） | Razor 是唯一这么做的（Jalium 那份已删除）；另五家把它放模板包（见 `WorkflowSystem/extension.md` §4.3 的对照表） |
 
 其余注册位置（`VeloxDev.slnx`、7 个模板条目、两套 demo、skill 平台页、`adapters/<平台>.md`）见
 `memory/modules/WorkflowSystem/extension.md` §4.3，不重复。

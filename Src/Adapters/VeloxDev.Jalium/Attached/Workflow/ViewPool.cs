@@ -36,15 +36,6 @@ public static class ViewPool
     public static void SetTemplateSelector(Panel element, IWorkflowTemplateSelector? value)
         => element.SetValue(TemplateSelectorProperty, value);
 
-    /// <summary>Pushes the canvas content translate onto every pooled view's RenderTransform.</summary>
-    internal static void UpdateRenderTransforms(Panel panel, Transform transform)
-    {
-        if (s_managers.TryGetValue(panel, out var manager))
-        {
-            manager.UpdateRenderTransforms(transform);
-        }
-    }
-
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not Panel panel)

@@ -231,7 +231,7 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
   **卡片长什么样是用户的设计**：里面三个嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` /
   `DoubleBufferedPanel`）与 `OnPaintBackground` 是它的视觉，不该进包。
 
-Jalium 的 tree-view 仍 553 行自绘，而且它包里那份 `WorkflowTreeView` 是**零消费者的死代码** —— 还没做。见 `extension.md` §4.1。
+Jalium 的 tree-view 仍 553 行自绘；适配器里那份零消费者的 `WorkflowTreeView` 已删除，这块迁移等于没做。见 `extension.md` §4.1。
 
 ---
 

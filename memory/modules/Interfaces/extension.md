@@ -102,7 +102,7 @@
 
 ### 3. 别在契约里放「哪些平台支持」的知识
 
-`IThemeValueConverter` 六家实现（Jalium 不接 DynamicTheme），`IWorkflowGridDecorator` 只有 2 家把实现放进适配器本体、其余 5 家在模板里。契约不记录这些 —— 想确认某契约某平台到底有没有，只能按 `architecture.md` §三·B 的表去各家目录数。
+`IThemeValueConverter` 六家实现（Jalium 不接 DynamicTheme），`IWorkflowGridDecorator` 只有 Razor 1 家把实现放进适配器本体，WPF/Avalonia/WinUI/MAUI/WinForms 5 家在模板/demo 里，Jalium 没有实现。契约不记录这些 —— 想确认某契约某平台到底有没有，只能按 `architecture.md` §三·B 的表去各家目录数。
 
 ### 4. 改契约名/挪命名空间 = 改一个**字符串常量**，编译器不会提醒你
 

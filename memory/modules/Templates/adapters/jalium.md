@@ -2,8 +2,9 @@
 
 > **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
-> **适配器侧**（`WorkflowTreeView` 的 `PART_*`/`RegisterName`、`Visual.ShouldRenderChild` 自盒化、纯模型数学、
-> `IWorkflowGridDecorator` 的消费者）在 `memory/modules/WorkflowSystem/adapters/jalium.md`，本文只指路不抄；
+> **表面侧**（`RegisterName` 的硬要求、`Visual.ShouldRenderChild` 自盒化、纯模型数学、`_zoomPin`）在
+> `memory/modules/WorkflowSystem/adapters/jalium.md`，本文只指路不抄 —— **这些落点现在都在模板产物/demo，
+> 不在适配器**（适配器里六个画布角色行为与自装配外壳 `WorkflowTreeView` 已删除）；
 > 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
 > **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.Jalium.Templates/working/content/`；
 > 提到 demo 时相对仓库根的 `Examples/Workflow/Jalium Trimmed/`；引用别处一律写全路径。
@@ -35,11 +36,12 @@
    `:12-20`），卡片、连线端点与命中**共用它**（`node-view:39,175,184,188,194,199,203`、
    `link-view:156,159-161,173-174`、`tree-view:249-258,359,389,423,533`）。
    ⇒ 它的四个颜色符号全部空转（§三·P1），改"插槽外观"要改的是 node-view 的 `DrawCard`。
-2. **`grid-decorator` 产出的是一个 `static class`，实现不了 `IWorkflowGridDecorator`**
+2. **`grid-decorator` 产出的是一个 `static class`，不实现 `IWorkflowGridDecorator`**
    （Core 的接口成员：四个偏移属性 + `RulerBand`，
    `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs:15-35`）。
-   而适配器的 `WorkflowTreeView.GridDecorator` setter 要的正是**实例**
-   （`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowTreeView.cs:32-42`）。
+   Jalium 这家**现在没有任何 `IWorkflowGridDecorator` 实现**：适配器里那个实现随 `WorkflowGridDecorator.cs` 删除，
+   模板产物又是静态类。表面靠 `tree-view` 对 `GridDecorator.RulerThickness` / `GridDecorator.DrawGrid(...)` 的
+   **静态调用**拿网格与标尺（`tree-view:38-39,203,314`），不经过接口。
    ⇒ **这个条目只对模板那套表面有用**（见 §二·1）。
 3. **selector 条目的产物是工厂方法而不是类**：tree-view 条目**自己**在属性默认值里调它
    （`tree-view:104` 的 `= TemplateNamespace.TemplateSelector.CreateSelector()`），所以七份产物
@@ -54,19 +56,11 @@
 
 ## 二、模板里必须手写、委派不掉的接线
 
-### 2.1 Jalium 有两套表面，模板产出的是**自己那一套**
+### 2.1 表面只剩模板这一套（适配器那套已删除）
 
-适配器自带一个成品表面 `WorkflowTreeView : Grid`（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowTreeView.cs:14-101`：
-内建 `PART_SurfaceBorder`/`PART_ScrollViewer`/`PART_Canvas`/`PART_GridDecorator` + `RegisterName` +
-`WorkflowSurfaceBehavior` 六个附着属性 + 适配器自己的 `WorkflowGridDecorator` 实例）。
-**模板产出的 `TreeView : Canvas` 完全不使用它**：它自己画网格与标尺（`:311-335`）、自己命中（`:353-406`）、
-自己处理拖拽/平移/连线手势（`:410-552`）、自己维护视口与虚拟化（`:153-208`）。
-两条路都自洽，但**装饰器条目的形状只对得上模板那一条**（§一·2）。
+曾经有两套表面：适配器自带的成品 `WorkflowTreeView : Grid`，和模板产出的 `TreeView : Canvas`。**适配器那套已删除**（零消费者），所以**现在只有模板产出的 `TreeView : Canvas`**：它自己画网格与标尺（`:311-335`）、自己命中（`:353-406`）、自己处理拖拽/平移/连线手势（`:410-552`）、自己维护视口与虚拟化（`:153-208`）。
 
-⇒ 后果：想改用适配器的 `WorkflowTreeView` 时，`GridDecorator` 属性需要一个人写的
-`IWorkflowGridDecorator` 实现（或直接用适配器的 `WorkflowGridDecorator` 实例去设它的 DP），
-而**模板产出的静态类给不了**。小地图条目不受影响 —— 它继承适配器的 `WorkflowMinimapOverlay`
-（实例、实现 `IWorkflowMinimapOverlay`），两套表面都能接。
+⇒ 后果：网格装饰器是模板自己的静态类，**没有任何 `IWorkflowGridDecorator` 实例可换**（§一·2）。小地图条目不受影响 —— 它继承适配器的 `WorkflowMinimapOverlay`（实例、实现 `IWorkflowMinimapOverlay`），仍然可用。
 
 ### 2.2 **七份产物合起来还缺一个宿主窗口**，且宿主有严格的装配顺序
 
@@ -79,15 +73,14 @@
 | 2 | 放进 `ScrollViewer`，且 `PanningMode = PanningMode.None`（**表面自己处理鼠标平移**） | `MainWindow.cs:43-49` |
 | 3 | `surface.AttachScrollViewer(viewer)` —— **必须在 `SetTree` 之前**，注释 `tree-view:86-88` 说明了原因（视口尺寸在 `SetTree` 时就要可读，否则第一次虚拟化要等一次可能不来的 `ScrollChanged`） | `MainWindow.cs:51-54` |
 | 4 | `surface.SetTree(tree)` | `MainWindow.cs:55` |
-| 5 | `surface.DataContext = tree` —— **`SetTree` 只存 `_tree`**，适配器的 behavior 是从 `DataContext` 取树的 | `MainWindow.cs:56-57` |
-| 6 | `WorkflowSurfaceBehavior.SetZoomEnabled(surface, true)` —— **在这家是空操作**:它只经 `OnZoomEnabledChanged`(`WorkflowSurfaceBehavior.cs:259`)转 `HookZoom`,而 `HookZoom` 在 `StateProperty` 未设时直接 `return`(`:281-284`);`StateProperty` 仅由 `Attach`(`:136`,需 `IsEnabled` 为 true)或 `Refresh`(`:108-109`)写入,而 demo 与 Jalium 模板**都不调 `SetIsEnabled`** ⇒ 缩放其实全靠第 8 步 | `MainWindow.cs:60` |
-| 7 | 订阅 `viewer.ScrollChanged` / `viewer.SizeChanged` / `surface.Changed`，把 6 个数值（ContentOffset/ScrollOffset/Viewport 宽高）喂给小地图那一类叠加层 | `MainWindow.cs:87-109` |
-| 8 | 自己接缩放（窗口级 Ctrl+wheel 与 Ctrl+`+`/`-`），并在每次提交后调 `surface.NotifyZoomCommitted(...)` | `MainWindow.cs:145-152,166-219`；API 在 `tree-view:220-239` |
+| 5 | `surface.DataContext = tree` —— **`SetTree` 只存 `_tree`**，池化视图是从 `DataContext` 取 item 的 | `MainWindow.cs:56-58` |
+| 6 | 订阅 `viewer.ScrollChanged` / `viewer.SizeChanged` / `surface.Changed`，把 6 个数值（ContentOffset/ScrollOffset/Viewport 宽高）喂给小地图那一类叠加层 | `MainWindow.cs:87-109` |
+| 7 | 自己接缩放（窗口级 Ctrl+wheel 与 Ctrl+`+`/`-`），并在每次提交后调 `surface.NotifyZoomCommitted(...)` | `MainWindow.cs:121-142,146-155,165-229`；API 在 `tree-view:220-239` |
 
-⇒ 第 5、8 两条最容易漏且**都不报错**：漏了 5 ⇒ 适配器那条缩放路径拿不到树；漏了 8 ⇒
+⇒ 第 5、7 两条最容易漏且**都不报错**：漏了 5 ⇒ 池化视图读不到 item；漏了 7 ⇒
 深缩放窗口里连线会被虚拟化剔掉约 100 ms（`tree-view:210-219` 的注释把这条写明了）。
 `AttachScrollViewer`/`SetTree`/`NotifyZoomCommitted`/`Changed` 都是生成产物上的公开成员，
-所以"模板不含入口"这件事的代价在这一家是**八个步骤的手写装配**。
+所以"模板不含入口"这件事的代价在这一家是**七个步骤的手写装配**。
 
 ### 2.3 跨条目的**编译期**耦合：tree 少生成一条兄弟就编译不过
 
@@ -125,7 +118,7 @@ selector 条目引用 `new NodeView()` / `new LinkView()`（`:18-19`）。
 | `gridBackground`（grid-decorator） | `DrawGrid` 只画线、**不填任何矩形**（`:36-55`）；背景由 surface 的 `Background`（`tree-view:25`）承担 |
 | `slotBackground`/`slotColor`/`slotBorderColor`/`slotPath`（slot-view，四个全空转） | 这个文件**一行绘制代码都没有**（§一·1）—— 它是端口数学 |
 | `minimapBackground`/`minimapBorder`/`nodeFill`/`viewportStroke`（minimap-overlay，四个全空转） | 产物是个**空子类**（`:9-13`），连一个 `Template*` token 都不含；颜色全在适配器的 `WorkflowMinimapOverlay` 默认值里 |
-| `surfaceBorderBrush`/`surfaceBorderThickness`/`surfaceCornerRadius`（tree-view） | 产物是 `Canvas` 子类，只设 `Background`（`:25`），没有边框/圆角面（对照：适配器的 `WorkflowTreeView` 才有 `PART_SurfaceBorder`，`WorkflowTreeView.cs:77-84`） |
+| `surfaceBorderBrush`/`surfaceBorderThickness`/`surfaceCornerRadius`（tree-view） | 产物是 `Canvas` 子类，只设 `Background`（`:25`），没有边框/圆角面 |
 
 ⇒ 补 `replaces` 在 Jalium 上是纯负收益（理由同 `../extension.md` §4.3）。
 本家 12 个 + Razor 7 个 = **24 个空转参数里有 19 个属于"没有绘制面"这一类**。
@@ -138,7 +131,7 @@ selector 条目引用 `new NodeView()` / `new LinkView()`（`:18-19`）。
 | link-view 复制成 `RulerReserve = 36`，注释**明确要求与上一条一起改** | `link-view:28-30` |
 | node-view **硬编码字面量** `+ 36`（注释说明与树的 `OriginX` 加的是同一个预留） | `node-view:157-160` |
 | tree-view 的 `OriginX/OriginY` = 布局偏移 + `GridDecorator.RulerThickness` | `tree-view:38-39` |
-| tree-view 把它喂给 `SetVirtualizeInset`（适配器那条路用的是装饰器实例的 `RulerBand`，`WorkflowSurfaceBehavior.cs:614`） | `tree-view:203` |
+| tree-view 把它喂给 `SetVirtualizeInset`（现在只有这一条路） | `tree-view:203` |
 
 ⇒ 改厚度要改**两处常量 + 一处字面量**；本家**没有**"绑定式"的那条路
 （WPF/Avalonia/WinUI/MAUI 是把 `TranslateTransform` 绑到 `PART_GridDecorator.RulerThickness`）。
@@ -166,18 +159,14 @@ selector 条目引用 `new NodeView()` / `new LinkView()`（`:18-19`）。
 `IsDragPreview`（`:136-137`）跳过两个端点都是 `SlotDefaultViewModel` 的拖拽预览 ——
 那条预览由 surface 自己在 `OnPostRender` 里画（`tree-view:330-334`），池里的 LinkView 必须让它过去。
 
-### P5 · "深缩放不丢连线"的守卫只存在于**模板产物**里
+### P5 · "深缩放不丢连线"的守卫在**模板产物**里
 
 `_zoomPin`（250 ms）+ `NotifyZoomCommitted` 这套 committed-target 守卫在 tree-view 里（`:52-60,153-178,220-239`），
-**适配器里没有**（全仓 `Src/Adapters/VeloxDev.Jalium/` 搜 `_zoomPin`/`NotifyZoomCommitted` 零命中），
-而适配器的 `WorkflowSurfaceBehavior.ZoomBy`（`WorkflowSurfaceBehavior.cs:344`）**不调虚拟化**。
-⇒ 走适配器 `SetZoomEnabled` 那条路时，缩放后要等 helper 的 ~10 fps 脏计时器才重算可见集
-（这正是 `tree-view:210-219` 注释里说的 ~100 ms 窗口）。demo 里两条路**并存**
-（窗口级 Ctrl+wheel `MainWindow.cs:145-152` 与 `SetZoomEnabled(surface, true)` `:60`）。
-**已核 2026-09-20：后者在这家是空操作** —— demo 从不调 `SetIsEnabled`,`StateProperty` 始终未设,
-`HookZoom`（`WorkflowSurfaceBehavior.cs:281-284`）必然早退（机理见上表第 6 步）。
-⇒ **真正生效的只有窗口级那一条**；"preview 返回 true 是否终止路由"只影响它自身会不会被重复处理,
-已不再是"二选一"。
+**适配器里没有**（全仓 `Src/Adapters/VeloxDev.Jalium/` 搜 `_zoomPin`/`NotifyZoomCommitted` 零命中）——
+适配器现在根本没有表面，六个画布角色行为已删除。
+⇒ 缩放与视口提交全在宿主侧：模板/demo 的 `TreeView` 自己维护这套守卫；demo 的窗口级 Ctrl+wheel
+（`MainWindow.cs:121-142,146-155`）算出提交目标后调 `surface.NotifyZoomCommitted(...)`（`:216,227`）。
+少了它，缩放后要等 helper 的 ~10 fps 脏计时器才重算可见集（这正是 `tree-view:210-219` 注释里说的 ~100 ms 窗口）。
 
 ### P6 · 类名与属性名的撞名（生成后第一件事通常是加别名）
 
@@ -201,7 +190,7 @@ selector 条目引用 `new NodeView()` / `new LinkView()`（`:18-19`）。
 
 | 结论 | 在哪 |
 |---|---|
-| `WorkflowTreeView` 的 `PART_*`/`RegisterName` 契约、`WorkflowSurfaceBehavior` 六个附着属性 | `memory/modules/WorkflowSystem/adapters/jalium.md` 与 `extension.md` §3.9 |
+| 表面 `RegisterName` 的硬要求、自装配/网格/视口的落点（模板产物 `TemplateClass.cs`） | `memory/modules/WorkflowSystem/adapters/jalium.md` 与 `extension.md` §3.9 |
 | 渲染器按布局盒裁剪（`Visual.ShouldRenderChild`）⇒ 自盒化的机制；纯模型数学；`_zoomPin` 的来龙去脉 | `memory/modules/WorkflowSystem/adapters/jalium.md` |
 | 缩放枢轴 / `EnsureNegativeCover` / `ClampScrollOffset` 的模型侧语义 | `memory/modules/WorkflowSystem/extension.md` §3.9 与 `../extension.md` §4.1 的 #13 |
 | 本家 12 个空转 symbol 的清单与 24 个的全局盘点 | `../architecture.md` §7.1 |

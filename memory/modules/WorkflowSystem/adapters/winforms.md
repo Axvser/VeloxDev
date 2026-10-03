@@ -118,7 +118,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 这家定义了 `GetPointerPressSourceName` / `SetPointerPressSourceName`（`WorkflowSurfaceBehavior.cs:336-357`），**四个地方在写**（`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-tree-view/TemplateClass.cs:159`、`Examples/Workflow/WinForms/Demo/Controls/WorkflowCanvas.cs:183`、`Examples/Workflow/WinForms/Demo/Form1.cs:22`、`Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.cs:162`），而**适配器里没有任何地方读它**（`GetPointerPressSourceName` 除了自身没有调用者；全仓库 `grep PointerPressSourceName` 在 `Src/Adapters/VeloxDev.WinForms/` 内只命中定义与 getter/setter）。
 
-其余六家**都**在宿主行为里解析它并据此挂拖拽/平移（WPF `WorkflowSurfaceBehavior.cs:210`、Avalonia `:182`、WinUI `:219`、MAUI `:290`、Jalium `:214`；Razor 无此 API）。⇒ **照着别家的模板写 `SetPointerPressSourceName(this, "PART_Canvas")` 在这家不会产生任何效果**，也不会报错。这家的平移/拖拽改由 `WorkflowNodeDragBehavior` 的整树挂钩与宿主自己的 pan 逻辑承担。
+其余四家（WPF `WorkflowSurfaceBehavior.cs:210`、Avalonia `:182`、WinUI `:219`、MAUI `:290`）**都**在宿主行为里解析它并据此挂拖拽/平移（Razor 无此 API；Jalium 的适配器行为已删除）。⇒ **照着别家的模板写 `SetPointerPressSourceName(this, "PART_Canvas")` 在这家不会产生任何效果**，也不会报错。这家的平移/拖拽改由 `WorkflowNodeDragBehavior` 的整树挂钩与宿主自己的 pan 逻辑承担。
 
 ### 4.2 `WorkflowCanvasTransformBehavior.GetTransform` 没有消费者（注释描述的是「能力」，不是现状）
 
@@ -132,7 +132,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 坐标宿主存在时，路径是 `slotControl.PointToClient(screenPoint)` → `SlotAnchorFromCanvasLocal`（`WorkflowSlotLayoutBehavior.cs:602-604`），注释 `:597-601` 写明理由：**`PointToClient` 得到的已经是画布客户区坐标（节点的 `Location` 里已经含 pan + `ActualOffset`），所以不能再减一次偏移；用 `SlotAnchorFromVisualCenter` 会把每条连线整体平移 `-ActualOffset`（只要设了 `NegativeOffset`，就是恒定的左上移位）。** 取不到坐标宿主时才退回 `SlotAnchorFromNode`（`:608-610`）。
 
-⇒ 这正是 `WorkflowSurfaceMath`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Math/WorkflowSurfaceMath.cs:207-213`）注释所说「选错是静默的偏移 bug」。**七家在这条上分三派，照抄前先看你测到的是哪个坐标系**：用 `SlotAnchorFromCanvasLocal` 的是这家、WinUI（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:402`）、MAUI（`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:465`）；用 `SlotAnchorFromVisualCenter` 的是 WPF（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:356`）与 Avalonia（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:284`）；Jalium 只走 `SlotAnchorFromNode` 一条（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:357`），Razor 直接 `new Anchor(...)` 不经过这三个函数（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:80`）。**「分三派」说的是「哪一个是插槽测量的主路径」，不是互斥** —— 除 Jalium 与 Razor 外，每家都还调了另外一两个（作退路或用在别的角色上），所以别按「这家只该出现这一个函数名」去搜。
+⇒ 这正是 `WorkflowSurfaceMath`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Math/WorkflowSurfaceMath.cs:207-213`）注释所说「选错是静默的偏移 bug」。**七家在这条上分三派，照抄前先看你测到的是哪个坐标系**：用 `SlotAnchorFromCanvasLocal` 的是这家、WinUI（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:402`）、MAUI（`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:465`）；用 `SlotAnchorFromVisualCenter` 的是 WPF（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:356`）与 Avalonia（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSlotLayoutBehavior.cs:284`）；Jalium 的插槽行为已删除（原走 `SlotAnchorFromNode`，现在适配器里这三个函数都没有调用者），Razor 直接 `new Anchor(...)` 不经过这三个函数（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:80`）。**「分三派」说的是「哪一个是插槽测量的主路径」，不是互斥** —— 除 Jalium 与 Razor 外，每家都还调了另外一两个（作退路或用在别的角色上），所以别按「这家只该出现这一个函数名」去搜。
 
 ### 4.5 反射是这家的主要接缝，改名即静默失效
 

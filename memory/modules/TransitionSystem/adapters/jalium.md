@@ -76,8 +76,8 @@
 ### 2.5 csproj：独一家 `net10.0` 无平台后缀 + 独一家抑制 `8605;8604`
 
 - `VeloxDev.Jalium.csproj:7` 是**单目标 `net10.0`，没有 `-windows` / `-android` 后缀**。七家里 WPF/WinForms 多目标 `netframework4.6.1;net5.0-windows;netcoreapp3.0`，Avalonia `netstandard2.0;net6.0`，MAUI `net10.0;net10.0-windows10.0.19041.0`，WinUI 两个 `-windows10.0.19041.0`，Razor 单目标 `net6.0`。⇒ **这不只是打包口味**：它决定了引用必须是"最低的、跨平台的"那个包 —— `Jalium.UI.Controls` 而不是 `Jalium.UI.Desktop`（理由写在 `VeloxDev.Jalium.csproj:4-6` 与 `:29-32` 的注释里），因此这家能同时服务 Windows / Linux / Android。
-- `VeloxDev.Jalium.csproj:12` 的 `NoWarn` 含 `8605;8604`，**七家只有这一家**（WPF 是 `1573`/`1591` 两条分开写，MAUI 只有 `CA1416`）。成因实测：去掉后重编，**CS8605**（拆箱可能为 null）来自约二十个附着属性的 CLR 包装（形如 `public static bool GetIsEnabled(DependencyObject e) => (bool)e.GetValue(IsEnabledProperty);`，`Attached/Workflow/WorkflowSurfaceBehavior.cs:79-97` 一整片），**CS8604**（可能为 null 的实参）来自递归下降的 `FindDescendantWithSlotDataContext`（`Attached/Workflow/WorkflowSlotLayoutBehavior.cs:417-430`）。
-  ⇒ 这是 **C# 侧的形状**（DP 包装约定 + 递归下降），不是 Jalium API 的问题 —— 同一份抑制放到别家也成立。改代码时别因为"别家不抑制"就删这两条，除非顺手把包装改成 `is bool b ? b : false` 那种形状。
+- `VeloxDev.Jalium.csproj:12` 的 `NoWarn` 含 `8605;8604`，**七家只有这一家**（WPF 是 `1573`/`1591` 两条分开写，MAUI 只有 `CA1416`）。**CS8605**（拆箱可能为 null）来自附着属性的 CLR 包装（形如 `public double X { get => (double)GetValue(XProperty); … }`，现存于 `Attached/Workflow/WorkflowMinimapOverlay.cs:43-52` 一族）；**CS8604**（可能为 null 的实参）的原触发点是已删除的 `WorkflowSlotLayoutBehavior` 里的递归下钻 `FindDescendantWithSlotDataContext` —— 该文件已删。
+  ⇒ 这是 **C# 侧的形状**（DP 包装约定），不是 Jalium API 的问题 —— 同一份抑制放到别家也成立。改代码时别因为"别家不抑制"就删这两条，除非顺手把包装改成 `is double d ? d : 0` 那种形状。
 
 ---
 

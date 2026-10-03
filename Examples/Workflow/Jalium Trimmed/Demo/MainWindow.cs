@@ -53,11 +53,10 @@ internal sealed class MainWindow : Window
         // until the viewer measures) instead of waiting for a ScrollChanged that may never fire.
         surface.AttachScrollViewer(viewer);
         surface.SetTree(tree);
-        // The surface behavior resolves the workflow tree from DataContext (SetTree only stores _tree).
+        // The pooled node/link views read their view model from DataContext, which Jalium inherits down the
+        // visual tree. Zoom is this window's own (OnPreviewWindowMouseWheel → ZoomBy).
         surface.DataContext = tree;
         _tree = tree;
-        // Ctrl + mouse-wheel zoom (the Core Anchor/Size getters collapse the nodes toward the origin).
-        WorkflowSurfaceBehavior.SetZoomEnabled(surface, true);
 
         var minimap = new MinimapOverlay
         {

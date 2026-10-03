@@ -8,11 +8,7 @@
 
 ## Writing the surface
 
-The attached properties match WPF, with one addition — zoom is an explicit call:
-
-```csharp
-WorkflowSurfaceBehavior.ZoomBy(host, viewModel, factor);
-```
+The adapter no longer ships a surface or its attached-property behaviors — the seven view-role behaviors were removed as dead code. The surface is the generated `workflow-tree-view` product (`TreeView : Canvas`) or a canvas subclass you write yourself. Zoom is the host's own call (the Trimmed demo keeps it in `MainWindow.ZoomBy`).
 
 ⚙ **Zoom is host-driven here.** The surface has to be told when a zoom is committed:
 
@@ -32,7 +28,7 @@ Canvas.SetLeft(view, collapsedAnchor.Horizontal + ActualOffset.Horizontal);
 Canvas.SetTop(view,  collapsedAnchor.Vertical   + ActualOffset.Vertical);
 ```
 
-The reason is written into the adapter: with the views at their final position, anchors, hit-testing and link geometry can never go stale. Do not "harmonise" it with the `RenderTransform` carrier the other XAML adapters use — `ViewManager` mirrors any transform onto the pooled views instead, so a transform set on the host never reaches them.
+The reason is the "world == model" contract: with the views at their final position, anchors, hit-testing and link geometry can never go stale. Do not "harmonise" it with the `RenderTransform` carrier the other XAML adapters use. (`ViewManager` / `ViewPool` still contain an `UpdateRenderTransforms` mirror, but nothing calls it — it is dead, so a transform set on the host never reaches the pooled views either.)
 
 ## Adding your own content to a node
 
@@ -40,7 +36,7 @@ The reason is written into the adapter: with the views at their final position, 
 
 ⚙ The `ScaledCenter` helper the Trimmed tree and the templates use to find a port's centre **exists only in Jalium**. It is not a shared type; do not go looking for it in Core or in another adapter.
 
-⚙ Port centres are computed **from the model** — `Canvas.GetLeft/Top` plus half the size — written through `SlotAnchorFromNode`. There is no coordinate host to measure against, so if you change how nodes are positioned you must keep that computation in step.
+⚙ Port centres are computed **from the model** inside `LinkView.PortCenter` (from the slot's parent node geometry; `Canvas.GetLeft/Top` plus half the size). There is no coordinate host to measure against — and the adapter has no port-layout behavior any more — so if you change how nodes are positioned you must keep that computation in step.
 
 ## Links — self-bounding geometry
 
