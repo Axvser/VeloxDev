@@ -69,37 +69,14 @@ public partial class WorkflowView : UserControl
                 using var reader = new StreamReader(stream);
                 var json = await reader.ReadToEndAsync();
                 var result = json.Deserialize<TreeViewModel>();
-                // Preserve the saved OriginSize and viewport position.
+                // The surface restores the saved viewport position by itself when the tree is attached below.
                 result.Layout.UpdateCommand.Execute(null);
-                var vpX = result.Layout.ViewportOffset.Horizontal;
-                var vpY = result.Layout.ViewportOffset.Vertical;
 
                 UnsubscribeAutoScroll(_workflowViewModel);
                 _workflowViewModel = result;
                 DataContext = _workflowViewModel;
                 SubscribeAutoScroll(_workflowViewModel);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-                _ = Dispatcher.InvokeAsync(() =>
-                {
-                    var sv = this.FindName("PART_ScrollViewer") as System.Windows.Controls.ScrollViewer;
-                    if (sv is not null)
-                    {
-                        var offset = _workflowViewModel.Layout.ActualOffset;
-                        if (vpX > 0 || vpY > 0)
-                        {
-                            sv.ScrollToHorizontalOffset(Math.Max(0, vpX + offset.Horizontal));
-                            sv.ScrollToVerticalOffset(Math.Max(0, vpY + offset.Vertical));
-                        }
-                        else
-                        {
-                            var layout = _workflowViewModel.Layout;
-                            var centerX = layout.ActualSize.Width / 2.0;
-                            var centerY = layout.ActualSize.Height / 2.0;
-                            sv.ScrollToHorizontalOffset(Math.Max(0, centerX - sv.ViewportWidth / 2.0));
-                            sv.ScrollToVerticalOffset(Math.Max(0, centerY - sv.ViewportHeight / 2.0));
-                        }
-                    }
-                }, System.Windows.Threading.DispatcherPriority.Loaded);
 
                 MessageBox.Show($"Workflow loaded successfully from {dialog.FileName}.", "Load succeeded",
                     MessageBoxButton.OK, MessageBoxImage.Information);

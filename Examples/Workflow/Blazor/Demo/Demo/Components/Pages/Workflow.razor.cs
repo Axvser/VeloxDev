@@ -270,16 +270,8 @@ public partial class Workflow : ComponentBase, IDisposable
             _session = WorkflowDemoSession.FromTree(tree);
             SubscribeSession();
             UpdateCanvasSize();
+            // The surface restores the saved viewport position by itself when the new tree reaches it.
             StateHasChanged();
-
-            // Restore the saved viewing position (mirrors the XAML demos, which read
-            // Layout.ViewportOffset after loading and scroll to it).
-            var vp = _session.Tree.Layout?.ViewportOffset;
-            if (vp is { } viewport && (viewport.Horizontal > 0 || viewport.Vertical > 0))
-            {
-                await Task.Delay(120); // let the surface lay out the canvas first
-                await JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", "wf-scroll", viewport.Horizontal, viewport.Vertical);
-            }
         }
         catch { }
     }

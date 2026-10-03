@@ -677,11 +677,9 @@ internal sealed class MainWindow : Window
             return;
         }
 
-        var vpX = result.Layout.ViewportOffset.Horizontal;
-        var vpY = result.Layout.ViewportOffset.Vertical;
-
         UnsubscribeTree(_tree);
         _tree = result;
+        // The surface restores the saved viewport position by itself when the tree is attached here.
         _surface.SetTree(_tree);
         SubscribeTree(_tree);
 
@@ -689,19 +687,6 @@ internal sealed class MainWindow : Window
         // have nothing to act on and fall back to their idle state.
         _demo = null;
         RefreshRunControls();
-        _ = _uiDispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
-        {
-            var offset = _tree.Layout.ActualOffset;
-            if (vpX > 0 || vpY > 0)
-            {
-                _surfaceViewer.ScrollToHorizontalOffset(Math.Max(0, vpX + offset.Horizontal));
-                _surfaceViewer.ScrollToVerticalOffset(Math.Max(0, vpY + offset.Vertical));
-            }
-            else
-            {
-                CenterViewport();
-            }
-        }));
     }
 
     // ── MCP ─────────────────────────────────────────────────────────────────

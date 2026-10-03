@@ -114,13 +114,9 @@ namespace Demo.Views
                     return;
                 }
 
-                // Preserve the saved OriginSize (do not shrink via AdaptTo) so
-                // the Canvas dimensions match the content extent.  Restore the
-                // saved viewport position, or center if this is a first load.
-                var layout = result.Layout;
-                layout.UpdateCommand.Execute(null);
-                var vpX = layout.ViewportOffset.Horizontal;
-                var vpY = layout.ViewportOffset.Vertical;
+                // The saved OriginSize stays as it is (no AdaptTo shrink), and the surface restores the
+                // saved viewport position by itself when the tree is attached below.
+                result.Layout.UpdateCommand.Execute(null);
 
                 UnsubscribeAutoScroll(ViewModel);
                 ViewModel = result;
@@ -128,25 +124,6 @@ namespace Demo.Views
                 SubscribeAutoScroll(ViewModel);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
 
-                // Restore the saved viewport, or center if no saved position.
-                if (this.FindName("PART_ScrollViewer") is ScrollViewer sv)
-                {
-                    if (vpX > 0 || vpY > 0)
-                    {
-                        var offset = layout.ActualOffset;
-                        sv.ScrollToHorizontalOffset(Math.Max(0, vpX + offset.Horizontal));
-                        sv.ScrollToVerticalOffset(Math.Max(0, vpY + offset.Vertical));
-                    }
-                    else
-                    {
-                        var centerX = layout.ActualSize.Width / 2.0;
-                        var centerY = layout.ActualSize.Height / 2.0;
-                        var vpW = sv.ViewportWidth;
-                        var vpH = sv.ViewportHeight;
-                        sv.ScrollToHorizontalOffset(Math.Max(0, centerX - vpW / 2.0));
-                        sv.ScrollToVerticalOffset(Math.Max(0, centerY - vpH / 2.0));
-                    }
-                }
                 await ShowMessageAsync("Load Succeeded", $"Workflow loaded from {file.Name}.", "OK");
             }
             catch (Exception ex)

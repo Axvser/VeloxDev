@@ -188,18 +188,6 @@ public partial class WorkflowView : ContentView
             oldSession.Controller.ResumeCommand.Exited -= OnRunCommandExited;
         }
 
-        // Capture ViewportOffset BEFORE setting BindingContext, because
-        // BindingContext change triggers OnBindingContextChanged →
-        // Refresh → UpdateVisibleRegion, which overwrites ViewportOffset
-        // to the current (pre-restore, 0,0) scroll position.
-        var savedVpX = 0d;
-        var savedVpY = 0d;
-        if (newSession is not null)
-        {
-            savedVpX = newSession.Tree.Layout.ViewportOffset.Horizontal;
-            savedVpY = newSession.Tree.Layout.ViewportOffset.Vertical;
-        }
-
         _workflowViewModel = newSession?.Tree ?? new TreeViewModel();
         // MAUI propagates BindingContext through the visual tree automatically,
         // so setting it on the ContentView root is sufficient. Do NOT set
@@ -228,37 +216,6 @@ public partial class WorkflowView : ContentView
         }
 
         RefreshRunControls();
-
-        // Delay refresh to after layout settles, then restore the saved viewport
-        // position (or center the content if no saved position exists).
-        MainThread.BeginInvokeOnMainThread(() =>
-        {
-            if (newSession is not null)
-            {
-                if (savedVpX > 0 || savedVpY > 0)
-                {
-                    // RequestViewportRestore internally calls Refresh then queues
-                    // a deferred scroll via ApplyPendingScrollRestore. The deferred
-                    // scroll uses await Task.Yield() which gives MAUI time to finish
-                    // the layout pass before scrolling.  This is more reliable than
-                    // calling ScrollToAsync directly while layout is still pending.
-                    WorkflowBehaviors.WorkflowSurfaceBehavior.RequestViewportRestore(this, savedVpX, savedVpY);
-                }
-                else
-                {
-                    // First load — center the content.
-                    WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-                    var layout = newSession.Tree.Layout;
-                    var centerX = layout.ActualSize.Width / 2.0;
-                    var centerY = layout.ActualSize.Height / 2.0;
-                    var vpW = PART_ScrollViewer.Width > 0 ? PART_ScrollViewer.Width : 100;
-                    var vpH = PART_ScrollViewer.Height > 0 ? PART_ScrollViewer.Height : 100;
-                    PART_ScrollViewer.ScrollToAsync(
-                        Math.Max(0, centerX - vpW / 2.0),
-                        Math.Max(0, centerY - vpH / 2.0), false);
-                }
-            }
-        });
     }
 
     private void SubscribeAutoScroll(TreeViewModel vm)
