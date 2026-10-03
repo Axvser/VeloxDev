@@ -130,6 +130,13 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 因为只有捕获所有者能收到越界事件（`WorkflowMinimapOverlay.cs:94-108`、`:205-293`）；并且 Windows 上
 `EndInteraction` 必须**直接 return**（`:574-579`）—— MAUI 指针一离开小地图就报 `EndInteraction`，而拖拽还没结束。
 
+**视口往返（2026-10-03 接上挂树口）**：这家本来就有整套恢复机（`RequestViewportRestore` → 调度器 +
+`Task.Yield` + `ToScreen` + clamp），但它只对宿主开放，宿主不调就不恢复。现在
+`Attach`/`OnLoaded`/`OnBindingContextChanged` 三处都会 `CaptureViewportRestore`（树引用变了才算，
+且必须在 `Refresh` **之前** —— 那次 `UpdateVisibleRegion` 会把它覆盖成本地 (0,0)）。同一轮还修了一处坐标
+不一致：持久化过去写原始滚动值、恢复却按世界坐标处理，`ActualOffset ≠ 0` 时会加两次；现在两侧都写世界。
+见 [../extension.md](../extension.md) §3.9-10。
+
 ---
 
 ## 三、与其它家的刻意背离

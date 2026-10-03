@@ -48,6 +48,7 @@
 |---|---|---|
 | `CanvasLayout.ActualOffset` / `ActualSize` | `CanvasLayout.Update()`（`GUI/GeometryModels/CanvasLayout.cs:93`） | 由 `OriginSize` / `PositiveOffset` / `NegativeOffset` / `Scale` 的 partial 变更钩子驱动（`:117-122`）。适配器只能写那四个，**不能直接写 Actual\*** |
 | `TreeHelper.Viewport` | 适配器（`TreeHelper<T>.OnViewportChanged` 同步虚拟化，`Templates/Helpers/TreeHelper.cs:97`） | 坐标系是**画布局部** |
+| `CanvasLayout.ViewportOffset` | 适配器，两个方向各一处：滚动时写回、挂树时读出来恢复 | 坐标系是**世界**（与 `ActualOffset` 差一个平移，见 `WorkflowSurfaceMath.ViewportOffsetFromScroll` / `ViewportRestoreScroll`）。成对才有意义，见 [extension.md](extension.md) §3.9-10 |
 | `TreeHelper.VisibleItems` | `WorkflowSpatialEx.VirtualizeCore`（`GUI/Virtualization/WorkflowSpatialEx.cs:119`） | 任何地方直接改它都会让空间索引与可见集脱钩 |
 | `slot.Anchor` | 适配器的 slot-layout 行为，在 render 优先级下异步测量后写入 | 见 `GUI/Rendering/WorkflowSlotUpdateGate.cs:1-16` 的长注释 |
 | `VirtualLink` | `StandardSendConnection` / `StandardResetVirtualLink`（`StandardEx/WorkflowTreeEx.cs:97,173`） | `VirtualLink.Sender/Receiver` 的 Anchor 被直接赋值，不走 setter |

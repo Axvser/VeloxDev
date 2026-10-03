@@ -116,6 +116,13 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 浏览器下滚是正 `deltaY`，翻成负数 = 缩小），一格固定 ±120。
 **这条容易在改 JS 时被反向**：`deltaY` 与 `wheelDelta` 的正方向相反，谁在哪一层翻号必须两边一致。
 
+**视口往返（2026-10-03 接上）**：滚动是 JS 独占的，所以恢复是「C# 取、JS 滚」。`OnParametersSet` 里
+`CaptureViewportRestore`（`Tree` 引用变了才算），首帧作为两个新增的可选尾参交给 `initSurface`（在
+`ensureRulerReserve()` 之后、首次 `report()` 之前应用，免得第一份上报是原点），之后换树走 `scrollToPosition`。
+坐标要加本家那段 ruler 超出预留的平移 —— 与 `OnSurfaceScroll` 里 effX/effY 同式。
+**`scrollToPosition` 收的是像素滚动位置、不是世界坐标**，它此前的注释写反了（demo 也照错的用）。
+见 [../extension.md](../extension.md) §3.9-10。
+
 ---
 
 ## 三、与其它六家的刻意背离

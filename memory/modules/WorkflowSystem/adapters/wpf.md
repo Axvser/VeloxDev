@@ -139,6 +139,9 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 11. **`UpdateGridDecorator` 必须把 `RulerBand` 转发给虚拟化内缩**（`:597-615`，`:613` 的 `viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand)`），否则浮在顶/左边的标尺下面那些节点会被判为不可见。这是 extension.md §3.8 那条「`RulerBand` 要转发」在这家的具体落点，**照抄时最容易只抄 `ScrollOffset*` 三个赋值而漏掉这一行**。
 
 12. **`UpdateVisibleRegion` 同时写 `Viewport` 和 `Layout.ViewportOffset`**（`:577-595`，后者在 `:594`）—— 后者是为了序列化往返保留视口位置。⇒ 只写 `Viewport` 的话视图是对的，但保存再加载会丢掉「上次看到哪」。
+    2026-10-03 起另一半也在这家：`Refresh` 里 `CaptureViewportRestore`（在 `UpdateVisibleRegion` **之前**取值）+
+    `QueueViewportRestore`（末尾排 `Dispatcher.BeginInvoke(…, DispatcherPriority.Loaded)`），滚到
+    `ViewportRestoreScroll` 并按 `ClampValue` 夹到 `GetHorizontalScrollMaximum`。宿主不再自己滚。见 [../extension.md](../extension.md) §3.9-10。
 
 13. **悬停连线会让画布自己滚一段 —— 是「取焦点」带来的 WPF 默认行为，不是本仓库的代码。** 连线视图在指针进入、或指针落到线身上时 `Focus()`（`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs:102`、`:479`；焦点是 `OnKeyDown` 的 Delete 需要的，`:483`）；WPF 的 `FrameworkElement` 在获得焦点时替它请求 `RequestBringIntoView`，`ScrollContentPresenter` 的类处理照办 ⇒ `ScrollViewer` 偏移跳变，**与按键无关**（实测 `left=Released`）。跳多远由当时的偏移与 extent 决定，不是固定值：连线视图的尺寸绑的是祖先 `Canvas`（`Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml:68-69`）⇒ 它的包围盒就是整块画布。
 

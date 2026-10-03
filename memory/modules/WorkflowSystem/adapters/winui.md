@@ -26,6 +26,10 @@
 
 契约要求「`Viewport` 是画布局部坐标、且只有适配器写」：这一家写在 `WorkflowSurfaceBehavior.ApplyVisibleRegion`
 （`:607-625`，同时写 `Layout.ViewportOffset`），触发链路是 `UpdateVisibleRegion` → `ApplyVisibleRegion`。
+2026-10-03 起挂树时也恢复：`CaptureViewportRestore` 在 `Refresh` 里取值（持久化是延后的，所以读模型即可），
+恢复借它既有的 `DispatcherQueue` Low 队列 —— 而且**跳过那一轮的 `ApplyVisibleRegion`**，因为 `ChangeView`
+是异步的，此刻读到的还是旧偏移，写回去就抹了存档位置；让落地后的 `ViewChanged → Refresh` 去写。
+见 [../extension.md](../extension.md) §3.9-10。
 契约要求「连线视图首行过渲染就绪门」：那行在视图侧。本家两个 demo 的实现不同 ——
 `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/LinkView.xaml.cs` 只有 `CanRender`（绑定到 `IsVisible`），
 **没有 NaN 那半**；`Examples/Workflow/WinUI/Demo/Views/Workflow/PolylineCurveView.xaml.cs` 的 `RenderReady`

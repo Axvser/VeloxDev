@@ -83,6 +83,11 @@
 - `WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay.cs:15`），`RulerBand => 0`（`:48`）。**两个角色的 `RulerBand` 语义不同**：装饰器返回标尺厚度（它占了一条视觉带），小地图返回 0（它不是标尺）。两者都转发给 `WorkflowSpatialEx.SetVirtualizeInset` —— 装饰器那条在 `WorkflowSurfaceBehavior.cs:614`，小地图那条靠 `UpdateMinimapOverlay`（`:618-632`）不设 inset，所以它返回什么都无所谓。⇒ **有标尺的那家（装饰器）必须让 `RulerBand` 有值，否则标尺下面的节点看不见**（`extension.md` §3.8 同结论）。
 - `WorkflowMinimapOverlay.cs:244-262` 的 `OnMiniMouseDown` 先置 `_dragging` 再 `PanToMini(...)` ⇒ **单击即居中**（不是"拖才动"）。这是小地图的既定语义，与 WPF 那份同款，**不是背离**。
 
+**视口往返（2026-10-03 接上）**：`Refresh` 里 `CaptureViewportRestore`（在 `UpdateVisibleRegion` 之前）
++ `QueueViewportRestore`（末尾 `Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(…))` ——
+本家 `BeginInvoke` 是优先级在前，与 WPF 相反）。夹取用 `ScrollViewer.ScrollableWidth/Height`，本家没有
+`GetHorizontalScrollMaximum` 那种包装。见 [../extension.md](../extension.md) §3.9-10。
+
 ---
 
 ## 三、与其它六家的差异

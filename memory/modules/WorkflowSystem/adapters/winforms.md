@@ -146,6 +146,14 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 ⇒ **改宿主控件（模板或 demo）的成员名时，这里一定一起改；而且不会有任何编译错误或运行时异常提醒你。**
 
+**视口往返在这家是 2026-10-03 才补齐的**：此前 `Refresh` 只推 `helper.Viewport`，既不持久化
+`Layout.ViewportOffset`、也没有挂树恢复 —— 七家里唯一两半都缺的。现在：
+写回用 `WorkflowSurfaceMath.ViewportOffsetFromScroll`，**只在 `ResolveScrollOffset` 走真实 pan 来源时写**
+（`out bool measured`）—— 上表那一行说的「退回 `ViewportOffset`」那条兜底不能用，写回去就是枢轴漂移那个坑；
+恢复是 `CaptureViewportRestore`（`Refresh` 里、写 Viewport 之前）+ `QueueViewportRestore`（`BeginInvoke`；
+**句柄还没创建时不清标记**，等既有的 `HandleCreated`/`InitialSync` 再走一次 `Refresh` 排队）。
+见 [../extension.md](../extension.md) §3.9-10。
+
 ### 4.6 应用级消息过滤器的两个副作用
 
 `WorkflowSurfaceBehavior.SetZoomEnabled` 里挂的 `state` 是**每个已启用控件一个**（`Application.AddMessageFilter(state)`，`:190`），而 `WorkflowSlotConnectionBehavior` 的 `_messageFilter` 是**进程唯一**（`:31`）。⇒ 同时启用多个工作流表面时：缩放的过滤器会各收一份（靠 `ResolveSurfaceHost(m.HWnd)` 归位，`:47-51`），连线只认最后 `EnsureMessageFilter` 那次挂上的那一个，而它的归属靠静态 `_activeConnection` 决定（`:31-32`）。**多表面同时拖连线不是被设计覆盖的场景。**

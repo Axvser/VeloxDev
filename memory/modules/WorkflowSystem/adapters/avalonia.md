@@ -177,6 +177,10 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 4. **`IsScrollInertiaEnabled="False"`**（demo 的 `PART_ScrollViewer`，`TreeView.axaml:41`）：这家自建了完整的平移逻辑（`WorkflowSurfaceBehavior` 的 `IsPanning`/`PanStartOffset`），滚动惯性会与它抢同一组指针事件。抄 demo 时别把这一行删了。
 5. **`_templateMap` 按 ViewModel 类型永久缓存模板**（`ViewManager.cs:230-233`），后来才加进 `Application.DataTemplates` 的模板不会被重新解析；同类型换模板（例如主题切换换掉 DataTemplate）也不会生效。这不是 bug 而是缓存策略，但改模板相关行为时要知道它在那儿。
 6. **`WorkflowSurfaceBehavior` 的刷新是 `ScrollChanged` 驱动的**：`OnScrollChanged`（`:431-439`）→ `Refresh(host)`（`:90`）→ `UpdateVisibleRegion`（`:507-523`），而 `UpdateVisibleRegion` 每次都会写 `viewModel.Layout.ViewportOffset`（`:522`）。**`Viewport` 是画布局部坐标、只有适配器写它**这条契约（`extension.md` §3.9-3）在这家由这一处落地；不要在别处再写一次 `Viewport`。
+   2026-10-03 起 `Refresh` 里还多了一对：`CaptureViewportRestore`（在 `UpdateVisibleRegion` **之前**取
+   `Layout.ViewportOffset`）+ `QueueViewportRestore`（末尾 `Dispatcher.UIThread.Post(…, DispatcherPriority.Loaded)`，
+   滚到 `ViewportRestoreScroll` 并按 `ClampValue` 夹到 `GetHorizontalScrollMaximum`）。宿主不再自己滚，
+   也不要再自己写 `ViewportOffset` 恢复 —— 见 [../extension.md](../extension.md) §3.9-10。
 7. **`ApplyLayout` 每次都新建 `TransformGroup` + `TranslateTransform`**（`:491-500`），并先设 `Canvas.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative)`（`:491`）。缩放/平移期间这是每帧一次的分配 —— 与 WPF 同形，属于已知代价；若要优化，注意 `RenderTransformOrigin` 必须保持 `(0,0)`，否则 `ActualOffset` 的语义就变了。
 8. **`TranslatePoint` 在这家返回 `Point?`**（未挂到同一视觉树根时为 null）。所有测量点都要处理 null：`WorkflowSlotLayoutBehavior.cs:281-287`（有坐标宿主时）与 `:290-297`（回退到 `SlotAnchorFromNode`）。**别把这两条回退路径合成一条**：前者用 `SlotAnchorFromVisualCenter` + 宿主 `CanvasLayout`，后者用 `SlotAnchorFromNode`，坐标系不同（`extension.md` §3.9-5 要求按测量到的坐标系三选一）。
 9. **`SyncSlot` 在 `Bounds` 未测量时直接返回**（`:276`：`control.Bounds.Width <= 0 || control.Bounds.Height <= 0`）。这是这家版的「NaN 锚点 = 未测量」门（Core 那边是 `WorkflowSlotUpdateGate`）；**不要**在这里改成「用 0 兜底」，那会让连线先在节点原点画一帧再跳走。

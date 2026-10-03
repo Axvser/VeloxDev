@@ -165,6 +165,9 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 7. **一次缩放的提交顺序**：枢轴 → `Scale` → `EnsureNegativeCover` → 重布局 → `PivotCenterScroll` → `ClampScrollOffset`（`GUI/Math/WorkflowSurfaceMath.cs:403` 的时序约束）。
 8. **既有默认实现可以直接复用**：`TreeDefaultViewModel` / `NodeDefaultViewModel` / `SlotDefaultViewModel` / `LinkDefaultViewModel`（`Templates/ViewModels/`）。一家适配器**不需要**定义新的 ViewModel 类型。
 9. **适配器不引用其它适配器**，也没有共享适配器基类 —— 七家各写各的（`Src/Adapters/VeloxDev.*/Attached/Workflow/`）。能从自家平台 API 拿到的东西不要去 Core 里加开关。
+10. **视口位置必须成对：滚动时写回，挂树时恢复。** 写回用 `WorkflowSurfaceMath.ViewportOffsetFromScroll`（世界坐标），恢复用 `ViewportRestoreScroll` + `ClampValue`，各自的逆函数就是对方。**缺一半都算没实现**：只写不恢复 = 存了白存（宿主加载回来停在原点）；只恢复不写 = 存下来的是空。判据用 `HasViewportRestore`（默认 (0,0) 与亚像素不算）。
+    **时序是硬要求**：适配器自己第一次 `Refresh`/`UpdateVisibleRegion` 会用控件当前（还没滚过去的）位置**覆盖** `ViewportOffset`，所以捕获必须在它之前。参考实现见七家各自的 `CaptureViewportRestore` + 一个延后队列（`Dispatcher`/`DispatcherQueue`/`MainThread`/`BeginInvoke`/`OnAfterRenderAsync` 各按平台）；每次换树只恢复一次，用树引用去重（`LastRestoreTree`）。
+    **适配器不做「没存档就居中」** —— 那是宿主的 UX 决定。
 
 **注册在哪：**
 

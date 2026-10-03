@@ -140,6 +140,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`（grep `Src/Core/VeloxDe
 ### 3.5 谁写 Core 模型：只有一处
 
 整份 1203 行的 `WorkflowSurfaceBehavior` 里，**写 Core 模型状态的只有 `ApplyVisibleRegion`（`:1073-1116`）**：`viewModel.GetHelper().Viewport = new Viewport(...)`（`:1107-1110`）与 `viewModel.Layout.ViewportOffset = new Offset(...)`（`:1113-1115`）。它上游是 `UpdateVisibleRegion`（`:1051-1071`），用 `MainThread.BeginInvokeOnMainThread` 把一帧内的多次请求**合并成一次**（守卫 `IsVisibleRegionUpdateQueued` `:1053`，回调里还要再验一次 `GetIsEnabled` 与 `State` 身份，`:1061-1066`）。
+2026-10-03 起**写进去的是世界坐标**（此前写的是原始滚动值，而恢复路径按世界处理 —— `ActualOffset ≠ 0` 时会加两次）。同轮接上了挂树恢复：`Attach`/`OnLoaded`/`OnBindingContextChanged` 三处 `CaptureViewportRestore` → 复用既有 `RequestViewportRestore` 的延后机（`WorkflowSystem/extension.md` §3.9-10）。
 
 装饰器/小地图的偏移是**另一条路**：`ApplyLayout`（`:785-824`）在**每次** Refresh 里直接从 `ScrollViewer.ScrollX/Y` 写一遍（`:820-821`），而 `ApplyVisibleRegion` 又写第二遍（`:1102-1103`）。这不是重复劳动 —— `:817-819` 的注释说明第二次写是免费的（两个 overlay 都合并重绘），而第一遍保证**平移途中**网格与内容同帧一致。
 
