@@ -149,14 +149,20 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
    每一项的落位由 `ViewManager` 每帧 `AbsoluteLayout.SetLayoutBounds`（`ViewManager.cs:387-409`）写。
    **照抄点**：`view-layer.md:50-61` 那条「变换绑定必须挂在 `DataTemplate` 根上」的坑在 MAUI 上**不适用** ——
    这里根本没有那个附着属性可绑。
-2. **链接是「一层」而不是「每线一视图」，且这一层是本家唯一的链接动画宿主。** 枚举源与其余六家同源
-   （Core 的可见集），差别只在喂给谁：别家把可见集喂给每线一视图，本家喂给这唯一一层。
-   这与 WPF/Avalonia/WinUI 的每线一视图（demo 的 `PolylineCurveView`，光带写 `GradientStops[i].Offset` / `.Color`）是两条不同路线：
-   本家把 `FlowBrush` 换成两个标量 `BandCentre`/`BandMix`，由**一个** `Transition<WorkflowLinkOverlay>` 链驱动
-   （`WorkflowLinkOverlay.cs:106-126`、`:145-172` 三段 450/700/450ms 结尾 `Repeat(int.MaxValue)`、`:175-186` 起动、`:189-190` 停止），
-   每帧所有线读同一对值（`:393-394`）。**所以本家没有「每条线各自起一条链」的问题，也不该照抄那份做法**。
-   视图池因此只物化节点：模板选择器里只有 `NodeTemplate`，`LinkTemplate` 已废
-   （`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml:14-17`）。
+2. **连线正在从「一层」走向「每线一视图」，两条路线现在同时在仓库里（2026-10-03 起）。**
+   `WorkflowLinkOverlay` 原本是唯一的连线宿主：画全部可见连线 + 唯一的光带动画宿主 + 收指针。现在它多了一条判据：
+   **一条连线的曲线如果带着 `Visual` 被发布（视图调了 `PublishCurve(curve, this)`），这一层就跳过它** ——
+   `WorkflowLinkOverlay.cs` 的 `LinkOverlayDrawable` 里那句 `if (link.HitTarget()?.Visual is not null) continue;`。
+   于是：
+   - **MAUI Trimmed demo（= 模板产物）已是每线一视图**：`Demo/Controls/Workflow/LinkView.xaml(.cs)` 是一个
+     `ContentView` 包两条 `Microsoft.Maui.Controls.Shapes.Path`（本体 + 光晕），由 `ViewPool` 按
+     `Helper.VisibleItems` 物化（节点与连线共用一个池，选择器同时给 `NodeTemplate` 与 `LinkTemplate`）。
+     它发布曲线、实现 `ILinkHighlight`，**自己不处理任何输入**。
+   - **完整版 demo 仍是「一层」**：它没有每线视图，于是 overlay 照旧画全部连线 —— 包括光带。
+   两条路线共用同一个 hub（`LinkInteraction.For(tree)`）与同一份命中几何，所以交互行为一致。
+   **光带仍然只有 overlay 有**（`BandCentre`/`BandMix` 两个标量 + `Transition<WorkflowLinkOverlay>`，
+   三段 450/700/450ms 结尾 `Repeat(int.MaxValue)`）：每线视图要光带就得自己按弧长画彗星，**还没做**。
+   ⇒ 改这块前先看 `LinkView.xaml.cs` 顶部那段注释，别把 overlay 的跳过判据删掉（删了就是每条线画两遍）。
 3. **流光的颜色规则是「本色往白里提」，不是换色**：线体本身是静息的暗线（本色 alpha 降到 55%，`:867`），
    彗星的每段由本色与白按它在尾上的位置插值、透明度按位置平方衰减、再叠一层更宽更淡的光晕
    （`WorkflowLinkOverlay.cs:400-432`）。与 `view-layer.md:104-107` 的通则一致，但本家的实现落点在 overlay 的两个标量上。
@@ -211,6 +217,28 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:547-551`）：`StartInteraction`
 11. **给链接层加「可见集之外也要补画」的兜底**（最典型的是把全量 `tree.Links` 再拉回来做差分）→ 又和其余六家分叉，
     而且不需要：新连线进可见集的时机就是 Core 的「量完才画」，与 WinUI 那条修好的行为一致。这条窗口真出问题时
     要报出来，不是在绘制侧绕过。
+12. **每线视图（`LinkView`）的盒子：`Path` 只画在自己的布局槽里，落在槽外的几何被整段裁掉 —— 而且不报错。**
+    2026-10-03 实测，踩了一路，四条一起记住：
+    - 几何必须按**视图盒子自己的原点**换算。画布局部坐标常常是负的（demo 的端口就在 `(101,−53)`），
+      所以「视图铺满画布 `(0,0,W,H)` + 几何直接用画布坐标」等于把每条 y 为负的连线画到盒子外 —— **一条都看不见**。
+    - `Aspect="None"` 是**生效**的（几何不会被拉伸去填盒子）。别信「MAUI 一定 stretch」的猜测，实测是不拉。
+    - **盒子不能每帧跟着曲线包围盒走**。写 `AbsoluteLayout.SetLayoutBounds` 是能生效的，但一帧一变时
+      视图会停在一两个状态之前的盒子上（实测），正在拖动的橡皮筋因此整条消失。
+      现在做法是 `LinkView.EnsureBox`：盒子 = 画布 + `BoxMargin`(2048) 的余量，只有连线跑出这个区域才长大一次。
+    - **`ViewManager.ApplyLayout` 对连线的分支必须保持「不写 bounds」**（`ViewManager.cs` 里那段），
+      否则池子会把盒子刷回画布尺寸，把上面两条一起作废。
+13. **橡皮筋（虚拟连线）在本家的 Trimmed demo 里从来没画出来过** —— 2026-10-03 用 `git stash` 回到改动前实测确认，
+    不是每线视图引入的回归。别把它当成新 bug 去查（要修另开一轮：它的 `IsVisible` 会翻真，但两端锚点与绘制的对齐没人验过）。
+14. **⚠ 未修：每线视图的高亮改完不重画（2026-10-03 实测，重复 5+ 次）。** 现象与已知的边界：
+    - hub 的 `AutoHighlight` **确实**把 `IsHighlighted` 置到了**正在画这条线的那一个实例**上
+      （临时日志：`paint#<hash> hl=True bc=True` 是最后一行），`LinkView.ApplyPaint` 也确实跑了；
+    - 而屏幕**一个像素都不变**（同一帧序列里 rest→hover 逐像素差 = 0；同一串动作改成按 Delete，差 = 1574）；
+    - 试过且**都无效**：换新画刷、`PART_Halo.IsVisible` 开关、重挂一个新 `Data` 实例、`InvalidateMeasure()`；
+    - 反面对照：模型变了（Delete 把连线移出可见集）立刻重画 —— 也就是说重画是被**池子的布局那一路**带出来的，
+      视图自己改属性带不出来。
+    ⇒ 结论：这一步卡在「视图自身的属性变化没有变成 WinUI 的一次重绘」，**不是** hub 或契约的问题。
+    下一步该查的方向：MAUI 的 `ShapeViewHandler` 在这条嵌套（`AbsoluteLayout` 里的 `ContentView` → `Grid` → `Path`）下
+    是否把属性映射吃掉了，或改用「把高亮做成另一层/另一种元素」绕开它。
 
 ---
 

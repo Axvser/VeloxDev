@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- VeloxDev customization: Customize line geometry, color and thickness in the code-behind. -->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:shapes="clr-namespace:Microsoft.Maui.Controls.Shapes;assembly=Microsoft.Maui.Controls"
+             x:Class="Demo.Controls.LinkView"
+             InputTransparent="True">
+    <!-- Two passes of the same curve: a wide faint halo under the body, so a highlighted link reads
+         as lit rather than recoloured. Both are vector shapes (not a GraphicsView), and Aspect="None"
+         keeps them where the code-behind put them — no GraphicsView means no texture cap on deep zoom. -->
+    <Grid>
+        <shapes:Path x:Name="PART_Halo" Aspect="None" InputTransparent="True" />
+        <shapes:Path x:Name="PART_Curve" Aspect="None" InputTransparent="True" />
+    </Grid>
+</ContentView>

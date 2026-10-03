@@ -7,9 +7,11 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// Viewport-sized single-draw link overlay for a workflow surface. Renders the tree's visible
-/// links (plus the in-progress virtual connection) in ONE <see cref="GraphicsView"/> draw pass that
-/// lives in the decorator's coordinate space — the same frame the grid and ruler use.
+/// Viewport-sized link layer for a workflow surface. Renders in ONE <see cref="GraphicsView"/> draw pass,
+/// in the decorator's coordinate space — the same frame the grid and ruler use — the links that have no
+/// view of their own: the immediate-mode hosts (one surface draws every link) and the frames before a
+/// pooled link view has materialized. A link that published its curve together with the control that drew
+/// it (<see cref="ILinkHitTestable.Visual"/>) is painted by that control and skipped here.
 ///
 /// It deliberately does NOT live inside the scrolling world canvas (which grows by 1/Scale on
 /// zoom-in): a canvas-sized GraphicsView exceeds the Win2D ~16k device-pixel texture cap at
@@ -1214,6 +1216,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             // px = Ruler + c + ContentOffset − ScrollOffset (shared with the grid drawable).
             foreach (var link in EnumerateVisibleLinks(tree))
             {
+                // 这条线已经有自己的视图在画（视图发布曲线时把「画它的那个控件」一并交了上来）——
+                // 这层只画没人画的：立即模式的主机，以及池化视图还没物化出来的那几帧
+                if (link.HitTarget()?.Visual is not null)
+                {
+                    continue;
+                }
+
                 if (!TryGetEndpoints(link, out var csx, out var csy, out var cex, out var cey))
                 {
                     continue;

@@ -386,7 +386,7 @@ public sealed class ViewManager
 
     private void ApplyLayout(object viewModel, View view)
     {
-        if (_layout is not AbsoluteLayout canvas)
+        if (_layout is not AbsoluteLayout)
         {
             return;
         }
@@ -398,8 +398,9 @@ public sealed class ViewManager
                 AbsoluteLayout.SetLayoutBounds(view, new Rect(node.Anchor.Horizontal, node.Anchor.Vertical, Math.Max(1, node.Size.Width), Math.Max(1, node.Size.Height)));
                 break;
             case IWorkflowLinkViewModel:
-                AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
-                AbsoluteLayout.SetLayoutBounds(view, new Rect(0, 0, Math.Max(1, GetCanvasExtent(canvas.WidthRequest, canvas.Width)), Math.Max(1, GetCanvasExtent(canvas.HeightRequest, canvas.Height))));
+                // 连线视图自己摆盒子（模板里的 LinkView）：这里绝不能覆盖它。画布局部坐标有负值，
+                // 把盒子写成 (0,0,画布宽,画布高) 会让 y 为负的连线落在视图盒子之外 —— Path 只画在
+                // 自己的布局槽里，于是整条线被静默裁掉（实测：一条都看不见）。
                 break;
             default:
                 AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
@@ -409,9 +410,6 @@ public sealed class ViewManager
     }
 
 
-
-    private static double GetCanvasExtent(double requested, double actual)
-        => requested > 0 ? requested : actual;
 
     private DataTemplate? FindDataTemplate(object context)
     {

@@ -11,10 +11,18 @@
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView WidthRequest="{Binding Size.Width}" HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
-        <!-- Links are NOT pooled anymore: the shared WorkflowLinkOverlay renders them in one
-             viewport-sized GraphicsView (see below), so the pool only materializes node views and
-             the selector needs no LinkTemplate. -->
-        <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" />
+        <!-- Nodes AND links share the pool: one view per visible item, each link drawn by its own
+             path view (see LinkView.xaml.cs for the box its geometry is baked against). -->
+        <DataTemplate x:Key="LinkTemplate">
+            <local:LinkView StartHorizontal="{Binding Sender.Anchor.Horizontal}"
+                            StartVertical="{Binding Sender.Anchor.Vertical}"
+                            EndHorizontal="{Binding Receiver.Anchor.Horizontal}"
+                            EndVertical="{Binding Receiver.Anchor.Vertical}"
+                            CanRender="{Binding IsVisible}" />
+        </DataTemplate>
+        <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
+                                      NodeTemplate="{StaticResource NodeTemplate}"
+                                      LinkTemplate="{StaticResource LinkTemplate}" />
     </ContentView.Resources>
 
     <Grid>
@@ -24,9 +32,10 @@
                 StrokeShape="RoundRectangle 3"
                 BackgroundColor="#1E1E1E">
             <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
-                <!-- Viewport-sized link layer (sibling of the scroll viewer, never inside the growing
-                     world canvas → no Win2D texture cap on deep zoom). One GraphicsView draw at
-                     px = Ruler + anchor + ContentOffset − Scroll. z order: grid < links < nodes < rulers. -->
+                <!-- Link input layer. The links themselves are drawn by their own views inside the
+                     canvas; this layer hooks the surface's pointer and key events (this layer is
+                     input-transparent) and forwards them to the Core interaction hub, and stays as the
+                     painter for links no view draws. z order: grid < links < nodes < rulers. -->
                 <behaviors:WorkflowLinkOverlay WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
                                               InteractionSource="{x:Reference Root}"
                                               ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
@@ -42,7 +51,7 @@
                                     TranslationY="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}">
                         <AbsoluteLayout x:Name="PART_Canvas"
                                         BackgroundColor="Transparent"
-                                        behaviors:ViewPool.ItemsSource="{Binding NodeItemsSource, Source={x:Reference Root}}"
+                                        behaviors:ViewPool.ItemsSource="{Binding ItemsSource, Source={x:Reference Root}}"
                                         behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
                     </AbsoluteLayout>
                 </ScrollView>

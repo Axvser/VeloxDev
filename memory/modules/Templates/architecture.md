@@ -149,6 +149,11 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   **Razor 也喂 `Helper.VisibleItems`**（`workflow-tree-view/TemplateClass.razor:34-36` 的
   `Items="Tree.GetHelper().VisibleItems"`，节点与连线共用一个选择器，见 `adapters/razor.md` §二·6）；
   MAUI 那家虽然也叫 `VisibleItems`，但喂的是**去掉连线**的包装（`NodeOnlyVisibleItems`，连线交给共享 overlay）。
+  ⚠ **2026-10-03 起 MAUI 的 Trimmed demo 与它的模板故意分叉了**：demo 已经改成**每线一视图**
+  （`Demo/Controls/Workflow/LinkView.xaml(.cs)`，节点与连线共用一个池、选择器给 `LinkTemplate`），
+  而 `workflow-link-view` / `workflow-tree-view` 两个模板**还是旧的 overlay 形态**。
+  这是「先做 demo 看效果、再做模板镜像」的顺序决定的，**不是遗漏**；镜像那一轮要把这条注、§六 轴 1 的绑定说明、
+  以及 §七 里「MAUI 没有本地连线视图」那句一起改掉（那三处现在只对模板成立）。
 - **Jalium 的 tree-view 构造器引用三个兄弟条目的静态/类型成员**：`SlotView.Layout`、`new GridDecorator()`、
   `TemplateSelector.CreateSelector()`（`workflow-tree-view/TemplateClass.cs:19-21`，见本节上表）。所以"少生成一条兄弟
   就编译不过"在这家覆盖三条：`GridDecorator`、`SlotView` 与 `TemplateSelector`（2026-10-03 重构后 node-view / link-view
