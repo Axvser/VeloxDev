@@ -29,7 +29,12 @@ be read straight off a captured frame. Supported:
   rclick:<x>,<y>              right click
   dblclick:<x>,<y>            double left click
   drag:<x1>,<y1>,<x2>,<y2>    press at the first point, move in steps, release at the second
-  key:Delete                  press and release a key (Delete | Escape | Enter | Back)
+  down:<x>,<y>                press and hold — pair with move:/shot: to see a mid-drag state, then up:
+  up:<x>,<y>                  release the held button at that point
+  key:Delete                  press and release a key (Delete | Escape | Enter | Back | Control)
+  keydown:Control             hold a key down (pair it with keyup:, e.g. around wheel: for Ctrl+wheel zoom)
+  keyup:Control               release a key
+  wheel:<x>,<y>,<delta>       one wheel notch at that point; 120 = up (zoom in), -120 = down
   type:<text>                 type ASCII text
   wait:<ms>
 
@@ -82,23 +87,39 @@ public class Ui {
   // vanish with no error anywhere. The pad restores the 40.
   [StructLayout(LayoutKind.Sequential)] public struct INPUTK { public uint type; public KI ki; public ulong pad; }
 
-  public const uint MOVE = 0x0001, ABSOLUTE = 0x8000;
+  // The *_FLAG suffix is load-bearing, not style: PowerShell resolves members case-insensitively, so a
+  // constant named WHEEL or KEYUP would shadow the Wheel()/KeyUp() methods from the call site and the
+  // call would fail with "MethodNotFound" while the method is plainly there.
+  public const uint MOVE = 0x0001, ABSOLUTE = 0x8000, WHEEL_FLAG = 0x0800;
   public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004, RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
-  public const uint KEYUP = 0x0002;
+  public const uint KEYUP_FLAG = 0x0002;
 
   public static void Mouse(uint flags) {
     var a = new INPUT[1]; a[0].type = 0; a[0].mi.flags = flags;
     SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
+  }
+  // One wheel notch carries the distance in data (not in dx/dy), and the sign is the direction:
+  // positive is away from the user, which every framework reads as "scroll up / zoom in".
+  public static uint Wheel(int delta) {
+    var a = new INPUT[1]; a[0].type = 0; a[0].mi.flags = WHEEL_FLAG; a[0].mi.data = unchecked((uint)delta);
+    return SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
+  }
+  public static uint KeyDown(ushort vk) {
+    var d = new INPUTK[1]; d[0].type = 1; d[0].ki.vk = vk;
+    return SendKeyInput(1, d, Marshal.SizeOf(typeof(INPUTK)));
+  }
+  public static uint KeyUp(ushort vk) {
+    var u = new INPUTK[1]; u[0].type = 1; u[0].ki.vk = vk; u[0].ki.flags = KEYUP_FLAG;
+    return SendKeyInput(1, u, Marshal.SizeOf(typeof(INPUTK)));
   }
   // Absolute move: SendInput's absolute form is normalised over the virtual screen, which is what makes it
   // land identically on multi-monitor / scaled setups where a bare SetCursorPos is ambiguous.
   // Returns how many events the OS actually accepted (2 = a full press+release). Anything else means the
   // input never happened — surface it instead of assuming.
   public static uint Key(ushort vk) {
-    var d = new INPUTK[1]; d[0].type = 1; d[0].ki.vk = vk;
-    var u = new INPUTK[1]; u[0].type = 1; u[0].ki.vk = vk; u[0].ki.flags = KEYUP;
-    var n = SendKeyInput(1, d, Marshal.SizeOf(typeof(INPUTK)));
-    n += SendKeyInput(1, u, Marshal.SizeOf(typeof(INPUTK)));
+    // Add-Type compiles with the legacy CodeDom compiler (C# 5), so no expression-bodied members here.
+    var n = KeyDown(vk);
+    n += KeyUp(vk);
     return n;
   }
 }
@@ -179,6 +200,13 @@ function Shot([string]$name) {
 
 function ToClient([int]$cx, [int]$cy) { [void][Ui]::SetCursorPos($ox + $cx, $oy + $cy); Start-Sleep -Milliseconds 70 }
 
+function ToVk([string]$name) {
+    switch ($name) {
+        'Delete' { 0x2E } 'Escape' { 0x1B } 'Enter' { 0x0D } 'Back' { 0x08 } 'Control' { 0x11 }
+        default { throw "unsupported key: $name" }
+    }
+}
+
 foreach ($action in ($Actions -split ';')) {
     $action = $action.Trim()
     if ([string]::IsNullOrEmpty($action)) { continue }
@@ -227,6 +255,18 @@ foreach ($action in ($Actions -split ';')) {
             [Ui]::Mouse([Ui]::LEFTDOWN); [Ui]::Mouse([Ui]::LEFTUP); Start-Sleep -Milliseconds 250
             Add-Content $log "dblclick $arg"
         }
+        'down' {
+            $p = $arg -split ','
+            ToClient ([int]$p[0]) ([int]$p[1])
+            [Ui]::Mouse([Ui]::LEFTDOWN); Start-Sleep -Milliseconds 200
+            Add-Content $log "down $arg"
+        }
+        'up' {
+            $p = $arg -split ','
+            ToClient ([int]$p[0]) ([int]$p[1])
+            [Ui]::Mouse([Ui]::LEFTUP); Start-Sleep -Milliseconds 350
+            Add-Content $log "up $arg"
+        }
         'drag' {
             $p = $arg -split ','
             ToClient ([int]$p[0]) ([int]$p[1])
@@ -241,14 +281,30 @@ foreach ($action in ($Actions -split ';')) {
             Add-Content $log "drag $arg"
         }
         'key' {
-            $vk = switch ($arg) {
-                'Delete' { 0x2E } 'Escape' { 0x1B } 'Enter' { 0x0D } 'Back' { 0x08 }
-                default { throw "unsupported key: $arg" }
-            }
-            $accepted = [Ui]::Key([uint16]$vk)
+            $accepted = [Ui]::Key([uint16](ToVk $arg))
             if ($accepted -ne 2) { Add-Content $log "key $arg REJECTED (SendInput accepted $accepted/2)" }
             else { Add-Content $log "key $arg" }
             Start-Sleep -Milliseconds 350
+        }
+        'keydown' {
+            $accepted = [Ui]::KeyDown([uint16](ToVk $arg))
+            if ($accepted -ne 1) { Add-Content $log "keydown $arg REJECTED (SendInput accepted $accepted/1)" }
+            else { Add-Content $log "keydown $arg" }
+            Start-Sleep -Milliseconds 120
+        }
+        'keyup' {
+            $accepted = [Ui]::KeyUp([uint16](ToVk $arg))
+            if ($accepted -ne 1) { Add-Content $log "keyup $arg REJECTED (SendInput accepted $accepted/1)" }
+            else { Add-Content $log "keyup $arg" }
+            Start-Sleep -Milliseconds 120
+        }
+        'wheel' {
+            $p = $arg -split ','
+            ToClient ([int]$p[0]) ([int]$p[1])
+            $accepted = [Ui]::Wheel([int]$p[2])
+            if ($accepted -ne 1) { Add-Content $log "wheel $arg REJECTED (SendInput accepted $accepted/1)" }
+            else { Add-Content $log "wheel $arg" }
+            Start-Sleep -Milliseconds 220
         }
         'type' {
             foreach ($ch in $arg.ToCharArray()) {
