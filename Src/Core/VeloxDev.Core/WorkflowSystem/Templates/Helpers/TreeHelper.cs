@@ -28,7 +28,7 @@ public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 /// </summary>
 /// <typeparam name="T">The type of the Tree ViewModel that this helper is designed for.</typeparam>
 [Tickable(channel: nameof(TreeHelper), fps: 10)]
-public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
+public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTreeEvents
     where T : class, IWorkflowTreeViewModel
 {
     public TreeHelper()
@@ -232,6 +232,38 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
     #endregion
 
     #region Connection Manager   
+    /// <summary>
+    /// Raised when a connection between two ports is about to be made — before <see cref="ValidateConnection"/> is
+    /// asked. Refusing here is the per-drag answer a host can give without subclassing its Helper.
+    /// </summary>
+    public event EventHandler<ConnectionEventArgs>? Connecting;
+
+    /// <summary>Raised once the link exists, carrying the same handle as <see cref="Connecting"/>.</summary>
+    public event EventHandler<ConnectionEventArgs>? Connected;
+
+    /// <summary>
+    /// Asks the host whether this connection may be made, and hands back the handle the caller passes on to
+    /// <see cref="RaiseConnected"/>.
+    /// </summary>
+    /// <param name="sender">The port the connection leaves.</param>
+    /// <param name="receiver">The port it arrives at.</param>
+    public virtual WorkflowEventHandle RaiseConnecting(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    {
+        var handle = new WorkflowEventHandle();
+        Connecting?.Invoke(Component, new ConnectionEventArgs(sender, receiver, handle));
+        return handle;
+    }
+
+    /// <summary>Reports a connection that happened, unless the handle silenced it.</summary>
+    /// <param name="sender">The port the connection leaves.</param>
+    /// <param name="receiver">The port it arrives at.</param>
+    /// <param name="handle">The handle <see cref="RaiseConnecting"/> returned.</param>
+    public virtual void RaiseConnected(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, WorkflowEventHandle handle)
+    {
+        if (handle.StopPropagation) return;
+        Connected?.Invoke(Component, new ConnectionEventArgs(sender, receiver, handle));
+    }
+
     public virtual bool ValidateConnection(
         IWorkflowSlotViewModel sender,
         IWorkflowSlotViewModel receiver)

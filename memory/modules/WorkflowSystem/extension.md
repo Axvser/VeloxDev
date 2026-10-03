@@ -27,8 +27,20 @@
 | 让连线可被命中 / 自定义它的曲线 | **不实现接口，是发布**：连线视图画完调 `link.PublishCurve(LinkCurve, this)`；形状归视图（Core 不假定贝塞尔），判定归 Core | `GUI/Interaction/LinkHitTestEx.cs`、`GUI/Interaction/LinkCurve.cs` |
 | 让悬停能看见 / 让连线响应 hover 外观 | 视图实现 `ILinkHighlight`（`IsHighlighted`）—— hub 的 `AutoHighlight` 会直接点亮它，**不要**自己订 `HoverChanged` 去设颜色 | `GUI/Interaction/ILinkHighlight.cs` |
 | 改连线的命中/高亮/删除策略 | 取 `LinkInteraction.For(tree)`（**hub 只有这一个位置**）改 `AutoHighlight` / `AutoDelete` / `HitRadius`，或订 `HoverChanged` / `LinkPressed` / `LinkDeleteRequested` | `GUI/Events/LinkInteraction.cs` |
+| **否决某一次**连线动作（而不是全局关开关） | 订 `PreviewHoverChanged` / `PreviewLinkPressed` / `PreviewLinkDeleteRequested`，在 `e.Handle.PreventDefault` 里拒绝这一次；`StopPropagation` 则是「默认照跑、只是不报」 | `GUI/Events/WorkflowEventHandle.cs`、`GUI/Events/Link/Preview*.cs` |
+| **把节点/插槽/树的动作也接成标准事件** | 取该组件的 Helper 并按**能力接口**转型：`((IWorkflowNodeEvents)node.GetHelper())`、`IWorkflowSlotEvents`、`IWorkflowTreeEvents`。已实现五对：`Moving/Moved`、`Resizing/Resized`、`Deleting/Deleted`（node）、`ChannelChanging/Changed`（slot）、`Connecting/Connected`（tree） | `GUI/Events/{Node,Slot,Tree}/IWorkflow*Events.cs` |
+| **把模型事件交给宿主，按平台族分三种**（2026-10-03 用户定，**不要 hub**） | ①**有附加属性的四家**（WPF/Avalonia/WinUI/MAUI）：附加属性 + 绑定一个 sink 对象 —— `behaviors:WorkflowEvents.Node="{Binding NodeEvents}"`（`.Slot` / `.Tree` 同形）；②**Razor**（类 XAML）：沿用订阅；③**无标记语言的两家**（WinForms/Jalium）：**适配器基类提供 `protected virtual OnXxx(args)` 钩子**，宿主重写即得 | `GUI/Events/IWorkflow*EventSink.cs`、`GUI/Events/WorkflowEventRelay.cs`；WPF 参考实现 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowEvents.cs` |
+| 右键菜单的请求与开合 | **菜单本身是宿主的**（要选位置、要平台弹出物）：订 `ContextMenuRequested`（可 `PreventDefault` 拒绝这一次），并用 `Publish(ContextMenuEvent)` 把 Opened/Closed 报回来 —— hub 据此自动收放 `IsSuspended` | `GUI/Events/LinkInteraction.cs`、`GUI/Events/Menu/*` |
 
 > ⚠ **别把连线视图做成吃掉整块画布的命中面**（给它加背景、或让容器接指针）—— 那会吞掉画布手势。命中面必须仍然只是**画出来的那道描边**；hub 也是按发布的那条曲线判距的。
+> ⚠ **组件落位的事件里，`Anchor` 必须是完整落位 —— 图层（`Anchor.Layer`）跟着走。**（2026-10-03 用户定）
+> 典型是 `NodeMoveEventArgs.From/To`：宿主拿 `To` 自己落位、或存 `From` 以后撤销时，**不能**把节点的图层悄悄抹成 0。
+> 造值一律 `new Anchor(x, y, 源.Layer)`，不要 `new Anchor(x, y, 0)`（`StandardMove:102` 就是这么写的，测试钉住 layer=7 往返）。
+> 例外只有两处：**指针位置**（`PointerEvent.Position` 等，指针没有图层）；以及指针变成**虚拟连线终点**时 ——
+> 那一处由 `StandardSetPointer` 统一取**起点那一端**的图层（七家适配器交上来的锚带不带图层都不影响结果）。
+> ⚠ **模型层事件经「能力接口」暴露，不加进 `IWorkflowXxxViewModelHelper`** —— 往那个接口加成员会打断每一个实现者。
+> `NodeHelper<T>` / `SlotHelper<T>` / `TreeHelper<T>` 已实现能力接口，自定义 Helper 继承即得；订阅时要转型。
+> `Connecting` 与 `ValidateConnection` 是**复合**关系：事件先问（可逐次否决），校验器再问（Helper 的规则），任一说不就不连。
 > ⚠ **命中还要避开节点框（2026-10-03 起）**：卡片是不透明的，压在它下面的那段线**没画出来**，因此也不应答 —— `LinkHitTestEx.HitTestVisibleLinks` 在返回之前查一次「这点上面盖着哪张卡」。**端口是例外**：离这条线自己端口 `DefaultHitRadius` 以内仍然算命中（端口就画在卡片边缘上，停在端口上就是冲着这条线去的）。这条修的是「在节点上操作，命中的却是它下面那条线」。
 > ⚠ **别把命中门改回 `IsRenderReady()`**（要求锚点已测量）。Jalium 按设计从不写 `slot.Anchor`，那样会让它整家连线静默失效 —— 用「曲线有没有被发布」当门。
 > ⚠ **Delete 需要一条「焦点路由」，而它和命中是两件事**（2026-10-03 实测踩过，七家里五家缺）。Delete 是键盘事件：它只会沿着**焦点所在的元素**往上冒泡。所以适配器必须①能持有焦点、②在悬停到连线上时**把焦点收到自己身上/那个可视对象上**。只做①不做②的话「悬停（不点）后按 Delete」没有任何路由，而且**不报错**。完整 demo 掩盖了这个缺口 —— 它们有窗口级预览兜底（`MainWindow.OnPreviewWindowKeyDown`），生成出来的工程没有。

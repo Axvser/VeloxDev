@@ -16,7 +16,7 @@ public class SlotHelper : SlotHelper<IWorkflowSlotViewModel>
 /// [ Component Helper ] Provide standard supports for Slot Component.
 /// </summary>
 /// <typeparam name="T">The type of the Slot ViewModel that this helper is designed for. </typeparam>
-public class SlotHelper<T> : IWorkflowSlotViewModelHelper
+public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents
     where T : class, IWorkflowSlotViewModel
 {
     public T? Component { get; protected set; }
@@ -54,6 +54,39 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper
     public virtual void ReceiveConnection() => Component?.StandardReceiveConnection();
 
     public virtual void Delete() => Component?.StandardDelete();
+
+    /// <summary>
+    /// Raised before the slot's channel changes. A channel decides how many connections the slot may hold and
+    /// whether it takes senders, receivers or both, so changing it can tear connections down — refusing here is how
+    /// a host protects one slot from that.
+    /// </summary>
+    public event EventHandler<SlotChannelEventArgs>? ChannelChanging;
+
+    /// <summary>Raised after the channel changed, carrying the same handle as <see cref="ChannelChanging"/>.</summary>
+    public event EventHandler<SlotChannelEventArgs>? ChannelChanged;
+
+    /// <summary>
+    /// Asks the host whether the channel may change, and hands back the handle the caller passes on to
+    /// <see cref="RaiseChannelChanged"/>.
+    /// </summary>
+    /// <param name="from">The current channel.</param>
+    /// <param name="to">The channel it is going to.</param>
+    public virtual WorkflowEventHandle RaiseChannelChanging(SlotChannel from, SlotChannel to)
+    {
+        var handle = new WorkflowEventHandle();
+        if (Component is { } slot) ChannelChanging?.Invoke(slot, new SlotChannelEventArgs(slot, from, to, handle));
+        return handle;
+    }
+
+    /// <summary>Reports a channel change that happened, unless the handle silenced it.</summary>
+    /// <param name="from">The channel it was.</param>
+    /// <param name="to">The channel it is now.</param>
+    /// <param name="handle">The handle <see cref="RaiseChannelChanging"/> returned.</param>
+    public virtual void RaiseChannelChanged(SlotChannel from, SlotChannel to, WorkflowEventHandle handle)
+    {
+        if (handle.StopPropagation || Component is not { } slot) return;
+        ChannelChanged?.Invoke(slot, new SlotChannelEventArgs(slot, from, to, handle));
+    }
 
     private void OnTargetsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

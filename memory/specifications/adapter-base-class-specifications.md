@@ -36,6 +36,11 @@
 | 坐标换算、缩放折叠、每帧记账 | 用哪个模板选择器 |
 | 反射读模型里的名字（标题、输入口、插槽标签） | |
 
+**模型事件也是基类的扩展点**（2026-10-03 用户定）：无标记语言的两家没有附加属性可挂，所以**基类必须为它管的那个角色提供可重写的钩子** ——
+`WorkflowNodeView` 出 `OnMoving/OnMoved/OnResizing/OnResized/OnDeleting/OnDeleted`、`WorkflowSlotView` 出 `OnChannelChanging/OnChannelChanged`、
+`WorkflowTreeView` 出 `OnConnecting/OnConnected`（都 `protected virtual`，默认空实现）。基类自己用 `WorkflowEventRelay.Attach(...)` 接上模型事件并转发进这些钩子，
+宿主（模板产物）只需重写。转发逻辑在 Core 一份，七家共用 —— 不要在基类里重新订阅一遍 Helper 的事件。
+
 **基类必须是 `public`、非 `sealed`**，扩展点是 `protected virtual` / `protected abstract`，或既有的公开接口
 （如 `IWorkflowTemplateSelector` / `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay`）—— 能复用接口就不要新造虚方法。
 

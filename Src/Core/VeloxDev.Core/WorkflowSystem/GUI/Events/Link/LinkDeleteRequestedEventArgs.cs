@@ -20,8 +20,27 @@ public sealed class LinkDeleteRequestedEventArgs : EventArgs
 {
     /// <summary>Creates the argument.</summary>
     /// <param name="link">The link to delete.</param>
-    public LinkDeleteRequestedEventArgs(IWorkflowLinkViewModel link) => Link = link;
+    public LinkDeleteRequestedEventArgs(IWorkflowLinkViewModel link)
+        : this(link, new WorkflowEventHandle())
+    {
+    }
+
+    /// <summary>Creates the argument, carrying the handle the Preview subscriber saw.</summary>
+    /// <param name="link">The link to delete.</param>
+    /// <param name="handle">The handle of the action this reports — the same instance the Preview event carried.</param>
+    public LinkDeleteRequestedEventArgs(IWorkflowLinkViewModel link, WorkflowEventHandle handle)
+    {
+        Link = link;
+        Handle = handle;
+    }
 
     /// <summary>The link to delete.</summary>
     public IWorkflowLinkViewModel Link { get; }
+
+    /// <summary>
+    /// The handle of the action this reports. Read <see cref="WorkflowEventHandle.IsDefaultPrevented"/> /
+    /// <see cref="WorkflowEventHandle.IsPropagationStopped"/> to see what a Preview subscriber decided; writing it
+    /// here is a no-op, the decision was already taken.
+    /// </summary>
+    public WorkflowEventHandle Handle { get; }
 }

@@ -8,38 +8,8 @@ namespace VeloxDev.Core.Test.WorkflowSystem;
 /// that means.
 /// </summary>
 [TestClass]
-public class LinkInteractionTests
+public class LinkInteractionTests : LinkInteractionTestBase
 {
-    private const double Radius = LinkHitTestEx.DefaultHitRadius;
-
-    private static IWorkflowLinkViewModel ReadyLink(double sx, double sy, double ex, double ey, bool visible = true)
-    {
-        var a = new NodeDefaultViewModel();
-        var b = new NodeDefaultViewModel();
-        var sa = new SlotDefaultViewModel { Parent = a };
-        var sb = new SlotDefaultViewModel { Parent = b };
-        a.Slots.Add(sa);
-        b.Slots.Add(sb);
-        sa.Anchor = new Anchor(sx, sy, 0);
-        sb.Anchor = new Anchor(ex, ey, 0);
-
-        var link = new LinkDefaultViewModel { Sender = sa, Receiver = sb, IsVisible = visible };
-        link.PublishCurve(LinkCurve.BuildCubic(sx, sy, ex, ey, 40));
-        return link;
-    }
-
-    private static TreeDefaultViewModel TreeWith(params IWorkflowLinkViewModel[] links)
-    {
-        var tree = new TreeDefaultViewModel();
-        var visible = tree.GetHelper().VisibleItems;
-        visible.Clear();
-        foreach (var link in links) visible.Add(link);
-        return tree;
-    }
-
-    private static PointerEvent Move(double x, double y)
-        => new(PointerPhase.Moved, new Anchor(x, y, 0));
-
     // ── 悬停 ────────────────────────────────────────────────────────────────
 
     [TestMethod]
@@ -281,20 +251,7 @@ public class LinkInteractionTests
     public void DeleteKey_DefaultPolicy_RemovesTheLink()
     {
         // 默认策略：hub 自己执行 DeleteCommand，所以生成出来的工程零代码就有删除。
-        var tree = new TreeDefaultViewModel();
-        var a = new NodeDefaultViewModel { Parent = tree };
-        var b = new NodeDefaultViewModel { Parent = tree };
-        var sa = new SlotDefaultViewModel { Parent = a };
-        var sb = new SlotDefaultViewModel { Parent = b };
-        a.Slots.Add(sa);
-        b.Slots.Add(sb);
-        tree.Nodes.Add(a);
-        tree.Nodes.Add(b);
-        var link = new LinkDefaultViewModel { Sender = sa, Receiver = sb, IsVisible = true };
-        tree.Links.Add(link);
-        tree.LinksMap[sa] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel> { [sb] = link };
-        tree.GetHelper().VisibleItems.Add(link);
-        link.PublishCurve(LinkCurve.FromPoints([0d, 100d], [0d, 0d]));
+        var tree = DeletableTree(out var link);
 
         var interaction = LinkInteraction.For(tree);
         interaction.Publish(new PointerEvent(PointerPhase.Moved, new Anchor(50, 0, 0)));
@@ -319,22 +276,4 @@ public class LinkInteractionTests
         Assert.IsTrue(requested);
     }
 
-    // 代表「连线视图」的可视对象：实现了 ILinkHighlight，所以 hub 能直接点亮/熄灭它。
-    private sealed class HighlightingVisual : ILinkHighlight
-    {
-        private bool highlighted;
-
-        public bool IsHighlighted
-        {
-            get => highlighted;
-            set
-            {
-                if (highlighted == value) return;
-                highlighted = value;
-                HighlightChanges++;
-            }
-        }
-
-        public int HighlightChanges { get; private set; }
-    }
 }

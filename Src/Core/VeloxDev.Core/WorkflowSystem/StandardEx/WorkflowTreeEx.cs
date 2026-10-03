@@ -39,7 +39,11 @@ public static class WorkflowTreeEx
 
     public static void StandardSetPointer(this IWorkflowTreeViewModel component, Anchor anchor)
     {
-        component.VirtualLink.Receiver.Anchor = anchor;
+        // 指针只带得动位置：这一端落在哪一层，由这条虚拟连线**起点那一端**决定 —— 起点是
+        // `StandardSendConnection` 从真实插槽整个拷过来的（含图层）。这样各家适配器交给这里的锚
+        // 带不带图层都不影响结果：两端同层，橡皮筋不会一半在源节点的层、一半在第 0 层。
+        var start = component.VirtualLink.Sender.Anchor;
+        component.VirtualLink.Receiver.Anchor = new Anchor(anchor.Horizontal, anchor.Vertical, start.Layer);
         component.VirtualLink.OnPropertyChanged(nameof(component.VirtualLink.Receiver));
         component.OnPropertyChanged(nameof(component.VirtualLink));
     }
@@ -138,8 +142,19 @@ public static class WorkflowTreeEx
             return;
         }
 
+        // 事件先问（可逐次否决），校验器再问（Helper 的规则）：两者任一说不，这次连接就不成立。
+        var helper = component.GetHelper();
+        var events = helper as IWorkflowTreeEvents;
+        var handle = events?.RaiseConnecting(cache.CurrentSender, slot) ?? new WorkflowEventHandle();
+        if (handle.PreventDefault)
+        {
+            component.StandardResetVirtualLink();
+            cache.CurrentSender = null;
+            return;
+        }
+
         // Check the user-custom validation logic
-        if (!component.GetHelper().ValidateConnection(cache.CurrentSender, slot))
+        if (!helper.ValidateConnection(cache.CurrentSender, slot))
         {
             component.StandardResetVirtualLink();
             cache.CurrentSender = null;
@@ -162,6 +177,8 @@ public static class WorkflowTreeEx
 
         // Create the new connection
         component.StandardCreateNewConnection(cache.CurrentSender, slot);
+
+        events?.RaiseConnected(cache.CurrentSender, slot, handle);
 
         // Reset state
         component.StandardResetVirtualLink();

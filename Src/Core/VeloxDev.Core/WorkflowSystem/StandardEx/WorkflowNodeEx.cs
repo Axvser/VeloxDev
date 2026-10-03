@@ -87,9 +87,17 @@ public static class WorkflowNodeEx
     public static void StandardSetSize(this IWorkflowNodeViewModel component, Size size)
     {
         if (component is null) return;
-        // `size` is the logical (world) size; store directly.
-        component.Size = new Size(size.Width, size.Height);
+        var from = component.Size;
+        var to = new Size(size.Width, size.Height);
+
+        var events = component.GetHelper() as IWorkflowNodeEvents;
+        var handle = events?.RaiseResizing(from, to) ?? new WorkflowEventHandle();
+        if (handle.PreventDefault) return;
+
+        component.Size = to;
         component.OnPropertyChanged(nameof(component.Size));
+
+        events?.RaiseResized(from, to, handle);
     }
 
     public static void StandardMove(this IWorkflowNodeViewModel component, Offset offset)
@@ -99,11 +107,23 @@ public static class WorkflowNodeEx
         // to world so the node visual follows the pointer exactly (world' = (collapsed + offset) * scale).
         var a = component.Anchor;
         var (sx, sy) = ViewToWorldFactors(component);
-        component.Anchor = new Anchor(
+
+        // 事件里的两端都写成**世界坐标的完整落位**（含图层）：宿主若拿 `To` 自己落位、或存 `From` 以后撤销，
+        // 都不会把节点的图层悄悄抹成 0。
+        var from = new Anchor(a.Horizontal * sx, a.Vertical * sy, a.Layer);
+        var to = new Anchor(
             (a.Horizontal + offset.Horizontal) * sx,
             (a.Vertical + offset.Vertical) * sy,
             a.Layer);
+
+        var events = component.GetHelper() as IWorkflowNodeEvents;
+        var handle = events?.RaiseMoving(from, to) ?? new WorkflowEventHandle();
+        if (handle.PreventDefault) return;
+
+        component.Anchor = to;
         component.OnPropertyChanged(nameof(component.Anchor));
+
+        events?.RaiseMoved(from, to, handle);
     }
 
     public static async Task StandardBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, CancellationToken ct = default)
@@ -270,6 +290,10 @@ public static class WorkflowNodeEx
             return;
         }
 
+        var events = component.GetHelper() as IWorkflowNodeEvents;
+        var handle = events?.RaiseDeleting() ?? new WorkflowEventHandle();
+        if (handle.PreventDefault) return;
+
         var tree = component.Parent;
         var oldParent = component.Parent;
 
@@ -327,6 +351,8 @@ public static class WorkflowNodeEx
                 RestoreNode(tree, component, oldParent, distinctConnections, slotConnections);
             }
         ));
+
+        events?.RaiseDeleted(handle);
     }
 
     private static void ExecuteNodeDeletion(

@@ -16,7 +16,7 @@ public class NodeHelper : NodeHelper<IWorkflowNodeViewModel>
 /// [ Component Helper ] Provide standard supports for Node Component
 /// </summary>
 /// <typeparam name="T"> The type of the Node ViewModel that this helper is designed for. </typeparam>
-public class NodeHelper<T> : IWorkflowNodeViewModelHelper
+public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents
     where T : class, IWorkflowNodeViewModel
 {
     public T? Component { get; protected set; }
@@ -80,6 +80,88 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper
     }
 
     public virtual void Delete() => Component?.StandardDelete();
+
+    /// <summary>
+    /// Raised before the node is placed somewhere new. Refusing here holds the node where it is — the per-event way
+    /// to pin one node without disabling dragging for the whole surface.
+    /// </summary>
+    /// <remarks>The anchors on the argument are complete placements (layer included); see <see cref="NodeMoveEventArgs"/>.</remarks>
+    public event EventHandler<NodeMoveEventArgs>? Moving;
+
+    /// <summary>Raised after the node has been placed, carrying the same handle as <see cref="Moving"/>.</summary>
+    public event EventHandler<NodeMoveEventArgs>? Moved;
+
+    /// <summary>Raised before the node's size changes.</summary>
+    public event EventHandler<NodeResizeEventArgs>? Resizing;
+
+    /// <summary>Raised after the node's size changed, carrying the same handle as <see cref="Resizing"/>.</summary>
+    public event EventHandler<NodeResizeEventArgs>? Resized;
+
+    /// <summary>Raised before the node is torn down. Refusing here keeps it in the tree.</summary>
+    public event EventHandler<NodeEventArgs>? Deleting;
+
+    /// <summary>Raised after the node was torn down, carrying the same handle as <see cref="Deleting"/>.</summary>
+    public event EventHandler<NodeEventArgs>? Deleted;
+
+    /// <summary>
+    /// Asks the host whether a placement may happen, and hands back the handle the caller must pass on to
+    /// <see cref="RaiseMoved"/>. Called by the framework after it has computed both ends, before it touches the
+    /// model.
+    /// </summary>
+    /// <param name="from">Where the node is now, layer included.</param>
+    /// <param name="to">Where it is going, layer included.</param>
+    public virtual WorkflowEventHandle RaiseMoving(Anchor from, Anchor to)
+    {
+        var handle = new WorkflowEventHandle();
+        if (Component is { } node) Moving?.Invoke(node, new NodeMoveEventArgs(node, from, to, handle));
+        return handle;
+    }
+
+    /// <summary>Reports a placement that happened, unless the handle silenced it.</summary>
+    /// <param name="from">Where the node was, layer included.</param>
+    /// <param name="to">Where it is now, layer included.</param>
+    /// <param name="handle">The handle <see cref="RaiseMoving"/> returned.</param>
+    public virtual void RaiseMoved(Anchor from, Anchor to, WorkflowEventHandle handle)
+    {
+        if (handle.StopPropagation || Component is not { } node) return;
+        Moved?.Invoke(node, new NodeMoveEventArgs(node, from, to, handle));
+    }
+
+    /// <summary>Asks the host whether a resize may happen; see <see cref="RaiseMoving"/>.</summary>
+    /// <param name="from">The current size.</param>
+    /// <param name="to">The size it is going to.</param>
+    public virtual WorkflowEventHandle RaiseResizing(Size from, Size to)
+    {
+        var handle = new WorkflowEventHandle();
+        if (Component is { } node) Resizing?.Invoke(node, new NodeResizeEventArgs(node, from, to, handle));
+        return handle;
+    }
+
+    /// <summary>Reports a resize that happened, unless the handle silenced it.</summary>
+    /// <param name="from">The size it was.</param>
+    /// <param name="to">The size it is now.</param>
+    /// <param name="handle">The handle <see cref="RaiseResizing"/> returned.</param>
+    public virtual void RaiseResized(Size from, Size to, WorkflowEventHandle handle)
+    {
+        if (handle.StopPropagation || Component is not { } node) return;
+        Resized?.Invoke(node, new NodeResizeEventArgs(node, from, to, handle));
+    }
+
+    /// <summary>Asks the host whether the node may be torn down; see <see cref="RaiseMoving"/>.</summary>
+    public virtual WorkflowEventHandle RaiseDeleting()
+    {
+        var handle = new WorkflowEventHandle();
+        if (Component is { } node) Deleting?.Invoke(node, new NodeEventArgs(node, handle));
+        return handle;
+    }
+
+    /// <summary>Reports a deletion that happened, unless the handle silenced it.</summary>
+    /// <param name="handle">The handle <see cref="RaiseDeleting"/> returned.</param>
+    public virtual void RaiseDeleted(WorkflowEventHandle handle)
+    {
+        if (handle.StopPropagation || Component is not { } node) return;
+        Deleted?.Invoke(node, new NodeEventArgs(node, handle));
+    }
 
     private void OnSlotsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

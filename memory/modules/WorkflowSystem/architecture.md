@@ -170,6 +170,30 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Help
     → 同时报 HoverChanged / LinkPressed / LinkDeleteRequested 给宿主
 ```
 
+**每个动作有两相，第一相是「处理之前」**（2026-10-03 起）：`PreviewHoverChanged` / `PreviewLinkPressed` / `PreviewLinkDeleteRequested` 在框架默认行为**之前**抛出，带一个 `WorkflowEventHandle`；`PreventDefault` = 这一次的默认行为整个不发生、Outcome 也不报，`StopPropagation` = 默认照跑、只是不报 Outcome。两个标志都不设时，行为与这条模型出现之前**逐字相同**。
+
+- 这是**逐事件否决**（「这一条不许删」），与 `AutoDelete` / `AutoHighlight` 那种**表面级开关**是两回事，两者共存：开关管全局策略，句柄管这一次。
+- Preview 与 Outcome 拿到的是**同一个句柄实例**，所以 Outcome 订阅方能读到 `IsDefaultPrevented`。
+- 动作**真的变了**才发 Preview（同一条线上移动不会反复问）。
+- 句柄只有这两相的事件的 args 才有；`ContextMenuOpened`/`Closed` 是**事实**，没有可取消的东西。
+
+**模型层（节点/插槽/树的动作为准）的事件挂在各自的 Helper 上**，经**能力接口**暴露（2026-10-03 起）：
+
+```
+IWorkflowNodeEvents : Moving/Moved · Resizing/Resized · Deleting/Deleted
+IWorkflowSlotEvents : ChannelChanging/Changed
+IWorkflowTreeEvents : Connecting/Connected
+```
+
+- 与连线那套**同一形状**：`Xxx…ing` 在框架动手**之前**（`WorkflowEventHandle.PreventDefault` = 这一次不发生）、`Xxx…ed` 在之后，两相共用一个句柄。
+- 由 `StandardEx` 在改动模型之前/之后问一下 Helper（`RaiseMoving` / `RaiseMoved` …）—— 与 `ValidateConnection` 同一条路子：**框架问 Helper，Helper 问宿主**。
+- 能力接口而**不是** `IWorkflowNodeViewModelHelper`：往那个接口加成员会打断每一个实现者（`ILinkHitTestable.cs` 的 remarks 是这条规矩的出处）。宿主订阅要转型：`((IWorkflowNodeEvents)node.GetHelper()).Moving += …`。
+- `Connecting` 与 `ValidateConnection` **复合**：事件否决 或 校验器为假 ⇒ 不连。
+
+**凡是交给宿主的组件落位（`Anchor`），都是完整落位 —— 图层跟着走。** 最典型是 `NodeMoveEventArgs.From/To`：宿主若拿 `To` 自己落位、或存 `From` 撤销，不能把图层抹成 0。指针位置没有图层（例外）；指针成为虚拟连线终点时，图层由 `StandardSetPointer` 统一取起点那一端。
+
+**右键菜单三事件也在同一个 hub 上**：`ContextMenuRequested`（可否决 —— 这就是「这里不给菜单」的写法）+ `ContextMenuOpened` / `ContextMenuClosed`。菜单**本身仍是宿主的**（要选位置、要平台自己的弹出物），宿主用 `Publish(ContextMenuEvent)` 报回开合，hub 据此自动收放 `IsSuspended` —— 七家原先各自手工记账那一段（WPF `:583`、Avalonia `:499`、WinUI `:550`、Razor `:154`、WinForms `:590`、MAUI overlay `:867/:872`、Jalium）应当逐步换成这个上报。**`ContextMenuRequested` 不压掉 `LinkPressed`** —— 六个 demo 是从后者弹菜单的，压掉会让它们一按弹两次。
+
 要点：
 
 - **hub 只有一个位置**：`LinkInteraction.For(tree)`（`GUI/Events/LinkInteraction.cs`），一棵树一个实例、`ConditionalWeakTable` 缓存。适配器只**转发**，宿主与连线视图都用这同一个调用取它 —— 没有「每个表面各持一个」这种说法。

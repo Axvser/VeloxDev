@@ -20,6 +20,11 @@ public static class WorkflowSlotEx
             WorkflowGuard.Fail("The slot is not attached to a tree; SetChannel cannot clean up existing connections.");
             return;
         }
+        var from = component.Channel;
+        var events = component.GetHelper() as IWorkflowSlotEvents;
+        var handle = events?.RaiseChannelChanging(from, channel) ?? new WorkflowEventHandle();
+        if (handle.PreventDefault) return;
+
         var tree = component.Parent.Parent;
         List<IWorkflowLinkViewModel> links_asSource = [];
         List<IWorkflowLinkViewModel> links_asTarget = [];
@@ -77,6 +82,7 @@ public static class WorkflowSlotEx
                 break;
         }
         component.Channel = channel;
+        events?.RaiseChannelChanged(from, channel, handle);
     }
 
     public static void StandardUpdateState(this IWorkflowSlotViewModel component)

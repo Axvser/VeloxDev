@@ -108,6 +108,47 @@ public sealed class LinkInteraction
     /// </summary>
     public event EventHandler<LinkDeleteRequestedEventArgs>? LinkDeleteRequested;
 
+    /// <summary>
+    /// Raised before the hover moves, so a subscriber can refuse it for this one event
+    /// (<see cref="WorkflowEventHandle.PreventDefault"/>) instead of turning highlighting off for the surface.
+    /// Only raised when the hover would actually change.
+    /// </summary>
+    public event EventHandler<PreviewLinkHoverEventArgs>? PreviewHoverChanged;
+
+    /// <summary>
+    /// Raised before a press selects the link or reports it, so a subscriber can swallow the press for this link.
+    /// </summary>
+    public event EventHandler<PreviewLinkPressedEventArgs>? PreviewLinkPressed;
+
+    /// <summary>
+    /// Raised before the Delete key does anything. Refusing here is the per-event answer to "this link may not be
+    /// deleted", where <see cref="AutoDelete"/> is the surface-wide one.
+    /// </summary>
+    public event EventHandler<PreviewLinkDeleteRequestedEventArgs>? PreviewLinkDeleteRequested;
+
+    /// <summary>
+    /// Raised on a right press, before anything opens, with the link the menu would be about (or
+    /// <see langword="null"/> on empty canvas). The menu is the host's, so this is a notification with a veto:
+    /// <see cref="WorkflowEventHandle.PreventDefault"/> means "no menu for this press".
+    /// <para>
+    /// <see cref="LinkPressed"/> still fires afterwards, so hosts that open their menu from there keep working.
+    /// A host that migrates to this event should stop opening from <see cref="LinkPressed"/>.
+    /// </para>
+    /// </summary>
+    public event EventHandler<ContextMenuRequestedEventArgs>? ContextMenuRequested;
+
+    /// <summary>
+    /// Raised after <see cref="Publish(ContextMenuEvent)"/> reports that a menu is on screen — the hover is already
+    /// suspended by then. The <c>sender</c> is this hub.
+    /// </summary>
+    public event EventHandler<ContextMenuOpenedEventArgs>? ContextMenuOpened;
+
+    /// <summary>
+    /// Raised after <see cref="Publish(ContextMenuEvent)"/> reports that a menu has gone away — the hover is
+    /// already live again by then. The <c>sender</c> is this hub.
+    /// </summary>
+    public event EventHandler<ContextMenuClosedEventArgs>? ContextMenuClosed;
+
     /// <summary>Feeds one translated pointer event in.</summary>
     public void Publish(PointerEvent e)
     {
@@ -125,10 +166,32 @@ public sealed class LinkInteraction
             case PointerPhase.Pressed:
                 // 按下的那条就是选中的那条 —— 菜单里的动作作用于「当前这条」，先落选中再报事件。
                 var link = Find(e.Position);
-                SetHovered(link);
-                if (link is not null)
+                if (link is null)
                 {
-                    LinkPressed?.Invoke(VisualOf(link), new LinkPressedEventArgs(link, e.Button));
+                    SetHovered(null);
+                    if (e.Button is PointerButtonKind.Right)
+                    {
+                        RequestContextMenu(null, e.Position);
+                    }
+                    break;
+                }
+
+                var pressed = new WorkflowEventHandle();
+                PreviewLinkPressed?.Invoke(
+                    VisualOf(link), new PreviewLinkPressedEventArgs(link, e.Button, pressed));
+
+                // Preview 里拒绝：这一次按下整个不发生 —— 不选中、不弹菜单、也不报事件。
+                if (pressed.PreventDefault) break;
+
+                SetHovered(link);
+                if (e.Button is PointerButtonKind.Right)
+                {
+                    RequestContextMenu(link, e.Position);
+                }
+
+                if (!pressed.StopPropagation)
+                {
+                    LinkPressed?.Invoke(VisualOf(link), new LinkPressedEventArgs(link, e.Button, pressed));
                 }
                 break;
 
@@ -143,9 +206,53 @@ public sealed class LinkInteraction
         if (e.Key != InputKey.Delete) return;
         if (hovered is not { } link) return;
 
+        var handle = new WorkflowEventHandle();
+        PreviewLinkDeleteRequested?.Invoke(
+            VisualOf(link), new PreviewLinkDeleteRequestedEventArgs(link, handle));
+
+        // Preview 里拒绝：这一次的删除整个不发生 —— 比全局关掉 AutoDelete 更细的那把闸。
+        if (handle.PreventDefault) return;
+
         // 先报事件再执行：宿主想观察（或已经关掉 AutoDelete 想自己确认）都拿得到这条链接的引用。
-        LinkDeleteRequested?.Invoke(VisualOf(link), new LinkDeleteRequestedEventArgs(link));
+        if (!handle.StopPropagation)
+        {
+            LinkDeleteRequested?.Invoke(VisualOf(link), new LinkDeleteRequestedEventArgs(link, handle));
+        }
+
         if (AutoDelete) link.DeleteCommand.Execute(null);
+    }
+
+    /// <summary>
+    /// Reports what the host's context menu just did, so the hover is suspended while it is on screen and released
+    /// when it goes away. Menus are the platform's own object and cannot be observed from here, so the host says.
+    /// </summary>
+    /// <param name="e">The menu that opened or closed.</param>
+    public void Publish(ContextMenuEvent e)
+    {
+        switch (e.Phase)
+        {
+            case ContextMenuPhase.Opened:
+                // 指针一弹菜单就飞到菜单上去了：那之后的移动与离开都不该改这次选中的东西
+                IsSuspended = true;
+                ContextMenuOpened?.Invoke(this, new ContextMenuOpenedEventArgs(e.Link, e.Position));
+                break;
+
+            case ContextMenuPhase.Closed:
+                IsSuspended = false;
+                ContextMenuClosed?.Invoke(this, new ContextMenuClosedEventArgs(e.Link));
+                break;
+        }
+    }
+
+    // 右键请求：菜单是宿主的（要选位置、要平台自己的弹出物），所以这里只报事实 + 给否决权 ——
+    // hub 自己没有默认动作可跳，宿主读到 PreventDefault 就不弹。
+    private void RequestContextMenu(IWorkflowLinkViewModel? link, Anchor position)
+    {
+        if (ContextMenuRequested is null) return;
+
+        ContextMenuRequested.Invoke(
+            link is null ? null : VisualOf(link),
+            new ContextMenuRequestedEventArgs(link, position, new WorkflowEventHandle()));
     }
 
     private IWorkflowLinkViewModel? Find(Anchor position)
@@ -161,7 +268,18 @@ public sealed class LinkInteraction
 
     private void SetHovered(IWorkflowLinkViewModel? link)
     {
+        // 「只在意真的变了」这条判断在 Preview 之前 —— 在同一条线上移动不该反复问订阅方同一个问题
         if (ReferenceEquals(hovered, link)) return;
+
+        var handle = new WorkflowEventHandle();
+        if (PreviewHoverChanged is not null)
+        {
+            PreviewHoverChanged.Invoke(
+                link is null ? null : VisualOf(link), new PreviewLinkHoverEventArgs(link, handle));
+
+            // Preview 里拒绝：hover 与高亮都留在原处
+            if (handle.PreventDefault) return;
+        }
 
         var previous = hovered;
         hovered = link;
@@ -172,6 +290,9 @@ public sealed class LinkInteraction
             Highlight(link, true);
         }
 
-        HoverChanged?.Invoke(link is null ? null : VisualOf(link), new LinkHoverEventArgs(link));
+        if (!handle.StopPropagation)
+        {
+            HoverChanged?.Invoke(link is null ? null : VisualOf(link), new LinkHoverEventArgs(link, handle));
+        }
     }
 }
