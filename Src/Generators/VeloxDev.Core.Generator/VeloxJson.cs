@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
+using System.Collections.Generic;
 using System.Text;
 using VeloxDev.Generators.Base;
 using VeloxDev.Generators.Writers;
@@ -53,13 +54,17 @@ namespace VeloxDev.Generators
             // 没有引用 VeloxDev.MVVM 的工程没有 ViewModel 可写，连遍历都不做。
             if (!VeloxJsonModelBuilder.Applies(compilation)) return;
 
-            var assembly = VeloxJsonModelBuilder.Build(compilation);
-            if (assembly is null) return;
+            var notices = new List<Diagnostic>();
+            var assembly = VeloxJsonModelBuilder.Build(compilation, notices);
 
-            foreach (var notice in assembly.Notices)
+            // 先报诊断再判空：一个被拒的声明往往正是「这个程序集什么也没产出」的原因，
+            // 而那样的情况恰恰是最需要出声的时候。
+            foreach (var notice in notices)
             {
                 context.ReportDiagnostic(notice);
             }
+
+            if (assembly is null) return;
 
             var source = VeloxJsonCodeWriter.Write(assembly, Sanitize(assembly.AssemblyName));
 

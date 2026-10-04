@@ -146,6 +146,40 @@ namespace VeloxDev.Generators
         /// the document holds — <c>Anchor</c> uses <c>[OnSerializing]</c> to expand a collapsed transient into
         /// its raw values. Skipping it would change the bytes without any other symptom.
         /// </remarks>
+        /// <summary>
+        /// An <c>[Archive]</c> declaration the generator cannot honour — an unreachable member, or a rename with
+        /// nothing to rename it to.
+        /// </summary>
+        /// <remarks>
+        /// Error rather than warning: the generated file would either not compile or quietly carry a different
+        /// document than the declaration asks for, and a silently missing member is the one failure a reader of
+        /// the archive has no way to notice.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnusableArchiveDeclaration = new(
+            id: "VELOX_JSON_MEMBER001",
+            title: "Unusable [Archive] declaration",
+            messageFormat: "'{0}' cannot be marked: {1}",
+            category: JsonCategory,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// <c>[Archive(KeepField)]</c> on a field that already has a property beside it.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error: the declaration is contradictory but not unrepresentable — the member is
+        /// emitted either way, and the default rules already take the property. Speaking up matters because the
+        /// author asked for the field and is silently getting the property, which is a different member with the
+        /// same name.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor ConflictingArchiveField = new(
+            id: "VELOX_JSON_MEMBER002",
+            title: "Conflicting [Archive(KeepField)]",
+            messageFormat: "'{0}' cannot be taken as a field: {1}",
+            category: JsonCategory,
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
         public static readonly DiagnosticDescriptor UnreachableSerializationHook = new(
             id: "VELOX_JSON_HOOK002",
             title: "Unreachable serialization callback",

@@ -19,13 +19,11 @@ namespace VeloxDev.Generators.Base
         internal VeloxJsonAssembly(
             string assemblyName,
             IReadOnlyList<VeloxJsonType> types,
-            IReadOnlyList<VeloxJsonContainer> containers,
-            IReadOnlyList<Diagnostic> notices)
+            IReadOnlyList<VeloxJsonContainer> containers)
         {
             AssemblyName = assemblyName;
             Types = types;
             Containers = containers;
-            Notices = notices;
         }
 
         internal string AssemblyName { get; }
@@ -36,9 +34,6 @@ namespace VeloxDev.Generators.Base
         // 成员自己那一层容器由它的生成 reader 就地填；再深一层就没有「就地」了，值得先被造出来，
         // 而按 Type 造一个泛型容器只能靠反射 —— 所以由见过这个关闭组合的那一方提供。
         internal IReadOnlyList<VeloxJsonContainer> Containers { get; }
-
-        /// <summary>What the walk could not represent faithfully — reported rather than dropped in silence.</summary>
-        internal IReadOnlyList<Diagnostic> Notices { get; }
     }
 
     // 文档里嵌在别的容器里的一个容器。
@@ -68,6 +63,24 @@ namespace VeloxDev.Generators.Base
         internal bool InterfaceKeys { get; }
     }
 
+    /// <summary>
+    /// <c>VeloxDev.Serialization.ArchiveOptions</c>, mirrored.
+    /// </summary>
+    /// <remarks>
+    /// A source generator cannot reference the assembly it generates for, so the values are repeated here. This is
+    /// the one place in this file where a number has to be kept in step by hand: <c>[Archive]</c>'s first argument
+    /// arrives as its underlying integer, and these are what those integers mean.
+    /// </remarks>
+    [System.Flags]
+    internal enum ArchiveFlags
+    {
+        None = 0,
+        KeepProperty = 1,
+        KeepField = 2,
+        IgnoreField = 4,
+        ReName = 8,
+    }
+
     /// <summary>How a member's value reaches the document.</summary>
     internal enum VeloxJsonMemberKind
     {
@@ -90,13 +103,30 @@ namespace VeloxDev.Generators.Base
         internal VeloxJsonMember(string name, ITypeSymbol declaredType, ITypeSymbol? elementType, VeloxJsonMemberKind kind)
         {
             Name = name;
+            DocumentName = name;
             DeclaredType = declaredType;
             ElementType = elementType;
             Kind = kind;
         }
 
-        /// <summary>The member's name in the document — the property name, never the backing field's.</summary>
+        /// <summary>
+        /// The member's CLR name — what generated code reaches it through (<c>t.…</c>). For a
+        /// <c>[VeloxProperty]</c> field this is the promoted property's name, never the backing field's.
+        /// </summary>
         internal string Name { get; }
+
+        /// <summary>
+        /// The name this member carries in the document. Differs from <see cref="Name"/> only where
+        /// <see cref="ArchiveFlags.ReName"/> moved it.
+        /// </summary>
+        internal string DocumentName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Whether the member is written but never read back — a computed property, which has no setter for the
+        /// reader to assign through. The generated reader leaves no branch for such a member, so the document's
+        /// value is stepped over as an unknown one.
+        /// </summary>
+        internal bool WriteOnly { get; set; }
 
         /// <summary>The declared type, which is what decides whether a value needs its type name written.</summary>
         internal ITypeSymbol DeclaredType { get; }
@@ -180,6 +210,7 @@ namespace VeloxDev.Generators.Base
     {
         private const string VeloxPropertyAttributeName = "VeloxDev.MVVM.VeloxPropertyAttribute";
         private const string ArchivableAttributeName = "VeloxDev.Serialization.ArchivableAttribute";
+        private const string ArchiveAttributeName = "VeloxDev.Serialization.ArchiveAttribute";
 
         // 钩子就是 BCL 那四个。生成器认它们，而不是另立一套自己名字的特性 —— 这些特性本来就写在这些
         // 方法上，只是此前生成器不看它们，于是成了死的装饰。
@@ -222,7 +253,20 @@ namespace VeloxDev.Generators.Base
         internal static bool Applies(Compilation compilation)
             => compilation.GetTypeByMetadataName(VeloxPropertyAttributeName) is not null;
 
-        internal static VeloxJsonAssembly? Build(Compilation compilation)
+        /// <summary>
+        /// Builds one assembly's serializer model, collecting the diagnostics it trips over into
+        /// <paramref name="notices"/>.
+        /// </summary>
+        /// <remarks>
+        /// The caller owns <paramref name="notices"/> rather than reading them off the result, because the result
+        /// is <see langword="null"/> when the assembly contributes nothing — and a declaration the generator
+        /// refused is exactly the case where nothing gets contributed. Keeping the notices inside the result would
+        /// drop them at the one moment they matter most.
+        /// </remarks>
+        /// <param name="compilation">The assembly being compiled.</param>
+        /// <param name="notices">Collects what the walk could not represent faithfully.</param>
+        /// <returns>The model, or <see langword="null"/> when there is nothing to generate.</returns>
+        internal static VeloxJsonAssembly? Build(Compilation compilation, List<Diagnostic> notices)
         {
             var contracts = ResolveContracts(compilation);
             var candidates = EnumerateTypes(compilation.Assembly.GlobalNamespace).ToList();
@@ -231,7 +275,6 @@ namespace VeloxDev.Generators.Base
 
             var included = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             var queue = new Queue<INamedTypeSymbol>(roots);
-            var notices = new List<Diagnostic>();
 
             // 闭包：从根类型出发，沿可写成员的声明类型一路收下去。目录里没有的类型写不出去，
             // 所以这一步决定了「什么能进文档」。
@@ -262,7 +305,7 @@ namespace VeloxDev.Generators.Base
                     queue.Enqueue(named);
                 }
 
-                foreach (var member in ReadMembers(symbol, contracts))
+                foreach (var member in ReadMembers(symbol, contracts, compilation.Assembly, notices))
                 {
                     foreach (var reachable in Reachable(member))
                     {
@@ -299,7 +342,7 @@ namespace VeloxDev.Generators.Base
 
             if (types.Count == 0) return null;
 
-            return new VeloxJsonAssembly(compilation.AssemblyName ?? "Assembly", types, CollectNestedContainers(types), notices);
+            return new VeloxJsonAssembly(compilation.AssemblyName ?? "Assembly", types, CollectNestedContainers(types));
         }
 
         // 收出所有嵌在别的容器里的容器，一直收到嵌套见底。
@@ -551,7 +594,8 @@ namespace VeloxDev.Generators.Base
             List<Diagnostic> notices,
             IAssemblySymbol assembly)
         {
-            var members = ReadMembers(symbol, contracts).ToList();
+            // notices 传 null：闭包那一趟已经为每个类型报过一次成员级的诊断，这里再报就是同一个毛病说两遍。
+            var members = ReadMembers(symbol, contracts, assembly, notices: null).ToList();
             if (members.Count == 0) return null;
 
             return new VeloxJsonType(
@@ -660,10 +704,10 @@ namespace VeloxDev.Generators.Base
         /// <c>public</c> hook. That is not a style preference: reference assemblies drop non-public members, so an
         /// <c>internal</c> hook on a foreign type cannot even be seen here, let alone called.
         /// </remarks>
-        private static bool IsReachableFromGeneratedCode(IMethodSymbol method, IAssemblySymbol assembly)
-            => method.DeclaredAccessibility == Accessibility.Public
-               || (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, assembly)
-                   && method.DeclaredAccessibility is Accessibility.Internal or Accessibility.ProtectedOrInternal);
+        private static bool IsReachableFromGeneratedCode(ISymbol member, IAssemblySymbol assembly)
+            => member.DeclaredAccessibility == Accessibility.Public
+               || (SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, assembly)
+                   && member.DeclaredAccessibility is Accessibility.Internal or Accessibility.ProtectedOrInternal);
 
         /// <summary>
         /// The members the format writes: public read/write properties, in the order the contract reports them —
@@ -677,21 +721,48 @@ namespace VeloxDev.Generators.Base
         /// </remarks>
         private static IEnumerable<VeloxJsonMember> ReadMembers(
             INamedTypeSymbol symbol,
-            IReadOnlyDictionary<string, INamedTypeSymbol> contracts)
+            IReadOnlyDictionary<string, INamedTypeSymbol> contracts,
+            IAssemblySymbol assembly,
+            List<Diagnostic>? notices)
         {
             var promoted = new HashSet<string>(System.StringComparer.Ordinal);
-            var fields = new List<(IFieldSymbol Field, string Name)>();
+            var fields = new List<(IFieldSymbol Field, string Name, string DocumentName)>();
 
             foreach (var member in symbol.GetMembers())
             {
-                if (member is IFieldSymbol field && AIContextNaming.HasAttribute(field, VeloxPropertyAttributeName))
+                if (member is not IFieldSymbol field) continue;
+
+                var (options, renamed) = ReadArchive(field, notices);
+
+                // 字段永不参与：对家（那个提升出来的属性）照常走属性那一趟。
+                if ((options & ArchiveFlags.IgnoreField) != 0) continue;
+
+                if (AIContextNaming.HasAttribute(field, VeloxPropertyAttributeName))
                 {
+                    // 成员是提升出来的那个属性，生成代码写的是它而不是字段 —— 所以字段的可访问性在这里无关紧要，
+                    // 只有下面那条「直接读字段」的路才要求字段自己够得着。
+                    if ((options & ArchiveFlags.KeepField) != 0) ReportFieldConflict(field, notices);
+
                     var name = AIContextNaming.PromotedPropertyName(field.Name);
                     if (name.Length == 0) continue;
 
                     promoted.Add(name);
-                    fields.Add((field, name));
+                    fields.Add((field, name, renamed ?? name));
+                    continue;
                 }
+
+                // 普通字段默认不进文档；KeepField 或 ReName 才把它拉进来。
+                if ((options & (ArchiveFlags.KeepField | ArchiveFlags.ReName)) == 0) continue;
+
+                if (!CanBeMarked(field, options, assembly, notices)) continue;
+
+                if (HasCorrespondingProperty(symbol, field))
+                {
+                    ReportFieldConflict(field, notices);
+                    continue;
+                }
+
+                fields.Add((field, field.Name, renamed ?? field.Name));
             }
 
             var emitted = new HashSet<string>(System.StringComparer.Ordinal);
@@ -701,16 +772,23 @@ namespace VeloxDev.Generators.Base
                 if (member is not IPropertySymbol property) continue;
                 if (property.IsIndexer || property.IsStatic) continue;
                 if (promoted.Contains(property.Name)) continue;
-                if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
+
+                var (options, renamed) = ReadArchive(property, notices);
+                if (!CanBeMarked(property, options, assembly, notices)) continue;
+
+                // 没有 public setter 的计算属性默认丢弃。KeepProperty 把它写进文档，读侧却必须跳过 ——
+                // 没有 setter 可赋值，所以它是只写得出去的那一种成员。
+                var writable = property.SetMethod is { DeclaredAccessibility: Accessibility.Public };
+                if (!writable && (options & ArchiveFlags.KeepProperty) == 0) continue;
                 if (!emitted.Add(property.Name)) continue;
 
-                yield return BuildMember(property.Name, property.Type);
+                yield return BuildMember(property.Name, property.Type, renamed, writeOnly: !writable);
             }
 
-            foreach (var (field, name) in fields)
+            foreach (var (field, name, documentName) in fields)
             {
                 if (!emitted.Add(name)) continue;
-                yield return BuildMember(name, field.Type);
+                yield return BuildMember(name, field.Type, documentName);
             }
 
             // 组件的成员由 Workflow 生成器写出，本生成器看不见 —— 按作者写下的 [WorkflowBuilder.*]
@@ -776,13 +854,93 @@ namespace VeloxDev.Generators.Base
             }
         }
 
-        private static VeloxJsonMember BuildMember(string name, ITypeSymbol declaredType)
+        /// <summary>
+        /// The <c>[Archive]</c> declaration on a member: its options, and the name it renames the member to.
+        /// </summary>
+        /// <remarks>
+        /// An enum argument arrives as its underlying integer, not as the enum — attributes carry constants, and
+        /// the compiler boxes them as the backing type.
+        /// </remarks>
+        private static (ArchiveFlags Options, string? Name) ReadArchive(ISymbol member, List<Diagnostic>? notices)
+        {
+            var attribute = member.GetAttributes().FirstOrDefault(a =>
+                a.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .Replace("global::", string.Empty) == ArchiveAttributeName);
+
+            if (attribute is null) return (ArchiveFlags.None, null);
+
+            var options = attribute.ConstructorArguments.Length > 0 && attribute.ConstructorArguments[0].Value is int raw
+                ? (ArchiveFlags)raw
+                : ArchiveFlags.None;
+
+            if ((options & ArchiveFlags.ReName) == 0) return (options, null);
+
+            // 形参声明成 object?，所以名字按实参自己的类型出现 —— 字符串就是 string。
+            if (attribute.ConstructorArguments.Length > 1
+                && attribute.ConstructorArguments[1].Value is string { Length: > 0 } name)
+            {
+                return (options, name);
+            }
+
+            notices?.Add(Diagnostic.Create(
+                Diagnostics.UnusableArchiveDeclaration,
+                attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation(),
+                member.Name,
+                "ReName needs a non-empty string as the attribute's second argument"));
+
+            return (options & ~ArchiveFlags.ReName, null);
+        }
+
+        /// <summary>
+        /// Whether a marked member can be written by generated code, reporting it when it cannot.
+        /// </summary>
+        /// <remarks>
+        /// Only a member that asked to take part is worth a diagnostic: the default rules already pass over
+        /// everything the generator cannot reach, so saying so for every private helper would drown the reports
+        /// that matter.
+        /// </remarks>
+        private static bool CanBeMarked(ISymbol member, ArchiveFlags options, IAssemblySymbol assembly, List<Diagnostic>? notices)
+        {
+            if (options == ArchiveFlags.None) return true;
+            if (IsReachableFromGeneratedCode(member, assembly)) return true;
+
+            notices?.Add(Diagnostic.Create(
+                Diagnostics.UnusableArchiveDeclaration,
+                member.Locations.FirstOrDefault(),
+                member.Name,
+                SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, assembly)
+                    ? "generated code sits in another namespace of the same assembly, so it reaches internal members but not private or protected ones"
+                    : "the generated reader and writer are emitted into the consuming assembly, so a marked member on a type declared elsewhere has to be public"));
+
+            return false;
+        }
+
+        /// <summary>Reports a <c>KeepField</c> the default rules will not honour.</summary>
+        private static void ReportFieldConflict(IFieldSymbol field, List<Diagnostic>? notices)
+            => notices?.Add(Diagnostic.Create(
+                Diagnostics.ConflictingArchiveField,
+                field.Locations.FirstOrDefault(),
+                field.Name,
+                "it has a property beside it, which is the member the default rules take — drop the field with ArchiveOptions.IgnoreField, or move the marking onto the property"));
+
+        // 字段是不是已经有一个对应属性 —— 按提升名找同名属性。`[VeloxProperty]` 的字段一定有（生成器会造出那个属性）。
+        private static bool HasCorrespondingProperty(INamedTypeSymbol symbol, IFieldSymbol field)
+        {
+            var name = AIContextNaming.PromotedPropertyName(field.Name);
+            if (name.Length == 0) return false;
+
+            return symbol.GetMembers().OfType<IPropertySymbol>().Any(property => !property.IsIndexer && property.Name == name);
+        }
+
+        private static VeloxJsonMember BuildMember(string name, ITypeSymbol declaredType, string? documentName = null, bool writeOnly = false)
         {
             var (kind, element, interfaceKeyed) = Classify(declaredType);
             return new VeloxJsonMember(name, declaredType, element, kind)
             {
                 IsDeclaredHere = true,
                 InterfaceKeyed = interfaceKeyed,
+                DocumentName = documentName ?? name,
+                WriteOnly = writeOnly,
             };
         }
 

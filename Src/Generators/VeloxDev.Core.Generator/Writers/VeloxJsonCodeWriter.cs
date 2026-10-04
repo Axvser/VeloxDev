@@ -124,7 +124,7 @@ namespace VeloxDev.Generators.Writers
             // 被排除的成员连名字都不写：快照模式靠这条把节点引用挡在文件外。
             builder.AppendLine($"        if (!global::{SerializationNamespace}.VeloxJsonSerializer.IsExcluded(typeof({declaredType})))");
             builder.AppendLine("        {");
-            builder.AppendLine($"            {wait}writer.{(async ? "WriteMemberNameAsync" : "WriteMemberName")}(\"{Escape(member.Name)}\"){configure};");
+            builder.AppendLine($"            {wait}writer.{(async ? "WriteMemberNameAsync" : "WriteMemberName")}(\"{Escape(member.DocumentName)}\"){configure};");
             builder.AppendLine($"            {wait}global::{SerializationNamespace}.VeloxJsonSerializer.{(async ? "WriteValueAsync" : "WriteValue")}(");
             builder.AppendLine($"                writer, t.{member.Name}, typeof({declaredType})){configure};");
             builder.AppendLine("        }");
@@ -197,8 +197,12 @@ namespace VeloxDev.Generators.Writers
             var first = true;
             foreach (var member in type.Members)
             {
+                // 只写得出去的成员（计算属性）没有读法：不给它发分支，文档里那个值就落到下面那条
+                // 「读不懂的成员跳过」上 —— 与「旧版本读到新成员」走的是同一条路。
+                if (member.WriteOnly) continue;
+
                 // 每个分支各起一个作用域：多个分支都用到模式变量的话会撞名。
-                builder.AppendLine($"            {(first ? "if" : "else if")} (reader.MemberNameEquals(\"{Escape(member.Name)}\"))");
+                builder.AppendLine($"            {(first ? "if" : "else if")} (reader.MemberNameEquals(\"{Escape(member.DocumentName)}\"))");
                 builder.AppendLine("            {");
                 builder.AppendLine($"                {ReadMember(member, async)}");
                 builder.AppendLine("            }");
