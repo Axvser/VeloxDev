@@ -47,3 +47,20 @@ BenchmarkDotNet 默认会为每个基准新建工程并以 Release 重编译整�
 
 同一台机器、同一次会话里比 Stage 前后的变化。`MemoryDiagnoser` 的分配列是这里最可靠的一维：
 分配量不受 JIT 进度影响，耗时会。
+
+**跨会话比就要带上机器**：把 CPU / 内存 / 系统 / 运行时 / 工具链和数字记在一起。测出来的数字
+（连同环境）落在 [`memory/modules/Serialization/architecture.md`](../../memory/modules/Serialization/architecture.md) §四。
+
+### 与 System.Text.Json / Newtonsoft 比
+
+```bash
+./Src/Verification/VeloxDev.Serialization.Benchmarks/bin/Debug/net10.0/VeloxDev.Serialization.Benchmarks.exe \
+             --filter "*ComparisonBenchmarks*"
+```
+
+`ComparisonBenchmarks` 让**同一个对象图**过三家，且三家都开着引用保留（`ReferenceHandler.Preserve` /
+`PreserveReferencesHandling.Objects`，Newtonsoft 另加 `TypeNameHandling.Auto`）—— 归档对每个对象都写
+`$id`、对多态成员写 `$type`，不对齐这两项就是拿不同的活来比。`GlobalSetup` 会打印三份文档的字符数。
+
+两处 **实测** 的 STJ 默认设置失败（不是推测）：写不了含 NaN/±Infinity 的图（要
+`AllowNamedFloatingPointLiterals`），以及读不了主构造器类（构造器形参名与提升出来的属性名不同）。

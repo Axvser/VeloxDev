@@ -12,6 +12,9 @@
 
 	<ItemGroup>
 		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+		<!-- 只给 ComparisonBenchmarks 用：同一个对象图过三家序列化器，才谈得上「快不快」。
+		     本目录不打包、不进任何 PackageReference，所以这里多一个引用不牵连产品。 -->
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 	</ItemGroup>
 
 	<ItemGroup>
