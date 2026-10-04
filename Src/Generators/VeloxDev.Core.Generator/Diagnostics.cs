@@ -139,14 +139,6 @@ namespace VeloxDev.Generators
             isEnabledByDefault: true);
 
         /// <summary>
-        /// A serialization callback the generated code cannot reach, or whose signature it cannot call.
-        /// </summary>
-        /// <remarks>
-        /// Error rather than warning: the callback would silently not run, and a callback exists to change what
-        /// the document holds — <c>Anchor</c> uses <c>[OnSerializing]</c> to expand a collapsed transient into
-        /// its raw values. Skipping it would change the bytes without any other symptom.
-        /// </remarks>
-        /// <summary>
         /// A member declaration the generator cannot honour — an unreachable member, a rename with nothing to
         /// rename it to, or a <c>[JsonIgnore]</c> condition this format has no reading for.
         /// </summary>
@@ -180,12 +172,62 @@ namespace VeloxDev.Generators
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
 
+        /// <summary>
+        /// A serialization callback the generated code cannot reach, or whose signature it cannot call.
+        /// </summary>
+        /// <remarks>
+        /// Error rather than warning: the callback would silently not run, and a callback exists to change what
+        /// the document holds — <c>Anchor</c> uses <c>[OnSerializing]</c> to expand a collapsed transient into
+        /// its raw values. Skipping it would change the bytes without any other symptom.
+        /// </remarks>
         public static readonly DiagnosticDescriptor UnreachableSerializationHook = new(
             id: "VELOX_JSON_HOOK002",
             title: "Unreachable serialization callback",
             messageFormat: "'{0}' on '{1}' cannot be called by the generated serializer: {2}",
             category: JsonCategory,
             defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A type parameter whose constraints name no class or interface the generator can follow.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error: the declaration is legal and the build can proceed — what is lost is the
+        /// family of types the parameter may hold, which is exactly what cannot be worked out. Saying so matters
+        /// because the symptom otherwise waits until run time, as a <c>MissingWriter</c> naming a type the author
+        /// never mentioned. See <c>Base/VeloxJsonModel.cs</c>.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnresolvableTypeParameter = new(
+            id: "VELOX_JSON_GENERIC001",
+            title: "Type parameter with no resolvable constraint",
+            messageFormat: "'{0}' on '{1}' has no class or interface constraint, so the types it may hold cannot be taken into the archive format",
+            category: JsonCategory,
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A type no declaration names, which the archive format can nevertheless write, and why.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Informational rather than a warning: nothing is wrong. It exists because the set of types a document can
+        /// hold is decided by a closure over member types, derived types and type-parameter constraints — so a type
+        /// reached only through inheritance, a map key or a constraint is not visible in any one declaration.
+        /// </para>
+        /// <para>
+        /// Only those are reported. A root, a member's declared type, a type named by <c>[Archivable]</c> and a
+        /// constraint type are all written down in source, so listing them would restate what the author already
+        /// said — and it is those that multiply, once per target framework. The generated file carries the full
+        /// list in its header instead. <see cref="UnresolvableTypeParameter"/> covers the case where the closure
+        /// cannot be worked out at all.
+        /// </para>
+        /// </remarks>
+        public static readonly DiagnosticDescriptor SerializationSurface = new(
+            id: "VELOX_JSON_INCLUDE001",
+            title: "Type taken into the archive format",
+            messageFormat: "'{0}' is serialized by VeloxDev: {1}",
+            category: JsonCategory,
+            defaultSeverity: DiagnosticSeverity.Info,
             isEnabledByDefault: true);
     }
 }

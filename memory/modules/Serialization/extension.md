@@ -50,24 +50,26 @@
 
 ## 三、想加一个新拼写/新成员类型（例如一种新的容器形状）
 
-1. `Base/VeloxJsonModel.cs` 的 `Classify`（`:572` 附近）决定成员算标量、集合还是字典 —— 新形状先在这里加。
-2. 若它需要**读回来**（不是只写得出去），还要 `CollectNestedContainers`（`:265` 附近）与 `IsContainerReadable`（`:287` 附近）认它。**只加写侧是一条已知的坑**：嵌套容器曾经写得出去读不回来，见 `VeloxJsonRegistry.RegisterContainerFactory` 的 remarks。
-3. `Writers/VeloxJsonCodeWriter.cs` 的 `ReadMember`（`:189` 附近）发对应的读法。
+1. `Base/VeloxJsonModel.cs` 的 `Classify` 决定成员算标量、集合还是字典 —— 新形状先在这里加。它的返回值是四元组 `(Kind, Element, Key, InterfaceKeyed)`：**`Key` 是字典的键类型，也是 `Reachable` 的入口之一**（2026-10-04 起），新形状要么给它一个键，要么显式给 `null`。
+2. 若它需要**读回来**（不是只写得出去），还要 `CollectNestedContainers` 与 `IsContainerReadable` 认它。**只加写侧是一条已知的坑**：嵌套容器曾经写得出去读不回来，见 `VeloxJsonRegistry.RegisterContainerFactory` 的 remarks。
+3. `Writers/VeloxJsonCodeWriter.cs` 的 `ReadMember` 发对应的读法。
 4. 跑 `Src/Core/VeloxDev.Core.Extension.Test` —— 逐字节黄金与幂等测试会当场告诉你产物变了没有。
 
-**成员收录顺序是契约的一部分**：手写可写属性（声明顺序）在前，`[VeloxProperty]` 提升出来的字段（字段顺序）在后，继承来的再往后。规则在 `Base/VeloxJsonModel.cs:458` 的 `ReadMembers`。**改它会直接打翻黄金文件**，改之前先看 `SerializationOrderTests`。
+**成员收录顺序是契约的一部分**：手写可写属性（声明顺序）在前，`[VeloxProperty]` 提升出来的字段（字段顺序）在后，继承来的再往后。规则在 `Base/VeloxJsonModel.cs` 的 `ReadMembers`。**改它会直接打翻黄金文件**，改之前先看 `SerializationOrderTests`。
 
 ---
 
 ## 四、想加一个能被序列化的类型
 
-不需要动引擎，只需要让它进得了「闭世界」——见 architecture.md §一。三条路：实现四个组件接口之一、贴 `[VeloxProperty]`、或贴 `[Archivable]`；或者从这些类型出发沿**成员的声明类型**能走到。
+不需要动引擎，只需要让它进得了「闭世界」——见 architecture.md §一。四条路：实现四个组件接口之一、贴 `[VeloxProperty]`、贴 `[Archivable]`、或带 `[WorkflowBuilder.*]`；或者从这些类型出发沿**成员的声明类型**能走到。**能走到的比声明本身宽**（派生类向下展开、字典的键、根形状开放泛型的约束，见 architecture.md §一「收录面比…宽三条」）。
 
-`[Archivable(typeof(A), typeof(B))]` 是第四条路：被点名的类型直接当根收进来，可以链式（被点名的类型自己也能再点名），去重靠既有的 `included`。**点名却发不出条目的类型报 `VELOX_JSON_ARCH001`（错误），不静默丢掉** —— 判据与措辞在 `Base/VeloxJsonModel.cs` 的 `WhyNotWritable`。
+`[Archivable(typeof(A), typeof(B))]` 是第五条路：被点名的类型直接当根收进来，可以链式（被点名的类型自己也能再点名），去重靠既有的 `included`。**点名却发不出条目的类型报 `VELOX_JSON_ARCH001`（错误），不静默丢掉** —— 判据与措辞在 `Base/VeloxJsonModel.cs` 的 `WhyNotWritable`。
 
 走不到也不打紧，**写它时会抛 `MissingWriter`，错误信息本身写着为什么**。不要为了「让它能写」去加反射兜底 —— 闭世界正是这套东西能裁剪的前提。
 
-**接口 / 抽象类作为成员类型时，只有同程序集的实现者会被自动收进来**；跨程序集的实现者要自己贴 `[Archivable]`。失败形态（写抛 `MissingWriter`、读抛 `MissingReader`、`object` 成员静默降级成字典）见 [pitfalls.md](pitfalls.md) §六。
+**成员类型声明成基类时，本程序集里它的派生类 / 实现类会被自动收进来**（2026-10-04 起对**具体**基类也成立，此前只有接口与抽象类）；跨程序集的实现者要自己贴 `[Archivable]`。失败形态（写抛 `MissingWriter`、读抛 `MissingReader`、`object` 成员静默降级成字典）见 [pitfalls.md](pitfalls.md) §六。
+
+**收录了什么可以不用猜**：全量清单（类型名 + `$type` 名 + 出处）写在生成文件 `*_VeloxJson.g.cs` 的**文件头注释**里（VS：Dependencies → Analyzers；CLI：`-p:EmitCompilerGeneratedFiles=true`）。构建期只有两类出声：`VELOX_JSON_INCLUDE001`（Info）**只报没有声明点名过的**那些，`VELOX_JSON_GENERIC001`（Warning）报解析不出的类型参数。
 
 ---
 

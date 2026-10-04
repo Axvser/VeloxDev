@@ -15,3 +15,5 @@ VELOX_JSON_HOOK001 | VeloxDev.Serialization | Warning | Ambiguous serialization 
 VELOX_JSON_HOOK002 | VeloxDev.Serialization | Error | Unreachable serialization callback
 VELOX_JSON_MEMBER001 | VeloxDev.Serialization | Error | Unusable member declaration
 VELOX_JSON_MEMBER002 | VeloxDev.Serialization | Warning | Conflicting [Archive(KeepField)]
+VELOX_JSON_GENERIC001 | VeloxDev.Serialization | Warning | Type parameter with no resolvable constraint
+VELOX_JSON_INCLUDE001 | VeloxDev.Serialization | Info | Type reached without being named by a declaration

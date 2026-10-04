@@ -461,26 +461,9 @@ namespace VeloxDev.Generators.Writers
                 forcedPropertyType);
         }
 
-        // 递归收集类型里出现的全部类型参数，数组/指针/泛型实参都要下钻。
+        // 收集写在别处：归档侧也要走同一套下钻规则，见 Base/TypeParameterWalk.cs。
         private static IEnumerable<ITypeParameterSymbol> CollectTypeParameters(ITypeSymbol type)
-        {
-            switch (type)
-            {
-                case ITypeParameterSymbol typeParameter:
-                    yield return typeParameter;
-                    break;
-                case IArrayTypeSymbol array:
-                    foreach (var element in CollectTypeParameters(array.ElementType)) yield return element;
-                    break;
-                case IPointerTypeSymbol pointer:
-                    foreach (var pointed in CollectTypeParameters(pointer.PointedAtType)) yield return pointed;
-                    break;
-                case INamedTypeSymbol named:
-                    foreach (var argument in named.TypeArguments)
-                        foreach (var nested in CollectTypeParameters(argument)) yield return nested;
-                    break;
-            }
-        }
+            => TypeParameterWalk.Collect(type);
 
         // 带 global:: 前缀且保留可空注解的类型名。不能用 SymbolDisplayFormat.FullyQualifiedFormat：
         // 它不带 global::（可能与用户命名空间撞名），也不稳定地带可空注解。

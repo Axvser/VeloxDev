@@ -288,6 +288,172 @@ public class ArchiveDiagnosticsTests
         StringAssert.Contains(generated, "global::Probe.Extra", "the named type gets an entry of its own");
     }
 
+    /// <summary>
+    /// A member declared as a concrete base class. The value written is a derived one, and <c>$type</c> names the
+    /// derived type — so without an entry for it the document cannot be written at all.
+    /// </summary>
+    private const string APolymorphicMemberDeclaredAsAConcreteBase = """
+        using VeloxDev.MVVM;
+
+        namespace Probe;
+
+        public partial class Model
+        {
+            [VeloxProperty] private Animal? pet;
+        }
+
+        public class Animal
+        {
+            public string? Name { get; set; }
+        }
+
+        public class Dog : Animal
+        {
+            public bool Barks { get; set; }
+        }
+
+        public class Unrelated
+        {
+            public string? Tag { get; set; }
+        }
+        """;
+
+    /// <summary>
+    /// A root-shaped open generic. It can never have an entry of its own — entries go to closed instantiations —
+    /// but what its type parameter is constrained to is what a value of that parameter can be.
+    /// </summary>
+    private const string AConstrainedTypeParameterOnARootShapedGeneric = """
+        using VeloxDev.Serialization;
+
+        namespace Probe;
+
+        [Archivable]
+        public partial class Host<T> where T : Animal
+        {
+            public T? Value { get; set; }
+        }
+
+        public class Animal
+        {
+            public string? Name { get; set; }
+        }
+
+        public class Dog : Animal
+        {
+            public bool Barks { get; set; }
+        }
+        """;
+
+    /// <summary>An unconstrained parameter says nothing about what it may hold, so nothing can be taken in.</summary>
+    private const string ATypeParameterWithNoResolvableConstraint = """
+        using VeloxDev.Serialization;
+
+        namespace Probe;
+
+        [Archivable]
+        public partial class Host<T> where T : object
+        {
+            public T? Value { get; set; }
+        }
+        """;
+
+    /// <summary>
+    /// An interface-keyed map. Its keys are written as the key objects' reference ids, so the implementations are
+    /// what those ids resolve to — and the key type is named nowhere else in the compilation.
+    /// </summary>
+    private const string AnInterfaceKeyedMap = """
+        using System.Collections.Generic;
+        using VeloxDev.MVVM;
+
+        namespace Probe;
+
+        public partial class Model
+        {
+            [VeloxProperty] private Dictionary<ISlot, int> weights = [];
+        }
+
+        public interface ISlot
+        {
+            string? Name { get; set; }
+        }
+
+        public class Slot : ISlot
+        {
+            public string? Name { get; set; }
+        }
+        """;
+
+    [TestMethod]
+    public void ADerivedTypeOfAConcreteBaseMember_IsTakenIn()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(new VeloxJson(), APolymorphicMemberDeclaredAsAConcreteBase, "Probe");
+
+        Assert.IsFalse(diagnostics.Any(static d => d.Severity == DiagnosticSeverity.Error),
+            GeneratorProbe.Describe(diagnostics));
+
+        StringAssert.Contains(generated, "\"Probe.Dog, Probe\"",
+            "a member declared as Animal can hold a Dog, and $type names the Dog");
+        Assert.IsFalse(generated.Contains("\"Probe.Unrelated, Probe\""),
+            "the closure widens along inheritance, it does not sweep the assembly");
+    }
+
+    [TestMethod]
+    public void AConstraintOnARootShapedOpenGeneric_TakesItsFamilyIn()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(new VeloxJson(), AConstrainedTypeParameterOnARootShapedGeneric, "Probe");
+
+        Assert.IsFalse(diagnostics.Any(static d => d.Severity == DiagnosticSeverity.Error),
+            GeneratorProbe.Describe(diagnostics));
+
+        StringAssert.Contains(generated, "\"Probe.Dog, Probe\"",
+            "T is constrained to Animal, so a value of T can be a Dog");
+    }
+
+    [TestMethod]
+    public void ATypeParameterWithNoResolvableConstraint_IsReported()
+        => AssertReports("VELOX_JSON_GENERIC001", ATypeParameterWithNoResolvableConstraint);
+
+    [TestMethod]
+    public void AKeyTypeThatIsAnInterface_TakesItsImplementationsIn()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(new VeloxJson(), AnInterfaceKeyedMap, "Probe");
+
+        Assert.IsFalse(diagnostics.Any(static d => d.Severity == DiagnosticSeverity.Error),
+            GeneratorProbe.Describe(diagnostics));
+
+        StringAssert.Contains(generated, "\"Probe.Slot, Probe\"",
+            "the key is written as a reference id, so what that id resolves to needs an entry");
+    }
+
+    [TestMethod]
+    public void OnlyTheTypesNoDeclarationNames_AreReportedAsInformation()
+    {
+        var (diagnostics, _) = GeneratorProbe.Run(new VeloxJson(), APolymorphicMemberDeclaredAsAConcreteBase, "Probe");
+        var listed = diagnostics.Where(static d => d.Id == "VELOX_JSON_INCLUDE001").ToList();
+
+        Assert.AreEqual(1, listed.Count,
+            "only Dog is reached without being named; Model is a root and Animal is the member's declared type: "
+                + GeneratorProbe.Describe(diagnostics));
+        Assert.AreEqual(DiagnosticSeverity.Info, listed[0].Severity,
+            "it reports what was taken in rather than complaining about it");
+        StringAssert.Contains(listed[0].GetMessage(), "Probe.Dog");
+        StringAssert.Contains(listed[0].GetMessage(), "derives from or implements");
+    }
+
+    [TestMethod]
+    public void TheGeneratedFileHeader_ListsEveryTypeItCanWrite()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(new VeloxJson(), APolymorphicMemberDeclaredAsAConcreteBase, "Probe");
+
+        Assert.IsFalse(diagnostics.Any(static d => d.Severity == DiagnosticSeverity.Error),
+            GeneratorProbe.Describe(diagnostics));
+
+        StringAssert.Contains(generated, "//   Probe.Model",
+            "the file is the full list, so the types the build stays quiet about are listed here");
+        StringAssert.Contains(generated, "// * Probe.Dog",
+            "(*) marks the ones reached without being named by a declaration");
+    }
+
     private static void AssertReports(string id, string source)
     {
         var (diagnostics, _) = GeneratorProbe.Run(new VeloxJson(), source, "Probe");

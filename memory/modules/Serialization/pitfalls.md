@@ -38,6 +38,11 @@
 
 **接口键的字典是这套格式独有的形状**：键写成键对象的**引用 id**，而且映射本身不写 `$id`、不写 `$type`。STJ / Json.NET 都没有这种形状，互操作时对不上。
 
+**键类型现在也进闭包**（2026-10-04 起 `Reachable` 交出 `VeloxJsonMember.KeyType`），走的是与其它成员类型**同一条**路 —— 接口键因此能拿到实现类的条目。但两件事**没解决，是已知契约**：
+
+- **写侧只发 id、不写对象**（`VeloxJsonWriter.GetOrAddReference` 只分配 id）。所以每个键对象都必须在文档**别处以完整对象出现过**，`ResolveReference` 才解析得回来；不成立时 [读侧当场 `SkipValue`，条目静默丢掉](/Src/Core/VeloxDev.Core/Serialization/VeloxJsonSerializer.cs)。今天靠的是「键对象同时是图里别处的节点」这个约定，而它取决于遍历顺序。
+- **`object` 键不走引用 id**：`Classify` 只在 `TypeArguments[0].TypeKind == Interface` 时置 `InterfaceKeyed`，而 `object` 的 `TypeKind` 是 `Class` —— 于是它走 `Convert.ToString`，读回 `ReadMapKey` 给的**字符串**，装箱对象降级。这是**故意的**：`SlotEnumerator.conditionMap` 的 `Dictionary<object, TSlot>` 重建就假定键是字符串，改它等于改格式契约。
+
 ---
 
 ## 三、`DateTime` 与值拼写
@@ -58,11 +63,11 @@
 
 ---
 
-## 五、成员声明成接口 / 抽象类：实现者**跨程序集不会被自动收进来**
+## 五、成员声明成基类：派生类**跨程序集不会被自动收进来**
 
-闭包那一趟（`Base/VeloxJsonModel.cs`）遇到接口或抽象基类时把它**跳过**，改为收集「实现了这个契约」的具体类型。两点要记住：
+闭包那一趟（`Base/VeloxJsonModel.cs`）按一张祖先索引（`BuildFamilyIndex`，键是「自己 + 基类链 + 全部接口」）收集**本程序集里派生 / 实现了这个类型**的具体类型。接口、抽象类、**具体基类**都走这一条 —— 2026-10-04 起具体基类也展开，此前只有接口与抽象类（那是「声明成 `Animal`、装的却是 `Dog`」写得出读不回来的原因）。两点要记住：
 
-- 抽象类型**自己永远没有条目** —— `IsWritableType` 只认 `Class`/`Struct` 且显式拒绝抽象，所以 `ReaderFor(I你的接口)` 恒为 `null`。
+- 抽象类型与接口**自己永远没有条目** —— `IsWritableType` 只认 `Class`/`Struct` 且显式拒绝抽象，所以 `ReaderFor(I你的接口)` 恒为 `null`。
 - 候选集只有 `candidates`，即**本程序集**的类型；跨程序集的具体类要 `IsWritableType` 放行，而它对外程序集只放**封闭泛型 + 公开无参构造**。所以一个普通具体类若在别的程序集、且在那儿不是 root，**不会被自动收进来**。
 
 失败形态：

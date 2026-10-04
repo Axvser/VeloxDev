@@ -118,12 +118,13 @@ namespace VeloxDev.Generators.Base
     /// <summary>One member of a serialized type.</summary>
     internal sealed class VeloxJsonMember
     {
-        internal VeloxJsonMember(string name, ITypeSymbol declaredType, ITypeSymbol? elementType, VeloxJsonMemberKind kind)
+        internal VeloxJsonMember(string name, ITypeSymbol declaredType, ITypeSymbol? elementType, ITypeSymbol? keyType, VeloxJsonMemberKind kind)
         {
             Name = name;
             DocumentName = name;
             DeclaredType = declaredType;
             ElementType = elementType;
+            KeyType = keyType;
             Kind = kind;
         }
 
@@ -170,6 +171,10 @@ namespace VeloxDev.Generators.Base
 
         /// <summary>For a collection or a dictionary, the type each element or value is written as.</summary>
         internal ITypeSymbol? ElementType { get; }
+
+        // 字典的键类型；序列与普通对象为 null。非接口键写成字符串、不经读写器，但接口键写成键对象的
+        // 引用 id，而那个对象得在文档别处以完整对象出现过 —— 所以键类型也要走收录那一趟。
+        internal ITypeSymbol? KeyType { get; }
 
         internal VeloxJsonMemberKind Kind { get; }
 
@@ -222,6 +227,13 @@ namespace VeloxDev.Generators.Base
         internal string WrittenName { get; }
 
         internal IReadOnlyList<VeloxJsonMember> Members { get; }
+
+        // 凭什么被收进来，以及「它是不是被向下展开带进来的」。
+        // 后者是提示诊断唯一会报的一类：根、成员的直接声明类型、[Archivable] 点名、类型参数的约束，
+        // 都在源码上看得见，逐条报出来只是复述；只有派生类 / 实现类不在任何声明上写着。
+        internal string IncludeReason { get; set; } = string.Empty;
+
+        internal bool IncludeIsSurprising { get; set; }
 
         /// <summary>The name of the generated writer class for this type.</summary>
         internal string WriterClassName { get; set; } = string.Empty;
@@ -321,17 +333,91 @@ namespace VeloxDev.Generators.Base
             var contracts = ResolveContracts(compilation);
             var candidates = EnumerateTypes(compilation.Assembly.GlobalNamespace).ToList();
             var roots = candidates.Where(s => IsRoot(s, compilation.Assembly)).ToList();
-            if (roots.Count == 0) return null;
+
+            // 开放泛型宿主：自己没有条目（条目只发给封闭实例），但它的类型参数上写的约束，指向的那一族
+            // 是会被写进文档的 —— 所以单独挑出来读一遍。只认带根标记的宿主，免得把无关泛型工具类的约束
+            // 也拉进闭世界。
+            var hosts = candidates.Where(s => IsOpenGeneric(s) && RootReason(s) is not null).ToList();
+            if (roots.Count == 0 && hosts.Count == 0) return null;
+
+            // 派生类索引：声明成基类、装的却是派生类时 $type 写的是派生类，所以派生类也得有条目。
+            // 建一次表、闭包里查一次 —— 不建表就要为每个成员类型扫一遍 candidates。
+            var family = BuildFamilyIndex(candidates, compilation.Assembly);
 
             var included = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            var queue = new Queue<INamedTypeSymbol>(roots);
+            var reasons = new Dictionary<INamedTypeSymbol, (string Reason, bool Surprising)>(SymbolEqualityComparer.Default);
+            var queue = new Queue<(INamedTypeSymbol Symbol, string Reason, bool Surprising)>();
+            foreach (var root in roots) queue.Enqueue((root, RootReason(root)!, false));
+
+            // 收一个「某个成员 / 某个约束可能装着的类型」：它自己可写就收，它在本程序集里的派生类与实现类
+            // 一并收。接口与抽象类型自己不写条目，走的正是这条路 —— 没有第二个分支。
+            void Take(INamedTypeSymbol reachable, string site)
+            {
+                // 标量（object / string / 枚举都在内）没有可写的派生类，查表只会把 object 的整本族谱翻出来。
+                if (IsScalar(reachable)) return;
+
+                // 索引里连它自己都在（`Ancestors` 第一个 yield 的就是自己），所以这一支同时覆盖「它自己」与
+                // 「它下面那些」。自己不算意外 —— 它写在源码上；只有派生类 / 实现类不在任何声明上。
+                if (family.TryGetValue(reachable, out var derived))
+                {
+                    foreach (var subtype in derived)
+                    {
+                        if (included.Contains(subtype)) continue;
+
+                        var itself = SymbolEqualityComparer.Default.Equals(subtype, reachable);
+                        queue.Enqueue((
+                            subtype,
+                            itself ? $"it is {site}" : $"it derives from or implements {site}",
+                            !itself));
+                    }
+                }
+
+                // 索引只装本程序集的类型，所以外程序集的封闭泛型要在这里自己拿一次机会。
+                if (included.Contains(reachable)) return;
+                if (!IsWritableType(reachable, compilation.Assembly)) return;
+
+                queue.Enqueue((reachable, $"it is {site}", false));
+            }
+
+            foreach (var host in hosts)
+            {
+                var reported = new HashSet<ITypeParameterSymbol>(SymbolEqualityComparer.Default);
+
+                foreach (var member in ReadMembers(host, contracts, compilation.Assembly, notices))
+                {
+                    // 声明类型一个位置就够：集合元素、字典的值与键都是声明类型的组成部分。
+                    foreach (var parameter in TypeParameterWalk.Collect(member.DeclaredType))
+                    {
+                        if (!reported.Add(parameter)) continue;
+
+                        // 约束里没有类 / 接口可走（无约束，或只有 class / struct / new() / object 这种）：
+                        // 这一族收不进来，静默下去要等到运行期 MissingWriter，所以在这里说出来。
+                        if (!HasResolvableConstraint(parameter))
+                        {
+                            notices.Add(Diagnostic.Create(
+                                Diagnostics.UnresolvableTypeParameter,
+                                parameter.Locations.FirstOrDefault(),
+                                parameter.Name,
+                                host.ToDisplayString()));
+                            continue;
+                        }
+
+                        foreach (var constraint in parameter.ConstraintTypes)
+                        {
+                            if (constraint is INamedTypeSymbol named)
+                                Take(named, $"the constraint of '{parameter.Name}' on '{host.ToDisplayString()}'");
+                        }
+                    }
+                }
+            }
 
             // 闭包：从根类型出发，沿可写成员的声明类型一路收下去。目录里没有的类型写不出去，
             // 所以这一步决定了「什么能进文档」。
             while (queue.Count > 0)
             {
-                var symbol = queue.Dequeue();
+                var (symbol, reason, surprising) = queue.Dequeue();
                 if (!included.Add(symbol)) continue;
+                reasons[symbol] = (reason, surprising);
 
                 // 声明里点名的额外根。放在循环里而不是只处理初始 roots —— 被点名的类型自己也可能再点名，
                 // 而它是不是根不影响它能不能点名。重复的由 included 去重，不需要另一张表。
@@ -352,7 +438,7 @@ namespace VeloxDev.Generators.Base
                         continue;
                     }
 
-                    queue.Enqueue(named);
+                    queue.Enqueue((named, $"'{symbol.ToDisplayString()}' names it in [Archivable]", false));
                 }
 
                 var members = ReadMembers(symbol, contracts, compilation.Assembly, notices).ToList();
@@ -362,29 +448,8 @@ namespace VeloxDev.Generators.Base
                 {
                     ReportNestedArray(member, notices);
 
-                    foreach (var reachable in Reachable(member))
-                    {
-                        // 声明类型是接口或抽象类时，实际写进文档的是某个具体类型，而它是由类型名派发过去的 ——
-                        // 所以「谁实现了这个契约」也要收进来，否则运行期会找不到写它的条目。
-                        if (reachable.TypeKind == TypeKind.Interface || reachable.IsAbstract)
-                        {
-                            foreach (var implementer in candidates)
-                            {
-                                if (included.Contains(implementer)) continue;
-                                if (!IsWritableType(implementer, compilation.Assembly)) continue;
-                                if (!MatchesContract(implementer, reachable)) continue;
-
-                                queue.Enqueue(implementer);
-                            }
-
-                            continue;
-                        }
-
-                        if (included.Contains(reachable)) continue;
-                        if (!IsWritableType(reachable, compilation.Assembly)) continue;
-
-                        queue.Enqueue(reachable);
-                    }
+                    foreach (var (reachable, slot) in Reachable(member))
+                        Take(reachable, $"{slot} on '{symbol.ToDisplayString()}'");
                 }
             }
 
@@ -396,6 +461,27 @@ namespace VeloxDev.Generators.Base
                 .ToList();
 
             if (types.Count == 0) return null;
+
+            // 收录结果只报「猜不到的那些」：被向下展开带进来的派生类 / 实现类不写在任何声明上，是唯一值得
+            // 出声的一类。根、成员的直接声明类型、[Archivable] 点名、约束类型都在源码上看得见，逐条报出来
+            // 只是复述 —— 实测一个大程序集里 32 条有 30 条是这种。全量清单连同 $type 名写进生成文件的
+            // 文件头，那是「查全」的出口。放在 types 之后发 —— 建不出成员的类型没有条目，不该进清单。
+            foreach (var type in types)
+            {
+                if (reasons.TryGetValue(type.Symbol, out var record))
+                {
+                    type.IncludeReason = record.Reason;
+                    type.IncludeIsSurprising = record.Surprising;
+                }
+
+                if (!type.IncludeIsSurprising) continue;
+
+                notices.Add(Diagnostic.Create(
+                    Diagnostics.SerializationSurface,
+                    type.Symbol.Locations.FirstOrDefault(),
+                    type.FullName,
+                    type.IncludeReason));
+            }
 
             return new VeloxJsonAssembly(compilation.AssemblyName ?? "Assembly", types, CollectNestedContainers(types));
         }
@@ -415,7 +501,7 @@ namespace VeloxDev.Generators.Base
             while (queue.Count > 0)
             {
                 var candidate = queue.Dequeue();
-                var (kind, element, interfaceKeyed) = Classify(candidate);
+                var (kind, element, key, interfaceKeyed) = Classify(candidate);
 
                 // 不是容器就到此为止；读不回来的也不登记 —— 声明那一层本来就跳过了它。
                 if (kind is not (VeloxJsonMemberKind.Dictionary or VeloxJsonMemberKind.Collection)) continue;
@@ -425,7 +511,7 @@ namespace VeloxDev.Generators.Base
                 containers.Add(new VeloxJsonContainer(
                     candidate,
                     kind,
-                    kind == VeloxJsonMemberKind.Dictionary ? candidate.TypeArguments[0] : null,
+                    key,
                     element!,
                     interfaceKeyed));
 
@@ -476,13 +562,19 @@ namespace VeloxDev.Generators.Base
         /// a serialized member.
         /// </summary>
         private static bool IsRoot(INamedTypeSymbol symbol, IAssemblySymbol assembly)
-        {
-            if (!IsWritableType(symbol, assembly)) return false;
+            => IsWritableType(symbol, assembly) && RootReason(symbol) is not null;
 
-            if (ComponentInterfaces.Any(contract => ImplementsInterface(symbol, contract))) return true;
+        // 一个类型凭什么被当根收进来，不是根就返回 null。
+        // 与 IsRoot 拆开，是因为「根形状」比「可写」宽：开放泛型永远发不出读写器，但它的类型参数约束
+        // 指向的那一族是会被写进文档的，所以它也要被认出来读一遍。这句话的另一半用处是当提示诊断的措辞。
+        private static string? RootReason(INamedTypeSymbol symbol)
+        {
+            if (ComponentInterfaces.Any(contract => ImplementsInterface(symbol, contract)))
+                return "it is a workflow component";
 
             // 不是 ViewModel 的普通文档类型靠一个特性自报家门 —— 检查点就是这种。
-            if (AIContextNaming.HasAttribute(symbol, ArchivableAttributeName)) return true;
+            if (AIContextNaming.HasAttribute(symbol, ArchivableAttributeName))
+                return "it carries [Archivable]";
 
             // 组件的接口是 Workflow 生成器加上去的，而生成器之间看不见彼此的产物 —— 所以这里认的是
             // 作者写下的那个特性，而不是最终会出现的接口。
@@ -491,18 +583,35 @@ namespace VeloxDev.Generators.Base
             // 把嵌套类型渲染成 `.` 而不是元数据里的 `+`，前缀匹配永远匹配不上。
             foreach (var attribute in symbol.GetAttributes())
             {
-                if (IsWorkflowBuilderAttribute(attribute.AttributeClass)) return true;
+                if (IsWorkflowBuilderAttribute(attribute.AttributeClass))
+                    return "it is declared as a workflow component";
             }
 
-            return symbol.GetMembers().OfType<IFieldSymbol>()
-                .Any(f => AIContextNaming.HasAttribute(f, VeloxPropertyAttributeName));
+            if (symbol.GetMembers().OfType<IFieldSymbol>()
+                .Any(f => AIContextNaming.HasAttribute(f, VeloxPropertyAttributeName)))
+            {
+                return "it carries a [VeloxProperty] field";
+            }
+
+            return null;
         }
 
-        /// <summary>The member types a member's value can be written as.</summary>
-        private static IEnumerable<INamedTypeSymbol> Reachable(VeloxJsonMember member)
+        /// <summary>
+        /// The types a member's value can be written as, each with the noun phrase naming which slot it came from
+        /// — the phrase is what the informational diagnostic reports as the reason.
+        /// </summary>
+        private static IEnumerable<(INamedTypeSymbol Type, string Slot)> Reachable(VeloxJsonMember member)
         {
-            if (member.ElementType is INamedTypeSymbol element) yield return element;
-            if (member.DeclaredType is INamedTypeSymbol declared) yield return declared;
+            if (member.ElementType is INamedTypeSymbol element)
+                yield return (element, "an element or value type");
+
+            // 字典的键走与其它成员类型同一条路，不做特例：非接口键写成字符串不经读写器，但接口键写成
+            // 键对象的引用 id，而那个对象得在文档别处以完整对象出现过 —— 实现类没有条目，那条引用就是死的。
+            if (member.KeyType is INamedTypeSymbol key)
+                yield return (key, "the key type of a map");
+
+            if (member.DeclaredType is INamedTypeSymbol declared)
+                yield return (declared, "the declared type of a member");
         }
 
         /// <summary>
@@ -1166,8 +1275,8 @@ namespace VeloxDev.Generators.Base
             bool required = false,
             bool enumName = false)
         {
-            var (kind, element, interfaceKeyed) = Classify(declaredType);
-            return new VeloxJsonMember(name, declaredType, element, kind)
+            var (kind, element, key, interfaceKeyed) = Classify(declaredType);
+            return new VeloxJsonMember(name, declaredType, element, key, kind)
             {
                 IsDeclaredHere = true,
                 InterfaceKeyed = interfaceKeyed,
@@ -1203,12 +1312,12 @@ namespace VeloxDev.Generators.Base
         /// <summary>
         /// Decides how a declared type reaches the document — the four cases the format knows.
         /// </summary>
-        private static (VeloxJsonMemberKind Kind, ITypeSymbol? Element, bool InterfaceKeyed) Classify(ITypeSymbol type)
+        private static (VeloxJsonMemberKind Kind, ITypeSymbol? Element, ITypeSymbol? Key, bool InterfaceKeyed) Classify(ITypeSymbol type)
         {
             // IsScalar 在前：byte[] 是标量（base64 字符串），其余的数组才是序列。
-            if (IsScalar(type)) return (VeloxJsonMemberKind.Scalar, null, false);
+            if (IsScalar(type)) return (VeloxJsonMemberKind.Scalar, null, null, false);
 
-            if (type is IArrayTypeSymbol array) return (VeloxJsonMemberKind.Collection, array.ElementType, false);
+            if (type is IArrayTypeSymbol array) return (VeloxJsonMemberKind.Collection, array.ElementType, null, false);
 
             if (type is INamedTypeSymbol named && named.TypeArguments.Length == 1)
             {
@@ -1216,14 +1325,14 @@ namespace VeloxDev.Generators.Base
                 if (definition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T
                     || IsSequenceType(definition))
                 {
-                    return (VeloxJsonMemberKind.Collection, named.TypeArguments[0], false);
+                    return (VeloxJsonMemberKind.Collection, named.TypeArguments[0], null, false);
                 }
             }
 
             if (type is INamedTypeSymbol map && map.TypeArguments.Length == 2 && IsMapType(map.OriginalDefinition))
-                return (VeloxJsonMemberKind.Dictionary, map.TypeArguments[1], map.TypeArguments[0].TypeKind == TypeKind.Interface);
+                return (VeloxJsonMemberKind.Dictionary, map.TypeArguments[1], map.TypeArguments[0], map.TypeArguments[0].TypeKind == TypeKind.Interface);
 
-            return (VeloxJsonMemberKind.Object, null, false);
+            return (VeloxJsonMemberKind.Object, null, null, false);
         }
 
         /// <summary>
@@ -1276,33 +1385,48 @@ namespace VeloxDev.Generators.Base
             => definition.Name is "Dictionary" or "IDictionary" or "IReadOnlyDictionary"
                && definition.ContainingNamespace?.ToDisplayString().StartsWith("System.Collections") == true;
 
-        /// <summary>
-        /// Whether a type is written as the contract.
-        /// </summary>
-        /// <remarks>
-        /// A component's interfaces are emitted by the Workflow generator, which this one cannot see, so the
-        /// author's <c>[WorkflowBuilder.*]</c> attribute stands in for them.
-        /// </remarks>
-        private static bool MatchesContract(INamedTypeSymbol symbol, INamedTypeSymbol contract)
+        // 本程序集里每个可写类型，沿「自己 + 基类链 + 全部接口」登记一次，键是那一层的类型。
+        // 一个类型在它每一层祖先下都登记过，所以查一次就拿到**传递**的派生类与实现类，不必再走 BFS。
+        // 一次建表换闭包里每个成员类型的一次查询 —— 现扫 candidates 是 O(成员数 × 类型数)。
+        private static Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> BuildFamilyIndex(
+            IReadOnlyList<INamedTypeSymbol> candidates, IAssemblySymbol assembly)
         {
-            if (Implements(symbol, contract)) return true;
+            var index = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
 
-            var attribute = contract.Name switch
+            foreach (var candidate in candidates)
             {
-                "IWorkflowTreeViewModel" => "TreeAttribute",
-                "IWorkflowNodeViewModel" => "NodeAttribute",
-                "IWorkflowSlotViewModel" => "SlotAttribute",
-                "IWorkflowLinkViewModel" => "LinkAttribute",
-                _ => null,
-            };
+                if (!IsWritableType(candidate, assembly)) continue;
 
-            if (attribute is null) return false;
+                foreach (var ancestor in Ancestors(candidate))
+                {
+                    if (!index.TryGetValue(ancestor, out var family)) index[ancestor] = family = [];
+                    family.Add(candidate);
+                }
+            }
 
-            return symbol.GetAttributes().Any(a =>
-                a.AttributeClass is { } attributeClass
-                && attributeClass.Name == attribute
-                && IsWorkflowBuilder(attributeClass.ContainingType));
+            return index;
         }
+
+        // 自己、基类链、全部接口。
+        // object 不当键：每个类都挂着它，查一次就把整个程序集翻出来，而那个查询没有任何意义。
+        private static IEnumerable<INamedTypeSymbol> Ancestors(INamedTypeSymbol symbol)
+        {
+            yield return symbol;
+
+            for (var baseType = symbol.BaseType; baseType is not null; baseType = baseType.BaseType)
+            {
+                if (baseType.SpecialType == SpecialType.System_Object) break;
+                yield return baseType;
+            }
+
+            foreach (var contract in symbol.AllInterfaces) yield return contract;
+        }
+
+        // 约束里有没有能落成「一族类型」的东西：类或接口，且不是 object / ValueType 这种人人都满足的。
+        private static bool HasResolvableConstraint(ITypeParameterSymbol parameter)
+            => parameter.ConstraintTypes.Any(static type =>
+                   type is INamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Interface }
+                   && type.SpecialType is not (SpecialType.System_Object or SpecialType.System_ValueType));
 
         /// <summary>Whether a type is one of the workflow builder's component attributes.</summary>
         private static bool IsWorkflowBuilderAttribute(INamedTypeSymbol? attributeClass)
@@ -1311,21 +1435,6 @@ namespace VeloxDev.Generators.Base
         private static bool IsWorkflowBuilder(INamedTypeSymbol? containingType)
             => containingType?.Name == "WorkflowBuilder"
                && containingType.ContainingNamespace?.ToDisplayString() == "VeloxDev.WorkflowSystem";
-
-        /// <summary>Whether a type is the contract itself, implements it, or derives from it.</summary>
-        private static bool Implements(INamedTypeSymbol symbol, INamedTypeSymbol contract)
-        {
-            if (SymbolEqualityComparer.Default.Equals(symbol, contract)) return true;
-
-            if (symbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, contract))) return true;
-
-            for (var baseType = symbol.BaseType; baseType is not null; baseType = baseType.BaseType)
-            {
-                if (SymbolEqualityComparer.Default.Equals(baseType, contract)) return true;
-            }
-
-            return false;
-        }
 
         private static bool ImplementsInterface(INamedTypeSymbol symbol, string metadataName)
             => symbol.AllInterfaces.Any(i =>

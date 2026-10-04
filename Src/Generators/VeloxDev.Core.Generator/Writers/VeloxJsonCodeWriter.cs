@@ -31,6 +31,7 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine("#pragma warning disable");
             builder.AppendLine("#nullable enable");
             builder.AppendLine();
+            WriteSurfaceComment(builder, assembly);
             builder.AppendLine($"namespace {SerializationNamespace}.Generated;");
             builder.AppendLine();
 
@@ -49,6 +50,25 @@ namespace VeloxDev.Generators.Writers
             WriteRegistration(builder, assembly, safeAssembly);
 
             return builder.ToString();
+        }
+
+        // 文件头列出这个程序集能被写进归档的全部类型 —— 这是「查全」的出口。
+        // 构建期的提示诊断只报 (*) 那一类（没有声明点名过、由向下展开带进来的）：根、成员的直接声明类型、
+        // [Archivable] 点名、约束类型都写在源码上，逐条报出来只是复述，而它们会按 TFM 各报一遍。
+        private static void WriteSurfaceComment(StringBuilder builder, VeloxJsonAssembly assembly)
+        {
+            builder.AppendLine("// ── Types this assembly writes to an archive ──");
+            builder.AppendLine("// (*) marks the ones no declaration names: they were reached through inheritance, a map key, or");
+            builder.AppendLine("// a type-parameter constraint. Those are the ones the build reports as information.");
+            builder.AppendLine();
+
+            foreach (var type in assembly.Types)
+            {
+                builder.AppendLine(
+                    $"// {(type.IncludeIsSurprising ? "*" : " ")} {type.FullName} — '{type.WrittenName}' — {type.IncludeReason}");
+            }
+
+            builder.AppendLine();
         }
 
         private static void WriteTypeWriter(StringBuilder builder, VeloxJsonType type)
