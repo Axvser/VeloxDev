@@ -174,4 +174,7 @@
     <Project Path="Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj" />
   </Folder>
+  <Folder Name="/Verification/">
+    <Project Path="Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Serialization.Benchmarks.csproj" />
+  </Folder>
 </Solution>
