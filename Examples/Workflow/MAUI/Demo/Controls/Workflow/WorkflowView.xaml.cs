@@ -437,24 +437,16 @@ public partial class WorkflowView : ContentView
     {
         if (_linkInput is not null)
         {
-            _linkInput.Input.PointerEntered -= OnLinkPointerEntered;
-            _linkInput.Input.PointerExited -= OnLinkPointerExited;
             _linkInput = null;
         }
 
         if (BindingContext is IWorkflowTreeViewModel tree && tree.GetHelper() is IWorkflowInputEvents events)
         {
             _linkInput = events;
-            events.Input.PointerEntered += OnLinkPointerEntered;
-            events.Input.PointerExited += OnLinkPointerExited;
         }
     }
 
-    private void OnLinkPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e)
-        => PART_LinkLayer.SelectedLink = e.Target as IWorkflowLinkViewModel;
 
-    private void OnLinkPointerExited(object? sender, WorkflowPointerExitedEventArgs e)
-        => PART_LinkLayer.SelectedLink = null;
 
     // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
     // 删不删由这里写（与悬停高亮同一条路）。

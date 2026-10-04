@@ -243,7 +243,7 @@
                          geometric, driven by the input the page root already receives — that is what keeps
                          link hover (highlight, Delete, the link menu) from eating canvas gestures. -->
                     <behaviors:WorkflowLinkOverlay x:Name="PART_LinkLayer"
-                                                  SelectedLinkColor="#FFFFFFFF" WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
+                                                  WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
                                                   InteractionSource="{x:Reference Root}"
                                                   ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
                                                   ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
@@ -254,6 +254,13 @@
                                                   VirtualLineColor="#E2E8F0"
                                                   StrokeWidth="2"
                                                   LinkFlowEnabled="True" />
+                    <!-- VeloxDev customization: 悬停高亮是本 demo 的一层（适配器的连线层只画静息线）。 -->
+                    <controls:LinkHighlightLayer Tree="{Binding BindingContext, Source={x:Reference Root}}"
+                                             ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                             ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                             ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                             ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                             RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}" />
                     <ScrollView x:Name="PART_ScrollViewer"
                                 Orientation="Both"
                                 BackgroundColor="Transparent">

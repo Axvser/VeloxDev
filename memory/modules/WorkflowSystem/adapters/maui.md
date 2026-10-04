@@ -1,5 +1,8 @@
 # MAUI — WorkflowSystem 适配器
 
+> **另（2026-10-05）：悬停高亮与 Delete 都搬出适配层了** —— overlay 不再有 `SelectedLink`/`SelectedLinkColor`，
+> 删除也不再由库执行；两者都在 demo 里（订 `IWorkflowInputEvents` 自己画 / 自己执行 `DeleteCommand`）。
+> 下文凡提这两个名字的行，按「宿主自己写」读。
 > ⚠ **交互那几段记的是 2026-10-04 之前的世界。** 当时 Core 有一个 `LinkInteraction` hub，事件是 `HoverChanged` /
 > `LinkPressed` / `ContextMenuRequested` 这些按组件定制的语义事件，高亮由 hub 经 `ILinkHighlight` 点亮。
 > **现在**：输入是一套**标准输入**（`WorkflowInput.For(tree).Route(...)` + `IWorkflowInputEvents`），

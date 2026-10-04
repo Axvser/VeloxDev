@@ -29,9 +29,21 @@ public interface ILinkHitTestable
     /// <summary>
     /// The visual that drew the current curve — the per-link control on the platforms that have one, or
     /// <see langword="null"/> where one surface draws every link. It is what
-    /// <see cref="LinkInteraction"/> hands over as the <c>sender</c> of its events.
+    /// the input route hands over as the <c>sender</c> of its events.
     /// </summary>
     object? Visual { get; }
+
+    /// <summary>
+    /// The curve the view last published — the very object hit-testing measures against.
+    /// <see langword="null"/> when nothing is drawn where this link is, which is the same answer
+    /// <see cref="SetCurve"/> retracts with.
+    /// </summary>
+    /// <remarks>
+    /// Read-only on purpose: the view owns the shape and replaces it whole. A host that wants to draw something of
+    /// its own along the link — a highlight, a badge, a label — draws from this instead of re-deriving the
+    /// geometry, so the two can never disagree about where the line is.
+    /// </remarks>
+    LinkCurve? Curve { get; }
 
     /// <summary>
     /// Publishes the curve the view just drew, and the visual that drew it, replacing both previous values.

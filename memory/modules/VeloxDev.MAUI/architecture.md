@@ -125,7 +125,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 ### 3.3 两个 overlay 的**不对称**：一个被推、一个自己拉
 
 - `WorkflowMinimapOverlay` **实现 `IWorkflowMinimapOverlay`**（`:19`），由宿主**推**数据：`UpdateMinimapOverlay`（`WorkflowSurfaceBehavior.cs:1672-1685`）写 4 个偏移 + `ViewportWidth/Height` + `WorkflowTree`。
-- `WorkflowLinkOverlay` **不实现 `IWorkflowGridDecorator`，也不实现任何 Core 接口**（`WorkflowLinkOverlay.cs:47` 就是 `GraphicsView`）。它的偏移/标尺 DP 与网格装饰器**同名同义**（`ScrollOffsetX/Y`、`ContentOffsetX/Y`、`RulerThickness`，`:60-73`），另加 `WorkflowTree`（`:56`）、`InteractionSource`（`:87`）、`LinkLineColor`/`VirtualLineColor`/`SelectedLinkColor`/`StrokeWidth`/`LinkFlowEnabled`（`:75-92`），在 XAML 里是**从 GridDecorator 实例上绑过来**的（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml` 的 `Source={x:Reference PART_GridDecorator}`）。
+- `WorkflowLinkOverlay` **不实现 `IWorkflowGridDecorator`，也不实现任何 Core 接口**（`WorkflowLinkOverlay.cs:47` 就是 `GraphicsView`）。它的偏移/标尺 DP 与网格装饰器**同名同义**（`ScrollOffsetX/Y`、`ContentOffsetX/Y`、`RulerThickness`，`:60-73`），另加 `WorkflowTree`（`:56`）、`InteractionSource`（`:87`）、`LinkLineColor`/`VirtualLineColor`/`StrokeWidth`/`LinkFlowEnabled`（`:75-92`）。**悬停高亮不在这一层**（2026-10-05 起）：overlay 只画静息线，演示里由 demo 自己叠的 `LinkHighlightLayer` 沿 `ILinkHitTestable.Curve` 画，在 XAML 里是**从 GridDecorator 实例上绑过来**的（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml` 的 `Source={x:Reference PART_GridDecorator}`）。
 
 ⇒ **网格装饰器上是这层唯一的偏移源**。想「让链接层自己从宿主拿偏移」得先给它加接口实现，现在没有这条路。反过来，只喂装饰器不喂链接层 = 链接层停在 0 偏移上（因为它默认值全是 `0d`）。
 

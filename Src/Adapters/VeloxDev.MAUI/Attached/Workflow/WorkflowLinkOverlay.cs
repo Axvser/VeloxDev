@@ -43,9 +43,10 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// is forwarded to the input route so the host surface can open its own menu.
 /// </para>
 /// <para>
-/// Selection is the host's: set <see cref="SelectedLink"/> (and <see cref="SelectedLinkColor"/> to make it
-/// visible) from your own subscription to the routed pointer events. Left alone, this layer paints
-/// resting links and nothing else.
+/// Hover feedback is the host's: this layer paints resting links and nothing else. A host that wants a link to
+/// look different while the pointer is on it subscribes the tree's <c>IWorkflowInputEvents</c> and draws its own
+/// layer above this one, from the curve the link published (<see cref="ILinkHitTestable.Curve"/>) — so the two can
+/// never disagree about where the line is.
 /// </para>
 /// </summary>
 public sealed class WorkflowLinkOverlay : GraphicsView
@@ -88,16 +89,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public static readonly BindableProperty InteractionSourceProperty = BindableProperty.Create(
         nameof(InteractionSource), typeof(View), typeof(WorkflowLinkOverlay), null, propertyChanged: OnInteractionSourceChanged);
 
-    public static readonly BindableProperty SelectedLinkProperty = BindableProperty.Create(
-        nameof(SelectedLink), typeof(IWorkflowLinkViewModel), typeof(WorkflowLinkOverlay), null,
-        propertyChanged: OnSelectedLinkChanged);
-
-    // 选中色默认 **null** ⇒ 本层不画任何选中反馈。外观是宿主的：想看见高亮就自己订
-    // 输入路由的指针事件，把 SelectedLink 与 SelectedLinkColor 一起给它。
-    // 惯例是一团白光（`#FFFFFFFF`）而不是换色 —— 其它色相都试过，红像告警、青像另一条线。
-    public static readonly BindableProperty SelectedLinkColorProperty = BindableProperty.Create(
-        nameof(SelectedLinkColor), typeof(Color), typeof(WorkflowLinkOverlay), null, propertyChanged: OnVisualPropertyChanged);
-
     private IWorkflowTreeViewModel? _tree;
     private IWorkflowLinkViewModel? _virtualLink;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
@@ -120,7 +111,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private IDispatcherTimer? _longPressTimer;
     private Point? _longPressOrigin;
 #endif
-    private IWorkflowLinkViewModel? _selectedLink;
     private Point? _lastPointer;
 
     // 当前这条链接的几何：canvas-local 的曲线（发布给 Core 做命中）+ 把它平移到视口的那一个偏移。
@@ -188,20 +178,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// </para>
     /// </summary>
     public View? InteractionSource { get => (View?)GetValue(InteractionSourceProperty); set => SetValue(InteractionSourceProperty, value); }
-
-    /// <summary>
-    /// The link the host considers selected, or <see langword="null"/> (the default) for none. Nobody sets it by
-    /// default: a host drives it from the routed pointer events, and selection is drawn only when
-    /// <see cref="SelectedLinkColor"/> is given as well. Selecting also moves keyboard focus to
-    /// <see cref="InteractionSource"/>, which is what lets <c>Delete</c> reach the hub.
-    /// </summary>
-    public IWorkflowLinkViewModel? SelectedLink { get => (IWorkflowLinkViewModel?)GetValue(SelectedLinkProperty); set => SetValue(SelectedLinkProperty, value); }
-
-    /// <summary>
-    /// Colour a selected link is drawn in. <see langword="null"/> by default, and then a selected link is drawn
-    /// exactly like a resting one — the appearance belongs to the host.
-    /// </summary>
-    public Color? SelectedLinkColor { get => (Color?)GetValue(SelectedLinkColorProperty); set => SetValue(SelectedLinkColorProperty, value); }
 
     /// <summary>Where the band is, as a fraction of a link's length from its sender's end. Written by the
     /// flow every frame; each link derives its geometry and colours from it while drawing.</summary>
@@ -570,7 +546,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         _interactionSource = null;
         _lastPointer = null;
-        SelectedLink = null;
     }
 
 #if WINDOWS
@@ -628,6 +603,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         var target = input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
         input.Route(args(anchor, target, new WorkflowEventHandle()));
+        FocusHoveredLink();
     }
 
     /// <summary>
@@ -755,23 +731,12 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     }
 #endif
 
-    private void SelectLink(IWorkflowLinkViewModel? link)
+    // 悬停到连线上就把键盘焦点收回交互源：Delete 要的按键事件经过它（本家不再画选中 —— 那是宿主的层）。
+    private void FocusHoveredLink()
     {
-        if (ReferenceEquals(_selectedLink, link))
-        {
-            return;
-        }
+        if (_input?.HoveredLink is null) return;
 
-        _selectedLink = link;
-
-        // 选中是「上色」，Delete 要的是键盘焦点 —— 两者必须同时发生：只上色不取焦点的版本会让
-        // 键事件落在别处（焦点不在源里，KeyDown 就不会经过挂钩子的那个元素），于是必须先点一下才删得掉
-        if (link is not null)
-        {
-            _interactionSource?.Focus();
-        }
-
-        ScheduleInvalidate();
+        _interactionSource?.Focus();
     }
 
 #if WINDOWS
@@ -958,7 +923,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnSourceKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
-        // 键也过输入路由：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠各家各记一个 _selectedLink
+        // 键也过输入路由：命中与 target 由它裁决；删不删是宿主的（订 KeyDown 自己执行命令）
         if (_input is not { } input || input.HoveredLink is null)
         {
             return;
@@ -1035,7 +1000,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         DetachInteraction();
         _tree = tree;
         // 换树时旧的选中项已经不属于这棵树了，留着它会让 Delete 去打一个不在场上的连线
-        SelectedLink = null;
         if (tree is null)
         {
             return;
@@ -1051,15 +1015,11 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     {
         // hub 只有一个位置：同树同实例（别家也走这个调用，不再各自发明取用方式）。
         // 删除是宿主的（订 KeyDown 自己执行命令）—— 本家不订它；
-        // 选中也不订指针事件 —— 那是宿主的事（订了之后把 SelectedLink 给它）。
+        // 悬停外观也不订 —— 那是宿主的事（它自己叠一层、沿发布的曲线画）。
         _input = WorkflowInput.For(tree);
     }
 
     private void DetachInteraction() => _input = null;
-
-    // 宿主写 SelectedLink 的唯一入口：同时取键盘焦点（Delete 靠它）+ 排一次重绘。
-    private static void OnSelectedLinkChanged(BindableObject bindable, object oldValue, object newValue)
-        => ((WorkflowLinkOverlay)bindable).SelectLink((IWorkflowLinkViewModel?)newValue);
 
     private void Subscribe(IWorkflowTreeViewModel tree)
     {
@@ -1257,11 +1217,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 if (i is IWorkflowLinkViewModel l)
                 {
                     UnsubscribeLink(l);
-                    // 删掉的正好是选中的那条（Delete、右键菜单、撤销都走这里）—— 选中必须跟着消失
-                    if (ReferenceEquals(_selectedLink, l))
-                    {
-                        SelectedLink = null;
-                    }
                 }
             }
         }
@@ -1412,10 +1367,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 }
 
                 var isVirtual = IsVirtualLink(link);
-                // 选中只改色与粗细，而且**只在宿主给了 SelectedLinkColor 时** —— 外观是宿主的，
-                // 本层默认不画任何选中反馈（没给色就等于没选中）。
-                var highlight = ReferenceEquals(link, owner._selectedLink) ? owner.SelectedLinkColor : null;
-                var color = highlight ?? (isVirtual ? virtualColor : linkColor);
+                var color = isVirtual ? virtualColor : linkColor;
                 if (color is null)
                 {
                     continue;
@@ -1445,8 +1397,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 canvas.StrokeDashPattern = isVirtual ? [4f, 2f] : null;
                 canvas.StrokeLineCap = LineCap.Round;
 
-                // 宿主给了选中色时整条（管壁与彗星都在内）加粗 1.5，与其它家的读法一致
-                var thickness = highlight is not null ? strokeWidth + 1.5f : strokeWidth;
+                var thickness = strokeWidth;
 
                 // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
                 // 两端才不像被截断的横截面
@@ -1469,7 +1420,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 }
 
                 // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
-                canvas.StrokeColor = Fade(color, highlight is not null ? 0.85 : 0.55);
+                canvas.StrokeColor = Fade(color, 0.55);
                 canvas.StrokeSize = thickness;
                 canvas.DrawPath(owner.Body);
 

@@ -32,6 +32,9 @@ public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable, IWo
     public virtual object? Visual { get; private set; }
 
     /// <inheritdoc />
+    public virtual LinkCurve? Curve => hitCurve;
+
+    /// <inheritdoc />
     public virtual void SetCurve(LinkCurve? curve, object? visual = null)
     {
         hitCurve = curve;

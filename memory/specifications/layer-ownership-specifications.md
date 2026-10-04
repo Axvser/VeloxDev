@@ -60,7 +60,9 @@
 | 整块表面级的策略 | `WorkflowInput.For(tree)` 的开关与只读口 |
 | 声明式的东西（右键菜单条目、模板选择器） | 标记平台：附着属性 / 组件参数；无标记两家：基类的 `protected virtual` 钩子 |
 
-⚠ **MAUI 的例外要写明白，别假装它一样**：那家**一个 overlay 画完所有线、没有每线视图**（每线一个 `GraphicsView` 撞 Win2D 纹理上限，Trimmed demo 实测过），所以「在我的视图里画」在那家没有对应物。它的入口是**订阅 + 给 overlay 两个属性**（`SelectedLink` 说哪条、`SelectedLinkColor` 说画成什么样），默认两个都不给 = 什么都不画。这不是「没统一」，而是**那家没有可派生的一线一视图**这个事实的直说 —— 要把一个没有的东西做成统一，只会造出一个假入口。
+**MAUI 也不能例外**（2026-10-05 用户定，走的是「宿主的层自己画」这条路）：那家**一个 overlay 画完所有线、没有每线视图**（每线一个 `GraphicsView` 撞 Win2D 纹理上限，Trimmed demo 实测过），所以「在我的那一笔视图里画」没有对应物 —— 但**效果仍是宿主的**：宿主在连线层之上**再叠一层自己的视图**，订 `IWorkflowInputEvents`，再沿 `ILinkHitTestable.Curve` 画。所以 Core 把**已发布的曲线**开成只读的公开事实（`Curve`）—— 那本来就是命中判定用的那一条，藏着只会逼每个宿主再推一遍几何。
+
+⇒ **七家现在是同一句话**：库给事件与几何（`Curve`），效果画在你自己的视图里。
 
 **适配器基类给无标记两家的可重写钩子，命名规则与模型事件那组同一条**：`On` + 事件名，参数就是那次事件的 args
 （`OnPointerEntered(WorkflowPointerEnteredEventArgs)`、`OnMoving(NodeMoveEventArgs)` …）。

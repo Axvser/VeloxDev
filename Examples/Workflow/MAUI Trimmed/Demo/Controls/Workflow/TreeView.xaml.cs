@@ -28,8 +28,6 @@ public partial class TreeView : ContentView
     {
         if (_linkInput is not null)
         {
-            _linkInput.Input.PointerEntered -= OnLinkPointerEntered;
-            _linkInput.Input.PointerExited -= OnLinkPointerExited;
             _linkInput.Input.KeyDown -= OnLinkKeyDown;
             _linkInput = null;
         }
@@ -37,19 +35,13 @@ public partial class TreeView : ContentView
         if (BindingContext is IWorkflowTreeViewModel tree && tree.GetHelper() is IWorkflowInputEvents events)
         {
             _linkInput = events;
-            events.Input.PointerEntered += OnLinkPointerEntered;
-            events.Input.PointerExited += OnLinkPointerExited;
 
             // VeloxDev customization: 删除也是宿主的 —— 路由把这次按键交过来（target 就是那条线）。
             events.Input.KeyDown += OnLinkKeyDown;
         }
     }
 
-    private void OnLinkPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e)
-        => PART_LinkLayer.SelectedLink = e.Target as IWorkflowLinkViewModel;
 
-    private void OnLinkPointerExited(object? sender, WorkflowPointerExitedEventArgs e)
-        => PART_LinkLayer.SelectedLink = null;
 
     private static void OnLinkKeyDown(object? sender, WorkflowKeyDownEventArgs e)
     {

@@ -39,6 +39,13 @@
                                 ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
                                 RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
                                 StrokeWidth="2" />
+                <!-- VeloxDev customization: 悬停高亮是本 demo 的一层（适配器的连线层只画静息线）。 -->
+                <local:LinkHighlightLayer Tree="{Binding BindingContext, Source={x:Reference Root}}"
+                                         ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                         ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                         ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                         ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                         RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}" />
                 <ScrollView x:Name="PART_ScrollViewer"
                             Orientation="Both">
                     <AbsoluteLayout x:Name="PART_RulerOffsetHost"

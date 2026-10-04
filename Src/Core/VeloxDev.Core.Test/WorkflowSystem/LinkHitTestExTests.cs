@@ -10,6 +10,21 @@ namespace VeloxDev.Core.Test.WorkflowSystem;
 public class LinkHitTestExTests : WorkflowInputTestBase
 {
     [TestMethod]
+    public void PublishCurve_MakesTheCurveReadableToTheHost()
+    {
+        // 曲线是公开事实：宿主想沿它画自己的东西（高亮、角标）时读的就是这一条，
+        // 不必再按端口推一遍几何 —— 推两遍就会有两份会分叉的几何。
+        var link = ReadyLink(0, 0, 100, 0);
+        var curve = LinkCurve.BuildCubic(0, 0, 100, 0, 40);
+
+        link.PublishCurve(curve, "visual");
+        Assert.AreSame(curve, link.HitTarget()!.Curve);
+
+        link.PublishCurve(null);
+        Assert.IsNull(link.HitTarget()!.Curve);
+    }
+
+    [TestMethod]
     public void HitTestVisibleLinks_ReturnsTheTopmostLink()
     {
         // VisibleItems 的后段是后画的 ⇒ 压在上面，命中也该是它。
