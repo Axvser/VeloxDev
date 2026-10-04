@@ -21,9 +21,20 @@ dotnet build Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Seriali
 
 # 2) 直接运行产物（不要用 dotnet run，它会再构建一次）
 #    跑完之前不要再跑 dotnet test —— 它会把 Core 重新构回未优化版本。
-./Src/Verification/VeloxDev.Serialization.Benchmarks/bin/Debug/net10.0/VeloxDev.Serialization.Benchmarks.exe \
-             --filter "*SerializationBenchmarks*"
+#    不带参数 = 四档当量全跑 + 出一份 Markdown 报告
+./Src/Verification/VeloxDev.Serialization.Benchmarks/bin/Debug/net10.0/VeloxDev.Serialization.Benchmarks.exe
 ```
+
+**四档当量**（`Scales.cs` 一处定义，两个基准类共用）：小 `100` / 中 `1 000` / 大 `10 000` / 超大 `30 000`
+个节点。`超大` 停在 30 000 是有意的：Newtonsoft 在 1 000 节点上单次操作就分配约 50 MB，
+再上一个数量级量到的会是 GC 而不是序列化器。
+
+**报告**：跑完写 `BenchmarkDotNet.Artifacts/serialization-performance.md`（该目录已被忽略），
+内容含**测量环境**（CPU / 核数 / 内存 / 系统 / 运行时 / 工具链）、三家的**文档大小**、按当量分节的
+结果表（含相对归档写的比率），以及**备注** —— 那一段说明这些数字是什么、以及不能推广到哪里。
+它由 `PerformanceReport.cs` 从 BenchmarkDotNet 的结构化结果生成，不解析控制台输出。
+
+**只想看回归（不跑另外两家）**：`--filter "*SerializationBenchmarks*"`。报告仍会写，只是没有文档大小那一节。
 
 ### 为什么不写 `-c Release`
 

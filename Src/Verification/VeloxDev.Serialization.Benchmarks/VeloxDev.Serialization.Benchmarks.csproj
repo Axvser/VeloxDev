@@ -15,6 +15,9 @@
 		<!-- 只给 ComparisonBenchmarks 用：同一个对象图过三家序列化器，才谈得上「快不快」。
 		     本目录不打包、不进任何 PackageReference，所以这里多一个引用不牵连产品。 -->
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<!-- 只为了报告里能写出 CPU 的**商品名**（"11th Gen Intel(R) Core(TM) i7-11800H"）而不是
+		     "Intel64 Family 6 Model 141 Stepping 1"。非 Windows 上读不到就退回环境变量。 -->
+		<PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -4,18 +4,23 @@ using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Serialization.Benchmarks;
 
-/// <summary>Times the archive engine reading and writing a tree at three sizes.</summary>
+/// <summary>Times the archive engine reading and writing a tree at the four magnitudes.</summary>
 /// <remarks>
 /// Each case writes and reads the <i>same</i> graph, so a change that speeds writing up by making the reader's
 /// work harder shows as a loss on the other half rather than as a win. <see cref="NodeCount"/> is the only
 /// parameter: the corpus holds both strings and numbers already, and the engine's cost per node is what the
 /// sizes are meant to separate.
+/// <para>
+/// This is the before/after tool — the same code, no other serializer in the picture. To compare against
+/// <c>System.Text.Json</c> and Newtonsoft run <see cref="ComparisonBenchmarks"/>; both classes share
+/// <see cref="Scales"/> so their magnitudes line up.
+/// </para>
 /// </remarks>
 [Config(typeof(BenchmarkConfig))]
 public class SerializationBenchmarks
 {
     /// <summary>How many nodes the corpus tree holds.</summary>
-    [Params(2, 1000, 10000)]
+    [Params(Scales.Small, Scales.Medium, Scales.Large, Scales.Huge)]
     public int NodeCount { get; set; }
 
     private TreeDefaultViewModel _tree = null!;

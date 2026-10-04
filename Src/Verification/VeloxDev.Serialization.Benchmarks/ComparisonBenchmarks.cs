@@ -51,7 +51,7 @@ internal partial class CorpusJsonContext : System.Text.Json.Serialization.JsonSe
 public class ComparisonBenchmarks
 {
     /// <summary>How many nodes the corpus tree holds.</summary>
-    [Params(1000)]
+    [Params(Scales.Small, Scales.Medium, Scales.Large, Scales.Huge)]
     public int NodeCount { get; set; }
 
     private TreeDefaultViewModel _tree = null!;
@@ -88,8 +88,10 @@ public class ComparisonBenchmarks
         _systemTextJson = Stj.Serialize(_tree, _stj);
         _newtonsoft = Nst.SerializeObject(_tree, _nst);
 
+        DocumentSizes.Record(NodeCount, _archive.Length, _systemTextJson.Length, _newtonsoft.Length);
+
         Console.WriteLine();
-        Console.WriteLine($"[{NodeCount} nodes] document sizes");
+        Console.WriteLine($"[{Scales.NameOf(NodeCount)} · {NodeCount} nodes] document sizes");
         Console.WriteLine($"  archive    : {_archive.Length,12:N0} chars");
         Console.WriteLine($"  stj        : {_systemTextJson.Length,12:N0} chars");
         Console.WriteLine($"  newtonsoft : {_newtonsoft.Length,12:N0} chars");
