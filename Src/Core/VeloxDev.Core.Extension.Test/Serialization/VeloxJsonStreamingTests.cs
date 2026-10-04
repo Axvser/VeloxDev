@@ -124,11 +124,16 @@ public class VeloxJsonStreamingTests
         {
             var frozen = Golden(name);
 
-            var fromString = VeloxJsonSerializer.Serialize(VeloxJsonSerializer.Deserialize(frozen, type));
-            var fromStream = VeloxJsonSerializer.Serialize(
-                VeloxJsonSerializer.Deserialize(new ChunkedReader(frozen, 3), type));
+            var wholeString = VeloxJsonSerializer.Deserialize(frozen, type);
+            var streamed = VeloxJsonSerializer.Deserialize(new ChunkedReader(frozen, 3), type);
 
-            Assert.AreEqual(fromString, fromStream, $"{name}: the two sources disagree");
+            Assert.IsNotNull(wholeString, $"{name}: the whole-string read produced nothing");
+            Assert.IsNotNull(streamed, $"{name}: the buffered read produced nothing");
+
+            Assert.AreEqual(
+                VeloxJsonSerializer.Serialize(wholeString),
+                VeloxJsonSerializer.Serialize(streamed),
+                $"{name}: the two sources disagree");
         }
     }
 
