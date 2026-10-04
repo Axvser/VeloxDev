@@ -45,4 +45,14 @@ public enum ArchiveOptions
     /// Writes the member under the name in <see cref="ArchiveAttribute.Argument"/> rather than under its own.
     /// </summary>
     ReName = 8,
+
+    /// <summary>
+    /// Writes an enum member as the name of its value rather than as its underlying number.
+    /// </summary>
+    /// <remarks>
+    /// The default is the number, and it stays the default everywhere else: a document's enum members are part of
+    /// its contract, and only the members that asked for a name get one. Applies to an enum and to a nullable
+    /// enum; anywhere else it is reported rather than quietly ignored.
+    /// </remarks>
+    EnumName = 16,
 }

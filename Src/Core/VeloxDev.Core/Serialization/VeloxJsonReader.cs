@@ -430,6 +430,25 @@ public sealed partial class VeloxJsonReader
             && CharAt(_position + 3) == 'l';
     }
 
+    /// <summary>
+    /// Reads an enum written as the name of its value, or the JSON <c>null</c> literal.
+    /// </summary>
+    /// <param name="enumType">The enum's type.</param>
+    /// <returns>The enum member, or <see langword="null"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="enumType"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// The counterpart of <c>[Archive(ArchiveOptions.EnumName)]</c>. A name the enum does not define comes back as
+    /// an undefined value rather than an error, which is what <see cref="Enum.Parse(Type, string, bool)"/> does
+    /// and what the numeric spelling already did.
+    /// </remarks>
+    public object? ReadEnum(Type enumType)
+    {
+        if (enumType is null) throw new ArgumentNullException(nameof(enumType));
+
+        var text = ReadString();
+        return text is null ? null : Enum.Parse(enumType, text, ignoreCase: true);
+    }
+
     /// <summary>Reads a string; a JSON <c>null</c> reads as <see langword="null"/>.</summary>
     /// <returns>The value.</returns>
     public string? ReadString()

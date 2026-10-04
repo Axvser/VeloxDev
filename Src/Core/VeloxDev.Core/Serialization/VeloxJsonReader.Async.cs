@@ -439,6 +439,21 @@ public sealed partial class VeloxJsonReader
     }
 
     /// <summary>Reads a string asynchronously; a JSON <c>null</c> reads as <see langword="null"/>.</summary>
+    /// <summary>
+    /// Reads an enum written as the name of its value, or the JSON <c>null</c> literal.
+    /// </summary>
+    /// <param name="enumType">The enum's type.</param>
+    /// <returns>The enum member, or <see langword="null"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="enumType"/> is <see langword="null"/>.</exception>
+    /// <remarks>The asynchronous counterpart of <see cref="ReadEnum(Type)"/>; same reading, awaited refills.</remarks>
+    public async Task<object?> ReadEnumAsync(Type enumType)
+    {
+        if (enumType is null) throw new ArgumentNullException(nameof(enumType));
+
+        var text = await ReadStringAsync().ConfigureAwait(false);
+        return text is null ? null : Enum.Parse(enumType, text, ignoreCase: true);
+    }
+
     public async Task<string?> ReadStringAsync()
     {
         ReleaseMember();

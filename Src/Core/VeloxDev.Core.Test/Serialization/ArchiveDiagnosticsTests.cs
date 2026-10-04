@@ -103,9 +103,29 @@ public class ArchiveDiagnosticsTests
     public void AnArrayInsideAContainer_IsReportedRatherThanLeftToFailAtRunTime()
         => AssertReports("VELOX_JSON_MEMBER001", ArrayInsideAContainer);
 
+    /// <summary>EnumName changes the spelling of a document, so asking for it where it cannot apply is an error.</summary>
+    private const string EnumNameOnANonEnum = """
+        using VeloxDev.MVVM;
+        using VeloxDev.Serialization;
+
+        namespace Probe;
+
+        public partial class Model
+        {
+            [VeloxProperty] private int count;
+
+            [Archive(ArchiveOptions.EnumName)]
+            public string? Tag { get; set; }
+        }
+        """;
+
     [TestMethod]
     public void ARequiredMemberThatIsNeverWritten_IsReported()
         => AssertReports("VELOX_JSON_MEMBER001", RequiredButExcluded);
+
+    [TestMethod]
+    public void EnumNameOnAMemberThatIsNotAnEnum_IsReported()
+        => AssertReports("VELOX_JSON_MEMBER001", EnumNameOnANonEnum);
 
     [TestMethod]
     public void ANamedRoot_TakesPartWithoutBeingReachableFromAComponent()

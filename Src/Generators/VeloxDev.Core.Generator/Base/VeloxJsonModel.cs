@@ -79,6 +79,7 @@ namespace VeloxDev.Generators.Base
         KeepField = 2,
         IgnoreField = 4,
         ReName = 8,
+        EnumName = 16,
     }
 
     /// <summary>When a member is written, as decided by <c>[JsonIgnore(Condition = …)]</c>.</summary>
@@ -157,6 +158,12 @@ namespace VeloxDev.Generators.Base
         /// The generated reader refuses a document that is missing it.
         /// </summary>
         internal bool IsRequired { get; set; }
+
+        /// <summary>
+        /// Whether an enum member is written as the name of its value rather than as its number —
+        /// <see cref="ArchiveFlags.EnumName"/>. Only ever set on a member whose declared type is an enum.
+        /// </summary>
+        internal bool IsEnumName { get; set; }
 
         /// <summary>The declared type, which is what decides whether a value needs its type name written.</summary>
         internal ITypeSymbol DeclaredType { get; }
@@ -775,7 +782,7 @@ namespace VeloxDev.Generators.Base
             List<Diagnostic>? notices)
         {
             var promoted = new HashSet<string>(System.StringComparer.Ordinal);
-            var fields = new List<(IFieldSymbol Field, string Name, string DocumentName, VeloxJsonWriteCondition Condition)>();
+            var fields = new List<(IFieldSymbol Field, string Name, string DocumentName, VeloxJsonWriteCondition Condition, bool EnumName)>();
 
             foreach (var member in symbol.GetMembers())
             {
@@ -798,7 +805,7 @@ namespace VeloxDev.Generators.Base
                     if (name.Length == 0) continue;
 
                     promoted.Add(name);
-                    fields.Add((field, name, renamed ?? name, condition.Value));
+                    fields.Add((field, name, renamed ?? name, condition.Value, UseEnumName(field, field.Type, options, notices)));
                     continue;
                 }
 
@@ -813,7 +820,7 @@ namespace VeloxDev.Generators.Base
                     continue;
                 }
 
-                fields.Add((field, field.Name, renamed ?? field.Name, condition.Value));
+                fields.Add((field, field.Name, renamed ?? field.Name, condition.Value, UseEnumName(field, field.Type, options, notices)));
             }
 
             var emitted = new HashSet<string>(System.StringComparer.Ordinal);
@@ -836,13 +843,14 @@ namespace VeloxDev.Generators.Base
                 if (condition is null) continue;
                 if (!emitted.Add(property.Name)) continue;
 
-                yield return BuildMember(property.Name, property.Type, renamed, writeOnly: !writable, condition: condition.Value, required: IsRequired(property));
+                yield return BuildMember(property.Name, property.Type, renamed, writeOnly: !writable, condition: condition.Value,
+                    required: IsRequired(property), enumName: UseEnumName(property, property.Type, options, notices));
             }
 
-            foreach (var (field, name, documentName, condition) in fields)
+            foreach (var (field, name, documentName, condition, enumName) in fields)
             {
                 if (!emitted.Add(name)) continue;
-                yield return BuildMember(name, field.Type, documentName, condition: condition, required: IsRequired(field));
+                yield return BuildMember(name, field.Type, documentName, condition: condition, required: IsRequired(field), enumName: enumName);
             }
 
             // 组件的成员由 Workflow 生成器写出，本生成器看不见 —— 按作者写下的 [WorkflowBuilder.*]
@@ -1155,7 +1163,8 @@ namespace VeloxDev.Generators.Base
             string? documentName = null,
             bool writeOnly = false,
             VeloxJsonWriteCondition condition = VeloxJsonWriteCondition.Always,
-            bool required = false)
+            bool required = false,
+            bool enumName = false)
         {
             var (kind, element, interfaceKeyed) = Classify(declaredType);
             return new VeloxJsonMember(name, declaredType, element, kind)
@@ -1166,7 +1175,29 @@ namespace VeloxDev.Generators.Base
                 WriteOnly = writeOnly,
                 WriteCondition = condition,
                 IsRequired = required,
+                IsEnumName = enumName,
             };
+        }
+
+        /// <summary>
+        /// Whether the member asked for its enum to be written by name, checked against what it actually is.
+        /// </summary>
+        /// <remarks>
+        /// Reported rather than ignored when the member is not an enum: the flag would change the document, and a
+        /// request that cannot be honoured is worth a build error here rather than a surprise in the file.
+        /// </remarks>
+        private static bool UseEnumName(ISymbol member, ITypeSymbol declaredType, ArchiveFlags options, List<Diagnostic>? notices)
+        {
+            if ((options & ArchiveFlags.EnumName) == 0) return false;
+            if (UnwrapNullable(declaredType).TypeKind == TypeKind.Enum) return true;
+
+            notices?.Add(Diagnostic.Create(
+                Diagnostics.UnusableArchiveDeclaration,
+                member.Locations.FirstOrDefault(),
+                member.Name,
+                "EnumName writes an enum as the name of its value, and this member is not an enum"));
+
+            return false;
         }
 
         /// <summary>

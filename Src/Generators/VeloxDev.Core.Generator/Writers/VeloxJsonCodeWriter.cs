@@ -129,10 +129,29 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine($"        if ({(guard.Length == 0 ? excluded : $"{guard} {excluded}")})");
             builder.AppendLine("        {");
             builder.AppendLine($"            {wait}writer.{(async ? "WriteMemberNameAsync" : "WriteMemberName")}(\"{Escape(member.DocumentName)}\"){configure};");
-            builder.AppendLine($"            {wait}global::{SerializationNamespace}.VeloxJsonSerializer.{(async ? "WriteValueAsync" : "WriteValue")}(");
-            builder.AppendLine($"                writer, t.{member.Name}, typeof({declaredType})){configure};");
+
+            if (member.IsEnumName)
+            {
+                // 枚举写名字。可空枚举要自己挡 null —— `Nullable<T>.ToString()` 对空值返回空串，
+                // 那会写成一个空字符串，而不是 JSON 的 null。
+                var value = IsNullableValueType(member.DeclaredType)
+                    ? $"t.{member.Name}.HasValue ? t.{member.Name}.Value.ToString() : null"
+                    : $"t.{member.Name}.ToString()";
+
+                builder.AppendLine($"            {wait}writer.{(async ? "WriteStringAsync" : "WriteString")}({value}){configure};");
+            }
+            else
+            {
+                builder.AppendLine($"            {wait}global::{SerializationNamespace}.VeloxJsonSerializer.{(async ? "WriteValueAsync" : "WriteValue")}(");
+                builder.AppendLine($"                writer, t.{member.Name}, typeof({declaredType})){configure};");
+            }
+
             builder.AppendLine("        }");
         }
+
+        /// <summary>Whether the type is a <c>Nullable&lt;T&gt;</c> — a value type that can still be null.</summary>
+        private static bool IsNullableValueType(ITypeSymbol type)
+            => type.IsValueType && !SymbolEqualityComparer.Default.Equals(VeloxJsonModelBuilder.UnwrapNullable(type), type);
 
         /// <summary>
         /// The condition that has to hold for a member to be written, or an empty string when it is
@@ -289,6 +308,11 @@ namespace VeloxDev.Generators.Writers
 
                 case VeloxJsonMemberKind.Dictionary:
                     return ReadMap(member, declaredType, access, async, skip);
+
+                case VeloxJsonMemberKind.Scalar when member.IsEnumName:
+                    // typeof(可空的枚举) 拿到的是 Nullable<T>，不是枚举本身 —— Enum.Parse 会当场拒绝它。
+                    var enumType = FullTypeOf(VeloxJsonModelBuilder.UnwrapNullable(member.DeclaredType));
+                    return $"{access} = ({declaredType}){wait}reader.ReadEnum{(async ? "Async" : string.Empty)}(typeof({enumType})){configure}!;";
 
                 case VeloxJsonMemberKind.Scalar:
                     return $"{access} = {ScalarRead(member.DeclaredType, async)};";
