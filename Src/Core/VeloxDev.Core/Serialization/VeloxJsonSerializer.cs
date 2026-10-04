@@ -232,6 +232,8 @@ public static partial class VeloxJsonSerializer
             case byte number: writer.WriteInt32(number); return true;
             case short number: writer.WriteInt32(number); return true;
             case char character: writer.WriteString(character.ToString()); return true;
+            // 二进制走 base64，与 STJ / Json.NET 一致 —— 也是唯一有专用拼法的数组。
+            case byte[] bytes: writer.WriteString(System.Convert.ToBase64String(bytes)); return true;
             case Guid id: writer.WriteGuid(id); return true;
             case System.DateTime moment: writer.WriteString(moment.ToString("O", System.Globalization.CultureInfo.InvariantCulture)); return true;
             case System.TimeSpan span: writer.WriteString(span.ToString()); return true;
@@ -435,9 +437,11 @@ public static partial class VeloxJsonSerializer
         if (underlying == typeof(byte)) return (byte)reader.ReadInt32();
         if (underlying == typeof(short)) return (short)reader.ReadInt32();
         if (underlying == typeof(char)) return reader.ReadText()[0];
+        if (underlying == typeof(byte[])) return System.Convert.FromBase64String(reader.ReadString() ?? string.Empty);
         if (underlying == typeof(Guid)) return reader.ReadGuid();
+        // RoundtripKind 是必须的：不带它，「…Z」会被解析成当地时刻并平移，写出去的值读回来就不是同一个时刻。
         if (underlying == typeof(DateTime))
-            return DateTime.Parse(reader.ReadText(), System.Globalization.CultureInfo.InvariantCulture);
+            return DateTime.Parse(reader.ReadText(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
         if (underlying == typeof(TimeSpan))
             return TimeSpan.Parse(reader.ReadText(), System.Globalization.CultureInfo.InvariantCulture);
 
@@ -640,7 +644,9 @@ public static partial class VeloxJsonSerializer
                 if (raw is not System.Collections.DictionaryEntry entry) continue;
                 if (entry.Key is null) continue;
 
-                writer.WriteMemberName(entry.Key.ToString() ?? string.Empty);
+                // 按不变区域性写：读侧用的是 Convert.ChangeType(..., InvariantCulture)，两边必须同一条 ——
+                // 否则 double/decimal 这类 IFormattable 键在非 invariant 区域下写下、按 invariant 读回会漂。
+                writer.WriteMemberName(System.Convert.ToString(entry.Key, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
                 WriteValue(writer, entry.Value, valueType);
             }
         }

@@ -253,6 +253,7 @@ namespace VeloxDev.Generators.Writers
         private static string ReadMember(VeloxJsonMember member, bool async)
         {
             var access = "t." + member.Name;
+            var declaredType = FullTypeOf(member.DeclaredType);
             var wait = async ? "await " : string.Empty;
             var configure = async ? ".ConfigureAwait(false)" : string.Empty;
             var skip = $"{wait}reader.{(async ? "SkipValueAsync" : "SkipValue")}(){configure};";
@@ -260,21 +261,10 @@ namespace VeloxDev.Generators.Writers
             switch (member.Kind)
             {
                 case VeloxJsonMemberKind.Collection:
-                    // 只有可变列表能追加；只读集合这一版读不回来，跳过而不是假装成功。
-                    if (!ImplementsInterface(member.DeclaredType, "System.Collections.IList"))
-                        return skip;
-
-                    // 追加而不是替换：构造函数可能已经填过，契约一贯是往里加。
-                    return $"if ({access} is {{ }} list) {wait}global::{SerializationNamespace}.VeloxJsonSerializer" +
-                           $".{(async ? "ReadArrayAsync" : "ReadArray")}(" +
-                           $"reader, list, typeof({FullTypeOf(member.ElementType!)})){configure}; else {skip}";
+                    return ReadCollection(member, declaredType, access, async, skip);
 
                 case VeloxJsonMemberKind.Dictionary:
-                    return $"if ({access} is {{ }} map) {wait}global::{SerializationNamespace}.VeloxJsonSerializer" +
-                           $".{(async ? "ReadMapAsync" : "ReadMap")}(" +
-                           $"reader, map, typeof({FullTypeOf(FirstTypeArgument(member.DeclaredType))}), " +
-                           $"typeof({FullTypeOf(member.ElementType!)}), interfaceKeys: {(member.InterfaceKeyed ? "true" : "false")}){configure}; " +
-                           $"else {skip}";
+                    return ReadMap(member, declaredType, access, async, skip);
 
                 case VeloxJsonMemberKind.Scalar:
                     return $"{access} = {ScalarRead(member.DeclaredType, async)};";
@@ -284,6 +274,78 @@ namespace VeloxDev.Generators.Writers
                            $".{(async ? "ReadValueAsync" : "ReadValue")}(reader, typeof({FullTypeOf(member.DeclaredType)}), {access}){configure}!;";
             }
         }
+
+        /// <summary>
+        /// Reads a sequence member into whatever shape its declared type asks for.
+        /// </summary>
+        /// <remarks>
+        /// Four shapes, chosen by the declared type: a mutable list is filled in place, a read-only interface takes
+        /// a fresh <c>List&lt;T&gt;</c>, an array takes that list's <c>ToArray</c>, and the rest of the whitelist
+        /// (<c>HashSet&lt;T&gt;</c>, <c>Queue&lt;T&gt;</c>, <c>Stack&lt;T&gt;</c>) is built from it. The older rule
+        /// was "fill it in place or step over it", which produced an empty collection — with nothing said — for
+        /// three of the four, and for a member that happened to be null as well.
+        /// </remarks>
+        private static string ReadCollection(VeloxJsonMember member, string declaredType, string access, bool async, string skip)
+        {
+            var wait = async ? "await " : string.Empty;
+            var configure = async ? ".ConfigureAwait(false)" : string.Empty;
+            var element = FullTypeOf(member.ElementType!);
+            var fresh = $"new global::System.Collections.Generic.List<{element}>()";
+
+            string Read(string target) =>
+                $"{wait}global::{SerializationNamespace}.VeloxJsonSerializer.{(async ? "ReadArrayAsync" : "ReadArray")}" +
+                $"(reader, {target}, typeof({element})){configure};";
+
+            var body = member.DeclaredType switch
+            {
+                IArrayTypeSymbol =>
+                    $"var list = {fresh}; {Read("list")} {access} = list.ToArray();",
+
+                // 只读接口：List<T> 满足它，直接赋过去。
+                { TypeKind: TypeKind.Interface } =>
+                    $"var list = {fresh}; {Read("list")} {access} = list;",
+
+                // 可变列表：就地填，构造函数填过的项继续留着，文档里的项往里加。
+                _ when ImplementsInterface(member.DeclaredType, "System.Collections.IList") =>
+                    $"if ({access} is {{ }} list) {{ {Read("list")} }} " +
+                    $"else {{ var created = new {declaredType}(); {Read("created")} {access} = created; }}",
+
+                // 其余白名单（HashSet / Queue / Stack）：它们都有吃 IEnumerable<T> 的构造。
+                _ => $"var list = {fresh}; {Read("list")} {access} = new {declaredType}(list);",
+            };
+
+            return $"if ({NullTest(async)}) {{ {skip} }} else {{ {body} }}";
+        }
+
+        /// <summary>
+        /// Reads a map member, creating the instance when the member holds none.
+        /// </summary>
+        /// <remarks>
+        /// A null member used to mean the document's entries were stepped over and lost. An interface-typed map
+        /// takes a <c>Dictionary&lt;K, V&gt;</c>, which is what satisfies it; anything else is built by name.
+        /// </remarks>
+        private static string ReadMap(VeloxJsonMember member, string declaredType, string access, bool async, string skip)
+        {
+            var wait = async ? "await " : string.Empty;
+            var configure = async ? ".ConfigureAwait(false)" : string.Empty;
+            var key = FullTypeOf(FirstTypeArgument(member.DeclaredType));
+            var value = FullTypeOf(member.ElementType!);
+            var fresh = member.DeclaredType.TypeKind == TypeKind.Interface
+                ? $"new global::System.Collections.Generic.Dictionary<{key}, {value}>()"
+                : $"new {declaredType}()";
+
+            string Read(string target) =>
+                $"{wait}global::{SerializationNamespace}.VeloxJsonSerializer.{(async ? "ReadMapAsync" : "ReadMap")}" +
+                $"(reader, {target}, typeof({key}), typeof({value}), interfaceKeys: {(member.InterfaceKeyed ? "true" : "false")}){configure};";
+
+            return $"if ({NullTest(async)}) {{ {skip} }} " +
+                   $"else if ({access} is {{ }} map) {{ {Read("map")} }} " +
+                   $"else {{ var created = {fresh}; {Read("created")} {access} = created; }}";
+        }
+
+        /// <summary>The test that tells a member the document holds the JSON literal.</summary>
+        private static string NullTest(bool async)
+            => async ? "await reader.NextIsNullAsync().ConfigureAwait(false)" : "reader.NextIsNull()";
 
         /// <summary>The read that produces one scalar, chosen from its declared type.</summary>
         private static string ScalarRead(ITypeSymbol type, bool async)
@@ -300,6 +362,10 @@ namespace VeloxDev.Generators.Writers
 
             if (type.TypeKind == TypeKind.Enum)
                 return $"({FullTypeOf(type)}){Call("ReadInt64")}";
+
+            // byte[] 是 base64 字符串，不是数组：与写侧、与 STJ / Json.NET 都对齐。
+            if (type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte })
+                return $"global::System.Convert.FromBase64String({Call("ReadString")} ?? string.Empty)";
 
             return type.SpecialType switch
             {
@@ -318,7 +384,8 @@ namespace VeloxDev.Generators.Writers
                 _ => type.ToDisplayString() switch
                 {
                     "System.Guid" => Call("ReadGuid"),
-                    "System.DateTime" => $"global::System.DateTime.Parse({Call("ReadText")}, global::System.Globalization.CultureInfo.InvariantCulture)",
+                    // RoundtripKind：不带它，「…Z」会被解析成当地时刻并平移 —— 写出去的时刻读回来就换了值。
+                    "System.DateTime" => $"global::System.DateTime.Parse({Call("ReadText")}, global::System.Globalization.CultureInfo.InvariantCulture, global::System.Globalization.DateTimeStyles.RoundtripKind)",
                     "System.TimeSpan" => $"global::System.TimeSpan.Parse({Call("ReadText")}, global::System.Globalization.CultureInfo.InvariantCulture)",
                     _ => $"({FullTypeOf(type)}){wait}global::{SerializationNamespace}.VeloxJsonSerializer" +
                          $".{(async ? "ReadValueAsync" : "ReadValue")}(reader, typeof({FullTypeOf(type)}), null){configure}!",

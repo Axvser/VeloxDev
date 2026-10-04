@@ -334,6 +334,8 @@ namespace VeloxDev.Generators.Base
 
                 foreach (var member in ReadMembers(symbol, contracts, compilation.Assembly, notices))
                 {
+                    ReportNestedArray(member, notices);
+
                     foreach (var reachable in Reachable(member))
                     {
                         // 声明类型是接口或抽象类时，实际写进文档的是某个具体类型，而它是由类型名派发过去的 ——
@@ -861,6 +863,27 @@ namespace VeloxDev.Generators.Base
             }
         }
 
+        /// <summary>
+        /// Reports an array that sits inside a container, which this format cannot read back.
+        /// </summary>
+        /// <remarks>
+        /// A member's own array is read into a <c>List&lt;T&gt;</c> and converted, and that works because the element
+        /// type is known where the member is declared. An element has no such place: by the time the reader is
+        /// inside <c>List&lt;int[]&gt;</c> all it holds is a <c>Type</c>, and making an array from one is reflection —
+        /// the thing this format exists to avoid. Reported rather than left to fail at run time.
+        /// </remarks>
+        private static void ReportNestedArray(VeloxJsonMember member, List<Diagnostic>? notices)
+        {
+            if (notices is null) return;
+            if (member.ElementType is not IArrayTypeSymbol array || IsByteArray(array)) return;
+
+            notices.Add(Diagnostic.Create(
+                Diagnostics.UnusableArchiveDeclaration,
+                null,
+                member.Name,
+                "an array nested inside a container cannot be read back — declare the element as a List<T> instead"));
+        }
+
         /// <summary>The writable properties a component contract contributes to a builder-shaped type.</summary>
         private static IEnumerable<VeloxJsonMember> ContractMembers(
             INamedTypeSymbol symbol,
@@ -1063,7 +1086,10 @@ namespace VeloxDev.Generators.Base
         /// </summary>
         private static (VeloxJsonMemberKind Kind, ITypeSymbol? Element, bool InterfaceKeyed) Classify(ITypeSymbol type)
         {
+            // IsScalar 在前：byte[] 是标量（base64 字符串），其余的数组才是序列。
             if (IsScalar(type)) return (VeloxJsonMemberKind.Scalar, null, false);
+
+            if (type is IArrayTypeSymbol array) return (VeloxJsonMemberKind.Collection, array.ElementType, false);
 
             if (type is INamedTypeSymbol named && named.TypeArguments.Length == 1)
             {
@@ -1096,18 +1122,31 @@ namespace VeloxDev.Generators.Base
                 : type;
 
         /// <summary>Whether a type is one of the scalars the format writes with a dedicated primitive.</summary>
+        /// <remarks>
+        /// <c>byte[]</c> counts: it is written as a base64 string rather than as an array of numbers. It is the one
+        /// array with a spelling of its own, and it is the one STJ and Json.NET agree on.
+        /// </remarks>
         private static bool IsScalar(ITypeSymbol type)
-            => UnwrapNullable(type).SpecialType switch
+        {
+            var unwrapped = UnwrapNullable(type);
+            if (IsByteArray(unwrapped)) return true;
+
+            return unwrapped.SpecialType switch
             {
                 SpecialType.System_String or SpecialType.System_Int32 or SpecialType.System_Int64
                     or SpecialType.System_Double or SpecialType.System_Single or SpecialType.System_Decimal
                     or SpecialType.System_Boolean or SpecialType.System_Byte or SpecialType.System_Int16
                     or SpecialType.System_Char or SpecialType.System_Object => true,
-                _ => type.TypeKind == TypeKind.Enum
-                     || type.ToDisplayString() == "System.Guid"
-                     || type.ToDisplayString() == "System.DateTime"
-                     || type.ToDisplayString() == "System.TimeSpan",
+                _ => unwrapped.TypeKind == TypeKind.Enum
+                     || unwrapped.ToDisplayString() == "System.Guid"
+                     || unwrapped.ToDisplayString() == "System.DateTime"
+                     || unwrapped.ToDisplayString() == "System.TimeSpan",
             };
+        }
+
+        /// <summary>Whether the type is <c>byte[]</c> — the one array written as a scalar.</summary>
+        private static bool IsByteArray(ITypeSymbol type)
+            => type is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_Byte };
 
         private static bool IsSequenceType(INamedTypeSymbol definition)
             => definition.Name is "List" or "ObservableCollection" or "IList" or "ICollection"

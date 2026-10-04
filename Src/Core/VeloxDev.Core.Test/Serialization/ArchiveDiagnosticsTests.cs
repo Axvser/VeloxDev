@@ -70,6 +70,22 @@ public class ArchiveDiagnosticsTests
     public void AFieldThatAlreadyHasAProperty_IsReportedRatherThanSilentlySwapped()
         => AssertReports("VELOX_JSON_MEMBER002", KeepFieldOnAPairedField);
 
+    private const string ArrayInsideAContainer = """
+        using System.Collections.Generic;
+        using VeloxDev.MVVM;
+
+        namespace Probe;
+
+        public partial class Model
+        {
+            [VeloxProperty] private List<int[]> jagged = [];
+        }
+        """;
+
+    [TestMethod]
+    public void AnArrayInsideAContainer_IsReportedRatherThanLeftToFailAtRunTime()
+        => AssertReports("VELOX_JSON_MEMBER001", ArrayInsideAContainer);
+
     [TestMethod]
     public void ANamedRoot_TakesPartWithoutBeingReachableFromAComponent()
     {
