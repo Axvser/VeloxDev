@@ -32,8 +32,9 @@ public static class LinkHitTestEx
     /// <param name="link">The link being drawn.</param>
     /// <param name="curve">The flattened curve, or <see langword="null"/> to retract it.</param>
     /// <param name="visual">
-    /// The control that drew it, when the platform has one per link — it becomes the <c>sender</c> of
-    /// <see cref="LinkInteraction"/>'s events. Leave it <see langword="null"/> where one surface draws every link.
+    /// The control that drew it, when the platform has one per link — what the surface focuses on hover, so the
+    /// Delete key has a route to bubble, and how an immediate-mode layer knows this link is already painted. Leave
+    /// it <see langword="null"/> where one surface draws every link.
     /// </param>
     /// <code>
     /// link.PublishCurve(LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, pullMinimum), this);

@@ -73,7 +73,6 @@ public sealed class TemplateClass : UserControl
         card.SurfaceBackdrop = WorkflowNodeAttachment.ParseColor("#1E1E1E");
         card.Rebound += (_, _) => OnRebound();
         card.CollapseChanged += (_, e) => OnCollapse(e.Collapse);
-        card.TitleChanged += (_, _) => _header.Invalidate();
 
         // Header row: title + drag surface (whole card acts as the drag handle).
         // Opaque double-buffered panel: without AllPaintingInWmPaint +
@@ -86,6 +85,10 @@ public sealed class TemplateClass : UserControl
             BackColor = _opaqueBackground,
             Name = "PART_Header",
         };
+
+        // Subscribed after the header exists: the handler dereferences it, and a lambda written above the
+        // assignment makes the compiler report the field as possibly null.
+        card.TitleChanged += (_, _) => _header.Invalidate();
         _header.Paint += (_, e) =>
         {
             var g = e.Graphics;

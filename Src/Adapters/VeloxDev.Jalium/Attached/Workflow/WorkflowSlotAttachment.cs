@@ -80,12 +80,11 @@ public sealed class WorkflowSlotAttachment
         target.DataContextChanged += OnDataContextChanged;
     }
 
-    /// <summary>Raised before the slot's channel changes; refuse that change via the argument's handle.</summary>
-    /// <param name="e">The change that is about to happen.</param>
+    /// <summary>Raised before the slot's channel changes, with the change that is about to happen.</summary>
+    /// <remarks>Refuse this one by setting <see cref="WorkflowEventHandle.PreventDefault"/> on the argument's handle.</remarks>
     public event EventHandler<SlotChannelEventArgs>? ChannelChanging;
 
-    /// <summary>Raised after the slot's channel changed.</summary>
-    /// <param name="e">The change that happened.</param>
+    /// <summary>Raised after the slot's channel changed, with the change that happened.</summary>
     public event EventHandler<SlotChannelEventArgs>? ChannelChanged;
 
     /// <summary>The glyph's radius, in the card's design coordinates.</summary>

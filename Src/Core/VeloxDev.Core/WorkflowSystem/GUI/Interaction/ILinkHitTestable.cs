@@ -28,8 +28,9 @@ public interface ILinkHitTestable
 {
     /// <summary>
     /// The visual that drew the current curve — the per-link control on the platforms that have one, or
-    /// <see langword="null"/> where one surface draws every link. It is what
-    /// the input route hands over as the <c>sender</c> of its events.
+    /// <see langword="null"/> where one surface draws every link. A surface focuses it while the pointer is on the
+    /// link, so the Delete key has a route to bubble; an immediate-mode layer reads it to skip what is already
+    /// painted.
     /// </summary>
     object? Visual { get; }
 
