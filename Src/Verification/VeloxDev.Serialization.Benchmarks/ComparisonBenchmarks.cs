@@ -48,11 +48,8 @@ internal partial class CorpusJsonContext : System.Text.Json.Serialization.JsonSe
 /// </para>
 /// </remarks>
 [Config(typeof(BenchmarkConfig))]
-public class ComparisonBenchmarks
+public class ComparisonBenchmarks : ScaleAwareBenchmarks
 {
-    /// <summary>How many nodes the corpus tree holds.</summary>
-    [Params(Scales.Small, Scales.Medium, Scales.Large, Scales.Huge)]
-    public int NodeCount { get; set; }
 
     private TreeDefaultViewModel _tree = null!;
     private string _archive = null!;
@@ -66,7 +63,7 @@ public class ComparisonBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _tree = Corpus.BuildTree(NodeCount);
+        _tree = Corpus.Shared(NodeCount);
 
         _stj = new StjOptions
         {

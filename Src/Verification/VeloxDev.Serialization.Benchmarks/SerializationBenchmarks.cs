@@ -17,11 +17,8 @@ namespace VeloxDev.Serialization.Benchmarks;
 /// </para>
 /// </remarks>
 [Config(typeof(BenchmarkConfig))]
-public class SerializationBenchmarks
+public class SerializationBenchmarks : ScaleAwareBenchmarks
 {
-    /// <summary>How many nodes the corpus tree holds.</summary>
-    [Params(Scales.Small, Scales.Medium, Scales.Large, Scales.Huge)]
-    public int NodeCount { get; set; }
 
     private TreeDefaultViewModel _tree = null!;
     private string _json = null!;
@@ -30,7 +27,7 @@ public class SerializationBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _tree = Corpus.BuildTree(NodeCount);
+        _tree = Corpus.Shared(NodeCount);
         _json = VeloxJsonSerializer.Serialize(_tree);
     }
 

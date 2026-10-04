@@ -16,11 +16,14 @@ public static class Program
     /// <param name="args">BenchmarkDotNet arguments; empty runs every benchmark.</param>
     public static void Main(string[] args)
     {
+        // 自己的开关（`--all`）先摘掉：BenchmarkDotNet 见到不认识的参数会直接报错。
+        var rest = Scales.Apply(args);
+
         // 空参数下**不能**交给 BenchmarkSwitcher：它会进交互式选择，无人应答就什么也不跑、还不报错。
         // 带参数走它（`--filter` 之类的都在那里），不带就把两个类全跑掉。
-        var summaries = args.Length == 0
+        var summaries = rest.Length == 0
             ? BenchmarkRunner.Run([typeof(SerializationBenchmarks), typeof(ComparisonBenchmarks)])
-            : BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+            : BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(rest);
 
         var path = PerformanceReport.Write(summaries);
 

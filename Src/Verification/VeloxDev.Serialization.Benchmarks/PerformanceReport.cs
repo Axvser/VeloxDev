@@ -22,9 +22,6 @@ namespace VeloxDev.Serialization.Benchmarks;
 /// </remarks>
 internal static class PerformanceReport
 {
-    private const string ArtifactsDirectory = "BenchmarkDotNet.Artifacts";
-    private const string FileName = "serialization-performance.md";
-
     /// <summary>The name MemoryDiagnoser gives the allocation metric, as BenchmarkDotNet spells it.</summary>
     private const string AllocatedMetric = "Allocated Memory";
 
@@ -49,8 +46,8 @@ internal static class PerformanceReport
         AppendResults(text, measured);
         AppendNotes(text, summaries, measured);
 
-        Directory.CreateDirectory(ArtifactsDirectory);
-        var path = Path.GetFullPath(Path.Combine(ArtifactsDirectory, FileName));
+        Directory.CreateDirectory(Artifacts.Path);
+        var path = System.IO.Path.Combine(Artifacts.Path, Artifacts.ReportFileName);
         File.WriteAllText(path, text.ToString());
 
         Console.WriteLine();
@@ -71,7 +68,7 @@ internal static class PerformanceReport
         text.AppendLine($"| 系统 | {RuntimeInformation.OSDescription} |");
         text.AppendLine($"| 运行时 | {RuntimeInformation.FrameworkDescription} |");
         text.AppendLine($"| 进程架构 | {RuntimeInformation.ProcessArchitecture} |");
-        text.AppendLine($"| 工具链 | InProcessEmitToolchain，3 warmup + 10 iterations，LaunchCount 1 |");
+        text.AppendLine($"| 工具链 | InProcessEmitToolchain，{BenchmarkConfig.Warmups} warmup + {BenchmarkConfig.Iterations} iterations，LaunchCount 1 |");
         text.AppendLine($"| 诊断器 | MemoryDiagnoser（`Allocated` 是 GC 可见的托管分配量） |");
         text.AppendLine();
     }

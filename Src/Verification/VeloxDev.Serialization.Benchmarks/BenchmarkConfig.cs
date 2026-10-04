@@ -22,16 +22,27 @@ namespace VeloxDev.Serialization.Benchmarks;
 /// </remarks>
 public sealed class BenchmarkConfig : ManualConfig
 {
+    /// <summary>How many iterations each case runs. Reported in the report, so it lives in one place.</summary>
+    internal const int Iterations = 6;
+
+    /// <summary>How many warm-up iterations precede them.</summary>
+    internal const int Warmups = 2;
+
     /// <summary>Builds the configuration.</summary>
     public BenchmarkConfig()
     {
-        // 迭代次数比 ShortRun 多：进程内容易受 JIT 与 GC 进度影响，3 次迭代量出来的误差能到均值的 100%。
+        // 迭代次数比 ShortRun 多、但比过去少：10 次那一版一次全量跑要九分钟，而报告自带的自校量出这一档的
+        // **噪声本身就有 5–15%**（同一个操作量两次之差），多跑四次并不改变任何结论。6 次是省时与稳定的折中。
         // LaunchCount 必须是 1 —— InProcess 工具链不支持多进程启动。
         AddJob(Job.Default
             .WithToolchain(InProcessEmitToolchain.Instance)
-            .WithWarmupCount(3)
-            .WithIterationCount(10)
+            .WithWarmupCount(Warmups)
+            .WithIterationCount(Iterations)
             .WithLaunchCount(1));
         AddDiagnoser(MemoryDiagnoser.Default);
+
+        // 默认是「工作目录下的 BenchmarkDotNet.Artifacts」—— 从仓库根启动就会落到根上。
+        // 改成本工程目录下，与从哪里启动无关。
+        WithArtifactsPath(Artifacts.Path);
     }
 }
