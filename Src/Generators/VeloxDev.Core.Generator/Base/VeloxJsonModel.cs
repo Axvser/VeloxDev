@@ -81,6 +81,23 @@ namespace VeloxDev.Generators.Base
         ReName = 8,
     }
 
+    /// <summary>When a member is written, as decided by <c>[JsonIgnore(Condition = …)]</c>.</summary>
+    /// <remarks>
+    /// <c>WhenWritingNull</c> is already resolved against the member's type here — a value type that cannot be
+    /// null has no null to test, so it collapses to <see cref="Always"/> and the writer emits no guard at all.
+    /// </remarks>
+    internal enum VeloxJsonWriteCondition
+    {
+        /// <summary>Written whenever the type is written.</summary>
+        Always,
+
+        /// <summary>Written only when the member is not null.</summary>
+        WhenNotNull,
+
+        /// <summary>Written only when the member differs from its default value.</summary>
+        WhenNotDefault,
+    }
+
     /// <summary>How a member's value reaches the document.</summary>
     internal enum VeloxJsonMemberKind
     {
@@ -127,6 +144,13 @@ namespace VeloxDev.Generators.Base
         /// value is stepped over as an unknown one.
         /// </summary>
         internal bool WriteOnly { get; set; }
+
+        /// <summary>
+        /// When the member is written. Anything but <see cref="VeloxJsonWriteCondition.Always"/> makes the
+        /// generated writer guard the member, so the document can be missing it — which the reader already
+        /// tolerates, since an absent member is the same thing as one it has never heard of.
+        /// </summary>
+        internal VeloxJsonWriteCondition WriteCondition { get; set; }
 
         /// <summary>The declared type, which is what decides whether a value needs its type name written.</summary>
         internal ITypeSymbol DeclaredType { get; }
@@ -211,6 +235,9 @@ namespace VeloxDev.Generators.Base
         private const string VeloxPropertyAttributeName = "VeloxDev.MVVM.VeloxPropertyAttribute";
         private const string ArchivableAttributeName = "VeloxDev.Serialization.ArchivableAttribute";
         private const string ArchiveAttributeName = "VeloxDev.Serialization.ArchiveAttribute";
+
+        // 与钩子同一条口径：认识 .NET 自带的那一个，使用方就不必为了同一件事把代码改一遍。
+        private const string JsonIgnoreAttributeName = "System.Text.Json.Serialization.JsonIgnoreAttribute";
 
         // 钩子就是 BCL 那四个。生成器认它们，而不是另立一套自己名字的特性 —— 这些特性本来就写在这些
         // 方法上，只是此前生成器不看它们，于是成了死的装饰。
@@ -726,16 +753,18 @@ namespace VeloxDev.Generators.Base
             List<Diagnostic>? notices)
         {
             var promoted = new HashSet<string>(System.StringComparer.Ordinal);
-            var fields = new List<(IFieldSymbol Field, string Name, string DocumentName)>();
+            var fields = new List<(IFieldSymbol Field, string Name, string DocumentName, VeloxJsonWriteCondition Condition)>();
 
             foreach (var member in symbol.GetMembers())
             {
                 if (member is not IFieldSymbol field) continue;
 
                 var (options, renamed) = ReadArchive(field, notices);
+                var condition = ReadWriteCondition(field, field.Type, notices);
 
-                // 字段永不参与：对家（那个提升出来的属性）照常走属性那一趟。
-                if ((options & ArchiveFlags.IgnoreField) != 0) continue;
+                // 三者说的是同一件事的三种说法：`IgnoreField`、`[JsonIgnore]`、`[JsonIgnore(Condition = Always)]`。
+                // 任一命中就整个排除 —— 排除掉的东西不会回到文档里。
+                if (condition is null || (options & ArchiveFlags.IgnoreField) != 0) continue;
 
                 if (AIContextNaming.HasAttribute(field, VeloxPropertyAttributeName))
                 {
@@ -747,7 +776,7 @@ namespace VeloxDev.Generators.Base
                     if (name.Length == 0) continue;
 
                     promoted.Add(name);
-                    fields.Add((field, name, renamed ?? name));
+                    fields.Add((field, name, renamed ?? name, condition.Value));
                     continue;
                 }
 
@@ -762,7 +791,7 @@ namespace VeloxDev.Generators.Base
                     continue;
                 }
 
-                fields.Add((field, field.Name, renamed ?? field.Name));
+                fields.Add((field, field.Name, renamed ?? field.Name, condition.Value));
             }
 
             var emitted = new HashSet<string>(System.StringComparer.Ordinal);
@@ -780,15 +809,18 @@ namespace VeloxDev.Generators.Base
                 // 没有 setter 可赋值，所以它是只写得出去的那一种成员。
                 var writable = property.SetMethod is { DeclaredAccessibility: Accessibility.Public };
                 if (!writable && (options & ArchiveFlags.KeepProperty) == 0) continue;
+
+                var condition = ReadWriteCondition(property, property.Type, notices);
+                if (condition is null) continue;
                 if (!emitted.Add(property.Name)) continue;
 
-                yield return BuildMember(property.Name, property.Type, renamed, writeOnly: !writable);
+                yield return BuildMember(property.Name, property.Type, renamed, writeOnly: !writable, condition: condition.Value);
             }
 
-            foreach (var (field, name, documentName) in fields)
+            foreach (var (field, name, documentName, condition) in fields)
             {
                 if (!emitted.Add(name)) continue;
-                yield return BuildMember(name, field.Type, documentName);
+                yield return BuildMember(name, field.Type, documentName, condition: condition);
             }
 
             // 组件的成员由 Workflow 生成器写出，本生成器看不见 —— 按作者写下的 [WorkflowBuilder.*]
@@ -892,6 +924,82 @@ namespace VeloxDev.Generators.Base
         }
 
         /// <summary>
+        /// What a member's <c>[JsonIgnore]</c> says about writing it, or <see langword="null"/> when it says the
+        /// member is not written at all.
+        /// </summary>
+        /// <remarks>
+        /// The standard attribute is honoured as it stands rather than mirrored under a Velox name, so a type
+        /// written for another serializer does not have to be rewritten to take part in this one. Its
+        /// <c>Condition</c> keeps its meaning: <c>Never</c> is an explicit opt-in, and the two conditional values
+        /// guard the write instead of dropping the member.
+        /// </remarks>
+        private static VeloxJsonWriteCondition? ReadWriteCondition(ISymbol member, ITypeSymbol declaredType, List<Diagnostic>? notices)
+        {
+            var attribute = member.GetAttributes().FirstOrDefault(a =>
+                a.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .Replace("global::", string.Empty) == JsonIgnoreAttributeName);
+
+            if (attribute is null) return VeloxJsonWriteCondition.Always;
+
+            var condition = ReadJsonIgnoreCondition(attribute) ?? "Always";
+
+            switch (condition)
+            {
+                case "Never":
+                    return VeloxJsonWriteCondition.Always;
+
+                case "Always":
+                    return null;
+
+                // 值类型（可空的除外）永远不为 null：没有可判的条件，写侧也就不必发一条永远为真的守卫。
+                case "WhenWritingNull" when !CanBeNull(declaredType):
+                    return VeloxJsonWriteCondition.Always;
+
+                case "WhenWritingNull":
+                    return VeloxJsonWriteCondition.WhenNotNull;
+
+                case "WhenWritingDefault":
+                    return VeloxJsonWriteCondition.WhenNotDefault;
+
+                default:
+                    notices?.Add(Diagnostic.Create(
+                        Diagnostics.UnusableArchiveDeclaration,
+                        attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation(),
+                        member.Name,
+                        $"the condition '{condition}' is not one this format knows how to honour"));
+                    return VeloxJsonWriteCondition.Always;
+            }
+        }
+
+        /// <summary>
+        /// The name of the <c>Condition</c> on a <c>[JsonIgnore]</c>, or <see langword="null"/> when it names none.
+        /// </summary>
+        /// <remarks>
+        /// Read <b>by name</b>, never by the number behind it. <c>JsonIgnoreCondition</c> has gained members across
+        /// releases — <c>WhenWriting</c> and <c>WhenReading</c> arrived in .NET 11 — so a mirror of its ordering is
+        /// a fact waiting to go stale, and the ordering is not what the attribute means anyway.
+        /// </remarks>
+        private static string? ReadJsonIgnoreCondition(AttributeData attribute)
+        {
+            // Condition 是特性上的属性（那个特性只有无参构造），所以它一定出现在命名实参里。
+            foreach (var named in attribute.NamedArguments)
+            {
+                if (named.Key != "Condition" || named.Value.Value is not int value) continue;
+
+                return named.Value.Type?.GetMembers()
+                    .OfType<IFieldSymbol>()
+                    .FirstOrDefault(field => field.HasConstantValue && field.ConstantValue is int constant && constant == value)
+                    ?.Name;
+            }
+
+            return null;
+        }
+
+        // 值类型（可空的除外）永远不为 null。
+        private static bool CanBeNull(ITypeSymbol type)
+            => !type.IsValueType || !SymbolEqualityComparer.Default.Equals(UnwrapNullable(type), type);
+
+        /// <summary>
         /// Whether a marked member can be written by generated code, reporting it when it cannot.
         /// </summary>
         /// <remarks>
@@ -932,7 +1040,12 @@ namespace VeloxDev.Generators.Base
             return symbol.GetMembers().OfType<IPropertySymbol>().Any(property => !property.IsIndexer && property.Name == name);
         }
 
-        private static VeloxJsonMember BuildMember(string name, ITypeSymbol declaredType, string? documentName = null, bool writeOnly = false)
+        private static VeloxJsonMember BuildMember(
+            string name,
+            ITypeSymbol declaredType,
+            string? documentName = null,
+            bool writeOnly = false,
+            VeloxJsonWriteCondition condition = VeloxJsonWriteCondition.Always)
         {
             var (kind, element, interfaceKeyed) = Classify(declaredType);
             return new VeloxJsonMember(name, declaredType, element, kind)
@@ -941,6 +1054,7 @@ namespace VeloxDev.Generators.Base
                 InterfaceKeyed = interfaceKeyed,
                 DocumentName = documentName ?? name,
                 WriteOnly = writeOnly,
+                WriteCondition = condition,
             };
         }
 

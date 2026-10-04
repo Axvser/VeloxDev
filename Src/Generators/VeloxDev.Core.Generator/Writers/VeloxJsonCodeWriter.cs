@@ -122,13 +122,36 @@ namespace VeloxDev.Generators.Writers
             var configure = async ? ".ConfigureAwait(false)" : string.Empty;
 
             // 被排除的成员连名字都不写：快照模式靠这条把节点引用挡在文件外。
-            builder.AppendLine($"        if (!global::{SerializationNamespace}.VeloxJsonSerializer.IsExcluded(typeof({declaredType})))");
+            var excluded = $"!global::{SerializationNamespace}.VeloxJsonSerializer.IsExcluded(typeof({declaredType}))";
+            var guard = WriteGuard(member, declaredType);
+
+            // 条件写出不需要读侧配合：缺一个成员，与读到一个没见过的成员，走的是同一条路。
+            builder.AppendLine($"        if ({(guard.Length == 0 ? excluded : $"{guard} {excluded}")})");
             builder.AppendLine("        {");
             builder.AppendLine($"            {wait}writer.{(async ? "WriteMemberNameAsync" : "WriteMemberName")}(\"{Escape(member.DocumentName)}\"){configure};");
             builder.AppendLine($"            {wait}global::{SerializationNamespace}.VeloxJsonSerializer.{(async ? "WriteValueAsync" : "WriteValue")}(");
             builder.AppendLine($"                writer, t.{member.Name}, typeof({declaredType})){configure};");
             builder.AppendLine("        }");
         }
+
+        /// <summary>
+        /// The condition that has to hold for a member to be written, or an empty string when it is
+        /// unconditional.
+        /// </summary>
+        /// <remarks>
+        /// <c>WhenWritingDefault</c> is a null test for a reference type rather than an equality one: the default
+        /// of a reference type is null, and comparing through <c>EqualityComparer</c> would drag a type's own
+        /// <c>Equals</c> into a decision the standard attribute does not make.
+        /// </remarks>
+        private static string WriteGuard(VeloxJsonMember member, string declaredType)
+            => member.WriteCondition switch
+            {
+                VeloxJsonWriteCondition.WhenNotNull => $"t.{member.Name} is not null &&",
+                VeloxJsonWriteCondition.WhenNotDefault when !member.DeclaredType.IsValueType => $"t.{member.Name} is not null &&",
+                VeloxJsonWriteCondition.WhenNotDefault =>
+                    $"!global::System.Collections.Generic.EqualityComparer<{declaredType}>.Default.Equals(t.{member.Name}, default!) &&",
+                _ => string.Empty,
+            };
 
         /// <summary>
         /// Emits the reader for one type: a factory and a member dispatch.

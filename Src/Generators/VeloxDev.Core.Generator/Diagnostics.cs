@@ -147,8 +147,8 @@ namespace VeloxDev.Generators
         /// its raw values. Skipping it would change the bytes without any other symptom.
         /// </remarks>
         /// <summary>
-        /// An <c>[Archive]</c> declaration the generator cannot honour — an unreachable member, or a rename with
-        /// nothing to rename it to.
+        /// A member declaration the generator cannot honour — an unreachable member, a rename with nothing to
+        /// rename it to, or a <c>[JsonIgnore]</c> condition this format has no reading for.
         /// </summary>
         /// <remarks>
         /// Error rather than warning: the generated file would either not compile or quietly carry a different
@@ -157,7 +157,7 @@ namespace VeloxDev.Generators
         /// </remarks>
         public static readonly DiagnosticDescriptor UnusableArchiveDeclaration = new(
             id: "VELOX_JSON_MEMBER001",
-            title: "Unusable [Archive] declaration",
+            title: "Unusable member declaration",
             messageFormat: "'{0}' cannot be marked: {1}",
             category: JsonCategory,
             defaultSeverity: DiagnosticSeverity.Error,
