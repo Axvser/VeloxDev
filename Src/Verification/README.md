@@ -29,13 +29,12 @@ dotnet build Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Seriali
 个节点。`超大` 停在 30 000 是有意的：Newtonsoft 在 1 000 节点上单次操作就分配约 50 MB，
 再上一个数量级量到的会是 GC 而不是序列化器。
 
-**默认跑三档（小/中/大），`--all` 加超大。** 档位由命令行决定（`[ParamsSource]` 读 `Scales.Selected`），
-因为 `[Params]` 是编译期常量 —— 那样每次改动都得为最慢的一档付钱。
+**默认四档全跑**，所以报告恒为五张表。档位由命令行决定（`[ParamsSource]` 读 `Scales.Selected`），
+因为 `[Params]` 是编译期常量 —— 那样收窄档位就得改代码。
 
 | 怎么跑 | 花多久 | 什么时候用 |
 | --- | --- | --- |
-| 不带参数 | ~4 分钟 | 提交前看整体 |
-| `--all` | ~9 分钟 | 要超大档 |
+| 不带参数 | ~9 分钟 | 完整五张表的报告 |
 | `--scale 10000` | 一档 | 只关心某一档 |
 | `--scale 10000 --filter "*Stj_Serialize*"` | ~15 秒 | **只量一个数字** —— 调参时用这个 |
 

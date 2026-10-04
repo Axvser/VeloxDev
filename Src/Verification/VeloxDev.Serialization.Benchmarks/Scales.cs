@@ -30,18 +30,19 @@ internal static class Scales
     };
 
     /// <summary>
-    /// The magnitudes this run measures. Small, medium and large by default; <c>--all</c> adds the huge one.
+    /// The magnitudes this run measures — all four unless <c>--scale</c> narrowed it.
     /// </summary>
     /// <remarks>
-    /// The huge scale is roughly two thirds of the wall clock and its numbers are the least trustworthy
-    /// (see the report's self-check), so it is opt-in rather than the default a change has to pay for.
+    /// All four by default, so a report always has its five tables. The huge scale is roughly two thirds of the
+    /// wall clock and its numbers are the least trustworthy (see the report's self-check), which is why
+    /// <c>--scale</c> exists: narrowing to one magnitude and one method is the fifteen-second path.
     /// </remarks>
-    internal static IReadOnlyList<int> Selected { get; private set; } = [Small, Medium, Large];
+    internal static IReadOnlyList<int> Selected { get; private set; } = [Small, Medium, Large, Huge];
 
-    /// <summary>Reads this tool's own switches and leaves BenchmarkDotNet's arguments alone.</summary>
+    /// <summary>Reads this tool's own switch and leaves BenchmarkDotNet's arguments alone.</summary>
     /// <remarks>
-    /// <c>--all</c> adds the huge magnitude; <c>--scale 10000</c> (or <c>--scale=10000</c>) narrows the run to one.
-    /// The latter is the "just measure one number" path — pair it with <c>--filter</c> and a run is seconds.
+    /// <c>--scale 10000</c> (or <c>--scale=10000</c>) narrows the run to one magnitude — the "just measure one
+    /// number" path, which with <c>--filter</c> takes seconds instead of minutes.
     /// </remarks>
     /// <param name="args">The command line.</param>
     /// <returns>The arguments BenchmarkDotNet should see.</returns>
@@ -52,12 +53,6 @@ internal static class Scales
 
         for (var i = 0; i < args.Length; i++)
         {
-            if (string.Equals(args[i], AllSwitch, StringComparison.OrdinalIgnoreCase))
-            {
-                Selected = [Small, Medium, Large, Huge];
-                continue;
-            }
-
             if (string.Equals(args[i], ScaleSwitch, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length
                 && int.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var byTwo))
             {
@@ -79,7 +74,6 @@ internal static class Scales
         return [.. rest];
     }
 
-    private const string AllSwitch = "--all";
     private const string ScaleSwitch = "--scale";
 }
 
