@@ -16,7 +16,7 @@
 		<!-- 本程序集的 Agent 面属于框架侧：生成的分片挂在 Framework/ 根下，而不是 Customer/。 -->
 		<VeloxAgentContextTreeRoot>Framework</VeloxAgentContextTreeRoot>
 		<Title>VeloxDev.Core</Title>
-		<Version>9.0.0</Version>
+		<Version>10.0.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI ...</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -45,7 +45,7 @@
 		                  OutputItemType="Analyzer"
 		                  ReferenceOutputAssembly="false"
 		                  Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0"
+		<PackageReference Include="VeloxDev.Core.Generator" Version="10.0.0"
 		                  Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
