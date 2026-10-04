@@ -90,8 +90,7 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine();
 
             // 钩子只在真的写这一个实例时跑 —— 写成 $ref 的那次没有内容要准备。
-            if (Implements(type, "IVeloxJsonSerializing"))
-                builder.AppendLine($"        ((global::{SerializationNamespace}.IVeloxJsonSerializing)t).OnSerializing();");
+            WriteHooks(builder, type.Serializing, "        ");
 
             builder.AppendLine();
 
@@ -102,10 +101,7 @@ namespace VeloxDev.Generators.Writers
 
             builder.AppendLine();
 
-            if (Implements(type, "IVeloxJsonSerialized"))
-            {
-                builder.AppendLine($"        ((global::{SerializationNamespace}.IVeloxJsonSerialized)t).OnSerialized();");
-            }
+            WriteHooks(builder, type.Serialized, "        ");
 
             builder.AppendLine($"        {wait}writer.{(async ? "WriteEndObjectAsync" : "WriteEndObject")}(){configure};");
             builder.AppendLine("    }");
@@ -189,8 +185,7 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine($"        var t = ({target})target;");
             builder.AppendLine();
 
-            if (Implements(type, "IVeloxJsonDeserializing"))
-                builder.AppendLine($"        ((global::{SerializationNamespace}.IVeloxJsonDeserializing)t).OnDeserializing();");
+            WriteHooks(builder, type.Deserializing, "        ");
 
             builder.AppendLine();
             // 成员名不落成字符串：NextMember() 只定位，MemberNameEquals 就地拿原文与字面量比。
@@ -218,10 +213,10 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine($"        {wait}reader.{(async ? "FinishObjectAsync" : "FinishObject")}(){configure};");
             builder.AppendLine();
 
-            if (Implements(type, "IVeloxJsonDeserialized"))
+            if (type.Deserialized.Count > 0)
             {
                 builder.AppendLine("        // 全部成员都读完才回调 —— 依赖旁边那个成员的成员等的是这个时刻。");
-                builder.AppendLine($"        ((global::{SerializationNamespace}.IVeloxJsonDeserialized)t).OnDeserialized();");
+                WriteHooks(builder, type.Deserialized, "        ");
             }
 
             builder.AppendLine("    }");
@@ -374,16 +369,23 @@ namespace VeloxDev.Generators.Writers
         }
 
         /// <summary>
-        /// Whether a type implements one of the serialization callback interfaces.
+        /// Emits one call per callback, base type first — the order the BCL formatter calls them in.
         /// </summary>
         /// <remarks>
-        /// Decided at compile time rather than by a <c>is</c> test: these types are sealed, so the compiler
-        /// already knows the answer and would reject a pattern that can never match.
+        /// The <c>StreamingContext</c> the BCL shape takes is passed as <c>default</c>: this format has no context
+        /// to hand over, and inventing one would be a lie the callback could act on.
         /// </remarks>
-        private static bool Implements(VeloxJsonType type, string interfaceName)
-            => type.Symbol.AllInterfaces.Any(i =>
-                i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                 .Replace("global::", string.Empty) == $"{SerializationNamespace}.{interfaceName}");
+        private static void WriteHooks(StringBuilder builder, IReadOnlyList<VeloxJsonHook> hooks, string indent)
+        {
+            foreach (var hook in hooks)
+            {
+                var call = hook.TakesContext
+                    ? $"{hook.Name}(default(global::System.Runtime.Serialization.StreamingContext))"
+                    : $"{hook.Name}()";
+
+                builder.AppendLine($"{indent}t.{call};");
+            }
+        }
 
         private static string FullTypeOf(ITypeSymbol type)
             => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);

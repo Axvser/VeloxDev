@@ -1,6 +1,5 @@
 ﻿using System.Runtime.Serialization;
 using VeloxDev.MVVM;
-using VeloxDev.Serialization;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
@@ -10,7 +9,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// <see cref="IsTerminal"/>: the branch registers a route key but has no downstream node — selecting it at runtime
 /// ends the whole run (the join-point tail segment is not propagated).
 /// </summary>
-public sealed partial class BranchOption : IVeloxJsonDeserialized
+public sealed partial class BranchOption
 {
     [VeloxProperty] private object? _key;
     [VeloxProperty] private string? _label;
@@ -26,13 +25,7 @@ public sealed partial class BranchOption : IVeloxJsonDeserialized
     [VeloxProperty] private string? _keyTypeName;
 
     /// <summary>Restores an enum key after loading — see <see cref="BranchSegment.NormalizeCompileKey"/>.</summary>
-    /// <remarks>
-    /// Both hooks are wired while the two serializers coexist, sharing one body: the attribute is what the
-    /// Newtonsoft path calls, the interface is what the VeloxDev serializer calls.
-    /// </remarks>
     [OnDeserialized]
-    internal void NormalizeKey(StreamingContext _) => ((IVeloxJsonDeserialized)this).OnDeserialized();
-
-    void IVeloxJsonDeserialized.OnDeserialized()
+    internal void NormalizeKey(StreamingContext _)
         => Key = CompileKeyNormalizer.Normalize(Key, KeyTypeName);
 }

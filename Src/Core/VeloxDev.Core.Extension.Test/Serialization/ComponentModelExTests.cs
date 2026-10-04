@@ -31,7 +31,7 @@ public partial class ComponentModelExTests
     }
 
     /// <summary>Mirrors the fix the compiled graph's branch keys need: remember the key's type, restore it on load.</summary>
-    internal sealed partial class KeyHolderWithTypeName : VeloxDev.Serialization.IVeloxJsonDeserialized
+    internal sealed partial class KeyHolderWithTypeName
     {
         [VeloxProperty] private object? key;
         [VeloxProperty] private string? keyTypeName;
@@ -40,14 +40,8 @@ public partial class ComponentModelExTests
         /// Runs after every member has been read, which is the only moment the type name beside the key is
         /// guaranteed to be there — a generated setter would fire before it.
         /// </summary>
-        /// <remarks>
-        /// Both hooks are wired while the two serializers coexist, sharing one body: the attribute is what the
-        /// Newtonsoft path calls, the interface is what the VeloxDev serializer calls.
-        /// </remarks>
         [OnDeserialized]
-        internal void NormalizeKey(StreamingContext _) => ((VeloxDev.Serialization.IVeloxJsonDeserialized)this).OnDeserialized();
-
-        void VeloxDev.Serialization.IVeloxJsonDeserialized.OnDeserialized()
+        internal void NormalizeKey(StreamingContext _)
         {
             if (Key is long number
                 && KeyTypeName is { Length: > 0 } name

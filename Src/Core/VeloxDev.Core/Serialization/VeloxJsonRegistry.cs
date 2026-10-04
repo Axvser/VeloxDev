@@ -67,52 +67,6 @@ public interface IVeloxJsonReader
 }
 
 /// <summary>
-/// Runs just before a type's members are written.
-/// </summary>
-/// <remarks>
-/// Callbacks are interfaces rather than attributes on purpose: an implementation is visible to the compiler and
-/// to a reader of the type, where an attribute is a stringly-typed convention that fails silently when it is
-/// misspelled.
-/// </remarks>
-public interface IVeloxJsonSerializing
-{
-    /// <summary>Called before this instance's members are written.</summary>
-    void OnSerializing();
-}
-
-/// <summary>
-/// Runs just after a type's members are written, whatever happened while writing them.
-/// </summary>
-public interface IVeloxJsonSerialized
-{
-    /// <summary>Called after this instance's members are written.</summary>
-    void OnSerialized();
-}
-
-/// <summary>
-/// Runs just before a type's members are read into an instance.
-/// </summary>
-public interface IVeloxJsonDeserializing
-{
-    /// <summary>Called before this instance's members are read.</summary>
-    void OnDeserializing();
-}
-
-/// <summary>
-/// Runs just after every member of a type has been read.
-/// </summary>
-/// <remarks>
-/// After <b>every</b> member: a type whose members depend on one another — an enum key that needs the type name
-/// beside it, an enumerator whose items only make sense once its selector type is known — must be able to rely
-/// on all of them being present, which is why this cannot be a generated setter.
-/// </remarks>
-public interface IVeloxJsonDeserialized
-{
-    /// <summary>Called after every member of this instance has been read.</summary>
-    void OnDeserialized();
-}
-
-/// <summary>
 /// The compile-time facts the archive serializer needs: which writer and reader belong to each type, and the
 /// name a type is written as.
 /// </summary>
@@ -124,6 +78,14 @@ public interface IVeloxJsonDeserialized
 /// <para>
 /// A type with no entry cannot be written. That is the closed world the format lives in, and it is what removes
 /// the reflection: the set of types an archive can contain is the set the generator was compiled over.
+/// </para>
+/// <para>
+/// <b>Callbacks are the BCL's own.</b> A type joins the write and read lifecycle by putting
+/// <c>[OnSerializing]</c>, <c>[OnSerialized]</c>, <c>[OnDeserializing]</c> or <c>[OnDeserialized]</c> — the
+/// attributes in <c>System.Runtime.Serialization</c> — on a method, and the generated reader and writer call it
+/// directly. So the method has to be reachable from generated code: <c>internal</c> or wider. A callback that
+/// depends on the whole instance runs after <b>every</b> member of its type has been read, never per member as
+/// it is assigned — a type whose members lean on one another must be able to rely on all of them being present.
 /// </para>
 /// <para>
 /// <b>Lookups take no lock.</b> The five tables live in a snapshot that is replaced, never mutated, so a

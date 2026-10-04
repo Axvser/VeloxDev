@@ -116,6 +116,22 @@ namespace VeloxDev.Generators.Base
         internal bool IsDeclaredHere { get; set; }
     }
 
+    /// <summary>One serialization callback the generated code has to call.</summary>
+    internal sealed class VeloxJsonHook
+    {
+        internal VeloxJsonHook(string name, bool takesContext)
+        {
+            Name = name;
+            TakesContext = takesContext;
+        }
+
+        /// <summary>The method's name on the instance the generated code calls it on.</summary>
+        internal string Name { get; }
+
+        /// <summary>Whether it takes a <c>StreamingContext</c>, the shape the BCL attributes document.</summary>
+        internal bool TakesContext { get; }
+    }
+
     /// <summary>One serialized type.</summary>
     internal sealed class VeloxJsonType
     {
@@ -145,6 +161,18 @@ namespace VeloxDev.Generators.Base
 
         /// <summary>The name of the generated reader class for this type.</summary>
         internal string ReaderClassName { get; set; } = string.Empty;
+
+        /// <summary>The callbacks to run around writing, base type first. Empty when the type has none.</summary>
+        internal IReadOnlyList<VeloxJsonHook> Serializing { get; set; } = [];
+
+        /// <summary>The callbacks to run after writing, base type first.</summary>
+        internal IReadOnlyList<VeloxJsonHook> Serialized { get; set; } = [];
+
+        /// <summary>The callbacks to run before reading, base type first.</summary>
+        internal IReadOnlyList<VeloxJsonHook> Deserializing { get; set; } = [];
+
+        /// <summary>The callbacks to run after every member is read, base type first.</summary>
+        internal IReadOnlyList<VeloxJsonHook> Deserialized { get; set; } = [];
     }
 
     /// <summary>Builds the serializer model for one assembly.</summary>
@@ -152,6 +180,13 @@ namespace VeloxDev.Generators.Base
     {
         private const string VeloxPropertyAttributeName = "VeloxDev.MVVM.VeloxPropertyAttribute";
         private const string ArchivableAttributeName = "VeloxDev.Serialization.ArchivableAttribute";
+
+        // 钩子就是 BCL 那四个。生成器认它们，而不是另立一套自己名字的特性 —— 这些特性本来就写在这些
+        // 方法上，只是此前生成器不看它们，于是成了死的装饰。
+        private const string OnSerializingAttributeName = "System.Runtime.Serialization.OnSerializingAttribute";
+        private const string OnSerializedAttributeName = "System.Runtime.Serialization.OnSerializedAttribute";
+        private const string OnDeserializingAttributeName = "System.Runtime.Serialization.OnDeserializingAttribute";
+        private const string OnDeserializedAttributeName = "System.Runtime.Serialization.OnDeserializedAttribute";
 
         private static readonly string[] ComponentInterfaces =
         [
@@ -256,7 +291,7 @@ namespace VeloxDev.Generators.Base
             }
 
             var types = included
-                .Select(s => BuildType(s, contracts))
+                .Select(s => BuildType(s, contracts, notices, compilation.Assembly))
                 .Where(static t => t is not null)
                 .Select(static t => t!)
                 .OrderBy(static t => t.FullName, System.StringComparer.Ordinal)
@@ -510,7 +545,11 @@ namespace VeloxDev.Generators.Base
             return false;
         }
 
-        private static VeloxJsonType? BuildType(INamedTypeSymbol symbol, IReadOnlyDictionary<string, INamedTypeSymbol> contracts)
+        private static VeloxJsonType? BuildType(
+            INamedTypeSymbol symbol,
+            IReadOnlyDictionary<string, INamedTypeSymbol> contracts,
+            List<Diagnostic> notices,
+            IAssemblySymbol assembly)
         {
             var members = ReadMembers(symbol, contracts).ToList();
             if (members.Count == 0) return null;
@@ -519,8 +558,112 @@ namespace VeloxDev.Generators.Base
                 symbol,
                 ReflectionFullName(symbol),
                 WrittenName(symbol),
-                members);
+                members)
+            {
+                Serializing = ReadHooks(symbol, OnSerializingAttributeName, notices, assembly),
+                Serialized = ReadHooks(symbol, OnSerializedAttributeName, notices, assembly),
+                Deserializing = ReadHooks(symbol, OnDeserializingAttributeName, notices, assembly),
+                Deserialized = ReadHooks(symbol, OnDeserializedAttributeName, notices, assembly),
+            };
         }
+
+        /// <summary>
+        /// The callback methods one hook attribute names along a type's base chain, base type first.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The attributes are <c>Inherited = false</c>, so a base type's callback is only found by walking the
+        /// chain — and the BCL calls base callbacks before the derived ones, which is the order returned here.
+        /// </para>
+        /// <para>
+        /// A callback the generated code cannot reach is an error rather than a silent omission: the callbacks
+        /// exist to change what a document holds (<c>Anchor</c> expands a collapsed transient in
+        /// <c>[OnSerializing]</c>), so dropping one would move the bytes with no other symptom.
+        /// </para>
+        /// </remarks>
+        private static IReadOnlyList<VeloxJsonHook> ReadHooks(
+            INamedTypeSymbol symbol,
+            string attributeName,
+            List<Diagnostic> notices,
+            IAssemblySymbol assembly)
+        {
+            var hooks = new List<VeloxJsonHook>();
+            var chain = new Stack<INamedTypeSymbol>();
+
+            for (var current = symbol; current is not null; current = current.BaseType)
+            {
+                if (current.SpecialType == SpecialType.System_Object) break;
+                chain.Push(current);
+            }
+
+            foreach (var level in chain)
+            {
+                var found = level.GetMembers().OfType<IMethodSymbol>()
+                    .Where(static method => !method.IsStatic && method.ReturnsVoid)
+                    .Where(method => AIContextNaming.HasAttribute(method, attributeName))
+                    .ToList();
+
+
+                if (found.Count == 0) continue;
+
+                if (found.Count > 1)
+                {
+                    notices.Add(Diagnostic.Create(
+                        Diagnostics.AmbiguousSerializationHook,
+                        found[1].Locations.FirstOrDefault(),
+                        attributeName,
+                        level.ToDisplayString()));
+                }
+
+                var hook = found[0];
+
+                if (!IsReachableFromGeneratedCode(hook, assembly))
+                {
+                    notices.Add(Diagnostic.Create(
+                        Diagnostics.UnreachableSerializationHook,
+                        hook.Locations.FirstOrDefault(),
+                        hook.Name,
+                        level.ToDisplayString(),
+                        SymbolEqualityComparer.Default.Equals(hook.ContainingAssembly, assembly)
+                            ? "generated code sits in another namespace of the same assembly, so it reaches internal methods but not private or protected ones"
+                            : "the generated reader and writer are emitted into the consuming assembly, so a hook on a type declared elsewhere has to be public"));
+                    continue;
+                }
+
+                if (hook.Parameters.Length > 1
+                    || (hook.Parameters.Length == 1
+                        && hook.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                            != "global::System.Runtime.Serialization.StreamingContext"))
+                {
+                    notices.Add(Diagnostic.Create(
+                        Diagnostics.UnreachableSerializationHook,
+                        hook.Locations.FirstOrDefault(),
+                        hook.Name,
+                        level.ToDisplayString(),
+                        "it must take no parameter, or a single System.Runtime.Serialization.StreamingContext"));
+                    continue;
+                }
+
+                hooks.Add(new VeloxJsonHook(hook.Name, hook.Parameters.Length == 1));
+            }
+
+            return hooks;
+        }
+
+        /// <summary>
+        /// Whether generated code in <paramref name="assembly"/> can name the method.
+        /// </summary>
+        /// <remarks>
+        /// <c>internal</c> only reaches as far as its own assembly, and the generated reader and writer are
+        /// emitted into the assembly being compiled — which for a type reached as another assembly's closed
+        /// generic is <b>not</b> the one that declares it. A type serialized from elsewhere therefore needs a
+        /// <c>public</c> hook. That is not a style preference: reference assemblies drop non-public members, so an
+        /// <c>internal</c> hook on a foreign type cannot even be seen here, let alone called.
+        /// </remarks>
+        private static bool IsReachableFromGeneratedCode(IMethodSymbol method, IAssemblySymbol assembly)
+            => method.DeclaredAccessibility == Accessibility.Public
+               || (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, assembly)
+                   && method.DeclaredAccessibility is Accessibility.Internal or Accessibility.ProtectedOrInternal);
 
         /// <summary>
         /// The members the format writes: public read/write properties, in the order the contract reports them —

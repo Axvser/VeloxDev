@@ -121,5 +121,37 @@ namespace VeloxDev.Generators
             category: JsonCategory,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// More than one method on a type carries the same serialization callback attribute.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error: the BCL formatter throws on this, but here the choice is deterministic
+        /// (declaration order), so the build can proceed — the author still needs to know that only one of the
+        /// two runs and which one it picked.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor AmbiguousSerializationHook = new(
+            id: "VELOX_JSON_HOOK001",
+            title: "Ambiguous serialization callback",
+            messageFormat: "'{1}' carries '{0}' on more than one method; only the first is called",
+            category: JsonCategory,
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A serialization callback the generated code cannot reach, or whose signature it cannot call.
+        /// </summary>
+        /// <remarks>
+        /// Error rather than warning: the callback would silently not run, and a callback exists to change what
+        /// the document holds — <c>Anchor</c> uses <c>[OnSerializing]</c> to expand a collapsed transient into
+        /// its raw values. Skipping it would change the bytes without any other symptom.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnreachableSerializationHook = new(
+            id: "VELOX_JSON_HOOK002",
+            title: "Unreachable serialization callback",
+            messageFormat: "'{0}' on '{1}' cannot be called by the generated serializer: {2}",
+            category: JsonCategory,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
     }
 }

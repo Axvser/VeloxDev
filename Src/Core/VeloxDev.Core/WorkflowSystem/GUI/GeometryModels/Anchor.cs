@@ -1,7 +1,6 @@
 using System.Runtime.Serialization;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.Serialization;
 
 namespace VeloxDev.WorkflowSystem;
 
@@ -9,7 +8,7 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.Chinese, "用于在工作流系统中描述组件的空间位置")]
 [AgentContext(AgentLanguages.English, "Used to describe the spatial position of components in the workflow system")]
 public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0)
-    : ICloneable, IEquatable<Anchor>, IVeloxJsonSerializing, IVeloxJsonSerialized, IVeloxJsonDeserialized
+    : ICloneable, IEquatable<Anchor>
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "水平坐标，单位为像素")]
@@ -65,15 +64,10 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
         return new Anchor(Horizontal * sx, Vertical * sy, Layer) { _collapseScale = scale, _owner = this };
     }
 
-    // 两个序列化器并存期间，Newtonsoft 的特性与 VeloxDev 的接口共用同一个函数体：
-    // ComponentModelEx 接到新序列化器上之后，特性那一对就可以删了。
+    // 钩子直接挂在 BCL 那四个特性上，生成器会调它们。方法必须是 internal 或更宽 ——
+    // 生成代码在同一个程序集的 VeloxDev.Serialization.Generated 里，private 够不着。
     [OnSerializing]
-    private void OnSerializing(StreamingContext context) => ((IVeloxJsonSerializing)this).OnSerializing();
-
-    [OnSerialized]
-    private void OnSerialized(StreamingContext context) => ((IVeloxJsonSerialized)this).OnSerialized();
-
-    void IVeloxJsonSerializing.OnSerializing()
+    internal void OnSerializing(StreamingContext context)
     {
         // 把坍缩的瞬态展开回原始/世界值，让 JSON 文件存的是世界坐标。
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
@@ -86,7 +80,8 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
         }
     }
 
-    void IVeloxJsonSerialized.OnSerialized()
+    [OnSerialized]
+    internal void OnSerialized(StreamingContext context)
     {
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
         {
@@ -99,9 +94,7 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
     }
 
     [OnDeserialized]
-    private void OnDeserialized(StreamingContext context) => ((IVeloxJsonDeserialized)this).OnDeserialized();
-
-    void IVeloxJsonDeserialized.OnDeserialized()
+    internal void OnDeserialized(StreamingContext context)
     {
         // 读取器把原始 JSON 值填进了这个瞬态（经节点的 getter 读入）却跳过了 setter；
         // 把还原出来的值推回它坍缩自的那个字段。

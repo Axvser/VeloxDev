@@ -4,14 +4,12 @@ using System.Diagnostics;
 using System.Runtime.Serialization;
 using System.Threading;
 using VeloxDev.MVVM;
-using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>A slot collection driven by one selector: each value of the selector type maps to one slot, and switching the selector swaps the whole set.</summary>
-public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IConditionalSlotProvider, System.ComponentModel.INotifyPropertyChanged,
-    IVeloxJsonDeserializing, IVeloxJsonDeserialized
+public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IConditionalSlotProvider, System.ComponentModel.INotifyPropertyChanged
     where TSlot : IWorkflowSlotViewModel, new()
 {
     /// <summary>Creates an empty enumerator.</summary>
@@ -634,14 +632,17 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         return found;
     }
 
-    // 两个序列化器并存期间，Newtonsoft 的特性与 VeloxDev 的接口共用同一个函数体。
+    /// <summary>
+    /// Clears the collections the constructor may have pre-populated, before the serializer fills them.
+    /// </summary>
+    /// <remarks>
+    /// Public, unlike the hooks on types this assembly serializes itself: a consuming assembly serializes its own
+    /// closed <see cref="SlotEnumerator{TSlot}"/>, and the generated code that calls this is emitted there — where
+    /// an <c>internal</c> member would not be visible at all.
+    /// </remarks>
+    /// <param name="context">The deserialization context; this format has none to offer and passes <c>default</c>.</param>
     [OnDeserializing]
-    private void OnDeserializing(StreamingContext context) => ((IVeloxJsonDeserializing)this).OnDeserializing();
-
-    [OnDeserialized]
-    private void OnDeserialized(StreamingContext context) => ((IVeloxJsonDeserialized)this).OnDeserialized();
-
-    void IVeloxJsonDeserializing.OnDeserializing()
+    public void OnDeserializing(StreamingContext context)
     {
         _isDeserializing = true;
 
@@ -654,7 +655,17 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         Items.Clear();
     }
 
-    void IVeloxJsonDeserialized.OnDeserialized()
+    /// <summary>
+    /// Settles the instance once every member has been read: re-resolves the selector type from its stored name
+    /// and re-normalizes the items that were mapped against the constructor's default type.
+    /// </summary>
+    /// <remarks>
+    /// Public for the same reason as <see cref="OnDeserializing(StreamingContext)"/>: the caller is generated into
+    /// the consuming assembly.
+    /// </remarks>
+    /// <param name="context">The deserialization context; this format has none to offer and passes <c>default</c>.</param>
+    [OnDeserialized]
+    public void OnDeserialized(StreamingContext context)
     {
         _isDeserializing = false;
 

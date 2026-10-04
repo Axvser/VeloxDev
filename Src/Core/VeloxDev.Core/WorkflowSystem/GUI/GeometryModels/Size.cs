@@ -1,7 +1,6 @@
 using System.Runtime.Serialization;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.Serialization;
 
 namespace VeloxDev.WorkflowSystem;
 
@@ -9,7 +8,7 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.Chinese, "表示一个二维尺寸")]
 [AgentContext(AgentLanguages.English, "Represents a two-dimensional size")]
 public sealed partial class Size(double width = 0d, double height = 0d)
-    : ICloneable, IEquatable<Size>, IVeloxJsonSerializing, IVeloxJsonSerialized, IVeloxJsonDeserialized
+    : ICloneable, IEquatable<Size>
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "宽度，像素单位")]
@@ -59,17 +58,10 @@ public sealed partial class Size(double width = 0d, double height = 0d)
         return new Size(Width * sx, Height * sy) { _collapseScale = scale, _owner = this };
     }
 
-    // 两个序列化器并存期间，Newtonsoft 的特性与 VeloxDev 的接口共用同一个函数体。
+    // 钩子直接挂在 BCL 那四个特性上，生成器会调它们。方法必须是 internal 或更宽 ——
+    // 生成代码在同一个程序集的 VeloxDev.Serialization.Generated 里，private 够不着。
     [OnSerializing]
-    private void OnSerializing(StreamingContext context) => ((IVeloxJsonSerializing)this).OnSerializing();
-
-    [OnSerialized]
-    private void OnSerialized(StreamingContext context) => ((IVeloxJsonSerialized)this).OnSerialized();
-
-    [OnDeserialized]
-    private void OnDeserialized(StreamingContext context) => ((IVeloxJsonDeserialized)this).OnDeserialized();
-
-    void IVeloxJsonSerializing.OnSerializing()
+    internal void OnSerializing(StreamingContext context)
     {
         // 把坍缩的瞬态展开回原始/世界坐标，让 JSON 文件存的是世界坐标。
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
@@ -82,7 +74,8 @@ public sealed partial class Size(double width = 0d, double height = 0d)
         }
     }
 
-    void IVeloxJsonSerialized.OnSerialized()
+    [OnSerialized]
+    internal void OnSerialized(StreamingContext context)
     {
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
         {
@@ -94,7 +87,8 @@ public sealed partial class Size(double width = 0d, double height = 0d)
         }
     }
 
-    void IVeloxJsonDeserialized.OnDeserialized()
+    [OnDeserialized]
+    internal void OnDeserialized(StreamingContext context)
     {
         // 读取器把原始 JSON 值填进了这个瞬态（经节点的 getter 读入）却跳过了 setter；
         // 把还原出来的值推回它坍缩自的那个字段。

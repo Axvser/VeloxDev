@@ -1,7 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Runtime.Serialization;
 using VeloxDev.MVVM;
-using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
@@ -13,7 +12,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// dynamic branches (<see cref="IsDynamic"/> = true) re-resolve the key at runtime via
 /// <see cref="ICompileTimeRouter.ResolveRouteKey"/>.
 /// </summary>
-public sealed partial class BranchSegment : CompileSegment, IVeloxJsonDeserialized
+public sealed partial class BranchSegment : CompileSegment
 {
     [VeloxProperty] private IWorkflowNodeViewModel? _router;
     [VeloxProperty] private ObservableCollection<BranchOption> _options = [];
@@ -31,12 +30,7 @@ public sealed partial class BranchSegment : CompileSegment, IVeloxJsonDeserializ
     /// properties are populated before it, whereas a setter would fire during the compiler's own assignment and,
     /// on load, before a type-name member declared later in the document had been read.
     /// </summary>
-    /// <remarks>
-    /// Both hooks are wired while the two serializers coexist, sharing one body.
-    /// </remarks>
     [OnDeserialized]
-    internal void NormalizeCompileKey(StreamingContext _) => ((IVeloxJsonDeserialized)this).OnDeserialized();
-
-    void IVeloxJsonDeserialized.OnDeserialized()
+    internal void NormalizeCompileKey(StreamingContext _)
         => CompileKey = CompileKeyNormalizer.Normalize(CompileKey, CompileKeyTypeName);
 }
