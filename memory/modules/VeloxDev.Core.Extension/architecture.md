@@ -195,15 +195,21 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 ---
 
-## 八、附：序列化的入口 `ComponentModelEx.cs`（引擎在 Core）
+## 八、附：序列化（引擎与通用面都在 Core，本项目只剩两个领域封装）
 
-`Src/Core/VeloxDev.Core.Extension/ComponentModelEx.cs` 的命名空间是 **`VeloxDev.MVVM.Serialization`**。
-**2026-10-03 起它只是入口，引擎在 `VeloxDev.Core` 的 `VeloxDev.Serialization`（见 §八·一）** ——
-本项目**已经没有 Newtonsoft 依赖**（包引用也删了），整个 Agent 面的 IL 裁剪警告从 160 降到 0（历史观测，不可复核）。
+**2026-10-04 起本项目里**没有**序列化 facade 了**：`ComponentModelEx.cs` 已下沉到
+`Src/Core/VeloxDev.Core/Serialization/ViewModelSerializer.cs`，命名空间 `VeloxDev.MVVM.Serialization`
+并入 **`VeloxDev.Serialization`**，类型改名 `ViewModelSerializer`。扩展方法名一个没动，所以调用点只改了
+`using`。理由：它当初留在这里是因为「Core 没有序列化器」—— 那句话随 2026-10-03 的引擎替换一起过期了。
+详见 [`Serialization/architecture.md`](../Serialization/architecture.md)。
 
-**公开面一行没变**：`Serialize<T>` / `TryDeserialize<T>` / `Deserialize<T>` 一族（同步 / 异步 / 流 / 字节 /
-`TextWriter`），全部 `where T : INotifyPropertyChanged`，交给新的序列化器执行。它是所有 demo 存/读工作流
-走的那条路（`TreeViewModel.cs` 的 `this.Serialize()`）。
+**留在这里的是 `CheckpointEx.cs` 与 `CompiledGraphEx.cs`**（同命名空间），它们是**工作流领域**对通用面的
+预设，不是通用 API 的一部分。本项目**已经没有 Newtonsoft 依赖**（包引用也删了）。
+
+**通用面的公开形状没变**：`Serialize<T>` / `TryDeserialize<T>` / `Deserialize<T>` 一族（同步 / 异步 / 流 /
+字节 / `TextWriter`），全部 `where T : INotifyPropertyChanged`。它是所有 demo 存/读工作流走的那条路
+（`TreeViewModel.cs` 的 `this.Serialize()`）。**2026-10-04 起流式入口变成真流式**（内存有界），并新增了
+同步的 `SerializeToStream` / `DeserializeFromStream` 一族。
 
 **`SerializationOptions` 只剩两个开关**：`WithIndented` / `WithCompact`（`VeloxJsonFormat`），以及
 `WithExcludedPropertyTypes`（`CompiledGraphEx` 用它把节点引用挡在快照外）。三个 Newtonsoft 时代的开关
