@@ -1,6 +1,6 @@
 ---
 name: veloxdev-drive-workflow-with-ai
-description: Give an LLM control of a VeloxDev workflow graph — wire a WorkflowAgentScope onto a tree, hand the tools to an IChatClient through one context provider, set the host's policy gates and call budgets, document components for the model with [AgentContext], load switchable skills (embedded documents or Agent-Skills folders on disk), and connect external MCP servers — including using the MCP or skill subsystem on its own, without the workflow layer
+description: Give an LLM control of a VeloxDev workflow graph — wire a WorkflowAgentScope onto a tree, hand the tools to an IChatClient through one context provider, set the host's policy gates and call budgets, document components for the model with [AgentContext], load switchable skills (embedded documents or Agent-Skills folders on disk), connect external MCP servers, and dispatch background sub-agents — including using the MCP or skill subsystem on its own, without the workflow layer
 ---
 
 ## Responsibility
@@ -15,7 +15,7 @@ Package: **`VeloxDev.Core.Extension`**. It also carries the graph serializer, wh
 var scope = tree.AsAgentScope()                       // tree : IWorkflowTreeViewModel
     .WithPromptLanguage(AgentLanguages.English)
     .WithOutputLanguage(AgentLanguages.Chinese)
-    .WithAutoDiscovery(assemblyName: "MyLib")         // find the concrete node/slot types
+    .WithAutoDiscovery()                              // register the concrete node/slot types
     .WithSynchronizationContext(SynchronizationContext.Current)
     .WithAllowNodeExecution(true)
     .WithSkills("skills")                             // switchable skills: embedded + a disk root
@@ -36,13 +36,13 @@ var response = await agent.RunAsync(message, session);
 
 ⚙ **The prompt is not rendered on that context.** The agent invocation thread builds each turn's instructions and tool list, so anything read there must be thread-safe. That is what `McpStatusViewModel.Snapshot` and `SkillsViewModel.Snapshot` are for: immutable copies republished on the bound thread whenever the collection changes. Read `Servers` / `Skills` from your UI, and the snapshots from anywhere else.
 
-⚙ **The context provider is the single source of tools, and it re-renders per turn.** `CreateContextProviders()` returns a `WorkflowAgentContextProvider` that contributes the current skill text and the current tool set — built-in, custom, and every connected MCP server's — on each invocation. That is what lets a skill switched off, a tool registered late, or a server loaded mid-session reach the model on the next turn without rebuilding the agent.
+⚙ **The context provider is the single source of tools, and it re-renders per turn.** The scope's own provider (a `WorkflowAgentContextProvider`, from `CreateContextProvider()`) contributes the current tool set — built-in, custom, and every connected MCP server's — on each invocation, and the attached subsystems' providers contribute theirs beside it. That is what lets a skill switched off, a tool registered late, or a server loaded mid-session reach the model on the next turn without rebuilding the agent.
 
 ⚙ **Never also pass the tools through `ChatOptions.Tools`.** MAF unions that list with the providers' contribution and does not deduplicate by name, so a tool offered through both channels is sent to the model twice.
 
 ⚙ **`ProvideTools()` still exists, but it is a one-shot snapshot** for hosts that build the agent by hand — it does not pick up later registrations. `CreateToolkit()` returns one instance per scope, so the call counters and the snapshot history behind `GetChangesSinceSnapshot` stay consistent.
 
-⚙ **`WithAutoDiscovery` is how the model learns your node types.** `ListCreatableTypes` and `CreateNode` can only offer what was registered — by assembly name, by explicit type, or through `WithEnums` / `WithInterfaces` / `WithComponents` / `WithData`.
+⚙ **`WithAutoDiscovery` is how the model learns your node types.** It registers every type the compiled agent context tree carries under the customer root — components (filed by the four component interfaces), enums, interfaces and data types. There is no assembly scan behind it: the generator has already filed each annotated or referenced type, so a type nothing annotated and no member references is not offered. `ListCreatableTypes` and `CreateNode` can only offer what was registered; register anything the tree does not carry by explicit type through `WithEnums` / `WithInterfaces` / `WithComponents` / `WithData` (each takes a `Type[]`).
 
 ## MCP and Skills without the workflow layer
 
@@ -59,7 +59,7 @@ skills.Refresh();
 var agent2 = chatClient.AsAIAgent([skills.CreateContextProvider()]);
 ```
 
-The workflow layer is a composition of exactly these: `scope.CreateContextProviders()` returns `[workflow, skills, mcp]`, and each subsystem provider is handed the **workflow scope's own** tool policy.
+The workflow layer is a composition of exactly these: `scope.CreateContextProviders()` returns the compaction provider first when the host asked for one, then the scope's own provider, then one per attached subsystem — skills, MCP and sub-agents — then the framework-native todo and agent-mode providers, then any factory registered with `WithContextProvider`. Each subsystem provider is handed the **workflow scope's own** tool policy.
 
 ⚙ **The policy is passed in by whoever composes, and that is the whole point.** Standalone, a subsystem is handed a thread-only policy — its tools are marshalled and nothing else. Composed into a workflow agent, it is handed that scope's policy, so its tools count against `MaxToolCalls` / `MaxReadToolCalls` / `MaxWriteToolCalls`, raise `ToolCalled`, and mark the tree dirty like any other. A subsystem never decides this for itself.
 
@@ -75,31 +75,35 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 
 | Gate | Default | Unlocks |
 |---|---|---|
-| `WithAllowNodeExecution(bool)` | **off** | `ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`, `RunCompiledWorkflow`, `GetNodeResult` |
+| `WithAllowNodeExecution(bool)` | **off** | `ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`, `RunCompiledWorkflow`, `GetNodeResult`, `StartCompiledWorkflow`, `ContinueCompiledWorkflow`, `PauseCompiledRun`, `ResumeCompiledRun`, `StopCompiledRun` — `GetCompiledRunStatus` reads a handle that only those produce |
 | `WithAllowedGenericCommands(params string[])` | **empty** | `ExecuteCommandOnNode`, `ExecuteCommandById` — and it *narrows* them to the listed names |
 | `WithSelectionHandler` / `WithConfirmationHandler` | **null** | registers `RequestSelection` / `RequestConfirmation` |
 | `WithInteractionSafety(0…3)` | `1` | 0 Silent · 1 Cautious · 2 Balanced · 3 Strict |
+| `WithToolApproval(bool)` | **off** | puts every non-query call to `WithConfirmationHandler` before it runs — a code gate, unlike `WithInteractionSafety` |
 | `WithAutoMarkDirty(bool)` | off | marks the tree dirty after every non-query tool call, instead of requiring one `MarkDirty` at the end |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | pre-flight caps; exceeding one returns an error object rather than throwing |
 
 ⚙ **`WithInteractionSafety` is prompt-only.** Levels 1–3 inject a safety policy into the system prompt and nothing else — no tool body consults the handler. A host that sets level 3 and believes destructive calls are gated is mistaken; gate them in `WithAllowedGenericCommands` or in your own handler.
 
-⚙ **A session confirmation is keyed by a string the model supplies.** Once an operation key is approved, any later call reusing that key is auto-approved. Treat it as a UX affordance, not a security boundary.
+⚙ **`WithToolApproval` is the code gate the safety level is not.** It wraps every call the toolkit classifies as non-query — including an MCP server's tools, which are third-party code and always treated as mutations — so the refusal happens before the body and cannot be skipped by a model that declines to ask. Without `WithConfirmationHandler` every such call is denied (an unanswerable prompt denies).
+
+⚙ **A spent budget is not a dead end.** The model always has `ResetToolCallLimit`, which puts the question to the user through the confirmation handler and reopens the tree's budget only on agreement; every refusal that names a limit points at it.
 
 ⚙ **`ClearHistory` drops the undo trail without touching the canvas.** After it, the agent cannot undo its own earlier work — the canvas is the state, the history is not.
 
 ## What the model gets
 
-62 tools in ten categories, all documented in [references/tools.md](references/tools.md). The shape worth knowing up front:
+67 tools in ten categories, all documented in [references/tools.md](references/tools.md). (69 once the two interaction tools register.) The shape worth knowing up front:
 
 - **Query** (all read-only) — `GetWorkflowSummary`, `GetFullTopology`, `ListNodes`, `GetNodeDetail`, `FindNodes`, `ResolveSlotId`, `ListSlotProperties`, `GetTypeSchema`, `GetComponentContext`, `ValidateWorkflow`, `CompileWorkflow`, `CompileNodeResult`, …
 - **Mutation** — `CreateNode`, `DeleteNode`, `ConnectSlots` / `ConnectByProperty`, `DisconnectSlots`, `SetSlotChannel`, `PatchNodeProperties`, `SetEnumSlotCollection`, `Undo` / `Redo`, …
-- **Execution** — node-level, chain-level (`RunCompiledWorkflow`) and result-level (`GetNodeResult`).
+- **Execution** — node-level (`ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`), chain-level (`RunCompiledWorkflow`, plus the handle form `StartCompiledWorkflow` / `ContinueCompiledWorkflow` with `GetCompiledRunStatus` / `PauseCompiledRun` / `ResumeCompiledRun` / `StopCompiledRun`) and result-level (`GetNodeResult`).
 - **Interaction** — `RequestSelection`, `RequestConfirmation`, registered only when the host wired the matching handler.
+- **Budget** — `ResetToolCallLimit`, always offered, whatever the configured categories.
 
 ⚙ **Indices are unstable; ids are not.** Creating or deleting shifts node indices, and a selector change rebuilds a slot enumerator's slots. The shipped prompt tells the model to prefer `GetFullTopology`, `ResolveSlotId` and `ConnectByProperty`. Any custom prompt you write should say the same.
 
-⚙ **Some mutations are deliberately not undoable**: `MoveNode` / `SetNodePosition` / `ResizeNode` (they mirror the GUI drag, which writes continuously) and `PatchNodeProperties` (direct property writes). Everything structural — create, delete, connect, disconnect, `SetSelector` — is.
+⚙ **Some mutations are deliberately not undoable**: `MoveNode` / `SetNodePosition` / `ResizeNode` (they mirror the GUI drag, which writes continuously) and `PatchNodeProperties` / `PatchComponentById` (direct property writes). Everything structural — create, delete, connect, disconnect, `SetEnumSlotCollection` — is undoable.
 
 ⚙ **Unmounted components are rejected, and operating on one elsewhere is a silent no-op.** A node must be in a tree before a tool can reach it.
 
@@ -154,14 +158,20 @@ var configs = new[]
     {
         Name = "Filesystem", RunMode = McpServerRunMode.Npx,
         Package = "@modelcontextprotocol/server-filesystem", Arguments = ["C:/data"],
-        Options = new { env = new { FILESYSTEM_ROOT = "C:/data" } },
+        Options = new Dictionary<string, object?>
+        {
+            ["env"] = new Dictionary<string, object?> { ["FILESYSTEM_ROOT"] = "C:/data" },
+        },
     },
     new McpServerConfiguration                                   // remote Streamable HTTP
     {
         Name = "Microsoft Learn", RunMode = McpServerRunMode.Http,
         Endpoint = "https://learn.microsoft.com/api/mcp",
-        Options = new { connectionTimeout = 30,
-                        headers = new { Authorization = "Bearer <token>" } },
+        Options = new Dictionary<string, object?>
+        {
+            ["connectionTimeout"] = 30,
+            ["headers"] = new Dictionary<string, object?> { ["Authorization"] = "Bearer <token>" },
+        },
     },
 };
 
@@ -182,6 +192,26 @@ var mcpTools = await mcp.LoadAsync(configs);
 
 Details and the full option surface are in [references/mcp.md](references/mcp.md).
 
+## Sub-agents
+
+`WithSubAgents(scope)` attaches the third subsystem (skills, MCP, sub-agents). The model gains five tools — `SpawnSubAgent`, `WaitSubAgents`, `GetSubAgentResult`, `ListSubAgents`, `CancelSubAgent` — and uses them to dispatch background children, then collect their reports. The pair is deliberately dispatch-and-poll rather than one blocking call: `SpawnSubAgent` returns at once, and the child runs on a background task while the host's UI thread stays free.
+
+```csharp
+var subAgents = SubAgentScope.ForClient(chatClient)   // the host owns the chat client
+    .WithSubAgentDepth(3);                            // bound the tree depth; the budget alone only terminates it
+scope.WithSubAgents(subAgents);
+```
+
+⚙ **The grant is a whitelist, and omitting it means "inherit everything".** `allowedTools`, `allowedSkills` and `allowedMcpServers` each default to the parent's currently-enabled set; an empty array grants none. A child is never shown a capability it does not hold — a request it cannot satisfy is reported in `dropped` with the wall named. Skills and MCP servers are handed down as narrowed *views*, not by name lists: the child's `ListSkills` / `ListMcpServers` shows only what it was granted.
+
+⚙ **The budget is one ledger for the whole tree, and every grant is strictly smaller than what remains** — that is what makes any spawn depth terminate. `WithSubAgentDepth(n)` is what makes it usable; set both, or a single unlimited root permits an arbitrarily deep chain.
+
+⚙ **A child holds its own share, not the parent's.** A reset the child itself makes (`ResetToolCallLimit`) goes up through the tree and reaches the user, so a stuck child can reopen the budget rather than sit rejected; a parent's reset does not reach down into a child. The interaction configuration is inherited — level, safety-prompt overrides and the two handlers — so `RequestSelection` / `RequestConfirmation` really exist on the child rather than being listed and unreachable.
+
+## Framework-native providers
+
+Three capabilities are the Agent Framework's own, attached through the scope rather than reimplemented: `WithTodoTracking()` (the model's `todos_*` plan, so a long task keeps its place), `WithAgentModes(options)` (`mode_get` / `mode_set`, with the modes and starting mode the host supplies), and `WithContextCompaction(maxContextWindowTokens, maxOutputTokens)` (old tool results summarised and old turns dropped as the window fills — pass the model's real numbers). Their tools are deliberately not wrapped: they neither read nor write the tree, so no budget accounting, UI marshalling or dirty marking applies. `WithContextProvider(factory)` adds a provider of your own alongside them.
+
 ## Checking your wiring
 
 ⚙ **Start by asking the agent to orient itself** — `GetWorkflowSummary`, then `GetFullTopology`. If those come back empty or error, the scope is not bound to the tree; if they work but mutations do not, it is `WithSynchronizationContext` or the auto-discovery list.
@@ -190,6 +220,6 @@ Details and the full option surface are in [references/mcp.md](references/mcp.md
 
 ⚙ **Watch the undo stack.** Every structural tool call the agent makes should appear as one entry. If nothing lands there, the agent is reaching a code path you added yourself rather than the library's commands.
 
-⚙ `Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs` is a complete working host — scope setup, an MCP panel, per-conversation tool assembly and the safety-prompt wiring. Read it before writing your own, whether from NuGet or from a checkout.
+⚙ `Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs` is a complete working host — scope setup, an MCP panel, a sub-agent panel (`SubAgentScope.ForClient(chatClient).WithSubAgentDepth(3)`), per-conversation tool assembly and the safety-prompt wiring. Read it before writing your own, whether from NuGet or from a checkout.
 
 ⚙ The prompts that ship to the model are under `Src/Core/VeloxDev.Core.Extension/Resources/Workflow/{en,zh}/` — seven `Skills/`, five `References/` and four `Safety/` documents, selected by `ProvideProgressiveContextPrompt(language)`. Read them to know what the model has already been told **before** you add to it, so your instructions do not fight the built-in ones.

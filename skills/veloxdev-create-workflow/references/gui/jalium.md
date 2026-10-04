@@ -4,7 +4,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/` — seven single `.cs` files, no markup. As of the 2026-10-03 refactor they are **thin subclasses of the adapter's base classes**: `TreeView.cs` sets the palette/port layout/grid/selector, `NodeView.cs` draws the card, `LinkView.cs` sets the stroke, `GridDecorator.cs` sets the grid palette, `SlotView.cs` holds the port-layout values, `TemplateSelector.cs` builds the factory. **The zoom itself lives in the demo's window, not in the view folder** — look there for the host-driven zoom pattern.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
 ## Writing the surface
 
@@ -21,10 +21,18 @@ public sealed class TreeView : WorkflowTreeView
         GridDecorator = new GridDecorator();
         TemplateSelector = TemplateNamespace.TemplateSelector.CreateSelector();
     }
+
+    protected override void OnBuildLinkMenu(ContextMenu menu, IWorkflowLinkViewModel link)
+    {
+        // The menu is rebuilt on every right press: add or remove entries here. The base adds "Delete".
+        base.OnBuildLinkMenu(menu, link);
+    }
 }
 ```
 
 Do not re-implement the gestures, the virtualization or the router maths in your subclass — that machinery is the adapter's, not the project's.
+
+⚙ **The link context menu is built in code.** Override `OnBuildLinkMenu(ContextMenu menu, IWorkflowLinkViewModel link)`; the base adds a Delete item, and the adapter subscribes to the interaction hub, positions the menu and reports its open and close.
 
 ⚙ **Zoom is host-driven here.** The surface has to be told when a zoom is committed:
 
@@ -82,7 +90,9 @@ This matters because **Jalium's renderer culls child elements by layout box**. A
 
 ⚙ **All the machinery is in the base classes**: the virtualize inset (`SetVirtualizeInset(WorkflowGridDecorator.RulerThickness)`), the committed-zoom state machine (`_zoomPin`, a pinned `UpdateViewport()`), the gestures and the rendering. The host owns zoom and is expected to call `NotifyZoomCommitted()`. Keep that split when you edit it — put palette and card art in your subclass, not platform machinery.
 
-⚙ **This pack has the most inert parameters.** Wired: node (all six), link (all three), selector, tree (`surfaceBackground`, `linkColor`), grid. Declared-but-ignored, each carrying a "cross-GUI CLI parity" note: slot `slotBackground`, `slotColor`, `slotBorderColor`, `slotPath`; tree `surfaceBorderBrush`, `surfaceBorderThickness`, `surfaceCornerRadius`; decorator `gridBackground`; minimap `minimapBackground`, `minimapBorder`, `nodeFill`, `viewportStroke`.
+⚙ **This pack has the most inert parameters.** Wired: node (`nodeBackground`, `nodeForeground`, `nodeBorderBrush`, `nodeBorderThickness`, `nodeCornerRadius`), link (`linkColor`, `linkThickness`), selector, tree (`surfaceBackground`), grid (`minorGridColor`, `majorGridColor`, `axisColor`, `gridSpacing`, `majorLineEvery`, `rulerBackground`, `rulerTickColor`, `rulerLabelColor`, `rulerDividerColor`). Declared-but-ignored, each carrying a "cross-GUI CLI parity" note: slot `slotBackground`, `slotColor`, `slotBorderColor`, `slotPath`; tree `surfaceBorderBrush`, `surfaceBorderThickness`, `surfaceCornerRadius`; decorator `gridBackground`; minimap `minimapBackground`, `minimapBorder`, `nodeFill`, `viewportStroke`.
+
+⚙ **The tree item has no `linkColor` parameter** (only the link item declares that symbol) — its generated `ConnectingLinkColor` is the literal `#DDFFFFFF`, the same value the other platforms' tree items hardcode, so the seven tree packs keep identical parameter sets. Passing `-lc` to `jalium-v-tree` is not accepted; to change that colour, edit the generated line.
 
 ⚙ The decorator draws its grid at runtime from the adapter's `DrawGrid(...)`, which is why its background colour is inert, and why restyling the grid means editing the palette properties rather than passing `-bg`.
 
@@ -90,4 +100,4 @@ This matters because **Jalium's renderer culls child elements by layout box**. A
 
 ⚙ **Packaging is the odd one out**: this pack's csproj sits one level higher than the other six — theirs live inside `working/`, this one beside it. The `working/content/` pack tree itself is present and the same as theirs, so the difference is the csproj's location, not a missing folder. It also omits the license expression, repository URL and reference payload the others carry. Nothing about the generated code depends on it, but a diff across packs will show it.
 
-⚙ Verification: `Src/Verification/verify-jalium-item-templates.ps1 -Strict` packs, installs, generates all seven, compiles them together against the adapter, and compares each against its `Examples/Workflow/Jalium Trimmed/` mirror (normalising the colour spelling first).
+⚙ Verification is one script for all seven platforms now: `Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict` (the two older per-platform scripts are thin forwarders, so existing invocations still work). It packs, installs, generates all seven, compiles them together against the adapter, compares each against its `Examples/Workflow/Jalium Trimmed/` mirror (normalising the colour spelling first), and **fails any generated file that still contains a `replaces` placeholder token** — the assertion that catches a template referencing a symbol its pack never declares; a colour-normalising comparison alone misses that class of defect.

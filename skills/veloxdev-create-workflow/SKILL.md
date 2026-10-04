@@ -19,7 +19,7 @@ Everything else about this repository (how the adapters are built, how the demos
 |---|---|
 | Model, canvas math, execution engine | `VeloxDev.Core` |
 | The canvas on screen | one adapter: `VeloxDev.WPF` · `VeloxDev.Avalonia` · `VeloxDev.WinUI` · `VeloxDev.MAUI` · `VeloxDev.WinForms` · `VeloxDev.Razor` · `VeloxDev.Jalium` |
-| `Serialize()` / `Deserialize()` | `VeloxDev.Core.Extension` — **Newtonsoft-based and not in Core**, so a project that saves graphs needs it |
+| `Serialize()` / `Deserialize()` | `VeloxDev.Core.Extension` — the entry points are **not in Core** (the engine is Core's own `VeloxDev.Serialization`), so a project that saves graphs needs it |
 | Driving the graph from an LLM | `VeloxDev.Core.Extension` |
 
 An adapter package brings `VeloxDev.Core` in transitively. Versions are deliberately not stated: take the latest published. Rendering the canvas needs an adapter; using only the model and the engine needs neither.
@@ -104,7 +104,7 @@ The behaviour that matters is visual and interactive, so check it in a running a
 
 ⚙ If you are working against a checkout rather than NuGet, `Examples/Workflow/Common/Lib` is a working node library to compare against — a controller, a dynamic router, a python worker, a timer and an agent message node — and `Examples/Workflow/<GUI> Trimmed/Demo` is a complete, minimal editor on your GUI. `Src/Core/VeloxDev.Core/WorkflowSystem/` holds the model and `Src/Adapters/VeloxDev.<GUI>/` the view layer; both are small enough to read when a reference here does not answer the question.
 
-⚙ **The `"Trimmed"` in those folder names means *minimal demo*, not trim configuration.** The library is **not** AOT- or trim-safe — `VeloxDev.Core` declares `IsTrimmable=false`, and the animation path compiles expression trees at runtime. Nothing warns you at build time; it surfaces at publish.
+⚙ **The `"Trimmed"` in those folder names means *minimal demo*, not trim configuration.** The name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read the folder name as publish-time guidance.
 
 ⚙ **Undo coverage is structural, and the gaps are by design.** Node and slot create/delete, connect/disconnect, selector changes and their cascades are undoable; **position, size and direct property patches are not** — a drag leaves no history entry. Do not build a feature that assumes a drag can be undone.
 

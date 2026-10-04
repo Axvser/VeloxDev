@@ -6,7 +6,7 @@ There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md
 
 ⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — all seven roles are single `.cs` files. `TreeView.cs` is where the pull model lives: the self-driven viewport, the virtualize inset and the `Refresh` calls.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
 ## This adapter is different: nothing binds
 
@@ -62,6 +62,8 @@ on it — skip the region instead of widening.
 
 ⚙ **If you host the canvas yourself, set the virtualize inset before writing `Viewport`.** This adapter has no decorator-hosted ruler to ask, so the reserve is passed explicitly; skipping it culls nodes that are still visible under the ruler.
 
+⚙ **The link context menu is built in code, not markup.** The tree subclass overrides `OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)`; the base adds a Delete item, and the adapter subscribes to the interaction hub, positions the strip and reports its open and close. Add or remove `ToolStripMenuItem`s in that override.
+
 ## Item templates — `VeloxDev.WinForms.Templates`
 
 **Generates code only.** All seven items are a single `.cs` file — no markup at all. Node and slot views are `UserControl` subclasses with `OnPaint`; node, slot, and link views are all pooled children, and the tree paints the grid surface itself.
@@ -70,7 +72,7 @@ on it — skip the region instead of widening.
 
 | item | derives from | you supply |
 |---|---|---|
-| tree | `WorkflowTreeView` | the palette, `CreateNodeView` / `CreateLinkView` (plus `OnTreeAttached` / `OnSurfaceRefreshed` if you add an overlay) |
+| tree | `WorkflowTreeView` | the palette, `CreateNodeView` / `CreateLinkView`, `OnBuildLinkMenu` (plus `OnTreeAttached` / `OnSurfaceRefreshed` if you add an overlay) |
 | node | `WorkflowNodeView` | the card itself — its panels, its paint — plus `OnNodeRebound` / `OnCollapseChanged` / `OnTitleChanged` |
 | slot | `WorkflowSlotView` | the glyph path and its colours |
 | link | `WorkflowLinkView` | `LineColor` / `Thickness` / `SurfaceBackground` |
@@ -84,6 +86,8 @@ Three helpers are shared by all of them: `WorkflowSurfaceColors.Parse`, `Workflo
 The node card implements `IWorkflowSurfaceNodeView` so the surface can place it on every pan — keep that when you edit it. The card is the one item that stays large: what it looks like is yours, and there is no markup language to carry it.
 
 ⚙ **This is the only fully-wired pack.** Every declared parameter, including all four slot colours and `slotPath`, has a consumer here — which makes it the pack to read when you want to know what a parameter is supposed to do on a framework where it is inert.
+
+⚙ **Two parameters are this pack's own.** The link item declares `surfaceBackground` (it must match the tree's surface background, or the carved stroke band shows a seam), and the decorator's `rulerBackground` default is `#70252526` rather than the other packs' `#C8252526` — WinForms cannot dim the opaque node-card children over the ruler band, so it uses a lower alpha.
 
 ⚙ Siblings are referenced as **static members**, not through markup namespace aliases, so all seven items must still be generated into one namespace.
 

@@ -141,11 +141,11 @@ For a node with a variable number of ports (a python worker whose ports depend o
 public partial SlotEnumerator<SlotViewModel> InputSlots { get; set; }
 ```
 
-`SlotEnumerator<TSlot>` holds `Items` (`ConditionalSlot<TSlot>` — a name, a value and a slot), a `SelectorType` and a `CurrentValue`. `SetSelector` accepts three shapes: an `enum` or `bool` `Type`, a fully-qualified type-name `string`, or an `ISlotProvider` returning named `SlotDefinition`s.
+`SlotEnumerator<TSlot>` holds `Items` (`ConditionalSlot<TSlot>` — a name, a value and a slot), a `SelectorType` and a `CurrentValue`. `SetSelector` (the model-side method; the Agent tool that reaches it is `SetEnumSlotCollection`) accepts three shapes: an `enum` or `bool` `Type`, a fully-qualified type-name `string`, or an `ISlotProvider` returning named `SlotDefinition`s.
 
 ⚙ **One undo entry per `SetSelector`; changing the value inside a selector type is live state, not a timeline point.**
 
-⚙ **`[SlotSelectors]` properties cannot be patched** — `PatchNodeProperties` refuses them and points at the dedicated tool. Slot-anchor notifications for these are posted one frame late on purpose, so container generation has finished first.
+⚙ **`[SlotSelectors]` properties cannot be patched** — the Agent's `PatchNodeProperties` refuses them and points at its dedicated `SetEnumSlotCollection` tool. Slot-anchor notifications for these are posted one frame late on purpose, so container generation has finished first.
 
 ## Links
 

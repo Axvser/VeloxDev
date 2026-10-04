@@ -4,7 +4,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/` — read `TreeView.xaml` and `LinkView.xaml` **together**; they are the pair that implements the offset frame described below, and neither makes sense alone. ViewModels at `Demo/ViewModels/Workflow/`.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
 ## Writing the surface
 
@@ -51,6 +51,8 @@ The point is to keep the geometry non-negative and inside the element's own box,
 **Generates** `.xaml` + `.xaml.cs` for node, slot, link and tree, and a single `.cs` for selector, decorator and minimap.
 
 ⚙ **The tree uses the offset frame**, subscribing to `CanvasLayout.ActualOffset` and `ActualSize`, positioning with `Canvas.SetLeft/Top(−offset)`, baking `+offset` into the geometry, and clearing `Clip` in all three places. That is the code to read when you need to change how links are drawn.
+
+⚙ **The link context menu is a `MenuFlyout` resource plus `LinkMenuKey`.** The generated tree declares `<MenuFlyout x:Key="LinkContextMenu">` and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` at it; the adapter positions it and reports open/close. `MenuFlyout` has no `DataContext`, so the adapter feeds each `MenuFlyoutItem.DataContext` the pressed link — `Command="{Binding DeleteCommand}"` works per item.
 
 ⚙ **`slotBorderColor` (`-bc`) is accepted and discarded** on this pack — declared for cross-GUI CLI parity, with that note in the pack's own `template.json`; the slot view draws a filled path and has no border element.
 

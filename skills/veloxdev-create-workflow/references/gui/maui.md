@@ -4,7 +4,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/` — note `Controls/`, not `Views/`. `TreeView.xaml` is where `x:Name="Root"` and the node-only pooling live, and it is the file to copy when your generated pack disagrees with it.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
 ## Writing the surface
 
@@ -59,3 +59,5 @@ If you add content to a node, **it will not scale with the zoom by itself.** Ext
 ⚙ **The tree declares no `LinkTemplate` and the link view is a thin forwarding shell.** The generated link view forwards its properties to the adapter's sealed `WorkflowLinkOverlay`, and the tree's template selector carries a `NodeTemplate` only — links are no longer pooled as views. If a version of this pack still gives you a per-link `LinkTemplate`, it is behind the demo: copy `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml` instead.
 
 ⚙ **`slotPath` (`-sp`) is accepted and discarded**, and here it is genuinely meaningless rather than merely unwired — MAUI draws its ports from `SlotState` geometry, not from an SVG path. `StrokeShape="RoundRectangle TemplateNodeCornerRadius"` substitutes a `Shape`, not a numeric `CornerRadius`.
+
+⚙ **The link context menu is a `MenuFlyout` resource plus `LinkMenuKey`,** declared on the tree and pointed at by `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"`. On Windows the adapter turns it into a native flyout; on the other platforms it materializes its own overlay layer over the surface (positioned by `Margin`). Each `MenuFlyoutItem` is bound to the pressed link, so `Command="{Binding DeleteCommand}"` is a complete entry.

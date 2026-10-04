@@ -4,7 +4,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Avalonia Trimmed/Demo/` — note the extra nesting, the project sits at `Demo/Demo/`, so the views are at `Demo/Demo/Views/Workflow/` and the ViewModels at `Demo/Demo/ViewModels/Workflow/`. `TreeView.axaml` is the surface and carries the compiled-binding `x:DataType` the template ships as a placeholder.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
 ## Writing the surface
 
@@ -55,5 +55,7 @@ Retained views overriding `Render(DrawingContext)`, with the render-ready gate a
 **Generates** `.axaml` + `.axaml.cs` for node, slot, link and tree (note the extension — `.axaml`, not `.xaml`), and a single `.cs` for selector, decorator and minimap.
 
 ⚙ Siblings resolve by default class name in one namespace (`xmlns:local="using:<your -ns>"`), as on WPF.
+
+⚙ **The tree's link context menu is a resource plus a key.** The generated `TreeView.axaml` declares `<ContextMenu x:Key="WorkflowTreeMenu">` (entries use `{ReflectionBinding …}` because the resource has no `x:DataType`) and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="WorkflowTreeMenu"` at it; the adapter owns the right-press wiring. Add or remove `<MenuItem>`s in that resource.
 
 ⚙ **Two slot parameters are inert on this pack:** `slotColor` (`-sc`) and `slotBorderColor` (`-bc`) are accepted for cross-GUI CLI parity, and now say so in the pack's own `template.json` — the slot view takes its colour from the control's `Foreground`, and it draws a filled path with no border element. This is the only pack where two slot colours both do nothing — edit the generated slot view directly.

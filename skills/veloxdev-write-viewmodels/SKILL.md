@@ -129,7 +129,7 @@ int weight = await vm.MeasureCommand.ExecuteAsync(note, CancellationToken.None);
 
 ⚙ **`semaphore`** is the command's concurrency capacity (default 1, serialised). It is the same knob as `workSemaphore: 1` on a workflow node's `[WorkflowBuilder.Node<T>]`.
 
-⚙ `IVeloxCommand` adds lifecycle over `ICommand`: `ExecuteAsync`, `Notify()`, `Lock`/`UnLock`, `Interrupt`/`Continue`, `Clear`, `ChangeSemaphore`, and `Created` / `Enqueued` / `Dequeued` / `Started` / `Completed` / `Failed` / `Canceled` / `Exited` events. Cancellation comes from the signature — there is no separate cancellable-command attribute.
+⚙ `IVeloxCommand` adds lifecycle over `ICommand`: `ExecuteAsync`, `Notify()`, `Lock`/`Unlock`, `Interrupt`/`Continue`, `Clear`, `ChangeSemaphore`, and `Created` / `Enqueued` / `Dequeued` / `Started` / `Completed` / `Failed` / `Canceled` / `Exited` events. Each has an `…Async` counterpart where the synchronous one would block. Cancellation comes from the signature — there is no separate cancellable-command attribute.
 
 ## Interoperating with another MVVM framework
 

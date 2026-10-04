@@ -148,7 +148,7 @@ var declared = GetStaticThemeCache();   // what the attributes declared
 var overrides = GetActiveThemeCache();  // what has been changed at runtime
 ```
 
-⚙ **The value array is written the same way the attribute writes it, but not in the same syntax.** In the attribute a collection expression works — `["#ffffff"]` — because the constructor takes `params object?[]`. `SetThemeValue`'s second parameter is a plain `object?`, so there a collection expression **does not compile** (`CS9174`): spell it `new object?[] { "#ffffff" }`.
+⚙ **The value array is written the same way the attribute writes it, but not in the same syntax.** In the attribute a collection expression works — `["#ffffff"]` — because each of the constructor's theme parameters is typed `object?[]`, which a collection expression can target. `SetThemeValue`'s second parameter is a plain `object?`, so there a collection expression **does not compile** (`CS9174`): spell it `new object?[] { "#ffffff" }`.
 
 ⚙ **An override wins over the declared value**, and only the properties you changed appear in the active cache.
 

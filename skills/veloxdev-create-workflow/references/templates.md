@@ -51,7 +51,7 @@ dotnet build
 
 ## Style parameters
 
-Beyond `namespace`, the parameters only affect colours and geometry, and **all seven packs expose the same names with the same CLI aliases and the same defaults** — so a command line moves between GUIs unchanged.
+Beyond `namespace`, the parameters only affect colours and geometry, and **all seven packs expose the same names with the same CLI aliases** — so a command line moves between GUIs unchanged. The defaults match too, with two documented exceptions on WinForms: its link item adds a `surfaceBackground` parameter, and its decorator's `rulerBackground` defaults to `#70252526` (lower alpha) rather than the other packs' `#C8252526`. See [gui/winforms.md](gui/winforms.md).
 
 | Item | Options (short → symbol) | Defaults |
 |---|---|---|
@@ -76,6 +76,8 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 ⚙ **The ViewModels.** The tree, node, slot and link ViewModels, your node types and their helpers — see [model.md](model.md). The minimal working set to copy is `Examples/Workflow/<GUI> Trimmed/Demo/ViewModels/Workflow/` in a source checkout, or on GitHub if you installed from NuGet.
 
 ⚙ **The wiring.** Add the `VeloxDev.<GUI>` package, set the tree's `DataContext` (or `Tree` parameter) to your `IWorkflowTreeViewModel`, and make sure your node view's `DataContext` is your node ViewModel.
+
+⚙ **The link menu is already declared.** The tree item emits a Delete link-context-menu entry and wires it — a `LinkMenuKey` plus its menu resource on the markup platforms, a `<LinkMenu>` fragment on Razor, an `OnBuildLinkMenu` override on WinForms/Jalium. Add or remove entries there rather than writing right-press code; see [view-layer.md](view-layer.md#the-link-context-menu).
 
 ⚙ **Anything the debug HUD does.** The demos carry an `InfoOverlay` read-only diagnostics panel; it is deliberately not part of the packs, because it is a debugging aid rather than part of the editor.
 

@@ -27,7 +27,7 @@ var tools = await mcp.LoadAsync(configs, cancellationToken);
 | `Version` | honoured by `Npm` and `Pip` only; ignored by `Npx`, `Uvx`, `Dotnet`, `Exe` |
 | `Arguments` | passed through to the server |
 | `Endpoint` | the URL, for `Http` |
-| `Options` | an anonymous object serialized to JSON — see the option table |
+| `Options` | an `IReadOnlyDictionary<string, object?>` of option name → value (a primitive, a nested map, or an array) — see the option table |
 
 | `McpServerRunMode` | Launches | `Package` is |
 |---|---|---|
@@ -51,19 +51,35 @@ var tools = await mcp.LoadAsync(configs, cancellationToken);
 | `transportMode` | HTTP | `AutoDetect` · `StreamableHttp` · `Sse` |
 | `ownsSession` | HTTP | whether the scope owns the session lifetime |
 
-⚙ **An unknown key throws.** The options object is validated against these names rather than silently ignored, so a typo is a startup failure and not a server that mysteriously lacks its header.
+⚙ **An unknown key throws.** The options map is validated against these names rather than silently ignored, so a typo is a startup failure and not a server that mysteriously lacks its header.
+
+⚙ **It is a dictionary, not an anonymous object.** The serialized world is closed and an anonymous type is in neither the archive format nor the generator's type set, so an anonymous object no longer compiles here — a nested section is another `Dictionary<string, object?>`.
 
 ```csharp
 // stdio, with an environment variable
-Options = new { env = new { FILESYSTEM_ROOT = "C:/data" }, workingDirectory = "C:/data" }
+Options = new Dictionary<string, object?>
+{
+    ["env"] = new Dictionary<string, object?> { ["FILESYSTEM_ROOT"] = "C:/data" },
+    ["workingDirectory"] = "C:/data",
+}
 
 // HTTP with bearer auth
-Options = new { connectionTimeout = 30, headers = new { Authorization = "Bearer <token>" } }
+Options = new Dictionary<string, object?>
+{
+    ["connectionTimeout"] = 30,
+    ["headers"] = new Dictionary<string, object?> { ["Authorization"] = "Bearer <token>" },
+}
 
 // HTTP with OAuth 2.0
-Options = new { oauth = new { clientId = "…", clientSecret = "…",
-                              redirectUri = "http://localhost:1179/cb",
-                              scopes = new[] { "mcp.read" } } }
+Options = new Dictionary<string, object?>
+{
+    ["oauth"] = new Dictionary<string, object?>
+    {
+        ["clientId"] = "…", ["clientSecret"] = "…",
+        ["redirectUri"] = "http://localhost:1179/cb",
+        ["scopes"] = new[] { "mcp.read" },
+    },
+}
 ```
 
 ## Lifecycle and status

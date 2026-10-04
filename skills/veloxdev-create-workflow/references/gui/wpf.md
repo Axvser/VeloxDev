@@ -4,7 +4,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/` — `TreeView.xaml` (the surface and both templates), `NodeView.xaml`, `SlotView.xaml`, `LinkView.xaml`, `CustomTemplateSelector.cs`, `WorkflowGridDecorator.cs`, `MinimapOverlay.cs`. ViewModels beside it at `Demo/ViewModels/Workflow/`. The demo names its selector and decorator `CustomTemplateSelector` / `WorkflowGridDecorator`; the templates use `TemplateSelector` / `GridDecorator`, so do not be thrown by the difference.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
 ## Writing the surface
 
@@ -19,7 +19,8 @@
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
              behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
-             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+             behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
 ```
 
 The tree's two `DataTemplate`s are where node positioning is declared:
@@ -70,7 +71,7 @@ protected override void OnRender(DrawingContext dc)
 
 ⚙ Slot anchors on this adapter are measured in **screen space** and converted with `SlotAnchorFromVisualCenter`. That is why links stay aligned through a pan: the canvas itself is *not* translated for the child views, so the visual centre genuinely is a screen coordinate here. If you rewrite the layout behaviour and it starts offsetting every link by the pan amount, this is the line you changed.
 
-⚙ **There is no link-interaction helper in this adapter.** Per-link pointer and key handling was built, tested and then reverted — the shipped tree has no link hit-testing, so plan any "click a link" feature into the node or the surface.
+⚙ **Link interaction is Core's, forwarded by this adapter.** The surface translates the pointer and the Delete key into `LinkInteraction.For(tree)` — hover highlight and Delete-to-delete come from there, and the right-press link menu is wired through `WorkflowSurfaceBehavior.LinkMenuKey` plus a `ContextMenu` resource. There is no per-platform hit-testing in this adapter to configure; any "click a link" feature rides the same hub (see [view-layer.md](../view-layer.md#making-a-link-interactive)).
 
 ⚙ `System.Windows.Shapes.Path` versus `System.IO.Path`: unlike WinUI, the WPF demo does not need an alias, but code-first views that use both namespaces will.
 
@@ -79,6 +80,8 @@ protected override void OnRender(DrawingContext dc)
 **Generates** a markup + code-behind pair for node, slot, link and tree, and a single `.cs` for selector, decorator and minimap — eleven files.
 
 ⚙ **Siblings resolve by default class name through a markup namespace alias**, so all seven items must be generated into **one** namespace: the tree maps `xmlns:workflowViews="clr-namespace:<your -ns>"` and refers to `workflowViews:NodeView`, `workflowViews:LinkView`, `workflowViews:GridDecorator`, `workflowViews:TemplateSelector`, `workflowViews:MinimapOverlay`.
+
+⚙ **The tree's link context menu is a resource plus a key.** The generated `TreeView.xaml` declares `<ContextMenu x:Key="LinkContextMenu">` with a Delete item and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` at it; the code-behind is otherwise empty because the adapter owns the right-press wiring. Add or remove `<MenuItem>`s in that resource — each is bound to the pressed link, so `Command="{Binding DeleteCommand}"` (or your own command) is the whole entry.
 
 ⚙ **`slotBorderColor` (`-bc`) is accepted and discarded** on this pack — the slot template declares it for cross-GUI CLI parity and says so in the pack's own `template.json`; the slot view draws a filled path and has no border element. If a slot border colour refuses to appear, edit the generated file rather than the command line.
 

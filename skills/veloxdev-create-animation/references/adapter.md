@@ -32,7 +32,7 @@ public override ThreadRef ThreadFor(object target)
 }
 ```
 
-WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a lazily captured global. Jalium chains three levels — the target, then `Application.Current`, then a static main dispatcher — with the reason written down: *"so even POCO targets marshal correctly."* WinForms cannot name a `Control`'s thread, so it overrides `IsCurrent` to ask the Control instead (`!control.InvokeRequired`), which is the same question answered where it is actually known.
+WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a lazily captured global. Jalium chains three levels — the target, then `Application.Current`, then a static main dispatcher — with the reason written down: *"so even POCO targets marshal correctly."* WinForms cannot name a `Control`'s thread, so it overrides `IsCurrentFor` to ask the Control instead (`!control.InvokeRequired`), which is the same question answered where it is actually known.
 
 **`PostCore` must report acceptance honestly.** It returns `false` when the action could not be queued at all, and that flag is the only thing standing between a dropped frame and a hung pipeline — `PostAsync` only waits on a completion source once the queue reported the work was accepted, so an optimistic `true` for work that was silently dropped hangs the consumer for the rest of the process. Check what your host says when the queue is gone (`HasShutdownStarted`, a refused `TryEnqueue`, a detached handle) and return `false`.
 
@@ -60,7 +60,7 @@ WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a laz
 
 `TransitionInterpreterCore.CreateFramePacer` returns a `FramePacerCore` the loop waits through, or null to fall back to the thread-pool timer. Derive the pacer from `affinity.ThreadFor(target)`, never from the platform — a pacer that disagrees with the write path turns every frame into a dispatch, which is the one thing the sampling path avoids.
 
-⚙ **The timer must be repeating.** `Arm` is called once per frame and `Disarm` stops the timer on every tick, so exactly one tick per arm is drawn — but only if the timer re-arms. MAUI's `IDispatcherTimer` with `IsRepeating = false` fires **once and never again**, which silently caps every animation at two frames: values freeze at their start, the closed-form half of the suite still passes, and nothing throws. WinUI's `DispatcherQueueTimer` re-arms correctly with the same flag, so this is a per-host check, not a rule you can copy across.
+⚙ **The timer must re-arm on every `Arm`.** `Arm` is called once per frame and `Disarm` stops the timer on every tick, so exactly one tick per arm is drawn — but only if a later `Start()` fires again. MAUI's `IDispatcherTimer` does not: a non-repeating one fires **once and never again**, which silently caps every animation at two frames — values freeze at their start, the closed-form half of the suite still passes, and nothing throws — so MAUI creates it with `IsRepeating = true`. WinUI's `DispatcherQueueTimer` re-arms correctly with `IsRepeating = false`, so it keeps that flag. Which value is right is a per-host check you have to make, not a rule you can copy across.
 
 ⚙ **Release the timer in `Dispose`.** The base's `Dispose` only stops the wait and releases the pending continuation; a host timer with its own teardown (WinForms', Avalonia's) is released by an override calling `base.Dispose()` and then detaching its tick and disposing.
 

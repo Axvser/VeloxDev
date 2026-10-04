@@ -8,7 +8,7 @@ Open your GUI's reference alongside this one — `gui/<gui>.md` carries that fra
 
 | Role | Class | Job |
 |---|---|---|
-| Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom |
+| Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu |
 | Canvas transform | `WorkflowCanvasTransformBehavior` | owns the pan offset your node and link views bind to |
 | View pool | `ViewPool` / `ViewManager` | object-pooled views over the visible-items collection |
 | Node drag | `WorkflowNodeDragBehavior` | a drag on a node executes `MoveCommand` |
@@ -30,7 +30,8 @@ The surface is the control that owns the scroll viewer and the canvas. Everythin
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
              behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
-             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+             behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
 ```
 
 | Property | Default | Meaning |
@@ -40,6 +41,7 @@ The surface is the control that owns the scroll viewer and the canvas. Everythin
 | `GridDecoratorName` / `MinimapOverlayName` | `null` | the elements implementing the two interfaces |
 | `PointerPressSourceName` | `null` | the element whose press starts panning |
 | `ZoomEnabled` | `false` | enable the wheel-zoom gesture |
+| `LinkMenuKey` | `null` | resource key of the link's context menu, resolved after the resource dictionary exists |
 
 ⚙ **Nothing happens until `IsEnabled` is true**, and every other setting is a name looked up in your markup. Renaming a `PART_` element without updating the attached property is a silent no-op — the canvas just does nothing.
 
@@ -112,6 +114,23 @@ public bool IsHighlighted { get => ...; set { ...; InvalidateVisual(); } }   // 
 ⚙ **Retract when you draw nothing.** Call `PublishCurve(null)` on the same paths that draw nothing (hidden, endpoints not measured, pooled view rebound to another link). A published curve *is* the answer to "is there something here", so a stale one makes a link hittable where nothing is painted.
 
 ⚙ **The curve is runtime geometry — never serialize it.** It belongs to the view, not to the model.
+
+### The link context menu
+
+Right-pressing a link asks whoever hosts the surface to show a menu (`LinkInteraction.ContextMenuRequested`), and the item templates already wire it — adding an entry is markup, not code.
+
+| GUI | How the menu is declared |
+|---|---|
+| WPF / WinUI / MAUI | `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` on the tree root, plus a menu resource with that key |
+| Avalonia | the same property with the key its template emits (`WorkflowTreeMenu`) |
+| Razor | a `<LinkMenu Context="link">…</LinkMenu>` fragment parameter on the surface component |
+| WinForms / Jalium | override `OnBuildLinkMenu(menu, link)` on the generated tree subclass |
+
+⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms/Jalium add or remove items in the `OnBuildLinkMenu` override; the base adds a Delete item.
+
+⚙ **The hub owns the open/closed bookkeeping.** The surface reports the platform menu's open and close back through `LinkInteraction.Publish(ContextMenuEvent)`; opening sets `IsSuspended`, so the pointer travelling onto the menu cannot clear the selection the menu acts on, and closing releases it. `ContextMenuDismissRequested` fires when the link an open menu was about has left the tree (Delete, Undo, an agent edit) — a host showing its own menu closes it and reports `Closed`. **Do not keep your own `IsSuspended` flag, and do not open your menu from `LinkPressed` as well as `ContextMenuRequested`.**
+
+⚙ **To refuse a menu, veto `ContextMenuRequesting`.** Subscribe `LinkInteraction.For(tree).ContextMenuRequesting` and set `e.Handle.PreventDefault = true`. It is the preview phase, so its order against the opening is fixed by construction — a refusal cannot race the popup (the surface subscribes to `ContextMenuRequested` to open its menu, and is seen after your preview).
 
 ### Which way the data goes
 

@@ -6,7 +6,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/` — note `Components/`, the Blazor convention. Every role is a `.razor` + `.razor.cs` pair, including the selector, decorator and minimap. The JS half of the adapter ships in the package, not the demo.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
 There is a long-form adapter README at `Src/Adapters/VeloxDev.Razor/README.md`.
 
@@ -23,6 +23,7 @@ There is no canvas control and no attached properties — the surface is a **Bla
 | `CanvasId` | `"veloxdev-wf-canvas"` | `id` of the canvas element |
 | `GridDecorator` / `Minimap` | `null` | `RenderFragment<SurfaceViewport>` |
 | `ChildContent` | `null` | `RenderFragment<SurfaceCanvas>` — the node/slot content |
+| `LinkMenu` | `null` | `RenderFragment<IWorkflowLinkViewModel>` — the link context menu's entries; the surface renders the chrome and wires it |
 | `Background` / `GridColor` / `MajorGridColor` / `AxisColor` | CSS colours | surface visuals |
 | `GridSpacing` / `MajorLineEvery` / `RulerThickness` | `40` / `5` / `28` | grid and ruler |
 
@@ -55,7 +56,9 @@ So: put your controls on the design-size card as usual. The browser scales them.
 
 ⚙ Siblings resolve by bare type name through `@namespace <your -ns>` + `@using <your -ns>` (`<GridDecorator>`, `<MinimapOverlay>`, `<LinkView>`, `<TemplateSelector>`, `<NodeView>`, `<SlotView>`), so all seven go into one namespace as usual.
 
-⚙ **Inert on this pack, each marked "accepted for cross-GUI CLI parity":** slot `slotBackground`; tree `surfaceBorderBrush`, `surfaceBorderThickness`, `surfaceCornerRadius`; decorator `gridBackground`, `minorGridColor`, `majorGridColor`. The decorator's colours are baked into the generated JS/CSS rather than driven by the symbols.
+⚙ **The tree declares the link menu as a fragment.** The generated surface passes `<LinkMenu Context="link">…</LinkMenu>`; each entry receives the right-pressed link, and the surface renders the chrome and wires right-press, positioning and open/close to the hub. Add or remove entry `<button>`s there (this GUI has no binding for menu items, so the handler is inline).
+
+⚙ **Inert on this pack, each marked "accepted for cross-GUI CLI parity":** slot `slotBackground`; tree `surfaceBorderBrush`, `surfaceBorderThickness`, `surfaceCornerRadius`; decorator `gridBackground`, `minorGridColor`, `majorGridColor`. Those three decorator colours are drawn by the surface's own CSS/JS rather than by the decorator's parameters.
 
 ⚙ **Colours are also runtime parameters here** — each symbol becomes the fallback default of a Blazor `[Parameter]`:
 
