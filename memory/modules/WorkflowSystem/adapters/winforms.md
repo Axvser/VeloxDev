@@ -237,6 +237,24 @@ Core 在 `Requested` 之前按构造顺序发出，被否决时 `Requested` 根�
 
 > 这条只在本家有：`Control.Region` 是 WinForms 的窗口裁剪机制，别家（保留模式的 `Clip`/`Bounds`、MAUI 的 `Path` 布局槽裁剪）没有「无限 vs 空」这个二选一，但都有各自的「画不出来时留下上一次的盒子」问题（MAUI 那条见 `adapters/maui.md` §四·12）。
 
+### 4.12 槽锚点是**客户区**系，`node.Anchor` 是**模型**系 —— 判端口方向必须先把端点搬过去
+
+Trimmed 这条路上（`WorkflowSlotLayoutBehavior.cs:588` 的 `SlotAnchorFromCanvasLocal` 分支）`slot.Anchor`
+写的是**画布客户区**坐标，而 `node.Anchor` / `node.Size` 是**模型**系，两者差一个表面投影
+（`_panOffset + VisualContentOffset`，本家实测约 (356,296)）。`LinkCurve.PortOutward` 判「这个口贴着节点哪条边」
+是拿端点比节点矩形，所以**端点在哪个系，就必须用那个系的节点矩形** —— 不搬的后果：一个在卡片**左缘**的输入口
+会被判成**下边**，反向连线（目标在源左边）该往左翻出去的那一端就不翻了。
+
+`WorkflowLinkAttachment.BuildCurve` 里先减 `ox/oy`（投影）再调用、算完把四个点加回来（`WorkflowLinkAttachment.cs` 的 `BuildCurve`），
+发布的那条曲线用同一组点（`LinkCurve.FromCubic`），所以画与命中仍是同一条。
+投影的来源：`WorkflowTreeView.VisualContentOffset` + `_panOffset`，**两处都要发** —— 摆位那一趟（子控件循环）
+与 `ArrangeLinkViews`（池化的连线视图是在那一趟才挂上来的，只发前者的话新视图会留着默认的 (0,0)）。
+
+**非 Trimmed demo 没有这个问题**：它的画布自己把 `slot.Anchor` 写成**世界坐标**（`WorkflowCanvas.cs:1094`
+「live world-coordinate snapshot」），与 `node.Anchor` 同系，所以那边 `BuildLinkCubic(_link, _startLeft, …)` 直接就是对的。
+判据（不依赖截图）：在 `BuildCurve` 里临时把两套坐标算出的法线都写进文件，对比
+`canvasNormals` / `modelNormals` —— 修前 `(1,0)(0,1)`、修后 `(1,0)(-1,0)`。
+
 ---
 
 ## 五、这份文件没写的东西

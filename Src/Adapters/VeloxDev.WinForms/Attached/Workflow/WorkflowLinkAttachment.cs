@@ -75,6 +75,11 @@ public sealed class WorkflowLinkAttachment
     private PointF[]? windowCurve;
     private Region? windowRegion;
 
+    // 表面现在的投影，与节点卡片收到的是同一份。端点本身是**画布系**，而判「这个口贴着节点哪条边」
+    // 的依据（node.Anchor / node.Size）是**模型系** —— 两者正好差这个平移，所以方向那一趟要先搬过去。
+    private Point surfacePan;
+    private Offset surfaceContent = new(0, 0);
+
     /// <summary>Attaches the link machinery to <paramref name="target"/>, or returns the one already attached.</summary>
     /// <param name="target">The control that is going to draw one link.</param>
     /// <returns>The attachment, for chaining the palette and the event subscriptions.</returns>
@@ -243,6 +248,26 @@ public sealed class WorkflowLinkAttachment
         g.DrawPath(pen, curve);
     }
 
+    /// <summary>
+    /// Records the surface's current projection — the same pair the node cards get — so the endpoints can be
+    /// read in the frame <c>node.Anchor</c> lives in when the curve's direction is worked out.
+    /// </summary>
+    /// <param name="panOffset">The surface's signed pan translation, in pixels.</param>
+    /// <param name="contentOffset">The world origin the surface is drawing at.</param>
+    public void ApplySurfacePosition(Point panOffset, Offset contentOffset)
+    {
+        if (surfacePan == panOffset
+            && surfaceContent.Horizontal == contentOffset.Horizontal
+            && surfaceContent.Vertical == contentOffset.Vertical)
+        {
+            return;
+        }
+
+        surfacePan = panOffset;
+        surfaceContent = contentOffset;
+        RebuildGeometry();
+    }
+
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
@@ -346,11 +371,9 @@ public sealed class WorkflowLinkAttachment
         // 坐标是画布局部坐标（slot.Anchor 的空间），也是表面指针事件所在的空间 —— 两边必须同系。
         // 发布不依赖视图是否真的画了一笔：几何与可见性这里都知道，画法归用户，命中契约归这里。
         current.PublishCurve(
-            LinkCurve.BuildLinkCubic(
-                current,
-                sender.Anchor.Horizontal, sender.Anchor.Vertical,
-                receiver.Anchor.Horizontal, receiver.Anchor.Vertical,
-                pullMinimum),
+            LinkCurve.FromCubic(
+                points[0].X, points[0].Y, points[1].X, points[1].Y,
+                points[2].X, points[2].Y, points[3].X, points[3].Y),
             target);
 
         using var strokePen = new Pen(Color.Black, thickness + 2 * RegionPad) { LineJoin = LineJoin.Miter };
@@ -439,16 +462,22 @@ public sealed class WorkflowLinkAttachment
     // 所以口在上/下边时竖直出线、反向连线也不会把控制点戳进自己节点；拖拽预览退回房规。
     private PointF[] BuildCurve(IWorkflowLinkViewModel link, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
     {
+        // 端点是**画布系**，而 LinkCurvePoints 按 node.Anchor / node.Size（**模型系**）判每个口贴哪条边 ——
+        // 两系差一个表面投影。所以先把端点搬进模型系让它判，再把算出的四个点搬回画布系（画与命中都在这个系）。
+        // 不搬的后果实测过：投影一大，左缘的口会被判成上边，反向连线该往左翻出去的那一端就不翻了。
+        var ox = surfacePan.X + surfaceContent.Horizontal;
+        var oy = surfacePan.Y + surfaceContent.Vertical;
+
         var points = LinkCurve.LinkCurvePoints(
             link,
-            sender.Anchor.Horizontal, sender.Anchor.Vertical,
-            receiver.Anchor.Horizontal, receiver.Anchor.Vertical,
+            sender.Anchor.Horizontal - ox, sender.Anchor.Vertical - oy,
+            receiver.Anchor.Horizontal - ox, receiver.Anchor.Vertical - oy,
             pullMinimum);
 
         var result = new PointF[points.Length];
         for (var i = 0; i < points.Length; i++)
         {
-            result[i] = new PointF((float)points[i].X, (float)points[i].Y);
+            result[i] = new PointF((float)(points[i].X + ox), (float)(points[i].Y + oy));
         }
 
         return result;

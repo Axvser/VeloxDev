@@ -464,10 +464,20 @@ public abstract class WorkflowTreeView : UserControl
         {
             if (_roles.TryGetValue(control, out var role) && role.IsLink)
             {
+                // 池化的连线视图是在**这一趟**才可能新挂上来的（连线一进可见集就会有视图）。投影只在平移/
+                // 视口那一趟发给「当时已在画布里的」子控件，新视图只会留着默认的 (0,0) —— 而判「口贴着节点
+                // 哪条边」要跟 node.Anchor（模型系）同系，拿不到投影就会按错系判（实测：左缘的输入口被判成
+                // 下边，反向连线该往左翻出去的那一端不翻）。所以这里补发一次。
+                WorkflowLinkAttachment.For(control)?.ApplySurfacePosition(_panOffset, VisualContentOffset);
                 control.SendToBack();
             }
         }
     }
+
+    // 视觉内容原点 = ActualOffset + 标尺预留。与摆位那一趟用的是同一个式子 —— 两处各推一遍就会漂。
+    private Offset VisualContentOffset => new(
+        (_tree?.Layout?.ActualOffset.Horizontal ?? 0) + RulerReserve,
+        (_tree?.Layout?.ActualOffset.Vertical ?? 0) + RulerReserve);
 
     private void OnTreeChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -826,8 +836,9 @@ public abstract class WorkflowTreeView : UserControl
             _tree?.Layout?.ActualOffset.Vertical ?? 0);
 
         // 视觉内容原点 = ActualOffset + 标尺预留（纯屏幕空间的位移，让世界轴落进标尺内角）。下面那份
-        // helper.Viewport 仍只用 content，所以对外报出的数字与其它适配器完全一致。
-        var contentVisual = new Offset(content.Horizontal + RulerReserve, content.Vertical + RulerReserve);
+        // helper.Viewport 仍只用 content，所以对外报出的数字与其它适配器完全一致。式子只有一个来源：
+        // VisualContentOffset（连线视图补发投影时用的是同一个）。
+        var contentVisual = VisualContentOffset;
 
         ((SurfaceCanvas)PART_Canvas).PanOffset = _panOffset;
         foreach (var child in PART_Canvas.Controls.OfType<Control>())
@@ -838,6 +849,10 @@ public abstract class WorkflowTreeView : UserControl
                 card.ApplySurfacePosition(_panOffset, contentVisual);
                 WorkflowSlotLayoutBehavior.SyncNow(child);
             }
+
+            // 连线视图也要这份投影：它的端点是画布系，而判「口贴着节点哪条边」要跟 node.Anchor（模型系）同系。
+            // 只搬端点、不搬这条 —— 投影一大方向就判错（实测：左缘的输入口被判成上边，反向连线不往左翻）。
+            WorkflowLinkAttachment.For(child)?.ApplySurfacePosition(_panOffset, contentVisual);
         }
 
         if (PART_GridDecorator is IWorkflowGridDecorator grid)
