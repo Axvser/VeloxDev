@@ -90,9 +90,13 @@
 - 今天没被触发：`SlotEnumerator` 只作为**具体声明类型**出现（声明类型 == 运行期类型 → 不写 `$type`），而四份黄金文件里的 `$type` **全是非泛型**。
 - **`ConditionalSlot<T>` 曾经同样会撞**，不止 SlotEnumerator。
 
-现在 `WrittenName` 递归带上实参：`SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, VeloxDev.Core`。**非泛型类型的名字一个字节没变**，所以黄金文件不受影响（这是这次能安全改的前提）。
+现在 `WrittenName` **逐层**带上实参：`SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, VeloxDev.Core`。**非泛型类型的名字一个字节没变**，所以黄金文件不受影响（这是能安全改的前提）。
 
-**注意这个字符串没有任何人解析它** —— 所以它只需要稳定且单射，不必是 `Type.GetType` 认的形式。嵌套泛型（`Outer<T>.Inner<U>`）只写内层的实参，是已知的边界。
+**嵌套泛型要逐层写，不能攒到最内层**：`A<int>.B<string>` 与 `A.B<int, string>` 是两个类型，挤平就拼成同一个字符串。所以是 `Probe.Envelope<…SlotDefaultViewModel, VeloxDev.Core>+Inner<…>, Probe` —— 每层的实参紧跟自己那层的名字，嵌套用 `+` 连（与 `Type.FullName` 一致）。
+
+**Roslyn 的 `TypeArguments` 是平铺的**：包含类型的实参也在里面，**外层在前**。自己那一段靠 `Arity` 从尾部切（`Skip(Length - Arity)`）—— 实测证实了顺序，而且这个切法在「将来改成只含自己的实参」时仍然正确（那时 `Length == Arity`）。判定在 `OwnTypeArgumentsOf`。
+
+**注意这个字符串没有任何人解析它** —— 所以它只需要稳定且单射，不必是 `Type.GetType` 认的形式。附带一个已知边界：实参若来自 BCL（`int`、`string`），它的程序集名会随 TFM 变（`System.Private.CoreLib` / `mscorlib`），跨 TFM 读旧文档时那一段名字可能对不上。
 
 ---
 
