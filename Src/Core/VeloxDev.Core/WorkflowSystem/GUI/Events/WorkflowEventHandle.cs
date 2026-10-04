@@ -14,8 +14,8 @@ namespace VeloxDev.WorkflowSystem;
 /// </para>
 /// <list type="bullet">
 /// <item><see cref="PreventDefault"/> — do not do the framework's own thing this time, and report no Outcome.
-/// This is the per-event replacement for the global policy switch (<c>LinkInteraction.AutoDelete</c>): a host can
-/// refuse one deletion without turning deletion off for the whole surface.</item>
+/// It is how a subscriber nearer the target refuses one action without changing anything for the whole surface:
+/// the handler that would have acted reads it and stands down.</item>
 /// <item><see cref="StopPropagation"/> — do the framework's own thing, but report no Outcome event. Rare, but
 /// coherent: it is how a host hides an action from other subscribers while keeping the behaviour.</item>
 /// </list>

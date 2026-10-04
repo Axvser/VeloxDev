@@ -98,6 +98,7 @@ public partial class LinkView : UserControl
         _inputLink = link;
         events.Input.PointerEntered += OnPointerEntered;
         events.Input.PointerExited += OnPointerExited;
+        events.Input.KeyDown += OnKeyDown;
     }
 
     private void UnsubscribeHub()
@@ -106,12 +107,21 @@ public partial class LinkView : UserControl
 
         events.Input.PointerEntered -= OnPointerEntered;
         events.Input.PointerExited -= OnPointerExited;
+        events.Input.KeyDown -= OnKeyDown;
         _inputLink = null;
     }
 
     private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
 
     private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
+
+    // VeloxDev customization: 删除也是宿主的 —— 路由把这次按键交过来（target 就是这条线），删不删、怎么删由这里写。
+    private void OnKeyDown(object? sender, WorkflowKeyDownEventArgs e)
+    {
+        if (e.Key != WorkflowKey.Delete) return;
+        if (e.Handle.PreventDefault) return;
+        if ((DataContext as IWorkflowLinkViewModel) is { } link && link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
+    }
 
     private bool IsVirtualLink
         => IsVirtual

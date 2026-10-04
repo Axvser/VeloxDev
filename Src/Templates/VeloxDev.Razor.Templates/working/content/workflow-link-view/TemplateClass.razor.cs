@@ -240,7 +240,7 @@ public partial class TemplateClass : ComponentBase, IDisposable
     }
 
     // Forwarding the pointer into the hub is what makes the link interactive: the hub decides which link
-    // is under the pointer and deletes it on Delete (AutoDelete). Nothing here decides anything — the
+    // is under the pointer. Nothing here decides anything — the
     // browser's stroke-only hit region is the outer gate, and the route is the judge. These two handlers also
     // hand over this view's own link as the target, so a hover subscriber hears the event on the link itself.
     private async Task OnPointerEnter(MouseEventArgs e)

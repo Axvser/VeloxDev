@@ -108,54 +108,51 @@ public class WorkflowInputTests : WorkflowInputTestBase
         Assert.AreSame(link, input.PointerTarget);
     }
 
-    // ── Delete ──────────────────────────────────────────────────────────────
+    // ── 键：只路由，不做事 ──────────────────────────────────────────────────
 
     [TestMethod]
-    public void Route_DeleteKeyOnALink_RemovesIt()
+    public void Route_KeyDown_ActsOnNothingItself()
     {
-        // 默认策略：框架自己执行 DeleteCommand，所以生成出来的工程零代码就有删除。
+        // 路由没有默认动作：删除是宿主订 KeyDown 自己做的（与高亮、菜单同一条路）。
         var tree = DeletableTree(out var link);
-        var input = WorkflowInput.For(tree);
 
-        input.Route(Down(WorkflowKey.Delete, link));
+        WorkflowInput.For(tree).Route(Down(WorkflowKey.Delete, link));
+
+        Assert.IsTrue(tree.Links.Contains(link));
+    }
+
+    [TestMethod]
+    public void Route_KeyDown_ReachesTheTargetSoAHostCanDelete()
+    {
+        var tree = DeletableTree(out var link);
+        Events(link).Input.KeyDown += (_, e) =>
+        {
+            if (e.Key == WorkflowKey.Delete) link.DeleteCommand.Execute(null);
+        };
+
+        WorkflowInput.For(tree).Route(Down(WorkflowKey.Delete, link));
 
         Assert.IsFalse(tree.Links.Contains(link));
     }
 
     [TestMethod]
-    public void Route_DeleteKeyWithNothingTargeted_RemovesNothing()
+    public void Route_KeyDown_PreventDefault_IsReadByTheHandlerThatActs()
     {
+        // 框架没有「默认那一手」可挡了，所以句柄由**动手的那个订阅方**自己查 —— 这正是七家菜单接线里
+        // 对 PointerPressed 的同一种写法（先查 PreventDefault，再弹）。
         var tree = DeletableTree(out var link);
-        var input = WorkflowInput.For(tree);
+        Events(link).Input.KeyDown += (_, e) => e.Handle.PreventDefault = true;
+        Events(tree).Input.KeyDown += (_, e) =>
+        {
+            if (e.Handle.PreventDefault) return;
+            link.DeleteCommand.Execute(null);
+        };
 
-        input.Route(Down(WorkflowKey.Delete));
+        WorkflowInput.For(tree).Route(Down(WorkflowKey.Delete, link));
 
         Assert.IsTrue(tree.Links.Contains(link));
     }
 
-    [TestMethod]
-    public void Route_DeleteKeyWithAutoDeleteOff_LeavesTheLinkAlone()
-    {
-        var tree = DeletableTree(out var link);
-        var input = new WorkflowInput(tree) { AutoDelete = false };
-
-        input.Route(Down(WorkflowKey.Delete, link));
-
-        Assert.IsTrue(tree.Links.Contains(link));
-    }
-
-    [TestMethod]
-    public void Route_OtherKeys_RemoveNothing()
-    {
-        var tree = DeletableTree(out var link);
-        var input = WorkflowInput.For(tree);
-
-        input.Route(Down(WorkflowKey.Escape, link));
-        input.Route(Down(WorkflowKey.Enter, link));
-        input.Route(Up(WorkflowKey.Delete, link));
-
-        Assert.IsTrue(tree.Links.Contains(link));
-    }
 
     // ── 落点 ────────────────────────────────────────────────────────────────
 

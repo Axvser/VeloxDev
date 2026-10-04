@@ -40,8 +40,8 @@
                positions the menu, and wires it to the interaction hub; each entry receives the link it
                acts on. Add or remove the item buttons here. *@
             <LinkMenu Context="link">
-                <button class="wf-link-menu-item" type="button"
-                        @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>
+                @* Add the entries this project wants; each one receives the link it acts on.
+                   Nothing is here by default — deleting, renaming, opening properties are all yours to write. *@
             </LinkMenu>
         </WorkflowSurfaceBehavior>
     </div>

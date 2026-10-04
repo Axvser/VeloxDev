@@ -67,6 +67,7 @@ public partial class Workflow : ComponentBase, IDisposable
     protected override void OnInitialized()
     {
         _session = WorkflowDemoSession.Create();
+        HookLinkKeys(_session.Tree);
         SubscribeSession();
         UpdateCanvasSize();
     }
@@ -235,6 +236,7 @@ public partial class Workflow : ComponentBase, IDisposable
 
             var tree = json.Deserialize<TreeViewModel>();
             _session = WorkflowDemoSession.FromTree(tree);
+        HookLinkKeys(_session.Tree);
             SubscribeSession();
             UpdateCanvasSize();
             // The surface restores the saved viewport position by itself when the new tree reaches it.
@@ -362,4 +364,19 @@ public partial class Workflow : ComponentBase, IDisposable
     {
         UnsubscribeSession();
     }
+    // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
+    // 删不删由这里写（与悬停高亮同一条路）。
+    private void HookLinkKeys(IWorkflowTreeViewModel? tree)
+    {
+        if (tree?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.KeyDown += (_, e) =>
+        {
+            if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+            if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
+
+            link.DeleteCommand.Execute(null);
+        };
+    }
+
 }

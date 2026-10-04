@@ -2,9 +2,9 @@ namespace VeloxDev.WorkflowSystem;
 
 /// <summary>Raised when a key goes down.</summary>
 /// <remarks>
-/// This is the only input event with a default reaction in Core: a <see cref="WorkflowKey.Delete"/> whose target is
-/// a link deletes it, unless <see cref="WorkflowEventHandle.PreventDefault"/> was set or
-/// <see cref="WorkflowInput.AutoDelete"/> is off.
+/// The route performs no action of its own: a host that wants Delete to delete a link subscribes here and executes
+/// <c>link.DeleteCommand</c> — after checking <see cref="WorkflowEventHandle.PreventDefault"/>, so a subscriber
+/// closer to the target can refuse that one press.
 /// </remarks>
 /// <seealso cref="WorkflowKeyEventArgs"/>
 public sealed class WorkflowKeyDownEventArgs : WorkflowKeyEventArgs

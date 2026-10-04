@@ -51,7 +51,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     private readonly List<Views.LinkView> _linkRenderers = [];
 
     // 输入归 Core（每棵树一个，见 WorkflowInput.For）：这条画布只把指针/按键翻译成标准输入事件
-    // 转发进去，再订阅它的事件。删除（AutoDelete）由路由自己完成，画布不再各记一份。
+    // 转发进去，再订阅它的事件。删除是宿主自己写的（见 OnKeyDown），画布不靠库代劳。
     private WorkflowInput? _input;
 
     // 右键菜单只在连线上弹，所以不能挂成画布的 ContextMenuStrip（那会变成右键画布任意处都弹）
@@ -866,7 +866,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // ── Link interaction ─────────────────────────────────────────────────────────
 
     // 输入归 Core：本家只做平台的事 —— 把指针/按键翻译成标准输入事件转发进去、命中时给画布取键盘焦点、
-    // 右键时弹菜单、按悬停结果给渲染器上色。删除（AutoDelete）由路由自己完成，本家不再各记一份。
+    // 右键时弹菜单、按悬停结果给渲染器上色、Delete 键自己删（见 OnKeyDown）—— 这些都是宿主的策略。
     private void AttachLinkInteraction(IWorkflowTreeViewModel tree)
     {
         DetachLinkInteraction();
@@ -1045,13 +1045,17 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         base.OnKeyDown(e);
 
-        // 键也过输入路由：「现在按 Delete 删哪条」与其它六家是同一个答案，不靠各家各记一个选中
-        if (_input is not { } input || input.HoveredLink is null) return;
+        // 键也过输入路由：命中与 target 由它裁决；**删不删是这里的决定**（库不再自带删除 —— 与悬停高亮同一条路，
+        // 那种效果属于宿主）。更靠前的一级（连线自己）可以在句柄上拒绝这一次。
+        if (_input is not { } input || input.HoveredLink is not { } hovered) return;
 
+        var handle = new WorkflowEventHandle();
         input.Route(new WorkflowKeyDownEventArgs(
-            ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false, this, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false, this, hovered, handle));
 
         if (e.KeyCode != Keys.Delete) return;
+
+        if (!handle.PreventDefault && hovered.DeleteCommand.CanExecute(null)) hovered.DeleteCommand.Execute(null);
 
         e.Handled = true;
         e.SuppressKeyPress = true;

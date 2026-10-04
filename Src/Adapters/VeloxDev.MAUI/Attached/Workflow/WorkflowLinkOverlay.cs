@@ -1050,7 +1050,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private void AttachInteraction(IWorkflowTreeViewModel tree)
     {
         // hub 只有一个位置：同树同实例（别家也走这个调用，不再各自发明取用方式）。
-        // 删除归 hub 自己（AutoDelete）—— 本家不再订 LinkDeleteRequested；
+        // 删除是宿主的（订 KeyDown 自己执行命令）—— 本家不订它；
         // 选中也不订指针事件 —— 那是宿主的事（订了之后把 SelectedLink 给它）。
         _input = WorkflowInput.For(tree);
     }

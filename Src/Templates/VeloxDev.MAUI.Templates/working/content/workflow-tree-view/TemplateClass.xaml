@@ -25,7 +25,6 @@
         <!-- The link context menu: add or remove MenuFlyoutItem entries to change it. Each item's Command
              binds to the pressed link, so a new entry needs no code. The surface below shows this menu. -->
         <MenuFlyout x:Key="LinkContextMenu">
-            <MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}" />
         </MenuFlyout>
     </ContentView.Resources>
 

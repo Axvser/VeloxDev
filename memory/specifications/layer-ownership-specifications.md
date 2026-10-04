@@ -8,12 +8,14 @@
 
 ## 一、四层各是什么
 
-**用户的判断标准是一句话：外观交互效果只存在于 Demo，作为「如何基于事件订阅实现定制」的示例；只有直接触及 WorkflowSystem 后端命令 / 数据 / 逻辑的部分，才在适配器提供实现。**
+**用户的判断标准是一句话：交互效果（悬停高亮、选中、Delete 删线、右键菜单条目）只存在于 Demo，作为「如何基于事件订阅实现定制」的示例；只有直接触及 WorkflowSystem 后端命令 / 数据 / 逻辑的部分（以及平台机制），才在适配器提供实现。**
+
+> **Core 自己不做任何动作**（2026-10-04 定）：输入路由只持有「指针停在哪」这一件状态，`KeyDown` 不再自带删除、指针事件不再自带高亮。库给的是**事件与时机**，效果写在你自己的视图/宿主里 —— 与 `InfoOverlay` 那种 demo 的地位一致。
 
 | 层 | 收什么 | 举例 |
 |---|---|---|
 | **Core**（`Src/Core/VeloxDev.Core/`） | **平台无关的机制**：状态、算法、输入面 | 连线命中算法（对着已发布的曲线判距）、**标准输入的输入路由** `WorkflowInput.For(tree)`（`Route` + 目标冒泡）、`IWorkflowInputEvents`（组件上的指针/键盘事件）、`WorkflowEventHandle` |
-| **适配器**（`Src/Adapters/VeloxDev.*/`） | **平台机制**，以及**直接触及后端命令 / 数据 / 逻辑**者 | 指针与按键翻译后转发进枢纽、键盘焦点路由（Delete 靠它）、WinForms 的窗口区域雕刻、几何与每帧记账；`AutoDelete` 走 `link.DeleteCommand` |
+| **适配器**（`Src/Adapters/VeloxDev.*/`） | **平台机制**，以及**直接触及后端命令 / 数据 / 逻辑**者 | 指针与按键翻译后转发进枢纽、键盘焦点路由（Delete 键靠它才能到达）、WinForms 的窗口区域雕刻、几何与每帧记账 |
 | **item template**（`Src/Templates/*/working/content/`） | **被动视觉**：把模型画出来，不含任何交互外观 | 画线、`PublishCurve(curve, this)`、NaN 就绪门、调色板与线宽 |
 | **demo**（`Examples/Workflow/…`） | **外观与策略**：交互效果在这里演示怎么写 | 悬停/选中高亮、流光、菜单条目、`InfoOverlay` 那类 HUD |
 

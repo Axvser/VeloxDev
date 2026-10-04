@@ -159,6 +159,7 @@ public partial class WorkflowView : ContentView
         }
 
         _workflowViewModel = newSession?.Tree ?? new TreeViewModel();
+        HookLinkKeys(_workflowViewModel);
         // MAUI propagates BindingContext through the visual tree automatically,
         // so setting it on the ContentView root is sufficient. Do NOT set
         // BindingContext on individual child elements — that breaks the natural
@@ -454,4 +455,19 @@ public partial class WorkflowView : ContentView
 
     private void OnLinkPointerExited(object? sender, WorkflowPointerExitedEventArgs e)
         => PART_LinkLayer.SelectedLink = null;
+
+    // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
+    // 删不删由这里写（与悬停高亮同一条路）。
+    private void HookLinkKeys(IWorkflowTreeViewModel tree)
+    {
+        if (tree.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.KeyDown += (_, e) =>
+        {
+            if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+            if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
+
+            link.DeleteCommand.Execute(null);
+        };
+    }
 }

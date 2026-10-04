@@ -47,7 +47,6 @@
 
         <!-- VeloxDev customization: add or remove the link menu's items here. -->
         <ContextMenu x:Key="WorkflowTreeMenu">
-            <MenuItem Header="Delete" Command="{ReflectionBinding DeleteCommand}" />
         </ContextMenu>
     </UserControl.Resources>
 

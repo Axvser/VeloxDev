@@ -68,7 +68,7 @@ public enum WorkflowKey
     /// <summary>Insert.</summary>
     Insert = 16,
 
-    /// <summary>Delete — the one key Core itself acts on (see <see cref="WorkflowInput.AutoDelete"/>).</summary>
+    /// <summary>Delete — the key a host usually binds to delete the hovered link.</summary>
     Delete = 17,
 
     /// <summary>The letter A key.</summary>

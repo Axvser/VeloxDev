@@ -764,7 +764,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (e.Key != Key.Delete || host.DataContext is not IWorkflowTreeViewModel viewModel)
             return;
 
-        // 键也过输入路由：现在按 Delete 删哪条与其它六家是同一个答案（路由的 AutoDelete 自己执行命令）。
+        // 键也过输入路由：命中与 target 由它裁决；删不删是宿主的（订 KeyDown 自己执行命令）。
         var input = WorkflowInput.For(viewModel);
         if (input.HoveredLink is null)
             return;

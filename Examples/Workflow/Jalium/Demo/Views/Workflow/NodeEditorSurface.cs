@@ -156,7 +156,7 @@ internal sealed class NodeEditorSurface : Canvas
     }
 
     // 宿主侧的删除（窗口级 Delete、菜单项）：走连线自己的命令，删完把指向它的选中清掉。
-    // 表面自己的 KeyDown 不走这里 —— 它把键转发给 hub，由 hub 的 AutoDelete 执行命令，
+    // 表面自己的 KeyDown 不走这里 —— 它把键转发给路由，再由这里自己执行命令，
     // 集合变更后再由 PruneCurves 收拾选中
     private void DeleteLink(IWorkflowLinkViewModel? link)
     {
@@ -177,16 +177,19 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        // 键也过 Core：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠表面另记一个选中
-        if (_input is not { } input || input.HoveredLink is null)
+        // 键也过 Core：命中与 target 由路由裁决；**删不删是这里的决定**（库不再自带删除 —— 与悬停高亮同一条路）。
+        if (_input is not { } input || input.HoveredLink is not { } hovered)
         {
             return;
         }
 
+        var handle = new WorkflowEventHandle();
         input.Route(new WorkflowKeyDownEventArgs(
-            ToKey(e.Key), (int)e.Key, InputModifiers.None, false, this, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, InputModifiers.None, false, this, hovered, handle));
 
         if (e.Key != Key.Delete) return;
+
+        if (!handle.PreventDefault && hovered.DeleteCommand.CanExecute(null)) hovered.DeleteCommand.Execute(null);
 
         e.Handled = true;
     }
@@ -204,7 +207,7 @@ internal sealed class NodeEditorSurface : Canvas
 
     // 输入归 Core（同树同实例，见 WorkflowInput.For）—— 表面不持有实例，只把事件转进去、订它的结果。
     // 这家一个表面画完所有线、没有「每线的可视对象」，所以选中由这里订阅 HoverChanged 自己画 ——
-    // 这也是七家现在的统一做法（高亮是宿主的）。删除归 hub 的 AutoDelete，本家不再订 LinkDeleteRequested。
+    // 这也是七家现在的统一做法（高亮与删除都是宿主的）。
     private void AttachInteraction()
     {
         DetachInteraction();

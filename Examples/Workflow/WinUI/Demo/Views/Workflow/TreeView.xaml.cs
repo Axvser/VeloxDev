@@ -142,6 +142,7 @@ namespace Demo.Views
             UnsubscribeAutoScroll(ViewModel);
             _demo = WorkflowDemoSession.Create();
             ViewModel = _demo.Tree;
+        HookLinkKeys(ViewModel);
             DataContext = ViewModel;
             SubscribeAutoScroll(ViewModel);
             if (ViewModel.GetHelper() is AgentHelper helper)
@@ -557,5 +558,20 @@ namespace Demo.Views
 
             await dialog.ShowAsync();
         }
+    // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
+    // 删不删由这里写（与悬停高亮同一条路）。
+    private void HookLinkKeys(IWorkflowTreeViewModel tree)
+    {
+        if (tree.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.KeyDown += (_, e) =>
+        {
+            if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+            if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
+
+            link.DeleteCommand.Execute(null);
+        };
+    }
+
     }
 }

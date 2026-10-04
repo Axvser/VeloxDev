@@ -26,7 +26,14 @@ public sealed class TreeView : WorkflowTreeView
     /// <inheritdoc />
     protected override void OnBuildLinkMenu(ContextMenu menu, IWorkflowLinkViewModel link)
     {
-        // The menu is rebuilt on every right press: add or remove entries here. The base adds "Delete".
-        base.OnBuildLinkMenu(menu, link);
+        // The menu is rebuilt on every right press. Nothing is here by default — the entries are this project's.
+        // ⚠ 本平台的菜单项点完不自己收：不显式 `menu.Close()`，删掉连线后菜单还杵在画布上。
+        var item = new MenuItem { Header = "Delete" };
+        item.Click += (_, _) =>
+        {
+            menu.Close();
+            link.DeleteCommand.Execute(null);
+        };
+        menu.Items.Add(item);
     }
 }

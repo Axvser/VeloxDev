@@ -52,7 +52,7 @@
 - **连线的命中与删除是库能力；高亮等外观是 demo 专属**（2026-10-04 用户改定，推翻 2026-10-03 那条「高亮由 hub 直接点亮、模板与 Trimmed demo 默认就有」，而那条本身推翻的是 2026-09-26 的「连线交互是 demo 层、模板保持被动」。分层的完整规则见 [layer-ownership-specifications.md](layer-ownership-specifications.md)）：连线视图只负责**画出自己那条曲线并把它发布出去**，其余由 Core、适配器、demo 三方分担 ——
   - 命中判定归 Core（`LinkHitTestEx` 对着已发布的曲线判距，半径 `LinkHitTestEx.DefaultHitRadius`）；
   - **输入路由只有一个位置**：`WorkflowInput.For(tree)`（一棵树一个实例），适配器把原生指针/按键翻译成标准输入后只往它里面转发；宿主与连线视图都在**组件的 Helper**上订（`IWorkflowInputEvents`）；
-  - 删除由 hub 直接执行（`AutoDelete`，走的是 `link.DeleteCommand`）——**不需要宿主写订阅**；
+  - **删除也是 demo 的**（2026-10-04 改定）：库只把 `Delete` 键路由过来（target = 指针停着的那条线），宿主订 `KeyDown` 自己执行 `link.DeleteCommand` —— 与悬停高亮同一条路。**菜单里的条目同理**：模板不再自带 `Delete` 项，基类也不加；
   - **悬停/选中高亮归 demo**：订那条线自己的 `Input.PointerEntered` / `PointerExited`（路由保证「先 Exited 后 Entered」）自己画。模板里的连线视图是**被动视觉**，不含任何高亮外观；适配器给的是**指针语义的覆写钩子**加一个空的画法钩子（WinForms/Jalium 的 `WorkflowLinkView.OnPointerEntered` … / `OnPaintLinkDecoration`）。Core 里没有 `ILinkHighlight`、也没有 `AutoHighlight`。
   ⇒ 判据是「这个角色**有没有指针源**」：任何一家只要它的连线视图或表面把指针位置喂给了 hub，生成的工程就开箱有命中/删除；**高亮要自己按 demo 那份写**。
   - **连线的右键菜单也归模板**（2026-10-03 用户改定，推翻本条原来那句「右键菜单仍是 demo 的策略，不要往模板里推」）：

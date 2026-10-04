@@ -279,7 +279,8 @@ public abstract class WorkflowTreeView : UserControl
     /// </remarks>
     protected virtual void OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)
     {
-        menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null));
+        // 基类**不加任何条目**：菜单里有什么是宿主的策略（删除、重命名、打开属性……），
+        // 与悬停高亮同一条路 —— 库给事件与时机，效果归你。
     }
 
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
@@ -303,7 +304,7 @@ public abstract class WorkflowTreeView : UserControl
     private bool _layoutPending;
 
     // 连线输入归 Core（每棵树一个，见 WorkflowInput.For）：本家只做平台的两件事 —— 翻译指针/按键、
-    // 命中时给画布取键盘焦点。删除由路由的 AutoDelete 负责；悬停外观是宿主的。
+    // 命中时给画布取键盘焦点。删除与悬停外观都是宿主的 —— 本家只把键路由出去。
     private WorkflowInput? _input;
 
     // 当前弹出的连线菜单。每次右键现建、收起即弃 —— 复用一份会带着上一次那条链接的捕获。
@@ -710,7 +711,7 @@ public abstract class WorkflowTreeView : UserControl
     }
 
     // 输入归 Core：本家只做平台的事 —— 把画布的指针/按键翻译成标准输入事件转发进去，命中时给画布取焦点。
-    // 删除（AutoDelete）由路由自己完成；悬停外观是宿主的。
+    // 删除与悬停外观都是宿主的；本家只做平台的事。
     private void AttachLinkInteraction()
     {
         DetachLinkInteraction();

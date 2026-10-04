@@ -113,6 +113,12 @@ public sealed class WorkflowLinkAttachment
     /// <summary>Raised when a pointer button comes up over this link.</summary>
     public event EventHandler<WorkflowPointerReleasedEventArgs>? PointerReleased;
 
+    /// <summary>Raised when a key goes down while this link is the key's target (the pointer is on it).</summary>
+    public event EventHandler<WorkflowKeyDownEventArgs>? KeyDown;
+
+    /// <summary>Raised when a key comes up while this link is the key's target.</summary>
+    public event EventHandler<WorkflowKeyUpEventArgs>? KeyUp;
+
     /// <summary>The link this element currently draws, taken from the <c>DataContext</c>.</summary>
     public IWorkflowLinkViewModel? Link => link;
 
@@ -247,6 +253,8 @@ public sealed class WorkflowLinkAttachment
             old.Input.PointerExited -= OnInputPointerExited;
             old.Input.PointerPressed -= OnInputPointerPressed;
             old.Input.PointerReleased -= OnInputPointerReleased;
+            old.Input.KeyDown -= OnInputKeyDown;
+            old.Input.KeyUp -= OnInputKeyUp;
         }
 
         if (next?.GetHelper() is IWorkflowInputEvents now)
@@ -255,6 +263,8 @@ public sealed class WorkflowLinkAttachment
             now.Input.PointerExited += OnInputPointerExited;
             now.Input.PointerPressed += OnInputPointerPressed;
             now.Input.PointerReleased += OnInputPointerReleased;
+            now.Input.KeyDown += OnInputKeyDown;
+            now.Input.KeyUp += OnInputKeyUp;
         }
     }
 
@@ -265,6 +275,10 @@ public sealed class WorkflowLinkAttachment
     private void OnInputPointerPressed(object? sender, WorkflowPointerPressedEventArgs e) => PointerPressed?.Invoke(this, e);
 
     private void OnInputPointerReleased(object? sender, WorkflowPointerReleasedEventArgs e) => PointerReleased?.Invoke(this, e);
+
+    private void OnInputKeyDown(object? sender, WorkflowKeyDownEventArgs e) => KeyDown?.Invoke(this, e);
+
+    private void OnInputKeyUp(object? sender, WorkflowKeyUpEventArgs e) => KeyUp?.Invoke(this, e);
 
     private void OnDataContextChanged(object? sender, DependencyPropertyChangedEventArgs e)
         => Bind(target.DataContext as IWorkflowLinkViewModel);

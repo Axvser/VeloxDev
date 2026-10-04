@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using VeloxDev.WorkflowSystem;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -198,6 +199,7 @@ public partial class WorkflowView : UserControl
         UnsubscribeAutoScroll(_workflowViewModel);
         _demo = WorkflowDemoSession.Create();
         _workflowViewModel = _demo.Tree;
+        HookLinkKeys(_workflowViewModel);
         DataContext = _workflowViewModel;
         SubscribeAutoScroll(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
@@ -643,5 +645,20 @@ public partial class WorkflowView : UserControl
     {
         if (scroller is null) return;
         scroller.Offset = new Vector(scroller.Offset.X, scroller.Extent.Height);
+    }
+
+    // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
+    // 删不删由这里写（与悬停高亮同一条路）。
+    private void HookLinkKeys(IWorkflowTreeViewModel tree)
+    {
+        if (tree.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.KeyDown += (_, e) =>
+        {
+            if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+            if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
+
+            link.DeleteCommand.Execute(null);
+        };
     }
 }

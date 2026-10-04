@@ -165,9 +165,9 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Help
 连线视图画完 → link.PublishCurve(曲线, 自己)      // 视图是形状的所有者，也是事件的 Source
 适配器把原生指针/按键翻译成标准输入 → WorkflowInput.For(tree).Route(args)
     → 按 args.Target 展开祖先链（link→tree / slot→node→tree / node→tree / 空白→tree）
-    → 每级取 IWorkflowInputEvents.Input 派发；用户订阅先跑，框架默认动作在整条链之后
+    → 每级取 IWorkflowInputEvents.Input 派发（目标先、祖先后）
     → 指针换了目标时先给留下那个发 Exited、给新那个发 Entered
-    → KeyDown + Delete + Target 是连线 + AutoDelete ⇒ link.DeleteCommand
+    → Core 自己不做任何动作：KeyDown 只路由，删不删由定了 KeyDown 的宿主决定
 ```
 
 - **API 形状抄 Avalonia**（`GUI/Events/Input/`）：`WorkflowPointerEventArgs` 六个具体子类（Entered/Exited/Moved/Pressed/Released/Wheel）、`WorkflowKeyEventArgs` 两个（Down/Up）、`WorkflowMouseButton`（`None/Left/Right/Middle/XButton1/XButton2`）、`InputModifiers`、`WorkflowKey`（务实子集，其余报 `Unknown` + `RawKeyCode`）。名字带 `Workflow` 前缀是硬要求 —— 适配器文件同时 `using` 平台命名空间，`PointerPressedEventArgs` 这些正是 Avalonia 自己的类型名（2026-10-04 撞过）。
@@ -175,7 +175,7 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Help
 - **能力接口 + 一个 relay**：`IWorkflowInputEvents { WorkflowInputRelay Input; }`，四组 Helper（`TreeHelper<T>`/`NodeHelper<T>`/`SlotHelper<T>`/`LinkHelper<T>`）都实现。宿主订阅：`((IWorkflowInputEvents)link.GetHelper()).Input.PointerEntered += …`。
 - **命中归适配器判**（`LinkHitTestEx.HitTestVisibleLinks` 是它调的那个共享算法）：Core 不新增 node/slot 命中。
 
-**两相没了，只剩「用户先跑」**：原来是 `Preview*/Outcome` 两相共用一个句柄；现在**一次动作只发一次**，用户订阅天然在框架默认动作之前，`WorkflowEventHandle` 仍在、语义不变：
+**两相没了，只剩「订阅者先跑」**：原来是 `Preview*/Outcome` 两相共用一个句柄；现在**一次动作只发一次**，而且 Core 本身没有默认动作可说「之前」，`WorkflowEventHandle` 仍在、语义不变：
 `PreventDefault` = 框架这一手不执行（Delete 就是「这条不许删」）、`StopPropagation` = 到此为止、祖先一个都收不到。两个标志都不设时行为与它们出现之前逐字相同。
 
 - 句柄**一次路由一个**：整条链共用，所以祖先能读到目标那级做了什么决定。
@@ -231,7 +231,7 @@ hub 收不了宿主的弹窗，所以这是**请**不是做：宿主关掉自己
 
 要点：
 
-- **输入只有一个位置**：`WorkflowInput.For(tree)`（`GUI/Events/WorkflowInput.cs`），一棵树一个实例、`ConditionalWeakTable` 缓存。适配器只**转发**，宿主与组件视图都从组件的 Helper 上订 —— 没有「每个表面各持一个」这种说法。它同时是 `HitRadius` / `AutoDelete` / `IsSuspended` / `PointerTarget` / `HoveredLink` 的持有者。
+- **输入只有一个位置**：`WorkflowInput.For(tree)`（`GUI/Events/WorkflowInput.cs`），一棵树一个实例、`ConditionalWeakTable` 缓存。适配器只**转发**，宿主与组件视图都从组件的 Helper 上订 —— 没有「每个表面各持一个」这种说法。它同时是 `HitRadius` / `IsSuspended` / `PointerTarget` / `HoveredLink` 的持有者。
 - **命中判据是「已发布的曲线」**，不是「锚点测没测到」。视图画不出来时用 `PublishCurve(null)` 撤回，所以「没有曲线」就等于「那里没有东西」。**不要**改回按 `IsRenderReady()` 判 —— Jalium 按设计从不写 `slot.Anchor`，那样会让它整家连线静默失效。
 - **命中面只是画出来的那道描边**，不是整块画布：曲线就是视图画的那条，半径 `LinkHitTestEx.DefaultHitRadius`（6）。
 - **曲线是运行期几何，永远不序列化**（别把它挂上任何归档序列化路径：不给它 `[Archivable]`，也不让它成为某个被收录成员的声明类型）。

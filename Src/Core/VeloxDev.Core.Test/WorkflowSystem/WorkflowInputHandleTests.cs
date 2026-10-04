@@ -4,37 +4,24 @@ namespace VeloxDev.Core.Test.WorkflowSystem;
 
 /// <summary>
 /// Tests for the contract a routed input event carries: one argument instance and one
-/// <see cref="WorkflowEventHandle"/> travel the whole route, a handler runs before the framework's own reaction, and
-/// the two flags steer that reaction and the rest of the route independently.
+/// <see cref="WorkflowEventHandle"/> travel the whole route, the target hears it before its ancestors, and the two
+/// flags steer the rest of the route (and let a handler that would have acted stand down).
 /// </summary>
 [TestClass]
 public class WorkflowInputHandleTests : WorkflowInputTestBase
 {
     [TestMethod]
-    public void Route_HandlerRunsBeforeTheFrameworksOwnReaction()
+    public void Route_TheTargetHearsAKeyBeforeItsAncestors()
     {
+        // 顺序由构造保证：目标是第一级的订阅方，树在后 —— 所以「更靠前的一级说不」时，后面那个还来得及看句柄。
         var tree = DeletableTree(out var link);
-        var input = WorkflowInput.For(tree);
-        var deletedWhenHandlerRan = true;
+        var order = new List<string>();
+        Events(link).Input.KeyDown += (_, _) => order.Add("link");
+        Events(tree).Input.KeyDown += (_, _) => order.Add("tree");
 
-        Events(link).Input.KeyDown += (_, _) => deletedWhenHandlerRan = !tree.Links.Contains(link);
+        WorkflowInput.For(tree).Route(Down(WorkflowKey.Delete, link));
 
-        input.Route(Down(WorkflowKey.Delete, link));
-
-        Assert.IsFalse(deletedWhenHandlerRan, "处理器先于框架动作 —— 它跑的时候那条线还在");
-        Assert.IsFalse(tree.Links.Contains(link), "框架动作在处理器之后执行");
-    }
-
-    [TestMethod]
-    public void Route_PreventDefaultOnDelete_KeepsTheLink()
-    {
-        var tree = DeletableTree(out var link);
-        var input = WorkflowInput.For(tree);
-        Events(link).Input.KeyDown += (_, e) => e.Handle.PreventDefault = true;
-
-        input.Route(Down(WorkflowKey.Delete, link));
-
-        Assert.IsTrue(tree.Links.Contains(link));
+        CollectionAssert.AreEqual(new[] { "link", "tree" }, order);
     }
 
     [TestMethod]

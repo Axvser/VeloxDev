@@ -150,6 +150,14 @@ public partial class LinkView : ComponentBase, IDisposable
 
     private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
+    // VeloxDev customization: 删除也是宿主的 —— 路由把这次按键交过来（target 就是这条线），删不删、怎么删由这里写。
+    private void OnKeyDown(object? sender, WorkflowKeyDownEventArgs e)
+    {
+        if (e.Key != WorkflowKey.Delete) return;
+        if (e.Handle.PreventDefault) return;
+        if ((Link) is { } link && link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
+    }
+
     /// <inheritdoc />
     protected override void OnInitialized()
     {
@@ -187,6 +195,7 @@ public partial class LinkView : ComponentBase, IDisposable
         {
             events.Input.PointerEntered += OnPointerEntered;
             events.Input.PointerExited += OnPointerExited;
+        events.Input.KeyDown += OnKeyDown;
         }
     }
 
@@ -285,7 +294,7 @@ public partial class LinkView : ComponentBase, IDisposable
     }
 
     // Forwarding the pointer into the hub is what makes the link interactive: the hub decides which link
-    // is under the pointer and deletes it on Delete (AutoDelete); the hover highlight is this demo's own
+    // is under the pointer; the hover highlight and Delete are this demo's own
     // (OnPointerEntered). Nothing here decides anything — the browser's stroke-only hit region is the outer
     // gate, and the hub is the judge.
     private async Task OnPointerEnter(MouseEventArgs e)
@@ -332,6 +341,7 @@ public partial class LinkView : ComponentBase, IDisposable
         {
             events.Input.PointerEntered -= OnPointerEntered;
             events.Input.PointerExited -= OnPointerExited;
+        events.Input.KeyDown -= OnKeyDown;
         }
     }
 }

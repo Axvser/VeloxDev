@@ -286,14 +286,9 @@ public class WorkflowTreeView : Canvas
     /// </remarks>
     protected virtual void OnBuildLinkMenu(ContextMenu menu, IWorkflowLinkViewModel link)
     {
-        var item = new MenuItem { Header = "Delete" };
-        item.Click += (_, _) =>
-        {
-            // 本平台的菜单项点完不自己收：不显式关，删掉连线后菜单还杵在画布上挡着看得见的东西。
-            menu.Close();
-            link.DeleteCommand.Execute(null);
-        };
-        menu.Items.Add(item);
+        // 基类**不加任何条目**：菜单里有什么是宿主的策略（删除、重命名、打开属性……），
+        // 与悬停高亮同一条路 —— 库给事件与时机，效果归你。
+        // ⚠ 本平台的菜单项点完**不自己收**：不显式 `menu.Close()`，删掉连线后菜单还杵在画布上。
     }
 
     // 换绑定树时复用同一个 sink；sink 只把调用转给可重写钩子，不持有额外状态。
@@ -480,7 +475,7 @@ public class WorkflowTreeView : Canvas
         };
     }
 
-    // 订阅与解订输入面：本体只碰右键按下弹菜单，删除仍由路由的 AutoDelete 完成。
+    // 订阅与解订输入面：本体只碰右键按下弹菜单；删除是宿主的（订 KeyDown 自己执行命令）。
     private void AttachInteraction()
     {
         DetachInteraction();

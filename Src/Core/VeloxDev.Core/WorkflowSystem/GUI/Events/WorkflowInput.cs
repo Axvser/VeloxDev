@@ -5,9 +5,13 @@ using System.Runtime.CompilerServices;
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
-/// Routes a GUI's pointer and keyboard input to the workflow components under it, and applies the few reactions the
-/// framework itself owns. Adapters translate their platform's input into the standard arguments and hand it here;
-/// hosts and component views subscribe on the components instead of re-deriving anything per platform.
+/// Routes a GUI's pointer and keyboard input to the workflow components under it. Adapters translate their
+/// platform's input into the standard arguments and hand it here; hosts and component views subscribe on the
+/// components instead of re-deriving anything per platform.
+///
+/// The route owns exactly one piece of state — which component the pointer is on — so a host can read it without
+/// keeping its own bookkeeping. It performs <b>no</b> action of its own: deleting a link, highlighting it, opening a
+/// menu are all the host's, written where they can be seen and changed (see <c>IWorkflowInputEvents</c>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -65,13 +69,6 @@ public sealed class WorkflowInput
     /// into <see cref="LinkHitTestEx.HitTestVisibleLinks"/> when it resolves a link target on a shared surface.
     /// </summary>
     public double HitRadius { get; set; } = LinkHitTestEx.DefaultHitRadius;
-
-    /// <summary>
-    /// Whether the Delete key removes the link it is routed against, by itself (<c>link.DeleteCommand</c>). On by
-    /// default, so a generated project deletes out of the box; turn it off to confirm first, or refuse one deletion
-    /// through <see cref="WorkflowEventHandle.PreventDefault"/> on that event.
-    /// </summary>
-    public bool AutoDelete { get; set; } = true;
 
     /// <summary>
     /// When set, pointer movement no longer updates <see cref="PointerTarget"/>. A host that has opened its own
@@ -217,13 +214,9 @@ public sealed class WorkflowInput
         }
     }
 
-    private void ApplyDefault(WorkflowKeyEventArgs e)
+    // 键没有默认动作：Core 只把按键路由出去。删除是宿主的事 —— 订 KeyDown、自己执行 link.DeleteCommand
+    // （Demo 与 InfoOverlay 同一条路：库给事件，效果归你）。
+    private static void ApplyDefault(WorkflowKeyEventArgs e)
     {
-        if (e is not WorkflowKeyDownEventArgs) return;
-        if (e.Key != WorkflowKey.Delete) return;
-        if (!AutoDelete) return;
-        if (e.Target is not IWorkflowLinkViewModel link) return;
-
-        link.DeleteCommand.Execute(null);
     }
 }
