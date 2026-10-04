@@ -412,23 +412,23 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         var scrollViewerName = GetScrollViewerName(control);
         if (!string.IsNullOrWhiteSpace(scrollViewerName))
-            state.ScrollViewer = control.FindControl<ScrollViewer>(scrollViewerName!);
+            state.ScrollViewer = FindNamed<ScrollViewer>(control, scrollViewerName!);
 
         var canvasName = GetCanvasName(control);
         if (!string.IsNullOrWhiteSpace(canvasName))
-            state.Canvas = control.FindControl<Canvas>(canvasName!);
+            state.Canvas = FindNamed<Canvas>(control, canvasName!);
 
         var gridDecoratorName = GetGridDecoratorName(control);
         if (!string.IsNullOrWhiteSpace(gridDecoratorName))
-            state.GridDecorator = control.FindControl<Control>(gridDecoratorName!);
+            state.GridDecorator = FindNamed<Control>(control, gridDecoratorName!);
 
         var minimapOverlayName = GetMinimapOverlayName(control);
         if (!string.IsNullOrWhiteSpace(minimapOverlayName))
-            state.MinimapOverlay = control.FindControl<Control>(minimapOverlayName!);
+            state.MinimapOverlay = FindNamed<Control>(control, minimapOverlayName!);
 
         var pointerPressSourceName = GetPointerPressSourceName(control);
         if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
-            state.PointerPressSource = control.FindControl<Control>(pointerPressSourceName!);
+            state.PointerPressSource = FindNamed<Control>(control, pointerPressSourceName!);
 
         if (state.PointerPressSource is not null)
             state.PointerPressSource.PointerPressed += OnPointerPressed;
@@ -444,6 +444,35 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (GetZoomEnabled(control))
         {
             HookZoom(state);
+        }
+    }
+
+    /// <summary>
+    /// Resolves one named control, or <see langword="null"/> when the names cannot be resolved yet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Avalonia's <c>FindControl</c> needs a parent name scope and throws <c>Could not find parent name scope</c>
+    /// without one. During XAML load there is none: the loader writes the attached properties one at a time, so the
+    /// one written last finds every name already set and goes looking for real controls — while the scope is still
+    /// missing. Which property that is depends on the order a given axaml writes them in, and the templates and
+    /// the demos do not all agree.
+    /// </para>
+    /// <para>
+    /// <see langword="null"/> is the honest answer there ("not yet"), not a swallowed failure:
+    /// <see cref="Refresh"/> runs again when the control reaches the visual tree and whenever its data context
+    /// changes, and by then the scope exists.
+    /// </para>
+    /// </remarks>
+    private static T? FindNamed<T>(UserControl control, string name) where T : Control
+    {
+        try
+        {
+            return control.FindControl<T>(name);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
         }
     }
 
