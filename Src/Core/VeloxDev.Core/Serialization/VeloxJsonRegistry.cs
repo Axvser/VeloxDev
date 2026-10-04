@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace VeloxDev.Serialization;
 
@@ -23,6 +24,15 @@ public interface IVeloxJsonWriter
     /// value's runtime type.
     /// </param>
     void Write(VeloxJsonWriter writer, object value, Type? declaredType);
+
+    /// <summary>
+    /// Writes <paramref name="value"/> asynchronously, awaiting every handover to the output.
+    /// </summary>
+    /// <param name="writer">The document being built.</param>
+    /// <param name="value">The instance to write.</param>
+    /// <param name="declaredType">The member's declared type, as for <see cref="Write"/>.</param>
+    /// <returns>A task that completes when the value has been written.</returns>
+    Task WriteAsync(VeloxJsonWriter writer, object value, Type? declaredType);
 }
 
 /// <summary>
@@ -46,6 +56,14 @@ public interface IVeloxJsonReader
     /// <param name="reader">The document being read, positioned just inside the object.</param>
     /// <param name="target">The instance to fill. The caller has already created or reused it.</param>
     void Read(VeloxJsonReader reader, object target);
+
+    /// <summary>
+    /// Reads this type's members into <paramref name="target"/> asynchronously, awaiting every refill.
+    /// </summary>
+    /// <param name="reader">The document being read, positioned just inside the object.</param>
+    /// <param name="target">The instance to fill.</param>
+    /// <returns>A task that completes when the members have been read.</returns>
+    Task ReadAsync(VeloxJsonReader reader, object target);
 }
 
 /// <summary>

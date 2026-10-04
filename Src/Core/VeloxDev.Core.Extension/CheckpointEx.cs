@@ -111,8 +111,13 @@ public sealed class FileCheckpointStore : IExecutionCheckpointStore
             var directory = System.IO.Path.GetDirectoryName(Path);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-            // 同步写：本工程只有一个 netstandard2.0 目标，那里没有 WriteAllTextAsync。
+#if NET8_0_OR_GREATER
+            await File.WriteAllTextAsync(Path, json, cancellationToken).ConfigureAwait(false);
+#else
+            // netstandard2.0 / net461 没有 WriteAllTextAsync（那是 .NET Core 2.0 起的 API）。
+            // 这两档保留同步写：兼容优先，而且它们不是流式那条路的目标。
             File.WriteAllText(Path, json);
+#endif
         }
         finally
         {
@@ -126,7 +131,13 @@ public sealed class FileCheckpointStore : IExecutionCheckpointStore
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return File.Exists(Path) ? File.ReadAllText(Path).DeserializeCheckpoint() : null;
+            if (!File.Exists(Path)) return null;
+
+#if NET8_0_OR_GREATER
+            return (await File.ReadAllTextAsync(Path, cancellationToken).ConfigureAwait(false)).DeserializeCheckpoint();
+#else
+            return File.ReadAllText(Path).DeserializeCheckpoint();
+#endif
         }
         finally
         {

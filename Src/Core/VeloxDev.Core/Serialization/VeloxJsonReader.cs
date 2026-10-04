@@ -24,7 +24,7 @@ namespace VeloxDev.Serialization;
 /// One instance reads one document and is not thread-safe.
 /// </para>
 /// </remarks>
-public sealed class VeloxJsonReader
+public sealed partial class VeloxJsonReader
 {
     // 整份文档已在手上时用它（string 入口）。这条路上所有取值都退化成直接索引，且从不续读。
     private readonly string? _text;
@@ -154,6 +154,21 @@ public sealed class VeloxJsonReader
 
     private void Fill(int floorAbs, int count)
     {
+        PrepareSpace(floorAbs, count);
+
+        while (!_sourceComplete && _origin + _length < _position + count)
+        {
+            var read = _reader!.Read(_window, _length, _window.Length - _length);
+            if (read == 0) { _sourceComplete = true; break; }
+
+            _length += read;
+        }
+    }
+
+    // 压缩 + 增长：让窗口从 _position 起装得下 count 个字符。同步与异步的续读共用它，
+    // 两边的差别只在「怎么把数据读进来」。
+    private void PrepareSpace(int floorAbs, int count)
+    {
         // 保留区下限：所有还活着的位置中最靠前的那个，它之前的字符一律丢弃。
         var keep = Math.Min(_position, floorAbs);
         if (_memberHeld) keep = Math.Min(keep, _memberStart);
@@ -170,14 +185,6 @@ public sealed class VeloxJsonReader
         // 一个 token 比整个窗口还长就增长 —— 「O(最大单个 token)」这条预算指的就是这里。
         var needed = (_position - _origin) + count;
         if (needed > _window.Length) Array.Resize(ref _window, Math.Max(needed, _window.Length * 2));
-
-        while (!_sourceComplete && _origin + _length < _position + count)
-        {
-            var read = _reader!.Read(_window, _length, _window.Length - _length);
-            if (read == 0) { _sourceComplete = true; break; }
-
-            _length += read;
-        }
     }
 
     // 取值方法都要调它：那个名字已经被消费掉了，压缩时不必再保。

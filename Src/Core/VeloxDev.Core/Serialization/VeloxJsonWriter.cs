@@ -20,17 +20,34 @@ namespace VeloxDev.Serialization;
 /// contract reports them, and ends the object; the primitives here decide everything about shape.
 /// </para>
 /// <para>
+/// <b>Everything is appended to an internal buffer first.</b> The synchronous write methods hand that buffer to
+/// the <see cref="TextWriter"/> as it fills; the asynchronous ones (<c>*Async</c>, in the companion file) await
+/// the handover instead, so a stream writer can put every actual I/O on the async path. Buffering changes when
+/// characters reach the output, never which characters — the frozen bytes are unaffected.
+/// </para>
+/// <para>
 /// The writer is single-use and not thread-safe: one instance owns one output and one reference table.
 /// </para>
 /// </remarks>
-public sealed class VeloxJsonWriter
+public sealed partial class VeloxJsonWriter
 {
+    private const int FlushThreshold = 4096;
+
     private readonly TextWriter _writer;
     private readonly Dictionary<object, int> _references = new(ReferenceComparer.Instance);
     private int _nextReferenceId = 1;
     private readonly bool _indented;
     private int _depth;
     private bool _hasMember;
+
+    // 只有异步写入器会给它分配：同步路径从不缓冲，为它留一份 16 KB 是每个小文档都要付的钱
+    // （2 节点那份文档的分配量因此涨了近一半）。
+    private char[] _buffer = [];
+    private int _buffered;
+
+    // 异步模式下 WriteRaw 只增长缓冲、绝不自己刷 —— 刷盘点由异步方法用 await 负责。
+    // 否则一个超长字符串会在异步路径上触发一次同步 I/O。
+    private readonly bool _async;
 
     // 缩进按层预生成到 64 层。原先的写法是每行每层写一次 "  "，一层一次虚调用；现在每行固定两次写
     // （换行、缩进），与深度无关。超过 64 层就退回循环 —— 极深的文档要的是正确，不是快。
@@ -55,6 +72,15 @@ public sealed class VeloxJsonWriter
     {
         _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         _indented = indented;
+    }
+
+    // 异步写入器：同样的造型，只是把写入落进自己的缓冲，好让「刷」成为一个可以 await 的点。
+    internal VeloxJsonWriter(TextWriter writer, bool indented, bool async)
+        : this(writer, indented)
+    {
+        _async = async;
+
+        if (async) _buffer = new char[FlushThreshold * 2];
     }
 
     /// <summary>How many references have been handed out so far; the next one gets this id.</summary>
@@ -257,9 +283,18 @@ public sealed class VeloxJsonWriter
 
         // 必须是 Environment.NewLine，不能图快写成 "\n"：黄金文件在索引里是 LF、工作区里是 CRLF，
         // 精确比较的那道闸（SerializationGoldenTests）会当场发现。见 memory/modules/Serialization。
-        _writer.Write(Environment.NewLine);
+        var cached = _depth < Indents.Length ? Indents[_depth] : null;
 
-        if (_depth < Indents.Length) _writer.Write(Indents[_depth]);
+        if (_async)
+        {
+            Append(Environment.NewLine);
+            if (cached is not null) Append(cached);
+            else for (var i = 0; i < _depth; i++) Append("  ");
+            return;
+        }
+
+        _writer.Write(Environment.NewLine);
+        if (cached is not null) _writer.Write(cached);
         else for (var i = 0; i < _depth; i++) _writer.Write("  ");
     }
 
@@ -280,12 +315,79 @@ public sealed class VeloxJsonWriter
         _hasMember = true;
     }
 
-    private void WriteRaw(char value) => _writer.Write(value);
-    private void WriteRaw(string value) => _writer.Write(value);
+    // ── 缓冲 ──────────────────────────────────────────────────────────────────────────────────────────
 
-    // 转义规则只有一份，在 VeloxJsonText —— JSON 树那条路走的是同一个函数。之前这里与它各有一份拷贝，
-    // 也就是说「文档怎么拼」有两个地方可以开始分叉。
-    private void WriteEscaped(string value) => VeloxJsonText.Escape(_writer, value);
+    // 只有异步写入器用缓冲：它需要「填满」成为一个可以 await 的点。
+    // 同步写入器直接写进 TextWriter —— 那本来就是它一直在做的事，加了缓冲只会改变字符到达输出的时机，
+    // 那是直接使用本类的调用方看得见的行为，不是一个可以顺手改掉的细节。
+
+    // 交出缓冲。异步面在 *Async 方法开头 await 异步版；同步面没有缓冲，这里什么都不做。
+    internal void FlushBuffer()
+    {
+        if (!_async || _buffered == 0) return;
+
+        _writer.Write(_buffer, 0, _buffered);
+        _buffered = 0;
+    }
+
+    private void Append(char value)
+    {
+        if (_buffered == _buffer.Length) Grow(_buffered + 1);
+
+        _buffer[_buffered++] = value;
+    }
+
+    private void Append(string value)
+    {
+        if (_buffered + value.Length > _buffer.Length) Grow(_buffered + value.Length);
+
+        value.CopyTo(0, _buffer, _buffered, value.Length);
+        _buffered += value.Length;
+    }
+
+    private void Grow(int needed)
+    {
+        var size = _buffer.Length;
+        while (size < needed) size *= 2;
+
+        Array.Resize(ref _buffer, size);
+    }
+
+    private void WriteRaw(char value)
+    {
+        if (_async) Append(value);
+        else _writer.Write(value);
+    }
+
+    private void WriteRaw(string value)
+    {
+        if (_async) Append(value);
+        else _writer.Write(value);
+    }
+
+    // 转义拼法只有一份（VeloxJsonText.EscapeSequence）；这里只决定往哪儿落 —— 直接写，或者追加进缓冲。
+    private void WriteEscaped(string value)
+    {
+        if (!_async) { VeloxJsonText.Escape(_writer, value); return; }
+
+        // 缓冲路径：没有转义字符的字符串整串一次追加 —— 文档里绝大多数都是这种。
+        var start = 0;
+        var index = VeloxJsonText.IndexOfEscapable(value, 0);
+
+        if (index < 0) { Append(value); return; }
+
+        while (index >= 0)
+        {
+            if (index > start) Append(value.Substring(start, index - start));
+
+            Append(VeloxJsonText.EscapeSequence(value[index])!);
+
+            start = index + 1;
+            index = VeloxJsonText.IndexOfEscapable(value, start);
+        }
+
+        if (start < value.Length) Append(value.Substring(start));
+    }
 
     /// <summary>Compares by identity: the reference table tracks the object, not its equality.</summary>
     private sealed class ReferenceComparer : IEqualityComparer<object>

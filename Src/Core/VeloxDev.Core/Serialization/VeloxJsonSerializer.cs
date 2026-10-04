@@ -18,7 +18,7 @@ namespace VeloxDev.Serialization;
 /// <see cref="VeloxJsonWriter"/> for what that means in detail.
 /// </para>
 /// </remarks>
-public static class VeloxJsonSerializer
+public static partial class VeloxJsonSerializer
 {
     /// <summary>
     /// Members whose declared type is one of these are left out of the document, whatever their value.
@@ -84,7 +84,11 @@ public static class VeloxJsonSerializer
 
         try
         {
-            WriteValue(new VeloxJsonWriter(output, indented), value, null);
+            var writer = new VeloxJsonWriter(output, indented);
+            WriteValue(writer, value, null);
+
+            // 写入器自己有缓冲，收尾要把它交出去。
+            writer.FlushBuffer();
         }
         finally
         {

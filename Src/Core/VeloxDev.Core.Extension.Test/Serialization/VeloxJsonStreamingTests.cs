@@ -185,4 +185,68 @@ public class VeloxJsonStreamingTests
             return VeloxJsonSerializer.ReadValue(reader, typeof(TreeDefaultViewModel), null);
         }
     }
+
+    // ── 异步面 ────────────────────────────────────────────────────────────────────────────────────────
+    // 同一批语料在异步读写器上再跑一遍。生成器为每个类型产出同步与异步两套，两条路必须同义 ——
+    // 它们各自独立演化过一次就够受了，这几条测试就是把它们钉在一起的那颗钉子。
+
+    [TestMethod]
+    [DataRow(1)]
+    [DataRow(2)]
+    [DataRow(3)]
+    [DataRow(7)]
+    [DataRow(64)]
+    public async Task EveryChunkSize_ReproducesTheFrozenDocument_OnTheAsyncPath(int chunk)
+    {
+        foreach (var (name, type) in Corpus)
+        {
+            var frozen = Golden(name);
+
+            var restored = await VeloxJsonSerializer.DeserializeAsync(new ChunkedReader(frozen, chunk), type);
+
+            Assert.IsNotNull(restored, $"{name}: chunk {chunk} produced nothing on the async path");
+            Assert.AreEqual(frozen, Reserialize(restored), $"{name}: chunk {chunk} changed the document on the async path");
+        }
+    }
+
+    [TestMethod]
+    public async Task TheAsyncWriter_ProducesTheSameBytesAsTheSyncOne()
+    {
+        foreach (var (name, type) in Corpus)
+        {
+            var graph = VeloxJsonSerializer.Deserialize(Golden(name), type);
+            Assert.IsNotNull(graph);
+
+            using var text = new StringWriter();
+            await VeloxJsonSerializer.WriteToAsync(text, graph);
+
+            Assert.AreEqual(
+                VeloxJsonSerializer.Serialize(graph), text.ToString(),
+                $"{name}: the async writer disagrees with the sync one");
+        }
+    }
+
+    [TestMethod]
+    public async Task AStreamRoundTrip_MatchesTheFrozenDocument()
+    {
+        var frozen = Golden("tree");
+        var graph = VeloxJsonSerializer.Deserialize(frozen, typeof(TreeDefaultViewModel));
+        Assert.IsNotNull(graph);
+
+        using var stream = new MemoryStream();
+        await VeloxJsonSerializer.WriteToAsync(stream, graph);
+
+        stream.Position = 0;
+        var restored = await VeloxJsonSerializer.DeserializeAsync(stream, typeof(TreeDefaultViewModel));
+
+        Assert.IsNotNull(restored, "the stream round trip produced nothing");
+        Assert.AreEqual(frozen, VeloxJsonSerializer.Serialize(restored), "the stream round trip changed the document");
+    }
+
+    [TestMethod]
+    public async Task TheAsyncEntryPoints_RejectAnEmptySourceTheSameWayTheSyncOnesDo()
+    {
+        await Assert.ThrowsExactlyAsync<ArgumentException>(
+            () => VeloxJsonSerializer.DeserializeAsync(new StringReader(string.Empty), typeof(TreeDefaultViewModel)));
+    }
 }

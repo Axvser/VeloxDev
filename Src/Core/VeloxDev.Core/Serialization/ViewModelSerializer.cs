@@ -326,12 +326,16 @@ public static class ViewModelSerializer
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // 逐段写进 writer，不再先造一整份字符串 —— 这条路上内存有界。
-        VeloxJsonSerializer.WriteTo(writer, workflow, options?.Formatting != VeloxJsonFormat.Compact, options?.ExcludedPropertyTypes);
-        await writer.FlushAsync().ConfigureAwait(false);
+        // 逐段写进 writer，不再先造一整份字符串；每一次把缓冲交给输出的 I/O 都是 await 的。
+        await VeloxJsonSerializer.WriteToAsync(
+            writer, workflow, options?.Formatting != VeloxJsonFormat.Compact, options?.ExcludedPropertyTypes).ConfigureAwait(false);
     }
 
     /// <summary>Asynchronously deserializes a workflow object from a <see cref="TextReader"/>.</summary>
+    /// <remarks>
+    /// Streams: the document is pulled as the cursor advances rather than read to the end first, and every pull
+    /// is awaited.
+    /// </remarks>
     public static async Task<T> DeserializeFromTextReaderAsync<T>(this TextReader reader, SerializationOptions? options = null, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
     {
@@ -339,13 +343,16 @@ public static class ViewModelSerializer
             throw new ArgumentNullException(nameof(reader), "Source reader cannot be null");
 
         cancellationToken.ThrowIfCancellationRequested();
-        var json = await reader.ReadToEndAsync().ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        return DeserializeCore<T>(json, options);
+
+        var restored = (T?)await VeloxJsonSerializer.DeserializeAsync(reader, typeof(T)).ConfigureAwait(false);
+        if (restored == null)
+            throw new InvalidOperationException($"Deserialization of JSON to type {typeof(T).Name} resulted in null. The JSON may be invalid or incompatible with the target type.");
+
+        return restored;
     }
 
     /// <summary>
-    /// Asynchronously serializes a workflow object to a stream.
+    /// Asynchronously serializes a workflow object to a UTF-8 stream, without holding the document in memory.
     /// </summary>
     public static async Task SerializeToStreamAsync<T>(this T workflow, Stream stream, SerializationOptions? options = null, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
@@ -358,12 +365,13 @@ public static class ViewModelSerializer
             throw new ArgumentNullException(nameof(workflow));
 
         cancellationToken.ThrowIfCancellationRequested();
-        using var streamWriter = new StreamWriter(stream, new UTF8Encoding(false), 1024, true);
-        await workflow.SerializeToTextWriterAsync(streamWriter, options, cancellationToken).ConfigureAwait(false);
+
+        await VeloxJsonSerializer.WriteToAsync(
+            stream, workflow, options?.Formatting != VeloxJsonFormat.Compact, options?.ExcludedPropertyTypes).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Asynchronously deserializes a workflow object from a stream.
+    /// Asynchronously deserializes a workflow object from a UTF-8 stream, without holding the document in memory.
     /// </summary>
     public static async Task<T> DeserializeFromStreamAsync<T>(this Stream stream, SerializationOptions? options = null, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
@@ -373,8 +381,13 @@ public static class ViewModelSerializer
         if (!stream.CanRead)
             throw new InvalidOperationException("Source stream is not readable");
 
-        using var streamReader = new StreamReader(stream, Encoding.UTF8, true, 1024, true);
-        return await streamReader.DeserializeFromTextReaderAsync<T>(options, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var restored = (T?)await VeloxJsonSerializer.DeserializeAsync(stream, typeof(T)).ConfigureAwait(false);
+        if (restored == null)
+            throw new InvalidOperationException($"Deserialization of JSON to type {typeof(T).Name} resulted in null. The JSON may be invalid or incompatible with the target type.");
+
+        return restored;
     }
 
     #endregion

@@ -60,13 +60,33 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine("/// </summary>");
             builder.AppendLine($"internal sealed class {type.WriterClassName} : global::{SerializationNamespace}.IVeloxJsonWriter");
             builder.AppendLine("{");
-            builder.AppendLine("    public void Write(");
+            WriteWriterBody(builder, type, target, async: false);
+            builder.AppendLine();
+            WriteWriterBody(builder, type, target, async: true);
+            builder.AppendLine("}");
+        }
+
+        /// <summary>
+        /// Emits one of the two write methods: the synchronous one, or the asynchronous one.
+        /// </summary>
+        /// <remarks>
+        /// They are the same sequence of member writes; only the calls differ, and only because a stream output
+        /// has to await its handovers. Emitting both keeps the in-memory path free of state machines it would
+        /// never need — the asynchronous one is reached only through a stream or reader entry point.
+        /// </remarks>
+        private static void WriteWriterBody(StringBuilder builder, VeloxJsonType type, string target, bool async)
+        {
+            var wait = async ? "await " : string.Empty;
+            var configure = async ? ".ConfigureAwait(false)" : string.Empty;
+            var returns = async ? "async global::System.Threading.Tasks.Task" : "void";
+
+            builder.AppendLine($"    public {returns} {(async ? "WriteAsync" : "Write")}(");
             builder.AppendLine($"        global::{SerializationNamespace}.VeloxJsonWriter writer,");
             builder.AppendLine("        object value,");
             builder.AppendLine("        global::System.Type? declaredType)");
             builder.AppendLine("    {");
             builder.AppendLine($"        var t = ({target})value;");
-            builder.AppendLine("        if (!writer.WriteStartObject(t, declaredType)) return;");
+            builder.AppendLine($"        if (!{wait}writer.{(async ? "WriteStartObjectAsync" : "WriteStartObject")}(t, declaredType){configure}) return;");
             builder.AppendLine();
 
             // 钩子只在真的写这一个实例时跑 —— 写成 $ref 的那次没有内容要准备。
@@ -77,7 +97,7 @@ namespace VeloxDev.Generators.Writers
 
             foreach (var member in type.Members)
             {
-                WriteMember(builder, member);
+                WriteMember(builder, member, async);
             }
 
             builder.AppendLine();
@@ -87,9 +107,8 @@ namespace VeloxDev.Generators.Writers
                 builder.AppendLine($"        ((global::{SerializationNamespace}.IVeloxJsonSerialized)t).OnSerialized();");
             }
 
-            builder.AppendLine("        writer.WriteEndObject();");
+            builder.AppendLine($"        {wait}writer.{(async ? "WriteEndObjectAsync" : "WriteEndObject")}(){configure};");
             builder.AppendLine("    }");
-            builder.AppendLine("}");
         }
 
         /// <summary>
@@ -100,16 +119,18 @@ namespace VeloxDev.Generators.Writers
         /// container, a registered object — is decided there from the declared type and the value, so the
         /// generated code stays one line per member and the format's rules live in exactly one place.
         /// </remarks>
-        private static void WriteMember(StringBuilder builder, VeloxJsonMember member)
+        private static void WriteMember(StringBuilder builder, VeloxJsonMember member, bool async)
         {
             var declaredType = FullTypeOf(member.DeclaredType);
+            var wait = async ? "await " : string.Empty;
+            var configure = async ? ".ConfigureAwait(false)" : string.Empty;
 
             // 被排除的成员连名字都不写：快照模式靠这条把节点引用挡在文件外。
             builder.AppendLine($"        if (!global::{SerializationNamespace}.VeloxJsonSerializer.IsExcluded(typeof({declaredType})))");
             builder.AppendLine("        {");
-            builder.AppendLine($"            writer.WriteMemberName(\"{Escape(member.Name)}\");");
-            builder.AppendLine($"            global::{SerializationNamespace}.VeloxJsonSerializer.WriteValue(");
-            builder.AppendLine($"                writer, t.{member.Name}, typeof({declaredType}));");
+            builder.AppendLine($"            {wait}writer.{(async ? "WriteMemberNameAsync" : "WriteMemberName")}(\"{Escape(member.Name)}\"){configure};");
+            builder.AppendLine($"            {wait}global::{SerializationNamespace}.VeloxJsonSerializer.{(async ? "WriteValueAsync" : "WriteValue")}(");
+            builder.AppendLine($"                writer, t.{member.Name}, typeof({declaredType})){configure};");
             builder.AppendLine("        }");
         }
 
@@ -144,7 +165,26 @@ namespace VeloxDev.Generators.Writers
             }
 
             builder.AppendLine();
-            builder.AppendLine($"    public void Read(global::{SerializationNamespace}.VeloxJsonReader reader, object target)");
+            WriteReaderBody(builder, type, target, async: false);
+            builder.AppendLine();
+            WriteReaderBody(builder, type, target, async: true);
+            builder.AppendLine("}");
+        }
+
+        /// <summary>
+        /// Emits one of the two read methods: the synchronous one, or the asynchronous one.
+        /// </summary>
+        /// <remarks>
+        /// Same dispatch, same order; the asynchronous one awaits its refills. <c>MemberNameEquals</c> stays
+        /// synchronous on both — comparing a name in the buffer does no I/O.
+        /// </remarks>
+        private static void WriteReaderBody(StringBuilder builder, VeloxJsonType type, string target, bool async)
+        {
+            var wait = async ? "await " : string.Empty;
+            var configure = async ? ".ConfigureAwait(false)" : string.Empty;
+            var returns = async ? "async global::System.Threading.Tasks.Task" : "void";
+
+            builder.AppendLine($"    public {returns} {(async ? "ReadAsync" : "Read")}(global::{SerializationNamespace}.VeloxJsonReader reader, object target)");
             builder.AppendLine("    {");
             builder.AppendLine($"        var t = ({target})target;");
             builder.AppendLine();
@@ -156,7 +196,7 @@ namespace VeloxDev.Generators.Writers
             // 成员名不落成字符串：NextMember() 只定位，MemberNameEquals 就地拿原文与字面量比。
             // 换掉原来的 `while (NextMember(out var name)) switch (name)` —— 那条每读一个成员都要
             // 先分配一个字符串，只为和字面量比一次就丢掉。
-            builder.AppendLine("        while (reader.NextMember())");
+            builder.AppendLine($"        while ({wait}reader.{(async ? "NextMemberAsync" : "NextMember")}(){configure})");
             builder.AppendLine("        {");
 
             var first = true;
@@ -165,16 +205,17 @@ namespace VeloxDev.Generators.Writers
                 // 每个分支各起一个作用域：多个分支都用到模式变量的话会撞名。
                 builder.AppendLine($"            {(first ? "if" : "else if")} (reader.MemberNameEquals(\"{Escape(member.Name)}\"))");
                 builder.AppendLine("            {");
-                builder.AppendLine($"                {ReadMember(member)}");
+                builder.AppendLine($"                {ReadMember(member, async)}");
                 builder.AppendLine("            }");
 
                 first = false;
             }
 
             // 读不懂的成员跳过，而不是失败：旧版本读新文档时该继续走。
-            builder.AppendLine(first ? "            reader.SkipValue();" : "            else reader.SkipValue();");
+            var skip = $"{wait}reader.{(async ? "SkipValueAsync" : "SkipValue")}(){configure};";
+            builder.AppendLine(first ? $"            {skip}" : $"            else {skip}");
             builder.AppendLine("        }");
-            builder.AppendLine("        reader.FinishObject();");
+            builder.AppendLine($"        {wait}reader.{(async ? "FinishObjectAsync" : "FinishObject")}(){configure};");
             builder.AppendLine();
 
             if (Implements(type, "IVeloxJsonDeserialized"))
@@ -184,70 +225,81 @@ namespace VeloxDev.Generators.Writers
             }
 
             builder.AppendLine("    }");
-            builder.AppendLine("}");
         }
 
         /// <summary>Reads one member's value back into the target.</summary>
-        private static string ReadMember(VeloxJsonMember member)
+        private static string ReadMember(VeloxJsonMember member, bool async)
         {
             var access = "t." + member.Name;
+            var wait = async ? "await " : string.Empty;
+            var configure = async ? ".ConfigureAwait(false)" : string.Empty;
+            var skip = $"{wait}reader.{(async ? "SkipValueAsync" : "SkipValue")}(){configure};";
 
             switch (member.Kind)
             {
                 case VeloxJsonMemberKind.Collection:
                     // 只有可变列表能追加；只读集合这一版读不回来，跳过而不是假装成功。
                     if (!ImplementsInterface(member.DeclaredType, "System.Collections.IList"))
-                        return "reader.SkipValue();";
+                        return skip;
 
                     // 追加而不是替换：构造函数可能已经填过，契约一贯是往里加。
-                    return $"if ({access} is {{ }} list) global::{SerializationNamespace}.VeloxJsonSerializer.ReadArray(" +
-                           $"reader, list, typeof({FullTypeOf(member.ElementType!)})); else reader.SkipValue();";
+                    return $"if ({access} is {{ }} list) {wait}global::{SerializationNamespace}.VeloxJsonSerializer" +
+                           $".{(async ? "ReadArrayAsync" : "ReadArray")}(" +
+                           $"reader, list, typeof({FullTypeOf(member.ElementType!)})){configure}; else {skip}";
 
                 case VeloxJsonMemberKind.Dictionary:
-                    return $"if ({access} is {{ }} map) global::{SerializationNamespace}.VeloxJsonSerializer.ReadMap(" +
+                    return $"if ({access} is {{ }} map) {wait}global::{SerializationNamespace}.VeloxJsonSerializer" +
+                           $".{(async ? "ReadMapAsync" : "ReadMap")}(" +
                            $"reader, map, typeof({FullTypeOf(FirstTypeArgument(member.DeclaredType))}), " +
-                           $"typeof({FullTypeOf(member.ElementType!)}), interfaceKeys: {(member.InterfaceKeyed ? "true" : "false")}); " +
-                           "else reader.SkipValue();";
+                           $"typeof({FullTypeOf(member.ElementType!)}), interfaceKeys: {(member.InterfaceKeyed ? "true" : "false")}){configure}; " +
+                           $"else {skip}";
 
                 case VeloxJsonMemberKind.Scalar:
-                    return $"{access} = {ScalarRead(member.DeclaredType)};";
+                    return $"{access} = {ScalarRead(member.DeclaredType, async)};";
 
                 default:
-                    return $"{access} = ({FullTypeOf(member.DeclaredType)})global::{SerializationNamespace}.VeloxJsonSerializer" +
-                           $".ReadValue(reader, typeof({FullTypeOf(member.DeclaredType)}), {access})!;";
+                    return $"{access} = ({FullTypeOf(member.DeclaredType)}){wait}global::{SerializationNamespace}.VeloxJsonSerializer" +
+                           $".{(async ? "ReadValueAsync" : "ReadValue")}(reader, typeof({FullTypeOf(member.DeclaredType)}), {access}){configure}!;";
             }
         }
 
         /// <summary>The read that produces one scalar, chosen from its declared type.</summary>
-        private static string ScalarRead(ITypeSymbol type)
+        private static string ScalarRead(ITypeSymbol type, bool async)
         {
+            var wait = async ? "await " : string.Empty;
+            var configure = async ? ".ConfigureAwait(false)" : string.Empty;
+
+            string Call(string name) => $"{wait}reader.{name}{(async ? "Async" : string.Empty)}(){configure}";
+
             // 可空值类型：缺值时文档里就是 null，读法与底层类型一样，只是结果可能为空。
             var underlying = VeloxJsonModelBuilder.UnwrapNullable(type);
             if (!SymbolEqualityComparer.Default.Equals(underlying, type))
-                return $"(reader.NextIsNull() ? null : {ScalarRead(underlying)})";
+                return $"({Call("NextIsNull")} ? null : {ScalarRead(underlying, async)})";
 
             if (type.TypeKind == TypeKind.Enum)
-                return $"({FullTypeOf(type)})reader.ReadInt64()";
+                return $"({FullTypeOf(type)}){Call("ReadInt64")}";
 
             return type.SpecialType switch
             {
-                SpecialType.System_String => "reader.ReadString()",
-                SpecialType.System_Int32 => "reader.ReadInt32()",
-                SpecialType.System_Int64 => "reader.ReadInt64()",
-                SpecialType.System_Double => "reader.ReadDouble()",
-                SpecialType.System_Single => "reader.ReadSingle()",
-                SpecialType.System_Decimal => "reader.ReadDecimal()",
-                SpecialType.System_Boolean => "reader.ReadBoolean()",
-                SpecialType.System_Char => "reader.ReadText()[0]",
-                SpecialType.System_Byte => "(byte)reader.ReadInt32()",
-                SpecialType.System_Int16 => "(short)reader.ReadInt32()",
-                SpecialType.System_Object => $"global::{SerializationNamespace}.VeloxJsonSerializer.ReadUnknown(reader)",
+                SpecialType.System_String => Call("ReadString"),
+                SpecialType.System_Int32 => Call("ReadInt32"),
+                SpecialType.System_Int64 => Call("ReadInt64"),
+                SpecialType.System_Double => Call("ReadDouble"),
+                SpecialType.System_Single => Call("ReadSingle"),
+                SpecialType.System_Decimal => Call("ReadDecimal"),
+                SpecialType.System_Boolean => Call("ReadBoolean"),
+                SpecialType.System_Char => $"({Call("ReadText")})[0]",
+                SpecialType.System_Byte => $"(byte)({Call("ReadInt32")})",
+                SpecialType.System_Int16 => $"(short)({Call("ReadInt32")})",
+                SpecialType.System_Object =>
+                    $"{wait}global::{SerializationNamespace}.VeloxJsonSerializer.{(async ? "ReadUnknownAsync" : "ReadUnknown")}(reader){configure}",
                 _ => type.ToDisplayString() switch
                 {
-                    "System.Guid" => "reader.ReadGuid()",
-                    "System.DateTime" => "global::System.DateTime.Parse(reader.ReadText(), global::System.Globalization.CultureInfo.InvariantCulture)",
-                    "System.TimeSpan" => "global::System.TimeSpan.Parse(reader.ReadText(), global::System.Globalization.CultureInfo.InvariantCulture)",
-                    _ => $"({FullTypeOf(type)})global::{SerializationNamespace}.VeloxJsonSerializer.ReadValue(reader, typeof({FullTypeOf(type)}), null)!",
+                    "System.Guid" => Call("ReadGuid"),
+                    "System.DateTime" => $"global::System.DateTime.Parse({Call("ReadText")}, global::System.Globalization.CultureInfo.InvariantCulture)",
+                    "System.TimeSpan" => $"global::System.TimeSpan.Parse({Call("ReadText")}, global::System.Globalization.CultureInfo.InvariantCulture)",
+                    _ => $"({FullTypeOf(type)}){wait}global::{SerializationNamespace}.VeloxJsonSerializer" +
+                         $".{(async ? "ReadValueAsync" : "ReadValue")}(reader, typeof({FullTypeOf(type)}), null){configure}!",
                 },
             };
         }
