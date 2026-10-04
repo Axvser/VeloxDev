@@ -29,13 +29,12 @@
 
 ---
 
-## 二、事件参数族：四个类型，各有各的读者
+## 二、事件参数族：三个类型，各有各的读者
 
 | 类型 | 谁产生 | 谁读 | 状态 |
 |---|---|---|---|
-| `TimeLineEventArgs`（`TimeLineEventArgs.cs`） | 抽象基类 | — | `virtual bool Handled`，**全仓库零 `override`**（grep `override bool Handled` 在 `Src/`+`Examples/` 下无命中） |
+| `TimeLineEventArgs`（`TimeLineEventArgs.cs`） | 抽象基类 | — | `virtual bool Handled`，**全仓库零 `override`**，现在也**没有候选者**了（唯一那个用 `new` 遮蔽它的类型已于 2026-10-04 删除，见 §八·5） |
 | `FrameEventArgs`（`FrameEventArgs.cs`） | `TickManager.CreateFrameEventArgs`（`:826`） | 五个 `partial void` 钩子 | 四个字段全 `internal set`，外部只能读 |
-| `ThreadSafeFrameEventArgs`（`ThreadSafeFrameEventArgs.cs`） | **没有人** | **没有人** | 见 §八·5 |
 | `TransitionEventArgs`（`TransitionEventArgs.cs`） | `TransitionDiagnostics`（`:18`、`:33`）；另有一处 `Transition.cs:348` | 用户挂在 effect 上的 `Error`/`Warn` 处理器 | `sealed`，`Stage`/`Message`/`Exception` 全 `init` |
 
 **`FrameEventArgs` 的四个字段各有来源，都不是随手填的：**
@@ -236,7 +235,8 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 2. **只贴 `[Tickable]` 什么都不会发生。** 特性只被**生成器**读（`TickWriter.cs:20-51`），运行时的 `TickManager` **从不反射**这个特性。要真正跑起来，必须调生成的 `InitializeTickable()`。仓库内唯一的运行期读法是**没有**——对照组：`Analizer.cs:103` 的 `TriggerAttributes` 里那一项只决定生成器是否介入。
 3. **`[Tickable]` 上的 `fps` 只在第一次注册时入队一次。** 生成器把它展开成 `TickManager.SetTargetFPS({fps}, "{Channel}")` **放在 `RegisterBehaviour` 之前**（`TickWriter.cs:81-89`），`fps >= 1` 时才发这句。而 `fps = -1`（默认）时**整句不生成**。所以「特性里写了 fps 却没生效」先看这个值是不是 `-1`；`TreeHelper` 用的是 `fps: 10`（`TreeHelper.cs:33`）。
 4. **对一条从未被创建（或从未被启动）的 channel 调 `SetTargetFPS` 是静默无效的**：它会**创建** channel（`GetOrCreateChannel`）并把请求**入队**，但队列只有更新泵会排空，没启动就没有读者。WPF demo 的旧版正是踩了这个——三个组件注册在 default channel，却调 `SetTargetFPS(30, "game")`（`Examples/Tickable/WPF/Demo/SimState.cs:11-12` 的原注释）。
-5. **`ThreadSafeFrameEventArgs` 是死的，而且它的遮蔽是危险的。** 全仓库零生产者、零消费者（grep 只命中定义与 `Src/Core/VeloxDev.Core.Test/TimeLine/TimeLineEventArgsTests.cs`）。它的 `public new bool Handled`（`ThreadSafeFrameEventArgs.cs:10`）**遮蔽**基类的 `virtual bool Handled`——若真有代码按 `TimeLineEventArgs` 引用同一个对象去读 `Handled`，读到的是基类字段，永远是 `false`。要用它，先把它接进泵（`CreateFrameEventArgs` 只造 `FrameEventArgs`，`:828`），否则它只是一份带锁的摆设。
+5. **`ThreadSafeFrameEventArgs` 已于 2026-10-04 删除 —— 它是一份「带锁的摆设」，而且那个锁永远走不到。** 它 `public new bool Handled` **遮蔽**基类的 `virtual bool Handled`，而泵的读写都在 `FrameEventArgs` 静态类型上（`ExecuteBehaviorsUpdateSync(FrameEventArgs frameArgs, …)` 的 `:696` 读、`CreateFrameEventArgs` 的 `:833` 写），所以即便把实例塞进池子，走上来的也是基类那个**没锁**的属性。何况它连池子都进不了：池的声明就是 `ObjectPool<FrameEventArgs>`（`:154`），全仓除定义与三条测试外零引用，生成器也不产出它。
+   ⇒ **记住这个形状**：`virtual` 留着是给 `override` 的，用 `new` 遮蔽等于让虚分派失效 —— 症状是「看起来有线程安全，实际读写的是另一个字段」，而且类型自己的单测**通过派生类型**访问，绿得毫无意义。要线程安全，这家的既有写法是 `Volatile.Read`（同一文件 `:835` 读 `_targetFPS` 就是），比对每次读写进出 `lock` 更贴。
 6. **`Handled` 在 Update 里置上 = 本帧没有 LateUpdate。** 见 §三·1。这不是推断，是 `:712` 的循环体第一句 + 同一个 `frameArgs` 对象造成的确定结果。
 7. **`SafeExecute` 吞掉钩子异常**（`:941-944`，只写 `Debug.WriteLine`）。在钩子里做 `Dispatcher.Invoke` 之类的跨线程动作一旦抛，症状是「循环还在跑但界面停止更新，且哪儿都没有日志」。WPF demo 的钩子侧头部注释把这条写成了它的整体设计理由（`Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs:15`）。
 8. **`GetCachedWrappers` 有最长 1000ms 的陈旧窗口。** `_wrappersNeedSort` 为假且距上次检查不到 `MAX_CONFIG_CACHE_DURATION_MS` 时直接用旧数组（`:743-753`）。注册与注销都会置脏（`:802`、`:817`），所以正常路径上是即时的；但如果有人在别处直接改了 `_behaviors`，最坏要等 1 秒。

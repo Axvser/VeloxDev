@@ -35,40 +35,4 @@ public class TimeLineEventArgsTests
         Assert.IsFalse(args.Handled);
     }
 
-    // ───────── ThreadSafeFrameEventArgs ─────────
-
-    [TestMethod]
-    public void ThreadSafeFrameEventArgs_Handled_DefaultFalse()
-    {
-        var args = new ThreadSafeFrameEventArgs();
-        Assert.IsFalse(args.Handled);
-    }
-
-    [TestMethod]
-    public void ThreadSafeFrameEventArgs_Handled_ThreadSafe()
-    {
-        var args = new ThreadSafeFrameEventArgs();
-        var tasks = new List<Task>();
-        for (int i = 0; i < 100; i++)
-        {
-            tasks.Add(Task.Run(() =>
-            {
-                args.Handled = true;
-                _ = args.Handled;
-                args.Handled = false;
-            }));
-        }
-        Task.WaitAll(tasks.ToArray());
-        // No exception = thread-safe access works
-    }
-
-    [TestMethod]
-    public void ThreadSafeFrameEventArgs_Handled_SetAndGet()
-    {
-        var args = new ThreadSafeFrameEventArgs();
-        args.Handled = true;
-        Assert.IsTrue(args.Handled);
-        args.Handled = false;
-        Assert.IsFalse(args.Handled);
-    }
 }

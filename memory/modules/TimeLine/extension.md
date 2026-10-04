@@ -121,9 +121,8 @@
 | 扩展点 | 状态 | 依据 |
 |---|---|---|
 | `ExecuteOnMainThread` | **零调用者**。`Src/` + `Examples/` 下只有定义（`:242`）与静态转发（`:1087`）。且它的「Main」是 channel 的**更新线程**，不是 UI 线程 | grep `ExecuteOnMainThread` |
-| `ThreadSafeFrameEventArgs` | **零生产者、零消费者**。泵只造 `FrameEventArgs`（`:828`）。它的 `public new bool Handled` 还遮蔽了基类的虚属性，按基类引用读会永远读到 `false` | grep `ThreadSafeFrameEventArgs`（只命中定义与 `Src/Core/VeloxDev.Core.Test/TimeLine/TimeLineEventArgsTests.cs`） |
-| `TimeLineEventArgs.Handled` 是 `virtual` | **全仓库零 `override`**。它 `virtual` 而不是普通属性，本意大概是给 `ThreadSafeFrameEventArgs` 那种重写留位，但那个类用了 `new` | grep `override bool Handled` 无命中 |
+| `TimeLineEventArgs.Handled` 是 `virtual` | **全仓库零 `override`，而且现在没有候选者了**：唯一想重写它的 `ThreadSafeFrameEventArgs` 用了 `new` 遮蔽，已于 2026-10-04 删除。这个 `virtual` 今天纯属多余 —— 但删它是 API 变更，另说 | grep `override bool Handled` 无命中 |
 | `ITickable.Invoke*` 系列 | **只能由泵调**，手写实现在仓库内不存在。不要把它们当公开 API 用 | `TickManager.cs:701,717,733` 是唯一的调用点 |
 | 通道级 `_useAsyncLoopOverride` | 活的，但**只在 channel 未运行时能设**（`:252-253`） | — |
 
-**这意味着**：本模块真正活的扩展面只有「生成器 + 五个 `partial void` + `InitializeTickable`」这一条。`ExecuteOnMainThread` 与 `ThreadSafeFrameEventArgs` 是两条**建好了但没接上**的路——遇到「我需要从钩子回到 UI 线程」时，先看这两条是不是能接上，再接；不要因为「看起来有现成的」就假定它在工作。
+**这意味着**：本模块真正活的扩展面只有「生成器 + 五个 `partial void` + `InitializeTickable`」这一条。`ExecuteOnMainThread` 是唯一剩下那条**建好了但没接上**的路——遇到「我需要从钩子回到 UI 线程」时，先看它是不是能接上，再接；不要因为「看起来有现成的」就假定它在工作。（另一条同类的 `ThreadSafeFrameEventArgs` 已删除，理由见 `architecture.md` §八·5。）

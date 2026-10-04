@@ -79,7 +79,7 @@ Several classes may share one channel, and the channel is paused, re-timed, rest
 
 ⚙ `Examples/Tickable/WPF/Demo` — the working sample. The window itself is the tickable (`[Tickable(DemoChannel.Name)]` on `MainWindow`, in `MainWindow.Hooks.cs`); its two hooks integrate a ball each through `Update` and `FixedUpdate` so the two pumps can be compared, and the window half only polls, formats and draws. Close calls `CloseTickable()` and then a deliberately **un-awaited** `StopAsync` — the pumps are background threads, so awaiting would only make the close look stuck.
 
-⚙ `Src/Core/VeloxDev.Core/TimeLine/` — `TickableAttribute`, `TickManager`, `FrameEventArgs` (and its `TimeLineEventArgs` base), `ThreadSafeFrameEventArgs`.
+⚙ `Src/Core/VeloxDev.Core/TimeLine/` — `TickableAttribute`, `TickManager`, `FrameEventArgs` (and its `TimeLineEventArgs` base), `TransitionEventArgs`.
 
 ⚙ `Src/Core/VeloxDev.Core/Interfaces/Tickable/ITickable.cs` — what the generator implements for you. You only implement it by hand if you are replacing the generator, and then you own all seven members: `InitializeTickable`, `CloseTickable` and the five `Invoke…` forwarders.
 
