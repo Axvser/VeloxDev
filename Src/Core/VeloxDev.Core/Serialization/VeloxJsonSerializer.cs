@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Text;
 
 namespace VeloxDev.Serialization;
 
@@ -56,19 +57,9 @@ public static class VeloxJsonSerializer
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
 
-        var previous = _excludedTypes;
-        _excludedTypes = excludedTypes is { Count: > 0 } ? [.. excludedTypes] : null;
-
-        try
-        {
-            using var text = new StringWriter();
-            WriteTo(text, value, indented);
-            return text.ToString();
-        }
-        finally
-        {
-            _excludedTypes = previous;
-        }
+        using var text = new StringWriter();
+        WriteTo(text, value, indented, excludedTypes);
+        return text.ToString();
     }
 
     /// <summary>
@@ -79,12 +70,52 @@ public static class VeloxJsonSerializer
     /// <param name="indented">Whether to lay the document out over lines.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The value's type has no registered writer.</exception>
-    public static void WriteTo(TextWriter output, object value, bool indented = true)
+    public static void WriteTo(
+        TextWriter output,
+        object value,
+        bool indented = true,
+        System.Collections.Generic.IReadOnlyCollection<Type>? excludedTypes = null)
     {
         if (output is null) throw new ArgumentNullException(nameof(output));
         if (value is null) throw new ArgumentNullException(nameof(value));
 
-        WriteValue(new VeloxJsonWriter(output, indented), value, null);
+        var previous = _excludedTypes;
+        _excludedTypes = excludedTypes is { Count: > 0 } ? [.. excludedTypes] : null;
+
+        try
+        {
+            WriteValue(new VeloxJsonWriter(output, indented), value, null);
+        }
+        finally
+        {
+            _excludedTypes = previous;
+        }
+    }
+
+    /// <summary>
+    /// Writes a value as a UTF-8 document into <paramref name="output"/>, a piece at a time.
+    /// </summary>
+    /// <param name="output">Where the document is written. Left open.</param>
+    /// <param name="value">The value to write.</param>
+    /// <param name="indented">Whether to lay the document out over lines.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The value's type has no registered writer.</exception>
+    /// <remarks>
+    /// No whole-document buffer is built: the writer hands characters to a <see cref="StreamWriter"/> that
+    /// flushes to <paramref name="output"/> as it fills. UTF-8 without a byte order mark — the convention the
+    /// rest of the library follows for text it writes.
+    /// </remarks>
+    public static void WriteTo(
+        Stream output,
+        object value,
+        bool indented = true,
+        System.Collections.Generic.IReadOnlyCollection<Type>? excludedTypes = null)
+    {
+        if (output is null) throw new ArgumentNullException(nameof(output));
+        if (value is null) throw new ArgumentNullException(nameof(value));
+
+        using var writer = new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 8192, leaveOpen: true);
+        WriteTo(writer, value, indented, excludedTypes);
     }
 
     /// <summary>
@@ -133,11 +164,15 @@ public static class VeloxJsonSerializer
 
         if (value is System.Collections.IEnumerable sequence && value is not string)
         {
+            // 元素类型只取决于声明类型，提到循环外。原先每个元素都重算一次，而 ElementTypeOf 里的
+            // GetGenericArguments() 每次都会分配一个 Type[] —— 一个序列就是 N 个数组。
+            var elementType = ElementTypeOf(declaredType);
+
             writer.WriteStartArray();
             foreach (var item in sequence)
             {
                 writer.WriteNextElement();
-                WriteValue(writer, item, ElementTypeOf(declaredType));
+                WriteValue(writer, item, elementType);
             }
             writer.WriteEndArray();
             return;
@@ -234,6 +269,62 @@ public static class VeloxJsonSerializer
         if (type is null) throw new ArgumentNullException(nameof(type));
 
         return ReadValue(new VeloxJsonReader(json), type, null);
+    }
+
+    /// <summary>
+    /// Reads a document from a source that does not have to hold all of it.
+    /// </summary>
+    /// <typeparam name="T">The root type the document was written from.</typeparam>
+    /// <param name="reader">The source. Read no further than the parser needs, and left open.</param>
+    /// <returns>The graph, or <see langword="null"/> when the document held the JSON literal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Peak memory is the reader's buffer plus the graph, rather than the whole document. The format only ever
+    /// refers back to objects it has already written, so one forward pass suffices.
+    /// </remarks>
+    public static T? Deserialize<T>(TextReader reader) where T : class
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+
+        return (T?)ReadValue(new VeloxJsonReader(reader), typeof(T), null);
+    }
+
+    /// <summary>Reads a document from a source that does not have to hold all of it, into a run-time type.</summary>
+    /// <param name="reader">The source. Left open.</param>
+    /// <param name="type">The root type.</param>
+    /// <returns>The graph, or <see langword="null"/> when the document held the JSON literal.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static object? Deserialize(TextReader reader, Type type)
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+        if (type is null) throw new ArgumentNullException(nameof(type));
+
+        return ReadValue(new VeloxJsonReader(reader), type, null);
+    }
+
+    /// <summary>Reads a UTF-8 document from a stream that does not have to hold all of it.</summary>
+    /// <typeparam name="T">The root type the document was written from.</typeparam>
+    /// <param name="stream">The source. Left open, and honouring a byte order mark.</param>
+    /// <returns>The graph, or <see langword="null"/> when the document held the JSON literal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+    public static T? Deserialize<T>(Stream stream) where T : class
+    {
+        if (stream is null) throw new ArgumentNullException(nameof(stream));
+
+        return (T?)ReadValue(new VeloxJsonReader(stream), typeof(T), null);
+    }
+
+    /// <summary>Reads a UTF-8 document from a stream that does not have to hold all of it.</summary>
+    /// <param name="stream">The source. Left open.</param>
+    /// <param name="type">The root type.</param>
+    /// <returns>The graph, or <see langword="null"/> when the document held the JSON literal.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static object? Deserialize(Stream stream, Type type)
+    {
+        if (stream is null) throw new ArgumentNullException(nameof(stream));
+        if (type is null) throw new ArgumentNullException(nameof(type));
+
+        return ReadValue(new VeloxJsonReader(stream), type, null);
     }
 
     /// <summary>

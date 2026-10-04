@@ -107,15 +107,63 @@ public interface IVeloxJsonDeserialized
 /// A type with no entry cannot be written. That is the closed world the format lives in, and it is what removes
 /// the reflection: the set of types an archive can contain is the set the generator was compiled over.
 /// </para>
+/// <para>
+/// <b>Lookups take no lock.</b> The five tables live in a snapshot that is replaced, never mutated, so a
+/// reader sees a whole table or the previous whole table and never a half-built one. Registration stays
+/// serialised behind <c>Gate</c>, which is where a new snapshot is built and published. This matters because
+/// lookups sit on the per-node path — a writer is looked up for every value written and a reader for every
+/// object read — so a shared lock there was a bottleneck on every document, contended or not.
+/// </para>
 /// </remarks>
 public static class VeloxJsonRegistry
 {
+    // 注册只在模块初始化器里发生，之后整份快照只读；用 volatile 发布，读侧就彻底免锁了。
     private static readonly object Gate = new();
-    private static readonly Dictionary<Type, IVeloxJsonWriter> Writers = [];
-    private static readonly Dictionary<Type, IVeloxJsonReader> Readers = [];
-    private static readonly Dictionary<Type, Func<object>> ContainerFactories = [];
-    private static readonly Dictionary<Type, string> Names = [];
-    private static readonly Dictionary<string, Type> TypesByName = new(StringComparer.Ordinal);
+    private static volatile Snapshot _snapshot = Snapshot.Empty;
+
+    // 一份完整的注册表。里面的表发布之后不再被任何人改动，所以并发读是安全的 —— 换表换的是整个快照。
+    private sealed class Snapshot
+    {
+        internal static readonly Snapshot Empty = new([], [], [], [], new(StringComparer.Ordinal));
+
+        internal readonly Dictionary<Type, IVeloxJsonWriter> Writers;
+        internal readonly Dictionary<Type, IVeloxJsonReader> Readers;
+        internal readonly Dictionary<Type, Func<object>> ContainerFactories;
+        internal readonly Dictionary<Type, string> Names;
+        internal readonly Dictionary<string, Type> TypesByName;
+
+        private Snapshot(
+            Dictionary<Type, IVeloxJsonWriter> writers,
+            Dictionary<Type, IVeloxJsonReader> readers,
+            Dictionary<Type, Func<object>> containerFactories,
+            Dictionary<Type, string> names,
+            Dictionary<string, Type> typesByName)
+        {
+            Writers = writers;
+            Readers = readers;
+            ContainerFactories = containerFactories;
+            Names = names;
+            TypesByName = typesByName;
+        }
+
+        // 复制一份再改。只有被换掉的那张表需要复制，其余三张原样带走 —— 它们本来就不会再变。
+        internal Snapshot WithWriter(Type type, IVeloxJsonWriter writer)
+            => new(new Dictionary<Type, IVeloxJsonWriter>(Writers) { [type] = writer }, Readers, ContainerFactories, Names, TypesByName);
+
+        internal Snapshot WithReader(Type type, IVeloxJsonReader reader)
+            => new(Writers, new Dictionary<Type, IVeloxJsonReader>(Readers) { [type] = reader }, ContainerFactories, Names, TypesByName);
+
+        internal Snapshot WithContainerFactory(Type type, Func<object> factory)
+            => new(Writers, Readers, new Dictionary<Type, Func<object>>(ContainerFactories) { [type] = factory }, Names, TypesByName);
+
+        // 类型名那张表是双向的：写用 Names，读用 TypesByName，所以两份都必须一起换。
+        internal Snapshot WithName(Type type, string name)
+        {
+            var names = new Dictionary<Type, string>(Names) { [type] = name };
+            var typesByName = new Dictionary<string, Type>(TypesByName, StringComparer.Ordinal) { [name] = type };
+            return new Snapshot(Writers, Readers, ContainerFactories, names, typesByName);
+        }
+    }
 
     /// <summary>
     /// Registers how to construct a container the document holds as a nested value.
@@ -134,7 +182,7 @@ public static class VeloxJsonRegistry
         if (type is null) throw new ArgumentNullException(nameof(type));
         if (factory is null) throw new ArgumentNullException(nameof(factory));
 
-        lock (Gate) ContainerFactories[type] = factory;
+        lock (Gate) _snapshot = _snapshot.WithContainerFactory(type, factory);
     }
 
     /// <summary>The factory for a nested container type, or <see langword="null"/> when it has none.</summary>
@@ -142,7 +190,8 @@ public static class VeloxJsonRegistry
     /// <returns>The factory, or <see langword="null"/>.</returns>
     public static Func<object>? ContainerFactoryFor(Type type)
     {
-        lock (Gate) return ContainerFactories.TryGetValue(type, out var factory) ? factory : null;
+        var snapshot = _snapshot;
+        return snapshot.ContainerFactories.TryGetValue(type, out var factory) ? factory : null;
     }
 
     /// <summary>
@@ -156,7 +205,7 @@ public static class VeloxJsonRegistry
         if (type is null) throw new ArgumentNullException(nameof(type));
         if (writer is null) throw new ArgumentNullException(nameof(writer));
 
-        lock (Gate) Writers[type] = writer;
+        lock (Gate) _snapshot = _snapshot.WithWriter(type, writer);
     }
 
     /// <summary>
@@ -170,7 +219,7 @@ public static class VeloxJsonRegistry
         if (type is null) throw new ArgumentNullException(nameof(type));
         if (reader is null) throw new ArgumentNullException(nameof(reader));
 
-        lock (Gate) Readers[type] = reader;
+        lock (Gate) _snapshot = _snapshot.WithReader(type, reader);
     }
 
     /// <summary>
@@ -187,11 +236,7 @@ public static class VeloxJsonRegistry
         if (type is null) throw new ArgumentNullException(nameof(type));
         if (name is null) throw new ArgumentNullException(nameof(name));
 
-        lock (Gate)
-        {
-            Names[type] = name;
-            TypesByName[name] = type;
-        }
+        lock (Gate) _snapshot = _snapshot.WithName(type, name);
     }
 
     /// <summary>The name a type is written as, or <see langword="null"/> when it has none.</summary>
@@ -199,7 +244,8 @@ public static class VeloxJsonRegistry
     /// <returns>The registered name, or <see langword="null"/>.</returns>
     public static string? NameOf(Type type)
     {
-        lock (Gate) return Names.TryGetValue(type, out var name) ? name : null;
+        var snapshot = _snapshot;
+        return snapshot.Names.TryGetValue(type, out var name) ? name : null;
     }
 
     /// <summary>The type a written name stands for, or <see langword="null"/> when nothing registered it.</summary>
@@ -207,7 +253,8 @@ public static class VeloxJsonRegistry
     /// <returns>The type, or <see langword="null"/>.</returns>
     public static Type? TypeOf(string name)
     {
-        lock (Gate) return TypesByName.TryGetValue(name, out var type) ? type : null;
+        var snapshot = _snapshot;
+        return snapshot.TypesByName.TryGetValue(name, out var type) ? type : null;
     }
 
     /// <summary>The writer for a type, or <see langword="null"/> when it has none.</summary>
@@ -215,7 +262,8 @@ public static class VeloxJsonRegistry
     /// <returns>The writer, or <see langword="null"/>.</returns>
     public static IVeloxJsonWriter? WriterFor(Type type)
     {
-        lock (Gate) return Writers.TryGetValue(type, out var writer) ? writer : null;
+        var snapshot = _snapshot;
+        return snapshot.Writers.TryGetValue(type, out var writer) ? writer : null;
     }
 
     /// <summary>The reader for a type, or <see langword="null"/> when it has none.</summary>
@@ -223,6 +271,7 @@ public static class VeloxJsonRegistry
     /// <returns>The reader, or <see langword="null"/>.</returns>
     public static IVeloxJsonReader? ReaderFor(Type type)
     {
-        lock (Gate) return Readers.TryGetValue(type, out var reader) ? reader : null;
+        var snapshot = _snapshot;
+        return snapshot.Readers.TryGetValue(type, out var reader) ? reader : null;
     }
 }

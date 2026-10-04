@@ -32,6 +32,19 @@ public sealed class VeloxJsonWriter
     private int _depth;
     private bool _hasMember;
 
+    // 缩进按层预生成到 64 层。原先的写法是每行每层写一次 "  "，一层一次虚调用；现在每行固定两次写
+    // （换行、缩进），与深度无关。超过 64 层就退回循环 —— 极深的文档要的是正确，不是快。
+    private const int CachedIndentDepth = 64;
+    private static readonly string[] Indents = BuildIndents();
+
+    private static string[] BuildIndents()
+    {
+        var indents = new string[CachedIndentDepth + 1];
+        indents[0] = string.Empty;
+        for (var i = 1; i <= CachedIndentDepth; i++) indents[i] = new string(' ', i * 2);
+        return indents;
+    }
+
     /// <summary>
     /// Creates a writer over <paramref name="writer"/>.
     /// </summary>
@@ -242,8 +255,12 @@ public sealed class VeloxJsonWriter
     {
         if (!_indented) return;
 
+        // 必须是 Environment.NewLine，不能图快写成 "\n"：黄金文件在索引里是 LF、工作区里是 CRLF，
+        // 精确比较的那道闸（SerializationGoldenTests）会当场发现。见 memory/modules/Serialization。
         _writer.Write(Environment.NewLine);
-        for (var i = 0; i < _depth; i++) _writer.Write("  ");
+
+        if (_depth < Indents.Length) _writer.Write(Indents[_depth]);
+        else for (var i = 0; i < _depth; i++) _writer.Write("  ");
     }
 
     /// <summary>
@@ -266,37 +283,9 @@ public sealed class VeloxJsonWriter
     private void WriteRaw(char value) => _writer.Write(value);
     private void WriteRaw(string value) => _writer.Write(value);
 
-    /// <summary>
-    /// Escapes a string the way the archive format does: quotes, backslashes and the control characters, with
-    /// everything else — including non-ASCII — left as it is.
-    /// </summary>
-    private void WriteEscaped(string value)
-    {
-        foreach (var c in value)
-        {
-            switch (c)
-            {
-                case '"': WriteRaw("\\\""); break;
-                case '\\': WriteRaw("\\\\"); break;
-                case '\b': WriteRaw("\\b"); break;
-                case '\f': WriteRaw("\\f"); break;
-                case '\n': WriteRaw("\\n"); break;
-                case '\r': WriteRaw("\\r"); break;
-                case '\t': WriteRaw("\\t"); break;
-                default:
-                    if (c < ' ')
-                    {
-                        WriteRaw("\\u");
-                        WriteRaw(((int)c).ToString("x4", CultureInfo.InvariantCulture));
-                    }
-                    else
-                    {
-                        WriteRaw(c);
-                    }
-                    break;
-            }
-        }
-    }
+    // 转义规则只有一份，在 VeloxJsonText —— JSON 树那条路走的是同一个函数。之前这里与它各有一份拷贝，
+    // 也就是说「文档怎么拼」有两个地方可以开始分叉。
+    private void WriteEscaped(string value) => VeloxJsonText.Escape(_writer, value);
 
     /// <summary>Compares by identity: the reference table tracks the object, not its equality.</summary>
     private sealed class ReferenceComparer : IEqualityComparer<object>
