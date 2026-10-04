@@ -3,10 +3,11 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.ComponentModel;
 using System.Globalization;
+// Alias Path: `using Microsoft.UI.Xaml.Shapes;` would collide with System.IO.Path (implicit usings).
+using Path = Microsoft.UI.Xaml.Shapes.Path;
 using VeloxDev.WorkflowSystem;
 using Windows.Foundation;
 
@@ -291,7 +292,7 @@ public sealed partial class LinkView : UserControl, ILinkHighlight
         // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
     // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
         var color = IsHighlighted ? HighlightColor : LineColor;
-        var thickness = IsHighlighted ? 3.5 : 2;
+        var thickness = IsHighlighted ? 2 + 1.5 : 2;
         _strokeBrush.Color = color;
         _path.StrokeThickness = thickness;
 

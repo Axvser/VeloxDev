@@ -6,7 +6,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              d:DesignHeight="20" d:DesignWidth="20"
-             Background="Transparent"
+             Background="#01000000"
              behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"
              MouseLeftButtonUp="OnPointerReleased"
              MouseLeftButtonDown="OnPointerPressed">

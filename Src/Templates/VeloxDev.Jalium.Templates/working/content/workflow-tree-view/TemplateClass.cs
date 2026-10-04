@@ -17,7 +17,7 @@ public sealed class TemplateClass : WorkflowTreeView
     public TemplateClass()
     {
         SurfaceBackground = (Color)ColorConverter.ConvertFromString("TemplateSurfaceBackground");
-        ConnectingLinkColor = (Color)ColorConverter.ConvertFromString("TemplateLinkColor");
+        ConnectingLinkColor = (Color)ColorConverter.ConvertFromString("#DDFFFFFF");
         PortLayout = SlotView.Layout;
         GridDecorator = new GridDecorator();
         TemplateSelector = TemplateNamespace.TemplateSelector.CreateSelector();

@@ -4,7 +4,7 @@
              xmlns:controls="clr-namespace:Demo.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.SlotView"
-             BackgroundColor="Transparent"
+             BackgroundColor="#01000000"
              behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
     <Grid BackgroundColor="Transparent">
         <GraphicsView x:Name="IconView" />
