@@ -31,7 +31,7 @@ namespace VeloxDev.Serialization;
 /// <b>A checkpoint is a plain document, not a view model</b>, which is why it does not go through
 /// <see cref="ViewModelSerializer.Serialize{T}(T)"/>: that surface is constrained to
 /// <see cref="System.ComponentModel.INotifyPropertyChanged"/>. It takes part in the archive format by declaring
-/// itself serializable — see <see cref="VeloxSerializableAttribute"/>.
+/// itself serializable — see <see cref="ArchivableAttribute"/>.
 /// </para>
 /// <para>
 /// Like <see cref="CompiledGraphEx"/>, this stays in this assembly while the engine and the general view-model

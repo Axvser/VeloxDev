@@ -151,7 +151,7 @@ namespace VeloxDev.Generators.Base
     internal static class VeloxJsonModelBuilder
     {
         private const string VeloxPropertyAttributeName = "VeloxDev.MVVM.VeloxPropertyAttribute";
-        private const string VeloxSerializableAttributeName = "VeloxDev.Serialization.VeloxSerializableAttribute";
+        private const string ArchivableAttributeName = "VeloxDev.Serialization.ArchivableAttribute";
 
         private static readonly string[] ComponentInterfaces =
         [
@@ -196,6 +196,7 @@ namespace VeloxDev.Generators.Base
 
             var included = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             var queue = new Queue<INamedTypeSymbol>(roots);
+            var notices = new List<Diagnostic>();
 
             // 闭包：从根类型出发，沿可写成员的声明类型一路收下去。目录里没有的类型写不出去，
             // 所以这一步决定了「什么能进文档」。
@@ -203,6 +204,28 @@ namespace VeloxDev.Generators.Base
             {
                 var symbol = queue.Dequeue();
                 if (!included.Add(symbol)) continue;
+
+                // 声明里点名的额外根。放在循环里而不是只处理初始 roots —— 被点名的类型自己也可能再点名，
+                // 而它是不是根不影响它能不能点名。重复的由 included 去重，不需要另一张表。
+                foreach (var (named, site) in ReadAdditionalRoots(symbol))
+                {
+                    if (included.Contains(named)) continue;
+
+                    if (!IsWritableType(named, compilation.Assembly))
+                    {
+                        // 发不出条目就报错而不是丢掉：丢掉的话要等到运行期 MissingWriter 才显形，
+                        // 那时已经离能改的那一行很远了。
+                        notices.Add(Diagnostic.Create(
+                            Diagnostics.UnsupportedArchivableRoot,
+                            site,
+                            named.ToDisplayString(),
+                            symbol.ToDisplayString(),
+                            WhyNotWritable(named)));
+                        continue;
+                    }
+
+                    queue.Enqueue(named);
+                }
 
                 foreach (var member in ReadMembers(symbol, contracts))
                 {
@@ -241,7 +264,7 @@ namespace VeloxDev.Generators.Base
 
             if (types.Count == 0) return null;
 
-            return new VeloxJsonAssembly(compilation.AssemblyName ?? "Assembly", types, CollectNestedContainers(types), []);
+            return new VeloxJsonAssembly(compilation.AssemblyName ?? "Assembly", types, CollectNestedContainers(types), notices);
         }
 
         // 收出所有嵌在别的容器里的容器，一直收到嵌套见底。
@@ -326,7 +349,7 @@ namespace VeloxDev.Generators.Base
             if (ComponentInterfaces.Any(contract => ImplementsInterface(symbol, contract))) return true;
 
             // 不是 ViewModel 的普通文档类型靠一个特性自报家门 —— 检查点就是这种。
-            if (AIContextNaming.HasAttribute(symbol, VeloxSerializableAttributeName)) return true;
+            if (AIContextNaming.HasAttribute(symbol, ArchivableAttributeName)) return true;
 
             // 组件的接口是 Workflow 生成器加上去的，而生成器之间看不见彼此的产物 —— 所以这里认的是
             // 作者写下的那个特性，而不是最终会出现的接口。
@@ -350,6 +373,29 @@ namespace VeloxDev.Generators.Base
         }
 
         /// <summary>
+        /// The types an <c>[Archivable(typeof(…))]</c> declaration names, each paired with the site to blame when
+        /// the generator cannot honour it.
+        /// </summary>
+        private static IEnumerable<(INamedTypeSymbol Named, Location? Site)> ReadAdditionalRoots(INamedTypeSymbol symbol)
+        {
+            foreach (var attribute in symbol.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        .Replace("global::", string.Empty) != ArchivableAttributeName) continue;
+                if (attribute.ConstructorArguments.Length == 0) continue;
+
+                // 位置报在声明处，不报在被点名类型的声明处 —— 那是作者能改的那一行。
+                var site = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
+
+                // `params Type[]` 收成一个数组实参；`[Archivable]` 不带参数时是一个空数组。
+                foreach (var argument in attribute.ConstructorArguments[0].Values)
+                {
+                    if (argument.Value is INamedTypeSymbol named) yield return (named, site);
+                }
+            }
+        }
+
+        /// <summary>
         /// Whether a type needs an entry of its own.
         /// </summary>
         /// <remarks>
@@ -365,15 +411,7 @@ namespace VeloxDev.Generators.Base
             // 抽象类型没有实例可写：它的值总是某个具体类型，而那个类型有自己的条目。
             if (symbol.IsAbstract) return false;
 
-            // 开放泛型生成不出来：`(SlotEnumerator<T>)value` 里的 T 没有绑定。
-            //
-            // 判据是**类型实参里还有类型参数**，不是 `TypeParameters.Length` —— 后者对封闭实例照样返回
-            // 定义上的那些参数，用它会把 `SlotEnumerator<SlotDefaultViewModel>` 一起挡掉。
-            for (var current = symbol; current is not null; current = current.ContainingType)
-            {
-                if (current.IsUnboundGenericType) return false;
-                if (current.TypeArguments.Any(static argument => argument.TypeKind == TypeKind.TypeParameter)) return false;
-            }
+            if (IsOpenGeneric(symbol)) return false;
 
             if (!IsAccessible(symbol)) return false;
 
@@ -385,6 +423,45 @@ namespace VeloxDev.Generators.Base
             return symbol.IsGenericType
                    && !IsNativeCollection(symbol.OriginalDefinition)
                    && HasPublicParameterlessConstructor(symbol);
+        }
+
+        /// <summary>
+        /// Whether the type is generic in a way the generator cannot write, because some type argument is still
+        /// unbound.
+        /// </summary>
+        /// <remarks>
+        /// 判据是**类型实参里还有类型参数**，不是 <c>TypeParameters.Length</c> —— 后者对封闭实例照样返回定义上的
+        /// 那些参数，用它会把 <c>SlotEnumerator&lt;SlotDefaultViewModel&gt;</c> 一起挡掉。
+        /// </remarks>
+        private static bool IsOpenGeneric(INamedTypeSymbol symbol)
+        {
+            for (var current = symbol; current is not null; current = current.ContainingType)
+            {
+                if (current.IsUnboundGenericType) return true;
+                if (current.TypeArguments.Any(static argument => argument.TypeKind == TypeKind.TypeParameter)) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Why <see cref="IsWritableType"/> refused a type, in words an author can act on.
+        /// </summary>
+        /// <remarks>
+        /// Same checks in the same order, kept next to it so a new rule added there gets a sentence here. The
+        /// error it feeds is worth the duplication: without it the author is told a type cannot take part but not
+        /// which of six reasons applies.
+        /// </remarks>
+        private static string WhyNotWritable(INamedTypeSymbol symbol)
+        {
+            if (symbol.TypeKind is not (TypeKind.Class or TypeKind.Struct)) return "it is not a class or a struct";
+            if (symbol.IsStatic) return "it is static";
+            if (symbol.IsImplicitlyDeclared) return "it is compiler-generated";
+            if (symbol.IsAbstract) return "it is abstract, so there is no instance to write";
+            if (IsOpenGeneric(symbol)) return "it is an open generic type, so its type arguments cannot be bound";
+            if (!IsAccessible(symbol)) return "generated code in this assembly cannot name it";
+
+            return "it is declared in another assembly and is not a closed generic this assembly has seen";
         }
 
         /// <summary>Whether a type is one of the framework containers the serializer writes by shape.</summary>

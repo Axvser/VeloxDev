@@ -24,7 +24,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </para>
 /// </remarks>
 /// <seealso cref="IExecutionCheckpointStore"/>
-[VeloxSerializable]
+[Archivable]
 public sealed class ExecutionCheckpoint
 {
     /// <summary>The pass the run was on when this was taken — <see cref="IRuntimeContext.Attempt"/>.</summary>

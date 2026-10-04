@@ -22,6 +22,7 @@ namespace VeloxDev.Generators
     public static class Diagnostics
     {
         private const string Category = "VeloxDev.MVVM";
+        private const string JsonCategory = "VeloxDev.Serialization";
 
         /// <summary>
         /// A <c>[VeloxCommand]</c> method whose shape cannot be turned into a command.
@@ -101,6 +102,24 @@ namespace VeloxDev.Generators
             messageFormat: "'{0}' takes {1} argument(s) in more than one overload; only the first is reachable through the agent context tree",
             category: "VeloxDev.AI",
             defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A type named by <c>[Archivable(typeof(…))]</c> that this assembly cannot emit an entry for.
+        /// </summary>
+        /// <remarks>
+        /// Error rather than warning: the declaration asks for a type to take part in the archive format, and the
+        /// generator cannot honour it — the readers and writers are emitted into the assembly that declares the
+        /// type, so a type from another assembly, an abstract one, or one generated code cannot reach simply gets
+        /// no entry. Skipping it would surface far away as a <c>MissingWriter</c> at run time, long after the line
+        /// that could have fixed it.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnsupportedArchivableRoot = new(
+            id: "VELOX_JSON_ARCH001",
+            title: "Unsupported [Archivable] root",
+            messageFormat: "'{0}' named by '{1}' cannot take part in the archive format: {2}",
+            category: JsonCategory,
+            defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
     }
 }
