@@ -42,8 +42,7 @@ internal static class PerformanceReport
         text.AppendLine();
 
         AppendEnvironment(text);
-        AppendSizes(text);
-        AppendResults(text, measured);
+        AppendScales(text, measured);
         AppendNotes(text, summaries, measured);
 
         Directory.CreateDirectory(Artifacts.Path);
@@ -69,93 +68,113 @@ internal static class PerformanceReport
         text.AppendLine($"| 运行时 | {RuntimeInformation.FrameworkDescription} |");
         text.AppendLine($"| 进程架构 | {RuntimeInformation.ProcessArchitecture} |");
         text.AppendLine($"| 工具链 | InProcessEmitToolchain，{BenchmarkConfig.Warmups} warmup + {BenchmarkConfig.Iterations} iterations，LaunchCount 1 |");
-        text.AppendLine($"| 诊断器 | MemoryDiagnoser（`Allocated` 是 GC 可见的托管分配量） |");
+        text.AppendLine($"| 诊断器 | MemoryDiagnoser（「分配」是 GC 可见的托管分配量，键名 `{AllocatedMetric}`） |");
         text.AppendLine();
     }
 
-    private static void AppendSizes(StringBuilder text)
+    /// <summary>
+    /// One table per data magnitude. Each row is a serializer; time and storage sit side by side; this library's
+    /// row is set in bold.
+    /// </summary>
+    /// <remarks>
+    /// Storage belongs in the same table as the time: allocation does not move with JIT progress, so it is the
+    /// column worth believing, and a reader should not have to join two tables to see that. The ratio in
+    /// parentheses is against this library's own number in the same direction — the only comparison the rows
+    /// support, since the three write different member sets.
+    /// </remarks>
+    private static void AppendScales(StringBuilder text, IReadOnlyList<BenchmarkReport> measured)
     {
-        var sizes = DocumentSizes.All.OrderBy(static pair => pair.Key).ToList();
-
-        text.AppendLine("## 文档大小（同一张图）");
-        text.AppendLine();
-        if (sizes.Count == 0)
-        {
-            text.AppendLine("_本次运行没有包含 `ComparisonBenchmarks`，所以没有量文档大小 —— 那一项在它的 `GlobalSetup` 里。_");
-            text.AppendLine();
-            return;
-        }
-
-        text.AppendLine("| 当量 | 节点 | 归档 | System.Text.Json | Newtonsoft.Json | 归档 / STJ | 归档 / Newtonsoft |");
-        text.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
-
-        foreach (var (nodeCount, size) in sizes)
-        {
-            text.AppendLine(
-                $"| {Scales.NameOf(nodeCount)} | {nodeCount:N0} | {size.Archive:N0} | {size.Stj:N0} | {size.Newtonsoft:N0} " +
-                $"| {Ratio(size.Archive, size.Stj)} | {Ratio(size.Archive, size.Newtonsoft)} |");
-        }
-
-        text.AppendLine();
-        text.AppendLine("_字符数（不是字节）。三家写的成员集不同 —— 归档写生成契约，另外两家写公开面 —— 所以差距里有一部分是「写得少」。_");
-        text.AppendLine();
-    }
-
-    private static void AppendResults(StringBuilder text, IReadOnlyList<BenchmarkReport> measured)
-    {
-        text.AppendLine("## 结果");
-        text.AppendLine();
-
         var byScale = measured
             .Select(report => (Report: report, Nodes: NodeCountOf(report)))
             .Where(static pair => pair.Nodes > 0)
             .GroupBy(static pair => pair.Nodes)
-            .OrderBy(static group => group.Key);
+            .OrderBy(static group => group.Key)
+            .ToList();
+
+        if (byScale.Count == 0)
+        {
+            text.AppendLine("## 结果");
+            text.AppendLine();
+            text.AppendLine("_本次运行没有产出可用的数据。_");
+            text.AppendLine();
+            return;
+        }
 
         foreach (var group in byScale)
         {
-            var rows = group
-                .Select(static pair => pair.Report)
-                .OrderBy(static report => MeanOf(report))
-                .ToList();
+            var reports = group.Select(static pair => pair.Report).ToList();
+            var ourWrite = Find(reports, "Archive_Serialize") ?? Find(reports, "Serialize");
+            var ourRead = Find(reports, "Archive_Deserialize") ?? Find(reports, "Deserialize");
 
-            // 比率一律对着归档引擎的「写」—— 那是这套东西自己的基准线，跨方法比才有意义。
-            var baseline = rows
-                .Where(static report => MethodOf(report) is "Archive_Serialize" or "Serialize")
-                .Select(MeanOf)
-                .DefaultIfEmpty(0d)
-                .Min();
-
-            text.AppendLine($"### {Scales.NameOf(group.Key)} · {group.Key:N0} 节点");
-            text.AppendLine();
-            text.AppendLine("| 方法 | 类 | Mean | StdDev | Allocated | 相对归档写 |");
-            text.AppendLine("| --- | --- | ---: | ---: | ---: | ---: |");
-
-            foreach (var report in rows)
+            // 只有归档那个类跑过时（`--filter "*SerializationBenchmarks*"`）文档大小就没量到 —— 那时写「—」而不是 0。
+            int? archiveSize = null, stjSize = null, newtonsoftSize = null;
+            if (DocumentSizes.All.TryGetValue(group.Key, out var sizes))
             {
-                // 键名以 BenchmarkDotNet 为准（0.15 起是 `Allocated Memory`），不认「Allocated」——
-                // 取错了不会报错，只会让整列变成「—」，所以这里对不上时要说出来（见 AppendNotes）。
-                var allocated = report.Metrics.TryGetValue(AllocatedMetric, out var metric)
-                    ? $"{metric.Value / 1024d / 1024d:N2} MB"
-                    : "—";
-
-                text.AppendLine(
-                    $"| `{MethodOf(report)}` | {ClassNameOf(report)} | {Milliseconds(MeanOf(report))} | " +
-                    $"{Milliseconds(StandardDeviationOf(report))} | {allocated} | {Ratio(baseline, MeanOf(report))} |");
+                archiveSize = sizes.Archive;
+                stjSize = sizes.Stj;
+                newtonsoftSize = sizes.Newtonsoft;
             }
 
+            text.AppendLine($"## {Scales.NameOf(group.Key)} · {group.Key:N0} 节点");
             text.AppendLine();
+            text.AppendLine("| 序列化器 | 写 · 耗时 | 读 · 耗时 | 写 · 分配 | 读 · 分配 | 文档大小 |");
+            text.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: |");
+
+            Row("VeloxDev（本仓库）", ours: true, ourWrite, ourRead, archiveSize);
+            Row("System.Text.Json", ours: false, Find(reports, "Stj_Serialize"), Find(reports, "Stj_Deserialize"), stjSize);
+            Row("System.Text.Json（源生成）", ours: false, write: Find(reports, "StjSourceGen_Serialize"), read: null, size: stjSize);
+            Row("Newtonsoft.Json", ours: false, Find(reports, "Nst_Serialize"), Find(reports, "Nst_Deserialize"), newtonsoftSize);
+
+            text.AppendLine();
+
+            void Row(string label, bool ours, BenchmarkReport? write, BenchmarkReport? read, int? size)
+            {
+                text.AppendLine(
+                    $"| {Bold(label, ours)} | {Time(write, ourWrite, ours)} | {Time(read, ourRead, ours)} " +
+                    $"| {Storage(write, ours)} | {Storage(read, ours)} | {Chars(size, ours)} |");
+            }
         }
 
-        var missing = measured
-            .Where(report => !report.Metrics.ContainsKey(AllocatedMetric))
-            .ToList();
+        text.AppendLine("**粗体行 = 本仓库。** 「文档大小」是字符数，不是字节；括号里是相对本仓库同方向的倍数。");
+        text.AppendLine("三家的成员集不同（归档写生成契约，另外两家写公开面），所以差距里有一部分是「写得少」。");
+        text.AppendLine("`System.Text.Json（源生成）` 与上一行是同一个序列化器、同一份文档，只是元数据来自源生成而不是反射。");
+        text.AppendLine($"System.Text.Json 的「读」在本语料上不可用 —— 见备注。分配量若整列是「—」，说明这一项没取到（键名以 `{AllocatedMetric}` 为准）。");
+        text.AppendLine();
+    }
 
-        if (missing.Count > 0)
+    private static string Bold(string value, bool bold) => bold ? $"**{value}**" : value;
+
+    private static string Time(BenchmarkReport? report, BenchmarkReport? ourReport, bool bold)
+    {
+        if (report is null) return "—";
+
+        var text = Milliseconds(MeanOf(report));
+        if (!bold && ourReport is not null) text += $"（{Ratio(MeanOf(ourReport), MeanOf(report))}）";
+
+        return Bold(text, bold);
+    }
+
+    private static string Storage(BenchmarkReport? report, bool bold)
+    {
+        if (report is null) return "—";
+
+        return report.Metrics.TryGetValue(AllocatedMetric, out var metric)
+            ? Bold($"{metric.Value / 1024d / 1024d:N2} MB", bold)
+            : "—";
+    }
+
+    private static string Chars(int? characters, bool bold)
+        => characters is { } value ? Bold(value.ToString("N0", CultureInfo.InvariantCulture), bold) : "—";
+
+    /// <summary>One named benchmark, or <see langword="null"/> when this run did not include it.</summary>
+    private static BenchmarkReport? Find(IReadOnlyList<BenchmarkReport> reports, string method)
+    {
+        foreach (var report in reports)
         {
-            text.AppendLine($"_有 {missing.Count} 个用例没有产出分配数据（`{AllocatedMetric}` 这一项缺失）。_");
-            text.AppendLine();
+            if (MethodOf(report) == method) return report;
         }
+
+        return null;
     }
 
     private static void AppendNotes(StringBuilder text, IEnumerable<Summary> summaries, IReadOnlyList<BenchmarkReport> measured)
