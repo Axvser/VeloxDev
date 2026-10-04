@@ -153,24 +153,26 @@ namespace VeloxDev.Generators.Writers
                 builder.AppendLine($"        ((global::{SerializationNamespace}.IVeloxJsonDeserializing)t).OnDeserializing();");
 
             builder.AppendLine();
-            builder.AppendLine("        while (reader.NextMember(out var name))");
+            // 成员名不落成字符串：NextMember() 只定位，MemberNameEquals 就地拿原文与字面量比。
+            // 换掉原来的 `while (NextMember(out var name)) switch (name)` —— 那条每读一个成员都要
+            // 先分配一个字符串，只为和字面量比一次就丢掉。
+            builder.AppendLine("        while (reader.NextMember())");
             builder.AppendLine("        {");
-            builder.AppendLine("            switch (name)");
-            builder.AppendLine("            {");
 
+            var first = true;
             foreach (var member in type.Members)
             {
-                // 每个 case 各起一个作用域：多个分支都用到模式变量的话，同一个 switch 里会撞名。
-                builder.AppendLine($"                case \"{Escape(member.Name)}\":");
-                builder.AppendLine("                {");
-                builder.AppendLine($"                    {ReadMember(member)}");
-                builder.AppendLine("                    break;");
-                builder.AppendLine("                }");
+                // 每个分支各起一个作用域：多个分支都用到模式变量的话会撞名。
+                builder.AppendLine($"            {(first ? "if" : "else if")} (reader.MemberNameEquals(\"{Escape(member.Name)}\"))");
+                builder.AppendLine("            {");
+                builder.AppendLine($"                {ReadMember(member)}");
+                builder.AppendLine("            }");
+
+                first = false;
             }
 
             // 读不懂的成员跳过，而不是失败：旧版本读新文档时该继续走。
-            builder.AppendLine("                default: reader.SkipValue(); break;");
-            builder.AppendLine("            }");
+            builder.AppendLine(first ? "            reader.SkipValue();" : "            else reader.SkipValue();");
             builder.AppendLine("        }");
             builder.AppendLine("        reader.FinishObject();");
             builder.AppendLine();
