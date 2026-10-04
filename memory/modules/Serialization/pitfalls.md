@@ -51,7 +51,9 @@
 
 `[Archive(ArchiveOptions.KeepProperty)]` 把它写进文档，但**读侧仍然跳过**：没有 setter 可赋值，生成器干脆不给它发读分支（`Writers/VeloxJsonCodeWriter.cs` 里 `member.WriteOnly` 跳过的就是它，于是那个值落到「读不懂的成员跳过」上）。**往返仍然丢这个成员** —— 那是诚实的结局。
 
-**排除单个成员**用 `[Archive(ArchiveOptions.IgnoreField)]`。按**声明类型**整批排除仍然只有 `SerializationOptions.WithExcludedPropertyTypes`，它精确匹配声明类型（`ViewModelSerializer.cs:44` → `VeloxJsonSerializer.cs:44`），「排掉基类、留下派生」这种粒度做不到。
+**排除单个成员**用 `[Archive(ArchiveOptions.IgnoreField)]`，或者直接用 .NET 自带的 `[JsonIgnore]` —— 生成器认后者，且**按它本来的意思认**：`Always`（默认）= 排除，`Never` = 显式放行，`WhenWritingNull` / `WhenWritingDefault` = 条件写出（不满足就不写那个成员，读侧不必配合：缺一个成员与读到一个没见过的成员是同一条路）。
+
+按**声明类型**整批排除仍然只有 `SerializationOptions.WithExcludedPropertyTypes`，它精确匹配声明类型（`ViewModelSerializer.cs:44` → `VeloxJsonSerializer.cs:44`），「排掉基类、留下派生」这种粒度做不到。
 
 ---
 
@@ -82,7 +84,8 @@
 
 前两条是源生成器的固有形状，第三条是 .NET 的。三条都实测过，撞上时不会报错 —— 只会静默少一个成员或一次回调。
 
-1. **生成器不能引用它为之生成代码的程序集。** 所以 `ArchiveOptions` 在生成器里镜像成 `ArchiveFlags`（`Base/VeloxJsonModel.cs:74-84` 附近），枚举值只能手工保持同步 —— 那是这个文件里唯一一处手工对齐的数字。特性实参到达时是**底层整数**，不是枚举。
+1. **生成器不能引用它为之生成代码的程序集。** 所以 `ArchiveOptions` 在生成器里镜像成 `ArchiveFlags`（`Base/VeloxJsonModel.cs`），枚举值只能手工保持同步。特性实参到达时是**底层整数**，不是枚举。
+   **但 `JsonIgnoreCondition` 故意没有镜像**：它按名字判（`ReadJsonIgnoreCondition` 拿常量值反查字段名，再用 `switch` 认名字）。理由是实测踩过 —— 它的顺序是 `Never=0, Always=1, WhenWritingDefault=2, WhenWritingNull=3`（.NET 11 又加了 `WhenWriting`/`WhenReading`），我第一版按 `Always/Never/WhenWritingNull/WhenWritingDefault` 记，**把后两个写反了**；症状是 `WhenWritingDefault` 静默不生效、而 `WhenWritingNull` 作用到了不该作用的成员上，测试才抓出来。**枚举顺序不是它表达的意思，别记它**。
 2. **源生成器看不见别的生成器的产物。** `[VeloxProperty]` 提升出来的属性在 VeloxJson 生成器的视图里**不存在**。所以「忽略字段、改用属性」不可表达 —— 两者产出的代码完全一样（同一个名字、同一个类型，都从字段那边推出来）。`IgnoreField` 因此取「该成员整个不进文档」这个唯一可实现、且此前真正缺位的语义。同理，`HasCorrespondingProperty` 对提升出来的属性找不到，只有作者手写的同名属性才会命中。
 3. **引用程序集剥掉非 public 成员 —— 消费方看不见它们。** 实测：测试程序集看 `SlotEnumerator<SlotDefaultViewModel>` 得到 `members=51`，里面**没有** `internal` 的 `OnDeserializing`/`OnDeserialized`。所以**钩子方法要能被别的程序集调，就必须是 `public`**；`internal` 只在「类型由它自己的程序集序列化」时够用（`Anchor`/`Size`/`BranchSegment`/`BranchOption` 属于这种）。判据在 `Base/VeloxJsonModel.cs` 的 `IsReachableFromGeneratedCode`，它按**程序集**判。
 

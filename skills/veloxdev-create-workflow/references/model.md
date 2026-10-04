@@ -237,6 +237,10 @@ property (it is never read back — there is no setter); `KeepField` writes a fi
 `IgnoreField` leaves the member out entirely; `[Archive(ArchiveOptions.ReName, "name")]` writes it under
 another name. Nothing here reorders members or changes what the other members do.
 
+⚙ **`[JsonIgnore]` counts too**, with the meaning it has in `System.Text.Json`: `Always` (the default) drops the
+member, `Never` opts it back in, and `WhenWritingNull` / `WhenWritingDefault` write it only when it holds
+something. A type written for another serializer does not have to be rewritten to take part here.
+
 ⚙ **Only writable members are written.** A `{ get; private set; }` property is runtime state the document never
 sees. A writable property of a delegate type is written but cannot be read back — keep hooks out of writable
 properties.

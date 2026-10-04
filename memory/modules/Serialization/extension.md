@@ -75,6 +75,8 @@
 
 `[Archive(ArchiveOptions, object?)]` 是成员级唯一的开关：`KeepProperty` 放行计算属性、`KeepField` 放行没有对应属性的字段、`IgnoreField` 把成员整个排除、`ReName` 换成员在文档里的名字（第二个实参给新名）。
 
+.NET 自带的 `[JsonIgnore]` 一并认：`Always`（默认）= 排除，`Never` = 显式放行，`WhenWritingNull` / `WhenWritingDefault` = 条件写出。**给已经有 `[JsonIgnore]` 的类型接入这套格式时不必改写。**
+
 **它只动单个成员，不动规则**：成员顺序是逐字节契约，`[Archive]` 不重排、不改变其余成员的取舍。改「所有成员」的粒度仍然只有 `SerializationOptions.WithExcludedPropertyTypes`，而且它按**声明类型**精确匹配。
 
 写这个特性时会撞上三条只有做过才知道的约束（生成器看不见别的生成器、生成器引用不了目标程序集、引用程序集剥非 public 成员），都记在 [pitfalls.md](pitfalls.md) §七。
