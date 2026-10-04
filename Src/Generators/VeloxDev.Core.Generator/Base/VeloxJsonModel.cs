@@ -1345,11 +1345,33 @@ namespace VeloxDev.Generators.Base
         }
 
         /// <summary>
-        /// The name written into <c>$type</c>: <c>Namespace.Type, AssemblyName</c>, the form existing archives
-        /// carry.
+        /// The name written into <c>$type</c>: <c>Namespace.Type, AssemblyName</c> — and, for a generic type, its
+        /// type arguments, each written the same way.
         /// </summary>
-        private static string WrittenName(INamedTypeSymbol symbol)
-            => ReflectionFullName(symbol) + ", " + symbol.ContainingAssembly?.Name;
+        /// <remarks>
+        /// <para>
+        /// The arguments have to be part of the name. The registry maps a name back to <b>one</b> type, and
+        /// <c>SlotEnumerator&lt;A&gt;</c> and <c>SlotEnumerator&lt;B&gt;</c> are two types with two readers — without
+        /// the arguments they registered the same string and the second overwrote the first, so a <c>$type</c>
+        /// would resolve to whichever assembly's module initializer happened to run last.
+        /// </para>
+        /// <para>
+        /// A non-generic type's name is byte-for-byte what it was, which is what keeps the frozen documents
+        /// byte-identical. Nothing parses this string — <c>VeloxJsonRegistry.TypeOf</c> is a dictionary lookup — so
+        /// the shape only has to be stable and injective rather than something <c>Type.GetType</c> would accept.
+        /// </para>
+        /// </remarks>
+        private static string WrittenName(ITypeSymbol symbol)
+            => symbol is INamedTypeSymbol named
+                ? ReflectionFullName(named) + TypeArgumentsOf(named) + ", " + named.ContainingAssembly?.Name
+                : symbol.ToDisplayString();
+
+        // 每个类型实参按同样的规则递归写出来（含它自己的程序集），非泛型类型没有这一段。
+        // 结尾那段 `<…>` 与最外层程序集之间用 `, ` 分隔，与既有拼法一致。
+        private static string TypeArgumentsOf(INamedTypeSymbol symbol)
+            => symbol.TypeArguments.Length == 0
+                ? string.Empty
+                : "<" + string.Join(", ", symbol.TypeArguments.Select(WrittenName)) + ">";
 
         private static IEnumerable<INamedTypeSymbol> EnumerateTypes(INamespaceSymbol scope)
         {

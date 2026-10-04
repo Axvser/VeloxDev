@@ -208,7 +208,9 @@ public static class VeloxJsonRegistry
     /// <param name="type">The type.</param>
     /// <param name="name">
     /// The name, in the form existing archives carry — <c>Namespace.Type, AssemblyName</c>, the assembly-qualified
-    /// name without its version and culture. It is the wire format, not a label.
+    /// name without its version and culture, and with each type argument written the same way for a generic type
+    /// (<c>SlotEnumerator&lt;A, AssemblyName&gt;, AssemblyName</c>). It is the wire format, not a label — and it is
+    /// the key this table is read by, so it has to identify exactly one type.
     /// </param>
     /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
     public static void RegisterName(Type type, string name)

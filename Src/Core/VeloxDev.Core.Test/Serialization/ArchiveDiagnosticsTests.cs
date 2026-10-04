@@ -181,6 +181,33 @@ public class ArchiveDiagnosticsTests
         }
         """;
 
+    /// <summary>A closed generic, whose registered name has to say which instantiation it is.</summary>
+    private const string AClosedGenericMember = """
+        using VeloxDev.MVVM;
+        using VeloxDev.WorkflowSystem;
+
+        namespace Probe;
+
+        public partial class Model
+        {
+            [VeloxProperty] private SlotEnumerator<SlotDefaultViewModel>? enumerator;
+        }
+        """;
+
+    [TestMethod]
+    public void AClosedGeneric_IsRegisteredUnderANameCarryingItsTypeArgument()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(new VeloxJson(), AClosedGenericMember, "Probe");
+
+        Assert.IsFalse(diagnostics.Any(static d => d.Severity == DiagnosticSeverity.Error),
+            GeneratorProbe.Describe(diagnostics));
+
+        StringAssert.Contains(
+            generated,
+            "\"VeloxDev.WorkflowSystem.SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, VeloxDev.Core\"",
+            "without the argument, SlotEnumerator<A> and SlotEnumerator<B> would register the same name");
+    }
+
     [TestMethod]
     public void ANamedRootThatCannotBeWritten_IsReported()
         => AssertReports("VELOX_JSON_ARCH001", NamedRootThatCannotBeWritten);
