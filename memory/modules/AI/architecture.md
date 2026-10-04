@@ -1,11 +1,11 @@
 ﻿# AI — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/AI/`（19 个 .cs）。**目录名 `AI`，命名空间是 `VeloxDev.AI`** —— 两者不同名，`grep VeloxDev.AI` 会连带命中消费方。
-> **这个模块已经一行反射都没有了**（2026-10-03 起）。五个助手全部读编译期目录 `AIContextTree`（见 §七），动作经每类型生成的 `IAIContextAccessor` 落地：`AgentContextReader` / `AgentTypeResolver` / `AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor`。三个标注特性**在 Core 里已经没有读取点**，只有生成器读它们。**下面 §一~§六 仍然成立**（讲的是可观察行为，那些基本都保住了），但凡涉及「怎么做的」的句子都以 §七 为准；已经过期的具体行在 §七 末尾逐条列出。
-> 消费方：`Src/Core/VeloxDev.Core.Extension/Agent/`（**52** 个 .cs，命名空间同样以 `VeloxDev.AI` 起头：`VeloxDev.AI.Pipelines`、`VeloxDev.AI.Workflow`、`VeloxDev.AI.MCP`、`VeloxDev.AI.Skills`）。**别把 `Agent/` 与整个 `VeloxDev.Core.Extension` 项目搞混**：整个项目是 55 个 .cs（2026-09-26 实测；含 `Compat/NotNullWhenAttribute.cs` 这类非 Agent/ 下的文件），`Agent/` 只是其中 52 个（其余是框架侧的 `WorkflowSystem` 辅助、`TransitionSystem`、`MVVM` 等，与本模块无关）。**依赖方向单向：Extension → Core**。Core/AI 不引用 Extension 的任何东西，也不引用 `VeloxDev.WorkflowSystem` 的类型 —— 唯一一处提及是 `SlotSelectorsAttribute.cs:4` 的 XML 注释 `cref`（同程序集，所以能解析，但不是编译期依赖）。
-> 平台差异：**本模块没有平台轴**。整个 `AI/` 只 `using System.Windows.Input`（由 `System.ObjectModel` 提供，不是 WPF 依赖）—— `System.Reflection` 的 using 已随反射一起删光。所以本模块没有 `adapters/`。
+> 代码：`Src/Core/VeloxDev.Core/AI/`（20 个 .cs）。**目录名 `AI`，命名空间是 `VeloxDev.AI`** —— 两者不同名，`grep VeloxDev.AI` 会连带命中消费方。
+> **这个模块已经一行反射都没有了**（2026-10-03 起）。五个助手全部读编译期目录 `AIContextTree`（见 §七），动作经每类型生成的 `IAIContextAccessor` 落地：`AgentContextReader` / `AgentTypeResolver` / `AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor`。三个标注特性**在 Core 里已经没有读取点**，只有生成器读它们。**下面 §一~§六 仍然成立**（讲的是可观察行为，那些基本都保住了），但凡涉及「怎么做的」的句子都以 §七 为准。
+> 消费方：`Src/Core/VeloxDev.Core.Extension/Agent/`（**54** 个 .cs，命名空间同样以 `VeloxDev.AI` 起头：`VeloxDev.AI.Pipelines`、`VeloxDev.AI.Workflow`、`VeloxDev.AI.MCP`、`VeloxDev.AI.Skills`、`VeloxDev.AI.SubAgents` 等）。**别把 `Agent/` 与整个 `VeloxDev.Core.Extension` 项目搞混**：整个项目是 97 个 .cs（2026-10-04 实测；含 `Compat/NotNullWhenAttribute.cs` 这类非 Agent/ 下的文件），`Agent/` 只是其中 54 个（其余是框架侧的 `WorkflowSystem` 辅助、`TransitionSystem`、`MVVM` 等，与本模块无关）。**依赖方向单向：Extension → Core**。Core/AI 不引用 Extension 的任何东西，也不引用 `VeloxDev.WorkflowSystem` 的类型 —— 唯一一处提及是 `SlotSelectorsAttribute.cs:4` 的 XML 注释 `cref`（同程序集，所以能解析，但不是编译期依赖）。
+> 平台差异：**本模块没有平台轴**。整个 `AI/` 只用两个 BCL using —— `System.Reflection`（`AgentContextReader.cs:1` 取 `MemberInfo` 的声明类型与名字，不是对元数据做遍历）与 `System.Globalization`（`AIContextConvert.cs:1`）；没有任何 GUI 依赖。所以本模块没有 `adapters/`。
 
-本文只写「读完 13 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+本文只写「读完 20 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
@@ -19,24 +19,24 @@
 
 | 你以为在这里 | 实际在哪 |
 |---|---|
-| 工具怎么变成 `AITool`、工具名/描述/JSON 参数长什么样 | `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:49`（`CreateTools`）、`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs` |
+| 工具怎么变成 `AITool`、工具名/描述/JSON 参数长什么样 | `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:54`（`CreateTools`）、`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs` |
 | 调用上限、拒绝、埋点、事件流水线 | `Src/Core/VeloxDev.Core.Extension/Agent/Pipelines/`（`AgentPipeline`/`ToolPipeline`）。Core 的 `AgentToolCallEventArgs` 是**事后**通知，且不含结果成败字段 |
-| 弹窗、用户点「同意/拒绝」的 UI | 七家 demo，例如 `Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml.cs:431`。Core 只给 `AgentConfirmationEventArgs`/`AgentSelectionEventArgs` 两个 DTO |
-| 「等用户点完」的异步握手 | **不在 Core**。`EventHandler` 是同步的，所以接口注释只能写「signal any awaitable completion mechanism」（`AgentConfirmationEventArgs.cs:40-43`）；真正做这件事的是消费方的 `Func<..., Task>` 形状（`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs:494`、`:521`） |
-| 线程编组 | **不在 Core**。反射读写在**调用方线程**上跑；`AgentObjectToolkit` 明说它刻意不注册编组（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:84-88`） |
+| 弹窗、用户点「同意/拒绝」的 UI | 七家 demo，例如 `Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml.cs:452`（`ShowConfirmationDialogAsync`）。Core 只给 `AgentConfirmationEventArgs`/`AgentSelectionEventArgs` 两个 DTO |
+| 「等用户点完」的异步握手 | **不在 Core**。`EventHandler` 是同步的，所以接口注释只能写「signal any awaitable completion mechanism」（`AgentConfirmationEventArgs.cs:41-42`）；真正做这件事的是消费方的 `Func<..., Task>` 形状（`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs:726`、`:753`） |
+| 线程编组 | **不在 Core**。目录读写与访问器调用都在**调用方线程**上跑；`AgentObjectToolkit` 明说它刻意不注册编组（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:90-92`） |
 | 语言包 / 翻译 | 只有 `AgentLanguages` 枚举与码表，**没有一条文案**。文案由作者写在 `[AgentContext]` 上 |
-| 类型 schema（属性列表、枚举值、默认实例） | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/TypeIntrospector.cs:20`（`GetTypeSchema`）；Core 的 `AgentTypeResolver` 只做「字符串 → `Type`」 |
+| 类型 schema（属性列表、枚举值、默认实例） | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/TypeIntrospector.cs:39`（`GetTypeSchema`）；Core 的 `AgentTypeResolver` 只做「字符串 → `Type`」 |
 
 ### 本模块**不是**唯一的实现路径（读到这里之前一定会踩）
 
-消费方**只复用本模块的三样东西**：`AgentContextAttribute`/`AgentCommandParameterAttribute`/`SlotSelectorsAttribute` 三个**特性类型**、`AgentContextReader`/`AgentTypeResolver` 两个纯读助手、以及事件 DTO 与接口。**命令的发现/执行与属性的写入这两条在 Workflow 侧是分叉实现**：
+消费方**复用本模块的东西分几层**：`AgentContextAttribute`/`AgentCommandParameterAttribute`/`SlotSelectorsAttribute` 三个**特性类型**、`AgentContextReader`/`AgentTypeResolver` 两个纯读助手、事件 DTO 与接口，以及 §七 的目录面（`AIContextDirectory`/`AIContextTreeRegistry`/`IAIContextAccessor` —— 消费方直接读目录、直接调访问器）。**命令的发现/执行与属性的写入这两条在 Workflow 侧是分叉实现**：
 
 | 问题 | Core 通用路径 | Workflow 路径（各写各的） |
 |---|---|---|
-| 命令怎么被列出/执行 | `AgentCommandDiscoverer`，调用者 `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:217`、`:240` | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/CommandInvoker.cs:21`、`:81`，调用者 `.../Workflow/Functions/WorkflowAgentToolkit.cs:869`、`:921`、`:937` |
-| 属性怎么被批量写 | `AgentPropertyAccessor.SetProperties`（`AgentPropertyAccessor.cs:138`） | `.../Functions/ComponentPatcher.cs`（`ApplyPatch`，调用者 `.../WorkflowAgentToolkit.cs:810`、`:822`），连标量对拷都另写了一版（`ComponentPatcher.cs:236`） |
+| 命令怎么被列出/执行 | `AgentCommandDiscoverer`，调用者 `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:224`、`:247` | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/CommandInvoker.cs:32`、`:64`，调用者 `.../Workflow/Functions/WorkflowAgentToolkit.cs:989`、`:1041`、`:1057` |
+| 属性怎么被批量写 | `AgentPropertyAccessor.SetProperties`（`AgentPropertyAccessor.cs:164`） | `.../Functions/ComponentPatcher.cs`（`ApplyPatch` `:41`，调用者 `.../WorkflowAgentToolkit.cs:930`、`:942`），连标量对拷都另写了一版（`ComponentPatcher.cs:251`） |
 
-两条路在**可观察行为**上不同，所以「改 Core 的规则」和「改工具的行为」不是同一件事：`CommandInvoker` 的接口扫描**不做语言过滤**（返回全部语言的键值对，`CommandInvoker.cs:36-38`）而具体类扫描**硬编码 English**（`:64`、`:70`）；去重是「与已累积结果比名字」（`:53`）而不是名字集合；参数是按 `[AgentCommandParameter].ParameterType` **反序列化 JSON**（`:107`）—— 也正因为如此，**枚举参数在 Workflow 路径上是通的，在 `AgentMethodInvoker` 那条路上是断的**（见 §五·2）。它还自带一个**同名的 `CommandDescriptor`**（`CommandInvoker.cs:171`，与 `AgentCommandDiscoverer.CommandDescriptor` 同名不同命名空间）。
+两条路在**可观察行为**上不同，所以「改 Core 的规则」和「改工具的行为」不是同一件事。**`CommandInvoker` 现在也读目录**（`CommandInvoker.cs:39` 的 `MembersAcross`），但它仍是一份独立实现：自带一个**同名的 `CommandDescriptor`**（`CommandInvoker.cs:120`，与 `AgentCommandDiscoverer.CommandDescriptor` 同名不同命名空间，字段是 `Type? ParameterType` 与 `Descriptions` 的 `KeyValuePair<AgentLanguages,string>`）；**不做语言过滤** —— 把节点上每种语言的说明全部倒出来（`:45`）；参数用生成的 `VeloxJsonSerializer.Deserialize` 反序列化（`:89`）而不是 `AgentMethodInvoker` 的 `AIContextConvert` 转换表。**枚举参数两条路现在都能通**（见 §五·2）。
 
 ---
 
@@ -44,20 +44,20 @@
 
 | 特性 | 声明位置 | Core 里谁读它 | 消费方谁读它 |
 |---|---|---|---|
-| `AgentContextAttribute` | `AgentContextAttribute.cs:4` | **只有生成器**（`Src/Generators/VeloxDev.Core.Generator/Base/AIContextModel.cs` 的 `ReadTexts`）。运行期没有读取点：说明在编译期就被渲染成 `AgentText` 存进目录，Core 的 `AgentTextSelection.Select`（`AgentText.cs:63`）是**语言与回退规则的唯一所在**，`AgentContextReader` 只是按 `DeclaringType`+`Name` 查节点后转调它 | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/AgentContextCollector.cs:18`（转调 Core）、`.../Workflow/Functions/TypeIntrospector.cs:66` |
-| `AgentCommandParameterAttribute` | `AgentCommandParameterAttribute.cs:10` | **只有生成器**（`AIContextModel.ReadCommandParameterType`）。存进目录的方式是节点上一条 `AIContextRefKind.CommandParameterType` 引用 | `.../Agent/Workflow/WorkflowAgentScope.cs:810`、`:838`、`:850`（只取 `ParameterType` 用于注册类型，不参与调用） |
-| `SlotSelectorsAttribute` | `SlotSelectorsAttribute.cs:38` | **没有。Core 一处都不读它**（生成器读，存成 `SlotSelectorType` 引用 + `HasSlotSelectors` 标志） | `.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1133`、`:1293`、`:1344`；`.../Functions/ComponentPatcher.cs:128`；`.../Agent/Workflow/AgentContextCollector.cs:221`；`.../Agent/Workflow/WorkflowAgentScope.cs:809`、`:818`、`:837`、`:863` |
+| `AgentContextAttribute` | `AgentContextAttribute.cs:5` | **只有生成器**（`Src/Generators/VeloxDev.Core.Generator/Base/AIContextModel.cs:587` 的 `ReadTexts`）。运行期没有读取点：说明在编译期就被渲染成 `AgentText` 存进目录，Core 的 `AgentTextSelection.Select`（`AgentText.cs:63`）是**语言与回退规则的唯一所在**，`AgentContextReader` 只是按 `DeclaringType`+`Name` 查节点后转调它 | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/AgentContextCollector.cs:33`（转调 Core）、`.../Workflow/Functions/TypeIntrospector.cs:96` |
+| `AgentCommandParameterAttribute` | `AgentCommandParameterAttribute.cs:10` | **只有生成器**（`AIContextModel.ReadCommandParameterType` `:871`）。存进目录的方式是节点上一条 `AIContextRefKind.CommandParameterType` 引用 | 运行期只有 `.../Agent/Workflow/Functions/CommandInvoker.cs:44`、`:83` 经访问器的 `ParameterType(commandName)` 取它（`typeof` 字面量），用于反序列化参数 |
+| `SlotSelectorsAttribute` | `SlotSelectorsAttribute.cs:38` | **没有。Core 一处都不读它**（生成器读，存成 `SlotSelectorType` 引用 + `HasSlotSelectors` 标志） | `.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1253`（展示白名单）、`:1401`、`:1451`（校验）；`.../Functions/ComponentPatcher.cs:124`（拒绝直接 patch） |
 
 **结论**：`SlotSelectorsAttribute` 住在 Core/AI，但它是**给消费方的 Workflow 工具箱用的**（语义属于 `SlotEnumerator<TSlot>` 的校验白名单）。Core 只是提供了一个「编译器保证的常量容器」。动它的语义 = 动 Extension，Core 无感。
 
 ### `[AgentContext]` 的四条硬规则（读代码得出，不是读注释得出）
 
-1. **`inherit: false` 到处都是。** 类型/属性/方法上的 `[AgentContext]` **不会**沿继承链或接口下沉 —— 每一处读取都传 `inherit: false`（`AgentContextReader.cs:20`、`:27`、`:34`；`AgentMethodInvoker.cs:78`；`AgentPropertyAccessor.cs:63`）。
+1. **说明不沿继承链或接口下沉。** 类型/成员上的 `[AgentContext]` 在编译期就落到它自己那个目录节点上，运行期没有「继承」这一步：`AgentContextReader.EntryFor(member)` 按 `member.DeclaringType` 查节点（`AgentContextReader.cs:77-82`），所以继承来的成员读的是**基类**那条说明，派生类型不会多出一份；属性/方法也不扫接口。命名空间里已经不存在 `inherit:` 参数 —— 说明本就不从元数据读取。
 2. **有语言回退，且是「整目标、全有或全无」。** 规则集中在 `AgentTextSelection.Select`（`AgentText.cs:63`）：先取 `Language == language` 的；若**一条都没有**且请求的不是 `English`，则整体改取 `English` 的那些。所以「同语言命中 ≥ 1 条」时**不会**混入英文；`English` 自身无处可退。测试 `Src/Core/VeloxDev.Core.Test/AI/AgentContextReaderTests.cs`：`..._FallsBackToEnglish`、`..._FallbackIsAllOrNothing`、`..._EnglishRequestNeverFallsBack`、`..._NoEnglishEither_ReturnsEmpty`。**三个助手走 `AIContextMembers.DescriptionsFor(node, language)`（`AIContextMembers.cs`），按 `MemberInfo`/`Type` 进来的走 `AgentContextReader`** —— 两条都只是转调 `Select`，规则不再有第二份拷贝，改它只需改 `Select` 一处。
-3. **`HasAgentContext` 不看语言**（`AgentContextReader.cs:34-35`）：只要有任何语言的标注就为 true，与 `GetContexts` 的选取无关。
-4. **一个语言可写多条，全部返回且保序**（`AllowMultiple = true`，`AgentContextAttribute.cs:3`；测试 `.../AgentContextReaderTests.cs` 断言 English 命中 2 条）。`Context` 默认空串，所以 `[AgentContext(AgentLanguages.English)]` 合法但什么都不说明。
+3. **`HasAgentContext` 不看语言**（`AgentContextReader.cs:52-53`）：只要有任何语言的标注就为 true，与 `GetContexts` 的选取无关。
+4. **一个语言可写多条，全部返回且保序**（`AllowMultiple = true`，`AgentContextAttribute.cs:4`；测试 `.../AgentContextReaderTests.cs` 断言 English 命中 2 条）。`Context` 默认空串，所以 `[AgentContext(AgentLanguages.English)]` 合法但什么都不说明。
 
-**`ICommand` 是唯一「接口上的特性算数」的地方。** `AgentCommandDiscoverer.DiscoverCommands` **先扫接口**再扫具体类型（`AgentCommandDiscoverer.cs:64-88` / `:90-111`），用一个 `Ordinal` 名字集合去重（`:61`、`:70`、`:94`）。对命令而言「特性写在接口上」是官方做法（代码注释自己写着 `these carry the authoritative attributes`，`:64`），这也正是 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:33` 那一族标注的位置。对**方法**与**普通属性**没有对应的接口扫描，接口上的特性一律读不到。
+**`ICommand` 是唯一「接口上的特性算数」的地方。** 运行期不再扫描接口：`AgentCommandDiscoverer.DiscoverCommands` 直接遍历目录里的 `Commands` 节点（`AgentCommandDiscoverer.cs:79-90`），去重交给 `AIContextDirectory.MembersAcross` 的 `seen` 集合（`AIContextDirectory.cs:98-111`）。「接口上的标注才算数」这条规则前移到了生成期 —— `AIContextModel.InterfaceCommandProperty`（`AIContextModel.cs:783`，在 `BuildProperty` `:739` 与 `BuildPromotedCommand` `:969` 里只对命令调用）按同名属性回查接口，把 `[AgentContext]`/`[AgentCommandParameter]` 复制到实现类的命令节点上。对**方法**与**普通属性**没有对应的接口回查，接口上的特性一律读不到。命令标注的范本仍是 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:33` 那一族。
 
 ---
 
@@ -83,26 +83,26 @@ SetProperty(obj, "Name", v)     → 节点（CanWrite 标志）→ 访问器 Set
 
 **支线**：`FindBackingCommand`（属性名 → `Set{X}Command` / `{X}Command`，`AgentCommandDiscoverer.cs`）给消费方的 patcher 判断「这个属性该走 setter 还是走命令」—— 现在形参仍是 `Type`，但只读它的 `FullName` 去查目录；`AgentTypeResolver.ResolveType` 给「字符串类型名 → `Type`」（查访问器注册表，闭世界）；`AgentContextReader` 只服务类型/成员的说明文字。
 
-**这里没有「谁拥有状态」的问题，只有「谁有副作用」的问题。** 全是静态类和每次调用新建的 DTO，**静态可变状态为零**（`AIContextTreeRegistry` 的 `_fragments` / `_accessors` 只在模块初始化时写一次；`AgentLanguagesExtensions.LanguageCodeMap`，`AgentLanguages.cs:43`，初始化后再无写者）；唯一被长期持有的状态是消费方那边的被代理对象。有副作用的入口只有四个：`Execute`、`Invoke`、`SetPropertyValue`/`SetProperties`、`CopyScalarProperties`。
+**这里没有「谁拥有状态」的问题，只有「谁有副作用」的问题。** 全是静态类和每次调用新建的 DTO，**静态可变状态为零**（`AIContextTreeRegistry` 的 `_fragments` / `_accessors` 只在模块初始化时写一次；`AgentLanguagesExtensions.LanguageCodeMap`，`AgentLanguages.cs:45`，初始化后再无写者）；唯一被长期持有的状态是消费方那边的被代理对象。有副作用的入口只有四个：`Execute`、`Invoke`、`SetPropertyValue`/`SetProperties`、`CopyScalarProperties`。
 
 ---
 
 ## 四、不变量
 
-1. **`CanExecute` 只被报告，从不拦截。** `AgentCommandDiscoverer.Execute` 不查 `CanExecute`，消费方也不查 —— `AgentObjectToolkit` 把 `CanExecute` 原样放进 `ListCommands` 的输出（`.../Agent/AgentObjectToolkit.cs:225`），而 `ExecuteCommand` 直接调 `Execute`（`.../Agent/AgentObjectToolkit.cs:240`）。要拦只能由工具层自己拦。**生成器那条闸已经删掉了**：`WriteTryExecuteCommand` 曾经发一句 `if (!c.CanExecute(parameter)) return false;`，与 `IAIContextAccessor.CanExecuteCommand` 的注释直接矛盾 —— 搬入时按不变量改成不查（`Src/Core/VeloxDev.Core.Test/AI/AgentCommandDiscovererTests.cs` 的 `CanExecute_IsReportedAndNeverEnforced` 锁住）。
+1. **`CanExecute` 只被报告，从不拦截。** `AgentCommandDiscoverer.Execute` 不查 `CanExecute`，消费方也不查 —— `AgentObjectToolkit` 把 `CanExecute` 原样放进 `ListCommands` 的输出（`.../Agent/AgentObjectToolkit.cs:232`），而 `ExecuteCommand` 直接调 `Execute`（`.../Agent/AgentObjectToolkit.cs:247`）。要拦只能由工具层自己拦。**生成器那条闸已经删掉了**：`WriteTryExecuteCommand` 曾经发一句 `if (!c.CanExecute(parameter)) return false;`，与 `IAIContextAccessor.CanExecuteCommand` 的注释直接矛盾 —— 搬入时按不变量改成不查（`Src/Core/VeloxDev.Core.Test/AI/AgentCommandDiscovererTests.cs` 的 `CanExecute_IsReportedAndNeverEnforced` 锁住）。
 2. **`CanExecute` 的实参恒为 `null`**（`AgentCommandDiscoverer.cs` 的 `DiscoverCommands` 与 `CanExecuteCommand`）—— 命令的 `ParameterType` 完全不参与。后果：需要非空参数才返回 `true` 的命令被报成 `canExecute: false`（假阴）。
-3. **命令名规范化单向且大小写敏感**：`name.EndsWith("Command") ? name : name + "Command"`（`:199-200`）。发现时给的是**原始属性名**（`"SaveCommand"`），执行时 `"Save"` 与 `"SaveCommand"` 都行，但 `"savecommand"` 会被拼成 `"savecommandCommand"` 然后找不到。
-4. **`[AgentContext]` 的语言参数占了位置参数第一位**（`AgentContextAttribute.cs:4`），所以写不出 `[AgentContext("说明")]`（字符串撞 `AgentLanguages`，编译不过）。官方写法是 `[AgentContext(AgentLanguages.Chinese, "说明")]`，全仓一致，例 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowViewModel.cs:11`。
-5. **确认题的默认答案是「拒绝」**：`AgentConfirmationEventArgs.Result` 初值 `Deny`（`AgentConfirmationEventArgs.cs:30`）。处理器忘了赋值 = 拒绝，fail-closed。消费方在这之上做 `AllowAlways` 的会话级持久化（`.../Agent/Workflow/WorkflowAgentScope.cs:537-550`）。
-6. **`AgentLanguages.Chinese` 与 `ChineseSimplified` 是同一个值**（`AgentLanguages.cs:7`，值 1）：枚举共 34 个名字 / **33 个不同值**。所以 `ToLanguageCode`/`GetDisplayName` 里 `Chinese or ChineseSimplified`（`:93`、`:168`）只覆盖一个值。**未定义值会抛** `ArgumentOutOfRangeException`（`:125`、`:200`）—— 例如反序列化来一个 `(AgentLanguages)99`。
-7. **码表 41 条 → 33 个值，方向不对称**（`AgentLanguages.cs:43-86`）：`no`/`nb`/`nn` 都 → `Norwegian`，但 `Norwegian.ToLanguageCode()` 只回 `no`；`zh`/`zh-hans`/`zh-cn`/`zh-sg` → `ChineseSimplified`，回程只有 `zh-Hans`。`TryParseLanguageCode` 额外做两件事：先把 `_` 换成 `-`（`:138`），失败后再按 `-` 切首段重试（`:144-148`），所以 `zh-HK-x-foo` 会命中 `zh-hk`。
+3. **命令名规范化单向且大小写敏感**：`name.EndsWith("Command") ? name : name + "Command"`（`AgentCommandDiscoverer.cs:191-192`）。发现时给的是**原始属性名**（`"SaveCommand"`），执行时 `"Save"` 与 `"SaveCommand"` 都行，但 `"savecommand"` 会被拼成 `"savecommandCommand"` 然后找不到。
+4. **`[AgentContext]` 的语言参数占了位置参数第一位**（`AgentContextAttribute.cs:5`），所以写不出 `[AgentContext("说明")]`（字符串撞 `AgentLanguages`，编译不过）。官方写法是 `[AgentContext(AgentLanguages.Chinese, "说明")]`，全仓一致，例 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowViewModel.cs:11`。
+5. **确认题的默认答案是「拒绝」**：`AgentConfirmationEventArgs.Result` 初值 `Deny`（`AgentConfirmationEventArgs.cs:30`）。处理器忘了赋值 = 拒绝，fail-closed。消费方在这之上做 `AllowAlways` 的会话级持久化（`.../Agent/Workflow/WorkflowAgentScope.cs:770-783`）。
+6. **`AgentLanguages.Chinese` 与 `ChineseSimplified` 是同一个值**（`AgentLanguages.cs:8`，值 1）：枚举共 34 个名字 / **33 个不同值**。所以 `ToLanguageCode`/`GetDisplayName` 里 `Chinese or ChineseSimplified`（`:108`、`:191`）只覆盖一个值。**未定义值会抛** `ArgumentOutOfRangeException`（`:140`、`:223`）—— 例如反序列化来一个 `(AgentLanguages)99`。
+7. **码表 41 条 → 33 个值，方向不对称**（`AgentLanguages.cs:45-88`）：`no`/`nb`/`nn` 都 → `Norwegian`，但 `Norwegian.ToLanguageCode()` 只回 `no`；`zh`/`zh-hans`/`zh-cn`/`zh-sg` → `ChineseSimplified`，回程只有 `zh-Hans`。`TryParseLanguageCode` 额外做两件事：先把 `_` 换成 `-`（`:157`），失败后再按 `-` 切首段重试（`:163-166`）—— 重试取的是**第一个 `-` 之前的那一段**，所以命中不了 `zh-hk` 这类两段码：`zh-HK-x-foo` 会退到 `zh`（→ `ChineseSimplified`），要命中 `zh-hk` 只有写成 `zh-HK` 本身。
 
 ---
 
 ## 五、反直觉（带依据）
 
 1. **重载解析仍按实参个数，不按类型。** 生成期把同一名字的方法排成 `switch (args.Length)`：精确元数优先，其余元数由「必填数 ≤ 个数 < 总数」的那个重载接手（尾部缺的参数由生成代码**省略实参**，编译器补它自己的默认值 —— 所以目录里不需要存默认值，只需要 `Optional` 标志）。**同元数的重载谁赢取决于声明顺序**，`Add(int)` 与 `Add(string)` 仍然无法区分。
-2. **枚举参数现在能进去了。** 生成的转换走 `AIContextConvert.ToEnum<TEnum>`（字符串按名字、数字按底层值，`AIContextConvert.cs:126`）。旧的反射路径在这里会 `Convert.ChangeType` 抛 `InvalidCastException` 再被吞掉 —— 那是 `AgentMethodInvoker` 与 `AgentPropertyAccessor` 两条路不对称的时代。**JSON 整数经 `JToken.ToObject<object>()` 是 `Int64`，现在也能落到枚举上。**
+2. **枚举参数现在能进去了。** 生成的转换走 `AIContextConvert.ToEnum<TEnum>`（字符串按名字、数字按底层值，`AIContextConvert.cs:126`）。旧的反射路径在这里会 `Convert.ChangeType` 抛 `InvalidCastException` 再被吞掉 —— 那是 `AgentMethodInvoker` 与 `AgentPropertyAccessor` 两条路不对称的时代。数字形态也能落到枚举上（`ToEnum<TEnum>` 对非字符串走 `Enum.ToObject`，`:135`）。
 3. **`GetPropertyValue` 对「不可读」与「不在目录里」都回 `null`，不抛。** `CanRead` 现在也不是「有 getter」而是「有**公开** getter」，所以 `{ private get; set; }` 走「不可读」这条路 —— 旧的反射实现会在这里抛 `ArgumentException`（行为变化见 §七）。
 4. **`CopyScalarProperties` 现在转调访问器的 `CopyScalarFrom`**，搬的是**两个类型共有的、可写的全部成员**，不再限「11 种标量 + 枚举」（旧的也不做转换，靠 `SetValue` 抛出后吞掉；新的是生成代码里 `(T)value!`）。**它零生产调用者** —— 真正跑的是 `ComponentPatcher.CopyScalarProperties` 那份自带白名单的分叉（`extension.md` §二·7），改 Core 这份不影响实际路径。
 5. **`SetProperties` 的 `rejected` 是按名字精确比对的 `ISet<string>`** —— 没有通配、没有前缀规则。这条没变。
@@ -110,7 +110,7 @@ SetProperty(obj, "Name", v)     → 节点（CanWrite 标志）→ 访问器 Set
 7. **「后备方法」的猜测没了**：旧的 `FindParameterAttribute` 会拿 `commandName.Replace("Command","")` 去猜属性背后的方法，`"CommandHistoryCommand"` 会被猜成 `"History"`。目录里没有这种启发式 —— 参数类型只来自 `[AgentCommandParameter]`，接口上写了就以接口为准（见 §七）。
 8. **`DiscoverCommands` 的顺序变成声明顺序**（目录保序），不再是 `GetInterfaces()` 的未定义顺序。名字仍按名字去重；**同名不同元数的方法在目录里只能留一个节点**（`AIContextTreeRegistry.List` 按名字去重），所以 `DiscoverMethods` 一个方法名只报一条 —— 但 `Invoke` 仍按实参个数支持全部重载（访问器里 `switch (args.Length)` 每个合法个数一个分支）。
 9. **`AgentContextReader.HasAgentContext` 不看语言**：只要有任何语言的 `[AgentContext]` 就为 true，与 `GetContexts` 的选取无关。
-10. **Core/AI 已零反射，但 `IsTrimmable` 仍是 `false`。** `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 TargetFrameworks 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0`。剩余反射全在消费方：Extension 侧的 `WorkflowAgentToolkit`、`CommandInvoker`、`AgentContextCollector` 的四个 `…ByReflection` 回退体、`WorkflowAgentScope` 的 `assembly.GetTypes()` 扫描、`TypeIntrospector`，以及 `ComponentPatcher.ApplyPatch` —— 见 §七 的剩余清单。
+10. **Core/AI 已零反射，裁剪/AOT 契约也开在 `net8.0` 那一档了。** `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj:5` 的 TargetFrameworks 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`，其中 `IsAotCompatible` 只对 `net8.0` 为 true（早期几档不支持分析器，靠 net8.0 替它们守）；Extension 的 csproj 同样如此。**反射已从 Core 与 Extension 两侧全部清零**（`…ByReflection` 回退体现在住在测试工程 `ReflectionContextOracle`）；少数无法消除的点改成「按需声明」而不是消除 —— 见 §七。
 
 ---
 
@@ -124,16 +124,16 @@ SetProperty(obj, "Name", v)     → 节点（CanWrite 标志）→ 访问器 Set
 | 属性读写与类型转换规则 | `AgentPropertyAccessor.cs`（发现与拒绝文案）；转换在生成代码里，同上 |
 | 类型/成员的继承链怎么走 | `AIContextDirectory.MembersAcross`（`AIContextDirectory.cs`）—— **只此一份**，渲染器与三个助手都转调它 |
 | 说明文字怎么取（语言、回退、多值） | `AgentTextSelection.Select`（`AgentText.cs`）一处；节点侧的入口是 `AIContextMembers.DescriptionsFor`，`MemberInfo`/`Type` 侧的入口是 `AgentContextReader`，都只是转调，见 §二表 |
-| 语言枚举与码表 | `AgentLanguages.cs:3-39`（枚举）、`:43-86`（码表）、`:88`/`:129`/`:163`（三处 switch） |
+| 语言枚举与码表 | `AgentLanguages.cs:4-40`（枚举）、`:45-88`（码表）、`:97`（`AllLanguages` 派生列表）、`:103`/`:186`（两处 switch：`ToLanguageCode`/`GetDisplayName`） |
 | 确认 / 选择 / 工具调用的事件负载 | `AgentConfirmationEventArgs.cs`、`AgentSelectionEventArgs.cs`、`AgentToolCallEventArgs.cs` |
-| `SlotSelectors` 的行为 | **不在本模块** —— `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1293`、`.../Functions/ComponentPatcher.cs:128` |
+| `SlotSelectors` 的行为 | **不在本模块** —— `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1253`、`:1401`、`:1451`、`.../Functions/ComponentPatcher.cs:124` |
 | 工具面的整体装配（谁把描述符变成工具） | `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs`（通用对象）、`.../Agent/Workflow/WorkflowAgentScope.cs`（工作流） |
 
 ---
 
-## 七、AIContextTree：编译期静态目录（说明与类型解析已接入；动作路径待搬）
+## 七、AIContextTree：编译期静态目录（Core 与 Extension 都已全部接入）
 
-**为什么有它。** §五·10 记的那条 —— 整套 Agent 面靠运行期反射，没有任何裁剪/AOT 契约。`AIContextTree` 是把「Agent 面是什么」和「怎么对一个对象动手」都前移到编译期的那条路，目标就是让这套东西在 NativeAOT 下工作。**今天它是死代码**：生成器在产出、注册表在注册，但 `AgentContextCollector` 与 `WorkflowAgentScope` 仍走反射那条。
+**为什么有它。** §五·10 记的那条 —— 整套 Agent 面靠运行期反射，没有任何裁剪/AOT 契约。`AIContextTree` 是把「Agent 面是什么」和「怎么对一个对象动手」都前移到编译期的那条路，目标就是让这套东西在 NativeAOT 下工作。**它现在是唯一的路径**：Core 五个助手与 Extension 的 `AgentContextCollector`/`CommandInvoker`/`ComponentPatcher`/`TypeIntrospector`/`WorkflowAgentScope` 全部读目录；原先那些 `…ByReflection` 实现搬进了测试工程当 parity 的 oracle。
 
 ### 两半，必须分开理解
 
@@ -158,7 +158,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
   …同上
 ```
 
-`Components` 下四分不是发明的：`WorkflowAgentScope` 的自动发现本来就按这四个接口分类。四个默认视图模型、框架枚举/接口/数据也都在 `Framework/` 里，`WorkflowAgentScope` 那四个手维护的 `Type[]`（`:34-50`）是它们的手写前身。
+`Components` 下四分不是发明的：`WorkflowAgentScope` 的自动发现本来就按这四个接口分类。四个默认视图模型、框架枚举/接口/数据也都在 `Framework/` 里；那些曾经手维护的 `Type[]` 已经删除，`WithAutoDiscovery` 现在只是按目录列举（`WorkflowAgentScope.cs:969-986`）。
 
 ### 惰性：一个目录一个 `Lazy`
 
@@ -168,17 +168,17 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 **它不套用 `Analizer.Filters.Targets`**，三处独立的理由：那个管线只接受 `ClassDeclarationSyntax` 且要求 `partial`（接口与枚举进不来，而它们是目录的一等公民）；它的触发集 `TriggerAttributes` 不含三个 Agent 特性；而组件的身份是**实现了哪个接口**，特性触发表达不了。它走一次编译级遍历，一次 `AddSource`。两条守卫：编译单元里没有 `VeloxDev.AI.AgentContextAttribute` 就整体不产出；`VeloxAgentContextTree=false` 可整体关闭。
 
-**框架分片必须在 Core 内部生成。** 决定性理由：`GetClassContext` 渲染带 `[VeloxProperty]` 的**私有实例字段**（`AgentContextCollector.cs:160-168` 用 `BindingFlags.NonPublic`），而 Roslyn **引用程序集里没有私有成员** —— 消费者侧去读引用程序集符号会静默丢掉每一个字段行。
+**框架分片必须在 Core 内部生成。** 决定性理由：目录要收录带 `[VeloxProperty]` 的**私有实例字段**（`AIContextModel.ReadMembers` 的私有字段分支 `:697-704`；这也正是旧 `…ByReflection` 实现里 `BindingFlags.NonPublic` 做的那件事，如今那份实现住在测试工程的 `ReflectionContextOracle`），而 Roslyn **引用程序集里没有私有成员** —— 消费者侧去读引用程序集符号会静默丢掉每一个字段行。
 
 ### 三条必须记住的坑
 
-1. **生成器之间看不见彼此的产物。** 目录里的 `Channel` 是 MVVM 生成器写出来的属性，`SaveCommand` 是 CommandWriter 写出来的 —— `AIContextTree` 生成器**看不到它们**，只能复现命名规则。所以规则抽在 `Base/AIContextNaming.cs`，`MVVMFieldAnalizer`（`Analizer.cs`）与 `CommandWriter.cs:153` 都改为转调它。**改命名规则只改那一处；改一处漏一处会让目录开始命名不存在的成员，报错落在消费方编译里。**
+1. **生成器之间看不见彼此的产物。** 目录里的 `Channel` 是 MVVM 生成器写出来的属性，`SaveCommand` 是 CommandWriter 写出来的 —— `AIContextTree` 生成器**看不到它们**，只能复现命名规则。所以规则抽在 `Base/AIContextNaming.cs`，`MVVMFieldAnalizer`（`Analizer.cs:223`，转调点 `:270`）与 `CommandWriter.cs:155` 都改为转调它。**改命名规则只改那一处；改一处漏一处会让目录开始命名不存在的成员，报错落在消费方编译里。**
 2. **`[VeloxCommand]` 方法在实现类里普遍是 `private`。** 生成出来的命令属性却是公开的，所以命令的收录**不能按方法可见性过滤** —— 按 `Public` 过滤会把整个命令面漏掉（`SlotDefaultViewModel` 的四条命令全是 private）。
 3. **访问器够不着别的类型的 `private` 成员。** 提升属性靠的是**生成出来的那个属性**（同一个类里，编得过），不是字段本身。
 
 ### 明确不在目录里的东西（都不是漏，是判过）
 
-泛型类型与泛型方法（`T` 在生成的 cast 里没有绑定）、静态类（`(Static)target` 编不过）、`private`/`protected`/`file` 类型、编译器生成的名字、`object` 的四个成员（`ToString`/`GetHashCode`/`Equals`/`GetType` —— 与 `AgentMethodInvoker.DiscoverMethods` 跳过的是同一批，理由也一样：没有作者想把它们放进 Agent 面）。同元数的重载只留一个，并报 `VELOX_AI_TREE001`。
+泛型类型与泛型方法（`T` 在生成的 cast 里没有绑定）、静态类（`(Static)target` 编不过）、`private`/`protected`/`file` 类型、编译器生成的名字、`object` 的四个成员（`ToString`/`GetHashCode`/`Equals`/`GetType` —— 生成器的 `IsObjectMember` 把它们滤掉，理由一样：没有作者想把它们放进 Agent 面）。同元数的重载只留一个，并报 `VELOX_AI_TREE001`。
 
 **`VELOX_AI_TREE001` 差点变成噪音，值得记一笔。** 它第一次跑就报了 8 条，全在 `Anchor`/`Offset`/`Size`/`Scale`/`Viewport`/`CellKey`/`ThreadRef` 上 —— 报的是 `Equals(object)` 与 `Equals(T)` 那一对。每个带强类型 `Equals` 的值类型都会中，而没人想重载 `Equals` 给 Agent 用。**先把 `object` 的四个成员滤掉，诊断才只剩真正需要作者知道的东西**；顺序反了的话，这条警告的下场就是被整仓 `NoWarn` 掉。
 
@@ -197,11 +197,11 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 - `Src/Core/VeloxDev.Core.Test/AI/AIContextTreeTests.cs`（8 条）—— 注册、目录列举、条目查找、访问器读写与执行。含**反向对照**：一个没被标注的类型必须查不到路径也没有访问器 —— 目录一旦放宽收录规则，那条会先红。
 - `Src/Core/VeloxDev.Core.Test/AI/AIContextTreeGeneratorTests.cs`（5 条）—— 走 `GeneratorProbe` 驱动生成器，断言提升名、命令名、重载诊断、以及没有 Agent 面时**不产出**。
-- `Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentContextTreeParityTests.cs` —— **最重要的一条**：63 个框架类型 × 2 种语言共 **126 个块**，目录渲染与反射渲染逐字对比。它是「换数据源不换输出」的唯一保证。
+- `Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentContextTreeParityTests.cs` —— **最重要的一条**（单个 `[TestMethod]`，运行时遍历 `Framework/` 下每个类型条目 × 2 种语言）：目录渲染与反射渲染逐字对比。它是「换数据源不换输出」的唯一保证。**块数不可静态复核** —— 记忆写下时是 63 个框架类型 × 2 语言 = 126 个块，以测试实际遍历为准。
 
 ### 当前状态（2026-10-03，第三站已落：**Extension 侧也清零了**）
 
-**实测**（把 `VeloxDev.Core` 与 `VeloxDev.Core.Extension` 临时加到 `net8.0` + `-p:EnableTrimAnalyzer=true`）：
+**实测**（当时把 `VeloxDev.Core` 与 `VeloxDev.Core.Extension` 临时多目标到 `net8.0` + `-p:EnableTrimAnalyzer=true`；如今 `net8.0` 档已进两个 csproj 并常开 `IsAotCompatible`）：
 
 | 程序集 | IL2xxx 警告 |
 |---|---|
@@ -219,9 +219,9 @@ Customer/                           ← 每个消费者程序集一个分片（�
 | `AgentContextCollector` | 四个 `…ByReflection` **搬进测试工程**（`ReflectionContextOracle`）当 parity 的 oracle；库里只剩目录一条路 |
 | `CommandInvoker` | 目录的 `Commands` 目录 + 访问器；`Invoke` 的参数类型来自 `IAIContextAccessor.ParameterType`（`typeof` 字面量） |
 | `ComponentPatcher` | 目录标志（`CanWrite`/`IsSingleSlot`/`HasSlotSelectors`）+ `accessor.Set`；`DeserializeToType` 的目标 `Type` 来自 `MemberType` |
-| `TypeIntrospector` | 目录 + `MemberType` + `accessor.Create`；`FriendlyTypeName` 不再吃 `Type` |
+| `TypeIntrospector` | 目录 + `MemberType` + `accessor.Create`；`FriendlyTypeName` 只吃访问器给的 `Type?`（`typeof` 字面量），不再拿反射对象 |
 | `WorkflowStateTracker` | `MembersAcross(type,"Properties")` + `accessor.TryGet` |
-| `WorkflowAgentToolkit` | 约 14 组共享助手（见下） |
+| `WorkflowAgentToolkit` | 一组共享助手：原先散落的 `GetProperty(...)`/`GetMethod(...)`/`GetInterfaces()` 反射调用换成目录查询、访问器转型与类型解析包装 |
 | `WorkflowAgentScope` | `WithAutoDiscovery()` 无参化，四个手维护的 `Type[]` 删除 |
 
 **`WithAutoDiscovery` 现在是目录列举**：读 `Customer/{Enums,Interfaces,Data}` 与 `Customer/Components/{Nodes,Slots,Links,Trees}`，每个名字经 `AgentTypeResolver.ResolveType` 换成 `typeof` 字面量再进既有的 `Customer*` 集合。**框架类型不再需要手写的排除表** —— 只读 `Customer/` 就把它们排除了。旧的两趟扫描（`GetTypes()` + 成员深扫推断）整个消失：目录本来就是那次推断的结果。
@@ -229,7 +229,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 **为泛型补的两条路**（目录不收泛型类型，所以访问器够不着 `SlotEnumerator<TSlot>`）：
 
 1. `VeloxDev.WorkflowSystem` 新增非泛型视图 —— `IConditionalSlotProvider`（擦掉 `TSlot` 的 `Parent`/`SelectorTypeName`/`SelectorType`/`Slots`/`TrySelect`/`SetSelector`）与 `IConditionalSlot`（`Name`/`Value`/`Slot`），两个泛型类显式实现。Toolkit 里那些 `GetProperty("Items")`/`GetProperty("Slot")`/`GetMethod("TrySelect")` 全部变成一次转型。
-2. `IAIContextAccessor` 新增 `MemberType(member)` 与 `ParameterType(commandName)` —— 每处都是 `typeof` 字面量。这是唯一让 `Type` 合法离开访问器的地方，也是 Newtonsoft 反序列化、`IsAssignableFrom` 判定、`Create` 之外所有需要 `Type` 的地方的解。
+2. `IAIContextAccessor` 新增 `MemberType(member)` 与 `ParameterType(commandName)` —— 每处都是 `typeof` 字面量。这是唯一让 `Type` 合法离开访问器的地方，也是生成式序列化、`IsAssignableFrom` 判定、`Create` 之外所有需要 `Type` 的地方的解。
 
 **`IAIContextAccessor` 现在的形状**：`TypeName` / `TargetType` / `HasPublicParameterlessConstructor` / `Create` / `MemberType` / `ParameterType` / `TryGet` / `Set` / `TryExecuteCommand` / `CanExecuteCommand` / `TryInvoke` / `CopyScalarFrom`。**值类型也能 `Create`**（`IsRefLikeType` 除外），所以 `defaultJson_runtimeOnly` 对 struct 依旧。
 
@@ -258,7 +258,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 - 枚举参数经 `InvokeMethod` 从「传不进去」变成「能进去」。
 - 闭世界：`AgentObjectToolkit` 只对生成器收录过的类型有效（被标注、或成员里有 `ICommand`、或是四个组件接口的实现）。任意 POCO 现在是「列不出、写不进、调不动」，不是「能用」—— 这是公开 API 的契约位移，写在 `AgentObjectToolkit` 的 `<remarks>` 里。
 
-**没搬的（全在 Extension）：** `WorkflowAgentToolkit`、`CommandInvoker`、`AgentContextCollector` 的四个 `…ByReflection` 回退体、`WorkflowAgentScope` 含 `assembly.GetTypes()` 的扫描、`TypeIntrospector`、`ComponentPatcher.ApplyPatch`。另有 5 条**不属于 Agent 面**（WorkflowSystem 3、TransitionSystem 2）。
+**第二站结束时没搬的都还在 Extension：** `WorkflowAgentToolkit`、`CommandInvoker`、`AgentContextCollector` 的四个 `…ByReflection` 回退体、`WorkflowAgentScope` 含 `assembly.GetTypes()` 的扫描、`TypeIntrospector`、`ComponentPatcher.ApplyPatch` —— **第三站已把这些全部搬完**（见上一节「第三站改了什么」）。另有 5 条**不属于 Agent 面**（WorkflowSystem 3、TransitionSystem 2）。
 
 **AOT 警告数本轮没有重测**（要动 `IsAotCompatible` 影子工程）。第一站的基线是 `VeloxDev.Core` 28 → 26、`VeloxDev.Core.Extension` 225（162 条 Newtonsoft + 63 条自身反射）—— 那两个数现在都过期了。
 
@@ -275,11 +275,11 @@ Customer/                           ← 每个消费者程序集一个分片（�
    （`CompileKeyNormalizer` 的路由键、`TransitionProperty.FindIndexer`、`Interpolator`）也都各自处理完了 ——
    前两处的换法**实测过会红**，所以是「按需声明」而不是消除，理由写在各自的注释里。
 
-**还没做的**：`IsTrimmable` / `IsAotCompatible` 仍未正式开（两个工程的 csproj 都不是）；本轮的测量是临时
-多目标 + `-p:EnableTrimAnalyzer=true` 做出来的，没进仓库。`Examples/Workflow/Avalonia Trimmed/
-Directory.Build.props` 里那条 `TrimmerRootAssembly` **已经删了**，但端到端的裁剪发布没验过 —— 桌面那条路
-被 `NETSDK1124` 挡着（`-p:PublishTrimmed=true` 是全局属性，会泄漏给多目标的 Core/Extension），
-真正配了裁剪的是 Browser/Android 两条。
+**已进仓库的**：`VeloxDev.Core` 与 `VeloxDev.Core.Extension` 的 csproj 都给 `net8.0` 那一档开了
+`IsAotCompatible=true`（`VeloxDev.Core.csproj:5`、`VeloxDev.Core.Extension.csproj:5`），分析器在这一档常开。
+`Examples/Workflow/Avalonia Trimmed/Directory.Build.props` 里那条 `TrimmerRootAssembly` **已经删了**，
+但端到端的裁剪发布没验过 —— 桌面那条路被 `NETSDK1124` 挡着（`-p:PublishTrimmed=true` 是全局属性，会泄漏给
+多目标的 Core/Extension），真正配了裁剪的是 Browser/Android 两条（此历史判断未再复核）。
 
 ### 这一轮踩到的坑（都在测试里钉住了）
 

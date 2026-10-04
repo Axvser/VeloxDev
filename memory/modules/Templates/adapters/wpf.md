@@ -19,11 +19,11 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| link-view | **空壳**：`TemplateClass.xaml` 全文只有一个空 `<UserControl>`（5 行），几何全在 code-behind | `workflow-link-view/TemplateClass.xaml:2-5`、`.xaml.cs:66` 的 `OnRender` |
+| link-view | **空壳**：`TemplateClass.xaml` 全文只有一个空 `<UserControl>`（5 行），几何全在 code-behind | `workflow-link-view/TemplateClass.xaml:2-5`、`.xaml.cs:92` 的 `OnRender` |
 | node-view | `Viewbox` + 固定设计尺寸卡片 | `workflow-node-view/TemplateClass.xaml:16-17` |
 | slot-view | `Viewbox` + 一个 `Path` | `workflow-slot-view/TemplateClass.xaml:14-17` |
-| tree-view | 五层嵌套外壳（`Border` → `GridDecorator` → `ScrollViewer` → `Canvas` + 平级 `MinimapOverlay`） | `workflow-tree-view/TemplateClass.xaml:41-69` |
-| grid-decorator | `RulerThickness` 默认 **28**，`RulerBand => RulerThickness` | `workflow-grid-decorator/TemplateClass.cs:38` |
+| tree-view | 五层嵌套外壳（`Border` → `GridDecorator` → `ScrollViewer` → `Canvas` + 平级 `MinimapOverlay`） | `workflow-tree-view/TemplateClass.xaml:45-74` |
+| grid-decorator | `RulerThickness` 默认 **28**，`RulerBand => RulerThickness` | `workflow-grid-decorator/TemplateClass.cs:39` |
 | minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，构造器里只设四个画刷（24 行） | `workflow-minimap-overlay/TemplateClass.cs:12-23` |
 | template-selector | `DataTemplateSelector` 子类 | `workflow-template-selector/TemplateClass.cs` |
 
@@ -40,19 +40,19 @@
    `clr-namespace:TemplateNamespace`（`workflow-tree-view/TemplateClass.xaml:5-6`）。
    这是"七个条目必须落进同一个命名空间"这条契约的**实现本身**：`local` 指自己，`workflowViews` 指兄弟。
 2. **`RenderTransform` 绑定必须写在 `DataTemplate` 的根元素上**，两处：
-   `workflow-tree-view/TemplateClass.xaml:22`（节点）与 `:34`（连线），
+   `workflow-tree-view/TemplateClass.xaml:23`（节点）与 `:35`（连线），
    写法都是 `{Binding RelativeSource={RelativeSource AncestorType={x:Type local:TemplateClass}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}`。
    适配器只负责写这个附着属性的值，**不会**替你把它绑到视图上。
-3. **`PART_Canvas` 的三件套**：`Background="Transparent"`（`:54`，命中测试要它）、
-   `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`（`:55`）、
-   `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`（`:56`）。
+3. **`PART_Canvas` 的三件套**：`Background="Transparent"`（`:59`，命中测试要它）、
+   `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`（`:60`）、
+   `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`（`:61`）。
    ⇒ **WPF 是 `ViewPool` 两个属性都设的那一类**；Avalonia 只设前一个，见 `adapters/avalonia.md`。
 4. **标尺避让由模板自己做**：`Canvas.RenderTransform` 里的 `TranslateTransform` 把 X/Y 都绑到
-   `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.xaml:58-59`）。
+   `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.xaml:63-64`）。
    适配器不参与 —— 它只把装饰器的 `RulerBand` 转发给虚拟化内缩。
 5. **连线视图的盒子由 tree-view 给**：`LinkTemplate` 里 `Width/Height` 绑
    `ElementName=PART_Canvas` 的 `ActualWidth/ActualHeight`，并 `Panel.ZIndex="-1"`
-   （`workflow-tree-view/TemplateClass.xaml:31-33`）。⇒ link-view 自己的 XAML 是空的（§一），
+   （`workflow-tree-view/TemplateClass.xaml:32-34`）。⇒ link-view 自己的 XAML 是空的（§一），
    它拿到了一个画布大小的盒子、再在其中 `OnRender`。**改 link-view 时不要去找它的 XAML**。
 6. **五个 `PART_*` 名字一次挂全**：`ScrollViewerName` / `CanvasName` / `GridDecoratorName` /
    `PointerPressSourceName` / `MinimapOverlayName`（`workflow-tree-view/TemplateClass.xaml:10-14`）。
@@ -73,7 +73,7 @@
   （`workflow-slot-view/TemplateClass.xaml.cs:48`）与 `context.ReceiveConnectionCommand.Execute(null)`（`:57`）
 
 而适配器的附着行为走的是 `PreviewMouseLeftButtonDown` / `PreviewMouseLeftButtonUp` 并置 `e.Handled = true`
-（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotConnectionBehavior.cs:26-33,43-44`，同位置见
+（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotConnectionBehavior.cs:29-35,44-58`，同位置见
 `memory/modules/WorkflowSystem/adapters/wpf.md` §二·L1 的对照）。
 
 ⇒ **同一对命令挂了两条路**。按 WPF 路由语义，Preview（隧道）那条置 `Handled` 之后，

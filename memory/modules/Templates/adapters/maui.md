@@ -17,13 +17,13 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| link-view | **不是几何视图**：一个 `ContentView`（`InputTransparent="True"`）里放适配器的 `behaviors:WorkflowLinkOverlay`，把树＋四个滚动/内容偏移＋标尺厚度＋三个颜色绑过去 | `workflow-link-view/TemplateClass.xaml:13-22`、`.xaml.cs:17-41` 是 8 个 `BindableProperty` |
+| link-view | **不是几何视图**：一个 `ContentView`（`InputTransparent="True"`）里放适配器的 `behaviors:WorkflowLinkOverlay`，把树＋交互源＋四个滚动/内容偏移＋标尺厚度＋三个颜色绑过去 | `workflow-link-view/TemplateClass.xaml:14-23`、`.xaml.cs:21-40` 是 10 个 `BindableProperty` |
 | node-view | `ContentView` 自己挂 `WorkflowSlotLayoutBehavior` 的三个名字 | `workflow-node-view/TemplateClass.xaml:8-11` |
 | slot-view | 圆点由 `IDrawable` **按几何画**，不是 SVG | `workflow-slot-view/TemplateClass.xaml.cs:35-49` |
 | tree-view | `ContentView`（`x:Name="Root"`）+ 池数据源直绑 `Helper.VisibleItems`（连线由适配器的入队过滤跳过） | `workflow-tree-view/TemplateClass.xaml:8,57`、`.xaml.cs:1-12` |
 | grid-decorator | `sealed class : Grid, IWorkflowGridDecorator`，两个 `GraphicsView` + `IDrawable` | `workflow-grid-decorator/TemplateClass.cs:17,20-21,46-60` |
 | minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个颜色（21 行） | `workflow-minimap-overlay/TemplateClass.cs:12-20` |
-| template-selector | `DataTemplateSelector` 子类，四个 `DataTemplate?`，`OnSelectTemplate` 抛 `"Xxx is not set."` | `workflow-template-selector/TemplateClass.cs:33` |
+| template-selector | `DataTemplateSelector` 子类，四个 `DataTemplate?`，`OnSelectTemplate` 抛 `"Xxx is not set."` | `workflow-template-selector/TemplateClass.cs:20`（方法）、`:24-30`（四处抛） |
 
 三层 z 序写在 tree-view 的注释里：`grid < links < nodes < rulers`（`workflow-tree-view/TemplateClass.xaml:35`）。
 
@@ -33,10 +33,10 @@
 
 ### 2.1 link 层是 `ScrollView` 的**兄弟**，且在 `GridDecorator` **内部**
 
-`workflow-tree-view/TemplateClass.xaml:32-53` 的结构是 `GridDecorator` → { `LinkView`, `ScrollView` }。
-`LinkView` 的五个绑定全部指向 `PART_GridDecorator`（`:37-41`），而 `WorkflowTree` 走
-`{Binding BindingContext, Source={x:Reference Root}}`（`:36`）。
-文件里 `:33-35` 的注释把理由写明了：视口级 → **不随世界画布长大** → 深缩放不撞 Win2D 纹理上限，
+`workflow-tree-view/TemplateClass.xaml:32-61` 的结构是 `GridDecorator` → { `LinkView`, `ScrollView` }。
+`LinkView` 的绑定指向 `PART_GridDecorator`（`:44-48`；另加 `InteractionSource` `:43`），而 `WorkflowTree` 走
+`{Binding BindingContext, Source={x:Reference Root}}`（`:42`）。
+文件里 `:39-41` 的注释把理由写明了：视口级 → **不随世界画布长大** → 深缩放不撞 Win2D 纹理上限，
 并给出换算式 `px = Ruler + anchor + ContentOffset − Scroll`。
 
 ⇒ **把 `LinkView` 挪进 `ScrollView` 会让深缩放下的连线消失**，而且不报错。
@@ -56,10 +56,10 @@
 
 ### 2.3 `PART_RulerOffsetHost` 是夹在 `ScrollView` 与 `PART_Canvas` 之间的第二个 `AbsoluteLayout`
 
-`workflow-tree-view/TemplateClass.xaml:45-52`：`PART_ScrollViewer` → `PART_RulerOffsetHost`
-（`TranslationX/Y` 绑 `PART_GridDecorator.RulerThickness`）→ `PART_Canvas`。
+`workflow-tree-view/TemplateClass.xaml:52-59`：`PART_ScrollViewer` → `PART_RulerOffsetHost`
+（`TranslationX/Y` 绑 `PART_GridDecorator.RulerThickness`，`:53-54`）→ `PART_Canvas`。
 ⇒ 标尺避让在这一家是**外层容器的位移**，不是其它家的 `Canvas.RenderTransform`。
-`PART_Canvas` 自己仍是 `BackgroundColor="Transparent"`（`:49`）并挂 `ViewPool.TemplateSelector`（`:51`）。
+`PART_Canvas` 自己仍是 `BackgroundColor="Transparent"`（`:56`）并挂 `ViewPool.TemplateSelector`（`:58`）。
 ⚠ `WorkflowSurfaceBehavior.CanvasName` 指的是 `PART_Canvas`（`:12`），**不是** `PART_RulerOffsetHost`。
 
 ### 2.4 插槽宿主 Grid 必须 `InputTransparent="True" CascadeInputTransparent="False"`
@@ -73,7 +73,7 @@
 
 ### 2.5 node-view 的"弹性缩放"是 code-behind 算的，不是布局
 
-`workflow-node-view/TemplateClass.xaml:12-13` 的注释：code-behind 按
+`workflow-node-view/TemplateClass.xaml.cs:19` 的注释：code-behind 按
 `collapsed width / 260` 缩放标题行、字号与插槽字形，让内容重排进折叠后的盒子、不裁切。
 ⇒ 设计尺寸 `260` 在这一家是 **`workflow-node-view/TemplateClass.xaml.cs:6` 的 `DesignWidth` 常量**，
 不是标记里的 `Width="260"`（WPF/WinUI 那边是标记里的固定 `Grid Width="260" Height="180"`）。
@@ -93,14 +93,14 @@
 
 `workflow-slot-view/.template.config/template.json` 声明了 `slotPath` 却没有 `replaces`。
 根因在代码：`SlotDrawable.Draw` 用 `canvas.FillCircle` / `canvas.DrawCircle`
-按 `dirtyRect` 算半径（`workflow-slot-view/TemplateClass.xaml.cs:40-48`），
+按 `dirtyRect` 算半径（`workflow-slot-view/TemplateClass.xaml.cs:35-49`），
 一份 SVG 路径都没有。⇒ **想在 MAUI 上换插槽图标，要改的是 `SlotDrawable`，不是任何 `TemplateSlotPath`。**
 其余 23 个空转参数与全局清单见 `../architecture.md` §7.1。
 
 ### P2 · `Replace` / `Move` 仍无人处理（现在归适配器）
 
 过滤已搬进适配器 `ViewManager`（见 `memory/modules/WorkflowSystem/adapters/maui.md` §二·1），
-它的 `OnCollectionChanged` 同样只有 `Add` / `Remove` / `Reset`（`ViewManager.cs:87-131`）。
+它的 `OnCollectionChanged` 同样只有 `Add` / `Remove` / `Reset`（`ViewManager.cs:87-119`）。
 ⇒ 上游若用 `Replace` 原地换掉一个可见项，池**不会**收到任何通知，节点视图不刷新也不报错
 （与本仓库适配器侧"`ViewManager` 多半不处理 `Replace`"是同一类问题，
 对照表见 `memory/modules/WorkflowSystem/adapters/wpf.md` §三·5）。
@@ -118,10 +118,11 @@
 ⇒ 漏掉 `InputTransparent` 会让整块画布的指针手势被装饰器吃掉（平移、框选全失效），
 漏掉 `ZIndex` 或添加顺序会让标尺被网格盖住。
 
-### P5 · `RulerThickness` 在这一家是 `28d`，而且**只有这一家是 double 字面量**
+### P5 · `RulerThickness` 在这一家是 `28d`
 
-`workflow-grid-decorator/TemplateClass.cs:24` 写的是 `28d`（其余各家写 `28` 或 `28.0`）。
-与 WinForms/Jalium 的 `36` 对照表在 `../architecture.md` §六·轴 1。
+`workflow-grid-decorator/TemplateClass.cs:24` 的 `BindableProperty.Create(..., 28d, …)`。
+WPF 的 DP 元数据、WinUI 的 `PropertyMetadata`、Avalonia 的 `Register(...)` 也都写 `28d`；
+Razor 写 `28`。与 WinForms/Jalium 的 `36` 对照表在 `../architecture.md` §六·轴 1。
 
 ---
 

@@ -17,7 +17,7 @@
 | `Interpolator` | 注册 `string` 一个采样器 + `CreateScheduler` 的选择依据 | 唯一要回答「这家平台上什么东西可动画」的地方；答案与别家完全不同（§二·3） |
 | `UIThreadInspector` | 线程归属 = **circuit 的** `SynchronizationContext` | 唯一要回答「UI 线程是谁」的地方，而在这家这个答案不是进程级的（§二·4） |
 | `Transition<T>` | 逐类型手写的 `Property` 重载表 | 唯一要回答「用户能声明出什么」的地方，而这张表是手写的、因此有缺口（§二·3 末） |
-| `State` / `TransitionEffect` / `TransitionEffects` / `TransitionScheduler` / `TransitionInterpreter` | —— | `TransitionScheduler` 只是把三个型参绑好；**`TransitionEffect` 类体为空、连 `Priority` 都不声明**，靠 Core 非泛型基类已经实现好的 `ITransitionEffect<NonPriority>`（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionEffect.cs:38-43`）—— 这是「这家的 `TPriorityCore` = `NonPriority`」的必然结果，别等着一份优先级默认值；`TransitionInterpreter` 的类体为空**本身就是这家的核心决定**，见 §二·2 |
+| `State` / `TransitionEffect` / `TransitionEffects` / `TransitionScheduler` / `TransitionInterpreter` | —— | `TransitionScheduler` 只是把三个型参绑好；**`TransitionEffect` 类体为空、连 `Priority` 都不声明**，靠 Core 非泛型基类已经实现好的 `ITransitionEffect<NonPriority>`（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionEffect.cs:40-45`）—— 这是「这家的 `TPriorityCore` = `NonPriority`」的必然结果，别等着一份优先级默认值；`TransitionInterpreter` 的类体为空**本身就是这家的核心决定**，见 §二·2 |
 
 `Transition<T>` 的 `where T : class`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Transition.cs:18`）不是随手加的约束，
 它是这家的动画目标形状（§二·1）。
@@ -35,8 +35,8 @@
 （`Examples/Transition/Blazor/Demo/Demo/Models/BoxModel.cs:11`），其中 `Style` 属性负责把若干字段拼成一段 CSS 串
 （同文件 `:74-79` 的 `transform:translateX(..) translateY(..) rotate(..) scale(..)`）。
 适配器侧没有任何元素可挂，于是**「什么时候重绘」变成用户的责任**：demo 在 `Home.razor.cs` 里显式调
-`UIThreadInspector.CaptureUIThread()`（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs:998`），
-并逐个对象挂 `PropertyChanged += (_, _) => InvokeAsync(StateHasChanged)`（同文件 `:1005`、`:1008`）。
+`UIThreadInspector.CaptureUIThread()`（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs:903`），
+并逐个对象挂 `PropertyChanged += (_, _) => InvokeAsync(StateHasChanged)`（同文件 `:910`、`:913`）。
 
 **推论（写新用例时先想这一条）。** 别家的 `LateUpdate += InvalidateVisual` / `effect.LateUpdate += (_,_) => 重绘`
 之所以能成立，是因为动画目标**就是**渲染对象；这里动画目标与渲染对象之间永远隔着一层用户写的 `PropertyChanged` 桥。
@@ -46,7 +46,7 @@
 
 **限制。** Blazor 没有一个在「渲染器自己的线程」上 tick 的定时器 —— 服务端根本没有渲染器线程，渲染发生在浏览器。
 `TransitionInterpreter` 的 XML 把这句写成了结论：`Deliberately without a frame pacer: Blazor has no timer that fires on
-the renderer's own thread.`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs:3-8`，类体为空）。
+the renderer's own thread.`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs:3-9`，类体为空）。
 
 **这条「唯一」是有据可查的**：七家里六家都覆写了 `CreateFramePacer`（Avalonia / Jalium / MAUI / WPF / WinForms / WinUI
 各自的 `PlatformAdapters/TransitionInterpreter.cs`），**只有 Razor 没有** —— 它的那个文件里只有类声明。
@@ -60,7 +60,7 @@ therefore drifts to a pool thread after its first frame unless the host supplied
 
 结论：**在这家，第一帧之后 `Update` / `LateUpdate` 就在线程池线程上跑了。**
 - 想在这两个回调里碰渲染 → 必须自己 `InvokeAsync`，否则死在 `SynchronizationContext` 上。
-- 「每帧一次 dispatch」这件在别家是要避免的事（`../extension.md:89` 的捷径表里写着「pacer 与写路径不一致 → **每帧一次 dispatch**，正是采样路径要避免的那件事」），
+- 「每帧一次 dispatch」这件在别家是要避免的事（`../extension.md:105` 的捷径表里写着「pacer 与写路径不一致 → **每帧一次 dispatch**，正是采样路径要避免的那件事」），
   在这家是**默认且唯一**的路径：属性写入经 `SamplerSet.Apply` → `UIThreadInspector.PostCore` → `context.Post`，一帧一次。
 
 这与 mem 里那条「Blazor 刻意没有 pacer」是同一件事的两个面，别把「没有 pacer」当成漏写 —— 它是**做不到**，
@@ -90,19 +90,19 @@ WPF 12、Avalonia 14、MAUI 12、WinUI 10、Jalium 10、**WinForms 1、Razor 1**
 Blazor 这一侧没有这样的类型：**没有任何「可写的元素属性」是 CLR 对象**，动画的产物是一段**字符串**（CSS / SVG 属性）。
 于是 `string` 是这家唯一有意义的平台类型，而字符串插值恰恰需要自己的数学 ——
 颜色要按 R/G/B 通道共用一条 `BoundedProgress` 进度、alpha 走自己的区间
-（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Samplers/StringSampler.cs:93-105`；
+（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Samplers/StringSampler.cs:95-107`；
 `BoundedProgress` 本身在 Core：`Src/Core/VeloxDev.Core/TransitionSystem/BoundedProgress.cs`），
 非颜色串只能退化成**离散标记**：先判两端能不能解析成颜色，不能就挂 `DiscreteMarker`，起点保持到进度到 1 才换终点
-（同文件 `:32-49`、`:57`）。
+（同文件 `:34-51`、`:59`）。
 
 这家 demo 的动画面就是「几个 double + 一个 CSS 颜色串」（`Examples/Transition/Blazor/Demo/Demo/Models/BoxModel.cs:74-79`），
 Core 那 15 个本来就够。
 
-**由此得出的联动陷阱。** 这张表是**手写**的（`PlatformAdapters/Transition.cs:31-129`，十三组逐类型重载），
-而不是别家那种泛型 `Property<TValue>`，于是它的两个边缘各有一个坑（`../extension.md:162` 已记 `long`）：
+**由此得出的联动陷阱。** 这张表是**手写**的（`PlatformAdapters/Transition.cs:35-143`，十六组逐类型重载），
+而不是别家那种泛型 `Property<TValue>`，于是它的两个边缘各有一个坑（`../extension.md:178` 已记 `long`）：
 - **`long` 声明不出来**：Core 注册了 `LongSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:15`），
   但这张手写表里没有 `long` 重载 → 在 Razor 上**根本写不出**这条路径，不是「写了不生效」而是「写不了」。
-- **`decimal` 声明得出来但不会动**：表里有 `decimal` 重载（`PlatformAdapters/Transition.cs:55-60`），
+- **`decimal` 声明得出来但不会动**：表里有 `decimal` 重载（`PlatformAdapters/Transition.cs:63-68`），
   但 Core **从没注册过** decimal 采样器 → `Prepare` 走 `Warn("Unsampled")` 静默跳过。
   这一格在**六家都存在**（WPF/Avalonia/WinUI/MAUI/WinForms/Razor 的重载表都有 `decimal`；**只有 Jalium 没有**，它的 `Transition.cs` 里搜不到 `decimal`），不是 Razor 特有；写在这是因为手写表没有编译器帮你对账。
 
@@ -113,28 +113,28 @@ Core 那 15 个本来就够。
 ### 4. `SynchronizationContext` 属于 circuit，不属于进程
 
 **限制。** 一个 Blazor Server 进程同时跑很多 circuit，每个 circuit 有自己的同步上下文。
-「UI 线程」在这家**不是一个进程级答案，而是「哪个 circuit 在问」**（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs:42-51`
+「UI 线程」在这家**不是一个进程级答案，而是「哪个 circuit 在问」**（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs:44-53`
 的 remarks 把这句写死了）。
 
-**做法。** `ThreadFor` 返回**当前线程的 context 优先、首次捕获的兜底**（`:52-56`）；
-`IsCurrentThread` 是 `SynchronizationContext` 的**引用相等**（`:58-60`）；
+**做法。** `ThreadFor` 返回**当前线程的 context 优先、首次捕获的兜底**（`:54-58`）；
+`IsCurrentThread` 是 `SynchronizationContext` 的**引用相等**（`:61-63`）；
 调度器在启动这趟动画的线程上把答案钉进 `TransitionRun.Thread`（`../architecture.md` §三），
 这才让两个同时活着的 circuit 不会互相投递。
 
 **陷阱。** `_uiSyncContext` / `_uiThreadId` 是 **static**（`:7-9`），所以它记住的是**第一个**触碰它的 circuit 的 context。
 因此 `ThreadFor` 的兜底只在「动画从后台线程启动」这一种情形下有意义 —— 这正是 `CaptureUIThread` 的 XML 说的用法
-（`:11-15`），别把那个 static 当成「本进程的 UI 线程」。同理 `IsAlive` 只由 `NotifyShutdown()` 翻牌（`:40`），
+（`:11-15`），别把那个 static 当成「本进程的 UI 线程」。同理 `IsAlive` 只由 `NotifyShutdown()` 翻牌（`:42`），
 没有框架生命周期可依赖。
 
 ### 5. 编组的失败没有信号
 
 **限制。** `SynchronizationContext.Post` 返回 `void`，队列已经消失（circuit 断了）也不抛、也不报。
 `PostCore` 因此**无条件返回 `true`**，代码里原文承认了这一点：
-`// Post 没有失败信号,只能按"已接受"记;真正的丢弃由帧侧的取消标记兜住。`（`UIThreadInspector.cs:62-69`）。
+`// Post 没有失败信号,只能按"已接受"记;真正的丢弃由帧侧的取消标记兜住。`（`UIThreadInspector.cs:66-73`）。
 
-**与契约的表面冲突 —— 这里要标记一下。** `../extension.md:195` 写着「`PostCore` 必须诚实报告是否入队」，
+**与契约的表面冲突 —— 这里要标记一下。** `../extension.md:211` 写着「`PostCore` 必须诚实报告是否入队」，
 而这里返回的是一个恒真的乐观值。读代码时不要把它当违规：**是平台做不到，不是没做**。
-能被做的那半做到了 —— `if (!thread.TryGet<SynchronizationContext>(out var context)) return false;`（`:64`），
+能被做的那半做到了 —— `if (!thread.TryGet<SynchronizationContext>(out var context)) return false;`（`:68`），
 即「这个 `ThreadRef` 里没有 context」时报 `false`。
 
 **实践结论。** 「这趟动画还在不在」的唯一可靠判据是 `run.Cts`（与宿主自己的 `Dispose`），
@@ -164,24 +164,23 @@ Core 那 15 个本来就够。
 ## 四、改这里时最容易踩的坑（带依据）
 
 1. **Culture：把 `double` 格式化进 CSS。** 这是这家的标志性坑。反面（自己做对的样子）就在采样器里：
-   `StringSampler` 输出颜色用 `string.Create(CultureInfo.InvariantCulture, ...)`（`Samplers/StringSampler.cs:120`），
-   解析百分比用 `float.TryParse(..., NumberStyles.Float, CultureInfo.InvariantCulture, ...)`（`:228`）。
+   `StringSampler` 输出颜色用 `string.Create(CultureInfo.InvariantCulture, ...)`（`Samplers/StringSampler.cs:121`），
+   解析百分比用 `float.TryParse(..., NumberStyles.Float, CultureInfo.InvariantCulture, ...)`（`:229`）。
    **采样器侧是干净的；坑全在采样器之外** —— 也就是用户/demo 把动画值拼进样式串的地方。
-   已修的两个范本在 demo 里：`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateLinkView.razor.cs:128`
-   的注释把规则写成了显式约定，`Css()` 走不变文化（`:312-315`，alpha 那一处的理由写在 `:311`：
-   「它是周期的一个端点」），`N()` 同理（`:317`）。
-   这条**为什么会变成 bug**，树里就能看全：光带颜色是一个 `string` 属性（`TemplateLinkView.razor.cs:133-134`
-   的 `BandColor`，注释写明「周期写它，中间那个 stop 读它」），而它与三个偏移量一样**全部是动画状态**
-   （`:127` 的注释：「本组件即动画对象，路径直接读视图，中间没有标量要映射回停靠点」）—— 串一旦成为动画端点，
-   采样器就必须能解析它，于是小数点写法从「显示问题」升级成「正确性问题」；`:128` 的注释正是这条结论的落点。
-   适配器侧仍有活体，全量清单见 `WorkflowSystem/adapters/razor.md`。凡是要在 Razor 上写「把 double 变进字符串」的新代码，
-   先确认 `CultureInfo.InvariantCulture`。
+   已修的两个范本在 demo 里：`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateLinkView.razor.cs:160`
+   的注释把规则写成了显式约定（「数值一律走不变文化：Razor 按当前区域写裸 `double`，逗号小数点会让浏览器读不出这个属性」），
+   `N(double)` 用 `ToString("0.####", CultureInfo.InvariantCulture)`（`:167`），`ToCss` 用 `FormattableString.Invariant`
+   （`:128` 的函数、`:138-139` 的写入）。
+   这条**为什么会变成 bug**，树里就能看全：被动画的是 `Phase`（`double`，`.Property(v => v.Phase, 1d)`，`:243`），
+   它经这些 helper 被拼进 CSS 串 —— 动画产物一旦是串，格式化写法就从「显示问题」升级成「正确性问题」，
+   浏览器认不认那个小数点决定动画有没有发生。适配器侧仍有活体，全量清单见 `WorkflowSystem/adapters/razor.md`。
+   凡是要在 Razor 上写「把 double 变进字符串」的新代码，先确认 `CultureInfo.InvariantCulture`。
 2. **`Transition<T>.Execute` 是 `async void`，而 circuit 会在导航时销毁。** 别家的窗口通常活到进程结束；
    这家的 circuit 一导航就没了，动画却还在线程池线程上跑、还在往一个已死的 `SynchronizationContext` 上投帧
    （§二·5 的乐观 `true` 意味着**你不会收到任何抱怨**）。写用例时要在 `Dispose` 路径上退出动画，
    并在 `InvokeAsync` 之前检查自己的 `_disposed` 标记 —— demo 的读表定时器就是这么写的：
-   `if (_disposed) return;` 在回调第一行（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs:1020-1022`，
-   标记声明在 `:827`），注释写明「定时器线程可能在 Dispose 之后才轮到」。
+   `if (_disposed) return;` 在回调第一行（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs:927-930`，
+   标记声明在 `:756`），注释写明「定时器线程可能在 Dispose 之后才轮到」。
 3. **静态状态在 Blazor Server 下的语义被放大了。** 一个进程多个 circuit，任何 `static` 字段都是**跨用户共享**的。
    这家的适配器里确实有两个 `static`（`UIThreadInspector` 的 context/线程号），它们能成立是因为语义恰好是
    「首个 circuit 的兜底」；**新增任何 `static` 之前先想清楚它是进程级还是 circuit 级** —— 视图侧为同一件事

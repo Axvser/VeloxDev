@@ -12,7 +12,7 @@
 | 嵌入资源 | `SkillSourceKind.Embedded`（`EmbeddedSkillSource.cs:47`） | **正文全文注入**，按名字序拼接（`SkillScope.cs:238` `BuildEmbeddedBlock`） |
 | 文件系统 | `SkillSourceKind.File`（`FileSkillSource.cs:46`） | **只做广告**：名字 + 描述，包在 `<available_skills>` 的 Agent Skills 约定块里（`SkillScope.cs:299` `BuildAdvertisement`），正文要模型自己用 `load_skill` 取 |
 
-两者**可以同时存在**，`SkillAgentContextProvider.BuildInstructions`（`SkillAgentContextProvider.cs:106-120`）把两个块依次拼起来；**两个都空时返回 `null`**，贡献一个「空标题」不如什么都不贡献（`:116-117`）。
+两者**可以同时存在**，`SkillAgentContextProvider.BuildInstructions`（`SkillAgentContextProvider.cs:106-117`）把两个块依次拼起来；**两个都空时返回 `null`**，贡献一个「空标题」不如什么都不贡献（`:117`）。
 
 `BuildEmbeddedBlock` 的注释（`SkillScope.cs:233-237`）给了一个可以直接拿来验的等价关系：**全部技能都启用时，它逐字节等于技能可开关之前提示里带的内容**。所以「技能开关坏了」的判据是这句话，不是回忆。
 
@@ -24,14 +24,14 @@
 - `WithSkills(...)` 之后建的 provider 拿到这个事实（`SkillScope.CreateContextProvider(..., embeddedCorpusDelivered: true)`），于是**不再贡献 `BuildEmbeddedBlock`**，改为贡献 `SkillScope.BuildWithdrawnBlock`（`:267`）：**当前处于停用状态的嵌入技能名单**。
 - 为什么不是干脆闭嘴：骨架冻住的是「当时的启用状态」，之后 `SetEnabled(name, false)` 若不发声就成了静默空操作。报一份「上面那几篇请忽略」既不说两遍正文，也不丢掉这次关闭。
 
-**两种宿主顺序都能跑**，但语义不同：先 `WithSkills` 再取骨架 ⇒ 语料归子系统（默认推荐，`AgentHelper.cs` 就是这个顺序）；先取骨架再 `WithSkills` ⇒ 语料冻在骨架里，子系统此后只报差量。文件技能永远不进 `BuildWithdrawnBlock`（它们本就只做广告，不在提示里）。测试：`ComposedProvidersTests.cs` 的 `SkeletonBuiltBeforeSkills_*` / `SkeletonBuiltAfterSkills_*` 五条，以及 `SkillScopeTests.cs` 的 `WithdrawnBlock_*` 五条。
+**两种宿主顺序都能跑**，但语义不同：先 `WithSkills` 再取骨架 ⇒ 语料归子系统（默认推荐，`AgentHelper.cs` 就是这个顺序）；先取骨架再 `WithSkills` ⇒ 语料冻在骨架里，子系统此后只报差量。文件技能永远不进 `BuildWithdrawnBlock`（它们本就只做广告，不在提示里）。测试：`ComposedProvidersTests.cs` 的 `SkeletonBuiltBeforeSkills_*` / `SkeletonBuiltAfterSkills_*` 四条，以及 `SkillScopeTests.cs` 的 `WithdrawnBlock_*` 五条。
 
 ---
 
 ## 二、缓存与版本
 
 - `SkillScope.Version`（`SkillScope.cs:61`）在**发现集合**或**任一启用标志**变化时自增。
-- `PromptLanguage` 是**独立维度**：注释明说「语言不是别的地方可观察的」（`:75-78`），虽然 `WithPromptLanguage` 也自增 `Version`（`:83`），provider 仍然按 **`(Version, Language)` 元组**缓存。这是双保险，不是冗余。
+- `PromptLanguage` 是**独立维度**：注释明说「语言不是别的地方可观察的」（`:76-79`），虽然 `WithPromptLanguage` 也自增 `Version`（`:83`），provider 仍然按 **`(Version, Language)` 元组**缓存。这是双保险，不是冗余。
 - `SkillAgentContextProvider` 的 `_stateKeys` 用 **`scope.InstanceId`**（每个 scope 一个 `Guid`，`SkillScope.cs:73`）而不是像工作流那样用 `StateDiscriminator`。理由：一个 agent 上挂两个 scope 是正常布置，框架在**两个 provider 共用 state key** 时会抛。
 - `Refresh()` **是宿主动作，不是每轮动作** —— `SkillScope.cs:153-158` 明说：它总是自增 `Version`，在 prompt provider 里每轮调它会直接废掉缓存。
 
@@ -77,11 +77,11 @@
 
 ## 五、技能工具
 
-`SkillAgentToolkit.ToolNames`（`SkillAgentToolkit.cs:49`）= `["ListSkills","load_skill","UnloadSkill","read_skill_resource"]`。
+`SkillAgentToolkit.ToolNames`（`SkillAgentToolkit.cs:48`）= `["ListSkills","load_skill","UnloadSkill","read_skill_resource"]`。
 
 - 工具名故意用 Agent Skills 约定的 `load_skill` / `read_skill_resource`（下划线而非 Pascal），其余是 Pascal。
-- **这组名字必须被工作流工具包读到**：`WorkflowAgentToolkit.BuildQueryToolNames`（`WorkflowAgentToolkit.cs:346`）把它们整体并进「只读」集合，于是技能工具**无论从哪来**（宿主注册的 or provider 贡献的）都**计入读预算、且永不标脏**（`WorkflowAgentToolkit.cs:323-330`）。**所以在这里加一个新工具名，只读分类会自动跟上 —— 但只有名字进了 `ToolNames` 才行。**
-- `CreateTools()`（`:53`）不包装，`CreateTools(ToolPipeline, AgentPipeline?)`（`:69`）包装。provider 用的是**后者**（`SkillAgentContextProvider.cs:92`），所以从 provider 走出来的技能工具同样受预算闸门管。
+- **这组名字必须被工作流工具包读到**：`WorkflowAgentToolkit.BuildQueryToolNames`（`WorkflowAgentToolkit.cs:386`）把它们整体并进「只读」集合，于是技能工具**无论从哪来**（宿主注册的 or provider 贡献的）都**计入读预算、且永不标脏**（`WorkflowAgentToolkit.cs:374-384`）。**所以在这里加一个新工具名，只读分类会自动跟上 —— 但只有名字进了 `ToolNames` 才行。**
+- `CreateTools()`（`:52`）不包装，`CreateTools(ToolPipeline, AgentPipeline?)`（`:68`）包装。provider 用的是**后者**（`SkillAgentContextProvider.cs:92`），所以从 provider 走出来的技能工具同样受预算闸门管。
 
 ---
 
@@ -97,7 +97,7 @@
 **加一个外部 source**
 
 1. 实现 `ISkillSource`（`ISkillSource.cs:17`）：`Kind` / `Discover()` / `ReadBody()` / `ReadResource()`。
-2. `new SkillScope().WithSource(src)` 或 `WorkflowAgentScope.WithSkills(SkillScope)`（`WorkflowAgentScope.cs:1460`）。
+2. `new SkillScope().WithSource(src)` 或 `WorkflowAgentScope.WithSkills(SkillScope)`（`WorkflowAgentScope.cs:1420`）。
 3. **`Discover()` 必须无副作用、且绝不能返回技能正文** —— 正文只在 `ReadBody` 里给（这样广告模式才可能只发名字）。
 4. 名字冲突时你会**输给先注册的 source**；分语言变体靠**同一个 source 返回多个同名 `SkillDescriptor`**（各带 `Language`，`SkillDescriptor.cs:31`）。
 
@@ -117,4 +117,4 @@
 
 ## 七、死面
 
-本目录**没有零调用者的成员**。唯一需要留意的是 `Agent/Skills/` 与 `Agent/Workflow/Functions/` 共享的一个约定：`WorkflowAgentToolkit.BuildQueryToolNames` 是**唯一**把 `SkillAgentToolkit.ToolNames` 接进来的地方（`WorkflowAgentToolkit.cs:346`），它排在字面量集合之后 —— 重名时字面量赢，但两边目前无重名。
+本目录**没有零调用者的成员**。唯一需要留意的是 `Agent/Skills/` 与 `Agent/Workflow/Functions/` 共享的一个约定：`WorkflowAgentToolkit.BuildQueryToolNames` 是**唯一**把 `SkillAgentToolkit.ToolNames` 接进来的地方（`WorkflowAgentToolkit.cs:386`），它排在字面量集合之后 —— 重名时字面量赢，但两边目前无重名。

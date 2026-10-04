@@ -1,6 +1,6 @@
 # WorkflowSystem — 编译执行引擎（CompilerEx）的并发模型与契约
 
-> 代码：`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/`（`Compile/` 16 文件 + `Runtime/` 20 文件）。
+> 代码：`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/`（`Compile/` 16 文件 + `Runtime/` 22 文件）。
 > 提交标签用 `[Compiler]`（提交规范把它列为独立模块名），但记忆按模块粒度落在 `WorkflowSystem/` 下。
 > 编译/运行的**流程与段类型**见 [architecture.md](architecture.md) §3.3；本文只写流程之外、读代码才知道的东西。
 
@@ -8,9 +8,9 @@
 
 ## 一、扇出是并发的（2026-09-27 起），但那不是线程并行
 
-- `RunParallelAsync`（`Runtime/RuntimeEngine.cs:220`）用 `Task.WhenAll` 让分支**交错执行**，**不用 `Task.Run`**：分支在调用方上下文上启动、靠 `await` 让位 —— 所以 I/O 型分支重叠，而整组**不离开宿主的 `SynchronizationContext`**（「组件是 UI 绑定的」这条契约不破）。
+- `RunParallelAsync`（`Runtime/RuntimeEngine.cs:329`）用 `Task.WhenAll` 让分支**交错执行**，**不用 `Task.Run`**：分支在调用方上下文上启动、靠 `await` 让位 —— 所以 I/O 型分支重叠，而整组**不离开宿主的 `SynchronizationContext`**（「组件是 UI 绑定的」这条契约不破）。
 - 推论：**CPU 型分支仍轮流占线程**。把分支体丢到线程池能拿到真并行，但那会破坏上面那条契约（`TrackedAIFunction` 的存在理由）——不要为了核数改这一层。
-- 上限：`RuntimeContext.MaxParallelBranches`（`Runtime/Model/RuntimeContext.cs:83`），默认 `null` = 不限、按组生效。**刻意不进 `IRuntimeContext`**：给那个契约加成员会破坏每个外部实现，而这是引擎策略不是会话状态（自定义会话拿到的就是不限并发）。
+- 上限：`RuntimeContext.MaxParallelBranches`（`Runtime/Model/RuntimeContext.cs:92`），默认 `null` = 不限、按组生效。**刻意不进 `IRuntimeContext`**：给那个契约加成员会破坏每个外部实现，而这是引擎策略不是会话状态（自定义会话拿到的就是不限并发）。
 - 收益形状：一个中枢 → N 个处理器 → 一个汇聚，每个处理器 `await` 一次进程调用（demo 的 python 节点就是），墙钟从 Σ 变 ≈ max。
 
 ## 二、每分支一个会话门面（`BranchRuntimeContext`）
@@ -40,19 +40,19 @@
 
 ## 四、三个契约是**可选**实现的，而 Core 自带的节点一个都没实现
 
-`ICompileTimeAware` / `IRuntimeAware` / `IRedirectable` **都不在** `IWorkflowNodeViewModel` 的继承链上（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:9`）—— Core 的 `NodeDefaultViewModel` 只实现 `IWorkflowNodeViewModel, IWorkflowIdentifiable`（生成器也不补）。实现它们的是 **demo 的节点**：`Examples/Workflow/Common/Lib/…` 的 `PythonScriptNodeViewModel`、`TimerNodeViewModel`、`EnumSelectorNodeViewModel`、`ControllerViewModel`。
+`ICompileTimeAware` / `IRuntimeAware` / `IRedirectable` **都不在** `IWorkflowNodeViewModel` 的继承链上（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:10`）—— Core 的 `NodeDefaultViewModel` 只实现 `IWorkflowNodeViewModel, IWorkflowIdentifiable`（生成器也不补）。实现它们的是 **demo 的节点**：`Examples/Workflow/Common/Lib/…` 的 `PythonScriptNodeViewModel`、`TimerNodeViewModel`、`EnumSelectorNodeViewModel`、`ControllerViewModel`。
 
 自研节点不实现时**静默降级**，没有任何提示：
 
-- `AttachCompileTimeContext` 只在 `node is ICompileTimeAware` 时注入（`CompilerViewModel.cs:249`）⇒ 取不到 `CompileContext` ⇒ `Order` 恒 `-1`、`InputNodes` 恒 `null`；
-- 于是多输入汇合点**拿不到 `GroupData`**，只看到上一个节点写进 `Data` 的输出（`RuntimeEngine.cs:327` 的注入条件不成立）；
+- `AttachCompileTimeContext` 只在 `node is ICompileTimeAware` 时注入（`CompilerViewModel.cs:267`）⇒ 取不到 `CompileContext` ⇒ `Order` 恒 `-1`、`InputNodes` 恒 `null`；
+- 于是多输入汇合点**拿不到 `GroupData`**，只看到上一个节点写进 `Data` 的输出（`RuntimeEngine.cs:466` 的注入条件不成立）；
 - 重定向按 `order < target` 跳过节点，而 `-1` 永远小于目标 ⇒ 这类节点在**重跑里不会被驱动**。
 
 ## 五、两条与「广播路径」的不对称
 
 | | 广播路径 | 编译执行 |
 |---|---|---|
-| `context.Sender` / `Receiver` | 由 `Templates/Helpers/TreeHelper.cs:155-156` 填上真实上下游 slot | **恒为 `null`** —— `DriveAsync` 从不给 `RuntimeContext` 的 `_sender`/`_receiver` 赋值（代码级核对；未做运行时验证） |
+| `context.Sender` / `Receiver` | 由 `Templates/Helpers/TreeHelper.cs:176-177` 填上真实上下游 slot | **恒为 `null`** —— `DriveAsync` 从不给 `RuntimeContext` 的 `_sender`/`_receiver` 赋值（代码级核对；未做运行时验证） |
 | 多输入节点的输入 | 按 slot 广播 | 只有 `InputNodes.Count > 1` 才聚合成 `GroupData`，否则是单值 `Data` |
 
 ## 六、两档报告：`Warn` 只是提醒，`Error`（与未捕获的异常）主动停止（2026-09-27 定）
@@ -67,7 +67,7 @@
 - **警告不吃掉结果**：`DriveAsync` 只在 Error 档把这次驱动记成「返回 null」+ `RegisterOutput(node, null)`；Warn 档节点返回什么，下游就收到什么（汇合点里读到的是那个值，不是 null）。
 - **级别是分支私有的**：门面自带一份（与 `Data`/`CurrentNode` 同理）—— 写在会话上，交错的两个分支会互相覆盖。引擎读它走 `RuntimeEngine.ReportedLevel(context, session)`。
 - 与 2026-09-27 之前那条「一句 `Warn` 终止整轮」比，**只有 Warn 这一格变了**；Error 与抛异常的行为逐字回到旧规则。
-- 分档的理由：demo 的 [`PythonHelper.cs:27`](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 与 [:54](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 正好是两种意图 —— 脚本为空是「这一支没东西可跑」（30 个分支里有一个没写脚本不该拖垮整轮），python 进程失败是「没有任何下游能绕过它」。而全仓**没有一个生产 `IRedirectable` 实现者**（只有测试探针），所以 Error 档的默认后果就是终止。
+- 分档的理由：demo 的 [`PythonHelper.cs:34`](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 与 [:59](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 正好是两种意图 —— 脚本为空是「这一支没东西可跑」（30 个分支里有一个没写脚本不该拖垮整轮），python 进程失败是「没有任何下游能绕过它」。而全仓**没有一个生产 `IRedirectable` 实现者**（只有测试探针），所以 Error 档的默认后果就是终止。
 - **同步那对只写日志，异步那对才记录到宿主**：`ErrorAsync`/`WarnAsync` = 同步那对 + 把 `ExecutionError` 交给 `IExecutionErrorSink`（带 `ExecutionReportLevel`，见 §十），**档位语义完全继承**（`ErrorAsync` 一样停）。同步的 `Error`/`Warn` 必须保持 `void`（`ILogWriter.Write` 是同步的，节点帧里不能阻塞），所以它不碰 sink。
 - 节点自己报的记录里带 `CurrentNode`：**扇出里存在分支门面上**，与级别同一个理由。
 
@@ -75,10 +75,10 @@
 
 ## 七、测试在哪、什么没测
 
-- 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，**16 文件 / 77 条**（2026-09-27 实测；同日从 44 条经「五个可选能力契约」涨到 66、「报告不打断运行」到 72、「检查点与恢复」到 77）。**全部用手写探针**（`ProbeNode` 实现了全部三个契约）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
-- 并发契约由 `ParallelExecutionTests` 钉住（5 条）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。**做法是先写测试**：其中两条在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`），改完才绿 —— 这类「先让测试证明它能判别」的次序值得沿用。
+- 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，**19 文件 / 79 条**（2026-10-04 实测；2026-09-27 时为 16 文件 / 77 条，同日从 44 条经「五个可选能力契约」涨到 66、「报告不打断运行」到 72、「检查点与恢复」到 77）。**全部用手写探针**（`ProbeNode` 实现 `ICompileTimeAware` / `IRuntimeAware`，`RedirectableNode : ProbeNode` 实现 `IRedirectable`）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
+- 并发契约由 `ParallelExecutionTests` 钉住（6 条，其中 `FanOut_CompilesToAParallelSegment` 是前置确认）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。**做法是先写测试**：其中两条在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`），改完才绿 —— 这类「先让测试证明它能判别」的次序值得沿用。
 - 日志 sink 与上限另由 `CompilerLogWriterTests`（`Core.Test`）钉住：writer 与 `Logs` 逐行同序、上限只裁内存（`0` = 只落 writer）、**writer 抛异常不改变运行**（吞掉并报 `LogWriteFailed`）、分支的 `Warn` 不置会话的 `RedirectRequested`；Agent 路径那条在 `Core.Extension.Test` 的 `WorkflowLifecycleFidelityTests.WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink`。
-- **没测**（2026-09-27 更新：**取消已补测**，见第十节）：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 三个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值；重定向上限（50 次）那条路只有代码审查，没有测试跑进去过。
+- **没测**（2026-09-27 更新：**取消已补测**，见第十节）：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 三个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值。~~重定向上限（50 次）那条路只有代码审查~~ **2026-10-04 已补测：`RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException`**（断言异常消息含 `"50"`）。
 
 ## 八、编译图作为可序列化文档（2026-09-27 起）
 
@@ -126,7 +126,7 @@
 - **取消只进 sink，不进日志**：宿主自己停的运行不是失败，写一行 `[Error]` 会让以后读 `Logs` 的人以为出过错。`RunOutcome` 才是把 `"Stopped"` 拆成 Failed / Cancelled 的那个成员（`RunOutcome.Unknown` = 取消之外没跑完，例如异常穿出 `RunAsync`）。
 - **观察者与 sink 抛异常都不改运行**（各留一行日志）；补偿器抛异常不掩盖原始失败、也不中断其余节点；重试策略抛异常当作「不再试」。
 
-**同笔修掉的两处宿主契约缺陷（行为变更）**：`ResolveRouteKey` 与 `ResolveRedirectAsync` 原先无守卫，宿主实现一抛异常就穿出 `RunAsync`、`Status` 停在 `"Running"`（会话谎称还在跑）；`IRuntimeAware.AttachRuntimeContext` 在 `try` 之外调用，异常落进空 catch ⇒ 节点被**无声跳过**。现在三者都走与节点体同一套失败纪律（记 Error → 重定向或结束），`EngineHostContractFailureTests` 三条分别钉住。重定向上限那条路也顺手补了 `Status = "Stopped"`（原先同样停在 `"Running"`），但它**只有代码审查、没有测试**跑进去过。
+**同笔修掉的两处宿主契约缺陷（行为变更）**：`ResolveRouteKey` 与 `ResolveRedirectAsync` 原先无守卫，宿主实现一抛异常就穿出 `RunAsync`、`Status` 停在 `"Running"`（会话谎称还在跑）；`IRuntimeAware.AttachRuntimeContext` 在 `try` 之外调用，异常落进空 catch ⇒ 节点被**无声跳过**。现在三者都走与节点体同一套失败纪律（记 Error → 重定向或结束），`EngineHostContractFailureTests` 三条分别钉住。重定向上限那条路也顺手补了 `Status = "Stopped"`（原先同样停在 `"Running"`）—— 这条**已由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 覆盖**（2026-10-04 核）。
 
 **注释风格别照抄**：`CompilerEx` 的 `internal`/`private` 成员上还是规范生效前写的英语 `///`（`RuntimeEngine` 里那几个老私有方法、`BranchRuntimeContext` 整份）。本轮新写的行按手册 §二 用中文 `//`，所以文件里两种并存 —— **以手册为准，不要拿旁边的老注释当标准**。
 
@@ -169,4 +169,4 @@
 | 只编译的两个工具纳入闸门 | Agent 侧的 `CompileWorkflow`/`CompileNodeResult` 会写节点编译身份却不受 `WithAllowNodeExecution` 约束 —— 属 `VeloxDev.Core.Extension` 模块 |
 | 编译执行时补 `Sender`/`Receiver` | 第五节的不对称仍未消 |
 | `ExecuteCommandOnNode` 的完成语义 | Agent 侧它同步返回、不等完成，而同族的 `ExecuteNode` 会等 `Exited` —— 属 Extension 模块 |
-| 七家 demo 的运行控制**在像素层仍未验** | 七家的控件与处理器都已接上、构建 0 错误，但**点下去的样子**没人看过：除 Avalonia 外合成输入进不了输入管线（已实测），而且这七处是七种 UI 栈（两家还是命令式搭界面）⇒ 只能人眼验。**依据订正（2026-09-27）**：WinForms 的四个控制器按钮**不在** `Form1.cs:336-343`（那里是 `UpdateControllerState`），而在节点卡 `Controls/WorkflowNodeCard.cs:654-658` —— 那条旧依据写错了文件与行号 |
+| 七家 demo 的运行控制**在像素层仍未验** | 七家的控件与处理器都已接上、构建 0 错误，但**点下去的样子**没人看过：除 Avalonia 外合成输入进不了输入管线（已实测），而且这七处是七种 UI 栈（两家还是命令式搭界面）⇒ 只能人眼验。**依据订正（2026-09-27，2026-10-04 复核）**：WinForms 的四个控制器按钮**不在** `Form1.cs:336-343`（那里是 `ReloadExecutionLog` 的日志刷新），而在节点卡 `Controls/WorkflowNodeCard.cs:654-658`（Compile/Run/Stop/Close）—— 那条旧依据写错了文件与行号 |

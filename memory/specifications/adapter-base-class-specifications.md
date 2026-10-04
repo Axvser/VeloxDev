@@ -73,7 +73,7 @@
 
 **worked example**：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/` 下五个基类
 （`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` / `WorkflowLinkView` / `WorkflowMinimapOverlay`），
-对应模板 1095→45、790→417、379→22、346→21、325→22 行。
+对应模板 1095→52、790→404、379→22、346→21、325→22 行。
 
 **要一起想的**：一个角色的基类若要引用**另一个角色的产物**（Jalium 做这一项时正是这种情况：树基类要端口几何，
 而端口几何起初在模板的 `SlotView` 静态类里），那个依赖必须一起进包，否则基类做不了自己的活 —— Jalium 的解法是把
@@ -104,17 +104,17 @@
 | **Jalium** | **七项全有**（2026-10-03 完成） | ——（`slot-view` 在这家没有「视图」可派生，见下） |
 
 **WinForms 的七个基类**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）与它们把模板压到的行数：
-`WorkflowTreeView` 45、`WorkflowNodeView` 404、`WorkflowSlotView` 22、`WorkflowLinkView` 21、
-`WorkflowGridDecorator` 41、`WorkflowMinimapOverlay` 22、`WorkflowTemplateSelector` 19 —— 合计 **574**（原 3257）。
+`WorkflowTreeView` 52、`WorkflowNodeView` 404、`WorkflowSlotView` 22、`WorkflowLinkView` 21、
+`WorkflowGridDecorator` 41、`WorkflowMinimapOverlay` 22、`WorkflowTemplateSelector` 19 —— 合计 **581**（原 3257）。
 另有三个共用件：`WorkflowSurfaceColors`（颜色解析）、`WorkflowSurfaceGraphics`（圆角矩形）、
 `WorkflowSurfaceGrid`（网格线判定与刻度标签格式化，此前在包内有**两份**逐字相同的私有副本）。
 校验：`Src/Verification/verify-workflow-item-templates.ps1 -Strict` 全绿。
 
-**Jalium 的七个角色**（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`）：`WorkflowTreeView` 621、
-`WorkflowNodeView` 212、`WorkflowLinkView` 272、`WorkflowSlotView`（端口图形）、`WorkflowGridDecorator` 234、
-`WorkflowTemplateSelector` 51、`WorkflowMinimapOverlay` 305，加分层的两个共用件 `WorkflowPortLayout`（设计值）
-与 `WorkflowPortGeometry`（端口枚举与定位，反射）。
-七个模板条目现压到 23 / 59 / 35 / 20 / 25 / 25 / 14 行，合计 **201**（原 1262）。
+**Jalium 的七个角色**（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`）：`WorkflowTreeView` 819、
+`WorkflowNodeView` 309、`WorkflowLinkView` 344、`WorkflowSlotView` 167（端口图形）、`WorkflowGridDecorator` 234、
+`WorkflowTemplateSelector` 51、`WorkflowMinimapOverlay` 311，加分层的两个共用件 `WorkflowPortLayout`（设计值，41）
+与 `WorkflowPortGeometry`（端口枚举与定位，反射，125）。
+七个模板条目现压到 32 / 59 / 35 / 20 / 25 / 25 / 14 行，合计 **210**（原 1262）。
 校验：`Src/Verification/verify-jalium-item-templates.ps1 -Strict` 全绿。
 
 **七个角色在这家都是「基类 + 派生」，没有例外。** 曾经不是：`slot-view` 的产物一度是一份「端口在哪」的静态几何，

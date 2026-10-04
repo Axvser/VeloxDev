@@ -14,14 +14,14 @@
 
 | 类 | 这家的内容 |
 |---|---|
-| `Interpolator` | 一行 `RegisterInterpolator` + `CreateScheduler`（`Interpolator.cs:9`、`:12-15`） |
-| `UIThreadInspector` | **五个覆写全都要**：`IsAlive`/`ThreadFor`/`IsCurrentFor`/`IsCurrentThread`/`PostCore`（`UIThreadInspector.cs:51-84`）—— 这家是七家里唯一覆写 `IsCurrentFor` 的 |
-| `TransitionInterpreter` | 一个 `CreateFramePacer`（`TransitionInterpreter.cs:20-21`）+ 私有的 `PostedFramePacer`（`:23-94`，这家唯一一个不能照抄别家的 pacer，见 §2.2） |
+| `Interpolator` | 一行 `RegisterInterpolator` + `CreateScheduler`（`Interpolator.cs:9`、`:13-16`） |
+| `UIThreadInspector` | **五个覆写全都要**：`IsAlive`/`ThreadFor`/`IsCurrentFor`/`IsCurrentThread`/`PostCore`（`UIThreadInspector.cs:52-88`）—— 这家是七家里唯一覆写 `IsCurrentFor` 的 |
+| `TransitionInterpreter` | 一个 `CreateFramePacer`（`TransitionInterpreter.cs:20-21`）+ 私有的 `PostedFramePacer`（`:23-95`，这家唯一一个不能照抄别家的 pacer，见 §2.2） |
 | `State` / `TransitionScheduler` / `TransitionEffect` / `TransitionEffects` / 非泛型 `Transition` | 空壳（`State.cs:3`、`TransitionScheduler.cs:3-9`、`TransitionEffect.cs:3`、`TransitionEffects.cs:3-17` 只给三个样本、`Transition.cs:5-8` 连体都没有）——**不要以为漏写了什么** |
 
-`TPriorityCore` 填 `NonPriority`（`Transition.cs:17`）。这一个决定牵动两处：`Transition<T>` 的第七个型参，与 `CreateScheduler` 里的 cast（`Interpolator.cs:13`）。第二处写错 ⇒ 主题切换静默变瞬切（`extension.md` §二·3）。
+`TPriorityCore` 填 `NonPriority`（`Transition.cs:17`）。这一个决定牵动两处：`Transition<T>` 的第七个型参，与 `CreateScheduler` 里的 cast（`Interpolator.cs:14`）。第二处写错 ⇒ 主题切换静默变瞬切（`extension.md` §二·3）。
 
-**`Transition<T>` 有 1 个泛型 `Property` + 16 个手写重载**（泛型 `Transition.cs:30`，手写 `:37-135`）。与 WPF 不同 —— 那家手写重载里有泛型表达不了的语义 —— 这 16 个在 WinForms 上**功能上是冗余的**：参数表被泛型版完全覆盖，方法体逐字相同（对照 `:30-35` 与 `:37-42`）。逐类型手写**必须**的只有 Razor（它没有泛型版，`extension.md` §三·A·3）。⇒ 改这些重载不会改变任何行为，**除了 `decimal` 那一个**（见 §4.1）。
+**`Transition<T>` 有 1 个泛型 `Property` + 16 个手写重载**（泛型 `Transition.cs:34`，手写 `:42-150`）。与 WPF 不同 —— 那家手写重载里有泛型表达不了的语义 —— 这 16 个在 WinForms 上**功能上是冗余的**：参数表被泛型版完全覆盖，方法体逐字相同（对照 `:34-40` 与 `:42-48`）。逐类型手写**必须**的只有 Razor（它没有泛型版，`extension.md` §三·A·3）。⇒ 改这些重载不会改变任何行为，**除了 `decimal` 那一个**（见 §4.1）。
 
 ### 为什么这家只有一个采样器（与 Razor 并列最少）
 
@@ -33,7 +33,7 @@
 - **这不是「还没补」**：上一条的推理已经把「可动画的专有类型只剩 `Padding`」用属性面推完了；树内可核的现状是 `PlatformAdapters/Samplers/PaddingSampler.cs` 一个文件、`Interpolator.cs:9` 一条注册。**「以前是不是更少」只存在于提交历史、代码里复核不到**，所以别拿数少去推断这里缺了实现。
 - 这家**没有** `Brush`/`Transform`/`CornerRadius`/`GridLength`/`DropShadow`/`Projection`/`Point3D` 的等价物：画刷按需 `new SolidBrush(color)` 现造（`ThemeValueConverters.cs:433`），坐标变换是 GDI+ 的 `Graphics.Transform` 而不是视图模型上的属性 —— WorkflowSystem 那半边也印证：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowCanvasTransformBehavior.cs` 存的是一个 `Offset` 结构，不是变换对象。
 - 校准别家的数（免得把「少」当缺陷；**数的是采样器类数 / `RegisterInterpolator` 条数**，两者仅在 Jalium 上不同 —— 它的 `BrushSampler` 同时注册 `Brush` 与 `SolidColorBrush`）：Avalonia 14/14、WPF 12/12、MAUI 12/12、WinUI 10/10、Jalium 9/10、**WinForms 1/1、Razor 1/1**。
-- **副作用（容易手贱的一点）**：`Point`/`Size`/`Color` 在 Core 里已经注册过，**不要**在这家再注册一遍。`RegisterInterpolator` 是进程级 last-writer-wins 的原子 `AddOrUpdate`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:89-95`），而 `Interpolator` 与 `InterpolatorCore` 两个静态构造谁先跑不确定；重注册会无声地把 Core 的实现换掉。WPF/Avalonia 那种「同名不同型的 `Point`」在这家**不存在**（它俩用的就是同一个 `System.Drawing.Point`），所以那条理由不适用。
+- **副作用（容易手贱的一点）**：`Point`/`Size`/`Color` 在 Core 里已经注册过，**不要**在这家再注册一遍。`RegisterInterpolator` 是进程级 last-writer-wins 的原子 `AddOrUpdate`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:92-98`），而 `Interpolator` 与 `InterpolatorCore` 两个静态构造谁先跑不确定；重注册会无声地把 Core 的实现换掉。WPF/Avalonia 那种「同名不同型的 `Point`」在这家**不存在**（它俩用的就是同一个 `System.Drawing.Point`），所以那条理由不适用。
 
 ---
 
@@ -43,18 +43,18 @@
 
 ### 2.1 没有 dispatcher、也没有可问的存活源 ⇒ 只能自己记
 
-`_isAppAlive` 是静态字段，只在捕获成功那一刻挂上 `Application.ApplicationExit` 去关它（`UIThreadInspector.cs:40`，初值 `:10`），`IsAlive => _isAppAlive`（`:51`）。对照有 dispatcher 的家：WPF/Jalium 直接问 `dispatcher.HasShutdownStarted`、WinUI 问 `queue.TryEnqueue` 的返回值（见 `wpf.md` §2.1）。**没有东西可问，所以必须自己记** —— 这不是风格选择。同一形状的还有 MAUI 与 Razor。
+`_isAppAlive` 是静态字段，只在捕获成功那一刻挂上 `Application.ApplicationExit` 去关它（`UIThreadInspector.cs:40`，初值 `:10`），`IsAlive => _isAppAlive`（`:52`）。对照有 dispatcher 的家：WPF/Jalium 直接问 `dispatcher.HasShutdownStarted`、WinUI 问 `queue.TryEnqueue` 的返回值（见 `wpf.md` §2.1）。**没有东西可问，所以必须自己记** —— 这不是风格选择。同一形状的还有 MAUI 与 Razor。
 
 ### 2.2 帧源不能是 WM_TIMER ⇒ 这家的 pacer 是「线程池定时器 + 投递到控件」
 
 **`WM_TIMER` 是这个平台上唯一不能用来当帧时钟的机制。** Windows 只在消息队列空无一物时才合成它，而那一刻只有一个「空闲时刻」——哪个到期定时器先被问到就归谁（这家进程里每个 `Transition` 都有一条自己的定时器）。两处实测（workflow demo，`Examples/Workflow/WinForms/Demo/`，16 ms 帧间隔）：
 
-- **拖画布期间 0 帧**：拖拽的每个 `WM_MOUSEMOVE` 都被回以一次同步重画（`WorkflowSurfaceBehavior.Refresh` 的 `host.Capture → Update()`、`WorkflowNodeDragBehavior.cs:222-229`），队列里永远躺着下一条鼠标消息 ⇒ 3 秒拖拽里 **0 次 WM_TIMER、流光 0 次写入**，而同一期间的 BeginInvoke 投递保持 11–15 次/200 ms（≈64/s，与空闲时相同）—— 队列不忙，只有 WM_TIMER 被饿死。
+- **拖画布期间 0 帧**：拖拽的每个 `WM_MOUSEMOVE` 都被回以一次同步重画（`WorkflowSurfaceBehavior.Refresh` 的 `host.Invalidate()` →（`host.Capture` 时）`host.Update()`、`WorkflowNodeDragBehavior.cs:222-229`），队列里永远躺着下一条鼠标消息 ⇒ 3 秒拖拽里 **0 次 WM_TIMER、流光 0 次写入**，而同一期间的 BeginInvoke 投递保持 11–15 次/200 ms（≈64/s，与空闲时相同）—— 队列不忙，只有 WM_TIMER 被饿死。
 - **空闲时同一条规则把帧率压到 1/4**：该进程 ~16 条定时器（画布 1 + 每个 `SlotView` 波纹 1）分 ~57 次 WM_TIMER/200 ms ⇒ 画布流光的写入从 60/s 掉到 ~15/s。
 
 所以 `CreateFramePacer` 是 `affinity.IsCurrent(target) ? new PostedFramePacer(target as Control) : null`（`TransitionInterpreter.cs:20-21`）：续体由 `System.Threading.Timer` 到期后经 `Control.BeginInvoke` 投回目标窗口（`:63-81`）。投递出去的消息按 FIFO 送达，不等队列空；续体仍在控件线程上恢复 ⇒ 属性写入照旧直写、`Update`/`LateUpdate` 仍在该线程（pacer 存在的理由不变）。
 
-- 对照：WPF / Avalonia / WinUI / MAUI / Jalium 五家**一律**从 `affinity.ThreadFor(target)` 派生（WPF 是 `affinity.ThreadFor(target).TryGet<Dispatcher>(out var d) ? new DispatcherFramePacer(d) : null`，`Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs:8-11`；其余四家同形，只换 `TryGet` 的类型）——它们的 `DispatcherTimer` 是**按优先级排队的队列项**，不受这条规则影响；Razor 干脆不覆写，注释写着「Blazor 没有在渲染器自己线程上触发的定时器」（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs:4`）。
+- 对照：WPF / Avalonia / WinUI / MAUI / Jalium 五家**一律**从 `affinity.ThreadFor(target)` 派生（WPF 是 `affinity.ThreadFor(target).TryGet<Dispatcher>(out var d) ? new DispatcherFramePacer(d) : null`，`Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs:9-12`；其余四家同形，只换 `TryGet` 的类型）——它们的 `DispatcherTimer` 是**按优先级排队的队列项**，不受这条规则影响；Razor 干脆不覆写，注释写着「Blazor 没有在渲染器自己线程上触发的定时器」（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs:4`）。
 - **仍然「有条件地」取**（七家里唯一，见 §三·4），但判据的含义变了：不再是因为「Forms 定时器只能在自己线程上 tick」，而是「续体要投到哪个控件的窗口上，只有已经在它线程上时才认这个前提」。
 - `IsCurrent(target)` 走基类的 `IsCurrentFor(target, ThreadFor(target))`（`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs:15`），而这家覆写了 `IsCurrentFor`（见 §三·1）。
 - **后果（要记住）**：从非 UI 线程**首次**发起一段动画 ⇒ 没有 pacer ⇒ 回落到 `ArmNextFrame` 的默认实现（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:94`），而 `FrameWait` **不还原 `SynchronizationContext`**（`extension.md` §F 已写）⇒ `Update`/`LateUpdate` 会漂到线程池线程上跑。所以「确保第一次触碰发生在 UI 线程」在这家不是优化，是前提。
@@ -66,9 +66,9 @@
 
 ### 2.4 平台定时器是 `IDisposable`，而基类不管释放
 
-`Dispose` 必须 `_disposed = true; timer = _timer; _timer = null; base.Dispose(); timer?.Dispose();`（`TransitionInterpreter.cs:84-93`）：基类先停表并放行挂着的续体，之后这块表才轮到被释放。WPF 那家的 `Dispose` **只停表、不释放**（见 `wpf.md` §2.2）——**别把两家互相照抄**：WPF 的 `DispatcherTimer` 生命周期归 dispatcher 管，这家的 `System.Threading.Timer` 必须自己 dispose，否则它自己的线程池回调（以及那条对已死窗口的投递尝试）会一直活下去。
+`Dispose` 必须 `_disposed = true; timer = _timer; _timer = null; base.Dispose(); timer?.Dispose();`（`TransitionInterpreter.cs:84-94`）：基类先停表并放行挂着的续体，之后这块表才轮到被释放。WPF 那家的 `Dispose` **只停表、不释放**（见 `wpf.md` §2.2）——**别把两家互相照抄**：WPF 的 `DispatcherTimer` 生命周期归 dispatcher 管，这家的 `System.Threading.Timer` 必须自己 dispose，否则它自己的线程池回调（以及那条对已死窗口的投递尝试）会一直活下去。
 
-`Arm` 在已释放时必须 `Fire()` 放行而不是直接 return（`:38-45`）：基类 `Dispose` 就是靠「唤醒挂着的续体」让采样循环收尾的，丢掉它等于把循环永久停在一次等不到的唤醒上（宿主侧表现为「不报错、也再没有帧」）。
+`Arm` 在已释放时必须 `Fire()` 放行而不是直接 return（`:40-45`）：基类 `Dispose` 就是靠「唤醒挂着的续体」让采样循环收尾的，丢掉它等于把循环永久停在一次等不到的唤醒上（宿主侧表现为「不报错、也再没有帧」）。
 
 ### 2.5 捕获是惰性的，而且「按类型名认亲」
 
@@ -82,9 +82,9 @@
 
 | # | 这里的做法和其他家不一样，因为… | 依据 |
 |---|---|---|
-| 1 | **`IsCurrentFor` 被覆写（七家里唯一）**：先问目标 `Control.InvokeRequired`，拿不到控件才回落到基类。WinForms 没有任何 API 能「查一个 `Control` 属于哪个线程」，但 `Control` 自己答得出「调用方在不在我的线程上」——**同一个问题的对偶问法**。这不只是查询优化：`ThreadDispatcherBase.Post`（`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs:49-50`）在 `IsCurrentFor` 为真时直接 `RunInline`，所以覆写它等于让 UI 线程上的写完全绕开消息泵。 | `UIThreadInspector.cs:59-66` |
-| 2 | **`PostCore` 优先走目标 `Control.BeginInvoke`（七家里唯一）**：别家一律从 `thread` 里 `TryGet<TDispatcher/TSyncContext>`。这家先看目标本身是不是一个已建句柄的 `Control`（`ControlDispatcher`，`:48-49`），是就直接投。所以**即使从未捕获过 UI 上下文、即使首次调用来自后台线程**，只要 `target` 是 `Control`，写也落对线程（`:43-47` 的注释明写这一点）。基类专门声明这是被允许的自由（`ThreadDispatcherBase.cs:33-36`：需要 target 而不是 thread 的宿主可以忽略 `thread`）。 | `UIThreadInspector.cs:72-84` |
-| 3 | **`ThreadFor` 返回「已捕获的上下文」，不为调用方造一个**：`ThreadRef.From(_uiSyncContext)`（`:53-57`）。没捕获过就是 `From(null)`。Razor 那家给的是「当下看到的」`SynchronizationContext.Current ?? 捕获值`——**两家在「调用方不在 UI 线程时给什么」上是相反的选择**。基类契约禁止「造一个」（`extension.md` §二·6），这家与 Razor 的分歧在于「拿什么当兜底」。 | `UIThreadInspector.cs:53-57` |
+| 1 | **`IsCurrentFor` 被覆写（七家里唯一）**：先问目标 `Control.InvokeRequired`，拿不到控件才回落到基类。WinForms 没有任何 API 能「查一个 `Control` 属于哪个线程」，但 `Control` 自己答得出「调用方在不在我的线程上」——**同一个问题的对偶问法**。这不只是查询优化：`ThreadDispatcherBase.Post`（`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs:49-50`）在 `IsCurrentFor` 为真时直接 `RunInline`，所以覆写它等于让 UI 线程上的写完全绕开消息泵。 | `UIThreadInspector.cs:65-68` |
+| 2 | **`PostCore` 优先走目标 `Control.BeginInvoke`（七家里唯一）**：别家一律从 `thread` 里 `TryGet<TDispatcher/TSyncContext>`。这家先看目标本身是不是一个已建句柄的 `Control`（`ControlDispatcher`，`:48-49`），是就直接投。所以**即使从未捕获过 UI 上下文、即使首次调用来自后台线程**，只要 `target` 是 `Control`，写也落对线程（`:43-47` 的注释明写这一点）。基类专门声明这是被允许的自由（`ThreadDispatcherBase.cs:33-36`：需要 target 而不是 thread 的宿主可以忽略 `thread`）。 | `UIThreadInspector.cs:76-88` |
+| 3 | **`ThreadFor` 返回「已捕获的上下文」，不为调用方造一个**：`ThreadRef.From(_uiSyncContext)`（`:55-59`）。没捕获过就是 `From(null)`。Razor 那家给的是「当下看到的」`SynchronizationContext.Current ?? 捕获值`——**两家在「调用方不在 UI 线程时给什么」上是相反的选择**。基类契约禁止「造一个」（`extension.md` §二·6），这家与 Razor 的分歧在于「拿什么当兜底」。 | `UIThreadInspector.cs:55-59` |
 | 4 | **pacer 在七家里唯一「有条件地」取得**（见 §2.2）：别家要么给、要么不给，这家先问线程再决定；而且它是七家里唯一**不拿平台定时器当帧源**的 pacer（线程池定时器 + `Control.BeginInvoke`，因为 WM_TIMER 会被输入饿死）。 | `TransitionInterpreter.cs:20-21`、`:63-81` |
 | 5 | **`TransitionEffect` 连 `Priority` 默认值都不用给**：`TransitionEffect : TransitionEffectCore` 是纯空壳（`TransitionEffect.cs:3`），因为 `NonPriority` 是空结构体，`default!` 就是全部答案（`ThreadDispatcherBase.cs:39-44`）。WPF 那家必须在这里给一个 `DispatcherPriority`。 | `TransitionEffect.cs` |
 
@@ -96,33 +96,33 @@
 
 ### 4.1 `decimal` 重载能声明、能编译、动画静默不动
 
-`Transition<T>.Property(Expression<Func<T, decimal>>, decimal, ...)` 存在（`Transition.cs:62-67`），但**全仓库没有任何地方为 `decimal` 注册采样器**：Core 的注册表里没有（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:12-27`），本家的注册表里只有 `Padding`（`Interpolator.cs:9`）。全仓库 `typeof(decimal)` 的命中全部在 AI 工具面（`Src/Core/VeloxDev.Core.Extension/Agent/...`），与动画无关。
+`Transition<T>.Property(Expression<Func<T, decimal>>, decimal, ...)` 存在（`Transition.cs:70-75`），但**全仓库没有任何地方为 `decimal` 注册采样器**：Core 的注册表里没有（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:12-27`），本家的注册表里只有 `Padding`（`Interpolator.cs:9`）。全仓库 `typeof(decimal)` 的命中全部在 AI 工具面（`Src/Core/VeloxDev.Core.Extension/Agent/...`），与动画无关。
 
-运行后果**不是抛异常**：`InterpolatorCore.Prepare` 走到最后一步找不到采样器，只发一次 `Warn("Unsampled")` 然后 `continue`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:175-179`）。于是一段「只动 `decimal` 属性」的动画会不报错、不画、直接跑完。**要动画 `decimal` 必须自己写采样器并注册。**
+运行后果**不是抛异常**：`InterpolatorCore.Prepare` 走到最后一步找不到采样器，只发一次 `Warn("Unsampled")` 然后 `continue`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:178-182`）。于是一段「只动 `decimal` 属性」的动画会不报错、不画、直接跑完。**要动画 `decimal` 必须自己写采样器并注册。**
 
 这条同时是「16 个手写重载是照抄来的、不是从注册表推出来的」的证据：如果这 16 个重载是按采样器表写的，`decimal` 根本不会出现在里面。
 
 ### 4.2 `Brush` 类型的主题属性会「全程保持旧值、最后跳变」
 
-`ThemeValueConverters.cs` 的 `ObjectConverter` 会为目标类型是 `Brush` 的属性造 `SolidBrush`（`:427-433`），但本家没有 `Brush` 采样器。于是 `Brush` 类型的主题属性走的是 `ThemeManager` 记录在案的降级路径：整场动画不写它，等整场结束后统一写终值（`Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs:296-297` 的注释 + `ApplyHeldValues` `:390-407`）。**这不是 bug**，但要做「刷子渐变」类的主题过渡就得自己补采样器。
+`ThemeValueConverters.cs` 的 `ObjectConverter` 会为目标类型是 `Brush` 的属性造 `SolidBrush`（`:437-446`），但本家没有 `Brush` 采样器。于是 `Brush` 类型的主题属性走的是 `ThemeManager` 记录在案的降级路径：整场动画不写它，等整场结束后统一写终值（`Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs:296-297` 的注释 + `ApplyHeldValues` `:390-407`）。**这不是 bug**，但要做「刷子渐变」类的主题过渡就得自己补采样器。
 
 ### 4.3 `SetPlatformInterpolator` 从没为 WinForms 调用过 ⇒ `CreateScheduler` 在仓库内没有执行路径
 
-全仓库只有 4 处调用，全在 Avalonia / WPF 的 theme demo（`Examples/Theme/Avalonia/Demo/App.axaml.cs:25`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs:46`、`Examples/Theme/WPF/Demo/App.xaml.cs:16`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:47`）——`Examples/Theme/` 下**没有** WinForms 目录（只有 Avalonia、Avalonia Trimmed、WPF、WPF Trimmed）。而 `CreateScheduler` 的唯一调用者是 `ThemeManager.cs:219`。
+`Examples/` 下只有 4 处调用，全在 Avalonia / WPF 的 theme demo（`Examples/Theme/Avalonia/Demo/App.axaml.cs:24`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs:46`、`Examples/Theme/WPF/Demo/App.xaml.cs:15`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:47`；`Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs` 另有若干处用 `TestInterpolator`）——`Examples/Theme/` 下**没有** WinForms 目录（只有 Avalonia、Avalonia Trimmed、WPF、WPF Trimmed）。而 `CreateScheduler` 的唯一调用者是 `ThemeManager.cs:219`。
 
-⇒ 本家 `Interpolator.CreateScheduler`（`Interpolator.cs:12-15`）是**给下游消费者的接口，不是现成能力**：没有主题动画的 demo 覆盖它。要用主题动画，得自己在 `Application.Run` 之前调一次 `ThemeManager.SetPlatformInterpolator(new Interpolator())`。
+⇒ 本家 `Interpolator.CreateScheduler`（`Interpolator.cs:13-16`）是**给下游消费者的接口，不是现成能力**：没有主题动画的 demo 覆盖它。要用主题动画，得自己在 `Application.Run` 之前调一次 `ThemeManager.SetPlatformInterpolator(new Interpolator())`。
 
 ### 4.4 `PaddingSampler` 用截断，Core 的同族用舍入
 
-`(int)(t * delta)`（`Samplers/PaddingSampler.cs:13-17`）是**截断**；Core 的 `SizeSampler`/`PointSampler` 用 `(int)Math.Round(...)`（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/SizeSampler.cs:24-25`）。后果有限但确实有：每帧像素落点最多差 1px，且**不累积**（每帧都从 `start` 重算）。想让 `Padding` 与同屏的 `Size`/`Point` 落点一致，就改成 `Math.Round`。
+`(int)(t * delta)`（`Samplers/PaddingSampler.cs:16-20`）是**截断**；Core 的 `SizeSampler`/`PointSampler` 用 `(int)Math.Round(...)`（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/SizeSampler.cs:27-28`）。后果有限但确实有：每帧像素落点最多差 1px，且**不累积**（每帧都从 `start` 重算）。想让 `Padding` 与同屏的 `Size`/`Point` 落点一致，就改成 `Math.Round`。
 
 另外两点（都是与 Core 同族的有意对照，不是缺陷）：
 - `PaddingSampler` 忽略 `options`（签名收了 `object? options` 但体里没用，`:8`）⇒ `interpolationOptions` 对 `Padding` 无效。
-- `SizeSampler` 特意让宽高共享一个 `BoundedProgress` 并在 0 处停住（`SizeSampler.cs:18-22` 的注释：负尺寸不可表示）；`Padding` 的四条边各算各的，因为四个 int 接受负值 —— **这就是验收表把这条判成 `SamplerRule.Extrapolate` 而不是饱和的原因**（`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs:14-28`，写明了「收缩的一侧在 t > 1 处会算出负的 Padding，而 Padding 只是四个 int，接受负值」）。
+- `SizeSampler` 特意让宽高共享一个 `BoundedProgress` 并在 0 处停住（`SizeSampler.cs:23-27` 的注释：负尺寸不可表示）；`Padding` 的四条边各算各的，因为四个 int 接受负值 —— **这就是验收表把这条判成 `SamplerRule.Extrapolate` 而不是饱和的原因**（`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs:14-24`，写明了「收缩的一侧在 t > 1 处会算出负的 Padding，而 Padding 只是四个 int，接受负值」）。
 
 ### 4.5 静态构造的触发时机：这家的注册只有一个，漏掉等于「全部不动画」
 
-`Interpolator` 的静态构造（`Interpolator.cs:7-10`）只在 `Interpolator` 这个类型被第一次触碰时跑。`TransitionCore<...>` 有 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:290`），在 WinForms 上就是 `new Interpolator()` ⇒ 只要 `new Transition<T>()` 过一次，注册就发生了，**不需要任何显式注册调用**。反过来：绕开 `Transition<T>` 直接调 `InterpolatorCore.Prepare` 时 `Padding` 没注册。别家漏一个注册只是少一个类型，这家漏掉就是全部（表里只有一项）。
+`Interpolator` 的静态构造（`Interpolator.cs:7-10`）只在 `Interpolator` 这个类型被第一次触碰时跑。`TransitionCore<...>` 有 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:297`），在 WinForms 上就是 `new Interpolator()` ⇒ 只要 `new Transition<T>()` 过一次，注册就发生了，**不需要任何显式注册调用**。反过来：绕开 `Transition<T>` 直接调 `InterpolatorCore.Prepare` 时 `Padding` 没注册。别家漏一个注册只是少一个类型，这家漏掉就是全部（表里只有一项）。
 
 ---
 
@@ -130,4 +130,4 @@
 
 - **契约与注册位置**（八个类各自必须提供什么、`NonPriority` 怎么选）：`memory/modules/TransitionSystem/extension.md` §三·C。
 - **人面向的「怎么写」**：`skills/veloxdev-create-animation/references/adapter.md`。
-- **验收套件与联动清单**：`extension.md` §四·4.1/4.3。这里只记这家的一条事实：WinForms 的验收表**只有一条 entry**（`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs:30-40`），而 `Examples/Transition/AUTO TEST/Samplers/SamplerCoverageTests.cs:23-33` 的 `ExpectedAdapterAssemblies` 里那个 `"VeloxDev.WinForms"` 字符串是「这家还在名单上」的唯一依据 —— 改采样器时覆盖率测试会不会真的验到这家，全靠它。
+- **验收套件与联动清单**：`extension.md` §四·4.1/4.3。这里只记这家的一条事实：WinForms 的验收表**只有一条 entry**（`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs:26-36`），而 `Examples/Transition/AUTO TEST/Samplers/SamplerCoverageTests.cs:23-33` 的 `ExpectedAdapterAssemblies` 里那个 `"VeloxDev.WinForms"` 字符串是「这家还在名单上」的唯一依据 —— 改采样器时覆盖率测试会不会真的验到这家，全靠它。
