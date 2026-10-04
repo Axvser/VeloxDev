@@ -194,6 +194,11 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 10. **池建视图时传的是 VM，不是 `null` —— 传 `null` 会让自定义 `IDataTemplate` 选择器整个失效。** 那一行现在是 `template?.Build(viewModel)`（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs:170`，2026-09-25 从 `Build(null)` 改来）。原因：Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的若是个**选择器**，轮到 `Build` 时才是它挑内层模板的时候；传 `null` 它无从下手（`workflow-template-selector` 的 `SelectTemplate(null)` 抛 `InvalidOperationException`）⇒ **视图一个都不建、画布空着、不报错**。实测（Avalonia Trimmed demo，装记录仪）：`Build(null)` 时 5 次 Build 全失败（1 条连线 + 4 个节点，正好对应基线的 4 张卡），截图是空画布；改成传 VM 后日志为 `Build NodeViewModel -> NodeView`×4 与 `Build LinkDefaultViewModel -> LinkView`，卡片回来。**别把它「简化」回 `Build(null)`** —— 其余三家（WPF/WinUI/MAUI）没有这个问题，因为它们的 `DataTemplateSelector` 只负责「选」，建由适配器 `LoadContent()`/`CreateContent()` 做。
 
+11. **Android 头那一行 `AndroidEnableProfiledAot` 会把整个解决方案的 Debug 构建挡在门外。**
+   `Examples/Workflow/Avalonia Trimmed/Demo/Demo.Android/Demo.Android.csproj:11` 原先是无条件 `true`。它让 Android SDK 在**求值阶段**就打开 AOT（`Microsoft.Android.Sdk.Windows/36.1.69/targets/Microsoft.Android.Sdk.Aot.targets:25-29` 那段以 `'$(AotAssemblies)' == 'true'` 为条件的 `ImportGroup`），于是去解析 `Microsoft.NET.Runtime.MonoAOTCompiler.Task` 与 `Microsoft.NETCore.App.Runtime.AOT.Cross.android-*`；工作负载不全的机器上解不出来，**`dotnet build VeloxDev.slnx` 连 MSBuild 求值都过不去**（错误挂在 `Microsoft.Android.Sdk.Aot.targets` 上，看着像环境问题，其实是这一行）。**全仓只有这一处设了它**（`grep AndroidEnableProfiledAot` 只有这一行）。现在带上 `Condition="'$(Configuration)' == 'Release'"` —— Debug 不需要 AOT。
+   判据：改前 `dotnet clean VeloxDev.slnx -c Debug` 4 个 error、`dotnet build … -p:AotAssemblies=false` 才能过（还带 3 条 `XA1029`）；改后 `dotnet clean` 与 `dotnet build VeloxDev.slnx -c Debug` 都是 **0 错误 0 警告**。
+   另注：**`dotnet build VeloxDev.slnx -t:Rebuild` 在解决方案上不安全** —— 那是「每个项目各自 Clean+Build」，引用项目的 clean 会与依赖方的 build 抢文件（实测 25 个 error：`CS0006 找不到元数据文件`、`MSB3030 复制失败`、WinUI 的 `XamlCompiler.exe` 退出、NuGet 打包找不到 xml）。VS 的「重新生成解决方案」是整解先 clean 再 build，CLI 的等价写法是 `dotnet clean` + `dotnet build` 两步。
+
 ---
 
 ## 五、非 Trimmed demo 的连线：视图只画，命中 / 悬停 / 右键 / 删除全在 Core
