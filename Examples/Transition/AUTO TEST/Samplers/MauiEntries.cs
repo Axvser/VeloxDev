@@ -17,10 +17,8 @@ using MauiThickness = Microsoft.Maui.Thickness;
 namespace VeloxDev.SamplerTest;
 
 // The samplers the MAUI adapter ships, with the closed form each one follows.
-// 覆盖的是"结果本身是值"的那些采样器。BrushSampler / ShadowSampler / TransformSampler 的产物是
 // BindableObject，其类型初始化要求进程里有 MAUI 的平台件 —— 纯数据套件里
 // new SolidColorBrush() 抛的是 Element 静态构造失败。这三条登记在
-// UnreachableSamplers 里，由真跑起来的 demo 覆盖。
 internal static class MauiEntries
 {
     private const string Adapter = "MAUI";
@@ -73,7 +71,6 @@ internal static class MauiEntries
     private static double Lerp(double start, double end, double t) => start + (end - start) * t;
 
     // 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的 BoundedProgress，不调用它。
-    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 1（MAUI 的通道是 float）。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
@@ -110,9 +107,6 @@ internal static class MauiEntries
     }
 
     // Microsoft.Maui.Graphics.Color 是引用类型，逐位相等会退化成引用比较，所以按四个通道比。
-    // 通道按容差比，理由与四元数那条相同：MAUI 的通道是 float，而这段闭式解和适配器是分开编译的，
-    // a + (b - a) * t 在两边收缩成什么由各自的 JIT 决定，最后一个 bit 会差 —— 实测差 1 个 ULP。
-    // 1e-5 比任何一条真实规则差异（共用进度、钳制、通道错位）都小几个数量级，不会把真错误放过去。
     private static bool ColorEquivalent(object? expected, object? actual)
         => expected is MauiColor e && actual is MauiColor a
            && Close(e.Red, a.Red)

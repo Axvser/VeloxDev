@@ -1,21 +1,8 @@
 namespace VeloxDev.SamplerTest;
 
 // 随产品发布、但**这个纯数据套件**驱动不起来的采样器，以及它需要而这里造不出来的那个端点值。
-// 它们不是没被验证 —— 只是不在这里被验证。这六个的闭式解由 VeloxDev.AT 在真跑起来的 app 里验：
-// WinUI 的三条在 Conformance/WinUiConformance.cs，MAUI 的三条在 Conformance/MauiConformance.cs，
-// 与这个套件用同一组缓动时间、同一组端点。两个套件合起来，75 个采样器全部覆盖。
-// 卡住的是端点值，不是采样器本身：这六个都是普通的托管类，Activator 造得出来，但它们要写的是一个
 // 框架对象（画刷 / 投影 / 变换 / 阴影），而那种对象在没有 XAML/MAUI 运行时的进程里激活不了 —— 没有端点，
-// 一帧都跑不了，也就无从在这里验它的闭式解。
-// 名单里的类型按程序集限定名解析，这一点是承重的：WinUI 与 MAUI 两个适配器只在这里出现，
-// 靠它才把两个程序集拉进进程，覆盖校验才数得到它们那 22 个采样器。少了这一层，两个程序集永远不会加载，
-// 覆盖校验会在"少验 22 个采样器"的情况下显示绿色。
-// 这是一句可证伪的话，不是垃圾桶：SamplerCoverageTests 会真的去构造
-// RepresentativeValue，一旦某个框架允许在无 UI 运行时的进程里造出它，那条理由就不再成立、
 // 测试立刻失败，条目必须搬回 SamplerRegistry 接受闭式解校验 —— 那时 AT 侧那份就成了重复，
-// 也该一并删掉。
-// 顺带记下探到过的那层底（2026-09-12）：六个失败是同一个根因 REGDB_E_CLASSNOTREG，
-// 而 Bootstrap.TryInitialize(0x00010007) 返回 True 就能抬掉它；抬掉之后 MAUI 的 Shapes.Transform
 // 直接可造，余下五个只剩 RPC_E_WRONG_THREAD（线程亲和性）。真去 Application.Start 起那条线程
 // 会把 MSTest 宿主进程整个带崩 —— 这也正是这六个改由 AT 侧覆盖、而不是在这里硬凑的原因。
 internal static class UnreachableSamplers

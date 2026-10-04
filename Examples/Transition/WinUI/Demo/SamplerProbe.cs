@@ -16,12 +16,7 @@ using Windows.UI;
 namespace Demo;
 
 // 把该适配器发布的每一个采样器各推一帧序列，把结果写成机器可读的载荷。
-// 这是采样式验收在真 app 里的落点：采样器要写的对象（画刷、投影、变换）都需要一个活着的 XAML 运行时，
-// 而这里正是有运行时的进程。
-// 被写对象是 SamplerSubject —— 一个**真正在视觉树里的控件**，每条采样器一条同类型的依赖属性。
 // 采样器直接写在它上面，载荷再从该属性读回，所以断言依据的是界面上那个控件实际持有的值。控件自己按属性重绘，
-// 于是"画出来"这件事不需要另一套映射代码。
-// 每条采样器由界面上的一个把手点击驱动，一次只跑一条 —— 验收侧因此走的是"点控件 → 触发处理函数 →
 // 采样器写值 → 读回"这条真实的 UI 交互路径，而不是让 app 在启动时闷头算完一遍。
 // 端点是工厂而不是实例：引用类型的端点若跨帧复用，一个就地改动端点的采样器会把后面的帧一起带偏，
 // 而「不得改动交给 InsertFrame 的 start/end」正是库对采样器的硬约束 —— 每帧一对全新端点才看得见它。
@@ -46,18 +41,13 @@ internal static class SamplerProbe
         internal const string TransformSampler = nameof(TransformSampler);
 
         // 索引器路径的两条：它们验的不是某个采样器，而是**路径能落到具体的槽上**。
-        // 名字不再取自采样器类型名 —— 两条用的是同一个 ColorSampler，区分它们的是路径里那个下标。
         // 相邻下标必须是两条不同的路径：索引器的 PropertyInfo 对每个下标都是同一个 "Item"，
-        // 下标不并入身份的话这两行会合成一个状态条目，一条动画静默盖掉另一条 —— 而批量那一路
-        // 会立刻报出来（表里的条目在帧报告里缺席）。
         internal const string GradientStop0Color = "GradientStop0Color";
 
         internal const string GradientStop1Color = "GradientStop1Color";
     }
 
     // 一条采样器：把手令牌、它在被写控件上的属性，以及一对端点工厂。
-    // 被写的属性名；带索引器的路径用它表达不了，那些条目的这一项是 null、改由 Path 给出路径。
-    // 一条完整路径，用于"属性名"说不清的那些条目 —— 尤其是带索引器的：Ramp.GradientStops[0].Color。
     private sealed record ProbeSpec(
         string Name,
         string Description,
@@ -68,8 +58,6 @@ internal static class SamplerProbe
         Func<TransitionProperty>? Path = null);
 
     // 一个产物读出来的样子：类型名 + 固定顺序的分量。
-    // TypeTag: 产物的运行时类型名。认不出来的类型也照报，由测试侧去说"类型不对"。
-    // Components: 该类型的分量。认不出的类型没有分量，所以是空数组。
     internal sealed record Measurement(string TypeTag, double[] Components);
 
     // ---- 端点：与 Samplers/WinUiEntries.cs 里的一致 ----
@@ -197,15 +185,11 @@ internal static class SamplerProbe
     internal static object End(string samplerName) => Spec(samplerName).End();
 
     // 被写控件上这个属性**此刻**持有的值，按分量读出来。
-    // 真动画那一段时间靠它采样：采样当刻就把分量取成数字，绝不把值对象留到后面 ——
-    // 画刷、投影、变换这类产物每帧写的是同一个 scratch 实例、就地改，存下实例等于读到"后来"的状态。
     internal static Measurement Read(SamplerSubject subject, string samplerName)
         => Measure(Path(samplerName).GetValue(subject));
 
     // 这一行此刻的值是否**就是**它声明的起点。
-    // 给顶栏那三个按钮用的可观测量。逐分量精确比较而不是带容差：重置是**把声明的那对端点原样写回去**，
     // 所以"已经回到起点"必然是逐位相同，不需要容差去猜。离散型的那几条永远停在起点，于是它们恒为真 ——
-    // 这是它们应有的样子，不是漏报。
     internal static bool MatchesStart(SamplerSubject subject, string samplerName)
         => SameComponents(Measure(Start(samplerName)).Components, Read(subject, samplerName).Components);
 
@@ -224,9 +208,6 @@ internal static class SamplerProbe
 
     // 在被写控件上跑一条采样器的五个固定缓动时间，产出载荷文本，形如
     // v=1;seq=3;n=5;s.PointSampler.0=Point,10,…;。
-    // subject: 这一格的在屏控件 —— 采样器写在它上面，值也从它读回。
-    // samplerName: 要跑的那条采样器，取 SamplerNames 里的名字。
-    // sequence: 激活次数，由调用方递增 —— 载荷靠它证明这一次是新的。
     // 必须落在 UI 线程上 —— 它要构造画刷、投影、变换这类有线程亲和性的对象，而把手正是从 UI 线程触发的。
     internal static string Run(SamplerSubject subject, string samplerName, long sequence)
         => $"v=1;seq={sequence};n={Times.Length};" + RunFrames(subject, samplerName);
@@ -246,7 +227,6 @@ internal static class SamplerProbe
     }
 
     // 在被写控件上跑一条采样器的一帧，返回**从控件读回**的值。
-    // 验收与演示台走的是同一个入口：载荷报的就是这个返回值，屏幕上那个控件持有的也是它 ——
     // 界面上看到的和断言里读的必然是同一个数，不可能各说各话。
     internal static object? Frame(SamplerSubject subject, string samplerName, double t)
     {
@@ -261,11 +241,8 @@ internal static class SamplerProbe
     }
 
     // 把一个产物读成类型名 + 分量，顺序固定。
-    // 打头带上类型名是有意的 —— 采样器一旦换了产物的类型，或者这里的分量顺序被改动，验收侧会立刻发现，
     // 而不是把两种情况都读成"数值对不上"。
     // 栅格长度多带一个单位码：单看数值，Pixel 被换成 Star 是看不见的。码就是枚举的底层值
-    // （Auto = 0、Pixel = 1、Star = 2）。
-    // 认不出的类型不抛。 这里读的是"控件此刻持有什么"，而"类型变了"本身就是要报给验收的异常之一；
     // 在一个属性回调里抛出去只会把 demo 打挂，把异常变成一次崩溃。所以照实报类型名、分量留空，让测试侧去说。
     internal static Measurement Measure(object? value) => value switch
     {
@@ -322,19 +299,15 @@ internal static class SamplerProbe
     }
 
     // 真动画那一段时间里对控件属性的采样累积。
-    // 收的是 Measurement 里已经取成数字的分量，不是值对象（见 Read）。
     // 非有限值单独计数、**不喂给 min/max** —— 一个 NaN 喂进去会把那个分量的包络永久粘住，
     // 于是"有过 NaN"这件事就再也看不出来了。
     // Settled 是"最后一帧已经落地"的判据：流水线的末帧是排队投递的，固定余量在负载重的机器上
-    // 会读早，而值连续几拍不再变是它真的到了。
     internal sealed class LiveWatch
     {
         // 连续多少拍同一个值算落定。
         // 三十拍（这条链路上每拍 16ms，约 480ms），不是两三拍。落定要代表的是"流水线的末帧已经落到目标上"，
         // 而末帧是排队投递的：Blazor 上它得等电路线程腾出手，慢的时候一拍与下一拍之间能隔几十毫秒。
         // 更麻烦的是产物**被量化**的时候：Blazor 的 CSS 颜色字符串按三位小数格式化，动画末段缓动又被压平，
-        // 连着好几帧能格式化出同一个字符串 —— 于是"值不再变"在动画还没跑完时就成立了。实测：bench 1600ms、
-        // 窗口 5 拍时这条会误报成"没跑到终点"（3 次错 2 次），窗口 30 拍后 3 次全对。
         private const int SettledTicks = 30;
 
         private double[] _min = [];
@@ -416,9 +389,6 @@ internal static class SamplerProbe
             => value == previous || (double.IsNaN(value) && double.IsNaN(previous));
 
         // 这段动画的机器可读结果：控件属性这段时间里被写成了什么。
-        // sampler: 跑的是哪条采样器。
-        // sequence: 点击序号，与 over.conf 共用 —— 载荷靠它证明这一份是新的。
-        // error: 起动画时就抛出来的异常，没有则为 null。
         internal string Digest(string sampler, long sequence)
 
             => $"v=1;seq={sequence};done=1;sampler={sampler};" + RowFields();

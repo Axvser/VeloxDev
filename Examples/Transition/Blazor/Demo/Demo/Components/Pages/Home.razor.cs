@@ -53,9 +53,7 @@ public partial class Home : ComponentBase, IDisposable
     private const int ElasticDurationMs = 1100;
 
     // 加载那三条动画的行程。
-    // 行程原来按窗口宽度定（500 / 400），那是在三块目标直接摊在整页上的时候。现在每一块在列表的一行里，台子
     // 就是它的边界，跑出去会被裁掉 —— 而"跑出去看不见"与"没在跑"在屏幕上分不开。所以行程缩到台子里放得下：
-    // 36 的起边 + 200 的行程 + 60 的方块 = 296，台子给 300。
     private const double LoadTravel = 200d;
 
     // ---------------------------------------------------------------
@@ -214,7 +212,6 @@ public partial class Home : ComponentBase, IDisposable
     // -----------------------------------------------------------------------------------------------
 
     // 把三种案例行拼成一张表：先加载那三行，再过冲那五行，最后每个采样器一行。
-    // 采样器排在最后是有意的：它们是套件逐条驱动的对象，也是最需要滚动的部分，而滚动这一步本身要被真的走到。
     private void RebuildCaseList()
     {
         if (_caseRows.Count > 0) return;
@@ -293,7 +290,6 @@ public partial class Home : ComponentBase, IDisposable
 
     // 跑一条过冲案例：先把目标放回起点，再起动画。
     // 先放回起点是必须的：Prepare 读的是**目标此刻的值**当起点，不放回去就变成"从终点动到终点"，
-    // 看上去什么都没发生。
     private void RunOvershoot(
         BoxModel target, Transition<BoxModel> animation, string scenario, int durationMs, int targetIndex, Action restoreStart)
     {
@@ -348,9 +344,7 @@ public partial class Home : ComponentBase, IDisposable
     // -----------------------------------------------------------------------------------------------
 
     // 顶栏的"全部启动"：每一行同时起一条真动画。
-    // 十几条真 Transition 并发跑，是这个库要经得住的一种真实用法；逐行载荷（over.conf / over.live）在
     // 这一路里刻意不写 —— 十几条各自写只会互相覆盖，而那些载荷的归属是"点了哪一行"，由行里的"启动"负责。
-    // 要每一行的结果，读 over.batch。
     // 走过行自己的动作而不是另写一套：行里那个动作就是这条案例的定义，两处各写一份必然漂移。采样器那一类走的是
     // BulkStart —— 行里那个"启动"会掐掉上一次被观察的那一行，批量这一路谁都不能动别人。
     private void StartAllCases()
@@ -383,8 +377,6 @@ public partial class Home : ComponentBase, IDisposable
     }
 
     // 批量运行期间每一拍喂一次每一行，全部落定之后把这一份载荷收尾。
-    // "跑完了"是**每一行都落定**，不是某一拍过去 —— 十几条并发，先跑完的等后跑完的。落定判据仍是那个逐行用的
-    // 稳定窗口（见 LiveWatch），兜底上限也一样。
     private void StartBatchWatch(long sequence)
     {
         var clock = Stopwatch.StartNew();
@@ -426,8 +418,6 @@ public partial class Home : ComponentBase, IDisposable
     }
 
     // 写批量载荷：每一行的五帧闭式解，加上每一行的观察摘要。
-    // 点那一刻先落一份 done=0（帧已经齐了，观察还没跑完），每一行都落定之后再落 done=1。
-    // 与逐行载荷同一套握手：对方靠序号越过基线、且 done 为真，才认这一份是新的、且是跑完了的。
     private void WriteBatch(long sequence, bool done)
     {
         var payload = new System.Text.StringBuilder(
@@ -461,7 +451,6 @@ public partial class Home : ComponentBase, IDisposable
     }
 
     // 顶栏"重置"：整个界面回到各自的起点。
-    // 加载、过冲、采样器三类各自走自己那行的重置动作 —— 少一类，"重置"这个名字就与它做的事对不上。
     // 采样器那一行收在这里也是有意的：按下它之后，没有一行还偏离声明的起点，顶栏那几个数才有意义。
     private void ResetAllCases()
     {
@@ -585,7 +574,6 @@ public partial class Home : ComponentBase, IDisposable
     private long _probeSequence;
 
     // 演示台的被写对象当前该是什么颜色 —— 就是 StringSampler 最后写出的那个 CSS 颜色。
-    // 每一行那块 swatch 的颜色：与目标一样，一行一个。
     private readonly Dictionary<string, string> _benchColors = new(StringComparer.Ordinal);
 
     // 这一行此刻该画成什么颜色。还没写过就退回中性灰。
@@ -594,13 +582,6 @@ public partial class Home : ComponentBase, IDisposable
 
     // 演示台常驻的被写目标：真动画写它，那一行的 swatch 每帧读它。
     // 桌面那几侧的目标是在屏控件，浏览器里没有"控件属性"可写，这个对象就是那个位置 ——
-    // 它和 over.bench 上真正生效的计算样式之间只隔一个 _benchColor 赋值。
-    // 每一行演出用的目标：一行一个。
-    // 与桌面那六个平台"每行一个在屏元素"同构 —— 而且这不是风格问题。共用一个目标时，"全部启动"会逐行
-    // 调用每一行的启动动作，后一条 Execute 立刻顶掉前一条（互斥语义）：前几行只画出一帧就被取消，
-    // 观察窗口读到的就是那个冻结的起点值。
-    // 实测：共用目标时批量那一路除最后一行外全部报"末值不等于 t=1 端点"，而只有一行时看不出来 ——
-    // 那正是它一直没被发现的原因。每行一个之后全绿。
     private readonly Dictionary<string, SamplerProbe.Target> _benchTargets = new(StringComparer.Ordinal);
 
     private SamplerProbe.Target Bench(string sampler) => _benchTargets[sampler];
@@ -620,7 +601,6 @@ public partial class Home : ComponentBase, IDisposable
     private readonly Dictionary<string, double[]> _rowPrevious = new(StringComparer.Ordinal);
 
     // 这一行的"启动"：验五个固定缓动时间，再起一条真动画把这一条跑一遍。
-    // 采样器写在**这一格的在屏元素**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
     // 这一条同时是套件点的那个把手令牌走的路径，也是行里"启动"按钮走的路径 —— 两者不可能各说各话。
     private void RunSamplerProbe(string sampler)
     {
@@ -636,7 +616,6 @@ public partial class Home : ComponentBase, IDisposable
 
     // 起一条真动画把某个案例从起点跑到终点。
     // 起点必须先同步写回目标：Prepare 读的是**目标此刻的值**当起点，不写回去就变成"从终点动到终点"，
-    // 屏幕上什么都不会发生。属性路径与采样器都取自同一张探针表。
     private void StartSamplerAnimation(string sampler)
     {
         var target = Bench(sampler);
@@ -657,7 +636,6 @@ public partial class Home : ComponentBase, IDisposable
     // Razor 适配器只有 StringSampler，产物就是 CSS 颜色字符串，所以目标直接把它当背景色用 ——
     // 这里不需要 WPF 那边的标尺：颜色本来就没有"行程"可言。
     // 末帧是排队投递的，所以落定判据是"值连续几拍不再变"而不是一个固定的余量 —— 负载重的机器上固定余量会读早，
-    // 把一次正常的动画报成"没跑到终点"。
     private void PlaySampler(string sampler, long sequence)
     {
         _benchTimer?.Dispose();
@@ -766,7 +744,6 @@ public partial class Home : ComponentBase, IDisposable
 
     // 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
     // 逐行载荷是"点哪一行写哪一行"的形状，十几行一起跑只会互相覆盖，所以并发这一路另开一份。初值就是一份
-    // 合法的空载荷：套件在点击之前先读它一次，拿那个序号当基线。
     private string _batchSnapshot = $"v=1;seq=0;done=1;rows={SamplerProbe.SamplerNames.Count};";
 
     // 记下本次场景，并把该目标此前的峰值清零——每次点击都必须从干净的观测开始。
@@ -816,7 +793,6 @@ public partial class Home : ComponentBase, IDisposable
 
     // 时间轴控制那排的回读：暂停与否、速率、当前程内位置、第几程。读的是 Box0 —— 它既是加载模式那排每一条
     // 路径都动的第一块，也是"连续互斥"唯一点的那块，拿它当代表不会读到一块静息的目标。
-    // 速率用不变文化格式化，免得小数点跟着机器区域设置变，验收侧读到 "0,25" 就解析不了。
     private static string TimelineState(BoxModel target)
     {
         const bool mutual = true, noMutual = true;
@@ -828,7 +804,6 @@ public partial class Home : ComponentBase, IDisposable
 
     // 加载模式那一排三块目标的状态：动画真正写的那几个属性，读出来报给测试。
     // 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
-    // 那三条动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。字段形状与
     // 参考实现的 RecState 对齐，多报一个 rotate 与 scale（Blazor 的旋转与缩放是独立属性，不是变换对象里的一支）。
     private static string RecState(string prefix, BoxModel target)
         => $"{prefix}.x={target.X:F3};"
@@ -838,15 +813,12 @@ public partial class Home : ComponentBase, IDisposable
          + $"{prefix}.opacity={target.Opacity:F3};";
 
     // 行数 / 偏离声明起点的行数 / 相对上一拍仍在变的行数。
-    // 顶栏那三个按钮唯一的可观测量，与加载模式那边的 nomutual 同一个思路：它不解释动画该到哪，
     // 只说明有没有在动、有没有回到起点。只数采样器那一行 —— 别的行的"起点"由各自的台子宣布，不在这里说话。
     // 两个数得分开，缺一个就有假命题。 只看"偏离起点"，静息时也是满的 —— 那一行初始持有的是属性的默认值
     // （空字符串，连颜色都不是），不是采样器声明的起点，于是"全部启动后 > 0"在什么都没跑时也成立。所以进界面
     // 时先把它写成声明的起点（见 OnAfterRenderAsync），并另记一个"这一拍还在变"：静息 0 / 启动后满 /
     // 停止后 0 / 重置后 0 且回到起点。
-    // 两个数都是"这一拍"的快照，不是"这一批跑起来了"的判据。 一行刚起动画的头几帧里，它的分量可能与
     // 声明的起点**逐位相同**（字符串采样器在 t=0 原样写回起点那一串），所以要问"这一批起来了没有"，得**等**
-    // away 追上该有的行数，不能拿某一拍去断言（见验收侧的 ScanToolbar）。
     private (int Rows, int Away, int Moving) RowState()
     {
         var away = 0;
@@ -871,7 +843,6 @@ public partial class Home : ComponentBase, IDisposable
     }
 
     // 这三块目标上还有几条**并发**（非互斥）动画在跑。
-    // 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器是按目标缓存的一辈子不释放，
     // `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥的那张表在每条动画结束时
     // 真的会清空。要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
     private int NoMutualCount()

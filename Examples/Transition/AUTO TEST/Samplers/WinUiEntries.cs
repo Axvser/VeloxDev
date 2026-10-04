@@ -17,10 +17,6 @@ using WinThickness = Microsoft.UI.Xaml.Thickness;
 namespace VeloxDev.SamplerTest;
 
 // The samplers the WinUI adapter ships, with the closed form each one follows.
-// 覆盖的是"结果本身是值"的那些采样器。BrushSampler / ProjectionSampler / TransformSampler 的产物是
-// WinRT 的 DependencyObject，而 WinRT 类激活要求进程里有一个真正的 XAML 运行时 —— 纯数据套件里
-// new SolidColorBrush() 直接就是 REGDB_E_CLASSNOTREG。这三条登记在
-// UnreachableSamplers 里，由真跑起来的 demo 覆盖。
 internal static class WinUiEntries
 {
     private const string Adapter = "WinUI";
@@ -71,7 +67,6 @@ internal static class WinUiEntries
     private static double Lerp(double start, double end, double t) => start + (end - start) * t;
 
     // 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的 BoundedProgress，不调用它。
-    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;

@@ -11,16 +11,10 @@ namespace VeloxDev.SamplerTest;
 // Puts the two halves of a registration together: which key a type is registered under, and which type the sampler
 // behind that key actually unboxes.
 // 这一格此前没有任何测试看着。覆盖校验对的是采样器的类型集合，不看它注册在哪个键上；闭式解校验的端点
-// 由表自己给，于是表和采样器可以一起错、还错得一致。历史上 MAUI 的 RectFSampler 正是这样：键是
-// Microsoft.Maui.Graphics.RectF，体里解的却是 System.Drawing.RectangleF —— 编译通过、
-// 两个套件全绿，直到第一帧在采样器里抛 InvalidCastException、整条 run 被取消。
-// 断言的依据是这个进程里真实的注册表，不是表里重抄一遍的键：查之前先把七家（加 Core）的注册入口都
-// 跑起来，再问注册表"ValueType 这条类型解析到谁"。所以它能看见的正是适配器里那一行注册写成了什么。
 [TestClass]
 public class SamplerKeyTests
 {
     // 前提：每条条目归属的适配器，都有一份能在这个进程里跑起来的注册表。
-    // 下面两条断言都建立在"注册表真的被填过"之上。填不上时 TryGetInterpolator 一律返回 false，
     // 它们会以"没有键"的形式报红 —— 但那是在报症状。这一条先把前提本身钉死，并钉在正确的方向上：
     // 漏掉一家，那家的采样器在下面两条里是被跳过的，而不是被验过的。
     [TestMethod]
@@ -56,8 +50,6 @@ public class SamplerKeyTests
     }
 
     // 每条条目的声明类型，在真实注册表里必须解析到这条条目写的那条采样器。
-    // 声明类型就是注册键：InterpolatorCore.Prepare 拿 PropertyType 去查表。所以这条断言问的是
-    // "用户的属性声明成这个类型，实际会跑谁" —— 表里写着谁不算数。
     [TestMethod]
     public void EveryEntry_ValueTypeResolvesToTheSamplerItNames()
     {
@@ -102,10 +94,6 @@ public class SamplerKeyTests
     }
 
     // 注册表为这条键解析出的采样器，必须接得住"这个键类型的值" —— 逐条收集、一次报出。
-    // 与上一条的分工：上一条比 Type，问"注册在哪条键上"；这一条把后果跑一遍，问"接得住吗"。
-    // 键对而体里解错时上一条照过，那时就是这里抛 InvalidCastException。但这不是新的检测面 ——
-    // 闭式解校验会撞上同一处，差别只在于它一抛就整体中断、只报第一条，而这里逐条收齐。
-    // 端点取条目自己的（就是闭式解校验用的那一对），采样器取注册表解析出的那个实例。
     [TestMethod]
     public void EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey()
     {
@@ -146,13 +134,7 @@ public class SamplerKeyTests
     }
 
     // 注册到基类型上的采样器，会被交到手的类型不止它名字里那一种。
-    // WPF 注册的是 typeof(Effect)（WPF 自己的 UIElement.Effect DP 就是按 Effect 声明的），
-    // 于是 BlurEffect 也会走到这条叫 DropShadowEffectSampler 的采样器上。这条钉的是它在那时
-    // 不冒充：既不许把不认识的效果静默画成自己最熟的那一种，也不许抛。
     // 比的是实例（AreSame）而不是字段：这一对没有可插的公共面（BlurEffect 没有 Color/Direction/
-    // ShadowDepth），采样器该把调用方给的那个实例原样交回。造一个新对象、只把字段抄成端点的值，在这个断言下同样是
-    // 冒充 —— 那正是这条采样器旧兜底分支在做的事。
-    // 放在这个文件里，是因为这件事是"键选成了基类型"的直接后果；它进不了闭式解那张表 ——
     // SamplerCoverageTests.EveryRegistryEntry_IsListedOnce 要求一个采样器只有一条条目。
     [TestMethod]
     public void ASamplerRegisteredForABaseType_HandsBackTheFamilyItWasGiven()
@@ -191,7 +173,6 @@ public class SamplerKeyTests
     // 把每条条目归属适配器的那份注册表都填上 —— 这是上面两条断言的前提。Core 那份没有独立入口：它的注册
     // 写在抽象基类的静态构造里，第一次 TryGetInterpolator 就会触发。
     // 这里不缓存"已经跑过哪几家"：静态构造再跑一次是无操作，而一旦缓存，某条测试单独跑时就会漏填，
-    // 漏填的表现正是本文件要防的那种"安静变瞎"。
     private static void ForceEveryRegistrationTable()
     {
         foreach (var assembly in SamplerRegistry.Entries.Select(entry => entry.SamplerType.Assembly).Distinct())

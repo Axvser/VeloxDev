@@ -91,7 +91,6 @@ internal static class AvaloniaEntries
     }
 
     // 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的规则，不调用库的辅助函数。
-    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;

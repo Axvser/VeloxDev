@@ -6,23 +6,7 @@ using System.Windows.Media;
 namespace Demo;
 
 // 案例列表里的一行：一个在屏元素、一句"这条在验什么"，以及这一行自己的三个动作。
-// 采样器行、加载行、过冲行共用这一个形状 —— 用户看到的是一张统一的表，行的种类只体现在各自的
 // 令牌、描述与动作里。三个动作是 Action 而不是事件处理函数：行本身不该知道调度器、
-// 载荷与元素之间的关系，那些留在窗口那侧。
-// Title: 行首那个名字，加粗显示。
-// Description: 这条在验什么。采样器那几条来自探针表，与把手、载荷同源。
-// Element: 这一行真正在动的那个在屏元素。
-// ElementWidth: 元素区的宽度。位移类那几条要放得下整段行程，其余的按元素本身给。
-// StartToken: "启动"按钮的自动化令牌。
-// StopToken: "关闭"按钮的自动化令牌。
-// ResetToken: "重置"按钮的自动化令牌。
-// Start: 点"启动"。
-// Stop: 点"关闭"。
-// Reset: 点"重置"。
-// 顶栏"全部启动"用的动作，不填就等于 Start。
-// 两者之所以可能不同：行里那个"启动"是**单独**驱动这一行，它得管载荷、得盯着这一条跑完；而"全部启动"
-// 是十几条一起发起，那时谁都不能去动别人。采样器行的"启动"里有一句"停掉上一次被观察的那一行"，
-// 那是为了单点时不至于两条同时写载荷 —— 走到批量路径上就变成了"后一条把前一条掐掉"，只剩最后一条在跑。
 internal sealed record CaseRow(
     string Title,
     string Description,
@@ -39,7 +23,6 @@ internal sealed record CaseRow(
 // 案例列表：一条案例一行。左边是那条案例真正在动的在屏元素，中间是这条在验什么的文字，
 // 右边固定宽度是这一行自己的 启动 / 关闭 / 重置。
 // 采样器那一类案例的元素是 SamplerSubject —— 采样器直接写在它上面，它自己按属性重绘，
-// 所以"画出来"这件事不需要另一套映射代码。行的顺序就是传进来的顺序。
 internal sealed class SamplerBench
 {
     private const double StageWidth = 96d;
@@ -54,7 +37,6 @@ internal sealed class SamplerBench
     internal SamplerSubject SubjectFor(string sampler) => _subjects[sampler];
 
     // 造一条采样器案例行：元素是一个在它自己那一格里被写的控件，令牌沿用 over.sampler.<类型名>。
-    // "启动"的令牌刻意不跟另外两条走同一套命名：验收套件点的就是它，点它要写闭式解载荷并起那条真动画。
     internal CaseRow SamplerRow(string sampler, Action start, Action stop, Action reset, Action bulkStart)
     {
         var stage = new Canvas

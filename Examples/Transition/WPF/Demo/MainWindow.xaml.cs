@@ -71,7 +71,6 @@ public partial class MainWindow : Window
     // -----------------------------------------------------------------------------------------------
 
     // 把三种案例行拼成一张表：先加载那三行，再过冲那五行，最后每个采样器一行。
-    // 采样器排在最后是有意的：它们是套件逐条驱动的对象，也是最需要滚动的部分，而滚动这一步本身要被真的走到。
     private void RebuildCaseList()
     {
         _caseRows.Clear();
@@ -152,9 +151,7 @@ public partial class MainWindow : Window
     private readonly List<CaseRow> _caseRows = [];
 
     // 把元素放进一块定宽、裁边的台子里 —— 它的行程跑到端点也不会压到旁边的字上。
-    // 加载行与过冲行共用它。台子宽度由那一条案例的行程决定（LoadElementWidth 与
     // ShiftElementWidth）：这是"这一段动哪儿"的唯一来源，窄一点就会让元素在最该被看见的
-    // 那一瞬跑出边界 —— 而"跑出去看不见"和"没在跑"在屏幕上分不开。
     private static Canvas PlayStage(FrameworkElement element, double width)
     {
         var stage = new Canvas { Width = width, Height = 62, ClipToBounds = true };
@@ -178,8 +175,6 @@ public partial class MainWindow : Window
             () => ResetCase(element, restore));
 
     // 一条过冲案例：元素是那块目标本身。
-    // 元素区的宽度。位移那两条要放得下整段行程（端点是 300，方块本身 80），不按原值留出位置的话，
-    // 它一跑就整块滑出格子 —— 看上去和"没动"一模一样，正是这个演示要消除的错觉。
     private static CaseRow OvershootRow(
         string id, string title, string description, Rectangle target, FrameworkElement stage, double elementWidth,
         Action start, Action restore)
@@ -232,7 +227,6 @@ public partial class MainWindow : Window
 
     // 位移那第二条曲线（Elastic）自己的一块目标。
     // 与 Over0 **不能**是同一块：一个元素只能有一个父级，而每一行各自是一个父级。
-    // 所以"两条曲线同屏对比"改成"上下相邻两行同时看得见" —— 同一条时间轴上，仍然是同一次对比。
     private readonly Rectangle Over4 = new()
     {
         Fill = new SolidColorBrush(OverColorStart), Width = 80, Height = 60, RenderTransform = new TranslateTransform(),
@@ -267,9 +261,7 @@ public partial class MainWindow : Window
     private const double ShiftElementWidth = 420d;
 
     // 加载那三行的元素区宽度，以及那三条动画的行程。
-    // 行程原来按窗口宽度定（800），那是在三块目标直接摊在窗口上的时候。现在每一块在列表的一行里，
     // 台子就是它的边界，跑出去会被裁掉 —— 而"跑出去看不见"和"没在跑"在屏幕上是一样的，
-    // 正是 SamplerSubject 那边用标尺要消除的错觉。所以行程缩到台子里放得下。
     private const double LoadElementWidth = 300d;
 
     private const double LoadTravel = 200d;
@@ -309,7 +301,6 @@ public partial class MainWindow : Window
 
     // 起一条真动画把某个案例从起点跑到终点。
     // 起点必须先同步写回目标：Prepare 读的是**目标此刻的值**当起点，不写回去就变成"从终点动到终点"，
-    // 屏幕上什么都不会发生。属性路径与采样器都取自同一张探针表。
     private static void StartSamplerAnimation(string sampler, SamplerSubject subject)
     {
         var property = SamplerProbe.Path(sampler);
@@ -332,9 +323,7 @@ public partial class MainWindow : Window
     private void ResetSamplerRow(string sampler) => ResetSamplerRows(sampler);
 
     // 顶栏的"全部启动"：每一行同时起一条真动画。
-    // 十几条真 Transition 并发跑，是这个库要经得住的一种真实用法；刻意不写任何载荷 ——
     // 十几条各自写 over.live 只会互相覆盖，而那两份载荷的归属是"点了哪一行"，
-    // 由行里的"启动"负责。
     private void StartAllCases(object sender, RoutedEventArgs e)
     {
         // 正在被观察的那一行先停掉观察：它的载荷已经发过了，别让它在"全部启动"之后又补发一份属于别人的。
@@ -368,8 +357,6 @@ public partial class MainWindow : Window
     }
 
     // 批量运行期间每一拍喂一次每一行，全部落定之后把这一份载荷收尾。
-    // "跑完了"是**每一行都落定**，不是某一拍过去 —— 十几条并发，先跑完的等后跑完的。落定判据仍是那个
-    // 逐行用的稳定窗口（见 LiveWatch），兜底上限也一样。
     private void StartBatchWatch(long sequence)
     {
         var clock = Stopwatch.StartNew();
@@ -400,8 +387,6 @@ public partial class MainWindow : Window
     }
 
     // 写批量载荷：每一行的五帧闭式解，加上每一行的观察摘要。
-    // 点那一刻先落一份 done=0（帧已经齐了，观察还没跑完），每一行都落定之后再落 done=1。
-    // 与逐行载荷同一套握手：对方靠序号越过基线、且 done 为真，才认这一份是新的、且是跑完了的。
     private void WriteBatch(long sequence, bool done)
     {
         var payload = new StringBuilder(
@@ -452,7 +437,6 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, double[]> _rowPrevious = new(StringComparer.Ordinal);
 
     // 行数 / 偏离声明起点的行数 / 相对上一拍仍在变的行数。
-    // 顶栏那三个按钮唯一的可观测量，与加载模式那边的 nomutual 同一个思路：它不解释动画该到哪，
     // 只说明有没有在动、有没有回到起点。
     // 两个数得分开，缺一个就有假命题。 只看"偏离起点"，静息时也是满的 —— 每行初始持有的是控件的默认值
     // （null 画刷、灰底色、默认圆角），都不是采样器声明的起点，于是"全部启动后 > 0"在什么都没跑时
@@ -483,11 +467,8 @@ public partial class MainWindow : Window
 
     // 演出：用真的 Transition 把一条采样器从起点跑到终点，全程对控件属性采样，最后写进 over.live。
     // 这不是原先那个手写循环 —— scheduler、effect、端点归一化、按属性类型解析采样器、每帧往 UI 线程投递，
-    // 走的全是库自己那条路径。
     // 起点必须先同步写回目标：Prepare 读的是**目标此刻的值**当起点，不写回去就变成"从终点动到终点"，
-    // 屏幕上什么都不会发生。
     // 末帧是排队投递的，所以落定判据是"值连续几拍不再变"而不是一个固定的余量 —— 负载重的机器上固定余量会读早，
-    // 把一次正常的动画报成"没跑到终点"。
     private void PlaySampler(string sampler, SamplerSubject subject, long sequence)
     {
         _benchTimer?.Stop();
@@ -604,7 +585,6 @@ public partial class MainWindow : Window
 
     // 加载模式那一排三块目标的状态：动画真正写的那几个属性，读出来报给测试。
     // 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
-    // 那三个动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。
     private static string RecState(string prefix, Rectangle target)
         => $"{prefix}.x={TranslateX(target):F3};"
          + $"{prefix}.fill={Describe(target.Fill)};"
@@ -619,7 +599,6 @@ public partial class MainWindow : Window
     };
 
     // 这个目标上还有几条**并发**（非互斥）动画在跑。
-    // 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器是按目标缓存的一辈子不释放，
     // `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥的那张表在每条动画结束时
     // 真的会清空。要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
     private int NoMutualCount()
@@ -941,7 +920,6 @@ public partial class MainWindow
 
     // 跑一条过冲案例：先把目标放回起点，再起动画。
     // 先放回起点是必须的：Prepare 读的是**目标此刻的值**当起点，不放回去就变成"从终点动到终点"，
-    // 看上去什么都没发生。位移那两条共用同一块目标（好让两条曲线同屏对比），所以这一步对它们尤其要紧。
     private void RunOvershoot(
         Rectangle target, Transition<Rectangle> animation, string scenario, int durationMs, int targetIndex, Action restoreStart)
     {

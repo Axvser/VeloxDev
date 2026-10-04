@@ -91,7 +91,6 @@ internal static class CoreSamplerEntries
     private static double Lerp(double start, double end, double t) => start + (end - start) * t;
 
     // 一组通道共用一个进度：谁先出界就停在谁那里 —— 与库里的规则一致，但这里是独立重述的。
-    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
@@ -221,7 +220,6 @@ internal static class CoreSamplerEntries
     // 组合型采样器。它不由宿主按名字注册，而是 StructAssembler.Create 每次动画现造、端点已经烘进构造函数，
     // 所以既没有无参构造，也不能用 Activator 起。这里走产品的真实入口（反射进那两个 internal 类型），
     // 条目验的仍是生产路径，而不是一条测试专用的捷径。
-    // 规则判为 Saturate：中间帧确实随缓动时间走（成员各自插值），但 t 一旦越过
     // [0,1] 就整体停在调用方给的端点上，不跟着成员外推 —— "停在界上"而不是"继续走"。
     private static SamplerEntry StructEntry()
     {

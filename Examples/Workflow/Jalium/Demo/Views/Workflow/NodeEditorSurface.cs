@@ -830,10 +830,7 @@ internal sealed class NodeEditorSurface : Canvas
     // 画一个节点上的每颗端口：字形（环 + 芯）与它的端口名。
     // 为什么端口在表面上画，而不是像 Avalonia 那样放进卡片自己：这一家的渲染器按布局盒裁剪子元素
     // （Visual.ShouldRenderChild 只看布局盒、不看画出来的内容，见 Jalium Trimmed 那个 LinkView 的注释）——
-    // 端口有一半骑在卡边外，放进卡里就等于把外溢的那一半交给一个刚好到此为止的盒子去决定；
     // 而 Enum 卡根上那个裁到圆角的主体区（NodeChrome 给卡片设了 ClipToBounds）会直接切掉它。
-    // 表面自己的盒子覆盖整个视口，端口因此永远不越界，也不用像 Avalonia 那样逐卡去挪 ScrollViewer 的视口。
-    // 位置仍是 NodePorts 那一处给的（连线端点与命中测试读的也是它），
     // 所以字形、名字、连线三者不可能对不齐。
     private void DrawPorts(DrawingContext dc)
     {
@@ -1245,9 +1242,7 @@ internal sealed class NodeEditorSurface : Canvas
 
     // 一个周期里彗星有多亮：头部从发送端出发时升起来（占前 30% 路程），到达接收端之前落下去
     // （占后 22%）。两端都是「没有光」，所以循环接缝看不出来。
-    // Avalonia 那版把这三段写成三条相位（成形 / 行进 / 退去）。这里从一个相位推出来，是因为本平台
     // 一个控件上只能跑一条转换（Transition.Exit 按目标停，两条会互相打断），相位一多就必然要
-    // 第二条 —— 所以只留一个 double，其余全从它算。
     private static double CometIntensity(double phase)
     {
         double p = Math.Clamp(phase, 0, 1);
@@ -1293,9 +1288,6 @@ internal sealed class NodeEditorSurface : Canvas
     // 理由见 DrawPorts），没有 per-link 的视图可写，所以这一个成员就是全部的动画状态。
     // 写它就重绘，因为画它的是表面自己的 OnRender / OnPostRender，没有别人会告诉它光走了 ——
     // 一帧一次重绘是「动画画在表面自己身上」的代价，转换本来就按 60fps 走。
-    // 2300ms 这个周期照的是 Avalonia 那版端口的波纹；彗星因此一个周期走完整条链接（那边是三段相位拼出
-    // 1600ms）。两个动效一个节拍读起来是同一件事在发生，代价是彗星比 Avalonia 慢一档 ——
-    // 这是「一个控件一条时钟」的必然结果，不是随手挑的数。
     public double FlowPhase
     {
         get => _flowPhase;

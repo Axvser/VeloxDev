@@ -20,31 +20,11 @@ namespace Demo;
 
 // 采样器演示台上的被写对象：一个真正在视觉树里的控件，每条采样器一条**可绑定属性**，类型与产物完全一致。
 // 换成控件而不是一个私有的 scratch 类，是为了让"采样器把值写到哪"这件事可被验证：属性是框架属性系统的真成员
-// （可绑定属性），采样器写它时走的是真实的属性通道，验收再从这个属性读回来 —— 于是断言依据的是**界面上那个
 // 控件实际持有的值**，而不是一个屏幕外的对象。
-// 为什么是 GraphicsView。WPF 那侧派生的是 FrameworkElement 并重写 OnRender，
 // 属性一变就由属性系统安排重绘。MAUI 没有 OnRender：派生 Border 只能靠改框架属性（背景、圆角）
-// 间接换样子，画不了"按采样器的产物现算出来的图形"。GraphicsView + IDrawable 才是
-// 对等物 —— 自己在自己的局部坐标里画，画完调 Invalidate 让画布重画。
 // MAUI 没有 AffectsRender。可绑定属性的元数据只认 validateValue / propertyChanged /
 // propertyChanging / coerceValue / defaultValueCreator 这几样，没有"这条属性影响渲染"
 // 这个选项，属性系统也不替谁安排重绘。所以重绘是**我们在属性变更回调里自己调 Invalidate()** 换来的：
-// 那是Register里唯一一处"记得去做"的事，而不是属性系统给的保证 —— 与 WPF 由
-// AffectsRender 兜底正好相反。
-// 绘制是有标尺的。位移类端点跑到 220，格子只有 84×56，按原值画会一步跨出格子被裁掉 —— 那看上去
-// 和"没动"一模一样。所以位置与尺寸在**绘制反应里**乘一个固定缩放，而属性本身持有的仍是原值：载荷读的是
-// 属性，于是断言的是原值，缩放只影响"怎么画"。（这个适配器的清单里没有三维的点与向量 —— Point3D/Vector3D
-// 那几条是 WPF 那侧才有的，这里的位移与尺寸就这几条。）
-// <b>MAUI 把"位置"和"旋转/缩放"表达成元素自己的 TranslationX/TranslationY、
-// RotationX/RotationY/Scale，没有变换对象可以挂</b>，而 Transform 型产物也只交出一个
-// 矩阵。所以这里分成两步：产物照原样进属性（真值在那儿），绘制反应只把矩阵的偏移量投影到平移上、把图形画成
-// 2D 图元 —— 看上去动的方向与量级对得上，而矩阵本身一个分量都没被改写。
-// 四条与框架成员重名的属性，各让一步：厚度不叫 Margin（View 已经占了那个名字，
-// 而且那条属性正是绘制反应的落点），叫 Inset；Shadow、Bounds、Frame 同理 ——
-// VisualElement 上有一个 Shadow（本适配器阴影采样器的产物类型正好就是它）、一个只读的
-// Bounds 和它的旧名 Frame，所以这两条叫 ShadowValue 与 Area。
-// 标尺常量也不叫 Scale：那个名字是元素自己的缩放。ShadowValue 与框架那个 Shadow
-// 的差别不只是名字 —— 后者挂到这一格上根本不显示，见 Draw。
 internal sealed class SamplerSubject : GraphicsView, IDrawable
 {
     // 位移与尺寸的像素缩放。这一组端点最大分量 220，格子留出的行程约 28 像素，另给过冲峰值留余量。
@@ -159,8 +139,6 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
     // 把采样器写下的值**换算成格子里画得下的样子**。
     // 这是"反应"，不是"值"：属性持有的是采样器写下的原值（载荷读的就是它），这里只把它落到像素上。
     // 位移走 TranslationX/TranslationY（MAUI 没有变换对象），尺寸走
-    // WidthRequest/HeightRequest，厚度走 Margin，阴影交给 Draw ——
-    // 采样器的产物只读不写。
     internal void Reposition()
     {
         var (x, y) = Kind switch
@@ -209,17 +187,9 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
 
     // 画这一格：在自己的局部坐标里画一个圆角方块，外加它自己的阴影。位置、尺寸、旋转由元素自己的属性承载，
     // 不在这幅画里。
-    // 画布只接受一个圆角半径，而采样器写的是四个分量，所以取其中的最大值（与 WPF 那侧一致）。半径再钳到短边的
-    // 一半：超过就画不出"更大的圆角"了，而端点在外推下会跑到 44 甚至负值，平台实现不该被这种值叫停。
-    // 颜色只取实心刷的通道 —— 这两条端点刷都是实心的，非实心时退回 Tint。
-    // 阴影画在画布上，不挂在Shadow上。那是实测出来的分歧：GraphicsView 在
-    // Windows 上是一块自绘画布，框架的阴影合到原生视图上、画布自己的 alpha 不参与，于是把
     // ShadowValue 整份挂过去，五个缓动帧加一次过冲播放下来，那一格**一个像素都没变** ——
     // 界面上与"没有阴影"是同一件事。所以阴影也用同一套 2D 图元画：**同一个圆角方块，改成阴影的颜色、按标尺
-    // 挪开一份**，方块盖在上面（Reposition 给这一格的画布留了 ShadowRoom 那么一圈，
     // 阴影才有地方落 —— 画布与方块一样大时，整块阴影要么被方块盖住、要么被画布裁掉，两个都是"没有阴影"）。
-    // 偏移按标尺缩小后又钳到那一圈的半径上：原值 220 的偏移落下来是 29 个点，比留出来的一圈还大，钳住之后
-    // 方向仍在、量级顶在上限上；模糊半径则按标尺外扩一圈，于是 10→60 的半径在这一格上是阴影厚 1→8 个点。
     public void Draw(ICanvas canvas, RectF dirtyRect)
     {
         var width = Math.Max(1f, dirtyRect.Width);
@@ -262,7 +232,6 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
     }
 
     // 阴影的颜色：取它的刷子（非实心就没有颜色可取），再乘上它自己的不透明度。
-    // 采样器的产物只读不写 —— 这里算出的是颜色，不是把产物改掉。
     private static MauiColor? ShadowPaint(MauiShadow cast)
         => cast.Brush is SolidColorBrush solid
             ? solid.Color.WithAlpha(Math.Clamp((float)(solid.Color.Alpha * cast.Opacity), 0f, 1f))
@@ -272,8 +241,6 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
     // Reposition 里落到控件上的。重算是幂等的，多算一次不花钱。
     // 这里与 WPF 的分歧是这段代码里最要紧的一处：WPF 注册的是带 AffectsRender 的
     // FrameworkPropertyMetadata，重绘由属性系统安排；MAUI 的可绑定属性没有这个开关，重绘只能由
-    // Reposition 末尾那句 Invalidate 自己叫。也就是说，**漏掉那句
-    // 不会有任何编译期或运行期报错**，只是画布停在上一帧 —— 换属性的写法要连着这句一起搬。
     private static BindableProperty Register(string name, Type type, object? defaultValue)
         => BindableProperty.Create(
             name,

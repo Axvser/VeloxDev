@@ -18,7 +18,6 @@ internal static class SamplerProbe
     private static readonly double[] Times = [0d, 0.5d, 1d, 1.5d, -0.5d];
 
     // 一个目标类，每条属性挂一个该适配器发布的采样器。
-    // 与桌面那几侧不同，这里的目标**常驻**：真动画要把它当 Transition<Target> 的目标，
     // 演示台每帧读它的值当背景色。桌面那侧目标是在屏控件，浏览器里没有控件属性可写，这个对象就是那个位置。
     internal sealed class Target
     {
@@ -31,8 +30,6 @@ internal static class SamplerProbe
     }
 
     // 一条采样器：把手令牌、它要写的属性、采样器本身，以及一对端点工厂。
-    // 被写的属性名；带索引器的路径用它表达不了，那些条目的这一项是 null、改由 Path 给出路径。
-    // 一条完整路径，用于"属性名"说不清的那些条目 —— 尤其是带索引器的：Slots[0]。
     private sealed record ProbeSpec(
         string Name,
         string Description,
@@ -43,8 +40,6 @@ internal static class SamplerProbe
         Func<TransitionProperty>? Path = null);
 
     // 一个产物读出来的样子：类型名 + 固定顺序的分量。
-    // TypeTag: 产物的运行时类型名。认不出来的类型也照报，由测试侧去说"类型不对"。
-    // Components: 该类型的分量。认不出的类型没有分量，所以是空数组。
     internal sealed record Measurement(string TypeTag, double[] Components);
 
     // 端点与 Samplers/RazorEntries.cs 里的一致：8 位十六进制 #RRGGBBAA。
@@ -96,8 +91,6 @@ internal static class SamplerProbe
             ?? throw new InvalidOperationException($"没有名为 {samplerName} 的采样器；把手与探针表不同步了。");
 
     // 这一条采样器写在目标对象的哪个属性上。
-    // 这一条采样器写的路径 —— 单属性，或者一条带索引器的路径。
-    // 每条只建一个实例。路径是状态字典的键，每次新建一个虽然按值相等，但索引实参来自闭包时未必相等；
     // 缓存下来就没有这层疑问。
     internal static TransitionProperty Path(string samplerName) => Paths[samplerName];
 
@@ -117,7 +110,6 @@ internal static class SamplerProbe
                 : probe.Path());
 
     // 这一条案例在界面上那句"这条在验什么"。
-    // 与把手、端点、采样器同一张表：加一条采样器仍然只需要改 Probes 一处，行里的文字跟着来。
     internal static string Description(string samplerName) => Spec(samplerName).Description;
 
     // 这一条采样器的实例。每次都要新的：采样器本身可能带状态。
@@ -130,14 +122,11 @@ internal static class SamplerProbe
     internal static object End(string samplerName) => Spec(samplerName).End();
 
     // 目标对象上这个属性**此刻**持有的值，按分量读出来。
-    // 真动画那一段时间靠它采样：采样当刻就把分量取成数字，绝不把值对象留到后面。
     internal static Measurement Read(Target target, string samplerName)
         => Measure(Path(samplerName).GetValue(target));
 
     // 这一行此刻的值是否**就是**它声明的起点。
-    // 给顶栏那三个按钮用的可观测量。逐分量精确比较而不是带容差：重置是**把声明的那对端点原样写回去**，
     // 所以"已经回到起点"必然是逐位相同，不需要容差去猜。离散型的那几条永远停在起点，于是它们恒为真 ——
-    // 这是它们应有的样子，不是漏报。
     internal static bool MatchesStart(Target target, string samplerName)
         => SameComponents(Measure(Start(samplerName)).Components, Read(target, samplerName).Components);
 
@@ -155,8 +144,6 @@ internal static class SamplerProbe
     }
 
     // 跑一条采样器，产出载荷文本，形如 v=1;seq=1;n=5;s.StringSampler.0=String,35,67,…;。
-    // samplerName: 要跑的那条采样器，取 SamplerNames 里的名字。
-    // sequence: 激活次数，由调用方递增 —— 载荷靠它证明这一次是新的。
     internal static string Run(string samplerName, long sequence)
         => $"v=1;seq={sequence};n={Times.Length};" + RunFrames(samplerName);
 
@@ -175,7 +162,6 @@ internal static class SamplerProbe
     }
 
     // 跑一条采样器的一帧，返回它写出来的值。
-    // 验收与演示台走的是同一个入口：载荷报的就是这个返回值，演出台画出来的也是这个返回值 ——
     // 屏幕上看到的和断言里读的必然是同一个数，不可能各说各话。
     internal static object? FrameValue(string samplerName, double t)
     {
@@ -194,8 +180,6 @@ internal static class SamplerProbe
     // 字符串取其字符码点：#C8640080 与 rgba(200, 100, 0, 0.502) 都含 ,，直接写进载荷
     // 会把字段分隔符弄坏，而码点序列是纯数字、无歧义，也仍然是逐字符精确的。
     // 码点序列是**表示**而不是量：它的长度随产物字符串而变，逐位取最小/最大值没有意义。
-    // 验收侧因此不对这个类型做"动没动过"的判断。
-    // 认不出的类型不抛。 这里读的是"目标此刻持有什么"，而"类型变了"本身就是要报给验收的异常之一；
     // 在定时器回调里抛出去只会把电路打断，把异常变成一次崩溃。所以照实报类型名、分量留空，让测试侧去说。
     internal static Measurement Measure(object? value) => value switch
     {
@@ -235,20 +219,16 @@ internal static class SamplerProbe
     }
 
     // 真动画那一段时间里对目标属性的采样累积。
-    // 收的是 Measurement 里已经取成数字的分量，不是值对象（见 Read）。
     // 非有限值单独计数、**不喂给 min/max** —— 一个 NaN 喂进去会把那个分量的包络永久粘住，
     // 于是"有过 NaN"这件事就再也看不出来了。
     // 分量个数变了就把包络重来一段（见 Measure 说的：字符串的长度随 t 变）。
     // Settled 是"最后一帧已经落地"的判据：流水线的末帧是排队投递的，固定余量在负载重的机器上
-    // 会读早，而值连续几拍不再变是它真的到了。
     internal sealed class LiveWatch
     {
         // 连续多少拍同一个值算落定。
         // 三十拍（这条链路上每拍 16ms，约 480ms），不是两三拍。落定要代表的是"流水线的末帧已经落到目标上"，
         // 而末帧是排队投递的：Blazor 上它得等电路线程腾出手，慢的时候一拍与下一拍之间能隔几十毫秒。
         // 更麻烦的是产物**被量化**的时候：Blazor 的 CSS 颜色字符串按三位小数格式化，动画末段缓动又被压平，
-        // 连着好几帧能格式化出同一个字符串 —— 于是"值不再变"在动画还没跑完时就成立了。实测：bench 1600ms、
-        // 窗口 5 拍时这条会误报成"没跑到终点"（3 次错 2 次），窗口 30 拍后 3 次全对。
         private const int SettledTicks = 30;
 
         private double[] _min = [];
@@ -330,9 +310,6 @@ internal static class SamplerProbe
             => value == previous || (double.IsNaN(value) && double.IsNaN(previous));
 
         // 这段动画的机器可读结果：目标属性这段时间里被写成了什么。
-        // sampler: 跑的是哪条采样器。
-        // sequence: 点击序号，与 over.conf 共用 —— 载荷靠它证明这一份是新的。
-        // error: 起动画时就抛出来的异常，没有则为 null。
         internal string Digest(string sampler, long sequence)
 
             => $"v=1;seq={sequence};done=1;sampler={sampler};" + RowFields();

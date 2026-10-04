@@ -45,15 +45,7 @@ internal static class BlazorConformance
 
     // StringSampler 颜色路径的闭式解：两端先解析成 CSS 颜色，中间帧再逐通道插值并重新格式化成
     // rgba(r, g, b, a)。
-    // R/G/B 共用一个 [0,255] 有界进度：起始 B=0 让 t < 0 时整组被 B 先拽回 0，而 t > 1 时由 R 先顶到
-    // 255 停住；alpha 自成一界、不做组内钳制。随后每个通道先四舍五入再饱和到 0..255，alpha 除以 255 后以
     // 0.### 写成 0..1 —— 小数位数是这条闭式解的一部分，不能省。
-    // startHex: 起始端点原样写回的那串十六进制。
-    // endHex: 结束端点原样写回的那串十六进制。
-    // start: 起始端点的 R/G/B（0..255）。
-    // end: 结束端点的 R/G/B（0..255）。
-    // startAlpha: 起始端点的 alpha（0..255）。
-    // endAlpha: 结束端点的 alpha（0..255）。
     private static string CssAt(
         double t,
         string startHex,

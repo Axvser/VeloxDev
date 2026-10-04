@@ -41,7 +41,6 @@ internal static class ConformanceChecks
 
     // Blazor only: the sampler's product checked through the browser's own computed style.
     // 这条是 Blazor 独有的形态，也是"从真实 UI 表现验证"最字面的一种：浏览器里没有一个"控件属性"可读，
-    // 真实表现就是**计算样式**。所以这里不读 app 报的载荷，而是读浏览器算出来的背景色，与采样器端点色比。
     internal static void RunBlazorBench(IDemoDriver driver)
     {
         driver.Settle();
@@ -142,8 +141,6 @@ internal static class ConformanceChecks
     }
 
     // 批量那一路：一次"全部启动"把每一行都跑起来，一次读取把每一行的闭式解与观察结果都收回来。
-    // 逐行点的话，十几行就是十几条真动画、十几段等待 —— 那是这个套件最慢的部分。批量把它们压成一次点击，
-    // 而每一行验的东西一字未变：同样的五个缓动时间、同一份闭式解、同一套观察规则。
     private static void ScanBatch(
         IDemoDriver driver,
         IReadOnlyList<ConformanceEntry> table,
@@ -222,7 +219,6 @@ internal static class ConformanceChecks
 
     // 抽样一行，走一遍完整的"点它的把手 → 它写自己的载荷 → 读回"。
     // 批量那一路不点行，所以这条交互路径如果没有抽样就没人走了 —— 而"点某一行"本身正是这个界面要保证的事。
-    // 只抽一行是刻意的：每平台一次点击足以证明它还通，又不会把批量省下来的时间花回去。
     private static void SpotCheck(
         IDemoDriver driver,
         IReadOnlyList<ConformanceEntry> table,
@@ -334,11 +330,8 @@ internal static class ConformanceChecks
     private static readonly TimeSpan ToolbarWindow = TimeSpan.FromSeconds(10);
 
     // 顶栏那三个按钮：全部启动 / 停止全部 / 重置，一次动到列表里的每一行。
-    // 可观测量只有 over.state 里的 rows/away/moving，断言全是无模型的 ——
     // 不解释某一行该到哪，只说明有几行离开了起点、有几行这一拍还在变。
-    // 把节拍临时关掉是有意的。 "还在动"这件事情只在一条动画没跑完时存在，而点击之后那口气
     // （VELOXDEV_AT_PACE）的默认值比一条动画还长 —— 不关掉的话，等套件开始读，动画早就跑完了，
-    // "停止之后不再有行在动"就成了一句恒真的废话。这里只在本地关掉、读完恢复，不动驱动的公共形状。
     private static void ScanToolbar(IDemoDriver driver, IReadOnlyList<ConformanceEntry> table, List<string> anomalies)
     {
         // 表里声明会从 t=0 变到 t=1 的那些行 —— 离散的几条整个网格都停在起点，它们永远不会"离开起点"。

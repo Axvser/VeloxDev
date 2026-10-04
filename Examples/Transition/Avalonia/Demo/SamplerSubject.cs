@@ -28,15 +28,11 @@ namespace Demo;
 
 // 采样器演示台上的被写对象：一个真正在视觉树里的控件，每条采样器一条**样式属性**，类型与产物完全一致。
 // 换成控件而不是一个私有的 scratch 类，是为了让"采样器把值写到哪"这件事可被验证：属性是框架属性系统的真成员，
-// 采样器写它时走的是真实的属性通道，验收再从这个属性读回来 —— 于是断言依据的是**界面上那个控件实际持有的值**，
 // 而不是一个屏幕外的对象。控件自己按属性重绘，于是"画出来"这件事不需要另一套映射代码。
 // 重绘要自己挂。Avalonia 没有 WPF 那种写进属性元数据里的 AffectsRender 开关，等价物是
 // AffectsRender{T}(AvaloniaProperty[]) —— 一个只能在静态构造函数里调的静态方法，它做的
 // 事情就是给每条属性挂一个类处理器，处理器里调 InvalidateVisual。不挂的话，一条只影响
-// 画面、不影响版面的属性（笔刷、阴影、圆角）写进去之后画面上什么都不会发生：属性系统无从知道"这条属性要重画"。
 // 绘制是有标尺的。位移类端点跑到 220，格子只有 96×62，按原值画会一步跨出格子被裁掉 —— 那看上去
-// 和"没动"一模一样。所以位置与尺寸在**绘制反应里**乘一个固定缩放，而属性本身持有的仍是原值：载荷读的是
-// 属性，于是断言的是原值，缩放只影响"怎么画"。
 internal sealed class SamplerSubject : Control
 {
     // 位移与尺寸的像素缩放。这一组端点最大分量 220，格子留出的行程约 38 像素。
@@ -105,7 +101,6 @@ internal sealed class SamplerSubject : Control
     // 每条属性写入都要发生的两件事：重绘，以及把值落到控件上。
     // 这张表必须声明在上面那 14 条属性之后：静态字段初始化器按文本顺序执行，声明在前面的话它读到的是
     // 还没初始化的 null。挂在类处理器上而不是每条属性自己的元数据里，是因为 Avalonia 的注册入口不收
-    // "值变了要做什么"这类回调 —— 类处理器是它给的挂点。
     private static readonly AvaloniaProperty[] Tracked =
     [
         ShadowsProperty, FillProperty, RampProperty, TintProperty, RadiusProperty, ColumnProperty, PixelSpotProperty,

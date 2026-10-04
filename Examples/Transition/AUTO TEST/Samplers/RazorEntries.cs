@@ -20,7 +20,6 @@ internal static class RazorEntries
 
     // 一组颜色通道共用一个进度：谁先出界就停在谁那里，后面的通道不能把它再拉回来 ——
     // 与库里的 BoundedProgress 同一条规则，但这里是独立重述的。
-    // maximum: 该组的上界；颜色通道是 255，下界固定为 0。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
@@ -53,10 +52,6 @@ internal static class RazorEntries
     // rgba(r, g, b, a)。
     // 源码 StringSampler.InsertFrame 分两种情形。t == 0 与 t == 1 原样写回调用方给的字符串
     // （字符串有损，端点不可能被重新格式化成"值相等"的另一种写法），所以这里直接返回两个端点常量；
-    // 其余 t 才走颜色插值。InterpolateColor 里 R/G/B 共用一个 [0,255] 有界进度：起始 B=0 让
-    // t < 0 时整组被 B 先拽回 0，而 t > 1 时由 R 先顶到 255 停住；alpha 自成一界、不做组内钳制
-    // （本组端点下 A 始终落在 0..255 内）。随后每个通道先四舍五入再饱和到 0..255，alpha 除以 255 后
-    // 以 0.### 写成 0..1。
     private static string Expected(double t)
     {
         if (t == 0d) return StartHex;

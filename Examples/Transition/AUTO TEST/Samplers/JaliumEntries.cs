@@ -24,9 +24,6 @@ namespace VeloxDev.SamplerTest;
 
 // Jalium 适配器注册的采样器，以及每个必须满足的闭式解。
 // 采样器类型按"程序集限定名"取，而不是直接写类名：七个适配器都把采样器放在同一个
-// VeloxDev.Adapters.NativeSamplers 命名空间下，PointSampler / ColorSampler / BrushSampler …
-// 因此跨程序集重名，直接写会在编译期撞成 CS0433。测试只通过 ISampler 与
-// SamplerType 使用采样器，所以把归属钉死在 VeloxDev.Jalium 即可。
 internal static class JaliumEntries
 {
     private const string Adapter = "Jalium";
@@ -92,7 +89,6 @@ internal static class JaliumEntries
     private static double Clamp01(double value) => Math.Max(0d, Math.Min(1d, value));
 
     // 一组通道共用一个进度：谁先出界就停在谁那里 —— 与库里的规则一致，但这里是独立重述的。
-    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
