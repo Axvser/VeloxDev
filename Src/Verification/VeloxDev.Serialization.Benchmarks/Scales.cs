@@ -87,12 +87,16 @@ internal static class Scales
 /// </remarks>
 internal static class DocumentSizes
 {
-    private static readonly ConcurrentDictionary<int, (int Archive, int Stj, int Newtonsoft)> Measured = new();
+    private static readonly ConcurrentDictionary<int, (int Archive, int Stj, int StjSourceGen, int Newtonsoft)> Measured = new();
 
-    /// <summary>Remembers what the three serializers produced for one scale.</summary>
-    internal static void Record(int nodeCount, int archive, int stj, int newtonsoft)
-        => Measured[nodeCount] = (archive, stj, newtonsoft);
+    /// <summary>Remembers what each serializer produced for one scale.</summary>
+    /// <remarks>
+    /// Source-generated metadata gets a size of its own rather than borrowing the reflection row's: the two write
+    /// the same document by construction, and a shared column would hide the day that stops being true.
+    /// </remarks>
+    internal static void Record(int nodeCount, int archive, int stj, int stjSourceGen, int newtonsoft)
+        => Measured[nodeCount] = (archive, stj, stjSourceGen, newtonsoft);
 
     /// <summary>What was measured, keyed by node count.</summary>
-    internal static IReadOnlyDictionary<int, (int Archive, int Stj, int Newtonsoft)> All => Measured;
+    internal static IReadOnlyDictionary<int, (int Archive, int Stj, int StjSourceGen, int Newtonsoft)> All => Measured;
 }

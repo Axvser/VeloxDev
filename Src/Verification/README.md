@@ -16,6 +16,8 @@
 # 1) 以「Debug 配置 + 优化过的代码」构建 —— 两个条件都不能少，理由见下
 #    -t:Rebuild 是必需的：增量构建会认为 VeloxDev.Core 已是最新而跳过它，
 #    于是产物里留下上一次 dotnet test 构建的未优化 DLL，BenchmarkDotNet 会直接拒绝运行。
+#    症状很安静：它只在 BenchmarkRun-*.log 里写两行 Validating benchmarks，
+#    报告照样生成、但「结果」那一节是「本次运行没有产出可用的数据。」—— 不是崩，是空。
 dotnet build Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Serialization.Benchmarks.csproj \
              -c Debug -p:Optimize=true -t:Rebuild
 
@@ -47,9 +49,15 @@ dotnet build Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Seriali
 按任意深度匹配，不计入仓库）。**产物落在工程目录而不是工作目录** —— BenchmarkDotNet 的默认是后者，从仓库根
 启动就会把输出散到根上；`BenchmarkConfig` 因此用 `WithArtifactsPath`，路径从程序集位置（`bin/Debug/net10.0`
 往上三层）解析，与从哪里启动无关。
-**报告就是五张表**：环境一张，四个当量各一张。每个当量的表里**一行一个序列化器**，**耗时与存储同表**
-（写/读各自的耗时与分配，加文档字符数），**本仓库那行加粗**，括号里是相对本仓库同方向的倍数。表后是
-**备注**（这些数字是什么、不能推广到哪里）与一处**自校**（同一个量在两类里各量一次，差值就是这一档的噪声）。
+**报告 = 五张表 + 一处自校 + 一章行为说明**：环境一张，四个当量各一张。每个当量的表里**一行一个序列化器**，
+共四行 —— 本仓库、System.Text.Json（反射）、System.Text.Json（源生成）、Newtonsoft.Json。
+**耗时与存储同表**（写/读各自的耗时与分配，加文档字符数），**本仓库那行加粗**，括号里是相对本仓库同方向的倍数。
+**两行 System.Text.Json 都带 `StjSerializationBridge.cs` 的桥接配置**（跳过构造器建实例 + 一张派生表），
+不配它两行连读都读不了这张图 —— 主构造器形参绑不上属性、接口成员没有判别符。桥接只是**配置**，
+不是替它写的转换器；这条线守住，比较才成立（Newtonsoft 读同一张图只需要开两个开关）。
+表后是**自校**（同一个量在两类里各量一次，差值就是这一档的噪声），再往后是一章**《归档序列化 · 行为与支持》**
+—— 分节讲这套序列化本身（收录条件、API、成员规则、`[Archive]` / `[JsonIgnore]` / 钩子、容器与键、泛型、
+拼写契约、失败形态、诊断），**以用例代码为主**，与本次测量的数字无关，所以是常量。
 它由 `PerformanceReport.cs` 从 BenchmarkDotNet 的结构化结果生成，不解析控制台输出。
 
 **只想看回归（不跑另外两家）**：`--filter "*SerializationBenchmarks*"`。报告仍会写，只是没有文档大小那一节。
