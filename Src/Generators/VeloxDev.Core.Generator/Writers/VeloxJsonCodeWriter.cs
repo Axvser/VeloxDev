@@ -175,7 +175,13 @@ namespace VeloxDev.Generators.Writers
             // 而不是生成一个编译不过的 `new`。
             if (HasPublicParameterlessConstructor(type.Symbol))
             {
-                builder.AppendLine($"    public object Create() => new {target}();");
+                // 有 required 成员时必须写对象初始化器：C# 不允许把它们留空，只写 `new T()` 的文件根本编不过 ——
+                // 于是「带 required 的类型一律没法序列化」曾经是这个生成器的一个硬洞。
+                var initializer = type.RequiredMembers.Count == 0
+                    ? string.Empty
+                    : " { " + string.Join(", ", type.RequiredMembers.Select(static name => $"{name} = default!")) + " }";
+
+                builder.AppendLine($"    public object Create() => new {target}(){initializer};");
             }
             else
             {
@@ -211,6 +217,16 @@ namespace VeloxDev.Generators.Writers
             WriteHooks(builder, type.Deserializing, "        ");
 
             builder.AppendLine();
+
+            // 必填成员先立一个「见过了没有」的旗子，读完再收账 —— 缺成员是文档的事，不是某一行的错。
+            var required = type.Members.Where(static m => m.IsRequired && !m.WriteOnly).ToList();
+            foreach (var member in required)
+            {
+                builder.AppendLine($"        var seen_{member.Name} = false;");
+            }
+
+            if (required.Count > 0) builder.AppendLine();
+
             // 成员名不落成字符串：NextMember() 只定位，MemberNameEquals 就地拿原文与字面量比。
             // 换掉原来的 `while (NextMember(out var name)) switch (name)` —— 那条每读一个成员都要
             // 先分配一个字符串，只为和字面量比一次就丢掉。
@@ -227,6 +243,7 @@ namespace VeloxDev.Generators.Writers
                 // 每个分支各起一个作用域：多个分支都用到模式变量的话会撞名。
                 builder.AppendLine($"            {(first ? "if" : "else if")} (reader.MemberNameEquals(\"{Escape(member.DocumentName)}\"))");
                 builder.AppendLine("            {");
+                if (member.IsRequired) builder.AppendLine($"                seen_{member.Name} = true;");
                 builder.AppendLine($"                {ReadMember(member, async)}");
                 builder.AppendLine("            }");
 
@@ -238,6 +255,13 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine(first ? $"            {skip}" : $"            else {skip}");
             builder.AppendLine("        }");
             builder.AppendLine($"        {wait}reader.{(async ? "FinishObjectAsync" : "FinishObject")}(){configure};");
+
+            foreach (var member in required)
+            {
+                builder.AppendLine($"        if (!seen_{member.Name}) throw new global::System.InvalidOperationException(");
+                builder.AppendLine($"            \"'{Escape(type.FullName)}' requires '{Escape(member.DocumentName)}', and this document does not carry it.\");");
+            }
+
             builder.AppendLine();
 
             if (type.Deserialized.Count > 0)

@@ -28,7 +28,7 @@
     <ProjectReference Include="..\..\Generators\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
                       OutputItemType="Analyzer" />
     <!-- 版本与生成器自身编译所依赖的一致（见 VeloxDev.Core.Generator.csproj）；该版本在本机缓存中。 -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -152,6 +152,12 @@ namespace VeloxDev.Generators.Base
         /// </summary>
         internal VeloxJsonWriteCondition WriteCondition { get; set; }
 
+        /// <summary>
+        /// Whether the document has to carry this member — C#'s <c>required</c>, or <c>[JsonRequired]</c>.
+        /// The generated reader refuses a document that is missing it.
+        /// </summary>
+        internal bool IsRequired { get; set; }
+
         /// <summary>The declared type, which is what decides whether a value needs its type name written.</summary>
         internal ITypeSymbol DeclaredType { get; }
 
@@ -216,6 +222,13 @@ namespace VeloxDev.Generators.Base
         /// <summary>The name of the generated reader class for this type.</summary>
         internal string ReaderClassName { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Every member the type requires, its own and its bases'. Kept apart from <see cref="Members"/> because
+        /// the generated factory has to set all of them — C# will not let a required member be left unassigned in
+        /// an object initializer, whether or not the member takes part in the document.
+        /// </summary>
+        internal IReadOnlyList<string> RequiredMembers { get; set; } = [];
+
         /// <summary>The callbacks to run around writing, base type first. Empty when the type has none.</summary>
         internal IReadOnlyList<VeloxJsonHook> Serializing { get; set; } = [];
 
@@ -238,6 +251,9 @@ namespace VeloxDev.Generators.Base
 
         // 与钩子同一条口径：认识 .NET 自带的那一个，使用方就不必为了同一件事把代码改一遍。
         private const string JsonIgnoreAttributeName = "System.Text.Json.Serialization.JsonIgnoreAttribute";
+
+        // 「这个成员必须在文档里」。C# 的 required 关键字走 RequiredMembers（编译器 API），STJ 用这个特性。
+        private const string JsonRequiredAttributeName = "System.Text.Json.Serialization.JsonRequiredAttribute";
 
         // 钩子就是 BCL 那四个。生成器认它们，而不是另立一套自己名字的特性 —— 这些特性本来就写在这些
         // 方法上，只是此前生成器不看它们，于是成了死的装饰。
@@ -332,7 +348,10 @@ namespace VeloxDev.Generators.Base
                     queue.Enqueue(named);
                 }
 
-                foreach (var member in ReadMembers(symbol, contracts, compilation.Assembly, notices))
+                var members = ReadMembers(symbol, contracts, compilation.Assembly, notices).ToList();
+                ReportUnsatisfiableRequired(symbol, members, notices);
+
+                foreach (var member in members)
                 {
                     ReportNestedArray(member, notices);
 
@@ -633,6 +652,7 @@ namespace VeloxDev.Generators.Base
                 WrittenName(symbol),
                 members)
             {
+                RequiredMembers = RequiredMembers.NamesOf(symbol),
                 Serializing = ReadHooks(symbol, OnSerializingAttributeName, notices, assembly),
                 Serialized = ReadHooks(symbol, OnSerializedAttributeName, notices, assembly),
                 Deserializing = ReadHooks(symbol, OnDeserializingAttributeName, notices, assembly),
@@ -816,13 +836,13 @@ namespace VeloxDev.Generators.Base
                 if (condition is null) continue;
                 if (!emitted.Add(property.Name)) continue;
 
-                yield return BuildMember(property.Name, property.Type, renamed, writeOnly: !writable, condition: condition.Value);
+                yield return BuildMember(property.Name, property.Type, renamed, writeOnly: !writable, condition: condition.Value, required: IsRequired(property));
             }
 
             foreach (var (field, name, documentName, condition) in fields)
             {
                 if (!emitted.Add(name)) continue;
-                yield return BuildMember(name, field.Type, documentName, condition: condition);
+                yield return BuildMember(name, field.Type, documentName, condition: condition, required: IsRequired(field));
             }
 
             // 组件的成员由 Workflow 生成器写出，本生成器看不见 —— 按作者写下的 [WorkflowBuilder.*]
@@ -847,7 +867,7 @@ namespace VeloxDev.Generators.Base
                     if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
                     if (!emitted.Add(property.Name)) continue;
 
-                    yield return BuildMember(property.Name, property.Type);
+                    yield return BuildMember(property.Name, property.Type, required: IsRequired(property));
                 }
 
                 foreach (var member in baseType.GetMembers())
@@ -858,7 +878,42 @@ namespace VeloxDev.Generators.Base
                     var name = AIContextNaming.PromotedPropertyName(field.Name);
                     if (name.Length == 0 || !emitted.Add(name)) continue;
 
-                    yield return BuildMember(name, field.Type);
+                    yield return BuildMember(name, field.Type, required: IsRequired(field));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reports a required member the document will never be able to satisfy.
+        /// </summary>
+        /// <remarks>
+        /// Required means the generated reader refuses a document missing it, so a required member the writer can
+        /// leave out is a document nobody can load. There are two ways to get there: excluding the member
+        /// outright, or letting its write be conditional.
+        /// </remarks>
+        private static void ReportUnsatisfiableRequired(
+            INamedTypeSymbol symbol,
+            IReadOnlyList<VeloxJsonMember> members,
+            List<Diagnostic>? notices)
+        {
+            if (notices is null) return;
+
+            foreach (var name in DocumentRequiredMemberNames(symbol))
+            {
+                var location = symbol.GetMembers(name).FirstOrDefault()?.Locations.FirstOrDefault();
+                var member = members.FirstOrDefault(m => m.Name == name);
+
+                if (member is null)
+                {
+                    notices.Add(Diagnostic.Create(Diagnostics.UnusableArchiveDeclaration, location, name,
+                        "it is required, so the document has to carry it — but it is excluded and never written"));
+                    continue;
+                }
+
+                if (member.WriteOnly || member.WriteCondition != VeloxJsonWriteCondition.Always)
+                {
+                    notices.Add(Diagnostic.Create(Diagnostics.UnusableArchiveDeclaration, location, name,
+                        "it is required, so the document has to carry it — but its write is conditional, so it may be absent"));
                 }
             }
         }
@@ -903,7 +958,7 @@ namespace VeloxDev.Generators.Base
                         if (property.IsIndexer || property.IsStatic) continue;
                         if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
 
-                        yield return BuildMember(property.Name, property.Type);
+                        yield return BuildMember(property.Name, property.Type, required: IsRequired(property));
                     }
                 }
             }
@@ -1022,6 +1077,37 @@ namespace VeloxDev.Generators.Base
         private static bool CanBeNull(ITypeSymbol type)
             => !type.IsValueType || !SymbolEqualityComparer.Default.Equals(UnwrapNullable(type), type);
 
+        /// <summary>Whether the document has to carry this member — C#'s <c>required</c>, or <c>[JsonRequired]</c>.</summary>
+        private static bool IsRequired(ISymbol member)
+            => RequiredMembers.IsRequired(member)
+               || AIContextNaming.HasAttribute(member, JsonRequiredAttributeName);
+
+        /// <summary>
+        /// The names of every member the document has to carry, on the type and up its base chain.
+        /// </summary>
+        /// <remarks>
+        /// Wider than <see cref="RequiredMembers.NamesOf"/>: that one answers what the compiler demands at the
+        /// construction site, this one answers what the reader will refuse a document for — which also includes
+        /// <c>[JsonRequired]</c>, a member C# knows nothing about.
+        /// </remarks>
+        private static List<string> DocumentRequiredMemberNames(INamedTypeSymbol symbol)
+        {
+            var names = new List<string>();
+
+            for (var current = symbol; current is not null; current = current.BaseType)
+            {
+                if (current.SpecialType == SpecialType.System_Object) break;
+
+                foreach (var member in current.GetMembers())
+                {
+                    if (!IsRequired(member) || names.Contains(member.Name)) continue;
+                    names.Add(member.Name);
+                }
+            }
+
+            return names;
+        }
+
         /// <summary>
         /// Whether a marked member can be written by generated code, reporting it when it cannot.
         /// </summary>
@@ -1068,7 +1154,8 @@ namespace VeloxDev.Generators.Base
             ITypeSymbol declaredType,
             string? documentName = null,
             bool writeOnly = false,
-            VeloxJsonWriteCondition condition = VeloxJsonWriteCondition.Always)
+            VeloxJsonWriteCondition condition = VeloxJsonWriteCondition.Always,
+            bool required = false)
         {
             var (kind, element, interfaceKeyed) = Classify(declaredType);
             return new VeloxJsonMember(name, declaredType, element, kind)
@@ -1078,6 +1165,7 @@ namespace VeloxDev.Generators.Base
                 DocumentName = documentName ?? name,
                 WriteOnly = writeOnly,
                 WriteCondition = condition,
+                IsRequired = required,
             };
         }
 

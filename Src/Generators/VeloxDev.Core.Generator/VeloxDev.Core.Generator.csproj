@@ -20,7 +20,9 @@
 
 	<!-- Roslyn dependencies aren't exported; minimum 4.3.0 (ForAttributeWithMetadataName), compatible with VS 2022 17.3+ -->
 	<ItemGroup>
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />
+		<!-- 4.4 起才有 `ISymbol.IsRequired`；编译器合成的 `[RequiredMember]` 在源码符号上看不到，
+		     所以检测 required 成员没有别的路。4.8 是 .NET 8 SDK 自带的编译器版本，消费方不会因此抬高门槛。 -->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
 	</ItemGroup>
 
 	<ItemGroup>

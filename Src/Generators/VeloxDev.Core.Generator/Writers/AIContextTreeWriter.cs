@@ -422,8 +422,9 @@ namespace VeloxDev.Generators.Writers
 
             builder.AppendLine("    public object Create()");
             builder.AppendLine("    {");
+            // required 成员必须在对象初始化器里赋值，否则这一行根本编不过 —— 与归档生成器的工厂同一条约束。
             builder.AppendLine(canCreate
-                ? $"        return new {fullType}();"
+                ? $"        return new {fullType}(){RequiredMembers.InitializerFor(type.Symbol)};"
                 : $"        throw new global::System.InvalidOperationException(\"{Escape(type.FullName)} cannot be constructed with no arguments.\");");
             builder.AppendLine("    }");
             builder.AppendLine();

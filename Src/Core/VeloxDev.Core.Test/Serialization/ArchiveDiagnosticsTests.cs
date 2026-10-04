@@ -82,9 +82,30 @@ public class ArchiveDiagnosticsTests
         }
         """;
 
+    /// <summary>A document that can never satisfy the reader: the member is required and never written.</summary>
+    private const string RequiredButExcluded = """
+        using System.Text.Json.Serialization;
+        using VeloxDev.MVVM;
+
+        namespace Probe;
+
+        public partial class Model
+        {
+            [VeloxProperty] private int count;
+
+            [JsonIgnore]
+            [JsonRequired]
+            public string? Tag { get; set; }
+        }
+        """;
+
     [TestMethod]
     public void AnArrayInsideAContainer_IsReportedRatherThanLeftToFailAtRunTime()
         => AssertReports("VELOX_JSON_MEMBER001", ArrayInsideAContainer);
+
+    [TestMethod]
+    public void ARequiredMemberThatIsNeverWritten_IsReported()
+        => AssertReports("VELOX_JSON_MEMBER001", RequiredButExcluded);
 
     [TestMethod]
     public void ANamedRoot_TakesPartWithoutBeingReachableFromAComponent()
