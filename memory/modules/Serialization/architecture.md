@@ -116,9 +116,11 @@
 `[Params]`，因为后者是编译期常量，会让每次改动都为最慢的一档付钱。`SerializationBenchmarks` 只量归档自己
 （回归用），`ComparisonBenchmarks` 让**同一个对象图**过归档 / System.Text.Json / Newtonsoft（三家都开引用
 保留）。**一条命令跑完并留一份 Markdown 报告**到本工程目录下的
-`BenchmarkDotNet.Artifacts/serialization-performance.md`，含测量环境（CPU 商品名、核数、内存、系统、运行时、
-工具链）、三家的文档大小、按当量分节的结果表，以及一段备注（下面 §四·二 那些结论就在里面）。报告由
-`PerformanceReport.cs` 从 BenchmarkDotNet 的**结构化结果**生成，不解析控制台输出。
+`BenchmarkDotNet.Artifacts/serialization-performance.md`。**报告就是五张表**：环境一张，四个当量各一张 ——
+（用户 2026-10-04 定的形状）每个当量的表**一行一个序列化器**，**耗时与存储同表**（写/读各自的耗时与分配，
+加文档字符数），**本仓库那行加粗**，括号里是相对本仓库同方向的倍数。表后是一段备注（下面 §四·二 那些结论
+就在里面）与一处自校。报告由 `PerformanceReport.cs` 从 BenchmarkDotNet 的**结构化结果**生成，不解析控制台
+输出 —— 分配那一项尤其要注意：指标键是 `Allocated Memory`，取错不会报错、只会让整列变成「—」。
 
 > ⚠ **产物必须落在工程目录，不是工作目录。** BenchmarkDotNet 默认 `BenchmarkDotNet.Artifacts` 相对**当前
 > 工作目录**，从仓库根启动就会把输出散到根上；`Artifacts.cs` 从程序集位置（`bin/Debug/net10.0` 往上三层）
