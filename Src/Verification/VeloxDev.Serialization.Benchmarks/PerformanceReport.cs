@@ -155,6 +155,20 @@ internal static class PerformanceReport
         text.AppendLine("**粗体行 = 本仓库。** 「文档大小」是字符数，不是字节；括号里是相对本仓库同方向的倍数。");
         text.AppendLine("耗时一律取**中位数**（理由见「测量环境」）；标了「噪声内」的倍率落在这一档的读数精度之内 —— 那不是结论，是抖动。");
         text.AppendLine("三家的成员集不同（归档写生成契约，另外两家写公开面），所以差距里有一部分是「写得少」。");
+        text.AppendLine();
+        text.AppendLine("**文档为什么小这么多 —— 量过，三个原因，按大小排**（小档 133 K vs STJ 795 K vs NST 650 K）：");
+        text.AppendLine();
+        text.AppendLine("1. **成员写得少 5.2×**（4,070 vs 20,982 个成员）。归档写**生成契约** —— 一份策展过的成员集；");
+        text.AppendLine("   另外两家反射**整个公开面**，于是把命令、Helper、Input、EventContext、`IsBusy` / `PendingCount`");
+        text.AppendLine("   这类 UI 管道也写进文档（那两个成员在 STJ 的文档里各出现 1,922 次，在归档里 0 次）。**这一项占大头。**");
+        text.AppendLine("2. **`$type` 只在必要时写**（303 vs 2,529）：归档只在**运行期类型 ≠ 声明类型**时写，另外两家对每个");
+        text.AppendLine("   多态位置都盖一个。这一项的字符开销 STJ 139 K、NST 170 K，归档 24 K。");
+        text.AppendLine("3. **`$id` 只在必要时写**（715 vs 3,753）：STJ 给**每个对象和每个集合**都发 id（所以还多出 507 个 `$values`），");
+        text.AppendLine("   归档与 NST 只发给被引用到的。这一项 STJ 花 105 K 字符，归档 17 K。");
+        text.AppendLine();
+        text.AppendLine("缩进把上面每一条都放大了（5,486 行 vs 25,741 行），但**它不是原因**：把空白全部删掉，");
+        text.AppendLine("归档仍是 69 K vs STJ 395 K —— 差的是内容，不是排版。");
+        text.AppendLine();
         text.AppendLine("`System.Text.Json（源生成）` 与上一行是同一个序列化器、同一份文档（「文档大小」那列相等就是证据），");
         text.AppendLine("只是元数据**优先**来自源生成；多态契约那几种类型源生成答不上（它要靠类型自己贴 `[JsonDerivedType]`，");
         text.AppendLine("而框架类型贴不了），那时落到反射。");
@@ -487,7 +501,33 @@ internal static class PerformanceReport
 
         **这是能裁剪的前提，不是缺陷** —— 正因为没有反射兜底，裁剪与 AOT 才安全。
 
-        ### 十二、诊断
+        ### 十二、与别家序列化器的边界
+
+        **和 System.Text.Json / Newtonsoft.Json 不兼容 —— 直接互读不了。** 三处结构差异，前两处是词表与形状，
+        第三处不可逆：
+
+        | | 归档 | System.Text.Json | Newtonsoft |
+        | --- | --- | --- | --- |
+        | `$type` 的值 | 注册表键 `Namespace.Type, Assembly`（泛型带实参） | `FullName`，无程序集 | 程序集限定名 |
+        | 集合 | 裸数组 | `{"$id":…,"$values":[…]}` | 裸数组 |
+        | 成员集 | **生成契约** | 反射公开面 | 反射公开面 |
+
+        **键名却是同一套**（`$id` / `$ref` / `$type`），`$id` 也同样是带引号的字符串 —— 所以它*看起来*像同一份格式。
+        但**值对不上、形状也对不上：键名相通不等于格式相通。**
+
+        **喂进来会怎样**：`$type` 进不了注册表 → 退回**声明类型** —— 声明类型是具体类时**静默丢多态**
+        （读到的是基类实例、不报错），是接口或抽象时抛 `MissingReader`。反过来一样：
+        System.Text.Json 认不出这里的 `$type` 值，Newtonsoft 认不出 System.Text.Json 的 `$values`。
+
+        **语义层是可转换的**：枚举两边都是底层整数、`byte[]` 两边都是 base64、空容器两边都是 `{}` / `[]`。
+        几处标量拼写不同（`double` 的整数值这里补 `.0`、`DateTime` 这里写 `"O"`、非 ASCII 这里不转义）——
+        都是文本差异，宽容的解析器吃得下。**真正不可逆的是成员集**：这里少写的那些（命令、`Helper`、
+        `EventContext`、`IsBusy` 这类 UI 管道），在别家的文档里有、在这里没有 —— 所以转换是有损的。
+
+        **这是立场，不是缺陷**：闭世界与零反射是这套格式能裁剪、能 AOT 的前提，代价就是不与别家同源。
+        库从未承诺过互操作。
+
+        ### 十三、诊断
 
         | ID | 级别 | 说的什么 |
         | --- | --- | --- |
@@ -502,7 +542,7 @@ internal static class PerformanceReport
         最后两条：`INCLUDE001` 只报「向下展开带进来的」那一类（它是唯一从源码上看不出来的），**全量清单**
         （类型名 + `$type` + 出处）在生成文件 `*_VeloxJson.g.cs` 的**文件头注释**里。
 
-        ### 十三、关掉它
+        ### 十四、关掉它
 
         ```xml
         <PropertyGroup>
