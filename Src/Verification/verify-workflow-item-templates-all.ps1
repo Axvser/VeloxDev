@@ -105,6 +105,7 @@ $configs = [ordered]@{
         Aliases         = [ordered]@{}
         Expected        = @{
             'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
+            'tree' = 'the mirror carries the demo HUD and its own link-menu entries (delete is the host''s, the template ships none)'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false

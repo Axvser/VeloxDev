@@ -2,6 +2,7 @@
 // The adapter's WorkflowNodeAttachment owns the binding, the placement, the viewbox scaffolding and the port glyphs
 // (it hosts one SlotView per port at the layout's positions). Rename SlotView below if you renamed that item.
 using Jalium.UI;
+using Jalium.UI.Controls;
 using Jalium.UI.Interop;
 using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -43,7 +44,7 @@ public sealed class TemplateClass : Canvas
             new Pen(
                 new SolidColorBrush((Color)ColorConverter.ConvertFromString("TemplateNodeBorderBrush")),
                 TemplateNodeBorderThickness),
-            new Rect(0, 0, PortLayout.DesignWidth, PortLayout.DesignHeight),
+            new Rect(0, 0, Attachment.PortLayout.DesignWidth, Attachment.PortLayout.DesignHeight),
             TemplateNodeCornerRadius, TemplateNodeCornerRadius);
 
         var title = new FormattedText(WorkflowPortGeometry.TitleOf(node), FontFamilyName, 14)

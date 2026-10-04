@@ -14,6 +14,7 @@ public sealed class TemplateClass : WorkflowTemplateSelector
     public TemplateClass()
     {
         NodeViewFactory = node => new NodeView { ViewModel = node };
-        LinkViewFactory = link => new LinkView { ViewModel = link };
+        // 连线视图由适配器那份「附加」收绑（池会找它），所以这里不必传 ViewModel。
+        LinkViewFactory = link => new LinkView();
     }
 }
