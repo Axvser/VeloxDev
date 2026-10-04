@@ -5,43 +5,27 @@ using Jalium.UI.Media.Media3D;
 
 namespace Demo;
 
-/// <summary>
-/// 采样器演示台上的被写对象：一个真正在视觉树里的控件，每条采样器一条**依赖属性**，类型与产物完全一致。
-/// </summary>
-/// <remarks>
-/// 换成控件而不是一个私有的 scratch 类，是为了让"采样器把值写到哪"这件事可被验证：属性是框架属性系统的真成员
-/// （依赖属性），采样器写它时走的是真实的属性通道，验收再从这个属性读回来 —— 于是断言依据的是**界面上那个
-/// 控件实际持有的值**，而不是一个屏幕外的对象。
-/// <para>
-/// 每条属性都注册成 <c>AffectsRender</c>，所以采样器一写，Jalium 就自己安排重绘，不必在 setter 里手动
-/// <c>InvalidateVisual</c>。每一格只被它那条采样器写，<see cref="Kind"/> 告诉这一格该把哪条属性画出来。
-/// </para>
-/// <para>
-/// <b>绘制是有标尺的。</b>位移类端点跑到 220，格子只有 76×50，按原值画会一步跨出格子被裁掉 —— 那看上去
-/// 和"没动"一模一样。所以位置、尺寸与边距在**绘制反应里**乘一个固定缩放，而属性本身持有的仍是原值：载荷读的
-/// 是属性，于是断言的是原值，缩放只影响"怎么画"。
-/// </para>
-/// </remarks>
+// 采样器演示台上的被写对象：一个真正在视觉树里的控件，每条采样器一条**依赖属性**，类型与产物完全一致。
+// 换成控件而不是一个私有的 scratch 类，是为了让"采样器把值写到哪"这件事可被验证：属性是框架属性系统的真成员
+// （依赖属性），采样器写它时走的是真实的属性通道，验收再从这个属性读回来 —— 于是断言依据的是**界面上那个
+// 控件实际持有的值**，而不是一个屏幕外的对象。
+// 每条属性都注册成 AffectsRender，所以采样器一写，Jalium 就自己安排重绘，不必在 setter 里手动
+// InvalidateVisual。每一格只被它那条采样器写，Kind 告诉这一格该把哪条属性画出来。
+// 绘制是有标尺的。位移类端点跑到 220，格子只有 76×50，按原值画会一步跨出格子被裁掉 —— 那看上去
+// 和"没动"一模一样。所以位置、尺寸与边距在**绘制反应里**乘一个固定缩放，而属性本身持有的仍是原值：载荷读的
+// 是属性，于是断言的是原值，缩放只影响"怎么画"。
 internal sealed class SamplerSubject : FrameworkElement
 {
-    /// <summary>
-    /// 位移、尺寸与边距的像素缩放。
-    /// </summary>
-    /// <remarks>
-    /// 标尺由这一组端点里最长的行程定出来，而不是拍一个好看的数。这一组里最远的一跳是纵向
-    /// 220（PointSampler / TransformSampler 的 Y），而被写对象自己占掉 13 高、基准线在 y=6，格子只剩
-    /// 50 − 6 − 13 = 31 像素的纯行程 —— 单看位移，<c>s ≤ 31 / 220 ≈ 0.14</c> 就够。
-    /// <para>
-    /// 真正卡住的是 <c>RectSampler</c>：它在终点同时做到"下移 220"和"高 150"，而尺寸通道与位移共用同一个
-    /// 缓动时间，所以两者会一起走到底。要求 <c>6 + (220 + 150)·s ≤ 50</c>，即 <c>s ≤ 0.119</c>。
-    /// 取 <c>0.11</c> 再留一点余量：演出用的 Back.Out 会过冲到 1.10，最坏一格是
-    /// <c>6 + (220×1.10 + 150)×0.11 = 49.1 ≤ 50</c>，仍在格内。
-    /// </para>
-    /// <para>
-    /// 基准取左上角而不是格心：行程只朝正方向走，从格心起步会把后半段挤出格底、被裁掉 —— 那看上去反倒
-    /// 像"没动"，正是这块台子要避免的错觉。
-    /// </para>
-    /// </remarks>
+    // 位移、尺寸与边距的像素缩放。
+    // 标尺由这一组端点里最长的行程定出来，而不是拍一个好看的数。这一组里最远的一跳是纵向
+    // 220（PointSampler / TransformSampler 的 Y），而被写对象自己占掉 13 高、基准线在 y=6，格子只剩
+    // 50 − 6 − 13 = 31 像素的纯行程 —— 单看位移，s ≤ 31 / 220 ≈ 0.14 就够。
+    // 真正卡住的是 RectSampler：它在终点同时做到"下移 220"和"高 150"，而尺寸通道与位移共用同一个
+    // 缓动时间，所以两者会一起走到底。要求 6 + (220 + 150)·s ≤ 50，即 s ≤ 0.119。
+    // 取 0.11 再留一点余量：演出用的 Back.Out 会过冲到 1.10，最坏一格是
+    // 6 + (220×1.10 + 150)×0.11 = 49.1 ≤ 50，仍在格内。
+    // 基准取左上角而不是格心：行程只朝正方向走，从格心起步会把后半段挤出格底、被裁掉 —— 那看上去反倒
+    // 像"没动"，正是这块台子要避免的错觉。
     private const double Scale = 0.11d;
 
     private const double BaseLeft = 4d;
@@ -49,19 +33,15 @@ internal sealed class SamplerSubject : FrameworkElement
     private const double BaseWidth = 20d;
     private const double BaseHeight = 13d;
 
-    /// <summary>这一格显示哪一条采样器的产物。构造时定一次，此后不变。</summary>
+    // 这一格显示哪一条采样器的产物。构造时定一次，此后不变。
     internal required string Kind { get; init; }
 
     public static readonly DependencyProperty FillProperty =
         Register(nameof(Fill), typeof(Brush), null);
 
-    /// <summary>
-    /// 一段两停的渐变，只给索引器那两行当被写的集合用：路径写的是 <c>Ramp.GradientStops[i].Color</c>。
-    /// </summary>
-    /// <remarks>
-    /// 单独一条属性而不是复用 <see cref="Fill"/>：那一位是 null 开头、由每一行自己的起点值装填的，
-    /// 而索引器路径要写的元素必须在写它之前就先存在。
-    /// </remarks>
+    // 一段两停的渐变，只给索引器那两行当被写的集合用：路径写的是 Ramp.GradientStops[i].Color。
+    // 单独一条属性而不是复用 Fill：那一位是 null 开头、由每一行自己的起点值装填的，
+    // 而索引器路径要写的元素必须在写它之前就先存在。
     public static readonly DependencyProperty RampProperty =
         Register(nameof(Ramp), typeof(Brush), null);
 
@@ -83,7 +63,7 @@ internal sealed class SamplerSubject : FrameworkElement
     public static readonly DependencyProperty InsetProperty =
         Register(nameof(Inset), typeof(Thickness), default(Thickness));
 
-    /// <summary>二维变换。<c>new</c> 是必需的：<see cref="Visual"/> 已经有一个同名的公开方法。</summary>
+    // 二维变换。new 是必需的：Visual 已经有一个同名的公开方法。
     public static readonly DependencyProperty RenderProperty =
         Register(nameof(Render), typeof(Transform), null);
 
@@ -104,7 +84,7 @@ internal sealed class SamplerSubject : FrameworkElement
 
     public Size Extent { get => (Size)GetValue(ExtentProperty)!; set => SetValue(ExtentProperty, value); }
 
-    /// <summary>厚度。名字不叫 <c>Margin</c>：<see cref="FrameworkElement"/> 已经占用了那个名字。</summary>
+    // 厚度。名字不叫 Margin：FrameworkElement 已经占用了那个名字。
     public Thickness Inset { get => (Thickness)GetValue(InsetProperty)!; set => SetValue(InsetProperty, value); }
 
     public new Transform? Render { get => (Transform?)GetValue(RenderProperty); set => SetValue(RenderProperty, value); }
@@ -129,18 +109,12 @@ internal sealed class SamplerSubject : FrameworkElement
         };
     }
 
-    /// <summary>
-    /// 采样器写进来之后，把这个值**换算成格子里画得下的样子**。
-    /// </summary>
-    /// <remarks>
-    /// 这是"反应"，不是"值"：属性持有的是采样器写下的原值（载荷读的就是它），这里只把它落到像素上。
-    /// <para>
-    /// 三维那条走的是投影而不是三维实体：这一组端点把轴钉死在单位 Z 上，所以采样出来的旋转就是一次平面内旋转，
-    /// 绕 Z 的角与二维 <see cref="RotateTransform.Angle"/> 是同一份几何，画出来不是近似。投影丢掉的只有旋转
-    /// 中心（CenterX/Y/Z：1→5、2→6、3→7）—— 二维元素没有第三根轴，那三个分量落在载荷里，不在画面上。轴一旦
-    /// 离开 ±Z，平面里就没有对应物，这时不画，而不是拿别的东西冒名顶替。
-    /// </para>
-    /// </remarks>
+    // 采样器写进来之后，把这个值**换算成格子里画得下的样子**。
+    // 这是"反应"，不是"值"：属性持有的是采样器写下的原值（载荷读的就是它），这里只把它落到像素上。
+    // 三维那条走的是投影而不是三维实体：这一组端点把轴钉死在单位 Z 上，所以采样出来的旋转就是一次平面内旋转，
+    // 绕 Z 的角与二维 Angle 是同一份几何，画出来不是近似。投影丢掉的只有旋转
+    // 中心（CenterX/Y/Z：1→5、2→6、3→7）—— 二维元素没有第三根轴，那三个分量落在载荷里，不在画面上。轴一旦
+    // 离开 ±Z，平面里就没有对应物，这时不画，而不是拿别的东西冒名顶替。
     internal void Reposition()
     {
         var (x, y) = Kind switch
@@ -200,9 +174,7 @@ internal sealed class SamplerSubject : FrameworkElement
         drawingContext.DrawRoundedRectangle(fill, null, bounds, radius, radius);
     }
 
-    /// <summary>
-    /// 把三维旋转投影成二维旋转角：只有轴落在单位 ±Z 上时平面内才有对应物，其余给 0（不转），不假装。
-    /// </summary>
+    // 把三维旋转投影成二维旋转角：只有轴落在单位 ±Z 上时平面内才有对应物，其余给 0（不转），不假装。
     private static double PlanarAngle(RotateTransform3D pose)
     {
         if (pose.Rotation is not AxisAngleRotation3D rotation) return 0d;
@@ -212,14 +184,10 @@ internal sealed class SamplerSubject : FrameworkElement
         return rotation.Angle * Math.Sign(rotation.Axis.Z);
     }
 
-    /// <summary>
-    /// 注册一条依赖属性。每条属性写入都会重算这一格的显示 —— 不只是位置类的那些：厚度、变换也是在
-    /// <see cref="Reposition"/> 里落到控件上的。重算是幂等的，多算一次不花钱。
-    /// </summary>
-    /// <remarks>
-    /// <c>AffectsRender</c> 是这里的关键：采样器一写，Jalium 自己安排重绘 —— 不必手写 <c>InvalidateVisual</c>，
-    /// 而且重绘是属性系统给的保证，不是我们记得去调。
-    /// </remarks>
+    // 注册一条依赖属性。每条属性写入都会重算这一格的显示 —— 不只是位置类的那些：厚度、变换也是在
+    // Reposition 里落到控件上的。重算是幂等的，多算一次不花钱。
+    // AffectsRender 是这里的关键：采样器一写，Jalium 自己安排重绘 —— 不必手写 InvalidateVisual，
+    // 而且重绘是属性系统给的保证，不是我们记得去调。
     private static DependencyProperty Register(string name, Type type, object? defaultValue)
         => DependencyProperty.Register(
             name,

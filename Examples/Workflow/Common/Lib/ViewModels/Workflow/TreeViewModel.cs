@@ -33,6 +33,7 @@ public partial class TreeViewModel
 
     [VeloxProperty] private bool useStreamingAgentResponse = true;
 
+    /// <summary>Sends a user message to the Agent. The pipeline reports the run, so this host records nothing.</summary>
     [VeloxCommand]
     public async Task AskAsync(object? parameter, CancellationToken ct)
     {
@@ -88,24 +89,28 @@ public partial class TreeViewModel
         }
     }
 
+    /// <summary>Marks the workflow running and clears the execution log; the UI calls this when a run starts.</summary>
     public void BeginWorkflowRun()
     {
         ResetExecutionLog();
         SetWorkflowRunning(true);
     }
 
+    /// <summary>Recomputes the running flag from the controllers' active state — needed after the tree is edited.</summary>
     public void RefreshWorkflowRunningState()
     {
         var isRunning = Nodes.OfType<ControllerViewModel>().Any(c => c.IsActive);
         SetWorkflowRunning(isRunning);
     }
 
+    /// <summary>Clears the execution log and the running flag.</summary>
     public void ResetExecutionLog()
     {
         ExecutionLog.Clear();
         SetWorkflowRunning(false);
     }
 
+    /// <summary>Appends one plain-text agent line and its message counterpart; a blank entry is ignored.</summary>
     public void AppendAgentLog(string entry)
     {
         if (string.IsNullOrWhiteSpace(entry))

@@ -14,7 +14,7 @@ namespace Demo.Views;
 /// <see cref="IWorkflowTreeViewModelHelper.Viewport"/> (kept current by the surface's pan/layout
 /// pump), <see cref="CanvasLayout"/> and <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>.
 /// The WorkflowCanvas host calls <see cref="UpdateText"/> after each pan/layout (its RefreshOverlays)
-/// and binds the tree on session attach; the 复制 button copies the current multi-line info to the clipboard.
+/// and binds the tree on session attach; the <c>复制</c> button copies the current multi-line info to the clipboard.
 /// </summary>
 public sealed class InfoOverlay : Panel
 {

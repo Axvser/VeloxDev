@@ -47,6 +47,7 @@ public partial class TimerNodeViewModel : ICompileTimeRouter, ICompileTimeAware
 
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
+    /// <inheritdoc/>
     public void AttachCompileTimeContext(ICompileContext context)
     {
         CompileContext = context;
@@ -75,9 +76,11 @@ public partial class TimerNodeViewModel : ICompileTimeRouter, ICompileTimeAware
     public string ExecutionOrderText => IsCompileStopped ? "⊘" : LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
 
     /// <summary>Single route key fan-out: the key is always "tick", so the compiler emits one branch whose sub-graph is a ParallelSegment over all downstream targets.</summary>
+    /// <inheritdoc/>
     public Task<object?> ResolveRouteKey(object? payload) => Task.FromResult<object?>("tick");
 
     /// <summary>Route table: one branch "tick" carrying every downstream target of <see cref="OutputSlot"/> (empty list = terminal).</summary>
+    /// <inheritdoc/>
     public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
     {
         var targets = OutputSlot?.Targets;

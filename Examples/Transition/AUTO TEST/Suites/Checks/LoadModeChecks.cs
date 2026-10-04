@@ -98,7 +98,7 @@ internal static class LoadModeChecks
             driver.WaitFor(payload => AtRest(payload, entry), StartWindow, "重置后回到声明的静止态");
         }
 
-        /// <summary>点一个加载按钮，断言三块目标的状态偏离静止态。</summary>
+        // 点一个加载按钮，断言三块目标的状态偏离静止态。
         void AssertLoadStarts(string button, string what)
         {
             Reset();
@@ -185,7 +185,7 @@ internal static class LoadModeChecks
             $"{platform} 的加载模式有 {failures.Count} 处不符：{Environment.NewLine}{string.Join(Environment.NewLine, failures)}");
     }
 
-    /// <summary>三块目标的观测状态，按表里声明的字段顺序拼起来 —— 比"整串相等/不等"就够了。</summary>
+    // 三块目标的观测状态，按表里声明的字段顺序拼起来 —— 比"整串相等/不等"就够了。
     private static string Observe(StatePayload payload, LoadModeEntry entry)
         => string.Join('|', entry.Initial.Keys.Select(payload.Text));
 

@@ -27,11 +27,10 @@ public partial class Workflow : ComponentBase, IDisposable
         => (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;
     private string _canvasLayoutSize = "";
 
-    /// <summary>What the run-controls card says about the gate — 空闲 / 已暂停 / …</summary>
+    // 运行控制卡片对闸门状态的显示——空闲 / 已暂停 / …
     private string _runGateState = "空闲";
 
-    /// <summary>Whether the session has a checkpoint to carry on from. Cached rather than read per
-    /// render: the page re-renders on every node/link change, and <c>HasCheckpoint</c> hits the disk.</summary>
+    // 会话是否有可续跑的检查点。缓存而不是每次渲染读取：页面在每个节点/连线变化时重渲染，而 HasCheckpoint 会碰磁盘。
     private bool _hasCheckpoint;
 
     // ── Link selection ─────────────────────────────────────────────────────

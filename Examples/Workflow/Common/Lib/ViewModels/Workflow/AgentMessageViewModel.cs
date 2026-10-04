@@ -33,6 +33,7 @@ public enum AgentMessageRole
 /// </summary>
 public partial class AgentMessageViewModel
 {
+    /// <summary>What kind of message this is; drives how the transcript renders it.</summary>
     public AgentMessageRole Role { get; }
 
     [VeloxProperty] private string text = "";

@@ -19,6 +19,7 @@ public class PythonPortProvider : ISlotProvider
 {
     public List<PythonPort> Ports { get; set; } = [];
 
+    /// <inheritdoc/>
     public IEnumerable<SlotDefinition> GetSlots()
         => Ports.Select(p => new SlotDefinition(p.Name, p.Name));
 }

@@ -16,9 +16,7 @@ namespace VeloxDev.AT.Suites;
 // Suites/*Checks.cs 里，由这些壳调用。加一个新平台 = 加一个这样的类 + 在 DemoCatalog 登记一行。
 // -----------------------------------------------------------------------------------------------------------------
 
-/// <summary>
-/// WPF 的验收：一个窗口，四个方面。
-/// </summary>
+// WPF 的验收：一个窗口，四个方面。
 [TestClass]
 public class WpfAcceptanceSuite
 {
@@ -30,7 +28,7 @@ public class WpfAcceptanceSuite
     [ClassCleanup]
     public static void CloseDemo() => DemoCatalog.Release(WpfDemoDriver.PlatformName);
 
-    /// <summary>这个类的 demo。禁用时由 RequireEnabled 抛出跳过，所以夹具那一层不需要断言任何东西。</summary>
+    // 这个类的 demo。禁用时由 RequireEnabled 抛出跳过，所以夹具那一层不需要断言任何东西。
     private static IDemoDriver Demo()
     {
         DemoCatalog.RequireEnabled(WpfDemoDriver.PlatformName);
@@ -54,9 +52,7 @@ public class WpfAcceptanceSuite
     public void TimelineControl_SteersTheRunningAnimation() => TimelineControlChecks.Run(Demo(), WpfDemoDriver.PlatformName);
 }
 
-/// <summary>
-/// Avalonia 的验收：一个窗口，四个方面。
-/// </summary>
+// Avalonia 的验收：一个窗口，四个方面。
 [TestClass]
 public class AvaloniaAcceptanceSuite
 {
@@ -91,9 +87,7 @@ public class AvaloniaAcceptanceSuite
     public void TimelineControl_SteersTheRunningAnimation() => TimelineControlChecks.Run(Demo(), AvaloniaDemoDriver.PlatformName);
 }
 
-/// <summary>
-/// WinUI 的验收：一个窗口，四个方面。
-/// </summary>
+// WinUI 的验收：一个窗口，四个方面。
 [TestClass]
 public class WinUiAcceptanceSuite
 {
@@ -128,9 +122,7 @@ public class WinUiAcceptanceSuite
     public void TimelineControl_SteersTheRunningAnimation() => TimelineControlChecks.Run(Demo(), WinUIDemoDriver.PlatformName);
 }
 
-/// <summary>
-/// MAUI 的验收：一个窗口，四个方面。
-/// </summary>
+// MAUI 的验收：一个窗口，四个方面。
 [TestClass]
 public class MauiAcceptanceSuite
 {
@@ -165,9 +157,7 @@ public class MauiAcceptanceSuite
     public void TimelineControl_SteersTheRunningAnimation() => TimelineControlChecks.Run(Demo(), MauiDemoDriver.PlatformName);
 }
 
-/// <summary>
-/// WinForms 的验收：一个窗口，四个方面。
-/// </summary>
+// WinForms 的验收：一个窗口，四个方面。
 [TestClass]
 public class WinFormsAcceptanceSuite
 {
@@ -202,9 +192,7 @@ public class WinFormsAcceptanceSuite
     public void TimelineControl_SteersTheRunningAnimation() => TimelineControlChecks.Run(Demo(), WinFormsDemoDriver.PlatformName);
 }
 
-/// <summary>
-/// Jalium 的验收：一个窗口，四个方面。
-/// </summary>
+// Jalium 的验收：一个窗口，四个方面。
 [TestClass]
 public class JaliumAcceptanceSuite
 {
@@ -239,9 +227,7 @@ public class JaliumAcceptanceSuite
     public void TimelineControl_SteersTheRunningAnimation() => TimelineControlChecks.Run(Demo(), JaliumDemoDriver.PlatformName);
 }
 
-/// <summary>
-/// Blazor 的验收：一个页面，四个方面，外加一条只有浏览器才有的检查。
-/// </summary>
+// Blazor 的验收：一个页面，四个方面，外加一条只有浏览器才有的检查。
 [TestClass]
 public class BlazorAcceptanceSuite
 {
@@ -259,7 +245,7 @@ public class BlazorAcceptanceSuite
         return _demo ?? DemoCatalog.For(BlazorDemoDriver.PlatformName);
     }
 
-    /// <summary>浏览器宿主不在 kill-on-close 作业对象里，理由见 <see cref="ProbeChecks.Run"/>。</summary>
+    // 浏览器宿主不在 kill-on-close 作业对象里，理由见 Run。
     [TestMethod]
     [TestCategory("AT.Blazor")]
     public void ObservationSurface_IsReachableAndTicking() => ProbeChecks.Run(Demo(), expectKillOnCloseJob: false);
@@ -276,7 +262,7 @@ public class BlazorAcceptanceSuite
     [TestCategory("AT.Blazor")]
     public void TimelineControl_SteersTheRunningAnimation() => TimelineControlChecks.Run(Demo(), BlazorDemoDriver.PlatformName);
 
-    /// <summary>只有浏览器能这么验：读浏览器算出来的背景色，而不是 app 自己报的载荷。</summary>
+    // 只有浏览器能这么验：读浏览器算出来的背景色，而不是 app 自己报的载荷。
     [TestMethod]
     [TestCategory("AT.Blazor")]
     public void SamplerBench_PaintsTheColourTheSamplerProduced() => ConformanceChecks.RunBlazorBench(Demo());

@@ -6,15 +6,11 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>
-/// 「真正在算」的那个节点：标题行（标题 + 执行序号 + 状态胶囊）、一条用途描述、一块可编辑的脚本。
-/// 骨架照这套设计（Avalonia PythonNodeView.axaml）：32 / 描述带 / 主体，主体三列 64 / * / 64
-/// —— 中间是脚本区（自己一块更深的底），两边那两列是端口名的通道。
-/// <para>
-/// 端口名由表面画，不在这棵树里：表面才知道端口行落在哪一行（位置由 <see cref="NodePorts"/> 一处给出），
-/// 名字与字形因此不可能分家。
-/// </para>
-/// </summary>
+// 「真正在算」的那个节点：标题行（标题 + 执行序号 + 状态胶囊）、一条用途描述、一块可编辑的脚本。
+// 骨架照这套设计（Avalonia PythonNodeView.axaml）：32 / 描述带 / 主体，主体三列 64 / * / 64
+// —— 中间是脚本区（自己一块更深的底），两边那两列是端口名的通道。
+// 端口名由表面画，不在这棵树里：表面才知道端口行落在哪一行（位置由 NodePorts 一处给出），
+// 名字与字形因此不可能分家。
 internal sealed class PythonNodeView : NodeViewBase
 {
     protected override Color Accent => CardPalette.AccentTimerPython;

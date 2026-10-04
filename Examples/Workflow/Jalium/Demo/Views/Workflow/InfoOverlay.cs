@@ -13,7 +13,7 @@ namespace Demo.Views.Workflow;
 /// zoom/origin and the visible node/link elements materialized by the Core virtualization
 /// (<see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>). It repaints from the Core model
 /// (Layout / helper VisibleItems / Nodes / Links) plus the scroll/viewport numbers the window pushes
-/// on every scroll or surface change (same feed as the minimap). The small 复制 button in the
+/// on every scroll or surface change (same feed as the minimap). The small <c>复制</c> button in the
 /// bottom-right corner copies the current multi-line info to the clipboard for debugging.
 /// </summary>
 public sealed class InfoOverlay : Border

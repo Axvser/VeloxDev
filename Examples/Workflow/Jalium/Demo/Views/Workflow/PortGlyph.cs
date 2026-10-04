@@ -4,28 +4,12 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>
-/// 端口上那一个字形的画法：一枚细环 + 一个小芯，外加一圈说方向的波纹。
-/// <para>
-/// 与 Avalonia 的 <c>Views/Workflow/SlotView.cs</c> 同源，差别只在「画在哪」：那边是一个控件每帧重画
-/// 自己的 <c>Render</c>，这边是表面在 <c>OnPostRender</c> 里按 <see cref="NodePorts"/> 给的中心现画
-/// （为什么不在卡里画，见 <see cref="NodeEditorSurface.DrawPorts"/> 的注释）。比例、周期与方向语言
-/// 逐条照抄，所以两家的端口是同一个端口。
-/// </para>
-/// <para>
-/// 方向由<b>运动的形状</b>承担，而不是靠一个颜色或一只转个不停的令牌：能发的时候波纹向外散，能收的时候
-/// 向内聚，两个方向都有就同时来。这来自插槽声明的 <see cref="SlotChannel"/>，而不是它碰巧连了什么 ——
-/// 所以一颗空着的口也能说清自己是干什么的。
-/// </para>
-/// <para>
-/// 呼吸（被瞄准时芯会胀缩）是从同一个相位推出来的：<c>sin</c> 的相位就是 <c>phase</c>，所以它和波纹
-/// 天然同步，也就不需要第二条动画（本平台一个控件上只能跑一条转换，两条会互相打断）。
-/// </para>
-/// <para>
-/// 坐标是画布坐标（已经缩放过），所以调用方给的方框边长 <c>boxSize</c> 与中心 <c>center</c> 都必须是
-/// 按当前缩放换算过的画布值。理由：表面不像卡片那样有一个 Viewbox 替它缩放。
-/// </para>
-/// </summary>
+// 端口上那一个字形的画法：一枚细环 + 一个小芯，外加一圈说方向的波纹。
+// 与 Avalonia 的 Views/Workflow/SlotView.cs 同源，差别只在「画在哪」：那边是一个控件每帧重画自己的 Render，
+// 这边是表面在 OnPostRender 里按 NodePorts 给的中心现画。比例、周期与方向语言逐条照抄。
+// 方向由运动的形状承担（能发向外散、能收向内聚、都有就同时来），它来自插槽声明的 SlotChannel，而不是它碰巧连了什么。
+// 呼吸从同一个相位（sin 的 phase）推出来，与波纹天然同步 —— 本平台一个控件上只能跑一条转换，两条会互相打断。
+// 坐标是画布坐标（已缩放过），所以 boxSize 与 center 都必须是按当前缩放换算过的画布值：表面不像卡片那样有 Viewbox 替它缩放。
 internal static class PortGlyph
 {
     // 字形按端口的方框等比缩放，但以 32 设计单位为上限 —— 口在卡里只有二十几单位，再大就不成其为「点」了
@@ -52,10 +36,8 @@ internal static class PortGlyph
     // 读起来像一个静止的靶心 —— 眼睛抓不住单个环，方向也就读不出来
     private const int RippleCount = 1;
 
-    /// <summary>
-    /// 画一颗端口。<paramref name="boxSize"/> 是这个口的方框边长（画布单位，已按缩放换算），
-    /// <paramref name="phase"/> 是表面那条唯一的时钟，<paramref name="hovered"/> 由表面自己记。
-    /// </summary>
+    // 画一颗端口。boxSize 是这个口的方框边长（画布单位，已按缩放换算），phase 是表面那条唯一的时钟，
+    // hovered 由表面自己记。
     public static void Draw(DrawingContext dc, Point center, double boxSize, SlotState state,
         SlotChannel channel, double phase, bool hovered)
     {
@@ -91,13 +73,9 @@ internal static class PortGlyph
         dc.DrawEllipse(CardPalette.Alpha(color, Math.Min(1, lit + 0.2)), null, center, core, core);
     }
 
-    /// <summary>
-    /// 方向语言：能发就向外散，能收就向内聚，两个方向都声明了就同时来。
-    /// </summary>
-    /// <remarks>
-    /// 外散越往外越淡 —— 能量在离开。内聚越往里越亮 —— 能量在落地。所以两条路即使停在一帧里也是相反的：
-    /// 一条最外最淡，另一条最内最亮。
-    /// </remarks>
+    // 方向语言：能发就向外散，能收就向内聚，两个方向都声明了就同时来。
+    // 外散越往外越淡 —— 能量在离开；内聚越往里越亮 —— 能量在落地。所以两条路即使停在一帧里也是相反的：
+    // 一条最外最淡，另一条最内最亮。
     private static void DrawRipples(DrawingContext dc, Point center, double size, double ringRadius, Color color,
         bool canSend, bool canReceive, bool aiming, bool connected, double phase)
     {
@@ -144,11 +122,11 @@ internal static class PortGlyph
         }
     }
 
-    /// <summary>Whether the slot may connect outward — a target direction is declared.</summary>
+    // 该口能否向外连 —— 声明了目标方向。
     private static bool CanSend(SlotChannel channel)
         => channel.HasFlag(SlotChannel.OneTarget) || channel.HasFlag(SlotChannel.MultipleTargets);
 
-    /// <summary>Whether the slot may be connected inward — a source direction is declared.</summary>
+    // 该口能否向内连 —— 声明了来源方向。
     private static bool CanReceive(SlotChannel channel)
         => channel.HasFlag(SlotChannel.OneSource) || channel.HasFlag(SlotChannel.MultipleSources);
 
@@ -158,10 +136,8 @@ internal static class PortGlyph
     private static bool IsConnected(SlotState state)
         => state.HasFlag(SlotState.Sender) || state.HasFlag(SlotState.Receiver);
 
-    /// <summary>
-    /// 端口颜色按 <see cref="SlotState"/> 取：默认白、发送端 Tomato、接收端 Lime、两头都通 Violet。
-    /// 预览（正在拉线的那一头）不加色 —— 它的反馈在呼吸与波纹上，不在颜色上，Avalonia 那边亦然。
-    /// </summary>
+    // 端口颜色按 SlotState 取：默认白、发送端 Tomato、接收端 Lime、两头都通 Violet。
+    // 预览（正在拉线的那一头）不加色 —— 它的反馈在呼吸与波纹上，不在颜色上，Avalonia 那边亦然。
     private static Color ColorOf(SlotState state)
     {
         bool sender = state.HasFlag(SlotState.Sender);

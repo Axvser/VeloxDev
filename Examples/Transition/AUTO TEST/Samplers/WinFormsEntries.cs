@@ -11,15 +11,11 @@ internal static class WinFormsEntries
         public System.Windows.Forms.Padding Pad { get; set; }
     }
 
-    /// <summary>
-    /// PaddingSampler 的闭式解：四条边各自独立地随缓动时间线性外推，不经过任何钳制。
-    /// </summary>
-    /// <remarks>
-    /// 源码（<c>PaddingSampler.InsertFrame</c>）对每条边算的都是
-    /// <c>p1 + (int)(t * (p2 - p1))</c>，左右上下四个算式之间没有任何耦合：没有共用进度、没有在 0 处停住、
-    /// 也没有别的上下限。因此 t 越过 [0,1] 时四条边照走不误 —— 收缩的一侧在 t &gt; 1 处会算出负的 Padding，
-    /// 而 <c>Padding</c> 只是四个 int，接受负值，所以这里既没有饱和也没有切换，判定为 Extrapolate。
-    /// </remarks>
+    // PaddingSampler 的闭式解：四条边各自独立地随缓动时间线性外推，不经过任何钳制。
+    // 源码（PaddingSampler.InsertFrame）对每条边算的都是
+    // p1 + (int)(t * (p2 - p1))，左右上下四个算式之间没有任何耦合：没有共用进度、没有在 0 处停住、
+    // 也没有别的上下限。因此 t 越过 [0,1] 时四条边照走不误 —— 收缩的一侧在 t > 1 处会算出负的 Padding，
+    // 而 Padding 只是四个 int，接受负值，所以这里既没有饱和也没有切换，判定为 Extrapolate。
     private static System.Windows.Forms.Padding Expected(double t)
         => new(
             20 + (int)(t * 80d),

@@ -11,8 +11,10 @@ namespace Demo.ViewModels;
 /// </summary>
 public sealed class NetworkFlowContext
 {
+    /// <summary>The variables forwarded downstream; keys are case-insensitive.</summary>
     public Dictionary<string, string> Variables { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Creates a context, seeding its <c>seed</c> variable when a seed is given.</summary>
     public static NetworkFlowContext Create(object? seed = default)
     {
         var context = new NetworkFlowContext();
@@ -24,6 +26,7 @@ public sealed class NetworkFlowContext
         return context;
     }
 
+    /// <summary>Returns the parameter itself when it already is a context, otherwise wraps it as a seed.</summary>
     public static NetworkFlowContext From(object? parameter)
         => parameter as NetworkFlowContext ?? Create(parameter);
 }

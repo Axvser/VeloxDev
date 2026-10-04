@@ -16,10 +16,8 @@ namespace VeloxDev.SamplerTest;
 [TestClass]
 public class SamplerCoverageTests
 {
-    /// <summary>
-    /// 产品适配器程序集。少一个就说明引用被摘掉了，而那正是这个套件最容易安静变瞎的方式：
-    /// 程序集不加载 → 反射看不见它的采样器 → 覆盖校验在"少验一批"的情况下显示绿色。
-    /// </summary>
+    // 产品适配器程序集。少一个就说明引用被摘掉了，而那正是这个套件最容易安静变瞎的方式：
+    // 程序集不加载 → 反射看不见它的采样器 → 覆盖校验在"少验一批"的情况下显示绿色。
     private static readonly string[] ExpectedAdapterAssemblies =
     [
         "VeloxDev.Core",

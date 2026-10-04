@@ -6,11 +6,9 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>
-/// 定时器数据源节点：标题行（标题 + 执行序号）+ 主体里的间隔与最近一次 tick。
-/// 骨架照这套设计（Avalonia TimerNodeView.axaml）：32 / *，标签是小写号，最近一次 tick 用类型色加重。
-/// 单口节点，输入口与输出口都在卡边中点上，由表面画。
-/// </summary>
+// 定时器数据源节点：标题行（标题 + 执行序号）+ 主体里的间隔与最近一次 tick。
+// 骨架照这套设计（Avalonia TimerNodeView.axaml）：32 / *，标签是小写号，最近一次 tick 用类型色加重。
+// 单口节点，输入口与输出口都在卡边中点上，由表面画。
 internal sealed class TimerNodeView : NodeViewBase
 {
     private TextBox? _interval;

@@ -7,20 +7,18 @@ using VeloxDev.TransitionSystem;
 namespace Demo.Components.Pages;
 
 /// <summary>
-/// VeloxDev Transition 的 Blazor 演示。
+/// The Blazor demo for VeloxDev Transition.
 /// </summary>
 /// <remarks>
-/// 版面与其余几个平台的 Transition demo 对齐（见 <c>Home.razor</c>）：顶栏（全局三件 + 五种加载方式）压在上面，
-/// 下面是读数，再往下是一张**案例列表** —— 一条案例一行，行里是那条案例真正在动的元素、一句"这条在验什么"，
-/// 以及这一行自己的 启动 / 关闭 / 重置。
+/// The layout matches the other platform demos: a top bar with the three global actions and the five load modes,
+/// the readout below, then a case list, one row per case. Load, overshoot and sampler rows share one shape and
+/// differ only in their token, description and actions; the shared definition is <see cref="RebuildCaseList"/>.
+/// On the desktop demos a row carries a control; the browser has no control properties to write, so a row carries
+/// the element's view model (or the sampler's coloured div) and re-renders on its <c>PropertyChanged</c>.
 /// <para>
-/// 三种行（加载 3 条、过冲 5 条、每条采样器 1 条）长得一样，区别只在各自的令牌、描述与动作里，三条合成一处的
-/// 定义在 <see cref="RebuildCaseList"/>。桌面那几侧的行携带的是在屏控件；浏览器里没有"控件属性"可写，行携带的
-/// 是那块元素的 ViewModel（或采样器那个着色 div），重渲染由它的 PropertyChanged 驱动。
-/// </para>
-/// <para>
-/// <b>位移那两条（Back / Elastic）各有自己的一块目标。</b>一个元素只能有一个父级，而每一行各自是一个父级 ——
-/// 所以"两条曲线同屏对比"在列表里是"上下相邻两行同时看得见"：同一条时间轴上，仍然是同一次对比。
+/// The two displacement curves (Back and Elastic) each get their own target, because an element can have only one
+/// parent; comparing both curves on one screen therefore means two adjacent rows visible at once — still the same
+/// comparison, on the same timeline.
 /// </para>
 /// </remarks>
 public partial class Home : ComponentBase, IDisposable
@@ -54,14 +52,10 @@ public partial class Home : ComponentBase, IDisposable
     private const int BackDurationMs = 900;
     private const int ElasticDurationMs = 1100;
 
-    /// <summary>
-    /// 加载那三条动画的行程。
-    /// </summary>
-    /// <remarks>
-    /// 行程原来按窗口宽度定（500 / 400），那是在三块目标直接摊在整页上的时候。现在每一块在列表的一行里，台子
-    /// 就是它的边界，跑出去会被裁掉 —— 而"跑出去看不见"与"没在跑"在屏幕上分不开。所以行程缩到台子里放得下：
-    /// 36 的起边 + 200 的行程 + 60 的方块 = 296，台子给 300。
-    /// </remarks>
+    // 加载那三条动画的行程。
+    // 行程原来按窗口宽度定（500 / 400），那是在三块目标直接摊在整页上的时候。现在每一块在列表的一行里，台子
+    // 就是它的边界，跑出去会被裁掉 —— 而"跑出去看不见"与"没在跑"在屏幕上分不开。所以行程缩到台子里放得下：
+    // 36 的起边 + 200 的行程 + 60 的方块 = 296，台子给 300。
     private const double LoadTravel = 200d;
 
     // ---------------------------------------------------------------
@@ -71,19 +65,17 @@ public partial class Home : ComponentBase, IDisposable
     // 边界。台子的高是统一的（SamplerBench.StageHeight），行高也是。
     // ---------------------------------------------------------------
 
-    /// <summary>加载那三行的元素区宽度：36 的起边、200 的行程与 60 的方块都落在里面。</summary>
+    // 加载那三行的元素区宽度：36 的起边、200 的行程与 60 的方块都落在里面。
     private const double LoadStageWidth = 300d;
 
-    /// <summary>
-    /// 位移那两条的元素区宽度：端点 220 外加上方块自己的 60 —— Elastic 的峰值是目标的 1.373 倍（302），
-    /// 不留出来它一跑就整块滑出格子，看上去和"没动"一模一样。
-    /// </summary>
+    // 位移那两条的元素区宽度：端点 220 外加上方块自己的 60 —— Elastic 的峰值是目标的 1.373 倍（302），
+    // 不留出来它一跑就整块滑出格子，看上去和"没动"一模一样。
     private const double ShiftStageWidth = 420d;
 
-    /// <summary>尺寸那一条的元素区宽度：宽度从 60 长到 220，Elastic 峰值处（约 302）也还留在台子里。</summary>
+    // 尺寸那一条的元素区宽度：宽度从 60 长到 220，Elastic 峰值处（约 302）也还留在台子里。
     private const double SizeStageWidth = 320d;
 
-    /// <summary>颜色与饱和那两条不改变尺寸，元素区就是方块本身加一点边。</summary>
+    // 颜色与饱和那两条不改变尺寸，元素区就是方块本身加一点边。
     private const double BodyStageWidth = 96d;
 
     // ---------------------------------------------------------------
@@ -98,12 +90,8 @@ public partial class Home : ComponentBase, IDisposable
 
     private BoxModel Over0 { get; } = new() { Width = SamplerBench.BodyWidth, Height = SamplerBench.BodyHeight, Color = OverStartColor };
 
-    /// <summary>
-    /// 位移那第二条曲线（Elastic）自己的一块目标。
-    /// </summary>
-    /// <remarks>
-    /// 与 <see cref="Over0"/> **不能**是同一块：一个元素只能有一个父级，而每一行各自是一个父级。
-    /// </remarks>
+    // 位移那第二条曲线（Elastic）自己的一块目标。
+    // 与 Over0 **不能**是同一块：一个元素只能有一个父级，而每一行各自是一个父级。
     private BoxModel Over4 { get; } = new() { Width = SamplerBench.BodyWidth, Height = SamplerBench.BodyHeight, Color = OverStartColor };
 
     private BoxModel Over1 { get; } = new() { Width = SamplerBench.BodyWidth, Height = SamplerBench.BodyHeight, Color = OverStartColor };
@@ -112,10 +100,9 @@ public partial class Home : ComponentBase, IDisposable
 
     private BoxModel Over3 { get; } = new() { Width = SamplerBench.BodyWidth, Height = SamplerBench.BodyHeight, Color = OverStartColor };
 
-    /// <summary>过冲那五块目标，顺序即载荷里 t0…t4 的编号顺序。</summary>
+    // 过冲那五块目标，顺序即载荷里 t0…t4 的编号顺序。
     private BoxModel[] OvershootTargets => [Over0, Over1, Over2, Over3, Over4];
 
-    /// <summary>加载那三块目标。</summary>
     private BoxModel[] LoadTargets => [Box0, Box1, Box2];
 
     // ---------------------------------------------------------------
@@ -226,12 +213,8 @@ public partial class Home : ComponentBase, IDisposable
     // 三种行的元素都**不再**声明在标记里：元素属于行，而行的顺序与数量由表决定。
     // -----------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// 把三种案例行拼成一张表：先加载那三行，再过冲那五行，最后每个采样器一行。
-    /// </summary>
-    /// <remarks>
-    /// 采样器排在最后是有意的：它们是套件逐条驱动的对象，也是最需要滚动的部分，而滚动这一步本身要被真的走到。
-    /// </remarks>
+    // 把三种案例行拼成一张表：先加载那三行，再过冲那五行，最后每个采样器一行。
+    // 采样器排在最后是有意的：它们是套件逐条驱动的对象，也是最需要滚动的部分，而滚动这一步本身要被真的走到。
     private void RebuildCaseList()
     {
         if (_caseRows.Count > 0) return;
@@ -301,20 +284,16 @@ public partial class Home : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>一条加载行的"重置"：停下它，再把声明的那份静止态同步写回去。</summary>
+    // 一条加载行的"重置"：停下它，再把声明的那份静止态同步写回去。
     private static void ResetLoadRow(BoxModel element, string color)
     {
         Transition.Exit(element, IncludeMutual: true, IncludeNoMutual: true);
         CreateReset(color).Effect(TransitionEffects.Empty).Execute(element);
     }
 
-    /// <summary>
-    /// 跑一条过冲案例：先把目标放回起点，再起动画。
-    /// </summary>
-    /// <remarks>
-    /// 先放回起点是必须的：<c>Prepare</c> 读的是**目标此刻的值**当起点，不放回去就变成"从终点动到终点"，
-    /// 看上去什么都没发生。
-    /// </remarks>
+    // 跑一条过冲案例：先把目标放回起点，再起动画。
+    // 先放回起点是必须的：Prepare 读的是**目标此刻的值**当起点，不放回去就变成"从终点动到终点"，
+    // 看上去什么都没发生。
     private void RunOvershoot(
         BoxModel target, Transition<BoxModel> animation, string scenario, int durationMs, int targetIndex, Action restoreStart)
     {
@@ -368,18 +347,12 @@ public partial class Home : ComponentBase, IDisposable
     // 顶栏那三件：整块界面一起启动 / 停止 / 重置
     // -----------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// 顶栏的"全部启动"：每一行同时起一条真动画。
-    /// </summary>
-    /// <remarks>
-    /// 十几条真 <c>Transition</c> 并发跑，是这个库要经得住的一种真实用法；逐行载荷（over.conf / over.live）在
-    /// 这一路里刻意不写 —— 十几条各自写只会互相覆盖，而那些载荷的归属是"点了哪一行"，由行里的"启动"负责。
-    /// 要每一行的结果，读 over.batch。
-    /// <para>
-    /// 走过行自己的动作而不是另写一套：行里那个动作就是这条案例的定义，两处各写一份必然漂移。采样器那一类走的是
-    /// <see cref="CaseRow.BulkStart"/> —— 行里那个"启动"会掐掉上一次被观察的那一行，批量这一路谁都不能动别人。
-    /// </para>
-    /// </remarks>
+    // 顶栏的"全部启动"：每一行同时起一条真动画。
+    // 十几条真 Transition 并发跑，是这个库要经得住的一种真实用法；逐行载荷（over.conf / over.live）在
+    // 这一路里刻意不写 —— 十几条各自写只会互相覆盖，而那些载荷的归属是"点了哪一行"，由行里的"启动"负责。
+    // 要每一行的结果，读 over.batch。
+    // 走过行自己的动作而不是另写一套：行里那个动作就是这条案例的定义，两处各写一份必然漂移。采样器那一类走的是
+    // BulkStart —— 行里那个"启动"会掐掉上一次被观察的那一行，批量这一路谁都不能动别人。
     private void StartAllCases()
     {
         // 正在被观察的那一行先停掉观察：它的载荷已经发过了，别让它在"全部启动"之后又补发一份属于别人的。
@@ -409,13 +382,9 @@ public partial class Home : ComponentBase, IDisposable
         StartBatchWatch(sequence);
     }
 
-    /// <summary>
-    /// 批量运行期间每一拍喂一次每一行，全部落定之后把这一份载荷收尾。
-    /// </summary>
-    /// <remarks>
-    /// "跑完了"是**每一行都落定**，不是某一拍过去 —— 十几条并发，先跑完的等后跑完的。落定判据仍是那个逐行用的
-    /// 稳定窗口（见 <see cref="SamplerProbe.LiveWatch"/>），兜底上限也一样。
-    /// </remarks>
+    // 批量运行期间每一拍喂一次每一行，全部落定之后把这一份载荷收尾。
+    // "跑完了"是**每一行都落定**，不是某一拍过去 —— 十几条并发，先跑完的等后跑完的。落定判据仍是那个逐行用的
+    // 稳定窗口（见 LiveWatch），兜底上限也一样。
     private void StartBatchWatch(long sequence)
     {
         var clock = Stopwatch.StartNew();
@@ -456,13 +425,9 @@ public partial class Home : ComponentBase, IDisposable
             TimeSpan.FromMilliseconds(16));
     }
 
-    /// <summary>
-    /// 写批量载荷：每一行的五帧闭式解，加上每一行的观察摘要。
-    /// </summary>
-    /// <remarks>
-    /// 点那一刻先落一份 <c>done=0</c>（帧已经齐了，观察还没跑完），每一行都落定之后再落 <c>done=1</c>。
-    /// 与逐行载荷同一套握手：对方靠序号越过基线、且 done 为真，才认这一份是新的、且是跑完了的。
-    /// </remarks>
+    // 写批量载荷：每一行的五帧闭式解，加上每一行的观察摘要。
+    // 点那一刻先落一份 done=0（帧已经齐了，观察还没跑完），每一行都落定之后再落 done=1。
+    // 与逐行载荷同一套握手：对方靠序号越过基线、且 done 为真，才认这一份是新的、且是跑完了的。
     private void WriteBatch(long sequence, bool done)
     {
         var payload = new System.Text.StringBuilder(
@@ -478,7 +443,7 @@ public partial class Home : ComponentBase, IDisposable
         _batchSnapshot = payload.ToString();
     }
 
-    /// <summary>顶栏"停止全部"：整块界面一起停下，否则这个按钮的名字就是假的。原地冻结，不回起点。</summary>
+    // 顶栏"停止全部"：整块界面一起停下，否则这个按钮的名字就是假的。原地冻结，不回起点。
     private void ExitAll()
     {
         foreach (var target in LoadTargets)
@@ -495,13 +460,9 @@ public partial class Home : ComponentBase, IDisposable
         StopSamplerRows();
     }
 
-    /// <summary>
-    /// 顶栏"重置"：整个界面回到各自的起点。
-    /// </summary>
-    /// <remarks>
-    /// 加载、过冲、采样器三类各自走自己那行的重置动作 —— 少一类，"重置"这个名字就与它做的事对不上。
-    /// 采样器那一行收在这里也是有意的：按下它之后，没有一行还偏离声明的起点，顶栏那几个数才有意义。
-    /// </remarks>
+    // 顶栏"重置"：整个界面回到各自的起点。
+    // 加载、过冲、采样器三类各自走自己那行的重置动作 —— 少一类，"重置"这个名字就与它做的事对不上。
+    // 采样器那一行收在这里也是有意的：按下它之后，没有一行还偏离声明的起点，顶栏那几个数才有意义。
     private void ResetAllCases()
     {
         _benchTimer?.Dispose();
@@ -595,9 +556,7 @@ public partial class Home : ComponentBase, IDisposable
 
     private void RateFast() => SetRate(4d);
 
-    /// <summary>
-    /// 正常速。把速率调回 1。时间轴只有正速率 —— 减速之后要回到原速就靠这一个，而不是再去点一次重置。
-    /// </summary>
+    // 正常速。把速率调回 1。时间轴只有正速率 —— 减速之后要回到原速就靠这一个，而不是再去点一次重置。
     private void RateNormal() => SetRate(1d);
 
     private void SetRate(double rate)
@@ -608,9 +567,7 @@ public partial class Home : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// 跳到下一程的起点。程计数器是整数，所以"第几程"可以被指名 —— 这正是绝对时间轴需要它的原因。
-    /// </summary>
+    // 跳到下一程的起点。程计数器是整数，所以"第几程"可以被指名 —— 这正是绝对时间轴需要它的原因。
     private void SeekNextPass()
     {
         foreach (var target in LoadTargets)
@@ -624,36 +581,26 @@ public partial class Home : ComponentBase, IDisposable
     // 采样器：演出与批量
     // -----------------------------------------------------------------------------------------------
 
-    /// <summary>激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。</summary>
+    // 激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。
     private long _probeSequence;
 
-    /// <summary>演示台的被写对象当前该是什么颜色 —— 就是 StringSampler 最后写出的那个 CSS 颜色。</summary>
-    /// <summary>每一行那块 swatch 的颜色：与目标一样，一行一个。</summary>
+    // 演示台的被写对象当前该是什么颜色 —— 就是 StringSampler 最后写出的那个 CSS 颜色。
+    // 每一行那块 swatch 的颜色：与目标一样，一行一个。
     private readonly Dictionary<string, string> _benchColors = new(StringComparer.Ordinal);
 
-    /// <summary>这一行此刻该画成什么颜色。还没写过就退回中性灰。</summary>
+    // 这一行此刻该画成什么颜色。还没写过就退回中性灰。
     private string BenchColor(string sampler)
         => _benchColors.TryGetValue(sampler, out var color) ? color : "#808080";
 
-    /// <summary>
-    /// 演示台常驻的被写目标：真动画写它，那一行的 swatch 每帧读它。
-    /// </summary>
-    /// <remarks>
-    /// 桌面那几侧的目标是在屏控件，浏览器里没有"控件属性"可写，这个对象就是那个位置 ——
-    /// 它和 <c>over.bench</c> 上真正生效的计算样式之间只隔一个 <c>_benchColor</c> 赋值。
-    /// </remarks>
-    /// <summary>
-    /// 每一行演出用的目标：<b>一行一个</b>。
-    /// </summary>
-    /// <remarks>
-    /// 与桌面那六个平台"每行一个在屏元素"同构 —— 而且这不是风格问题。共用一个目标时，"全部启动"会逐行
-    /// 调用每一行的启动动作，后一条 Execute 立刻顶掉前一条（互斥语义）：前几行只画出一帧就被取消，
-    /// 观察窗口读到的就是那个冻结的起点值。
-    /// <para>
-    /// 实测：共用目标时批量那一路除最后一行外全部报"末值不等于 t=1 端点"，而只有一行时看不出来 ——
-    /// 那正是它一直没被发现的原因。每行一个之后全绿。
-    /// </para>
-    /// </remarks>
+    // 演示台常驻的被写目标：真动画写它，那一行的 swatch 每帧读它。
+    // 桌面那几侧的目标是在屏控件，浏览器里没有"控件属性"可写，这个对象就是那个位置 ——
+    // 它和 over.bench 上真正生效的计算样式之间只隔一个 _benchColor 赋值。
+    // 每一行演出用的目标：一行一个。
+    // 与桌面那六个平台"每行一个在屏元素"同构 —— 而且这不是风格问题。共用一个目标时，"全部启动"会逐行
+    // 调用每一行的启动动作，后一条 Execute 立刻顶掉前一条（互斥语义）：前几行只画出一帧就被取消，
+    // 观察窗口读到的就是那个冻结的起点值。
+    // 实测：共用目标时批量那一路除最后一行外全部报"末值不等于 t=1 端点"，而只有一行时看不出来 ——
+    // 那正是它一直没被发现的原因。每行一个之后全绿。
     private readonly Dictionary<string, SamplerProbe.Target> _benchTargets = new(StringComparer.Ordinal);
 
     private SamplerProbe.Target Bench(string sampler) => _benchTargets[sampler];
@@ -669,16 +616,12 @@ public partial class Home : ComponentBase, IDisposable
     // 异常也记在各自那一份里，所以十几条并发时谁的错是认得出的。
     private readonly Dictionary<string, SamplerProbe.LiveWatch> _watches = new(StringComparer.Ordinal);
 
-    /// <summary>上一拍每一行的值，用来判断"这一拍还在不在变"。按键是采样器名。</summary>
+    // 上一拍每一行的值，用来判断"这一拍还在不在变"。按键是采样器名。
     private readonly Dictionary<string, double[]> _rowPrevious = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// 这一行的"启动"：验五个固定缓动时间，再起一条真动画把这一条跑一遍。
-    /// </summary>
-    /// <remarks>
-    /// 采样器写在**这一格的在屏元素**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
-    /// 这一条同时是套件点的那个把手令牌走的路径，也是行里"启动"按钮走的路径 —— 两者不可能各说各话。
-    /// </remarks>
+    // 这一行的"启动"：验五个固定缓动时间，再起一条真动画把这一条跑一遍。
+    // 采样器写在**这一格的在屏元素**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
+    // 这一条同时是套件点的那个把手令牌走的路径，也是行里"启动"按钮走的路径 —— 两者不可能各说各话。
     private void RunSamplerProbe(string sampler)
     {
         // 验：五个固定的缓动时间各跑一帧，写进载荷。
@@ -691,13 +634,9 @@ public partial class Home : ComponentBase, IDisposable
         InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>
-    /// 起一条真动画把某个案例从起点跑到终点。
-    /// </summary>
-    /// <remarks>
-    /// 起点必须先同步写回目标：<c>Prepare</c> 读的是**目标此刻的值**当起点，不写回去就变成"从终点动到终点"，
-    /// 屏幕上什么都不会发生。属性路径与采样器都取自同一张探针表。
-    /// </remarks>
+    // 起一条真动画把某个案例从起点跑到终点。
+    // 起点必须先同步写回目标：Prepare 读的是**目标此刻的值**当起点，不写回去就变成"从终点动到终点"，
+    // 屏幕上什么都不会发生。属性路径与采样器都取自同一张探针表。
     private void StartSamplerAnimation(string sampler)
     {
         var target = Bench(sampler);
@@ -714,17 +653,11 @@ public partial class Home : ComponentBase, IDisposable
         animation.Execute(target);
     }
 
-    /// <summary>
-    /// 演出：用真的 <c>Transition</c> 把一条采样器从起点跑到终点，全程对目标属性采样，最后写进 <c>over.live</c>。
-    /// </summary>
-    /// <remarks>
-    /// Razor 适配器只有 StringSampler，产物就是 CSS 颜色字符串，所以目标直接把它当背景色用 ——
-    /// 这里不需要 WPF 那边的标尺：颜色本来就没有"行程"可言。
-    /// <para>
-    /// 末帧是排队投递的，所以落定判据是"值连续几拍不再变"而不是一个固定的余量 —— 负载重的机器上固定余量会读早，
-    /// 把一次正常的动画报成"没跑到终点"。
-    /// </para>
-    /// </remarks>
+    // 演出：用真的 Transition 把一条采样器从起点跑到终点，全程对目标属性采样，最后写进 over.live。
+    // Razor 适配器只有 StringSampler，产物就是 CSS 颜色字符串，所以目标直接把它当背景色用 ——
+    // 这里不需要 WPF 那边的标尺：颜色本来就没有"行程"可言。
+    // 末帧是排队投递的，所以落定判据是"值连续几拍不再变"而不是一个固定的余量 —— 负载重的机器上固定余量会读早，
+    // 把一次正常的动画报成"没跑到终点"。
     private void PlaySampler(string sampler, long sequence)
     {
         _benchTimer?.Dispose();
@@ -779,7 +712,7 @@ public partial class Home : ComponentBase, IDisposable
             TimeSpan.FromMilliseconds(16));
     }
 
-    /// <summary>停下每一行。原地冻结，与库的退出语义一致。</summary>
+    // 停下每一行。原地冻结，与库的退出语义一致。
     private void StopSamplerRows()
     {
         foreach (var sampler in SamplerProbe.SamplerNames)
@@ -788,13 +721,9 @@ public partial class Home : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// 把每一行停回它声明的起点。
-    /// </summary>
-    /// <remarks>
-    /// 进界面时也走这一条：不这么做的话，静息时那一行持有的是属性的默认值（空字符串），不是采样器声明的起点，
-    /// 于是"偏离起点"的行数在什么都没跑的时候就是满的 —— 顶栏那个数会变成一句假命题。
-    /// </remarks>
+    // 把每一行停回它声明的起点。
+    // 进界面时也走这一条：不这么做的话，静息时那一行持有的是属性的默认值（空字符串），不是采样器声明的起点，
+    // 于是"偏离起点"的行数在什么都没跑的时候就是满的 —— 顶栏那个数会变成一句假命题。
     private void ResetSamplerRows()
     {
         foreach (var sampler in SamplerProbe.SamplerNames)
@@ -816,7 +745,7 @@ public partial class Home : ComponentBase, IDisposable
 
     private readonly Stopwatch _scenarioClock = new();
 
-    /// <summary>每个过冲目标各自的峰值。第五条是位移那第二条曲线（Elastic）自己的目标。</summary>
+    // 每个过冲目标各自的峰值。第五条是位移那第二条曲线（Elastic）自己的目标。
     private readonly double[] _targetPeaks = new double[5];
 
     private string _scenario = "none";
@@ -832,16 +761,12 @@ public partial class Home : ComponentBase, IDisposable
     // 采样器一致性载荷：点一次把手跑一条、写一次，所以不在定时器里更新。
     private string _confSnapshot = "v=1;seq=0;n=0;";
 
-    /// <summary>真动画的载荷。点击先写一份 done=0，跑完再写 done=1。</summary>
+    // 真动画的载荷。点击先写一份 done=0，跑完再写 done=1。
     private string _liveSnapshot = "v=1;seq=0;done=1;";
 
-    /// <summary>
-    /// 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
-    /// </summary>
-    /// <remarks>
-    /// 逐行载荷是"点哪一行写哪一行"的形状，十几行一起跑只会互相覆盖，所以并发这一路另开一份。初值就是一份
-    /// 合法的空载荷：套件在点击之前先读它一次，拿那个序号当基线。
-    /// </remarks>
+    // 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
+    // 逐行载荷是"点哪一行写哪一行"的形状，十几行一起跑只会互相覆盖，所以并发这一路另开一份。初值就是一份
+    // 合法的空载荷：套件在点击之前先读它一次，拿那个序号当基线。
     private string _batchSnapshot = $"v=1;seq=0;done=1;rows={SamplerProbe.SamplerNames.Count};";
 
     // 记下本次场景，并把该目标此前的峰值清零——每次点击都必须从干净的观测开始。
@@ -889,13 +814,9 @@ public partial class Home : ComponentBase, IDisposable
              + $"nomutual={NoMutualCount()};";
     }
 
-    /// <summary>
-    /// 时间轴控制那排的回读：暂停与否、速率、当前程内位置、第几程。读的是 Box0 —— 它既是加载模式那排每一条
-    /// 路径都动的第一块，也是"连续互斥"唯一点的那块，拿它当代表不会读到一块静息的目标。
-    /// </summary>
-    /// <remarks>
-    /// 速率用不变文化格式化，免得小数点跟着机器区域设置变，验收侧读到 "0,25" 就解析不了。
-    /// </remarks>
+    // 时间轴控制那排的回读：暂停与否、速率、当前程内位置、第几程。读的是 Box0 —— 它既是加载模式那排每一条
+    // 路径都动的第一块，也是"连续互斥"唯一点的那块，拿它当代表不会读到一块静息的目标。
+    // 速率用不变文化格式化，免得小数点跟着机器区域设置变，验收侧读到 "0,25" 就解析不了。
     private static string TimelineState(BoxModel target)
     {
         const bool mutual = true, noMutual = true;
@@ -905,14 +826,10 @@ public partial class Home : ComponentBase, IDisposable
              + $"cycle={Transition.Cycle(target, mutual, noMutual)};";
     }
 
-    /// <summary>
-    /// 加载模式那一排三块目标的状态：动画真正写的那几个属性，读出来报给测试。
-    /// </summary>
-    /// <remarks>
-    /// 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
-    /// 那三条动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。字段形状与
-    /// 参考实现的 RecState 对齐，多报一个 rotate 与 scale（Blazor 的旋转与缩放是独立属性，不是变换对象里的一支）。
-    /// </remarks>
+    // 加载模式那一排三块目标的状态：动画真正写的那几个属性，读出来报给测试。
+    // 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
+    // 那三条动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。字段形状与
+    // 参考实现的 RecState 对齐，多报一个 rotate 与 scale（Blazor 的旋转与缩放是独立属性，不是变换对象里的一支）。
     private static string RecState(string prefix, BoxModel target)
         => $"{prefix}.x={target.X:F3};"
          + $"{prefix}.rotate={target.Rotate:F3};"
@@ -920,24 +837,16 @@ public partial class Home : ComponentBase, IDisposable
          + $"{prefix}.color={Describe(target.Color)};"
          + $"{prefix}.opacity={target.Opacity:F3};";
 
-    /// <summary>
-    /// 行数 / 偏离声明起点的行数 / 相对上一拍仍在变的行数。
-    /// </summary>
-    /// <remarks>
-    /// 顶栏那三个按钮唯一的可观测量，与加载模式那边的 <c>nomutual</c> 同一个思路：它不解释动画该到哪，
-    /// 只说明有没有在动、有没有回到起点。只数采样器那一行 —— 别的行的"起点"由各自的台子宣布，不在这里说话。
-    /// <para>
-    /// <b>两个数得分开，缺一个就有假命题。</b> 只看"偏离起点"，静息时也是满的 —— 那一行初始持有的是属性的默认值
-    /// （空字符串，连颜色都不是），不是采样器声明的起点，于是"全部启动后 &gt; 0"在什么都没跑时也成立。所以进界面
-    /// 时先把它写成声明的起点（见 OnAfterRenderAsync），并另记一个"这一拍还在变"：静息 0 / 启动后满 /
-    /// 停止后 0 / 重置后 0 且回到起点。
-    /// </para>
-    /// <para>
-    /// <b>两个数都是"这一拍"的快照，不是"这一批跑起来了"的判据。</b> 一行刚起动画的头几帧里，它的分量可能与
-    /// 声明的起点**逐位相同**（字符串采样器在 t=0 原样写回起点那一串），所以要问"这一批起来了没有"，得**等**
-    /// <c>away</c> 追上该有的行数，不能拿某一拍去断言（见验收侧的 ScanToolbar）。
-    /// </para>
-    /// </remarks>
+    // 行数 / 偏离声明起点的行数 / 相对上一拍仍在变的行数。
+    // 顶栏那三个按钮唯一的可观测量，与加载模式那边的 nomutual 同一个思路：它不解释动画该到哪，
+    // 只说明有没有在动、有没有回到起点。只数采样器那一行 —— 别的行的"起点"由各自的台子宣布，不在这里说话。
+    // 两个数得分开，缺一个就有假命题。 只看"偏离起点"，静息时也是满的 —— 那一行初始持有的是属性的默认值
+    // （空字符串，连颜色都不是），不是采样器声明的起点，于是"全部启动后 > 0"在什么都没跑时也成立。所以进界面
+    // 时先把它写成声明的起点（见 OnAfterRenderAsync），并另记一个"这一拍还在变"：静息 0 / 启动后满 /
+    // 停止后 0 / 重置后 0 且回到起点。
+    // 两个数都是"这一拍"的快照，不是"这一批跑起来了"的判据。 一行刚起动画的头几帧里，它的分量可能与
+    // 声明的起点**逐位相同**（字符串采样器在 t=0 原样写回起点那一串），所以要问"这一批起来了没有"，得**等**
+    // away 追上该有的行数，不能拿某一拍去断言（见验收侧的 ScanToolbar）。
     private (int Rows, int Away, int Moving) RowState()
     {
         var away = 0;
@@ -961,14 +870,10 @@ public partial class Home : ComponentBase, IDisposable
         return (SamplerProbe.SamplerNames.Count, away, moving);
     }
 
-    /// <summary>
-    /// 这三块目标上还有几条**并发**（非互斥）动画在跑。
-    /// </summary>
-    /// <remarks>
-    /// 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器是按目标缓存的一辈子不释放，
-    /// `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥的那张表在每条动画结束时
-    /// 真的会清空。要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
-    /// </remarks>
+    // 这三块目标上还有几条**并发**（非互斥）动画在跑。
+    // 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器是按目标缓存的一辈子不释放，
+    // `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥的那张表在每条动画结束时
+    // 真的会清空。要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
     private int NoMutualCount()
     {
         var running = 0;

@@ -9,20 +9,10 @@ using VeloxDev.TimeLine;
 
 namespace Demo;
 
-/// <summary>
-/// The same scenario as the window, run headlessly and written out as a table: how a theme switch behaves as the
-/// number of registered elements grows.
-/// </summary>
-/// <remarks>
-/// Run with <c>dotnet run -- bench</c>. Two columns carry the story. <c>prep_ms</c> is the synchronous part of the
-/// <see cref="ThemeManager.Transition{T}"/> call — everything the switch does before its first frame — and it is the
-/// part that scales with the element count. <c>anim_ms</c> is the rest, and it does not: every element of a switch
-/// is anchored to one shared timeline, so a hundred targets and a thousand take the same wall time to reach the end.
-/// <para>
-/// <c>attached</c> separates the library's cost from the framework's. With the tiles outside the visual tree, no
-/// layout or render work happens, so a gap between the two rows is the host's rendering, not the theme system's.
-/// </para>
-/// </remarks>
+// 与窗口相同的场景，无界面运行并输出成表格：注册元素数量增长时主题切换的表现。
+// 用 dotnet run -- bench 启动。prep_ms 是切换首帧之前的同步工作，随元素数量增长；anim_ms 是其余部分，
+// 不随数量增长——一次切换的所有元素锚在同一条时间轴上，一百个和一千个走到终点花的时间相同。
+// attached 把库的开销与框架的分开：方块不在可视树里时不发生布局与渲染，两行之差就是宿主的渲染开销。
 internal static class BenchRunner
 {
     private static readonly int[] Sizes = [1, 50, 200, 1000];
@@ -77,8 +67,7 @@ internal static class BenchRunner
             foreach (var tile in tiles) host.Children.Add(tile);
         }
 
-        // The previous batch is only weakly referenced by the theme manager; one collection makes the active set
-        // exactly this batch.
+        // 上一批只被主题管理器弱引用；回收一次即可让活动集合恰好是本批。
         Collect();
 
         ThemeManager.SetCurrent<Dark>();
@@ -89,8 +78,7 @@ internal static class BenchRunner
         EventHandler<TransitionEventArgs> handler = (_, _) => Interlocked.Increment(ref frames);
         effect.Update += handler;
 
-        // Warm-up, so first-run costs (JIT, lazy compilation inside the runtime) are not attributed to a row.
-        // The theme path also compiles a property path per element per switch; see TransitionProperty.FromProperty.
+        // 预热，免得首次运行的开销（JIT、运行时内部的惰性编译）算到某一行；主题路径每次切换为每个元素编译一次属性路径。
         ThemeManager.Transition<Light>(effect);
         await UntilAsync(() => ThemeManager.Current == typeof(Light));
         ThemeManager.Transition<Dark>(effect);
@@ -99,8 +87,7 @@ internal static class BenchRunner
 
         for (var rep = 0; rep < repeats; rep++)
         {
-            // Both operations have to actually switch: a Jump or Transition to the theme already current is
-            // rejected by the guard at the top of each, which would measure nothing.
+            // 两种操作都必须真的切换：Jump/Transition 到当前主题会被各自顶部的守卫拒绝，那样就什么都没量到。
             Collect();
             var beforeJump = GC.GetTotalAllocatedBytes(true);
             var jumpWatch = Stopwatch.StartNew();
@@ -108,9 +95,8 @@ internal static class BenchRunner
             else ThemeManager.Jump<Dark>();
             jumpWatch.Stop();
 
-            // Sampled here, not when the row is written: Jump is synchronous, and the row is assembled only after
-            // the animated switch below has also run — differencing against the pre-Jump snapshot there would
-            // attribute the whole animated switch to the jump.
+            // 在这里采样，而不是写行时：Jump 是同步的，而这一行要等下面的动画切换也跑完才拼出来，
+            // 若在写行时对 Jump 前的快照做差，会把整段动画切换算到 jump 头上。
             var jumpAllocated = GC.GetTotalAllocatedBytes(true) - beforeJump;
 
             var toLight = ThemeManager.Current != typeof(Light);

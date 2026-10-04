@@ -45,20 +45,16 @@ internal static class WpfEntries
         public Vector Slope { get; set; }
     }
 
-    /// <summary>WPF 适配器所在的程序集；同名的采样器只能从这里按类型名取。</summary>
+    // WPF 适配器所在的程序集；同名的采样器只能从这里按类型名取。
     private static readonly Assembly SamplerAssembly = typeof(DropShadowEffectSampler).Assembly;
 
-    /// <summary>
-    /// 七个适配器把同名采样器（BrushSampler、PointSampler……）放在同一个命名空间里，编译期直接写类型名会
-    /// CS0433（多个被引用的程序集都提供该类型）。这里按程序集限定反射取 WPF 的那一个。
-    /// </summary>
+    // 七个适配器把同名采样器（BrushSampler、PointSampler……）放在同一个命名空间里，编译期直接写类型名会
+    // CS0433（多个被引用的程序集都提供该类型）。这里按程序集限定反射取 WPF 的那一个。
     private static Type CrossAdapter(string samplerName)
         => SamplerAssembly.GetType($"VeloxDev.Adapters.NativeSamplers.{samplerName}", throwOnError: true)!;
 
-    /// <summary>
-    /// 一条条目：写一帧再读回。接线交给 <see cref="EntryFactory"/>，它按 <c>ISampler</c> 静态调用，
-    /// 实际派发到真实采样器；<c>SamplerType</c> 随后覆盖为真实类型（覆盖校验与实例化都靠它）。
-    /// </summary>
+    // 一条条目：写一帧再读回。接线交给 EntryFactory，它按 ISampler 静态调用，
+    // 实际派发到真实采样器；SamplerType 随后覆盖为真实类型（覆盖校验与实例化都靠它）。
     private static SamplerEntry Entry<TValue>(
         Type samplerType,
         SamplerRule rule,
@@ -90,10 +86,8 @@ internal static class WpfEntries
 
     private static double Clamp01(double value) => Math.Max(0d, Math.Min(1d, value));
 
-    /// <summary>
-    /// 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的规则，不调用库的辅助函数。
-    /// </summary>
-    /// <param name="maximum">该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。</param>
+    // 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的规则，不调用库的辅助函数。
+    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
@@ -114,10 +108,10 @@ internal static class WpfEntries
         return progress;
     }
 
-    /// <summary>颜色通道饱和截断，不回绕 —— 裸 byte 转换会把 300 变成 44。</summary>
+    // 颜色通道饱和截断，不回绕 —— 裸 byte 转换会把 300 变成 44。
     private static byte Channel(double value) => value <= 0d ? (byte)0 : value >= 255d ? (byte)255 : (byte)value;
 
-    /// <summary>R/G/B 共用一个上界 255 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/255 饱和。</summary>
+    // R/G/B 共用一个上界 255 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/255 饱和。
     private static Color ColorAt(double t, Color from, Color to)
     {
         var progress = SharedProgress(t, 255d, (from.R, to.R), (from.G, to.G), (from.B, to.B));
@@ -129,19 +123,19 @@ internal static class WpfEntries
             Channel(from.B + (to.B - from.B) * progress));
     }
 
-    /// <summary>画刷的实心↔实心分支返回的是可变引用类型，按颜色与不透明度比。</summary>
+    // 画刷的实心↔实心分支返回的是可变引用类型，按颜色与不透明度比。
     private static bool SolidBrushEquivalent(object? expected, object? actual)
         => expected is SolidColorBrush e && actual is SolidColorBrush a
            && e.Color == a.Color
            && e.Opacity == a.Opacity;
 
-    /// <summary>变换的快速路返回 scratch 实例，按分量比（t=0/1 交出的则是端点实例本身）。</summary>
+    // 变换的快速路返回 scratch 实例，按分量比（t=0/1 交出的则是端点实例本身）。
     private static bool TranslateEquivalent(object? expected, object? actual)
         => expected is TranslateTransform e && actual is TranslateTransform a
            && e.X == a.X
            && e.Y == a.Y;
 
-    /// <summary>阴影的快速路返回 scratch 实例，按五个字段比。</summary>
+    // 阴影的快速路返回 scratch 实例，按五个字段比。
     private static bool EffectEquivalent(object? expected, object? actual)
         => expected is DropShadowEffect e && actual is DropShadowEffect a
            && e.Color == a.Color

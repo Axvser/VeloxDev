@@ -232,6 +232,7 @@ public sealed class WorkflowDemoSession : IDisposable
         primary.ConfigureSessionWith(ConfigureRun);
     }
 
+    /// <summary>The workflow tree this session owns; the canvas binds it.</summary>
     public TreeViewModel Tree { get; }
     /// <summary>Primary controller (example C: compiled compute chain), for backward compatibility / single-graph hosts.</summary>
     public ControllerViewModel Controller { get; }

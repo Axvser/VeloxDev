@@ -16,13 +16,11 @@ using WinThickness = Microsoft.UI.Xaml.Thickness;
 
 namespace VeloxDev.SamplerTest;
 
-/// <summary>The samplers the WinUI adapter ships, with the closed form each one follows.</summary>
-/// <remarks>
-/// 覆盖的是"结果本身是值"的那些采样器。BrushSampler / ProjectionSampler / TransformSampler 的产物是
-/// WinRT 的 DependencyObject，而 WinRT 类激活要求进程里有一个真正的 XAML 运行时 —— 纯数据套件里
-/// <c>new SolidColorBrush()</c> 直接就是 <c>REGDB_E_CLASSNOTREG</c>。这三条登记在
-/// <see cref="UnreachableSamplers"/> 里，由真跑起来的 demo 覆盖。
-/// </remarks>
+// The samplers the WinUI adapter ships, with the closed form each one follows.
+// 覆盖的是"结果本身是值"的那些采样器。BrushSampler / ProjectionSampler / TransformSampler 的产物是
+// WinRT 的 DependencyObject，而 WinRT 类激活要求进程里有一个真正的 XAML 运行时 —— 纯数据套件里
+// new SolidColorBrush() 直接就是 REGDB_E_CLASSNOTREG。这三条登记在
+// UnreachableSamplers 里，由真跑起来的 demo 覆盖。
 internal static class WinUiEntries
 {
     private const string Adapter = "WinUI";
@@ -40,13 +38,11 @@ internal static class WinUiEntries
         public WinThickness Margin { get; set; }
     }
 
-    /// <summary>WinUI 适配器所在的程序集；同名的采样器只能从这里按类型名取。</summary>
+    // WinUI 适配器所在的程序集；同名的采样器只能从这里按类型名取。
     private static readonly Assembly SamplerAssembly = typeof(ProjectionSampler).Assembly;
 
-    /// <summary>
-    /// 七个适配器把大量同名采样器放在同一个命名空间里，编译期直接写类型名会 CS0433。这里按程序集限定反射取
-    /// WinUI 的那一个；<c>SamplerType</c> 覆盖为真实类型（覆盖校验与实例化都靠它）。
-    /// </summary>
+    // 七个适配器把大量同名采样器放在同一个命名空间里，编译期直接写类型名会 CS0433。这里按程序集限定反射取
+    // WinUI 的那一个；SamplerType 覆盖为真实类型（覆盖校验与实例化都靠它）。
     private static SamplerEntry Entry<TValue>(
         string samplerName,
         SamplerRule rule,
@@ -74,10 +70,8 @@ internal static class WinUiEntries
 
     private static double Lerp(double start, double end, double t) => start + (end - start) * t;
 
-    /// <summary>
-    /// 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的 <c>BoundedProgress</c>，不调用它。
-    /// </summary>
-    /// <param name="maximum">该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。</param>
+    // 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的 BoundedProgress，不调用它。
+    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
@@ -98,13 +92,13 @@ internal static class WinUiEntries
         return progress;
     }
 
-    /// <summary>通道饱和截断，不回绕 —— 裸 byte 转换会把 300 变成 44。</summary>
+    // 通道饱和截断，不回绕 —— 裸 byte 转换会把 300 变成 44。
     private static byte Channel(double value) => value <= 0d ? (byte)0 : value >= 255d ? (byte)255 : (byte)value;
 
-    /// <summary>圆角的负值 WinUI 直接拒收（构造函数就 Validate），所以停在 0 处。</summary>
+    // 圆角的负值 WinUI 直接拒收（构造函数就 Validate），所以停在 0 处。
     private static double ClampAtZero(double value) => value <= 0d ? 0d : value;
 
-    /// <summary>颜色：R/G/B 共用一个 [0,255] 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/255 饱和。</summary>
+    // 颜色：R/G/B 共用一个 [0,255] 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/255 饱和。
     private static WinColor ColorAt(double t, WinColor from, WinColor to)
     {
         var progress = SharedProgress(t, 255d, (from.R, to.R), (from.G, to.G), (from.B, to.B));

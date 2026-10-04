@@ -35,7 +35,7 @@ internal static class MauiConformance
     private static readonly (double A, double R, double G, double B) ShadowStart = BrushStart;
     private static readonly (double A, double R, double G, double B) ShadowEnd = BrushEnd;
 
-    /// <summary>尺寸类的端点：宽 100→0、高 50→150，一涨一缩，正好逼出"共用进度、在 0 处停"这条规则。</summary>
+    // 尺寸类的端点：宽 100→0、高 50→150，一涨一缩，正好逼出"共用进度、在 0 处停"这条规则。
     private const double WidthStart = 100d;
     private const double WidthEnd = 0d;
     private const double HeightStart = 50d;

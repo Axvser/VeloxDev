@@ -95,7 +95,7 @@ internal sealed class ConformancePayload
         return new ConformancePayload(version, parsedSequence, declared, frames, raw);
     }
 
-    /// <summary>把 <c>k=v;</c> 载荷拆成字段。<paramref name="what"/> 只用于失败信息。</summary>
+    // 把 k=v; 载荷拆成字段。what 只用于失败信息。
     internal static Dictionary<string, string> Fields(string text, string what)
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);

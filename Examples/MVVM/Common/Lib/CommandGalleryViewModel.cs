@@ -124,13 +124,13 @@ public partial class CommandGalleryViewModel
 
     // ── void, no parameters ────────────────────────────────────────────────
 
-    /// <summary>Runs synchronously; the body never sees a token, so interrupting it only reports.</summary>
+    // 同步运行；函数体看不到 token，中断它只能报告。
     [VeloxCommand]
     private void Notify() => Record("Notify(): void, no parameters");
 
     // ── Task, no parameters ────────────────────────────────────────────────
 
-    /// <summary>Runs asynchronously with nothing to pass.</summary>
+    // 异步运行，没有参数可传。
     [VeloxCommand]
     private Task Run()
     {
@@ -140,11 +140,8 @@ public partial class CommandGalleryViewModel
 
     // ── Task<T>, no parameters ─────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns a value. The one-argument <c>Execute</c> still returns as soon as the call is accepted; the value
-    /// comes out of <c>((IVeloxCommandResult)QueryCommand).ExecuteAsync(null, ct)</c>, because this command is not
-    /// strongly typed.
-    /// </summary>
+    // 返回值：一参的 Execute 在调用被接受后立即返回，值要从
+    // ((IVeloxCommandResult)QueryCommand).ExecuteAsync(null, ct) 取出，因为这条命令不是强类型的。
     [VeloxCommand]
     private Task<string> Query()
     {
@@ -154,7 +151,7 @@ public partial class CommandGalleryViewModel
 
     // ── ValueTask, no parameters ───────────────────────────────────────────
 
-    /// <summary>Returns a <see cref="ValueTask"/>; the generated thunk converts it with <c>AsTask()</c>.</summary>
+    // 返回 ValueTask；生成的 thunk 用 AsTask() 转换它。
     [VeloxCommand]
     private ValueTask Step()
     {
@@ -164,7 +161,7 @@ public partial class CommandGalleryViewModel
 
     // ── ValueTask<T>, no parameters ────────────────────────────────────────
 
-    /// <summary>Returns a <see cref="ValueTask{TResult}"/>.</summary>
+    // 返回 ValueTask<T>。
     [VeloxCommand]
     private ValueTask<int> Measure()
     {
@@ -174,10 +171,7 @@ public partial class CommandGalleryViewModel
 
     // ── CancellationToken only ────────────────────────────────────────────
 
-    /// <summary>
-    /// The only shape whose body really receives a token — and therefore the only one <c>Interrupt</c> and
-    /// <c>Clear</c> can actually stop.
-    /// </summary>
+    // 唯一真正把 token 交给函数体的形状，因此也是 Interrupt 与 Clear 唯一能真正停下的。
     [VeloxCommand]
     private async Task RunCancellable(CancellationToken ct)
     {
@@ -186,7 +180,7 @@ public partial class CommandGalleryViewModel
         Record("RunCancellable(ct): finished");
     }
 
-    /// <summary>The same contract with a <see cref="ValueTask"/> body.</summary>
+    // 同样的契约，函数体换成 ValueTask。
     [VeloxCommand]
     private async ValueTask StepCancellable(CancellationToken ct)
     {
@@ -197,7 +191,7 @@ public partial class CommandGalleryViewModel
 
     // ── object? parameter ─────────────────────────────────────────────────
 
-    /// <summary>An untyped command: the property stays <see cref="IVeloxCommand"/> and the argument is boxed.</summary>
+    // 非强类型命令：属性仍是 IVeloxCommand，实参被装箱。
     [VeloxCommand]
     private Task HandleObject(object? value)
     {
@@ -205,7 +199,7 @@ public partial class CommandGalleryViewModel
         return Task.CompletedTask;
     }
 
-    /// <summary>Untyped, cancellable.</summary>
+    // 非强类型，可取消。
     [VeloxCommand]
     private async Task HandleObjectAndToken(object? value, CancellationToken ct)
     {
@@ -213,11 +207,11 @@ public partial class CommandGalleryViewModel
         await Task.Delay(200, ct);
     }
 
-    /// <summary>A synchronous untyped body.</summary>
+    // 非强类型的同步函数体。
     [VeloxCommand]
     private void NotifyObject(object? value) => Record($"NotifyObject(object?): {value}");
 
-    /// <summary>Untyped with a <see cref="ValueTask"/> body.</summary>
+    // 非强类型，函数体是 ValueTask。
     [VeloxCommand]
     private ValueTask StepObject(object? value)
     {
@@ -227,10 +221,8 @@ public partial class CommandGalleryViewModel
 
     // ── Concrete parameter type: the property becomes IVeloxCommand<P> ────
 
-    /// <summary>
-    /// A concrete parameter makes the command strongly typed <em>and</em> makes the validator strongly typed:
-    /// the generated declaration is <c>CanExecuteHandleNoteCommand(NotePayload parameter)</c>.
-    /// </summary>
+    // 具体形参让命令变成强类型，校验器也跟着变强类型：生成的声明是
+    // CanExecuteHandleNoteCommand(NotePayload parameter)。
     [VeloxCommand(canValidate: true)]
     private Task HandleNote(NotePayload note)
     {
@@ -238,17 +230,13 @@ public partial class CommandGalleryViewModel
         return Task.CompletedTask;
     }
 
-    // Two things must match the generated declaration exactly: the parameter type follows the command's
-    // parameter, and the name mirrors the source method's own parameter — HandleNote(NotePayload note)
-    // means the validator takes `note`. Any other name is CS8826.
-    //
-    // The null check is not redundant. A strongly typed validator is still reachable through the *untyped*
-    // CanExecute(object?), and the frameworks use it: WPF calls CanExecute(null) once while it applies the
-    // button template. Without the check this dereference throws on the UI thread and takes the app down —
-    // which is the concrete form of "strong typing is type information, not a guarantee".
+    // 两处必须与生成的声明完全一致：形参类型跟随命令的形参，名字照抄源方法的形参名
+    // （HandleNote(NotePayload note) ⇒ 校验器收到 note），否则 CS8826。
+    // null 检查不是多余的：强类型校验器仍能被*非强类型*的 CanExecute(object?) 调到，
+    // WPF 在套用按钮模板时会以 CanExecute(null) 调一次；没有这个检查，UI 线程上的解引用会把程序带崩。
     private partial bool CanExecuteHandleNoteCommand(NotePayload note) => note is not null && note.Weight > 0;
 
-    /// <summary>Strongly typed and cancellable; <c>Interrupt</c> really stops this one.</summary>
+    // 强类型且可取消；Interrupt 能真正停下这一条。
     [VeloxCommand]
     private async Task HandleNoteAndToken(NotePayload note, CancellationToken ct)
     {
@@ -256,11 +244,8 @@ public partial class CommandGalleryViewModel
         await Task.Delay(200, ct);
     }
 
-    /// <summary>
-    /// A strongly typed body that returns a value: the property is <c>IVeloxCommand&lt;NotePayload, int&gt;</c>,
-    /// so both the argument and the result are typed and <c>await MeasureNoteCommand.ExecuteAsync(note, ct)</c>
-    /// yields the weight directly. This is the shape the demo's "MeasureNoteCommand" button uses.
-    /// </summary>
+    // 返回值的强类型函数体：属性是 IVeloxCommand<NotePayload, int>，实参与结果都有类型，
+    // await MeasureNoteCommand.ExecuteAsync(note, ct) 直接得到重量。
     [VeloxCommand]
     private Task<int> MeasureNote(NotePayload note)
     {
@@ -268,16 +253,13 @@ public partial class CommandGalleryViewModel
         return Task.FromResult(note.Weight);
     }
 
-    /// <summary>
-    /// A value-type parameter is strongly typed too — and still boxes on the way through the pipeline, because
-    /// the queue carries its argument as <see cref="object"/>.
-    /// </summary>
+    // 值类型形参同样是强类型的，但经过管线时仍会装箱，因为队列以 object 携带实参。
     [VeloxCommand(canValidate: true)]
     private void NotifyWeight(int weight) => Record($"NotifyWeight(int): {weight}");
 
     private partial bool CanExecuteNotifyWeightCommand(int weight) => weight > 0;
 
-    /// <summary>A strongly typed <see cref="ValueTask"/> body.</summary>
+    // 强类型，函数体是 ValueTask。
     [VeloxCommand]
     private ValueTask StepMagnitude(double magnitude)
     {
@@ -287,12 +269,8 @@ public partial class CommandGalleryViewModel
 
     // ── Method type parameter: a generated accessor, not a property ────────
 
-    /// <summary>
-    /// The type argument belongs to the method, so a property cannot carry it — the generator emits
-    /// <c>IVeloxCommand&lt;T&gt; GetStoreCommand&lt;T&gt;()</c> instead. Each closed <c>T</c> gets its own
-    /// command, with its own queue, lock and concurrency cap.
-    /// </summary>
-    /// <typeparam name="T">The type to store.</typeparam>
+    // 类型参数属于方法，属性带不了它，生成器改为发出 IVeloxCommand<T> GetStoreCommand<T>()。
+    // 每个封闭的 T 各有一条命令，各有自己的队列、锁与并发上限。
     [VeloxCommand(canValidate: true)]
     private Task Store<T>(T value)
     {
@@ -300,12 +278,10 @@ public partial class CommandGalleryViewModel
         return Task.CompletedTask;
     }
 
-    // The validator of a generic command carries the same type parameter and constraint,
-    // and mirrors the source method's parameter name (Store<T>(T value) ⇒ value).
+    // 泛型命令的校验器带相同的类型参数与约束，并照抄源方法的形参名（Store<T>(T value) ⇒ value）。
     private partial bool CanExecuteStoreCommand<T>(T value) => value is not null;
 
-    /// <summary>A method type parameter nested inside the parameter type — the array and tuple forms both work.</summary>
-    /// <typeparam name="T">The element type of the pair.</typeparam>
+    // 类型参数嵌在形参类型里 —— 数组与元组两种写法都可以。
     [VeloxCommand]
     private Task StorePair<T>((T, T) pair)
     {
@@ -331,7 +307,7 @@ public partial class CommandGalleryViewModel
 /// <typeparam name="T">The type the command body receives.</typeparam>
 public partial class TypedGalleryViewModel<T>
 {
-    /// <summary>Runs with the class's own type argument, with no box in the signature.</summary>
+    // 用类自己的类型实参运行，签名里不装箱。
     [VeloxCommand]
     private Task Accept(T value)
     {

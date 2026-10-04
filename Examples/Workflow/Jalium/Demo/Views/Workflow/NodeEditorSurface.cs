@@ -827,22 +827,14 @@ internal sealed class NodeEditorSurface : Canvas
 
     // ── Ports (the ring + its ripples) ─────────────────────────────────────
 
-    /// <summary>
-    /// 画一个节点上的每颗端口：字形（环 + 芯）与它的端口名。
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// 为什么端口在表面上画，而不是像 Avalonia 那样放进卡片自己：这一家的渲染器按<b>布局盒</b>裁剪子元素
-    /// （<c>Visual.ShouldRenderChild</c> 只看布局盒、不看画出来的内容，见 Jalium Trimmed 那个 LinkView 的注释）——
-    /// 端口有一半骑在卡边外，放进卡里就等于把外溢的那一半交给一个刚好到此为止的盒子去决定；
-    /// 而 Enum 卡根上那个裁到圆角的主体区（<c>NodeChrome</c> 给卡片设了 <c>ClipToBounds</c>）会直接切掉它。
-    /// 表面自己的盒子覆盖整个视口，端口因此永远不越界，也不用像 Avalonia 那样逐卡去挪 ScrollViewer 的视口。
-    /// </para>
-    /// <para>
-    /// 位置仍是 <see cref="NodePorts"/> 那<b>一处</b>给的（连线端点与命中测试读的也是它），
-    /// 所以字形、名字、连线三者不可能对不齐。
-    /// </para>
-    /// </remarks>
+    // 画一个节点上的每颗端口：字形（环 + 芯）与它的端口名。
+    // 为什么端口在表面上画，而不是像 Avalonia 那样放进卡片自己：这一家的渲染器按布局盒裁剪子元素
+    // （Visual.ShouldRenderChild 只看布局盒、不看画出来的内容，见 Jalium Trimmed 那个 LinkView 的注释）——
+    // 端口有一半骑在卡边外，放进卡里就等于把外溢的那一半交给一个刚好到此为止的盒子去决定；
+    // 而 Enum 卡根上那个裁到圆角的主体区（NodeChrome 给卡片设了 ClipToBounds）会直接切掉它。
+    // 表面自己的盒子覆盖整个视口，端口因此永远不越界，也不用像 Avalonia 那样逐卡去挪 ScrollViewer 的视口。
+    // 位置仍是 NodePorts 那一处给的（连线端点与命中测试读的也是它），
+    // 所以字形、名字、连线三者不可能对不齐。
     private void DrawPorts(DrawingContext dc)
     {
         if (_tree is null)
@@ -907,7 +899,7 @@ internal sealed class NodeEditorSurface : Canvas
         }
     }
 
-    /// <summary>端口名：行内那颗小字，居中在它那口的行上，往卡里缩 <paramref name="inset"/> 设计单位。</summary>
+    // 端口名：行内那颗小字，居中在它那口的行上，往卡里缩 inset 设计单位。
     private static void DrawSlotName(DrawingContext dc, string name, Point center, double scale, double inset,
         bool input, IWorkflowNodeViewModel node)
     {
@@ -937,7 +929,7 @@ internal sealed class NodeEditorSurface : Canvas
         _ => s_slotNameFallback,
     };
 
-    /// <summary>卡片当前被缩放的比例：Viewbox 是等比缩放的，取两轴的较小者才与它一致。</summary>
+    // 卡片当前被缩放的比例：Viewbox 是等比缩放的，取两轴的较小者才与它一致。
     private static double PortScale(IWorkflowNodeViewModel node, NodeViewBase card)
     {
         double sx = card.DesignWidth <= 0 ? 1 : node.Size.Width / card.DesignWidth;
@@ -945,10 +937,8 @@ internal sealed class NodeEditorSurface : Canvas
         return Math.Min(sx, sy);
     }
 
-    /// <summary>
-    /// 视口粗筛。端口画在表面自己的坐标里，不受「子元素布局盒」那套剔除影响，但逐个画整棵树的端口在
-    /// 缩到很远时是白费力气 —— 卡片在视口之外就整块跳过（留一点余量给外溢的那半个口）。
-    /// </summary>
+    // 视口粗筛。端口画在表面自己的坐标里，不受「子元素布局盒」那套剔除影响，但逐个画整棵树的端口在
+    // 缩到很远时是白费力气 —— 卡片在视口之外就整块跳过（留一点余量给外溢的那半个口）。
     private bool NearViewport(IWorkflowNodeViewModel node, NodeViewBase card)
     {
         if (_scrollViewer is not { } viewer)
@@ -1093,10 +1083,8 @@ internal sealed class NodeEditorSurface : Canvas
         }
     }
 
-    /// <summary>
-    /// 一条链接是否可能出现在视口里。两点都落在视口外也照样可能穿过视口（贝塞尔是弯的），
-    /// 所以判的是<b>两点连线</b>的包围盒与视口相交，再往外留一段余量把控制点拉出去的弧度也算进去。
-    /// </summary>
+    // 一条链接是否可能出现在视口里。两点都落在视口外也照样可能穿过视口（贝塞尔是弯的），
+    // 所以判的是两点连线的包围盒与视口相交，再往外留一段余量把控制点拉出去的弧度也算进去。
     private bool CrossesViewport(Point a, Point b)
     {
         if (_scrollViewer is not { } viewer)
@@ -1202,15 +1190,11 @@ internal sealed class NodeEditorSurface : Canvas
         return pen;
     }
 
-    /// <summary>
-    /// 彗星：沿弧长切出 [头−尾, 头] 这一段，再分若干小段画，每段一个递减的透明度与一个向白偏的颜色。
-    /// <para>
-    /// 不用渐变刷有两个理由，第二个才是新的：本平台的渐变写停靠点不出帧（见 flow 声明），所以原先那版
-    /// 流光只能画成「裁剪几何 + 宽度动画」；而且渐变刷的轴是两端之间的直线，在曲线上会把光打偏 ——
-    /// 亮度不再跟着弯走，绕弯时看着忽快忽慢。改成按弧长切出来的几何之后，这两条一起消失：
-    /// 几何本来就是切出来的，不再依赖渐变刷。
-    /// </para>
-    /// </summary>
+    // 彗星：沿弧长切出 [头−尾, 头] 这一段，再分若干小段画，每段一个递减的透明度与一个向白偏的颜色。
+    // 不用渐变刷有两个理由，第二个才是新的：本平台的渐变写停靠点不出帧（见 flow 声明），所以原先那版
+    // 流光只能画成「裁剪几何 + 宽度动画」；而且渐变刷的轴是两端之间的直线，在曲线上会把光打偏 ——
+    // 亮度不再跟着弯走，绕弯时看着忽快忽慢。改成按弧长切出来的几何之后，这两条一起消失：
+    // 几何本来就是切出来的，不再依赖渐变刷。
     private void DrawComet(DrawingContext dc, LinkCurve curve, Color color, double thickness)
     {
         double intensity = CometIntensity(FlowPhase);
@@ -1259,15 +1243,11 @@ internal sealed class NodeEditorSurface : Canvas
         }
     }
 
-    /// <summary>
-    /// 一个周期里彗星有多亮：头部从发送端出发时升起来（占前 30% 路程），到达接收端之前落下去
-    /// （占后 22%）。两端都是「没有光」，所以循环接缝看不出来。
-    /// </summary>
-    /// <remarks>
-    /// Avalonia 那版把这三段写成三条相位（成形 / 行进 / 退去）。这里从一个相位推出来，是因为本平台
-    /// 一个控件上只能跑一条转换（<c>Transition.Exit</c> 按目标停，两条会互相打断），相位一多就必然要
-    /// 第二条 —— 所以只留一个 double，其余全从它算。
-    /// </remarks>
+    // 一个周期里彗星有多亮：头部从发送端出发时升起来（占前 30% 路程），到达接收端之前落下去
+    // （占后 22%）。两端都是「没有光」，所以循环接缝看不出来。
+    // Avalonia 那版把这三段写成三条相位（成形 / 行进 / 退去）。这里从一个相位推出来，是因为本平台
+    // 一个控件上只能跑一条转换（Transition.Exit 按目标停，两条会互相打断），相位一多就必然要
+    // 第二条 —— 所以只留一个 double，其余全从它算。
     private static double CometIntensity(double phase)
     {
         double p = Math.Clamp(phase, 0, 1);
@@ -1306,24 +1286,16 @@ internal sealed class NodeEditorSurface : Canvas
 
     private double _flowPhase;
 
-    /// <summary>
-    /// 表面的相位，0 到 1 循环：<b>这是全表面唯一的动画状态</b>，沿链接跑的彗星与端口上的波纹都从它推出来。
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// 一个 double 而不是几个，有两个理由。其一，本平台一个控件上只能跑一条转换（<c>Transition.Exit</c>
-    /// 按目标停，两条会互相打断），相位一多就必然要有第二条 —— 唯一能做的就是让它们全是同一个相位的函数。
-    /// 其二，它属于表面而不是属于链接：这个表面一笔画完所有链接、又画完所有端口（端口也归它画，
-    /// 理由见 DrawPorts），没有 per-link 的视图可写，所以这一个成员就是全部的动画状态。
-    /// 写它就重绘，因为画它的是表面自己的 OnRender / OnPostRender，没有别人会告诉它光走了 ——
-    /// 一帧一次重绘是「动画画在表面自己身上」的代价，转换本来就按 60fps 走。
-    /// </para>
-    /// <para>
-    /// 2300ms 这个周期照的是 Avalonia 那版端口的波纹；彗星因此一个周期走完整条链接（那边是三段相位拼出
-    /// 1600ms）。两个动效一个节拍读起来是同一件事在发生，代价是彗星比 Avalonia 慢一档 ——
-    /// 这是「一个控件一条时钟」的必然结果，不是随手挑的数。
-    /// </para>
-    /// </remarks>
+    // 表面的相位，0 到 1 循环：这是全表面唯一的动画状态，沿链接跑的彗星与端口上的波纹都从它推出来。
+    // 一个 double 而不是几个，有两个理由。其一，本平台一个控件上只能跑一条转换（Transition.Exit
+    // 按目标停，两条会互相打断），相位一多就必然要有第二条 —— 唯一能做的就是让它们全是同一个相位的函数。
+    // 其二，它属于表面而不是属于链接：这个表面一笔画完所有链接、又画完所有端口（端口也归它画，
+    // 理由见 DrawPorts），没有 per-link 的视图可写，所以这一个成员就是全部的动画状态。
+    // 写它就重绘，因为画它的是表面自己的 OnRender / OnPostRender，没有别人会告诉它光走了 ——
+    // 一帧一次重绘是「动画画在表面自己身上」的代价，转换本来就按 60fps 走。
+    // 2300ms 这个周期照的是 Avalonia 那版端口的波纹；彗星因此一个周期走完整条链接（那边是三段相位拼出
+    // 1600ms）。两个动效一个节拍读起来是同一件事在发生，代价是彗星比 Avalonia 慢一档 ——
+    // 这是「一个控件一条时钟」的必然结果，不是随手挑的数。
     public double FlowPhase
     {
         get => _flowPhase;
@@ -1373,11 +1345,9 @@ internal sealed class NodeEditorSurface : Canvas
 
     // ── Hit testing (world coords) ─────────────────────────────────────────
 
-    /// <summary>
-    /// 端口的抓取半径（画布单位）：跟着字形一起被缩放 —— 口本身就是按设计尺寸画的，
-    /// 缩到很远时还按固定像素去抓，就会出现「看得见的口抓不住、看不见的地方抓着空」。
-    /// 输出口给得比输入口小一点：拉线从输出口起，误抓一颗粒代价比多试一次大。
-    /// </summary>
+    // 端口的抓取半径（画布单位）：跟着字形一起被缩放 —— 口本身就是按设计尺寸画的，
+    // 缩到很远时还按固定像素去抓，就会出现「看得见的口抓不住、看不见的地方抓着空」。
+    // 输出口给得比输入口小一点：拉线从输出口起，误抓一颗粒代价比多试一次大。
     private double PortHitRadius(IWorkflowNodeViewModel node, double factor)
     {
         _cards.TryGetValue(node, out var card);
@@ -1635,7 +1605,7 @@ internal sealed class NodeEditorSurface : Canvas
         }
     }
 
-    /// <summary>指针落在哪颗端口上（画布坐标进，插槽视图模型出）。只改状态、只在真的换了口时重绘。</summary>
+    // 指针落在哪颗端口上（画布坐标进，插槽视图模型出）。只改状态、只在真的换了口时重绘。
     private void UpdatePortHover(Point canvasPos)
     {
         if (_tree is null)

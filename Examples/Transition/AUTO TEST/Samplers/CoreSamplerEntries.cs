@@ -29,10 +29,8 @@ internal static class CoreSamplerEntries
         public Quaternion Q { get; set; }
     }
 
-    /// <summary>
-    /// 一个成员各自可动画的复合值类型。两个成员类型不同（<c>double</c> 与 <c>int</c>），正好覆盖
-    /// "每个成员走自己的采样器"这半条规则。
-    /// </summary>
+    // 一个成员各自可动画的复合值类型。两个成员类型不同（double 与 int），正好覆盖
+    // "每个成员走自己的采样器"这半条规则。
     private readonly struct SampleablePair : ISampleable
     {
         public SampleablePair(double a, int b)
@@ -52,7 +50,7 @@ internal static class CoreSamplerEntries
             => new SampleablePair((double)memberValues[0]!, (int)memberValues[1]!);
     }
 
-    /// <summary>承载一个复合值类型的属性，让组装出来的整值有一条真实的写入路径。</summary>
+    // 承载一个复合值类型的属性，让组装出来的整值有一条真实的写入路径。
     private sealed class StructTarget
     {
         public SampleablePair Pair { get; set; }
@@ -92,10 +90,8 @@ internal static class CoreSamplerEntries
 
     private static double Lerp(double start, double end, double t) => start + (end - start) * t;
 
-    /// <summary>
-    /// 一组通道共用一个进度：谁先出界就停在谁那里 —— 与库里的规则一致，但这里是独立重述的。
-    /// </summary>
-    /// <param name="maximum">该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。</param>
+    // 一组通道共用一个进度：谁先出界就停在谁那里 —— 与库里的规则一致，但这里是独立重述的。
+    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
@@ -222,15 +218,11 @@ internal static class CoreSamplerEntries
         StructEntry(),
     ];
 
-    /// <summary>
-    /// 组合型采样器。它不由宿主按名字注册，而是 <c>StructAssembler.Create</c> 每次动画现造、端点已经烘进构造函数，
-    /// 所以既没有无参构造，也不能用 <see cref="Activator"/> 起。这里走产品的真实入口（反射进那两个 internal 类型），
-    /// 条目验的仍是生产路径，而不是一条测试专用的捷径。
-    /// </summary>
-    /// <remarks>
-    /// 规则判为 <see cref="SamplerRule.Saturate"/>：中间帧确实随缓动时间走（成员各自插值），但 t 一旦越过
-    /// [0,1] 就整体停在调用方给的端点上，不跟着成员外推 —— "停在界上"而不是"继续走"。
-    /// </remarks>
+    // 组合型采样器。它不由宿主按名字注册，而是 StructAssembler.Create 每次动画现造、端点已经烘进构造函数，
+    // 所以既没有无参构造，也不能用 Activator 起。这里走产品的真实入口（反射进那两个 internal 类型），
+    // 条目验的仍是生产路径，而不是一条测试专用的捷径。
+    // 规则判为 Saturate：中间帧确实随缓动时间走（成员各自插值），但 t 一旦越过
+    // [0,1] 就整体停在调用方给的端点上，不跟着成员外推 —— "停在界上"而不是"继续走"。
     private static SamplerEntry StructEntry()
     {
         var start = new SampleablePair(10d, 10);
@@ -274,10 +266,8 @@ internal static class CoreSamplerEntries
         };
     }
 
-    /// <summary>
-    /// 四元数的闭式解与库里的算式写法不同（这里显式展开大圆公式），最后一个 bit 可能不同，所以逐分量按容差比，
-    /// 而其余条目一律逐位相等。
-    /// </summary>
+    // 四元数的闭式解与库里的算式写法不同（这里显式展开大圆公式），最后一个 bit 可能不同，所以逐分量按容差比，
+    // 而其余条目一律逐位相等。
     private static bool QuaternionEquivalent(object? expected, object? actual)
     {
         if (expected is not Quaternion e || actual is not Quaternion a) return false;

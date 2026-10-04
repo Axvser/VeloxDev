@@ -9,21 +9,12 @@ namespace Demo;
 /// <summary>
 /// The window half of the demo.
 /// </summary>
-/// <remarks>
-/// Nothing here knows what a frame is. It polls, formats and draws; every number on screen was produced by a hook
-/// in <c>MainWindow.Hooks.cs</c> and arrived as a published report.
-/// <para>
-/// The polling is not a compromise, it is the only shape that works: the engine runs each hook on a channel thread
-/// and swallows anything thrown out of one, so a <c>Dispatcher.Invoke</c> from inside a hook would be the one
-/// failure mode with no symptom — the loop would simply stop drawing and nothing would be logged.
-/// </para>
-/// </remarks>
 public partial class MainWindow : Window
 {
     private const int LogCapacity = 2000;
     private const int LogTail = 80;
 
-    /// <summary>Half the ball, in pixels — what a height has to clear to sit on the ground line.</summary>
+    // 半个球（像素）：高度要越过它才落到地面线上。
     private const double BallRadius = 9;
 
     private const double FollowerRadius = 15;
@@ -35,12 +26,12 @@ public partial class MainWindow : Window
     private bool _registered;
     private int _restartGeneration;
 
-    /// <summary>Wall clock and both ordinals at the opening of the current delivery window.</summary>
+    // 当前交付窗口开始时的挂钟与两个序号。
     private long _windowMs;
     private int _windowUpdate;
     private int _windowFixed;
 
-    /// <summary>Fixed steps per Update frame, and frames per second, both as measured — not as configured.</summary>
+    // 每个 Update 帧的固定步数，以及每秒帧数；都是实测值，不是配置值。
     private double _stepsPerFrame;
     private double _framesPerSecond;
 
@@ -108,16 +99,9 @@ public partial class MainWindow : Window
 
     private void ResumeChannel(object sender, RoutedEventArgs e) => TickManager.Resume(DemoChannel.Name);
 
-    /// <summary>
-    /// Takes the behaviour off the channel. The next registration re-runs Awake and Start on it.
-    /// </summary>
-    /// <remarks>
-    /// This pair is the sharpest contrast in the lifecycle and the one nothing else in the demo can show:
-    /// registration drives Awake and Start again on a fresh wrapper for the same object, while stopping and
-    /// starting the channel does not (the counters stay put). The buttons are enabled one at a time so the
-    /// sequence is the one that demonstrates it — registering twice without unregistering would fire Awake twice
-    /// and say nothing about the lifecycle.
-    /// </remarks>
+    // 把行为从通道上摘下来，下次注册会重新跑 Awake 与 Start。
+    // 这一对是生命周期里对比最鲜明的：注册会在同一对象的新包装上重跑 Awake/Start，而停止再启动通道不会（计数不动）。
+    // 按钮一次只启用一个，让顺序正好演示这一点。
     private void Unregister(object sender, RoutedEventArgs e)
     {
         CloseTickable();
@@ -134,14 +118,8 @@ public partial class MainWindow : Window
         BtnRegister.IsEnabled = false;
     }
 
-    /// <summary>
-    /// Asks both pumps to put their own ball back on the line.
-    /// </summary>
-    /// <remarks>
-    /// Two clicks of this are never needed in normal running — landing already restarts a fall. What it is for is
-    /// re-synchronising the pair after a slow frame rate has moved them a long way apart, so a fresh comparison
-    /// can be watched from a known starting point.
-    /// </remarks>
+    // 让两条泵把自己的球放回线上。正常跑时不需要点两次——落地本就会重新下落；
+    // 它用于慢帧率把两球拉开很远后重新对齐，从一个已知起点观察新的比较。
     private void RestartBalls(object sender, RoutedEventArgs e) => _restartGeneration = Interlocked.Increment(ref _state.RestartGeneration);
 
     private void ClearLog(object sender, RoutedEventArgs e)
@@ -175,7 +153,7 @@ public partial class MainWindow : Window
         DrawPayload(update, fixedReport);
     }
 
-    /// <summary>Moves whatever the hooks queued into the bounded view model, once per poll.</summary>
+    // 每次轮询把钩子入队的内容搬进有界的视图模型。
     private void DrainLog()
     {
         while (_state.Log.TryDequeue(out var entry))
@@ -185,19 +163,10 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Measures how many fixed steps each Update frame was given, over a wall-clock second.
-    /// </summary>
-    /// <remarks>
-    /// This is the one claim counters alone cannot make: that the fixed pump runs on its own cadence rather than the
-    /// frame rate's. Two ordinals and a wall clock give <c>Δstep / Δframe</c> — the delivery this channel actually
-    /// produced, with neither the target frame rate nor the step size taken on trust. It is the number to watch while
-    /// the frame-rate buttons are pressed: it barely moves when they do.
-    /// <para>
-    /// Only updated when both ordinals advanced inside the window. A paused channel, or a frame rate low enough to
-    /// starve the window, would otherwise divide by zero — and a stale value is honest where an infinity is not.
-    /// </para>
-    /// </remarks>
+    // 在挂钟一秒内，量每个 Update 帧分到多少固定步。
+    // 这是计数器说不出的那件事：固定泵按自己的节奏跑，而不是帧率的节奏。两个序号加挂钟给出 Δstep/Δframe——
+    // 本通道真实交付的量，不信任目标帧率也不信任步长。按帧率按钮时看它：几乎不动。
+    // 只在窗口内两个序号都前进时更新；暂停的通道或低到饿死窗口的帧率会除零，旧值比无穷更诚实。
     private void MeasureDelivery()
     {
         var now = Environment.TickCount64;
@@ -244,7 +213,7 @@ public partial class MainWindow : Window
         MirrorBar.Y2 = mid + half;
     }
 
-    /// <summary>The centre of a ball resting at <paramref name="height"/> metres, in stage pixels.</summary>
+    // 高度为 height 米的球静止时的中心 Y（舞台像素）。
     private static double CentreY(double height) => DemoChannel.GroundY - BallRadius - height * DemoChannel.PixelsPerMetre;
 
     private static void Place(System.Windows.Shapes.Shape shape, double centreX, double height, double radius)

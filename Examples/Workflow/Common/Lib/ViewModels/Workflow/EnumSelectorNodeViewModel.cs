@@ -129,6 +129,7 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     /// <summary>Whether the node is in the compile-time absolute stop state (unselected static branch / terminated).</summary>
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
+    /// <inheritdoc/>
     public void AttachCompileTimeContext(ICompileContext context)
     {
         CompileContext = context;
@@ -155,6 +156,7 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     /// - Static: the key is decided by the currently selected enum value (decidable at compile time);
     /// - Dynamic: a null compile-time payload returns null → IsDynamic; at runtime reads the shared "selector.value" field, else falls back to the currently selected value.
     /// </summary>
+    /// <inheritdoc/>
     public Task<object?> ResolveRouteKey(object? payload)
     {
         if (CompileMode == RouterCompileMode.Dynamic && payload is null)
@@ -195,6 +197,7 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     };
 
     /// <summary>Compile-time route table (changes with mode): Static contains only the currently selected branch; Dynamic contains all branches (preserving 1:N fan-out).</summary>
+    /// <inheritdoc/>
     public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
     {
         var dict = new Dictionary<object, List<IWorkflowNodeViewModel>>();

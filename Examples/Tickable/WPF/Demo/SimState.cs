@@ -4,92 +4,69 @@ using VeloxDev.TimeLine;
 
 namespace Demo;
 
-/// <summary>
-/// The constants the two pumps and the window have to agree on.
-/// </summary>
+// 两条泵与窗口必须一致的常量。
 internal static class DemoChannel
 {
-    /// <summary>
-    /// The channel the window registers on. One channel, started once.
-    /// </summary>
-    /// <remarks>
-    /// The previous version of this demo drove three components that registered on the default channel and then
-    /// called <c>SetTargetFPS(30, "game")</c> — a second channel nothing ever started, so the call had no reader
-    /// and the frame rate it configured never existed. A channel is named here, started here, and read back on
-    /// screen; that is what makes the numbers below mean what they say.
-    /// </remarks>
+    // 窗口注册的通道，只有一个，只启动一次。
+    // 旧版演示驱动三个注册在默认通道上的组件，却去 SetTargetFPS(30, "game") —— 一个从没启动过的第二通道，
+    // 那次调用没有读者，配的帧率从未存在。这里通道在此命名、在此启动、在屏幕上读回，下面那些数才有意义。
     public const string Name = TickManager.DEFAULT_CHANNEL;
 
-    /// <summary>Gravity the balls integrate under, m/s². Chosen so one fall takes about 1.6 s.</summary>
+    // 球积分所受的重力，m/s²。取值让一次下落约 1.6 秒。
     public const double Gravity = 1.2;
 
-    /// <summary>The line the balls fall to, in metres.</summary>
+    // 球落到的那条线，单位米。
     public const double FallHeight = 1.5;
 
-    /// <summary>Stage scale, fixed so that a distance on screen converts back into a length.</summary>
+    // 舞台缩放，固定值，屏幕上的一段距离才能换算回长度。
     public const double PixelsPerMetre = 200.0;
 
-    /// <summary>How much the mirror bar below the balls exaggerates the distance between them.</summary>
+    // 球下方那根镜像条把两球距离放大的倍数。
     public const double Mirror = 10.0;
 
-    /// <summary>Canvas height in pixels: the fall plus a little headroom above the start line.</summary>
+    // 画布高度（像素）：整段下落再加上起点线上方一点余量。
     public const double StageHeight = FallHeight * PixelsPerMetre + 20;
 
-    /// <summary>Where the ground line sits, in stage pixels.</summary>
+    // 地面线在舞台像素中的位置。
     public const double GroundY = FallHeight * PixelsPerMetre;
 }
 
-/// <summary>
-/// One ball, integrating under <see cref="DemoChannel.Gravity"/>.
-/// </summary>
-/// <remarks>
-/// Both pumps run this same type through this same <see cref="Step"/>. The comparison is entirely in the dt handed
-/// to it — there is no second integration rule for a difference to hide in, so what the two balls disagree about
-/// is the loop and nothing else.
-/// <para>
-/// No locking anywhere: exactly one pump thread owns each instance and the window never touches one. What crosses
-/// threads is a <see cref="BallReport"/>, published whole.
-/// </para>
-/// </remarks>
+// 一只球，在 DemoChannel.Gravity 下积分。
+// 两条泵跑的是同一个类型、同一个 Step()，差别全在交给它的 dt —— 没有第二套积分规则可供差异藏身，
+// 所以两球不一致只可能是循环不同。
+// 全程不加锁：恰好一条泵线程独占每个实例，窗口从不碰它；跨线程的只有整份发布的 BallReport。
 internal sealed class BallBody(double gravity)
 {
-    /// <summary>Metres above the ground.</summary>
+    // 离地高度（米）。
     public double Height;
 
-    /// <summary>Metres per second, downward positive.</summary>
+    // 速度（米/秒，向下为正）。
     public double Velocity;
 
-    /// <summary>Seconds into the fall in progress. Restarts with the fall, because the closed form is compared against this.</summary>
+    // 当前这次下落已经过的秒数。随下落重置，因为闭式解是拿它比的。
     public double FallTime;
 
-    /// <summary>Seconds fed in since the channel started. Never restarted by a landing.</summary>
-    /// <remarks>
-    /// Each pump's own record of how much time it has been given, so it is what the unspent-time readout is measured
-    /// against: the bus's position minus this is the part of the timeline that pump has not driven yet. A landing must
-    /// not clear it — with two balls landing at different moments, a clock that restarted with each fall would only
-    /// be comparable between two of them.
-    /// </remarks>
+    // 通道启动以来喂入的秒数，落地不重置。
+    // 这是每条泵对自己拿到多少时间的记录，也是未交付时间读数的基准：总线位置减去它，就是那条泵还没驱动的部分。
+    // 落地绝不能清它——两球落地时刻不同，随每次下落重置的时钟只在其中两个之间可比。
     public double DriveTime;
 
     private double _dtSum;
     private double _dtSquares;
 
-    /// <summary>How many times the ball has been put back on the line.</summary>
+    // 球被放回线上的次数。
     public int Falls { get; private set; }
 
-    /// <summary>The dt this ball was really driven at: <c>Σdt² / Σdt</c>.</summary>
-    /// <remarks>
-    /// Not the arithmetic mean, and the difference is the point rather than precision. Expanding semi-implicit
-    /// Euler from rest gives <c>Height - (g/2)t² = -(g/2)·Σdt²</c> exactly, for any dt sequence at all (see
-    /// <see cref="Drift"/>), so this is the dt the integration can be reconstructed from. A plain mean only agrees
-    /// when the steps are evenly spaced — and the update pump's are precisely the ones that are not.
-    /// </remarks>
+    // 这只球真正被驱动的 dt：Σdt² / Σdt。
+    // 不是算术平均，差别正是要点而非精度：从静止展开半隐式欧拉得 Height - (g/2)t² = -(g/2)·Σdt²，
+    // 对任意 dt 序列都精确（见 Drift），所以这是能反推积分的 dt。普通平均只在步长均匀时吻合，
+    // 而 update 泵恰恰不均匀。
     public double EffectiveDt => _dtSum > 0 ? _dtSquares / _dtSum : 0;
 
-    /// <summary>Metres below the closed form <c>(g/2)t²</c>. Always negative, and exactly <c>-(g/2)Σdt²</c>.</summary>
+    // 低于闭式解 (g/2)t² 的米数。恒为负，且恰为 -(g/2)Σdt²。
     public double Drift => -0.5 * gravity * _dtSquares;
 
-    /// <summary>Advances the ball by one interval, however the pump measured it.</summary>
+    // 让球前进一个区间，无论泵是怎么量出来的。
     public void Step(double seconds)
     {
         Velocity += gravity * seconds;
@@ -100,16 +77,12 @@ internal sealed class BallBody(double gravity)
         _dtSquares += seconds * seconds;
     }
 
-    /// <summary>True once the ball has reached the fall height and <see cref="RestartFall"/> is due.</summary>
+    // 球到达下落高度、该调用 RestartFall 时为真。
     public bool HasLanded => Height >= DemoChannel.FallHeight;
 
-    /// <summary>Puts the ball back on the line, at rest, with the fall's accumulation cleared.</summary>
-    /// <remarks>
-    /// The step that crossed the line is discarded whole rather than trimmed to the crossing instant. Trimming
-    /// would need that instant, and every reader of this class only needs a fall to start from rest at a known
-    /// height. What it costs is honest and visible: a coarser dt overshoots further, so the update ball spends a
-    /// little more time off the stage than the fixed one.
-    /// </remarks>
+    // 把球放回线上、静止，并清空本次下落的累计。
+    // 越过线的那一步整段丢弃，而不是裁剪到穿越瞬间：裁剪需要那个瞬间，而本类的读者只需要一次从静止、
+    // 已知高度的下落。代价诚实可见——dt 越粗过冲越多，update 球在台外待的时间比 fixed 球略长。
     public void RestartFall()
     {
         Height = 0;
@@ -121,7 +94,7 @@ internal sealed class BallBody(double gravity)
     }
 }
 
-/// <summary>Which hook an entry came from.</summary>
+// 一条日志来自哪个钩子。
 internal enum HookKind
 {
     Awake,
@@ -131,23 +104,20 @@ internal enum HookKind
     FixedUpdate,
 }
 
-/// <summary>Something about a hook call that is worth a line even when the log is not recording every frame.</summary>
+// 关于一次钩子调用、即便不记录每一帧也值得记一行的事。
 internal enum HookNote
 {
     None,
 
-    /// <summary>This call slept on purpose. Update owes a frame; FixedUpdate owes steps.</summary>
+    // 这次调用故意睡了。Update 欠一帧，FixedUpdate 欠几步。
     Slept,
 
-    /// <summary>This call is the one carrying the consequence of the previous call's sleep.</summary>
+    // 这次调用承担上一次调用睡觉的后果。
     AfterSleep,
 }
 
-/// <summary>One recorded hook call.</summary>
-/// <remarks>
-/// A struct, and built without touching a string: at the default frame rate a channel runs about 120 hooks a
-/// second, and a log that allocated per call would be a GC cost the demo imposed on the very loop it is measuring.
-/// </remarks>
+// 一次被记录的钩子调用。
+// 用 struct，且构建时不碰字符串：默认帧率下每秒约 120 次钩子，按次分配的日志会把 GC 开销加在它正在度量的循环上。
 internal readonly record struct HookEntry(
     HookKind Kind,
     int Index,
@@ -157,18 +127,10 @@ internal readonly record struct HookEntry(
     HookNote Note,
     long WallMs);
 
-/// <summary>
-/// An immutable snapshot of one ball and the pump that drove it, published by the hook that owns it.
-/// </summary>
-/// <remarks>
-/// One reference, written once per hook call, so a reader takes the whole record or none of it. Writing the fields
-/// in place would let the window show a position from one frame beside a dt from the next — which is how a
-/// cross-thread bug turns into "sometimes the ball jumps" and never reproduces.
-/// <para>
-/// This is the reason the report is a class: a struct that size is not published atomically, and
-/// <c>Volatile.Write</c> has no overload for one.
-/// </para>
-/// </remarks>
+// 一只球与驱动它的泵的不可变快照，由拥有它的钩子发布。
+// 一次引用、每次钩子调用写一次，读者要么读到整份要么读不到。若就地写字段，窗口可能显示上一帧的位置配下一帧的 dt ——
+// 跨线程 bug 就是这样变成「球有时跳一下」且永不复现的。
+// 这也是报告用类而不用结构体的原因：那个大小的结构体不是原子发布的，Volatile.Write 也没有重载。
 internal sealed record BallReport(
     double Height,
     double FallTime,
@@ -184,39 +146,30 @@ internal sealed record BallReport(
     HookNote Note,
     long WallMs)
 {
-    /// <summary>What a reader sees before the pump has run once.</summary>
+    // 泵还没跑过一次时读者看到的值。
     public static readonly BallReport Empty = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "—", HookNote.None, 0);
 }
 
-/// <summary>
-/// Everything the two pump threads write and the window reads.
-/// </summary>
-/// <remarks>
-/// The rules, since none of this is enforced by a type:
-/// <list type="bullet">
-/// <item>Counters are incremented by one writer with <see cref="Interlocked"/> and read with <see cref="Volatile"/>.
-/// They are never reset — they say what has happened since the channel started.</item>
-/// <item>Balls are owned outright by one pump thread each and never leave their hook.</item>
-/// <item>Flags run the other way: the window writes, a pump reads. One writer each, so a volatile int is enough.</item>
-/// <item>The log is a <see cref="ConcurrentQueue{T}"/>, which is what the engine itself uses for every hand-off
-/// between these threads.</item>
-/// </list>
-/// </remarks>
+// 两条泵线程写、窗口读的全部状态。
+// 规则（这些都不由类型强制）：计数器各由一个写者用 Interlocked 递增、用 Volatile 读，且从不重置——
+// 它们说的是通道启动以来发生了什么；球各由一个泵线程独占，从不离开自己的钩子；
+// 标志方向相反，窗口写、泵读，各一个写者，volatile int 就够；日志是 ConcurrentQueue<T>，
+// 引擎自己在这两个线程之间交接用的也是它。
 internal sealed class DemoState
 {
-    /// <summary>Driven by the window's <c>Update</c> hook — variable dt, one call per frame.</summary>
+    // 由窗口的 Update 钩子驱动——可变 dt，每帧一次。
     public readonly BallBody UpdateBall = new(DemoChannel.Gravity);
 
-    /// <summary>Driven by the window's <c>FixedUpdate</c> hook — a constant dt, one call per owed step.</summary>
+    // 由窗口的 FixedUpdate 钩子驱动——固定 dt，每个欠下的步一次。
     public readonly BallBody FixedBall = new(DemoChannel.Gravity);
 
     private BallReport _updateReport = BallReport.Empty;
     private BallReport _fixedReport = BallReport.Empty;
 
-    /// <summary>The update ball and its pump, as of that pump's last call.</summary>
+    // update 球及其泵，截至该泵最后一次调用。
     public BallReport UpdateReport => Volatile.Read(ref _updateReport);
 
-    /// <summary>The fixed ball and its pump, as of that pump's last call.</summary>
+    // fixed 球及其泵，截至该泵最后一次调用。
     public BallReport FixedReport => Volatile.Read(ref _fixedReport);
 
     public void PublishUpdate(BallReport report) => Volatile.Write(ref _updateReport, report);
@@ -229,48 +182,43 @@ internal sealed class DemoState
     public int LateUpdateCount;
     public int FixedUpdateCount;
 
-    /// <summary>Frames where LateUpdate ran without that frame's Update having run first. Must stay zero.</summary>
+    // 本帧的 Update 没先跑、LateUpdate 却跑了的帧。必须恒为 0。
     public int OrderViolations;
 
-    /// <summary>Frames where LateUpdate was skipped because Update set <c>e.Handled</c>.</summary>
+    // 因 Update 置了 e.Handled 而被跳过的 LateUpdate 帧。
     public int SkippedLateUpdates;
 
-    /// <summary>
-    /// <see cref="UpdateCount"/> as it stood when Awake, then Start, ran.
-    /// </summary>
-    /// <remarks>
-    /// Zero is the whole evidence for "the lifecycle runs before the first frame body": they are driven from the
-    /// loop's main-thread drain, which happens before the first frame's Update.
-    /// </remarks>
+    // Awake、随后 Start 运行时 UpdateCount 的值。
+    // 0 就是「生命周期先于第一帧体」的全部证据：它们由循环的主线程排空驱动，而排空发生在第一帧的 Update 之前。
     public int AwakeAtUpdateCount = -1;
 
     public int StartAtUpdateCount = -1;
 
-    /// <summary>Frames completed when Awake ran, straight from the engine rather than from a counter of ours.</summary>
+    // Awake 运行时已完成的帧数，直接来自引擎而非我们自己的计数器。
     public long AwakeFrameOrdinal = -1;
 
-    /// <summary>Wall time of the last LateUpdate. A stale value means the hook stopped being called.</summary>
+    // 最后一次 LateUpdate 的挂钟。旧值意味着钩子不再被调用。
     public long LateUpdateWallMs;
 
-    /// <summary>Where the last LateUpdate put the follower ring, in metres. Frozen means LateUpdate is not running.</summary>
+    // 最后一次 LateUpdate 把跟随环放在的米数。冻结意味着 LateUpdate 没在跑。
     public double LateUpdateHeight;
 
-    /// <summary>Window → Update. Non-zero asks the next Update to set <c>e.Handled</c>.</summary>
+    // 窗口 → Update。非零要求下一次 Update 置 e.Handled。
     public int HandledRequested;
 
-    /// <summary>Window → Update: milliseconds to sleep inside the next Update, once.</summary>
+    // 窗口 → Update：下一次 Update 内要睡的毫秒数，只一次。
     public int UpdateHitchMs;
 
-    /// <summary>Window → FixedUpdate: milliseconds to sleep inside the next FixedUpdate, once.</summary>
+    // 窗口 → FixedUpdate：下一次 FixedUpdate 内要睡的毫秒数，只一次。
     public int FixedHitchMs;
 
-    /// <summary>Window → both pumps: a bump asks each to put its own ball back on the line.</summary>
+    // 窗口 → 两条泵：加一要求各自把自己的球放回线上。
     public int RestartGeneration;
 
-    /// <summary>Window → both pumps: non-zero records every hook call instead of only the notable ones.</summary>
+    // 窗口 → 两条泵：非零则记录每一次钩子调用，而不是只记值得注意的。
     public int RecordEveryHook;
 
-    /// <summary>Hook calls not written to the log. Shown, so a filtered log is never mistaken for a quiet loop.</summary>
+    // 未写入日志的钩子调用数。显示出来，过滤过的日志就不会被误当成安静的循环。
     public int OmittedCount;
 
     public readonly ConcurrentQueue<HookEntry> Log = new();

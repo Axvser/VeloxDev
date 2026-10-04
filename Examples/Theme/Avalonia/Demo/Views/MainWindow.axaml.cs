@@ -14,18 +14,13 @@ namespace Demo.Views;
 /// every element of one switch moves on <b>one</b> shared timeline, so the existing timeline control reaches a
 /// theme switch unchanged, and one <see cref="Transition.Pause"/> call on any single element freezes all of them.
 /// </summary>
-/// <remarks>
-/// The UI is built in code because it is generated — a thousand identical tiles plus a toolbar — and because the
-/// thing worth reading here is the measurement, not the markup. <c>dotnet run -- bench</c> runs the same scenario
-/// headlessly and writes a table.
-/// </remarks>
 public partial class MainWindow : Window
 {
     private readonly List<ThemeTile> _tiles = [];
     private readonly DispatcherTimer _ticker = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly Process _self = Process.GetCurrentProcess();
 
-    // Long enough that pause and seek have something to interrupt.
+    // 长到让暂停与跳转有东西可打断。
     private readonly TransitionEffect _effect = new() { Duration = TimeSpan.FromSeconds(3), FPS = 60 };
 
     private readonly EventHandler<TransitionEventArgs> _frameCounter;
@@ -35,17 +30,16 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
-        // Counts one call per target per frame, which is how the frame deficit at high target counts shows up.
+        // 每个目标每帧记一次，高目标数下的掉帧就是这样显出来的。
         _frameCounter = (_, _) => Interlocked.Increment(ref _frames);
         _effect.Update += _frameCounter;
 
         InitializeComponent();
 
-        // The window is a themed element too, on top of the thousands of tiles, so one switch covers both. Like
-        // every other one, this call must follow InitializeComponent.
+        // 窗口自己也是一个主题元素，与上千个方块一起被同一次切换覆盖；和其他元素一样，这句必须在 InitializeComponent 之后。
         InitializeTheme();
 
-        // Matches the theme the application starts on; OnThemeChanged keeps it in step afterwards.
+        // 与应用程序启动时的主题一致；之后由 OnThemeChanged 保持同步。
         RequestedThemeVariant = ThemeVariant.Dark;
 
         _ticker.Tick += (_, _) => UpdateLive();
@@ -68,17 +62,13 @@ public partial class MainWindow : Window
 
         _size = count;
 
-        // The previous batch is only weakly referenced by the theme manager and is pruned on the next switch, so
-        // one collection makes the active set exactly this batch.
+        // 上一批只被主题管理器弱引用，下次切换时清除，所以回收一次就让活动集合恰好是本批。
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
     }
 
-    /// <summary>
-    /// Hands one control call to the switch. Addressing <b>any single</b> target is enough: they all share one
-    /// timeline, so there is only one transport for a pause, a seek or a rate change to move.
-    /// </summary>
+    // 把一次控制调用交给这次切换：寻址任意一个目标就够，它们共享一条时间轴，暂停/跳转/变速只有一个载体。
     private void Act(Action<ThemeTile> operation)
     {
         if (_tiles.Count == 0) return;
@@ -101,8 +91,8 @@ public partial class MainWindow : Window
         var cpuBefore = _self.TotalProcessorTime;
         var watch = Stopwatch.StartNew();
 
-        // Transition returns only after every target has been prepared, written and scheduled — its first await is
-        // the Task.WhenAll — so this call's own duration is the preparation cost, measured apart from the animation.
+        // Transition 在每个目标都准备、写入、排定之后才返回（首个 await 是 Task.WhenAll），
+        // 所以这段耗时就是准备开销，与动画分开计。
         if (animate)
         {
             if (toLight) ThemeManager.Transition<Light>(_effect);
@@ -193,23 +183,14 @@ public partial class MainWindow : Window
     }
 }
 
-//------------------------------------------------------------------------------------------------------------------
-// Theme Part ↓
-
-/* The theme declarations live in their own partial block: they are configuration, not interaction logic. */
+// 主题部分 ↓
+// 主题声明放在单独的 partial 块里：它们是配置，不是交互逻辑。
 [ThemeConfig<ObjectConverter, Dark, Light>(nameof(Background), ["#1e1e1e"], ["#ffffff"])]
 public partial class MainWindow
 {
-    /// <summary>
-    /// The generated hooks. Implementing them is the whole subscription mechanism — there is no event to add a
-    /// handler to, and a switch that is superseded before it lands calls neither.
-    /// </summary>
-    /// <remarks>
-    /// This demo themes the window's own background, so the Fluent variant has to follow it: Fluent's control
-    /// brushes are built for the surface they sit on, and its dark-variant buttons are translucent white, which
-    /// disappears on the white this switch ends on. Flipping the variant when the switch lands keeps the controls
-    /// legible at rest in both themes.
-    /// </remarks>
+    // 生成的钩子。实现它们就是全部订阅机制 —— 没有事件可挂处理器，被后一次切换取代的切换两个钩子都不调。
+    // 本演示切换的是窗口自身背景，所以 Fluent 变体也得跟着换：Fluent 的控件画刷按所在表面构建，
+    // 暗色变体按钮是半透明白，落在切换终点的白色上会看不见；落地时翻转变体，控件在两种主题下都清晰。
     partial void OnThemeChanging(Type? oldValue, Type? newValue)
         => Hooks.Text = $"OnThemeChanging: {oldValue?.Name} -> {newValue?.Name}";
 
@@ -219,10 +200,7 @@ public partial class MainWindow
         RequestedThemeVariant = newValue == typeof(Light) ? ThemeVariant.Light : ThemeVariant.Dark;
     }
 
-    /// <summary>
-    /// Overrides one value for one theme on this instance, and puts it back. An override beats the declared value
-    /// for that theme, and only the properties actually changed appear in the active cache.
-    /// </summary>
+    // 覆盖本实例某个主题下的一个值，并可还原：覆盖胜过声明值，只有真正改动的属性会进活动缓存。
     private void OnEditThemeValue(object? sender, RoutedEventArgs e)
         => SetThemeValue<Light>(nameof(Background), new object?[] { "#fff4d6" });
 

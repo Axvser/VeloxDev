@@ -43,21 +43,17 @@ internal static class BlazorConformance
 
     ];
 
-    /// <summary>
-    /// StringSampler 颜色路径的闭式解：两端先解析成 CSS 颜色，中间帧再逐通道插值并重新格式化成
-    /// <c>rgba(r, g, b, a)</c>。
-    /// </summary>
-    /// <remarks>
-    /// R/G/B 共用一个 [0,255] 有界进度：起始 B=0 让 t &lt; 0 时整组被 B 先拽回 0，而 t &gt; 1 时由 R 先顶到
-    /// 255 停住；alpha 自成一界、不做组内钳制。随后每个通道先四舍五入再饱和到 0..255，alpha 除以 255 后以
-    /// <c>0.###</c> 写成 0..1 —— 小数位数是这条闭式解的一部分，不能省。
-    /// </remarks>
-    /// <param name="startHex">起始端点原样写回的那串十六进制。</param>
-    /// <param name="endHex">结束端点原样写回的那串十六进制。</param>
-    /// <param name="start">起始端点的 R/G/B（0..255）。</param>
-    /// <param name="end">结束端点的 R/G/B（0..255）。</param>
-    /// <param name="startAlpha">起始端点的 alpha（0..255）。</param>
-    /// <param name="endAlpha">结束端点的 alpha（0..255）。</param>
+    // StringSampler 颜色路径的闭式解：两端先解析成 CSS 颜色，中间帧再逐通道插值并重新格式化成
+    // rgba(r, g, b, a)。
+    // R/G/B 共用一个 [0,255] 有界进度：起始 B=0 让 t < 0 时整组被 B 先拽回 0，而 t > 1 时由 R 先顶到
+    // 255 停住；alpha 自成一界、不做组内钳制。随后每个通道先四舍五入再饱和到 0..255，alpha 除以 255 后以
+    // 0.### 写成 0..1 —— 小数位数是这条闭式解的一部分，不能省。
+    // startHex: 起始端点原样写回的那串十六进制。
+    // endHex: 结束端点原样写回的那串十六进制。
+    // start: 起始端点的 R/G/B（0..255）。
+    // end: 结束端点的 R/G/B（0..255）。
+    // startAlpha: 起始端点的 alpha（0..255）。
+    // endAlpha: 结束端点的 alpha（0..255）。
     private static string CssAt(
         double t,
         string startHex,
@@ -80,7 +76,7 @@ internal static class BlazorConformance
             $"rgba({Rounded(start.R + (end.R - start.R) * progress)}, {Rounded(start.G + (end.G - start.G) * progress)}, {Rounded(start.B + (end.B - start.B) * progress)}, {alpha:0.###})");
     }
 
-    /// <summary>四舍五入再饱和到 0..255 —— 直接转 byte 会把 300 折成 44。</summary>
+    // 四舍五入再饱和到 0..255 —— 直接转 byte 会把 300 折成 44。
     private static double Rounded(double value)
         => value <= 0d ? 0d : value >= 255d ? 255d : Math.Round(value);
 }

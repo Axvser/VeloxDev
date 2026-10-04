@@ -5,13 +5,11 @@ using VeloxDev.MVVM;
 
 namespace Demo;
 
-/* No need to inherit any class, and no need to explicitly declare an interface */
-/* Tip: you can inherit other classes, but avoid MVVM-related ones, since this toolkit already
-   provides complete MVVM support and inheriting another MVVM base may conflict with it. */
+// 不必继承任何类，也不必显式声明接口。
+// 可以继承其他类，但避开 MVVM 相关的基类：本工具包已提供完整 MVVM 支持，再继承别的 MVVM 基类可能冲突。
 public partial class MainWindowViewModel : ObservableViewModelBase
 {
-    /* Every [VeloxCommand] signature, one command each, with its validator. Lives in the shared library so the
-       Avalonia demo shows the exact same set. See section "命令签名画廊" in the window. */
+    /// <summary>Every <c>[VeloxCommand]</c> signature, one command each, with its validator. Shared so both demos show the same set.</summary>
     public CommandGalleryViewModel Gallery { get; } = new();
 
     public MainWindowViewModel()
@@ -26,7 +24,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         SelectedItem = Items.FirstOrDefault();
     }
 
-    /* Quickly generate your properties */
+    // 快速生成属性
     [VeloxProperty] private int _index = 0;
     [VeloxProperty] private string _greeting = $"current index: 0";
     [VeloxProperty] private ObservableCollection<string> _items = [];
@@ -35,10 +33,10 @@ public partial class MainWindowViewModel : ObservableViewModelBase
     [VeloxProperty] private string _collectionStatus = "等待集合通知";
     [VeloxProperty] private string _collectionTrace = "OnCollectionChanged<T> 尚未触发";
 
-    /* Property callbacks */
+    // 属性回调
     partial void OnIndexChanged(int oldValue, int newValue)
     {
-        MinusCommand.Notify(); // notify that MinusCommand's executability needs to be refreshed
+        MinusCommand.Notify(); // 刷新 MinusCommand 的可执行性
     }
 
     partial void OnSelectedItemChanged(string? oldValue, string? newValue)
@@ -62,7 +60,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         CollectionTrace = $"{propertyName}: {e.Action} | old=[{FormatItems(oldItems)}] | new=[{FormatItems(newItems)}]";
     }
 
-    /* A default Command with an auto-derived name, no executability validation, queued execution */
+    // 默认命令：自动取名、不校验可执行性、排队执行
     [VeloxCommand(name: "Auto", canValidate: false, semaphore: 1)]
     private Task Plus(object? sender, CancellationToken ct)
     {
@@ -71,7 +69,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         return Task.CompletedTask;
     }
 
-    /* Enable executability validation */
+    // 开启可执行性校验
     [VeloxCommand(canValidate: true)]
     private Task Minus(object? sender, CancellationToken ct)
     {
@@ -79,7 +77,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         Greeting = $"current index: {Index}";
         return Task.CompletedTask;
     }
-    /* This partial method must be implemented at this point */
+    // 这个 partial 方法必须在此实现
     private partial bool CanExecuteMinusCommand(object? sender)
     {
         return _index > 0;
@@ -159,28 +157,26 @@ public partial class MainWindowViewModel : ObservableViewModelBase
         return Task.CompletedTask;
     }
 
-    /* Non-blocking interrupt */
+    // 非阻塞式中断
     private void FreeCommand()
     {
-        MinusCommand.Lock();   // enter the locked state: prevents new commands from triggering but
-                               // does not interrupt the currently running command
+        MinusCommand.Lock();   // 进入锁定：阻止新命令触发，但不中断正在运行的命令
 
-        MinusCommand.Interrupt();    // interrupt the current command
-        MinusCommand.Clear();        // interrupt the current command and all queued commands
+        MinusCommand.Interrupt();    // 中断当前命令
+        MinusCommand.Clear();        // 中断当前命令与所有排队命令
 
-        MinusCommand.Unlock(); // release the lock
+        MinusCommand.Unlock(); // 解除锁定
     }
 
-    /* Awaitable interrupt */
+    // 可等待式中断
     private async Task FreeCommandAsync()
     {
-        MinusCommand.Lock();   // enter the locked state: prevents new commands from triggering but
-                               // does not interrupt the currently running command
+        MinusCommand.Lock();   // 进入锁定：阻止新命令触发，但不中断正在运行的命令
 
-        await MinusCommand.InterruptAsync();    // interrupt the current command
-        await MinusCommand.ClearAsync(); // interrupt the current command and all queued commands
+        await MinusCommand.InterruptAsync();    // 中断当前命令
+        await MinusCommand.ClearAsync(); // 中断当前命令与所有排队命令
 
-        MinusCommand.Unlock(); // release the lock
+        MinusCommand.Unlock(); // 解除锁定
     }
 
     partial void OnItemAddedToItems(IEnumerable<string> items)

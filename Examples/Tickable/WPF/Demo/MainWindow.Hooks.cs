@@ -1,25 +1,18 @@
 ﻿// ---------------------------------------------------------------------------------------------------------------------
-// Tickable part ↓
+// Tickable 部分 ↓
 //
-// The demo. One class, one channel, and the five hooks the generator declares.
+// 演示：一个类、一个通道、生成器声明的五个钩子。
 //
-// The subject is a pair of balls integrating under the same gravity through the same Step(), fed by the two pumps
-// every channel runs:
+// 主体是一对球，用同一个 Step()、同样的重力积分，由每条通道都有的两条泵驱动：
+//   Update      —— 可变 dt，按挂钟量，不做补偿；每帧一次，在通道的 update 线程上，先于 LateUpdate。
+//   FixedUpdate —— 固定 dt 作为步长，卡顿欠下的步会被补还；在 fixed-update 线程上，每次唤醒按欠账调用多次。
 //
-//   Update      — variable dt, measured off the clock, never compensated. One call per frame, on the channel's
-//                 update thread, before LateUpdate.
-//   FixedUpdate — a constant dt entered as a step size, and every step a stall costs is owed and repaid. Called on
-//                 the channel's fixed-update thread, as many times per wake-up as the debt requires.
+// 从静止展开半隐式欧拉得 Height − (g/2)·t² = −(g/2)·Σdt²，对任意 dt 序列都精确。
+// 于是每只球的 Drift 就是它那条泵的 Σdt²，EffectiveDt = Σdt²/Σdt 还原它实际被驱动的间隔 ——
+// 这就是整个演示，也是两球在 60fps 下无法区分是结论、而不是演示坏了的原因。
 //
-// Expanding semi-implicit Euler from rest gives  Height − (g/2)·t²  =  −(g/2)·Σdt²  exactly, for any dt sequence.
-// So each ball's Drift measures its own pump's Σdt², and its EffectiveDt = Σdt²/Σdt recovers the interval it was
-// actually driven at. The two readouts are therefore a measurement of the loops made by the physics — which is the
-// whole demo, and why the two balls being indistinguishable at 60 fps is a result rather than a broken demo.
-//
-// Nothing here talks to the window. Each hook ends by publishing one immutable report and, if the call is worth a
-// line, enqueueing one small struct; the window polls. A Dispatcher.Invoke in a hook would be swallowed by the
-// engine's per-hook catch — the old version of this file did that every frame — and a failure would look like a
-// dead loop with nothing written anywhere to say why.
+// 这里不直接和窗口说话：每个钩子最后发布一份不可变报告，值得记一行就再入一个小结构体，由窗口轮询。
+// 钩子里的 Dispatcher.Invoke 会被引擎的 per-hook catch 吞掉，失败看起来就像一个不写任何东西的死循环。
 // ---------------------------------------------------------------------------------------------------------------------
 
 using System.Threading;
@@ -32,18 +25,18 @@ public partial class MainWindow
 {
     private readonly DemoState _state = new();
 
-    /// <summary>Frame ordinal of the last Update, so LateUpdate can prove it ran after it (update thread only).</summary>
+    // 上一次 Update 的帧序号，LateUpdate 用它证明自己跑在其后（仅 update 线程）。
     private int _updateSeenFrame;
     private bool _updateSeen;
 
-    /// <summary>Last step ordinal delivered to FixedUpdate, so a call's batch is a difference of ordinals (fixed thread only).</summary>
+    // 交付给 FixedUpdate 的最后步序号，一次调用的 batch 就是序号之差（仅 fixed 线程）。
     private int _lastFixedIndex;
 
-    /// <summary>Set by a hook that slept; the next call on that thread is the one carrying the consequence.</summary>
+    // 由睡过的钩子置上；该线程的下一次调用就是承担后果的那一次。
     private bool _updateSlept;
     private bool _fixedSlept;
 
-    /// <summary>One per pump, each written only by its own thread — hence two fields and not one.</summary>
+    // 每条泵一个，只由各自的线程写，所以是两个字段而不是一个。
     private int _latchedRestartUpdate;
     private int _latchedRestartFixed;
 
@@ -171,25 +164,12 @@ public partial class MainWindow
 
     #region Plumbing
 
-    /// <summary>
-    /// Snapshots one ball, its pump, and how much time that pump has not handed over yet.
-    /// </summary>
-    /// <remarks>
-    /// How many steps the fixed sampler owes, and how much of a step it has already banked, are private to the
-    /// channel — the public face of its clock is position, rate and epoch, and nothing else. So each pump measures
-    /// its own shortfall instead: the bus's position now, minus the time it has handed to its ball so far. What is
-    /// left is the part it has not driven.
-    /// <para>
-    /// It has to be taken <em>here</em>, inside the hook, rather than by subtracting the two published drive clocks
-    /// in the window: those two are only as fresh as their own last call, and at a low frame rate the update side's
-    /// is most of a second stale — a difference that swamps the quantity being looked at. Measured at each pump's
-    /// own instant, the stale part cancels exactly and what is left is the remainder plus the debt.
-    /// </para>
-    /// <para>
-    /// The absolute value also carries a constant — how long the channel's clock existed before <c>Start</c>
-    /// re-anchored it — so only the difference between the two pumps is shown.
-    /// </para>
-    /// </remarks>
+    // 快照一只球、它的泵，以及那条泵还没交付的时间。
+    // 固定采样器欠多少步、已经攒下多少，是通道的私有状态（它对外只有位置、速率与 epoch），所以每条泵自己量缺口：
+    // 总线此刻的位置减去它已交给球的时间，剩下的就是还没驱动的部分。
+    // 必须在钩子内部量，而不是在窗口里把两个已发布的驱动时钟相减：那两个只和各自最后一次调用一样新，
+    // 低帧率下 update 侧能旧掉近一秒，差值会淹没被观察的量。在各自瞬间测量，陈旧部分恰好抵消，剩下余数加欠账。
+    // 绝对值还带一个常数（通道时钟在 Start 重新锚定前存在了多久），所以只显示两条泵之差。
     private BallReport Report(BallBody ball, int index, int batch, double dtMilliseconds, HookNote note)
     {
         var bus = TickManager.Bus(DemoChannel.Name);
@@ -212,14 +192,9 @@ public partial class MainWindow
                               Environment.TickCount64);
     }
 
-    /// <summary>
-    /// Records a hook call, or counts it as omitted.
-    /// </summary>
-    /// <remarks>
-    /// With the log holding every frame the panel is a wall of text — at 30 fps and a 16 ms step a channel runs
-    /// about 120 hooks a second. So the default is the notable calls only, and every call left out is counted and
-    /// displayed: a filtered log that does not say it is filtered reads exactly like a loop that stopped.
-    /// </remarks>
+    // 记录一次钩子调用，或把它计为省略。
+    // 若日志保存每一帧，面板就是一面字墙——30fps、16ms 步长下每秒约 120 次钩子。
+    // 所以默认只记值得注意的调用，省略的每一次都计数并显示：一个不说自己被过滤了的日志，读起来和一个停下来的循环一模一样。
     private void RecordIf(HookKind kind, int index, double dtMilliseconds, int batch, bool handled, HookNote note)
     {
         var everyHook = Volatile.Read(ref _state.RecordEveryHook) != 0;
@@ -229,15 +204,9 @@ public partial class MainWindow
             Interlocked.Increment(ref _state.OmittedCount);
     }
 
-    /// <summary>
-    /// Puts the update ball back on the line if the window asked for it.
-    /// </summary>
-    /// <remarks>
-    /// Two methods rather than one, and a field each: a shared latch would let whichever pump got there first
-    /// swallow the request before the other saw it. This way each thread touches only its own ball and only its
-    /// own latch, and the two landings may be a frame apart — which is exactly why <c>DriveTime</c> survives a
-    /// restart while <c>FallTime</c> does not.
-    /// </remarks>
+    // 窗口要求时把 update 球放回线上。
+    // 两个方法而不是一个、各一个字段：共享闩锁会让先到的泵吞掉请求。
+    // 这样每个线程只碰自己的球和自己的闩锁，两个落地可能差一帧——正是 DriveTime 能跨重启保住、FallTime 不能的原因。
     private void LatchRestartFromUpdate()
     {
         var generation = Volatile.Read(ref _state.RestartGeneration);

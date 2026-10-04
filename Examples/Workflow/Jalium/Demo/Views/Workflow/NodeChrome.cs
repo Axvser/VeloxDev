@@ -4,36 +4,19 @@ using Jalium.UI.Media;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>
-/// 这套卡片外壳的构件工厂：卡面、标题行、分隔线、字级、输入框、状态胶囊、代码面、幽灵按钮。
-/// <para>
-/// 色值与字级全部取自 <see cref="CardPalette"/>，这里只负责形状与拼装 —— 五张卡因此共用同一条
-/// 发丝边、同一个 32 高的标题行、同一支幽灵按钮，改一处就五张一起改。
-/// </para>
-/// <para>
-/// 端口不在这里：本平台上端口由 <see cref="NodeEditorSurface"/> 画在卡片之上（理由见那边的注释），
-/// 卡片只负责自己的内容。
-/// </para>
-/// </summary>
+// 这套卡片外壳的构件工厂：卡面、标题行、分隔线、字级、输入框、状态胶囊、代码面、幽灵按钮。
+// 色值与字级全部取自 CardPalette，这里只负责形状与拼装 —— 五张卡共用同一条发丝边、同一个 32 高的标题行、
+// 同一支幽灵按钮，改一处就五张一起改。
+// 端口不在这里：本平台上端口由 NodeEditorSurface 画在卡片之上，卡片只负责自己的内容。
 internal static class NodeChrome
 {
-    /// <summary>标题行高度。卡片的每一行都从这里量起，端口行的起点也一样（见 <see cref="NodePorts"/>）。</summary>
+    // 标题行高度。卡片的每一行都从这里量起，端口行的起点也一样（见 NodePorts）。
     public const double HeaderHeight = CardPalette.HeaderHeight;
 
     // ── 卡面 ────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// 整张卡：单层暗面 + 发丝边 + <paramref name="headerHeight"/> 高的标题行，下面是调用方的内容区。
-    /// </summary>
-    /// <param name="width">设计宽（必须与节点类型的 [DefaultSize] 一致）。</param>
-    /// <param name="height">设计高（同上）。</param>
-    /// <param name="accent">标题行左侧那条 2px 类型色条的颜色。</param>
-    /// <param name="title">标题文字，左对齐。</param>
-    /// <param name="execOrder">标题行右侧的执行序号；空串即不显示。</param>
-    /// <param name="status">状态胶囊的文字；空串即没有胶囊（Controller 卡就没有）。</param>
-    /// <param name="statusFg">胶囊文字色（Python 用中性 #9AA6B5，Enum 用类型色）。</param>
-    /// <param name="statusBold">胶囊文字是否加粗（Enum 的路由结果加粗）。</param>
-    /// <param name="content">内容区（标题行下面那一格），调用方往里放主体。</param>
+    // 整张卡：单层暗面 + 发丝边 + headerHeight 高的标题行，下面是调用方的内容区。
+    // width / height 是设计宽高，必须与节点类型的 [DefaultSize] 一致。
     public static Border Card(double width, double height, Color accent, string title,
         string execOrder, string status, Color statusFg, bool statusBold,
         out Grid content, out TextBlock titleText, out TextBlock execText, out Border pill, out TextBlock pillText)
@@ -115,14 +98,9 @@ internal static class NodeChrome
         };
     }
 
-    /// <summary>
-    /// 兜底卡：只有卡面、发丝边与一条贯穿全高的类型色条，衬一个「?」。
-    /// <para>
-    /// 故意留空：<c>IWorkflowNodeViewModel</c> 只有几何与插槽、没有显示名 —— 标题是具体 ViewModel 的属性，
-    /// 所以这张卡没法诚实地说出它不认识的那个节点叫什么。这个 demo 里每种节点都有自己的视图，
-    /// 它只会画到外来类型上。
-    /// </para>
-    /// </summary>
+    // 兜底卡：只有卡面、发丝边与一条贯穿全高的类型色条，衬一个「?」。
+    // 故意留空：IWorkflowNodeViewModel 只有几何与插槽、没有显示名 —— 标题是具体 ViewModel 的属性，所以这张卡没法
+    // 诚实地报出它不认识的那个节点叫什么；这个 demo 里每种节点都有自己的视图，它只会画到外来类型上。
     public static Border BareCard(double width, double height, Color accent)
     {
         var columns = new Grid();
@@ -157,10 +135,8 @@ internal static class NodeChrome
 
     // ── 分隔线 ──────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// 1px 实心分隔线。写成一条有高度的实心条，而不是「只描底边」的 Border：后者要靠 Border 自己
-    /// 量出 1px 高才画得出来，而一个没有子元素的 Border 量出什么高度是本平台的实现细节，不该赌。
-    /// </summary>
+    // 1px 实心分隔线。写成一条有高度的实心条，而不是「只描底边」的 Border：后者要靠 Border 自己量出 1px 高才画得
+    // 出来，而一个没有子元素的 Border 量出什么高度是本平台的实现细节，不该赌。
     public static Border Divider(bool atBottom = true)
         => new()
         {
@@ -180,20 +156,16 @@ internal static class NodeChrome
             FontWeight = weight,
         };
 
-    /// <summary>小写标签：10号，字距比正文松，读起来像「字段名」而不是「一句话」。</summary>
+    // 小写标签：10号，字距比正文松，读起来像「字段名」而不是「一句话」。
     public static TextBlock Label(string text) => Text(text, CardPalette.LabelSize, CardPalette.LabelBrush, FontWeights.Normal);
 
-    /// <summary>正文。</summary>
     public static TextBlock Value(string text) => Text(text, CardPalette.ValueSize, CardPalette.ValueBrush, FontWeights.Normal);
 
     // ── 输入 ────────────────────────────────────────────────────────────────
 
-    /// <summary>输入框：凹一档的底 + 发丝边 + 圆角 6。</summary>
-    /// <remarks>
-    /// 没有占位提示：这套设计给 Controller 的种子框写了 PlaceholderText="payload"，但本 build 的
-    /// Jalium 里 <c>TextBox.PlaceholderText</c> 只有包内的 XML 文档、程序集里没有这个成员
-    /// （编译直接报 CS1061），而种子值本来就有一个默认值，提示也不会显示出来。
-    /// </remarks>
+    // 输入框：凹一档的底 + 发丝边 + 圆角 6。
+    // 没有占位提示：本 build 的 Jalium 里 TextBox.PlaceholderText 只有包内的 XML 文档、程序集里没有这个成员
+    // （编译直接报 CS1061），而种子值本来就有一个默认值。
     public static TextBox Field()
     {
         var box = new TextBox
@@ -211,7 +183,7 @@ internal static class NodeChrome
         return box;
     }
 
-    /// <summary>下拉框。与输入框同一套形状。</summary>
+    // 下拉框。与输入框同一套形状。
     public static ComboBox Picker()
         => new()
         {
@@ -227,10 +199,8 @@ internal static class NodeChrome
 
     // ── 幽灵按钮 ────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// 同形的「幽灵按钮」：透明底 + 发丝边 + 圆角 6，语义只体现在字色上，不靠高饱和色块。
-    /// 悬停只抬底与边（<c>#1E2731</c> / <c>#3A4553</c>），不换字色 —— 语义已经写在字色里了。
-    /// </summary>
+    // 同形的「幽灵按钮」：透明底 + 发丝边 + 圆角 6，语义只体现在字色上，不靠高饱和色块。
+    // 悬停只抬底与边（#1E2731 / #3A4553），不换字色 —— 语义已经写在字色里了。
     public static Button Ghost(string text, Color semantic)
     {
         var button = new Button
@@ -263,10 +233,8 @@ internal static class NodeChrome
         return button;
     }
 
-    /// <summary>
-    /// 把幽灵按钮摆到启用或禁用态。禁用只压暗边与字，形状不变 —— 平台默认模板会把按钮填成一块实灰，
-    /// 那在一排幽灵按钮里格外突兀（Avalonia 那边为同一件事写了一条 :disabled 样式）。
-    /// </summary>
+    // 把幽灵按钮摆到启用或禁用态。禁用只压暗边与字，形状不变 —— 平台默认模板会把按钮填成一块实灰，
+    // 那在一排幽灵按钮里格外突兀。
     public static void SetGhostEnabled(Button button, Color semantic, bool enabled)
     {
         button.IsEnabled = enabled;
@@ -282,10 +250,8 @@ internal static class NodeChrome
 
     // ── 代码面（Python 卡） ─────────────────────────────────────────────────
 
-    /// <summary>
-    /// 脚本区：比卡面更深的一块底 + 一圈发丝边 + 圆角 6，顶上一条自己的小标题带
-    /// （<c>script.py</c> 与 <c>Python 3</c>）。代码要读起来像代码，所以它不跟卡面共用底色。
-    /// </summary>
+    // 脚本区：比卡面更深的一块底 + 一圈发丝边 + 圆角 6，顶上一条自己的小标题带（script.py 与 Python 3）。
+    // 代码要读起来像代码，所以它不跟卡面共用底色。
     public static Border CodeBox(out TextBox editor)
     {
         editor = new TextBox

@@ -22,23 +22,21 @@ using JaliumVector3D = Jalium.UI.Media.Media3D.Vector3D;
 
 namespace VeloxDev.SamplerTest;
 
-/// <summary>Jalium 适配器注册的采样器，以及每个必须满足的闭式解。</summary>
-/// <remarks>
-/// 采样器类型按"程序集限定名"取，而不是直接写类名：七个适配器都把采样器放在同一个
-/// <c>VeloxDev.Adapters.NativeSamplers</c> 命名空间下，PointSampler / ColorSampler / BrushSampler …
-/// 因此跨程序集重名，直接写会在编译期撞成 CS0433。测试只通过 <see cref="ISampler"/> 与
-/// <see cref="SamplerEntry.SamplerType"/> 使用采样器，所以把归属钉死在 VeloxDev.Jalium 即可。
-/// </remarks>
+// Jalium 适配器注册的采样器，以及每个必须满足的闭式解。
+// 采样器类型按"程序集限定名"取，而不是直接写类名：七个适配器都把采样器放在同一个
+// VeloxDev.Adapters.NativeSamplers 命名空间下，PointSampler / ColorSampler / BrushSampler …
+// 因此跨程序集重名，直接写会在编译期撞成 CS0433。测试只通过 ISampler 与
+// SamplerType 使用采样器，所以把归属钉死在 VeloxDev.Jalium 即可。
 internal static class JaliumEntries
 {
     private const string Adapter = "Jalium";
     private const string JaliumAssembly = "VeloxDev.Jalium";
 
-    /// <summary>取本适配器里那个采样器类型：命名空间 + 程序集限定名，绕开跨适配器的重名。</summary>
+    // 取本适配器里那个采样器类型：命名空间 + 程序集限定名，绕开跨适配器的重名。
     private static Type SamplerType(string name)
         => Type.GetType($"VeloxDev.Adapters.NativeSamplers.{name}, {JaliumAssembly}", throwOnError: true)!;
 
-    /// <summary>一个目标类，每个采样器一条属性，让每个条目都有真实的写入对象。</summary>
+    // 一个目标类，每个采样器一条属性，让每个条目都有真实的写入对象。
     private sealed class Target
     {
         public JaliumBrush Fill { get; set; } = null!;
@@ -52,9 +50,7 @@ internal static class JaliumEntries
         public JaliumTransform3D Pose { get; set; } = null!;
     }
 
-    /// <summary>
-    /// 一条条目：把 <paramref name="start"/> 写进一个新目标，跑一帧 t，再读回真正落地的值。
-    /// </summary>
+    // 一条条目：把 start 写进一个新目标，跑一帧 t，再读回真正落地的值。
     private static SamplerEntry Entry(
         string samplerName,
         SamplerRule rule,
@@ -87,7 +83,7 @@ internal static class JaliumEntries
         };
     }
 
-    /// <summary>默认比较：结构体结果（颜色、点、尺寸、矩形、厚度、圆角）逐位相等，只有引用类型要另配比较器。</summary>
+    // 默认比较：结构体结果（颜色、点、尺寸、矩形、厚度、圆角）逐位相等，只有引用类型要另配比较器。
     private static readonly Func<object?, object?, bool> ExactEquivalent =
         static (expected, actual) => object.Equals(expected, actual);
 
@@ -95,10 +91,8 @@ internal static class JaliumEntries
 
     private static double Clamp01(double value) => Math.Max(0d, Math.Min(1d, value));
 
-    /// <summary>
-    /// 一组通道共用一个进度：谁先出界就停在谁那里 —— 与库里的规则一致，但这里是独立重述的。
-    /// </summary>
-    /// <param name="maximum">该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。</param>
+    // 一组通道共用一个进度：谁先出界就停在谁那里 —— 与库里的规则一致，但这里是独立重述的。
+    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 255。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
@@ -119,7 +113,7 @@ internal static class JaliumEntries
         return progress;
     }
 
-    /// <summary>饱和而不是回绕 —— 裸的 byte 转换会把 300 变成 44。</summary>
+    // 饱和而不是回绕 —— 裸的 byte 转换会把 300 变成 44。
     private static byte Channel(double value)
     {
         if (value <= 0d) return 0;
@@ -127,7 +121,7 @@ internal static class JaliumEntries
         return (byte)value;
     }
 
-    /// <summary>R/G/B 共用一个 0..255 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/255 饱和。</summary>
+    // R/G/B 共用一个 0..255 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/255 饱和。
     private static JaliumColor ColorAt(double t, JaliumColor from, JaliumColor to)
     {
         var rgb = SharedProgress(t, 255d, (from.R, to.R), (from.G, to.G), (from.B, to.B));
@@ -139,19 +133,19 @@ internal static class JaliumEntries
             Channel(from.B + (to.B - from.B) * rgb));
     }
 
-    /// <summary>SolidColorBrush 是引用类型，逐位相等不成立，按颜色与不透明度比。</summary>
+    // SolidColorBrush 是引用类型，逐位相等不成立，按颜色与不透明度比。
     private static bool SolidBrushEquivalent(object? expected, object? actual)
         => expected is JaliumSolidColorBrush e && actual is JaliumSolidColorBrush a
            && e.Color.Equals(a.Color)
            && e.Opacity == a.Opacity;
 
-    /// <summary>TranslateTransform 是引用类型，逐位相等不成立，按 X/Y 比。</summary>
+    // TranslateTransform 是引用类型，逐位相等不成立，按 X/Y 比。
     private static bool TranslateEquivalent(object? expected, object? actual)
         => expected is JaliumTranslateTransform e && actual is JaliumTranslateTransform a
            && e.X == a.X
            && e.Y == a.Y;
 
-    /// <summary>RotateTransform3D 是引用类型，逐位相等不成立，按轴、角度与旋转中心比。</summary>
+    // RotateTransform3D 是引用类型，逐位相等不成立，按轴、角度与旋转中心比。
     private static bool Rotate3DEquivalent(object? expected, object? actual)
         => expected is JaliumRotateTransform3D e && actual is JaliumRotateTransform3D a
            && e.Rotation is JaliumAxisAngleRotation3D er

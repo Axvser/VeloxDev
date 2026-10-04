@@ -6,69 +6,61 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>
-/// 全量 demo 里每种节点视图的基类。这些视图是<b>纯展示</b>的：拖拽 / 连线 / 平移全归
-/// <see cref="NodeEditorSurface"/>，由它把每个视图摆到 node.Anchor + 布局偏移上，所以节点视图
-/// 既不该自己设 Canvas.Left/Top，也不该自己接拖拽与连线。基类按设计尺寸搭出卡片，再套一层
-/// <see cref="Viewbox"/> 把整张卡（外壳、字、以及表面画在其上的端口）缩到被折叠过的节点盒上，
-/// 与 WPF 那家节点视图的 Viewbox 同一种做法。
-/// <para>
-/// 端口不在这棵树里：本平台渲染器按布局盒裁剪子元素，而端口有一半骑在卡边外，所以它由表面画在卡之上
-/// （见 <see cref="NodeEditorSurface.DrawPorts"/>）。于是这个基类只剩下卡片本身。
-/// </para>
-/// </summary>
+// 全量 demo 里每种节点视图的基类。这些视图是纯展示的：拖拽 / 连线 / 平移全归 NodeEditorSurface，由它把每个视图摆到
+// node.Anchor + 布局偏移上，所以节点视图既不该自己设 Canvas.Left/Top，也不该自己接拖拽与连线。基类按设计尺寸搭出卡片，
+// 再套一层 Viewbox 把整张卡（外壳、字，以及表面画在其上的端口）缩到被折叠过的节点盒上。
+// 端口不在这棵树里：本平台渲染器按布局盒裁剪子元素，而端口有一半骑在卡边外，所以它由表面画在卡之上。于是这个基类
+// 只剩下卡片本身。
 internal abstract class NodeViewBase : Canvas
 {
     private Viewbox? _viewbox;
     private Border? _pill;
 
-    /// <summary>The node view-model bound to this card.</summary>
+    // 绑定到这张卡的节点视图模型。
     protected IWorkflowNodeViewModel Node { get; private set; } = null!;
 
-    /// <summary>The card's header title, for cards whose title changes.</summary>
+    // 卡片标题行上的标题，给标题会变的卡用。
     protected TextBlock? TitleText { get; private set; }
 
-    /// <summary>执行序号那块字（标题行右侧），空串即不显示。</summary>
+    // 执行序号那块字（标题行右侧），空串即不显示。
     protected TextBlock? ExecOrderText { get; private set; }
 
-    /// <summary>The text inside the header's status capsule (updated by subclasses on property changes).</summary>
+    // 标题行状态胶囊里的字（由子类在属性变化时更新）。
     protected TextBlock? StatusText { get; private set; }
 
-    /// <summary>卡片标题行左侧那条 2px 色条的颜色（每种节点类型一个）。</summary>
+    // 卡片标题行左侧那条 2px 色条的颜色（每种节点类型一个）。
     protected abstract Color Accent { get; }
 
-    /// <summary>标题行右侧状态胶囊的初始文字；空串即这张卡没有胶囊（Controller 卡就没有）。</summary>
+    // 标题行右侧状态胶囊的初始文字；空串即这张卡没有胶囊（Controller 卡就没有）。
     protected virtual string InitialStatus(IWorkflowNodeViewModel node) => string.Empty;
 
-    /// <summary>标题行右侧执行序号的初始文字；空串即不显示。</summary>
+    // 标题行右侧执行序号的初始文字；空串即不显示。
     protected virtual string InitialExecOrder(IWorkflowNodeViewModel node) => string.Empty;
 
-    /// <summary>胶囊文字是否加粗（Enum 卡的路由结果加粗，Python 卡的状态不加粗）。</summary>
+    // 胶囊文字是否加粗（Enum 卡的路由结果加粗，Python 卡的状态不加粗）。
     protected virtual bool StatusBold => false;
 
-    /// <summary>胶囊文字色。</summary>
     protected virtual Color StatusTextColor => CardPalette.GhostCloseText;
 
-    /// <summary>兜底卡：只有卡面与类型色条，没有标题行，也不填主体。</summary>
+    // 兜底卡：只有卡面与类型色条，没有标题行，也不填主体。
     protected virtual bool IsBareCard => false;
 
-    /// <summary>卡片标题。接口只有几何与插槽、没有显示名，所以读类型自己发布的 Title；
-    /// 不发布的类型（控制器）重写此方法给出自己的名字。</summary>
+    // 卡片标题。接口只有几何与插槽、没有显示名，所以读类型自己发布的 Title；不发布的类型（控制器）重写此方法给出自己的名字。
     protected virtual string TitleFor(IWorkflowNodeViewModel node) => NodePorts.TitleOf(node);
 
-    /// <summary>把主体内容放进 <paramref name="content"/>（卡片的第 2 行）。</summary>
+    // 把主体内容放进 content（卡片的第 2 行）。
     protected abstract void Build(IWorkflowNodeViewModel node, Grid content);
 
-    /// <summary>Called for node property changes so subclasses can update header/status text.</summary>
+    // 节点属性变化时调用，子类据此更新标题 / 状态文字。
     protected virtual void OnNodePropertyChanged(string propertyName)
     {
     }
 
-    /// <summary>The node's DESIGN (scale-1) size, captured at Bind.</summary>
+    // 节点在设计尺寸（缩放 1）下的尺寸，在 Bind 时捕获。
     public double DesignWidth { get; private set; }
     public double DesignHeight { get; private set; }
 
-    /// <summary>Binds the view to a node and builds its card.</summary>
+    // 把视图绑到一个节点并搭出它的卡片。
     public void Bind(IWorkflowNodeViewModel node)
     {
         Node = node;
@@ -113,7 +105,7 @@ internal abstract class NodeViewBase : Canvas
         }
     }
 
-    /// <summary>设置状态胶囊：文字为空就把整颗胶囊收起来（Auto 列会跟着塌掉）。</summary>
+    // 设置状态胶囊：文字为空就把整颗胶囊收起来（Auto 列会跟着塌掉）。
     protected void SetStatus(string text)
     {
         string value = text ?? string.Empty;
@@ -129,7 +121,7 @@ internal abstract class NodeViewBase : Canvas
         }
     }
 
-    /// <summary>设置标题行右侧的执行序号；空串即不显示。</summary>
+    // 设置标题行右侧的执行序号；空串即不显示。
     protected void SetExecOrder(string text)
     {
         string value = text ?? string.Empty;
@@ -141,8 +133,7 @@ internal abstract class NodeViewBase : Canvas
         }
     }
 
-    /// <summary>The type's [DefaultSize] attribute is the single source of the node's design
-    /// canvas; falls back to the live node.Size only when a type declares no DefaultSize.</summary>
+    // 类型的 [DefaultSize] 特性是节点设计画布的唯一来源；只有类型没声明 DefaultSize 时才退回活的 node.Size。
     private static (double Width, double Height) ResolveDesignSize(IWorkflowNodeViewModel node)
     {
         if (Attribute.GetCustomAttribute(node.GetType(), typeof(DefaultSizeAttribute)) is DefaultSizeAttribute d
@@ -162,9 +153,8 @@ internal abstract class NodeViewBase : Canvas
         }
     }
 
-    /// <summary>Scales the whole card (chrome, text) to the current (collapsed) size: resize the
-    /// Viewbox so the design-size card shrinks by 1/scale when the workspace zooms — mirroring the WPF
-    /// node Viewbox. Call after the view is sized.</summary>
+    // 把整张卡（外壳、字）缩到当前（折叠）尺寸：工作区缩放时把 Viewbox 调小 1/scale，与 WPF 那家的节点 Viewbox 一致。
+    // 视图定尺寸后调用。
     public void ApplyScale()
     {
         if (_viewbox is not null)

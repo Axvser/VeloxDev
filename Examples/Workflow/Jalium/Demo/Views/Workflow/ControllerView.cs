@@ -6,11 +6,9 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>
-/// 工作流发起节点：可编辑的种子负载 + 一排 Compile / Run / Stop / Close。
-/// 骨架照这套设计（Avalonia ControllerView.axaml）：标题行 32 高，主体可编辑，动作区 66 高、
-/// 四颗同形的幽灵按钮按 2×2 摆，语义只在文字颜色上（Run 要编译过才亮）。拖拽与连线归表面，端口归表面。
-/// </summary>
+// 工作流发起节点：可编辑的种子负载 + 一排 Compile / Run / Stop / Close。
+// 骨架照这套设计（Avalonia ControllerView.axaml）：标题行 32 高，主体可编辑，动作区 66 高、
+// 四颗同形的幽灵按钮按 2×2 摆，语义只在文字颜色上（Run 要编译过才亮）。拖拽与连线归表面，端口归表面。
 internal sealed class ControllerView : NodeViewBase
 {
     private TextBox? _seed;

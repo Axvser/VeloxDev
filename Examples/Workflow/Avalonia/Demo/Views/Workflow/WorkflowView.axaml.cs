@@ -30,43 +30,29 @@ public partial class WorkflowView : UserControl
     private TreeViewModel _workflowViewModel = new();
     private WindowNotificationManager _manager;
 
-    /// <summary>
-    /// The panel's tree, built over whichever helper's subsystem is currently showing. Kept as a field
-    /// because it has to be detached from the scope it was built on — swapping the workflow replaces the
-    /// helper, and a tree left subscribed to the old one would keep rebuilding a panel nobody sees.
-    /// </summary>
+    // 面板的树，建立在当前显示的 helper 子系统上。留成字段是因为它要被从建它时的作用域上摘下来：
+    // 换工作流会换 helper，留在旧树上的订阅会一直重建一个没人看的面板。
     private SubAgentTreeViewModel? _subAgentTree;
 
-    /// <summary>
-    /// The clock behind the panel's elapsed times. The library owns no timer on purpose — a panel that ticks
-    /// and a process that hosts one have different lifetimes — so the demo supplies the one it already has a
-    /// dispatcher for. One second is the coarsest rate at which a "分/秒" label still looks alive.
-    /// </summary>
+    // 面板计时背后的时钟。库有意不持有定时器——会 tick 的面板与承载它的进程生命周期不同——所以由演示提供
+    // 它已经有的那一个；一秒是「分/秒」标签还显得活着的最粗速率。
     private DispatcherTimer? _subAgentTick;
 
-    /// <summary>
-    /// Collapses a burst of "the surface is stale" requests into one refresh.
-    /// <para>
-    /// An Agent turn makes dozens of tool calls and every one of them asks for a refresh, and a refresh here is
-    /// total — so without this the editor spent the whole turn running them back to back, which the user
-    /// measured as "very very slowly" (2026-09-27). One per view rather than one per request: the merging is
-    /// the point. It stays valid across a session swap, since the refresh resolves the tree at call time.
-    /// </para>
-    /// </summary>
+    // 把一串「表面过期」请求合并成一次刷新。一轮 Agent 会发几十次工具调用、每次都要刷新，而这里的刷新是全量的——
+    // 没有它，编辑器整轮都在背靠背地刷新。按视图一次而不是按请求一次，合并正是要点；刷新在调用时才解析树，
+    // 所以跨会话切换仍然有效。
     private readonly CoalescedRefresh _surfaceRefresh;
 
     public WorkflowView()
     {
         InitializeComponent();
 
-        // The hop is Background on purpose — the priority this view already used for the agent's own updates —
-        // so a burst of them can never get ahead of input.
+        // 跳到 Background 是有意的——本视图给 Agent 自身更新用的就是这个优先级——这样一串刷新永远抢不到输入前面。
         _surfaceRefresh = new CoalescedRefresh(
             () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this),
             action => Dispatcher.UIThread.Post(action, DispatcherPriority.Background));
 
-        // Keep the canvas-info HUD current on every scroll / viewport change: it reads helper.Viewport,
-        // which the surface behaviour refreshes, and subscribes to the model for the rest.
+        // 每次滚动/视口变化都让画布信息 HUD 保持最新：它读 helper.Viewport（由表面行为刷新），其余订阅模型。
         PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
 
         DataContext = _workflowViewModel;

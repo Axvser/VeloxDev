@@ -16,13 +16,11 @@ using MauiThickness = Microsoft.Maui.Thickness;
 
 namespace VeloxDev.SamplerTest;
 
-/// <summary>The samplers the MAUI adapter ships, with the closed form each one follows.</summary>
-/// <remarks>
-/// 覆盖的是"结果本身是值"的那些采样器。BrushSampler / ShadowSampler / TransformSampler 的产物是
-/// <c>BindableObject</c>，其类型初始化要求进程里有 MAUI 的平台件 —— 纯数据套件里
-/// <c>new SolidColorBrush()</c> 抛的是 <c>Element</c> 静态构造失败。这三条登记在
-/// <see cref="UnreachableSamplers"/> 里，由真跑起来的 demo 覆盖。
-/// </remarks>
+// The samplers the MAUI adapter ships, with the closed form each one follows.
+// 覆盖的是"结果本身是值"的那些采样器。BrushSampler / ShadowSampler / TransformSampler 的产物是
+// BindableObject，其类型初始化要求进程里有 MAUI 的平台件 —— 纯数据套件里
+// new SolidColorBrush() 抛的是 Element 静态构造失败。这三条登记在
+// UnreachableSamplers 里，由真跑起来的 demo 覆盖。
 internal static class MauiEntries
 {
     private const string Adapter = "MAUI";
@@ -41,13 +39,11 @@ internal static class MauiEntries
         public MauiThickness Margin { get; set; }
     }
 
-    /// <summary>MAUI 适配器所在的程序集；同名的采样器只能从这里按类型名取。</summary>
+    // MAUI 适配器所在的程序集；同名的采样器只能从这里按类型名取。
     private static readonly Assembly SamplerAssembly = typeof(ShadowSampler).Assembly;
 
-    /// <summary>
-    /// 七个适配器把大量同名采样器放在同一个命名空间里，编译期直接写类型名会 CS0433。这里按程序集限定反射取
-    /// MAUI 的那一个；<c>SamplerType</c> 覆盖为真实类型（覆盖校验与实例化都靠它）。
-    /// </summary>
+    // 七个适配器把大量同名采样器放在同一个命名空间里，编译期直接写类型名会 CS0433。这里按程序集限定反射取
+    // MAUI 的那一个；SamplerType 覆盖为真实类型（覆盖校验与实例化都靠它）。
     private static SamplerEntry Entry<TValue>(
         string samplerName,
         SamplerRule rule,
@@ -76,10 +72,8 @@ internal static class MauiEntries
 
     private static double Lerp(double start, double end, double t) => start + (end - start) * t;
 
-    /// <summary>
-    /// 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的 <c>BoundedProgress</c>，不调用它。
-    /// </summary>
-    /// <param name="maximum">该组的上界：尺寸是 +∞（只有下界 0），颜色是 1（MAUI 的通道是 float）。</param>
+    // 一组通道共用一个进度：谁先出界就停在谁那里。独立重述库里的 BoundedProgress，不调用它。
+    // maximum: 该组的上界：尺寸是 +∞（只有下界 0），颜色是 1（MAUI 的通道是 float）。
     private static double SharedProgress(double t, double maximum, params (double Start, double End)[] channels)
     {
         var progress = t;
@@ -100,10 +94,10 @@ internal static class MauiEntries
         return progress;
     }
 
-    /// <summary>通道饱和到 [0,1] —— MAUI 的通道是 float，越界不是回绕而是根本不该出现。</summary>
+    // 通道饱和到 [0,1] —— MAUI 的通道是 float，越界不是回绕而是根本不该出现。
     private static double Channel(double value) => value <= 0d ? 0d : value >= 1d ? 1d : value;
 
-    /// <summary>颜色：R/G/B 共用一个 [0,1] 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/1 饱和。</summary>
+    // 颜色：R/G/B 共用一个 [0,1] 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/1 饱和。
     private static MauiColor ColorAt(double t, MauiColor from, MauiColor to)
     {
         var progress = SharedProgress(t, 1d, (from.Red, to.Red), (from.Green, to.Green), (from.Blue, to.Blue));
@@ -115,14 +109,10 @@ internal static class MauiEntries
             Channel(from.Alpha + (to.Alpha - from.Alpha) * t));
     }
 
-    /// <summary>
-    /// <c>Microsoft.Maui.Graphics.Color</c> 是引用类型，逐位相等会退化成引用比较，所以按四个通道比。
-    /// </summary>
-    /// <remarks>
-    /// 通道按容差比，理由与四元数那条相同：MAUI 的通道是 float，而这段闭式解和适配器是分开编译的，
-    /// <c>a + (b - a) * t</c> 在两边收缩成什么由各自的 JIT 决定，最后一个 bit 会差 —— 实测差 1 个 ULP。
-    /// 1e-5 比任何一条真实规则差异（共用进度、钳制、通道错位）都小几个数量级，不会把真错误放过去。
-    /// </remarks>
+    // Microsoft.Maui.Graphics.Color 是引用类型，逐位相等会退化成引用比较，所以按四个通道比。
+    // 通道按容差比，理由与四元数那条相同：MAUI 的通道是 float，而这段闭式解和适配器是分开编译的，
+    // a + (b - a) * t 在两边收缩成什么由各自的 JIT 决定，最后一个 bit 会差 —— 实测差 1 个 ULP。
+    // 1e-5 比任何一条真实规则差异（共用进度、钳制、通道错位）都小几个数量级，不会把真错误放过去。
     private static bool ColorEquivalent(object? expected, object? actual)
         => expected is MauiColor e && actual is MauiColor a
            && Close(e.Red, a.Red)
@@ -135,7 +125,7 @@ internal static class MauiEntries
     private static readonly MauiColor TintStart = MauiColor.FromRgba(30d / 255d, 200d / 255d, 250d / 255d, 120d / 255d);
     private static readonly MauiColor TintEnd = MauiColor.FromRgba(210d / 255d, 40d / 255d, 10d / 255d, 200d / 255d);
 
-    /// <summary>尺寸类的端点：宽 100→0、高 50→150，一涨一缩，正好逼出"共用进度、在 0 处停"这条规则。</summary>
+    // 尺寸类的端点：宽 100→0、高 50→150，一涨一缩，正好逼出"共用进度、在 0 处停"这条规则。
     private const double WidthStart = 100d;
     private const double WidthEnd = 0d;
     private const double HeightStart = 50d;

@@ -7,11 +7,9 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>
-/// 枚举路由节点：标题行（标题 + 执行序号 + 路由结果胶囊）、主体里两个下拉，以及每枚枚举成员一颗输出口。
-/// 骨架照这套设计（Avalonia EnumSelectorNodeView.axaml）：32 / *，输入口居中在主体上，输出口按行排在
-/// 表头下面。每条分支的名字由表面画，与它那颗口同一行 —— 位置由 <see cref="NodePorts"/> 一处给出。
-/// </summary>
+// 枚举路由节点：标题行（标题 + 执行序号 + 路由结果胶囊）、主体里两个下拉，以及每枚枚举成员一颗输出口。
+// 骨架照这套设计（Avalonia EnumSelectorNodeView.axaml）：32 / *，输入口居中在主体上，输出口按行排在
+// 表头下面。每条分支的名字由表面画，与它那颗口同一行 —— 位置由 NodePorts 一处给出。
 internal sealed class EnumSelectorNodeView : NodeViewBase
 {
     private ComboBox? _method;

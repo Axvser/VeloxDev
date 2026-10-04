@@ -158,6 +158,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     /// <summary>Compile-time identity injected by the compiler (the controller is the origin; Order is usually 0).</summary>
     public ICompileContext? CompileContext { get; private set; }
 
+    /// <inheritdoc/>
     public void AttachCompileTimeContext(ICompileContext context)
     {
         CompileContext = context;
@@ -169,6 +170,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
     /// <summary>Runtime injection: hands the current execution session to this node before the engine drives it.</summary>
+    /// <inheritdoc/>
     public void AttachRuntimeContext(IRuntimeContext context)
     {
         RuntimeContext = context;

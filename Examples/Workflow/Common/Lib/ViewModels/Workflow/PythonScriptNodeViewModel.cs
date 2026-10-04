@@ -68,6 +68,7 @@ public partial class PythonScriptNodeViewModel : ICompileTimeAware, IRuntimeAwar
     /// <summary>Whether the node is in the compile-time absolute stop state (unselected static branch / terminated).</summary>
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
+    /// <inheritdoc/>
     public void AttachCompileTimeContext(ICompileContext context)
     {
         CompileContext = context;
@@ -98,6 +99,7 @@ public partial class PythonScriptNodeViewModel : ICompileTimeAware, IRuntimeAwar
     /// <summary>Shared context injected at runtime (called before the engine drives this node).</summary>
     public IRuntimeContext? RuntimeContext { get; private set; }
 
+    /// <inheritdoc/>
     public void AttachRuntimeContext(IRuntimeContext context)
     {
         RuntimeContext = context;
@@ -119,6 +121,7 @@ public partial class PythonScriptNodeViewModel : ICompileTimeAware, IRuntimeAwar
 
     /// <inheritdoc />
     /// <returns>The compile order of the named node, or <c>null</c> — which is what ends the run.</returns>
+    /// <inheritdoc/>
     public Task<int?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
         => Task.FromResult(OrderOf(RedirectTo));
 

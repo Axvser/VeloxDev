@@ -13,7 +13,7 @@ namespace Demo.Views;
 /// viewport (canvas + world), zoom/origin and the visible node/link elements materialized by the Core
 /// virtualization. Repaints from the Core model (Layout / helper VisibleItems / Nodes / Links) plus the
 /// ScrollOffset/ContentOffset/Viewport DPs that the host binds (same feed as the minimap), and from the
-/// surface's own ViewChanged. The 复制 button copies the current multi-line info to the clipboard.
+/// surface's own ViewChanged. The <c>复制</c> button copies the current multi-line info to the clipboard.
 /// </summary>
 public sealed partial class InfoOverlay : UserControl
 {

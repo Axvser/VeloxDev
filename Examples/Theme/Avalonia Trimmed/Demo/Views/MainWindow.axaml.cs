@@ -7,13 +7,10 @@ using VeloxDev.TransitionSystem;
 
 namespace Demo.Views;
 
-/* We recommend defining theme-related operations in a separate partial class, so interaction logic
-   is not cluttered by unrelated code */
-/* Note: when using Rider, this may cause generated content to be unrecognized. It does not affect
-   compilation, but Rider may need to be restarted to recover recognition. */
+// 建议把主题相关操作放到单独的 partial 类里，交互逻辑才不会被无关代码搅乱。
+// 注意：在 Rider 下这样做可能认不出生成的内容；不影响编译，但可能要重启 Rider 才能恢复识别。
 
-//------------------------------------------------------------------------------------------------------------------
-// User Part ↓
+// 用户部分 ↓
 
 [ThemeConfig<ObjectConverter, Dark, Light>(nameof(Background), ["#1e1e1e"], ["#ffffff"])]
 [ThemeConfig<ObjectConverter, Dark, Light>(nameof(Foreground), ["#ffffff"], ["#1e1e1e"])]
@@ -38,32 +35,22 @@ public partial class MainWindow
 {
     private void LoadTheme()
     {
-        InitializeTheme(); // this call is required and must come after InitializeComponent()
+        InitializeTheme(); // 此调用必需，且必须在 InitializeComponent() 之后
 
-        // [ Applies globally ]
-        // If you do not use themed transitions, the interpolator does not need to be configured;
-        // otherwise this call is mandatory.
+        // 全局生效：不用主题过渡时无需配置插值器，否则此调用是必须的。
         ThemeManager.SetPlatformInterpolator(new Interpolator());
 
-        // [ Applies globally ]
-        // When the theme changes, should the animation's starting state come from the cache, or
-        // should reflection read the current state as the starting point?
+        // 全局生效：主题变化时，动画的起始态取自缓存，还是用反射读当前状态当起点？
         ThemeManager.StartModel = StartModel.Cache;
     }
 
-    /// <summary>
-    /// Theme switching has a callback
-    /// </summary>
-    /// <param name="oldValue">The value before switching</param>
-    /// <param name="newValue">The value after switching</param>
+    // 主题切换有回调。
     partial void OnThemeChanged(Type? oldValue, Type? newValue)
     {
         _message.Show(new Notification("Message", $"Theme changed from {oldValue?.Name} to {newValue?.Name}"));
     }
 
-    /// <summary>
-    /// This kind of theme switch loads a gradient animation
-    /// </summary>
+    // 这类主题切换带渐变动画。
     private static void ReverseThemeWithAnimation()
     {
         var condition = ThemeManager.Current == typeof(Dark);
@@ -77,9 +64,7 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>
-    /// This kind of theme switch has no gradient animation
-    /// </summary>
+    // 这类主题切换没有渐变动画。
     private static void ReverseThemeWithOutAnimation()
     {
         var condition = ThemeManager.Current == typeof(Dark);
@@ -93,34 +78,22 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>
-    /// Provides a set of extensions for getting and editing theme resource packages. These methods
-    /// are auto-generated; here, for example, they all belong to MainWindow.
-    /// </summary>
+    // 读取与编辑主题资源包的一组扩展。这些方法都是自动生成的；本例里它们都属于 MainWindow。
     private void ThemeValueEx()
     {
-        // Dynamically edit theme resource values
+        // 动态编辑主题资源值
         SetThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });
-        // Can be restored to the initial state
+        // 可还原到初始状态
         RestoreThemeValue<Light>(nameof(Foreground));
 
-        // Get the static resources
+        // 取静态资源
         var staticCache = GetStaticThemeCache();
-        // Get the dynamic resources
+        // 取动态资源
         var dynamicCache = GetActiveThemeCache();
 
-        /* The "resource" here is a complex auto-generated structure.
-           Only modified properties are stored in the dynamic resources; otherwise nothing is stored.
-           When the theme switches, dynamic content overrides static content.
-           Dictionary<string,Dictionary<PropertyInfo,Dictionary<Type,object?>>>
-
-           From left to right
-           string       -> name of property
-           PropertyInfo -> target to use theme change
-           Type         -> theme
-           object?      -> value of property at the theme
-
-           It provides full access to the theme resources.
-         */
+        // 这里的「资源」是自动生成的复杂结构，类型是
+        // Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>>：从左到右依次是属性名、
+        // 参与主题切换的目标、主题、该主题下属性的值。动态资源只保存被改动过的属性，否则什么都不存；
+        // 主题切换时动态内容覆盖静态内容。它提供对主题资源的完整访问。
     }
 }

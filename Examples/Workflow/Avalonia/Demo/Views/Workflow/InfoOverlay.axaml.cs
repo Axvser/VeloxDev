@@ -13,7 +13,7 @@ namespace Demo;
 /// viewport (canvas + world), zoom/origin and the visible node/link elements materialized by the Core
 /// virtualization. It subscribes to the Core model — <see cref="CanvasLayout"/> plus the helper's
 /// VisibleItems — and the offset/viewport numbers it shows come from the host, which refreshes it on
-/// TreeView scroll changes. The 复制 button copies the current multi-line info to the clipboard.
+/// TreeView scroll changes. The <c>复制</c> button copies the current multi-line info to the clipboard.
 /// </summary>
 public partial class InfoOverlay : UserControl
 {

@@ -26,28 +26,20 @@ using AvTranslateTransform = Avalonia.Media.TranslateTransform;
 
 namespace Demo;
 
-/// <summary>
-/// 采样器演示台上的被写对象：一个真正在视觉树里的控件，每条采样器一条**样式属性**，类型与产物完全一致。
-/// </summary>
-/// <remarks>
-/// 换成控件而不是一个私有的 scratch 类，是为了让"采样器把值写到哪"这件事可被验证：属性是框架属性系统的真成员，
-/// 采样器写它时走的是真实的属性通道，验收再从这个属性读回来 —— 于是断言依据的是**界面上那个控件实际持有的值**，
-/// 而不是一个屏幕外的对象。控件自己按属性重绘，于是"画出来"这件事不需要另一套映射代码。
-/// <para>
-/// <b>重绘要自己挂。</b>Avalonia 没有 WPF 那种写进属性元数据里的 <c>AffectsRender</c> 开关，等价物是
-/// <see cref="Visual.AffectsRender{T}(AvaloniaProperty[])"/> —— 一个只能在静态构造函数里调的静态方法，它做的
-/// 事情就是给每条属性挂一个类处理器，处理器里调 <see cref="Visual.InvalidateVisual"/>。不挂的话，一条只影响
-/// 画面、不影响版面的属性（笔刷、阴影、圆角）写进去之后画面上什么都不会发生：属性系统无从知道"这条属性要重画"。
-/// </para>
-/// <para>
-/// <b>绘制是有标尺的。</b>位移类端点跑到 220，格子只有 96×62，按原值画会一步跨出格子被裁掉 —— 那看上去
-/// 和"没动"一模一样。所以位置与尺寸在**绘制反应里**乘一个固定缩放，而属性本身持有的仍是原值：载荷读的是
-/// 属性，于是断言的是原值，缩放只影响"怎么画"。
-/// </para>
-/// </remarks>
+// 采样器演示台上的被写对象：一个真正在视觉树里的控件，每条采样器一条**样式属性**，类型与产物完全一致。
+// 换成控件而不是一个私有的 scratch 类，是为了让"采样器把值写到哪"这件事可被验证：属性是框架属性系统的真成员，
+// 采样器写它时走的是真实的属性通道，验收再从这个属性读回来 —— 于是断言依据的是**界面上那个控件实际持有的值**，
+// 而不是一个屏幕外的对象。控件自己按属性重绘，于是"画出来"这件事不需要另一套映射代码。
+// 重绘要自己挂。Avalonia 没有 WPF 那种写进属性元数据里的 AffectsRender 开关，等价物是
+// AffectsRender{T}(AvaloniaProperty[]) —— 一个只能在静态构造函数里调的静态方法，它做的
+// 事情就是给每条属性挂一个类处理器，处理器里调 InvalidateVisual。不挂的话，一条只影响
+// 画面、不影响版面的属性（笔刷、阴影、圆角）写进去之后画面上什么都不会发生：属性系统无从知道"这条属性要重画"。
+// 绘制是有标尺的。位移类端点跑到 220，格子只有 96×62，按原值画会一步跨出格子被裁掉 —— 那看上去
+// 和"没动"一模一样。所以位置与尺寸在**绘制反应里**乘一个固定缩放，而属性本身持有的仍是原值：载荷读的是
+// 属性，于是断言的是原值，缩放只影响"怎么画"。
 internal sealed class SamplerSubject : Control
 {
-    /// <summary>位移与尺寸的像素缩放。这一组端点最大分量 220，格子留出的行程约 38 像素。</summary>
+    // 位移与尺寸的像素缩放。这一组端点最大分量 220，格子留出的行程约 38 像素。
     private const double Scale = 0.14d;
 
     private const double BaseLeft = 6d;
@@ -55,7 +47,7 @@ internal sealed class SamplerSubject : Control
     private const double BaseWidth = 26d;
     private const double BaseHeight = 18d;
 
-    /// <summary>这一格显示哪一条采样器的产物。构造时定一次，此后不变。</summary>
+    // 这一格显示哪一条采样器的产物。构造时定一次，此后不变。
     internal required string Kind { get; init; }
 
     public static readonly StyledProperty<AvBoxShadows> ShadowsProperty =
@@ -64,13 +56,9 @@ internal sealed class SamplerSubject : Control
     public static readonly StyledProperty<AvIBrush?> FillProperty =
         AvaloniaProperty.Register<SamplerSubject, AvIBrush?>(nameof(Fill));
 
-    /// <summary>
-    /// 一段两停的渐变，只给索引器那两行当被写的集合用：路径写的是 <c>Ramp.GradientStops[i].Color</c>。
-    /// </summary>
-    /// <remarks>
-    /// 单独一条属性而不是复用 <see cref="Fill"/>：那一位是 null 开头、由每一行自己的起点值装填的，
-    /// 而索引器路径要写的元素必须在写它之前就先存在。
-    /// </remarks>
+    // 一段两停的渐变，只给索引器那两行当被写的集合用：路径写的是 Ramp.GradientStops[i].Color。
+    // 单独一条属性而不是复用 Fill：那一位是 null 开头、由每一行自己的起点值装填的，
+    // 而索引器路径要写的元素必须在写它之前就先存在。
     public static readonly StyledProperty<AvIBrush?> RampProperty =
         AvaloniaProperty.Register<SamplerSubject, AvIBrush?>(nameof(Ramp));
 
@@ -104,26 +92,20 @@ internal sealed class SamplerSubject : Control
     public static readonly StyledProperty<AvSize> ExtentProperty =
         AvaloniaProperty.Register<SamplerSubject, AvSize>(nameof(Extent));
 
-    /// <summary>厚度。名字不叫 <c>Margin</c>：<see cref="Layoutable"/> 已经占用了那个名字。</summary>
+    // 厚度。名字不叫 Margin：Layoutable 已经占用了那个名字。
     public static readonly StyledProperty<AvThickness> InsetProperty =
         AvaloniaProperty.Register<SamplerSubject, AvThickness>(nameof(Inset));
 
-    /// <summary>
-    /// 变换。名字既不叫 <c>Render</c>（本类要重写 <see cref="Visual.Render"/>(DrawingContext)，同一个类型里
-    /// 属性与方法不能同名），也不叫 <c>RenderTransform</c>（那是 <see cref="Visual"/> 的属性，本类把缩放后的
-    /// 副本画在它上面，原值留在这条属性里给载荷读）。
-    /// </summary>
+    // 变换。名字既不叫 Render（本类要重写 Render(DrawingContext)，同一个类型里
+    // 属性与方法不能同名），也不叫 RenderTransform（那是 Visual 的属性，本类把缩放后的
+    // 副本画在它上面，原值留在这条属性里给载荷读）。
     public static readonly StyledProperty<AvTransform?> MotionProperty =
         AvaloniaProperty.Register<SamplerSubject, AvTransform?>(nameof(Motion));
 
-    /// <summary>
-    /// 每条属性写入都要发生的两件事：重绘，以及把值落到控件上。
-    /// </summary>
-    /// <remarks>
-    /// 这张表<b>必须声明在上面那 14 条属性之后</b>：静态字段初始化器按文本顺序执行，声明在前面的话它读到的是
-    /// 还没初始化的 null。挂在类处理器上而不是每条属性自己的元数据里，是因为 Avalonia 的注册入口不收
-    /// "值变了要做什么"这类回调 —— 类处理器是它给的挂点。
-    /// </remarks>
+    // 每条属性写入都要发生的两件事：重绘，以及把值落到控件上。
+    // 这张表必须声明在上面那 14 条属性之后：静态字段初始化器按文本顺序执行，声明在前面的话它读到的是
+    // 还没初始化的 null。挂在类处理器上而不是每条属性自己的元数据里，是因为 Avalonia 的注册入口不收
+    // "值变了要做什么"这类回调 —— 类处理器是它给的挂点。
     private static readonly AvaloniaProperty[] Tracked =
     [
         ShadowsProperty, FillProperty, RampProperty, TintProperty, RadiusProperty, ColumnProperty, PixelSpotProperty,
@@ -191,12 +173,8 @@ internal sealed class SamplerSubject : Control
         };
     }
 
-    /// <summary>
-    /// 采样器写进来之后，把这个值**换算成格子里画得下的样子**。
-    /// </summary>
-    /// <remarks>
-    /// 这是"反应"，不是"值"：属性持有的是采样器写下的原值（载荷读的就是它），这里只把它落到像素上。
-    /// </remarks>
+    // 采样器写进来之后，把这个值**换算成格子里画得下的样子**。
+    // 这是"反应"，不是"值"：属性持有的是采样器写下的原值（载荷读的就是它），这里只把它落到像素上。
     internal void Reposition()
     {
         // 位置。位移类的产物挪动这一格、按标尺画；厚度也挪，但按原值 —— 它的端点最大分量 44，格子装得下，

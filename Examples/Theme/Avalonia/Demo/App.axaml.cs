@@ -19,19 +19,17 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Both of these are global and must be in place before any element registers itself or any switch runs:
-            // the interpolator is what lets an animated switch run on the platform's scheduler at all, and StartModel
-            // decides whether a switch animates from the cached theme value or from the live property.
+            // 两项都是全局的，必须在任何元素注册、任何切换开始之前就位：插值器让动画切换能跑在平台调度器上，
+            // StartModel 决定切换从缓存主题值还是从实时属性起动画。
             ThemeManager.SetPlatformInterpolator(new Interpolator());
             ThemeManager.StartModel = StartModel.Cache;
 
-            // Set before any element registers itself, so the values each one applies as it initialises are the
-            // ones for this theme.
+            // 在任何元素注册之前设定，元素初始化时应用的就是本主题的值。
             ThemeManager.SetCurrent<Dark>();
 
             if (desktop.Args?.Any(static arg => string.Equals(arg, "bench", StringComparison.OrdinalIgnoreCase)) == true)
             {
-                // No window to close, so the run itself decides when the process ends.
+                // 没有窗口可关，由这次运行自己决定进程何时结束。
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 _ = BenchRunner.RunAsync(() => desktop.Shutdown());
             }
