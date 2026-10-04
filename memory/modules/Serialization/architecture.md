@@ -173,6 +173,34 @@
 它量的是**既有文档那条路**，而那正是该量的一维 —— 新特性的开销只由用到它们的文档付。要量新特性，
 得先给 `Corpus` 加形状。
 
+### 四·二、与 STJ / Newtonsoft 的同图对比（2026-10-04）
+
+`ComparisonBenchmarks`（跑法：`--filter "*ComparisonBenchmarks*"`）让**同一个对象图**过三家 —— 这是「快不快」唯一能回答的方式。三家都开着引用保留（`ReferenceHandler.Preserve` / `PreserveReferencesHandling.Objects`），Newtonsoft 另加 `TypeNameHandling.Auto`，因为归档对每个对象都写 `$id`、对多态成员写 `$type`，不对齐这两项就是拿不同的活来比。`NodeCount = 1000`，同一台机器、同一次会话：
+
+| 方法 | Mean | 相对归档写 | Allocated |
+| --- | --- | --- | --- |
+| Archive_Serialize | 7.76 ms | 1.00 | 7.54 MB |
+| Archive_Deserialize | 32.25 ms | 4.16 | 14.26 MB |
+| Stj_Serialize（反射） | 15.17 ms | 1.96 | 10.32 MB |
+| StjSourceGen_Serialize | 15.14 ms | 1.95 | 11.07 MB |
+| Nst_Serialize | 42.70 ms | 5.50 | 49.25 MB |
+| Nst_Deserialize | 71.58 ms | 9.22 | 24.79 MB |
+
+文档大小（同一张图）：归档 **1 327 428** 字符 / STJ 3 120 722 / Newtonsoft 6 372 468。
+
+**三条结论**：
+
+1. **写**：比 STJ 快约 2×，比 Newtonsoft 快约 5.5×。
+2. **读**：比 Newtonsoft 快约 2.2×；而 **STJ 读不了这张图**（见下）。
+3. **STJ 的源生成在这一档没有收益**（15.14 vs 15.17 ms）—— 成本在引用保留与图的形状上，不在元数据查找上。所以「拿反射版 STJ 比不公平」这个担心实测不成立。
+
+**STJ 在这张图上的两处默认设置失败**（实测，不是推测）：
+
+- **写**：默认设置对 NaN/±Infinity 抛 `ArgumentException`，要 `AllowNamedFloatingPointLiterals` 才写得出去 —— 与 §三 那条「非有限值写成字符串」正是同一个分歧。
+- **读**：`Each parameter in the deserialization constructor on type 'Offset' must bind to an object property or field`。这些 ViewModel 是**主构造器类**，提升出来的属性名（`Horizontal`）与构造器形参名（`left`）不同，STJ 直接拒绝；`IncludeFields` 也救不了（字段是 `_horizontal`）。**要用 STJ 读这套库自己的图，得先给库的类型加注解或写转换器** —— 而那正是归档格式在编译期生成读写器所省掉的事。
+
+**这些数字不能推广**：语料是一棵**带引用保留与多态**的工作流树，那正是这套格式存在的理由；换成「五个属性、不开引用保留的 POCO」，STJ 会近得多，源生成也会开始有收益。三家写的成员集也不同（归档写生成契约，另外两家写公开面），所以文档大小差里有一部分是「写得少」。
+
 ### 一个**没有**采纳的方案，别再试一遍
 
 计划里原本要把内部游标从 UTF-16 换成 UTF-8 字节。**证据不支持**：
