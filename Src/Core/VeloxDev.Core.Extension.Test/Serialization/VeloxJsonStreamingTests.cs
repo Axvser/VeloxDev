@@ -26,22 +26,6 @@ namespace VeloxDev.Core.Extension.Test.Serialization;
 [TestClass]
 public class VeloxJsonStreamingTests
 {
-    /// <summary>A source that never hands over more than <c>chunk</c> characters at a time.</summary>
-    private sealed class ChunkedReader(string text, int chunk) : TextReader
-    {
-        private int _position;
-
-        public override int Read(char[] buffer, int index, int count)
-        {
-            var take = Math.Min(Math.Min(chunk, count), text.Length - _position);
-            if (take <= 0) return 0;
-
-            text.CopyTo(_position, buffer, index, take);
-            _position += take;
-            return take;
-        }
-    }
-
     private static string GoldenDirectory
     {
         get
@@ -87,7 +71,7 @@ public class VeloxJsonStreamingTests
             var frozen = Golden(name);
 
             // chunk = 1 时每个 token 都跨越一次续读。
-            var restored = VeloxJsonSerializer.Deserialize(new ChunkedReader(frozen, chunk), type);
+            var restored = VeloxJsonSerializer.Deserialize(new ChunkedTextReader(frozen, chunk), type);
 
             Assert.IsNotNull(restored, $"{name}: chunk {chunk} produced nothing");
             Assert.AreEqual(frozen, Reserialize(restored), $"{name}: chunk {chunk} changed the document");
@@ -109,7 +93,7 @@ public class VeloxJsonStreamingTests
             var frozen = Golden(name);
 
             // 缓冲比成员名还小，逼出「一个 token 比整个窗口长」的增长路径。
-            var reader = new VeloxJsonReader(new ChunkedReader(frozen, 1), bufferSize);
+            var reader = new VeloxJsonReader(new ChunkedTextReader(frozen, 1), bufferSize);
             var restored = VeloxJsonSerializer.ReadValue(reader, type, null);
 
             Assert.IsNotNull(restored, $"{name}: buffer {bufferSize} produced nothing");
@@ -125,7 +109,7 @@ public class VeloxJsonStreamingTests
             var frozen = Golden(name);
 
             var wholeString = VeloxJsonSerializer.Deserialize(frozen, type);
-            var streamed = VeloxJsonSerializer.Deserialize(new ChunkedReader(frozen, 3), type);
+            var streamed = VeloxJsonSerializer.Deserialize(new ChunkedTextReader(frozen, 3), type);
 
             Assert.IsNotNull(wholeString, $"{name}: the whole-string read produced nothing");
             Assert.IsNotNull(streamed, $"{name}: the buffered read produced nothing");
@@ -155,7 +139,7 @@ public class VeloxJsonStreamingTests
         // 把每段压到 1 个字符，让探测的每一步都落在边界上。
         var json = "{\"$id\":\"1\",\"$type\":\"X\",\"$reff\":1,\"Value\":42}";
 
-        var reader = new VeloxJsonReader(new ChunkedReader(json, 1), 1);
+        var reader = new VeloxJsonReader(new ChunkedTextReader(json, 1), 1);
 
         Assert.IsTrue(reader.BeginObject(out var id, out var typeName));
         Assert.AreEqual(1, id);
@@ -186,7 +170,7 @@ public class VeloxJsonStreamingTests
 
         static object? Read(string json)
         {
-            var reader = new VeloxJsonReader(new ChunkedReader(json, 1), 1);
+            var reader = new VeloxJsonReader(new ChunkedTextReader(json, 1), 1);
             return VeloxJsonSerializer.ReadValue(reader, typeof(TreeDefaultViewModel), null);
         }
     }
@@ -207,7 +191,7 @@ public class VeloxJsonStreamingTests
         {
             var frozen = Golden(name);
 
-            var restored = await VeloxJsonSerializer.DeserializeAsync(new ChunkedReader(frozen, chunk), type);
+            var restored = await VeloxJsonSerializer.DeserializeAsync(new ChunkedTextReader(frozen, chunk), type);
 
             Assert.IsNotNull(restored, $"{name}: chunk {chunk} produced nothing on the async path");
             Assert.AreEqual(frozen, Reserialize(restored), $"{name}: chunk {chunk} changed the document on the async path");

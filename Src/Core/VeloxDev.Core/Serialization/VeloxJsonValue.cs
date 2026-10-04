@@ -437,7 +437,9 @@ public sealed class VeloxJsonObject : VeloxJsonValue, IEnumerable<KeyValuePair<s
 
     private void Reindex(int from)
     {
-        _index.Clear();
+        // 只重编 `from` 起的那些：删掉一格，它之后的成员下标各上移一位，而它**之前**的没动。
+        // 清空重来会把前面那些从索引里抹掉 —— 症状是「删掉中间一个成员，它前面的成员全部找不回来」
+        // （`Has` 与索引器都走这张表，实测）。
         for (var i = from; i < _members.Count; i++) _index[_members[i].Key] = i;
     }
 

@@ -271,7 +271,18 @@ public sealed partial class VeloxJsonReader
             if (c < 0) throw Malformed("unterminated member name");
 
             if (c == '"') break;
-            if (c == '\\') _memberHasEscape = true;
+            if (c == '\\')
+            {
+                // `\` 之后的那个字符是被转义的，**不能**当结束引号（`\"` 最典型）。名字里出现转义只可能
+                // 来自 map 的键 —— 生成器那条链比对的是已知标识符，不会带转义 —— 所以这个角落只有 shape
+                // 驱动的 map 会走到，同步面走的是另一条重载（`NextMember(out name)`，它整串读）。
+                _memberHasEscape = true;
+                _position++;
+                if (await PeekCodeAsync().ConfigureAwait(false) < 0) throw Malformed("unterminated member name");
+                _position++;
+                continue;
+            }
+
             _position++;
         }
 
@@ -290,14 +301,33 @@ public sealed partial class VeloxJsonReader
     /// type read as a map, an interface-keyed map — need the name as a string.
     /// </remarks>
     /// <exception cref="InvalidOperationException">No member has been read yet.</exception>
-    public Task<string> ReadMemberNameAsync()
+    public async Task<string> ReadMemberNameAsync()
     {
         if (!_memberHeld) throw new InvalidOperationException("ReadMemberNameAsync needs a preceding NextMemberAsync.");
 
         _memberHeld = false;
 
-        var name = _memberHasEscape ? DecodeMemberName() : Slice(_memberStart, _memberLength);
-        return Task.FromResult(name);
+        // 带转义时回退到开引号重读一遍 —— 但必须用**异步的**那条：同步的 `DecodeMemberName` 读的是同步
+        // 路径，而流源上「读不到就该 await」，同步那条只会返回 false（症状是只在恰好截断时报 unterminated）。
+        return _memberHasEscape
+            ? await DecodeMemberNameAsync().ConfigureAwait(false)
+            : Slice(_memberStart, _memberLength);
+    }
+
+    // 与同步面的 `DecodeMemberName` 同形，只把「读那一个字符串」换成异步的。回退位置要跨压缩保住。
+    private async Task<string> DecodeMemberNameAsync()
+    {
+        var saved = _position;
+        var savedFloor = _checkpointFloor;
+
+        _position = _memberStart - 1;
+        _checkpointFloor = Math.Min(_checkpointFloor, _position);
+        try { return await ReadQuotedAsync().ConfigureAwait(false); }
+        finally
+        {
+            _position = saved;
+            _checkpointFloor = savedFloor;
+        }
     }
 
     /// <summary>Consumes an object's closing brace, asynchronously.</summary>

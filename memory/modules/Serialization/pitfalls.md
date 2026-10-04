@@ -162,3 +162,27 @@
 
 **这是立场不是缺陷**：闭世界与零反射是能裁剪、能 AOT 的前提，代价就是不与别家同源；库从未承诺互操作。
 报告那一章的同名节（§十二）就是写给读者的这一版。
+
+---
+
+## 十、两套实现的不对称：四处只在补覆盖时露出来的缺陷（2026-10-05 修）
+
+补覆盖（行 81.4% → 91.0%、分支 67.2% → 77.8%）时新加的测试当场抓出四处。共同点都是
+**同步面有测试、异步面没有**，或者**语料的形状没走到**：
+
+1. **异步面的成员名扫描不跳转义字符**（`VeloxJsonReader.Async.cs` 的 `NextMemberAsync`）：扫到 `\` 只置标志就
+   `_position++`，于是把被转义的 `"` 当结束引号。名字里的转义只来自 **map 的键**（生成器那条链比对标识符，永不转义），
+   所以只有 shape 驱动的 map 会走到；同步面走的是另一条重载（`NextMember(out name)`，整串读），一直没露。
+2. **`DecodeMemberName` 不能用在异步面**：它回退后读的是同步的 `ReadQuoted()`，流源上读不到只会返回 false
+   （症状：只在恰好截断时报 unterminated）。异步面因此有自己的 `DecodeMemberNameAsync`（走 `ReadQuotedAsync`）。
+3. **压缩下限钉晚了一格**（`VeloxJsonReader.cs` 的 `PrepareSpace`）：`_memberHeld` 只保到 `_memberStart`，而上面那次
+   回退要到 `_memberStart - 1`（开引号）—— 单字符分块 + 转义名字时回退落在窗口原点之外，`CharAt` 越界。现钉 `_memberStart - 1`。
+4. **`ReadArray`/`ReadArrayAsync` 只 `Add` 不清空**：文档说的是成员**现在有什么**，不是再添几个。成员的集合初值非空时
+   （`Dictionary<string,List<int>>` 里塞了 `[1,2]`），加载会追加成 `[1,2,1,2]`。**语料里的集合初值都是空的**，所以
+   幂等与黄金测试都看不见 —— 这是语料的一个盲区。现 `if (!target.IsFixedSize) target.Clear();`（定长数组跳过）。
+
+同族还有一条**尚未修**的：`ReadMap` 逐键赋值，所以「成员的 map 里有一个文档没有的初值键」会**留着**（多一格，方向相反）。
+没修是因为还没有用例证明它有害。
+
+`VeloxJsonObject.Reindex` 也在这轮修的（`VeloxJsonValue.cs`）：它原来 `_index.Clear()` 后只从 `from` 重建，
+于是删掉中间一个成员，**它之前**的成员就从索引里消失（`Has` / 索引器都拿不到）。

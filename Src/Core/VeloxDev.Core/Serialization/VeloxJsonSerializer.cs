@@ -511,6 +511,11 @@ public static partial class VeloxJsonSerializer
         if (reader is null) throw new ArgumentNullException(nameof(reader));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
+        // 先清空：文档说的是这个成员**现在有什么**，不是「再添几个」。实例本身复用（身份与订阅因此活着），
+        // 但内容归文档 —— 否则成员的初值非空时，加载会把文档里的元素追加到它后面（实测 [1,2] → [1,2,1,2]）。
+        // 定长数组（byte[] 这类）清不了也加不进，跳过。
+        if (!target.IsFixedSize) target.Clear();
+
         reader.BeginArray();
         while (reader.NextElement())
         {

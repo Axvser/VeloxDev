@@ -401,6 +401,9 @@ public static partial class VeloxJsonSerializer
         if (reader is null) throw new ArgumentNullException(nameof(reader));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
+        // 与同步面同一条：文档说的是这个成员**现在有什么**，先清空再填（理由见同步那条）。
+        if (!target.IsFixedSize) target.Clear();
+
         await reader.BeginArrayAsync().ConfigureAwait(false);
         while (await reader.NextElementAsync().ConfigureAwait(false))
         {

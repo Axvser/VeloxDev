@@ -171,7 +171,10 @@ public sealed partial class VeloxJsonReader
     {
         // 保留区下限：所有还活着的位置中最靠前的那个，它之前的字符一律丢弃。
         var keep = Math.Min(_position, floorAbs);
-        if (_memberHeld) keep = Math.Min(keep, _memberStart);
+        // 从**开引号**起保，不是从名字的第一个字符起：`DecodeMemberName` 发现名字带转义时会回退到
+        // `_memberStart - 1` 重读一遍，而那个引号正好落在 `_memberStart` 之前。钉晚一格，回退就落到
+        // 窗口原点之外 —— `CharAt` 越界（实测：单字符分块 + map 的键带转义）。
+        if (_memberHeld) keep = Math.Min(keep, _memberStart - 1);
         if (_checkpointFloor != int.MaxValue) keep = Math.Min(keep, _checkpointFloor);
 
         // 先压缩。搬的是 [keep, 末尾)，_origin 随之改变；所有偏移字段是绝对的，因此都不用动。
