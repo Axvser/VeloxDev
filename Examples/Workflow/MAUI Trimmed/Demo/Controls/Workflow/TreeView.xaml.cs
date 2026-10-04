@@ -16,8 +16,14 @@ public partial class TreeView : ContentView
 
         // The tree is assigned to this control by the page; propagate it explicitly so the HUD's
         // BindingContextChanged fires even if inheritance doesn't reach the nested overlay.
-        BindingContextChanged += (_, _) => InfoOverlay.BindingContext = BindingContext;
-        SyncLinkInput();
+        // SyncLinkInput 必须挂在这里，不能只在构造里调一次：构造函数跑的时候 BindingContext 还是 null
+        //（本文件的约定就是「由页面在加载前赋给它」），那一次订阅会静默落空 —— 悬停照常亮（那是 overlay
+        // 自己的事），但 Delete 永远到不了宿主。
+        BindingContextChanged += (_, _) =>
+        {
+            InfoOverlay.BindingContext = BindingContext;
+            SyncLinkInput();
+        };
     }
 
     // VeloxDev customization: 悬停高亮是这本 demo 的。overlay 默认什么都不画，订阅树的输入事件、
