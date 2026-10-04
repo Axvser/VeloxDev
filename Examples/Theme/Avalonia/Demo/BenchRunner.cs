@@ -5,7 +5,6 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using VeloxDev.DynamicTheme;
 using VeloxDev.TransitionSystem;
-using VeloxDev.TimeLine;
 
 namespace Demo;
 

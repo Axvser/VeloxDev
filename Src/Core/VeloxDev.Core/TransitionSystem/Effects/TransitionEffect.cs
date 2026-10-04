@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using VeloxDev.Threading;
-using VeloxDev.TimeLine;
 using VeloxDev.WeakTypes;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -59,9 +58,9 @@ public class TransitionEffectCore : ITransitionEffectCore, ITransitionEffect<Non
     /// <summary>The handlers behind <see cref="Finally"/>.</summary>
     protected WeakDelegate<EventHandler<TransitionEventArgs>> _finally = new();
     /// <summary>The handlers behind <see cref="Warn"/>.</summary>
-    protected WeakDelegate<EventHandler<TransitionEventArgs>> _warn = new();
+    protected WeakDelegate<EventHandler<TransitionEventArgs<WarnStage, string>>> _warn = new();
     /// <summary>The handlers behind <see cref="Error"/>.</summary>
-    protected WeakDelegate<EventHandler<TransitionEventArgs>> _error = new();
+    protected WeakDelegate<EventHandler<TransitionEventArgs<ErrorStage, Exception>>> _error = new();
 
     /// <inheritdoc />
     public virtual int FPS { get; set; } = 60;
@@ -121,13 +120,13 @@ public class TransitionEffectCore : ITransitionEffectCore, ITransitionEffect<Non
         remove => _finally.RemoveHandler(value);
     }
     /// <inheritdoc />
-    public virtual event EventHandler<TransitionEventArgs> Warn
+    public virtual event EventHandler<TransitionEventArgs<WarnStage, string>> Warn
     {
         add => _warn.AddHandler(value);
         remove => _warn.RemoveHandler(value);
     }
     /// <inheritdoc />
-    public virtual event EventHandler<TransitionEventArgs> Error
+    public virtual event EventHandler<TransitionEventArgs<ErrorStage, Exception>> Error
     {
         add => _error.AddHandler(value);
         remove => _error.RemoveHandler(value);
@@ -170,17 +169,17 @@ public class TransitionEffectCore : ITransitionEffectCore, ITransitionEffect<Non
     }
 
     /// <inheritdoc />
-    public virtual void InvokeWarn(object sender, TransitionEventArgs e)
+    public virtual void InvokeWarn(object sender, TransitionEventArgs<WarnStage, string> e)
     {
-        Debug.WriteLine($"[VeloxDev.Transition] warn @{e.Stage}: {e.Message}");
+        Debug.WriteLine($"[VeloxDev.Transition] warn @{e.Stage}: {e.Value}");
         _warn.GetInvocationList()?.Invoke(sender, e);
     }
 
     /// <inheritdoc />
-    public virtual void InvokeError(object sender, TransitionEventArgs e)
+    public virtual void InvokeError(object sender, TransitionEventArgs<ErrorStage, Exception> e)
     {
         // 不用 Debug.Fail：它在无交互宿主里会直接终止进程，而那正是这条通道要防的事。
-        Debug.WriteLine($"[VeloxDev.Transition] error @{e.Stage}: {e.Exception}");
+        Debug.WriteLine($"[VeloxDev.Transition] error @{e.Stage}: {e.Value}");
         _error.GetInvocationList()?.Invoke(sender, e);
     }
 

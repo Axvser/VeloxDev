@@ -62,7 +62,7 @@
 
 | 要注册的东西 | 注册点 | 什么时候真的发生 |
 |---|---|---|
-| 10 个采样器 | `Interpolator` 的**静态构造**（`Interpolator.cs:12-25`；10 条登记在 `:14-23`） | 第一次**构造** `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:297`，约束 `new()` 在 `:271`） |
+| 10 个采样器 | `Interpolator` 的**静态构造**（`Interpolator.cs:12-25`；10 条登记在 `:14-23`） | 第一次**构造** `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:297`，约束 `new()` 在 `:271`） |
 | 采样器所在的宿主/解释器/优先级 | `TransitionScheduler<TTarget>` 的类型实参（`TransitionScheduler.cs:5-11`） | 同上，全部编译期写死 |
 | DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler`（`Interpolator.cs:27-30`） | **宿主必须显式调** `ThemeManager.SetPlatformInterpolator(new Interpolator())` |
 
@@ -86,7 +86,7 @@ Lifetime.SetAlive(accepted);
 return accepted;
 ```
 
-`Lifetime` 定义在 Core `TransitionHostBase.cs:12`（`protected ApplicationState Lifetime { get; } = new();`），`IsAlive` 在 `:14` 转发它，消费方是 `SamplerSet.CanSetValue()`（`Src/Core/VeloxDev.Core/TransitionSystem/SamplerSet.cs:90`，`=> _host.IsAlive`）—— 也就是**每一次属性写入的闸门**。
+`Lifetime` 定义在 Core `Runtime/TransitionHostBase.cs:12`（`protected ApplicationState Lifetime { get; } = new();`），`IsAlive` 在 `:14` 转发它，消费方是 `SamplerSet.CanSetValue()`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:90`，`=> _host.IsAlive`）—— 也就是**每一次属性写入的闸门**。
 
 ⇒ 这条链的语义是：**队列拒绝一次 `TryEnqueue`，整个宿主就被标记为「应用已死」，所有属性写入立刻停；再有一次被接纳就复活。** 七家里**只有这一家**写了 `SetAlive`（`grep -rc SetAlive Src/Adapters/VeloxDev.<家>/` 只有 `VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs` 命中源码，其余全是 `bin/obj` 里 `VeloxDev.Core.dll` 的二进制命中）；Core 侧那句 remarks 直接点名了这一家（`Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs:17-21`：「WinUI clears its flag when a single enqueue is refused … has to be able to take it back」）。**所以 `SetAlive` 是刻意双向的，别把它「修」成只置 false。**
 
@@ -96,7 +96,7 @@ return accepted;
 
 - `State : StateCore`（`State.cs`，7 行）、`Transition : TransitionCore`（`Transition.cs:12-15`）是空壳，**别以为漏写了**。
 - `TransitionEffects` 的三个预设（`TransitionEffects.cs:7`/`:11`/`:15`：`Empty` 0s / `Theme` 0.46s / `Hover` 0.32s）**七家逐字相同**（含 `{ get; set; }` 的可写形态），不是这家特有的；唯一的差别是这里写成 `class` 而非 `static class`（七家里只有这一家不带 `static`，逐家 grep 实测确认）。因为三个成员在**任何一家**都是可写的静态属性，宿主可以全局改掉 `TransitionEffects.Hover` 的时长 —— 之后所有新动画跟着变，这不是 WinUI 独有的坑，只是在这一家更容易被误当成「实例属性」。
-- **`TransitionScheduler<TTarget>` 的 `TTarget` 是个没人用的类型参数**（`TransitionScheduler.cs:5-11`，类体空）：全仓 `grep 'new TransitionScheduler<'` **零命中**（没有任何构造点）；带 `<TTarget>` 这个形状的只有本家与 Avalonia 两家，另外五家是**非泛型**的 `TransitionScheduler`。真正被 `CreateScheduler` 用来建调度器的是 Core 的 `TransitionSchedulerCore<THost, TInterpreter, TPriority>.FindOrCreate(target)`（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionScheduler.cs:189`，`GetValue` 原子安装 + `TargetRef` 弱引用）。**别拿 `new TransitionScheduler<T>()` 当 `Transition<T>` 的调度器**：它不参与 `MutualSchedulers` 归档，而按 target 找回 run 的操作（`TransitionCore.Pause`/`Seek` 那条链）走的正是那张字典，`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:217-226` 的 `CollectSchedulers` 就是它的读者。
+- **`TransitionScheduler<TTarget>` 的 `TTarget` 是个没人用的类型参数**（`TransitionScheduler.cs:5-11`，类体空）：全仓 `grep 'new TransitionScheduler<'` **零命中**（没有任何构造点）；带 `<TTarget>` 这个形状的只有本家与 Avalonia 两家，另外五家是**非泛型**的 `TransitionScheduler`。真正被 `CreateScheduler` 用来建调度器的是 Core 的 `TransitionSchedulerCore<THost, TInterpreter, TPriority>.FindOrCreate(target)`（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs:189`，`GetValue` 原子安装 + `TargetRef` 弱引用）。**别拿 `new TransitionScheduler<T>()` 当 `Transition<T>` 的调度器**：它不参与 `MutualSchedulers` 归档，而按 target 找回 run 的操作（`TransitionCore.Pause`/`Seek` 那条链）走的正是那张字典，`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:217-226` 的 `CollectSchedulers` 就是它的读者。
 - `TransitionInterpreter` 声明成 `partial`（`TransitionInterpreter.cs:7`）但**全项目没有第二半**（grep `partial class TransitionInterpreter` 各只有它自己那一行）。MAUI 同形，看不出理由，**只能存疑**。
 - 帧 pacer 用 `DispatcherQueueTimer` 且 `IsRepeating = false`（`TransitionInterpreter.cs:43`，建表在 `CreateTimer` `:40-46`），靠 `Arm` 里再 `Start()` 续帧（`:19-24`）—— 「一次性定时器 = 帧时钟」这个形状是这一家的。`CreateFramePacer` 在 `:10-13`，`TryGet<DispatcherQueue>` 失败就返回 `null`（拿不到队列就没有 pacer，动画照跑）。
 - `Transition.cs` 的 `ICollection<Transform>` 重载（`:56-74`）是采集多重变换的唯一入口，注释讲清了为什么单 `Transform` 要保住运行时类型 —— 属 TransitionSystem 轴，不在此展开。

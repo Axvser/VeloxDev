@@ -7,7 +7,7 @@
 
 ## 一、加一个采样器（这家的高频改动）
 
-**先判该不该加。** Core 已经覆盖的是 `System.Drawing` / `System.Numerics` 那一组（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:12-27`）；Avalonia 的 `Point`/`Size`/`Color` 是**另外的类型**，所以本家必须各注册一份。判断式：这个类型是不是 Core 那张表里的类型？是 → 不要加；不是 → 加（见 `architecture.md` §六）。
+**先判该不该加。** Core 已经覆盖的是 `System.Drawing` / `System.Numerics` 那一组（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:12-27`）；Avalonia 的 `Point`/`Size`/`Color` 是**另外的类型**，所以本家必须各注册一份。判断式：这个类型是不是 Core 那张表里的类型？是 → 不要加；不是 → 加（见 `architecture.md` §六）。
 
 步骤：
 

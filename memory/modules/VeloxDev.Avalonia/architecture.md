@@ -28,12 +28,12 @@
 
 ## 二、注册与工厂：`Interpolator` 是 Core 泛型点名本家的地方
 
-- **注册表在 Core**：静态 `ConcurrentDictionary`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:40`），基类静态 ctor 先注册 15 个来自 `System.Drawing` / `System.Numerics` 的采样器（`:11-27`）。
+- **注册表在 Core**：静态 `ConcurrentDictionary`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:40`），基类静态 ctor 先注册 15 个来自 `System.Drawing` / `System.Numerics` 的采样器（`:11-27`）。
 - **这家补 14 条**（`Interpolator.cs:13-26`），注册的是 Avalonia 的类型，其中两条注册的是**接口** `IBrush` / `ITransform`（`:13-14`）。
-- **静态 ctor 什么时候跑**：Core 的泛型节点里写着 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:297`，约束 `where TInterpolatorCore : InterpolatorCore, new()` 在 `:271`）⇒ **每构造一个 transition 节点就 `new` 一个这家的 `Interpolator`**，第一次构造即触发 14 条注册。所以纯动画路径**不需要任何引导代码**，而纯主题路径恰好不构造 `Transition<T>`，这就是它必须补一条 `SetPlatformInterpolator`（§三.2）的原因。
+- **静态 ctor 什么时候跑**：Core 的泛型节点里写着 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:297`，约束 `where TInterpolatorCore : InterpolatorCore, new()` 在 `:271`）⇒ **每构造一个 transition 节点就 `new` 一个这家的 `Interpolator`**，第一次构造即触发 14 条注册。所以纯动画路径**不需要任何引导代码**，而纯主题路径恰好不构造 `Transition<T>`，这就是它必须补一条 `SetPlatformInterpolator`（§三.2）的原因。
 - 同一处约束串解释了这家另外四个类的形状：`THost : ITransitionHost<TPriorityCore>, new()`（`UIThreadInspector`）、`TTransitionInterpreterCore : …, new()`（`TransitionInterpreter`）、`TStateCore : IFrameState, new()`（`State`）、`TEffectCore : ITransitionEffect<TPriorityCore>, new()`（`TransitionEffect`）。**这些空壳/薄壳不是「这家有差异」，是泛型闭合点** —— `State.cs:3` 与 Jalium 的 `State.cs` 内容等价，都只有一句类声明。它们唯一的硬要求是**公开可构造**。
-- **工厂只有一个方法**：`CreateScheduler`（`Interpolator.cs:30-33`），按 `effect is ITransitionEffect<DispatcherPriority>` 决定给不给 scheduler；基类默认 `null`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:126`）。
-  - **全仓唯一调用者是主题系统**（`Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs:220`），不是普通动画路径（普通路径走 `TransitionSchedulerCore<…>.FindOrCreate` 的按目标缓存，`Src/Core/VeloxDev.Core/TransitionSystem/TransitionScheduler.cs:197`）。
+- **工厂只有一个方法**：`CreateScheduler`（`Interpolator.cs:30-33`），按 `effect is ITransitionEffect<DispatcherPriority>` 决定给不给 scheduler；基类默认 `null`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:126`）。
+  - **全仓唯一调用者是主题系统**（`Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs:220`），不是普通动画路径（普通路径走 `TransitionSchedulerCore<…>.FindOrCreate` 的按目标缓存，`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs:197`）。
   - 后果是**全有或全无**：只要有一个目标拿不到 scheduler，整批主题切换退化为瞬时（`ThemeManager.cs:206-208` 无 interpolator / 无分组；`:227-230` 某个目标拿不到 scheduler）。
 - 第二个公开入口 `TransitionScheduler<TTarget>`（`TransitionScheduler.cs:5-9`）在仓库内**没有任何调用者**，是给消费方的显式泛型壳（WinUI 也定义了同名同形的一个，同样无人调用）。
 
@@ -42,7 +42,7 @@
 ## 三、三条轴各自「怎么被宿主接上」
 
 1. **Transition：零引导，家在编译期选定。** 消费方写的是这家的 `Transition<T>`（`Transition.cs:15-24`），它把 Core 的七参泛型一次闭合成本家的五件套；用法形状是 `private static readonly Transition<Rectangle> X = Transition<Rectangle>.Create()…`（`Examples/Transition/Avalonia/Demo/Views/MainWindow.axaml.cs:322-325`）。⇒ 「用哪一家」= 引用哪个适配器程序集，没有运行时注册。
-   - 控制面（`Transition.Exit` / 暂停等）在 Core 的非泛型 `TransitionCore`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:19-55`），与平台无关；这家的非泛型 `Transition`（`Transition.cs:10-13`）是空壳，只是把同名 API 放进本家程序集。
+   - 控制面（`Transition.Exit` / 暂停等）在 Core 的非泛型 `TransitionCore`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:11-257`），与平台无关；这家的非泛型 `Transition`（`Transition.cs:10-13`）是空壳，只是把同名 API 放进本家程序集。
    - `TransitionEffects.Empty/Theme/Hover`（`TransitionEffects.cs:7/11/15`）是这家三档预设，**七家同形**（与 WPF 同名文件逐字相同），不是本家设计。
 2. **Theme：必须一次性引导，且不引导不报错。** 消费方在启动处调 `ThemeManager.SetPlatformInterpolator(new Interpolator())`（demo：`Examples/Theme/Avalonia/Demo/App.axaml.cs:25`）。两个作用写在 Core 的 remarks 里（`ThemeManager.cs:55-61`，入口 `:62`）：把本家的采样器注册跑起来 + 给 Core 一个它自己点不出名字的 scheduler（Core 原话：which inspector, interpreter and dispatcher priority to animate with is the one thing Core cannot name）。没有它主题照样切换、只是**瞬切无动画**（`ThemeManager.cs:207-209`）—— 最容易误判成「动画坏了」的一处。属性侧是特性的类型参数：`[ThemeConfig<ObjectConverter, Dark, Light>(nameof(Background), ["#1e1e1e"], ["#ffffff"])]`（`Examples/Theme/Avalonia/Demo/ThemeTile.cs:17-18`）。
 3. **Workflow：XAML 附着属性 + 名字解析，无代码引导。** 根容器一次性写六七个 `…Name` + `LinkMenuKey`（`Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/TreeView.axaml:12-18`），节点/插槽视图写自己的开关（`NodeView.axaml:11-14`、`SlotView.axaml:8`），画布变换靠绑定 `TreeView` 自己的 `WorkflowCanvasTransformBehavior.Transform`（`TreeView.axaml:26/36`）。宿主也可直接调 `WorkflowSurfaceBehavior.Refresh(host)`（公开静态，`WorkflowSurfaceBehavior.cs:133`）在数据/尺寸变化后重解析 —— demo 在多处这么做（`Examples/Workflow/Avalonia/Demo/Views/Workflow/WorkflowView.axaml.cs:65`/`:199`/`:218`）。
@@ -83,11 +83,11 @@
 
 数一遍（`git ls-files 'Src/Adapters/<家>/PlatformAdapters/Samplers/*.cs' | wc -l`）：**Avalonia 14**、WPF 12、MAUI 12、WinUI 10、Jalium 9、WinForms 1、Razor 1。「别的家不用写这么多」是错的 —— 四个 XAML 家都在 9–12 之间。真实机制：
 
-- **Core 只覆盖「不属于任何 toolkit」的取值类型**：它的静态注册表用的是 `System.Drawing` 与 `System.Numerics` 下的 `Point`/`PointF`/`Size`/`SizeF`/`Color`/`Rectangle`/`RectangleF`/`Vector2-4`/`Quaternion`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:2-3` 的 using + `:12-27` 的注册）。
+- **Core 只覆盖「不属于任何 toolkit」的取值类型**：它的静态注册表用的是 `System.Drawing` 与 `System.Numerics` 下的 `Point`/`PointF`/`Size`/`SizeF`/`Color`/`Rectangle`/`RectangleF`/`Vector2-4`/`Quaternion`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:2-3` 的 using + `:12-27` 的注册）。
 - **工具包自己的同名类型是另一个类型**，必须各自注册：这家注册 `Avalonia.Point` / `Avalonia.Size` / `Avalonia.Color`（`Interpolator.cs:16/18/24`），WPF / WinUI / MAUI / Jalium 同理各注册一份自己的。
 - **这家多出来的 6 条是「Avalonia 把多少概念命名成了值类型」的函数**：`PixelPoint` / `PixelSize` / `PixelRect`（窗口与屏幕坐标）、`RelativePoint` / `RelativeRect`（相对单位）、`BoxShadows`（圆角阴影是值类型 `BoxShadow` 的集合）。
 - **WinForms / Razor 各只有 1 个**，因为它们的可动画属性大多直接落在 Core 已覆盖的类型上（WinForms 的 `Location`/`Size`/`BackColor` 就是 `System.Drawing` 的），例外各只有一个：`PaddingSampler`、`StringSampler`。
-- **已知缺口（是遗漏不是背离）**：这家**有** `Avalonia.Rect`（`WorkflowSlotLayoutBehavior.cs:136` 挂 `Visual.BoundsProperty`、`:272` 读 `control.Bounds`，就是它）与 `Avalonia.Vector`，但注册表两个都没有；而 WPF / WinUI / MAUI 三家都注册了自家的 `Rect`。⇒ 这家上对 `Rect`/`Vector` 属性做动画会静默跳过（Core `Interpolator.cs:183` 的 `Warn("Unsampled", …)`）。细节与「该不该补」见 `TransitionSystem/adapters/avalonia.md` §二.7。
+- **已知缺口（是遗漏不是背离）**：这家**有** `Avalonia.Rect`（`WorkflowSlotLayoutBehavior.cs:136` 挂 `Visual.BoundsProperty`、`:272` 读 `control.Bounds`，就是它）与 `Avalonia.Vector`，但注册表两个都没有；而 WPF / WinUI / MAUI 三家都注册了自家的 `Rect`。⇒ 这家上对 `Rect`/`Vector` 属性做动画会静默跳过（Core `Sampling/Interpolator.cs:183` 的 `Warn(WarnStage.Unsampled, …)`）。细节与「该不该补」见 `TransitionSystem/adapters/avalonia.md` §二.7。
 
 ---
 

@@ -79,7 +79,7 @@ public class TransitionDiagnosticsTests
         var effect = new TransitionEffectCore { Duration = TimeSpan.FromMilliseconds(200), FPS = 60 };
         effect.Update += (_, _) => throw new InvalidOperationException("callback");
 
-        var reports = new List<TransitionEventArgs>();
+        var reports = new List<TransitionEventArgs<ErrorStage, Exception>>();
         effect.Error += (_, e) => reports.Add(e);
 
         var target = new Target();
@@ -90,8 +90,8 @@ public class TransitionDiagnosticsTests
         await new TestInterpreter().Execute(target, set, effect, cts);
 
         Assert.AreEqual(1, reports.Count);
-        Assert.AreEqual("Update", reports[0].Stage);
-        Assert.IsInstanceOfType<InvalidOperationException>(reports[0].Exception);
+        Assert.AreEqual(ErrorStage.Update, reports[0].Stage);
+        Assert.IsInstanceOfType<InvalidOperationException>(reports[0].Value);
     }
 
     [TestMethod]
@@ -99,7 +99,7 @@ public class TransitionDiagnosticsTests
     {
         var target = new Target();
         var effect = new TransitionEffectCore();
-        var reports = new List<TransitionEventArgs>();
+        var reports = new List<TransitionEventArgs<ErrorStage, Exception>>();
         effect.Error += (_, e) => reports.Add(e);
 
         using var cts = new CancellationTokenSource();
@@ -111,7 +111,7 @@ public class TransitionDiagnosticsTests
         set.Apply(target, 0.5);
 
         Assert.AreEqual(1, reports.Count);
-        Assert.AreEqual("Sampling", reports[0].Stage);
+        Assert.AreEqual(ErrorStage.Sampling, reports[0].Stage);
         Assert.IsTrue(cts.IsCancellationRequested, "a run that cannot draw must stop rather than throw once per frame");
     }
 
@@ -124,7 +124,7 @@ public class TransitionDiagnosticsTests
         state.SetValue<Target, double>(t => ((Beta)t.Shape).X, 5d);
 
         var effect = new TransitionEffectCore { Duration = TimeSpan.Zero };
-        var warnings = new List<TransitionEventArgs>();
+        var warnings = new List<TransitionEventArgs<WarnStage, string>>();
         effect.Warn += (_, e) => warnings.Add(e);
 
         var target = new Target();
@@ -134,7 +134,7 @@ public class TransitionDiagnosticsTests
         await new TestInterpreter().Execute(target, set, effect, cts);
 
         Assert.AreEqual(1, warnings.Count);
-        Assert.AreEqual("Unreadable", warnings[0].Stage);
+        Assert.AreEqual(WarnStage.Unreadable, warnings[0].Stage);
         Assert.AreEqual(100d, target.Value, "the property that does match the target must still be animated");
     }
 
@@ -170,6 +170,60 @@ public class TransitionDiagnosticsTests
         // 定义期的拒绝走调用者，不进运行期的报错通道。
         Assert.ThrowsExactly<TransitionPathUnsampleableException>(() => transition.Execute(new Target()));
         Assert.AreEqual(0, errors);
+    }
+
+    [TestMethod]
+    public async Task EachPassIsNumberedInLoopAndCountedInCycle()
+    {
+        // LoopTime 是「额外重复几次」，所以 2 表示连头一趟共三趟。零时长的趟只有一帧，趟与帧一一对应。
+        var state = new StateCore();
+        state.SetValue<Target, double>(t => t.Value, 100d);
+
+        var effect = new TransitionEffectCore { Duration = TimeSpan.Zero, LoopTime = 2 };
+        var seen = new List<(int Loop, long Cycle)>();
+        effect.Update += (_, e) => seen.Add((e.Loop, e.Cycle));
+
+        var target = new Target();
+        var set = new TestInterpolator().Prepare(target, state, effect, new ImmediateHost());
+        using var cts = new CancellationTokenSource();
+
+        await new TestInterpreter().Execute(target, set, effect, cts);
+
+        Assert.AreEqual(3, seen.Count, "LoopTime 2 是头一趟加两趟");
+        Assert.AreEqual(0, seen[0].Loop);
+        Assert.AreEqual(1, seen[1].Loop);
+        Assert.AreEqual(2, seen[2].Loop);
+        // Cycle 是整条运行的趟位，所以它只在 Loop 之外还回答「这个目标一共跑过多少趟」；这里只钉住它是逐趟递增的。
+        Assert.AreEqual(seen[0].Cycle + 1, seen[1].Cycle);
+        Assert.AreEqual(seen[1].Cycle + 1, seen[2].Cycle);
+    }
+
+    [TestMethod]
+    public async Task TotalTimeAccumulatesAcrossPassesWhileLoopCountsThem()
+    {
+        // 两个成员分工：Loop 说「第几趟」，TotalTime 说「这一段开工多久了」—— 它不随趟重置。
+        var state = new StateCore();
+        state.SetValue<Target, double>(t => t.Value, 100d);
+
+        var effect = new TransitionEffectCore { Duration = TimeSpan.FromMilliseconds(120), FPS = 60, LoopTime = 1 };
+        var totals = new List<double>();
+        var loops = new List<int>();
+        effect.Update += (_, e) =>
+        {
+            totals.Add(e.TotalTime.TotalMilliseconds);
+            loops.Add(e.Loop);
+        };
+
+        var target = new Target();
+        var set = new TestInterpolator().Prepare(target, state, effect, new ImmediateHost());
+        using var cts = new CancellationTokenSource();
+
+        await new TestInterpreter().Execute(target, set, effect, cts);
+
+        Assert.AreEqual(0, loops[0]);
+        Assert.AreEqual(1, loops[^1], "LoopTime 1 是两趟");
+        Assert.IsTrue(totals[^1] >= 220d,
+            "TotalTime 不随趟重置：两趟各 120 ms，跑完应当在 240 ms 上下，而不是回到 120");
     }
 
     private sealed class RefusingHost : TransitionHostBase<NonPriority>

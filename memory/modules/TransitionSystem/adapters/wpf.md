@@ -26,7 +26,7 @@
 
 **采样器条数不度量工作量，它度量「这家框架自带的、且 Core 还没覆盖的可动画值类型有多少个」。**
 
-- Core 已把**无 GUI 依赖**的一整族注册完（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:12-28`）：4 个基元 + `System.Drawing` 的 `Point/PointF/Size/SizeF/Color/Rectangle/RectangleF` + 4 个 `System.Numerics` 向量/四元数。
+- Core 已把**无 GUI 依赖**的一整族注册完（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:12-28`）：4 个基元 + `System.Drawing` 的 `Point/PointF/Size/SizeF/Color/Rectangle/RectangleF` + 4 个 `System.Numerics` 向量/四元数。
 - **WinForms 的整个值类型面就是 `System.Drawing` 那一族**，Core 已经全注册了，只剩 `Padding` 一个没覆盖 ⇒ 所以只有 `PaddingSampler`（`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/Interpolator.cs:9`）。
 - **Razor 没有任何带类型的 UI 值类型**，它的动画面是内联 CSS 字符串 ⇒ 只有 `StringSampler`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Interpolator.cs:9`）。
 - WPF 则自带一整族 `System.Windows.*` 可动画类型：`Point/Size/Rect/Vector/Thickness/CornerRadius` + 两个 Freezable 家族（`Brush`/`Transform`）+ `Effect`（服务整个效果家族，实作是 `DropShadowEffectSampler`）+ `Media3D` 的 `Point3D`/`Vector3D` + `Media.Color` ⇒ 12 个（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Interpolator.cs:14-27`）。
@@ -96,13 +96,13 @@
 
 3. **`CornerRadius` 用原始 `t` 逐角插值，没有共享的 `BoundedProgress`**（`Samplers/CornerRadiusSampler.cs:16-21`）；`Size`/`Rect` 反过来对 W/H 用**同一个** `BoundedProgress(t, 0d, double.PositiveInfinity)`（`Samplers/SizeSampler.cs:19`、`Samplers/RectSampler.cs:19`），而位置不夹。⇒ 同一批采样器里「夹不夹」不一致，是按各自语义定的，**别照着某一个去统一另外几个**。
 
-4. **`Interpolator` 的注册是静态构造，注册顺序不影响查找**（查找按精确 → 基类由近及远 → 接口按名字序，`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:50-87`）。WPF 注册的是 `typeof(Brush)`/`typeof(Transform)` 这种**基类型**（`Interpolator.cs:14`/`:18`），所以它**承诺处理整个家族** —— 梯度 Brush、`TransformGroup` 都会进来，`TransformSampler` 里那一大段 `CloneTransform` 的穷举 switch 就是为这个付出的代价。在这家加一个 `typeof(SolidColorBrush)` 之类的具体注册只会让查找更早命中，不会更晚。
+4. **`Interpolator` 的注册是静态构造，注册顺序不影响查找**（查找按精确 → 基类由近及远 → 接口按名字序，`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:51-91`）。WPF 注册的是 `typeof(Brush)`/`typeof(Transform)` 这种**基类型**（`Interpolator.cs:14`/`:18`），所以它**承诺处理整个家族** —— 梯度 Brush、`TransformGroup` 都会进来，`TransformSampler` 里那一大段 `CloneTransform` 的穷举 switch 就是为这个付出的代价。在这家加一个 `typeof(SolidColorBrush)` 之类的具体注册只会让查找更早命中，不会更晚。
 
 5. **改采样器后必须补测试表。** WPF 的 12 个采样器**全部**能在 `Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs` 那个纯数据进程里构造出端点值 —— 一个都不在 `Examples/Transition/AUTO TEST/Samplers/UnreachableSamplers.cs`（那份只有 WinUI 3 条 + MAUI 3 条，理由写在该文件顶部：要真 XAML/MAUI 运行时）。⇒ **WPF 上没有 `Unreachable` 这个逃逸口**，漏了 `WpfEntries.cs` 一行就是 `SamplerCoverageTests.EveryShippedSampler_IsAccountedFor` 直接红。
 
 6. **`WpfEntries.cs` 记录了一个真会咬人的坑：七家采样器共享同一个命名空间 `VeloxDev.Adapters.NativeSamplers` 且类名相同** ⇒ 同一个测试项目里引用两家就是 CS0433/CS0104。那份文件里的解法是显式 using 别名 + 程序集限定名反射（`VeloxDev.Adapters.NativeSamplers.{name}`）。**这条不是测试的怪癖，是真实的适配器形状**：新接一家沿用同名同namespace 时，任何同时引用两家的项目都要付这份成本。
 
-7. **声明成 `Effect`（抽象基类）的属性曾经在注册表里一条键都没有 —— 2026-09-20 已改成注册基类型。** 查找只**向上**走（精确 → 基类 → 接口，`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:50-87`），所以注册具体类型 `DropShadowEffect` 时，`Effect` 的基类链（`Animatable` → `Freezable` → `DependencyObject` → `object`）上没有键 ⇒ `Prepare` 报一次 `Unsampled` 并把该属性**整个跳过**（`Interpolator.cs:178-182`），**不抛、不降级、不提示**。现在注册的是 `typeof(Effect)`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Interpolator.cs:25`），**这条键的代价是必须服务整个家族**（Core 注册表那条通则的实例）：
+7. **声明成 `Effect`（抽象基类）的属性曾经在注册表里一条键都没有 —— 2026-09-20 已改成注册基类型。** 查找只**向上**走（精确 → 基类 → 接口，`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:51-91`），所以注册具体类型 `DropShadowEffect` 时，`Effect` 的基类链（`Animatable` → `Freezable` → `DependencyObject` → `object`）上没有键 ⇒ `Prepare` 报一次 `Unsampled` 并把该属性**整个跳过**（`Sampling/Interpolator.cs:181-185`），**不抛、不降级、不提示**。现在注册的是 `typeof(Effect)`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Interpolator.cs:25`），**这条键的代价是必须服务整个家族**（Core 注册表那条通则的实例）：
    - **两处独立地照 `Effect` 声明**，所以这不是测试的臆造：真 demo 的 DP 是 `Register(nameof(Shadow), typeof(Effect), null)`、属性是 `public Effect? Shadow`（`Examples/Transition/WPF/Demo/SamplerSubject.cs:41,81`）；纯数据表的 `Target.Shadow` 同样是 `Effect`（`Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs:37`）。
    - **两处此前能跑，都是绕开了注册表**：demo 用 `SetInterpolator` 逐条覆盖（`Examples/Transition/WPF/Demo/MainWindow.xaml.cs:321`），纯数据表直接拿采样器实例。⇒ 改注之前，「`Effect` 属性能动画」这句话在仓库里**没有任何一条经注册表的证据**；现在有了。
    - **公开 API 暴露的是具体类型**：`Transition.cs:125` 的重载签名是 `Expression<Func<T, DropShadowEffect?>>`。这条重载仍是「编译期就知道是阴影」时的最短写法，但**它不是走通 `Effect` 声明的前提** —— 泛型 `Property<TValue>` 配 `typeof(Effect)` 那条键即可，demo 与纯数据表用的都是后者。

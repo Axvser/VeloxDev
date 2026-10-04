@@ -141,7 +141,7 @@ public class TransitionSchedulerCore<
             catch (Exception exception)
             {
                 // 宿主回调抛出的异常到此为止：动画结束，宿主进程不受影响。
-                diagnostics.Error("Awake", exception);
+                diagnostics.Error(ErrorStage.Awake, exception);
                 return null;
             }
 
@@ -149,7 +149,7 @@ public class TransitionSchedulerCore<
             // animation that cannot draw. Leaving here still releases the gate through the finally below.
             if (!awoken)
             {
-                diagnostics.Warn("Dropped", "the host's dispatch queue refused the animation's Awake.");
+                diagnostics.Warn(WarnStage.Dropped, "the host's dispatch queue refused the animation's Awake.");
                 return null;
             }
 
@@ -161,7 +161,7 @@ public class TransitionSchedulerCore<
             catch (Exception exception)
             {
                 // 一个准备不出来的属性不该带走整趟动画，更不该带走宿主进程。
-                diagnostics.Error("Prepare", exception);
+                diagnostics.Error(ErrorStage.Prepare, exception);
                 return null;
             }
 

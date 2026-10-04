@@ -48,7 +48,7 @@
 
 | 要注册的东西 | 注册点 | 什么时候真的发生 |
 |---|---|---|
-| 12 个采样器 | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs:12-30`） | 第一次**构造** `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:290`，约束 `:269` 的 `new()`） |
+| 12 个采样器 | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs:12-30`） | 第一次**构造** `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:297`，约束 `:271` 的 `new()`） |
 | 采样器所在的宿主/解释器/优先级 | `TransitionScheduler` 的类型实参（`PlatformAdapters/TransitionScheduler.cs:5-9`） | 同上，全部编译期写死 |
 | DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler`（`PlatformAdapters/Interpolator.cs:31-34`） | **宿主必须显式调** `ThemeManager.SetPlatformInterpolator(new Interpolator())` |
 
@@ -120,7 +120,7 @@
 
 **`GlobalUsings.cs` 三行，七个适配器逐字相同**（`global using` `VeloxDev.TransitionSystem` / `VeloxDev.TransitionSystem.Abstractions` / `VeloxDev.Threading`）：
 
-- 这就是为什么本模块的 PlatformAdapters 文件都不写 `using VeloxDev.TransitionSystem;` 却能用 `InterpolatorCore`、`ISampler`（它们定义在 `...Abstractions` 里，`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:7`）。
+- 这就是为什么本模块的 PlatformAdapters 文件都不写 `using VeloxDev.TransitionSystem;` 却能用 `InterpolatorCore`、`ISampler`（它们定义在 `...Abstractions` 里，`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:7`）。
 - **它不含 `VeloxDev.WorkflowSystem`** ⇒ `Attached/` 里 6 个文件各自写 `using VeloxDev.WorkflowSystem;`（`WorkflowEvents`/`WorkflowMinimapOverlay`/`WorkflowNodeDragBehavior`/`WorkflowSlotConnectionBehavior`/`WorkflowSlotLayoutBehavior`/`WorkflowSurfaceBehavior`；另 3 个不需要：`ViewPool.cs`、`WorkflowCanvasTransformBehavior.cs`、`ViewManager.cs`）。
 - **`global using` 是编译期的，不随包/`ProjectReference` 传给消费者**：宿主要用 `Transition<T>` 仍得自己写 `using VeloxDev.TransitionSystem;`（`Examples/Theme/WPF/Demo/App.xaml.cs:3`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:3` 都写了）。⇒ 别指望引用 `VeloxDev.WPF` 之后自己项目里能少写一行 using。
 

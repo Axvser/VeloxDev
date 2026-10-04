@@ -15,7 +15,7 @@
 | 怎么把动作送到那条线程 | `PostCore(target, thread, action, priority) → bool` | `:39`（protected abstract） | 必须 |
 | 更精确的「在不在 target 的线程上」 | `IsCurrentFor(target, thread)` | `:26`（protected virtual，默认 `IsCurrentThread(thread)`） | 可选 —— 覆写它 = 决定 UI 线程上的写要不要走消息泵（`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs:63` 是全树唯一例子） |
 | 阻塞读用的优先级 | `InternalPriority` | `:46`（protected virtual，默认 `default!`） | **有优先级的宿主必须覆写** |
-| 「宿主还活着吗」 | `Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs`；宿主侧的入口是 `TransitionHostBase.IsAlive` 与 `TransitionHostBase.Lifetime`（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionHostBase.cs:12,15`） | | 可选，但见 `memory/modules/Lifetime/extension.md` |
+| 「宿主还活着吗」 | `Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs`；宿主侧的入口是 `TransitionHostBase.IsAlive` 与 `TransitionHostBase.Lifetime`（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs:12,15`） | | 可选，但见 `memory/modules/Lifetime/extension.md` |
 
 **不要在适配器里实现 `IThreadDispatcher<TPriorityCore>`**：派生 `ThreadDispatcherBase<TPriorityCore>`（→ 实用上再派生 `TransitionHostBase<TPriorityCore>`）。基类的注释（`ThreadDispatcherBase.cs:3-6`）写明了理由：派生面只写一次，宿主的差异只剩三个答案。直接实现接口 = 自己重写 `PostAsync` 的「只在被接受时才等」规则（`:65-75`）与 `Run<T>` 的失败语义（`:92`），这两条都是错了不报错的东西。
 
@@ -25,16 +25,16 @@
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| `PostCore` 在拿不到句柄/队列已关时乐观返回 `true` | `PostAsync` 的消费者会等一个永不完成的 TCS；而它唯一消费者 `Awake` 是在持有 scheduler `_gate` 时 await 的 ⇒ 那条 `_gate` 永不释放，该 target 之后每次动画都永远排队 | `ThreadDispatcherBase.cs:65-75`、`Src/Core/VeloxDev.Core/TransitionSystem/TransitionScheduler.cs:118`/`:132`/`:182` |
+| `PostCore` 在拿不到句柄/队列已关时乐观返回 `true` | `PostAsync` 的消费者会等一个永不完成的 TCS；而它唯一消费者 `Awake` 是在持有 scheduler `_gate` 时 await 的 ⇒ 那条 `_gate` 永不释放，该 target 之后每次动画都永远排队 | `ThreadDispatcherBase.cs:65-75`、`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs:118`/`:132`/`:182` |
 | `ThreadFor` 里为调用方**造**一个句柄 | 消费者被钉在一个没人驱动的消息泵上，且没有任何地方会报 | `IThreadDispatcher.cs:14-17` |
 | 把 `IsCurrentFor` 覆写成「我是 UI 线程就 true」之类的通用判断 | 判据是 **target 相对**的；谎报 true 会让 inline 分支在错的线程上直写 target，静默通过（inline 分支不投递、不排队、也不 catch） | `ThreadDispatcherBase.cs:56`、`:98-102`、`IThreadDispatcher.cs:4-10` |
-| 有优先级的宿主不覆写 `InternalPriority` | 它决定 `Run<T>` 那次**阻塞读**排在哪个优先级。默认 `default!`，而 Core 那句注释（「`default(DispatcherPriority)` 是 `Inactive`，这条读要等消息泵完全空闲才跑」）**只在 WPF 的枚举上成立** —— Avalonia 的 `default` 不是 `Inactive`，两家的差别与实测见 `memory/modules/TransitionSystem/adapters/avalonia.md` §二.1（两个枚举都定义在 SDK 里，树内核不到） | `ThreadDispatcherBase.cs:41-46`、`:90`；`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:153` |
+| 有优先级的宿主不覆写 `InternalPriority` | 它决定 `Run<T>` 那次**阻塞读**排在哪个优先级。默认 `default!`，而 Core 那句注释（「`default(DispatcherPriority)` 是 `Inactive`，这条读要等消息泵完全空闲才跑」）**只在 WPF 的枚举上成立** —— Avalonia 的 `default` 不是 `Inactive`，两家的差别与实测见 `memory/modules/TransitionSystem/adapters/avalonia.md` §二.1（两个枚举都定义在 SDK 里，树内核不到） | `ThreadDispatcherBase.cs:41-46`、`:90`；`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:153` |
 | 往 `ThreadFor` 加 `catch { return null; }` 之外的语义 | 「没有线程拥有它」已经是 `ThreadRef.None` 这个**答案**，不是异常；返 None 的后果是确定的：pacer 得到 `null`、`PostCore` 该丢帧 | `ThreadRef.cs:17-18`、`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/TransitionInterpreter.cs:10` |
-| 用三参 `Post(target, action, priority)` 做写路径 | 它每次自己解析线程（`:50-51`），在「答案随调用者变化」的宿主上必然解析错；写路径必须用钉好的那条 | `Src/Core/VeloxDev.Core/TransitionSystem/SamplerSet.cs:114-115`、`Src/Core/VeloxDev.Core/TransitionSystem/TransitionScheduler.cs:111-113` |
+| 用三参 `Post(target, action, priority)` 做写路径 | 它每次自己解析线程（`:50-51`），在「答案随调用者变化」的宿主上必然解析错；写路径必须用钉好的那条 | `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:114-115`、`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs:111-113` |
 | 以为 `Post` 的 `true` 意味着「跑完了」 | 它只意味着「入队了」。要等就得用 `PostAsync`，而 `PostAsync` 也只在真入队时才等 | `IThreadDispatcher.cs:26-29` vs `:41` |
 | 把 `ThreadRef` 存起来当「UI 线程身份」跨进程/跨 circuit 复用 | 它是不透明句柄、相等即引用相等；Razor 上句柄随 circuit 变，缓存第一个就等于把所有 circuit 的帧投进第一个 | `ThreadRef.cs:31-38`；`Src/Core/VeloxDev.Core.Test/TransitionSystem/TransitionRunThreadAffinityTests.cs:135-162` 是这条的回归测试（两个 circuit 各投各的） |
 
-**没有「官方 vs 捷径」的一条提醒**：`Post`/`PostAsync`/`Run` 三条路径对**异常**的处理不同 —— `Run`/`PostAsync` 把动作异常装进完成源（`Run` 再在 `GetResult` 处重抛，`PostAsync` 由 `await` 处重抛），`Post` 让异常落在泵它的线程上。写路径的异常已经被 `SamplerSet.ApplyCore` 收口（`Src/Core/VeloxDev.Core/TransitionSystem/SamplerSet.cs:132-142`），**不要在适配器里再加一层 catch**。
+**没有「官方 vs 捷径」的一条提醒**：`Post`/`PostAsync`/`Run` 三条路径对**异常**的处理不同 —— `Run`/`PostAsync` 把动作异常装进完成源（`Run` 再在 `GetResult` 处重抛，`PostAsync` 由 `await` 处重抛），`Post` 让异常落在泵它的线程上。写路径的异常已经被 `SamplerSet.ApplyCore` 收口（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:132-142`），**不要在适配器里再加一层 catch**。
 
 ---
 
@@ -46,7 +46,7 @@
 4. **定 `PostCore`**：返回**真实的**「入队了吗」。平台没有失败信号时（`SynchronizationContext.Post` 无返回值）只能按已接受记，但要在注释里写明兜底是谁 —— 现成的措辞见 `Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs:66-68`。
 5. **有优先级就覆写 `InternalPriority`**；没有优先级就把第七型参填 `NonPriority`（`NonPriority.cs`），不需要碰它。
 6. **存活**：见 `memory/modules/Lifetime/extension.md`。这一条是可以**先不做**的，但要知道代价（同一份文件里写了）。
-7. **pacer 必须用 `affinity.ThreadFor(target)`**，不能用平台侧的等价调用去另推一次 —— 两者不一致 = 每帧一次 dispatch（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:69-73`）。`CreateFramePacer` 只拿到 `IThreadAffinity`，正是为了让这家无法悄悄拿到投递/存活。
+7. **pacer 必须用 `affinity.ThreadFor(target)`**，不能用平台侧的等价调用去另推一次 —— 两者不一致 = 每帧一次 dispatch（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:69-73`）。`CreateFramePacer` 只拿到 `IThreadAffinity`，正是为了让这家无法悄悄拿到投递/存活。
 8. 跑 `Src/Core/VeloxDev.Core.Test/` 里已有的宿主形状（`Src/Core/VeloxDev.Core.Test/TestHosts.cs` 三个：`ImmediateHost` 全 inline、`InlinePostHost` 永不在线程上、`DeferredHost` 入队后手动 `Pump()`）—— 这三条覆盖了「真投递」「优先级参数」「fire-and-forget 落地」三件事，新宿主至少要在同形的位置有对应物。
 
 ---

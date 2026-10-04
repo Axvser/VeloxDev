@@ -318,7 +318,7 @@ public class FramePacerTests
         var effect = new TransitionEffectCore { Duration = TimeSpan.Zero, FPS = 60 };
         effect.Finally += (_, _) => throw new InvalidOperationException("a host's own callback");
 
-        TransitionEventArgs? reported = null;
+        TransitionEventArgs<ErrorStage, Exception>? reported = null;
         effect.Error += (_, e) => reported = e;
 
         var frameSet = new TestInterpolator().Prepare(target, state, effect, new ImmediateInspector());
@@ -330,8 +330,8 @@ public class FramePacerTests
         Assert.IsNotNull(pacer, "the interpreter must have been asked for a pacer");
 
         Assert.IsNotNull(reported, "the callback's exception must reach the Error channel");
-        Assert.AreEqual("Finally", reported!.Stage);
-        Assert.IsInstanceOfType<InvalidOperationException>(reported.Exception);
+        Assert.AreEqual(ErrorStage.Finally, reported!.Stage);
+        Assert.IsInstanceOfType<InvalidOperationException>(reported.Value);
 
         Assert.IsTrue(pacer.IsDisposed,
             "the callback is host code; the resources are the loop's, and one must not be able to take the other");

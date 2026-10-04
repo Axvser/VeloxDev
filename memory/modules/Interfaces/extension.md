@@ -41,7 +41,7 @@
 
 | 反例 | 为什么别照抄 |
 |---|---|
-| `ITransitionEffect.cs:36` 的 `InvokeCancled` | 拼写错（`Canceled` 在 `:24` 是对的，`InvokeCancled` 少一个 `c`）。**改名是破坏性变更**：`Src/Core/VeloxDev.Core/TransitionSystem/TransitionEffect.cs:56` 的私有字段也叫 `_cancled`。新契约别复制这个拼写 |
+| `ITransitionEffect.cs:36` 的 `InvokeCancled` | 拼写错（`Canceled` 在 `:24` 是对的，`InvokeCancled` 少一个 `c`）。**改名是破坏性变更**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:56` 的私有字段也叫 `_cancled`。新契约别复制这个拼写 |
 | `IVeloxCommand`（`IVeloxCommand.cs:5`） | 它 `: System.Windows.Input.ICommand` —— 契约直接继承了一个 BCL 接口，于是实现方必须同时满足两边。只在「所有实现方本来就都要实现 BCL 接口」时才这么做 |
 | `Interfaces/Tickable/ITickable.cs` | 名字里曾有 U+200B，**2026-10-01 已清除**（见 architecture.md §八·9）。**新契约绝对不要**引入 Cf 类字符：编译器忽略它，所以能编译，但裸路径打不开、`grep -l` 漏、文档生成器可能崩 —— 而代码评审看不出来 |
 | `IWorkflowTreeViewModel.cs:9` | 单个文件里声明 2–3 个接口（`ITransitionScheduler.cs` 3 个、四族 VM 各 2 个）是既有做法，但代价是**按文件名找接口会失效**；新契约优先一文件一接口 |
@@ -79,7 +79,7 @@
 
 | 条件（都成立才拆） | `ITimeSourceControl` 的实况 |
 |---|---|
-| 同一个对象会**被交给不该写它的那一方**（订阅者、采样器、消费者） | 动画管线自己拿写侧（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionRun.cs:34`），sampler 拿读侧（`ITimeSource.cs:10-11`） |
+| 同一个对象会**被交给不该写它的那一方**（订阅者、采样器、消费者） | 动画管线自己拿写侧（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionRun.cs:34`），sampler 拿读侧（`ITimeSource.cs:10-11`） |
 | 写操作是**少数几个**、可以穷举 | 写侧只加 5 个成员的规模（`Pause`/`Resume`/`SetRate`/`Seek`/`Wake`） |
 | 拆开能让「只读方」的签名自证其意图 | `ITimeSampler` 拿的是只读面（`ITimeSource.cs:10-11` 的说明） |
 
@@ -124,8 +124,8 @@
 |---|---|---|
 | 1 | `Src/Generators/VeloxDev.Core.Generator/` 里的**字符串全名**（`Theme.cs`、`AopSurface.cs`、`Writers/{TickWriter,CommandWriter,WorkflowWriter}.cs`） | 改名后静默不生成，症状远离病因 |
 | 2 | 七家适配器 `Src/Adapters/<平台>/PlatformAdapters/`（`UIThreadInspector` / `Samplers/` / `ThemeValueConverters` / `Attached/Workflow/*`） | 编译失败（好情况）或漏一家（见 §五·1 的规模差异） |
-| 3 | Core 侧的**默认实现**：`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/*DefaultViewModel.cs`、`TransitionSystem/{TransitionInterpreter,TransitionScheduler,TransitionEffect,TransitionProperty}.cs` | 编译失败 |
+| 3 | Core 侧的**默认实现**：`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/*DefaultViewModel.cs`、`TransitionSystem/{Runtime/TransitionInterpreter,Runtime/TransitionScheduler,Effects/TransitionEffect,Binding/TransitionProperty}.cs` | 编译失败 |
 | 4 | `Src/Templates/*/working/content/<契约名>/` 与 `Examples/`（`IWorkflowGridDecorator` 不在适配器本体的那 4 家在这里补；`IWorkflowMinimapOverlay` 现已 7/7 在适配器本体） | 该平台的示例/模板缺能力 |
-| 5 | 若是注册表键：`TimerCore.RegisterTimeSource<…>` 的所有调用点（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs` 定义，`TransitionSystem/SamplerSet.cs:78`、`Transition.cs:394` 消费） | 运行期抛「未注册」，编译期无感 |
+| 5 | 若是注册表键：`TimerCore.RegisterTimeSource<…>` 的所有调用点（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs` 定义，`TransitionSystem/Sampling/SamplerSet.cs:78`、`TransitionSystem/Effects/Transition.cs:393` 消费） | 运行期抛「未注册」，编译期无感 |
 | 6 | `Tests`：`Src/Core/VeloxDev.Core.Test/` 下的手写实现（`DynamicTheme/ThemeTransitionTests.cs:48`、`TimeLine/TickableBusTests.cs:46` 是 `IThemeObject`/`ITickable` 仅存的手写实现） | 测试编译失败 |
 | 7 | **不必**动：`Interfaces/` 内的目录结构（挪文件不改命名空间，见 `architecture.md` §一），也不影响任何 `using` | — |

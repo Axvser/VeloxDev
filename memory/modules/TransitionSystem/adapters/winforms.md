@@ -27,13 +27,13 @@
 
 **一句话：采样器条数不度量实现完整度，它度量「这家框架自带的、Core 还没覆盖的可动画值类型有几个」。而 WinForms 的那一族正好被 Core 全包了。**
 
-- Core 的 `InterpolatorCore` 静态构造（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:12-28`）注册的是：4 个数值类型（`double`/`float`/`int`/`long`）+ `System.Drawing` 的 `Point`/`PointF`/`Size`/`SizeF`/`Color`/`Rectangle`/`RectangleF` + `#if !NETSTANDARD2_0` 的 `Vector2/3/4`/`Quaternion`。**`System.Drawing.Primitives` 是无 GUI 依赖的程序集，所以 Core 引用得起它** —— 这是这家的采样器表看起来「空」的根本原因。
+- Core 的 `InterpolatorCore` 静态构造（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:12-28`）注册的是：4 个数值类型（`double`/`float`/`int`/`long`）+ `System.Drawing` 的 `Point`/`PointF`/`Size`/`SizeF`/`Color`/`Rectangle`/`RectangleF` + `#if !NETSTANDARD2_0` 的 `Vector2/3/4`/`Quaternion`。**`System.Drawing.Primitives` 是无 GUI 依赖的程序集，所以 Core 引用得起它** —— 这是这家的采样器表看起来「空」的根本原因。
 - WinForms 的属性面**就是 `System.Drawing` 那一族**：`Control.Location`=Point、`Control.Size`=Size、`BackColor`/`ForeColor`=Color、`Bounds`/`ClientRectangle`=Rectangle/`RectangleF`、`Font` 是引用类型。
 - 排掉这些**只剩 `System.Windows.Forms.Padding`** —— 它是 `System.Drawing` 之外唯一一个 WinForms 专有可动画值类型，也就是 WPF/Avalonia/WinUI/MAUI/Jalium 五家 `Thickness` 的对等物。所以注册表里只有一行（`Interpolator.cs:9`）。
 - **这不是「还没补」**：上一条的推理已经把「可动画的专有类型只剩 `Padding`」用属性面推完了；树内可核的现状是 `PlatformAdapters/Samplers/PaddingSampler.cs` 一个文件、`Interpolator.cs:9` 一条注册。**「以前是不是更少」只存在于提交历史、代码里复核不到**，所以别拿数少去推断这里缺了实现。
 - 这家**没有** `Brush`/`Transform`/`CornerRadius`/`GridLength`/`DropShadow`/`Projection`/`Point3D` 的等价物：画刷按需 `new SolidBrush(color)` 现造（`ThemeValueConverters.cs:433`），坐标变换是 GDI+ 的 `Graphics.Transform` 而不是视图模型上的属性 —— WorkflowSystem 那半边也印证：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowCanvasTransformBehavior.cs` 存的是一个 `Offset` 结构，不是变换对象。
 - 校准别家的数（免得把「少」当缺陷；**数的是采样器类数 / `RegisterInterpolator` 条数**，两者仅在 Jalium 上不同 —— 它的 `BrushSampler` 同时注册 `Brush` 与 `SolidColorBrush`）：Avalonia 14/14、WPF 12/12、MAUI 12/12、WinUI 10/10、Jalium 9/10、**WinForms 1/1、Razor 1/1**。
-- **副作用（容易手贱的一点）**：`Point`/`Size`/`Color` 在 Core 里已经注册过，**不要**在这家再注册一遍。`RegisterInterpolator` 是进程级 last-writer-wins 的原子 `AddOrUpdate`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:92-98`），而 `Interpolator` 与 `InterpolatorCore` 两个静态构造谁先跑不确定；重注册会无声地把 Core 的实现换掉。WPF/Avalonia 那种「同名不同型的 `Point`」在这家**不存在**（它俩用的就是同一个 `System.Drawing.Point`），所以那条理由不适用。
+- **副作用（容易手贱的一点）**：`Point`/`Size`/`Color` 在 Core 里已经注册过，**不要**在这家再注册一遍。`RegisterInterpolator` 是进程级 last-writer-wins 的原子 `AddOrUpdate`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:92-98`），而 `Interpolator` 与 `InterpolatorCore` 两个静态构造谁先跑不确定；重注册会无声地把 Core 的实现换掉。WPF/Avalonia 那种「同名不同型的 `Point`」在这家**不存在**（它俩用的就是同一个 `System.Drawing.Point`），所以那条理由不适用。
 
 ---
 
@@ -57,7 +57,7 @@
 - 对照：WPF / Avalonia / WinUI / MAUI / Jalium 五家**一律**从 `affinity.ThreadFor(target)` 派生（WPF 是 `affinity.ThreadFor(target).TryGet<Dispatcher>(out var d) ? new DispatcherFramePacer(d) : null`，`Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs:9-12`；其余四家同形，只换 `TryGet` 的类型）——它们的 `DispatcherTimer` 是**按优先级排队的队列项**，不受这条规则影响；Razor 干脆不覆写，注释写着「Blazor 没有在渲染器自己线程上触发的定时器」（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs:4`）。
 - **仍然「有条件地」取**（七家里唯一，见 §三·4），但判据的含义变了：不再是因为「Forms 定时器只能在自己线程上 tick」，而是「续体要投到哪个控件的窗口上，只有已经在它线程上时才认这个前提」。
 - `IsCurrent(target)` 走基类的 `IsCurrentFor(target, ThreadFor(target))`（`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs:15`），而这家覆写了 `IsCurrentFor`（见 §三·1）。
-- **后果（要记住）**：从非 UI 线程**首次**发起一段动画 ⇒ 没有 pacer ⇒ 回落到 `ArmNextFrame` 的默认实现（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:94`），而 `FrameWait` **不还原 `SynchronizationContext`**（`extension.md` §F 已写）⇒ `Update`/`LateUpdate` 会漂到线程池线程上跑。所以「确保第一次触碰发生在 UI 线程」在这家不是优化，是前提。
+- **后果（要记住）**：从非 UI 线程**首次**发起一段动画 ⇒ 没有 pacer ⇒ 回落到 `ArmNextFrame` 的默认实现（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:94`），而 `FrameWait` **不还原 `SynchronizationContext`**（`extension.md` §F 已写）⇒ `Update`/`LateUpdate` 会漂到线程池线程上跑。所以「确保第一次触碰发生在 UI 线程」在这家不是优化，是前提。
 - **代价（换来的东西不是白给的）**：每帧多一次 `BeginInvoke`（一次小对象分配 + 一条投递消息）。空闲实测：16 条动画 60 fps 下 ~1300 次投递/秒，同时队列里还有 ~770 次 WM_PAINT/200 ms，画布每次重画 ~4 ms —— 都在余量内。CPU 全忙时帧会排队变慢而不是停止：`SamplerSet.Apply` 在执行时读的是最新时刻，所以积压的帧落地时画的是当前位置。
 
 ### 2.3 目标无句柄 / 非控件时的退路
@@ -96,9 +96,9 @@
 
 ### 4.1 `decimal` 重载能声明、能编译、动画静默不动
 
-`Transition<T>.Property(Expression<Func<T, decimal>>, decimal, ...)` 存在（`Transition.cs:70-75`），但**全仓库没有任何地方为 `decimal` 注册采样器**：Core 的注册表里没有（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:12-27`），本家的注册表里只有 `Padding`（`Interpolator.cs:9`）。全仓库 `typeof(decimal)` 的命中全部在 AI 工具面（`Src/Core/VeloxDev.Core.Extension/Agent/...`），与动画无关。
+`Transition<T>.Property(Expression<Func<T, decimal>>, decimal, ...)` 存在（`Transition.cs:70-75`），但**全仓库没有任何地方为 `decimal` 注册采样器**：Core 的注册表里没有（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:12-27`），本家的注册表里只有 `Padding`（`Interpolator.cs:9`）。全仓库 `typeof(decimal)` 的命中全部在 AI 工具面（`Src/Core/VeloxDev.Core.Extension/Agent/...`），与动画无关。
 
-运行后果**不是抛异常**：`InterpolatorCore.Prepare` 走到最后一步找不到采样器，只发一次 `Warn("Unsampled")` 然后 `continue`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:178-182`）。于是一段「只动 `decimal` 属性」的动画会不报错、不画、直接跑完。**要动画 `decimal` 必须自己写采样器并注册。**
+运行后果**不是抛异常**：`InterpolatorCore.Prepare` 走到最后一步找不到采样器，只发一次 `Warn(WarnStage.Unsampled, …)` 然后 `continue`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:181-185`）。于是一段「只动 `decimal` 属性」的动画会不报错、不画、直接跑完。**要动画 `decimal` 必须自己写采样器并注册。**
 
 这条同时是「16 个手写重载是照抄来的、不是从注册表推出来的」的证据：如果这 16 个重载是按采样器表写的，`decimal` 根本不会出现在里面。
 
@@ -122,7 +122,7 @@
 
 ### 4.5 静态构造的触发时机：这家的注册只有一个，漏掉等于「全部不动画」
 
-`Interpolator` 的静态构造（`Interpolator.cs:7-10`）只在 `Interpolator` 这个类型被第一次触碰时跑。`TransitionCore<...>` 有 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:297`），在 WinForms 上就是 `new Interpolator()` ⇒ 只要 `new Transition<T>()` 过一次，注册就发生了，**不需要任何显式注册调用**。反过来：绕开 `Transition<T>` 直接调 `InterpolatorCore.Prepare` 时 `Padding` 没注册。别家漏一个注册只是少一个类型，这家漏掉就是全部（表里只有一项）。
+`Interpolator` 的静态构造（`Interpolator.cs:7-10`）只在 `Interpolator` 这个类型被第一次触碰时跑。`TransitionCore<...>` 有 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:297`），在 WinForms 上就是 `new Interpolator()` ⇒ 只要 `new Transition<T>()` 过一次，注册就发生了，**不需要任何显式注册调用**。反过来：绕开 `Transition<T>` 直接调 `InterpolatorCore.Prepare` 时 `Padding` 没注册。别家漏一个注册只是少一个类型，这家漏掉就是全部（表里只有一项）。
 
 ---
 

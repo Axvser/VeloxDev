@@ -64,7 +64,7 @@
 
 | 契约 | 七家现状 | 依据（每家的锚点） |
 |---|---|---|
-| `ITransitionHost<TPriorityCore>` | **7/7**：`PlatformAdapters/UIThreadInspector.cs` 继承 Core 的 `TransitionHostBase<…>` | `Src/Core/VeloxDev.Core/TransitionSystem/TransitionHostBase.cs:9`；7 家分别 `Src/Adapters/<平台>/PlatformAdapters/UIThreadInspector.cs` |
+| `ITransitionHost<TPriorityCore>` | **7/7**：`PlatformAdapters/UIThreadInspector.cs` 继承 Core 的 `TransitionHostBase<…>` | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs:9`；7 家分别 `Src/Adapters/<平台>/PlatformAdapters/UIThreadInspector.cs` |
 | `ISampler` | **7/7**，但规模差一个量级：Avalonia 14 个文件、WPF 12、MAUI 12、WinUI 10、Jalium 9、**Razor 1、WinForms 1**（`PlatformAdapters/Samplers/*.cs` 文件数） | 同名目录下每文件一个采样器类 |
 | `IWorkflowMinimapOverlay` | **7/7 适配器本体**（`Attached/Workflow/WorkflowMinimapOverlay.cs`；Razor 是 `WorkflowMinimapOverlay.razor.cs`，WinForms 还同时实现 `IWorkflowMinimapScrollSource`） | 各家类声明：Avalonia `:23`、Jalium `:15`、MAUI `:19`、WinForms `:23`、WinUI `:21`、WPF `:19`、Razor `:27` |
 | `IWorkflowGridDecorator` | 适配器本体有 **2 家**（Razor `Attached/Workflow/WorkflowGridDecorator.razor.cs:14`、WinForms `Attached/Workflow/WorkflowGridDecorator.cs:23`）；Avalonia/MAUI/WinUI/WPF 在 `Src/Templates/*/working/content/workflow-grid-decorator/TemplateClass.cs` 与 `Examples/Workflow/<平台>/…` 里实现；**Jalium 仍一个实现都没有**：适配器发的是可继承基类 `WorkflowGridDecorator`（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowGridDecorator.cs:22`，用自己的签名，不实现本接口），模板派生它 | 2/7 在适配器，4/7 在模板/demo，1/7（Jalium）无 —— **「七家适配器都实现」这个印象对本契约是错的** |
@@ -74,11 +74,11 @@
 
 | 契约 | Core 实现 | 外部该怎么做 |
 |---|---|---|
-| `ITransitionInterpreter<TPriorityCore>` | `Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:10`、`:31` | 平台**继承** `TransitionInterpreterCore<…>`（7 家 `PlatformAdapters/TransitionInterpreter.cs:5-7`），别直接实现接口 |
-| `ITransitionScheduler<TPriorityCore>` / `ITransitionScheduler` / `ITransitionSchedulerCore` | `Src/Core/VeloxDev.Core/TransitionSystem/TransitionScheduler.cs:12`、`:229` | 同上：平台继承 `TransitionSchedulerCore<…>`（如 `Src/Adapters/VeloxDev.MAUI/PlatformAdapters/TransitionScheduler.cs:3`） |
-| `IFrameState` | `Src/Core/VeloxDev.Core/TransitionSystem/State.cs:8` | 不实现 |
-| `ITransitionProperty` | `Src/Core/VeloxDev.Core/TransitionSystem/TransitionProperty.cs:24`、`:157` | 不实现（另有两个内部实现：`StructAssembler.cs:92`） |
-| `IEaseCalculator` | `Src/Core/VeloxDev.Core/TransitionSystem/Eases.cs:121,128,134` | 可以自己写缓动，但走注册而不是实现接口 |
+| `ITransitionInterpreter<TPriorityCore>` | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:10`、`:31` | 平台**继承** `TransitionInterpreterCore<…>`（7 家 `PlatformAdapters/TransitionInterpreter.cs:5-7`），别直接实现接口 |
+| `ITransitionScheduler<TPriorityCore>` / `ITransitionScheduler` / `ITransitionSchedulerCore` | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs:12`、`:229` | 同上：平台继承 `TransitionSchedulerCore<…>`（如 `Src/Adapters/VeloxDev.MAUI/PlatformAdapters/TransitionScheduler.cs:3`） |
+| `IFrameState` | `Src/Core/VeloxDev.Core/TransitionSystem/State/State.cs:8` | 不实现 |
+| `ITransitionProperty` | `Src/Core/VeloxDev.Core/TransitionSystem/Binding/TransitionProperty.cs:24`、`:157` | 不实现（另有两个内部实现：`Sampling/StructAssembler.cs:92`） |
+| `IEaseCalculator` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/Eases.cs:121,128,134` | 可以自己写缓动，但走注册而不是实现接口 |
 | `ISampleable` | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/GeometryModels/Viewport.cs:10` | 是**值类型**参与动画的入口，应用为自己的 struct 实现（规则见 `ISampleable.cs:8-13`） |
 | `ISpatialMap<T>` | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Virtualization/SpatialGridHashMap.cs:11` | 不实现 |
 | `ISpatialBoundsProvider` | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Virtualization/NodeBoundsProvider.cs:9`、`NodePairBoundsProvider.cs:14` | 不实现（`"Bounds"` 名字的通知约定写在 `ISpatialBoundsProvider.cs:19-23`） |
@@ -106,14 +106,14 @@
 
 | 被引用的模块 | 处数 | 咬合在哪个接口/成员 |
 |---|---|---|
-| `VeloxDev.AI` | 10 | `[AgentContext]`/`[AgentCommandParameter]` 标在 WorkflowSystem 的契约上（`IWorkflowViewModel.cs:7-8`、`IWorkflowTreeViewModel.cs:31-33`、`IContext.cs:10-11` 等）。读取规则见 `memory/modules/AI/architecture.md` |
+| `VeloxDev.AI` | 11 | `[AgentContext]`/`[AgentCommandParameter]` 标在 WorkflowSystem 的契约上（`IWorkflowViewModel.cs:7-8`、`IWorkflowTreeViewModel.cs:31-33`、`IContext.cs:10-11` 等）。读取规则见 `memory/modules/AI/architecture.md` |
 | `VeloxDev.MVVM` | 5 | `IVeloxCommand` 作为契约的属性类型（`IWorkflowViewModel.cs:26`、`IWorkflowTreeViewModel.cs:34` 等 22 个命令属性） |
-| `VeloxDev.TimeLine` | 3 | `ITickable.cs:1`（`FrameEventArgs`）、`ITransitionEffect.cs:1`（`TransitionEventArgs`）、`ITransitionInterpreter.cs:1`（`TransitionEventArgs`） |
+| `VeloxDev.TimeLine` | 1 | `ITickable.cs:1`（`FrameEventArgs`）。2026-10-04 之前这里还有第二处：`ITransitionInterpreter.cs` 的 `using VeloxDev.TimeLine`，在 `TransitionEventArgs` 从 `VeloxDev.TimeLine` 移入 `VeloxDev.TransitionSystem` 之后就成了死引用，已删 |
 | `VeloxDev.Threading` | 1 | `ITransitionHost.cs:14` 的 `IThreadDispatcher<TPriorityCore>` |
 | `VeloxDev.Lifetime` | 1 | `ITransitionHost.cs:14` 的 `IApplicationState` |
 | `VeloxDev.TransitionSystem.Abstractions` | 2 | `ITransitionScheduler.cs:1`（`InterpolatorCore`）、`ITransitionInterpreter.cs:2`（`SamplerSet<TPriorityCore>`）—— **契约引用了具体类**，见 §八·4 |
 
-**反向最要紧的一条：TransitionSystem ↔ Timing 的耦合点是 `ITimeSourceControl`（写侧！）。** `Src/Core/VeloxDev.Core/TransitionSystem/` 有 5 个文件 `using VeloxDev.Timing`（`SamplerSet.cs:3`、`StateSnapshot.cs:2`、`Transition.cs:6`、`TransitionInterpreter.cs:3`、`TransitionRun.cs:2`），实际用到的类型是 `SamplerSet.cs:78` 与 `Transition.cs:394` 的 `TimerCore.CreateTimeSource<ITimeSourceControl>()`、`TransitionRun.cs:34` 持有的 `ITimeSourceControl`。而 `Src/Core/VeloxDev.Core/Timing/` 反过来**零处**引用 `VeloxDev.TransitionSystem` —— 依赖单向。注意这与 `ITimeSource.cs:10-11` 里"sampler 拿的是只读面"的说明**不矛盾但也不重合**：动画管线要 `Wake`/`Seek`，所以它拿的是写侧。
+**反向最要紧的一条：TransitionSystem ↔ Timing 的耦合点是 `ITimeSourceControl`（写侧！）。** `Src/Core/VeloxDev.Core/TransitionSystem/` 有 5 个文件 `using VeloxDev.Timing`（`Sampling/SamplerSet.cs:3`、`State/StateSnapshot.cs:2`、`Effects/Transition.cs:6`、`Runtime/TransitionInterpreter.cs:3`、`Runtime/TransitionRun.cs:2`），实际用到的类型是 `Sampling/SamplerSet.cs:78` 与 `Effects/Transition.cs:393` 的 `TimerCore.CreateTimeSource<ITimeSourceControl>()`、`Runtime/TransitionRun.cs:34` 持有的 `ITimeSourceControl`。而 `Src/Core/VeloxDev.Core/Timing/` 反过来**零处**引用 `VeloxDev.TransitionSystem` —— 依赖单向。注意这与 `ITimeSource.cs:10-11` 里"sampler 拿的是只读面"的说明**不矛盾但也不重合**：动画管线要 `Wake`/`Seek`，所以它拿的是写侧。
 
 ---
 
@@ -126,7 +126,7 @@
 5. **WorkflowSystem 四族的 helper 不在基接口上。** `IWorkflowViewModel`（`:9`）只有初始化/通知/`CloseCommand`；`GetHelper()`/`SetHelper()` 由四个子契约各声明一次（`IWorkflowTreeViewModel.cs:71-72`、`IWorkflowNodeViewModel.cs:67-68`、`IWorkflowSlotViewModel.cs:55-56`、`IWorkflowLinkViewModel.cs:27-28`）—— 所以拿到基接口引用**拿不到 helper**。
 6. **命令属性的数量按语义给，不按对称**：`IVeloxCommand` 属性在五个契约里是 1（基）/8（Tree）/8（Node）/4（Slot）/1（Link），共 22 个。
 7. **异步成员一律把取消参数放最后**，但默认值不统一：`ITimeSource.cs:100`（`CancellationToken cancellationToken = default`）与 `ITransitionScheduler.cs:11`/`:24`（`CancellationTokenSource? externCts = default`）给默认值，WorkflowSystem 的 `ReceiveAsync`/`BroadcastAsync`/`ReverseBroadcastAsync`/`AccessAsync`（`IWorkflowNodeViewModel.cs:92-107`）不给，必须显式传。
-8. **契约里的拼写错误会被固化。** `ITransitionEffectCore` 有 `Canceled` 事件（`:24`）却只有 `InvokeCancled(...)`（`:36`，少一个 `c`），全仓按错拼写用（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionEffect.cs:56` 的字段就叫 `_cancled`）。
+8. **契约里的拼写错误会被固化。** `ITransitionEffectCore` 有 `Canceled` 事件（`:24`）却只有 `InvokeCancled(...)`（`:36`，少一个 `c`），全仓按错拼写用（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:56` 的字段就叫 `_cancled`）。
 9. **`ITickable` 的名字里曾藏着一个 U+200B 零宽空格 —— 2026-10-01 随重命名一并清除**（当时它还叫 `IMonoBehaviour`）。记录留下是因为它**编译得过、代码评审看不出来**，值一条纪律：文件名与 `ITickable` / `InitializeTickable` 两个标识符里各有一个，而编译器忽略 Cf 类字符 ⇒ 两种拼写**是同一个标识符**，元数据里落地的还是无 ZWSP 的写法。坑**全在人这一侧**：裸路径打不开文件（实测 `FileNotFoundError`）、`grep -l` 漏、**连 `git ls-files` 都把路径转义成 `"…\342\200\213.cs"`**，于是 `git ls-files … | grep -c '\.cs$'` 数出 37 而不是 38。
    **现在这些都不成立了** —— 名字就是普通的 `ITickable`，上面的数法也正常了。**纪律**：新契约的名字里绝不允许出现 Cf 类字符；它编译得过，所以唯一的防线是知道这件事。
 

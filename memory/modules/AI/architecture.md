@@ -208,7 +208,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 | `VeloxDev.Core.Extension` | **0** |
 | `VeloxDev.Core` | **4**，全在 `AI/` 之外 |
 
-那 4 条：`CompileKeyNormalizer.cs`（`Type.GetType(string)`）、`SlotEnumerator.ResolveTypeByName`（`Assembly.GetType`，反序列化时按名字还原 `SelectorType`）、`TransitionProperty.cs` 与 `Interpolator.cs`（TransitionSystem）。**前两条属于反序列化**，第三条属于另一个模块 —— 都不在本轮的「Agent 面清零」范围内。
+那 4 条：`CompileKeyNormalizer.cs`（`Type.GetType(string)`）、`SlotEnumerator.ResolveTypeByName`（`Assembly.GetType`，反序列化时按名字还原 `SelectorType`）、`TransitionSystem/Binding/TransitionProperty.cs` 与 `TransitionSystem/Sampling/Interpolator.cs`。**前两条属于反序列化**，第三条属于另一个模块 —— 都不在本轮的「Agent 面清零」范围内。
 
 **注意**：`IsTrimmable=true` 单独用**不够**。SDK 10 上它不引 `Microsoft.NET.ILLink.Tasks`，于是「0 警告」是假象 —— 必须显式 `-p:EnableTrimAnalyzer=true`，并且 Core 也要多目标到 net8.0（否则 Extension 的 net8.0 构建引用不到它）。历史上那条 `-p:TargetFrameworks=...` 的命令在 SDK 10 上已经不成立（属性会泄漏给 Core，报 MSB3277）。
 

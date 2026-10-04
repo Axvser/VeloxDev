@@ -2,7 +2,6 @@
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Threading;
-using VeloxDev.TimeLine;
 using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -345,11 +344,10 @@ public class TransitionCore<
             // async void 没有调用者可以承接异常，让它逃出去就是宿主进程的未处理异常。动画不终止宿主。
             try
             {
-                (root ?? this).effect.InvokeError(target, new TransitionEventArgs
+                (root ?? this).effect.InvokeError(target, new TransitionEventArgs<ErrorStage, Exception>
                 {
-                    Stage = "Run",
-                    Message = exception.Message,
-                    Exception = exception,
+                    Stage = ErrorStage.Run,
+                    Value = exception,
                 });
             }
             catch

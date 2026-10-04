@@ -28,7 +28,7 @@
 
 ### 2. 事件挂在**哪个实例**上，决定订阅者会不会被钉住
 
-`static readonly` 的 owner + 长活订阅者 = 泄漏照旧（强缓存钉住 handler，owner 又永不释放）。官方是**每个视图/每次调用一个 owner 实例**：`Src/Core/VeloxDev.Core/TransitionSystem/TransitionEffect.cs:48-64` 全是实例字段，`skills/veloxdev-create-animation/SKILL.md:224` 把这条写成了规则（"An instance handler is safe exactly because the declaration is per view; on a `static readonly` one it would keep the view alive"）。反例就在测试里：`WeakDelegateTests.cs:10` 的 `Holder` 是 `static readonly`，正是为了让 `:27` 那条"保活"断言成立。
+`static readonly` 的 owner + 长活订阅者 = 泄漏照旧（强缓存钉住 handler，owner 又永不释放）。官方是**每个视图/每次调用一个 owner 实例**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:48-64` 全是实例字段，`skills/veloxdev-create-animation/SKILL.md:224` 把这条写成了规则（"An instance handler is safe exactly because the declaration is per view; on a `static readonly` one it would keep the view alive"）。反例就在测试里：`WeakDelegateTests.cs:10` 的 `Holder` 是 `static readonly`，正是为了让 `:27` 那条"保活"断言成立。
 
 ### 3. 迭代期间不要在回调/循环体里改容器 —— 锁救不了你
 
@@ -76,7 +76,7 @@
 
 | 位置 | 内容 |
 |---|---|
-| `Src/Core/VeloxDev.Core/TransitionSystem/TransitionEffect.cs:48-64` | 9 个 `WeakDelegate<EventHandler<TransitionEventArgs>>` 字段 |
+| `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:48-64` | 9 个 `WeakDelegate` 字段：7 个 `WeakDelegate<EventHandler<TransitionEventArgs>>`（:48-60）+ 2 个带载荷的泛型 `Warn`/`Error`（`<EventHandler<TransitionEventArgs<WarnStage, string>>>` :62、`<…<ErrorStage, Exception>>>` :64） |
 | `:82-134` | 9 对 `add => _x.AddHandler(value); remove => _x.RemoveHandler(value);` |
 | `:137-184` | 9 个 `InvokeXxx`，走 `_x.GetInvocationList()?.Invoke(sender, e)` |
 | `:188` | `Clone()` 里 9 次 `_x.Clone()` |

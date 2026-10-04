@@ -76,7 +76,7 @@
 |---|---|---|
 | 目标帧率 | `SetTargetFPS(fps, channel)` | 入队，由**更新泵**在帧体里同时改 `_targetFPS` 与 `_cachedTargetFrameDurationTicks`（`:770-785`）——两者必须同时生效 |
 | 固定步长 | `SetFixedUpdateInterval(ms, channel)` | **不走配置队列**，用 `_pendingFixedIntervalMs` 交给**固定泵自己的线程**落（`:223-227` + `:460-465`）。从更新线程写 `Step` 会与 `Advance` 争它要重置的累加器 |
-| ❌ 捷径 | 直接改 `FrameEventArgs.TargetFPS` | 字段是 `internal set`（`FrameEventArgs.cs:26`），你改不了；就算能改也只影响这一帧的读数 |
+| ❌ 捷径 | 直接改 `FrameEventArgs.TargetFPS` | 属性是 `internal set`（`FrameEventArgs.cs:11`），你改不了；就算能改也只影响这一帧的读数 |
 
 ---
 
@@ -104,7 +104,7 @@
 | 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（标识符里曾有的 ZWSP 已于 2026-10-01 清除，见 `architecture.md` §八·1）② `TickWriter.cs:85-126` 的模板与 `GenerateBaseInterfaces`（`:68-71`）③ 五个 `partial void` 声明 ④ `Src/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
 | 加/改 `[Tickable]` 的参数 | ① `TickableAttribute.cs` ② `TickWriter.cs:33-49`（位置参数 + 命名参数两条读取路径，**命名参数覆盖位置参数**）③ `TickableAttributeTests.cs` |
 | 改 `TriggerAttributes` 的组合方式 | `Src/Generators/VeloxDev.Core.Generator/Base/Analizer.cs:95-107`；`"VeloxDev.TimeLine.TickableAttribute"` 在 `:103`。**它同时决定了「哪些类会进入生成器」**，删掉它等于整个特性失效 |
-| 改事件参数族的形状 | `TransitionSystem`（`TransitionDiagnostics.cs:42`、`TransitionInterpreter.cs:204,208,294`、`Transition.cs:350`）+ `TimeLineEventArgsTests.cs` |
+| 改事件参数族的形状 | `TransitionSystem`（`Runtime/TransitionDiagnostics.cs:41`、`Runtime/TransitionInterpreter.cs:219,223,316`、`Effects/Transition.cs:350`）+ `Events/TransitionEventArgs{TStage,TValue}.cs`、`Enums/{Warn,Error}Stage.cs` + `TimeLineEventArgsTests.cs` |
 | 改 channel 的静态 API 面 | `TickManager.cs:1050-1156` 七组；注意**命令面走 `GetOrCreateChannel`、查询面走 `TryGetValue`**（`:1146` 的注释写死了这条不对称） |
 | 加一条「跨线程可见」的字段 | 检查它的写者是否只在一条泵的线程上：`_state` 那种「一条泵一个字段」的写法见 `Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs:33-43` |
 | 改暂停/倍速语义 | 实现全在 `Src/Core/VeloxDev.Core/Timing/TimeSourceCore.cs`；本模块只转发（`:240`、`:386`、`:399`） |

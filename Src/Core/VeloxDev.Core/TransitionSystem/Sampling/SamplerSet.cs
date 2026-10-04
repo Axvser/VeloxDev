@@ -114,7 +114,7 @@ public sealed class SamplerSet<TPriorityCore>
         var thread = _run is { } bound && !bound.Thread.IsNone ? bound.Thread : _host.ThreadFor(target);
         if (!_host.Post(target, thread, _cachedApply!, priority))
         {
-            _diagnostics?.Warn("Dropped", "the host refused a frame; the animation carries on without it.");
+            _diagnostics?.Warn(WarnStage.Dropped, "the host refused a frame; the animation carries on without it.");
         }
     }
 
@@ -136,7 +136,7 @@ public sealed class SamplerSet<TPriorityCore>
             catch (Exception exception)
             {
                 // 一个绘制不动的动画不该继续以帧率抛异常：报一次，结束这一趟。
-                _diagnostics?.Error("Sampling", exception);
+                _diagnostics?.Error(ErrorStage.Sampling, exception);
                 CancelQuietly();
                 return;
             }

@@ -32,7 +32,7 @@ Rect   : RectF    (Interpolator.cs:19,20)
 `PointF`/`SizeF`/`RectangleF` 同源，不是「Frame」也不是平台缩写。七家里只有 MAUI 有这套重复类型，所以
 `PointFSampler` / `SizeFSampler` / `RectFSampler` / `ShadowSampler` 这四个类**只有 MAUI 有**
 （对比：`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/Samplers/`、`…/Avalonia/…`、`…/WPF/…` 等六家的目录清单里都没有）。
-校验身份时按**注册键类型**核对，不要按类名 —— 注册表的 key 就是 `Type` 本身（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:39` 的 `ConcurrentDictionary<Type, ISampler>`，查找是 `:50-60` 的精确命中→基类→接口），同名而不同程序集的两个类型是两个键、各注册各的；只有把**同一个 `Type`** 注册两次才会被 `AddOrUpdate` 顶掉（历史上那条 `RectFSampler` 的教训见 §四·1）。
+校验身份时按**注册键类型**核对，不要按类名 —— 注册表的 key 就是 `Type` 本身（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:39` 的 `ConcurrentDictionary<Type, ISampler>`，查找是 `:50-60` 的精确命中→基类→接口），同名而不同程序集的两个类型是两个键、各注册各的；只有把**同一个 `Type`** 注册两次才会被 `AddOrUpdate` 顶掉（历史上那条 `RectFSampler` 的教训见 §四·1）。
 
 ---
 
@@ -42,7 +42,7 @@ Rect   : RectF    (Interpolator.cs:19,20)
 
 `UIThreadInspector.cs:9`：`IsAlive => Application.Current?.Windows?.Count > 0`。
 
-- 基类的默认实现是 `Lifetime.IsAlive`（`Src/Core/VeloxDev.Core/TransitionSystem/TransitionHostBase.cs:14`），而
+- 基类的默认实现是 `Lifetime.IsAlive`（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs:14`），而
   `ApplicationState` 的初值是 `true` 且只有宿主主动 `SetAlive(false)` 才变（`Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs:13,22`）。
   也就是说**不覆写就没有「应用已退出」这个信号**。
 - 七家里覆写 `IsAlive` 的只有三家：MAUI 用窗口数，Razor 用自报的 `_isAppRunning`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs:42`）、
@@ -115,10 +115,10 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
   实现处 `Samplers/RectFSampler.cs` 却 `using System.Drawing;`、解的是 `System.Drawing.RectangleF`。
   **同名不是原因**：键是 `Type`，两者本可并存；错在**实现解的不是自己那条键的类型**。
 - **旧后果**：声明为 Maui `RectF` 的属性（声明入口在本家自己的 `Transition.cs:127` 的 `Property(Expression<Func<T, RectF>>…)`）
-  走注册表时，第一帧在采样器里抛 `InvalidCastException`；`SamplerSet.ApplyCore` 只报一次 `"Sampling"` 诊断然后
-  `CancelQuietly()` —— **整条 run 被取消**，不是静默降级（`Src/Core/VeloxDev.Core/TransitionSystem/SamplerSet.cs:136-142`）。
+  走注册表时，第一帧在采样器里抛 `InvalidCastException`；`SamplerSet.ApplyCore` 只报一次 `ErrorStage.Sampling` 诊断然后
+  `CancelQuietly()` —— **整条 run 被取消**，不是静默降级（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:136-142`）。
 - **为什么长期没露头**（两条独立原因）：① 单精度矩形在仓库里一直按 `System.Drawing.RectangleF` 用，而那个类型由
-  **Core** 注册（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:22` 的 `RectangleFSampler`），根本不经过 MAUI 这条键；
+  **Core** 注册（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:22` 的 `RectangleFSampler`），根本不经过 MAUI 这条键；
   ② demo 的验收路径用 `SetInterpolator` 逐条覆盖，注册表被整个绕过（`Examples/Transition/MAUI/Demo/MainPage.xaml.cs:459`）。
 - **修法（已落地）= 让体去解自己那条键的类型**：删掉 `using System.Drawing;`，改解 Maui `RectF`
   （`Samplers/RectFSampler.cs:15-16` 现在是 `(RectF)(start ?? new RectF())`）。名字 / 注册键 / 实现三处就此对齐。
@@ -157,7 +157,7 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
 ### 3. 采样器必须无状态；引用型值只能落在 `ref object? working`
 
 本家的 `ShadowSampler` 把 scratch 放在 `working`（`Samplers/ShadowSampler.cs:30-34`）、`BrushSampler` 同形，符合
-`../extension.md` §二·1。反例的形状要知道：注册表是**进程级**的（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:39`），
+`../extension.md` §二·1。反例的形状要知道：注册表是**进程级**的（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:40`），
 把「本次动画」的字段挂在采样器上会直接串台。除 `TransparentBrush`（`static readonly`，只读共享，`ShadowSampler.cs:5`）外，
 本家采样器不应有可变静态字段。
 

@@ -31,7 +31,7 @@
 
 **错在哪**：`Interpolator.cs` 里所有裸名 `PointF`（`:13`）、`SizeF`（`:18`）会**静默改指** `System.Drawing` —— 这两个简单名在 MAUI 与 `System.Drawing` 里**都有**。于是 `:13`/`:18` 变成 `RegisterInterpolator(typeof(System.Drawing.PointF), new PointFSampler())`，而右边那个 `PointFSampler` 是**本家**的（`using VeloxDev.Adapters.NativeSamplers`，解 `Microsoft.Maui.Graphics.PointF`）。两件事同时发生，**都是 §五·1 那个 bug 的翻版**：
 
-- 它经 `AddOrUpdate` **顶掉 Core 早已注册对的** `System.Drawing.PointF/SizeF`（Core 的 `Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:2,17,19` 用的是 `using System.Drawing` 的一份实现）⇒ 这两个类型的属性开始抛 `InvalidCastException`、整条 run 被取消；
+- 它经 `AddOrUpdate` **顶掉 Core 早已注册对的** `System.Drawing.PointF/SizeF`（Core 的 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:2,17,19` 用的是 `using System.Drawing` 的一份实现）⇒ 这两个类型的属性开始抛 `InvalidCastException`、整条 run 被取消；
 - `Microsoft.Maui.Graphics.PointF/SizeF` 从此**没有任何键指向**。
 
 编译期一声不响。`RectF`（`:20`）不会跟着变（`System.Drawing` 里没有这个名字），修复它更不能靠这一行。
@@ -42,9 +42,9 @@
 
 **当时的形状**：`Interpolator.cs:20` 注册 `typeof(RectF)`（= `Microsoft.Maui.Graphics.RectF`）却给了个解 `System.Drawing.RectangleF` 的采样器（旧 `Samplers/RectFSampler.cs`）。
 
-**修法是改体，不是改键**：`RectFSampler` 现在解 Maui `RectF`，与自己的注册键一致。`System.Drawing.RectangleF` 的覆盖本来就**不归它** —— 那是 Core 的 `RectangleFSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:22`），纯数据套件里也一直有自己的表项。
+**修法是改体，不是改键**：`RectFSampler` 现在解 Maui `RectF`，与自己的注册键一致。`System.Drawing.RectangleF` 的覆盖本来就**不归它** —— 那是 Core 的 `RectangleFSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:22`），纯数据套件里也一直有自己的表项。
 
-**为什么不能反过来改键**：`RegisterInterpolator` 是 `AddOrUpdate`、**last-writer-wins**（`Interpolator.cs:89-95`），把键写成 `typeof(System.Drawing.RectangleF)` 会**顶掉 Core 的 `RectangleFSampler`** —— 一个适配器版本静默替换 Core 的实现，之后两家各自演化。**同名不冲突**（注册键就是 `Type`），**同一个 `Type`** 才冲突。
+**为什么不能反过来改键**：`RegisterInterpolator` 是 `AddOrUpdate`、**last-writer-wins**（Core `TransitionSystem/Sampling/Interpolator.cs:94-100`），把键写成 `typeof(System.Drawing.RectangleF)` 会**顶掉 Core 的 `RectangleFSampler`** —— 一个适配器版本静默替换 Core 的实现，之后两家各自演化。**同名不冲突**（注册键就是 `Type`），**同一个 `Type`** 才冲突。
 
 **下次遇到同形状的错**（注册键的 `Type` 与采样器解箱的类型不是同一个）：`dotnet build` **不会报错** —— 但**采样器套件现在会红**（2026-09-20 补的网）：`Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs` 把本家 `Interpolator` 的静态构造真跑起来，再拿**真实注册表**问「条目声明的类型解析到谁」，与条目写的采样器逐字比（`EveryEntry_ValueTypeResolvesToTheSamplerItNames` `:62`）。依据是条目里的 `ValueType` 字段（= 属性的**声明类型**，也就是注册键）。**新加采样器时不用额外写什么** —— 那个字段由 `EntryFactory.Create` / 各家 `Entry(...)` 从 `property.PropertyType` 自动填。
 

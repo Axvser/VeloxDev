@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core/Timing/`（5 个 .cs）、契约在 `Src/Core/VeloxDev.Core/Interfaces/Timing/`（6 个文件）。
 > 这是**全仓库唯一的时间权威**。任何「现在几点、走了多远、还走不走」的问题，答案只在这里。
-> 帧节奏（每次唤醒隔多久、下一个续体怎么排队）归 `TransitionSystem`，见 `Src/Core/VeloxDev.Core/TransitionSystem/FramePacerCore.cs`；本模块只回答「时间轴在哪」。
+> 帧节奏（每次唤醒隔多久、下一个续体怎么排队）归 `TransitionSystem`，见 `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/FramePacerCore.cs`；本模块只回答「时间轴在哪」。
 
 本文只写「读完这 5 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
@@ -24,9 +24,9 @@
 
 | 你以为在这里 | 其实在哪 |
 |---|---|
-| 「下一帧什么时候来」/ 帧栅格 / FPS 上限 | `TransitionSystem/FramePacerCore.cs` + 各适配器的 `TransitionInterpreter.CreateFramePacer`。`TimerCore.cs:21-25` 的类注释明说「把 loop 钉在 UI 线程上是另一个问题，归拥有 loop 的子系统」 |
+| 「下一帧什么时候来」/ 帧栅格 / FPS 上限 | `TransitionSystem/Runtime/FramePacerCore.cs` + 各适配器的 `TransitionInterpreter.CreateFramePacer`。`TimerCore.cs:21-25` 的类注释明说「把 loop 钉在 UI 线程上是另一个问题，归拥有 loop 的子系统」 |
 | 暂停时要不要记欠账、恢复后补不补帧 | `CompensatingTimeSampler.cs:131-142` 的 **epoch 丢弃**：暂停期间一步不欠，是构造性的 |
-| 睡眠/自旋/续体调度 | 消费者自己的循环（`TransitionInterpreter.cs:303-306` 的 `EmitFrame`-then-`WaitWhileStalledAsync`） |
+| 睡眠/自旋/续体调度 | 消费者自己的循环（`TransitionSystem/Runtime/TransitionInterpreter.cs:325-328` 的 `EmitFrame`-then-`WaitWhileStalledAsync`） |
 | 定时器（「N 毫秒后叫我」） | 没有这个能力。本模块**只报位置，不报事件**。`TimeSample` 刻意不带绝对位置（见 `Interfaces/Timing/` 的 `TimeSample`） |
 | 反向播放 | 不成立。时间只向前，`SetRate` 拒绝负数（`TimeSourceCore.cs:294-297`） |
 | 真实墙钟的单调性保证 | 靠 `Stopwatch.GetTimestamp()`（`TimeSourceCore.cs:136`）。注入源自己负责单调 |
@@ -133,13 +133,13 @@
 3. **每次查找都新建实例。** 有唯一时钟的宿主也保持这个形状：**每次调用返回一个「包着同一份 feed 的新 wrapper」，不是共享单例**（`TimerCore.cs:27-32`）。单例会让暂停一个通道暂停所有通道。
 4. **`AddOrUpdate` 后写者胜**，与 `InterpolatorCore.RegisterInterpolator` 同一规矩（`TimerCore.cs:14-16`）。
 
-**「定时器不是时间权威」这条边界的落点。** `TimerCore` 的类注释（`TimerCore.cs:20-25`）明说这条缝是给「**拥有时间的宿主**」——player loop、媒体位置、音频回调——用的，**刻意不是给框架的渲染循环用的**：只在帧上走的钟会让帧率变成时间权威，而采样路径建立在反面。`Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs:149` 那句「`Task.Delay` 从来不是 timing source」是同一件事的另一面。
+**「定时器不是时间权威」这条边界的落点。** `TimerCore` 的类注释（`TimerCore.cs:20-25`）明说这条缝是给「**拥有时间的宿主**」——player loop、媒体位置、音频回调——用的，**刻意不是给框架的渲染循环用的**：只在帧上走的钟会让帧率变成时间权威，而采样路径建立在反面。`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:149` 那句「`Task.Delay` 从来不是 timing source」是同一件事的另一面。
 
 **「谁在用 Timing」——仓库内的消费者清单（全在 Core 内）：**
 
 | 调用 | 位置 |
 |---|---|
-| `TimerCore.CreateTimeSource<ITimeSourceControl>()` | `TransitionSystem/Transition.cs:394`（默认时间轴）、`TransitionSystem/SamplerSet.cs:78`（没人控制得住的私有时间轴）、`DynamicTheme/ThemeManager.cs:237`（整场共享一条轴）、`TimeLine/TickManager.cs:118`（每个 channel 一条总线） |
+| `TimerCore.CreateTimeSource<ITimeSourceControl>()` | `TransitionSystem/Effects/Transition.cs:393`（默认时间轴）、`TransitionSystem/Sampling/SamplerSet.cs:78`（没人控制得住的私有时间轴）、`DynamicTheme/ThemeManager.cs:237`（整场共享一条轴）、`TimeLine/TickManager.cs:118`（每个 channel 一条总线） |
 | `TimerCore.CreateTimeSampler<...>` | `TimeLine/TickManager.cs:165-168`（两个采样器，显式 16ms 步长） |
 
 也就是说 **Timing 只服务 `TransitionSystem`、`DynamicTheme` 与 `TimeLine` 三个模块**（都与本模块同在 `Src/Core/VeloxDev.Core/` 内）。`Src/Adapters/` 下七家 GUI 适配器**一家都不直接引用 Timing**（它们经 `Transition<T>`/`TransitionHostBase` 间接用）。

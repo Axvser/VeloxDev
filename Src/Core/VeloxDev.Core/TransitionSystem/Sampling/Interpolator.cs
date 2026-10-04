@@ -155,7 +155,7 @@ public abstract class InterpolatorCore
             // 路径对当前目标无效（中间对象运行时类型不符）→ 跳过，否则会被当成 null 参与插值而扭曲结果。
             if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath))
             {
-                diagnostics.Warn("Unreadable", $"'{bound.Path}' does not match the target's runtime type.");
+                diagnostics.Warn(WarnStage.Unreadable, $"'{bound.Path}' does not match the target's runtime type.");
                 continue;
             }
 
@@ -180,7 +180,7 @@ public abstract class InterpolatorCore
 
             if (sampler == null)
             {
-                diagnostics.Warn("Unsampled", $"'{bound.Path}' has no sampler for {kvp.Key.PropertyType.Name}.");
+                diagnostics.Warn(WarnStage.Unsampled, $"'{bound.Path}' has no sampler for {kvp.Key.PropertyType.Name}.");
                 continue;
             }
 

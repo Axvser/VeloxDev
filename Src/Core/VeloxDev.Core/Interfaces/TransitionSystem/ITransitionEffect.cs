@@ -1,5 +1,3 @@
-using VeloxDev.TimeLine;
-
 namespace VeloxDev.TransitionSystem
 {
     /// <summary>A transition effect whose priority type is <typeparamref name="TPriorityCore"/>.</summary>
@@ -51,11 +49,11 @@ namespace VeloxDev.TransitionSystem
         /// <summary>Raised once the animation has finished, however it ended.</summary>
         public event EventHandler<TransitionEventArgs> Finally;
 
-        /// <summary>Raised when the run degrades through a recoverable stage.</summary>
-        public event EventHandler<TransitionEventArgs> Warn;
+        /// <summary>Raised when the run degrades through a recoverable stage, carrying which stage and its message.</summary>
+        public event EventHandler<TransitionEventArgs<WarnStage, string>> Warn;
 
-        /// <summary>Raised when the run fails.</summary>
-        public event EventHandler<TransitionEventArgs> Error;
+        /// <summary>Raised when the run fails, carrying which stage and the escaped exception.</summary>
+        public event EventHandler<TransitionEventArgs<ErrorStage, Exception>> Error;
 
         /// <summary>Raises <see cref="Awaked"/>.</summary>
         public void InvokeAwake(object sender, TransitionEventArgs e);
@@ -79,10 +77,10 @@ namespace VeloxDev.TransitionSystem
         public void InvokeFinally(object sender, TransitionEventArgs e);
 
         /// <summary>Raises <see cref="Warn"/>.</summary>
-        public void InvokeWarn(object sender, TransitionEventArgs e);
+        public void InvokeWarn(object sender, TransitionEventArgs<WarnStage, string> e);
 
         /// <summary>Raises <see cref="Error"/>.</summary>
-        public void InvokeError(object sender, TransitionEventArgs e);
+        public void InvokeError(object sender, TransitionEventArgs<ErrorStage, Exception> e);
 
         /// <summary>Returns a copy of this effect.</summary>
         public ITransitionEffectCore Clone();

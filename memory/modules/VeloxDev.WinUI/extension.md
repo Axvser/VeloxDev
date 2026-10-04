@@ -100,9 +100,9 @@
 
 ### 官方做法 vs 看着能编译但错的捷径
 
-- ❌ **「修好」`UIThreadInspector.PostCore` 里的 `Lifetime.SetAlive(accepted)`**（`:60`）。它是**刻意双向**的：队列拒绝说明应用在退出，接纳说明还活着，两个方向都报；Core 侧 remarks（`Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs:17-21`）点名了「WinUI clears its flag when a single enqueue is refused … has to be able to take it back」。改成只置 false ⇒ **一次瞬时拒绝就让整个进程的动画永久停摆、且什么都不记**。改这里之前先把 `SetAlive` 的消费链读一遍：`TransitionHostBase.cs:12,14`（`Lifetime`/`IsAlive` 两个属性都转发到它）→ `SamplerSet.cs:90`（`CanSetValue`，每次写属性的闸门）。
+- ❌ **「修好」`UIThreadInspector.PostCore` 里的 `Lifetime.SetAlive(accepted)`**（`:60`）。它是**刻意双向**的：队列拒绝说明应用在退出，接纳说明还活着，两个方向都报；Core 侧 remarks（`Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs:17-21`）点名了「WinUI clears its flag when a single enqueue is refused … has to be able to take it back」。改成只置 false ⇒ **一次瞬时拒绝就让整个进程的动画永久停摆、且什么都不记**。改这里之前先把 `SetAlive` 的消费链读一遍：`Runtime/TransitionHostBase.cs:12,14`（`Lifetime`/`IsAlive` 两个属性都转发到它）→ `Sampling/SamplerSet.cs:90`（`CanSetValue`，每次写属性的闸门）。
 - ❌ **给 `UIThreadInspector` 加一个「更可靠」的静态初始化**。它已有三层：`QueueFor(target)` 先问 target 自己（`:36-41`）、`EnsureQueue()` 懒捕获（`:25-34`）、`CaptureUIThread()` 让宿主主动交（`:16-21`，非 UI 线程会抛）。**WinUI 侧的仓内调用点是零**（唯一调用在 Blazor demo），因为 `DependencyObject` 目标是常态；加之前先确认你确实有「target 不是 `DependencyObject`」的宿主。
-- ❌ **拿 `new TransitionScheduler<T>()` 当调度器**。这个类的 `TTarget` 是个没人用的类型参数、全仓没有构造点（`TransitionScheduler.cs:5-11`）；真正被用的建法只有 `TransitionSchedulerCore<…>.FindOrCreate(target)`（`Interpolator.cs:29`）。手建的那个**不参与 `MutualSchedulers` 归档**，而按 target 找回 run 的三个静态入口 `Exit`/`Pause`/`Seek`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:30`/`:63`/`:104`，默认 `IncludeMutual = true`）走的正是那张字典（读者是 `CollectSchedulers`，`:217-226`）⇒ 对目标调它们，你手建那个调度器不会被停、不会被定位（`architecture.md` §二·3）。
+- ❌ **拿 `new TransitionScheduler<T>()` 当调度器**。这个类的 `TTarget` 是个没人用的类型参数、全仓没有构造点（`TransitionScheduler.cs:5-11`）；真正被用的建法只有 `TransitionSchedulerCore<…>.FindOrCreate(target)`（`Interpolator.cs:29`）。手建的那个**不参与 `MutualSchedulers` 归档**，而按 target 找回 run 的三个静态入口 `Exit`/`Pause`/`Seek`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:31`/`:64`/`:105`，默认 `IncludeMutual = true`）走的正是那张字典（读者是 `CollectSchedulers`，`:218-230`）⇒ 对目标调它们，你手建那个调度器不会被停、不会被定位（`architecture.md` §二·3）。
 - ⚠ **`State : StateCore`、`Transition : TransitionCore` 是空壳**，看起来像「忘了实现」而实际就是空的（`PlatformAdapters/State.cs:3`、`Transition.cs:12-15`）。要加状态字段就加在这里，别去 Core 改。
 
 ---

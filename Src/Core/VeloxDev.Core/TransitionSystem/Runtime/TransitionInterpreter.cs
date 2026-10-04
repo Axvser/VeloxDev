@@ -1,5 +1,4 @@
 ﻿using VeloxDev.Threading;
-using VeloxDev.TimeLine;
 using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -58,6 +57,15 @@ public abstract class TransitionInterpreterCore : IDisposable
     private ReusableTimerWait? _wait;
     private FramePacerCore? _pacer;
     private bool _pacerResolved;
+
+    // 这一趟跑到的位置：Loop 是本段的第几轮（0 起），Cycle 是整条运行的第几趟。主循环每轮开头刷新它们，
+    // EmitFrame 只负责抄到 Args 上 —— 回调是缓存好的静态委托，闭包这两个值会让每帧多一次分配。
+    private int _loop;
+    private long _cycle;
+
+    // 帧的时间：DeltaTime 是距上一帧推进了多少，TotalTime 是本段开工以来的累计（不随趟重置，趟位由 Loop 表达）。
+    private double _lastElapsedMs;
+    private double _totalMs;
 
     /// <summary>The arguments handed to every effect callback of one animation.</summary>
     public virtual TransitionEventArgs Args { get; set; } = new();
@@ -175,6 +183,9 @@ public abstract class TransitionInterpreterCore : IDisposable
         // 计数器整趟共用，而一段只是链中的一段，所以本段的环按它自己起点时的计数器起算。少了这个偏移，
         // 链里第二段一上来计数就已越过 LoopTime，头一趟之前就 break：报了 Start 与 Completed 却一帧不写。
         var startCycle = run.Cycle;
+        _lastElapsedMs = 0d;
+        _totalMs = 0d;
+        StampPosition();
         var diagnostics = new TransitionDiagnostics(effect, target, Args);
         frameSet.SetDiagnostics(diagnostics);
 
@@ -191,7 +202,7 @@ public abstract class TransitionInterpreterCore : IDisposable
                 _pacer = CreateFramePacer(target, frameSet.Host);
             }
 
-            if (Report(effect, target, Args, diagnostics, "Start", StartCallback))
+            if (Report(effect, target, Args, diagnostics, ErrorStage.Start, StartCallback))
             {
                 throw new OperationCanceledException();
             }
@@ -200,6 +211,9 @@ public abstract class TransitionInterpreterCore : IDisposable
                 // 计数器是读来的不是存下的，所以 Seek 仍能把动画挪到另一趟：这个环没有自己的「第几趟」。
                 // 零时长的趟不占时间，也只有它能表示趟位。相对本段起点读：Seek 照旧重定位，链中更早的段不算在它头上。
                 if (!foreverloop && run.Cycle - startCycle > effect.LoopTime) break;
+
+                _cycle = run.Cycle;
+                _loop = (int)(run.Cycle - startCycle);
 
                 if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
                 await RunPassAsync(target, effect, run, durationMs, cts, apply, diagnostics, forward: true);
@@ -210,17 +224,17 @@ public abstract class TransitionInterpreterCore : IDisposable
                 }
                 run.NextCycle();
             }
-            Report(effect, target, Args, diagnostics, "Completed", CompletedCallback);
+            Report(effect, target, Args, diagnostics, ErrorStage.Completed, CompletedCallback);
         }
         catch (OperationCanceledException)
         {
-            Report(effect, target, Args, diagnostics, "Canceled", CanceledCallback);
+            Report(effect, target, Args, diagnostics, ErrorStage.Canceled, CanceledCallback);
         }
         catch (Exception exception)
         {
             // 任何一条没在本地报过的逃逸路径，都在这里收口。
-            diagnostics.Error("Run", exception);
-            Report(effect, target, Args, diagnostics, "Canceled", CanceledCallback);
+            diagnostics.Error(ErrorStage.Run, exception);
+            Report(effect, target, Args, diagnostics, ErrorStage.Canceled, CanceledCallback);
         }
         finally
         {
@@ -229,7 +243,7 @@ public abstract class TransitionInterpreterCore : IDisposable
             // whose only release point is its own Dispose — so skipping this leaks one timer per animation.
             try
             {
-                Report(effect, target, Args, diagnostics, "Finally", FinallyCallback);
+                Report(effect, target, Args, diagnostics, ErrorStage.Finally, FinallyCallback);
             }
             finally
             {
@@ -252,7 +266,7 @@ public abstract class TransitionInterpreterCore : IDisposable
         object target,
         TransitionEventArgs args,
         TransitionDiagnostics diagnostics,
-        string stage,
+        ErrorStage stage,
         Action<ITransitionEffectCore, object, TransitionEventArgs> callback)
     {
         try { callback(effect, target, args); return false; }
@@ -262,7 +276,14 @@ public abstract class TransitionInterpreterCore : IDisposable
     private static bool ReportMarshaling(Action<double> apply, double easedT, TransitionDiagnostics diagnostics)
     {
         try { apply(easedT); return false; }
-        catch (Exception exception) { diagnostics.Error("Marshaling", exception); return true; }
+        catch (Exception exception) { diagnostics.Error(ErrorStage.Marshaling, exception); return true; }
+    }
+
+    // 把这一趟的位置落到共享的那个 Args 实例上。主循环每轮开头刷新 _loop/_cycle，这里只负责抄。
+    private void StampPosition()
+    {
+        Args.Loop = _loop;
+        Args.Cycle = _cycle;
     }
 
     private static readonly Action<ITransitionEffectCore, object, TransitionEventArgs> UpdateCallback = static (e, t, a) => e.InvokeUpdate(t, a);
@@ -342,6 +363,17 @@ public abstract class TransitionInterpreterCore : IDisposable
     {
         if (elapsedMs < 0d) elapsedMs = 0d;
 
+        // 时间与位置一起交给回调。换趟（以及反程重锚）时 elapsedMs 会从头数，diff 因此是负的 —— 那是「这一帧
+        // 自己走了多少」，不是倒退。TotalTime 不随趟重置：趟位由 Loop 说，它只需要回答「这一段开工多久了」。
+        var deltaMs = elapsedMs - _lastElapsedMs;
+        if (deltaMs < 0d) deltaMs = elapsedMs;
+        _lastElapsedMs = elapsedMs;
+        _totalMs += deltaMs;
+
+        StampPosition();
+        Args.DeltaTime = TimeSpan.FromMilliseconds(deltaMs);
+        Args.TotalTime = TimeSpan.FromMilliseconds(_totalMs);
+
         var rawT = durationMs <= 0d ? 1d : elapsedMs / durationMs;
 
         double easedT;
@@ -361,9 +393,9 @@ public abstract class TransitionInterpreterCore : IDisposable
 
         // 一个抛异常的帧整帧作废：后面的回调不再跑，这一趟也就此结束 —— 半坏的动画不该继续以帧率出错。
         // 回调是缓存好的静态委托，不是就地写的 lambda：后者每帧都会捕获本方法的局部变量，一个闭包就是一次分配。
-        if (Report(effect, target, Args, diagnostics, "Update", UpdateCallback)
+        if (Report(effect, target, Args, diagnostics, ErrorStage.Update, UpdateCallback)
             || ReportMarshaling(apply, easedT, diagnostics)
-            || Report(effect, target, Args, diagnostics, "LateUpdate", LateUpdateCallback))
+            || Report(effect, target, Args, diagnostics, ErrorStage.LateUpdate, LateUpdateCallback))
         {
             throw new OperationCanceledException();
         }

@@ -61,7 +61,7 @@
 
 | 要注册的东西 | 注册点 | 什么时候真的发生 |
 |---|---|---|
-| 12 个采样器 | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs:8-22`；12 条登记在 `:10-21`） | 第一次**构造** `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Transition.cs:290`，约束 `:269` 的 `new()`） |
+| 12 个采样器 | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs:8-22`；12 条登记在 `:10-21`） | 第一次**构造** `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:297`，约束 `:271` 的 `new()`） |
 | 采样器所在的宿主/解释器/优先级 | `Transition<T>` 的类型实参（`PlatformAdapters/Transition.cs:11-19`）与 `TransitionScheduler`（`TransitionScheduler.cs:3`） | 同上，全部编译期写死 |
 | DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler`（`PlatformAdapters/Interpolator.cs:25-28`） | **宿主必须显式调** `ThemeManager.SetPlatformInterpolator(new Interpolator())` |
 
@@ -165,9 +165,9 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
    - 旧注册处 `PlatformAdapters/Interpolator.cs:20`：`RegisterInterpolator(typeof(RectF), new RectFSampler());`
    - 该文件的 using 只有 `Microsoft.Maui.Controls.Shapes`（`:1`）与 `VeloxDev.Adapters.NativeSamplers`（`:2`），**没有 `System.Drawing`**；而 `System.Drawing` 里**没有叫 `RectF` 的类型**（它叫 `RectangleF`）。MAUI 的隐式 using 里有 `global using Microsoft.Maui.Graphics;`（生成物 `obj/.../VeloxDev.MAUI.GlobalUsings.g.cs`）⇒ 这个 `RectF` 只能是 `Microsoft.Maui.Graphics.RectF`。
    - 旧实现处 `Samplers/RectFSampler.cs` 有 `using System.Drawing;`，解的是 `System.Drawing.RectangleF` —— **12 个采样器里只有它这一处 import 了 `System.Drawing`**。
-   - **后果（是它被修掉的理由）**：声明为 `Microsoft.Maui.Graphics.RectF` 的属性走注册表解析（精确类型命中，Core `Interpolator.cs:50-87`；`RectF` 是 struct，基类链走到 `ValueType`/`object` 就没了，没有别的回退），**第一帧抛 `InvalidCastException`**；`SamplerSet.ApplyCore` 在 `Src/Core/VeloxDev.Core/TransitionSystem/SamplerSet.cs:136` 接住，`:139` 报一条 `"Sampling"` 诊断，`:140` `CancelQuietly()`，`:141` 返回 —— **整条 run 被取消，不是静默降级**。
-   - **当时仍然能解析的**：`System.Drawing.RectangleF` 由 **Core** 注册（`Src/Core/VeloxDev.Core/TransitionSystem/Interpolator.cs:22` 的 `RectangleFSampler`），根本不经过这条键；`Microsoft.Maui.Graphics.Rect` 走 `:19` 的 `RectSampler`，是对的。
-   - **修法**：把体改成解 `Microsoft.Maui.Graphics.RectF`（`Samplers/RectFSampler.cs` 删掉那行 `using System.Drawing;`），名字 / 键 / 实现三处对齐。**不能**走另一条路（把键改成 `typeof(System.Drawing.RectangleF)`）：那会经 `AddOrUpdate` **顶掉 Core 的 `RectangleFSampler`**（安装是 last-writer-wins，Core `Interpolator.cs:89-95`）。**同名从来不是问题**（键是 `Type`，`Interpolator.cs:39`），同一个 `Type` 才是。
+   - **后果（是它被修掉的理由）**：声明为 `Microsoft.Maui.Graphics.RectF` 的属性走注册表解析（精确类型命中，Core `Sampling/Interpolator.cs:51-91`；`RectF` 是 struct，基类链走到 `ValueType`/`object` 就没了，没有别的回退），**第一帧抛 `InvalidCastException`**；`SamplerSet.ApplyCore` 在 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:136` 接住，`:139` 报一条 `ErrorStage.Sampling` 诊断，`:140` `CancelQuietly()`，`:141` 返回 —— **整条 run 被取消，不是静默降级**。
+   - **当时仍然能解析的**：`System.Drawing.RectangleF` 由 **Core** 注册（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:22` 的 `RectangleFSampler`），根本不经过这条键；`Microsoft.Maui.Graphics.Rect` 走 `:19` 的 `RectSampler`，是对的。
+   - **修法**：把体改成解 `Microsoft.Maui.Graphics.RectF`（`Samplers/RectFSampler.cs` 删掉那行 `using System.Drawing;`），名字 / 键 / 实现三处对齐。**不能**走另一条路（把键改成 `typeof(System.Drawing.RectangleF)`）：那会经 `AddOrUpdate` **顶掉 Core 的 `RectangleFSampler`**（安装是 last-writer-wins，Core `Sampling/Interpolator.cs:94-100`）。**同名从来不是问题**（键是 `Type`，`Sampling/Interpolator.cs:40`），同一个 `Type` 才是。
    - **为什么测试没抓到**：`SamplerCoverageTests` 对的是**采样器类型**集合，不是 `(键, 采样器)` 配对。修完**已补上**这类断言：`Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs` 拿真实注册表问「条目声明的类型解析到谁」，`EveryEntry_ValueTypeResolvesToTheSamplerItNames`（`:62`）比采样器类型、`EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey`（`:110`）跑一帧看接不接得住。
    - 与 `memory/modules/TransitionSystem/adapters/maui.md` §四·1 的结论一致，**不冲突**。
 
