@@ -194,6 +194,46 @@ public class ArchiveDiagnosticsTests
         }
         """;
 
+    /// <summary>
+    /// A generic nested in a generic. Each level's arguments belong beside that level's own name — flattened onto
+    /// the innermost one, <c>Envelope&lt;A&gt;.Inner&lt;B&gt;</c> and <c>Envelope.Inner&lt;A, B&gt;</c> would spell
+    /// the same thing.
+    /// </summary>
+    private const string ANestedGenericMember = """
+        using VeloxDev.MVVM;
+        using VeloxDev.WorkflowSystem;
+
+        namespace Probe;
+
+        public class Envelope<T>
+        {
+            public class Inner<U>
+            {
+                public string? Tag { get; set; }
+            }
+        }
+
+        public partial class Model
+        {
+            [VeloxProperty] private Envelope<SlotDefaultViewModel>.Inner<SlotDefaultViewModel>? nested;
+        }
+        """;
+
+    [TestMethod]
+    public void ANestedGeneric_PutsEachLevelsArgumentsBesideThatLevel()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(new VeloxJson(), ANestedGenericMember, "Probe");
+
+        Assert.IsFalse(diagnostics.Any(static d => d.Severity == DiagnosticSeverity.Error),
+            GeneratorProbe.Describe(diagnostics));
+
+        StringAssert.Contains(
+            generated,
+            "\"Probe.Envelope<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>"
+                + "+Inner<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, Probe\"",
+            GeneratorProbe.Describe(diagnostics));
+    }
+
     [TestMethod]
     public void AClosedGeneric_IsRegisteredUnderANameCarryingItsTypeArgument()
     {

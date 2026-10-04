@@ -1332,17 +1332,9 @@ namespace VeloxDev.Generators.Base
                 i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                  .Replace("global::", string.Empty) == metadataName);
 
-        /// <summary>The type's name in the shape <c>Type.FullName</c> reports.</summary>
+        /// <summary>The type's name in the shape <c>Type.FullName</c> reports — nesting joined with <c>+</c>.</summary>
         private static string ReflectionFullName(INamedTypeSymbol symbol)
-        {
-            var name = symbol.Name;
-
-            if (symbol.ContainingType is not null)
-                return ReflectionFullName(symbol.ContainingType) + "+" + name;
-
-            var ns = symbol.ContainingNamespace;
-            return ns is null || ns.IsGlobalNamespace ? name : ns.ToDisplayString() + "." + name;
-        }
+            => QualifiedNameOf(symbol, withTypeArguments: false);
 
         /// <summary>
         /// The name written into <c>$type</c>: <c>Namespace.Type, AssemblyName</c> — and, for a generic type, its
@@ -1363,15 +1355,51 @@ namespace VeloxDev.Generators.Base
         /// </remarks>
         private static string WrittenName(ITypeSymbol symbol)
             => symbol is INamedTypeSymbol named
-                ? ReflectionFullName(named) + TypeArgumentsOf(named) + ", " + named.ContainingAssembly?.Name
+                ? QualifiedNameOf(named, withTypeArguments: true) + ", " + named.ContainingAssembly?.Name
                 : symbol.ToDisplayString();
 
-        // 每个类型实参按同样的规则递归写出来（含它自己的程序集），非泛型类型没有这一段。
-        // 结尾那段 `<…>` 与最外层程序集之间用 `, ` 分隔，与既有拼法一致。
-        private static string TypeArgumentsOf(INamedTypeSymbol symbol)
-            => symbol.TypeArguments.Length == 0
-                ? string.Empty
-                : "<" + string.Join(", ", symbol.TypeArguments.Select(WrittenName)) + ">";
+        /// <summary>
+        /// The type's name, nesting joined with <c>+</c> — and, when asked, each level's own type arguments
+        /// written right after that level's name.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Per level, not flattened onto the innermost name: <c>A&lt;int&gt;.B&lt;string&gt;</c> and
+        /// <c>A.B&lt;int, string&gt;</c> are two types, and one flat argument list would spell them the same way.
+        /// </para>
+        /// <para>
+        /// <c>ReflectionFullName</c> is this same walk with nothing substituted, which is what keeps a
+        /// non-generic type's name byte-for-byte what it was.
+        /// </para>
+        /// </remarks>
+        private static string QualifiedNameOf(INamedTypeSymbol symbol, bool withTypeArguments)
+        {
+            var name = withTypeArguments ? symbol.Name + OwnTypeArgumentsOf(symbol) : symbol.Name;
+
+            if (symbol.ContainingType is { } containing)
+                return QualifiedNameOf(containing, withTypeArguments) + "+" + name;
+
+            return (symbol.ContainingNamespace is { IsGlobalNamespace: false } ns
+                ? ns.ToDisplayString() + "."
+                : string.Empty) + name;
+        }
+
+        /// <summary>
+        /// One level's own type arguments, each written the same way.
+        /// </summary>
+        /// <remarks>
+        /// Sliced off the end because Roslyn's <c>TypeArguments</c> carries the containing types' arguments too,
+        /// outermost first — <c>Arity</c> is the part that belongs to this level. The slice is right either way,
+        /// which is deliberate: if a future Roslyn made <c>TypeArguments</c> own-only the count would equal
+        /// <c>Arity</c> and this would take all of it.
+        /// </remarks>
+        private static string OwnTypeArgumentsOf(INamedTypeSymbol symbol)
+        {
+            if (symbol.Arity == 0) return string.Empty;
+
+            var own = symbol.TypeArguments.Skip(symbol.TypeArguments.Length - symbol.Arity);
+            return "<" + string.Join(", ", own.Select(WrittenName)) + ">";
+        }
 
         private static IEnumerable<INamedTypeSymbol> EnumerateTypes(INamespaceSymbol scope)
         {
