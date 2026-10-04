@@ -2,6 +2,7 @@
 
 namespace VeloxDev.WorkflowSystem;
 
+/// <summary>The connection capacity of a slot in each direction (a flags enum).</summary>
 [AgentContext(AgentLanguages.Chinese, "定义工作流插槽在两个方向上的连接容量：Target 表示当前插槽可主动连出的目标数量，Source 表示当前插槽可被连入的来源数量。这是一个位掩码枚举，两个方向独立计数；组合值表示同时具备多种方向权限。语义优先级为 Multiple > One > None，同一方向上高优先级覆盖低优先级。此外，当节点的 [SlotSelectors] 声明了 SlotChannel 时，它也可作为 SlotEnumerator 的 selector 类型，用于按通道类型路由信号。")]
 [AgentContext(AgentLanguages.English, "Defines the connection capacity of a workflow slot in two independent directions: Target means how many outgoing targets this slot may connect to, and Source means how many incoming sources may connect to this slot. This is a flags enum. Each direction is evaluated independently, and combined values grant permissions for both directions. Semantic priority per direction is Multiple > One > None, where the higher priority overrides the lower one. Additionally, when a node's [SlotSelectors] includes SlotChannel, it is also valid as a SlotEnumerator selector type for routing signals by channel type.")]
 [Flags]
@@ -36,6 +37,7 @@ public enum SlotChannel : int
     MultipleBoth = MultipleTargets | MultipleSources
 }
 
+/// <summary>The runtime state of a slot (a flags enum, so states can combine).</summary>
 [AgentContext(AgentLanguages.Chinese, "描述工作流插槽的当前运行时状态。支持组合状态，例如同时处于预览发送和预览接收状态。")]
 [AgentContext(AgentLanguages.English, "Describes the current runtime state of a workflow slot. Supports combined states, e.g., simultaneously previewing as sender and receiver.")]
 [Flags]

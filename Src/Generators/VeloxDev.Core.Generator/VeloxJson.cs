@@ -32,6 +32,7 @@ namespace VeloxDev.Generators
     {
         private const string EnabledProperty = "build_property.VeloxJsonSerialization";
 
+        /// <inheritdoc />
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             var enabled = context.AnalyzerConfigOptionsProvider.Select(static (provider, _) =>

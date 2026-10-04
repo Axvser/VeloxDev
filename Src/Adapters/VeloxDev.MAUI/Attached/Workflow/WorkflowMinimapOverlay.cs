@@ -18,7 +18,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapOverlay
 {
-    // ── Bindable Properties ──────────────────────────────────────────────────
+    // ── 可绑定属性 ──────────────────────────────────────────────────────────
 
     private static void OnVisualProp(BindableObject b, object o, object n) => ((WorkflowMinimapOverlay)b).MarkDirty();
 
@@ -51,7 +51,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     public static readonly BindableProperty WorkflowTreeProperty = BindableProperty.Create(nameof(WorkflowTree), typeof(IWorkflowTreeViewModel), typeof(WorkflowMinimapOverlay), null,
         propertyChanged: (b, o, n) => ((WorkflowMinimapOverlay)b).OnTreeChanged((IWorkflowTreeViewModel?)n));
 
-    // ── CLR accessors ────────────────────────────────────────────────────────
+    // ── CLR 访问器 ───────────────────────────────────────────────────────────
 
     public double ScrollOffsetX { get => (double)GetValue(ScrollOffsetXProperty); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => (double)GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }
@@ -81,9 +81,9 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     public double MinimapMinSize { get => (double)GetValue(MinimapMinSizeProperty); set => SetValue(MinimapMinSizeProperty, value); }
     public string? ScrollViewerName { get => (string?)GetValue(ScrollViewerNameProperty); set => SetValue(ScrollViewerNameProperty, value); }
 
-    // ── Internal types ───────────────────────────────────────────────────────
+    // ── 内部类型 ────────────────────────────────────────────────────────────
 
-    // ── State ────────────────────────────────────────────────────────────────
+    // ── 状态 ────────────────────────────────────────────────────────────────
 
     private WorkflowBounds _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
@@ -92,18 +92,15 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private bool _isDragging;
     private ContentView? _parentView;
 #if WINDOWS
-    // Native pan gesture: it rides the GraphicsView's captured manipulation pipeline
-    // (ManipulationMode=All), so deltas keep arriving while the pointer is outside the
-    // minimap — unlike routed PointerMoved listeners, which stop at the bounds because
-    // only the capture owner receives pointer events once a manipulation begins.
+    // 原生平移手势借用 GraphicsView 已捕获的 manipulation 管线（ManipulationMode=All），指针移出缩略图后增量照常到达；
+    // 路由的 PointerMoved 监听不行 —— 一旦开始 manipulation，只有捕获者收得到指针事件，它会停在边界。
     private PanGestureRecognizer? _panGesture;
     private float _dragStartX;
     private float _dragStartY;
     private PointerEventHandler? _nativePressedHandler;
     private PointerEventHandler? _nativeMovedHandler;
     private PointerEventHandler? _nativeReleasedHandler;
-    // One deferred retry per handler epoch: HandlerChanged fires before the platform
-    // view exists, so the first attach attempt is allowed to retry on the UI thread.
+    // 每个 handler 世代允许一次延后重试：HandlerChanged 早于平台视图创建，所以第一次挂接可以到 UI 线程重试。
     private bool _platformAttachPending;
 #endif
 
@@ -113,7 +110,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private IWorkflowTreeViewModel? _subscribedTree;
     private ScrollView? _scrollView;
 
-    // Drawing intermediates (float for MAUI ICanvas)
+    // 绘制的中间量（MAUI ICanvas 用 float）
     private float _mmW, _mmH, _ox, _oy, _sc;
     private WorkflowBounds _drawGb;
 
@@ -129,9 +126,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         Loaded += OnLoaded;
 
 #if WINDOWS
-        // Attached statically (not lazily on drag start) so a press is always captured
-        // even if the gesture suppresses MAUI's own touch interaction on the GraphicsView.
-        // The drag end is owned by this gesture's Completed/Canceled.
+        // 静态挂接（而非拖拽开始时才挂），这样即使手势压掉了 MAUI 自己在 GraphicsView 上的触摸交互，按下也总被捕获；
+        // 拖拽结束由本手势的 Completed/Canceled 负责。
         _panGesture = new PanGestureRecognizer();
         _panGesture.PanUpdated += OnPanUpdated;
         GestureRecognizers.Add(_panGesture);
@@ -140,8 +136,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     private void OnLoaded(object? s, EventArgs e)
     {
-        // Walk up parent hierarchy to find the root ContentView (WorkflowView).
-        // Used for ScrollView lookup and drag-outside-bounds pointer tracking.
+        // 沿父链上溯找到根 ContentView（WorkflowView）；用于查 ScrollView 与拖出边界后的指针跟踪。
         Element? el = this;
         while (el is not null)
         {
@@ -156,8 +151,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         }
 
 #if WINDOWS
-        // The element is in the live tree now, so the platform view exists — attach the
-        // native pointer handlers here (OnHandlerChanged runs before the view is created).
+        // 元素已进入活动树、平台视图已存在，在这里挂原生指针处理器（OnHandlerChanged 早于视图创建）。
         AttachPlatformPressedHandler();
 #endif
     }
@@ -166,8 +160,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     {
         base.OnHandlerChanged();
 #if WINDOWS
-        // New handler epoch: allow a fresh deferred retry if the platform view is not
-        // created yet at this point.
+        // 新的 handler 世代：若此刻平台视图还没建，允许再安排一次延后重试。
         _platformAttachPending = false;
         AttachPlatformPressedHandler();
 #endif
@@ -177,8 +170,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     {
         base.OnHandlerChanging(args);
 #if WINDOWS
-        // Detach from the outgoing platform view so the handlers don't leak across
-        // handler recreations (e.g. page navigation).
+        // 从要离开的平台视图上摘掉处理器，避免 handler 重建（如页面导航）时泄漏。
         if (args.OldHandler?.PlatformView is UIElement oldEl)
         {
             if (_nativePressedHandler is not null)
@@ -216,10 +208,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         if (_nativePressedHandler is not null) return;
         if (this.Handler?.PlatformView is not UIElement mmEl)
         {
-            // HandlerChanged is raised before MAUI creates the platform view (that happens
-            // inside the handler's Setup). Defer one tick — the native element exists by the
-            // time the UI thread processes it. Bounded by _platformAttachPending, so a view
-            // that never materializes cannot spin.
+            // HandlerChanged 早于 MAUI 创建平台视图（创建发生在 handler 的 Setup 里）；延后一拍，UI 线程处理时原生元素已存在。
+            // 由 _platformAttachPending 限界，永不出现的视图不会空转。
             if (_platformAttachPending) return;
             _platformAttachPending = true;
             Dispatcher.Dispatch(() => AttachPlatformPressedHandler());
@@ -231,14 +221,10 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             var pt = e.GetCurrentPoint(mm).Position;
             _dragStartX = (float)pt.X;
             _dragStartY = (float)pt.Y;
-            // Best-effort explicit capture: while captured, ONLY this element fires
-            // pointer events, so PointerMoved below keeps flowing outside the bounds
-            // until release. (Can only be taken during PointerPressed.)
+            // 尽力显式捕获：捕获期间只有此元素发指针事件，下面的 PointerMoved 移出边界也继续流动，直到释放（只能在 PointerPressed 期间取得）。
             mm.CapturePointer(e.Pointer);
-            // MAUI raises StartInteraction from its class handler before this instance
-            // handler, so _isDragging is already true when the interaction ran; the probe
-            // then only records the start. When the gesture suppresses the interaction,
-            // the probe stands in for the full press handling.
+            // MAUI 的 StartInteraction 先经类 handler 再到本实例 handler，所以交互跑时 _isDragging 已为真，探针只记录起点；
+            // 手势压掉交互时，探针代行完整的按下处理。
             if (_isDragging) return;
             if (_pendingRefresh) RefreshMinimapData();
             var aw = (float)SafeDim(WidthRequest, 1);
@@ -293,7 +279,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     }
 #endif
 
-    // ── Tree management ──────────────────────────────────────────────────────
+    // ── 树管理 ──────────────────────────────────────────────────────────────
 
     private void OnTreeChanged(IWorkflowTreeViewModel? newTree)
     {
@@ -375,20 +361,15 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void MarkDirty()
     {
         _pendingRefresh = true;
-        // A single frame can write several visual DPs back-to-back (ApplyVisibleRegion
-        // sets ScrollOffsetX/Y + ContentOffsetX/Y + ViewportWidth/Height together), and a
-        // minimap drag re-writes them per scroll delta. Each DP write is a full minimap
-        // Invalidate — coalesce them into ONE redraw per frame by flushing on the next
-        // main-thread dispatch instead of invalidating inline.
+        // 一帧内会连续写多个视觉 DP（ApplyVisibleRegion 一起写 ScrollOffsetX/Y、ContentOffsetX/Y、ViewportWidth/Height），
+        // 拖缩略图时每个滚动增量又写一遍；每次 DP 写都是一次完整重绘，所以改为在下次主线程派发时统一冲刷，一帧只重绘一次。
         if (_invalidatePending)
         {
             return;
         }
 
         _invalidatePending = true;
-        // Invalidate requires the main thread; BeginInvokeOnMainThread both marshals
-        // background sources and gives the coalescing window so back-to-back writes in
-        // the same frame land in one flush.
+        // Invalidate 必须在主线程；BeginInvokeOnMainThread 既调度后台来源，又给出合并窗口，同帧内连续写入因此合并成一次冲刷。
         MainThread.BeginInvokeOnMainThread(FlushInvalidate);
     }
 
@@ -398,7 +379,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         Invalidate();
     }
 
-    // ── Data refresh ─────────────────────────────────────────────────────────
+    // ── 数据刷新 ─────────────────────────────────────────────────────────────
 
     private void RefreshMinimapData()
     {
@@ -436,7 +417,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         _lastViewport = default;
     }
 
-    // ── Compute float intermediates for drawing ─────────────────────────────
+    // ── 为绘制计算 float 中间量 ────────────────────────────────────────────
 
     private void ComputeDrawing(float availWidth, float availHeight)
     {
@@ -444,7 +425,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         _drawGb = gb;
         var minSz = Math.Max(1f, (float)MinimapMinSize);
 
-        // availWidth/Height can be NaN from WidthRequest during layout transitions.
+        // 布局过渡期 WidthRequest 可能让 availWidth/Height 为 NaN。
         if (float.IsNaN(availWidth) || float.IsNaN(availHeight))
         {
             _mmW = minSz;
@@ -461,21 +442,20 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var drawW = _mmW - pad * 2;
         var drawH = _mmH - pad * 2;
 
-        // MinimapFit: scale = min(drawW/max(1,cw), drawH/max(1,ch)),
-        // origin = pad + (draw − content·scale)/2.  Preserve MAUI's NaN/Infinity guard
-        // on the fit scale (gb bounds can be NaN from a node with a NaN Size).
+        // MinimapFit：scale = min(drawW/max(1,cw), drawH/max(1,ch))，origin = pad + (draw − content·scale)/2；
+        // 保留 MAUI 对拟合比例的 NaN/Infinity 防护（节点 Size 为 NaN 时 gb 边界也会是 NaN）。
         var (fitOx, fitOy, fitSc) = WorkflowSurfaceMath.MinimapFit(
             (float)gb.Width, (float)gb.Height, drawW, drawH, pad);
         _sc = float.IsNaN((float)fitSc) || float.IsInfinity((float)fitSc) ? 1f : (float)fitSc;
         _ox = (float)fitOx;
         _oy = (float)fitOy;
 
-        // Final NaN guard for _ox/_oy — if they're NaN all hit-testing breaks.
+        // _ox/_oy 的最终 NaN 防护 —— 它们为 NaN 时全部命中测试都会失效。
         if (float.IsNaN(_ox)) _ox = 0f;
         if (float.IsNaN(_oy)) _oy = 0f;
     }
 
-    // ── Touch input ──────────────────────────────────────────────────────────
+    // ── 触摸输入 ────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Returns the viewport rectangle's render position in minimap coordinates,
@@ -495,16 +475,14 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         if (float.IsNaN(w) || float.IsNaN(h))
             return (0, 0, 0, 0);
 
-        // MinimapViewportRect maps the world viewport onto the minimap via the same fit
-        // transform the content uses and clamps the indicator inside the minimap bounds
-        // (min indicator size 2px, matching the old inline math).
+        // MinimapViewportRect 用与内容相同的拟合变换把世界视口映射到缩略图，并把指示块夹在缩略图边界内（指示块最小 2px，与旧内联算法一致）。
         var (x, y, rw, rh) = WorkflowSurfaceMath.MinimapViewportRect(
             _ox, _oy, _sc,
             vp.Left, vp.Top, vp.Width, vp.Height,
             gb.Left, gb.Top,
             _mmW, _mmH, minRectSize: 2.0);
 
-        // Preserve MAUI's final NaN guards on the helper's raw output.
+        // 保留 MAUI 对该 helper 原始输出的最终 NaN 防护。
         return (float.IsNaN((float)x) ? 0f : (float)x,
                 float.IsNaN((float)y) ? 0f : (float)y,
                 float.IsNaN((float)rw) ? 0f : (float)rw,
@@ -532,9 +510,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
 
-            // Match the Jalium adapter: the clicked point always becomes the viewport
-            // center — no grab-anchor on the indicator block, so pressing anywhere
-            // recenters the view.
+            // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
 #if WINDOWS
             _dragStartX = pt.X;
             _dragStartY = pt.Y;
@@ -546,8 +522,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // GraphicsView touch events can fire with stale/empty Touches on WinUI
-            // (dotnet/maui #13452).  This is non-fatal.
+            // WinUI 上 GraphicsView 触摸事件可能带陈旧/空的 Touches 触发（dotnet/maui #13452）；无害。
             System.Diagnostics.Debug.WriteLine($"[Minimap] StartInteraction error: {ex.Message}");
         }
     }
@@ -572,10 +547,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         try
         {
 #if WINDOWS
-            // MAUI raises EndInteraction the instant the pointer leaves the minimap — and
-            // again on release. The native handlers (mmEl PointerReleased / pan Completed)
-            // own the drag end on Windows: they keep delivering out-of-bounds moves and
-            // end at the real release, so EndInteraction must not tear the drag down here.
+            // MAUI 在指针一离开缩略图时就发 EndInteraction，释放时又发一次；Windows 上拖拽结束归原生处理器
+            // （mmEl PointerReleased / pan Completed），它们能持续投递越界移动、在真正释放处才结束，所以这里不能因 EndInteraction 拆掉拖拽。
             return;
 #else
             _isDragging = false;
@@ -591,9 +564,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void SubscribeDragCapture()
     {
 #if WINDOWS
-        // No-op: the native pan gesture and the platform PointerPressed probe are attached
-        // statically (constructor / OnHandlerChanged), so there is nothing to subscribe
-        // lazily. The drag end is owned by the pan gesture's Completed/Canceled.
+        // 空操作：原生平移手势与平台 PointerPressed 探针都是静态挂接（构造/OnHandlerChanged），没有可懒订阅的东西；
+        // 拖拽结束由 pan 手势的 Completed/Canceled 负责。
 #else
         SubscribeParentGestureCapture();
 #endif
@@ -602,8 +574,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void UnsubscribeDragCapture()
     {
 #if WINDOWS
-        // No-op: the static handlers stay attached for the lifetime of the view and are
-        // detached in OnHandlerChanging.
+        // 空操作：静态处理器在视图生命周期内一直挂着，在 OnHandlerChanging 里摘除。
 #else
         UnsubscribeParentGestureCapture();
 #endif
@@ -641,7 +612,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         UnsubscribeDragCapture();
     }
 
-    // ── Input / drag ─────────────────────────────────────────────────────────
+    // ── 输入/拖拽 ──────────────────────────────────────────────────────────
 
     private float _lastScrollX = float.MinValue;
     private float _lastScrollY = float.MinValue;
@@ -658,33 +629,25 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     {
         if (_drawGb.IsEmpty || _sc <= 0) return;
 
-        // MinimapToWorld: world = (mm − origin)/scale + contentLeft; MinimapToScroll then
-        // converts the world target to the scroll offset that centers it on the viewport.
+        // MinimapToWorld：world = (mm − origin)/scale + contentLeft；MinimapToScroll 再把世界目标换算成能把它居中到视口的滚动偏移。
         var (wcx, wcy) = WorkflowSurfaceMath.MinimapToWorld(
             adjX, adjY, _ox, _oy, _sc, _drawGb.Left, _drawGb.Top);
         var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
             wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
         if (_scrollView is null || WorkflowTree?.Layout is not { } layout) return;
 
-        // Max scroll extent comes from the layout MODEL (ActualSize = OriginSize + offsets),
-        // which grows synchronously the moment ClampScrollOffset writes the overshoot below.
-        // _scrollView.ContentSize lags the async MAUI layout pass, so clamping against it
-        // pins the target at the current edge; the 2px throttle then skips the scroll and the
-        // canvas never grows — a self-locking stop at the boundary.  The canvas pan
-        // (WorkflowSurfaceBehavior) uses the model for exactly this reason.
+        // 最大滚动范围取自布局模型（ActualSize = OriginSize + offsets），下面的 ClampScrollOffset 一写越界量它就同步长大；
+        // _scrollView.ContentSize 滞后于异步 MAUI 布局，拿它夹取会把目标钉在当前边缘、2px 节流又跳过这次滚动，画布再也长不大 —— 在边界上自锁。
+        // 画布平移（WorkflowSurfaceBehavior）正是为此用模型。
         var svW = _scrollView.Width;
         var svH = _scrollView.Height;
 
         var maxH = ComputeMaxScroll(layout.ActualSize.Width, svW);
         var maxV = ComputeMaxScroll(layout.ActualSize.Height, svH);
 
-        // Expand canvas model when drag reaches edge.  ClampScrollOffset writes the
-        // overshoot into NegativeOffset (before origin) or PositiveOffset (past the edge)
-        // only when it exceeds the 0.5f dead-band (sub-pixel jitter), returning the clamped
-        // scroll offset.  The canvas only grows through ApplyLayout (driven by
-        // WorkflowSurfaceBehavior.Refresh), so on expansion we apply layout NOW — mirroring
-        // ApplyPanAsync — and recompute the max from the model, which already reflects the
-        // growth.
+        // 拖到边缘时扩展画布模型：ClampScrollOffset 仅在越界量超过 0.5f 死区（亚像素抖动）时把它写进 NegativeOffset（原点前）
+        // 或 PositiveOffset（边缘外），并返回夹取后的滚动偏移。画布只经 ApplyLayout（由 WorkflowSurfaceBehavior.Refresh 驱动）长大，
+        // 所以扩展时就地应用布局（同 ApplyPanAsync），再从模型重算最大值（模型已反映增长）。
         bool layoutChanged = (scrollX < 0 && -scrollX > 0.5f)
             || (scrollX > maxH && scrollX - maxH > 0.5f)
             || (scrollY < 0 && -scrollY > 0.5f)
@@ -693,7 +656,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true, threshold: 0.5f);
         scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false, threshold: 0.5f);
 
-        // Recompute max after expansion (model just grew synchronously).
+        // 扩展后重算最大值（模型刚同步长大）。
         if (layoutChanged)
         {
             if (_parentView is not null)
@@ -707,7 +670,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var clampedX = SafeClamp(scrollX, maxH);
         var clampedY = SafeClamp(scrollY, maxV);
 
-        // Throttle: skip ScrollToAsync if the target hasn't changed meaningfully.
+        // 节流：目标没有实质变化就跳过 ScrollToAsync。
         if (Math.Abs(clampedX - _lastScrollX) < 2f &&
             Math.Abs(clampedY - _lastScrollY) < 2f)
         {
@@ -764,20 +727,18 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         }
     }
 
-    // ── IDrawable implementation ─────────────────────────────────────────────
+    // ── IDrawable 实现 ─────────────────────────────────────────────────────
 
     void IDrawable.Draw(ICanvas canvas, RectF dirtyRect)
     {
         try
         {
-            // The MAUI GraphicsView Draw callback has no exception protection on WinUI
-            // (dotnet/maui #14567). If a render call throws (e.g. NaN coordinates),
-            // the exception leaks directly into the WinUI UnhandledException.
+            // WinUI 上 MAUI GraphicsView 的 Draw 回调没有异常保护（dotnet/maui #14567）；
+            // 渲染调用抛异常（如 NaN 坐标）会直接漏进 WinUI 的 UnhandledException。
             if (!IsMinimapVisible) return;
             if (_pendingRefresh) RefreshMinimapData();
 
-            // dirtyRect.Width/Height may be NaN (a known MAUI WinUI issue).
-            // float/double.IsNaN is required: NaN > 0 is false, and NaN <= 0 is also false.
+            // dirtyRect.Width/Height 可能为 NaN（已知 MAUI WinUI 问题）；必须用 IsNaN 判断 —— NaN > 0 为假，NaN <= 0 也为假。
             var dw = dirtyRect.Width;
             var dh = dirtyRect.Height;
             var w = (!float.IsNaN(dw) && dw > 0)
@@ -815,7 +776,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
                     var ncr = Math.Max(0, (float)NodeCornerRadius);
                     foreach (var (nx, ny, nw, nh) in _lastNodeRects)
                     {
-                        // MinimapLocal: local = origin + (world − contentOrigin)·scale.
+                        // MinimapLocal：local = origin + (world − contentOrigin)·scale。
                         var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, _ox, _oy, _sc);
                         canvas.FillRoundedRectangle(
                             (float)lx, (float)ly,

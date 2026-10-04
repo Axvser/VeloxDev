@@ -94,6 +94,7 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     /// </summary>
     public static readonly object UnreadablePath = new();
 
+    /// <inheritdoc />
     public object? GetValue(object? target)
     {
         if (target is null)
@@ -104,6 +105,7 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
         return (_compiledGetter ??= CompileGetter())(target, null);
     }
 
+    /// <inheritdoc />
     public bool SetValue(object target, object? value)
     {
         if (target is null)
@@ -325,10 +327,8 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
         }
     }
 
-    /// <summary>
-    /// 多维数组的元素访问在表达式树里<b>不是</b> <c>IndexExpression</c>，而是编译器生成的 <c>Array.Get(i, j)</c> 调用，
-    /// 所以它得在这里认出来。<c>Get</c> 在 <see cref="Array"/> 上是 internal 的，用户代码写不出这个调用。
-    /// </summary>
+    // 多维数组的元素访问在表达式树里不是 IndexExpression，而是编译器生成的 Array.Get(i, j) 调用，
+    // 所以它得在这里认出来。Get 在 Array 上是 internal 的，用户代码写不出这个调用。
     private static bool IsMultiDimensionalArrayGet(MethodCallExpression call, out Type arrayType, out Type elementType)
     {
         arrayType = typeof(void);
@@ -346,17 +346,8 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
         return true;
     }
 
-    /// <summary>
-    /// Finds the indexer a <c>get_Item</c> call belongs to, by name shape and parameter types. Comparing the getter
-    /// by reference does not survive the interface/implementation split (an <c>IList&lt;T&gt;</c> call and the
-    /// <c>List&lt;T&gt;</c> property are different <see cref="MethodInfo"/> instances).
-    /// </summary>
-    // 找 get_Item 所属的索引器属性。这一步要读声明类型的属性元数据，而且是**必须**的 —— **实测过**：
-    // 把读路径换成 `Expression.Call(getter, …)` 之后，`WritesThroughAMultiArgumentIndexer` 与
-    // `ANonPublicIndexerIsNotASecondClassMember` 当场抛 `Expression must be writeable (Parameter 'left')`，
-    // 因为写路径是 `Expression.Assign(<成员访问>, value)`，而方法调用不是可赋值的左值；
-    // 表达式树里能表达「给索引器赋值」的只有 `Expression.MakeIndex(instance, propertyInfo, args)`。
-    // 代价：宿主必须保住被动画类型的属性元数据（这些类型来自它自己的表达式树，lambda 本来就 root 了它们）。
+    // 找 get_Item 所属的索引器属性：写路径要用 Expression.MakeIndex(instance, propertyInfo, args)，
+    // 它需要 PropertyInfo，所以这里必须按名字形状与参数类型回查声明类型的属性元数据。
 #pragma warning disable IL2070 // 索引器的读写都要属性元数据，见上；宿主必须保住被动画类型的属性
     private static PropertyInfo? FindIndexer(MethodCallExpression call)
     {

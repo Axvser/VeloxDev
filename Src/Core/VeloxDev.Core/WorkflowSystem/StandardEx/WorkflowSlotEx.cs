@@ -2,8 +2,10 @@
 
 namespace VeloxDev.WorkflowSystem.StandardEx;
 
+/// <summary>Standard operations for a workflow slot: commands, channel changes, connection state and deletion.</summary>
 public static class WorkflowSlotEx
 {
+    /// <summary>Returns the standard commands a slot helper drives.</summary>
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
         (this IWorkflowSlotViewModel component)
         =>
@@ -13,6 +15,7 @@ public static class WorkflowSlotEx
             component.DeleteCommand
         ];
 
+    /// <summary>Sets the slot's channel to <paramref name="channel"/>, tearing down the connections the new channel disallows.</summary>
     public static void StandardSetChannel(this IWorkflowSlotViewModel component, SlotChannel channel)
     {
         if (component.Parent?.Parent is null)
@@ -85,6 +88,7 @@ public static class WorkflowSlotEx
         events?.RaiseChannelChanged(from, channel, handle);
     }
 
+    /// <summary>Recomputes the slot's connection state from its targets and sources.</summary>
     public static void StandardUpdateState(this IWorkflowSlotViewModel component)
     {
         bool hasOutgoingConnections = component.Targets.Count > 0;
@@ -99,6 +103,7 @@ public static class WorkflowSlotEx
         };
     }
 
+    /// <summary>Starts a connection from the slot through its tree.</summary>
     public static void StandardApplyConnection(this IWorkflowSlotViewModel component)
     {
         var tree = component.Parent?.Parent;
@@ -109,6 +114,7 @@ public static class WorkflowSlotEx
         }
         tree.GetHelper()?.SendConnection(component);
     }
+    /// <summary>Completes a connection at the slot through its tree.</summary>
     public static void StandardReceiveConnection(this IWorkflowSlotViewModel component)
     {
         var tree = component.Parent?.Parent;
@@ -120,6 +126,7 @@ public static class WorkflowSlotEx
         tree.GetHelper().ReceiveConnection(component);
     }
 
+    /// <summary>Deletes the slot and its links as one undoable step.</summary>
     public static void StandardDelete(this IWorkflowSlotViewModel component)
     {
         if (component.Parent is null)
@@ -182,12 +189,14 @@ public static class WorkflowSlotEx
             }));
     }
 
+    /// <summary>Whether the slot's channel allows it to send.</summary>
     public static bool StandardCanBeSender(this IWorkflowSlotViewModel component)
         => component.Channel.HasFlag(SlotChannel.OneTarget) ||
            component.Channel.HasFlag(SlotChannel.MultipleTargets) ||
            component.Channel.HasFlag(SlotChannel.OneBoth) ||
            component.Channel.HasFlag(SlotChannel.MultipleBoth);
 
+    /// <summary>Whether the slot's channel allows it to receive.</summary>
     public static bool StandardCanBeReceiver(this IWorkflowSlotViewModel component)
         => component.Channel.HasFlag(SlotChannel.OneSource) ||
            component.Channel.HasFlag(SlotChannel.MultipleSources) ||

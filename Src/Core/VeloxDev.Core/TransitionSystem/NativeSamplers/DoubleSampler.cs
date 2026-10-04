@@ -1,10 +1,14 @@
-﻿namespace VeloxDev.TransitionSystem.NativeSamplers
+namespace VeloxDev.TransitionSystem.NativeSamplers
 {
+    /// <summary>Samples a <see cref="double"/>.</summary>
     public class DoubleSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 

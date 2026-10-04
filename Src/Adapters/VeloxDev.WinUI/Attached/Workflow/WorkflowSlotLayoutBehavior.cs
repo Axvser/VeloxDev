@@ -18,13 +18,9 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         public bool SyncPending { get; set; }
         public bool Syncing { get; set; }
         public EventHandler<object>? LayoutUpdatedHandler { get; set; }
-        // The coordinate host (PART_Canvas) re-arranges its children AFTER the node's own subtree
-        // layout finishes. WinUI's LayoutUpdated is per-element, so syncing on the node's own
-        // LayoutUpdated can measure the slot at the node's PRE-move canvas position while the link
-        // endpoint (bound to the measured anchor) then lags the node by a frame during collapse-zoom
-        // — the transient "link end dangles off its port while zooming" symptom. Hooking the host's
-        // LayoutUpdated reads the post-arrange geometry (the WPF adapter is immune because WPF's
-        // LayoutUpdated fires once per whole-tree layout pass, i.e. always post-arrange).
+        // 坐标宿（PART_Canvas）在节点自身子树布局完成后才重排其子元素。WinUI 的 LayoutUpdated 是逐元素的，所以同步在节点自身的 LayoutUpdated 上可能在节点移动前的画布位置量插槽，
+        // 而连线端点（绑到量到的锚点）在折叠缩放中就比节点慢一帧 —— 表现为「缩放时连线端点从端口上垂下来」。
+        // 挂宿主的 LayoutUpdated 读到的是排完后的几何（WPF 家免疫，因为 WPF 的 LayoutUpdated 整棵树布局趟只触发一次，总是排完之后）。
         public FrameworkElement? CoordinateHost { get; set; }
         public EventHandler<object>? CoordinateHostLayoutHandler { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
@@ -105,9 +101,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.DataContextChanged += OnDataContextChanged;
-        // LayoutUpdated's sender is ALWAYS null (per Microsoft docs), so capture the control in a
-        // closure and sync synchronously (post-layout, same frame) — the async DispatcherQueue hop
-        // made slot anchors (and the links bound to them) lag a frame behind the node collapse.
+        // LayoutUpdated 的 sender 永远是 null（微软文档），所以用闭包捕获控件并同步执行（布局后、同帧）—— 异步 DispatcherQueue 跳转会让插槽锚点（及绑到它的连线）比节点折叠慢一帧。
         if (control.GetValue(StateProperty) is LayoutState state)
         {
             state.LayoutUpdatedHandler = (_, _) => Sync(control);
@@ -206,8 +200,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     {
         if (sender is UserControl control)
         {
-            // SizeChanged fires only after layout passes are finalized (per Microsoft docs); sync
-            // synchronously so slot anchors update in the same frame as the node's resize.
+            // SizeChanged 只在布局趟定稿后触发（微软文档）；同步执行，插槽锚点与节点 resize 同帧更新。
             Sync(control);
         }
     }
@@ -273,10 +266,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             return;
         }
 
-        // LayoutUpdated can fire nested during a measure; guard so a synchronous sync from
-        // OnLayoutUpdated doesn't re-enter. The guard is exception-safe (try/finally): a throw from
-        // TransformToVisual mid-layout must not leave Syncing set, or every later sync would be
-        // suppressed and slot anchors (and the links bound to them) would go stale permanently.
+        // LayoutUpdated 可能在测量中嵌套触发；加防护，避免 OnLayoutUpdated 里的同步 Sync 重入。防护对异常安全（try/finally）：
+        // 布局中途 TransformToVisual 抛异常绝不能把 Syncing 留在置位状态，否则之后每次 Sync 都被压掉，插槽锚点（及绑到它的连线）永久失效。
         state.Syncing = true;
         try
         {
@@ -290,13 +281,12 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             var slotNames = GetAllSlotNames(control);
             var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-            // Rebuild the set of property names that should trigger ScheduleSync on change.
+            // 重建「变化时该触发 ScheduleSync」的属性名集合。
             state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
-            // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
-            // names ("OutputSlots"). Add both the full control name and the
-            // PART_-stripped form so OnPropertyChanged("OutputSlots") is matched.
+            // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
+            // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
             {
                 state.SlotPropertyNames.Add(name);
@@ -309,8 +299,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
                 if (name.StartsWith("PART_"))
                     state.SlotPropertyNames.Add(name.Substring(5));
             }
-            // Always include fallback defaults for standard property names,
-            // covering both direct ViewModel properties and SlotEnumerator members.
+            // 标准属性名一律带兜底默认值，覆盖 ViewModel 直接属性与 SlotEnumerator 成员。
             state.SlotPropertyNames.Add("InputSlot");
             state.SlotPropertyNames.Add("OutputSlot");
             state.SlotPropertyNames.Add("OutputSlots");
@@ -367,7 +356,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
                 continue;
             }
 
-            // Container exists but not yet measured - retry later.
+            // 容器已存在但尚未测量 —— 稍后重试。
             if (slotView.ActualWidth <= 0 || slotView.ActualHeight <= 0)
             {
                 anyMissing = true;
@@ -377,7 +366,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             SyncSlot(host, coordinateHost, slotView, node);
         }
 
-        // Containers not yet generated or measured - retry after layout completes.
+        // 容器尚未生成或测量 —— 布局完成后重试。
         if (anyMissing)
         {
             parentHost.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
@@ -397,8 +386,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         if (coordinateHost is not null)
         {
             var centerOnCanvas = control.TransformToVisual(coordinateHost).TransformPoint(new Windows.Foundation.Point(control.ActualWidth / 2, control.ActualHeight / 2));
-            // coordinateHost is the canvas, so the transform already inverts the canvas
-            // Translation — the center is world/canvas-local and must NOT subtract ActualOffset.
+            // coordinateHost 是画布，变换已反转画布平移 —— 中心是世界/画布局部坐标，不能减 ActualOffset。
             slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
                 centerOnCanvas.X, centerOnCanvas.Y, slot.Anchor.Layer);
             return;

@@ -11,6 +11,7 @@ namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1)
@@ -32,6 +33,7 @@ namespace VeloxDev.DynamicTheme
 
     public class PointConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1)
@@ -62,6 +64,7 @@ namespace VeloxDev.DynamicTheme
 
     public class ThicknessConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1)
@@ -104,6 +107,7 @@ namespace VeloxDev.DynamicTheme
 
     public class CornerRadiusConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1)
@@ -141,6 +145,7 @@ namespace VeloxDev.DynamicTheme
 
     public class ColorConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1)
@@ -150,7 +155,7 @@ namespace VeloxDev.DynamicTheme
             {
                 if (parameters[0] is string str)
                 {
-                    // Supports #AARRGGBB or #RRGGBB
+                    // 支持 #AARRGGBB 或 #RRGGBB
                     str = str.Trim();
                     if (str.StartsWith('#'))
                     {
@@ -192,6 +197,7 @@ namespace VeloxDev.DynamicTheme
 
     public class BrushConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1)
@@ -204,14 +210,14 @@ namespace VeloxDev.DynamicTheme
 
                 if (parameters[0] is string str)
                 {
-                    // First try resource lookup.
+                    // 先试资源查找。
                     if (ThemeResourceLookup.TryFindResource(str, out var resource))
                     {
                         if (resource is Brush b)
                             return b;
                     }
 
-                    // Then try color parsing.
+                    // 再试颜色解析。
                     var colorConv = new ColorConverter();
                     if (colorConv.Convert(typeof(Color), propertyName, [str]) is Color c)
                         return new SolidColorBrush(c);
@@ -229,6 +235,7 @@ namespace VeloxDev.DynamicTheme
 
     public class ObjectConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length != 1 || parameters[0] is not string str)
@@ -236,14 +243,14 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // Try resource lookup.
+                // 试资源查找。
                 if (ThemeResourceLookup.TryFindResource(str, out var resource) &&
                     targetType.IsInstanceOfType(resource))
                 {
                     return resource;
                 }
 
-                // Try Brush.
+                // 试 Brush。
                 if (typeof(Brush).IsAssignableFrom(targetType))
                 {
                     var brushConverter = new BrushConverter();
@@ -262,6 +269,7 @@ namespace VeloxDev.DynamicTheme
 
     internal static class ThemeResourceLookup
     {
+        /// <summary>Tries to resolve the resource named <paramref name="key"/> from the host's resource scopes.</summary>
         public static bool TryFindResource(object key, out object? value)
         {
             value = null;

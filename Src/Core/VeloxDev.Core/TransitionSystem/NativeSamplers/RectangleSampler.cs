@@ -1,12 +1,16 @@
-﻿using System.Drawing;
+using System.Drawing;
 
 namespace VeloxDev.TransitionSystem.NativeSamplers
 {
+    /// <summary>Samples a <see cref="Rectangle"/>.</summary>
     public class RectangleSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
@@ -17,8 +21,7 @@ namespace VeloxDev.TransitionSystem.NativeSamplers
             var deltaWidth = r2.Width - r1.Width;
             var deltaHeight = r2.Height - r1.Height;
 
-            // Width and height share one progress so an overshoot cannot skew the shape, and stop at
-            // zero: a negative size is not representable. Position stays unbounded.
+            // 宽与高共用一个进度，超调才不会把形状拧歪；且停在零——负尺寸无法表示。位置不受限。
             var size = new BoundedProgress(t, 0d, double.PositiveInfinity);
             size.Add(r1.Width, r2.Width);
             size.Add(r1.Height, r2.Height);

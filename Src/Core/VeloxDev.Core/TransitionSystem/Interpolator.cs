@@ -5,6 +5,7 @@ using VeloxDev.TransitionSystem.NativeSamplers;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
+/// <summary>The process-wide sampler registry and the base class for interpolators.</summary>
 public abstract class InterpolatorCore
 {
     static InterpolatorCore()
@@ -89,6 +90,7 @@ public abstract class InterpolatorCore
         return matched is not null;
     }
 
+    /// <summary>Registers <paramref name="sampler"/> for <paramref name="type"/>, replacing any existing one.</summary>
     public static bool RegisterInterpolator(Type type, ISampler sampler)
     {
         // Atomic last-writer-wins install. AddOrUpdate makes the update unconditional and atomic, so the
@@ -96,6 +98,7 @@ public abstract class InterpolatorCore
         Interpolators.AddOrUpdate(type, sampler, (_, _) => sampler);
         return true;
     }
+    /// <summary>Removes the sampler registered for <paramref name="type"/>.</summary>
     public static bool UnregisterInterpolator(Type type, out ISampler? sampler)
     {
         return Interpolators.TryRemove(type, out sampler);

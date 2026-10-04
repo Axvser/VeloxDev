@@ -116,9 +116,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private double _lastContentX;
     private double _lastContentY;
 
-    // Content translate for left/top canvas expansion. The canvas element grows in all four
-    // directions; the content wrapper is shifted right/down by this offset so world (node/slot)
-    // coordinates stay put while the newly revealed area appears to the left/top.
+    // 左/上画布扩展的内容平移：画布元素向四个方向长大，内容包装元素按此偏移右/下移，世界（节点/插槽）坐标因此不动，新露出的区域出现在左/上。
     private double _offsetX;
     private double _offsetY;
     private SurfaceViewport _viewport = null!;
@@ -159,8 +157,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// While <see cref="LinkInteraction.IsSuspended"/> is set (a menu is open) the hub itself keeps
     /// the hovered link, so moving onto the menu does not clear the hover the menu acts on.
     /// </remarks>
-    // The surface itself is the key host (see the .razor tabindex), so Delete and Escape have a route in a
-    // generated project with no host code. The hub still decides which link: this only forwards the key.
+    // 表面自己就是按键宿主（见 .razor 的 tabindex），生成的工程没有宿主代码，Delete 与 Escape 也有路由。删哪条仍由枢纽决定：这里只转发按键。
     private async Task OnSurfaceKeyDown(KeyboardEventArgs e)
     {
         // Escape 与菜单同层：菜单由表面弹，也由表面收，宿主不必再绑一次。
@@ -408,8 +405,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         }
     }
 
-    // Broadcasts the latest viewport snapshot to cheap overlay consumers (grid decorator) so they
-    // can re-render without dragging the node/link content subtree along. See SurfaceViewportFeed.
+    // 把最新视口快照广播给轻量覆盖层消费者（网格装饰器），它们无需拖着节点/连线内容子树就能重渲染。见 SurfaceViewportFeed。
     private readonly SurfaceViewportFeed _feed = new();
 
     // 表面的根元素（见 .razor 的 tabindex）：悬停到连线上时把焦点收到它，Delete 才有路由
@@ -429,8 +425,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         get
         {
             var spacing = Math.Max(8, GridSpacing);
-            // The grid spacing is read back out of this custom property by the JS grid painter, so it has to
-            // stay parseable — invariant, with a '.', whatever the culture.
+            // JS 网格绘制器会从这个自定义属性读回网格间距，所以它必须可解析 —— 固定不变、用 '.'，与区域设置无关。
             return $"background-color:{Background};" +
                    $"--veloxdev-gs:{spacing.ToString("0.#", CultureInfo.InvariantCulture)}px;" +
                    $"--veloxdev-gc:{GridColor};--veloxdev-mgc:{MajorGridColor};--veloxdev-ac:{AxisColor};";
@@ -442,9 +437,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     {
         base.OnParametersSet();
 
-        // Reserve the ruler band: world 0 sits at the content boundary (right/below the ruler),
-        // so grid lines and ruler ticks align with node anchors. Grow-only, mirroring the JS-side
-        // edge expansion reported via OnSurfaceScroll (a pan left/up only grows the offset).
+        // 预留标尺带：世界 0 位于内容边界（标尺右/下方），网格线与标尺刻度因此和节点锚点对齐。只增不减，与 JS 侧经 OnSurfaceScroll 上报的边界扩展一致（向左/上平移只增大偏移）。
         _offsetX = Math.Max(_offsetX, RulerThickness);
         _offsetY = Math.Max(_offsetY, RulerThickness);
 
@@ -473,8 +466,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             var layout = Tree?.Layout;
             var contentX = layout?.ActualOffset.Horizontal ?? 0;
             var contentY = layout?.ActualOffset.Vertical ?? 0;
-            // The restore rides in on the initial surface rather than a follow-up call, so the very first
-            // report already carries the saved position instead of the origin.
+            // 恢复随初始表面一起进来，而不是后续调用，所以第一次上报就带着已保存位置而非原点。
             _handle = await _module.InvokeAsync<IJSObjectReference>("initSurface",
                 _scroller, _canvasHost, _dotNetRef, _canvasW, _canvasH, contentX, contentY, _offsetX, _offsetY,
                 _hasPendingRestore ? _pendingScrollX : 0, _hasPendingRestore ? _pendingScrollY : 0);
@@ -487,8 +479,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         }
         else if (_hasPendingRestore && IsEnabled && _module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
         {
-            // A tree swapped in after the surface was already live: scroll is JS-owned, so the restore is
-            // a JS call. No delay needed — the module is initialized and the DOM is laid out by now.
+            // 表面已激活后才换进来的树：滚动归 JS，所以恢复是一次 JS 调用。无需延迟 —— 模块已初始化、DOM 已布局。
             _hasPendingRestore = false;
             await _module.InvokeVoidAsync("scrollToPosition", ScrollViewerId, _pendingScrollX, _pendingScrollY);
         }
@@ -514,27 +505,18 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
         if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
         {
-            // One zoom transaction: while active, every per-node geometry writer (wrapper SyncPosition,
-            // size re-renders, tree re-renders) stands down — the atomic applyZoomSurface below is the
-            // sole geometry authority for the gesture, so no intermediate browser frame can paint
-            // collapsed nodes against the old translate/scroll (the zoom flicker).
+            // 一次缩放事务：激活期间所有逐节点几何写入者（包装元素 SyncPosition、尺寸重渲染、树重渲染）让位 —— 下面的原子 applyZoomSurface 是该手势唯一的几何权威，浏览器不会出现中间帧把折叠节点画在旧的平移/滚动上（缩放闪烁）。
             using var _zoomScope = WorkflowGeometryScope.Zoom();
 
-            // Capture the world point under the viewport center ONCE for the whole burst — the scroll
-            // state is unchanged until the single final apply, so the same pivot stays valid across
-            // every compounding step.
-            // scrollX/Y, viewportW/H and reachW/H are captured LIVE from the DOM by the JS wheel handler
-            // at burst start (eff = DOM scroll − the JS edge reserve). A fast second burst therefore
-            // zooms about the exact world point under the viewport right now — never the last REPORTED
-            // scroll, whose one-round-trip lag used to bake an off-center offset in as ground truth (the
-            // deep-zoom non-recovering drift).
+            // 整段连发只捕获一次视口中心下方的世界点 —— 滚动状态在唯一一次最终应用前不变，同一枢轴在每个复合步都成立。
+            // scrollX/Y、viewportW/H、reachW/H 由 JS 滚轮处理器在连发开始时从 DOM 实时捕获（eff = DOM 滚动 − JS 边界预留）。
+            // 快速第二次连发因此绕视口正下方的精确世界点缩放，绝不靠上次上报的滚动 —— 它一个往返的滞后曾把偏心偏移当成真相烘进去（深度缩放不可恢复的漂移）。
             var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(scrollX, scrollY, viewportW, viewportH, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
 
             var notches = Math.Abs(wheelDelta) / 120d;
             var count = (int)Math.Max(1, Math.Round(notches));
-            // Wheel up arrives as positive wheelDelta (the JS handler negates the browser's deltaY)
-            // and zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+            // 滚轮向上到达时 wheelDelta 为正（JS 处理器取反浏览器的 deltaY）且为放大：Scale 是折叠因子，放大要除以 1/1.1。
             var factor = wheelDelta > 0 ? 1 / 1.1 : 1.1;
 
             for (var i = 0; i < count; i++)
@@ -543,49 +525,26 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
                 layout.Scale = new Scale(next, next);
             }
 
-            // Deep zoom-in collapses negative-world content to w/Scale past the fixed NegativeOffset,
-            // pushing left/top content outside the reachable DOM host. Grow the cover now (monotonic,
-            // no-op for positive-only content) so the contentW/H, clamps and the atomic
-            // applyZoomSurface below all read the NEW ActualOffset/ActualSize in the same frame.
+            // 深度放大把负向内容折叠到 w/Scale、越过固定 NegativeOffset，把左/上内容推出可达的 DOM 宿主。
+            // 现在扩大覆盖（单调，只有正向内容时无事），下面的 contentW/H、夹取与原子 applyZoomSurface 就会同帧读到新的 ActualOffset/ActualSize。
             WorkflowSurfaceMath.EnsureNegativeCover(Tree);
 
-            // The canvas content auto-extends on zoom-in below scale 1 (ActualSize = world / scale),
-            // and clamping may grow NegativeOffset (content moves right/down). Push the new offset and
-            // the new extent to the DOM atomically with the scroll below; first compute the scroll
-            // against the post-change model extent exactly like the XAML adapters.
-            //
-            // Content width = the model ActualSize (the links layer) but at least the DOM host's
-            // currently-reachable content (reachW, read live by the JS wheel handler) so an edge-pan-
-            // expanded host is never clamped shorter than what the user already scrolled to. The clamp
-            // max is the effective scroll extent (content − viewport), matching what the JS host will
-            // expose after we grow it.
+            // 比例低于 1 时画布内容随放大自动延伸（ActualSize = world / scale），夹取还可能增大 NegativeOffset（内容右/下移）。把新偏移与新范围连同下面的滚动原子地推给 DOM；先照 XAML 几家那样按变化后的模型范围算滚动。
+            // 内容宽 = 模型 ActualSize（连线层），但不小于 DOM 宿主当前可达内容（reachW，由 JS 滚轮处理器实时读），这样边缘平移扩过的宿主不会被夹得比用户已滚到的还短。夹取上限是有效滚动范围（内容 − 视口），与我们扩展后 JS 宿主将暴露的一致。
             var contentW = Math.Max(1, Math.Max(layout.ActualSize.Width, reachW));
             var contentH = Math.Max(1, Math.Max(layout.ActualSize.Height, reachH));
             var (tx0, ty0) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, viewportW, viewportH);
             _ = WorkflowSurfaceMath.ClampScrollOffset(tx0, Math.Max(0, contentW - viewportW), layout, horizontal: true);
             _ = WorkflowSurfaceMath.ClampScrollOffset(ty0, Math.Max(0, contentH - viewportH), layout, horizontal: false);
 
-            // The clamp may have grown NegativeOffset, which moved the content — re-derive the scroll
-            // from the NEW offset/scale/extent so the pivot lands exactly under the viewport center
-            // (first-pass PivotCenterScroll used the pre-clamp offset).
+            // 夹取可能增大了 NegativeOffset、移动了内容 —— 按新偏移/比例/范围重推滚动，枢轴才正好落在视口中心（第一趟 PivotCenterScroll 用的是夹取前的偏移）。
             var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, viewportW, viewportH);
             tx = Math.Max(0, tx);
             ty = Math.Max(0, ty);
 
-            // One atomic JS step: re-translate content to the new ActualOffset, grow the host so the
-            // scroll range covers the (possibly auto-extended) model content, then scroll — all in a
-            // single synchronous block the browser paints as one frame, so there is no intermediate
-            // frame where the world sits at the old translate under the new scroll (the old left-right
-            // flicker). Effective-space lengths: the JS adds its own edge reserve back.
-            //
-            // Node geometry joins the same atomic block: after Scale changed, every node's collapsed
-            // Anchor/Size getter (world / scale) is already correct, so we marshal them and the JS
-            // repositions the existing pooled wrappers synchronously here, then keeps re-asserting them
-            // (surfaceZoomState settle loop) until the async .NET per-node renders converge — so a
-            // stale render can never paint even one frame of old collapsed values.
-            // Await the single atomic apply so the DOM (translate + host grow + scroll + node/link
-            // geometry) is fully stamped before this burst returns — the next burst's live DOM read is
-            // then the settled final state, never a half-applied intermediate.
+            // 一次原子 JS 步骤：把内容重平移到新 ActualOffset、扩展宿主让滚动范围覆盖（可能自动延伸的）模型内容，再滚动 —— 全在一个同步块里，浏览器按一帧绘制，世界不会出现「旧平移 + 新滚动」的中间帧（旧的左右闪烁）。生效空间长度：JS 会补回自己的边界预留。
+            // 节点几何并入同一原子块：Scale 改变后每个节点折叠后的 Anchor/Size getter（world / scale）已正确，把它们编组过去，JS 同步重摆现有池化包装元素、并持续重申（surfaceZoomState 落定循环）直到异步的 .NET 逐节点渲染收敛 —— 陈旧渲染不会画出哪怕一帧旧折叠值。
+            // 等待这一次原子应用，DOM（平移 + 宿主扩展 + 滚动 + 节点/连线几何）在本次连发返回前完全盖好，下一次连发的实时 DOM 读取因此是落定的最终态，绝不是半应用的中间态。
             if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
             {
                 await _module.InvokeVoidAsync("applyZoomSurface",
@@ -600,7 +559,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         {
             var notches = Math.Abs(wheelDelta) / 120d;
             var count = (int)Math.Max(1, Math.Round(notches));
-            // Wheel up (positive wheelDelta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+            // 滚轮向上（wheelDelta 为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
             var factor = wheelDelta > 0 ? 1 / 1.1 : 1.1;
             for (var i = 0; i < count; i++)
             {
@@ -652,9 +611,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _viewportW = Math.Max(1, viewportW);
         _viewportH = Math.Max(1, viewportH);
 
-        // Keep the .NET-side canvas size and content translate in sync with JS-side auto-expansion
-        // (grow-only), so subsequent re-renders never shrink the canvas back after it was expanded
-        // near an edge, and never reset the left/top offset while the user is panning.
+        // 让 .NET 侧画布尺寸与内容平移跟 JS 侧自动扩展（只增）保持同步，后续重渲染不会把已在边缘扩展过的画布缩回去，也不会在用户平移中重置左/上偏移。
         var grew = false;
         if (canvasW > _canvasW)
         {
@@ -685,16 +642,13 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             var layout = Tree.Layout;
             var contentX = layout?.ActualOffset.Horizontal ?? 0;
             var contentY = layout?.ActualOffset.Vertical ?? 0;
-            // Canonical (reported) frame — matches the XAML adapters: the reserved ruler inset and any
-            // left/top overscroll growth are a visual translate only, so the world-left reported here is
-            // scroll − (ActualOffset + overscroll). The decorator re-adds the ruler reserve for ticks.
+            // 规范（上报）坐标系 —— 与 XAML 几家一致：预留标尺内缩与左/上越界增长都只是视觉平移，所以这里上报的 world-left 是 scroll − (ActualOffset + 越界量)。装饰器为刻度再加回标尺预留。
             var effX = contentX + Math.Max(0, _offsetX - RulerThickness);
             var effY = contentY + Math.Max(0, _offsetY - RulerThickness);
             var viewportX = WorkflowSurfaceMath.ToWorld(scrollLeft, effX);
             var viewportY = WorkflowSurfaceMath.ToWorld(scrollTop, effY);
 
-            // Keep the virtualization visible-region correction in sync with the reserved ruler band
-            // so nodes beneath it are not culled a ruler-thickness early.
+            // 让虚拟化可见区修正与预留标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
             Tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness);
             try
             {
@@ -702,11 +656,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             }
             catch
             {
-                // Best-effort viewport bookkeeping; some trees may not support it.
+                // 尽力而为的视口记账；有些树可能不支持。
             }
 
-            // Persist the viewport position (world coordinates) so it survives a serialization
-            // round-trip — mirrors the XAML adapters' WorkflowSurfaceBehavior.UpdateVisibleRegion.
+            // 持久化视口位置（世界坐标）以熬过序列化往返 —— 与 XAML 几家 WorkflowSurfaceBehavior.UpdateVisibleRegion 一致。
             if (layout is not null)
             {
                 layout.ViewportOffset = new Offset(viewportX, viewportY);
@@ -714,13 +667,9 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
             _viewport = BuildViewport();
 
-            // Cheap overlays (grid decorator) update via the feed; the node/link content subtree is
-            // untouched by plain scrolling. The canvas host/grid/axis are JS-owned, so the grid no
-            // longer depends on a re-render. Only canvas growth (edge expansion) changes the links-
-            // layer size (SurfaceCanvas context), so only then do we re-render the whole surface.
+            // 轻量覆盖层（网格装饰器）经 feed 更新，纯滚动不动节点/连线内容子树。画布宿主/网格/坐标轴归 JS，网格不再依赖重渲染。只有画布增长（边缘扩展）会改变连线层尺寸（SurfaceCanvas 上下文），所以只有那时才重渲染整个表面。
             _feed.Publish(_viewport);
-            // The minimap is drawn over node/world content, so it must use the PHYSICAL visible world
-            // rect (which includes the edge translate) — not the canonical (ruler-excluded) one.
+            // 缩略图画在节点/世界内容之上，所以必须用物理可见世界矩形（含边缘平移）—— 而不是规范（排除标尺）的那个。
             var physX = WorkflowSurfaceMath.ToWorld(scrollLeft, _offsetX + contentX);
             var physY = WorkflowSurfaceMath.ToWorld(scrollTop, _offsetY + contentY);
             PushMinimapViewport(physX, physY);

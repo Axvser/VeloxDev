@@ -2,17 +2,21 @@ using System.Drawing;
 
 namespace VeloxDev.TransitionSystem.NativeSamplers
 {
+    /// <summary>Samples a <see cref="Color"/>.</summary>
     public class ColorSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             var c1 = (Color)(start ?? default(Color));
             var c2 = (Color)(end ?? c1);
 
-            // RGB share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            // RGB 共用一个进度，超调才不会偏色；alpha 走自己的区间。
             var rgb = new BoundedProgress(t, 0d, 255d);
             rgb.Add(c1.R, c2.R);
             rgb.Add(c1.G, c2.G);
@@ -26,7 +30,7 @@ namespace VeloxDev.TransitionSystem.NativeSamplers
             ));
         }
 
-        /// <summary>Saturates instead of wrapping — a bare byte cast turns 300 into 44.</summary>
+        // 饱和截断而不是回绕——直接转 byte 会把 300 变成 44。
         private static byte Channel(double value)
         {
             if (value <= 0d) return 0;

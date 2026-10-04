@@ -4,11 +4,13 @@ using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
+/// <summary>The interpreter base for a host with a dispatcher priority.</summary>
 public abstract class TransitionInterpreterCore<
     TTransitionEffectCore,
     TPriorityCore> : TransitionInterpreterCore, ITransitionInterpreter<TPriorityCore>
     where TTransitionEffectCore : ITransitionEffect<TPriorityCore>
 {
+    /// <inheritdoc />
     public virtual Task Execute(
         object target,
         SamplerSet<TPriorityCore> frameSet,
@@ -24,6 +26,7 @@ public abstract class TransitionInterpreterCore<
     }
 }
 
+/// <summary>The interpreter base for a host with no dispatcher priority.</summary>
 public abstract class TransitionInterpreterCore<
     TTransitionEffectCore> : TransitionInterpreterCore, ITransitionInterpreter<NonPriority>
     where TTransitionEffectCore : ITransitionEffectCore
@@ -47,8 +50,10 @@ public abstract class TransitionInterpreterCore<
     }
 }
 
+/// <summary>The interpreter base: the sampling loop and the effect callbacks it drives.</summary>
 public abstract class TransitionInterpreterCore : IDisposable
 {
+    /// <summary>The cancellation source of the current run, or <see langword="null"/> when none is running.</summary>
     protected CancellationTokenSource? cts = null;
     private ReusableTimerWait? _wait;
     private FramePacerCore? _pacer;
@@ -366,11 +371,13 @@ public abstract class TransitionInterpreterCore : IDisposable
         return rawT >= 1d;
     }
 
+    /// <inheritdoc />
     public virtual void Exit()
     {
         Dispose();
     }
 
+    /// <inheritdoc />
     public virtual void Dispose()
     {
         // 先取消：唤醒循环是它停下来的方式。pacer 后释放——即使顺序反过来也不会卡住（已释放的 pacer 会立刻唤醒

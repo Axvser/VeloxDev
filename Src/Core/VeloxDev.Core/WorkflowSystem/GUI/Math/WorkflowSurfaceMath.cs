@@ -488,18 +488,27 @@ public static class WorkflowSurfaceMath
 /// </summary>
 public readonly struct WorkflowBounds
 {
+    /// <summary>The left edge of the bounds in world space.</summary>
     public double Left { get; init; }
+    /// <summary>The top edge of the bounds in world space.</summary>
     public double Top { get; init; }
+    /// <summary>The width of the bounds.</summary>
     public double Width { get; init; }
+    /// <summary>The height of the bounds.</summary>
     public double Height { get; init; }
 
+    /// <summary>The right edge, <see cref="Left"/> plus <see cref="Width"/>.</summary>
     public readonly double Right => Left + Width;
+    /// <summary>The bottom edge, <see cref="Top"/> plus <see cref="Height"/>.</summary>
     public readonly double Bottom => Top + Height;
+    /// <summary>Whether the bounds have no area.</summary>
     public readonly bool IsEmpty => Width <= 0 || Height <= 0;
 
+    /// <summary>Creates bounds from a node rectangle at (<paramref name="x"/>, <paramref name="y"/>).</summary>
     public static WorkflowBounds FromNode(double x, double y, double w, double h)
         => new() { Left = x, Top = y, Width = w, Height = h };
 
+    /// <summary>Returns the union of every rectangle in <paramref name="rects"/>.</summary>
     public static WorkflowBounds FromNodes(IEnumerable<(double X, double Y, double W, double H)> rects)
     {
         var bounds = default(WorkflowBounds);
@@ -513,6 +522,7 @@ public readonly struct WorkflowBounds
         return bounds;
     }
 
+    /// <summary>Returns the minimal bounds covering both <paramref name="a"/> and <paramref name="b"/>.</summary>
     public static WorkflowBounds Union(WorkflowBounds a, WorkflowBounds b)
     {
         if (a.IsEmpty) return b;

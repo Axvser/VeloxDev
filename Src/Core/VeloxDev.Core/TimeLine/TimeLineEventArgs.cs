@@ -1,5 +1,6 @@
 ﻿namespace VeloxDev.TimeLine;
 
+/// <summary>The base event args a timeline reports, carrying the handled flag.</summary>
 public abstract class TimeLineEventArgs
 {
     /// <summary>

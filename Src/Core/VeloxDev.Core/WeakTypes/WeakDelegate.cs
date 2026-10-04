@@ -23,6 +23,9 @@ namespace VeloxDev.WeakTypes
         private readonly List<WeakReference<Delegate>> _handlers = [];
         private readonly object _lock = new();
 
+        /// <summary>Adds <paramref name="handler"/> to the list.</summary>
+        /// <param name="handler">The handler to add.</param>
+        /// <param name="CanUpdateCache">Whether to rebuild the combined delegate now.</param>
         public void AddHandler(TDelegate? handler, bool CanUpdateCache = true)
         {
             lock (_lock)
@@ -33,6 +36,9 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Removes every entry equal to <paramref name="handler"/>.</summary>
+        /// <param name="handler">The handler to remove.</param>
+        /// <param name="CanUpdateCache">Whether to rebuild the combined delegate now.</param>
         public void RemoveHandler(TDelegate? handler, bool CanUpdateCache = true)
         {
             lock (_lock)
@@ -103,6 +109,7 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Returns a copy carrying the same live handlers.</summary>
         public WeakDelegate<TDelegate> Clone()
         {
             lock (_lock)

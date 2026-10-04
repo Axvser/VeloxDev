@@ -15,9 +15,8 @@
                               fill="@NodeFill" rx="@NodeRadiusCss" />
                     }
                 }
-                @* The viewport block: x/y/width/height are owned entirely by JS (setMinimapViewport),
-                   so a .NET re-render never writes stale coordinates that would make the block jitter
-                   while the surface is being panned or navigated. *@
+                @* Viewport block x/y/width/height are owned entirely by JS (setMinimapViewport),
+                   so a re-render cannot overwrite it with stale coordinates. *@
                 <rect class="veloxdev-wf-minimap-viewport"
                       fill="@ViewportFill" stroke="@ViewportStroke"
                       stroke-width="@ViewportStrokeWidthCss" rx="2" />

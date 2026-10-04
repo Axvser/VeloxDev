@@ -18,7 +18,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 {
-    // ── Dependency Properties ────────────────────────────────────────────────
+    // ── 依赖属性 ────────────────────────────────────────────────────────────
 
     public static readonly DependencyProperty ScrollOffsetXProperty =
         DependencyProperty.Register(nameof(ScrollOffsetX), typeof(double), typeof(WorkflowMinimapOverlay),
@@ -68,7 +68,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         DependencyProperty.Register(nameof(LinkStrokeThickness), typeof(double), typeof(WorkflowMinimapOverlay),
             new FrameworkPropertyMetadata(2.0, OnPropChanged));
 
-    // ── Brush / Style properties ─────────────────────────────────────────────
+    // ── 画刷/样式属性 ───────────────────────────────────────────────────────
 
     public static readonly DependencyProperty MinimapBackgroundProperty =
         DependencyProperty.Register(nameof(MinimapBackground), typeof(Brush), typeof(WorkflowMinimapOverlay),
@@ -122,7 +122,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         DependencyProperty.Register(nameof(ScrollViewerName), typeof(string), typeof(WorkflowMinimapOverlay),
             new FrameworkPropertyMetadata(null));
 
-    // ── CLR accessors ────────────────────────────────────────────────────────
+    // ── CLR 访问器 ───────────────────────────────────────────────────────────
 
     public double ScrollOffsetX { get => (double)GetValue(ScrollOffsetXProperty); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => (double)GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }
@@ -152,7 +152,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     public double MinimapMinSize { get => (double)GetValue(MinimapMinSizeProperty); set => SetValue(MinimapMinSizeProperty, value); }
     public string? ScrollViewerName { get => (string?)GetValue(ScrollViewerNameProperty); set => SetValue(ScrollViewerNameProperty, value); }
 
-    // ── State ────────────────────────────────────────────────────────────────
+    // ── 状态 ────────────────────────────────────────────────────────────────
 
     private WorkflowBounds _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
@@ -186,9 +186,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     {
         if (string.IsNullOrWhiteSpace(ScrollViewerName)) return;
 
-        // Walk up the visual tree to find the UserControl (name scope owner).
-        // FindName on the UserControl CAN find all named elements in its XAML,
-        // whereas Window.FindName cannot see inside UserControl namescopes.
+        // 沿可视树上溯找 UserControl（名称作用域属主）。UserControl 的 FindName 能找到其 XAML 里所有命名元素，而 Window.FindName 看不进 UserControl 名称作用域。
         DependencyObject? el = this;
         while (el is not null)
         {
@@ -205,14 +203,12 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     private void OnUnloaded(object? s, RoutedEventArgs e)
     {
-        // Prevent memory leak: unsubscribe from all tree events and clear
-        // strong references to ViewModel objects when the overlay is removed
-        // from the visual tree (e.g. closing a tab).
+        // 防内存泄漏：覆盖层从可视树移除时（如关闭标签页），退订所有树事件、清掉对 ViewModel 对象的强引用。
         UnsubscribeFromTree();
         _scrollViewer = null;
     }
 
-    // ── Tree change / subscription ──────────────────────────────────────────
+    // ── 树变更/订阅 ────────────────────────────────────────────────────────
 
     private void OnTreeChanged(IWorkflowTreeViewModel? newTree)
     {
@@ -306,16 +302,14 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         _pendingRefresh = true;
         if (!IsVisible) return;
 
-        // OnNodePropChanged / OnSlotPropChanged can fire from the
-        // TickManager loop thread (via BroadcastVisibleItemLayout).
-        // InvalidateVisual requires the UI thread — dispatch if needed.
+        // OnNodePropChanged / OnSlotPropChanged 可能从 TickManager 循环线程触发（经 BroadcastVisibleItemLayout）；InvalidateVisual 必须在 UI 线程，需要时派发。
         if (Dispatcher.CheckAccess())
             InvalidateVisual();
         else
             Dispatcher.BeginInvoke(InvalidateVisual);
     }
 
-    // ── Data refresh ─────────────────────────────────────────────────────────
+    // ── 数据刷新 ─────────────────────────────────────────────────────────────
 
     private void RefreshMinimapData()
     {
@@ -349,7 +343,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         _lastViewport = default;
     }
 
-    // ── Hit test / drag ─────────────────────────────────────────────────────
+    // ── 命中测试/拖拽 ──────────────────────────────────────────────────────
 
     private Rect? GetViewportRectInMinimap()
     {
@@ -370,8 +364,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         if (_isDragging) return;
         var pt = e.GetPosition(this);
 
-        // Match the Jalium adapter: the clicked point always becomes the viewport center —
-        // no grab-anchor on the indicator block, so pressing anywhere recenters the view.
+        // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
         NavigateToWorld(pt.X, pt.Y);
         _isDragging = true;
         CaptureMouse();
@@ -400,7 +393,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         base.OnLostMouseCapture(e);
     }
 
-    // ── Transform ─────────────────────────────────────────────────────────────
+    // ── 变换 ────────────────────────────────────────────────────────────────
 
     private (double Ox, double Oy, double MmW, double MmH, double Sc) ComputeTransform(WorkflowBounds gb)
     {
@@ -437,11 +430,11 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         }
     }
 
-    // ── Rendering ─────────────────────────────────────────────────────────────
+    // ── 渲染 ────────────────────────────────────────────────────────────────
 
     protected override void OnRender(DrawingContext dc)
     {
-        // Draw transparent background to establish visual content for hit-testing
+        // 画透明背景，为命中测试建立可视内容
         var sz = RenderSize;
         if (sz.Width <= 0 || sz.Height <= 0) return;
         dc.DrawRectangle(System.Windows.Media.Brushes.Transparent, null, new Rect(sz));
@@ -456,7 +449,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         var mmRect = new Rect(0, 0, mmW, mmH);
         var cr = Math.Max(0, MinimapCornerRadius);
 
-        // Minimap background
+        // 缩略图背景
         if (MinimapBackground is not null)
             dc.DrawRoundedRectangle(MinimapBackground, null, mmRect, cr, cr);
         if (MinimapBorderBrush is not null)
@@ -472,7 +465,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         dc.PushClip(clipGeometry);
         try
         {
-            // Nodes
+            // 节点
             if (NodeBrush is not null)
             {
                 var ncr = Math.Max(0, NodeCornerRadius);
@@ -486,7 +479,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
                 }
             }
 
-            // Viewport indicator
+            // 视口指示块
             var vp = _lastViewport;
             if (!vp.IsEmpty)
             {

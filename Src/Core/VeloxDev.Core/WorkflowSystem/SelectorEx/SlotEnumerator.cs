@@ -9,10 +9,12 @@ using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem;
 
+/// <summary>A slot collection driven by one selector: each value of the selector type maps to one slot, and switching the selector swaps the whole set.</summary>
 public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IConditionalSlotProvider, System.ComponentModel.INotifyPropertyChanged,
     IVeloxJsonDeserializing, IVeloxJsonDeserialized
     where TSlot : IWorkflowSlotViewModel, new()
 {
+    /// <summary>Creates an empty enumerator.</summary>
     public SlotEnumerator()
     {
         Items = [];
@@ -41,9 +43,12 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
 
     [VeloxProperty] public partial Type? SelectorType { get; protected set; }
     [VeloxProperty] public partial ObservableCollection<ConditionalSlot<TSlot>> Items { get; set; }
+    /// <summary>The number of items in the collection.</summary>
     public int Count { get { FlushDeferredRemovals(); return Items.Count; } }
+    /// <summary>Returns the slot at <paramref name="index"/>.</summary>
     public TSlot this[int index] { get { FlushDeferredRemovals(); return Items[index].Slot; } }
 
+    /// <inheritdoc />
     public object? CurrentValue
     {
         get => _currentValue?.ToString();
@@ -124,6 +129,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         }
     }
 
+    /// <summary>Normalizes <paramref name="value"/> onto the current selector type.</summary>
     public object? NormalizeSelectorValue(object? value) => NormalizeValue(value);
 
     private object? NormalizeValue(object? value)
@@ -271,11 +277,13 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         }
     }
 
+    /// <inheritdoc />
     public bool TrySelect(object value, out TSlot? slot)
     {
         return conditionMap.TryGetValue(value, out slot);
     }
 
+    /// <inheritdoc />
     public void SetSelector(object? selector)
     {
         FlushDeferredRemovals();
@@ -598,12 +606,14 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         public IReadOnlyList<IWorkflowLinkViewModel> Links { get; } = links;
     }
 
+    /// <inheritdoc />
     public void Install(IWorkflowNodeViewModel parent, string memberName)
     {
         Parent = parent;
         _memberName = memberName;
     }
 
+    /// <inheritdoc />
     public void Uninstall()
     {
         FlushDeferredRemovals();
@@ -729,15 +739,8 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
             yield return item.Slot;
     }
 
-    /// <summary>
-    /// 按名字还原选择器类型 —— 走编译期目录，不扫程序集。
-    /// </summary>
-    /// <remarks>
-    /// 存档里只留下 <c>SelectorTypeName</c>，而按名字找类型正是目录在做的事：它按类型全名索引，
-    /// 而这里存的正是 <c>FullName</c>。选择器类型是宿主的枚举，但只要它出现在某个成员的声明类型上
-    /// （demo 的 <c>VoltageRange</c> 就是 <c>EnumSelectorNodeViewModel.SelectedValue</c> 的类型），
-    /// 目录就收录得到。查不到就是闭世界的老答案：那个类型没进目录，还原不出来。
-    /// </remarks>
+    // 按名字还原选择器类型——走编译期目录，不扫程序集。存档里只留 FullName，目录按类型全名索引，
+    // 所以查不到就说明那个类型没进目录，还原不出来。
     private static Type? ResolveTypeByName(string fullName)
         => VeloxDev.AI.AgentTypeResolver.ResolveType(fullName);
 

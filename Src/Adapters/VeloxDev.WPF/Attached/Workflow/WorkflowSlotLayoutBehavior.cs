@@ -161,10 +161,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     private static void OnLayoutUpdated(object? sender, EventArgs e)
     {
-        // Synchronous post-layout write-back (mirrors the WinUI adapter). Zoom collapse moves node
-        // geometry via binding -> layout; reading the slot center here, before this frame's render,
-        // guarantees the link-endpoint anchors are refreshed in the same frame as the node collapse
-        // instead of lagging one BeginInvoke(Render) cadence (the slot drift / flicker source).
+        // 布局后同步回写（与 WinUI 家一致）：在渲染前读插槽中心，保证连线端点锚点与节点折叠同帧刷新，而不是迟一个 BeginInvoke(Render) 节拍（插槽漂移/闪烁的来源）。
         if (sender is UserControl control)
         {
             Sync(control);
@@ -175,10 +172,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     {
         if (sender is UserControl control)
         {
-            // Zoom collapse changes the node's Size every tick. LayoutUpdated can fire during an
-            // intermediate measure/arrange pass before the node's resize (and its Viewbox-scaled slot
-            // children) settle; SizeChanged fires only once the node's layout reaches its final size
-            // for this update. Syncing here keeps slot anchors on the node's final, in-frame geometry.
+            // 缩放折叠每格都改节点 Size。LayoutUpdated 可能在节点 resize（及其 Viewbox 缩放的插槽子元素）落定之前的中间测量/排布趟触发；SizeChanged 只在节点布局达到本次更新的最终尺寸后触发。
+            // 在这里同步让插槽锚点保持在节点最终的、同帧几何上。
             Sync(control);
         }
     }
@@ -262,13 +257,12 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             var slotNames = GetAllSlotNames(control);
             var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-            // Rebuild the set of property names that should trigger ScheduleSync on change.
+            // 重建「变化时该触发 ScheduleSync」的属性名集合。
             state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
-            // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
-            // names ("OutputSlots"). Add both the full control name and the
-            // PART_-stripped form so OnPropertyChanged("OutputSlots") is matched.
+            // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
+            // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
             {
                 state.SlotPropertyNames.Add(name);
@@ -281,8 +275,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
                 if (name.StartsWith("PART_"))
                     state.SlotPropertyNames.Add(name.Substring(5));
             }
-            // Always include fallback defaults for standard property names,
-            // covering both direct ViewModel properties and SlotEnumerator members.
+            // 标准属性名一律带兜底默认值，覆盖 ViewModel 直接属性与 SlotEnumerator 成员。
             state.SlotPropertyNames.Add("InputSlot");
             state.SlotPropertyNames.Add("OutputSlot");
             state.SlotPropertyNames.Add("OutputSlots");
@@ -347,8 +340,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
         if (coordinateHost is not null)
         {
-            // TranslatePoint relative to the canvas yields canvas-local (world + ActualOffset)
-            // because the ActualOffset is a per-node render transform; subtract to get world.
+            // 相对画布做 TranslatePoint 得到画布局部（world + ActualOffset），因为 ActualOffset 是逐节点渲染变换；减掉它得到世界坐标。
             var centerOnCanvas = control.TranslatePoint(new Point(control.ActualWidth / 2, control.ActualHeight / 2), coordinateHost);
             var layout = node.Parent?.Layout;
             if (layout is not null)

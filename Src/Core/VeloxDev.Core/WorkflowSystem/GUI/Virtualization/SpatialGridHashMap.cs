@@ -24,6 +24,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
     private bool _reindexing;
     private bool _rerunPending;
 
+    /// <inheritdoc />
     public Viewport Bounds
     {
         get
@@ -56,6 +57,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         EnsureBounds();
     }
 
+    /// <inheritdoc />
     public void Insert(T item)
     {
         if (item == null) return;
@@ -79,6 +81,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         InvalidateBounds();
     }
 
+    /// <inheritdoc />
     public void Remove(T item)
     {
         if (item == null || !_trackedItems.TryGetValue(item, out var b)) return;
@@ -91,6 +94,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         InvalidateBounds();
     }
 
+    /// <inheritdoc />
     public IEnumerable<T> Query(Viewport viewport)
     {
         if (viewport.IsEmpty) yield break;
@@ -124,6 +128,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         }
     }
 
+    /// <inheritdoc />
     public void Clear()
     {
         // Iterate over a snapshot (Keys copy) because UnregisterItem only

@@ -14,6 +14,9 @@ public class AgentCommandParameterAttribute : Attribute
     /// </summary>
     public Type? ParameterType { get; }
 
+    /// <summary>Declares that the command takes no parameter.</summary>
     public AgentCommandParameterAttribute() => ParameterType = null;
+
+    /// <summary>Declares <paramref name="parameterType"/> as the command's parameter type.</summary>
     public AgentCommandParameterAttribute(Type parameterType) => ParameterType = parameterType;
 }

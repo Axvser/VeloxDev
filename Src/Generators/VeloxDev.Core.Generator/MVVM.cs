@@ -12,6 +12,7 @@ namespace VeloxDev.Generators
     [Generator(LanguageNames.CSharp)]
     public class MVVM : IIncrementalGenerator
     {
+        /// <inheritdoc />
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             context.RegisterSourceOutput(
@@ -19,6 +20,7 @@ namespace VeloxDev.Generators
                 GenerateSource);
         }
 
+        /// <summary>Writes the generated sources for every target resolved from <paramref name="input"/>.</summary>
         public void GenerateSource(SourceProductionContext context, (ImmutableArray<Analizer.Filters.GeneratorTarget> Targets, Compilation Compilation) input)
         {
             foreach (var (syntax, symbol) in Analizer.Filters.Resolve(input.Targets, input.Compilation))

@@ -10,6 +10,7 @@ namespace VeloxDev.Timing;
 /// </remarks>
 public abstract class TimeSamplerCore
 {
+    /// <summary>Creates the sampler over <paramref name="source"/>.</summary>
     protected TimeSamplerCore(ITimeSource source)
     {
         Source = source ?? throw new ArgumentNullException(nameof(source));
@@ -21,7 +22,9 @@ public abstract class TimeSamplerCore
     /// <summary>The source's unit. Never <c>Stopwatch.Frequency</c>, which an injected source may not share.</summary>
     protected long TicksPerSecond => Source.TicksPerSecond;
 
+    /// <summary>Converts <paramref name="ticks"/> in the source's unit to a <see cref="TimeSpan"/>.</summary>
     protected TimeSpan ToTimeSpan(long ticks) => TimeConversion.TicksToTimeSpan(ticks, TicksPerSecond);
 
+    /// <summary>Converts <paramref name="span"/> to the source's unit.</summary>
     protected long ToTicks(TimeSpan span) => TimeConversion.SpanToTicks(span, TicksPerSecond);
 }

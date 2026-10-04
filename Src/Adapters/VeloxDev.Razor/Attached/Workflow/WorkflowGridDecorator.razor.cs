@@ -74,20 +74,15 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     /// <inheritdoc />
     public double RulerBand => RulerThickness;
 
-    // The corner/band inline styles need an explicit px unit — a unitless length (e.g. "28") is
-    // invalid CSS and the browser drops it, collapsing the corner, bands, and tick lines to 0×0.
+    // 角/带的内联样式必须带 px 单位 —— 无单位长度（如 28）是无效 CSS，浏览器会丢弃，角、带与刻度线塌成 0×0。
     private string RulerThicknessCss => Css(RulerThickness) + "px";
 
-    // Every length that reaches a style="" attribute goes through here: invariant, and always with a '.'
-    // decimal separator, or a comma-decimal culture makes the browser drop the declaration entirely.
+    // 所有进入 style 属性的长度都走这里：固定不变、且总是用 '.' 小数点，否则逗号小数文化会让浏览器整条丢弃该声明。
     private static string Css(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
 
-    // The bands span the full surface width/height (background always covers the strip); only the
-    // tick layer translates. The viewport is reported in canonical coordinates (ScrollOffset = raw
-    // scroll offset >= 0, ContentOffset = effective world-origin = ActualOffset + overscroll), so the
-    // physical grid/axis line for world v sits at v + ContentOffset + RulerThickness - ScrollOffset
-    // (the RulerThickness reserve is a visual-only canvas translate). Translate the tick layer by that
-    // term and draw a world tick at band-local v to land exactly on the physical grid line.
+    // 带横跨整个表面宽/高（背景总覆盖条纹），只有刻度层平移。视口按规范坐标上报（ScrollOffset = 原始滚动偏移 >= 0，ContentOffset = 有效世界原点 = ActualOffset + 越界量），
+    // 所以世界坐标 v 的物理网格/轴线位于 v + ContentOffset + RulerThickness − ScrollOffset（RulerThickness 预留只是视觉性的画布平移）。
+    // 把刻度层平移这一项、在带局部 v 处画世界刻度，就正好落在物理网格线上。
     private string TopTransform => $"translateX({Css(ContentOffsetX + RulerThickness - ScrollOffsetX)}px)";
     private string LeftTransform => $"translateY({Css(ContentOffsetY + RulerThickness - ScrollOffsetY)}px)";
     private string TickLengthCss(bool isMajor)

@@ -19,6 +19,7 @@ namespace VeloxDev.DynamicTheme
         Cache = 2,
     }
 
+    /// <summary>Applies theme transitions to the theme objects registered against it.</summary>
     public class ThemeManager
     {
         private static InterpolatorCore? _interpolator;
@@ -608,13 +609,13 @@ namespace VeloxDev.DynamicTheme
             public PropertyInfo PropertyInfo { get; } = propertyInfo;
             public ITransitionProperty TransitionProperty { get; } = transitionProperty;
 
-            /// <summary>起点原值，按 <see cref="StartModel"/> 取；未经采样器归一化，因为它要写回真实对象。</summary>
+            // 起点原值，按 StartModel 取；未经采样器归一化，因为它要写回真实对象。
             public object? StartValue { get; } = startValue;
 
-            /// <summary>终点原值。归一化交给 Prepare，这里预先做会归一化两次。</summary>
+            // 终点原值。归一化交给 Prepare，这里预先做会归一化两次。
             public object? EndValue { get; } = endValue;
 
-            /// <summary>该属性有没有采样器。没有的话 Prepare 会静默跳过它，须由本类在收尾时补写终值。</summary>
+            // 该属性有没有采样器。没有的话 Prepare 会静默跳过它，须由本类在收尾时补写终值。
             public bool HasSampler { get; } = hasSampler;
         }
 

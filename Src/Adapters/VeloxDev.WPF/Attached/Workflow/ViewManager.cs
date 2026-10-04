@@ -234,7 +234,7 @@ public sealed class ViewManager(Panel panel)
         var selector = ViewPool.GetTemplateSelector(_panel);
         if (selector != null)
         {
-            // Construct a temporary ContentPresenter as the container argument.
+            // 构造一个临时 ContentPresenter 作容器参数。
             var cp = new ContentPresenter { Content = context };
             if (selector.SelectTemplate(context, cp) is DataTemplate selected)
             {
@@ -243,7 +243,7 @@ public sealed class ViewManager(Panel panel)
             }
         }
 
-        // Walk up the visual tree looking for a DataTemplate (Resources dictionaries).
+        // 沿可视树上溯找 DataTemplate（资源字典）。
         DependencyObject? current = _panel;
         while (current != null)
         {
@@ -262,7 +262,7 @@ public sealed class ViewManager(Panel panel)
                    ?? (current is FrameworkElement fe2 ? fe2.Parent : null);
         }
 
-        // Look up Application resources.
+        // 查 Application 资源。
         foreach (var key in Application.Current.Resources.Keys)
         {
             if (Application.Current.Resources[key] is DataTemplate dt && dt.DataType is Type dtType && dtType == contextType)

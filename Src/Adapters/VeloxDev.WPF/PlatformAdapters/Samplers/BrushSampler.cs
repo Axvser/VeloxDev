@@ -8,15 +8,18 @@ namespace VeloxDev.Adapters.NativeSamplers
     {
         private const int RenderSize = 100;
 
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
             if (start is SolidColorBrush sb && end is SolidColorBrush eb)
             {
-                // Zero per-frame allocation: reuse a scratch brush, recomputing from the pristine start/end each frame.
+                // 每帧零分配：复用同一个 scratch 画刷，每帧从原始 start/end 重算。
                 if (working is not SolidColorBrush wb)
                 {
                     wb = new SolidColorBrush(sb.Color) { Opacity = sb.Opacity };
@@ -61,7 +64,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color InterpolateColor(Color c1, Color c2, double t)
         {
-            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。
             var rgb = new BoundedProgress(t, 0d, 255d);
             rgb.Add(c1.R, c2.R);
             rgb.Add(c1.G, c2.G);
@@ -97,8 +100,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             public RenderTargetBitmap Redraw(Brush start, Brush end, double t)
             {
-                // The cross-fade factor is a fraction, so it cannot express an overshoot: it saturates at either end
-                // instead of being handed a value outside [0,1], which is what the eased time can now be.
+                // 淡出系数是比例，表达不了越界：它在两端饱和，而不是接收 [0,1] 之外的值 —— 缓动时间现在可以越界。
                 var blend = t <= 0d ? 0d : (t >= 1d ? 1d : t);
 
                 using (var context = _visual.RenderOpen())

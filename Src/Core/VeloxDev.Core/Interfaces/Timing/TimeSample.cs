@@ -12,6 +12,7 @@ namespace VeloxDev.Timing;
 /// </remarks>
 public readonly struct TimeSample
 {
+    /// <summary>Creates a sample describing one reading of a time source.</summary>
     public TimeSample(TimeSpan delta, TimeSpan total, long step, long epoch)
     {
         Delta = delta;

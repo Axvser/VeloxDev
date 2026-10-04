@@ -31,6 +31,7 @@ namespace VeloxDev.Generators
 
         private const string DefaultRoot = "Customer";
 
+        /// <inheritdoc />
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             var settings = context.AnalyzerConfigOptionsProvider.Select(static (provider, _) =>

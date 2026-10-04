@@ -21,6 +21,7 @@ public static class AgentMethodInvoker
     /// </summary>
     public sealed class MethodDescriptor
     {
+        /// <summary>The method's name.</summary>
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
@@ -28,7 +29,9 @@ public static class AgentMethodInvoker
         /// </summary>
         public string ReturnType { get; set; } = "System.Void";
 
+        /// <summary>The method's parameters.</summary>
         public IReadOnlyList<ParameterDescriptor> Parameters { get; set; } = [];
+        /// <summary>The <c>[AgentContext]</c> descriptions for this method.</summary>
         public IReadOnlyList<string> AgentDescriptions { get; set; } = [];
     }
 
@@ -37,8 +40,11 @@ public static class AgentMethodInvoker
     /// </summary>
     public sealed class ParameterDescriptor
     {
+        /// <summary>The parameter's name.</summary>
         public string Name { get; set; } = string.Empty;
+        /// <summary>The parameter type's full name as the tree records it.</summary>
         public string ParameterType { get; set; } = "System.Object";
+        /// <summary>Whether the parameter is optional.</summary>
         public bool IsOptional { get; set; }
     }
 
@@ -47,8 +53,11 @@ public static class AgentMethodInvoker
     /// </summary>
     public sealed class InvokeResult
     {
+        /// <summary>Whether the call ran successfully.</summary>
         public bool Success { get; set; }
+        /// <summary>The value the method returned, when <see cref="Success"/>.</summary>
         public object? ReturnValue { get; set; }
+        /// <summary>The reason the call did not run, when not <see cref="Success"/>.</summary>
         public string? Error { get; set; }
     }
 

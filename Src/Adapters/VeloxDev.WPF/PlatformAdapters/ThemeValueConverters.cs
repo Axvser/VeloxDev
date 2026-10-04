@@ -7,6 +7,7 @@ namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
@@ -24,13 +25,14 @@ namespace VeloxDev.DynamicTheme
 
     public class PointConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string "x,y"
+                // 格式 1：逗号分隔字符串 x,y
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -40,7 +42,7 @@ namespace VeloxDev.DynamicTheme
                         return new Point(x, y);
                 }
 
-                // Format 2: two separate parameters [x, y]
+                // 格式 2：两个独立参数 [x, y]
                 if (parameters.Length >= 2)
                 {
                     double x = System.Convert.ToDouble(parameters[0]);
@@ -56,13 +58,14 @@ namespace VeloxDev.DynamicTheme
 
     public class ThicknessConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string
+                // 格式 1：逗号分隔字符串
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -81,7 +84,7 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // Format 2: numeric parameter list
+                // 格式 2：数值参数列表
                 return parameters.Length switch
                 {
                     1 => new Thickness(System.Convert.ToDouble(parameters[0])),
@@ -104,13 +107,14 @@ namespace VeloxDev.DynamicTheme
 
     public class CornerRadiusConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string
+                // 格式 1：逗号分隔字符串
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -126,7 +130,7 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // Format 2: numeric parameter list
+                // 格式 2：数值参数列表
                 return parameters.Length switch
                 {
                     1 => new CornerRadius(System.Convert.ToDouble(parameters[0])),
@@ -144,13 +148,14 @@ namespace VeloxDev.DynamicTheme
 
     public class ColorConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: color name or HEX string
+                // 格式 1：颜色名或 HEX 字符串
                 if (parameters[0] is string colorString)
                 {
                     var converter = new System.Windows.Media.BrushConverter();
@@ -158,7 +163,7 @@ namespace VeloxDev.DynamicTheme
                     return brush?.Color;
                 }
 
-                // Format 2: integer value (ARGB)
+                // 格式 2：整数值（ARGB）
                 if (parameters[0] is int argb)
                 {
                     return Color.FromArgb(
@@ -168,7 +173,7 @@ namespace VeloxDev.DynamicTheme
                         (byte)(argb & 0xFF));
                 }
 
-                // Format 3: individual components
+                // 格式 3：各分量
                 if (parameters.Length >= 3)
                 {
                     byte a = parameters.Length >= 4 ? System.Convert.ToByte(parameters[0]) : (byte)255;
@@ -186,17 +191,18 @@ namespace VeloxDev.DynamicTheme
 
     public class BrushConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: pass a brush directly
+                // 格式 1：直接传画刷
                 if (parameters[0] is Brush brush)
                     return brush;
 
-                // Format 2: resource-key lookup
+                // 格式 2：资源键查找
                 if (parameters[0] is string resourceKey)
                 {
                     if (ThemeResourceLookup.TryFindResource(resourceKey, out var resource)
@@ -204,14 +210,14 @@ namespace VeloxDev.DynamicTheme
                         return resourceBrush;
                 }
 
-                // Format 3: color string (uses WPF's BrushConverter)
+                // 格式 3：颜色字符串（用 WPF 的 BrushConverter）
                 if (parameters[0] is string colorString)
                 {
                     var converter = new System.Windows.Media.BrushConverter();
                     return converter.ConvertFromString(colorString) as Brush;
                 }
 
-                // Format 4: color value (delegated to the color converter)
+                // 格式 4：颜色值（交给颜色转换器）
                 var colorConverter = new ColorConverter();
                 if (colorConverter.Convert(typeof(Color), propertyName, parameters) is Color color)
                 {
@@ -226,9 +232,10 @@ namespace VeloxDev.DynamicTheme
 
     public class ObjectConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
-            // Parameter validation
+            // 参数校验
             if (parameters == null || parameters.Length != 1 || parameters[0] is not string strValue)
                 return null;
 
@@ -240,28 +247,28 @@ namespace VeloxDev.DynamicTheme
                     return resourceValue;
                 }
 
-                // Special-case the Brush type (WPF's BrushConverter must be handled separately).
+                // 单独处理 Brush 类型（WPF 的 BrushConverter 必须分开处理）。
                 if (typeof(Brush).IsAssignableFrom(targetType))
                 {
                     var brushConverter = new System.Windows.Media.BrushConverter();
                     return brushConverter.ConvertFromString(strValue);
                 }
 
-                // Get the target type's TypeConverter.
+                // 取目标类型的 TypeConverter。
                 TypeConverter converter = TypeDescriptor.GetConverter(targetType);
 
-                // Support culture-insensitive conversion (numbers, dates, etc.).
+                // 支持与文化无关的转换（数字、日期等）。
                 if (converter.CanConvertFrom(typeof(string)))
                 {
                     return converter.ConvertFromString(null, CultureInfo.InvariantCulture, strValue);
                 }
 
-                // Fall back to default conversion (works for most WPF built-in types).
+                // 退回默认转换（对多数 WPF 内建类型有效）。
                 return converter.ConvertFrom(strValue);
             }
             catch (NotSupportedException)
             {
-                // When conversion is unsupported, try resource lookup.
+                // 转换不支持时试资源查找。
                 if (Application.Current.TryFindResource(strValue) is object resourceValue &&
                     targetType.IsInstanceOfType(resourceValue))
                 {
@@ -278,6 +285,7 @@ namespace VeloxDev.DynamicTheme
 
     internal static class ThemeResourceLookup
     {
+        /// <summary>Tries to resolve the resource named <paramref name="key"/> from the host's resource scopes.</summary>
         public static bool TryFindResource(object key, out object? value)
         {
             value = null;

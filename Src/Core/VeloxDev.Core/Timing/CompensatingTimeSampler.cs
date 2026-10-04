@@ -42,6 +42,7 @@ public sealed class CompensatingTimeSampler : TimeSamplerCore, ICompensatingTime
     private long _delivered;
     private long _dropped;
 
+    /// <summary>Creates the sampler over <paramref name="source"/> with the fixed <paramref name="step"/>.</summary>
     public CompensatingTimeSampler(ITimeSource source, TimeSpan step) : base(source)
     {
         Step = step;

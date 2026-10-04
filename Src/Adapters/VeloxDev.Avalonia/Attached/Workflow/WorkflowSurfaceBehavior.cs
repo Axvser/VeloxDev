@@ -436,10 +436,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ScrollChanged += OnScrollChanged;
-            // Remove the built-in ScrollGestureRecognizer from ScrollContentPresenter.
-            // Without this, on touch platforms (Android/iOS) the recognizer steals pointer
-            // capture mid-drag, breaking node drag and slot connection interactions.
-            // WorkflowSurfaceBehavior implements its own complete pan logic.
+            // 移除 ScrollContentPresenter 内置的 ScrollGestureRecognizer：否则在触屏平台（Android/iOS）它会在拖拽中
+            // 抢走指针捕获，破坏节点拖拽与插槽连接；本类自带完整的平移逻辑。
             state.ScrollViewer.LayoutUpdated += OnScrollViewerLayoutUpdated;
         }
 
@@ -485,8 +483,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
     }
 
-    // Avalonia has no PreviewMouseWheel, so the wheel is tunneled on the ScrollViewer: it fires before
-    // the control scrolls and marks the event handled, keeping plain wheel scrolling intact.
+    // Avalonia 没有 PreviewMouseWheel，所以滚轮在 ScrollViewer 上做隧道：它在控件滚动前触发并标记已处理，
+    // 普通滚轮滚动因此不受影响。
     private static void HookZoom(SurfaceState state)
     {
         if (state.ScrollViewer is not null && state.ZoomHandler is null)
@@ -523,7 +521,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
         }
 
-        // Wheel up (positive Delta.Y) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        // 滚轮向上（Delta.Y 为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = e.Delta.Y > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
         var layout = viewModel.Layout;
@@ -536,15 +534,12 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
                 sv.Offset.X, sv.Offset.Y, sv.Viewport.Width, sv.Viewport.Height, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
-            // Deep zoom-in collapses negative-world content past the fixed canvas translate (ActualOffset
-            // == NegativeOffset); grow the cover BEFORE ApplyLayout adopts the new offset. PivotCenterScroll
-            // below reads the grown offset, so the extra cover is absorbed by the scroll target and the
-            // pivot stays centered. Positive-only content is a no-op.
+            // 深度放大时负向内容会越过固定的画布平移；必须在 ApplyLayout 采纳新偏移前扩大覆盖，
+            // 下面的 PivotCenterScroll 才会读到长大的偏移、枢轴保持居中。只有正向内容时无事发生。
             WorkflowSurfaceMath.EnsureNegativeCover(viewModel);
 
-            // Re-layout so the ScrollViewer adopts the new extent BEFORE reading the max. Otherwise the
-            // clamp lands against the stale extent, the pivot lands off-center, and the next wheel tick
-            // re-captures from that error — the compounding drift reads as zoom jitter.
+            // 先重排，让 ScrollViewer 在读取最大值前采纳新范围；否则夹取落在陈旧范围上、枢轴偏离中心，
+            // 下一次滚轮又从这个误差重捕 —— 累积漂移表现为缩放抖动。
             ApplyLayout(host, state);
             sv.UpdateLayout();
 
@@ -552,10 +547,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             var maxH = GetHorizontalScrollMaximum(sv);
             var maxV = GetVerticalScrollMaximum(sv);
 
-            // Overscroll-expand the canvas (same mechanism as panning past an edge) so the pivot is
-            // always reachable; a plain clamp would push the pivot off-center and drift on each tick.
-            // The canvas geometry is untouched by the zoom (ActualOffset == NegativeOffset, fixed) —
-            // only the scroll moves.
+            // 越界扩展画布（与拖过边界同一机制），让枢轴总能到达；单纯夹取会把枢轴推离中心并逐格漂移。
+            // 缩放不动画布几何（ActualOffset == NegativeOffset），只动滚动。
             var newX = WorkflowSurfaceMath.ClampScrollOffset(tx, maxH, layout, horizontal: true);
             var newY = WorkflowSurfaceMath.ClampScrollOffset(ty, maxV, layout, horizontal: false);
             if (Math.Abs(newX - tx) > double.Epsilon || Math.Abs(newY - ty) > double.Epsilon)
@@ -573,8 +566,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         else
         {
             layout.Scale = new Scale(next, next);
-            // World-origin zoom (dormant in the viewport-center demos): re-apply the layout if the cover
-            // grew so the canvas translate/extent follow the new ActualOffset.
+            // 世界原点缩放（视口居中示例中未启用）：覆盖长大后重排，让画布平移/范围跟上新的 ActualOffset。
             if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel)
                 && host.GetValue(StateProperty) is SurfaceState fallbackState
                 && fallbackState.ScrollViewer is { } fallbackViewer)
@@ -697,9 +689,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (sender is not ScrollViewer viewer)
             return;
 
-        // GestureRecognizerCollection only exposes Add (IReadOnlyCollection).
-        // Access the backing _recognizers field via reflection to remove ScrollGestureRecognizer,
-        // which otherwise steals pointer capture mid-drag on touch platforms.
+        // GestureRecognizerCollection 只暴露 Add（IReadOnlyCollection）；用反射取背后的 _recognizers 字段
+        // 来移除 ScrollGestureRecognizer，否则它在触屏平台会在拖拽中抢走指针捕获。
         var presenter = viewer.GetVisualDescendants().OfType<ScrollContentPresenter>().FirstOrDefault();
         if (presenter is null)
             return;
@@ -807,7 +798,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             state.ScrollViewer.Viewport.Width,
             state.ScrollViewer.Viewport.Height);
 
-        // Persist the viewport position so it survives serialization round-trip.
+        // 持久化视口位置，使其能熬过序列化往返。
         viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
     }
 
@@ -821,8 +812,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
 
-        // Keep the virtualization visible-region correction in sync with the decorator's
-        // floating ruler band so nodes beneath it are not culled a ruler-thickness early.
+        // 让虚拟化可见区修正与装饰器的浮动标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
         viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
     }
 

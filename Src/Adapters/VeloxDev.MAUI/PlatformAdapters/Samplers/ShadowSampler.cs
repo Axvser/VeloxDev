@@ -4,9 +4,12 @@ namespace VeloxDev.Adapters.NativeSamplers
     {
         private static readonly Brush TransparentBrush = new SolidColorBrush(Colors.Transparent);
 
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             var s1 = start as Shadow;
@@ -19,12 +22,11 @@ namespace VeloxDev.Adapters.NativeSamplers
             var r1 = s1?.Radius ?? 0f; var r2 = s2?.Radius ?? 0f;
             var o1 = s1?.Opacity ?? 0f; var o2 = s2?.Opacity ?? 0f;
 
-            // The radius has its own range and stops at zero — a negative radius is not a shadow. The offset is
-            // unbounded, and opacity keeps its own [0,1] clamp below.
+            // 半径走自己的范围、在 0 处停住（负半径不成其为阴影）；偏移不受限，不透明度由下面的 [0,1] 夹取负责。
             var radius = new BoundedProgress(t, 0f, double.PositiveInfinity);
             radius.Add(r1, r2);
 
-            // Zero per-frame allocation: reuse a scratch Shadow, recomputing its fields from the pristine start/end.
+            // 每帧零分配：复用同一个 scratch Shadow，每帧从原始 start/end 重算各字段。
             if (working is not Shadow ws)
             {
                 ws = new Shadow();

@@ -4,7 +4,8 @@ namespace VeloxDev.TransitionSystem
 {
     public class TransitionEffect : TransitionEffectCore<DispatcherQueuePriority>
     {
-        // Queue animation-frame writes at High priority so they are processed before rendering, reducing stutter.
+        // 以 High 优先级排队动画帧写入，让它们在渲染前处理，减少卡顿。
+        /// <inheritdoc />
         public override DispatcherQueuePriority Priority { get; set; } = DispatcherQueuePriority.High;
     }
 }

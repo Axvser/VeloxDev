@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 namespace VeloxDev.AI.MCP;
 
+/// <summary>The configuration of one MCP server.</summary>
 public partial class McpServerConfiguration
 {
     [VeloxProperty] public partial string Name { get; set; }

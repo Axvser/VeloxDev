@@ -3,6 +3,7 @@ using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
+/// <summary>The typed snapshot base: one node in a transition chain, before it is run.</summary>
 public abstract class StateSnapshotCore<T> : StateSnapshotCore where T : class
 {
     internal TimeSpan delay = TimeSpan.Zero;
@@ -95,12 +96,15 @@ public abstract class StateSnapshotCore<T> : StateSnapshotCore where T : class
     }
 }
 
+/// <summary>The non-generic snapshot contract every chain node implements.</summary>
 public abstract class StateSnapshotCore
 {
     internal abstract void AsRoot();
     internal abstract T1 CoreInterpolator<T1, TTarget, TValue>(Expression<Func<TTarget, TValue>> propertyLambda, ISampler interpolator)
         where T1 : StateSnapshotCore;
+    /// <summary>Sets the segment's effect.</summary>
     protected abstract T1 CoreEffect<T1, T2>(T2 effect) where T2 : ITransitionEffectCore;
+    /// <summary>Configures the segment's effect through <paramref name="effectSetter"/>.</summary>
     protected abstract T1 CoreEffect<T1, T2>(Action<T2> effectSetter) where T2 : ITransitionEffectCore, new();
     internal abstract IFrameState CoreRecordState();
     internal abstract T CoreAwait<T>(TimeSpan timeSpan)

@@ -15,6 +15,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 // the flow ends there, exactly like forward semantics. The target is never fabricated; reachability is reported
 // by the caller (see RuntimeContext.Target / TargetReached).
 
+/// <summary>Reverse (sink-driven) compilation: the partial that compiles the producer subgraph a target node needs.</summary>
 public sealed partial class CompilerViewModel
 {
     private sealed class ConeInfo(

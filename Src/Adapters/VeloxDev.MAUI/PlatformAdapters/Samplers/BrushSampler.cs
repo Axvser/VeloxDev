@@ -2,13 +2,16 @@
 {
     public class BrushSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
-            // Normalize the start/end once per animation (a Color/null input must not allocate a brush per frame).
+            // 每段动画只归一化一次 start/end（Color/null 输入不该每帧分配画刷）。
             if (working is not NormalizedState st)
             {
                 st = new NormalizedState { Start = Normalize(start), End = Normalize(end) };
@@ -19,7 +22,7 @@
 
             if (s is SolidColorBrush ss && e is SolidColorBrush se)
             {
-                // Zero per-frame allocation: reuse a scratch brush, recomputing its color from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 画刷，每帧从原始 start/end 重算颜色。
                 if (st.Scratch is not SolidColorBrush wb)
                 {
                     wb = new SolidColorBrush();
@@ -33,7 +36,7 @@
             if (s is LinearGradientBrush sl && e is LinearGradientBrush el
                 && sl.GradientStops.Count == el.GradientStops.Count)
             {
-                // Zero per-frame allocation: reuse a scratch linear gradient, recomputing its stops from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 线性渐变，每帧从原始 start/end 重算色标。
                 if (st.Scratch is not LinearGradientBrush wl || wl.GradientStops.Count != sl.GradientStops.Count)
                 {
                     wl = new LinearGradientBrush { StartPoint = sl.StartPoint, EndPoint = sl.EndPoint };
@@ -43,8 +46,7 @@
                 }
                 wl.StartPoint = LerpPoint(sl.StartPoint, el.StartPoint, t);
                 wl.EndPoint = LerpPoint(sl.EndPoint, el.EndPoint, t);
-                // The offsets are one value: they share a progress so the stops keep their spacing instead of
-                // crossing, which would invert the gradient. It stops at [0,1].
+                // 偏移是同一个值：共用进度，色标保持间距而不会交叉（交叉会反转渐变）；到 [0,1] 为止。
                 var offsets = new BoundedProgress(t, 0d, 1d);
                 for (var i = 0; i < sl.GradientStops.Count; i++)
                     offsets.Add(sl.GradientStops[i].Offset, el.GradientStops[i].Offset);
@@ -61,7 +63,7 @@
             if (s is RadialGradientBrush sr && e is RadialGradientBrush er
                 && sr.GradientStops.Count == er.GradientStops.Count)
             {
-                // Zero per-frame allocation: reuse a scratch radial gradient, recomputing its stops from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 径向渐变，每帧从原始 start/end 重算色标。
                 if (st.Scratch is not RadialGradientBrush wr || wr.GradientStops.Count != sr.GradientStops.Count)
                 {
                     wr = new RadialGradientBrush { Center = sr.Center, Radius = sr.Radius };
@@ -71,7 +73,7 @@
                 }
                 wr.Center = LerpPoint(sr.Center, er.Center, t);
                 wr.Radius = (float)Lerp(sr.Radius, er.Radius, t);
-                // Same shared offset progress as the linear case above.
+                // 与上面线性同样的共用偏移进度。
                 var offsets = new BoundedProgress(t, 0d, 1d);
                 for (var i = 0; i < sr.GradientStops.Count; i++)
                     offsets.Add(sr.GradientStops[i].Offset, er.GradientStops[i].Offset);
@@ -85,8 +87,7 @@
                 return;
             }
 
-            // Mixed types / different stop counts / other brushes → blend to a representative color in a scratch
-            // solid brush — zero per-frame framework object allocation.
+            // 异型/色标数不同/其它画刷 → 混成代表性纯色写进 scratch 画刷，每帧零框架对象分配。
             var c1 = ExtractRepresentativeColor(s);
             var c2 = ExtractRepresentativeColor(e);
             if (st.Scratch is not SolidColorBrush wb2)
@@ -134,8 +135,7 @@
 
         private static Color LerpColor(Color start, Color end, double t)
         {
-            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range. MAUI's
-            // channels are floats, so the range is [0,1].
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。MAUI 通道是 float，范围 [0,1]。
             var rgb = new BoundedProgress(t, 0f, 1f);
             rgb.Add(start.Red, end.Red);
             rgb.Add(start.Green, end.Green);

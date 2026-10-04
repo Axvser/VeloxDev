@@ -45,8 +45,13 @@ namespace VeloxDev.MVVM
         bool canValidate = false,
         int semaphore = 1) : Attribute
     {
+        /// <summary>The command's name; <c>"Auto"</c> derives it from the method name.</summary>
         public string Name { get; } = name;
+
+        /// <summary>Whether the command's executability is validated by a generated partial method.</summary>
         public bool CanValidate { get; } = canValidate;
+
+        /// <summary>The maximum number of concurrent executions.</summary>
         public int Semaphore { get; } = semaphore;
     }
 }

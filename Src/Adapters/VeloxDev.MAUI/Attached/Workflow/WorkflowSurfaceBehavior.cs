@@ -190,10 +190,8 @@ public sealed class WorkflowSurfaceBehavior
 
         WireLinkMenu(host, state);
 
-        // Re-entrancy guard: prevent cascading Refresh cycles when canvas expansion
-        // during ApplyLayout triggers Scrolled/SizeChanged which call Refresh again.
-        // Without this guard, each canvas expansion cascades 2-3 Refresh calls,
-        // compounding into a positive-feedback slowdown spiral.
+        // 重入防护：ApplyLayout 中的画布扩展会触发 Scrolled/SizeChanged 再次调用 Refresh，必须挡住。
+        // 没有它，每次扩展级联 2-3 次 Refresh，滚成正反馈的减速螺旋。
         if (state.IsRefreshing)
         {
             return;
@@ -372,7 +370,7 @@ public sealed class WorkflowSurfaceBehavior
         {
             switch (element)
             {
-                // MenuFlyoutSeparator derives from MenuFlyoutItem, so it must be matched first.
+                // MenuFlyoutSeparator 派生自 MenuFlyoutItem，必须先匹配它。
                 case MenuFlyoutSeparator:
                     flyout.Items.Add(new Microsoft.UI.Xaml.Controls.MenuFlyoutSeparator());
                     break;
@@ -739,8 +737,7 @@ public sealed class WorkflowSurfaceBehavior
         {
             state.ScrollViewer.Scrolled += OnScrolled;
             state.ScrollViewer.SizeChanged += OnScrollViewerSizeChanged;
-            // Configure the native ScrollViewer once its platform view exists (the handler can
-            // be created after this attachment runs). Re-runs if the handler is re-created.
+            // 在平台视图出现后配置原生 ScrollViewer（handler 可能在本挂接之后才创建）；handler 重建时会再跑一次。
             state.ScrollViewer.HandlerChanged += OnScrollViewerHandlerChanged;
             OnScrollViewerHandlerChanged(state.ScrollViewer, EventArgs.Empty);
         }
@@ -809,8 +806,7 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 
-    // MAUI is cross-platform: touch zooms via a pinch gesture (works everywhere); on Windows,
-    // Ctrl + mouse-wheel is also accepted. Both write Layout.Scale (Core collapses the nodes).
+    // MAUI 跨平台：触摸用捏合手势缩放（到处可用）；Windows 上还接受 Ctrl+滚轮。两者都写 Layout.Scale（节点由 Core 折叠）。
     private static void HookZoom(ContentView control, SurfaceState state)
     {
         if (state.PointerPressSource is not null && state.ZoomGesture is null)
@@ -823,8 +819,7 @@ public sealed class WorkflowSurfaceBehavior
 #if WINDOWS
         if (state.ZoomWheelHandler is null)
         {
-            // Capture the MAUI host in the closure: the platform element has no DataContext, but the
-            // MAUI ContentView's BindingContext is the workflow tree.
+            // 闭包捕获 MAUI 宿主：平台元素没有 DataContext，而 MAUI ContentView 的 BindingContext 就是工作流树。
             var captured = control;
             state.ZoomWheelHandler = (s, ev) => OnZoomWheelChanged(s, ev, captured);
             if (control.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement el)
@@ -888,15 +883,14 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var delta = e.GetCurrentPoint(source).Properties.MouseWheelDelta;
-        // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
         var layout = viewModel.Layout;
 
         if (layout.ZoomCenter == ZoomCenter.ViewportCenter && state.ScrollViewer is { } sv)
         {
-            // Capture the world point under the viewport center, collapse about it, then recenter the
-            // scroll via the deferred async path (MAUI's native extent re-measures asynchronously).
+            // 捕获视口中心下方的世界点，绕它折叠，再经延后异步路径重新居中滚动（MAUI 原生范围异步重测）。
             var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
                 sv.ScrollX, sv.ScrollY, sv.Width, sv.Height, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
@@ -906,9 +900,7 @@ public sealed class WorkflowSurfaceBehavior
         else
         {
             layout.Scale = new Scale(next, next);
-            // World-origin zoom keeps content aligned to the top-left, so a cover that grew to keep
-            // negative-quadrant content reachable must be re-applied here — nothing downstream (no
-            // PivotCenterScroll) would otherwise pick up the new ActualOffset.
+            // 世界原点缩放让内容对齐左上角，所以要让负象限内容保持可达就得在这里重应用已扩大的覆盖 —— 别处（没有 PivotCenterScroll）不会采纳新的 ActualOffset。
             if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel))
             {
                 ApplyLayout(control, state);
@@ -942,17 +934,12 @@ public sealed class WorkflowSurfaceBehavior
                 return;
             }
 
-            // A deep zoom-in collapses negative-world content to w/Scale, and the fixed NegativeOffset
-            // (== ActualOffset) stops covering it below some scale — content escapes the scrollable
-            // region on the left/top and links truncate there. Grow the cover first (monotonic, no-op
-            // for positive-only content) so the PivotCenterScroll below reads the NEW ActualOffset and
-            // auto-shifts the recenter by exactly the growth.
+            // 深度放大把负向内容折叠到 w/Scale，固定的 NegativeOffset（== ActualOffset）在某个比例以下就盖不住它 —— 内容跑出左/上可滚动区、连线在那里被截断。
+            // 先扩大覆盖（单调，只有正向内容时无事），下面的 PivotCenterScroll 才能读到新的 ActualOffset，重居中正好平移增长量。
             if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel))
             {
-                // The cover grew the model ActualOffset/ActualSize. Push the canvas element (translate +
-                // WidthRequest) to the new values BEFORE the native scroll max below is read — otherwise
-                // GetHorizontalScrollMaximum still reflects the pre-cover extent, the clamp lands short,
-                // and the grown negative content stays out of reach (left/top truncation lags a notch).
+                // 覆盖让模型 ActualOffset/ActualSize 长大了；要在读取下面的原生滚动最大值之前把画布元素（平移 + WidthRequest）推到新值 ——
+                // 否则 GetHorizontalScrollMaximum 还是覆盖前的范围，夹取落短，长出来的负向内容够不着（左/上截断迟一格）。
                 ApplyLayout(host, state);
                 await Task.Yield(); // let MAUI's async native extent re-measure against the grown canvas
             }
@@ -960,8 +947,7 @@ public sealed class WorkflowSurfaceBehavior
             var svW = double.IsNaN(state.ScrollViewer.Width) ? 1 : state.ScrollViewer.Width;
             var svH = double.IsNaN(state.ScrollViewer.Height) ? 1 : state.ScrollViewer.Height;
             var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(worldX, worldY, viewModel.Layout, svW, svH);
-            // Overscroll-expand the canvas so the pivot is always reachable; a plain clamp would push
-            // the pivot off-center and the next wheel tick re-captures the drift as jitter.
+            // 越界扩展画布让枢轴总能到达；单纯夹取会把枢轴推离中心，下一次滚轮又把这个漂移当成抖动重捕。
             _ = WorkflowSurfaceMath.ClampScrollOffset(tx, GetHorizontalScrollMaximum(state), viewModel.Layout, horizontal: true);
             _ = WorkflowSurfaceMath.ClampScrollOffset(ty, GetVerticalScrollMaximum(state), viewModel.Layout, horizontal: false);
             tx = WorkflowSurfaceMath.ClampValue(tx, 0, GetHorizontalScrollMaximum(state));
@@ -1022,8 +1008,7 @@ public sealed class WorkflowSurfaceBehavior
                 else
                 {
                     layout.Scale = new Scale(factor, factor);
-                    // Same world-origin re-apply as the wheel path: grow the cover when deep zoom-in
-                    // collapses content past the fixed NegativeOffset, then push the new extent out.
+                    // 与滚轮路径同样的世界原点重应用：深度放大把内容折叠越过固定 NegativeOffset 时扩大覆盖，再把新范围推出去。
                     if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
                     {
                         ApplyLayout(host, state);
@@ -1047,17 +1032,10 @@ public sealed class WorkflowSurfaceBehavior
         state.LayoutNotifier = notifier;
         state.LayoutChangedHandler = (_, e) =>
         {
-            // Only react to OriginSize changes which can happen outside of
-            // scroll/pan (e.g. AdaptTo, programmatic resize).  During pan,
-            // PositiveOffset/NegativeOffset change on every frame but those
-            // are already handled by ApplyPanAsync calling ApplyLayout +
-            // UpdateVisibleRegion directly.  Reacting to them here would
-            // triple the work per pan frame (LayoutChangedHandler fires,
-            // then OnScrolled fires from ScrollToAsync), causing cascading
-            // slowdown.
-            // ViewportOffset is also filtered to avoid the circular update
-            // where ApplyVisibleRegion sets ViewportOffset which would
-            // trigger another Refresh.
+            // 只对 OriginSize 变化反应（它可能在滚动/平移之外发生，如 AdaptTo、程序化改尺寸）。平移期间 PositiveOffset/NegativeOffset 每帧都变，
+            // 但 ApplyPanAsync 已直接调 ApplyLayout + UpdateVisibleRegion 处理；在这里再反应会让每帧平移的工作量翻三倍
+            // （LayoutChangedHandler 先发，ScrollToAsync 又触发 OnScrolled），造成级联减速。ViewportOffset 也过滤掉，
+            // 避免 ApplyVisibleRegion 写 ViewportOffset 又触发一次 Refresh 的循环。
             if (e.PropertyName is nameof(CanvasLayout.OriginSize))
             {
                 Refresh(control);
@@ -1138,15 +1116,10 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        // CRITICAL: do NOT suppress Scrolled during a pan. MAUI fires this on every native
-        // ViewChanged (intermediate + final), and ScrollX/ScrollY are the native offsets at
-        // that instant — the ONLY trustworthy position. ScrollToAsync is a fire-and-forget
-        // ChangeView that can land short of the request (it never guarantees the target is hit),
-        // and on Windows the native ScrollViewer's manipulation can move the content on its
-        // own. Suppressing Scrolled froze the decorators at the requested target during the
-        // drag, so when the native settled elsewhere after release the decorators snapped —
-        // the release jump. Letting every scroll through (the minimap's path) keeps grid +
-        // content glued at all times.
+        // 关键：平移期间不要压制 Scrolled。MAUI 每次原生 ViewChanged（中间 + 最终）都会发它，ScrollX/ScrollY 就是那一刻的原生偏移 —— 唯一可信的位置。
+        // ScrollToAsync 是即发即忘的 ChangeView，可能没落到请求目标（从不保证命中），Windows 上原生 ScrollViewer 的 manipulation 还会自己移动内容。
+        // 压制 Scrolled 曾让装饰块在拖拽中冻在请求目标上，释放后原生落到别处、装饰块就猛地一跳 —— 释放跳变。
+        // 放行每次滚动（缩略图那条路）才能让网格与内容始终贴在一起。
         Refresh(host);
     }
 
@@ -1215,13 +1188,8 @@ public sealed class WorkflowSurfaceBehavior
         var actualSize = viewModel.Layout.ActualSize;
 
         state.Canvas.Margin = new Thickness(0);
-        // Canvas-level TranslationX shifts ALL children simultaneously, keeping
-        // nodes, links, and grid in perfect sync on every frame.
-        // Per-child TranslationX (tried previously) causes frame-level desync
-        // between decorator updates and child transforms.
-        // WidthRequest is set in the SAME call from model data (not XAML binding
-        // which adds async lag), avoiding the clipping that motivated the per-child
-        // experiment.
+        // 画布级 TranslationX 同时移动所有子元素，节点、连线、网格每帧完全同步；逐子元素 TranslationX（以前试过）会让装饰更新与子元素变换帧级不同步。
+        // WidthRequest 在同一次调用里由模型数据直接设（不用会引入异步延迟的 XAML 绑定），避免当初推动逐子元素实验的裁剪问题。
         state.Canvas.TranslationX = actualOffset.Horizontal;
         state.Canvas.TranslationY = actualOffset.Vertical;
 
@@ -1232,10 +1200,8 @@ public sealed class WorkflowSurfaceBehavior
             double.IsNaN(state.Canvas.HeightRequest))
             state.Canvas.HeightRequest = Math.Max(1, actualSize.Height);
 
-        // Decorator/minimap offsets are viewport data. Written from ScrollX (the native offset
-        // as of the last ViewChanged) on EVERY Refresh — including during a pan — so grid +
-        // content never diverge. The decorators coalesce their redraws (ScheduleInvalidate),
-        // so the second write from ApplyVisibleRegion later in this Refresh is free.
+        // 装饰块/缩略图偏移是视口数据，每次 Refresh 都从 ScrollX（最近一次 ViewChanged 的原生偏移）写，平移期间也写，网格与内容因此不会分家。
+        // 装饰块会合并重绘（ScheduleInvalidate），本 Refresh 稍后 ApplyVisibleRegion 的第二次写是免费的。
         if (state.ScrollViewer is not null)
         {
             UpdateGridDecorator(viewModel, state, state.ScrollViewer.ScrollX, state.ScrollViewer.ScrollY);
@@ -1261,10 +1227,7 @@ public sealed class WorkflowSurfaceBehavior
             switch (e.StatusType)
             {
                 case GestureStatus.Started:
-                    // Anchor the pan at the current scroll + pointer position. Each Running
-                    // computes the target absolutely from this anchor (WPF/minimap style)
-                    // instead of accumulating per-delta differences, which drift whenever a
-                    // clamped ScrollToAsync lands off the requested offset.
+                    // 把平移锚在当前滚动 + 指针位置；每次 Running 从这个锚绝对地算目标（WPF/缩略图风格），而不是累加逐增量差 —— 夹取过的 ScrollToAsync 一旦没落到请求偏移就会漂移。
                     state.PanAccumulatedX = state.ScrollViewer.ScrollX;
                     state.PanAccumulatedY = state.ScrollViewer.ScrollY;
                     state.PanAnchorTotalX = e.TotalX;
@@ -1274,10 +1237,7 @@ public sealed class WorkflowSurfaceBehavior
                 case GestureStatus.Running:
                     if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
                     {
-                        // Keep the anchor glued to the current scroll + pointer while a
-                        // node/connection drag suppresses canvas panning, so that when the
-                        // drag ends mid-gesture the resumed pan continues from the current
-                        // position instead of jumping by the node-drag pointer distance.
+                        // 节点/连线拖拽压制画布平移期间，把锚点贴在当前滚动 + 指针上；这样拖拽在手势中途结束、平移恢复时是从当前位置继续，而不是跳过一段节点拖拽的指针距离。
                         state.PanAccumulatedX = state.ScrollViewer.ScrollX;
                         state.PanAccumulatedY = state.ScrollViewer.ScrollY;
                         state.PanAnchorTotalX = e.TotalX;
@@ -1295,10 +1255,7 @@ public sealed class WorkflowSurfaceBehavior
                         state.PanGestureActive = false;
                         state.PanAccumulatedX = state.ScrollViewer.ScrollX;
                         state.PanAccumulatedY = state.ScrollViewer.ScrollY;
-                        // No forced finalize: the last ChangeView's landing fires Scrolled ->
-                        // OnScrolled -> Refresh, which writes the decorators from the settled
-                        // native offset. Dropping the flag is safe now that OnScrolled is the
-                        // single decorator writer and reads ScrollX (native truth) directly.
+                        // 不强制收尾：最后一次 ChangeView 落地会发 Scrolled → OnScrolled → Refresh，从稳定的原生偏移写装饰块。OnScrolled 现在是唯一的装饰写入者、直接读 ScrollX（原生真相），丢掉标记是安全的。
                     }
                     break;
             }
@@ -1311,12 +1268,8 @@ public sealed class WorkflowSurfaceBehavior
 
     private static async Task ApplyPanAsync(ContentView host, SurfaceState state, PanUpdatedEventArgs e)
     {
-        // Absolute target from the pan anchor — the same math WPF uses (startOffset + pointer
-        // movement since the anchor). Reading the actual ScrollX each frame is what caused the
-        // flash-back; accumulating a per-delta offset is what jittered (a clamped ScrollToAsync
-        // lets the bookkeeping drift from the real position, so the content sticks then jumps).
-        // The anchor only moves in Started, node-drag suppression, and the edge re-anchor below,
-        // so it never accumulates error.
+        // 从平移锚得到绝对目标 —— 与 WPF 同一套算法（起始偏移 + 锚点以来的指针位移）。每帧读实际 ScrollX 曾导致回闪；累加逐增量偏移曾导致抖动（被夹取的 ScrollToAsync 让记账偏离真实位置，内容先粘住再跳）。
+        // 锚只在 Started、节点拖拽压制、以及下面的边缘重锚时移动，所以永不累积误差。
         await ApplyPanTargetAsync(
             host, state,
             state.PanAccumulatedX - (e.TotalX - state.PanAnchorTotalX),
@@ -1406,8 +1359,7 @@ public sealed class WorkflowSurfaceBehavior
 
         state.PanAccumulatedX = state.ScrollViewer.ScrollX;
         state.PanAccumulatedY = state.ScrollViewer.ScrollY;
-        // The anchor is the same shape the gesture path keeps: PanAnchorTotal* is the cumulative
-        // pointer travel AT the anchor, which is zero here because the pointer anchor is this point.
+        // 锚与手势路径同形：PanAnchorTotal* 是锚点处的累计指针位移，这里为零，因为指针锚就是这一点。
         state.PanAnchorTotalX = 0;
         state.PanAnchorTotalY = 0;
         state.PointerAnchorX = point.Position.X;
@@ -1452,8 +1404,7 @@ public sealed class WorkflowSurfaceBehavior
             var totalX = point.Position.X - state.PointerAnchorX;
             var totalY = point.Position.Y - state.PointerAnchorY;
 
-            // Same form as the gesture path: the core re-anchors PanAnchorTotal* on overscroll, and
-            // a target of "anchor - total" would then add the travel again on every later frame.
+            // 与手势路径同形：Core 在越界时重锚 PanAnchorTotal*，若目标写成 anchor - total 就会在之后每一帧重复加上位移。
             await ApplyPanTargetAsync(
                 state.Host, state,
                 state.PanAccumulatedX - (totalX - state.PanAnchorTotalX),
@@ -1520,28 +1471,20 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        // Cancel any previous in-flight ScrollToAsync to prevent cascading.
+        // 取消上一个在飞的 ScrollToAsync，防止级联。
         state.PanCts?.Cancel();
         state.PanCts = new CancellationTokenSource();
         var ct = state.PanCts.Token;
 
-        // The absolute target arrives already resolved (gesture deltas on non-Windows, raw pointer
-        // travel on Windows); everything below is the shared clamp / expand / apply.
+        // 绝对目标传来时已解析好（非 Windows 是手势增量，Windows 是原始指针位移）；下面全是共用的夹取/扩展/应用。
         var maxH = GetHorizontalScrollMaximum(state);
         var maxV = GetVerticalScrollMaximum(state);
-        // layoutChanged = the desired offset overshoots [0, max] on either axis, which is
-        // exactly when ClampScrollOffset (below) expands the canvas.  Kept adapter-specific
-        // so the max-recompute flow below stays unchanged.
+        // layoutChanged = 目标偏移在任一轴越过 [0, max]，正好是 ClampScrollOffset（下面）扩展画布的时候；保留为适配器专属，下面的最大重算流程不变。
         var layoutChanged = desiredX < 0 || desiredX > maxH || desiredY < 0 || desiredY > maxV;
 
-        // Expand canvas when pan reaches the edge. Expansion IS the correct behavior
-        // (matching WPF). The original crash was caused by a cascade:
-        // expansion → Refresh → more expansion. The IsRefreshing guard in Refresh()
-        // breaks this cycle.
+        // 平移到达边缘时扩展画布，扩展本就是正确行为（与 WPF 一致）。当初的崩溃源于级联：扩展 → Refresh → 再扩展；Refresh() 里的 IsRefreshing 防护打断这个循环。
 
-        // ClampScrollOffset writes the overshoot into NegativeOffset (before origin) or
-        // PositiveOffset (past the content edge) and returns the clamped offset to apply.
-        // threshold 0 = always expand, matching the previous inline branches.
+        // ClampScrollOffset 把越界量写进 NegativeOffset（原点前）或 PositiveOffset（内容边缘外），并返回要应用的夹取偏移；阈值 0 = 总是扩展，与之前的内联分支一致。
         var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(
             desiredX, maxH, viewModel.Layout, horizontal: true, threshold: 0, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
         var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(
@@ -1550,52 +1493,39 @@ public sealed class WorkflowSurfaceBehavior
         if (layoutChanged)
         {
             ApplyLayout(host, state);
-            // Recompute max from model — canvas size was just updated via ApplyLayout
-            // but MAUI layout is async so ScrollViewer.ContentSize is stale.
+            // 从模型重算最大值 —— 画布尺寸刚经 ApplyLayout 更新，但 MAUI 布局是异步的，ScrollViewer.ContentSize 还是旧的。
             maxH = GetHorizontalScrollMaximum(state);
             maxV = GetVerticalScrollMaximum(state);
         }
 
-        // Guard against NaN from ScrollViewer.Width/Height during async layout.
-        // Math.Max(0, NaN) = NaN, which would crash ScrollToAsync.
+        // 防住异步布局期 ScrollViewer.Width/Height 的 NaN：Math.Max(0, NaN) = NaN，会让 ScrollToAsync 崩。
         if (!double.IsFinite(maxH)) maxH = 0;
         if (!double.IsFinite(maxV)) maxV = 0;
 
-        // Bound the applied target by the NATIVE ScrollViewer extent, not just the model.
-        // On overscroll the model's ActualSize (and canvas WidthRequest) grows
-        // SYNCHRONOUSLY, but the native content re-measures ASYNCHRONOUSLY, so during a
-        // fast drag the native extent can lag the model by thousands of pixels. ChangeView
-        // clamps to the native extent, so a model-based target lands short of the native edge.
-        // Re-anchoring at the model edge then sets the bookkeeping AHEAD of the native:
-        // the content pins at the stale native edge and, when the native finally re-measures,
-        // jumps forward in one frame to catch the anchor. Clamping the applied target to the
-        // live native extent makes every ChangeView land exactly, so the content eases with
-        // the re-measure instead of jumping (and never over-shoots on release).
+        // 用原生 ScrollViewer 范围而不是只凭模型来限制应用目标。越界时模型的 ActualSize（和画布 WidthRequest）同步长大，但原生内容异步重测，快速拖拽中原生范围可落后模型数千像素；
+        // ChangeView 会夹到原生范围，基于模型的目标因此落不到原生边缘。若在模型边缘重锚，记账就跑到原生前面：内容钉在陈旧的原生边缘，等原生终于重测时一帧内前跳去追锚点。
+        // 把应用目标夹到实时原生范围，每次 ChangeView 都精确落地，内容随重测平顺跟上（释放时也不会过冲）。
         var appliedOffsetX = WorkflowSurfaceMath.ClampValue(newOffsetX, 0, GetNativeScrollMaximum(state, horizontal: true));
         var appliedOffsetY = WorkflowSurfaceMath.ClampValue(newOffsetY, 0, GetNativeScrollMaximum(state, horizontal: false));
 
         if (layoutChanged)
         {
-            // Re-anchor at the APPLIED (native-bounded) offset — never the model edge — so
-            // the bookkeeping stays exactly where the content will actually land this frame.
+            // 在应用的（原生限定的）偏移处重锚 —— 绝不按模型边缘 —— 记账才正好落在内容本帧真正落地的位置。
             state.PanAccumulatedX = appliedOffsetX;
             state.PanAccumulatedY = appliedOffsetY;
             state.PanAnchorTotalX = totalX;
             state.PanAnchorTotalY = totalY;
         }
 
-        // The decorators are NOT written from the requested target: ChangeView is fire-and-forget
-        // and can land short of the request (the native manipulation fights it on Windows), so
-        // writing the requested target would desync the grid from the content. The native
-        // ViewChanged -> Scrolled -> OnScrolled -> Refresh path writes the decorators from the
-        // ACTUAL landed position on every move — the same single-writer path the smooth minimap uses.
+        // 装饰块不按请求目标写：ChangeView 即发即忘、可能落短（Windows 上原生 manipulation 还跟它抢），按请求目标写会让网格与内容脱节。
+        // 原生 ViewChanged → Scrolled → OnScrolled → Refresh 路径每次移动都从实际落地位置写装饰块 —— 与平滑缩略图同一条单写入者路径。
         try
         {
             await state.ScrollViewer.ScrollToAsync(appliedOffsetX, appliedOffsetY, false);
         }
         catch (OperationCanceledException)
         {
-            // Previous scroll was superseded by a newer pan delta — expected.
+            // 上一次滚动被更新的平移增量取代 —— 预期内。
             return;
         }
 
@@ -1609,10 +1539,7 @@ public sealed class WorkflowSurfaceBehavior
 
     private static double GetHorizontalScrollMaximum(SurfaceState state)
     {
-        // Compute max scroll from the layout model.  Canvas size is driven
-        // by ViewModel binding (Layout.ActualSize).  The ScrollView content
-        // is the AbsoluteLayout which follows ActualSize from the binding,
-        // so ActualSize - viewportWidth gives the correct scroll extent.
+        // 从布局模型算最大滚动：画布尺寸由 ViewModel 绑定（Layout.ActualSize）驱动，ScrollView 内容就是跟随该绑定的 AbsoluteLayout，所以 ActualSize − 视口宽就是正确的滚动范围。
         var viewModel = ResolveTreeViewModel(state.Host!, state);
         if (viewModel is null || state.ScrollViewer is null) return 0;
         var w = viewModel.Layout.ActualSize.Width - state.ScrollViewer.Width;
@@ -1696,15 +1623,8 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        // CRITICAL: After ScrollToAsync completes, ScrollViewer dimensions and
-        // scroll position can still be NaN/zero during MAUI's async layout pass.
-        // NaN propagates through Viewport → Virtualize → spatial index, causing
-        // all VisibleItems to be cleared (links permanently disappear).
-        // NaN <= 0 returns false in C#, so Virtualize's guard does NOT catch this.
-        // CRITICAL: always write from ScrollX — the native offset as of the last ViewChanged,
-        // i.e. where the content ACTUALLY is. The requested target can differ from ScrollX
-        // whenever a ChangeView lands short, and writing the requested target here is exactly
-        // what made the grid snap back to the true position after release.
+        // 关键：ScrollToAsync 完成后，MAUI 异步布局趟中 ScrollViewer 尺寸与滚动位置仍可能是 NaN/零。NaN 会经 Viewport → Virtualize → 空间索引传播，清空所有 VisibleItems（连线永久消失）；C# 里 NaN <= 0 为假，Virtualize 的防护挡不住。
+        // 关键：一律从 ScrollX 写 —— 最近一次 ViewChanged 的原生偏移，即内容真正所在处；ChangeView 落短时请求目标会与 ScrollX 不同，按请求目标写正是释放后网格猛跳回真实位置的原因。
         var scrollX = state.ScrollViewer.ScrollX;
         var scrollY = state.ScrollViewer.ScrollY;
         var svW = state.ScrollViewer.Width;
@@ -1727,9 +1647,7 @@ public sealed class WorkflowSurfaceBehavior
             double.IsNaN(viewportY) ? 0 : viewportY,
             svW, svH);
 
-        // Persist the viewport position so it survives serialization round-trip. World, like every other
-        // adapter and like the value just handed to Viewport above — the restore path reads it back as world
-        // (ApplyPendingScrollRestoreCore → ToScreen), so raw scroll here would be added to ActualOffset twice.
+        // 持久化视口位置以熬过序列化往返。与其它各家和上面刚交给 Viewport 的值一样用世界坐标 —— 恢复路径按世界读回（ApplyPendingScrollRestoreCore → ToScreen），这里写原始滚动会在 ActualOffset 上被加两次。
         viewModel.Layout.ViewportOffset = new Offset(
             double.IsNaN(viewportX) ? 0 : viewportX,
             double.IsNaN(viewportY) ? 0 : viewportY);
@@ -1747,8 +1665,7 @@ public sealed class WorkflowSurfaceBehavior
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
 
-        // Keep the virtualization visible-region correction in sync with the decorator's
-        // floating ruler band so nodes beneath it are not culled a ruler-thickness early.
+        // 让虚拟化可见区修正与装饰器的浮动标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
         viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
     }
 
@@ -1777,8 +1694,7 @@ public sealed class WorkflowSurfaceBehavior
 
         state.HasPendingScrollRestore = false;
 
-        // Dispatch async restoration via IDispatcher to avoid async void.
-        // The Task is fire-and-forget but will not silently swallow exceptions.
+        // 用 IDispatcher 派发异步恢复，避免 async void；Task 即发即忘但不会静默吞异常。
         _ = host.Dispatcher.DispatchAsync(() => ApplyPendingScrollRestoreCore(host, state));
     }
 
@@ -1791,8 +1707,7 @@ public sealed class WorkflowSurfaceBehavior
                 return;
             }
 
-            // Yield once so that any pending layout pass (from ApplyLayout called
-            // before this method) settles, ensuring ActualOffset is up-to-date.
+            // 让出一拍，等本方法之前 ApplyLayout 引发的那趟布局落定，确保 ActualOffset 是最新的。
             await Task.Yield();
 
             var viewModel = ResolveTreeViewModel(host, state);
@@ -1801,7 +1716,7 @@ public sealed class WorkflowSurfaceBehavior
                 return;
             }
 
-            // ToScreen: screen = world + ActualOffset (the pending viewport is in world space).
+            // ToScreen：screen = world + ActualOffset（待恢复视口是世界坐标）。
             var target = WorkflowSurfaceMath.ToScreen(state.PendingViewportX, state.PendingViewportY, viewModel.Layout);
             var targetX = WorkflowSurfaceMath.ClampValue(target.Horizontal, 0, GetHorizontalScrollMaximum(state));
             var targetY = WorkflowSurfaceMath.ClampValue(target.Vertical, 0, GetVerticalScrollMaximum(state));

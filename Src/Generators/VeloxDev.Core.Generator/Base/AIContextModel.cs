@@ -454,8 +454,7 @@ namespace VeloxDev.Generators.Base
                 _ => componentKind is not null ? AIContextTypeKind.Component : AIContextTypeKind.Data,
             };
 
-            // Components split by the four interfaces the workflow runtime already recognises, so
-            // "which node types exist" becomes a directory listing rather than a filtered scan.
+            // 组件按工作流运行时已识别的四个接口拆分，「有哪些节点类型」于是变成一次目录列举，而不是带过滤的扫描。
             var segments = kind switch
             {
                 AIContextTypeKind.Enum => new[] { "Enums" },

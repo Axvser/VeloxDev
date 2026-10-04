@@ -9,7 +9,9 @@ namespace VeloxDev.Adapters.NativeSamplers
     /// </summary>
     public class StringSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
         /// <summary>
@@ -31,7 +33,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             if (ReferenceEquals(working, DiscreteMarker))
             {
-                // Discrete: hold the start value until the progress reaches the end.
+                // 离散：进度到达终点前保持起始值。
                 property.SetValue(target, t >= 1d ? endValue : startValue);
                 return;
             }
@@ -92,7 +94,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color InterpolateColor(Color start, Color end, double t)
         {
-            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。
             var rgb = new BoundedProgress(t, 0d, 255d);
             rgb.Add(start.R, end.R);
             rgb.Add(start.G, end.G);
@@ -115,8 +117,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static string ToCssColor(Color color)
         {
-            // Writes directly into the string buffer via the interpolated string handler — one allocation per
-            // frame (the output string itself), no intermediate FormattableString.
+            // 经插值字符串处理器直接写进缓冲 —— 每帧一次分配（输出字符串本身），没有中间的 FormattableString。
             return string.Create(CultureInfo.InvariantCulture,
                 $"rgba({color.R}, {color.G}, {color.B}, {(color.A / 255d):0.###})");
         }

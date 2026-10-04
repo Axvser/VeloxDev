@@ -23,6 +23,7 @@ namespace VeloxDev.TransitionSystem
             RegisterInterpolator(typeof(Color), new ColorSampler());
         }
 
+        /// <inheritdoc />
         public override TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect)
             => effect is ITransitionEffect<DispatcherQueuePriority>
                 ? (TransitionSchedulerCore)TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherQueuePriority>.FindOrCreate(target)

@@ -59,7 +59,7 @@ namespace VeloxDev.Generators.Writers
             return builder.ToString();
         }
 
-        // ── Planning ────────────────────────────────────────────────────────────────────────────────────
+        // ── 规划 ──
 
         /// <summary>
         /// Lays the fragment out as directories, breadth-first, and numbers them for the emitted switch.
@@ -150,7 +150,7 @@ namespace VeloxDev.Generators.Writers
             }
         }
 
-        // ── The fragment ────────────────────────────────────────────────────────────────────────────────
+        // ── 片段 ──
 
         private static void WriteFragment(
             StringBuilder builder,
@@ -384,7 +384,7 @@ namespace VeloxDev.Generators.Writers
             return "[" + string.Join(", ", parts) + "]";
         }
 
-        // ── The accessors ───────────────────────────────────────────────────────────────────────────────
+        // ── 访问器 ──
 
         private static void WriteAccessors(StringBuilder builder, AIContextAssembly assembly, string safeAssembly, CancellationToken cancellationToken)
         {
@@ -803,7 +803,7 @@ namespace VeloxDev.Generators.Writers
         private static string FullTypeOf(ITypeSymbol type)
             => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-        // ── Registration ────────────────────────────────────────────────────────────────────────────────
+        // ── 注册 ──
 
         private static void WriteRegistration(StringBuilder builder, AIContextAssembly assembly, string safeAssembly)
         {
@@ -826,7 +826,7 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine("}");
         }
 
-        // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
+        // ── 助手 ──
 
         private static string LastSegment(string path)
         {

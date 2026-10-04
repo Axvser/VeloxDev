@@ -55,6 +55,7 @@ public class McpScope
 
     // ── Fluent configuration ───────────────────────────────────────────────
 
+    /// <summary>Sets the root directory, relative to the application base, that MCP servers are resolved from.</summary>
     public McpScope WithMcpRoot(string relativePath)
     {
         McpRootRelative = relativePath;
@@ -740,6 +741,7 @@ public class McpScope
 
     // ── Execution ──────────────────────────────────────────────────────────
 
+    /// <summary>Loads <paramref name="servers"/>, replacing whatever was loaded before, and returns their tools.</summary>
     public async Task<AITool[]> LoadAsync(
         IEnumerable<McpServerConfiguration> servers, CancellationToken ct = default)
     {

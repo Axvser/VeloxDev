@@ -29,8 +29,10 @@ namespace VeloxDev.WeakTypes
         private readonly object _lock = new();
         private int _counter = 0;
 
+        /// <summary>The number of additions after which collected targets are pruned.</summary>
         public int _perceptionThreshold = 4;
 
+        /// <summary>Calls <paramref name="action"/> for every live target and the cache filed under it.</summary>
         public void ForeachCache(Action<TTargetKey, TCacheKey> action)
         {
             lock (_lock)
@@ -48,6 +50,7 @@ namespace VeloxDev.WeakTypes
                 }
             }
         }
+        /// <summary>Tries to read the cache filed under <paramref name="target"/>.</summary>
         public bool TryGetCache(TTargetKey target, out TCacheKey? cache)
         {
             lock (_lock)
@@ -61,6 +64,7 @@ namespace VeloxDev.WeakTypes
                 return false;
             }
         }
+        /// <summary>Files <paramref name="cache"/> under <paramref name="target"/>, replacing any existing entry.</summary>
         public void AddOrUpdate(TTargetKey target, TCacheKey cache)
         {
             lock (_lock)
@@ -81,6 +85,7 @@ namespace VeloxDev.WeakTypes
                 _counter++;
             }
         }
+        /// <summary>Removes the entry filed under <paramref name="target"/>.</summary>
         public void Remove(TTargetKey target)
         {
             lock (_lock)

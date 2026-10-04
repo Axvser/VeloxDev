@@ -55,9 +55,7 @@ public partial class ViewPool : ComponentBase, IDisposable
             }
         }
 
-        // Snapshot the source only when the collection reference changes; re-snapshotting on every
-        // parent re-render allocated a fresh O(N) array per scroll frame. Content mutations are
-        // caught by OnCollectionChanged below, which re-snapshots explicitly.
+        // 只在集合引用变化时快照源；每次父级重渲染都快照会每滚动帧分配一个 O(N) 数组。内容增删由下面的 OnCollectionChanged 显式重快照。
         if (!ReferenceEquals(ItemsSource, _lastSource))
         {
             _lastSource = ItemsSource;

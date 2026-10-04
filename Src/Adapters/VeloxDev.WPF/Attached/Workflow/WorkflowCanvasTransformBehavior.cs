@@ -24,8 +24,7 @@ public static class WorkflowCanvasTransformBehavior
 
     private static void OnTransformChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        // Intentionally empty: this property is a notification carrier only.
-        // Node and link views bind their own RenderTransform to this attached property via XAML.
-        // The host itself must not receive a render transform.
+        // 有意留空：此属性只作通知载体。
+        // 节点/连线视图各自把自己的 RenderTransform 绑到它上面，宿主本身不该收到渲染变换。
     }
 }

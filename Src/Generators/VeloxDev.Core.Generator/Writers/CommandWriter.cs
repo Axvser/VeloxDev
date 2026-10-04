@@ -111,19 +111,19 @@ namespace VeloxDev.Generators.Writers
 
             foreach (var methodSymbol in symbol.GetMembers().OfType<IMethodSymbol>())
             {
-                // Only check whether VeloxCommandAttribute is applied
+                // 只检查是否应用了 VeloxCommandAttribute
                 var attribute = methodSymbol.GetAttributes()
                     .FirstOrDefault(attr =>
                         attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == attributeFullName);
 
                 if (attribute == null) continue;
 
-                // Parse the configuration: positional arguments first, then named-argument overrides
+                // 解析配置：先位置参数，再命名参数覆盖
                 string commandName = "Auto";
                 bool canValidate = false;
                 int semaphore = 1;
 
-                // Positional arguments (in order)
+                // 位置参数（按顺序）
                 if (attribute.ConstructorArguments.Length >= 1 && attribute.ConstructorArguments[0].Value is string nameArg)
                     commandName = nameArg;
                 if (attribute.ConstructorArguments.Length >= 2 && attribute.ConstructorArguments[1].Value is bool canValArg)
@@ -131,7 +131,7 @@ namespace VeloxDev.Generators.Writers
                 if (attribute.ConstructorArguments.Length >= 3 && attribute.ConstructorArguments[2].Value is int semaArg)
                     semaphore = semaArg;
 
-                // Named arguments (override positional arguments)
+                // 命名参数（覆盖位置参数）
                 foreach (var namedArg in attribute.NamedArguments)
                 {
                     switch (namedArg.Key)
@@ -148,14 +148,14 @@ namespace VeloxDev.Generators.Writers
                     }
                 }
 
-                // Auto naming rule
+                // 自动命名规则
                 if (commandName == "Auto")
                 {
                     // 规则本体在 AIContextNaming：上下文树的生成器看不见这里的产物，只能复现同一个命名规则。
                     commandName = AIContextNaming.CommandBaseName(methodSymbol);
                 }
 
-                // Analyze the construction mode
+                // 分析构造模式
                 var spec = BuildSpec(symbol, methodSymbol, commandName, canValidate, Math.Max(1, semaphore), out string reason);
 
                 if (spec is null)

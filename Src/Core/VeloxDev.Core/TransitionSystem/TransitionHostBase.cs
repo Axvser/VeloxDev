@@ -11,5 +11,6 @@ public abstract class TransitionHostBase<TPriorityCore> : ThreadDispatcherBase<T
     /// <summary>What a host reports its own exit into. Override <see cref="IsAlive"/> instead when it can only ask.</summary>
     protected ApplicationState Lifetime { get; } = new();
 
+    /// <inheritdoc />
     public virtual bool IsAlive => Lifetime.IsAlive;
 }

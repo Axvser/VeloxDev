@@ -15,10 +15,8 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            // Exact endpoints, not a range. The pipeline drives the last frame of every pass with exactly 1
-            // (or 0 on a reverse pass), and the caller's own instance has to survive to the end: a nested path
-            // such as ((TranslateTransform)x.RenderTransform).X depends on the runtime type it was declared
-            // with, which the interpolated scratch would replace. An overshoot past the endpoint falls through.
+            // 精确端点而非区间：管线每趟最后一帧正好给 1（反向给 0），调用方自己的实例必须活到最后 ——
+            // 嵌套路径如 ((TranslateTransform)x.RenderTransform).X 依赖声明时的运行时类型，插值用的 scratch 会替换它；越过端点则落到下一分支。
             if (t == 0d) { property.SetValue(target, start); return; }
             if (t == 1d) { property.SetValue(target, end); return; }
 
@@ -29,7 +27,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 && startT.GetType() != typeof(TransformGroup)
                 && IsKnownTransform(startT))
             {
-                // Zero per-frame allocation: reuse a scratch transform, recomputing from the pristine start/end each frame.
+                // 每帧零分配：复用同一个 scratch 变换，每帧从原始 start/end 重算。
                 if (working is not Transform wt || wt.GetType() != startT.GetType())
                 {
                     wt = CloneTransform(startT);
@@ -40,7 +38,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return;
             }
 
-            // Group / type mismatch / unknown / null → allocate a fresh transform (start/end are never mutated).
+            // 组/类型不匹配/未知/null → 新建变换（绝不改动 start/end）。
             property.SetValue(target, Compute(start, end, direction, t));
         }
 

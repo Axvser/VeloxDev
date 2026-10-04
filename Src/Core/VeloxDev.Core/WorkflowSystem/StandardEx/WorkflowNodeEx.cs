@@ -3,8 +3,10 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem.StandardEx;
 
+/// <summary>Standard operations for a workflow node: commands, slot creation, placement/size hooks, broadcast and traversal.</summary>
 public static class WorkflowNodeEx
 {
+    /// <summary>Returns the standard commands a node helper drives.</summary>
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
         (this IWorkflowNodeViewModel component)
         =>
@@ -18,6 +20,7 @@ public static class WorkflowNodeEx
             component.ReverseBroadcastCommand
         ];
 
+    /// <summary>Adds <paramref name="slot"/> to the node, as one undoable step when the node is attached.</summary>
     public static void StandardCreateSlot(this IWorkflowNodeViewModel component, IWorkflowSlotViewModel slot)
     {
         if (component is null) return;
@@ -67,6 +70,7 @@ public static class WorkflowNodeEx
             scale is null || scale.Vertical == 0 ? 1 : scale.Vertical);
     }
 
+    /// <summary>Sets the node's anchor to <paramref name="anchor"/> and notifies listeners.</summary>
     public static void StandardSetAnchor(this IWorkflowNodeViewModel component, Anchor anchor)
     {
         if (component is null) return;
@@ -75,6 +79,7 @@ public static class WorkflowNodeEx
         component.OnPropertyChanged(nameof(component.Anchor));
     }
 
+    /// <summary>Sets only the node's layer, keeping its world position.</summary>
     public static void StandardSetLayer(this IWorkflowNodeViewModel component, int layer)
     {
         if (component is null) return;
@@ -84,6 +89,7 @@ public static class WorkflowNodeEx
         component.Anchor = new Anchor(a.Horizontal * sx, a.Vertical * sy, layer);
         component.OnPropertyChanged(nameof(component.Anchor));
     }
+    /// <summary>Sets the node's size to <paramref name="size"/> once the resizing hooks allow it.</summary>
     public static void StandardSetSize(this IWorkflowNodeViewModel component, Size size)
     {
         if (component is null) return;
@@ -100,6 +106,7 @@ public static class WorkflowNodeEx
         events?.RaiseResized(from, to, handle);
     }
 
+    /// <summary>Moves the node by the view-space delta <paramref name="offset"/> once the moving hooks allow it.</summary>
     public static void StandardMove(this IWorkflowNodeViewModel component, Offset offset)
     {
         if (component is null) return;
@@ -126,6 +133,7 @@ public static class WorkflowNodeEx
         events?.RaiseMoved(from, to, handle);
     }
 
+    /// <summary>Delivers <paramref name="parameter"/> along every outgoing connection, after access validation.</summary>
     public static async Task StandardBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, CancellationToken ct = default)
     {
         var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
@@ -158,6 +166,7 @@ public static class WorkflowNodeEx
         }
     }
 
+    /// <summary>Delivers <paramref name="parameter"/> along every incoming connection, after access validation.</summary>
     public static async Task StandardReverseBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, CancellationToken ct = default)
     {
         var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
@@ -281,6 +290,7 @@ public static class WorkflowNodeEx
         }
     }
 
+    /// <summary>Deletes the node and its connections as one undoable step, once the deleting hooks allow it.</summary>
     public static void StandardDelete(this IWorkflowNodeViewModel component)
     {
         if (component is null) return;

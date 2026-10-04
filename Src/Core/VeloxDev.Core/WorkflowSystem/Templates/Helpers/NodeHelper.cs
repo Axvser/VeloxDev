@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem.StandardEx;
 
@@ -19,66 +19,83 @@ public class NodeHelper : NodeHelper<IWorkflowNodeViewModel>
 public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents
     where T : class, IWorkflowNodeViewModel
 {
+    /// <summary>The node this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
     public T? Component { get; protected set; }
     private IReadOnlyCollection<IVeloxCommand> commands = [];
 
+    /// <inheritdoc />
     public event EventHandler<IWorkflowSlotViewModel>? SlotAdded;
+    /// <inheritdoc />
     public event EventHandler<IWorkflowSlotViewModel>? SlotRemoved;
 
+    /// <inheritdoc />
     public virtual void Install(IWorkflowNodeViewModel node)
     {
         Component = node as T;
         commands = node.GetStandardCommands();
         node.Slots.CollectionChanged += OnSlotsChanged;
     }
+    /// <inheritdoc />
     public virtual void Uninstall(IWorkflowNodeViewModel node)
     {
         Component = null;
         commands = [];
         node.Slots.CollectionChanged -= OnSlotsChanged;
     }
+    /// <inheritdoc />
     public virtual void Closing() => commands.StandardClosing();
+    /// <inheritdoc />
     public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
+    /// <inheritdoc />
     public virtual void Closed() => commands.StandardClosed();
+    /// <inheritdoc />
     public virtual void CreateSlot(IWorkflowSlotViewModel slot) => Component?.StandardCreateSlot(slot);
 
+    /// <inheritdoc />
     public virtual async Task BroadcastAsync(
         object? parameter,
         CancellationToken ct)
     {
         if (Component is not null) await Component.StandardBroadcastAsync(parameter, ct);
     }
+    /// <inheritdoc />
     public virtual async Task ReverseBroadcastAsync(
         object? parameter,
         CancellationToken ct)
     {
         if (Component is not null) await Component.StandardReverseBroadcastAsync(parameter, ct);
     }
+    /// <inheritdoc />
     public virtual Task<object?> ReceiveAsync(
         ITaskContext context,
         CancellationToken ct)
         => Task.FromResult<object?>(null);
+    /// <inheritdoc />
     public virtual Task<bool> AccessAsync(
         IAccessContext context,
         CancellationToken ct)
         => Task.FromResult(true);
 
+    /// <inheritdoc />
     public virtual void SetAnchor(Anchor anchor)
     {
         Component?.StandardSetAnchor(anchor);
         Component?.Parent?.GetHelper().MarkDirty();
     }
+    /// <inheritdoc />
     public virtual void SetSize(Size size)
     {
         Component?.StandardSetSize(size);
         Component?.Parent?.GetHelper().MarkDirty();
     }
+    /// <inheritdoc />
     public virtual void Move(Offset offset)
     {
         Component?.StandardMove(offset);
         Component?.Parent?.GetHelper().MarkDirty();
     }
 
+    /// <inheritdoc />
     public virtual void Delete() => Component?.StandardDelete();
 
     /// <summary>
@@ -189,6 +206,8 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents
                 break;
         }
     }
+    /// <summary>Raises <see cref="SlotAdded"/>.</summary>
     protected virtual void OnSlotAdded(IWorkflowSlotViewModel slot) => SlotAdded?.Invoke(Component, slot);
+    /// <summary>Raises <see cref="SlotRemoved"/>.</summary>
     protected virtual void OnSlotRemoved(IWorkflowSlotViewModel slot) => SlotRemoved?.Invoke(Component, slot);
 }

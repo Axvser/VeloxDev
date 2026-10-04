@@ -2,21 +2,23 @@
 {
     public class SizeSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
-            // Handle null values by providing defaults.
+            // null 时给默认值。
             var s1 = (Size)(start ?? Size.Zero);
             var s2 = (Size)(end ?? Size.Zero);
 
             var deltaWidth = s2.Width - s1.Width;
             var deltaHeight = s2.Height - s1.Height;
 
-            // Width and height share one progress so an overshoot cannot skew the shape, and stop at
-            // zero: a negative size is not representable.
+            // 宽高共用同一进度，越界时不会变形，且在 0 处停住（负尺寸无法表示）。
             var size = new BoundedProgress(t, 0d, double.PositiveInfinity);
             size.Add(s1.Width, s2.Width);
             size.Add(s1.Height, s2.Height);

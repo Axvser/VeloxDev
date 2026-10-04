@@ -179,7 +179,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         }
     }
 
-    // ── Content-fit mapping ─────────────────────────────────────────────────
+    // ── 内容适配映射 ────────────────────────────────────────────────────────
 
     private Rect ComputeBounds()
     {
@@ -245,7 +245,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         ScrollViewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(scrollY, 0, maxV));
     }
 
-    // ── Mouse ──────────────────────────────────────────────────────────────
+    // ── 鼠标 ────────────────────────────────────────────────────────────────
 
     private void OnMiniMouseDown(object? sender, MouseButtonEventArgs e)
     {

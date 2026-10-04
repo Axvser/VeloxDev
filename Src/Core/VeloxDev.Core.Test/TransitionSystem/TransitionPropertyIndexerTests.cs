@@ -5,9 +5,10 @@ using VeloxDev.TransitionSystem.Abstractions;
 namespace VeloxDev.Core.Test.TransitionSystem;
 
 /// <summary>
-/// 索引器路径（<c>x.Items[0].Width</c>、<c>x.Map["a"].Color</c>）。重点不在能不能解析，而在<b>身份</b>：
-/// 路径是 <c>StateCore</c> 字典的键，而同一个 lambda 会被解析多次，所以这里的每一条断言都在守「两条不同的
-/// 路径不能合成一个键、同一条路径不能裂成两个键」。
+/// Indexer paths (<c>x.Items[0].Width</c>, <c>x.Map["a"].Color</c>). The point is not whether they resolve but
+/// their <b>identity</b>: a path is a key of the <c>StateCore</c> dictionary and the same lambda is resolved more
+/// than once, so every assertion here guards that two different paths cannot collapse into one key and that one
+/// path cannot split into two.
 /// </summary>
 [TestClass]
 public class TransitionPropertyIndexerTests
@@ -402,7 +403,7 @@ public class TransitionPropertyIndexerTests
         public double Width { get; set; }
     }
 
-    /// <summary>值类型中间环节：<c>b</c> 是它的一个引用类型属性，<c>c</c> 是 <c>b</c> 上的公开可读写属性。</summary>
+    // 值类型中间环节：b 是它的一个引用类型属性，c 是 b 上的公开可读写属性。
     private struct Holder
     {
         public Leaf Leaf { get; set; }
@@ -447,7 +448,7 @@ public class TransitionPropertyIndexerTests
             set => _hidden[index] = value;
         }
 
-        /// <summary>私有索引器只有本类型能写进表达式树，所以路径从这里取。</summary>
+        // 私有索引器只有本类型能写进表达式树，所以路径从这里取。
         public static Expression<Func<Target, double>> HiddenIndexerPath => x => x[0];
     }
 }

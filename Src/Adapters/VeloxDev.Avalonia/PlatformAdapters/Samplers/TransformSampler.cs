@@ -10,15 +10,16 @@ namespace VeloxDev.Adapters.NativeSamplers
     {
         private static readonly Transform Identity = new TransformGroup();
 
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            // Exact endpoints, not a range. The pipeline drives the last frame of every pass with exactly 1
-            // (or 0 on a reverse pass), and the caller's own instance has to survive to the end: a nested path
-            // such as ((TranslateTransform)x.RenderTransform).X depends on the runtime type it was declared
-            // with, which the interpolated scratch would replace. An overshoot past the endpoint falls through.
+            // 精确端点而非区间：管线每趟最后一帧正好给 1（反向给 0），调用方自己的实例必须活到最后 ——
+            // 嵌套路径如 ((TranslateTransform)x.RenderTransform).X 依赖声明时的运行时类型，插值用的 scratch 会替换它；越过端点则落到下一分支。
             if (t == 0d) { property.SetValue(target, start); return; }
             if (t == 1d) { property.SetValue(target, end); return; }
 
@@ -28,7 +29,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             if (startTransform.GetType() == endTransform.GetType() && IsKnownTransform(startTransform))
             {
-                // Zero per-frame allocation: reuse a scratch transform, recomputing from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 变换，每帧从原始 start/end 重算。
                 if (working is not Transform wt || wt.GetType() != startTransform.GetType())
                 {
                     wt = CloneTransform(startTransform);
@@ -39,22 +40,20 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return;
             }
 
-            // 1. Unified preprocessing
-            // 2. Parse effective transforms
+            // 1. 统一预处理
+            // 2. 解析有效变换
             var startTransforms = ParseTransforms(startTransform);
             var endTransforms = ParseTransforms(endTransform);
 
-            // 3. Create matched pairs
+            // 3. 建立配对
             var transformPairs = CreateTransformPairs(startTransforms, endTransforms);
 
-            // 4. Interpolate at time t
+            // 4. 在时刻 t 插值
             property.SetValue(target, InterpolateTransformPairs(transformPairs, t, direction));
         }
 
-        /// <summary>
-        /// 只有这几种变换既能被 <see cref="CloneTransform"/> 克隆、又有逐字段的插值分支。其余（自定义子类）必须走矩阵
-        /// 路径：没有这道门禁，它们会落进快路径的克隆上，而克隆恰好是唯一对它们抛异常的地方。
-        /// </summary>
+        // 只有这几种变换既能被 CloneTransform 克隆、又有逐字段插值；其余子类必须走矩阵路径，
+        // 否则会落进快路径的克隆上，而克隆恰好是唯一对它们抛异常的地方。
         private static bool IsKnownTransform(Transform transform) => transform is
             TranslateTransform or RotateTransform or ScaleTransform or SkewTransform or Rotate3DTransform or MatrixTransform;
 
@@ -152,6 +151,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             return pairs;
         }
 
+        /// <summary>Interpolates the matched transform pairs at progress <paramref name="t"/> and the given rotation <paramref name="direction"/>.</summary>
         protected virtual Transform InterpolateTransformPairs(
             List<(Transform? start, Transform? end)> pairs, double t, RotationDirection direction)
         {
@@ -171,6 +171,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             };
         }
 
+        /// <summary>Interpolates a single transform pair, falling back to the matrix path for mismatched or unknown types.</summary>
         protected virtual Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t, RotationDirection direction)
         {
             static Transform GetDefaultTransform(Transform? transform) => transform switch

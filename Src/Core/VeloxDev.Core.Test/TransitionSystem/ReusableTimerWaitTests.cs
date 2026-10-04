@@ -4,12 +4,13 @@ using VeloxDev.TransitionSystem.Abstractions;
 namespace VeloxDev.Core.Test.TransitionSystem;
 
 /// <summary>
-/// <see cref="ReusableTimerWait"/> 的契约。这里的每条断言都对应「采样循环停下来」的一种方式——一个不再唤醒的
-/// 等待对象不会报错，它只会让动画永远停在那里，所以这些必须是被测过的行为而不是注释。
+/// The contract of <see cref="ReusableTimerWait"/>. Each assertion here pins one way the sampling loop can stop —
+/// a wait object that no longer wakes does not throw, it just parks the animation forever, so these have to be
+/// behaviours under test rather than comments.
 /// </summary>
 /// <remarks>
-/// 串行：分配那条断言量的是进程级计数（<c>GC.GetTotalAllocatedBytes</c>），方法级并行时别的方法的分配会落进
-/// 它的测量窗口，best-of-2 只是缓解。
+/// Serial: the allocation assertion measures a process-wide counter, and a parallel test's allocations would land
+/// in its measurement window.
 /// </remarks>
 [TestClass]
 [DoNotParallelize]

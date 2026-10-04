@@ -7,6 +7,7 @@ using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
+/// <summary>The transition control plane: create, cancel, pause, resume, seek and query the animations running on a target.</summary>
 public abstract class TransitionCore
 {
     /// <summary>
@@ -255,6 +256,7 @@ public abstract class TransitionCore
     }
 }
 
+/// <summary>The typed transition skeleton: one segment of a transition chain, parameterized by its state, effect, interpolator, host, interpreter and priority types.</summary>
 public class TransitionCore<
     T,
     TStateCore,
@@ -270,7 +272,9 @@ public class TransitionCore<
     where THost : ITransitionHost<TPriorityCore>, new()
     where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
 {
+    /// <summary>The segment's frame state.</summary>
     protected TStateCore state = new();
+    /// <summary>The chain's root segment.</summary>
     protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? root;
 
     /// <summary>
@@ -285,10 +289,14 @@ public class TransitionCore<
     /// is the same animation however deep in which loop it is running.
     /// </remarks>
     public int RepeatTime { get; set; }
+    /// <summary>The next segment in the chain.</summary>
     protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? next = null;
+    /// <summary>The segment's effect.</summary>
     protected TEffectCore effect = new();
+    /// <summary>The segment's interpolator.</summary>
     protected TInterpolatorCore interpolator = new();
 
+    /// <summary>Returns the segment's frame state.</summary>
     public TStateCore GetState() => state;
 
     /// <summary>
@@ -576,6 +584,7 @@ public class TransitionCore<
         state.SetInterpolator(propertyLambda, interpolator);
         return result;
     }
+    /// <inheritdoc />
     protected override T1 CoreEffect<T1, T2>(T2 effect)
     {
         if (this is not T1 result)
@@ -589,6 +598,7 @@ public class TransitionCore<
         this.effect = convertedEffect;
         return result;
     }
+    /// <inheritdoc />
     protected override T1 CoreEffect<T1, T2>(Action<T2> effectSetter)
     {
         if (this is not T1 result)

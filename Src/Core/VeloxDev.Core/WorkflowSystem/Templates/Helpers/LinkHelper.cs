@@ -1,4 +1,4 @@
-﻿using VeloxDev.MVVM;
+using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem;
@@ -18,6 +18,7 @@ public class LinkHelper : LinkHelper<IWorkflowLinkViewModel>
 public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable
     where T : class, IWorkflowLinkViewModel
 {
+    /// <summary>The link this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
     public T? Component { get; protected set; }
     private IReadOnlyCollection<IVeloxCommand> commands = [];
 
@@ -39,11 +40,13 @@ public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable
     public virtual bool Contains(double x, double y, double radius)
         => hitCurve is not null && hitCurve.Contains(x, y, radius);
 
+    /// <inheritdoc />
     public virtual void Install(IWorkflowLinkViewModel link)
     {
         Component = link as T;
         commands = link.GetStandardCommands();
     }
+    /// <inheritdoc />
     public virtual void Uninstall(IWorkflowLinkViewModel link)
     {
         Component = null;
@@ -52,9 +55,13 @@ public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable
         hitCurve = null;
         Visual = null;
     }
+    /// <inheritdoc />
     public virtual void Closing() => commands.StandardClosing();
+    /// <inheritdoc />
     public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
+    /// <inheritdoc />
     public virtual void Closed() => commands.StandardClosed();
 
+    /// <inheritdoc />
     public virtual void Delete() => Component?.StandardDelete();
 }

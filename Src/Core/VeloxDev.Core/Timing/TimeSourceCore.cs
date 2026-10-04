@@ -16,21 +16,27 @@ public static class TimeConversion
     /// <summary>The tick unit of the default source: <see cref="Stopwatch.Frequency"/>, which is not portable.</summary>
     public static long DefaultTicksPerSecond => Stopwatch.Frequency;
 
+    /// <summary>Converts <paramref name="ticks"/> in <paramref name="ticksPerSecond"/> units to a <see cref="TimeSpan"/>.</summary>
     public static TimeSpan TicksToTimeSpan(long ticks, long ticksPerSecond)
         => TimeSpan.FromTicks(TicksToSpanTicks(ticks, ticksPerSecond));
 
+    /// <summary>Converts <paramref name="ticks"/> in <paramref name="ticksPerSecond"/> units to <c>TimeSpan</c> ticks.</summary>
     public static long TicksToSpanTicks(long ticks, long ticksPerSecond)
         => (long)(ticks * (double)TimeSpan.TicksPerSecond / ticksPerSecond);
 
+    /// <summary>Converts <paramref name="span"/> to <paramref name="ticksPerSecond"/> units.</summary>
     public static long SpanToTicks(TimeSpan span, long ticksPerSecond)
         => (long)(span.Ticks * (double)ticksPerSecond / TimeSpan.TicksPerSecond);
 
+    /// <summary>Converts <paramref name="ticks"/> to milliseconds.</summary>
     public static double TicksToMilliseconds(long ticks, long ticksPerSecond)
         => ticks * 1000.0 / ticksPerSecond;
 
+    /// <summary>Converts <paramref name="ticks"/> to seconds.</summary>
     public static double TicksToSeconds(long ticks, long ticksPerSecond)
         => ticks / (double)ticksPerSecond;
 
+    /// <summary>Converts <paramref name="milliseconds"/> to <paramref name="ticksPerSecond"/> units.</summary>
     public static long MillisecondsToTicks(double milliseconds, long ticksPerSecond)
         => (long)(milliseconds * ticksPerSecond / 1000.0);
 }
@@ -139,6 +145,7 @@ public class TimeSourceCore : ITimeSourceControl
     /// </remarks>
     private readonly Func<long> _nowStamp;
 
+    /// <summary>Creates a source over the machine clock.</summary>
     public TimeSourceCore() : this(MachineStamp, TimeConversion.DefaultTicksPerSecond)
     {
     }

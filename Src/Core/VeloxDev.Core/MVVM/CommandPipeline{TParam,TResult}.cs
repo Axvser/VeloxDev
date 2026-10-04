@@ -105,6 +105,7 @@ public abstract class CommandPipeline<TParam, TResult> :
         remove => CommandDiagnostics.HandlerException -= value;
     }
 
+    /// <inheritdoc />
     public event EventHandler? CanExecuteChanged;
 
     /// <inheritdoc />

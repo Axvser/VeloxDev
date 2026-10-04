@@ -172,8 +172,7 @@ public sealed class WorkflowSlotConnectionBehavior
             case GestureStatus.Started:
                 if (ReferenceEquals(_activeConnection?.SourceView, view))
                 {
-                    // MAUI libraries target a platform-neutral TFM, so native pointer
-                    // capture may be unavailable. Once Pan starts, let it own the drag.
+                    // MAUI 库面向平台中立 TFM，原生指针捕获可能不可用；Pan 一旦开始就让它负责拖拽。
                     state.IsPointerActive = false;
                     _activeConnection.LastPanX = 0d;
                     _activeConnection.LastPanY = 0d;
@@ -315,10 +314,8 @@ public sealed class WorkflowSlotConnectionBehavior
 
     private static IWorkflowSlotViewModel? FindReceiver(ActiveConnection active)
     {
-        // Iterate canvas children directly (they are node ContentViews) rather than
-        // using recursive FindDescendants over the entire visual tree. Slot views
-        // live inside node ContentViews, so we only need to descend one level into
-        // each node's content to find Views with WorkflowSlotConnectionBehavior.
+        // 直接遍历画布子元素（都是节点 ContentView），不要对整棵可视树递归 FindDescendants；插槽视图在节点 ContentView 内，
+        // 只需下钻一层就能找到带 WorkflowSlotConnectionBehavior 的视图。
         if (active.CoordinateHost is not AbsoluteLayout canvas)
         {
             return null;
@@ -337,13 +334,13 @@ public sealed class WorkflowSlotConnectionBehavior
 
             if (GetIsEnabled(nodeView) && nodeView.BindingContext is IWorkflowSlotViewModel directSlot)
             {
-                // Slot view is a direct child of the canvas (unusual but supported).
+                // 插槽视图直接挂在画布下（少见但支持）。
                 TryMatchSlot(nodeView, directSlot, active, minimumRadius,
                     ref receiver, ref nearestDistance);
             }
             else
             {
-                // Walk into the node's subtree to find slot views.
+                // 进入节点子树查找插槽视图。
                 FindSlotInSubtree(nodeView, active, minimumRadius,
                     ref receiver, ref nearestDistance);
             }
@@ -428,7 +425,7 @@ public sealed class WorkflowSlotConnectionBehavior
             return false;
         }
 
-        // coordinateHost is the canvas; the measured center is already world/canvas-local.
+        // coordinateHost 是画布，量到的中心已是世界/画布局部坐标。
         slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(center.X, center.Y, slot.Anchor.Layer);
         return true;
     }

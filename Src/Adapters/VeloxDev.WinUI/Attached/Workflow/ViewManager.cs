@@ -343,17 +343,13 @@ public sealed class ViewManager(Panel panel)
                 Canvas.SetLeft(view, node.Anchor.Horizontal);
                 Canvas.SetTop(view, node.Anchor.Vertical);
                 Canvas.SetZIndex(view, node.Anchor.Layer);
-                // When Size is (0,0) the view has not been measured yet; use NaN so
-                // the platform auto-sizes to content instead of collapsing to 0×0.
+                // Size 为 (0,0) 说明视图尚未测量；用 NaN 让平台按内容自适应，而不是塌成 0×0。
                 view.Width = node.Size.Width > 0 ? node.Size.Width : double.NaN;
                 view.Height = node.Size.Height > 0 ? node.Size.Height : double.NaN;
                 break;
             case IWorkflowLinkViewModel:
-                // Link views own their position: Trimmed LinkView places itself at −ActualOffset and
-                // bakes +ActualOffset into its geometry (offset frame), so a deep-zoom link's negative
-                // half stays inside its own box instead of being cut. Pinning to (0,0) here would
-                // clobber that on Sender/Receiver/Anchor changes and shift the whole line by the cover.
-                // Views that do not self-position keep their default (0,0) — identical to the old pin.
+                // 连线视图自己摆位置：Trimmed LinkView 把自己放在 −ActualOffset 并把 +ActualOffset 烘进几何（偏移系），深缩放连线的负半段因此留在自己的盒子里而不被裁掉。
+                // 在这里钉 (0,0) 会在 Sender/Receiver/Anchor 变化时覆盖它、把整条线平移一个覆盖量。不自定位的视图保持默认 (0,0) —— 与旧的钉法相同。
                 break;
         }
     }

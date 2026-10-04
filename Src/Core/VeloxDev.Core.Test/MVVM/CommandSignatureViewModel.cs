@@ -119,7 +119,7 @@ public partial class CommandSignatureViewModel
     // ---- 单个非 object? 形参：命令参数在 thunk 里被强转后交给命令体 ----
     // （刻意不写进 Ran：上面那条「每个签名各跑一遍」的用例不传参数，这里需要带着实参断言。）
 
-    /// <summary>每一次强转后命令体实际收到的值，按执行顺序。</summary>
+    // 每一次强转后命令体实际收到的值，按执行顺序。
     internal List<string?> TypedSeen { get; } = [];
 
     [VeloxCommand]

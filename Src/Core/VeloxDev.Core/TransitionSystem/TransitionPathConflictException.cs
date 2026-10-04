@@ -18,6 +18,9 @@ namespace VeloxDev.TransitionSystem;
 /// </remarks>
 public sealed class TransitionPathConflictException : Exception
 {
+    /// <summary>Creates the exception for the conflicting paths.</summary>
+    /// <param name="existing">The path already on the transition.</param>
+    /// <param name="conflicting">The path that was rejected.</param>
     public TransitionPathConflictException(ITransitionProperty existing, ITransitionProperty conflicting)
         : base($"'{conflicting.Path}' conflicts with '{existing.Path}': one object must be expressed by exactly one path.")
     {

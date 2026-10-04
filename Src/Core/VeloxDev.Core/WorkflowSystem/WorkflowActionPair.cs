@@ -5,7 +5,9 @@
     /// </summary>
     public readonly struct WorkflowActionPair(Action redo, Action undo) : IWorkflowActionPair
     {
+        /// <inheritdoc />
         public Action Redo { get; } = redo;
+        /// <inheritdoc />
         public Action Undo { get; } = undo;
     }
 }

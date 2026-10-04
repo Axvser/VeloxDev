@@ -4,11 +4,14 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
+/// <summary>The default implementation of <see cref="IWorkflowNodeViewModel"/>.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Node组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Node component interface")]
 public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWorkflowIdentifiable
 {
     private IWorkflowNodeViewModelHelper helper = new NodeHelper();
+
+    /// <summary>The helper that carries this component's behaviour.</summary>
     public IWorkflowNodeViewModelHelper Helper
     {
         get => helper;
@@ -21,8 +24,10 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
         }
     }
 
+    /// <inheritdoc />
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
+    /// <summary>Creates the component and installs its default helper.</summary>
     public NodeDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private IWorkflowTreeViewModel? parent = null;
@@ -35,6 +40,7 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
     // world origin by the layout scale. The stored fields keep the original world values. The canvas
     // geometry is the same in both zoom modes — ViewportCenter zoom keeps the pivot under the viewport
     // center purely by scrolling, so the origin collapse here stays correct for both.
+    /// <inheritdoc />
     public Anchor Anchor
     {
         get => anchor.Collapse(Parent?.Layout?.Scale);
@@ -52,6 +58,7 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
     partial void OnAnchorChanging(Anchor oldValue, Anchor newValue);
     partial void OnAnchorChanged(Anchor oldValue, Anchor newValue);
 
+    /// <inheritdoc />
     public Size Size
     {
         get => size.Collapse(Parent?.Layout?.Scale);
@@ -134,11 +141,14 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
         await Helper.CloseAsync();
     }
 
+    /// <inheritdoc />
     public IWorkflowNodeViewModelHelper GetHelper() => Helper;
+    /// <inheritdoc />
     public void InitializeWorkflow()
     {
         Helper.Install(this);
     }
+    /// <inheritdoc />
     public void SetHelper(IWorkflowNodeViewModelHelper helper)
     {
         if (ReferenceEquals(Helper, helper)) return;

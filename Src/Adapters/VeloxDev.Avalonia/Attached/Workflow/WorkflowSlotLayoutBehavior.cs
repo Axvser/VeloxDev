@@ -125,10 +125,8 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
     private static void OnLayoutUpdated(object? sender, EventArgs e)
     {
-        // Synchronous post-layout write-back (mirrors the WinUI adapter). Zoom collapse moves node
-        // geometry via binding -> layout; reading the slot center here, before this frame's render,
-        // guarantees the link-endpoint anchors are refreshed in the same frame as the node collapse
-        // instead of lagging one Dispatcher.Post(Render) cadence (the slot drift / flicker source).
+        // 布局后同步回写（与 WinUI 家一致）：在渲染前读插槽中心，保证连线端点锚点与节点折叠同帧刷新，
+        // 而不是迟一个 Dispatcher.Post(Render) 节拍（插槽漂移/闪烁的来源）。
         if (sender is UserControl control)
             Sync(control);
     }
@@ -209,13 +207,12 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             var slotNames = GetAllSlotNames(control);
             var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-            // Rebuild the set of property names that should trigger ScheduleSync on change.
+            // 重建「变化时该触发 ScheduleSync」的属性名集合。
             state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
-            // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
-            // names ("OutputSlots"). Add both the full control name and the
-            // PART_-stripped form so OnPropertyChanged("OutputSlots") is matched.
+            // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
+            // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
             {
                 state.SlotPropertyNames.Add(name);
@@ -228,8 +225,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
                 if (name.StartsWith("PART_"))
                     state.SlotPropertyNames.Add(name.Substring(5));
             }
-            // Always include fallback defaults for standard property names,
-            // covering both direct ViewModel properties and SlotEnumerator members.
+            // 标准属性名一律带兜底默认值，覆盖 ViewModel 直接属性与 SlotEnumerator 成员。
             state.SlotPropertyNames.Add("InputSlot");
             state.SlotPropertyNames.Add("OutputSlot");
             state.SlotPropertyNames.Add("OutputSlots");

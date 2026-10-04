@@ -1,14 +1,17 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
+/// <summary>The default implementation of <see cref="IWorkflowTreeViewModel"/>.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Tree组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Tree component interface")]
 public sealed partial class TreeDefaultViewModel : IWorkflowTreeViewModel, IWorkflowIdentifiable
 {
     private IWorkflowTreeViewModelHelper helper = new TreeHelper();
+
+    /// <summary>The helper that carries this component's behaviour.</summary>
     public IWorkflowTreeViewModelHelper Helper
     {
         get => helper;
@@ -21,8 +24,10 @@ public sealed partial class TreeDefaultViewModel : IWorkflowTreeViewModel, IWork
         }
     }
 
+    /// <inheritdoc />
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
+    /// <summary>Creates the component and installs its default helper.</summary>
     public TreeDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private CanvasLayout layout = new();
@@ -90,11 +95,14 @@ public sealed partial class TreeDefaultViewModel : IWorkflowTreeViewModel, IWork
         await Helper.CloseAsync();
     }
 
+    /// <inheritdoc />
     public IWorkflowTreeViewModelHelper GetHelper() => Helper;
+    /// <inheritdoc />
     public void InitializeWorkflow()
     {
         Helper.Install(this);
     }
+    /// <inheritdoc />
     public void SetHelper(IWorkflowTreeViewModelHelper helper)
     {
         if (ReferenceEquals(Helper, helper)) return;

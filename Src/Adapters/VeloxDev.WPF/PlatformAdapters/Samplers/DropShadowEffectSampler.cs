@@ -4,27 +4,32 @@ using System.Windows.Media.Effects;
 namespace VeloxDev.Adapters.NativeSamplers
 {
     /// <summary>
-    /// 服务整个 <see cref="Effect"/> 家族：注册键是 <c>typeof(Effect)</c>（<c>PlatformAdapters/Interpolator.cs</c>），
-    /// 所以交到手上的可能是任何一种效果，不只是 <see cref="DropShadowEffect"/>。
+    /// Interpolates the whole <see cref="Effect"/> family. The sampler is registered under
+    /// <c>typeof(Effect)</c>, so the values it receives may be any effect, not only a
+    /// <see cref="DropShadowEffect"/>.
     /// </summary>
     /// <remarks>
-    /// 插值只对成对的 <see cref="DropShadowEffect"/> 存在；其余（异型，或别的子类）在 <c>t &gt;= 0.5</c> 于两端之间切换 ——
-    /// 没有可插的公共面时，选「到达终点」那一支而不是「停在起点」。**任何情况都不再凭空造一个 DropShadowEffect
-    /// 去顶替别的效果**：旧兜底分支把非 DropShadowEffect 静默画成阴影，那是注册成 <c>Effect</c> 之后最不能留的一手。
-    /// 端点不在 t==0/1 短路（与 <c>TransformSampler</c> 不同）：插值分支只在两端同型时才走，scratch 的运行期类型必与端点
-    /// 一致，端点值也由同一套算式给出。
+    /// <para>
+    /// Per-field interpolation exists only for a pair of <see cref="DropShadowEffect"/> instances. Any other
+    /// pair switches between the two endpoints at <c>t &gt;= 0.5</c>, preferring the end value; it never
+    /// fabricates a <see cref="DropShadowEffect"/> to stand in for a different effect.
+    /// </para>
     /// </remarks>
     public class DropShadowEffectSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
             if (start is DropShadowEffect e1 && end is DropShadowEffect e2)
             {
-                // Zero per-frame allocation: reuse a scratch effect, recomputing from the pristine start/end each frame.
+                // 每帧零分配：复用同一个 scratch 实例，每帧都从原始的 start/end 重算。
                 if (working is not DropShadowEffect we)
                 {
                     we = new DropShadowEffect();
@@ -46,7 +51,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color InterpolateColor(Color c1, Color c2, double t)
         {
-            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。
             var rgb = new BoundedProgress(t, 0d, 255d);
             rgb.Add(c1.R, c2.R);
             rgb.Add(c1.G, c2.G);
@@ -59,7 +64,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 Channel(rgb.At(c1.B, c2.B)));
         }
 
-        /// <summary>Saturates instead of wrapping — a bare byte cast turns 300 into 44.</summary>
+        // 饱和处理而非回绕 —— 直接转 byte 会把 300 变成 44。
         private static byte Channel(double value)
         {
             if (value <= 0d) return 0;

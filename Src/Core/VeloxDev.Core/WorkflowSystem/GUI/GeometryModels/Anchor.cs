@@ -1,10 +1,11 @@
-﻿using System.Runtime.Serialization;
+using System.Runtime.Serialization;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
 
 namespace VeloxDev.WorkflowSystem;
 
+/// <summary>A component's spatial position: horizontal and vertical coordinates and a layer.</summary>
 [AgentContext(AgentLanguages.Chinese, "用于在工作流系统中描述组件的空间位置")]
 [AgentContext(AgentLanguages.English, "Used to describe the spatial position of components in the workflow system")]
 public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0)
@@ -23,15 +24,16 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
     [AgentContext(AgentLanguages.English, "Layer, behavior depends on the GUI")]
     private int _layer = layer;
 
-    // Serialization state (runtime-only, never written to JSON):
-    //  - _collapseScale: scale the transient was collapsed by, so [OnSerializing] can write the raw/world value.
-    //  - _owner: the field this transient is a collapsed view of. On load Newtonsoft populates the transient
-    //    in place and skips the node's Anchor setter, so [OnDeserialized] pushes the raw value back into _owner.
+    // 序列化状态（仅运行期，不写入 JSON）：
+    //  - _collapseScale：瞬态被坍缩时的缩放，供 [OnSerializing] 写出原始/世界值。
+    //  - _owner：这个瞬态所映射的那个字段。加载时 Newtonsoft 就地填充瞬态并绕过节点的 Anchor setter，
+    //    所以 [OnDeserialized] 把原始值推回 _owner。
     [NonSerialized]
     private Scale? _collapseScale;
     [NonSerialized]
     private Anchor? _owner;
 
+    /// <inheritdoc />
     public override bool Equals(object? obj)
     {
         if (obj is Anchor other)
@@ -40,9 +42,17 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
         }
         return false;
     }
+
+    /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(Horizontal, Vertical, Layer);
+
+    /// <inheritdoc />
     public override string ToString() => $"Anchor({Horizontal},{Vertical},{Layer})";
+
+    /// <inheritdoc />
     public object Clone() => new Anchor(Horizontal, Vertical, Layer);
+
+    /// <summary>Returns whether <paramref name="other"/> has the same coordinates and layer.</summary>
     public bool Equals(Anchor? other) => other is not null && Horizontal == other.Horizontal && Vertical == other.Vertical && Layer == other.Layer;
 
     /// <summary>View value collapsed toward the world origin by <paramref name="scale"/> (identity when null/1). The transient remembers its scale and owner so serialization can restore the raw value.</summary>
@@ -65,7 +75,7 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
 
     void IVeloxJsonSerializing.OnSerializing()
     {
-        // Expand the collapsed transient back to raw/world values so the JSON file stores world coordinates.
+        // 把坍缩的瞬态展开回原始/世界值，让 JSON 文件存的是世界坐标。
         if (_collapseScale is { } scale && scale.Horizontal != 1d && scale.Horizontal != 0d)
         {
             _horizontal *= scale.Horizontal;
@@ -93,8 +103,8 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
 
     void IVeloxJsonDeserialized.OnDeserialized()
     {
-        // The reader populated this transient (read through the node's getter) with the raw JSON value but
-        // skipped the setter; push the restored value back into the field it was collapsed from.
+        // 读取器把原始 JSON 值填进了这个瞬态（经节点的 getter 读入）却跳过了 setter；
+        // 把还原出来的值推回它坍缩自的那个字段。
         if (_owner is not null)
         {
             _owner._horizontal = _horizontal;
@@ -105,8 +115,15 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
         _collapseScale = null;
     }
 
+    /// <summary>Returns whether <paramref name="left"/> and <paramref name="right"/> are equal.</summary>
     public static bool operator ==(Anchor left, Anchor right) => left.Equals(right);
+
+    /// <summary>Returns whether <paramref name="left"/> and <paramref name="right"/> differ.</summary>
     public static bool operator !=(Anchor left, Anchor right) => !left.Equals(right);
+
+    /// <summary>Adds two anchors component-wise.</summary>
     public static Anchor operator +(Anchor left, Anchor right) => new(left.Horizontal + right.Horizontal, left.Vertical + right.Vertical, left.Layer + right.Layer);
+
+    /// <summary>Subtracts <paramref name="right"/> from <paramref name="left"/> component-wise.</summary>
     public static Anchor operator -(Anchor left, Anchor right) => new(left.Horizontal - right.Horizontal, left.Vertical - right.Vertical, left.Layer - right._layer);
 }

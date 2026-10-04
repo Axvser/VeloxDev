@@ -895,7 +895,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
     }
 
-    // ── Model subscriptions (mirrors the superseded LinkLayerView pattern) ─────
+    // ── 模型订阅（沿用已被取代的 LinkLayerView 模式）───────────────────────
 
     private void AttachTree(IWorkflowTreeViewModel? tree)
     {
@@ -1171,7 +1171,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         if (e.PropertyName is nameof(IWorkflowLinkViewModel.Sender) or nameof(IWorkflowLinkViewModel.Receiver)
             && sender is IWorkflowLinkViewModel link && _subscribedLinks.Contains(link))
         {
-            // Endpoints rewired — re-subscribe to the new slots' anchors.
+            // 端点已改接 —— 重新订阅新插槽的锚点。
             if (link.Sender is INotifyPropertyChanged sp)
             {
                 sp.PropertyChanged -= OnSlotPropertyChanged;
@@ -1218,7 +1218,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         Invalidate();
     }
 
-    // ── Drawing ──────────────────────────────────────────────────────────────
+    // ── 绘制 ────────────────────────────────────────────────────────────────
 
     // 枚举源是 Core 的虚拟化可见集，不是全量的 tree.Links —— 每帧代价是 O(可见) 而不是 O(全部)。
     // 按可见集裁剪不会漏画：曲线恒在两端节点包围盒的并集内（NodePairBoundsProvider），并集不与视口相交时它也不可能可见。
@@ -1247,8 +1247,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         startY = (float)link.Sender.Anchor.Vertical;
         endX = (float)link.Receiver.Anchor.Horizontal;
         endY = (float)link.Receiver.Anchor.Vertical;
-        // A slot that has not been laid out yet has a NaN anchor — skip it rather
-        // than feed NaN through Win2D.
+        // 尚未布局的插槽锚点是 NaN —— 跳过它，别把 NaN 喂进 Win2D。
         return !float.IsNaN(startX) && !float.IsNaN(startY) && !float.IsNaN(endX) && !float.IsNaN(endY);
     }
 
@@ -1274,14 +1273,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             var virtualColor = owner.VirtualLineColor;
             var strokeWidth = (float)Math.Max(0.5d, owner.StrokeWidth);
 
-            // Viewport bounds (expanded a little so a link edge never pops at the frame boundary).
+            // 视口包围盒（稍微外扩，连线边缘不会在视口边界处突然冒出）。
             var left = dirtyRect.Left - (float)CullMargin;
             var right = dirtyRect.Right + (float)CullMargin;
             var top = dirtyRect.Top - (float)CullMargin;
             var bottom = dirtyRect.Bottom + (float)CullMargin;
 
-            // Transform each collapsed canvas-local anchor c to viewport pixels:
-            // px = Ruler + c + ContentOffset − ScrollOffset (shared with the grid drawable).
+            // 把每个折叠后的画布局部锚点换算成视口像素：px = Ruler + 锚点 + 内容偏移 − 滚动偏移（与网格 drawable 共用）。
             foreach (var link in EnumerateVisibleLinks(tree))
             {
                 // 这条线已经有自己的视图在画（视图发布曲线时把「画它的那个控件」一并交了上来）——
@@ -1322,9 +1320,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                     continue;
                 }
 
-                // Whole-link bounding-box cull: segments outside the viewport are clipped by the
-                // canvas anyway, so drawing them is pure waste (and deep zoom could send huge
-                // coordinates through Win2D otherwise).
+                // 整条连线按包围盒裁剪：视口外的段反正会被画布裁掉，画了纯属浪费（深缩放下还能避免把巨大坐标喂进 Win2D）。
                 if (!owner.IntersectsViewport(left, right, top, bottom))
                 {
                     continue;

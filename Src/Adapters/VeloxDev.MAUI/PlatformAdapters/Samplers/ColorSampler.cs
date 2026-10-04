@@ -2,17 +2,19 @@ namespace VeloxDev.Adapters.NativeSamplers
 {
     public class ColorSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            // Handle null values by providing defaults.
+            // null 时给默认值。
             var c1 = (Color)(start ?? Colors.Transparent);
             var c2 = (Color)(end ?? Colors.Transparent);
 
-            // RGB share one progress so an overshoot cannot shift the hue; alpha is its own range. MAUI's channels
-            // are floats, so the range is [0,1] rather than [0,255].
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。MAUI 通道是 float，范围是 [0,1] 而非 [0,255]。
             var rgb = new BoundedProgress(t, 0f, 1f);
             rgb.Add(c1.Red, c2.Red);
             rgb.Add(c1.Green, c2.Green);

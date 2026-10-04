@@ -4,15 +4,16 @@ namespace VeloxDev.Adapters.NativeSamplers
 {
     public class TransformSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            // Exact endpoints, not a range. The pipeline drives the last frame of every pass with exactly 1
-            // (or 0 on a reverse pass), and the caller's own instance has to survive to the end: a nested path
-            // such as ((TranslateTransform)x.RenderTransform).X depends on the runtime type it was declared
-            // with, which the interpolated scratch would replace. An overshoot past the endpoint falls through.
+            // 精确端点而非区间：管线每趟最后一帧正好给 1（反向给 0），调用方自己的实例必须活到最后 ——
+            // 嵌套路径如 ((TranslateTransform)x.RenderTransform).X 依赖声明时的运行时类型，插值用的 scratch 会替换它；越过端点则落到下一分支。
             if (t == 0d) { property.SetValue(target, start); return; }
             if (t == 1d) { property.SetValue(target, end); return; }
 
@@ -22,7 +23,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 && startT.GetType() == endT.GetType()
                 && startT.GetType() != typeof(TransformGroup))
             {
-                // Zero per-frame allocation: reuse a scratch transform, recomputing from the pristine start/end each frame.
+                // 每帧零分配：复用同一个 scratch 变换，每帧从原始 start/end 重算。
                 if (working is not Transform wt || wt.GetType() != startT.GetType())
                 {
                     wt = CloneTransform(startT);
@@ -33,7 +34,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return;
             }
 
-            // Group / type mismatch / null → allocate a fresh transform (start/end are never mutated).
+            // 组/类型不匹配/null → 新建变换（绝不改动 start/end）。
             property.SetValue(target, Compute(start, end, direction, t));
         }
 
@@ -90,7 +91,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Transform NormalizeInput(object? input)
         {
-            // Normalize null/Identity into an empty TransformGroup.
+            // 把 null/Identity 归一化成空 TransformGroup。
             if (input == null || (input is Transform transform && transform == Transform.Identity))
                 return new TransformGroup();
             return (Transform)input;
@@ -102,7 +103,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             if (transform is TransformGroup group && group.Children.Count > 0)
             {
-                // Keep the last transform of each type.
+                // 每类保留最后一个变换。
                 var lastOfType = new Dictionary<Type, Transform>();
                 foreach (var child in group.Children)
                 {
@@ -158,7 +159,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t, RotationDirection direction)
         {
-            // Get the default transform (ensures a smooth transition from nothing).
+            // 取默认变换（保证从「无」平滑过渡）。
             static Transform GetDefaultTransform(Transform? transform) => transform switch
             {
                 TranslateTransform _ => new TranslateTransform(0, 0),
@@ -171,14 +172,14 @@ namespace VeloxDev.Adapters.NativeSamplers
             start ??= GetDefaultTransform(end);
             end ??= GetDefaultTransform(start);
 
-            // On type mismatch, fall back to matrix interpolation.
+            // 类型不匹配时退回矩阵插值。
             if (start.GetType() != end.GetType())
             {
                 return new MatrixTransform(
                     LerpMatrix(start.Value, end.Value, t));
             }
 
-            // Per-type interpolation.
+            // 按类型插值。
             return start switch
             {
                 TranslateTransform st when end is TranslateTransform et =>

@@ -127,9 +127,7 @@ public sealed class WorkflowNodeDragBehavior
         state.IsDragging = false;
         state.CoordinateHost = null;
 
-        // When drag is enabled on a node card, automatically add WS_CLIPCHILDREN: the card's self-drawn rounded border clips
-        // the inner TableLayoutPanel/labels/input boxes so parent-window drawing does not cover the inner controls
-        // and cause content flicker. The host needs no changes.
+        // 节点卡片启用拖拽时自动加 WS_CLIPCHILDREN：卡片自绘的圆角边框裁剪内部 TableLayoutPanel/标签/输入框，父窗绘制不会盖住内部控件造成内容闪烁；宿主无需改动。
         NativeWindowStyleHelper.EnsureClipChildren(control);
 
         HookControlTree(control, control);
@@ -215,17 +213,11 @@ public sealed class WorkflowNodeDragBehavior
         {
             node.MoveCommand.Execute(new Offset(dx, dy));
 
-            // WinForms' Invalidate() only queues the repaint request; WM_PAINT is coalesced only when the message loop
-            // goes idle. During a drag, mouse messages arrive at high frequency, so canvas repaints keep being deferred and
-            // the card image at the node's old position and the old link geometry are not erased in time, leaving drag ghosts.
-            // Repainting the coordinate host synchronously right after a move (canvas: grid/links) keeps the links tracking with no ghosting.
+            // WinForms 的 Invalidate() 只排队重绘请求，WM_PAINT 要等消息循环空闲才合并。拖拽中鼠标消息高频到达，画布重绘一直被推迟，节点旧位置的卡片影像与旧连线几何来不及擦掉，留下拖影。移动后立刻同步重绘坐标宿（画布：网格/连线），连线便能跟上且无残影。
             host.Invalidate();
             host.Update();
 
-            // Recursively repaint the dragged card's whole subtree synchronously: after the card background is painted,
-            // the repaints of its internal transparent child controls (title bar, output-row panel, slot views) are still
-            // queued in the message loop — after a card move they briefly show old background residue as bar-shaped
-            // flicker in the transparent gaps above/below the output rows (most visible on a full-screen canvas). Recursive repaint composites card and layers in one frame.
+            // 同步递归重绘被拖卡片的整棵子树：卡片背景画完后，其内部透明子控件（标题栏、输出行面板、插槽视图）的重绘还排在消息循环里 —— 卡片移动后它们会在输出行上/下的透明缝隙里短暂露出旧背景残影，呈条状闪烁（全屏画布上最明显）。递归重绘把卡片与各层在一帧内合成。
             RedrawTree(control);
         }
 
@@ -519,8 +511,7 @@ public sealed class WorkflowNodeDragBehavior
             return;
         }
 
-        // First repaint the parent synchronously (opaque background/border), then repaint child controls level by level,
-        // so the transparent compositing order is correct (children composite from the already-updated parent background).
+        // 先同步重绘父级（不透明背景/边框），再逐层重绘子控件，透明合成顺序才正确（子控件从已更新的父背景上合成）。
         root.Invalidate();
         root.Update();
 

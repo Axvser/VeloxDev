@@ -63,8 +63,7 @@ public partial class WorkflowSlotConnectionBehavior : ComponentBase, IAsyncDispo
             return;
         }
 
-        // Pin the slot's anchor to its measured screen position so the virtual link starts from
-        // the slot itself, even if the slot was never measured by a layout behavior.
+        // 把插槽锚点钉到量到的屏幕位置，虚拟连线就从插槽本身出发，即使该插槽从未被布局行为测量过。
         Slot.Anchor = new Anchor(worldX, worldY, Slot.Anchor.Layer);
 
         if (Slot.SendConnectionCommand.CanExecute(null))

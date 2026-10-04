@@ -5,8 +5,10 @@ namespace VeloxDev.TransitionSystem
 {
     public class UIThreadInspector() : TransitionHostBase<NonPriority>
     {
+        /// <inheritdoc />
         public override bool IsAlive => Microsoft.Maui.Controls.Application.Current?.Windows?.Count > 0;
 
+        /// <inheritdoc />
         public override ThreadRef ThreadFor(object target) => ThreadRef.From(DispatcherFor(target));
 
         internal static IDispatcher? ApplicationDispatcher
@@ -42,9 +44,11 @@ namespace VeloxDev.TransitionSystem
             return ApplicationDispatcher;
         }
 
+        /// <inheritdoc />
         protected override bool IsCurrentThread(ThreadRef thread)
             => thread.TryGet<IDispatcher>(out var dispatcher) && !dispatcher.IsDispatchRequired;
 
+        /// <inheritdoc />
         protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority)
         {
             if (!thread.TryGet<IDispatcher>(out var dispatcher)) return false;

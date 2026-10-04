@@ -44,9 +44,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
     private IJSObjectReference? _handle;
     private IWorkflowNodeViewModel? _subscribedNode;
 
-    // True while the pointer is dragging this node. JS owns the wrapper position during a drag
-    // (immediate, compositor-friendly), so the Anchor PropertyChanged handler must NOT reposition or
-    // re-render mid-drag — that would snap the node back to a stale .NET value each frame.
+    // 指针拖拽本节点期间为真。拖拽中包装元素位置归 JS（即时、利于合成器），所以 Anchor 的 PropertyChanged 处理器在拖拽中不能重新定位或重渲染 —— 那会每帧把节点弹回陈旧的 .NET 值。
     private bool _isDragging;
 
     /// <summary>
@@ -92,17 +90,13 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
     {
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor))
         {
-            // During a zoom the collapse of every node is stamped synchronously by the surface's
-            // applyZoomSurface (atomic with the scroll/translate); standing down here stops a per-node
-            // setNodePosition from reaching the browser first and painting a misplaced wrapper.
+            // 缩放时每个节点的折叠由表面的 applyZoomSurface 同步盖章（与滚动/平移原子）；这里让位，避免逐节点 setNodePosition 抢先到浏览器、画出错位的包装元素。
             if (WorkflowGeometryScope.IsZooming)
             {
                 return;
             }
 
-            // JS moves the wrapper live during a drag; for external moves (undo/redo, layout
-            // commands) reposition it directly via JS — no re-render, mirroring the XAML adapters'
-            // ViewManager.ApplyLayout (Canvas.SetLeft/Top only).
+            // 拖拽中包装元素由 JS 实时移动；外部移动（撤销/重做、布局命令）也直接经 JS 重定位 —— 不重渲染，与 XAML 几家 ViewManager.ApplyLayout（只 Canvas.SetLeft/Top）一致。
             if (!_isDragging)
             {
                 SyncPosition();
@@ -110,14 +104,13 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
         }
         else if (e.PropertyName is nameof(IWorkflowNodeViewModel.Size))
         {
-            // During a zoom the JS already re-stamped the collapsed card transform; a re-render here
-            // would fight it with differently-rounded bytes.
+            // 缩放中 JS 已重新盖章折叠后的卡片变换；这里再重渲染会用舍入不同的字节跟它打架。
             if (WorkflowGeometryScope.IsZooming)
             {
                 return;
             }
 
-            // Size changes are rare (selector swapping content); a re-render is fine.
+            // 尺寸变化很少（选择器换内容），重渲染即可。
             InvokeAsync(StateHasChanged);
         }
     }
@@ -169,7 +162,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
     public void OnNodeDragEnd()
     {
         _isDragging = false;
-        // Snap the wrapper to the final .NET anchor so it agrees with undo/redo and serialization.
+        // 把包装元素吸附到最终的 .NET 锚点，与撤销/重做和序列化保持一致。
         SyncPosition();
     }
 

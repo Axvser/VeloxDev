@@ -16,6 +16,7 @@ namespace VeloxDev.TransitionSystem;
 /// </remarks>
 public sealed class TransitionPathUnsampleableException : Exception
 {
+    /// <summary>Creates the exception for the unsampleable <paramref name="property"/>.</summary>
     public TransitionPathUnsampleableException(ITransitionProperty property)
         : base($"'{property.Path}' cannot be animated: {property.PropertyType.Name} has no sampler and is a reference type, so it is not assembled from its members.")
     {

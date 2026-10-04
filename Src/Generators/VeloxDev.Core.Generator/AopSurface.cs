@@ -30,6 +30,7 @@ namespace VeloxDev.Generators
     [Generator(LanguageNames.CSharp)]
     public class AopSurface : IIncrementalGenerator
     {
+        /// <inheritdoc />
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             context.RegisterSourceOutput(
@@ -63,9 +64,7 @@ namespace VeloxDev.Generators
             {
                 if (!AnalizeHelper.IsAopClass(classSymbol)) continue;
 
-                // Mirror every attributed member of the type, not just the ones on the declaration
-                // this generator was handed: the interface has to match the proxy contract that
-                // AopWriter builds, and both now ignore which partial file a member came from.
+                // 镜像该类型所有带特性的成员，而不只是本生成器拿到的那份声明上的：接口必须匹配 AopWriter 构建的代理契约，两者现在都不看成员来自哪个 partial 文件。
                 var members = AnalizeHelper.Members(classSymbol).ToList();
 
                 string className = classDeclaration.Identifier.Text;

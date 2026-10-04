@@ -17,6 +17,7 @@ public readonly struct ThreadRef : IEquatable<ThreadRef>
     /// <summary>No thread owns this. A real answer, not a failure.</summary>
     public static ThreadRef None => default;
 
+    /// <summary>Whether no thread owns this.</summary>
     public bool IsNone => _handle is null;
 
     /// <summary>Wraps a host's handle, or returns <see cref="None"/> when it is null.</summary>
@@ -33,13 +34,18 @@ public readonly struct ThreadRef : IEquatable<ThreadRef>
         return handle is not null;
     }
 
+    /// <summary>Returns whether <paramref name="other"/> names the same thread.</summary>
     public bool Equals(ThreadRef other) => ReferenceEquals(_handle, other._handle);
 
+    /// <inheritdoc />
     public override bool Equals(object? obj) => obj is ThreadRef other && Equals(other);
 
+    /// <inheritdoc />
     public override int GetHashCode() => _handle is null ? 0 : RuntimeHelpers.GetHashCode(_handle);
 
+    /// <summary>Returns whether <paramref name="left"/> and <paramref name="right"/> name the same thread.</summary>
     public static bool operator ==(ThreadRef left, ThreadRef right) => left.Equals(right);
 
+    /// <summary>Returns whether <paramref name="left"/> and <paramref name="right"/> differ.</summary>
     public static bool operator !=(ThreadRef left, ThreadRef right) => !left.Equals(right);
 }

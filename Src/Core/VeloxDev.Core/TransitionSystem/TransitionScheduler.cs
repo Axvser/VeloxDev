@@ -5,6 +5,7 @@ using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
+/// <summary>The frame scheduler that drives one host and interpreter pair at a given priority type.</summary>
 public class TransitionSchedulerCore<
     THost,
     TTransitionInterpreterCore,
@@ -12,8 +13,10 @@ public class TransitionSchedulerCore<
     where THost : ITransitionHost<TPriorityCore>, new()
     where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
 {
+    /// <summary>The host this scheduler drives.</summary>
     protected static readonly THost host = new();
 
+    /// <inheritdoc />
     public override async Task Execute(
         InterpolatorCore producer,
         IFrameState state,
@@ -24,6 +27,7 @@ public class TransitionSchedulerCore<
         await Execute(producer, state, cvt_effect, externCts);
     }
 
+    /// <inheritdoc />
     public virtual async Task Execute(
         InterpolatorCore producer,
         IFrameState state,
@@ -181,11 +185,15 @@ public class TransitionSchedulerCore<
         }
     }
 
+    /// <inheritdoc />
     public override void Exit()
     {
         CancelDrained(DrainActive());
     }
 
+    /// <summary>Returns the scheduler for <paramref name="source"/>, creating one when none exists.</summary>
+    /// <param name="source">The animation target.</param>
+    /// <param name="CanMutualTask">Whether the target may share one scheduler across animations.</param>
     public static ITransitionScheduler<TPriorityCore> FindOrCreate<T>(T source, bool CanMutualTask = true) where T : class
     {
         if (CanMutualTask)
@@ -217,6 +225,7 @@ public class TransitionSchedulerCore<
     }
 }
 
+/// <summary>The scheduler base: the shared registry, target locks and active-run bookkeeping.</summary>
 public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
 {
     private static readonly ConditionalWeakTable<object, SemaphoreSlim> TargetLocks = new();
@@ -235,6 +244,7 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     internal static SemaphoreSlim GetTargetLock(object target)
         => TargetLocks.GetValue(target, static _ => new SemaphoreSlim(1, 1));
 
+    /// <summary>The scheduler shared by all mutual animations of a target.</summary>
     public static ConditionalWeakTable<object, ITransitionSchedulerCore> MutualSchedulers { get; protected set; } = new();
 
     /// <summary>
@@ -245,18 +255,21 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     /// </summary>
     public static ConditionalWeakTable<object, ConcurrentDictionary<ITransitionSchedulerCore, byte>> NoMutualSchedulers { get; internal set; } = new();
 
+    /// <summary>Tries to read the mutual scheduler registered for <paramref name="source"/>.</summary>
     public static bool TryGetMutualScheduler(object source, out ITransitionSchedulerCore? scheduler)
     {
         if (MutualSchedulers.TryGetValue(source, out scheduler)) return true;
         scheduler = null;
         return false;
     }
+    /// <summary>Stops and removes the mutual scheduler registered for <paramref name="source"/>.</summary>
     public static bool RemoveMutualScheduler(object source)
     {
         if (MutualSchedulers.TryGetValue(source, out var scheduler)) scheduler.Exit();
         return MutualSchedulers.Remove(source);
     }
 
+    /// <summary>Tries to read the non-mutual schedulers registered for <paramref name="source"/>.</summary>
     public static bool TryGetNoMutualScheduler(object source, out ITransitionSchedulerCore[] schedulers)
     {
         if (NoMutualSchedulers.TryGetValue(source, out var values))
@@ -267,6 +280,7 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
         schedulers = [];
         return false;
     }
+    /// <summary>Stops and removes the non-mutual schedulers registered for <paramref name="source"/>.</summary>
     public static bool RemoveNoMutualScheduler(object source)
     {
         if (NoMutualSchedulers.TryGetValue(source, out var values))
@@ -290,6 +304,7 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     /// </remarks>
     internal readonly ConcurrentDictionary<CancellationTokenSource, TransitionRun> _activeRuns = new();
     private int _generation;
+    /// <summary>Serializes the runs queued on this scheduler.</summary>
     protected readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>
@@ -433,16 +448,21 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     }
 
     internal WeakReference<object>? targetref = null;
+
+    /// <summary>A weak reference to the animation target this scheduler serves.</summary>
     public virtual WeakReference<object>? TargetRef
     {
         get => targetref;
         protected set => targetref = value;
     }
 
+    /// <inheritdoc />
     public abstract Task Execute(
         InterpolatorCore producer,
         IFrameState state,
         ITransitionEffectCore effect,
         CancellationTokenSource? externCts = default);
+
+    /// <inheritdoc />
     public abstract void Exit();
 }

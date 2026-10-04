@@ -52,6 +52,7 @@ public sealed class SerializationOptions
 
     }
 
+/// <summary>Serialization helpers for workflow components, backed by VeloxDev's own serializer.</summary>
 public static class ComponentModelEx
 {
     // 三个核心入口都走 VeloxDev 自己的序列化器：格式逐字节一致，但不再依赖运行期反射，

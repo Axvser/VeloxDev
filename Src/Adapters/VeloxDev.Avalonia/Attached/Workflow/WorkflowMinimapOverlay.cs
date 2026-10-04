@@ -22,7 +22,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 {
-    // ── Styled properties ────────────────────────────────────────────────────
+    // ── 样式属性 ─────────────────────────────────────────────────────────────
 
     public static readonly StyledProperty<double> ScrollOffsetXProperty =
         AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(ScrollOffsetX));
@@ -76,7 +76,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     public static readonly StyledProperty<double> LinkStrokeThicknessProperty =
         AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(LinkStrokeThickness), 2.0);
 
-    // ── Brushes ──────────────────────────────────────────────────────────────
+    // ── 画刷 ────────────────────────────────────────────────────────────────
 
     public static readonly StyledProperty<IBrush?> MinimapBackgroundProperty =
         AvaloniaProperty.Register<WorkflowMinimapOverlay, IBrush?>(nameof(MinimapBackground),
@@ -125,7 +125,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     public static readonly StyledProperty<double> MinimapMinSizeProperty =
         AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(MinimapMinSize), 20d);
 
-    // ── CLR accessors ────────────────────────────────────────────────────────
+    // ── CLR 访问器 ───────────────────────────────────────────────────────────
 
     public double ScrollOffsetX { get => GetValue(ScrollOffsetXProperty); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }
@@ -156,7 +156,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     public double MinimapMinSize { get => GetValue(MinimapMinSizeProperty); set => SetValue(MinimapMinSizeProperty, value); }
     public string ScrollViewerName { get => GetValue(ScrollViewerNameProperty); set => SetValue(ScrollViewerNameProperty, value); }
 
-    // ── Cached state ─────────────────────────────────────────────────────────
+    // ── 缓存状态 ─────────────────────────────────────────────────────────────
 
     private WorkflowBounds _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
@@ -188,19 +188,16 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         Height = MinimapHeight;
     }
 
-    // ── Lifetime ─────────────────────────────────────────────────────────────
+    // ── 生命周期 ─────────────────────────────────────────────────────────────
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         SubscribeToTree(WorkflowTree);
 
-        // Resolve ScrollViewer by recursively searching from the visual root.
-        // FindControl only searches descendants, not the whole tree, so we
-        // search by walking the full visual tree from the root.
-        // NOTE: VisualExtensions.GetVisualRoot() was removed in Avalonia 12 and
-        // e.Root's return type changed (IRenderRoot in 11, Visual in 12), so walk
-        // up via GetVisualParent() whose signature is identical in both 11.x and 12.x.
+        // 从可视根递归查找 ScrollViewer：FindControl 只搜后代，所以沿完整可视树向上走。
+        // Avalonia 12 移除了 GetVisualRoot()、e.Root 的返回类型也变了（11 是 IRenderRoot，12 是 Visual），
+        // 因此用两版签名一致的 GetVisualParent() 向上走。
         if (!string.IsNullOrWhiteSpace(ScrollViewerName))
         {
             Visual root = this;
@@ -253,11 +250,10 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         }
     }
 
-    // ── Node & slot change tracking (real-time updates) ──────────────────
+    // ── 节点与插槽变更跟踪（实时更新）──────────────────────────────────────
 
     private IWorkflowTreeViewModel? _subscribedTree;
-    // Track slot anchor subscription so we can unsubscribe properly.
-    // We use ConditionalWeakTable-style management via per-link tracking.
+    // 记录插槽锚点的订阅，解绑时才能正确退订；按链接逐条管理。
     private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
     private ScrollViewer? _scrollViewer;
@@ -378,8 +374,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         _pendingRefresh = true;
         if (!IsVisible) return;
 
-        // OnNodePropChanged can fire from the TickManager loop thread.
-        // InvalidateVisual requires the UI thread — dispatch if needed.
+        // OnNodePropChanged 可能从 TickManager 循环线程触发；InvalidateVisual 必须在 UI 线程，需要时派发。
         if (Dispatcher.UIThread.CheckAccess())
             InvalidateVisual();
         else
@@ -392,7 +387,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         if (IsVisible) InvalidateVisual();
     }
 
-    // ── Data refresh ─────────────────────────────────────────────────────────
+    // ── 数据刷新 ─────────────────────────────────────────────────────────────
 
     private void RefreshMinimapData()
     {
@@ -411,7 +406,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 
         _lastGlobalBounds = WorkflowBounds.FromNodes(_lastNodeRects);
 
-        // Viewport in world coordinates — use bindable ViewportWidth/Height
+        // 视口用世界坐标；尺寸取可绑定的 ViewportWidth/Height。
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
         _lastViewport = WorkflowBounds.FromNode(
@@ -427,7 +422,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         _lastViewport = default;
     }
 
-    // ── Pointer / drag: only on the viewport indicator rect ──────────────────
+    // ── 指针/拖拽：只作用于视口指示块 ────────────────────────────────────────
 
     private Rect? GetViewportRectInMinimap()
     {
@@ -450,8 +445,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 
         var pt = e.GetPosition(this);
 
-        // Match the Jalium adapter: the clicked point always becomes the viewport center —
-        // no grab-anchor on the indicator block, so pressing anywhere recenters the view.
+        // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
         NavigateToWorld(pt.X, pt.Y);
 
         _isDragging = true;
@@ -483,7 +477,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         _isDragging = false;
     }
 
-    // ── Shared transform ─────────────────────────────────────────────────────
+    // ── 共用变换 ─────────────────────────────────────────────────────────────
 
     private (double OriginX, double OriginY, double MmW, double MmH, double Scale) ComputeTransform(WorkflowBounds globalBounds)
     {
@@ -524,7 +518,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         }
     }
 
-    // ── Rendering ────────────────────────────────────────────────────────────
+    // ── 渲染 ────────────────────────────────────────────────────────────────
 
     public override void Render(DrawingContext context)
     {
@@ -545,7 +539,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         var mmRect = new Rect(0, 0, mmW, mmH);
         var cr = (float)Math.Max(0, MinimapCornerRadius);
 
-        // Background with rounded corners
+        // 圆角背景
         if (MinimapBackground is not null)
             context.FillRectangle(MinimapBackground, mmRect, cr);
         if (MinimapBorderBrush is not null)
@@ -561,7 +555,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 
         using (context.PushClip(mmRect))
         {
-            // Nodes
+            // 节点
             if (NodeBrush is not null)
             {
                 var ncr = (float)Math.Max(0, NodeCornerRadius);
@@ -575,7 +569,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
                 }
             }
 
-            // Viewport indicator
+            // 视口指示块
             var vp = _lastViewport;
             if (!vp.IsEmpty)
             {

@@ -3,8 +3,10 @@ using VeloxDev.TransitionSystem.Abstractions;
 
 namespace VeloxDev.TransitionSystem;
 
+/// <summary>Fluent chain building for transition snapshots.</summary>
 public static class TransitionCoreEx
 {
+    /// <summary>Pauses the chain for <paramref name="timeSpan"/> before the next segment.</summary>
     public static T Await<T>(this T snapshot, TimeSpan timeSpan)
         where T : StateSnapshotCore, new()
     {
@@ -12,11 +14,13 @@ public static class TransitionCoreEx
         return snapshot;
     }
 
+    /// <summary>Starts a new segment after this one.</summary>
     public static T Then<T>(this T snapshot)
         where T : StateSnapshotCore, new()
     {
         return snapshot.CoreThen<T>();
     }
+    /// <summary>Starts a new segment after a <paramref name="timeSpan"/> delay.</summary>
     public static T AwaitThen<T>(this T snapshot, TimeSpan timeSpan)
         where T : StateSnapshotCore, new()
     {
@@ -38,6 +42,7 @@ public static class TransitionCoreEx
         return snapshot.CoreRepeat<T>(count);
     }
 
+    /// <summary>Registers <paramref name="interpolator"/> for <paramref name="propertyLambda"/> on this segment.</summary>
     public static TSnapshot Interpolator<TSnapshot, TTarget, TValue>(
         this TSnapshot snapshot,
         Expression<Func<TTarget, TValue>> propertyLambda,

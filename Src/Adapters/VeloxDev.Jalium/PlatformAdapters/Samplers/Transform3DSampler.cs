@@ -6,9 +6,12 @@ namespace VeloxDev.Adapters.NativeSamplers
     /// angle (same axis), otherwise it falls back to Matrix3D component lerp.</summary>
     public class Transform3DSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
@@ -19,10 +22,8 @@ namespace VeloxDev.Adapters.NativeSamplers
                 && rs.Rotation is AxisAngleRotation3D as1 && re.Rotation is AxisAngleRotation3D as2
                 && as1.Axis == as2.Axis)
             {
-                // Zero per-frame allocation: reuse a scratch RotateTransform3D, recomputing its angle from the pristine start/end.
-                // The axis is part of the guard, not just the angle: the scratch keeps the start's axis for the whole
-                // animation, so two different axes would settle on the start's axis at the end's angle — a pose that is
-                // neither end. Differing axes go to the matrix fallback, which interpolates the full transform.
+                // 每帧零分配：复用 scratch RotateTransform3D，从原始 start/end 重算角度。轴也要纳入门禁：
+                // scratch 整段动画都保留起始轴，两轴不同会落到「起始轴 + 终点角度」这种两边都不是的姿态；轴不同走矩阵兜底。
                 if (working is not RotateTransform3D wt || wt.Rotation is not AxisAngleRotation3D)
                 {
                     wt = new RotateTransform3D(new AxisAngleRotation3D(as1.Axis, as1.Angle), rs.CenterX, rs.CenterY, rs.CenterZ);
@@ -39,7 +40,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 }
             }
 
-            // Matrix fallback: allocate a fresh MatrixTransform3D (Value is read-only).
+            // 矩阵兜底：新建 MatrixTransform3D（Value 只读）。
             var m1 = startT?.Value ?? Matrix3D.Identity;
             var m2 = endT?.Value ?? Matrix3D.Identity;
             property.SetValue(target, new MatrixTransform3D(LerpMatrix3D(m1, m2, t)));

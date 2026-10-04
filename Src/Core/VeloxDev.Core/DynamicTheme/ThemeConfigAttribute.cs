@@ -11,6 +11,7 @@
     {
 #pragma warning disable IDE0060
 #pragma warning disable IDE0290
+        /// <summary>Configures the theme contexts for <paramref name="propertyName"/>.</summary>
         public ThemeConfigAttribute(string propertyName, object?[] themeContext1, object?[] themeContext2) { }
 #pragma warning restore IDE0290
 #pragma warning restore IDE0060
@@ -28,6 +29,7 @@
     {
 #pragma warning disable IDE0060
 #pragma warning disable IDE0290
+        /// <summary>Configures the theme contexts for <paramref name="propertyName"/>.</summary>
         public ThemeConfigAttribute(string propertyName, object?[] themeContext1, object?[] themeContext2, object?[] themeContext3) { }
 #pragma warning restore IDE0290
 #pragma warning restore IDE0060
@@ -46,6 +48,7 @@
     {
 #pragma warning disable IDE0060
 #pragma warning disable IDE0290
+        /// <summary>Configures the theme contexts for <paramref name="propertyName"/>.</summary>
         public ThemeConfigAttribute(string propertyName, object?[] themeContext1, object?[] themeContext2, object?[] themeContext3, object?[] themeContext4) { }
 #pragma warning restore IDE0290
 #pragma warning restore IDE0060
@@ -65,6 +68,7 @@
     {
 #pragma warning disable IDE0060
 #pragma warning disable IDE0290
+        /// <summary>Configures the theme contexts for <paramref name="propertyName"/>.</summary>
         public ThemeConfigAttribute(string propertyName, object?[] themeContext1, object?[] themeContext2, object?[] themeContext3, object?[] themeContext4, object?[] themeContext5) { }
 #pragma warning restore IDE0290
 #pragma warning restore IDE0060
@@ -85,6 +89,7 @@
     {
 #pragma warning disable IDE0060
 #pragma warning disable IDE0290
+        /// <summary>Configures the theme contexts for <paramref name="propertyName"/>.</summary>
         public ThemeConfigAttribute(string propertyName, object?[] themeContext1, object?[] themeContext2, object?[] themeContext3, object?[] themeContext4, object?[] themeContext5, object?[] themeContext6) { }
 #pragma warning restore IDE0290
 #pragma warning restore IDE0060
@@ -106,6 +111,7 @@
     {
 #pragma warning disable IDE0060
 #pragma warning disable IDE0290
+        /// <summary>Configures the theme contexts for <paramref name="propertyName"/>.</summary>
         public ThemeConfigAttribute(string propertyName, object?[] themeContext1, object?[] themeContext2, object?[] themeContext3, object?[] themeContext4, object?[] themeContext5, object?[] themeContext6, object?[] themeContext7) { }
 #pragma warning restore IDE0290
 #pragma warning restore IDE0060

@@ -16,6 +16,7 @@ public sealed class UncompensatedTimeSampler : TimeSamplerCore, IUncompensatedTi
     private long _lastTicks;
     private long _originTicks;
 
+    /// <summary>Creates the sampler over <paramref name="source"/>.</summary>
     public UncompensatedTimeSampler(ITimeSource source) : base(source) => Reset();
 
     /// <inheritdoc />

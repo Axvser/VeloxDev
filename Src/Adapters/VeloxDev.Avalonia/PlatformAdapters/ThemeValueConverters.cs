@@ -9,11 +9,12 @@ namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // Use Avalonia's built-in type conversion system.
+            // 用 Avalonia 内置的类型转换系统。
             if (TypeUtilities.TryConvert(targetType, parameters[0], CultureInfo.InvariantCulture, out var result))
             {
                 return result;
@@ -32,17 +33,18 @@ namespace VeloxDev.DynamicTheme
 
     public class PointConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // Use Avalonia's built-in point parsing.
+            // 用 Avalonia 内置的 Point 解析。
             if (parameters[0] is string strValue)
             {
                 return Point.Parse(strValue);
             }
 
-            // Multi-parameter construction.
+            // 多参数构造。
             try
             {
                 if (parameters.Length >= 2)
@@ -60,17 +62,18 @@ namespace VeloxDev.DynamicTheme
 
     public class ThicknessConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // Use Avalonia's built-in thickness parsing.
+            // 用 Avalonia 内置的 Thickness 解析。
             if (parameters[0] is string strValue)
             {
                 return Thickness.Parse(strValue);
             }
 
-            // Multi-parameter construction.
+            // 多参数构造。
             try
             {
                 return parameters.Length switch
@@ -93,17 +96,18 @@ namespace VeloxDev.DynamicTheme
 
     public class CornerRadiusConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // Use Avalonia's built-in corner-radius parsing.
+            // 用 Avalonia 内置的 CornerRadius 解析。
             if (parameters[0] is string strValue)
             {
                 return CornerRadius.Parse(strValue);
             }
 
-            // Multi-parameter construction.
+            // 多参数构造。
             try
             {
                 return parameters.Length switch
@@ -123,11 +127,12 @@ namespace VeloxDev.DynamicTheme
 
     public class ColorConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // Use Avalonia's built-in color parsing.
+            // 用 Avalonia 内置的颜色解析。
             if (parameters[0] is string colorString)
             {
                 if (Color.TryParse(colorString, out var color))
@@ -138,13 +143,13 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // Integer value (ARGB)
+                // 整数值（ARGB）
                 if (parameters[0] is int argb)
                 {
                     return Color.FromUInt32((uint)argb);
                 }
 
-                // Individual components
+                // 各分量
                 if (parameters.Length >= 3)
                 {
                     byte a = parameters.Length >= 4 ? System.Convert.ToByte(parameters[0]) : (byte)255;
@@ -162,20 +167,21 @@ namespace VeloxDev.DynamicTheme
 
     public class BrushConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // 1. Pass a brush directly
+                // 1. 直接传画刷
                 if (parameters[0] is IBrush brush)
                     return brush;
 
-                // 2. Resource-key lookup
+                // 2. 资源键查找
                 if (parameters[0] is string resourceKey)
                 {
-                    // Use Avalonia's built-in resource lookup.
+                    // 用 Avalonia 内置的资源查找。
                     var app = Application.Current;
                     if (app != null)
                     {
@@ -186,17 +192,17 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 3. Color string
+                // 3. 颜色字符串
                 if (parameters[0] is string colorString)
                 {
-                    // Use built-in color parsing.
+                    // 用内置颜色解析。
                     if (Color.TryParse(colorString, out var color1))
                     {
                         return new SolidColorBrush(color1);
                     }
                 }
 
-                // 4. Delegate to the color converter
+                // 4. 交给颜色转换器
                 var colorConverter = new ColorConverter();
                 if (colorConverter.Convert(typeof(Color), propertyName, parameters) is Color color)
                 {
@@ -211,15 +217,16 @@ namespace VeloxDev.DynamicTheme
 
     public class ObjectConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
-            // Parameter validation
+            // 参数校验
             if (parameters == null || parameters.Length != 1 || parameters[0] is not string strValue)
                 return null;
 
             try
             {
-                // 1. Try resource lookup
+                // 1. 先试资源查找
                 var app = Application.Current;
                 if (app != null)
                 {
@@ -229,13 +236,13 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 2. Use Avalonia's built-in type conversion system
+                // 2. 用 Avalonia 内置的类型转换系统
                 if (TypeUtilities.TryConvert(targetType, strValue, CultureInfo.InvariantCulture, out var result))
                 {
                     return result;
                 }
 
-                // 3. Special-case the Brush type
+                // 3. 单独处理 Brush 类型
                 if (typeof(IBrush).IsAssignableFrom(targetType))
                 {
                     var brushConverter = new BrushConverter();

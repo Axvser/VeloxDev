@@ -114,9 +114,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private DotNetObjectReference<WorkflowMinimapOverlay>? _dotNetRef;
     private IJSObjectReference? _handle;
 
-    // Content-fit mapping used to render the minimap. It is pushed to JS so drag/click navigation
-    // inverts the SAME mapping (instead of a raw scroll-extent ratio, which diverges once the canvas
-    // is edge-extended and overshoots by n×). Only the fields below change with content bounds.
+    // 渲染缩略图用的内容适配映射。它推给 JS，拖拽/点击导航才能反演同一份映射（而不是原始滚动范围比例 —— 画布越界扩展后它就会偏离、并过冲 n 倍）。只有下面这些字段随内容边界变化。
     private double _scale;
     private double _mapOx;
     private double _mapOy;
@@ -128,8 +126,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private double _lastWidth;
     private double _lastHeight;
 
-    // Event-driven content tracking: the mapping/node rects are recomputed (debounced) only when
-    // nodes are added/removed/moved, exactly like the XAML adapters' MarkDirty + 16ms timer.
+    // 事件驱动的内容跟踪：只在节点增/删/移动时（去抖地）重算映射/节点矩形，与 XAML 几家的 MarkDirty + 16ms 定时器一致。
     private IWorkflowTreeViewModel? _subscribedTree;
     private INotifyCollectionChanged? _nodesNotifier;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
@@ -139,11 +136,8 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     private IReadOnlyList<Mapped>? MappedNodes { get; set; }
 
-    // Unitless lengths are invalid inside a CSS style="" attribute (the browser drops them,
-    // collapsing the element to 0×0). These feed the inline width/height style; the px suffix is
-    // also accepted by the SVG width/height attributes below.
-    // Invariant and '.'-separated: these feed style="" attributes and SVG length attributes, where a
-    // comma-decimal culture would serialize a value the browser cannot parse.
+    // CSS style 属性内无单位长度无效（浏览器会丢弃，元素塌成 0×0）。这些值喂给内联 width/height 样式，下面 SVG 的 width/height 属性也接受 px 后缀。
+    // 固定不变并用 '.' 分隔：它们喂给 style 与 SVG 长度属性，逗号小数文化会序列化出浏览器解析不了的值。
     private string WidthCss => Width.ToString("0.#", CultureInfo.InvariantCulture) + "px";
     private string HeightCss => Height.ToString("0.#", CultureInfo.InvariantCulture) + "px";
     private string NodeRadiusCss => NodeRadius.ToString("0.#", CultureInfo.InvariantCulture);
@@ -180,8 +174,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             recompute = true;
         }
 
-        // Content-fit mapping depends only on node bounds + minimap size, never on scroll. Scroll is
-        // handled by JS moving the viewport block, so we do NOT recompute on every viewport change.
+        // 内容适配映射只取决于节点边界 + 缩略图尺寸，绝不取决于滚动；滚动由 JS 移动视口块处理，所以视口变化时不重算。
         if (recompute)
         {
             Recompute();
@@ -201,16 +194,14 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             PushMapping();
         }
 
-        // Re-sync the JS-owned viewport block after every re-render: a re-render rewrites the block
-        // from stale .NET state (MappedViewport), and refreshMinimapViewport re-applies the current
-        // world rect the surface last pushed, so the block never jumps away during a pan.
+        // 每次重渲染后重新同步 JS 持有的视口块：重渲染会用陈旧的 .NET 状态（MappedViewport）重写它，而 refreshMinimapViewport 会再应用表面最近推过的当前世界矩形，块在平移中因此不会跳走。
         if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
         {
             _ = _module.InvokeVoidAsync("refreshMinimapViewport", ScrollViewerId);
         }
     }
 
-    // ── Content tracking (event-driven, mirrors the XAML adapters) ──────────
+    // ── 内容跟踪（事件驱动，与 XAML 几家一致）─────────────────────────────
 
     private void ResubscribeTree(IWorkflowTreeViewModel? tree)
     {
@@ -335,7 +326,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         });
     }
 
-    // ── Mapping ──────────────────────────────────────────────────────────────
+    // ── 映射 ────────────────────────────────────────────────────────────────
 
     private void Recompute()
     {
@@ -384,8 +375,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             return new Mapped(x, y, Math.Max(1, n.Size.Width * scale), Math.Max(1, n.Size.Height * scale));
         }).ToArray();
 
-        // The viewport block is NOT computed/rendered here: it is owned entirely by JS
-        // (setMinimapViewport), so a .NET rebuild can never write stale coordinates over it.
+        // 视口块不在这里计算/渲染：它完全归 JS（setMinimapViewport），.NET 重建因此永远不会用陈旧坐标覆盖它。
     }
 
     /// <summary>

@@ -2,6 +2,7 @@
 
 namespace VeloxDev.TimeLine;
 
+/// <summary>The per-frame event args a tick loop reports.</summary>
 public class FrameEventArgs : TimeLineEventArgs
 {
     /// <summary>

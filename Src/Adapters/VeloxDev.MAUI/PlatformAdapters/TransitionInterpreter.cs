@@ -5,6 +5,7 @@ namespace VeloxDev.TransitionSystem
 {
     public partial class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect>
     {
+        /// <inheritdoc />
         protected override FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity)
             => affinity.ThreadFor(target).TryGet<IDispatcher>(out var dispatcher)
                 ? new DispatcherFramePacer(dispatcher)

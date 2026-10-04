@@ -1,14 +1,17 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
+/// <summary>The default implementation of <see cref="IWorkflowSlotViewModel"/>.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Slot组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Slot component interface")]
 public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel, IWorkflowIdentifiable
 {
     private IWorkflowSlotViewModelHelper helper = new SlotHelper();
+
+    /// <summary>The helper that carries this component's behaviour.</summary>
     public IWorkflowSlotViewModelHelper Helper
     {
         get => helper;
@@ -21,8 +24,10 @@ public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel, IWork
         }
     }
 
+    /// <inheritdoc />
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
+    /// <summary>Creates the component and installs its default helper.</summary>
     public SlotDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> targets = [];
@@ -63,11 +68,14 @@ public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel, IWork
         await Helper.CloseAsync();
     }
 
+    /// <inheritdoc />
     public IWorkflowSlotViewModelHelper GetHelper() => Helper;
+    /// <inheritdoc />
     public void InitializeWorkflow()
     {
         Helper.Install(this);
     }
+    /// <inheritdoc />
     public void SetHelper(IWorkflowSlotViewModelHelper helper)
     {
         if (ReferenceEquals(Helper, helper)) return;

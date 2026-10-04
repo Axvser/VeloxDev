@@ -12,6 +12,7 @@ public sealed class ApplicationState : IApplicationState
 {
     private volatile bool _isAlive = true;
 
+    /// <inheritdoc />
     public bool IsAlive => _isAlive;
 
     /// <remarks>

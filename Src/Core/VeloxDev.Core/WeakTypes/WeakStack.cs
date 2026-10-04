@@ -1,12 +1,14 @@
-﻿using System.Collections;
+using System.Collections;
 
 namespace VeloxDev.WeakTypes
 {
+    /// <summary>A LIFO stack that holds its items weakly; entries whose target has been collected are pruned.</summary>
     public sealed class WeakStack<T> : IEnumerable<T> where T : class
     {
         private readonly Stack<WeakReference<T>> _references = new();
         private readonly object _lock = new();
 
+        /// <summary>The number of live items in the stack.</summary>
         public int Count
         {
             get
@@ -21,8 +23,10 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Whether the stack holds no live items.</summary>
         public bool IsEmpty => Count == 0;
 
+        /// <summary>Removes every entry.</summary>
         public void Clear()
         {
             lock (_lock)
@@ -31,6 +35,7 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Pushes <paramref name="item"/> onto the top of the stack.</summary>
         public void Push(T item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
@@ -41,6 +46,8 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Pushes every non-null item in <paramref name="items"/>, preserving their order on the stack.</summary>
+        /// <returns>How many items were pushed.</returns>
         public int PushRange(IEnumerable<T> items)
         {
             if (items == null) throw new ArgumentNullException(nameof(items));
@@ -60,6 +67,8 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Removes and returns the item on top of the stack.</summary>
+        /// <returns><see langword="true"/> when a live item was found.</returns>
         public bool TryPop(out T? item)
         {
             lock (_lock)
@@ -77,6 +86,8 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Returns the item on top of the stack without removing it.</summary>
+        /// <returns><see langword="true"/> when a live item was found.</returns>
         public bool TryPeek(out T? item)
         {
             lock (_lock)
@@ -95,6 +106,7 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Prunes collected entries and releases unused capacity.</summary>
         public void TrimExcess()
         {
             lock (_lock)
@@ -104,6 +116,7 @@ namespace VeloxDev.WeakTypes
             }
         }
 
+        /// <summary>Enumerates the live items from top to bottom.</summary>
         public IEnumerator<T> GetEnumerator()
         {
             lock (_lock)

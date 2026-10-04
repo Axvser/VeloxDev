@@ -32,6 +32,7 @@ namespace VeloxDev.DynamicTheme
         /// </summary>
         public sealed class InstanceCache
         {
+            /// <summary>The per-instance theme overrides, keyed by property name.</summary>
             public Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>> Overrides { get; set; } = [];
         }
 

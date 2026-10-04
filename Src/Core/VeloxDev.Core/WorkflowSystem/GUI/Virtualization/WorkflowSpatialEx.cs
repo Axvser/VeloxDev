@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 
 namespace VeloxDev.WorkflowSystem.StandardEx;
 
+/// <summary>Attaches spatial indexing and virtualization to a workflow tree, driven by its viewport.</summary>
 public static class WorkflowSpatialEx
 {
     private static readonly ConditionalWeakTable<object, WorkflowSpatialManager> SpatialManagers = new();

@@ -106,18 +106,13 @@ public sealed class WorkflowSlotLayoutBehavior
         control.BindingContextChanged += OnBindingContextChanged;
 
 #if WINDOWS
-        // Sync on the node's WinUI-native LayoutUpdated — the true end-of-layout-pass signal
-        // (the one WinUI/WPF families sync on). MAUI's managed SizeChanged fires DURING the
-        // arrange, before the node's inner slot layout settles, so a zoom collapse measured
-        // there reads a transient overshoot that the links (bound to those anchors) paint for
-        // a frame — the residual per-notch endpoint pop. LayoutUpdated runs after the whole
-        // subtree is arranged, giving final geometry in the same frame the node lands. The
-        // platform element is created when the handler attaches, so hook on HandlerChanged too.
+        // 在节点的 WinUI 原生 LayoutUpdated 上同步 —— 那才是布局趟真正的结束信号（WinUI/WPF 几家都用它）。
+        // MAUI 托管 SizeChanged 在 arrange 期间触发，此时节点内部插槽布局尚未稳定，缩放在那里量到的是瞬时过冲，连线会按它多画一帧 —— 每格缩放残留的端点跳动。
+        // LayoutUpdated 在整个子树排完后运行，节点落位同帧就有最终几何。平台元素在 handler 挂接时创建，所以也在 HandlerChanged 上挂钩。
         control.HandlerChanged += OnNodeHandlerChanged;
         TryInstallResizeSignal(control);
 #else
-        // Non-Windows MAUI: no framework LayoutUpdated exposed; keep the managed SizeChanged
-        // resize signal used before. (Windows no longer subscribes: it mis-measures in-arrange.)
+        // 非 Windows MAUI：框架不暴露 LayoutUpdated，沿用之前的托管 SizeChanged 尺寸信号（Windows 不再订阅：arrange 期间会量错）。
         control.SizeChanged += OnNodeResized;
 #endif
 
@@ -140,8 +135,7 @@ public sealed class WorkflowSlotLayoutBehavior
         if (control.GetValue(StateProperty) is LayoutState state)
         {
 #if WINDOWS
-            // The managed SizeChanged was only ever a fallback until the native LayoutUpdated
-            // hook attached — remove it if a detach happens while it is still the active signal.
+            // 托管 SizeChanged 只是原生 LayoutUpdated 挂钩前的兜底；若摘除时它仍是活动信号，就移除它。
             if (state.ResizeFallbackActive)
             {
                 control.SizeChanged -= OnNodeResized;
@@ -196,9 +190,7 @@ public sealed class WorkflowSlotLayoutBehavior
             state.NativeLayoutElement = native;
             state.NativeLayoutUpdatedHandler = (_, _) =>
             {
-                // Sync synchronously inside LayoutUpdated: layout has completed for this subtree,
-                // so slot centers read final. The dirty check in SyncSlot makes repeated passes a
-                // no-op once the geometry settles — no re-arm chain, nothing to wedge.
+                // 在 LayoutUpdated 里同步执行：该子树布局已完成，插槽中心是最终值。SyncSlot 的脏检查让几何稳定后的重复趟变成空操作 —— 没有重排链，也不会卡死。
                 if (control.GetValue(StateProperty) is not null)
                 {
                     Sync(control);
@@ -206,8 +198,7 @@ public sealed class WorkflowSlotLayoutBehavior
             };
             native.LayoutUpdated += state.NativeLayoutUpdatedHandler;
 
-            // Post-pass signal installed — drop the managed fallback so it can't write its
-            // mid-arrange measurement anymore.
+            // 布局后信号已装好 —— 丢掉托管兜底，免得它再写入 arrange 中途的测量。
             if (state.ResizeFallbackActive)
             {
                 control.SizeChanged -= OnNodeResized;
@@ -216,8 +207,7 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
-        // Platform element not materialized yet (HandlerChanged fires as the handler attaches)
-        // or not a FrameworkElement — keep the managed SizeChanged fallback in the meantime.
+        // 平台元素还没出现……或不是 FrameworkElement —— 暂时保留托管 SizeChanged 兜底。
         if (!state.ResizeFallbackActive && state.NativeLayoutUpdatedHandler is null)
         {
             control.SizeChanged += OnNodeResized;
@@ -265,10 +255,8 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static void OnNodeResized(object? sender, EventArgs e)
     {
-        // Non-Windows fallback only. On Windows this hook is NOT used: MAUI's managed
-        // SizeChanged fires DURING the arrange, before the node's inner slots settle, so
-        // the measured anchors overshoot the final geometry for ~10ms (see git history:
-        // the per-notch endpoint pop). Windows syncs on the platform LayoutUpdated instead.
+        // 仅非 Windows 兜底。Windows 不用这个钩子：托管 SizeChanged 在 arrange 期间触发，量到的锚点会过冲最终几何约 10ms
+        // （见 git 历史：每格端点跳动）；Windows 改用平台 LayoutUpdated 同步。
         if (sender is ContentView control)
         {
             Sync(control);
@@ -302,9 +290,7 @@ public sealed class WorkflowSlotLayoutBehavior
 
         if (control.BindingContext is INotifyPropertyChanged notify)
         {
-            // Use a lambda that directly captures the ContentView. The node VM is a plain
-            // INotifyPropertyChanged (not a BindableObject / Element), so we cannot walk
-            // the visual tree from the sender to find the associated view.
+            // 用直接捕获 ContentView 的 lambda：节点 VM 只是普通 INotifyPropertyChanged（不是 BindableObject/Element），无法从 sender 沿可视树找到对应视图。
             PropertyChangedEventHandler handler = (_, e) =>
             {
                 if (e.PropertyName is not null && state.SlotPropertyNames.Contains(e.PropertyName))
@@ -327,16 +313,9 @@ public sealed class WorkflowSlotLayoutBehavior
 
         state.SyncPending = true;
 
-        // Use an IDispatcherTimer (≈1-frame delay) instead of nested BeginInvoke.
-        // MAUI lacks WPF's DispatcherPriority.Render, so the original two-level
-        // dispatch was a fragile ordering hack that depended on queue ordering.
-        // A per-control coalescing timer:
-        //   • Naturally waits for the layout pass between ticks
-        //   • Eliminates race with ViewManager.ApplyLayout (SetLayoutBounds)
-        //   • Works consistently across Android/iOS/Windows
-        //   • Multiple rapid requests coalesce into a single Sync call
-        // The closure is short-lived (single-shot timer), so allocation impact is
-        // negligible compared to the performance gain from eliminating the race.
+        // 用 IDispatcherTimer（约一帧延迟）取代嵌套 BeginInvoke：MAUI 没有 WPF 的 DispatcherPriority.Render，原来的两级派发是依赖队列顺序的脆弱 hack。
+        // 逐控件的合并定时器：在两次 tick 之间自然等布局趟；消除与 ViewManager.ApplyLayout（SetLayoutBounds）的竞争；
+        // 跨 Android/iOS/Windows 表现一致；多个快速请求合并成一次 Sync。闭包短命（单次定时器），分配开销可忽略。
         var timer = control.Dispatcher.CreateTimer();
         timer.Interval = TimeSpan.FromMilliseconds(16);  // ≈1 frame
         timer.IsRepeating = false;
@@ -354,9 +333,7 @@ public sealed class WorkflowSlotLayoutBehavior
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // IDispatcherTimer.Tick exceptions are NOT caught by MAUI
-                // and bubble unhandled to WinUI's UnhandledException event.
-                // This is a known MAUI/WinUI gap (dotnet/maui #12245, #10341).
+                // MAUI 不捕获 IDispatcherTimer.Tick 的异常，它会未处理地冒到 WinUI 的 UnhandledException；这是已知的 MAUI/WinUI 缺口（dotnet/maui #12245、#10341）。
                 System.Diagnostics.Debug.WriteLine(
                     $"[WorkflowSlotLayout] Sync error: {ex.Message}");
             }
@@ -377,15 +354,14 @@ public sealed class WorkflowSlotLayoutBehavior
         var slotNames = GetAllSlotNames(control);
         var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-        // Rebuild the set of property names that should trigger ScheduleSync on change.
+        // 重建「变化时该触发 ScheduleSync」的属性名集合。
         if (control.GetValue(StateProperty) is LayoutState state)
         {
             state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
-            // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
-            // names ("OutputSlots"). Add both the full control name and the
-            // PART_-stripped form so OnPropertyChanged("OutputSlots") is matched.
+            // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
+            // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
             {
                 state.SlotPropertyNames.Add(name);
@@ -398,8 +374,7 @@ public sealed class WorkflowSlotLayoutBehavior
                 if (name.StartsWith("PART_"))
                     state.SlotPropertyNames.Add(name.Substring(5));
             }
-            // Always include fallback defaults for standard property names,
-            // covering both direct ViewModel properties and SlotEnumerator members.
+            // 标准属性名一律带兜底默认值，覆盖 ViewModel 直接属性与 SlotEnumerator 成员。
             state.SlotPropertyNames.Add("InputSlot");
             state.SlotPropertyNames.Add("OutputSlot");
             state.SlotPropertyNames.Add("OutputSlots");
@@ -458,10 +433,8 @@ public sealed class WorkflowSlotLayoutBehavior
                 return;
             }
 
-            // MAUI measures the center relative to the canvas (coordinate host) by summing
-            // layout positions, which excludes the canvas TranslationX render transform — so
-            // the result is already canvas/world space and needs no ActualOffset subtraction.
-            // (Core's SlotAnchorFromVisualCenter is for adapters that measure in screen space.)
+            // MAUI 以画布（坐标宿）为基准、靠累加布局位置量中心，这排除了画布的 TranslationX 渲染变换 —— 结果已是画布/世界坐标，不必再减 ActualOffset。
+            // （Core 的 SlotAnchorFromVisualCenter 是给按屏幕空间测量的适配器用的。）
             newAnchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
                 centerOnCanvas.Value.X, centerOnCanvas.Value.Y, slot.Anchor.Layer);
         }
@@ -473,16 +446,13 @@ public sealed class WorkflowSlotLayoutBehavior
                 return;
             }
 
-            // SlotAnchorFromNode: anchor = nodeAnchor + local offset (no coordinate host).
+            // SlotAnchorFromNode：anchor = nodeAnchor + 局部偏移（无坐标宿）。
             newAnchor = WorkflowSurfaceMath.SlotAnchorFromNode(
                 node.Anchor.Horizontal, node.Anchor.Vertical,
                 center.Value.X, center.Value.Y, slot.Anchor.Layer);
         }
 
-        // Dirty check: skip if the anchor value hasn't changed.
-        // This prevents the infinite cycle:
-        //   SyncSlot → slot.Anchor setter → PropertyChanged → ApplyLayout
-        //   → MAUI layout → SizeChanged/X/Y → ScheduleSync → SyncSlot ...
+        // 脏检查：锚点值没变就跳过，避免无限循环 SyncSlot → slot.Anchor setter → PropertyChanged → ApplyLayout → MAUI 布局 → SizeChanged/X/Y → ScheduleSync → SyncSlot ……
         if (slot.Anchor.Horizontal == newAnchor.Horizontal && slot.Anchor.Vertical == newAnchor.Vertical)
             return;
 

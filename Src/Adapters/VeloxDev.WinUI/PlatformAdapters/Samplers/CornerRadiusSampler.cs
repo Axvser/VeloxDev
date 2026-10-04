@@ -9,9 +9,12 @@ namespace VeloxDev.Adapters.NativeSamplers
         // CornerRadius 只收非负分量，连构造函数都会 Validate —— 越界是抛异常，不是截断，所以必须钳。
         private static double ClampAtZero(double value) => value <= 0d ? 0d : value;
 
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 

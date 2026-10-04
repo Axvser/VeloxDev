@@ -28,6 +28,7 @@ public readonly struct TaskContext : ITaskContext
     [AgentContext(AgentLanguages.English, "This node's input slot (receiver), nullable")]
     public IWorkflowSlotViewModel? Receiver { get; }
 
+    /// <summary>Creates a task context from its parts.</summary>
     public TaskContext(object? data = null,
         IWorkflowSlotViewModel? sender = null,
         IWorkflowSlotViewModel? receiver = null)
@@ -37,6 +38,7 @@ public readonly struct TaskContext : ITaskContext
         Receiver = receiver;
     }
 
+    /// <summary>Deconstructs the context into its data, sender and receiver parts.</summary>
     public void Deconstruct(out object? data,
         out IWorkflowSlotViewModel? sender,
         out IWorkflowSlotViewModel? receiver)

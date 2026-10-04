@@ -5,15 +5,18 @@ namespace VeloxDev.Adapters.NativeSamplers
 {
     public class ColorSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             var c1 = (Color)(start ?? Colors.Transparent);
             var c2 = (Color)(end ?? c1);
 
-            // RGB share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。
             var rgb = new BoundedProgress(t, 0d, 255d);
             rgb.Add(c1.R, c2.R);
             rgb.Add(c1.G, c2.G);

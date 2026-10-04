@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using VeloxDev.MVVM;
@@ -12,11 +12,14 @@ namespace VeloxDev.WorkflowSystem;
 /// </summary>
 public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 {
+    /// <summary>Creates a helper with virtualization off.</summary>
     public TreeHelper() : base()
     {
 
     }
 
+    /// <summary>Creates a helper with virtualization on.</summary>
+    /// <param name="cellSize">The cell size of the spatial grid.</param>
     public TreeHelper(double cellSize) : base(cellSize)
     {
 
@@ -31,11 +34,14 @@ public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTreeEvents
     where T : class, IWorkflowTreeViewModel
 {
+    /// <summary>Creates a helper with virtualization off.</summary>
     public TreeHelper()
     {
         useVirtualization = false;
     }
 
+    /// <summary>Creates a helper with virtualization on.</summary>
+    /// <param name="cellSize">The cell size of the spatial grid.</param>
     public TreeHelper(double cellSize)
     {
         useVirtualization = true;
@@ -46,6 +52,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
         }
     }
 
+    /// <summary>The tree this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
     public T? Component { get; protected set; }
     private IReadOnlyCollection<IVeloxCommand> commands = [];
     private double CellSize { get; } = 200;
@@ -90,7 +97,9 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
             OnVisibleItemsRemoved(item);
         }
     }
+    /// <summary>Raises <see cref="VisibleItemAdded"/>.</summary>
     protected virtual void OnVisibleItemsAdded(IWorkflowViewModel visibleItem) => VisibleItemAdded?.Invoke(this, visibleItem);
+    /// <summary>Raises <see cref="VisibleItemRemoved"/>.</summary>
     protected virtual void OnVisibleItemsRemoved(IWorkflowViewModel visibleItem) => VisibleItemRemoved?.Invoke(this, visibleItem);
 
     [VeloxProperty] private Viewport viewport = new();
@@ -99,13 +108,20 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
         Component?.Virtualize(newValue);
     }
 
+    /// <inheritdoc />
     public event EventHandler<IWorkflowNodeViewModel>? NodeAdded;
+    /// <inheritdoc />
     public event EventHandler<IWorkflowNodeViewModel>? NodeRemoved;
+    /// <inheritdoc />
     public event EventHandler<IWorkflowLinkViewModel>? LinkAdded;
+    /// <inheritdoc />
     public event EventHandler<IWorkflowLinkViewModel>? LinkRemoved;
+    /// <inheritdoc />
     public event EventHandler<IWorkflowViewModel>? VisibleItemAdded;
+    /// <inheritdoc />
     public event EventHandler<IWorkflowViewModel>? VisibleItemRemoved;
 
+    /// <inheritdoc />
     public virtual void Install(IWorkflowTreeViewModel tree)
     {
         Component = tree as T;
@@ -123,6 +139,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
         InitializeTickable();
     }
 
+    /// <inheritdoc />
     public virtual void Uninstall(IWorkflowTreeViewModel tree)
     {
         Component = null;
@@ -140,13 +157,17 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
         CloseTickable();
     }
 
+    /// <inheritdoc />
     public virtual void Closing() => commands.StandardClosing();
+    /// <inheritdoc />
     public virtual async Task CloseAsync()
     {
         if (Component is not null) await Component.StandardCloseAsync();
     }
+    /// <inheritdoc />
     public virtual void Closed() => commands.StandardClosed();
 
+    /// <inheritdoc />
     public virtual IWorkflowLinkViewModel CreateLink(
         IWorkflowSlotViewModel sender,
         IWorkflowSlotViewModel receiver)
@@ -156,12 +177,15 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
             Receiver = receiver,
         };
 
+    /// <inheritdoc />
     public virtual void CreateNode(IWorkflowNodeViewModel node)
         => Component?.StandardCreateNode(node);
 
+    /// <inheritdoc />
     public virtual void SetPointer(Anchor anchor)
         => Component?.StandardSetPointer(anchor);
 
+    /// <inheritdoc />
     public virtual void Virtualize(Viewport viewport)
         => Component?.Virtualize(viewport);
 
@@ -195,7 +219,9 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
         }
         Component?.Virtualize(Viewport);
     }
+    /// <summary>Raises <see cref="NodeAdded"/>.</summary>
     protected virtual void OnNodeAdded(IWorkflowNodeViewModel node) => NodeAdded?.Invoke(Component, node);
+    /// <summary>Raises <see cref="NodeRemoved"/>.</summary>
     protected virtual void OnNodeRemoved(IWorkflowNodeViewModel node) => NodeRemoved?.Invoke(Component, node);
 
     private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -227,11 +253,13 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
         }
         Component?.Virtualize(Viewport);
     }
+    /// <summary>Raises <see cref="LinkAdded"/>.</summary>
     protected virtual void OnLinkAdded(IWorkflowLinkViewModel link) => LinkAdded?.Invoke(Component, link);
+    /// <summary>Raises <see cref="LinkRemoved"/>.</summary>
     protected virtual void OnLinkRemoved(IWorkflowLinkViewModel link) => LinkRemoved?.Invoke(Component, link);
     #endregion
 
-    #region Connection Manager   
+    #region Connection Manager
     /// <summary>
     /// Raised when a connection between two ports is about to be made — before <see cref="ValidateConnection"/> is
     /// asked. Refusing here is the per-drag answer a host can give without subclassing its Helper.
@@ -264,34 +292,43 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
         Connected?.Invoke(Component, new ConnectionEventArgs(sender, receiver, handle));
     }
 
+    /// <inheritdoc />
     public virtual bool ValidateConnection(
         IWorkflowSlotViewModel sender,
         IWorkflowSlotViewModel receiver)
         => true;
 
+    /// <inheritdoc />
     public virtual void SendConnection(IWorkflowSlotViewModel slot)
         => Component?.StandardSendConnection(slot);
 
+    /// <inheritdoc />
     public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
         => Component?.StandardReceiveConnection(slot);
 
+    /// <inheritdoc />
     public virtual void ResetVirtualLink()
         => Component?.StandardResetVirtualLink();
     #endregion
 
     #region Redo & Undo
+    /// <inheritdoc />
     public virtual void Redo()
         => Component?.StandardRedo();
 
+    /// <inheritdoc />
     public virtual void Submit(IWorkflowActionPair actionPair)
         => Component?.StandardSubmit(actionPair);
 
+    /// <inheritdoc />
     public virtual void Undo()
         => Component?.StandardUndo();
 
+    /// <inheritdoc />
     public virtual void ClearHistory()
         => Component?.StandardClearHistory();
 
+    /// <inheritdoc />
     public virtual void MarkDirty() => isDirty = true;
     #endregion
 }

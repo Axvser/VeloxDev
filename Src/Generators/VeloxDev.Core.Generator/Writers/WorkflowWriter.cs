@@ -8,15 +8,21 @@ namespace VeloxDev.Generators.Writers
 {
     public class WorkflowWriter : WriterBase
     {
+        /// <summary>Fully qualified name of <c>ObservableCollection&lt;T&gt;</c> emitted into generated sources.</summary>
         public const string ObservableCollectionFullName = "global::System.Collections.ObjectModel.ObservableCollection";
+        /// <summary>Fully qualified name of <c>Dictionary&lt;TKey, TValue&gt;</c> emitted into generated sources.</summary>
         public const string DictionaryFullName = "global::System.Collections.Generic.Dictionary";
+        /// <summary>Fully qualified name of <c>object</c> emitted into generated sources.</summary>
         public const string ObjectFullName = "global::System.Object";
+        /// <summary>Fully qualified name of <c>Task</c> emitted into generated sources.</summary>
         public const string TaskFullName = "global::System.Threading.Tasks.Task";
+        /// <summary>Fully qualified name of <c>CancellationToken</c> emitted into generated sources.</summary>
         public const string CancellationTokenFullName = "global::System.Threading.CancellationToken";
         private WorkflowAttributeModel? _workflowModel;
         private bool _isBaseClassWorkflowGenerated;
         private bool _hasNodeDefaultsWithoutAttribute;
 
+        /// <inheritdoc />
         public override void Initialize(Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
@@ -27,6 +33,7 @@ namespace VeloxDev.Generators.Writers
                 && IsNodeDefaultOnlySubclass(namedTypeSymbol);
         }
 
+        /// <inheritdoc />
         public override bool CanWrite()
         {
             return Symbol != null && (_workflowModel != null || _hasNodeDefaultsWithoutAttribute);
@@ -40,12 +47,11 @@ namespace VeloxDev.Generators.Writers
         /// </summary>
         private bool IsNodeDefaultOnlySubclass(INamedTypeSymbol symbol)
         {
-            // No [WorkflowBuilder.*] attribute (guaranteed by caller), but a node-layout default present.
+            // 无 [WorkflowBuilder.*] 特性（调用方保证），但存在节点布局默认值。
             if (GetDefaultAnchor(symbol) == null && GetDefaultSize(symbol) == null)
                 return false; // no node-layout default to apply
 
-            // Must inherit from a generated workflow base of Node kind. Walk the base chain and
-            // look for a [WorkflowBuilder.Node] attribute at any level.
+            // 必须继承生成的 Node 类工作流基类。沿基链走，在任意层级找 [WorkflowBuilder.Node] 特性。
             var current = symbol.BaseType;
             while (current != null && current.SpecialType != SpecialType.System_Object)
             {
@@ -57,16 +63,19 @@ namespace VeloxDev.Generators.Writers
             return false;
         }
 
+        /// <inheritdoc />
         public override string GetFileName()
         {
             return Symbol?.Name + ".g.cs";
         }
 
+        /// <inheritdoc />
         public override string[] GenerateBaseTypes()
         {
             return [];
         }
 
+        /// <inheritdoc />
         public override string[] GenerateBaseInterfaces()
         {
             var model = _workflowModel;
@@ -359,14 +368,13 @@ namespace VeloxDev.Generators.Writers
             };
         }
 
+        /// <inheritdoc />
         public override string GenerateBody()
         {
             var model = _workflowModel;
             if (model == null)
             {
-                // A [WorkflowBuilder.*]-less subclass that only overrides node-layout defaults:
-                // emit the InitializeWorkflowCore override that applies [DefaultAnchor]/[DefaultSize]
-                // over the inherited base implementation.
+                // 只覆盖节点布局默认值、不带 [WorkflowBuilder.*] 的子类：生成 InitializeWorkflowCore 覆盖，在继承的基实现之上应用 [DefaultAnchor]/[DefaultSize]。
                 if (_hasNodeDefaultsWithoutAttribute)
                 {
                     var defaultsSb = new StringBuilder();
@@ -415,8 +423,7 @@ namespace VeloxDev.Generators.Writers
                     }
                 """);
 
-            // Node subclasses extend the one-time initialization core with their own
-            // slots/enumerators and, optionally, their own DefaultAnchor/DefaultSize.
+            // 节点子类用自身的插槽/枚举器扩展一次性初始化核心，并可选地加上自己的 DefaultAnchor/DefaultSize。
             if (model.WorkflowType == 2)
             {
                 var members = GetNodeInitMembers(model.TargetClassSymbol);
@@ -1482,16 +1489,16 @@ namespace VeloxDev.Generators.Writers
         {
             if (typeSymbol is not INamedTypeSymbol namedType || !namedType.IsGenericType) return false;
 
-            // 1. Exact match: SlotEnumerator<TSlot>
+            // 1. 精确匹配：SlotEnumerator<TSlot>
             var original = namedType.OriginalDefinition;
             var name = original.Name;
             if (name.Contains('`')) name = name.Substring(0, name.IndexOf('`'));
             if (name == "SlotEnumerator") return true;
 
-            // 2. Any type that directly IS IConditionalSlotProvider<TSlot>
+            // 2. 直接就是 IConditionalSlotProvider<TSlot> 的任何类型
             if (name == "IConditionalSlotProvider") return true;
 
-            // 3. Any concrete type that implements IConditionalSlotProvider<TSlot>
+            // 3. 实现 IConditionalSlotProvider<TSlot> 的任何具体类型
             return namedType.AllInterfaces.Any(i =>
             {
                 if (!i.IsGenericType) return false;
@@ -1503,7 +1510,7 @@ namespace VeloxDev.Generators.Writers
 
         private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
         {
-            // 1. Direct interface-symbol comparison (works when the interface is already visible).
+            // 1. 直接接口符号比较（接口已可见时有效）。
             INamedTypeSymbol? slotInterface = Symbol != null
                 ? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.IWorkflowSlotViewModel")
                 : null;
@@ -1521,10 +1528,7 @@ namespace VeloxDev.Generators.Writers
                     return true;
             }
 
-            // 2. Name-based fallback: walk the type hierarchy looking for a [WorkflowBuilder.SlotAttribute].
-            //    This handles user-defined SlotViewModel subclasses whose IWorkflowSlotViewModel
-            //    implementation is injected by the generator in the same compilation pass and
-            //    therefore not yet visible via AllInterfaces at scan time.
+            // 2. 基于名称的兜底：沿类型层级找 [WorkflowBuilder.SlotAttribute]。这处理用户自定义 SlotViewModel 子类 —— 它们的 IWorkflowSlotViewModel 实现由生成器在同一编译趟注入，扫描时 AllInterfaces 还看不到。
             var current = typeSymbol as INamedTypeSymbol;
             while (current != null && current.SpecialType != SpecialType.System_Object)
             {
@@ -1629,15 +1633,11 @@ namespace VeloxDev.Generators.Writers
             {
                 if (m.IsSlotEnumerator)
                 {
-                    // Assign through the property so that OnXxxChanging/Changed notifications fire.
-                    // If the user pre-assigned the enumerator in their constructor the equality guard
-                    // in the property setter will short-circuit, so this is always safe.
-                    // When the field/property type is the IConditionalSlotProvider<TSlot> interface,
-                    // fall back to SlotEnumerator<TSlot> as the concrete default implementation.
+                    // 经属性赋值以触发 OnXxxChanging/Changed 通知。若用户在构造函数里预先赋值了枚举器，属性 setter 的相等防护会短路，所以总是安全的。当字段/属性类型是 IConditionalSlotProvider<TSlot> 接口时，退回 SlotEnumerator<TSlot> 作具体默认实现。
                     string concreteType;
                     if (m.IsConditionalSlotProviderInterface)
                     {
-                        // Replace leading namespace+"IConditionalSlotProvider" with "VeloxDev.WorkflowSystem.SlotEnumerator"
+                        // 把开头的 namespace + IConditionalSlotProvider 换成 VeloxDev.WorkflowSystem.SlotEnumerator
                         var raw = m.FullTypeName.TrimEnd('?');
                         var lt = raw.IndexOf('<');
                         var slotArg = lt >= 0 ? raw.Substring(lt) : string.Empty;
@@ -1652,10 +1652,7 @@ namespace VeloxDev.Generators.Writers
                 }
                 else if (m.IsWorkflowSlot)
                 {
-                    // Assign through the property so that OnXxxChanging/Changed notifications fire.
-                    // Parent assignment and Slots registration still use the backing field directly
-                    // because at this point node.Parent == null — we must NOT go through
-                    // CreateSlotCommand/OnWorkflowSlotAdded (those require the node to be in a tree).
+                    // 经属性赋值以触发 OnXxxChanging/Changed 通知。父级赋值与 Slots 注册仍直接用背后的字段，因为此刻 node.Parent == null —— 绝不能走 CreateSlotCommand/OnWorkflowSlotAdded（它们要求节点已在树上）。
                     var nonNullableType = m.FullTypeName.TrimEnd('?');
                     sb.AppendLine($"if ({m.FieldName} is null) {m.PropertyName} = CreateWorkflowSlot<{nonNullableType}>();");
                     sb.AppendLine($"{m.FieldName}.Parent = this;");

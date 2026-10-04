@@ -8,13 +8,14 @@ namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Use MAUI's recommended type conversion.
+                // 用 MAUI 推荐的类型转换。
                 if (parameters[0] is string strValue)
                 {
                     if (double.TryParse(strValue, NumberStyles.Any, CultureInfo.InvariantCulture, out double result))
@@ -23,7 +24,7 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // Handle other types.
+                // 处理其它类型。
                 return parameters[0] switch
                 {
                     double val => val,
@@ -41,21 +42,22 @@ namespace VeloxDev.DynamicTheme
 
     public class PointConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Use MAUI's built-in point parsing.
+                // 用 MAUI 内置的 Point 解析。
                 if (parameters[0] is string strValue)
                 {
-                    // Convert using PointTypeConverter.
+                    // 用 PointTypeConverter 转换。
                     var converter = new PointTypeConverter();
                     return converter.ConvertFromInvariantString(strValue);
                 }
 
-                // Multi-parameter construction.
+                // 多参数构造。
                 if (parameters.Length >= 2)
                 {
                     double x = System.Convert.ToDouble(parameters[0], CultureInfo.InvariantCulture);
@@ -71,20 +73,21 @@ namespace VeloxDev.DynamicTheme
 
     public class ThicknessConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Use MAUI's built-in thickness parsing.
+                // 用 MAUI 内置的 Thickness 解析。
                 if (parameters[0] is string strValue)
                 {
                     var converter = new ThicknessTypeConverter();
                     return converter.ConvertFromInvariantString(strValue);
                 }
 
-                // Multi-parameter construction.
+                // 多参数构造。
                 return parameters.Length switch
                 {
                     1 => new Thickness(System.Convert.ToDouble(parameters[0], CultureInfo.InvariantCulture)),
@@ -105,20 +108,21 @@ namespace VeloxDev.DynamicTheme
 
     public class CornerRadiusConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Use MAUI's built-in corner-radius parsing.
+                // 用 MAUI 内置的 CornerRadius 解析。
                 if (parameters[0] is string strValue)
                 {
                     var converter = new CornerRadiusTypeConverter();
                     return converter.ConvertFromInvariantString(strValue);
                 }
 
-                // Multi-parameter construction.
+                // 多参数构造。
                 return parameters.Length switch
                 {
                     1 => new CornerRadius(System.Convert.ToDouble(parameters[0], CultureInfo.InvariantCulture)),
@@ -136,26 +140,27 @@ namespace VeloxDev.DynamicTheme
 
     public class ColorConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Use MAUI's built-in color parsing.
+                // 用 MAUI 内置的颜色解析。
                 if (parameters[0] is string colorString)
                 {
                     var converter = new ColorTypeConverter();
                     return converter.ConvertFromInvariantString(colorString);
                 }
 
-                // Integer value (ARGB)
+                // 整数值（ARGB）
                 if (parameters[0] is int argb)
                 {
                     return Color.FromInt(argb);
                 }
 
-                // Individual components
+                // 各分量
                 if (parameters.Length >= 3)
                 {
                     float a = parameters.Length >= 4 ?
@@ -174,6 +179,7 @@ namespace VeloxDev.DynamicTheme
 
     public class BrushConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1)
@@ -181,26 +187,26 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 1. Pass a brush directly
+                // 1. 直接传画刷
                 if (parameters[0] is Brush brush)
                     return brush;
 
-                // 2. Resource-key lookup - uses MAUI's official resource lookup mechanism
+                // 2. 资源键查找 —— 用 MAUI 官方的资源查找机制
                 if (parameters[0] is string resourceKey)
                 {
-                    // Get the target element (resource lookup context).
+                    // 取目标元素（资源查找上下文）。
                     var targetElement = GetTargetElement(parameters);
 
-                    // Use MAUI's official resource lookup.
+                    // 用 MAUI 官方的资源查找。
                     object? resource = null;
 
-                    // First try element-level resource lookup.
+                    // 先试元素级资源查找。
                     if (targetElement != null)
                     {
                         resource = FindElementResource(targetElement, resourceKey);
                     }
 
-                    // If not found, try application-level resources.
+                    // 找不到再试应用级资源。
                     resource ??= FindApplicationResource(resourceKey);
 
                     if (resource is Brush foundBrush)
@@ -211,7 +217,7 @@ namespace VeloxDev.DynamicTheme
                     Debug.WriteLine($"Brush resource '{resourceKey}' not found");
                 }
 
-                // 3. Color string parsing
+                // 3. 颜色字符串解析
                 if (parameters[0] is string colorString)
                 {
                     if (Color.TryParse(colorString, out var color))
@@ -231,30 +237,30 @@ namespace VeloxDev.DynamicTheme
 
         #region Resource Helpers
 
-        // Get the target element.
+        // 取目标元素。
         private static IElement? GetTargetElement(object?[] parameters)
         {
-            // 1. Try to get the explicit target from the parameters (usually the control itself).
+            // 1. 先试从参数取显式目标（通常是控件本身）。
             if (parameters.Length > 1 && parameters[1] is IElement explicitTarget)
             {
                 return explicitTarget;
             }
 
-            // 2. Try to get the current page (using MAUI's official method for the current context).
+            // 2. 再试取当前页（用 MAUI 官方方法取当前上下文）。
             return Shell.Current?.CurrentPage ?? Application.Current?.Windows[0].Page;
         }
 
-        // MAUI's officially recommended element-level resource lookup.
+        // MAUI 官方推荐的元素级资源查找。
         private static object? FindElementResource(IElement element, string key)
         {
-            // Check the element's own resources.
+            // 查元素自身的资源。
             if (element is VisualElement visualElement &&
                 ThemeResourceLookup.TryFindInResourceDictionary(visualElement.Resources, key, out var resource))
             {
                 return resource;
             }
 
-            // Walk up the parent chain looking for the resource.
+            // 沿父链上溯找资源。
             if (element is Element mauiElement && mauiElement.Parent is IElement parent)
             {
                 return FindElementResource(parent, key);
@@ -263,7 +269,7 @@ namespace VeloxDev.DynamicTheme
             return null;
         }
 
-        // MAUI's officially recommended application-level resource lookup.
+        // MAUI 官方推荐的应用级资源查找。
         private static object? FindApplicationResource(string key)
         {
             if (ThemeResourceLookup.TryFindApplicationResource(key, out var resource))
@@ -279,15 +285,16 @@ namespace VeloxDev.DynamicTheme
 
     public class ObjectConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
-            // Parameter validation
+            // 参数校验
             if (parameters == null || parameters.Length < 1 || parameters[0] is not string strValue)
                 return null;
 
             try
             {
-                // 1. Try resource lookup
+                // 1. 先试资源查找
                 if (ThemeResourceLookup.TryFindApplicationResource(strValue, out var resource) &&
                     targetType.IsInstanceOfType(resource))
                 {
@@ -297,7 +304,7 @@ namespace VeloxDev.DynamicTheme
                 // 到此为止 —— 平台自己的类型由上面几步负责，其它类型不再支持。
                 // 自定义类型（含可插值的那些）由宿主自己写一个 IThemeValueConverter，声明在
                 // [ThemeConfig<...>] 上：那是本模块记录在案的扩展点，也是这里不再需要反射的原因。
-                // 3. Special-case MAUI-specific types
+                // 3. 单独处理 MAUI 专属类型
                 if (targetType == typeof(Point))
                 {
                     return new PointTypeConverter().ConvertFromInvariantString(strValue);
@@ -331,12 +338,14 @@ namespace VeloxDev.DynamicTheme
 
     internal static class ThemeResourceLookup
     {
+        /// <summary>Tries to resolve the application-level resource named <paramref name="key"/>.</summary>
         public static bool TryFindApplicationResource(string key, out object? value)
         {
             value = null;
             return TryFindInResourceDictionary(Application.Current?.Resources, key, out value);
         }
 
+        /// <summary>Tries to resolve <paramref name="key"/> from <paramref name="dictionary"/>.</summary>
         public static bool TryFindInResourceDictionary(ResourceDictionary? dictionary, string key, out object? value)
         {
             value = null;

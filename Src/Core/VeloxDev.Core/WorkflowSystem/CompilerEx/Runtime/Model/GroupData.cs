@@ -27,16 +27,23 @@ public readonly struct GroupData : IGroupData
 {
     private readonly IReadOnlyDictionary<IWorkflowNodeViewModel, object?> _entries;
 
+    /// <summary>Wraps <paramref name="entries"/> as a group-data view.</summary>
     public GroupData(IReadOnlyDictionary<IWorkflowNodeViewModel, object?> entries) => _entries = entries;
 
     /// <summary>Gets the output of the specified source node; throws <see cref="KeyNotFoundException"/> if the source is unregistered (use TryGetValue to read safely).</summary>
     public object? this[IWorkflowNodeViewModel key] => _entries[key];
 
+    /// <inheritdoc />
     public IEnumerable<IWorkflowNodeViewModel> Keys => _entries.Keys;
+    /// <inheritdoc />
     public IEnumerable<object?> Values => _entries.Values;
+    /// <inheritdoc />
     public int Count => _entries.Count;
+    /// <inheritdoc />
     public bool ContainsKey(IWorkflowNodeViewModel key) => _entries.ContainsKey(key);
+    /// <inheritdoc />
     public bool TryGetValue(IWorkflowNodeViewModel key, out object? value) => _entries.TryGetValue(key, out value);
+    /// <inheritdoc />
     public IEnumerator<KeyValuePair<IWorkflowNodeViewModel, object?>> GetEnumerator() => _entries.GetEnumerator();
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

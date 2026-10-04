@@ -18,14 +18,19 @@ using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow;
 
+/// <summary>Configures and runs an Agent over one workflow tree: tools, capabilities, prompts, skills, MCP servers and sub-agents.</summary>
 public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNotifier
 {
+    /// <summary>The workflow tree this scope operates on.</summary>
     public IWorkflowTreeViewModel Tree { get; } = tree;
 
+    /// <summary>The cap on total tool calls, or <c>null</c> for no cap. Set by <see cref="WithMaxToolCalls"/>.</summary>
     public int? MaxToolCalls { get; private set; }
 
+    /// <summary>Whether mutating tool calls automatically mark the tree dirty. Set by <see cref="WithAutoMarkDirty"/>.</summary>
     public bool AutoMarkDirty { get; private set; }
 
+    /// <summary>Raised after every Agent tool call.</summary>
     public event EventHandler<AgentToolCallEventArgs>? ToolCalled;
 
     private const string SystemName = "Workflow";
@@ -123,6 +128,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
+    /// <summary>Caps the total number of tool calls per turn.</summary>
+    /// <param name="maxCalls">The cap.</param>
     public WorkflowAgentScope WithMaxToolCalls(int maxCalls)
     {
         MaxToolCalls = maxCalls;
@@ -865,6 +872,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return sb.ToString();
     }
 
+    /// <summary>Registers enum types the Agent should know about.</summary>
+    /// <param name="enums">The enum types.</param>
+    /// <param name="language">Override language for this call; if <c>null</c> the global default is used.</param>
     public WorkflowAgentScope WithEnums(Type[] enums, AgentLanguages? language = null)
     {
         var lang = Resolve(language);
@@ -880,6 +890,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
+    /// <summary>Registers interface types the Agent should know about.</summary>
+    /// <param name="interfaces">The interface types.</param>
+    /// <param name="language">Override language for this call; if <c>null</c> the global default is used.</param>
     public WorkflowAgentScope WithInterfaces(Type[] interfaces, AgentLanguages? language = null)
     {
         var lang = Resolve(language);
@@ -895,6 +908,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
+    /// <summary>Registers component types the Agent should know about.</summary>
+    /// <param name="components">The component types.</param>
+    /// <param name="language">Override language for this call; if <c>null</c> the global default is used.</param>
     public WorkflowAgentScope WithComponents(Type[] components, AgentLanguages? language = null)
     {
         var lang = Resolve(language);
@@ -988,6 +1004,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// </summary>
     public string ProvideAllContexts() => ProvideAllContexts(_defaultLanguage);
 
+    /// <summary>Provides the full context in <paramref name="language"/>.</summary>
     public string ProvideAllContexts(AgentLanguages language)
     {
         var result = new StringBuilder();
@@ -1044,6 +1061,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// <summary>Provides a progressive context prompt using the global default language set by <see cref="WithPromptLanguage"/>.</summary>
     public string ProvideProgressiveContextPrompt() => ProvideProgressiveContextPrompt(_defaultLanguage);
 
+    /// <summary>Provides the progressive context prompt in <paramref name="language"/>.</summary>
     public string ProvideProgressiveContextPrompt(AgentLanguages language)
     {
         var result = new StringBuilder();
@@ -1249,6 +1267,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return result.ToString();
     }
 
+    /// <summary>Renders the developer-registered types' context in <paramref name="language"/>.</summary>
     public string ProvideCustomerContext(AgentLanguages language = AgentLanguages.English)
     {
         var result = new StringBuilder();

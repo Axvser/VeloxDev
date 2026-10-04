@@ -1,13 +1,17 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 namespace VeloxDev.TransitionSystem.NativeSamplers
 {
 #if !NETSTANDARD2_0
+    /// <summary>Samples a <see cref="Vector2"/>.</summary>
     public class Vector2Sampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 

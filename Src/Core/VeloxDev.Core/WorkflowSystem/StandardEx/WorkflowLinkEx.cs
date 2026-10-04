@@ -2,8 +2,10 @@
 
 namespace VeloxDev.WorkflowSystem.StandardEx;
 
+/// <summary>Standard operations for a workflow link: its command and deletion.</summary>
 public static class WorkflowLinkEx
 {
+    /// <summary>Returns the standard commands a link helper drives.</summary>
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
         (this IWorkflowLinkViewModel component)
         =>
@@ -11,6 +13,7 @@ public static class WorkflowLinkEx
             component.DeleteCommand
         ];
 
+    /// <summary>Deletes the link as one undoable step.</summary>
     public static void StandardDelete(this IWorkflowLinkViewModel component)
     {
         if (component.Sender?.Parent?.Parent is null)

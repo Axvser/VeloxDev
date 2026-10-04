@@ -490,10 +490,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
     }
 
-    // WinUI has no PreviewMouseWheel, so the wheel is handled on the SCROLLVIEWER (always in the bubble
-    // path over its whole content). Hooked with handledEventsToo:true so it still fires when a node
-    // handled the wheel first. A Ctrl+wheel notch may also scroll a hair before the handler runs — the
-    // zoom still applies everywhere (hooking the canvas instead only reached its hit-testable area).
+    // WinUI 没有 PreviewMouseWheel，所以滚轮在 SCROLLVIEWER 上处理（它始终位于其全部内容的冒泡路径上）。用 handledEventsToo:true 挂接，节点先处理了滚轮也仍触发。
+    // Ctrl+滚轮在处理器跑之前可能还会滚一丁点 —— 缩放到处都还是会应用（改挂画布则只覆盖其可命中区域）。
     private static void HookZoom(SurfaceState state)
     {
         if (state.ScrollViewer is not null && state.ZoomHandler is null)
@@ -531,7 +529,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var delta = e.GetCurrentPoint(source as UIElement ?? host).Properties.MouseWheelDelta;
-        // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
         var layout = viewModel.Layout;
@@ -544,15 +542,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
-            // Deep zoom-in collapses negative-world content past the fixed canvas translate (ActualOffset
-            // == NegativeOffset); grow the cover BEFORE ApplyLayout adopts the new offset. PivotCenterScroll
-            // below reads the grown offset, so the extra cover is absorbed by the scroll target and the
-            // pivot stays centered — no manual delta needed. See WorkflowSurfaceMath.EnsureNegativeCover.
+            // 深度放大把负向内容折叠越过固定画布平移（ActualOffset == NegativeOffset）；必须在 ApplyLayout 采纳新偏移前扩大覆盖。
+            // 下面的 PivotCenterScroll 会读到长大的偏移，多出的覆盖被滚动目标吸收、枢轴保持居中 —— 无需手动增量。见 WorkflowSurfaceMath.EnsureNegativeCover。
             WorkflowSurfaceMath.EnsureNegativeCover(viewModel);
 
-            // Force a layout pass so the ScrollViewer adopts the new extent BEFORE we land the scroll.
-            // Otherwise ChangeView clamps against the stale extent, the pivot lands off-center, and the
-            // next wheel notch re-captures from that error — the compounding drift reads as zoom jitter.
+            // 强制一次布局趟，让 ScrollViewer 在我们落滚动之前采纳新范围；否则 ChangeView 按陈旧范围夹取、枢轴偏离中心，下一次滚轮又从这个误差重捕 —— 累积漂移表现为缩放抖动。
             ApplyLayout(host, state);
             state.Canvas?.UpdateLayout();
             sv.UpdateLayout();
@@ -562,9 +556,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             var maxH = GetHorizontalScrollMaximum(sv);
             var maxV = GetVerticalScrollMaximum(sv);
 
-            // Overscroll-expand the canvas so the pivot is always reachable; a plain clamp would push
-            // the pivot off-center and drift on each notch. The canvas geometry is untouched by the
-            // zoom (ActualOffset == NegativeOffset, fixed) — only the scroll moves.
+            // 越界扩展画布让枢轴总能到达；单纯夹取会把枢轴推离中心并逐格漂移。缩放不动画布几何（ActualOffset == NegativeOffset，固定）——只动滚动。
             var newX = WorkflowSurfaceMath.ClampScrollOffset(tx, maxH, layout, horizontal: true);
             var newY = WorkflowSurfaceMath.ClampScrollOffset(ty, maxV, layout, horizontal: false);
             if (Math.Abs(newX - tx) > double.Epsilon || Math.Abs(newY - ty) > double.Epsilon)
@@ -581,19 +573,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             var committedY = WorkflowSurfaceMath.ClampValue(ty, 0, maxV);
             sv.ChangeView(committedX, committedY, null, disableAnimation: true);
 
-            // Synchronous re-virtualize at the COMMITTED scroll target (mirrors Jalium
-            // TreeView.NotifyZoomCommitted). The helper otherwise re-virtualizes on its ~10fps dirty
-            // tick / Low-priority viewport queue, so during a zoom burst the pooled node/link views lag
-            // the freshly collapsed anchors by ~100ms — links vanish/pop for that window. Use the
-            // committed offset, not sv.HorizontalOffset, which ChangeView may not have applied yet.
+            // 在提交的滚动目标处同步重新虚拟化（与 Jalium TreeView.NotifyZoomCommitted 一致）。否则 helper 在约 10fps 的脏 tick / 低优先级视口队列上重新虚拟化，
+            // 缩放连发期间池化的节点/连线视图比刚折叠的锚点慢约 100ms —— 那个窗口里连线消失/弹出。用提交的偏移，而不是 sv.HorizontalOffset（ChangeView 可能还没应用）。
             VirtualizeAtScroll(viewModel, committedX, committedY, sv.ViewportWidth, sv.ViewportHeight);
         }
         else
         {
             layout.Scale = new Scale(next, next);
-            // World-origin zoom: the canvas translate only changes when the layout is re-applied, so if
-            // the cover grew, push the new offset through the same layout pass the viewport-center branch
-            // does (the trim demo is viewport-center, so this path normally stays dormant).
+            // 世界原点缩放：只有重应用布局时画布平移才变，所以覆盖长大后把新偏移走视口居中分支同样的布局趟推出去（trim 示例是视口居中，此路径通常休眠）。
             if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel)
                 && host.GetValue(StateProperty) is SurfaceState fallbackState
                 && fallbackState.Canvas is { } fallbackCanvas
@@ -605,9 +592,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 host.UpdateLayout();
             }
 
-            // Re-virtualize even when the cover did not grow: collapse can shrink a box that straddled
-            // the window edge out of it, and pooled views otherwise only catch up on the ~10fps dirty
-            // tick / Low-priority queue. Scroll is unchanged here, so the current offsets are valid.
+            // 覆盖没长大也要重新虚拟化：折叠可能把一个跨越窗口边缘的盒子缩小到窗口外，而池化视图否则只能在约 10fps 的脏 tick / 低优先级队列上追上。这里滚动不变，当前偏移有效。
             if (host.GetValue(StateProperty) is SurfaceState elseState
                 && elseState.ScrollViewer is { } elseViewer)
             {
@@ -874,9 +859,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             Y = viewModel.Layout.ActualOffset.Vertical
         };
 
-        // WinUI children (unlike WPF) do not bind RenderTransform to
-        // CanvasTransformBehavior.Transform; apply the offset directly to
-        // the canvas via composition transform (the layout-aware approach).
+        // WinUI 子元素（不同于 WPF）不把 RenderTransform 绑到 CanvasTransformBehavior.Transform；直接经合成变换把偏移应用到画布（布局感知的做法）。
         state.Canvas.Translation = new System.Numerics.Vector3(
             (float)viewModel.Layout.ActualOffset.Horizontal,
             (float)viewModel.Layout.ActualOffset.Vertical,
@@ -942,7 +925,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.ScrollViewer.ViewportWidth,
             state.ScrollViewer.ViewportHeight);
 
-        // Persist the viewport position so it survives serialization round-trip.
+        // 持久化视口位置，使其能熬过序列化往返。
         viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
     }
 
@@ -975,8 +958,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
 
-        // Keep the virtualization visible-region correction in sync with the decorator's
-        // floating ruler band so nodes beneath it are not culled a ruler-thickness early.
+        // 让虚拟化可见区修正与装饰器的浮动标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
         viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
     }
 
@@ -991,10 +973,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         minimap.ScrollOffsetY = state.ScrollViewer.VerticalOffset;
         minimap.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         minimap.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
-        // Push the ACTUAL visible area (the ScrollViewer's rendered size). ViewportWidth can report
-        // an effective/larger value on window shrink; the minimap's draggable block must track the
-        // real on-screen region (matches the minimap's own OnScrollViewerResized, which uses the
-        // settled ActualWidth after the layout pass).
+        // 推实际可见区（ScrollViewer 的渲染尺寸）。窗口缩小时 ViewportWidth 可能报有效/更大的值；缩略图的可拖块必须跟踪真实屏幕区域（与缩略图自己的 OnScrollViewerResized 一致，后者用布局趟后落定的 ActualWidth）。
         minimap.ViewportWidth = Math.Max(0, state.ScrollViewer.ActualWidth);
         minimap.ViewportHeight = Math.Max(0, state.ScrollViewer.ActualHeight);
         minimap.WorkflowTree = viewModel;
@@ -1056,9 +1035,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     private static bool IsWorkflowNodeOrSlotVisual(DependencyObject source)
         => source is FrameworkElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
 
-    // Link identification for the pan-blank heuristic only: which link is under the pointer is decided by
-    // the hub (LinkInteraction). DataContext is enough here — a link view's content inherits it — and the
-    // former class-name fallback was redundant with it and made this path stringly typed.
+    // 只为「空白处平移」判定做连线识别：指针下是哪条连线由枢纽（LinkInteraction）决定。这里 DataContext 就够 —— 连线视图的内容会继承它；原先把类名当兜底是多余的，还让这条路径变成字符串类型化。
     private static bool IsWorkflowLinkVisual(DependencyObject source)
         => source is FrameworkElement { DataContext: IWorkflowLinkViewModel };
 

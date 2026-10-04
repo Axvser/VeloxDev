@@ -10,13 +10,16 @@ namespace VeloxDev.Adapters.NativeSamplers
     {
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
-            // Normalize the start/end once per animation (a Color/null input must not allocate a brush per frame).
+            // 每段动画只归一化一次 start/end（Color/null 输入不该每帧分配画刷）。
             if (working is not NormalizedState st)
             {
                 st = new NormalizedState { Start = Normalize(start), End = Normalize(end) };
@@ -27,7 +30,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             if (s is SolidColorBrush ss && e is SolidColorBrush se)
             {
-                // Zero per-frame allocation: reuse a scratch brush, recomputing its color/opacity from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 画刷，每帧从原始 start/end 重算颜色/不透明度。
                 if (st.Scratch is not SolidColorBrush wb)
                 {
                     wb = new SolidColorBrush();
@@ -42,7 +45,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             if (s is LinearGradientBrush sl && e is LinearGradientBrush el
                 && sl.GradientStops.Count == el.GradientStops.Count)
             {
-                // Zero per-frame allocation: reuse a scratch linear gradient, recomputing its stops from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 线性渐变，每帧从原始 start/end 重算色标。
                 if (st.Scratch is not LinearGradientBrush wl || wl.GradientStops.Count != sl.GradientStops.Count)
                 {
                     wl = new LinearGradientBrush { StartPoint = sl.StartPoint, EndPoint = sl.EndPoint };
@@ -52,8 +55,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 }
                 wl.StartPoint = LerpPoint(sl.StartPoint, el.StartPoint, t);
                 wl.EndPoint = LerpPoint(sl.EndPoint, el.EndPoint, t);
-                // The offsets are one value: they share a progress so the stops keep their spacing instead of
-                // crossing, which would invert the gradient. It stops at [0,1].
+                // 偏移是同一个值：共用进度，色标保持间距而不会交叉（交叉会反转渐变）；到 [0,1] 为止。
                 var offsets = new BoundedProgress(t, 0d, 1d);
                 for (var i = 0; i < sl.GradientStops.Count; i++)
                     offsets.Add(sl.GradientStops[i].Offset, el.GradientStops[i].Offset);
@@ -70,7 +72,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             if (s is RadialGradientBrush sr && e is RadialGradientBrush er
                 && sr.GradientStops.Count == er.GradientStops.Count)
             {
-                // Zero per-frame allocation: reuse a scratch radial gradient, recomputing its stops from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 径向渐变，每帧从原始 start/end 重算色标。
                 if (st.Scratch is not RadialGradientBrush wr || wr.GradientStops.Count != sr.GradientStops.Count)
                 {
                     wr = new RadialGradientBrush { Center = sr.Center, RadiusX = sr.RadiusX, RadiusY = sr.RadiusY };
@@ -81,7 +83,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 wr.Center = LerpPoint(sr.Center, er.Center, t);
                 wr.RadiusX = Lerp(sr.RadiusX, er.RadiusX, t);
                 wr.RadiusY = Lerp(sr.RadiusY, er.RadiusY, t);
-                // Same shared offset progress as the linear case above.
+                // 与上面线性同样的共用偏移进度。
                 var offsets = new BoundedProgress(t, 0d, 1d);
                 for (var i = 0; i < sr.GradientStops.Count; i++)
                     offsets.Add(sr.GradientStops[i].Offset, er.GradientStops[i].Offset);
@@ -95,8 +97,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return;
             }
 
-            // Mixed types / different stop counts / other brushes → blend to a representative color in a scratch
-            // solid brush — zero per-frame WinRT object allocation.
+            // 异型/色标数不同/其它画刷 → 混成代表性纯色写进 scratch 画刷，每帧零 WinRT 对象分配。
             var c1 = ExtractRepresentativeColor(s);
             var c2 = ExtractRepresentativeColor(e);
             if (st.Scratch is not SolidColorBrush wb2)
@@ -116,7 +117,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             public object? Scratch;
         }
 
-        //----------- Normalize -----------
+        // ----------- 归一化 -----------
 
         private static Brush Normalize(object? obj) => obj switch
         {
@@ -125,7 +126,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             _ => new SolidColorBrush(Colors.Transparent)
         };
 
-        //----------- Math helpers -----------
+        // ----------- 数学助手 -----------
 
         private static Point LerpPoint(Point a, Point b, double t)
             => new(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));
@@ -139,11 +140,8 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color LerpColorPremultiplied(Color a, Color b, double t)
         {
-            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range. The progress
-            // comes from the colours as they are seen, not from the premultiplied channels: each of those carries
-            // alpha inside it, so a hue cannot be bounded there. Alpha is carried through un-premultiplied space
-            // only to blend — which is the reason this helper exists at all — and the final Channel saturates
-            // whatever leaves the range. For fully opaque stops the two paths coincide exactly.
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。进度取自所见颜色，而非预乘通道 —— 预乘通道各自含 alpha，无法在那里界定色相。
+            // alpha 只在非预乘空间里为混合而携带（这正是本 helper 存在的理由），最后的 Channel 把越界值饱和。完全不透明的色标下两条路径完全重合。
             var rgb = new BoundedProgress(t, 0d, 255d);
             rgb.Add(a.R, b.R);
             rgb.Add(a.G, b.G);

@@ -5,16 +5,19 @@ namespace VeloxDev.Adapters.NativeSamplers
 {
     public class GridLengthSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
             var g1 = (GridLength)(start ?? new GridLength(0));
             var g2 = (GridLength)(end ?? g1);
 
-            // If grid units differ, interpolation is impossible; hold the start value.
+            // 网格单位不同就无法插值，保持起始值。
             if (g1.GridUnitType != g2.GridUnitType)
             {
                 property.SetValue(target, g1);

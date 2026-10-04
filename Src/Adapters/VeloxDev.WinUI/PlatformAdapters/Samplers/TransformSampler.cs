@@ -10,15 +10,16 @@ namespace VeloxDev.Adapters.NativeSamplers
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
         private static readonly TransformGroup Identity = new();
 
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            // Exact endpoints, not a range. The pipeline drives the last frame of every pass with exactly 1
-            // (or 0 on a reverse pass), and the caller's own instance has to survive to the end: a nested path
-            // such as ((TranslateTransform)x.RenderTransform).X depends on the runtime type it was declared
-            // with, which the interpolated scratch would replace. An overshoot past the endpoint falls through.
+            // 精确端点而非区间：管线每趟最后一帧正好给 1（反向给 0），调用方自己的实例必须活到最后 ——
+            // 嵌套路径如 ((TranslateTransform)x.RenderTransform).X 依赖声明时的运行时类型，插值用的 scratch 会替换它；越过端点则落到下一分支。
             if (t == 0d) { property.SetValue(target, start); return; }
             if (t == 1d) { property.SetValue(target, end); return; }
 
@@ -27,7 +28,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             if (s.GetType() == e.GetType() && IsKnownTransform(s))
             {
-                // Zero per-frame allocation: reuse a scratch transform, recomputing from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 变换，每帧从原始 start/end 重算。
                 if (working is not Transform wt || wt.GetType() != s.GetType())
                 {
                     wt = CloneTransform(s);
@@ -45,10 +46,8 @@ namespace VeloxDev.Adapters.NativeSamplers
             property.SetValue(target, CombineTransforms(pairs, t));
         }
 
-        /// <summary>
-        /// 只有这几种变换既能被 <see cref="CloneTransform"/> 克隆、又有逐字段的插值分支。其余（自定义子类）必须走矩阵
-        /// 路径：没有这道门禁，它们会落进快路径的克隆上，而克隆恰好是唯一对它们抛异常的地方。
-        /// </summary>
+        // 只有这几种变换既能被 CloneTransform 克隆、又有逐字段插值；其余子类必须走矩阵路径，
+        // 否则会落进快路径的克隆上，而克隆恰好是唯一对它们抛异常的地方。
         private static bool IsKnownTransform(Transform transform) => transform is
             TranslateTransform or ScaleTransform or RotateTransform or SkewTransform or MatrixTransform;
 
@@ -106,6 +105,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             return [.. types.Select(t => (s.LastOrDefault(x => x.GetType() == t), e.LastOrDefault(x => x.GetType() == t)))];
         }
 
+        /// <summary>Combines the matched transform pairs into one transform at progress <paramref name="t"/>.</summary>
         protected virtual Transform CombineTransforms(List<(Transform? s, Transform? e)> pairs, double t)
         {
             var list = new List<Transform>();
@@ -131,6 +131,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             return g;
         }
 
+        /// <summary>Interpolates a single transform pair, falling back to the matrix path for mismatched or unknown types.</summary>
         protected virtual Transform? InterpolateSingle(Transform? s, Transform? e, double t)
         {
             static Transform Default(Transform? t) => t switch
@@ -169,6 +170,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             };
         }
 
+        /// <summary>Linearly interpolates the rotation angle by <paramref name="t"/>.</summary>
         protected virtual double LerpAngle(double start, double end, double t) => Lerp(start, end, t);
 
         private static Matrix LerpMatrix(Matrix m1, Matrix m2, double t)
@@ -183,6 +185,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             );
         }
 
+        /// <summary>Interpolates the angle along the shortest path, honoring <paramref name="reverse"/>.</summary>
         protected static double LerpDirectionalAngle(double start, double end, double t, bool reverse)
         {
             var delta = (end - start) % 360d;

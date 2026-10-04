@@ -4,6 +4,7 @@ namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
@@ -25,6 +26,7 @@ namespace VeloxDev.DynamicTheme
 
     public class StringConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
@@ -34,6 +36,7 @@ namespace VeloxDev.DynamicTheme
 
     public class IntConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
@@ -55,6 +58,7 @@ namespace VeloxDev.DynamicTheme
 
     public class BoolConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;

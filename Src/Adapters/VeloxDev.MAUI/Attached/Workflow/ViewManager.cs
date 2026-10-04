@@ -142,10 +142,8 @@ public sealed class ViewManager
 
         _isSchedulingRender = true;
 
-        // Use a dispatcher timer for incremental rendering instead of processing
-        // all pending views in one batch. MAUI lacks WPF's DispatcherPriority.Background,
-        // so a per-frame timer spreads view creation across multiple frames.
-        // This prevents UI freezes when loading 100+ workflow nodes.
+        // 用 dispatcher 定时器分批建视图，而不是一次处理完：MAUI 没有 WPF 的 DispatcherPriority.Background，
+        // 逐帧定时器把建视图摊到多帧，加载上百节点时才不会冻结 UI。
         _batchTimer?.Stop();
         _batchTimer = _layout.Dispatcher.CreateTimer();
         _batchTimer.Interval = TimeSpan.FromMilliseconds(16); // ��1 frame
@@ -182,14 +180,12 @@ public sealed class ViewManager
 
             if (_pendingViews.Count > 0)
             {
-                // More views to create �� schedule the next batch.
+                // 还有视图要建 → 安排下一批。
                 ScheduleNextBatchRender();
             }
             else if (!_slotSyncQueued)
             {
-                // All views created �� schedule a single deferred pass to sync
-                // node slot layouts (equivalent to WPF's LayoutUpdated).
-                // This avoids the per-node SizeChanged cascade that MAUI triggers.
+                // 视图建完 → 安排一次延后的同步，同步节点插槽布局（等价于 WPF 的 LayoutUpdated），避免 MAUI 逐节点 SizeChanged 的级联。
                 _slotSyncQueued = true;
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
@@ -200,8 +196,7 @@ public sealed class ViewManager
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // IDispatcherTimer.Tick exceptions escape to WinUI's UnhandledException
-            // if not caught.  This is a known MAUI/WinUI limitation (dotnet/maui #12245).
+            // IDispatcherTimer.Tick 的异常不捕获会逃逸到 WinUI 的 UnhandledException；这是已知的 MAUI/WinUI 限制（dotnet/maui #12245）。
             System.Diagnostics.Debug.WriteLine($"[ViewManager] Batch error: {ex.Message}");
         }
     }
@@ -220,9 +215,7 @@ public sealed class ViewManager
 
     private void AddOrReuseView(object viewModel)
     {
-        // Use HashSet-style lookup for O(1) duplicate check.
-        // _activeViews is a List, so we scan �� but LinkBuilder deduplicates,
-        // and the pending queue filters duplicates, so this is rarely triggered.
+        // 这里做 O(1) 去重式查找；_activeViews 是 List 只能扫，但 LinkBuilder 已去重、待建队列也过滤重复，所以很少触发。
         if (_activeViews.Count > 0)
         {
             for (int i = 0; i < _activeViews.Count; i++)
@@ -261,9 +254,7 @@ public sealed class ViewManager
         }
         else
         {
-            // Pooled view is still a child of _layout (we don't remove on hide).
-            // Just make it visible again and re-apply the data context.
-            // Also clean any stale deferred-layout entry from its previous life.
+            // 池化视图仍是 _layout 的子元素（隐藏时不移除）；让它重新可见并重设数据上下文，同时清掉上一世残留的延后布局项。
             _layoutApplyQueued.Remove(view);
             view.IsVisible = true;
         }
@@ -289,12 +280,10 @@ public sealed class ViewManager
 
         if (item is null) return;
 
-        // Clean up stale deferred-layout entries so the dictionary doesn't
-        // accumulate View references over the lifetime of the workflow surface.
+        // 清理陈旧的延后布局项，字典才不会在工作面生命周期内不断累积 View 引用。
         _layoutApplyQueued.Remove(item.View);
 
-        // Keep the view in _layout.Children (do NOT remove) to avoid
-        // expensive MAUI layout recalculations. Just hide and unbind.
+        // 视图留在 _layout.Children 里（不移除），避免昂贵的 MAUI 重排；只隐藏并解绑。
         item.View.BindingContext = null;
         item.View.IsVisible = false;
         item.View.ZIndex = -100;
@@ -313,7 +302,7 @@ public sealed class ViewManager
     {
         foreach (var item in _activeViews)
         {
-            // Clean up stale deferred-layout entries.
+            // 清理陈旧的延后布局项。
             _layoutApplyQueued.Remove(item.View);
 
             item.View.BindingContext = null;
@@ -375,9 +364,7 @@ public sealed class ViewManager
                 or nameof(IWorkflowLinkViewModel.Receiver)
                 or nameof(IWorkflowSlotViewModel.Anchor))
             {
-                // Coalesce: only dispatch ApplyLayout once per view per frame,
-                // preventing runaway cascade when layout changes trigger more
-                // PropertyChanged events which trigger more layout changes...
+                // 合并：每帧每个视图只派发一次 ApplyLayout，防止布局变化触发更多 PropertyChanged、又触发更多布局变化的失控级联。
                 if (_layoutApplyQueued.TryGetValue(view, out var queued) && queued)
                     return;
                 _layoutApplyQueued[view] = true;

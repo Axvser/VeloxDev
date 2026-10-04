@@ -2,16 +2,14 @@ using VeloxDev.TimeLine;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
-/// <summary>Reports a run's degraded and failed stages: a Debug line, and an event when someone is listening.</summary>
-/// <remarks>
-/// 两个通道都不向调用方抛异常。每个 stage 每个实例最多报一次——它们大多是每帧都会发生的事。
-/// </remarks>
+// 汇报一趟运行里降级与失败的 stage：写一行 Debug，并在有人监听时发一个事件。
+// 两个通道都不向调用方抛异常。每个 stage 每个实例最多报一次——它们大多是每帧都会发生的事。
 internal sealed class TransitionDiagnostics(ITransitionEffectCore effect, object target, TimeLineEventArgs? run = null)
 {
     private HashSet<string>? _warned;
     private HashSet<string>? _reported;
 
-    /// <summary>Reports an escaped exception. False when this stage was already reported.</summary>
+    // 汇报一个逃逸出来的异常。该 stage 已经报过时返回 false。
     public bool Error(string stage, Exception exception)
     {
         _reported ??= [];
@@ -26,7 +24,7 @@ internal sealed class TransitionDiagnostics(ITransitionEffectCore effect, object
         return true;
     }
 
-    /// <summary>Reports a stage the run degrades through and carries on from.</summary>
+    // 汇报一个运行降级后继续的 stage。
     public void Warn(string stage, string message)
     {
         _warned ??= [];

@@ -10,6 +10,7 @@ namespace VeloxDev.Generators.Writers
         private string Channel { get; set; } = "default";
         private int TargetFPS { get; set; } = -1;
 
+        /// <inheritdoc />
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
@@ -29,14 +30,14 @@ namespace VeloxDev.Generators.Writers
 
             if (IsTickable && attributeData != null)
             {
-                // Read positional constructor arguments: (string channel, int fps)
+                // 读构造位置参数：(string channel, int fps)
                 var ctorArgs = attributeData.ConstructorArguments;
                 if (ctorArgs.Length >= 1 && ctorArgs[0].Value is string ctorChannel && !string.IsNullOrEmpty(ctorChannel))
                     Channel = ctorChannel;
                 if (ctorArgs.Length >= 2 && ctorArgs[1].Value is int ctorFps)
                     TargetFPS = ctorFps;
 
-                // Named arguments override positional ones
+                // 命名参数覆盖位置参数
                 var channelArg = attributeData.NamedArguments
                     .FirstOrDefault(kv => kv.Key == "Channel");
                 if (channelArg.Value.Value is string channelValue && !string.IsNullOrEmpty(channelValue))
@@ -49,8 +50,10 @@ namespace VeloxDev.Generators.Writers
             }
         }
 
+        /// <inheritdoc />
         public override bool CanWrite() => IsTickable;
 
+        /// <inheritdoc />
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null)
@@ -61,11 +64,13 @@ namespace VeloxDev.Generators.Writers
             return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_Tick.g.cs";
         }
 
+        /// <inheritdoc />
         public override string[] GenerateBaseInterfaces()
         {
             return IsTickable ? ["global::VeloxDev.TimeLine.ITickable"] : [];
         }
 
+        /// <inheritdoc />
         public override string GenerateBody()
         {
             if (Syntax == null || Symbol == null || !IsTickable)
@@ -121,6 +126,7 @@ namespace VeloxDev.Generators.Writers
             """;
         }
 
+        /// <inheritdoc />
         public override string[] GenerateBaseTypes() => [];
     }
 }

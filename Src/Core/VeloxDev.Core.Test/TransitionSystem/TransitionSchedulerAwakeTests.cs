@@ -9,8 +9,8 @@ namespace VeloxDev.Core.Test.TransitionSystem;
 /// fire-and-forget, an unawaited Awake ran after Prepare instead — which is what these two tests pin.
 /// </summary>
 /// <remarks>
-/// 串行：两个方法共用一个静态的排队表（<see cref="OffThreadInspector.Pending"/>），方法级并行时一个方法的
-/// <c>Pump</c> 会把另一个方法排队的 Awake 抽走 —— 实测 5 次里 2~3 次红。
+/// Serial: both tests share one static queue table (<see cref="OffThreadInspector.Pending"/>), and a parallel
+/// test's <c>Pump</c> would pull the other's queued Awake away.
 /// </remarks>
 [TestClass]
 [DoNotParallelize]

@@ -23,8 +23,7 @@ internal static class NativeWindowStyleHelper
     private const int WS_CLIPCHILDREN = 0x02000000;
     private const int WS_EX_COMPOSITED = 0x02000000;
 
-    // SetWindowPos flags: force the system to re-read the styles after they are set (SWP_FRAMECHANGED) so styles applied at runtime
-    // via SetWindowLong/SetWindowLongPtr take effect immediately.
+    // SetWindowPos 标志：强制系统在设置后重读样式（SWP_FRAMECHANGED），运行时经 SetWindowLong/SetWindowLongPtr 应用的样式才会立即生效。
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOZORDER = 0x0004;
@@ -32,14 +31,11 @@ internal static class NativeWindowStyleHelper
     private const uint SWP_FRAMECHANGED = 0x0020;
     private const uint SWP_NOOWNERZORDER = 0x0200;
 
-    // WS_EX_COMPOSITED lets DWM maintain a redirected surface per child window and composite them as one; the more child
-    // windows, the higher the cost. On complex forms with many standard controls (SplitContainer/TabControl/ListBox/
-    // toolbars + complex node cards, hundreds of child windows) it visibly stutters, while a plain workflow host (template)
-    // has only a dozen or so child windows and is unaffected. Above this threshold composited is skipped and flicker is
-    // instead eliminated by the already-applied WS_CLIPCHILDREN plus synchronous repaint within the drag gesture.
+    // WS_EX_COMPOSITED 让 DWM 为每个子窗口维护一个重定向表面再合成为一，子窗口越多开销越高。复杂窗体（SplitContainer/TabControl/ListBox/工具栏 + 复杂节点卡片，几百个子窗口）会明显卡顿，
+    // 而普通工作流宿主（模板）只有十几个子窗口、不受影响。超过此阈值就跳过 composited，闪烁改由已应用的 WS_CLIPCHILDREN 加拖拽手势内的同步重绘消除。
     private const int CompositedMaxControlCount = 100;
 
-    // Weak-reference tracking: does not prevent control collection and guarantees each control subscribes to HandleCreated only once.
+    // 弱引用跟踪：不阻止控件被回收，且保证每个控件只订阅一次 HandleCreated。
     private static readonly ConditionalWeakTable<Control, object> ClipChildrenTracked = new();
     private static readonly ConditionalWeakTable<Control, object> CompositedTracked = new();
     private static readonly ConditionalWeakTable<Control, object> CompositedForms = new();
@@ -125,23 +121,21 @@ internal static class NativeWindowStyleHelper
 
     private static void ApplyCompositedToTopLevel(Control control)
     {
-        // FindForm returns the top-level Form containing the control; for a control that is already top-level it returns itself.
+        // FindForm 返回包含该控件的顶层 Form；控件本身已是顶层时返回它自己。
         var top = control.FindForm() ?? control.TopLevelControl;
         if (top is null)
         {
             return;
         }
 
-        // Skip composited for complex form trees (many standard controls + complex node cards): DWM maintains a
-        // redirected surface per child window and composites them, and with hundreds of child windows the cost makes
-        // the whole form (including ListBox, TextBox, TabControl, etc.) stutter. The workflow area's flicker-free
-        // rendering is guaranteed by WS_CLIPCHILDREN plus synchronous repaint while dragging, matching the template.
+        // 复杂窗体树（多标准控件 + 复杂节点卡片）跳过 composited：DWM 为每个子窗口维护重定向表面再合成，几百个子窗口的开销会让整个窗体（含 ListBox、TextBox、TabControl 等）卡顿。
+        // 工作流区域的无闪烁由 WS_CLIPCHILDREN 加拖拽期间同步重绘保证，与模板一致。
         if (CountDescendants(top) > CompositedMaxControlCount)
         {
             return;
         }
 
-        // Bind to the top-level form's own HandleCreated so it is restored automatically after a handle rebuild.
+        // 绑到顶层窗体自己的 HandleCreated，句柄重建后能自动恢复。
         if (CompositedForms.TryGetValue(top, out _))
         {
             return;
@@ -207,8 +201,7 @@ internal static class NativeWindowStyleHelper
         {
             SetLong(hwnd, index, new IntPtr(value | (uint)style));
 
-            // SWP_FRAMECHANGED: notifies the system that the window styles changed and forces a recompute/re-read of the
-            // styles; otherwise styles set at runtime (especially WS_EX_COMPOSITED) may not take effect.
+            // SWP_FRAMECHANGED：通知系统窗口样式已变、强制重算/重读样式；否则运行时设置的样式（尤其 WS_EX_COMPOSITED）可能不生效。
             SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         }

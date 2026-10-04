@@ -1,5 +1,6 @@
 namespace VeloxDev.MVVM;
 
+/// <summary>The stage of a command execution that an event reports.</summary>
 public enum CommandEventType : int
 {
     None = 0,

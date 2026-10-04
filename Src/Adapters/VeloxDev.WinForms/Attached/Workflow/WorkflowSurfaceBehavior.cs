@@ -64,7 +64,7 @@ public sealed class WorkflowSurfaceBehavior
             }
 
             var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
-            // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+            // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
             var factor = delta > 0 ? 1 / 1.1 : 1.1;
             var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
             var layout = tree.Layout;
@@ -77,9 +77,7 @@ public sealed class WorkflowSurfaceBehavior
                     scrollOffset.Horizontal, scrollOffset.Vertical, clientSize.Width, clientSize.Height, layout);
                 layout.CollapsePivot = new Anchor(wx, wy, 0);
                 layout.Scale = new Scale(next, next);
-                // Deep zoom-in collapses negative-world content to w/Scale past the fixed NegativeOffset;
-                // grow the cover first (monotonic, no-op for positive-only content) so the PivotCenterScroll
-                // below and the Refresh read the NEW ActualOffset.
+                // 深度放大把负向内容折叠到 w/Scale、越过固定 NegativeOffset；先扩大覆盖（单调，只有正向内容时无事），下面的 PivotCenterScroll 与 Refresh 才会读到新的 ActualOffset。
                 WorkflowSurfaceMath.EnsureNegativeCover(tree);
                 var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, clientSize.Width, clientSize.Height);
                 ApplyScrollOffset(host, tx, ty);
@@ -88,8 +86,7 @@ public sealed class WorkflowSurfaceBehavior
             else
             {
                 layout.Scale = new Scale(next, next);
-                // World-origin zoom keeps content top-left aligned: nothing downstream reads the new
-                // ActualOffset, so push the grown cover (if any) through the repaint path explicitly.
+                // 世界原点缩放保持内容左上对齐：下游没人读新的 ActualOffset，所以把长大的覆盖（若有）显式经重绘路径推出去。
                 if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
                 {
                     Refresh(host);
@@ -152,9 +149,7 @@ public sealed class WorkflowSurfaceBehavior
 
         if (value)
         {
-            // When the host canvas is enabled, automatically orchestrate Win32 window styles to eliminate flicker/ghosting
-            // from the repaint separation between the self-drawn canvas and child windows (node cards): the canvas window
-            // gets WS_CLIPCHILDREN and its top-level form gets WS_EX_COMPOSITED (DWM composites the whole form tree). Host needs no changes.
+            // 宿主画布启用时自动编排 Win32 窗口样式，消除自绘画布与子窗口（节点卡片）重绘分离造成的闪烁/残影：画布窗口加 WS_CLIPCHILDREN，其顶层窗体加 WS_EX_COMPOSITED（DWM 合成整个窗体树）。宿主无需改动。
             NativeWindowStyleHelper.EnsureClipChildren(element);
             NativeWindowStyleHelper.EnsureComposited(element);
         }
@@ -190,10 +185,7 @@ public sealed class WorkflowSurfaceBehavior
         if (value)
         {
             element.MouseWheel += OnZoomMouseWheel;
-            // A message filter catches the Ctrl+wheel gesture before any descendant control
-            // (e.g. a node card's internal AutoScroll panel, or the surface's own scroll viewer)
-            // can scroll with it. Hooking WndProc on the element only catches wheel events routed
-            // to the element itself — wheel sent to a child window never reaches it.
+            // 消息过滤器抢在任何后代控件（如节点卡片内部的 AutoScroll 面板、或表面自己的滚动视图）用它滚动之前接住 Ctrl+滚轮。在元素上挂 WndProc 只能接住路由到该元素自身的滚轮 —— 发给子窗口的滚轮到不了它。
             Application.AddMessageFilter(state);
         }
         else
@@ -216,7 +208,7 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = e.Delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
         var layout = tree.Layout;
@@ -229,9 +221,7 @@ public sealed class WorkflowSurfaceBehavior
                 scrollOffset.Horizontal, scrollOffset.Vertical, clientSize.Width, clientSize.Height, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
-            // Deep zoom-in collapses negative-world content to w/Scale past the fixed NegativeOffset;
-            // grow the cover first (monotonic, no-op for positive-only content) so the PivotCenterScroll
-            // below and the Refresh read the NEW ActualOffset.
+            // 深度放大把负向内容折叠到 w/Scale、越过固定 NegativeOffset；先扩大覆盖（单调，只有正向内容时无事），下面的 PivotCenterScroll 与 Refresh 才会读到新的 ActualOffset。
             WorkflowSurfaceMath.EnsureNegativeCover(tree);
             var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, clientSize.Width, clientSize.Height);
             ApplyScrollOffset(control, tx, ty);
@@ -240,16 +230,14 @@ public sealed class WorkflowSurfaceBehavior
         else
         {
             layout.Scale = new Scale(next, next);
-            // World-origin zoom keeps content top-left aligned: nothing downstream reads the new
-            // ActualOffset, so push the grown cover (if any) through the repaint path explicitly.
+            // 世界原点缩放保持内容左上对齐：下游没人读新的 ActualOffset，所以把长大的覆盖（若有）显式经重绘路径推出去。
             if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
             {
                 Refresh(control);
             }
         }
 
-        // Mark the wheel event handled so the Ctrl+wheel gesture only zooms — without this the
-        // MouseWheel bubbles up to the AutoScroll parent and scrolls the viewport while zooming.
+        // 把滚轮事件标记为已处理，Ctrl+滚轮才只缩放；否则 MouseWheel 冒泡到 AutoScroll 父级，缩放的同时还会滚动视口。
         if (e is HandledMouseEventArgs handled)
         {
             handled.Handled = true;
@@ -440,8 +428,7 @@ public sealed class WorkflowSurfaceBehavior
         var clientSize = ResolveClientSize(host);
         var contentOffset = tree?.Layout?.ActualOffset ?? new Offset();
 
-        // Update the tree viewport so consumers (e.g. spatial virtualization) observe
-        // the current visible region. Best-effort: never throw from a refresh cycle.
+        // 更新树的视口，让消费者（如空间虚拟化）观察到当前可见区；尽力而为，刷新周期里绝不抛异常。
         if (tree is not null && clientSize.Width > 0 && clientSize.Height > 0)
         {
             try
@@ -454,11 +441,10 @@ public sealed class WorkflowSurfaceBehavior
             }
             catch
             {
-                // The tree helper may not support viewport writes on some hosts; ignore.
+                // 某些宿主上树 helper 可能不支持写视口；忽略。
             }
 
-            // Persist the same world position the viewport above was given, so the canvas position survives a
-            // save/load. Guarded on `measuredScroll`: an unmeasured offset came from ViewportOffset itself.
+            // 持久化与上面交给视口相同的世界位置，画布位置才能熬过存/取。用 measuredScroll 把关：未测量的偏移本就来自 ViewportOffset 自身。
             if (measuredScroll)
             {
                 tree.Layout.ViewportOffset = WorkflowSurfaceMath.ViewportOffsetFromScroll(
@@ -474,8 +460,7 @@ public sealed class WorkflowSurfaceBehavior
             decorator.ContentOffsetX = contentOffset.Horizontal;
             decorator.ContentOffsetY = contentOffset.Vertical;
 
-            // Keep the virtualization visible-region correction in sync with the decorator's
-            // floating ruler band so nodes beneath it are not culled a ruler-thickness early.
+            // 让虚拟化可见区修正与装饰器的浮动标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
             tree?.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
         }
 
@@ -491,17 +476,14 @@ public sealed class WorkflowSurfaceBehavior
             minimap.WorkflowTree = tree;
         }
 
-        // Publish the translate transform as a notification carrier for host canvases.
+        // 把平移变换作为通知载体发布给宿主画布。
         WorkflowCanvasTransformBehavior.Apply(host, contentOffset);
 
         host.PerformLayout();
 
-        // Asynchronous invalidation: WM_PAINT is coalesced by the message loop. Refresh is called frequently by non-interactive
-        // scenarios (runtime status refresh, scrolling, collection changes); always repainting synchronously would make the
-        // self-drawn canvas redraw every frame and stutter, so the default stays asynchronous.
-        // Exception: repaint synchronously while the host captures the mouse (canvas pan/drag in progress) — otherwise high-
-        // frequency mouse messages keep deferring WM_PAINT and the node's old position and old links are not erased in time,
-        // leaving ghosts. Node-drag synchronous repaint is triggered separately by WorkflowNodeDragBehavior, so not repeated here.
+        // 异步失效：WM_PAINT 由消息循环合并。非交互场景（运行时状态刷新、滚动、集合变化）频繁调用 Refresh，总同步重绘会让自绘画布每帧重画并卡顿，所以默认保持异步。
+        // 例外：宿主捕获鼠标时（画布平移/拖拽进行中）同步重绘 —— 否则高频鼠标消息一直推迟 WM_PAINT，节点旧位置与旧连线来不及擦掉、留下残影。
+        // 节点拖拽的同步重绘由 WorkflowNodeDragBehavior 单独触发，这里不重复。
         host.Invalidate();
         if (host.Capture)
         {
@@ -581,22 +563,17 @@ public sealed class WorkflowSurfaceBehavior
     // 只有量到的才允许写回：兜底返回的就是要写的那个值本身，写回去等于让它穿过一次下面注释警告过的那次相减。
     private static Offset ResolveScrollOffset(Control host, IWorkflowTreeViewModel? tree, out bool measured)
     {
-        // Effective scroll = the negative of the host's world-origin translate (pan), so
-        // WorldAtViewportCenter sees scroll space consistent with node positioning. The node views
-        // sit at node.Anchor + pan (+ ActualOffset for hosts that translate the content separately),
-        // never at node.Anchor + ViewportOffset — falling back to ViewportOffset double-subtracts
-        // the content offset and makes the captured pivot drift on every wheel notch.
+        // 有效滚动 = 宿主世界原点平移的负值，让 WorldAtViewportCenter 看到的滚动空间与节点定位一致。节点视图位于 node.Anchor + pan（对单独平移内容的宿主再加 ActualOffset），
+        // 绝不在 node.Anchor + ViewportOffset —— 退回 ViewportOffset 会把内容偏移减两次，抓取的枢轴每个滚轮格都漂。
         if (host is ScrollableControl scrollable && scrollable.AutoScroll)
         {
-            // Full demo host: node translate = _panOffset + AutoScrollPosition; the scroll range
-            // is clamped >= 0, so the pivot can only be reached within it (overscroll clamps).
+            // 完整示例宿主：节点平移 = _panOffset + AutoScrollPosition；滚动范围夹在 >= 0，枢轴只能在其内到达（越界被夹）。
             var pan = ResolvePanOffset(host) ?? new System.Drawing.Point();
             measured = true;
             return new Offset(-(pan.X + scrollable.AutoScrollPosition.X), -(pan.Y + scrollable.AutoScrollPosition.Y));
         }
 
-        // Signed-pan host (template / Trimmed demo): the canvas stays fixed over the viewport and
-        // node views are positioned at node.Anchor + PanOffset, so effective scroll = -PanOffset.
+        // 带符号平移宿主（模板/Trimmed 示例）：画布固定在视口上、节点视图定位在 node.Anchor + PanOffset，所以有效滚动 = -PanOffset。
         var signedPan = ResolvePanOffset(host);
         if (signedPan is not null)
         {
@@ -604,7 +581,7 @@ public sealed class WorkflowSurfaceBehavior
             return new Offset(-signedPan.Value.X, -signedPan.Value.Y);
         }
 
-        // No pan translate exposed: fall back to the persisted viewport offset (world space).
+        // 未暴露平移：退回持久化的视口偏移（世界坐标）。
         measured = false;
         return tree?.Layout?.ViewportOffset ?? new Offset();
     }
@@ -623,19 +600,14 @@ public sealed class WorkflowSurfaceBehavior
     {
         if (host is ScrollableControl scrollable && scrollable.AutoScroll)
         {
-            // WinForms AutoScrollPosition setter negates its argument (getter = −setter), and the
-            // node translate includes the pan offset, so to land the effective scroll at (x, y)
-            // the setter must receive (x + panOffset). Verify: getter scr = −(x + pan), effective
-            // scroll = −(pan + scr) = x. The (x + pan) shape mirrors the demo's own minimap
-            // compensation (_panOffset = −sx − scroll → setter = sx + panOffset).
+            // WinForms 的 AutoScrollPosition setter 会取反参数（getter = −setter），而节点平移含平移偏移，所以要把有效滚动落到 (x, y)，setter 必须收到 (x + panOffset)。
+            // 验证：getter scr = −(x + pan)，有效滚动 = −(pan + scr) = x。(x + pan) 的形状与示例自己的缩略图补偿一致（_panOffset = −sx − scroll → setter = sx + panOffset）。
             var pan = ResolvePanOffset(host) ?? new System.Drawing.Point();
             scrollable.AutoScrollPosition = new System.Drawing.Point((int)Math.Round(x + pan.X), (int)Math.Round(y + pan.Y));
             return;
         }
 
-        // Signed-pan host: recenter via its minimap-scroll handler (same "_panOffset = (-sx, -sy);
-        // ApplyPan()" logic as panning). Skip the full demo (AutoScroll) — handled above — and any
-        // control whose handler would recurse into the message filter.
+        // 带符号平移宿主：经它自己的缩略图滚动 handler 重新居中（与平移同一套 _panOffset = (-sx, -sy); ApplyPan()）。跳过完整示例（AutoScroll）—— 上面已处理 —— 以及任何 handler 会递归进消息过滤器的控件。
         var target = ResolveNamedCanvas(host) ?? host;
         for (var p = target; p is not null; p = p.Parent)
         {
@@ -653,7 +625,7 @@ public sealed class WorkflowSurfaceBehavior
                 }
                 catch
                 {
-                    // Best-effort; the refresh cycle after this still re-pushes the viewport.
+                    // 尽力而为；之后那次刷新周期仍会重推视口。
                 }
 
                 return;
@@ -677,8 +649,7 @@ public sealed class WorkflowSurfaceBehavior
     /// </summary>
     private static System.Drawing.Point? ResolvePanOffset(Control host)
     {
-        // The pan translate lives on the named canvas (the host tree-view owns it privately and
-        // pushes it in ApplyPan), so start the reflection from the canvas, not the host.
+        // 平移量在命名画布上（宿主树视图私有持有并在 ApplyPan 里推），所以反射从画布开始，不从宿主。
         var canvas = ResolveNamedCanvas(host);
         for (var p = canvas ?? host; p is not null; p = p.Parent)
         {
@@ -688,7 +659,7 @@ public sealed class WorkflowSurfaceBehavior
                 return (System.Drawing.Point)property.GetValue(p)!;
             }
 
-            // Full demo (self-drawn canvas): the pan lives in a private _panOffset field.
+            // 完整示例（自绘画布）：平移量在私有 _panOffset 字段里。
             var field = p.GetType().GetField(
                 "_panOffset", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             if (field?.FieldType == typeof(System.Drawing.Point))
@@ -710,9 +681,7 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        // Resolve the named control (e.g. PART_ScrollViewer / PART_Canvas / PART_GridDecorator) and automatically add
-        // WS_CLIPCHILDREN to its window: these layered containers clip child regions while repainting, avoiding layer
-        // flicker from covering node views/links. The control can be resolved through the control tree before its handle exists.
+        // 解析命名控件（如 PART_ScrollViewer / PART_Canvas / PART_GridDecorator）并给它的窗口自动加 WS_CLIPCHILDREN：这些分层容器重绘时裁剪子区域，避免层叠闪烁盖住节点视图/连线。控件可在其句柄存在前经控件树解析出来。
         if (FindControlByName(root, name!) is Control control)
         {
             NativeWindowStyleHelper.EnsureClipChildren(control);

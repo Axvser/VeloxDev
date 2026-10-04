@@ -36,6 +36,7 @@ namespace VeloxDev.Generators.Writers
         private void Report(DiagnosticDescriptor descriptor, ISymbol target, params object?[] args)
             => Diagnostics.Add(Diagnostic.Create(descriptor, target.Locations.FirstOrDefault(), args));
 
+        /// <inheritdoc />
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
@@ -50,17 +51,17 @@ namespace VeloxDev.Generators.Writers
             ReadAutoProperties(namedTypeSymbol);
         }
 
-        // ── Framework-aware detection ──
+        // ── 框架感知检测 ──
         private SetterMode DetectSetterMode(INamedTypeSymbol symbol)
         {
-            // Check for CommunityToolkit.Mvvm (ObservableObject / ObservableValidator / [ObservableObject])
+            // 检测 CommunityToolkit.Mvvm（ObservableObject / ObservableValidator / [ObservableObject]）
             if (HasAttributeInHierarchy(symbol, "global::CommunityToolkit.Mvvm.ComponentModel.ObservableObjectAttribute"))
                 return SetterMode.FrameworkSetProperty;
 
-            // Check for Prism (BindableBase)
+            // 检测 Prism（BindableBase）
             if (ImplementsInterface(symbol, "global::System.ComponentModel.INotifyPropertyChanged"))
             {
-                // BindableBase has SetProperty<T>(ref T, T, string) — check via method presence
+                // BindableBase 有 SetProperty<T>(ref T, T, string) —— 用方法存在性判断
                 var bindableBase = symbol.BaseType;
                 while (bindableBase != null && bindableBase.SpecialType != SpecialType.System_Object)
                 {
@@ -68,7 +69,7 @@ namespace VeloxDev.Generators.Writers
                     if (fullName == "global::Prism.Mvvm.BindableBase")
                         return SetterMode.FrameworkSetProperty;
                     
-                    // Also match generic pattern: any base with SetProperty(ref T, T, string)
+                    // 也匹配通用模式：任何带 SetProperty(ref T, T, string) 的基类
                     var hasSetProp = bindableBase.GetMembers("SetProperty")
                         .OfType<IMethodSymbol>()
                         .Any(m => !m.IsStatic && m.Parameters.Length >= 2 &&
@@ -80,11 +81,11 @@ namespace VeloxDev.Generators.Writers
                 }
             }
 
-            // Check for ReactiveUI (ReactiveObject)
+            // 检测 ReactiveUI（ReactiveObject）
             if (ImplementsInterface(symbol, "global::ReactiveUI.IReactiveObject"))
                 return SetterMode.FrameworkRaiseAndSet;
 
-            // Check for Caliburn.Micro (PropertyChangedBase)
+            // 检测 Caliburn.Micro（PropertyChangedBase）
             var baseType = symbol.BaseType;
             while (baseType != null && baseType.SpecialType != SpecialType.System_Object)
             {
@@ -473,9 +474,7 @@ namespace VeloxDev.Generators.Writers
             var methodName = isChanging ? "OnPropertyChanging" : "OnPropertyChanged";
             var eventArgsMethod = FindMethodInHierarchy(symbol, methodName, eventArgsType);
 
-            // Check framework-specific forwarding names FIRST.
-            // For Caliburn.Micro: prefer NotifyOfPropertyChange over OnPropertyChanged(PropertyChangedEventArgs)
-            // to respect IsNotifying check. For Prism: prefer RaisePropertyChanged for consistency.
+            // 先查框架专属的转发名。Caliburn.Micro：优先 NotifyOfPropertyChange 而非 OnPropertyChanged(PropertyChangedEventArgs)，以尊重 IsNotifying 检查；Prism：优先 RaisePropertyChanged 以求一致。
             var forwardingNames = isChanging
                 ? new[] { "RaisePropertyChanging", "NotifyOfPropertyChanging" }
                 : new[] { "RaisePropertyChanged", "NotifyOfPropertyChange" };
@@ -485,11 +484,11 @@ namespace VeloxDev.Generators.Writers
                     return $"{forwardingName}(propertyName);";
             }
 
-            // Fall back to EventArgs-based method if available (e.g. CommunityToolkit.Mvvm ObservableObject)
+            // 有基于 EventArgs 的方法就退回它（如 CommunityToolkit.Mvvm 的 ObservableObject）
             if (eventArgsMethod != null)
                 return $"{methodName}(new {eventArgsType}(propertyName));";
 
-            // ReactiveUI uses extension methods
+            // ReactiveUI 用扩展方法
             if (ImplementsInterface(symbol, "global::ReactiveUI.IReactiveObject"))
             {
                 var extensionMethod = isChanging ? "RaisePropertyChanging" : "RaisePropertyChanged";
@@ -631,12 +630,12 @@ namespace VeloxDev.Generators.Writers
 
         private void ConfigureWorkflowSlotProperty(MVVMPropertyFactory factory, ISymbol memberSymbol, ITypeSymbol typeSymbol)
         {
-            // Re-evaluate workflow-class recognition based on the member's declaring type
+            // 按成员的声明类型重新判定工作流类识别
             var ownerType = memberSymbol?.ContainingType as INamedTypeSymbol;
             var isWorkflowComponentOrBase = HasWorkflowAttributeInHierarchy(ownerType);
             var isWorkflowNodeOrBase = HasWorkflowNodeAttributeInHierarchy(ownerType);
 
-            // Check if this is a SlotEnumerator<TSlot> field on a Node
+            // 检查这是否是 Node 上的 SlotEnumerator<TSlot> 字段
             if (isWorkflowComponentOrBase && isWorkflowNodeOrBase && IsSlotEnumeratorType(typeSymbol))
             {
                 factory.UseSlotEnumeratorLifecycle = true;
@@ -650,10 +649,10 @@ namespace VeloxDev.Generators.Writers
                                               isWorkflowNodeOrBase &&
                                               IsWorkflowSlotViewModelType(typeSymbol);
 
-            // Lazy auto-creation in getter is no longer generated; slots are created in InitializeWorkflow
+            // 不再生成 getter 里的惰性自动创建；插槽在 InitializeWorkflow 里创建
             factory.UseWorkflowSlotAutoCreation = false;
 
-            // Collection lifecycle for slot collections is replaced by SlotEnumerator<TSlot>
+            // 插槽集合的集合生命周期已由 SlotEnumerator<TSlot> 取代
             factory.UseWorkflowSlotCollectionLifecycle = false;
         }
 
@@ -764,10 +763,10 @@ namespace VeloxDev.Generators.Writers
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;
 
-            // First, check for an explicit workflow attribute
+            // 先查显式的工作流特性
             if (HasWorkflowAttribute(symbol)) return true;
 
-            // Next, check whether the type or any base implements a workflow interface (Tree/Node/Slot/Link)
+            // 再查该类型或其基类是否实现工作流接口（Tree/Node/Slot/Link）
             INamedTypeSymbol? treeInterface = null;
             INamedTypeSymbol? nodeInterface = null;
             INamedTypeSymbol? slotInterface = null;
@@ -790,7 +789,7 @@ namespace VeloxDev.Generators.Writers
                 if (slotInterface != null && current.AllInterfaces.Any(i => comparer.Equals(i, slotInterface))) return true;
                 if (linkInterface != null && current.AllInterfaces.Any(i => comparer.Equals(i, linkInterface))) return true;
 
-                // Fall back to string comparison in case resolution fails
+                // 解析失败时退回字符串比较
                 if (current.AllInterfaces.Any(i =>
                     i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).StartsWith(NAMESPACE_VELOX_IWORKFLOW)))
                 {
@@ -800,7 +799,7 @@ namespace VeloxDev.Generators.Writers
                 current = current.BaseType;
             }
 
-            // Continue recursively checking attributes on base classes (preserves existing behavior)
+            // 递归继续检查基类的特性（保持既有行为）
             return HasWorkflowAttributeInHierarchy(symbol.BaseType);
         }
         private bool HasWorkflowNodeAttributeInHierarchy(INamedTypeSymbol? symbol)
@@ -811,10 +810,10 @@ namespace VeloxDev.Generators.Writers
             var current = symbol;
             while (current != null && current.SpecialType != SpecialType.System_Object)
             {
-                // 1) Explicit Node attribute
+                // 1) 显式 Node 特性
                 if (HasWorkflowNodeAttribute(current)) return true;
 
-                // 2) Check whether the current type directly implements IWorkflowNodeViewModel (interface name or symbol match)
+                // 2) 检查当前类型是否直接实现 IWorkflowNodeViewModel（接口名或符号匹配）
                 foreach (var iface in current.Interfaces)
                 {
                     var ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -822,7 +821,7 @@ namespace VeloxDev.Generators.Writers
                         return true;
                 }
 
-                // 3) Check all interfaces implemented by the current type or its bases (in case an explicit base interface isn't in the Interfaces list)
+                // 3) 检查当前类型或其基类实现的所有接口（以防显式基接口不在 Interfaces 列表里）
                 foreach (var iface in current.AllInterfaces)
                 {
                     var ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -857,7 +856,7 @@ namespace VeloxDev.Generators.Writers
 
         private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
         {
-            // 1) Try to resolve the SlotAttribute symbol for symbol comparison
+            // 1) 试解析 SlotAttribute 符号以做符号比较
             INamedTypeSymbol? slotAttributeSymbol = null;
             if (Symbol != null)
             {
@@ -893,7 +892,7 @@ namespace VeloxDev.Generators.Writers
                 }
             }
 
-            // 2) Check whether it implements the IWorkflowSlotViewModel interface (symbol comparison first)
+            // 2) 检查它是否实现 IWorkflowSlotViewModel 接口（先做符号比较）
             INamedTypeSymbol? slotInterface = null;
             if (Symbol != null)
             {
@@ -919,7 +918,7 @@ namespace VeloxDev.Generators.Writers
         }
         private static ITypeSymbol? GetCollectionItemTypeSymbol(ITypeSymbol typeSymbol)
         {
-            // Check IEnumerable<T> to get T's type symbol
+            // 检查 IEnumerable<T> 以取 T 的类型符号
             if (typeSymbol is INamedTypeSymbol namedType &&
                 namedType.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T &&
                 namedType.TypeArguments.Length > 0)
@@ -935,7 +934,7 @@ namespace VeloxDev.Generators.Writers
 
         private static bool IsGenericCollectionType(ITypeSymbol typeSymbol)
         {
-            // Check if the type implements ICollection<T>
+            // 检查类型是否实现 ICollection<T>
             if (typeSymbol is INamedTypeSymbol namedType &&
                 namedType.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.ICollection<T>")
             {
@@ -986,14 +985,17 @@ namespace VeloxDev.Generators.Writers
                 method.Parameters[0].Type.SpecialType == SpecialType.System_String);
         }
 
+        /// <inheritdoc />
         public override bool CanWrite() => MVVMProperties.Count > 0 || AutoProperties.Count > 0 || IsWorkflowComponent;
 
+        /// <inheritdoc />
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null) return string.Empty;
             return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_MVVM.g.cs";
         }
 
+        /// <inheritdoc />
         public override string[] GenerateBaseInterfaces()
         {
             var interfaces = new List<string>();
@@ -1004,8 +1006,10 @@ namespace VeloxDev.Generators.Writers
             return [.. interfaces];
         }
 
+        /// <inheritdoc />
         public override string[] GenerateBaseTypes() => [];
 
+        /// <inheritdoc />
         public override string GenerateBody()
         {
             if (Syntax == null || Symbol == null) return string.Empty;

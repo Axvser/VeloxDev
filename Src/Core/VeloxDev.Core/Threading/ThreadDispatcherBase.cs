@@ -10,8 +10,10 @@ namespace VeloxDev.Threading;
 /// </remarks>
 public abstract class ThreadDispatcherBase<TPriorityCore> : IThreadDispatcher<TPriorityCore>
 {
+    /// <summary>Returns the thread that owns <paramref name="target"/>.</summary>
     public abstract ThreadRef ThreadFor(object target);
 
+    /// <summary>Whether the calling thread owns <paramref name="target"/>.</summary>
     public virtual bool IsCurrent(object target) => IsCurrentFor(target, ThreadFor(target));
 
     /// <summary>
@@ -43,12 +45,18 @@ public abstract class ThreadDispatcherBase<TPriorityCore> : IThreadDispatcher<TP
     /// </remarks>
     protected virtual TPriorityCore InternalPriority => default!;
 
+    /// <summary>Queues <paramref name="action"/> on <paramref name="target"/>'s thread.</summary>
+    /// <returns><see langword="true"/> when the action was accepted.</returns>
     public bool Post(object target, Action action, TPriorityCore priority)
         => Post(target, ThreadFor(target), action, priority);
 
+    /// <summary>Queues <paramref name="action"/> on <paramref name="thread"/>, already resolved from <paramref name="target"/>.</summary>
+    /// <returns><see langword="true"/> when the action was accepted.</returns>
     public bool Post(object target, ThreadRef thread, Action action, TPriorityCore priority)
         => IsCurrentFor(target, thread) ? RunInline(action) : PostCore(target, thread, action, priority);
 
+    /// <summary>Queues <paramref name="action"/> and completes when it has run.</summary>
+    /// <returns><see langword="true"/> when the action was accepted.</returns>
     public async Task<bool> PostAsync(object target, Action action, TPriorityCore priority)
     {
         var thread = ThreadFor(target);
@@ -68,6 +76,7 @@ public abstract class ThreadDispatcherBase<TPriorityCore> : IThreadDispatcher<TP
         return true;
     }
 
+    /// <summary>Runs <paramref name="body"/> on <paramref name="target"/>'s thread and returns its result.</summary>
     public virtual T Run<T>(object target, Func<T> body)
     {
         var thread = ThreadFor(target);

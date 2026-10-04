@@ -90,11 +90,8 @@ public sealed class WorkflowNodeDragBehavior
         view.HandlerChanged += OnHandlerChanged;
         HookPlatformEvents(view, state);
 #else
-        // On non-Windows platforms, PanGestureRecognizer is the primary drag
-        // mechanism. MAUI's PanGestureRecognizer reliably tracks TotalX/TotalY
-        // deltas across Android, iOS, and MacCatalyst. The PointerGestureRecognizer
-        // is omitted because its PointerMoved/Released events race with Pan's
-        // lifecycle and add no value — Pan handles start/running/end cleanly.
+        // 非 Windows 平台以 PanGestureRecognizer 为主：它跨 Android/iOS/MacCatalyst 稳定跟踪 TotalX/TotalY；
+        // 不用 PointerGestureRecognizer —— 它的 PointerMoved/Released 与 Pan 生命周期相互竞争、没有收益，Pan 本身把 start/running/end 处理得很干净。
         var pan = new PanGestureRecognizer();
         pan.PanUpdated += OnPanUpdated;
 
@@ -258,24 +255,22 @@ public sealed class WorkflowNodeDragBehavior
 
     private static void OnPointerPressed(object? sender, PointerEventArgs e)
     {
-        // No-op: PointerGestureRecognizer is only used on Windows via platform hooks.
-        // On non-Windows, PanGestureRecognizer handles the full drag lifecycle.
+        // 空操作：PointerGestureRecognizer 只在 Windows 经平台钩子使用；非 Windows 由 PanGestureRecognizer 覆盖整个拖拽生命周期。
     }
 
     private static void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        // No-op: see OnPointerPressed.
+        // 空操作：见 OnPointerPressed。
     }
 
     private static void OnPointerReleased(object? sender, PointerEventArgs e)
     {
-        // No-op: see OnPointerPressed.
+        // 空操作：见 OnPointerPressed。
     }
 
     private static void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
-        // This handler is only subscribed on non-Windows platforms.
-        // On Windows, native PointerRoutedEvents handle node dragging.
+        // 这个处理器只在非 Windows 平台订阅；Windows 上由原生 PointerRoutedEvents 负责节点拖拽。
         if (sender is not View view || view.GetValue(StateProperty) is not DragState state)
         {
             return;
@@ -291,10 +286,7 @@ public sealed class WorkflowNodeDragBehavior
                 IsDraggingNode = true;
                 break;
             case GestureStatus.Running:
-                // PanGestureRecognizer always fires Started first, so the
-                // !state.IsDragging branch below is defensive only — it
-                // handles the theoretical case where Running fires without
-                // a preceding Started event on some MAUI platforms.
+                // PanGestureRecognizer 总是先发 Started，下面的 !state.IsDragging 分支只是防御 —— 针对某些 MAUI 平台可能不发 Started 就发 Running 的理论情况。
                 if (!state.IsDragging)
                 {
                     state.CoordinateHost ??= ResolveCoordinateHost(view);

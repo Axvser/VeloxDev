@@ -10,22 +10,23 @@ namespace VeloxDev.Generators.Writers
     {
         private bool IsAop { get; set; } = false;
 
+        /// <inheritdoc />
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
             ReadAopConfig(namedTypeSymbol);
         }
 
-        // Symbol-based: the [AspectOriented] members may live on a different partial declaration than
-        // the one this writer was handed, and detecting them from one declaration would silently emit
-        // nothing for the whole type.
+        // 基于符号：[AspectOriented] 成员可能不在本写入者拿到的那个 partial 声明上，只从一份声明检测会为整个类型静默地什么都不生成。
         private void ReadAopConfig(INamedTypeSymbol symbol)
         {
             IsAop = AnalizeHelper.IsAopClass(symbol);
         }
 
+        /// <inheritdoc />
         public override bool CanWrite() => IsAop;
 
+        /// <inheritdoc />
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null) return string.Empty;
@@ -35,20 +36,25 @@ namespace VeloxDev.Generators.Writers
         // 不再往用户类上注入那个接口。曾经需要它，只是为了让 CreateProxy<接口>(x) 编译得过；
         // 改用编译期实现类之后 new {Proxy}(x) 不需要任何转换，而生成的接口现在多了一个**带成员的**
         // 基接口 IAopHookTarget —— 继续让用户类实现它，用户类就必须自己实现 SetHooks，那是荒谬的。
+        /// <inheritdoc />
         public override string[] GenerateBaseTypes() => [];
 
+        /// <inheritdoc />
         public override string[] GenerateBaseInterfaces() => [];
 
+        /// <inheritdoc />
         public override string GenerateBody() => string.Empty;
 
-        // ── Output 2: extension method class ──
+        // ── 输出 2：扩展方法类 ──
 
+        /// <summary>Returns the generated file name for the extension-method class.</summary>
         public string GetExtensionFileName()
         {
             if (Syntax == null || Symbol == null) return string.Empty;
             return $"{Syntax.Identifier.Text}_{NamespaceFileSegment()}_AopExt.g.cs";
         }
 
+        /// <summary>Returns the generated extension-method class source.</summary>
         public string WriteExtension()
         {
             if (Syntax == null || Symbol == null || !IsAop)

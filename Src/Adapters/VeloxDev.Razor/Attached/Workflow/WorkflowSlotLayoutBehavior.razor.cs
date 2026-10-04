@@ -68,9 +68,7 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
             }
 
             var id = entry[0];
-            // The batch comes from the measuring JS, which formats with toFixed() and is therefore always
-            // '.'-separated. Parsed with the current culture instead, a comma-decimal server would read the
-            // '.' as a thousands separator and silently place the anchor wrong — no exception, no zero.
+            // 批次来自测量的 JS，用 toFixed() 格式化、总是 '.' 分隔；若按当前文化解析，逗号小数服务器会把 '.' 当千位分隔符，锚点被静默放错 —— 不抛异常、也不是零。
             if (!double.TryParse(entry[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
                 || !double.TryParse(entry[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var y))
             {
@@ -86,9 +84,7 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
             anyChanged = true;
         }
 
-        // Notify the node that its slot layout changed. Consumers render links from slot anchors,
-        // so this makes them redraw immediately during a live drag instead of waiting for the
-        // node's own Anchor to change again.
+        // 通知节点其插槽布局变了。消费者按插槽锚点渲染连线，所以这让它们在实时拖拽中立刻重画，而不是等节点自身 Anchor 再变一次。
         if (anyChanged)
         {
             Node.OnPropertyChanged(nameof(IWorkflowNodeViewModel.Anchor));

@@ -5,6 +5,7 @@ using VeloxDev.Timing;
 
 namespace VeloxDev.TimeLine
 {
+    /// <summary>The tick loop: fixed-rate channels that drive <c>ITickable</c> objects.</summary>
     public static class TickManager
     {
         #region Constants
@@ -30,6 +31,7 @@ namespace VeloxDev.TimeLine
         // 睡多久就查一次令牌：既不忙等，也不让一次停止等上一整个间隔（最低目标帧率下预算有一秒长）。
         private const int MAX_SLEEP_CHUNK_MS = 50;
 
+        /// <summary>The channel name used when none is given.</summary>
         public const string DEFAULT_CHANNEL = "default";
 
         #endregion
@@ -1156,8 +1158,10 @@ namespace VeloxDev.TimeLine
         #endregion
     }
 
+    /// <summary>The event args for tick-channel lifecycle events.</summary>
     public sealed class TickChannelEventArgs(string channelName) : EventArgs
     {
+        /// <summary>The channel the event belongs to.</summary>
         public string ChannelName { get; } = channelName;
     }
 }

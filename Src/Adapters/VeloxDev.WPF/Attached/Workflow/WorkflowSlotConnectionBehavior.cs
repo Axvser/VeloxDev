@@ -7,13 +7,16 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors
 {
 public sealed class WorkflowSlotConnectionBehavior : DependencyObject
 {
+    /// <summary>Identifies the <c>IsEnabled</c> attached property that turns on slot-connection dragging for a control.</summary>
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
         "IsEnabled",
         typeof(bool),
         typeof(WorkflowSlotConnectionBehavior),
         new PropertyMetadata(false, OnIsEnabledChanged));
 
+    /// <summary>Reads the <c>IsEnabled</c> attached property from <paramref name="element"/>.</summary>
     public static bool GetIsEnabled(DependencyObject element) => (bool)element.GetValue(IsEnabledProperty);
+    /// <summary>Sets the <c>IsEnabled</c> attached property on <paramref name="element"/>.</summary>
     public static void SetIsEnabled(DependencyObject element, bool value) => element.SetValue(IsEnabledProperty, value);
 
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

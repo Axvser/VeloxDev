@@ -48,8 +48,10 @@ namespace VeloxDev.TransitionSystem
         private static Control? ControlDispatcher(object target)
             => target is Control control && control.IsHandleCreated ? control : null;
 
+        /// <inheritdoc />
         public override bool IsAlive => _isAppAlive;
 
+        /// <inheritdoc />
         public override ThreadRef ThreadFor(object target)
         {
             EnsureCaptured();
@@ -65,10 +67,12 @@ namespace VeloxDev.TransitionSystem
                 ? !control.InvokeRequired
                 : base.IsCurrentFor(target, thread);
 
+        /// <inheritdoc />
         protected override bool IsCurrentThread(ThreadRef thread)
             => thread.TryGet<SynchronizationContext>(out var context)
                && ReferenceEquals(SynchronizationContext.Current, context);
 
+        /// <inheritdoc />
         protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority)
         {
             if (ControlDispatcher(target) is { } control)

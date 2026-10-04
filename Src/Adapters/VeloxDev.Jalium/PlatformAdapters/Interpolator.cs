@@ -9,8 +9,7 @@ namespace VeloxDev.TransitionSystem
     {
         static Interpolator()
         {
-            // Exact-type lookup: register BOTH Brush and SolidColorBrush so brush properties
-            // declared as either type animate (anchor/port/link fills).
+            // 按精确类型查找：Brush 与 SolidColorBrush 都要注册，声明成任一种的画刷属性才能动画（锚点/端口/连线填充）。
             RegisterInterpolator(typeof(Point), new PointSampler());
             RegisterInterpolator(typeof(Rect), new RectSampler());
             RegisterInterpolator(typeof(Thickness), new ThicknessSampler());
@@ -23,6 +22,7 @@ namespace VeloxDev.TransitionSystem
             RegisterInterpolator(typeof(Jalium.UI.Media.Media3D.Transform3D), new Transform3DSampler());
         }
 
+        /// <inheritdoc />
         public override TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect)
             => effect is ITransitionEffect<DispatcherPriority>
                 ? (TransitionSchedulerCore)TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>.FindOrCreate(target)

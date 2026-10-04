@@ -309,9 +309,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
         catch (InvalidOperationException)
         {
-            // A descendant slot control had no usable geometry yet (e.g. called
-            // during handle creation before child handles exist). Re-queue so the
-            // anchor still lands after the layout settles.
+            // 后代插槽控件还没有可用几何（例如在句柄创建期间、子句柄尚未存在时被调用）；重新排队，让锚点在布局落定后仍能落下。
             ScheduleSync(control);
         }
     }
@@ -471,13 +469,8 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (States.TryGetValue(control, out var state))
         {
-            // (Re)establish the node PropertyChanged subscription. The initial
-            // Attach runs at ctor time when the node view-model is still null, so
-            // the subscription created there is a no-op — without re-running it
-            // here, slot anchors would only ever be measured once and links would
-            // never track node drags. The ReferenceEquals guard in
-            // UpdatePropertyChangedSubscription keeps this a cheap no-op once the
-            // correct source is subscribed.
+            // 重新建立节点的 PropertyChanged 订阅：Attach 在构造时跑，那时节点 VM 还是 null，订阅是空操作；不在这里重跑，插槽锚点只会被量一次、连线永不跟随节点拖拽。
+            // UpdatePropertyChangedSubscription 里的 ReferenceEquals 防护让它在已订阅正确源后成为廉价空操作。
             UpdatePropertyChangedSubscription(control, state);
         }
 
@@ -493,15 +486,14 @@ public sealed class WorkflowSlotLayoutBehavior
         var slotNames = GetAllSlotNames(control);
         var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-        // Rebuild the set of property names that should trigger ScheduleSync on change.
+        // 重建「变化时该触发 ScheduleSync」的属性名集合。
         if (state is not null)
         {
             state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
-            // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
-            // names ("OutputSlots"). Add both the full control name and the
-            // PART_-stripped form so OnPropertyChanged("OutputSlots") is matched.
+            // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
+            // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
             {
                 state.SlotPropertyNames.Add(name);
@@ -514,8 +506,7 @@ public sealed class WorkflowSlotLayoutBehavior
                 if (name.StartsWith("PART_"))
                     state.SlotPropertyNames.Add(name.Substring(5));
             }
-            // Always include fallback defaults for standard property names,
-            // covering both direct ViewModel properties and SlotEnumerator members.
+            // 标准属性名一律带兜底默认值，覆盖 ViewModel 直接属性与 SlotEnumerator 成员。
             state.SlotPropertyNames.Add("InputSlot");
             state.SlotPropertyNames.Add("OutputSlot");
             state.SlotPropertyNames.Add("OutputSlots");
@@ -550,11 +541,8 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
-        // The named control may be the slot view itself, or a host panel that
-        // contains slot views (e.g. PART_InputSlot in the node template). Sync
-        // whichever SlotViews resolve under it — otherwise a container named as a
-        // slot never gets its child slot view measured, its anchor stays NaN, and
-        // the WorkflowSlotUpdateGate NaN check hides every link that ends there.
+        // 命名控件可能是插槽视图本身，也可能是包含插槽视图的宿主面板（如节点模板里的 PART_InputSlot）。把它下面解析出的 SlotView 都同步 —— 否则被命名为插槽的容器其子插槽视图永不被测量、锚点停在 NaN，
+        // WorkflowSlotUpdateGate 的 NaN 检查会隐藏所有以此结尾的连线。
         if (ResolveSlot(slotControl) is not null)
         {
             SyncSlot(host, coordinateHost, slotControl, node);
@@ -594,11 +582,8 @@ public sealed class WorkflowSlotLayoutBehavior
 
         if (coordinateHost is not null)
         {
-            // PointToClient yields the center in the coordinate host's (the canvas) client
-            // space, which is exactly where links are rendered — the node's Location already
-            // includes pan + ActualOffset, so NO offset subtraction. Using
-            // SlotAnchorFromVisualCenter here would subtract ActualOffset and offset every
-            // link by -ActualOffset (a constant up-left shift whenever NegativeOffset is set).
+            // PointToClient 得到的是坐标宿（画布）客户区里的中心，正是连线渲染所在的系 —— 节点的 Location 已含平移 + ActualOffset，所以不减偏移。
+            // 这里若用 SlotAnchorFromVisualCenter 会减掉 ActualOffset，让每条连线偏移 -ActualOffset（只要设了 NegativeOffset 就恒定左上移）。
             var coordinatePoint = coordinateHost.PointToClient(screenPoint);
             slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
                 coordinatePoint.X, coordinatePoint.Y, slot.Anchor.Layer);

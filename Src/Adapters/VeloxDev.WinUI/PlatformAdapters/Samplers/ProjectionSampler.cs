@@ -6,9 +6,12 @@ namespace VeloxDev.Adapters.NativeSamplers
     {
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
@@ -16,7 +19,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             var s = Normalize(start);
             var e = Normalize(end);
 
-            // Zero per-frame allocation: reuse a scratch projection, recomputing its fields from the pristine start/end.
+            // 每帧零分配：复用同一个 scratch projection，每帧从原始 start/end 重算各字段。
             if (working is not PlaneProjection wp)
             {
                 wp = new PlaneProjection();
@@ -36,6 +39,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             property.SetValue(target, wp);
         }
 
+        /// <summary>Interpolates the projection angle by <paramref name="t"/>.</summary>
         protected virtual double LerpAngle(double start, double end, double t, RotationDirection direction, char axis)
         {
             bool reverse = axis switch
@@ -66,7 +70,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             if (obj is PlaneProjection p)
                 return p;
 
-            // Default initial state: no rotation, no offset.
+            // 默认初始状态：无旋转、无偏移。
             return new PlaneProjection
             {
                 RotationX = 0,
@@ -81,6 +85,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             };
         }
 
+        /// <summary>Interpolates the angle along the shortest path, honoring <paramref name="reverse"/>.</summary>
         protected static double LerpDirectionalAngle(double start, double end, double t, bool reverse)
         {
             var delta = (end - start) % 360d;

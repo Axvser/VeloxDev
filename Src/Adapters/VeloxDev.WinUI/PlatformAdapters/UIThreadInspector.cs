@@ -40,13 +40,17 @@ namespace VeloxDev.TransitionSystem
             return EnsureQueue();
         }
 
+        /// <inheritdoc />
         public override ThreadRef ThreadFor(object target) => ThreadRef.From(QueueFor(target));
 
+        /// <inheritdoc />
         protected override bool IsCurrentThread(ThreadRef thread)
             => thread.TryGet<DispatcherQueue>(out var queue) && queue.HasThreadAccess;
 
+        /// <inheritdoc />
         protected override DispatcherQueuePriority InternalPriority => DispatcherQueuePriority.Normal;
 
+        /// <inheritdoc />
         protected override bool PostCore(object target, ThreadRef thread, Action action, DispatcherQueuePriority priority)
         {
             if (!thread.TryGet<DispatcherQueue>(out var queue)) return false;

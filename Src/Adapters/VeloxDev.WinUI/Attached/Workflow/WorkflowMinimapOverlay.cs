@@ -20,7 +20,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 {
-    // ── Dependency Properties ────────────────────────────────────────────────
+    // ── 依赖属性 ────────────────────────────────────────────────────────────
 
     public static readonly DependencyProperty ScrollOffsetXProperty =
         DependencyProperty.Register(nameof(ScrollOffsetX), typeof(double), typeof(WorkflowMinimapOverlay),
@@ -150,7 +150,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     public double MinimapMinSize { get => (double)GetValue(MinimapMinSizeProperty); set => SetValue(MinimapMinSizeProperty, value); }
     public string? ScrollViewerName { get => (string?)GetValue(ScrollViewerNameProperty); set => SetValue(ScrollViewerNameProperty, value); }
 
-    // ── State ────────────────────────────────────────────────────────────────
+    // ── 状态 ────────────────────────────────────────────────────────────────
 
     private WorkflowBounds _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
@@ -163,7 +163,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     private IWorkflowTreeViewModel? _subscribedTree;
     private ScrollViewer? _scrollViewer;
 
-    // Shape pools
+    // 形状池
     private readonly List<Rectangle> _nodeRects = [];
     private Rectangle? _viewportRect;
     private Rectangle? _bgRect;
@@ -176,7 +176,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         Width = MinimapWidth;
         Height = MinimapHeight;
 
-        // Only subscribe timer if we're on UI thread
+        // 只在 UI 线程才订阅定时器
         try
         {
             _refreshTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.CreateTimer();
@@ -204,7 +204,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     private void ResolveScrollViewer()
     {
         if (string.IsNullOrWhiteSpace(ScrollViewerName)) return;
-        // Walk up to the UserControl (name scope root) and find by name
+        // 上溯到 UserControl（名称作用域根）按名查找
         FrameworkElement? el = this;
         while (el is not null)
         {
@@ -215,10 +215,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
                 {
                     if (_scrollViewer is not null) _scrollViewer.SizeChanged -= OnScrollViewerResized;
                     _scrollViewer = sv;
-                    // The behavior pushes ViewportWidth on ViewChanged (scroll), but ViewChanged does
-                    // NOT fire for a viewport-SIZE change — and ScrollViewer.ViewportWidth can lag at
-                    // SizeChanged mid-layout. Read the ScrollViewer's settled viewport on ITS resize so
-                    // the draggable block follows the real visible area when the window shrinks.
+                    // 行为在 ViewChanged（滚动）时推 ViewportWidth，但视口尺寸变化不会触发 ViewChanged —— 且布局中途 ScrollViewer.ViewportWidth 会滞后。
+                    // 在 ScrollViewer 自身 resize 时读它落定的视口，窗口缩小时可拖块才跟得上真实可见区。
                     _scrollViewer.SizeChanged += OnScrollViewerResized;
                 }
                 return;
@@ -229,11 +227,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
     private void OnScrollViewerResized(object? sender, SizeChangedEventArgs e)
     {
-        // Defer past the current layout pass so the size is settled; then push the ACTUAL visible
-        // area and re-render. ActualWidth/Height = the element's rendered size — the real visible
-        // region — whereas ScrollViewer.ViewportWidth can report the effective/larger value; the
-        // block must shrink to the actual area when the window shrinks.
-        // ScrollOffsetX/Y are unchanged by a pure resize (the block's top-left stays put).
+        // 延后到当前布局趟之后让尺寸落定，再推实际可见区并重渲染。ActualWidth/Height = 元素渲染尺寸（真实可见区），而 ScrollViewer.ViewportWidth 可能报有效/更大的值；窗口缩小时块必须缩到实际区域。
+        // 纯 resize 不改 ScrollOffsetX/Y（块的左上角不动）。
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             if (_scrollViewer is null) return;
@@ -243,7 +238,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         });
     }
 
-    // ── Tree management ──────────────────────────────────────────────────────
+    // ── 树管理 ──────────────────────────────────────────────────────────────
 
     private void OnTreeChanged(IWorkflowTreeViewModel? newTree)
     {
@@ -338,10 +333,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     {
         if (_refreshTimer is not null)
         {
-            // Throttle, not debounce: restarting a running timer on every MarkDirty
-            // means it never ticks during a continuous pan — the minimap only redraws
-            // once movement stops. Start only when idle so it ticks at the fixed 16 ms
-            // cadence while updates keep arriving.
+            // 节流而非去抖：每次 MarkDirty 重启运行中的定时器会让连续平移期间它永不触发 —— 缩略图只在移动停止后重绘一次。
+            // 只在空闲时启动，更新持续到来时它才按固定 16ms 节拍触发。
             if (!_refreshTimer.IsRunning)
             {
                 _refreshTimer.Start();
@@ -353,7 +346,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         }
     }
 
-    // ── Data refresh ─────────────────────────────────────────────────────────
+    // ── 数据刷新 ─────────────────────────────────────────────────────────────
 
     private void RefreshMinimapData()
     {
@@ -392,7 +385,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         _lastViewport = default;
     }
 
-    // ── Transform ─────────────────────────────────────────────────────────────
+    // ── 变换 ────────────────────────────────────────────────────────────────
 
     private (double Ox, double Oy, double MmW, double MmH, double Sc) ComputeTransform(WorkflowBounds gb)
     {
@@ -405,7 +398,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         return (ox, oy, mmW, mmH, sc);
     }
 
-    // ── Pointer ──────────────────────────────────────────────────────────────
+    // ── 指针 ────────────────────────────────────────────────────────────────
 
     private Rect? GetViewportRectInMinimap()
     {
@@ -416,8 +409,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var (ox, oy, mmW, mmH, sc) = ComputeTransform(gb);
         if (sc <= 0) return null;
 
-        // Shared fit + clamp: maps the world-space viewport through the minimap fit and
-        // keeps the block inside the minimap even when the viewport exceeds the content.
+        // 共用拟合 + 夹取：把世界空间视口经缩略图拟合映射，并在视口超出内容时仍把块留在缩略图内。
         var (l, t, w, h) = WorkflowSurfaceMath.MinimapViewportRect(
             ox, oy, sc, vp.Left, vp.Top, vp.Width, vp.Height,
             gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
@@ -429,8 +421,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         if (_isDragging) return;
         var pt = e.GetCurrentPoint(this).Position;
 
-        // Match the Jalium adapter: the clicked point always becomes the viewport center —
-        // no grab-anchor on the indicator block, so pressing anywhere recenters the view.
+        // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
         NavigateToWorld(pt.X, pt.Y);
         _isDragging = true;
         CapturePointer(e.Pointer);
@@ -482,7 +473,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         }
     }
 
-    // ── Shape rendering ──────────────────────────────────────────────────────
+    // ── 形状渲染 ────────────────────────────────────────────────────────────
 
     private void RebuildShapes()
     {
@@ -505,7 +496,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var gb = _lastGlobalBounds;
         bool hasData = gb.Width > 0 && gb.Height > 0;
 
-        // Ensure background/border
+        // 确保背景/边框
         if (_bgRect is null)
         {
             _bgRect = new Rectangle();
@@ -539,7 +530,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
         var (ox, oy, _, _, sc) = ComputeTransform(gb);
 
-        // Nodes
+        // 节点
         var ncr = Math.Max(0, NodeCornerRadius);
         while (_nodeRects.Count < _lastNodeRects.Count)
         {
@@ -570,7 +561,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             }
         }
 
-        // Viewport indicator
+        // 视口指示块
         var vp = _lastViewport;
         if (!vp.IsEmpty)
         {
@@ -579,7 +570,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
                 _viewportRect = new Rectangle();
                 Children.Add(_viewportRect);
             }
-            // Same shared fit + clamp as GetViewportRectInMinimap.
+            // 与 GetViewportRectInMinimap 相同的共用拟合 + 夹取。
             var (vpx, vpy, vpw, vph) = WorkflowSurfaceMath.MinimapViewportRect(
                 ox, oy, sc, vp.Left, vp.Top, vp.Width, vp.Height,
                 gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);

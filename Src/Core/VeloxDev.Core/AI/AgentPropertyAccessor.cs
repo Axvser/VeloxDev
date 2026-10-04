@@ -22,6 +22,7 @@ public static class AgentPropertyAccessor
     /// </summary>
     public sealed class PropertyDescriptor
     {
+        /// <summary>The property's name.</summary>
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
@@ -30,9 +31,13 @@ public static class AgentPropertyAccessor
         /// </summary>
         public string PropertyType { get; set; } = "System.Object";
 
+        /// <summary>Whether the property can be read.</summary>
         public bool CanRead { get; set; }
+        /// <summary>Whether the property can be written.</summary>
         public bool CanWrite { get; set; }
+        /// <summary>The property's current value, when discovery was asked to read values.</summary>
         public object? CurrentValue { get; set; }
+        /// <summary>The <c>[AgentContext]</c> descriptions for this property.</summary>
         public IReadOnlyList<string> AgentDescriptions { get; set; } = [];
     }
 
@@ -41,8 +46,11 @@ public static class AgentPropertyAccessor
     /// </summary>
     public sealed class SetResult
     {
+        /// <summary>The name of the property the write targeted.</summary>
         public string PropertyName { get; set; } = string.Empty;
+        /// <summary>Whether the write succeeded.</summary>
         public bool Success { get; set; }
+        /// <summary>The reason the write was refused, when it was.</summary>
         public string? Error { get; set; }
     }
 

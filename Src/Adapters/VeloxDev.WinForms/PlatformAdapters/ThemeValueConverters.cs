@@ -5,6 +5,7 @@ namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
@@ -22,6 +23,7 @@ namespace VeloxDev.DynamicTheme
 
     public class IntConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
@@ -39,6 +41,7 @@ namespace VeloxDev.DynamicTheme
 
     public class FloatConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
@@ -56,13 +59,14 @@ namespace VeloxDev.DynamicTheme
 
     public class PointConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string "x,y"
+                // 格式 1：逗号分隔字符串 x,y
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -72,7 +76,7 @@ namespace VeloxDev.DynamicTheme
                         return new Point(x, y);
                 }
 
-                // Format 2: two separate parameters [x, y]
+                // 格式 2：两个独立参数 [x, y]
                 if (parameters.Length >= 2)
                 {
                     int x = System.Convert.ToInt32(parameters[0]);
@@ -88,13 +92,14 @@ namespace VeloxDev.DynamicTheme
 
     public class PointFConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string "x,y"
+                // 格式 1：逗号分隔字符串 x,y
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -104,7 +109,7 @@ namespace VeloxDev.DynamicTheme
                         return new PointF(x, y);
                 }
 
-                // Format 2: two separate parameters [x, y]
+                // 格式 2：两个独立参数 [x, y]
                 if (parameters.Length >= 2)
                 {
                     float x = System.Convert.ToSingle(parameters[0]);
@@ -120,13 +125,14 @@ namespace VeloxDev.DynamicTheme
 
     public class SizeConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string "width,height"
+                // 格式 1：逗号分隔字符串 width,height
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -136,7 +142,7 @@ namespace VeloxDev.DynamicTheme
                         return new Size(width, height);
                 }
 
-                // Format 2: two separate parameters [width, height]
+                // 格式 2：两个独立参数 [width, height]
                 if (parameters.Length >= 2)
                 {
                     int width = System.Convert.ToInt32(parameters[0]);
@@ -152,13 +158,14 @@ namespace VeloxDev.DynamicTheme
 
     public class SizeFConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string "width,height"
+                // 格式 1：逗号分隔字符串 width,height
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -168,7 +175,7 @@ namespace VeloxDev.DynamicTheme
                         return new SizeF(width, height);
                 }
 
-                // Format 2: two separate parameters [width, height]
+                // 格式 2：两个独立参数 [width, height]
                 if (parameters.Length >= 2)
                 {
                     float width = System.Convert.ToSingle(parameters[0]);
@@ -184,13 +191,14 @@ namespace VeloxDev.DynamicTheme
 
     public class RectangleConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string "x,y,width,height"
+                // 格式 1：逗号分隔字符串 x,y,width,height
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -202,7 +210,7 @@ namespace VeloxDev.DynamicTheme
                         return new Rectangle(x, y, width, height);
                 }
 
-                // Format 2: four separate parameters [x, y, width, height]
+                // 格式 2：四个独立参数 [x, y, width, height]
                 if (parameters.Length >= 4)
                 {
                     int x = System.Convert.ToInt32(parameters[0]);
@@ -220,13 +228,14 @@ namespace VeloxDev.DynamicTheme
 
     public class RectangleFConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string "x,y,width,height"
+                // 格式 1：逗号分隔字符串 x,y,width,height
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -238,7 +247,7 @@ namespace VeloxDev.DynamicTheme
                         return new RectangleF(x, y, width, height);
                 }
 
-                // Format 2: four separate parameters [x, y, width, height]
+                // 格式 2：四个独立参数 [x, y, width, height]
                 if (parameters.Length >= 4)
                 {
                     float x = System.Convert.ToSingle(parameters[0]);
@@ -256,13 +265,14 @@ namespace VeloxDev.DynamicTheme
 
     public class PaddingConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: comma-separated string
+                // 格式 1：逗号分隔字符串
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -281,7 +291,7 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // Format 2: numeric parameter list
+                // 格式 2：数值参数列表
                 return parameters.Length switch
                 {
                     1 => new Padding(System.Convert.ToInt32(parameters[0])),
@@ -304,32 +314,33 @@ namespace VeloxDev.DynamicTheme
 
     public class ColorConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: color name or HEX string
+                // 格式 1：颜色名或 HEX 字符串
                 if (parameters[0] is string colorString)
                 {
-                    // Use ColorConverter to convert a color name or HEX value.
+                    // 用 ColorConverter 转换颜色名或 HEX 值。
                     var converter = new System.Drawing.ColorConverter();
                     if (converter.ConvertFromString(colorString) is Color color)
                         return color;
 
-                    // Try converting from a known color name.
+                    // 试从已知颜色名转换。
                     if (Enum.TryParse<KnownColor>(colorString, true, out KnownColor knownColor))
                         return Color.FromKnownColor(knownColor);
                 }
 
-                // Format 2: integer value (ARGB)
+                // 格式 2：整数值（ARGB）
                 if (parameters[0] is int argb)
                 {
                     return Color.FromArgb(argb);
                 }
 
-                // Format 3: individual components
+                // 格式 3：各分量
                 if (parameters.Length >= 3)
                 {
                     byte a = parameters.Length >= 4 ? System.Convert.ToByte(parameters[0]) : (byte)255;
@@ -347,13 +358,14 @@ namespace VeloxDev.DynamicTheme
 
     public class FontConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             if (parameters == null || parameters.Length < 1) return null;
 
             try
             {
-                // Format 1: font description string "fontName,size,style"
+                // 格式 1：字体描述字符串 fontName,size,style
                 if (parameters[0] is string fontString)
                 {
                     var parts = fontString.Split(',');
@@ -373,14 +385,14 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // Format 2: system font name
+                // 格式 2：系统字体名
                 if (parameters[0] is string systemFontName)
                 {
                     var systemFont = GetSystemFont(systemFontName);
                     if (systemFont != null) return systemFont;
                 }
 
-                // Format 3: separate parameters [fontName, size, style(optional)]
+                // 格式 3：独立参数 [fontName, size, style(可选)]
                 if (parameters.Length >= 2)
                 {
                     string fontFamily = parameters[0]?.ToString() ?? "Microsoft Sans Serif";
@@ -416,15 +428,16 @@ namespace VeloxDev.DynamicTheme
 
     public class ObjectConverter : IThemeValueConverter
     {
+        /// <inheritdoc />
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
-            // Parameter validation
+            // 参数校验
             if (parameters == null || parameters.Length != 1 || parameters[0] is not string strValue)
                 return null;
 
             try
             {
-                // Special-case the Brush type.
+                // 单独处理 Brush 类型。
                 if (typeof(Brush).IsAssignableFrom(targetType))
                 {
                     var colorConverter = new System.Drawing.ColorConverter();
@@ -434,35 +447,35 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // Special-case the Color type.
+                // 单独处理 Color 类型。
                 if (targetType == typeof(Color))
                 {
                     var colorConverter = new System.Drawing.ColorConverter();
                     return colorConverter.ConvertFromString(strValue);
                 }
 
-                // Special-case the Font type - use the correct FontConverter method.
+                // 单独处理 Font 类型 —— 用正确的 FontConverter 方法。
                 if (targetType == typeof(Font))
                 {
                     var fontConverter = new System.Drawing.FontConverter();
                     return fontConverter.ConvertFromString(strValue);
                 }
 
-                // Get the target type's TypeConverter.
+                // 取目标类型的 TypeConverter。
                 TypeConverter converter = TypeDescriptor.GetConverter(targetType);
 
-                // Support culture-insensitive conversion.
+                // 支持与文化无关的转换。
                 if (converter.CanConvertFrom(typeof(string)))
                 {
                     return converter.ConvertFromString(null, CultureInfo.InvariantCulture, strValue);
                 }
 
-                // Fall back to default conversion.
+                // 退回默认转换。
                 return converter.ConvertFrom(strValue);
             }
             catch (NotSupportedException)
             {
-                // WinForms has no Application.Current.Resources, but other resource lookup paths can be tried.
+                // WinForms 没有 Application.Current.Resources，但可尝试其它资源查找路径。
                 return null;
             }
             catch

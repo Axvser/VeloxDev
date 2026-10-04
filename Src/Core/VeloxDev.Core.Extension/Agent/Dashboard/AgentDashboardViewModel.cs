@@ -89,13 +89,12 @@ public sealed partial class AgentDashboardViewModel : IDisposable
 
     /// <summary>
     /// Reconnects every server the host registered. This is the aggregate counterpart of a server row's own
-    /// reload, and replaces the standalone MCP panel's 重载 button.
+    /// reload, and replaces the standalone MCP panel's reload button.
     /// </summary>
     public async System.Threading.Tasks.Task ReloadAllServersAsync()
     {
         if (_scope.Mcp is null) return;
-        // LoadAsync, not AddAsync: the point of the aggregate action is to re-establish the whole set, and
-        // it re-tracks every server's status row itself.
+        // 用 LoadAsync 而不是 AddAsync：这个聚合动作就是为了重建整个集合，而 LoadAsync 自己会重新跟踪每个服务器的状态行。
         await _scope.Mcp.LoadAsync(_scope.Mcp.RegisteredServers).ConfigureAwait(false);
     }
 

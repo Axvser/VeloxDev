@@ -1,20 +1,17 @@
 @namespace VeloxDev.WorkflowSystem.AttachedBehaviors
 
-@* The surface cascades itself so a link view nested in ChildContent can forward pointer input into
-   the tree's LinkInteraction hub (see ForwardPointerAsync). *@
+@* The surface cascades itself so a nested link view can forward pointer input into the tree's
+   LinkInteraction hub. *@
 <CascadingValue TValue="WorkflowSurfaceBehavior" Value="@this" IsFixed="true">
 <CascadingValue TValue="SurfaceViewportFeed" Value="_feed">
-    @* tabindex + keydown: the surface is the key host, so Delete reaches the interaction hub and
-       Escape closes the link menu from a generated project without any host code. Focused on link
-       hover (see ForwardPointerAsync) with preventScroll, which is this platform's guard against the
-       focus-scroll jump. The contextmenu handler is the menu's one entry point (see OnSurfaceContextMenu). *@
+    @* The surface is the key host: Delete reaches the hub and Escape closes the menu with no host
+       code. Focus is taken on link hover with preventScroll, and contextmenu is the menu's entry point. *@
     <div class="veloxdev-wf-surface" tabindex="0" @onkeydown="OnSurfaceKeyDown" @ref="_surfaceRoot"
          @oncontextmenu="OnSurfaceContextMenu" @oncontextmenu:preventDefault="true"
          style="outline:none;">
         <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">
-            @* Canvas host owns the pixel size (grows via edge expansion) and is set ONLY by JS, so a
-               Blazor re-render can never shrink the canvas under the content. The canvas inside is
-               solid-background only; the grid and axis are separate JS-positioned layers. *@
+            @* Canvas host owns the pixel size and is set ONLY by JS, so a Blazor re-render cannot
+               shrink the canvas; the grid and axis are separate JS-positioned layers. *@
             <div class="veloxdev-wf-canvas-host" @ref="_canvasHost">
                 <div id="@CanvasId" class="veloxdev-wf-canvas" style="@CanvasBackgroundStyle" @ref="_canvas">
                     <div class="veloxdev-wf-grid" @ref="_grid"></div>
@@ -37,10 +34,8 @@
         {
             @Minimap(_viewport)
         }
-        @* Link context menu: the chrome lives here (and is styled by veloxdev.workflow.css), while the
-           entries are the host's — passed in as LinkMenu. The backdrop is what makes click-away dismiss
-           work with no JS, and while it is up it swallows canvas gestures — which is what a menu should
-           do. *@
+        @* Link context menu chrome; the entries come from the host as LinkMenu. The backdrop makes
+           click-away dismiss work with no JS and swallows canvas gestures while open. *@
         @if (MenuLink is not null)
         {
             <div class="wf-link-menu-backdrop"

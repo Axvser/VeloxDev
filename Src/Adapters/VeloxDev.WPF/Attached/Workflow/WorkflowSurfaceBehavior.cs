@@ -527,7 +527,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = e.Delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
         var layout = viewModel.Layout;
@@ -536,24 +536,18 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             && host.GetValue(StateProperty) is SurfaceState state
             && state.ScrollViewer is { } sv)
         {
-            // Capture the world point under the viewport center, collapse the nodes about it, then
-            // scroll so that point stays put: nodes near the viewport center remain visible while zooming.
-            // The canvas geometry is untouched by the zoom (ActualOffset == NegativeOffset, fixed) — only
-            // the scroll moves, so the canvas position never jitters.
+            // 捕获视口中心下方的世界点，绕它折叠节点，再滚动让该点不动：缩放时视口中心附近的节点保持可见。
+            // 缩放不动画布几何（ActualOffset == NegativeOffset，固定）——只动滚动，画布位置因此永不抖动。
             var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
                 sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
 
-            // Deep zoom-in collapses negative-world content past the fixed canvas translate (ActualOffset
-            // == NegativeOffset); grow the cover BEFORE ApplyLayout adopts the new offset. PivotCenterScroll
-            // below reads the grown offset, so the extra cover is absorbed by the scroll target and the
-            // pivot stays centered — no manual delta needed. Positive-only content is a no-op.
+            // 深度放大把负向内容折叠越过固定画布平移（ActualOffset == NegativeOffset）；必须在 ApplyLayout 采纳新偏移前扩大覆盖。
+            // 下面的 PivotCenterScroll 会读到长大的偏移，多出的覆盖被滚动目标吸收、枢轴保持居中 —— 无需手动增量。只有正向内容时无事发生。
             WorkflowSurfaceMath.EnsureNegativeCover(viewModel);
 
-            // Let the ScrollViewer adopt the (possibly auto-extended) extent BEFORE reading the max.
-            // Zoom-in below scale 1 grows the canvas, zoom-out may shrink it; the clamp must see the
-            // settled extent or the pivot lands off-center and the next tick re-captures the drift.
+            // 让 ScrollViewer 在读取最大值前采纳（可能自动延伸的）范围。比例低于 1 的放大让画布长大、缩小可能让它变小；夹取必须看到落定的范围，否则枢轴偏离中心、下一格又重捕漂移。
             ApplyLayout(host, state);
             state.Canvas?.UpdateLayout();
             sv.UpdateLayout();
@@ -563,13 +557,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             var maxH = GetHorizontalScrollMaximum(sv);
             var maxV = GetVerticalScrollMaximum(sv);
 
-            // Overscroll-expand the canvas (same mechanism as panning past an edge) so the pivot is
-            // always reachable; a plain clamp would push the pivot off-center and drift on each tick.
+            // 越界扩展画布（与拖过边界同一机制），让枢轴总能到达；单纯夹取会把枢轴推离中心并逐格漂移。
             var newX = WorkflowSurfaceMath.ClampScrollOffset(tx, maxH, layout, horizontal: true);
             var newY = WorkflowSurfaceMath.ClampScrollOffset(ty, maxV, layout, horizontal: false);
             if (Math.Abs(newX - tx) > double.Epsilon || Math.Abs(newY - ty) > double.Epsilon)
             {
-                // Expansion changed the extent; re-apply and re-read the max so tx/ty land inside it.
+                // 扩展改变了范围；重应用并重读最大值，tx/ty 才落在其内。
                 ApplyLayout(host, state);
                 state.Canvas?.UpdateLayout();
                 sv.UpdateLayout();
@@ -584,9 +577,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         else
         {
             layout.Scale = new Scale(next, next);
-            // World-origin zoom: the canvas translate only changes when the layout is re-applied, so if
-            // the cover grew, push the new offset through the same layout pass the viewport-center branch
-            // does (the trimmed demos are viewport-center, so this path normally stays dormant).
+            // 世界原点缩放：只有重应用布局时画布平移才变，所以覆盖长大后把新偏移走视口居中分支同样的布局趟推出去（trimmed 示例是视口居中，此路径通常休眠）。
             if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel)
                 && host.GetValue(StateProperty) is SurfaceState fallbackState
                 && fallbackState.Canvas is { } fallbackCanvas
@@ -619,7 +610,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        // Start canvas panning only when the click lands on blank background (not on nodes/slots/links or other interactive elements).
+        // 只有点击落在空白背景（非节点/插槽/连线或其它交互元素）时才起画布平移。
         if (e.OriginalSource is not DependencyObject originalSource
             || !IsSurfaceBlankInteraction(originalSource, state))
         {
@@ -877,8 +868,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var maxH = GetHorizontalScrollMaximum(state.ScrollViewer);
         var maxV = GetVerticalScrollMaximum(state.ScrollViewer);
 
-        // Canonical overscroll clamp: expands the canvas via Negative/PositiveOffset when panning past
-        // the content edge, then returns the clamped scroll offset (WorkflowSurfaceMath.ClampScrollOffset).
+        // 规范越界夹取：拖过内容边缘时经 Negative/PositiveOffset 扩展画布，再返回夹取后的滚动偏移（WorkflowSurfaceMath.ClampScrollOffset）。
         var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(
             desiredX, maxH, viewModel.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
         var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(
@@ -945,7 +935,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.ScrollViewer.ViewportWidth,
             state.ScrollViewer.ViewportHeight);
 
-        // Persist the viewport position so it survives serialization round-trip.
+        // 持久化视口位置，使其能熬过序列化往返。
         viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
     }
 
@@ -963,8 +953,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
             decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
 
-            // Keep the virtualization visible-region correction in sync with the decorator's
-            // floating ruler band so nodes beneath it are not culled a ruler-thickness early.
+            // 让虚拟化可见区修正与装饰器的浮动标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
             viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
         }
     }
@@ -1004,7 +993,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return false;
         }
 
-        // Do not start canvas panning when clicking the ScrollViewer's scroll bar (Thumb/Track/RepeatButton/ScrollBar).
+        // 点击 ScrollViewer 的滚动条（Thumb/Track/RepeatButton/ScrollBar）时不起画布平移。
         if (source is System.Windows.Controls.Primitives.ScrollBar
             || ancestors.Any(x => x is System.Windows.Controls.Primitives.ScrollBar))
         {

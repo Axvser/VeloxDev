@@ -222,9 +222,7 @@ public sealed class ViewManager : IDisposable
 
     private static void ApplyContext(Control view, object item)
     {
-        // WinForms has no DataContext; honor the common "Tag as context" convention
-        // used throughout the VeloxDev WinForms demos, plus optional ViewModel/DataContext
-        // properties so control designers can bind explicitly.
+        // WinForms 没有 DataContext；沿用 VeloxDev WinForms 示例里常见的「Tag 作上下文」约定，并支持可选的 ViewModel/DataContext 属性，供控件设计器显式绑定。
         view.Tag = item;
 
         foreach (var propertyName in new[] { "ViewModel", "DataContext", "BindingContext" })
@@ -238,7 +236,7 @@ public sealed class ViewManager : IDisposable
                 }
                 catch
                 {
-                    // Best-effort context wiring; the view may require designer setup.
+                    // 尽力而为的上下文接线；视图可能需要设计器设置。
                 }
             }
         }

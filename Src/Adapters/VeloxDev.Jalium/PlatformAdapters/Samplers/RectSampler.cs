@@ -4,17 +4,19 @@ namespace VeloxDev.Adapters.NativeSamplers
 {
     public class RectSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
             var r1 = (Rect)(start ?? new Rect(0, 0, 0, 0));
             var r2 = (Rect)(end ?? r1);
-            // Convex lerp of two valid rects stays non-negative (Jalium's Rect ctor throws on negatives).
-            // Width and height share one progress so an overshoot cannot skew the shape, and stop at
-            // zero: a negative size is not representable. Position stays unbounded.
+            // 两个合法矩形的凸插值必为非负（Jalium 的 Rect 构造对负值抛异常）；宽高共用同一进度、在 0 处停住，
+            // 负尺寸无法表示；位置不受限。
             var size = new BoundedProgress(t, 0d, double.PositiveInfinity);
             size.Add(r1.Width, r2.Width);
             size.Add(r1.Height, r2.Height);

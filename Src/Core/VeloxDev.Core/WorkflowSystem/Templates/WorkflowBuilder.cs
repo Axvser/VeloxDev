@@ -1,5 +1,6 @@
 ﻿namespace VeloxDev.WorkflowSystem;
 
+/// <summary>Attributes that tell the source generator which helper a workflow component uses.</summary>
 public sealed class WorkflowBuilder
 {
     /// <summary>
@@ -12,7 +13,9 @@ public sealed class WorkflowBuilder
     public sealed class TreeAttribute<T>(Type? virtualLinkType = default, Type? virtualSlotType = default) : Attribute
         where T : IWorkflowTreeViewModelHelper, new()
     {
+        /// <summary>The link type used for the tree's provisional link.</summary>
         public Type? VirtualLinkType { get; } = virtualLinkType;
+        /// <summary>The slot type used inside that provisional link.</summary>
         public Type? VirtualSlotType { get; } = virtualSlotType;
     }
 
@@ -25,6 +28,7 @@ public sealed class WorkflowBuilder
     public sealed class NodeAttribute<T>(int workSemaphore = 1) : Attribute
         where T : IWorkflowNodeViewModelHelper, new()
     {
+        /// <summary>The concurrent capacity of the node's receive task.</summary>
         public int Semaphore { get; } = workSemaphore;
     }
 
@@ -45,6 +49,7 @@ public sealed class WorkflowBuilder
     public sealed class LinkAttribute<T>(Type? slotType = default) : Attribute
         where T : IWorkflowLinkViewModelHelper, new()
     {
+        /// <summary>The starter slot type a new link gets.</summary>
         public Type? SlotType { get; } = slotType;
     }
 }

@@ -78,7 +78,7 @@ public sealed partial class McpServerMemberViewModel : AgentMemberViewModel
 
     /// <summary>
     /// The server's own state is Failed. Deliberately distinct from <see cref="HasError"/>: a message can
-    /// be attached to a server that is still connected, and the 存活 / 错误 roll-up has to count states,
+    /// be attached to a server that is still connected, and the alive / error roll-up has to count states,
     /// or one server would land in both buckets.
     /// </summary>
     public bool IsFailedState => IsFailed;

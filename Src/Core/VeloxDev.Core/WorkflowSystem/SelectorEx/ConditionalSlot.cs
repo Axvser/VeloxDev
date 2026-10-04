@@ -21,6 +21,7 @@ public interface IConditionalSlot
     public IWorkflowSlotViewModel Slot { get; }
 }
 
+/// <summary>One entry of a conditional slot provider: the selector value it answers to and the slot built for it.</summary>
 public partial class ConditionalSlot<TSlot> : IConditionalSlot
     where TSlot : IWorkflowSlotViewModel, new()
 {

@@ -19,6 +19,7 @@ namespace VeloxDev.Generators
         private const string IThemeObjectFullName = "global::VeloxDev.DynamicTheme.IThemeObject";
         private const string IThemeValueConverterFullName = "global::VeloxDev.DynamicTheme.IThemeValueConverter";
 
+        /// <inheritdoc />
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             static (ClassDeclarationSyntax Syntax, INamedTypeSymbol Symbol) Transform(
@@ -117,7 +118,7 @@ namespace VeloxDev.Generators
                 return string.Empty;
             }
 
-            // ── Detect if base type already implements IThemeObject ──
+            // ── 检测基类型是否已实现 IThemeObject ──
             bool baseHasIThemeObject = false;
             bool baseHasOurThemeConfig = false;
             if (classSymbol.BaseType != null && classSymbol.BaseType.SpecialType != SpecialType.System_Object)
@@ -125,7 +126,7 @@ namespace VeloxDev.Generators
                 baseHasIThemeObject = classSymbol.BaseType.AllInterfaces.Any(i =>
                     i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == IThemeObjectFullName);
 
-                // Check if any ancestor has ThemeConfigAttribute (meaning our generator handles it)
+                // 检查是否有祖先带 ThemeConfigAttribute（表示由本生成器处理）
                 var checkType = classSymbol.BaseType;
                 while (checkType != null && checkType.SpecialType != SpecialType.System_Object)
                 {
@@ -153,7 +154,7 @@ namespace VeloxDev.Generators
             string baseCallChanged = baseHasIThemeObject ? "base.ExecuteThemeChanged(oldValue, newValue);" : "";
             string addInterface = baseHasIThemeObject ? "" : $" : {IThemeObjectFullName}";
 
-            // Collect property configurations for ThemeCache registration
+            // 收集属性配置供 ThemeCache 注册
             var configRegistrations = new List<string>();
             var propertyNamesForInit = new List<string>();
 
@@ -168,7 +169,7 @@ namespace VeloxDev.Generators
                     continue;
                 var converterTypeName = converterType.ToDisplayString();
 
-                // Find property symbol (walk inheritance chain)
+                // 查属性符号（沿继承链上溯）
                 var propertySymbol = classSymbol.GetMembers(propertyName!)
                     .OfType<IPropertySymbol>()
                     .FirstOrDefault();
@@ -187,10 +188,10 @@ namespace VeloxDev.Generators
 
                 var propertyTypeName = propertySymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-                // Build converter key (only placeholder—converter created inline)
+                // 构建转换器键（仅占位 —— 转换器内联创建）
                 var converterKey = $"__velox_conv_{converterTypeName.GetHashCode()}_{propertyName}__";
 
-                // Process theme context parameters
+                // 处理主题上下文的参数
                 var themeContexts = new List<string>();
                 for (int i = 1; i < attribute.ConstructorArguments.Length; i++)
                 {
@@ -217,7 +218,7 @@ namespace VeloxDev.Generators
                     themeContexts.Add($"[{string.Join(", ", contextElements)}]");
                 }
 
-                // Get theme types
+                // 取主题类型
                 var themeTypes = new List<string>();
                 for (int i = 1; i < attribute.AttributeClass?.TypeArguments.Length; i++)
                 {
@@ -228,7 +229,7 @@ namespace VeloxDev.Generators
                     }
                 }
 
-                // Build theme value expressions
+                // 构建主题值表达式
                 var themeValueExprs = new List<string>();
                 for (int i = 0; i < Math.Min(themeTypes.Count, themeContexts.Count); i++)
                 {
@@ -240,7 +241,7 @@ namespace VeloxDev.Generators
 
                 var propertyExpr = $"typeof({classFullTypeName}).GetProperty(nameof({propertyName}))!";
 
-                // Build registration string for this property (used in InitializeTheme)
+                // 为本属性构建注册字符串（用于 InitializeTheme）
                 var themeDictEntries = string.Join("\n", themeValueExprs);
                 var regEntry = $$"""
                                 {
@@ -293,7 +294,7 @@ namespace VeloxDev.Generators
             sb.AppendLine("        }");
             sb.AppendLine();
 
-            // ── Partial methods ──
+            // ── 分部方法 ──
             sb.AppendLine("        partial void OnThemeChanging(global::System.Type? oldValue, global::System.Type? newValue);");
             sb.AppendLine("        partial void OnThemeChanged(global::System.Type? oldValue, global::System.Type? newValue);");
             sb.AppendLine();
@@ -384,10 +385,10 @@ namespace VeloxDev.Generators
             sb.AppendLine("        }");
             sb.AppendLine();
 
-            // ── InitializeTheme (with lazy registration) ──
+            // ── InitializeTheme（惰性注册）──
             sb.AppendLine($"        public {methodModifier}void InitializeTheme()");
             sb.AppendLine("        {");
-            // Lazy registration: only register if this type hasn't been registered yet
+            // 惰性注册：本类型尚未注册才注册
             sb.AppendLine($"            if (!{ThemeCacheFullName}.IsTypeRegistered(typeof({classFullTypeName})))");
             sb.AppendLine("            {");
             sb.AppendLine($"                {ThemeCacheFullName}.RegisterType(typeof({classFullTypeName}), new global::System.Collections.Generic.Dictionary<global::System.String, (global::System.Reflection.PropertyInfo Property, global::System.Collections.Generic.Dictionary<global::System.Type, object?> Values)>");
@@ -396,10 +397,10 @@ namespace VeloxDev.Generators
             sb.AppendLine("                });");
             sb.AppendLine("            }");
             sb.AppendLine();
-            // Call base initialization first (if applicable)
+            // 先调基类初始化（若适用）
             if (!string.IsNullOrEmpty(baseCallInit))
                 sb.AppendLine($"            {baseCallInit}");
-            // Register with ThemeManager and apply current theme values
+            // 向 ThemeManager 注册并应用当前主题值
             sb.AppendLine($"            {ThemeManagerFullName}.Register(this);");
             sb.AppendLine($"            var staticCache = {ThemeCacheFullName}.GetStaticForType(this.GetType());");
             sb.AppendLine("            var currentTheme = " + ThemeManagerFullName + ".Current;");

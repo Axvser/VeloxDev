@@ -1,5 +1,6 @@
 ﻿namespace VeloxDev.AI;
 
+/// <summary>The languages the Agent context system can render text in.</summary>
 public enum AgentLanguages : byte
 {
     English = 0,
@@ -38,6 +39,7 @@ public enum AgentLanguages : byte
     Persian = 32,
 }
 
+/// <summary>Conversions between <see cref="AgentLanguages"/> and language codes or display names.</summary>
 public static class AgentLanguagesExtensions
 {
     private static readonly Dictionary<string, AgentLanguages> LanguageCodeMap = new(StringComparer.OrdinalIgnoreCase)
@@ -97,6 +99,7 @@ public static class AgentLanguagesExtensions
 
     private static AgentLanguages LanguageCodeMap_Value(string code) => LanguageCodeMap[code];
 
+    /// <summary>Returns the BCP-47 language code for <paramref name="language"/>.</summary>
     public static string ToLanguageCode(this AgentLanguages language)
     {
         return language switch
@@ -138,6 +141,10 @@ public static class AgentLanguagesExtensions
         };
     }
 
+    /// <summary>Tries to parse a BCP-47 language code.</summary>
+    /// <param name="languageCode">The code to parse, e.g. <c>en</c> or <c>zh-Hans</c>.</param>
+    /// <param name="language">The parsed language.</param>
+    /// <returns><see langword="true"/> when the code is known.</returns>
     public static bool TryParseLanguageCode(string languageCode, out AgentLanguages language)
     {
         language = default;
@@ -162,6 +169,9 @@ public static class AgentLanguagesExtensions
         return false;
     }
 
+    /// <summary>Parses a BCP-47 language code.</summary>
+    /// <param name="languageCode">The code to parse.</param>
+    /// <exception cref="ArgumentException">The code is not known.</exception>
     public static AgentLanguages ParseLanguageCode(string languageCode)
     {
         if (TryParseLanguageCode(languageCode, out var language))
@@ -172,6 +182,7 @@ public static class AgentLanguagesExtensions
         throw new ArgumentException($"Unsupported language code: {languageCode}", nameof(languageCode));
     }
 
+    /// <summary>Returns the English display name of <paramref name="language"/>.</summary>
     public static string GetDisplayName(this AgentLanguages language)
     {
         return language switch

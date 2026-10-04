@@ -13,15 +13,18 @@ namespace VeloxDev.Adapters.NativeSamplers
     /// snapshot).</summary>
     public class BrushSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
             if (start is SolidColorBrush sb && end is SolidColorBrush eb)
             {
-                // Zero per-frame allocation: reuse a scratch brush, recomputing from the pristine start/end each frame.
+                // 每帧零分配：复用同一个 scratch 画刷，每帧从原始 start/end 重算。
                 if (working is not SolidColorBrush wb)
                 {
                     wb = new SolidColorBrush(sb.Color) { Opacity = sb.Opacity };
@@ -92,7 +95,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color InterpolateColor(Color c1, Color c2, double t)
         {
-            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。
             var rgb = new BoundedProgress(t, 0d, 255d);
             rgb.Add(c1.R, c2.R);
             rgb.Add(c1.G, c2.G);
@@ -120,7 +123,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Point LerpPoint(Point a, Point b, double t) => new(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));
 
-        /// <summary>一种画刷的代表性颜色：纯色取它自己，渐变取最后一个色标，其余视为透明。</summary>
+        // 一种画刷的代表性颜色：纯色取它自己，渐变取最后一个色标，其余视为透明。
         private static Color RepresentativeColor(Brush brush) => brush switch
         {
             SolidColorBrush solid => solid.Color,

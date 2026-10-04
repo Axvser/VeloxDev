@@ -5,42 +5,34 @@ using System.Runtime.CompilerServices;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
-/// <summary>
-/// 路径的一段。属性段与索引段共用它做身份（<see cref="SameAs"/> / <see cref="Hash"/>）与文本渲染，
-/// 编译访问器则在 <c>TransitionProperty</c> 里按段落类型分派。
-/// </summary>
+// 路径的一段。属性段与索引段共用它做身份（SameAs / Hash）与文本渲染，
+// 编译访问器则在 TransitionProperty 里按段落类型分派。
 internal abstract class PathSegment
 {
-    /// <summary>该段从哪个类型上取值。</summary>
+    // 该段从哪个类型上取值。
     internal abstract Type DeclaringType { get; }
 
-    /// <summary>该段产出的值类型。</summary>
+    // 该段产出的值类型。
     internal abstract Type ValueType { get; }
 
-    /// <summary>路径文本里的这一段，仅用于诊断。</summary>
+    // 路径文本里的这一段，仅用于诊断。
     internal abstract string Display { get; }
 
-    /// <summary>
-    /// 按值比较。必须与 <see cref="Hash"/> 严格同步——两侧不同步会让 <c>HashSet</c>/字典把同一条路径留成两份，
-    /// 排除与包含判定就会静默失配。
-    /// </summary>
+    // 按值比较。必须与 Hash 严格同步——两侧不同步会让 HashSet/字典把同一条路径留成两份，
+    // 排除与包含判定就会静默失配。
     internal abstract bool SameAs(PathSegment other);
 
     internal abstract void Hash(ref HashCode hash);
 
-    /// <summary>
-    /// 按名字 + 声明类型比较两个 <see cref="PropertyInfo"/>：反射给出的实例与表达式树携带的实例不是同一个对象，
-    /// 而 <c>PropertyInfo.Equals</c> 是引用比较。
-    /// </summary>
+    // 按名字 + 声明类型比较两个 PropertyInfo：反射给出的实例与表达式树携带的实例不是同一个对象，
+    // 而 PropertyInfo.Equals 是引用比较。
     internal static bool SameMember(PropertyInfo left, PropertyInfo right)
         => ReferenceEquals(left, right)
            || (left.Name == right.Name && left.DeclaringType == right.DeclaringType);
 
-    /// <summary>
-    /// 哈希 <paramref name="property"/> 的名字与声明类型，<b>不</b>哈希实例本身：net5.0/netcoreapp3.0 上
-    /// <c>RuntimePropertyInfo</c> 覆盖了 <c>GetHashCode</c> 看起来是按值的，但 netframework4.6.1 上是引用比较——
-    /// 那样同一条路径会既相等又落在不同的桶里。
-    /// </summary>
+    // 哈希 property 的名字与声明类型，不哈希实例本身：net5.0/netcoreapp3.0 上
+    // RuntimePropertyInfo 覆盖了 GetHashCode 看起来是按值的，但 netframework4.6.1 上是引用比较——
+    // 那样同一条路径会既相等又落在不同的桶里。
     internal static void HashMember(ref HashCode hash, PropertyInfo property)
     {
         hash.Add(property.Name);
@@ -48,7 +40,7 @@ internal abstract class PathSegment
     }
 }
 
-/// <summary>普通属性段。身份语义与索引器支持之前完全一致：名字 + 声明类型。</summary>
+// 普通属性段。身份语义与索引器支持之前完全一致：名字 + 声明类型。
 internal sealed class PropertySegment : PathSegment
 {
     internal PropertySegment(PropertyInfo property)
@@ -70,7 +62,7 @@ internal sealed class PropertySegment : PathSegment
     internal override void Hash(ref HashCode hash) => HashMember(ref hash, Property);
 }
 
-/// <summary>索引器段：<c>x.Items[0]</c>、<c>x.Map["a"]</c>、<c>x.Grid[3, 7]</c>。</summary>
+// 索引器段：x.Items[0]、x.Map["a"]、x.Grid[3, 7]。
 internal sealed class IndexerSegment : PathSegment
 {
     internal IndexerSegment(PropertyInfo indexer, Type declaringType, IndexArgument[] arguments)
@@ -102,9 +94,7 @@ internal sealed class IndexerSegment : PathSegment
     }
 }
 
-/// <summary>
-/// 数组元素段。数组没有 <see cref="PropertyInfo"/>，所以它单独成型；一维及以上共用（多维走 <c>IndexExpression</c>）。
-/// </summary>
+// 数组元素段。数组没有 PropertyInfo，所以它单独成型；一维及以上共用（多维走 IndexExpression）。
 internal sealed class ArrayIndexSegment : PathSegment
 {
     internal ArrayIndexSegment(Type declaringType, Type elementType, IndexArgument[] arguments)
@@ -132,31 +122,27 @@ internal sealed class ArrayIndexSegment : PathSegment
     }
 }
 
-/// <summary>
-/// 索引实参。三种身份规则，全部与「求值」解耦——键必须在构造期定死，因为属性是
-/// <c>ConcurrentDictionary</c> 的键，而同一个用户 lambda 会在 <c>SetValue</c> / <c>SetOptions</c> /
-/// <c>TryGetValue</c> 里被<b>分别解析多次</b>：键一旦依赖当时的值，闭包字段被改写后两次解析就对不上，
-/// 表现为静默 miss。
-/// </summary>
+// 索引实参。三种身份规则，全部与「求值」解耦——键必须在构造期定死，因为属性是
+// ConcurrentDictionary 的键，而同一个用户 lambda 会在 SetValue / SetOptions /
+// TryGetValue 里被分别解析多次：键一旦依赖当时的值，闭包字段被改写后两次解析就对不上，
+// 表现为静默 miss。
 internal abstract class IndexArgument
 {
-    /// <summary>文本形式，仅用于诊断路径。</summary>
+    // 文本形式，仅用于诊断路径。
     internal abstract string Display { get; }
 
-    /// <summary>是否需要把实参绑定到一个具体 target。只有冻结档才需要。</summary>
+    // 是否需要把实参绑定到一个具体 target。只有冻结档才需要。
     internal abstract bool NeedsBinding { get; }
 
     internal abstract bool SameAs(IndexArgument other);
 
     internal abstract void Hash(ref HashCode hash);
 
-    /// <summary>求值。<paramref name="target"/> 只在实参引用了 lambda 参数时才会被读。</summary>
+    // 求值。target 只在实参引用了 lambda 参数时才会被读。
     internal abstract object? Resolve(object? target);
 
-    /// <summary>
-    /// 把实参编译进访问器表达式。跟随档在这里<b>内联</b>原始表达式（每帧现场求值，没有委托调用开销），
-    /// 冻结档则从 <paramref name="arguments"/> 数组里取第 <paramref name="slot"/> 个（由 <c>BindTo</c> 在启动时填好）。
-    /// </summary>
+    // 把实参编译进访问器表达式。跟随档在这里内联原始表达式（每帧现场求值，没有委托调用开销），
+    // 冻结档则从 arguments 数组里取第 slot 个（由 BindTo 在启动时填好）。
     internal abstract Expression Build(Expression target, Expression arguments, ref int slot, Type parameterType);
 
     internal static bool SameAll(IndexArgument[] left, IndexArgument[] right)
@@ -179,10 +165,8 @@ internal abstract class IndexArgument
     }
 }
 
-/// <summary>
-/// 编译期常量实参（<c>[0]</c>、<c>["a"]</c>、<c>[MyEnum.Value]</c>）。按「值 + 运行时类型」做身份：
-/// <c>[0]</c> 与 <c>[0L]</c> 必须是两条路径，所以类型要参与比较，不能只比数值。
-/// </summary>
+// 编译期常量实参（[0]、["a"]、[MyEnum.Value]）。按「值 + 运行时类型」做身份：
+// [0] 与 [0L] 必须是两条路径，所以类型要参与比较，不能只比数值。
 internal sealed class ConstantIndexArgument : IndexArgument
 {
     private readonly int _hash;
@@ -224,12 +208,10 @@ internal sealed class ConstantIndexArgument : IndexArgument
         => Expression.Convert(Expression.Constant(Value), parameterType);
 }
 
-/// <summary>
-/// 需要解析的实参：闭包成员（<c>[i]</c>）与引用 lambda 参数的表达式（<c>[x.SelectedIndex]</c>）。
-/// 身份是构造期定死的字符串——闭包按 (实例, 成员) 而不是按值（循环里批量声明时每次都是不同的闭包实例，
-/// 按值会让它们挤成一个键），参数引用按规范化结构串（参数名要归一，否则 <c>x.K</c> 与 <c>s.K</c> 不相等，
-/// 同一条路径会静默分裂成两个字典条目）。
-/// </summary>
+// 需要解析的实参：闭包成员（[i]）与引用 lambda 参数的表达式（[x.SelectedIndex]）。
+// 身份是构造期定死的字符串——闭包按 (实例, 成员) 而不是按值（循环里批量声明时每次都是不同的闭包实例，
+// 按值会让它们挤成一个键），参数引用按规范化结构串（参数名要归一，否则 x.K 与 s.K 不相等，
+// 同一条路径会静默分裂成两个字典条目）。
 internal sealed class DeferredIndexArgument : IndexArgument
 {
     private readonly string _key;
@@ -286,18 +268,16 @@ internal sealed class DeferredIndexArgument : IndexArgument
     }
 }
 
-/// <summary>把一段表达式里的某个参数换成另一个表达式，用于把索引实参嫁接到编译访问器的形参上。</summary>
+// 把一段表达式里的某个参数换成另一个表达式，用于把索引实参嫁接到编译访问器的形参上。
 internal sealed class PathParameterReplacer(ParameterExpression from, Expression to) : ExpressionVisitor
 {
     protected override Expression VisitParameter(ParameterExpression node)
         => ReferenceEquals(node, from) ? to : base.VisitParameter(node);
 }
 
-/// <summary>
-/// 把索引实参表达式分类成 <see cref="IndexArgument"/>。失败（遇到表达不出来的节点、非法的实参类型）
-/// 时返回 null，由调用方把整条路径当作不可解析——与 <c>TryCreate</c> 既有的「不认识就丢弃」一致，
-/// 绝不输出被截断的身份。
-/// </summary>
+// 把索引实参表达式分类成 IndexArgument。失败（遇到表达不出来的节点、非法的实参类型）
+// 时返回 null，由调用方把整条路径当作不可解析——与 TryCreate 既有的「不认识就丢弃」一致，
+// 绝不输出被截断的身份。
 internal static class IndexArgumentFactory
 {
     private static readonly MethodInfo FrozenDefinition =
@@ -345,11 +325,9 @@ internal static class IndexArgumentFactory
         => method.IsGenericMethod
            && method.GetGenericMethodDefinition() == FrozenDefinition;
 
-    /// <summary>
-    /// <c>System.Index</c> / <c>System.Range</c> 要挡在编译之前：它们不在 netstandard2.0 / netframework4.6.1 上，
-    /// 表达式树里带着它们会让 <c>Compile()</c> 从内部抛 <c>TypeLoadException</c>——也就是从用户的
-    /// <c>Property(...)</c> 里抛出来，既晚又难懂。
-    /// </summary>
+    // System.Index / System.Range 要挡在编译之前：它们不在 netstandard2.0 / netframework4.6.1 上，
+    // 表达式树里带着它们会让 Compile() 从内部抛 TypeLoadException——也就是从用户的
+    // Property(...) 里抛出来，既晚又难懂。
     private static bool IsSupportedArgumentType(Type type)
         => type.FullName is not "System.Index" and not "System.Range"
            && !(type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>)
@@ -377,10 +355,8 @@ internal static class IndexArgumentFactory
     }
 }
 
-/// <summary>
-/// 实参表达式的规范化身份串。要求严格：遇到任何表达不出来的节点就返回 null（整条路径被丢弃），
-/// 绝不输出截断的字符串——截断会让两条不同的路径撞成同一个键，是这里最坏的结果。
-/// </summary>
+// 实参表达式的规范化身份串。要求严格：遇到任何表达不出来的节点就返回 null（整条路径被丢弃），
+// 绝不输出截断的字符串——截断会让两条不同的路径撞成同一个键，是这里最坏的结果。
 internal static class PathKey
 {
     private const int MaxDepth = 32;
@@ -397,7 +373,7 @@ internal static class PathKey
         }
     }
 
-    /// <summary>表达式是否引用了这个 lambda 参数——决定它是闭包（按实例身份）还是跟随（按结构身份）。</summary>
+    // 表达式是否引用了这个 lambda 参数——决定它是闭包（按实例身份）还是跟随（按结构身份）。
     internal static bool References(Expression expression, ParameterExpression? parameter)
     {
         if (parameter is null) return false;
@@ -417,7 +393,7 @@ internal static class PathKey
         return expression;
     }
 
-    /// <summary>字面量的文本形式。值类型按值，引用类型按实例身份（字符串除外，它没有有意义的身份）。</summary>
+    // 字面量的文本形式。值类型按值，引用类型按实例身份（字符串除外，它没有有意义的身份）。
     internal static string Literal(object? value)
     {
         if (value is null) return "null";

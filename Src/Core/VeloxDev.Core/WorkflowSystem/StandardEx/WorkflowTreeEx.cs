@@ -5,10 +5,12 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem.StandardEx;
 
+/// <summary>Standard operations for a workflow tree: commands, node and link lifecycle, connection building, undo/redo and degree queries.</summary>
 public static class WorkflowTreeEx
 {
     private static readonly ConditionalWeakTable<IWorkflowTreeViewModel, TreeCache> _cache = new();
 
+    /// <summary>Returns the standard commands a tree helper drives.</summary>
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands(this IWorkflowTreeViewModel component)
         =>
         [
@@ -22,6 +24,7 @@ public static class WorkflowTreeEx
             component.UndoCommand
         ];
 
+    /// <summary>Creates <paramref name="node"/> in the tree, detaching it from any previous tree first.</summary>
     public static void StandardCreateNode(this IWorkflowTreeViewModel component, IWorkflowNodeViewModel node)
     {
         var oldParent = node.Parent;
@@ -37,6 +40,7 @@ public static class WorkflowTreeEx
             () => CreateNodeUndo(component, node, oldParent)));
     }
 
+    /// <summary>Moves the virtual link's receiver to <paramref name="anchor"/>, keeping the sender's layer.</summary>
     public static void StandardSetPointer(this IWorkflowTreeViewModel component, Anchor anchor)
     {
         // 指针只带得动位置：这一端落在哪一层，由这条虚拟连线**起点那一端**决定 —— 起点是
@@ -48,6 +52,7 @@ public static class WorkflowTreeEx
         component.OnPropertyChanged(nameof(component.VirtualLink));
     }
 
+    /// <summary>Closes the tree and every node, slot and link under it.</summary>
     public static async Task StandardCloseAsync(this IWorkflowTreeViewModel component)
     {
         component.GetHelper().Closing();
@@ -96,6 +101,7 @@ public static class WorkflowTreeEx
 
     #region Connection Manager Extensions
 
+    /// <summary>Starts building a connection from <paramref name="slot"/>.</summary>
     public static void StandardSendConnection(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel slot)
     {
         var cache = GetCache(component);
@@ -129,6 +135,7 @@ public static class WorkflowTreeEx
         slot.GetHelper().UpdateState();
     }
 
+    /// <summary>Completes a connection at <paramref name="slot"/>.</summary>
     public static void StandardReceiveConnection(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel slot)
     {
         var cache = GetCache(component);
@@ -185,6 +192,7 @@ public static class WorkflowTreeEx
         cache.CurrentSender = null;
     }
 
+    /// <summary>Clears the virtual link and its preview state.</summary>
     public static void StandardResetVirtualLink(this IWorkflowTreeViewModel component)
     {
         var cache = GetCache(component);
@@ -205,6 +213,7 @@ public static class WorkflowTreeEx
     #endregion
 
     #region Redo & Undo Extensions
+    /// <summary>Redoes the last undone action.</summary>
     public static void StandardRedo(this IWorkflowTreeViewModel component)
     {
         var cache = GetCache(component);
@@ -222,6 +231,7 @@ public static class WorkflowTreeEx
         }
     }
 
+    /// <summary>Applies <paramref name="actionPair"/> and pushes it onto the undo history.</summary>
     public static void StandardSubmit(this IWorkflowTreeViewModel component, IWorkflowActionPair actionPair)
     {
         var cache = GetCache(component);
@@ -236,6 +246,7 @@ public static class WorkflowTreeEx
         }
     }
 
+    /// <summary>Undoes the last action.</summary>
     public static void StandardUndo(this IWorkflowTreeViewModel component)
     {
         var cache = GetCache(component);
@@ -253,6 +264,7 @@ public static class WorkflowTreeEx
         }
     }
 
+    /// <summary>Clears the undo and redo histories.</summary>
     public static void StandardClearHistory(this IWorkflowTreeViewModel component)
     {
         var cache = GetCache(component);

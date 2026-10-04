@@ -6,9 +6,12 @@ namespace VeloxDev.Adapters.NativeSamplers
 {
     public class BrushSampler : ISampler
     {
+        /// <inheritdoc />
         public object? NormalizeStart(object? start, object? end, object? options) => start;
+        /// <inheritdoc />
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
+        /// <inheritdoc />
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
 
@@ -17,7 +20,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             if (startBrush is ISolidColorBrush ss && endBrush is ISolidColorBrush se)
             {
-                // Zero per-frame allocation: reuse a scratch brush, recomputing its color/opacity from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 画刷，每帧从原始 start/end 重算颜色/不透明度。
                 if (working is not SolidColorBrush wb)
                 {
                     wb = new SolidColorBrush();
@@ -32,7 +35,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             if (startBrush is LinearGradientBrush sl && endBrush is LinearGradientBrush el
                 && sl.GradientStops.Count == el.GradientStops.Count)
             {
-                // Zero per-frame allocation: reuse a scratch linear gradient, recomputing its stops from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 线性渐变，每帧从原始 start/end 重算色标。
                 if (working is not LinearGradientBrush wl || wl.GradientStops.Count != sl.GradientStops.Count)
                 {
                     wl = new LinearGradientBrush { StartPoint = sl.StartPoint, EndPoint = sl.EndPoint };
@@ -42,9 +45,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 }
                 wl.StartPoint = LerpRelativePoint(sl.StartPoint, el.StartPoint, t);
                 wl.EndPoint = LerpRelativePoint(sl.EndPoint, el.EndPoint, t);
-                // The offsets are one value: they share a progress so the stops keep their spacing instead of
-                // crossing, which would invert the gradient. It stops at [0,1] — an offset outside that range is
-                // not a valid gradient stop.
+                // 偏移是同一个值：共用进度，色标保持间距而不会交叉（交叉会反转渐变）；到 [0,1] 为止，越界偏移不是合法色标。
                 var offsets = new BoundedProgress(t, 0d, 1d);
                 for (var i = 0; i < sl.GradientStops.Count; i++)
                     offsets.Add(sl.GradientStops[i].Offset, el.GradientStops[i].Offset);
@@ -61,7 +62,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             if (startBrush is RadialGradientBrush sr && endBrush is RadialGradientBrush er
                 && sr.GradientStops.Count == er.GradientStops.Count)
             {
-                // Zero per-frame allocation: reuse a scratch radial gradient, recomputing its stops from the pristine start/end.
+                // 每帧零分配：复用同一个 scratch 径向渐变，每帧从原始 start/end 重算色标。
                 if (working is not RadialGradientBrush wr || wr.GradientStops.Count != sr.GradientStops.Count)
                 {
                     wr = new RadialGradientBrush { Center = sr.Center, RadiusX = sr.RadiusX, RadiusY = sr.RadiusY };
@@ -73,7 +74,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 // 半径按标量插值，写回时沿用起始笔刷的单位
                 wr.RadiusX = new RelativeScalar(sr.RadiusX.Scalar + (er.RadiusX.Scalar - sr.RadiusX.Scalar) * t, sr.RadiusX.Unit);
                 wr.RadiusY = new RelativeScalar(sr.RadiusY.Scalar + (er.RadiusY.Scalar - sr.RadiusY.Scalar) * t, sr.RadiusY.Unit);
-                // Same shared offset progress as the linear case above.
+                // 与上面线性同样的共用偏移进度。
                 var offsets = new BoundedProgress(t, 0d, 1d);
                 for (var i = 0; i < sr.GradientStops.Count; i++)
                     offsets.Add(sr.GradientStops[i].Offset, er.GradientStops[i].Offset);
@@ -87,8 +88,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return;
             }
 
-            // Unhandled brush kinds (image, conic, mixed types, different stop counts) → blend to a representative
-            // color in a scratch solid brush — zero per-frame allocation (no RenderTargetBitmap).
+            // 未处理的画刷种类（图像、锥形、异型、色标数不同）混成一个代表性纯色写进 scratch 画刷 —— 每帧零分配（不动 RenderTargetBitmap）。
             var c1 = ExtractRepresentativeColor(startBrush);
             var c2 = ExtractRepresentativeColor(endBrush);
             if (working is not SolidColorBrush wb2)
@@ -122,7 +122,7 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color LerpColor(Color c1, Color c2, double t)
         {
-            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            // R/G/B 共用同一进度，越界时不会偏色；alpha 走自己的范围。
             var rgb = new BoundedProgress(t, 0d, 255d);
             rgb.Add(c1.R, c2.R);
             rgb.Add(c1.G, c2.G);

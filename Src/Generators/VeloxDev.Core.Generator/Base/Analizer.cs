@@ -42,6 +42,7 @@ namespace VeloxDev.Generators.Base
             /// </remarks>
             public readonly struct GeneratorTarget : IEquatable<GeneratorTarget>
             {
+                /// <summary>Creates a target descriptor for a class declaration produced by one of the trigger attributes.</summary>
                 public GeneratorTarget(ClassDeclarationSyntax syntax, string typeKey, bool isClassLevelAttribute)
                 {
                     Syntax = syntax;
@@ -65,18 +66,23 @@ namespace VeloxDev.Generators.Base
                 /// </summary>
                 public bool IsClassLevelAttribute { get; }
 
+                /// <inheritdoc />
                 public bool Equals(GeneratorTarget other)
                     => ReferenceEquals(Syntax, other.Syntax)
                        && IsClassLevelAttribute == other.IsClassLevelAttribute
                        && string.Equals(TypeKey, other.TypeKey, StringComparison.Ordinal);
 
+                /// <inheritdoc />
                 public override bool Equals(object? obj) => obj is GeneratorTarget other && Equals(other);
 
+                /// <inheritdoc />
                 public override int GetHashCode()
                     => TypeKey.GetHashCode() ^ (IsClassLevelAttribute ? 1 : 0);
 
+                /// <summary>Returns whether two targets are equal.</summary>
                 public static bool operator ==(GeneratorTarget left, GeneratorTarget right) => left.Equals(right);
 
+                /// <summary>Returns whether two targets differ.</summary>
                 public static bool operator !=(GeneratorTarget left, GeneratorTarget right) => !left.Equals(right);
             }
 
@@ -124,7 +130,7 @@ namespace VeloxDev.Generators.Base
                         .Collect();
                 }
 
-                // Fold the per-attribute streams into one flat array.
+                // 把逐特性流折叠成一个扁平数组。
                 var merged = perAttribute[0];
                 for (var i = 1; i < perAttribute.Length; i++)
                 {
@@ -200,9 +206,7 @@ namespace VeloxDev.Generators.Base
                 {
                     if (indexByType.TryGetValue(target.TypeKey, out var index))
                     {
-                        // A type split over several partial files arrives once per declaration. Keep
-                        // the one carrying a class-level attribute, since that is the declaration the
-                        // syntax-scoped writers need; otherwise the first one seen wins.
+                        // 跨多个 partial 文件的类型每个声明各到达一次。保留带类级特性的那份（语法作用域写入者需要它）；否则先见到的胜出。
                         if (!result[index].IsClassLevelAttribute && target.IsClassLevelAttribute)
                             result[index] = target;
                         continue;
@@ -218,6 +222,7 @@ namespace VeloxDev.Generators.Base
 
         public sealed class MVVMFieldAnalizer
         {
+            /// <summary>Metadata name of the attribute that marks a field for MVVM generation.</summary>
             public const string NAME_VP = "VeloxProperty";
 
             internal MVVMFieldAnalizer(IFieldSymbol fieldSymbol)
@@ -231,12 +236,19 @@ namespace VeloxDev.Generators.Base
                 CollectionItemTypeName = GetCollectionItemTypeName(fieldSymbol.Type);
             }
 
+            /// <summary>Gets the field symbol being analyzed.</summary>
             public IFieldSymbol Symbol { get; private set; }
+            /// <summary>Gets the fully qualified type name of the field.</summary>
             public string TypeName { get; private set; } = string.Empty;
+            /// <summary>Gets the field's name.</summary>
             public string FieldName { get; private set; } = string.Empty;
+            /// <summary>Gets the promoted property name derived from the field.</summary>
             public string PropertyName { get; private set; } = string.Empty;
+            /// <summary>Gets whether the field's type is nullable.</summary>
             public bool IsNullable { get; private set; }
+            /// <summary>Gets whether the field's type is an observable collection.</summary>
             public bool IsNotifyCollectionChanged { get; private set; }
+            /// <summary>Gets the collection element type name, or <see langword="null"/> when the field is not a collection.</summary>
             public string? CollectionItemTypeName { get; private set; }
 
             private static string GetFullyQualifiedTypeName(ITypeSymbol typeSymbol) =>
@@ -260,6 +272,7 @@ namespace VeloxDev.Generators.Base
 
         public sealed class MVVMPropertyAnalizer
         {
+            /// <summary>Metadata name of the attribute that marks a property for MVVM generation.</summary>
             public const string NAME_VP = "VeloxProperty";
 
             internal MVVMPropertyAnalizer(IPropertySymbol propertySymbol)
@@ -270,10 +283,10 @@ namespace VeloxDev.Generators.Base
                 FieldName = GetFieldNameFromPropertyName(propertySymbol.Name);
                 IsNullable = IsNullableType(propertySymbol.Type);
 
-                // Get the property's own access modifier
+                // 取属性自身的访问修饰符
                 PropertyAccessModifier = GetPropertyAccessModifier(propertySymbol);
 
-                // Get the accessor's access modifier (relative to the property level)
+                // 取访问器的访问修饰符（相对属性层级）
                 GetterAccessModifier = GetAccessorAccessModifier(propertySymbol, isGetter: true);
                 SetterAccessModifier = GetAccessorAccessModifier(propertySymbol, isGetter: false);
 
@@ -284,18 +297,31 @@ namespace VeloxDev.Generators.Base
                 CollectionItemTypeName = GetCollectionItemTypeName(propertySymbol.Type);
             }
 
+            /// <summary>Gets the property symbol being analyzed.</summary>
             public IPropertySymbol Symbol { get; private set; }
+            /// <summary>Gets the fully qualified type name of the property.</summary>
             public string TypeName { get; private set; } = string.Empty;
+            /// <summary>Gets the property's name.</summary>
             public string PropertyName { get; private set; } = string.Empty;
+            /// <summary>Gets the backing field name derived from the property.</summary>
             public string FieldName { get; private set; } = string.Empty;
+            /// <summary>Gets whether the property's type is nullable.</summary>
             public bool IsNullable { get; private set; }
+            /// <summary>Gets whether the property declares a getter.</summary>
             public bool HasGetter { get; private set; }
+            /// <summary>Gets whether the property declares a setter.</summary>
             public bool HasSetter { get; private set; }
+            /// <summary>Gets whether the property is a partial property.</summary>
             public bool IsPartial { get; private set; }
+            /// <summary>Gets whether the property's type is an observable collection.</summary>
             public bool IsNotifyCollectionChanged { get; private set; }
+            /// <summary>Gets the collection element type name, or <see langword="null"/> when the property is not a collection.</summary>
             public string? CollectionItemTypeName { get; private set; }
+            /// <summary>Gets the property's declared access modifier.</summary>
             public string PropertyAccessModifier { get; private set; } = "public";
+            /// <summary>Gets the getter's explicit access modifier, or an empty string when it inherits the property's.</summary>
             public string GetterAccessModifier { get; private set; } = string.Empty;
+            /// <summary>Gets the setter's explicit access modifier, or an empty string when it inherits the property's.</summary>
             public string SetterAccessModifier { get; private set; } = string.Empty;
 
             private static string GetPropertyAccessModifier(IPropertySymbol propertySymbol)
@@ -317,7 +343,7 @@ namespace VeloxDev.Generators.Base
                 var accessorMethod = isGetter ? propertySymbol.GetMethod : propertySymbol.SetMethod;
                 if (accessorMethod == null) return string.Empty;
 
-                // Only specify a modifier when the accessor's accessibility differs from the property's
+                // 仅当访问器可访问性与属性不同时才写修饰符
                 var propertyAccessibility = propertySymbol.DeclaredAccessibility;
                 var accessorAccessibility = accessorMethod.DeclaredAccessibility;
 
@@ -381,6 +407,7 @@ namespace VeloxDev.Generators.Base
             const string RETRACT = "   ";
 
             // 从字段构造：属性名由字段名推导，读写器必定齐全
+            /// <summary>Creates a factory from an analyzed field; the generated property is public with full accessors.</summary>
             public MVVMPropertyFactory(MVVMFieldAnalizer fieldAnalizer)
             {
                 FullTypeName = fieldAnalizer.TypeName;
@@ -400,6 +427,7 @@ namespace VeloxDev.Generators.Base
             }
 
             // 从 partial 属性构造：读写器与可访问性照用户写的那份保留
+            /// <summary>Creates a factory from an analyzed partial property, preserving the accessors and modifiers the user wrote.</summary>
             public MVVMPropertyFactory(MVVMPropertyAnalizer propertyAnalizer)
             {
                 FullTypeName = propertyAnalizer.TypeName;
@@ -418,10 +446,15 @@ namespace VeloxDev.Generators.Base
                 SetterAccessModifier = propertyAnalizer.SetterAccessModifier;
             }
 
+            /// <summary>Gets the fully qualified type name of the generated property.</summary>
             public string FullTypeName { get; private set; }
+            /// <summary>Gets the source expression the generated code reads and writes.</summary>
             public string SourceName { get; private set; }
+            /// <summary>Gets the generated property's name.</summary>
             public string PropertyName { get; private set; }
+            /// <summary>Gets whether the generated property's type is nullable.</summary>
             public bool IsNullable { get; private set; }
+            /// <summary>Gets whether this factory was built from a field rather than a partial property.</summary>
             public bool IsFromField { get; private set; }
             /// <summary>
             /// Whether the generated code must declare the backing field itself.
@@ -432,17 +465,29 @@ namespace VeloxDev.Generators.Base
             /// declaring a second one of the same name.
             /// </remarks>
             public bool ShouldEmitField { get; internal set; }
+            /// <summary>Gets whether a getter is generated.</summary>
             public bool HasGetter { get; private set; }
+            /// <summary>Gets whether a setter is generated.</summary>
             public bool HasSetter { get; private set; }
+            /// <summary>Gets whether the generated property is partial.</summary>
             public bool IsPartial { get; private set; }
+            /// <summary>Gets whether the generated property participates in change tracking.</summary>
             public bool IsNotifyCollectionChanged { get; private set; }
+            /// <summary>Gets the collection element type name, or <see langword="null"/> when the property is not a collection.</summary>
             public string? CollectionItemTypeName { get; private set; }
+            /// <summary>Gets the access modifier of the generated property.</summary>
             public string PropertyAccessModifier { get; private set; }
+            /// <summary>Gets the access modifier of the generated getter, if any.</summary>
             public string GetterAccessModifier { get; private set; }
+            /// <summary>Gets the access modifier of the generated setter, if any.</summary>
             public string SetterAccessModifier { get; private set; }
+            /// <summary>Gets or sets whether workflow slot lifecycle hooks are generated.</summary>
             public bool UseWorkflowSlotLifecycle { get; set; }
+            /// <summary>Gets or sets whether workflow slots are auto-created.</summary>
             public bool UseWorkflowSlotAutoCreation { get; set; }
+            /// <summary>Gets or sets whether collection lifecycle hooks are generated for workflow slots.</summary>
             public bool UseWorkflowSlotCollectionLifecycle { get; set; }
+            /// <summary>Gets or sets whether slot-enumerator lifecycle hooks are generated.</summary>
             public bool UseSlotEnumeratorLifecycle { get; set; }
 
             /// <summary>
@@ -453,7 +498,9 @@ namespace VeloxDev.Generators.Base
             /// </summary>
             public SetterMode FrameworkSetterMode { get; set; } = SetterMode.Default;
 
+            /// <summary>Gets or sets the body lines emitted while the property value is changing.</summary>
             public List<string> SetteringBody { get; set; } = [];
+            /// <summary>Gets or sets the body lines emitted after the property value has changed.</summary>
             public List<string> SetteredBody { get; set; } = [];
 
             /// <summary>
@@ -482,13 +529,8 @@ namespace VeloxDev.Generators.Base
             }
             else if (FrameworkSetterMode == SetterMode.FrameworkSetProperty)
             {
-                // Delegates to the host MVVM framework's SetProperty<T>(ref T, T, string) method.
-                // This is accessible from the generated partial class because SetProperty is
-                // a protected method in CommunityToolkit.Mvvm's ObservableObject / ObservableValidator
-                // and Prism's BindableBase.
-                // Note: SetteredBody (OnPropertyChanged) is intentionally excluded because
-                // SetProperty already fires PropertyChanged internally. The partial OnXxxChanged
-                // is still called to maintain VeloxDev's own API contract.
+                // 委托给宿主 MVVM 框架的 SetProperty<T>(ref T, T, string)。生成的 partial 类能访问它，因为 SetProperty 在 CommunityToolkit.Mvvm 的 ObservableObject/ObservableValidator 和 Prism 的 BindableBase 里都是 protected。
+                // 注意：有意排除 SetteredBody（OnPropertyChanged），因为 SetProperty 内部已发 PropertyChanged；仍调用 partial OnXxxChanged 以维持 VeloxDev 自己的 API 契约。
                 return
                 [
                     $"var old = {SourceName};",
@@ -506,7 +548,7 @@ namespace VeloxDev.Generators.Base
             }
             else if (FrameworkSetterMode == SetterMode.FrameworkRaiseAndSet)
             {
-                // ReactiveUI's this.RaiseAndSetIfChanged<T>(ref T, T, string)
+                // ReactiveUI 的 this.RaiseAndSetIfChanged<T>(ref T, T, string)
                 return
                 [
                     $"var old = {SourceName};",
@@ -521,7 +563,7 @@ namespace VeloxDev.Generators.Base
             }
             else if (FrameworkSetterMode == SetterMode.FrameworkNotifyOfPropertyChange)
             {
-                // Caliburn.Micro: NotifyOfPropertyChange handles the changed notification
+                // Caliburn.Micro：由 NotifyOfPropertyChange 负责变更通知
                 return
                 [
                     $"if(global::System.Object.Equals({SourceName}, value)) return;",
@@ -544,6 +586,7 @@ namespace VeloxDev.Generators.Base
 
         private string NonNullableFullTypeName => FullTypeName.EndsWith("?") ? FullTypeName.Substring(0, FullTypeName.Length - 1) : FullTypeName;
 
+            /// <summary>Returns the backing-field declaration, or an empty string when an existing field is reused.</summary>
             public string GenerateFieldDeclaration()
             {
                 // 复用已有字段（见 MVVMWriter.ResolveBackingStorage）时不再声明，否则同名成员会撞成 CS0102。
@@ -570,9 +613,10 @@ namespace VeloxDev.Generators.Base
                 };
             }
 
+            /// <summary>Returns the generated property accessors.</summary>
             public string Generate()
             {
-                // Generate the property accessors, fully preserving the modifiers the user wrote
+                // 生成属性访问器，完整保留用户写的修饰符
                 var getter = HasGetter ? GenerateGetter() : string.Empty;
 
                 string setter;
@@ -599,7 +643,7 @@ namespace VeloxDev.Generators.Base
                 var changedMethod = HasSetter ?
                     $"{RETRACT}partial void On{PropertyName}Changed({FullTypeName} oldValue, {FullTypeName} newValue);" : string.Empty;
 
-                // If it's a partial property, add the partial modifier
+                // 分部属性就加 partial 修饰符
                 var partialModifier = IsPartial ? "partial " : string.Empty;
                 var collectionMembers = GenerateCollectionMembers();
                 var workflowSlotMembers = GenerateWorkflowSlotMembers();
@@ -626,9 +670,7 @@ namespace VeloxDev.Generators.Base
                     return $"{RETRACT}    {getterAccessModifier}get => {SourceName};";
                 }
 
-                // ObservableCollection: lazily subscribe to CollectionChanged in the getter.
-                // A field initializer ([] = ...) assigns the field directly without going through the setter,
-                // so this tracker call keeps the subscription active (only the first call truly subscribes; later calls are O(1) no-ops).
+                // ObservableCollection：在 getter 里惰性订阅 CollectionChanged。字段初始化器（[] = ...）直接赋值给字段、不经过 setter，所以这次 tracker 调用让订阅保持有效（只有首次真正订阅，之后是 O(1) 空操作）。
                 var handlerName = $"On{PropertyName}CollectionChanged";
                 return $$"""
                     {{RETRACT}}    {{getterAccessModifier}}get

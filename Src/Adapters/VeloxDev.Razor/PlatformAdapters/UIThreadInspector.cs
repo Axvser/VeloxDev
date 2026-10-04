@@ -19,6 +19,7 @@ namespace VeloxDev.TransitionSystem
             EnsureCaptured();
         }
 
+        /// <summary>Marks the application as no longer running so background transition queues stop dispatching.</summary>
         public static void NotifyShutdown() => _isAppRunning = false;
 
         /// <summary>
@@ -37,6 +38,7 @@ namespace VeloxDev.TransitionSystem
             _isAppRunning = true;
         }
 
+        /// <inheritdoc />
         public override bool IsAlive => _isAppRunning;
 
         /// <summary>
@@ -55,10 +57,12 @@ namespace VeloxDev.TransitionSystem
             return ThreadRef.From(SynchronizationContext.Current ?? _uiSyncContext);
         }
 
+        /// <inheritdoc />
         protected override bool IsCurrentThread(ThreadRef thread)
             => thread.TryGet<SynchronizationContext>(out var context)
                && ReferenceEquals(SynchronizationContext.Current, context);
 
+        /// <inheritdoc />
         protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority)
         {
             if (!thread.TryGet<SynchronizationContext>(out var context)) return false;

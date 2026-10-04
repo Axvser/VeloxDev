@@ -27,6 +27,7 @@ public static class AgentCommandDiscoverer
     /// </summary>
     public sealed class CommandDescriptor
     {
+        /// <summary>The command property's name.</summary>
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
@@ -51,8 +52,11 @@ public static class AgentCommandDiscoverer
     /// </summary>
     public sealed class ExecuteResult
     {
+        /// <summary>The name of the command that was run.</summary>
         public string CommandName { get; set; } = string.Empty;
+        /// <summary>Whether the command ran successfully.</summary>
         public bool Success { get; set; }
+        /// <summary>The reason the command did not run, when not <see cref="Success"/>.</summary>
         public string? Error { get; set; }
     }
 
