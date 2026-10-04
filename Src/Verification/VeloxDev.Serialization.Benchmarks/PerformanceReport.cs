@@ -69,6 +69,8 @@ internal static class PerformanceReport
         text.AppendLine($"| 运行时 | {RuntimeInformation.FrameworkDescription} |");
         text.AppendLine($"| 进程架构 | {RuntimeInformation.ProcessArchitecture} |");
         text.AppendLine($"| 工具链 | InProcessEmitToolchain，{BenchmarkConfig.Warmups} warmup + {BenchmarkConfig.Iterations} iterations，LaunchCount 1 |");
+        text.AppendLine("| 耗时怎么取 | **中位数**（BenchmarkDotNet 已先丢掉上侧离群点）。不取均值：这套测量天然右偏 —— GC 与 LOH 只会往**上**加时间，均值会被尖峰拉高，中位数不会 |");
+        text.AppendLine("| 分配怎么取 | 每次操作的分配总量。它是确定性量，不是平均出来的 |");
         text.AppendLine($"| 诊断器 | MemoryDiagnoser（「分配」是 GC 可见的托管分配量，键名 `{AllocatedMetric}`） |");
         text.AppendLine();
     }
@@ -107,6 +109,10 @@ internal static class PerformanceReport
             var ourWrite = Find(reports, "Archive_Serialize") ?? Find(reports, "Serialize");
             var ourRead = Find(reports, "Archive_Deserialize") ?? Find(reports, "Deserialize");
 
+            // 这一档的噪声先算出来，再让每一格用它。它是「这个倍率算不算数」的唯一答案，
+            // 而且只由这一档自己的重复测量算得出来 —— 不能从别的当量借，也不能事后补。
+            var noise = DriftIn(reports);
+
             // 只有归档那个类跑过时（`--filter "*SerializationBenchmarks*"`）文档大小就没量到 —— 那时写「—」而不是 0。
             int? archiveSize = null, stjSize = null, stjSourceGenSize = null, newtonsoftSize = null;
             if (DocumentSizes.All.TryGetValue(group.Key, out var sizes))
@@ -129,15 +135,25 @@ internal static class PerformanceReport
 
             text.AppendLine();
 
+            if (noise is { } band)
+            {
+                text.AppendLine($"**这一档的噪声约 ±{band:N0}%** —— 同一个归档写被两个类各量了一次，两者之差。");
+                text.AppendLine("这就是这张表的读数精度：**小于它的倍率标了「噪声内」**，那不是结论，是抖动。");
+                text.AppendLine("「分配」与「文档大小」是确定性量，不受这条限制 —— 同一份输入每次都得到同一个数。");
+            }
+
+            text.AppendLine();
+
             void Row(string label, bool ours, BenchmarkReport? write, BenchmarkReport? read, int? size)
             {
                 text.AppendLine(
-                    $"| {Bold(label, ours)} | {Time(write, ourWrite, ours)} | {Time(read, ourRead, ours)} " +
+                    $"| {Bold(label, ours)} | {Time(write, ourWrite, ours, noise)} | {Time(read, ourRead, ours, noise)} " +
                     $"| {Storage(write, ours)} | {Storage(read, ours)} | {Chars(size, ours)} |");
             }
         }
 
         text.AppendLine("**粗体行 = 本仓库。** 「文档大小」是字符数，不是字节；括号里是相对本仓库同方向的倍数。");
+        text.AppendLine("耗时一律取**中位数**（理由见「测量环境」）；标了「噪声内」的倍率落在这一档的读数精度之内 —— 那不是结论，是抖动。");
         text.AppendLine("三家的成员集不同（归档写生成契约，另外两家写公开面），所以差距里有一部分是「写得少」。");
         text.AppendLine("`System.Text.Json（源生成）` 与上一行是同一个序列化器、同一份文档（「文档大小」那列相等就是证据），");
         text.AppendLine("只是元数据**优先**来自源生成；多态契约那几种类型源生成答不上（它要靠类型自己贴 `[JsonDerivedType]`，");
@@ -151,12 +167,28 @@ internal static class PerformanceReport
 
     private static string Bold(string value, bool bold) => bold ? $"**{value}**" : value;
 
-    private static string Time(BenchmarkReport? report, BenchmarkReport? ourReport, bool bold)
+    /// <summary>
+    /// One time cell: the statistic, and — for every row but this library's — how it compares to this library's.
+    /// </summary>
+    /// <remarks>
+    /// A ratio that sits inside the scale's own noise is labelled instead of printed bare, because 1.17× at a
+    /// scale that reproduces itself to ±30% is not a finding. Printed as a number it says "Newtonsoft is 1.17 times
+    /// slower here"; what the run actually said is "these two are indistinguishable at what this run can resolve".
+    /// </remarks>
+    private static string Time(BenchmarkReport? report, BenchmarkReport? ourReport, bool bold, double? noise)
     {
         if (report is null) return "—";
 
-        var text = Milliseconds(MeanOf(report));
-        if (!bold && ourReport is not null) text += $"（{Ratio(MeanOf(ourReport), MeanOf(report))}）";
+        var text = Milliseconds(MedianOf(report));
+
+        if (!bold && ourReport is not null && MedianOf(ourReport) > 0d)
+        {
+            var baseline = MedianOf(ourReport);
+            var within = noise is { } band && Math.Abs(MedianOf(report) / baseline - 1d) <= band / 100d;
+            var ratio = Ratio(baseline, MedianOf(report));
+
+            text += within ? $"（{ratio}，噪声内）" : $"（{ratio}）";
+        }
 
         return Bold(text, bold);
     }
@@ -197,7 +229,8 @@ internal static class PerformanceReport
     {
         text.AppendLine("## 自校");
         text.AppendLine();
-        text.AppendLine("同一个归档写被两个类各量了一次（`Serialize` 与 `Archive_Serialize`），两者之差就是这一档的噪声：");
+        text.AppendLine("同一个归档写被两个类各量了一次（`Serialize` 与 `Archive_Serialize`），两者之差就是这一档的噪声 ——");
+        text.AppendLine("**每张表下面印的那个「噪声约 ±x%」就是它**。每组顺带给出两侧各自的四分位距，好分辨那个差是怎么来的：");
         text.AppendLine();
 
         var byScale = measured
@@ -208,23 +241,25 @@ internal static class PerformanceReport
 
         foreach (var group in byScale)
         {
-            var a = group.FirstOrDefault(pair => MethodOf(pair.Report) == "Serialize");
-            var b = group.FirstOrDefault(pair => MethodOf(pair.Report) == "Archive_Serialize");
+            var reports = group.Select(static pair => pair.Report).ToList();
+            var a = Find(reports, "Serialize");
+            var b = Find(reports, "Archive_Serialize");
+            if (a is null || b is null) continue;
 
-            if (a.Report is null || b.Report is null) continue;
-
-            var low = Math.Min(MeanOf(a.Report), MeanOf(b.Report));
-            var high = Math.Max(MeanOf(a.Report), MeanOf(b.Report));
+            var low = Math.Min(MedianOf(a), MedianOf(b));
+            var high = Math.Max(MedianOf(a), MedianOf(b));
             if (low <= 0d) continue;
 
-            var drift = (high / low - 1d) * 100d;
-
             text.AppendLine(
-                $"- {Scales.NameOf(group.Key)}（{group.Key:N0} 节点）：{Milliseconds(low)} vs {Milliseconds(high)}，差 {drift:N1}%");
+                $"- {Scales.NameOf(group.Key)}（{group.Key:N0} 节点）：{Milliseconds(low)} vs {Milliseconds(high)}，" +
+                $"差 {(high / low - 1d) * 100d:N1}%；两侧各自的 IQR 是 {RelativeInterquartileOf(a):N1}% 与 {RelativeInterquartileOf(b):N1}%");
         }
 
         text.AppendLine();
-        text.AppendLine("差得越多，这一档越不能当真；**哪一档最差每次都不一样**，看当次这一节给的数。");
+        text.AppendLine("**怎么读**：第一个数（差）就是这一档的读数精度，也是每张表下印的那个数。后两个数是每一侧自己的抖动。");
+        text.AppendLine("**差远大于 IQR** ⇒ 那个差来自两次测量之间的整体漂移（谁先跑、当时堆是什么样、JIT 到了哪一层），");
+        text.AppendLine("不是某几次迭代的尖峰 —— **加迭代次数治不了它**，只能把它印出来让读者按它折算。");
+        text.AppendLine("两者差不多大 ⇒ 这一档本来就抖。**哪一档最差每次都不一样**，所以永远看当次这一节给的数，别记上一次的。");
 
         var skipped = summaries
             .SelectMany(static summary => summary.Reports)
@@ -498,9 +533,48 @@ internal static class PerformanceReport
 
     private static string ClassNameOf(BenchmarkReport report) => report.BenchmarkCase.Descriptor.Type.Name;
 
-    private static double MeanOf(BenchmarkReport report) => report.ResultStatistics?.Mean ?? 0d;
+    /// <summary>The statistic every time in this report is: the median, never the mean.</summary>
+    /// <remarks>
+    /// A throughput measurement is right-skewed by construction — the GC and the large object heap only ever add
+    /// time, never take it away — and a mean over a right-skewed series reports the spikes as if they were the
+    /// measurement. BenchmarkDotNet has already dropped the upper outliers by this point; the median is what keeps
+    /// the rest of the spread from moving the number.
+    /// </remarks>
+    private static double MedianOf(BenchmarkReport report) => report.ResultStatistics?.Median ?? 0d;
 
-    private static double StandardDeviationOf(BenchmarkReport report) => report.ResultStatistics?.StandardDeviation ?? 0d;
+    /// <summary>One measurement's own spread, as a percentage of its median.</summary>
+    /// <remarks>
+    /// Quartiles rather than the standard deviation, for the same reason the statistic is the median: a standard
+    /// deviation is built from squared deviations, so one spike moves it further than the number it is meant to
+    /// qualify.
+    /// </remarks>
+    private static double RelativeInterquartileOf(BenchmarkReport report)
+    {
+        var statistics = report.ResultStatistics;
+        if (statistics is null || statistics.Median <= 0d) return 0d;
+
+        return (statistics.Q3 - statistics.Q1) / statistics.Median * 100d;
+    }
+
+    /// <summary>How far apart this scale's two measurements of the same archive write were, in percent.</summary>
+    /// <remarks>
+    /// One operation, measured by two benchmark classes that share nothing but the process and the corpus. Their
+    /// difference therefore bounds everything the table cannot control — which case ran first, what the heap looked
+    /// like when it did, how far the JIT had tiered — so it is the number that says how large a ratio has to be
+    /// before it means anything. Computed from medians, for the same reason the table is.
+    /// </remarks>
+    private static double? DriftIn(IReadOnlyList<BenchmarkReport> reports)
+    {
+        var a = Find(reports, "Serialize");
+        var b = Find(reports, "Archive_Serialize");
+        if (a is null || b is null) return null;
+
+        var low = Math.Min(MedianOf(a), MedianOf(b));
+        var high = Math.Max(MedianOf(a), MedianOf(b));
+        if (low <= 0d) return null;
+
+        return (high / low - 1d) * 100d;
+    }
 
     private static string Milliseconds(double nanoseconds)
         => (nanoseconds / 1_000_000d).ToString("N3", CultureInfo.InvariantCulture) + " ms";

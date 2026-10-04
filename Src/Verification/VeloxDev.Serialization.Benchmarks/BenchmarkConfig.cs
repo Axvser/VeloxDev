@@ -23,16 +23,25 @@ namespace VeloxDev.Serialization.Benchmarks;
 public sealed class BenchmarkConfig : ManualConfig
 {
     /// <summary>How many iterations each case runs. Reported in the report, so it lives in one place.</summary>
-    internal const int Iterations = 6;
+    /// <remarks>
+    /// 15 rather than the 6 this used to be. The old value was a time-for-stability compromise, and it was the
+    /// wrong place to compromise: BenchmarkDotNet drops the upper outliers before any statistic is computed, so six
+    /// iterations leave a median built from as few as five samples — too few for the number to be called a
+    /// measurement. Nothing here is free, and this is the cost that buys accuracy rather than the one that only
+    /// buys wall-clock.
+    /// </remarks>
+    internal const int Iterations = 15;
 
     /// <summary>How many warm-up iterations precede them.</summary>
-    internal const int Warmups = 2;
+    /// <remarks>
+    /// Three, so tiered JIT has settled one tier further before the measured runs — the warm-up is not part of the
+    /// statistic, which is exactly why it is worth spending.
+    /// </remarks>
+    internal const int Warmups = 3;
 
     /// <summary>Builds the configuration.</summary>
     public BenchmarkConfig()
     {
-        // 迭代次数比 ShortRun 多、但比过去少：10 次那一版一次全量跑要九分钟，而报告自带的自校量出这一档的
-        // **噪声本身就有 5–15%**（同一个操作量两次之差），多跑四次并不改变任何结论。6 次是省时与稳定的折中。
         // LaunchCount 必须是 1 —— InProcess 工具链不支持多进程启动。
         AddJob(Job.Default
             .WithToolchain(InProcessEmitToolchain.Instance)
