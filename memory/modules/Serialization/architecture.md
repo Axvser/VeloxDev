@@ -111,6 +111,19 @@
 
 基准在 `Src/Verification/VeloxDev.Serialization.Benchmarks/`（跑法见 `Src/Verification/README.md`）。
 
+**工具的形状（2026-10-04 起）**：两个基准类共享 `Scales.cs` 里的四档当量 —— 小 100 / 中 1 000 / 大 10 000 /
+超大 30 000 个节点。`SerializationBenchmarks` 只量归档自己（回归用），`ComparisonBenchmarks` 让**同一个
+对象图**过归档 / System.Text.Json / Newtonsoft（三家都开引用保留）。**一条命令跑完并留一份 Markdown 报告**
+到 `BenchmarkDotNet.Artifacts/serialization-performance.md`：含测量环境（CPU 商品名、核数、内存、系统、
+运行时、工具链）、三家的文档大小、按当量分节的结果表，以及一段备注（下面 §四·二 那些结论就在里面）。
+报告由 `PerformanceReport.cs` 从 BenchmarkDotNet 的**结构化结果**生成，不解析控制台输出。
+
+> ⚠ **`超 大` 停在 30 000 是有意的**：Newtonsoft 在 1 000 节点上单次操作就分配约 50 MB，再上一个数量级
+> 量到的会是 GC 而不是序列化器。
+>
+> ⚠ **入口不能把空参数交给 `BenchmarkSwitcher`**：它会进交互式选择，无人应答就什么也不跑、**还不报错**
+> （报告里会是空的）。空参数走 `BenchmarkRunner.Run([两个类])`。
+
 **量出来的数字**（同一台机器、同一会话，`Debug -p:Optimize=true`、进程内；语料是节点+槽位+链路的工作流树）：
 
 | 用例 | 改前耗时 | 改后耗时 | 改前分配 | 改后分配 |
@@ -173,26 +186,30 @@
 它量的是**既有文档那条路**，而那正是该量的一维 —— 新特性的开销只由用到它们的文档付。要量新特性，
 得先给 `Corpus` 加形状。
 
+> 工具后来改成**四档当量**（100 / 1 000 / 10 000 / 30 000），所以上表「2 节点」那一行不再可复跑；
+> 中与大两档的数字仍与 §四·二 对照得上（差在噪声内）。
+
 ### 四·二、与 STJ / Newtonsoft 的同图对比（2026-10-04）
 
-`ComparisonBenchmarks`（跑法：`--filter "*ComparisonBenchmarks*"`）让**同一个对象图**过三家 —— 这是「快不快」唯一能回答的方式。三家都开着引用保留（`ReferenceHandler.Preserve` / `PreserveReferencesHandling.Objects`），Newtonsoft 另加 `TypeNameHandling.Auto`，因为归档对每个对象都写 `$id`、对多态成员写 `$type`，不对齐这两项就是拿不同的活来比。`NodeCount = 1000`，同一台机器、同一次会话：
+`ComparisonBenchmarks` 让**同一个对象图**过三家 —— 这是「快不快」唯一能回答的方式。三家都开着引用保留（`ReferenceHandler.Preserve` / `PreserveReferencesHandling.Objects`），Newtonsoft 另加 `TypeNameHandling.Auto`，因为归档对每个对象都写 `$id`、对多态成员写 `$type`，不对齐这两项就是拿不同的活来比。**四档当量**、同机同会话：
 
-| 方法 | Mean | 相对归档写 | Allocated |
-| --- | --- | --- | --- |
-| Archive_Serialize | 7.76 ms | 1.00 | 7.54 MB |
-| Archive_Deserialize | 32.25 ms | 4.16 | 14.26 MB |
-| Stj_Serialize（反射） | 15.17 ms | 1.96 | 10.32 MB |
-| StjSourceGen_Serialize | 15.14 ms | 1.95 | 11.07 MB |
-| Nst_Serialize | 42.70 ms | 5.50 | 49.25 MB |
-| Nst_Deserialize | 71.58 ms | 9.22 | 24.79 MB |
+| 当量 · 节点 | 归档写 | STJ 写 | NST 写 | 归档读 | NST 读 | 文档（归档 / STJ / NST） |
+| --- | --- | --- | --- | --- | --- | --- |
+| 小 · 100 | 0.75 ms | 1.01 ms | 4.19 ms | 1.53 ms | 4.31 ms | 133 K / 312 K / 643 K |
+| 中 · 1 000 | 8.32 ms | 15.66 ms | 47.29 ms | 37.03 ms | 71.41 ms | 1.33 M / 3.12 M / 6.37 M |
+| 大 · 10 000 | **108.0 ms** | 204.9 ms | 481.7 ms | **358.8 ms** | 1 170.3 ms | 13.3 M / 31.5 M / 63.8 M |
+| 超大 · 30 000 | 519.2 ms | 618.0 ms | 2 030.7 ms | 2 428.8 ms | 3 357.8 ms | 40.2 M / 94.7 M / 191.5 M |
 
-文档大小（同一张图）：归档 **1 327 428** 字符 / STJ 3 120 722 / Newtonsoft 6 372 468。
+分配（中档）：归档写/读 **7.54 / 14.26 MB**，STJ 写 10.75 MB，NST 写/读 49.25 / 24.63 MB。
 
-**三条结论**：
+**四条结论**：
 
-1. **写**：比 STJ 快约 2×，比 Newtonsoft 快约 5.5×。
-2. **读**：比 Newtonsoft 快约 2.2×；而 **STJ 读不了这张图**（见下）。
-3. **STJ 的源生成在这一档没有收益**（15.14 vs 15.17 ms）—— 成本在引用保留与图的形状上，不在元数据查找上。所以「拿反射版 STJ 比不公平」这个担心实测不成立。
+1. **写**：中、大两档稳定地比 STJ 快约 2×、比 Newtonsoft 快约 5–6×。
+2. **读**：比 Newtonsoft 快约 2–3×；而 **STJ 读不了这张图**（见下）。读侧是它相对最弱的一环（读写比 4.16×，Newtonsoft 只有 1.7×）。
+3. **文档小 2.35× / 4.8×**，且**逐档稳定**（2.34–2.36 与 4.76–4.81）—— 比例与规模无关，所以这不是「小图上侥幸」。
+4. **STJ 的源生成与反射持平**（中档 15.66 vs 15.93 ms）—— 成本在引用保留与图的形状上，不在元数据查找上。所以「拿反射版 STJ 比不公平」这个担心实测不成立。
+
+**噪声上限约 15%，小于 ~1.2 的比率不要当真。** 报告自带一处自校：同一个归档写被两个类各量了一次，两者之差就是这一档的噪声 —— 最近一次跑出来是 12.9% / 5.4% / 15.2% / 15.0%（小 → 超大）。**超大档只能当指示**：30 000 节点的文档是 40 MB（Newtonsoft 191 MB），单次读分配 436 MB，量到的更接近 GC —— 归档读从大档到超大档是 3× 数据换 6.8× 时间。
 
 **STJ 在这张图上的两处默认设置失败**（实测，不是推测）：
 
