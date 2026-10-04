@@ -157,3 +157,34 @@
 | `GenerateBaseTypes()` | `Writers/AopWriter.cs:40`、`Writers/CommandWriter.cs:613`、`Writers/TickWriter.cs:130`、`Writers/MVVMWriter.cs:1010` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:73` 真正用到了它 |
 | MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：全源 grep 已无 `IsView` / `isView`；`MVVMPropertyFactory` 现在只有两个构造 —— 从字段（`Base/Analizer.cs:411`）与从 partial 属性（`:431`），`Generate()`（原 `GenerateViewModel` 改名，`:617`）是唯一出口。**要恢复 View 支持，必须同时改构造、`Generate()` 与调用点** —— 别再只加参数不加分支 |
 | `VeloxDev.Core.Generator.targets` 的版本门槛 | `VeloxDev.Core.Generator.targets:8-19` | **活着，但条件刻意放宽**：`RoslynVersion` 为空时**跳过检查**（`:13-15` 的注释：现代宿主上的 netframework TFM 拿不到该属性，跳过以免误报）。所以这条诊断**不会**在每个项目上都出现 |
+
+---
+
+## 八、消费方要满足什么，生成器才用得上（2026-10-04 实测）
+
+**「能不能用源生成」看的是谁在编译，不是编译给哪个框架。** 生成器跑在编译器进程里，程序集是
+netstandard2.0 —— 与消费方的 TFM 无关。实测：一个 **net40** 工程照样加载生成器、产出、编译、运行
+（`Environment.Version` 报 4.x 的 CLR、`mscorlib` 是 4.0.0.0）。
+
+| # | 判据 | 取决于 | 不满足时 |
+| --- | --- | --- | --- |
+| ① | 生成器 API 的世代 | 消费方编译器的 Roslyn：`IIncrementalGenerator` ≥ **4.0** | 🔇 **静默**：什么都不生成 |
+| ② | 分析器程序集版本 ≤ 编译器 | 生成器编译时引用的 `Microsoft.CodeAnalysis.CSharp`（本仓库已抬到 **4.8**） | `CS1705`「引用的程序集版本高于…」（本轮撞过一次：测试工程还停在 4.3 时） |
+| ③ | **产物**编不编得过 | 消费方的 `LangVersion` 与 BCL 面 | 报错落在**生成文件**里，看起来像生成器的锅 |
+| ④ | **产物**调不调得到库 | 被生成的那个库有没有该 TFM 的资产 | 类型找不到，且 **NuGet 不报兼容性错误** |
+| ⑤ | 该生成器启不启用 | 它的触发条件（特性能否解析、MSBuild 开关） | 🔇 **静默**不生成 |
+
+**目标框架只影响 ③④**，不影响 ①② —— 所以「netX 能不能用生成器」这个问法本身是错的。
+
+**③ 的账单**：产物用到文件范围内的命名空间（C# **10**）、可空引用类型（8）、`is { }` / `is not null`（8/9）、
+集合表达式 `[...]`（**12**）⇒ 消费方 `LangVersion` 下限 **12**，而 **.NET Framework 目标默认 7.3**（`CS8370`）。
+另外产物用 `[ModuleInitializer]`，**包里不自带那个 polyfill** —— 仓库内看不出来，因为
+`Src/Core/VeloxDev.Core/ModuleInitializerAttribute.cs` 自己带着（同理还有 `IsExternalInit.cs`）。
+
+**④ 的账单**：`VeloxDev.Core` 已发布的最新（8.0.0）只有 `net461` / `netstandard2.0` / `netcoreapp3.0` /
+`net5.0`。挂到 net40 上时 NuGet **还原成功、不报兼容性错误**，只是不给编译资产 —— `CS0246` 最后出现在
+消费方**自己那行 `using`** 上：错误指向受害者。**序列化生成器的产物直接调用引擎**
+（`VeloxJsonSerializer` / `VeloxJsonRegistry`），所以它不可能脱离 Core 单独支持某个 TFM。
+
+> ①②⑤ 全是**静默**的（不报错、只是没产物），只有 ②③ 响亮 —— 所以外部报「生成器没生效」时，
+> 先问 ①（编译器版本）与 ⑤（触发条件），再看产物报的错。
