@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
 
@@ -71,5 +73,68 @@ public partial class ShapeRoundTripTests
 
         Assert.AreEqual(DateTimeKind.Utc, restored.Moment.Kind, "the kind is part of the value, not a display detail");
         Assert.AreEqual(new DateTime(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc), restored.Moment);
+    }
+
+    [TestMethod]
+    public async Task TheTwoChains_SpellEveryScalarTheSameWay()
+    {
+        // 同步与异步各有一张手写的标量表（`TryWriteScalar` / `TryWriteScalarAsync`），没有东西强制它们一致。
+        // 这条用例把每种标量都过一遍两条路并逐字节比 —— 那是唯一能让「只改了一侧」当场红掉的闸。
+        var scalars = new ScalarModel
+        {
+            Text = "t", Flag = true, Small = 1, Big = 2L, Fraction = 1.5, Single = 2.5f,
+            Money = 3.5m, Octet = 4, Sixteen = 5, Letter = 'x', Id = Guid.Empty,
+            Moment = new DateTime(2026, 10, 4, 0, 0, 0, DateTimeKind.Utc),
+            Span = TimeSpan.FromMinutes(1), Kind = ScalarKind.Second, Bytes = [9, 8],
+        };
+
+        var sync = VeloxJsonSerializer.Serialize(scalars);
+        using var text = new StringWriter();
+        await VeloxJsonSerializer.WriteToAsync(text, scalars);
+
+        Assert.AreEqual(sync, text.ToString(), "the two chains must spell the same document");
+    }
+
+    /// <summary>Public because the promoted property is: an internal type behind one would not compile.</summary>
+    public enum ScalarKind { First, Second }
+
+    /// <summary>One member per scalar the format writes with a primitive of its own.</summary>
+    internal sealed partial class ScalarModel
+    {
+        [VeloxProperty] private string? text;
+        [VeloxProperty] private bool flag;
+        [VeloxProperty] private int small;
+        [VeloxProperty] private long big;
+        [VeloxProperty] private double fraction;
+        [VeloxProperty] private float single;
+        [VeloxProperty] private decimal money;
+        [VeloxProperty] private byte octet;
+        [VeloxProperty] private short sixteen;
+        [VeloxProperty] private char letter;
+        [VeloxProperty] private Guid id;
+        [VeloxProperty] private DateTime moment;
+        [VeloxProperty] private TimeSpan span;
+        [VeloxProperty] private ScalarKind kind;
+        [VeloxProperty] private byte[] bytes = [];
+    }
+
+    [TestMethod]
+    public async Task EveryShape_AlsoSurvivesTheAsynchronousChain()
+    {
+        // 同步与异步是两条独立生成的链路（readers/writers 各一对），新加的守卫与四种读法两边都要发到 ——
+        // 只跑同步那一条等于只覆盖一半。
+        using var stream = new MemoryStream();
+        await VeloxJsonSerializer.WriteToAsync(stream, Sample());
+        stream.Position = 0;
+
+        var restored = (ShapeModel?)await VeloxJsonSerializer.DeserializeAsync(stream, typeof(ShapeModel));
+
+        Assert.IsNotNull(restored);
+        CollectionAssert.AreEqual(new[] { 1, 2, 3 }, restored.Numbers);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 250 }, restored.Payload);
+        CollectionAssert.AreEqual(new[] { "a", "b" }, new List<string>(restored.ReadOnly));
+        Assert.AreEqual("two", restored.Map[2]);
+        CollectionAssert.AreEqual(new[] { 4, 5, 6 }, restored.Lazy!);
+        Assert.AreEqual(DateTimeKind.Utc, restored.Moment.Kind);
     }
 }

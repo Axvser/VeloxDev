@@ -139,6 +139,9 @@ public static partial class VeloxJsonSerializer
             case byte number: await writer.WriteInt32Async(number).ConfigureAwait(false); return true;
             case short number: await writer.WriteInt32Async(number).ConfigureAwait(false); return true;
             case char character: await writer.WriteStringAsync(character.ToString()).ConfigureAwait(false); return true;
+            // 二进制走 base64，与 STJ / Json.NET 一致 —— 也**必须与同步那份表逐条对齐**：
+            // 这两张表是手写抄的两份，同步加了而这里没加就是一份会编过的漂移。
+            case byte[] bytes: await writer.WriteStringAsync(System.Convert.ToBase64String(bytes)).ConfigureAwait(false); return true;
             case Guid id: await writer.WriteGuidAsync(id).ConfigureAwait(false); return true;
             case DateTime moment:
                 await writer.WriteStringAsync(moment.ToString("O", CultureInfo.InvariantCulture)).ConfigureAwait(false);
