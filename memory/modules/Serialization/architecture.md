@@ -12,7 +12,7 @@
 ## 一、三层，别记成两层
 
 | 层 | 在哪 | 是什么 |
-|---|---|---|
+| --- | --- | --- |
 | **引擎** | `Src/Core/VeloxDev.Core/Serialization/` | 手写、**零反射**的 JSON 读写。`VeloxJsonSerializer` 是门面，`VeloxJsonReader` / `VeloxJsonWriter` 是游标 |
 | **代码生成** | `Src/Generators/VeloxDev.Core.Generator/` | 为每个类型编出直写的 reader/writer，产物是**消费者项目里的 C# 文本** |
 | **通用序列化面** | `Src/Core/VeloxDev.Core/Serialization/ViewModelSerializer.cs` | VM 的 `Serialize` / `TryDeserialize` / `Deserialize` / 流 / 字节。**没有引擎逻辑** |
@@ -30,9 +30,36 @@
 
 ## 二、热路径上的三个结构事实
 
-1. **注册表读取无锁。** 五张表收在一个不可变 `Snapshot` 里，用 `private static volatile Snapshot _snapshot`（`VeloxJsonRegistry.cs:122`）发布；注册在 `Gate` 内造新快照再换，**五个查询方法一把锁都不拿**。查询在每一步都发生（写：`WriterFor` 每个值一次、`NameOf` 每个类型不符一次；读：`TypeOf` + `ReaderFor` 每个对象各一次），原先的全局锁因此是每节点的固定开销。
-2. **成员名不落成字符串。** 生成器发出的是 `while (reader.NextMember())` + `reader.MemberNameEquals("字面量")` 的 `if/else if` 链（`Writers/VeloxJsonCodeWriter.cs:159`、`:166`），名字在原文上就地比对（`VeloxJsonReader.cs:130`、`:167`）。**旧的 `while (NextMember(out var name)) switch (name)` 每读一个成员先分配一个字符串，只为和字面量比一次就丢掉。**
-3. **转义规则只有一份。** 在 `VeloxJsonText.Escape`（`VeloxJsonText.cs:51`）。归档写入器只是转发（`VeloxJsonWriter.cs:286`），JSON 树也走它。**没有转义的字符串整串一次写出**，不再每字符一次虚调用。
+1. **注册表读取无锁。** 五张表收在一个不可变 `Snapshot` 里，用 `private static volatile Snapshot _snapshot`（`VeloxJsonRegistry.cs:140`）发布；注册在 `Gate` 内造新快照再换，**五个查询方法一把锁都不拿**。查询在每一步都发生（写：`WriterFor` 每个值一次、`NameOf` 每个类型不符一次；读：`TypeOf` + `ReaderFor` 每个对象各一次），原先的全局锁因此是每节点的固定开销。
+2. **成员名不落成字符串。** 生成器发出的是 `while (reader.NextMember())` + `reader.MemberNameEquals("字面量")` 的 `if/else if` 链（`Writers/VeloxJsonCodeWriter.cs:206`），名字在原文上就地比对（`VeloxJsonReader.cs:263`、`:303`）。**旧的 `while (NextMember(out var name)) switch (name)` 每读一个成员先分配一个字符串，只为和字面量比一次就丢掉。**
+3. **转义拼法只有一份。** 在 `VeloxJsonText.EscapeSequence`（`VeloxJsonText.cs:52`）—— 归档写入器与 JSON 树都从它取。**没有转义字符的字符串整串一次写出**，不再每字符一次虚调用。
+
+---
+
+## 二·五、同步面与异步面是**两套**，不是一套加了 await
+
+读写两侧各有两条完整链路：同步的（`VeloxJsonReader.cs` / `VeloxJsonWriter.cs`）与异步的
+（`VeloxJsonReader.Async.cs` / `VeloxJsonWriter.Async.cs`）。生成器为每个类型**同时产出**
+`Read`/`ReadAsync` 与 `Write`/`WriteAsync`。
+
+**为什么不合并**：唯一的合并办法是让每个 token 都穿过一层状态机，而内存内那条路
+（`Serialize()` / `Deserialize<T>(string)`，也是 7 个平台 demo 走的那条）**永远不发生 I/O**，
+穿状态机是纯亏。分开之后同步面保住上一轮量出来的速度，异步面才付它该付的代价。
+
+**代价与纪律**：产物大约翻倍，而且两条路**必须同义**。守卫是 `VeloxJsonStreamingTests` ——
+同一批语料（四份黄金文件、分块 1..64、缓冲区 1..16）在**两条路各跑一遍**。改一条链路就得改另一条。
+
+四条不显眼但必须守的规矩：
+
+- **异步方法不能有 `out`**（CS1988）。`BeginObjectAsync` 因此返回 `(bool Opened, int ReferenceId,
+  string? TypeName)`，`PeekCodeAsync` 用 `-1` 表示文档结束。同步面保留 `out`。
+- **写侧缓冲只给异步面。** 同步写入器**不**缓冲，仍然直接写进 `TextWriter`。给同步面加缓冲会改变字符
+  到达输出的**时机**，而那是对直接使用 `VeloxJsonWriter` 的调用方可见的行为 —— 2026-10-04 加过一次，
+  6 条测试当场红，于是退回。异步面有内部缓冲，收尾必须 `CompleteAsync()`。
+- **`Task` 而不是 `ValueTask`**：`ValueTask` 在 netstandard2.0/net461 上不在框架里，用它就得让生成产物
+  随 TFM 变化 —— 而生成器跑在消费者的编译里，判断不了 TFM。
+- **`FileCheckpointStore` 的异步文件读写按 `#if NET8_0_OR_GREATER` 分档**：`File.WriteAllTextAsync`
+  是 .NET Core 2.0 起的 API，旧档保留同步写。
 
 ---
 
@@ -43,7 +70,7 @@
 两道闸，**强度不一样**，这是最容易误判的地方：
 
 | 闸 | 位置 | 比法 |
-|---|---|---|
+| --- | --- | --- |
 | **强** | `SerializationGoldenTests.cs:57` | `File.ReadAllText` **精确**比较，不归一化 |
 | 弱 | `VeloxJsonSerializerTests.cs:30-34` | 先把 `\r\n` 归一化成 `\n` 再比 |
 
@@ -72,7 +99,7 @@
 **量出来的数字**（同一台机器、同一会话，`Debug -p:Optimize=true`、进程内；语料是节点+槽位+链路的工作流树）：
 
 | 用例 | 改前耗时 | 改后耗时 | 改前分配 | 改后分配 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Serialize 2 | 19.45 µs | 18.54 µs | 33.84 KB | 34.16 KB |
 | Deserialize 2 | 52.37 µs | 43.02 µs | 89.88 KB | **53.70 KB** |
 | Serialize 1000 | 8 628.77 µs | 7 973.83 µs | 7 663.55 KB | 7 726.11 KB |
@@ -92,6 +119,10 @@
 | Deserialize 2 / 1000 / 10000 | 39.68 / 32 738.11 / 374 952.58 µs |
 
 即**没有回归**，分配也一模一样。**改这几条快路径之前先量**：它们是「一份实现 + 几处直连」换来的，不是冗余。
+
+异步面（§二·五）落地后同步面**分配量逐字节不变**、耗时在误差内 —— 这正是「两条链路分开」买到的东西。
+中途踩过一次：给同步写入器也加了内部缓冲（为了少一层分支），2 节点那份文档的分配量立刻涨了近一半
+（每个写入器实例预分配 8 KB×2），而且字符到达输出的时机变了、6 条测试当场红。**缓冲只归异步面。**
 
 ### 一个**没有**采纳的方案，别再试一遍
 

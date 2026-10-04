@@ -10,7 +10,7 @@
 同一个拼写规则在三条路上都要成立，但**只有一处**是权威：
 
 | 你要改的 | 打开 |
-|---|---|
+| --- | --- |
 | 字符串怎么转义、double 怎么拼 | `VeloxJsonText.cs` — **唯一一处**。归档写入器（`VeloxJsonWriter.WriteEscaped` 只是转发）与 JSON 树（`VeloxJsonValue`）都走它 |
 | 数字/布尔/`Guid` 的写法 | `VeloxJsonWriter.cs` 的 `WriteInt32` / `WriteInt64` / `WriteDouble` / … |
 | 缩进、换行、成员分隔 | `VeloxJsonWriter.cs` 的 `NewLine()` / `Separate()` / `StartContainer()` |
@@ -29,8 +29,12 @@
 生成器的产物调用引擎，引擎的实现可以随便换，**但两侧的调用面必须同时改**。
 
 1. 引擎侧：在 `VeloxJsonReader` / `VeloxJsonWriter` / `VeloxJsonSerializer` 上加或改成员。
-2. 生成器侧：`Writers/VeloxJsonCodeWriter.cs` 里对应的 `AppendLine` 字符串。
+   **同步与异步两条链路都要改** —— 异步面在 `*.Async.cs` 里，生成器为每个类型产出 `X` 与 `XAsync` 一对。
+2. 生成器侧：`Writers/VeloxJsonCodeWriter.cs` 里对应的 `AppendLine` 字符串，且两套都要发
+   （`WriteWriterBody` / `WriteReaderBody` 各带一个 `async` 参数）。
 3. **两侧一起提交。** 只改一侧的后果是产物编不过，或者（更糟）编得过但行为与另一侧不一致。
+4. 加完立刻跑 `VeloxJsonStreamingTests` —— 它在**两条路各跑一遍**同一批语料，是唯一能发现「只改了一侧」
+   或「两侧语义漂了」的闸。
 
 **联动清单（漏一处不会报错，只会静默不同步）：**
 
