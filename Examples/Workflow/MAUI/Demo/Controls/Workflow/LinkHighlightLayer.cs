@@ -27,6 +27,7 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
         nameof(GlowColor), typeof(Color), typeof(LinkHighlightLayer), Color.FromArgb("#FFFFFFFF"));
 
     private IWorkflowInputEvents? _input;
+    private IWorkflowTreeViewModelHelper? _treeHelper;
     private IWorkflowLinkViewModel? _lit;
 
     public LinkHighlightLayer()
@@ -84,6 +85,12 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
         _input = events;
         events.Input.PointerEntered += OnPointerEntered;
         events.Input.PointerExited += OnPointerExited;
+
+        // 线被删掉时指针还停在原地，收不到 Exited —— 这一层于是留着旧的光带像素，直到指针动一下
+        //（连线本体不在此列：它在共享那层，靠集合变化就重绘了）。删线的路子不止 Delete：Undo、Agent
+        // 改树都算，所以盯 LinkRemoved，不是盯那一次按键。
+        _treeHelper = tree.GetHelper();
+        _treeHelper.LinkRemoved += OnLinkRemoved;
     }
 
     private void UnhookInput()
@@ -94,6 +101,20 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
             _input.Input.PointerExited -= OnPointerExited;
             _input = null;
         }
+
+        if (_treeHelper is not null)
+        {
+            _treeHelper.LinkRemoved -= OnLinkRemoved;
+            _treeHelper = null;
+        }
+    }
+
+    private void OnLinkRemoved(object? sender, IWorkflowLinkViewModel link)
+    {
+        if (!ReferenceEquals(_lit, link)) return;
+
+        _lit = null;
+        Invalidate();
     }
 
     private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e)
