@@ -79,6 +79,23 @@
 
 ---
 
+## 五·五、`$type` 的名字是注册表的**键**，泛型要带上实参
+
+`NameOf` / `TypeOf` 是一对字典查找，`ReadObjectValue` 靠 `TypeOf($type) ?? 声明类型` 落回一个类型。所以名字必须**唯一标识一个封闭类型**。
+
+**2026-10-04 之前泛型名字不带类型实参**（`WrittenName` 用的是 `symbol.Name`），于是同一泛型定义的两个封闭实例注册了**同一个字符串** —— 实测两个程序集都写过 `"VeloxDev.WorkflowSystem.SlotEnumerator, VeloxDev.Core"`（一个给 `SlotEnumerator<SlotDefaultViewModel>`，一个给 `SlotEnumerator<Demo.ViewModels.SlotViewModel>`）。`TypesByName[那个名字]` 谁后注册谁赢。
+
+- **写侧不受影响**：读写器表按 `Type` 索引；且 `$type` 只在声明类型 ≠ 运行期类型时才写。
+- **读侧会受影响**，只在 `$type` 真的出现时：解析可能落到另一个封闭实例 → `Create()` 造出错类型 → 生成 reader 那句 `(SlotEnumerator<X>)` 转型失败。
+- 今天没被触发：`SlotEnumerator` 只作为**具体声明类型**出现（声明类型 == 运行期类型 → 不写 `$type`），而四份黄金文件里的 `$type` **全是非泛型**。
+- **`ConditionalSlot<T>` 曾经同样会撞**，不止 SlotEnumerator。
+
+现在 `WrittenName` 递归带上实参：`SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, VeloxDev.Core`。**非泛型类型的名字一个字节没变**，所以黄金文件不受影响（这是这次能安全改的前提）。
+
+**注意这个字符串没有任何人解析它** —— 所以它只需要稳定且单射，不必是 `Type.GetType` 认的形式。嵌套泛型（`Outer<T>.Inner<U>`）只写内层的实参，是已知的边界。
+
+---
+
 ## 六、`[Archive]` 与钩子的实现约束
 
 三条都实测过，撞上时不会报错 —— 只会静默少一个成员或一次回调。

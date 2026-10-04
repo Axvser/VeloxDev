@@ -93,7 +93,7 @@
 > 黄金文件在**索引里是 LF、工作区里是 CRLF**（`.gitattributes` 为 `* text=auto`），所以「写 `Environment.NewLine`」是**唯一**能同时过两道闸的写法。
 > **把 `Environment.NewLine` 硬编码成 `"\n"` 会在弱闸上通过、在强闸上失败。**
 
-同一族里另外几条：`$id`/`$type` 必须是对象的**前两个成员**；重复对象写 `{"$ref":"n"}`；double 用最短往返且整数值补 `.0`；NaN/±Infinity 写成字符串；枚举写底层整数；非 ASCII **不转义**；空容器写 `{}`/`[]`。
+同一族里另外几条：`$id`/`$type` 必须是对象的**前两个成员**；`$type` 的值是注册表的**键**（`Namespace.Type, AssemblyName`，泛型再带上每个类型实参 —— 见 [pitfalls.md](pitfalls.md) §五·五）；重复对象写 `{"$ref":"n"}`；double 用最短往返且整数值补 `.0`；NaN/±Infinity 写成字符串；枚举写底层整数；非 ASCII **不转义**；空容器写 `{}`/`[]`。
 
 ### 陷阱：`$id` 的值是**带引号的字符串**
 
