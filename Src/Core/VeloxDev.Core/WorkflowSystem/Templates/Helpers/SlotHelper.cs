@@ -16,12 +16,15 @@ public class SlotHelper : SlotHelper<IWorkflowSlotViewModel>
 /// [ Component Helper ] Provide standard supports for Slot Component.
 /// </summary>
 /// <typeparam name="T">The type of the Slot ViewModel that this helper is designed for. </typeparam>
-public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents
+public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, IWorkflowInputEvents
     where T : class, IWorkflowSlotViewModel
 {
     /// <summary>The slot this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
     public T? Component { get; protected set; }
     private IReadOnlyCollection<IVeloxCommand> commands = [];
+
+    /// <inheritdoc />
+    public WorkflowInputRelay Input { get; } = new();
 
     /// <inheritdoc />
     public event EventHandler<IWorkflowSlotViewModel>? TargetAdded;

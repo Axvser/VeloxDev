@@ -13,7 +13,7 @@ namespace TemplateNamespace;
 /// mirroring the WPF template's geometry. The curve derives from the endpoint slot anchors;
 /// it spans the whole canvas and redraws whenever the endpoints move.
 /// </summary>
-public partial class TemplateClass : ComponentBase, IDisposable, ILinkHighlight
+public partial class TemplateClass : ComponentBase, IDisposable
 {
     // Minimum control-point pull: two ports close together would otherwise degenerate the curve
     // into a straight segment and lose the horizontal exit at each end.
@@ -60,28 +60,6 @@ public partial class TemplateClass : ComponentBase, IDisposable, ILinkHighlight
     private INotifyPropertyChanged? _senderNotifier;
     private INotifyPropertyChanged? _receiverNotifier;
     private LinkCurve? _curve;
-
-    // VeloxDev customization: colour and width bonus applied while the hub marks this link hovered.
-    // Repaint the same data-veloxdev-link-curve path rather than adding an element.
-    private const string HighlightColor = "#FFFFFFFF";
-    private const double HighlightWidthBonus = 1.5;
-
-    private bool _hover;
-
-    /// <summary>
-    /// Whether the pointer is on this link. The tree's <see cref="LinkInteraction"/> hub drives it
-    /// through <see cref="ILinkHighlight"/> as it resolves the hovered link.
-    /// </summary>
-    public bool IsHighlighted
-    {
-        get => _hover;
-        set
-        {
-            if (_hover == value) return;
-            _hover = value;
-            _ = InvokeAsync(StateHasChanged);
-        }
-    }
 
     private string LineColor => LineColorOverride ?? ToCss("TemplateLinkColor");
     private double Thickness
@@ -139,10 +117,6 @@ public partial class TemplateClass : ComponentBase, IDisposable, ILinkHighlight
     private string CanvasWidthCss => CanvasWidth.ToString("0.#", CultureInfo.InvariantCulture);
     private string CanvasHeightCss => CanvasHeight.ToString("0.#", CultureInfo.InvariantCulture);
     private string ThicknessCss => Thickness.ToString("0.#", CultureInfo.InvariantCulture);
-
-    // VeloxDev customization: repaint the one data-veloxdev-link-curve path instead of adding an element.
-    private string StrokeColor => _hover ? HighlightColor : LineColor;
-    private string StrokeWidthCss => (_hover ? Thickness + HighlightWidthBonus : Thickness).ToString("0.#", CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     protected override void OnInitialized()
@@ -266,13 +240,15 @@ public partial class TemplateClass : ComponentBase, IDisposable, ILinkHighlight
     }
 
     // Forwarding the pointer into the hub is what makes the link interactive: the hub decides which link
-    // is under the pointer, lights it (AutoHighlight) and deletes it on Delete (AutoDelete). Nothing here
-    // decides anything — the browser's stroke-only hit region is the outer gate, and the hub is the judge.
+    // is under the pointer and deletes it on Delete (AutoDelete). Nothing here decides anything — the
+    // browser's stroke-only hit region is the outer gate, and the route is the judge. These two handlers also
+    // hand over this view's own link as the target, so a hover subscriber hears the event on the link itself.
     private async Task OnPointerEnter(MouseEventArgs e)
     {
         if (Surface is not null)
         {
-            await Surface.ForwardPointerAsync(PointerPhase.Entered, e.ClientX, e.ClientY);
+            await Surface.RoutePointerAsync(
+                SurfacePointerKind.Entered, e.ClientX, e.ClientY, target: Link);
         }
     }
 
@@ -280,7 +256,8 @@ public partial class TemplateClass : ComponentBase, IDisposable, ILinkHighlight
     {
         if (Surface is not null)
         {
-            await Surface.ForwardPointerAsync(PointerPhase.Exited, e.ClientX, e.ClientY);
+            await Surface.RoutePointerAsync(
+                SurfacePointerKind.Exited, e.ClientX, e.ClientY, target: Link);
         }
     }
 

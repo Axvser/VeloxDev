@@ -222,7 +222,14 @@ public sealed class ViewManager : IDisposable
 
     private static void ApplyContext(Control view, object item)
     {
-        // WinForms 没有 DataContext；沿用 VeloxDev WinForms 示例里常见的「Tag 作上下文」约定，并支持可选的 ViewModel/DataContext 属性，供控件设计器显式绑定。
+        // 连线视图由适配器那份「附加」收绑：订阅、雕刻、命中契约都归它，控件本身只是用户画的视图。
+        if (item is IWorkflowLinkViewModel link && WorkflowLinkAttachment.For(view) is { } attachment)
+        {
+            attachment.Bind(link);
+            return;
+        }
+
+        // 其余角色：WinForms 没有 DataContext；沿用 VeloxDev WinForms 示例里常见的「Tag 作上下文」约定，并支持可选的 ViewModel/DataContext 属性，供控件设计器显式绑定。
         view.Tag = item;
 
         foreach (var propertyName in new[] { "ViewModel", "DataContext", "BindingContext" })

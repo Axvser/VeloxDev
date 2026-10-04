@@ -128,11 +128,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private INotifyPropertyChanged? _subscribedTreeNotifier;
     private INotifyPropertyChanged? _subscribedVirtualLink;
 
-    // 连线右键菜单：条目由宿主以 LinkMenu 传入，接线全在这里 —— 订中枢、弹出、开合报回去。
-    private LinkInteraction? _menuHub;
-    private EventHandler<ContextMenuRequestedEventArgs>? _menuRequested;
-    private EventHandler<ContextMenuDismissRequestedEventArgs>? _menuDismissed;
-    private Anchor _menuPosition = new();
+    // 连线右键菜单：条目由宿主以 LinkMenu 传入，接线全在这里 —— 订输入面、弹出、挂起指针跟踪。
+    private WorkflowInput? _input;
+    private EventHandler<WorkflowPointerPressedEventArgs>? _menuPressed;
+    private EventHandler<IWorkflowLinkViewModel>? _menuLinkRemoved;
     private int _menuLeft;
     private int _menuTop;
 
@@ -142,37 +141,77 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private double _pendingScrollX;
     private double _pendingScrollY;
 
-    /// <summary>
-    /// Feeds one pointer event into the tree's <see cref="LinkInteraction"/> hub, converting the
-    /// viewport coordinates the browser reports into the canvas-local space the link curves are
-    /// published in.
-    /// </summary>
-    /// <param name="phase">What the pointer did.</param>
-    /// <param name="clientX">Viewport x of the pointer, as reported by the browser.</param>
-    /// <param name="clientY">Viewport y of the pointer, as reported by the browser.</param>
-    /// <param name="button">Which button, for a press or a release; <see cref="PointerButtonKind.None"/> by default.</param>
-    /// <remarks>
-    /// A link view's <c>mouseenter</c>/<c>mouseleave</c> fires per DOM element, but the hub decides
-    /// which link is topmost from the position, so the element it fired on is not passed through.
-    /// While <see cref="LinkInteraction.IsSuspended"/> is set (a menu is open) the hub itself keeps
-    /// the hovered link, so moving onto the menu does not clear the hover the menu acts on.
-    /// </remarks>
-    // 表面自己就是按键宿主（见 .razor 的 tabindex），生成的工程没有宿主代码，Delete 与 Escape 也有路由。删哪条仍由枢纽决定：这里只转发按键。
+    // 表面自己就是按键宿主（见 .razor 的 tabindex），生成的工程没有宿主代码，Delete 与 Escape 也有路由。
+    // 删哪条仍由输入路由决定：这里只把按键翻译过去。
     private async Task OnSurfaceKeyDown(KeyboardEventArgs e)
     {
         // Escape 与菜单同层：菜单由表面弹，也由表面收，宿主不必再绑一次。
         if (e.Key == "Escape")
         {
             CloseLinkMenu();
-            return;
         }
 
-        if (e.Key is not ("Delete" or "Del") || Tree is not { } tree) return;
+        await RouteKeyAsync(e.Key, isDown: true);
+    }
 
-        var interaction = LinkInteraction.For(tree);
-        if (interaction.HoveredLink is null) return;
+    private async Task OnSurfaceKeyUp(KeyboardEventArgs e) => await RouteKeyAsync(e.Key, isDown: false);
 
-        interaction.Publish(new KeyEvent(InputKey.Delete));
+    private async Task RouteKeyAsync(string key, bool isDown)
+    {
+        if (_input is not { } input) return;
+
+        var mapped = ToKey(key);
+        WorkflowEventHandle handle = new();
+
+        if (isDown)
+        {
+            input.Route(new WorkflowKeyDownEventArgs(
+                mapped, 0, InputModifiers.None, false, _surfaceRoot, input.HoveredLink, handle));
+        }
+        else
+        {
+            input.Route(new WorkflowKeyUpEventArgs(
+                mapped, 0, InputModifiers.None, false, _surfaceRoot, input.HoveredLink, handle));
+        }
+
+        await Task.CompletedTask;
+    }
+
+    // 浏览器给的是键名（KeyboardEvent.key）：字母数字直接认，其余逐个点名，没点到的报 Unknown。
+    private static WorkflowKey ToKey(string key)
+    {
+        if (key.Length == 1)
+        {
+            var c = key[0];
+            if (c >= 'a' && c <= 'z') return WorkflowKey.A + (c - 'a');
+            if (c >= 'A' && c <= 'Z') return WorkflowKey.A + (c - 'A');
+            if (c >= '0' && c <= '9') return WorkflowKey.D0 + (c - '0');
+            if (c == ' ') return WorkflowKey.Space;
+        }
+
+        if (key.Length is 2 or 3 && key[0] == 'F' && int.TryParse(key.AsSpan(1), out var fn) && fn is >= 1 and <= 12)
+        {
+            return WorkflowKey.F1 + (fn - 1);
+        }
+
+        return key switch
+        {
+            "Delete" or "Del" => WorkflowKey.Delete,
+            "Backspace" => WorkflowKey.Back,
+            "Tab" => WorkflowKey.Tab,
+            "Enter" => WorkflowKey.Enter,
+            "Escape" or "Esc" => WorkflowKey.Escape,
+            "Insert" => WorkflowKey.Insert,
+            "Home" => WorkflowKey.Home,
+            "End" => WorkflowKey.End,
+            "PageUp" => WorkflowKey.PageUp,
+            "PageDown" => WorkflowKey.PageDown,
+            "ArrowLeft" => WorkflowKey.Left,
+            "ArrowUp" => WorkflowKey.Up,
+            "ArrowRight" => WorkflowKey.Right,
+            "ArrowDown" => WorkflowKey.Down,
+            _ => WorkflowKey.Unknown,
+        };
     }
 
     // 视口坐标是右键那一刻记下的；菜单相对视口定位，与画布坐标无关。
@@ -187,8 +226,18 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _menuLeft = (int)Math.Round(e.ClientX);
         _menuTop = (int)Math.Round(e.ClientY);
 
-        await ForwardPointerAsync(PointerPhase.Pressed, e.ClientX, e.ClientY, PointerButtonKind.Right);
+        await RoutePointerAsync(SurfacePointerKind.Pressed, e.ClientX, e.ClientY, WorkflowMouseButton.Right);
     }
+
+    // 指针移动/松开/滚轮也进输入路由：占位法（surface 自己转发）与逐线转发汇到同一个入口。
+    private async Task OnSurfacePointerMove(PointerEventArgs e)
+        => await RoutePointerAsync(SurfacePointerKind.Moved, e.ClientX, e.ClientY);
+
+    private async Task OnSurfacePointerUp(PointerEventArgs e)
+        => await RoutePointerAsync(SurfacePointerKind.Released, e.ClientX, e.ClientY, WorkflowMouseButton.Left);
+
+    private async Task OnSurfaceWheel(WheelEventArgs e)
+        => await RoutePointerAsync(SurfacePointerKind.Wheel, e.ClientX, e.ClientY, deltaY: e.DeltaY);
 
     // 换树才重接：按模型实例比对，同一棵树在重复的 OnParametersSet 里不再动订阅。
     private void SyncTreeSubscriptions()
@@ -295,92 +344,125 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private void OnVirtualLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
 
-    // 订中枢：右键请求与「菜单指着的那条线离树」两相都在这。枢纽按树取用（Core 缓存），
+    // 订输入面：右键按下与「菜单指着的那条线离树」两相都在这。路由按树取用（Core 缓存），
     // 换树就换实例，所以按实例比对重新接。
     private void WireLinkMenu()
     {
-        var hub = Tree is { } tree ? LinkInteraction.For(tree) : null;
-        if (ReferenceEquals(hub, _menuHub)) return;
+        var input = Tree is { } tree ? WorkflowInput.For(tree) : null;
+        if (ReferenceEquals(input, _input)) return;
 
-        if (_menuHub is not null)
+        if (_input is not null)
         {
             UnsubscribeMenuHub();
-            // 菜单还开着就换树：把 Closed 报回旧枢纽，它的挂起状态不会留在那儿。
-            if (MenuLink is not null)
-            {
-                _menuHub.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, MenuLink));
-                MenuLink = null;
-            }
+            // 菜单还开着就换树：先放开旧路由的挂起，别把它留在那儿。
+            if (MenuLink is not null) MenuLink = null;
         }
 
-        _menuHub = hub;
-        if (hub is null) return;
+        _input = input;
+        if (input is null) return;
 
-        _menuRequested = (_, e) => ShowLinkMenu(e);
-        _menuDismissed = (_, e) =>
+        var bound = input.Tree;
+        _menuPressed = (_, e) => ShowLinkMenu(e);
+        _menuLinkRemoved = (_, link) =>
         {
-            if (!ReferenceEquals(MenuLink, e.Link)) return;
+            // 「菜单不能比它指着的那条线活得久」：Delete、Undo、Agent 改树都走这条路。
+            if (!ReferenceEquals(MenuLink, link)) return;
             CloseLinkMenu();
         };
-        hub.ContextMenuRequested += _menuRequested;
-        hub.ContextMenuDismissRequested += _menuDismissed;
+        ((IWorkflowInputEvents)bound.GetHelper()).Input.PointerPressed += _menuPressed;
+        bound.GetHelper().LinkRemoved += _menuLinkRemoved;
     }
 
     private void UnsubscribeMenuHub()
     {
-        if (_menuHub is null) return;
-        if (_menuRequested is not null) _menuHub.ContextMenuRequested -= _menuRequested;
-        if (_menuDismissed is not null) _menuHub.ContextMenuDismissRequested -= _menuDismissed;
-        _menuRequested = null;
-        _menuDismissed = null;
+        if (_input is not { } input) return;
+
+        var helper = input.Tree.GetHelper();
+        if (_menuPressed is not null && helper is IWorkflowInputEvents events) events.Input.PointerPressed -= _menuPressed;
+        if (_menuLinkRemoved is not null) helper.LinkRemoved -= _menuLinkRemoved;
+
+        _menuPressed = null;
+        _menuLinkRemoved = null;
+        _input = null;
     }
 
-    // 命中连线且宿主真的给了条目才开菜单：空白处枢纽也会报一次（Link 为 null），在这里挡掉。
-    private void ShowLinkMenu(ContextMenuRequestedEventArgs e)
+    // 命中连线且宿主真的给了条目才开菜单：空白处也会路由一次（Target 为 null），在这里挡掉。
+    private void ShowLinkMenu(WorkflowPointerPressedEventArgs e)
     {
-        if (e.Link is null || LinkMenu is null) return;
+        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Target is not IWorkflowLinkViewModel link || LinkMenu is null) return;
 
-        MenuLink = e.Link;
-        _menuPosition = e.Position;
-        // 报回枢纽：菜单在屏期间挂起悬停，指针移到菜单上不会清掉这次选中的连线。
-        _menuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
+        // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
+        if (e.Handle.PreventDefault) return;
+
+        MenuLink = link;
+        // 菜单在屏期间挂起悬停：指针移到菜单上不会清掉这次选中的连线。
+        if (_input is { } input) input.IsSuspended = true;
         _ = InvokeAsync(StateHasChanged);
     }
 
-    // 收起照常报 Closed，挂起随之放开。点条目、点背景、按 Escape 都走这里。
+    // 收起即放开挂起。点条目、点背景、按 Escape 都走这里。
     private void CloseLinkMenu()
     {
         if (MenuLink is null) return;
 
-        var link = MenuLink;
         MenuLink = null;
-        _menuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, link));
+        if (_input is { } input) input.IsSuspended = false;
         _ = InvokeAsync(StateHasChanged);
     }
 
     // 点面板里任何一处都收起菜单 —— 与平台原生的右键菜单一致：条目一击即散。
     private void OnMenuPanelClick() => CloseLinkMenu();
 
-    public async Task ForwardPointerAsync(PointerPhase phase, double clientX, double clientY, PointerButtonKind button = PointerButtonKind.None)
+    /// <summary>
+    /// Routes one pointer event into the tree's input route, converting the viewport coordinates the browser
+    /// reports into the canvas-local space the link curves are published in.
+    /// </summary>
+    /// <param name="kind">What the pointer did.</param>
+    /// <param name="clientX">Viewport x of the pointer, as reported by the browser.</param>
+    /// <param name="clientY">Viewport y of the pointer, as reported by the browser.</param>
+    /// <param name="button">Which button, for a press or a release.</param>
+    /// <param name="deltaY">Wheel movement, for a wheel event.</param>
+    /// <param name="target">
+    /// The component the pointer is on when the DOM element that fired already knows it (a link view's
+    /// <c>mouseenter</c>); left <see langword="null"/> the surface resolves it from the position.
+    /// </param>
+    /// <remarks>
+    /// While <see cref="WorkflowInput.IsSuspended"/> is set (a menu is open) the route keeps the pointer target,
+    /// so moving onto the menu does not clear the one the menu acts on.
+    /// </remarks>
+    public async Task RoutePointerAsync(
+        SurfacePointerKind kind, double clientX, double clientY,
+        WorkflowMouseButton button = WorkflowMouseButton.None, double deltaY = 0, IWorkflowViewModel? target = null)
     {
-        // 枢纽按树取用（Core 只保留一处）：本家不持有实例，换树自然换枢纽
-        if (Tree is not { } tree)
+        // 路由按树取用（Core 只保留一处）：本家不持有实例，换树自然换路由
+        if (_input is not { } input)
         {
             return;
         }
-
-        var interaction = LinkInteraction.For(tree);
 
         if (await ToCanvasLocalAsync(clientX, clientY) is not { } local)
         {
             return;
         }
 
-        interaction.Publish(new PointerEvent(phase, new Anchor(local[0], local[1], 0), button));
+        var anchor = new Anchor(local[0], local[1], 0);
+        target ??= input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        WorkflowEventHandle handle = new();
+
+        input.Route(kind switch
+        {
+            SurfacePointerKind.Entered => new WorkflowPointerEnteredEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, handle),
+            SurfacePointerKind.Exited => new WorkflowPointerExitedEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, handle),
+            SurfacePointerKind.Pressed => new WorkflowPointerPressedEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, button, 1, handle),
+            SurfacePointerKind.Released => new WorkflowPointerReleasedEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, button, 1, handle),
+            SurfacePointerKind.Wheel => new WorkflowPointerWheelEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, 0d, deltaY, handle),
+            _ => new WorkflowPointerMovedEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, handle),
+        });
 
         // 悬停到连线上就把焦点收到表面根：Delete 才有路由，而「悬停（不点）就能删」是契约。
         // preventScroll 是本家对那一次「焦点把画布卷进视口」的防护 —— 不用它，鼠标碰到线画布就跳一段。
-        if (interaction.HoveredLink is not null)
+        if (input.HoveredLink is not null)
         {
             await _surfaceRoot.FocusAsync(preventScroll: true);
         }
@@ -774,15 +856,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         // 先摘模型订阅，拆 JS 句柄期间不再有回调进来要求重渲染。
         UnsubscribeTree();
 
-        // 菜单还开着就收尾：把 Closed 报回去，旧枢纽的挂起状态不会留在那儿。
-        if (MenuLink is not null)
-        {
-            _menuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, _menuPosition, MenuLink));
-            MenuLink = null;
-        }
+        // 菜单还开着就收尾：先放开输入路由的挂起，别把它留在那儿。
+        if (MenuLink is not null) MenuLink = null;
 
         UnsubscribeMenuHub();
-        _menuHub = null;
 
         if (_handle is not null)
         {

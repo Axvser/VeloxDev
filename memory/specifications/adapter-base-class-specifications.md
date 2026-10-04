@@ -44,6 +44,31 @@
 **基类必须是 `public`、非 `sealed`**，扩展点是 `protected virtual` / `protected abstract`，或既有的公开接口
 （如 `IWorkflowTemplateSelector` / `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay`）—— 能复用接口就不要新造虚方法。
 
+**钩子的命名规则：`On` + 事件名，参数就是那次事件的 args。** 与上面那组模型事件钩子同一条规矩
+（`OnMoving(NodeMoveEventArgs)`）。
+⚠ 名字**不许断言效果** —— 写「指针进来了」，不写「该高亮了」：用户订的是事件，做什么由他决定
+（`OnPaintHighlight` 那种名字已经被否掉，见 [layer-ownership-specifications.md](layer-ownership-specifications.md) §1.4）。
+**两家给同一个概念时必须同名同形**：`OnRenderHighlight` vs `OnPaintHighlight` 那种只差一个动词的分裂，等于让用户学两套。
+
+### 2.1.1 例外：`workflow-link-view` 给的是「附加」，不是基类
+
+**2026-10-04 用户定**：连线的组件视图是**完全用户定制**的，所以**整个视图的构建不该被藏进基类**。这一角色的产物
+应该像一个**视图**（用户写 `OnPaint` / `OnRender`），适配器给的是一个**可以附到控件上的助手**，在用户构建视图时
+顺带把其余东西挂上去：
+
+| | 写法 |
+|---|---|
+| 其余六个角色 | `public class TemplateClass : <适配器的基类>` —— 派生 + 设调色板 |
+| **`workflow-link-view`** | `public sealed class TemplateClass : Control`（或 `FrameworkElement`），构造里一行 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnPaint` / `OnRender` 里画 |
+
+助手负责**不是画**的那部分：端点订阅（含池化换绑）、窗口区域雕刻 / 自适应盒子、几何、命中契约的发布、这条线的指针事件
+（`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`，事件名与 `IWorkflowInputEvents` 一致）。
+`Curve` 把四个控制点交出来，`Paint(…)` 提供「最短的一版静息线」供调用或忽略。
+
+**为什么这条能例外而 `grid-decorator` 不能**：判据始终是 §2.1 的「这段代码是不是用户该改的扩展点」。
+网格那些平台机制（世界坐标换算、刻度排版、每帧重绘）**用户不会想重写**；而连线视图的**画法本身就是用户的**，
+把它藏进基类的唯一效果是用户每次想改一笔都要先读一遍基类。
+
 ### 2.2 「每一个角色」是字面的
 
 七项逐项适用：`workflow-grid-decorator` / `workflow-link-view` / `workflow-minimap-overlay` /
@@ -72,7 +97,7 @@
 6. **跑校验脚本**（见 §四）。
 
 **worked example**：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/` 下五个基类
-（`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` / `WorkflowLinkView` / `WorkflowMinimapOverlay`），
+（`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` / `WorkflowMinimapOverlay`，加连线的 `WorkflowLinkAttachment`），
 对应模板 1095→52、790→404、379→22、346→21、325→22 行。
 
 **要一起想的**：一个角色的基类若要引用**另一个角色的产物**（Jalium 做这一项时正是这种情况：树基类要端口几何，
@@ -102,30 +127,33 @@
 
 | 平台 | 有基类 | 还缺 |
 |---|---|---|
-| **WinForms** | **七项全有**（2026-10-03 完成） | —— |
-| **Jalium** | **七项全有**（2026-10-03 完成） | ——（`slot-view` 在这家没有「视图」可派生，见下） |
+| **WinForms** | 六项有基类；**`workflow-link-view` 改为 `WorkflowLinkAttachment`**（2026-10-04，见 §2.1.1） | —— |
+| **Jalium** | 六项有基类；**`workflow-link-view` 改为 `WorkflowLinkAttachment`**（2026-10-04，见 §2.1.1） | ——（`slot-view` 在这家没有「视图」可派生，见下） |
 
 **WinForms 的七个基类**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）与它们把模板压到的行数：
-`WorkflowTreeView` 52、`WorkflowNodeView` 404、`WorkflowSlotView` 22、`WorkflowLinkView` 21、
-`WorkflowGridDecorator` 41、`WorkflowMinimapOverlay` 22、`WorkflowTemplateSelector` 19 —— 合计 **581**（原 3257）。
+`WorkflowTreeView` 52、`WorkflowNodeView` 404、`WorkflowSlotView` 22、`WorkflowGridDecorator` 41、
+`WorkflowMinimapOverlay` 22、`WorkflowTemplateSelector` 19；连线那一角色换成 `WorkflowLinkAttachment`
+（助手，2026-10-04）。
 另有三个共用件：`WorkflowSurfaceColors`（颜色解析）、`WorkflowSurfaceGraphics`（圆角矩形）、
 `WorkflowSurfaceGrid`（网格线判定与刻度标签格式化，此前在包内有**两份**逐字相同的私有副本）。
 校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform WinForms -Strict` 全绿。
 
 **Jalium 的七个角色**（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`）：`WorkflowTreeView` 819、
-`WorkflowNodeView` 309、`WorkflowLinkView` 344、`WorkflowSlotView` 167（端口图形）、`WorkflowGridDecorator` 234、
+`WorkflowNodeView` 309、`WorkflowSlotView` 167（端口图形）、`WorkflowGridDecorator` 234、
 `WorkflowTemplateSelector` 51、`WorkflowMinimapOverlay` 311，加分层的两个共用件 `WorkflowPortLayout`（设计值，41）
 与 `WorkflowPortGeometry`（端口枚举与定位，反射，125）。
 七个模板条目现压到 32 / 59 / 35 / 20 / 25 / 25 / 14 行，合计 **210**（原 1262）。
 校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict` 全绿。
 
-**七个角色在这家都是「基类 + 派生」，没有例外。** 曾经不是：`slot-view` 的产物一度是一份「端口在哪」的静态几何，
+**六个角色是「基类 + 派生」，连线那一角色是「附加助手」**（2026-10-04，见 §2.1.1）。 曾经不是：`slot-view` 的产物一度是一份「端口在哪」的静态几何，
 **端口图形由卡片自己画成圆点**；现在 `WorkflowSlotView` 是一个真正的控件，卡片按 `WorkflowPortLayout` 托管
 一个实例在每个端口位置上，模板的 `slot-view` 条目是它的子类。剩下的 `WorkflowPortLayout` 是**设计值**
 （尺寸与端口位置），不是「因为造不出控件而留下的替代品」。
 
 **连线交互那层归属已决**（此前是这一项最大的纠结点，见 [item-template-specifications.md](item-template-specifications.md) §五最后一条）：
-Jalium 的连线命中/拖拽/虚拟预览**进了包**（`WorkflowTreeView` 的手势与 `WorkflowLinkView` 的拖拽预览跳过），
-模板与 Trimmed demo 因此不必自绘那层 —— 这与「连线的命中/高亮/删除是库能力、模板默认就有」（见
-[item-template-specifications.md](item-template-specifications.md) §五，2026-10-03 起）一致，因为交互在**适配器基类**里，
-生成的模板拿到的仍是「被动视觉 + 可覆写画法」。
+Jalium 的连线命中/拖拽/虚拟预览**进了包**（`WorkflowTreeView` 的手势与 `WorkflowLinkAttachment` 的拖拽预览跳过），
+模板与 Trimmed demo 因此不必自绘那层 —— 交互在**适配器基类**里，生成的模板拿到的仍是「被动视觉 + 可覆写画法」。
+
+**外观那一半也归用户**（2026-10-04）：这两家的 `WorkflowLinkAttachment` **只画静息线、且只在用户调 `Paint` 时才画**；
+悬停光、焦点环、角标一律由用户的视图自己在 `OnPaint` / `OnRender` 里画，事件从助手上订
+（`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`，名字与 `IWorkflowInputEvents` 一致）。

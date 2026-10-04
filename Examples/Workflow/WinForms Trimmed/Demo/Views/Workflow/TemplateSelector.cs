@@ -14,6 +14,6 @@ public sealed class TemplateSelector : WorkflowTemplateSelector
     public TemplateSelector()
     {
         NodeViewFactory = node => new NodeView { ViewModel = node };
-        LinkViewFactory = link => new LinkView { ViewModel = link };
+        LinkViewFactory = link => new LinkView();
     }
 }

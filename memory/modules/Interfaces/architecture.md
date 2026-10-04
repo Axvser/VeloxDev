@@ -1,4 +1,4 @@
-﻿# Interfaces — 架构
+# Interfaces — 架构
 
 > 代码：`Src/Core/VeloxDev.Core/Interfaces/`（**42 个 .cs**，49 个接口声明），7 个子目录按模块分：`AspectOriented/`(1 文件 / 1 接口)、`DynamicTheme/`(3/3)、`MVVM/`(5/5)、`Tickable/`(1/1)、`Timing/`(6/5)、`TransitionSystem/`(9/12)、`WorkflowSystem/`(17/22)。文件数 42；其中 **41** 个含接口声明，剩下 1 个是 `Timing/TimeSample.cs`（一个 `readonly struct`，不是契约）。
 > 本文与其他模块的 `architecture.md` 写法不同：**这里没有实现，只有契约的集中地**。所以本文不写「这个模块做什么」，只写**契约的分层与归属规则** —— 哪个接口该谁实现、为什么集中在一个目录、跨模块在哪儿咬合。
@@ -32,7 +32,7 @@
 | 编译期内部管线 `ICompile*`（3） | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Compile/Contracts/`（`:12`、`:7`、`:14`） | 只有该子系统实现 |
 | 运行期内部管线 `IExecution*`/`ILogWriter`/`INodeRetryPolicy`/`IRedirectable`/`IRuntimeAware`/`IRuntimeContext`（10） | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Contracts/`（`IRedirectable.cs:11`、`IRuntimeAware.cs:8`、`IRuntimeContext.cs:15` 等） | 运行期内部管线 |
 | `IGroupData`（1） | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Model/GroupData.cs:17` | 引擎注入给节点的只读产物字典（详见 `memory/modules/WorkflowSystem/`） |
-| WorkflowSystem 事件/交互族 `IWorkflow*Events`、`IWorkflow*EventSink`、`ILinkHighlight`、`ILinkHitTestable`（8） | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/{Node,Slot,Tree}/`、`GUI/Interaction/` | Core 内部事件轴，外部不实现 |
+| WorkflowSystem 事件/交互族 `IWorkflow*Events`、`IWorkflow*EventSink`、`IWorkflowInputEvents`、`ILinkHitTestable`（8） | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/{Node,Slot,Tree,Input}/`、`GUI/Interaction/` | Core 内部事件轴，外部不实现 |
 | `IConditionalSlot`（1） | `Src/Core/VeloxDev.Core/WorkflowSystem/SelectorEx/ConditionalSlot.cs:12` | SelectorEx 内部 |
 | `IAopHookTarget`（1） | `Src/Core/VeloxDev.Core/AspectOriented/AspectHooks.cs:66` | AOP 运行期内部 |
 | 强类型命令族 `IVeloxCommand<TParam1..TParamN, TResult>`（14）与 `IVeloxCommandEvents<TParam,TResult>`（1） | `Src/Core/VeloxDev.Core/MVVM/CommandArities.cs`、`MVVM/CommandEventArgs{TParam,TResult}.cs:31` | MVVM 模块内部管线 |

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Components;
@@ -31,7 +31,7 @@ namespace Demo.Components.Workflow;
 /// which for a path means no path at all.
 /// </para>
 /// </summary>
-public partial class TemplateLinkView : ComponentBase, IDisposable, ILinkHighlight
+public partial class TemplateLinkView : ComponentBase, IDisposable
 {
     // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
     private const double PullMinimum = 40;
@@ -515,8 +515,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, ILinkHighlig
     private bool _hover;
 
     /// <summary>
-    /// Whether the pointer is on this link. The tree's <see cref="LinkInteraction"/> hub drives it
-    /// through <see cref="ILinkHighlight"/> as it resolves the hovered link.
+    /// Whether the pointer is on this link. This view drives it itself, from the tree's
+    /// input route — see <see cref="OnPointerEntered"/>.
     /// </summary>
     public bool IsHighlighted
     {
@@ -542,25 +542,23 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, ILinkHighlig
     private string HitTargetCss => EffectiveIsVirtual ? "none" : "stroke";
 
     // 悬停高亮：本视图进入即先亮（这张脸是逐元素的，浏览器进出即可，不必等枢纽走一圈），
-    // 枢纽随后按命中把 IsHighlighted 落在真正在最上的那条上 —— 本视图转发的只是位置，
+    // 路由随后按命中把 IsHighlighted 落在真正在最上的那条上 —— 本视图转发的只是位置，
     // 哪条线在最上由枢纽裁决，它不替枢纽下结论。
     private async Task OnPointerEnter(MouseEventArgs e)
     {
-        _hover = true;
-        await InvokeAsync(StateHasChanged);
+        IsHighlighted = true;
         if (Surface is not null)
         {
-            await Surface.ForwardPointerAsync(PointerPhase.Entered, e.ClientX, e.ClientY);
+            await Surface.RoutePointerAsync(SurfacePointerKind.Entered, e.ClientX, e.ClientY, target: Link);
         }
     }
 
     private async Task OnPointerExit(MouseEventArgs e)
     {
-        _hover = false;
-        await InvokeAsync(StateHasChanged);
+        IsHighlighted = false;
         if (Surface is not null)
         {
-            await Surface.ForwardPointerAsync(PointerPhase.Exited, e.ClientX, e.ClientY);
+            await Surface.RoutePointerAsync(SurfacePointerKind.Exited, e.ClientX, e.ClientY, target: Link);
         }
     }
 
@@ -597,7 +595,19 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, ILinkHighlig
             _receiverNotifier = r;
             r.PropertyChanged += OnEndpointChanged;
         }
+
+        // 悬停高亮是本 demo 的：订**这条线自己的** Helper 就够了 —— 路由会告诉它指针什么时候进来、
+        // 什么时候离开，这里不必再去比 target 是谁。
+        if (link.GetHelper() is IWorkflowInputEvents events)
+        {
+            events.Input.PointerEntered += OnPointerEntered;
+            events.Input.PointerExited += OnPointerExited;
+        }
     }
+
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
     private void OnLinkChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -664,6 +674,13 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, ILinkHighlig
         {
             _receiverNotifier.PropertyChanged -= OnEndpointChanged;
             _receiverNotifier = null;
+        }
+
+        // 视图比树活得短：退了订，路由不会往一个已经走掉的渲染器里发事件
+        if (Link?.GetHelper() is IWorkflowInputEvents events)
+        {
+            events.Input.PointerEntered -= OnPointerEntered;
+            events.Input.PointerExited -= OnPointerExited;
         }
     }
 }

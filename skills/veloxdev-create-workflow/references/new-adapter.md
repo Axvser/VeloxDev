@@ -131,7 +131,7 @@ A workable order, bottom-up — each step is verifiable on its own:
 3. **`Interpolator`** — an `InterpolatorCore` subclass that registers those samplers and implements `CreateScheduler`. This is also what makes a theme switch animate on your platform.
 4. **State, interpreter, scheduler** — only if your framework's value types need their own write path.
 5. **The surface behaviour** and the named-part resolution.
-6. **The node, slot and link behaviours** — drag, connect, slot measurement, and forwarding the platform's pointer and Delete key into `LinkInteraction.For(tree)` (see [view-layer.md](view-layer.md#making-a-link-interactive)).
+6. **The node, slot and link behaviours** — drag, connect, slot measurement, and translating the platform's pointer and keys into the standard input route (`WorkflowInput.For(tree).Route(...)`, resolving the target with `HitTestVisibleLinks`; see [view-layer.md](view-layer.md#making-a-link-interactive)).
 7. **The grid decorator and minimap**, implementing Core's `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay`.
 
 ⚙ **Do not add per-platform link hit-testing or hover code.** Core's hub resolves the hovered link against the curves the views publish, highlights and deletes it; the adapter only translates the platform's events in. The link context menu is the same split — the entries are yours (a menu resource, a fragment, or a build hook) and the hub owns the open/close bookkeeping (see [view-layer.md](view-layer.md#the-link-context-menu)).

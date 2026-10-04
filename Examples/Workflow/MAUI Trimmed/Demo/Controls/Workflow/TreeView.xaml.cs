@@ -1,4 +1,5 @@
 // VeloxDev customization: Set BindingContext to your IWorkflowTreeViewModel before the control is loaded.
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Controls;
 
@@ -16,5 +17,33 @@ public partial class TreeView : ContentView
         // The tree is assigned to this control by the page; propagate it explicitly so the HUD's
         // BindingContextChanged fires even if inheritance doesn't reach the nested overlay.
         BindingContextChanged += (_, _) => InfoOverlay.BindingContext = BindingContext;
+        SyncLinkInput();
     }
+
+    // VeloxDev customization: 悬停高亮是这本 demo 的。overlay 默认什么都不画，订阅树的输入事件、
+    // 把「现在轮到哪条线」交给它，它才照 #FFFFFFFF 画那一条 —— 换色/换画法都在这里改。
+    private IWorkflowInputEvents? _linkInput;
+
+    private void SyncLinkInput()
+    {
+        if (_linkInput is not null)
+        {
+            _linkInput.Input.PointerEntered -= OnLinkPointerEntered;
+            _linkInput.Input.PointerExited -= OnLinkPointerExited;
+            _linkInput = null;
+        }
+
+        if (BindingContext is IWorkflowTreeViewModel tree && tree.GetHelper() is IWorkflowInputEvents events)
+        {
+            _linkInput = events;
+            events.Input.PointerEntered += OnLinkPointerEntered;
+            events.Input.PointerExited += OnLinkPointerExited;
+        }
+    }
+
+    private void OnLinkPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e)
+        => PART_LinkLayer.SelectedLink = e.Target as IWorkflowLinkViewModel;
+
+    private void OnLinkPointerExited(object? sender, WorkflowPointerExitedEventArgs e)
+        => PART_LinkLayer.SelectedLink = null;
 }

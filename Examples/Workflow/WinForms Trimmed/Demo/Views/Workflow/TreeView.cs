@@ -46,7 +46,7 @@ public sealed class TreeView : WorkflowTreeView
 
     /// <inheritdoc />
     protected override Control CreateLinkView(IWorkflowLinkViewModel link)
-        => new LinkView { ViewModel = link };
+        => new LinkView();
 
     /// <inheritdoc />
     protected override void OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)

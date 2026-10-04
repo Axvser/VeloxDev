@@ -9,10 +9,10 @@ namespace TemplateNamespace;
 
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
-/// The view only paints: it publishes its curve for hit-testing and implements
-/// <see cref="ILinkHighlight"/> so the surface lights it on hover. It handles no input itself.
+/// The view only paints: it publishes its curve for hit-testing and handles no input itself. Hover feedback is
+/// the host's — subscribe <c>IWorkflowInputEvents</c> on the helper and handle the routed pointer events.
 /// </summary>
-public partial class TemplateClass : UserControl, ILinkHighlight
+public partial class TemplateClass : UserControl
 {
     // Extension point: the least horizontal pull of the two control points. Keep it in step with the curve
     // that is published for hit-testing below.
@@ -47,10 +47,6 @@ public partial class TemplateClass : UserControl, ILinkHighlight
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnRenderChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(TemplateClass), new PropertyMetadata((Color)ColorConverter.ConvertFromString("TemplateLinkColor"), OnRenderChanged));
-    public static readonly DependencyProperty HighlightColorProperty =
-        DependencyProperty.Register(nameof(HighlightColor), typeof(Color), typeof(TemplateClass), new PropertyMetadata((Color)ColorConverter.ConvertFromString("#FFFFFFFF"), OnRenderChanged));
-    public static readonly DependencyProperty IsHighlightedProperty =
-        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnRenderChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -59,12 +55,6 @@ public partial class TemplateClass : UserControl, ILinkHighlight
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Color LineColor { get => (Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
-
-    /// <summary>The soft light the link turns into while it is hovered.</summary>
-    public Color HighlightColor { get => (Color)GetValue(HighlightColorProperty); set => SetValue(HighlightColorProperty, value); }
-
-    /// <inheritdoc />
-    public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
 
     private static void OnRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TemplateClass)d).InvalidateVisual();
@@ -99,32 +89,16 @@ public partial class TemplateClass : UserControl, ILinkHighlight
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
         PublishCurve(LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
-        var color = IsHighlighted ? HighlightColor : LineColor;
         var thickness = TemplateLinkThickness;
         var geometry = BuildCurve(StartLeft, StartTop, EndLeft, EndTop);
 
-        // Extension point: this is the hover feedback. Swap the halo's width or alpha, or HighlightColor,
-        // to restyle the highlighted link.
-        if (IsHighlighted)
-        {
-            ctx.DrawGeometry(null, new Pen(new SolidColorBrush(AtAlpha(color, 0.18)), thickness + 8)
-            {
-                StartLineCap = PenLineCap.Round,
-                EndLineCap = PenLineCap.Round,
-            }, geometry);
-        }
-
-        var brush = new SolidColorBrush(color);
+        var brush = new SolidColorBrush(LineColor);
         var pen = IsVirtualLink
             ? new Pen(brush, thickness) { DashStyle = new DashStyle(new double[] { 4, 2 }, 0) }
             : new Pen(brush, thickness);
 
         ctx.DrawGeometry(null, pen, geometry);
     }
-
-    // Extension point: the hover halo's opacity (0..1); 0 turns the glow off.
-    private static Color AtAlpha(Color color, double alpha)
-        => Color.FromArgb((byte)Math.Round(Math.Clamp(alpha, 0, 1) * 255), color.R, color.G, color.B);
 
     // Extension point: the control points set the curve's shape. Both are pulled horizontally by
     // max(40, |dx| / 2), which is what makes the line leave each port horizontally — keep that

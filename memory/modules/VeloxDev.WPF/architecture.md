@@ -95,8 +95,8 @@
 
 这是 2026-10-04 起这家最重的一段新增，模板只留资源、不留交互代码：
 
-- **`LinkMenuKey` 是资源键，不是菜单本身**（`:95-108`，注释 `:99-102` 解释了为什么不能用 `{StaticResource}`：属性挂在根元素上，静态资源会在定义它的字典解析之前求值）。表面在每次 `Refresh` 里重查一次资源（`WireLinkMenu`，`:159-219`），并把 `Opened`/`Closed` 报给 Core 的 `LinkInteraction` 中枢；`UnwireLinkMenu`（`:221-243`）在 `Detach` 时把菜单与中枢两边的订阅都摘掉。菜单的 `DataContext` 就是被点的那条连线（`ShowLinkMenu` `:246-278`，画布坐标 → 屏幕坐标含 DPI 折算，netframework 走呈现源、其余走 `VisualTreeHelper.GetDpi`，`:262-271`）。
-- **悬停 / 按下 / 离开归 Core 判**：`OnPreviewMouseMove`（`:659 起`）、`OnLinkPointerEntered`（`:692 起`）、`OnLinkPointerExited`（`:715 起`）、`OnLinkPointerPressed`（`:734 起`）把指针事件翻成 `PointerEvent`（Moved/Entered/Exited/Pressed）发布给 `LinkInteraction.For(viewModel)`。拉线时（`VirtualLink.IsVisible`）不转发，免得沿途实连线一路亮起（`:659 起`）。
+- **`LinkMenuKey` 是资源键，不是菜单本身**（`:95-108`，注释 `:99-102` 解释了为什么不能用 `{StaticResource}`：属性挂在根元素上，静态资源会在定义它的字典解析之前求值）。表面在每次 `Refresh` 里重查一次资源（`WireLinkMenu`），开合时自己置/放 `WorkflowInput.IsSuspended`；`UnwireLinkMenu` 在 `Detach` 时把菜单与输入路由两边的订阅都摘掉。菜单的 `DataContext` 就是被点的那条连线（`ShowLinkMenu` `:246-278`，画布坐标 → 屏幕坐标含 DPI 折算，netframework 走呈现源、其余走 `VisualTreeHelper.GetDpi`，`:262-271`）。
+- **悬停 / 按下 / 离开归 Core 判**：`OnPreviewMouseMove`、`OnLinkPointerEntered`、`OnLinkPointerExited`、`OnLinkPointerPressed`、`OnLinkPointerReleased`、`OnLinkPointerWheel` 把指针事件翻成标准输入（`WorkflowPointer*EventArgs`）交给 `WorkflowInput.For(viewModel).Route(...)`，命中由 `HitTestVisibleLinks` 判。拉线时（`VirtualLink.IsVisible`）不转发，免得沿途实连线一路亮起。
 - **键盘焦点由表面接力**：`FocusHoveredLink`（`:772 起`）优先把焦点交给画出那条线的控件，**不可聚焦时退回宿主本身**（模板/Trimmed 的连线视图默认就不可聚焦）—— 否则「悬停 + Delete」在生成出来的工程里没有路由。`OnLinkKeyDown`（`:789 起`）只在 `Key.Delete` 且有悬停连线时发 `KeyEvent(InputKey.Delete)`，走冒泡不隧道（聚焦的输入框先赢）。
 - **视口恢复**：`CaptureViewportRestore`（`:282-295`）只在「换了树」时把存档位置排进待恢复（引用比较 `LastRestoreTree`）；`QueueViewportRestore`（`:299-321`）在 `DispatcherPriority.Loaded` 才滚，避免 `DataContext` 变化那一刻 Extent 还是 0 被夹没。
 

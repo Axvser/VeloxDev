@@ -13,7 +13,7 @@ namespace Demo.Components.Workflow;
 /// endpoint slot anchors; it spans the whole canvas so links are absolutely positioned
 /// (overflow visible) and redraw whenever the endpoints move.
 /// </summary>
-public partial class LinkView : ComponentBase, IDisposable, ILinkHighlight
+public partial class LinkView : ComponentBase, IDisposable
 {
     // Minimum control-point pull: two ports close together would otherwise degenerate the curve
     // into a straight segment and lose the horizontal exit at each end.
@@ -61,16 +61,17 @@ public partial class LinkView : ComponentBase, IDisposable, ILinkHighlight
     private INotifyPropertyChanged? _receiverNotifier;
     private LinkCurve? _curve;
 
-    // 悬停高亮：柔光（浅青）而不是刺目的红。只改这一条 path 的描边 —— 新增元素拿不到
-    // data-veloxdev-link-curve，缩放的 JS 不跟它，会画出一条不跟手的重影。
+    // VeloxDev customization: 悬停高亮 —— 本 demo 自己订这条线的输入事件实现，
+    // 模板里那份没有这一段。只改这一条 path 的描边：新增元素拿不到 data-veloxdev-link-curve，
+    // 缩放的 JS 不跟它，会画出一条不跟手的重影。
     private const string HighlightColor = "#FFFFFFFF";
     private const double HighlightWidthBonus = 1.5;
 
     private bool _hover;
 
     /// <summary>
-    /// Whether the pointer is on this link. The tree's <see cref="LinkInteraction"/> hub drives it
-    /// through <see cref="ILinkHighlight"/> as it resolves the hovered link.
+    /// Whether the pointer is on this link. This view drives it itself, from the tree's
+    /// input route — see <see cref="OnPointerEntered"/>.
     /// </summary>
     public bool IsHighlighted
     {
@@ -145,6 +146,10 @@ public partial class LinkView : ComponentBase, IDisposable, ILinkHighlight
     private string StrokeColor => _hover ? HighlightColor : LineColor;
     private string StrokeWidthCss => (_hover ? Thickness + HighlightWidthBonus : Thickness).ToString("0.#", CultureInfo.InvariantCulture);
 
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
+
     /// <inheritdoc />
     protected override void OnInitialized()
     {
@@ -174,6 +179,14 @@ public partial class LinkView : ComponentBase, IDisposable, ILinkHighlight
         {
             _receiverNotifier = r;
             r.PropertyChanged += OnEndpointChanged;
+        }
+
+        // 悬停高亮是本 demo 的：订**这条线自己的** Helper 就够了 —— 路由会告诉它指针什么时候进来、
+        // 什么时候离开，这里不必再去比 target 是谁。
+        if (link.GetHelper() is IWorkflowInputEvents events)
+        {
+            events.Input.PointerEntered += OnPointerEntered;
+            events.Input.PointerExited += OnPointerExited;
         }
     }
 
@@ -272,13 +285,14 @@ public partial class LinkView : ComponentBase, IDisposable, ILinkHighlight
     }
 
     // Forwarding the pointer into the hub is what makes the link interactive: the hub decides which link
-    // is under the pointer, lights it (AutoHighlight) and deletes it on Delete (AutoDelete). Nothing here
-    // decides anything — the browser's stroke-only hit region is the outer gate, and the hub is the judge.
+    // is under the pointer and deletes it on Delete (AutoDelete); the hover highlight is this demo's own
+    // (OnPointerEntered). Nothing here decides anything — the browser's stroke-only hit region is the outer
+    // gate, and the hub is the judge.
     private async Task OnPointerEnter(MouseEventArgs e)
     {
         if (Surface is not null)
         {
-            await Surface.ForwardPointerAsync(PointerPhase.Entered, e.ClientX, e.ClientY);
+            await Surface.RoutePointerAsync(SurfacePointerKind.Entered, e.ClientX, e.ClientY, target: Link);
         }
     }
 
@@ -286,7 +300,7 @@ public partial class LinkView : ComponentBase, IDisposable, ILinkHighlight
     {
         if (Surface is not null)
         {
-            await Surface.ForwardPointerAsync(PointerPhase.Exited, e.ClientX, e.ClientY);
+            await Surface.RoutePointerAsync(SurfacePointerKind.Exited, e.ClientX, e.ClientY, target: Link);
         }
     }
 
@@ -311,6 +325,13 @@ public partial class LinkView : ComponentBase, IDisposable, ILinkHighlight
         {
             _receiverNotifier.PropertyChanged -= OnEndpointChanged;
             _receiverNotifier = null;
+        }
+
+        // 视图比树活得短：退了订，路由不会往一个已经走掉的渲染器里发事件
+        if (Link?.GetHelper() is IWorkflowInputEvents events)
+        {
+            events.Input.PointerEntered -= OnPointerEntered;
+            events.Input.PointerExited -= OnPointerExited;
         }
     }
 }

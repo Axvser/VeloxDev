@@ -16,10 +16,12 @@ namespace Demo.Views.Workflow;
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
 /// Passive visual only — never hit-testable, so it cannot swallow canvas gestures. It publishes the curve it
-/// draws, in raw canvas-local DP values, so the surface can hit-test it, and implements
-/// <see cref="ILinkHighlight"/> so the surface lights it on hover; keep the curve in sync with the drawn shape.
+/// draws, in raw canvas-local DP values, so the surface can hit-test it.
+/// The hover highlight below is <b>this demo's</b> reading of
+/// <see cref="LinkInteraction.HoverChanged"/> — the template ships the same view without it (see the repo's
+/// layering rule), so delete these members to get that back.
 /// </summary>
-public sealed partial class LinkView : UserControl, ILinkHighlight
+public sealed partial class LinkView : UserControl
 {
     private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
 
@@ -125,6 +127,7 @@ public sealed partial class LinkView : UserControl, ILinkHighlight
         UpdateLayoutSubscription();
         EnsureGeometry();
         ScheduleUpdate();
+        ResubscribeHub();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -132,6 +135,7 @@ public sealed partial class LinkView : UserControl, ILinkHighlight
         _isLoaded = false;
         _updatePending = false;
         UnsubscribeLayout();
+        UnsubscribeHub();
         _boundLink?.PublishCurve(null);
     }
 
@@ -143,6 +147,7 @@ public sealed partial class LinkView : UserControl, ILinkHighlight
             // Pool reuse / hide: retract the previous link's curve, or it keeps answering hit tests.
             _boundLink?.PublishCurve(null);
             _boundLink = link;
+            ResubscribeHub();
         }
 
         // Pool reuse re-assigns DataContext (and hides show a null DataContext first), so the layout
@@ -150,6 +155,38 @@ public sealed partial class LinkView : UserControl, ILinkHighlight
         UpdateLayoutSubscription();
         ScheduleUpdate();
     }
+
+    // VeloxDev customization: the hover highlight. The hub only reports whose turn it is; each view decides
+    // whether it lights up, so mutual exclusion needs no bookkeeping. The view lives shorter than the tree.
+    // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
+    // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
+    private IWorkflowLinkViewModel? _inputLink;
+
+    private void ResubscribeHub()
+    {
+        var link = _boundLink;
+        if (ReferenceEquals(link, _inputLink)) return;
+
+        UnsubscribeHub();
+        if (link?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        _inputLink = link;
+        events.Input.PointerEntered += OnPointerEntered;
+        events.Input.PointerExited += OnPointerExited;
+    }
+
+    private void UnsubscribeHub()
+    {
+        if (_inputLink?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.PointerEntered -= OnPointerEntered;
+        events.Input.PointerExited -= OnPointerExited;
+        _inputLink = null;
+    }
+
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
     /// <summary>Resolve the owning tree (Sender/Receiver → node → tree) and follow its CanvasLayout,
     /// so when EnsureNegativeCover grows ActualOffset during zoom the offset-frame bake re-runs.</summary>

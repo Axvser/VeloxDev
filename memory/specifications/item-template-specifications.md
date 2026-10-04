@@ -49,11 +49,12 @@
 - **Avalonia 此前确实没接**，而且它的症结不在 tree-view，在适配器：池是 `template.Build(null)` 建视图（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs:168`），而 Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的是选择器自己，轮到 `Build` 时它才去挑内层模板；传 `null` 就无从下手（选择器的 `SelectTemplate(null)` 抛异常）⇒ **视图一个都不建，且不报错**（画布空白）。现在传的是 VM，选择器因此可用。
 - **判定顺序**（四家 `FindDataTemplate` 同形）：按 VM **类型**的缓存 → 选择器 → 平台自带的查找（Avalonia：`ViewManager.cs:233` 缓存 → `:235` 选择器 → `:242`/`:248`/`:259` 面板/祖先/`Application`）⇒ 「选择器命中就跳过平台机制、没命中就退化到平台机制」成立；但选择器若**按实例**判定，第一个实例的判定会被整个类型沿用。
 - **WinForms 是例外**：它的池没有平台兜底可谈 —— 选择器是唯一的创建路径（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs:161` 的 `_selector.CreateView(item)`），所以「退化」在那家不存在。
-- **连线的命中、高亮与删除是库能力，模板与 Trimmed demo 默认就有**（2026-10-03 用户改定，推翻 2026-09-26 那条「连线交互是 demo 层、模板保持被动」的划定）：连线视图只负责**画出自己那条曲线并把它发布出去**，其余由 Core 与适配器承担 ——
+- **连线的命中与删除是库能力；高亮等外观是 demo 专属**（2026-10-04 用户改定，推翻 2026-10-03 那条「高亮由 hub 直接点亮、模板与 Trimmed demo 默认就有」，而那条本身推翻的是 2026-09-26 的「连线交互是 demo 层、模板保持被动」。分层的完整规则见 [layer-ownership-specifications.md](layer-ownership-specifications.md)）：连线视图只负责**画出自己那条曲线并把它发布出去**，其余由 Core、适配器、demo 三方分担 ——
   - 命中判定归 Core（`LinkHitTestEx` 对着已发布的曲线判距，半径 `LinkHitTestEx.DefaultHitRadius`）；
-  - hub 只有一个位置：`LinkInteraction.For(tree)`（一棵树一个实例），适配器只往里转发指针与 Delete，宿主与连线视图都用同一个调用取它；
-  - 悬停高亮由 hub 通过 **`ILinkHighlight`** 直接点亮（`AutoHighlight`），删除由 hub 直接执行（`AutoDelete`）——**都不需要宿主写订阅**。
-  ⇒ 新的判据是「这个角色**有没有指针源**」：任何一家只要它的连线视图或表面把指针位置喂给了 hub，生成的工程就开箱有命中/高亮/删除。
+  - **输入路由只有一个位置**：`WorkflowInput.For(tree)`（一棵树一个实例），适配器把原生指针/按键翻译成标准输入后只往它里面转发；宿主与连线视图都在**组件的 Helper**上订（`IWorkflowInputEvents`）；
+  - 删除由 hub 直接执行（`AutoDelete`，走的是 `link.DeleteCommand`）——**不需要宿主写订阅**；
+  - **悬停/选中高亮归 demo**：订那条线自己的 `Input.PointerEntered` / `PointerExited`（路由保证「先 Exited 后 Entered」）自己画。模板里的连线视图是**被动视觉**，不含任何高亮外观；适配器给的是**指针语义的覆写钩子**加一个空的画法钩子（WinForms/Jalium 的 `WorkflowLinkView.OnPointerEntered` … / `OnPaintLinkDecoration`）。Core 里没有 `ILinkHighlight`、也没有 `AutoHighlight`。
+  ⇒ 判据是「这个角色**有没有指针源**」：任何一家只要它的连线视图或表面把指针位置喂给了 hub，生成的工程就开箱有命中/删除；**高亮要自己按 demo 那份写**。
   - **连线的右键菜单也归模板**（2026-10-03 用户改定，推翻本条原来那句「右键菜单仍是 demo 的策略，不要往模板里推」）：
     理由直说 —— **条目列表本身就是用户要改的东西**，「改模板增删菜单条目」比「读库的文档再自己接一套」直接得多。
   - 落点是 **`workflow-tree-view` 条目**、不是 `workflow-link-view`：右键落在**表面**上（连线视图在很多家不吃指针），

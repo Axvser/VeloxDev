@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Hosting;
@@ -47,12 +47,15 @@ namespace Demo.Views;
 /// The view is a painting surface only: it publishes the <see cref="LinkCurve"/> it draws
 /// (<see cref="LinkHitTestEx.PublishCurve"/>) in canvas-local coordinates, and the tree's
 /// <see cref="LinkInteraction"/> decides what the pointer is on. Nothing here is hit-testable — the view is
-/// canvas sized, so a hit-testable one would swallow every canvas gesture — and it implements
-/// <see cref="ILinkHighlight"/>, so the hub lights it straight on hover without this view subscribing to
-/// anything. Deleting and the right-click menu belong to the demo, which subscribes to the same hub.
+/// canvas sized, so a hit-testable one would swallow every canvas gesture.
+/// </para>
+/// <para>
+/// The hover highlight is this demo's: the view subscribes to
+/// <see cref="LinkInteraction.HoverChanged"/> and writes <see cref="IsHighlighted"/> when the hovered link is
+/// its own. Deleting and the right-click menu belong to the demo too, off the same hub.
 /// </para>
 /// </summary>
-public sealed partial class PolylineCurveView : UserControl, ILinkHighlight
+public sealed partial class PolylineCurveView : UserControl
 {
     // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，失去「从端口水平出来」的形状。
     // 与 Core 的 LinkCurve.BuildCubic 取同一个下限；发布给命中的曲线也用这一份。
@@ -356,6 +359,7 @@ public sealed partial class PolylineCurveView : UserControl, ILinkHighlight
         _isLoaded = true;
         EnsureComet();
         Refresh();
+        ResubscribeHub();
     }
 
     // 彗星的 24 段在合成层里建一次。端点变化只改已有的几何对象，不重建任何东西 —— 这也是它不再进布局的原因
@@ -437,9 +441,10 @@ public sealed partial class PolylineCurveView : UserControl, ILinkHighlight
             // 改绑/回收：旧链接的曲线必须撤掉，否则一条已经不画这条线的线还会被命中
             _boundLink?.PublishCurve(null);
             _boundLink = link;
-            // 高亮由 LinkInteraction 直接写 ILinkHighlight；池化复用后旧链接的高亮会留在本视图上，先熄灭，
+            // 池化复用后旧链接的高亮会留在本视图上，先熄灭；换订新那棵树之后，
             // 指针再动时中枢会按当前悬停重新点亮
             IsHighlighted = false;
+            ResubscribeHub();
         }
 
         if (link is not null)
@@ -452,6 +457,38 @@ public sealed partial class PolylineCurveView : UserControl, ILinkHighlight
         // 否则它会一直往一个没人看的视图里写 27 条 Path，直到这个视图被复用
         Hide();
     }
+
+    // 高亮是这本 demo 的事：中枢只报「现在轮到谁」，每条线各自决定自己亮不亮 —— 互斥不需要谁记账。
+    // 视图比树活得短，改绑与回收都要退订（两者都走 OnDataContextChanged）。
+    // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
+    // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
+    private IWorkflowLinkViewModel? _inputLink;
+
+    private void ResubscribeHub()
+    {
+        var link = _boundLink;
+        if (ReferenceEquals(link, _inputLink)) return;
+
+        UnsubscribeHub();
+        if (link?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        _inputLink = link;
+        events.Input.PointerEntered += OnPointerEntered;
+        events.Input.PointerExited += OnPointerExited;
+    }
+
+    private void UnsubscribeHub()
+    {
+        if (_inputLink?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.PointerEntered -= OnPointerEntered;
+        events.Input.PointerExited -= OnPointerExited;
+        _inputLink = null;
+    }
+
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
     #endregion
 

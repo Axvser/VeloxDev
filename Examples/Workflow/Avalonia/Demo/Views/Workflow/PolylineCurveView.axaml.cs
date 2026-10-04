@@ -18,12 +18,12 @@ namespace Demo;
 /// </para>
 /// <para>
 /// The flattened curve comes from <see cref="LinkCurve"/> and is published to the link's own helper, so the
-/// surface hit-tests the exact shape this view painted (see <see cref="LinkHitTestEx"/>). The view keeps no
-/// hit-testing, input handling or hub subscription of its own: hover, press and Delete are resolved once, in
-/// Core, and <see cref="ILinkHighlight.IsHighlighted"/> is set there — this view only decides how lit it looks.
+/// surface hit-tests the exact shape this view painted (see <see cref="LinkHitTestEx"/>). Hit-testing and input
+/// handling stay in Core: hover, press and Delete are resolved once, there. The highlight is this demo's own
+/// reading — it subscribes to <see cref="LinkInteraction.HoverChanged"/> and decides how lit it looks.
 /// </para>
 /// </summary>
-public partial class PolylineCurveView : Control, ILinkHighlight
+public partial class PolylineCurveView : Control
 {
     // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
     private const double TailFraction = 0.30;
@@ -191,6 +191,7 @@ public partial class PolylineCurveView : Control, ILinkHighlight
         base.OnAttachedToVisualTree(e);
         PublishCurve();
         StartFlow();
+        ResubscribeHub();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -198,7 +199,40 @@ public partial class PolylineCurveView : Control, ILinkHighlight
         base.OnDetachedFromVisualTree(e);
         // A pooled view released and reused for another link must not leave the old animation running on it.
         StopFlow();
+        UnsubscribeHub();
     }
+
+    // 高亮是这本 demo 的事：中枢只报「现在轮到谁」，每条线各自决定自己亮不亮 —— 互斥不需要谁记账。
+    // 视图比树活得短，改绑与摘树都要退订。
+    // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
+    // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
+    private IWorkflowLinkViewModel? _inputLink;
+
+    private void ResubscribeHub()
+    {
+        var link = DataContext as IWorkflowLinkViewModel;
+        if (ReferenceEquals(link, _inputLink)) return;
+
+        UnsubscribeHub();
+        if (link?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        _inputLink = link;
+        events.Input.PointerEntered += OnPointerEntered;
+        events.Input.PointerExited += OnPointerExited;
+    }
+
+    private void UnsubscribeHub()
+    {
+        if (_inputLink?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.PointerEntered -= OnPointerEntered;
+        events.Input.PointerExited -= OnPointerExited;
+        _inputLink = null;
+    }
+
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -219,6 +253,7 @@ public partial class PolylineCurveView : Control, ILinkHighlight
             }
 
             PublishCurve();
+            ResubscribeHub();
         }
 
         // A link becomes drawable only once both endpoints have been measured, and the flow has nothing to

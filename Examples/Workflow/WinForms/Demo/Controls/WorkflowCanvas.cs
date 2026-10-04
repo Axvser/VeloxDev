@@ -1,4 +1,4 @@
-﻿using Demo.ViewModels;
+using Demo.ViewModels;
 using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -50,9 +50,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // WinForms being clipped by WS_CLIPSIBLINGS (only the topmost one would be drawn).
     private readonly List<Views.LinkView> _linkRenderers = [];
 
-    // 交互 hub 归 Core（每棵树一个，见 LinkInteraction.For）：这条画布只把指针/按键翻译成标准输入事件
-    // 转发进去，再订阅它的事件。高亮（AutoHighlight）与删除（AutoDelete）由 hub 自己完成，画布不再各记一份。
-    private LinkInteraction? _linkInteraction;
+    // 输入归 Core（每棵树一个，见 WorkflowInput.For）：这条画布只把指针/按键翻译成标准输入事件
+    // 转发进去，再订阅它的事件。删除（AutoDelete）由路由自己完成，画布不再各记一份。
+    private WorkflowInput? _input;
 
     // 右键菜单只在连线上弹，所以不能挂成画布的 ContextMenuStrip（那会变成右键画布任意处都弹）
     private ContextMenuStrip? _linkMenu;
@@ -262,7 +262,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     /// <summary>
     /// The link interaction hub for the bound session — the same instance Core gives every other surface over
-    /// that session's tree (see <see cref="VeloxDev.WorkflowSystem.LinkInteraction.For"/>); <see langword="null"/>
+    /// that session's tree (see <see cref="VeloxDev.WorkflowSystem.WorkflowInput.For"/>); <see langword="null"/>
     /// until a session is attached.
     /// </summary>
     /// <remarks>
@@ -273,7 +273,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     /// </remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public LinkInteraction? LinkInteraction => _linkInteraction;
+    public WorkflowInput? Input => _input;
 
     // 一个周期：三段相位各自结束时头部走过的比例——出发、行进、到达。
     // 两端都是「没有光」的状态（头在起点/终点且强度为 0），循环接缝才看不出来。
@@ -357,7 +357,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         // 渲染器整体换新：旧的即将被 Dispose、曲线也被撤，先把悬停清掉。否则 hub 还握着被换掉的那条线，
         // 新渲染器不会被点亮，直到指针再动一次。
-        _linkInteraction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+        _input?.Route(new WorkflowPointerExitedEventArgs(
+            new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
 
         foreach (var lv in _linkRenderers) lv.Dispose();
         _linkRenderers.Clear();
@@ -771,13 +772,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // 右键只对连线有意义：转发给 Core，命中时它才发 ContextMenuRequested，表面据弹菜单；空白处右键不启动平移
         if (e.Button == MouseButtons.Right)
         {
-            PublishPointer(PointerPhase.Pressed, e.Location, PointerButtonKind.Right);
+            RoutePointer(e.Location, (p, t, h) => new WorkflowPointerPressedEventArgs(
+                p, Modifiers(), this, t, WorkflowMouseButton.Right, 1, h));
             return;
         }
 
         if (e.Button != MouseButtons.Left) return;
 
-        PublishPointer(PointerPhase.Pressed, e.Location, PointerButtonKind.Left);
+        RoutePointer(e.Location, (p, t, h) => new WorkflowPointerPressedEventArgs(
+            p, Modifiers(), this, t, WorkflowMouseButton.Left, 1, h));
 
         if (_session?.Tree.VirtualLink.IsVisible == true)
         {
@@ -814,7 +817,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         }
 
         // 悬停即选中：命中归 Core，这里只把世界坐标的指针转发进去
-        PublishPointer(PointerPhase.Moved, e.Location);
+        RoutePointer(e.Location, (p, t, h) => new WorkflowPointerMovedEventArgs(p, Modifiers(), this, t, h));
 
         // Mouse tracking in link mode is handled by WorkflowSlotConnectionBehavior; no need to repeat it here
     }
@@ -856,64 +859,132 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         // 菜单开着时指针是飞到菜单上去了、不是移开这条线：Core 在 IsSuspended 下会忽略这次 Exited，不必自拦。
         // 移开就取消选中（其它六家同）：Core 收到 Exited 会清掉悬停，选中跟着走。
-        _linkInteraction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+        _input?.Route(new WorkflowPointerExitedEventArgs(
+            new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
     }
 
     // ── Link interaction ─────────────────────────────────────────────────────────
 
-    // 交互 hub 归 Core：本家只做平台的事 —— 把指针/按键翻译成标准输入事件转发进去、命中时给画布取键盘焦点、
-    // 右键时弹菜单。高亮（AutoHighlight）与删除（AutoDelete）由 hub 自己完成，本家不再各记一份。
+    // 输入归 Core：本家只做平台的事 —— 把指针/按键翻译成标准输入事件转发进去、命中时给画布取键盘焦点、
+    // 右键时弹菜单、按悬停结果给渲染器上色。删除（AutoDelete）由路由自己完成，本家不再各记一份。
     private void AttachLinkInteraction(IWorkflowTreeViewModel tree)
     {
         DetachLinkInteraction();
 
-        // hub 由 Core 按树缓存：同一棵树在任何界面上都是这一个，本家不再自己造；半径沿用本家原先的值。
-        var interaction = VeloxDev.WorkflowSystem.LinkInteraction.For(tree);
-        interaction.HitRadius = LinkHitRadius;
-        interaction.HoverChanged += OnLinkHoverChanged;
-        // 菜单归表面：条目见 OnBuildLinkMenu，开合报回 hub（Publish(ContextMenuEvent)），挂起状态由 Core 记账。
-        // 宿主想否决某一次，订 ContextMenuRequesting（Preview 相）即可 —— 它在 Requested 之前发出，与订阅先后无关。
-        interaction.ContextMenuRequested += OnContextMenuRequested;
-        // 菜单指着的那条线离树时，hub 发这个；宿主收不了自己的弹窗，只负责把它关掉。
-        interaction.ContextMenuDismissRequested += OnContextMenuDismissRequested;
-        _linkInteraction = interaction;
+        // 路由由 Core 按树缓存：同一棵树在任何界面上都是这一个，本家不再自己造；半径沿用本家原先的值。
+        var input = WorkflowInput.For(tree);
+        input.HitRadius = LinkHitRadius;
+        if (tree.GetHelper() is IWorkflowInputEvents events)
+        {
+            // 菜单归表面：条目见 OnBuildLinkMenu。宿主在更靠前的一级（连线自己）订同一个事件并置 PreventDefault
+            // 就能否决这一次 —— 顺序由「目标先于祖先」保证，与订阅先后无关。
+            events.Input.PointerPressed += OnLinkPointerPressed;
+        }
+
+        // 菜单指着的那条线离树时，树会报这个；宿主收不了自己的弹窗，只负责把它关掉。
+        tree.GetHelper().LinkRemoved += OnLinkRemoved;
+        _input = input;
     }
 
     private void DetachLinkInteraction()
     {
-        if (_linkInteraction is null) return;
+        if (_input is not { } input) return;
 
-        _linkInteraction.HoverChanged -= OnLinkHoverChanged;
-        _linkInteraction.ContextMenuRequested -= OnContextMenuRequested;
-        _linkInteraction.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
+        var helper = input.Tree.GetHelper();
+        if (helper is IWorkflowInputEvents events) events.Input.PointerPressed -= OnLinkPointerPressed;
+        helper.LinkRemoved -= OnLinkRemoved;
 
-        // 会话结束菜单还挂着的话先收起：Closed 会顺手把 hub 的挂起放开，换会话时不至于一直停在不接收移动。
+        // 会话结束菜单还挂着的话先收起：Closed 会顺手把挂起放开，换会话时不至于一直停在不接收移动。
         _linkMenu?.Close();
 
-        // 解绑前清掉悬停：hub 跟着树活着，比这次绑定久；不清的话重新绑同一棵树时上一条线还亮着。
-        // Exited 不走 IsSuspended，一定生效；AutoHighlight 顺手把高亮熄灭。
-        _linkInteraction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
-        _linkInteraction = null;
+        // 解绑前清掉指针目标：路由跟着树活着，比这次绑定久；不清的话重新绑同一棵树时上一条线还亮着。
+        input.Route(new WorkflowPointerExitedEventArgs(
+            new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
+        _input = null;
     }
 
     // 指针位置在这里是「世界坐标」：曲线就是在世界坐标里发布的（画布内部按世界坐标绘制），两边必须同系。
-    private void PublishPointer(PointerPhase phase, Point client, PointerButtonKind button = PointerButtonKind.None)
-        => _linkInteraction?.Publish(new PointerEvent(phase, ClientToWorld(client), button));
-
-    // 高亮由 hub 经 ILinkHighlight 写到命中的渲染器上（Views.LinkView 实现了它）；这里只补平台欠的焦点，
-    // Delete 才进得来这块画布。
-    private void OnLinkHoverChanged(object? sender, LinkHoverEventArgs e)
+    // 命中由共享的曲线判定器回答，事件交给输入路由。
+    private void RoutePointer(Point client, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, WorkflowPointerEventArgs> args)
     {
-        if (e.Link is not null && CanFocus) Focus();
+        if (_input is not { } input) return;
+
+        var anchor = ClientToWorld(client);
+        var target = input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+
+        input.Route(args(anchor, target, new WorkflowEventHandle()));
+
+        // 高亮是这本 demo 的事：画布把「现在轮到谁」写回画着那条线的渲染器 —— 互斥因此不需要谁记账。
+        foreach (var lv in _linkRenderers)
+        {
+            lv.IsHighlighted = ReferenceEquals(lv.ViewModel, input.HoveredLink);
+        }
+
+        // 这里同时补平台欠的焦点，Delete 才进得来这块画布。
+        if (input.HoveredLink is not null && CanFocus) Focus();
+    }
+
+    private static WorkflowMouseButton ButtonOf(MouseButtons button) => button switch
+    {
+        MouseButtons.Left => WorkflowMouseButton.Left,
+        MouseButtons.Right => WorkflowMouseButton.Right,
+        MouseButtons.Middle => WorkflowMouseButton.Middle,
+        MouseButtons.XButton1 => WorkflowMouseButton.XButton1,
+        MouseButtons.XButton2 => WorkflowMouseButton.XButton2,
+        _ => WorkflowMouseButton.None,
+    };
+
+    private static InputModifiers Modifiers()
+    {
+        var keys = Control.ModifierKeys;
+        var modifiers = InputModifiers.None;
+        if ((keys & Keys.Alt) != 0) modifiers |= InputModifiers.Alt;
+        if ((keys & Keys.Control) != 0) modifiers |= InputModifiers.Control;
+        if ((keys & Keys.Shift) != 0) modifiers |= InputModifiers.Shift;
+        return modifiers;
+    }
+
+    // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
+    private static WorkflowKey ToKey(Keys key)
+    {
+        if (key >= Keys.A && key <= Keys.Z) return WorkflowKey.A + ((int)key - (int)Keys.A);
+        if (key >= Keys.D0 && key <= Keys.D9) return WorkflowKey.D0 + ((int)key - (int)Keys.D0);
+        if (key >= Keys.F1 && key <= Keys.F12) return WorkflowKey.F1 + ((int)key - (int)Keys.F1);
+
+        return key switch
+        {
+            Keys.None => WorkflowKey.None,
+            Keys.Back => WorkflowKey.Back,
+            Keys.Tab => WorkflowKey.Tab,
+            Keys.Enter => WorkflowKey.Enter,
+            Keys.Escape => WorkflowKey.Escape,
+            Keys.Space => WorkflowKey.Space,
+            Keys.PageUp => WorkflowKey.PageUp,
+            Keys.PageDown => WorkflowKey.PageDown,
+            Keys.End => WorkflowKey.End,
+            Keys.Home => WorkflowKey.Home,
+            Keys.Left => WorkflowKey.Left,
+            Keys.Up => WorkflowKey.Up,
+            Keys.Right => WorkflowKey.Right,
+            Keys.Down => WorkflowKey.Down,
+            Keys.Insert => WorkflowKey.Insert,
+            Keys.Delete => WorkflowKey.Delete,
+            _ => WorkflowKey.Unknown,
+        };
     }
 
     // 右键菜单归表面、不归连线视图：右键落在表面上（连线是画布代画的，没有自己的控件），而弹出要屏幕坐标、
     // 模型给的是世界坐标 —— 只有表面同时知道这两件事。
-    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
+    private void OnLinkPointerPressed(object? sender, WorkflowPointerPressedEventArgs e)
     {
+        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Target is not IWorkflowLinkViewModel link) return;
+
         // 弹着的时候再来一次：忽略，别把当前这份菜单连着的链接换掉。
         if (_linkMenu?.Visible == true) return;
-        if (e.Link is not { } link) return;
+
+        // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
+        if (e.Handle.PreventDefault) return;
 
         var menu = new ContextMenuStrip();
         OnBuildLinkMenu(menu, link);
@@ -923,8 +994,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         menu.Closed += (_, _) =>
         {
-            // 收起报回 hub：它自己放开 IsSuspended，宿主不用记这一笔账。
-            _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, e.Position, link));
+            // 收起即放开挂起：宿主自己记这一笔账，输入路由只管照做。
+            if (_input is { } input) input.IsSuspended = false;
             if (ReferenceEquals(_linkMenu, menu))
             {
                 _linkMenu = null;
@@ -937,15 +1008,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         _linkMenu = menu;
         _menuLink = link;
 
-        // 菜单一开指针就飞到菜单上去：先报 Opened，hub 把悬停挂起，那之后的移动不会清掉这次选中的线。
-        _linkInteraction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
+        // 菜单一开指针就飞到菜单上去：先把指针跟踪挂起，那之后的移动不会清掉这次选中的线。
+        if (_input is { } opening) opening.IsSuspended = true;
         menu.Show(screen);
     }
 
-    // 菜单指着的那条线已经不在树上：hub 请宿主收起这份菜单（它收不了宿主的弹窗）。收起照常报 Closed，挂起随之放开。
-    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    // 菜单指着的那条线已经不在树上：收起这份菜单（树报的是离场的那条，本家只认自己这份）。
+    private void OnLinkRemoved(object? sender, IWorkflowLinkViewModel link)
     {
-        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        if (!ReferenceEquals(_menuLink, link)) return;
         _linkMenu?.Close();
     }
 
@@ -959,24 +1030,29 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // 平移/滚动/缩放挪的是几何而不是指针：指针没动，命中却变了，所以拿最近一次位置重发一次。
     private void RefreshLinkHover()
     {
-        if (!_pointerInside || _linkInteraction is null)
+        if (!_pointerInside)
         {
-            // 指针不在画布上：清掉悬停（hub 跟着树活着，不清会留一条亮线）
-            _linkInteraction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+            // 指针不在画布上：清掉指针目标（路由跟着树活着，不清会留一条亮线）
+            _input?.Route(new WorkflowPointerExitedEventArgs(
+                new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
             return;
         }
 
-        PublishPointer(PointerPhase.Moved, _lastPointerClient);
+        RoutePointer(_lastPointerClient, (p, t, h) => new WorkflowPointerMovedEventArgs(p, Modifiers(), this, t, h));
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
 
-        // 键也过 Core：「现在按 Delete 删哪条」与其它六家是同一个答案，不靠各家各记一个选中
-        if (e.KeyCode != Keys.Delete || _linkInteraction?.HoveredLink is null) return;
+        // 键也过输入路由：「现在按 Delete 删哪条」与其它六家是同一个答案，不靠各家各记一个选中
+        if (_input is not { } input || input.HoveredLink is null) return;
 
-        _linkInteraction.Publish(new KeyEvent(InputKey.Delete));
+        input.Route(new WorkflowKeyDownEventArgs(
+            ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false, this, input.HoveredLink, new WorkflowEventHandle()));
+
+        if (e.KeyCode != Keys.Delete) return;
+
         e.Handled = true;
         e.SuppressKeyPress = true;
     }

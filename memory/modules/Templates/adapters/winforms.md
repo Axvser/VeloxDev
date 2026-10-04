@@ -20,7 +20,7 @@
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
 | tree-view | **2026-10-03 起**：`sealed class TemplateClass : WorkflowTreeView`（52 行）——调色板 + `CreateNodeView` / `CreateLinkView` / `OnBuildLinkMenu`。搭壳、两个私有嵌套类（`SurfaceCanvas` / `RulerOverlayForm`）、平移引擎、视图池全在适配器的基类里：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` | 基类见左；模板只剩 `:18` 起的构造器、两个工厂 override 与 `OnBuildLinkMenu` |
-| link-view | **2026-10-03 起**：`sealed class : WorkflowLinkView`（21 行）——调色板。雕窗口区域、端点订阅、几何全在基类 | 基类见左 |
+| link-view | **2026-10-04 起**：`sealed class : Control` + `WorkflowLinkAttachment.Attach(this)`——自己的控件、自己的 `OnPaint`；雕窗口区域、端点订阅、几何、命中发布全在助手 `WorkflowLinkAttachment` | 助手见左；不再是基类派生 |
 | node-view | **2026-10-03 起**：`sealed class : WorkflowNodeView`（404 行）——三个私有嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` / `DoubleBufferedPanel`）、`OnNodeRebound`、`OnCollapseChanged`、绘制。绑定/定位/折叠/反射读名字在基类 | 基类见左 |
 | slot-view | **2026-10-03 起**：`sealed class : WorkflowSlotView`（22 行）——图形 + 三个调色值。**那个 `SvgPathParser` 搬进了适配器**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSlotView.cs:250`；该文件共 437 行） | 基类见左 |
 | grid-decorator | **2026-10-03 起**：`sealed class : WorkflowGridDecorator`（41 行）——八个颜色 + 间距 + 每几条一条主线。网格与标尺的绘制（含 `OnPaintBackground` 那一趟）在基类 | 基类见左 |
@@ -164,7 +164,7 @@ WinForms 的子窗口**不透明、也不与兄弟合成**，所以连线视图�
 这正是这一家早年放弃子窗口、改成"画布代画"的原因（`WorkflowSystem/adapters/winforms.md` 里
 没有这条，只在旧注释里）。现在的做法是**把窗口区域雕成折线的描边带**：
 
-- `RebuildGeometry`（适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowLinkView.cs:209`）：
+- `RebuildGeometry`（适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowLinkAttachment.cs`）：
   取四点 → `Widen(厚度 + 2×RegionPad)`（`:253`）→ 取 `GetBounds` 落在整像素上（`:255`），
   路径平移到窗口局部后交给 `Region`（`:293`）。
   ⇒ **窗口只在线的位置上存在**，网格在它周围照常可见，命中测试也只落在线上（视图还 `Enabled = false`）。

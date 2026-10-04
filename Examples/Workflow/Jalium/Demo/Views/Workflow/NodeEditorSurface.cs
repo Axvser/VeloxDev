@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using Demo.ViewModels;
 using Jalium.UI;
@@ -73,12 +73,12 @@ internal sealed class NodeEditorSurface : Canvas
 
     // 当前被点亮的连线。链接和端口一样是表面画的，没有控件能担任这个角色；
     // 悬停即点亮（与其它六家一致），它只决定绘制时给哪条上高亮色。
-    // 由 hub 的 HoverChanged 驱动（见 OnLinkHoverChanged），表面自己不再判命中；Delete 由 hub 按 HoveredLink 裁决
+    // 由输入路由的指针事件驱动（见 RoutePointer），表面自己不再判命中；Delete 由路由按指针目标裁决
     private IWorkflowLinkViewModel? _selectedLink;
 
-    // 连线的命中与输入裁决归 Core（见 LinkInteraction）：表面只负责把指针/按键翻译成标准输入事件转发进去，
+    // 连线的命中与输入裁决归 Core（见 WorkflowInput）：表面只负责把指针/按键翻译成标准输入事件转发进去，
     // 并订阅结果（选中上色、右键菜单、删除请求）。命中的算法不在这家
-    private LinkInteraction? _interaction;
+    private WorkflowInput? _input;
 
     // 右键菜单每次现建、收起即弃 —— 复用一份会带着上一次那条链接的捕获；同时只会开一个，
     // 字段只用来挡住重复请求与换树时收尾
@@ -126,11 +126,11 @@ internal sealed class NodeEditorSurface : Canvas
         Unloaded += (_, _) => StopFlow();
 
         // 指针离开表面：端口的悬停反馈是表面画的（这里直接清），连线的悬停转成 Core 的 PointerExited。
-        // 菜单开着时那一发不会清掉选中 —— hub 自己认挂起（见 Publish(ContextMenuEvent)）
+        // 菜单开着时那一发不会清掉选中 —— 输入路由自己认挂起
         MouseLeave += (_, _) =>
         {
             _hoverSlot = null;
-            ForwardPointer(PointerPhase.Exited, default);
+            ForwardPointer(default);
             InvalidateVisual();
         };
     }
@@ -146,7 +146,7 @@ internal sealed class NodeEditorSurface : Canvas
     public bool DeleteSelectedLink()
     {
         // 「哪条在指针下」归 hub：窗口级预览走的就是这一条，与表面自己的 KeyDown 得到同一个答案
-        if (_interaction?.HoveredLink is not { } link)
+        if (_input?.HoveredLink is not { } link)
         {
             return false;
         }
@@ -178,12 +178,16 @@ internal sealed class NodeEditorSurface : Canvas
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         // 键也过 Core：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠表面另记一个选中
-        if (e.Key != Key.Delete || _interaction?.HoveredLink is null)
+        if (_input is not { } input || input.HoveredLink is null)
         {
             return;
         }
 
-        _interaction.Publish(new KeyEvent(InputKey.Delete));
+        input.Route(new WorkflowKeyDownEventArgs(
+            ToKey(e.Key), (int)e.Key, InputModifiers.None, false, this, input.HoveredLink, new WorkflowEventHandle()));
+
+        if (e.Key != Key.Delete) return;
+
         e.Handled = true;
     }
 
@@ -198,10 +202,9 @@ internal sealed class NodeEditorSurface : Canvas
 
     // ── Link interaction (forwarded to Core) ───────────────────────────────
 
-    // hub 归 Core（同树同实例，见 LinkInteraction.For）—— 表面不持有实例，只把事件转进去、订它的结果。
-    // 这家一个表面画完所有线、没有「每线的可视对象」，所以 hub 的 AutoHighlight 没有东西可点：选中由这里
-    // 订阅 HoverChanged 自己画（别家是视觉实现 ILinkHighlight、由 hub 直接点亮）。删除归 hub 的 AutoDelete，
-    // 本家不再订 LinkDeleteRequested。
+    // 输入归 Core（同树同实例，见 WorkflowInput.For）—— 表面不持有实例，只把事件转进去、订它的结果。
+    // 这家一个表面画完所有线、没有「每线的可视对象」，所以选中由这里订阅 HoverChanged 自己画 ——
+    // 这也是七家现在的统一做法（高亮是宿主的）。删除归 hub 的 AutoDelete，本家不再订 LinkDeleteRequested。
     private void AttachInteraction()
     {
         DetachInteraction();
@@ -210,62 +213,75 @@ internal sealed class NodeEditorSurface : Canvas
             return;
         }
 
-        var hub = LinkInteraction.For(_tree);
-        hub.HoverChanged += OnLinkHoverChanged;
-        hub.ContextMenuRequested += OnContextMenuRequested;
-        hub.ContextMenuDismissRequested += OnContextMenuDismissRequested;
-        _interaction = hub;
+        var input = WorkflowInput.For(_tree);
+        if (_tree.GetHelper() is IWorkflowInputEvents events)
+        {
+            // 菜单归表面：宿主在更靠前的一级（连线自己）订同一个事件并置 PreventDefault 就能否决这一次。
+            events.Input.PointerPressed += OnLinkPointerPressed;
+        }
+
+        _tree.GetHelper().LinkRemoved += OnLinkRemoved;
+        _input = input;
     }
 
     private void DetachInteraction()
     {
-        if (_interaction is not { } hub)
+        if (_input is not { } input)
         {
             return;
         }
 
-        hub.HoverChanged -= OnLinkHoverChanged;
-        hub.ContextMenuRequested -= OnContextMenuRequested;
-        hub.ContextMenuDismissRequested -= OnContextMenuDismissRequested;
-        // 换树/解绑时菜单还开着就先收：Closed 会顺手把 hub 的挂起放开
+        var helper = input.Tree.GetHelper();
+        if (helper is IWorkflowInputEvents events) events.Input.PointerPressed -= OnLinkPointerPressed;
+        helper.LinkRemoved -= OnLinkRemoved;
+        // 换树/解绑时菜单还开着就先收：Closed 会顺手把挂起放开
         _linkMenu?.Close();
-        _interaction = null;
+        _input = null;
     }
 
     // 指针位置就是表面自己的坐标（= ToCanvas 的画布系），与发布给 Core 的曲线用的是同一个系。
-    // 菜单开着时那几帧指针在弹层上，转发进去的移动会被 hub 按挂起忽略（Opened 已报过）
-    private void ForwardPointer(PointerPhase phase, Point canvasPos, PointerButtonKind button = PointerButtonKind.None)
+    // 命中由共享的曲线判定器回答（这家一个表面画完所有线），事件交给输入路由。
+    // 菜单开着时那几帧指针在弹层上，转发进去的移动会被路由按挂起忽略。
+    private void ForwardPointer(Point canvasPos, IWorkflowLinkViewModel? link = null)
     {
-        if (_interaction is not { } hub)
+        if (_input is not { } input)
         {
             return;
         }
 
-        hub.Publish(new PointerEvent(phase, new Anchor(canvasPos.X, canvasPos.Y, 0), button));
-    }
+        // 指针换了目标就是换了选中：路由会给留下那个发一次 Exited、给新那个发一次 Entered，
+        // 这里照着指针目标重画即可 —— 与其它六家的连线一致。
+        var anchor = new Anchor(canvasPos.X, canvasPos.Y, 0);
+        var target = link ?? input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
-    // 悬停即「当前选中」，移开即取消 —— 与其它六家的连线一致
-    private void OnLinkHoverChanged(object? sender, LinkHoverEventArgs e)
-    {
-        _selectedLink = e.Link;
-        InvalidateVisual();
+        input.Route(new WorkflowPointerMovedEventArgs(
+            anchor, InputModifiers.None, this, target, new WorkflowEventHandle()));
+
+        if (!ReferenceEquals(_selectedLink, input.HoveredLink))
+        {
+            _selectedLink = input.HoveredLink;
+            InvalidateVisual();
+        }
     }
 
     // 右键菜单归表面：这一家的连线是表面一笔画出来的、不吃指针，右键也落在表面上，
     // 而弹出要根视觉坐标、模型给的是画布坐标 —— 只有表面同时知道这两件事。
-    // 否决归 hub 的 Preview 相（ContextMenuRequesting），到得了这里的请求必是没被拒绝的。
-    private void OnContextMenuRequested(object? sender, ContextMenuRequestedEventArgs e)
+    private void OnLinkPointerPressed(object? sender, WorkflowPointerPressedEventArgs e)
     {
-        if (e.Link is not { } link) return;
+        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Target is not IWorkflowLinkViewModel link) return;
         if (_linkMenu?.IsOpen == true) return;
+
+        // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
+        if (e.Handle.PreventDefault) return;
 
         var menu = new ContextMenu();
         OnBuildLinkMenu(menu, link);
 
         menu.Closed += (_, _) =>
         {
-            // 收起报回 hub：它自己放开挂起，表面不用记这一笔账
-            _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, e.Position, link));
+            // 收起即放开挂起：宿主自己记这一笔账，输入路由只管照做。
+            if (_input is { } input) input.IsSuspended = false;
             if (ReferenceEquals(_linkMenu, menu)) _linkMenu = null;
             if (ReferenceEquals(_menuLink, link)) _menuLink = null;
         };
@@ -273,16 +289,45 @@ internal sealed class NodeEditorSurface : Canvas
         _linkMenu = menu;
         _menuLink = link;
 
-        // 菜单一开指针就飞到弹层上去：先报 Opened，hub 把悬停挂起，那之后的移动不会清掉这次选中的线
-        _interaction?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, link));
+        // 菜单一开指针就飞到弹层上去：先把指针跟踪挂起，那之后的移动不会清掉这次选中的线。
+        if (_input is { } opening) opening.IsSuspended = true;
         menu.Open(ToMenuPosition(e.Position));
     }
 
-    // 菜单指着的那条线已经不在树上：hub 请宿主收起这份菜单（它收不了宿主的弹窗）。收起照常报 Closed，挂起随之放开。
-    private void OnContextMenuDismissRequested(object? sender, ContextMenuDismissRequestedEventArgs e)
+    // 菜单指着的那条线已经不在树上：收起这份菜单（树报的是离场的那条，本家只认自己这份）。
+    private void OnLinkRemoved(object? sender, IWorkflowLinkViewModel link)
     {
-        if (!ReferenceEquals(_menuLink, e.Link)) return;
+        if (!ReferenceEquals(_menuLink, link)) return;
         _linkMenu?.Close();
+    }
+
+    // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
+    private static WorkflowKey ToKey(Key key)
+    {
+        if (key >= Key.A && key <= Key.Z) return WorkflowKey.A + (key - Key.A);
+        if (key >= Key.D0 && key <= Key.D9) return WorkflowKey.D0 + (key - Key.D0);
+        if (key >= Key.F1 && key <= Key.F12) return WorkflowKey.F1 + (key - Key.F1);
+
+        return key switch
+        {
+            Key.None => WorkflowKey.None,
+            Key.Back => WorkflowKey.Back,
+            Key.Tab => WorkflowKey.Tab,
+            Key.Enter => WorkflowKey.Enter,
+            Key.Escape => WorkflowKey.Escape,
+            Key.Space => WorkflowKey.Space,
+            Key.PageUp => WorkflowKey.PageUp,
+            Key.PageDown => WorkflowKey.PageDown,
+            Key.End => WorkflowKey.End,
+            Key.Home => WorkflowKey.Home,
+            Key.Left => WorkflowKey.Left,
+            Key.Up => WorkflowKey.Up,
+            Key.Right => WorkflowKey.Right,
+            Key.Down => WorkflowKey.Down,
+            Key.Insert => WorkflowKey.Insert,
+            Key.Delete => WorkflowKey.Delete,
+            _ => WorkflowKey.Unknown,
+        };
     }
 
     // 条目在这里增删。与 WorkflowTreeView 基类的 OnBuildLinkMenu 同一角色：这块画布是自绘的 Canvas、
@@ -645,11 +690,11 @@ internal sealed class NodeEditorSurface : Canvas
         var alive = new HashSet<IWorkflowLinkViewModel>(_tree.Links);
 
         // 悬停的那条也可能已经不在了：删除不止表面这一条路（Agent、Undo 都会删连线）。
-        // 选中由 hub 的 HoverChanged 驱动，所以要清的是 hub 的悬停 —— 发一次 Exited 让它把选中一起带走，
+        // 选中由输入路由驱动，所以要清的是路由的指针目标 —— 发一次 Exited 让它把选中一起带走，
         // 否则留着一条不在树上的选中，下一次 Delete 就打在空气上
-        if (_interaction?.HoveredLink is { } hovered && !alive.Contains(hovered))
+        if (_input?.HoveredLink is { } hovered && !alive.Contains(hovered))
         {
-            _interaction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+            ForwardPointer(default);
         }
 
         foreach (var link in _curves.Keys.ToArray())
@@ -1433,11 +1478,11 @@ internal sealed class NodeEditorSurface : Canvas
         }
 
         // 右键只在连线上有含义（弹出删除菜单），落在别处什么也不做：命中的裁决在 hub —— 按下转发进去，
-        // 命中了它才发 ContextMenuRequested，表面订阅后弹菜单（见 OnContextMenuRequested）；空白处右键不置 Handled
+        // 命中了它才进菜单（见 OnLinkPointerPressed）；空白处右键不置 Handled
         if (e.ChangedButton == MouseButton.Right)
         {
-            ForwardPointer(PointerPhase.Pressed, e.GetPosition(this), PointerButtonKind.Right);
-            if (_interaction?.HoveredLink is not null)
+            ForwardPointer(e.GetPosition(this));
+            if (_input?.HoveredLink is not null)
             {
                 e.Handled = true;
             }
@@ -1588,11 +1633,11 @@ internal sealed class NodeEditorSurface : Canvas
             }
 
             // 没在拖任何东西：更新端口与连线的悬停。端口是表面自己画的，就地更新；连线的悬停转发给 hub，
-            // 由 Core 裁决后经 HoverChanged 回到 OnLinkHoverChanged（悬停即选中）
+            // 由输入路由裁决后写回 _selectedLink（悬停即选中）
             default:
                 var canvasPos = e.GetPosition(this);
                 UpdatePortHover(canvasPos);
-                ForwardPointer(PointerPhase.Moved, canvasPos);
+                ForwardPointer(canvasPos);
                 break;
         }
     }

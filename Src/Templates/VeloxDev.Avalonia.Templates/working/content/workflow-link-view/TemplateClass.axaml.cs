@@ -10,9 +10,10 @@ namespace TemplateNamespace;
 
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
-/// The surface's interaction hub lights <see cref="IsHighlighted"/> while the pointer is over this link.
+/// It only paints and publishes its curve; hover feedback is the host's — subscribe
+/// <c>IWorkflowInputEvents</c> on the helper and handle the routed pointer events.
 /// </summary>
-public partial class TemplateClass : Control, ILinkHighlight
+public partial class TemplateClass : Control
 {
     // Horizontal pull shared by the drawn curve and the hit-test curve, so both describe the same shape.
     private const double PullMinimum = 40;
@@ -63,12 +64,6 @@ public partial class TemplateClass : Control, ILinkHighlight
     public static readonly StyledProperty<double> LineThicknessProperty =
         AvaloniaProperty.Register<TemplateClass, double>(nameof(LineThickness), TemplateLinkThickness);
 
-    public static readonly StyledProperty<bool> IsHighlightedProperty =
-        AvaloniaProperty.Register<TemplateClass, bool>(nameof(IsHighlighted), false);
-
-    public static readonly StyledProperty<Color> HighlightColorProperty =
-        AvaloniaProperty.Register<TemplateClass, Color>(nameof(HighlightColor), Color.Parse("#FFFFFFFF"));
-
     public double StartLeft
     {
         get => GetValue(StartLeftProperty);
@@ -117,27 +112,12 @@ public partial class TemplateClass : Control, ILinkHighlight
         set => SetValue(LineThicknessProperty, value);
     }
 
-    // Set by the surface's interaction hub while the pointer is over this link; the render below repaints on change.
-    public bool IsHighlighted
-    {
-        get => GetValue(IsHighlightedProperty);
-        set => SetValue(IsHighlightedProperty, value);
-    }
-
-    // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
-    // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
-    public Color HighlightColor
-    {
-        get => GetValue(HighlightColorProperty);
-        set => SetValue(HighlightColorProperty, value);
-    }
-
     static TemplateClass()
     {
         AffectsRender<TemplateClass>(
             StartLeftProperty, StartTopProperty, EndLeftProperty, EndTopProperty,
             CanRenderProperty, IsVirtualProperty, LineColorProperty,
-            LineThicknessProperty, IsHighlightedProperty, HighlightColorProperty);
+            LineThicknessProperty);
     }
 
     #endregion
@@ -176,22 +156,13 @@ public partial class TemplateClass : Control, ILinkHighlight
 
         if (!CanRender) return;
 
-        var color = IsHighlighted ? HighlightColor : LineColor;
-        var thickness = IsHighlighted ? LineThickness + 1.5 : LineThickness;
-        var brush = new ImmutableSolidColorBrush(color);
+        var brush = new ImmutableSolidColorBrush(LineColor);
 
         var pen = IsVirtualLink
-            ? new Pen(brush, thickness) { DashStyle = new DashStyle([4.0, 2.0], 0) }
-            : new Pen(brush, thickness);
+            ? new Pen(brush, LineThickness) { DashStyle = new DashStyle([4.0, 2.0], 0) }
+            : new Pen(brush, LineThickness);
 
         var geometry = BuildCurve(StartLeft, StartTop, EndLeft, EndTop);
-
-        // Extension point: the halo painted under the line while highlighted. Widen or fade the pen here.
-        if (IsHighlighted)
-        {
-            var glowPen = new Pen(new ImmutableSolidColorBrush(color, 0.25), thickness + 6);
-            context.DrawGeometry(null, glowPen, geometry);
-        }
 
         context.DrawGeometry(null, pen, geometry);
     }

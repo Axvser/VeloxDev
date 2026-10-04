@@ -9,10 +9,11 @@ namespace Demo.Views.Workflow;
 
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
-/// The view only paints: it publishes its curve for hit-testing and implements
-/// <see cref="ILinkHighlight"/> so the surface lights it on hover. It handles no input itself.
+/// The view only paints: it publishes its curve for hit-testing and handles no input itself. The hover
+/// highlight below is <b>this demo's</b> reading of <see cref="LinkInteraction.HoverChanged"/> — the template
+/// ships the same view without it (see the repo's layering rule), so delete these members to get that back.
 /// </summary>
-public partial class LinkView : UserControl, ILinkHighlight
+public partial class LinkView : UserControl
 {
     // Extension point: the least horizontal pull of the two control points. Keep it in step with the curve
     // that is published for hit-testing below.
@@ -75,7 +76,42 @@ public partial class LinkView : UserControl, ILinkHighlight
         _publishedLink?.PublishCurve(null);
         _publishedLink = null;
         InvalidateVisual();
+        ResubscribeHub();
     }
+
+    // VeloxDev customization: the hover highlight. The hub only reports whose turn it is; each view decides
+    // whether it lights up, so mutual exclusion needs no bookkeeping. The subscription follows the data
+    // context — a pooled view gets recycled and rebound without being unloaded, and the view lives shorter
+    // than the tree.
+    // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
+    // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
+    private IWorkflowLinkViewModel? _inputLink;
+
+    private void ResubscribeHub()
+    {
+        var link = DataContext as IWorkflowLinkViewModel;
+        if (ReferenceEquals(link, _inputLink)) return;
+
+        UnsubscribeHub();
+        if (link?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        _inputLink = link;
+        events.Input.PointerEntered += OnPointerEntered;
+        events.Input.PointerExited += OnPointerExited;
+    }
+
+    private void UnsubscribeHub()
+    {
+        if (_inputLink?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.PointerEntered -= OnPointerEntered;
+        events.Input.PointerExited -= OnPointerExited;
+        _inputLink = null;
+    }
+
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
     private bool IsVirtualLink
         => IsVirtual

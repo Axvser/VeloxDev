@@ -1,4 +1,4 @@
-﻿# Your views
+# Your views
 
 The canvas you put on screen is assembled from seven view roles, and the item templates generate all seven for you — see [templates.md](templates.md). This file is what you need in order to **customize and debug** them: how they are composed, which parts are yours to change, and the handful of rules that make them silently not work when broken.
 
@@ -101,13 +101,14 @@ if (DataContext is IWorkflowLinkViewModel link)
     link.PublishCurve(curve, this);   // the curve you just drew, and the control that drew it
 ```
 
-Then, if you want the hover to be *visible*, implement `ILinkHighlight` on that control:
+Then, if you want the hover to be *visible*, subscribe to the routed pointer events on that link's own helper:
 
 ```csharp
-public bool IsHighlighted { get => ...; set { ...; InvalidateVisual(); } }   // repaint, nothing else
+h.Input.PointerEntered += (_, _) => { _lit = true;  InvalidateVisual(); };
+h.Input.PointerExited  += (_, _) => { _lit = false; InvalidateVisual(); };
 ```
 
-⚙ **Core decides, the view draws.** `LinkInteraction.For(tree)` is the one interaction hub — one instance per tree. The adapter surface translates the platform's pointer and Delete key into it; the hub resolves which link is under the pointer against the published curves, lights it through `ILinkHighlight` (its `AutoHighlight`), and deletes it through `link.DeleteCommand` (its `AutoDelete`). **Do not subscribe to `HoverChanged` just to change a colour, and do not write your own distance-to-curve test** — both were per-platform copies before and are now one implementation.
+⚙ **Core routes the input, the component hears it, the host draws.** `WorkflowInput.For(tree).Route(...)` is the one input route — one instance per tree. The adapter translates the platform's pointer and keys into the standard arguments and hands them over with the component it hit; the route raises them on that component's helper and then bubbles up its ancestors (`link → tree`, `slot → node → tree`, `node → tree`). Subscribe `((IWorkflowInputEvents)link.GetHelper()).Input` and you hear your own hover — the route sends `PointerExited` to the one you left before `PointerEntered` to the one you arrived at. **Do not write your own distance-to-curve test** — that was per-platform copies before and is now one implementation.
 
 ⚙ **The hit area is the painted stroke, not the view's box.** Publish the curve you actually draw, and keep the view's own hit region on the stroke (a `Path`/geometry with no background, or `pointer-events: stroke`) — a link that answers over its whole canvas-sized box swallows every canvas gesture.
 
@@ -117,7 +118,7 @@ public bool IsHighlighted { get => ...; set { ...; InvalidateVisual(); } }   // 
 
 ### The link context menu
 
-Right-pressing a link asks whoever hosts the surface to show a menu (`LinkInteraction.ContextMenuRequested`), and the item templates already wire it — adding an entry is markup, not code.
+Right-pressing a link shows the menu the surface declares: the adapter resolves the link, and (unless a subscriber on the link itself set `Handle.PreventDefault`) pops the resource named by `WorkflowSurfaceBehavior.LinkMenuKey`. Adding an entry is markup, not code.
 
 | GUI | How the menu is declared |
 |---|---|
@@ -128,9 +129,9 @@ Right-pressing a link asks whoever hosts the surface to show a menu (`LinkIntera
 
 ⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms/Jalium add or remove items in the `OnBuildLinkMenu` override; the base adds a Delete item.
 
-⚙ **The hub owns the open/closed bookkeeping.** The surface reports the platform menu's open and close back through `LinkInteraction.Publish(ContextMenuEvent)`; opening sets `IsSuspended`, so the pointer travelling onto the menu cannot clear the selection the menu acts on, and closing releases it. `ContextMenuDismissRequested` fires when the link an open menu was about has left the tree (Delete, Undo, an agent edit) — a host showing its own menu closes it and reports `Closed`. **Do not keep your own `IsSuspended` flag, and do not open your menu from `LinkPressed` as well as `ContextMenuRequested`.**
+⚙ **The surface owns the open/closed bookkeeping.** It sets `WorkflowInput.IsSuspended` while its menu is up, so the pointer travelling onto the menu cannot clear the link the menu acts on, and releases it on close. When the link an open menu was about leaves the tree (Delete, Undo, an agent edit) the tree reports it through `GetHelper().LinkRemoved` — close your popup when it names yours. **There is no menu event in Core any more; the surface opens it off the routed right-press.**
 
-⚙ **To refuse a menu, veto `ContextMenuRequesting`.** Subscribe `LinkInteraction.For(tree).ContextMenuRequesting` and set `e.Handle.PreventDefault = true`. It is the preview phase, so its order against the opening is fixed by construction — a refusal cannot race the popup (the surface subscribes to `ContextMenuRequested` to open its menu, and is seen after your preview).
+⚙ **To refuse a menu, veto the press on the link itself.** Subscribe that link's `Input.PointerPressed` and set `e.Handle.PreventDefault = true`; the surface's own handler runs later (the route reaches the target before its ancestors) and skips the popup. Ordering is fixed by construction, so a refusal cannot race the popup.
 
 ### Which way the data goes
 

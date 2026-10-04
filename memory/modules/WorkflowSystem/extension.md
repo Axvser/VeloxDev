@@ -1,4 +1,4 @@
-﻿# WorkflowSystem 扩展
+# WorkflowSystem 扩展
 
 > 配套阅读：`architecture.md`（本目录）；平台差异见 `adapters/<平台>.md`；连接/视图层的**逐平台做法**见
 > `skills/veloxdev-create-workflow/references/new-adapter.md` 与 `references/view-layer.md`。本文**不重复**平台差异。
@@ -25,20 +25,20 @@
 | 自定义空间索引 | 实现 `ISpatialBoundsProvider`（`Bounds` + `INotifyPropertyChanged`）/ `ISpatialMap<T>` | `Interfaces/WorkflowSystem/ISpatialBoundsProvider.cs`、`ISpatialMap.cs:12` |
 | 网格装饰器 / 小地图 | 实现 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs:15`、`IWorkflowMinimapOverlay.cs:18` |
 | 让连线可被命中 / 自定义它的曲线 | **不实现接口，是发布**：连线视图画完调 `link.PublishCurve(LinkCurve, this)`；形状归视图（Core 不假定贝塞尔），判定归 Core | `GUI/Interaction/LinkHitTestEx.cs`、`GUI/Interaction/LinkCurve.cs` |
-| 让悬停能看见 / 让连线响应 hover 外观 | 视图实现 `ILinkHighlight`（`IsHighlighted`）—— hub 的 `AutoHighlight` 会直接点亮它，**不要**自己订 `HoverChanged` 去设颜色 | `GUI/Interaction/ILinkHighlight.cs` |
-| 改连线的命中/高亮/删除策略 | 取 `LinkInteraction.For(tree)`（**hub 只有这一个位置**）改 `AutoHighlight` / `AutoDelete` / `HitRadius`，或订 `HoverChanged` / `LinkPressed` / `LinkDeleteRequested` | `GUI/Events/LinkInteraction.cs` |
-| **否决某一次**连线动作（而不是全局关开关） | 订 `PreviewHoverChanged` / `PreviewLinkPressed` / `PreviewLinkDeleteRequested`，**右键菜单则是 `ContextMenuRequesting`**，在 `e.Handle.PreventDefault` 里拒绝这一次；`StopPropagation` 则是「默认照跑、只是不报」 | `GUI/Events/WorkflowEventHandle.cs`、`GUI/Events/Link/Preview*.cs` |
+| 让悬停能看见 / 让连线响应 hover 外观 | **外观是宿主的**：订**那条线自己的** `((IWorkflowInputEvents)link.GetHelper()).Input.PointerEntered` / `PointerExited` 自己画。路由保证「离开的先收 Exited、进入的后收 Entered」，互斥不用记账 | `GUI/Events/Input/IWorkflowInputEvents.cs`、示例见 `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/LinkView.xaml.cs` |
+| 改连线的命中/删除策略 | 取 `WorkflowInput.For(tree)`（**只有这一个位置**）改 `AutoDelete` / `HitRadius`，或读 `PointerTarget` / `HoveredLink`；要什么事件就在组件上订标准输入 | `GUI/Events/WorkflowInput.cs` |
+| **否决某一次**连线动作（而不是全局关开关） | 订标准输入（如 `KeyDown`）并在 `e.Handle.PreventDefault` 里拒绝这一次 —— 框架那一手（Delete 删线）就不执行；`StopPropagation` 则是「到此为止、祖先一个都收不到」。**两个标志都不设 = 一切照旧** | `GUI/Events/WorkflowEventHandle.cs` |
 | **把节点/插槽/树的动作也接成标准事件** | 取该组件的 Helper 并按**能力接口**转型：`((IWorkflowNodeEvents)node.GetHelper())`、`IWorkflowSlotEvents`、`IWorkflowTreeEvents`。已实现五对：`Moving/Moved`、`Resizing/Resized`、`Deleting/Deleted`（node）、`ChannelChanging/Changed`（slot）、`Connecting/Connected`（tree） | `GUI/Events/{Node,Slot,Tree}/IWorkflow*Events.cs` |
 | **把模型事件交给宿主，按平台族分三种**（2026-10-03 用户定，**不要 hub**） | ①**有附加属性的四家**（WPF/Avalonia/WinUI/MAUI）：附加属性 + 绑定一个 sink 对象 —— `behaviors:WorkflowEvents.Node="{Binding NodeEvents}"`（`.Slot` / `.Tree` 同形）；②**Razor**（类 XAML）：沿用订阅；③**无标记语言的两家**（WinForms/Jalium）：**适配器基类提供 `protected virtual OnXxx(args)` 钩子**，宿主重写即得 | `GUI/Events/IWorkflow*EventSink.cs`、`GUI/Events/WorkflowEventRelay.cs`；WPF 参考实现 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowEvents.cs` |
 | **连线的右键菜单** | **归模板**（2026-10-03 用户定，推翻原先「菜单是 demo 策略」那条）：条目声明在 `workflow-tree-view` 条目里，用户改模板增删；无标记语言的两家由 `WorkflowTreeView` 基类的 `OnBuildLinkMenu` 钩子给出 | [item-template-specifications.md](../specifications/item-template-specifications.md) §五 |
-| 右键菜单的请求与开合 | **菜单本身是宿主的**（要选位置、要平台弹出物）：**否决订 `ContextMenuRequesting`（Preview 相）**，弹出订 `ContextMenuRequested`；用 `Publish(ContextMenuEvent)` 把 Opened/Closed 报回来 —— hub 据此自动收放 `IsSuspended`。⚠ **在 `Requested` 上读 `e.Handle.PreventDefault` 是无效的**：Core 只在两相之间查一次句柄，`Requested` 那一相它必为 false —— 七家 2026-10-03 已把这类判断删净，别再写回去 | `GUI/Events/LinkInteraction.cs`、`GUI/Events/Menu/*` |
-| **让菜单不活得比它的线久**（Delete 键外的删除也算：Undo、Agent 改树） | **不要自己盯 `tree.Links`**：开菜单照常报 `Opened`（带上那条线），hub 自己盯；那条线一离开就发 `ContextMenuDismissRequested`（`e.Link`），订阅方关掉那份弹窗、照常报 `Closed` —— 挂起仍由 hub 放开。**接线落点是适配层**（WPF/Avalonia/WinUI/MAUI 四家：`WorkflowSurfaceBehavior.LinkMenuKey` 那个附着行为；Razor：组件参数 `LinkMenu` + RenderFragment；无标记语言两家 WinForms/Jalium：基类），模板不参与 | `GUI/Events/LinkInteraction.cs`（`OnLinksChanged`）、`GUI/Events/Menu/ContextMenuDismissRequestedEventArgs.cs` |
+| 右键菜单的请求与开合 | Core **没有**菜单事件了（2026-10-04 起）：**适配器从自己的 `PointerPressed(Right, link)` 里弹**（模板只声明条目，见 `WorkflowSurfaceBehavior.LinkMenuKey`）；宿主想否决，就在链上更靠前的一级（连线自己）订同一个事件并置 `PreventDefault` —— 顺序由「目标先于祖先」保证。开合由适配器自己置 `WorkflowInput.IsSuspended` | 七家适配器的 `WorkflowSurfaceBehavior` / `WorkflowTreeView` 基类 |
+| **让菜单不活得比它的线久**（Delete 键外的删除也算：Undo、Agent 改树） | 订**既有的** `tree.GetHelper().LinkRemoved`（Delete/Undo/Agent 改树都会发），比对是不是自己那份菜单指着的那条，是就关掉并放开挂起。**接线落点是适配层**（WPF/Avalonia/WinUI/MAUI 四家：`WorkflowSurfaceBehavior.LinkMenuKey` 那个附着行为；Razor：组件参数 `LinkMenu` + RenderFragment；无标记语言两家 WinForms/Jalium：基类），模板不参与 | `Templates/Helpers/TreeHelper.cs`（`OnLinksChanged`） |
 
 > ⚠ **别把连线视图做成吃掉整块画布的命中面**（给它加背景、或让容器接指针）—— 那会吞掉画布手势。命中面必须仍然只是**画出来的那道描边**；hub 也是按发布的那条曲线判距的。
 > ⚠ **组件落位的事件里，`Anchor` 必须是完整落位 —— 图层（`Anchor.Layer`）跟着走。**（2026-10-03 用户定）
 > 典型是 `NodeMoveEventArgs.From/To`：宿主拿 `To` 自己落位、或存 `From` 以后撤销时，**不能**把节点的图层悄悄抹成 0。
 > 造值一律 `new Anchor(x, y, 源.Layer)`，不要 `new Anchor(x, y, 0)`（`StandardMove:103` 就是这么写的，测试钉住 layer=7 往返）。
-> 例外只有两处：**指针位置**（`PointerEvent.Position` 等，指针没有图层）；以及指针变成**虚拟连线终点**时 ——
+> 例外只有两处：**指针位置**（`WorkflowPointerEventArgs.Position` 的 `Layer` 取来源视图的图层，但喂给 `SetPointerCommand` 的那个 anchor 仍是 0）；以及指针变成**虚拟连线终点**时 ——
 > 那一处由 `StandardSetPointer` 统一取**起点那一端**的图层（七家适配器交上来的锚带不带图层都不影响结果）。
 > ⚠ **模型层事件经「能力接口」暴露，不加进 `IWorkflowXxxViewModelHelper`** —— 往那个接口加成员会打断每一个实现者。
 > `NodeHelper<T>` / `SlotHelper<T>` / `TreeHelper<T>` 已实现能力接口，自定义 Helper 继承即得；订阅时要转型。

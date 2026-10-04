@@ -18,10 +18,11 @@ namespace TemplateNamespace;
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
 /// Passive visual only — never hit-testable, so it cannot swallow canvas gestures. It publishes the curve it
-/// draws, in raw canvas-local DP values, so the surface can hit-test it, and implements
-/// <see cref="ILinkHighlight"/> so the surface lights it on hover; keep the curve in sync with the drawn shape.
+/// draws, in raw canvas-local DP values, so the surface can hit-test it; keep the curve in sync with the drawn
+/// shape. Hover feedback is the host's — subscribe <c>IWorkflowInputEvents</c> on the helper and handle the
+/// routed pointer events.
 /// </summary>
-public sealed partial class TemplateClass : UserControl, ILinkHighlight
+public sealed partial class TemplateClass : UserControl
 {
     private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
 
@@ -86,10 +87,6 @@ public sealed partial class TemplateClass : UserControl, ILinkHighlight
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(TemplateClass), new PropertyMetadata(ParseColor("TemplateLinkColor"), OnChanged));
-    public static readonly DependencyProperty IsHighlightedProperty =
-        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnChanged));
-    public static readonly DependencyProperty HighlightColorProperty =
-        DependencyProperty.Register(nameof(HighlightColor), typeof(Windows.UI.Color), typeof(TemplateClass), new PropertyMetadata(ParseColor("#FFFFFFFF"), OnChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -98,10 +95,6 @@ public sealed partial class TemplateClass : UserControl, ILinkHighlight
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Windows.UI.Color LineColor { get => (Windows.UI.Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
-    public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
-    // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
-    // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
-    public Windows.UI.Color HighlightColor { get => (Windows.UI.Color)GetValue(HighlightColorProperty); set => SetValue(HighlightColorProperty, value); }
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -288,12 +281,8 @@ public sealed partial class TemplateClass : UserControl, ILinkHighlight
         }
 
         BuildCurve(ox, oy);
-        // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
-    // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
-        var color = IsHighlighted ? HighlightColor : LineColor;
-        var thickness = IsHighlighted ? TemplateLinkThickness + 1.5 : TemplateLinkThickness;
-        _strokeBrush.Color = color;
-        _path.StrokeThickness = thickness;
+        _strokeBrush.Color = LineColor;
+        _path.StrokeThickness = TemplateLinkThickness;
 
         if (IsVirtualLink)
             _path.StrokeDashArray = VirtualStrokeDashArray;

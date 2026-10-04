@@ -28,11 +28,12 @@ namespace Demo.Views;
 /// <para>
 /// The host canvas draws this link (<see cref="Render"/>) rather than showing it as a child window, so it never
 /// participates in WinForms' fragile transparent compositing. Having no window, it can be neither hovered nor
-/// focused: both live in the host. The Core interaction hub sets <see cref="IsHighlighted"/> through
-/// <see cref="ILinkHighlight"/> and handles the <c>Delete</c> key itself.
+/// focused: both live in the host. The canvas subscribes to the Core hub's
+/// <see cref="LinkInteraction.HoverChanged"/> and writes <see cref="IsHighlighted"/> back onto the renderer that
+/// drew the hovered link; the <c>Delete</c> key is the hub's own.
 /// </para>
 /// </summary>
-public sealed class LinkView : Control, ILinkHighlight
+public sealed class LinkView : Control
 {
     // 曲线的最小水平拉出量（画布单位）：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
     private const double PullMinimum = 40d;
@@ -111,7 +112,10 @@ public sealed class LinkView : Control, ILinkHighlight
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; RequestPaint(); } }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Whether the host considers this link highlighted. The canvas sets it from the hub's
+    /// <see cref="LinkInteraction.HoverChanged"/>; nothing sets it by default.
+    /// </summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool IsHighlighted

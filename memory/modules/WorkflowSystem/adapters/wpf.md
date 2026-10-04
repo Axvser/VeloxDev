@@ -1,4 +1,11 @@
-﻿# WorkflowSystem — WPF
+# WorkflowSystem — WPF
+
+> ⚠ **交互那几段记的是 2026-10-04 之前的世界。** 当时 Core 有一个 `LinkInteraction` hub，事件是 `HoverChanged` /
+> `LinkPressed` / `ContextMenuRequested` 这些按组件定制的语义事件，高亮由 hub 经 `ILinkHighlight` 点亮。
+> **现在**：输入是一套**标准输入**（`WorkflowInput.For(tree).Route(...)` + `IWorkflowInputEvents`），
+> 外观是宿主的，菜单由适配器从 `PointerPressed(Right, link)` 里自己弹、用 `tree.GetHelper().LinkRemoved` 收尾。
+> 完整规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)。**下面凡是提到 hub / 那几个事件名 /
+> `ILinkHighlight` 的句子都按这个替换读**；与交互无关的部分（坐标换算、焦点、弹窗平台的怪癖、命中几何）仍然有效。
 
 > **读法**：契约（七个视图角色、附着属性、注册位置、联动清单）在 `memory/modules/WorkflowSystem/extension.md` §3.9 与 §4.3，
 > 本文不重复；人面向的「怎么搭一个 WPF 工作流视图」在 `skills/veloxdev-create-workflow/references/gui/wpf.md`，

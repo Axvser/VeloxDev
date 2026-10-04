@@ -13,7 +13,8 @@
 |---|---|---|
 | 一张新的工作流表面 | **派生 `WorkflowTreeView`**（`abstract`），实现 `CreateNodeView`/`CreateLinkView`，或赋 `TemplateSelector` | `Attached/Workflow/WorkflowTreeView.cs:35`（工厂 `:232`/`:237`） |
 | 一种新的节点卡片 | **派生 `WorkflowNodeView`**（`abstract`），重写事件钩子、设颜色 | `Attached/Workflow/WorkflowNodeView.cs:24`（钩子 `:150-182`） |
-| 一种新的插槽 / 连线图形 | **派生 `WorkflowSlotView` / `WorkflowLinkView`** | `WorkflowSlotView.cs:24`、`WorkflowLinkView.cs:32` |
+| 一种新的插槽图形 | **派生 `WorkflowSlotView`** | `WorkflowSlotView.cs:24` |
+| 一种新的连线图形 | **自己的控件 + `WorkflowLinkAttachment.Attach(this)`**，在 `OnPaint` 里画（2026-10-04 起不再是基类） | `WorkflowLinkAttachment.cs` |
 | 换网格/标尺外观 | **派生 `WorkflowGridDecorator`**，设调色板与间距 | `WorkflowGridDecorator.cs:23` |
 | 「item 类型 → 视图」的工厂 | `WorkflowTemplateSelector`（设四个工厂）或直接实现 `IWorkflowTemplateSelector.CreateView(object item)` | `WorkflowTemplateSelector.cs:21` / `ViewManager.cs:14` |
 | 一个新的附着行为 | 新建 `public static class` + `ConditionalWeakTable<Control, State>` + 静态 `Get`/`Set`，命名空间写 `VeloxDev.WorkflowSystem.AttachedBehaviors` | `Attached/Workflow/` 下新文件；若需要 `Refresh` 推数据，改 `WorkflowSurfaceBehavior.Refresh`（`:417`） |
@@ -32,7 +33,7 @@
 | # | 错的捷径 | 为什么错 | 官方做法 | 依据 |
 |---|---|---|---|---|
 | 1 | 在 `WorkflowSurfaceBehavior` 里补平移（`MouseDown/Move/Up`）或打开 `PART_ScrollViewer.AutoScroll` | 这家有**两套平移模型**：表面行为只**反射读** pan，真正的签名平移在 `WorkflowTreeView` 的画布上 | 平移在 `WorkflowTreeView`（`ApplyPan` 写 `SurfaceCanvas.PanOffset`）；要改就改基类或派生覆写 | `WorkflowSurfaceBehavior.cs:650`（`ResolvePanOffset`）；`WorkflowTreeView.cs:733` |
-| 2 | 自己 `new` 一个网格装饰器/小地图/连线控件，再 `Set*Name` 接上（旧写法） | 现在适配器**自带**这些实现与基类；自己在宿主里重造会与池/表面重复一套 | 派生对应基类，或把它作为 `MinimapOverlay`/`TemplateSelector` 赋给 `WorkflowTreeView` | `WorkflowGridDecorator.cs:23`、`WorkflowLinkView.cs:32`、`WorkflowMinimapOverlay.cs:23` |
+| 2 | 自己 `new` 一个网格装饰器/小地图/连线控件，再 `Set*Name` 接上（旧写法） | 现在适配器**自带**这些实现与基类；自己在宿主里重造会与池/表面重复一套 | 派生对应基类，或把它作为 `MinimapOverlay`/`TemplateSelector` 赋给 `WorkflowTreeView` | `WorkflowGridDecorator.cs:23`、`WorkflowLinkAttachment.cs`、`WorkflowMinimapOverlay.cs:23` |
 | 3 | 用 `SetLayoutPropertyName` / `SetActualOffsetPropertyName` 改「读宿主的哪个布局属性」 | 这两个公共成员唯一的消费者是私有 `GetActualOffset`（`:743`），而它**自己零调用者** ⇒ 整条链是死代码，改了没有任何反应 | 基类自己从 `IWorkflowTreeViewModel.Layout` 取 | `WorkflowSlotLayoutBehavior.cs:210`、`:237`、`:758` |
 | 4 | 在节点卡 ctor 里调 `Refresh`/`SetIsEnabled`，指望锚点当场量好 | `ScheduleSync` 在 `!control.IsHandleCreated` 时把 `SyncPending` 复位后返回 —— 请求被**丢掉**，不是排队 | 要同步量就调 `WorkflowSlotLayoutBehavior.SyncNow(control)` | `WorkflowSlotLayoutBehavior.cs:440-466`（`:465`）、`:288` |
 | 5 | 自绘画布用 `WorkflowCanvasTransformBehavior.GetTransform(host)` 拿平移量 | 写进去了，**全仓零读者**（写值走 `Apply` `:65`）。基类卡片走 `IWorkflowSurfaceNodeView.ApplySurfacePosition`，表面走自己的 pan 字段 | 你既然是自绘，pan 就在你自己手里，不必绕这一圈 | `WorkflowCanvasTransformBehavior.cs:34`、`:65` |

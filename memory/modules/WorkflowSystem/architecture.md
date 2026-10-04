@@ -1,4 +1,4 @@
-﻿# WorkflowSystem 架构
+# WorkflowSystem 架构
 
 > 模块位置：`Src/Core/VeloxDev.Core/WorkflowSystem/`
 > 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（17 个文件，命名空间 `VeloxDev.WorkflowSystem`）
@@ -159,23 +159,31 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Help
                                 → StandardEx → 改模型状态 → 属性变更通知 → 视图重绘
 ```
 
-**② 连线的命中/高亮/删除现在归 Core**（2026-10-03 起）。链路是：
+**② 输入归 Core，是一套标准输入**（2026-10-04 起，替换掉原来的「按组件定制的事件」）。链路是：
 
 ```
-连线视图画完 → link.PublishCurve(曲线, 自己)      // 视图是形状的所有者
-适配器表面把原生指针翻译成 PointerEvent → LinkInteraction.For(tree).Publish(...)
-    → 对着已发布的曲线判距（LinkHitTestEx / LinkCurve）→ 得到 HoveredLink
-    → AutoHighlight：通过 ILinkHighlight 点亮那个「自己」
-    → AutoDelete：Delete 键直接执行 link.DeleteCommand
-    → 同时报 HoverChanged / LinkPressed / LinkDeleteRequested 给宿主
+连线视图画完 → link.PublishCurve(曲线, 自己)      // 视图是形状的所有者，也是事件的 Source
+适配器把原生指针/按键翻译成标准输入 → WorkflowInput.For(tree).Route(args)
+    → 按 args.Target 展开祖先链（link→tree / slot→node→tree / node→tree / 空白→tree）
+    → 每级取 IWorkflowInputEvents.Input 派发；用户订阅先跑，框架默认动作在整条链之后
+    → 指针换了目标时先给留下那个发 Exited、给新那个发 Entered
+    → KeyDown + Delete + Target 是连线 + AutoDelete ⇒ link.DeleteCommand
 ```
 
-**每个动作有两相，第一相是「处理之前」**（2026-10-03 起）：`PreviewHoverChanged` / `PreviewLinkPressed` / `PreviewLinkDeleteRequested` 在框架默认行为**之前**抛出，带一个 `WorkflowEventHandle`；`PreventDefault` = 这一次的默认行为整个不发生、Outcome 也不报，`StopPropagation` = 默认照跑、只是不报 Outcome。两个标志都不设时，行为与这条模型出现之前**逐字相同**。
+- **API 形状抄 Avalonia**（`GUI/Events/Input/`）：`WorkflowPointerEventArgs` 六个具体子类（Entered/Exited/Moved/Pressed/Released/Wheel）、`WorkflowKeyEventArgs` 两个（Down/Up）、`WorkflowMouseButton`（`None/Left/Right/Middle/XButton1/XButton2`）、`InputModifiers`、`WorkflowKey`（务实子集，其余报 `Unknown` + `RawKeyCode`）。名字带 `Workflow` 前缀是硬要求 —— 适配器文件同时 `using` 平台命名空间，`PointerPressedEventArgs` 这些正是 Avalonia 自己的类型名（2026-10-04 撞过）。
+- **位置是 `Anchor`，`Position.Layer` 取来源视图所在图层**。但**指针本身没有图层**：`SetPointerCommand` / 虚拟连线端点仍按旧规则取起点那一端的图层。
+- **能力接口 + 一个 relay**：`IWorkflowInputEvents { WorkflowInputRelay Input; }`，四组 Helper（`TreeHelper<T>`/`NodeHelper<T>`/`SlotHelper<T>`/`LinkHelper<T>`）都实现。宿主订阅：`((IWorkflowInputEvents)link.GetHelper()).Input.PointerEntered += …`。
+- **命中归适配器判**（`LinkHitTestEx.HitTestVisibleLinks` 是它调的那个共享算法）：Core 不新增 node/slot 命中。
 
-- 这是**逐事件否决**（「这一条不许删」），与 `AutoDelete` / `AutoHighlight` 那种**表面级开关**是两回事，两者共存：开关管全局策略，句柄管这一次。
-- Preview 与 Outcome 拿到的是**同一个句柄实例**，所以 Outcome 订阅方能读到 `IsDefaultPrevented`。
-- 动作**真的变了**才发 Preview（同一条线上移动不会反复问）。
-- 句柄只有这两相的事件的 args 才有；`ContextMenuOpened`/`Closed` 是**事实**，没有可取消的东西。
+**两相没了，只剩「用户先跑」**：原来是 `Preview*/Outcome` 两相共用一个句柄；现在**一次动作只发一次**，用户订阅天然在框架默认动作之前，`WorkflowEventHandle` 仍在、语义不变：
+`PreventDefault` = 框架这一手不执行（Delete 就是「这条不许删」）、`StopPropagation` = 到此为止、祖先一个都收不到。两个标志都不设时行为与它们出现之前逐字相同。
+
+- 句柄**一次路由一个**：整条链共用，所以祖先能读到目标那级做了什么决定。
+- `IsSuspended` 仍在 Core（`WorkflowInput`）：菜单开着时指针跟踪不动 —— **`Exited` 也要认**（2026-10-03 由 Jalium 实测逼出来的那条不变）。
+
+**右键菜单**（2026-10-04 起）：Core 不再有 `ContextMenuRequested` 这一族。**适配器从自己的 `PointerPressed(Right, link)` 里弹**，宿主想否决就在链上更靠前的一级（连线自己）订同一个事件并置 `PreventDefault` —— 顺序由「目标先于祖先」保证，与订阅先后无关。开合由适配器自己记账（置 `WorkflowInput.IsSuspended`）。**「菜单不能比它指着的那条线活得久」改由 `tree.GetHelper().LinkRemoved` 实现**（树既有的事件，Delete/Undo/Agent 改树都会发）：七家各订一次，WinForms/Jalium 落在基类、标记五家落在 `WorkflowSurfaceBehavior`。
+
+**光标下的连线视图不再由 Core 点亮**（2026-10-04）：悬停外观是**宿主/demo** 的事 —— 订那条线自己的 `Input.PointerEntered` / `PointerExited` 即可，互斥不需要记账（路由已经保证「离开的先收 Exited、进入的后收 Entered」）。Core 里没有 `ILinkHighlight`、也没有 `AutoHighlight`。
 
 **模型层（节点/插槽/树的动作为准）的事件挂在各自的 Helper 上**，经**能力接口**暴露（2026-10-03 起）：
 
@@ -223,12 +231,12 @@ hub 收不了宿主的弹窗，所以这是**请**不是做：宿主关掉自己
 
 要点：
 
-- **hub 只有一个位置**：`LinkInteraction.For(tree)`（`GUI/Events/LinkInteraction.cs`），一棵树一个实例、`ConditionalWeakTable` 缓存。适配器只**转发**，宿主与连线视图都用这同一个调用取它 —— 没有「每个表面各持一个」这种说法。
+- **输入只有一个位置**：`WorkflowInput.For(tree)`（`GUI/Events/WorkflowInput.cs`），一棵树一个实例、`ConditionalWeakTable` 缓存。适配器只**转发**，宿主与组件视图都从组件的 Helper 上订 —— 没有「每个表面各持一个」这种说法。它同时是 `HitRadius` / `AutoDelete` / `IsSuspended` / `PointerTarget` / `HoveredLink` 的持有者。
 - **命中判据是「已发布的曲线」**，不是「锚点测没测到」。视图画不出来时用 `PublishCurve(null)` 撤回，所以「没有曲线」就等于「那里没有东西」。**不要**改回按 `IsRenderReady()` 判 —— Jalium 按设计从不写 `slot.Anchor`，那样会让它整家连线静默失效。
 - **命中面只是画出来的那道描边**，不是整块画布：曲线就是视图画的那条，半径 `LinkHitTestEx.DefaultHitRadius`（6）。
 - **曲线是运行期几何，永远不序列化**（别把它挂上任何归档序列化路径：不给它 `[Archivable]`，也不让它成为某个被收录成员的声明类型）。
 
-⇒ 「加一个新的连线交互动作」（比如双击重命名）现在也是改 Core 或宿主，不是改七家 demo —— 但**手势**（拖动、连线）仍是适配器的事。
+⇒ 「加一个新的连线交互动作」（比如双击重命名）现在就是订标准输入：适配器把那次指针事件路由进来，宿主在组件上订它 —— **不用改 Core**；但**手势**（拖动、连线）仍是适配器的事。
 
 节点命令共 8 个（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:36-78`），Tree 8 个（`IWorkflowTreeViewModel.cs:41-83`），Slot 4 个（`IWorkflowSlotViewModel.cs:46-64`），Link 1 个（`IWorkflowLinkViewModel.cs:30`），另有全部组件共有的 `CloseCommand`（`IWorkflowViewModel.cs:31`）。
 

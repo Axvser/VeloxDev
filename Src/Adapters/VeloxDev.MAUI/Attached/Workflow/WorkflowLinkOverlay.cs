@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.Maui.Graphics;
 using VeloxDev.TransitionSystem;
@@ -38,10 +38,14 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// (pan, wheel zoom, node drag, slot drag) for the whole surface. Interaction is driven instead by
 /// <see cref="InteractionSource"/> — a view that is already on the surface's input path — and the hit test is
 /// geometric, walking each drawn curve's sample table: a link was never a view, so no platform hit test can
-/// see it, and the drawn body is the only thing that answers. Hovering a link selects it (drawn in
-/// <see cref="SelectedLinkColor"/>), <c>Delete</c> removes it through
+/// see it, and the drawn body is the only thing that answers. <c>Delete</c> removes the hovered link through
 /// <see cref="IWorkflowLinkViewModel.DeleteCommand"/>, and a right press — or, off Windows, a long press —
-/// is forwarded to <see cref="LinkInteraction"/> so the host surface can open its own menu.
+/// is forwarded to the input route so the host surface can open its own menu.
+/// </para>
+/// <para>
+/// Selection is the host's: set <see cref="SelectedLink"/> (and <see cref="SelectedLinkColor"/> to make it
+/// visible) from your own subscription to the routed pointer events. Left alone, this layer paints
+/// resting links and nothing else.
 /// </para>
 /// </summary>
 public sealed class WorkflowLinkOverlay : GraphicsView
@@ -49,9 +53,6 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private const double CullMargin = 24d;
 
     private static readonly Color DefaultWhite = Color.FromArgb("#DDFFFFFF");
-
-    // 七家统一的默认高亮色：白色。与 Core 的 LinkInteraction 默认高亮同义，只是这里是平台的颜色类型。
-    private static readonly Color DefaultHighlight = Color.FromArgb("#FFFFFFFF");
 
     public static readonly BindableProperty WorkflowTreeProperty = BindableProperty.Create(
         nameof(WorkflowTree), typeof(IWorkflowTreeViewModel), typeof(WorkflowLinkOverlay), null,
@@ -87,10 +88,15 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public static readonly BindableProperty InteractionSourceProperty = BindableProperty.Create(
         nameof(InteractionSource), typeof(View), typeof(WorkflowLinkOverlay), null, propertyChanged: OnInteractionSourceChanged);
 
-    // 高亮是「一团白而模糊的光」，不是换色：静息线本来就是近白的，所以靠**更亮 + 更粗 + 外面那圈光晕**
-    // 读出来，而不是靠换一个色相。七家都用白（`#FFFFFFFF`）—— 其它色相都试过，红像告警、青像另一条线。
+    public static readonly BindableProperty SelectedLinkProperty = BindableProperty.Create(
+        nameof(SelectedLink), typeof(IWorkflowLinkViewModel), typeof(WorkflowLinkOverlay), null,
+        propertyChanged: OnSelectedLinkChanged);
+
+    // 选中色默认 **null** ⇒ 本层不画任何选中反馈。外观是宿主的：想看见高亮就自己订
+    // 输入路由的指针事件，把 SelectedLink 与 SelectedLinkColor 一起给它。
+    // 惯例是一团白光（`#FFFFFFFF`）而不是换色 —— 其它色相都试过，红像告警、青像另一条线。
     public static readonly BindableProperty SelectedLinkColorProperty = BindableProperty.Create(
-        nameof(SelectedLinkColor), typeof(Color), typeof(WorkflowLinkOverlay), DefaultHighlight, propertyChanged: OnVisualPropertyChanged);
+        nameof(SelectedLinkColor), typeof(Color), typeof(WorkflowLinkOverlay), null, propertyChanged: OnVisualPropertyChanged);
 
     private IWorkflowTreeViewModel? _tree;
     private IWorkflowLinkViewModel? _virtualLink;
@@ -124,13 +130,16 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private float _curveOffsetY;
 
     // 指针与键盘翻译成 Core 的标准输入事件后交给它裁决；本层只负责「把事件转发进去、把结果画出来」
-    private LinkInteraction? _interaction;
+    private WorkflowInput? _input;
 
 #if WINDOWS
     private Microsoft.UI.Xaml.UIElement? _hookElement;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverMovedHandler;
+    private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverEnteredHandler;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _hoverExitedHandler;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _pressedHandler;
+    private Microsoft.UI.Xaml.Input.PointerEventHandler? _releasedHandler;
+    private Microsoft.UI.Xaml.Input.PointerEventHandler? _wheelHandler;
     private Microsoft.UI.Xaml.Input.KeyEventHandler? _keyHandler;
 
     // 键盘钩子实际挂在哪（窗口根，或 XamlRoot 还没就绪时的交互源），与指针钩子分开记，摘的时候才拆得干净
@@ -180,7 +189,18 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// </summary>
     public View? InteractionSource { get => (View?)GetValue(InteractionSourceProperty); set => SetValue(InteractionSourceProperty, value); }
 
-    /// <summary>Colour a hovered link is drawn in, so the selected one reads as picked rather than resting.</summary>
+    /// <summary>
+    /// The link the host considers selected, or <see langword="null"/> (the default) for none. Nobody sets it by
+    /// default: a host drives it from the routed pointer events, and selection is drawn only when
+    /// <see cref="SelectedLinkColor"/> is given as well. Selecting also moves keyboard focus to
+    /// <see cref="InteractionSource"/>, which is what lets <c>Delete</c> reach the hub.
+    /// </summary>
+    public IWorkflowLinkViewModel? SelectedLink { get => (IWorkflowLinkViewModel?)GetValue(SelectedLinkProperty); set => SetValue(SelectedLinkProperty, value); }
+
+    /// <summary>
+    /// Colour a selected link is drawn in. <see langword="null"/> by default, and then a selected link is drawn
+    /// exactly like a resting one — the appearance belongs to the host.
+    /// </summary>
     public Color? SelectedLinkColor { get => (Color?)GetValue(SelectedLinkColorProperty); set => SetValue(SelectedLinkColorProperty, value); }
 
     /// <summary>Where the band is, as a fraction of a link's length from its sender's end. Written by the
@@ -550,7 +570,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         _interactionSource = null;
         _lastPointer = null;
-        SelectLink(null);
+        SelectedLink = null;
     }
 
 #if WINDOWS
@@ -559,7 +579,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private void OnInteractionSourceHandlerChanging(object? sender, HandlerChangingEventArgs e) => DetachPlatformHooks();
 #endif
 
-    // 悬停落在哪条线上由 Core 裁决（见 LinkInteraction）：本层只把指针翻译成标准事件转发进去。
+    // 悬停落在哪条线上由共享的曲线命中裁决（本层一个人画完所有线、没有每线的可视对象）：
+    // 本层只把指针翻译成标准输入交给路由。
     // 拉线时指针下面正挂着橡皮筋，逐帧判悬停只会把沿途那些实连线点亮
     private void OnHoverMoved(Point point)
     {
@@ -581,14 +602,32 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         // 键盘钩子要升级到窗口根，而 XamlRoot 在挂钩子那会儿还没就绪（见 AttachKeyHook 的注释）
         TryUpgradeKeyHook();
 #endif
-        _interaction?.Publish(new PointerEvent(PointerPhase.Moved, ToCanvasLocal(point)));
+        RoutePointer(point, (p, t, h) => new WorkflowPointerMovedEventArgs(p, InputModifiers.None, this, t, h));
     }
 
-    // 指针离开整块输入面：选中跟着走 —— 高亮留在身后会让「现在按 Delete 删哪条」变得没有答案。
-    // 菜单弹出引起的那一次离开由 Core 自己挡（它认 IsSuspended），本层不再重复拦一遍。
+    // 指针离开整块输入面：指针目标跟着走 —— 留在身后会让「现在按 Delete 删哪条」变得没有答案。
+    // 菜单弹出引起的那一次离开由输入路由自己挡（它认 IsSuspended），本层不再重复拦一遍。
     private void OnHoverExited()
     {
-        _interaction?.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
+        _input?.Route(new WorkflowPointerExitedEventArgs(new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
+    }
+
+    // 指针进入整块输入面。
+    private void OnHoverEntered(Point point)
+    {
+        RoutePointer(point, (p, t, h) => new WorkflowPointerEnteredEventArgs(p, InputModifiers.None, this, t, h));
+    }
+
+    // 指针进来时统一在这里翻译：被指到的线由共享的曲线命中判出来，事件交给输入路由。
+    private void RoutePointer(
+        Point point, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, WorkflowPointerEventArgs> args)
+    {
+        if (_input is not { } input) return;
+
+        var anchor = ToCanvasLocal(point);
+        var target = input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+
+        input.Route(args(anchor, target, new WorkflowEventHandle()));
     }
 
     /// <summary>
@@ -598,11 +637,11 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// </summary>
     /// <param name="onOverlay">Where the press landed, in this layer's coordinates.</param>
     /// <param name="button">Which button.</param>
-    private void OnPressed(Point onOverlay, PointerButtonKind button)
+    private void OnPressed(Point onOverlay, WorkflowMouseButton button)
     {
-        _interaction?.Publish(new PointerEvent(PointerPhase.Pressed, ToCanvasLocal(onOverlay), button));
+        RoutePointer(onOverlay, (p, t, h) => new WorkflowPointerPressedEventArgs(p, InputModifiers.None, this, t, button, 1, h));
 
-        if (_interaction?.HoveredLink is null)
+        if (_input?.HoveredLink is null)
         {
             // 空白处按下不是这条线的事：不置 Handled，也不动焦点
             return;
@@ -650,9 +689,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnGesturePointerPressed(object? sender, PointerEventArgs e)
     {
-        var button = e.Button == ButtonsMask.Secondary ? PointerButtonKind.Right
-            : e.Button == ButtonsMask.Primary ? PointerButtonKind.Left
-            : (PointerButtonKind?)null;
+        var button = e.Button == ButtonsMask.Secondary ? WorkflowMouseButton.Right
+            : e.Button == ButtonsMask.Primary ? WorkflowMouseButton.Left
+            : (WorkflowMouseButton?)null;
 
         if (button is null || _interactionSource is null || e.GetPosition(this) is not { } onOverlay)
         {
@@ -660,7 +699,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         // 只有左键（触摸/鼠标）走长按；右键本身就是菜单手势，不需要等。
-        if (button is PointerButtonKind.Left)
+        if (button is WorkflowMouseButton.Left)
         {
             StartLongPress(onOverlay);
         }
@@ -668,17 +707,27 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         OnPressed(onOverlay, button.Value);
     }
 
-    private void OnGesturePointerReleased(object? sender, PointerEventArgs e) => CancelLongPress();
+    private void OnGesturePointerReleased(object? sender, PointerEventArgs e)
+    {
+        CancelLongPress();
 
-    // 长按到点与 Windows 的右键同义：翻译成「在原处按了右键」交给 hub，hub 照常判命中并报
-    // ContextMenuRequested —— 菜单本身仍由宿主（模板）声明和弹出。
+        if (e.GetPosition(this) is { } onOverlay)
+        {
+            RoutePointer(onOverlay, (p, t, h) => new WorkflowPointerReleasedEventArgs(
+                p, InputModifiers.None, this, t, WorkflowMouseButton.Left, 1, h));
+        }
+    }
+
+    // 长按到点与 Windows 的右键同义：翻译成「在原处按了右键」交给输入路由，路由照常判命中并把这次按下
+    // 发给那条线 —— 菜单本身仍由宿主（模板）声明和弹出。
     private void OnLongPressTick(object? sender, EventArgs e)
     {
         var origin = _longPressOrigin;
         CancelLongPress();
         if (origin is { } point)
         {
-            _interaction?.Publish(new PointerEvent(PointerPhase.Pressed, ToCanvasLocal(point), PointerButtonKind.Right));
+            RoutePointer(point, (p, t, h) => new WorkflowPointerPressedEventArgs(
+                p, InputModifiers.None, this, t, WorkflowMouseButton.Right, 1, h));
         }
     }
 
@@ -746,22 +795,56 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             }
         };
         _hoverExitedHandler = (_, _) => OnHoverExited();
+        _hoverEnteredHandler = (_, e) =>
+        {
+            if (ToOverlayPoint(e) is { } point)
+            {
+                OnHoverEntered(point);
+            }
+        };
         _pressedHandler = (_, e) =>
         {
             var properties = e.GetCurrentPoint(element).Properties;
-            var button = properties.IsRightButtonPressed ? PointerButtonKind.Right
-                : properties.IsLeftButtonPressed ? PointerButtonKind.Left
-                : (PointerButtonKind?)null;
+            var button = properties.IsRightButtonPressed ? WorkflowMouseButton.Right
+                : properties.IsMiddleButtonPressed ? WorkflowMouseButton.Middle
+                : properties.IsLeftButtonPressed ? WorkflowMouseButton.Left
+                : (WorkflowMouseButton?)null;
 
             if (button is not null && ToOverlayPoint(e) is { } onOverlay)
             {
                 OnPressed(onOverlay, button.Value);
             }
         };
+        _releasedHandler = (_, e) =>
+        {
+            var properties = e.GetCurrentPoint(element).Properties;
+            var button = properties.IsRightButtonPressed ? WorkflowMouseButton.Right
+                : properties.IsMiddleButtonPressed ? WorkflowMouseButton.Middle
+                : WorkflowMouseButton.Left;
+
+            if (ToOverlayPoint(e) is { } onOverlay)
+            {
+                RoutePointer(onOverlay, (p, t, h) => new WorkflowPointerReleasedEventArgs(
+                    p, InputModifiers.None, this, t, button, 1, h));
+            }
+        };
+        _wheelHandler = (_, e) =>
+        {
+            var properties = e.GetCurrentPoint(element).Properties;
+            if (ToOverlayPoint(e) is { } onOverlay)
+            {
+                var delta = properties.MouseWheelDelta;
+                RoutePointer(onOverlay, (p, t, h) => new WorkflowPointerWheelEventArgs(
+                    p, InputModifiers.None, this, t, 0d, delta, h));
+            }
+        };
 
         element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerMovedEvent, _hoverMovedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerEnteredEvent, _hoverEnteredHandler, true);
         element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerExitedEvent, _hoverExitedHandler, true);
         element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, _pressedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerReleasedEvent, _releasedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerWheelChangedEvent, _wheelHandler, true);
 
         _hookElement = element;
         AttachKeyHook(element);
@@ -817,6 +900,11 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerMovedEvent, _hoverMovedHandler);
         }
 
+        if (_hoverEnteredHandler is not null)
+        {
+            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerEnteredEvent, _hoverEnteredHandler);
+        }
+
         if (_hoverExitedHandler is not null)
         {
             _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerExitedEvent, _hoverExitedHandler);
@@ -825,6 +913,16 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         if (_pressedHandler is not null)
         {
             _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, _pressedHandler);
+        }
+
+        if (_releasedHandler is not null)
+        {
+            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerReleasedEvent, _releasedHandler);
+        }
+
+        if (_wheelHandler is not null)
+        {
+            _hookElement.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerWheelChangedEvent, _wheelHandler);
         }
 
         if (_keyHandler is not null && _keyHost is not null)
@@ -860,19 +958,48 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnSourceKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
-        if (e.Key != Windows.System.VirtualKey.Delete)
+        // 键也过输入路由：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠各家各记一个 _selectedLink
+        if (_input is not { } input || input.HoveredLink is null)
         {
             return;
         }
 
-        // 键也过 Core：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠各家各记一个 _selectedLink
-        if (_interaction?.HoveredLink is null)
-        {
-            return;
-        }
+        input.Route(new WorkflowKeyDownEventArgs(
+            ToKey(e.Key), (int)e.Key, InputModifiers.None, false, this, input.HoveredLink, new WorkflowEventHandle()));
 
-        _interaction.Publish(new KeyEvent(InputKey.Delete));
-        e.Handled = true;
+        if (e.Key == Windows.System.VirtualKey.Delete) e.Handled = true;
+    }
+
+    // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
+    private static WorkflowKey ToKey(Windows.System.VirtualKey key)
+    {
+        if (key >= Windows.System.VirtualKey.A && key <= Windows.System.VirtualKey.Z)
+            return WorkflowKey.A + (key - Windows.System.VirtualKey.A);
+        if (key >= Windows.System.VirtualKey.Number0 && key <= Windows.System.VirtualKey.Number9)
+            return WorkflowKey.D0 + (key - Windows.System.VirtualKey.Number0);
+        if (key >= Windows.System.VirtualKey.F1 && key <= Windows.System.VirtualKey.F12)
+            return WorkflowKey.F1 + (key - Windows.System.VirtualKey.F1);
+
+        return key switch
+        {
+            Windows.System.VirtualKey.Cancel => WorkflowKey.Cancel,
+            Windows.System.VirtualKey.Back => WorkflowKey.Back,
+            Windows.System.VirtualKey.Tab => WorkflowKey.Tab,
+            Windows.System.VirtualKey.Enter => WorkflowKey.Enter,
+            Windows.System.VirtualKey.Escape => WorkflowKey.Escape,
+            Windows.System.VirtualKey.Space => WorkflowKey.Space,
+            Windows.System.VirtualKey.PageUp => WorkflowKey.PageUp,
+            Windows.System.VirtualKey.PageDown => WorkflowKey.PageDown,
+            Windows.System.VirtualKey.End => WorkflowKey.End,
+            Windows.System.VirtualKey.Home => WorkflowKey.Home,
+            Windows.System.VirtualKey.Left => WorkflowKey.Left,
+            Windows.System.VirtualKey.Up => WorkflowKey.Up,
+            Windows.System.VirtualKey.Right => WorkflowKey.Right,
+            Windows.System.VirtualKey.Down => WorkflowKey.Down,
+            Windows.System.VirtualKey.Insert => WorkflowKey.Insert,
+            Windows.System.VirtualKey.Delete => WorkflowKey.Delete,
+            _ => WorkflowKey.Unknown,
+        };
     }
 #endif
 
@@ -908,7 +1035,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         DetachInteraction();
         _tree = tree;
         // 换树时旧的选中项已经不属于这棵树了，留着它会让 Delete 去打一个不在场上的连线
-        _selectedLink = null;
+        SelectedLink = null;
         if (tree is null)
         {
             return;
@@ -919,30 +1046,20 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     }
 
     // 交互归 Core：本层只做两件平台的事 —— 把原生指针/按键翻译成标准输入事件转发进去，
-    // 再把裁决结果画出来（选中上色）。命中的算法不在这家。
+    // 再把裁决结果画出来。命中的算法不在这家。
     private void AttachInteraction(IWorkflowTreeViewModel tree)
     {
         // hub 只有一个位置：同树同实例（别家也走这个调用，不再各自发明取用方式）。
-        // 删除归 hub 自己（AutoDelete）—— 本家不再订 LinkDeleteRequested。
-        var interaction = LinkInteraction.For(tree);
-        // 本家一个表面画完所有线、没有「每线的可视对象」，所以 hub 的 AutoHighlight 没有东西可点：
-        // 选中由这里订阅 HoverChanged 自己画。别家是视觉实现 ILinkHighlight、由 hub 直接点亮。
-        interaction.HoverChanged += OnHoverChanged;
-        _interaction = interaction;
+        // 删除归 hub 自己（AutoDelete）—— 本家不再订 LinkDeleteRequested；
+        // 选中也不订指针事件 —— 那是宿主的事（订了之后把 SelectedLink 给它）。
+        _input = WorkflowInput.For(tree);
     }
 
-    private void DetachInteraction()
-    {
-        if (_interaction is not { } interaction)
-        {
-            return;
-        }
+    private void DetachInteraction() => _input = null;
 
-        interaction.HoverChanged -= OnHoverChanged;
-        _interaction = null;
-    }
-
-    private void OnHoverChanged(object? sender, LinkHoverEventArgs e) => SelectLink(e.Link);
+    // 宿主写 SelectedLink 的唯一入口：同时取键盘焦点（Delete 靠它）+ 排一次重绘。
+    private static void OnSelectedLinkChanged(BindableObject bindable, object oldValue, object newValue)
+        => ((WorkflowLinkOverlay)bindable).SelectLink((IWorkflowLinkViewModel?)newValue);
 
     private void Subscribe(IWorkflowTreeViewModel tree)
     {
@@ -1143,7 +1260,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                     // 删掉的正好是选中的那条（Delete、右键菜单、撤销都走这里）—— 选中必须跟着消失
                     if (ReferenceEquals(_selectedLink, l))
                     {
-                        _selectedLink = null;
+                        SelectedLink = null;
                     }
                 }
             }
@@ -1295,11 +1412,10 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 }
 
                 var isVirtual = IsVirtualLink(link);
-                // 选中的线换成选中色并加粗 1.5：与其它六家同一种读法（高亮 = 偏红 + 更粗）
-                var isSelected = ReferenceEquals(link, owner._selectedLink);
-                var color = isSelected
-                    ? owner.SelectedLinkColor ?? DefaultHighlight
-                    : isVirtual ? virtualColor : linkColor;
+                // 选中只改色与粗细，而且**只在宿主给了 SelectedLinkColor 时** —— 外观是宿主的，
+                // 本层默认不画任何选中反馈（没给色就等于没选中）。
+                var highlight = ReferenceEquals(link, owner._selectedLink) ? owner.SelectedLinkColor : null;
+                var color = highlight ?? (isVirtual ? virtualColor : linkColor);
                 if (color is null)
                 {
                     continue;
@@ -1329,8 +1445,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 canvas.StrokeDashPattern = isVirtual ? [4f, 2f] : null;
                 canvas.StrokeLineCap = LineCap.Round;
 
-                // 选中的线整条（管壁与彗星都在内）加粗 1.5，与 Avalonia / WPF 的选中读法一致
-                var thickness = isSelected ? strokeWidth + 1.5f : strokeWidth;
+                // 宿主给了选中色时整条（管壁与彗星都在内）加粗 1.5，与其它家的读法一致
+                var thickness = highlight is not null ? strokeWidth + 1.5f : strokeWidth;
 
                 // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
                 // 两端才不像被截断的横截面
@@ -1353,7 +1469,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 }
 
                 // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
-                canvas.StrokeColor = Fade(color, isSelected ? 0.85 : 0.55);
+                canvas.StrokeColor = Fade(color, highlight is not null ? 0.85 : 0.55);
                 canvas.StrokeSize = thickness;
                 canvas.DrawPath(owner.Body);
 

@@ -83,7 +83,10 @@ $configs = [ordered]@{
         RazorAllMarkup  = $false
         MirrorBase      = @{}
         Aliases         = [ordered]@{}
-        Expected        = @{ 'tree' = 'the mirror carries the demo HUD' }
+        Expected        = @{
+            'tree' = 'the mirror carries the demo HUD'
+            'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
+        }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
         UseWinForms     = $true
@@ -100,7 +103,9 @@ $configs = [ordered]@{
         RazorAllMarkup  = $false
         MirrorBase      = @{}
         Aliases         = [ordered]@{}
-        Expected        = @{}
+        Expected        = @{
+            'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
+        }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
         UseWinForms     = $false
@@ -117,7 +122,10 @@ $configs = [ordered]@{
         RazorAllMarkup  = $false
         MirrorBase      = $renameWpfBase
         Aliases         = $renameWpfFamily
-        Expected        = @{ 'tree' = 'the mirror carries the demo HUD' }
+        Expected        = @{
+            'tree' = 'the mirror carries the demo HUD'
+            'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
+        }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $true
         UseWinForms     = $false
@@ -137,7 +145,7 @@ $configs = [ordered]@{
         Expected        = @{
             'tree'   = 'the mirror carries the demo HUD'
             'node'   = 'the mirror replaces the template x:CompileBindings=False with a concrete x:DataType, as the template comment instructs'
-            'link'   = 'the mirror replaces the template x:CompileBindings=False with a concrete x:DataType, as the template comment instructs'
+            'link'   = 'x:DataType in the mirror, plus the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
@@ -188,7 +196,10 @@ public sealed class HelperProxy
         RazorAllMarkup  = $false
         MirrorBase      = $renameWpfBase
         Aliases         = $renameWpfFamily
-        Expected        = @{ 'tree' = 'the mirror carries the demo HUD' }
+        Expected        = @{
+            'tree' = 'the mirror carries the demo HUD'
+            'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
+        }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
         UseWinForms     = $false
@@ -205,7 +216,10 @@ public sealed class HelperProxy
         RazorAllMarkup  = $false
         MirrorBase      = $renameWpfBase
         Aliases         = $renameWpfFamily
-        Expected        = @{ 'tree' = 'the mirror carries the demo HUD' }
+        Expected        = @{
+            'tree' = 'the mirror carries the demo HUD'
+            'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
+        }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
         UseWinForms     = $false
@@ -222,7 +236,10 @@ public sealed class HelperProxy
         RazorAllMarkup  = $true
         MirrorBase      = @{ 'selector' = 'CustomTemplateSelector' }
         Aliases         = $renameRazorOnly
-        Expected        = @{ 'tree' = 'the mirror carries the demo HUD' }
+        Expected        = @{
+            'tree' = 'the mirror carries the demo HUD'
+            'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
+        }
         ProbeShell      = 'Microsoft.NET.Sdk.Web'
         UseWPF          = $false
         UseWinForms     = $false

@@ -17,7 +17,7 @@
 | 让 `.Property(...)` 能顺滑写某个 Jalium 类型 | 加一个 `Property(Expression<Func<T, TXxx>>, TXxx, object?)` 重载 | `PlatformAdapters/Transition.cs`（**这一家 13 个**） |
 | 加 / 换工作流表面 | 继承 `WorkflowTreeView`（`Canvas`），派生类设属性；改手势、命中、视口这些机械部分才动基类 | `Attached/Workflow/WorkflowTreeView.cs:29` |
 | 卡片长什么样 | 继承 `WorkflowNodeView`（`abstract`），重写 `DrawCard` | `Attached/Workflow/WorkflowNodeView.cs:26`（`DrawCard` `:94`） |
-| 换连线外观（颜色 / 线宽） | 继承 `WorkflowLinkView`，设 `LinkColor` / `Thickness` | `Attached/Workflow/WorkflowLinkView.cs:29`（属性 `:81` / `:93`） |
+| 换连线外观（颜色 / 线宽） | 你自己的连线控件里 `WorkflowLinkAttachment.Attach(this)`，设 `LinkColor` / `Thickness`，在 `OnRender` 里画 | `Attached/Workflow/WorkflowLinkAttachment.cs`（2026-10-04 起不再是基类） |
 | 换网格 / 标尺外观 | 用 `WorkflowGridDecorator`（绘制器），设调色板与 `GridStep` / `MajorLineEvery` | `Attached/Workflow/WorkflowGridDecorator.cs:22`（`:91`/`:98`） |
 | 卡片设计尺寸与端口位置 | 提供一个 `WorkflowPortLayout` 值（值类型，不是常量） | `Attached/Workflow/WorkflowPortLayout.cs` |
 | 端口图形 | 派生 `WorkflowSlotView`，改半径与待机色 | `Attached/Workflow/WorkflowSlotView.cs` |

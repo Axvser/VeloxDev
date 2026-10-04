@@ -49,12 +49,13 @@ namespace Demo.Views.Workflow;
 /// </para>
 /// <para>
 /// It no longer handles pointer input: the surface's <see cref="LinkInteraction"/> decides which link is under
-/// the pointer. This view implements <see cref="ILinkHighlight"/> so that hub lights it by writing
-/// <see cref="IsHighlighted"/>, and it takes keyboard focus while hovered so <c>Delete</c> bubbles up to the
-/// surface that forwards it.
+/// the pointer. The hover highlight is <b>this demo's</b> — it subscribes to the hub's
+/// <see cref="LinkInteraction.HoverChanged"/> and writes <see cref="IsHighlighted"/> when the hovered link is
+/// its own — and it takes keyboard focus while hovered so <c>Delete</c> bubbles up to the surface that
+/// forwards it.
 /// </para>
 /// </summary>
-public partial class PolylineCurveView : UserControl, ILinkHighlight
+public partial class PolylineCurveView : UserControl
 {
     // 控制点的最小水平拉出量（canvas-local 单位）：两个端口靠得很近时，0.5·dx 会让曲线退化成
     // 一条直线段，失去「从端口水平出来」的形状。
@@ -92,8 +93,8 @@ public partial class PolylineCurveView : UserControl, ILinkHighlight
     public PolylineCurveView()
     {
         InitializeComponent();
-        // 指针输入不在视图里：命中归 Core，指针与按键由表面行为转发；悬停高亮由中枢写 IsHighlighted，
-        // 悬停焦点由适配器交给画线的那台控件（见 WorkflowSurfaceBehavior.FocusHoveredLink）。
+        // 指针输入不在视图里：命中归 Core，指针与按键由表面行为转发；悬停高亮由本 demo 订中枢自己画
+        // （见 ResubscribeHub），悬停焦点由适配器交给画线的那台控件（见 WorkflowSurfaceBehavior.FocusHoveredLink）。
         IsHitTestVisible = false;
         Focusable = true;
         Panel.SetZIndex(this, -100);
@@ -205,12 +206,44 @@ public partial class PolylineCurveView : UserControl, ILinkHighlight
 
     #region Pooling
 
-    // 改绑：几何重发（曲线发布到新链接）。视图不再订阅中枢 —— 高亮由中枢直接写 IsHighlighted，
-    // 悬停焦点由适配器交给画线的那台控件。
+    // 改绑：几何重发（曲线发布到新链接），中枢订阅也跟着换一棵树。悬停焦点由适配器交给画线的那台控件。
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         RefreshGeometry();
+        ResubscribeHub();
     }
+
+    // 高亮是这本 demo 的事：中枢只报「现在轮到谁」，每条线各自决定自己亮不亮 ——
+    // 互斥因此不需要谁去记账。视图比树活得短，改绑与卸载都要退订。
+    // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
+    // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
+    private IWorkflowLinkViewModel? _inputLink;
+
+    private void ResubscribeHub()
+    {
+        var link = DataContext as IWorkflowLinkViewModel;
+        if (ReferenceEquals(link, _inputLink)) return;
+
+        UnsubscribeHub();
+        if (link?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        _inputLink = link;
+        events.Input.PointerEntered += OnPointerEntered;
+        events.Input.PointerExited += OnPointerExited;
+    }
+
+    private void UnsubscribeHub()
+    {
+        if (_inputLink?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.PointerEntered -= OnPointerEntered;
+        events.Input.PointerExited -= OnPointerExited;
+        _inputLink = null;
+    }
+
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
     #endregion
 
@@ -281,11 +314,13 @@ public partial class PolylineCurveView : UserControl, ILinkHighlight
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         StartFlow();
+        ResubscribeHub();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         StopFlow();
+        UnsubscribeHub();
     }
 
     #endregion

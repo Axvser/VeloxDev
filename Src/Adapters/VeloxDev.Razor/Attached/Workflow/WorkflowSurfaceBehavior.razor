@@ -1,12 +1,14 @@
 @namespace VeloxDev.WorkflowSystem.AttachedBehaviors
 
 @* The surface cascades itself so a nested link view can forward pointer input into the tree's
-   LinkInteraction hub. *@
+   input route. *@
 <CascadingValue TValue="WorkflowSurfaceBehavior" Value="@this" IsFixed="true">
 <CascadingValue TValue="SurfaceViewportFeed" Value="_feed">
-    @* The surface is the key host: Delete reaches the hub and Escape closes the menu with no host
+    @* The surface is the key host: Delete reaches the input route and Escape closes the menu with no host
        code. Focus is taken on link hover with preventScroll, and contextmenu is the menu's entry point. *@
-    <div class="veloxdev-wf-surface" tabindex="0" @onkeydown="OnSurfaceKeyDown" @ref="_surfaceRoot"
+    <div class="veloxdev-wf-surface" tabindex="0" @ref="_surfaceRoot"
+         @onkeydown="OnSurfaceKeyDown" @onkeyup="OnSurfaceKeyUp"
+         @onpointermove="OnSurfacePointerMove" @onpointerup="OnSurfacePointerUp" @onwheel="OnSurfaceWheel"
          @oncontextmenu="OnSurfaceContextMenu" @oncontextmenu:preventDefault="true"
          style="outline:none;">
         <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">

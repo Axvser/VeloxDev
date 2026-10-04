@@ -38,6 +38,8 @@ public partial class TemplateClass : ContentView
         nameof(VirtualLineColor), typeof(Color), typeof(TemplateClass), Color.FromArgb("TemplateLinkColor"));
     public static readonly BindableProperty StrokeWidthProperty = BindableProperty.Create(
         nameof(StrokeWidth), typeof(double), typeof(TemplateClass), (double)TemplateLinkThickness);
+    public static readonly BindableProperty SelectedLinkProperty = BindableProperty.Create(
+        nameof(SelectedLink), typeof(IWorkflowLinkViewModel), typeof(TemplateClass), null);
 
     public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
     public View? InteractionSource { get => (View?)GetValue(InteractionSourceProperty); set => SetValue(InteractionSourceProperty, value); }
@@ -49,4 +51,9 @@ public partial class TemplateClass : ContentView
     public Color LinkLineColor { get => (Color)GetValue(LinkLineColorProperty); set => SetValue(LinkLineColorProperty, value); }
     public Color VirtualLineColor { get => (Color)GetValue(VirtualLineColorProperty); set => SetValue(VirtualLineColorProperty, value); }
     public double StrokeWidth { get => (double)GetValue(StrokeWidthProperty); set => SetValue(StrokeWidthProperty, value); }
+
+    /// <summary>The link to draw as selected, or <see langword="null"/> (the default) for none. Drive it from
+    /// your own subscriber to the routed pointer events; nothing is drawn until the overlay's
+    /// <c>SelectedLinkColor</c> is set as well.</summary>
+    public IWorkflowLinkViewModel? SelectedLink { get => (IWorkflowLinkViewModel?)GetValue(SelectedLinkProperty); set => SetValue(SelectedLinkProperty, value); }
 }

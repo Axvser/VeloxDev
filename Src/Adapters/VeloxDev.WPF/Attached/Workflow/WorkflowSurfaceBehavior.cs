@@ -32,13 +32,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         // 当前持有键盘焦点的连线可视对象（悬停焦点）。只在换了对象时才 Focus，避免每帧重复取焦点。
         public IInputElement? HoverFocus { get; set; }
 
-        // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、开合上报都在这里。
+        // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、挂起都在这里。
         public ContextMenu? LinkMenu { get; set; }
         public IWorkflowLinkViewModel? MenuLink { get; set; }
-        public Anchor MenuPosition { get; set; } = new();
-        public LinkInteraction? MenuHub { get; set; }
-        public EventHandler<ContextMenuRequestedEventArgs>? MenuRequested { get; set; }
-        public EventHandler<ContextMenuDismissRequestedEventArgs>? MenuDismissed { get; set; }
+
+        // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
+        public WorkflowInput? Input { get; set; }
+        public EventHandler<WorkflowPointerPressedEventArgs>? MenuPressed { get; set; }
+        public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
         public RoutedEventHandler? MenuOpened { get; set; }
         public RoutedEventHandler? MenuClosed { get; set; }
 
@@ -154,8 +155,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         QueueViewportRestore(host, state);
     }
 
-    // 连线右键菜单：**条目由模板声明**（资源键挂在 LinkMenuKeyProperty 上），**接线在这里** —— 订中枢、定位、
-    // 弹出、把开合报回去，模板因此没有一行交互代码。菜单指着的那条线离树时中枢发 DismissRequested，这里收自己那份。
+    // 连线右键菜单：**条目由模板声明**（资源键挂在 LinkMenuKeyProperty 上），**接线在这里** —— 订输入面、
+    // 定位、弹出、挂起指针跟踪，模板因此没有一行交互代码。菜单指着的那条线离树时树会报 LinkRemoved，这里收自己那份。
     private static void WireLinkMenu(UserControl host, SurfaceState state)
     {
         // 资源在 attach 之后才一定就绪（第一次 Refresh 可能早于 Resources 解析完），所以每次 Refresh 都重查一次。
@@ -179,43 +180,47 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.MenuClosed = null;
             if (menu is not null)
             {
-                state.MenuOpened = (_, _) => state.MenuHub?.Publish(
-                    new ContextMenuEvent(ContextMenuPhase.Opened, state.MenuPosition, state.MenuLink));
-                state.MenuClosed = (_, _) => state.MenuHub?.Publish(
-                    new ContextMenuEvent(ContextMenuPhase.Closed, state.MenuPosition, state.MenuLink));
+                // 开合由表面自己记账：菜单开着的那段时间，输入路由不再改指针目标。
+                state.MenuOpened = (_, _) =>
+                {
+                    if (state.Input is { } open) open.IsSuspended = true;
+                };
+                state.MenuClosed = (_, _) =>
+                {
+                    if (state.Input is { } closed) closed.IsSuspended = false;
+                    state.MenuLink = null;
+                };
                 menu.Opened += state.MenuOpened;
                 menu.Closed += state.MenuClosed;
             }
         }
 
-        var hub = host.DataContext is IWorkflowTreeViewModel tree ? LinkInteraction.For(tree) : null;
-        if (ReferenceEquals(hub, state.MenuHub))
+        var input = host.DataContext is IWorkflowTreeViewModel tree ? WorkflowInput.For(tree) : null;
+        if (ReferenceEquals(input, state.Input))
         {
             return;
         }
 
-        if (state.MenuHub is not null)
+        if (state.Input is not null)
         {
-            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
-            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
+            UnsubscribeMenu(state);
         }
 
-        state.MenuHub = hub;
-        state.MenuRequested = null;
-        state.MenuDismissed = null;
-        if (hub is null)
+        state.Input = input;
+        if (input is null || host.DataContext is not IWorkflowTreeViewModel bound)
         {
             return;
         }
 
-        state.MenuRequested = (_, e) => ShowLinkMenu(host, state, e);
-        state.MenuDismissed = (_, e) =>
+        state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
+        state.MenuLinkRemoved = (_, link) =>
         {
-            if (!ReferenceEquals(state.MenuLink, e.Link)) return;
+            // 「菜单不能比它指着的那条线活得久」：Delete、Undo、Agent 改树都走这条路。
+            if (!ReferenceEquals(state.MenuLink, link)) return;
             if (state.LinkMenu is { } open) open.IsOpen = false;
         };
-        hub.ContextMenuRequested += state.MenuRequested;
-        hub.ContextMenuDismissRequested += state.MenuDismissed;
+        ((IWorkflowInputEvents)bound.GetHelper()).Input.PointerPressed += state.MenuPressed;
+        bound.GetHelper().LinkRemoved += state.MenuLinkRemoved;
     }
 
     private static void UnwireLinkMenu(SurfaceState state)
@@ -230,30 +235,44 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         state.MenuOpened = null;
         state.MenuClosed = null;
 
-        if (state.MenuHub is not null)
+        UnsubscribeMenu(state);
+    }
+
+    private static void UnsubscribeMenu(SurfaceState state)
+    {
+        if (state.Input is { } input)
         {
-            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
-            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
-            state.MenuHub = null;
+            var helper = input.Tree.GetHelper();
+            if (state.MenuPressed is not null && helper is IWorkflowInputEvents events)
+            {
+                events.Input.PointerPressed -= state.MenuPressed;
+            }
+
+            if (state.MenuLinkRemoved is not null) helper.LinkRemoved -= state.MenuLinkRemoved;
         }
 
-        state.MenuRequested = null;
-        state.MenuDismissed = null;
+        state.Input = null;
+        state.MenuPressed = null;
+        state.MenuLinkRemoved = null;
         state.MenuLink = null;
     }
 
     // 右键落在表面上，而弹出要屏幕坐标；只有表面同时知道画布与屏幕两件事，所以菜单由表面弹。
-    private static void ShowLinkMenu(UserControl host, SurfaceState state, ContextMenuRequestedEventArgs e)
+    private static void ShowLinkMenu(UserControl host, SurfaceState state, WorkflowPointerPressedEventArgs e)
     {
-        // 空白画布没有可操作的对象，不给菜单。
-        if (e.Link is null || state.LinkMenu is null || state.Canvas is null) return;
+        // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
+        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Target is not IWorkflowLinkViewModel link) return;
+        if (state.LinkMenu is null || state.Canvas is null) return;
         if (host.DataContext is not IWorkflowTreeViewModel tree) return;
 
-        state.MenuLink = e.Link;
-        state.MenuPosition = e.Position;
+        // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
+        if (e.Handle.PreventDefault) return;
+
+        state.MenuLink = link;
 
         // 菜单的 DataContext 就是这条连线，条目据此绑定命令。
-        state.LinkMenu.DataContext = e.Link;
+        state.LinkMenu.DataContext = link;
 
         // 画布坐标 → 设备坐标：先按适配器那套逆变换（world + ActualOffset）回到画布局部，再由画布换到屏幕；
         // AbsolutePoint 用 DIP，所以最后按 DPI 折回去。
@@ -351,9 +370,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.DataContextChanged += OnDataContextChanged;
         control.PreviewMouseMove += OnPreviewMouseMove;
         control.PreviewMouseDown += OnLinkPointerPressed;
+        control.MouseUp += OnLinkPointerReleased;
         control.MouseEnter += OnLinkPointerEntered;
         control.MouseLeave += OnLinkPointerExited;
+        control.MouseWheel += OnLinkPointerWheel;
         control.KeyDown += OnLinkKeyDown;
+        control.KeyUp += OnLinkKeyUp;
         control.AddHandler(UIElement.MouseUpEvent, MouseUpHandler, true);
         ResolveNamedControls(control, state);
         Refresh(control);
@@ -366,9 +388,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.DataContextChanged -= OnDataContextChanged;
         control.PreviewMouseMove -= OnPreviewMouseMove;
         control.PreviewMouseDown -= OnLinkPointerPressed;
+        control.MouseUp -= OnLinkPointerReleased;
         control.MouseEnter -= OnLinkPointerEntered;
         control.MouseLeave -= OnLinkPointerExited;
+        control.MouseWheel -= OnLinkPointerWheel;
         control.KeyDown -= OnLinkKeyDown;
+        control.KeyUp -= OnLinkKeyUp;
         control.RemoveHandler(UIElement.MouseUpEvent, MouseUpHandler);
 
         if (control.GetValue(StateProperty) is SurfaceState state)
@@ -675,20 +700,17 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var point = e.GetPosition(state.Canvas);
-        var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout);
-        viewModel.SetPointerCommand.Execute(anchor);
+        viewModel.SetPointerCommand.Execute(WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout));
 
-        // 悬停归 Core：曲线发布在 canvas-local 空间（子控件的画布平移之内），指针要过同一次逆变换
-        // 才能和曲线比。拉线时指针下正挂着橡皮筋，那段时间不转发，否则沿途实连线会一路亮起。
+        // 拉线时指针下正挂着橡皮筋，那段时间不转发，否则沿途实连线会一路亮起。
         if (!viewModel.VirtualLink.IsVisible)
         {
-            var interaction = LinkInteraction.For(viewModel);
-            interaction.Publish(new PointerEvent(PointerPhase.Moved, anchor));
-            FocusHoveredLink(interaction, state);
+            RoutePointer(state, viewModel, point, host,
+                (anchor, target, handle) => new WorkflowPointerMovedEventArgs(anchor, Modifiers(), host, target, handle));
         }
     }
 
-    // 悬停到连线上的指针消息：进入与移动走同一条翻译 —— Core 只看点在哪，不看事件叫什么。
+    // 悬停到连线上的指针消息：进入与移动走同一条翻译 —— 输入面只看点在哪，不看事件叫什么。
     private static void OnLinkPointerEntered(object sender, MouseEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
@@ -703,15 +725,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var point = e.GetPosition(state.Canvas);
-        var interaction = LinkInteraction.For(viewModel);
-        interaction.Publish(new PointerEvent(
-            PointerPhase.Entered,
-            WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout)));
-        FocusHoveredLink(interaction, state);
+        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host,
+            (anchor, target, handle) => new WorkflowPointerEnteredEventArgs(anchor, Modifiers(), host, target, handle));
     }
 
-    // 指针离开整块输入面：选中跟着走。菜单弹出引起的那一次离开由 Core 按 IsSuspended 认出并忽略。
+    // 指针离开整块输入面：指针目标跟着走。菜单弹出引起的那一次离开由输入面按 IsSuspended 认出并忽略。
     private static void OnLinkPointerExited(object sender, MouseEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
@@ -724,12 +742,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var interaction = LinkInteraction.For(viewModel);
-        interaction.Publish(new PointerEvent(PointerPhase.Exited, new Anchor()));
-        FocusHoveredLink(interaction, state);
+        var input = WorkflowInput.For(viewModel);
+        input.Route(new WorkflowPointerExitedEventArgs(new Anchor(), Modifiers(), host, null, new WorkflowEventHandle()));
+        FocusHoveredLink(input, state);
     }
 
-    // 按下哪条线由 Core 判（它拿到的是同一空间里的指针），这里只把左右中键翻译过去，不置 Handled ——
+    // 按下哪条线由这里判（对着发布出去的曲线），输入面只负责把这次按下发给那一条与其祖先，不置 Handled ——
     // 平移与端口拖线仍要照常收到这次按下。
     private static void OnLinkPointerPressed(object sender, MouseButtonEventArgs e)
     {
@@ -744,34 +762,133 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var button = e.ChangedButton switch
-        {
-            MouseButton.Left => PointerButtonKind.Left,
-            MouseButton.Right => PointerButtonKind.Right,
-            MouseButton.Middle => PointerButtonKind.Middle,
-            _ => PointerButtonKind.None,
-        };
-        if (button == PointerButtonKind.None)
+        var button = ToButton(e.ChangedButton);
+        if (button == WorkflowMouseButton.None)
         {
             return;
         }
 
-        var point = e.GetPosition(state.Canvas);
-        var interaction = LinkInteraction.For(viewModel);
-        interaction.Publish(new PointerEvent(
-            PointerPhase.Pressed,
-            WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout),
-            button));
-        FocusHoveredLink(interaction, state);
+        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host,
+            (anchor, target, handle) => new WorkflowPointerPressedEventArgs(
+                anchor, Modifiers(), host, target, button, e.ClickCount, handle));
+    }
+
+    private static void OnLinkPointerReleased(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (state.Canvas is null
+            || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        var button = ToButton(e.ChangedButton);
+        if (button == WorkflowMouseButton.None)
+        {
+            return;
+        }
+
+        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host,
+            (anchor, target, handle) => new WorkflowPointerReleasedEventArgs(
+                anchor, Modifiers(), host, target, button, e.ClickCount, handle));
+    }
+
+    // 滚轮也进输入面（缩放那条路是 Ctrl+滚轮，归 ScrollViewer 的预览事件，两者不重叠）。
+    private static void OnLinkPointerWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (state.Canvas is null
+            || host.DataContext is not IWorkflowTreeViewModel viewModel
+            || Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            return;
+        }
+
+        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host,
+            (anchor, target, handle) => new WorkflowPointerWheelEventArgs(
+                anchor, Modifiers(), host, target, 0d, e.Delta, handle));
+    }
+
+    // 指针进来时统一在这里翻译：Anchor 带上来源视图所在图层当 Z，被指到的那条线由 Core 那条共享的曲线命中判出来 ——
+    // 表面一个人画完所有线、没有「每线的可视对象」，所以命中只能对着发布出去的曲线做。
+    private static void RoutePointer(
+        SurfaceState state, IWorkflowTreeViewModel tree, Point point, FrameworkElement source,
+        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, WorkflowPointerEventArgs> args)
+    {
+        var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, Panel.GetZIndex(source), tree.Layout);
+        var input = WorkflowInput.For(tree);
+        var target = tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+
+        input.Route(args(anchor, target, new WorkflowEventHandle()));
+        FocusHoveredLink(input, state);
+    }
+
+    private static WorkflowMouseButton ToButton(MouseButton button) => button switch
+    {
+        MouseButton.Left => WorkflowMouseButton.Left,
+        MouseButton.Right => WorkflowMouseButton.Right,
+        MouseButton.Middle => WorkflowMouseButton.Middle,
+        MouseButton.XButton1 => WorkflowMouseButton.XButton1,
+        MouseButton.XButton2 => WorkflowMouseButton.XButton2,
+        _ => WorkflowMouseButton.None,
+    };
+
+    private static InputModifiers Modifiers()
+    {
+        var keys = Keyboard.Modifiers;
+        var modifiers = InputModifiers.None;
+        if ((keys & ModifierKeys.Alt) != 0) modifiers |= InputModifiers.Alt;
+        if ((keys & ModifierKeys.Control) != 0) modifiers |= InputModifiers.Control;
+        if ((keys & ModifierKeys.Shift) != 0) modifiers |= InputModifiers.Shift;
+        if ((keys & ModifierKeys.Windows) != 0) modifiers |= InputModifiers.Meta;
+        return modifiers;
+    }
+
+    // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
+    private static WorkflowKey ToKey(Key key)
+    {
+        if (key >= Key.A && key <= Key.Z) return WorkflowKey.A + (key - Key.A);
+        if (key >= Key.D0 && key <= Key.D9) return WorkflowKey.D0 + (key - Key.D0);
+        if (key >= Key.F1 && key <= Key.F12) return WorkflowKey.F1 + (key - Key.F1);
+
+        return key switch
+        {
+            Key.None => WorkflowKey.None,
+            Key.Cancel => WorkflowKey.Cancel,
+            Key.Back => WorkflowKey.Back,
+            Key.Tab => WorkflowKey.Tab,
+            Key.Enter => WorkflowKey.Enter,
+            Key.Escape => WorkflowKey.Escape,
+            Key.Space => WorkflowKey.Space,
+            Key.PageUp => WorkflowKey.PageUp,
+            Key.PageDown => WorkflowKey.PageDown,
+            Key.End => WorkflowKey.End,
+            Key.Home => WorkflowKey.Home,
+            Key.Left => WorkflowKey.Left,
+            Key.Up => WorkflowKey.Up,
+            Key.Right => WorkflowKey.Right,
+            Key.Down => WorkflowKey.Down,
+            Key.Insert => WorkflowKey.Insert,
+            Key.Delete => WorkflowKey.Delete,
+            _ => WorkflowKey.Unknown,
+        };
     }
 
     // 悬停把键盘焦点交给能接住它的东西：Delete 才能沿焦点所在子树冒泡到宿主的键路由。
     // 优先交给画出那条线的控件；它不可聚焦时（**模板与 Trimmed 的连线视图默认就是**）退回宿主本身 ——
     // 否则「悬停 + Delete」在生成出来的工程里根本没有路由，而且不报错。
     // 节点卡里的输入框自己处理 Delete 时事件已被标记、冒泡到宿主前就被吃掉，编辑文本不受影响。
-    private static void FocusHoveredLink(LinkInteraction interaction, SurfaceState state)
+    private static void FocusHoveredLink(WorkflowInput input, SurfaceState state)
     {
-        var hovered = interaction.HoveredLink?.HitTarget()?.Visual as UIElement;
+        var hovered = input.HoveredLink?.HitTarget()?.Visual as UIElement;
         IInputElement? target = hovered is null
             ? null
             : hovered is { Focusable: true } ? hovered : state.Host;
@@ -786,9 +903,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     }
 
     // Delete 走冒泡而不是隧穿：聚焦的输入框先吃掉它改自己的光标时必须让它赢。
+    // 键没有坐标，目标就是指针停着的那条线 —— 由适配器交给输入面。
     private static void OnLinkKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Delete || sender is not UserControl host
+        if (sender is not UserControl host
             || host.GetValue(StateProperty) is not SurfaceState state)
         {
             return;
@@ -799,14 +917,33 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var interaction = LinkInteraction.For(viewModel);
-        if (interaction.HoveredLink is null)
+        var input = WorkflowInput.For(viewModel);
+        if (input.HoveredLink is null)
         {
             return;
         }
 
-        interaction.Publish(new KeyEvent(InputKey.Delete));
+        input.Route(new WorkflowKeyDownEventArgs(
+            ToKey(e.Key), (int)e.Key, Modifiers(), e.IsRepeat, host, input.HoveredLink, new WorkflowEventHandle()));
         e.Handled = true;
+    }
+
+    private static void OnLinkKeyUp(object sender, KeyEventArgs e)
+    {
+        if (sender is not UserControl host
+            || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        var input = WorkflowInput.For(viewModel);
+        input.Route(new WorkflowKeyUpEventArgs(
+            ToKey(e.Key), (int)e.Key, Modifiers(), e.IsRepeat, host, input.HoveredLink, new WorkflowEventHandle()));
     }
 
     private static void OnMouseUp(object sender, MouseButtonEventArgs e)

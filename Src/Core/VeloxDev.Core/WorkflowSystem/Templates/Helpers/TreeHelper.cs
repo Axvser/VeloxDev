@@ -31,9 +31,12 @@ public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 /// </summary>
 /// <typeparam name="T">The type of the Tree ViewModel that this helper is designed for.</typeparam>
 [Tickable(channel: nameof(TreeHelper), fps: 10)]
-public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTreeEvents
+public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTreeEvents, IWorkflowInputEvents
     where T : class, IWorkflowTreeViewModel
 {
+    /// <inheritdoc />
+    public WorkflowInputRelay Input { get; } = new();
+
     /// <summary>Creates a helper with virtualization off.</summary>
     public TreeHelper()
     {

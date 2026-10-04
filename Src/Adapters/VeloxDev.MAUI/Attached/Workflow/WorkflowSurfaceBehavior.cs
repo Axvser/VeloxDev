@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 
@@ -62,13 +62,14 @@ public sealed class WorkflowSurfaceBehavior
         public double PointerAnchorX { get; set; }
         public double PointerAnchorY { get; set; }
 
-        // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、开合上报都在这里。
+        // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、挂起都在这里。
         public MenuFlyout? LinkMenu { get; set; }
         public IWorkflowLinkViewModel? MenuLink { get; set; }
-        public Anchor MenuPosition { get; set; } = new();
-        public LinkInteraction? MenuHub { get; set; }
-        public EventHandler<ContextMenuRequestedEventArgs>? MenuRequested { get; set; }
-        public EventHandler<ContextMenuDismissRequestedEventArgs>? MenuDismissed { get; set; }
+
+        // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
+        public WorkflowInput? Input { get; set; }
+        public EventHandler<WorkflowPointerPressedEventArgs>? MenuPressed { get; set; }
+        public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
 
 #if WINDOWS
         /// <summary>The press source's platform element with the native pointer handlers attached.</summary>
@@ -210,65 +211,74 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 
-    // 连线右键菜单：**条目由模板声明**（挂在 LinkMenuKey 上），**接线在这里** —— 订中枢、定位、弹出、
-    // 把开合报回去，模板因此没有一行交互代码。菜单指着的那条线离树时中枢发 DismissRequested，这里收自己那份。
-    // MAUI 的 MenuFlyout 是资源、不是可视物，也没有 Opened/Closed，所以开合由两条呈现路径各自上报。
+    // 连线右键菜单：**条目由模板声明**（挂在 LinkMenuKey 上），**接线在这里** —— 订输入面、定位、弹出、
+    // 挂起指针跟踪，模板因此没有一行交互代码。菜单指着的那条线离树时树会报 LinkRemoved，这里收自己那份。
+    // MAUI 的 MenuFlyout 是资源、不是可视物，也没有 Opened/Closed，所以挂起由两条呈现路径各自上报。
     private static void WireLinkMenu(ContentView host, SurfaceState state)
     {
         // 资源在 attach 之后才一定就绪（第一次 Refresh 可能早于 Resources 解析完），所以每次 Refresh 都重查一次。
         var key = GetLinkMenuKey(host);
         state.LinkMenu = key is { Length: > 0 } ? FindLinkMenuResource(host, key) : null;
 
-        var hub = ResolveTreeViewModel(host, state) is { } tree ? LinkInteraction.For(tree) : null;
-        if (ReferenceEquals(hub, state.MenuHub))
+        var input = ResolveTreeViewModel(host, state) is { } tree ? WorkflowInput.For(tree) : null;
+        if (ReferenceEquals(input, state.Input))
         {
             return;
         }
 
-        if (state.MenuHub is not null)
+        if (state.Input is not null)
         {
-            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
-            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
+            UnsubscribeMenu(state);
         }
 
-        state.MenuHub = hub;
-        state.MenuRequested = null;
-        state.MenuDismissed = null;
-        if (hub is null)
+        state.Input = input;
+        if (input is null)
         {
             return;
         }
 
-        state.MenuRequested = (_, e) => ShowLinkMenu(host, state, e);
-        state.MenuDismissed = (_, e) =>
+        var bound = input.Tree;
+        state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
+        state.MenuLinkRemoved = (_, link) =>
         {
-            if (!ReferenceEquals(state.MenuLink, e.Link)) return;
+            // 「菜单不能比它指着的那条线活得久」：Delete、Undo、Agent 改树都走这条路。
+            if (!ReferenceEquals(state.MenuLink, link)) return;
 #if WINDOWS
-            // 隐藏原生 flyout；它的 Closed 处理器照常把 Closed 报回 hub，挂起随之放开。
             state.OpenFlyout?.Hide();
 #else
             DismissLinkMenu(state);
 #endif
         };
-        hub.ContextMenuRequested += state.MenuRequested;
-        hub.ContextMenuDismissRequested += state.MenuDismissed;
+        ((IWorkflowInputEvents)bound.GetHelper()).Input.PointerPressed += state.MenuPressed;
+        bound.GetHelper().LinkRemoved += state.MenuLinkRemoved;
+    }
+
+    private static void UnsubscribeMenu(SurfaceState state)
+    {
+        if (state.Input is { } input)
+        {
+            var helper = input.Tree.GetHelper();
+            if (state.MenuPressed is not null && helper is IWorkflowInputEvents events)
+            {
+                events.Input.PointerPressed -= state.MenuPressed;
+            }
+
+            if (state.MenuLinkRemoved is not null) helper.LinkRemoved -= state.MenuLinkRemoved;
+        }
+
+        state.Input = null;
+        state.MenuPressed = null;
+        state.MenuLinkRemoved = null;
+        state.MenuLink = null;
     }
 
     private static void UnwireLinkMenu(SurfaceState state)
     {
-        if (state.MenuHub is not null)
-        {
-            if (state.MenuRequested is not null) state.MenuHub.ContextMenuRequested -= state.MenuRequested;
-            if (state.MenuDismissed is not null) state.MenuHub.ContextMenuDismissRequested -= state.MenuDismissed;
-            state.MenuHub = null;
-        }
-
-        state.MenuRequested = null;
-        state.MenuDismissed = null;
+        UnsubscribeMenu(state);
         state.LinkMenu = null;
 
 #if WINDOWS
-        // 先摘 hub 再收弹窗：Closed 处理器里 state.MenuHub 已为空，不会往 hub 补发一发。
+        // 先摘订阅再收弹窗：Closed 处理器里 state.Input 已为空，不会往路由补发一发。
         state.OpenFlyout?.Hide();
         state.OpenFlyout = null;
 #else
@@ -331,30 +341,35 @@ public sealed class WorkflowSurfaceBehavior
 #if WINDOWS
     // 菜单条目在 LinkMenuKey 指向的资源里声明；这里只管定位与弹出。
     // 画布坐标 → 视口像素：px = Ruler + 锚点 + 内容偏移 − 滚动偏移（与链接层绘制/命中共用同一条换算）。
-    private static void ShowLinkMenu(ContentView host, SurfaceState state, ContextMenuRequestedEventArgs e)
+    private static void ShowLinkMenu(ContentView host, SurfaceState state, WorkflowPointerPressedEventArgs e)
     {
-        // 空白画布没有可操作的对象，不给菜单。
+        // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
+        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Target is not IWorkflowLinkViewModel link) return;
+
+        // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
+        if (e.Handle.PreventDefault) return;
+
         var menu = state.LinkMenu;
         var gridDecorator = state.GridDecorator;
-        if (e.Link is null || menu is null || gridDecorator is null) return;
+        if (menu is null || gridDecorator is null) return;
         if (ResolveTreeViewModel(host, state) is null) return;
         if (gridDecorator is not IWorkflowGridDecorator decorator) return;
         if (gridDecorator.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement hostElement) return;
 
-        state.MenuLink = e.Link;
-        state.MenuPosition = e.Position;
+        state.MenuLink = link;
 
-        var flyout = BuildPlatformMenu(menu, e.Link);
+        var flyout = BuildPlatformMenu(menu, link);
         state.OpenFlyout = flyout;
 
-        // 开合报回 hub：菜单开着时指针飞到菜单上，也不该清掉这次选中的连线。
+        // 挂起由表面自己记账：菜单开着时指针飞到菜单上，也不该清掉这次选中的连线。
         flyout.Closed += (_, _) =>
         {
             state.OpenFlyout = null;
             state.MenuLink = null;
-            state.MenuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, state.MenuPosition, e.Link));
+            if (state.Input is { } input) input.IsSuspended = false;
         };
-        state.MenuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, state.MenuPosition, e.Link));
+        if (state.Input is { } opening) opening.IsSuspended = true;
 
         var ruler = Math.Max(0d, decorator.RulerBand);
         var x = ruler + e.Position.Horizontal + decorator.ContentOffsetX - decorator.ScrollOffsetX;
@@ -394,12 +409,18 @@ public sealed class WorkflowSurfaceBehavior
 #else
     // 非 Windows 没有能在指定点弹出的跨平台菜单，所以把声明的条目物化进适配器自建的浮层，
     // 落在长按处。长按本身由链接层翻译成右键交给 hub；这里只负责呈现。
-    private static void ShowLinkMenu(ContentView host, SurfaceState state, ContextMenuRequestedEventArgs e)
+    private static void ShowLinkMenu(ContentView host, SurfaceState state, WorkflowPointerPressedEventArgs e)
     {
-        // 空白画布没有可操作的对象，不给菜单。
+        // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
+        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Target is not IWorkflowLinkViewModel link) return;
+
+        // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
+        if (e.Handle.PreventDefault) return;
+
         var menu = state.LinkMenu;
         var gridDecorator = state.GridDecorator;
-        if (e.Link is null || menu is null || gridDecorator is null) return;
+        if (menu is null || gridDecorator is null) return;
         if (ResolveTreeViewModel(host, state) is null) return;
         if (gridDecorator is not IWorkflowGridDecorator decorator) return;
 
@@ -409,8 +430,7 @@ public sealed class WorkflowSurfaceBehavior
         var items = state.LinkMenuItems;
         if (layer is null || menuHost is null || items is null) return;
 
-        state.MenuLink = e.Link;
-        state.MenuPosition = e.Position;
+        state.MenuLink = link;
 
         items.Children.Clear();
         foreach (var element in menu)
@@ -427,7 +447,7 @@ public sealed class WorkflowSurfaceBehavior
                     break;
 
                 case MenuFlyoutItem item:
-                    item.BindingContext = e.Link;
+                    item.BindingContext = link;
                     var button = new Button
                     {
                         Text = item.Text,
@@ -451,7 +471,8 @@ public sealed class WorkflowSurfaceBehavior
 
         menuHost.Margin = new Thickness(Math.Max(0d, x), Math.Max(0d, y), 0, 0);
         layer.IsVisible = true;
-        state.MenuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Opened, e.Position, e.Link));
+        state.MenuLink = link;
+        if (state.Input is { } opening) opening.IsSuspended = true;
     }
 
     // 条目被点：先收起（收起会报 Closed），再执行条目自己的动作。
@@ -470,12 +491,8 @@ public sealed class WorkflowSurfaceBehavior
         if (state.LinkMenuLayer is not { IsVisible: true } layer) return;
 
         layer.IsVisible = false;
-        var link = state.MenuLink;
         state.MenuLink = null;
-        if (link is not null)
-        {
-            state.MenuHub?.Publish(new ContextMenuEvent(ContextMenuPhase.Closed, new Anchor(), link));
-        }
+        if (state.Input is { } input) input.IsSuspended = false;
     }
 
     // 浮层是呈现，归适配器：条目物化在这里，模板不再携带这层标记。挂到装饰器**外**最近的一层 Layout 上

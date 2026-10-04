@@ -152,12 +152,12 @@ MAUI 21 / Jalium 14 / Razor 15 行）。
 
 - WinForms（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）：
 `WorkflowTreeView`（装配、网格、分层窗口标尺、平移引擎、视图池）、`WorkflowNodeView`（绑定、定位、缩放折叠、
-反射读标题/输入口/插槽标签）、`WorkflowSlotView`（含那个 SVG 路径解析器，`WorkflowSlotView.cs:250` 起）、`WorkflowLinkView`
+反射读标题/输入口/插槽标签）、`WorkflowSlotView`（含那个 SVG 路径解析器，`WorkflowSlotView.cs:250` 起）、`WorkflowLinkAttachment`
 （雕窗口区域、端点订阅、几何）、`WorkflowMinimapOverlay`、`WorkflowGridDecorator`（网格与标尺的绘制）、
 `WorkflowTemplateSelector`（四个工厂与分流）。模板合计 3257 → 581 行。
 - Jalium（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`，12 文件 2685 行）：
 `WorkflowTreeView`（池化接线、视口、缩放钉、手势、网格/标尺渲染、命中）、`WorkflowNodeView`（绑定、定位、Viewbox、
-端口状态画刷）、`WorkflowLinkView`（绑定、端点订阅、自盒化、烘焙）、`WorkflowGridDecorator`（网格与标尺绘制）、
+端口状态画刷）、`WorkflowLinkAttachment`（绑定、端点订阅、自盒化、烘焙、命中发布）、`WorkflowGridDecorator`（网格与标尺绘制）、
 `WorkflowTemplateSelector`（四工厂与分派）、`WorkflowPortGeometry`（反射读端口 + 定位）、`WorkflowPortLayout`（设计值）、
 `WorkflowMinimapOverlay`。模板合计 1262 → 210 行。
 
@@ -201,7 +201,7 @@ Razor 的 `slotBackground` 就是这一类的正面样本：它的 `description`
 |---|---|
 | 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor:20` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**（2026-10-03 起）：WinForms 在适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowGridDecorator.cs:31` 的 `DefaultRulerThickness`（tree-view 的 `RulerReserve` 读它，`WorkflowTreeView.cs:45`），Jalium 在 `WorkflowGridDecorator.cs:25`，模板侧零副本 |
 | 节点设计尺寸 `260×180` | WPF node-view `TemplateClass.xaml:17` / WinUI `:18` 的 `Grid Width/Height`、MAUI `workflow-node-view/TemplateClass.xaml.cs:6` 的 `DesignWidth`、Razor `workflow-node-view/TemplateClass.razor.cs:77`、Jalium `workflow-slot-view/TemplateClass.cs:19-29` 的 `WorkflowPortLayout`（Jalium 的 node/link/tree 三处都读它） |
-| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `TemplateClass.axaml.cs:18`、WPF `:19`、WinUI 是字面量 `Math.Max(40, …)`（`:312`）、Razor `PullMinimum`（`:20`）；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js:262`）；无标记三家在适配器各一份（WinForms `WorkflowLinkView.cs:50`、Jalium `WorkflowLinkView.cs:33` 与 `WorkflowTreeView.cs:335`、MAUI `WorkflowLinkOverlay.cs:306`）。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
+| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `TemplateClass.axaml.cs:18`、WPF `:19`、WinUI 是字面量 `Math.Max(40, …)`（`:312`）、Razor `PullMinimum`（`:20`）；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js:262`）；无标记三家在适配器各一份（WinForms `WorkflowLinkAttachment.cs` 的 `pullMinimum`、Jalium `WorkflowLinkAttachment.cs` 的 `PullMinimum` 与 `WorkflowTreeView.cs:335`、MAUI `WorkflowLinkOverlay.cs:306`）。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
 
 绑定式的那几家（WPF/Avalonia/WinUI/MAUI 的 tree-view 把 `TranslateTransform` 绑到
 `PART_GridDecorator.RulerThickness`）会自动跟随，**复制式的那几处不会**。

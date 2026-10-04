@@ -1,5 +1,14 @@
 # WorkflowSystem — Jalium
 
+> **另：连线的那个基类已换成附加助手**（2026-10-04）—— 这一角色现在由用户自己的控件 + `WorkflowLinkAttachment.Attach(this)` 组成，
+> 下文凡是 `WorkflowLinkView` 的类名与行号，按 `WorkflowLinkAttachment` 读；机制（自盒化 / 雕窗口区域 / 端点订阅 / 命中发布）没变。
+> ⚠ **交互那几段记的是 2026-10-04 之前的世界。** 当时 Core 有一个 `LinkInteraction` hub，事件是 `HoverChanged` /
+> `LinkPressed` / `ContextMenuRequested` 这些按组件定制的语义事件，高亮由 hub 经 `ILinkHighlight` 点亮。
+> **现在**：输入是一套**标准输入**（`WorkflowInput.For(tree).Route(...)` + `IWorkflowInputEvents`），
+> 外观是宿主的，菜单由适配器从 `PointerPressed(Right, link)` 里自己弹、用 `tree.GetHelper().LinkRemoved` 收尾。
+> 完整规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)。**下面凡是提到 hub / 那几个事件名 /
+> `ILinkHighlight` 的句子都按这个替换读**；与交互无关的部分（坐标换算、焦点、弹窗平台的怪癖、命中几何）仍然有效。
+
 > **读法**：契约与注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3，本文不重复；
 > 人面向的「这家怎么用」在 `skills/veloxdev-create-workflow/references/gui/jalium.md`（七角色表在 `references/view-layer.md`），本文只指路不抄。
 > 本文只写这家的**硬限制、刻意背离、该家特有的坑**。

@@ -41,7 +41,7 @@ public sealed class TemplateClass : WorkflowTreeView
 
     /// <inheritdoc />
     protected override Control CreateLinkView(IWorkflowLinkViewModel link)
-        => new LinkView { ViewModel = link };
+        => new LinkView();
 
     /// <inheritdoc />
     protected override void OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)

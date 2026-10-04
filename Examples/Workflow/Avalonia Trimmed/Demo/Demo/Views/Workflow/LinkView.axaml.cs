@@ -9,9 +9,11 @@ namespace Demo;
 
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
-/// The surface's interaction hub lights <see cref="IsHighlighted"/> while the pointer is over this link.
+/// The hover highlight below is <b>this demo's</b> reading of <see cref="LinkInteraction.HoverChanged"/> —
+/// the template ships the same view without it (see the repo's layering rule), so delete these members to get
+/// that back.
 /// </summary>
-public partial class LinkView : Control, ILinkHighlight
+public partial class LinkView : Control
 {
     // Horizontal pull shared by the drawn curve and the hit-test curve, so both describe the same shape.
     private const double PullMinimum = 40;
@@ -159,8 +161,42 @@ public partial class LinkView : Control, ILinkHighlight
             || change.Property == DataContextProperty)
         {
             RefreshGeometry();
+            ResubscribeHub();
         }
     }
+
+    // VeloxDev customization: the hover highlight. The hub only reports whose turn it is; each view decides
+    // whether it lights up, so mutual exclusion needs no bookkeeping. The view lives shorter than the tree,
+    // and a pooled control is rebound (not unloaded), so the subscription follows the data context.
+    // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
+    // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
+    private IWorkflowLinkViewModel? _inputLink;
+
+    private void ResubscribeHub()
+    {
+        var link = DataContext as IWorkflowLinkViewModel;
+        if (ReferenceEquals(link, _inputLink)) return;
+
+        UnsubscribeHub();
+        if (link?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        _inputLink = link;
+        events.Input.PointerEntered += OnPointerEntered;
+        events.Input.PointerExited += OnPointerExited;
+    }
+
+    private void UnsubscribeHub()
+    {
+        if (_inputLink?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.PointerEntered -= OnPointerEntered;
+        events.Input.PointerExited -= OnPointerExited;
+        _inputLink = null;
+    }
+
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
     // The one geometry build: it feeds both the drawn curve and the published hit-test curve, so the two can
     // never describe different shapes.

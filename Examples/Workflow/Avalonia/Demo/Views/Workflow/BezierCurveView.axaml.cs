@@ -13,11 +13,12 @@ namespace Demo;
 /// <para>
 /// The no-band counterpart of <see cref="PolylineCurveView"/>: same curve, without the travelling light. It
 /// flattens that curve into a <see cref="LinkCurve"/> and publishes it to the link's helper, so the surface
-/// hit-tests the exact shape this view painted; hover, press, Delete and the highlight state all come from
-/// Core, and <see cref="ILinkHighlight.IsHighlighted"/> here only decides how lit it looks.
+/// hit-tests the exact shape this view painted; hover, press and Delete all come from Core. The highlight is
+/// this demo's: it subscribes to <see cref="LinkInteraction.HoverChanged"/> and writes
+/// <see cref="IsHighlighted"/> when the hovered link is its own, which then only decides how lit it looks.
 /// </para>
 /// </summary>
-public partial class BezierCurveView : Control, ILinkHighlight
+public partial class BezierCurveView : Control
 {
     // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
     private const double PullMinimum = 40;
@@ -154,12 +155,46 @@ public partial class BezierCurveView : Control, ILinkHighlight
     {
         base.OnAttachedToVisualTree(e);
         PublishCurve();
+        ResubscribeHub();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        UnsubscribeHub();
     }
+
+    // 高亮是这本 demo 的事：中枢只报「现在轮到谁」，每条线各自决定自己亮不亮 —— 互斥不需要谁记账。
+    // 视图比树活得短，改绑与摘树都要退订。
+    // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
+    // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
+    private IWorkflowLinkViewModel? _inputLink;
+
+    private void ResubscribeHub()
+    {
+        var link = DataContext as IWorkflowLinkViewModel;
+        if (ReferenceEquals(link, _inputLink)) return;
+
+        UnsubscribeHub();
+        if (link?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        _inputLink = link;
+        events.Input.PointerEntered += OnPointerEntered;
+        events.Input.PointerExited += OnPointerExited;
+    }
+
+    private void UnsubscribeHub()
+    {
+        if (_inputLink?.GetHelper() is not IWorkflowInputEvents events) return;
+
+        events.Input.PointerEntered -= OnPointerEntered;
+        events.Input.PointerExited -= OnPointerExited;
+        _inputLink = null;
+    }
+
+    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+
+    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -180,6 +215,7 @@ public partial class BezierCurveView : Control, ILinkHighlight
             }
 
             PublishCurve();
+            ResubscribeHub();
         }
 
         // UsePolyline 在两个视图之间切换显示；接手显示的那个要把曲线（与 sender）重新挂到自己身上。

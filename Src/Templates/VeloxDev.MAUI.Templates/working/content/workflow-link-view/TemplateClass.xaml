@@ -20,5 +20,6 @@
                                    RulerThickness="{Binding RulerThickness, Source={x:Reference Root}}"
                                    LinkLineColor="{Binding LinkLineColor, Source={x:Reference Root}}"
                                    VirtualLineColor="{Binding VirtualLineColor, Source={x:Reference Root}}"
-                                   StrokeWidth="{Binding StrokeWidth, Source={x:Reference Root}}" />
+                                   StrokeWidth="{Binding StrokeWidth, Source={x:Reference Root}}"
+                                   SelectedLink="{Binding SelectedLink, Source={x:Reference Root}}" />
 </ContentView>

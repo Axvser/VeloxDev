@@ -16,12 +16,15 @@ public class NodeHelper : NodeHelper<IWorkflowNodeViewModel>
 /// [ Component Helper ] Provide standard supports for Node Component
 /// </summary>
 /// <typeparam name="T"> The type of the Node ViewModel that this helper is designed for. </typeparam>
-public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents
+public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, IWorkflowInputEvents
     where T : class, IWorkflowNodeViewModel
 {
     /// <summary>The node this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
     public T? Component { get; protected set; }
     private IReadOnlyCollection<IVeloxCommand> commands = [];
+
+    /// <inheritdoc />
+    public WorkflowInputRelay Input { get; } = new();
 
     /// <inheritdoc />
     public event EventHandler<IWorkflowSlotViewModel>? SlotAdded;

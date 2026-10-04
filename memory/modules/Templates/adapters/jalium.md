@@ -22,7 +22,7 @@
 |---|---|---|---|
 | tree-view（32） | `sealed class TemplateClass : WorkflowTreeView` | 表面：构造器设 `SurfaceBackground` / `ConnectingLinkColor` / `PortLayout` / `GridDecorator` / `TemplateSelector`，并 override `OnBuildLinkMenu` | `:15`、`:17-24` |
 | node-view（59） | `sealed class TemplateClass : WorkflowNodeView` | 卡片：`override DrawCard` 画设计尺寸的卡 | `:14`、`:28-58` |
-| link-view（20） | `sealed class TemplateClass : WorkflowLinkView` | 连线：设 `PortLayout` / `LinkColor` / `Thickness` | `:12`、`:16-18` |
+| link-view | `sealed class TemplateClass : FrameworkElement` + `WorkflowLinkAttachment.Attach(this)` | 连线：设 `PortLayout` / `LinkColor` / `Thickness`，自己在 `OnRender` 里画 | `:12`、`:16-18`（2026-10-04 起不再是基类派生） |
 | grid-decorator（25） | `sealed class TemplateClass : WorkflowGridDecorator` | 网格/标尺：设七色 + `GridStep` / `MajorLineEvery` | `:11`、`:15-23` |
 | slot-view（35） | `sealed class TemplateClass : WorkflowSlotView` + `static readonly WorkflowPortLayout Layout` | 端口图形：构造函数设 `StandbyColor`；`Layout` 供卡片/连线读 | `:12`、`:19-29`（Layout）、`:31-34`（ctor） |
 | minimap-overlay（14） | `class TemplateClass : WorkflowMinimapOverlay`，**空构造器** | 薄壳（七家里最薄） | `:9-13` |
@@ -112,7 +112,7 @@ node-view 与 link-view **不再**引用兄弟条目（端口位置读基类的 
 | 位置 | 依据 |
 |---|---|
 | 权威常量 `public const double RulerThickness = 36;` | `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowGridDecorator.cs:25` |
-| link-view 端点算在 `OnRender` 里，从 `OriginX/OriginY` 出发 | `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkView.cs:140`（`OnRender`） |
+| link-view 端点算在助手里，从 `OriginX/OriginY` 出发 | `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkAttachment.cs`（`UpdateGeometry`） |
 | node-view 的端口定位经 `PortLayout`（`WorkflowGridDecorator.RulerThickness` 参与表面坐标） | `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowNodeView.cs:26`（类）＋ `WorkflowPortGeometry` |
 | tree-view 的 `OriginX/OriginY`（含 `RulerThickness`）与 `SetVirtualizeInset` | `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowTreeView.cs:156,159`、`:774` |
 
@@ -132,7 +132,7 @@ node-view 与 link-view **不再**引用兄弟条目（端口位置读基类的 
 ### P4 · link-view 的"自盒化"机制已进包，模板只出线色
 
 旧的 P4（模板必须持续维持自盒化）**已随重构移进适配器**：`UpdateBounds` + `OnRender` 烘焙现在在
-`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkView.cs:75/:100`（`UpdateBounds`）与 `:140`（`OnRender`），
+`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkAttachment.cs`（`UpdateGeometry` 里的自盒化 + 元素局部烘焙），
 根因（渲染器按布局盒裁剪）在 `:52` 一带的注释里。模板产物只有 20 行，设 `PortLayout` / `LinkColor` / `Thickness`。
 **要维护自盒化请改基类**；机制说明见 `memory/modules/WorkflowSystem/adapters/jalium.md` §2.1。
 

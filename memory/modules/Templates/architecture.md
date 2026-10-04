@@ -82,7 +82,7 @@
 | `workflow-tree-view` | `TreeView` | `-tree` | 1 或 2 |
 
 - `shortName` 完整形式是 `<平台小写>-v-<后缀>`（`wpf-v-tree`、`jalium-v-decorator`、`winforms-v-minimap`…）。
-- `identity` 是 `VeloxDev.<平台>.<角色名>`（如 `VeloxDev.Jalium.WorkflowLinkView`）。
+- `identity` 是 `VeloxDev.<平台>.<角色名>`（如 `VeloxDev.Jalium.WorkflowNodeView`）。
 - **`primaryOutputs` 的条数就是"这个条目生成几个文件"**，且它列出的路径恰好等于条目目录里除 `.template.config/`
   外的全部文件：有标记语言的一家写两个（`TemplateClass.xaml` + `TemplateClass.xaml.cs`；Razor 是
   `.razor` + `.razor.cs`），纯代码的一家写一个（`TemplateClass.cs`）。⇒ **"这个平台有没有标记语言"在包元数据里就能读出来**，
@@ -163,9 +163,9 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   翻成一层**由适配器自己搭的浮层**（2026-10-03 起：原来那层 `PART_LinkMenuLayer` 标记长在模板 XAML 里，
   它是呈现、不是声明，已随接线一起搬进 `WorkflowSurfaceBehavior.EnsureLinkMenuLayer`；不翻转、不出窗口、
   不是 OS 菜单、嵌套项会拍平）。非 Windows 的「请求菜单」手势是**长按**（`LongPressDelay = 500` ms，
-  位移超过 `LongPressMoveSlop = 8` 设备无关单位即取消），由链接层翻译成一次合成右键交给 hub。
+  位移超过 `LongPressMoveSlop = 8` 设备无关单位即取消），由链接层翻译成一次合成右键，交给输入路由。
   ⚠ **菜单不会活得比它指着的那条线久**（2026-10-03）：判定归 Core —— hub 在「菜单开着、那条线却离开树」时发
-  `ContextMenuDismissRequested`；**接线在适配层，模板不参与**（`WorkflowSystem/architecture.md`）。
+  `LinkRemoved`；**接线在适配层，模板不参与**（`WorkflowSystem/architecture.md`）。
   ⚠ **模板里的注释一律英文**（2026-10-03 用户定，见 [code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五）：
   只标扩展点、一行说清，函数体注释也算在内 —— 不是每个成员都配得上一行。
   ⚠ **2026-10-03 起 MAUI 的 Trimmed demo 与它的模板故意分叉了**：demo 已经改成**每线一视图**
@@ -213,7 +213,7 @@ Jalium 的 36 **没有说明**。
 
 | 族 | 平台 | 依据 |
 |---|---|---|
-| **立即模式**：继承一个能覆写绘制入口的元素，XAML 只是空壳 | WPF、Avalonia、Jalium、WinForms | WPF `workflow-link-view/TemplateClass.xaml` 全文是一个空 `<UserControl>`（5 行），几何全在 `.xaml.cs:92` 的 `OnRender`；Avalonia 同理（`TemplateClass.axaml` 是空 `<Control>`，`Render` 在 code-behind `:173`）；Jalium 的几何在**适配器基类** `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkView.cs:140` 的 `OnRender`（模板只设线色/线宽）；WinForms 的几何也在**适配器基类** `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowLinkView.cs:209` 的 `RebuildGeometry`（雕窗口区域，模板只设调色板） |
+| **立即模式**：继承一个能覆写绘制入口的元素，XAML 只是空壳 | WPF、Avalonia、Jalium、WinForms | WPF `workflow-link-view/TemplateClass.xaml` 全文是一个空 `<UserControl>`（5 行），几何全在 `.xaml.cs:92` 的 `OnRender`；Avalonia 同理（`TemplateClass.axaml` 是空 `<Control>`，`Render` 在 code-behind `:173`）；Jalium 与 WinForms 的几何在**附加助手** `WorkflowLinkAttachment`（`UpdateGeometry` / `RebuildGeometry`：自盒化、雕窗口区域、发布曲线），视图模板自己是 `: FrameworkElement` / `: Control`，只设调色板并在 `OnRender` / `OnPaint` 里画（2026-10-04 起不再是基类派生） |
 | **保留式几何在代码里构造**：XAML 是空壳，`Path` + `PathGeometry` 在构造函数里 new 出来 | WinUI | `workflow-link-view/TemplateClass.xaml` 只有 6 行（`Clip="{x:Null}"` 是全部内容）；`TemplateClass.xaml.cs:28-31` 是 `Path` / `PathGeometry` / `PathFigure` 字段，`:63-64` 在 ctor 里 new 并 `Children.Add`。原因是这一家**没有公共 `OnRender`**，理由见 `memory/modules/WorkflowSystem/adapters/winui.md` §二·L2，此处不抄 |
 | **标记语言里的元素 + 代码给几何字符串** | Razor | `workflow-link-view/TemplateClass.razor` 的 `<path d=…>`（虚线的 `stroke-dasharray="@dash"`，`dash` 在 code-behind 里按 `IsVirtual` 取 `"6 4"`）；`data-veloxdev-link-curve="1"` 是给适配器缩放 JS 认的标记，不是样式 —— 见 `adapters/razor.md` §2 |
 | **复用适配器的视口级图层** | MAUI | `workflow-link-view/TemplateClass.xaml:14` 直接放 `behaviors:WorkflowLinkOverlay`；文件头 `:2-7` 的注释写明取舍：**每条线一个 `GraphicsView` 会在深缩放下超出 Win2D 纹理上限并静默消失**，所以一个表面只放**一个** link 层 |
@@ -270,7 +270,7 @@ Jalium 那 14 行仍是七家里最薄的（一个空构造器：`workflow-minim
 | tree-view | 553 | **32** | `WorkflowTreeView.cs`（819） |
 | node-view | 217 | **59** | `WorkflowNodeView.cs`（309） |
 | slot-view | 77 | **35** | `WorkflowSlotView.cs`（167，端口图形）+ `WorkflowPortLayout.cs`（41，设计值）+ `WorkflowPortGeometry.cs`（125，枚举与定位） |
-| link-view | 261 | **20** | `WorkflowLinkView.cs`（344） |
+| link-view | 261 | 自己画（不是薄派生） | `WorkflowLinkAttachment.cs`（助手） |
 | grid-decorator | 117 | **25** | `WorkflowGridDecorator.cs`（234） |
 | minimap-overlay | 14 | **14** | `WorkflowMinimapOverlay.cs`（311，本来已合规） |
 | template-selector | 23 | **25** | `WorkflowTemplateSelector.cs`（51） |
@@ -380,11 +380,11 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 六�
 |---|---|---|
 | WPF | `link.IsRenderReady()` | `workflow-link-view/TemplateClass.xaml.cs:96` |
 | Razor | `WorkflowSlotUpdateGate.IsLinkRenderReady(link)` | `workflow-link-view/TemplateClass.razor.cs:237` |
-| WinForms | `WorkflowSlotUpdateGate.IsLinkRenderReady(link)` | **已进适配器**：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowLinkView.cs:213`（模板 link-view 只剩 21 行调色板） |
+| WinForms | `WorkflowSlotUpdateGate.IsLinkRenderReady(link)` | **已进适配器**：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowLinkAttachment.cs` 的 `RebuildGeometry`（模板 link-view 是自己的控件 + `Attach`） |
 
 | 无门 | 它们各自有的东西 |
 |---|---|
-| Jalium | 适配器基类 `WorkflowLinkView.OnRender` 首行的 `IsVisible` + 端点非 null 检查（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkView.cs:144`）；`PortCenter` 里还有一道端点 `double.IsNaN` 回退（`:290`） |
+| Jalium | 助手 `WorkflowLinkAttachment.UpdateGeometry` 首行的 `IsVisible` + 端点非 null 检查（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkAttachment.cs`）；`PortCenter` 里还有一道端点 `double.IsNaN` 回退 |
 | Razor | 除了门，还有一道显式 `double.IsNaN` 守卫（`workflow-link-view/TemplateClass.razor.cs:250`）—— 七家里唯一两道都有 |
 | Avalonia | 无门、无 NaN 守卫（`workflow-link-view/TemplateClass.axaml.cs` 只有 `CanRender`） |
 | WinUI | 无门、无 NaN 守卫（`workflow-link-view/TemplateClass.xaml.cs` 只有 `CanRender`） |

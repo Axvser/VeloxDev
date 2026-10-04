@@ -1,4 +1,4 @@
-﻿# VeloxDev.Core.Test — 架构
+# VeloxDev.Core.Test — 架构
 
 > 代码：`Src/Core/VeloxDev.Core.Test/`（140 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；120 个 `[TestClass]`，1030 个 `[TestMethod]`）
 > 被测：`Src/Core/VeloxDev.Core/`（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj:5` 是五目标 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`）
@@ -103,7 +103,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | 测试目录 | 文件数（其中 `[TestClass]`） | 测什么 |
 |---|---|---|
 | `TransitionSystem/` | 26（26） | 采样循环、调度器、帧集、pacer、链与 `Repeat`、内建采样器、缓动 |
-| `WorkflowSystem/` | 51（47：30 直接 + 17 `CompilerEx/`；`CompilerEx/` 另有 `ProbeGraph.cs`/`ProbeNodes.cs`，`Support/` 另有 `LinkInteractionTestBase.cs`/`WorkflowTestKit.cs`，共 4 个非测试文件） | 树 / 节点 / slot 枚举 / 虚拟化数学 / 编译运行 |
+| `WorkflowSystem/` | 51（47：30 直接 + 17 `CompilerEx/`；`CompilerEx/` 另有 `ProbeGraph.cs`/`ProbeNodes.cs`，`Support/` 另有 `WorkflowInputTestBase.cs`/`WorkflowTestKit.cs`，共 4 个非测试文件） | 树 / 节点 / slot 枚举 / 虚拟化数学 / 编译运行 |
 | `AI/` | 9（9） | 工具调用与上下文拼装 |
 | `Timing/` | 6（5；`FakeTimeSource.cs` 非测试） | 时钟、两类采样器 |
 | `TimeLine/` | 4（4） | Tickable 总线与管理器 |
