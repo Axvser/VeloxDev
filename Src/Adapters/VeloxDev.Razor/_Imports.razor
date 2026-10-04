@@ -1,0 +1,3 @@
+@* Load-bearing, not cosmetic: without this import the compiler emits @on… handlers as literal attributes
+   ("@onclick"), so they never run. The official razorclasslib template ships this file for the same reason. *@
+@using Microsoft.AspNetCore.Components.Web

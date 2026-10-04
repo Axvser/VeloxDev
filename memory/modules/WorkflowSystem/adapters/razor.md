@@ -246,6 +246,20 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 真正做左右上扩展的是 surface 自己的内容层（`README.md:179-182`），所以消费方**通常不该**再自己套一次
 `transform` —— 叠两层会让坐标算两次。
 
+### 7. `_Imports.razor` 一删，本工程**所有** `.razor` 的 `@on…` 静默失效
+
+`Src/Adapters/VeloxDev.Razor/_Imports.razor` 只做一件事：`@using Microsoft.AspNetCore.Components.Web`。
+**删掉它不报错、不警告，但工程里每一个 `.razor` 的 `@on…` 都会被编成字面属性** ——
+`__builder.AddAttribute(10, "@onkeydown", "OnSurfaceKeyDown")`，属性名里带着 `@`，浏览器不认识，
+于是表面根一个事件都收不到：Delete / Escape / 指针路由 / 右键菜单**一起失效**，而 `@ref`、组件标签照常工作。
+`@on…:preventDefault` / `:stopPropagation` 两个指令属性同样落在这里 —— 少了它，页面上的原生右键菜单也压不掉。
+**这是工程级配置，与文件内容无关**：把 demo 里那个能正常绑定的 `.razor` 搬进本工程，一样变字面量。
+
+判据是生成代码那一句：名字**不带 `@`**、值是 `EventCallback` 才对
+（`AddAttribute(10, "onkeydown", EventCallback.Factory.Create<KeyboardEventArgs>(this, …))`），
+`:preventDefault` 则要编成 `AddEventPreventDefaultAttribute`。看生成代码：
+`dotnet build … -t:Rebuild -p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=<dir>`。
+
 ---
 
 ## 五、两条历史说法的核实结论
