@@ -37,7 +37,7 @@ public static class LinkHitTestEx
     /// it <see langword="null"/> where one surface draws every link.
     /// </param>
     /// <code>
-    /// link.PublishCurve(LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, pullMinimum), this);
+    /// link.PublishCurve(LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, pullMinimum), this);
     /// </code>
     public static void PublishCurve(this IWorkflowLinkViewModel link, LinkCurve? curve, object? visual = null)
         => link.HitTarget()?.SetCurve(curve, visual);

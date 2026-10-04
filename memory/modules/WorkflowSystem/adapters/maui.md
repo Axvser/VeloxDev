@@ -132,8 +132,8 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
 
 类文档 `WorkflowLinkOverlay.cs:27-34`：本版 `ICanvas` 没有描边渐变的等价物（`SetFillPaint` 只在填充侧），
 彗星因此是**按弧长切出来的几何**：曲线先按 `LinkCurve.DefaultSampleCount = 128` 采样成弧长表（采样与弧长表归 Core
-`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkCurve.cs:29` 的 `DefaultSampleCount`、`:107` 的 `BuildCubic`；
-本层调用在 `:1310-1311`），再在表上取头与尾，用 `TailSegments = 16` 段、每段一个透明度的 `DrawLine` 画出来
+`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkCurve.cs:29` 的 `DefaultSampleCount`、`:168` 的 `BuildLinkCubic`；
+本层调用在 `WorkflowLinkOverlay.cs:1379`），再在表上取头与尾，用 `TailSegments = 16` 段、每段一个透明度的 `DrawLine` 画出来
 （`:302`、`DrawComet :433-475`；两遍：先光晕后本体）。**这条限制带来的好处仍在**：按弧长走的光会跟着弯走，
 而渐变刷的轴是两端的连线（弦），光在弯链上会离开绳子跑到弦上。
 

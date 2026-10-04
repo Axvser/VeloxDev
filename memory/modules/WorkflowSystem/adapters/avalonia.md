@@ -200,7 +200,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 两个自绘连线视图各有一份，**都要改** —— demo 的 `WorkflowView.axaml` 按 `LinkViewModel.UsePolyline`（默认 `true`，字段在 `Examples/Workflow/Common/Lib/ViewModels/Workflow/LinkViewModel.cs:14`）在两者之间切换，不是死代码。**默认显示的是 `PolylineCurveView`**（带流动光带那个），`BezierCurveView` 是关掉光带的对照。
 
-**这两个视图现在都不碰输入、也不订阅 hub**：命中、悬停、右键、Delete 一律由 Core 的 `LinkInteraction` 裁决（hub 用 `LinkInteraction.For(tree)` 取，一棵树一个），视图只做两件事 —— 画，以及把画出来的曲线发布给命中契约。两者都把 `LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum)` 交给 `link.PublishCurve(_curve, this)`（`PolylineCurveView.axaml.cs:251-268`、`BezierCurveView.axaml.cs:231-248`；`PullMinimum = 40`），发布出去的那条就是命中用的唯一几何。**区别只在有没有流动光带，不在曲线形状**：`BezierCurveView` 绘制时另用一份 `Controls()` 拉控制点（`:252-257`），与 `LinkCurve.BuildCubic` 必须是同一个拉出量 —— 两处各推一遍几何的话，弯的地方命中就会对不上指针（`PolylineCurveView` 直接画 `_curve` 的采样，没有第二份）。
+**这两个视图现在都不碰输入、也不订阅 hub**：命中、悬停、右键、Delete 一律由 Core 的 `LinkInteraction` 裁决（hub 用 `LinkInteraction.For(tree)` 取，一棵树一个），视图只做两件事 —— 画，以及把画出来的曲线发布给命中契约。两者都把 `LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum)` 交给 `link.PublishCurve(_curve, this)`（`PolylineCurveView.axaml.cs`、`BezierCurveView.axaml.cs` 的 `RefreshGeometry`；`PullMinimum = 40`），发布出去的那条就是命中用的唯一几何。**区别只在有没有流动光带，不在曲线形状**：`BezierCurveView` 绘制时另用一份 `Controls()` 拉控制点，那一份也来自 Core 的 `LinkCurve.LinkCurvePoints` —— 两处若各推一遍几何，弯的地方命中就会对不上指针（`PolylineCurveView` 直接画 `_curve` 的采样，没有第二份）。控制点沿每个口自己那条边的外法线拉，不是写死水平，理由见 [`architecture.md` §3.4](../architecture.md)。
 
 | 事 | 现在归谁 | 锚点 |
 |---|---|---|

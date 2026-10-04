@@ -498,20 +498,18 @@ public sealed partial class PolylineCurveView : UserControl
     // 控制点拉出规则由 BuildCubic 给出（max(40, |dx|/2)，两端水平出线），与静息线画的同一条。
     private void RefreshGeometry()
     {
-        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        var link = DataContext as IWorkflowLinkViewModel;
+        var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        _curve = LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
 
         // 静息线就是那条三次贝塞尔本身，直接用 BezierSegment 画：一个段就是精确曲线，
         // 不必拿采样点去拼（那是给「按弧长切」用的表）。三层各写一份 —— 几何不能共用，理由见 RestingStroke
-        var pull = Math.Max(PullMinimum, Math.Abs(EndLeft - StartLeft) * 0.5);
-        var start = new Point(StartLeft, StartTop);
-        var end = new Point(EndLeft, EndTop);
-
         foreach (var stroke in _resting)
         {
-            stroke.Figure.StartPoint = start;
-            stroke.Segment.Point1 = new Point(StartLeft + pull, StartTop);
-            stroke.Segment.Point2 = new Point(EndLeft - pull, EndTop);
-            stroke.Segment.Point3 = end;
+            stroke.Figure.StartPoint = new Point(points[0].X, points[0].Y);
+            stroke.Segment.Point1 = new Point(points[1].X, points[1].Y);
+            stroke.Segment.Point2 = new Point(points[2].X, points[2].Y);
+            stroke.Segment.Point3 = new Point(points[3].X, points[3].Y);
         }
     }
 

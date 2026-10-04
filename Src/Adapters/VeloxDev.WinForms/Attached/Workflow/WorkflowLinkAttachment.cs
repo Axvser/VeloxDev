@@ -335,7 +335,7 @@ public sealed class WorkflowLinkAttachment
         // 每次都重算，绝不用缓存值：一个从虚拟（手势）连线回收来的池化视图，接着画真实连线时不能还画着虚线。
         isVirtual = sender.Parent is null && receiver.Parent is null;
 
-        var points = BuildCurve(sender.Anchor, receiver.Anchor);
+        var points = BuildCurve(current, sender, receiver);
         if (!IsDrawable(points))
         {
             Clear();
@@ -346,7 +346,11 @@ public sealed class WorkflowLinkAttachment
         // 坐标是画布局部坐标（slot.Anchor 的空间），也是表面指针事件所在的空间 —— 两边必须同系。
         // 发布不依赖视图是否真的画了一笔：几何与可见性这里都知道，画法归用户，命中契约归这里。
         current.PublishCurve(
-            LinkCurve.BuildCubic(points[0].X, points[0].Y, points[3].X, points[3].Y, pullMinimum),
+            LinkCurve.BuildLinkCubic(
+                current,
+                sender.Anchor.Horizontal, sender.Anchor.Vertical,
+                receiver.Anchor.Horizontal, receiver.Anchor.Vertical,
+                pullMinimum),
             target);
 
         using var strokePen = new Pen(Color.Black, thickness + 2 * RegionPad) { LineJoin = LineJoin.Miter };
@@ -431,14 +435,22 @@ public sealed class WorkflowLinkAttachment
     }
 
     // 起点、两个控制点、终点 —— AddBezier 要的那四个点。
-    // 两个控制点各自水平拉开：连线因此从两端水平出线、中间平滑过渡，没有折角。
-    private PointF[] BuildCurve(Anchor sender, Anchor receiver)
+    // 每个控制点沿**自己那个口**所在边的外法线拉（Core 的 LinkCurve.LinkCurvePoints 给的），
+    // 所以口在上/下边时竖直出线、反向连线也不会把控制点戳进自己节点；拖拽预览退回房规。
+    private PointF[] BuildCurve(IWorkflowLinkViewModel link, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
     {
-        var s = new PointF((float)sender.Horizontal, (float)sender.Vertical);
-        var e = new PointF((float)receiver.Horizontal, (float)receiver.Vertical);
+        var points = LinkCurve.LinkCurvePoints(
+            link,
+            sender.Anchor.Horizontal, sender.Anchor.Vertical,
+            receiver.Anchor.Horizontal, receiver.Anchor.Vertical,
+            pullMinimum);
 
-        // 最小拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段，失去「从端口水平出来」的形状。
-        var pull = Math.Max(pullMinimum, Math.Abs(e.X - s.X) * 0.5f);
-        return [s, new PointF(s.X + pull, s.Y), new PointF(e.X - pull, e.Y), e];
+        var result = new PointF[points.Length];
+        for (var i = 0; i < points.Length; i++)
+        {
+            result[i] = new PointF((float)points[i].X, (float)points[i].Y);
+        }
+
+        return result;
     }
 }

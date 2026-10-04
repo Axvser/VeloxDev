@@ -112,7 +112,29 @@ public sealed class LinkCurve
     }
 
     /// <summary>
-    /// The four control points of the curve between two ports, each one pulled along the <b>outward</b>
+    /// Samples the cubic through four control points the caller already has, without deriving them.
+    /// </summary>
+    /// <remarks>
+    /// Use this when one set of control points has to be sampled in more than one coordinate space — the points
+    /// are computed once (in the space the directions were read from) and then offset per space, so the copies
+    /// cannot describe different shapes.
+    /// </remarks>
+    /// <param name="p0X">Start point x.</param>
+    /// <param name="p0Y">Start point y.</param>
+    /// <param name="p1X">First control point x.</param>
+    /// <param name="p1Y">First control point y.</param>
+    /// <param name="p2X">Second control point x.</param>
+    /// <param name="p2Y">Second control point y.</param>
+    /// <param name="p3X">End point x.</param>
+    /// <param name="p3Y">End point y.</param>
+    /// <param name="sampleCount">Number of points; <see cref="DefaultSampleCount"/> when not positive.</param>
+    public static LinkCurve FromCubic(
+        double p0X, double p0Y, double p1X, double p1Y, double p2X, double p2Y, double p3X, double p3Y,
+        int sampleCount = DefaultSampleCount)
+        => Sample(p0X, p0Y, p1X, p1Y, p2X, p2Y, p3X, p3Y, sampleCount);
+
+    /// <summary>
+    /// The four control points to draw for <paramref name="link"/>, each one pulled along the <b>outward</b>
     /// direction of its own port — the edge of its node that the port sits on.
     ///
     /// This is the same curve <see cref="BuildCubic"/> draws whenever both ports are on the usual sides
@@ -122,26 +144,68 @@ public sealed class LinkCurve
     /// control point <i>into</i> its node.
     ///
     /// The two ends are treated symmetrically: swapping them returns the same four points in reverse order,
-    /// so the curve does not depend on which end is called the sender. An end with no node contributes no
-    /// pull at all, which is what a drag preview needs: its far end is the pointer, not a port.
+    /// so the curve does not depend on which end is called the sender.
     /// </summary>
-    /// <param name="start">The port the link leaves.</param>
-    /// <param name="end">The port it arrives at.</param>
+    /// <param name="link">
+    /// The link being drawn; its ends supply the outward directions. <see langword="null"/> is accepted and means
+    /// "no direction known" — a pooled view that has not been bound yet, for which the house rule is the answer.
+    /// </param>
+    /// <param name="startX">Start point x, in the view's render space — what the view draws between.</param>
+    /// <param name="startY">Start point y.</param>
+    /// <param name="endX">End point x.</param>
+    /// <param name="endY">End point y.</param>
     /// <param name="pullMinimum">Least pull, in the view's units; see <paramref name="pullMinimum"/> on <see cref="BuildCubic"/>.</param>
     /// <returns>Start, first control point, second control point, end.</returns>
-    /// <exception cref="ArgumentNullException">Either port is <see langword="null"/>.</exception>
-    public static (double X, double Y)[] PortCurvePoints(
-        IWorkflowSlotViewModel start, IWorkflowSlotViewModel end, double pullMinimum)
+    /// <remarks>
+    /// Falls back to the house rule (<see cref="BuildCubic"/>'s horizontal pull) whenever an end has no node:
+    /// the drag preview, whose ends are both placeholder slots the tree hands anchors to, and an unbound pooled
+    /// view. There is no edge to read a direction from — and a curve with no pull at either end would degenerate
+    /// into a straight line.
+    /// </remarks>
+    public static (double X, double Y)[] LinkCurvePoints(
+        IWorkflowLinkViewModel? link, double startX, double startY, double endX, double endY, double pullMinimum)
     {
-        if (start is null) throw new ArgumentNullException(nameof(start));
-        if (end is null) throw new ArgumentNullException(nameof(end));
+        var senderNode = link?.Sender?.Parent;
+        var receiverNode = link?.Receiver?.Parent;
 
-        var (sx, sy) = (start.Anchor.Horizontal, start.Anchor.Vertical);
-        var (ex, ey) = (end.Anchor.Horizontal, end.Anchor.Vertical);
-        var (nx1, ny1) = PortOutward(start);
-        var (nx2, ny2) = PortOutward(end);
+        // 方向只看**传进来的那两个端点**相对于各自父节点在哪条边 —— 不读 slot.Anchor，也不问「谁是发送端」。
+        // 这样从模型推端口位置的适配器（如 Jalium）与从绑定读 slot.Anchor 的六家走的是同一条规则。
+        if (senderNode is not null && receiverNode is not null)
+        {
+            var (nx1, ny1) = PortOutward(startX, startY, senderNode);
+            var (nx2, ny2) = PortOutward(endX, endY, receiverNode);
+            return CurvePoints(startX, startY, endX, endY, nx1, ny1, nx2, ny2, pullMinimum);
+        }
 
-        // 每个控制点沿**自己那个口**的法线拉：距离按该法线轴上的间距算，所以两端互相独立、交换不变。
+        // 房规：起点 +x、终点 −x。与 BuildCubic 逐字相同。
+        return CurvePoints(startX, startY, endX, endY, 1, 0, -1, 0, pullMinimum);
+    }
+
+    /// <summary>
+    /// Builds <paramref name="link"/>'s curve with <see cref="LinkCurvePoints"/> and samples it, so the drawn
+    /// curve and the hit-tested one come from one computation.
+    /// </summary>
+    /// <param name="link">The link being drawn, or <see langword="null"/>; see <see cref="LinkCurvePoints"/>.</param>
+    /// <param name="startX">Start point x, in the view's render space.</param>
+    /// <param name="startY">Start point y.</param>
+    /// <param name="endX">End point x.</param>
+    /// <param name="endY">End point y.</param>
+    /// <param name="pullMinimum">Least pull, in the view's units.</param>
+    /// <param name="sampleCount">Number of points; <see cref="DefaultSampleCount"/> when not positive.</param>
+    public static LinkCurve BuildLinkCubic(
+        IWorkflowLinkViewModel? link, double startX, double startY, double endX, double endY,
+        double pullMinimum, int sampleCount = DefaultSampleCount)
+    {
+        var points = LinkCurvePoints(link, startX, startY, endX, endY, pullMinimum);
+        return Sample(
+            points[0].X, points[0].Y, points[1].X, points[1].Y, points[2].X, points[2].Y, points[3].X, points[3].Y, sampleCount);
+    }
+
+    // 两个控制点各沿给点的法线拉：距离按该法线轴上的间距算，所以两端互相独立、交换不变。
+    private static (double X, double Y)[] CurvePoints(
+        double sx, double sy, double ex, double ey,
+        double nx1, double ny1, double nx2, double ny2, double pullMinimum)
+    {
         var pull1 = Pull(sx, sy, ex, ey, nx1, ny1, pullMinimum);
         var pull2 = Pull(sx, sy, ex, ey, nx2, ny2, pullMinimum);
 
@@ -155,31 +219,14 @@ public sealed class LinkCurve
     }
 
     /// <summary>
-    /// Builds the curve between two ports with <see cref="PortCurvePoints"/> and samples it, so the drawn
-    /// curve and the hit-tested one come from one computation.
-    /// </summary>
-    /// <param name="start">The port the link leaves.</param>
-    /// <param name="end">The port it arrives at.</param>
-    /// <param name="pullMinimum">Least pull, in the view's units.</param>
-    /// <param name="sampleCount">Number of points; <see cref="DefaultSampleCount"/> when not positive.</param>
-    /// <exception cref="ArgumentNullException">Either port is <see langword="null"/>.</exception>
-    public static LinkCurve BuildPortCubic(
-        IWorkflowSlotViewModel start, IWorkflowSlotViewModel end, double pullMinimum, int sampleCount = DefaultSampleCount)
-    {
-        var points = PortCurvePoints(start, end, pullMinimum);
-        return Sample(
-            points[0].X, points[0].Y, points[1].X, points[1].Y, points[2].X, points[2].Y, points[3].X, points[3].Y, sampleCount);
-    }
-
-    /// <summary>
     /// The direction a port's line should leave in: the outward normal of the node edge that port sits on,
     /// taken as the edge nearest the port (normalised, so a wide node does not favour its horizontal edges).
     /// <para>
-    /// A port with <b>no node</b> answers <c>(0, 0)</c> — no direction. That is the drag preview's free end:
-    /// nothing is known about what the pointer will land on, so assuming an edge for it would bend the line
-    /// around a target that does not exist yet. With no direction the end's control point collapses onto the
-    /// end itself and the curve arrives there <b>straight</b>; once the pointer is over a real port, that port
-    /// has a node and this answers its edge, so the preview bends the way the finished link will.
+    /// A port with <b>no node</b> answers <c>(0, 0)</c> — no direction, because nothing about the node it will
+    /// land on is known. A caller that cannot accept "no pull" at an end — a view drawing a link whose ends are
+    /// placeholders, i.e. the drag preview — should use <see cref="LinkCurvePoints"/> rather than deriving the
+    /// curve from this alone: it falls back to the house rule, where a curve with no pull at either end would
+    /// degenerate into a straight line.
     /// </para>
     /// </summary>
     /// <param name="slot">The port.</param>
@@ -187,12 +234,31 @@ public sealed class LinkCurve
     public static (double X, double Y) PortOutward(IWorkflowSlotViewModel slot)
     {
         if (slot is null) throw new ArgumentNullException(nameof(slot));
-        if (slot.Parent is not { } node) return (0, 0);
+        return PortOutward(slot.Anchor.Horizontal, slot.Anchor.Vertical, slot.Parent);
+    }
+
+    /// <summary>
+    /// The direction a port at <paramref name="x"/>/<paramref name="y"/> leaves in: the outward normal of the
+    /// edge of <paramref name="node"/> that port is nearest, taken as the edge nearest the port (normalised, so a
+    /// wide node does not favour its horizontal edges).
+    /// </summary>
+    /// <remarks>
+    /// The one rule is the port's <b>actual position relative to its own node</b> — never a layout convention,
+    /// and never which end of the link it happens to be. A caller whose endpoint coordinates do not come from
+    /// <c>slot.Anchor</c> (an adapter that derives port positions from the model) passes them here, so it obeys
+    /// the same rule as everyone else.
+    /// </remarks>
+    /// <param name="x">The port's x, in the same space as the node's anchor and size.</param>
+    /// <param name="y">The port's y, in that same space.</param>
+    /// <param name="node">The node the port sits on, or <see langword="null"/> for a port with no node.</param>
+    public static (double X, double Y) PortOutward(double x, double y, IWorkflowNodeViewModel? node)
+    {
+        if (node is null) return (0, 0);
 
         var halfWidth = Math.Max(1e-6, node.Size.Width * 0.5);
         var halfHeight = Math.Max(1e-6, node.Size.Height * 0.5);
-        var dx = (slot.Anchor.Horizontal - (node.Anchor.Horizontal + halfWidth)) / halfWidth;
-        var dy = (slot.Anchor.Vertical - (node.Anchor.Vertical + halfHeight)) / halfHeight;
+        var dx = (x - (node.Anchor.Horizontal + halfWidth)) / halfWidth;
+        var dy = (y - (node.Anchor.Vertical + halfHeight)) / halfHeight;
 
         if (Math.Abs(dx) >= Math.Abs(dy))
         {

@@ -285,7 +285,7 @@ public partial class PolylineCurveView : Control
     // 曲线由 Core 构建一次：与绘制读的是同一次构建，所以命中与画出来的永远是一条。
     private void RefreshGeometry()
     {
-        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        _curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         PublishCurve();
     }
 

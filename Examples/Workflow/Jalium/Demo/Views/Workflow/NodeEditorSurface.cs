@@ -1178,10 +1178,23 @@ internal sealed class NodeEditorSurface : Canvas
             return entry.Curve;
         }
 
-        var curve = BuildCurve(from, to);
-        var model = BuildCurve(
-            new Point(from.X - OriginX, from.Y - OriginY),
-            new Point(to.X - OriginX, to.Y - OriginY));
+        // 端点是画布系；四个控制点归 Core 算，而且要用**模型系**的端点去判每个口贴着自己节点哪条边 ——
+        // node.Anchor / node.Size 是模型系，与这里差一个 Origin。画布系那一份是同一组点平移回来的，
+        // 所以画的与发布的必然同形（各推一遍就会在弯的地方对不上指针）。
+        var points = LinkCurve.LinkCurvePoints(
+            link, from.X - OriginX, from.Y - OriginY, to.X - OriginX, to.Y - OriginY, PullMinimum);
+
+        var model = LinkCurve.FromCubic(
+            points[0].X, points[0].Y, points[1].X, points[1].Y,
+            points[2].X, points[2].Y, points[3].X, points[3].Y,
+            LinkCurve.DefaultSampleCount);
+        var curve = LinkCurve.FromCubic(
+            points[0].X + OriginX, points[0].Y + OriginY,
+            points[1].X + OriginX, points[1].Y + OriginY,
+            points[2].X + OriginX, points[2].Y + OriginY,
+            points[3].X + OriginX, points[3].Y + OriginY,
+            LinkCurve.DefaultSampleCount);
+
         _curves[link] = (from, to, curve, model);
         hitCurve = model;
         return curve;

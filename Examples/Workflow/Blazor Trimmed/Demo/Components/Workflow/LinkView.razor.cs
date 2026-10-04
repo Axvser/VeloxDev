@@ -281,16 +281,16 @@ public partial class LinkView : ComponentBase, IDisposable
             return "";
         }
 
-        double dx = ex - sx;
-        double pull = Math.Max(PullMinimum, Math.Abs(dx) * 0.5);
-
-        _curve = LinkCurve.BuildCubic(sx, sy, ex, ey, PullMinimum, LinkCurve.DefaultSampleCount);
+        // The control points come from Core so the drawn path and the published hit-test curve cannot
+        // describe different shapes; both leave each port along that port's own edge normal.
+        var points = LinkCurve.LinkCurvePoints(link, sx, sy, ex, ey, PullMinimum);
+        _curve = LinkCurve.BuildLinkCubic(link, sx, sy, ex, ey, PullMinimum, LinkCurve.DefaultSampleCount);
         link.PublishCurve(_curve, this);
 
         // Invariant: the path is SVG, and the adapter's zoom JS rewrites this same attribute with
         // '.' separators — a culture-dependent format would make the two disagree every frame.
         return FormattableString.Invariant(
-            $"M {sx:F1},{sy:F1} C {sx + pull:F1},{sy:F1} {ex - pull:F1},{ey:F1} {ex:F1},{ey:F1}");
+            $"M {points[0].X:F1},{points[0].Y:F1} C {points[1].X:F1},{points[1].Y:F1} {points[2].X:F1},{points[2].Y:F1} {points[3].X:F1},{points[3].Y:F1}");
     }
 
     // Forwarding the pointer into the hub is what makes the link interactive: the hub decides which link

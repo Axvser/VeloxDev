@@ -1375,8 +1375,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
                 // 几何在 canvas-local 定下来：曲线发布给 Core 做命中，本层只把它平移到视口来画。
                 // 于是「画出来的」与「能点中的」是同一条曲线，不是两次各自推导的结果。
-                var curve = LinkCurve.BuildCubic(
-                    csx, csy, cex, cey, PullMinimum, LinkCurve.DefaultSampleCount);
+                // 控制点由 Core 按每个口自己那条边的外法线给（拖拽预览两端是占位插槽，回退房规）。
+                var curve = LinkCurve.BuildLinkCubic(
+                    link, csx, csy, cex, cey, PullMinimum, LinkCurve.DefaultSampleCount);
                 link.PublishCurve(curve);
 
                 owner.BuildViewportGeometry(

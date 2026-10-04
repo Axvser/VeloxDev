@@ -330,7 +330,7 @@ public partial class PolylineCurveView : UserControl
     // 弧长表由 Core 的 LinkCurve 拥有：端点变化时重建，同一份同时用于绘制、取点与命中。
     private void RefreshGeometry()
     {
-        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        _curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         PublishCurve();
     }
 

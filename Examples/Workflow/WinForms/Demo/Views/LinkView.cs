@@ -489,7 +489,7 @@ public sealed class LinkView : Control
             return;
         }
 
-        _curve = LinkCurve.BuildCubic(_startLeft, _startTop, _endLeft, _endTop, PullMinimum);
+        _curve = LinkCurve.BuildLinkCubic(_link, _startLeft, _startTop, _endLeft, _endTop, PullMinimum);
         _link?.PublishCurve(_curve, this);
     }
 

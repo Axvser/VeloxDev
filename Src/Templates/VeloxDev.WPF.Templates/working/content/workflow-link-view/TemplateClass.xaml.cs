@@ -87,10 +87,10 @@ public partial class TemplateClass : UserControl
 
         // Publish the curve the surface hit-tests against: same control points as BuildCurve, same
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
-        PublishCurve(LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
+        PublishCurve(LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
         var thickness = TemplateLinkThickness;
-        var geometry = BuildCurve(StartLeft, StartTop, EndLeft, EndTop);
+        var geometry = BuildCurve(DataContext as IWorkflowLinkViewModel);
 
         var brush = new SolidColorBrush(LineColor);
         var pen = IsVirtualLink
@@ -100,23 +100,21 @@ public partial class TemplateClass : UserControl
         ctx.DrawGeometry(null, pen, geometry);
     }
 
-    // Extension point: the control points set the curve's shape. Both are pulled horizontally by
-    // max(40, |dx| / 2), which is what makes the line leave each port horizontally — keep that
-    // property if you replace the formula.
-    private static Geometry BuildCurve(double startLeft, double startTop, double endLeft, double endTop)
+    // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
+    // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
+    private Geometry BuildCurve(IWorkflowLinkViewModel? link)
     {
-        var dx = endLeft - startLeft;
-        var pull = Math.Max(MinimumPull, Math.Abs(dx) * 0.5);
+        var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull);
         var figure = new PathFigure
         {
-            StartPoint = new Point(startLeft, startTop),
+            StartPoint = new Point(points[0].X, points[0].Y),
             IsClosed = false,
             IsFilled = false,
         };
         figure.Segments.Add(new BezierSegment(
-            new Point(startLeft + pull, startTop),
-            new Point(endLeft - pull, endTop),
-            new Point(endLeft, endTop),
+            new Point(points[1].X, points[1].Y),
+            new Point(points[2].X, points[2].Y),
+            new Point(points[3].X, points[3].Y),
             true));
 
         var geometry = new PathGeometry();

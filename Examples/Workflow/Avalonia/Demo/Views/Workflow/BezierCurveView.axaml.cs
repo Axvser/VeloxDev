@@ -266,7 +266,7 @@ public partial class BezierCurveView : Control
     // 曲线由 Core 构建一次并发布给命中契约；绘制仍用同一条公式画平滑贝塞尔（与 LinkCurve 同一拉出量）。
     private void RefreshGeometry()
     {
-        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        _curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         PublishCurve();
     }
 
@@ -283,13 +283,14 @@ public partial class BezierCurveView : Control
         link.PublishCurve(_curve, this);
     }
 
-    // 两个控制点各自水平拉开 max(40, |dx|·0.5)：连线因此从两端水平出线、中间平滑过渡，没有折角。
-    // 与 LinkCurve.BuildCubic 用同一个拉出量 —— 两处若各推一遍几何，弯的地方命中就会对不上指针。
+    // 两个控制点各沿**自己那个口**所在边的外法线拉（Core 的 LinkCurve.LinkCurvePoints 给的），
+    // 所以口在上/下边时竖直出线、反向连线也不会把控制点戳进自己节点。
+    // 与发布给命中的那条曲线同源 —— 两处若各推一遍几何，弯的地方命中就会对不上指针。
     private (Point C1, Point C2) Controls()
     {
-        var diffx = EndLeft - StartLeft;
-        var pull = Math.Max(PullMinimum, Math.Abs(diffx) * 0.5);
-        return (new Point(StartLeft + pull, StartTop), new Point(EndLeft - pull, EndTop));
+        var points = LinkCurve.LinkCurvePoints(
+            DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        return (new Point(points[1].X, points[1].Y), new Point(points[2].X, points[2].Y));
     }
 
     private StreamGeometry? CreateBezierGeometry()

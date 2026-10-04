@@ -26,44 +26,57 @@ public sealed class LinkPortCurveTests
     [TestMethod]
     public void PortOutward_APortWithNoNode_HasNoDirection()
     {
-        // 拖拽预览的自由端下面不是端口，**不能替它假设一条边** —— 零向量表示「没有方向」。
+        // 没有节点的口报零向量 = 「不知道方向」，而不是替它猜一条边。
         AssertDirection((0, 0), new SlotDefaultViewModel());
     }
 
     [TestMethod]
-    public void PortCurvePoints_FreeEnd_ArrivesStraightAndAssumesNothing()
+    public void LinkCurvePoints_AnEndWithNoNode_FallsBackToTheHouseRule()
     {
-        // 预览：起点是真实端口（有自己的法线），末端是指针（没有节点）。末端那一半不能拉弯 ——
-        // 它的控制点就落在端点上，曲线是「从一个端口出去、到指针处是直的」。而且曲线**不能**因为
-        // 假设末端在某个方向就越界绕一下。
+        // 拖拽预览的两端都是占位插槽（Parent 为 null），没有边可读。此时**整条**退回房规，
+        // 否则两端都不拉，橡皮筋会被拉成一条直线。
         var source = SlotOn(Node(0, 0, 200, 100), 200, 50);
         var freeEnd = new SlotDefaultViewModel { Anchor = new Anchor(320, 240, 0) };
 
-        var points = LinkCurve.PortCurvePoints(source, freeEnd, Minimum);
+        var points = LinkCurvePoints(Link(source, freeEnd));
+        var house = LinkCurve.BuildCubic(200, 50, 320, 240, Minimum);
 
-        Assert.AreEqual(320d, points[2].X, 1e-9);
-        Assert.AreEqual(240d, points[2].Y, 1e-9);
-        Assert.IsTrue(points[1].X > 200d, "起点那一半仍按自己的法线拉");
-
-        var curve = LinkCurve.BuildPortCubic(source, freeEnd, Minimum);
-        for (var i = 0; i < curve.Count; i++)
-        {
-            Assert.IsTrue(curve.XAt(i) >= 200d - 1e-9, $"sample {i} must stay on the outward side of the source port");
-        }
+        Assert.AreEqual(house.XAt(0), points[0].X, 1e-9);
+        Assert.AreEqual(house.XAt(house.Count - 1), points[3].X, 1e-9);
+        Assert.IsTrue(points[1].X > 200d, "房规下起点那一半照常朝外拉");
+        Assert.AreNotEqual(freeEnd.Anchor.Horizontal, points[2].X, "末端也拉，所以曲线不是直的");
     }
 
     [TestMethod]
-    public void PortCurvePoints_StandardLayout_IsExactlyTheHouseCurve()
+    public void PortOutward_TakesTheDirectionFromTheGivenPoint_NotFromTheSlotAnchor()
+    {
+        // 判据只有「这个点相对父节点在哪条边」。故意把 slot.Anchor 设成 NaN（模型自己推端口位置的适配器
+        // 就是这样，如 Jalium）：方向照样由传进来的坐标决定。
+        var node = Node(0, 0, 200, 100);
+        var slot = SlotOn(node, 100, 0);                      // 上边
+        slot.Anchor = new Anchor(double.NaN, double.NaN, 0);
+
+        var up = LinkCurve.PortOutward(100, 0, node);
+        Assert.AreEqual(0d, up.X, 1e-9);
+        Assert.AreEqual(-1d, up.Y, 1e-9);
+
+        var left = LinkCurve.PortOutward(0, 50, node);
+        Assert.AreEqual(-1d, left.X, 1e-9);
+        Assert.AreEqual(0d, left.Y, 1e-9);
+    }
+
+    [TestMethod]
+    public void LinkCurvePoints_StandardLayout_IsExactlyTheHouseCurve()
     {
         // 发送口在右、接收口在左 ⇒ 两个法线都是水平的，拉法与旧公式逐字相同：七家的观感因此不变。
         var sender = SlotOn(Node(0, 0, 200, 100), 200, 50);
         var receiver = SlotOn(Node(300, 0, 200, 100), 300, 50);
+        var link = Link(sender, receiver);
 
-        var points = LinkCurve.PortCurvePoints(sender, receiver, Minimum);
+        var points = LinkCurvePoints(link);
         var house = LinkCurve.BuildCubic(200, 50, 300, 50, Minimum);
 
-        var portCurve = LinkCurve.BuildPortCubic(sender, receiver, Minimum);
-        AssertSamePolyline(house, portCurve);
+        AssertSamePolyline(house, LinkCurve.BuildLinkCubic(link, 200, 50, 300, 50, Minimum));
 
         Assert.AreEqual(200d + 50d, points[1].X, 1e-9);   // pull = |dx|/2 = 50
         Assert.AreEqual(50d, points[1].Y, 1e-9);
@@ -72,13 +85,13 @@ public sealed class LinkPortCurveTests
     }
 
     [TestMethod]
-    public void PortCurvePoints_SwappingTheEnds_GivesTheSameCurveReversed()
+    public void LinkCurvePoints_SwappingTheEnds_GivesTheSameCurveReversed()
     {
         var a = SlotOn(Node(0, 0, 200, 100), 200, 40);
         var b = SlotOn(Node(-120, 260, 200, 100), -120, 300);
 
-        var forward = LinkCurve.PortCurvePoints(a, b, Minimum);
-        var backward = LinkCurve.PortCurvePoints(b, a, Minimum);
+        var forward = LinkCurvePoints(Link(a, b));
+        var backward = LinkCurvePoints(Link(b, a));
 
         for (var i = 0; i < forward.Length; i++)
         {
@@ -88,11 +101,11 @@ public sealed class LinkPortCurveTests
         }
 
         // 采样出来的折线是同一条曲线的**反向遍历**：同一个几何，不是两条线。
-        AssertSamePolylineReversed(LinkCurve.BuildPortCubic(a, b, Minimum), LinkCurve.BuildPortCubic(b, a, Minimum));
+        AssertSamePolylineReversed(LinkCurve.BuildLinkCubic(Link(a, b), 200, 40, -120, 300, Minimum), LinkCurve.BuildLinkCubic(Link(b, a), -120, 300, 200, 40, Minimum));
     }
 
     [TestMethod]
-    public void PortCurvePoints_NeverFoldsIntoItsOwnNode()
+    public void LinkCurvePoints_NeverFoldsIntoItsOwnNode()
     {
         // 四种摆位都试：正常左右、目标在左（反向）、上边口、下边口。每个控制点都必须在该口法线的**外侧**。
         var cases = new (IWorkflowSlotViewModel A, IWorkflowSlotViewModel B)[]
@@ -105,13 +118,13 @@ public sealed class LinkPortCurveTests
 
         foreach (var (a, b) in cases)
         {
-            AssertPulledOutward(a, b);
-            AssertPulledOutward(b, a);
+            AssertPulledOutward(Link(a, b));
+            AssertPulledOutward(Link(b, a));
         }
     }
 
     [TestMethod]
-    public void PortCurvePoints_BackwardsLayout_PullsBothEndsOutOfTheirOwnNodes()
+    public void LinkCurvePoints_BackwardsLayout_PullsBothEndsOutOfTheirOwnNodes()
     {
         // 目标在左边时：两个控制点仍然各自贴着自己的口朝外拉（这条就是原则本身）。曲线本体在两口之间
         // 会从节点上方经过 —— 单个三次曲线不绕行，这是模型的边界，不是这条规则的产物（Blender/UE 同样如此）。
@@ -120,7 +133,7 @@ public sealed class LinkPortCurveTests
         var sender = SlotOn(senderNode, 500, 50);
         var receiver = SlotOn(receiverNode, 0, 50);
 
-        var points = LinkCurve.PortCurvePoints(sender, receiver, Minimum);
+        var points = LinkCurvePoints(Link(sender, receiver));
 
         Assert.IsTrue(points[1].X > senderNode.Anchor.Horizontal + senderNode.Size.Width,
             "sender's control point must sit beyond its node's right edge");
@@ -146,16 +159,26 @@ public sealed class LinkPortCurveTests
         return slot;
     }
 
-    private static bool Inside(IWorkflowNodeViewModel node, double x, double y)
-        => x > node.Anchor.Horizontal + 1e-6
-        && x < node.Anchor.Horizontal + node.Size.Width - 1e-6
-        && y > node.Anchor.Vertical + 1e-6
-        && y < node.Anchor.Vertical + node.Size.Height - 1e-6;
+    // 端点坐标一律取两口自己的 Anchor —— 与视图从绑定里读到的那两个数是同一份
+    // （视图的 StartLeft/Top 就绑在 Sender.Anchor 上），所以画的与发布的不会各推一遍。
+    private static LinkDefaultViewModel Link(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+        => new() { Sender = sender, Receiver = receiver };
 
-    private static void AssertPulledOutward(IWorkflowSlotViewModel port, IWorkflowSlotViewModel other)
+    private static (double X, double Y)[] LinkCurvePoints(LinkDefaultViewModel link)
+        => LinkCurve.LinkCurvePoints(
+            link,
+            link.Sender.Anchor.Horizontal, link.Sender.Anchor.Vertical,
+            link.Receiver.Anchor.Horizontal, link.Receiver.Anchor.Vertical,
+            Minimum);
+
+    private static void AssertPulledOutward(LinkDefaultViewModel link)
     {
-        var (nx, ny) = LinkCurve.PortOutward(port);
-        var points = LinkCurve.PortCurvePoints(port, other, Minimum);
+        var (nx, ny) = LinkCurve.PortOutward(link.Sender);
+        var points = LinkCurve.LinkCurvePoints(
+            link,
+            link.Sender.Anchor.Horizontal, link.Sender.Anchor.Vertical,
+            link.Receiver.Anchor.Horizontal, link.Receiver.Anchor.Vertical,
+            Minimum);
         var control = points[1];
 
         // 端点 + 控制点：控制点在法线方向上的投影必须不小于端点自己的 —— 也就是绝不朝节点里折。

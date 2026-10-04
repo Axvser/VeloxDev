@@ -146,8 +146,9 @@ public partial class TemplateClass : Control
     // hit-test curve, so the two can never describe different shapes.
     private void RefreshGeometry()
     {
-        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
-        (DataContext as IWorkflowLinkViewModel)?.PublishCurve(_curve, this);
+        var link = DataContext as IWorkflowLinkViewModel;
+        _curve = LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        link?.PublishCurve(_curve, this);
     }
 
     public override void Render(DrawingContext context)
@@ -162,26 +163,24 @@ public partial class TemplateClass : Control
             ? new Pen(brush, LineThickness) { DashStyle = new DashStyle([4.0, 2.0], 0) }
             : new Pen(brush, LineThickness);
 
-        var geometry = BuildCurve(StartLeft, StartTop, EndLeft, EndTop);
+        var geometry = BuildCurve(DataContext as IWorkflowLinkViewModel);
 
         context.DrawGeometry(null, pen, geometry);
     }
 
-    // Extension point: the control points set the curve's shape. Both are pulled horizontally by
-    // max(PullMinimum, |dx| / 2), which is what makes the line leave each port horizontally — keep that
-    // property if you replace the formula.
-    private static StreamGeometry BuildCurve(double startLeft, double startTop, double endLeft, double endTop)
+    // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
+    // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
+    private StreamGeometry BuildCurve(IWorkflowLinkViewModel? link)
     {
-        var dx = endLeft - startLeft;
-        var pull = Math.Max(PullMinimum, Math.Abs(dx) * 0.5);
+        var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {
-            ctx.BeginFigure(new Point(startLeft, startTop), false);
+            ctx.BeginFigure(new Point(points[0].X, points[0].Y), false);
             ctx.CubicBezierTo(
-                new Point(startLeft + pull, startTop),
-                new Point(endLeft - pull, endTop),
-                new Point(endLeft, endTop));
+                new Point(points[1].X, points[1].Y),
+                new Point(points[2].X, points[2].Y),
+                new Point(points[3].X, points[3].Y));
         }
 
         return geometry;

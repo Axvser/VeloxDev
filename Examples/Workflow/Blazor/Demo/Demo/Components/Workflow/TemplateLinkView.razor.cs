@@ -331,7 +331,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
             _cacheSy = sy;
             _cacheEx = ex;
             _cacheEy = ey;
-            _curve = LinkCurve.BuildCubic(sx, sy, ex, ey, PullMinimum, LinkCurve.DefaultSampleCount);
+            _curve = LinkCurve.BuildLinkCubic(Link, sx, sy, ex, ey, PullMinimum, LinkCurve.DefaultSampleCount);
             Link?.PublishCurve(_curve, this);
         }
 

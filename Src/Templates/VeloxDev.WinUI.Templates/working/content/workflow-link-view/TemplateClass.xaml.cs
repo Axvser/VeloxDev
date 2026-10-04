@@ -292,21 +292,20 @@ public sealed partial class TemplateClass : UserControl
         _path.Data = _pathGeometry;
     }
 
-    // Extension point: the control points set the curve's shape. Both are pulled horizontally by
-    // max(40, |dx| / 2), which is what makes the line leave each port horizontally — keep that
-    // property if you replace the formula.
+    // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
+    // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
     private void BuildCurve(double ox, double oy)
     {
-        double dx = EndLeft - StartLeft;
-        double pull = Math.Max(40, Math.Abs(dx) * 0.5);
-        _pathFigure.StartPoint = new Point(StartLeft + ox, StartTop + oy);
-        _segment.Point1 = new Point(StartLeft + pull + ox, StartTop + oy);
-        _segment.Point2 = new Point(EndLeft - pull + ox, EndTop + oy);
-        _segment.Point3 = new Point(EndLeft + ox, EndTop + oy);
+        var link = DataContext as IWorkflowLinkViewModel;
+        var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, 40);
+        _pathFigure.StartPoint = new Point(points[0].X + ox, points[0].Y + oy);
+        _segment.Point1 = new Point(points[1].X + ox, points[1].Y + oy);
+        _segment.Point2 = new Point(points[2].X + ox, points[2].Y + oy);
+        _segment.Point3 = new Point(points[3].X + ox, points[3].Y + oy);
 
-        // Publish the UN-baked curve for hit-testing — keep it built from the same control points as the
+        // Publish the UN-baked curve for hit-testing — keep it built from the same four points as the
         // geometry above, and in the raw DP (canvas-local) space, if you replace the formula.
-        _curve = LinkCurve.BuildCubic(StartLeft, StartTop, EndLeft, EndTop, 40);
+        _curve = LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, 40);
         PublishCurve();
     }
 

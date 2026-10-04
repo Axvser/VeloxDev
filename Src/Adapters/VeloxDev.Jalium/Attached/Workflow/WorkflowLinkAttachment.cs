@@ -322,24 +322,32 @@ public sealed class WorkflowLinkAttachment
         target.Width = Math.Max(1, x2 - x1);
         target.Height = Math.Max(1, y2 - y1);
 
-        // 发布给 Core 的曲线用**模型系**，不是元素所处的表面系：Core 的命中判定会拿指针去比
-        // node.Anchor / node.Size（模型系），两系差一个 Origin（= ActualOffset + 标尺带）。不同系时
-        // 遮挡守卫会把画得出来的一段当成「压在卡片下面」而跳过整条线 —— 症状是悬停不亮、右键无菜单、
-        // Delete 到不了路由（本家实测）。所以这里减掉 Origin，与表面的指针（见 WorkflowTreeView.RoutePointer）
-        // 对齐；元素自己的摆放与绘制的四个点仍用表面系，见下。
+        // 端点在**模型系**里给：Core 的命中判定会拿指针去比 node.Anchor / node.Size（模型系），而本家
+        // 表面系比模型系多一个 Origin（= ActualOffset + 标尺带）。不同系时遮挡守卫会把画得出来的一段
+        // 当成「压在卡片下面」而跳过整条线 —— 症状是悬停不亮、右键无菜单、Delete 到不了路由（本家实测）。
+        // 所以这里减掉 Origin，与表面的指针（见 WorkflowTreeView.RoutePointer）对齐。
+        var worldFrom = new Point(ep.FromP.X - ep.OriginX, ep.FromP.Y - ep.OriginY);
+        var worldTo = new Point(ep.ToP.X - ep.OriginX, ep.ToP.Y - ep.OriginY);
+
+        // 四个控制点归 Core 算：每个口沿**自己实际贴着的那条边**向外拉，规则与其余六家同一条 ——
+        // 就是「端口实际在哪、离父节点哪条边最近」，与本家端口画在哪、谁当发送端都无关。
         link.PublishCurve(
-            LinkCurve.BuildCubic(
-                ep.FromP.X - ep.OriginX, ep.FromP.Y - ep.OriginY,
-                ep.ToP.X - ep.OriginX, ep.ToP.Y - ep.OriginY,
+            LinkCurve.BuildLinkCubic(
+                link, worldFrom.X, worldFrom.Y, worldTo.X, worldTo.Y,
                 pullMinimum, LinkCurve.DefaultSampleCount),
             target);
 
-        // 把画布局部的几何烘焙回元素局部：元素被摆在 (viewX,viewY)，所以 local = canvas − (viewX,viewY)。
+        // 把模型系的四个点烘焙回元素局部：模型 → 画布（+Origin）→ 元素（−viewX/viewY）。
         // 这一步抵消掉上面那次重定位，屏幕上的输出与画在 (0,0) 完全一样。
-        var from = new Point(ep.FromP.X - viewX, ep.FromP.Y - viewY);
-        var to = new Point(ep.ToP.X - viewX, ep.ToP.Y - viewY);
-        var pull = Math.Max(pullMinimum, Math.Abs(to.X - from.X) * 0.5);
-        curve = [from, new Point(from.X + pull, from.Y), new Point(to.X - pull, to.Y), to];
+        var points = LinkCurve.LinkCurvePoints(
+            link, worldFrom.X, worldFrom.Y, worldTo.X, worldTo.Y, pullMinimum);
+        curve =
+        [
+            new Point(points[0].X + ep.OriginX - viewX, points[0].Y + ep.OriginY - viewY),
+            new Point(points[1].X + ep.OriginX - viewX, points[1].Y + ep.OriginY - viewY),
+            new Point(points[2].X + ep.OriginX - viewX, points[2].Y + ep.OriginY - viewY),
+            new Point(points[3].X + ep.OriginX - viewX, points[3].Y + ep.OriginY - viewY),
+        ];
 
         target.InvalidateVisual();
     }
