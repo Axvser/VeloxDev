@@ -112,17 +112,27 @@
 基准在 `Src/Verification/VeloxDev.Serialization.Benchmarks/`（跑法见 `Src/Verification/README.md`）。
 
 **工具的形状（2026-10-04 起）**：两个基准类共享 `Scales.cs` 里的四档当量 —— 小 100 / 中 1 000 / 大 10 000 /
-超大 30 000 个节点。`SerializationBenchmarks` 只量归档自己（回归用），`ComparisonBenchmarks` 让**同一个
-对象图**过归档 / System.Text.Json / Newtonsoft（三家都开引用保留）。**一条命令跑完并留一份 Markdown 报告**
-到 `BenchmarkDotNet.Artifacts/serialization-performance.md`：含测量环境（CPU 商品名、核数、内存、系统、
-运行时、工具链）、三家的文档大小、按当量分节的结果表，以及一段备注（下面 §四·二 那些结论就在里面）。
-报告由 `PerformanceReport.cs` 从 BenchmarkDotNet 的**结构化结果**生成，不解析控制台输出。
+超大 30 000 个节点。**默认跑三档，`--all` 加超大，`--scale N` 只跑一档**；档位走 `[ParamsSource]` 而不是
+`[Params]`，因为后者是编译期常量，会让每次改动都为最慢的一档付钱。`SerializationBenchmarks` 只量归档自己
+（回归用），`ComparisonBenchmarks` 让**同一个对象图**过归档 / System.Text.Json / Newtonsoft（三家都开引用
+保留）。**一条命令跑完并留一份 Markdown 报告**到本工程目录下的
+`BenchmarkDotNet.Artifacts/serialization-performance.md`，含测量环境（CPU 商品名、核数、内存、系统、运行时、
+工具链）、三家的文档大小、按当量分节的结果表，以及一段备注（下面 §四·二 那些结论就在里面）。报告由
+`PerformanceReport.cs` 从 BenchmarkDotNet 的**结构化结果**生成，不解析控制台输出。
 
-> ⚠ **`超 大` 停在 30 000 是有意的**：Newtonsoft 在 1 000 节点上单次操作就分配约 50 MB，再上一个数量级
+> ⚠ **产物必须落在工程目录，不是工作目录。** BenchmarkDotNet 默认 `BenchmarkDotNet.Artifacts` 相对**当前
+> 工作目录**，从仓库根启动就会把输出散到根上；`Artifacts.cs` 从程序集位置（`bin/Debug/net10.0` 往上三层）
+> 解析绝对路径，`BenchmarkConfig` 用 `WithArtifactsPath` 钉住它 —— 报告也写同一处。`.gitignore` 里那条是
+> 任意深度匹配，所以不计入仓库。
+> ⚠ **`超大` 停在 30 000 是有意的**：Newtonsoft 在 1 000 节点上单次操作就分配约 50 MB，再上一个数量级
 > 量到的会是 GC 而不是序列化器。
->
 > ⚠ **入口不能把空参数交给 `BenchmarkSwitcher`**：它会进交互式选择，无人应答就什么也不跑、**还不报错**
 > （报告里会是空的）。空参数走 `BenchmarkRunner.Run([两个类])`。
+> ⚠ **一次全量跑是分钟级，这是构造成本、不是可绕过的开销**：BenchmarkDotNet 每个用例要 jitting + pilot +
+> warmup + actual，合计约 **10 次真实操作**，而大档的一次操作是 0.1–1.2 秒 —— 「24 个用例 × 约 10 次操作」
+> 就决定了量级。**它是一次测量，不是一次测试**（单元测试约 45 秒），不要挂在每次改动上跑；调参时用
+> `--scale N --filter`，那是一条 15 秒的路。语料按档缓存（`Corpus.Shared`），否则每个用例都重建一遍同样的
+> 树（实测每个用例约 13 秒花在构建与准备上）。
 
 **量出来的数字**（同一台机器、同一会话，`Debug -p:Optimize=true`、进程内；语料是节点+槽位+链路的工作流树）：
 
