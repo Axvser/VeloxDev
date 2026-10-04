@@ -16,11 +16,10 @@ public sealed class WorkflowSurfaceBehavior
     {
         public bool IsEnabled { get; set; }
         public bool ZoomEnabled { get; set; }
-        public string? ScrollViewerName { get; set; }
-        public string? CanvasName { get; set; }
-        public string? GridDecoratorName { get; set; }
-        public string? PointerPressSourceName { get; set; }
-        public string? MinimapOverlayName { get; set; }
+        public Control? ScrollViewer { get; set; }
+        public Control? Canvas { get; set; }
+        public Control? GridDecorator { get; set; }
+        public Control? MinimapOverlay { get; set; }
         public IWorkflowTreeViewModel? WorkflowTree { get; set; }
 
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
@@ -244,140 +243,75 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 
-    /// <summary>
-    /// Gets the configured scroll viewer host name.
-    /// </summary>
-    public static string? GetScrollViewerName(Control element)
+    /// <summary>Gets the scroll viewer the host handed over, when it has one.</summary>
+    public static Control? GetScrollViewer(Control element)
+    {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        return GetState(element).ScrollViewer;
+    }
+
+    /// <summary>Hands the scroll viewer over to the behaviour — the object, not a control name to look up.</summary>
+    public static void SetScrollViewer(Control element, Control? value)
+    {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        GetState(element).ScrollViewer = value;
+        EnsureClipChildrenFor(element, value);
+    }
+
+    /// <summary>Gets the canvas the host handed over, when it has one.</summary>
+    public static Control? GetCanvas(Control element)
+    {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        return GetState(element).Canvas;
+    }
+
+    /// <summary>Hands the canvas over to the behaviour — the object, not a control name to look up.</summary>
+    public static void SetCanvas(Control element, Control? value)
+    {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        GetState(element).Canvas = value;
+        EnsureClipChildrenFor(element, value);
+    }
+
+    /// <summary>Gets the grid decorator the host handed over, when it has one.</summary>
+    public static Control? GetGridDecorator(Control element)
+    {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        return GetState(element).GridDecorator;
+    }
+
+    /// <summary>Hands the grid decorator over to the behaviour — the object, not a control name to look up.</summary>
+    public static void SetGridDecorator(Control element, Control? value)
+    {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        GetState(element).GridDecorator = value;
+        EnsureClipChildrenFor(element, value);
+    }
+
+    /// <summary>Gets the minimap overlay the host handed over, when it has one.</summary>
+    public static Control? GetMinimapOverlay(Control element)
     {
         if (element is null)
         {
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).ScrollViewerName;
+        return GetState(element).MinimapOverlay;
     }
 
     /// <summary>
-    /// Sets the configured scroll viewer host name.
+    /// Hands the minimap overlay over to the behaviour — the object, not a control name to look up. When it
+    /// implements <see cref="IWorkflowMinimapOverlay"/>, <see cref="Refresh"/> pushes scroll, content offset,
+    /// viewport, and tree values into it on every refresh cycle.
     /// </summary>
-    public static void SetScrollViewerName(Control element, string? value)
+    public static void SetMinimapOverlay(Control element, Control? value)
     {
         if (element is null)
         {
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).ScrollViewerName = value;
-        EnsureClipChildrenForName(element, value);
-    }
-
-    /// <summary>
-    /// Gets the configured canvas host name.
-    /// </summary>
-    public static string? GetCanvasName(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return GetState(element).CanvasName;
-    }
-
-    /// <summary>
-    /// Sets the configured canvas host name.
-    /// </summary>
-    public static void SetCanvasName(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        GetState(element).CanvasName = value;
-        EnsureClipChildrenForName(element, value);
-    }
-
-    /// <summary>
-    /// Gets the configured grid decorator host name.
-    /// </summary>
-    public static string? GetGridDecoratorName(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return GetState(element).GridDecoratorName;
-    }
-
-    /// <summary>
-    /// Sets the configured grid decorator host name.
-    /// </summary>
-    public static void SetGridDecoratorName(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        GetState(element).GridDecoratorName = value;
-        EnsureClipChildrenForName(element, value);
-    }
-
-    /// <summary>
-    /// Gets the configured pointer press source host name.
-    /// </summary>
-    public static string? GetPointerPressSourceName(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return GetState(element).PointerPressSourceName;
-    }
-
-    /// <summary>
-    /// Sets the configured pointer press source host name.
-    /// </summary>
-    public static void SetPointerPressSourceName(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        GetState(element).PointerPressSourceName = value;
-    }
-
-    /// <summary>
-    /// Gets the configured minimap overlay host name.
-    /// </summary>
-    public static string? GetMinimapOverlayName(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return GetState(element).MinimapOverlayName;
-    }
-
-    /// <summary>
-    /// Sets the configured minimap overlay host name. When the named control implements
-    /// <see cref="IWorkflowMinimapOverlay"/>, <see cref="Refresh"/> pushes scroll, content
-    /// offset, viewport, and tree values into it on every refresh cycle.
-    /// </summary>
-    public static void SetMinimapOverlayName(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        GetState(element).MinimapOverlayName = value;
-        EnsureClipChildrenForName(element, value);
+        GetState(element).MinimapOverlay = value;
     }
 
     /// <summary>
@@ -452,8 +386,7 @@ public sealed class WorkflowSurfaceBehavior
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(state.GridDecoratorName)
-            && FindControlByName(host, state.GridDecoratorName!) is IWorkflowGridDecorator decorator)
+        if (state.GridDecorator is IWorkflowGridDecorator decorator)
         {
             decorator.ScrollOffsetX = scrollOffset.Horizontal;
             decorator.ScrollOffsetY = scrollOffset.Vertical;
@@ -464,8 +397,7 @@ public sealed class WorkflowSurfaceBehavior
             tree?.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
         }
 
-        if (!string.IsNullOrWhiteSpace(state.MinimapOverlayName)
-            && FindControlByName(host, state.MinimapOverlayName!) is IWorkflowMinimapOverlay minimap)
+        if (state.MinimapOverlay is IWorkflowMinimapOverlay minimap)
         {
             minimap.ScrollOffsetX = scrollOffset.Horizontal;
             minimap.ScrollOffsetY = scrollOffset.Vertical;
@@ -608,7 +540,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         // 带符号平移宿主：经它自己的缩略图滚动 handler 重新居中（与平移同一套 _panOffset = (-sx, -sy); ApplyPan()）。跳过完整示例（AutoScroll）—— 上面已处理 —— 以及任何 handler 会递归进消息过滤器的控件。
-        var target = ResolveNamedCanvas(host) ?? host;
+        var target = ResolveCanvas(host) ?? host;
         for (var p = target; p is not null; p = p.Parent)
         {
             var method = p.GetType().GetMethod(
@@ -633,11 +565,11 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 
-    /// <summary>Resolves the named canvas configured on the host state, if any.</summary>
-    private static Control? ResolveNamedCanvas(Control host)
+    /// <summary>The canvas the host handed over, if any.</summary>
+    private static Control? ResolveCanvas(Control host)
     {
         var state = GetState(host);
-        return !string.IsNullOrWhiteSpace(state.CanvasName) ? FindControlByName(host, state.CanvasName!) : null;
+        return state.Canvas;
     }
 
     /// <summary>
@@ -650,7 +582,7 @@ public sealed class WorkflowSurfaceBehavior
     private static System.Drawing.Point? ResolvePanOffset(Control host)
     {
         // 平移量在命名画布上（宿主树视图私有持有并在 ApplyPan 里推），所以反射从画布开始，不从宿主。
-        var canvas = ResolveNamedCanvas(host);
+        var canvas = ResolveCanvas(host);
         for (var p = canvas ?? host; p is not null; p = p.Parent)
         {
             var property = p.GetType().GetProperty("PanOffset");
@@ -674,45 +606,17 @@ public sealed class WorkflowSurfaceBehavior
     private static System.Drawing.Size ResolveClientSize(Control host)
         => host.ClientSize.Width > 0 ? host.ClientSize : host.Size;
 
-    private static void EnsureClipChildrenForName(Control root, string? name)
+    // 给分层容器的窗口自动加 WS_CLIPCHILDREN：它们重绘时裁剪子区域，避免层叠闪烁盖住节点视图/连线。
+    private static void EnsureClipChildrenFor(Control root, Control? control)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        if (control is null)
         {
             return;
         }
 
-        // 解析命名控件（如 PART_ScrollViewer / PART_Canvas / PART_GridDecorator）并给它的窗口自动加 WS_CLIPCHILDREN：这些分层容器重绘时裁剪子区域，避免层叠闪烁盖住节点视图/连线。控件可在其句柄存在前经控件树解析出来。
-        if (FindControlByName(root, name!) is Control control)
-        {
-            NativeWindowStyleHelper.EnsureClipChildren(control);
-        }
+        NativeWindowStyleHelper.EnsureClipChildren(control);
     }
 
-    private static Control? FindControlByName(Control root, string name)
-    {
-        foreach (var control in EnumerateSelfAndDescendants(root))
-        {
-            if (string.Equals(control.Name, name, StringComparison.Ordinal))
-            {
-                return control;
-            }
-        }
-
-        return null;
-    }
-
-    private static System.Collections.Generic.IEnumerable<Control> EnumerateSelfAndDescendants(Control root)
-    {
-        yield return root;
-        foreach (var child in root.Controls.OfType<Control>())
-        {
-            yield return child;
-            foreach (var descendant in EnumerateSelfAndDescendants(child))
-            {
-                yield return descendant;
-            }
-        }
-    }
 
     private static object? ResolveValue(Control control, string propertyName)
     {

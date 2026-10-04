@@ -129,7 +129,7 @@ public abstract class WorkflowTreeView : UserControl
             value.Name = "PART_MinimapOverlay";
             Controls.Add(value);
             value.BringToFront();
-            WorkflowSurfaceBehavior.SetMinimapOverlayName(this, "PART_MinimapOverlay");
+            WorkflowSurfaceBehavior.SetMinimapOverlay(this, value);
         }
     }
 
@@ -373,11 +373,11 @@ public abstract class WorkflowTreeView : UserControl
 
         WorkflowSurfaceBehavior.SetIsEnabled(this, true);
         WorkflowSurfaceBehavior.SetZoomEnabled(this, true);
-        WorkflowSurfaceBehavior.SetScrollViewerName(this, "PART_ScrollViewer");
-        WorkflowSurfaceBehavior.SetCanvasName(this, "PART_Canvas");
+        // 手交出去的三个部件是对象，不是一个待查的名字：表层行为因此不必再沿控件树按名找。
         // 画布自己画网格与标尺，所以它同时就是网格装饰器。
-        WorkflowSurfaceBehavior.SetGridDecoratorName(this, "PART_Canvas");
-        WorkflowSurfaceBehavior.SetPointerPressSourceName(this, "PART_Canvas");
+        WorkflowSurfaceBehavior.SetScrollViewer(this, PART_ScrollViewer);
+        WorkflowSurfaceBehavior.SetCanvas(this, PART_Canvas);
+        WorkflowSurfaceBehavior.SetGridDecorator(this, PART_Canvas);
 
         // 平移：拖空白画布按有符号偏移移动表面。卡片和插槽是画布的子控件、有自己的鼠标事件，所以这几个
         // 处理器只在拖背景时跑。

@@ -23,8 +23,7 @@ namespace Demo
         {
             InitializeComponent();
             WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(workflowSurfaceControl, true);
-            WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(workflowSurfaceControl, nameof(workflowSurfaceControl));
-            WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(workflowSurfaceControl, nameof(workflowSurfaceControl));
+            WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvas(workflowSurfaceControl, workflowSurfaceControl);
             workflowSurfaceControl.MinimapOverlay = minimapOverlay;
             LoadDemo(WorkflowDemoSession.Create());
         }

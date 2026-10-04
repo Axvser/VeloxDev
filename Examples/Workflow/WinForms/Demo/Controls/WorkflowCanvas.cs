@@ -170,10 +170,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
                     mm.WorkflowTree = _session?.Tree;
                 }
 
-                // 与树视图模板一致的接线：覆盖层成为具名子控件，surface 才会喂它
-                value.Name = "PART_MinimapOverlay";
+                // 与树视图模板一致的接线：覆盖层成为子控件，并把**对象**交给表面行为（不靠名字找）
                 Controls.Add(value);
-                WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlayName(this, "PART_MinimapOverlay");
+                WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlay(this, value);
                 if (value is Views.MinimapOverlay minimap)
                 {
                     minimap.PositionAtTopRight();
@@ -199,10 +198,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         BackColor = Color.FromArgb(30, 30, 30); // #1E1E1E template grid decorator default background
         AutoScroll = true;
 
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewerName(this, nameof(WorkflowCanvas));
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(this, nameof(WorkflowCanvas));
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecoratorName(this, nameof(WorkflowCanvas));
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(this, nameof(WorkflowCanvas));
+        // 这块画布是自己组装的：滚动容器、画布、网格装饰器都是它自己 —— 现在把**对象**交出去，
+        // 而不是把自己命名成某种名字再让表面行为沿控件树去查。
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewer(this, this);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvas(this, this);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecorator(this, this);
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(this, true);
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetZoomEnabled(this, true);
 
