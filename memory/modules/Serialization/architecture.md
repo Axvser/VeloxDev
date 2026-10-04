@@ -112,7 +112,7 @@
 基准在 `Src/Verification/VeloxDev.Serialization.Benchmarks/`（跑法见 `Src/Verification/README.md`）。
 
 **工具的形状（2026-10-04 起）**：两个基准类共享 `Scales.cs` 里的四档当量 —— 小 100 / 中 1 000 / 大 10 000 /
-超大 30 000 个节点。**默认跑三档，`--all` 加超大，`--scale N` 只跑一档**；档位走 `[ParamsSource]` 而不是
+超大 30 000 个节点。**默认四档全跑**（报告因此恒为五张表），`--scale N` 收窄到一档；档位走 `[ParamsSource]` 而不是
 `[Params]`，因为后者是编译期常量，会让每次改动都为最慢的一档付钱。`SerializationBenchmarks` 只量归档自己
 （回归用），`ComparisonBenchmarks` 让**同一个对象图**过归档 / System.Text.Json / Newtonsoft（三家都开引用
 保留）。**一条命令跑完并留一份 Markdown 报告**到本工程目录下的
