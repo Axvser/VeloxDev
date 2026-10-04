@@ -228,7 +228,7 @@ public abstract class WorkflowTreeView : UserControl
 
     /// <summary>Creates the card for a node.</summary>
     /// <param name="node">The node to render.</param>
-    /// <returns>The card. It should implement <see cref="IWorkflowSurfaceNodeView"/> so the surface can place it.</returns>
+    /// <returns>The card. Attach <see cref="WorkflowNodeAttachment"/> to it so the surface can place it.</returns>
     protected abstract Control CreateNodeView(IWorkflowNodeViewModel node);
 
     /// <summary>Creates the view for a link.</summary>
@@ -831,9 +831,10 @@ public abstract class WorkflowTreeView : UserControl
         ((SurfaceCanvas)PART_Canvas).PanOffset = _panOffset;
         foreach (var child in PART_Canvas.Controls.OfType<Control>())
         {
-            if (child is IWorkflowSurfaceNodeView nodeView)
+            // 卡片是用户自己的控件，摆位与槽位测量归适配器那份「附加」——这里向它要，而不是要控件实现接口。
+            if (WorkflowNodeAttachment.For(child) is { } card)
             {
-                nodeView.ApplySurfacePosition(_panOffset, contentVisual);
+                card.ApplySurfacePosition(_panOffset, contentVisual);
                 WorkflowSlotLayoutBehavior.SyncNow(child);
             }
         }

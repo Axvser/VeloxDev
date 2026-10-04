@@ -229,6 +229,20 @@ public sealed class ViewManager : IDisposable
             return;
         }
 
+        // 节点卡片同理：绑定、摆位、折叠与模型事件都归附加。
+        if (item is IWorkflowNodeViewModel node && WorkflowNodeAttachment.For(view) is { } nodeAttachment)
+        {
+            nodeAttachment.Node = node;
+            return;
+        }
+
+        // 插槽视图同理：绑定、状态着色、通道事件与拖拽连线都归附加。
+        if (item is IWorkflowSlotViewModel slot && WorkflowSlotAttachment.For(view) is { } slotAttachment)
+        {
+            slotAttachment.Slot = slot;
+            return;
+        }
+
         // 其余角色：WinForms 没有 DataContext；沿用 VeloxDev WinForms 示例里常见的「Tag 作上下文」约定，并支持可选的 ViewModel/DataContext 属性，供控件设计器显式绑定。
         view.Tag = item;
 

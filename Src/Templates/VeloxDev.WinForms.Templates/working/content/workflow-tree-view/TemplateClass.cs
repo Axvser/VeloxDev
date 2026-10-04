@@ -29,7 +29,7 @@ public sealed class TemplateClass : WorkflowTreeView
         var view = new NodeView { ViewModel = node };
         // The minimap reads node anchors directly; dragging a node changes the anchor without panning,
         // so repaint it as the node moves.
-        view.AnchorChanged += () =>
+        view.Attachment.AnchorChanged += () =>
         {
             if (!IsDisposed && PART_MinimapOverlay is not null)
             {

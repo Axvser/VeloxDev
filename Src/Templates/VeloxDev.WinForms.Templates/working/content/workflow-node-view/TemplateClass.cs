@@ -1,6 +1,6 @@
 // VeloxDev customization: Customize node content, but keep PART_* names synchronized
-// with WorkflowSlotLayoutBehavior (SlotNames / SlotEnumeratorNames). The adapter's WorkflowNodeView already owns
-// the binding, the placement, the zoom collapse and the reflective title/slot lookups; this file draws the card.
+// with WorkflowSlotLayoutBehavior (SlotNames / SlotEnumeratorNames). The adapter's WorkflowNodeAttachment owns the
+// binding, the placement, the zoom collapse and the reflective title/slot lookups; this control draws the card.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -19,15 +19,15 @@ namespace TemplateNamespace;
 /// <c>PART_DynamicOutputs</c>, which <see cref="WorkflowSlotLayoutBehavior"/>
 /// measures for link anchoring. No slot hangs off the card edge.
 /// </summary>
-public sealed class TemplateClass : WorkflowNodeView
+public sealed class TemplateClass : UserControl
 {
     /// <summary>Inside-card host for the bare input port and the labeled output rows.</summary>
     public Panel PART_DynamicOutputs => _dynamicOutputs;
 
     private readonly DynamicOutputsPanel _dynamicOutputs;
-    private readonly Color _background = ParseColor("TemplateNodeBackground");
-    private readonly Color _foreground = ParseColor("TemplateNodeForeground");
-    private readonly Color _border = ParseColor("TemplateNodeBorderBrush");
+    private readonly Color _background = WorkflowNodeAttachment.ParseColor("TemplateNodeBackground");
+    private readonly Color _foreground = WorkflowNodeAttachment.ParseColor("TemplateNodeForeground");
+    private readonly Color _border = WorkflowNodeAttachment.ParseColor("TemplateNodeBorderBrush");
     private readonly float _borderThickness = float.Parse("TemplateNodeBorderThickness", CultureInfo.InvariantCulture);
     private readonly float _cornerRadius = float.Parse("TemplateNodeCornerRadius", CultureInfo.InvariantCulture);
     // The card paints itself fully opaque (see OnPaintBackground). The configured
@@ -40,9 +40,22 @@ public sealed class TemplateClass : WorkflowNodeView
     // The host surface behind the card is opaque #1E1E1E; the rounded corners erase
     // to this so they visually match the surface (the canvas between cards is
     // transparent, so this card is the only opaque thing over it).
-    private readonly Color _cardBackdrop = ParseColor("#1E1E1E");
+    private readonly Color _cardBackdrop = WorkflowNodeAttachment.ParseColor("#1E1E1E");
     // The header row (title + drag surface) — a field so zoom scaling can resize it.
     private readonly DoubleBufferedPanel _header;
+    private readonly WorkflowNodeAttachment card;
+
+    /// <summary>Gets the attachment, for a card that wants the title, the collapse or the model events.</summary>
+    public WorkflowNodeAttachment Attachment => card;
+
+    /// <summary>Gets or sets the node this card shows — the pool and the surface both bind through it.</summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public IWorkflowNodeViewModel? ViewModel
+    {
+        get => card.Node;
+        set => card.Node = value;
+    }
 
     public TemplateClass()
     {
@@ -53,6 +66,14 @@ public sealed class TemplateClass : WorkflowNodeView
         // translucent BackColor throws in .NET 10 (Control.set_BackColor requires
         // A == 0xFF without SupportsTransparentBackColor).
         BackColor = _opaqueBackground;
+
+        // One call attaches the rest: binding, placement, zoom collapse, the model events and the reflective
+        // title/slot lookups. Pointers and the card's own drawing stay yours.
+        card = WorkflowNodeAttachment.Attach(this);
+        card.SurfaceBackdrop = WorkflowNodeAttachment.ParseColor("#1E1E1E");
+        card.Rebound += (_, _) => OnRebound();
+        card.CollapseChanged += (_, e) => OnCollapse(e.Collapse);
+        card.TitleChanged += (_, _) => _header.Invalidate();
 
         // Header row: title + drag surface (whole card acts as the drag handle).
         // Opaque double-buffered panel: without AllPaintingInWmPaint +
@@ -71,10 +92,10 @@ public sealed class TemplateClass : WorkflowNodeView
             using var brush = new SolidBrush(_foreground);
             // Scale the title font and ellipsize so longer titles don't clip when the
             // card collapses on zoom.
-            using var font = new Font(Font.FontFamily, Math.Max(5f, 10f * (float)Collapse), FontStyle.Bold);
+            using var font = new Font(Font.FontFamily, Math.Max(5f, 10f * (float)card.Collapse), FontStyle.Bold);
             var rect = new RectangleF(12, 0, Math.Max(0, _header.Width - 24), _header.Height);
             using var format = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
-            g.DrawString(NodeTitle, font, brush, rect, format);
+            g.DrawString(card.Title, font, brush, rect, format);
         };
 
         // The input port and every output row render inside the card
@@ -273,8 +294,8 @@ public sealed class TemplateClass : WorkflowNodeView
         }
     }
 
-    /// <inheritdoc />
-    protected override void OnCollapseChanged(double collapse)
+    // 折叠因子变了：按它重排卡片内部的固定度量。
+    private void OnCollapse(double collapse)
     {
         _header.Height = Math.Max(14, (int)Math.Round(36 * collapse));
         _dynamicOutputs.SetCollapse(collapse);
@@ -300,15 +321,15 @@ public sealed class TemplateClass : WorkflowNodeView
     /// channel, so it never renders as a mislabeled output row even when the channel
     /// is written asynchronously after binding.
     /// </summary>
-    protected override void OnNodeRebound()
+    private void OnRebound()
     {
         if (IsDisposed) return;
 
-        DisposeChildren(PART_DynamicOutputs);
+        WorkflowNodeAttachment.DisposeChildren(PART_DynamicOutputs);
         _dynamicOutputs.SetInputView(null);
 
         var rows = new List<DynamicSlotRow>();
-        var inputSlot = ResolveInputSlot();
+        var inputSlot = card.ResolveInputSlot();
         SlotView? inputView = null;
         var node = ViewModel;
 
@@ -339,7 +360,7 @@ public sealed class TemplateClass : WorkflowNodeView
                     continue;
                 }
 
-                rows.Add(new DynamicSlotRow(ResolveSlotLabel(slot, outputIndex), slot, _foreground, _opaqueBackground));
+                rows.Add(new DynamicSlotRow(card.ResolveSlotLabel(slot, outputIndex), slot, _foreground, _opaqueBackground));
                 outputIndex++;
             }
 

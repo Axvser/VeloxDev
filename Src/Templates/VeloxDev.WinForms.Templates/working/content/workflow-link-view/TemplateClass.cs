@@ -31,7 +31,7 @@ public sealed class TemplateClass : Control
     }
 
     /// <summary>Gets the attachment, for a view that wants the curve or the pointer events.</summary>
-    public WorkflowLinkAttachment Link => link;
+    public WorkflowLinkAttachment Attachment => link;
 
     // VeloxDev customization: the drawing. link.Paint is the resting line; replace or wrap it with whatever this
     // project's links look like. link.Curve is the four control points in this control's own coordinates, and the
