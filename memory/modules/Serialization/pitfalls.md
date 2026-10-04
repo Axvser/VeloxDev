@@ -1,96 +1,112 @@
 # Serialization — 坑
 
 > 与 [architecture.md](architecture.md) / [extension.md](extension.md) 配套。
-> 这里只放**写得出、读不回**这类静默不对称 —— 每一类都带代码锚点，读记忆的 agent 能当场核。
+> 这里只放**不看代码就会踩**的东西 —— 每一条都带代码锚点，读记忆的 agent 能当场核。
 
 ---
 
-## 一、数组（含 `byte[]`）写得出去、读不回来
+## 一、数组与集合：支持到哪一层
 
-- **写侧**：`byte[]` / `int[]` 既不是标量也不是容器，落到 `WriteValue` 的 `IEnumerable` 分支，写成**数字数组**（`Src/Core/VeloxDev.Core/Serialization/VeloxJsonSerializer.cs:169`）。
-- **读侧**：`Classify` 不认数组 —— 它要求 `INamedTypeSymbol` 且恰好一个类型参数（`Base/VeloxJsonModel.cs:954`），数组是 `IArrayTypeSymbol`，于是成员落 `VeloxJsonMemberKind.Object`，生成的 reader 走 `default` 分支调 `ReadValue`（`Writers/VeloxJsonCodeWriter.cs:259`）。
-- `ReadValue` 只拦「声明类型不是数组的顶层数组」（`VeloxJsonSerializer.cs:407`），**声明类型就是数组时不拦**，于是进 `ReadObjectValue`，`BeginObject` 对着 `[` 抛 `expected '{'`（`VeloxJsonReader.cs:210`）。
+**2026-10-04 之前这一段是「数组写得出、读不回」，现在是按声明类型分四种读法**（`Writers/VeloxJsonCodeWriter.cs` 的 `ReadCollection`）：
 
-**没有 `byte[]` 的 base64 通道** —— STJ / Json.NET 默认都写 base64，这里不是。
+| 声明类型 | 读法 |
+| --- | --- |
+| `List<T>` / `ObservableCollection<T>` | 就地填；成员为 null 时先造一个再填 |
+| `IReadOnlyList<T>` / `ICollection<T>` / `IEnumerable<T>` 等接口 | 读进 `new List<T>()` 再赋过去 |
+| `T[]` | 读进 `new List<T>()` 再 `.ToArray()` |
+| `HashSet<T>` / `Queue<T>` / `Stack<T>` | 读进 `new List<T>()` 再 `new 声明类型(list)` |
 
-推论：要在文档里带一段定长数据，就把成员声明成 `List<T>`；二进制走 `string`（自己 base64 一下）。
+四种都由**声明类型**决定，类型实参在那一层是已知的，所以数组能在不碰 `Array.CreateInstance` 的前提下读回来 —— 那正是这套格式躲开的东西。
+
+**仍然读不回来的是「嵌在容器里的数组」**：`List<int[]>`、`int[][]`。读到元素时手上只有一个 `Type`，按它造数组要反射。生成器**报 `VELOX_JSON_MEMBER001`**（`Base/VeloxJsonModel.cs` 的 `ReportNestedArray`），不是留到运行期炸。要改就声明成 `List<List<int>>`。
+
+**`byte[]` 是标量，不是数组**：走 base64 字符串（`IsScalar` 里的 `IArrayTypeSymbol` 分支，排在数组那条分支**之前**，否则它会被当成普通序列）。与 STJ / Json.NET 一致。
+
+**Map 同理**：成员为 null 时造实例再读，不再把文档里的项静默跳过（`ReadMap`）。
 
 ---
 
-## 二、只读集合是**静默**丢数据，不报错
-
-`IReadOnlyList<T>` / `IReadOnlyCollection<T>` 被 `Classify` 认成 `Collection`（`Base/VeloxJsonModel.cs:998` 的 `IsSequenceType`），但生成 reader 的 Collection 分支要求声明类型实现 `System.Collections.IList`，不满足就直接 `SkipValue()`（`Writers/VeloxJsonCodeWriter.cs:241`）。
-**文档里有值，读回来是空集合，没有任何异常。** 想往返就得声明成 `List<T>` / `ObservableCollection<T>`。
-
----
-
-## 三、Map 的键，三种写法三种代价
+## 二、Map 的键，三种写法
 
 | 键 | 写法 | 锚点 |
 | --- | --- | --- |
-| `string` / `object` | 键文本直接当属性名，读回是同一个字符串 | `VeloxJsonSerializer.cs:585` |
-| 枚举 | 写 `ToString()` 的**名字**，读 `Enum.Parse(ignoreCase: true)` —— 一致 | `:586` |
-| 其它（`int` / `double` / …） | 写 `entry.Key.ToString()` 用**当前区域性**，读 `Convert.ChangeType(..., InvariantCulture)` | 写 `:643`，读 `:588` |
+| `string` / `object` | 键文本直接当属性名，读回是同一个字符串 | `VeloxJsonSerializer.cs` 的 `ReadMapKey` |
+| 枚举 | 写 `ToString()` 的**名字**，读 `Enum.Parse(ignoreCase: true)` —— 一致 | 同上 |
+| 其它（`int` / `double` / …） | 写读**同为不变区域性** | 写 `WriteMap`，读 `ReadMapKey` |
 
-**第三行是不对称的**：`double` / `decimal` 这类 `IFormattable` 键在非 invariant 区域写下、按 invariant 读回，会漂。
+第三行曾经是不对称的（写用当前区域性、读用 invariant），`double` / `decimal` 这类 `IFormattable` 键在非 invariant 区域下会漂。**改任何一侧都要同时看另一侧。**
 
-**接口键的字典是这套格式独有的形状**：键写成键对象的**引用 id**，而且映射本身不写 `$id`、不写 `$type`（`VeloxJsonSerializer.cs:621-633`）。STJ / Json.NET 都没有这种形状，互操作时对不上。
-
----
-
-## 四、`DateTime` 的 `Kind` 不往返
-
-写 `ToString("O")`（`VeloxJsonSerializer.cs:236`），读 `DateTime.Parse(text, InvariantCulture)` —— 生成器侧 `Writers/VeloxJsonCodeWriter.cs:298`，引擎侧 `VeloxJsonSerializer.cs:439-440`。
-两边都**没有 `DateTimeStyles.RoundtripKind`**：`Kind = Utc` 的值（`…Z` 结尾）读回来是 `Local` 且时刻被平移，`Unspecified` 原样读回。STJ 与 Json.NET 默认都保留 `Kind`。
+**接口键的字典是这套格式独有的形状**：键写成键对象的**引用 id**，而且映射本身不写 `$id`、不写 `$type`。STJ / Json.NET 都没有这种形状，互操作时对不上。
 
 ---
 
-## 五、get-only 属性默认不进文档（现在有出口）
+## 三、`DateTime` 与值拼写
 
-`ReadMembers` 要求 `property.SetMethod` 是 public（`Base/VeloxJsonModel.cs:813`）。只读计算属性默认**既不写出、也不读入** —— 与 STJ / Json.NET 的默认（会写出）相反。
+写 `ToString("O")`，读 `DateTime.Parse(text, InvariantCulture, DateTimeStyles.RoundtripKind)` —— 生成器侧与引擎侧各一处，**两边都要带 `RoundtripKind`**。不带它的时候 `Kind = Utc` 的值（`…Z`）读回来是 `Local` 且时刻被平移（这个洞 2026-10-04 修掉了）。
 
-`[Archive(ArchiveOptions.KeepProperty)]` 把它写进文档，但**读侧仍然跳过**：没有 setter 可赋值，生成器干脆不给它发读分支（`Writers/VeloxJsonCodeWriter.cs` 里 `member.WriteOnly` 跳过的就是它，于是那个值落到「读不懂的成员跳过」上）。**往返仍然丢这个成员** —— 那是诚实的结局。
-
-**排除单个成员**用 `[Archive(ArchiveOptions.IgnoreField)]`，或者直接用 .NET 自带的 `[JsonIgnore]` —— 生成器认后者，且**按它本来的意思认**：`Always`（默认）= 排除，`Never` = 显式放行，`WhenWritingNull` / `WhenWritingDefault` = 条件写出（不满足就不写那个成员，读侧不必配合：缺一个成员与读到一个没见过的成员是同一条路）。
-
-按**声明类型**整批排除仍然只有 `SerializationOptions.WithExcludedPropertyTypes`，它精确匹配声明类型（`ViewModelSerializer.cs:44` → `VeloxJsonSerializer.cs:44`），「排掉基类、留下派生」这种粒度做不到。
+其余值拼写见 [architecture.md](architecture.md) §三，那四条是冻结契约：`double` 最短往返且整数值补 `.0`、NaN/±Infinity 写成字符串、枚举默认写底层整数（**要写名字用 `[Archive(ArchiveOptions.EnumName)]`**，逐成员生效）、非 ASCII 不转义。
 
 ---
 
-## 六、成员声明成接口 / 抽象类：实现者**跨程序集不会被自动收进来**
+## 四、get-only 属性默认不进文档（现在有出口）
 
-闭包那一趟（`Base/VeloxJsonModel.cs:301-332`）遇到接口或抽象基类时把它**跳过**（`:314`），改为收集「实现了这个契约」的具体类型（`:305-318`）。两点要记住：
+`ReadMembers` 要求 `property.SetMethod` 是 public。只读计算属性默认**既不写出、也不读入**。
 
-- 抽象类型**自己永远没有条目** —— `IsWritableType` 只认 `Class`/`Struct` 且显式拒绝抽象（`:486`、`:490`），所以 `ReaderFor(I你的接口)` 恒为 `null`。
-- 候选集只有 `candidates`，即**本程序集**的类型（`:272`）；跨程序集的具体类要 `IsWritableType` 放行，而它对外程序集只放**封闭泛型 + 公开无参构造**（`:498-501`）。所以一个普通具体类若在别的程序集、且在那儿不是 root，**不会被自动收进来**。
+`[Archive(ArchiveOptions.KeepProperty)]` 把它写进文档，但**读侧仍然跳过**：没有 setter 可赋值，生成器干脆不给它发读分支（`Writers/VeloxJsonCodeWriter.cs` 里 `member.WriteOnly` 跳过的就是它）。**往返仍然丢这个成员** —— 那是诚实的结局。
 
-失败形态（都验过代码路径）：
+**排除单个成员**用 `[Archive(ArchiveOptions.IgnoreField)]` 或 .NET 自带的 `[JsonIgnore]`（`Always` 排除、`Never` 放行、两个条件值条件写出）。按**声明类型**整批排除仍然只有 `SerializationOptions.WithExcludedPropertyTypes`（`ViewModelSerializer.cs` → `VeloxJsonSerializer.cs`），「排掉基类、留下派生」这种粒度做不到。
+
+---
+
+## 五、成员声明成接口 / 抽象类：实现者**跨程序集不会被自动收进来**
+
+闭包那一趟（`Base/VeloxJsonModel.cs`）遇到接口或抽象基类时把它**跳过**，改为收集「实现了这个契约」的具体类型。两点要记住：
+
+- 抽象类型**自己永远没有条目** —— `IsWritableType` 只认 `Class`/`Struct` 且显式拒绝抽象，所以 `ReaderFor(I你的接口)` 恒为 `null`。
+- 候选集只有 `candidates`，即**本程序集**的类型；跨程序集的具体类要 `IsWritableType` 放行，而它对外程序集只放**封闭泛型 + 公开无参构造**。所以一个普通具体类若在别的程序集、且在那儿不是 root，**不会被自动收进来**。
+
+失败形态：
 
 | 情况 | 写 | 读 |
 | --- | --- | --- |
 | 实现者与抽象**同程序集**且可访问 | 自动计入，成功 | 成功 |
-| 实现者在**别的程序集**且在那儿不是 root | 抛 `MissingWriter`（`VeloxJsonSerializer.cs:185`） | 抛 `MissingReader`（`:458`） |
-| ↳ 例外：该类型实现了 `IEnumerable` | **静默写成数组**，不抛（`:169`） | — |
-| 成员声明成 `object` | 同上 | **不抛**：`ReadByShape` 降级成 `Dictionary<string, object?>`（`:460-464`） |
-| 被计入但**没有公开无参构造** | 成功 | `Create()` 抛 `NotSupportedException`（`Writers/VeloxJsonCodeWriter.cs:153-160`） |
+| 实现者在**别的程序集**且在那儿不是 root | 抛 `MissingWriter` | 抛 `MissingReader` |
+| ↳ 例外：该类型实现了 `IEnumerable` | **静默写成数组**，不抛 | — |
+| 成员声明成 `object` | 同上 | **不抛**：`ReadByShape` 降级成 `Dictionary<string, object?>` |
+| 被计入但**没有公开无参构造** | 成功 | `Create()` 抛 `NotSupportedException` |
 
-两个异常的消息都自带线索：`MissingReader` 额外给出文档里那个 `$type` 名字，所以它能直接指出是哪个类型漏了。
-
-**修法**：给具体类型贴 `[Archivable]`，让它在自己所在的程序集里成为 root（`Base/VeloxJsonModel.cs:430`）。前提是那个程序集引用了 `VeloxDev.MVVM`（`VeloxJson.cs` 的 `Applies` 判据），否则生成器在那一边根本不跑。**不要**加反射兜底。
+**修法**：给具体类型贴 `[Archivable]`（或 `[Archivable(typeof(它))]`），让它在自己所在的程序集里成为 root。前提是那个程序集引用了 `VeloxDev.MVVM`，否则生成器在那一边根本不跑。**不要**加反射兜底。
 
 ---
 
-## 七、`[Archive]` 与钩子的三条实现约束
+## 六、`[Archive]` 与钩子的实现约束
 
-前两条是源生成器的固有形状，第三条是 .NET 的。三条都实测过，撞上时不会报错 —— 只会静默少一个成员或一次回调。
+三条都实测过，撞上时不会报错 —— 只会静默少一个成员或一次回调。
 
-1. **生成器不能引用它为之生成代码的程序集。** 所以 `ArchiveOptions` 在生成器里镜像成 `ArchiveFlags`（`Base/VeloxJsonModel.cs`），枚举值只能手工保持同步。特性实参到达时是**底层整数**，不是枚举。
-   **但 `JsonIgnoreCondition` 故意没有镜像**：它按名字判（`ReadJsonIgnoreCondition` 拿常量值反查字段名，再用 `switch` 认名字）。理由是实测踩过 —— 它的顺序是 `Never=0, Always=1, WhenWritingDefault=2, WhenWritingNull=3`（.NET 11 又加了 `WhenWriting`/`WhenReading`），我第一版按 `Always/Never/WhenWritingNull/WhenWritingDefault` 记，**把后两个写反了**；症状是 `WhenWritingDefault` 静默不生效、而 `WhenWritingNull` 作用到了不该作用的成员上，测试才抓出来。**枚举顺序不是它表达的意思，别记它**。
-2. **源生成器看不见别的生成器的产物。** `[VeloxProperty]` 提升出来的属性在 VeloxJson 生成器的视图里**不存在**。所以「忽略字段、改用属性」不可表达 —— 两者产出的代码完全一样（同一个名字、同一个类型，都从字段那边推出来）。`IgnoreField` 因此取「该成员整个不进文档」这个唯一可实现、且此前真正缺位的语义。同理，`HasCorrespondingProperty` 对提升出来的属性找不到，只有作者手写的同名属性才会命中。
-3. **引用程序集剥掉非 public 成员 —— 消费方看不见它们。** 实测：测试程序集看 `SlotEnumerator<SlotDefaultViewModel>` 得到 `members=51`，里面**没有** `internal` 的 `OnDeserializing`/`OnDeserialized`。所以**钩子方法要能被别的程序集调，就必须是 `public`**；`internal` 只在「类型由它自己的程序集序列化」时够用（`Anchor`/`Size`/`BranchSegment`/`BranchOption` 属于这种）。判据在 `Base/VeloxJsonModel.cs` 的 `IsReachableFromGeneratedCode`，它按**程序集**判。
+1. **生成器不能引用它为之生成代码的程序集。** 所以 `ArchiveOptions` 在生成器里镜像成 `ArchiveFlags`，枚举值只能手工保持同步。特性实参到达时是**底层整数**，不是枚举。
+   **`JsonIgnoreCondition` 故意没有镜像**：它按名字判（`ReadJsonIgnoreCondition` 拿常量值反查字段名再 `switch`）。理由是实测踩过 —— 它的顺序是 `Never=0, Always=1, WhenWritingDefault=2, WhenWritingNull=3`（.NET 11 又加了 `WhenWriting`/`WhenReading`），我第一版按 `Always/Never/WhenWritingNull/WhenWritingDefault` 记，**把后两个写反了**，症状是 `WhenWritingDefault` 静默不生效。**枚举顺序不是它表达的意思，别记它**。
+2. **源生成器看不见别的生成器的产物。** `[VeloxProperty]` 提升出来的属性在 VeloxJson 生成器的视图里**不存在** —— 所以「忽略字段、改用属性」不可表达（两者产出的代码完全一样），`IgnoreField` 因此取「该成员整个不进文档」这个唯一可实现、且此前真正缺位的语义。
+3. **引用程序集剥掉非 public 成员 —— 消费方看不见它们。** 实测：测试程序集看 `SlotEnumerator<SlotDefaultViewModel>` 得到 `members=51`，里面**没有** `internal` 的 `OnDeserializing`/`OnDeserialized`。所以**钩子方法要能被别的程序集调，就必须是 `public`**；`internal` 只在「类型由它自己的程序集序列化」时够用。判据是 `IsReachableFromGeneratedCode`，它按**程序集**判。
+   **推论**：外程序集里 `internal`/`private` 的钩子生成器**根本看不到**，也就**无法**为它出声 —— 症状是那个回调静默不跑。`VELOX_JSON_HOOK002` / `VELOX_JSON_MEMBER001` 只覆盖够得着却不可调的情况。
 
 **钩子就是 BCL 那四个**（`System.Runtime.Serialization` 的 `[OnSerializing]` / `[OnSerialized]` / `[OnDeserializing]` / `[OnDeserialized]`），生成器沿基类链先基后派生地调，带 `StreamingContext` 的传 `default(...)`。四个 `IVeloxJson*` 钩子接口已删。
 
-> ⚠ **这四条特性在 2026-10-04 之前是死的**：它们一直写在这些方法上，而生成器只认接口 —— 每个钩子都拖着一个不生效的转发壳（`Anchor.cs` 里的 `private void OnSerializing(StreamingContext) => ((IVeloxJsonSerializing)this).OnSerializing();`）。别再照着那种写法加钩子。
+> ⚠ **这四条特性在 2026-10-04 之前是死的**：它们一直写在这些方法上，而生成器只认接口 —— 每个钩子都拖着一个不生效的转发壳。别再照着那种写法加钩子。
 
-**第三条还有一个陷阱**：诊断只能报在**看得见**的东西上。外程序集里 `internal`/`private` 的钩子在消费方编译里根本不存在，所以生成器**无法**为它出声 —— 症状是那个回调静默不跑。`VELOX_JSON_HOOK002` / `VELOX_JSON_MEMBER001` 只覆盖够得着却不可调的情况（同程序集的 `private`、跨程序集的 `protected` 之类）。
+---
+
+## 七、编译器合成的特性，源码符号上看不到
+
+**`[RequiredMember]` 是编译器在 emit 阶段合成的**，所以对**本次编译里声明的**类型，`ISymbol.GetAttributes()` **看不到它** —— 只有从元数据读回来的符号才有。我第一版按特性找 required 成员，实测静默失败：生成的 `Create()` 里没有对象初始化器，于是带 required 成员的类型**编不过**。
+
+判据是编译器 API `IPropertySymbol.IsRequired` / `IFieldSymbol.IsRequired`（**Roslyn ≥ 4.4**，生成器已从 4.3.1 抬到 4.8.0；`VeloxDev.Core.Test` 那处按它自己的注释要同步抬）。判定与工厂初始化器在 `Base/RequiredMembers.cs`，**两个生成器共用** —— VeloxJson 与 AIContextTree 都要发工厂调用，那个洞曾经两边都有。
+
+同类的还有一处：**`typeof(可空的枚举)` 拿到的是 `Nullable<T>`，不是枚举本身**，`Enum.Parse` 会当场抛「Type provided must be an Enum」。写 `EnumName` 的读法时，`typeof` 要用 `UnwrapNullable` 之后的类型，而赋值那侧的转型仍用可空类型。
+
+---
+
+## 八、两条链路是手写抄的两份，靠一条测试拴住
+
+写侧有两张手写的标量表：`TryWriteScalar`（同步）与 `TryWriteScalarAsync`（异步）。**没有任何东西强制它们一致** —— 2026-10-04 给同步那份加了 `byte[]` 而忘了异步那份，异步链路就把 `byte[]` 写成了数字数组，而读侧按 base64 读，异步往返当场 `FormatException`。
+
+没有合并两张表（那是横跨整个标量面的重构），而是加了 `ShapeRoundTripTests.TheTwoChains_SpellEveryScalarTheSameWay`：同一种对象过两条路，文档必须逐字节相同。**加新标量时它会红** —— 那就是它存在的意义。

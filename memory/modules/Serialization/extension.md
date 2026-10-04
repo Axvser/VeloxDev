@@ -77,6 +77,10 @@
 
 .NET 自带的 `[JsonIgnore]` 一并认：`Always`（默认）= 排除，`Never` = 显式放行，`WhenWritingNull` / `WhenWritingDefault` = 条件写出。**给已经有 `[JsonIgnore]` 的类型接入这套格式时不必改写。**
 
+`EnumName` 让**那一个**枚举成员写值名而不是底层整数（默认仍是整数，那是既有契约）。它只对枚举与可空枚举有意义，用在别处报 `VELOX_JSON_MEMBER001`。
+
+**必填**走 C# 的 `required` 或 STJ 的 `[JsonRequired]`，不需要 Velox 自己的特性：生成的 reader 缺了它就读不过去（抛 `InvalidOperationException`）。注意必填与「排除」「条件写出」互斥 —— 三者一起用会让文档永远无法满足，生成器报错。
+
 **它只动单个成员，不动规则**：成员顺序是逐字节契约，`[Archive]` 不重排、不改变其余成员的取舍。改「所有成员」的粒度仍然只有 `SerializationOptions.WithExcludedPropertyTypes`，而且它按**声明类型**精确匹配。
 
 写这个特性时会撞上三条只有做过才知道的约束（生成器看不见别的生成器、生成器引用不了目标程序集、引用程序集剥非 public 成员），都记在 [pitfalls.md](pitfalls.md) §七。

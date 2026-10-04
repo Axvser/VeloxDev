@@ -33,7 +33,9 @@
 
 类型进了闭世界之后，「哪些成员进文档」由三条规则决定：默认规则（public 且 public setter 的属性、按声明顺序、加上 `[VeloxProperty]` 提升出来的）、成员级 `[Archive(ArchiveOptions, object?)]`、以及 .NET 自带的 `[JsonIgnore]`。
 
-四个选项 `KeepProperty` / `KeepField` / `IgnoreField` / `ReName` 都**只动它标的那一个成员**，不重排、不改其余成员的取舍 —— 顺序是逐字节契约。生成器把「文档里的名字」与「CLR 成员名」拆成 `VeloxJsonMember.DocumentName` 与 `.Name`，`ReName` 与只写得出去的成员都靠这两个字段区分。
+五个选项 `KeepProperty` / `KeepField` / `IgnoreField` / `ReName` / `EnumName` 都**只动它标的那一个成员**，不重排、不改其余成员的取舍 —— 顺序是逐字节契约。生成器把「文档里的名字」与「CLR 成员名」拆成 `VeloxJsonMember.DocumentName` 与 `.Name`，`ReName` 与只写得出去的成员都靠这两个字段区分；`WriteCondition`（条件写出）、`IsRequired`（必填）、`IsEnumName`（枚举写名字）是同一条路上的另外三个开关。
+
+**必填**有两个同义的口子：C# 的 `required` 与 STJ 的 `[JsonRequired]`。生成的工厂因此要为它们写对象初始化器（`new T() { X = default! }` —— 只写 `new T()` 编不过），而生成的 reader 读完会核对每个必填成员到没到，缺了就抛。判定与初始化器在 `Base/RequiredMembers.cs`，AIContextTree 生成器共用同一份。
 
 `[JsonIgnore]` 按它本来的意思被认下来（理由与钩子那次相同：使用方不必为了同一件事改写代码）：`Always` = 排除该成员，`Never` = 显式放行，`WhenWritingNull` / `WhenWritingDefault` = **条件写出**（`VeloxJsonMember.WriteCondition`，写侧发一条守卫，读侧不必配合）。它的 `Condition` **按名字判、不按数值** —— 理由见 [pitfalls.md](pitfalls.md) §七。
 
