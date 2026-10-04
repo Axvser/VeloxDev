@@ -257,8 +257,8 @@ internal static class PerformanceReport
         }
 
         text.AppendLine();
-        text.AppendLine("差得越多，这一档越该往后放 —— 文档越大，量到的越接近 GC 而不是序列化器。");
-        text.AppendLine("**要做决定时以「大」那一列为准**，「超大」只当指示。");
+        text.AppendLine("差得越多，这一档的数字越不能当真。**哪一档噪声最小每次都不一样** —— 最近几次里有一次是超大档");
+        text.AppendLine("最差（15.0%）、另一次是最小档最差（21.8%），所以别固定信某一档，看的是这一节当次给的数。");
     }
 
     private static int NodeCountOf(BenchmarkReport report)
