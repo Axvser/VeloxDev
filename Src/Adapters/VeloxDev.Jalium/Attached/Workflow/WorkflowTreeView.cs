@@ -417,7 +417,13 @@ public class WorkflowTreeView : Canvas
         if (_input is not { } input) return;
 
         var anchor = new Anchor(canvasPos.X, canvasPos.Y, 0);
-        var target = input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+
+        // 命中判定在**模型系**里做：Core 的遮挡守卫拿指针去比 node.Anchor / node.Size，而 canvasPos 是表面系
+        // （= 模型 + Origin，见 OriginX）。两个系差一个标尺带，不同系时守卫会误判「压在卡片下面」而漏掉整条线
+        // （症状：悬停不亮、右键无菜单、Delete 进不来）。曲线那一侧同样发布在模型系，见 WorkflowLinkAttachment。
+        // 报给宿主的 anchor 仍是表面系 —— 菜单定位（ToMenuPosition）按表面坐标算 PointToScreen。
+        var target = input.Tree.HitTestVisibleLinks(
+            canvasPos.X - OriginX, canvasPos.Y - OriginY, input.HitRadius);
 
         input.Route(args(anchor, target, new WorkflowEventHandle()));
 

@@ -255,7 +255,13 @@ internal sealed class NodeEditorSurface : Canvas
         // 指针换了目标就是换了选中：路由会给留下那个发一次 Exited、给新那个发一次 Entered，
         // 这里照着指针目标重画即可 —— 与其它六家的连线一致。
         var anchor = new Anchor(canvasPos.X, canvasPos.Y, 0);
-        var target = link ?? input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+
+        // 命中判定在**模型系**里做：Core 的遮挡守卫拿指针去比 node.Anchor / node.Size（模型系），而 canvasPos
+        // 是画布系（= 模型 + Origin，见 OriginX）。原点不为 0 时两系差一个平移，守卫会把画得出来的一段当成
+        // 「压在卡片下面」而跳过整条线（症状：悬停不亮、选不中、右键无菜单、Delete 打在空气上）。
+        // 曲线那一侧同样发布在模型系，见绘制循环里那一处 PublishCurve。
+        var target = link ?? input.Tree.HitTestVisibleLinks(
+            anchor.Horizontal - OriginX, anchor.Vertical - OriginY, input.HitRadius);
 
         input.Route(new WorkflowPointerMovedEventArgs(
             anchor, InputModifiers.None, this, target, new WorkflowEventHandle()));
@@ -1111,8 +1117,8 @@ internal sealed class NodeEditorSurface : Canvas
             // 线体是静息的，光不在时它只是一根暗线 —— 有了对比，沿它跑的那段彗星才亮得出来。
             // 端点每次绘制现读：拖节点只动 Anchor，链接本身收不到通知，所以几何按端点缓存。
             // 这条曲线同时发布给 Core 做命中，画出来的与能点中的是同一条（退化成一点的不发布，免得被当可命中）
-            var curve = CurveFor(link, p0, p1);
-            link.PublishCurve(curve.Length > 0 ? curve : null);
+            var curve = CurveFor(link, p0, p1, out var hitCurve);
+            link.PublishCurve(curve.Length > 0 ? hitCurve : null);
             if (curve.Length <= 0)
             {
                 continue;
@@ -1150,9 +1156,10 @@ internal sealed class NodeEditorSurface : Canvas
 
     // ── 链接几何（发布给 Core 的扁曲线 + 弧长取段）────────────────────────
 
-    // 每条链接当前发布给 Core 的曲线。Core 的 LinkCurve 一旦建好就不可变，端点变了就换一条；
+    // 每条链接当前的两条曲线。Core 的 LinkCurve 一旦建好就不可变，端点变了就换一条；
     // 缓存只为省下每帧的采样开销，判据就是建曲线时的那两个端点。
-    private readonly Dictionary<IWorkflowLinkViewModel, (Point From, Point To, LinkCurve Curve)> _curves = new();
+    // Curve 是画布系（画用），ModelCurve 是模型系（发布给 Core 做命中），两者只差一个 Origin 平移。
+    private readonly Dictionary<IWorkflowLinkViewModel, (Point From, Point To, LinkCurve Curve, LinkCurve ModelCurve)> _curves = new();
 
     // 虚拟连线（指针下那根橡皮筋）也有自己的一条曲线：同时只会有一根，端点一变就重算
     private (Point From, Point To, LinkCurve Curve)? _virtualPreview;
@@ -1162,15 +1169,21 @@ internal sealed class NodeEditorSurface : Canvas
     private static LinkCurve BuildCurve(Point from, Point to)
         => LinkCurve.BuildCubic(from.X, from.Y, to.X, to.Y, PullMinimum, LinkCurve.DefaultSampleCount);
 
-    private LinkCurve CurveFor(IWorkflowLinkViewModel link, Point from, Point to)
+    // 同时给出模型系的那一份（hitCurve）：发布给 Core 的是它，而不是画用的这一条，理由见 ForwardPointer。
+    private LinkCurve CurveFor(IWorkflowLinkViewModel link, Point from, Point to, out LinkCurve hitCurve)
     {
         if (_curves.TryGetValue(link, out var entry) && entry.From == from && entry.To == to)
         {
+            hitCurve = entry.ModelCurve;
             return entry.Curve;
         }
 
         var curve = BuildCurve(from, to);
-        _curves[link] = (from, to, curve);
+        var model = BuildCurve(
+            new Point(from.X - OriginX, from.Y - OriginY),
+            new Point(to.X - OriginX, to.Y - OriginY));
+        _curves[link] = (from, to, curve, model);
+        hitCurve = model;
         return curve;
     }
 

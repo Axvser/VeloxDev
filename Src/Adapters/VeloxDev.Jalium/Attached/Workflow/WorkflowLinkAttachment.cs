@@ -322,9 +322,16 @@ public sealed class WorkflowLinkAttachment
         target.Width = Math.Max(1, x2 - x1);
         target.Height = Math.Max(1, y2 - y1);
 
-        // 发布给 Core 的曲线用的是画布局部系（与表面的指针同一系），控件随曲线一起交出去。
+        // 发布给 Core 的曲线用**模型系**，不是元素所处的表面系：Core 的命中判定会拿指针去比
+        // node.Anchor / node.Size（模型系），两系差一个 Origin（= ActualOffset + 标尺带）。不同系时
+        // 遮挡守卫会把画得出来的一段当成「压在卡片下面」而跳过整条线 —— 症状是悬停不亮、右键无菜单、
+        // Delete 到不了路由（本家实测）。所以这里减掉 Origin，与表面的指针（见 WorkflowTreeView.RoutePointer）
+        // 对齐；元素自己的摆放与绘制的四个点仍用表面系，见下。
         link.PublishCurve(
-            LinkCurve.BuildCubic(ep.FromP.X, ep.FromP.Y, ep.ToP.X, ep.ToP.Y, pullMinimum, LinkCurve.DefaultSampleCount),
+            LinkCurve.BuildCubic(
+                ep.FromP.X - ep.OriginX, ep.FromP.Y - ep.OriginY,
+                ep.ToP.X - ep.OriginX, ep.ToP.Y - ep.OriginY,
+                pullMinimum, LinkCurve.DefaultSampleCount),
             target);
 
         // 把画布局部的几何烘焙回元素局部：元素被摆在 (viewX,viewY)，所以 local = canvas − (viewX,viewY)。
@@ -414,7 +421,8 @@ public sealed class WorkflowLinkAttachment
 
     // 两个端点在画布局部坐标下的位置（折叠后的端口 + 布局偏移 + 标尺预留），与 NodeView 的定位、表面的
     // OriginX/Y 同一个坐标系。任一端点没有位置时为 null。
-    private (Point FromP, Point ToP)? EndpointsCanvasLocal()
+    // OriginX/Y 一并交回：发布给 Core 的曲线要减掉它们换到模型系，见 UpdateGeometry。
+    private (Point FromP, Point ToP, double OriginX, double OriginY)? EndpointsCanvasLocal()
     {
         if (link is null) return null;
 
@@ -426,7 +434,7 @@ public sealed class WorkflowLinkAttachment
         var to = PortCenter(link.Receiver);
         if (from is null || to is null) return null;
         return (new Point(from.Value.X + rx, from.Value.Y + ry),
-                new Point(to.Value.X + rx, to.Value.Y + ry));
+                new Point(to.Value.X + rx, to.Value.Y + ry), rx, ry);
     }
 
 }
