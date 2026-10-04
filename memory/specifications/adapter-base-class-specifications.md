@@ -87,8 +87,10 @@
 - `template.json` 的 `primaryOutputs` / `symbols` / `dotnetcli.host.json`：颜色 token 一般不用动（仍在模板里，只是从
   `ParseColor` 的参数变成属性的赋值）。**改名或新增文件才要动 `primaryOutputs`。**
 - **文本没有构建产物**（模板项目 `EnableDefaultCompileItems=false`），所以「生成 → 一起编译 → 与镜像比对」必须脚本化。
-  WinForms 有 `Src/Verification/verify-workflow-item-templates.ps1`；**Jalium 也有** `Src/Verification/verify-jalium-item-templates.ps1`
-  （会先把模板的颜色拼写规范化再与镜像比对）。
+  **七家统一走** `Src/Verification/verify-workflow-item-templates-all.ps1`（`-Platform <平台名>` 选一家、
+  `-Strict` 严格模式；不传 `-Platform` 就是七家一起）。两个旧的平台专用脚本现在是它的**薄转发**，老调用照常可用。
+  它还会**硬断言生成文件里不残留任何 `replaces` 占位符** —— Jalium 那个 `TemplateLinkColor` 缺陷就是这条抓到的
+  （旧的 Jalium 脚本会把 `ColorConverter.ConvertFromString("…")` 归一化掉，正好抹掉要查的东西）。
 - 模块记忆（`memory/modules/Templates/adapters/<平台>.md` 与 `memory/modules/VeloxDev.<平台>/`）要跟着改：
   角色表里的「形状」一列与扩展点清单都会变。
 
@@ -108,14 +110,14 @@
 `WorkflowGridDecorator` 41、`WorkflowMinimapOverlay` 22、`WorkflowTemplateSelector` 19 —— 合计 **581**（原 3257）。
 另有三个共用件：`WorkflowSurfaceColors`（颜色解析）、`WorkflowSurfaceGraphics`（圆角矩形）、
 `WorkflowSurfaceGrid`（网格线判定与刻度标签格式化，此前在包内有**两份**逐字相同的私有副本）。
-校验：`Src/Verification/verify-workflow-item-templates.ps1 -Strict` 全绿。
+校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform WinForms -Strict` 全绿。
 
 **Jalium 的七个角色**（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`）：`WorkflowTreeView` 819、
 `WorkflowNodeView` 309、`WorkflowLinkView` 344、`WorkflowSlotView` 167（端口图形）、`WorkflowGridDecorator` 234、
 `WorkflowTemplateSelector` 51、`WorkflowMinimapOverlay` 311，加分层的两个共用件 `WorkflowPortLayout`（设计值，41）
 与 `WorkflowPortGeometry`（端口枚举与定位，反射，125）。
 七个模板条目现压到 32 / 59 / 35 / 20 / 25 / 25 / 14 行，合计 **210**（原 1262）。
-校验：`Src/Verification/verify-jalium-item-templates.ps1 -Strict` 全绿。
+校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict` 全绿。
 
 **七个角色在这家都是「基类 + 派生」，没有例外。** 曾经不是：`slot-view` 的产物一度是一份「端口在哪」的静态几何，
 **端口图形由卡片自己画成圆点**；现在 `WorkflowSlotView` 是一个真正的控件，卡片按 `WorkflowPortLayout` 托管
