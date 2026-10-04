@@ -127,6 +127,72 @@ public class ArchiveDiagnosticsTests
     public void EnumNameOnAMemberThatIsNotAnEnum_IsReported()
         => AssertReports("VELOX_JSON_MEMBER001", EnumNameOnANonEnum);
 
+    /// <summary>A named root the generator cannot emit an entry for — the declaration would be a runtime surprise.</summary>
+    private const string NamedRootThatCannotBeWritten = """
+        using VeloxDev.MVVM;
+        using VeloxDev.Serialization;
+
+        namespace Probe;
+
+        [Archivable(typeof(AbstractThing))]
+        public partial class Model
+        {
+            [VeloxProperty] private int count;
+        }
+
+        public abstract class AbstractThing
+        {
+            public string? Tag { get; set; }
+        }
+        """;
+
+    /// <summary>Two callbacks for one moment: the BCL formatter would throw, so the generator has to say so.</summary>
+    private const string TwoCallbacksForOneMoment = """
+        using System.Runtime.Serialization;
+        using VeloxDev.MVVM;
+
+        namespace Probe;
+
+        public partial class Model
+        {
+            [VeloxProperty] private int count;
+
+            [OnDeserialized]
+            public void First(StreamingContext context) { }
+
+            [OnDeserialized]
+            public void Second(StreamingContext context) { }
+        }
+        """;
+
+    /// <summary>A callback the generated code cannot reach, so it would silently never run.</summary>
+    private const string ACallbackThatCannotBeCalled = """
+        using System.Runtime.Serialization;
+        using VeloxDev.MVVM;
+
+        namespace Probe;
+
+        public partial class Model
+        {
+            [VeloxProperty] private int count;
+
+            [OnDeserializing]
+            private void Hidden(StreamingContext context) { }
+        }
+        """;
+
+    [TestMethod]
+    public void ANamedRootThatCannotBeWritten_IsReported()
+        => AssertReports("VELOX_JSON_ARCH001", NamedRootThatCannotBeWritten);
+
+    [TestMethod]
+    public void TwoCallbacksForOneMoment_AreReported()
+        => AssertReports("VELOX_JSON_HOOK001", TwoCallbacksForOneMoment);
+
+    [TestMethod]
+    public void ACallbackTheGeneratedCodeCannotReach_IsReported()
+        => AssertReports("VELOX_JSON_HOOK002", ACallbackThatCannotBeCalled);
+
     [TestMethod]
     public void ANamedRoot_TakesPartWithoutBeingReachableFromAComponent()
     {
