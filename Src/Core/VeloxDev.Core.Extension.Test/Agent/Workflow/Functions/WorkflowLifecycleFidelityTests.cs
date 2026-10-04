@@ -8,7 +8,7 @@ using VeloxDev.MVVM;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;

@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using Newtonsoft.Json.Linq;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 

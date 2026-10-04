@@ -3,7 +3,7 @@ using System.Collections.ObjectModel;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
 
-namespace VeloxDev.MVVM.Serialization;
+namespace VeloxDev.Serialization;
 
 /// <summary>
 /// Serializes a <see cref="CompiledGraph"/> as a document in its own right.

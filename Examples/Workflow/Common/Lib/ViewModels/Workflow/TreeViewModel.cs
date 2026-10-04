@@ -7,7 +7,7 @@ using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;

@@ -1,7 +1,7 @@
 using System.IO;
 using System.Runtime.CompilerServices;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Test.Serialization;

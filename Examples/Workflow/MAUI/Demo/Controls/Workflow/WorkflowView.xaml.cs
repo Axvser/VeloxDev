@@ -6,7 +6,7 @@ using System.IO;
 using System.Windows.Input;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;

@@ -2,7 +2,7 @@ using Demo.ViewModels;
 using System.Collections.ObjectModel;
 using System.IO;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Workflow;

@@ -1,4 +1,3 @@
-﻿using VeloxDev.Serialization;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -9,11 +8,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace VeloxDev.MVVM.Serialization;
+namespace VeloxDev.Serialization;
 
 /// <summary>
 /// Per-call serialization options built via a Fluent API.
-/// Construct an instance with <see cref="SerializationOptions.Create"/>,
+/// Construct an instance with <see cref="Create"/>,
 /// chain the desired overrides, then pass it to the
 /// <c>Serialize</c> / <c>Deserialize</c> / <c>TryDeserialize</c> overloads.
 /// </summary>
@@ -52,11 +51,11 @@ public sealed class SerializationOptions
 
     }
 
-/// <summary>Serialization helpers for workflow components, backed by VeloxDev's own serializer.</summary>
-public static class ComponentModelEx
+/// <summary>Serialization for any view model, backed by VeloxDev's own serializer.</summary>
+public static class ViewModelSerializer
 {
     // 三个核心入口都走 VeloxDev 自己的序列化器：格式逐字节一致，但不再依赖运行期反射，
-    // 因此裁剪与 NativeAOT 下都成立。公开面一行没变。
+    // 因此裁剪与 NativeAOT 下都成立。
     private static string SerializeCore<T>(T workflow, SerializationOptions? options = null)
         where T : INotifyPropertyChanged
     {
@@ -95,7 +94,7 @@ public static class ComponentModelEx
     /// <param name="value">The tree.</param>
     /// <param name="targetType">The type to read into; it must be one the generator carried.</param>
     /// <returns>The instance, or <see langword="null"/> when the tree is the JSON literal.</returns>
-    internal static object? DeserializeToType(this VeloxJsonValue value, Type targetType)
+    public static object? DeserializeToType(this VeloxJsonValue value, Type targetType)
     {
         if (value == null)
             throw new ArgumentNullException(nameof(value));
@@ -210,6 +209,79 @@ public static class ComponentModelEx
     #endregion
 
     #region Streaming Methods (netstandard2.0 compatible)
+
+    /// <summary>Serializes a workflow object into a <see cref="TextWriter"/>, a piece at a time.</summary>
+    /// <param name="workflow">The object to write.</param>
+    /// <param name="writer">Where the document is written.</param>
+    /// <param name="options">Optional per-call overrides.</param>
+    /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// No whole-document string is built; memory is bounded by the writer's own buffering. Use this rather than
+    /// <see cref="Serialize{T}(T)"/> when the document is large enough that holding it twice matters.
+    /// </remarks>
+    public static void SerializeToTextWriter<T>(this T workflow, TextWriter writer, SerializationOptions? options = null)
+        where T : INotifyPropertyChanged
+    {
+        if (writer == null)
+            throw new ArgumentNullException(nameof(writer), "Target writer cannot be null");
+        if (workflow == null)
+            throw new ArgumentNullException(nameof(workflow));
+
+        VeloxJsonSerializer.WriteTo(writer, workflow, options?.Formatting != VeloxJsonFormat.Compact, options?.ExcludedPropertyTypes);
+        writer.Flush();
+    }
+
+    /// <summary>Serializes a workflow object into a UTF-8 stream, a piece at a time.</summary>
+    /// <param name="workflow">The object to write.</param>
+    /// <param name="stream">Where the document is written. Left open.</param>
+    /// <param name="options">Optional per-call overrides.</param>
+    /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The stream is not writable.</exception>
+    public static void SerializeToStream<T>(this T workflow, Stream stream, SerializationOptions? options = null)
+        where T : INotifyPropertyChanged
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream), "Target stream cannot be null");
+        if (!stream.CanWrite)
+            throw new InvalidOperationException("Target stream is not writable");
+        if (workflow == null)
+            throw new ArgumentNullException(nameof(workflow));
+
+        VeloxJsonSerializer.WriteTo(stream, workflow, options?.Formatting != VeloxJsonFormat.Compact, options?.ExcludedPropertyTypes);
+    }
+
+    /// <summary>Deserializes a workflow object from a <see cref="TextReader"/>, a piece at a time.</summary>
+    /// <typeparam name="T">The root type.</typeparam>
+    /// <param name="reader">The document. Left open.</param>
+    /// <returns>The restored object, or <see langword="null"/> when the document held the JSON literal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
+    /// <remarks>Peak memory is the reader's buffer plus the graph, not the whole document.</remarks>
+    public static T? DeserializeFromTextReader<T>(this TextReader reader)
+        where T : INotifyPropertyChanged
+    {
+        if (reader == null)
+            throw new ArgumentNullException(nameof(reader), "Source reader cannot be null");
+
+        return (T?)VeloxJsonSerializer.Deserialize(reader, typeof(T));
+    }
+
+    /// <summary>Deserializes a workflow object from a UTF-8 stream, a piece at a time.</summary>
+    /// <typeparam name="T">The root type.</typeparam>
+    /// <param name="stream">The document. Left open.</param>
+    /// <returns>The restored object, or <see langword="null"/> when the document held the JSON literal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The stream is not readable.</exception>
+    public static T? DeserializeFromStream<T>(this Stream stream)
+        where T : INotifyPropertyChanged
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream), "Source stream cannot be null");
+        if (!stream.CanRead)
+            throw new InvalidOperationException("Source stream is not readable");
+
+        return (T?)VeloxJsonSerializer.Deserialize(stream, typeof(T));
+    }
+
     /// <summary>Serializes a workflow object to a UTF-8 byte array.</summary>
     public static byte[] SerializeToUtf8Bytes<T>(this T workflow, SerializationOptions? options = null)
         where T : INotifyPropertyChanged
@@ -253,9 +325,9 @@ public static class ComponentModelEx
             throw new ArgumentNullException(nameof(workflow));
 
         cancellationToken.ThrowIfCancellationRequested();
-        var json = SerializeCore(workflow, options);
-        cancellationToken.ThrowIfCancellationRequested();
-        await writer.WriteAsync(json).ConfigureAwait(false);
+
+        // 逐段写进 writer，不再先造一整份字符串 —— 这条路上内存有界。
+        VeloxJsonSerializer.WriteTo(writer, workflow, options?.Formatting != VeloxJsonFormat.Compact, options?.ExcludedPropertyTypes);
         await writer.FlushAsync().ConfigureAwait(false);
     }
 

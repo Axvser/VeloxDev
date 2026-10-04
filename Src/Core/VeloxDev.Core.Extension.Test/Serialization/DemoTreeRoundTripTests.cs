@@ -1,6 +1,6 @@
 using System.Linq;
 using Demo.ViewModels;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Test.Serialization;

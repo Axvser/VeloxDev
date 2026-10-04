@@ -1,7 +1,7 @@
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using VeloxDev.MVVM;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Test.Serialization;

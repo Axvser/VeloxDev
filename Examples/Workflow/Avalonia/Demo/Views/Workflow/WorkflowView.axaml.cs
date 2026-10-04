@@ -20,7 +20,7 @@ using VeloxDev.AI;
 using VeloxDev.AI.MCP;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo;

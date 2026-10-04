@@ -5,7 +5,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo

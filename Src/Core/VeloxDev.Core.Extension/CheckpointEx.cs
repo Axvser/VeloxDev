@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using VeloxDev.Serialization;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 
-namespace VeloxDev.MVVM.Serialization;
+namespace VeloxDev.Serialization;
 
 /// <summary>
 /// Persists an <see cref="ExecutionCheckpoint"/>: the JSON form, and the <see cref="IExecutionCheckpointStore"/>
@@ -13,9 +13,10 @@ namespace VeloxDev.MVVM.Serialization;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>It goes through the same settings the rest of the library uses</b> — the ones behind <c>ComponentModelEx</c>
-/// — rather than a private set of its own, so a checkpoint and the graph it belongs to are written the same way,
-/// and a payload keeps its shape: a dictionary comes back as a dictionary rather than a <c>JObject</c>.
+/// <b>It goes through the same settings the rest of the library uses</b> — the ones behind
+/// <see cref="ViewModelSerializer"/> — rather than a private set of its own, so a checkpoint and the graph it
+/// belongs to are written the same way, and a payload keeps its shape: a dictionary comes back as a dictionary
+/// rather than a <c>JObject</c>.
 /// </para>
 /// <para>
 /// <b>Numbers do not keep their type, and that is measured, not assumed.</b> A payload is
@@ -28,11 +29,13 @@ namespace VeloxDev.MVVM.Serialization;
 /// </para>
 /// <para>
 /// <b>A checkpoint is a plain document, not a view model</b>, which is why it does not go through
-/// <c>ComponentModelEx.Serialize</c>: that surface is constrained to <see cref="System.ComponentModel.INotifyPropertyChanged"/>.
-/// It takes part in the archive format by declaring itself serializable — see <see cref="VeloxSerializableAttribute"/>.
+/// <see cref="ViewModelSerializer.Serialize{T}(T)"/>: that surface is constrained to
+/// <see cref="System.ComponentModel.INotifyPropertyChanged"/>. It takes part in the archive format by declaring
+/// itself serializable — see <see cref="VeloxSerializableAttribute"/>.
 /// </para>
 /// <para>
-/// Like <see cref="CompiledGraphEx"/>, this lives here rather than in Core because Core has no serializer.
+/// Like <see cref="CompiledGraphEx"/>, this stays in this assembly while the engine and the general view-model
+/// surface live in <c>VeloxDev.Core</c>: these two are the workflow domain's own wrappers over it.
 /// </para>
 /// </remarks>
 /// <seealso cref="FileCheckpointStore"/>

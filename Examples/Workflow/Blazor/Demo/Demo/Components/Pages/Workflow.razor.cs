@@ -8,7 +8,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 

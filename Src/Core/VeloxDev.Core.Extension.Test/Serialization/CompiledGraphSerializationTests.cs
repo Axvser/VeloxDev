@@ -6,7 +6,7 @@ using Demo.ViewModels;
 using Demo.Workflow;
 using VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 

@@ -12,7 +12,7 @@ using Jalium.UI.Threading;
 using Microsoft.Win32;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
-using VeloxDev.MVVM.Serialization;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo;
