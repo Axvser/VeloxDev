@@ -2,6 +2,9 @@
 
 > **另：连线的那个基类已换成附加助手**（2026-10-04）—— 这一角色现在由用户自己的控件 + `WorkflowLinkAttachment.Attach(this)` 组成，
 > 下文凡是 `WorkflowLinkView` 的类名与行号，按 `WorkflowLinkAttachment` 读；机制（自盒化 / 雕窗口区域 / 端点订阅 / 命中发布）没变。
+> **另（2026-10-04）：slot / node 的基类也换成了附加助手** —— `WorkflowSlotAttachment` / `WorkflowNodeAttachment`；
+> 树（`WorkflowTreeView`）仍是基类（它是引擎不是视图），但 WinForms 那家的表面行为改成了**按对象**交部件，不再按名字找。
+> 下文凡提 `WorkflowSlotView` / `WorkflowNodeView` 的类名，按对应的 `*Attachment` 读。
 > ⚠ **交互那几段记的是 2026-10-04 之前的世界。** 当时 Core 有一个 `LinkInteraction` hub，事件是 `HoverChanged` /
 > `LinkPressed` / `ContextMenuRequested` 这些按组件定制的语义事件，高亮由 hub 经 `ILinkHighlight` 点亮。
 > **现在**：输入是一套**标准输入**（`WorkflowInput.For(tree).Route(...)` + `IWorkflowInputEvents`），

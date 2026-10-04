@@ -132,11 +132,20 @@
 `[Params]`，因为后者是编译期常量，会让每次改动都为最慢的一档付钱。`SerializationBenchmarks` 只量归档自己
 （回归用），`ComparisonBenchmarks` 让**同一个对象图**过归档 / System.Text.Json / Newtonsoft（三家都开引用
 保留）。**一条命令跑完并留一份 Markdown 报告**到本工程目录下的
-`BenchmarkDotNet.Artifacts/serialization-performance.md`。**报告就是五张表**：环境一张，四个当量各一张 ——
+`BenchmarkDotNet.Artifacts/serialization-performance.md`。**报告 = 五张表 + 一处自校 + 一章行为说明**：
+环境一张，四个当量各一张 ——
 （用户 2026-10-04 定的形状）每个当量的表**一行一个序列化器**，**耗时与存储同表**（写/读各自的耗时与分配，
-加文档字符数），**本仓库那行加粗**，括号里是相对本仓库同方向的倍数。表后是一段备注（下面 §四·二 那些结论
-就在里面）与一处自校。报告由 `PerformanceReport.cs` 从 BenchmarkDotNet 的**结构化结果**生成，不解析控制台
-输出 —— 分配那一项尤其要注意：指标键是 `Allocated Memory`，取错不会报错、只会让整列变成「—」。
+加文档字符数），**本仓库那行加粗**，括号里是相对本仓库同方向的倍数。表后是**自校**（同一个归档写被两个类
+各量一次，两者之差就是这一档的噪声，结论见 §四·二）。
+
+**尾章 2026-10-04 从「备注」改成一章《归档序列化 · 行为与支持》**（用户定）：原来那段解释数字局限的散文
+不要了，改成**分节讲这套序列化本身** —— 收录条件（含 §一·一 那三条扩展）、写读 API、选项、成员规则、
+`[Archive]` 五个选项、`[JsonIgnore]` / 必填、生命周期钩子、容器与键、泛型、拼写契约、失败形态、诊断、
+领域封装，**以用例代码为主、每节只讲关键结论**。它写在 `PerformanceReport.cs` 的常量 `Surface` 里，
+与某一次测量的数字无关；换行要做归一化（raw string 带的是源文件的换行符，其余行走 `AppendLine`）。
+
+报告由 `PerformanceReport.cs` 从 BenchmarkDotNet 的**结构化结果**生成，不解析控制台输出 —— 分配那一项
+尤其要注意：指标键是 `Allocated Memory`，取错不会报错、只会让整列变成「—」。
 
 > ⚠ **产物必须落在工程目录，不是工作目录。** BenchmarkDotNet 默认 `BenchmarkDotNet.Artifacts` 相对**当前
 > 工作目录**，从仓库根启动就会把输出散到根上；`Artifacts.cs` 从程序集位置（`bin/Debug/net10.0` 往上三层）
@@ -244,10 +253,25 @@
 
 > ⚠ **别拿被污染的那次当结论。** 曾经记过一次「归档读在大档到超大档是 3× 数据换 6.8× 时间」，那来自一次**我同时还在跑 demo 与重建**的测量。干净跑出来是 3.24×（线性）。量基准时不要在机器上做别的事 —— 这条比任何一条数字都值得记。
 
-**STJ 在这张图上的两处默认设置失败**（实测，不是推测）：
+**STJ 在这张图上的失败，以及 2026-10-04 用配置补上它们的过程**（全部实测，不是推测）。
+补在 `Src/Verification/VeloxDev.Serialization.Benchmarks/StjSerializationBridge.cs`：
 
 - **写**：默认设置对 NaN/±Infinity 抛 `ArgumentException`，要 `AllowNamedFloatingPointLiterals` 才写得出去 —— 与 §三 那条「非有限值写成字符串」正是同一个分歧。
-- **读**：`Each parameter in the deserialization constructor on type 'Offset' must bind to an object property or field`。这些 ViewModel 是**主构造器类**，提升出来的属性名（`Horizontal`）与构造器形参名（`left`）不同，STJ 直接拒绝；`IncludeFields` 也救不了（字段是 `_horizontal`）。**要用 STJ 读这套库自己的图，得先给库的类型加注解或写转换器** —— 而那正是归档格式在编译期生成读写器所省掉的事。
+- **读，第一处**：`Each parameter in the deserialization constructor on type 'Offset' must bind to an object property or field`。这些 ViewModel 是**主构造器类**，提升出来的属性名（`Horizontal`）与构造器形参名（`left`）不同；`IncludeFields` 也救不了（字段是 `_horizontal`）。修法是 `TypeInfoResolver` 的修饰器把 `CreateObject` 换成 `GetUninitializedObject` —— 跳过构造器建实例，与生成器 `Create()` 同源。**只对没有公开无参构造的类型生效**，所以落在 `Offset` 这类叶子上，不是每个对象都多一笔。
+- **读，第二处**（补掉第一处才露出来）：`Deserialization of interface or abstract types is not supported. Type 'IWorkflowLinkViewModel'. Path: $.VirtualLink`。修法是给接口 / 抽象类型配 `JsonPolymorphismOptions` 加一张**枚举出来的派生表**。**必须同时配在写这一侧**（判别符是写进去的）；派生表要排掉泛型 —— STJ 拒绝泛型派生类型，实测对着 `VeloxCommand\`1[T1…T9,TResult]` 抛 `must not be generic`。
+
+**这两条是配置，不是替它写的序列化代码 —— 这条线必须守住。** 一旦要手写转换器，那一行就不再是
+「System.Text.Json」而是「System.Text.Json + 我们」，表就在声称一个它撑不住的比较。读者要能一眼看出
+每一行带的是什么 —— 报告的表下那段图例就是干这个的。
+
+**配上多态的代价（实测）**：STJ 写出的文档从 312 K 涨到 795 K（小档）——**也就是说在那之前它写的是一份没有
+`$type`、读不回来的文档**，拿它比大小与耗时对归档是不公平的。旧的倍率因此整批作废，表要重跑。
+
+**没解决的**：树的 `LinksMap`（接口键套接口键）是这套格式最贵的形状，而**这张语料里它是空的**。
+`Corpus.BuildTree` 用的是 `NodeDefaultViewModel` / `SlotDefaultViewModel`，只有 `SlotEnumerator` 会往
+`LinksMap` 里写（`SlotEnumerator.cs:429` 起）；黄金文件 `tree.json` 同样是 `"LinksMap": {}`，所以不是语料
+造错了。**原来 `Corpus.cs` 的注释说语料覆盖了它，是错的，2026-10-04 改正。** 要覆盖它得让树带上
+`SlotEnumerator`，而 STJ 会**从此需要转换器**（它的字典键必须是属性名）—— 那一刻「配置对配置」不再成立。
 
 **这些数字不能推广**：语料是一棵**带引用保留与多态**的工作流树，那正是这套格式存在的理由；换成「五个属性、不开引用保留的 POCO」，STJ 会近得多，源生成也会开始有收益。三家写的成员集也不同（归档写生成契约，另外两家写公开面），所以文档大小差里有一部分是「写得少」。
 
@@ -284,6 +308,7 @@
 
 - 本仓库**只有 Debug 可构建**。「Release 不受益」的旧说法其实还说轻了。
 - 基准因此以 `-c Debug -p:Optimize=true` 构建、并用 `InProcessEmitToolchain` 运行（`BenchmarkConfig.cs`）。**`-t:Rebuild` 是必需的**：增量构建会认为 Core 已最新而跳过它，留下 `dotnet test` 构出的未优化 DLL，BenchmarkDotNet 会直接拒绝。
+  **拒绝是安静的**（2026-10-04 实测踩到）：它只在 `BenchmarkDotNet.Artifacts/BenchmarkRun-*.log` 里写两行 `Validating benchmarks`，命令行不报错，**报告照样生成、只是「结果」那一节是「本次运行没有产出可用的数据。」** —— 看到那句先查这一条，别去查 `NodeCountOf` 或 `Scales`。同理 `dotnet run` 会再构建一次、把优化冲掉，要跑就直接执行 `bin/Debug/net10.0/` 下的产物。
 
 ---
 

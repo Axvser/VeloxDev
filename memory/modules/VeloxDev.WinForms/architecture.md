@@ -37,8 +37,8 @@
 | 类型 | 基类 | 宿主做什么 | 关键成员 |
 |---|---|---|---|
 | `WorkflowTreeView` | `UserControl`（`abstract`，`:35`） | **派生**，实现 `CreateNodeView`（`:232`）/ `CreateLinkView`（`:237`），或改赋 `TemplateSelector`（`:145`） | 自带 `PART_ScrollViewer`/`PART_Canvas`/`PART_GridDecorator`（画布自己就是装饰器，`:60`）、chrome 配色、签名平移引擎、自绘网格与浮动标尺层（owned layered popup，`:1078` 的 `RulerOverlayForm`）、视图池接线、布局调度；`RulerReserve = SurfaceCanvas.DefaultRulerThickness`（`:45`）；`Input`（`:176`，`WorkflowInput`）；虚拟钩子 `OnTreeAttached`/`OnSurfaceRefreshed`/`OnConnecting`/`OnConnected`/`OnBuildLinkMenu`（`:241-280`） |
-| `WorkflowNodeView` | `UserControl`（`abstract`，`:24`），实现 `IWorkflowSurfaceNodeView` | **派生**，重写事件钩子、设颜色 | `ViewModel`/`NodeTitle`/`Collapse`；`ApplySurfacePosition`（接口）把卡片放到 `node.Anchor + PanOffset`；钩子 `OnMoving`/`OnMoved`/`OnResizing`/`OnResized`/`OnDeleting`/`OnDeleted`/`OnTitleChanged`/`OnCollapseChanged`（`:150-182`）；`ResolveInputSlot`（`:195`）；内部 `NodeEventSink`（`:414`） |
-| `WorkflowSlotView` | `Control`（`:24`） | **派生**，改半径/配色 | `ViewModel`/`SlotPath`/`PathViewBox`/`SlotBackground`/`StandbyColor`/`BorderColor`；钩子 `OnChannelChanging`/`OnChannelChanged`（`:155`/`:161`）；内部 `SlotEventSink`（`:432`） |
+| `WorkflowNodeAttachment` | 附到用户的 `Control` 上（2026-10-04 起；**不再是基类**） | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画整张卡 | `Node`/`Title`/`Collapse`/`SurfacePanOffset`/`SurfaceContentOffset`；`ApplySurfacePosition`（实现 `IWorkflowSurfaceNodeView`）；`ResolveInputSlot`/`ResolveSlotLabel`；事件 `Rebound`/`TitleChanged`/`CollapseChanged`/`AnchorChanged`/`Moving`…`Deleted` |
+| `WorkflowSlotAttachment` | 附到用户的 `Control` 上（2026-10-04 起；**不再是基类**） | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画 | `Slot`/`SlotPath`/`PathViewBox`/`SlotBackground`/`StandbyColor`/`BorderColor`/`IconPath`/`GlyphColor`；事件 `ChannelChanging`/`ChannelChanged`；图形解析器另立 `SvgPathParser.cs` |
 | `WorkflowLinkAttachment` | 附到用户的 `Control` 上（2026-10-04 起；**不再是基类**） | 用户在视图构造里 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnPaint` 里画 | `LineColor`/`Thickness`/`PullMinimum`/`SurfaceBackground`/`Curve`/`Link`；`Paint(Graphics)`/`Bind(link)`/`Attach`/`For`；事件 `PointerEntered`/`PointerLeft`/`PointerPressed`/`PointerReleased` |
 | `WorkflowGridDecorator` | `Panel`（`:23`），实现 `IWorkflowGridDecorator` | **派生**，设调色板/间距 | `DefaultRulerThickness = 36`（`:31`）、`GridSpacing`/`MajorLineEvery`、`RulerThickness`、`RulerBand => RulerThickness`（`:165`） |
 | `WorkflowTemplateSelector` | `IWorkflowTemplateSelector`（`:21`） | 设四个工厂 | `NodeViewFactory`/`SlotViewFactory`/`LinkViewFactory`/`TreeViewFactory`（`:24-33`）、`CreateView`（`:36`） |
@@ -131,8 +131,8 @@
 | 想改的东西 | 先打开 |
 |---|---|
 | 工作表表面：chrome / 平移 / 网格 / 标尺 / 池接线 / 布局调度 | `Attached/Workflow/WorkflowTreeView.cs`（派生类只实现两个工厂） |
-| 节点卡片 | `Attached/Workflow/WorkflowNodeView.cs`（基类）+ 派生类的重写 |
-| 插槽 / 连线图形 | `Attached/Workflow/WorkflowSlotView.cs`、`WorkflowLinkAttachment.cs` |
+| 节点卡片 | `Attached/Workflow/WorkflowNodeAttachment.cs`（附加）+ 用户卡片自己的 `OnPaint` |
+| 插槽 / 连线图形 | `Attached/Workflow/WorkflowSlotAttachment.cs`、`WorkflowLinkAttachment.cs` |
 | 网格/标尺调色板与间距 | `Attached/Workflow/WorkflowGridDecorator.cs` |
 | 「item 类型 → 视图」的工厂 | `Attached/Workflow/WorkflowTemplateSelector.cs` / `ViewManager.cs:14` 的 `IWorkflowTemplateSelector` |
 | 滚轮缩放 / Ctrl 判定 / 消息过滤器 | `Attached/Workflow/WorkflowSurfaceBehavior.cs`（`SetZoomEnabled` `:170`、过滤器 `:47`） |

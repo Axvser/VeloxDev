@@ -50,24 +50,44 @@
 （`OnPaintHighlight` 那种名字已经被否掉，见 [layer-ownership-specifications.md](layer-ownership-specifications.md) §1.4）。
 **两家给同一个概念时必须同名同形**：`OnRenderHighlight` vs `OnPaintHighlight` 那种只差一个动词的分裂，等于让用户学两套。
 
-### 2.1.1 例外：`workflow-link-view` 给的是「附加」，不是基类
+### 2.1.1 「视图类角色」给的是「附加」，不是基类
 
-**2026-10-04 用户定**：连线的组件视图是**完全用户定制**的，所以**整个视图的构建不该被藏进基类**。这一角色的产物
-应该像一个**视图**（用户写 `OnPaint` / `OnRender`），适配器给的是一个**可以附到控件上的助手**，在用户构建视图时
-顺带把其余东西挂上去：
+**2026-10-04 用户定**：一个角色的产物若是**用户自己要画的东西**，它就**不该被藏进基类** —— 产物应该像一个
+**视图**（用户写 `OnPaint` / `OnRender`），适配器给的是一个**可以附到控件上的助手**，在用户构建视图时顺带把
+其余机制挂上去。
 
-| | 写法 |
-|---|---|
-| 其余六个角色 | `public class TemplateClass : <适配器的基类>` —— 派生 + 设调色板 |
-| **`workflow-link-view`** | `public sealed class TemplateClass : Control`（或 `FrameworkElement`），构造里一行 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnPaint` / `OnRender` 里画 |
+**判据是「这个角色的产物里有没有属于用户的画」，不是「它是不是工作流组件」**：
 
-助手负责**不是画**的那部分：端点订阅（含池化换绑）、窗口区域雕刻 / 自适应盒子、几何、命中契约的发布、这条线的指针事件
-（`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`，事件名与 `IWorkflowInputEvents` 一致）。
-`Curve` 把四个控制点交出来，`Paint(…)` 提供「最短的一版静息线」供调用或忽略。
+| 角色 | 形态 | 为什么 |
+|---|---|---|
+| `workflow-link-view` / `workflow-node-view` / `workflow-slot-view`（**WinForms、Jalium**） | `public sealed class X : Control` / `: Canvas` / `: UserControl`，构造里一行 `Workflow<角色>Attachment.Attach(this)`，自己在 `OnPaint` / `OnRender` 里画 | 这三样的样子**就是**用户的：卡片长什么样、端口画成什么、线怎么走 |
+| `workflow-grid-decorator` / `workflow-minimap-overlay` / `workflow-template-selector` | 仍是派生 + 调色板 | 它们是**实现**（`IWorkflowGridDecorator` 等），里面的平台机制用户不会想重写 |
+| `workflow-tree-view` | 仍是派生 | **它是引擎不是视图**：绑定、视图池、手势、虚拟化、菜单；用户自己的树模板只设属性 + 两个工厂（详见 §2.1.2） |
+| 标记四家（WPF / Avalonia / WinUI / MAUI）的全部角色 | 仍是派生 | 有标记语言时，「视图」本来就在用户手里（`x:Name` + `OnRender`），不需要多一层助手 |
 
-**为什么这条能例外而 `grid-decorator` 不能**：判据始终是 §2.1 的「这段代码是不是用户该改的扩展点」。
-网格那些平台机制（世界坐标换算、刻度排版、每帧重绘）**用户不会想重写**；而连线视图的**画法本身就是用户的**，
-把它藏进基类的唯一效果是用户每次想改一笔都要先读一遍基类。
+助手的形状是同一套：**不是画**的那部分归它（绑定、改绑退订、几何、命中契约、事件），画归你；它另外给
+「最短的一版」（`Paint(...)`）与可供你自绘的原料（`Curve` / `IconPath` / `Brush` / `PortLayout`）。事件名与
+`IWorkflowInputEvents` 逐字相同（`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`），
+模型事件则与 §2.1 那组同名（`Moving` / `Moved` / …）。三种 view 的助手访问器一律叫 `Attachment`。
+
+### 2.1.2 树是引擎，不是视图 —— 它留在基类，但**部件按对象交出去**
+
+**2026-10-04 用户定**：树这一角色跟上面三个不同性质 —— 它是「绑一个 tree → 视图池把可见集逐个物化成 View」的那台
+机器（Jalium `WorkflowTreeView.SetTree` → `ViewPool.SetItemsSource(this, tree.GetHelper().VisibleItems)`）；
+用户在这条路上只提供三样：**每个 VM 用哪个 View 类**（工厂 / 选择器）、**容器怎么组装**、调色板。用户自己的树模板
+因此天然很短（Jalium 32 行 / WinForms 52 行），**里面没有一行属于他的画**。
+
+⇒ 别为了「七个角色形态齐一」把它也搬成助手：那不会把任何画法还给用户，只是把「摆一个控件」变成「造一个控件再挂助手」。
+
+**但无标记语言的平台上，「按名字找控件」是一层假装的标记，要去掉。** XAML 里 `x:Name` 是标记语言自己的
+手交出去方式，正当；纯代码平台没有这个理由 —— WinForms 的完整 demo 为此不得不把自己命名成 `nameof(WorkflowCanvas)`
+再登记「我就是滚动容器、是画布、是网格装饰器」。所以：
+
+- **WinForms**：`WorkflowSurfaceBehavior` 的部件从**名字字符串**改成**对象**（`SetScrollViewer/SetCanvas/SetGridDecorator/SetMinimapOverlay`）。
+- **Jalium**：本来就没有名字解析（`GridDecorator` / `PortLayout` / `TemplateSelector` 是属性，滚动容器由
+  `AttachScrollViewer(viewer)` 显式交出），无需改。
+- **边界**：WinForms 的**画布交不出来** —— `SurfaceCanvas` 就是池的宿主（它拿 `_owner.CreateNodeView/CreateLinkView`
+  建视图、`RecordRole` 记角色、读 `SurfaceBackground` 画网格），交出画布等于交出引擎。
 
 ### 2.2 「每一个角色」是字面的
 
@@ -127,8 +147,8 @@
 
 | 平台 | 有基类 | 还缺 |
 |---|---|---|
-| **WinForms** | 六项有基类；**`workflow-link-view` 改为 `WorkflowLinkAttachment`**（2026-10-04，见 §2.1.1） | —— |
-| **Jalium** | 六项有基类；**`workflow-link-view` 改为 `WorkflowLinkAttachment`**（2026-10-04，见 §2.1.1） | ——（`slot-view` 在这家没有「视图」可派生，见下） |
+| **WinForms** | 四项有基类（grid-decorator / minimap-overlay / template-selector / tree-view）；**link / node / slot 三项改为附加助手**（2026-10-04，见 §2.1.1） | —— |
+| **Jalium** | 四项有基类；**link / node / slot 三项改为附加助手**（2026-10-04，见 §2.1.1） | ——（`slot-view` 在这家没有「视图」可派生，见下） |
 
 **WinForms 的七个基类**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）与它们把模板压到的行数：
 `WorkflowTreeView` 52、`WorkflowNodeView` 404、`WorkflowSlotView` 22、`WorkflowGridDecorator` 41、

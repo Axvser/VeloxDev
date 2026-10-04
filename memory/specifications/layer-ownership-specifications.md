@@ -53,7 +53,7 @@
 | 要定制 | 入口（七家同一套） |
 |---|---|
 | 一次指针/键盘动作（悬停、按下、松开、滚轮、按键） | **订阅**：`((IWorkflowInputEvents)vm.GetHelper()).Input.<事件> += …`。视图自己吃指针的平台（Razor / MAUI overlay / 逐线视图）与表面转发指针的平台（WPF / WinUI / Avalonia / WinForms / Jalium）都是这一句 |
-| 这一笔的效果怎么画 | **画在你自己的连线视图里**：WPF / WinUI / Avalonia / Razor 是你本来就拥有的那个视图类（`OnRender` / 标记）；WinForms / Jalium 也是你的控件（`: Control` / `: FrameworkElement`），调 `WorkflowLinkAttachment.Attach(this)` 挂上其余机制后自己画。**MAUI 是唯一的例外**（见下） |
+| 这一笔的效果怎么画 | **画在你自己的视图里**（连线 / 节点卡 / 端口都一样）：WPF / WinUI / Avalonia / Razor 是你本来就拥有的那个视图类（`OnRender` / 标记）；WinForms / Jalium 也是你的控件，调 `WorkflowLinkAttachment` / `WorkflowNodeAttachment` / `WorkflowSlotAttachment` 的 `Attach(this)` 挂上其余机制后自己画。**MAUI 的连线是唯一的例外**（见下） |
 | 这一次要不要走框架那一手 | args 上的 `Handle.PreventDefault`；要不要继续往上冒 = `StopPropagation` |
 | 整块表面级的策略 | `WorkflowInput.For(tree)` 的开关与只读口 |
 | 声明式的东西（右键菜单条目、模板选择器） | 标记平台：附着属性 / 组件参数；无标记两家：基类的 `protected virtual` 钩子 |

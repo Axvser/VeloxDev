@@ -21,10 +21,10 @@
 | 条目 | 产物类型（行数） | 扮演什么 | 关键锚点 |
 |---|---|---|---|
 | tree-view（32） | `sealed class TemplateClass : WorkflowTreeView` | 表面：构造器设 `SurfaceBackground` / `ConnectingLinkColor` / `PortLayout` / `GridDecorator` / `TemplateSelector`，并 override `OnBuildLinkMenu` | `:15`、`:17-24` |
-| node-view（59） | `sealed class TemplateClass : WorkflowNodeView` | 卡片：`override DrawCard` 画设计尺寸的卡 | `:14`、`:28-58` |
+| node-view（**2026-10-04 起不再是薄派生**：`Canvas` + `WorkflowNodeAttachment.Attach`，`Render` 事件里画） | `sealed class TemplateClass : WorkflowNodeView` | 卡片：`override DrawCard` 画设计尺寸的卡 | `:14`、`:28-58` |
 | link-view | `sealed class TemplateClass : FrameworkElement` + `WorkflowLinkAttachment.Attach(this)` | 连线：设 `PortLayout` / `LinkColor` / `Thickness`，自己在 `OnRender` 里画 | `:12`、`:16-18`（2026-10-04 起不再是基类派生） |
 | grid-decorator（25） | `sealed class TemplateClass : WorkflowGridDecorator` | 网格/标尺：设七色 + `GridStep` / `MajorLineEvery` | `:11`、`:15-23` |
-| slot-view（35） | `sealed class TemplateClass : WorkflowSlotView` + `static readonly WorkflowPortLayout Layout` | 端口图形：构造函数设 `StandbyColor`；`Layout` 供卡片/连线读 | `:12`、`:19-29`（Layout）、`:31-34`（ctor） |
+| slot-view（**2026-10-04 起不再是薄派生**：`FrameworkElement` + `WorkflowSlotAttachment.Attach`） | `sealed class TemplateClass : WorkflowSlotView` + `static readonly WorkflowPortLayout Layout` | 端口图形：构造函数设 `StandbyColor`；`Layout` 供卡片/连线读 | `:12`、`:19-29`（Layout）、`:31-34`（ctor） |
 | minimap-overlay（14） | `class TemplateClass : WorkflowMinimapOverlay`，**空构造器** | 薄壳（七家里最薄） | `:9-13` |
 | template-selector（25） | **`static class TemplateClass`** + 私有 `Selector : WorkflowTemplateSelector` | 工厂：`CreateSelector()` 返回选择器实例 | `:11`、`:15`、`:17-24` |
 

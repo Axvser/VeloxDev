@@ -79,10 +79,10 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // :20 —�
 | 文件 | 行 | 角色 | 谁写状态 |
 |---|---|---|---|
 | `WorkflowTreeView.cs` | 819 | **表面基类** `: Canvas`（`public class`，`:29`）：池化接线（`SetTree` `:189`）、视口记账（`UpdateViewport` `:729`/`:753`）、缩放钉（`_zoomPin` `:61`、`NotifyZoomCommitted` `:227`/`:234`）、平移/节点拖拽/连线手势（`OnMouseDown` `:513`、`OnMouseMove` `:569`、`OnMouseUp` `:647`）、网格与标尺渲染（`OnRender` `:301`、`OnPostRender` `:309`）、命中测试（`HitTestOutputPort` `:349`、`HitTestInputPort` `:368`、`HitTestTitleBar` `:383`、`HitTestCard` `:398`）、`AttachScrollViewer` `:170` | 表面持有 `PortLayout`/`GridDecorator`/`TemplateSelector` 属性；绑定 `_tree` 后驱动 `ViewPool` |
-| `WorkflowNodeView.cs` | 309 | **节点卡基类**（`abstract : Canvas`，`:26`）：`DataContext` 绑定（`:49`/`:159`）、订阅（节点 `Anchor`/`Size`、插槽集合与 `State`、布局）、定位（`ApplyPosition`）、`Viewbox` + 内层设计画布脚手架、端口状态画刷 `SlotBrush` | 绑定写；卡面由派生类 `DrawCard`（`abstract` `:94`）画 |
+| `WorkflowNodeAttachment.cs` | 附到用户的 `Canvas` 上（2026-10-04 起；**不再是基类**） | `DataContext` 绑定、订阅（节点 `Anchor`/`Size`、插槽集合与 `State`、布局）、定位、`Viewbox` + 内层设计画布、端口排版 | 卡面由用户的 `Render` 事件画（`CardRenderEventArgs` 带内层 `DrawingContext`） |
 | `WorkflowLinkAttachment.cs` | 附到用户的 `FrameworkElement` 上（2026-10-04 起；**不再是基类**） | 用户在视图构造里 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnRender` 里画。助手持有：`DataContext` 绑定、端点 + 布局订阅、自盒化、几何 + 命中发布、`PortLayout`/`LinkColor`/`Thickness`/`PullMinimum`/`Curve`/`Link`、`Paint(DrawingContext)`、事件 `PointerEntered`/`PointerLeft`/`PointerPressed`/`PointerReleased` | 自己写自己的盒；几何由模型算 |
 | `WorkflowGridDecorator.cs` | 234 | **网格/标尺绘制器**（普通类，非控件，`:22`）：世界网格 + 两条浮动标尺的绘制、笔刷缓存；`RulerThickness` 常量 36（`:25`）、`GridStep`（`:91`）、`MajorLineEvery`（`:98`） | 派生类设调色板/间距 |
-| `WorkflowSlotView.cs` | 167 | 端口图形：绑定、状态着色、重画 | 派生（改半径与调色板） |
+| `WorkflowSlotAttachment.cs` | 附到用户的 `FrameworkElement` 上（2026-10-04 起；**不再是基类**） | 端口绑定、状态着色、尺寸 | 图形由用户在 `OnRender` 里画（`Paint`/`Brush`/`Radius` 可调可弃） |
 | `WorkflowTemplateSelector.cs` | 51 | **选择器基类** `: IWorkflowTemplateSelector`（`:19`）：四个工厂（`:22-31`）+ `virtual CreateView`（`:34`）分派与「工厂未设」诊断（`:39`/`:42`/`:45`/`:48` 抛 `InvalidOperationException`） | 派生类设工厂 |
 | `WorkflowPortLayout.cs` | 41 | 卡片设计尺寸与端口位置的**值类型**（`sealed`），宿主的设计不是常量 | 宿主/模板赋值 |
 | `WorkflowPortGeometry.cs` | 125 | `static`（`:23`）：把节点的输入/输出/标题从 view-model **反射读**出来（`:41-52`/`:68-69`/`:124`），并把端口中心定位到画布（纯模型数学） | 无状态 |
