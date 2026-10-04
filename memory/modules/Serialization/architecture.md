@@ -1,6 +1,7 @@
 # Serialization — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/Serialization/`，7 个 `.cs`。命名空间 `VeloxDev.Serialization`。
+> 代码：`Src/Core/VeloxDev.Core/Serialization/`，11 个 `.cs`。命名空间 `VeloxDev.Serialization`。
+> 读写器各有同步 / 异步两份：`VeloxJsonReader(.Async).cs`、`VeloxJsonWriter(.Async).cs`、`VeloxJsonSerializer(.Async).cs`。
 > 生成器：`Src/Generators/VeloxDev.Core.Generator/`（`VeloxJson.cs` / `Base/VeloxJsonModel.cs` / `Writers/VeloxJsonCodeWriter.cs`）。
 > 通用 VM 序列化面：`Src/Core/VeloxDev.Core/Serialization/ViewModelSerializer.cs`（2026-10-04 从 Extension 下沉，原名 `ComponentModelEx`，命名空间由 `VeloxDev.MVVM.Serialization` 并入 `VeloxDev.Serialization`）。
 > 工作流领域的两个封装仍在 Extension：`CheckpointEx.cs`、`CompiledGraphEx.cs`。
@@ -22,9 +23,19 @@
 
 ### 闭世界：什么类型进得了文档
 
-**当且仅当生成器为它编出了读写器。** 收录条件：实现四个组件接口之一、或贴 `[VeloxProperty]`、或贴 `[VeloxSerializable]`，或能从这些类型出发沿**成员的声明类型**走到。
+**当且仅当生成器为它编出了读写器。** 收录条件：实现四个组件接口之一、或贴 `[VeloxProperty]`、或贴 `[Archivable]`，或能从这些类型出发沿**成员的声明类型**走到。
+
+`[Archivable(typeof(A), typeof(B))]` 把点名到的类型直接当根收进来（可链式；去重靠 `included`；发不出条目的报 `VELOX_JSON_ARCH001` 而不是静默丢掉）。
 
 引擎里**没有反射、也没有兜底**（`VeloxJsonSerializer` 的 remarks 写着这句）。进不了闭世界的类型写它会抛 `MissingWriter`，错误信息自己说明原因。**这不是缺陷，是能裁剪的前提。**
+
+### 闭世界里的第二个开关：成员不只有默认规则
+
+类型进了闭世界之后，「哪些成员进文档」由两条规则决定：默认规则（public 且 public setter 的属性、按声明顺序、加上 `[VeloxProperty]` 提升出来的）与成员级 `[Archive(ArchiveOptions, object?)]`。
+
+四个选项 `KeepProperty` / `KeepField` / `IgnoreField` / `ReName` 都**只动它标的那一个成员**，不重排、不改其余成员的取舍 —— 顺序是逐字节契约。生成器把「文档里的名字」与「CLR 成员名」拆成 `VeloxJsonMember.DocumentName` 与 `.Name`，`ReName` 与只写得出去的成员都靠这两个字段区分。
+
+**生命周期钩子是 BCL 那四个特性**（`[OnSerializing]` / `[OnSerialized]` / `[OnDeserializing]` / `[OnDeserialized]`），生成器沿基类链先基后派生地调，带 `StreamingContext` 的传 `default`。原来的四个 `IVeloxJson*` 钩子接口已删。
 
 ---
 

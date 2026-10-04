@@ -36,7 +36,7 @@
 | `IConditionalSlot`（1） | `Src/Core/VeloxDev.Core/WorkflowSystem/SelectorEx/ConditionalSlot.cs:12` | SelectorEx 内部 |
 | `IAopHookTarget`（1） | `Src/Core/VeloxDev.Core/AspectOriented/AspectHooks.cs:66` | AOP 运行期内部 |
 | 强类型命令族 `IVeloxCommand<TParam1..TParamN, TResult>`（14）与 `IVeloxCommandEvents<TParam,TResult>`（1） | `Src/Core/VeloxDev.Core/MVVM/CommandArities.cs`、`MVVM/CommandEventArgs{TParam,TResult}.cs:31` | MVVM 模块内部管线 |
-| `IVeloxJson*`（6） | `Src/Core/VeloxDev.Core/Serialization/VeloxJsonRegistry.cs` | 序列化模块内部 |
+| `IVeloxJson*`（2） | `Src/Core/VeloxDev.Core/Serialization/VeloxJsonRegistry.cs` | 序列化模块内部。**2026-10-04 起只剩读写器这两个** —— 原来的四个生命周期钩子接口已删，钩子改用 BCL 那四个特性，见 `memory/modules/Serialization/pitfalls.md` §七 |
 
 **可执行的判据**：契约进 `Interfaces/`，当且仅当它**跨越实现模块的边界** —— 由一个核心实现 + 若干外部（应用/适配器/生成器）各自实现。只被一个子系统实现、外部从不实现的，跟实现同住。`IContext` 的 XML 自己把这棵树写出来了（`IContext.cs:10-11`：派生 `IAccessContext`/`ITaskContext`/`IRuntimeContext`/`ICompileContext`），其中前两个在 `Interfaces/` 而 `IRuntimeContext`/`ICompileContext` 在 `CompilerEx/` —— 同一棵树，跨目录。
 

@@ -61,6 +61,20 @@
 
 ## 四、想加一个能被序列化的类型
 
-不需要动引擎，只需要让它进得了「闭世界」——见 architecture.md §一。三条路：实现四个组件接口之一、贴 `[VeloxProperty]`、或贴 `[VeloxSerializable]`；或者从这些类型出发沿**成员的声明类型**能走到。
+不需要动引擎，只需要让它进得了「闭世界」——见 architecture.md §一。三条路：实现四个组件接口之一、贴 `[VeloxProperty]`、或贴 `[Archivable]`；或者从这些类型出发沿**成员的声明类型**能走到。
+
+`[Archivable(typeof(A), typeof(B))]` 是第四条路：被点名的类型直接当根收进来，可以链式（被点名的类型自己也能再点名），去重靠既有的 `included`。**点名却发不出条目的类型报 `VELOX_JSON_ARCH001`（错误），不静默丢掉** —— 判据与措辞在 `Base/VeloxJsonModel.cs` 的 `WhyNotWritable`。
 
 走不到也不打紧，**写它时会抛 `MissingWriter`，错误信息本身写着为什么**。不要为了「让它能写」去加反射兜底 —— 闭世界正是这套东西能裁剪的前提。
+
+**接口 / 抽象类作为成员类型时，只有同程序集的实现者会被自动收进来**；跨程序集的实现者要自己贴 `[Archivable]`。失败形态（写抛 `MissingWriter`、读抛 `MissingReader`、`object` 成员静默降级成字典）见 [pitfalls.md](pitfalls.md) §六。
+
+---
+
+## 四·五、想改「某一个成员怎么写」
+
+`[Archive(ArchiveOptions, object?)]` 是成员级唯一的开关：`KeepProperty` 放行计算属性、`KeepField` 放行没有对应属性的字段、`IgnoreField` 把成员整个排除、`ReName` 换成员在文档里的名字（第二个实参给新名）。
+
+**它只动单个成员，不动规则**：成员顺序是逐字节契约，`[Archive]` 不重排、不改变其余成员的取舍。改「所有成员」的粒度仍然只有 `SerializationOptions.WithExcludedPropertyTypes`，而且它按**声明类型**精确匹配。
+
+写这个特性时会撞上三条只有做过才知道的约束（生成器看不见别的生成器、生成器引用不了目标程序集、引用程序集剥非 public 成员），都记在 [pitfalls.md](pitfalls.md) §七。

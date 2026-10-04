@@ -226,10 +226,16 @@ WorkflowSurfaceBehavior.Refresh(view);                     // re-bind the views
 ⚙ **Add `VeloxDev.Core.Extension` to save or load a graph.** `VeloxDev.Core` alone has no serializer.
 
 ⚙ **The world is closed.** A type takes part in the document when the generator compiled a writer for it: a
-workflow component, a type carrying `[VeloxProperty]` / `[VeloxCommand]` / `[VeloxSerializable]`, or a type
+workflow component, a type carrying `[VeloxProperty]` / `[VeloxCommand]` / `[Archivable]`, or a type
 reachable from one of those along a member's *declared* type. A plain POCO that nothing declares cannot be
 written at all — it throws `MissingWriter`. That closure is what removes the reflection, and it is why a type
-you want in the file must either carry `[VeloxSerializable]` or be declared from something that is already in.
+you want in the file must either carry `[Archivable]` or be declared from something that is already in.
+`[Archivable(typeof(A), typeof(B))]` names further types to pull in with the same declaration.
+
+⚙ **`[Archive]` is the per-member switch.** `[Archive(ArchiveOptions.KeepProperty)]` writes a computed
+property (it is never read back — there is no setter); `KeepField` writes a field no property corresponds to;
+`IgnoreField` leaves the member out entirely; `[Archive(ArchiveOptions.ReName, "name")]` writes it under
+another name. Nothing here reorders members or changes what the other members do.
 
 ⚙ **Only writable members are written.** A `{ get; private set; }` property is runtime state the document never
 sees. A writable property of a delegate type is written but cannot be read back — keep hooks out of writable

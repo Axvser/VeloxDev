@@ -21,7 +21,7 @@
 | AspectOriented | `AspectOrientedAttribute` | `AopSurface.cs`（接口 + 代理实现）+ `AopProxy.cs`（扩展方法） |
 | AI（AIContextTree，2026-10-03 起） | `AgentContextAttribute` 等三个 Agent 特性 | `AIContextTree.cs` —— **全程序集遍历，一次 `AddSource`**，不被任何特性触发，见 §三·四 |
 | DynamicTheme | `ThemeConfigAttribute\`3..\`7`（5 个元数） | `Theme.cs` |
-| Serialization（VeloxJson） | `VeloxSerializableAttribute`（根之一；另一个根是「实现了工作流组件接口」） | `VeloxJson.cs` —— **全程序集遍历，一次 `AddSource`**，不被任何特性触发，见 §三·四 |
+| Serialization（VeloxJson） | `ArchivableAttribute`（根之一；另一个根是「实现了工作流组件接口」）+ 成员级 `ArchiveAttribute` | `VeloxJson.cs` —— **全程序集遍历，一次 `AddSource`**，不被任何特性触发，见 §三·四 |
 
 **这七家 GUI 适配器在本模块里是零代码 —— 这正是「契约不该重复七遍」的实例。** 适配器全都不做特性解析、不写生成逻辑，**源码里也一个生成器特性都不用**（`grep -rn 'VeloxProperty\|\[Velox' Src/Adapters/ --include=*.cs` 零命中），因此它们**一个都不引用这个分析器包** —— 七份 `Src/Adapters/*/*.csproj` 只引用 `VeloxDev.Core` 加各家自己的 GUI 包，而 §五 那张 12 对 `PackageReference`/`ProjectReference` 的表里**没有任何适配器**；`[VeloxProperty]` 在 WPF、Avalonia、WinUI、MAUI、WinForms、Razor、Jalium 上生成的东西**逐字相同**，因为生成器读的是符号语义，从不问平台（`Base/AnalizeHelper.cs` 全文没有平台概念，`VeloxDev.Core.Generator.csproj` 也没有任何 GUI 引用）。要改「生成的属性长什么样」，改这一处就同时改了七家；要改「某家在某个平台上怎么渲染」，与本模块无关 —— 那是 `memory/modules/<WorkflowSystem|TransitionSystem>/adapters/<平台>.md` 的事。**所以本模块没有 `adapters/` 子目录，也不该有。**
 
@@ -87,7 +87,7 @@ context.RegisterSourceOutput(
 
 产物一份文件里两半：一个 `{程序集名}_AIContextFragment`（只含数据的目录，逐目录一个 `Lazy`）与每组 `{程序集名}_Accessor{i}`（`switch` 加转型，无反射），末尾一个 `[ModuleInitializer]` 自注册（`Writers/AIContextTreeWriter.cs:166`、`:416`、`:815`）。**它复现 `MVVMWriter` 与 `CommandWriter` 的命名规则**（见 `Base/AIContextNaming.cs`）—— 生成器之间看不见彼此的产物，只能复现规则。
 
-**`VeloxJson.cs` 是第二个全程序集生成器**（归档序列化）。它同样订阅 `CompilationProvider`、检查 `VeloxJsonModelBuilder.Applies`（要求编译单元里有 `VeloxPropertyAttribute`，否则不遍历），受 MSBuild 属性 `VeloxJsonSerialization=false` 关闭。与另外两个不同的是它从**根类型**出发沿成员的声明类型做**传递闭包**（`Base/VeloxJsonModel.cs:190` 的 `Build`）：根是「实现了工作流组件接口的类型」或贴了 `[VeloxSerializable]` 的类型。产物每个程序集一份 `{程序集名}_VeloxJson.g.cs`，命名空间写死 `VeloxDev.Serialization.Generated`，逐个类型出一个 `{程序集名}_JsonWriter{i}` / `{程序集名}_JsonReader{i}`，末尾 `Register()` 把读写器与容器工厂登记进 `VeloxDev.Serialization.VeloxJsonRegistry`（`Writers/VeloxJsonCodeWriter.cs:290-299`）。
+**`VeloxJson.cs` 是第二个全程序集生成器**（归档序列化）。它同样订阅 `CompilationProvider`、检查 `VeloxJsonModelBuilder.Applies`（要求编译单元里有 `VeloxPropertyAttribute`，否则不遍历），受 MSBuild 属性 `VeloxJsonSerialization=false` 关闭。与另外两个不同的是它从**根类型**出发沿成员的声明类型做**传递闭包**（`Base/VeloxJsonModel.cs:269` 的 `Build`）：根是「实现了工作流组件接口的类型」或贴了 `[Archivable]` 的类型，后者还能用 `[Archivable(typeof(A), typeof(B))]` 把别的类型点名成额外根（可链式，去重靠 `included`）。成员层面由 `[Archive(ArchiveOptions)]` 放行/改名/排除单个成员；生命周期钩子认 BCL 那四个特性（`[OnSerializing]` 等），不认自有名字。**诊断由调用方持有而非挂在返回值上** —— `Build` 返回 `null`（这个程序集什么也没产出）恰恰常是「被拒的声明」导致的，把 notices 放进返回值会在最需要它的时候丢掉（`VeloxJson.cs` 先报诊断再判空）。这一模块的三条实现约束记在 `memory/modules/Serialization/pitfalls.md` §七。产物每个程序集一份 `{程序集名}_VeloxJson.g.cs`，命名空间写死 `VeloxDev.Serialization.Generated`，逐个类型出一个 `{程序集名}_JsonWriter{i}` / `{程序集名}_JsonReader{i}`，末尾 `Register()` 把读写器与容器工厂登记进 `VeloxDev.Serialization.VeloxJsonRegistry`（`Writers/VeloxJsonCodeWriter.cs:290-299`）。
 
 ### 产物命名（hint name = 文件名）
 

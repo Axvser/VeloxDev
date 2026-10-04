@@ -223,8 +223,10 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 ### 八·一、闭世界：什么类型能进文档
 
 **一个类型能进文档，当且仅当生成器为它编出了读写器**。收录条件是：它是四个组件接口之一的实现、
-或带 `[VeloxProperty]` / `[VeloxCommand]`、或带 `[VeloxSerializable]`（**非 ViewModel 的普通文档类型
+或带 `[VeloxProperty]` / `[VeloxCommand]`、或带 `[Archivable]`（**非 ViewModel 的普通文档类型
 用它自报家门**，`ExecutionCheckpoint` 就是），或者能从这些类型出发沿**成员的声明类型**走到。
+`[Archivable(typeof(T))]` 还能把走不到的类型点名收进来；进了闭世界之后，哪些成员进文档由
+`[Archive(ArchiveOptions)]` 按成员放行/改名/排除 —— 两者都见 `memory/modules/Serialization/`。
 生成器走整编译遍历而不是特性触发集：组件的身份是「实现了哪个接口」，特性触发表达不了。
 
 **代价是真的**：一个没被标注、又没有成员声明它的普通 POCO 进不了文档 —— 写它会抛
