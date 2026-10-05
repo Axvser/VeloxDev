@@ -6,6 +6,7 @@ using Jalium.UI.Controls;
 using Jalium.UI.Input;
 using Jalium.UI.Media;
 using System;
+using System.ComponentModel;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 // Jalium also ships a TreeView control, so alias the generated workflow surface.
@@ -14,10 +15,8 @@ using Size = VeloxDev.WorkflowSystem.Size;
 
 namespace Demo;
 
-/// <summary>Composed like the other GUI adapters' Trimmed demos: a dark surface (the
-/// workflow-tree-view template's TreeView, which draws its grid + ruler band internally) in a
-/// ScrollViewer, plus a content-fit minimap (the minimap-overlay template's MinimapOverlay,
-/// subclassing the adapter's base).</summary>
+/// <summary>Composed like the other GUI adapters' Trimmed demos: the tree view template's surface (which declares
+/// its grid decorator, scroll viewer, canvas and minimap in markup) plus a demo-only info HUD.</summary>
 internal sealed class MainWindow : Window
 {
     private IWorkflowTreeViewModel? _tree;
@@ -34,42 +33,20 @@ internal sealed class MainWindow : Window
         var tree = new TreeViewModel();
         LoadTree(tree);
 
+        // 表面是一个 UserControl：模板声明自己的部件，WorkflowSurfaceBehavior 按名字解析并驱动它们。
+        // 树经 DataContext 交进去 —— 与其余六家同一条契约。
         _surface = new WorkflowTreeView
         {
-            TemplateSelector = TemplateSelector.CreateSelector(),
+            DataContext = tree,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
         };
-        var surface = _surface;
 
-        _viewer = new ScrollViewer
-        {
-            Content = surface,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            PanningMode = PanningMode.None, // surface handles mouse-pan itself
-        };
-        var viewer = _viewer;
-        // Attach before SetTree so the surface has a scroll viewer to compute its viewport from the
-        // moment the tree is set — the first Virtualize then runs immediately (full-canvas fallback
-        // until the viewer measures) instead of waiting for a ScrollChanged that may never fire.
-        surface.AttachScrollViewer(viewer);
-        surface.SetTree(tree);
-        // The pooled node/link views read their view model from DataContext, which Jalium inherits down the
-        // visual tree. Zoom is this window's own (OnPreviewWindowMouseWheel → ZoomBy).
-        surface.DataContext = tree;
+        _viewer = (ScrollViewer)_surface.FindName("PART_ScrollViewer")!;
         _tree = tree;
 
-        var minimap = new MinimapOverlay
-        {
-            WorkflowTree = tree,
-            ScrollViewer = viewer,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 40, 16, 0),
-        };
-
         // Realtime canvas-info decorator layer (floating text HUD): anchored bottom-left, hit-test
-        // transparent. It subscribes to the Core model itself (Layout.ActualSize / Scale / helper
-        // VisibleItems) and is fed the same scroll + content-offset + viewport numbers as the minimap,
+        // transparent. It subscribes to the Core model itself and is fed the same offsets as the minimap,
         // so the read-out stays live while panning / zooming / dragging beneath it.
         var info = new InfoOverlay
         {
@@ -79,44 +56,36 @@ internal sealed class MainWindow : Window
             Margin = new Thickness(16, 0, 0, 18),
         };
 
-        // Feed the minimap's and info HUD's offsets/viewport on every scroll or model change (the
-        // minimap base's WorkflowMinimapOverlay repaints and drag-pans from these values; InfoOverlay
-        // redraws from them). The grid + ruler band are drawn by the TreeView's own OnRender
-        // (GridDecorator), like the other GUI adapters.
+        // Feed the info HUD on every scroll or model change. The minimap is fed by WorkflowSurfaceBehavior.
         void RefreshOverlays()
         {
-            minimap.ContentOffsetX = surface.OriginX;
-            minimap.ContentOffsetY = surface.OriginY;
-            minimap.ScrollOffsetX = viewer.HorizontalOffset;
-            minimap.ScrollOffsetY = viewer.VerticalOffset;
-            minimap.ViewportWidth = viewer.ViewportWidth;
-            minimap.ViewportHeight = viewer.ViewportHeight;
-
-            info.ContentOffsetX = surface.ContentOriginX; // canonical (ruler reserve excluded)
-            info.ContentOffsetY = surface.ContentOriginY;
-            info.ScrollOffsetX = viewer.HorizontalOffset;
-            info.ScrollOffsetY = viewer.VerticalOffset;
-            info.ViewportWidth = viewer.ViewportWidth;
-            info.ViewportHeight = viewer.ViewportHeight;
+            info.ContentOffsetX = tree.Layout.ActualOffset.Horizontal;
+            info.ContentOffsetY = tree.Layout.ActualOffset.Vertical;
+            info.ScrollOffsetX = _viewer.HorizontalOffset;
+            info.ScrollOffsetY = _viewer.VerticalOffset;
+            info.ViewportWidth = _viewer.ViewportWidth;
+            info.ViewportHeight = _viewer.ViewportHeight;
         }
 
         // SizeChanged catches the viewer's first measure (Jalium may not fire ScrollChanged on the
-        // initial layout, which is why TreeView.UpdateViewport falls back to the whole canvas).
-        viewer.ScrollChanged += (_, _) => RefreshOverlays();
-        viewer.SizeChanged += (_, _) => RefreshOverlays();
-        surface.Changed += RefreshOverlays;
+        // initial layout, which is why the surface falls back to the whole canvas until it is measured).
+        _viewer.ScrollChanged += (_, _) => RefreshOverlays();
+        _viewer.SizeChanged += (_, _) => RefreshOverlays();
+        if (tree.Layout is INotifyPropertyChanged layout)
+        {
+            layout.PropertyChanged += (_, _) => RefreshOverlays();
+        }
         RefreshOverlays();
 
         var root = new Grid();
-        root.Children.Add(viewer);
-        root.Children.Add(minimap);
+        root.Children.Add(_surface);
         root.Children.Add(info);
 
         Content = root;
     }
 
     /// <summary>Window-level preview key: fires for every key regardless of which child has focus.
-    /// Zoom the workspace with + / - ; the viewport center is held fixed (ViewportCenter zoom keeps
+    /// Zoom the workspace with Ctrl + / - ; the viewport center is held fixed (ViewportCenter zoom keeps
     /// the world point under the viewport center on-screen while scaling).</summary>
     protected override bool OnPreviewWindowKeyDown(Key key, ModifierKeys modifiers, bool isRepeat)
     {
@@ -213,7 +182,7 @@ internal sealed class MainWindow : Window
             // helper's ~10 fps dirty tick (a stale viewport there would leave deep-zoom links culled for
             // ~100 ms after each zoom notch). Pass the committed scroll target — reading the viewer's
             // offset right after ScrollTo can see a not-yet-applied (pre-zoom) value.
-            _surface.NotifyZoomCommitted(committedX, committedY);
+            WorkflowSurfaceBehavior.NotifyZoomCommitted(_surface, committedX, committedY);
         }
         else
         {
@@ -224,7 +193,7 @@ internal sealed class MainWindow : Window
                 _surface.UpdateLayout();
                 _viewer.UpdateLayout();
             }
-            _surface.NotifyZoomCommitted();
+            WorkflowSurfaceBehavior.NotifyZoomCommitted(_surface);
         }
     }
 

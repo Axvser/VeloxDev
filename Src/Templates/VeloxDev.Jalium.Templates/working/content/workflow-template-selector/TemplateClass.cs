@@ -1,25 +1,49 @@
-// VeloxDev customization: The view selector. The adapter's WorkflowTemplateSelector owns the dispatch and the
-// unsupported-item diagnostics; this file says which view each item kind gets. Rename the view types below if you
-// renamed those items, and add SlotViewFactory / TreeViewFactory if your host pools slots or whole trees.
-using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using System;
+using Jalium.UI;
+using Jalium.UI.Controls;
+using VeloxDev.WorkflowSystem;
 
 namespace TemplateNamespace;
 
 /// <summary>
-/// The view selector the node-editor surface's view pool uses.
+/// Points each kind of workflow item at the <c>DataTemplate</c> that renders it.
 /// </summary>
-public static class TemplateClass
+/// <remarks>
+/// Assign the four properties in the tree view's resources and hand the instance to
+/// <c>behaviors:ViewPool.TemplateSelector</c>:
+/// <code>
+/// &lt;local:TemplateClass x:Key="WorkflowTemplateSelector"
+///                        NodeTemplate="{StaticResource NodeTemplate}"
+///                        LinkTemplate="{StaticResource LinkTemplate}" /&gt;
+/// </code>
+/// This selector is asked before the framework's own lookup, so naming a template here is enough to win.
+/// </remarks>
+public sealed class TemplateClass : DataTemplateSelector
 {
-    /// <summary>Creates a selector wired to this project's node and link views.</summary>
-    /// <returns>The selector.</returns>
-    public static IWorkflowTemplateSelector CreateSelector() => new Selector();
+    /// <summary>The template used for <see cref="IWorkflowNodeViewModel"/> items.</summary>
+    public DataTemplate? NodeTemplate { get; set; }
 
-    private sealed class Selector : WorkflowTemplateSelector
-    {
-        public Selector()
+    /// <summary>The template used for <see cref="IWorkflowSlotViewModel"/> items.</summary>
+    public DataTemplate? SlotTemplate { get; set; }
+
+    /// <summary>The template used for <see cref="IWorkflowLinkViewModel"/> items.</summary>
+    public DataTemplate? LinkTemplate { get; set; }
+
+    /// <summary>The template used for <see cref="IWorkflowTreeViewModel"/> items.</summary>
+    public DataTemplate? TreeTemplate { get; set; }
+
+    /// <inheritdoc />
+    public override DataTemplate SelectTemplate(object? item, DependencyObject container)
+        => item switch
         {
-            NodeViewFactory = _ => new NodeView();
-            LinkViewFactory = _ => new LinkView();
-        }
-    }
+            IWorkflowLinkViewModel => LinkTemplate
+                ?? throw new InvalidOperationException("LinkTemplate is not set."),
+            IWorkflowSlotViewModel => SlotTemplate
+                ?? throw new InvalidOperationException("SlotTemplate is not set."),
+            IWorkflowNodeViewModel => NodeTemplate
+                ?? throw new InvalidOperationException("NodeTemplate is not set."),
+            IWorkflowTreeViewModel => TreeTemplate
+                ?? throw new InvalidOperationException("TreeTemplate is not set."),
+            _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
+        };
 }

@@ -36,24 +36,30 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Surface border brush. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
-      "defaultValue": "#33FFFFFF"
+      "defaultValue": "#33FFFFFF",
+      "replaces": "TemplateSurfaceBorderBrush"
     },
     "surfaceBorderThickness": {
       "type": "parameter",
       "datatype": "text",
       "description": "Surface border thickness. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
-      "defaultValue": "1"
+      "defaultValue": "1",
+      "replaces": "TemplateSurfaceBorderThickness"
     },
     "surfaceCornerRadius": {
       "type": "parameter",
       "datatype": "text",
       "description": "Surface corner radius. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
-      "defaultValue": "3"
+      "defaultValue": "3",
+      "replaces": "TemplateSurfaceCornerRadius"
     }
   },
   "primaryOutputs": [
     {
-      "path": "TemplateClass.cs"
+      "path": "TemplateClass.jalxaml"
+    },
+    {
+      "path": "TemplateClass.jalxaml.cs"
     }
   ]
 }

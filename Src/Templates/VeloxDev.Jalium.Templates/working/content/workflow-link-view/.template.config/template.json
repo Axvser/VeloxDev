@@ -42,7 +42,10 @@
   },
   "primaryOutputs": [
     {
-      "path": "TemplateClass.cs"
+      "path": "TemplateClass.jalxaml"
+    },
+    {
+      "path": "TemplateClass.jalxaml.cs"
     }
   ]
 }

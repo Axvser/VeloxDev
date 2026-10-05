@@ -1,0 +1,12 @@
+<!-- VeloxDev customization: Customize the connector shape or colors; keep WorkflowSlotConnectionBehavior enabled for interactive links. -->
+<UserControl xmlns="http://schemas.jalium.com/jalxaml"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.Jalium"
+             x:Class="TemplateNamespace.TemplateClass"
+             Background="TemplateSlotBackground"
+             behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
+    <Viewbox>
+        <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+              Data="TemplateSlotPath" />
+    </Viewbox>
+</UserControl>

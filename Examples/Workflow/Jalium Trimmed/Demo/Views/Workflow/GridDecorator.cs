@@ -19,6 +19,7 @@ public sealed class GridDecorator : WorkflowGridDecorator
         RulerLabelColor = Color.FromRgb(0xC8, 0xC8, 0xC8);
         RulerTickColor = Color.FromRgb(0x6E, 0x6E, 0x6E);
         RulerDividerColor = Color.FromRgb(0x4D, 0x4D, 0x4D);
+        SurfaceBackground = Color.FromRgb(0x1E, 0x1E, 0x1E);
         GridStep = 40d;
         MajorLineEvery = 5;
     }

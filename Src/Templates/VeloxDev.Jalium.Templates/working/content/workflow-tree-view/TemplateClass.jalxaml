@@ -1,0 +1,66 @@
+<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them. -->
+<UserControl xmlns="http://schemas.jalium.com/jalxaml"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:TemplateNamespace"
+             xmlns:workflowViews="clr-namespace:TemplateNamespace"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.Jalium"
+             x:Class="TemplateNamespace.TemplateClass"
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+             behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
+             behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+             behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
+    <UserControl.Resources>
+        <!-- The world-to-view translation is applied to PART_Canvas by WorkflowSurfaceBehavior, not bound here:
+             Jalium's binding paths do not resolve prefixed attached properties, so the per-view mirror the XAML
+             adapters use is unavailable. Views therefore sit at plain world coordinates. -->
+        <DataTemplate x:Key="NodeTemplate">
+            <workflowViews:NodeView Width="{Binding Size.Width}"
+                                    Height="{Binding Size.Height}"
+                                    Canvas.Left="{Binding Anchor.Horizontal}"
+                                    Canvas.Top="{Binding Anchor.Vertical}"
+                                    Panel.ZIndex="{Binding Anchor.Layer}" />
+        </DataTemplate>
+        <DataTemplate x:Key="LinkTemplate">
+            <workflowViews:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                    StartTop="{Binding Sender.Anchor.Vertical}"
+                                    EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                    EndTop="{Binding Receiver.Anchor.Vertical}"
+                                    CanRender="{Binding IsVisible}"
+                                    Panel.ZIndex="-1" />
+        </DataTemplate>
+        <workflowViews:TemplateSelector x:Key="WorkflowTemplateSelector"
+                                        NodeTemplate="{StaticResource NodeTemplate}"
+                                        LinkTemplate="{StaticResource LinkTemplate}" />
+        <!-- Right-click menu for a link; its DataContext is that link. Add or remove entries here. -->
+        <ContextMenu x:Key="LinkContextMenu">
+        </ContextMenu>
+    </UserControl.Resources>
+    <Grid>
+        <Border x:Name="PART_SurfaceBorder"
+                Background="TemplateSurfaceBackground"
+                BorderBrush="TemplateSurfaceBorderBrush"
+                BorderThickness="TemplateSurfaceBorderThickness"
+                CornerRadius="TemplateSurfaceCornerRadius">
+            <workflowViews:GridDecorator x:Name="PART_GridDecorator">
+                <ScrollViewer x:Name="PART_ScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              PanningMode="None">
+                    <Canvas x:Name="PART_Canvas"
+                            Background="Transparent"
+                            behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                            behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
+                </ScrollViewer>
+            </workflowViews:GridDecorator>
+        </Border>
+        <workflowViews:MinimapOverlay x:Name="PART_MinimapOverlay"
+                                      HorizontalAlignment="Right"
+                                      VerticalAlignment="Top"
+                                      Margin="0,12,12,0"
+                                      ScrollViewerName="PART_ScrollViewer" />
+    </Grid>
+</UserControl>

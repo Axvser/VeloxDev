@@ -2,38 +2,44 @@ using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 using Jalium.UI;
 using Jalium.UI.Controls;
-using Jalium.UI.Media;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
-/// <summary>Attached properties that drive a <see cref="ViewManager"/> from a Panel, binding its
-/// ItemsSource (usually the tree's Helper.VisibleItems) and a factory template selector.</summary>
+/// <summary>Attached properties that drive a <see cref="ViewManager"/> from a <see cref="Panel"/>, binding its
+/// items source (usually the tree's visible set) and the <see cref="DataTemplateSelector"/> that resolves each
+/// item's view.</summary>
 public static class ViewPool
 {
     private static readonly ConditionalWeakTable<Panel, ViewManager> s_managers = new();
 
+    /// <summary>Identifies the <c>ItemsSource</c> attached property.</summary>
     public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.RegisterAttached(
         "ItemsSource",
         typeof(INotifyCollectionChanged),
         typeof(ViewPool),
         new PropertyMetadata(null, OnChanged));
 
+    /// <summary>Identifies the <c>TemplateSelector</c> attached property.</summary>
     public static readonly DependencyProperty TemplateSelectorProperty = DependencyProperty.RegisterAttached(
         "TemplateSelector",
-        typeof(IWorkflowTemplateSelector),
+        typeof(DataTemplateSelector),
         typeof(ViewPool),
         new PropertyMetadata(null, OnChanged));
 
+    /// <summary>Reads the items source attached to <paramref name="element"/>.</summary>
     public static INotifyCollectionChanged? GetItemsSource(Panel element)
         => (INotifyCollectionChanged?)element.GetValue(ItemsSourceProperty);
 
+    /// <summary>Sets the items source attached to <paramref name="element"/>.</summary>
     public static void SetItemsSource(Panel element, INotifyCollectionChanged? value)
         => element.SetValue(ItemsSourceProperty, value);
 
-    public static IWorkflowTemplateSelector? GetTemplateSelector(Panel element)
-        => (IWorkflowTemplateSelector?)element.GetValue(TemplateSelectorProperty);
+    /// <summary>Reads the template selector attached to <paramref name="element"/>.</summary>
+    public static DataTemplateSelector? GetTemplateSelector(Panel element)
+        => (DataTemplateSelector?)element.GetValue(TemplateSelectorProperty);
 
-    public static void SetTemplateSelector(Panel element, IWorkflowTemplateSelector? value)
+    /// <summary>Sets the template selector attached to <paramref name="element"/>.</summary>
+    public static void SetTemplateSelector(Panel element, DataTemplateSelector? value)
         => element.SetValue(TemplateSelectorProperty, value);
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

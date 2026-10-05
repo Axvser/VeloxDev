@@ -19,6 +19,7 @@ public sealed class TemplateClass : WorkflowGridDecorator
         RulerLabelColor = (Color)ColorConverter.ConvertFromString("TemplateRulerLabelColor");
         RulerTickColor = (Color)ColorConverter.ConvertFromString("TemplateRulerTickColor");
         RulerDividerColor = (Color)ColorConverter.ConvertFromString("TemplateRulerDividerColor");
+        SurfaceBackground = (Color)ColorConverter.ConvertFromString("TemplateGridBackground");
         GridStep = TemplateGridSpacing;
         MajorLineEvery = TemplateMajorLineEvery;
     }

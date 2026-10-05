@@ -91,8 +91,9 @@
     "gridBackground": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Grid surface background color. Accepted for cross-GUI CLI parity; this GUI's decorator does not paint the surface background.",
-      "defaultValue": "#1E1E1E"
+      "description": "Grid surface background color.",
+      "defaultValue": "#1E1E1E",
+      "replaces": "TemplateGridBackground"
     }
   },
   "primaryOutputs": [

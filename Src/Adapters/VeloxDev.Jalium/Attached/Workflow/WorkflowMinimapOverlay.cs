@@ -59,8 +59,45 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     private T Read<T>(DependencyProperty property, T fallback) where T : struct
         => GetValue(property) is T value ? value : fallback;
 
-    /// <summary>Assigned by the composing control (WorkflowTreeView) for drag-to-pan.</summary>
+    /// <summary>Assigned by the composing control for drag-to-pan, or resolved from <see cref="ScrollViewerName"/>.</summary>
     public ScrollViewer? ScrollViewer { get; set; }
+
+    /// <summary>
+    /// The name of the <see cref="ScrollViewer"/> the minimap pans, resolved in the template's name scope.
+    /// </summary>
+    /// <remarks>
+    /// Markup can name the viewer instead of handing over an object, which keeps the overlay declared purely in
+    /// the template — the same contract the surface behavior uses for its own parts.
+    /// </remarks>
+    public static readonly DependencyProperty ScrollViewerNameProperty = DependencyProperty.Register(
+        nameof(ScrollViewerName),
+        typeof(string),
+        typeof(WorkflowMinimapOverlay),
+        new PropertyMetadata(null, OnScrollViewerNameChanged));
+
+    /// <summary>The name of the <see cref="ScrollViewer"/> the minimap pans.</summary>
+    public string? ScrollViewerName
+    {
+        get => (string?)GetValue(ScrollViewerNameProperty);
+        set => SetValue(ScrollViewerNameProperty, value);
+    }
+
+    private static void OnScrollViewerNameChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is WorkflowMinimapOverlay overlay)
+        {
+            overlay.ResolveScrollViewer();
+        }
+    }
+
+    // 名字作用域要等到装进树里才建好，所以 Loaded 时再兜一次。
+    private void ResolveScrollViewer()
+    {
+        if (ScrollViewerName is { Length: > 0 } name && FindName(name) is ScrollViewer viewer)
+        {
+            ScrollViewer = viewer;
+        }
+    }
 
     // 节点缩略框与内容包围盒的缓存：视口、颜色、尺寸的变化只影响那一趟 O(1) 的变换，不该让重画再走一遍节点表。
     // 只有节点自己动了（或树换了）才置脏重算 —— 与 WPF / Avalonia / WinUI / MAUI 的同名脏标记同一条规矩。
@@ -81,6 +118,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         AddHandler(MouseDownEvent, new MouseButtonEventHandler(OnMiniMouseDown));
         AddHandler(MouseMoveEvent, new MouseEventHandler(OnMiniMouseMove));
         AddHandler(MouseUpEvent, new MouseButtonEventHandler(OnMiniMouseUp));
+        Loaded += (_, _) => ResolveScrollViewer();
     }
 
     private static void OnVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
