@@ -74,37 +74,29 @@ public static class WorkflowPresentation
                                   || s.Channel.HasFlag(SlotChannel.MultipleTargets));
 
     /// <summary>
-    /// Builds a slot → name lookup for the node's enumerated selector slots. The names live
-    /// on the <see cref="ConditionalSlot{TSlot}"/> wrappers inside each
-    /// <see cref="SlotEnumerator{TSlot}"/> property, not on the slot view models themselves,
-    /// so they are surfaced via reflection over any property implementing
-    /// <see cref="IConditionalSlotProvider{TSlot}"/>.
+    /// Builds a slot to name lookup for the node's enumerated selector slots.
     /// </summary>
+    /// <remarks>
+    /// The names live on the <see cref="ConditionalSlot{TSlot}"/> entries inside each
+    /// <see cref="SlotEnumerator{TSlot}"/>, not on the slot view models — and the node hands its enumerators over
+    /// through <see cref="IConditionalSlotProviders"/>, so this reads them instead of reflecting over the node's
+    /// properties by name.
+    /// </remarks>
     public static Dictionary<IWorkflowSlotViewModel, string> SlotNamesOf(IWorkflowNodeViewModel node)
     {
         var map = new Dictionary<IWorkflowSlotViewModel, string>();
-        foreach (var property in node.GetType().GetProperties())
+        if (node?.GetHelper() is not IConditionalSlotProviders providers) return map;
+
+        foreach (var provider in providers.Providers)
         {
-            var value = property.GetValue(node);
-            if (value is null) continue;
-
-            var isProvider = value.GetType().GetInterfaces().Any(i =>
-                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConditionalSlotProvider<>));
-            if (!isProvider) continue;
-
-            if (value.GetType().GetProperty("Items")
-                    ?.GetValue(value) is not IEnumerable items)
-                continue;
-
-            foreach (var item in items)
+            var items = provider.Slots;
+            for (int i = 0; i < items.Count; i++)
             {
-                var itemType = item.GetType();
-                if (itemType.GetProperty("Slot")?.GetValue(item) is not IWorkflowSlotViewModel slot)
-                    continue;
-                var name = itemType.GetProperty("Name")?.GetValue(item) as string;
-                map[slot] = string.IsNullOrEmpty(name) ? slot.ToString() ?? string.Empty : name;
+                if (items[i] is not { } item || item.Slot is not { } slot) continue;
+                map[slot] = string.IsNullOrEmpty(item.Name) ? slot.ToString() ?? string.Empty : item.Name;
             }
         }
+
         return map;
     }
 

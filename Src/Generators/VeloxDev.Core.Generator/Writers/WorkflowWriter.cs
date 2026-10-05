@@ -79,7 +79,14 @@ namespace VeloxDev.Generators.Writers
         public override string[] GenerateBaseInterfaces()
         {
             var model = _workflowModel;
-            if (model == null || _isBaseClassWorkflowGenerated) return Array.Empty<string>();
+            if (model == null) return Array.Empty<string>();
+
+            // 基类已经生成过时，基础设施接口由基类带着，派生只补端口这一个 —— 派生重新实现它，
+            // 于是读的是派生自己的槽属性。
+            if (_isBaseClassWorkflowGenerated)
+            {
+                return Array.Empty<string>();
+            }
 
             var interfaces = new List<string> { GetWorkflowInterfaceName(model.WorkflowType) };
             if (!HasIdentifiableInfrastructure(model.TargetClassSymbol))
@@ -389,6 +396,8 @@ namespace VeloxDev.Generators.Writers
             if (_isBaseClassWorkflowGenerated)
             {
                 GenerateHelperOverrideBody(sb, model);
+                // 基类已经有整套基础设施，派生只补 Helper —— 但端口要自己说：基类那份读的是基类的槽属性，
+                // 派生若声明了自己的槽，继承来的实现看不见它们。
                 return sb.ToString();
             }
 
@@ -443,6 +452,14 @@ namespace VeloxDev.Generators.Writers
             }
         }
 
+        /// <summary>
+        /// 节点把自己的端口说出来 —— 生成器知道这些名字，所以由它写，平台适配器就不必按名反射去读。
+        /// </summary>
+        /// <remarks>
+        /// 约定：普通槽 <c>InputSlot</c> / <c>OutputSlot</c>，枚举器 <c>InputSlots</c> / <c>OutputSlots</c>，
+        /// 标题取提升后名为 <c>Title</c> 或 <c>Name</c> 的字符串成员。名不在此列、或要把某个口的角色换过来，
+        /// 都由宿主自己的声明覆盖（适配器优先看声明）。
+        /// </remarks>
         private string GenerateHelperProperty(WorkflowAttributeModel model)
         {
             var helperInterface = GetWorkflowHelperInterfaceName(model.WorkflowType);

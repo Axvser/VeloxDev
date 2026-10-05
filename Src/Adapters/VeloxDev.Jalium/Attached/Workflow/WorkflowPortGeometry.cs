@@ -5,7 +5,7 @@ using Jalium.UI;
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// Reads a node's ports and locates them on the canvas.
+/// Reads a node's ports out of the model and locates them on the canvas.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,31 +13,29 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// Nth output", so it is derived here once rather than in each of them.
 /// </para>
 /// <para>
-/// Where the ports <i>are</i> is geometry and is computed here. <i>Which</i> slots are a node's ports is not
-/// computable: a node holds its slots in properties of its own naming, and this adapter holds the node as
-/// <see cref="IWorkflowNodeViewModel"/>, which says nothing about them. The view declares that part — see
-/// <see cref="WorkflowNodePorts"/> — exactly as the markup adapters' <c>SlotNames</c> has their view declare it.
+/// Nothing here is reflected and nothing is declared: a node's slots are <see cref="IWorkflowNodeViewModel.Slots"/>
+/// and which side each faces is <see cref="IWorkflowSlotViewModel.Channel"/>. The only thing the node does not
+/// publish on that path is what an <em>enumerated</em> port is called — those names live on the enumerator's
+/// entries, and the node hands its enumerators over through
+/// <see cref="IConditionalSlotProviders"/> so a caller holding only the node can reach them.
 /// </para>
 /// </remarks>
 public static class WorkflowPortGeometry
 {
+    private const SlotChannel SourceBits = SlotChannel.OneSource | SlotChannel.MultipleSources;
+    private const SlotChannel TargetBits = SlotChannel.OneTarget | SlotChannel.MultipleTargets;
+
     /// <summary>A node's input slots, with their display names.</summary>
     /// <param name="node">The node.</param>
-    /// <returns>The inputs, in order; empty when the view declared none.</returns>
-    public static IReadOnlyList<WorkflowNodePort> Inputs(IWorkflowNodeViewModel node)
-        => WorkflowNodePorts.For(node) is { } ports ? ports.Inputs(node) : [];
+    /// <returns>The inputs, in the order the node declares them.</returns>
+    public static IReadOnlyList<(IWorkflowSlotViewModel Slot, string Name)> Inputs(IWorkflowNodeViewModel node)
+        => SlotsFacing(node, SourceBits);
 
     /// <summary>A node's output slots, with their display names.</summary>
     /// <param name="node">The node.</param>
-    /// <returns>The outputs, in order; empty when the view declared none.</returns>
-    public static IReadOnlyList<WorkflowNodePort> Outputs(IWorkflowNodeViewModel node)
-        => WorkflowNodePorts.For(node) is { } ports ? ports.Outputs(node) : [];
-
-    /// <summary>A node's display title.</summary>
-    /// <param name="node">The node.</param>
-    /// <returns>The title, or an empty string when the view declared none.</returns>
-    public static string TitleOf(IWorkflowNodeViewModel node)
-        => WorkflowNodePorts.For(node) is { } ports ? ports.Title(node) : string.Empty;
+    /// <returns>The outputs, in the order the node declares them.</returns>
+    public static IReadOnlyList<(IWorkflowSlotViewModel Slot, string Name)> Outputs(IWorkflowNodeViewModel node)
+        => SlotsFacing(node, TargetBits);
 
     /// <summary>Whether a slot is an input or an output of its node, and its index among those.</summary>
     /// <param name="node">The node.</param>
@@ -90,5 +88,46 @@ public static class WorkflowPortGeometry
         var sx = layout.DesignWidth == 0 ? 1 : node.Size.Width / layout.DesignWidth;
         var sy = layout.DesignHeight == 0 ? 1 : node.Size.Height / layout.DesignHeight;
         return new Point(node.Anchor.Horizontal + designX * sx, node.Anchor.Vertical + designY * sy);
+    }
+
+    /// <summary>The node's slots that face <paramref name="bits"/>, with the names their enumerators gave them.</summary>
+    /// <remarks>
+    /// Filtered, not partitioned: a slot whose channel carries both directions is an input and an output, which is
+    /// what <see cref="SlotChannel"/> means — a capacity in each direction, counted independently.
+    /// </remarks>
+    private static IReadOnlyList<(IWorkflowSlotViewModel Slot, string Name)> SlotsFacing(IWorkflowNodeViewModel node, SlotChannel bits)
+    {
+        if (node?.Slots is not { } slots) return [];
+
+        var names = EnumeratedNames(node);
+        var result = new List<(IWorkflowSlotViewModel Slot, string Name)>(slots.Count);
+        for (int i = 0; i < slots.Count; i++)
+        {
+            if (slots[i] is not { } slot) continue;
+            if ((slot.Channel & bits) == 0) continue;
+
+            result.Add((slot, names.TryGetValue(slot, out var name) ? name : string.Empty));
+        }
+
+        return result;
+    }
+
+    /// <summary>The names the node's enumerators gave the slots they selected.</summary>
+    private static Dictionary<IWorkflowSlotViewModel, string> EnumeratedNames(IWorkflowNodeViewModel node)
+    {
+        var map = new Dictionary<IWorkflowSlotViewModel, string>();
+        if (node?.GetHelper() is not IConditionalSlotProviders providers) return map;
+
+        foreach (var provider in providers.Providers)
+        {
+            var items = provider.Slots;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i] is not { } item || item.Slot is not { } slot) continue;
+                map[slot] = item.Name ?? string.Empty;
+            }
+        }
+
+        return map;
     }
 }

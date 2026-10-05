@@ -8,6 +8,7 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
+using Demo.ViewModels.Workflow;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
@@ -70,6 +71,9 @@ public sealed class NodeView : UserControl
         // One call attaches the rest: binding, placement, zoom collapse, the model events and the reflective
         // title/slot lookups. Pointers and the card's own drawing stay yours.
         card = WorkflowNodeAttachment.Attach(this);
+
+        // 端口由生成器写在节点上；标题不是端口，由这张卡声明。
+        card.NodeTitle = static vm => (vm as NodeViewModel)?.Name ?? string.Empty;
         card.SurfaceBackdrop = WorkflowNodeAttachment.ParseColor("#1E1E1E");
         card.Rebound += (_, _) => OnRebound();
         card.CollapseChanged += (_, e) => OnCollapse(e.Collapse);

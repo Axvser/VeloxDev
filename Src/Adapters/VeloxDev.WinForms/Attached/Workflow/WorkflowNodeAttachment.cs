@@ -2,7 +2,6 @@ using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
@@ -11,7 +10,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <summary>
 /// Everything a WinForms control needs to become one workflow node card, attached to it in a single call. The
 /// control stays yours — what the card looks like is your <c>OnPaint</c> — and this helper supplies the binding,
-/// the placement, the zoom collapse, the model events, and the reflective lookups that read a title, an input slot
+/// the placement, the zoom collapse, the model events, and the port list a card lays out
 /// and a slot label off whatever node view-model the host generated.
 /// </summary>
 /// <remarks>
@@ -91,6 +90,21 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     /// <summary>Raised when the node's title changes.</summary>
     public event EventHandler? TitleChanged;
 
+    /// <summary>How the card reads the node's title.</summary>
+    /// <remarks>
+    /// A title is not a port, and picking one of a node's members to call the title is a naming guess — so the
+    /// generated ports say nothing about it and the view, which knows its node type, declares it here. Without a
+    /// declaration the card has no title.
+    /// </remarks>
+    public Func<IWorkflowNodeViewModel, string>? NodeTitle { get; set; }
+
+    /// <summary>How the card reads a slot's own display label, for slots that carry one.</summary>
+    /// <remarks>
+    /// This is the slot view model's own member, not the conditional-slot entry's name the generated ports carry —
+    /// a different question, and one only the view can answer. Falls through to a positional label when unset.
+    /// </remarks>
+    public Func<IWorkflowSlotViewModel, string?>? SlotLabel { get; set; }
+
     /// <summary>Raised when the zoom collapse factor changes; re-flow the card's fixed metrics here.</summary>
     public event EventHandler<CollapseChangedEventArgs>? CollapseChanged;
 
@@ -152,7 +166,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
         }
     }
 
-    /// <summary>The bound node's display title, read reflectively — <see cref="IWorkflowNodeViewModel"/> has none.</summary>
+    /// <summary>The bound node's display title, as the view declared it.</summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Title { get; private set; } = string.Empty;
@@ -224,38 +238,20 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     /// </remarks>
     public IWorkflowSlotViewModel? ResolveInputSlot()
     {
-        if (node is null) return null;
+        if (node?.Slots is not { } slots) return null;
 
-        IWorkflowSlotViewModel? fallback = null;
-        foreach (var property in node.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        // 只在候选明确是输入（能当源、不能当目标）时才认；只有输出能力的口不能变成输入口。
+        // 要认作者起的名字，由模板来做 —— 它知道节点类型，写得出 ((MyNode)vm).InputSlot。
+        for (int i = 0; i < slots.Count; i++)
         {
-            IWorkflowSlotViewModel? slot;
-            try
-            {
-                slot = property.GetValue(node) as IWorkflowSlotViewModel;
-            }
-            catch
-            {
-                // 生成的属性在初始化之前有些会抛；跳过。
-                continue;
-            }
+            if (slots[i] is not { } slot) continue;
 
-            if (slot is null) continue;
-            if (string.Equals(property.Name, "InputSlot", StringComparison.OrdinalIgnoreCase))
-            {
-                return slot;
-            }
-
-            // 只在候选明确是输入（能当源、不能当目标）时才兜底；只有输出能力的属性不能变成输入口。
             var hasSource = (slot.Channel & (SlotChannel.OneSource | SlotChannel.MultipleSources)) != 0;
             var hasTarget = (slot.Channel & (SlotChannel.OneTarget | SlotChannel.MultipleTargets)) != 0;
-            if (hasSource && !hasTarget && fallback is null)
-            {
-                fallback = slot;
-            }
+            if (hasSource && !hasTarget) return slot;
         }
 
-        return fallback;
+        return null;
     }
 
     /// <summary>
@@ -276,12 +272,8 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
             return name;
         }
 
-        var fallback = slot.GetType().GetProperty("Name") ?? slot.GetType().GetProperty("Title");
-        if (fallback?.GetValue(slot)?.ToString() is { Length: > 0 } text)
-        {
-            return text;
-        }
-
+        // 槽自身的显示名同样由视图声明 —— 它是槽类型上的成员，节点这一层看不到。
+        if (SlotLabel?.Invoke(slot) is { Length: > 0 } declared) return declared;
         return $"Output {index + 1}";
     }
 
@@ -350,14 +342,12 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
         target.Invalidate();
     }
 
-    // IWorkflowNodeViewModel 不暴露名字，所以反射找 Name / Title —— 对任何节点视图模型都成立，包括
-    // VeloxDev 自带的那些。
     private string ReadNodeTitle()
     {
         if (node is null) return string.Empty;
 
-        var property = node.GetType().GetProperty("Name") ?? node.GetType().GetProperty("Title");
-        return property?.GetValue(node)?.ToString() ?? string.Empty;
+        // 标题不是端口，模型与生成代码都不描述它 —— 由画这张卡的视图声明。
+        return NodeTitle?.Invoke(node) ?? string.Empty;
     }
 
     // 1/Scale（缩放为 1 时是 1）。缩放为 0 按 1 处理 —— 那是个守卫，不是受支持的缩放级别。
@@ -372,15 +362,14 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     // SlotEnumerator<T> 的私有形状，而接口就是为「只拿到一个 object 的调用方」准备的。
     private string? ReadEnumeratorLabel(IWorkflowSlotViewModel slot)
     {
-        if (node is null) return null;
+        if (node?.GetHelper() is not IConditionalSlotProviders providers) return null;
 
-        foreach (var property in node.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        foreach (var provider in providers.Providers)
         {
-            if (property.GetValue(node) is not IConditionalSlotProvider provider) continue;
-
-            foreach (var item in provider.Slots)
+            var items = provider.Slots;
+            for (int i = 0; i < items.Count; i++)
             {
-                if (ReferenceEquals(item.Slot, slot)) return item.Name;
+                if (ReferenceEquals(items[i]?.Slot, slot)) return items[i]!.Name;
             }
         }
 

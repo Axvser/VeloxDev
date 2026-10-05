@@ -67,9 +67,17 @@ public sealed class TemplateClass : UserControl
         // A == 0xFF without SupportsTransparentBackColor).
         BackColor = _opaqueBackground;
 
-        // One call attaches the rest: binding, placement, zoom collapse, the model events and the reflective
-        // title/slot lookups. Pointers and the card's own drawing stay yours.
+        // One call attaches the rest: binding, placement, zoom collapse, the model events and the port list.
+        // Pointers and the card's own drawing stay yours.
         card = WorkflowNodeAttachment.Attach(this);
+
+        // VeloxDev customization: the node's ports come from the node itself — the generator writes them onto every
+        // node — but a title is not a port, so the view declares it. Replace MyNode with your node type; without
+        // this the card has no title.
+        //
+        //     card.NodeTitle = static vm => (vm as MyNode)?.Name ?? string.Empty;
+        //     card.SlotLabel = static slot => (slot as MySlot)?.Name;
+
         card.SurfaceBackdrop = WorkflowNodeAttachment.ParseColor("#1E1E1E");
         card.Rebound += (_, _) => OnRebound();
         card.CollapseChanged += (_, e) => OnCollapse(e.Collapse);

@@ -16,7 +16,7 @@ public class NodeHelper : NodeHelper<IWorkflowNodeViewModel>
 /// [ Component Helper ] Provide standard supports for Node Component
 /// </summary>
 /// <typeparam name="T"> The type of the Node ViewModel that this helper is designed for. </typeparam>
-public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, IInputEvents
+public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, IInputEvents, IConditionalSlotProviders
     where T : class, IWorkflowNodeViewModel
 {
     /// <summary>The node this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
@@ -25,6 +25,9 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, 
 
     /// <inheritdoc />
     public InputRelay Input { get; } = new();
+
+    /// <inheritdoc />
+    public IList<IConditionalSlotProvider> Providers { get; } = [];
 
     /// <inheritdoc />
     public event EventHandler<IWorkflowSlotViewModel>? SlotAdded;

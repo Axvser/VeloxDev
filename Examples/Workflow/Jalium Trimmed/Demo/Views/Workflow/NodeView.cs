@@ -5,7 +5,6 @@ using Jalium.UI;
 using Jalium.UI.Controls;
 using Jalium.UI.Interop;
 using Jalium.UI.Media;
-using System.Linq;
 using Demo.ViewModels.Workflow;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -30,14 +29,28 @@ public sealed class NodeView : Canvas
         node.PortLayout = SlotView.Layout;
         node.SlotViewFactory = _ => new SlotView();
         node.Render += (_, e) => DrawCard(e.Context);
-        // VeloxDev customization: declare this node's ports here. The adapter holds the node as
-        // IWorkflowNodeViewModel, which does not say which of its properties are its ports — so the card does.
-        // Without a declaration the card has no ports.
-        node.Ports = new WorkflowNodePortSet
+
+        // 端口由模型给出；标题不是端口，由这张卡声明。
+        node.NodeTitle = static vm => (vm as NodeViewModel)?.Name ?? string.Empty;
+
+        // 输入口排成一列 —— 默认排布只画第一个，这里改成任意多个都画得出来。
+        node.LayoutPorts = static card =>
         {
-            Inputs = static vm => [new WorkflowNodePort(((NodeViewModel)vm).InputSlot, string.Empty)],
-            Outputs = static vm => [.. ((NodeViewModel)vm).OutputSlots.Items.Select(i => new WorkflowNodePort(i.Slot, i.Name))],
-            Title = static vm => ((NodeViewModel)vm).Name,
+            var layout = card.PortLayout;
+            double y = layout.TitleBarH + layout.RowH / 2;
+
+            foreach (var (slot, _) in card.Inputs)
+            {
+                card.PlacePort(slot, layout.InputPortX, y, layout.InputPortRadius);
+                y += layout.RowH;
+            }
+
+            y = layout.TitleBarH + layout.RowH / 2;
+            foreach (var (slot, _) in card.Outputs)
+            {
+                card.PlacePort(slot, layout.DesignWidth - layout.OutputInset, y, layout.OutputPortRadius);
+                y += layout.RowH;
+            }
         };
     }
 
@@ -58,7 +71,7 @@ public sealed class NodeView : Canvas
             new Rect(0, 0, Attachment.PortLayout.DesignWidth, Attachment.PortLayout.DesignHeight),
             6, 6);
 
-        var title = new FormattedText(WorkflowPortGeometry.TitleOf(node), FontFamilyName, 14)
+        var title = new FormattedText(Attachment.NodeTitle?.Invoke(node) ?? string.Empty, FontFamilyName, 14)
         {
             Foreground = s_titleBrush,
             FontWeight = 600,

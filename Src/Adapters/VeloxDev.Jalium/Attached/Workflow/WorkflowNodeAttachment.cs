@@ -48,7 +48,6 @@ public sealed class WorkflowNodeAttachment
     private readonly IWorkflowNodeEventSink eventSink;
 
     private IWorkflowNodeViewModel? node;
-    private WorkflowNodePortSet? ports;
     private INotifyPropertyChanged? layoutNotify;
     private PropertyChangedEventHandler? layoutHandler;
     private INotifyCollectionChanged? slotsNotify;
@@ -140,28 +139,12 @@ public sealed class WorkflowNodeAttachment
     /// </remarks>
     public Func<IWorkflowSlotViewModel, FrameworkElement>? SlotViewFactory { get; set; }
 
-    /// <summary>How the card declares its node's ports.</summary>
+    /// <summary>How the card reads the node's title.</summary>
     /// <remarks>
-    /// <para>
-    /// Set it once in the card's constructor. The adapter holds the node as <see cref="IWorkflowNodeViewModel"/>,
-    /// which does not name the properties a node keeps its slots in, so without a declaration the card has no
-    /// ports — this is the type knowledge the card's own generated view has and the adapter does not.
-    /// </para>
-    /// <para>
-    /// The same division the markup adapters use: there the view writes <c>SlotNames="PART_InputSlot"</c> and the
-    /// adapter reads the bound control; here the view writes the accessor and the adapter calls it.
-    /// </para>
+    /// A title is not a port: the model does not describe one and neither does anything derived from it, so the
+    /// view — which knows its node type — declares it here. Without a declaration the card has no title.
     /// </remarks>
-    public WorkflowNodePortSet? Ports
-    {
-        get => ports;
-        set
-        {
-            ports = value;
-            DeclarePorts();
-            RebuildSlotViews();
-        }
-    }
+    public Func<IWorkflowNodeViewModel, string>? NodeTitle { get; set; }
 
     /// <summary>The node this card is showing, taken from the <c>DataContext</c>.</summary>
     public IWorkflowNodeViewModel? Node => node;
@@ -176,31 +159,71 @@ public sealed class WorkflowNodeAttachment
     /// <summary>Repaints the card — call it when something you drew from changed.</summary>
     public void InvalidateCard() => layer.InvalidateVisual();
 
-    private void DeclarePorts()
-    {
-        if (node is not null && ports is not null) WorkflowNodePorts.Declare(node, ports);
-    }
 
     private void RebuildSlotViews()
     {
         layer.Children.Clear();
         if (node is null) return;
 
-        var inputs = WorkflowPortGeometry.Inputs(node);
-        if (inputs.Count > 0)
+        if (LayoutPorts is { } layout)
         {
-            PlaceSlot(inputs[0].Slot, portLayout.InputPortX, portLayout.DesignHeight / 2.0, portLayout.InputPortRadius);
+            layout(this);
+            return;
         }
 
-        var outputs = WorkflowPortGeometry.Outputs(node);
+        // 默认排布：一个输入贴左边，输出每个一行往下。卡片设了 LayoutPorts 就整块由它接管。
+        DefaultLayout();
+    }
+
+    private void DefaultLayout()
+    {
+        var inputs = Inputs;
+        if (inputs.Count > 0)
+        {
+            PlacePort(inputs[0].Slot, portLayout.InputPortX, portLayout.DesignHeight / 2.0, portLayout.InputPortRadius);
+        }
+
+        var outputs = Outputs;
         for (int i = 0; i < outputs.Count; i++)
         {
             double rowCenter = portLayout.TitleBarH + portLayout.RowH * i + portLayout.RowH / 2.0;
-            PlaceSlot(outputs[i].Slot, portLayout.DesignWidth - portLayout.OutputInset, rowCenter, portLayout.OutputPortRadius);
+            PlacePort(outputs[i].Slot, portLayout.DesignWidth - portLayout.OutputInset, rowCenter, portLayout.OutputPortRadius);
         }
     }
 
-    private void PlaceSlot(IWorkflowSlotViewModel slot, double designX, double designY, double radius)
+    /// <summary>The node's input ports, as the model gives them.</summary>
+    /// <remarks>What this card does with them is <see cref="LayoutPorts"/>'s business, not this property's.</remarks>
+    public IReadOnlyList<(IWorkflowSlotViewModel Slot, string Name)> Inputs
+        => node is null ? [] : WorkflowPortGeometry.Inputs(node);
+
+    /// <summary>The node's output ports, as the model gives them.</summary>
+    public IReadOnlyList<(IWorkflowSlotViewModel Slot, string Name)> Outputs
+        => node is null ? [] : WorkflowPortGeometry.Outputs(node);
+
+    /// <summary>
+    /// Where this card puts its ports — set it and the placement is entirely yours.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unset, the card lays out one input on the left edge and one row per output down the right — the shape every
+    /// shipped template starts from. Set, you get the whole placement: read <see cref="Inputs"/> and
+    /// <see cref="Outputs"/> (or <see cref="Node"/>'s slots directly, and their channels) and call
+    /// <see cref="PlacePort"/> for each one you want drawn, wherever you want it. Nothing is placed for you.
+    /// </para>
+    /// <para>
+    /// A delegate rather than a base class on purpose: the card is your own control — the same division the
+    /// attachment's other hooks use, and the same one WinForms' card has, where the template does this in its own
+    /// <c>OnRebound</c>.
+    /// </para>
+    /// </remarks>
+    public Action<WorkflowNodeAttachment>? LayoutPorts { get; set; }
+
+    /// <summary>Draws one port glyph at a design-local position on the card.</summary>
+    /// <param name="slot">The slot this glyph stands for.</param>
+    /// <param name="designX">X in the card's design coordinates.</param>
+    /// <param name="designY">Y in the card's design coordinates.</param>
+    /// <param name="radius">The glyph's radius, which is also its hit area.</param>
+    public void PlacePort(IWorkflowSlotViewModel slot, double designX, double designY, double radius)
     {
         var view = SlotViewFactory?.Invoke(slot) ?? new FrameworkElement();
         view.DataContext = slot;
@@ -221,7 +244,6 @@ public sealed class WorkflowNodeAttachment
         UnsubscribeNodeEvents();
 
         node = target.DataContext as IWorkflowNodeViewModel;
-        DeclarePorts();
         if (node is INotifyPropertyChanged notify) notify.PropertyChanged += OnNodeChanged;
 
         // 模型事件由 Core 的 relay 接一次，转发到事件；Helper 不提供事件时 Attach 返回 null。

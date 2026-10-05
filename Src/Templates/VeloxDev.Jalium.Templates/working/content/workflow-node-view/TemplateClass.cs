@@ -28,16 +28,21 @@ public sealed class TemplateClass : Canvas
         node.PortLayout = SlotView.Layout;
         node.SlotViewFactory = _ => new SlotView();
         node.Render += (_, e) => DrawCard(e.Context);
-        // VeloxDev customization: declare this node's ports here. The adapter holds the node as
-        // IWorkflowNodeViewModel, which does not say which of its properties are its ports — so the card does.
-        // Without a declaration the card has no ports. Shape (replace MyNode with your node type):
+        // VeloxDev customization: the ports come from the model — Slots, and the Channel each one faces — and
+        // this card decides where they go. Left alone, the card puts one input on the left edge and one row per
+        // output down the right; set LayoutPorts and the whole placement is yours:
         //
-        //     node.Ports = new WorkflowNodePortSet
+        //     node.LayoutPorts = card =>
         //     {
-        //         Inputs = static vm => [new WorkflowNodePort(((MyNode)vm).InputSlot, string.Empty)],
-        //         Outputs = static vm => [.. ((MyNode)vm).OutputSlots.Items.Select(i => new WorkflowNodePort(i.Slot, i.Name))],
-        //         Title = static vm => ((MyNode)vm).Name,
+        //         double y = card.PortLayout.TitleBarH + card.PortLayout.RowH / 2;
+        //         foreach (var (slot, _) in card.Inputs)
+        //         {
+        //             card.PlacePort(slot, card.PortLayout.InputPortX, y, card.PortLayout.InputPortRadius);
+        //             y += card.PortLayout.RowH;
+        //         }
         //     };
+        //
+        // That override is for a node whose slots do not carry the channels you want drawn, or for the title.
     }
 
     /// <summary>Gets the attachment, for a card that wants the node, the layout or the model events.</summary>
@@ -57,7 +62,7 @@ public sealed class TemplateClass : Canvas
             new Rect(0, 0, Attachment.PortLayout.DesignWidth, Attachment.PortLayout.DesignHeight),
             TemplateNodeCornerRadius, TemplateNodeCornerRadius);
 
-        var title = new FormattedText(WorkflowPortGeometry.TitleOf(node), FontFamilyName, 14)
+        var title = new FormattedText(Attachment.NodeTitle?.Invoke(node) ?? string.Empty, FontFamilyName, 14)
         {
             Foreground = s_titleBrush,
             FontWeight = 600,

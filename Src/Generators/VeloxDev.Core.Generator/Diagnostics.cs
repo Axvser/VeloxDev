@@ -25,6 +25,23 @@ namespace VeloxDev.Generators
         private const string JsonCategory = "VeloxDev.Serialization";
 
         /// <summary>
+        /// The project's language version is below what the generated code is written in.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error, and raised on the author's own type rather than left to surface inside a
+        /// <c>.g.cs</c>: the generated file is valid C#, it is the project's <c>LangVersion</c> that is too low, and
+        /// the author is the only one who can raise it. Collection expressions are what the generated code needs
+        /// today; when that moves, this moves with it.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor LanguageVersionTooLow = new(
+            id: "VELOX_LANGVERSION001",
+            title: "LangVersion is below what the generated code needs",
+            messageFormat: "Generated code uses C# {0} syntax; this project's LangVersion maps to {1}. Raise <LangVersion> to at least {0} (or 'latest').",
+            category: "VeloxDev.Generators",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        /// <summary>
         /// A <c>[VeloxCommand]</c> method whose shape cannot be turned into a command.
         /// </summary>
         /// <remarks>

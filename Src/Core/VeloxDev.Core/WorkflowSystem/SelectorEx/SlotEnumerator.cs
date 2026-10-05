@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Runtime.Serialization;
@@ -676,11 +676,23 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
     {
         Parent = parent;
         _memberName = memberName;
+
+        // 把本枚举器交给持有节点的调用方 —— 条目的名字在我身上，而我的属性名只有节点知道。
+        if (parent?.GetHelper() is IConditionalSlotProviders registry
+            && !registry.Providers.Contains(this))
+        {
+            registry.Providers.Add(this);
+        }
     }
 
     /// <inheritdoc />
     public void Uninstall()
     {
+        if (Parent?.GetHelper() is IConditionalSlotProviders registry)
+        {
+            registry.Providers.Remove(this);
+        }
+
         FlushDeferredRemovals();
         Parent = null;
         conditionMap.Clear();
