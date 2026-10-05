@@ -1181,7 +1181,7 @@ public sealed class WorkflowAgentToolkit
     private string CreateSlotOnNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Fully-qualified slot type name.")] string fullSlotTypeName,
-        [Description("Channel: 'OneSender','OneReceiver','OneBoth','ManySender','ManyReceiver','ManyBoth'.")] string channel = "OneBoth")
+        [Description("Channel: 'None','OneTarget','OneSource','OneBoth','MultipleTargets','MultipleSources','MultipleBoth'.")] string channel = "OneBoth")
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
 
@@ -1301,7 +1301,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Node index.")] int nodeIndex,
         [Description("Name of the slot collection property, e.g. 'OutputSlots'.")] string propertyName,
         [Description("Fully-qualified slot type name.")] string fullSlotTypeName,
-        [Description("Channel: 'OneSender','OneReceiver','OneBoth','ManySender','ManyReceiver','ManyBoth'.")] string channel = "MultipleBoth")
+        [Description("Channel: 'None','OneTarget','OneSource','OneBoth','MultipleTargets','MultipleSources','MultipleBoth'.")] string channel = "MultipleBoth")
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var prop = FindProperty(node, propertyName);
@@ -1733,7 +1733,7 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Slot Channel ──────────────────────────
 
-    [Description("Changes the channel type of a slot. Channels: 'OneSender','OneReceiver','OneBoth','ManySender','ManyReceiver','ManyBoth','MultipleSenders','MultipleTargets','MultipleBoth'.")]
+    [Description("Changes the channel type of a slot. Channels: 'None','OneTarget','OneSource','OneBoth','MultipleTargets','MultipleSources','MultipleBoth'.")]
     private string SetSlotChannel(
         [Description("Node index.")] int nodeIndex,
         [Description("Slot index.")] int slotIndex,
