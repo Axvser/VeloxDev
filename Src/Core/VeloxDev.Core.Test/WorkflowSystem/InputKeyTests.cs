@@ -7,7 +7,7 @@ namespace VeloxDev.Core.Test.WorkflowSystem;
 /// distinguishably, and the modifier state is never approximated.
 /// </summary>
 [TestClass]
-public class WorkflowKeyTests : WorkflowInputTestBase
+public class InputKeyTests : WorkflowInputTestBase
 {
     [TestMethod]
     public void KeyDown_AnUnnamedKey_ReportsUnknownAndKeepsThePlatformCode()
