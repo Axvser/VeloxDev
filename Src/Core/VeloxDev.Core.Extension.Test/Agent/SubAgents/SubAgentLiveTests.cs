@@ -1,9 +1,7 @@
-using Microsoft.Agents.AI;
+﻿using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Newtonsoft.Json.Linq;
-using OpenAI;
 using System;
-using System.ClientModel;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,18 +25,15 @@ namespace VeloxDev.Core.Extension.Test.Agent.SubAgents;
 /// whether the provider's token usage survives the agent wrap to reach the panel.
 /// </para>
 /// <para>
-/// Gated on <c>API_KEY_DEEPSEEK</c>: without it these are <c>Inconclusive</c>, so a machine that holds no
-/// key stays green rather than red. When they do run they cost a handful of model calls, so they are kept
-/// to one turn of the host agent each rather than a suite.
+/// Gated on <c>VELOXDEV_LIVE</c> (see <see cref="LiveModelGate"/>): unset, these are <c>Inconclusive</c>, so the
+/// default run stays deterministic and free. It used to be the key's mere presence that decided, which meant the
+/// people most able to run them paid seven model calls and a flake on every full run. When they do run they cost
+/// a handful of model calls, so they are kept to one turn of the host agent each rather than a suite.
 /// </para>
 /// </summary>
 [TestClass]
 public class SubAgentLiveTests
 {
-    private const string KeyVariable = "API_KEY_DEEPSEEK";
-    private const string Endpoint = "https://api.deepseek.com";
-    private const string Model = "deepseek-v4-flash";
-
     /// <summary>What the host agent is asked, phrased the way a user would rather than the way a tool wants.</summary>
     private const string DispatchInstruction =
         "The workflow graph is in front of you. Work out how many nodes it has by dispatching a background "
@@ -51,8 +46,8 @@ public class SubAgentLiveTests
         // The question the plan could not answer from the code: are the tool descriptions good enough that
         // a model reaches for SpawnSubAgent when it is the right tool? A green offline suite says nothing
         // about it, and a description written badly fails silently.
-        var client = ClientOrNull();
-        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+        var client = LiveModelGate.ClientOrNull();
+        if (client is null) Assert.Inconclusive(LiveModelGate.Skipped);
 
         await using var session = new LiveSession(client!);
         using var tree = new SubAgentTreeViewModel(session.SubAgents);
@@ -75,8 +70,8 @@ public class SubAgentLiveTests
         // The other half: a narrowed child, built by the library's own factory, running on a real model, with
         // the count it was sent for. That it actually called a tool is the claim worth making — an answer
         // invented from nothing would pass a "reply is non-empty" assertion.
-        var client = ClientOrNull();
-        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+        var client = LiveModelGate.ClientOrNull();
+        if (client is null) Assert.Inconclusive(LiveModelGate.Skipped);
 
         await using var session = new LiveSession(client!);
 
@@ -108,8 +103,8 @@ public class SubAgentLiveTests
         // cannot prove the half it does not own: that a real provider reports usage at all and that MAF
         // aggregates it onto AgentResponse. If that ever stops, the panel's token column goes quietly blank,
         // and this is the test that says so first.
-        var client = ClientOrNull();
-        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+        var client = LiveModelGate.ClientOrNull();
+        if (client is null) Assert.Inconclusive(LiveModelGate.Skipped);
 
         await using var session = new LiveSession(client!);
 
@@ -152,8 +147,8 @@ public class SubAgentLiveTests
         // having if a model populates them. A description that reads well to a person can still leave a model
         // omitting the argument and taking the default — which for both axes is now "everything the parent
         // has". The two halves are told apart by the grant, so one turn settles it.
-        var client = ClientOrNull();
-        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+        var client = LiveModelGate.ClientOrNull();
+        if (client is null) Assert.Inconclusive(LiveModelGate.Skipped);
 
         var skills = new VeloxDev.AI.Skills.SkillScope()
             .WithSource(new VeloxDev.AI.Skills.EmbeddedSkillSource("Workflow"));
@@ -203,8 +198,8 @@ public class SubAgentLiveTests
         // standing text asks for a title (TheStandingText_AsksForATitle_BecauseThePanelShowsOne). What neither
         // can answer is whether a model reading that text actually puts one in, and an omitted optional
         // argument is silent rather than an error — the same silence the narrowing test above is aimed at.
-        var client = ClientOrNull();
-        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+        var client = LiveModelGate.ClientOrNull();
+        if (client is null) Assert.Inconclusive(LiveModelGate.Skipped);
 
         await using var session = new LiveSession(client!);
 
@@ -235,8 +230,8 @@ public class SubAgentLiveTests
         // one call and measures nothing. Six chapters whose one useful word sits in the middle of three
         // hundred filler lines cannot be answered without six reads, so the model's choice is the one the
         // mandate is about — six calls in its own context, or one child.
-        var client = ClientOrNull();
-        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+        var client = LiveModelGate.ClientOrNull();
+        if (client is null) Assert.Inconclusive(LiveModelGate.Skipped);
 
         // 模型的判断带采样噪声：同一段提示词，它偶尔会自己读完而不派子代理。所以跑几次、任一次委派即通过 ——
         // 「指令变弱」仍然抓得住（三次全失败才红），而单次采样失手不再把套件染红。
@@ -357,15 +352,4 @@ public class SubAgentLiveTests
         public ValueTask DisposeAsync() => SubAgents.DisposeAsync();
     }
 
-    private static IChatClient? ClientOrNull()
-    {
-        var key = Environment.GetEnvironmentVariable(KeyVariable);
-        if (string.IsNullOrWhiteSpace(key)) return null;
-
-        return new OpenAIClient(
-            new ApiKeyCredential(key),
-            new OpenAIClientOptions { Endpoint = new Uri(Endpoint) })
-            .GetChatClient(Model)
-            .AsIChatClient();
-    }
 }

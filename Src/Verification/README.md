@@ -8,6 +8,22 @@
 | `agent-ui-harness.ps1` / `agent-web-harness.ps1` | 用真实输入驱动 demo 并截图 |
 | `verify-*-item-templates*.ps1` | 打包/编译模板项，检查镜像漂移 |
 
+**还有一类「不在默认测试里跑」的验证：真模型测试。** 它们在 `VeloxDev.Core.Extension.Test` 里，由
+`VELOXDEV_LIVE` 开关控制（`Agent/LiveModelGate.cs`）—— **不设就是 `Inconclusive`**，默认套件因此确定、免费、
+2 秒；设了（任何非空、非 `0` 的值）才连上真模型，凭据仍取环境里的 `API_KEY_DEEPSEEK`。
+
+```bash
+# 默认：真模型用例全部跳过
+dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj -c Debug
+
+# 只跑真模型那批（花模型调用；也要 key 在环境里）
+VELOXDEV_LIVE=1 dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj -c Debug \
+  --filter "FullyQualifiedName~LiveTests"
+```
+
+**闸门为什么不是「环境里有没有 key」**：那样一来，手里有 key 的人（也就是唯一跑得动它们的人）每次全量跑都要付
+七次真模型调用，而且要红要绿取决于模型当次怎么答 —— 套件对最该跑它的人反而不确定。key 是凭据，不是开关。
+
 ---
 
 ## 跑序列化基准

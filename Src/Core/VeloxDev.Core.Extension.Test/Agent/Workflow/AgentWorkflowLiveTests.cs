@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,8 +7,6 @@ using Demo.ViewModels;
 using Demo.Workflow;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using OpenAI;
-using System.ClientModel;
 using VeloxDev.AI.Workflow;
 
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow;
@@ -27,17 +25,13 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow;
 /// </para>
 /// <para>
 /// So this drives the demo's own graph with the demo's own instructions and asks for the same edit. It runs
-/// against the real DeepSeek endpoint, gated the way <c>SubAgentLiveTests</c> is: without the key it is
-/// <c>Inconclusive</c>, so a machine that holds none stays green rather than red.
+/// against the real DeepSeek endpoint behind <see cref="LiveModelGate"/> — unset switch, <c>Inconclusive</c> —
+/// so the default suite stays deterministic and free.
 /// </para>
 /// </remarks>
 [TestClass]
 public class AgentWorkflowLiveTests
 {
-    private const string KeyVariable = "API_KEY_DEEPSEEK";
-    private const string Endpoint = "https://api.deepseek.com";
-    private const string Model = "deepseek-v4-flash";
-
     /// <summary>
     /// The user's request, with the payload spelled out.
     /// </summary>
@@ -73,23 +67,12 @@ public class AgentWorkflowLiveTests
         return directory;
     }
 
-    private static IChatClient? ClientOrNull()
-    {
-        var key = Environment.GetEnvironmentVariable(KeyVariable);
-        if (string.IsNullOrWhiteSpace(key)) return null;
-
-        return new OpenAIClient(
-            new ApiKeyCredential(key),
-            new OpenAIClientOptions { Endpoint = new Uri(Endpoint) })
-            .GetChatClient(Model)
-            .AsIChatClient();
-    }
 
     [TestMethod]
     public async Task ARealModel_ExtendsTheMergeNodesPorts()
     {
-        var client = ClientOrNull();
-        if (client is null) Assert.Inconclusive($"Set {KeyVariable} to run this against a real model.");
+        var client = LiveModelGate.ClientOrNull();
+        if (client is null) Assert.Inconclusive(LiveModelGate.Skipped);
 
         using var session = WorkflowDemoSession.Create(Scratch());
 
