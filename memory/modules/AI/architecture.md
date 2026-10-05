@@ -360,3 +360,30 @@ Customer/                           ← 每个消费者程序集一个分片（�
 - 位置无法往返核对，两次不同缩放下的读数也无法互比。
 
 `ListNodes` / `GetNodeDetail` 已改成乘回缩放报世界坐标（`WorldAnchor` / `WorldSize`），说明里也写明用的是哪个空间。**改动只在读侧** —— 渲染确实需要折叠值，错的是把渲染用的 getter 当成对外的位置读数。守卫在 `NodeGeometryToolTests`（非单位缩放的读数与往返各一条）。
+
+### 七·八、目录的「谁算组件」判据也漏了同一个兜底（2026-10-05）
+
+`AIContextModel.ComponentKindOf` 原来只查四个 `IWorkflow*ViewModel` 接口 —— 与 §七·六 同一个病根（接口是
+另一个生成器注入的，看不见）。而 `BuildType` 的收录规则是「是组件 / 或被标注过 / 或成员带标注」，所以
+**一个只写了 `[WorkflowBuilder.Node<T>]` 的节点类型整条不进目录**：`AgentTypeResolver.ResolveType` 解不开，
+`CreateNode` / `GetTypeSchema` / `ListCreatableTypes` 对用户自己写的节点类型一律答「不在目录里」。
+
+**demo 看不见这个缺口**，因为 demo 的每个节点都另外带了 `[AgentContext]`；它只在消费方第一次写下不带标注的
+节点时出现。归档那一侧早就不这样：`VeloxJsonModel.RootReason` 第二条就是 `[WorkflowBuilder.*]`。
+
+⚠ **这是对消费方目录的加宽**：他们声明的每个组件开始进目录（此前只有带标注的进）。方向是对的 —— 否则 Agent
+建不了用户自己的节点 —— 但 prompt 体积会涨。回退点：`ComponentKindOf` 里那一行。
+
+守卫：`DiscoveryCoverageTests`。同一条用例还钉住了**「枚举器不带 `[SlotSelectors]` = 不设限」**：白名单才是
+限制，没有它就是放开；枚举/布尔一路、自定义 provider 一路，各验一次（`IsEnumTypeAllowed` 对两路的代码不同）。
+
+### 七·九、目录没有、也不需要归档那三条「加宽」
+
+归档的闭世界沿三条线扩：**派生类向下展开**（`BuildFamilyIndex`）、**字典的键**、**开放泛型根上的类型参数约束**。
+AI 目录不需要其中任何一条，值得写下来免得下次照着搬：
+
+- **向下展开**解决的是「成员声明成基类、装着派生类时 `$type` 要解得开」—— 那是**写读文档**的问题。目录是
+  **给人/模型看的清单**，按类型各有一条，本来就没有「按声明类型去找运行期类型」这一步。派生类型要么自己带标注，
+  要么经 §七·八 那条新判据进来。
+- **字典的键**在目录里没有对应物：目录不描述容器的键类型。
+- **开放泛型约束**同样没有对应物：`BuildType` 对开放泛型直接返回 null（生成的 cast 里 `T` 没有绑定）。

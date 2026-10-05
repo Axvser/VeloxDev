@@ -265,9 +265,14 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
    |---|---|---|
    | `RootReason` | `Base/VeloxJsonModel.cs:588` | `[WorkflowBuilder.*]`（任一）—— 决定闭世界的根 |
    | 槽类型兜底 | `Writers/WorkflowWriter.cs:1531` | 沿基类链找 `[WorkflowBuilder.SlotAttribute]` |
-   | `IsSingleSlotType` | `Base/AIContextModel.cs` | `[WorkflowBuilder.SlotAttribute]`（2026-10-05 补上，见下） |
+   | `ComponentKindOf` | `Base/AIContextModel.cs` | 四个特性 → 四个目录段（2026-10-05 补上） |
+   | `IsSingleSlotType` | 同上，经 `WorkflowBuilderComponentKind == "Slots"` | 同上（2026-10-05 补上） |
 
-   **`IsSingleSlotType` 是漏最久的那一处**，代价是消费方声明的槽属性拿不到 `AIContextFlags.IsSingleSlot`：`ListSlotProperties` 不列它、`BuildSlotPropertyMap` 不认它（按属性名解析的连接工具全部报错）、`ComponentPatcher` 也不拒绝对它直接赋值。详见 [`AI/architecture.md`](../AI/architecture.md) §七·五 与 [`WorkflowSystem/architecture.md`](../WorkflowSystem/architecture.md)。
+   后两处共用 `AIContextModel.WorkflowBuilderComponentKind`，**别再各写一份** —— 它们本来就是同一条规则。
+
+   **这一轮补的是后两处，代价各不相同。** `IsSingleSlotType` 漏最久：消费方声明的槽属性拿不到 `AIContextFlags.IsSingleSlot`，于是 `ListSlotProperties` 不列它、`BuildSlotPropertyMap` 不认它（按属性名解析的连接工具全部报错）、`ComponentPatcher` 也不拒绝对它直接赋值。`ComponentKindOf` 漏的是**整类组件**：只写了 `[WorkflowBuilder.Node<T>]` 的节点类型不进目录，`CreateNode` / `GetTypeSchema` 对它一律答「不在目录里」。详见 [`AI/architecture.md`](../AI/architecture.md) §七·五、§七·六 与 [`WorkflowSystem/architecture.md`](../WorkflowSystem/architecture.md)。
+
+   ⚠ 补 `ComponentKindOf` 会**加宽消费方的目录**（此前只有带标注的组件才进），这是要的方向，但 prompt 体积会涨；回退点就是那一行。
 
    写这条判据时**按包含类型判、不按名字前缀**：`WorkflowBuilder.Slot<T>` 是泛型嵌套特性，`ToDisplayString` 把嵌套类型渲染成 `.` 而不是元数据里的 `+`，前缀匹配永远匹配不上。**新增这类判据时先 grep 上面这张表**，照着已有那处的写法写。
 
