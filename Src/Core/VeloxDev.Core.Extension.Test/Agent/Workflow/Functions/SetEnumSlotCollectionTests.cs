@@ -175,6 +175,59 @@ public class SetEnumSlotCollectionTests
     }
 
     /// <summary>
+    /// Growing a Python node's input ports keeps the links that fed them.
+    /// </summary>
+    /// <remarks>
+    /// The report this pins was written from a real session: rebuilding <c>Merge Report</c>'s inputs from three
+    /// ports to five dropped all three links feeding it, the call answered <c>ok</c>, and the loss was found by
+    /// counting links afterwards. The branches of an <i>input</i> set hold their links in <c>Sources</c>, and the
+    /// topology restore only ever put back <c>Targets</c> — so rebuilding an output set preserved its wiring and
+    /// rebuilding an input set silently threw its away.
+    /// </remarks>
+    [TestMethod]
+    public void GrowingThePythonNodesPorts_KeepsTheLinksThatFeedThem()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new PythonScriptNodeViewModel();
+        tree.GetHelper().CreateNode(node);
+
+        var scope = new WorkflowAgentScope(tree);
+        var provider = typeof(PythonPortProvider).FullName!;
+
+        Set(scope, "InputSlots", """{"Ports":[{"Name":"stats"},{"Name":"dist"}]}""", provider);
+
+        // Two producers feeding the first two ports.
+        foreach (var index in new[] { 0, 1 })
+        {
+            var producer = new NodeDefaultViewModel();
+            tree.GetHelper().CreateNode(producer);
+            var slot = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
+            producer.GetHelper().CreateSlot(slot);
+
+            tree.GetHelper().SendConnection(slot);
+            tree.GetHelper().ReceiveConnection(node.InputSlots.Items[index].Slot);
+        }
+
+        Assert.HasCount(2, tree.Links, "precondition: both ports are fed");
+
+        Set(scope, "InputSlots",
+            """{"Ports":[{"Name":"stats"},{"Name":"dist"},{"Name":"anomalies"},{"Name":"trend"},{"Name":"corr"}]}""",
+            provider);
+
+        Assert.HasCount(5, node.InputSlots.Items, "precondition: the rebuild landed");
+        Assert.HasCount(2, tree.Links,
+            "the rebuild must not eat the links that feed this node — losing them is invisible, because the call "
+            + "reports success either way");
+
+        var fedPorts = tree.Links
+            .Select(link => node.InputSlots.Items.First(item => ReferenceEquals(item.Slot, link.Receiver)).Name)
+            .OrderBy(name => name, System.StringComparer.Ordinal)
+            .ToArray();
+        CollectionAssert.AreEqual(new[] { "dist", "stats" }, fedPorts,
+            "and each one must land on the port whose name it fed before");
+    }
+
+    /// <summary>
     /// A provider with no archive reader is refused with the fix in the message, not the engine's own wording.
     /// </summary>
     /// <remarks>

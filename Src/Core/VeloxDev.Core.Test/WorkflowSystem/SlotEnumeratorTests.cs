@@ -804,6 +804,94 @@ public class SlotEnumeratorTests
             "the second provider's ports are the ones that stand — same type, different value");
     }
 
+    /// <summary>
+    /// Rebuilding a provider's slots keeps the links that <b>feed</b> them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The re-wire that preserves topology on a selector rebuild only ever looked at each branch's
+    /// <c>Targets</c> — what it <i>sends</i> to. That is the right half for an output enumerator, and no half at
+    /// all for an input one: the branches of an input set have no targets, so nothing was restored and the links
+    /// arriving at them died with the slots they pointed at.
+    /// </para>
+    /// <para>
+    /// Severity is what makes this worth a test of its own: the call still returns success, nothing logs, and the
+    /// only symptom is that the graph quietly has fewer links than it did. A hand-run of the demo lost three of
+    /// them rebuilding <c>Merge Report</c>'s inputs from three ports to five, and found out by counting.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void RebuildingAProvidersSlots_KeepsTheLinksThatFeedThem()
+    {
+        var tree = new TreeDefaultViewModel();
+        var senderNode = new NodeDefaultViewModel();
+        var receiverNode = new NodeDefaultViewModel();
+        var senderSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+
+        tree.GetHelper().CreateNode(senderNode);
+        tree.GetHelper().CreateNode(receiverNode);
+        senderNode.GetHelper().CreateSlot(senderSlot);
+
+        enumerator.Install(receiverNode, "InputSlots");
+        enumerator.SetSelector(new StubPortProvider("stats", "dist", "anomalies"));
+
+        var firstSlot = enumerator.Items[0].Slot;
+        tree.GetHelper().SendConnection(senderSlot);
+        tree.GetHelper().ReceiveConnection(firstSlot);
+        Assert.HasCount(1, tree.Links, "precondition: the first port is fed");
+
+        enumerator.SetSelector(new StubPortProvider("stats", "dist", "anomalies", "trend", "corr"));
+
+        Assert.HasCount(5, enumerator.Items, "precondition: the rebuild landed");
+        Assert.HasCount(1, tree.Links,
+            "the link that fed the 'stats' port must still be there — it now ends at the new 'stats' slot");
+        Assert.AreSame(enumerator.Items[0].Slot, tree.Links[0].Receiver,
+            "and it must end at the new slot, not at the one the rebuild retired");
+        Assert.AreSame(senderSlot, tree.Links[0].Sender);
+    }
+
+    /// <summary>
+    /// A rebuild of the same provider pairs old branches to new ones by <b>name</b>, so reordering does not
+    /// re-route a connection onto a different port.
+    /// </summary>
+    /// <remarks>
+    /// The position pairing that a type switch uses is only safe when the two sets have nothing to do with each
+    /// other, which is what an enum swap is. Here they demonstrably do: the same provider type came back with the
+    /// same port names in a different order, and pairing by position would quietly move the statistics feed onto
+    /// the correlation port — a wrong graph that looks like a working one, which is worse than the loss the
+    /// re-wire exists to prevent.
+    /// </remarks>
+    [TestMethod]
+    public void RebuildingAProvidersSlots_PairsBranchesByName_NotByPosition()
+    {
+        var tree = new TreeDefaultViewModel();
+        var senderNode = new NodeDefaultViewModel();
+        var receiverNode = new NodeDefaultViewModel();
+        var senderSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+
+        tree.GetHelper().CreateNode(senderNode);
+        tree.GetHelper().CreateNode(receiverNode);
+        senderNode.GetHelper().CreateSlot(senderSlot);
+
+        enumerator.Install(receiverNode, "InputSlots");
+        enumerator.SetSelector(new StubPortProvider("stats", "dist"));
+
+        tree.GetHelper().SendConnection(senderSlot);
+        tree.GetHelper().ReceiveConnection(enumerator.Items[0].Slot);
+        Assert.HasCount(1, tree.Links, "precondition: the 'stats' port is fed");
+
+        // Same provider type, same names, different order — plus a port that did not exist before.
+        enumerator.SetSelector(new StubPortProvider("corr", "stats", "dist"));
+
+        Assert.HasCount(3, enumerator.Items, "precondition: the rebuild landed");
+        Assert.HasCount(1, tree.Links, "still exactly one link — the new 'corr' port must not have picked one up");
+        Assert.AreEqual("stats",
+            enumerator.Items.First(item => ReferenceEquals(item.Slot, tree.Links[0].Receiver)).Name,
+            "the link follows the name, not the index it used to sit at");
+    }
+
     /// <summary>An <see cref="ISlotProvider"/> whose ports are just the names it was handed.</summary>
     private sealed class StubPortProvider(params string[] names) : ISlotProvider
     {

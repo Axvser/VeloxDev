@@ -361,10 +361,20 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
             }
         }
 
-        // Capture each current branch's downstream targets, so switching to a FRESH type can
-        // re-wire the new branches onto the same downstream nodes (preserves routing topology
-        // instead of leaving the new branches disconnected).
-        var targetsByIndex = Items.Select(item => item.Slot.Targets.ToArray()).ToList();
+        // Capture each current branch's wiring on **both** sides before the old slots are retired, so a FRESH
+        // selector can re-wire the new branches onto the same neighbours (preserves routing topology instead of
+        // leaving the new branches disconnected).
+        //
+        // 两边的连线都要记：分支发往的（Targets）与喂给它的（Sources）。只记 Targets 是给**输出**枚举写的，
+        // 而**输入**枚举的分支没有 Targets —— 它上面挂的是 Sources。先前只有 Targets，于是重建一个输入端口集
+        // 会把喂给它的连线连同旧槽一起静默丢掉（调用照常报成功），只有比对连线数才发现。
+        var previousSelectorTypeName = SelectorTypeName;
+        var previousWiring = Items
+            .Select(item => (
+                Name: item.Name,
+                Targets: item.Slot.Targets.ToArray(),
+                Sources: item.Slot.Sources.ToArray()))
+            .ToList();
 
         // Remember the current selector's full state so switching back restores it.
         // The undo timeline is one entry per SetSelector: a value change inside a type is
@@ -408,26 +418,77 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         }
 
         tree.GetHelper().Submit(new WorkflowActionPair(
-            () => ApplyNewState(tree, newState, isFresh ? targetsByIndex : null),
+            () => ApplyNewState(tree, newState, isFresh ? previousSelectorTypeName : null, isFresh ? previousWiring : null),
             () => ApplyAttachedState(tree, oldState)));
     }
 
-    private void ApplyNewState(IWorkflowTreeViewModel tree, SelectorState state, List<IWorkflowSlotViewModel[]>? rewireTargets)
+    private void ApplyNewState(
+        IWorkflowTreeViewModel tree,
+        SelectorState state,
+        string? previousSelectorTypeName,
+        List<(string Name, IWorkflowSlotViewModel[] Targets, IWorkflowSlotViewModel[] Sources)>? previousWiring)
     {
         ApplyAttachedState(tree, state);
-        if (rewireTargets is null) return;
+        if (previousWiring is null) return;
 
-        // Reconnect each new branch onto the downstream nodes the previous type's branch at
-        // the same position was connected to — a type switch preserves the wiring topology.
-        for (int i = 0; i < state.Items.Count && i < rewireTargets.Count; i++)
+        // Reconnect each new branch to the neighbours the old branch it stands for was connected to, in **both**
+        // directions — an input set's branches carry their links in Sources and an output set's in Targets, and
+        // restoring only Targets lost every link feeding a rebuilt input set.
+        var byName = string.Equals(previousSelectorTypeName, state.TypeName, StringComparison.Ordinal);
+
+        for (int i = 0; i < state.Items.Count; i++)
         {
-            var sender = state.Items[i].Slot;
-            foreach (var receiver in rewireTargets[i])
+            var branch = state.Items[i].Slot;
+            var previous = MatchBranch(previousWiring, state.Items[i].Name, i, byName);
+            if (previous is null) continue;
+
+            foreach (var receiver in previous.Value.Targets)
             {
                 if (receiver.Parent?.Parent != tree) continue;
-                ConnectSlots(tree, sender, receiver);
+                ConnectSlots(tree, branch, receiver);
+            }
+
+            foreach (var sender in previous.Value.Sources)
+            {
+                if (sender.Parent?.Parent != tree) continue;
+                ConnectSlots(tree, sender, branch);
             }
         }
+    }
+
+    /// <summary>The old branch a new one stands for, or <see langword="null"/> when it stands for none.</summary>
+    /// <remarks>
+    /// <para>
+    /// Which branch a new one "stands for" depends on what kind of change this is, and the selector type name is
+    /// what tells them apart.
+    /// </para>
+    /// <para>
+    /// <b>A different type</b> — an enum swapped for another enum, where the members of one have nothing to do
+    /// with the members of the other. Identity is then the <i>position</i>, which is the rule this has always
+    /// followed and the one the type-switch tests pin.
+    /// </para>
+    /// <para>
+    /// <b>The same type</b> — a provider whose port list was edited, which is the only way to reach here with the
+    /// name unchanged. Identity is then the <i>name</i>: it is what the caller reordering or inserting into a port
+    /// list is thinking in, and pairing by position would silently re-route a connection onto a different port.
+    /// A branch whose name is not in the old set is genuinely new and gets no wiring, which is the honest answer.
+    /// </para>
+    /// </remarks>
+    private static (string Name, IWorkflowSlotViewModel[] Targets, IWorkflowSlotViewModel[] Sources)? MatchBranch(
+        List<(string Name, IWorkflowSlotViewModel[] Targets, IWorkflowSlotViewModel[] Sources)> previous,
+        string name,
+        int index,
+        bool byName)
+    {
+        if (byName)
+        {
+            foreach (var candidate in previous)
+                if (string.Equals(candidate.Name, name, StringComparison.Ordinal)) return candidate;
+
+            return null;
+        }
+
+        return index < previous.Count ? previous[index] : null;
     }
 
     private static void ConnectSlots(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
