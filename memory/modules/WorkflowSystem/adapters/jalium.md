@@ -21,13 +21,54 @@
 
 ---
 
+## 〇、`.jalxaml` 运行时能力实测（2026-10-05，探针实测后已删）
+
+**为什么记**：`.jalxaml` 能**编译**不等于能**运行**。下面每条都是在
+`Examples/Workflow/Jalium Trimmed/Demo` 里挂一个真实窗口树、`UpdateLayout()` 之后逐条断言跑出来的
+（Debug 与 `PublishTrimmed` 发布版各跑一遍，结果**逐条一致**）。探针本身按惯例删了，结论留在这里；
+下次要动 Jalium 的标记化，不必再摸一遍。**空着不写的地方 = 还没测过，不是「不行」。**
+
+| 能力 | 结果 |
+|---|---|
+| `UserControl` 作 `.jalxaml` 根 + `x:Class` partial 配对 | ✅ |
+| 根 name scope 里按 `x:Name` 做 `FrameworkElement.FindName` | ✅ |
+| `DataTemplate` **内部**的 `x:Name` 对根 `FindName` 可见？ | ❌ 不可见（与 WPF 同）⇒ 枚举器必须走 `ItemContainerGenerator.ContainerFromIndex(i)` + 视觉树后代搜索 |
+| `ItemsControl` + `ItemTemplate`(DataTemplate) + `{Binding}` 真物化容器 | ✅ `Items.Count` 正确；`ContainerFromIndex(0)` 返回 **`ContentPresenter`**；容器 `DataContext` 是条目本身 |
+| 自定义 attached DP 写进标记并读回（**跨程序集**，`assembly=VeloxDev.Jalium`） | ✅ 含以 `{Binding}` 为值 |
+| `Style` / `Setter` / `StaticResource` | ✅ `Setter` 真的改到了属性 |
+| 嵌套**结构体**路径绑定（`{Binding Offset.Left}` → `Canvas.Left`） | ✅ |
+| `ElementName` 绑定 | ✅ |
+| `RelativeSource Self` | ✅ |
+| `RelativeSource AncestorType=<框架类型>`（如 `Canvas` / `UserControl`） | ✅ |
+| **从 `DataTemplate` 内部**用 `AncestorType=UserControl` 够到模板根 | ✅ |
+| 颜色 / `BorderThickness` / `CornerRadius` / `Path Data` 字面量 | ✅ `#DDFFFFFF` 原样、`1,1,1,1`、`6,6,6,6`、`PathGeometry` |
+| `PublishTrimmed` 发布版 | ✅ 与 Debug 逐条一致，未裁剪掉标记资源 |
+| **`RelativeSource AncestorType` = 自定义 `clr-namespace` 类型** | ❌ 不解析（带不带 `{x:Type}` 都不行）⇒ 用**框架基类**（`UserControl`）替代 |
+| **带前缀的附加属性路径** `(behaviors:X.Y)` 出现在绑定路径里 | ❌ 根本不解析（`ElementName` / `RelativeSource` 两种宿主都试过） |
+
+**两条失败合起来毙掉的一句**：WPF 的 tree 模板靠
+`RenderTransform="{Binding RelativeSource={RelativeSource AncestorType=local:模板类}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"`
+把画布变换镜像给池化视图 —— 这**两半在 Jalium 都用不了**。Jalium 若要走标记，画布变换必须改由
+**表面在代码里推给池化视图**（表面本来就持有池与变换值）。
+
+**还有一个坐标事实**：`Visual.TransformToAncestor(ancestor)` 返回的是 **`Jalium.UI.Point`**
+（元素在祖先坐标系里的**原点**），**不是** WPF 那个 `GeneralTransform`。⇒ 要拿「控件中心在画布上的位置」
+得自己加半个 `ActualWidth/ActualHeight`，没有 `TranslatePoint(p, ancestor)` 这种一步到位的写法。
+
+---
+
 ## 一、这家必须实现什么，为什么是这些
 
 **七个视图角色现在都由适配器实现（以可继承基类的形态）。** 契约本身（每个角色要做什么）没变；变的是落点：`WorkflowTreeView`、`WorkflowNodeView`、`WorkflowLinkView`、`WorkflowSlotView`、`WorkflowGridDecorator`、`WorkflowTemplateSelector`、`WorkflowMinimapOverlay`（后者早在适配器里；端口几何 `WorkflowPortGeometry` / `WorkflowPortLayout` 同样在适配器，供各基类共用）。宿主与模板从这些基类派生，只写策略（调色板、卡片画法、端口布局值、工厂接线）。六个曾经的零消费者行为类（`WorkflowSurfaceBehavior` / `WorkflowCanvasTransformBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSlotLayoutBehavior` / 独立 `WorkflowGridDecorator`）与自装配外壳 `WorkflowTreeView : Grid` **没有**回来；现在是按 `adapter-base-class-specifications.md` 重新切开的七个基类，`WorkflowTreeView : Canvas` 是活表面的基类。
 
 ### 1.1 `IWorkflowTemplateSelector` 替掉的是什么
 
-- **`IWorkflowTemplateSelector` 替掉 `DataTemplateSelector` + `DataTemplate`。** Jalium 有 `Jalium.UI.DataTemplate`，但**没有 `DataTemplateSelector` 这个类型**（反射清点 `Jalium.UI.Managed` 可证：`DataTemplate` 有三个构造器 `()`/`(object)`/`(Type)`，`DataTemplateSelector` 一个都不存在）。⇒ 别家靠 `DataTemplateSelector.SelectTemplate(object, DependencyObject)` 返回 `DataTemplate` 的分派，在这里必须换成一个返回**已构造控件**的接口：`IWorkflowTemplateSelector.CreateView(object item)`（`IWorkflowTemplateSelector.cs:10`）。XML 注释自己写着 "mirroring the role of a DataTemplateSelector in the XAML adapters"。基类 `WorkflowTemplateSelector` 把它做成四个工厂 + `virtual CreateView` 分派（`WorkflowTemplateSelector.cs:21-50`）。
+- ⚠ **2026-10-05 更正**：本文原来断言「Jalium **没有 `DataTemplateSelector` 这个类型**」。**这是错的** ——
+  `Jalium.UI.Controls 26.10.8` 的 `Jalium.UI.Managed.dll` 里有 `Jalium.UI.Controls.DataTemplateSelector`
+  （连同 `SelectTemplate` / `LoadContent` / `ItemContainerGenerator` / `ContentPresenter`）。下面那条「必须换成一个返回
+  已构造控件的自造接口」的推论因此**不成立**；`IWorkflowTemplateSelector` 是当时基于错判做出来的东西。
+  ⇒ 与 WPF 同形的池化（`DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退）在 Jalium 是**可实现的**。
+- **`IWorkflowTemplateSelector` 替掉 `DataTemplateSelector` + `DataTemplate`。** 别家靠 `DataTemplateSelector.SelectTemplate(object, DependencyObject)` 返回 `DataTemplate` 的分派，这里换成返回**已构造控件**的接口：`IWorkflowTemplateSelector.CreateView(object item)`（`IWorkflowTemplateSelector.cs:10`）。XML 注释自己写着 "mirroring the role of a DataTemplateSelector in the XAML adapters"。基类 `WorkflowTemplateSelector` 把它做成四个工厂 + `virtual CreateView` 分派（`WorkflowTemplateSelector.cs:21-50`）。
   **注意，这不是 Jalium 独有**：WinForms 在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs:14-20` 里有一个**逐字同名同形**的接口（`Control CreateView(object item)`，连注释都一样）。⇒ 这条轴上的真实划分是「有标记语言的三家（WPF/Avalonia/WinUI）用 `DataTemplateSelector`，无标记语言的两家（Jalium/WinForms）用自造接口，MAUI/Razor 各按自家形状」。
 - **表面外壳那份补偿现在进了包。** WPF 的 `Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml:14-137` 用标记声明 `PART_SurfaceBorder` / `PART_GridDecorator` / `PART_ScrollViewer` / `PART_Canvas` / `PART_MinimapOverlay` 的嵌套与绑定；Jalium 没有 XAML，于是同一份结构做进适配器基类 `WorkflowTreeView`（持 `PortLayout` / `GridDecorator` / `TemplateSelector` 三个属性，并由 `SetTree` 接线 ViewPool），模板只派生设值。WinForms 同样走「适配器发基类」，但它的宿主装配在模板的 `workflow-tree-view/TemplateClass.cs` 里更多。
   **非 Trimmed demo** 例外：它用自己的画布外壳 `Examples/Workflow/Jalium/Demo/Views/Workflow/NodeEditorSurface.cs:23` 的 `NodeEditorSurface : Canvas`，**不派生**适配器基类（见 §五）。

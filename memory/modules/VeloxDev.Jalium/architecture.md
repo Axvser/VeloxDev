@@ -87,7 +87,7 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // :20 —�
 | `WorkflowPortLayout.cs` | 41 | 卡片设计尺寸与端口位置的**值类型**（`sealed`），宿主的设计不是常量 | 宿主/模板赋值 |
 | `WorkflowPortGeometry.cs` | 125 | `static`（`:23`）：把节点的输入/输出/标题从 view-model **反射读**出来（`:41-52`/`:68-69`/`:124`），并把端口中心定位到画布（纯模型数学） | 无状态 |
 | `WorkflowMinimapOverlay.cs` | 311 | 小地图，`FrameworkElement, IWorkflowMinimapOverlay`（`:15`）；`RulerBand => 0`（`:48`） | 视口数值由宿主的附着属性喂；`ScrollViewer` 由宿主赋（`:61`，见 §3.3） |
-| `IWorkflowTemplateSelector.cs` | 11 | 「item 类型 → 视图」的工厂契约，替代 XAML 家的 `DataTemplateSelector`：`CreateView(object item)` 返回**已构造控件** | 宿主实现 |
+| `IWorkflowTemplateSelector.cs` | 11 | 「item 类型 → 视图」的工厂契约：`CreateView(object item)` 返回**已构造控件**。⚠ 它当初是「Jalium 没有 `DataTemplateSelector`」这个**错判**的产物（2026-10-05 更正，见 [WorkflowSystem/adapters/jalium.md §〇](../WorkflowSystem/adapters/jalium.md)）；Jalium 其实有 `Jalium.UI.Controls.DataTemplateSelector` | 宿主实现 |
 | `ViewPool.cs` | 66 | **`public static class`**，附着属性 `ItemsSource` / `TemplateSelector` 共用 `OnChanged`（`:29`），两者都非空才建 `ConditionalWeakTable<Panel, ViewManager>`（`:13`） | 无状态，只做转发 |
 | `ViewManager.cs` | 207 | 池本体（`:12`）：按 `item.GetType()` 分桶、即时建视图、移除时 `Collapsed` + `DataContext = null`（`RemoveItem` `:149`） | 唯一写者，池内视图全归它管 |
 
@@ -136,7 +136,7 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // :20 —�
 **两条推论：**
 
 1. **`_zoomPin` / `NotifyZoomCommitted` 现在长在适配器的表面上**（`WorkflowTreeView.cs:61`/`:227`/`:234`/`:729-753`）。模板/demo 的薄派生继承它，宿主只负责在提交缩放后调 `surface.NotifyZoomCommitted(...)`。
-2. **`IWorkflowTemplateSelector` 不是 Jalium 独有**：WinForms 在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs:14` 里有一个逐字同名同形的接口（`Control CreateView(object item)`）。这条轴的真实划分是「有标记语言的三家用 `DataTemplateSelector`，无标记语言的 Jalium/WinForms 用自造接口」。
+2. **`IWorkflowTemplateSelector` 不是 Jalium 独有**：WinForms 在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs:14` 里有一个逐字同名同形的接口（`Control CreateView(object item)`）。**但「Jalium 属于无标记语言一家」这个前提是错的**（2026-10-05 实测：Jalium 有完整 `.jalxaml` 工具链，也有 `Jalium.UI.Controls.DataTemplateSelector`）—— 详见 [WorkflowSystem/adapters/jalium.md §〇](../WorkflowSystem/adapters/jalium.md)。WinForms 那半仍然成立（它确实没有标记语言）。
 
 ---
 
