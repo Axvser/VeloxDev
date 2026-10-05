@@ -479,6 +479,18 @@ public static class WorkflowSurfaceBehavior
         }
     }
 
+    /// <summary>
+    /// The tree the surface at or above <paramref name="element"/> is showing, if any.
+    /// </summary>
+    /// <param name="element">Any element inside the surface — a slot view, a node card, the canvas.</param>
+    /// <returns>The tree, or <see langword="null"/> when the element is not inside an enabled surface.</returns>
+    /// <remarks>
+    /// A slot's own <see cref="FrameworkElement.DataContext"/> is the slot, not the tree, so anything that needs
+    /// the tree (cancelling a connection, for one) has to reach the host first.
+    /// </remarks>
+    public static IWorkflowTreeViewModel? TreeOf(DependencyObject element)
+        => FindHost(element)?.DataContext as IWorkflowTreeViewModel;
+
     private static FrameworkElement? FindHost(DependencyObject source)
     {
         foreach (var ancestor in EnumerateSelfAndVisualAncestors(source))
