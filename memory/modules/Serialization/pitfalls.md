@@ -181,8 +181,16 @@
    （`Dictionary<string,List<int>>` 里塞了 `[1,2]`），加载会追加成 `[1,2,1,2]`。**语料里的集合初值都是空的**，所以
    幂等与黄金测试都看不见 —— 这是语料的一个盲区。现 `if (!target.IsFixedSize) target.Clear();`（定长数组跳过）。
 
-同族还有一条**尚未修**的：`ReadMap` 逐键赋值，所以「成员的 map 里有一个文档没有的初值键」会**留着**（多一格，方向相反）。
-没修是因为还没有用例证明它有害。
+5. **`ReadMap`/`ReadMapAsync` 逐键赋值，没有清空**（同日补齐）：成员的 map 里那些**文档没有的初值键**会活过加载，
+   回写出来就是多出来的字节（实测一个 `{"stale":9}` 让文档长了 50 字节）。与第 4 条同族、方向相反（多一格而不是重复）：
+   一起改成 `if (!target.IsFixedSize) target.Clear();`。判据是 `MemberInitializerTests` 的
+   `write(read(document)) == document` —— 每个成员的初值都与文档**不重合**，所以「替换」和「合并」给不同答案。
+6. **生成的 setter 用 `Object.Equals` 判「没变」，对浮点是错的**（生成器 `Analizer.cs`，同日修）：
+   `(-0.0).Equals(0.0)` 为真，于是字段已经握着 `+0.0` 时赋 `-0.0` 会被当成没变、直接 `return` —— **符号永远进不去**，
+   回写出来 `-0.0` 变 `0.0`。这在**生成器**里（每个消费方的每个属性都受影响），不是引擎。现在浮点（含 `Nullable<T>`）
+   改比位模式（`BitConverter.DoubleToInt64Bits` 两边都接，`float` 按值拓宽、符号与 NaN 载荷都保得住）。
+   判据 `NumberSpellingTests`：`-0.0`、`-0.0f`、`double?` 的 `-0.0` 各断言**位模式**（`==` 对它们为真，说明不了问题），
+   并对照一个**集合元素**里的 `-0.0`（那里没有属性守卫，本来就是对的）。
 
 `VeloxJsonObject.Reindex` 也在这轮修的（`VeloxJsonValue.cs`）：它原来 `_index.Clear()` 后只从 `from` 重建，
 于是删掉中间一个成员，**它之前**的成员就从索引里消失（`Has` / 索引器都拿不到）。

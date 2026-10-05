@@ -546,6 +546,10 @@ public static partial class VeloxJsonSerializer
         if (reader is null) throw new ArgumentNullException(nameof(reader));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
+        // 与数组同一条：文档说的是这个成员**现在有什么**。逐键赋值只覆盖同名键，初值里那些文档没有的键会
+        // 活过加载 —— 回写出来就是多出来的字节（实测 `{"stale":9}` 让文档长了 50 字节）。
+        if (!target.IsFixedSize) target.Clear();
+
         reader.BeginObject(out _, out _);
         while (reader.NextMember(out var name))
         {

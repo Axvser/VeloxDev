@@ -61,8 +61,8 @@ public partial class AsyncShapeRoundTripTests
     {
         var document = VeloxJsonSerializer.Serialize(Sample());
 
-        AssertSame(await VeloxJsonSerializer.DeserializeAsync<AsyncShapeModel>(new ChunkedTextReader(document, 1))!, "chunked TextReader");
-        AssertSame(await VeloxJsonSerializer.DeserializeAsync<AsyncShapeModel>(new MemoryStream(Encoding.UTF8.GetBytes(document)))!, "stream");
+        AssertSame((await VeloxJsonSerializer.DeserializeAsync<AsyncShapeModel>(new ChunkedTextReader(document, 1)))!, "chunked TextReader");
+        AssertSame((await VeloxJsonSerializer.DeserializeAsync<AsyncShapeModel>(new MemoryStream(Encoding.UTF8.GetBytes(document))))!, "stream");
     }
 
     [TestMethod]

@@ -430,6 +430,9 @@ public static partial class VeloxJsonSerializer
         if (reader is null) throw new ArgumentNullException(nameof(reader));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
+        // 与同步面和数组同一条：先清空再填（理由见同步那条）。
+        if (!target.IsFixedSize) target.Clear();
+
         await reader.BeginObjectAsync().ConfigureAwait(false);
         while (await reader.NextMemberAsync().ConfigureAwait(false))
         {

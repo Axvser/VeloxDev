@@ -20,6 +20,27 @@ namespace VeloxDev.Generators.Base
                 genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
                 miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier));
 
+        /// <summary>
+        /// Whether the setter's "unchanged" test for a type has to look at the bit pattern rather than at
+        /// equality — true for the two floating-point types, unwrapping <see cref="Nullable{T}"/>.
+        /// </summary>
+        /// <remarks>
+        /// 浮点的相等对字节一无所知：`(-0.0).Equals(0.0)` 与 `NaN.Equals(NaN)` 都为真。生成器原来用
+        /// `Object.Equals` 判「没变」，于是字段已经握着 `+0.0` 时赋 `-0.0` 会被当成没变、直接 return —— 符号
+        /// 永远进不去，回写出来就差一个字节（`-0.0` 变 `0.0`）。两个类型都用
+        /// <c>BitConverter.DoubleToInt64Bits</c> 比：它接 `float` 时按值拓宽，符号保得住，不同 NaN 也仍然不同。
+        /// </remarks>
+        internal static bool IsFloatingPointType(ITypeSymbol typeSymbol)
+        {
+            var type = typeSymbol;
+            if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } named)
+            {
+                type = named.TypeArguments[0];
+            }
+
+            return type.SpecialType is SpecialType.System_Double or SpecialType.System_Single;
+        }
+
         public static class Filters
         {
             /// <summary>
@@ -414,6 +435,7 @@ namespace VeloxDev.Generators.Base
                 SourceName = $"this.{fieldAnalizer.FieldName}";
                 PropertyName = fieldAnalizer.PropertyName;
                 IsNullable = fieldAnalizer.IsNullable;
+                IsFloatingPoint = Analizer.IsFloatingPointType(fieldAnalizer.Symbol.Type);
                 IsFromField = true;
                 ShouldEmitField = false;
                 HasGetter = true;
@@ -434,6 +456,7 @@ namespace VeloxDev.Generators.Base
                 SourceName = propertyAnalizer.FieldName;
                 PropertyName = propertyAnalizer.PropertyName;
                 IsNullable = propertyAnalizer.IsNullable;
+                IsFloatingPoint = Analizer.IsFloatingPointType(propertyAnalizer.Symbol.Type);
                 IsFromField = false;
                 ShouldEmitField = true;
                 HasGetter = propertyAnalizer.HasGetter;
@@ -454,6 +477,8 @@ namespace VeloxDev.Generators.Base
             public string PropertyName { get; private set; }
             /// <summary>Gets whether the generated property's type is nullable.</summary>
             public bool IsNullable { get; private set; }
+            /// <summary>Gets whether the setter's "unchanged" test must compare bit patterns; see <see cref="Analizer.IsFloatingPointType"/>.</summary>
+            public bool IsFloatingPoint { get; private set; }
             /// <summary>Gets whether this factory was built from a field rather than a partial property.</summary>
             public bool IsFromField { get; private set; }
             /// <summary>
@@ -506,9 +531,21 @@ namespace VeloxDev.Generators.Base
             /// <summary>
         /// The full setter body lines, resolved according to <see cref="FrameworkSetterMode"/>.
         /// </summary>
+        // "值没变" 的判据。浮点必须比位模式（理由见 Analizer.IsFloatingPointType）—— 用 Object.Equals 时
+        // `-0.0` 会被当成「和 +0.0 一样」而丢掉符号。可空的那种两头都要有值才算相等。
+        private string EqualityComparison()
+        {
+            if (!IsFloatingPoint) return $"global::System.Object.Equals({SourceName}, value)";
+
+            const string bits = "global::System.BitConverter.DoubleToInt64Bits";
+            return IsNullable
+                ? $"{SourceName}.HasValue == value.HasValue && (!{SourceName}.HasValue || {bits}({SourceName}.Value) == {bits}(value.Value))"
+                : $"{bits}({SourceName}) == {bits}(value)";
+        }
+
         public List<string> GetSetterBodyLines()
         {
-            var equalityComparison = $"global::System.Object.Equals({SourceName}, value)";
+            var equalityComparison = EqualityComparison();
 
             if (FrameworkSetterMode == SetterMode.Default)
             {
@@ -566,7 +603,7 @@ namespace VeloxDev.Generators.Base
                 // Caliburn.Micro：由 NotifyOfPropertyChange 负责变更通知
                 return
                 [
-                    $"if(global::System.Object.Equals({SourceName}, value)) return;",
+                    $"if({equalityComparison}) return;",
                     $"var old = {SourceName};",
                     .. GetWorkflowSlotBeforeAssignmentLines(),
                     .. SetteringBody,
