@@ -1259,7 +1259,7 @@ public sealed class WorkflowAgentToolkit
                 continue;
             }
 
-            if (prop.IsSingleSlot)
+            if (prop.HoldsASingleSlot(node))
             {
                 var slot = prop.Get(node) as IWorkflowSlotViewModel;
                 result.Add(new VeloxJsonObject
@@ -1306,6 +1306,10 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var prop = FindProperty(node, propertyName);
         if (prop is null) return Error($"Property '{propertyName}' not found on {AgentTypeNames.SimpleOf(node)}.");
+        // 枚举器也带 IsSlotCollection 标志（它确实是槽的集合），但它的条目不落在 IList 里 —— 它的槽由选择器
+        // 决定，增删要走 SetEnumSlotCollection。先把它分出去，否则下面那句「集合是空的」会把模型引到错的方向。
+        if (prop.Value.IsSlotEnumerator)
+            return Error($"Property '{propertyName}' is a SlotEnumerator — its slots come from the selector, not from this tool. Use 'SetEnumSlotCollection' to rebuild them.");
         if (!prop.Value.IsSlotCollection)
             return Error($"Property '{propertyName}' is not a slot collection.");
 
@@ -1354,6 +1358,10 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var prop = FindProperty(node, propertyName);
         if (prop is null) return Error($"Property '{propertyName}' not found on {AgentTypeNames.SimpleOf(node)}.");
+        // 枚举器也带 IsSlotCollection 标志（它确实是槽的集合），但它的条目不落在 IList 里 —— 它的槽由选择器
+        // 决定，增删要走 SetEnumSlotCollection。先把它分出去，否则下面那句「集合是空的」会把模型引到错的方向。
+        if (prop.Value.IsSlotEnumerator)
+            return Error($"Property '{propertyName}' is a SlotEnumerator — its slots come from the selector, not from this tool. Use 'SetEnumSlotCollection' to rebuild them.");
         if (!prop.Value.IsSlotCollection)
             return Error($"Property '{propertyName}' is not a slot collection.");
 
@@ -1524,7 +1532,7 @@ public sealed class WorkflowAgentToolkit
         {
             if (!prop.CanRead) continue;
 
-            if (prop.IsSingleSlot)
+            if (prop.HoldsASingleSlot(node))
             {
                 if (prop.Get(node) is IWorkflowSlotViewModel slot)
                     map[slot] = prop.Name;
@@ -1851,8 +1859,10 @@ public sealed class WorkflowAgentToolkit
         else
         {
             var prop = FindProperty(receiverNode!, receiverSlot);
-            if (prop is null || !prop.Value.IsSingleSlot)
-                return Error($"'{receiverSlot}' not a slot on node [{receiverNodeIndex}]");
+            if (prop is null || !prop.Value.HoldsASingleSlot(receiverNode!))
+                return Error(prop is not null && prop.Value.IsSlotEnumerator
+                    ? $"'{receiverSlot}' is a SlotEnumerator on node [{receiverNodeIndex}] — pick one of its slots by passing receiverCondition (the port or member name), not the property itself."
+                    : $"'{receiverSlot}' not a slot on node [{receiverNodeIndex}]");
             receiver = prop.Value.Get(receiverNode!) as IWorkflowSlotViewModel;
             if (receiver == null) return Error($"Slot '{receiverSlot}' is null");
         }
@@ -2746,6 +2756,25 @@ public sealed class WorkflowAgentToolkit
         internal bool IsSingleSlot => node.Has(AIContextFlags.IsSingleSlot);
         internal bool IsSlotCollection => node.Has(AIContextFlags.IsSlotCollection);
 
+        /// <summary>
+        /// Whether this property holds one slot — by the compiled flag, or failing that by what it currently holds.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The flag is computed by the context-tree generator, which cannot see the interface another generator
+        /// injects — so a type declared <c>[WorkflowBuilder.Slot&lt;T&gt;]</c> is only recognised as a slot once
+        /// that generator knows the rule. A consumer built against an older one gets a property that is plainly a
+        /// slot and is not flagged as one, and every name-based path here (listing, the property-to-slot map, the
+        /// connect tools) silently skips it.
+        /// </para>
+        /// <para>
+        /// The value cannot lie about this: a property holding an <see cref="IWorkflowSlotViewModel"/> holds a
+        /// slot. Reading it costs one cast, and it is what keeps the tools working for a consumer whose generator
+        /// predates the flag.
+        /// </para>
+        /// </remarks>
+        internal bool HoldsASingleSlot(object target) => IsSingleSlot || Get(target) is IWorkflowSlotViewModel;
+
         /// <summary>The declared type, from the accessor's <c>typeof</c> literal.</summary>
         internal Type? Type => accessor.MemberType(name);
 
@@ -2922,10 +2951,28 @@ public sealed class WorkflowAgentToolkit
         var prop = FindProperty(node, propertyName);
         if (prop is null) return Error($"Property '{propertyName}' not found on {AgentTypeNames.SimpleOf(node)}.");
 
-        if (prop.Value.IsSingleSlot)
+        if (prop.Value.HoldsASingleSlot(node))
         {
             if (prop.Value.Get(node) is not IWorkflowSlotViewModel slot) return Error($"Slot property '{propertyName}' is null.");
             return new VeloxJsonObject { ["status"] = "ok", ["id"] = GetComponentId(slot), ["prop"] = propertyName }.ToJson();
+        }
+        else if (prop.Value.IsSlotEnumerator)
+        {
+            // 枚举器是**另一**种集合：它装的是 ConditionalSlot，本身不是 IList，所以下面那条通用集合分支
+            // 读不到它（以前这里没有这条分支，于是它对枚举器一律答「不是槽也不是槽集合」——
+            // 而枚举器明明就是槽集合，只是形状不同）。按条件取第 collectionIndex 个。
+            if (prop.Value.Get(node) is not IConditionalSlotProvider enumerator)
+                return Error($"SlotEnumerator '{propertyName}' is null.");
+            if (collectionIndex < 0 || collectionIndex >= enumerator.Slots.Count)
+                return Error($"SlotEnumerator '{propertyName}' index {collectionIndex} out of range (count={enumerator.Slots.Count}).");
+            return new VeloxJsonObject
+            {
+                ["status"] = "ok",
+                ["id"] = GetComponentId(enumerator.Slots[collectionIndex].Slot),
+                ["prop"] = $"{propertyName}[{collectionIndex}]",
+                ["index"] = collectionIndex,
+                ["label"] = enumerator.Slots[collectionIndex].Name,
+            }.ToJson();
         }
         else if (prop.Value.IsSlotCollection)
         {
@@ -3032,7 +3079,7 @@ public sealed class WorkflowAgentToolkit
         var prop = FindProperty(node, propertyName);
         if (prop is null || !prop.Value.CanRead) return null;
 
-        if (prop.Value.IsSingleSlot)
+        if (prop.Value.HoldsASingleSlot(node))
             return prop.Value.Get(node) as IWorkflowSlotViewModel;
 
         if (prop.Value.IsSlotEnumerator)

@@ -852,6 +852,15 @@ namespace VeloxDev.Generators.Base
         }
 
         /// <summary>Whether the type is a single workflow slot — the interface itself counts, as it does for <c>IsAssignableFrom</c>.</summary>
+        /// <remarks>
+        /// 两条判据缺一不可。接口那条对框架自己的槽类型成立（它们是手写的，接口就在源码里），
+        /// 而 `[WorkflowBuilder.Slot&lt;T&gt;]` 那条对**消费方声明**的槽类型成立 —— 它们的 `IWorkflowSlotViewModel`
+        /// 是 Workflow 生成器在**同一编译趟**注入的，这边扫 `AllInterfaces` 时还看不到。
+        /// 与 `VeloxJsonModel.RootReason`、`WorkflowWriter` 里那份同名兜底是同一条规则。
+        /// 漏掉第二条的症状：`EnumSelectorNodeViewModel.InputSlot` 这类属性拿不到 `IsSingleSlot`，
+        /// 于是 `ListSlotProperties` 不列它、`BuildSlotPropertyMap` 不认它（按属性名解析的连接工具全部报错）、
+        /// `ComponentPatcher` 也不拒绝对它直接赋值。
+        /// </remarks>
         private static bool IsSingleSlotType(ITypeSymbol type)
         {
             const string slotInterface = "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel";
@@ -859,7 +868,38 @@ namespace VeloxDev.Generators.Base
             if (type is not INamedTypeSymbol named) return false;
 
             return named.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty) == slotInterface
-                   || ImplementsInterface(named, slotInterface);
+                   || ImplementsInterface(named, slotInterface)
+                   || IsWorkflowBuilderSlotType(named);
+        }
+
+        /// <summary>
+        /// Whether the type, or anything it derives from, is declared with <c>[WorkflowBuilder.Slot&lt;T&gt;]</c>.
+        /// </summary>
+        /// <remarks>
+        /// 沿基类链走，是因为用户常常从一个已标注的基类派生自己的槽。
+        /// 按**包含类型**判而不按名字前缀：`WorkflowBuilder.Slot&lt;T&gt;` 是泛型嵌套特性，`ToDisplayString`
+        /// 把嵌套类型渲染成 `.` 而不是元数据里的 `+`，前缀匹配永远匹配不上（同 `VeloxJsonModel.RootReason`）。
+        /// </remarks>
+        private static bool IsWorkflowBuilderSlotType(ITypeSymbol type)
+        {
+            for (var current = type as INamedTypeSymbol;
+                 current is not null && current.SpecialType != SpecialType.System_Object;
+                 current = current.BaseType)
+            {
+                foreach (var attribute in current.GetAttributes())
+                {
+                    var attributeClass = attribute.AttributeClass;
+                    if (attributeClass is null) continue;
+                    if (attributeClass.ContainingType is not { } container) continue;
+                    if (container.Name != "WorkflowBuilder") continue;
+                    if (container.ContainingNamespace?.ToDisplayString() != "VeloxDev.WorkflowSystem") continue;
+                    if (attributeClass.Name != "SlotAttribute") continue;
+
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>The type named by <c>[AgentCommandParameter]</c>, or null when the command takes none.</summary>

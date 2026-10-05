@@ -108,8 +108,12 @@ public static class ComponentPatcher
                 continue;
             }
 
-            // Reject slot-typed properties — these are auto-created by source generator
-            if (prop.Has(AIContextFlags.IsSingleSlot))
+            // Reject slot-typed properties — these are auto-created by source generator.
+            // 标志之外还要看**当前的值**：`[WorkflowBuilder.Slot<T>]` 类型的接口是另一个生成器注入的，
+            // 目录生成器扫的时候看不见，所以为一个用旧版生成器构建的消费方，这个标志会缺 —— 而缺了它，
+            // 直接给槽属性赋值这条绕过 CreateSlotCommand 的路就没人拦。
+            if (prop.Has(AIContextFlags.IsSingleSlot)
+                || (accessor!.TryGet(target, propName, out var currentSlot) && currentSlot is IWorkflowSlotViewModel))
             {
                 results.Add(new VeloxJsonObject
                 {
