@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Jalium.UI;
 using Jalium.UI.Controls;
+using Jalium.UI.Controls.Primitives;
 using Jalium.UI.Input;
 using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem.StandardEx;
@@ -58,6 +60,8 @@ public static class WorkflowSurfaceBehavior
 
         public IWorkflowGridDecorator? GridDecorator;
 
+        public FrameworkElement? GridDecoratorElement;
+
         public IWorkflowMinimapOverlay? MinimapOverlay;
 
         public FrameworkElement? PointerPressSource;
@@ -89,11 +93,15 @@ public static class WorkflowSurfaceBehavior
         // 解订要用同一个委托实例，所以每一处订阅都留一份。
         public MouseButtonEventHandler? MouseDownHandler;
 
+        public MouseButtonEventHandler? PressSourceDownHandler;
+
         public MouseEventHandler? MouseMoveHandler;
 
         public MouseButtonEventHandler? MouseUpHandler;
 
         public MouseWheelEventHandler? MouseWheelHandler;
+
+        public MouseWheelEventHandler? ZoomWheelHandler;
 
         public PlatformInput.KeyEventHandler? KeyDownHandler;
 
@@ -136,7 +144,7 @@ public static class WorkflowSurfaceBehavior
 
     /// <summary>The attached property that lets the surface drive a zoom gesture of its own.</summary>
     public static readonly DependencyProperty ZoomEnabledProperty = DependencyProperty.RegisterAttached(
-        "ZoomEnabled", typeof(bool), typeof(WorkflowSurfaceBehavior), new PropertyMetadata(false));
+        "ZoomEnabled", typeof(bool), typeof(WorkflowSurfaceBehavior), new PropertyMetadata(false, OnZoomEnabledChanged));
 
     /// <summary>The attached property naming the resource that holds the context menu shown for a link.</summary>
     /// <remarks>
@@ -288,6 +296,7 @@ public static class WorkflowSurfaceBehavior
         state.ZoomPin = (horizontalOffset, verticalOffset, DateTime.UtcNow.Ticks);
         UpdateViewport(state, horizontalOffset, verticalOffset);
         tree.GetHelper().Virtualize(tree.GetHelper().Viewport);
+        UpdateOverlays(state);
         host.InvalidateVisual();
     }
 
@@ -338,9 +347,9 @@ public static class WorkflowSurfaceBehavior
         host.Loaded += OnLoaded;
         host.Unloaded += OnUnloaded;
         host.DataContextChanged += OnDataContextChanged;
-        host.AddHandler(UIElement.MouseDownEvent, state.MouseDownHandler);
-        host.AddHandler(UIElement.MouseMoveEvent, state.MouseMoveHandler);
-        host.AddHandler(UIElement.MouseUpEvent, state.MouseUpHandler);
+        host.AddHandler(UIElement.PreviewMouseDownEvent, state.MouseDownHandler);
+        host.AddHandler(UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
+        host.AddHandler(UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
         host.AddHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler);
         host.AddHandler(UIElement.KeyDownEvent, state.KeyDownHandler);
         host.AddHandler(UIElement.KeyUpEvent, state.KeyUpHandler);
@@ -368,9 +377,9 @@ public static class WorkflowSurfaceBehavior
         host.Loaded -= OnLoaded;
         host.Unloaded -= OnUnloaded;
         host.DataContextChanged -= OnDataContextChanged;
-        RemoveHandler(host, UIElement.MouseDownEvent, state.MouseDownHandler);
-        RemoveHandler(host, UIElement.MouseMoveEvent, state.MouseMoveHandler);
-        RemoveHandler(host, UIElement.MouseUpEvent, state.MouseUpHandler);
+        RemoveHandler(host, UIElement.PreviewMouseDownEvent, state.MouseDownHandler);
+        RemoveHandler(host, UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
+        RemoveHandler(host, UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
         RemoveHandler(host, Mouse.MouseWheelEvent, state.MouseWheelHandler);
         RemoveHandler(host, UIElement.KeyDownEvent, state.KeyDownHandler);
         RemoveHandler(host, UIElement.KeyUpEvent, state.KeyUpHandler);
@@ -448,12 +457,34 @@ public static class WorkflowSurfaceBehavior
                 scrollViewer.ScrollChanged += OnScrollViewerChanged;
                 scrollViewer.SizeChanged += OnScrollViewerSizeChanged;
             }
+
+            // 视口可能晚于 ZoomEnabled 解析出来，所以两处都挂一次（幂等）。
+            HookZoom(host, state);
         }
 
         state.Canvas = ResolvePart<Panel>(host, GetCanvasName(host));
-        state.PointerPressSource = ResolvePart<FrameworkElement>(host, GetPointerPressSourceName(host));
 
-        state.GridDecorator = ResolvePart<FrameworkElement>(host, GetGridDecoratorName(host)) as IWorkflowGridDecorator;
+        // 「起平移」挂在**具名按下源**的预览相上，与 WPF 同形。挂在宿主的冒泡相上收不到：
+        // 滚动视口那一层会把 MouseDown 标成已处理，宿主的处理器于是整场不触发（这里是实测踩到的）。
+        var pressSource = ResolvePart<FrameworkElement>(host, GetPointerPressSourceName(host));
+        if (!ReferenceEquals(pressSource, state.PointerPressSource))
+        {
+            if (state.PointerPressSource is { } previous && state.PressSourceDownHandler is not null)
+            {
+                previous.PreviewMouseDown -= state.PressSourceDownHandler;
+            }
+
+            state.PointerPressSource = pressSource;
+
+            if (pressSource is not null)
+            {
+                state.PressSourceDownHandler ??= OnPointerPressSourceDown;
+                pressSource.PreviewMouseDown += state.PressSourceDownHandler;
+            }
+        }
+
+        state.GridDecoratorElement = ResolvePart<FrameworkElement>(host, GetGridDecoratorName(host));
+        state.GridDecorator = state.GridDecoratorElement as IWorkflowGridDecorator;
         state.MinimapOverlay = ResolvePart<FrameworkElement>(host, GetMinimapOverlayName(host)) as IWorkflowMinimapOverlay;
     }
 
@@ -465,6 +496,111 @@ public static class WorkflowSurfaceBehavior
         }
 
         return host.FindName(name!) as T;
+    }
+
+    private static void OnZoomEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is FrameworkElement host && States.TryGetValue(host, out var state))
+        {
+            HookZoom(host, state);
+        }
+    }
+
+    // 缩放归表面：Ctrl + 滚轮。挂在 ScrollViewer 的**预览**上，否则滚轮会先被它拿去滚动。
+    private static void HookZoom(FrameworkElement host, SurfaceState state)
+    {
+        state.ZoomWheelHandler ??= OnZoomPreviewMouseWheel;
+
+        if (state.ScrollViewer is { } viewer)
+        {
+            viewer.PreviewMouseWheel -= state.ZoomWheelHandler;
+            if (GetZoomEnabled(host))
+            {
+                viewer.PreviewMouseWheel += state.ZoomWheelHandler;
+            }
+        }
+    }
+
+    private static void OnZoomPreviewMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer viewer
+            || FindHost(viewer) is not { } host
+            || !States.TryGetValue(host, out var state)
+            || state.Tree is not { } tree)
+        {
+            return;
+        }
+
+        if (e.KeyboardModifiers != ModifierKeys.Control)
+        {
+            return;
+        }
+
+        // 滚轮向上（增量为正）放大。Scale 是**折叠因子** —— 数值越大节点越小，所以放大要除以 1.1。
+        var factor = e.Delta > 0 ? 1d / 1.1 : 1.1;
+        var layout = tree.Layout;
+        var next = Math.Max(0.1, Math.Min(10d, layout.Scale.Horizontal * factor));
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
+        {
+            // 钉住视口中心下方的世界点，绕它折叠，再滚动让那个点不动。
+            var (worldX, worldY) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                viewer.HorizontalOffset, viewer.VerticalOffset, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+            layout.CollapsePivot = new Anchor(worldX, worldY, 0);
+            layout.Scale = new Scale(next, next);
+
+            // 深度放大把负向内容折叠过固定画布位移；必须在采纳新偏移前扩大覆盖。
+            WorkflowSurfaceMath.EnsureNegativeCover(tree);
+
+            // 先让 ScrollViewer 采纳（可能自动延伸的）范围，再读最大值 —— 否则夹取落在陈旧范围上，
+            // 枢轴偏离中心，下一格又重捕一次，读起来就是缩放抖动。
+            UpdateCanvasSize(state);
+            ApplyLayout(state);
+            host.UpdateLayout();
+            viewer.UpdateLayout();
+
+            var (targetX, targetY) = WorkflowSurfaceMath.PivotCenterScroll(
+                worldX, worldY, layout, viewer.ViewportWidth, viewer.ViewportHeight);
+            var maxH = viewer.ScrollableWidth;
+            var maxV = viewer.ScrollableHeight;
+
+            // 越界扩展画布，让枢轴总能到达；单纯夹取会把枢轴推离中心并逐格漂移。
+            var newX = WorkflowSurfaceMath.ClampScrollOffset(targetX, maxH, layout, horizontal: true);
+            var newY = WorkflowSurfaceMath.ClampScrollOffset(targetY, maxV, layout, horizontal: false);
+            if (Math.Abs(newX - targetX) > double.Epsilon || Math.Abs(newY - targetY) > double.Epsilon)
+            {
+                UpdateCanvasSize(state);
+                ApplyLayout(state);
+                host.UpdateLayout();
+                viewer.UpdateLayout();
+                maxH = viewer.ScrollableWidth;
+                maxV = viewer.ScrollableHeight;
+            }
+
+            var committedX = WorkflowSurfaceMath.ClampValue(targetX, 0, maxH);
+            var committedY = WorkflowSurfaceMath.ClampValue(targetY, 0, maxV);
+            viewer.ScrollToHorizontalOffset(committedX);
+            viewer.ScrollToVerticalOffset(committedY);
+
+            // 立刻按提交后的几何重跑一次虚拟化：本家的 ScrollTo 异步落地，等它的脏 tick 会让刚物化的
+            // 连线被陈旧视口剔掉约 100ms（深缩放闪断）。
+            NotifyZoomCommitted(host, committedX, committedY);
+        }
+        else
+        {
+            layout.Scale = new Scale(next, next);
+            if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
+            {
+                UpdateCanvasSize(state);
+                ApplyLayout(state);
+                host.UpdateLayout();
+                viewer.UpdateLayout();
+            }
+
+            NotifyZoomCommitted(host);
+        }
+
+        e.Handled = true;
     }
 
     private static void OnScrollViewerChanged(object? sender, ScrollChangedEventArgs e) => RefreshFor(sender);
@@ -776,14 +912,26 @@ public static class WorkflowSurfaceBehavior
 
         RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), (p, t, h) => new Wf.PointerPressedEventArgs(
             p, Modifiers(e.KeyboardModifiers), host, t, ButtonOf(e.ChangedButton), 1, h));
+    }
 
-        if (e.ChangedButton != PlatformInput.MouseButton.Left || state.ScrollViewer is null)
+    // 起平移。挂在具名按下源的预览相上（见 ResolveNamedParts），所以一定收得到。
+    private static void OnPointerPressSourceDown(object? sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement source
+            || FindHost(source) is not { } host
+            || !States.TryGetValue(host, out var state)
+            || state.ScrollViewer is null)
         {
             return;
         }
 
-        // 只有按在空白处才起平移：落在卡片/端口/连线上的那一按是它们自己的手势。
-        if (e.OriginalSource is DependencyObject originalSource && !IsBlankSurfaceInteraction(originalSource))
+        if (e.ChangedButton != PlatformInput.MouseButton.Left)
+        {
+            return;
+        }
+
+        // 按在卡片/端口上的那一按是它们自己的手势 —— 具名源可能包着它们，所以这一道仍要有。
+        if (e.OriginalSource is DependencyObject originalSource && !IsBlankSurfaceInteraction(originalSource, state))
         {
             return;
         }
@@ -897,12 +1045,14 @@ public static class WorkflowSurfaceBehavior
             return;
         }
 
-        // 松手后橡皮筋还挂着，说明这一拖没落到任何接收口上（落到的那次由目标槽的
-        // ReceiveConnectionCommand 收尾，虚拟连线那时已经收起）—— 回收它。
-        // 冒泡到这里的顺序在槽自己的 Preview 处理之后，所以「还可见」就是「没连上」。
+        // 松手后橡皮筋还挂着 —— 兜底把它收掉，但这**只在松手没落到端口上时**才做：
+        // 宿主的处理器在预览相，排在槽自己那个预览处理器**之前**，若不加这一道，就会在槽有机会完成
+        // 连接之前先把虚拟连线收掉（实测：所有连线都连不成）。
+        // 落在端口上的那三次出口（连成 / 松回自己 / 落在接不了的口）由槽自己收尾。
         if (e.ChangedButton == PlatformInput.MouseButton.Left
             && state.Tree is { } tree
-            && tree.VirtualLink.IsVisible)
+            && tree.VirtualLink.IsVisible
+            && (e.OriginalSource is not DependencyObject source || !IsSlotVisual(source)))
         {
             tree.ResetVirtualLinkCommand.Execute(null);
         }
@@ -928,6 +1078,12 @@ public static class WorkflowSurfaceBehavior
     private static void OnMouseWheel(object? sender, MouseWheelEventArgs e)
     {
         if (sender is not FrameworkElement host || !States.TryGetValue(host, out var state) || state.Input is null)
+        {
+            return;
+        }
+
+        // Ctrl + 滚轮是表面的缩放（预览相已经吃掉并标记 handled）；到这里的都不该再有 Ctrl。
+        if (e.KeyboardModifiers == ModifierKeys.Control)
         {
             return;
         }
@@ -1000,31 +1156,45 @@ public static class WorkflowSurfaceBehavior
     private static Point WorldPoint(SurfaceState state, MouseEventArgs e)
         => state.Canvas is null ? e.GetPosition(state.Host) : e.GetPosition(state.Canvas);
 
-    // 空白 = 命中链上没有落在节点/端口/连线视图上。这三类视图都是池化到画布里的子元素。
-    private static bool IsBlankSurfaceInteraction(DependencyObject source)
+    // 「空白」= 按下的东西是表面自己的部件之一，而不是落在卡片或端口上。
+    // 判据与 WPF 同形：先排除节点与端口的视觉，再排除滚动条，最后要求命中链上出现
+    // 画布 / 滚动视口 / 指定的按下源 / 网格装饰器之一 —— `PointerPressSourceName` 就是在这里被消费的。
+    private static bool IsBlankSurfaceInteraction(DependencyObject source, SurfaceState state)
     {
-        foreach (var current in EnumerateSelfAndVisualAncestors(source))
+        if (IsNodeOrSlotVisual(source))
         {
-            if (current is not FrameworkElement element)
-            {
-                continue;
-            }
-
-            if (element.DataContext is IWorkflowNodeViewModel
-                or IWorkflowSlotViewModel
-                or IWorkflowLinkViewModel)
-            {
-                return false;
-            }
-
-            if (element.GetValue(IsEnabledProperty) is true)
-            {
-                return true;
-            }
+            return false;
         }
 
-        return true;
+        var ancestors = EnumerateSelfAndVisualAncestors(source).ToArray();
+        if (ancestors.Any(IsNodeOrSlotVisual))
+        {
+            return false;
+        }
+
+        // 按在滚动条上是要滚，不是要平移画布。
+        if (source is ScrollBar || ancestors.Any(x => x is ScrollBar))
+        {
+            return false;
+        }
+
+        return IsSurfacePart(source, state)
+            || ancestors.Any(x => IsSurfacePart(x, state) || x is ScrollContentPresenter);
     }
+
+    private static bool IsSurfacePart(DependencyObject candidate, SurfaceState state)
+        => ReferenceEquals(candidate, state.Canvas)
+        || ReferenceEquals(candidate, state.ScrollViewer)
+        || ReferenceEquals(candidate, state.PointerPressSource)
+        || ReferenceEquals(candidate, state.GridDecoratorElement);
+
+    private static bool IsNodeOrSlotVisual(DependencyObject source)
+        => source is FrameworkElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
+
+    private static bool IsSlotVisual(DependencyObject source)
+        => EnumerateSelfAndVisualAncestors(source)
+            .OfType<FrameworkElement>()
+            .Any(x => x.DataContext is IWorkflowSlotViewModel);
 
     // 右键菜单归表面：右键落在表面上，而弹出要根视觉坐标、模型给的是画布坐标 —— 只有表面同时知道这两件事。
     // 条目由宿主在资源里声明（LinkMenuKey），库只负责订阅、定位、弹出与开合上报。
