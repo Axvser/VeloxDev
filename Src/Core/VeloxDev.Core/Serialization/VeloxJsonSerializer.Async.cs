@@ -336,9 +336,16 @@ public static partial class VeloxJsonSerializer
         if (underlying == typeof(byte)) return (byte)await reader.ReadInt32Async().ConfigureAwait(false);
         if (underlying == typeof(short)) return (short)await reader.ReadInt32Async().ConfigureAwait(false);
         if (underlying == typeof(char)) return (await reader.ReadTextAsync().ConfigureAwait(false))[0];
+        // 二进制走 base64 —— **与同步那份表逐条对齐**：漏了这一条时，写入是 base64 字符串、
+        // 读回来却按数字数组走，异步往返当场 FormatException（同步面 2026-10-04 修过同一个洞）。
+        if (underlying == typeof(byte[])) return System.Convert.FromBase64String((await reader.ReadStringAsync().ConfigureAwait(false))!);
         if (underlying == typeof(Guid)) return await reader.ReadGuidAsync().ConfigureAwait(false);
+        // RoundtripKind 与同步面同一条理由：不带它，「…Z」会解析成当地时刻并平移。
         if (underlying == typeof(DateTime))
-            return DateTime.Parse(await reader.ReadTextAsync().ConfigureAwait(false), CultureInfo.InvariantCulture);
+            return DateTime.Parse(
+                await reader.ReadTextAsync().ConfigureAwait(false),
+                CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind);
         if (underlying == typeof(TimeSpan))
             return TimeSpan.Parse(await reader.ReadTextAsync().ConfigureAwait(false), CultureInfo.InvariantCulture);
 

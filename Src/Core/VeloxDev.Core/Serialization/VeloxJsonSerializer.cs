@@ -437,7 +437,8 @@ public static partial class VeloxJsonSerializer
         if (underlying == typeof(byte)) return (byte)reader.ReadInt32();
         if (underlying == typeof(short)) return (short)reader.ReadInt32();
         if (underlying == typeof(char)) return reader.ReadText()[0];
-        if (underlying == typeof(byte[])) return System.Convert.FromBase64String(reader.ReadString() ?? string.Empty);
+        // ReadValue 已经在上面把 `null` 挡掉了，所以到这里一定是带引号的字符串。
+        if (underlying == typeof(byte[])) return System.Convert.FromBase64String(reader.ReadString()!);
         if (underlying == typeof(Guid)) return reader.ReadGuid();
         // RoundtripKind 是必须的：不带它，「…Z」会被解析成当地时刻并平移，写出去的值读回来就不是同一个时刻。
         if (underlying == typeof(DateTime))
