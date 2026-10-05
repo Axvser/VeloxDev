@@ -797,13 +797,22 @@ public static class WorkflowSurfaceBehavior
             return;
         }
 
-        if (state.Tree is null)
+        if (state.Tree is not { } tree)
         {
             return;
         }
 
-        RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), (p, t, h) => new Wf.PointerMovedEventArgs(
-            p, Modifiers(e.KeyboardModifiers), host, t, h));
+        // 拉线时指针下挂着橡皮筋：把指针的世界坐标喂给树，虚拟连线那一端就跟着走，
+        // 池化出来的连线视图按绑定重画 —— 预览是这么来的，表面不自己画一笔。
+        var world = WorldPoint(state, e);
+        tree.SetPointerCommand.Execute(new Anchor(world.X, world.Y, 0));
+
+        // 橡皮筋挂着的那段时间不转发 PointerMoved，否则沿途经过的实连线会一路亮起。
+        if (!tree.VirtualLink.IsVisible)
+        {
+            RoutePointer(state, host, e.GetPosition(host), world, (p, t, h) => new Wf.PointerMovedEventArgs(
+                p, Modifiers(e.KeyboardModifiers), host, t, h));
+        }
     }
 
     private static void PanMoved(FrameworkElement host, SurfaceState state, MouseEventArgs e)
@@ -873,6 +882,17 @@ public static class WorkflowSurfaceBehavior
             state.IsPanning = false;
             host.ReleaseMouseCapture();
             e.Handled = true;
+            return;
+        }
+
+        // 松手后橡皮筋还挂着，说明这一拖没落到任何接收口上（落到的那次由目标槽的
+        // ReceiveConnectionCommand 收尾，虚拟连线那时已经收起）—— 回收它。
+        // 冒泡到这里的顺序在槽自己的 Preview 处理之后，所以「还可见」就是「没连上」。
+        if (e.ChangedButton == PlatformInput.MouseButton.Left
+            && state.Tree is { } tree
+            && tree.VirtualLink.IsVisible)
+        {
+            tree.ResetVirtualLinkCommand.Execute(null);
         }
     }
 

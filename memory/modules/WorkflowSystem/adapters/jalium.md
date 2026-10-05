@@ -129,6 +129,27 @@
 一起跟着走 —— 等价，且没有「视图后到、变换晚一帧」的同步问题。代价是**画布系坐标就是模型系**，
 凡是要比模型的地方都不许再减 `ActualOffset`（见 §2.3）。
 
+### 2.4.1 拉线的橡皮筋不是表面画的，是池化出来的**虚拟连线**（2026-10-05）
+
+**表面一行都不画预览。** 拉线时指针下那条虚线，是树自己的 `VirtualLink` —— 它被 `ViewPool` 像别的连线一样
+物化成一个连线视图，端点绑在 `Sender.Anchor` / `Receiver.Anchor` 上。所以「预览跟着指针走」靠的是**表面每次
+鼠标移动都执行 `tree.SetPointerCommand.Execute(锚点)`**，模型的锚点一动，池化视图按绑定重画。
+（它画成虚线，是因为虚拟连线的两端都是 `SlotDefaultViewModel`（`Parent` 都是 `null`），
+命中连线模板里那条 `IsVirtualLink` 判定。）
+
+⇒ **两个必须做、漏了就是静默无反馈的动作**（2026-10-05 实测补上）：
+
+1. **移动时喂指针**：`OnMouseMove` 里执行 `SetPointerCommand`。漏了的表现是——按住端口拖拽**全程没有任何
+   视觉反馈**，直到松手才「啪」地冒出一条线。
+2. **松手时回收**：松手后若 `VirtualLink.IsVisible` 仍为真，说明这一拖没落到接收口上（落到的那次由目标槽的
+   `ReceiveConnectionCommand` 收尾，虚拟连线那时已收起），要执行 `ResetVirtualLinkCommand`，否则橡皮筋赖着不走。
+
+⚠ **坐标系**：喂的是**世界坐标**。本家把世界位移做成了画布自己的 `RenderTransform`（见 §2.4），
+所以 `e.GetPosition(PART_Canvas)` 交回的**就是**世界坐标 —— 别再套 `WorkflowSurfaceMath.ToWorldAnchor`
+（那是给「画布系 = 世界 + ActualOffset」的平台用的，这里再减一次就是系统性偏移）。
+
+另：`PointerMoved` 在橡皮筋挂着的那段时间**不转发**给输入面，否则沿途经过的实连线会一条条亮起来。
+
 ### 2.5 缩放/滚动的时序：Jalium 的 `ScrollTo` 不保证同步落地，`ScrollChanged` 不可靠
 
 **这套守卫现在在适配器的表面基类里**（`WorkflowTreeView.cs`），不再是宿主自写：
