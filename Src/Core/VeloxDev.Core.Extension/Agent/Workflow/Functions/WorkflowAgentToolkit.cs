@@ -1064,7 +1064,7 @@ public sealed class WorkflowAgentToolkit
         return result;
     }
 
-    [Description("Creates a node (via CreateNodeCommand — never modify the Nodes collection directly). Width/height: 0 reads the type's default ([DefaultSize]) if declared, else 300×260. Position auto-offsets to avoid overlap.")]
+    [Description("Creates a node (via CreateNodeCommand — never modify the Nodes collection directly). Width/height: 0 reads the type's default ([DefaultSize]) if declared, else 300×260. Position auto-offsets to avoid overlap. A node whose ports are selector-driven is created with NO ports — its slots exist only once a selector has been set — so configure them with SetEnumSlotCollection before connecting anything to it. ListSlotProperties reporting count:0 on a SlotEnumerator property means exactly that, not that the property is missing.")]
     private string CreateNode(
         [Description("Fully-qualified type name.")] string fullTypeName,
         [Description("Left px. Consider existing node positions to avoid overlap.")] double left = 0,
@@ -1823,14 +1823,14 @@ public sealed class WorkflowAgentToolkit
         return Ok($"Slot '{conditionValue}' in {propertyName}[{nodeIndex}] channel set to {ch}");
     }
 
-    [Description("Connects SlotEnumerator slot (by condition) to another slot. The receiver can be a plain slot property/index OR another SlotEnumerator slot — supply receiverCondition to pick the receiver slot by its enum/bool condition value instead of by index.")]
+    [Description("Connects one slot of a sender SlotEnumerator (chosen by 'senderCondition') to a receiver slot. The receiver is either PLAIN — name its property in 'receiverSlot' (e.g. 'InputSlot'), or pass a numeric slot index — or a slot INSIDE another SlotEnumerator, which needs both 'receiverSlot' (that enumerator's property name) and 'receiverCondition' (which of its slots). A condition value is whatever the slots on that side answer to: an enum member name, 'True'/'False' for a bool selector, or the PORT NAME when the enumerator is driven by an ISlotProvider — the Python nodes' 'InputSlots' take e.g. 'stats'. Naming a SlotEnumerator in 'receiverSlot' while leaving 'receiverCondition' out is the common mistake: a SlotEnumerator is not itself a slot, and the refusal will say so.")]
     private async Task<string> ConnectEnumSlot(
         [Description("Sender node index")] int senderNodeIndex,
         [Description("Sender SlotEnumerator property")] string senderProperty,
-        [Description("Sender condition value")] string senderCondition,
+        [Description("Which of the sender's slots: enum member name, 'True'/'False' for a bool selector, or the port name for an ISlotProvider-driven enumerator.")] string senderCondition,
         [Description("Receiver node index")] int receiverNodeIndex,
-        [Description("Receiver slot property or index. When receiverCondition is supplied this must be the SlotEnumerator property name.")] string receiverSlot,
-        [Description("Optional: receiver condition value (enum name or True/False). Set this when the receiver slot also lives inside a SlotEnumerator property.")] string? receiverCondition = null,
+        [Description("Receiver slot: a plain slot's property name (e.g. 'InputSlot'), a numeric slot index, or — together with receiverCondition — the property name of the SlotEnumerator the receiver lives in.")] string receiverSlot,
+        [Description("Which of the receiver SlotEnumerator's slots: enum member name, 'True'/'False' for a bool selector, or the port name for an ISlotProvider-driven enumerator. Required whenever 'receiverSlot' names a SlotEnumerator.")] string? receiverCondition = null,
         CancellationToken cancellationToken = default)
     {
         var senderResult = GetEnumSlotByValue(senderNodeIndex, senderProperty, senderCondition);
