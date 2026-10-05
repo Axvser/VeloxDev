@@ -31,7 +31,7 @@
     <!-- Jalium.UI.Controls is the lowest platform-neutral package that carries the
          Canvas/ScrollViewer/Border/Control + DrawingContext/Geometry/FormattedText +
          TextMeasurement surface the workflow adapter renders with. -->
-    <PackageReference Include="Jalium.UI.Controls" Version="26.10.8" />
+    <PackageReference Include="Jalium.UI.Controls" Version="26.10.9" />
   </ItemGroup>
 
 </Project>

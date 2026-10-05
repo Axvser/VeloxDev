@@ -34,7 +34,7 @@
     <!-- The Jalium adapter (Debug consumes VeloxDev.Core by project ref). -->
     <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj" />
     <!-- The Windows desktop entry package (net10.0-windows) — the app host and windowing. -->
-    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.9" />
   </ItemGroup>
 
 </Project>

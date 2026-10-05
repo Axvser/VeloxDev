@@ -332,7 +332,7 @@ function New-ProbeProject($config, [string] $probeDir) {
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.9" />
     <ProjectReference Include="$adapter" />
   </ItemGroup>
 </Project>

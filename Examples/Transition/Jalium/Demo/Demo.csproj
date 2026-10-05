@@ -8,6 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj" />
-    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.9" />
   </ItemGroup>
 </Project>
