@@ -105,9 +105,12 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 七项逐项适用：`workflow-grid-decorator` / `workflow-link-view` / `workflow-minimap-overlay` /
 `workflow-node-view` / `workflow-slot-view` / `workflow-template-selector` / `workflow-tree-view`。
 
-**不做「这个角色看起来本来就该用户写」的豁免。** 判据是「这一段是不是扩展点」，不是「这个角色感觉像不像用户的」——
-反例：`grid-decorator` 在七家都是「你自己的网格」，看着像纯用户代码，但它照样含平台机制（网格线的世界坐标换算、
-标尺刻度与标签的排版、每帧重绘），用户该拿到的是「派生 + 调色板」而不是「写一个网格渲染器」。
+**不做「这个角色看起来本来就该用户写」的豁免。** 判据是「这一段是不是扩展点」，不是「这个角色感觉像不像用户的」。
+
+> ⚠ **2026-10-05 更正**：这里原本拿 `grid-decorator` 当反例，说「用户该拿到派生 + 调色板，而不是写一个网格渲染器」。
+> **实测的七家不是这样**：WPF / Avalonia / WinUI / MAUI / Razor **五家**把整个网格渲染器放在**模板**里（111–535 行），
+> 只有 WinForms 与 Jalium 把它藏在适配器。用户 2026-10-05 定「WPF 怎么来，Jalium 就怎么来」，Jalium 随之改成第六家。
+> ⇒ **那条反例作废**；下面这句抽象规则仍然成立，只是别再用 grid-decorator 举例。
 
 ### 2.3 验收（不是设计目标）
 
@@ -134,8 +137,8 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 **要一起想的**：一个角色的基类若要引用**另一个角色的产物**，那个依赖必须一起进包，否则基类做不了自己的活。
 ⚠ 这条原先举的例子（Jalium 的 `WorkflowPortGeometry` / `WorkflowPortLayout`）**已于 2026-10-05 作废** ——
 那两个类型随 Jalium 转标记驱动一起删了（端口位置改由标记里声明的槽控件实测写回 `slot.Anchor`）。
-现在这条的实例是 **`WorkflowLinkBounds`**：连线视图的自盒化是 Jalium 的渲染器硬限制，它属于适配器、
-不属于模板。
+现在这条的实例是 **`WorkflowLinkBounds`**：连线视图的自盒化是 Jalium 渲染器的硬限制（按 `RenderSize` 盒裁剪，
+画到盒外静默丢弃），它属于适配器、不属于模板 —— 那是**实测走不通**才留的差异，不是偏好。
 
 ---
 

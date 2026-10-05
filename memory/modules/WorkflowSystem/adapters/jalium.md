@@ -1,16 +1,14 @@
 # WorkflowSystem — Jalium
 
-> ⚠ **2026-10-05：这家已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
-> 本文下面凡描述「附加助手（`*Attachment`）」「代码绘制」「端口几何（`WorkflowPortGeometry` /
-> `WorkflowPortLayout`）」「`WorkflowTreeView : Canvas`」「自造 `IWorkflowTemplateSelector`」的段落
-> **都已作废** —— 那些类型全部删除。**仍然有效**的是「平台硬限制」那一类事实（渲染器盒裁剪、
-> `ScrollTo` 异步落地、菜单坐标吃根视觉），它们与用不用标记无关。§〇 的运行时能力实测是这次改造的
-> 依据，先读它。
+> **基准：WPF。** 2026-10-05 用户定：「WPF 怎么来，Jalium 就怎么来。」
+> 本文从这一条出发 —— 本家**不再**有自己的形状：类名、附着属性名、模板形态、装配方式逐项照 WPF。
+> 只有**实测走不通**的地方才允许不同，且每一处都必须带着**当场量到的依据**，不许写「这家一向如此」。
+> 旧的那批「Jalium 必须不一样」的结论（附加助手、代码绘制、端口几何、不测量视觉、没有画布变换通道…）
+> **全部作废** —— 它们要么已经被推翻，要么还剩下的几条在 §三 里按测量重列。
 
 > **读法**：契约与注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3，本文不重复；
 > 人面向的「这家怎么用」在 `skills/veloxdev-create-workflow/references/gui/jalium.md`，本文只指路不抄。
-> 本文只写这家的**硬限制、刻意背离、该家特有的坑**。
-> 代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`（11 个文件）与
+> 代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`（**9 个文件**，与 WPF 适配器同数）与
 > `Src/Templates/VeloxDev.Jalium.Templates/working/content/`（七个条目，其中四个是 `.jalxaml`）。
 
 ## 〇、`.jalxaml` 运行时能力实测（2026-10-05，探针实测后已删）
@@ -39,7 +37,7 @@
 | 颜色 / `BorderThickness` / `CornerRadius` / `Path Data` 字面量 | ✅ `#DDFFFFFF` 原样、`1,1,1,1`、`6,6,6,6`、`PathGeometry` |
 | `PublishTrimmed` 发布版 | ✅ 与 Debug 逐条一致，未裁剪掉标记资源 |
 | **`RelativeSource AncestorType` = 自定义 `clr-namespace` 类型** | ❌ 不解析（带不带 `{x:Type}` 都不行）⇒ 用**框架基类**（`UserControl`）替代 |
-| **带前缀的附加属性路径** `(behaviors:X.Y)` 出现在绑定路径里 | ❌ 根本不解析（`ElementName` / `RelativeSource` 两种宿主都试过） |
+| **`(附加属性)` 括号路径**（`(behaviors:X.Y)`）出现在绑定路径里 | ❌ 根本不解析。2026-10-05 重测：**`(Canvas.Left)` 这条框架类型自己的也不行** ⇒ 卡的是**括号语法本身**，与前缀无关 |
 
 **两条失败合起来毙掉的一句**：WPF 的 tree 模板靠
 `RenderTransform="{Binding RelativeSource={RelativeSource AncestorType=local:模板类}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"`
@@ -64,13 +62,16 @@
 | 连线手势 | `WorkflowSlotConnectionBehavior` | `static` + `IsEnabled` |
 | 模型事件 | `WorkflowEvents` | `static` + `Node` / `Slot` / `Tree` 三个 sink 附着属性 |
 | 连线自盒化 | `WorkflowLinkBounds` | `static` 助手（**唯一刻意背离**，见 §2.1） |
-| 网格 | `WorkflowGridDecorator` | `Grid, IWorkflowGridDecorator` **容器控件**，16 个 DP，两层自绘 |
 | 小地图 | `WorkflowMinimapOverlay` | `FrameworkElement`，14 个 DP；`ScrollViewerName` 由模板给 |
 | 视图池 | `ViewPool` / `ViewManager` | Jalium 自己的 `DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退 |
 
+**网格装饰器不在这里**：与 WPF / Avalonia / WinUI / MAUI / Razor 五家一致，它归**模板**
+（`workflow-grid-decorator`，`sealed class : Grid, IWorkflowGridDecorator`），适配器只留接口。
+
 **删掉的一整套**（想让它们回来之前先读 §〇 与 `adapter-base-class-specifications.md` §一）：
 `WorkflowTreeView`、`WorkflowNodeAttachment`、`WorkflowSlotAttachment`、`WorkflowLinkAttachment`、
-`WorkflowPortGeometry`、`WorkflowPortLayout`、`IWorkflowTemplateSelector`、`WorkflowTemplateSelector`。
+`WorkflowPortGeometry`、`WorkflowPortLayout`、`WorkflowGridDecorator`、`IWorkflowTemplateSelector`、
+`WorkflowTemplateSelector`。
 
 ---
 
@@ -214,17 +215,20 @@ WinForms 那家的 `WorkflowSlotConnectionBehavior` 是同一形状（`CancelCon
 
 ---
 
-## 三、与其它六家的差异
+## 三、与 WPF 的差异 —— 只有实测挡住的才留（2026-10-05 重测）
 
-**校准**：这家 2026-10-05 之后**几乎不再特殊** —— 视图层与 WPF 逐行同形（标记 + 附着行为 + `FindName`
-+ `DataTemplate` + `DataTemplateSelector`）。真正剩下的差异只有四条，全部是平台硬限制或实测限制：
+**基准是 WPF。** 下面每一条都**当场量过**才留；量不过就照 WPF 改。旧的那批「这家特殊」的结论一律作废。
 
-1. **连线视图必须自盒化**（§2.1）—— 渲染器按 `RenderSize` 裁剪，内容画到盒外会被静默丢掉。
-2. **画布变换写在画布上，不走附着属性通道**（§2.4）。
-3. **槽锚点用 `SlotAnchorFromCanvasLocal`**，不是其余六家那个 `SlotAnchorFromVisualCenter`（§2.3）。
-4. **`RelativeSource AncestorType` 与带前缀附加属性路径的限制**（§2.2）。
+| 差异 | 现在的依据（当场量的） |
+|---|---|
+| **没有 `WorkflowCanvasTransformBehavior`** | Jalium 的绑定**不支持 `(附加属性)` 这条括号路径语法** —— 2026-10-05 重测：`(behaviors:WorkflowSurfaceBehavior.LinkMenuKey)` 与 **`(Canvas.Left)`（框架类型自己的）** 全都解析不出来，与前缀无关。WPF 的节点/连线模板正是靠 `Path=(behaviors:…Transform)` 读它的，这条通道在本家**建不起来**；补上那个类就是**死 API**（照着模板写会以为生效）。画布变换由表面写在画布自己的 `RenderTransform` 上，观感与 WPF 等价 |
+| **有 `WorkflowLinkBounds`** | 渲染器按 `RenderSize` 盒裁剪子元素、内容画到盒外**静默丢弃**（§2.1 的 IL 级依据）。WPF 让连线视图铺满整块画布即可，本家那样做会在缩放里陈盒掉整层线 |
+| **`LinkView` 从模型读几何** | 绑定比模型**晚一拍**，池化视图反复改绑 —— 表现为连线落后卡片、以及刚建好那一瞬从原点画一条（两条都是 2026-10-05 用截图抓到的） |
+| **槽锚点用 `SlotAnchorFromCanvasLocal`** | 画布变换在本家写在画布自己身上（见第一条），坐标宿主之上的变换不进 `TransformToAncestor`，用别家那个 `SlotAnchorFromVisualCenter` 会再减一次 `ActualOffset` |
+| **槽再同步靠 `Loaded`/`SizeChanged`/模型变更 + `Dispatcher.Render` 排一拍** | 本家**没有 `LayoutUpdated` 事件**（26.10.9 反射清点，一个都没有） |
 
----
+⇒ **这五条都是「WPF 那么做在本家跑不起来」，不是「本家想不一样」。** 谁要是能证明其中一条现在能跑了，
+就照 WPF 改 —— 记忆不是理由，测量才是。
 
 ## 四、坑（带依据）
 
