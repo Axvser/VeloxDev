@@ -99,6 +99,23 @@ public partial class MemberInitializerTests
     }
 
     [TestMethod]
+    public void ReadingTwice_IntoTheSameInstance_DoesNotAccumulate()
+    {
+        // 把同一份文档读进一个已经装着的实例（`ReadValue` 的 existing 重载，生成代码用的就是它）——
+        // 任何残留的追加或合并都会在第二遍显形。
+        var document = VeloxJsonSerializer.Serialize(FromTheDocument());
+        var target = FromTheDocument();
+
+        for (var pass = 0; pass < 2; pass++)
+        {
+            VeloxJsonSerializer.ReadValue(new VeloxJsonReader(document), typeof(PrepopulatedModel), target);
+        }
+
+        AssertHoldsWhatTheDocumentSaid(target, "read twice");
+        Assert.AreEqual(document, VeloxJsonSerializer.Serialize(target), "a second read changed the instance");
+    }
+
+    [TestMethod]
     public void ALoad_ReproducesTheDocumentByteForByte()
     {
         // 这是真正的判据：初值留下的任何多余元素或陈旧键，回写出来都比原文多出字节。
