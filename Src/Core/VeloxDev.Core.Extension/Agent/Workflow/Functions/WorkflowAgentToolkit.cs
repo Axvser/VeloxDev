@@ -539,7 +539,7 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Query Functions ──────────────────────────
 
-    [Description("Lists all nodes. Returns compact JSON: [{i,id,t,x,y,l,w,h,slots,...props}]. Use GetNodeDetail for full info.")]
+    [Description("Lists all nodes. Returns compact JSON: [{i,id,t,x,y,l,w,h,slots,...props}]. x/y/w/h are WORLD coordinates — the same frame CreateNode and SetNodePosition take, unaffected by the canvas zoom. Use GetNodeDetail for full info.")]
     private string ListNodes()
     {
         var nodes = Tree.Nodes;
@@ -547,16 +547,18 @@ public sealed class WorkflowAgentToolkit
         for (int i = 0; i < nodes.Count; i++)
         {
             var node = nodes[i];
+            var world = WorldAnchor(node);
+            var size = WorldSize(node);
             var obj = new VeloxJsonObject
             {
                 ["i"] = i,
                 ["id"] = GetComponentId(node),
                 ["t"] = node.GetType().Name,
-                ["x"] = node.Anchor.Horizontal,
-                ["y"] = node.Anchor.Vertical,
-                ["l"] = node.Anchor.Layer,
-                ["w"] = node.Size.Width,
-                ["h"] = node.Size.Height,
+                ["x"] = world.Horizontal,
+                ["y"] = world.Vertical,
+                ["l"] = world.Layer,
+                ["w"] = size.Width,
+                ["h"] = size.Height,
                 ["slots"] = node.Slots.Count,
             };
             AppendScalarProperties(obj, node);
@@ -565,7 +567,7 @@ public sealed class WorkflowAgentToolkit
         return result.ToJson();
     }
 
-    [Description("Gets full detail of a node by index: properties, slots with connections. Use ListComponentCommands for commands.")]
+    [Description("Gets full detail of a node by index: properties, slots with connections. x/y/w/h are WORLD coordinates — the same frame CreateNode and SetNodePosition take, unaffected by the canvas zoom. Use ListComponentCommands for commands.")]
     private string GetNodeDetail(
         [Description("Zero-based index of the node.")] int nodeIndex)
     {
@@ -584,17 +586,19 @@ public sealed class WorkflowAgentToolkit
 
     private string BuildNodeDetailJson(IWorkflowNodeViewModel node, int nodeIndex)
     {
+        var world = WorldAnchor(node);
+        var size = WorldSize(node);
         var obj = new VeloxJsonObject
         {
             ["i"] = nodeIndex,
             ["id"] = GetComponentId(node),
             ["t"] = node.GetType().Name,
             ["fullType"] = node.GetType().FullName,
-            ["x"] = node.Anchor.Horizontal,
-            ["y"] = node.Anchor.Vertical,
-            ["l"] = node.Anchor.Layer,
-            ["w"] = node.Size.Width,
-            ["h"] = node.Size.Height,
+            ["x"] = world.Horizontal,
+            ["y"] = world.Vertical,
+            ["l"] = world.Layer,
+            ["w"] = size.Width,
+            ["h"] = size.Height,
         };
 
         AppendScalarProperties(obj, node);
@@ -2835,6 +2839,43 @@ public sealed class WorkflowAgentToolkit
         {
             return data.ToString();
         }
+    }
+
+    /// <summary>A node's position in the <b>world</b> frame — the one the placement tools take.</summary>
+    /// <remarks>
+    /// <para>
+    /// A node's <c>Anchor</c> getter is <b>collapsed by the canvas scale</b> (<c>Anchor.Collapse</c>, so it
+    /// renders correctly on a zoomed canvas); the field behind it keeps the world value, and that is the value
+    /// <c>CreateNode</c> / <c>SetNodePosition</c> write and the archive stores.
+    /// </para>
+    /// <para>
+    /// Reading the getter therefore answered in a different frame from the one the write side speaks: a node
+    /// placed at (3120, 940) read back as (2836.36, 854.55), and the ratio moved whenever the user zoomed —
+    /// so an agent could not round-trip a position, and could not compare two readings taken at different zooms.
+    /// Multiplying back by the live scale answers in the frame the caller is already working in.
+    /// </para>
+    /// </remarks>
+    private static Anchor WorldAnchor(IWorkflowNodeViewModel node) => WorldFrame(node, node.Anchor);
+
+    /// <summary>A node's size in the <b>world</b> frame — as <see cref="WorldAnchor"/> is for its position.</summary>
+    private static Size WorldSize(IWorkflowNodeViewModel node) => WorldFrame(node, node.Size);
+
+    private static Anchor WorldFrame(IWorkflowNodeViewModel node, Anchor collapsed)
+    {
+        var scale = node.Parent?.Layout?.Scale;
+        if (scale is null || scale.Horizontal == 0d || scale.Vertical == 0d) return collapsed;
+        if (scale.Horizontal == 1d && scale.Vertical == 1d) return collapsed;
+
+        return new Anchor(collapsed.Horizontal * scale.Horizontal, collapsed.Vertical * scale.Vertical, collapsed.Layer);
+    }
+
+    private static Size WorldFrame(IWorkflowNodeViewModel node, Size collapsed)
+    {
+        var scale = node.Parent?.Layout?.Scale;
+        if (scale is null || scale.Horizontal == 0d || scale.Vertical == 0d) return collapsed;
+        if (scale.Horizontal == 1d && scale.Vertical == 1d) return collapsed;
+
+        return new Size(collapsed.Width * scale.Horizontal, collapsed.Height * scale.Vertical);
     }
 
     private static void AppendScalarProperties(VeloxJsonObject obj, object target)

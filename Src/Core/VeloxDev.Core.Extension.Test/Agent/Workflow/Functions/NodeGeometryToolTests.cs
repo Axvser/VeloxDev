@@ -1,4 +1,6 @@
-using System;
+﻿using System;
+using System.Linq;
+using Newtonsoft.Json.Linq;
 using VeloxDev.AI.Workflow;
 using VeloxDev.WorkflowSystem;
 
@@ -114,5 +116,53 @@ public class NodeGeometryToolTests
         raised.Clear();
         WorkflowToolInvoker.Invoke(scope, "ResizeNode", ("nodeIndex", 0), ("width", 321.0), ("height", 123.0));
         CollectionAssert.Contains(raised, nameof(IWorkflowNodeViewModel.Size));
+    }
+
+    /// <summary>
+    /// What the query tools report is the position the placement tools set — at any zoom.
+    /// </summary>
+    /// <remarks>
+    /// The write side speaks <i>world</i> coordinates (<c>SetAnchorCommand</c> stores straight into the field),
+    /// but <c>node.Anchor</c>'s getter is collapsed by the canvas scale for rendering. Reporting the getter
+    /// therefore answered a different frame from the one the caller wrote in: placing a node at (3120, 940) and
+    /// reading it back gave (2836.36, 854.55), and that ratio moved whenever the user zoomed — so a position
+    /// could not be round-tripped and two readings taken at different zooms could not be compared. A hand-run of
+    /// the demo hit exactly this and filed it as "the two spaces disagree".
+    /// </remarks>
+    [TestMethod]
+    public void QueryTools_ReportTheWorldPosition_ThePlacementToolsTake()
+    {
+        var (tree, scope) = TwoNodes();
+        tree.Layout.Scale = new Scale(0.5, 0.5);   // view = world / 0.5, so the two frames differ by 2×
+
+        // World coordinates, straight through the command a GUI placement dispatches.
+        tree.Nodes[0].SetAnchorCommand.Execute(new Anchor(3120, 940, 0));
+        tree.Nodes[0].SetSizeCommand.Execute(new Size(280, 260));
+
+        var detail = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "GetNodeDetail", ("nodeIndex", 0)));
+        Assert.AreEqual(3120d, detail["x"]!.Value<double>(), 0.001, "a position must read back as it was written");
+        Assert.AreEqual(940d, detail["y"]!.Value<double>(), 0.001);
+        Assert.AreEqual(280d, detail["w"]!.Value<double>(), 0.001, "and so must a size");
+        Assert.AreEqual(260d, detail["h"]!.Value<double>(), 0.001);
+
+        var listed = JArray.Parse(WorkflowToolInvoker.Invoke(scope, "ListNodes"))
+            .Single(n => n!["i"]!.Value<int>() == 0)!;
+        Assert.AreEqual(3120d, listed["x"]!.Value<double>(), 0.001, "the list answers in the same frame as the detail");
+        Assert.AreEqual(280d, listed["w"]!.Value<double>(), 0.001);
+    }
+
+    /// <summary>The round trip an agent actually performs: place by tool, read by tool, get the same numbers.</summary>
+    [TestMethod]
+    public void SetNodePosition_ReadsBackThroughGetNodeDetail_AtANonUnitScale()
+    {
+        var (tree, scope) = TwoNodes();
+        tree.Layout.Scale = new Scale(2.0, 2.0);
+
+        WorkflowToolInvoker.Invoke(scope, "SetNodePosition",
+            ("nodeIndex", 0), ("left", 700.0), ("top", 450.0));
+
+        var detail = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "GetNodeDetail", ("nodeIndex", 0)));
+        Assert.AreEqual(700d, detail["x"]!.Value<double>(), 0.001);
+        Assert.AreEqual(450d, detail["y"]!.Value<double>(), 0.001);
     }
 }
