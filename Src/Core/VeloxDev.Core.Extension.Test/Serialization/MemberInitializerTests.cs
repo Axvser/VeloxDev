@@ -98,6 +98,39 @@ public partial class MemberInitializerTests
         AssertHoldsWhatTheDocumentSaid(restored!, "chunked TextReader, async");
     }
 
+    /// <summary>The same members, empty — a document that says "nothing here" over initializers that say otherwise.</summary>
+    private static PrepopulatedModel Nothing() => new()
+    {
+        List = [],
+        Set = [],
+        Map = new(),
+        Nested = new(),
+        Numbers = [],
+        Payload = [],
+        Keyed = new(),
+        MapsInList = [],
+    };
+
+    [TestMethod]
+    public void ADocumentThatHoldsNothing_EmptiesWhatTheInitializerPutThere()
+    {
+        // 与第一组相反的方向：那边文档比初值多，这边文档比初值少 —— 两边的「剩下什么」都要由文档说了算。
+        var document = VeloxJsonSerializer.Serialize(Nothing());
+
+        var restored = VeloxJsonSerializer.Deserialize<PrepopulatedModel>(document)!;
+
+        Assert.AreEqual(0, restored.List.Count, "an empty document empties the list");
+        Assert.AreEqual(0, restored.Set.Count, "and the set");
+        Assert.AreEqual(0, restored.Map.Count, "and the map");
+        Assert.AreEqual(0, restored.Nested.Count, "and the nested one");
+        Assert.AreEqual(0, restored.Numbers.Length, "and the fixed-size array");
+        Assert.AreEqual(0, restored.Payload.Length, "and byte[]");
+        Assert.AreEqual(0, restored.Keyed.Count, "and the typed dictionary");
+        Assert.AreEqual(0, restored.MapsInList.Count, "and the list of maps");
+
+        Assert.AreEqual(document, VeloxJsonSerializer.Serialize(restored), "and the bytes come back the same");
+    }
+
     [TestMethod]
     public void ReadingTwice_IntoTheSameInstance_DoesNotAccumulate()
     {
