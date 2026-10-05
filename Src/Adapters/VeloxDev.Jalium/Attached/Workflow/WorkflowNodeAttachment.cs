@@ -48,6 +48,7 @@ public sealed class WorkflowNodeAttachment
     private readonly IWorkflowNodeEventSink eventSink;
 
     private IWorkflowNodeViewModel? node;
+    private WorkflowNodePortSet? ports;
     private INotifyPropertyChanged? layoutNotify;
     private PropertyChangedEventHandler? layoutHandler;
     private INotifyCollectionChanged? slotsNotify;
@@ -139,6 +140,29 @@ public sealed class WorkflowNodeAttachment
     /// </remarks>
     public Func<IWorkflowSlotViewModel, FrameworkElement>? SlotViewFactory { get; set; }
 
+    /// <summary>How the card declares its node's ports.</summary>
+    /// <remarks>
+    /// <para>
+    /// Set it once in the card's constructor. The adapter holds the node as <see cref="IWorkflowNodeViewModel"/>,
+    /// which does not name the properties a node keeps its slots in, so without a declaration the card has no
+    /// ports — this is the type knowledge the card's own generated view has and the adapter does not.
+    /// </para>
+    /// <para>
+    /// The same division the markup adapters use: there the view writes <c>SlotNames="PART_InputSlot"</c> and the
+    /// adapter reads the bound control; here the view writes the accessor and the adapter calls it.
+    /// </para>
+    /// </remarks>
+    public WorkflowNodePortSet? Ports
+    {
+        get => ports;
+        set
+        {
+            ports = value;
+            DeclarePorts();
+            RebuildSlotViews();
+        }
+    }
+
     /// <summary>The node this card is showing, taken from the <c>DataContext</c>.</summary>
     public IWorkflowNodeViewModel? Node => node;
 
@@ -151,6 +175,11 @@ public sealed class WorkflowNodeAttachment
 
     /// <summary>Repaints the card — call it when something you drew from changed.</summary>
     public void InvalidateCard() => layer.InvalidateVisual();
+
+    private void DeclarePorts()
+    {
+        if (node is not null && ports is not null) WorkflowNodePorts.Declare(node, ports);
+    }
 
     private void RebuildSlotViews()
     {
@@ -192,6 +221,7 @@ public sealed class WorkflowNodeAttachment
         UnsubscribeNodeEvents();
 
         node = target.DataContext as IWorkflowNodeViewModel;
+        DeclarePorts();
         if (node is INotifyPropertyChanged notify) notify.PropertyChanged += OnNodeChanged;
 
         // 模型事件由 Core 的 relay 接一次，转发到事件；Helper 不提供事件时 Attach 返回 null。

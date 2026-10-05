@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Utilities;
@@ -14,17 +14,16 @@ namespace VeloxDev.DynamicTheme
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // 用 Avalonia 内置的类型转换系统。
-            if (TypeUtilities.TryConvert(targetType, parameters[0], CultureInfo.InvariantCulture, out var result))
-            {
-                return result;
-            }
-
+            // 本类就是 double 转换器，直接按值类型收 —— 不经过 Avalonia 的类型转换系统，
+            // 那条路带 RequiresUnreferencedCode（转换器靠反射发现），会让主题在裁剪/AOT 下不可用。
             return parameters[0] switch
             {
                 double d => d,
                 int i => (double)i,
+                long l => (double)l,
                 float f => (double)f,
+                decimal m => (double)m,
+                bool b => b ? 1d : 0d,
                 string s when double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out double parsed) => parsed,
                 _ => null
             };
@@ -236,11 +235,25 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 2. 用 Avalonia 内置的类型转换系统
-                if (TypeUtilities.TryConvert(targetType, strValue, CultureInfo.InvariantCulture, out var result))
-                {
-                    return result;
-                }
+                // 2. 目标类型的显式转换表。
+                // 这里刻意不用 Avalonia 的 TypeUtilities.TryConvert：它带 RequiresUnreferencedCode
+                // （转换器靠反射发现），一旦用它，整条主题转换在裁剪/AOT 下就被标成不可用。
+                if (targetType == typeof(string)) return strValue;
+                if (targetType == typeof(bool)) return bool.Parse(strValue);
+                if (targetType == typeof(double)) return double.Parse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture);
+                if (targetType == typeof(float)) return float.Parse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture);
+                if (targetType == typeof(decimal)) return decimal.Parse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture);
+                if (targetType == typeof(int)) return int.Parse(strValue, NumberStyles.Integer, CultureInfo.InvariantCulture);
+                if (targetType == typeof(long)) return long.Parse(strValue, NumberStyles.Integer, CultureInfo.InvariantCulture);
+                if (targetType == typeof(TimeSpan)) return TimeSpan.Parse(strValue, CultureInfo.InvariantCulture);
+                if (targetType == typeof(Avalonia.Media.Color)) return Avalonia.Media.Color.Parse(strValue);
+                if (targetType == typeof(Thickness)) return Thickness.Parse(strValue);
+                if (targetType == typeof(CornerRadius)) return CornerRadius.Parse(strValue);
+                if (targetType == typeof(Point)) return Point.Parse(strValue);
+                if (targetType == typeof(Size)) return Size.Parse(strValue);
+                if (targetType == typeof(Rect)) return Rect.Parse(strValue);
+                if (targetType == typeof(Avalonia.Media.FontFamily)) return new Avalonia.Media.FontFamily(strValue);
+                if (targetType.IsEnum) return Enum.Parse(targetType, strValue, ignoreCase: true);
 
                 // 3. 单独处理 Brush 类型
                 if (typeof(IBrush).IsAssignableFrom(targetType))

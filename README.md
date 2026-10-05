@@ -4,7 +4,7 @@
 
 **Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI, WinForms, Razor, or Jalium.**
 
-<!-- Supported GUI frameworks -->
+<!-- Supported GUI frameworks: all seven ship from this repository as first-party NuGet packages. -->
 [![WPF](https://img.shields.io/badge/-WPF-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://learn.microsoft.com/dotnet/desktop/wpf/)
 [![Avalonia](https://img.shields.io/badge/-Avalonia-8B5CF6?style=flat-square)](https://avaloniaui.net/)
 [![WinUI](https://img.shields.io/badge/-WinUI-0C54A2?style=flat-square&logo=windows&logoColor=white)](https://learn.microsoft.com/windows/apps/winui/)
@@ -20,107 +20,146 @@
 
 ---
 
-**📖 Wiki** — [Online (WASM)](https://axvser.github.io/VeloxDev.Docs/) · [Local](https://github.com/Axvser/VeloxDev.Docs/) — the online Wiki is a WebAssembly app, so its load speed depends on your network.
+**📖 Wiki** — [Online](https://axvser.github.io/VeloxDev.Docs/) /  [Local](https://github.com/Axvser/VeloxDev.Docs/) — the online Wiki is a WebAssembly app, so its load speed depends on your network.
 
 ---
 
 </div>
 
-> **What this is** — a **node editor / node-graph / workflow-editor** framework for **.NET / C#**. Drag nodes, wire slots into links on a **zoomable, virtualized canvas**, drive the graph with a **compiled, pull-based execution engine**, gate structural edits behind **undo/redo**, and control it all through an **AI agent** (function calling + **MCP**). One model → **7 GUIs**: WPF · Avalonia · WinUI · MAUI · WinForms · Blazor · Jalium.
+> **What this is** — a **node editor / node-graph / workflow-editor** framework for **.NET / C#**. Drag nodes, wire slots into links on a **zoomable, virtualized canvas**, drive the graph with a **compiled, pull-based execution engine**, gate structural edits behind **undo/redo**, and control it all through an **AI agent** (function calling + **MCP**). One model → **7 GUIs**.
 
-## ✨ What is VeloxDev?
+## Every GUI above is a first-party adapter
 
-VeloxDev gives .NET developers a complete foundation for building **interactive workflow editors** — the kind where users drag nodes, wire slots together, and watch data flow through a graph at runtime.
+All seven ship from this repository as NuGet packages — not community forks or partial ports. An adapter brings `VeloxDev.Core` plus that platform's view layer:
 
-Three ideas hold the whole project together:
+| Platform | Package | Targets |
+|----------|---------|---------|
+| WPF | `VeloxDev.WPF` | `netframework4.6.1` · `net5.0-windows` · `netcoreapp3.0` · `net8.0-windows` |
+| Avalonia | `VeloxDev.Avalonia` | `netstandard2.0` · `net6.0` · `net8.0` |
+| WinUI | `VeloxDev.WinUI` | `net8.0-windows10.0.19041.0` · `net10.0-windows10.0.19041.0` |
+| MAUI | `VeloxDev.MAUI` | `net10.0` · `net10.0-windows10.0.19041.0` |
+| WinForms | `VeloxDev.WinForms` | `netframework4.6.1` · `net5.0-windows` · `netcoreapp3.0` · `net8.0-windows` |
+| Razor | `VeloxDev.Razor` | `net6.0` · `net8.0` |
+| Jalium | `VeloxDev.Jalium` | `net10.0` |
 
-1. **One model, every GUI.** The workflow model, compile-time identity, runtime engine, serialization and the command/undo-redo stack live in `VeloxDev.Core` with **zero UI dependencies**. Platform adapters (WPF, Avalonia, WinUI, MAUI, WinForms, Razor, Jalium) supply the views plus the platform glue only they can provide — timers and frame pacers, thread marshalling, native value conversion. Your graph data and its execution semantics behave identically on every platform.
-2. **A real execution engine, not just a canvas.** Besides the drag-and-drop surface, `CompilerEx` compiles any reachable sub-graph into a plan (linear chain / router branch / fan-out group) and drives it deterministically — including **reverse (Terminal) compilation**: ask "what would this node output?" and it computes just the ancestor cone that feeds it, with no controller needed. Fan-out branches run **concurrently as interleaved async operations, not as threads** — every branch starts on the caller's context and each `await` inside it yields to its siblings, so I/O-bound branches (a node invoking a process, say) overlap while the group stays on the host's `SynchronizationContext`. A branch that burns CPU still occupies the thread in turn: a compiled run shares one runtime blackboard, which is deliberately not thread-safe.
-3. **AI is a first-class controller.** A 60+ function-calling *Workflow Agent* lets an LLM inspect, build and mutate graphs at runtime through natural language — with the same undo/redo, validation and lifecycle the GUI uses, plus optional **MCP** tool connectivity.
+`VeloxDev.Core` itself ships `netstandard2.0` · `netframework4.6.1` · `net5.0` · `netcoreapp3.0` · `net8.0`.
 
-> **Why not just a WPF node editor?** Libraries like Nodify and NodeNetwork are excellent, but they are **WPF-only canvases** — they draw the graph and stop there. VeloxDev runs the same node graph on Avalonia, WinUI, MAUI, WinForms and Blazor, and layers on what a canvas alone cannot give you: a **compiled forward + reverse execution engine**, and an **AI agent** that edits and runs the graph through the same commands the GUI uses.
-
-### The workflow system
-
-| Layer | What it provides | Dependency |
-|-------|-----------------|------------|
-| ⛓️ **Workflow** | Tree / Node / Slot / Link templates with undo-redo, spatial indexing, deep-zoom canvas math, serialization, and a **compiled execution engine** (forward + reverse) | |
-| 🤖 **Workflow Agent** | 60+ Function Calling tools — an AI can create nodes, wire slots, patch properties and run chains at runtime via natural language. Supports **MCP (Model Context Protocol)** for external tools/data. Ships bilingual (en/zh) embedded prompt docs so the agent knows exact tool semantics. | `VeloxDev.Core.Extension` |
-
-### Other building blocks you can reuse
-
-| Layer | What it provides | Dependency |
-|-------|-----------------|------------|
-| 🪶 **MVVM** | Source generators for observable properties and async, cancellable commands — keeps node ViewModels lightweight | |
-| 🎞️ **Transition** | Cross-platform interpolation animation with easing & Fluent API — smooth visual feedback for workflow state changes | [Platform Adapter Package](#platform-adapter-packages) |
-| 🎨 **Theme** | Runtime theme switching with animated transitions — instant visual identity for your editor | [Platform Adapter Package](#platform-adapter-packages) |
-| 🌀 **AOP** | Generated aspect interfaces with runtime proxies — intercept node members for logging or validation without modifying business logic | |
-| ⚙️ **Tickable** | Frame-driven lifecycle loop — tick-based node simulation or real-time graph execution | |
-
-### Platform adapter packages
-
-| Platform | Package | NuGet |
-|----------|---------|-------|
-| WPF | `VeloxDev.WPF` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/) |
-| Avalonia | `VeloxDev.Avalonia` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/) |
-| WinUI | `VeloxDev.WinUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinUI/) |
-| MAUI | `VeloxDev.MAUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) |
-| WinForms | `VeloxDev.WinForms` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinForms?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinForms/) |
-| Razor | `VeloxDev.Razor` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Razor?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Razor/) |
-| Jalium | `VeloxDev.Jalium` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Jalium?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Jalium/) |
+> Every adapter now carries a `net8.0` rung, so a `net8.0` app gets a TFM-specific build and the trim/AOT analyzers run against the adapter's own code. **Trimming is still not the same as support**: WPF and WinForms are [not AOT-compatible](https://learn.microsoft.com/gaming/gdk/docs/gdk-dev/pc-dev/tutorials/get-started-with-custom-engine/native-aot-for-gaming) as frameworks, and no adapter declares `IsAotCompatible` yet — see [Scope and status](#scope-and-status).
 
 Adapter API docs: [WinForms](Src/Adapters/VeloxDev.WinForms/README.md) · [Razor](Src/Adapters/VeloxDev.Razor/README.md)
 
----
+## 🤔 Is this the right library for you?
 
-## 🧠 Core concepts (60 seconds)
+There are two ways in, and they have different answers. **The workflow editor is the core** — but it stands on six layers that are useful without it:
 
-- **A workflow is a Tree of Nodes.** Every Node is a ViewModel + a *Helper* (component/helper pattern). Nodes own **Slots**; slots are wired into **Links**. A slot has a *channel* (one/many, sender/receiver/both) that governs how connections are validated.
-- **Views are templates over the model.** The adapter's `WorkflowSurface` hosts Node/Slot/Link views (plus grid decorator, minimap, ruler and tree views), virtualized against a spatial index so graphs with thousands of nodes stay fluid.
-- **Structural edits are undoable commands.** Create/delete node or slot, connect/disconnect, selector changes and their cascades all flow through `IVeloxCommand` with a redo/undo pair — and the Agent tool layer uses the *same* commands the GUI does. Position and size are outside that history: `SetAnchor`/`SetSize` are commands with **no undo entry**, in the GUI and in the Agent alike.
-- **Execution is compiled, then driven.** Nodes expose one receive entry `ReceiveCommand → Helper.ReceiveAsync(ITaskContext, ct)`. The engine (`RuntimeEngine`) compiles a sub-graph into segments once and then *pulls* data through them — nodes do not broadcast to each other on their own during a compiled run.
-- **Phases are explicit.** Compile time assigns every node a fixed identity (`Order/ChainIndex/Offset`) and runs dataflow *validation* without data; runtime reuses the same `AccessAsync` gate with real payloads. A context hierarchy (`IContext → IAccessContext → ITaskContext`, plus `ICompileContext` / `IRuntimeContext`) describes every hand-off.
+| You are here for | Verdict |
+| --- | --- |
+| **A workflow editor** — a low-code platform, a visual ETL, a simulation canvas — on more than one GUI toolkit, or one an LLM should be able to read and write through the same commands your UI uses | ✅ **The core.** Nothing else in .NET pairs a node canvas on seven toolkits with a compiled execution engine behind it. |
+| **The layers, not the editor** — MVVM source generators, a cross-platform animation engine, runtime theming, a trim-friendly archiver | ✅ **Take them on their own.** None of them needs the editor; each has its own demos and tests here. See [the layers below](#-the-layers-the-editor-is-built-on). |
+| **A WPF-only canvas** | ❌ [Nodify](https://github.com/miroiu/nodify) and [NodeNetwork](https://github.com/Wouterdek/NodeNetwork) are smaller, focused, and have no cross-platform layer to pay for. |
+| **NativeAOT today** | ⚠️ The archiver is reflection-free, and compiled expression trees run under NativeAOT through the interpreter (measured: see [Scope and status](#scope-and-status)). **WPF and WinForms** are the real blocker — the frameworks themselves are not AOT-compatible. |
+
+## 🧩 The layers the editor is built on
+
+All six live in `VeloxDev.Core` and none of them needs a canvas. They are also what makes the word *modern* in the title more than a slogan:
+
+| Layer | What it gives you | Weight in this repo |
+| --- | --- | --- |
+| 🪶 **MVVM** | Source generators for observable properties and async, cancellable commands — no `INotifyPropertyChanged` boilerplate | ~4.8k lines · 33 test files |
+| 🎞️ **Transition** | An animation **engine**: easing families, keyframe sequences, a timeline you can pause / seek / re-rate, and a shared transport several animations can anchor to so a group stays in lockstep without any of them knowing about the others | ~5.4k lines · 26 test files · 7 platform demos + a conformance harness |
+| 🎨 **Theme** | Runtime theme switching that *animates* between states instead of snapping | ~0.9k lines |
+| 🌀 **AOP** | Generated aspect interfaces with runtime proxies — intercept members for logging or validation without touching business logic | ~0.3k lines |
+| ⚙️ **Tickable** | A frame-driven lifecycle loop with a fixed-step pump beside the variable one, for simulation and real-time work | ~1.2k lines |
+| 📦 **Serialization** | A closed-world archiver: the generator emits a reader and writer per type from compiler facts, so **the module contains no reflection at all** — and it writes materially smaller documents than a reflection-based writer (measured in `Src/Verification/`) | ~4.6k lines · 41 test files |
+
+Two of those carry the "modern" claim more than the rest:
+
+- **Serialization is the one that survives trimming.** Its engine, its generated code and its registry touch no reflection; the format is decided entirely at compile time. That is what lets it sit inside a trimmed or AOT-published app — and it is the same design that makes an unseen type fail loudly with `MissingWriter` instead of silently serializing an empty shell.
+- **Transition is an engine, not a tween helper.** One `ITimeSourceControl` can be shared by many animations: pausing, re-rating or seeking it moves them all together while each keeps its own pass and its own place in it. It reaches seven GUIs through the same Core, with each adapter contributing only a pacer subclass.
+
+## ⚡ What it looks like in code
+
+A workflow is a **tree of nodes**; nodes own **slots**, and slots are wired into **links**. A slot has a *channel* (one/many × sender/receiver/both) that governs which connections are legal. `VeloxDev.Core` holds that model, the undo/redo stack, the execution engine and serialization with **zero UI dependencies** — the adapters add views and platform glue only.
+
+The snippets below walk one three-node chain, `ticker → bias → printer`.
+
+### A node is a partial class
+
+```csharp
+// The generator wires INotifyPropertyChanged, slot lifecycle and the commands from these attributes.
+[WorkflowBuilder.Node<BiasNodeHelper>]
+public partial class BiasNodeViewModel
+{
+    public BiasNodeViewModel() => InitializeWorkflow();
+
+    [VeloxProperty] public partial BiasSlotViewModel InputSlot { get; set; }
+    [VeloxProperty] public partial BiasSlotViewModel OutputSlot { get; set; }
+    [VeloxProperty] private string title = "Bias";
+}
+
+public sealed class BiasNodeHelper : NodeHelper<BiasNodeViewModel>
+{
+    // What this node computes. The return value is handed to the next node in the chain.
+    public override Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
+        => Task.FromResult<object?>($"{context.Data}->bias");
+}
+```
+
+### The canvas is edited through undoable commands
+
+```csharp
+tree.CreateNodeCommand.Execute(bias);
+tree.SendConnectionCommand.Execute(ticker.OutputSlot);   // start from the sender…
+tree.ReceiveConnectionCommand.Execute(bias.InputSlot);   // …complete on the receiver
+tree.UndoCommand.Execute(null);                          // the connect is one undoable step
+```
+
+### Compile once, then run
+
+```csharp
+var compiler = new CompilerViewModel();
+var graph = (await compiler.CompileAsync(ticker, CompileRole.Root)).Single();
+
+var session = new RuntimeContext();
+await new RuntimeEngine().RunAsync(graph, session, CancellationToken.None);
+Console.WriteLine(session.Data);          // tick->bias->print
+```
+
+### Or ask for one node's result — with no start node
+
+```csharp
+var cone = (await compiler.CompileAsync(printer, CompileRole.Terminal)).Single();
+
+var probe = new RuntimeContext { Target = printer };
+await new RuntimeEngine().RunAsync(cone, probe, CancellationToken.None);
+Console.WriteLine(probe.TargetReached ? probe.Data : "not reached");
+```
+
+### And an LLM can drive all of it
+
+```csharp
+var scope = tree.AsAgentScope().WithAutoDiscovery().WithInteractionSafety(3);
+var agent = chatClient.AsAIAgent(scope.ProvideProgressiveContextPrompt(), scope.ProvideTools());
+```
 
 ---
 
 ## ⚙️ Execution model — compile once, run deterministically
 
-`CompilerViewModel` has **one** API, `CompileAsync(node, role)`:
+`CompilerViewModel` has **one** API, `CompileAsync<T>(node, role, ct = default)`. The role decides which way the compiler walks:
 
-```csharp
-public enum CompileRole { Root, Terminal }   // the node is a starter, or the result you want
-```
+| Role         | Meaning                                   | What it compiles                                                                                                                                             |
+| ------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Root`     | The node starts a run (e.g. a controller) | Its reachable sub-graph, walking**downstream** along `Targets`                                                                                       |
+| `Terminal` | You want this node's result               | Its**ancestor cone** — the producers feeding it, walked **backward** along `Sources` — starting automatically from the cone's entry frontier |
 
-| Role | Meaning | What it compiles |
-|------|---------|------------------|
-| `Root` | The node starts a run (e.g. a controller) | Its reachable sub-graph, walking **downstream** along `Targets` |
-| `Terminal` | You want this node's result | Its **ancestor cone** — the producers feeding it, walked **backward** along `Sources` — starting automatically from the cone's entry frontier |
+The plan is a small tree of segments — a **linear chain**, a **router branch** (a node implementing `ICompileTimeRouter`, Static or Dynamic), and **fan-out groups** — and it is always acyclic. Looping is expressed as runtime *redirects* instead of graph cycles: when a node signals an error, the engine checks for `IRedirectable` and, if the node implements it, re-runs the graph toward the returned target under an internal retry limit. The demo's Python node is the reference implementation.
 
-```csharp
-var compiler = new CompilerViewModel();
+Three properties keep reverse compilation honest:
 
-// 1) Forward: run the whole chain from a controller
-var graph = (await compiler.CompileAsync(controller, CompileRole.Root))[0];
-var session = new RuntimeContext();
-await new RuntimeEngine().RunAsync(graph, session);
-Console.WriteLine(session.Data);            // the chain's final payload
-
-// 2) Reverse: compute just one node's value — no start node needed
-var cone = (await compiler.CompileAsync(someNode, CompileRole.Terminal))[0];
-var probe = new RuntimeContext { Target = someNode };
-await new RuntimeEngine().RunAsync(cone, probe);
-
-if (probe.TargetReached) Console.WriteLine(probe.Data);   // that node's output
-else Console.WriteLine("target NOT reached — no value fabricated");
-```
-
-The plan it produces is a small tree of segments: a **linear chain**, a **router branch** (a node implementing `ICompileTimeRouter`, Static or Dynamic), and **fan-out groups** (branches off the same source, driven concurrently as interleaved async operations) — and it is always acyclic. Looping is expressed as runtime *redirects* instead of graph cycles: when a node signals an error, the engine checks for `IRedirectable` and, if the node implements it, re-runs the graph toward the returned target under an internal retry limit. Redirects are therefore an extension point you implement on your own nodes — the engine supports them end to end, and the demo's Python node is the reference implementation (its script names the node to fall back to, by title, and the node resolves that to a compile order).
-
-Three properties worth calling out, because they keep reverse compilation honest:
-
-- **Branches are real, never bypassed.** Terminal compilation keeps a router's true `BranchSegment` behavior; it only compiles the branch that leads into the target's cone. If the router actually selects a *sibling* branch at runtime, the target is **not reached** — you get an explicit "… was NOT reached … No result was produced." outcome, never a fabricated value. (Agent tools surface this as a specific error message; set the router's selection to the right branch and retry.)
-- **Joins aggregate by source.** A multi-input node receives an `IGroupData` — a read-only map keyed by its upstream node — so a join "waits for all inputs" however the fan-out's branches interleaved (the shared runtime session is intentionally not thread-safe, which is why a branch that burns CPU still takes the thread in turn rather than running beside its siblings).
-- **`TargetReached` means "the target was driven", not "a value was produced".** The flag is set as the engine enters the target node, so read it together with the run status: a target that throws surfaces as a run error (`Run failed: …`), not as a reached target.
+- **Branches are real, never bypassed.** If a router actually selects a *sibling* branch at runtime, the target is **not reached** — you get an explicit "… was NOT reached … No result was produced." outcome, never a fabricated value.
+- **Joins aggregate by source.** A multi-input node receives an `IGroupData` — a read-only map keyed by its upstream node — so a join "waits for all inputs" however the fan-out's branches interleaved. (The shared runtime session is intentionally not thread-safe, which is why a branch that burns CPU still takes the thread in turn.)
+- **`TargetReached` means "the target was driven", not "a value was produced".** Read it together with `Outcome` (`Unknown` / `Completed` / `Cancelled` / `Failed`), not with the raw `Status` string — `Status` has to share one value between a failure and a cancellation.
 
 ```csharp
 // Minimal "node" — the generator wires INotifyPropertyChanged, slot lifecycle and commands.
@@ -143,11 +182,11 @@ public partial class MyNodeViewModel
 
 ## 🤖 AI control
 
-The **Workflow Agent** turns a workflow Tree into a tool surface for any `IChatClient` (Microsoft.Extensions.AI), so an LLM can inspect the graph, build nodes, connect slots, patch properties, and run — or reverse-compute — compiled chains:
+The **Workflow Agent** turns a workflow Tree into a tool surface for any `IChatClient` (Microsoft.Extensions.AI):
 
 ```csharp
 var scope = tree.AsAgentScope()
-    .WithAutoDiscovery(assemblyName: "MyApp")
+    .WithAutoDiscovery()               // reads the compile-time context tree
     .WithInteractionSafety(3)          // confirm before destructive ops; present choices via tool
     .WithSelectionHandler(ShowDialog)
     .WithConfirmationHandler(ShowDialog);
@@ -160,9 +199,9 @@ var agent = chatClient.AsAIAgent(
 Highlights of the tool surface:
 
 - **Inspect & mutate like the GUI** — `ListNodes`, `GetFullTopology`, `CreateNode`, `ConnectByProperty`, `PatchNodeProperties`, `SetEnumSlotCollection`, `Undo`/`Redo`, `MoveNode`, … every mutation dispatches the same component command the GUI dispatches, so the Agent and the GUI share one edit path — including the same undo semantics, i.e. the moves and property patches that create no undo entry.
-- **Execute at three levels** — node-level (`ExecuteNode`), chain-level (`RunCompiledWorkflow`, Root role), and **result-level** (`GetNodeResult`, Terminal role). Plans can be read without running via `CompileWorkflow` / `CompileNodeResult`.
+- **Execute at three levels** — node-level (`ExecuteNode`), chain-level (`RunCompiledWorkflow`, Root role), and **result-level** (`GetNodeResult`, Terminal role). Plans can be read without running via `CompileWorkflow` / `CompileNodeResult`, and a long run can be handed back as a handle to pause, resume, poll or stop.
 - **Gated by policy, not just prose** — node-execution tools are disabled until the host calls `WithAllowNodeExecution(true)`; generic command execution is allow-listed; interaction tools appear only when a selection/confirmation handler is wired. `MaxToolCalls`, `MaxReadToolCalls` and `MaxWriteToolCalls` bound a session.
-- **Precision is baked into the prompt, in the host's language** — embedded (en/zh) prompt docs describe tool semantics, error/rejection handling, mount-before-operate and the exact "target not reached" contract, so the agent knows *before calling* what each tool does and what errors mean.
+- **Precision is baked into the prompt** — embedded (en/zh) prompt docs describe tool semantics, error/rejection handling, mount-before-operate and the exact "target not reached" contract, so the agent knows *before calling* what each tool does and what errors mean.
 
 ### 🔌 Connect MCP servers for external tooling
 
@@ -203,11 +242,16 @@ var allTools = scope.ProvideTools().Concat(mcpTools).ToArray();   // merge into 
 
 ## 📦 Installation
 
-Install one of the [platform adapter packages](#platform-adapter-packages) listed above and you get everything — workflow, execution engine, agent, animations and theming — wired up for that GUI.
+Install a platform adapter package (workflow, execution engine, animation, theming and the platform view layer), and add `VeloxDev.Core.Extension` **only if you want the Agent**:
+
+```powershell
+dotnet add package VeloxDev.WPF                 # an adapter — Core + WPF views
+dotnet add package VeloxDev.Core.Extension      # optional — the Agent, MCP, checkpoints
+```
 
 ### Generate a view suite from templates
 
-Each adapter ships a `dotnet new` template pack that generates the full view suite — Node, Slot, Link, Tree, template selector, grid decorator and minimap — pre-wired to the model. WPF example (replace `MyApp` with your root namespace):
+Each adapter ships a `dotnet new` template pack that generates the full view suite — Node, Slot, Link, Tree, template selector, grid decorator and minimap. WPF example (replace `MyApp` with your root namespace):
 
 ```powershell
 dotnet new install VeloxDev.WPF.Templates
@@ -224,55 +268,13 @@ dotnet new wpf-v-tree -n TreeView -ns MyApp.Views -o Views
 dotnet build
 ```
 
-Avalonia, WinUI, MAUI, WinForms and Jalium suites expose the same style options (`jalium-v-*` for Jalium). Common style aliases:
-
-| Template | Style aliases |
-|----------|---------------|
-| Node | `-bg` background, `-fg` foreground, `-bb` border brush, `-bt` border thickness, `-cr` corner radius |
-| Slot | `-bg` background, `-sc` standby color, `-bc` border color, `-sp` SVG path data |
-| Link | `-lc` line color, `-lt` line thickness |
-| Tree | `-bg` background, `-bb` border brush, `-bt` border thickness, `-cr` corner radius |
-| Grid decorator | `-bg` background, `-mic` minor color, `-mac` major color, `-ac` axis color, `-gs` spacing, `-mle` major interval, `-rb` ruler background, `-rtc` ruler tick color, `-rlc` ruler label color, `-rdc` ruler divider color |
-| Minimap overlay | `-bg` background, `-bdr` border, `-nf` node fill, `-vs` viewport stroke |
-
-All templates use `-ns` for the generated namespace.
+The other adapters expose the same seven items under their own prefix — `ava-v-*` (Avalonia), `winui-v-*`, `maui-v-*`, `winforms-v-*`, `razor-v-*`, `jalium-v-*`. Every item takes `-ns` for the generated namespace; each view also takes style options (`-bg`, `-fg`, `-cr`, …) documented inside its own template pack.
 
 ---
 
-## 🗂️ Repository Layout
+## 🧪 Tests & verification
 
-```text
-VeloxDev/
-├── VeloxDev.slnx
-├── Src/
-│   ├── Core/
-│   │   ├── VeloxDev.Core                 # Workflow model, generators, canvas math, CompilerEx engine
-│   │   ├── VeloxDev.Core.Extension       # Workflow Agent tools, MCP scope, runtime extensions
-│   │   ├── VeloxDev.Core.Test            # Unit tests (model / canvas / execution)
-│   │   └── VeloxDev.Core.Extension.Test  # Unit tests (agent tools / serialization / lifecycle)
-│   ├── Adapters/
-│   │   ├── VeloxDev.WPF · VeloxDev.Avalonia · VeloxDev.WinUI · VeloxDev.MAUI
-│   │   ├── VeloxDev.WinForms · VeloxDev.Razor · VeloxDev.Jalium   # one view layer per platform
-│   ├── Generators/
-│   │   └── VeloxDev.Core.Generator       # Roslyn source generators (netstandard2.0)
-│   └── Templates/                         # dotnet new item template packs per GUI adapter
-├── Examples/
-│   ├── Workflow/     # WPF · Avalonia · WinUI · WinForms · MAUI · Razor · Jalium
-│   │                #   (+ "Trimmed" variants that compile no extraneous generator code)
-│   │                #    Common/Lib holds the shared demo node library (Controller, routers, python workers)
-│   ├── MVVM/         # WPF · Avalonia
-│   ├── Transition/   # WPF · Avalonia · WinUI · WinForms · MAUI · Razor · Jalium
-│   ├── Theme/ · AOP/ # WPF · Avalonia
-│   └── Tickable/        # WPF
-└── Docs/
-    └── VeloxDev.Docs # Documentation site (WebAssembly: online/local wiki)
-```
-
----
-
-## 🧪 Tests & coverage
-
-Two test suites live beside the source (`VeloxDev.Core.Test`, `VeloxDev.Core.Extension.Test`) and are deliberately fast (~500+ assertions with no I/O in the hot path):
+Two test suites live beside the source — **1771 `[TestMethod]`s** (1129 in `VeloxDev.Core.Test`, 642 in `VeloxDev.Core.Extension.Test`), MSTest 4.0.2 on `net10.0`:
 
 ```bash
 dotnet test                          # or open VeloxDev.slnx and run in Visual Studio
@@ -280,24 +282,24 @@ dotnet test                          # or open VeloxDev.slnx and run in Visual S
 dotnet test Src/Core/VeloxDev.Core.Test --filter "FullyQualifiedName~CompilerEx"
 ```
 
-Coverage is collected with **coverlet** (`--collect:"XPlat Code Coverage"`). The `CompilerEx` execution engine — compile decomposition, runtime driving, redirects, joins, and reverse compilation — is covered end-to-end with self-contained contract tests (probe nodes, no UI/no demo dependency). A full XML-comment/language pass keeps the public API documented in English.
+Coverage is collected with **coverlet** (`--collect:"XPlat Code Coverage"`). The `CompilerEx` engine — compile decomposition, runtime driving, redirects, joins, reverse compilation — is covered end-to-end with self-contained contract tests (probe nodes, no UI and no demo dependency).
+
+`Src/Verification/VeloxDev.Serialization.Benchmarks` measures the archive engine against `System.Text.Json` and Newtonsoft at four graph sizes. **Read its caveats before quoting a number**: `Src/Verification/README.md` states the in-process toolchain shares JIT and GC, so absolute timings are not comparable across processes — the run is meant to compare *magnitudes on one machine in one session*, and the allocation column is the most trustworthy.
 
 ---
 
-## ⚠️ Scope & status
+## Scope and status
 
-Worth knowing before you depend on them:
+The four things worth knowing before you depend on it:
 
-- **Not AOT- or trim-safe, and it says so.** `VeloxDev.Core` declares `IsTrimmable=false`, and the animation path compiles expression trees at runtime (`Expression.Lambda(...).Compile()`). There are no `RequiresUnreferencedCode` / `DynamicallyAccessedMembers` annotations anywhere in it. (The `Examples/*/"Trimmed"` folders are *minimal* demos — the name is not about trimming configuration.)
-- **Redirects are a contract, and one node ships with it.** The engine drives `IRedirectable` end to end; the demo's Python node is the reference implementation (its script names the node to fall back to and the node resolves that name to a compile order), and the demo graph uses it to send a run back when the data is too thin to trust. A redirect target must still be strictly backward, and a target inside a nested branch is out of reach — see the limitation noted with the demo graph.
-- **Undo coverage is structural.** Node/slot create and delete, connect/disconnect, selector changes and their cascades are undoable; position, size and direct property patches are not.
-- **Fan-out overlaps, but it is not thread parallelism** — branches are interleaved async operations on the host's `SynchronizationContext` (see above). A compiled run shares one runtime blackboard, which is intentionally not thread-safe, so a node that starts its own `Task.Run` is on its own.
-- **Waiting, sleeping and offloading CPU work are node-body decisions, not engine features.** `ReceiveAsync` is async, so a timer is `await Task.Delay(...)` inside the node, an external signal is awaiting a `TaskCompletionSource`, and real parallelism for one branch is `Task.Run` — subject to the caveat above about not touching the shared session from that thread. Timing and threading therefore look absent from the engine's feature list rather than missing from it. What does *not* follow from this is a wait that outlives the process: a run in flight lives in memory, so a durable wait rides on the checkpoint — save the place, reload the graph, carry on — and `ExecutionCheckpoint.Rekey` is what makes the reload legal, since a restored graph has fresh node identities.
-- **A run can be paused, watched, retried, checkpointed and resumed — off by default.** `RuntimeContext` takes an `IExecutionGate`, an `IExecutionObserver`, an `INodeRetryPolicy`, an `IExecutionErrorSink`, an `IExecutionCompensation` and an `IExecutionCheckpointStore`; with none configured a run behaves exactly as it did before they existed, down to the log lines and the number of node drives. What still has no shipped implementation is `IRedirectable` (a node's own fallback contract) — see the note above.
-- **Animation overshoot is per-type today.** When an ease overshoots (Back/Elastic), numeric samplers extrapolate past the endpoint while the remaining samplers pin to it. Unifying the two is an open pass.
-- **The one model / 7 GUIs seam is at data and geometry, not rendering.** The transition engine and the workflow surface math live in Core and each adapter contributes only a small pacer subclass, but the *view* layer (surface behaviour, virtualization window, pooling, link rendering) is implemented per platform.
+| | |
+|---|---|
+| **AOT and trimming are partial** | `VeloxDev.Core` and `VeloxDev.Core.Extension` declare `IsAotCompatible=true` on their `net8.0` target; the adapters deliberately do **not** — they only switch the analyzers on, so a consumer sees the adapter's own trim warnings without the library making a claim it has not earned. Expression trees are *not* a blocker: under NativeAOT `Expression.Compile()` falls back to the interpreter and works (probe: `IsDynamicCodeSupported=False`, result correct) — it is a speed cost, not a failure. The remaining hazards are two reflection sites (`TransitionProperty.cs` for indexer metadata, `CompileKeyNormalizer.cs` for branch-key type names) and **28 trim warnings** the newly-enabled analyzers surfaced across the seven adapters (WPF 4, WinForms 6, Avalonia 4, Jalium 14; Razor, WinUI and MAUI are clean) — all in the theme value converters, one WinForms node attachment, and Jalium's port geometry. |
+| **Undo coverage is structural** | Create/delete node or slot, connect/disconnect and selector cascades are undoable; position, size and direct property patches are not. |
+| **Fan-out overlaps, but is not thread parallelism** | Branches interleave as async operations on the host's `SynchronizationContext`, sharing one runtime blackboard that is intentionally not thread-safe. A node that starts its own `Task.Run` is on its own. |
+| **Redirects ship one implementation** | The engine drives `IRedirectable` end to end — the demo's Python node is the reference. A redirect target must be strictly backward. |
 
----
+The rest is opt-in and off by default: pausing, observing, retrying, checkpointing and resuming a run all hang off optional `RuntimeContext` members (`IExecutionGate`, `IExecutionObserver`, `INodeRetryPolicy`, `IExecutionErrorSink`, `IExecutionCompensation`, `IExecutionCheckpointStore`) — with none configured, a run behaves exactly as it did before they existed. Waiting and offloading CPU work are node-body decisions rather than engine features, ease overshoot (Back/Elastic) is still handled per sampler type, and the one-model / 7-GUI seam sits at data and geometry — the *view* layer is still written per platform.
 
 ## 📄 License
 

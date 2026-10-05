@@ -5,6 +5,8 @@
          Interop/Core), not the net10.0-windows Jalium.UI.Desktop entry package. So it can
          serve Windows, Linux and Android consumers alike. -->
     <TargetFramework>net10.0</TargetFramework>
+		<EnableTrimAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableTrimAnalyzer>
+		<EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

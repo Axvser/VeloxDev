@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
@@ -254,17 +254,34 @@ namespace VeloxDev.DynamicTheme
                     return brushConverter.ConvertFromString(strValue);
                 }
 
-                // 取目标类型的 TypeConverter。
-                TypeConverter converter = TypeDescriptor.GetConverter(targetType);
+                // 目标类型的显式转换表。
+                // 这里刻意不用 TypeDescriptor.GetConverter(Type)：它带 RequiresUnreferencedCode
+                // （转换器要靠反射发现），一旦用它，整条主题转换在裁剪/AOT 下就被标成不可用。
+                // 表外的类型返回 null —— 与转换失败同一条路；需要更多类型的宿主应当为它写一个
+                // IThemeValueConverter（本文件里的 ThicknessConverter / PointConverter 等就是范例）。
+                if (targetType == typeof(string)) return strValue;
+                if (targetType == typeof(bool)) return bool.Parse(strValue);
+                if (targetType == typeof(double)) return double.Parse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture);
+                if (targetType == typeof(float)) return float.Parse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture);
+                if (targetType == typeof(decimal)) return decimal.Parse(strValue, NumberStyles.Float, CultureInfo.InvariantCulture);
+                if (targetType == typeof(int)) return int.Parse(strValue, NumberStyles.Integer, CultureInfo.InvariantCulture);
+                if (targetType == typeof(long)) return long.Parse(strValue, NumberStyles.Integer, CultureInfo.InvariantCulture);
+                if (targetType == typeof(TimeSpan)) return TimeSpan.Parse(strValue, CultureInfo.InvariantCulture);
+                if (targetType == typeof(System.Windows.Media.Color)) return System.Windows.Media.ColorConverter.ConvertFromString(strValue);
+                if (targetType == typeof(Thickness)) return new System.Windows.ThicknessConverter().ConvertFromString(strValue);
+                if (targetType == typeof(CornerRadius)) return new System.Windows.CornerRadiusConverter().ConvertFromString(strValue);
+                if (targetType == typeof(GridLength)) return new System.Windows.GridLengthConverter().ConvertFromString(strValue);
+                if (targetType == typeof(Point)) return new System.Windows.PointConverter().ConvertFromString(strValue);
+                if (targetType == typeof(Size)) return new System.Windows.SizeConverter().ConvertFromString(strValue);
+                if (targetType == typeof(Rect)) return new System.Windows.RectConverter().ConvertFromString(strValue);
+                if (targetType == typeof(Duration)) return new System.Windows.DurationConverter().ConvertFromString(strValue);
+                if (targetType == typeof(FontWeight)) return new System.Windows.FontWeightConverter().ConvertFromString(strValue);
+                if (targetType == typeof(FontStyle)) return new System.Windows.FontStyleConverter().ConvertFromString(strValue);
+                if (targetType == typeof(FontStretch)) return new System.Windows.FontStretchConverter().ConvertFromString(strValue);
+                if (targetType == typeof(FontFamily)) return new System.Windows.Media.FontFamilyConverter().ConvertFromString(strValue);
+                if (targetType.IsEnum) return Enum.Parse(targetType, strValue, ignoreCase: true);
 
-                // 支持与文化无关的转换（数字、日期等）。
-                if (converter.CanConvertFrom(typeof(string)))
-                {
-                    return converter.ConvertFromString(null, CultureInfo.InvariantCulture, strValue);
-                }
-
-                // 退回默认转换（对多数 WPF 内建类型有效）。
-                return converter.ConvertFrom(strValue);
+                return null;
             }
             catch (NotSupportedException)
             {

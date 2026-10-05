@@ -66,7 +66,7 @@ internal static class NodePorts
             return python.InputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
         }
 
-        var single = SingleSlot(node, "InputSlot");
+        var single = InputSlotOf(node);
         return single is { } s ? [(s, string.Empty)] : [];
     }
 
@@ -81,14 +81,19 @@ internal static class NodePorts
                 return e.OutputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
         }
 
-        var single = SingleSlot(node, "OutputSlot");
+        var single = OutputSlotOf(node);
         return single is { } s ? [(s, string.Empty)] : [];
     }
 
     // 节点显示名：Common/Lib 的视图模型发布的 Title（Timer / PythonScript / EnumSelector 都有），不发布的就是空串 ——
     // 控制器视图模型是其中一个，所以它的卡片自己给标题，而不是读这里。
-    public static string TitleOf(IWorkflowNodeViewModel node)
-        => node.GetType().GetProperty("Title")?.GetValue(node)?.ToString() ?? string.Empty;
+    public static string TitleOf(IWorkflowNodeViewModel node) => node switch
+    {
+        TimerNodeViewModel t => t.Title,
+        PythonScriptNodeViewModel p => p.Title,
+        EnumSelectorNodeViewModel e => e.Title,
+        _ => string.Empty,
+    };
 
     // 这个节点的口是按行排的（带名字的 SlotEnumerator），还是卡边中点一个口。
     public static bool UsesPortRows(IWorkflowNodeViewModel node)
@@ -173,6 +178,19 @@ internal static class NodePorts
         return null;
     }
 
-    private static IWorkflowSlotViewModel? SingleSlot(IWorkflowNodeViewModel node, string propertyName)
-        => node.GetType().GetProperty(propertyName)?.GetValue(node) as IWorkflowSlotViewModel;
+    // 单口节点的那个口。按类型取而不是按属性名反射 —— 每个节点类型自己那一行就是它的整份「端口表」，
+    // 而适配器持有的 IWorkflowNodeViewModel 接口不说这些属性叫什么。
+    private static IWorkflowSlotViewModel? InputSlotOf(IWorkflowNodeViewModel node) => node switch
+    {
+        EnumSelectorNodeViewModel e => e.InputSlot,
+        TimerNodeViewModel t => t.InputSlot,
+        _ => null,
+    };
+
+    private static IWorkflowSlotViewModel? OutputSlotOf(IWorkflowNodeViewModel node) => node switch
+    {
+        ControllerViewModel c => c.OutputSlot,
+        TimerNodeViewModel t => t.OutputSlot,
+        _ => null,
+    };
 }

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
         <!-- The Windows TFM must be >= 10.0.19041.0: MAUI 10.0.x ships Windows assets only
@@ -6,6 +6,8 @@
              the platform-neutral net10.0 assembly, losing the Windows-only types that the
              #if WINDOWS code needs. Matches the demos' net10.0-windows10.0.19041.0. -->
         <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+		<EnableTrimAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableTrimAnalyzer>
+		<EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
 		<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
 		<!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
 		<UseMaui>true</UseMaui>

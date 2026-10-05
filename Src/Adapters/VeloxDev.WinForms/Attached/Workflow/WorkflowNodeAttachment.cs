@@ -368,51 +368,20 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     }
 
     // 在节点的枚举器属性里找哪个条目引用了这个插槽，取它的名字。
+    // 走 IConditionalSlotProvider 这个非泛型视野，不反射 Items/Slot/Name —— 那三个成员名是
+    // SlotEnumerator<T> 的私有形状，而接口就是为「只拿到一个 object 的调用方」准备的。
     private string? ReadEnumeratorLabel(IWorkflowSlotViewModel slot)
     {
         if (node is null) return null;
 
         foreach (var property in node.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
-            var value = property.GetValue(node);
-            if (value is null) continue;
+            if (property.GetValue(node) is not IConditionalSlotProvider provider) continue;
 
-            var enumeratorType = value.GetType();
-            if (!enumeratorType.IsGenericType
-                || enumeratorType.GetGenericTypeDefinition() != typeof(SlotEnumerator<>))
+            foreach (var item in provider.Slots)
             {
-                continue;
+                if (ReferenceEquals(item.Slot, slot)) return item.Name;
             }
-
-            if (FindEnumeratorLabel(enumeratorType, value, slot) is { } label)
-            {
-                return label;
-            }
-        }
-
-        return null;
-    }
-
-    private static string? FindEnumeratorLabel(Type enumeratorType, object enumerator, IWorkflowSlotViewModel target)
-    {
-        var itemsProperty = enumeratorType.GetProperty("Items");
-        if (itemsProperty?.GetValue(enumerator) is not System.Collections.IEnumerable items)
-        {
-            return null;
-        }
-
-        foreach (var item in items)
-        {
-            if (item is null) continue;
-
-            var slotProperty = item.GetType().GetProperty("Slot");
-            if (slotProperty?.GetValue(item) is not IWorkflowSlotViewModel slot
-                || !ReferenceEquals(slot, target))
-            {
-                continue;
-            }
-
-            return item.GetType().GetProperty("Name")?.GetValue(item)?.ToString();
         }
 
         return null;

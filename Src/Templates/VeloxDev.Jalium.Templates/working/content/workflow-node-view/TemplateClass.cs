@@ -28,6 +28,16 @@ public sealed class TemplateClass : Canvas
         node.PortLayout = SlotView.Layout;
         node.SlotViewFactory = _ => new SlotView();
         node.Render += (_, e) => DrawCard(e.Context);
+        // VeloxDev customization: declare this node's ports here. The adapter holds the node as
+        // IWorkflowNodeViewModel, which does not say which of its properties are its ports — so the card does.
+        // Without a declaration the card has no ports. Shape (replace MyNode with your node type):
+        //
+        //     node.Ports = new WorkflowNodePortSet
+        //     {
+        //         Inputs = static vm => [new WorkflowNodePort(((MyNode)vm).InputSlot, string.Empty)],
+        //         Outputs = static vm => [.. ((MyNode)vm).OutputSlots.Items.Select(i => new WorkflowNodePort(i.Slot, i.Name))],
+        //         Title = static vm => ((MyNode)vm).Name,
+        //     };
     }
 
     /// <summary>Gets the attachment, for a card that wants the node, the layout or the model events.</summary>
