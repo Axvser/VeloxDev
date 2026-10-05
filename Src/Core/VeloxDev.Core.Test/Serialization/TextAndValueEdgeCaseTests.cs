@@ -80,7 +80,7 @@ public class TextAndValueEdgeCaseTests
         // 三种都会落到 From 的字典分支上。
         var loose = new RawHashtable();
         loose.Raw.Add("not an entry");
-        loose.Raw.Add(new DictionaryEntry(null, 1));
+        loose.Raw.Add(new DictionaryEntry(null!, 1));
         loose.Raw.Add(new DictionaryEntry(new NamelessKey(), 2));
 
         var node = (VeloxJsonObject)VeloxJsonValue.From(loose);
