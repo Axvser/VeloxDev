@@ -207,15 +207,33 @@ namespace VeloxDev.Generators.Base
     /// <summary>One serialized type.</summary>
     internal sealed class VeloxJsonType
     {
-        internal VeloxJsonType(INamedTypeSymbol symbol, string fullName, string writtenName, IReadOnlyList<VeloxJsonMember> members)
+        internal VeloxJsonType(
+            INamedTypeSymbol symbol,
+            string fullName,
+            string writtenName,
+            IReadOnlyList<VeloxJsonMember> members,
+            bool declaredHere)
         {
             Symbol = symbol;
             FullName = fullName;
             WrittenName = writtenName;
             Members = members;
+            DeclaredHere = declaredHere;
         }
 
         internal INamedTypeSymbol Symbol { get; }
+
+        /// <summary>
+        /// Whether the assembly being compiled is the one that declares this type.
+        /// </summary>
+        /// <remarks>
+        /// The registration call carries this to <c>VeloxJsonRegistry</c>, which needs it to decide which of two
+        /// assemblies offering an entry for the same type wins — a closed generic can be named both by the assembly
+        /// that declares it and by a consumer that met the instantiation, and only the declaring side sees the
+        /// type's <c>internal</c> members and callbacks. Stated here rather than inferred at the registry from
+        /// where the generated implementation class happens to live.
+        /// </remarks>
+        internal bool DeclaredHere { get; }
 
         /// <summary>The type's full name, as <c>Type.FullName</c> reports it.</summary>
         internal string FullName { get; }
@@ -657,7 +675,7 @@ namespace VeloxDev.Generators.Base
 
             if (!IsAccessible(symbol)) return false;
 
-            if (SymbolEqualityComparer.Default.Equals(symbol.ContainingAssembly, assembly)) return true;
+            if (DeclaredIn(symbol, assembly)) return true;
 
             // 别的程序集里的**封闭**泛型：`SlotEnumerator<SlotDefaultViewModel>` 的定义在 Core，但只有见过
             // 这个实例的消费方才发得出它的条目 —— 声明它的那一侧永远不会知道有这么一个组合。
@@ -666,6 +684,12 @@ namespace VeloxDev.Generators.Base
                    && !IsNativeCollection(symbol.OriginalDefinition)
                    && HasPublicParameterlessConstructor(symbol);
         }
+
+        // 「这个类型是不是当前这个程序集声明的」—— 只有这一处判据。它有两个消费者：收录时决定别的程序集的
+        // 类型够不够格进闭世界，以及注册时告诉 `VeloxJsonRegistry` 谁是声明方。写两遍就会漂，而漂了不报错：
+        // 注册那侧会把窄的那份产物当成权威。
+        private static bool DeclaredIn(INamedTypeSymbol symbol, IAssemblySymbol assembly)
+            => SymbolEqualityComparer.Default.Equals(symbol.ContainingAssembly, assembly);
 
         /// <summary>
         /// Whether the type is generic in a way the generator cannot write, because some type argument is still
@@ -766,7 +790,8 @@ namespace VeloxDev.Generators.Base
                 symbol,
                 ReflectionFullName(symbol),
                 WrittenName(symbol),
-                members)
+                members,
+                DeclaredIn(symbol, assembly))
             {
                 RequiredMembers = RequiredMembers.NamesOf(symbol),
                 Serializing = ReadHooks(symbol, OnSerializingAttributeName, notices, assembly),
