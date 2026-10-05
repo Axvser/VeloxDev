@@ -340,3 +340,23 @@ Customer/                           ← 每个消费者程序集一个分片（�
 ### 工具返回的形状也要能让人停下来
 
 `SetEnumSlotCollection` 的非枚举成功路径原来只回 `{ok, selectorType, property}` —— **不回它建了什么**。模型因此看不见自己那段 JSON 的结果，实测行为是**打转**：设一次、列一次、少两个端口再设一次、再列一次，跑了三五分钟。现在两条路径共用 `EnumeratorResult`，都带 `status: "ok"` / `count` / `slots`（id + label + value）。**改这个工具时别把 slots 拿掉。**
+
+### 七·六、槽属性的三条判据链，以及它断在哪（2026-10-05）
+
+一个槽属性要被工具面认出来，要连过三关：**生成器给出标志 → 目录带着标志 → 工具按标志解析**。这一轮断在第一关，而症状出现在第三关。
+
+- **`AIContextFlags.IsSingleSlot` 由目录生成器算**，判据是「属性的类型实现了 `IWorkflowSlotViewModel`」。但 `[WorkflowBuilder.Slot<T>]` 声明的类型，那个接口是 **Workflow 生成器**在同一编译趟注入的 —— 生成器之间看不见彼此的产物，于是这些类型一律判 false。`EnumSelectorNodeViewModel.InputSlot` 就是这样。
+- **断口的三个下游**（都是静默的）：`ListSlotProperties` 不列它；`BuildSlotPropertyMap` 不认它，`GetNodeDetail` 里那个槽因此没有 `prop` 字段；`ResolveSlotId` / `ConnectByProperty` 按属性名解析不到它 → 只能回落到 `ConnectSlotsById`。**还有一条**：`ComponentPatcher` 靠同一个标志拒绝对槽属性赋值，标志缺了它就放行 —— 那是唯一绕过 `CreateSlotCommand` 的写入口。
+- **修在生成器**，且工具侧**同时**留了一道运行期兜底（`TreeProperty.HoldsASingleSlot(target)` = 标志 || 值当前是 `IWorkflowSlotViewModel`），因为生成器的改动进不了已经发布的包。**兜底实测不是死代码**：单独撤掉生成器那一行，七条用例仍绿；两处一起撤才红。
+- `IsSlotCollection` 因此对消费方声明的 `SlotEnumerator<T>` 由 false 变 true（它确实是槽的集合）。这带出 `ResolveSlotId` 的一个既有毛病：它先查集合那条分支，而那条要求值是 `IList` —— 枚举器装的是 `ConditionalSlot`，不是 `IList`。**已补 `IsSlotEnumerator` 分支**。`AddSlotToCollection` / `RemoveSlotFromCollection` 也把枚举器单独分出来，否则它们会说「集合为空」。
+
+守卫：`SlotPropertyResolutionTests`（七条）。生成器那张「谁认 `[WorkflowBuilder.*]`」的表见 [`VeloxDev.Core.Generator/architecture.md`](../VeloxDev.Core.Generator/architecture.md) §六·9。
+
+### 七·七、工具面上的**两个坐标系**（2026-10-05）
+
+`SetAnchorCommand` / `SetSizeCommand` 存的是**世界坐标**（字段直存，存档里也是世界值）；而 `node.Anchor` / `node.Size` 的 **getter 为了渲染按画布缩放折叠过**（`Anchor.Collapse`，即除以缩放）。查询工具原来读的正是这个 getter，于是：
+
+- 写进去 (3120, 940)，读回来 (2836.36, 854.55)，**比例随用户缩放变**；
+- 位置无法往返核对，两次不同缩放下的读数也无法互比。
+
+`ListNodes` / `GetNodeDetail` 已改成乘回缩放报世界坐标（`WorldAnchor` / `WorldSize`），说明里也写明用的是哪个空间。**改动只在读侧** —— 渲染确实需要折叠值，错的是把渲染用的 getter 当成对外的位置读数。守卫在 `NodeGeometryToolTests`（非单位缩放的读数与往返各一条）。

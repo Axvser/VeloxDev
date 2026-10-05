@@ -255,6 +255,7 @@ hub 收不了宿主的弹窗，所以这是**请**不是做：宿主关掉自己
 1. **一次变更只能入栈一次。** 每个改模型的动作必须恰好经过一个 `Submit`。`SetSelector` 内部自己提交了一个 undo pair（`SelectorEx/SlotEnumerator.cs:287`），再包一层 `Submit` 就是两层栈项、Ctrl+Z 语义崩坏。AI 工具面的 `SetEnumSlotCollection` 注释直接写明了这一点（`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs`）。
 2. **`Move` / `SetAnchor` / `SetSize` 按设计不可撤销**（`StandardEx/WorkflowNodeEx.cs:74,93,110`）。同理 `WorkflowAgentToolkit` 的 `MoveNode`/`SetNodePosition` 文档里点明下层 `SetAnchorCommand` 没有 undo 项。
 3. **`Anchor` / `Size` 的 getter 是折叠值**（见 §二）。一切修改走 setter，setter 存世界原值。
+   ⚠ **对外的读数也必须是世界值**：AI 工具面的 `ListNodes` / `GetNodeDetail` 原来直接读 getter，于是同一个位置写进去、读出来不是同一个数，比例还随缩放变（2026-10-05 修，见 [`AI/architecture.md`](../AI/architecture.md) §七·七）。凡是把节点几何报给宿主/模型的地方，都要乘回 `Layout.Scale` —— 渲染需要折叠值，读数不需要。
 4. **`WorkflowGuard.Fail` 在 Release 里是彻底的空操作**。它是 `[Conditional("DEBUG")]`（`WorkflowGuard.cs:19`），连同消息参数一起被编译掉。所以 `StandardSetChannel` 在 slot 没挂到树上时 `return`（`StandardEx/WorkflowSlotEx.cs:19-23`）—— Debug 抛异常，Release 静默什么都不做。**不要把 `WorkflowGuard.Fail` 当成运行时防御**。
 5. **`Anchor` 默认 NaN 表示未测量**，连线在任一端点 NaN 时不得渲染（`WorkflowSlotUpdateGate.cs:20`）。
 6. **`EnableMap` 必须先于 `Virtualize`。** `VirtualizeCore` 找不到空间映射抛 `ArgumentNullException`（`WorkflowSpatialEx.cs:127`）；`EnableMap` 的返回码是 `-1`（cellSize ≤ 0）/ `0`（已启用）/ `1`（成功）（`WorkflowSpatialEx.cs:47-67`），`Uninstall` 里用 `ClearMap()` 的返回值 `== 5` 做 `Debug.Fail` 兜底（`Templates/Helpers/TreeHelper.cs:143`）。
@@ -359,6 +360,21 @@ provider 一律 `isFresh = true`。
 （Core 这一层）与 `Extension.Test/…/SetEnumSlotCollectionTests.ReshapingThePortsASecondTime_AppliesTheNewSet`
 （工具这一层）。**枚举那条路没变**：切走再切回来仍要复原布线，`SlotEnumeratorTests` 里原来那条用例就是
 在钉它。
+
+### 重建时的连线复原要管**两边**（2026-10-05 修）
+
+`SetSelector` 重建分支时会把新分支接回旧分支原来的邻居，但原来只记 `Targets` —— 那是给**输出**枚举写的。
+**输入**枚举的分支挂的是 `Sources`，它上面没有 `Targets`，于是重建一个输入端口集会把喂给它的连线连同旧槽
+一起丢掉，**而调用照常报成功**：没有异常、没有日志，只有连线数变了。用户会话里重建 `Merge Report` 的输入口
+（3 → 5）丢了三条，靠事后数连线才发现。
+
+配对规则按「选择器类型变没变」分档：**类型变了按序号**（枚举换枚举，两边名字无关，原行为一字不改）；
+**类型没变按名字**（同一 provider 的端口表被改，序号配对会把连线悄悄挪到另一个口上 —— 那是看起来正常的错图，
+比丢掉更难发现）。名字在旧集合里找不到的分支就是新端口，不接任何线。
+
+守卫三条：`SlotEnumeratorTests` 的 `RebuildingAProvidersSlots_KeepsTheLinksThatFeedThem` 与
+`…_PairsBranchesByName_NotByPosition`，加上工具侧的
+`SetEnumSlotCollectionTests.GrowingThePythonNodesPorts_KeepsTheLinksThatFeedThem`。
 
 ## 七、`CompilerViewModel` 的两个已知硬约束
 

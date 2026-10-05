@@ -259,6 +259,18 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 7. **`Generators.AgentCatalog` 在当前源码里不存在，`obj/` 下的陈旧产物也已复核不到。** 当前源码 25 个 `.cs` 无任何 AgentCatalog，`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/` 下也不再留着那份 `VeloxAgentCatalog.g.cs`。别再按旧记忆去找它。
 8. **裁剪/AOT 元数据与本模块无关。** 全部 writer 都不产出 `IsTrimmable` / `IsAotCompatible` / trim 注解；引擎侧也没有生成任何 `DynamicDependency` 之类的裁剪提示（全源 grep 无命中）。裁剪这条轴的开关在 csproj 与 MSBuild 属性上，见 §七。
 
+9. **「另一个生成器加上的接口」要在每个地方各自兜底，漏一处就是一整条功能坏掉。** 这是本模块最容易复发的坑，因为它**不报错**：`[WorkflowBuilder.Slot<T>]` / `Node<T>` / `Link<T>` 类型的 `IWorkflow*ViewModel` 是 Workflow 生成器在**同一编译趟**注入的，而另一个生成器扫 `AllInterfaces` 时看不见它 —— 生成器之间看不见彼此的产物。所以凡是「这个类型算不算组件/槽」的判断，都不能只查接口，要**同时认作者写下的那个特性**。已有的三处：
+
+   | 判据 | 在哪 | 认什么 |
+   |---|---|---|
+   | `RootReason` | `Base/VeloxJsonModel.cs:588` | `[WorkflowBuilder.*]`（任一）—— 决定闭世界的根 |
+   | 槽类型兜底 | `Writers/WorkflowWriter.cs:1531` | 沿基类链找 `[WorkflowBuilder.SlotAttribute]` |
+   | `IsSingleSlotType` | `Base/AIContextModel.cs` | `[WorkflowBuilder.SlotAttribute]`（2026-10-05 补上，见下） |
+
+   **`IsSingleSlotType` 是漏最久的那一处**，代价是消费方声明的槽属性拿不到 `AIContextFlags.IsSingleSlot`：`ListSlotProperties` 不列它、`BuildSlotPropertyMap` 不认它（按属性名解析的连接工具全部报错）、`ComponentPatcher` 也不拒绝对它直接赋值。详见 [`AI/architecture.md`](../AI/architecture.md) §七·五 与 [`WorkflowSystem/architecture.md`](../WorkflowSystem/architecture.md)。
+
+   写这条判据时**按包含类型判、不按名字前缀**：`WorkflowBuilder.Slot<T>` 是泛型嵌套特性，`ToDisplayString` 把嵌套类型渲染成 `.` 而不是元数据里的 `+`，前缀匹配永远匹配不上。**新增这类判据时先 grep 上面这张表**，照着已有那处的写法写。
+
 ---
 
 ## 七、验证线在哪（以及它不在哪）
