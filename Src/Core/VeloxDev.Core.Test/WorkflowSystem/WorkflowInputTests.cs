@@ -116,7 +116,7 @@ public class WorkflowInputTests : WorkflowInputTestBase
         // 路由没有默认动作：删除是宿主订 KeyDown 自己做的（与高亮、菜单同一条路）。
         var tree = DeletableTree(out var link);
 
-        WorkflowInput.For(tree).Route(Down(WorkflowKey.Delete, link));
+        WorkflowInput.For(tree).Route(Down(InputKey.Delete, link));
 
         Assert.IsTrue(tree.Links.Contains(link));
     }
@@ -127,10 +127,10 @@ public class WorkflowInputTests : WorkflowInputTestBase
         var tree = DeletableTree(out var link);
         Events(link).Input.KeyDown += (_, e) =>
         {
-            if (e.Key == WorkflowKey.Delete) link.DeleteCommand.Execute(null);
+            if (e.Key == InputKey.Delete) link.DeleteCommand.Execute(null);
         };
 
-        WorkflowInput.For(tree).Route(Down(WorkflowKey.Delete, link));
+        WorkflowInput.For(tree).Route(Down(InputKey.Delete, link));
 
         Assert.IsFalse(tree.Links.Contains(link));
     }
@@ -148,7 +148,7 @@ public class WorkflowInputTests : WorkflowInputTestBase
             link.DeleteCommand.Execute(null);
         };
 
-        WorkflowInput.For(tree).Route(Down(WorkflowKey.Delete, link));
+        WorkflowInput.For(tree).Route(Down(InputKey.Delete, link));
 
         Assert.IsTrue(tree.Links.Contains(link));
     }
@@ -171,9 +171,9 @@ public class WorkflowInputTests : WorkflowInputTestBase
         // 空白画布上的输入不落在任何组件上，但树自己还是要听得到（宿主的画布手势就从这里接）。
         var tree = TreeWith(ReadyLink(0, 0, 100, 0));
         var heard = 0;
-        ((IWorkflowInputEvents)tree.GetHelper()).Input.PointerPressed += (_, _) => heard++;
+        ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, _) => heard++;
 
-        WorkflowInput.For(tree).Route(Press(500, 500, WorkflowMouseButton.Right));
+        WorkflowInput.For(tree).Route(Press(500, 500, MouseButton.Right));
 
         Assert.AreEqual(1, heard);
     }

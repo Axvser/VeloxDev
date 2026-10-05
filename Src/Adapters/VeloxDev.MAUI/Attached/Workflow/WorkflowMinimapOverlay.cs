@@ -1,5 +1,7 @@
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
+using PlatformInput = Microsoft.Maui.Controls;
+using Wf = VeloxDev.WorkflowSystem;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -598,7 +600,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         _parentPointerRecognizer = null;
     }
 
-    private void OnParentPointerMoved(object? sender, PointerEventArgs e)
+    private void OnParentPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (!_isDragging) return;
         var pos = e.GetPosition(this);
@@ -606,7 +608,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         NavigateToWorld((float)pos.Value.X, (float)pos.Value.Y);
     }
 
-    private void OnParentPointerReleased(object? sender, PointerEventArgs e)
+    private void OnParentPointerReleased(object? sender, PlatformInput.PointerEventArgs e)
     {
         _isDragging = false;
         UnsubscribeDragCapture();

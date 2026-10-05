@@ -25,7 +25,7 @@
 | 自定义空间索引 | 实现 `ISpatialBoundsProvider`（`Bounds` + `INotifyPropertyChanged`）/ `ISpatialMap<T>` | `Interfaces/WorkflowSystem/ISpatialBoundsProvider.cs`、`ISpatialMap.cs:12` |
 | 网格装饰器 / 小地图 | 实现 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs:15`、`IWorkflowMinimapOverlay.cs:18` |
 | 让连线可被命中 / 自定义它的曲线 | **不实现接口，是发布**：连线视图画完调 `link.PublishCurve(LinkCurve, this)`；形状归视图（Core 不假定贝塞尔），判定归 Core | `GUI/Interaction/LinkHitTestEx.cs`、`GUI/Interaction/LinkCurve.cs` |
-| 让悬停能看见 / 让连线响应 hover 外观 | **外观是宿主的**：订**那条线自己的** `((IWorkflowInputEvents)link.GetHelper()).Input.PointerEntered` / `PointerExited` 自己画。路由保证「离开的先收 Exited、进入的后收 Entered」，互斥不用记账 | `GUI/Events/Input/IWorkflowInputEvents.cs`、示例见 `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/LinkView.xaml.cs` |
+| 让悬停能看见 / 让连线响应 hover 外观 | **外观是宿主的**：订**那条线自己的** `((IInputEvents)link.GetHelper()).Input.PointerEntered` / `PointerExited` 自己画。路由保证「离开的先收 Exited、进入的后收 Entered」，互斥不用记账 | `GUI/Events/Input/IInputEvents.cs`、示例见 `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/LinkView.xaml.cs` |
 | 改连线的命中/删除策略 | 取 `WorkflowInput.For(tree)`（**只有这一个位置**）改 `AutoDelete` / `HitRadius`，或读 `PointerTarget` / `HoveredLink`；要什么事件就在组件上订标准输入 | `GUI/Events/WorkflowInput.cs` |
 | **否决某一次**连线动作（而不是全局关开关） | 订标准输入（如 `KeyDown`）并在 `e.Handle.PreventDefault` 里拒绝这一次 —— 框架那一手（Delete 删线）就不执行；`StopPropagation` 则是「到此为止、祖先一个都收不到」。**两个标志都不设 = 一切照旧** | `GUI/Events/WorkflowEventHandle.cs` |
 | **把节点/插槽/树的动作也接成标准事件** | 取该组件的 Helper 并按**能力接口**转型：`((IWorkflowNodeEvents)node.GetHelper())`、`IWorkflowSlotEvents`、`IWorkflowTreeEvents`。已实现五对：`Moving/Moved`、`Resizing/Resized`、`Deleting/Deleted`（node）、`ChannelChanging/Changed`（slot）、`Connecting/Connected`（tree） | `GUI/Events/{Node,Slot,Tree}/IWorkflow*Events.cs` |
@@ -38,7 +38,7 @@
 > ⚠ **组件落位的事件里，`Anchor` 必须是完整落位 —— 图层（`Anchor.Layer`）跟着走。**（2026-10-03 用户定）
 > 典型是 `NodeMoveEventArgs.From/To`：宿主拿 `To` 自己落位、或存 `From` 以后撤销时，**不能**把节点的图层悄悄抹成 0。
 > 造值一律 `new Anchor(x, y, 源.Layer)`，不要 `new Anchor(x, y, 0)`（`StandardMove:103` 就是这么写的，测试钉住 layer=7 往返）。
-> 例外只有两处：**指针位置**（`WorkflowPointerEventArgs.Position` 的 `Layer` 取来源视图的图层，但喂给 `SetPointerCommand` 的那个 anchor 仍是 0）；以及指针变成**虚拟连线终点**时 ——
+> 例外只有两处：**指针位置**（`PointerEventArgs.Position` 的 `Layer` 取来源视图的图层，但喂给 `SetPointerCommand` 的那个 anchor 仍是 0）；以及指针变成**虚拟连线终点**时 ——
 > 那一处由 `StandardSetPointer` 统一取**起点那一端**的图层（七家适配器交上来的锚带不带图层都不影响结果）。
 > ⚠ **模型层事件经「能力接口」暴露，不加进 `IWorkflowXxxViewModelHelper`** —— 往那个接口加成员会打断每一个实现者。
 > `NodeHelper<T>` / `SlotHelper<T>` / `TreeHelper<T>` 已实现能力接口，自定义 Helper 继承即得；订阅时要转型。

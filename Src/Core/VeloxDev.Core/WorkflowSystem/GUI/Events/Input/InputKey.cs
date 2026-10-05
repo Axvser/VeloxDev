@@ -7,17 +7,17 @@ namespace VeloxDev.WorkflowSystem;
 /// <para>
 /// This is a curated subset, not a copy of the platform enums: it holds the keys a graph editor actually binds —
 /// editing and navigation keys, the function row, letters and digits. Anything else is reported as
-/// <see cref="Unknown"/>, and <see cref="WorkflowKeyEventArgs.RawKeyCode"/> still carries the platform's own code,
+/// <see cref="Unknown"/>, and <see cref="KeyEventArgs.RawKeyCode"/> still carries the platform's own code,
 /// so a host can pass an unmapped key through without Core enumerating every key there is.
 /// </para>
 /// <para>
-/// <see cref="WorkflowKeyEventArgs.RawKeyCode"/> is platform-native and is therefore <b>not</b> comparable across
+/// <see cref="KeyEventArgs.RawKeyCode"/> is platform-native and is therefore <b>not</b> comparable across
 /// adapters — it exists for diagnostics and for a host that knows which platform it is on.
 /// </para>
 /// </remarks>
-public enum WorkflowKey
+public enum InputKey
 {
-    /// <summary>A key this enum does not name; read <see cref="WorkflowKeyEventArgs.RawKeyCode"/> instead.</summary>
+    /// <summary>A key this enum does not name; read <see cref="KeyEventArgs.RawKeyCode"/> instead.</summary>
     Unknown = 0,
 
     /// <summary>No key at all.</summary>

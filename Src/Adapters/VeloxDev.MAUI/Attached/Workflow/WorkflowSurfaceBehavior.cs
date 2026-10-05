@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using PlatformInput = Microsoft.Maui.Controls;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
+using Wf = VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -68,7 +70,7 @@ public sealed class WorkflowSurfaceBehavior
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
-        public EventHandler<WorkflowPointerPressedEventArgs>? MenuPressed { get; set; }
+        public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
         public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
 
 #if WINDOWS
@@ -249,7 +251,7 @@ public sealed class WorkflowSurfaceBehavior
             DismissLinkMenu(state);
 #endif
         };
-        ((IWorkflowInputEvents)bound.GetHelper()).Input.PointerPressed += state.MenuPressed;
+        ((Wf.IInputEvents)bound.GetHelper()).Input.PointerPressed += state.MenuPressed;
         bound.GetHelper().LinkRemoved += state.MenuLinkRemoved;
     }
 
@@ -258,7 +260,7 @@ public sealed class WorkflowSurfaceBehavior
         if (state.Input is { } input)
         {
             var helper = input.Tree.GetHelper();
-            if (state.MenuPressed is not null && helper is IWorkflowInputEvents events)
+            if (state.MenuPressed is not null && helper is Wf.IInputEvents events)
             {
                 events.Input.PointerPressed -= state.MenuPressed;
             }
@@ -341,10 +343,10 @@ public sealed class WorkflowSurfaceBehavior
 #if WINDOWS
     // 菜单条目在 LinkMenuKey 指向的资源里声明；这里只管定位与弹出。
     // 画布坐标 → 视口像素：px = Ruler + 锚点 + 内容偏移 − 滚动偏移（与链接层绘制/命中共用同一条换算）。
-    private static void ShowLinkMenu(ContentView host, SurfaceState state, WorkflowPointerPressedEventArgs e)
+    private static void ShowLinkMenu(ContentView host, SurfaceState state, Wf.PointerPressedEventArgs e)
     {
         // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
-        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Button != Wf.MouseButton.Right) return;
         if (e.Target is not IWorkflowLinkViewModel link) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
@@ -409,10 +411,10 @@ public sealed class WorkflowSurfaceBehavior
 #else
     // 非 Windows 没有能在指定点弹出的跨平台菜单，所以把声明的条目物化进适配器自建的浮层，
     // 落在长按处。长按本身由链接层翻译成右键交给 hub；这里只负责呈现。
-    private static void ShowLinkMenu(ContentView host, SurfaceState state, WorkflowPointerPressedEventArgs e)
+    private static void ShowLinkMenu(ContentView host, SurfaceState state, Wf.PointerPressedEventArgs e)
     {
         // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
-        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Button != Wf.MouseButton.Right) return;
         if (e.Target is not IWorkflowLinkViewModel link) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。

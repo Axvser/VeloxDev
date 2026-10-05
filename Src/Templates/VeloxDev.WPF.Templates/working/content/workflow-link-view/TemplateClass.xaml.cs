@@ -10,7 +10,7 @@ namespace TemplateNamespace;
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
 /// The view only paints: it publishes its curve for hit-testing and handles no input itself. Hover feedback is
-/// the host's — subscribe <c>IWorkflowInputEvents</c> on the helper and handle the routed pointer events.
+/// the host's — subscribe <c>IInputEvents</c> on the helper and handle the routed pointer events.
 /// </summary>
 public partial class TemplateClass : UserControl
 {

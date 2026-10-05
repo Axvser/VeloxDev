@@ -2,6 +2,8 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using PlatformInput = Avalonia.Input;
+using Wf = VeloxDev.WorkflowSystem;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System;
@@ -438,7 +440,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         return new Rect(l, t, w, h);
     }
 
-    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    protected override void OnPointerPressed(PlatformInput.PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
         if (_isDragging) return;
@@ -453,7 +455,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         e.Handled = true;
     }
 
-    protected override void OnPointerMoved(PointerEventArgs e)
+    protected override void OnPointerMoved(PlatformInput.PointerEventArgs e)
     {
         base.OnPointerMoved(e);
         if (!_isDragging) return;
@@ -463,7 +465,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         e.Handled = true;
     }
 
-    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    protected override void OnPointerReleased(PlatformInput.PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
         _isDragging = false;

@@ -26,7 +26,7 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
     public static readonly BindableProperty GlowColorProperty = BindableProperty.Create(
         nameof(GlowColor), typeof(Color), typeof(LinkHighlightLayer), Color.FromArgb("#FFFFFFFF"));
 
-    private IWorkflowInputEvents? _input;
+    private IInputEvents? _input;
     private IWorkflowTreeViewModelHelper? _treeHelper;
     private IWorkflowLinkViewModel? _lit;
 
@@ -80,7 +80,7 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
     private void HookInput(IWorkflowTreeViewModel? tree)
     {
         UnhookInput();
-        if (tree?.GetHelper() is not IWorkflowInputEvents events) return;
+        if (tree?.GetHelper() is not IInputEvents events) return;
 
         _input = events;
         events.Input.PointerEntered += OnPointerEntered;
@@ -117,13 +117,13 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
         Invalidate();
     }
 
-    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e)
+    private void OnPointerEntered(object? sender, PointerEnteredEventArgs e)
     {
         _lit = e.Target as IWorkflowLinkViewModel;
         Invalidate();
     }
 
-    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e)
+    private void OnPointerExited(object? sender, PointerExitedEventArgs e)
     {
         _lit = null;
         Invalidate();

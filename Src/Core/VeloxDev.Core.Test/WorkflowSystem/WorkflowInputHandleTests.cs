@@ -19,7 +19,7 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
         Events(link).Input.KeyDown += (_, _) => order.Add("link");
         Events(tree).Input.KeyDown += (_, _) => order.Add("tree");
 
-        WorkflowInput.For(tree).Route(Down(WorkflowKey.Delete, link));
+        WorkflowInput.For(tree).Route(Down(InputKey.Delete, link));
 
         CollectionAssert.AreEqual(new[] { "link", "tree" }, order);
     }
@@ -34,7 +34,7 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
         Events(link).Input.PointerPressed += (_, e) => onLink = e.Handle;
         Events(tree).Input.PointerPressed += (_, e) => onTree = e.Handle;
 
-        WorkflowInput.For(tree).Route(Press(50, 0, WorkflowMouseButton.Right, link));
+        WorkflowInput.For(tree).Route(Press(50, 0, MouseButton.Right, link));
 
         Assert.IsNotNull(onLink);
         Assert.AreSame(onLink, onTree, "一次动作只有一个句柄");
@@ -49,7 +49,7 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
         Events(link).Input.PointerPressed += (_, e) => e.Handle.StopPropagation = true;
         Events(tree).Input.PointerPressed += (_, _) => onTree++;
 
-        WorkflowInput.For(tree).Route(Press(50, 0, WorkflowMouseButton.Right, link));
+        WorkflowInput.For(tree).Route(Press(50, 0, MouseButton.Right, link));
 
         Assert.AreEqual(0, onTree);
     }
@@ -64,7 +64,7 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
         Events(link).Input.PointerPressed += (_, e) => e.Handle.PreventDefault = true;
         Events(tree).Input.PointerPressed += (_, _) => onTree++;
 
-        WorkflowInput.For(tree).Route(Press(50, 0, WorkflowMouseButton.Right, link));
+        WorkflowInput.For(tree).Route(Press(50, 0, MouseButton.Right, link));
 
         Assert.AreEqual(1, onTree);
     }
@@ -87,7 +87,7 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
         Events(node).Input.PointerPressed += (_, _) => order.Add("node");
         Events(tree).Input.PointerPressed += (_, _) => order.Add("tree");
 
-        WorkflowInput.For(tree).Route(Press(0, 0, WorkflowMouseButton.Left, slot));
+        WorkflowInput.For(tree).Route(Press(0, 0, MouseButton.Left, slot));
 
         CollectionAssert.AreEqual(new[] { "slot", "node", "tree" }, order);
     }
@@ -101,7 +101,7 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
         IWorkflowViewModel? seen = null;
         Events(tree).Input.PointerPressed += (_, e) => seen = e.Target;
 
-        WorkflowInput.For(tree).Route(Press(50, 0, WorkflowMouseButton.Right, link));
+        WorkflowInput.For(tree).Route(Press(50, 0, MouseButton.Right, link));
 
         Assert.AreSame(link, seen);
     }
@@ -127,16 +127,16 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
     {
         var link = ReadyLink(0, 0, 100, 0);
         var tree = TreeWith(link);
-        var button = WorkflowMouseButton.None;
+        var button = MouseButton.None;
         var modifiers = InputModifiers.None;
         Events(link).Input.PointerPressed += (_, e) => { button = e.Button; modifiers = e.Modifiers; };
 
-        var args = new WorkflowPointerPressedEventArgs(
+        var args = new PointerPressedEventArgs(
             new Anchor(50, 0, 0), InputModifiers.Control, new SourceView(), link,
-            WorkflowMouseButton.Middle, 2, new WorkflowEventHandle());
+            MouseButton.Middle, 2, new WorkflowEventHandle());
         WorkflowInput.For(tree).Route(args);
 
-        Assert.AreEqual(WorkflowMouseButton.Middle, button);
+        Assert.AreEqual(MouseButton.Middle, button);
         Assert.AreEqual(InputModifiers.Control, modifiers);
     }
 }

@@ -14,6 +14,8 @@ using System.Windows.Threading;
 using VeloxDev.AI;
 using VeloxDev.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
+using PlatformInput = System.Windows.Input;
+using Wf = VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
@@ -172,7 +174,7 @@ public partial class WorkflowView : UserControl
         AgentInput!.Text = string.Empty;
     }
 
-    private void OnAgentInputKeyDown(object sender, KeyEventArgs e)
+    private void OnAgentInputKeyDown(object sender, PlatformInput.KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
         {
@@ -582,11 +584,11 @@ public partial class WorkflowView : UserControl
     // 删不删由这里写（与悬停高亮同一条路）。
     private void HookLinkKeys(IWorkflowTreeViewModel tree)
     {
-        if (tree.GetHelper() is not IWorkflowInputEvents events) return;
+        if (tree.GetHelper() is not Wf.IInputEvents events) return;
 
         events.Input.KeyDown += (_, e) =>
         {
-            if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+            if (e.Key != Wf.InputKey.Delete || e.Handle.PreventDefault) return;
             if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
 
             link.DeleteCommand.Execute(null);

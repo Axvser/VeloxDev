@@ -368,11 +368,11 @@ public partial class Workflow : ComponentBase, IDisposable
     // 删不删由这里写（与悬停高亮同一条路）。
     private void HookLinkKeys(IWorkflowTreeViewModel? tree)
     {
-        if (tree?.GetHelper() is not IWorkflowInputEvents events) return;
+        if (tree?.GetHelper() is not IInputEvents events) return;
 
         events.Input.KeyDown += (_, e) =>
         {
-            if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+            if (e.Key != InputKey.Delete || e.Handle.PreventDefault) return;
             if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
 
             link.DeleteCommand.Execute(null);

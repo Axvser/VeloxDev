@@ -14,14 +14,14 @@ public class WorkflowKeyTests : WorkflowInputTestBase
     {
         // Core 只枚举图编辑器会绑的那些键；其余一律 Unknown，但平台码还在，宿主照样分得出来。
         var tree = TreeWith(ReadyLink(0, 0, 100, 0));
-        var key = WorkflowKey.Delete;
+        var key = InputKey.Delete;
         var raw = 0;
         Events(tree).Input.KeyDown += (_, e) => { key = e.Key; raw = e.RawKeyCode; };
 
-        WorkflowInput.For(tree).Route(new WorkflowKeyDownEventArgs(
-            WorkflowKey.Unknown, 0x1234, InputModifiers.None, false, new SourceView(), null, new WorkflowEventHandle()));
+        WorkflowInput.For(tree).Route(new KeyDownEventArgs(
+            InputKey.Unknown, 0x1234, InputModifiers.None, false, new SourceView(), null, new WorkflowEventHandle()));
 
-        Assert.AreEqual(WorkflowKey.Unknown, key);
+        Assert.AreEqual(InputKey.Unknown, key);
         Assert.AreEqual(0x1234, raw);
     }
 
@@ -32,8 +32,8 @@ public class WorkflowKeyTests : WorkflowInputTestBase
         var modifiers = InputModifiers.None;
         Events(tree).Input.KeyDown += (_, e) => modifiers = e.Modifiers;
 
-        WorkflowInput.For(tree).Route(new WorkflowKeyDownEventArgs(
-            WorkflowKey.Unknown, 0, InputModifiers.Control | InputModifiers.Shift, false, new SourceView(), null, new WorkflowEventHandle()));
+        WorkflowInput.For(tree).Route(new KeyDownEventArgs(
+            InputKey.Unknown, 0, InputModifiers.Control | InputModifiers.Shift, false, new SourceView(), null, new WorkflowEventHandle()));
 
         Assert.AreEqual(InputModifiers.Control | InputModifiers.Shift, modifiers);
     }
@@ -43,11 +43,11 @@ public class WorkflowKeyTests : WorkflowInputTestBase
     {
         var link = ReadyLink(0, 0, 100, 0);
         var tree = TreeWith(link);
-        var key = WorkflowKey.Unknown;
+        var key = InputKey.Unknown;
         Events(link).Input.KeyUp += (_, e) => key = e.Key;
 
-        WorkflowInput.For(tree).Route(Up(WorkflowKey.Escape, link));
+        WorkflowInput.For(tree).Route(Up(InputKey.Escape, link));
 
-        Assert.AreEqual(WorkflowKey.Escape, key);
+        Assert.AreEqual(InputKey.Escape, key);
     }
 }

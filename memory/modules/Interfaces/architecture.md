@@ -32,7 +32,7 @@
 | 编译期内部管线 `ICompile*`（3） | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Compile/Contracts/`（`:12`、`:7`、`:14`） | 只有该子系统实现 |
 | 运行期内部管线 `IExecution*`/`ILogWriter`/`INodeRetryPolicy`/`IRedirectable`/`IRuntimeAware`/`IRuntimeContext`（10） | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Contracts/`（`IRedirectable.cs:11`、`IRuntimeAware.cs:8`、`IRuntimeContext.cs:15` 等） | 运行期内部管线 |
 | `IGroupData`（1） | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Model/GroupData.cs:17` | 引擎注入给节点的只读产物字典（详见 `memory/modules/WorkflowSystem/`） |
-| WorkflowSystem 事件/交互族 `IWorkflow*Events`、`IWorkflow*EventSink`、`IWorkflowInputEvents`、`ILinkHitTestable`（8） | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/{Node,Slot,Tree,Input}/`、`GUI/Interaction/` | Core 内部事件轴，外部不实现 |
+| WorkflowSystem 事件/交互族 `IWorkflow*Events`、`IWorkflow*EventSink`、`IInputEvents`、`ILinkHitTestable`（8） | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/{Node,Slot,Tree,Input}/`、`GUI/Interaction/` | Core 内部事件轴，外部不实现 |
 | `IConditionalSlot`（1） | `Src/Core/VeloxDev.Core/WorkflowSystem/SelectorEx/ConditionalSlot.cs:12` | SelectorEx 内部 |
 | `IAopHookTarget`（1） | `Src/Core/VeloxDev.Core/AspectOriented/AspectHooks.cs:66` | AOP 运行期内部 |
 | 强类型命令族 `IVeloxCommand<TParam1..TParamN, TResult>`（14）与 `IVeloxCommandEvents<TParam,TResult>`（1） | `Src/Core/VeloxDev.Core/MVVM/CommandArities.cs`、`MVVM/CommandEventArgs{TParam,TResult}.cs:31` | MVVM 模块内部管线 |

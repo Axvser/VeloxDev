@@ -28,7 +28,7 @@ public partial class TreeView : ContentView
 
     // VeloxDev customization: 悬停高亮是这本 demo 的。overlay 默认什么都不画，订阅树的输入事件、
     // 把「现在轮到哪条线」交给它，它才照 #FFFFFFFF 画那一条 —— 换色/换画法都在这里改。
-    private IWorkflowInputEvents? _linkInput;
+    private IInputEvents? _linkInput;
 
     private void SyncLinkInput()
     {
@@ -38,7 +38,7 @@ public partial class TreeView : ContentView
             _linkInput = null;
         }
 
-        if (BindingContext is IWorkflowTreeViewModel tree && tree.GetHelper() is IWorkflowInputEvents events)
+        if (BindingContext is IWorkflowTreeViewModel tree && tree.GetHelper() is IInputEvents events)
         {
             _linkInput = events;
 
@@ -49,9 +49,9 @@ public partial class TreeView : ContentView
 
 
 
-    private static void OnLinkKeyDown(object? sender, WorkflowKeyDownEventArgs e)
+    private static void OnLinkKeyDown(object? sender, KeyDownEventArgs e)
     {
-        if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+        if (e.Key != InputKey.Delete || e.Handle.PreventDefault) return;
         if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
 
         link.DeleteCommand.Execute(null);

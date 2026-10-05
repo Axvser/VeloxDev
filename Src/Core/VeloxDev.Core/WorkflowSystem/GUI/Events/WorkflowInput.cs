@@ -11,12 +11,12 @@ namespace VeloxDev.WorkflowSystem;
 ///
 /// The route owns exactly one piece of state — which component the pointer is on — so a host can read it without
 /// keeping its own bookkeeping. It performs <b>no</b> action of its own: deleting a link, highlighting it, opening a
-/// menu are all the host's, written where they can be seen and changed (see <c>IWorkflowInputEvents</c>).
+/// menu are all the host's, written where they can be seen and changed (see <c>IInputEvents</c>).
 /// </summary>
 /// <remarks>
 /// <para>
 /// The adapter decides <b>what</b> was hit (its own gesture logic already knows) and passes it as
-/// <see cref="WorkflowPointerEventArgs.Target"/>; this class decides <b>who hears about it</b> — the target first,
+/// <see cref="PointerEventArgs.Target"/>; this class decides <b>who hears about it</b> — the target first,
 /// then its ancestors, each of them seeing the same argument instance and the same
 /// <see cref="WorkflowEventHandle"/>. A handler therefore runs <b>before</b> the framework's own reaction, and can
 /// suppress it (<see cref="WorkflowEventHandle.PreventDefault"/>) or keep the event from going further up
@@ -27,7 +27,7 @@ namespace VeloxDev.WorkflowSystem;
 /// per-component hubs used to have, so an adapter and a host still meet at one call.
 /// </para>
 /// </remarks>
-/// <seealso cref="IWorkflowInputEvents"/>
+/// <seealso cref="IInputEvents"/>
 public sealed class WorkflowInput
 {
     // 一棵树一个：与树同寿，适配器与宿主都用这个调用取它。
@@ -57,7 +57,7 @@ public sealed class WorkflowInput
 
     /// <summary>
     /// The component the pointer is currently on, or <see langword="null"/> when it is over empty canvas. Maintained
-    /// by <see cref="Route(WorkflowPointerEventArgs)"/> unless <see cref="IsSuspended"/> is set.
+    /// by <see cref="Route(PointerEventArgs)"/> unless <see cref="IsSuspended"/> is set.
     /// </summary>
     public IWorkflowViewModel? PointerTarget => pointerTarget;
 
@@ -82,12 +82,12 @@ public sealed class WorkflowInput
     /// <exception cref="ArgumentNullException"><paramref name="e"/> is <see langword="null"/>.</exception>
     /// <remarks>
     /// When the pointer moves onto a different component, both ends of that change are told first: the one it left
-    /// through a <see cref="WorkflowPointerExitedEventArgs"/> of its own, the one it arrived at through a
-    /// <see cref="WorkflowPointerEnteredEventArgs"/> of its own, each carrying this event's position. A component
+    /// through a <see cref="PointerExitedEventArgs"/> of its own, the one it arrived at through a
+    /// <see cref="PointerEnteredEventArgs"/> of its own, each carrying this event's position. A component
     /// can therefore subscribe to its own helper alone and hear its whole hover — it does not have to watch every
     /// other component's events and compare targets.
     /// </remarks>
-    public void Route(WorkflowPointerEventArgs e)
+    public void Route(PointerEventArgs e)
     {
         if (e is null) throw new ArgumentNullException(nameof(e));
 
@@ -101,7 +101,7 @@ public sealed class WorkflowInput
     /// <summary>Routes a key event to the target and its ancestors, then applies the framework's own reaction.</summary>
     /// <param name="e">The event to route.</param>
     /// <exception cref="ArgumentNullException"><paramref name="e"/> is <see langword="null"/>.</exception>
-    public void Route(WorkflowKeyEventArgs e)
+    public void Route(KeyEventArgs e)
     {
         if (e is null) throw new ArgumentNullException(nameof(e));
 
@@ -113,34 +113,34 @@ public sealed class WorkflowInput
     // 指针换了目标：先给留下那个发一次 Exited，再给新那个发一次 Entered，然后才是这一条本身。
     // 逐组件订阅因此只需要 enter/leave 两件事，不必盯着每一条别人的事件比 target。
     // Exited 与 Entered 本身不合成 —— 那两条就是这件事本身，适配器已经按平台的意思报过了。
-    private void EnterAndLeaveTargets(WorkflowPointerEventArgs e)
+    private void EnterAndLeaveTargets(PointerEventArgs e)
     {
-        if (e is WorkflowPointerExitedEventArgs or WorkflowPointerEnteredEventArgs) return;
+        if (e is PointerExitedEventArgs or PointerEnteredEventArgs) return;
 
         var previous = pointerTarget;
         if (ReferenceEquals(previous, e.Target)) return;
 
         if (previous is not null)
         {
-            Bubble(new WorkflowPointerExitedEventArgs(
+            Bubble(new PointerExitedEventArgs(
                 e.Position, e.Modifiers, e.Source, previous, new WorkflowEventHandle()));
         }
 
         if (e.Target is not null)
         {
-            Bubble(new WorkflowPointerEnteredEventArgs(
+            Bubble(new PointerEnteredEventArgs(
                 e.Position, e.Modifiers, e.Source, e.Target, new WorkflowEventHandle()));
         }
     }
 
     // 冒泡：目标先看到，再逐级上溯。返 true 表示这次被否决 —— 框架默认动作整体不执行。
-    private bool Bubble(WorkflowPointerEventArgs e)
+    private bool Bubble(PointerEventArgs e)
     {
         var prevented = false;
 
         foreach (var helper in Chain(e.Target))
         {
-            if (helper is not IWorkflowInputEvents events) continue;
+            if (helper is not IInputEvents events) continue;
 
             events.Input.Raise(e);
 
@@ -151,13 +151,13 @@ public sealed class WorkflowInput
         return prevented;
     }
 
-    private bool Bubble(WorkflowKeyEventArgs e)
+    private bool Bubble(KeyEventArgs e)
     {
         var prevented = false;
 
         foreach (var helper in Chain(e.Target))
         {
-            if (helper is not IWorkflowInputEvents events) continue;
+            if (helper is not IInputEvents events) continue;
 
             events.Input.Raise(e);
 
@@ -198,17 +198,17 @@ public sealed class WorkflowInput
     }
 
     // 框架自己的反应，只有两件事：记住指针停在哪（供宿主与 Delete 用），以及 Delete 落在连线上就删掉它。
-    private void ApplyDefault(WorkflowPointerEventArgs e)
+    private void ApplyDefault(PointerEventArgs e)
     {
         if (IsSuspended) return;
 
         switch (e)
         {
-            case WorkflowPointerEnteredEventArgs or WorkflowPointerMovedEventArgs:
+            case PointerEnteredEventArgs or PointerMovedEventArgs:
                 pointerTarget = e.Target;
                 break;
 
-            case WorkflowPointerExitedEventArgs:
+            case PointerExitedEventArgs:
                 pointerTarget = null;
                 break;
         }
@@ -216,7 +216,7 @@ public sealed class WorkflowInput
 
     // 键没有默认动作：Core 只把按键路由出去。删除是宿主的事 —— 订 KeyDown、自己执行 link.DeleteCommand
     // （Demo 与 InfoOverlay 同一条路：库给事件，效果归你）。
-    private static void ApplyDefault(WorkflowKeyEventArgs e)
+    private static void ApplyDefault(KeyEventArgs e)
     {
     }
 }

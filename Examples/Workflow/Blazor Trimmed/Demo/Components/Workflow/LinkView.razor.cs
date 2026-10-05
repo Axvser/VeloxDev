@@ -146,14 +146,14 @@ public partial class LinkView : ComponentBase, IDisposable
     private string StrokeColor => _hover ? HighlightColor : LineColor;
     private string StrokeWidthCss => (_hover ? Thickness + HighlightWidthBonus : Thickness).ToString("0.#", CultureInfo.InvariantCulture);
 
-    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+    private void OnPointerEntered(object? sender, PointerEnteredEventArgs e) => IsHighlighted = true;
 
-    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
+    private void OnPointerExited(object? sender, PointerExitedEventArgs e) => IsHighlighted = false;
 
     // VeloxDev customization: 删除也是宿主的 —— 路由把这次按键交过来（target 就是这条线），删不删、怎么删由这里写。
-    private void OnKeyDown(object? sender, WorkflowKeyDownEventArgs e)
+    private void OnKeyDown(object? sender, KeyDownEventArgs e)
     {
-        if (e.Key != WorkflowKey.Delete) return;
+        if (e.Key != InputKey.Delete) return;
         if (e.Handle.PreventDefault) return;
         if ((Link) is { } link && link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
     }
@@ -191,7 +191,7 @@ public partial class LinkView : ComponentBase, IDisposable
 
         // 悬停高亮是本 demo 的：订**这条线自己的** Helper 就够了 —— 路由会告诉它指针什么时候进来、
         // 什么时候离开，这里不必再去比 target 是谁。
-        if (link.GetHelper() is IWorkflowInputEvents events)
+        if (link.GetHelper() is IInputEvents events)
         {
             events.Input.PointerEntered += OnPointerEntered;
             events.Input.PointerExited += OnPointerExited;
@@ -337,7 +337,7 @@ public partial class LinkView : ComponentBase, IDisposable
         }
 
         // 视图比树活得短：退了订，路由不会往一个已经走掉的渲染器里发事件
-        if (Link?.GetHelper() is IWorkflowInputEvents events)
+        if (Link?.GetHelper() is IInputEvents events)
         {
             events.Input.PointerEntered -= OnPointerEntered;
             events.Input.PointerExited -= OnPointerExited;

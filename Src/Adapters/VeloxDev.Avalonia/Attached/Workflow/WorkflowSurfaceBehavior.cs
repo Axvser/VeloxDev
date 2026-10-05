@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Input;
+using PlatformInput = Avalonia.Input;
+using Wf = VeloxDev.WorkflowSystem;
 using Avalonia.Input.GestureRecognizers;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -28,7 +30,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public Control? GridDecorator { get; set; }
         public Control? PointerPressSource { get; set; }
         public Control? MinimapOverlay { get; set; }
-        public EventHandler<PointerWheelEventArgs>? ZoomHandler { get; set; }
+        public EventHandler<PlatformInput.PointerWheelEventArgs>? ZoomHandler { get; set; }
 
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
         public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
@@ -49,7 +51,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
-        public EventHandler<WorkflowPointerPressedEventArgs>? MenuPressed { get; set; }
+        public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
         public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
         public EventHandler<RoutedEventArgs>? MenuOpened { get; set; }
         public EventHandler<RoutedEventArgs>? MenuClosed { get; set; }
@@ -210,7 +212,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             if (!ReferenceEquals(state.MenuLink, link)) return;
             state.LinkMenu?.Close();
         };
-        ((IWorkflowInputEvents)bound.GetHelper()).Input.PointerPressed += state.MenuPressed;
+        ((Wf.IInputEvents)bound.GetHelper()).Input.PointerPressed += state.MenuPressed;
         bound.GetHelper().LinkRemoved += state.MenuLinkRemoved;
     }
 
@@ -234,7 +236,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.Input is { } input)
         {
             var helper = input.Tree.GetHelper();
-            if (state.MenuPressed is not null && helper is IWorkflowInputEvents events)
+            if (state.MenuPressed is not null && helper is Wf.IInputEvents events)
             {
                 events.Input.PointerPressed -= state.MenuPressed;
             }
@@ -249,10 +251,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     }
 
     // 右键落在表面上，而弹出要屏幕坐标；只有表面同时知道画布与屏幕两件事，所以菜单由表面弹。
-    private static void ShowLinkMenu(UserControl host, SurfaceState state, WorkflowPointerPressedEventArgs e)
+    private static void ShowLinkMenu(UserControl host, SurfaceState state, Wf.PointerPressedEventArgs e)
     {
         // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
-        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Button != Wf.MouseButton.Right) return;
         if (e.Target is not IWorkflowLinkViewModel link) return;
         if (state.LinkMenu is null || state.Canvas is null) return;
         if (host.DataContext is not IWorkflowTreeViewModel tree) return;
@@ -280,8 +282,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     // 减去 ActualOffset 即连线视图自身的几何空间（见 WorkflowSurfaceMath / 各连线视图的 StartLeft 绑定）。
     // 命中由共享的曲线判定器回答（适配器负责「谁被指到」），事件交给输入路由（负责「谁听到」）。
     private static void RoutePointer(
-        UserControl host, SurfaceState state, PointerEventArgs e,
-        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, WorkflowPointerEventArgs> args)
+        UserControl host, SurfaceState state, PlatformInput.PointerEventArgs e,
+        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.Canvas is null)
             return;
@@ -296,43 +298,43 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         FocusHoveredLink(input, state);
     }
 
-    private static InputModifiers Modifiers(KeyModifiers keys)
+    private static Wf.InputModifiers Modifiers(KeyModifiers keys)
     {
-        var modifiers = InputModifiers.None;
-        if (keys.HasFlag(KeyModifiers.Alt)) modifiers |= InputModifiers.Alt;
-        if (keys.HasFlag(KeyModifiers.Control)) modifiers |= InputModifiers.Control;
-        if (keys.HasFlag(KeyModifiers.Shift)) modifiers |= InputModifiers.Shift;
-        if (keys.HasFlag(KeyModifiers.Meta)) modifiers |= InputModifiers.Meta;
+        var modifiers = Wf.InputModifiers.None;
+        if (keys.HasFlag(KeyModifiers.Alt)) modifiers |= Wf.InputModifiers.Alt;
+        if (keys.HasFlag(KeyModifiers.Control)) modifiers |= Wf.InputModifiers.Control;
+        if (keys.HasFlag(KeyModifiers.Shift)) modifiers |= Wf.InputModifiers.Shift;
+        if (keys.HasFlag(KeyModifiers.Meta)) modifiers |= Wf.InputModifiers.Meta;
         return modifiers;
     }
 
     // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
-    private static WorkflowKey ToKey(Key key)
+    private static Wf.InputKey ToKey(Key key)
     {
-        if (key >= Key.A && key <= Key.Z) return WorkflowKey.A + (key - Key.A);
-        if (key >= Key.D0 && key <= Key.D9) return WorkflowKey.D0 + (key - Key.D0);
-        if (key >= Key.F1 && key <= Key.F12) return WorkflowKey.F1 + (key - Key.F1);
+        if (key >= Key.A && key <= Key.Z) return Wf.InputKey.A + (key - Key.A);
+        if (key >= Key.D0 && key <= Key.D9) return Wf.InputKey.D0 + (key - Key.D0);
+        if (key >= Key.F1 && key <= Key.F12) return Wf.InputKey.F1 + (key - Key.F1);
 
         return key switch
         {
-            Key.None => WorkflowKey.None,
-            Key.Cancel => WorkflowKey.Cancel,
-            Key.Back => WorkflowKey.Back,
-            Key.Tab => WorkflowKey.Tab,
-            Key.Enter => WorkflowKey.Enter,
-            Key.Escape => WorkflowKey.Escape,
-            Key.Space => WorkflowKey.Space,
-            Key.PageUp => WorkflowKey.PageUp,
-            Key.PageDown => WorkflowKey.PageDown,
-            Key.End => WorkflowKey.End,
-            Key.Home => WorkflowKey.Home,
-            Key.Left => WorkflowKey.Left,
-            Key.Up => WorkflowKey.Up,
-            Key.Right => WorkflowKey.Right,
-            Key.Down => WorkflowKey.Down,
-            Key.Insert => WorkflowKey.Insert,
-            Key.Delete => WorkflowKey.Delete,
-            _ => WorkflowKey.Unknown,
+            Key.None => Wf.InputKey.None,
+            Key.Cancel => Wf.InputKey.Cancel,
+            Key.Back => Wf.InputKey.Back,
+            Key.Tab => Wf.InputKey.Tab,
+            Key.Enter => Wf.InputKey.Enter,
+            Key.Escape => Wf.InputKey.Escape,
+            Key.Space => Wf.InputKey.Space,
+            Key.PageUp => Wf.InputKey.PageUp,
+            Key.PageDown => Wf.InputKey.PageDown,
+            Key.End => Wf.InputKey.End,
+            Key.Home => Wf.InputKey.Home,
+            Key.Left => Wf.InputKey.Left,
+            Key.Up => Wf.InputKey.Up,
+            Key.Right => Wf.InputKey.Right,
+            Key.Down => Wf.InputKey.Down,
+            Key.Insert => Wf.InputKey.Insert,
+            Key.Delete => Wf.InputKey.Delete,
+            _ => Wf.InputKey.Unknown,
         };
     }
 
@@ -602,7 +604,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
     }
 
-    private static void OnZoomPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    private static void OnZoomPointerWheelChanged(object? sender, PlatformInput.PointerWheelEventArgs e)
     {
         if (sender is not Control source)
         {
@@ -677,7 +679,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         e.Handled = true;
     }
 
-    private static void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    private static void OnPointerPressed(object? sender, PlatformInput.PointerPressedEventArgs e)
     {
         if (sender is not Control source)
             return;
@@ -689,7 +691,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         // 按下先进输入路由：按在哪条连线上由共享的曲线命中裁。左键落在连线上时下面照样会起一次平移
         // （连线算空白），两者互不冲突 —— 路由只报「按到了哪条」，平移是这层的另一件事。
         RoutePointer(host, state, e,
-            (position, target, handle) => new WorkflowPointerPressedEventArgs(
+            (position, target, handle) => new Wf.PointerPressedEventArgs(
                 position, Modifiers(e.KeyModifiers), source, target, ButtonOf(e, state), e.ClickCount, handle));
 
         if (!ShouldStartPan(e, state))
@@ -702,30 +704,30 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         e.Handled = true;
     }
 
-    private static void OnPointerEntered(object? sender, PointerEventArgs e)
+    private static void OnPointerEntered(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
 
         RoutePointer(host, state, e,
-            (position, target, handle) => new WorkflowPointerEnteredEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
+            (position, target, handle) => new Wf.PointerEnteredEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
     }
 
     // 滚轮也进输入路由（缩放那条路是 Ctrl+滚轮，挂在 ScrollViewer 上，两者不重叠）。
-    private static void OnPointerWheel(object? sender, PointerWheelEventArgs e)
+    private static void OnPointerWheel(object? sender, PlatformInput.PointerWheelEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
 
-        if (Modifiers(e.KeyModifiers).HasFlag(InputModifiers.Control))
+        if (Modifiers(e.KeyModifiers).HasFlag(Wf.InputModifiers.Control))
             return;
 
         RoutePointer(host, state, e,
-            (position, target, handle) => new WorkflowPointerWheelEventArgs(
+            (position, target, handle) => new Wf.PointerWheelEventArgs(
                 position, Modifiers(e.KeyModifiers), host, target, e.Delta.X, e.Delta.Y, handle));
     }
 
-    private static void OnPointerMoved(object? sender, PointerEventArgs e)
+    private static void OnPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
@@ -744,19 +746,19 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         // 连线建立过程中橡皮筋就在指针底下，逐帧判悬停只会把沿途那些实连线点亮（VirtualLink 仅在拖时可见）。
         if (viewModel.VirtualLink is not { IsVisible: true })
             RoutePointer(host, state, e,
-                (position, target, handle) => new WorkflowPointerMovedEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
+                (position, target, handle) => new Wf.PointerMovedEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
     }
 
-    private static void OnPointerExited(object? sender, PointerEventArgs e)
+    private static void OnPointerExited(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
 
         RoutePointer(host, state, e,
-            (position, target, handle) => new WorkflowPointerExitedEventArgs(position, Modifiers(e.KeyModifiers), host, null, handle));
+            (position, target, handle) => new Wf.PointerExitedEventArgs(position, Modifiers(e.KeyModifiers), host, null, handle));
     }
 
-    private static void OnKeyDown(object? sender, KeyEventArgs e)
+    private static void OnKeyDown(object? sender, PlatformInput.KeyEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
@@ -769,13 +771,13 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (input.HoveredLink is null)
             return;
 
-        input.Route(new WorkflowKeyDownEventArgs(
+        input.Route(new Wf.KeyDownEventArgs(
             ToKey(e.Key), (int)e.Key, Modifiers(e.KeyModifiers), e.KeyModifiers.HasFlag(KeyModifiers.Shift),
             host, input.HoveredLink, new WorkflowEventHandle()));
         e.Handled = true;
     }
 
-    private static void OnKeyUp(object? sender, KeyEventArgs e)
+    private static void OnKeyUp(object? sender, PlatformInput.KeyEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
@@ -784,22 +786,22 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
 
         var input = WorkflowInput.For(viewModel);
-        input.Route(new WorkflowKeyUpEventArgs(
+        input.Route(new Wf.KeyUpEventArgs(
             ToKey(e.Key), (int)e.Key, Modifiers(e.KeyModifiers), false, host, input.HoveredLink, new WorkflowEventHandle()));
     }
 
-    private static WorkflowMouseButton ButtonOf(PointerEventArgs e, SurfaceState state)
+    private static Wf.MouseButton ButtonOf(PlatformInput.PointerEventArgs e, SurfaceState state)
     {
         var properties = e.GetCurrentPoint(state.ScrollViewer!).Properties;
-        if (properties.IsRightButtonPressed) return WorkflowMouseButton.Right;
-        if (properties.IsLeftButtonPressed) return WorkflowMouseButton.Left;
-        if (properties.IsMiddleButtonPressed) return WorkflowMouseButton.Middle;
-        if (properties.IsXButton1Pressed) return WorkflowMouseButton.XButton1;
-        if (properties.IsXButton2Pressed) return WorkflowMouseButton.XButton2;
-        return WorkflowMouseButton.None;
+        if (properties.IsRightButtonPressed) return Wf.MouseButton.Right;
+        if (properties.IsLeftButtonPressed) return Wf.MouseButton.Left;
+        if (properties.IsMiddleButtonPressed) return Wf.MouseButton.Middle;
+        if (properties.IsXButton1Pressed) return Wf.MouseButton.XButton1;
+        if (properties.IsXButton2Pressed) return Wf.MouseButton.XButton2;
+        return Wf.MouseButton.None;
     }
 
-    private static void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+    private static void OnPointerReleased(object? sender, PlatformInput.PointerReleasedEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
@@ -820,7 +822,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         // 松手也进输入路由：谁要收「这次手势结束了」就订它。
         RoutePointer(host, state, e,
-            (position, target, handle) => new WorkflowPointerReleasedEventArgs(
+            (position, target, handle) => new Wf.PointerReleasedEventArgs(
                 position, Modifiers(e.KeyModifiers), host, target, ButtonOf(e, state), 1, handle));
     }
 
@@ -866,7 +868,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             Refresh(host);
     }
 
-    private static void OnCanvasPanMoved(UserControl host, SurfaceState state, PointerEventArgs e)
+    private static void OnCanvasPanMoved(UserControl host, SurfaceState state, PlatformInput.PointerEventArgs e)
     {
         if (!state.IsPanning || state.ScrollViewer is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
             return;
@@ -984,14 +986,14 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     private static double GetVerticalScrollMaximum(ScrollViewer scrollViewer)
         => WorkflowSurfaceMath.ScrollMax(scrollViewer.Extent.Height, scrollViewer.Viewport.Height);
 
-    private static bool ShouldStartPan(PointerPressedEventArgs e, SurfaceState state)
+    private static bool ShouldStartPan(PlatformInput.PointerPressedEventArgs e, SurfaceState state)
     {
         var properties = e.GetCurrentPoint(state.ScrollViewer!).Properties;
         return (properties.IsLeftButtonPressed || properties.IsMiddleButtonPressed)
             && IsSurfaceBlankInteraction(e.Source, state);
     }
 
-    private static bool IsPanStillActive(UserControl host, PointerEventArgs e)
+    private static bool IsPanStillActive(UserControl host, PlatformInput.PointerEventArgs e)
     {
         var properties = e.GetCurrentPoint(host).Properties;
         return properties.IsLeftButtonPressed || properties.IsMiddleButtonPressed;

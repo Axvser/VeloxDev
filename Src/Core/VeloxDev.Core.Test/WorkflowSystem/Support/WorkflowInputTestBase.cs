@@ -67,41 +67,41 @@ public abstract class WorkflowInputTestBase
     }
 
     /// <summary>The input capability of a component's helper, for subscribing in a test.</summary>
-    protected static IWorkflowInputEvents Events(object component) => component switch
+    protected static IInputEvents Events(object component) => component switch
     {
-        IWorkflowLinkViewModel link => (IWorkflowInputEvents)link.GetHelper(),
-        IWorkflowSlotViewModel slot => (IWorkflowInputEvents)slot.GetHelper(),
-        IWorkflowNodeViewModel node => (IWorkflowInputEvents)node.GetHelper(),
-        IWorkflowTreeViewModel tree => (IWorkflowInputEvents)tree.GetHelper(),
+        IWorkflowLinkViewModel link => (IInputEvents)link.GetHelper(),
+        IWorkflowSlotViewModel slot => (IInputEvents)slot.GetHelper(),
+        IWorkflowNodeViewModel node => (IInputEvents)node.GetHelper(),
+        IWorkflowTreeViewModel tree => (IInputEvents)tree.GetHelper(),
         _ => throw new ArgumentException($"Not a workflow component: {component.GetType()}", nameof(component)),
     };
 
     // 目标由适配器判出来，所以这些工厂都收一个 target：测试直接指定「谁被指到了」，
     // Core 不再自己判命中（判命中的是 LinkHitTestEx，单测在 LinkHitTestExTests 里）。
-    protected static WorkflowPointerMovedEventArgs Move(double x, double y, IWorkflowViewModel? target = null, int layer = 0)
+    protected static PointerMovedEventArgs Move(double x, double y, IWorkflowViewModel? target = null, int layer = 0)
         => new(new Anchor(x, y, layer), InputModifiers.None, new SourceView(), target, new WorkflowEventHandle());
 
-    protected static WorkflowPointerEnteredEventArgs Enter(double x, double y, IWorkflowViewModel? target = null)
+    protected static PointerEnteredEventArgs Enter(double x, double y, IWorkflowViewModel? target = null)
         => new(new Anchor(x, y, 0), InputModifiers.None, new SourceView(), target, new WorkflowEventHandle());
 
-    protected static WorkflowPointerExitedEventArgs Exit(double x, double y, IWorkflowViewModel? target = null)
+    protected static PointerExitedEventArgs Exit(double x, double y, IWorkflowViewModel? target = null)
         => new(new Anchor(x, y, 0), InputModifiers.None, new SourceView(), target, new WorkflowEventHandle());
 
-    protected static WorkflowPointerPressedEventArgs Press(
-        double x, double y, WorkflowMouseButton button = WorkflowMouseButton.Right, IWorkflowViewModel? target = null)
+    protected static PointerPressedEventArgs Press(
+        double x, double y, MouseButton button = MouseButton.Right, IWorkflowViewModel? target = null)
         => new(new Anchor(x, y, 0), InputModifiers.None, new SourceView(), target, button, 1, new WorkflowEventHandle());
 
-    protected static WorkflowPointerReleasedEventArgs Release(
-        double x, double y, WorkflowMouseButton button = WorkflowMouseButton.Left, IWorkflowViewModel? target = null)
+    protected static PointerReleasedEventArgs Release(
+        double x, double y, MouseButton button = MouseButton.Left, IWorkflowViewModel? target = null)
         => new(new Anchor(x, y, 0), InputModifiers.None, new SourceView(), target, button, 1, new WorkflowEventHandle());
 
-    protected static WorkflowPointerWheelEventArgs Wheel(double x, double y, double deltaY, IWorkflowViewModel? target = null)
+    protected static PointerWheelEventArgs Wheel(double x, double y, double deltaY, IWorkflowViewModel? target = null)
         => new(new Anchor(x, y, 0), InputModifiers.None, new SourceView(), target, 0d, deltaY, new WorkflowEventHandle());
 
-    protected static WorkflowKeyDownEventArgs Down(
-        WorkflowKey key, IWorkflowViewModel? target = null, int rawKeyCode = 0, InputModifiers modifiers = InputModifiers.None)
+    protected static KeyDownEventArgs Down(
+        InputKey key, IWorkflowViewModel? target = null, int rawKeyCode = 0, InputModifiers modifiers = InputModifiers.None)
         => new(key, rawKeyCode, modifiers, false, new SourceView(), target, new WorkflowEventHandle());
 
-    protected static WorkflowKeyUpEventArgs Up(WorkflowKey key, IWorkflowViewModel? target = null)
+    protected static KeyUpEventArgs Up(InputKey key, IWorkflowViewModel? target = null)
         => new(key, 0, InputModifiers.None, false, new SourceView(), target, new WorkflowEventHandle());
 }

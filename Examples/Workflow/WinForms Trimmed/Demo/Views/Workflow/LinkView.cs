@@ -43,7 +43,7 @@ public sealed class LinkView : Control
         // VeloxDev customization: 删除也是宿主的 —— 路由把这次按键交过来（target 就是这条线），删不删由这里写。
         link.KeyDown += (_, e) =>
         {
-            if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+            if (e.Key != InputKey.Delete || e.Handle.PreventDefault) return;
             if (link.Link is { } current && current.DeleteCommand.CanExecute(null)) current.DeleteCommand.Execute(null);
         };
     }

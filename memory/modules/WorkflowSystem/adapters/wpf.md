@@ -2,7 +2,7 @@
 
 > ⚠ **交互那几段记的是 2026-10-04 之前的世界。** 当时 Core 有一个 `LinkInteraction` hub，事件是 `HoverChanged` /
 > `LinkPressed` / `ContextMenuRequested` 这些按组件定制的语义事件，高亮由 hub 经 `ILinkHighlight` 点亮。
-> **现在**：输入是一套**标准输入**（`WorkflowInput.For(tree).Route(...)` + `IWorkflowInputEvents`），
+> **现在**：输入是一套**标准输入**（`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），
 > 外观是宿主的，菜单由适配器从 `PointerPressed(Right, link)` 里自己弹、用 `tree.GetHelper().LinkRemoved` 收尾。
 > 完整规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)。**下面凡是提到 hub / 那几个事件名 /
 > `ILinkHighlight` 的句子都按这个替换读**；与交互无关的部分（坐标换算、焦点、弹窗平台的怪癖、命中几何）仍然有效。

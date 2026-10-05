@@ -3,6 +3,8 @@ using System.ComponentModel;
 using Jalium.UI;
 using Jalium.UI.Controls;
 using Jalium.UI.Input;
+using PlatformInput = Jalium.UI.Input;
+using Wf = VeloxDev.WorkflowSystem;
 using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem;
 
@@ -249,7 +251,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     private void OnMiniMouseDown(object? sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton == MouseButton.Left)
+        if (e.ChangedButton == PlatformInput.MouseButton.Left)
         {
             _dragging = true;
             CaptureMouse();
@@ -269,7 +271,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     private void OnMiniMouseUp(object? sender, MouseButtonEventArgs e)
     {
-        if (_dragging && e.ChangedButton == MouseButton.Left)
+        if (_dragging && e.ChangedButton == PlatformInput.MouseButton.Left)
         {
             _dragging = false;
             ReleaseMouseCapture();

@@ -8,7 +8,7 @@ namespace VeloxDev.WorkflowSystem;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A concrete subclass is raised per pointer action (<see cref="WorkflowPointerEnteredEventArgs"/> and friends); the
+/// A concrete subclass is raised per pointer action (<see cref="PointerEnteredEventArgs"/> and friends); the
 /// adapter creates exactly one instance, and the same instance travels the whole route, so every subscriber sees
 /// one <see cref="WorkflowEventHandle"/> for one action.
 /// </para>
@@ -20,7 +20,7 @@ namespace VeloxDev.WorkflowSystem;
 /// </para>
 /// </remarks>
 /// <seealso cref="WorkflowInput"/>
-public abstract class WorkflowPointerEventArgs : EventArgs
+public abstract class PointerEventArgs : EventArgs
 {
     /// <summary>Creates the argument. Called by the concrete subclasses.</summary>
     /// <param name="position">Where the pointer is, layer included.</param>
@@ -28,7 +28,7 @@ public abstract class WorkflowPointerEventArgs : EventArgs
     /// <param name="source">The view the input came from, or <see langword="null"/> when the platform has none.</param>
     /// <param name="target">The component the pointer is on, or <see langword="null"/> for empty canvas.</param>
     /// <param name="handle">The handle for this action, shared with the whole route.</param>
-    protected WorkflowPointerEventArgs(
+    protected PointerEventArgs(
         Anchor position, InputModifiers modifiers, object? source, IWorkflowViewModel? target, WorkflowEventHandle handle)
     {
         Position = position ?? throw new ArgumentNullException(nameof(position));

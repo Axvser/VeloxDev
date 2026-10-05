@@ -1,4 +1,6 @@
 using VeloxDev.WorkflowSystem;
+using PlatformInput = Microsoft.Maui.Controls;
+using Wf = VeloxDev.WorkflowSystem;
 
 #if WINDOWS
 using Microsoft.UI.Xaml;
@@ -253,17 +255,17 @@ public sealed class WorkflowNodeDragBehavior
     }
 #endif
 
-    private static void OnPointerPressed(object? sender, PointerEventArgs e)
+    private static void OnPointerPressed(object? sender, PlatformInput.PointerEventArgs e)
     {
         // 空操作：PointerGestureRecognizer 只在 Windows 经平台钩子使用；非 Windows 由 PanGestureRecognizer 覆盖整个拖拽生命周期。
     }
 
-    private static void OnPointerMoved(object? sender, PointerEventArgs e)
+    private static void OnPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
     {
         // 空操作：见 OnPointerPressed。
     }
 
-    private static void OnPointerReleased(object? sender, PointerEventArgs e)
+    private static void OnPointerReleased(object? sender, PlatformInput.PointerEventArgs e)
     {
         // 空操作：见 OnPointerPressed。
     }
@@ -323,7 +325,7 @@ public sealed class WorkflowNodeDragBehavior
     }
 
 #if WINDOWS
-    private static void TryCapturePointer(View view, PointerEventArgs e)
+    private static void TryCapturePointer(View view, PlatformInput.PointerEventArgs e)
     {
         if (view.Handler?.PlatformView is UIElement element && e.PlatformArgs?.PointerRoutedEventArgs is { Pointer: { } pointer })
         {
@@ -331,7 +333,7 @@ public sealed class WorkflowNodeDragBehavior
         }
     }
 
-    private static void TryReleasePointer(View view, PointerEventArgs e)
+    private static void TryReleasePointer(View view, PlatformInput.PointerEventArgs e)
     {
         if (view.Handler?.PlatformView is UIElement element && e.PlatformArgs?.PointerRoutedEventArgs is { Pointer: { } pointer })
         {
@@ -339,11 +341,11 @@ public sealed class WorkflowNodeDragBehavior
         }
     }
 #else
-    private static void TryCapturePointer(View view, PointerEventArgs e)
+    private static void TryCapturePointer(View view, PlatformInput.PointerEventArgs e)
     {
     }
 
-    private static void TryReleasePointer(View view, PointerEventArgs e)
+    private static void TryReleasePointer(View view, PlatformInput.PointerEventArgs e)
     {
     }
 #endif

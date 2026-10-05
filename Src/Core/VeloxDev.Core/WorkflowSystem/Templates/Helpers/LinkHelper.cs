@@ -15,7 +15,7 @@ public class LinkHelper : LinkHelper<IWorkflowLinkViewModel>
 /// [ Component Helper ] Provide standard supports for Link Component.
 /// </summary>
 /// <typeparam name="T">The type of the Link ViewModel that this helper is designed for. </typeparam>
-public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable, IWorkflowInputEvents
+public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable, IInputEvents
     where T : class, IWorkflowLinkViewModel
 {
     /// <summary>The link this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
@@ -23,7 +23,7 @@ public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable, IWo
     private IReadOnlyCollection<IVeloxCommand> commands = [];
 
     /// <inheritdoc />
-    public WorkflowInputRelay Input { get; } = new();
+    public InputRelay Input { get; } = new();
 
     // 视图发布的曲线与那个控件。存引用不拷贝 —— 它每帧可能重发一次，发布路径上不该有分配。
     private LinkCurve? hitCurve;

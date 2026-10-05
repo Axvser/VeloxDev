@@ -25,6 +25,7 @@
 | .NET Item Template | [memory/specifications/item-template-specifications.md](memory/specifications/item-template-specifications.md) | 改动 `Src/Templates/` 下任何文件之前；判断「这处改动该落在模板还是 demo」之前；新增 / 改名 / 删除一个模板项之前 |
 | 无标记语言平台的适配器基类 | [memory/specifications/adapter-base-class-specifications.md](memory/specifications/adapter-base-class-specifications.md) | 改 **WinForms / Jalium**（判据见 §一：这一家的模板产物里没有标记文件）的适配器或它的 item template 之前；判断「这段代码该进适配器包还是留在模板里」之前 |
 | 功能落层（Core / 适配器 / 模板 / demo） | [memory/specifications/layer-ownership-specifications.md](memory/specifications/layer-ownership-specifications.md) | 判断一段连线或视图的功能该落在 Core / 适配器 / item template / demo 哪一层之前；给连线做**外观**（高亮、选中、主题、流光）之前 |
+| 输入家族类型的别名 | [memory/specifications/input-alias-specifications.md](memory/specifications/input-alias-specifications.md) | 在 `Src/Adapters/`、`Src/Templates/`、`Examples/` 下写出输入家族那 15 个类型（`IInputEvents` / `InputRelay` / `InputKey` / `InputModifiers` / `MouseButton` / `Pointer*EventArgs` / `Key*EventArgs`，清单见手册 §二）中的**任何一个**之前 |
 
 ---
 

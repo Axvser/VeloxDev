@@ -431,7 +431,7 @@ public partial class WorkflowView : ContentView
 
     // VeloxDev customization: 悬停高亮是这本 demo 的。overlay 默认什么都不画，订阅树的输入事件、
     // 把「现在轮到哪条线」交给它，它才照给定颜色画那一条 —— 换色/换画法都在这里改。
-    private IWorkflowInputEvents? _linkInput;
+    private IInputEvents? _linkInput;
 
     private void SyncLinkInput()
     {
@@ -440,7 +440,7 @@ public partial class WorkflowView : ContentView
             _linkInput = null;
         }
 
-        if (BindingContext is IWorkflowTreeViewModel tree && tree.GetHelper() is IWorkflowInputEvents events)
+        if (BindingContext is IWorkflowTreeViewModel tree && tree.GetHelper() is IInputEvents events)
         {
             _linkInput = events;
         }
@@ -452,11 +452,11 @@ public partial class WorkflowView : ContentView
     // 删不删由这里写（与悬停高亮同一条路）。
     private void HookLinkKeys(IWorkflowTreeViewModel tree)
     {
-        if (tree.GetHelper() is not IWorkflowInputEvents events) return;
+        if (tree.GetHelper() is not IInputEvents events) return;
 
         events.Input.KeyDown += (_, e) =>
         {
-            if (e.Key != WorkflowKey.Delete || e.Handle.PreventDefault) return;
+            if (e.Key != InputKey.Delete || e.Handle.PreventDefault) return;
             if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
 
             link.DeleteCommand.Execute(null);

@@ -10,6 +10,8 @@ using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 using Size = VeloxDev.WorkflowSystem.Size;
+using PlatformInput = Jalium.UI.Input;
+using Wf = VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
@@ -175,7 +177,7 @@ internal sealed class NodeEditorSurface : Canvas
         Changed?.Invoke();
     }
 
-    private void OnKeyDown(object? sender, KeyEventArgs e)
+    private void OnKeyDown(object? sender, PlatformInput.KeyEventArgs e)
     {
         // 键也过 Core：命中与 target 由路由裁决；**删不删是这里的决定**（库不再自带删除 —— 与悬停高亮同一条路）。
         if (_input is not { } input || input.HoveredLink is not { } hovered)
@@ -184,8 +186,8 @@ internal sealed class NodeEditorSurface : Canvas
         }
 
         var handle = new WorkflowEventHandle();
-        input.Route(new WorkflowKeyDownEventArgs(
-            ToKey(e.Key), (int)e.Key, InputModifiers.None, false, this, hovered, handle));
+        input.Route(new Wf.KeyDownEventArgs(
+            ToKey(e.Key), (int)e.Key, Wf.InputModifiers.None, false, this, hovered, handle));
 
         if (e.Key != Key.Delete) return;
 
@@ -217,7 +219,7 @@ internal sealed class NodeEditorSurface : Canvas
         }
 
         var input = WorkflowInput.For(_tree);
-        if (_tree.GetHelper() is IWorkflowInputEvents events)
+        if (_tree.GetHelper() is Wf.IInputEvents events)
         {
             // 菜单归表面：宿主在更靠前的一级（连线自己）订同一个事件并置 PreventDefault 就能否决这一次。
             events.Input.PointerPressed += OnLinkPointerPressed;
@@ -235,7 +237,7 @@ internal sealed class NodeEditorSurface : Canvas
         }
 
         var helper = input.Tree.GetHelper();
-        if (helper is IWorkflowInputEvents events) events.Input.PointerPressed -= OnLinkPointerPressed;
+        if (helper is Wf.IInputEvents events) events.Input.PointerPressed -= OnLinkPointerPressed;
         helper.LinkRemoved -= OnLinkRemoved;
         // 换树/解绑时菜单还开着就先收：Closed 会顺手把挂起放开
         _linkMenu?.Close();
@@ -263,8 +265,8 @@ internal sealed class NodeEditorSurface : Canvas
         var target = link ?? input.Tree.HitTestVisibleLinks(
             anchor.Horizontal - OriginX, anchor.Vertical - OriginY, input.HitRadius);
 
-        input.Route(new WorkflowPointerMovedEventArgs(
-            anchor, InputModifiers.None, this, target, new WorkflowEventHandle()));
+        input.Route(new Wf.PointerMovedEventArgs(
+            anchor, Wf.InputModifiers.None, this, target, new WorkflowEventHandle()));
 
         if (!ReferenceEquals(_selectedLink, input.HoveredLink))
         {
@@ -275,9 +277,9 @@ internal sealed class NodeEditorSurface : Canvas
 
     // 右键菜单归表面：这一家的连线是表面一笔画出来的、不吃指针，右键也落在表面上，
     // 而弹出要根视觉坐标、模型给的是画布坐标 —— 只有表面同时知道这两件事。
-    private void OnLinkPointerPressed(object? sender, WorkflowPointerPressedEventArgs e)
+    private void OnLinkPointerPressed(object? sender, Wf.PointerPressedEventArgs e)
     {
-        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Button != Wf.MouseButton.Right) return;
         if (e.Target is not IWorkflowLinkViewModel link) return;
         if (_linkMenu?.IsOpen == true) return;
 
@@ -311,31 +313,31 @@ internal sealed class NodeEditorSurface : Canvas
     }
 
     // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
-    private static WorkflowKey ToKey(Key key)
+    private static Wf.InputKey ToKey(Key key)
     {
-        if (key >= Key.A && key <= Key.Z) return WorkflowKey.A + (key - Key.A);
-        if (key >= Key.D0 && key <= Key.D9) return WorkflowKey.D0 + (key - Key.D0);
-        if (key >= Key.F1 && key <= Key.F12) return WorkflowKey.F1 + (key - Key.F1);
+        if (key >= Key.A && key <= Key.Z) return Wf.InputKey.A + (key - Key.A);
+        if (key >= Key.D0 && key <= Key.D9) return Wf.InputKey.D0 + (key - Key.D0);
+        if (key >= Key.F1 && key <= Key.F12) return Wf.InputKey.F1 + (key - Key.F1);
 
         return key switch
         {
-            Key.None => WorkflowKey.None,
-            Key.Back => WorkflowKey.Back,
-            Key.Tab => WorkflowKey.Tab,
-            Key.Enter => WorkflowKey.Enter,
-            Key.Escape => WorkflowKey.Escape,
-            Key.Space => WorkflowKey.Space,
-            Key.PageUp => WorkflowKey.PageUp,
-            Key.PageDown => WorkflowKey.PageDown,
-            Key.End => WorkflowKey.End,
-            Key.Home => WorkflowKey.Home,
-            Key.Left => WorkflowKey.Left,
-            Key.Up => WorkflowKey.Up,
-            Key.Right => WorkflowKey.Right,
-            Key.Down => WorkflowKey.Down,
-            Key.Insert => WorkflowKey.Insert,
-            Key.Delete => WorkflowKey.Delete,
-            _ => WorkflowKey.Unknown,
+            Key.None => Wf.InputKey.None,
+            Key.Back => Wf.InputKey.Back,
+            Key.Tab => Wf.InputKey.Tab,
+            Key.Enter => Wf.InputKey.Enter,
+            Key.Escape => Wf.InputKey.Escape,
+            Key.Space => Wf.InputKey.Space,
+            Key.PageUp => Wf.InputKey.PageUp,
+            Key.PageDown => Wf.InputKey.PageDown,
+            Key.End => Wf.InputKey.End,
+            Key.Home => Wf.InputKey.Home,
+            Key.Left => Wf.InputKey.Left,
+            Key.Up => Wf.InputKey.Up,
+            Key.Right => Wf.InputKey.Right,
+            Key.Down => Wf.InputKey.Down,
+            Key.Insert => Wf.InputKey.Insert,
+            Key.Delete => Wf.InputKey.Delete,
+            _ => Wf.InputKey.Unknown,
         };
     }
 
@@ -1508,7 +1510,7 @@ internal sealed class NodeEditorSurface : Canvas
 
         // 右键只在连线上有含义（弹出删除菜单），落在别处什么也不做：命中的裁决在 hub —— 按下转发进去，
         // 命中了它才进菜单（见 OnLinkPointerPressed）；空白处右键不置 Handled
-        if (e.ChangedButton == MouseButton.Right)
+        if (e.ChangedButton == PlatformInput.MouseButton.Right)
         {
             ForwardPointer(e.GetPosition(this));
             if (_input?.HoveredLink is not null)
@@ -1519,7 +1521,7 @@ internal sealed class NodeEditorSurface : Canvas
             return;
         }
 
-        if (e.ChangedButton != MouseButton.Left)
+        if (e.ChangedButton != PlatformInput.MouseButton.Left)
         {
             return;
         }
@@ -1704,7 +1706,7 @@ internal sealed class NodeEditorSurface : Canvas
 
     private void OnMouseUp(object? sender, MouseButtonEventArgs e)
     {
-        if (_tree is null || e.ChangedButton != MouseButton.Left)
+        if (_tree is null || e.ChangedButton != PlatformInput.MouseButton.Left)
         {
             return;
         }

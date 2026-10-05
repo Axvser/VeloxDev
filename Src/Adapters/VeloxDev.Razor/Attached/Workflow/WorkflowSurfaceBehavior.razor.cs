@@ -4,8 +4,10 @@ using System.ComponentModel;
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using PlatformInput = Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
+using Wf = VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -130,7 +132,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
     // 连线右键菜单：条目由宿主以 LinkMenu 传入，接线全在这里 —— 订输入面、弹出、挂起指针跟踪。
     private WorkflowInput? _input;
-    private EventHandler<WorkflowPointerPressedEventArgs>? _menuPressed;
+    private EventHandler<Wf.PointerPressedEventArgs>? _menuPressed;
     private EventHandler<IWorkflowLinkViewModel>? _menuLinkRemoved;
     private int _menuLeft;
     private int _menuTop;
@@ -165,52 +167,52 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
         if (isDown)
         {
-            input.Route(new WorkflowKeyDownEventArgs(
-                mapped, 0, InputModifiers.None, false, _surfaceRoot, input.HoveredLink, handle));
+            input.Route(new Wf.KeyDownEventArgs(
+                mapped, 0, Wf.InputModifiers.None, false, _surfaceRoot, input.HoveredLink, handle));
         }
         else
         {
-            input.Route(new WorkflowKeyUpEventArgs(
-                mapped, 0, InputModifiers.None, false, _surfaceRoot, input.HoveredLink, handle));
+            input.Route(new Wf.KeyUpEventArgs(
+                mapped, 0, Wf.InputModifiers.None, false, _surfaceRoot, input.HoveredLink, handle));
         }
 
         await Task.CompletedTask;
     }
 
     // 浏览器给的是键名（KeyboardEvent.key）：字母数字直接认，其余逐个点名，没点到的报 Unknown。
-    private static WorkflowKey ToKey(string key)
+    private static Wf.InputKey ToKey(string key)
     {
         if (key.Length == 1)
         {
             var c = key[0];
-            if (c >= 'a' && c <= 'z') return WorkflowKey.A + (c - 'a');
-            if (c >= 'A' && c <= 'Z') return WorkflowKey.A + (c - 'A');
-            if (c >= '0' && c <= '9') return WorkflowKey.D0 + (c - '0');
-            if (c == ' ') return WorkflowKey.Space;
+            if (c >= 'a' && c <= 'z') return Wf.InputKey.A + (c - 'a');
+            if (c >= 'A' && c <= 'Z') return Wf.InputKey.A + (c - 'A');
+            if (c >= '0' && c <= '9') return Wf.InputKey.D0 + (c - '0');
+            if (c == ' ') return Wf.InputKey.Space;
         }
 
         if (key.Length is 2 or 3 && key[0] == 'F' && int.TryParse(key.AsSpan(1), out var fn) && fn is >= 1 and <= 12)
         {
-            return WorkflowKey.F1 + (fn - 1);
+            return Wf.InputKey.F1 + (fn - 1);
         }
 
         return key switch
         {
-            "Delete" or "Del" => WorkflowKey.Delete,
-            "Backspace" => WorkflowKey.Back,
-            "Tab" => WorkflowKey.Tab,
-            "Enter" => WorkflowKey.Enter,
-            "Escape" or "Esc" => WorkflowKey.Escape,
-            "Insert" => WorkflowKey.Insert,
-            "Home" => WorkflowKey.Home,
-            "End" => WorkflowKey.End,
-            "PageUp" => WorkflowKey.PageUp,
-            "PageDown" => WorkflowKey.PageDown,
-            "ArrowLeft" => WorkflowKey.Left,
-            "ArrowUp" => WorkflowKey.Up,
-            "ArrowRight" => WorkflowKey.Right,
-            "ArrowDown" => WorkflowKey.Down,
-            _ => WorkflowKey.Unknown,
+            "Delete" or "Del" => Wf.InputKey.Delete,
+            "Backspace" => Wf.InputKey.Back,
+            "Tab" => Wf.InputKey.Tab,
+            "Enter" => Wf.InputKey.Enter,
+            "Escape" or "Esc" => Wf.InputKey.Escape,
+            "Insert" => Wf.InputKey.Insert,
+            "Home" => Wf.InputKey.Home,
+            "End" => Wf.InputKey.End,
+            "PageUp" => Wf.InputKey.PageUp,
+            "PageDown" => Wf.InputKey.PageDown,
+            "ArrowLeft" => Wf.InputKey.Left,
+            "ArrowUp" => Wf.InputKey.Up,
+            "ArrowRight" => Wf.InputKey.Right,
+            "ArrowDown" => Wf.InputKey.Down,
+            _ => Wf.InputKey.Unknown,
         };
     }
 
@@ -226,15 +228,15 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _menuLeft = (int)Math.Round(e.ClientX);
         _menuTop = (int)Math.Round(e.ClientY);
 
-        await RoutePointerAsync(SurfacePointerKind.Pressed, e.ClientX, e.ClientY, WorkflowMouseButton.Right);
+        await RoutePointerAsync(SurfacePointerKind.Pressed, e.ClientX, e.ClientY, Wf.MouseButton.Right);
     }
 
     // 指针移动/松开/滚轮也进输入路由：占位法（surface 自己转发）与逐线转发汇到同一个入口。
-    private async Task OnSurfacePointerMove(PointerEventArgs e)
+    private async Task OnSurfacePointerMove(PlatformInput.PointerEventArgs e)
         => await RoutePointerAsync(SurfacePointerKind.Moved, e.ClientX, e.ClientY);
 
-    private async Task OnSurfacePointerUp(PointerEventArgs e)
-        => await RoutePointerAsync(SurfacePointerKind.Released, e.ClientX, e.ClientY, WorkflowMouseButton.Left);
+    private async Task OnSurfacePointerUp(PlatformInput.PointerEventArgs e)
+        => await RoutePointerAsync(SurfacePointerKind.Released, e.ClientX, e.ClientY, Wf.MouseButton.Left);
 
     private async Task OnSurfaceWheel(WheelEventArgs e)
         => await RoutePointerAsync(SurfacePointerKind.Wheel, e.ClientX, e.ClientY, deltaY: e.DeltaY);
@@ -369,7 +371,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             if (!ReferenceEquals(MenuLink, link)) return;
             CloseLinkMenu();
         };
-        ((IWorkflowInputEvents)bound.GetHelper()).Input.PointerPressed += _menuPressed;
+        ((Wf.IInputEvents)bound.GetHelper()).Input.PointerPressed += _menuPressed;
         bound.GetHelper().LinkRemoved += _menuLinkRemoved;
     }
 
@@ -378,7 +380,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         if (_input is not { } input) return;
 
         var helper = input.Tree.GetHelper();
-        if (_menuPressed is not null && helper is IWorkflowInputEvents events) events.Input.PointerPressed -= _menuPressed;
+        if (_menuPressed is not null && helper is Wf.IInputEvents events) events.Input.PointerPressed -= _menuPressed;
         if (_menuLinkRemoved is not null) helper.LinkRemoved -= _menuLinkRemoved;
 
         _menuPressed = null;
@@ -387,9 +389,9 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     }
 
     // 命中连线且宿主真的给了条目才开菜单：空白处也会路由一次（Target 为 null），在这里挡掉。
-    private void ShowLinkMenu(WorkflowPointerPressedEventArgs e)
+    private void ShowLinkMenu(Wf.PointerPressedEventArgs e)
     {
-        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Button != Wf.MouseButton.Right) return;
         if (e.Target is not IWorkflowLinkViewModel link || LinkMenu is null) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
@@ -433,7 +435,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// </remarks>
     public async Task RoutePointerAsync(
         SurfacePointerKind kind, double clientX, double clientY,
-        WorkflowMouseButton button = WorkflowMouseButton.None, double deltaY = 0, IWorkflowViewModel? target = null)
+        Wf.MouseButton button = Wf.MouseButton.None, double deltaY = 0, IWorkflowViewModel? target = null)
     {
         // 路由按树取用（Core 只保留一处）：本家不持有实例，换树自然换路由
         if (_input is not { } input)
@@ -452,12 +454,12 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
         input.Route(kind switch
         {
-            SurfacePointerKind.Entered => new WorkflowPointerEnteredEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, handle),
-            SurfacePointerKind.Exited => new WorkflowPointerExitedEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, handle),
-            SurfacePointerKind.Pressed => new WorkflowPointerPressedEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, button, 1, handle),
-            SurfacePointerKind.Released => new WorkflowPointerReleasedEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, button, 1, handle),
-            SurfacePointerKind.Wheel => new WorkflowPointerWheelEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, 0d, deltaY, handle),
-            _ => new WorkflowPointerMovedEventArgs(anchor, InputModifiers.None, _surfaceRoot, target, handle),
+            SurfacePointerKind.Entered => new Wf.PointerEnteredEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, handle),
+            SurfacePointerKind.Exited => new Wf.PointerExitedEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, handle),
+            SurfacePointerKind.Pressed => new Wf.PointerPressedEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, button, 1, handle),
+            SurfacePointerKind.Released => new Wf.PointerReleasedEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, button, 1, handle),
+            SurfacePointerKind.Wheel => new Wf.PointerWheelEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, 0d, deltaY, handle),
+            _ => new Wf.PointerMovedEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, handle),
         });
 
         // 悬停到连线上就把焦点收到表面根：Delete 才有路由，而「悬停（不点）就能删」是契约。

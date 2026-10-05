@@ -2,7 +2,7 @@ namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
 /// Which pointer button an input event concerns. The spellings mirror <c>Avalonia.Input.MouseButton</c>; the wheel
-/// is deliberately not a button here — it has its own event, <see cref="WorkflowPointerWheelEventArgs"/>.
+/// is deliberately not a button here — it has its own event, <see cref="PointerWheelEventArgs"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -14,7 +14,7 @@ namespace VeloxDev.WorkflowSystem;
 /// platform's input namespace, where a plain <c>MouseButton</c> already exists.
 /// </para>
 /// </remarks>
-public enum WorkflowMouseButton
+public enum MouseButton
 {
     /// <summary>No button is involved — a move, or a device that cannot say which button it was.</summary>
     None = 0,

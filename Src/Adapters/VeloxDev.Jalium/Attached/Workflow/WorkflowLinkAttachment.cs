@@ -5,6 +5,8 @@ using Jalium.UI;
 using Jalium.UI.Controls;
 using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem;
+using Wf = VeloxDev.WorkflowSystem;
+using PlatformInput = Jalium.UI.Input;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -102,22 +104,22 @@ public sealed class WorkflowLinkAttachment
     }
 
     /// <summary>Raised when the pointer arrives over this link.</summary>
-    public event EventHandler<WorkflowPointerEnteredEventArgs>? PointerEntered;
+    public event EventHandler<Wf.PointerEnteredEventArgs>? PointerEntered;
 
     /// <summary>Raised when the pointer leaves this link.</summary>
-    public event EventHandler<WorkflowPointerExitedEventArgs>? PointerLeft;
+    public event EventHandler<Wf.PointerExitedEventArgs>? PointerLeft;
 
     /// <summary>Raised when a pointer button goes down over this link.</summary>
-    public event EventHandler<WorkflowPointerPressedEventArgs>? PointerPressed;
+    public event EventHandler<Wf.PointerPressedEventArgs>? PointerPressed;
 
     /// <summary>Raised when a pointer button comes up over this link.</summary>
-    public event EventHandler<WorkflowPointerReleasedEventArgs>? PointerReleased;
+    public event EventHandler<Wf.PointerReleasedEventArgs>? PointerReleased;
 
     /// <summary>Raised when a key goes down while this link is the key's target (the pointer is on it).</summary>
-    public event EventHandler<WorkflowKeyDownEventArgs>? KeyDown;
+    public event EventHandler<Wf.KeyDownEventArgs>? KeyDown;
 
     /// <summary>Raised when a key comes up while this link is the key's target.</summary>
-    public event EventHandler<WorkflowKeyUpEventArgs>? KeyUp;
+    public event EventHandler<Wf.KeyUpEventArgs>? KeyUp;
 
     /// <summary>The link this element currently draws, taken from the <c>DataContext</c>.</summary>
     public IWorkflowLinkViewModel? Link => link;
@@ -247,7 +249,7 @@ public sealed class WorkflowLinkAttachment
     // 换绑就是换订阅：这条线的四个指针事件跟着走，池化元素因此不需要视图自己记一份。
     private void HookInput(IWorkflowLinkViewModel? previous, IWorkflowLinkViewModel? next)
     {
-        if (previous?.GetHelper() is IWorkflowInputEvents old)
+        if (previous?.GetHelper() is Wf.IInputEvents old)
         {
             old.Input.PointerEntered -= OnInputPointerEntered;
             old.Input.PointerExited -= OnInputPointerExited;
@@ -257,7 +259,7 @@ public sealed class WorkflowLinkAttachment
             old.Input.KeyUp -= OnInputKeyUp;
         }
 
-        if (next?.GetHelper() is IWorkflowInputEvents now)
+        if (next?.GetHelper() is Wf.IInputEvents now)
         {
             now.Input.PointerEntered += OnInputPointerEntered;
             now.Input.PointerExited += OnInputPointerExited;
@@ -268,17 +270,17 @@ public sealed class WorkflowLinkAttachment
         }
     }
 
-    private void OnInputPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => PointerEntered?.Invoke(this, e);
+    private void OnInputPointerEntered(object? sender, Wf.PointerEnteredEventArgs e) => PointerEntered?.Invoke(this, e);
 
-    private void OnInputPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => PointerLeft?.Invoke(this, e);
+    private void OnInputPointerExited(object? sender, Wf.PointerExitedEventArgs e) => PointerLeft?.Invoke(this, e);
 
-    private void OnInputPointerPressed(object? sender, WorkflowPointerPressedEventArgs e) => PointerPressed?.Invoke(this, e);
+    private void OnInputPointerPressed(object? sender, Wf.PointerPressedEventArgs e) => PointerPressed?.Invoke(this, e);
 
-    private void OnInputPointerReleased(object? sender, WorkflowPointerReleasedEventArgs e) => PointerReleased?.Invoke(this, e);
+    private void OnInputPointerReleased(object? sender, Wf.PointerReleasedEventArgs e) => PointerReleased?.Invoke(this, e);
 
-    private void OnInputKeyDown(object? sender, WorkflowKeyDownEventArgs e) => KeyDown?.Invoke(this, e);
+    private void OnInputKeyDown(object? sender, Wf.KeyDownEventArgs e) => KeyDown?.Invoke(this, e);
 
-    private void OnInputKeyUp(object? sender, WorkflowKeyUpEventArgs e) => KeyUp?.Invoke(this, e);
+    private void OnInputKeyUp(object? sender, Wf.KeyUpEventArgs e) => KeyUp?.Invoke(this, e);
 
     private void OnDataContextChanged(object? sender, DependencyPropertyChangedEventArgs e)
         => Bind(target.DataContext as IWorkflowLinkViewModel);

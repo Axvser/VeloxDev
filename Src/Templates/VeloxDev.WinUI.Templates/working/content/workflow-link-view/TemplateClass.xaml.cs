@@ -19,7 +19,7 @@ namespace TemplateNamespace;
 /// Cubic Bézier connection that leaves each port horizontally.
 /// Passive visual only — never hit-testable, so it cannot swallow canvas gestures. It publishes the curve it
 /// draws, in raw canvas-local DP values, so the surface can hit-test it; keep the curve in sync with the drawn
-/// shape. Hover feedback is the host's — subscribe <c>IWorkflowInputEvents</c> on the helper and handle the
+/// shape. Hover feedback is the host's — subscribe <c>IInputEvents</c> on the helper and handle the
 /// routed pointer events.
 /// </summary>
 public sealed partial class TemplateClass : UserControl

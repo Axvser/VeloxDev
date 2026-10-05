@@ -9,6 +9,8 @@ using System.Runtime.InteropServices;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
+using PlatformInput = System.Windows.Forms;
+using Wf = VeloxDev.WorkflowSystem;
 
 namespace Demo.Controls;
 
@@ -357,8 +359,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         // 渲染器整体换新：旧的即将被 Dispose、曲线也被撤，先把悬停清掉。否则 hub 还握着被换掉的那条线，
         // 新渲染器不会被点亮，直到指针再动一次。
-        _input?.Route(new WorkflowPointerExitedEventArgs(
-            new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
+        _input?.Route(new Wf.PointerExitedEventArgs(
+            new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
 
         foreach (var lv in _linkRenderers) lv.Dispose();
         _linkRenderers.Clear();
@@ -772,15 +774,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // 右键只对连线有意义：转发给 Core，命中时它才发 ContextMenuRequested，表面据弹菜单；空白处右键不启动平移
         if (e.Button == MouseButtons.Right)
         {
-            RoutePointer(e.Location, (p, t, h) => new WorkflowPointerPressedEventArgs(
-                p, Modifiers(), this, t, WorkflowMouseButton.Right, 1, h));
+            RoutePointer(e.Location, (p, t, h) => new Wf.PointerPressedEventArgs(
+                p, Modifiers(), this, t, Wf.MouseButton.Right, 1, h));
             return;
         }
 
         if (e.Button != MouseButtons.Left) return;
 
-        RoutePointer(e.Location, (p, t, h) => new WorkflowPointerPressedEventArgs(
-            p, Modifiers(), this, t, WorkflowMouseButton.Left, 1, h));
+        RoutePointer(e.Location, (p, t, h) => new Wf.PointerPressedEventArgs(
+            p, Modifiers(), this, t, Wf.MouseButton.Left, 1, h));
 
         if (_session?.Tree.VirtualLink.IsVisible == true)
         {
@@ -817,7 +819,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         }
 
         // 悬停即选中：命中归 Core，这里只把世界坐标的指针转发进去
-        RoutePointer(e.Location, (p, t, h) => new WorkflowPointerMovedEventArgs(p, Modifiers(), this, t, h));
+        RoutePointer(e.Location, (p, t, h) => new Wf.PointerMovedEventArgs(p, Modifiers(), this, t, h));
 
         // Mouse tracking in link mode is handled by WorkflowSlotConnectionBehavior; no need to repeat it here
     }
@@ -859,8 +861,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         // 菜单开着时指针是飞到菜单上去了、不是移开这条线：Core 在 IsSuspended 下会忽略这次 Exited，不必自拦。
         // 移开就取消选中（其它六家同）：Core 收到 Exited 会清掉悬停，选中跟着走。
-        _input?.Route(new WorkflowPointerExitedEventArgs(
-            new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
+        _input?.Route(new Wf.PointerExitedEventArgs(
+            new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
     }
 
     // ── Link interaction ─────────────────────────────────────────────────────────
@@ -874,7 +876,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // 路由由 Core 按树缓存：同一棵树在任何界面上都是这一个，本家不再自己造；半径沿用本家原先的值。
         var input = WorkflowInput.For(tree);
         input.HitRadius = LinkHitRadius;
-        if (tree.GetHelper() is IWorkflowInputEvents events)
+        if (tree.GetHelper() is Wf.IInputEvents events)
         {
             // 菜单归表面：条目见 OnBuildLinkMenu。宿主在更靠前的一级（连线自己）订同一个事件并置 PreventDefault
             // 就能否决这一次 —— 顺序由「目标先于祖先」保证，与订阅先后无关。
@@ -891,21 +893,21 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (_input is not { } input) return;
 
         var helper = input.Tree.GetHelper();
-        if (helper is IWorkflowInputEvents events) events.Input.PointerPressed -= OnLinkPointerPressed;
+        if (helper is Wf.IInputEvents events) events.Input.PointerPressed -= OnLinkPointerPressed;
         helper.LinkRemoved -= OnLinkRemoved;
 
         // 会话结束菜单还挂着的话先收起：Closed 会顺手把挂起放开，换会话时不至于一直停在不接收移动。
         _linkMenu?.Close();
 
         // 解绑前清掉指针目标：路由跟着树活着，比这次绑定久；不清的话重新绑同一棵树时上一条线还亮着。
-        input.Route(new WorkflowPointerExitedEventArgs(
-            new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
+        input.Route(new Wf.PointerExitedEventArgs(
+            new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
         _input = null;
     }
 
     // 指针位置在这里是「世界坐标」：曲线就是在世界坐标里发布的（画布内部按世界坐标绘制），两边必须同系。
     // 命中由共享的曲线判定器回答，事件交给输入路由。
-    private void RoutePointer(Point client, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, WorkflowPointerEventArgs> args)
+    private void RoutePointer(Point client, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         if (_input is not { } input) return;
 
@@ -924,60 +926,60 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (input.HoveredLink is not null && CanFocus) Focus();
     }
 
-    private static WorkflowMouseButton ButtonOf(MouseButtons button) => button switch
+    private static Wf.MouseButton ButtonOf(MouseButtons button) => button switch
     {
-        MouseButtons.Left => WorkflowMouseButton.Left,
-        MouseButtons.Right => WorkflowMouseButton.Right,
-        MouseButtons.Middle => WorkflowMouseButton.Middle,
-        MouseButtons.XButton1 => WorkflowMouseButton.XButton1,
-        MouseButtons.XButton2 => WorkflowMouseButton.XButton2,
-        _ => WorkflowMouseButton.None,
+        MouseButtons.Left => Wf.MouseButton.Left,
+        MouseButtons.Right => Wf.MouseButton.Right,
+        MouseButtons.Middle => Wf.MouseButton.Middle,
+        MouseButtons.XButton1 => Wf.MouseButton.XButton1,
+        MouseButtons.XButton2 => Wf.MouseButton.XButton2,
+        _ => Wf.MouseButton.None,
     };
 
-    private static InputModifiers Modifiers()
+    private static Wf.InputModifiers Modifiers()
     {
         var keys = Control.ModifierKeys;
-        var modifiers = InputModifiers.None;
-        if ((keys & Keys.Alt) != 0) modifiers |= InputModifiers.Alt;
-        if ((keys & Keys.Control) != 0) modifiers |= InputModifiers.Control;
-        if ((keys & Keys.Shift) != 0) modifiers |= InputModifiers.Shift;
+        var modifiers = Wf.InputModifiers.None;
+        if ((keys & Keys.Alt) != 0) modifiers |= Wf.InputModifiers.Alt;
+        if ((keys & Keys.Control) != 0) modifiers |= Wf.InputModifiers.Control;
+        if ((keys & Keys.Shift) != 0) modifiers |= Wf.InputModifiers.Shift;
         return modifiers;
     }
 
     // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
-    private static WorkflowKey ToKey(Keys key)
+    private static Wf.InputKey ToKey(Keys key)
     {
-        if (key >= Keys.A && key <= Keys.Z) return WorkflowKey.A + ((int)key - (int)Keys.A);
-        if (key >= Keys.D0 && key <= Keys.D9) return WorkflowKey.D0 + ((int)key - (int)Keys.D0);
-        if (key >= Keys.F1 && key <= Keys.F12) return WorkflowKey.F1 + ((int)key - (int)Keys.F1);
+        if (key >= Keys.A && key <= Keys.Z) return Wf.InputKey.A + ((int)key - (int)Keys.A);
+        if (key >= Keys.D0 && key <= Keys.D9) return Wf.InputKey.D0 + ((int)key - (int)Keys.D0);
+        if (key >= Keys.F1 && key <= Keys.F12) return Wf.InputKey.F1 + ((int)key - (int)Keys.F1);
 
         return key switch
         {
-            Keys.None => WorkflowKey.None,
-            Keys.Back => WorkflowKey.Back,
-            Keys.Tab => WorkflowKey.Tab,
-            Keys.Enter => WorkflowKey.Enter,
-            Keys.Escape => WorkflowKey.Escape,
-            Keys.Space => WorkflowKey.Space,
-            Keys.PageUp => WorkflowKey.PageUp,
-            Keys.PageDown => WorkflowKey.PageDown,
-            Keys.End => WorkflowKey.End,
-            Keys.Home => WorkflowKey.Home,
-            Keys.Left => WorkflowKey.Left,
-            Keys.Up => WorkflowKey.Up,
-            Keys.Right => WorkflowKey.Right,
-            Keys.Down => WorkflowKey.Down,
-            Keys.Insert => WorkflowKey.Insert,
-            Keys.Delete => WorkflowKey.Delete,
-            _ => WorkflowKey.Unknown,
+            Keys.None => Wf.InputKey.None,
+            Keys.Back => Wf.InputKey.Back,
+            Keys.Tab => Wf.InputKey.Tab,
+            Keys.Enter => Wf.InputKey.Enter,
+            Keys.Escape => Wf.InputKey.Escape,
+            Keys.Space => Wf.InputKey.Space,
+            Keys.PageUp => Wf.InputKey.PageUp,
+            Keys.PageDown => Wf.InputKey.PageDown,
+            Keys.End => Wf.InputKey.End,
+            Keys.Home => Wf.InputKey.Home,
+            Keys.Left => Wf.InputKey.Left,
+            Keys.Up => Wf.InputKey.Up,
+            Keys.Right => Wf.InputKey.Right,
+            Keys.Down => Wf.InputKey.Down,
+            Keys.Insert => Wf.InputKey.Insert,
+            Keys.Delete => Wf.InputKey.Delete,
+            _ => Wf.InputKey.Unknown,
         };
     }
 
     // 右键菜单归表面、不归连线视图：右键落在表面上（连线是画布代画的，没有自己的控件），而弹出要屏幕坐标、
     // 模型给的是世界坐标 —— 只有表面同时知道这两件事。
-    private void OnLinkPointerPressed(object? sender, WorkflowPointerPressedEventArgs e)
+    private void OnLinkPointerPressed(object? sender, Wf.PointerPressedEventArgs e)
     {
-        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Button != Wf.MouseButton.Right) return;
         if (e.Target is not IWorkflowLinkViewModel link) return;
 
         // 弹着的时候再来一次：忽略，别把当前这份菜单连着的链接换掉。
@@ -1033,15 +1035,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (!_pointerInside)
         {
             // 指针不在画布上：清掉指针目标（路由跟着树活着，不清会留一条亮线）
-            _input?.Route(new WorkflowPointerExitedEventArgs(
-                new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
+            _input?.Route(new Wf.PointerExitedEventArgs(
+                new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
             return;
         }
 
-        RoutePointer(_lastPointerClient, (p, t, h) => new WorkflowPointerMovedEventArgs(p, Modifiers(), this, t, h));
+        RoutePointer(_lastPointerClient, (p, t, h) => new Wf.PointerMovedEventArgs(p, Modifiers(), this, t, h));
     }
 
-    protected override void OnKeyDown(KeyEventArgs e)
+    protected override void OnKeyDown(PlatformInput.KeyEventArgs e)
     {
         base.OnKeyDown(e);
 
@@ -1050,7 +1052,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (_input is not { } input || input.HoveredLink is not { } hovered) return;
 
         var handle = new WorkflowEventHandle();
-        input.Route(new WorkflowKeyDownEventArgs(
+        input.Route(new Wf.KeyDownEventArgs(
             ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false, this, hovered, handle));
 
         if (e.KeyCode != Keys.Delete) return;

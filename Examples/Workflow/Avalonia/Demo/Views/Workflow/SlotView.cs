@@ -7,6 +7,8 @@ using System;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using PlatformInput = Avalonia.Input;
+using Wf = VeloxDev.WorkflowSystem;
 
 namespace Demo;
 
@@ -186,13 +188,13 @@ public class SlotView : UserControl
 
     // 悬停要亮一档：端口小，没有反馈就不知道指针到底有没有搭上它。
     // IsPointerOver 不是 AffectsRender 的属性，进出各重绘一次。
-    protected override void OnPointerEntered(PointerEventArgs e)
+    protected override void OnPointerEntered(PlatformInput.PointerEventArgs e)
     {
         base.OnPointerEntered(e);
         InvalidateVisual();
     }
 
-    protected override void OnPointerExited(PointerEventArgs e)
+    protected override void OnPointerExited(PlatformInput.PointerEventArgs e)
     {
         base.OnPointerExited(e);
         InvalidateVisual();

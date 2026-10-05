@@ -598,16 +598,16 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
         // 悬停高亮是本 demo 的：订**这条线自己的** Helper 就够了 —— 路由会告诉它指针什么时候进来、
         // 什么时候离开，这里不必再去比 target 是谁。
-        if (link.GetHelper() is IWorkflowInputEvents events)
+        if (link.GetHelper() is IInputEvents events)
         {
             events.Input.PointerEntered += OnPointerEntered;
             events.Input.PointerExited += OnPointerExited;
         }
     }
 
-    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+    private void OnPointerEntered(object? sender, PointerEnteredEventArgs e) => IsHighlighted = true;
 
-    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
+    private void OnPointerExited(object? sender, PointerExitedEventArgs e) => IsHighlighted = false;
 
     private void OnLinkChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -677,7 +677,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         }
 
         // 视图比树活得短：退了订，路由不会往一个已经走掉的渲染器里发事件
-        if (Link?.GetHelper() is IWorkflowInputEvents events)
+        if (Link?.GetHelper() is IInputEvents events)
         {
             events.Input.PointerEntered -= OnPointerEntered;
             events.Input.PointerExited -= OnPointerExited;

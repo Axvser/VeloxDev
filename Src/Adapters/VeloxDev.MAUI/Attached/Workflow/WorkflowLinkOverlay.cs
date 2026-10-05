@@ -1,8 +1,10 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.Maui.Graphics;
+using PlatformInput = Microsoft.Maui.Controls;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
+using Wf = VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -44,7 +46,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </para>
 /// <para>
 /// Hover feedback is the host's: this layer paints resting links and nothing else. A host that wants a link to
-/// look different while the pointer is on it subscribes the tree's <c>IWorkflowInputEvents</c> and draws its own
+/// look different while the pointer is on it subscribes the tree's <c>Wf.IInputEvents</c> and draws its own
 /// layer above this one, from the curve the link published (<see cref="ILinkHitTestable.Curve"/>) — so the two can
 /// never disagree about where the line is.
 /// </para>
@@ -577,25 +579,25 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         // 键盘钩子要升级到窗口根，而 XamlRoot 在挂钩子那会儿还没就绪（见 AttachKeyHook 的注释）
         TryUpgradeKeyHook();
 #endif
-        RoutePointer(point, (p, t, h) => new WorkflowPointerMovedEventArgs(p, InputModifiers.None, this, t, h));
+        RoutePointer(point, (p, t, h) => new Wf.PointerMovedEventArgs(p, Wf.InputModifiers.None, this, t, h));
     }
 
     // 指针离开整块输入面：指针目标跟着走 —— 留在身后会让「现在按 Delete 删哪条」变得没有答案。
     // 菜单弹出引起的那一次离开由输入路由自己挡（它认 IsSuspended），本层不再重复拦一遍。
     private void OnHoverExited()
     {
-        _input?.Route(new WorkflowPointerExitedEventArgs(new Anchor(), InputModifiers.None, this, null, new WorkflowEventHandle()));
+        _input?.Route(new Wf.PointerExitedEventArgs(new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
     }
 
     // 指针进入整块输入面。
     private void OnHoverEntered(Point point)
     {
-        RoutePointer(point, (p, t, h) => new WorkflowPointerEnteredEventArgs(p, InputModifiers.None, this, t, h));
+        RoutePointer(point, (p, t, h) => new Wf.PointerEnteredEventArgs(p, Wf.InputModifiers.None, this, t, h));
     }
 
     // 指针进来时统一在这里翻译：被指到的线由共享的曲线命中判出来，事件交给输入路由。
     private void RoutePointer(
-        Point point, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, WorkflowPointerEventArgs> args)
+        Point point, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         if (_input is not { } input) return;
 
@@ -613,9 +615,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// </summary>
     /// <param name="onOverlay">Where the press landed, in this layer's coordinates.</param>
     /// <param name="button">Which button.</param>
-    private void OnPressed(Point onOverlay, WorkflowMouseButton button)
+    private void OnPressed(Point onOverlay, Wf.MouseButton button)
     {
-        RoutePointer(onOverlay, (p, t, h) => new WorkflowPointerPressedEventArgs(p, InputModifiers.None, this, t, button, 1, h));
+        RoutePointer(onOverlay, (p, t, h) => new Wf.PointerPressedEventArgs(p, Wf.InputModifiers.None, this, t, button, 1, h));
 
         if (_input?.HoveredLink is null)
         {
@@ -644,7 +646,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     }
 
 #if !WINDOWS
-    private void OnGesturePointerMoved(object? sender, PointerEventArgs e)
+    private void OnGesturePointerMoved(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (e.GetPosition(this) is not { } point)
         {
@@ -661,13 +663,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         OnHoverMoved(point);
     }
 
-    private void OnGesturePointerExited(object? sender, PointerEventArgs e) => OnHoverExited();
+    private void OnGesturePointerExited(object? sender, PlatformInput.PointerEventArgs e) => OnHoverExited();
 
-    private void OnGesturePointerPressed(object? sender, PointerEventArgs e)
+    private void OnGesturePointerPressed(object? sender, PlatformInput.PointerEventArgs e)
     {
-        var button = e.Button == ButtonsMask.Secondary ? WorkflowMouseButton.Right
-            : e.Button == ButtonsMask.Primary ? WorkflowMouseButton.Left
-            : (WorkflowMouseButton?)null;
+        var button = e.Button == ButtonsMask.Secondary ? Wf.MouseButton.Right
+            : e.Button == ButtonsMask.Primary ? Wf.MouseButton.Left
+            : (Wf.MouseButton?)null;
 
         if (button is null || _interactionSource is null || e.GetPosition(this) is not { } onOverlay)
         {
@@ -675,7 +677,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         // 只有左键（触摸/鼠标）走长按；右键本身就是菜单手势，不需要等。
-        if (button is WorkflowMouseButton.Left)
+        if (button is Wf.MouseButton.Left)
         {
             StartLongPress(onOverlay);
         }
@@ -683,14 +685,14 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         OnPressed(onOverlay, button.Value);
     }
 
-    private void OnGesturePointerReleased(object? sender, PointerEventArgs e)
+    private void OnGesturePointerReleased(object? sender, PlatformInput.PointerEventArgs e)
     {
         CancelLongPress();
 
         if (e.GetPosition(this) is { } onOverlay)
         {
-            RoutePointer(onOverlay, (p, t, h) => new WorkflowPointerReleasedEventArgs(
-                p, InputModifiers.None, this, t, WorkflowMouseButton.Left, 1, h));
+            RoutePointer(onOverlay, (p, t, h) => new Wf.PointerReleasedEventArgs(
+                p, Wf.InputModifiers.None, this, t, Wf.MouseButton.Left, 1, h));
         }
     }
 
@@ -702,8 +704,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         CancelLongPress();
         if (origin is { } point)
         {
-            RoutePointer(point, (p, t, h) => new WorkflowPointerPressedEventArgs(
-                p, InputModifiers.None, this, t, WorkflowMouseButton.Right, 1, h));
+            RoutePointer(point, (p, t, h) => new Wf.PointerPressedEventArgs(
+                p, Wf.InputModifiers.None, this, t, Wf.MouseButton.Right, 1, h));
         }
     }
 
@@ -770,10 +772,10 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         _pressedHandler = (_, e) =>
         {
             var properties = e.GetCurrentPoint(element).Properties;
-            var button = properties.IsRightButtonPressed ? WorkflowMouseButton.Right
-                : properties.IsMiddleButtonPressed ? WorkflowMouseButton.Middle
-                : properties.IsLeftButtonPressed ? WorkflowMouseButton.Left
-                : (WorkflowMouseButton?)null;
+            var button = properties.IsRightButtonPressed ? Wf.MouseButton.Right
+                : properties.IsMiddleButtonPressed ? Wf.MouseButton.Middle
+                : properties.IsLeftButtonPressed ? Wf.MouseButton.Left
+                : (Wf.MouseButton?)null;
 
             if (button is not null && ToOverlayPoint(e) is { } onOverlay)
             {
@@ -783,14 +785,14 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         _releasedHandler = (_, e) =>
         {
             var properties = e.GetCurrentPoint(element).Properties;
-            var button = properties.IsRightButtonPressed ? WorkflowMouseButton.Right
-                : properties.IsMiddleButtonPressed ? WorkflowMouseButton.Middle
-                : WorkflowMouseButton.Left;
+            var button = properties.IsRightButtonPressed ? Wf.MouseButton.Right
+                : properties.IsMiddleButtonPressed ? Wf.MouseButton.Middle
+                : Wf.MouseButton.Left;
 
             if (ToOverlayPoint(e) is { } onOverlay)
             {
-                RoutePointer(onOverlay, (p, t, h) => new WorkflowPointerReleasedEventArgs(
-                    p, InputModifiers.None, this, t, button, 1, h));
+                RoutePointer(onOverlay, (p, t, h) => new Wf.PointerReleasedEventArgs(
+                    p, Wf.InputModifiers.None, this, t, button, 1, h));
             }
         };
         _wheelHandler = (_, e) =>
@@ -799,8 +801,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             if (ToOverlayPoint(e) is { } onOverlay)
             {
                 var delta = properties.MouseWheelDelta;
-                RoutePointer(onOverlay, (p, t, h) => new WorkflowPointerWheelEventArgs(
-                    p, InputModifiers.None, this, t, 0d, delta, h));
+                RoutePointer(onOverlay, (p, t, h) => new Wf.PointerWheelEventArgs(
+                    p, Wf.InputModifiers.None, this, t, 0d, delta, h));
             }
         };
 
@@ -929,41 +931,41 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             return;
         }
 
-        input.Route(new WorkflowKeyDownEventArgs(
-            ToKey(e.Key), (int)e.Key, InputModifiers.None, false, this, input.HoveredLink, new WorkflowEventHandle()));
+        input.Route(new Wf.KeyDownEventArgs(
+            ToKey(e.Key), (int)e.Key, Wf.InputModifiers.None, false, this, input.HoveredLink, new WorkflowEventHandle()));
 
         if (e.Key == Windows.System.VirtualKey.Delete) e.Handled = true;
     }
 
     // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
-    private static WorkflowKey ToKey(Windows.System.VirtualKey key)
+    private static Wf.InputKey ToKey(Windows.System.VirtualKey key)
     {
         if (key >= Windows.System.VirtualKey.A && key <= Windows.System.VirtualKey.Z)
-            return WorkflowKey.A + (key - Windows.System.VirtualKey.A);
+            return Wf.InputKey.A + (key - Windows.System.VirtualKey.A);
         if (key >= Windows.System.VirtualKey.Number0 && key <= Windows.System.VirtualKey.Number9)
-            return WorkflowKey.D0 + (key - Windows.System.VirtualKey.Number0);
+            return Wf.InputKey.D0 + (key - Windows.System.VirtualKey.Number0);
         if (key >= Windows.System.VirtualKey.F1 && key <= Windows.System.VirtualKey.F12)
-            return WorkflowKey.F1 + (key - Windows.System.VirtualKey.F1);
+            return Wf.InputKey.F1 + (key - Windows.System.VirtualKey.F1);
 
         return key switch
         {
-            Windows.System.VirtualKey.Cancel => WorkflowKey.Cancel,
-            Windows.System.VirtualKey.Back => WorkflowKey.Back,
-            Windows.System.VirtualKey.Tab => WorkflowKey.Tab,
-            Windows.System.VirtualKey.Enter => WorkflowKey.Enter,
-            Windows.System.VirtualKey.Escape => WorkflowKey.Escape,
-            Windows.System.VirtualKey.Space => WorkflowKey.Space,
-            Windows.System.VirtualKey.PageUp => WorkflowKey.PageUp,
-            Windows.System.VirtualKey.PageDown => WorkflowKey.PageDown,
-            Windows.System.VirtualKey.End => WorkflowKey.End,
-            Windows.System.VirtualKey.Home => WorkflowKey.Home,
-            Windows.System.VirtualKey.Left => WorkflowKey.Left,
-            Windows.System.VirtualKey.Up => WorkflowKey.Up,
-            Windows.System.VirtualKey.Right => WorkflowKey.Right,
-            Windows.System.VirtualKey.Down => WorkflowKey.Down,
-            Windows.System.VirtualKey.Insert => WorkflowKey.Insert,
-            Windows.System.VirtualKey.Delete => WorkflowKey.Delete,
-            _ => WorkflowKey.Unknown,
+            Windows.System.VirtualKey.Cancel => Wf.InputKey.Cancel,
+            Windows.System.VirtualKey.Back => Wf.InputKey.Back,
+            Windows.System.VirtualKey.Tab => Wf.InputKey.Tab,
+            Windows.System.VirtualKey.Enter => Wf.InputKey.Enter,
+            Windows.System.VirtualKey.Escape => Wf.InputKey.Escape,
+            Windows.System.VirtualKey.Space => Wf.InputKey.Space,
+            Windows.System.VirtualKey.PageUp => Wf.InputKey.PageUp,
+            Windows.System.VirtualKey.PageDown => Wf.InputKey.PageDown,
+            Windows.System.VirtualKey.End => Wf.InputKey.End,
+            Windows.System.VirtualKey.Home => Wf.InputKey.Home,
+            Windows.System.VirtualKey.Left => Wf.InputKey.Left,
+            Windows.System.VirtualKey.Up => Wf.InputKey.Up,
+            Windows.System.VirtualKey.Right => Wf.InputKey.Right,
+            Windows.System.VirtualKey.Down => Wf.InputKey.Down,
+            Windows.System.VirtualKey.Insert => Wf.InputKey.Insert,
+            Windows.System.VirtualKey.Delete => Wf.InputKey.Delete,
+            _ => Wf.InputKey.Unknown,
         };
     }
 #endif

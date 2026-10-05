@@ -6,8 +6,8 @@ namespace VeloxDev.WorkflowSystem;
 /// gesture logic, which runs after the route unless a subscriber set
 /// <see cref="WorkflowEventHandle.PreventDefault"/>.
 /// </remarks>
-/// <seealso cref="WorkflowPointerEventArgs"/>
-public sealed class WorkflowPointerPressedEventArgs : WorkflowPointerEventArgs
+/// <seealso cref="PointerEventArgs"/>
+public sealed class PointerPressedEventArgs : PointerEventArgs
 {
     /// <summary>Creates the argument.</summary>
     /// <param name="position">Where the pointer is, layer included.</param>
@@ -17,17 +17,17 @@ public sealed class WorkflowPointerPressedEventArgs : WorkflowPointerEventArgs
     /// <param name="button">Which button went down.</param>
     /// <param name="clickCount">How many clicks this press completes.</param>
     /// <param name="handle">The handle for this action.</param>
-    public WorkflowPointerPressedEventArgs(
+    public PointerPressedEventArgs(
         Anchor position, InputModifiers modifiers, object? source, IWorkflowViewModel? target,
-        WorkflowMouseButton button, int clickCount, WorkflowEventHandle handle)
+        MouseButton button, int clickCount, WorkflowEventHandle handle)
         : base(position, modifiers, source, target, handle)
     {
         Button = button;
         ClickCount = clickCount;
     }
 
-    /// <summary>Which button went down, or <see cref="WorkflowMouseButton.None"/> when the platform cannot say.</summary>
-    public WorkflowMouseButton Button { get; }
+    /// <summary>Which button went down, or <see cref="MouseButton.None"/> when the platform cannot say.</summary>
+    public MouseButton Button { get; }
 
     /// <summary>How many clicks this press completes — 2 for the second press of a double click.</summary>
     public int ClickCount { get; }

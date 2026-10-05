@@ -14,7 +14,7 @@
 
 | 层 | 收什么 | 举例 |
 |---|---|---|
-| **Core**（`Src/Core/VeloxDev.Core/`） | **平台无关的机制**：状态、算法、输入面 | 连线命中算法（对着已发布的曲线判距）、**标准输入的输入路由** `WorkflowInput.For(tree)`（`Route` + 目标冒泡）、`IWorkflowInputEvents`（组件上的指针/键盘事件）、`WorkflowEventHandle` |
+| **Core**（`Src/Core/VeloxDev.Core/`） | **平台无关的机制**：状态、算法、输入面 | 连线命中算法（对着已发布的曲线判距）、**标准输入的输入路由** `WorkflowInput.For(tree)`（`Route` + 目标冒泡）、`IInputEvents`（组件上的指针/键盘事件）、`WorkflowEventHandle` |
 | **适配器**（`Src/Adapters/VeloxDev.*/`） | **平台机制**，以及**直接触及后端命令 / 数据 / 逻辑**者 | 指针与按键翻译后转发进枢纽、键盘焦点路由（Delete 键靠它才能到达）、WinForms 的窗口区域雕刻、几何与每帧记账 |
 | **item template**（`Src/Templates/*/working/content/`） | **被动视觉**：把模型画出来，不含任何交互外观 | 画线、`PublishCurve(curve, this)`、NaN 就绪门、调色板与线宽 |
 | **demo**（`Examples/Workflow/…`） | **外观与策略**：交互效果在这里演示怎么写 | 悬停/选中高亮、流光、菜单条目、`InfoOverlay` 那类 HUD |
@@ -28,8 +28,8 @@
 ```csharp
 // demo only：hub 通知所有订阅者，每条线只在轮到自己时重画
 // 订这条线自己的 Helper 就够了 —— 路由会告诉它指针何时来、何时走
-((IWorkflowInputEvents)link.GetHelper()).Input.PointerEntered += (_, _) => _lit = true;
-((IWorkflowInputEvents)link.GetHelper()).Input.PointerExited += (_, _) => _lit = false;
+((IInputEvents)link.GetHelper()).Input.PointerEntered += (_, _) => _lit = true;
+((IInputEvents)link.GetHelper()).Input.PointerExited += (_, _) => _lit = false;
 ```
 
 - 事件在**被命中的那个组件**上先发，再沿祖先链冒泡（`link → tree` / `slot → node → tree` / `node → tree` / 空白画布 → `tree`）；`e.Target` 是适配器判出的命中者，`e.Source` 是发布曲线时登记的「画它的那个控件」，`e.Position.Layer` 是来源视图的图层。
@@ -54,18 +54,18 @@
 
 | 要定制 | 入口（七家同一套） |
 |---|---|
-| 一次指针/键盘动作（悬停、按下、松开、滚轮、按键） | **订阅**：`((IWorkflowInputEvents)vm.GetHelper()).Input.<事件> += …`。视图自己吃指针的平台（Razor / MAUI overlay / 逐线视图）与表面转发指针的平台（WPF / WinUI / Avalonia / WinForms / Jalium）都是这一句 |
+| 一次指针/键盘动作（悬停、按下、松开、滚轮、按键） | **订阅**：`((IInputEvents)vm.GetHelper()).Input.<事件> += …`。视图自己吃指针的平台（Razor / MAUI overlay / 逐线视图）与表面转发指针的平台（WPF / WinUI / Avalonia / WinForms / Jalium）都是这一句 |
 | 这一笔的效果怎么画 | **画在你自己的视图里**（连线 / 节点卡 / 端口都一样）：WPF / WinUI / Avalonia / Razor 是你本来就拥有的那个视图类（`OnRender` / 标记）；WinForms / Jalium 也是你的控件，调 `WorkflowLinkAttachment` / `WorkflowNodeAttachment` / `WorkflowSlotAttachment` 的 `Attach(this)` 挂上其余机制后自己画。**MAUI 的连线是唯一的例外**（见下） |
 | 这一次要不要走框架那一手 | args 上的 `Handle.PreventDefault`；要不要继续往上冒 = `StopPropagation` |
 | 整块表面级的策略 | `WorkflowInput.For(tree)` 的开关与只读口 |
 | 声明式的东西（右键菜单条目、模板选择器） | 标记平台：附着属性 / 组件参数；无标记两家：基类的 `protected virtual` 钩子 |
 
-**MAUI 也不能例外**（2026-10-05 用户定，走的是「宿主的层自己画」这条路）：那家**一个 overlay 画完所有线、没有每线视图**（每线一个 `GraphicsView` 撞 Win2D 纹理上限，Trimmed demo 实测过），所以「在我的那一笔视图里画」没有对应物 —— 但**效果仍是宿主的**：宿主在连线层之上**再叠一层自己的视图**，订 `IWorkflowInputEvents`，再沿 `ILinkHitTestable.Curve` 画。所以 Core 把**已发布的曲线**开成只读的公开事实（`Curve`）—— 那本来就是命中判定用的那一条，藏着只会逼每个宿主再推一遍几何。
+**MAUI 也不能例外**（2026-10-05 用户定，走的是「宿主的层自己画」这条路）：那家**一个 overlay 画完所有线、没有每线视图**（每线一个 `GraphicsView` 撞 Win2D 纹理上限，Trimmed demo 实测过），所以「在我的那一笔视图里画」没有对应物 —— 但**效果仍是宿主的**：宿主在连线层之上**再叠一层自己的视图**，订 `IInputEvents`，再沿 `ILinkHitTestable.Curve` 画。所以 Core 把**已发布的曲线**开成只读的公开事实（`Curve`）—— 那本来就是命中判定用的那一条，藏着只会逼每个宿主再推一遍几何。
 
 ⇒ **七家现在是同一句话**：库给事件与几何（`Curve`），效果画在你自己的视图里。
 
 **适配器基类给无标记两家的可重写钩子，命名规则与模型事件那组同一条**：`On` + 事件名，参数就是那次事件的 args
-（`OnPointerEntered(WorkflowPointerEnteredEventArgs)`、`OnMoving(NodeMoveEventArgs)` …）。
+（`OnPointerEntered(PointerEnteredEventArgs)`、`OnMoving(NodeMoveEventArgs)` …）。
 
 ⚠ **钩子名不许断言效果**：写 `OnPointerEntered`，不写 `OnPaintHighlight` —— 用户订的是「指针进来了」，
 不是「我要做高亮」；基类对「这条线为什么该长得不一样」没有意见，它只提供时机与画布。
@@ -101,6 +101,6 @@
 | 2026-09-26 | 连线交互是 demo 层，模板保持被动 |
 | 2026-10-03 | 推翻上一条：命中归 Core，**高亮**由 hub 经 `ILinkHighlight` 直接点亮、删除由 `AutoDelete` 直接执行，模板与 Trimmed demo 默认就有 |
 | 2026-10-04（第一版） | 再推翻 10-03 的**高亮**部分：命中与删除仍是库能力，高亮等外观回到 demo；Core 的 `ILinkHighlight` / `AutoHighlight` 因此删除 |
-| **2026-10-04（现行）** | 把上面这条做彻底：**按组件定制的那些事件整套换掉**，改成一套**标准输入**（抄 Avalonia 的指针/键盘 API，位置转 `Anchor` 并带上来源视图的图层、按 target 冒泡、句柄管「走不走框架那一手 / 还传不传」）。外观仍旧归 demo —— 现在订的是 `IWorkflowInputEvents` 的指针事件。菜单由适配器从 `PointerPressed(Right, link)` 自己弹，`LinkRemoved` 收尾 |
+| **2026-10-04（现行）** | 把上面这条做彻底：**按组件定制的那些事件整套换掉**，改成一套**标准输入**（抄 Avalonia 的指针/键盘 API，位置转 `Anchor` 并带上来源视图的图层、按 target 冒泡、句柄管「走不走框架那一手 / 还传不传」）。外观仍旧归 demo —— 现在订的是 `IInputEvents` 的指针事件。菜单由适配器从 `PointerPressed(Right, link)` 自己弹，`LinkRemoved` 收尾 |
 
 ⇒ 这一层来回翻过两次。再要动它，**先问用户**，不要按「上一次是怎么做的」推断。

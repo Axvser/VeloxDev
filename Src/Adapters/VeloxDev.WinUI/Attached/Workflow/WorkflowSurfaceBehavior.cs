@@ -11,6 +11,8 @@ using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 using Windows.System;
 using Windows.UI.Core;
+using Wf = VeloxDev.WorkflowSystem;
+using PlatformInput = Windows.UI.Core;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -35,7 +37,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
-        public EventHandler<WorkflowPointerPressedEventArgs>? MenuPressed { get; set; }
+        public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
         public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
         public EventHandler<object>? MenuOpened { get; set; }
         public EventHandler<object>? MenuClosed { get; set; }
@@ -219,7 +221,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             if (!ReferenceEquals(state.MenuLink, link)) return;
             state.LinkMenu?.Hide();
         };
-        ((IWorkflowInputEvents)bound.GetHelper()).Input.PointerPressed += state.MenuPressed;
+        ((Wf.IInputEvents)bound.GetHelper()).Input.PointerPressed += state.MenuPressed;
         bound.GetHelper().LinkRemoved += state.MenuLinkRemoved;
     }
 
@@ -243,7 +245,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.Input is { } input)
         {
             var helper = input.Tree.GetHelper();
-            if (state.MenuPressed is not null && helper is IWorkflowInputEvents events)
+            if (state.MenuPressed is not null && helper is Wf.IInputEvents events)
             {
                 events.Input.PointerPressed -= state.MenuPressed;
             }
@@ -258,10 +260,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     }
 
     // 右键落在表面上，而弹出要相对某个元素；表面同时知道画布与自己的位置，所以菜单由表面弹。
-    private static void ShowLinkMenu(UserControl host, SurfaceState state, WorkflowPointerPressedEventArgs e)
+    private static void ShowLinkMenu(UserControl host, SurfaceState state, Wf.PointerPressedEventArgs e)
     {
         // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
-        if (e.Button != WorkflowMouseButton.Right) return;
+        if (e.Button != Wf.MouseButton.Right) return;
         if (e.Target is not IWorkflowLinkViewModel link) return;
         if (state.LinkMenu is null || state.Canvas is null) return;
         if (host.DataContext is not IWorkflowTreeViewModel) return;
@@ -679,7 +681,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         // 把同一份 canvas-local 坐标交给输入面：被指到的那条线由 Core 那条共享的曲线命中判出来。
         RoutePointer(state, viewModel, e, host,
-            (position, target, handle) => new WorkflowPointerMovedEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
+            (position, target, handle) => new Wf.PointerMovedEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
     }
 
     // 指针进入宿主边界。
@@ -696,7 +698,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         RoutePointer(state, viewModel, e, host,
-            (position, target, handle) => new WorkflowPointerEnteredEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
+            (position, target, handle) => new Wf.PointerEnteredEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
     }
 
     // 指针 → canvas-local（槽锚点所在的坐标系）。画布自带 RenderTransform（WinUI demo 里的刻度带）
@@ -737,7 +739,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        input.Route(new WorkflowPointerExitedEventArgs(new Anchor(), Modifiers(e.KeyModifiers), host, null, new WorkflowEventHandle()));
+        input.Route(new Wf.PointerExitedEventArgs(new Anchor(), Modifiers(e.KeyModifiers), host, null, new WorkflowEventHandle()));
     }
 
     // 滚轮也进输入面（缩放那条路是 Ctrl+滚轮，挂在 ScrollViewer 上，两者不重叠）。
@@ -753,14 +755,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (Modifiers(e.KeyModifiers).HasFlag(InputModifiers.Control))
+        if (Modifiers(e.KeyModifiers).HasFlag(Wf.InputModifiers.Control))
         {
             return;
         }
 
         var delta = e.GetCurrentPoint(host).Properties.MouseWheelDelta;
         RoutePointer(state, viewModel, e, host,
-            (position, target, handle) => new WorkflowPointerWheelEventArgs(position, Modifiers(e.KeyModifiers), host, target, 0d, delta, handle));
+            (position, target, handle) => new Wf.PointerWheelEventArgs(position, Modifiers(e.KeyModifiers), host, target, 0d, delta, handle));
     }
 
     // 按下：转发给输入面裁决（是否落在某条连线上、哪个键）。不置 Handled —— 画布手势照旧。
@@ -777,17 +779,17 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var properties = e.GetCurrentPoint(host).Properties;
-        var button = properties.IsRightButtonPressed ? WorkflowMouseButton.Right
-            : properties.IsMiddleButtonPressed ? WorkflowMouseButton.Middle
-            : properties.IsLeftButtonPressed ? WorkflowMouseButton.Left
-            : WorkflowMouseButton.None;
-        if (button == WorkflowMouseButton.None)
+        var button = properties.IsRightButtonPressed ? Wf.MouseButton.Right
+            : properties.IsMiddleButtonPressed ? Wf.MouseButton.Middle
+            : properties.IsLeftButtonPressed ? Wf.MouseButton.Left
+            : Wf.MouseButton.None;
+        if (button == Wf.MouseButton.None)
         {
             return;
         }
 
         RoutePointer(state, viewModel, e, host,
-            (position, target, handle) => new WorkflowPointerPressedEventArgs(
+            (position, target, handle) => new Wf.PointerPressedEventArgs(
                 position, Modifiers(e.KeyModifiers), host, target, button, 1, handle));
 
         // 命中一条线就把焦点收到本宿主：Delete 要的按键事件经过它，悬停才删得掉。
@@ -811,7 +813,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        input.Route(new WorkflowKeyDownEventArgs(
+        input.Route(new Wf.KeyDownEventArgs(
             ToKey(e.Key), (int)e.Key, KeyModifiersNow(), false, host, input.HoveredLink, new WorkflowEventHandle()));
         e.Handled = true;
     }
@@ -824,14 +826,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var input = WorkflowInput.For(viewModel);
-        input.Route(new WorkflowKeyUpEventArgs(
+        input.Route(new Wf.KeyUpEventArgs(
             ToKey(e.Key), (int)e.Key, KeyModifiersNow(), false, host, input.HoveredLink, new WorkflowEventHandle()));
     }
 
     // 指针进来时统一在这里翻译：位置的 Z 取来源视图所在图层，被指到的线由共享的曲线命中判出来。
     private static void RoutePointer(
         SurfaceState state, IWorkflowTreeViewModel tree, PointerRoutedEventArgs e, UserControl host,
-        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, WorkflowPointerEventArgs> args)
+        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         var anchor = ToCanvasLocalAnchor(state, e, tree.Layout);
         var input = WorkflowInput.For(tree);
@@ -846,24 +848,24 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
     }
 
-    private static InputModifiers Modifiers(VirtualKeyModifiers keys)
+    private static Wf.InputModifiers Modifiers(VirtualKeyModifiers keys)
     {
-        var modifiers = InputModifiers.None;
-        if ((keys & VirtualKeyModifiers.Menu) != 0) modifiers |= InputModifiers.Alt;
-        if ((keys & VirtualKeyModifiers.Control) != 0) modifiers |= InputModifiers.Control;
-        if ((keys & VirtualKeyModifiers.Shift) != 0) modifiers |= InputModifiers.Shift;
-        if ((keys & VirtualKeyModifiers.Windows) != 0) modifiers |= InputModifiers.Meta;
+        var modifiers = Wf.InputModifiers.None;
+        if ((keys & VirtualKeyModifiers.Menu) != 0) modifiers |= Wf.InputModifiers.Alt;
+        if ((keys & VirtualKeyModifiers.Control) != 0) modifiers |= Wf.InputModifiers.Control;
+        if ((keys & VirtualKeyModifiers.Shift) != 0) modifiers |= Wf.InputModifiers.Shift;
+        if ((keys & VirtualKeyModifiers.Windows) != 0) modifiers |= Wf.InputModifiers.Meta;
         return modifiers;
     }
 
     // 键事件不带修饰键状态，只能问当前线程的键盘状态。
-    private static InputModifiers KeyModifiersNow()
+    private static Wf.InputModifiers KeyModifiersNow()
     {
-        var modifiers = InputModifiers.None;
-        if (IsDown(VirtualKey.Menu)) modifiers |= InputModifiers.Alt;
-        if (IsDown(VirtualKey.Control)) modifiers |= InputModifiers.Control;
-        if (IsDown(VirtualKey.Shift)) modifiers |= InputModifiers.Shift;
-        if (IsDown(VirtualKey.LeftWindows) || IsDown(VirtualKey.RightWindows)) modifiers |= InputModifiers.Meta;
+        var modifiers = Wf.InputModifiers.None;
+        if (IsDown(VirtualKey.Menu)) modifiers |= Wf.InputModifiers.Alt;
+        if (IsDown(VirtualKey.Control)) modifiers |= Wf.InputModifiers.Control;
+        if (IsDown(VirtualKey.Shift)) modifiers |= Wf.InputModifiers.Shift;
+        if (IsDown(VirtualKey.LeftWindows) || IsDown(VirtualKey.RightWindows)) modifiers |= Wf.InputModifiers.Meta;
         return modifiers;
 
         static bool IsDown(VirtualKey key)
@@ -871,31 +873,31 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     }
 
     // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
-    private static WorkflowKey ToKey(VirtualKey key)
+    private static Wf.InputKey ToKey(VirtualKey key)
     {
-        if (key >= VirtualKey.A && key <= VirtualKey.Z) return WorkflowKey.A + (key - VirtualKey.A);
-        if (key >= VirtualKey.Number0 && key <= VirtualKey.Number9) return WorkflowKey.D0 + (key - VirtualKey.Number0);
-        if (key >= VirtualKey.F1 && key <= VirtualKey.F12) return WorkflowKey.F1 + (key - VirtualKey.F1);
+        if (key >= VirtualKey.A && key <= VirtualKey.Z) return Wf.InputKey.A + (key - VirtualKey.A);
+        if (key >= VirtualKey.Number0 && key <= VirtualKey.Number9) return Wf.InputKey.D0 + (key - VirtualKey.Number0);
+        if (key >= VirtualKey.F1 && key <= VirtualKey.F12) return Wf.InputKey.F1 + (key - VirtualKey.F1);
 
         return key switch
         {
-            VirtualKey.Cancel => WorkflowKey.Cancel,
-            VirtualKey.Back => WorkflowKey.Back,
-            VirtualKey.Tab => WorkflowKey.Tab,
-            VirtualKey.Enter => WorkflowKey.Enter,
-            VirtualKey.Escape => WorkflowKey.Escape,
-            VirtualKey.Space => WorkflowKey.Space,
-            VirtualKey.PageUp => WorkflowKey.PageUp,
-            VirtualKey.PageDown => WorkflowKey.PageDown,
-            VirtualKey.End => WorkflowKey.End,
-            VirtualKey.Home => WorkflowKey.Home,
-            VirtualKey.Left => WorkflowKey.Left,
-            VirtualKey.Up => WorkflowKey.Up,
-            VirtualKey.Right => WorkflowKey.Right,
-            VirtualKey.Down => WorkflowKey.Down,
-            VirtualKey.Insert => WorkflowKey.Insert,
-            VirtualKey.Delete => WorkflowKey.Delete,
-            _ => WorkflowKey.Unknown,
+            VirtualKey.Cancel => Wf.InputKey.Cancel,
+            VirtualKey.Back => Wf.InputKey.Back,
+            VirtualKey.Tab => Wf.InputKey.Tab,
+            VirtualKey.Enter => Wf.InputKey.Enter,
+            VirtualKey.Escape => Wf.InputKey.Escape,
+            VirtualKey.Space => Wf.InputKey.Space,
+            VirtualKey.PageUp => Wf.InputKey.PageUp,
+            VirtualKey.PageDown => Wf.InputKey.PageDown,
+            VirtualKey.End => Wf.InputKey.End,
+            VirtualKey.Home => Wf.InputKey.Home,
+            VirtualKey.Left => Wf.InputKey.Left,
+            VirtualKey.Up => Wf.InputKey.Up,
+            VirtualKey.Right => Wf.InputKey.Right,
+            VirtualKey.Down => Wf.InputKey.Down,
+            VirtualKey.Insert => Wf.InputKey.Insert,
+            VirtualKey.Delete => Wf.InputKey.Delete,
+            _ => Wf.InputKey.Unknown,
         };
     }
 
@@ -923,11 +925,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         // 松手也进输入面：谁要收「这次手势结束了」就订它，输入面自己不做任何事。
         var properties = e.GetCurrentPoint(host).Properties;
-        var button = properties.IsRightButtonPressed ? WorkflowMouseButton.Right
-            : properties.IsMiddleButtonPressed ? WorkflowMouseButton.Middle
-            : WorkflowMouseButton.Left;
+        var button = properties.IsRightButtonPressed ? Wf.MouseButton.Right
+            : properties.IsMiddleButtonPressed ? Wf.MouseButton.Middle
+            : Wf.MouseButton.Left;
         RoutePointer(state, viewModel, e, host,
-            (position, target, handle) => new WorkflowPointerReleasedEventArgs(
+            (position, target, handle) => new Wf.PointerReleasedEventArgs(
                 position, Modifiers(e.KeyModifiers), host, target, button, 1, handle));
     }
 

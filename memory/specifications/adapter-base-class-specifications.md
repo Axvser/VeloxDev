@@ -67,7 +67,7 @@
 
 助手的形状是同一套：**不是画**的那部分归它（绑定、改绑退订、几何、命中契约、事件），画归你；它另外给
 「最短的一版」（`Paint(...)`）与可供你自绘的原料（`Curve` / `IconPath` / `Brush` / `PortLayout`）。事件名与
-`IWorkflowInputEvents` 逐字相同（`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`），
+`IInputEvents` 逐字相同（`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`），
 模型事件则与 §2.1 那组同名（`Moving` / `Moved` / …）。三种 view 的助手访问器一律叫 `Attachment`。
 
 ### 2.1.2 树是引擎，不是视图 —— 它留在基类，但**部件按对象交出去**
@@ -176,4 +176,4 @@ Jalium 的连线命中/拖拽/虚拟预览**进了包**（`WorkflowTreeView` 的
 
 **外观那一半也归用户**（2026-10-04）：这两家的 `WorkflowLinkAttachment` **只画静息线、且只在用户调 `Paint` 时才画**；
 悬停光、焦点环、角标一律由用户的视图自己在 `OnPaint` / `OnRender` 里画，事件从助手上订
-（`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`，名字与 `IWorkflowInputEvents` 一致）。
+（`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`，名字与 `IInputEvents` 一致）。

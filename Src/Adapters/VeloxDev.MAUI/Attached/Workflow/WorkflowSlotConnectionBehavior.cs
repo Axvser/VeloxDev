@@ -1,4 +1,6 @@
 using VeloxDev.WorkflowSystem;
+using PlatformInput = Microsoft.Maui.Controls;
+using Wf = VeloxDev.WorkflowSystem;
 
 #if WINDOWS
 using Microsoft.UI.Xaml;
@@ -115,7 +117,7 @@ public sealed class WorkflowSlotConnectionBehavior
         view.ClearValue(StateProperty);
     }
 
-    private static void OnPointerPressed(object? sender, PointerEventArgs e)
+    private static void OnPointerPressed(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (sender is not View view
             || view.GetValue(StateProperty) is not ConnectionState state
@@ -131,7 +133,7 @@ public sealed class WorkflowSlotConnectionBehavior
         }
     }
 
-    private static void OnPointerMoved(object? sender, PointerEventArgs e)
+    private static void OnPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (sender is not View view
             || view.GetValue(StateProperty) is not ConnectionState { IsPointerActive: true }
@@ -143,7 +145,7 @@ public sealed class WorkflowSlotConnectionBehavior
         UpdatePointer(e.GetPosition(_activeConnection.CoordinateHost));
     }
 
-    private static void OnPointerReleased(object? sender, PointerEventArgs e)
+    private static void OnPointerReleased(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (sender is not View view || view.GetValue(StateProperty) is not ConnectionState state)
         {
@@ -546,7 +548,7 @@ public sealed class WorkflowSlotConnectionBehavior
     }
 
 #if WINDOWS
-    private static void TryCapturePointer(View view, PointerEventArgs e)
+    private static void TryCapturePointer(View view, PlatformInput.PointerEventArgs e)
     {
         if (view.Handler?.PlatformView is UIElement element
             && e.PlatformArgs?.PointerRoutedEventArgs is { Pointer: { } pointer })
@@ -555,7 +557,7 @@ public sealed class WorkflowSlotConnectionBehavior
         }
     }
 
-    private static void TryReleasePointer(View view, PointerEventArgs e)
+    private static void TryReleasePointer(View view, PlatformInput.PointerEventArgs e)
     {
         if (view.Handler?.PlatformView is UIElement element
             && e.PlatformArgs?.PointerRoutedEventArgs is { Pointer: { } pointer })
@@ -564,11 +566,11 @@ public sealed class WorkflowSlotConnectionBehavior
         }
     }
 #else
-    private static void TryCapturePointer(View view, PointerEventArgs e)
+    private static void TryCapturePointer(View view, PlatformInput.PointerEventArgs e)
     {
     }
 
-    private static void TryReleasePointer(View view, PointerEventArgs e)
+    private static void TryReleasePointer(View view, PlatformInput.PointerEventArgs e)
     {
     }
 #endif

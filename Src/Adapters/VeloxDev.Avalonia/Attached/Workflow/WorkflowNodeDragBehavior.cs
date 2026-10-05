@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using PlatformInput = Avalonia.Input;
+using Wf = VeloxDev.WorkflowSystem;
 using Avalonia.VisualTree;
 using System;
 using System.Linq;
@@ -77,7 +79,7 @@ public sealed class WorkflowNodeDragBehavior : AvaloniaObject
         element.ClearValue(StateProperty);
     }
 
-    private static void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    private static void OnPointerPressed(object? sender, PlatformInput.PointerPressedEventArgs e)
     {
         if (sender is not Control control || control.GetValue(StateProperty) is not DragState state)
             return;
@@ -96,7 +98,7 @@ public sealed class WorkflowNodeDragBehavior : AvaloniaObject
         e.Handled = true;
     }
 
-    private static void OnPointerMoved(object? sender, PointerEventArgs e)
+    private static void OnPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (sender is not Control control || control.GetValue(StateProperty) is not DragState state || !state.IsDragging || state.CoordinateHost is null)
             return;
@@ -111,7 +113,7 @@ public sealed class WorkflowNodeDragBehavior : AvaloniaObject
         e.Handled = true;
     }
 
-    private static void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+    private static void OnPointerReleased(object? sender, PlatformInput.PointerReleasedEventArgs e)
     {
         if (sender is not InputElement element || element.GetValue(StateProperty) is not DragState state || !state.IsDragging)
             return;

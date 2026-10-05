@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using PlatformInput = Avalonia.Input;
+using Wf = VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -31,7 +33,7 @@ public sealed class WorkflowSlotConnectionBehavior : AvaloniaObject
         }
     }
 
-    private static void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    private static void OnPointerPressed(object? sender, PlatformInput.PointerPressedEventArgs e)
     {
         if (sender is not Control { DataContext: IWorkflowSlotViewModel slot })
             return;
@@ -40,7 +42,7 @@ public sealed class WorkflowSlotConnectionBehavior : AvaloniaObject
         e.Pointer.Capture(null);
     }
 
-    private static void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+    private static void OnPointerReleased(object? sender, PlatformInput.PointerReleasedEventArgs e)
     {
         if (sender is not Control { DataContext: IWorkflowSlotViewModel slot })
             return;

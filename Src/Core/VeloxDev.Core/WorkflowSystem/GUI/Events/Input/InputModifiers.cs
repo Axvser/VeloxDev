@@ -6,8 +6,8 @@ namespace VeloxDev.WorkflowSystem;
 /// The modifier keys held while an input event happened. Mirrors <c>Avalonia.Input.KeyModifiers</c>.
 /// </summary>
 /// <remarks>
-/// Modifier state is always precise, even when <see cref="WorkflowKeyEventArgs.Key"/> is
-/// <see cref="WorkflowKey.Unknown"/> — which is what makes a combination such as Ctrl + an unmapped key still
+/// Modifier state is always precise, even when <see cref="KeyEventArgs.Key"/> is
+/// <see cref="InputKey.Unknown"/> — which is what makes a combination such as Ctrl + an unmapped key still
 /// distinguishable to a subscriber.
 /// </remarks>
 [Flags]

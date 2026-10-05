@@ -1,3 +1,6 @@
+using PlatformInput = Microsoft.AspNetCore.Components.Web;
+using Wf = VeloxDev.WorkflowSystem;
+
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
@@ -7,7 +10,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// A DOM-level description, not a Core one: the surface receives <c>mouseenter</c>, <c>mousemove</c>,
 /// <c>wheel</c> and their siblings per element, and this is the smallest thing a caller has to name to hand one of
 /// them over. <see cref="WorkflowSurfaceBehavior.RoutePointerAsync"/> maps it to the matching
-/// <see cref="WorkflowPointerEventArgs"/>. It is never the same thing as the old pointer phase enum: that one was
+/// <see cref="Wf.PointerEventArgs"/>. It is never the same thing as the old pointer phase enum: that one was
 /// part of Core's input surface, this one belongs to the browser boundary.
 /// </remarks>
 public enum SurfacePointerKind

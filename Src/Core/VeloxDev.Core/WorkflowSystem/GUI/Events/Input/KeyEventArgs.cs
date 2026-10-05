@@ -9,27 +9,27 @@ namespace VeloxDev.WorkflowSystem;
 /// <remarks>
 /// <para>
 /// One instance travels the whole route, so every subscriber on it shares one <see cref="WorkflowEventHandle"/>.
-/// The concrete subclasses are <see cref="WorkflowKeyDownEventArgs"/> and <see cref="WorkflowKeyUpEventArgs"/> — a down and an up
+/// The concrete subclasses are <see cref="KeyDownEventArgs"/> and <see cref="KeyUpEventArgs"/> — a down and an up
 /// are two separate events, not two phases of one.
 /// </para>
 /// <para>
-/// A key event's <see cref="WorkflowPointerEventArgs.Target"/> is whatever the adapter decided the key applies to,
+/// A key event's <see cref="PointerEventArgs.Target"/> is whatever the adapter decided the key applies to,
 /// which for the Delete key is the component the pointer is on — a key has no position of its own.
 /// </para>
 /// </remarks>
 /// <seealso cref="WorkflowInput"/>
-public abstract class WorkflowKeyEventArgs : EventArgs
+public abstract class KeyEventArgs : EventArgs
 {
     /// <summary>Creates the argument. Called by the concrete subclasses.</summary>
-    /// <param name="key">The key, or <see cref="WorkflowKey.Unknown"/> when this enum does not name it.</param>
+    /// <param name="key">The key, or <see cref="InputKey.Unknown"/> when this enum does not name it.</param>
     /// <param name="rawKeyCode">The platform's own key code; not comparable across adapters.</param>
     /// <param name="modifiers">The modifier keys held.</param>
     /// <param name="isRepeat">Whether the platform reports this as an auto-repeat.</param>
     /// <param name="source">The view that had the keyboard focus, or <see langword="null"/>.</param>
     /// <param name="target">The component the adapter applies this key to, or <see langword="null"/>.</param>
     /// <param name="handle">The handle for this action, shared with the whole route.</param>
-    protected WorkflowKeyEventArgs(
-        WorkflowKey key, int rawKeyCode, InputModifiers modifiers, bool isRepeat,
+    protected KeyEventArgs(
+        InputKey key, int rawKeyCode, InputModifiers modifiers, bool isRepeat,
         object? source, IWorkflowViewModel? target, WorkflowEventHandle handle)
     {
         Key = key;
@@ -41,12 +41,12 @@ public abstract class WorkflowKeyEventArgs : EventArgs
         Handle = handle ?? throw new ArgumentNullException(nameof(handle));
     }
 
-    /// <summary>The key, or <see cref="WorkflowKey.Unknown"/> when <see cref="WorkflowKey"/> does not name it.</summary>
-    public WorkflowKey Key { get; }
+    /// <summary>The key, or <see cref="InputKey.Unknown"/> when <see cref="InputKey"/> does not name it.</summary>
+    public InputKey Key { get; }
 
     /// <summary>
     /// The platform's own key code. Only meaningful together with <see cref="Key"/> being
-    /// <see cref="WorkflowKey.Unknown"/>, and only on the platform that produced it.
+    /// <see cref="InputKey.Unknown"/>, and only on the platform that produced it.
     /// </summary>
     public int RawKeyCode { get; }
 

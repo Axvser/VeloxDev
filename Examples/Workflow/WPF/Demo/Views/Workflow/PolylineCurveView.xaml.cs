@@ -225,7 +225,7 @@ public partial class PolylineCurveView : UserControl
         if (ReferenceEquals(link, _inputLink)) return;
 
         UnsubscribeHub();
-        if (link?.GetHelper() is not IWorkflowInputEvents events) return;
+        if (link?.GetHelper() is not IInputEvents events) return;
 
         _inputLink = link;
         events.Input.PointerEntered += OnPointerEntered;
@@ -234,16 +234,16 @@ public partial class PolylineCurveView : UserControl
 
     private void UnsubscribeHub()
     {
-        if (_inputLink?.GetHelper() is not IWorkflowInputEvents events) return;
+        if (_inputLink?.GetHelper() is not IInputEvents events) return;
 
         events.Input.PointerEntered -= OnPointerEntered;
         events.Input.PointerExited -= OnPointerExited;
         _inputLink = null;
     }
 
-    private void OnPointerEntered(object? sender, WorkflowPointerEnteredEventArgs e) => IsHighlighted = true;
+    private void OnPointerEntered(object? sender, PointerEnteredEventArgs e) => IsHighlighted = true;
 
-    private void OnPointerExited(object? sender, WorkflowPointerExitedEventArgs e) => IsHighlighted = false;
+    private void OnPointerExited(object? sender, PointerExitedEventArgs e) => IsHighlighted = false;
 
     #endregion
 

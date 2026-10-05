@@ -16,8 +16,8 @@ namespace VeloxDev.WorkflowSystem;
 /// </para>
 /// </remarks>
 /// <seealso cref="WorkflowInput"/>
-public interface IWorkflowInputEvents
+public interface IInputEvents
 {
     /// <summary>The events this component receives while an input event routed through it.</summary>
-    WorkflowInputRelay Input { get; }
+    InputRelay Input { get; }
 }
