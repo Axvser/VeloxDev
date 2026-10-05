@@ -28,6 +28,9 @@
 | `ItemsControl` + `ItemTemplate`(DataTemplate) + `{Binding}` 真物化容器 | ✅ `Items.Count` 正确；`ContainerFromIndex(0)` 返回 **`ContentPresenter`**；容器 `DataContext` 是条目本身 |
 | 自定义 attached DP 写进标记并读回（**跨程序集**，`assembly=VeloxDev.Jalium`） | ✅ 含以 `{Binding}` 为值 |
 | `Style` / `Setter` / `StaticResource` | ✅ `Setter` 真的改到了属性 |
+| 控件根的 `Foreground` 向子 `TextBlock` **继承** | ❌ **不继承** —— 子 `TextBlock` 取的是主题默认（亮色 `#F5F5F7`）。WPF 的节点模板靠根 `Foreground` 一路继承下来，Jalium 必须在**每个** `TextBlock` 上显式写一次；漏了的表现是「白底白字」，但没有任何报错 |
+| `ContextMenu` 从宿主继承 `DataContext` | ❌ 菜单不在视觉树里，继承不到 —— 打开前必须 `menu.DataContext = link`，否则条目的 `Command="{Binding …}"` 静默不生效（菜单照常显示、点了没反应） |
+| `LayoutUpdated` 事件 | ❌ **不存在**（Jalium 没有这个事件）。槽布局的重新同步只能靠 `Loaded` / `SizeChanged` / 模型 `PropertyChanged` + `Dispatcher.BeginInvoke(DispatcherPriority.Render, …)` 排一拍 |
 | 嵌套**结构体**路径绑定（`{Binding Offset.Left}` → `Canvas.Left`） | ✅ |
 | `ElementName` 绑定 | ✅ |
 | `RelativeSource Self` | ✅ |

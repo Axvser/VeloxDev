@@ -469,7 +469,11 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         var count = VisualTreeHelper.GetChildrenCount(parent);
         for (var i = 0; i < count; i++)
         {
-            var child = VisualTreeHelper.GetChild(parent, i);
+            if (VisualTreeHelper.GetChild(parent, i) is not { } child)
+            {
+                continue;
+            }
+
             if (child is FrameworkElement { DataContext: IWorkflowSlotViewModel } element)
             {
                 return element;

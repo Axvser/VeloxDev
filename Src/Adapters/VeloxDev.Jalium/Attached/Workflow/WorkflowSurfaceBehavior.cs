@@ -368,14 +368,14 @@ public static class WorkflowSurfaceBehavior
         host.Loaded -= OnLoaded;
         host.Unloaded -= OnUnloaded;
         host.DataContextChanged -= OnDataContextChanged;
-        host.RemoveHandler(UIElement.MouseDownEvent, state.MouseDownHandler);
-        host.RemoveHandler(UIElement.MouseMoveEvent, state.MouseMoveHandler);
-        host.RemoveHandler(UIElement.MouseUpEvent, state.MouseUpHandler);
-        host.RemoveHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler);
-        host.RemoveHandler(UIElement.KeyDownEvent, state.KeyDownHandler);
-        host.RemoveHandler(UIElement.KeyUpEvent, state.KeyUpHandler);
-        host.RemoveHandler(UIElement.LostMouseCaptureEvent, state.LostCaptureHandler);
-        host.RemoveHandler(FrameworkElement.RequestBringIntoViewEvent, state.BringIntoViewHandler);
+        RemoveHandler(host, UIElement.MouseDownEvent, state.MouseDownHandler);
+        RemoveHandler(host, UIElement.MouseMoveEvent, state.MouseMoveHandler);
+        RemoveHandler(host, UIElement.MouseUpEvent, state.MouseUpHandler);
+        RemoveHandler(host, Mouse.MouseWheelEvent, state.MouseWheelHandler);
+        RemoveHandler(host, UIElement.KeyDownEvent, state.KeyDownHandler);
+        RemoveHandler(host, UIElement.KeyUpEvent, state.KeyUpHandler);
+        RemoveHandler(host, UIElement.LostMouseCaptureEvent, state.LostCaptureHandler);
+        RemoveHandler(host, FrameworkElement.RequestBringIntoViewEvent, state.BringIntoViewHandler);
 
         if (state.MouseLeaveHandler is not null)
         {
@@ -383,6 +383,15 @@ public static class WorkflowSurfaceBehavior
         }
 
         States.Remove(host);
+    }
+
+    // 订阅用的是委托实例，解订必须给同一个实例；字段可能为空（Attach 中途失败），所以在这里挡一下。
+    private static void RemoveHandler(UIElement element, RoutedEvent routedEvent, Delegate? handler)
+    {
+        if (handler is not null)
+        {
+            element.RemoveHandler(routedEvent, handler);
+        }
     }
 
     private static void OnLoaded(object? sender, RoutedEventArgs e)
@@ -1009,6 +1018,10 @@ public static class WorkflowSurfaceBehavior
 
         state.LinkMenu = menu;
         state.MenuLink = link;
+
+        // 菜单的 DataContext 就是这条连线 —— 条目据此绑定命令（`Command="{Binding DeleteCommand}"`）。
+        // 菜单不在视觉树里，继承不到宿主的 DataContext，所以必须在这里显式给。
+        menu.DataContext = link;
 
         menu.Closed += (_, _) =>
         {
