@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -534,6 +534,48 @@ namespace VeloxDev.Generators.Base
             if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel")) return "Slots";
             if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.IWorkflowLinkViewModel")) return "Links";
             if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.IWorkflowTreeViewModel")) return "Trees";
+
+            // 接口是 Workflow 生成器在同一编译趟注入的，生成器之间看不见彼此的产物 —— 所以消费方声明的组件
+            // 在这里一个接口都查不到。认作者写下的那个特性，与 `VeloxJsonModel.RootReason` 同一条规则
+            // （那一侧早就这样做，本处漏了）。漏掉的症状是**整类组件对 Agent 不可见**：
+            // `AgentTypeResolver.ResolveType` 解不开它，于是 `CreateNode` / `GetTypeSchema` / `ListCreatableTypes`
+            // 对用户自己写的节点类型全部报「不在目录里」—— 而它们正是最需要被看到的那批。
+            return WorkflowBuilderComponentKind(symbol);
+        }
+
+        /// <summary>
+        /// The component directory a type declares itself into with <c>[WorkflowBuilder.*]</c>, or <c>null</c>.
+        /// </summary>
+        /// <remarks>
+        /// 沿基类链走，因为用户常常从一个已标注的基类派生自己的组件。
+        /// 按**包含类型**判而不按名字前缀：`WorkflowBuilder.Node&lt;T&gt;` 是泛型嵌套特性，`ToDisplayString`
+        /// 把嵌套类型渲染成 `.` 而不是元数据里的 `+`，前缀匹配永远匹配不上（同 `VeloxJsonModel.RootReason`）。
+        /// </remarks>
+        private static string? WorkflowBuilderComponentKind(ITypeSymbol type)
+        {
+            for (var current = type as INamedTypeSymbol;
+                 current is not null && current.SpecialType != SpecialType.System_Object;
+                 current = current.BaseType)
+            {
+                foreach (var attribute in current.GetAttributes())
+                {
+                    var attributeClass = attribute.AttributeClass;
+                    if (attributeClass?.ContainingType is not { } container) continue;
+                    if (container.Name != "WorkflowBuilder") continue;
+                    if (container.ContainingNamespace?.ToDisplayString() != "VeloxDev.WorkflowSystem") continue;
+
+                    // `WorkflowBuilder` 今天正好四个，与四个组件接口一一对应。
+                    return attributeClass.Name switch
+                    {
+                        "TreeAttribute" => "Trees",
+                        "NodeAttribute" => "Nodes",
+                        "SlotAttribute" => "Slots",
+                        "LinkAttribute" => "Links",
+                        _ => null,
+                    };
+                }
+            }
+
             return null;
         }
 
@@ -869,38 +911,9 @@ namespace VeloxDev.Generators.Base
 
             return named.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty) == slotInterface
                    || ImplementsInterface(named, slotInterface)
-                   || IsWorkflowBuilderSlotType(named);
+                   || WorkflowBuilderComponentKind(named) == "Slots";
         }
 
-        /// <summary>
-        /// Whether the type, or anything it derives from, is declared with <c>[WorkflowBuilder.Slot&lt;T&gt;]</c>.
-        /// </summary>
-        /// <remarks>
-        /// 沿基类链走，是因为用户常常从一个已标注的基类派生自己的槽。
-        /// 按**包含类型**判而不按名字前缀：`WorkflowBuilder.Slot&lt;T&gt;` 是泛型嵌套特性，`ToDisplayString`
-        /// 把嵌套类型渲染成 `.` 而不是元数据里的 `+`，前缀匹配永远匹配不上（同 `VeloxJsonModel.RootReason`）。
-        /// </remarks>
-        private static bool IsWorkflowBuilderSlotType(ITypeSymbol type)
-        {
-            for (var current = type as INamedTypeSymbol;
-                 current is not null && current.SpecialType != SpecialType.System_Object;
-                 current = current.BaseType)
-            {
-                foreach (var attribute in current.GetAttributes())
-                {
-                    var attributeClass = attribute.AttributeClass;
-                    if (attributeClass is null) continue;
-                    if (attributeClass.ContainingType is not { } container) continue;
-                    if (container.Name != "WorkflowBuilder") continue;
-                    if (container.ContainingNamespace?.ToDisplayString() != "VeloxDev.WorkflowSystem") continue;
-                    if (attributeClass.Name != "SlotAttribute") continue;
-
-                    return true;
-                }
-            }
-
-            return false;
-        }
 
         /// <summary>The type named by <c>[AgentCommandParameter]</c>, or null when the command takes none.</summary>
         /// <remarks>
