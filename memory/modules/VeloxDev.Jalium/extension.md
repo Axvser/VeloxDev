@@ -1,5 +1,11 @@
 # VeloxDev.Jalium — 扩展
 
+> ⚠ **2026-10-05：Jalium 适配器已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
+> 本文下面凡提 `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
+> `IWorkflowTemplateSelector` / `WorkflowTemplateSelector` / `WorkflowNodeView` / `WorkflowSlotView` /
+> `WorkflowLinkView` 的段落**都已作废**（那些类型全部删除）。现行落点见
+> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇。
+
 > 读法：七角色契约、附着属性名、注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3 —— **Jalium 侧这七个角色现在由适配器提供（可继承控件基类 + `slot-view` 的值/几何），模板只派生重写或填值**（见下 §一）。
 > 两条轴上「这家和别家不一样」的地方在 `memory/modules/{TransitionSystem,WorkflowSystem,Templates}/adapters/jalium.md`。
 > 本文**只回答一件事**：在这个项目里加一个 X，动哪几处、按什么顺序、哪条看着能编译的捷径是错的。

@@ -6,15 +6,23 @@
 
 ---
 
-## 一、适用范围：无标记语言的那两家
+## 一、适用范围：无标记语言的那一家
 
 **判据：这一家的 item template 产物里没有标记文件 —— 产物是纯 `.cs`。**
 
-- **不适用**于有标记语言的平台：WPF / Avalonia / WinUI / MAUI（XAML），Razor / Blazor（`.razor`）。
-  它们的模板把布局与装配交给框架，本来就只有几十行。Razor 的行数比 XAML 那几家高，但那是组件模型而不是「没有标记」，**仍不适用**。
-- **适用**于纯代码的两家：**WinForms、Jalium**。
+- **不适用**于有标记语言的平台：WPF / Avalonia / WinUI / MAUI（XAML）、Razor / Blazor（`.razor`）、
+  **Jalium（`.jalxaml`）**。它们的模板把布局与装配交给框架，本来就只有几十行。
+  Razor 的行数比 XAML 那几家高，但那是组件模型而不是「没有标记」，**仍不适用**。
+- **适用**于纯代码：**WinForms**。
 
-⇒ 新增一家平台时，先答「它有没有标记语言」，再决定这条规则跟不跟。
+⚠ **2026-10-05 改判 —— Jalium 移出这份名单**。它原先在里面，依据是「它的模板产物是纯 `.cs`」。
+**那是把现状当成了判据。** 判据问的是「这一家**有没有**平台自带的标记语言」，不是「现有模板**用没用**它」。
+Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `EnableDefaultJalxamlItems` +
+`**\*.jalxaml` 通配 + `JalxamlCodeBehindTask`）与一个 WPF 同构的 UI 框架（`UserControl` /
+`ItemsControl` / `DataTemplate` / `DataTemplateSelector` / `FindName` / `ItemContainerGenerator`）。
+它的模板当时是纯 `.cs`，只是**没用** —— 因为这条判据先把它判成了「没有」，而后续一切绕路都从这一步长出来。
+
+⇒ 新增一家平台时，先答「它有没有标记语言」—— 去查它的 SDK 与运行时里有什么，**不要**看现有模板长什么样。
 
 ---
 
@@ -60,7 +68,7 @@
 
 | 角色 | 形态 | 为什么 |
 |---|---|---|
-| `workflow-link-view` / `workflow-node-view` / `workflow-slot-view`（**WinForms、Jalium**） | `public sealed class X : Control` / `: Canvas` / `: UserControl`，构造里一行 `Workflow<角色>Attachment.Attach(this)`，自己在 `OnPaint` / `OnRender` 里画 | 这三样的样子**就是**用户的：卡片长什么样、端口画成什么、线怎么走 |
+| `workflow-link-view` / `workflow-node-view` / `workflow-slot-view`（**WinForms**；Jalium 2026-10-05 移出，见 §一） | `public sealed class X : Control` / `: Canvas` / `: UserControl`，构造里一行 `Workflow<角色>Attachment.Attach(this)`，自己在 `OnPaint` / `OnRender` 里画 | 这三样的样子**就是**用户的：卡片长什么样、端口画成什么、线怎么走 |
 | `workflow-grid-decorator` / `workflow-minimap-overlay` / `workflow-template-selector` | 仍是派生 + 调色板 | 它们是**实现**（`IWorkflowGridDecorator` 等），里面的平台机制用户不会想重写 |
 | `workflow-tree-view` | 仍是派生 | **它是引擎不是视图**：绑定、视图池、手势、虚拟化、菜单；用户自己的树模板只设属性 + 两个工厂（详见 §2.1.2） |
 | 标记四家（WPF / Avalonia / WinUI / MAUI）的全部角色 | 仍是派生 | 有标记语言时，「视图」本来就在用户手里（`x:Name` + `OnRender`），不需要多一层助手 |
@@ -84,8 +92,11 @@
 再登记「我就是滚动容器、是画布、是网格装饰器」。所以：
 
 - **WinForms**：`WorkflowSurfaceBehavior` 的部件从**名字字符串**改成**对象**（`SetScrollViewer/SetCanvas/SetGridDecorator/SetMinimapOverlay`）。
-- **Jalium**：本来就没有名字解析（`GridDecorator` / `PortLayout` / `TemplateSelector` 是属性，滚动容器由
-  `AttachScrollViewer(viewer)` 显式交出），无需改。
+- **Jalium（2026-10-05 反转）**：它**改成**了按名字解析 —— 表面与节点视图各挂一组附着行为
+  （`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior`），部件靠 `x:Name` + `FindName` 交出，
+  与 WPF 同形。所以上面那条「无标记平台没有名字作用域」对它**不再成立**；WinForms 仍是对象件。
+  ⚠ 它同时带来两条 Jalium 特有的限制（实测）：`RelativeSource AncestorType` 只认**框架类型**，
+  自定义 `clr-namespace` 类型不解析；**带前缀的附加属性路径**（`(behaviors:X.Y)`）在绑定路径里根本不解析。
 - **边界**：WinForms 的**画布交不出来** —— `SurfaceCanvas` 就是池的宿主（它拿 `_owner.CreateNodeView/CreateLinkView`
   建视图、`RecordRole` 记角色、读 `SurfaceBackground` 画网格），交出画布等于交出引擎。
 
@@ -120,9 +131,11 @@
 （`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` / `WorkflowMinimapOverlay`，加连线的 `WorkflowLinkAttachment`），
 对应模板 1095→52、790→404、379→22、346→21、325→22 行。
 
-**要一起想的**：一个角色的基类若要引用**另一个角色的产物**（Jalium 做这一项时正是这种情况：树基类要端口几何，
-而端口几何起初在模板的 `SlotView` 静态类里），那个依赖必须一起进包，否则基类做不了自己的活 —— Jalium 的解法是把
-端口枚举/定位搬成包内的 `WorkflowPortGeometry`，模板只留一个 `WorkflowPortLayout` 值。这类跨角色的牵扯是这一步最容易漏的。
+**要一起想的**：一个角色的基类若要引用**另一个角色的产物**，那个依赖必须一起进包，否则基类做不了自己的活。
+⚠ 这条原先举的例子（Jalium 的 `WorkflowPortGeometry` / `WorkflowPortLayout`）**已于 2026-10-05 作废** ——
+那两个类型随 Jalium 转标记驱动一起删了（端口位置改由标记里声明的槽控件实测写回 `slot.Anchor`）。
+现在这条的实例是 **`WorkflowLinkBounds`**：连线视图的自盒化是 Jalium 的渲染器硬限制，它属于适配器、
+不属于模板。
 
 ---
 
@@ -148,7 +161,7 @@
 | 平台 | 有基类 | 还缺 |
 |---|---|---|
 | **WinForms** | 四项有基类（grid-decorator / minimap-overlay / template-selector / tree-view）；**link / node / slot 三项改为附加助手**（2026-10-04，见 §2.1.1） | —— |
-| **Jalium** | 四项有基类；**link / node / slot 三项改为附加助手**（2026-10-04，见 §2.1.1） | ——（`slot-view` 在这家没有「视图」可派生，见下） |
+| **Jalium** | **本规范不再适用于它**（2026-10-05 移出 §一）：它改成标记驱动，与 WPF / Avalonia / WinUI / MAUI 同一形态 | —— |
 
 **WinForms 的七个基类**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）与它们把模板压到的行数：
 `WorkflowTreeView` 52、`WorkflowNodeView` 404、`WorkflowSlotView` 22、`WorkflowGridDecorator` 41、
@@ -158,12 +171,16 @@
 `WorkflowSurfaceGrid`（网格线判定与刻度标签格式化，此前在包内有**两份**逐字相同的私有副本）。
 校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform WinForms -Strict` 全绿。
 
-**Jalium 的七个角色**（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`）：`WorkflowTreeView` 819、
-`WorkflowNodeView` 309、`WorkflowSlotView` 167（端口图形）、`WorkflowGridDecorator` 234、
-`WorkflowTemplateSelector` 51、`WorkflowMinimapOverlay` 311，加分层的两个共用件 `WorkflowPortLayout`（设计值，41）
-与 `WorkflowPortGeometry`（端口枚举与定位，反射，125）。
-七个模板条目现压到 32 / 59 / 35 / 20 / 25 / 25 / 14 行，合计 **210**（原 1262）。
-校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict` 全绿。
+**Jalium 的七个角色**（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`，2026-10-05 转标记驱动后重写）：
+`WorkflowSurfaceBehavior`（宿主表面的 8 个附着属性）、`WorkflowSlotLayoutBehavior`（`slot.Anchor` 的唯一写回点）、
+`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds`
+（四个与 WPF 同名同形的行为）、`WorkflowGridDecorator`（**已是控件**，`Grid, IWorkflowGridDecorator`，
+16 个 DP）、`WorkflowMinimapOverlay`（14 个 DP）、`ViewPool` / `ViewManager`（用 Jalium 自己的
+`DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退）。**没有** `WorkflowTreeView`、
+三个 `*Attachment`、`WorkflowPortGeometry`、`WorkflowPortLayout`、`IWorkflowTemplateSelector` —— 那一整套已删。
+四个模板条目是 `TemplateClass.jalxaml` + `.jalxaml.cs`（node / slot / link / tree），三个仍是 `.cs`。
+校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict` 全绿
+（generated 7/7、built True、match 9 / expected-diff 2 / drift 0）。
 
 **六个角色是「基类 + 派生」，连线那一角色是「附加助手」**（2026-10-04，见 §2.1.1）。 曾经不是：`slot-view` 的产物一度是一份「端口在哪」的静态几何，
 **端口图形由卡片自己画成圆点**；现在 `WorkflowSlotView` 是一个真正的控件，卡片按 `WorkflowPortLayout` 托管

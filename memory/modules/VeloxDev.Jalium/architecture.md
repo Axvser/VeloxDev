@@ -1,5 +1,11 @@
 # VeloxDev.Jalium — 架构
 
+> ⚠ **2026-10-05：Jalium 适配器已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
+> 本文下面凡提 `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
+> `IWorkflowTemplateSelector` / `WorkflowTemplateSelector` / `WorkflowNodeView` / `WorkflowSlotView` /
+> `WorkflowLinkView` 的段落**都已作废**（那些类型全部删除）。现行落点见
+> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇。
+
 > 代码：`Src/Adapters/VeloxDev.Jalium/`。**30 个 .cs、3661 行**
 > （`Attached/Workflow/` 12 个 2685 行，最大 `WorkflowTreeView.cs` 819、`WorkflowLinkAttachment.cs`、`WorkflowMinimapOverlay.cs` 311、`WorkflowNodeView.cs` 309、`WorkflowGridDecorator.cs` 234；
 > `PlatformAdapters/` 8 个 325 行，最大 `Transition.cs` 138；`PlatformAdapters/Samplers/` 9 个 648 行，最大 `TransformSampler.cs` 276、`BrushSampler.cs` 131；顶层 `GlobalUsings.cs` 3 行）。

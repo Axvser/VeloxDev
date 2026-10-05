@@ -1,25 +1,17 @@
 # WorkflowSystem — Jalium
 
-> **另：连线的那个基类已换成附加助手**（2026-10-04）—— 这一角色现在由用户自己的控件 + `WorkflowLinkAttachment.Attach(this)` 组成，
-> 下文凡是 `WorkflowLinkView` 的类名与行号，按 `WorkflowLinkAttachment` 读；机制（自盒化 / 雕窗口区域 / 端点订阅 / 命中发布）没变。
-> **另（2026-10-04）：slot / node 的基类也换成了附加助手** —— `WorkflowSlotAttachment` / `WorkflowNodeAttachment`；
-> 树（`WorkflowTreeView`）仍是基类（它是引擎不是视图），但 WinForms 那家的表面行为改成了**按对象**交部件，不再按名字找。
-> 下文凡提 `WorkflowSlotView` / `WorkflowNodeView` 的类名，按对应的 `*Attachment` 读。
-> ⚠ **交互那几段记的是 2026-10-04 之前的世界。** 当时 Core 有一个 `LinkInteraction` hub，事件是 `HoverChanged` /
-> `LinkPressed` / `ContextMenuRequested` 这些按组件定制的语义事件，高亮由 hub 经 `ILinkHighlight` 点亮。
-> **现在**：输入是一套**标准输入**（`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），
-> 外观是宿主的，菜单由适配器从 `PointerPressed(Right, link)` 里自己弹、用 `tree.GetHelper().LinkRemoved` 收尾。
-> 完整规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)。**下面凡是提到 hub / 那几个事件名 /
-> `ILinkHighlight` 的句子都按这个替换读**；与交互无关的部分（坐标换算、焦点、弹窗平台的怪癖、命中几何）仍然有效。
+> ⚠ **2026-10-05：这家已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
+> 本文下面凡描述「附加助手（`*Attachment`）」「代码绘制」「端口几何（`WorkflowPortGeometry` /
+> `WorkflowPortLayout`）」「`WorkflowTreeView : Canvas`」「自造 `IWorkflowTemplateSelector`」的段落
+> **都已作废** —— 那些类型全部删除。**仍然有效**的是「平台硬限制」那一类事实（渲染器盒裁剪、
+> `ScrollTo` 异步落地、菜单坐标吃根视觉），它们与用不用标记无关。§〇 的运行时能力实测是这次改造的
+> 依据，先读它。
 
 > **读法**：契约与注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3，本文不重复；
-> 人面向的「这家怎么用」在 `skills/veloxdev-create-workflow/references/gui/jalium.md`（七角色表在 `references/view-layer.md`），本文只指路不抄。
+> 人面向的「这家怎么用」在 `skills/veloxdev-create-workflow/references/gui/jalium.md`，本文只指路不抄。
 > 本文只写这家的**硬限制、刻意背离、该家特有的坑**。
-> **2026-10-03 起适配器重新拥有整套表面**：七个角色各有可继承基类（`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowLinkView` / `WorkflowSlotView` / `WorkflowGridDecorator` / `WorkflowTemplateSelector` / `WorkflowMinimapOverlay`；端口几何 `WorkflowPortGeometry` / `WorkflowPortLayout` 也在适配器里，供它们共用），模板与 Trimmed demo 只是薄派生。**下文描述的平台限制与机制，落点都在适配器基类里，不再在模板/demo。**
-> 代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`（12 个文件）与 `Src/Templates/VeloxDev.Jalium.Templates/working/content/`（七个薄条目）。
-> **路径写法**：下文的裸文件名（`ViewManager.cs:110` 等）都相对 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`；提到模板产物时相对 `Src/Templates/VeloxDev.Jalium.Templates/working/content/`；提到 demo 时相对仓库根的 `Examples/Workflow/Jalium Trimmed/`；引用 Core、别家适配器时一律写全路径。
-
----
+> 代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`（11 个文件）与
+> `Src/Templates/VeloxDev.Jalium.Templates/working/content/`（七个条目，其中四个是 `.jalxaml`）。
 
 ## 〇、`.jalxaml` 运行时能力实测（2026-10-05，探针实测后已删）
 
@@ -59,23 +51,23 @@
 
 ## 一、这家必须实现什么，为什么是这些
 
-**七个视图角色现在都由适配器实现（以可继承基类的形态）。** 契约本身（每个角色要做什么）没变；变的是落点：`WorkflowTreeView`、`WorkflowNodeView`、`WorkflowLinkView`、`WorkflowSlotView`、`WorkflowGridDecorator`、`WorkflowTemplateSelector`、`WorkflowMinimapOverlay`（后者早在适配器里；端口几何 `WorkflowPortGeometry` / `WorkflowPortLayout` 同样在适配器，供各基类共用）。宿主与模板从这些基类派生，只写策略（调色板、卡片画法、端口布局值、工厂接线）。六个曾经的零消费者行为类（`WorkflowSurfaceBehavior` / `WorkflowCanvasTransformBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSlotLayoutBehavior` / 独立 `WorkflowGridDecorator`）与自装配外壳 `WorkflowTreeView : Grid` **没有**回来；现在是按 `adapter-base-class-specifications.md` 重新切开的七个基类，`WorkflowTreeView : Canvas` 是活表面的基类。
+**七个视图角色仍由适配器提供，形态换成了「附着行为 + 可选基类」。**
 
-### 1.1 `IWorkflowTemplateSelector` 替掉的是什么
+| 角色 | 落点 | 形态 |
+|---|---|---|
+| 表面 | `WorkflowSurfaceBehavior` | `static` + 8 个附着属性，按 `FindName` 解析模板声明的部件 |
+| 插槽 | `WorkflowSlotLayoutBehavior` | `static` + 5 个附着属性；**`slot.Anchor` 的唯一写回点** |
+| 节点拖拽 | `WorkflowNodeDragBehavior` | `static` + `IsEnabled` / `CoordinateHostName` / `CoordinateHostType` |
+| 连线手势 | `WorkflowSlotConnectionBehavior` | `static` + `IsEnabled` |
+| 模型事件 | `WorkflowEvents` | `static` + `Node` / `Slot` / `Tree` 三个 sink 附着属性 |
+| 连线自盒化 | `WorkflowLinkBounds` | `static` 助手（**唯一刻意背离**，见 §2.1） |
+| 网格 | `WorkflowGridDecorator` | `Grid, IWorkflowGridDecorator` **容器控件**，16 个 DP，两层自绘 |
+| 小地图 | `WorkflowMinimapOverlay` | `FrameworkElement`，14 个 DP；`ScrollViewerName` 由模板给 |
+| 视图池 | `ViewPool` / `ViewManager` | Jalium 自己的 `DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退 |
 
-- ⚠ **2026-10-05 更正**：本文原来断言「Jalium **没有 `DataTemplateSelector` 这个类型**」。**这是错的** ——
-  `Jalium.UI.Controls 26.10.8` 的 `Jalium.UI.Managed.dll` 里有 `Jalium.UI.Controls.DataTemplateSelector`
-  （连同 `SelectTemplate` / `LoadContent` / `ItemContainerGenerator` / `ContentPresenter`）。下面那条「必须换成一个返回
-  已构造控件的自造接口」的推论因此**不成立**；`IWorkflowTemplateSelector` 是当时基于错判做出来的东西。
-  ⇒ 与 WPF 同形的池化（`DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退）在 Jalium 是**可实现的**。
-- **`IWorkflowTemplateSelector` 替掉 `DataTemplateSelector` + `DataTemplate`。** 别家靠 `DataTemplateSelector.SelectTemplate(object, DependencyObject)` 返回 `DataTemplate` 的分派，这里换成返回**已构造控件**的接口：`IWorkflowTemplateSelector.CreateView(object item)`（`IWorkflowTemplateSelector.cs:10`）。XML 注释自己写着 "mirroring the role of a DataTemplateSelector in the XAML adapters"。基类 `WorkflowTemplateSelector` 把它做成四个工厂 + `virtual CreateView` 分派（`WorkflowTemplateSelector.cs:21-50`）。
-  **注意，这不是 Jalium 独有**：WinForms 在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs:14-20` 里有一个**逐字同名同形**的接口（`Control CreateView(object item)`，连注释都一样）。⇒ 这条轴上的真实划分是「有标记语言的三家（WPF/Avalonia/WinUI）用 `DataTemplateSelector`，无标记语言的两家（Jalium/WinForms）用自造接口，MAUI/Razor 各按自家形状」。
-- **表面外壳那份补偿现在进了包。** WPF 的 `Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml:14-137` 用标记声明 `PART_SurfaceBorder` / `PART_GridDecorator` / `PART_ScrollViewer` / `PART_Canvas` / `PART_MinimapOverlay` 的嵌套与绑定；Jalium 没有 XAML，于是同一份结构做进适配器基类 `WorkflowTreeView`（持 `PortLayout` / `GridDecorator` / `TemplateSelector` 三个属性，并由 `SetTree` 接线 ViewPool），模板只派生设值。WinForms 同样走「适配器发基类」，但它的宿主装配在模板的 `workflow-tree-view/TemplateClass.cs` 里更多。
-  **非 Trimmed demo** 例外：它用自己的画布外壳 `Examples/Workflow/Jalium/Demo/Views/Workflow/NodeEditorSurface.cs:23` 的 `NodeEditorSurface : Canvas`，**不派生**适配器基类（见 §五）。
-
-### 1.2 池化换成 `ConditionalWeakTable`，不是 `ItemsControl`
-
-别家把 `ViewPool` 的附着属性挂在 `ItemsControl` 上、由 `ItemsControl` 的模板机制生成视图。Jalium 的 `ViewPool` 挂在**任意 `Panel`** 上（`ViewPool.cs:13`：`ConditionalWeakTable<Panel, ViewManager>`），由 `ViewManager` 手工同步集合。⇒ `WorkflowTreeView.SetTree` 把两个附着属性设在 `Canvas` 自己身上（`WorkflowTreeView.cs:205-206`）。**非 Trimmed demo 完全不用 `ViewPool`** —— 它自己按模型建卡片、自己画连线（见 §五）。**这条是后面 §三·1 那条差异的前提**。
+**删掉的一整套**（想让它们回来之前先读 §〇 与 `adapter-base-class-specifications.md` §一）：
+`WorkflowTreeView`、`WorkflowNodeAttachment`、`WorkflowSlotAttachment`、`WorkflowLinkAttachment`、
+`WorkflowPortGeometry`、`WorkflowPortLayout`、`IWorkflowTemplateSelector`、`WorkflowTemplateSelector`。
 
 ---
 
@@ -95,24 +87,44 @@
 
 **核对历史记录**：「自绘但宿主 box-cull」—— **仍成立**，且现在是 IL 级证据（本节）。「梯度交接测量」—— 指的不是这里，是 TransitionSystem 的 `Samplers/BrushSampler.cs:79-94`，见 `memory/modules/TransitionSystem/adapters/jalium.md` §2.3。「连线视图自盒化（盒 == 每线 bbox，定位+烘焙相消）」—— **仍成立**，`WorkflowLinkView.cs:327-343` + `:140-186`。「`IsVirtual` 跳过 + `PortCenter` 反查」—— **前半条已作废**：`IsVirtual` 在 Jalium 适配器与模板里**一处都没有**，它被一个精确得多的判定取代：`IsDragPreview(link) => link.Sender is SlotDefaultViewModel && link.Receiver is SlotDefaultViewModel`（`WorkflowLinkView.cs:191-192`），只跳过树的拖拽预览，脱了插槽的真实连线照样渲染。**后半条仍成立**：`PortCenter` 仍是反查（`:283-306`，常态从 `slot.Parent` 的节点几何算端口中心而非读 `slot.Anchor`；仅当端点已脱离节点、`slot.Parent` 为 `null` 时才退回读一次 `slot.Anchor`），返回 `Point?`，端点为 `null` 时跳过整条线而不是从原点画一条退化线。
 
-### 2.2 没有标记语言，但也无需名字作用域
+### 2.2 有标记，也有名字作用域（2026-10-05 反转）
 
-Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产物里 `NameScope.SetNameScope` + `RegisterName`）**随旧表面一起消失**。现在适配器基类不按名字解析任何宿主的 `PART_*`（`WorkflowTreeView` 只吃三个属性，不 `FindName`），模板与 Trimmed demo 也一个 `RegisterName` 都没有。⇒ **这条不再是一个约束**；若你打算自己写一个按名取部件的表面，那才需要自己造名字作用域。
+原来这节写「Jalium 没有标记语言，也无需名字作用域」。**两条都不对了**：`.jalxaml` 工具链完整
+（`Jalium.UI.Build` 的 `EnableDefaultJalxamlItems` + `**\*.jalxaml` + `JalxamlCodeBehindTask`），
+`FrameworkElement.FindName` 在模板的 name scope 里按 `x:Name` 正常工作（实测）。表面与节点视图因此
+与 WPF 同形地按名字取部件。
 
-### 2.3 这家不测量视觉：端口几何是纯模型数学
+⚠ **两条仍要记住的边界**（实测，见 §〇）：
+- `DataTemplate` **内部**的 `x:Name` 对根 `FindName` **不可见**（与 WPF 同）。枚举器里的槽只能先拿
+  `ItemContainerGenerator.ContainerFromIndex(i)`，再沿视觉树往下找带槽 DataContext 的那个元素。
+- `RelativeSource AncestorType` 只认**框架类型**（`UserControl` / `Canvas` 可用），自定义
+  `clr-namespace` 类型不解析；**带前缀的附加属性路径**（`(behaviors:X.Y)`）在绑定路径里**根本不解析**。
+  这两条合起来毙掉了 WPF 那句「节点模板隔着 DataTemplate 读表面变换」，见 §2.4。
 
-**这是本节最需要记住的一条。** 适配器不量任何视觉坐标：端口中心由 `WorkflowPortGeometry`（`WorkflowPortGeometry.cs:93-121`）从**模型几何**算（`node.Anchor + 设计局部 · s`，`s = node.Size / DesignSize`），节点卡由基类按 `Anchor`/`Size` 定位（`WorkflowNodeView.cs:272-282`），连线端点同样走几何（`WorkflowLinkView.cs:283-306`）。没有一处 `TranslatePoint` / `TransformToVisual` / `GetCenterRelativeTo`。
+### 2.3 这家现在**测量**视觉：端口位置由槽控件实测写回（2026-10-05 反转）
 
-- ⇒ **这条与另外六家全部相反**：六家的插槽布局在视觉坐标系里量（`TranslatePoint` / `TransformToVisual` / `GetCenterRelativeTo` + `SlotAnchorFromVisualCenter` / `SlotAnchorFromCanvasLocal`）；Jalium 连 `WorkflowSurfaceMath.SlotAnchorFromNode` 这类 helper 都**没有调用者**（`git grep` 源码零命中；只有 `bin/` 的编译产物残留符号）。**别把纯模型路径当模板抄到需要视觉测量的平台，反之亦然。**
-- 端口枚举（哪个属性是输入口、`SlotEnumerator<T>` 怎么展开）也是按**属性名反射**读的（`WorkflowPortGeometry.cs:37-62,123-124`）—— 这是节点 view-model 里接口没描述的那部分，改属性名会让端口与命中静默错位。
-- ⚠ **它从不写 `slot.Anchor`，而连线的命中判定不该要求它写**（2026-10-03 起）。`LinkHitTestEx.HitTest` 的门是「`IsVisible` + 已发布的曲线」，**不是** `IsRenderReady()`（那道门要求锚点非 NaN）。曾经有人为绕开那道门让 Jalium 开始写 `slot.Anchor`，那是错的：那条路线上每一条连线都会被静默拒掉（构建全绿、悬停与 Delete 全死）。**判据永远是曲线在不在，别把这家的不变量改回去。**
-  - 在**跑起来的**完整 demo 里核过（不是读代码）：把指针位置喂给 `LinkInteraction.For(tree)` 后 `HoveredLink` 非空、再喂 `KeyEvent(Delete)` 树上的连线从 16 条掉到 15 条 —— 即「不写锚点 ⇒ 连线可命中」是成立的。
+原来这节写「不测量视觉：端口中心由 `WorkflowPortGeometry` 从模型几何算」。**现在反过来**：
+`WorkflowSlotLayoutBehavior` 按 `SlotNames` / `SlotEnumeratorNames` 找到模板里那些槽控件，从控件的
+`DataContext` 取槽视图模型，量出**中心**，写回 `slot.Anchor`。⇒ `slot.Anchor` 从此**是**测量结果，
+它成了端口命中与连线端点的唯一来源；丢掉的是一条「端口位置由模型几何算出」的不变式。
 
-### 2.4 画布变换通道不存在
+⚠ **坐标系是这一步唯一的坑**：本家把世界位移做成**画布自己的 `RenderTransform`**（`ApplyLayout`），
+坐标宿主就是那块画布 —— 变换在宿主**之上**，所以 `TransformToAncestor(canvas)` 交回的已经是不含
+`ActualOffset` 的世界坐标，必须用 **`SlotAnchorFromCanvasLocal`**，不是其余六家那个
+`SlotAnchorFromVisualCenter`（再减一次 `ActualOffset` 就是那个静默的系统性偏移）。
+另：`Visual.TransformToAncestor(ancestor)` 在这家返回 **`Jalium.UI.Point`**（元素在祖先系里的原点），
+不是 WPF 的 `GeneralTransform`，取中心要自己加半个尺寸。
 
-- 这家没有"画布变换"这条通道：视图按世界坐标自定位（§2.3），不需要宿主把渲染变换镜像给它们。
-- 旧的镜像方法 `ViewManager.UpdateRenderTransforms` / `ViewPool.UpdateRenderTransforms` **已连同实现一起删除**（`git grep -n UpdateRenderTransforms -- Src Examples` 零命中）—— 不再是「有实现、结构上不可达」的残留。
-  > ⚠️ 人面向的 `skills/veloxdev-create-workflow/references/gui/jalium.md` 与 `references/view-layer.md` 若还说「Jalium 把变换镜像到池化视图上」，那是**过期**的：现在没有这条通道。
+### 2.4 画布变换：没有附着属性通道，写在画布上（2026-10-05 改写）
+
+别家让节点与连线模板用
+`RenderTransform="{Binding RelativeSource={RelativeSource AncestorType=…}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"`
+把画布变换镜像下来。**这半条路在 Jalium 走不通**（§2.2 的两条实测限制）。
+
+⇒ 本家**不设** `WorkflowCanvasTransformBehavior`：`WorkflowSurfaceBehavior.ApplyLayout` 直接把
+`TranslateTransform(ActualOffset)` 写在 **`PART_Canvas` 自己**身上。池化出来的节点与连线全在画布之下，
+一起跟着走 —— 等价，且没有「视图后到、变换晚一帧」的同步问题。代价是**画布系坐标就是模型系**，
+凡是要比模型的地方都不许再减 `ActualOffset`（见 §2.3）。
 
 ### 2.5 缩放/滚动的时序：Jalium 的 `ScrollTo` 不保证同步落地，`ScrollChanged` 不可靠
 
@@ -137,11 +149,13 @@ Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产�
 
 ## 三、与其它六家的差异
 
-> **先给一个校准**：这家的适配器现在不小了（Workflow 面 12 文件 2685 行），但差异仍能一句说清：池化挂 `Panel`、不测量视觉、没有画布变换通道。
+**校准**：这家 2026-10-05 之后**几乎不再特殊** —— 视图层与 WPF 逐行同形（标记 + 附着行为 + `FindName`
++ `DataTemplate` + `DataTemplateSelector`）。真正剩下的差异只有四条，全部是平台硬限制或实测限制：
 
-1. **池化挂在任意 `Panel` 上，不是 `ItemsControl`，且两个附着属性顺序无关。** `ItemsSource` 与 `TemplateSelector` 都挂 `OnChanged`（`ViewPool.cs:19`/`:25`），回调里同时读两者、只有**都非空**才建 `ViewManager`（`:49-60`），任一为空就 `Detach()`（`:61-64`）。**这里的做法和其他家不一样，因为别家由 `ItemsControl` 自己管模板与集合的顺序，这里得自己容忍"先设集合后设选择器"。** 另外 `ViewManager` 把选择器存成**字段**（`ViewManager.cs:18`、`:27`），换选择器必须走 `SetTemplateSelector`，直接改面板属性在 Jalium 上无效。`WorkflowTreeView.SetTree` 就是两个一起给。
-2. **这家不测量视觉，别家都测量。** §2.3。端口几何走纯模型数学，连 `WorkflowSurfaceMath.SlotAnchorFromNode` 都不再用。**这里不一样，因为这家把"世界坐标 = 模型坐标"当成了不变式**，量视觉反而会在平移/自动长大时变陈旧。
-3. **这家没有画布变换通道，别家都拥有。** §2.4。别照抄别家往这里补 `UpdateRenderTransforms` —— 方法已经删了，硬加会在自定位的视图上画出双重偏移。
+1. **连线视图必须自盒化**（§2.1）—— 渲染器按 `RenderSize` 裁剪，内容画到盒外会被静默丢掉。
+2. **画布变换写在画布上，不走附着属性通道**（§2.4）。
+3. **槽锚点用 `SlotAnchorFromCanvasLocal`**，不是其余六家那个 `SlotAnchorFromVisualCenter`（§2.3）。
+4. **`RelativeSource AncestorType` 与带前缀附加属性路径的限制**（§2.2）。
 
 ---
 
@@ -181,34 +195,12 @@ Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产�
 再 `_linkMenu?.Close()`：基类 `WorkflowTreeView.cs:476-480`、demo `NodeEditorSurface.cs:282-286`），收起后照常报
 `Closed`、挂起随之放开；**平台仍然不记任何账**。
 
-## 五、非 Trimmed demo 连线三件事的落点（表面自绘，含右键菜单）
+## 五、非 Trimmed demo 的落点（2026-10-05 更新）
 
-**先分清一件事：这家的非 Trimmed demo 没有连线视图。** §2.1 与 §四 里那些"连线视图自盒化"说的是 **适配器的 `WorkflowLinkView` 与 Trimmed demo 的派生版**；`Examples/Workflow/Jalium/Demo/` 下连线、端口、网格、标尺**全由 `Examples/Workflow/Jalium/Demo/Views/Workflow/NodeEditorSurface.cs` 自己画**（`:23` `NodeEditorSurface : Canvas`），没有 `LinkView`、不用 `ViewPool`、也不派生适配器基类（`MainWindow` 直接 new 表面 + `ScrollViewer` + 缩略图/信息浮层）。⇒ **没有控件可以承担"某一条连线的悬停/焦点/右键"**，三件事只能由画它的表面把指针/按键转进 Core 的 `LinkInteraction` hub（裁决在 hub，表面只负责转发与画高亮，见下表）。
-
-| 事 | 落点 | 依据 |
-|---|---|---|
-| 命中 | 归 Core 的 hub：表面只把指针转成 `PointerEvent`，由 `tree.HitTestVisibleLinks` 逐条量已发布曲线（半径 6 = `LinkHitTestEx.DefaultHitRadius`） | `:237`（`ForwardPointer`）、`:1070`（画线时 `link.PublishCurve`）、`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:309-310`、`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:18` |
-| 悬停即选中 | 订阅 hub 的 `HoverChanged`，在 `OnLinkHoverChanged` 里写 `_selectedLink`；**只改选中，不碰键盘焦点**（见结论 2、5） | `:214`（订阅）、`:248-252`（方法）、`:77`（字段） |
-| 滚进视口 | 表面吃掉「把表面自己滚进视口」的请求 | `:114`（挂 `RequestBringIntoViewEvent`）、`:191-197`（处理，目标是自己才拦） |
-| 高亮 | 选中那条整条换 `SelectedLinkColor`（白）并加粗 1.5，彗星跟着换 | `:142`（色）、`:31`（粗）、`:1076-1082`（绘制分支） |
-| Delete | 表面 `OnKeyDown` 把键发布进 hub（`AutoDelete` 执行命令），加 `MainWindow` 的窗口级预览兜底 | `:178-188`（`OnKeyDown`）、`Examples/Workflow/Jalium/Demo/MainWindow.cs:424-433`、`:161`（`DeleteLink`） |
-| 右键菜单 | 订阅 hub 的 `ContextMenuRequested`，**每次右键现建**一份原生 `ContextMenu`（本地 `OnBuildLinkMenu` 一项 `Delete`），开/收 `Publish(ContextMenuEvent)` 交 hub 管挂起，`menu.Open(ToMenuPosition(...))` 定位 | `:215`（订阅）、`:257-286`（建+开+上报）、`:290-300`（本地建菜单）、`:303-307`（表面→屏幕→根视觉） |
-
-> 行号写法沿用本文开头的约定：**裸 `:NNN` 都指 `Examples/Workflow/Jalium/Demo/Views/Workflow/NodeEditorSurface.cs`**（除非同格已写全路径或另注文件名）。
-
-五条结论：
-
-1. **命中量与画读的是同一条曲线。** 表面画线用的就是 `CurveFor`（`:1120`）取的那条 `LinkCurve`，并在同一处 `link.PublishCurve(curve)` 发布给 Core（`:1069-1070`）；命中的裁定在 Core —— `tree.HitTestVisibleLinks(...)` 逐条量已发布曲线（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:309-310`），半径 6 是 `LinkHitTestEx.DefaultHitRadius`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:18`）。所以**只有画出来的那一道笔画能命中**：两端之间的空当不算，缩放后端点按 `node.Size/DesignSize` 折叠也不会错位。**不要去写第二套几何**：两份几何只要有一处不同，就会出现"看得见抓不住 / 抓得住看不见"。命中半径的不变式是**"不超出画出来的范围"**：6 与最宽那层辉光同量级（`thickness + 9` 即 11px 宽 ⇒ 半宽 5.5px，见 `DrawLink` 的 `:1181`），读作"辉光能到的地方就能抓"。
-2. **Delete 靠窗口级预览兜底，悬停因此不必收焦点（曾经收过，见结论 5）。** 表面仍 `Focusable = true`（`:119`）并有自己的 `OnKeyDown`（`:178-188`），但那只是**第二道闸**：真正的主路径是 `Examples/Workflow/Jalium/Demo/MainWindow.cs:424-433`（`OnPreviewWindowKeyDown`）的窗口级预览，且**故意不看焦点**：判据是"有没有选中"—— 悬停即选中，"指针搭在连线上"本身就说明这一下 Delete 是冲那条线来的；指针不在线上时没有选中，`DeleteSelectedLink()`（`:146-156`）返回 `false`，按键原样落回输入框。**改回"焦点不是 TextBox 才处理"会让悬停-按 Delete 在焦点落到输入框时静默失效**（实测：焦点停在侧栏输入框时按 Delete，HUD 的连线数 12→11，画布偏移不变）。⇒ 因此悬停那条路（`ForwardPointer` + hub 的 `HoverChanged`）**从不调 `Focus()`**：收了焦点就多出一条"滚进视口"（结论 5），而 Delete 根本不需要它。
-3. **菜单的挂起来自 Core，不是表面自己记的标志。** 表面开菜单前 `Publish(ContextMenuEvent(Opened, ...))`（`:277`）、收起时报 `Closed`（`:268`），`LinkInteraction` 据此置/放 `IsSuspended`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/LinkInteraction.cs:262-278`）；于是弹层起来后指针"离开表面"的那一发 `Exited` 被 hub 忽略（`LinkInteraction.cs:187-191`），菜单开着时那条线仍亮着。**别在表面另立 `MenuOpen` / 读 `IsOpen` 去挡 `MouseLeave`**：旧实现里的 `MenuOpen`、`_menuTarget`、"在 `PruneCurves` 里收菜单"本轮全删了，挡两遍只会多一份会漏的账。这些删除仍成立 —— 「菜单指着的那条线从别处（Agent / Undo / …）离开了树」这件守卫现在由 Core 守：hub 在开着的菜单指着的那条线离开 `tree.Links` 时发 `ContextMenuDismissRequested`，宿主只收自己这份弹窗（与 `_menuLink` 比对后 `_linkMenu?.Close()`），收起照常报 `Closed`；**别把这件守卫搬回 `PruneCurves`，平台不记任何账**。其二：**菜单项点完不会自己收** —— 不显式关，删掉线菜单还杵在画布上（本地钩子 `:296` 的 `menu.Close(); DeleteLink(link);`；基类同款 `WorkflowTreeView.cs:291-292`）。其三：**`Closed` 与 `Click` 的先后不再有害** —— 旧实现把目标存在 `_menuTarget` 字段里、`Closed` 一清字段 `Click` 就拿到 `null`（"菜单关了、线没删"）；现在菜单每次现建、`link` 由闭包捕获在条目里（`:293-298`），时序无关，**别再回到"存一个目标字段、收起时清掉"的写法**。收尾：换树/解绑时菜单还开着就先 `Close()`（`:231`，`Closed` 会顺手放开 hub 的挂起），`Closed` 里把 `_linkMenu` 归零（`:269`）。
-4. **这家有完整的原生菜单栈，仓库里此前零使用**（反射 `Jalium.UI.Managed.dll` 查到；`Jalium.UI.Controls.dll` 只是转发程序集）：`Jalium.UI.Controls.ContextMenu : MenuBase`（带 `IsOpen` / `Open(Point)` / `StaysOpen` / `Placement` / `PlacementTarget`）、`MenuItem`（`Header` / `Click` / `Command`）、`MenuFlyout : Primitives.FlyoutBase`、`Primitives.Popup`，外加 `FrameworkElement.ContextMenu` + `ContextMenuService.TryOpen/Open` 这套 WPF 式接线，菜单主题也在（`Jalium.UI.Managed` 里的 `_Dict_..._Themes_Controls_MenusToolbars`）。**别把"仓库里没人用过"读成"这家没有"** —— 下一个人不必再反射一遍。但这根线要自己接：`FrameworkElement.ContextMenu` 的自动右键路径认的是**元素**，连线不是元素、表面又是整块画布，直接挂上去等于"画布任意处右键都弹删除菜单"。这里的做法是**由 hub 决定**：`OnMouseDown` 的右键分支只转发按下（`:1445-1454`），命中了 hub 才发 `ContextMenuRequested`，表面订阅后现建并 `Open`（`:215`、`:257-279`）。
-
-5. **「悬停取焦点」曾经会滚动画布，因为表面整块就是画布。** 链路（IL 级证据，反射 `Jalium.UI.Managed.dll`）：`Window.OnPlatformEvent` 里处理安全区/软键盘那个分支先 `InvalidateMeasure()`，紧接着调 `Window.ScrollFocusedEditorIntoViewAfterLayout()`；后者取 `Keyboard.FocusedElement`，在它的**下一次 `LayoutUpdated`** 上对它调 `FrameworkElement.BringIntoView()`（`Jalium.UI.Window+<>c__DisplayClass784_0::<ScrollFocusedEditorIntoViewAfterLayout>b__0`）；`BringIntoView` 抛出 `RequestBringIntoViewEvent`，冒泡到 `ScrollViewer.HandleRequestBringIntoView` → `MakeVisible(TargetObject, TargetRect)` + `e.Handled = true`。⇒ **焦点只要落在表面上，画布就会被滚进视口**，而 2000+ 见方的画布"滚进视口"只能是**跳到原点**（实测：HUD 的 `视口(画布)` 从 `712, 61` 一步跳到 `0, 0`）。这就是用户报的「**极小概率触发滚动**」：要同时满足「表面上恰好有键盘焦点」+「平台事件（安全区/软键盘，台式机上很少见）」+「其后有一次布局」。**别把这条当成"悬停会滚"去复现**——它不依赖悬停本身，依赖的是焦点：
-   - **本家的处理是两条一起**：① 去掉因 —— 悬停不再 `Focus()`（结论 2）；② 拦请求 —— 表面在 `:114` 挂 `RequestBringIntoViewEvent`，处理函数（`:191-197`）**只在自己是目标时** `e.Handled = true`，所以**只拦"把整块画布滚进视口"这一次**，节点卡里输入框发起的同类请求照旧冒泡（作用域不扩散，与 Avalonia 在同一条轴上）。**只做②不做①也够安全**（请求层已封住），但①顺手删掉了一条无用的焦点变化。
-   - **还查清一条容易误判的**：`FocusVisualManager.OnKeyboardFocusedChanged` 里也有一处 `BringIntoView`，看起来是"焦点一变就滚"的元凶 —— 但 `EnsureInitialized`（唯一安装该钩子的地方）**在 26.10.8 的任何一个 Jalium 程序集里都没有调用者**（`Jalium.UI.Managed` 只有它内部两处 `ldftn` 自引用；Desktop/Gpu/Xaml 零命中）。**这条是死代码，别照它写复现步骤。**
-   - **可复核的数字**：改前扫描悬停 40 次中跳 1 次（且带有"每次悬停前激活窗口"这个模式）；改后同一模式 40 次 + 纯鼠标移动 40 次 + 6 次真正落在连线上的悬停，HUD 偏移**一次没变**；用临时探针直接调 `surface.BringIntoView()`：不拦时 `712,61 → 0,0`，拦后不动（探针已从最终代码里删除，拦截代码未变）。
-
----
+**`Examples/Workflow/Jalium/`（4556 行）在 2026-10-05 那次改造里零改动。** 它只派生适配器的一个类型
+（`Views/Workflow/Minimap.cs:8` 的 `Minimap : WorkflowMinimapOverlay`），其余 `NodeEditorSurface`(1879) /
+`NodeViewBase` / `NodePorts` / `PortGlyph` / `NodeChrome` 全是它**自己的自绘代码**，不引被删的那一套。
+⇒ 下次再动 Jalium 适配器时，**先按这一条估爆炸半径**：全 demo 与适配器的耦合面只有小地图一个类。
 
 ## 六、这份文件没写的东西
 

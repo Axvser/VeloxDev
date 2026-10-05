@@ -28,7 +28,7 @@
 ## 三、自定义模板选择器：家家都要支持，且优先级最高
 
 - 七家都必须支持**用户自己的模板选择器** —— 是 VeloxDev 自己的那套 API（`ViewPool.TemplateSelector` / `ViewManager` 的构造参数），不是平台自带的 `DataTemplates` / `DataTemplateSelector` 机制。平台自带的那套继续兜底。
-- 模板的 tree-view 里要把它**接上**：`behaviors:ViewPool.TemplateSelector="{StaticResource …}"`（写法照已接上的三家：MAUI / WinUI / WPF 的 `workflow-tree-view`）。
+- 模板的 tree-view 里要把它**接上**：`behaviors:ViewPool.TemplateSelector="{StaticResource …}"`（写法照已接上的四家：MAUI / WinUI / WPF / **Jalium** 的 `workflow-tree-view`）。
 - **选择器的优先级最高**：解析一个 VM 的视图时先问它，它匹配就用它；平台自带的模板查找只在它之后兜底。
 
 理由两条：它是七家**公共 API 面**的一部分（用户换一家平台不该换一套写法），而客制化时用户最先要动的正是「哪个 VM 用哪个视图」。
@@ -45,7 +45,7 @@
 
 **这一节是现状，不是规范。** 要动相关代码时照第三节的方向改。
 
-- **七家的接法各不相同，「接上了」不等于搜得到字面串**：只有 XAML 那几家写得出 `behaviors:ViewPool.TemplateSelector="{StaticResource …}"`；另外几家用别的形态 —— WinForms **在适配器基类里**（`WorkflowTreeView` 把宿主给的 `TemplateSelector` 包一层记录视图角色，`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 的 `ViewFactorySelector`；模板那一侧已经没有这行了）、Jalium 现在**也在适配器基类里**（`WorkflowTreeView.SetTree` 内部调 `ViewPool.SetTemplateSelector`，`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowTreeView.cs:169`；模板构造器只设一个 public 属性，`Src/Templates/VeloxDev.Jalium.Templates/working/content/workflow-tree-view/TemplateClass.cs:21`）、Razor 是组件 `<TemplateSelector Items="Tree.Nodes" KeySelector="n => n" … />`（`workflow-tree-view/TemplateClass.razor:46`）。⇒ **只 grep `ViewPool.TemplateSelector=` 会把 WinForms / Jalium / Razor 误判成没接。**
+- **七家的接法各不相同，「接上了」不等于搜得到字面串**：只有 XAML 那几家写得出 `behaviors:ViewPool.TemplateSelector="{StaticResource …}"`；另外几家用别的形态 —— WinForms **在适配器基类里**（`WorkflowTreeView` 把宿主给的 `TemplateSelector` 包一层记录视图角色，`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 的 `ViewFactorySelector`；模板那一侧已经没有这行了）、Jalium 原先是**在适配器基类里**，**2026-10-05 转到 tree 标记里**（`behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`，与 WPF 同形；`WorkflowTreeView` 那一整个基类已删）、Razor 是组件 `<TemplateSelector Items="Tree.Nodes" KeySelector="n => n" … />`（`workflow-tree-view/TemplateClass.razor:46`）。⇒ **只 grep `ViewPool.TemplateSelector=` 会把 WinForms / Razor 误判成没接**（Jalium 现在搜得到了）。
 - **Avalonia 此前确实没接**，而且它的症结不在 tree-view，在适配器：池是 `template.Build(null)` 建视图（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs:168`），而 Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的是选择器自己，轮到 `Build` 时它才去挑内层模板；传 `null` 就无从下手（选择器的 `SelectTemplate(null)` 抛异常）⇒ **视图一个都不建，且不报错**（画布空白）。现在传的是 VM，选择器因此可用。
 - **判定顺序**（四家 `FindDataTemplate` 同形）：按 VM **类型**的缓存 → 选择器 → 平台自带的查找（Avalonia：`ViewManager.cs:233` 缓存 → `:235` 选择器 → `:242`/`:248`/`:259` 面板/祖先/`Application`）⇒ 「选择器命中就跳过平台机制、没命中就退化到平台机制」成立；但选择器若**按实例**判定，第一个实例的判定会被整个类型沿用。
 - **WinForms 是例外**：它的池没有平台兜底可谈 —— 选择器是唯一的创建路径（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs:161` 的 `_selector.CreateView(item)`），所以「退化」在那家不存在。

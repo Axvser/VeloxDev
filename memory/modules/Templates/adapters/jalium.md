@@ -1,5 +1,11 @@
 # Templates — Jalium
 
+> ⚠ **2026-10-05：Jalium 适配器已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
+> 本文下面凡提 `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
+> `IWorkflowTemplateSelector` / `WorkflowTemplateSelector` / `WorkflowNodeView` / `WorkflowSlotView` /
+> `WorkflowLinkView` 的段落**都已作废**（那些类型全部删除）。现行落点见
+> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇。
+
 > **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
 > **表面侧**（`Visual.ShouldRenderChild` 自盒化、纯模型数学、`_zoomPin`）现在都在**适配器基类**里，

@@ -55,10 +55,10 @@
 | 要定制 | 入口（七家同一套） |
 |---|---|
 | 一次指针/键盘动作（悬停、按下、松开、滚轮、按键） | **订阅**：`((IInputEvents)vm.GetHelper()).Input.<事件> += …`。视图自己吃指针的平台（Razor / MAUI overlay / 逐线视图）与表面转发指针的平台（WPF / WinUI / Avalonia / WinForms / Jalium）都是这一句 |
-| 这一笔的效果怎么画 | **画在你自己的视图里**（连线 / 节点卡 / 端口都一样）：WPF / WinUI / Avalonia / Razor 是你本来就拥有的那个视图类（`OnRender` / 标记）；WinForms / Jalium 也是你的控件，调 `WorkflowLinkAttachment` / `WorkflowNodeAttachment` / `WorkflowSlotAttachment` 的 `Attach(this)` 挂上其余机制后自己画。**MAUI 的连线是唯一的例外**（见下） |
+| 这一笔的效果怎么画 | **画在你自己的视图里**（连线 / 节点卡 / 端口都一样）：WPF / WinUI / Avalonia / Razor / **Jalium**（2026-10-05 起走标记）是你本来就拥有的那个视图类（`OnRender` / 标记）；WinForms 也是你的控件，调 `WorkflowLinkAttachment` / `WorkflowNodeAttachment` / `WorkflowSlotAttachment` 的 `Attach(this)` 挂上其余机制后自己画。**MAUI 的连线是唯一的例外**（见下） |
 | 这一次要不要走框架那一手 | args 上的 `Handle.PreventDefault`；要不要继续往上冒 = `StopPropagation` |
 | 整块表面级的策略 | `WorkflowInput.For(tree)` 的开关与只读口 |
-| 声明式的东西（右键菜单条目、模板选择器） | 标记平台：附着属性 / 组件参数；无标记两家：基类的 `protected virtual` 钩子 |
+| 声明式的东西（右键菜单条目、模板选择器） | 标记平台：附着属性 / 组件参数；无标记的 **WinForms**：基类的 `protected virtual` 钩子 |
 
 **MAUI 也不能例外**（2026-10-05 用户定，走的是「宿主的层自己画」这条路）：那家**一个 overlay 画完所有线、没有每线视图**（每线一个 `GraphicsView` 撞 Win2D 纹理上限，Trimmed demo 实测过），所以「在我的那一笔视图里画」没有对应物 —— 但**效果仍是宿主的**：宿主在连线层之上**再叠一层自己的视图**，订 `IInputEvents`，再沿 `ILinkHitTestable.Curve` 画。所以 Core 把**已发布的曲线**开成只读的公开事实（`Curve`）—— 那本来就是命中判定用的那一条，藏着只会逼每个宿主再推一遍几何。
 
@@ -88,7 +88,8 @@
 
 - 模板与 Trimmed demo 的镜像关系见 [item-template-specifications.md](item-template-specifications.md) §一：
   **外观下沉到 demo 意味着这两份本来就该不一样** —— 镜像校验脚本对这类条目按「预期差异」放行（同 `tree` 条目的 HUD）。
-- 无标记语言两家（WinForms / Jalium）的基类归属见 [adapter-base-class-specifications.md](adapter-base-class-specifications.md)：
+- 无标记语言的一家（**WinForms**）的基类归属见 [adapter-base-class-specifications.md](adapter-base-class-specifications.md)
+  —— Jalium 已于 2026-10-05 移出那份名单，它与标记四家同形：
   本规范只改**外观**这一层，§2.1 那条「平台机制进基类」的划分不动。
 - 注释照 [code-comment-specifications.md](code-comment-specifications.md)：模板里的注释只讲扩展点（§五）。
 
@@ -102,5 +103,6 @@
 | 2026-10-03 | 推翻上一条：命中归 Core，**高亮**由 hub 经 `ILinkHighlight` 直接点亮、删除由 `AutoDelete` 直接执行，模板与 Trimmed demo 默认就有 |
 | 2026-10-04（第一版） | 再推翻 10-03 的**高亮**部分：命中与删除仍是库能力，高亮等外观回到 demo；Core 的 `ILinkHighlight` / `AutoHighlight` 因此删除 |
 | **2026-10-04（现行）** | 把上面这条做彻底：**按组件定制的那些事件整套换掉**，改成一套**标准输入**（抄 Avalonia 的指针/键盘 API，位置转 `Anchor` 并带上来源视图的图层、按 target 冒泡、句柄管「走不走框架那一手 / 还传不传」）。外观仍旧归 demo —— 现在订的是 `IInputEvents` 的指针事件。菜单由适配器从 `PointerPressed(Right, link)` 自己弹，`LinkRemoved` 收尾 |
+| **2026-10-05** | **Jalium 从「无标记两家」移出**，适配器整体转标记驱动（与 WPF 逐行同形）。连带推翻 `57f1cb91` 的端口排版半笔：`slot.Anchor` 不再是模型几何算出来的，而是**标记里声明的槽控件实测写的**。上表「这一笔的效果怎么画」那一行因此从两家并作一家 —— 只剩 WinForms 走 `Attach(this)` |
 
 ⇒ 这一层来回翻过两次。再要动它，**先问用户**，不要按「上一次是怎么做的」推断。
