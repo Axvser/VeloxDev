@@ -180,12 +180,24 @@ public static class VeloxJsonRegistry
     /// <param name="type">The type.</param>
     /// <param name="writer">Its writer.</param>
     /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// More than one assembly can offer an entry for the same type: the one that declares it, and a consumer that
+    /// met a closed generic form of it — <c>SlotEnumerator&lt;ThatConsumer'sSlot&gt;</c> is declared in one
+    /// assembly and can only be named in the other. An entry already present is therefore kept unless the offering
+    /// assembly is the one that declares the type. A consumer sees the type through another assembly, so its writer
+    /// is the narrower one (no <c>internal</c> members and no <c>internal</c> callbacks), and without this rule
+    /// which of the two won would depend on module-initializer order, which the language does not fix.
+    /// </remarks>
     public static void RegisterWriter(Type type, IVeloxJsonWriter writer)
     {
         if (type is null) throw new ArgumentNullException(nameof(type));
         if (writer is null) throw new ArgumentNullException(nameof(writer));
 
-        lock (Gate) _snapshot = _snapshot.WithWriter(type, writer);
+        lock (Gate)
+        {
+            if (_snapshot.Writers.ContainsKey(type) && !Declares(type, writer)) return;
+            _snapshot = _snapshot.WithWriter(type, writer);
+        }
     }
 
     /// <summary>
@@ -194,13 +206,23 @@ public static class VeloxJsonRegistry
     /// <param name="type">The type.</param>
     /// <param name="reader">Its reader.</param>
     /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
+    /// <inheritdoc cref="RegisterWriter(Type, IVeloxJsonWriter)" path="/remarks"/>
     public static void RegisterReader(Type type, IVeloxJsonReader reader)
     {
         if (type is null) throw new ArgumentNullException(nameof(type));
         if (reader is null) throw new ArgumentNullException(nameof(reader));
 
-        lock (Gate) _snapshot = _snapshot.WithReader(type, reader);
+        lock (Gate)
+        {
+            if (_snapshot.Readers.ContainsKey(type) && !Declares(type, reader)) return;
+            _snapshot = _snapshot.WithReader(type, reader);
+        }
     }
+
+    // 判断这次注册是不是「声明方」发的。生成器把每个读写器类发进**发起注册的那个程序集**，所以实现类
+    // 所在的程序集就是注册方的程序集 —— 生成器那边同样依赖这条不变量（见 VeloxJsonCodeWriter 的注册块）。
+    private static bool Declares(Type type, object implementation)
+        => implementation.GetType().Assembly == type.Assembly;
 
     /// <summary>
     /// Registers the name a type is written as.

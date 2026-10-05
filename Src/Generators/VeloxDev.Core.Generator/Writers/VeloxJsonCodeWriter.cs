@@ -493,6 +493,9 @@ namespace VeloxDev.Generators.Writers
             builder.AppendLine("    internal static void Register()");
             builder.AppendLine("    {");
 
+            // 每个读写器类都发进**当前编译**，而 `VeloxJsonRegistry` 靠这一点判断谁是「声明方」
+            // （见它的 `Declares`）：同一个封闭泛型可能被声明它的程序集与见过它的消费方各注册一次，
+            // 那里只许声明方改写已有的条目。改动这个发法（比如把类发到公共程序集）会静默废掉那条判断。
             for (var i = 0; i < assembly.Types.Count; i++)
             {
                 var type = assembly.Types[i];
