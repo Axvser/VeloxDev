@@ -768,4 +768,46 @@ public class SlotEnumeratorTests
             flags.Items.Select(i => i.Name).ToArray(),
             "and so does a flags enum whose constants are built with |");
     }
+
+    /// <summary>
+    /// Re-setting a provider selector rebuilds the slots; it does not restore the ones the last provider made.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The remembered-state cache is keyed by selector <b>type name</b>, which is the right key for an enum: the
+    /// slots come from the type, so switching back to a type has to bring its wiring with it.
+    /// </para>
+    /// <para>
+    /// A provider is not a type, it is a value — the port table lives on the instance, and two instances of the
+    /// same class can describe entirely different ports. Keyed by type name, the second call found the first
+    /// call's snapshot, restored it, and discarded the slots it had just built. Nothing threw and nothing
+    /// reported a problem, because both calls "succeeded".
+    /// </para>
+    /// <para>
+    /// This is what made the Agent unable to reshape a Python node's ports: <c>SetEnumSlotCollection</c> goes
+    /// through exactly this path, and its provider is always the same type.
+    /// </para>
+    /// </remarks>
+    [TestMethod]
+    public void ReSettingAProviderSelector_RebuildsTheSlots()
+    {
+        var node = new StubNode();
+        var enumerator = new SlotEnumerator<StubSlot>();
+        enumerator.Install(node, "OutputSlots");
+
+        enumerator.SetSelector(new StubPortProvider("a", "b"));
+        Assert.HasCount(2, enumerator.Items, "precondition: the first provider installs its ports");
+
+        enumerator.SetSelector(new StubPortProvider("a", "b", "c"));
+
+        CollectionAssert.AreEqual(new[] { "a", "b", "c" }, enumerator.Items.Select(i => i.Name).ToArray(),
+            "the second provider's ports are the ones that stand — same type, different value");
+    }
+
+    /// <summary>An <see cref="ISlotProvider"/> whose ports are just the names it was handed.</summary>
+    private sealed class StubPortProvider(params string[] names) : ISlotProvider
+    {
+        public IEnumerable<SlotDefinition> GetSlots()
+            => names.Select(n => new SlotDefinition(n, n));
+    }
 }

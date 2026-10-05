@@ -295,6 +295,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         List<ConditionalSlot<TSlot>> newItems = [];
         string newTypeName;
         Type? newType;
+        bool isProviderSelector = selector is ISlotProvider;
 
         if (selector is ISlotProvider provider)
         {
@@ -380,9 +381,14 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         }
 
         // Restore the target type's remembered state, or build it fresh on first use.
+        //
+        // 缓存的单位是**选择器类型名**，那是为枚举写的：枚举的槽位来自类型本身，切回来时要连布线一起复原。
+        // 一个 ISlotProvider 不是类型而是**值** —— 端口表在它身上，同类型的不同实例给出的端口可以完全不同。
+        // 所以对它查这张表只会取回上一次的快照、把刚建好的槽位丢掉，而调用方看到的是「设置成功」。
+        // Agent 的 SetEnumSlotCollection 正是这条路径，症状是同一个节点第二次改端口不起作用。
         bool isFresh;
         SelectorState newState;
-        if (_typeStates.TryGetValue(newTypeName, out var remembered))
+        if (!isProviderSelector && _typeStates.TryGetValue(newTypeName, out var remembered))
         {
             newState = remembered;
             isFresh = false;
