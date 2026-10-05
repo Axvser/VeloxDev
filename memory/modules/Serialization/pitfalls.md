@@ -131,11 +131,18 @@
 
 ---
 
-## 八、两条链路是手写抄的两份，靠一条测试拴住
+## 八、两条链路是手写抄的两份，靠测试拴住
 
-写侧有两张手写的标量表：`TryWriteScalar`（同步）与 `TryWriteScalarAsync`（异步）。**没有任何东西强制它们一致** —— 2026-10-04 给同步那份加了 `byte[]` 而忘了异步那份，异步链路就把 `byte[]` 写成了数字数组，而读侧按 base64 读，异步往返当场 `FormatException`。
+**写侧**有两张手写的标量表：`TryWriteScalar`（`VeloxJsonSerializer.cs`）与 `TryWriteScalarAsync`（`VeloxJsonSerializer.Async.cs`）。**没有任何东西强制它们一致** —— 2026-10-04 给同步那份加了 `byte[]` 而忘了异步那份，异步链路就把 `byte[]` 写成了数字数组，而读侧按 base64 读，异步往返当场 `FormatException`。
 
 没有合并两张表（那是横跨整个标量面的重构），而是加了 `ShapeRoundTripTests.TheTwoChains_SpellEveryScalarTheSameWay`：同一种对象过两条路，文档必须逐字节相同。**加新标量时它会红** —— 那就是它存在的意义。
+
+**读侧有同样的两张表，2026-10-05 才发现也漂了**：`TryReadScalar`（`VeloxJsonSerializer.cs` 的 `underlying == typeof(…)` 那一串）与 `TryReadScalarAsync`（`.Async.cs` 同名方法）。这条路只在**集合元素 / map 值 / `object` 成员**上走 —— 成员自己声明成标量时，读法是生成代码直写的 `reader.ReadInt32()`，与这两张表无关。所以它比写侧更晚暴露：
+
+- 异步那份**整个漏了 `byte[]`**（同步有，异步没有）。症状与写侧那个洞对称：写入是 base64、读回来走数组形状。
+- 异步那份 `DateTime.Parse` **没有 `RoundtripKind`**（同步有）。症状是集合里的 UTC 时刻读回成当地时刻并平移。
+
+两处都修成与同步逐条一致；守卫是 `ElementScalarRoundTripTests`（`VeloxDev.Core.Extension.Test/Serialization/`）—— 一个成员即「某种标量的一整个集合」的模型，**两条链各过一遍**。**加新标量时它也会红**，且它比写侧那条更值钱：写侧漂移是文档不同，读侧漂移是值不同。
 
 ---
 
@@ -165,7 +172,7 @@
 
 ---
 
-## 十、两套实现的不对称：四处只在补覆盖时露出来的缺陷（2026-10-05 修）
+## 十、两套实现的不对称：只在补覆盖时露出来的缺陷（2026-10-05，行/分支补到 100%）
 
 补覆盖（行 81.4% → 91.0%、分支 67.2% → 77.8%）时新加的测试当场抓出四处。共同点都是
 **同步面有测试、异步面没有**，或者**语料的形状没走到**：
@@ -194,3 +201,10 @@
 
 `VeloxJsonObject.Reindex` 也在这轮修的（`VeloxJsonValue.cs`）：它原来 `_index.Clear()` 后只从 `from` 重建，
 于是删掉中间一个成员，**它之前**的成员就从索引里消失（`Has` / 索引器都拿不到）。
+
+**另一处同日收尾时补上：读侧的标量表也漏了同一条 `byte[]`，以及 `DateTime` 的 `RoundtripKind`**（见 §八）——
+两处只在集合元素上走得到，所以上面那六处的测试都没碰到它们。
+
+**这轮收在 100%**：`Src/Core/VeloxDev.Core/Serialization/`，行 2014/2014、分支 1193/1193
+（2026-10-05 收尾实测，`dotnet-coverage merge` 合并两个测试程序集后读数）。方法、读数与工具上的两个坑见
+[architecture.md](architecture.md) §七。

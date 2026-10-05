@@ -80,6 +80,8 @@
 **代价与纪律**：产物大约翻倍，而且两条路**必须同义**。守卫是 `VeloxJsonStreamingTests` ——
 同一批语料（四份黄金文件、分块 1..64、缓冲区 1..16）在**两条路各跑一遍**。改一条链路就得改另一条。
 
+**读写各有一对「手写抄的」标量表**（`TryWriteScalar(.Async)` / `TryReadScalar(.Async)`），没有任何东西强制同步那份与异步那份一致。写侧的守卫是 `ShapeRoundTripTests.TheTwoChains_SpellEveryScalarTheSameWay`，读侧是 `ElementScalarRoundTripTests`（集合元素才走得到读表）—— 见 [pitfalls.md](pitfalls.md) §八。
+
 ⚠ **语料跑两条路 ≠ 两条路对称**：`VeloxJsonStreamingTests` 只保证两边对**语料里有的形状**给同一个答案。
 语料没有的东西（字符串转义、容器套容器、`object` 成员、接口键的 map），两边可以悄悄不同 —— 2026-10-05 补覆盖时
 就是这么抓到四处的，见 [pitfalls.md](pitfalls.md) §十。**补一条形状的测试时，两条路都要各写一遍。**
@@ -382,3 +384,16 @@
 `obj/Debug/*/generated/...` 里那份 `*_VeloxJson.g.cs` 可能是**很久以前的遗留**。Roslyn 默认只在内存里持有生成结果；要落盘得加 `-p:EmitCompilerGeneratedFiles=true`。
 
 **别用文件时间戳判断生成器跑没跑**——2026-10-04 就因此误判过一次，差点把一次真实的产物改动当成没生效。
+
+---
+
+## 七、覆盖率：100%，以及怎么量才准
+
+`Src/Core/VeloxDev.Core/Serialization/` 的 12 个源文件目前是**行 2014/2014、分支 1193/1193**（2026-10-05 收尾实测；目录下共 13 个 `.cs`，唯一不在报告里的是 `Annotations/ArchiveOptions.cs` —— 它只有枚举定义，没有可测语句）。
+
+**两个测试程序集各出一份读数**（`VeloxDev.Core.Test` 与 `VeloxDev.Core.Extension.Test`），而覆盖率是**按项目**出报告的，所以必须合并：两个项目各跑一次 `dotnet test --collect:"XPlat Code Coverage"`，再 `dotnet-coverage merge -f cobertura -o 合并.xml <所有 coverage.cobertura.xml>`。
+
+- **不要手工按「每个文件取较大的 covered」合并** —— 会低估。同一条 `&&` 的两条臂可能各落在不同的一份报告里，取最大值等于丢掉一半；`&&` / `||` 的臂被拆分记录，正是最容易被这一步抹掉的东西。
+- **`dotnet vstest <两个 dll> --Collect:"XPlat Code Coverage"` 找不到收集器**（coverlet 的收集器不在输出目录里），别走那条路。
+- **edge-case 测试大多写在 `VeloxDev.Core.Test/Serialization/`**：`VeloxJsonText`、`VeloxJsonWriter` 的内部构造器与 `FlushBuffer`、`SerializationOptions.ExcludedPropertyTypes` 都是 `internal`，而 `InternalsVisibleTo` 只给了 `VeloxDev.Core.Test`（`Properties/AssemblyInfo.cs`）。`VeloxDev.Core.Extension.Test` 看不到它们，所以那边只放需要生成类型的往返测试。
+- 有一处臂是靠**另一条路**覆盖的，别再为它编测试：`WriteValueAsync` 的 `if (value is IEnumerable sequence && value is not string)`，其中「`value` 是字符串」这一臂**永远走不到**（字符串在 `TryWriteScalarAsync` 就被接走），但 coverlet 把「左操作数为假」记成短路后的右臂，所以补一条 `MissingWriter` 的用例就够。
