@@ -32,6 +32,9 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
 
     private bool _dragging;
 
+    // 每趟绘制复用同一份缩略框，免掉一次列表分配（内容变了也无所谓 —— 下一趟绘制会重填）。
+    private readonly List<(double X, double Y, double W, double H)> _nodeRects = [];
+
     /// <summary>Creates the overlay at its default size, anchored to the host's top-right corner.</summary>
     public WorkflowMinimapOverlay()
     {
@@ -196,19 +199,19 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
         g.FillRectangle(bgBrush, rect);
         g.DrawRectangle(borderPen, rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
 
-        var layout = ComputeLayout();
+        var layout = ComputeLayout(_nodeRects);
         if (layout is null) return;
         var l = layout.Value;
 
         using var nodeBrush = new SolidBrush(_nodeBrush);
         using var viewportPen = new Pen(_viewportStroke, 1.5f);
 
-        foreach (var node in l.Tree.Nodes)
+        foreach (var (nx, ny, nw, nh) in _nodeRects)
         {
-            double x = l.Ox + (node.Anchor.Horizontal - l.MinX) * l.Scale;
-            double y = l.Oy + (node.Anchor.Vertical - l.MinY) * l.Scale;
-            double w = Math.Max(2, node.Size.Width * l.Scale);
-            double h = Math.Max(2, node.Size.Height * l.Scale);
+            double x = l.Ox + (nx - l.MinX) * l.Scale;
+            double y = l.Oy + (ny - l.MinY) * l.Scale;
+            double w = Math.Max(2, nw * l.Scale);
+            double h = Math.Max(2, nh * l.Scale);
             g.FillRectangle(nodeBrush, (float)x, (float)y, (float)w, (float)h);
         }
 
@@ -241,6 +244,7 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
         base.OnMouseMove(e);
         if (!_dragging) return;
 
+        // 这里每次重算：本家不订阅节点，无从知道自上一趟绘制以来节点动没动，缓存会按旧位置反解。
         var layout = ComputeLayout();
         if (layout is null) return;
         UpdateViewportFromPointer(e.X, e.Y, layout.Value);
@@ -287,10 +291,13 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
     }
 
     // 绘制与拖拽映射共用的一套「画布范围 + 缩放」。还没有节点时返回 null，小地图在树排好版之前保持空白。
-    private MinimapLayout? ComputeLayout()
+    // 绘制要的缩略框顺手由 thumbnails 收走 —— 一趟把两样拿齐，别为包围盒单独再走一趟节点表。
+    private MinimapLayout? ComputeLayout(List<(double X, double Y, double W, double H)>? thumbnails = null)
     {
         var tree = WorkflowTree;
         if (tree?.Nodes is null) return null;
+
+        thumbnails?.Clear();
 
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
@@ -298,10 +305,12 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
 
         foreach (var node in tree.Nodes)
         {
-            minX = Math.Min(minX, node.Anchor.Horizontal);
-            minY = Math.Min(minY, node.Anchor.Vertical);
-            maxX = Math.Max(maxX, node.Anchor.Horizontal + node.Size.Width);
-            maxY = Math.Max(maxY, node.Anchor.Vertical + node.Size.Height);
+            var (x, y, w, h) = (node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height);
+            thumbnails?.Add((x, y, w, h));
+            minX = Math.Min(minX, x);
+            minY = Math.Min(minY, y);
+            maxX = Math.Max(maxX, x + w);
+            maxY = Math.Max(maxY, y + h);
             hasNode = true;
         }
 
@@ -319,7 +328,7 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
         // ComputeTransform 和 Razor 的 Recompute 是同一个变换，所以拖拽/点击反解的是绘制用的同一个映射。
         double ox = pad + (drawW - contentW * scale) / 2;
         double oy = pad + (drawH - contentH * scale) / 2;
-        return new MinimapLayout(tree, minX, minY, scale, ox, oy);
+        return new MinimapLayout(minX, minY, scale, ox, oy);
     }
 
     private RectangleF ViewportRect(MinimapLayout l)
@@ -337,14 +346,11 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
 
     private readonly struct MinimapLayout
     {
-        public readonly IWorkflowTreeViewModel Tree;
         public readonly double MinX, MinY, Scale, Ox, Oy;
 
         public MinimapLayout(
-            IWorkflowTreeViewModel tree,
             double minX, double minY, double scale, double ox, double oy)
         {
-            Tree = tree;
             MinX = minX;
             MinY = minY;
             Scale = scale;

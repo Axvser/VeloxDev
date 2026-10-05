@@ -89,6 +89,8 @@ Jalium 没有 XAML 编译器替你建名字作用域；旧的补偿（模板产�
 - `WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay.cs:15`），`RulerBand => 0`（`:48`）—— 它不是标尺，所以虚拟化 inset 为 0。
 - `WorkflowMinimapOverlay.cs:250-259` 的 `OnMiniMouseDown` 先置 `_dragging` 再调 `PanToMini(...)` ⇒ **单击即居中**（不是"拖才动"）。这是小地图的既定语义，与 WPF 那份同款，**不是背离**。
 - `WorkflowMinimapOverlay.ScrollViewer` 是普通属性（`:61`），**适配器里没有赋值者** —— 宿主必须自己赋（demo `MainWindow.cs:64`）；`WorkflowTreeView.AttachScrollViewer` 只管表面自己的 viewer，不转给小地图。
+- **小地图的内容（节点缩略框 + 包围盒）是带脏标记的缓存**（`WorkflowMinimapOverlay.cs` 的 `_nodeRects` / `_contentBounds` / `_pendingRefresh`，入口 `EnsureContent` / `MarkContentDirty`）：只有节点动过才重算（树的集合变化、节点 `Anchor`/`Size` 变更、换树）；视口、配色、尺寸的变化只 `InvalidateVisual`，不置脏 —— 它们只改那一趟 O(1) 的变换。这家的小地图在平移/缩放里每帧都被推着重画（宿主的 DP 变更 → `OnVisualChanged`），缓存因此是必需的：旧写法每帧要把节点表走两遍（包围盒一趟、绘制一趟）。与 WPF / Avalonia / WinUI / MAUI 的同名 `_pendingRefresh` 是同一条规矩。
+- ⚠ **但只有脏标记会漏掉缩放**：节点的 `Anchor`/`Size` 是「原值 ÷ `Layout.Scale`」的折叠值（`NodeDefaultViewModel.cs:46,64`），**缩放变化不让任何节点发 `PropertyChanged`**。所以 `EnsureContent` 除了脏标记还比一次 `Layout.Scale` 的两个分量。四家同名实现是靠「任何 DP 变化都置脏」把这件事顺带盖住的，这家把视口变化从脏标记里摘出去了（平移因此不必重算），就得自己补这一句 —— 别把它当冗余删掉。
 
 ---
 

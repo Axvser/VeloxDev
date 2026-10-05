@@ -62,7 +62,13 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     /// <summary>Assigned by the composing control (WorkflowTreeView) for drag-to-pan.</summary>
     public ScrollViewer? ScrollViewer { get; set; }
 
-    private readonly Rect _bounds = new(0, 0, 1, 1);
+    // 节点缩略框与内容包围盒的缓存：视口、颜色、尺寸的变化只影响那一趟 O(1) 的变换，不该让重画再走一遍节点表。
+    // 只有节点自己动了（或树换了）才置脏重算 —— 与 WPF / Avalonia / WinUI / MAUI 的同名脏标记同一条规矩。
+    private readonly List<(double X, double Y, double W, double H)> _nodeRects = [];
+    private Rect _contentBounds = new(0, 0, 1, 1);
+    private bool _pendingRefresh = true;
+    private double _cachedScaleX = double.NaN;
+    private double _cachedScaleY = double.NaN;
     private IWorkflowTreeViewModel? _tree;
     private bool _dragging;
 
@@ -95,7 +101,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         overlay.UnsubscribeTree();
         overlay._tree = (IWorkflowTreeViewModel?)e.NewValue;
         overlay.SubscribeTree();
-        overlay.InvalidateVisual();
+        overlay.MarkContentDirty();
     }
 
     private void SubscribeTree()
@@ -168,39 +174,66 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             }
         }
 
-        InvalidateVisual();
+        MarkContentDirty();
     }
 
+    // 连线不参与内容适配（包围盒只看节点），所以只重画、不重算。
     private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
         {
-            InvalidateVisual();
+            MarkContentDirty();
         }
     }
 
     // ── 内容适配映射 ────────────────────────────────────────────────────────
 
-    private Rect ComputeBounds()
+    private void MarkContentDirty()
     {
+        _pendingRefresh = true;
+        InvalidateVisual();
+    }
+
+    // 重画与拖拽映射都从这里取内容：脏了、或缩放变了，就重算一趟（缩略框 + 包围盒一起拿齐），否则用上一趟的快照。
+    private void EnsureContent()
+    {
+        // 节点位置是「锚点 ÷ 当前缩放」的折叠值，缩放一变它就变，而缩放**不会**让任何节点发 PropertyChanged ——
+        // 所以这里必须连着比缩放，否则缩放之后小地图会继续按旧比例画（比一个脏标记值钱的一行）。
+        var scale = _tree?.Layout?.Scale;
+        var sx = scale?.Horizontal ?? 1d;
+        var sy = scale?.Vertical ?? 1d;
+
+        if (!_pendingRefresh && sx == _cachedScaleX && sy == _cachedScaleY)
+        {
+            return;
+        }
+
+        _pendingRefresh = false;
+        _cachedScaleX = sx;
+        _cachedScaleY = sy;
+        _nodeRects.Clear();
+        _contentBounds = new Rect(0, 0, 1, 1);
+
         if (_tree is null || _tree.Nodes.Count == 0)
         {
-            return _bounds;
+            return;
         }
 
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
         foreach (var node in _tree.Nodes)
         {
-            minX = Math.Min(minX, node.Anchor.Horizontal);
-            minY = Math.Min(minY, node.Anchor.Vertical);
-            maxX = Math.Max(maxX, node.Anchor.Horizontal + node.Size.Width);
-            maxY = Math.Max(maxY, node.Anchor.Vertical + node.Size.Height);
+            var (x, y, w, h) = (node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height);
+            _nodeRects.Add((x, y, w, h));
+            minX = Math.Min(minX, x);
+            minY = Math.Min(minY, y);
+            maxX = Math.Max(maxX, x + w);
+            maxY = Math.Max(maxY, y + h);
         }
 
-        return new Rect(minX, minY, maxX - minX, maxY - minY);
+        _contentBounds = new Rect(minX, minY, maxX - minX, maxY - minY);
     }
 
     private (double Ox, double Oy, double Scale) ComputeTransform(Rect bounds)
@@ -217,7 +250,8 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             return;
         }
 
-        var bounds = ComputeBounds();
+        EnsureContent();
+        var bounds = _contentBounds;
         var (ox, oy, scale) = ComputeTransform(bounds);
         if (scale <= 0)
         {
@@ -284,23 +318,21 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         base.OnRender(dc);
         dc.DrawRoundedRectangle(s_bg, new Pen(s_border, 1), new Rect(0, 0, RenderSize.Width, RenderSize.Height), 4, 4);
 
-        var bounds = ComputeBounds();
+        EnsureContent();
+        var bounds = _contentBounds;
         var (ox, oy, scale) = ComputeTransform(bounds);
         if (scale <= 0)
         {
             return;
         }
 
-        if (_tree is not null)
+        foreach (var (nx, ny, nw, nh) in _nodeRects)
         {
-            foreach (var node in _tree.Nodes)
-            {
-                var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(node.Anchor.Horizontal, node.Anchor.Vertical, bounds.X, bounds.Y, ox, oy, scale);
-                dc.DrawRoundedRectangle(s_node, null,
-                    new Rect(lx, ly,
-                        WorkflowSurfaceMath.MinThumbSize(node.Size.Width, scale, 1),
-                        WorkflowSurfaceMath.MinThumbSize(node.Size.Height, scale, 1)), 2, 2);
-            }
+            var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(nx, ny, bounds.X, bounds.Y, ox, oy, scale);
+            dc.DrawRoundedRectangle(s_node, null,
+                new Rect(lx, ly,
+                    WorkflowSurfaceMath.MinThumbSize(nw, scale, 1),
+                    WorkflowSurfaceMath.MinThumbSize(nh, scale, 1)), 2, 2);
         }
 
         var worldLeft = WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX);
