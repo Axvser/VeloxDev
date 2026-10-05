@@ -387,3 +387,23 @@ AI 目录不需要其中任何一条，值得写下来免得下次照着搬：
   要么经 §七·八 那条新判据进来。
 - **字典的键**在目录里没有对应物：目录不描述容器的键类型。
 - **开放泛型约束**同样没有对应物：`BuildType` 对开放泛型直接返回 null（生成的 cast 里 `T` 没有绑定）。
+
+### 七·十、第二趟抬进了类，诊断也跟着收窄了（2026-10-05）
+
+第二趟（「可达的成员类型」）原来只抬 **枚举与结构体**，于是最普通的载荷类型 —— 一个普通**类** —— 反而漏了：
+Agent 在一处列表里读到 `List<X>`，去问 X 是「不在目录里」。现在 `Enum | Struct | Class`。只走一遍、
+只认直接声明或泛型实参，所以是一跳、有界；`ListCreatableTypes` 只看 `Components/Nodes|Slots`，新进来的
+`Data` 条目不会被当成可创建类型报给模型。
+
+**放宽之后 `VeloxDev.Core.Extension` 自己多出 2 条 `VELOX_AI_TREE001`**（`AgentPipeline.Use`、
+`WorkflowAgentScope.WithSkills`）—— 被成员类型捎带进来的宿主 API，此前不在目录里。于是 `DetectNotices`
+多收一个 `declared` 集合（第一趟填的），只对**作者自己声明进目录**的类型报。理由：诊断是说给作者的行动建议
+（「你的这个声明会被目录丢掉一部分」），一个只因为出现在成员的类型名里才进来的类型没有这样的行动，
+而诊断落在它的源码行上，看上去像在说那个人写错了。此前枚举/结构体那一趟没产生过任何诊断，所以这条收窄
+不改变任何既有输出。
+
+> 写这个过滤时踩了一次真空引用：`if (type.Symbol is not null && !declared.Contains(type.Symbol)) continue;`
+> —— `Symbol` 为 null 时不 continue，下一句就用它取 `Locations`。编译器 CS8602 报了；**nullable 警告在这条
+> 路上是抓真 bug 的**，不要顺手 `!` 掉。
+
+守则：`DiscoveryCoverageTests.AClassExposedByAnAnnotatedMember_IsResolvable`。
