@@ -205,6 +205,6 @@
 **另一处同日收尾时补上：读侧的标量表也漏了同一条 `byte[]`，以及 `DateTime` 的 `RoundtripKind`**（见 §八）——
 两处只在集合元素上走得到，所以上面那六处的测试都没碰到它们。
 
-**这轮收在 100%**：`Src/Core/VeloxDev.Core/Serialization/`，行 2014/2014、分支 1193/1193
-（2026-10-05 收尾实测，`dotnet-coverage merge` 合并两个测试程序集后读数）。方法、读数与工具上的两个坑见
-[architecture.md](architecture.md) §七。
+**这轮收在 100%**：`Src/Core/VeloxDev.Core/Serialization/`，行 2023/2023、分支 1201/1201
+（2026-10-05 收尾实测，`dotnet-coverage merge` 合并两个测试程序集后读数；含同日加的注册归属守卫）。
+方法、读数与工具上的两个坑见 [architecture.md](architecture.md) §七。
