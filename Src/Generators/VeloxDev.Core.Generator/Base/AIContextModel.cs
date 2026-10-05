@@ -285,6 +285,9 @@ namespace VeloxDev.Generators.Base
         {
             var candidates = EnumerateTypes(compilation.Assembly.GlobalNamespace).ToList();
             var included = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+
+            // 作者**自己声明进目录**的那些，与「因为被成员提到才捎带进来」的区分开 —— 见 DetectNotices。
+            var declared = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             var types = new List<AIContextType>();
 
             // 第一趟：直接参与的 —— 组件、被标注的类型、带标注成员的类型。
@@ -294,15 +297,21 @@ namespace VeloxDev.Generators.Base
                 if (type is null) continue;
 
                 included.Add(symbol);
+                declared.Add(symbol);
                 types.Add(type);
             }
 
-            // 第二趟：可达的 —— 成员的声明类型里那些枚举与结构体，否则 Agent 会在描述里读到
-            // 一个它查不到的字段类型名。只收本程序集内的，跨程序集的由那一侧自己的分片负责。
+            // 第二趟：可达的 —— 成员的声明类型，否则 Agent 会在描述里读到**一个它查不到的字段类型名**。
+            // 只收本程序集内的，跨程序集的由那一侧自己的分片负责。
+            //
+            // **类也算在内**（2026-10-05 起）。原来只抬枚举与结构体，于是「带标注的成员暴露一个普通类」这种
+            // 最普通的载荷类型反而进不来：Agent 在一处列表里读到 `List<X>`，去问 X 却是「不在目录里」——
+            // 而这一趟存在的理由就是不让这种事发生。只走一遍、只认**直接**声明（或泛型实参），所以是一跳、
+            // 有界的；组件类型与已标注的类型第一趟就进去了，这里补的只有剩下的那些。
             foreach (var symbol in candidates)
             {
                 if (included.Contains(symbol)) continue;
-                if (symbol.TypeKind != TypeKind.Enum && symbol.TypeKind != TypeKind.Struct) continue;
+                if (symbol.TypeKind is not (TypeKind.Enum or TypeKind.Struct or TypeKind.Class)) continue;
                 if (!IsReachableFromMembers(symbol, compiledTypes: candidates)) continue;
 
                 var type = BuildType(symbol, root, force: true);
@@ -315,7 +324,7 @@ namespace VeloxDev.Generators.Base
             if (types.Count == 0) return null;
 
             types.Sort(static (a, b) => string.CompareOrdinal(a.Path, b.Path));
-            return new AIContextAssembly(compilation.AssemblyName ?? "Assembly", types, DetectNotices(types));
+            return new AIContextAssembly(compilation.AssemblyName ?? "Assembly", types, DetectNotices(types, declared));
         }
 
         /// <summary>
@@ -326,12 +335,23 @@ namespace VeloxDev.Generators.Base
         /// name and argument count, so only one of them can be reached — and which one is arbitrary, where the
         /// reflection path's answer is equally arbitrary but different.
         /// </remarks>
-        private static IReadOnlyList<Diagnostic> DetectNotices(IReadOnlyList<AIContextType> types)
+        /// <param name="declared">
+        /// The types the author declared into the tree. A type the second pass dragged in as a member type is
+        /// <b>not</b> one of them, and gets no notice — see the remarks.
+        /// </param>
+        private static IReadOnlyList<Diagnostic> DetectNotices(
+            IReadOnlyList<AIContextType> types, HashSet<INamedTypeSymbol> declared)
         {
             var notices = new List<Diagnostic>();
 
             foreach (var type in types)
             {
+                // 诊断是说给**作者**听的：他的声明会以某种方式被目录丢掉。一个只因为出现在某个成员的
+                // 类型名里才被捎进来的类型没有这样的作者行动 —— 提醒它既没有可改的地方，也没有关掉的办法，
+                // 而且它落在那个类的源码行上，看上去像是在说那个人写错了。所以只对第一趟的报。
+                var symbol = type.Symbol;
+                if (symbol is not null && !declared.Contains(symbol)) continue;
+
                 var ambiguous = type.Members
                     .Where(static m => m.IsMethod)
                     .GroupBy(static m => m.Name + "|" + m.Parameters.Count, System.StringComparer.Ordinal)
@@ -342,7 +362,7 @@ namespace VeloxDev.Generators.Base
                     var first = group.First();
                     notices.Add(Diagnostic.Create(
                         VeloxDev.Generators.Diagnostics.AmbiguousMethodOverload,
-                        first.Symbol?.Locations.FirstOrDefault() ?? type.Symbol.Locations.FirstOrDefault(),
+                        first.Symbol?.Locations.FirstOrDefault() ?? symbol?.Locations.FirstOrDefault(),
                         type.FullName + "." + first.Name,
                         first.Parameters.Count));
                 }
