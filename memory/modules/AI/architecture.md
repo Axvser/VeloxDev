@@ -407,3 +407,25 @@ Agent 在一处列表里读到 `List<X>`，去问 X 是「不在目录里」。�
 > 路上是抓真 bug 的**，不要顺手 `!` 掉。
 
 守则：`DiscoveryCoverageTests.AClassExposedByAnAnnotatedMember_IsResolvable`。
+
+### 七·十一、**详细归说明，返回值保持简单**（2026-10-05，用户口述）
+
+> 返回值要简单，工具描述可以详细。
+
+理由在成本结构里：**返回值每次调用都进模型的上下文**（而且是累积的），说明是**静态的**、每条请求发一次。
+所以「模型需要知道的东西」应该尽量搬到说明里，返回值只放这一次调用真正产出的东西。
+
+本模块原来就有一部分这条原则 —— `WorkflowAgentToolkit` 的类注释写着 "All JSON output uses
+`VeloxJsonFormat.Compact` to minimize token consumption"。这次是把它扩展到**要不要靠返回值做提示**上：
+
+- 拒绝写「选择器驱动的节点建出来没有端口」，**不是**在 `CreateNode` 的返回值里加一句提醒，而是在它的
+  `[Description]` 里写。
+- 同理 `ConnectEnumSlot` 的两种接收口形态、`receiverCondition` 收什么值，都写进说明与参数说明，
+  返回值不动。
+
+⚠ **说明是声明，声明要有测试。** 照它写完之后必须能验证它说的是真的 —— 这一次是
+`PortConnectionRouteTests` 三条（能连、拒绝语点名了那个参数、`count:0` 确实是 0）。一段没人验的说明，
+只是把「模型不知道」换成了「模型被误导」，比原来更糟。
+
+（这条目前记在模块记忆里。如果它要成为全仓的规矩 —— 例如将来有别的工具面 —— 应当升到
+`memory/specifications/` 并在 `AGENTS.md` 的索引表里占一行。）
