@@ -1411,7 +1411,13 @@ public sealed class WorkflowAgentToolkit
                 }
                 catch (Exception ex)
                 {
-                    return Error($"Failed to deserialize selector JSON as '{nonEnumTypeName}': {ex.Message}");
+                    // 解析不了的两种原因要分开说：类型名打得开但读写器没编出来，是「加 [Archivable]」，
+                    // 而 JSON 写错了是别的问题。合成一句会把模型引到错的方向。
+                    return VeloxJsonRegistry.ReaderFor(targetType) is null
+                        ? Error($"'{nonEnumTypeName}' has no archive reader, so the host cannot rebuild it from JSON. " +
+                                "A type takes part in the archive format only when the generator compiled a reader for it — " +
+                                "add [Archivable] to it (or declare it from a type that is already in) and rebuild.")
+                        : Error($"Failed to deserialize selector JSON as '{nonEnumTypeName}': {ex.Message}");
                 }
 
                 if (selectorValue == null) return Error($"Deserialized selector value is null.");
@@ -1429,12 +1435,7 @@ public sealed class WorkflowAgentToolkit
                     return Error($"SetSelector failed: {ex.Message}");
                 }
 
-                return new VeloxJsonObject
-                {
-                    ["ok"] = true,
-                    ["selectorType"] = targetType.FullName,
-                    ["property"] = propertyName,
-                }.ToJson();
+                return EnumeratorResult(targetType.FullName!, propertyName, enumerator);
             }
 
             // Enum/bool path (original behaviour)
@@ -1471,34 +1472,45 @@ public sealed class WorkflowAgentToolkit
                 return Error($"SetSelector failed: {ex.Message}");
             }
 
-            var enumNames = SelectorLabels(selectorType);
-            var slotIds = new VeloxJsonArray();
-            {
-                int i = 0;
-                foreach (var item in enumerator.Slots)
-                {
-                    if (item.Slot is { } s)
-                    {
-                        slotIds.Add(new VeloxJsonObject
-                        {
-                            ["id"] = GetComponentId(s),
-                            ["label"] = i < enumNames.Length ? enumNames[i] : "?",
-                        });
-                    }
-                    i++;
-                }
-            }
-            return new VeloxJsonObject
-            {
-                ["ok"] = true,
-                ["selectorType"] = selectorType.FullName,
-                ["property"] = propertyName,
-                ["count"] = slotIds.Count,
-                ["slots"] = slotIds,
-            }.ToJson();
+            return EnumeratorResult(selectorType.FullName!, propertyName, enumerator);
         }
 
         return Error($"Property '{propertyName}' is not a SlotEnumerator.");
+    }
+
+    /// <summary>
+    /// The success shape both selector routes answer with: what was installed, and the slots that came of it.
+    /// </summary>
+    /// <remarks>
+    /// The non-enum route used to answer without the slots — only <c>ok</c> and the type name. A model that had
+    /// just handed over a provider therefore had no way to see what its JSON had produced, and the observed
+    /// behaviour was a loop: set it, list it, set it again with fewer ports, list it again. Reporting the slots
+    /// is what lets the caller stop, and it is what every other mutating tool here already does.
+    /// </remarks>
+    private static string EnumeratorResult(string selectorTypeName, string propertyName, IConditionalSlotProvider enumerator)
+    {
+        var slots = new VeloxJsonArray();
+        foreach (var item in enumerator.Slots)
+        {
+            slots.Add(new VeloxJsonObject
+            {
+                ["id"] = GetComponentId(item.Slot),
+                ["label"] = item.Name,
+                ["value"] = item.Value?.ToString() ?? string.Empty,
+            });
+        }
+
+        return new VeloxJsonObject
+        {
+            // `ok` 是这个工具一直以来的形状；`status` 是其余每个工具的形状，两个都发，
+            // 免得只认 `status` 的读法把一次成功当成失败，转头去重试或改问宿主。
+            ["status"] = "ok",
+            ["ok"] = true,
+            ["selectorType"] = selectorTypeName,
+            ["property"] = propertyName,
+            ["count"] = slots.Count,
+            ["slots"] = slots,
+        }.ToJson();
     }
 
     /// <summary>
@@ -2184,7 +2196,7 @@ public sealed class WorkflowAgentToolkit
             ["isPaused"] = run.Gate.IsPaused,
             ["attempts"] = context.Attempt,
             ["endedWithError"] = context.EndedWithError,
-            ["data"] = context.Data is not null ? VeloxJsonValue.From(context.Data) : VeloxJsonValue.Null,
+            ["data"] = DataJson(context.Data),
             ["failureCount"] = run.FailureCount,
             ["failures"] = VeloxJsonValue.From(run.SnapshotFailures().Select(FailureJson)),
             ["logCount"] = context.Logs.Count,
@@ -2280,7 +2292,7 @@ public sealed class WorkflowAgentToolkit
                 ["outcome"] = context.Outcome.ToString(),
                 ["endedWithError"] = context.EndedWithError,
                 ["attempts"] = context.Attempt,
-                ["data"] = context.Data is not null ? VeloxJsonValue.From(context.Data) : VeloxJsonValue.Null,
+                ["data"] = DataJson(context.Data),
                 // The same failures the log carries, as records: phase / level / message / attempt / order.
                 ["failures"] = VeloxJsonValue.From(run.SnapshotFailures().Select(FailureJson)),
                 ["logs"] = VeloxJsonValue.From(context.Logs),
@@ -2772,6 +2784,28 @@ public sealed class WorkflowAgentToolkit
         }
 
         return null;
+    }
+
+    /// <summary>Renders a compiled run's payload for the model.</summary>
+    /// <remarks>
+    /// <c>context.Data</c> is whatever the host's own business code put there — an arbitrary object that need
+    /// not take part in the archive format. <see cref="VeloxJsonValue.From"/> throws for exactly those, and
+    /// letting that escape would turn the whole status call into an error envelope — hiding the status the
+    /// Agent asked for, over a payload it only wanted to look at. A payload the format cannot carry is
+    /// reported as its text instead, the same fallback <c>AgentObjectToolkit</c> uses for a property value.
+    /// </remarks>
+    private static VeloxJsonValue DataJson(object? data)
+    {
+        if (data is null) return VeloxJsonValue.Null;
+
+        try
+        {
+            return VeloxJsonValue.From(data);
+        }
+        catch
+        {
+            return data.ToString();
+        }
     }
 
     private static void AppendScalarProperties(VeloxJsonObject obj, object target)

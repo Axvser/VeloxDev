@@ -12,6 +12,10 @@
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="4.0.2" />
+    <!-- 测试里用 JObject 解析工具返回的 JSON —— 一个**独立**的解析器当裁判，比拿被测的同一套序列化器
+         去读自己的产物有力。以前是靠传递引用解析到的（本工程没声明），NuGet 图一变就断，所以在这里钉住。
+         生产代码里没有 Newtonsoft。 -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="coverlet.collector" Version="6.0.4">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

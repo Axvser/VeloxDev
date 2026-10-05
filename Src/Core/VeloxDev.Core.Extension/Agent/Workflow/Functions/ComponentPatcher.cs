@@ -240,9 +240,10 @@ public static class ComponentPatcher
     private static string? FindBackingCommand(Type type, string propertyName)
         => AgentCommandDiscoverer.FindBackingCommand(type, propertyName);
 
-    // JSON 字面量读作 null；其余值写回 JSON 文本后，由生成的序列化器按声明类型读回。
+    // JSON 字面量读作 null；其余值按声明类型读回。枚举不走归档引擎（它刻意没有运行期枚举读法），
+    // 由 AgentJsonValue 就地认名字或底层整数 —— 而「名字」正是工具面自己报告枚举时用的写法。
     private static object? DeserializeToType(VeloxJsonValue? value, Type targetType)
-        => value is null || value.IsNull ? null : VeloxJsonSerializer.Deserialize(value.ToJson(), targetType);
+        => AgentJsonValue.Convert(value, targetType);
 
     /// <summary>
     /// Copies all writable scalar (non-command-backed) properties from source to target.

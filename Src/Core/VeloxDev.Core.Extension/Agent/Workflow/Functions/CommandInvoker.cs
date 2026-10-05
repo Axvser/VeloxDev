@@ -86,7 +86,9 @@ public static class CommandInvoker
         {
             try
             {
-                parameter = VeloxJsonSerializer.Deserialize(jsonParameter!, paramType);
+                // 经 AgentJsonValue 而不是直接调引擎：命令的参数类型里有枚举（SlotChannel），
+                // 而归档引擎的运行期读法刻意不认枚举 —— 那会让 SetChannel 这类命令永远调不动。
+                parameter = AgentJsonValue.Convert(VeloxJsonValue.Parse(jsonParameter!), paramType);
             }
             catch (Exception ex)
             {

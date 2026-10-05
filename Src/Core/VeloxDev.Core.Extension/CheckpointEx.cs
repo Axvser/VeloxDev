@@ -16,13 +16,13 @@ namespace VeloxDev.Serialization;
 /// <b>It goes through the same settings the rest of the library uses</b> — the ones behind
 /// <see cref="ViewModelSerializer"/> — rather than a private set of its own, so a checkpoint and the graph it
 /// belongs to are written the same way, and a payload keeps its shape: a dictionary comes back as a dictionary
-/// rather than a <c>JObject</c>.
+/// rather than a loosely typed tree.
 /// </para>
 /// <para>
 /// <b>Numbers do not keep their type, and that is measured, not assumed.</b> A payload is
 /// <see cref="object"/>, and JSON has one integer type: an <see cref="int"/> that went in comes back as a
-/// <see cref="long"/>, a <see cref="float"/> as a <see cref="double"/>. <c>TypeNameHandling.All</c> does not help
-/// — primitives are written as bare JSON values whatever the setting. The engine's own fields
+/// <see cref="long"/>, a <see cref="float"/> as a <see cref="double"/>. No setting helps — the archive format
+/// writes an enum as its underlying integer and a primitive as a bare JSON value by design. The engine's own fields
 /// (<see cref="ExecutionCheckpoint.Attempt"/>, the keys, the shape) are exact; a node that pattern-matches a
 /// payload on <see cref="int"/> will not match after a resume. The store that keeps the object graph as it is —
 /// <see cref="InMemoryCheckpointStore"/> — has no such gap.

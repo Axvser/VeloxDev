@@ -39,7 +39,14 @@ public static class TypeIntrospector
     public static string GetTypeSchema(Type type)
     {
         var fullName = type.FullName ?? type.Name;
-        var obj = new VeloxJsonObject { ["fullName"] = fullName };
+        var obj = new VeloxJsonObject
+        {
+            ["fullName"] = fullName,
+            // 工具把 JSON 交回宿主时走的是归档序列化器，而它是闭世界：没有读写器的类型根本建不出来。
+            // 这条就是「先调 GetTypeSchema」那一步要的答案 —— 让模型在构造 JSON 之前就知道，
+            // 而不是构造完才发现宿主吃不下（那种类型要补 [Archivable]）。
+            ["jsonReadable"] = VeloxJsonRegistry.ReaderFor(type) is not null,
+        };
 
         var path = AIContextDirectory.Shared.PathFor(fullName);
         var entry = path is null ? null : AIContextDirectory.Shared.Entry(path);

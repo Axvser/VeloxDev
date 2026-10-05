@@ -70,7 +70,7 @@ public class ComponentPatcherTests
         var target = new TreeDefaultViewModel();
 
         // Layout 是 [VeloxProperty] 提升出来的属性，没有 SetLayoutCommand —— 直接写这条路是通的。
-        // 值仍然走 Newtonsoft 反序列化，目标类型由访问器的 typeof 字面量给出。
+        // 值按访问器的 typeof 字面量给出的目标类型读回（经 AgentJsonValue，枚举那一类也认）。
         var result = Patch(target, """{"Layout":{"Scale":{"Horizontal":2.0,"Vertical":3.0}}}""");
 
         var detail = DetailFor(result, "Layout");

@@ -302,7 +302,7 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
 
     // ────────────────────────── Type Resolution ──────────────────────────
 
-    [Description("Resolves a .NET type by its fully-qualified name across all loaded assemblies. Returns type info.")]
+    [Description("Resolves a .NET type by its fully-qualified name from the compiled agent context tree, which is a closed world: a type nothing in the tree names does not resolve. Returns type info.")]
     private string ResolveType(
         [Description("Fully-qualified type name.")] string fullTypeName)
     {

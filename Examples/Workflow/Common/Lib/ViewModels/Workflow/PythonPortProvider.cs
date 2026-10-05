@@ -1,4 +1,5 @@
 using VeloxDev.AI;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
@@ -9,6 +10,14 @@ namespace Demo.ViewModels;
 /// The Agent rebuilds the ports by passing this provider's JSON to <c>SetEnumSlotCollection</c>;
 /// the whole slot set is atomically replaced and existing links are rewired by position.
 /// </summary>
+/// <remarks>
+/// <see cref="ArchivableAttribute"/> is what makes the Agent's route work at all. Neither this type nor
+/// <see cref="PythonPort"/> is a workflow component or a <c>[VeloxProperty]</c> holder, so without it the
+/// archive generator compiles no reader for them and <c>SetEnumSlotCollection</c> — which reads the
+/// provider back through the generated serializer — would fail with "no registered JSON reader".
+/// A <c>[SlotSelectors]</c> provider in a consuming project needs the same annotation.
+/// </remarks>
+[Archivable(typeof(PythonPort))]
 [AgentContext(AgentLanguages.Chinese,
     "Python 节点的动态端口提供器（实现 ISlotProvider）。先用 GetTypeSchema('Demo.ViewModels.PythonPortProvider') 查看属性结构，" +
     "再构造 JSON 传给 SetEnumSlotCollection 重建输入/输出口。")]

@@ -176,7 +176,8 @@ trip cannot preserve them — `Order` is `-1` on a restored node, the same silen
 implement `ICompileTimeAware` already shows.
 
 ⚙ **Branch keys are the exception that is repaired.** An enum key would come back as its number — JSON has no notion
-of an enum inside an `object` member, measured, and `TypeNameHandling.All` does not help — which would leave a
+of an enum inside an `object` member, measured, and no setting changes that — the archive format has no per-member
+type tag to spend on it — which would leave a
 *dynamic* branch matching no option at all. The compiler therefore records the key's type beside it.
 
 ⚙ **A flat outline is one call away.** `CompiledOutline.Of(graph)` returns one read-only row per segment — its depth,
@@ -237,7 +238,7 @@ mapping* — positional, checked against the node types in drive order. That is 
 their own writes, and `FileCheckpointStore` does. A store that throws costs one log line and changes nothing else.
 
 ⚙ **What a file does not keep.** Payload values round-trip through JSON, which has one integer type: an `int` comes
-back as a `long`, a `float` as a `double` (measured — `TypeNameHandling.All` does not change it). The engine's own
+back as a `long`, a `float` as a `double` (measured — no setting changes it). The engine's own
 fields are exact, and `InMemoryCheckpointStore` keeps the object graph as it is. A group payload is filed by node
 key, since a node reference cannot be written down.
 
