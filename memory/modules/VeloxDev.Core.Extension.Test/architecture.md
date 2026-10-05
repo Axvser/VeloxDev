@@ -82,9 +82,23 @@ csproj 的 `PackageReference` 只有 MSTest + coverlet 两个（`:14-15`），�
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **473**（2026-10-04 复核：`grep -c '\[TestMethod\]'` = 473，54 个 `[TestClass]`。含 `Agent/SubAgents/SubAgentLiveTests.cs` 的 **6** 条门控实测。旧读数 472/399/391/382 都已过期） |
-| 耗时 | **5–9 s**（有 `API_KEY_DEEPSEEK`，那 5 条真的走网络；实测连续 6 轮为 5/5/5/6/7/7/8 s，2026-09-22 加第 5 条门控后为 **9 s**）/ 无 key 时全量会在跑到 122~246 条之间**中止**（见下），而 `--filter FullyQualifiedName~Agent.SubAgents` 无 key 只需 **0.42–0.45 s**（2026-09-22 五次实测 441/423/440/431/451 ms） |
+| 测试条数 | **656**（2026-10-05 复核。含**门控**的真模型用例 **7** 条：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 473/472/399/391/382 都已过期） |
+| 耗时 | **2 s**（默认，真模型用例全部跳过；2026-10-05 实测）。开关打开时每条真模型用例另算，实测单条约 13 s |
 | 失败 | 0 |
+
+### 真模型用例由 `VELOXDEV_LIVE` 开关决定，不再由「有没有 key」决定（2026-10-05 改）
+
+闸门统一在 `Agent/LiveModelGate.cs`：`VELOXDEV_LIVE` 非空且非 `0` 才跑，凭据仍取 `API_KEY_DEEPSEEK`，
+跳过文案一处。**不设开关 ⇒ 7 条全 `Inconclusive`**，默认套件因此确定、免费。
+
+改之前的闸门是「环境里有没有 key」，而 key 在环境里就每次全量跑都真调七次模型 —— 对**唯一跑得动它的人**
+反而是花钱、慢、且红绿取决于模型当次怎么答（这一轮见过一次红，同一构建重跑就绿）。**key 是凭据，不是开关。**
+
+```bash
+VELOXDEV_LIVE=1 dotnet test … --filter "FullyQualifiedName~LiveTests"
+```
+
+跑法也记在 `Src/Verification/README.md` 开篇（那一处列的是所有「不在默认测试里跑」的验证）。
 
 **为什么离线部分比姊妹模块快得多**：这里几乎没有真实时钟。全部真实等待只有三处：
 
