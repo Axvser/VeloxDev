@@ -45,20 +45,26 @@
 
 **代价**：向下展开可能收进**没有公开无参构造**的类型，它的 `Create()` 会抛 `NotSupportedException`（既有行为，见 [pitfalls.md](pitfalls.md) §五）。
 
-### 同一个封闭泛型，可能被两个程序集各注册一次（2026-10-05 加了归属守卫）
+### 同一个封闭泛型，可能被两个程序集各注册一次（2026-10-05：归属由调用方**说出**）
 
 跨程序集的条目**分两种，只有一种会重复**：
 
-- **非泛型类型只有声明方能发**（`Base/VeloxJsonModel.cs` 的 `IsWritableType` 拿 `ContainingAssembly` 比）—— 消费方走到它也只是运行期去注册表里查声明方已经登记好的那份，自己不注册。不会重复。
+- **非泛型类型只有声明方能发**（`Base/VeloxJsonModel.cs` 的 `IsWritableType`，判据是 `DeclaredIn`）—— 消费方走到它也只是运行期去注册表里查声明方已经登记好的那份，自己不注册。不会重复。
 - **封闭泛型两边都可能发**：`SlotEnumerator<>` 的定义在 Core，而 `SlotEnumerator<Demo.ViewModels.SlotViewModel>` 只有见过它的 Lib 命名得出来；反过来 Core 也发得出 `SlotEnumerator<SlotDefaultViewModel>`。当实参对两边都可见时，同一个 `Type` 就会两次到达注册处。
 
-注册处因此有一条**归属规则**（`VeloxJsonRegistry.cs` 的 `RegisterWriter` / `RegisterReader`）：**已有条目只许「声明方」改写，其余一律丢弃**。判据是 `Declares`：生成的读写器类发在**发起注册的那个编译**里，所以「实现类所在程序集 == 类型的程序集」就是声明方 —— 生成器那边同样写着这条不变量（`Writers/VeloxJsonCodeWriter.cs` 的注册块），改那个发法会静默废掉它。
+注册处因此有一条**归属规则**（`VeloxJsonRegistry.cs`）：**声明方的注册永远写得上；消费方只在还没有条目时写得上**。这不是推断出来的 —— `RegisterWriter` / `RegisterReader` **收一个 `declaresType` 参数**，由生成的注册代码给出。
+
+**为什么必须是说出来的**：曾经有一版从 `implementation.GetType().Assembly == type.Assembly` 推断（「生成器把读写器类发进发起注册的那个编译」）。那条不变量没有任何东西强制，而且它躲在两个文件之外 —— 只要将来把读写器类发到公共程序集，判断就静默反向，且没有测试会红。
 
 **为什么不是「先到先得」**：消费方是通过别的程序集看这个类型的，它的产物是**窄的那一份** —— `IsReachableFromGeneratedCode` 把外程序集的 `internal` 成员与 `internal` 回调全部排除，所以两边产物不同；而 `[ModuleInitializer]` 跨程序集的执行顺序语言不保证，先到先得会随机选中窄的那份，症状是**静默少成员、少回调**。
 
+**这条事实在生成器里只算一处**：`VeloxJsonModel.DeclaredIn(symbol, assembly)` —— `IsWritableType`（够不够格进闭世界）与新加的 `VeloxJsonType.DeclaredHere`（谁是声明方）共用它，写两遍就会漂。`Writers/VeloxJsonCodeWriter.cs` 的注册块把它转成 `declaresType: true/false` 发出去。
+
+**两半各有守卫**：`RegistryOwnershipTests` 钉规则本身（三条臂：声明方覆盖、消费方不覆盖、消费方在无人认领时能写上），`RegistrationOwnershipEmissionTests` 钉**产物里那个 flag 对不对** —— 走 `GeneratorProbe` 拿生成文本，断言探针自己声明的类型是 `true`、探针只是命名的封闭泛型（`SlotEnumerator<SlotDefaultViewModel>`）是 `false`。把生成的 flag 写死成 `true`，第二条当场红。
+
 `RegisterName` / `RegisterContainerFactory` **刻意没有**加同一条：名字由类型自身的程序集与实参拼出（两边算出来是同一个串），工厂是同一个构造表达式 —— 重复写的本来就是同一份，加判断只是噪声。
 
-> ⚠ 今天三个程序集的注册集合**两两不相交**（实测 Core 18 条全是非泛型具体类型，Lib 10 条里 2 个封闭泛型，Extension.Test 16 条），所以这条守卫目前是**纯保险**：它只在真的重复时才动作，不改变任何现有注册。守卫测试 `RegistryOwnershipTests` —— 去掉守卫的那一句，`AConsumerCannotReplaceTheDeclaringAssemblysEntry` 当场红。
+> ⚠ **这是一次破坏性改动**：两个注册方法的签名多了一个必填参数，所以**生成物与 Core 必须同版本**走 —— 旧的 `.g.cs` 调新的 Core 编不过。这条耦合本来就在 [extension.md](extension.md) §二 的联动清单里管着，这次是它第一次真的咬人。另外，今天三个程序集的注册集合**两两不相交**（实测 Core 18 条全是非泛型具体类型，Lib 10 条里 2 个封闭泛型，Extension.Test 74 条里 4 条是封闭泛型），所以规则本身仍是纯保险：它只在真的重复时才动作。
 
 ### 闭世界里的第二个开关：成员不只有默认规则
 
@@ -404,7 +410,7 @@
 
 ## 七、覆盖率：100%，以及怎么量才准
 
-`Src/Core/VeloxDev.Core/Serialization/` 的 12 个源文件目前是**行 2023/2023、分支 1201/1201**（2026-10-05 收尾实测；目录下共 13 个 `.cs`，唯一不在报告里的是 `Annotations/ArchiveOptions.cs` —— 它只有枚举定义，没有可测语句）。
+`Src/Core/VeloxDev.Core/Serialization/` 的 12 个源文件目前是**行 2022/2022、分支 1201/1201**（2026-10-05 收尾实测；目录下共 13 个 `.cs`，唯一不在报告里的是 `Annotations/ArchiveOptions.cs` —— 它只有枚举定义，没有可测语句）。
 
 **两个测试程序集各出一份读数**（`VeloxDev.Core.Test` 与 `VeloxDev.Core.Extension.Test`），而覆盖率是**按项目**出报告的，所以必须合并：两个项目各跑一次 `dotnet test --collect:"XPlat Code Coverage"`，再 `dotnet-coverage merge -f cobertura -o 合并.xml <所有 coverage.cobertura.xml>`。
 

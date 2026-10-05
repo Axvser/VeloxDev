@@ -30,6 +30,9 @@
 
 1. 引擎侧：在 `VeloxJsonReader` / `VeloxJsonWriter` / `VeloxJsonSerializer` 上加或改成员。
    **同步与异步两条链路都要改** —— 异步面在 `*.Async.cs` 里，生成器为每个类型产出 `X` 与 `XAsync` 一对。
+   **`VeloxJsonRegistry` 的注册方法也是这条调用面的一部分**：生成物在 `[ModuleInitializer]` 里调
+   `RegisterWriter` / `RegisterReader` / `RegisterName`，签名一改，**旧的 `.g.cs` 就编不过** ——
+   2026-10-05 给两个注册方法加 `declaresType` 时就是这样（理由见 [architecture.md](architecture.md) §一）。
 2. 生成器侧：`Writers/VeloxJsonCodeWriter.cs` 里对应的 `AppendLine` 字符串，且两套都要发
    （`WriteWriterBody` / `WriteReaderBody` 各带一个 `async` 参数）。
 3. **两侧一起提交。** 只改一侧的后果是产物编不过，或者（更糟）编得过但行为与另一侧不一致。
