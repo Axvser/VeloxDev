@@ -305,3 +305,38 @@ Customer/                           ← 每个消费者程序集一个分片（�
 - **`[VeloxCommand]` 方法在实现类里普遍是 `private`**，而生成出来的命令属性是公开的 —— 命令的收录不能按方法可见性过滤，否则整个命令面漏掉。
 - **诊断要先滤掉 `object` 的四个成员**，否则 `VELOX_AI_TREE001` 会报在每个带强类型 `Equals` 的值类型上，下场是被整仓 `NoWarn` 掉。
 - **缺省参数不用往目录里存默认值**：生成代码只需**少写一个实参**，C# 会在调用点补上声明的默认值。目录里只要一个 `AIContextFlags.Optional` 标志供描述符报 `IsOptional`，剩下的交给编译器 —— 字面量渲染那一整块复杂度因此不存在。
+
+## 七·五、两个闭世界**不是同一个**，工具面正好卡在中间（2026-10-05）
+
+`AIContextTree` 与归档序列化器各有一个闭世界，**收录条件不同**：
+
+| | 谁进去 | 怎么进去 |
+|---|---|---|
+| **AI 闭世界** | 类型能被 `AgentTypeResolver.ResolveType` 解开 —— 即它有一条**类型条目**，因而有一个 `IAIContextAccessor` | 带 `[AgentContext]`（自己或成员）、是某成员的声明类型、被 `[SlotSelectors]` 之类**引用**到…… |
+| **归档闭世界** | 类型能被 `VeloxJsonSerializer` 读写 —— 即生成器为它编了 reader/writer | 组件、`[VeloxProperty]`、`[Archivable]`、`[WorkflowBuilder.*]`，或从这些出发沿**成员的声明类型**走到 |
+
+**能解析 ≠ 能重建。** 工具面有好几处是「模型给一段 JSON，宿主按类型名读回来」，那些地方要的是**两个闭世界同时成立** —— 而两个条件之间没有蕴含关系。迁移到自带序列化器之前，Newtonsoft 反射什么都能读，所以这条缝一直没露出来。
+
+### 缝在哪（都实测过）
+
+- **`SetEnumSlotCollection` 的非枚举路径**（`WorkflowAgentToolkit.cs`）：`TypeIntrospector.ResolveType(nonEnumTypeName)` 走的是 AI 闭世界，紧接着 `VeloxJsonSerializer.Deserialize(json, targetType)` 走的是归档闭世界。provider 是普通类（既不是组件也不是 `[VeloxProperty]` 持有者），**必须自己带 `[Archivable]`**。缺了它原来只会拿到引擎那句「has no registered JSON reader」—— 模型照着它去找宿主注册，什么也找不到。现在这句话会改成直接点名 `[Archivable]`。
+- **`ComponentPatcher` / `CommandInvoker` 的枚举参数**：工具面**写**枚举用名字（`AppendScalarProperties`、`WorkflowStateTracker` 都写 `ToString()`），而归档引擎的运行期读法**刻意没有枚举分支**（`TryReadScalar` 对 enum 返回 null，生成的 reader 才用强制转换）。于是 `PatchNodeProperties {"CompileMode":"Static"}` —— 写在 `EnumSelectorNodeViewModel` 自己的 `[AgentContext]` 里的例子 —— 直接抛。**修在工具层**：`AgentJsonValue.Convert` 就地认名字或底层整数，引擎那条「没有独立枚举读法」的设计不动。
+- **`VeloxJsonValue.From(context.Data)`**：运行载荷是宿主的业务对象，可以是任何一个归档不认识的类型，然后整个状态调用变成错误信封。`WorkflowAgentToolkit.DataJson` 现在兜底成文本。
+
+### 两条**必须记住**的收录规则（比上面更常见）
+
+- **`[SlotSelectors]` 只往目录里放一条*引用*，不放类型条目。** 所以一个只在 `[SlotSelectors]` 里被点名的枚举**解析不开**，`SetEnumSlotCollection` 会答「Type not found」，尽管属性自己把它列为允许。**选择器枚举要带 `[AgentContext]`**（demo 的 `DatasetSource` / `VoltageRange` 都带）。演示见 `SetEnumSlotCollectionTests.AnEnumTheTreeHoldsOnlyAsAReference_DoesNotResolve`。
+- **非枚举 provider 要带 `[Archivable]`**，见上。
+
+### 守卫：别再一条条靠模型发现
+
+`ClosedWorldBoundaryTests` 把这两条**按声明整体扫**，而不是举一个例子：
+
+- 扫四个程序集里**每个** `[SlotSelectors]`（**注意挂在成员上，不是类型上** —— 拿 `Type.GetCustomAttributes` 扫会一个都找不到，用例空过），非枚举的那类断言 `VeloxJsonRegistry.ReaderFor` 非空。
+- 扫每个组件的命令参数类型，断言可读 / 是枚举 / 是标量 / 在一张**具名的接口允许表**里（`IWorkflowNodeViewModel`、`IWorkflowSlotViewModel`、`ITaskContext`、`IWorkflowActionPair` —— 它们各自有专用工具，不需要从 JSON 造）。
+
+两条都带**自证守卫**（扫到 0 条就红），否则重命名一次属性就能让用例永远变绿。
+
+### 工具返回的形状也要能让人停下来
+
+`SetEnumSlotCollection` 的非枚举成功路径原来只回 `{ok, selectorType, property}` —— **不回它建了什么**。模型因此看不见自己那段 JSON 的结果，实测行为是**打转**：设一次、列一次、少两个端口再设一次、再列一次，跑了三五分钟。现在两条路径共用 `EnumeratorResult`，都带 `status: "ok"` / `count` / `slots`（id + label + value）。**改这个工具时别把 slots 拿掉。**

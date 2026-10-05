@@ -147,6 +147,18 @@ public partial SlotEnumerator<SlotViewModel> InputSlots { get; set; }
 
 ⚙ **`[SlotSelectors]` properties cannot be patched** — the Agent's `PatchNodeProperties` refuses them and points at its dedicated `SetEnumSlotCollection` tool. Slot-anchor notifications for these are posted one frame late on purpose, so container generation has finished first.
 
+⚙ **A non-enum `[SlotSelectors]` type must be `[Archivable]`.** The Agent rebuilds the provider *from JSON*, and the archive format is a closed world: a type the generator compiled no reader for cannot be read back, so `SetEnumSlotCollection` fails with "no archive reader". A provider is neither a component nor a `[VeloxProperty]` holder, so it has to say so itself — reaching it from elsewhere in the file is not enough. `GetTypeSchema` reports `jsonReadable`, and the tool names `[Archivable]` in its refusal, but neither is a substitute for the annotation:
+
+```csharp
+[Archivable(typeof(MyPort))]              // ← this is what makes the Agent's route work
+[AgentContext(AgentLanguages.English, "…")]
+public class MyPortProvider : ISlotProvider { … }
+```
+
+⚙ **An enum used as a selector must carry `[AgentContext]`.** Naming it in `[SlotSelectors]` puts a *reference* into the compiled context tree, not a resolvable type entry, and `AgentTypeResolver` resolves through type entries — so an enum the tree holds only as a reference is answered with "Type … not found" even though the property lists it as allowed. A member-typed enum gets an entry for free; one that is only ever named by `[SlotSelectors]` does not.
+
+⚙ **Re-setting a provider selector rebuilds the ports; re-setting an enum selector restores its remembered state.** The remembered-state cache is keyed by selector *type*, which is right for an enum (its slots come from the type, and its wiring should survive a switch away and back). A provider is a *value* — its port table lives on the instance — so a second `SetSelector` with a fresh provider replaces the ports rather than restoring the first call's.
+
 ## Links
 
 ```csharp

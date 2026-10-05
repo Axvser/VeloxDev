@@ -29,6 +29,8 @@
 
 引擎里**没有反射、也没有兜底**（`VeloxJsonSerializer` 的 remarks 写着这句）。进不了闭世界的类型写它会抛 `MissingWriter`，错误信息自己说明原因。**这不是缺陷，是能裁剪的前提。**
 
+⚠ **这个闭世界与 AI 的 `AIContextTree` 闭世界不是同一个，条件互不蕴含。** 工具面有若干处是「模型给 JSON、宿主按类型名读回来」，那些地方**两个闭世界都得成立**：类型要能被 `AgentTypeResolver` 解开（AI 侧），也要有生成的 reader（本侧）。`ISlotProvider` 这类普通类**必须自己带 `[Archivable]`** —— 它不是组件、也不是 `[VeloxProperty]` 持有者，别处提到它不算。清单与守卫见 [`AI/architecture.md`](../AI/architecture.md) §七·五。
+
 ### 收录面比「沿成员声明类型」宽三条（2026-10-04）
 
 三条都在 `Base/VeloxJsonModel.cs` 的 `Build` 里，各自补一个洞 —— 前两个会让**本来写得出去的文档读不回来**：

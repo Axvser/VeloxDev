@@ -339,6 +339,27 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 **按标签匹配条目**（`item.Value.ToString()`，忽略大小写），而不是把名字 `Enum.Parse(Type, …)` 回枚举值 ——
 后者正是要绕开的那类反射。
 
+### `SetSelector` 的记住状态：枚举按类型名缓存，**provider 不缓存**（2026-10-05 修）
+
+`_typeStates` 那张表按**选择器类型名**存 `SelectorState`（槽位 + 布线），切回某个类型时连布线一起复原。
+这对**枚举**是对的：槽位来自类型本身。
+
+对一个 `ISlotProvider` 选择器它是错的，而且**错得很安静**：provider 不是类型而是**值**，端口表在实例身上，
+同一个类的两个实例可以给出完全不同的端口。按类型名查表会命中上一次调用的快照、`newItems` 直接丢掉，
+`SetSelector` 返回后调用方看到的是「成功」。`SetSelector` 里因此有一个 `isProviderSelector` 分支，
+provider 一律 `isFresh = true`。
+
+**症状**：Agent 的 `SetEnumSlotCollection` 走的正是这条路，provider 类型永远是同一个 —— 所以**同一个节点
+第二次改端口不起作用**。用户报的「Merge Report 的输入口无法扩展」有一半是这个（另一半是没有
+`[Archivable]` 的 provider，见 [AI 记忆](../AI/architecture.md) §七·五）。
+`PythonScriptNodeViewModel` 的构造函数注释曾把这个缓存当作「端口不能在构造函数里设」的理由 —— 那条注释
+已随这次修复改写，别再照着它推理。
+
+守卫：`Core.Test/WorkflowSystem/SlotEnumeratorTests.ReSettingAProviderSelector_RebuildsTheSlots`
+（Core 这一层）与 `Extension.Test/…/SetEnumSlotCollectionTests.ReshapingThePortsASecondTime_AppliesTheNewSet`
+（工具这一层）。**枚举那条路没变**：切走再切回来仍要复原布线，`SlotEnumeratorTests` 里原来那条用例就是
+在钉它。
+
 ## 七、`CompilerViewModel` 的两个已知硬约束
 
 1. **Terminal 角色的锥必须是 series-parallel。** 若独立生产者「没有在目标之前汇入同一个 join」，`CompileConeAsync` 直接抛 `InvalidOperationException`（`CompilerEx/Compile/CompilerViewModel.Reverse.cs:112`）。
