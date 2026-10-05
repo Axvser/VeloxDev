@@ -114,6 +114,25 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 ---
 
+### 2.9 没有绑定引擎 ⇒ `WorkflowBindingExtensions`（2026-10-05 补）
+
+这家没有 `DataContext`、也没有 WPF 那种绑定引擎：`DataBindings` 要求每个属性配一个 `BindingSource`，
+而且对「模型在别的线程改了」一个字都不说。适配器包的 `WorkflowBindingExtensions` 补的就是这一小块：
+
+- `Control.Bind(model, (view, m) => …)` —— 立刻应用一次，之后模型每报一次变更再应用一次；
+- `Control.Bind(model, m => m.Anchor, (view, anchor) => …)` —— 先投影再比，投影值没变就不重放
+  （跟一个属性走，不必写属性名字符串）；
+- `Control.BindCollection(source, (view, e) => …)` —— 集合变更编组到控件线程。
+
+三条共用的语义两条：**控件销毁即解订**（挂在 `Control.Disposed` 上，因为控件比模型活得短）；
+跨线程编组复用 `ModelChangeRelay`（这家只有那一份「订阅 / 退订 / `InvokeRequired` 编排」，
+**别再抄第二份** —— 它是容易写错的一类代码，这也是当初把它抽出来的理由）。
+
+⚠ **它是给用户自己写的视图用的**。适配器自带的那几个视图走各自的助手（`WorkflowNodeAttachment` 等），
+不用它；不要把这两条路合成一条。
+
+---
+
 ## 三、与其它六家的刻意背离
 
 | # | 这里的做法和其他家不一样，因为… | 依据 |

@@ -86,6 +86,7 @@ $configs = [ordered]@{
         Expected        = @{
             'tree' = 'the mirror carries the demo HUD'
             'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
+            'node' = 'the mirror sets card.NodeTitle with its own node type; the template cannot - NodeTitle is a Func<IWorkflowNodeViewModel, string> and the node''s name property belongs to the project, so the template ships that line commented out as guidance'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
