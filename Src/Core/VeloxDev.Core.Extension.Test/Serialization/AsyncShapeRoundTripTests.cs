@@ -33,6 +33,18 @@ public partial class AsyncShapeRoundTripTests
         [VeloxProperty] private object? number = 12;
         [VeloxProperty] private object? flag = true;
         [VeloxProperty] private object? words = "text";
+
+        // 声明成 object 但装着**容器**：读侧要自己看出这一层是对象还是数组（`ReadUnknownAsync` 的两个分支）。
+        [VeloxProperty] private object? holdingObject = new Plain { Value = 5 };
+        [VeloxProperty] private object? holdingArray = new[] { 1, 2 };
+
+        // 容器套容器的另一种：列表里放列表。
+        [VeloxProperty] private List<List<int>> lists = [[1], [2, 3]];
+    }
+
+    internal sealed partial class Plain
+    {
+        [VeloxProperty] private int value;
     }
 
     private static AsyncShapeModel Sample() => new();
@@ -46,6 +58,12 @@ public partial class AsyncShapeRoundTripTests
         Assert.AreEqual(12L, restored.Number, entry + ": a number read as object comes back as a long");
         Assert.AreEqual(true, restored.Flag, entry + ": a literal reads back as a bool");
         Assert.AreEqual("text", restored.Words, entry + ": text reads back as text");
+
+        Assert.AreEqual(5, ((Plain)restored.HoldingObject!).Value, entry + ": an object declared as object keeps its shape");
+        CollectionAssert.AreEqual(
+            new object?[] { 1L, 2L }, (List<object?>)restored.HoldingArray!, entry + ": and so does an array");
+        Assert.AreEqual(2, restored.Lists.Count, entry + ": a list of lists");
+        CollectionAssert.AreEqual(new[] { 2, 3 }, restored.Lists[1], entry + ": and the inner list");
     }
 
     [TestMethod]

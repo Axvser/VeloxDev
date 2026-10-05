@@ -29,6 +29,10 @@ public partial class ShapeRoundTripTests
         [VeloxProperty] private List<int>? lazy;
 
         [VeloxProperty] private DateTime moment = new(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);
+
+        // 可空的标量走的是另一条读法（先生成可空实例再读值），`DateTime` 与 `TimeSpan` 在那里各有一条分支。
+        [VeloxProperty] private DateTime? maybeMoment = new(2026, 10, 5, 8, 30, 0, DateTimeKind.Utc);
+        [VeloxProperty] private TimeSpan? maybeSpan = TimeSpan.FromMinutes(45);
     }
 
     private static ShapeModel Sample() => new() { Lazy = [4, 5, 6] };
@@ -47,6 +51,8 @@ public partial class ShapeRoundTripTests
         Assert.AreEqual(2, restored.Set.Count, "a set reads back");
         Assert.AreEqual("two", restored.Map[2], "a map reads back");
         Assert.AreEqual("half", restored.Fractional[1.5], "a fractional key reads back");
+        Assert.AreEqual(Sample().MaybeMoment, restored.MaybeMoment, "a nullable moment reads back");
+        Assert.AreEqual(Sample().MaybeSpan, restored.MaybeSpan, "and so does a nullable span");
     }
 
     [TestMethod]
