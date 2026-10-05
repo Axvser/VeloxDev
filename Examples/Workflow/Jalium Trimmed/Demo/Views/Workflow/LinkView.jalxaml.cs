@@ -1,8 +1,11 @@
 // VeloxDev customization: Customize line geometry, color, and thickness here.
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using Jalium.UI;
 using Jalium.UI.Controls;
 using Jalium.UI.Media;
+using Jalium.UI.Threading;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -10,10 +13,25 @@ namespace Demo.Views.Workflow;
 
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The view reads its two ends <b>straight from the model</b> (<c>Sender.Anchor</c> / <c>Receiver.Anchor</c>)
+/// rather than from bound properties. On this platform that is not a style choice: a pooled view is rebound many
+/// times a second, and a bound endpoint is a frame stale every time — which reads as a link that lags the cards,
+/// and as a link drawn from the origin the instant one is created.
+/// </para>
+/// <para>
+/// It also moves its own layout box onto the curve <b>while the model reports a change</b>, never while drawing.
+/// This platform's renderer decides whether to draw a child by its layout box, so a box moved during a render pass
+/// is always one frame behind what is drawn inside it.
+/// </para>
+/// <para>
 /// The view only paints: it publishes its curve for hit-testing and handles no input itself. The hover glow
 /// below is <b>this demo's</b> — the template ships the same view without it, so delete those members to get
 /// that back.
-/// </summary>
+/// </para>
+/// </remarks>
 public partial class LinkView : UserControl
 {
     // Extension point: the least horizontal pull of the two control points. Keep it in step with the curve
@@ -29,6 +47,17 @@ public partial class LinkView : UserControl
     // stale curve answering for a link that no longer draws here.
     private IWorkflowLinkViewModel? _publishedLink;
 
+    private IWorkflowLinkViewModel? _link;
+    private IWorkflowSlotViewModel? _sender;
+    private IWorkflowSlotViewModel? _receiver;
+    private PropertyChangedEventHandler? _modelChanged;
+    private readonly List<INotifyPropertyChanged> _watchedModels = [];
+    private bool _refreshPending;
+    private readonly List<Point> _curve = [];
+    private double _originX;
+    private double _originY;
+    private bool _hasBounds;
+
     public LinkView()
     {
         InitializeComponent();
@@ -36,56 +65,22 @@ public partial class LinkView : UserControl
         Panel.SetZIndex(this, -100);
 
         DataContextChanged += OnDataContextChanged;
+        Loaded += (_, _) => Rebind();
     }
 
     #region Dependency properties
 
-    /// <summary>The canvas-local X of the start end.</summary>
-    public static readonly DependencyProperty StartLeftProperty =
-        DependencyProperty.Register(nameof(StartLeft), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnRenderChanged));
-
-    /// <summary>The canvas-local Y of the start end.</summary>
-    public static readonly DependencyProperty StartTopProperty =
-        DependencyProperty.Register(nameof(StartTop), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnRenderChanged));
-
-    /// <summary>The canvas-local X of the end end.</summary>
-    public static readonly DependencyProperty EndLeftProperty =
-        DependencyProperty.Register(nameof(EndLeft), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnRenderChanged));
-
-    /// <summary>The canvas-local Y of the end end.</summary>
-    public static readonly DependencyProperty EndTopProperty =
-        DependencyProperty.Register(nameof(EndTop), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnRenderChanged));
-
-    /// <summary>Whether the link should be drawn at all.</summary>
+    /// <summary>Whether the link should be drawn at all; the model's own visibility is required as well.</summary>
     public static readonly DependencyProperty CanRenderProperty =
         DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(LinkView), new PropertyMetadata(true, OnRenderChanged));
-
-    /// <summary>Whether this is the drag preview rather than a real link.</summary>
-    public static readonly DependencyProperty IsVirtualProperty =
-        DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnRenderChanged));
 
     /// <summary>The stroke colour.</summary>
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(LinkView),
             new PropertyMetadata(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF), OnRenderChanged));
 
-    /// <summary>The canvas-local X of the start end.</summary>
-    public double StartLeft { get => GetValue(StartLeftProperty) is double value ? value : 0d; set => SetValue(StartLeftProperty, value); }
-
-    /// <summary>The canvas-local Y of the start end.</summary>
-    public double StartTop { get => GetValue(StartTopProperty) is double value ? value : 0d; set => SetValue(StartTopProperty, value); }
-
-    /// <summary>The canvas-local X of the end end.</summary>
-    public double EndLeft { get => GetValue(EndLeftProperty) is double value ? value : 0d; set => SetValue(EndLeftProperty, value); }
-
-    /// <summary>The canvas-local Y of the end end.</summary>
-    public double EndTop { get => GetValue(EndTopProperty) is double value ? value : 0d; set => SetValue(EndTopProperty, value); }
-
     /// <summary>Whether the link should be drawn at all.</summary>
     public bool CanRender { get => GetValue(CanRenderProperty) is true; set => SetValue(CanRenderProperty, value); }
-
-    /// <summary>Whether this is the drag preview rather than a real link.</summary>
-    public bool IsVirtual { get => GetValue(IsVirtualProperty) is true; set => SetValue(IsVirtualProperty, value); }
 
     /// <summary>The stroke colour.</summary>
     public Color LineColor
@@ -95,16 +90,7 @@ public partial class LinkView : UserControl
     }
 
     private static void OnRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        => ((LinkView)d).InvalidateVisual();
-
-    private void OnDataContextChanged(object? sender, DependencyPropertyChangedEventArgs e)
-    {
-        // Retract the previous link's curve, then let the next draw publish the new one.
-        _publishedLink?.PublishCurve(null);
-        _publishedLink = null;
-        InvalidateVisual();
-        ResubscribeInput();
-    }
+        => ((LinkView)d).Refresh();
 
     #endregion
 
@@ -114,6 +100,7 @@ public partial class LinkView : UserControl
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private bool _lit;
     private IWorkflowLinkViewModel? _inputLink;
+    private IInputEvents? _inputEvents;
 
     private void ResubscribeInput()
     {
@@ -130,6 +117,7 @@ public partial class LinkView : UserControl
         }
 
         _inputLink = link;
+        _inputEvents = events;
         events.Input.PointerEntered += OnPointerEntered;
         events.Input.PointerExited += OnPointerExited;
         events.Input.KeyDown += OnKeyDown;
@@ -137,14 +125,14 @@ public partial class LinkView : UserControl
 
     private void UnsubscribeInput()
     {
-        if (_inputLink?.GetHelper() is not IInputEvents events)
+        if (_inputEvents is { } events)
         {
-            return;
+            events.Input.PointerEntered -= OnPointerEntered;
+            events.Input.PointerExited -= OnPointerExited;
+            events.Input.KeyDown -= OnKeyDown;
+            _inputEvents = null;
         }
 
-        events.Input.PointerEntered -= OnPointerEntered;
-        events.Input.PointerExited -= OnPointerExited;
-        events.Input.KeyDown -= OnKeyDown;
         _inputLink = null;
     }
 
@@ -174,13 +162,127 @@ public partial class LinkView : UserControl
         }
     }
 
-    private bool IsVirtualLink
-        => IsVirtual
-            || DataContext is IWorkflowLinkViewModel
+    #endregion
+
+    #region Model binding
+
+    private void OnDataContextChanged(object? sender, DependencyPropertyChangedEventArgs e)
+    {
+        // 换绑：先把上一条的曲线收回，免得池化视图留一条陈旧曲线替别人回答命中。
+        _publishedLink?.PublishCurve(null);
+        _publishedLink = null;
+        Rebind();
+        ResubscribeInput();
+    }
+
+    private void Rebind()
+    {
+        var link = DataContext as IWorkflowLinkViewModel;
+        if (!ReferenceEquals(link, _link))
+        {
+            Unhook();
+
+            _link = link;
+            _sender = link?.Sender;
+            _receiver = link?.Receiver;
+            _modelChanged = (_, _) => ScheduleRefresh();
+
+            // 订两端**以及它们各自的节点**：节点动的时候，槽的锚点是适配器在稍后的
+            // DispatcherPriority.Render 那一拍重测出来的 —— 只订槽会漏掉「节点已经在动、锚点还没写回」
+            // 的那一段（症状是连线整条冻在拖动前的几何上）。
+            Watch(_sender);
+            Watch(_receiver);
+            Watch(link);
+        }
+
+        Refresh();
+    }
+
+    private void Watch(IWorkflowViewModel? model)
+    {
+        if (_modelChanged is null)
+        {
+            return;
+        }
+
+        var notifying = model as INotifyPropertyChanged;
+        if (notifying is not null && _watchedModels.Contains(notifying) is false)
+        {
+            _watchedModels.Add(notifying);
+            notifying.PropertyChanged += _modelChanged;
+        }
+
+        // 节点的锚点变了，它这张卡上的每个槽都要重新量一次 —— 所以也订节点。
+        var node = model is IWorkflowSlotViewModel slot ? slot.Parent : null;
+        if (node is not null && _watchedModels.Contains(node) is false)
+        {
+            _watchedModels.Add(node);
+            node.PropertyChanged += _modelChanged;
+        }
+    }
+
+    private void Unhook()
+    {
+        if (_modelChanged is not null)
+        {
+            foreach (var model in _watchedModels)
             {
-                Sender.Parent: null,
-                Receiver.Parent: null
-            };
+                model.PropertyChanged -= _modelChanged;
+            }
+        }
+
+        _watchedModels.Clear();
+        _sender = null;
+        _receiver = null;
+        _modelChanged = null;
+    }
+
+    // 排到 Render 优先级的下一拍再量：槽锚点的重测也排在那一拍，先来后到保证读到的是重测后的值。
+    private void ScheduleRefresh()
+    {
+        if (_refreshPending)
+        {
+            return;
+        }
+
+        _refreshPending = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+        {
+            _refreshPending = false;
+            Refresh();
+        }));
+    }
+
+    /// <summary>Re-reads the geometry and moves the layout box onto it; never runs while drawing.</summary>
+    private void Refresh()
+    {
+        _curve.Clear();
+        _hasBounds = false;
+
+        if (!CanRender || _link is not { } link || !link.IsVisible || !link.IsRenderReady())
+        {
+            InvalidateVisual();
+            return;
+        }
+
+        var start = link.Sender.Anchor;
+        var end = link.Receiver.Anchor;
+        var points = LinkCurve.LinkCurvePoints(link, start.Horizontal, start.Vertical, end.Horizontal, end.Vertical, MinimumPull);
+        if (points.Length < 4)
+        {
+            InvalidateVisual();
+            return;
+        }
+
+        // 四个控制点一起进盒子 —— 曲线的凸包由它们界定；只按两端点算盒子，会把鼓出端点矩形的那一段切掉。
+        foreach (var (x, y) in points)
+        {
+            _curve.Add(new Point(x, y));
+        }
+
+        _hasBounds = WorkflowLinkBounds.Apply(this, _curve, out _originX, out _originY);
+        InvalidateVisual();
+    }
 
     #endregion
 
@@ -191,30 +293,23 @@ public partial class LinkView : UserControl
     {
         base.OnRender(ctx);
 
-        if (!CanRender)
+        // 模型没让画、或者几何还没量过（盒子也还没摆）—— 一笔都不画。
+        // 这一步挡掉的正是「刚建好那一瞬从原点画一条」：那时模型还没说这条线可见。
+        if (!_hasBounds || _link is not { } link || _curve.Count < 4)
         {
             return;
         }
 
-        var link = DataContext as IWorkflowLinkViewModel;
-        if (link is not null && !link.IsRenderReady())
-        {
-            return;
-        }
-
-        // 自盒化：Jalium 的渲染器按 RenderSize 裁剪子元素、不看画了什么，画到盒外的部分会被**静默丢掉**
-        // （见 WorkflowLinkBounds 的说明）。所以先把盒子挪到这条线自己的包围盒上，再用盒原点把坐标烘回元素局部。
-        if (!WorkflowLinkBounds.Apply(this, [new Point(StartLeft, StartTop), new Point(EndLeft, EndTop)], out var originX, out var originY))
-        {
-            return;
-        }
+        var start = link.Sender.Anchor;
+        var end = link.Receiver.Anchor;
 
         // Publish the curve the surface hit-tests against — the same control points as the drawing below, in
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
-        PublishCurve(LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
+        PublishCurve(link, LinkCurve.BuildLinkCubic(
+            link, start.Horizontal, start.Vertical, end.Horizontal, end.Vertical, MinimumPull));
 
         const double thickness = 2d;
-        var geometry = BuildCurve(link, originX, originY);
+        var geometry = BuildCurve();
 
         // VeloxDev customization: the hover glow. Delete this block to ship without it.
         if (_lit)
@@ -224,28 +319,31 @@ public partial class LinkView : UserControl
         }
 
         var brush = new SolidColorBrush(LineColor);
-        var pen = IsVirtualLink
+        var pen = IsVirtualLink(link)
             ? new Pen(brush, thickness) { DashStyle = new DashStyle([4d, 2d], 0d) }
             : new Pen(brush, thickness);
 
         ctx.DrawGeometry(null, pen, geometry);
     }
 
+    // 拖拽预览：两端都是占位槽（没有父节点），也就是一条还没落到任何卡片上的线。
+    private static bool IsVirtualLink(IWorkflowLinkViewModel link)
+        => link.Sender.Parent is null && link.Receiver.Parent is null;
+
     // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
     // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
-    private Geometry BuildCurve(IWorkflowLinkViewModel? link, double originX, double originY)
+    private Geometry BuildCurve()
     {
-        var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull);
         var figure = new PathFigure
         {
-            StartPoint = new Point(points[0].X - originX, points[0].Y - originY),
+            StartPoint = new Point(_curve[0].X - _originX, _curve[0].Y - _originY),
             IsClosed = false,
             IsFilled = false,
         };
         figure.Segments.Add(new BezierSegment(
-            new Point(points[1].X - originX, points[1].Y - originY),
-            new Point(points[2].X - originX, points[2].Y - originY),
-            new Point(points[3].X - originX, points[3].Y - originY),
+            new Point(_curve[1].X - _originX, _curve[1].Y - _originY),
+            new Point(_curve[2].X - _originX, _curve[2].Y - _originY),
+            new Point(_curve[3].X - _originX, _curve[3].Y - _originY),
             true));
 
         var geometry = new PathGeometry();
@@ -254,19 +352,15 @@ public partial class LinkView : UserControl
     }
 
     // Extension point: change the second argument if one view no longer draws exactly one link.
-    private void PublishCurve(LinkCurve curve)
+    private void PublishCurve(IWorkflowLinkViewModel link, LinkCurve curve)
     {
-        var link = DataContext as IWorkflowLinkViewModel;
         if (!ReferenceEquals(_publishedLink, link))
         {
             _publishedLink?.PublishCurve(null);
             _publishedLink = link;
         }
 
-        if (link is not null)
-        {
-            link.PublishCurve(curve, this);
-        }
+        link.PublishCurve(curve, this);
     }
 
     #endregion

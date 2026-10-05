@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.ComponentModel;
 using Jalium.UI;
 using Jalium.UI.Controls;
@@ -36,6 +37,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 {
     private sealed class LayoutState
     {
+        public FrameworkElement? Owner { get; set; }
+
         public bool Syncing { get; set; }
 
         public bool SyncPending { get; set; }
@@ -146,7 +149,11 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     {
         Detach(control);
 
-        control.SetValue(StateProperty, new LayoutState());
+        control.SetValue(StateProperty, new LayoutState { Owner = control });
+        if (control.DataContext is INotifyPropertyChanged context)
+        {
+            s_owners.AddOrUpdate(context, control);
+        }
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.DataContextChanged += OnDataContextChanged;
@@ -208,7 +215,10 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     private static void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is not FrameworkElement control || control.GetValue(StateProperty) is not LayoutState state)
+        // ⚠ sender 是**模型**（谁变更谁是 sender），不是宿主控件 —— 宿主得从状态里拿。
+        // 早先这里写成 `sender is FrameworkElement control`，于是每次都在第一行返回：
+        // 节点移动后槽锚点从不重测，连线整条冻在拖动前的几何上。
+        if (sender is not INotifyPropertyChanged model || !AttachmentOf(model, out var control, out var state))
         {
             return;
         }
@@ -218,6 +228,24 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         {
             ScheduleSync(control);
         }
+    }
+
+    // 模型 → 它挂在哪张卡上。`PropertyChanged` 的 sender 是模型，所以这个回指是必需的。
+    private static readonly ConditionalWeakTable<INotifyPropertyChanged, FrameworkElement> s_owners = new();
+
+    private static bool AttachmentOf(INotifyPropertyChanged model, out FrameworkElement control, out LayoutState state)
+    {
+        if (s_owners.TryGetValue(model, out var owner)
+            && owner.GetValue(StateProperty) is LayoutState found)
+        {
+            control = owner;
+            state = found;
+            return true;
+        }
+
+        control = null!;
+        state = null!;
+        return false;
     }
 
     private static void UpdatePropertyChangedSubscription(FrameworkElement control)
@@ -244,6 +272,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         {
             state.PropertyChangedHandler = OnNodePropertyChanged;
             state.PropertyChangedSource = source;
+            s_owners.AddOrUpdate(source, control);
             source.PropertyChanged += state.PropertyChangedHandler;
         }
     }
@@ -251,7 +280,13 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     // 排到布局之后同步：直接量会读到还没摆好的几何。
     private static void ScheduleSync(FrameworkElement control)
     {
-        if (control.GetValue(StateProperty) is not LayoutState state || state.SyncPending)
+        if (control.GetValue(StateProperty) is not LayoutState state)
+        {
+            return;
+        }
+
+        // 已经在队里了就丢掉这一次：同一拍里的重复请求没有新信息。
+        if (state.SyncPending)
         {
             return;
         }
