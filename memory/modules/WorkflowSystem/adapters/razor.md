@@ -156,7 +156,10 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 
 **滚轮只有 Ctrl 那一支到得了裁决**（2026-10-06 实测）：`initWheelZoom` 的 `onWheel` 第一句是
 `if (!e.ctrlKey) return;`（`wwwroot/veloxdev.workflow.js:1229`），所以**非 Ctrl 的滚轮在 JS 里就返回了、根本不问 .NET** ——
-想在宿主里写「Shift+滚轮归我」这种否决，在这家是**永不触发的死订阅**（其余六家在平台层就能拦到任何滚轮）。
+想在宿主里写「Shift+滚轮归我」这种否决，在这家是**永不触发的死订阅**。七家里 **5 家**（WPF / Avalonia / WinUI / MAUI / Jalium）
+在平台层路由**任何**滚轮（滚轮处理器只有一个入口，顺手就路由了）；**WinForms 与这家一样只路由 Ctrl+滚轮** ——
+它的 Win32 消息过滤器第一句就是 `if (m.Msg != WmMouseWheel || Control.ModifierKeys != Keys.Control) return false;`
+（`VeloxDev.WinForms/.../WorkflowSurfaceBehavior.cs:50`），普通滚轮压根不进过滤器、由控件自己滚，也就没有裁决可读。
 要否决缩放只能否决 **Ctrl+滚轮**，代价是这家 demo 也就没有缩放可用了。实测：订上并否决 Ctrl+滚轮后，
 同一串滚轮事件下 HUD 停在 `Scale 1.00`；不订时到 `0.91`。
 
