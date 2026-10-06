@@ -61,6 +61,15 @@
 
 所以 `node.Anchor.Horizontal = 5;` 或者 `node.Anchor + someOffset` 里对 `node.Anchor` 的属性赋值**全部丢失**。`StandardMove` 也是按这个语义写的：`world' = (collapsed + offset) * scale`（`StandardEx/WorkflowNodeEx.cs:110`）。
 
+**写侧两个命令收的不是同一个帧**（`Anchor` 这个名字下同时存在两帧，读错只在 `Scale ≠ 1` 时显形）：
+
+| 入口 | 收什么帧 | 依据 |
+|---|---|---|
+| `SetAnchorCommand` | **世界**帧，原样存 | `StandardEx/WorkflowNodeEx.cs:74-80`（`StandardSetAnchor`） |
+| `MoveCommand` | **视图**增量，内部乘 `Scale` | `:110-134`（`StandardMove` + `ViewToWorldFactors`） |
+
+⇒ 把节点的位置**报出去**（Agent 工具面、宿主、外层 API）要乘 `Scale` 回到世界帧（`VeloxDev.Core.Extension` 的 `WorkflowAgentToolkit.WorldFrame`，工具面在 `Scale=0.5 / 2.0` 上有测试）；渲染与空间索引则**留在折叠帧**，两者不要互相"修正"。另外 `WorkflowSurfaceMath.ToWorldAnchor` 名字里的 "world" 是**折叠帧**（`screen − ActualOffset`），全类同名的还有好几处，判据见 `skills/veloxdev-create-workflow/references/canvas-math.md` 的那张表。非 1 缩放的读/写往返由 `VeloxDev.Core.Extension.Test` 的 `NodeGeometryToolTests`（`:34`、`:133`、`:156` 三条）钉住 —— `AnchorSizeCollapseTests` 只钉 `Collapse` 这一个纯变换，不覆盖 VM getter、命令与序列化。
+
 ---
 
 ## 三、五条管线
