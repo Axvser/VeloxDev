@@ -27,34 +27,23 @@ public partial class MainView : UserControl
     }
 
     /// <summary>
-    /// The gestures this host has claimed: Shift-drag on the empty canvas, Ctrl-drag anywhere, and Shift+wheel —
-    /// the framework's own hand stands down and the host's takes over.
+    /// The presses this host has claimed: Shift-drag on the empty canvas, and Ctrl-drag anywhere — the
+    /// framework's own hand stands down and the host's takes over.
     /// </summary>
     /// <remarks>
-    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of an interaction of
-    /// one's own. The press subscription covers the blank canvas and the cards alike, because the refusal is read
-    /// wherever the framework's hand would have started: pan, node drag and slot connection. The wheel is a second
-    /// subscription (<c>PointerWheelChanged</c>), because zoom is a wheel gesture rather than a press. Subscribed
-    /// to the tree this view builds and hands over; this demo never swaps it, so one subscription lasts the
-    /// window's life.
+    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a press-and-drag
+    /// interaction of one's own. One subscription covers the blank canvas and the cards alike, because the refusal
+    /// is read wherever the framework's hand would have started: pan, node drag and slot connection. The wheel is
+    /// not on that list — a plain wheel reaches this same subscription as a report and no adapter reads its
+    /// verdict, while Ctrl+wheel zoom is the only wheel gesture the framework itself runs. Subscribed to the tree
+    /// this view builds and hands over; this demo never swaps it, so one subscription lasts the window's life.
     /// </remarks>
     private static void VetoFrameworkGestures(TreeViewModel tree)
     {
-        var input = ((IInputEvents)tree.GetHelper()).Input;
-
-        input.PointerPressed += (_, e) =>
+        ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
             if (e.Modifiers.HasFlag(InputModifiers.Control)
                 || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
-            {
-                e.Handle.PreventDefault = true;
-            }
-        };
-
-        // Shift+wheel is this host's own horizontal scroll, so the framework does not zoom on it.
-        input.PointerWheelChanged += (_, e) =>
-        {
-            if (e.Modifiers.HasFlag(InputModifiers.Shift))
             {
                 e.Handle.PreventDefault = true;
             }

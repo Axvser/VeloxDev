@@ -379,7 +379,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.MouseUp += OnLinkPointerReleased;
         control.MouseEnter += OnLinkPointerEntered;
         control.MouseLeave += OnLinkPointerExited;
-        control.MouseWheel += OnLinkPointerWheel;
+        // 普通滚轮走宿主的**预览**相：`ScrollViewer` 是宿主的下代，冒泡相上它先吃掉并标记 handled，
+        // 挂冒泡的处理器在能滚的时候一次都不会执行（实测：两格滚轮零到达）。
+        control.PreviewMouseWheel += OnLinkPointerWheel;
         control.KeyDown += OnLinkKeyDown;
         control.KeyUp += OnLinkKeyUp;
         control.AddHandler(UIElement.MouseUpEvent, MouseUpHandler, true);
@@ -397,7 +399,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.MouseUp -= OnLinkPointerReleased;
         control.MouseEnter -= OnLinkPointerEntered;
         control.MouseLeave -= OnLinkPointerExited;
-        control.MouseWheel -= OnLinkPointerWheel;
+        control.PreviewMouseWheel -= OnLinkPointerWheel;
         control.KeyDown -= OnLinkKeyDown;
         control.KeyUp -= OnLinkKeyUp;
         control.RemoveHandler(UIElement.MouseUpEvent, MouseUpHandler);
@@ -827,6 +829,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     }
 
     // 滚轮也进输入面（缩放那条路是 Ctrl+滚轮，归 ScrollViewer 的预览事件，两者不重叠）。
+    // 挂在宿主的预览相上，位置与目标是**滚动之前**的；本处理器不置 Handled，视口照旧滚。
     private static void OnLinkPointerWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
@@ -999,7 +1002,13 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         input.Route(new Wf.KeyDownEventArgs(
             ToKey(e.Key), (int)e.Key, Modifiers(), e.IsRepeat, host, input.HoveredLink, new WorkflowEventHandle()));
-        e.Handled = true;
+
+        // 只吞本层自己那一手管的键。先前无条件吞，于是指针停在一条线上时方向键、翻页键、空格全被吃掉，
+        // 画布那段时间对键盘整段无响应；Avalonia 只有 Delete 走得到这里、Jalium 也只吞 Delete，与它们同形。
+        if (e.Key == PlatformInput.Key.Delete)
+        {
+            e.Handled = true;
+        }
     }
 
     private static void OnLinkKeyUp(object sender, PlatformInput.KeyEventArgs e)

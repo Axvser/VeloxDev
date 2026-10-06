@@ -29,7 +29,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public FrameworkElement? GridDecorator { get; set; }
         public FrameworkElement? MinimapOverlay { get; set; }
         public FrameworkElement? PointerPressSource { get; set; }
-        public PointerEventHandler? ZoomHandler { get; set; }
+        public PointerEventHandler? WheelHandler { get; set; }
 
         // 这一笔按下已被路由过（组件自己路由的，或表面在平移那一处路由的）。
         // 不能用 e.Handled 代替：表面的按下处理器是 handledEventsToo:true 挂的，它无视 Handled 照跑，
@@ -380,7 +380,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.PointerMoved += OnPointerMoved;
         control.PointerEntered += OnPointerEntered;
         control.PointerExited += OnPointerExited;
-        control.PointerWheelChanged += OnLinkPointerWheel;
+        // 普通滚轮：这家没有预览/捕获相，`ScrollViewer` 在冒泡相上先吃掉滚轮并标记 handled，普通订阅
+        // 在能滚的时候一次都不会执行（实测：两格滚轮零到达）。用 handledEventsToo 挂，代价是位置与目标
+        // 取自**滚动之后** —— 与 Ctrl+滚轮那条已经接受的取舍相同。
         control.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleased), true);
         // 连线交互要看到整个 surface 上的按下与按键，包括被其它处理器标记为 Handled 的那些
         control.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnLinkPointerPressed), true);
@@ -398,7 +400,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.PointerMoved -= OnPointerMoved;
         control.PointerEntered -= OnPointerEntered;
         control.PointerExited -= OnPointerExited;
-        control.PointerWheelChanged -= OnLinkPointerWheel;
         control.RemoveHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleased));
         control.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnLinkPointerPressed));
         control.RemoveHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnLinkKeyDown));
@@ -481,10 +482,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.ScrollViewer.ViewChanged += OnViewChanged;
         }
 
-        if (GetZoomEnabled(control))
-        {
-            HookZoom(state);
-        }
+        // 滚轮的挂接不跟缩放开关走：普通滚轮的汇报与缩放是两件事。
+        HookWheel(state);
     }
 
     private static void UnsubscribeResolvedControls(SurfaceState state)
@@ -499,7 +498,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.ScrollViewer.ViewChanged -= OnViewChanged;
         }
 
-        UnhookZoom(state);
+        UnhookWheel(state);
         state.PointerPressSource = null;
         state.ScrollViewer = null;
         state.Canvas = null;
@@ -514,37 +513,34 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (Equals(e.NewValue, true))
-        {
-            HookZoom(state);
-        }
-        else
-        {
-            UnhookZoom(state);
-        }
+        // 滚轮的挂接与这个开关无关（汇报永远要发，缩放与否在处理器里判），这里只保证它还在：
+        // 换滚动容器时解析路径会重新挂，而只改开关时补一次是幂等的。
+        _ = e;
+        HookWheel(state);
     }
 
     // WinUI 没有 PreviewMouseWheel，所以滚轮在 SCROLLVIEWER 上处理（它始终位于其全部内容的冒泡路径上）。用 handledEventsToo:true 挂接，节点先处理了滚轮也仍触发。
     // Ctrl+滚轮在处理器跑之前可能还会滚一丁点 —— 缩放到处都还是会应用（改挂画布则只覆盖其可命中区域）。
-    private static void HookZoom(SurfaceState state)
+    // 挂接**不跟缩放开关走**：普通滚轮的汇报与缩放是两件事，关掉缩放的宿主一样要收得到。
+    private static void HookWheel(SurfaceState state)
     {
-        if (state.ScrollViewer is not null && state.ZoomHandler is null)
+        if (state.ScrollViewer is not null && state.WheelHandler is null)
         {
-            state.ZoomHandler = new PointerEventHandler(OnZoomPointerWheelChanged);
-            state.ScrollViewer.AddHandler(UIElement.PointerWheelChangedEvent, state.ZoomHandler, true);
+            state.WheelHandler = new PointerEventHandler(OnSurfaceWheel);
+            state.ScrollViewer.AddHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler, true);
         }
     }
 
-    private static void UnhookZoom(SurfaceState state)
+    private static void UnhookWheel(SurfaceState state)
     {
-        if (state.ScrollViewer is not null && state.ZoomHandler is not null)
+        if (state.ScrollViewer is not null && state.WheelHandler is not null)
         {
-            state.ScrollViewer.RemoveHandler(UIElement.PointerWheelChangedEvent, state.ZoomHandler);
-            state.ZoomHandler = null;
+            state.ScrollViewer.RemoveHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler);
+            state.WheelHandler = null;
         }
     }
 
-    private static void OnZoomPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    private static void OnSurfaceWheel(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not DependencyObject source)
         {
@@ -557,15 +553,24 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (!e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control))
+        var delta = e.GetCurrentPoint(source as UIElement ?? host).Properties.MouseWheelDelta;
+
+        // 普通滚轮只是一份汇报：路由给订阅者，视口照旧滚（本处理器不置 Handled）。
+        // 挂在这一层是因为它是这家唯一收得到滚轮的地方（宿主上的普通订阅与 handledEventsToo 订阅都实测收不到），
+        // 代价是位置与目标取自**滚动之后** —— 与下面 Ctrl 那条已经接受的取舍相同。
+        if (!e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control) || !GetZoomEnabled(host))
         {
+            if (host.GetValue(StateProperty) is SurfaceState reportState)
+            {
+                RoutePointer(reportState, viewModel, e, host, e.OriginalSource as DependencyObject,
+                    (position, target, handle) => new Wf.PointerWheelEventArgs(
+                        position, Modifiers(e.KeyModifiers), host, target, 0d, delta, handle));
+            }
+
             return;
         }
 
-        var delta = e.GetCurrentPoint(source as UIElement ?? host).Properties.MouseWheelDelta;
-
-        // Ctrl+滚轮也进路由，订阅者才有机会说「这一次别缩放」。不会造成二次路由：非 Ctrl 的滚轮走
-        // OnLinkPointerWheel 那一条，两支笔各走各的。
+        // Ctrl+滚轮也进路由，订阅者才有机会说「这一次别缩放」。
         if (host.GetValue(StateProperty) is SurfaceState zoomState)
         {
             var zoomHandle = RoutePointer(zoomState, viewModel, e, host, e.OriginalSource as DependencyObject,
@@ -788,29 +793,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         input.Route(new Wf.PointerExitedEventArgs(new Anchor(), Modifiers(e.KeyModifiers), host, null, new WorkflowEventHandle()));
     }
 
-    // 滚轮也进输入面（缩放那条路是 Ctrl+滚轮，挂在 ScrollViewer 上，两者不重叠）。
-    private static void OnLinkPointerWheel(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
-        {
-            return;
-        }
-
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.ScrollViewer is null)
-        {
-            return;
-        }
-
-        if (Modifiers(e.KeyModifiers).HasFlag(Wf.InputModifiers.Control))
-        {
-            return;
-        }
-
-        var delta = e.GetCurrentPoint(host).Properties.MouseWheelDelta;
-        RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
-            (position, target, handle) => new Wf.PointerWheelEventArgs(position, Modifiers(e.KeyModifiers), host, target, 0d, delta, handle));
-    }
-
     // 按下：转发给输入面裁决（是否落在某条连线上、哪个键）。不置 Handled —— 画布手势照旧。
     private static void OnLinkPointerPressed(object sender, PointerRoutedEventArgs e)
     {
@@ -869,7 +851,13 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         input.Route(new Wf.KeyDownEventArgs(
             ToKey(e.Key), (int)e.Key, KeyModifiersNow(), false, host, input.HoveredLink, new WorkflowEventHandle()));
-        e.Handled = true;
+
+        // 只吞本层自己那一手管的键。先前无条件吞，于是指针停在一条线上时方向键、翻页键、空格全被吃掉，
+        // 画布那段时间对键盘整段无响应；Avalonia 只有 Delete 走得到这里、Jalium 也只吞 Delete，与它们同形。
+        if (e.Key == Windows.System.VirtualKey.Delete)
+        {
+            e.Handled = true;
+        }
     }
 
     private static void OnLinkKeyUp(object sender, KeyRoutedEventArgs e)

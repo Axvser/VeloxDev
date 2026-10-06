@@ -383,7 +383,10 @@ public static class WorkflowSurfaceBehavior
         // 具名按下源与节点、插槽各自负责，见 OnPointerPressSourceDown 与 RouteComponentPress。
         host.AddHandler(UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
         host.AddHandler(UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
-        host.AddHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler);
+        // 普通滚轮改挂**预览**相：与缩放那条同相，位置与目标取在滚动之前（冒泡相上滚动容器先滚）。
+        // 这家宿主上的预览 MouseDown 收不到（见 §「按下不挂宿主」），滚轮预览是否收得到要靠实测；
+        // 收不到就退回冒泡相（那份是实测能到的，只是位置在滚动之后）。
+        host.AddHandler(Mouse.PreviewMouseWheelEvent, state.MouseWheelHandler);
         host.AddHandler(UIElement.KeyDownEvent, state.KeyDownHandler);
         host.AddHandler(UIElement.KeyUpEvent, state.KeyUpHandler);
         host.AddHandler(UIElement.LostMouseCaptureEvent, state.LostCaptureHandler);
@@ -412,7 +415,7 @@ public static class WorkflowSurfaceBehavior
         host.DataContextChanged -= OnDataContextChanged;
         RemoveHandler(host, UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
         RemoveHandler(host, UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
-        RemoveHandler(host, Mouse.MouseWheelEvent, state.MouseWheelHandler);
+        RemoveHandler(host, Mouse.PreviewMouseWheelEvent, state.MouseWheelHandler);
         RemoveHandler(host, UIElement.KeyDownEvent, state.KeyDownHandler);
         RemoveHandler(host, UIElement.KeyUpEvent, state.KeyUpHandler);
         RemoveHandler(host, UIElement.LostMouseCaptureEvent, state.LostCaptureHandler);
@@ -1130,7 +1133,8 @@ public static class WorkflowSurfaceBehavior
             return;
         }
 
-        // Ctrl + 滚轮是表面的缩放（预览相已经吃掉并标记 handled）；到这里的都不该再有 Ctrl。
+        // Ctrl+滚轮归缩放那一支（挂滚动容器的预览相，在隧道里比本处理器**更晚**跑）——这里先让开，
+        // 否则同一笔会被两支各处理一遍。
         if (e.KeyboardModifiers == ModifierKeys.Control)
         {
             return;

@@ -33,7 +33,7 @@ be read straight off a captured frame. Supported:
   drag:<x1>,<y1>,<x2>,<y2>    press at the first point, move in steps, release at the second
   down:<x>,<y>                press and hold — pair with move:/shot: to see a mid-drag state, then up:
   up:<x>,<y>                  release the held button at that point
-  key:Delete                  press and release a key (Delete | Escape | Enter | Back | Control | Shift)
+  key:Delete                  press and release a key (Delete | Escape | Enter | Back | Control | Shift | Next | Down | Up)
   keydown:Control             hold a key down (pair it with keyup:, e.g. around wheel: for Ctrl+wheel zoom,
                               or around down:/up: for a Shift-modified drag)
   keyup:Control               release a key
@@ -218,6 +218,8 @@ function ToClient([int]$cx, [int]$cy) { [void][Ui]::SetCursorPos($ox + $cx, $oy 
 function ToVk([string]$name) {
     switch ($name) {
         'Delete' { 0x2E } 'Escape' { 0x1B } 'Enter' { 0x0D } 'Back' { 0x08 } 'Control' { 0x11 } 'Shift' { 0x10 }
+        # 滚动容器会用到的键：用来验「适配器有没有把这一笔吞掉」（Next = PageDown）
+        'Next' { 0x22 } 'Down' { 0x28 } 'Up' { 0x26 }
         default { throw "unsupported key: $name" }
     }
 }

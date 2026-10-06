@@ -390,7 +390,9 @@ public abstract class WorkflowTreeView : UserControl
         PART_Canvas.MouseCaptureChanged += OnCanvasMouseCaptureChanged;
         PART_Canvas.MouseEnter += OnCanvasMouseEnter;
         PART_Canvas.MouseLeave += OnCanvasMouseLeave;
-        PART_Canvas.MouseWheel += OnCanvasMouseWheel;
+        // 滚轮不在这里订：WM_MOUSEWHEEL 发给**焦点**控件，画布没焦点时一笔都收不到（实测三格零到达）。
+        // 表面的消息过滤器在应用层看得见每一笔，由它按指针位置认领并路由 —— 两条都留会让订阅者收两遍。
+
         PART_Canvas.KeyDown += OnCanvasKeyDown;
         PART_Canvas.KeyUp += OnCanvasKeyUp;
 
@@ -620,13 +622,6 @@ public abstract class WorkflowTreeView : UserControl
         _pointerInside = false;
         _input?.Route(new Wf.PointerExitedEventArgs(
             new Anchor(), Modifiers(), PART_Canvas, null, new WorkflowEventHandle()));
-    }
-
-    // 滚轮也进输入路由：谁要收滚轮就订它（缩放不在这家）。
-    private void OnCanvasMouseWheel(object? sender, MouseEventArgs e)
-    {
-        RoutePointer(e.Location, (p, t, h) => new Wf.PointerWheelEventArgs(
-            p, Modifiers(), PART_Canvas, t, 0d, e.Delta / 120d, h));
     }
 
     // 键也过输入路由：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠各家各记一个选中。

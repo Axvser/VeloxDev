@@ -464,7 +464,9 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         control.PointerEntered += OnPointerEntered;
         control.PointerMoved += OnPointerMoved;
         control.PointerExited += OnPointerExited;
-        control.PointerWheelChanged += OnPointerWheel;
+        // 普通滚轮走宿主的**隧道**相：`ScrollViewer` 是宿主的下代，冒泡相上它先滚，位置与目标于是取的是
+        // 滚动之后的值。隧道相排在它前面，与按下那条路由（上面那行）同一个相。
+        control.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, RoutingStrategies.Tunnel);
         control.PointerReleased += OnPointerReleased;
         control.PointerCaptureLost += OnPointerCaptureLost;
         control.KeyUp += OnKeyUp;
@@ -482,7 +484,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         control.PointerEntered -= OnPointerEntered;
         control.PointerMoved -= OnPointerMoved;
         control.PointerExited -= OnPointerExited;
-        control.PointerWheelChanged -= OnPointerWheel;
+        control.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel);
         control.PointerReleased -= OnPointerReleased;
         control.PointerCaptureLost -= OnPointerCaptureLost;
         control.KeyUp -= OnKeyUp;

@@ -32,27 +32,53 @@ public sealed class WorkflowSurfaceBehavior
         public double PendingRestoreY { get; set; }
 
         private const int WmMouseWheel = 0x020A;
-        internal Control? _filterHost;
+
+        // 过滤器归**启用**管，不归缩放管：关掉缩放的宿主一样要收到滚轮汇报（报告与手势是两件事）。
+        private bool _filterAdded;
+
+        internal void EnsureMessageFilter()
+        {
+            if (_filterAdded)
+            {
+                return;
+            }
+
+            Application.AddMessageFilter(this);
+            _filterAdded = true;
+        }
+
+        internal void RemoveMessageFilter()
+        {
+            if (!_filterAdded)
+            {
+                return;
+            }
+
+            Application.RemoveMessageFilter(this);
+            _filterAdded = false;
+        }
 
         /// <summary>
-        /// Global pre-processing for the Ctrl+wheel zoom gesture. With no offset compensation the
-        /// gesture must be intercepted before ANY scrollable control — including the workflow's
-        /// scroll viewer and a node card's internal AutoScroll panels — has a chance to scroll. The
-        /// wheel message is addressed to the control under the cursor (WM_MOUSEWHEEL targets the
-        /// focused/focused-under-mouse window), so message handlers on the surface only ever see
-        /// wheel events routed to the surface itself; a wheel over a child window is delivered to
-        /// that child and never bubbles. This filter therefore resolves the surface host from the
-        /// message's target control, zooms, marks the message handled so the native wheel message is
-        /// dropped (no scroll anywhere), and swallows it (never forwards to the target).
+        /// Global pre-processing for every wheel over a surface. A wheel is addressed to the control
+        /// under the cursor (WM_MOUSEWHEEL targets the focused/focused-under-mouse window), so message
+        /// handlers on the surface only ever see wheel events routed to the surface itself; a wheel over
+        /// a child window is delivered to that child and never bubbles — which is why the surface's own
+        /// canvas handler cannot be the route. Ctrl+wheel is the zoom gesture: it must be intercepted
+        /// before ANY scrollable control (the workflow's scroll viewer, a node card's AutoScroll panels)
+        /// scrolls, and it swallows the message so nothing scrolls. A plain wheel has no gesture to run:
+        /// the filter routes it as a report and lets the message through, so the control under the cursor
+        /// scrolls exactly as it would without this library.
         /// </summary>
         bool IMessageFilter.PreFilterMessage(ref Message m)
         {
-            if (m.Msg != WmMouseWheel || Control.ModifierKeys != Keys.Control)
+            if (m.Msg != WmMouseWheel)
             {
                 return false;
             }
 
-            var host = ResolveSurfaceHost(m.HWnd);
+            // 按**指针底下**认领这一笔：消息发给谁取决于焦点，焦点不在表面上时按消息目标解析会认错人。
+            var under = GetControlAtScreenPoint(Cursor.Position);
+            var host = ResolveSurfaceHost(under) ?? ResolveSurfaceHost(m.HWnd);
             if (host is null)
             {
                 return false;
@@ -66,9 +92,16 @@ public sealed class WorkflowSurfaceBehavior
 
             var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
 
+            // 非 Ctrl、或这家关掉了缩放：滚轮只是汇报 —— 路由给订阅者，消息照旧往下走，由控件自己滚。
+            if (Control.ModifierKeys != Keys.Control || !GetState(host).ZoomEnabled)
+            {
+                RouteWheel(host, tree, under ?? host, delta);
+                return false;
+            }
+
             // 缩放也要能被订阅者否决。滚轮在消息层就被这里接住、画布收不到它，所以路由只能在这一层补一次；
             // 否决即吞掉消息 —— 不缩放，也不让任何控件滚动。
-            if (RouteWheel(host, tree, m.HWnd, delta))
+            if (RouteWheel(host, tree, under ?? host, delta))
             {
                 m.Result = IntPtr.Zero;
                 return true;
@@ -107,18 +140,15 @@ public sealed class WorkflowSurfaceBehavior
             return true; // swallow the message: the target control never scrolls
         }
 
-        private Control? ResolveSurfaceHost(IntPtr hwnd)
+        private Control? ResolveSurfaceHost(IntPtr hwnd) => ResolveSurfaceHost(Control.FromHandle(hwnd));
+
+        // 从命中控件沿父链认领表面：判据是**启用**着的表面，不是「开着缩放」的 —— 关掉缩放的宿主一样要收到滚轮汇报。
+        private static Control? ResolveSurfaceHost(Control? hit)
         {
-            var target = Control.FromHandle(hwnd);
-            var host = target;
+            var host = hit;
             while (host is not null)
             {
-                if (ReferenceEquals(host, _filterHost))
-                {
-                    return host;
-                }
-
-                if (States.TryGetValue(host, out var state) && state.ZoomEnabled)
+                if (States.TryGetValue(host, out var state) && state.IsEnabled)
                 {
                     return host;
                 }
@@ -128,6 +158,15 @@ public sealed class WorkflowSurfaceBehavior
 
             return null;
         }
+
+        private static Control? GetControlAtScreenPoint(Point screenPoint)
+        {
+            var handle = WindowFromPoint(screenPoint);
+            return handle == IntPtr.Zero ? null : Control.FromChildHandle(handle) ?? Control.FromHandle(handle);
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(Point point);
     }
 
     private static readonly ConditionalWeakTable<Control, SurfaceState> States = new();
@@ -155,13 +194,27 @@ public sealed class WorkflowSurfaceBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).IsEnabled = value;
+        var state = GetState(element);
+        if (state.IsEnabled == value)
+        {
+            return;
+        }
+
+        state.IsEnabled = value;
 
         if (value)
         {
+            // 滚轮的汇报入口：消息过滤器在应用层看得见**每一笔**滚轮（消息发给谁取决于焦点，事件层的
+            // 处理器在画布没焦点时一笔都收不到 —— 实测三格零到达）。开关跟着 IsEnabled 走。
+            state.EnsureMessageFilter();
+
             // 宿主画布启用时自动编排 Win32 窗口样式，消除自绘画布与子窗口（节点卡片）重绘分离造成的闪烁/残影：画布窗口加 WS_CLIPCHILDREN，其顶层窗体加 WS_EX_COMPOSITED（DWM 合成整个窗体树）。宿主无需改动。
             NativeWindowStyleHelper.EnsureClipChildren(element);
             NativeWindowStyleHelper.EnsureComposited(element);
+        }
+        else
+        {
+            state.RemoveMessageFilter();
         }
     }
 
@@ -191,17 +244,14 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         state.ZoomEnabled = value;
-        state._filterHost = value ? element : null;
         if (value)
         {
+            // 这条只是「滚轮正好发给宿主自己」时的直路；接住 Ctrl+滚轮的是消息过滤器，它跟着 IsEnabled 挂。
             element.MouseWheel += OnZoomMouseWheel;
-            // 消息过滤器抢在任何后代控件（如节点卡片内部的 AutoScroll 面板、或表面自己的滚动视图）用它滚动之前接住 Ctrl+滚轮。在元素上挂 WndProc 只能接住路由到该元素自身的滚轮 —— 发给子窗口的滚轮到不了它。
-            Application.AddMessageFilter(state);
         }
         else
         {
             element.MouseWheel -= OnZoomMouseWheel;
-            Application.RemoveMessageFilter(state);
         }
     }
 
@@ -501,13 +551,13 @@ public sealed class WorkflowSurfaceBehavior
 
     // 缩放这一手的路由：位置取光标在画布客户区的坐标（与表面自己那条滚轮路同一系），目标用与表面同一套
     // 解析。返回 true 表示订阅者否决了这一次缩放。
-    private static bool RouteWheel(Control host, IWorkflowTreeViewModel tree, IntPtr hwnd, int delta)
+    private static bool RouteWheel(Control host, IWorkflowTreeViewModel tree, Control hit, int delta)
     {
         var canvas = ResolveCanvas(host) ?? host;
         var point = canvas.PointToClient(Cursor.Position);
         var anchor = new Anchor(point.X, point.Y, 0);
         var input = WorkflowInput.For(tree);
-        var target = ResolveTarget(Control.FromHandle(hwnd), tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
         var handle = new WorkflowEventHandle();
 
         input.Route(new Wf.PointerWheelEventArgs(anchor, Modifiers(), canvas, target, 0d, delta, handle));

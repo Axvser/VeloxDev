@@ -894,35 +894,25 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     }
 
     /// <summary>
-    /// The gestures this host has claimed: Shift-drag on the empty canvas, Ctrl-drag anywhere, and Shift+wheel —
-    /// the framework's own hand stands down and the host's takes over.
+    /// The presses this host has claimed: Shift-drag on the empty canvas, and Ctrl-drag anywhere — the
+    /// framework's own hand stands down and the host's takes over.
     /// </summary>
     /// <remarks>
-    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of an interaction of
-    /// one's own. The press subscription covers the blank canvas and the cards alike, because the refusal is read
-    /// wherever the framework's hand would have started: pan, node drag and slot connection. The wheel is a second
-    /// subscription (<c>PointerWheelChanged</c>), because zoom is a wheel gesture rather than a press. Subscribed
-    /// from <see cref="AttachSession"/>, so it lands on the tree actually on screen: the canvas is handed a fresh
-    /// session at construction and again on every reload or file load, and the constructor's tree is not the one
-    /// the form ends up showing.
+    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a press-and-drag
+    /// interaction of one's own. One subscription covers the blank canvas and the cards alike, because the refusal
+    /// is read wherever the framework's hand would have started: pan, node drag and slot connection. The wheel is
+    /// not on that list — a plain wheel reaches this same subscription as a report and no adapter reads its
+    /// verdict, while Ctrl+wheel zoom is the only wheel gesture the framework itself runs. Subscribed from
+    /// <see cref="AttachSession"/>, so it lands on the tree actually on screen: the canvas is handed a fresh session
+    /// at construction and again on every reload or file load, and the constructor's tree is not the one the form
+    /// ends up showing.
     /// </remarks>
     private static void VetoFrameworkGestures(TreeViewModel tree)
     {
-        var input = ((IInputEvents)tree.GetHelper()).Input;
-
-        input.PointerPressed += (_, e) =>
+        ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
             if (e.Modifiers.HasFlag(InputModifiers.Control)
                 || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
-            {
-                e.Handle.PreventDefault = true;
-            }
-        };
-
-        // Shift+wheel is this host's own horizontal scroll, so the framework does not zoom on it.
-        input.PointerWheelChanged += (_, e) =>
-        {
-            if (e.Modifiers.HasFlag(InputModifiers.Shift))
             {
                 e.Handle.PreventDefault = true;
             }
