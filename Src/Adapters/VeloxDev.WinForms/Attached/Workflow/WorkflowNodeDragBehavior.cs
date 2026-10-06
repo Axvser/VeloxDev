@@ -285,12 +285,12 @@ public sealed class WorkflowNodeDragBehavior
         }
 
         var owner = ResolveOwnerControl(parent) ?? parent;
-        if (!States.TryGetValue(owner, out var state) || !state.IsEnabled)
+        if (!States.TryGetValue(owner, out var state) || !state.IsEnabled || e.Control is not { } added)
         {
             return;
         }
 
-        HookControlTree(owner, e.Control);
+        HookControlTree(owner, added);
     }
 
     private static void OnControlRemoved(object? sender, ControlEventArgs e)
@@ -301,12 +301,12 @@ public sealed class WorkflowNodeDragBehavior
         }
 
         var owner = ResolveOwnerControl(parent) ?? parent;
-        if (!States.TryGetValue(owner, out var state))
+        if (!States.TryGetValue(owner, out var state) || e.Control is not { } removed)
         {
             return;
         }
 
-        UnhookControlTree(e.Control, state);
+        UnhookControlTree(removed, state);
     }
 
     private static void HookControlTree(Control owner, Control control)
