@@ -122,7 +122,7 @@ namespace Demo.Views
                 ViewModel = result;
                 DataContext = ViewModel;
                 SubscribeAutoScroll(ViewModel);
-                VetoShiftDragOnBlankCanvas(ViewModel);
+                VetoFrameworkGestures(ViewModel);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
 
                 await ShowMessageAsync("Load Succeeded", $"Workflow loaded from {file.Name}.", "OK");
@@ -146,7 +146,7 @@ namespace Demo.Views
         HookLinkKeys(ViewModel);
             DataContext = ViewModel;
             SubscribeAutoScroll(ViewModel);
-            VetoShiftDragOnBlankCanvas(ViewModel);
+            VetoFrameworkGestures(ViewModel);
             if (ViewModel.GetHelper() is AgentHelper helper)
             {
                 helper.Mcp.WithSynchronizationContext(SynchronizationContext.Current);
@@ -274,18 +274,23 @@ namespace Demo.Views
         }
 
         /// <summary>
-        /// Shift-drag on empty canvas: the framework stands down and the host takes over.
+        /// The presses this host has claimed: Shift-drag on the empty canvas, and Ctrl anywhere — the
+        /// framework's own hand stands down and the host's takes over.
         /// </summary>
         /// <remarks>
         /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a
-        /// press-and-drag interaction of one's own on the blank canvas. Re-subscribed on every tree swap,
-        /// the same way auto-scroll is: the tree on screen is not the one the constructor started with.
+        /// press-and-drag interaction of one's own. One subscription covers the blank canvas and the cards
+        /// alike, because the refusal is read wherever the framework's hand would have started: pan, node drag
+        /// and slot connection. Wheel zoom is a wheel gesture, not a press — subscribe <c>PointerWheel</c> to
+        /// refuse that one. Re-subscribed on every tree swap, the same way auto-scroll is: the tree on screen
+        /// is not the one the constructor started with.
         /// </remarks>
-        private static void VetoShiftDragOnBlankCanvas(TreeViewModel tree)
+        private static void VetoFrameworkGestures(TreeViewModel tree)
         {
             ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
             {
-                if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
+                if (e.Modifiers.HasFlag(InputModifiers.Control)
+                    || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
                 {
                     e.Handle.PreventDefault = true;
                 }

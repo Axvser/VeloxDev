@@ -322,7 +322,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (s is null) return;
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, s.Tree);
         AttachLinkInput(s.Tree);
-        VetoShiftDragOnBlankCanvas(s.Tree);
+        VetoFrameworkGestures(s.Tree);
         s.Tree.Nodes.CollectionChanged += OnNodesChanged;
         s.Tree.Links.CollectionChanged += OnLinksChanged;
         s.Controller.PropertyChanged += OnControllerPropertyChanged;
@@ -894,19 +894,24 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     }
 
     /// <summary>
-    /// Shift-drag on empty canvas: the framework stands down and the host takes over.
+    /// The presses this host has claimed: Shift-drag on the empty canvas, and Ctrl anywhere — the framework's
+    /// own hand stands down and the host's takes over.
     /// </summary>
     /// <remarks>
     /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a
-    /// press-and-drag interaction of one's own on the blank canvas. Subscribed from <see cref="AttachSession"/>,
-    /// so it lands on the tree actually on screen: the canvas is handed a fresh session at construction and
-    /// again on every reload or file load, and the constructor's tree is not the one the form ends up showing.
+    /// press-and-drag interaction of one's own. One subscription covers the blank canvas and the cards alike,
+    /// because the refusal is read wherever the framework's hand would have started: pan, node drag and slot
+    /// connection. Wheel zoom is a wheel gesture, not a press — subscribe <c>PointerWheel</c> to refuse that one.
+    /// Subscribed from <see cref="AttachSession"/>, so it lands on the tree actually on screen: the canvas is
+    /// handed a fresh session at construction and again on every reload or file load, and the constructor's tree
+    /// is not the one the form ends up showing.
     /// </remarks>
-    private static void VetoShiftDragOnBlankCanvas(TreeViewModel tree)
+    private static void VetoFrameworkGestures(TreeViewModel tree)
     {
         ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
-            if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
+            if (e.Modifiers.HasFlag(InputModifiers.Control)
+                || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
             {
                 e.Handle.PreventDefault = true;
             }

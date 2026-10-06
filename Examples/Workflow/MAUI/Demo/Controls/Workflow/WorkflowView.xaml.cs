@@ -160,7 +160,7 @@ public partial class WorkflowView : ContentView
 
         _workflowViewModel = newSession?.Tree ?? new TreeViewModel();
         HookLinkKeys(_workflowViewModel);
-        VetoShiftDragOnBlankCanvas(_workflowViewModel);
+        VetoFrameworkGestures(_workflowViewModel);
         // MAUI propagates BindingContext through the visual tree automatically,
         // so setting it on the ContentView root is sufficient. Do NOT set
         // BindingContext on individual child elements — that breaks the natural
@@ -464,13 +464,15 @@ public partial class WorkflowView : ContentView
         };
     }
 
-    // VeloxDev customization: 空白画布上 Shift+拖拽 —— 框架让路、交互归宿主自己写。每换一次树都重订一次，
-    // 与自动滚动同理：屏幕上的树不是构造函数里那棵。
-    private static void VetoShiftDragOnBlankCanvas(TreeViewModel tree)
+    // VeloxDev customization: 宿主自留的按下 —— 空白画布上 Shift+拖拽，以及落在任何地方的 Ctrl+拖拽。
+    // 框架那一手（平移、节点拖动、插槽连线）在动手前都读这一笔的句柄，所以一次订阅同时覆盖空白处与卡片上；
+    // 缩放是滚轮手势、不是按下，要否决它得订 PointerWheel。每换一次树都重订一次，与自动滚动同理。
+    private static void VetoFrameworkGestures(TreeViewModel tree)
     {
         ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
-            if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
+            if (e.Modifiers.HasFlag(InputModifiers.Control)
+                || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
             {
                 e.Handle.PreventDefault = true;
             }

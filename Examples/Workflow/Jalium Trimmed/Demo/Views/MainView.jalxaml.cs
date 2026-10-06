@@ -23,22 +23,27 @@ public partial class MainView : UserControl
         var tree = new TreeViewModel();
         LoadTree(tree);
         DataContext = tree;
-        VetoShiftDragOnBlankCanvas(tree);
+        VetoFrameworkGestures(tree);
     }
 
     /// <summary>
-    /// Shift-drag on empty canvas: the framework stands down and the host takes over.
+    /// The presses this host has claimed: Shift-drag on the empty canvas, and Ctrl anywhere — the framework's
+    /// own hand stands down and the host's takes over.
     /// </summary>
     /// <remarks>
-    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a
-    /// press-and-drag interaction of one's own on the blank canvas. Subscribed to the tree this view builds
-    /// and hands over; this demo never swaps it, so one subscription lasts the window's life.
+    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a press-and-drag
+    /// interaction of one's own. One subscription covers the blank canvas and the cards alike, because the
+    /// refusal is read wherever the framework's hand would have started: pan, node drag and slot connection.
+    /// Wheel zoom is a wheel gesture, not a press — subscribe <c>PointerWheel</c> to refuse that one. Subscribed
+    /// to the tree this view builds and hands over; this demo never swaps it, so one subscription lasts the
+    /// window's life.
     /// </remarks>
-    private static void VetoShiftDragOnBlankCanvas(TreeViewModel tree)
+    private static void VetoFrameworkGestures(TreeViewModel tree)
     {
         ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
-            if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
+            if (e.Modifiers.HasFlag(InputModifiers.Control)
+                || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
             {
                 e.Handle.PreventDefault = true;
             }

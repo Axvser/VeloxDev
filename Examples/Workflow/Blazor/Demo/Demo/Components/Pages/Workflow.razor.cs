@@ -95,7 +95,7 @@ public partial class Workflow : ComponentBase, IDisposable
             _ = helper.LoadMcpServersAsync();
         }
         // 跟着会话一起订：OnInitialized / Reset / Load 三处换树都走这里，探针因此总落在屏幕上那棵树。
-        VetoShiftDragOnBlankCanvas(_session.Tree);
+        VetoFrameworkGestures(_session.Tree);
     }
 
     private void OnMcpStatusChanged(object? sender, PropertyChangedEventArgs e)
@@ -386,16 +386,19 @@ public partial class Workflow : ComponentBase, IDisposable
     /// </summary>
     /// <remarks>
     /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a
-    /// press-and-drag interaction of one's own on the blank canvas. Re-subscribed on every tree swap,
-    /// the same way the session's own wiring is: this component renders many times and the tree is
-    /// replaced wholesale by Reset / Load, so a subscription kept on the tree the component first saw
-    /// would go on hearing a tree that is no longer on screen.
+    /// press-and-drag interaction of one's own. One subscription covers the blank canvas and the cards alike,
+    /// because the refusal is read wherever the framework's hand would have started: pan, node drag and slot
+    /// connection. Wheel zoom is a wheel gesture, not a press — subscribe <c>PointerWheel</c> to refuse that
+    /// one. Re-subscribed on every tree swap, the same way the session's own wiring is: this component renders
+    /// many times and the tree is replaced wholesale by Reset / Load, so a subscription kept on the tree the
+    /// component first saw would go on hearing a tree that is no longer on screen.
     /// </remarks>
-    private static void VetoShiftDragOnBlankCanvas(TreeViewModel tree)
+    private static void VetoFrameworkGestures(TreeViewModel tree)
     {
         ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
-            if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
+            if (e.Modifiers.HasFlag(InputModifiers.Control)
+                || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
             {
                 e.Handle.PreventDefault = true;
             }
