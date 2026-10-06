@@ -14,9 +14,10 @@
              behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
              behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
     <UserControl.Resources>
-        <!-- The world-to-view translation is applied to PART_Canvas by WorkflowSurfaceBehavior, not bound here:
-             Jalium's binding paths do not resolve prefixed attached properties, so the per-view mirror the XAML
-             adapters use is unavailable. Views therefore sit at plain world coordinates. -->
+        <!-- The world-to-view translation comes from WorkflowSurfaceBehavior as an attached property, which this
+             template's own class re-exposes as a plain `CanvasTransform` property — this platform's bindings
+             cannot address an attached property. Binding to that plain property is the same per-view mirror the
+             other XAML adapters do; only the spelling differs. -->
         <DataTemplate x:Key="NodeTemplate">
             <workflowViews:NodeView Width="{Binding Size.Width}"
                                     Height="{Binding Size.Height}"

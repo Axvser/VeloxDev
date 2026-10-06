@@ -60,13 +60,13 @@
 
 | 角色 | 落点 | 形态 |
 |---|---|---|
-| 表面 | `WorkflowSurfaceBehavior` | `static` + 8 个附着属性，按 `FindName` 解析模板声明的部件 |
+| 表面 | `WorkflowSurfaceBehavior` | `static` + 9 个附着属性，按 `FindName` 解析模板声明的部件 |
 | 插槽 | `WorkflowSlotLayoutBehavior` | `static` + 5 个附着属性；**`slot.Anchor` 的唯一写回点** |
 | 节点拖拽 | `WorkflowNodeDragBehavior` | `static` + `IsEnabled` / `CoordinateHostName` / `CoordinateHostType` |
 | 连线手势 | `WorkflowSlotConnectionBehavior` | `static` + `IsEnabled` |
 | 模型事件 | `WorkflowEvents` | `static` + `Node` / `Slot` / `Tree` 三个 sink 附着属性 |
 | 连线自盒化 | `WorkflowLinkBounds` | `static` 助手（**唯一刻意背离**，见 §2.1） |
-| 小地图 | `WorkflowMinimapOverlay` | `FrameworkElement`，14 个 DP；`ScrollViewerName` 由模板给 |
+| 小地图 | `WorkflowMinimapOverlay` | `FrameworkElement`，22 个 DP；`ScrollViewerName` 由模板给 |
 | 视图池 | `ViewPool` / `ViewManager` | Jalium 自己的 `DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退 |
 
 **网格装饰器不在这里**：与 WPF / Avalonia / WinUI / MAUI / Razor 五家一致，它归**模板**
@@ -87,13 +87,13 @@
 
 `Jalium.UI.Media.Visual.ShouldRenderChild(DrawingContext, UIElement, Point)` 是 `Private, Static, HideBySig`（反射可证）。它解析到的判定链是：拿子元素的 `RenderSize` 做盒（**只有 `Effect` 的 `EffectPadding` 会扩大它**，`IClipBoundsDrawingContext.CurrentClipBounds` 那条只在有裁剪上下文时生效），再算 `MapChildBoundsToCurrentDrawingSpace` → `Rect.IntersectsWith`。⇒ **内容画到自己盒子外面的部分会被整块丢掉，且不报错。**
 
-**由此产生的唯一正确做法：一个自绘元素想画到哪里，就必须先把自己的盒挪/撑到那里。** 这条在两个角色上各体现一次：
+**由此产生的唯一正确做法：一个自绘元素想画到哪里，就必须先把自己的盒挪/撑到那里。** 现在这条逻辑归两个落点，都在**标记侧**调用：
 
-- **连线视图**：适配器基类 `WorkflowLinkView.cs:327-343` 的 `UpdateBounds()` 在每次端点折叠/移动后，把元素自身 `Canvas.SetLeft/Top` 与 `Width/Height` 设成**这条线自己的 canvas-local 包围盒**（`:332-335` 的 `BoxPad = 6` 外扩）；`:310-323` 的 `EndpointsCanvasLocal()` 算端点，`:140-186` 的 `OnRender` 再用 `local = canvas − (_viewX,_viewY)`（`:167-168`）把几何烘回元素局部坐标 —— **定位与烘焙相消**，视觉输出与画在 (0,0) 等价。`:14-22` 的注释把根因写死了：*"the renderer culls a child entirely when its layout box misses the viewport clip and never looks at the drawn content, so a full-canvas box that goes stale during a zoom burst takes the whole link layer with it"*。
-  ⇒ **这是本仓库"深缩放连线消失"谱系在 Jalium 的最后一环**，与共享 Core 的负侧 cover 无关，别去 Core 里找。改连线视图时若把 `UpdateBounds` 删掉或让它滞后一帧，盒子就是陈旧的，**线会在深缩放下静默消失**。
-- **节点视图**：适配器基类 `WorkflowNodeView.cs:272-282` 的 `ApplyPosition()` 同步设 `Canvas.SetLeft/Top` 与 `Width/Height`，同一份理由。
+- **连线视图**：适配器的静态助手 `WorkflowLinkBounds.Apply(view, points, out originX, out originY)`（`WorkflowLinkBounds.cs:42-83`）在每次端点折叠/移动后，把元素自身 `Canvas.SetLeft/Top` 与 `Width/Height` 设成**这条线自己的 canvas-local 包围盒**（`BoxPad = 6`，`:32` 外扩）；调用方是**模板产物** `workflow-link-view/TemplateClass.jalxaml.cs` 的 `Refresh()`（`:243`，四个控制点一起进盒），随后 `BuildCurve()`（`:282-299`）把每个点减去助手交回的原点 —— **定位与烘焙相消**，视觉输出与画在 (0,0) 等价。助手的 `<remarks>`（`:11-27`）把根因写死了：*"the renderer culls a child entirely when its layout box misses the viewport clip and never looks at the drawn content…"*。
+  ⇒ **这是本仓库"深缩放连线消失"谱系在 Jalium 的最后一环**，与共享 Core 的负侧 cover 无关，别去 Core 里找。改连线视图时若把 `WorkflowLinkBounds.Apply` 这一步删掉或让它滞后一帧，盒子就是陈旧的，**线会在深缩放下静默消失**。
+- **节点视图**：节点定位现在全在 item template 标记里 —— `workflow-node-view` 产出的 `UserControl` 由 tree-view 模板的 `NodeTemplate` 用 `Canvas.Left="{Binding Anchor.Horizontal}"` / `Canvas.Top="{Binding Anchor.Vertical}"` / `Width="{Binding Size.Width}"` / `Height="{Binding Size.Height}"` / `Panel.ZIndex="{Binding Anchor.Layer}"` 摆位（`workflow-tree-view/TemplateClass.jalxaml:20-27`）。**没有对应的适配器类型**（`WorkflowNodeView` 已删），也不存在 `ApplyPosition()`。
 
-**核对历史记录**：「自绘但宿主 box-cull」—— **仍成立**，且现在是 IL 级证据（本节）。「梯度交接测量」—— 指的不是这里，是 TransitionSystem 的 `Samplers/BrushSampler.cs:79-94`，见 `memory/modules/TransitionSystem/adapters/jalium.md` §2.3。「连线视图自盒化（盒 == 每线 bbox，定位+烘焙相消）」—— **仍成立**，`WorkflowLinkView.cs:327-343` + `:140-186`。「`IsVirtual` 跳过 + `PortCenter` 反查」—— **前半条已作废**：`IsVirtual` 在 Jalium 适配器与模板里**一处都没有**，它被一个精确得多的判定取代：`IsDragPreview(link) => link.Sender is SlotDefaultViewModel && link.Receiver is SlotDefaultViewModel`（`WorkflowLinkView.cs:191-192`），只跳过树的拖拽预览，脱了插槽的真实连线照样渲染。**后半条仍成立**：`PortCenter` 仍是反查（`:283-306`，常态从 `slot.Parent` 的节点几何算端口中心而非读 `slot.Anchor`；仅当端点已脱离节点、`slot.Parent` 为 `null` 时才退回读一次 `slot.Anchor`），返回 `Point?`，端点为 `null` 时跳过整条线而不是从原点画一条退化线。
+**核对历史记录**：「自绘但宿主 box-cull」—— **仍成立**，且现在是 IL 级证据（本节）。「梯度交接测量」—— 指的不是这里，是 TransitionSystem 的 `Samplers/BrushSampler.cs:79-94`，见 `memory/modules/TransitionSystem/adapters/jalium.md` §2.3。「连线视图自盒化（盒 == 每线 bbox，定位+烘焙相消）」—— **仍成立**，现在归 `WorkflowLinkBounds.Apply`（`WorkflowLinkBounds.cs:42-83`）＋ 模板的 `BuildCurve()`（`workflow-link-view/TemplateClass.jalxaml.cs:282-299`）。「`IsVirtual` 跳过 + `PortCenter` 反查」—— **两条都已作废**：`IsVirtual` / `IsDragPreview` / `PortCenter` 在整个 Jalium 适配器与模板里**一处都没有**。现在只跳过树的拖拽预览，判据是 `IsVirtualLink(link) => link.Sender.Parent is null && link.Receiver.Parent is null`（`workflow-link-view/TemplateClass.jalxaml.cs:277-278`）—— 两端都还没落到卡片上的占位槽（`slot.Parent` 为 `null`），脱了插槽的真实连线照样渲染。「端口中心从模型几何反查」同样不再存在：连线端点直接取绑定送来的 `Sender/Receiver.Anchor`，而 `slot.Anchor` 是量测结果（§2.3）。
 
 ### 2.2 有标记，也有名字作用域（2026-10-05 反转）
 
@@ -174,14 +174,14 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 
 ### 2.5 缩放/滚动的时序：Jalium 的 `ScrollTo` 不保证同步落地，`ScrollChanged` 不可靠
 
-**这套守卫现在在适配器的表面基类里**（`WorkflowTreeView.cs`），不再是宿主自写：
+**这套守卫现在在适配器的表面行为里**（`WorkflowSurfaceBehavior.cs`；不再是宿主自写，也**不再有**可继承的 `WorkflowTreeView`）：
 
-- `_zoomPin`（`:61`）+ `ZoomPinLifetimeMs = 250`（`:63`）：提交缩放目标后把视口钉在该目标上，直到 viewer 报告落地（±0.5）或超过 250ms（`UpdateViewport`，`:729-751`）。
-- 理由在 `:50-60` 与 `:218-226` 的注释里：Jalium 的 `ScrollTo` 之后立刻读 offset 可能读到**尚未生效的缩放前值**，而 `ScrollChanged` 会在落地前先发一次；若照读就会用陈旧窗口覆写 `Helper.Viewport`，下一次 `Virtualize` 把刚物化的连线裁掉（节点因为按自己的矩形进池而留下）→ **深缩放链接消失 ~100ms**。
-- 兜底：`:761-770` 视口未测量时（`vw<=0`）退回整块画布，否则首次 `Virtualize` 会在 0 尺寸视口上空转，初始节点/连线全不出现。
-- 宿主侧只需在提交缩放后调 `surface.NotifyZoomCommitted(committedX, committedY)`（demo `MainWindow.cs:216,227`）。
+- `SurfaceState.ZoomPin`（`:87` 的字段、`:322` 的写入）+ `ZoomPinLifetimeMs = 250`（`:45`）：提交缩放目标后把视口钉在该目标上，直到 viewer 报告落地（±0.5）或超过 250ms（`UpdateViewport(SurfaceState)`，`:770-789`）。
+- 理由在 `:85-87` 与 `:321-323` 的注释里：Jalium 的 `ScrollTo` 之后立刻读 offset 可能读到**尚未生效的缩放前值**，而 `ScrollChanged` 会在落地前先发一次；若照读就会用陈旧窗口覆写 `Helper.Viewport`，下一次 `Virtualize` 把刚物化的连线裁掉（节点因为按自己的矩形进池而留下）→ **深缩放链接消失 ~100ms**。
+- 兜底：`:802-810` 视口未测量时（`vw<=0`）退回整块画布，否则首次 `Virtualize` 会在 0 尺寸视口上空转，初始节点/连线全不出现。
+- **宿主零调用者**：`NotifyZoomCommitted`（`:297-327`）由表面**内部**在缩放提交后自己调（`OnZoomPreviewMouseWheel` 的 `:613` / `:626`），demo 宿主一处都不调。旧的「宿主必须在提交缩放后调 `surface.NotifyZoomCommitted(...)`（demo `MainWindow.cs:216,227`）」已作废 —— 现在缩放手势本身归表面（`ZoomEnabled` 附着属性 + `OnZoomPreviewMouseWheel`）。
 
-⇒ **这家的"链接在深缩放下闪没"有两个独立成因**：宿主侧的视口竞态（本节，靠 `_zoomPin` 解）与渲染侧的盒裁剪（§2.1，靠自盒化解）。**修一个不会修好另一个**，别把两者的现象混着查。
+⇒ **这家的"链接在深缩放下闪没"有两个独立成因**：表面侧的视口竞态（本节，靠 `ZoomPin` 解）与渲染侧的盒裁剪（§2.1，靠自盒化解）。**修一个不会修好另一个**，别把两者的现象混着查。
 
 ### 2.6 其余平台面的事实
 
