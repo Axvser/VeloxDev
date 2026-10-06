@@ -21,6 +21,8 @@
 | 能力 | 结果 |
 |---|---|
 | `UserControl` 作 `.jalxaml` 根 + `x:Class` partial 配对 | ✅ |
+| **`Window` 作 `.jalxaml` 根**（窗口外壳也写标记） | ✅ 2026-10-05 实测：`<Window … x:Class="Demo.MainWindow">` + 9 行 cs（只有 `InitializeComponent`）编译与运行都正常 ⇒ **宿主层不需要留在代码里** |
+| `UserControl` 上的 `Background` / 子元素 `ElementName` 绑定 | ✅ 都用过（demo 的 `MainView` 与 HUD 的偏移绑定） |
 | 根 name scope 里按 `x:Name` 做 `FrameworkElement.FindName` | ✅ |
 | `DataTemplate` **内部**的 `x:Name` 对根 `FindName` 可见？ | ❌ 不可见（与 WPF 同）⇒ 枚举器必须走 `ItemContainerGenerator.ContainerFromIndex(i)` + 视觉树后代搜索 |
 | `ItemsControl` + `ItemTemplate`(DataTemplate) + `{Binding}` 真物化容器 | ✅ `Items.Count` 正确；`ContainerFromIndex(0)` 返回 **`ContentPresenter`**；容器 `DataContext` 是条目本身 |
