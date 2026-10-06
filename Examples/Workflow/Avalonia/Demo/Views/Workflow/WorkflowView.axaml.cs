@@ -187,7 +187,7 @@ public partial class WorkflowView : UserControl
             _workflowViewModel = result;
             DataContext = _workflowViewModel;
             SubscribeAutoScroll(_workflowViewModel);
-        VetoShiftDragOnBlankCanvas(_workflowViewModel);
+            VetoShiftDragOnBlankCanvas(_workflowViewModel);
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
             _manager.Show(new Notification("OK", $"Workflow Loaded From {path}"));
         }
