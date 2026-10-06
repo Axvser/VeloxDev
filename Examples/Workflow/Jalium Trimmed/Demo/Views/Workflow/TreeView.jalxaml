@@ -24,10 +24,12 @@
                                     Canvas.Top="{Binding Anchor.Vertical}"
                                     Panel.ZIndex="{Binding Anchor.Layer}" />
         </DataTemplate>
-        <!-- The link view reads its two ends from the model rather than from bindings: a bound endpoint is a
-             frame stale on every rebind, and this platform re-pools views constantly. -->
         <DataTemplate x:Key="LinkTemplate">
-            <workflowViews:LinkView Panel.ZIndex="-1" />
+            <workflowViews:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                    StartTop="{Binding Sender.Anchor.Vertical}"
+                                    EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                    EndTop="{Binding Receiver.Anchor.Vertical}"
+                                    Panel.ZIndex="-1" />
         </DataTemplate>
         <workflowViews:TemplateSelector x:Key="WorkflowTemplateSelector"
                                         NodeTemplate="{StaticResource NodeTemplate}"

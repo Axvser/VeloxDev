@@ -64,6 +64,34 @@ public partial class TemplateClass : UserControl
 
     #region Dependency properties
 
+    /// <summary>The canvas-local X of the start end.</summary>
+    public static readonly DependencyProperty StartLeftProperty =
+        DependencyProperty.Register(nameof(StartLeft), typeof(double), typeof(TemplateClass), new PropertyMetadata(0d, OnRenderChanged));
+
+    /// <summary>The canvas-local Y of the start end.</summary>
+    public static readonly DependencyProperty StartTopProperty =
+        DependencyProperty.Register(nameof(StartTop), typeof(double), typeof(TemplateClass), new PropertyMetadata(0d, OnRenderChanged));
+
+    /// <summary>The canvas-local X of the end end.</summary>
+    public static readonly DependencyProperty EndLeftProperty =
+        DependencyProperty.Register(nameof(EndLeft), typeof(double), typeof(TemplateClass), new PropertyMetadata(0d, OnRenderChanged));
+
+    /// <summary>The canvas-local Y of the end end.</summary>
+    public static readonly DependencyProperty EndTopProperty =
+        DependencyProperty.Register(nameof(EndTop), typeof(double), typeof(TemplateClass), new PropertyMetadata(0d, OnRenderChanged));
+
+    /// <summary>The canvas-local X of the start end.</summary>
+    public double StartLeft { get => GetValue(StartLeftProperty) is double value ? value : 0d; set => SetValue(StartLeftProperty, value); }
+
+    /// <summary>The canvas-local Y of the start end.</summary>
+    public double StartTop { get => GetValue(StartTopProperty) is double value ? value : 0d; set => SetValue(StartTopProperty, value); }
+
+    /// <summary>The canvas-local X of the end end.</summary>
+    public double EndLeft { get => GetValue(EndLeftProperty) is double value ? value : 0d; set => SetValue(EndLeftProperty, value); }
+
+    /// <summary>The canvas-local Y of the end end.</summary>
+    public double EndTop { get => GetValue(EndTopProperty) is double value ? value : 0d; set => SetValue(EndTopProperty, value); }
+
     /// <summary>Whether the link should be drawn at all; the model's own visibility is required as well.</summary>
     public static readonly DependencyProperty CanRenderProperty =
         DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(TemplateClass), new PropertyMetadata(true, OnRenderChanged));
@@ -192,9 +220,14 @@ public partial class TemplateClass : UserControl
             return;
         }
 
-        var start = link.Sender.Anchor;
-        var end = link.Receiver.Anchor;
-        var points = LinkCurve.LinkCurvePoints(link, start.Horizontal, start.Vertical, end.Horizontal, end.Vertical, MinimumPull);
+        // 绑定送来的可能是 NaN（占位槽的默认锚点就是 NaN），NaN 进盒子会让渲染器抛「宽高为负」。
+        if (double.IsNaN(StartLeft) || double.IsNaN(StartTop) || double.IsNaN(EndLeft) || double.IsNaN(EndTop))
+        {
+            InvalidateVisual();
+            return;
+        }
+
+        var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull);
         if (points.Length < 4)
         {
             InvalidateVisual();
@@ -227,13 +260,9 @@ public partial class TemplateClass : UserControl
             return;
         }
 
-        var start = link.Sender.Anchor;
-        var end = link.Receiver.Anchor;
-
         // Publish the curve the surface hit-tests against — the same control points as the drawing below, in
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
-        PublishCurve(link, LinkCurve.BuildLinkCubic(
-            link, start.Horizontal, start.Vertical, end.Horizontal, end.Vertical, MinimumPull));
+        PublishCurve(link, LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
         const double thickness = TemplateLinkThickness;
         var brush = new SolidColorBrush(LineColor);
