@@ -8,7 +8,7 @@ The seven shipped adapters are your reference implementations. Read the one whos
 
 | Situation | Do this instead |
 |---|---|
-| The GUI is not one of the seven but is XAML-like | A full adapter. Expect about **nine** classes in the surface layer alone (see *What to build* below) plus a slot-layout behaviour. |
+| The GUI is not one of the seven but is XAML-like | A full adapter. Its surface layer is about **nine** classes — see *Writing the adapter* below for the build order. |
 | You only need the model and the engine, headless | Reference `VeloxDev.Core` alone — no adapter is involved at all. |
 | You want the canvas inside an existing control of your own | Still a full adapter. The surface is not separable from the coordinate host. |
 | You could switch to a GUI that already has an adapter | Do that. An adapter is a real cost and the seven cover most .NET GUIs. |
