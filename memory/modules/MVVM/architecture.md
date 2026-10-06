@@ -184,7 +184,7 @@ OnExecutionCompletedAsync(item)
 **命令支持最多 15 个形参（2026-10-02）**。命令只有一个实参槽，而 C# 没有可变泛型 —— 所以 N 个形参只能靠一个**载体**共享管道。载体是 `ValueTuple`（结构体，任意元数都不分配；>7 时嵌套的 `TRest` 也是结构体内联存储），外面套一层**薄门面**把它挡在公开面之外：调用点写 `cmd.ExecuteAsync(a, b, ct)`，永远看不到元组。
 
 - **元数 = 形参个数 + 1**，最后一个类型参数永远是结果 —— 与 `Func<TResult>`、`Func<T1, TResult>` 同一套排法。上限 **15 个形参**：体是 `Func<T1..Tn, CancellationToken, Task<TResult>>`，共 n+2 个类型实参，而 `Func` 最多 17 个。
-- **最小形状是两个泛型参数**：`IVeloxCommand<TParam, TResult>`。无返回值时 `TResult = object?` 且恒为 null。**1-arity 的 `IVeloxCommand<T>` 与 `VeloxCommand<T>` 已删除** —— 它们的存在会让「1 形参无结果」与「结果族」在元数上撞车。1-arity 的成员（`CanExecute/Execute/ExecuteAsync` 单参版）折进了 2-arity。
+- **最小形状是两个泛型参数**：`IVeloxCommand<TParam, TResult>`。无返回值时 `TResult = object?` 且恒为 null。**没有 1-arity 的 `IVeloxCommand<T>` 与 `VeloxCommand<T>`** —— 1 形参无结果会与「结果族」在元数上撞车。1-arity 的成员（`CanExecute/Execute/ExecuteAsync` 单参版）折进了 2-arity。
 - **族是生成的**：`Src/Core/VeloxDev.Core/MVVM/CommandArities.cs`（2..15 形参，接口 + 门面各 14 个）。内容是机械的 —— 新增一档就是照抄相邻那档、把元数整体加一。上限 15 个形参，因为体是 `Func<T1..Tn, CancellationToken, Task<TResult>>` 而 `Func` 最多 17 个类型实参。
 - **void 通道只留给「单形参 + 无返回值」**：arity 族没有无返回体的公开入口，多形参的 void / `Task` / `ValueTask` 体只能包一层 `async` lambda 进结果通道。**必须显式 `return default!`** —— `async` lambda 落到 `Task<T>` 目标时不允许从末尾漏出去（**CS1643**，与 `async Task<T>` 方法不同，实测过）。同步跑完的 async 由编译器缓存状态机，所以这条不额外分配。
 - **校验器的形参表跟着源方法走**（类型与名字都是），`canValidate: false` 时交给构造的恒真谓词**也要跟着元数**（arity 族收 `Func<T1..Tn, bool>`，写死 `_ => true` 是 CS1593）。
@@ -212,7 +212,7 @@ OnExecutionCompletedAsync(item)
 - **不改 `_command`**，另加第二条内部委托 `private readonly Func<TParam, CancellationToken, Task<TResult>>? _resultCommand`（`CommandPipeline{TParam,TResult}.cs:64`），**默认 null**；兜底面各构造/工厂经 `resultCommand: null` 一律不碰它，所以既有路径的行为与分配逐字节不变（`CommandAllocationTests` 是护栏）。带结果的入口（`CreateTaskWithResult`、`VeloxCommand<TP,TR>` 的构造）把它填上。
 - **捕获点只有一处**：`ExecuteCoreAsync` 里调用 `_resultCommand`/`_command` 的那两处（`:653-663`）；返回值顺着 `item.Complete(outcome, failure, result)`（`:693`）流进 sink。所以值天然属于**本次执行**，从不上命令字段。
 - `CommandCompletion` 加 `object? Result` + `GetResultOrThrow()` / `GetResultOrThrow<TR>()`。它是 `public readonly struct` —— **加字段会改尺寸，对已编译的消费者是二进制破坏**。
-- **接口**：`IVeloxCommandResult`（装箱通道：`Task<object?> ExecuteAsync(object?, ct)` + `void Execute(object?, out object?)`，由 `CommandPipeline<TParam,TResult>` 实现，所以每条命令都有）；`IVeloxCommand<TP,TR> : IVeloxCommand`（参数与结果都不装箱；继承的是**非泛型** `IVeloxCommand`，1-arity 接口已删除）。
+- **接口**：`IVeloxCommandResult`（装箱通道：`Task<object?> ExecuteAsync(object?, ct)` + `void Execute(object?, out object?)`，由 `CommandPipeline<TParam,TResult>` 实现，所以每条命令都有）；`IVeloxCommand<TP,TR> : IVeloxCommand`（参数与结果都不装箱；继承的是**非泛型** `IVeloxCommand`，没有 1-arity 接口）。
 - **2-arity 不继承 `IVeloxCommandResult`**：两者都声明双参 `ExecuteAsync`，同时实现时除 `TP = object` 外都合法，而那正是不会生成强类型命令的组合。
 - **失败语义**：`Task<TR>` / `GetResultOrThrow` **失败即抛** —— `Failed` 用 `ExceptionDispatchInfo` 重抛**原异常实例**（保栈），`Canceled` 抛 `OperationCanceledException`，`Refused` 抛 `InvalidOperationException`。这与 `ExecuteAndWaitAsync` 的「不抛、只报结局」是**两种取用方式**，不是替代。
 - **同步 `Execute(p, out r)` 会阻塞调用线程**（含排队与等锁），命令内部全程 `ConfigureAwait(false)` 所以不会因同步上下文死锁，但在命令体内部对自己调用会自锁。

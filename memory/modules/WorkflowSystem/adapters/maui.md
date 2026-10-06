@@ -288,7 +288,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
    右键按下不走长按（本来就是菜单手势，`:679-683`）。Windows 不变：右键即弹，原生 flyout。
 4. **菜单一开的那发 `PointerExited` 由输入路由挡**：本层 `OnHoverExited` 无条件发 `Exited`（`:587-590`，注释 `:586` 明写「由输入路由认 `IsSuspended`，本层不再重复拦一遍」），
    `WorkflowInput.ApplyDefault` 在 `IsSuspended` 时直接返回、不改指针目标（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs:203`）。挂起/恢复由**表面**自己报：弹出时置 `input.IsSuspended = true`、收起时复位
-   （`WorkflowSurfaceBehavior.cs:372-374`（Windows）/`:477`（非 Windows）与 `:497`，都在 `ShowLinkMenu` / `DismissLinkMenu` 里）。**本层的 `_menuOpen` 与平台侧 `IsSuspended` 守卫都已删除** —— 这个状态只能有一个家，现在在输入路由上。
+   （`WorkflowSurfaceBehavior.cs:372-374`（Windows）/`:477`（非 Windows）与 `:497`，都在 `ShowLinkMenu` / `DismissLinkMenu` 里）。**本层没有 `_menuOpen`，平台侧也没有 `IsSuspended` 守卫** —— 这个状态只能有一个家，在输入路由上。
    **「菜单不得比它作用的连线活得久」这条守卫由树的 `LinkRemoved` 实现**：那条线离开 `tree.Links` 时树报 `LinkRemoved`
    （`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:106`、`Templates/Helpers/TreeHelper.cs:121`），表面按 `ReferenceEquals(state.MenuLink, link)` 判定后收自己那份弹窗 —— Windows 调原生
    flyout 的 `Hide()`，非 Windows 走 `DismissLinkMenu(state)`（`WorkflowSurfaceBehavior.cs:244-253`）。收起照常复位 `IsSuspended`，单一责任人不变。
@@ -307,7 +307,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
      收起只有 `DismissLinkMenu(state)` 一条路：用户选择、点 scrim、以及树的 `LinkRemoved` 都走它。
    **这份浮层的局限都是设计取舍、不是待修的缺陷**：它是宿主 Layout 的子元素、不是窗口级弹出物（没有平台样式与键盘语义）；
    `Margin` 只在负值时夹到 0、不做贴边翻转；`MenuFlyoutSubItem` 会被 `case MenuFlyoutItem` 吃掉、当成一个
-   平铺按钮渲染，嵌套项不展开。`ShowDefaultContextMenu` / `ShowDeleteMenu` 那套内置「删除连线」已删除 ——
+   平铺按钮渲染，嵌套项不展开。没有 `ShowDefaultContextMenu` / `ShowDeleteMenu` 那套内置「删除连线」——
    条目就是用户在资源里写的那些，没声明就没条目。
 6. **悬停取焦点不会带滚画布（Avalonia 那条缺陷在本家不存在，实测）**。画布滚到非零偏移
    （HUD 读作 `视口(画布) 320, 195`）后：`SelectLink` → `Focus()` 走 5 轮、外加 3 秒连打，滚动在

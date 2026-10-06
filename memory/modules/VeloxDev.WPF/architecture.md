@@ -132,14 +132,14 @@
 | 四元组里**没有 netstandard2.0** | — | `PlatformAdapters/Transition.cs:224-253` 的 `#if !NETSTANDARD2_0`（4 个 `System.Numerics` 重载）在这家**恒为真**。六家写了这个守卫，只有 Avalonia（`netstandard2.0;net6.0;net8.0`）那条是真的 |
 | Debug → `ProjectReference`（`:28`）／非 Debug → `PackageReference`（`:29`） | — | 与生成器那套双轨同形；包里唯一的依赖是 `VeloxDev.Core` 10.0.0 |
 | `GeneratePackageOnBuild`（`:14`）+ `GenerateDocumentationFile`（`:6`） | — | 全仓只有 Core、Jalium、WPF 三个项目生成 XML 文档 |
-| `NoWarn` 写成**一条** `1573;1591`（`:5`，注释在 `:4`） | — | 正确形；过去「两条属性后者覆盖前者」的坑已修（见 §五·2） |
+| `NoWarn` 写成**一条** `1573;1591`（`:5`，注释在 `:4`） | — | 正确形 —— 拆成两条属性时 MSBuild 按序求值、只有后者生效（见 §五·2） |
 
 ---
 
 ## 五、陷阱（带依据）
 
 1. **小地图根本不画连线，但它的连线订阅是活的。** 类文档写着 "a thumbnail overview of all nodes, **links**, and the visible viewport"（`WorkflowMinimapOverlay.cs:14-18`），而 `OnRender`（`:435-500`）只画节点矩形与视口框；`LinkBrush`（`:85-87`/`:144`）与 `LinkStrokeThickness`（`:67-69`/`:140`）**全模块从不被读**（grep 只有声明与访问器命中）。同时 `_subscribedLinks` 那一套是完整的：`SubscribeLink`（`:260-265`）、`OnLinksChanged`（`:274-283`）、`UnsubscribeFromTree` 里的退订（`:245-250`）都在，`IWorkflowLinkViewModel` 的 Sender/Receiver 变更也会 `MarkDirty`。⇒ 想「让连线出现在小地图里」要自己补 `OnRender` 的分支，别以为订阅没接上。**以代码为准，注释说反了。**
-2. **`NoWarn` 曾是两条属性、后者覆盖前者（已修）。** 旧 `VeloxDev.WPF.csproj` 把 `NoWarn` 写成 `:4` = `1573`、`:5` = `1591` 两条，MSBuild 按序求值 ⇒ 实际只有 `1591`。**现状是一条 `NoWarn` `1573;1591`（`:5`），`1573` 已生效** —— 不要再按旧记忆去「修」它，也不要再拆成两行。
+2. **`NoWarn` 是一条 `1573;1591`（`:5`），`1573` 已生效。** 不要在 `.csproj` 里把它拆成两条 —— MSBuild 按序求值，拆成 `1573` 与 `1591` 两条时只有后一条生效。
 3. **`ThemeValueConverters.cs` 里 4 个类名与 WPF 自带类型撞名**：`BrushConverter`、`ColorConverter`、`ThicknessConverter`、`CornerRadiusConverter` 在 `System.Windows.Media`/`System.Windows` 里都有。所以文件里凡要用 WPF 自己那个必须全限定：`new System.Windows.Media.BrushConverter()`（`:161`、`:216`、`:253`）。⇒ 在这个命名空间下新写转换器时，写短名会解析到**本项目**这一个，且不报错（同名不同类型，转换结果只是悄悄不对）。
 4. **`ObjectConverter` 有两处直接碰 `Application.Current`，只有一处有守卫**：`ThemeResourceLookup.TryFindResource` 先判 `Application.Current is null` 再找（`:310`），而 `:289` 的 `Application.Current.TryFindResource(strValue)` 没有。无 `Application` 的进程（控制台探针、单测）走到那条分支会抛 `NullReferenceException`，被紧随其后的 `catch { return null; }` 吞掉。⇒ 症状是**静默拿到 null**，不是异常。转换器遍地 `catch { return null; }` 是刻意姿态，与 DynamicTheme「异常不逃逸」一致。
 5. **插槽布局的触发名单是拼出来的，属性名对不上就不排队。** `Sync` 每次都重建 `state.SlotPropertyNames`（`WorkflowSlotLayoutBehavior.cs:261-281`）：先放 `Anchor`/`Size`，再把 `SlotNames`/`SlotEnumeratorNames` 里每个控制名连「去掉 `PART_` 前缀」两种形式都塞进去，最后硬编码兜底 `InputSlot`/`OutputSlot`/`OutputSlots`（`:279-281`）。而 `OnNodePropertyChanged` 只认这个集合（`:181-191` 的 `!state.SlotPropertyNames.Contains(e.PropertyName)` 直接 return）。⇒ 你的节点 VM 用别的属性名发通知时，改那个属性的动画不会触发锚点重算 —— **改锚点或尺寸才会**。

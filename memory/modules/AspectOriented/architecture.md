@@ -10,14 +10,14 @@
 
 **是什么。** 给一个**已经写好的类**加一层「成员的实现可以被换掉」的入口，且不改成员自身的代码。手段是**编译期生成一对类型**：一个镜像接口，和一个实现它的代理类；调用方从 `Aop()` 拿到代理，代理转调真身。
 
-**代理是消费者程序集里的普通生成代码。** 这条决定了本模块的全部性格，也是它与旧实现的唯一分野：
+**代理是消费者程序集里的普通生成代码。** 这条决定了本模块的全部性格：
 
-| | 旧（已删除） | 现 |
-|---|---|---|
-| 代理从哪来 | `DispatchProxy.Create<T, ProxyInstance>()`，运行期 `Reflection.Emit` 造类型 | 生成器直接写一个 `internal sealed class`（`AopSurface.cs:215`） |
-| 真身怎么调 | `MethodInfo.Invoke`（`_targetType.GetMethod(Name)`） | 生成代码里写死的 `_target.X(...)`（`AopSurface.cs:305`） |
-| 怎么拿到真身字段 | `dynamic` 写 `proxy._target`（依赖 `Microsoft.CSharp` 运行期绑定器） | 构造函数参数，无绑定器 |
-| NativeAOT | 不可用（`Reflection.Emit` + `dynamic`） | **可用，已实测**（见 §八） |
+| 项 | 现 |
+|---|---|
+| 代理从哪来 | 生成器直接写一个 `internal sealed class`（`AopSurface.cs:215`） |
+| 真身怎么调 | 生成代码里写死的 `_target.X(...)`（`AopSurface.cs:305`） |
+| 怎么拿到真身字段 | 构造函数参数，无绑定器 |
+| NativeAOT | **可用，已实测**（见 §八） |
 
 **两个半场，缺一不成**：
 
@@ -168,7 +168,7 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 4. **接口成员一律给 `{ get; set; }`（字段那条路，`AopSurface.cs:105`）**，所以「接口上看得见 setter」不等于「真身可写」—— 一个只读属性会生成出 setter，然后编译失败。属性那条路则按真身的可访问性给（`:122-124`）。
 5. **`Analizer.Filters.Targets` 决定「这个类有没有活干」走符号**（`:127` 的 `VeloxDev.AspectOriented.AspectOrientedAttribute` 是 10 个触发特性之一）；**接口里有哪些成员走语法文本**：`attribute.Name.ToString() == "AspectOriented"`（`AnalizeHelper.cs:52`）。后果是一个**别的**叫 `AspectOriented` 的特性同样会被当成标记；字段那条路认的 MVVM 特性也是文本匹配 `Contains("Observable") || Contains("Property")`（`AopSurface.cs:94`）—— `[VeloxProperty]` 与 CommunityToolkit 的 `[ObservableProperty]` 都算。这是本模块唯一一处「两种匹配方式并存」，改任一侧都要想到另一侧。
 6. **裁剪 / AOT 不再是问题，但两个 IL 警告曾经是。** `AopCache` 的 `TInterface` 带着 `[DynamicallyAccessedMembers(PublicParameterlessConstructor)]`（`AopCache.cs:18-23`、`:41-43`）—— 这是为消掉 `ConditionalWeakTable` 的 IL2091 而传下去的标注，**不是**对调用方的真实要求（详见 §八）。
-7. **`AopInterface` 这个名字已经不存在**，接口与代理都由 `AopSurface.cs` 一个文件产出。旧记忆与旧文档里凡是提到 `AopInterface.cs` / `ProxyInstance.cs` / `DispatchProxy` 的段落都已作废。
+7. **没有 `AopInterface` 这个名字**，接口与代理都由 `AopSurface.cs` 一个文件产出 —— `AopInterface.cs` / `ProxyInstance.cs` / `DispatchProxy` 也都不存在。
 
 ---
 

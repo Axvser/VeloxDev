@@ -67,7 +67,7 @@
 | 以为传少了参数会失败 | 缺的尾部可选参数由生成代码**省略实参**、编译器补默认值 —— 这条是保住的 | 同上，`WriteInvokeBody` |
 | 传一个目录里认不出的参数类型 | 转换表就是生成期那张 `RenderConversion`（`AIContextConvert`）：字符串 / 数字 / bool / 日期 / `Guid` / `TimeSpan` / 枚举，其余一律 `(T)value!` 硬转，转不过就返回一句错误 | `AgentMethodInvoker.cs` 的 `Invoke` |
 | 用 `DiscoverMethods` 的输出当「唯一的方法集合」 | **一个方法名只报一条**（目录按名字去重），虽然 `Invoke` 支持该名字的全部元数 | `AgentMethodInvoker.DiscoverMethods` |
-| 在目录里找**静态**方法 | 没有：目录不录静态方法，访问器只对实例做事。`InvokeStatic` / `includeStatic` 已删除，没有回退 | `architecture.md` §五·6 |
+| 在目录里找**静态**方法 | 没有：目录不录静态方法，访问器只对实例做事。没有 `InvokeStatic` / `includeStatic`，没有回退 | `architecture.md` §五·6 |
 
 **官方**：枚举参数现在能直接传（`AIContextConvert.ToEnum<T>`，按名字或底层值）。需要更复杂的参数时，仍然推荐给目标对象加一个**收 `string`/`int` 的包装方法** —— 那让转换发生在你自己的代码里，比依赖生成期那张表可控。
 

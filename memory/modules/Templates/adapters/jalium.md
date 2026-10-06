@@ -1,10 +1,10 @@
 # Templates — Jalium
 
 > ⚠ **2026-10-05：Jalium 适配器已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
-> 本文下面凡提 `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
+> `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
 > `IWorkflowTemplateSelector` / `WorkflowTemplateSelector` / `WorkflowNodeView` / `WorkflowSlotView` /
-> `WorkflowLinkView` 的段落**都已作废**（那些类型全部删除）。现行落点见
-> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇。
+> `WorkflowLinkView` 这些类型都不存在；本文下面凡提这些名字的段落，落点以
+> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇 为准。
 
 > **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
@@ -57,7 +57,7 @@
 | 2 | 备一个 `IWorkflowTreeViewModel` 并设成 `DataContext`（表面从 `DataContext` 取树，`WorkflowSurfaceBehavior.BindTree`） | `MainView.jalxaml.cs:23-25`、`WorkflowSurfaceBehavior.cs:671-702` |
 | 3 | **其余全部在标记里**：具名部件、`ViewPool.ItemsSource`/`TemplateSelector`、`MinimapOverlay` 的 `ScrollViewerName`、`LinkMenuKey` —— 都不用宿主写代码 | `Demo/Views/Workflow/TreeView.jalxaml:9-16`、`:58-59`、`:63-67` |
 
-⇒ 旧记忆「宿主分七步手写装配（`AttachScrollViewer` / `SetTree` / `NotifyZoomCommitted` / 订阅 `ScrollChanged` …），漏第 5、7 步不报错」**已作废** —— 那些 API 现在都不存在了。漏了 DataContext 只会让 `BindTree` 空转（什么都不显示）。
+⇒ 宿主只做上面三条，其余全在标记里；`AttachScrollViewer` / `SetTree` / 订阅 `ScrollChanged` 这些 API 都不存在。漏了 DataContext 只会让 `BindTree` 空转（什么都不显示）。
 
 ### 2.3 跨条目的**编译期**耦合：tree 少生成一条兄弟就编译不过
 
@@ -112,7 +112,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 ### P3 · 状态色现在在**模板**的 slot-view 里（读 `SlotState`）
 
 - 四个插槽状态色由 `workflow-slot-view/TemplateClass.jalxaml.cs:35-47` 的 `UpdateForeground()` 算 —— 读的是 `SlotState`（一个 DP，由模板绑定送 `Slot.State`），写 `Foreground`，标记里的 `Path` 再 `Fill` 绑它。**不是每帧解析**：`SlotState` 变才重算一次。
-- 对照 `../architecture.md` §7.4：这一家**不绑颜色属性、在 code-behind 里算**。旧记忆里「状态色在适配器基类 `WorkflowSlotView` 算」「`DrawCard` 每次 `ConvertFromString`」都已作废（那两个类/成员不存在了）。
+- 对照 `../architecture.md` §7.4：这一家**不绑颜色属性、在 code-behind 里算** —— 状态色在模板的 slot-view 里算，没有适配器基类 `WorkflowSlotView`，也没有 `DrawCard`。
 
 ### P4 · link-view 的"自盒化"：助手在适配器，**调用在模板**
 
@@ -123,7 +123,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 `ZoomPin`（250 ms）+ `NotifyZoomCommitted` 这套 committed-target 守卫在 `WorkflowSurfaceBehavior`
 （`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs:87` 的 `ZoomPin` 字段、`:297-327` 的
 `NotifyZoomCommitted`、`:770-789` 的 `UpdateViewport`）—— **不在模板产物里，也不由宿主调**：缩放手势本身归表面（`ZoomEnabled`），
-`OnZoomPreviewMouseWheel` 算出提交目标后**自己**调 `NotifyZoomCommitted`（`:613`/`:626`）。旧记忆「宿主窗口级 Ctrl+wheel → `surface.NotifyZoomCommitted(...)`（demo `MainWindow.cs:216,227`）」已作废（demo 宿主现在是标记，没有这句）。少了它，缩放后要等 helper 的 ~10 fps 脏计时器才重算可见集。
+`OnZoomPreviewMouseWheel` 算出提交目标后**自己**调 `NotifyZoomCommitted`（`:613`/`:626`）—— 缩放手势归表面，demo 宿主是标记、不调它。少了它，缩放后要等 helper 的 ~10 fps 脏计时器才重算可见集。
 
 ### P6 · 与 Jalium 自带类型的撞名（生成后通常要加别名）
 

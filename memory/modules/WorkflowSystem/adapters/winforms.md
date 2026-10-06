@@ -1,4 +1,4 @@
-# WorkflowSystem — WinForms
+﻿# WorkflowSystem — WinForms
 
 > **另：连线的那个基类已换成附加助手**（2026-10-04）—— 这一角色现在由用户自己的控件 + `WorkflowLinkAttachment.Attach(this)` 组成，
 > 下文凡是 `WorkflowLinkView` 的类名与行号，按 `WorkflowLinkAttachment` 读；机制（自盒化 / 雕窗口区域 / 端点订阅 / 命中发布）没变。
@@ -214,7 +214,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 | 命中半径 | `LinkHitRadius = 6f`（≈ 最外圈辉光管壁的半宽 5.5px），建输入路由时写进 `input.HitRadius` | `WorkflowCanvas.cs:43`、`:878` |
 | 选中即取焦点 | 输入路由的悬停结果一到就 `Focus()`（上色是画布写回渲染器的 `IsHighlighted`，取焦点是画布补的平台一半） | `WorkflowCanvas.cs:919-926`（`Focus()` 在 `:926`）、`:213`（`ControlStyles.Selectable`） |
 | 删除 | 走连线的 `DeleteCommand`，**不是**摘控件：Delete 键由宿主自己在 `OnKeyDown` 里执行，菜单项在本地 `OnBuildLinkMenu` 里直接 `Execute` | `WorkflowCanvas.cs:1027-1030`、`:1058-1060` |
-| 右键菜单 | 每次右键**现建**一个 `ContextMenuStrip`，条目由本地 `OnBuildLinkMenu` 填（只有「删除连线」一项）；本画布发布的指针是**世界坐标**，所以弹出位置须经 `WorldToClient` 落回客户区再 `PointToScreen`（适配器基类发布的却是**客户区坐标**，那边直接 `PointToScreen`、没有这个逆变换 —— 两家的坐标约定相反，别互相照抄）；菜单一开就把输入路由置 `IsSuspended`、收起时放开（宿主自己记账）；**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹）。**菜单不得比它作用的那条线活得久**：那条线离开 `tree.Links`（Delete 键 / Agent / Undo 任一删除路径）时树发 `LinkRemoved`，宿主用记录菜单目标线的字段（本家 `_menuLink`）认领是不是自己这份菜单，认领了才 `_linkMenu?.Close()` —— 收起照常放开 `IsSuspended`，输入路由不代关弹窗；这一对接线在两处：适配器基类 `AttachLinkInteraction`/`DetachLinkInteraction`（模板产物与 Trimmed 继承它，自动具备）与这块自绘画布各自的 attach/detach 对 | `WorkflowCanvas.cs:980-1016`、`:1019-1023`、`:1268-1274`、`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:727-743`、`:745-761`、`:765-800` |
+| 右键菜单 | 每次右键**现建**一个 `ContextMenuStrip`，条目由本地 `OnBuildLinkMenu` 填（只有「删除连线」一项）；本画布发布的指针是**世界坐标**，所以弹出位置须经 `WorldToClient` 落回客户区再 `PointToScreen`（适配器基类发布的却是**客户区坐标**，那边直接 `PointToScreen`、没有这个逆变换 —— 两家的坐标约定相反，别互相照抄）；菜单一开就把输入路由置 `IsSuspended`、收起时放开（宿主自己记账）；**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹）。**菜单不得比它作用的那条线活得久**：那条线离开 `tree.Links`（Delete 键 / Agent / Undo 任一删除路径）时树发 `LinkRemoved`，宿主用记录菜单目标线的字段（本家 `_menuLink`）认领是不是自己这份菜单，认领了才 `_linkMenu?.Close()` —— 收起照常放开 `IsSuspended`，输入路由不代关弹窗；这一对接线在两处：适配器基类 `AttachLinkInput`/`DetachLinkInput`（模板产物与 Trimmed 继承它，自动具备）与这块自绘画布各自的 attach/detach 对 | `WorkflowCanvas.cs:980-1016`、`:1019-1023`、`:1268-1274`、`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:727-743`、`:745-761`、`:765-800` |
 
 四条要记住的结论：
 
@@ -230,8 +230,8 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 `WorkflowEventRelay` 接模型事件、转发进钩子；后者的**弹出、定位、开合上报全在基类**
 （`OnLinkPointerPressed`，`WorkflowTreeView.cs:765-800`），模板产物只重写 `OnBuildLinkMenu` 这一处来增删条目。
 
-⚠ **基类订阅输入路由的 `PointerPressed` 与树的 `LinkRemoved` 就在 `AttachLinkInteraction` 里**
-（`WorkflowTreeView.cs:734-742`；`Detach` 在 `DetachLinkInteraction` 里按相反方向卸，`:745-761`），
+⚠ **基类订阅输入路由的 `PointerPressed` 与树的 `LinkRemoved` 就在 `AttachLinkInput` 里**
+（`WorkflowTreeView.cs:734-742`；`Detach` 在 `DetachLinkInput` 里按相反方向卸，`:745-761`），
 已无单独的菜单 attach 步骤，也不再依赖订阅先后：链上更靠前的一级（连线自己）在同一个事件的句柄上置
 `e.Handle.PreventDefault` 就能否掉这一次，基类在 `OnLinkPointerPressed` 里读它（`WorkflowTreeView.cs:771`）。
 宿主想否决某一次，订同一个 `PointerPressed` 即可，与基类订阅的先后无关。

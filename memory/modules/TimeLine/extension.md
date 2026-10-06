@@ -125,4 +125,4 @@
 | `ITickable.Invoke*` 系列 | **只能由泵调**，手写实现在仓库内不存在。不要把它们当公开 API 用 | `TickManager.cs:701,717,733` 是唯一的调用点 |
 | 通道级 `_useAsyncLoopOverride` | 活的，但**只在 channel 未运行时能设**（`:252-253`） | — |
 
-**这意味着**：本模块真正活的扩展面只有「生成器 + 五个 `partial void` + `InitializeTickable`」这一条。`ExecuteOnMainThread` 是唯一剩下那条**建好了但没接上**的路——遇到「我需要从钩子回到 UI 线程」时，先看它是不是能接上，再接；不要因为「看起来有现成的」就假定它在工作。（另一条同类的 `ThreadSafeFrameEventArgs` 已删除，理由见 `architecture.md` §八·5。）
+**这意味着**：本模块真正活的扩展面只有「生成器 + 五个 `partial void` + `InitializeTickable`」这一条。`ExecuteOnMainThread` 是唯一一条**建好了但没接上**的路——遇到「我需要从钩子回到 UI 线程」时，先看它是不是能接上，再接；不要因为「看起来有现成的」就假定它在工作。（另一条同类的 `ThreadSafeFrameEventArgs` 不存在，理由见 `architecture.md` §八·5。）

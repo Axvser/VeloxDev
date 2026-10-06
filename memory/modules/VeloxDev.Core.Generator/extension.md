@@ -144,7 +144,7 @@
 
 **为什么改生成器必须跑它**：生成器改的是「哪些类型/成员存在」，而裁剪删的是「没人引用的类型/成员」—— 两条轴正好作用在同一个集合上（`architecture.md` §六·8 已确认生成器**不产出任何裁剪提示**，所以没有任何自动保护）。**本地 Debug 构建看不出任何问题。**
 
-> **复核（2026-10-04）**：`Src/Verification/VeloxDev.TrimProbe/` 底下**只有 `bin/` 与 `obj/`**，没有源码 —— `git ls-files` 对它零命中。但注意 `Src/Verification/` 这一层**并非全空**：`git ls-files Src/Verification/` 现在命中 4 个被跟踪的 `.ps1`（`agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`），磁盘上还有一个尚未 `git add` 的新脚本 `verify-workflow-item-templates-all.ps1`（旧两条是转发到它的薄包装）。所以旧记忆里「`git ls-files Src/Verification/` 为空」是错的，正确的是「**TrimProbe 本体无被跟踪文件**」。`VeloxDev.slnx` 里依旧没有 `TrimProbe`。**结论不变：这里没有可写的代码事实，裁剪探针的本体在仓库外。**
+> **复核（2026-10-04）**：`Src/Verification/VeloxDev.TrimProbe/` 底下**只有 `bin/` 与 `obj/`**，没有源码 —— `git ls-files` 对它零命中。但注意 `Src/Verification/` 这一层**并非全空**：`git ls-files Src/Verification/` 现在命中 4 个被跟踪的 `.ps1`（`agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`），磁盘上还有一个尚未 `git add` 的新脚本 `verify-workflow-item-templates-all.ps1`（另两个同名脚本是转发到它的薄包装）。准确的说法是「**TrimProbe 本体无被跟踪文件**」—— 不是「`Src/Verification/` 为空」。`VeloxDev.slnx` 里依旧没有 `TrimProbe`。**结论不变：这里没有可写的代码事实，裁剪探针的本体在仓库外。**
 
 ---
 
@@ -153,7 +153,7 @@
 | 东西 | 位置 | 现状 |
 |---|---|---|
 | `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | `Base/AnalizeHelper.cs:12-17` | **没有调用者**。实际用的是同名的符号重载 `:43-46`（调用点 `AopSurface.cs:65`、`Writers/AopWriter.cs:23`）。语法版只扫**单份声明**的成员，是符号版之前的写法；留着但无效 |
-| `Generators.AgentCatalog` | 旧路径 `Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` | **源码里不存在，`obj/` 里的陈旧产物现在也复核不到**（该 `.g.cs` 已不在树里）。当前 29 个 `.cs` 无此类；别按旧记忆去找它 |
+| `Generators.AgentCatalog` | 无（源码 29 个 `.cs` 无此类；`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` 也不在树里） | **不存在**。别去找它 |
 | `GenerateBaseTypes()` | `Writers/AopWriter.cs:40`、`Writers/CommandWriter.cs:596`、`Writers/TickWriter.cs:130`、`Writers/MVVMWriter.cs:1010` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:73` 真正用到了它 |
 | MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：全源 grep 已无 `IsView` / `isView`；`MVVMPropertyFactory` 现在只有两个构造 —— 从字段（`Base/Analizer.cs:432`）与从 partial 属性（`:453`），`Generate()`（原 `GenerateViewModel` 改名，`:654`）是唯一出口。**要恢复 View 支持，必须同时改构造、`Generate()` 与调用点** —— 别再只加参数不加分支 |
 | `VeloxDev.Core.Generator.targets` 的版本门槛 | `VeloxDev.Core.Generator.targets:8-19` | **活着，但条件刻意放宽**：`RoslynVersion` 为空时**跳过检查**（`:13-15` 的注释：现代宿主上的 netframework TFM 拿不到该属性，跳过以免误报）。所以这条诊断**不会**在每个项目上都出现 |

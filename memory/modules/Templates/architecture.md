@@ -132,12 +132,10 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   连 `GridDecorator` 这个类型名都没有出现（网格由基类 `WorkflowTreeView.cs` 自带的内部 `SurfaceCanvas`
   承担）。⇒ **生成不生成这一条，tree-view 行为不变**；其余六家的 tree-view 都真的引用它
   （WPF/WinUI/Avalonia/MAUI/Razor/Jalium 都在标记/组件里实例化，见本节上表）。
-- **WinForms 的 tree-view 与 minimap 的类型级耦合已在 2026-10-03 消除**：
-  `IWorkflowMinimapScrollSource` 曾经只声明在 minimap 条目的产物里、tree-view 在同命名空间下直接
-  模式匹配（旧的 `workflow-tree-view/TemplateClass.cs`，那两行已不存在），只生成 `winforms-v-tree` 会 CS0246。
-  现在接口搬进了适配器（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs:16`），
-  由 `WorkflowTreeView`（`:113,:125`）与 `WorkflowMinimapOverlay`（`:23`）引用，**模板侧零命中**。
-  ⇒ 现在 `winforms-v-tree` 的编译期兄弟只剩 `NodeView` 与 `LinkView`（见 §7.6）。
+- **WinForms 的 tree-view 与 minimap 之间没有类型级耦合**：
+  `IWorkflowMinimapScrollSource` 声明在适配器（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs:16`），
+  由 `WorkflowTreeView`（`:113,:125`）与 `WorkflowMinimapOverlay`（`:23`）引用，**模板侧零命中**
+  ⇒ 只生成 `winforms-v-tree` 也能编译，它的编译期兄弟只剩 `NodeView` 与 `LinkView`（见 §7.6）。
 - 对照：**WinForms 的可见集现在也由适配器喂给池**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:428`
   取 `_tree?.GetHelper().VisibleItems`），模板不再自己发散虚拟化。WPF/WinUI/Avalonia/Razor 在标记里绑
   `Helper.VisibleItems`，MAUI 由适配器 `ViewManager` 在入队前筛掉连线交给共享 overlay 画；
@@ -231,8 +229,8 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 | 薄壳（2026-10-03 起也归此列） | WinForms 22 | `workflow-minimap-overlay/TemplateClass.cs` |
 
 ⇒ **2026-10-03 起七家全是薄壳**：WinForms 的 335 行实现搬进了适配器
-（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowMinimapOverlay.cs`），原来"该家适配器里没有
-创建控件的钩子、装饰器/小地图只能由用户代码提供"的推理链已作废（迁移判据见
+（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowMinimapOverlay.cs`）—— 该家的创建控件钩子、
+装饰器与小地图现在都由适配器基类提供（迁移判据见
 [`adapter-base-class-specifications.md`](../../specifications/adapter-base-class-specifications.md) §2.2）。
 Jalium 那 24 行设四个颜色符号（`workflow-minimap-overlay/TemplateClass.cs`）；最薄的现在是 MAUI 的 21 行。
 
@@ -390,17 +388,15 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 六�
 另有两条 `double.IsNaN` 守卫：Razor（`workflow-link-view/TemplateClass.razor.cs:224`）与 Jalium 的模板
 （`workflow-link-view/TemplateClass.jalxaml.cs` 的 `Refresh`，不加会抛 `ArgumentException` 退出）。
 
-### 7.6 WinForms 少生成一条兄弟条目 ⇒ 编译不过（且没有任何地方写明）—— **2026-10-03 已对 tree-view 消除**
+### 7.6 WinForms 少生成一条兄弟条目 ⇒ 编译不过（且没有任何地方写明）—— **tree-view 这一处已于 2026-10-03 消除**
 
-**修复前的形状（历史，代码里已不复存在）**：`IWorkflowMinimapScrollSource` 只声明在 minimap 条目的产物里
-（`workflow-minimap-overlay/TemplateClass.cs` 的文件末尾；那处声明已随接口迁移删除，该文件现为 22 行的薄壳），
-tree-view 在同命名空间下直接模式匹配（旧行号已不存在）⇒ 只生成 `winforms-v-tree` 得到的代码编译不过（CS0246）。
-这一条与 §7.3 的 Avalonia 不同：那一处的注释自己写明了"build fails HERE"，
-**这一处没有任何文件提到过**，只能读代码发现。
+**WinForms 的 tree-view 没有这条耦合**：`IWorkflowMinimapScrollSource` 在适配器里
+（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs`），模板的
+`workflow-minimap-overlay/TemplateClass.cs` 是 22 行的薄壳，tree-view 不模式匹配它
+⇒ `winforms-v-tree` 的编译期兄弟只有 `NodeView` 与 `LinkView`。
+⚠ 与 §7.3 的 Avalonia 那处不同（那条注释自己写明了 "build fails HERE"）：**WinForms 这类「少一条兄弟就 CS0246」的耦合没有任何文件写明**，只能读代码发现。
 
-**已修**：该接口搬进了适配器（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs`），
-基类与本条都不再依赖 minimap 产物 —— 现在 `winforms-v-tree` 的编译期兄弟只有 NodeView 与 LinkView。
-新的 `verify-workflow-item-templates-all.ps1` 会**一起生成并编译七条**（`verify-workflow-item-templates.ps1` 现在只是转发），所以再出现这类漏依赖会当场红。
+`verify-workflow-item-templates-all.ps1` 会**一起生成并编译七条**（`verify-workflow-item-templates.ps1` 现在只是转发），所以再出现这类漏依赖会当场红。
 
 ---
 

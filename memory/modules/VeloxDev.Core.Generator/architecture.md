@@ -69,7 +69,7 @@ context.RegisterSourceOutput(
 - 给某个 writer 加「读更多语义」的逻辑是**安全**的 —— 它本来就拿到的是新鲜 symbol。
 - 给 `GeneratorTarget` 加 symbol 字段是**不安全**的，且不会立刻报错，只会在增量场景下偶发错码。要加信息就加 `TypeKey` 这类字符串。
 
-`Deduplicate`（`:221`）**按 `TypeKey` 去重，不按 symbol 去重**：`remarks`（`:215-220`）说明按 symbol 去重会让同一个类型在两条缓存条目持不同 `Compilation` 的 symbol 时进来两次，第二次 `AddSource` 会因为 hint name 重复被拒。一个类拆成多个 partial、每个 partial 各贴一个触发特性时，只有**一个代表**进入 writer；谁当代表由 `IsClassLevelAttribute` 决定（类级特性优先，`:231`）。**AOP 这一侧现在已经不受它影响**：`AopSurface.cs:68` 与 `Writers/AopWriter.cs:23` 都走符号（`AnalizeHelper.Members` / `IsAopClass`），代表是哪份声明只决定产物的**文件名**。`TickWriter` 同理走符号（`Writers/TickWriter.cs:20`）—— 所以「代表」当前影响的是字段名与文件名这类表面，别再照抄旧记忆里「三个生成器都按声明读特性」的说法。
+`Deduplicate`（`:221`）**按 `TypeKey` 去重，不按 symbol 去重**：`remarks`（`:215-220`）说明按 symbol 去重会让同一个类型在两条缓存条目持不同 `Compilation` 的 symbol 时进来两次，第二次 `AddSource` 会因为 hint name 重复被拒。一个类拆成多个 partial、每个 partial 各贴一个触发特性时，只有**一个代表**进入 writer；谁当代表由 `IsClassLevelAttribute` 决定（类级特性优先，`:231`）。**AOP 这一侧现在已经不受它影响**：`AopSurface.cs:68` 与 `Writers/AopWriter.cs:23` 都走符号（`AnalizeHelper.Members` / `IsAopClass`），代表是哪份声明只决定产物的**文件名**。`TickWriter` 同理走符号（`Writers/TickWriter.cs:20`）—— 所以「代表」当前只影响字段名与文件名这类表面（三个生成器都按符号读特性，不按声明）。
 
 ### 阶段 3：写 —— 各生成器的 `GenerateSource`
 
@@ -256,7 +256,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 4. **`AopSurface.cs` 一个生成器连着两次 `AddSource`**（`:163` 接口、`:167` 代理）；`AopProxy.cs` 只一次（`:33`）。加第三份产物必须自己保证 hint name 不撞。
 5. **`Theme.cs` 只对 `partial` 类发**（`:113-118`），且无属性注册时返回空串（`:262-265`）。
 6. **`Writers/WriterBase.cs:234-261` 的修饰符重排是「不报重复定义」的依赖**，不是格式化洁癖。
-7. **`Generators.AgentCatalog` 在当前源码里不存在，`obj/` 下的陈旧产物也已复核不到。** 当前源码 29 个 `.cs` 无任何 AgentCatalog，`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/` 下也不再留着那份 `VeloxAgentCatalog.g.cs`。别再按旧记忆去找它。
+7. **`Generators.AgentCatalog` 不存在。** 当前源码 29 个 `.cs` 无任何 AgentCatalog，`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/` 下也没有那份 `VeloxAgentCatalog.g.cs`。别去找它。
 8. **裁剪/AOT 元数据与本模块无关。** 全部 writer 都不产出 `IsTrimmable` / `IsAotCompatible` / trim 注解；引擎侧也没有生成任何 `DynamicDependency` 之类的裁剪提示（全源 grep 无命中）。裁剪这条轴的开关在 csproj 与 MSBuild 属性上，见 §七。
 
 9. **「另一个生成器加上的接口」要在每个地方各自兜底，漏一处就是一整条功能坏掉。** 这是本模块最容易复发的坑，因为它**不报错**：`[WorkflowBuilder.Slot<T>]` / `Node<T>` / `Link<T>` 类型的 `IWorkflow*ViewModel` 是 Workflow 生成器在**同一编译趟**注入的，而另一个生成器扫 `AllInterfaces` 时看不见它 —— 生成器之间看不见彼此的产物。所以凡是「这个类型算不算组件/槽」的判断，都不能只查接口，要**同时认作者写下的那个特性**。已有的三处：

@@ -1,10 +1,10 @@
 # VeloxDev.Jalium — 扩展
 
 > ⚠ **2026-10-05：Jalium 适配器已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
-> 本文下面凡提 `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
+> `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
 > `IWorkflowTemplateSelector` / `WorkflowTemplateSelector` / `WorkflowNodeView` / `WorkflowSlotView` /
-> `WorkflowLinkView` 的段落**都已作废**（那些类型全部删除）。现行落点见
-> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇。
+> `WorkflowLinkView` 这些类型都不存在；本文下面凡提这些名字的段落，落点以
+> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇 为准。
 
 > 读法：七角色契约、附着属性名、注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3 —— **Jalium 侧这七个角色现在由适配器的附着行为 + 静态助手提供（网格装饰器归模板），模板是标记 + 薄 code-behind**（见下 §一）。
 > 两条轴上「这家和别家不一样」的地方在 `memory/modules/{TransitionSystem,WorkflowSystem,Templates}/adapters/jalium.md`。
@@ -146,6 +146,6 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 2. **`Interpolator.cs:20` 那条看似冗余的 `SolidColorBrush` 登记不要顺手删。** 它确实被 `typeof(Brush)`（`:19`）的基类回溯覆盖，删了多半不报错也不改行为 —— 但它防的是「属性声明成 `SolidColorBrush`」这一类，代价为零。**要删就先跑一遍 `Examples/Transition/Jalium/Demo/`。**
 3. **`ZoomPin` / `NotifyZoomCommitted` 现在在 `WorkflowSurfaceBehavior` 里**（`WorkflowSurfaceBehavior.cs:87` 的 `ZoomPin` 字段、`:297-327` 的 `NotifyZoomCommitted`、`:770-789` 的 `UpdateViewport`），不要搬到宿主窗口，也不必在模板里重造。缩放手势本身归表面（`ZoomEnabled` + `OnZoomPreviewMouseWheel`，`:613`/`:626` 自己调），宿主**零调用者**。
 4. **七家的采样器类名不要「统一化」**（如 `PointSampler` → `JaliumPointSampler`）：命名空间的跨家重名是既成事实，改名只会让两处字符串表（`JaliumEntries.cs:34`、以及别家同名反射）同时错位。
-5. **标尺厚度 `36` 的单一来源在模板**：`workflow-grid-decorator/TemplateClass.cs:34` 的 `public const double DefaultRulerThickness = 36;`（它同时是 `RulerThickness` DP 的默认值）。适配器不抄这个常量 —— 表面从解析到的装饰器读接口属性 `IWorkflowGridDecorator.RulerBand`，只在**拿不到装饰器时兜底**写 `?? 36d`（`WorkflowSurfaceBehavior.cs:742`）。旧记忆里「`WorkflowGridDecorator.cs:25` 的 `const RulerThickness`，表面/节点卡/连线三处都读它」已作废（那个类已删）—— 改厚度改模板那一个常量。
-6. **`NoWarn` 现在只是 `1573;1591`（`VeloxDev.Jalium.csproj:14`）**：旧记忆里的 `8605;8604` 触发点（DP 的 CLR 包装拆箱）已消失（模板里值类型 DP 走泛型 `Read<T>`），不要按旧记忆去「保留」它们。
+5. **标尺厚度 `36` 的单一来源在模板**：`workflow-grid-decorator/TemplateClass.cs:34` 的 `public const double DefaultRulerThickness = 36;`（它同时是 `RulerThickness` DP 的默认值）。适配器不抄这个常量 —— 表面从解析到的装饰器读接口属性 `IWorkflowGridDecorator.RulerBand`，只在**拿不到装饰器时兜底**写 `?? 36d`（`WorkflowSurfaceBehavior.cs:742`）。没有 `WorkflowGridDecorator.const RulerThickness` 这一类东西 —— 改厚度就改模板那一个常量。
+6. **`NoWarn` 只是 `1573;1591`（`VeloxDev.Jalium.csproj:14`）**：没有 `8605;8604` 的触发点 —— 模板里值类型 DP 走泛型 `Read<T>`，不产生 DP 的 CLR 包装拆箱告警，不必为它保留任何条目。
 7. **`ViewPool` 的两个附着属性共用 `OnChanged`**（`ViewPool.cs:45`）：任何「只改一个」的想法都会重建 manager（`Attach` 第一行 `Detach`），节点入场动画/局部状态全部重来。

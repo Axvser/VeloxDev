@@ -1,10 +1,10 @@
 # VeloxDev.Jalium — 架构
 
 > ⚠ **2026-10-05：Jalium 适配器已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
-> 本文下面凡提 `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
+> `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
 > `IWorkflowTemplateSelector` / `WorkflowTemplateSelector` / `WorkflowNodeView` / `WorkflowSlotView` /
-> `WorkflowLinkView` 的段落**都已作废**（那些类型全部删除）。现行落点见
-> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇。
+> `WorkflowLinkView` 这些类型都不存在；本文下面凡提这些名字的段落，落点以
+> [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇 为准。
 
 > 代码：`Src/Adapters/VeloxDev.Jalium/`。**27 个 .cs、4411 行**
 > （`Attached/Workflow/` 9 个 3435 行，最大 `WorkflowSurfaceBehavior.cs` 1353、`WorkflowSlotLayoutBehavior.cs` 538、`WorkflowMinimapOverlay.cs` 493、`WorkflowNodeDragBehavior.cs` 254；
@@ -120,18 +120,17 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // :20 —�
 
 ### 3.3 小地图的 `ScrollViewer` 现在由模板按名字接上
 
-`WorkflowMinimapOverlay.ScrollViewer` 仍是普通自动属性（`WorkflowMinimapOverlay.cs:55`），`NavigateToWorld`（`:406`）要求 `_tree` 与 `ScrollViewer` **同时非空**。但**适配器现在会赋值**：`ScrollViewerName` DP（`:160`）+ `ResolveScrollViewer()`（`:182-188`，`FindName(name) is ScrollViewer viewer`，`Loaded` 时再兜一次）⇒ 模板只要写 `ScrollViewerName="PART_ScrollViewer"`（`workflow-tree-view/TemplateClass.jalxaml:66`）就接上，宿主不必自己赋。旧结论「适配器里没有任何东西替它赋值、宿主必须自己赋（demo `MainWindow.cs` 的 `ScrollViewer = viewer`）」已作废 —— Trimmed demo 的宿主现在是标记，没有这句。（非 Trimmed demo `Examples/Workflow/Jalium/` 仍走 `Minimap(viewer)` 构造器那条老路。）
+`WorkflowMinimapOverlay.ScrollViewer` 仍是普通自动属性（`WorkflowMinimapOverlay.cs:55`），`NavigateToWorld`（`:406`）要求 `_tree` 与 `ScrollViewer` **同时非空**。但**适配器现在会赋值**：`ScrollViewerName` DP（`:160`）+ `ResolveScrollViewer()`（`:182-188`，`FindName(name) is ScrollViewer viewer`，`Loaded` 时再兜一次）⇒ 模板只要写 `ScrollViewerName="PART_ScrollViewer"`（`workflow-tree-view/TemplateClass.jalxaml:66`）就接上，宿主不必自己赋 —— demo 宿主现在是标记，没有 `ScrollViewer = viewer` 这一句。（非 Trimmed demo `Examples/Workflow/Jalium/` 仍走 `Minimap(viewer)` 构造器那条路。）
 
 ### 3.4 画布变换现在有一条通道：`CanvasTransform` 附着属性
 
-`ViewManager.UpdateRenderTransforms` / `ViewPool.UpdateRenderTransforms` 这对镜像方法**确实已经被删**（`git grep -n UpdateRenderTransforms -- Src Examples` 零命中），但「画布变换通道彻底没有了」**已作废**：表面把世界位移作为附着属性 `WorkflowSurfaceBehavior.CanvasTransform` 发布在**宿主**上（`WorkflowSurfaceBehavior.cs:166-173` 注册，`ApplyLayout` `:756-768` 写入），tree-view 模板的 `UserControl` 把同一个 DP **用一个 CLR 属性再暴露一次**（`workflow-tree-view/TemplateClass.jalxaml.cs:19-22`）——因为本家的绑定**读不到括号路径**（`(Canvas.Left)` 也不行，见 §〇）——节点/连线模板于是绑 `RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource AncestorType=UserControl}}"`（`workflow-tree-view/TemplateClass.jalxaml:27`、`:35`）。**同一个 DP 对象、同一个值、同一种通知，只是换了个名字给绑定看得见。**
+`ViewManager` / `ViewPool` 没有 `UpdateRenderTransforms` 这对镜像方法（`git grep -n UpdateRenderTransforms -- Src Examples` 零命中）。画布变换的通道是附着属性：表面把世界位移作为 `WorkflowSurfaceBehavior.CanvasTransform` 发布在**宿主**上（`WorkflowSurfaceBehavior.cs:166-173` 注册，`ApplyLayout` `:756-768` 写入），tree-view 模板的 `UserControl` 把同一个 DP **用一个 CLR 属性再暴露一次**（`workflow-tree-view/TemplateClass.jalxaml.cs:19-22`）——因为本家的绑定**读不到括号路径**（`(Canvas.Left)` 也不行，见 §〇）——节点/连线模板于是绑 `RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource AncestorType=UserControl}}"`（`workflow-tree-view/TemplateClass.jalxaml:27`、`:35`）。**同一个 DP 对象、同一个值、同一种通知，只是换了个名字给绑定看得见。**
 
 ---
 
 ## 四、结构性根因：WPF 怎么做，这家就怎么做
 
-**2026-10-05 用户定：以 WPF 为基准。** 旧那条「Jalium 没有标记语言 ⇒ 适配器出可继承基类」**已作废** ——
-它有完整的 `.jalxaml` 工具链，与另外六家同形：
+**2026-10-05 用户定：以 WPF 为基准。** Jalium 有完整的 `.jalxaml` 工具链，与另外六家同形：
 
 | | 适配器 | 模板与 Trimmed demo |
 |---|---|---|
@@ -182,7 +181,7 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // :20 —�
 | `<TargetFramework>net10.0</TargetFramework>`（**单 TFM、不带平台后缀**） | `:7` | 七家里**只有这家**是单 TFM 且不带 `-windows`（Razor 已改成多 TFM `net6.0;net8.0`，仍不带 `-windows`）。`:4-6` 的注释把理由写明了：适配器只用跨平台核心，**不用 `net10.0-windows` 的 `Jalium.UI.Desktop` 入口包**，所以能同时服务 Windows / Linux / Android |
 | 唯一的 Jalium 引用是 `Jalium.UI.Controls 26.10.9` | `:34` | `:31-33` 的注释：这是**能提供 `Canvas`/`ScrollViewer`/`Border`/`Control` + `DrawingContext`/`Geometry`/`FormattedText` 的**最低**平台中立包。**别名包 `Jalium.UI.Desktop` 由消费 demo 自己引** ⇒ 适配器与 demo 的包版本可以不同步 |
 | Debug → `ProjectReference`（`:29`）／非 Debug → `PackageReference VeloxDev.Core 10.0.0`（`:30`） | — | 与另外六家同形的双轨；两条同时生效会报重复成员 |
-| `NoWarn` 写成**一条** `1573;1591`（`:14`） | — | 与 WPF 现状同形。**注意**：旧记忆里的 `8605;8604` 已不在这个集合 —— 现在不注册任何 DP 的 CLR 包装，没有那类拆箱告警触发点（模板里值类型 DP 走泛型 `Read<T>`） |
+| `NoWarn` 写成**一条** `1573;1591`（`:14`） | — | 与 WPF 现状同形。**注意**：`8605` / `8604`（DP 的 CLR 包装拆箱）在这个集合里没有触发点 —— 模板里值类型 DP 走泛型 `Read<T>`，不注册任何 DP 的 CLR 包装 |
 
 ---
 
