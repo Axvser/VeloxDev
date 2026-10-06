@@ -464,26 +464,26 @@ public partial class WorkflowView : ContentView
         };
     }
 
-    // VeloxDev customization: 宿主自留的手势 —— 空白画布上 Shift+拖拽、落在任何地方的 Ctrl+拖拽、以及
-    // Shift+滚轮（宿主要拿它做横向滚动）。按下那一支框架在动手前都读句柄，所以一次订阅覆盖空白处与卡片上；
-    // 滚轮是另一支订阅（PointerWheelChanged），缩放归它。每换一次树都重订一次，与自动滚动同理。
+    // VeloxDev customization: 宿主自留的手势 —— 空白画布上 Shift+拖拽、落在任何地方的 Ctrl+拖拽。
+    // 框架那一手（平移、节点拖动、插槽连线）在动手前都读这一笔的句柄，所以一次订阅同时覆盖空白处与卡片上。
+    // 滚轮不在这张名单里：普通滚轮会以「汇报」的身份到达同一个订阅，但没有哪家适配器读它的裁决；
+    // 框架真正执行到底的滚轮手势只有 Ctrl+滚轮缩放。
+    // 订阅按**树实例**去重，而且用一张集合而不是「上一棵」：本 demo 的会话会被换上好几轮（A → B → A），
+    // 只比上一棵的话回到 A 时会再订一遍 —— 同一棵树上挂两个订阅，每笔输入就送达两次（实测：滚动一格、
+    // 日志两行、args 是同一个实例）。每换一次树都重订一次，与自动滚动同理。
+    private static readonly HashSet<TreeViewModel> ProbedTrees = [];
+
     private static void VetoFrameworkGestures(TreeViewModel tree)
     {
-        var input = ((IInputEvents)tree.GetHelper()).Input;
+        if (!ProbedTrees.Add(tree))
+        {
+            return;
+        }
 
-        input.PointerPressed += (_, e) =>
+        ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
             if (e.Modifiers.HasFlag(InputModifiers.Control)
                 || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
-            {
-                e.Handle.PreventDefault = true;
-            }
-        };
-
-        // Shift+滚轮是宿主自己的横向滚动，框架不在这上面缩放。
-        input.PointerWheelChanged += (_, e) =>
-        {
-            if (e.Modifiers.HasFlag(InputModifiers.Shift))
             {
                 e.Handle.PreventDefault = true;
             }

@@ -1559,7 +1559,7 @@ public sealed class WorkflowSurfaceBehavior
             return null;
         }
 
-        return RouteWheelOnce(input.Tree, () =>
+        return RouteWheelOnce(e, () =>
         {
             var handle = new WorkflowEventHandle();
             var routed = WorkflowInput.For(input.Tree);
@@ -1854,7 +1854,10 @@ public sealed class WorkflowSurfaceBehavior
     // 按下的登记留到转发松手时才作废（平移在 Started 与第一帧读的是同一条），滚轮的由后到者读走。
     private static IWorkflowTreeViewModel? RoutedPressTree;
     private static WorkflowEventHandle? RoutedPressHandle;
-    private static IWorkflowTreeViewModel? RoutedWheelTree;
+    // 滚轮的登记按**事件对象**认，不按树：一次物理滚轮必然是新实例，所以没有谁需要负责收尾，也漏不到
+    // 下一笔。按树登记时，普通滚轮只有链接层一条来者，登记没人消费就留到下一笔上，那笔会被判成「已经
+    // 路由过」而静默丢掉（实测：三格滚轮到得了订阅者的行数与格数对不上）。
+    private static object? RoutedWheelEvent;
     private static WorkflowEventHandle? RoutedWheelHandle;
 
     // 组件把落在自己身上的一笔按下转发出去：目标就是它自己（沿视图的 BindingContext 链认，含自身）。
@@ -1916,19 +1919,20 @@ public sealed class WorkflowSurfaceBehavior
         RoutedPressHandle = null;
     }
 
-    // 滚轮：链接层与缩放两条路都跑在同一笔滚轮上，谁先到谁转发、后到的读现成的 —— 两份都要拿到同一个
-    // 句柄。滚轮没有松手可挂，登记就由后到的那一条读走并清掉。
-    internal static WorkflowEventHandle RouteWheelOnce(IWorkflowTreeViewModel tree, Func<WorkflowEventHandle> route)
+    // 滚轮：链接层与缩放两条路可能都跑在同一笔滚轮上，谁先到谁转发、后到的读现成的 —— 两份都要拿到同一个
+    // 句柄。滚轮没有松手可挂，所以登记按**事件对象**认、由后到的那一条读走并清掉；只有一条来者时
+    // （普通滚轮）它就自己留着，而下一笔是新实例，不会被它挡住。
+    internal static WorkflowEventHandle RouteWheelOnce(object? eventKey, Func<WorkflowEventHandle> route)
     {
-        if (ReferenceEquals(RoutedWheelTree, tree) && RoutedWheelHandle is { } routed)
+        if (ReferenceEquals(RoutedWheelEvent, eventKey) && RoutedWheelHandle is { } routed)
         {
-            RoutedWheelTree = null;
+            RoutedWheelEvent = null;
             RoutedWheelHandle = null;
             return routed;
         }
 
         var handle = route();
-        RoutedWheelTree = tree;
+        RoutedWheelEvent = eventKey;
         RoutedWheelHandle = handle;
         return handle;
     }

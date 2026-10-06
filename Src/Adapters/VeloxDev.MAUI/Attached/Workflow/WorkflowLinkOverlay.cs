@@ -133,6 +133,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _releasedHandler;
     private Microsoft.UI.Xaml.Input.PointerEventHandler? _wheelHandler;
     private Microsoft.UI.Xaml.Input.KeyEventHandler? _keyHandler;
+    private Microsoft.UI.Xaml.Input.KeyEventHandler? _keyUpHandler;
 
     // 键盘钩子实际挂在哪（窗口根，或 XamlRoot 还没就绪时的交互源），与指针钩子分开记，摘的时候才拆得干净
     private Microsoft.UI.Xaml.UIElement? _keyHost;
@@ -656,13 +657,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
     }
 
-    // 一笔滚轮只转发一次：链接层与 Ctrl+滚轮的缩放都跑在同一笔上（两条都挂在交互源的元素上，谁先跑
-    // 由注册顺序决定），RouteWheelOnce 让先到者转发、后到者读同一个句柄。
-    private void RouteWheel(Point onOverlay, double delta)
+    // 一笔滚轮只转发一次：链接层与 Ctrl+滚轮的缩放可能都跑在同一笔上（两条都挂在交互源的元素上，谁先跑
+    // 由注册顺序决定），RouteWheelOnce 让先到者转发、后到者读同一个句柄。登记按事件对象认。
+    private void RouteWheel(object eventKey, Point onOverlay, double delta)
     {
-        if (WorkflowTree is not { } tree) return;
+        if (WorkflowTree is not { }) return;
 
-        WorkflowSurfaceBehavior.RouteWheelOnce(tree, () =>
+        WorkflowSurfaceBehavior.RouteWheelOnce(eventKey, () =>
             RoutePointer(onOverlay, (p, t, h) => new Wf.PointerWheelEventArgs(
                 p, WorkflowSurfaceBehavior.ModifiersNow(), this, t, 0d, delta, h)));
     }
@@ -833,7 +834,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             if (ToOverlayPoint(e) is { } onOverlay)
             {
                 var delta = properties.MouseWheelDelta;
-                RouteWheel(onOverlay, delta);
+                RouteWheel(e, onOverlay, delta);
             }
         };
 
@@ -865,9 +866,17 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             _keyHost.RemoveHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler);
         }
 
+        if (_keyHost is not null && _keyUpHandler is not null)
+        {
+            _keyHost.RemoveHandler(Microsoft.UI.Xaml.UIElement.KeyUpEvent, _keyUpHandler);
+        }
+
         _keyHandler ??= OnSourceKeyDown;
+        _keyUpHandler ??= OnSourceKeyUp;
         _keyHost = host;
         host.AddHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler, false);
+        // KeyUp 与 KeyDown 同址同策略：键事件只从焦点元素往上冒，而按下会挪焦点，所以两者都得挂窗口根。
+        host.AddHandler(Microsoft.UI.Xaml.UIElement.KeyUpEvent, _keyUpHandler, false);
     }
 
     // 挂窗口根需要 XamlRoot，而它在 Attach 那一刻还是 null（实测），所以升级交给指针移动 ——
@@ -928,12 +937,18 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             _keyHost.RemoveHandler(Microsoft.UI.Xaml.UIElement.KeyDownEvent, _keyHandler);
         }
 
+        if (_keyUpHandler is not null && _keyHost is not null)
+        {
+            _keyHost.RemoveHandler(Microsoft.UI.Xaml.UIElement.KeyUpEvent, _keyUpHandler);
+        }
+
         _hookElement = null;
         _keyHost = null;
         _hoverMovedHandler = null;
         _hoverExitedHandler = null;
         _pressedHandler = null;
         _keyHandler = null;
+        _keyUpHandler = null;
     }
 
     /// <summary>
@@ -966,6 +981,19 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             ToKey(e.Key), (int)e.Key, WorkflowSurfaceBehavior.ModifiersNow(), false, this, input.HoveredLink, new WorkflowEventHandle()));
 
         if (e.Key == Windows.System.VirtualKey.Delete) e.Handled = true;
+    }
+
+    // 松手与按下同形，但不筛悬停：另外六家都是无条件上报（键抬起本身没有可删的东西，筛掉只会让
+    // 订阅者在不悬停时收不到配对的 KeyUp）。
+    private void OnSourceKeyUp(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (_input is not { } input)
+        {
+            return;
+        }
+
+        input.Route(new Wf.KeyUpEventArgs(
+            ToKey(e.Key), (int)e.Key, WorkflowSurfaceBehavior.ModifiersNow(), false, this, input.HoveredLink, new WorkflowEventHandle()));
     }
 
     // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
