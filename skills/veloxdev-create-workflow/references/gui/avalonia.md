@@ -1,6 +1,6 @@
 # Avalonia
 
-`VeloxDev.Avalonia` · targets `netstandard2.0;net6.0` · built against Avalonia 11.1, runs on 12.x
+`VeloxDev.Avalonia` · targets `netstandard2.0;net6.0;net8.0` · built against Avalonia 11.1, runs on 12.x
 
 ⚙ **Reference implementation:** `Examples/Workflow/Avalonia Trimmed/Demo/` — note the extra nesting, the project sits at `Demo/Demo/`, so the views are at `Demo/Demo/Views/Workflow/` and the ViewModels at `Demo/Demo/ViewModels/Workflow/`. `TreeView.axaml` is the surface and carries the compiled-binding `x:DataType` the template ships as a placeholder.
 

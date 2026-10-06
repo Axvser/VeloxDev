@@ -8,7 +8,7 @@ The seven shipped adapters are your reference implementations. Read the one whos
 
 | Situation | Do this instead |
 |---|---|
-| The GUI is not one of the seven but is XAML-like | A full adapter. Expect about six classes and a slot-layout behaviour. |
+| The GUI is not one of the seven but is XAML-like | A full adapter. Expect about **nine** classes in the surface layer alone (see *What to build* below) plus a slot-layout behaviour. |
 | You only need the model and the engine, headless | Reference `VeloxDev.Core` alone — no adapter is involved at all. |
 | You want the canvas inside an existing control of your own | Still a full adapter. The surface is not separable from the coordinate host. |
 | You could switch to a GUI that already has an adapter | Do that. An adapter is a real cost and the seven cover most .NET GUIs. |
@@ -61,9 +61,9 @@ The single highest-risk choice in the whole adapter. Ask: **what frame is the me
 
 | Your measurement gives you… | Use | Adapters |
 |---|---|---|
-| a screen-space centre, and nothing has applied the canvas pan for you | `SlotAnchorFromVisualCenter` | WPF, Avalonia |
+| a screen-space centre, and nothing has applied the canvas pan for you | `SlotAnchorFromVisualCenter` | WPF, Avalonia, Jalium |
 | a centre already inside the canvas-local frame (the host applies the pan itself) | `SlotAnchorFromCanvasLocal` | WinUI, MAUI, WinForms |
-| no coordinate host at all; you can only compute from model geometry | compute the centre in your adapter (Jalium's `WorkflowPortGeometry` derives it from `node.Anchor` + design-local · `node.Size/DesignSize`) | Jalium |
+| no coordinate host at all, and nothing you can measure | compute the centre in your adapter from model geometry (`node.Anchor` + design-local · `node.Size/DesignSize`) | *(none of the seven — this is the fallback for a GUI whose ports are not controls)* |
 | a value from outside the process, already canvas-local (e.g. JavaScript) | `SlotAnchorFromCanvasLocal` | Blazor |
 
 ⚙ **Get this wrong and every link in the graph is off by a constant** — by `−ActualOffset` in the visual-centre/identity mix-up. There is no exception, no log and no visual clue other than the offset.
@@ -96,7 +96,7 @@ Take whatever the framework actually provides, and expect it to be different fro
 | MAUI | `PinchGestureRecognizer` + a platform wheel hook |
 | WinForms | `MouseWheel` **plus** `Application.AddMessageFilter` on `WM_MOUSEWHEEL` |
 | Blazor | a non-passive JS `wheel` listener |
-| Jalium | host-driven `ZoomBy` + a committed-zoom state machine |
+| Jalium | `ScrollViewer.PreviewMouseWheel` with a Ctrl gate, like WPF |
 
 ⚙ **Wheel-up is zoom-in, and zoom-in divides `Scale` by 1.1.** `Scale` is a collapse factor; writing `delta > 0 ? 1.1 : 1/1.1` inverts the gesture. This was wrong across all seven adapters once and has been fixed everywhere.
 

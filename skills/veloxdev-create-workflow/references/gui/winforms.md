@@ -1,6 +1,6 @@
 # Windows Forms
 
-`VeloxDev.WinForms` · targets `net461;net5.0-windows;netcoreapp3.0`
+`VeloxDev.WinForms` · targets `net461;net5.0-windows;netcoreapp3.0;net8.0-windows`
 
 There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md`. This is the summary a consumer needs.
 

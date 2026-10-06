@@ -9,7 +9,7 @@ Open your GUI's reference alongside this one — `gui/<gui>.md` carries that fra
 | Role | Class | Job |
 |---|---|---|
 | Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu |
-| Canvas transform | `WorkflowCanvasTransformBehavior` | owns the pan offset your node and link views bind to |
+| Canvas transform | `WorkflowCanvasTransformBehavior` — **Jalium spells it `WorkflowSurfaceBehavior.CanvasTransform`**; MAUI has no carrier (see below) | owns the pan offset your node and link views bind to |
 | View pool | `ViewPool` / `ViewManager` | object-pooled views over the visible-items collection |
 | Node drag | `WorkflowNodeDragBehavior` | a drag on a node executes `MoveCommand` |
 | Slot connection | `WorkflowSlotConnectionBehavior` | press one slot, release on another, connect them |
@@ -60,7 +60,7 @@ RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type lo
 
 ⚙ **This binding must sit on the `DataTemplate` root, never on an element inside an item.** An ancestor lookup made from inside an item resolves against that item's own visual tree and silently finds nothing — which looks exactly like "the canvas does not pan".
 
-⚙ MAUI does not ship this behaviour at all, and Jalium has no transform carrier either — its base view (`WorkflowNodeView`) positions each card at its final canvas location and links bound themselves, so a transform set on the host never reaches the pooled views. Your GUI's reference says which applies.
+⚙ **Jalium carries the same value under a different name** — `WorkflowSurfaceBehavior.CanvasTransform`, republished as a CLR property by the tree view's own class, because this platform's bindings cannot read an attached property. Same value, same notifications; only the way it is spelled differs, so a `RenderTransform` bound to it works exactly as above. ⚙ MAUI is the one that ships no carrier at all: it pools links into a single overlay, so there is no per-view transform to set. Your GUI's reference says which applies.
 
 ## What a node view is made of
 
@@ -125,9 +125,10 @@ Right-pressing a link shows the menu the surface declares: the adapter resolves 
 | WPF / WinUI / MAUI | `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` on the tree root, plus a menu resource with that key |
 | Avalonia | the same property with the key its template emits (`WorkflowTreeMenu`) |
 | Razor | a `<LinkMenu Context="link">…</LinkMenu>` fragment parameter on the surface component |
-| WinForms / Jalium | override `OnBuildLinkMenu(menu, link)` on the generated tree subclass |
+| WinForms | override `OnBuildLinkMenu(menu, link)` on the generated tree subclass |
+| Jalium | the same `LinkMenuKey` + menu resource the markup platforms use |
 
-⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms/Jalium add or remove items in the `OnBuildLinkMenu` override; the base adds a Delete item.
+⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms adds or removes items in the `OnBuildLinkMenu` override; Jalium declares them in the menu resource, exactly like the other markup platforms.
 
 ⚙ **The surface owns the open/closed bookkeeping.** It sets `WorkflowInput.IsSuspended` while its menu is up, so the pointer travelling onto the menu cannot clear the link the menu acts on, and releases it on close. When the link an open menu was about leaves the tree (Delete, Undo, an agent edit) the tree reports it through `GetHelper().LinkRemoved` — close your popup when it names yours. **There is no menu event in Core any more; the surface opens it off the routed right-press.**
 

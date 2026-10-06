@@ -1,6 +1,6 @@
 # WPF
 
-`VeloxDev.WPF` · targets `net461;net5.0-windows;netcoreapp3.0`
+`VeloxDev.WPF` · targets `net461;net5.0-windows;netcoreapp3.0;net8.0-windows`
 
 ⚙ **Reference implementation:** `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/` — `TreeView.xaml` (the surface and both templates), `NodeView.xaml`, `SlotView.xaml`, `LinkView.xaml`, `CustomTemplateSelector.cs`, `WorkflowGridDecorator.cs`, `MinimapOverlay.cs`. ViewModels beside it at `Demo/ViewModels/Workflow/`. The demo names its selector and decorator `CustomTemplateSelector` / `WorkflowGridDecorator`; the templates use `TemplateSelector` / `GridDecorator`, so do not be thrown by the difference.
 

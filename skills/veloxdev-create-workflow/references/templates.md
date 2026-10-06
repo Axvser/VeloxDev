@@ -63,7 +63,7 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 | decorator | `-bg` `gridBackground` · `-mic` `minorGridColor` · `-mac` `majorGridColor` · `-ac` `axisColor` · `-gs` `gridSpacing` · `-mle` `majorLineEvery` · `-rb` `rulerBackground` · `-rtc` `rulerTickColor` · `-rlc` `rulerLabelColor` · `-rdc` `rulerDividerColor` | `#1E1E1E` · `#2A2D2E` · `#3A3D40` · `#4D4D4D` · `40d` · `5` · `#C8252526` · `#555555` · `#888888` · `#3A3D40` |
 | minimap | `-bg` `minimapBackground` · `-bdr` `minimapBorder` · `-nf` `nodeFill` · `-vs` `viewportStroke` | `#D2141922` · `#DC94A3B8` · `#DC38BDF8` · `#F0FFFFFF` |
 
-⚙ **A colour you pass may legitimately do nothing on some pack.** Where a framework has no consumer for a value, the parameter is still accepted so the command line stays uniform, and the pack says so in its own `template.json`. The ones to know: **Jalium's minimap colours** and **Razor's tree border and corner radius** are accepted and ignored, and **MAUI has no consumer for `slotPath`** because it draws its ports from geometry rather than from an SVG path. Each `gui/<gui>.md` lists its pack's inert parameters.
+⚙ **A colour you pass may legitimately do nothing on some pack.** Where a framework has no consumer for a value, the parameter is still accepted so the command line stays uniform, and the pack says so in its own `template.json`. The ones to know: **Razor's tree border and corner radius** are accepted and ignored, and **MAUI has no consumer for `slotPath`** because it draws its ports from geometry rather than from an SVG path. Each `gui/<gui>.md` lists its pack's inert parameters.
 
 ⚙ A few slot parameters are inert for the same parity reason, and now say so in their own pack's `template.json` too: `slotBorderColor` on the WPF, WinUI and Avalonia slot templates (those slot views draw a filled path, with no border element), `slotColor` on Avalonia's (its slot takes its colour from the control's `Foreground`), and `slotPath` on MAUI's (it draws its port from geometry). If a slot colour refuses to appear, that is the likely reason: edit the generated file directly rather than the command line.
 
@@ -77,7 +77,7 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 
 ⚙ **The wiring.** Add the `VeloxDev.<GUI>` package, set the tree's `DataContext` (or `Tree` parameter) to your `IWorkflowTreeViewModel`, and make sure your node view's `DataContext` is your node ViewModel.
 
-⚙ **The link menu is already declared.** The tree item emits a Delete link-context-menu entry and wires it — a `LinkMenuKey` plus its menu resource on the markup platforms, a `<LinkMenu>` fragment on Razor, an `OnBuildLinkMenu` override on WinForms/Jalium. Add or remove entries there rather than writing right-press code; see [view-layer.md](view-layer.md#the-link-context-menu).
+⚙ **The link menu is already declared.** The tree item emits a Delete link-context-menu entry and wires it — a `LinkMenuKey` plus its menu resource on the markup platforms, a `<LinkMenu>` fragment on Razor, an `OnBuildLinkMenu` override on WinForms. Add or remove entries there rather than writing right-press code; see [view-layer.md](view-layer.md#the-link-context-menu).
 
 ⚙ **Anything the debug HUD does.** The demos carry an `InfoOverlay` read-only diagnostics panel; it is deliberately not part of the packs, because it is a debugging aid rather than part of the editor.
 

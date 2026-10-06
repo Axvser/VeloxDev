@@ -1,6 +1,6 @@
 # Blazor / Razor
 
-`VeloxDev.Razor` · targets `net6.0` + `Microsoft.AspNetCore.App`
+`VeloxDev.Razor` · targets `net6.0;net8.0` + `Microsoft.AspNetCore.App`
 
 ⚙ **This GUI goes by two names, and the mismatch is only in the folder.** The package is `VeloxDev.Razor`, the template prefix is `razor`, but the demos live under **`Examples/Workflow/Blazor Trimmed/Demo`** — there is no `Razor` folder. Everywhere else the three agree.
 
