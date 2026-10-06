@@ -227,8 +227,10 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
      非 Windows 的手势**转发不出来**，只能在 Started 读 `PeekRoutedPress`（那一笔由链接层转发过）。
    - **缩放**：只有 Windows 的 Ctrl+滚轮进路由（`OnZoomWheelChanged` → `RouteSurfaceWheel`）；
      非 Windows 的捏合**没有可对应的滚轮事件**，当前不转发、也就否决不了。
-   「一笔只转发一次」由 `WorkflowSurfaceBehavior` 的两组静态登记（`RoutedPressTree/Handle`、`RoutedWheelTree/Handle`）保证：
-   先到者转发并登记，后到者读现成的；按下的登记由链接层转发**松手**时清（`ClearRoutedPress`），滚轮的由后到者读走（`RouteWheelOnce`）。
+   「一笔只转发一次」由 `WorkflowSurfaceBehavior` 的两组静态登记保证：
+   **按下**按**树**认（`RoutedPressTree`/`RoutedPressHandle`，`WorkflowSurfaceBehavior.cs:1855-1856`），由链接层转发**松手**时清（`ClearRoutedPress`，`:1911-1920`）；
+   **滚轮**按**物理事件对象**认（`RoutedWheelEvent`/`RoutedWheelHandle`，`:1860-1861`）—— 先到者转发并登记、后到者读现成的（`RouteWheelOnce`，`:1925-1938`）。
+   ⚠ 滚轮的登记**必须**按事件认：按树时登记要由**后到者消费**才清，而普通滚轮只有链接层一条来者 ⇒ 登记没人消费、留到**下一笔**上把那一笔判成「已经路由过」而静默丢掉（实测改前计数不稳：5 格 8 行；改后每格恰好一行）。一次物理滚轮必然是新实例，所以按事件认没有收尾问题。
    ⇒ **不要再给任何一条路加第二次 `Route`**：宿主会一笔听见两次，还会多收一对 `Entered`/`Exited`。
 
 ---
@@ -302,7 +304,7 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 | 谁来收输入 | DP `InteractionSource`（`View`）；宿主绑**页面根**，不绑这层自己 —— 这层 `InputTransparent` 且压在 `ScrollViewer` 下，收不到指针 | `WorkflowLinkOverlay.cs:91`、`:143`；`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml:247` |
 | 命中 | 本层在绘制时把曲线按 **canvas-local** 发布（`PublishCurve`，不带 visual）；指针经 `ToCanvasLocal`（`ToViewport` 的逆）转成同一坐标系，本层调 `input.Tree.HitTestVisibleLinks` 逐条判距，半径用 `input.HitRadius`（默认 6，七家同一个 `DefaultHitRadius`） | `:1381-1383`、`:639-646`、`:605-607`；Core `LinkHitTestEx.cs:18` |
 | 高亮 | 本层没有「每线的可视对象」，连线高亮归 **demo 的 `LinkHighlightLayer`**：它订树 helper 的 `Input.PointerEntered` / `PointerExited` 自己画光带，并在 `LinkRemoved` 上清掉旧像素（线被删时指针不动、收不到 `Exited`） | `Examples/Workflow/MAUI/Demo/Controls/Workflow/LinkHighlightLayer.cs:80-96`（Trimmed 同文件同形） |
-| 删除 | 本层只把 Delete 键翻成 `KeyEvent` 路由进输入面（仅当 `input.HoveredLink` 非空）；**执行归 demo** —— 订树 helper 的 `Input.KeyDown` 执行 `link.DeleteCommand` | `WorkflowLinkOverlay.cs:928-940`；`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs:454-464`、`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml.cs:46-58` |
+| 删除 | 本层只把 Delete 键翻成 `KeyEvent` 路由进输入面（`OnSourceKeyDown`，仅当 `input.HoveredLink` 非空）；**执行归 demo** —— 订树 helper 的 `Input.KeyDown` 执行 `link.DeleteCommand`。`KeyUp` 现在也路由（`OnSourceKeyUp`，无悬停筛选，见 §五·7） | `WorkflowLinkOverlay.cs:972-984`、`:986-997`；`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs:454-464`、`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml.cs:46-58` |
 | 菜单 | 本层不懂菜单：右键（或非 Windows 的长按）翻成 `PointerPressed(Right, …)` 发进输入路由，**表面（适配器）订它、自己弹**（2026-10-03 用户改定）。表面 `WorkflowSurfaceBehavior` 按附着属性 `LinkMenuKey` 从模板声明的 `LinkContextMenu` 资源取菜单、按 `RulerBand + 锚点 + 内容偏移 − 滚动偏移` 定位、弹出，`Opened`/`Closed` 由表面自己置/放 `input.IsSuspended`。菜单指着的那条线离开 `tree.Links`（Agent / Undo / 别处删都算）时树报 `LinkRemoved`，**表面只负责收起自己那份弹窗**（弹窗是平台的，输入路由收不了）。模板/demo 的 code-behind 因此没有一行菜单代码 | `WorkflowSurfaceBehavior.cs:146`（属性）、`:219`（`WireLinkMenu`）、`:346`/`:414`（两条 `ShowLinkMenu`）、`:491`（`DismissLinkMenu`）、`:244-255`（`LinkRemoved`）、`:372-374`/`:477`/`:497`（置/放 `IsSuspended`）；`WorkflowView.xaml:16`（`LinkMenuKey`）、`WorkflowLinkOverlay.cs:618-620`/`:701-710`（本层转发） |
 | 取焦点会不会带滚画布 | **不会** —— `Focus()` 打在 `InteractionSource`（页面根）上，而它是画布 `ScrollView` 的**祖先**；WinUI 的 bring-into-view 只从**焦点元素往上冒**，画布那个 `ScrollViewer` 根本不在那条路上 | `:741`、`:633`；`WorkflowView.xaml:247`（`Root` 是 ContentView 根，`PART_ScrollViewer` 在它里面 `:264`） |
 
@@ -364,12 +366,17 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
      左右键都转发 —— 契约是「按下的那条就是选中的那条」，左键才是「点一下连线」产生的事件。现在 `OnPressed`
      用同一个 `MouseButton` 左右都发（`:618-620`；Windows 分支 `:772-784`、非 Windows `:668-686`）。
    - **修法**（`WorkflowLinkOverlay.cs` 的 `AttachKeyHook` / `TryUpgradeKeyHook`）：把 `KeyDownEvent` 挂到
-     `element.XamlRoot.Content`（窗口根 `:826`），键路由因此不再依赖焦点落在哪；`XamlRoot` 在 Attach 那一刻**还是
-     `null`**（实测），所以升级交给第一次指针移动（`TryUpgradeKeyHook` `:844-856`，由 `OnHoverMoved` `:580` 调），
-     拿不到窗口根就回退到交互源（`:826`）。`handledEventsToo: false` 保持不变 —— 聚焦的输入框吃掉 Delete
-     改自己光标时必须让它赢（`:839`）。
+     `element.XamlRoot.Content`（窗口根，`AttachKeyHook` `:856-880`），键路由因此不再依赖焦点落在哪；`XamlRoot` 在 Attach 那一刻**还是
+     `null`**（实测），所以升级交给第一次指针移动（`TryUpgradeKeyHook` `:884-896`，由 `OnHoverMoved` `:581` 调），
+     拿不到窗口根就回退到交互源（`:858`）。`handledEventsToo: false` 保持不变 —— 聚焦的输入框吃掉 Delete
+     改自己光标时必须让它赢（`:877`）。
+   - **`KeyUp` 与 `KeyDown` 同址同策略（2026-10-06 补）**：`AttachKeyHook` 在同一台窗口根上再挂一个
+     `KeyUpEvent`（`:879`；`DetachPlatformHooks` `:940-943` 同摘），`OnSourceKeyUp`（`:986-997`）与 `OnSourceKeyDown` 同形，
+     但**不置 `Handled`、也不筛悬停** —— 另外六家都无条件上报，键抬起本身没有可删的东西，筛掉只会让订阅者
+     在不悬停时收不到配对的 `KeyUp`。这家此前**一封 `KeyUp` 都不上报**；实测补上后按 Delete / Escape 各得一行。
    - **验证**：点击 → Delete（HUD `连线 1/1 → 0/0`）、悬停 → Delete、右键/长按弹菜单；
      适配器五个 TFM + 两个 demo 0 警告 0 错误、Core 1012 测试全过。
+   - **demo 侧的订阅要按「树实例」去重，而且要用一张集合**（`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs:471-491` 的 `HashSet<TreeViewModel> ProbedTrees`）：demo 的会话会被换上好几轮（A → B → A），只比「上一棵」的话回到 A 时会再订一遍 ⇒ 同一棵树上挂两个订阅，每笔输入送达两次（实测：一格滚轮两行、args 是同一个实例）。这是 demo 的写法，不是适配器契约。
 
 改这块时的两条禁令：**别去掉 `InputTransparent = true`**（`:143`，同 §四·6）；**别把命中半径放大**
 （Core `LinkHitTestEx.DefaultHitRadius = 6d`，`LinkHitTestEx.cs:18`）—— 那会让画布空白处每一次移动都命中某条线。

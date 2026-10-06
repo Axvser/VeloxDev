@@ -162,13 +162,19 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 ### 2.4.3 两个相位的坑：按下要挂预览、收尾要排在别的处理器之后（2026-10-06 重测）
 
 **① 按下的一切都挂在具名按下源上**（`PointerPressSource.PreviewMouseDown` →
-`WorkflowSurfaceBehavior.OnPointerPressSourceDown`，`WorkflowSurfaceBehavior.cs:946-991`）。
-**宿主上挂什么都收不到**，且不是相位问题：26.10.9 实测，宿主的 `PreviewMouseDown`（隧道，含
+`WorkflowSurfaceBehavior.OnPointerPressSourceDown`，`WorkflowSurfaceBehavior.cs:949-994`）。
+**宿主收不到的是「按下」，不是「一切」**：26.10.9 实测，宿主的 `PreviewMouseDown`（隧道，含
 `handledEventsToo: true`）与冒泡 `MouseDown` **整场不触发**，而**同一处注册的** `PreviewMouseMove`
-照常触发 ⇒ 断在「路径怎么搭出来」，在 Jalium 侧，不是相位、也不是 `Handled`。
+照常触发 ⇒ 断在按下这条路径怎么搭出来，在 Jalium 侧，不是相位、也不是 `Handled`。
 
 ⇒ **别再把按下路由挂回宿主**（`WorkflowSurfaceBehavior.Attach` 的注释 `:381-383` 记了这一条）。
 一个永不触发的路由器比没有更误导人 —— 它会让「已经路由过了」这件事看着成立。
+
+⚠ **这条相位结论只对「按下」成立，别延伸成「宿主预览相不可靠」**（2026-10-06 重测）：普通滚轮就挂在
+**宿主预览相**上（`Mouse.PreviewMouseWheelEvent`，`WorkflowSurfaceBehavior.cs:389`；处理器 `OnMouseWheel`
+`:1129-1146`，里面让开 Ctrl+那支），实测**收得到** —— 三格滚轮三行。改挂冒泡相
+（`Mouse.MouseWheelEvent`）也收到 2/2，但位置与目标取在滚动容器滚过之后，所以留在预览相。
+Ctrl+滚轮缩放仍挂 `ScrollViewer.PreviewMouseWheel`（`HookZoom`，`:545-557`，只在 `ZoomEnabled` 时挂）。
 
 **按下源比节点卡更浅、在隧道里更早跑**（同构树上以真实分发量过：宿主 → 按下源 → 卡片，三级全触发），
 但这条顺序**不保证**，所以两边都做了一遍防御：表面状态里 `RoutedPress` 存的是**按下的事件对象本身**
@@ -178,7 +184,7 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 **组件（`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior`）订的是隧道相 `PreviewMouseDown`，
 不能再订 `PreviewMouseLeftButtonDown`** —— 后者是隧道相翻译出来的 **Direct** 事件、args 另建一份
 （`UIElement.ReRaiseButtonEvent`），拿它就没法和按下源对「是不是同一笔」。`RouteComponentPress`
-（`WorkflowSurfaceBehavior.cs:1246-1281`）是组件交回按下、换回句柄的唯一入口（组件订
+（`WorkflowSurfaceBehavior.cs:1253-1285`）是组件交回按下、换回句柄的唯一入口（组件订
 `PreviewMouseDown` 就要自己判 `e.ChangedButton`）。
 
 **② 「兜底收虚拟连线」不能无条件排在预览相。** 宿主的预览处理器**早于**槽自己的预览处理器，所以一句
