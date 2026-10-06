@@ -159,11 +159,27 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 **盒子仍然在属性变更期摆，不在 `OnRender` 里摆**（渲染器按盒裁剪，见 §2.1）：DP 一变就重算几何并挪盒子，
 `OnRender` 只负责画。盒子要盖住**四个控制点**（曲线凸包），只盖两端点会把鼓出去的那段静默切掉。
 
-### 2.4.3 两个相位的坑：按下要挂预览、收尾要排在别的处理器之后（2026-10-05 实测）
+### 2.4.3 两个相位的坑：按下要挂预览、收尾要排在别的处理器之后（2026-10-06 重测）
 
-**① 「起平移」必须挂在具名按下源的预览相上**（`PointerPressSource.PreviewMouseDown`），与 WPF 同形。
-挂在宿主的**冒泡**相上收不到：滚动视口那一层会把 `MouseDown` 标成已处理，宿主的处理器整场不触发。
-宿主的转发（`RoutePointer`）也因此一并挪到预览相。
+**① 按下的一切都挂在具名按下源上**（`PointerPressSource.PreviewMouseDown` →
+`WorkflowSurfaceBehavior.OnPointerPressSourceDown`，`WorkflowSurfaceBehavior.cs:946-991`）。
+**宿主上挂什么都收不到**，且不是相位问题：26.10.9 实测，宿主的 `PreviewMouseDown`（隧道，含
+`handledEventsToo: true`）与冒泡 `MouseDown` **整场不触发**，而**同一处注册的** `PreviewMouseMove`
+照常触发 ⇒ 断在「路径怎么搭出来」，在 Jalium 侧，不是相位、也不是 `Handled`。
+
+⇒ **别再把按下路由挂回宿主**（`WorkflowSurfaceBehavior.Attach` 的注释 `:381-383` 记了这一条）。
+一个永不触发的路由器比没有更误导人 —— 它会让「已经路由过了」这件事看着成立。
+
+**按下源比节点卡更浅、在隧道里更早跑**（同构树上以真实分发量过：宿主 → 按下源 → 卡片，三级全触发），
+但这条顺序**不保证**，所以两边都做了一遍防御：表面状态里 `RoutedPress` 存的是**按下的事件对象本身**
+（一次物理按下全程同一个 args 实例，下一次必然是新的，`WorkflowSurfaceBehavior.cs:76-79`），
+表面与组件各自路由前都拿它比一次，谁都只路由一遍。
+
+**组件（`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior`）订的是隧道相 `PreviewMouseDown`，
+不能再订 `PreviewMouseLeftButtonDown`** —— 后者是隧道相翻译出来的 **Direct** 事件、args 另建一份
+（`UIElement.ReRaiseButtonEvent`），拿它就没法和按下源对「是不是同一笔」。`RouteComponentPress`
+（`WorkflowSurfaceBehavior.cs:1246-1281`）是组件交回按下、换回句柄的唯一入口（组件订
+`PreviewMouseDown` 就要自己判 `e.ChangedButton`）。
 
 **② 「兜底收虚拟连线」不能无条件排在预览相。** 宿主的预览处理器**早于**槽自己的预览处理器，所以一句
 无条件的 `ResetVirtualLinkCommand` 会在槽有机会完成连接**之前**就把橡皮筋收掉 —— 症状是**所有连线都连不成**，
@@ -176,10 +192,10 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 
 **这套守卫现在在适配器的表面行为里**（`WorkflowSurfaceBehavior.cs`；不再是宿主自写，也**不再有**可继承的 `WorkflowTreeView`）：
 
-- `SurfaceState.ZoomPin`（`:87` 的字段、`:322` 的写入）+ `ZoomPinLifetimeMs = 250`（`:45`）：提交缩放目标后把视口钉在该目标上，直到 viewer 报告落地（±0.5）或超过 250ms（`UpdateViewport(SurfaceState)`，`:770-789`）。
-- 理由在 `:85-87` 与 `:321-323` 的注释里：Jalium 的 `ScrollTo` 之后立刻读 offset 可能读到**尚未生效的缩放前值**，而 `ScrollChanged` 会在落地前先发一次；若照读就会用陈旧窗口覆写 `Helper.Viewport`，下一次 `Virtualize` 把刚物化的连线裁掉（节点因为按自己的矩形进池而留下）→ **深缩放链接消失 ~100ms**。
-- 兜底：`:802-810` 视口未测量时（`vw<=0`）退回整块画布，否则首次 `Virtualize` 会在 0 尺寸视口上空转，初始节点/连线全不出现。
-- **宿主零调用者**：`NotifyZoomCommitted`（`:297-327`）由表面**内部**在缩放提交后自己调（`OnZoomPreviewMouseWheel` 的 `:613` / `:626`），demo 宿主一处都不调 —— 缩放手势本身归表面（`ZoomEnabled` 附着属性 + `OnZoomPreviewMouseWheel`）。
+- `SurfaceState.ZoomPin`（`:95` 的字段、`:328` 的写入）+ `ZoomPinLifetimeMs = 250`（`:45`）：提交缩放目标后把视口钉在该目标上，直到 viewer 报告落地（±0.5）或超过 250ms（`UpdateViewport(SurfaceState)`，`:786-805`）。
+- 理由在 `:93-95` 与 `:327-328` 的注释里：Jalium 的 `ScrollTo` 之后立刻读 offset 可能读到**尚未生效的缩放前值**，而 `ScrollChanged` 会在落地前先发一次；若照读就会用陈旧窗口覆写 `Helper.Viewport`，下一次 `Virtualize` 把刚物化的连线裁掉（节点因为按自己的矩形进池而留下）→ **深缩放链接消失 ~100ms**。
+- 兜底：`:818-826` 视口未测量时（`vw<=0`）退回整块画布，否则首次 `Virtualize` 会在 0 尺寸视口上空转，初始节点/连线全不出现。
+- **宿主零调用者**：`NotifyZoomCommitted`（`:303-332`）由表面**内部**在缩放提交后自己调（`OnZoomPreviewMouseWheel` 的 `:629` / `:642`），demo 宿主一处都不调 —— 缩放手势本身归表面（`ZoomEnabled` 附着属性 + `OnZoomPreviewMouseWheel`）。
 
 ⇒ **这家的"链接在深缩放下闪没"有两个独立成因**：表面侧的视口竞态（本节，靠 `ZoomPin` 解）与渲染侧的盒裁剪（§2.1，靠自盒化解）。**修一个不会修好另一个**，别把两者的现象混着查。
 
@@ -232,18 +248,18 @@ Jalium 没有 `WorkflowTreeView`，也没有 `OnBuildLinkMenu` / `OnConnecting` 
 
 - **条目由宿主的标记声明。** tree-view 模板在 `UserControl.Resources` 里放一个 `<ContextMenu x:Key="LinkContextMenu">`
   （`workflow-tree-view/TemplateClass.jalxaml:40-42`；demo 里就一条 `Delete`），表面用附着属性 `LinkMenuKey="LinkContextMenu"`
-  按 key 取（`WorkflowSurfaceBehavior.cs:175-182`；`OnLinkPointerPressed` `:1236-1241` 的 `host.FindResource(menuKey)`）。
+  按 key 取（`WorkflowSurfaceBehavior.cs:181-187`；`OnLinkPointerPressed` `:1343-1347` 的 `host.FindResource(menuKey)`）。
   存 key 而不是菜单对象，是因为这个附着属性挂在表面自己的根上，`{StaticResource}` 会在定义它的字典之前求值（`:176-180` 的注释）。
-- **订阅/定位/开合都在表面行为里。** `OnLinkPointerPressed`（`:1223-1276`）挂在 Core 的 `Input.PointerPressed` 上，判右键 + 连线命中后：
-  打开前 `menu.DataContext = link`（菜单不在视觉树里、继承不到宿主的 DataContext，`:1246-1248`），先置 `input.IsSuspended = true`（`:1269-1273`），
-  再 `menu.Open(ToMenuPosition(host, e.Position))`；`menu.Closed` 里放开挂起并清状态（`:1250-1267`）。
+- **订阅/定位/开合都在表面行为里。** `OnLinkPointerPressed`（`:1329-1382`）挂在 Core 的 `Input.PointerPressed` 上，判右键 + 连线命中后：
+  打开前 `menu.DataContext = link`（菜单不在视觉树里、继承不到宿主的 DataContext，`:1352-1354`），先置 `input.IsSuspended = true`（`:1375-1379`），
+  再 `menu.Open(ToMenuPosition(host, e.Position))`；`menu.Closed` 里放开挂起并清状态（`:1356-1373`）。
 - **定位链**：`e.Position`（表面局部）→ `host.PointToScreen`（物理像素）→ **`root.PointFromScreen(...)`（根视觉局部）** → `menu.Open(...)`
-  （`ToMenuPosition`，`:1288-1292`）。最后那一步不能省：`ContextMenu.Open` 把点**直接写进** `Popup.HorizontalOffset/VerticalOffset`，
+  （`ToMenuPosition`，`:1393-1397`）。最后那一步不能省：`ContextMenu.Open` 把点**直接写进** `Popup.HorizontalOffset/VerticalOffset`，
   而 `Popup` 按**根视觉/窗口客户区**解释它们；直接把 `PointToScreen` 的结果喂进去，菜单会整体偏移一个窗口原点。
 - **线被别处删掉（Agent / Undo / …）时收菜单归宿主。** 树 helper 在开着的菜单指着的那条线离开 `tree.Links` 时发 **`LinkRemoved`**
   （Core `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:106`、`Templates/Helpers/TreeHelper.cs:121`；
   没有 `ContextMenuDismissRequested`）。表面只认自己这份菜单指着的那条（`ReferenceEquals(state.MenuLink, link)` → `state.LinkMenu?.Close()`：
-  `WorkflowSurfaceBehavior.cs:1278-1285`），收起后照常报 `Closed`、挂起随之放开；**平台仍然不记任何账**。
+  `WorkflowSurfaceBehavior.cs:1384-1390`），收起后照常报 `Closed`、挂起随之放开；**平台仍然不记任何账**。
 
 另外：Jalium 的 `MenuItem` **不会自己关菜单** —— 条目点完要显式 `menu.Close()` 再执行命令。模板产出的 `ContextMenu` 是**空的**（`workflow-tree-view/TemplateClass.jalxaml:40-41`，注释写着 "Add or remove entries here"），
 demo 往里放了一条 `<MenuItem Header="Delete" Command="{Binding DeleteCommand}" />`（`Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/TreeView.jalxaml:42`）；`DataContext` 被表面设成那条线，

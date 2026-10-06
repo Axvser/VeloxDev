@@ -7,7 +7,7 @@
 > 下文凡提 `WorkflowSlotView` / `WorkflowNodeView` 的类名，按对应的 `*Attachment` 读。
 >
 > 连线交互规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)：输入是标准输入
-> （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），命中归 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
+> （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），指针底下是谁（节点 / 插槽 / 连线）由适配器解析、认不到才回退 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
 >
 > **读法**：契约（七个视图角色、注册位置、联动清单）在 `memory/modules/WorkflowSystem/extension.md` §3.9 与 §4.3，
 > 本文不重复；人面向的「怎么搭一个 WinForms 工作流视图」在 `skills/veloxdev-create-workflow/references/gui/winforms.md`，
@@ -54,9 +54,9 @@
 
 ### 2.2 没有路由/隧道事件 ⇒ `Application.AddMessageFilter`，而且是**进程级单例**
 
-- 滚轮缩放：`SetZoomEnabled` 加 `Application.AddMessageFilter(state)` 并同时挂 `MouseWheel`（`WorkflowSurfaceBehavior.cs:186-188`）。注释 `:187` 写明为什么必须用消息过滤器：**「挂在元素上的 `WndProc` 只能收到发给元素自己的滚轮消息，发给子窗口的滚轮永远到不了它」** —— 节点卡片内部的 `AutoScroll` 面板会先把滚轮吃掉。
-- 插槽连接：`_messageFilter` 与 `_activeConnection` 都是**静态字段**（`WorkflowSlotConnectionBehavior.cs:31-32`），即**整个进程同时只有一条在拖的连线**；`EnsureMessageFilter` 惰性挂、`DetachMessageFilter` 摘下（`:163-182`）。过滤器自己监听 `WM_MOUSEMOVE`/`WM_LBUTTONUP` 并用 `NativeMethods.WindowFromPoint`（`:331`、`:375-379`）做命中测试。
-- ⇒ **这条的代价必须记住**：`IMessageFilter` 是应用级的，所以 **(a)** 多个工作流表面同时开滚轮缩放时，是靠 `ResolveSurfaceHost(m.HWnd)` 从消息目标反查归谁（`:53`、`:99-119`），而不是靠事件源；**(b)** 任何全局过滤器链上的异常都会影响整个应用的消息泵。
+- 滚轮缩放：`SetZoomEnabled` 加 `Application.AddMessageFilter(state)` 并同时挂 `MouseWheel`（`WorkflowSurfaceBehavior.cs:197-199`）。注释 `:198` 写明为什么必须用消息过滤器：**「挂在元素上的 `WndProc` 只能收到发给元素自己的滚轮消息，发给子窗口的滚轮永远到不了它」** —— 节点卡片内部的 `AutoScroll` 面板会先把滚轮吃掉。
+- 插槽连接：`_messageFilter` 与 `_activeConnection` 都是**静态字段**（`WorkflowSlotConnectionBehavior.cs:31-32`），即**整个进程同时只有一条在拖的连线**；`EnsureMessageFilter` 惰性挂、`DetachMessageFilter` 摘下（`:170-189`）。过滤器自己监听 `WM_MOUSEMOVE`/`WM_LBUTTONUP` 并用 `NativeMethods.WindowFromPoint`（`:338`、`:347-371`）做命中测试。
+- ⇒ **这条的代价必须记住**：`IMessageFilter` 是应用级的，所以 **(a)** 多个工作流表面同时开滚轮缩放时，是靠 `ResolveSurfaceHost(m.HWnd)` 从消息目标反查归谁（`:55`、`:110-130`），而不是靠事件源；**(b)** 任何全局过滤器链上的异常都会影响整个应用的消息泵。
 
 ### 2.3 子控件永远画在父控件的 `OnPaintBackground` 之上 ⇒ **透明分层在这家不可用**
 
@@ -128,6 +128,10 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 ⚠ **它是给用户自己写的视图用的**。适配器自带的那几个视图走各自的助手（`WorkflowNodeAttachment` 等），
 不用它；不要把这两条路合成一条。
 
+### 2.10 卡片/插槽上的按下送不到画布，所以由组件自己路由
+
+这家没有隧道相：指针落在**启用的子控件**（节点卡片 / 插槽）上时画布的 `MouseDown` 根本不触发，句柄只能由组件自己那次转发产出 —— `WorkflowNodeDragBehavior`（`WorkflowNodeDragBehavior.cs:169`）与 `WorkflowSlotConnectionBehavior`（`WorkflowSlotConnectionBehavior.cs:94`）调 `WorkflowSurfaceBehavior.RouteComponentPress(control, 组件模型, e.Button, 1)`（`WorkflowSurfaceBehavior.cs:532`）并以组件自身为目标，返回的句柄就地判 `PreventDefault`；目标解析沿命中控件与父链读 `ViewModel` / `DataContext` / `BindingContext` / `Tag`，认不到才回退共享曲线判定（`ResolveTarget`，`:553`）。**滚轮是另一条**：它在 Win32 消息过滤器里就被接住（`:71` 调 `RouteWheel`，`:504`），画布永远看不到，所以缩放的路由与「否决即吞消息」（`:73-74` 的 `m.Result = IntPtr.Zero; return true;`）都只能在这一层做。适配器基类 `WorkflowTreeView` 的空白平移走 `OnCanvasMouseDown`（`WorkflowTreeView.cs:540`，句柄读取在 `:564`）；非 Trimmed demo 的自绘画布自持平移，同理自己路由那一笔（`Examples/Workflow/WinForms/Demo/Controls/WorkflowCanvas.cs`）。
+
 ---
 
 ## 三、与其它六家的刻意背离
@@ -135,12 +139,12 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 | # | 这里的做法和其他家不一样，因为… | 依据 |
 |---|---|---|
 | 1 | **`SetIsEnabled` 顺手改 Win32 窗口样式（七家里唯一）**：启用画布宿主的同时给画布窗口上 `WS_CLIPCHILDREN`、给顶层窗体上 `WS_EX_COMPOSITED`。因为这家没有合成器，自绘画布与子窗口的重绘分离必然产生闪烁/鬼影，只能在窗口层解决。别家没有这一步，也没有对应的 hook 点。 | `WorkflowSurfaceBehavior.cs:151-153` |
-| 2 | **Ctrl+滚轮走应用级 `IMessageFilter`，并且能真的把滚轮消息吃掉（七家里唯一）**：别家都用平台的路由/隧道/预览阶段（WPF `PreviewMouseWheel`、Avalonia `RoutingStrategies.Tunnel`、WinUI `AddHandler(handledEventsToo:true)`，见 `wpf.md` §三·1），其中 Avalonia/WinUI 两家拿不到 preview 阶段、会「先滚一丝」。这家没有事件路由，只能抢在消息泵那一层，于是**能彻底抑制滚动**：`m.Result = IntPtr.Zero; return true; // swallow the message: the target control never scrolls`（`:95-96`）。设计意图写在 `:36-45`。 | `WorkflowSurfaceBehavior.cs:47-51`、`:95-96`、`:186-188` |
-| 3 | **插槽连接用消息过滤器 + `WindowFromPoint` + 静态单活动连接（七家里唯一）**：整文件 383 行；对照 WPF 是 61 行，只有 `PreviewMouseLeftButtonDown` → `SendConnectionCommand`、`PreviewMouseLeftButtonUp` → `ReceiveConnectionCommand`（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotConnectionBehavior.cs:38-58`）。这家的复杂度全部来自「按下与抬起可能落在不同的窗口上」，所以必须靠 `WindowFromPoint` 反查目标控件、并自己维护「谁在拖」。**别把 WPF 那种两行式实现当成通用形状往新平台上套。** | `WorkflowSlotConnectionBehavior.cs:31-32`、`:163-182`、`:329-379` |
+| 2 | **Ctrl+滚轮走应用级 `IMessageFilter`，并且能真的把滚轮消息吃掉（七家里唯一）**：别家都用平台的路由/隧道/预览阶段（WPF `PreviewMouseWheel`、Avalonia `RoutingStrategies.Tunnel`、WinUI `AddHandler(handledEventsToo:true)`，见 `wpf.md` §三·1），其中 Avalonia/WinUI 两家拿不到 preview 阶段、会「先滚一丝」。这家没有事件路由，只能抢在消息泵那一层，于是**能彻底抑制滚动**：`m.Result = IntPtr.Zero; return true; // swallow the message: the target control never scrolls`（`:106-107`）。设计意图写在 `:37-47`。 | `WorkflowSurfaceBehavior.cs:48`、`:106-107`、`:197-199` |
+| 3 | **插槽连接用消息过滤器 + `WindowFromPoint` + 静态单活动连接（七家里唯一）**：整文件 390 行；对照 WPF 是 72 行，只有 `PreviewMouseLeftButtonDown`（先读表面存的按下句柄，被否决就不起）→ `SendConnectionCommand`、`PreviewMouseLeftButtonUp` → `ReceiveConnectionCommand`（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotConnectionBehavior.cs:39-70`）。这家的复杂度全部来自「按下与抬起可能落在不同的窗口上」，所以必须靠 `WindowFromPoint` 反查目标控件、并自己维护「谁在拖」。**别把 WPF 那种两行式实现当成通用形状往新平台上套。** | `WorkflowSlotConnectionBehavior.cs:31-32`、`:170-189`、`:338`、`:347-380` |
 | 4 | **`WorkflowSlotLayoutBehavior.SyncNow(Control)` 只有这家有**：一个公开的**同步**重测入口。理由是延迟路径 `BeginInvoke` 会合并到消息循环，而消息循环排在强制同步重绘之后，所以缩放折叠/画布扩张期间连线会用旧端点画一帧。别家都不需要它 —— 它们的布局/渲染是同一趟流水线。**调用方**：适配器基类 `WorkflowTreeView.cs:852`（模板与 Trimmed 继承它，自动具备）、节点视图 `Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-node-view/TemplateClass.cs:320` 与 `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/NodeView.cs:316`。 | `WorkflowSlotLayoutBehavior.cs:274-315` |
 | 5 | **表面行为不再按名字找控件**：画布/装饰器/小地图都是宿主**按对象**交进来的（`SetScrollViewer` / `SetCanvas` / `SetGridDecorator` / `SetMinimapOverlay`），改名不再有影响。仍然靠名字找的是**插槽布局** —— `FindControlByName`（Ordinal 全树遍历，`WorkflowSlotLayoutBehavior.cs:652-663`）解析插槽名 / 坐标宿 / 父宿（`:538`、`:560`、`:603`、`:633`），不是 `FindName`/`GetTemplateChild`。`PART_*` 命名约定在这家**只是模板自己遵守的写法**，框架不强制任何前缀。⇒ 给这些具名控件改名，插槽测量会静默失效（不抛）。 | `WorkflowSlotLayoutBehavior.cs:652-663` |
 | 6 | **`ViewManager` 处理 `NotifyCollectionChangedAction.Replace`**（`ViewManager.cs:126-142`）：与 Jalium 同（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/ViewManager.cs:105`），而 WPF/Avalonia/WinUI/MAUI 四家的 `switch` 只列 `Add`/`Remove`/`Reset`。⇒ 这家的「原地替换 `VisibleItems` 元素」是**会**刷新视图的。 | `ViewManager.cs:126-142` |
-| 7 | **Ctrl 判定是精确相等**：`Control.ModifierKeys != Keys.Control`（`WorkflowSurfaceBehavior.cs:48`）。与 WPF 同形，另四家用 `HasFlag`（四家的位置见 `wpf.md` §四·4）。⇒ **Ctrl+Shift+滚轮在这家不缩放**；这是七家不一致的地方，代码里没写是刻意还是遗漏，**别猜**。 | `WorkflowSurfaceBehavior.cs:48` |
+| 7 | **Ctrl 判定是精确相等**：`Control.ModifierKeys != Keys.Control`（`WorkflowSurfaceBehavior.cs:50`）。与 WPF 同形，另四家用 `HasFlag`（四家的位置见 `wpf.md` §四·4）。⇒ **Ctrl+Shift+滚轮在这家不缩放**；这是七家不一致的地方，代码里没写是刻意还是遗漏，**别猜**。 | `WorkflowSurfaceBehavior.cs:50` |
 
 ---
 
@@ -214,7 +218,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 | 命中半径 | `LinkHitRadius = 6f`（≈ 最外圈辉光管壁的半宽 5.5px），建输入路由时写进 `input.HitRadius` | `WorkflowCanvas.cs:43`、`:878` |
 | 选中即取焦点 | 输入路由的悬停结果一到就 `Focus()`（上色是画布写回渲染器的 `IsHighlighted`，取焦点是画布补的平台一半） | `WorkflowCanvas.cs:919-926`（`Focus()` 在 `:926`）、`:213`（`ControlStyles.Selectable`） |
 | 删除 | 走连线的 `DeleteCommand`，**不是**摘控件：Delete 键由宿主自己在 `OnKeyDown` 里执行，菜单项在本地 `OnBuildLinkMenu` 里直接 `Execute` | `WorkflowCanvas.cs:1027-1030`、`:1058-1060` |
-| 右键菜单 | 每次右键**现建**一个 `ContextMenuStrip`，条目由本地 `OnBuildLinkMenu` 填（只有「删除连线」一项）；本画布发布的指针是**世界坐标**，所以弹出位置须经 `WorldToClient` 落回客户区再 `PointToScreen`（适配器基类发布的却是**客户区坐标**，那边直接 `PointToScreen`、没有这个逆变换 —— 两家的坐标约定相反，别互相照抄）；菜单一开就把输入路由置 `IsSuspended`、收起时放开（宿主自己记账）；**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹）。**菜单不得比它作用的那条线活得久**：那条线离开 `tree.Links`（Delete 键 / Agent / Undo 任一删除路径）时树发 `LinkRemoved`，宿主用记录菜单目标线的字段（本家 `_menuLink`）认领是不是自己这份菜单，认领了才 `_linkMenu?.Close()` —— 收起照常放开 `IsSuspended`，输入路由不代关弹窗；这一对接线在两处：适配器基类 `AttachLinkInput`/`DetachLinkInput`（模板产物与 Trimmed 继承它，自动具备）与这块自绘画布各自的 attach/detach 对 | `WorkflowCanvas.cs:980-1016`、`:1019-1023`、`:1268-1274`、`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:727-743`、`:745-761`、`:765-800` |
+| 右键菜单 | 每次右键**现建**一个 `ContextMenuStrip`，条目由本地 `OnBuildLinkMenu` 填（只有「删除连线」一项）；本画布发布的指针是**世界坐标**，所以弹出位置须经 `WorldToClient` 落回客户区再 `PointToScreen`（适配器基类发布的却是**客户区坐标**，那边直接 `PointToScreen`、没有这个逆变换 —— 两家的坐标约定相反，别互相照抄）；菜单一开就把输入路由置 `IsSuspended`、收起时放开（宿主自己记账）；**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹）。**菜单不得比它作用的那条线活得久**：那条线离开 `tree.Links`（Delete 键 / Agent / Undo 任一删除路径）时树发 `LinkRemoved`，宿主用记录菜单目标线的字段（本家 `_menuLink`）认领是不是自己这份菜单，认领了才 `_linkMenu?.Close()` —— 收起照常放开 `IsSuspended`，输入路由不代关弹窗；这一对接线在两处：适配器基类 `AttachLinkInput`/`DetachLinkInput`（模板产物与 Trimmed 继承它，自动具备）与这块自绘画布各自的 attach/detach 对 | `WorkflowCanvas.cs:980-1016`、`:1019-1023`、`:1268-1274`、`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:738-754`、`:756-772`、`:776-811` |
 
 四条要记住的结论：
 
@@ -228,12 +232,13 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 `WorkflowTreeView` 现在还有：`OnConnecting` / `OnConnected`（连接建立前后）、`OnBuildLinkMenu(menu, link)`
 （填连线右键菜单，基类**什么都不加**、条目是宿主的策略，`WorkflowTreeView.cs:282-286`）。前者由基类用
 `WorkflowEventRelay` 接模型事件、转发进钩子；后者的**弹出、定位、开合上报全在基类**
-（`OnLinkPointerPressed`，`WorkflowTreeView.cs:765-800`），模板产物只重写 `OnBuildLinkMenu` 这一处来增删条目。
+（`OnLinkPointerPressed`，`WorkflowTreeView.cs:776-811`），模板产物只重写 `OnBuildLinkMenu` 这一处来增删条目。
 
 ⚠ **基类订阅输入路由的 `PointerPressed` 与树的 `LinkRemoved` 就在 `AttachLinkInput` 里**
-（`WorkflowTreeView.cs:734-742`；`Detach` 在 `DetachLinkInput` 里按相反方向卸，`:745-761`），
+（`WorkflowTreeView.cs:738-754`；`Detach` 在 `DetachLinkInput` 里按相反方向卸，`:756-772`），
 已无单独的菜单 attach 步骤，也不再依赖订阅先后：链上更靠前的一级（连线自己）在同一个事件的句柄上置
-`e.Handle.PreventDefault` 就能否掉这一次，基类在 `OnLinkPointerPressed` 里读它（`WorkflowTreeView.cs:771`）。
+`e.Handle.PreventDefault` 就能否掉这一次，基类在 `OnLinkPointerPressed` 里读它（`WorkflowTreeView.cs:782`）。
+空白画布上的平移同一笔否决：`OnCanvasMouseDown` 路由后读同一个句柄（`WorkflowTreeView.cs:564`）。
 宿主想否决某一次，订同一个 `PointerPressed` 即可，与基类订阅的先后无关。
 
 （校验脚本已泛化：入口是 `Src/Verification/verify-workflow-item-templates-all.ps1` —— 七家平台通吃，`-Platform <name>` 选一家、`-Strict` 严格模式；旧的 `verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1` 现在是薄转发，老调用照常可用。）

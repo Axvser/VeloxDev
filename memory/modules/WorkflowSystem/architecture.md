@@ -177,7 +177,7 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Help
 - **平台层怎么引用这 15 个名字 = 规范，不在这里**（用户 2026-10-05 定为规范）：适配器与 item template 每个文件**同时持有 `Wf` / `PlatformInput` 两个别名、处处带前缀**（哪怕该名字在本文件里并不冲突、哪怕某个别名一次没用上）；demo 只在**真冲突**处留别名 —— 只有五个 demo 文件留：Avalonia Demo `Views/Workflow/SlotView.cs` 与 `Views/Workflow/WorkflowView.axaml.cs`、Jalium Demo `Views/Workflow/NodeEditorSurface.cs`、WPF Demo `Views/Workflow/WorkflowView.xaml.cs`、WinForms Demo `Controls/WorkflowCanvas.cs`，其余 demo 保持裸名。这 15 个之外的 Core 名字（`WorkflowInput` / `WorkflowEventHandle` / `Anchor` / `IWorkflowTreeViewModel` …、以及按组件定制的那三个事件族）也保持裸名。清单、判据（按用途不按名字）、核查命令与自查表都在 [memory/specifications/input-alias-specifications.md](../../specifications/input-alias-specifications.md)。
 - **位置是 `Anchor`，`Position.Layer` 取来源视图所在图层**。但**指针本身没有图层**：`SetPointerCommand` / 虚拟连线端点仍按旧规则取起点那一端的图层。
 - **能力接口 + 一个 relay**：`IInputEvents { InputRelay Input; }`，四组 Helper（`TreeHelper<T>`/`NodeHelper<T>`/`SlotHelper<T>`/`LinkHelper<T>`）都实现。宿主订阅：`((IInputEvents)link.GetHelper()).Input.PointerEntered += …`。
-- **命中归适配器判**（`LinkHitTestEx.HitTestVisibleLinks` 是它调的那个共享算法）：Core 不新增 node/slot 命中。
+- **命中归适配器判**：适配器回答的是「指针底下是谁」，**节点与插槽也是答案的一部分** —— 从来源视觉的 `DataContext`（五家标记平台的视图都把它挂在视图上）、控件的 `ViewModel`/`Tag`（WinForms）、JS 回的 `data-veloxdev-node-id` / `-slot-id`（Razor）认出组件模型，认不到才回退 `LinkHitTestEx.HitTestVisibleLinks`（它仍是那条共享的曲线判定，Core 不新增 node/slot 命中）。链里 `slot → node → tree` 因此才走得通 —— 只认连线时 `Target` 永远是「连线或空白」。
 
 **两相没了，只剩「订阅者先跑」**：原来是 `Preview*/Outcome` 两相共用一个句柄；现在**一次动作只发一次**，而且 Core 本身没有默认动作可说「之前」，`WorkflowEventHandle` 仍在、语义不变：
 `PreventDefault` = 框架这一手不执行（Delete 就是「这条不许删」）、`StopPropagation` = 到此为止、祖先一个都收不到。两个标志都不设时行为与它们出现之前逐字相同。
@@ -211,7 +211,7 @@ IWorkflowTreeEvents : Connecting/Connected
 - **命中面只是画出来的那道描边**，不是整块画布：曲线就是视图画的那条，半径 `LinkHitTestEx.DefaultHitRadius`（6）。
 - **曲线是运行期几何，永远不序列化**（别把它挂上任何归档序列化路径：不给它 `[Archivable]`，也不让它成为某个被收录成员的声明类型）。
 
-⇒ 「加一个新的连线交互动作」（比如双击重命名）现在就是订标准输入：适配器把那次指针事件路由进来，宿主在组件上订它 —— **不用改 Core**；但**手势**（拖动、连线）仍是适配器的事。
+⇒ 「加一个新的连线交互动作」（比如双击重命名）现在就是订标准输入：适配器把那次指针事件路由进来，宿主在组件上订它 —— **不用改 Core**；**手势**（平移、拖动、连线、缩放）仍是适配器的事，但**四个手势都读这一笔按下的句柄**（2026-10-06 起）：订阅者置 `PreventDefault`，框架那一手就不执行 —— 与菜单、Delete 是同一条契约。各家把句柄交到手势手上的路径不同（隧道相 / 组件自己转发 / JS 先问再动手），见 [extension.md](extension.md) 的「否决某一次自带手势」那一行与 `adapters/<平台>.md`。
 
 节点命令共 8 个（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:36-78`），Tree 8 个（`IWorkflowTreeViewModel.cs:41-83`），Slot 4 个（`IWorkflowSlotViewModel.cs:46-64`），Link 1 个（`IWorkflowLinkViewModel.cs:30`），另有全部组件共有的 `CloseCommand`（`IWorkflowViewModel.cs:31`）。
 

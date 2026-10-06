@@ -21,7 +21,7 @@
 
 | 角色 | 本家的实现 | 说明 |
 |---|---|---|
-| 画布宿主 | `WorkflowSurfaceBehavior.cs` | 唯一的「知晓一切」的类（1757 行）：解析命名控件、喂装饰器、平移、缩放、可见区、连线右键菜单接线 |
+| 画布宿主 | `WorkflowSurfaceBehavior.cs` | 唯一的「知晓一切」的类（2012 行）：解析命名控件、喂装饰器、平移、缩放、可见区、连线右键菜单接线、以及组件自己那次输入转发的入口与「已路由」登记（§三·9） |
 | 画布变换 | —— **本家没有这个类** | 见 §三·1；职责由宿主 + `ViewManager` 分担 |
 | 视图池 | `ViewPool.cs` / `ViewManager.cs` | 见 §二·1 |
 | 节点拖拽 | `WorkflowNodeDragBehavior.cs` | 见 §三·5 |
@@ -150,6 +150,24 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
 不一致：持久化过去写原始滚动值、恢复却按世界坐标处理，`ActualOffset ≠ 0` 时会加两次；现在两侧都写世界。
 见 [../extension.md](../extension.md) §3.9-10。
 
+### 11. 非 Windows 平台没有键态来源，修饰键只能填 `None`
+
+MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventArgs` 只有 `Button` / `PlatformArgs`，
+**没有 `Modifiers`**；`KeyboardAcceleratorModifiers` 只是键盘加速器的枚举，不是「现在按着什么」的现取值。
+所以 Core 输入 args 的 `InputModifiers` 在这家分两路取（两个助手都在 `WorkflowSurfaceBehavior`）：
+
+- **Windows 头**与 WinUI 同源：`Modifiers(Windows.System.VirtualKeyModifiers)` 把平台事件自带的 `KeyModifiers`
+  逐位映射（`PointerRoutedEventArgs` **有** `KeyModifiers`）。⚠ `KeyRoutedEventArgs` **没有** `KeyModifiers`
+  —— 键事件那条路（`WorkflowLinkOverlay.OnSourceKeyDown`）必须走下面的 `ModifiersNow()`，照 Pointer 的写法会 `CS1061`。
+- `ModifiersNow()`：`#if WINDOWS` 用 `Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread` 现取当前
+  线程键态（对应 WinUI 的 `KeyModifiersNow`）；其余平台（Android/iOS/MacCatalyst）**返回 `None`**。
+  指针悬停/按下/滚轮、以及组件自己那次转发（`RouteComponentPress`）都不携带修饰键，在非 Windows 上
+  因此**永远看到 `None`** —— 这是平台缺口、不是待修的 bug。`WorkflowLinkOverlay.OnLongPressTick`（仅非 Windows
+  的长按菜单手势）保持字面 `None`，注释已写同一原因，别顺手「补」它。
+
+⇒ demo 层「空白画布 Shift+拖拽」那种按修饰键分流的定制，在非 Windows 上拿不到 Shift；Windows 头（与 WinUI 同平台）正常。
+把 `None` 改回去、或给非 Windows 编一个恒返回 `None` 的伪助手，都是倒退。
+
 ---
 
 ## 三、与其它家的刻意背离
@@ -197,6 +215,21 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
    在 `Started` 记一次锚，每次 `Running` 用 `anchor − (Total − anchorTotal)` 算绝对目标（`:1288-1297`），
    并让**在飞的上一笔 `ScrollToAsync` 被取消**（`PanCts`，`:48-50`、`:1494-1495`）。注释给的教训：读每帧实际 `ScrollX` 会闪回，
    累积逐帧增量会在被夹取的滚动下漂移（卡住再跳）。
+9. **输入转发是「组件各自转发 + 已路由标记」，不是「表面在隧道相转发一次」。** 本家**没有隧道路由相**，
+   而节点/插槽的处理器比链接层挂在 `InteractionSource` 上的钩子更早跑（平台事件从命中元素往上冒泡，越深越早），
+   所以「这一笔的句柄」只能由**组件自己**那次转发产出 —— 七个自带手势因此各自读自己那份：
+   - **节点 / 插槽**：`WorkflowNodeDragBehavior`（Windows 的 `OnPlatformPointerPressed`、非 Windows 的
+     `OnPanUpdated` Started）与 `WorkflowSlotConnectionBehavior.TryBeginConnection` 调
+     `WorkflowSurfaceBehavior.RouteComponentPress(view, 画布坐标)`，**目标就是组件自己** ——
+     这是 `WorkflowInput.Chain` 里 `slot → node → tree` 那条链唯一的入口（只认连线的路由永远只答「连线或空白」）。
+     非 Windows 的 Pan 手势不给指针位置，锚点退回组件自己的 `Anchor`。
+   - **平移**：Windows 在 `OnPlatformPanPressed` 自己转发（`RouteSurfacePress`，落点取指针在画布元素里的坐标）；
+     非 Windows 的手势**转发不出来**，只能在 Started 读 `PeekRoutedPress`（那一笔由链接层转发过）。
+   - **缩放**：只有 Windows 的 Ctrl+滚轮进路由（`OnZoomWheelChanged` → `RouteSurfaceWheel`）；
+     非 Windows 的捏合**没有可对应的滚轮事件**，当前不转发、也就否决不了。
+   「一笔只转发一次」由 `WorkflowSurfaceBehavior` 的两组静态登记（`RoutedPressTree/Handle`、`RoutedWheelTree/Handle`）保证：
+   先到者转发并登记，后到者读现成的；按下的登记由链接层转发**松手**时清（`ClearRoutedPress`），滚轮的由后到者读走（`RouteWheelOnce`）。
+   ⇒ **不要再给任何一条路加第二次 `Route`**：宿主会一笔听见两次，还会多收一对 `Entered`/`Exited`。
 
 ---
 
@@ -247,6 +280,11 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
     用 `move:`（`SetCursorPos`）则两者都「看着像没反应」—— 而这家的悬停（`PointerMoved` 钩子）又**时而**能收到，
     所以症状是「有时好有时坏」，很容易被误判成坐标不对或功能坏。**验证拖拽类行为一律用 `moveto:`。**
     **不要假设 `SetCursorPos` 也能驱动拖拽**（这条假设是错的）。
+15. **手势的 `PreventDefault` 只做到「读得到句柄」这一步，别顺手把语义补齐。** 平移与节点/插槽的否决已经生效
+    （不捕获指针、不起拖拽/连线）；**非 Windows 的捏合缩放**根本没有可对应的滚轮事件，转发不出来，当前否决不了；
+    Windows 的 Ctrl+滚轮**否决后要不要退回平台自己的滚动**，全仓七家还没拉平 —— 要在别处定，不在这里单独定。
+    另一条：Windows 的 `RouteSurfacePress` 必须在 `element.CapturePointer` **之前**读句柄（`WorkflowSurfaceBehavior.cs`
+    的 `OnPlatformPanPressed`）—— 否决了还去捕获，那一笔要走的宿主定制就拿不到指针。
 
 ---
 
