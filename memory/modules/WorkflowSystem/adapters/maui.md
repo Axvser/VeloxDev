@@ -324,7 +324,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
    `Margin` 只在负值时夹到 0、不做贴边翻转；`MenuFlyoutSubItem` 会被 `case MenuFlyoutItem` 吃掉、当成一个
    平铺按钮渲染，嵌套项不展开。`ShowDefaultContextMenu` / `ShowDeleteMenu` 那套内置「删除连线」已删除 ——
    条目就是用户在资源里写的那些，没声明就没条目。
-6. **悬停取焦点不会带滚画布（Avalonia/Jalium 那条缺陷在本家不存在，实测）**。画布滚到非零偏移
+6. **悬停取焦点不会带滚画布（Avalonia 那条缺陷在本家不存在，实测）**。画布滚到非零偏移
    （HUD 读作 `视口(画布) 320, 195`）后：`SelectLink` → `Focus()` 走 5 轮、外加 3 秒连打，滚动在
    **同一回合 / +250ms / +750ms** 三处都一位没动，HUD 那行逐字相同；真指针 hover（`SendInput` 走完，
    先确认应用收到了指针：`_lastPointer` 从 nil 变成那个点）同样一次没动，而选中确实生效 —— 截图里同一条线

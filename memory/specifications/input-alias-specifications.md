@@ -45,7 +45,7 @@ using PlatformInput = <平台输入命名空间>;      // 平台侧 → Platform
 
 判据**不是**「这个名字在这个文件里冲不冲突」，而是「这一层不留裸名，读的人不必先推一遍解析规则」。**哪怕某个别名在本文件里一次都没用上，也留着** —— 靠省一行 `using` 换来的是一处特例，而特例正是这条规矩要消灭的东西。
 
-`PlatformInput` 按平台取（与 [adapter-base-class-specifications.md §一](adapter-base-class-specifications.md) 的「无标记两家」判据无关，七家都要）：
+`PlatformInput` 按平台取（与 [adapter-base-class-specifications.md §一](adapter-base-class-specifications.md) 的「无标记语言那一家的判据」无关，七家都要）：
 
 | 平台 | `PlatformInput` |
 |---|---|

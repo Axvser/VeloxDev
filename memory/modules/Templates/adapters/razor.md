@@ -132,7 +132,7 @@
 |---|---|
 | `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius`（tree-view） | 生成的 tree-view **没有任何外层容器元素**（`.razor` 的根就是 `<WorkflowSurfaceBehavior>`），而适配器的外壳 `<div class="veloxdev-wf-surface">` 是适配器渲染的、没有内联边框样式（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor:9`）⇒ 没地方画这个边框 |
 | `gridBackground`、`minorGridColor`、`majorGridColor`（grid-decorator） | 在 Razor 里网格背景/细线/粗线/坐标轴**不由 decorator 画**，而由 surface 画布元素的 CSS 变量承载：`--veloxdev-gs/-gc/-mgc/-ac`（`WorkflowSurfaceBehavior.razor.cs:430-431`，参数 `Background:72` / `GridColor:76` / `MajorGridColor:84` / `AxisColor:92`）⇒ decorator 上放这三个颜色没有绘制面 |
-| `slotBackground`（slot-view） | slot-view 只画一个 `<path>`（fill + stroke，`workflow-slot-view/TemplateClass.razor:12-16`），适配器的连接行为也不提供背景层；这一条在 `template.json` 的 `description` 里自陈（`workflow-slot-view/.template.config/template.json:54`：`Accepted for cross-GUI CLI parity; this GUI's slot has no separate background surface.`）—— 2026-10-04 起全仓 24 个空转参数都这么自陈了，它不再是唯一一个 |
+| `slotBackground`（slot-view） | slot-view 只画一个 `<path>`（fill + stroke，`workflow-slot-view/TemplateClass.razor:12-16`），适配器的连接行为也不提供背景层；这一条在 `template.json` 的 `description` 里自陈（`workflow-slot-view/.template.config/template.json:54`：`Accepted for cross-GUI CLI parity; this GUI's slot has no separate background surface.`）—— 2026-10-04 起全仓 12 个空转参数都这么自陈了，它不再是唯一一个 |
 
 ⇒ **不要在 Razor 上给这三个补 `replaces`**（理由与 `../extension.md` §4.3 同）。
 
@@ -219,7 +219,7 @@ tree-view 现在把连线交给池（本文 §二·3 / §二·6），池对每�
 | 适配器里没有 `_disposed` 守卫、`MarkDirty` 的 16ms 异步窗口 | 同上 §四·5 |
 | `WorkflowCanvasTransformBehavior` 是静态助手、不是组件 | 同上 §四·6 |
 | 五类机械改动、`InfoOverlay` 是 demo 独有（本文 §二·6 的池喂什么在此） | `../extension.md` §1.1 |
-| 本家 5 个空转 symbol 的清单、24 个空转参数的全局盘点 | `../architecture.md` §7.1 |
+| 本家 7 个空转 symbol 的清单、12 个空转参数的全局盘点 | `../architecture.md` §7.1 |
 | 七家同一条目的结构差异（连线怎么画、标尺厚度 28/36、minimap 薄壳 vs 自带实现） | `../architecture.md` §六 |
 | 滚轮方向与缩放提交顺序（模板只消费，不改） | `memory/modules/WorkflowSystem/extension.md` §3.9 |
 | 人面向的"怎么用这套模板" | `skills/veloxdev-create-workflow/references/gui/razor.md` 的 `## Item templates` |

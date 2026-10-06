@@ -85,7 +85,7 @@ DP 变更回调调 `UpdatePath()`（`:252`），`UpdatePath` 里 `EnsureGeometry
 `workflow-slot-view/.template.config/template.json` 声明了 `slotBorderColor` 但**没有 `replaces`**。
 slot-view 的 `Path` 只有一个 `Fill`（`workflow-slot-view/TemplateClass.xaml:17` 的 `RootPath`），
 `UpdateForeground()` 只写 `RootPath.Fill`（`.xaml.cs:35-41`）。⇒ 传这个参数**什么也不会发生**，
-而且不报错。全平台共有 24 个这样的参数，见 `../architecture.md` §7.1。
+而且不报错。全平台共有 12 个这样的参数，见 `../architecture.md` §7.1。
 
 ### P4 · 两处 `ParseColor` 是**逐字重复**的
 

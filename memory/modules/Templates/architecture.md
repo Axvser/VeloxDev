@@ -131,7 +131,7 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
 - **WinForms 的 tree-view 与 `workflow-grid-decorator` 条目无引用关系**：整个 tree-view 模板文件里
   连 `GridDecorator` 这个类型名都没有出现（网格由基类 `WorkflowTreeView.cs` 自带的内部 `SurfaceCanvas`
   承担）。⇒ **生成不生成这一条，tree-view 行为不变**；其余六家的 tree-view 都真的引用它
-  （WPF/WinUI/Avalonia/MAUI 与 Razor 在标记/组件里实例化，Jalium 读它的静态成员，见本节上表）。
+  （WPF/WinUI/Avalonia/MAUI/Razor/Jalium 都在标记/组件里实例化，见本节上表）。
 - **WinForms 的 tree-view 与 minimap 的类型级耦合已在 2026-10-03 消除**：
   `IWorkflowMinimapScrollSource` 曾经只声明在 minimap 条目的产物里、tree-view 在同命名空间下直接
   模式匹配（旧的 `workflow-tree-view/TemplateClass.cs`，那两行已不存在），只生成 `winforms-v-tree` 会 CS0246。
@@ -145,11 +145,11 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   Razor 的 `Items="Tree.GetHelper().VisibleItems"` 在 `workflow-tree-view/TemplateClass.razor:35`；MAUI 的连线
   由适配器 `ViewManager` 在入队前筛掉（选择器给不出 `LinkTemplate`），交给共享 overlay 画
   （见 `adapters/maui.md` §2.2 与 `WorkflowSystem/adapters/maui.md` §二·1）。
-  ⚠ **2026-10-03 起 `workflow-tree-view` 条目还带「连线的右键菜单」**：**条目**声明在模板里（标记五家是资源里的
-  `MenuFlyout`/`ContextMenu` 或 `.razor` 里的按钮，WinForms/Jalium 是基类的 `OnBuildLinkMenu` 钩子），
-  而**接线在适配层**（2026-10-03 用户改定）：标记四家 XAML（WPF/Avalonia/WinUI/MAUI）只多一行附着属性
+  ⚠ **2026-10-03 起 `workflow-tree-view` 条目还带「连线的右键菜单」**：**条目**声明在模板里（WPF/Avalonia/WinUI/MAUI/Jalium
+  是资源里的 `ContextMenu`，Razor 是 `.razor` 里的按钮，WinForms 是基类的 `OnBuildLinkMenu` 钩子），
+  而**接线在适配层**（2026-10-03 用户改定）：WPF/Avalonia/WinUI/MAUI/Jalium 五家只多一行附着属性
   `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="<资源键>"`，适配器按这个键取菜单、包办订阅 / 定位 / 弹出 /
-  开合上报，**模板 code-behind 因此只剩 `InitializeComponent()`**（这四家 tree-view code-behind 现为 11–12 行）。
+  开合上报，**模板 code-behind 因此只剩 `InitializeComponent()`**（WPF/Avalonia/WinUI/MAUI 四家 tree-view code-behind 现为 11–12 行；Jalium 的 code-behind 另有那个 `CanvasTransform` 镜像属性，见 `WorkflowSystem/adapters/jalium.md` §2.4）。
   Razor 没有附着属性这一层：菜单是 `.razor` 里带内联 `@onclick` 的 `<LinkMenu>` 按钮（见下）。
   传键不传菜单本身，是因为这个属性挂在表面
   自己的根元素上，`{StaticResource}` 会在定义它的资源字典之前求值（见 [item-template-specifications.md](../../specifications/item-template-specifications.md) §五）。
@@ -159,7 +159,7 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   （WPF/Avalonia 是 `DataContext`；MAUI 是 `BindingContext`；WinUI 是逐条给 `MenuFlyoutItem.DataContext`，
   因为 `MenuFlyout : FlyoutBase : DependencyObject` **没有 `DataContext`**），条目写 `Command="{Binding DeleteCommand}"`
   即成一个新动作。Avalonia 因为资源里没有 `x:DataType`、而 demo 开了编译绑定，必须写 `{ReflectionBinding …}`，不能退回 `Click`。
-  Razor 没有绑定那一套，保留内联 `@onclick`（条目仍要一眼可增删）；WinForms/Jalium 的条目在 `OnBuildLinkMenu` 里增删。
+  Razor 没有绑定那一套，保留内联 `@onclick`（条目仍要一眼可增删）；WinForms 的条目在 `OnBuildLinkMenu` 里增删，Jalium 的条目在资源里的 `ContextMenu` 上增删。
   ⚠ **MAUI 的一份菜单有两副面孔**：Windows 上把声明的 `MenuFlyout` 翻成原生 flyout；非 Windows **没有任意点弹出**，
   翻成一层**由适配器自己搭的浮层**（2026-10-03 起：原来那层 `PART_LinkMenuLayer` 标记长在模板 XAML 里，
   它是呈现、不是声明，已随接线一起搬进 `WorkflowSurfaceBehavior.EnsureLinkMenuLayer`；不翻转、不出窗口、

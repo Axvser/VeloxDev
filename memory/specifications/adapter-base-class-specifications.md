@@ -81,9 +81,9 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 ### 2.1.2 树是引擎，不是视图 —— 它留在基类，但**部件按对象交出去**
 
 **2026-10-04 用户定**：树这一角色跟上面三个不同性质 —— 它是「绑一个 tree → 视图池把可见集逐个物化成 View」的那台
-机器（Jalium `WorkflowTreeView.SetTree` → `ViewPool.SetItemsSource(this, tree.GetHelper().VisibleItems)`）；
+机器（Jalium `WorkflowSurfaceBehavior.BindTree` → `ViewPool.SetItemsSource(canvas, tree.GetHelper().VisibleItems)`）；
 用户在这条路上只提供三样：**每个 VM 用哪个 View 类**（工厂 / 选择器）、**容器怎么组装**、调色板。用户自己的树模板
-因此天然很短（Jalium 32 行 / WinForms 52 行），**里面没有一行属于他的画**。
+因此天然很短（Jalium 93 行 / WinForms 52 行），**里面没有一行属于他的画**。
 
 ⇒ 别为了「七个角色形态齐一」把它也搬成助手：那不会把任何画法还给用户，只是把「摆一个控件」变成「造一个控件再挂助手」。
 
