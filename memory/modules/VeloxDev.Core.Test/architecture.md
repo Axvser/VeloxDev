@@ -81,7 +81,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | 命令 | 说明 |
 |---|---|
 | `dotnet test Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` | 单项目 |
-| `dotnet test Src/Core/VeloxDev.Core.Test --filter "FullyQualifiedName~CompilerEx"` | 按命名空间定位一个目录；`README.md:280` 记的就是这条 |
+| `dotnet test Src/Core/VeloxDev.Core.Test --filter "FullyQualifiedName~CompilerEx"` | 按命名空间定位一个目录；`README.md:282` 记的就是这条 |
 
 实测（本机，Debug）：
 
@@ -129,7 +129,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | 符号 | 为什么测不到 |
 |---|---|
 | `RotationDirection`（`Src/Core/VeloxDev.Core/TransitionSystem/`） | 两个测试项目里**零引用**；只有适配器采样器（如 `Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Samplers/TransformSampler.cs`）与 `Examples/` 演示消费它 —— 测它等于测适配器，而适配器不在引用图里 |
-| `TransitionCoreEx.AwaitThen` / `.Await`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEx.cs:8`、`:20-24`） | 两个测试项目里零调用；只出现在七家 `Examples/` 演示里。`Repeat` / `Then` 是唯一被间接走到的（经 `ChainRepeatTests.cs:66` 的 `ChainNode`） |
+| `TransitionCoreEx.AwaitThen` / `.Await`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEx.cs:10`、`:20-24`） | 两个测试项目里零调用；只出现在七家 `Examples/` 演示里。`Repeat` / `Then` 是唯一被间接走到的（经 `ChainRepeatTests.cs:66` 的 `ChainNode`） |
 | `MVVM/` 的 `VeloxCommandAttribute.cs`、`VeloxPropertyAttribute.cs` | 两个纯声明特性，没有行为可测 —— 它们的效果全在生成器产物里 |
 | `AI/` 的 20 个源文件里的 11 个 | 20 源 vs 9 测试文件 |
 
@@ -151,7 +151,7 @@ Src/Core/VeloxDev.Core.Test/MSTestSettings.cs:1
 | 档 | 类（`文件:行`） | 为什么 |
 |---|---|---|
 | 进程级静态状态 | `TimeLine/TickableBusTests.cs:23`、`TimeLine/TickManagerTests.cs:10`、`DynamicTheme/ThemeTransitionTests.cs:19`、`Timing/TimerCoreRegistryTests.cs:16`、`MVVM/VeloxCommandDiagnosticsTests.cs:16` | 静态注册表 / 总线 / 进程级静态事件（诊断钩子）。`TimerCoreRegistryTests.cs:9-16` 自己写明：覆盖 `ITimeSourceControl` 会把「时钟永不动」的源交给每个并发动画，而停在冻结时钟上的动画**不报错，它挂起** |
-| 进程级测量 | `TransitionSystem/ReusableTimerWaitTests.cs:15`、`MVVM/CommandAllocationTests.cs:15`、`MVVM/CommandBoxingTests.cs:18` | 分配断言量的是 `GC.GetTotalAllocatedBytes`（进程级），并行时别的方法的分配会落进测量窗口，best-of-2 只是缓解 |
+| 进程级测量 | `TransitionSystem/ReusableTimerWaitTests.cs:16`、`MVVM/CommandAllocationTests.cs:15`、`MVVM/CommandBoxingTests.cs:18` | 分配断言量的是 `GC.GetTotalAllocatedBytes`（进程级），并行时别的方法的分配会落进测量窗口，best-of-2 只是缓解 |
 | 实时动画 / 时钟 | `Timing/TimeSourceContractTests.cs:15`、`TransitionSystem/FramePacerTests.cs:17`、`TransitionSystem/TimelineControlTests.cs:18`、`TransitionSystem/TransitionRunThreadAffinityTests.cs:18`、`TransitionSystem/TransitionSchedulerAwakeTests.cs:16`、`TransitionSystem/TransitionSchedulerPrepareTests.cs:16` | `TimelineControlTests.cs:8-18` 写明：观察的是实时运行的动画，断言是比值不是绝对时间 |
 | 纵深防御 | `TransitionSystem/InterpolatorCoreTests.cs:13` | 注释（`:9-12`）自己写明：这些断言与并行无关，保留 `[DoNotParallelize]` 纯粹是防御 |
 | 未注明理由 | `MVVM/CommandArityTests.cs:40` | 只有裸 `[DoNotParallelize]`，类注释里没写为什么串行 |

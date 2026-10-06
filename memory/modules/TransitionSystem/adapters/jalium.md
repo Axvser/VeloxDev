@@ -1,4 +1,4 @@
-# TransitionSystem — Jalium
+﻿# TransitionSystem — Jalium
 
 > **读法**：契约与注册位置在 `memory/modules/TransitionSystem/extension.md`，本文不重复；
 > 人面向的「怎么写一个适配器」在 `skills/veloxdev-create-animation/references/adapter.md`，本文只指路不抄。
@@ -9,7 +9,7 @@
 
 ## 一、这家要写什么，为什么是这些
 
-八个类一个不少（表见 extension.md §三·C）。这家唯一"有内容"的选择是**第七型参填 `DispatcherPriority`**（`TransitionScheduler.cs:8`），与 WPF/Avalonia 同族。这个选择牵动的四处与 WPF 逐条同形：`CreateScheduler` 里测 `effect is ITransitionEffect<DispatcherPriority>`（`Interpolator.cs:26-29`；**这一处属 DynamicTheme 轴，在本家是休眠的** —— 它唯一的调用者是 `Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs:219`，而全仓没有任何 Jalium 调用 `SetPlatformInterpolator`、`Examples/Theme/` 下也没有 Jalium）、宿主覆写 `InternalPriority`（`UIThreadInspector.cs:34` 给 `Send`）、pacer 有真优先级可用（`TransitionInterpreter.cs:10-13` 建 `DispatcherFramePacer`，`:38` 建带优先级的 `DispatcherTimer`）、`TransitionEffect.Priority` 给 `Render`（`TransitionEffect.cs:8`）。
+八个类一个不少（表见 extension.md §三·C）。这家唯一"有内容"的选择是**第七型参填 `DispatcherPriority`**（`TransitionScheduler.cs:8`），与 WPF/Avalonia 同族。这个选择牵动的四处与 WPF 逐条同形：`CreateScheduler` 里测 `effect is ITransitionEffect<DispatcherPriority>`（`Interpolator.cs:26-29`；**这一处属 DynamicTheme 轴，在本家是休眠的** —— 它唯一的调用者是 `Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs:220`，而全仓没有任何 Jalium 调用 `SetPlatformInterpolator`、`Examples/Theme/` 下也没有 Jalium）、宿主覆写 `InternalPriority`（`UIThreadInspector.cs:34` 给 `Send`）、pacer 有真优先级可用（`TransitionInterpreter.cs:10-13` 建 `DispatcherFramePacer`，`:38` 建带优先级的 `DispatcherTimer`）、`TransitionEffect.Priority` 给 `Render`（`TransitionEffect.cs:8`）。
 
 **这家的过渡层基本上是 WPF 的逐字副本**：`TransitionInterpreter.cs`（含 `DispatcherFramePacer` 的 `Arm`/`Disarm`/`Dispose`）与 `Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs` 除注释外逐字相同；`State.cs`、`TransitionScheduler.cs`、`TransitionEffects.cs`、`TransitionEffect.cs` 只换了 `using`。**⇒ 差异全部集中在采样器面与 `Property` 重载面；要给别家找跨平台范本，这两家等价，要理解 Jalium 只需要看那两处。**
 
@@ -75,8 +75,8 @@
 
 ### 2.5 csproj：独一家 `net10.0` 无平台后缀
 
-- `VeloxDev.Jalium.csproj:7` 是**单目标 `net10.0`，没有 `-windows` / `-android` 后缀**。七家里 WPF/WinForms 多目标 `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`，Avalonia `netstandard2.0;net6.0;net8.0`，MAUI `net10.0;net10.0-windows10.0.19041.0`，WinUI `net8.0-windows10.0.19041.0;net10.0-windows10.0.19041.0`，Razor `net6.0;net8.0`。⇒ **这不只是打包口味**：它决定了引用必须是"最低的、跨平台的"那个包 —— `Jalium.UI.Controls` 而不是 `Jalium.UI.Desktop`（理由写在 `VeloxDev.Jalium.csproj:4-6` 与 `:29-32` 的注释里），因此这家能同时服务 Windows / Linux / Android。
-- `VeloxDev.Jalium.csproj:12` 的 `NoWarn` 是 `1573;1591`，与 WPF（`:5` 同样 `1573;1591`）相同；三家适配器里只有 MAUI 的 `NoWarn`（`CA1416`）不同。
+- `VeloxDev.Jalium.csproj:7` 是**单目标 `net10.0`，没有 `-windows` / `-android` 后缀**。七家里 WPF/WinForms 多目标 `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`，Avalonia `netstandard2.0;net6.0;net8.0`，MAUI `net10.0;net10.0-windows10.0.19041.0`，WinUI `net8.0-windows10.0.19041.0;net10.0-windows10.0.19041.0`，Razor `net6.0;net8.0`。⇒ **这不只是打包口味**：它决定了引用必须是"最低的、跨平台的"那个包 —— `Jalium.UI.Controls` 而不是 `Jalium.UI.Desktop`（理由写在 `VeloxDev.Jalium.csproj:4-6` 与 `:31-33` 的注释里），因此这家能同时服务 Windows / Linux / Android。
+- `VeloxDev.Jalium.csproj:14` 的 `NoWarn` 是 `1573;1591`，与 WPF（`:5` 同样 `1573;1591`）相同；三家适配器里只有 MAUI 的 `NoWarn`（`CA1416`）不同。
 
 ---
 

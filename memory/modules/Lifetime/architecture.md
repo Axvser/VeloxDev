@@ -31,7 +31,7 @@
 | 默认怎么读 | `TransitionHostBase.IsAlive => Lifetime.IsAlive`（`:15`，`virtual`） |
 | 谁**读**（消费者） | `SamplerSet.CanSetValue() => _host.IsAlive`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:90`） |
 | 读到之后 | `SamplerSet.Apply` 排队**之前**（`:103`）与 `ApplyCore` **逐条属性写之前**（`:130`）各拦一次 |
-| 谁**写** | `ApplicationState.SetAlive(bool)`（`:23`）—— 树内唯一调用点是 `Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs:56` |
+| 谁**写** | `ApplicationState.SetAlive(bool)`（`:23`）—— 树内唯一调用点是 `Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs:60` |
 | 还有谁引用 `IApplicationState` | 没有。全树只有四处：定义（`IApplicationState.cs:4`）、合成（`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs:14`）、默认实现（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs:1,12,15`）、读（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:90`） |
 
 ⇒ **整个模块的消费者集合 = 一个 bool 喂给一处 `CanSetValue()`**。它是最小的 Core 模块，但这一条边决定「帧还写不写得进去」。
@@ -53,9 +53,9 @@
 
 | 满足方式 | 家 | 代码锚点 |
 |---|---|---|
-| **覆写 `IsAlive`**（能问就问） | MAUI / WinForms / Razor | `Src/Adapters/VeloxDev.MAUI/PlatformAdapters/UIThreadInspector.cs:8`；`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs:51`（静态 `_isAppAlive`，初值 `true`，只在捕获成功那支挂 `ApplicationExit`，`:40`）；`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs:40`（`_isAppRunning`，靠外部调 `NotifyShutdown()`，`:22`） |
-| **报进 `Lifetime.SetAlive`**（能观测就报） | WinUI | `Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs:55-56`：`accepted = queue.TryEnqueue(priority, …)` 后 `Lifetime.SetAlive(accepted)`，双向（`:54` 的注释） |
-| **不覆写，在 `PostCore` 里问平台并丢弃** | WPF / Jalium | `Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs:34`、`Src/Adapters/VeloxDev.Jalium/PlatformAdapters/UIThreadInspector.cs:36` 的 `dispatcher.HasShutdownStarted` ⇒ 返 `false` |
+| **覆写 `IsAlive`**（能问就问） | MAUI / WinForms / Razor | `Src/Adapters/VeloxDev.MAUI/PlatformAdapters/UIThreadInspector.cs:9`；`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs:52`（静态 `_isAppAlive`，初值 `true`，只在捕获成功那支挂 `ApplicationExit`，`:40`）；`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs:42`（`_isAppRunning`，靠外部调 `NotifyShutdown()`，`:23`） |
+| **报进 `Lifetime.SetAlive`**（能观测就报） | WinUI | `Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs:59-60`：`accepted = queue.TryEnqueue(priority, …)` 后 `Lifetime.SetAlive(accepted)`，双向（`:58` 的注释） |
+| **不覆写，在 `PostCore` 里问平台并丢弃** | WPF / Jalium | `Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs:38`、`Src/Adapters/VeloxDev.Jalium/PlatformAdapters/UIThreadInspector.cs:40` 的 `dispatcher.HasShutdownStarted` ⇒ 返 `false` |
 | **一个存活信号都没有** | Avalonia | `Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/UIThreadInspector.cs:16-22` 既无 `HasShutdownStarted` 也无 `IsAlive` 覆写 ⇒ 基类默认恒 `true`（理由是这家 `Dispatcher` 只有 `ShutdownStarted`/`ShutdownFinished` **事件**、没有可查询属性，见 `memory/modules/TransitionSystem/adapters/avalonia.md` §三.1） |
 
 **这张表里最容易被漏读的一列是「能不能让 `CanSetValue()` 变 false」**：只有上表前两行（4 家）能。WPF/Jalium 的 `IsAlive` **永远是 true**，它们的存活只走 Threading 那条轴（`Post` 返 false → `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:117` 报一次 `Warn(WarnStage.Dropped, …)`）。所以「七家都有存活机制」是错的，「四家的写路径会因为宿主死而停、两家只丢帧、一家什么都不报」才对。各家理由与代价见 `memory/modules/TransitionSystem/adapters/<平台>.md`。

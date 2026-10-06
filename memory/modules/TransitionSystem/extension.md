@@ -1,4 +1,4 @@
-# TransitionSystem — 扩展
+﻿# TransitionSystem — 扩展
 
 > 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`，契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，
 > 时钟在 `Src/Core/VeloxDev.Core/Timing/`，编组在 `Src/Core/VeloxDev.Core/Threading/`。
@@ -17,13 +17,13 @@
 | 让一个**值类型**整体动画（不写新采样器） | `ISampleable` | `Interfaces/TransitionSystem/ISampleable.cs:14`；由 `StructAssembler.Create` 在 `Sampling/Interpolator.cs:178` 处装配 |
 | 只给某条路径换采样器（不动全局注册表） | `State.SetInterpolator` | `TransitionSystem/State/State.cs:37` / `:96`；`Prepare` 里 override 优先于注册表（`Sampling/Interpolator.cs:166`） |
 | 缓动曲线 | `IEaseCalculator` | `Interfaces/TransitionSystem/IEaseCalculator.cs:4`（`double Ease(double t)`）+ `TransitionSystem/Effects/Eases.cs` 的静态成员 + `TransitionEffect.Ease` |
-| 帧的等待方式（宿主定时器/中央帧循环） | `TransitionInterpreterCore.CreateFramePacer` | `TransitionSystem/Runtime/TransitionInterpreter.cs:93` + `FramePacerCore` 的 `Arm`/`Disarm`（`TransitionSystem/Runtime/FramePacerCore.cs:66`/`:75`） |
-| 帧唤醒的兜底路径（不用 pacer） | `TransitionInterpreterCore.ArmNextFrame` | `Runtime/TransitionInterpreter.cs:108` |
+| 帧的等待方式（宿主定时器/中央帧循环） | `TransitionInterpreterCore.CreateFramePacer` | `TransitionSystem/Runtime/TransitionInterpreter.cs:92` + `FramePacerCore` 的 `Arm`/`Disarm`（`TransitionSystem/Runtime/FramePacerCore.cs:66`/`:75`） |
+| 帧唤醒的兜底路径（不用 pacer） | `TransitionInterpreterCore.ArmNextFrame` | `Runtime/TransitionInterpreter.cs:107` |
 | 线程归属 / 编组 / 存活 | `TransitionHostBase<TPriorityCore>` | `TransitionSystem/Runtime/TransitionHostBase.cs`；三个成员见 §三·C |
 | 平台接缝：给一个只有 `object` 的 target 找到 scheduler | `InterpolatorCore.CreateScheduler` | `Sampling/Interpolator.cs:126` |
-| 时钟（宿主拥有时间） | `TimerCore.RegisterTimeSource<TContract>` | `Timing/TimerCore.cs:62`；`TimeSourceCore` 的 protected 构造 `Timing/TimeSourceCore.cs:168` + `SetHostFeeding`（`:368`） |
-| 链式动词（`Then`/`Await`/`Repeat`/…） | `StateSnapshotCore.Core*` + `TransitionCoreEx` | `TransitionSystem/State/StateSnapshot.cs:100-115`、`TransitionSystem/Effects/TransitionEx.cs:6` |
-| 效果事件 | 9 个 `WeakDelegate` 事件（7 个无载荷 `EventHandler<TransitionEventArgs>` + 2 个带载荷泛型 `Warn`/`Error`） | `Effects/TransitionEffect.cs:48-64`；参数 `TransitionSystem/Events/TransitionEventArgs.cs:7` 与 `Events/TransitionEventArgs{TStage,TValue}.cs:9` |
+| 时钟（宿主拥有时间） | `TimerCore.RegisterTimeSource<TContract>` | `Timing/TimerCore.cs:62`；`TimeSourceCore` 的 protected 构造 `Timing/TimeSourceCore.cs:175` + `SetHostFeeding`（`:375`） |
+| 链式动词（`Then`/`Await`/`Repeat`/…） | `StateSnapshotCore.Core*` + `TransitionCoreEx` | `TransitionSystem/State/StateSnapshot.cs:102-119`、`TransitionSystem/Effects/TransitionEx.cs:7` |
+| 效果事件 | 9 个 `WeakDelegate` 事件（7 个无载荷 `EventHandler<TransitionEventArgs>` + 2 个带载荷泛型 `Warn`/`Error`） | `Effects/TransitionEffect.cs:47-63`；参数 `TransitionSystem/Events/TransitionEventArgs.cs:7` 与 `Events/TransitionEventArgs{TStage,TValue}.cs:9` |
 | 索引实参的求值时机 | `PathIndex.Frozen<T>` | `TransitionSystem/Binding/PathIndex.cs:24`；身份在 `Binding/PathSegment.cs:319` |
 | 新平台适配器 | 见 §三·C | 八个类 + 联动清单 §四 |
 
@@ -64,11 +64,11 @@
 
 **官方**：让一个值类型可动画，只有两条路 —— 注册一个 `ISampler`，或让这个 struct 实现 `ISampleable`。**两条都不走时，这条路径是静默失效的**，不是编译错误、不是异常。
 
-`RejectUnsampleablePaths`（`Effects/Transition.cs:206`）只拒绝**引用类型**：`if (property.PropertyType.IsValueType) continue;`。它豁免值类型的理由是 `ISampleable` 那条路 —— 但那条路只有 `ISampleable` 的实现者走得通。于是**「是值类型」但「既没注册采样器、又没实现 `ISampleable`」的类型从这道门底下漏了过去**，落到 `Prepare` 的 `sampler == null` 分支：`Warn(WarnStage.Unsampled, …)` + `continue`（`Sampling/Interpolator.cs:181-185`）。
+`RejectUnsampleablePaths`（`Effects/Transition.cs:205`）只拒绝**引用类型**：`if (property.PropertyType.IsValueType) continue;`。它豁免值类型的理由是 `ISampleable` 那条路 —— 但那条路只有 `ISampleable` 的实现者走得通。于是**「是值类型」但「既没注册采样器、又没实现 `ISampleable`」的类型从这道门底下漏了过去**，落到 `Prepare` 的 `sampler == null` 分支：`Warn(WarnStage.Unsampled, …)` + `continue`（`Sampling/Interpolator.cs:181-185`）。
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 用 `Property(x => x.SomeDecimal, 1.5m)` 期望它动起来 | **六家的 `decimal` 重载都是空头支票**：全仓库没有任何 `DecimalSampler`，Core 也不注册 `decimal`（`Sampling/Interpolator.cs:12-29`）⇒ 该属性每趟只报一次 `Warn(WarnStage.Unsampled, …)` 然后被跳过，**什么都不动**。`decimal` 是值类型，所以连声明期的 `TransitionPathUnsampleableException` 都不会抛 | `Sampling/Interpolator.cs:181-185`、`Effects/Transition.cs:206`；`decimal` 重载位置：Avalonia `Effects/Transition.cs:182`、MAUI `:163`、Razor `:63`、WPF `:168`、WinForms `:71`、WinUI `:156`（**只有 Jalium 没有 `decimal` 重载**，在它那里是编译错误 —— 反而更安全） |
+| 用 `Property(x => x.SomeDecimal, 1.5m)` 期望它动起来 | **六家的 `decimal` 重载都是空头支票**：全仓库没有任何 `DecimalSampler`，Core 也不注册 `decimal`（`Sampling/Interpolator.cs:12-29`）⇒ 该属性每趟只报一次 `Warn(WarnStage.Unsampled, …)` 然后被跳过，**什么都不动**。`decimal` 是值类型，所以连声明期的 `TransitionPathUnsampleableException` 都不会抛 | `Sampling/Interpolator.cs:181-185`、`Effects/Transition.cs:205`；`decimal` 重载位置：Avalonia `Effects/Transition.cs:182`、MAUI `:163`、Razor `:63`、WPF `:168`、WinForms `:71`、WinUI `:156`（**只有 Jalium 没有 `decimal` 重载**，在它那里是编译错误 —— 反而更安全） |
 | 以为「用了平台自带的值类型就没问题」 | 平台类型同样受这条支配：Avalonia 有 `Avalonia.Rect` / `Avalonia.Vector` 却没注册，于是这两个类型的属性动画一律静默跳过（WPF/WinUI/MAUI 三家都注册了 `Rect`，所以这是 Avalonia 的缺口而非平台限制） | `Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Interpolator.cs` 的静态构造；见 `adapters/avalonia.md` |
 | 想靠「值类型成员可写」绕过去 | 值类型的中间态是**装箱副本**，逐成员写回不到原属性 —— 这正是 `StructAssembler` 要用 `CaptureProperty` 假路径收集成员的原因（`Sampling/StructAssembler.cs:92-100`）。没实现 `ISampleable` 就没有这个装配器可用 | `Sampling/StructAssembler.cs:92-100` |
 
@@ -84,7 +84,7 @@
 |---|---|---|
 | 直接 `new TransitionSchedulerCore<...>()` | **编译通过、动画正常跑、永远不可控**：只有 `FindOrCreate` 会把它登记到 target 名下，而登记正是 `Transition.Pause`/`Seek`/`Exit` 查找的依据 | `Sampling/Interpolator.cs:117-121` 明写；`Runtime/TransitionScheduler.cs:197` |
 | 不按 effect 类型做判断，无脑返回一个 scheduler | 拿到一个跑起来**画不出任何东西**的 scheduler（scheduler 自己开头就会做同一个 cast 并静默 return） | `Sampling/Interpolator.cs:113-115`、`Runtime/TransitionScheduler.cs:26` |
-| 干脆不写 `CreateScheduler`（基类默认返回 null） | 主题切换**仍然发生，但是瞬时的，什么都不记录** —— 与缺一个采样器同样的静默降级 | `Sampling/Interpolator.cs:123`；`ThemeManager.cs:206-209`、`:227-230` |
+| 干脆不写 `CreateScheduler`（基类默认返回 null） | 主题切换**仍然发生，但是瞬时的，什么都不记录** —— 与缺一个采样器同样的静默降级 | `Sampling/Interpolator.cs:126`；`ThemeManager.cs:206-209`、`:227-230` |
 
 ### 4. 覆写 `InterpolatorCore.Prepare`
 
@@ -102,15 +102,15 @@
 | 用 `IsRepeating = false` 的定时器 | 只 tick 一次 → **动画恒为两帧**：值冻在起点、闭式解那半仍然通过、不抛任何异常 | `adapter.md:63` |
 | `Arm` 不挂定时器 / 永不 `Fire` | loop **永久停车**：无异常、无帧，宿主侧看不到任何迹象 | `Runtime/FramePacerCore.cs:21-25` |
 | 一次 `Arm` 里 `Fire` 两次 | 双采样（同一帧写两次，FPS 上限失效） | 同上 |
-| 从**平台**而不是 `affinity.ThreadFor(target)` 派生等待线程 | pacer 与写路径不一致 → **每帧一次 dispatch**，正是采样路径要避免的那件事 | `Runtime/TransitionInterpreter.cs:78-87` |
+| 从**平台**而不是 `affinity.ThreadFor(target)` 派生等待线程 | pacer 与写路径不一致 → **每帧一次 dispatch**，正是采样路径要避免的那件事 | `Runtime/TransitionInterpreter.cs:77-86` |
 | 覆写 `Dispose` 不调 `base.Dispose()` | 挂着的续体被搁死（loop 停在半路）；宿主定时器资源也不释放 | `Runtime/FramePacerCore.cs:97-102` |
-| 覆写 `ArmNextFrame` 时在取消后不调用续体 | loop 永久停车；默认实现特意在已取消时**立即放行**，不等一个间隔 | `Runtime/TransitionInterpreter.cs:110-124` |
+| 覆写 `ArmNextFrame` 时在取消后不调用续体 | loop 永久停车；默认实现特意在已取消时**立即放行**，不等一个间隔 | `Runtime/TransitionInterpreter.cs:109-123` |
 
 ### 6. 宿主（`TransitionHostBase` / `IThreadDispatcher`）
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| `PostCore` 在队列已消失时乐观返回 `true` | `PostAsync` **只在动作被真正接受时才等**完成源 → 消费者挂到进程结束 | `adapter.md:37`、`ThreadDispatcherBase.cs:64` |
+| `PostCore` 在队列已消失时乐观返回 `true` | `PostAsync` **只在动作被真正接受时才等**完成源 → 消费者挂到进程结束 | `adapter.md:37`、`ThreadDispatcherBase.cs:60` |
 | `ThreadFor` 里为调用方**造**一个 dispatcher | 宿主契约明令不许：这会把「不知道」变成「假装知道」，让写落到错的线程 | `Threading/IThreadDispatcher.cs:14-17` |
 | 在写路径再加一层 `catch { }` | 失败已被 `SamplerSet.ApplyCore` 收口并终止这一趟；第二层吞掉只会掩盖是哪一层看到的失败 | `adapter.md:53`、`Sampling/SamplerSet.cs:136-142` |
 | `IsCurrentThread` 用「当前线程 == 我记的那个」之外的花招 | 基类握的是不透明句柄、无法与调用线程比较，所以这是**基类无法提供**的那个谓词；默认从 target 推（任何 GUI 都成立：视图只能在 UI 线程创建） | `adapter.md:51` |
@@ -132,15 +132,15 @@
 | 按**实现类型**注册 | 查找按精确契约、**无回退**：注册在别处，`CreateTimeSource` 直接抛 | `TimerCore.cs:11-15`、`:102-121` |
 | 注册一个共享单例 | 一条通道暂停会暂停所有通道；每次查找本就该新建 | `TimerCore.cs:28-31` |
 | 用渲染循环替换时钟 | 明令不是这个用途：帧率会变成时间权威，而采样路径建立在相反的前提上 | `TimerCore.cs:17-26` |
-| 直接实现 `ITimeSourceControl` 从头写时钟 | 官方路径是继承 `TimeSourceCore` 的 protected 构造（`:168`）只管**喂时间**，用 `SetHostFeeding`（`:368`）报告是否还在喂；其余（pause/rate/seek/park）由基类负责 | `TimerCore.cs:17-21` |
+| 直接实现 `ITimeSourceControl` 从头写时钟 | 官方路径是继承 `TimeSourceCore` 的 protected 构造（`:175`）只管**喂时间**，用 `SetHostFeeding`（`:375`）报告是否还在喂；其余（pause/rate/seek/park）由基类负责 | `TimerCore.cs:17-21` |
 
 ### 9. 效果
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 给平台的 `TransitionEffect` 子类**加字段/状态** | 运行时跑的是每段 `Clone()` 出来的对象，而 `TransitionEffectCore<TPriorityCore>.Clone()` 构造的是**基类型**（且不是 `virtual`，是 `new`）→ 子类的任何额外状态**在运行体里不存在** | `Effects/TransitionEffect.cs:15-17`、`Effects/Transition.cs:422` |
-| 往共享 `static readonly` 的 effect 上加 handler / 用 `.Effect(共享实例)` 直接赋值 | 运行体虽是克隆，但克隆自同一个实例；声明又是共享的 → 所有使用者共享处理器。第二个后果**方向与直觉相反**：`WeakDelegate` 的组合委托是 `volatile` **强**字段（`Src/Core/VeloxDev.Core/WeakTypes/WeakDelegate.cs:22`/`:88`，类型 remarks `:6-18` 明说 Handlers are kept alive），所以在共享 owner 上订阅者不会被 GC，而是**反过来被保活**（视图/局部对象回收不掉）；"订阅者可能被回收"不成立 | `Effects/Transition.cs:597`；`skills/veloxdev-create-animation/SKILL.md:224`（"...on a `static readonly` one it would keep the view alive"）；`memory/modules/WeakTypes/architecture.md` §二 |
-| 指望 `Start`/`Update`/`LateUpdate` 里置 `Args.Handled` 之外的事件也能否决 | `Handled` 只在循环的两个检查点被读：每趟开头与每帧开头 | `Runtime/TransitionInterpreter.cs:219`、`:316` |
+| 给平台的 `TransitionEffect` 子类**加字段/状态** | 运行时跑的是每段 `Clone()` 出来的对象，而 `TransitionEffectCore<TPriorityCore>.Clone()` 构造的是**基类型**（且不是 `virtual`，是 `new`）→ 子类的任何额外状态**在运行体里不存在** | `Effects/TransitionEffect.cs:14-16`、`Effects/Transition.cs:421` |
+| 往共享 `static readonly` 的 effect 上加 handler / 用 `.Effect(共享实例)` 直接赋值 | 运行体虽是克隆，但克隆自同一个实例；声明又是共享的 → 所有使用者共享处理器。第二个后果**方向与直觉相反**：`WeakDelegate` 的组合委托是 `volatile` **强**字段（`Src/Core/VeloxDev.Core/WeakTypes/WeakDelegate.cs:22`/`:88`，类型 remarks `:6-18` 明说 Handlers are kept alive），所以在共享 owner 上订阅者不会被 GC，而是**反过来被保活**（视图/局部对象回收不掉）；"订阅者可能被回收"不成立 | `Effects/Transition.cs:596`；`skills/veloxdev-create-animation/SKILL.md:224`（"...on a `static readonly` one it would keep the view alive"）；`memory/modules/WeakTypes/architecture.md` §二 |
+| 指望 `Start`/`Update`/`LateUpdate` 里置 `Args.Handled` 之外的事件也能否决 | `Handled` 只在循环的两个检查点被读：每趟开头与每帧开头 | `Runtime/TransitionInterpreter.cs:218`、`:315` |
 | 在 `Awake` 之外的 stage 里做「把 target 摆成起点」 | 只有 `Awake` 在 `Prepare` **之前**、且被 `await`；`Prepare` 在那之前不得读 target | `Runtime/TransitionScheduler.cs:126-139` |
 
 ### 10. 控制面
@@ -151,17 +151,17 @@
 |---|---|---|
 | 手动 `cts.Cancel()` 而不经 `Exit` | 暂停中的循环停在时间轴的 park gate 上，它**不知道** token；必须同时 `run.Timeline.Wake()` | `Runtime/TransitionScheduler.cs:394-398` |
 | 在 `Track`/`DrainActive` 时把 target 锁跨着动画体持有 | 在 UI 线程 `Exit` 上阻塞 dispatcher；回调重入 `Exit`/`Execute` 会死锁（`SemaphoreSlim` 不可重入） | `Runtime/TransitionScheduler.cs:240-244`、`:355-362` |
-| 每段结束后 `Untrack`（而不是整条链结束） | 段间 `Await` 间隙里 `Exit` 找不到它，剩下的段照跑 | `Effects/Transition.cs:489-491` |
+| 每段结束后 `Untrack`（而不是整条链结束） | 段间 `Await` 间隙里 `Exit` 找不到它，剩下的段照跑 | `Effects/Transition.cs:488-490` |
 | 自己 `new TransitionRun(...)` 却不 `Track` | `Execute` 靠 `_activeRuns[cts]` 找回 run；找不回则帧集拿到一条**没人控制得住的私有时间轴** | `Sampling/SamplerSet.cs:72-78`、`ThemeManager.cs:249-250` |
-| 在动画出口 `run.Cts.Cancel()` | 一个 cts 可以交给好几段（`Transition` 就是这样），在出口取消会让动画在第一段后就结束 | `Runtime/TransitionInterpreter.cs:433-444` |
+| 在动画出口 `run.Cts.Cancel()` | 一个 cts 可以交给好几段（`Transition` 就是这样），在出口取消会让动画在第一段后就结束 | `Runtime/TransitionInterpreter.cs:432-443` |
 
 ### 11. 链式动词
 
-**官方**：`StateSnapshotCore` 加 `internal abstract CoreXxx`（`State/StateSnapshot.cs:100-115`）→ `TransitionCore<...>` 覆写（`Effects/Transition.cs:543-586`）→ `TransitionCoreEx` 加扩展方法（`Effects/TransitionEx.cs:6`）。
+**官方**：`StateSnapshotCore` 加 `internal abstract CoreXxx`（`State/StateSnapshot.cs:102-119`）→ `TransitionCore<...>` 覆写（`Effects/Transition.cs:542-585`）→ `TransitionCoreEx` 加扩展方法（`Effects/TransitionEx.cs:7`）。
 
 - 捷径：只加扩展方法不接 Core 抽象 → 编译不过（抽象成员没有实现）。
 - 捷径：只加 Core 覆写不加扩展方法 → 那个动词**根本调不到**（`Transition<T>` 上没有它）。三处都必改。
-- 语义约定（照 `CoreRepeat` 写）：声明配的是**它写在其后的那个节点**（`Effects/Transition.cs:567`），不是链上别的段。
+- 语义约定（照 `CoreRepeat` 写）：声明配的是**它写在其后的那个节点**（`Effects/Transition.cs:565`），不是链上别的段。
 
 ---
 
@@ -212,7 +212,7 @@
 - `ThreadFor` 不能为调用方造 dispatcher。
 - 采样器一律无状态单例，端点不回写。
 
-**`TPriorityCore` 选型**：框架有 dispatcher 优先级就用它，没有就用 `NonPriority`（`Threading/NonPriority.cs`）。当前七家：WPF/Avalonia/Jalium = `DispatcherPriority`，WinUI = `DispatcherQueuePriority`，MAUI/WinForms/Razor = `NonPriority`（`Runtime/TransitionScheduler.cs:5` 等各家声明；`adapter.md:159-163`）。优先级出现在**两处**：`Transition<T>` 的第七个型参，与 `CreateScheduler` 里测试 effect 的那个 cast —— 第二处写错会让主题切换静默降级为瞬切。
+**`TPriorityCore` 选型**：框架有 dispatcher 优先级就用它，没有就用 `NonPriority`（`Threading/NonPriority.cs`）。当前七家：WPF/Avalonia/Jalium = `DispatcherPriority`，WinUI = `DispatcherQueuePriority`，MAUI/WinForms/Razor = `NonPriority`（`Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/TransitionScheduler.cs:5` 等各家声明；`adapter.md:159-163`）。优先级出现在**两处**：`Transition<T>` 的第七个型参，与 `CreateScheduler` 里测试 effect 的那个 cast —— 第二处写错会让主题切换静默降级为瞬切。
 
 **注册位置**：只在自己家注册采样器（`Interpolator` 静态构造）、只在自己家返回 scheduler（`CreateScheduler`）。**Core 里没有任何一处需要改** —— 这正是这套适配器模式的目的。Core 侧要改的只有测试与 demo 的清单，见 §四。
 
@@ -220,8 +220,8 @@
 
 ### D. 新增一个时间源（宿主拥有时间：播放器循环、媒体位置、音频回调）
 
-1. 继承 `TimeSourceCore`，用 protected 构造 `base(nowStamp, ticksPerSecond)`（`Timing/TimeSourceCore.cs:168`）。
-2. 报告是否还在喂：`SetHostFeeding(bool)`（`:368`）。
+1. 继承 `TimeSourceCore`，用 protected 构造 `base(nowStamp, ticksPerSecond)`（`Timing/TimeSourceCore.cs:175`）。
+2. 报告是否还在喂：`SetHostFeeding(bool)`（`:375`）。
 3. 注册：`TimerCore.RegisterTimeSource<ITimeSourceControl>(static () => new MySource());`（`TimerCore.cs:62`）—— **按契约注册**。
 4. 每次查找都要新建（每个消费者自己的 pause/rate）；不要注册单例。
 5. **不要**为了框架渲染循环做这件事（`TimerCore.cs:21-25`）；那种「把 loop 钉在 UI 线程」的需求由 `FramePacerCore` 解决。
@@ -230,15 +230,15 @@
 
 三处都改，顺序即依赖顺序：
 
-1. `State/StateSnapshot.cs` 加 `internal abstract T1 CoreXxx<...>(...)`（`State/StateSnapshot.cs:100-115` 是现有五个的形状）。
-2. `Effects/Transition.cs:543-586` 在 `TransitionCore<T,...>` 里覆写（里面有统一的三段式：类型不匹配就抛 `InvalidOperationException`）。
-3. `Effects/TransitionEx.cs:6` 加 `public static T Xxx<T>(this T snapshot, ...)` 扩展方法 —— 泛型约束写成 `where T : StateSnapshotCore, new()`，七个平台的 `Transition<T>` 都满足。
-4. 语义写进 XML 注释：**配的是它写在其后的那个节点**（照 `CoreRepeat` 的措辞，`Effects/Transition.cs:567`）。
+1. `State/StateSnapshot.cs` 加 `internal abstract T1 CoreXxx<...>(...)`（`State/StateSnapshot.cs:102-119` 是现有五个的形状）。
+2. `Effects/Transition.cs:542-585` 在 `TransitionCore<T,...>` 里覆写（里面有统一的三段式：类型不匹配就抛 `InvalidOperationException`）。
+3. `Effects/TransitionEx.cs:7` 加 `public static T Xxx<T>(this T snapshot, ...)` 扩展方法 —— 泛型约束写成 `where T : StateSnapshotCore, new()`，七个平台的 `Transition<T>` 都满足。
+4. 语义写进 XML 注释：**配的是它写在其后的那个节点**（照 `CoreRepeat` 的措辞，`Effects/Transition.cs:565`）。
 
 ### F. 自定义帧等待（不写完整 pacer）
 
-1. 覆写 `TransitionInterpreterCore.ArmNextFrame`（`Runtime/TransitionInterpreter.cs:108`）：不得阻塞调用线程，且**必须恰好调用一次续体，包括被取消时**。
-2. `FrameWait`（`:128`）是 `INotifyCompletion`、**刻意不是** `ICriticalNotifyCompletion`。注意它**不会**把 loop 拉回 UI 线程（还原 `SynchronizationContext` 是 `Task` 的事）——不提供 pacer 的宿主上，loop 在第一帧后就会漂到线程池线程，`Update`/`LateUpdate` 会在那里跑（`:116-127` 明写）。
+1. 覆写 `TransitionInterpreterCore.ArmNextFrame`（`Runtime/TransitionInterpreter.cs:107`）：不得阻塞调用线程，且**必须恰好调用一次续体，包括被取消时**。
+2. `FrameWait`（`:127`）是 `INotifyCompletion`、**刻意不是** `ICriticalNotifyCompletion`。注意它**不会**把 loop 拉回 UI 线程（还原 `SynchronizationContext` 是 `Task` 的事）——不提供 pacer 的宿主上，loop 在第一帧后就会漂到线程池线程，`Update`/`LateUpdate` 会在那里跑（`:115-126` 明写）。
 
 ---
 
@@ -315,5 +315,5 @@
 
 ## 五、死扩展点与已失效的钩子
 
-- **`StateSnapshotCore.CoreRecordState()`（`State/StateSnapshot.cs:105`，实现于 `Effects/Transition.cs:332`）没有任何调用者**：`Src/`、`Examples/` 里搜不到。覆写它不会产生任何效果。
-- **`TransitionSchedulerCore.RemoveMutualScheduler`（`Runtime/TransitionScheduler.cs:266`）在 `Src/` 内零调用者**：互斥 scheduler 每 target 缓存一生。所以 `TryGetMutualScheduler(target)` 返回 `true` 只说明「这个 target 跑过互斥动画」，不说明现在有东西在跑；非互斥那张表在每条动画结束时确实会被清空（数组会空），所以判断「还在跑」要读**数组长度**，不要读那个 bool（`Effects/Transition.cs:232-258`、`Examples/Transition/Avalonia/Demo/Views/MainWindow.axaml.cs:733-740`）。
+- **`StateSnapshotCore.CoreRecordState()`（`State/StateSnapshot.cs:109`，实现于 `Effects/Transition.cs:331`）没有任何调用者**：`Src/`、`Examples/` 里搜不到。覆写它不会产生任何效果。
+- **`TransitionSchedulerCore.RemoveMutualScheduler`（`Runtime/TransitionScheduler.cs:266`）在 `Src/` 内零调用者**：互斥 scheduler 每 target 缓存一生。所以 `TryGetMutualScheduler(target)` 返回 `true` 只说明「这个 target 跑过互斥动画」，不说明现在有东西在跑；非互斥那张表在每条动画结束时确实会被清空（数组会空），所以判断「还在跑」要读**数组长度**，不要读那个 bool（`Effects/Transition.cs:231-257`、`Examples/Transition/Avalonia/Demo/Views/MainWindow.axaml.cs:733-740`）。

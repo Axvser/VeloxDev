@@ -125,7 +125,7 @@
 |---|---|
 | 加/改 `Timing/TimeSourceCore` 的控制调用语义 | `Src/Core/VeloxDev.Core/TimeLine/TickManager.cs`（`SetTimeScale` = `_bus.SetRate` 逐字转发，`:240`；`Pause`/`Resume` 受 `_isRunning` 门控，`:386-403`）、`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:78` |
 | 加/改采样器契约 | `Interfaces/Timing/` + `Timing/TimerCore.cs:46-52` + `TimerCoreRegistryTests.cs` |
-| 改 `Scale` 或 `DefaultTicksPerSecond` | 消费者侧的 `TimeConversion` 调用会静默改变量纲（`Src/Core/VeloxDev.Core/Timing/TimeSourceCore.cs:9-12` 的 remarks 写明「quietly used Stopwatch.Frequency would be wrong by orders of magnitude with no symptom」）；消费点如 `TimeLine/TickManager.cs:666-668,747,847,936-938`、`TransitionSystem/Effects/Transition.cs:172,177,536` |
+| 改 `Scale` 或 `DefaultTicksPerSecond` | 消费者侧的 `TimeConversion` 调用会静默改变量纲（`Src/Core/VeloxDev.Core/Timing/TimeSourceCore.cs:9-12` 的 remarks 写明「quietly used Stopwatch.Frequency would be wrong by orders of magnitude with no symptom」）；消费点如 `TimeLine/TickManager.cs:666-668,747,847,936-938`、`TransitionSystem/Effects/Transition.cs:171,176,535` |
 | 改 `Advance` 的溢出守卫 | `TimeSourceContractTests.cs` / `HostTimeSourceTests.cs` |
 | 让某个契约注册变得「可选」 | `CreateTimeSource` 无回退（`TimerCore.cs:102-107`），去掉默认注册会让**所有**消费者在运行时抛 |
 

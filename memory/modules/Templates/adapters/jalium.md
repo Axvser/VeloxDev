@@ -25,9 +25,9 @@
 
 | 条目 | 产物（行数） | 扮演什么 | 关键锚点 |
 |---|---|---|---|
-| tree-view（jalxaml 67 + cs 25 = 92） | `UserControl`（标记）+ `partial class` | 表面：根上写 `behaviors:WorkflowSurfaceBehavior.*` 具名部件；`Resources` 里 `NodeTemplate`／`LinkTemplate`／`TemplateSelector`／`ContextMenu`；`PART_*` 网格/滚动/画布/小地图 | `:8-15`（行为）、`:20-27`（NodeTemplate）、`:36-38`（selector）、`:43-66`（部件） |
+| tree-view（jalxaml 68 + cs 25 = 93） | `UserControl`（标记）+ `partial class` | 表面：根上写 `behaviors:WorkflowSurfaceBehavior.*` 具名部件；`Resources` 里 `NodeTemplate`／`LinkTemplate`／`TemplateSelector`／`ContextMenu`；`PART_*` 网格/滚动/画布/小地图 | `:8-15`（行为）、`:21-28`（NodeTemplate）、`:37-39`（selector）、`:44-67`（部件） |
 | node-view（jalxaml 76 + cs 9 = 85） | `UserControl`（标记）+ `partial class` | 卡片：`Viewbox` + 设计尺寸 `Grid(260×180)`；`SlotNames`／`SlotEnumeratorNames` 指 `PART_InputSlot`／`PART_OutputSlots`；标题栏挂 `WorkflowNodeDragBehavior` | `:7-12`（行为）、`:16-17`（设计尺寸）、`:29-32`（拖拽） |
-| link-view（jalxaml 5 + cs 314 = 319） | `UserControl`（标记）+ `partial class`（实现在 code-behind） | 连线：`LineColor`／`CanRender` DP + `StartLeft/Top`／`EndLeft/Top` 端点 DP，`Refresh` 自盒化、`BuildCurve` 烘焙、`OnRender` 画 | `cs:68-112`（DP）、`cs:212-245`（Refresh）、`cs:252-299`（Render/BuildCurve） |
+| link-view（jalxaml 5 + cs 314 = 319） | `UserControl`（标记）+ `partial class`（实现在 code-behind） | 连线：`LineColor`／`CanRender` DP + `StartLeft/Top`／`EndLeft/Top` 端点 DP，`Refresh` 自盒化、`BuildCurve` 烘焙、`OnRender` 画 | `cs:68-112`（DP）、`cs:212-245`（Refresh）、`cs:249-299`（Render/BuildCurve） |
 | grid-decorator（449） | `sealed class TemplateClass : Grid, IWorkflowGridDecorator` | 网格/标尺：**整个渲染器都在这里** —— 两面自绘子层（世界网格 + 两条浮动标尺）、笔刷缓存、`GridStep`／`MajorLineEvery`／七色 | `:31`（类）、`:34`（`DefaultRulerThickness = 36`）、`:139-140`（符号）、`:324-405`（DrawGrid/DrawRulers） |
 | slot-view（jalxaml 12 + cs 48 = 60） | `UserControl`（标记）+ `partial class` | 端口图形：标记里 `Path` + `WorkflowSlotConnectionBehavior`；code-behind 按 `SlotState` 算 `Foreground` 配色 | `jalxaml:7`（手势）、`jalxaml:9-10`（Path）、`cs:35-47`（配色） |
 | minimap-overlay（24） | `class TemplateClass : WorkflowMinimapOverlay` | 薄派生：构造器设 `MinimapBackground`／`MinimapBorderBrush`／`NodeBrush`／`ViewportStroke` 四色（**不是空构造器**） | `:10`（类）、`:12-18`（四色） |
@@ -61,7 +61,7 @@
 
 ### 2.3 跨条目的**编译期**耦合：tree 少生成一条兄弟就编译不过
 
-tree-view 的标记 `xmlns` 引用这些兄弟条目的类型：`workflowViews:NodeView` / `workflowViews:LinkView`（两个 `DataTemplate` 里，`:21`/`:29`）、`workflowViews:TemplateSelector`（`:36`）、`workflowViews:GridDecorator`（`:49`）、`workflowViews:MinimapOverlay`（`:61`）。
+tree-view 的标记 `xmlns` 引用这些兄弟条目的类型：`workflowViews:NodeView` / `workflowViews:LinkView`（两个 `DataTemplate` 里，`:22`/`:30`）、`workflowViews:TemplateSelector`（`:37`）、`workflowViews:GridDecorator`（`:50`）、`workflowViews:MinimapOverlay`（`:62`）。
 node-view 的标记引用 `local:SlotView`（`:41`、`:65`）。
 ⇒ **只生成 `jalium-v-tree` 会 CS0246**（缺 `NodeView`/`LinkView`/`TemplateSelector`/`GridDecorator`/`MinimapOverlay` 五个类型），**只生成 `jalium-v-node` 会缺 `SlotView`**。
 slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引用兄弟条目**（连线端点、端口位置全靠适配器行为/绑定），所以耦合面比旧版小。与 WinForms 那条同源，见 `../architecture.md` §五 与 `winforms.md` §三·P1。
@@ -74,7 +74,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 | `BorderThickness="TemplateNodeBorderThickness"` / `CornerRadius="TemplateNodeCornerRadius"` | `workflow-node-view/TemplateClass.jalxaml:26-27` | 内联进标记属性；默认 `1` / `6`，Jalium 按 Thickness / CornerRadius 解析 |
 | `const double thickness = TemplateLinkThickness;` | `workflow-link-view/TemplateClass.jalxaml.cs:267` | **double** |
 | `ColorConverter.ConvertFromString("Template…Color")` | `grid-decorator/TemplateClass.cs:131-138`、`workflow-link-view/TemplateClass.jalxaml.cs:102`、`workflow-slot-view/TemplateClass.jalxaml.cs:45` | C# 侧的颜色一律是**字符串** |
-| `Background="TemplateSurfaceBackground"` / `Foreground="TemplateNodeForeground"` / `Data="TemplateSlotPath"` | `workflow-tree-view/TemplateClass.jalxaml:45`、`workflow-node-view/TemplateClass.jalxaml:12,24`、`workflow-slot-view/TemplateClass.jalxaml:6,10` | 标记侧的颜色/路径也是**字符串**字面量 |
+| `Background="TemplateSurfaceBackground"` / `Foreground="TemplateNodeForeground"` / `Data="TemplateSlotPath"` | `workflow-tree-view/TemplateClass.jalxaml:46`、`workflow-node-view/TemplateClass.jalxaml:12,24`、`workflow-slot-view/TemplateClass.jalxaml:6,10` | 标记侧的颜色/路径也是**字符串**字面量 |
 
 ⇒ 给 `gridSpacing`/`majorLineEvery`/`nodeBorderThickness`/`nodeCornerRadius`/`linkThickness` 传非数值（如 `40px`）
 **生成时会成功、构建时才炸**（`dotnet new` 只做文本替换）。
@@ -87,7 +87,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 `../architecture.md` §7.1 的判据是「`type: parameter` 而**没有 `replaces`**」——`dotnet new --help` 收得下、命令行能传、不报错、也不替换文本。逐文件核当前七个 `template.json`：**每个 symbol 都带了 `replaces`** ⇒ Jalium 侧现在 **0 个**空转符号。
 
-旧的 12 个（`gridBackground`×1、slot-view 四个、minimap-overlay 四个、tree-view 三个）**全部被接上了绘制面**：grid-decorator 现在真读 `TemplateGridBackground`（`workflow-grid-decorator/TemplateClass.cs:138`）、slot-view 真读 `TemplateSlotBackground`/`TemplateSlotColor`/`TemplateSlotPath`（`workflow-slot-view/TemplateClass.jalxaml:6,10`、`…jalxaml.cs:45`）、minimap-overlay 真读那四色（`workflow-minimap-overlay/TemplateClass.cs:14-17`）、tree-view 真读 `TemplateSurfaceBackground`/`TemplateSurfaceBorderBrush`/`…Thickness`/`…CornerRadius`（`workflow-tree-view/TemplateClass.jalxaml:45-48`）。**所以别再去补 `replaces` —— 已经补完了。**
+旧的 12 个（`gridBackground`×1、slot-view 四个、minimap-overlay 四个、tree-view 三个）**全部被接上了绘制面**：grid-decorator 现在真读 `TemplateGridBackground`（`workflow-grid-decorator/TemplateClass.cs:138`）、slot-view 真读 `TemplateSlotBackground`/`TemplateSlotColor`/`TemplateSlotPath`（`workflow-slot-view/TemplateClass.jalxaml:6,10`、`…jalxaml.cs:45`）、minimap-overlay 真读那四色（`workflow-minimap-overlay/TemplateClass.cs:14-17`）、tree-view 真读 `TemplateSurfaceBackground`/`TemplateSurfaceBorderBrush`/`…Thickness`/`…CornerRadius`（`workflow-tree-view/TemplateClass.jalxaml:46-49`）。**所以别再去补 `replaces` —— 已经补完了。**
 
 ⚠ 一处残留：**`slotBorderColor` 的 token（`TemplateSlotBorderColor`）在 Jalium 的 slot-view 产物里一处都不出现**（`git grep TemplateSlotBorderColor -- Src/Templates/VeloxDev.Jalium.Templates` 只命中它自己的 `template.json`）。它按 §7.1 的定义不算「空转」（有 `replaces`），但传 `--slotBorderColor` 实际仍什么都不改变 —— 新的 slot-view 是一条 `Path`，没有独立的边框面。
 
@@ -116,7 +116,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 ### P4 · link-view 的"自盒化"：助手在适配器，**调用在模板**
 
-自盒化的实现是适配器的静态助手 `WorkflowLinkBounds.Apply`（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkBounds.cs`，根因注释在 `:11-27`）；**调用方是模板产物** `workflow-link-view/TemplateClass.jalxaml.cs`：`Refresh()`（`:243`）把四个控制点交给助手摆盒，`BuildCurve()`（`:282-299`）画前把每个点减掉助手交回的原点。模板不只是"出线色" —— 它**必须**在正确时机调用这个助手，这是它在扩展点里的责任。机制说明见 `memory/modules/WorkflowSystem/adapters/jalium.md` §2.1。
+自盒化的实现是适配器的静态助手 `WorkflowLinkBounds.Apply`（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkBounds.cs`，根因注释在 `:11-27`）；**调用方是模板产物** `workflow-link-view/TemplateClass.jalxaml.cs`：`Refresh()`（`:212`，摆盒调用 `WorkflowLinkBounds.Apply` 在 `:243`）把四个控制点交给助手摆盒，`BuildCurve()`（`:282-299`）画前把每个点减掉助手交回的原点。模板不只是"出线色" —— 它**必须**在正确时机调用这个助手，这是它在扩展点里的责任。机制说明见 `memory/modules/WorkflowSystem/adapters/jalium.md` §2.1。
 
 ### P5 · "深缩放不丢连线"的守卫在**适配器表面行为**里，宿主零调用者
 

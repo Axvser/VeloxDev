@@ -116,7 +116,7 @@ RunSwitch (:201)
 
 **两处都在「值已经全部落地之后」**。所以「属性值」与「`Current`」在**每次切换结束时**一致，但在一场**中途被取消**之后不一致（见 §三·5）。读 `Current` 的地方有三处：`PrepareSamplers` 的 `StartModel.Cache` 分支（取起点，`:511`、`:515`）、生成器的 `UpdatePropertyToCurrentTheme`（`Theme.cs:348`）、`InitializeTheme`（`Theme.cs:406`）。
 
-**`InitializeTheme()` 是同步的、不走动画的**（`Theme.cs:389-415`）：懒注册 → `base.InitializeTheme()` → `ThemeManager.Register(this)` → 逐属性 `pi.SetValue(this, 当前主题的值)`。所以**新建一个对象时它会立刻带上当前主题的值**，与有没有平台 interpolator 无关 —— 必须**在构造之后**调（demo 的注释也这么写：`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:42`）。
+**`InitializeTheme()` 是同步的、不走动画的**（`Theme.cs:389-415`）：懒注册 → `base.InitializeTheme()` → `ThemeManager.Register(this)` → 逐属性 `pi.SetValue(this, 当前主题的值)`。所以**新建一个对象时它会立刻带上当前主题的值**，与有没有平台 interpolator 无关 —— 必须**在构造之后**调（demo 的注释也这么写：`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:36`）。
 
 ---
 
@@ -157,7 +157,7 @@ RunSwitch (:201)
 2. **`ThemeCache` 里有三处死代码**（声明存在、**全仓库零调用者**，已核对）：`RegisterConverter`（`ThemeCache.cs:74`）、`GetConverter`（`:87`）与它们背后的 `_converters` / `_converterIndex`（`:21-22`）、`RemoveActiveEntry`（`:149`）。生成器**不用**这条转换器缓存 —— 它在生成代码里**内联** `new` 一个转换器：`((IThemeValueConverter)Activator.CreateInstance(typeof(...))!).Convert(...)`（`Theme.cs:237`）。**所以每个属性、每次 `InitializeTheme` 都会新建一个转换器实例**（在懒注册守卫之内，因此每类型一次），不是单例。
 3. **`ThemeManager._def_cache`（`:27`）是死字段**：声明后再无任何读写，也无任何注释解释它原本要做什么。
 4. **`Theme.cs:192` 的 `converterKey` 算了不用**：局部变量赋值后从未被引用，`:191` 的注释自己承认「only placeholder—converter created inline」。
-5. **7 个主题声明得出来、用不了。** Core 提供了 arity 8 的 `ThemeConfigAttribute<TConverter, TTheme1..TTheme7>`（`ThemeConfigAttribute.cs:102`），但生成器只注册了 arity `` `3 ``–`` `7 `` 五个 `ForAttributeWithMetadataName` 提供器（`Theme.cs:33-56`）。⇒ **arity 8 的标注不会让那个类进入生成管线**（`ForAttributeWithMetadataName` 不命中，连 `Transform` 都不跑），该类的 `IThemeObject` 实现**根本不会生成**。这与 `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:34-35` 的注释「supports at most one Converter plus seven Themes」**不一致**：**以代码为准，实际上限是 1 个 converter + 6 个主题**。
+5. **7 个主题声明得出来、用不了。** Core 提供了 arity 8 的 `ThemeConfigAttribute<TConverter, TTheme1..TTheme7>`（`ThemeConfigAttribute.cs:102`），但生成器只注册了 arity `` `3 ``–`` `7 `` 五个 `ForAttributeWithMetadataName` 提供器（`Theme.cs:33-56`）。⇒ **arity 8 的标注不会让那个类进入生成管线**（`ForAttributeWithMetadataName` 不命中，连 `Transform` 都不跑），该类的 `IThemeObject` 实现**根本不会生成**。这与 `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:29` 的注释「supports at most one Converter plus seven Themes」**不一致**：**以代码为准，实际上限是 1 个 converter + 6 个主题**。
 6. **`RegisterType` 幂等 ⇒ 改静态表需要重启或改类型。** `InitializeTheme` 的懒注册以类型为守卫（`Theme.cs:392`），一旦注册过，**同一类型再调 `InitializeTheme` 不会重写静态表**。热重载场景下静态表不会刷新。
 7. **`CollectStaticForType` 的「整条名字覆盖」不是合并**（`ThemeCache.cs:120-123`）：派生类声明了与基类**同名**属性时，基类那条的 `Values` 字典被整个丢换。想在派生类**追加**一个主题的同一属性做不到 —— 只能在派生类把该属性的全部主题重写一遍。
 8. **`activeThemes` 的清理只发生在三个入口**（`Transition` `:120`、`Jump` `:172`、`Unregister` `:93`）。一个目标被 GC 之后，它的弱引用会一直躺在 `activeThemes` 里，直到下一次切换来临。`RunSwitch` 内部**不再**过滤 null（`actives` 在入口就过滤好了）—— 所以 `PrepareSamplers` 里的 `target == null` 分支（`:445-449`）在正常路径上到不了。

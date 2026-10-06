@@ -15,7 +15,7 @@
 
 | 容器 | 弱的是 | 强引用/被谁钉住 | 谁清扫、什么时候 | 生产消费者 |
 |---|---|---|---|---|
-| `WeakDelegate<TDelegate>` | 只有账本 `List<WeakReference<Delegate>>`（`WeakDelegate.cs:23`） | **`_combinedDelegate`（`:22`，`volatile`）把组合出来的每个 handler 都钉住**；它由 `Delegate.Combine` 拼成（`:94`） | 只在 `RebuildCache()`（`:85-99`）里，即 `AddHandler`/`RemoveHandler` 且 `CanUpdateCache:true`、缓存为 null 时的 `GetInvocationList()`、`Clone()` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:48-64`（9 个事件字段）—— **全仓唯一** |
+| `WeakDelegate<TDelegate>` | 只有账本 `List<WeakReference<Delegate>>`（`WeakDelegate.cs:23`） | **`_combinedDelegate`（`:22`，`volatile`）把组合出来的每个 handler 都钉住**；它由 `Delegate.Combine` 拼成（`:94`） | 只在 `RebuildCache()`（`:85-99`）里，即 `AddHandler`/`RemoveHandler` 且 `CanUpdateCache:true`、缓存为 null 时的 `GetInvocationList()`、`Clone()` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:47-63`（9 个事件字段）—— **全仓唯一** |
 | `WeakCache<TTargetKey,TCacheKey>` | 键：`ConditionalWeakTable<TTargetKey,TCacheKey>`（`WeakCache.cs:27`） | **值**（`TCacheKey`）由 CWT 保活至键死；另有 `_targets`（`:28`）作可枚举索引，它才是 `ForeachCache` 真正遍历的东西 | 两处：`ForeachCache` 每次调用都全清（`:40`）；`AddOrUpdate` 按计数器阈值定期清（`:72-77`） | **零**（只有测试，见 §二） |
 | `WeakQueue<T>` | 值：`Queue<WeakReference<T>>`（`WeakQueue.cs:8`） | 无强引用侧 | 访问即清扫（`Count`/`TryDequeue`/`TryPeek`/`TrimExcess`/`GetEnumerator`） | **零** |
 | `WeakStack<T>` | 值：`Stack<WeakReference<T>>`（`WeakStack.cs:8`） | 无强引用侧 | 同上（`TryPop` 代替 `TryDequeue`） | **零** |
@@ -30,7 +30,7 @@
 
 | 容器 | 生产调用点 | 结论 |
 |---|---|---|
-| `WeakDelegate<TDelegate>` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:48-64`（9 个字段）+ 该文件的访问器 `:82-134`、`InvokeXxx` `:137-184`、`Clone()` `:188` | 唯一的生产消费者，但用得很深：9 个事件全走它 |
+| `WeakDelegate<TDelegate>` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:47-63`（9 个字段）+ 该文件的访问器 `:81-133`、`InvokeXxx` `:136-184`、`Clone()` `:187` | 唯一的生产消费者，但用得很深：9 个事件全走它 |
 | `WeakCache` / `WeakQueue` / `WeakStack` | **0 处**（除自身文件与测试） | 见下 |
 
 `WeakCache`/`WeakQueue`/`WeakStack` 在全仓（`Src`、`Examples`、`Templates`、根目录，含 `.cs`/`.razor`/`.xaml`/`.md`）**没有任何生产构造点**；`VeloxDev.WeakTypes` 这个 `using` 只出现在 `TransitionSystem/Effects/TransitionEffect.cs:4` 与 4 个测试文件里。
@@ -117,7 +117,7 @@ GetNextCleanupThreshold: (count == 0 ? 4 : count * 2) * 0.9 取整   // :100-104
 4. **`AddHandler(null)` 静默返回**（`:33`），但 `WeakQueue.Enqueue(null)` / `WeakStack.Push(null)` 抛 `ArgumentNullException`（`WeakQueue.cs:41`、`WeakStack.cs:41`）。
 5. **批量版容忍 null，单条版不容忍**：`EnqueueRange`/`PushRange` 跳过 null 并只把**实际入队的个数**当返回值（`WeakQueue.cs:51-68`）—— 传入 3 个含 1 个 null 返回 2。
 6. **`WeakCache.AddOrUpdate` 的"更新"是删除 + 重加**（`:78-84`，因为 CWT 的 `Add` 对已存在键会抛），这也意味着更新会**把该键挪到 `_targets` 末尾**。
-7. **`Invoke(object?[])` 走 `DynamicInvoke` → 自身会分配**（`:80-83`）。签名已知时必须用 `GetInvocationList()?.Invoke(sender, e)`，这是 `TransitionSystem/Effects/TransitionEffect.cs:137-185` 的写法，也是 §二那条零分配测试测量的路径。
+7. **`Invoke(object?[])` 走 `DynamicInvoke` → 自身会分配**（`:80-83`）。签名已知时必须用 `GetInvocationList()?.Invoke(sender, e)`，这是 `TransitionSystem/Effects/TransitionEffect.cs:136-184` 的写法，也是 §二那条零分配测试测量的路径。
 8. **四者都是 `sealed`**，且都直接 `new()` 内部字段而非注入 —— 没有可替换的锁、比较器或 GC 钩子。
 9. **`TCacheKey` 上的 `DynamicallyAccessedMembers` 标注不是对调用方的真实要求**（`WeakCache.cs:22`，包在 `#if NET` 里）。`ConditionalWeakTable<TKey,TValue>` 的 `TValue` 带 `PublicParameterlessConstructor` 标注 —— 那是服务于 `GetOrCreateValue()` 的，而这个类型只走 `TryGetValue` / `Add`，从不碰它；但类型实参是**未标注的泛型形参**时，裁剪分析器照样报 IL2091，所以把标注传下去消警告。**具体类型不查构造器**，调用点不会因此多出约束。`#if NET` 是必需的：`DynamicallyAccessedMembersAttribute` 在 `netstandard2.0` / `net461` 上不存在，而本文件是全档编译的（对比 `AspectOriented/AopCache.cs` —— 那一份整个都在 `#if NET` 内，所以不需要这层判断）。
 
@@ -130,4 +130,4 @@ GetNextCleanupThreshold: (count == 0 ? 4 : count * 2) * 0.9 取整   // :100-104
 | 事件订阅的可见性/顺序/是否保活 | `WeakDelegate.cs:29-55`（加删）、`:85-99`（重建与拼装顺序） |
 | 每帧调用路径的开销 | `WeakDelegate.cs:62-73`（无锁快路径）、`:80-83`（会分配的 `Invoke`） |
 | 缓存/队列/栈的清扫时机与频率 | `WeakCache.cs:68-87`（阈值触发）、`WeakQueue.cs:137-148`（访问即清扫） |
-| 过渡动画的 9 个事件 | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:48-64`、`:82-134`、`:188` |
+| 过渡动画的 9 个事件 | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:47-63`、`:81-133`、`:187` |

@@ -20,12 +20,12 @@
 | link-view | **不是几何视图**：一个 `ContentView`（`InputTransparent="True"`）里放适配器的 `behaviors:WorkflowLinkOverlay`，把树＋交互源＋四个滚动/内容偏移＋标尺厚度＋三个颜色绑过去 | `workflow-link-view/TemplateClass.xaml:14-23`、`.xaml.cs:21-40` 是 10 个 `BindableProperty` |
 | node-view | `ContentView` 自己挂 `WorkflowSlotLayoutBehavior` 的三个名字 | `workflow-node-view/TemplateClass.xaml:8-11` |
 | slot-view | 圆点由 `IDrawable` **按几何画**，不是 SVG | `workflow-slot-view/TemplateClass.xaml.cs:35-49` |
-| tree-view | `ContentView`（`x:Name="Root"`）+ 池数据源直绑 `Helper.VisibleItems`（连线由适配器的入队过滤跳过） | `workflow-tree-view/TemplateClass.xaml:8,57`、`.xaml.cs:1-12` |
+| tree-view | `ContentView`（`x:Name="Root"`）+ 池数据源直绑 `Helper.VisibleItems`（连线由适配器的入队过滤跳过） | `workflow-tree-view/TemplateClass.xaml:8,56`、`.xaml.cs:1-11` |
 | grid-decorator | `sealed class : Grid, IWorkflowGridDecorator`，两个 `GraphicsView` + `IDrawable` | `workflow-grid-decorator/TemplateClass.cs:17,20-21,46-60` |
 | minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个颜色（21 行） | `workflow-minimap-overlay/TemplateClass.cs:12-20` |
 | template-selector | `DataTemplateSelector` 子类，四个 `DataTemplate?`，`OnSelectTemplate` 抛 `"Xxx is not set."` | `workflow-template-selector/TemplateClass.cs:20`（方法）、`:24-30`（四处抛） |
 
-三层 z 序写在 tree-view 的注释里：`grid < links < nodes < rulers`（`workflow-tree-view/TemplateClass.xaml:35`）。
+三层 z 序写在 tree-view 的注释里：`grid < links < nodes < rulers`（`workflow-tree-view/TemplateClass.xaml:40`）。
 
 ---
 
@@ -34,9 +34,9 @@
 ### 2.1 link 层是 `ScrollView` 的**兄弟**，且在 `GridDecorator` **内部**
 
 `workflow-tree-view/TemplateClass.xaml:32-61` 的结构是 `GridDecorator` → { `LinkView`, `ScrollView` }。
-`LinkView` 的绑定指向 `PART_GridDecorator`（`:44-48`；另加 `InteractionSource` `:43`），而 `WorkflowTree` 走
-`{Binding BindingContext, Source={x:Reference Root}}`（`:42`）。
-文件里 `:39-41` 的注释把理由写明了：视口级 → **不随世界画布长大** → 深缩放不撞 Win2D 纹理上限，
+`LinkView` 的绑定指向 `PART_GridDecorator`（`:43-48`；另加 `InteractionSource` `:42`），而 `WorkflowTree` 走
+`{Binding BindingContext, Source={x:Reference Root}}`（`:41`）。
+文件里 `:38-40` 的注释把理由写明了：视口级 → **不随世界画布长大** → 深缩放不撞 Win2D 纹理上限，
 并给出换算式 `px = Ruler + anchor + ContentOffset − Scroll`。
 
 ⇒ **把 `LinkView` 挪进 `ScrollView` 会让深缩放下的连线消失**，而且不报错。
@@ -50,16 +50,16 @@
 **连线不会进池**：适配器的 `ViewManager` 在入队前问一次选择器，拿不到模板的项（这一家的选择器只声明
 `NodeTemplate`、遇到连线会抛）直接跳过 —— 机制与行号见 `memory/modules/WorkflowSystem/adapters/maui.md` §二·1。
 ⇒ 这一家的 `TemplateSelector` 因此**只需要 `NodeTemplate`**（`workflow-tree-view/TemplateClass.xaml:24`
-的实例化只有这一个实参，注释 `:21-23` 说明原因），模板 code-behind 也只剩构造器（`.xaml.cs:1-12`）。
+的实例化只有这一个实参，注释 `:21-23` 说明原因），模板 code-behind 也只剩构造器（`.xaml.cs:1-11`）。
 **别的平台把 `Helper.VisibleItems` 直接喂给池**，连线在各家自己的 `LinkTemplate` 里物化；
 这一家的共享 overlay 画连线，照抄别家会在深缩放时撞 Win2D 纹理上限并静默消失。
 
 ### 2.3 `PART_RulerOffsetHost` 是夹在 `ScrollView` 与 `PART_Canvas` 之间的第二个 `AbsoluteLayout`
 
-`workflow-tree-view/TemplateClass.xaml:52-59`：`PART_ScrollViewer` → `PART_RulerOffsetHost`
-（`TranslationX/Y` 绑 `PART_GridDecorator.RulerThickness`，`:53-54`）→ `PART_Canvas`。
+`workflow-tree-view/TemplateClass.xaml:49-58`：`PART_ScrollViewer` → `PART_RulerOffsetHost`
+（`TranslationX/Y` 绑 `PART_GridDecorator.RulerThickness`，`:52-53`）→ `PART_Canvas`。
 ⇒ 标尺避让在这一家是**外层容器的位移**，不是其它家的 `Canvas.RenderTransform`。
-`PART_Canvas` 自己仍是 `BackgroundColor="Transparent"`（`:56`）并挂 `ViewPool.TemplateSelector`（`:58`）。
+`PART_Canvas` 自己仍是 `BackgroundColor="Transparent"`（`:55`）并挂 `ViewPool.TemplateSelector`（`:57`）。
 ⚠ `WorkflowSurfaceBehavior.CanvasName` 指的是 `PART_Canvas`（`:12`），**不是** `PART_RulerOffsetHost`。
 
 ### 2.4 插槽宿主 Grid 必须 `InputTransparent="True" CascadeInputTransparent="False"`

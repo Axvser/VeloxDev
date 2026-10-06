@@ -9,9 +9,9 @@
 
 `AgentDashboardViewModel` 的全部引用都在**它自己的测试**里（`AgentDashboardViewModelTests.cs:66` 起 21 处 `Create(scope)`，全文件 24 处 `Create`）。三个 demo 都不用它 —— Avalonia / Blazor / Jalium 是**各自**绑 `McpScope.Status`（`McpStatusViewModel`）建自己的 MCP 面板：
 
-- `Examples/Workflow/Avalonia/Demo/Views/Workflow/WorkflowView.axaml.cs:70` `McpStatusPanel.DataContext = helper.Mcp.Status;`
-- `Examples/Workflow/Blazor/Demo/Demo/Components/Pages/Workflow.razor.cs:26` `=> (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;`
-- `Examples/Workflow/Jalium/Demo/MainWindow.cs:701` `_mcpStatus = helper.Mcp.Status;`
+- `Examples/Workflow/Avalonia/Demo/Views/Workflow/WorkflowView.axaml.cs:73` `McpStatusPanel.DataContext = helper.Mcp.Status;`
+- `Examples/Workflow/Blazor/Demo/Demo/Components/Pages/Workflow.razor.cs:27` `=> (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;`
+- `Examples/Workflow/Jalium/Demo/MainWindow.cs:703` `_mcpStatus = helper.Mcp.Status;`
 
 **推论**：`Agent/Dashboard/` 是**有测试、无宿主**的一片。它想做的是「把系统工具 / 技能工具 / MCP 服务器 / MCP 工具 / 技能统一成同一种可开关的行」，但各家 demo 现在各自拼面板、也没有统一开关 UI。动它之前先确认你要解决的是哪个问题 —— 改这里不会影响任何一个 demo 的显示。
 

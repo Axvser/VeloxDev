@@ -1,4 +1,4 @@
-# TransitionSystem — WinUI 适配器
+﻿# TransitionSystem — WinUI 适配器
 
 > 契约与官方做法在 [`../extension.md`](../extension.md)；怎么用这一家见
 > `skills/veloxdev-create-animation/references/adapter.md`。本文只写这一家的**形状**：
@@ -44,8 +44,8 @@ Projection / Size / Rect / GridLength / Color。其中三个（Brush、Projectio
 （`RebuildShapes`，`:478-591`），刷新由 16 ms `DispatcherQueueTimer` **节流而非去抖**（`:182-192` 建、`:332-347` 调度，
 去抖会「连续平移期间只画一次」的理由写在 `:336-337`），并且 `Tick` 里吞 `COMException`（`:189-191`，应用拆卸时对象已销毁）。
 判据：**别家有 `OnRender`/`Render` 就别抄这套** —— WPF/Avalonia/Jalium 覆写 `OnRender`/`Render`
-（`Src/Adapters/VeloxDev.WPF/.../WorkflowMinimapOverlay.cs:442`、`.../Avalonia/.../WorkflowMinimapOverlay.cs:529`、
-`.../Jalium/.../WorkflowMinimapOverlay.cs:280`），MAUI 走 `GraphicsView`/`IDrawable`（`.../MAUI/.../WorkflowMinimapOverlay.cs:19`）。
+（`Src/Adapters/VeloxDev.WPF/.../WorkflowMinimapOverlay.cs:435`、`.../Avalonia/.../WorkflowMinimapOverlay.cs:525`、
+`.../Jalium/.../WorkflowMinimapOverlay.cs:456`），MAUI 走 `GraphicsView`/`IDrawable`（`.../MAUI/.../WorkflowMinimapOverlay.cs:21`）。
 
 **L3 · `LayoutUpdated` 是逐元素的，且画布在节点子树布局之后才重排自己的子元素。**
 所以槽位测量不能只挂节点自己的 `LayoutUpdated`，还要**额外**挂坐标宿主（`PART_Canvas`）的
@@ -70,7 +70,7 @@ layout pass、永远 post-arrange（同注释 `:23`）。WinUI 是七家里唯�
 
 **L6 · `DispatcherQueuePriority` 没有 `Render` 这一档。** 别家的 `TransitionEffect.Priority` 默认
 `DispatcherPriority.Render`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionEffect.cs:8`、Avalonia/Jalium 同），
-WinUI 取 `High`，并用注释解释为什么（`PlatformAdapters/TransitionEffect.cs:8-9`：「在处理渲染之前先处理」——
+WinUI 取 `High`，并用注释解释为什么（`PlatformAdapters/TransitionEffect.cs:7-9`：「在处理渲染之前先处理」——
 正因为没有 Render 这个语义档位，才需要一句话解释）。
 同族的第二处：`InternalPriority` 覆写成 `Normal`（`UIThreadInspector.cs:51`），而 WPF/Avalonia/Jalium 都取各自最高的
 `Send`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs:32`）。
@@ -130,7 +130,7 @@ Avalonia 同文件 `:238-254`、Jalium `:229-234`；`../extension.md` §4.6 的�
 两害相权只能选「至少能到」。
 
 **D6 · 只有这一家把「端点身份」这件事做了一半。**
-`Samplers/TransformSampler.cs:22-23` 在 `t == 0` / `t == 1` 原样返回调用方给的实例（注释 `:18-22` 讲清理由：
+`Samplers/TransformSampler.cs:23-24` 在 `t == 0` / `t == 1` 原样返回调用方给的实例（注释 `:21-22` 讲清理由：
 嵌套路径 `((TranslateTransform)x.RenderTransform).X` 依赖声明时的运行时类型），
 但**同一个目录**的 `Samplers/ProjectionSampler.cs:23-27` 无条件把 scratch 写出去，端点也不例外，且没有任何注释。
 后果限于投影：动画结束后 `target.Projection` 不是调用方给的那个实例。
@@ -140,7 +140,7 @@ Avalonia 同文件 `:238-254`、Jalium `:229-234`；`../extension.md` §4.6 的�
 **D7 · 三家（WinUI / Avalonia / Jalium）为「快速路径」设了类型门禁，WPF 没有。**
 `Samplers/TransformSampler.cs:49-51` 的 `IsKnownTransform` 把自定义 `Transform` 子类挡在克隆快路径之外 ——
 因为 `CloneTransform`（`:54-61`）对未知类型**抛异常**，而那正是唯一会抛的地方。
-Avalonia 有同一道门禁（`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Samplers/TransformSampler.cs:29` 的调用点、`:57` 的 `IsKnownTransform`、`:60` 的 `CloneTransform`），Jalium 也是（`:45` 的 `IsKnownTransform`、`:48` 的 `CloneTransform`）；WPF 的 `CloneTransform` 对未知类型回退 `_ => null`，没有这道门禁。抄这三家时这道门禁必须一起抄。
+Avalonia 有同一道门禁（`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Samplers/TransformSampler.cs:30` 的调用点、`:57` 的 `IsKnownTransform`、`:60` 的 `CloneTransform`），Jalium 也是（`:45` 的 `IsKnownTransform`、`:48` 的 `CloneTransform`）；WPF 的 `CloneTransform` 对未知类型回退 `_ => null`，没有这道门禁。抄这三家时这道门禁必须一起抄。
 
 ---
 

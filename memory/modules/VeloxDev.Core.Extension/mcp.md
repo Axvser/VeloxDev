@@ -18,7 +18,7 @@
 1. `McpScope.CanAddServer(runMode)`（`:109`）—— 级别 + 运行模式的组合判定。`RemoteConfirmed` 只放 `Http`，`AllConfirmed` 放本地模式，`Unrestricted` 不问。`AddServer` 里第一件事就是查它（`McpAgentToolkit.cs:160`）。
 2. 确认：在 `Unrestricted` 以下的级别，添加要用户同意（`RequiresConfirmationToAdd()`，`:121`；`ConfirmationResolver`，`:102`）。
 
-**级别与确认处理器是两回事。** `WithSelfService` 只开级别；`WithConfirmationHandler`（`:93`）注册裁决者。**没注册处理器时，需要确认的级别会「拒绝」，而不是「放行」** —— 这条在 `skills/veloxdev-drive-workflow-with-ai/SKILL.md:183` 与 `references/mcp.md:112` 都写死了。
+**级别与确认处理器是两回事。** `WithSelfService` 只开级别；`WithConfirmationHandler`（`:93`）注册裁决者。**没注册处理器时，需要确认的级别会「拒绝」，而不是「放行」** —— 这条在 `skills/veloxdev-drive-workflow-with-ai/SKILL.md:189` 与 `references/mcp.md:128` 都写死了。
 
 **接进 `WorkflowAgentScope` 时，你在 `McpScope` 上设的确认处理器会被顶掉。** `WithMcps`（`WorkflowAgentScope.cs:1552`）无条件执行 `mcp.WithConfirmationHandler(ResolveConfirmationAsync)`，注释明说「A handler set directly on the MCP scope is replaced by this」。这是刻意的：审批**只配一次**，工作流工具与 MCP 自服务共用同一个。所以宿主只需要在 **scope** 上调 `WithConfirmationHandler`（`WorkflowAgentScope.cs:753`）。
 
@@ -50,12 +50,12 @@ AddAsync(config, ct)          McpScope.cs:782   ← 中途加一个，不清空
 
 ## 三、`Options` 是白名单校验的，不是自由 blob
 
-`McpServerConfiguration.Options`（`McpServerConfiguration.cs:72`）是个字典，序列化后**按运行模式**过白名单（`EnsureKnownKeys`，`McpScope.cs:1236`）：
+`McpServerConfiguration.Options`（`McpServerConfiguration.cs:73`）是个字典，序列化后**按运行模式**过白名单（`EnsureKnownKeys`，`McpScope.cs:1238`）：
 
 | 模式 | 允许的键 | 位置 |
 |---|---|---|
-| Http | `headers` / `oauth` / `connectionTimeout` / `transportMode` / `ownsSession` | `McpScope.cs:1210` |
-| Stdio（Npm/Npx/Pip/Uvx/Dotnet/Exe） | `env` / `workingDirectory` | `McpScope.cs:1211` |
+| Http | `headers` / `oauth` / `connectionTimeout` / `transportMode` / `ownsSession` | `McpScope.cs:1212` |
+| Stdio（Npm/Npx/Pip/Uvx/Dotnet/Exe） | `env` / `workingDirectory` | `McpScope.cs:1213` |
 
 **写了别的键 ⇒ 抛异常**（`:1238`），错误信息会把允许列表列出来。所以要加一个新的 option 键，必须同时改 `HttpOptionKeys` / `StdioOptionKeys` **以及** 消费它的 `BuildHttpTransportOptions`（`:1161`）/ `BuildStdioTransportOptions`（`:1118`）。
 
@@ -104,7 +104,7 @@ AddAsync(config, ct)          McpScope.cs:782   ← 中途加一个，不清空
 **加一个运行模式**
 
 1. `McpServerRunMode.cs` 加枚举值。
-2. `McpScope.GetRuntimeDir`（`:947`）加分支。
+2. `McpScope.GetRuntimeDir`（`:949`）加分支。
 3. `McpScope` 里装载分支：需要装运行时的模式要在 `LoadOneAsync`（`:845`）的 `Installing` 段里接上；需要自己的 transport 要接 `ConnectServerAsync`（`:1055`）。
 4. `McpServerConfiguration` 的必填字段校验：`AddServer`（`McpAgentToolkit.cs:168-171`）与 `EnsureKnownKeys` 的白名单。
 5. `McpAgentToolkit.BuildPromptContext` 的措辞、以及 `AddServer` 的 `[Description]`（`:148`，里面逐条列了模式名）。

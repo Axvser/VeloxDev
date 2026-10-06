@@ -35,7 +35,7 @@
 |---|---|---|---|
 | `TimeLineEventArgs`（`TimeLineEventArgs.cs`） | 抽象基类 | — | `virtual bool Handled`（**全仓库零 `override`**；唯一那个用 `new` 遮蔽它的类型已于 2026-10-04 删除，见 §八·5）+ `DeltaTime`/`TotalTime`（`TimeSpan`，`internal set`）—— 基类给两条链路一份共享的时钟读数 |
 | `FrameEventArgs`（`FrameEventArgs.cs`） | `TickManager.CreateFrameEventArgs`（`:826`） | 五个 `partial void` 钩子 | 只剩 `CurrentFPS`/`TargetFPS` 两个自有属性（全 `internal set`）；两个时钟读数已上移到基类 |
-| `TransitionEventArgs`（**已移出本模块**：`TransitionSystem/Events/TransitionEventArgs.cs:7`） | `TransitionInterpreter` 的 `Args`、`TransitionDiagnostics`（`:16`/`:26`）、`Effects/Transition.cs:348` | 用户挂在 effect 上的七个无载荷事件处理器 | `TransitionEventArgs : TimeLineEventArgs`；自有 `Loop`（int，本段第几趟，0 起）/ `Cycle`（long，这个 target 累计走了几趟），都 `internal set`。带载荷的 `Warn`/`Error` 改用派生泛型，见本节末 |
+| `TransitionEventArgs`（**已移出本模块**：`TransitionSystem/Events/TransitionEventArgs.cs:7`） | `TransitionInterpreter` 的 `Args`、`TransitionDiagnostics`（`:16`/`:26`）、`Effects/Transition.cs:347` | 用户挂在 effect 上的七个无载荷事件处理器 | `TransitionEventArgs : TimeLineEventArgs`；自有 `Loop`（int，本段第几趟，0 起）/ `Cycle`（long，这个 target 累计走了几趟），都 `internal set`。带载荷的 `Warn`/`Error` 改用派生泛型，见本节末 |
 
 **四个读数（`FrameEventArgs` 的两个自有属性 + 基类的两个时钟）各有来源，都不是随手填的：**
 
@@ -50,9 +50,9 @@
 | `WarnStage`（3 值，`Enums/WarnStage.cs:5`） | `Unreadable` | `Sampling/Interpolator.cs:158` |
 | | `Unsampled` | `Sampling/Interpolator.cs:183` |
 | | `Dropped` | `Runtime/TransitionScheduler.cs:152`（Awake 投递被拒）与 `Sampling/SamplerSet.cs:117`（帧被宿主拒收）——**同一个枚举成员，两个不同的事** |
-| `ErrorStage`（11 值，`Enums/ErrorStage.cs:6`） | `Sampling` / `Run` / `Marshaling` | `Sampling/SamplerSet.cs:139` / `Runtime/TransitionInterpreter.cs:237` + `Effects/Transition.cs:350` / `Runtime/TransitionInterpreter.cs:280` |
+| `ErrorStage`（11 值，`Enums/ErrorStage.cs:6`） | `Sampling` / `Run` / `Marshaling` | `Sampling/SamplerSet.cs:139` / `Runtime/TransitionInterpreter.cs:236` + `Effects/Transition.cs:349` / `Runtime/TransitionInterpreter.cs:279` |
 | | `Awake` / `Prepare` | `Runtime/TransitionScheduler.cs:144` / `:164` |
-| | `Start` / `Update` / `LateUpdate` / `Completed` / `Canceled` / `Finally` | `Runtime/TransitionInterpreter.cs:206` / `:397` / `:399` / `:228` / `:232`(与 `:238`) / `:247` —— 这六个表示「**那个事件的某个订阅者抛了**」，不是引擎自己的步骤 |
+| | `Start` / `Update` / `LateUpdate` / `Completed` / `Canceled` / `Finally` | `Runtime/TransitionInterpreter.cs:205` / `:396` / `:398` / `:227` / `:231`(与 `:237`) / `:246` —— 这六个表示「**那个事件的某个订阅者抛了**」，不是引擎自己的步骤 |
 
 枚举是封闭集合：消费方 `switch` stage 时，新增一个成员会让未覆盖的分支被编译器指出（`switch` 表达式无 `default` 时 CS8509；无 `default` 的 `switch` 语句不报）。引擎侧没有「必须处理每个 stage」的中央 `switch`，所以给枚举加成员不必改引擎代码，但也没有哪个调用点会替你保证新成员被用上。带载荷的 `Warn`/`Error` 把枚举装在 `TransitionEventArgs<WarnStage, string>` / `<ErrorStage, Exception>` 上（`Events/TransitionEventArgs{TStage,TValue}.cs:13`）；七个无载荷事件用非泛型的 `TransitionEventArgs`（`Events/TransitionEventArgs.cs`），它只有 `Loop`/`Cycle`，没有 `Stage`。
 
@@ -72,14 +72,14 @@
 ### 链路 B —— TransitionSystem：取消这一趟动画
 
 - **写**：`TransitionDiagnostics.Raise`（`Runtime/TransitionDiagnostics.cs:41`）：`if (args.Handled && run is not null) run.Handled = true;` —— 即 effect 的带载荷 `Warn`/`Error` 处理器把 `TransitionEventArgs.Handled` 置上，落到 `run.Handled`。
-- **读**：`TransitionInterpreter` 三处：趟循环起点（`:219`）、自动反向的第二趟之前（`:223`）、**每帧**（`:316`）。任一为真就 `throw new OperationCanceledException()`，走正常取消路径。
-- **`Args` 的生命周期**：每个解释器一个（`Runtime/TransitionInterpreter.cs:72`），每个解释器只服务一段的一趟，所以 **`Handled` 不跨段**。
+- **读**：`TransitionInterpreter` 三处：趟循环起点（`:218`）、自动反向的第二趟之前（`:222`）、**每帧**（`:315`）。任一为真就 `throw new OperationCanceledException()`，走正常取消路径。
+- **`Args` 的生命周期**：每个解释器一个（`Runtime/TransitionInterpreter.cs:71`），每个解释器只服务一段的一趟，所以 **`Handled` 不跨段**。
 
 ### 两条链路的三条实用结论
 
 1. **`Handled` 在 Update 与 LateUpdate 之间不重置。** 同一个 `frameArgs` 对象先传给 `ExecuteBehaviorsUpdateSync` 再传给 `ExecuteBehaviorsLateUpdateSync`（`TickManager.cs:541-542`），中间没有清位。**在 Update 里置上 `Handled`，本帧的整个 LateUpdate 被跳掉**。WPF demo 把这个做成了一颗按钮并直接计数（`Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs:92-96`，读数在 `MainWindow.xaml.cs:248`）。
 2. **`FixedUpdate` 每步自建参数**（`TickManager.cs:487-494`、异步版 `:593-600` 各自 `CreateFrameEventArgs`），所以 `Handled` **不跨步**，也不与 Update 共享。demo 的状态行明说了这条（`MainWindow.xaml.cs:287-290`）。
-3. **不是每个 args 都能否决。** `TransitionDiagnostics` 造的那份带 `run`（构造参数，`Runtime/TransitionDiagnostics.cs:5`），置 `Handled` 才落下去；而 `Effects/Transition.cs:348-352` 在 `async void CoreExecute` 的 catch 里直接 new 的 `TransitionEventArgs<ErrorStage, Exception>` **没有 run**——在那个处理器里置 `Handled` 什么都不发生（那时这一趟已经结束了）。
+3. **不是每个 args 都能否决。** `TransitionDiagnostics` 造的那份带 `run`（构造参数，`Runtime/TransitionDiagnostics.cs:5`），置 `Handled` 才落下去；而 `Effects/Transition.cs:347-351` 在 `async void CoreExecute` 的 catch 里直接 new 的 `TransitionEventArgs<ErrorStage, Exception>` **没有 run**——在那个处理器里置 `Handled` 什么都不发生（那时这一趟已经结束了）。
 
 ---
 
@@ -166,15 +166,15 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 
 ## 五、边界：这不是七家 GUI 适配器的东西
 
-**`Src/Adapters/VeloxDev.*/` 下没有任何一行引用 `TickManager`**，只有两处**注释**在解释「为什么这段代码会被非 UI 线程碰到」：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowMinimapOverlay.cs:377` 与 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowMinimapOverlay.cs:305`（后者点明了「经 `BroadcastVisibleItemLayout`」）。七家的帧循环各自由 `TransitionInterpreter.CreateFramePacer` 建立。
+**`Src/Adapters/VeloxDev.*/` 下没有任何一行引用 `TickManager`**，只有两处**注释**在解释「为什么这段代码会被非 UI 线程碰到」：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowMinimapOverlay.cs:379` 与 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowMinimapOverlay.cs:305`（后者点明了「经 `BroadcastVisibleItemLayout`」）。七家的帧循环各自由 `TransitionInterpreter.CreateFramePacer` 建立。
 
 它给的是 **Unity 式宿主** —— 游戏循环、Unity 的 MonoBehaviour 集成、或任何想跑一条**独立于 UI 的帧循环**的非 UI 代码。判据很简单：你要的是「一条与渲染无关、能自己调速、暂停时不占 CPU 的帧泵」，就用它；你要的是「让动画在 UI 线程上出帧」，那是 `TransitionSystem` + 适配器的事。
 
 **但 Core 内部有一个真实消费者**，容易被忽略：
 
-`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/TreeHelper.cs` 的 `[Tickable(channel: nameof(TreeHelper), fps: 10)]`（`:33`），channel 在带 `cellSize` 的构造里 `Start`（`:45-53`），`Install` 里 `InitializeTickable()`（`:139`），`Uninstall` 里 `CloseTickable()`（`:157`），`partial void Update`（`:63-71`）做 `Virtualize` + `BroadcastVisibleItemLayout`。
+`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/TreeHelper.cs` 的 `[Tickable(channel: nameof(TreeHelper), fps: 10)]`（`:33`），channel 在带 `cellSize` 的构造里 `Start`（`:48-55`），`Install` 里 `InitializeTickable()`（`:142`），`Uninstall` 里 `CloseTickable()`（`:160`），`partial void Update`（`:66-74`）做 `Virtualize` + `BroadcastVisibleItemLayout`。
 
-**这条链的后果值得单独记住：虚拟化跑在一条 10fps 的后台线程上，而 `BroadcastVisibleItemLayout` 从那条线程对每个可见节点发 `OnPropertyChanged(nameof(Anchor))` / `(nameof(Size))`（`TreeHelper.cs:73-83`）。** 绑定层是否接受跨线程的属性变更由各 GUI 决定，本模块不做任何编组（对照：`TransitionSystem` 有一条完整的 `IThreadDispatcher` 通路）。也注意 `[Tickable]` 只装在泛型类 `TreeHelper<T>` 上（`:34`），而 `nameof(TreeHelper)` 在泛型内解析为不带参数个数的 `"TreeHelper"`。
+**这条链的后果值得单独记住：虚拟化跑在一条 10fps 的后台线程上，而 `BroadcastVisibleItemLayout` 从那条线程对每个可见节点发 `OnPropertyChanged(nameof(Anchor))` / `(nameof(Size))`（`TreeHelper.cs:76-84`）。** 绑定层是否接受跨线程的属性变更由各 GUI 决定，本模块不做任何编组（对照：`TransitionSystem` 有一条完整的 `IThreadDispatcher` 通路）。也注意 `[Tickable]` 只装在泛型类 `TreeHelper<T>` 上（`:34`），而 `nameof(TreeHelper)` 在泛型内解析为不带参数个数的 `"TreeHelper"`。
 
 ---
 
@@ -222,7 +222,7 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 | 启动/停止/重启语义 | `TickManager.cs:276-329`、`:331-376`、`:406-430` |
 | 注册为什么没生效 | `TickManager.cs:432-435`（只入队）→ `:787-803`（帧体里结算） |
 | 钩子怎么被声明出来 | 契约 `Interfaces/Tickable/ITickable.cs` + 生成器 `Src/Generators/VeloxDev.Core.Generator/Writers/TickWriter.cs` |
-| `Handled` 在动画一侧的含义 | `TransitionSystem/Runtime/TransitionDiagnostics.cs:41` + `TransitionSystem/Runtime/TransitionInterpreter.cs:219,223,316` |
+| `Handled` 在动画一侧的含义 | `TransitionSystem/Runtime/TransitionDiagnostics.cs:41` + `TransitionSystem/Runtime/TransitionInterpreter.cs:218,222,315` |
 | 跨模块共用的参数形状 | `TimeLine/TimeLineEventArgs.cs`、`TimeLine/FrameEventArgs.cs`；`TransitionSystem/Events/TransitionEventArgs.cs`、`Events/TransitionEventArgs{TStage,TValue}.cs`、`Enums/{Warn,Error}Stage.cs` |
 
 ---
@@ -230,7 +230,7 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 ## 八、陷阱（带依据）
 
 1. **`ITickable` 的名字里曾带零宽空格（U+200B），2026-10-01 已清除**（当时它还叫 `IMonoBehaviour`）。它为什么编译得过却仍然有害，见 `memory/modules/Interfaces/architecture.md` §六·9 —— 一句话：C# 忽略 Cf 类字符，所以带与不带是同一个标识符，坑全在人这一侧（裸路径打不开、`grep -l` 漏、`git ls-files` 会把路径转义）。现在按字符串找这个名字用普通拼写就行。
-2. **只贴 `[Tickable]` 什么都不会发生。** 特性只被**生成器**读（`TickWriter.cs:20-51`），运行时的 `TickManager` **从不反射**这个特性。要真正跑起来，必须调生成的 `InitializeTickable()`。仓库内唯一的运行期读法是**没有**——对照组：`Analizer.cs:103` 的 `TriggerAttributes` 里那一项只决定生成器是否介入。
+2. **只贴 `[Tickable]` 什么都不会发生。** 特性只被**生成器**读（`TickWriter.cs:20-51`），运行时的 `TickManager` **从不反射**这个特性。要真正跑起来，必须调生成的 `InitializeTickable()`。仓库内唯一的运行期读法是**没有**——对照组：`Analizer.cs:124` 的 `TriggerAttributes` 里那一项只决定生成器是否介入。
 3. **`[Tickable]` 上的 `fps` 只在第一次注册时入队一次。** 生成器把它展开成 `TickManager.SetTargetFPS({fps}, "{Channel}")` **放在 `RegisterBehaviour` 之前**（`TickWriter.cs:81-89`），`fps >= 1` 时才发这句。而 `fps = -1`（默认）时**整句不生成**。所以「特性里写了 fps 却没生效」先看这个值是不是 `-1`；`TreeHelper` 用的是 `fps: 10`（`TreeHelper.cs:33`）。
 4. **对一条从未被创建（或从未被启动）的 channel 调 `SetTargetFPS` 是静默无效的**：它会**创建** channel（`GetOrCreateChannel`）并把请求**入队**，但队列只有更新泵会排空，没启动就没有读者。WPF demo 的旧版正是踩了这个——三个组件注册在 default channel，却调 `SetTargetFPS(30, "game")`（`Examples/Tickable/WPF/Demo/SimState.cs:11-12` 的原注释）。
 5. **`ThreadSafeFrameEventArgs` 已于 2026-10-04 删除 —— 它是一份「带锁的摆设」，而且那个锁永远走不到。** 它 `public new bool Handled` **遮蔽**基类的 `virtual bool Handled`，而泵的读写都在 `FrameEventArgs` 静态类型上（`ExecuteBehaviorsUpdateSync(FrameEventArgs frameArgs, …)` 的 `:696` 读、`CreateFrameEventArgs` 的 `:833` 写），所以即便把实例塞进池子，走上来的也是基类那个**没锁**的属性。何况它连池子都进不了：池的声明就是 `ObjectPool<FrameEventArgs>`（`:154`），全仓除定义与三条测试外零引用，生成器也不产出它。

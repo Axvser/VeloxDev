@@ -15,7 +15,7 @@
 | D. 加一个**特性元数**（如 `ThemeConfigAttribute\`8`） | §二·D | 2 处 |
 | E. 改「谁算 AOP 类」之类的**判定** | §二·E | 1 处，但会静默改变行为 |
 
-**判据：** 先问「这个新能力是『哪些类会被处理』变了，还是『处理出来的东西』变了」。前者必须动 `Base/Analizer.cs:95-107`；后者才动 writer。**只动 writer 不动清单 = 新特性永远不触发，且不报错。**
+**判据：** 先问「这个新能力是『哪些类会被处理』变了，还是『处理出来的东西』变了」。前者必须动 `Base/Analizer.cs:116-128`；后者才动 writer。**只动 writer 不动清单 = 新特性永远不触发，且不报错。**
 
 ---
 
@@ -25,24 +25,24 @@
 
 三个位置，缺一不可：
 
-1. **`Base/Analizer.cs:95-107` 的 `TriggerAttributes`**（10 条 `readonly string[]`）—— 加一条**元数据名**（`Namespace.Type+嵌套名`，泛型特性带 `` `1 `` 这类元数后缀，照 `:97-100` 的 `WorkflowBuilder+TreeAttribute\`1` 写法）。这是**所有生成器共用的同一张表**。
+1. **`Base/Analizer.cs:116-128` 的 `TriggerAttributes`**（10 条 `readonly string[]`）—— 加一条**元数据名**（`Namespace.Type+嵌套名`，泛型特性带 `` `1 `` 这类元数后缀，照 `:118-121` 的 `WorkflowBuilder+TreeAttribute\`1` 写法）。这是**所有生成器共用的同一张表**。
 2. **写或复用 writer**：实现 `Base/ICodeWriter.cs:8-15` 的四个成员（`Initialize` / `CanWrite` / `Write` / `GetFileName`），或继承 `Writers/WriterBase.cs` 只实现它的五个抽象成员（`Writers/WriterBase.cs:264-272`）。
 3. **一个生成器类**：`[Generator(LanguageNames.CSharp)]` + `IIncrementalGenerator`，`Initialize` 写 `context.RegisterSourceOutput(Analizer.Filters.Targets(context).Combine(context.CompilationProvider), GenerateSource)`，`GenerateSource` 走 `Filters.Resolve` → `new writer` → `CanWrite()` → `AddSource(writer.GetFileName(), writer.Write())`。照 `MVVM.cs:12-45` 抄最短。
 
-**候选闸门也是硬性的**：`Base/Analizer.cs:170-174` 的 `IsCandidateClass` 要求类是 **`partial`**。不 `partial` ⇒ 该类型不进入流程，**没有诊断**。
+**候选闸门也是硬性的**：`Base/Analizer.cs:191-195` 的 `IsCandidateClass` 要求类是 **`partial`**。不 `partial` ⇒ 该类型不进入流程，**没有诊断**。
 
 ### B. 给已有生成器加一种产物形状
 
-- **多生成一个成员**：改对应 writer 的 `GenerateBody()`，或改 `Base/Analizer.cs` 里那组 `MVVM*` 类（它是 MVVM 侧绝大多数模板的所在地：`SetterMode` 的 setter 体在 `MVVMPropertyFactory.GetSetterBodyLines()`（`:509` 起）、集合订阅与 `Enumerate{名}Items` 合成在 `GenerateCollectionMembers()`（`:793` 起）。注意槽位生命周期**不在**这里：`GenerateWorkflowSlotMembers()`（`:788`）现在只返回 `string.Empty`，三件套已移到 `Writers/MVVMWriter.cs:1040-1065`）。
+- **多生成一个成员**：改对应 writer 的 `GenerateBody()`，或改 `Base/Analizer.cs` 里那组 `MVVM*` 类（它是 MVVM 侧绝大多数模板的所在地：`SetterMode` 的 setter 体在 `MVVMPropertyFactory.GetSetterBodyLines()`（`:546` 起）、集合订阅与 `Enumerate{名}Items` 合成在 `GenerateCollectionMembers()`（`:830` 起）。注意槽位生命周期**不在**这里：`GenerateWorkflowSlotMembers()`（`:825`）现在只返回 `string.Empty`，三件套已移到 `Writers/MVVMWriter.cs:1040-1065`）。
 - **多写一份文件**：照 `Writers/AopWriter.cs` 的第二产物写法 —— 额外的 `GetExtensionFileName()`（`:51`）/`WriteExtension()`（`:58`）对**不在 `ICodeWriter` 接口里**，是在生成器类里直接调（`AopProxy.cs:33-35` 的 `AddSource`）。**加第二份产物必须自己保证 hint name 不与第一份撞。** （`AopSurface.cs` 更进一步：接口与代理两个产物由同一个生成器各 `AddSource` 一次，`:163`/`:167`。）
 - **加基础类型/接口**：`GenerateBaseTypes()` 或 `GenerateBaseInterfaces()` 返回数组即可，`Writers/WriterBase.cs:211-212` 会把它们并入用户原有基类型后 `.Distinct()`。
 - **改修饰符**：只能改 `Writers/WriterBase.cs:234-261` 的 `FormatModifiers` —— `partial` 必须排在最后，否则生成的声明与原声明被视为不同而报重复定义。
 
 ### C. 加一个全新生成器
 
-在一个类里做四件事：`[Generator(LanguageNames.CSharp)]`（`MVVM.cs:12` 等 9 处同形）→ `IIncrementalGenerator` → `Initialize` 注册 → `GenerateSource` 里循环。**不要写 `ISourceGenerator`**（`architecture.md` §二）。
+在一个类里做四件事：`[Generator(LanguageNames.CSharp)]`（`MVVM.cs:12` 等 10 处同形）→ `IIncrementalGenerator` → `Initialize` 注册 → `GenerateSource` 里循环。**不要写 `ISourceGenerator`**（`architecture.md` §二）。
 
-**引用点不用改**：`VeloxDev.Core.Generator.csproj:32` 是按 `bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).dll` 整包进 `analyzers/dotnet/cs`，新增的生成器类自然进包。
+**引用点不用改**：`VeloxDev.Core.Generator.csproj:41` 是按 `bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).dll` 整包进 `analyzers/dotnet/cs`，新增的生成器类自然进包。
 
 ### D. 加一个特性元数（以 Theme 为例）
 
@@ -63,13 +63,13 @@
 
 | 场景 | 官方做法 | 看着能编译、但错的捷径 | 错了会怎样 |
 |---|---|---|---|
-| 让某个特性触发生成 | 把元数据名加进 `Base/Analizer.cs:95-107` | 只在 writer 里支持该特性 | 类从不进入流程，**不报错、不生成** |
+| 让某个特性触发生成 | 把元数据名加进 `Base/Analizer.cs:116-128` | 只在 writer 里支持该特性 | 类从不进入流程，**不报错、不生成** |
 | 让某一家 GUI 生成不同的东西 | **不做** —— 平台差异去改适配器（`Src/Adapters/VeloxDev.<GUI>/`） | 在 writer 里判断平台 / `#if WPF` | 生成器是 `netstandard2.0` 且不引用任何 GUI 程序集，写不出来；就算写出来也违背「契约只写一次」 |
-| 把语义信息带进 writer | writer 里用 `Initialize` 收到的**新鲜** `INamedTypeSymbol` 现读 | 给 `Base/Analizer.cs:43-87` 的 `GeneratorTarget` 加 symbol 字段 | 增量下 symbol 指向**陈旧 `Compilation`**，偶发生成错码；只改别的文件才复现 |
+| 把语义信息带进 writer | writer 里用 `Initialize` 收到的**新鲜** `INamedTypeSymbol` 现读 | 给 `Base/Analizer.cs:64-108` 的 `GeneratorTarget` 加 symbol 字段 | 增量下 symbol 指向**陈旧 `Compilation`**，偶发生成错码；只改别的文件才复现 |
 | 从 writer 里读 `partial` 的其它声明 | `Base/AnalizeHelper.cs:23-36` 的 `Declarations`/`Members` | 只看 `Initialize` 拿到的那一份 `ClassDeclarationSyntax` | 拆成多个 partial 文件时**静默少生成**；`Writers/AopWriter.cs:20` 的注释就是为这条写的 |
 | 命名产物 | `GetFileName()` 返回 `{类}_{命名空间}_X.g.cs`，命名空间段走 `WriterBase.NamespaceFileSegment()` | 用 `ToDisplayString().Replace('.','_')` 拼完事 | 全局命名空间会生成出 `{类}_<global namespace>_Aop`；`Writers/WriterBase.cs:78-89` 若回退更会写出非法的 `namespace <global namespace>;`。**统一样板是 `Writers/WriterBase.cs:40-43`** |
 | 加基础接口 | 返回 `GenerateBaseInterfaces()` 数组 | 在 `GenerateBody()` 或模板串里手写 `: IFoo` | 类型声明由 `Writers/WriterBase.cs:137` 一处拼出，模板串里写的会出现在类体里 ⇒ 语法错误 |
-| 让生成器报错 | 在 `Diagnostics.cs` 加一条 `DiagnosticDescriptor`，照 `CommandWriter.cs:100`（`List<Diagnostic> Diagnostics`）+ `Command.cs:33-35` 那一对（writer 收集，生成器类在 `CanWrite()` **之前**逐条 `ReportDiagnostic`） | 随手 `context.ReportDiagnostic(...)` | 诊断号要按模块+种类命名（`VELOX_MVVM_CMD…` / `VELOX_MVVM_PROP…`，2026-10-02 起；Agent 树那条是 `VELOX_AI_TREE001`）。`EnforceExtendedAnalyzerRules`（`VeloxDev.Core.Generator.csproj:5`）已开但当前**零告警** —— 因为分析器是 `IIncrementalGenerator`，不需要 `SupportedDiagnostics`，也没有 `AnalyzerReleases.*` 文件被要求 |
+| 让生成器报错 | 在 `Diagnostics.cs` 加一条 `DiagnosticDescriptor`，照 `CommandWriter.cs:100`（`List<Diagnostic> Diagnostics`）+ `Command.cs:33-35` 那一对（writer 收集，生成器类在 `CanWrite()` **之前**逐条 `ReportDiagnostic`） | 随手 `context.ReportDiagnostic(...)` | 诊断号要按模块+种类命名（`VELOX_MVVM_CMD…` / `VELOX_MVVM_PROP…`，2026-10-02 起；Agent 树那条是 `VELOX_AI_TREE001`）。`EnforceExtendedAnalyzerRules`（`VeloxDev.Core.Generator.csproj:5`）已开但当前**零告警** —— 因为分析器是 `IIncrementalGenerator`，不需要 `SupportedDiagnostics`；**而 RS2008（分析器发布跟踪）要的两份文件是齐的** —— `AnalyzerReleases.Shipped.md` / `Unshipped.md` 由 csproj `:31-32` 以 `AdditionalFiles` 纳入，文件本身也在树里。**零告警正是它们齐了的结果，不是「没被要求」** |
 | 发版 | 改 `VeloxDev.Core.Generator.csproj:11` 的 `<Version>` **并且**改 §四那张表的 11 处引用 | 只改 csproj | Debug 走源码仍是对的，Release **静默**还原旧包 —— 本地怎么调都复现不出来 |
 
 ---
@@ -93,7 +93,7 @@
 |---|---|
 | 1 | `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj:48` |
 | 2 | `Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj:31` |
-| 3 | `Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj:33` |
+| 3 | `Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj:37` |
 | 4 | `Examples/Workflow/Directory.Build.props:10` |
 | 5 | `Examples/Theme/Directory.Build.props:10` |
 | 6 | `Examples/AOP/WPF/Demo/Demo.csproj:21` |
@@ -111,7 +111,7 @@
 
 **升版本的完整动作**：`VeloxDev.Core.Generator.csproj:11` → 上表 11 处 `Version=` 全改 → 想清 Release 会不会静默还原旧包（Debug 看不出问题）。路径基准注意 `Examples/Workflow/Directory.Build.props:5` 的说法：基准是导入方项目目录，必须走 `MSBuildThisFileDirectory`。
 
-> **复核口径**：全仓 grep `VeloxDev.Core.Generator` 的引用点就是上表 11 条 `PackageReference` 加对应的 `ProjectReference`（`VeloxDev.Core.csproj:44`、`VeloxDev.Core.Extension.csproj:30`、`VeloxDev.Core.Extension.Test.csproj:29`、`VeloxDev.Core.Test.csproj:28`、`Examples/Workflow/Directory.Build.props:6`、`Examples/Theme/Directory.Build.props:6`、四个 demo 的 `:17/:35/:19/:37`、`Examples/MVVM/Common/Lib/Lib.csproj:19`、`Examples/Tickable/WPF/Demo/Demo.csproj:17`）。`Src/Adapters/*` 只在 `bin/` 的 `.pdb` 里偶然命中该字符串，源码与 csproj 一律不引用（见 [architecture.md](architecture.md) §一）。
+> **复核口径**：全仓 grep `VeloxDev.Core.Generator` 的引用点就是上表 11 条 `PackageReference` 加对应的 `ProjectReference`（`VeloxDev.Core.csproj:44`、`VeloxDev.Core.Extension.csproj:30`、`VeloxDev.Core.Extension.Test.csproj:33`、`VeloxDev.Core.Test.csproj:28`、`Examples/Workflow/Directory.Build.props:6`、`Examples/Theme/Directory.Build.props:6`、四个 demo 的 `:17/:35/:19/:37`、`Examples/MVVM/Common/Lib/Lib.csproj:19`、`Examples/Tickable/WPF/Demo/Demo.csproj:17`）。`Src/Adapters/*` 只在 `bin/` 的 `.pdb` 里偶然命中该字符串，源码与 csproj 一律不引用（见 [architecture.md](architecture.md) §一）。
 
 ---
 
@@ -119,7 +119,7 @@
 
 | # | 位置 | 加什么 | 漏了会怎样 |
 |---|---|---|---|
-| 1 | `Base/Analizer.cs:95-107` | 新特性的元数据名 | **该特性完全无感**，不生成、不报错 |
+| 1 | `Base/Analizer.cs:116-128` | 新特性的元数据名 | **该特性完全无感**，不生成、不报错 |
 | 2 | 新 `Xxx.cs`（生成器类，照 `MVVM.cs:12-45`） | `[Generator]` + `IIncrementalGenerator` + `RegisterSourceOutput` | 没有产物 |
 | 3 | 新 writer（或复用） | 实现 `Writers/WriterBase.cs` 的抽象成员 | 同上 |
 | 4 | 消费项目的引用对 | 若是**新项目**：`ProjectReference`(Debug) + `PackageReference`(Release) 一对 | Release 下不生成；Debug 正常 ⇒ 本地测不出来 |
@@ -153,9 +153,9 @@
 | 东西 | 位置 | 现状 |
 |---|---|---|
 | `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | `Base/AnalizeHelper.cs:12-17` | **没有调用者**。实际用的是同名的符号重载 `:43-46`（调用点 `AopSurface.cs:65`、`Writers/AopWriter.cs:23`）。语法版只扫**单份声明**的成员，是符号版之前的写法；留着但无效 |
-| `Generators.AgentCatalog` | 旧路径 `Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` | **源码里不存在，`obj/` 里的陈旧产物现在也复核不到**（该 `.g.cs` 已不在树里）。当前 25 个 `.cs` 无此类；别按旧记忆去找它 |
-| `GenerateBaseTypes()` | `Writers/AopWriter.cs:40`、`Writers/CommandWriter.cs:613`、`Writers/TickWriter.cs:130`、`Writers/MVVMWriter.cs:1010` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:73` 真正用到了它 |
-| MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：全源 grep 已无 `IsView` / `isView`；`MVVMPropertyFactory` 现在只有两个构造 —— 从字段（`Base/Analizer.cs:411`）与从 partial 属性（`:431`），`Generate()`（原 `GenerateViewModel` 改名，`:617`）是唯一出口。**要恢复 View 支持，必须同时改构造、`Generate()` 与调用点** —— 别再只加参数不加分支 |
+| `Generators.AgentCatalog` | 旧路径 `Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` | **源码里不存在，`obj/` 里的陈旧产物现在也复核不到**（该 `.g.cs` 已不在树里）。当前 29 个 `.cs` 无此类；别按旧记忆去找它 |
+| `GenerateBaseTypes()` | `Writers/AopWriter.cs:40`、`Writers/CommandWriter.cs:596`、`Writers/TickWriter.cs:130`、`Writers/MVVMWriter.cs:1010` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:73` 真正用到了它 |
+| MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：全源 grep 已无 `IsView` / `isView`；`MVVMPropertyFactory` 现在只有两个构造 —— 从字段（`Base/Analizer.cs:432`）与从 partial 属性（`:453`），`Generate()`（原 `GenerateViewModel` 改名，`:654`）是唯一出口。**要恢复 View 支持，必须同时改构造、`Generate()` 与调用点** —— 别再只加参数不加分支 |
 | `VeloxDev.Core.Generator.targets` 的版本门槛 | `VeloxDev.Core.Generator.targets:8-19` | **活着，但条件刻意放宽**：`RoslynVersion` 为空时**跳过检查**（`:13-15` 的注释：现代宿主上的 netframework TFM 拿不到该属性，跳过以免误报）。所以这条诊断**不会**在每个项目上都出现 |
 
 ---

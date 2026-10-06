@@ -66,8 +66,9 @@
     ⇒ **模板产物的 code-behind 因此只剩 `InitializeComponent()`。**
     **为什么传资源键、不传菜单本身**：这个属性挂在表面**自己的根元素**上，`{StaticResource}` 在那里会在
     定义它的那个资源字典之前求值；键交给适配器在挂载之后解析，绕开这个顺序。
-  - 触发点是 hub 的 `ContextMenuRequested`（**可取消**：宿主 `PreventDefault` 就是「这里不给菜单」），
-    开合用 `Publish(ContextMenuEvent)` 报回 hub —— 挂起状态因此不用各家的代码自己记账。
+  - 触发点是**这条连线上的右键按下**（**可取消**：宿主在链上更靠前的一级 —— 连线自己 —— 订同一个事件并
+    `PreventDefault` 就是「这里不给菜单」，顺序由「目标先于祖先」保证），
+    挂起用 `WorkflowInput.IsSuspended` 表达 —— 菜单开着时指针跟踪不动。
   - **无标记语言的 WinForms**：菜单的条目由**基类的可重写钩子**给出（`WorkflowTreeView` 上
     一个 `protected virtual` 的 `OnBuildLinkMenu`，基类负责订阅、定位、弹出），模板产物派生之后增删条目即可 ——
     与这家其余的扩展点同一条线（见 [adapter-base-class-specifications.md](adapter-base-class-specifications.md) §2）。

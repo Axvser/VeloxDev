@@ -85,7 +85,7 @@
 | 改名一个 `internal` 成员 | 本模块大量直测 internal（`Src/Core/VeloxDev.Core/Properties/AssemblyInfo.cs:3`）；改名前先 grep 本目录 |
 | 改 `TransitionEx` 的扩展方法 | `ChainRepeatTests.cs:66` 的 `ChainNode` 是唯一经手 `Then`/`Repeat` 的地方；`AwaitThen` / `Await` 目前**零测试** |
 | 新增一个 Core 主题目录 | `architecture.md` §五的「零测试」缺口表要一起改 |
-| 改核心的取消 / 生命周期时序 | 至少两条类注释里写着「这里为什么必须串行」：`Timing/TimerCoreRegistryTests.cs:9-16`、`TransitionSystem/ReusableTimerWaitTests.cs:15` —— 时序变了这些理由也要重写 |
+| 改核心的取消 / 生命周期时序 | 至少两条类注释里写着「这里为什么必须串行」：`Timing/TimerCoreRegistryTests.cs:9-16`、`TransitionSystem/ReusableTimerWaitTests.cs:16` —— 时序变了这些理由也要重写 |
 
 ---
 

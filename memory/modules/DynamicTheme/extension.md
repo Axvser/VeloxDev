@@ -32,7 +32,7 @@
 
 **错的捷径**：写了 `[ThemeConfig<...>]`、编译通过、属性也有值（`InitializeTheme` 里那句 `pi.SetValue` 会立即写），但切换主题时**一点反应都没有** —— 因为 `activeThemes` 里从来没有它。
 
-**官方做法**：在构造完成后调一次（demo 的注释明说必须在 `InitializeComponent()` 之后：`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:42`）。
+**官方做法**：在构造完成后调一次（demo 的注释明说必须在 `InitializeComponent()` 之后：`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:36`）。
 
 ### 2. 用动画切换却不调 `SetPlatformInterpolator`
 
@@ -69,7 +69,7 @@
 7. 需要「切换中/切换后」做事：实现 `partial void OnThemeChanging/OnThemeChanged`。
 8. 需要局部覆盖：`SetThemeValue<Light>(nameof(属性), value)` / `RestoreThemeValue<Light>(nameof(属性))`。
 
-范本：`Examples/Theme/WPF/Demo/ThemeTile.cs:17-18`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:36-37`、`Examples/Theme/Avalonia/Demo/App.axaml.cs:25`。
+范本：`Examples/Theme/WPF/Demo/ThemeTile.cs:17-18`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:30-31`、`Examples/Theme/Avalonia/Demo/App.axaml.cs:25`。
 
 ---
 
@@ -83,7 +83,7 @@
 |---|---|---|
 | 1 | 在**该家**的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs` 加一个实现 `IThemeValueConverter` 的类 | 六家都在 `namespace VeloxDev.DynamicTheme`（同名类各写一份） |
 | 2 | **必须有无参构造** | 生成器用 `Activator.CreateInstance(typeof(...))` 内联 new（`Theme.cs:237`） |
-| 3 | 类名要能作为特性泛型实参直接写 | 用户在 `[ThemeConfig<BrushConverter, ...>]` 里裸写类名（demo `:36-37`），所以命名空间必须能被 `using VeloxDev.DynamicTheme;` 覆盖 |
+| 3 | 类名要能作为特性泛型实参直接写 | 用户在 `[ThemeConfig<BrushConverter, ...>]` 里裸写类名（demo `:30-31`），所以命名空间必须能被 `using VeloxDev.DynamicTheme;` 覆盖 |
 
 **Jalium 没有 `ThemeValueConverters.cs`** —— 这家要么不用主题、要么把转换器写在别处。核对时以 `Src/Adapters/VeloxDev.Jalium/` 为准。
 
@@ -128,7 +128,7 @@
 | 1 | `Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs` | 已存在，无需改 |
 | 2 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs:33-56` | 加第 6 个 `ForAttributeWithMetadataName("...ThemeConfigAttribute\`8", ...)` |
 | 3 | `Theme.cs:58-84` 的 `Combine` 链 | **必须跟着改**：那一串是**定长元组**（`var ((((classes3, classes4), classes5), classes6), classes7) = combined;`），加一个 provider 就要加一层 `.Combine(...)` 并改解构，同时把新集合加进 `allItems`（`:67-72`） |
-| 4 | `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:34-35` 的注释 | 改掉「at most one Converter plus seven Themes」—— 代码支持之后它才成立；在那之前它是**错的** |
+| 4 | `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:29` 的注释 | 改掉「at most one Converter plus seven Themes」—— 代码支持之后它才成立；在那之前它是**错的** |
 
 漏第 3 步的后果是**编译错误**（元数不匹配），不是静默 —— 这一处比其它联动安全。
 
@@ -148,6 +148,6 @@
 ## 五、只能存疑的地方
 
 1. **`PropertyInfo` 作为字典键的等值语义**：`ThemeCache` 的二级键与三级键都是 `PropertyInfo`，生成器两处都写 `typeof(X).GetProperty(nameof(P))`（`Theme.cs:242`、`:311`）。这能命中**依赖 BCL 的 `PropertyInfo` 按元数据（而非引用）比较**。这条我**没有在仓库内验证**（没有测试专门覆盖「两个 `GetProperty` 调用返回的实例互相命中」），只是从「这套代码在 demo 与测试里跑通」反推。若某天出现「覆盖值不生效」，这是第一个要查的地方。
-2. **`ThemeConfigAttribute` 各 arity 的构造签名差异**：`Examples/Theme/WPF Trimmed` 用的是 `[ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]`（`MainWindow.xaml.cs:36`），即「属性名 + 每主题一个参数数组」；而生成器按 `attribute.ConstructorArguments[0]` 取属性名、`TypeArguments[0]` 取转换器、`TypeArguments[1..]` 取主题（`Theme.cs:163`、`:167`、`:223-230`）。**未逐 arity 核对 6 个类的构造参数形状是否一致**。
+2. **`ThemeConfigAttribute` 各 arity 的构造签名差异**：`Examples/Theme/WPF Trimmed` 用的是 `[ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]`（`MainWindow.xaml.cs:30`），即「属性名 + 每主题一个参数数组」；而生成器按 `attribute.ConstructorArguments[0]` 取属性名、`TypeArguments[0]` 取转换器、`TypeArguments[1..]` 取主题（`Theme.cs:163`、`:167`、`:223-230`）。**未逐 arity 核对 6 个类的构造参数形状是否一致**。
 3. **`UpdatePropertyToCurrentTheme` 会绕过 setter**：它直接 `propertyInfo.SetValue(this, value)`（`Theme.cs:373`），所以对 `[VeloxProperty]` 属性而言**会绕过生成的通知**。这是从代码直读的事实，但「是不是有意的」没有注释说明，也**没有测试覆盖**这一交叉场景（`VeloxProperty` + `ThemeConfig` 同属性）。
 4. **`SetPlatformInterpolator` 的「每进程一次」是注释里的约定**（`ThemeManager.cs:53`「This method only needs to be called once」），代码本身不阻止重复调用 —— `_interpolator` 是普通静态字段，最后一次赋值胜出。重复调用是否有代价（例如 sampler 注册表被重复写）**未核实**。

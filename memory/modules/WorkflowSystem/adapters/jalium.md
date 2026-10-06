@@ -91,7 +91,7 @@
 
 - **连线视图**：适配器的静态助手 `WorkflowLinkBounds.Apply(view, points, out originX, out originY)`（`WorkflowLinkBounds.cs:42-83`）在每次端点折叠/移动后，把元素自身 `Canvas.SetLeft/Top` 与 `Width/Height` 设成**这条线自己的 canvas-local 包围盒**（`BoxPad = 6`，`:32` 外扩）；调用方是**模板产物** `workflow-link-view/TemplateClass.jalxaml.cs` 的 `Refresh()`（`:243`，四个控制点一起进盒），随后 `BuildCurve()`（`:282-299`）把每个点减去助手交回的原点 —— **定位与烘焙相消**，视觉输出与画在 (0,0) 等价。助手的 `<remarks>`（`:11-27`）把根因写死了：*"the renderer culls a child entirely when its layout box misses the viewport clip and never looks at the drawn content…"*。
   ⇒ **这是本仓库"深缩放连线消失"谱系在 Jalium 的最后一环**，与共享 Core 的负侧 cover 无关，别去 Core 里找。改连线视图时若把 `WorkflowLinkBounds.Apply` 这一步删掉或让它滞后一帧，盒子就是陈旧的，**线会在深缩放下静默消失**。
-- **节点视图**：节点定位现在全在 item template 标记里 —— `workflow-node-view` 产出的 `UserControl` 由 tree-view 模板的 `NodeTemplate` 用 `Canvas.Left="{Binding Anchor.Horizontal}"` / `Canvas.Top="{Binding Anchor.Vertical}"` / `Width="{Binding Size.Width}"` / `Height="{Binding Size.Height}"` / `Panel.ZIndex="{Binding Anchor.Layer}"` 摆位（`workflow-tree-view/TemplateClass.jalxaml:20-27`）。**没有对应的适配器类型**（`WorkflowNodeView` 已删），也不存在 `ApplyPosition()`。
+- **节点视图**：节点定位现在全在 item template 标记里 —— `workflow-node-view` 产出的 `UserControl` 由 tree-view 模板的 `NodeTemplate` 用 `Canvas.Left="{Binding Anchor.Horizontal}"` / `Canvas.Top="{Binding Anchor.Vertical}"` / `Width="{Binding Size.Width}"` / `Height="{Binding Size.Height}"` / `Panel.ZIndex="{Binding Anchor.Layer}"` 摆位（`workflow-tree-view/TemplateClass.jalxaml:21-28`）。**没有对应的适配器类型**（`WorkflowNodeView` 已删），也不存在 `ApplyPosition()`。
 
 **核对历史记录**：「自绘但宿主 box-cull」—— **仍成立**，且现在是 IL 级证据（本节）。「梯度交接测量」—— 指的不是这里，是 TransitionSystem 的 `Samplers/BrushSampler.cs:79-94`，见 `memory/modules/TransitionSystem/adapters/jalium.md` §2.3。「连线视图自盒化（盒 == 每线 bbox，定位+烘焙相消）」—— **仍成立**，现在归 `WorkflowLinkBounds.Apply`（`WorkflowLinkBounds.cs:42-83`）＋ 模板的 `BuildCurve()`（`workflow-link-view/TemplateClass.jalxaml.cs:282-299`）。「`IsVirtual` 跳过 + `PortCenter` 反查」—— **两条都已作废**：`IsVirtual` / `IsDragPreview` / `PortCenter` 在整个 Jalium 适配器与模板里**一处都没有**。现在只跳过树的拖拽预览，判据是 `IsVirtualLink(link) => link.Sender.Parent is null && link.Receiver.Parent is null`（`workflow-link-view/TemplateClass.jalxaml.cs:277-278`）—— 两端都还没落到卡片上的占位槽（`slot.Parent` 为 `null`），脱了插槽的真实连线照样渲染。「端口中心从模型几何反查」同样不再存在：连线端点直接取绑定送来的 `Sender/Receiver.Anchor`，而 `slot.Anchor` 是量测结果（§2.3）。
 
@@ -187,7 +187,7 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 
 - `WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay.cs:17`），`RulerBand => 0`（`:42`）—— 它不是标尺，所以虚拟化 inset 为 0。
 - `WorkflowMinimapOverlay.cs:426-435` 的 `OnMiniMouseDown` 先置 `_dragging` 再调 `PanToMini(...)` ⇒ **单击即居中**（不是"拖才动"）。这是小地图的既定语义，与 WPF 那份同款，**不是背离**。
-- `WorkflowMinimapOverlay.ScrollViewer` 仍是普通属性（`:55`），但**适配器里有赋值者**了：`ScrollViewerName` DP（`:160`）+ `ResolveScrollViewer()`（`:182-188`，`FindName(name) is ScrollViewer viewer`，`Loaded` 时再兜一次）⇒ 模板只要写 `ScrollViewerName="PART_ScrollViewer"`（`workflow-tree-view/TemplateClass.jalxaml:65`）就接上了，宿主**不必**自己赋。旧记忆「适配器里没有赋值者，宿主必须自己赋（demo `MainWindow.cs:64`）」已作废。（非 Trimmed demo `Examples/Workflow/Jalium/` 仍走 `Minimap(viewer)` 构造器那条老路，那是它自己的选择。）
+- `WorkflowMinimapOverlay.ScrollViewer` 仍是普通属性（`:55`），但**适配器里有赋值者**了：`ScrollViewerName` DP（`:160`）+ `ResolveScrollViewer()`（`:182-188`，`FindName(name) is ScrollViewer viewer`，`Loaded` 时再兜一次）⇒ 模板只要写 `ScrollViewerName="PART_ScrollViewer"`（`workflow-tree-view/TemplateClass.jalxaml:66`）就接上了，宿主**不必**自己赋。旧记忆「适配器里没有赋值者，宿主必须自己赋（demo `MainWindow.cs:64`）」已作废。（非 Trimmed demo `Examples/Workflow/Jalium/` 仍走 `Minimap(viewer)` 构造器那条老路，那是它自己的选择。）
 - **小地图的内容（节点缩略框 + 包围盒）是带脏标记的缓存**（`WorkflowMinimapOverlay.cs` 的 `_nodeRects` / `_contentBounds` / `_pendingRefresh`，入口 `EnsureContent` / `MarkContentDirty`）：只有节点动过才重算（树的集合变化、节点 `Anchor`/`Size` 变更、换树）；视口、配色、尺寸的变化只 `InvalidateVisual`，不置脏 —— 它们只改那一趟 O(1) 的变换。这家的小地图在平移/缩放里每帧都被推着重画（宿主的 DP 变更 → `OnVisualChanged`），缓存因此是必需的：旧写法每帧要把节点表走两遍（包围盒一趟、绘制一趟）。与 WPF / Avalonia / WinUI / MAUI 的同名 `_pendingRefresh` 是同一条规矩。
 - ⚠ **但只有脏标记会漏掉缩放**：节点的 `Anchor`/`Size` 是「原值 ÷ `Layout.Scale`」的折叠值（`NodeDefaultViewModel.cs:46,64`），**缩放变化不让任何节点发 `PropertyChanged`**。所以 `EnsureContent` 除了脏标记还比一次 `Layout.Scale` 的两个分量。四家同名实现是靠「任何 DP 变化都置脏」把这件事顺带盖住的，这家把视口变化从脏标记里摘出去了（平移因此不必重算），就得自己补这一句 —— 别把它当冗余删掉。
 
@@ -221,7 +221,7 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 
 1. **重做连线视图时最容易漏掉"自盒化"。** 盒子必须**每次端点折叠/移动都同步** `Canvas.SetLeft/Top` + `Width/Height` —— 调 `WorkflowLinkBounds.Apply`（`WorkflowLinkBounds.cs:42-83`），且把几何减掉它交回的 `originX/originY` 再画（`workflow-link-view/TemplateClass.jalxaml.cs:282-299` 的 `BuildCurve()`）。漏任一半 = 深缩放静默消失或整条线画歪。依据：`WorkflowLinkBounds.cs:11-27` 的注释与 §2.1 的 IL 判定链。
 2. **拖拽预览的跳过条件要精确，不要回到 `IsVirtual`。** 现用 `IsVirtualLink(link) => link.Sender.Parent is null && link.Receiver.Parent is null`（`workflow-link-view/TemplateClass.jalxaml.cs:277-278`），并把 `CanRender` / `link.IsVisible` / `link.IsRenderReady()` 与 `_hasBounds` 的检查都留下（`Refresh()` `:212-245`、`OnRender` `:252-274`）。判据的要点是「两端都还没落到卡片上」，脱了插槽的真实连线照样渲染。
-3. **视图池的模板解析失败会抛，不再是静默返回。** 旧记忆里「`_selector is null` 时 `AddItem` 静默返回（`ViewManager.cs:122`）」已作废：`_selector` 字段还在（`ViewManager.cs:27`，由 `SetTemplateSelector` `:37` 写入），但 `_selector` 为空只是让 `FindDataTemplate` 走后面的资源回退 —— 没有任何一条「静默返回」。现在有两条失败路 —— ① manager 根本建不起来：`ViewPool` 的两个附着属性（`ItemsSource` / `TemplateSelector`）**都非空**才建（`ViewPool.cs:55`）；② 建起来了但三级回退都解析不到：`FindDataTemplate`（`ViewManager.cs:274-329`：选择器 → 沿视觉树上溯 `Resources`（按 `DataType` 比）→ `Application.Resources`）返回 `null` 时 `AddOrReuseView` 抛 `InvalidOperationException`（`:210-211`），只在 `ProcessNextBatch` 的 `catch` 里打一行 `Debug.WriteLine`（`:175-182`）⇒ 表现仍是**什么都不显示**，但会有一条调试输出。诊断顺序：先确认模板产物里 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"` 与 `ItemsSource` 都写了（`workflow-tree-view/TemplateClass.jalxaml:56-57`）。
+3. **视图池的模板解析失败会抛，不再是静默返回。** 旧记忆里「`_selector is null` 时 `AddItem` 静默返回（`ViewManager.cs:122`）」已作废：`_selector` 字段还在（`ViewManager.cs:27`，由 `SetTemplateSelector` `:37` 写入），但 `_selector` 为空只是让 `FindDataTemplate` 走后面的资源回退 —— 没有任何一条「静默返回」。现在有两条失败路 —— ① manager 根本建不起来：`ViewPool` 的两个附着属性（`ItemsSource` / `TemplateSelector`）**都非空**才建（`ViewPool.cs:55`）；② 建起来了但三级回退都解析不到：`FindDataTemplate`（`ViewManager.cs:274-329`：选择器 → 沿视觉树上溯 `Resources`（按 `DataType` 比）→ `Application.Resources`）返回 `null` 时 `AddOrReuseView` 抛 `InvalidOperationException`（`:210-211`），只在 `ProcessNextBatch` 的 `catch` 里打一行 `Debug.WriteLine`（`:175-182`）⇒ 表现仍是**什么都不显示**，但会有一条调试输出。诊断顺序：先确认模板产物里 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"` 与 `ItemsSource` 都写了（`workflow-tree-view/TemplateClass.jalxaml:57-58`）。
 4. **视图池按具体类型分桶、且是分批创建。** `ViewManager.cs:201`/`:261` 用 `item.GetType()` 作桶键 ⇒ 两种 ViewModel 类型即使视图相同也各建一份（`item.GetType()` 同时也是 `_templateMap` 缓存键，`:276-290`）；`:156-191` 的 `ScheduleNextBatchRender` / `ProcessNextBatch` **按 `DispatcherPriority.Background` 每批 3 个**物化（`batchSize = 3`，`:167`），未处理完继续排下一批。旧记忆「没有别家那种分批、大集合首帧会卡」**已作废** —— 本家就是分批（与 WPF 同形）。依据：`:14-17` 的 `<remarks>`、`:156-191`、`:201`、`:261`。另：与 WPF 的差异是它**额外处理 `Replace`**（`:105-124`）。
 5. **删视图时同时置 `Collapsed` 与 `DataContext = null`**（`ViewManager.cs:236-237` 的 `HideViewFor`，`:247-248` 的 `ResetAllViews` 同款）。⇒ 视图里读 `DataContext` 的代码在池化回收后会看到 `null`，别把 `DataContext is not null` 当成"已初始化"。现在取模型都靠 `DataContextChanged`：连线模板 `workflow-link-view/TemplateClass.jalxaml.cs:61`（`DataContextChanged += OnDataContextChanged`）与 `:135` 的 `DataContext as IWorkflowLinkViewModel`；槽/节点侧由 `WorkflowSlotLayoutBehavior` 在 `DataContextChanged` 上重接（`WorkflowSlotLayoutBehavior.cs:159`、`:197-206`）。
 6. **哪些插槽显示由卡片刻画决定，命中与端点由适配器量测决定 —— 改名字要同步。** `WorkflowSlotLayoutBehavior` 不再反射读模型：它按 `SlotNames` / `SlotEnumeratorNames` 找到模板里那些具名控件（`FindName`，`:325` / `:379`），从控件 `DataContext` 取槽，量测后写回 `slot.Anchor`。⚠ 但它**硬编码**了几个 watch 的属性名（`RebuildWatchedNames`，`:344-371`：`Anchor`、`Size` + 配置进来的名字 + `InputSlot`/`OutputSlot`/`OutputSlots`）—— 改节点 view-model 上这几个属性名会让重测静默丢失对应触发。`DrawCard` / `WorkflowPortGeometry` 都已不存在。
@@ -234,7 +234,7 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 Jalium 已无 `WorkflowTreeView`，`OnBuildLinkMenu` / `OnConnecting` / `OnConnected` 全部作废。现在分成四件：
 
 - **条目由宿主的标记声明。** tree-view 模板在 `UserControl.Resources` 里放一个 `<ContextMenu x:Key="LinkContextMenu">`
-  （`workflow-tree-view/TemplateClass.jalxaml:39-41`；demo 里就一条 `Delete`），表面用附着属性 `LinkMenuKey="LinkContextMenu"`
+  （`workflow-tree-view/TemplateClass.jalxaml:40-42`；demo 里就一条 `Delete`），表面用附着属性 `LinkMenuKey="LinkContextMenu"`
   按 key 取（`WorkflowSurfaceBehavior.cs:175-182`；`OnLinkPointerPressed` `:1236-1241` 的 `host.FindResource(menuKey)`）。
   存 key 而不是菜单对象，是因为这个附着属性挂在表面自己的根上，`{StaticResource}` 会在定义它的字典之前求值（`:176-180` 的注释）。
 - **订阅/定位/开合都在表面行为里。** `OnLinkPointerPressed`（`:1223-1276`）挂在 Core 的 `Input.PointerPressed` 上，判右键 + 连线命中后：
@@ -243,7 +243,7 @@ Jalium 已无 `WorkflowTreeView`，`OnBuildLinkMenu` / `OnConnecting` / `OnConne
 - **定位链**：`e.Position`（表面局部）→ `host.PointToScreen`（物理像素）→ **`root.PointFromScreen(...)`（根视觉局部）** → `menu.Open(...)`
   （`ToMenuPosition`，`:1288-1292`）。最后那一步不能省：`ContextMenu.Open` 把点**直接写进** `Popup.HorizontalOffset/VerticalOffset`，
   而 `Popup` 按**根视觉/窗口客户区**解释它们；直接把 `PointToScreen` 的结果喂进去，菜单会整体偏移一个窗口原点。
-- **线被别处删掉（Agent / Undo / …）时收菜单归 Core。** hub 在开着的菜单指着的那条线离开 `tree.Links` 时发 **`LinkRemoved`**
+- **线被别处删掉（Agent / Undo / …）时收菜单归宿主。** 树 helper 在开着的菜单指着的那条线离开 `tree.Links` 时发 **`LinkRemoved`**
   （Core `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:106`、`Templates/Helpers/TreeHelper.cs:121`；
   旧的 `ContextMenuDismissRequested` 已不存在）。表面只认自己这份菜单指着的那条（`ReferenceEquals(state.MenuLink, link)` → `state.LinkMenu?.Close()`：
   `WorkflowSurfaceBehavior.cs:1278-1285`），收起后照常报 `Closed`、挂起随之放开；**平台仍然不记任何账**。
@@ -252,7 +252,7 @@ Jalium 已无 `WorkflowTreeView`，`OnBuildLinkMenu` / `OnConnecting` / `OnConne
 demo 往里放了一条 `<MenuItem Header="Delete" Command="{Binding DeleteCommand}" />`（`Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/TreeView.jalxaml:42`）；`DataContext` 被表面设成那条线，
 所以 `{Binding DeleteCommand}` 解析得到。挂起的承担方仍是 Core —— `WorkflowInput.Route(PointerEventArgs)` 在 `IsSuspended`
 时直接返回（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs:78`、`:203`）。完整 demo 的 `MouseLeave` 也只清端口悬停 + 转发，
-收菜单走它自己那套 `menu.Close(); DeleteLink(link);`（`NodeEditorSurface.cs:294-299`），与适配器无关。
+收菜单走它自己那套 `menu.Close(); DeleteLink(link);`（`NodeEditorSurface.cs:352-353`），与适配器无关。
 
 ## 五、非 Trimmed demo 的落点（2026-10-05 更新）
 

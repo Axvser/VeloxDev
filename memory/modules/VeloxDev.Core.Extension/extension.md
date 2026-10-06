@@ -32,7 +32,7 @@
 | `WithAllowNodeExecution(bool)` | **`false`（拒绝）** | `WorkflowAgentScope.cs:319`、内部标志 `:326`。理由（`:313-318`）：这些工具跑**节点的任意业务代码**，「Security is enforced here, not in prompt prose」 |
 | `WithAllowedGenericCommands(params string[])` | **从不调用 = 完全禁用** | `:341`、判定 `IsGenericCommandAllowed` `:355`。名字的 `"Command"` 后缀可省（`:337`） |
 | `WithInteractionSafety(int level)` | `0` = 不注册 `RequestSelection`/`RequestConfirmation` | `:654`、`IsInteractionAllowed` `:800`、注册处 `WorkflowAgentToolkit.cs:194-201`。**两级条件**：级别 > 0 **且** 对应 handler 非空 |
-| `McpScope.WithSelfService(level)` | `Closed` = `AddMcpServer` 不注册 | `McpScope.cs:75`、注册处 `McpAgentToolkit.cs:83` |
+| `McpScope.WithSelfService(level)` | `Closed` = `AddMcpServer` 不注册 | `McpScope.cs:76`、注册处 `McpAgentToolkit.cs:83` |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | 无上限 | `WorkflowAgentToolkit.CheckBudget` `:317` |
 | `WithToolEnabled` / `SetToolEnabled` | 全开 | `CreateTools` 的 `.Where`（`:74`）**加** `CheckBudget` 的第一条（`:323`） |
 | **一个子代理的额度** | 从父那里取一份**份额**，不是另开一口锅 | 授权在 `SubAgentScope.TrySpawn`（`SubAgentScope.cs:387`）就被夹紧，执行期由 `CheckBudget` 的根账本一条（`WorkflowAgentToolkit.cs:336-342`）兜底 |
@@ -60,7 +60,7 @@
 | 给模型派子代理的能力 | `scope.WithSubAgents(SubAgentScope.ForClient(client))`，窄化由子系统按父的实时能力算 | 自己 `new WorkflowAgentScope(tree)` 当孩子 —— 它**不**继承父的账本、UI 上下文与开关，等于给了模型一个能力不受限的第二棵工作流（见 `sub-agents.md` §二、§三） |
 | 写一个 pipeline 阶段 | 实现 `IAgentPipelineStage`，自己 `try/catch` | 靠抛异常中断 run。工具路径上它已经被 `TrackedAIFunction` 的 `catch` 变成**工具错误**，模型会以为工具失败（`AgentPipeline.cs:70-83`） |
 | 在工具体里 await | 什么都不写（不要加 `ConfigureAwait(false)`） | 加上它 —— 会把 await 之后的工作挪到线程池，而连接校验、`ExecuteNodes` 的第二个节点、执行引擎都在那里跑（`TrackedAIFunction.cs` 的注释） |
-| 从后台线程改绑定的集合 | 走 scope 的 `Set*`（内部编组） | 直改 —— `SkillsViewModel.Skills`、`McpStatusViewModel.Servers` 是绑到宿主 UI 的 `ObservableCollection`（`McpScope.cs:812-817`） |
+| 从后台线程改绑定的集合 | 走 scope 的 `Set*`（内部编组） | 直改 —— `SkillsViewModel.Skills`、`McpStatusViewModel.Servers` 是绑到宿主 UI 的 `ObservableCollection`（`McpScope.cs:904-905`） |
 | 让面板开关生效 | `ApplyToScope` 穿透 | 直接改行的 `IsEnabled` 字段不触发 `OnIsEnabledChanged`（生成器只挂在属性 setter 上） |
 | 加一个复合工具 | 不加 —— 每个操作都是单个组件命令步骤 | 加一个「批量做 N 件事」的工具：会**绕过或重复提交** Core 的 undo/redo 栈（`WorkflowAgentToolkit.cs:190-192`） |
 | 给 MCP 自服务配审批 | 在 **scope** 上调 `WithConfirmationHandler`（`WorkflowAgentScope.cs:753`），工作流工具与 MCP 共用它 | 在 `McpScope` 上调 —— `WithMcps` 会**无条件顶掉**它（`WorkflowAgentScope.cs:1558`，注释明说「A handler set directly on the MCP scope is replaced by this」） |
@@ -154,8 +154,8 @@
 | `AgentEmbeddedResources.ReadScript` / `ListScripts` / `ReadAllScripts` | `AgentEmbeddedResources.cs:135`、`:141`、`:147` | **零调用者，且要读的 `Resources/{system}/Scripts/` 目录不存在** —— 加目录不会自动生效 |
 | `AgentEmbeddedResources.ReadSafetyFiles` | `AgentEmbeddedResources.cs:114` | **零调用者**。逐级读的是单个 `ReadSafety`（`WorkflowAgentScope.cs:814`、`:821`） |
 | `AgentEmbeddedResources.ReadReference` / `ListReferences` | `AgentEmbeddedResources.cs:86`、`:92` | **零调用者**。活的是「全读」的 `ReadAllReferences` |
-| `McpScope.WithMcpRoot` | `McpScope.cs:58` | 仓库内无调用者；`.evn/mcp` 是唯一用到的根 |
-| `McpScope.WithSelfService` | `McpScope.cs:75` | **非测试调用者为零** —— 三个 demo 都停在 `Closed`，`AddMcpServer` 的完整路径只有测试在跑 |
+| `McpScope.WithMcpRoot` | `McpScope.cs:59` | 仓库内无调用者；`.evn/mcp` 是唯一用到的根 |
+| `McpScope.WithSelfService` | `McpScope.cs:76` | **非测试调用者为零** —— 三个 demo 都停在 `Closed`，`AddMcpServer` 的完整路径只有测试在跑 |
 | `AgentDashboardViewModel` | `Agent/Dashboard/AgentDashboardViewModel.cs` | 有测试、**无 UI 消费者**；三个 demo 绑的是 `McpScope.Status` |
 | `WorkflowToolCategory.Layout` / `Composite` | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | 保留位，无工具注册 |
 | `WithInteractionSafetyPrompt(level, body)` 的覆盖段 | 覆盖方法 `WorkflowAgentScope.cs:710`，落点 `:826-834` | **只在 1–3 挡生效**（级别 0 走的是 `BuildInteractionSafetyPrompt` `:804` 的提前返回），接在嵌入的 `Level{n}.md` 之后、优先级更高 |

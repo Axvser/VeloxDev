@@ -11,7 +11,7 @@
 
 ## 一、这是什么、不解决什么
 
-**是什么。** `VeloxDev.Core.Extension`（Agent / MCP / Skills / 管线 / 工作流工具函数）的**纯逻辑**测试宿主。它同时是**整个仓库里唯一引用 `Examples/Workflow/Common/Lib/Lib.csproj` 的测试项目**（`VeloxDev.Core.Extension.Test.csproj:24`）。
+**是什么。** `VeloxDev.Core.Extension`（Agent / MCP / Skills / 管线 / 工作流工具函数）的**纯逻辑**测试宿主。它同时是**整个仓库里唯一引用 `Examples/Workflow/Common/Lib/Lib.csproj` 的测试项目**（`VeloxDev.Core.Extension.Test.csproj:28`）。
 
 **不是什么：**
 
@@ -35,7 +35,7 @@
 
 ## 二、最大的一条不对称：本模块引了源生成器
 
-`VeloxDev.Core.Extension.Test.csproj:27-35` 是「生成器不随 ProjectReference 传递」这条仓库通则的**唯一一处测试项目级复现**，且注释就写在旁边：
+`VeloxDev.Core.Extension.Test.csproj:31-39` 是「生成器不随 ProjectReference 传递」这条仓库通则的**唯一一处测试项目级复现**，且注释就写在旁边：
 
 ```xml
 <!-- 本项目自己也用生成器特性，而 analyzer 不随 ProjectReference 传递。 -->
@@ -61,7 +61,7 @@
 
 ## 三、测试替身（同样没有 mock 库）
 
-csproj 的 `PackageReference` 只有 MSTest + coverlet 两个（`:14-15`），外加生成器那条（Debug 走 `ProjectReference`、Release 走 `PackageReference`，`:29-34`）。
+csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 三个（`:14`、`:18-19`），外加生成器那条（Debug 走 `ProjectReference`、Release 走 `PackageReference`，`:33-38`）。
 
 | 替身 | 在哪 | 顶替什么 |
 |---|---|---|
@@ -144,7 +144,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 但**全项目只有 1 个 `[DoNotParallelize]`**（`Agent/AgentTelemetryExtensionsTests.cs:23`；姊妹模块有 16 个）。这个差异不是风格，是**结果**：本模块既没有进程级静态写入，也没有真实时钟断言，所以基本不需要摘出去。
 
-**子代理那一批没有改变这一点，但它把边界推近了一格**：`SubAgentDoubles.cs:106,535` 的两处 `Thread.Sleep(5)` 轮询带着 5000 ms 的墙钟超时，在满载的 CI 上是「真实时钟断言」的雏形。它今天仍然安全，因为超时只用来**把死锁变成失败**而不是断言性能 —— 一个卡住的 `GateChatClient` 会让测试红，而不会让它假绿。加到 `[DoNotParallelize]` 的门槛是「超时值本身成为断言对象」，不是「存在超时」。
+**子代理那一批没有改变这一点，但它把边界推近了一格**：`SubAgentDoubles.cs:149,592` 的两处 `Thread.Sleep(5)` 轮询带着 5000 ms 的墙钟超时，在满载的 CI 上是「真实时钟断言」的雏形。它今天仍然安全，因为超时只用来**把死锁变成失败**而不是断言性能 —— 一个卡住的 `GateChatClient` 会让测试红，而不会让它假绿。加到 `[DoNotParallelize]` 的门槛是「超时值本身成为断言对象」，不是「存在超时」。
 
 ### ⚠ 但「0 个 `[DoNotParallelize]`」不等于「曾经没有抖动」—— 有一次真实抖动，已定位并修掉
 
@@ -256,7 +256,7 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 | 造一个父子 scope 现场 | `Agent/SubAgents/SubAgentDoubles.cs:327` 的 `SubAgentFixture`（`WaitFor` 在 `:586`；`DescendantSubAgents(path)` 拿任意一层孙代理的名册；`skills` / `mcp` / `customTools` 三个可选参数把父装成带能力的宿主） |
 | 断言「窄化真的落到了能力上」 | `Agent/SubAgents/SubAgentDoubles.cs:453-497` 的探针组：`SkillSurfaceOf` / `McpSurfaceOf` / `CustomSurfaceOf` / `PromptOf` / `ProviderToolOf` |
 | 加一个带真实语料的能力源 | `Agent/SubAgents/SubAgentCapabilityGrantTests.cs:41` 的 `EmbeddedSkills()`（库自带的 7 个技能）与 `:49` 的 `TwoServers()`（`SeedLoadedTools` 假的两个 MCP 服务器） |
-| 让测试能用生成器类型 | `VeloxDev.Core.Extension.Test.csproj:24-32` 那组引用 |
+| 让测试能用生成器类型 | `VeloxDev.Core.Extension.Test.csproj:33-38` 那组引用 |
 | 声明一个生成类型 | `Agent/Workflow/Functions/WorkflowSerializationTests.cs:12-30`（唯一先例） |
 | 等后台线程做完 | `Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs:222` 的 `WaitUntilAsync` |
 | 改 `AgentTranscript` 的渲染形状 | **两个** `AgentTranscriptTests`：库侧形状在 `Agent/Pipelines/AgentTranscriptTests.cs`（当前 8 条），`Lib` 契约转发在 `Examples/AgentTranscriptTests.cs`（当前 9 条） |

@@ -1,4 +1,4 @@
-# TransitionSystem — WPF
+﻿# TransitionSystem — WPF
 
 > **读法**：契约与注册位置在 `memory/modules/TransitionSystem/extension.md`，本文不重复；
 > 人面向的「怎么写一个适配器」在 `skills/veloxdev-create-animation/references/adapter.md`，本文只指路不抄。
@@ -20,7 +20,7 @@
 
 其余类是空壳，**不要以为漏写了什么**：`TransitionScheduler` 是非泛型空壳（`TransitionScheduler.cs:5-9`）、`State : StateCore` 空（`State.cs:3`）。
 
-**`Transition<T>` 的 `Property` 一共 28 个重载：1 个泛型 + 27 个逐类型手写**（泛型在 `Transition.cs:39`，手写在 `:54` 起）。这不是 WPF 类型多 —— **27 个手写里只有 `Transform` 那一个（`Transition.cs:54-74`）有泛型版本表达不了的语义**：单个 transform 必须**直接赋值**而不能包进 `TransformGroup`，否则运行时类型变了，`((TranslateTransform)x.RenderTransform).X` 这类嵌套路径就断（注释在 `:58-59`）。其余 26 个是「照抄泛型体、只换签名」的等价物。
+**`Transition<T>` 的 `Property` 一共 28 个重载：1 个泛型 + 27 个逐类型手写**（泛型在 `Transition.cs:39`，手写在 `:47` 起）。这不是 WPF 类型多 —— **27 个手写里只有 `Transform` 那一个（`Transition.cs:54-74`）有泛型版本表达不了的语义**：单个 transform 必须**直接赋值**而不能包进 `TransformGroup`，否则运行时类型变了，`((TranslateTransform)x.RenderTransform).X` 这类嵌套路径就断（注释在 `:58-59`）。其余 26 个是「照抄泛型体、只换签名」的等价物。
 
 ### 为什么这家有 12 个采样器（而 WinForms / Razor 各只有 1 个）
 
@@ -34,7 +34,7 @@
 
 **这条的副作用（最容易漏的一点）**：`System.Windows.Point/Size/Color` 与 Core 用 `System.Drawing` 注册的那三个**同名不同型**（Core 侧同名文件在 `Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/PointSampler.cs`、`SizeSampler.cs`、`ColorSampler.cs`），所以 WPF 必须**再写一份**采样器，放在 `VeloxDev.Adapters.NativeSamplers` 命名空间里（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/PointSampler.cs:3`）才能与 Core 的 `VeloxDev.TransitionSystem.NativeSamplers` 共存。⇒ **改 WPF 采样器时不要 `using VeloxDev.TransitionSystem.NativeSamplers;`**，那三个名字立刻歧义。这不是 WPF 独有：Avalonia 的 `PointSampler` 同形同namespace（`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Samplers/PointSampler.cs:3`）。
 
-**没被覆盖的类型（要动它们就得自己写采样器）**：`System.Windows.Media.Matrix` 只被 `TransformSampler` 内部用（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/TransformSampler.cs:230` 的 `LerpMatrix`），**注册表里没有 `typeof(Matrix)`** ⇒ `Matrix` 类型的属性不可动画；`Media3D.Matrix3D`、`GradientStop` 同理。别以为「有 Transform 就有 Matrix」。
+**没被覆盖的类型（要动它们就得自己写采样器）**：`System.Windows.Media.Matrix` 只被 `TransformSampler` 内部用（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/TransformSampler.cs:231` 的 `LerpMatrix`），**注册表里没有 `typeof(Matrix)`** ⇒ `Matrix` 类型的属性不可动画；`Media3D.Matrix3D`、`GradientStop` 同理。别以为「有 Transform 就有 Matrix」。
 
 ---
 
@@ -78,7 +78,7 @@
 
 > **先给一个反直觉的结论**：TransitionSystem 这边 WPF 是七家里的**平均样本** —— 它既不是最多采样器的（Avalonia 14 > 12），也不是唯一有存活守卫的，`TransitionScheduler`/`TransitionEffect.Priority` 都跟多数派一致。所以下面既列真正的背离，也列**「看起来像这家特有、其实不是」**的校准项，免得下一个 agent 把共性当差异去改。
 
-1. **这里的 Ctrl 判定是精确相等，不是 `HasFlag`** —— 见 2.3 同源的 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs:525` 的 `Keyboard.Modifiers != ModifierKeys.Control`（WinForms 同形：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceBehavior.cs:49` 的 `Control.ModifierKeys != Keys.Control`）；另外三家用 `HasFlag`：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs:519`、`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:526`、`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:880`。可观察后果：**Ctrl+Shift+滚轮在 WPF 与 WinForms 上不缩放，在这三家上缩放**（Jalium 同在这组：它的缩放挂在 `WorkflowSurfaceBehavior` 的 `ScrollViewer.PreviewMouseWheel` 上，Ctrl 也判精确相等 —— `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs`）。代码与注释里**没有**记录这是刻意还是遗漏 —— 按现状保留或统一都行，但别以为七家一致。
+1. **这里的 Ctrl 判定是精确相等，不是 `HasFlag`** —— 见 2.3 同源的 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs:552` 的 `Keyboard.Modifiers != ModifierKeys.Control`（WinForms 同形：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceBehavior.cs:48` 的 `Control.ModifierKeys != Keys.Control`）；另外三家用 `HasFlag`：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs:620`、`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:555`、`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:899`。可观察后果：**Ctrl+Shift+滚轮在 WPF 与 WinForms 上不缩放，在这三家上缩放**（Jalium 同在这组：它的缩放挂在 `WorkflowSurfaceBehavior` 的 `ScrollViewer.PreviewMouseWheel` 上，Ctrl 也判精确相等 —— `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs`）。代码与注释里**没有**记录这是刻意还是遗漏 —— 按现状保留或统一都行，但别以为七家一致。
 
 2. **这家与 Avalonia 是七家里唯二会与 Core 撞名的** —— `System.Windows.Point/Size/Color`（Avalonia 则是 `Avalonia.Point/Size/Color`）与 Core 注册的 `System.Drawing` 三兄弟同名，只能靠第二命名空间分开（两家的采样器都放在 `VeloxDev.Adapters.NativeSamplers`）。WinUI/Jalium/MAUI 的平台类型与 `System.Drawing` 不同名，不需要这一层。理由见第一节。
 
@@ -103,11 +103,11 @@
 6. **`WpfEntries.cs` 记录了一个真会咬人的坑：七家采样器共享同一个命名空间 `VeloxDev.Adapters.NativeSamplers` 且类名相同** ⇒ 同一个测试项目里引用两家就是 CS0433/CS0104。那份文件里的解法是显式 using 别名 + 程序集限定名反射（`VeloxDev.Adapters.NativeSamplers.{name}`）。**这条不是测试的怪癖，是真实的适配器形状**：新接一家沿用同名同namespace 时，任何同时引用两家的项目都要付这份成本。
 
 7. **声明成 `Effect`（抽象基类）的属性曾经在注册表里一条键都没有 —— 2026-09-20 已改成注册基类型。** 查找只**向上**走（精确 → 基类 → 接口，`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:51-91`），所以注册具体类型 `DropShadowEffect` 时，`Effect` 的基类链（`Animatable` → `Freezable` → `DependencyObject` → `object`）上没有键 ⇒ `Prepare` 报一次 `Unsampled` 并把该属性**整个跳过**（`Sampling/Interpolator.cs:181-185`），**不抛、不降级、不提示**。现在注册的是 `typeof(Effect)`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Interpolator.cs:25`），**这条键的代价是必须服务整个家族**（Core 注册表那条通则的实例）：
-   - **两处独立地照 `Effect` 声明**，所以这不是测试的臆造：真 demo 的 DP 是 `Register(nameof(Shadow), typeof(Effect), null)`、属性是 `public Effect? Shadow`（`Examples/Transition/WPF/Demo/SamplerSubject.cs:41,81`）；纯数据表的 `Target.Shadow` 同样是 `Effect`（`Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs:37`）。
-   - **两处此前能跑，都是绕开了注册表**：demo 用 `SetInterpolator` 逐条覆盖（`Examples/Transition/WPF/Demo/MainWindow.xaml.cs:321`），纯数据表直接拿采样器实例。⇒ 改注之前，「`Effect` 属性能动画」这句话在仓库里**没有任何一条经注册表的证据**；现在有了。
+   - **两处独立地照 `Effect` 声明**，所以这不是测试的臆造：真 demo 的 DP 是 `Register(nameof(Shadow), typeof(Effect), null)`、属性是 `public Effect? Shadow`（`Examples/Transition/WPF/Demo/SamplerSubject.cs:39,79`）；纯数据表的 `Target.Shadow` 同样是 `Effect`（`Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs:37`）。
+   - **两处此前能跑，都是绕开了注册表**：demo 用 `SetInterpolator` 逐条覆盖（`Examples/Transition/WPF/Demo/MainWindow.xaml.cs:314`），纯数据表直接拿采样器实例。⇒ 改注之前，「`Effect` 属性能动画」这句话在仓库里**没有任何一条经注册表的证据**；现在有了。
    - **公开 API 暴露的是具体类型**：`Transition.cs:125` 的重载签名是 `Expression<Func<T, DropShadowEffect?>>`。这条重载仍是「编译期就知道是阴影」时的最短写法，但**它不是走通 `Effect` 声明的前提** —— 泛型 `Property<TValue>` 配 `typeof(Effect)` 那条键即可，demo 与纯数据表用的都是后者。
    - **兜底分支同时被改诚实了**：`Samplers/DropShadowEffectSampler.cs:49` 现在是 `property.SetValue(target, t >= 0.5d ? end : start)` —— 两端不是同一类具体效果时（例如 `BlurEffect`）**如实交出调用方给的实例**，不再凭空造一个 `DropShadowEffect` 顶替。这正是 `adapter.md:153` 那句「改注成基类型是义务的开始，不是结束」的落地：改注把 `BlurEffect` 引进来，兜底决定它被静默画成阴影还是被原样交出。
-   - **这一条现在由两条测试钉着**：`SamplerKeyTests.cs:158` 的 `ASamplerRegisteredForABaseType_HandsBackTheFamilyItWasGiven` 用 `Assert.AreSame` 证明交出的不是替身对象；`WpfEntries.cs:214` 那条条目的声明类型回到键校验里（此前挂的是 `UnregisteredReason`「该键不该存在」的可证伪声明），由 `SamplerKeyTests` 的 `EveryEntry_ValueTypeResolvesToTheSamplerItNames` 核。**两条都做过变异验证**：注册退回 `typeof(DropShadowEffect)` 时两条同时红，兜底退回「造 `DropShadowEffect`」时 `AreSame` 那条红。
+   - **这一条现在由两条测试钉着**：`SamplerKeyTests.cs:140` 的 `ASamplerRegisteredForABaseType_HandsBackTheFamilyItWasGiven` 用 `Assert.AreSame` 证明交出的不是替身对象；`WpfEntries.cs:212-213` 那条条目的声明类型回到键校验里（此前挂的是 `UnregisteredReason`「该键不该存在」的可证伪声明），由 `SamplerKeyTests` 的 `EveryEntry_ValueTypeResolvesToTheSamplerItNames` 核。**两条都做过变异验证**：注册退回 `typeof(DropShadowEffect)` 时两条同时红，兜底退回「造 `DropShadowEffect`」时 `AreSame` 那条红。
 
 ---
 

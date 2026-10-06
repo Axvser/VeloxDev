@@ -36,7 +36,7 @@
 | 只写了中文，指望英文界面也能看到 | **英文无处可退**：`language == English` 时直接返回命中集（可能为空） | 同上；测试 `..._EnglishRequestNeverFallsBack` |
 | 写 `[AgentContext("说明")]` | **编译不过**：位置参数第一位是 `AgentLanguages` | `AgentContextAttribute.cs:5` |
 
-**官方**：命令的说明与参数类型标在**接口**上（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:33` 那一族是范本）；其它成员标在**声明它的那个类**上。想支持几种语言就写几条 —— 但**不必为回退而写**：整目标缺该语言时会自动退回英文。
+**官方**：命令的说明与参数类型标在**接口**上（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:37-41` 那一族是范本）；其它成员标在**声明它的那个类**上。想支持几种语言就写几条 —— 但**不必为回退而写**：整目标缺该语言时会自动退回英文。
 
 ### 2. 暴露一个命令
 
@@ -77,8 +77,8 @@
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 用字符串构造指望跨程序集能解析 | 字符串形式**能编译**，但白名单校验是**对字符串的 Ordinal 精确比对**：`IsEnumTypeAllowed` 拿 `selectorType.FullName` 去比生成期记下的 `SlotSelectorType` 引用名（`.../Functions/WorkflowAgentToolkit.cs:2809-2823`），生成的类型名要与所写的字符串**逐字符相同**才行。没有任何 `Type.GetType` 或程序集扫描（全仓已零反射），`AgentTypeResolver.ResolveType` 也是闭世界（只查目录，`AgentTypeResolver.cs:25`） | `.../Functions/WorkflowAgentToolkit.cs:2809-2823`；对照 `AgentTypeResolver.cs:25`、`.../Functions/TypeIntrospector.cs:30` |
-| 给 `[SlotSelectors]` 属性直接 patch | 消费方**按代码硬拒** | `.../Agent/Workflow/Functions/ComponentPatcher.cs:124-133` |
+| 用字符串构造指望跨程序集能解析 | 字符串形式**能编译**，但白名单校验是**对字符串的 Ordinal 精确比对**：`IsEnumTypeAllowed` 拿 `selectorType.FullName` 去比生成期记下的 `SlotSelectorType` 引用名（`.../Functions/WorkflowAgentToolkit.cs:2913-2928`），生成的类型名要与所写的字符串**逐字符相同**才行。没有任何 `Type.GetType` 或程序集扫描（全仓已零反射），`AgentTypeResolver.ResolveType` 也是闭世界（只查目录，`AgentTypeResolver.cs:25`） | `.../Functions/WorkflowAgentToolkit.cs:2913-2928`；对照 `AgentTypeResolver.cs:25`、`.../Functions/TypeIntrospector.cs:30` |
+| 给 `[SlotSelectors]` 属性直接 patch | 消费方**按代码硬拒** | `.../Agent/Workflow/Functions/ComponentPatcher.cs:127-135` |
 | 以为空数组 = 什么都不允许 | 两个集合都空时语义是**「任意类型都接受」** | `SlotSelectorsAttribute.cs:42`、`:49` |
 
 ### 6. 新增一种「特性 + 反射读取」
@@ -95,13 +95,13 @@
 |---|---|---|
 | 列出/执行命令 | `AgentCommandDiscoverer.DiscoverCommands` / `Execute`（读目录） | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/CommandInvoker.cs`（**也读目录**了，但仍是一份独立实现：自带 `CommandDescriptor`、参数走生成的 `VeloxJsonSerializer` 反序列化、不按语言过滤） |
 | 批量写属性 | `AgentPropertyAccessor.cs:164` | `.../Workflow/Functions/ComponentPatcher.cs`（`ApplyPatch` `:41`） |
-| 标量对拷 | `AgentPropertyAccessor.CopyScalarProperties`（**零生产调用者**；转调访问器，搬全部可写成员） | `.../Workflow/Functions/ComponentPatcher.cs:251`（自带标量白名单，实际跑的是这份） |
+| 标量对拷 | `AgentPropertyAccessor.CopyScalarProperties`（**零生产调用者**；转调访问器，搬全部可写成员） | `.../Workflow/Functions/ComponentPatcher.cs:256`（自带标量白名单，实际跑的是这份） |
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 在 Core 里改命令的命名规范化/语言过滤，期待 Workflow 工具跟着变 | Workflow 工具走 `CommandInvoker`，不与 Core 共享任何一行实现 —— 改 Core 只影响 `AgentObjectToolkit`（通用对象）那条路 | `AgentObjectToolkit.cs:247` vs `WorkflowAgentToolkit.cs:1041` |
-| 以为 Core 的转换表也管着 Workflow | 两条各有各的：Core 走**生成期那张表**（`AIContextConvert`，需要重新生成才会变），Workflow 那条走 `AgentJsonValue.Convert(VeloxJsonValue.Parse(json), paramType)`（运行期，改了立刻生效） | `CommandInvoker.cs:89` vs `AIContextConvert.cs` |
-| 以为「命令描述符」是同一个类型 | 有两个同名类：Core 的嵌套 `AgentCommandDiscoverer.CommandDescriptor` 与 `VeloxDev.AI.Workflow.Functions.CommandDescriptor`（`CommandInvoker.cs:120`）；字段也不同（后者带 `Descriptions` 的 `KeyValuePair<AgentLanguages,string>`） | 同上 |
+| 在 Core 里改命令的命名规范化/语言过滤，期待 Workflow 工具跟着变 | Workflow 工具走 `CommandInvoker`，不与 Core 共享任何一行实现 —— 改 Core 只影响 `AgentObjectToolkit`（通用对象）那条路 | `AgentObjectToolkit.cs:247` vs `WorkflowAgentToolkit.cs:1045` |
+| 以为 Core 的转换表也管着 Workflow | 两条各有各的：Core 走**生成期那张表**（`AIContextConvert`，需要重新生成才会变），Workflow 那条走 `AgentJsonValue.Convert(VeloxJsonValue.Parse(json), paramType)`（运行期，改了立刻生效） | `CommandInvoker.cs:91` vs `AIContextConvert.cs` |
+| 以为「命令描述符」是同一个类型 | 有两个同名类：Core 的嵌套 `AgentCommandDiscoverer.CommandDescriptor` 与 `VeloxDev.AI.Workflow.Functions.CommandDescriptor`（`CommandInvoker.cs:122`）；字段也不同（后者带 `Descriptions` 的 `KeyValuePair<AgentLanguages,string>`） | 同上 |
 
 **要一起改的两处**（改命令语义时）：`AgentCommandDiscoverer.cs`（通用路径）与 `CommandInvoker.cs`（Workflow 路径）。反过来说，**只**想要 Workflow 行为变、通用路径不变，也是可行的 —— 那就只改后者。
 
@@ -113,7 +113,7 @@
 
 1. 定位它**被读取的方式**：命令 → 写在**接口**上；属性/方法/类型 → 写在**声明类**上。
 2. 每种要支持的语言各写一条 `[AgentContext(AgentLanguages.X, "…")]`（同一语言可多条，全部会返回）。
-3. 命令若带参数，另外补 `[AgentCommandParameter(typeof(T))]` —— 参数类型**只从这里来**，没有按名字猜后备方法的启发式：写在实现类属性上就用它，写在接口上由生成器按同名属性回查、复制到实现类的命令节点（`AIContextModelBuilder.InterfaceCommandProperty`，`AIContextModel.cs:783`）。
+3. 命令若带参数，另外补 `[AgentCommandParameter(typeof(T))]` —— 参数类型**只从这里来**，没有按名字猜后备方法的启发式：写在实现类属性上就用它，写在接口上由生成器按同名属性回查、复制到实现类的命令节点（`AIContextModelBuilder.InterfaceCommandProperty`，`AIContextModel.cs:845`）。
 4. 自检：用目标语言调一次 `AgentContextReader.GetContexts(...)`。返回空数组 = 该目标**既没有目标语言、也没有英文**标注；只写英文时返回的是英文那几条（回退），不是空，也不是「两种语言都有」。
 
 ### B. 暴露一个新命令
@@ -127,8 +127,8 @@
 ### C. 给 `SlotEnumerator` 属性加白名单
 
 1. 在 `SlotEnumerator<TSlot>` 属性（或它的后备字段）上标 `[SlotSelectors(typeof(A), typeof(B))]` —— **用 typeof**。
-2. 消费方两处会读它：`ListSlotProperties` 输出白名单（`.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1253`）、`SetEnumSlotCollection` 的校验（`:1401`、`:1451`）。
-3. `ComponentPatcher` 会自动拒绝直接 patch 这个属性，**不需要额外注册**（`.../Agent/Workflow/Functions/ComponentPatcher.cs:124`）。
+2. 消费方两处会读它：`ListSlotProperties` 输出白名单（`.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1258`）、`SetEnumSlotCollection` 的校验（`:1413`、`:1466`）。
+3. `ComponentPatcher` 会自动拒绝直接 patch 这个属性，**不需要额外注册**（`.../Agent/Workflow/Functions/ComponentPatcher.cs:127`）。
 
 ### D. 把一个新的对象类型整体暴露成工具面
 
@@ -174,7 +174,7 @@
 
 ### 4.4 加一个 `SlotSelectors` 的消费者
 
-只有消费方要动（`.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1401`、`:1451` 校验，`:1253` 描述，`.../Agent/Workflow/Functions/ComponentPatcher.cs:124` 拒绝）。**Core 一行都不用改**。
+只有消费方要动（`.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs:1413`、`:1466` 校验，`:1258` 描述，`.../Agent/Workflow/Functions/ComponentPatcher.cs:127` 拒绝）。**Core 一行都不用改**。
 
 ### 4.5 加一个事件负载字段
 
@@ -195,7 +195,7 @@
 
 | 成员 | 位置 | 说明 |
 |---|---|---|
-| `AgentPropertyAccessor.CopyScalarProperties` | `AgentPropertyAccessor.cs:197` | 零生产调用者（转调访问器的 `CopyScalarFrom`）；**消费方另写了一份同名实现在 `.../Agent/Workflow/Functions/ComponentPatcher.cs:251`**（自带标量白名单，没有转调 Core）—— 改 Core 那份不会影响实际跑的路径 |
+| `AgentPropertyAccessor.CopyScalarProperties` | `AgentPropertyAccessor.cs:197` | 零生产调用者（转调访问器的 `CopyScalarFrom`）；**消费方另写了一份同名实现在 `.../Agent/Workflow/Functions/ComponentPatcher.cs:256`**（自带标量白名单，没有转调 Core）—— 改 Core 那份不会影响实际跑的路径 |
 | `IAIContextAccessor.CopyScalarFrom` | 生成代码里，每个访问器一份 | 目前唯一的调用者就是上面那个零调用者的包装（`AgentPropertyAccessor.cs:201`）—— 等到 `ComponentPatcher` 那条分叉也搬过来才有真实用途 |
 | `AgentContextReader.HasAgentContext` | `AgentContextReader.cs:52` | 零非测试调用者 |
 | `AgentLanguagesExtensions.ParseLanguageCode` | `AgentLanguages.cs:175` | **零调用者**（连测试都没有；测试用的是 `TryParseLanguageCode`）。`ToLanguageCode`/`GetDisplayName` 相反，消费方在用（`.../Agent/Workflow/WorkflowAgentScope.cs:1220`、`:1221`） |
@@ -203,4 +203,4 @@
 
 **已经不在这个表里的**（2026-10-03 删除或改变了地位）：`AgentMethodInvoker.InvokeStatic`（删除）、`DiscoverMethods(includeStatic:)`（删除）、`AgentCommandDiscoverer.CanExecuteCommand`（不再零调用者 —— `DiscoverCommands` 与它自己都走它）。
 
-唯一有非测试调用者的替身入口仍是 `AgentCommandDiscoverer.FindBackingCommand`，调用者是 `.../Agent/Workflow/Functions/ComponentPatcher.cs:240` 的一层薄委托。
+唯一有非测试调用者的替身入口仍是 `AgentCommandDiscoverer.FindBackingCommand`，调用者是 `.../Agent/Workflow/Functions/ComponentPatcher.cs:244` 的一层薄委托。

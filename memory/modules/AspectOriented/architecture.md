@@ -62,7 +62,7 @@
 
 ### 类仍然必须 `partial` —— 但理由变了
 
-AOP 自己已经不需要它了：`AopWriter.GenerateBaseInterfaces()` 现在返回 `[]`（`AopWriter.cs:43`），不再往用户类上注入那句 bodyless `partial class`。**但共享管线仍然只放行 partial 类**：`Analizer.Filters.IsCandidateClass`（`Base/Analizer.cs:170-174`，经 `:127` 的 `ForAttributeWithMetadataName` 过滤）对非 partial 类直接返回 false，于是 `Aop()` 根本不生成，调用方拿到的是 CS1061「未包含 Aop 的定义」。实测：把 `partial` 去掉即复现。所以「类必须 partial」这条不是 AOP 的，是整条生成管线的。
+AOP 自己已经不需要它了：`AopWriter.GenerateBaseInterfaces()` 现在返回 `[]`（`AopWriter.cs:43`），不再往用户类上注入那句 bodyless `partial class`。**但共享管线仍然只放行 partial 类**：`Analizer.Filters.IsCandidateClass`（`Base/Analizer.cs:191-195`，经 `:148` 的 `ForAttributeWithMetadataName` 过滤）对非 partial 类直接返回 false，于是 `Aop()` 根本不生成，调用方拿到的是 CS1061「未包含 Aop 的定义」。实测：把 `partial` 去掉即复现。所以「类必须 partial」这条不是 AOP 的，是整条生成管线的。
 
 **为什么不再注入那句 partial class**：旧实现需要它，只是为了让 `CreateProxy<接口>(x)` 编译得过（`x` 必须能隐式转成接口）。现在 `new {Proxy}(x)` 不需要任何转换；而接口新增的基接口 `IAopHookTarget` 是**带成员**的，继续让用户类实现它，用户类就得自己实现 `SetHooks`。副作用是**好处**：用户类不再实现生成接口，于是「在真身上装切面」从运行期静默失效变成了**编译错误**（`SetProxy` 的 `where T : IAspectOriented` 过不去）。
 
@@ -156,7 +156,7 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 | 「成员名怎么变成键」（`get_`/`set_` 前缀） | `ProxyEx.cs:69-71`，与生成侧的 `SetHooks` switch（`AopSurface.cs:336-361`）**必须成对** |
 | 代理的缓存与复用 | `AopCache.cs`（`Entry<,>` `:18-25`、`Resolve` `:41`） |
 | 代理→真身 | `Aop.cs`（`Map` `:19`、`GetTarget<TTarget>` `:25`） |
-| 「为什么这个特性标上去没反应」 | 先看 `AopSurface.cs:93`/`:113`/`:137` 的可见性过滤，再看 `AnalizeHelper.cs:52` 的文本匹配，最后看类是不是 partial（`Analizer.cs:170`） |
+| 「为什么这个特性标上去没反应」 | 先看 `AopSurface.cs:93`/`:113`/`:137` 的可见性过滤，再看 `AnalizeHelper.cs:52` 的文本匹配，最后看类是不是 partial（`Analizer.cs:191`） |
 
 ---
 
@@ -166,7 +166,7 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 2. **表达式体属性 = 生成代码编译失败。** `hasGetter` / `hasSetter` 的推导在 `property.AccessorList` 为 null 时两者都给 false（`AopSurface.cs:118-125`），于是生成的属性是 `{ }` —— CS0548「属性或索引器必须至少有一个访问器」，接口与代理两处各报一次。实测复现。写成 `public string X => "x";` 并标 `[AspectOriented]` 即触发；`{ get; }` 与 `{ get; set; }` 都正常。
 3. **一个切面到底拦的是哪个成员，取决于生成器把什么放进了接口。** 字段必须同时有 MVVM 特性与 `[AspectOriented]`（`AopSurface.cs:94-95`），且它生成的是**推导出的属性名**（`_name` → `Name`，`AnalizeHelper.cs:55-65`）。只用 `[AspectOriented]` 标字段、不标 MVVM 特性 ⇒ 接口里没有该成员，**静默无效**。
 4. **接口成员一律给 `{ get; set; }`（字段那条路，`AopSurface.cs:105`）**，所以「接口上看得见 setter」不等于「真身可写」—— 一个只读属性会生成出 setter，然后编译失败。属性那条路则按真身的可访问性给（`:122-124`）。
-5. **`Analizer.Filters.Targets` 决定「这个类有没有活干」走符号**（`:106` 的 `VeloxDev.AspectOriented.AspectOrientedAttribute` 是 10 个触发特性之一）；**接口里有哪些成员走语法文本**：`attribute.Name.ToString() == "AspectOriented"`（`AnalizeHelper.cs:52`）。后果是一个**别的**叫 `AspectOriented` 的特性同样会被当成标记；字段那条路认的 MVVM 特性也是文本匹配 `Contains("Observable") || Contains("Property")`（`AopSurface.cs:94`）—— `[VeloxProperty]` 与 CommunityToolkit 的 `[ObservableProperty]` 都算。这是本模块唯一一处「两种匹配方式并存」，改任一侧都要想到另一侧。
+5. **`Analizer.Filters.Targets` 决定「这个类有没有活干」走符号**（`:127` 的 `VeloxDev.AspectOriented.AspectOrientedAttribute` 是 10 个触发特性之一）；**接口里有哪些成员走语法文本**：`attribute.Name.ToString() == "AspectOriented"`（`AnalizeHelper.cs:52`）。后果是一个**别的**叫 `AspectOriented` 的特性同样会被当成标记；字段那条路认的 MVVM 特性也是文本匹配 `Contains("Observable") || Contains("Property")`（`AopSurface.cs:94`）—— `[VeloxProperty]` 与 CommunityToolkit 的 `[ObservableProperty]` 都算。这是本模块唯一一处「两种匹配方式并存」，改任一侧都要想到另一侧。
 6. **裁剪 / AOT 不再是问题，但两个 IL 警告曾经是。** `AopCache` 的 `TInterface` 带着 `[DynamicallyAccessedMembers(PublicParameterlessConstructor)]`（`AopCache.cs:18-23`、`:41-43`）—— 这是为消掉 `ConditionalWeakTable` 的 IL2091 而传下去的标注，**不是**对调用方的真实要求（详见 §八）。
 7. **`AopInterface` 这个名字已经不存在**，接口与代理都由 `AopSurface.cs` 一个文件产出。旧记忆与旧文档里凡是提到 `AopInterface.cs` / `ProxyInstance.cs` / `DispatchProxy` 的段落都已作废。
 

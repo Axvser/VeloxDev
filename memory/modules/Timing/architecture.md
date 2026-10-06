@@ -133,7 +133,7 @@
 3. **每次查找都新建实例。** 有唯一时钟的宿主也保持这个形状：**每次调用返回一个「包着同一份 feed 的新 wrapper」，不是共享单例**（`TimerCore.cs:27-32`）。单例会让暂停一个通道暂停所有通道。
 4. **`AddOrUpdate` 后写者胜**，与 `InterpolatorCore.RegisterInterpolator` 同一规矩（`TimerCore.cs:14-16`）。
 
-**「定时器不是时间权威」这条边界的落点。** `TimerCore` 的类注释（`TimerCore.cs:20-25`）明说这条缝是给「**拥有时间的宿主**」——player loop、媒体位置、音频回调——用的，**刻意不是给框架的渲染循环用的**：只在帧上走的钟会让帧率变成时间权威，而采样路径建立在反面。`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:149` 那句「`Task.Delay` 从来不是 timing source」是同一件事的另一面。
+**「定时器不是时间权威」这条边界的落点。** `TimerCore` 的类注释（`TimerCore.cs:20-25`）明说这条缝是给「**拥有时间的宿主**」——player loop、媒体位置、音频回调——用的，**刻意不是给框架的渲染循环用的**：只在帧上走的钟会让帧率变成时间权威，而采样路径建立在反面。`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:157` 那句「`Task.Delay` 从来不是 timing source」是同一件事的另一面。
 
 **「谁在用 Timing」——仓库内的消费者清单（全在 Core 内）：**
 

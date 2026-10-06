@@ -20,7 +20,7 @@
 | 条目 | `.razor` 的形状 | 关键锚点（`.razor` / `.razor.cs`） |
 |---|---|---|
 | tree-view | 一个 `<WorkflowSurfaceBehavior>` + 三个**片段参数槽**（`GridDecorator` / `Minimap` / `ChildContent`），内容层只有**一个** `<TemplateSelector>`：节点与连线都由它物化 | `:10-17`、`:18,26,35` / `:14`、`:17-34`（只留参数与 `NodeTemplate`） |
-| link-view | 一个 `<svg>` + `<path d="@d" data-veloxdev-link-curve="1">`（虚线 `stroke-dasharray="@dash"`，`dash` 在 code-behind 里取 `"6 4"`） | `:19-31,37-44` / `:222-259`（几何）、`:237,250`（两道守卫） |
+| link-view | 一个 `<svg>` + `<path d="@d" data-veloxdev-link-curve="1">`（虚线 `stroke-dasharray="@dash"`，`dash` 在 code-behind 里取 `"6 4"`） | `:19-31,37-44` / `:196-240`（几何）、`:211,224`（两道守卫） |
 | node-view | 两层适配器行为包裹 + **定尺寸卡片 div**，`transform:scale()` 缩放 | `:8-10`、`:15-21` / `:77,81-90` |
 | slot-view | 一个 `<svg viewBox="0 0 1024 1024">` + `<path d="TemplateSlotPath">` | `:11,12,15` / `:19-20,42-65` |
 | grid-decorator | **薄壳**：`@if (Viewport is { } vp)` 后渲染适配器的 `<WorkflowGridDecorator>`（15 行） | `:4,6-14` / `:16,20,24,28` |
@@ -90,7 +90,7 @@
    `Items="Tree.GetHelper().VisibleItems"`、`KeySelector="i => i"`，配 `NodeTemplate` + `LinkTemplate`
    两个模板（`workflow-tree-view/TemplateClass.razor:35-37`）。
    `VisibleItems` 由 `TreeHelper.Install` 里的 `EnableMap` 建出来
-   （`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/TreeHelper.cs:129,135`），
+   （`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/TreeHelper.cs:128,138`），
    **首元素恒为 `tree.VirtualLink`**（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Virtualization/WorkflowSpatialEx.cs:64,168`），
    其余按视口增删 ⇒ **虚拟连线天然被池覆盖**，不要再给模板加 `@if (Tree.VirtualLink.IsVisible)` 分支；
    画不画由生成的 `<LinkView>` 自己的 `CanRender` 门决定。
@@ -105,7 +105,7 @@
 7. **输入/输出插槽按通道拆的逻辑现在在适配器 `WorkflowPresentation`**：`InputSlotsOf`（只带 source 标志、
    排除任何 target 标志）与 `OutputSlotsOf`（带 target 标志）
    （`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowPresentation.cs:65-74`），
-   插槽显示名走**反射** `IConditionalSlotProvider<>`（`SlotNamesOf`，`:83-109`，理由 `:76-82`）。
+   插槽显示名走 `IConditionalSlotProviders`（`SlotNamesOf`，`:85-101`，理由 `:79-84`）。
    两处尺寸仍在 tree-view 标记里写死：输入 `SlotSize="18"`、输出 `SlotSize="14"`
    （`workflow-tree-view/TemplateClass.razor:72,84`），而 slot-view 自己的默认是 `IconSize = 20`
    （`workflow-slot-view/TemplateClass.razor.cs:19`）—— **改插槽大小要改的是 tree-view 这两个字面量**，
@@ -115,7 +115,7 @@
    生成的 tree-view 给 decorator 传 `RulerThickness="28"`（`workflow-tree-view/TemplateClass.razor:20`），
    **但从不给 `<WorkflowSurfaceBehavior>` 传 `RulerThickness`**（`:10-17` 只有
    `GridSpacing` / `GridColor` / `Background`）—— surface 那边用的是适配器默认 28
-   （`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:96`）。
+   （`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:98`）。
    两者相等只是**默认值巧合**。⇒ 改标尺厚度要同时改**两处**，只改 `:20` 会让刻度带与"世界原点预留"
    错开同样的像素数。同一份常量在 grid-decorator 条目里也是硬编码（`grid-decorator/TemplateClass.razor.cs:20`），
    而**两个条目的 `template.json` 都没有 `rulerThickness` 符号** ⇒ Razor 的标尺厚度**不可经 CLI 配置**。
@@ -131,7 +131,7 @@
 | 空转符号 | 为什么换不回来 |
 |---|---|
 | `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius`（tree-view） | 生成的 tree-view **没有任何外层容器元素**（`.razor` 的根就是 `<WorkflowSurfaceBehavior>`），而适配器的外壳 `<div class="veloxdev-wf-surface">` 是适配器渲染的、没有内联边框样式（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor:9`）⇒ 没地方画这个边框 |
-| `gridBackground`、`minorGridColor`、`majorGridColor`（grid-decorator） | 在 Razor 里网格背景/细线/粗线/坐标轴**不由 decorator 画**，而由 surface 画布元素的 CSS 变量承载：`--veloxdev-gs/-gc/-mgc/-ac`（`WorkflowSurfaceBehavior.razor.cs:430-431`，参数 `Background:72` / `GridColor:76` / `MajorGridColor:84` / `AxisColor:92`）⇒ decorator 上放这三个颜色没有绘制面 |
+| `gridBackground`、`minorGridColor`、`majorGridColor`（grid-decorator） | 在 Razor 里网格背景/细线/粗线/坐标轴**不由 decorator 画**，而由 surface 画布元素的 CSS 变量承载：`--veloxdev-gs/-gc/-mgc/-ac`（`WorkflowSurfaceBehavior.razor.cs:514-515`，参数 `Background:74` / `GridColor:78` / `MajorGridColor:86` / `AxisColor:94`）⇒ decorator 上放这三个颜色没有绘制面 |
 | `slotBackground`（slot-view） | slot-view 只画一个 `<path>`（fill + stroke，`workflow-slot-view/TemplateClass.razor:12-16`），适配器的连接行为也不提供背景层；这一条在 `template.json` 的 `description` 里自陈（`workflow-slot-view/.template.config/template.json:54`：`Accepted for cross-GUI CLI parity; this GUI's slot has no separate background surface.`）—— 2026-10-04 起全仓 12 个空转参数都这么自陈了，它不再是唯一一个 |
 
 ⇒ **不要在 Razor 上给这三个补 `replaces`**（理由与 `../extension.md` §4.3 同）。
@@ -177,13 +177,13 @@ tree-view 实例化生成组件时**显式传了**哪些参数（`workflow-tree-
 |---|---|---|
 | `gridSpacing` 的符号默认值是 **`'40d'`**（XAML 的 double 字面量风格），所以要 `ParseGridValue` 剥尾缀 `d` | `grid-decorator/TemplateClass.razor.cs:24,56` + `.template.config/template.json` 的 `"defaultValue": "40d"` | 不剥就是 `double.Parse("40d")` 抛 `FormatException` —— 是生成**组件构造时**才炸，`dotnet new` 只做文本替换不会发现 |
 | 尾缀 `d` 只有**这一处**被剥：`nodeBorderThickness` / `nodeCornerRadius` 走 `WithCssUnits`（只补单位、不剥后缀） | `node-view/TemplateClass.razor.cs:72-73,96` | 若把这两个符号的值写成 XAML 风格的 `1d`，得到的是 `1dpx`，浏览器**静默丢弃**这条声明 ⇒ 边框消失、圆角消失，都不报错（默认值 `'1'`/`'6'` 恰好不带 `d`，所以开箱是对的） |
-| `linkThickness` / `majorLineEvery` 是裸 `double.Parse` / `int.Parse` | `link-view/TemplateClass.razor.cs:98`、`grid-decorator/TemplateClass.razor.cs:28` | 传 `--linkThickness 2d` 或 `--majorLineEvery 5d` ⇒ 运行期 `FormatException`；默认值 `'2'`/`'5'` 不带 `d` |
+| `linkThickness` / `majorLineEvery` 是裸 `double.Parse` / `int.Parse` | `link-view/TemplateClass.razor.cs:76`、`grid-decorator/TemplateClass.razor.cs:28` | 传 `--linkThickness 2d` 或 `--majorLineEvery 5d` ⇒ 运行期 `FormatException`；默认值 `'2'`/`'5'` 不带 `d` |
 
 ### P6 · link-view 的 `Sync` 只在 `OnInitialized` 跑 —— 现在由池的 `@key` 兜住
 
-`Sync(Link)`（订阅链自身与两个端点）**只从 `OnInitialized` 调用**（`workflow-link-view/TemplateClass.razor.cs:148-150`），
-`OnParametersSet` 只在有 override 参数时重渲染（`:197-200`）；而 `BuildCurve()` 与 `@if` 门用的是
-`CanRender` / `IsVirtual` 两个**状态字段**（`:131-135`，由 `Sync` 写）。
+`Sync(Link)`（订阅链自身与两个端点）**只从 `OnInitialized` 调用**（`workflow-link-view/TemplateClass.razor.cs:122-124`），
+`OnParametersSet` 只在有 override 参数时重渲染（`:171-176`）；而 `BuildCurve()` 与 `@if` 门用的是
+`CanRender` / `IsVirtual` 两个**状态字段**（`:109-110`，由 `Sync` 写）。
 ⇒ 这里成立的前提是「一个 link 实例始终配同一个 `LinkView` 实例」。
 tree-view 现在把连线交给池（本文 §二·3 / §二·6），池对每个 item 下 `@key`（`KeySelector="i => i"`，
 `Src/Adapters/VeloxDev.Razor/Attached/Workflow/ViewPool.razor:10`）⇒ 配对按**对象身份**稳定。
@@ -194,9 +194,9 @@ tree-view 现在把连线交给池（本文 §二·3 / §二·6），池对每�
 ### P7 · 同一份小工具在六个文件里各抄一遍
 
 `ToCss`（`#AARRGGBB` → `rgba(...)`）与 `HexByte` 在**五处**逐字重复（tree-view 的那份已随重构搬进适配器）：
-`link-view/TemplateClass.razor.cs:106-131`、`node-view/…:116-139`、`slot-view/…:73-96`、
-`grid-decorator/…:71-94`、`minimap-overlay/…:40-63`（`template-selector` 没有；tree-view 用适配器的
-`WorkflowPresentation.ToCss`，`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowPresentation.cs:37-57` + `HexByte :112-113`）。
+`link-view/TemplateClass.razor.cs:84-108`、`node-view/…:116-140`、`slot-view/…:73-97`、
+`grid-decorator/…:71-95`、`minimap-overlay/…:40-64`（`template-selector` 没有；tree-view 用适配器的
+`WorkflowPresentation.ToCss`，`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowPresentation.cs:37-57` + `HexByte :104-105`）。
 ⇒ 改解析规则（比如支持 3 位缩写、或支持 `#RGB`）要改这五处 **加** 适配器那一份。
 （WinUI 那家的**两份**重复见 `../adapters/winui.md` §三·P4。）
 同一类的还有**设计尺寸 260 在 node-view 里写了两份**：标记的 `width:260px;height:180px`

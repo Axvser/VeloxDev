@@ -52,7 +52,7 @@
 
 | | 广播路径 | 编译执行 |
 |---|---|---|
-| `context.Sender` / `Receiver` | 由 `Templates/Helpers/TreeHelper.cs:176-177` 填上真实上下游 slot | **恒为 `null`** —— `DriveAsync` 从不给 `RuntimeContext` 的 `_sender`/`_receiver` 赋值（代码级核对；未做运行时验证） |
+| `context.Sender` / `Receiver` | 由 `Templates/Helpers/TreeHelper.cs:179-180` 填上真实上下游 slot | **恒为 `null`** —— `DriveAsync` 从不给 `RuntimeContext` 的 `_sender`/`_receiver` 赋值（代码级核对；未做运行时验证） |
 | 多输入节点的输入 | 按 slot 广播 | 只有 `InputNodes.Count > 1` 才聚合成 `GroupData`，否则是单值 `Data` |
 
 ## 六、两档报告：`Warn` 只是提醒，`Error`（与未捕获的异常）主动停止（2026-09-27 定）
@@ -169,4 +169,4 @@
 | 只编译的两个工具纳入闸门 | Agent 侧的 `CompileWorkflow`/`CompileNodeResult` 会写节点编译身份却不受 `WithAllowNodeExecution` 约束 —— 属 `VeloxDev.Core.Extension` 模块 |
 | 编译执行时补 `Sender`/`Receiver` | 第五节的不对称仍未消 |
 | `ExecuteCommandOnNode` 的完成语义 | Agent 侧它同步返回、不等完成，而同族的 `ExecuteNode` 会等 `Exited` —— 属 Extension 模块 |
-| 七家 demo 的运行控制**在像素层仍未验** | 七家的控件与处理器都已接上、构建 0 错误，但**点下去的样子**没人看过：除 Avalonia 外合成输入进不了输入管线（已实测），而且这七处是七种 UI 栈（两家还是命令式搭界面）⇒ 只能人眼验。**依据订正（2026-09-27，2026-10-04 复核）**：WinForms 的四个控制器按钮**不在** `Form1.cs:336-343`（那里是 `ReloadExecutionLog` 的日志刷新），而在节点卡 `Controls/WorkflowNodeCard.cs:654-658`（Compile/Run/Stop/Close）—— 那条旧依据写错了文件与行号 |
+| 七家 demo 的运行控制**在像素层仍未验** | 七家的控件与处理器都已接上、构建 0 错误，但**点下去的样子**没人看过：除 Avalonia 外合成输入进不了输入管线（已实测），而且这七处是七种 UI 栈（两家还是命令式搭界面）⇒ 只能人眼验。**依据订正（2026-09-27，2026-10-04 复核）**：WinForms 的四个控制器按钮**不在** `Form1.cs:325-347`（那里是 `ReloadExecutionLog` 的日志刷新），而在节点卡 `Controls/WorkflowNodeCard.cs:654-658`（Compile/Run/Stop/Close）—— 那条旧依据写错了文件与行号 |

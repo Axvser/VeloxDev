@@ -37,8 +37,10 @@ item template 的 `replaces` token，逐个在生成文件里搜，残留即“�
 `primaryOutputs` 完整、七个生成文件能对着适配器一起编译、模板文本 == `Examples/Workflow/<GUI> Trimmed` 的镜像
 （机械改动除外）；证明不了任何运行期行为，也分不出颜色对不对（错的颜色照样编译）。
 
-⚠ **占位符守卫第一次跑就抓到 Jalium pack 的一个真缺陷**：tree 模板引用了 `TemplateLinkColor`，而该条
-`template.json` 并没有声明这个 symbol；现在模板直接写 `#DDFFFFFF`（`workflow-tree-view/TemplateClass.cs:20`）。
+⚠ **占位符守卫第一次跑就抓到 Jalium pack 的一个真缺陷**：**`workflow-link-view`** 模板引用了 `TemplateLinkColor`，
+而该条 `template.json` 当时并没有声明这个 symbol。**现已修好**：`workflow-link-view/.template.config/template.json:33`
+声明了 `"replaces": "TemplateLinkColor"`（默认值 `#DDFFFFFF`），源码侧因此**保持占位符 token、不写死颜色**
+（`workflow-link-view/TemplateClass.jalxaml.cs:102` 把它交给 `ParseColor`）。
 这一轮全平台化同时补了四对镜像同步：WinUI `LinkView`、MAUI `LinkView` / `TreeView` / `SlotView`、WPF `SlotView`。
 
 ⚠ **它第一次跑就照出五对既有漂移**，其中 decorator 那处是**真的值差异**（模板 `#C8252526` vs 镜像
@@ -54,8 +56,8 @@ item template 的 `replaces` token，逐个在生成文件里搜，残留即“�
 
 | 平台 | 条目 | 模板行数 / demo 行数 | 逐行差异行数 |
 |---|---|---|---|
-| WinForms | `workflow-template-selector` | 19 / 19 | **0**（改完命名空间与类名后逐字节相同） |
-| WinForms | 其余六个条目 | 21–404 / 22–404 | 6 / 8 / 8 / 10 / 20 / 31 |
+| WinForms | `workflow-template-selector` | 20 / 19 | **1**（多出的那行是模板侧的注释：`workflow-template-selector/TemplateClass.cs:17`「连线视图由适配器那份『附加』收绑…」；其余是命名空间与类名的机械改名） |
+| WinForms | 其余六个条目 | 22–436 / 22–432 | tree 35 / node 24 / slot 17 / link 60 / grid 20 / minimap 8 |
 | Razor | `workflow-tree-view` 的 `.razor` / `.razor.cs` | 90 / 91、35 / 34 | 11 / 1 |
 | WPF | `workflow-tree-view` 的 `.xaml` / `.xaml.cs` | 76 / 84、12 / 11 | 48 / 1 |
 | MAUI | `workflow-tree-view` 的 `.xaml` / `.xaml.cs` | 69 / 77、11 / 20 | 68 / 9（demo 已按每线一视图分叉，见 §五） |
@@ -80,7 +82,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 | # | 改什么 | 例 |
 |---|---|---|
 | 1 | 命名空间与类名 token 化 | `TemplateNamespace` / `TemplateClass` |
-| 2 | 字面量换成 `Template*` 占位符，并在 `template.json` 里配 `replaces` | WinForms demo 的 `TreeView.cs` 写 `ParseColor("#1E1E1E")`，模板写 `ParseColor("TemplateSurfaceBackground")`（`workflow-tree-view/TemplateClass.cs:63-66` 四行同形）；WPF demo 的 `<Border … Background="#1E1E1E" BorderBrush="#33FFFFFF" BorderThickness="1">` 在模板里是四个 `Template*`（`workflow-tree-view/TemplateClass.xaml:42-45`） |
+| 2 | 字面量换成 `Template*` 占位符，并在 `template.json` 里配 `replaces` | WinForms demo 的 `TreeView.cs` 写 `ParseColor("#1E1E1E")`，模板写 `ParseColor("TemplateSurfaceBackground")`（`workflow-tree-view/TemplateClass.cs:20-23` 四行同形）；WPF demo 的 `<Border … Background="#1E1E1E" BorderBrush="#33FFFFFF" BorderThickness="1">` 在模板里是四个 `Template*`（`workflow-tree-view/TemplateClass.xaml:46-49`） |
 | 3 | **删掉 demo 的 `InfoOverlay` HUD 及其绑定** | 模板里没有任何 InfoOverlay；demo 每个平台都有（如 `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/InfoOverlay.razor`，模板 tree-view 只把它连同 `<InfoOverlay …>` 那一行一起拿掉） |
 | 4 | **兄弟类型改名**：demo 用 `WorkflowGridDecorator` / `CustomTemplateSelector`，模板条目必须叫 `GridDecorator` / `TemplateSelector` | WPF demo `TreeView.xaml` 里是 `<workflowViews:WorkflowGridDecorator>`，模板里是 `<workflowViews:GridDecorator>`；因为 tree-view 是按 `defaultName` 引用兄弟的（`architecture.md` §五） |
 | 5 | 头注释换成 `… VeloxDev customization: …` 那一句 | 每个条目文件的第一行 |
@@ -152,7 +154,7 @@ MAUI 21 / Jalium 24 / Razor 15 行）。
 
 - WinForms（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）：
 `WorkflowTreeView`（装配、网格、分层窗口标尺、平移引擎、视图池）、`WorkflowNodeView`（绑定、定位、缩放折叠、
-反射读标题/输入口/插槽标签）、`WorkflowSlotView`（含那个 SVG 路径解析器，`WorkflowSlotView.cs:250` 起）、`WorkflowLinkAttachment`
+反射读标题/输入口/插槽标签）、`WorkflowSlotAttachment`（含那个 SVG 路径解析器，`SvgPathParser.cs:20` 起）、`WorkflowLinkAttachment`
 （雕窗口区域、端点订阅、几何）、`WorkflowMinimapOverlay`、`WorkflowGridDecorator`（网格与标尺的绘制）、
 `WorkflowTemplateSelector`（四个工厂与分流）。模板合计 3257 → 581 行。
 - Jalium（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`，9 文件 3435 行）：**2026-10-05 起不再走这条** ——
@@ -199,9 +201,9 @@ Razor 的 `slotBackground` 就是这一类的正面样本：它的 `description`
 
 | 常量 | 被复制到 |
 |---|---|
-| 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor:20` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**：WinForms 在适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowGridDecorator.cs:31` 的 `DefaultRulerThickness`（tree-view 的 `RulerReserve` 读它，`WorkflowTreeView.cs:45`，2026-10-03 起），Jalium 在**模板** `workflow-grid-decorator/TemplateClass.cs:34` 的 `DefaultRulerThickness = 36`（2026-10-05 起），模板其余文件零副本 |
+| 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor:20` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**：WinForms 在适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowGridDecorator.cs:31` 的 `DefaultRulerThickness`（tree-view 的 `RulerReserve` 读它，`WorkflowTreeView.cs:47`，2026-10-03 起），Jalium 在**模板** `workflow-grid-decorator/TemplateClass.cs:34` 的 `DefaultRulerThickness = 36`（2026-10-05 起），模板其余文件零副本 |
 | 节点设计尺寸 `260×180` | WPF node-view `TemplateClass.xaml:17` / WinUI `:18` 的 `Grid Width/Height`、MAUI `workflow-node-view/TemplateClass.xaml.cs:6` 的 `DesignWidth`、Razor `workflow-node-view/TemplateClass.razor.cs:77`、Jalium `workflow-node-view/TemplateClass.jalxaml` 的 `Grid Width="260"/Height="180"` |
-| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `TemplateClass.axaml.cs:18`、WPF `:19`、WinUI 是字面量 `Math.Max(40, …)`（`:312`）、Razor `PullMinimum`（`:20`）；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js:262`）；无标记语言的 WinForms 与 MAUI 在适配器各一份（WinForms `WorkflowLinkAttachment.cs` 的 `pullMinimum`、MAUI `WorkflowLinkOverlay.cs:306`），Jalium 在模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `MinimumPull = 40`。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
+| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `TemplateClass.axaml.cs:19`、WPF `:19`、WinUI 是字面量 `40`（`:300`）、Razor `PullMinimum`（`:20`）；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js:262`）；无标记语言的 WinForms 与 MAUI 在适配器各一份（WinForms `WorkflowLinkAttachment.cs` 的 `pullMinimum`、MAUI `WorkflowLinkOverlay.cs:304`），Jalium 在模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `MinimumPull = 40`。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
 
 绑定式的那几家（WPF/Avalonia/WinUI/MAUI 的 tree-view 把 `TranslateTransform` 绑到
 `PART_GridDecorator.RulerThickness`）会自动跟随，**复制式的那几处不会**。

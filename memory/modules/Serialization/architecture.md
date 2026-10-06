@@ -84,8 +84,8 @@
 
 ## 二、热路径上的三个结构事实
 
-1. **注册表读取无锁。** 五张表收在一个不可变 `Snapshot` 里，用 `private static volatile Snapshot _snapshot`（`VeloxJsonRegistry.cs:140`）发布；注册在 `Gate` 内造新快照再换，**五个查询方法一把锁都不拿**。查询在每一步都发生（写：`WriterFor` 每个值一次、`NameOf` 每个类型不符一次；读：`TypeOf` + `ReaderFor` 每个对象各一次），原先的全局锁因此是每节点的固定开销。
-2. **成员名不落成字符串。** 生成器发出的是 `while (reader.NextMember())` + `reader.MemberNameEquals("字面量")` 的 `if/else if` 链（`Writers/VeloxJsonCodeWriter.cs:206`），名字在原文上就地比对（`VeloxJsonReader.cs:263`、`:303`）。**旧的 `while (NextMember(out var name)) switch (name)` 每读一个成员先分配一个字符串，只为和字面量比一次就丢掉。**
+1. **注册表读取无锁。** 五张表收在一个不可变 `Snapshot` 里，用 `private static volatile Snapshot _snapshot`（`VeloxJsonRegistry.cs:102`）发布；注册在 `Gate` 内造新快照再换，**五个查询方法一把锁都不拿**。查询在每一步都发生（写：`WriterFor` 每个值一次、`NameOf` 每个类型不符一次；读：`TypeOf` + `ReaderFor` 每个对象各一次），原先的全局锁因此是每节点的固定开销。
+2. **成员名不落成字符串。** 生成器发出的是 `while (reader.NextMember())` + `reader.MemberNameEquals("字面量")` 的 `if/else if` 链（`Writers/VeloxJsonCodeWriter.cs:272`），名字在原文上就地比对（`VeloxJsonReader.cs:266`、`:306`）。**旧的 `while (NextMember(out var name)) switch (name)` 每读一个成员先分配一个字符串，只为和字面量比一次就丢掉。**
 3. **转义拼法只有一份。** 在 `VeloxJsonText.EscapeSequence`（`VeloxJsonText.cs:52`）—— 归档写入器与 JSON 树都从它取。**没有转义字符的字符串整串一次写出**，不再每字符一次虚调用。
 
 ---
@@ -132,9 +132,9 @@
 | 闸 | 位置 | 比法 |
 | --- | --- | --- |
 | **强** | `SerializationGoldenTests.cs:57` | `File.ReadAllText` **精确**比较，不归一化 |
-| 弱 | `VeloxJsonSerializerTests.cs:30-34` | 先把 `\r\n` 归一化成 `\n` 再比 |
+| 弱 | `VeloxJsonSerializerTests.cs:30-33` | 先把 `\r\n` 归一化成 `\n` 再比 |
 
-> ⚠ **换行必须写 `Environment.NewLine`**（`VeloxJsonWriter.cs:258`）。
+> ⚠ **换行必须写 `Environment.NewLine`**（`VeloxJsonWriter.cs:280`）。
 > 黄金文件在**索引里是 LF、工作区里是 CRLF**（`.gitattributes` 为 `* text=auto`），所以「写 `Environment.NewLine`」是**唯一**能同时过两道闸的写法。
 > **把 `Environment.NewLine` 硬编码成 `"\n"` 会在弱闸上通过、在强闸上失败。**
 
@@ -142,8 +142,8 @@
 
 ### 陷阱：`$id` 的值是**带引号的字符串**
 
-`VeloxJsonWriter.WriteStartObject` 用 `WriteString(...)` 写 `$id`（`VeloxJsonWriter.cs:109`），所以文档里是 `"$id": "1"` 而不是 `"$id": 1`。
-读侧 `ReadReferenceId`（`VeloxJsonReader.cs:458`）两种都认，但**按整数解析是一个已经犯过的错**——2026-10-04 那次改动让 36 条测试当场红，报的是 `expected a reference id`。
+`VeloxJsonWriter.WriteStartObject` 用 `WriteString(...)` 写 `$id`（`VeloxJsonWriter.cs:135`），所以文档里是 `"$id": "1"` 而不是 `"$id": 1`。
+读侧 `ReadReferenceId`（`VeloxJsonReader.cs:711`）两种都认，但**按整数解析是一个已经犯过的错**——2026-10-04 那次改动让 36 条测试当场红，报的是 `expected a reference id`。
 
 ### 幂等测试是最强的一条闸
 
@@ -268,7 +268,7 @@
 得先给 `Corpus` 加形状。
 
 ⚠ **它也不覆盖这套格式最贵的那个形状**：树的 `LinksMap`（接口键套接口键的嵌套字典）在这张语料里是**空的**。
-只有 `SlotEnumerator` 会往它里面写（`SlotEnumerator.cs:429` 起），而这棵树用的是 `NodeDefaultViewModel` /
+只有 `SlotEnumerator` 会往它里面写（`SlotEnumerator.cs:496` 起），而这棵树用的是 `NodeDefaultViewModel` /
 `SlotDefaultViewModel`；黄金文件 `tree.json` 同样写着 `"LinksMap": {}`，所以不是语料造错了。
 **原来 `Corpus.cs` 的注释声称语料覆盖了它，那句话是错的，2026-10-05 改正。** 后果是文档大小与耗时的对比
 里**没有「接口键字典」这一维**。要补上得让树带上 `SlotEnumerator`，而那会让 STJ 需要转换器（它的字典键
@@ -359,7 +359,7 @@
 
 **没解决的**：树的 `LinksMap`（接口键套接口键）是这套格式最贵的形状，而**这张语料里它是空的**。
 `Corpus.BuildTree` 用的是 `NodeDefaultViewModel` / `SlotDefaultViewModel`，只有 `SlotEnumerator` 会往
-`LinksMap` 里写（`SlotEnumerator.cs:429` 起）；黄金文件 `tree.json` 同样是 `"LinksMap": {}`，所以不是语料
+`LinksMap` 里写（`SlotEnumerator.cs:496` 起）；黄金文件 `tree.json` 同样是 `"LinksMap": {}`，所以不是语料
 造错了。**原来 `Corpus.cs` 的注释说语料覆盖了它，是错的，2026-10-04 改正。** 要覆盖它得让树带上
 `SlotEnumerator`，而 STJ 会**从此需要转换器**（它的字典键必须是属性名）—— 那一刻「配置对配置」不再成立。
 

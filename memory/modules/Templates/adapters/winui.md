@@ -42,14 +42,14 @@
    `Do not bind Width/Height here; LinkView sizes its own box.`
    ⇒ 与 WPF 的 `Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"` **正好相反**。
 3. **`PART_Canvas` 的几何走 `Layout.ActualSize`**，不是 `ElementName=PART_Canvas` 自引用：
-   `workflow-tree-view/TemplateClass.xaml:54-56`。而 `Background="Transparent"`（`:59`）与
-   `ViewPool` 两个属性（`:60-61`）与其他家一致。
-4. **`ScrollViewer` 要显式 `ZoomMode="Disabled"`**（`workflow-tree-view/TemplateClass.xaml:52`）——
+   `workflow-tree-view/TemplateClass.xaml:53-54`。而 `Background="Transparent"`（`:55`）与
+   `ViewPool` 两个属性（`:56-57`）与其他家一致。
+4. **`ScrollViewer` 要显式 `ZoomMode="Disabled"`**（`workflow-tree-view/TemplateClass.xaml:51`）——
    WinUI 的 `ScrollViewer` 自带缩放，不关掉会与适配器的 Ctrl+滚轮打架。
    ⚠ 这条在 WPF/Avalonia/MAUI/Razor 的 tree-view 里**没有对应物**（那几个没有这个属性），
    抄这段时容易一起漏。
 5. **标尺避让由模板自己做**：`Canvas.RenderTransform` 里的 `TranslateTransform` 绑
-   `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.xaml:60-62`）。
+   `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.xaml:59-60`）。
 6. **`Clip="{x:Null}"` 是一条链，不是一处**。link-view 的根（`workflow-link-view/TemplateClass.xaml:5`）
    与 node-view 的三处（`:12` 根、`:18` 设计尺寸卡片、`:39` 插槽宿主 Grid）都要写。
    理由（这一家的保留式几何会被元素盒裁掉）在 `memory/modules/WorkflowSystem/adapters/winui.md` §二·L2
@@ -63,9 +63,9 @@
 
 `TemplateClass.xaml.cs:12` 有一句别名注释：`using System.IO.Path` 的隐式 using 会撞名，
 所以 `using Path = Microsoft.UI.Xaml.Shapes.Path;`。几何是三个字段
-`_path` / `_pathGeometry` / `_pathFigure`（`:28`、`:30`、`:31`），在构造函数里 new 出来并 `container.Children.Add(_path)`（`:62-64`），
-DP 变更回调调 `UpdatePath()`（`:252`），`UpdatePath` 里 `EnsureGeometry()`（`:216`）后写 `_path.Data`（`:303`）。
-`:57-61` 的注释点明了动机：**WPF 的连线是 `OnRender` 画的、永不被裁，这里用整条 `Clip = null` 链复现那个"不被裁"的效果**。
+`_path` / `_pathGeometry` / `_pathFigure`（`:29`、`:31`、`:32`），在构造函数里 new 出来并 `container.Children.Add(_path)`（`:63-65`），
+DP 变更回调调 `UpdatePath()`（`:104` / `:240`），`UpdatePath` 里 `EnsureGeometry()`（`:247`）后写 `_path.Data`（`:292`）。
+`:58-62` 的注释点明了动机：**WPF 的连线是 `OnRender` 画的、永不被裁，这里用整条 `Clip = null` 链复现那个"不被裁"的效果**。
 
 ⇒ 改这一家的连线时，**不要去找 `OnRender`**；要改的是三个字段的生命周期与 `UpdatePath` 的触发点。
 

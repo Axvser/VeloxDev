@@ -45,7 +45,7 @@
 4. **`Canvas` 的两条几何/虚拟化接线**：`Width/Height` 绑 `Layout.ActualSize`
    （`workflow-tree-view/TemplateClass.axaml:64`）、`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`（`:65`）。
 5. **标尺避让由模板自己做**：`Canvas.RenderTransform` 里的 `TranslateTransform` 绑
-   `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.axaml:68-69`）。
+   `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.axaml:67-68`）。
 6. **五个 `PART_*` 名字一次挂全，外加 `IsEnabled` / `ZoomEnabled` 两个开关**
    （`workflow-tree-view/TemplateClass.axaml:16-22`）。这一段与 WPF/WinUI/MAUI 的 tree-view
    **逐条对应**（各自 `:8-15` / `:8-15` / `:9-16`），Razor 的组件写法同名同序
@@ -83,7 +83,7 @@ tree-view 用编译器帮你查错，node-view 先关掉让你填 `x:DataType`�
 
 tree-view 用两个 **keyed** `<DataTemplate x:Key="NodeTemplate" …>`（`workflow-tree-view/TemplateClass.axaml:27`）
 与 `LinkTemplate`（`:34`），在 `:44-46` 声明 `local:TemplateSelector`，并在 `Canvas` 上设
-`behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`（`:66`）。
+`behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`（`:65`）。
 ⇒ 生成出来的 `workflow-template-selector` 条目现在是**真的被接上**的
 （不再是旧版那个"生成但不接线"的 selector）。selector 的 XML 注释仍告诉你要 assign 四个模板
 （`workflow-template-selector/TemplateClass.cs:8-12`），tree-view 这一份只给了 Node/Link 两个。
@@ -94,7 +94,7 @@ tree-view 用两个 **keyed** `<DataTemplate x:Key="NodeTemplate" …>`（`workf
 
 ### P4 · `IsScrollInertiaEnabled="False"` 是必须的
 
-`workflow-tree-view/TemplateClass.axaml:62`。触控/惯性滚动会与适配器的缩放枢轴补偿打架
+`workflow-tree-view/TemplateClass.axaml:61`。触控/惯性滚动会与适配器的缩放枢轴补偿打架
 （数学在 `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Math/WorkflowSurfaceMath.cs`，七家共用）。
 ⇒ 从别家抄 tree-view 时别把这一条丢掉 —— 别家没有同名属性，容易一起漏。
 

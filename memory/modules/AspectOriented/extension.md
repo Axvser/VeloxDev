@@ -32,8 +32,8 @@
 |---|---|---|
 | 在**字段**上只标 `[AspectOriented]` | 接口里什么都没有 —— 字段那条路要求**同时**有 MVVM 特性（文本匹配 `Contains("Observable") \|\| Contains("Property")`） | `AopSurface.cs:94-95`；`skills/veloxdev-add-aspects/SKILL.md:34` |
 | 标 `private` / `internal` 成员 | **静默跳过，无诊断**。类被判为 AOP 类，接口里却没这个成员，`Aop()` 照常返回 | `AopSurface.cs:113`（属性 `PublicKeyword`）、`:137`（方法 `PublicKeyword`） |
-| 类**不是 `partial`** | `Aop()` 根本不生成，调用方报 CS1061「未包含 Aop 的定义」。这不是 AOP 自己的要求，是整条生成管线的：`Analizer.Filters.IsCandidateClass`（`Base/Analizer.cs:170-174`，经 `:127` 过滤）只放行 partial 类 | 实测 |
-| 目标是 `struct` / 静态类 | 生成器按 `ClassDeclarationSyntax` 走（`Analizer.cs:172`），静态类/结构体不在其中 | `Base/Analizer.cs:170-174` |
+| 类**不是 `partial`** | `Aop()` 根本不生成，调用方报 CS1061「未包含 Aop 的定义」。这不是 AOP 自己的要求，是整条生成管线的：`Analizer.Filters.IsCandidateClass`（`Base/Analizer.cs:191-195`，经 `:148` 过滤）只放行 partial 类 | 实测 |
+| 目标是 `struct` / 静态类 | 生成器按 `ClassDeclarationSyntax` 走（`Analizer.cs:193`），静态类/结构体不在其中 | `Base/Analizer.cs:191-195` |
 
 **官方做法**：字段标 MVVM 特性 + `[AspectOriented]`；属性 / 方法标 `[AspectOriented]` 且 **public**；类保持 `partial`。属性**没有**「getter 与 setter 一起生效」这回事 —— 钩子键是 `get_X` / `set_X` 两条独立记录（`ProxyEx.cs:69-70`），必须分开装。
 
@@ -75,7 +75,7 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 ## 三、给一个现有类加切面：步骤清单
 
 1. **标记成员。** 字段：`[VeloxProperty][AspectOriented] private string _name;`（顺序无关，但两个都要有）。属性 / 方法：`[AspectOriented]` + `public`。
-2. **确认类是 `partial`。** 不是为了 AOP —— 是共享管线只放行 partial 类（`Base/Analizer.cs:170-174`）；非 partial 类连 `Aop()` 都不会生成。
+2. **确认类是 `partial`。** 不是为了 AOP —— 是共享管线只放行 partial 类（`Base/Analizer.cs:191-195`）；非 partial 类连 `Aop()` 都不会生成。
 3. **重新构建。** 产物三个文件，都在 `VeloxDev.AopInterfaces` / `VeloxDev.AspectOriented` 命名空间下：`<类>_<ns段>_Aop.g.cs`（接口）、`<类>_<ns段>_AopProxy.g.cs`（代理实现）、`<类>_<ns段>_AopExt.g.cs`（扩展方法）。
    **要看到它们得加 `-p:EmitCompilerGeneratedFiles=true`**，否则根本不落盘 —— 落点是 `obj/<配置>/<TFM>/generated/VeloxDev.Core.Generator/VeloxDev.Generators.{AopSurface,AopProxy}/`。文件不在那里**不是**「生成器没跑」的证据（同理见 `Docs/…/06_tickable/01_install/index.md`）。
 4. **在对象构造之后、一次装钩子。** `var p = obj.Aop();` 然后按需 `p.SetProxy(ProxyMembers.Getter|Setter|Method, nameof(类.成员), start, coverage, end)`。装一次够 —— 代理每实例一个且被缓存（`AopCache.cs:41`）。重复装同一成员是**替换**不是叠加（生成的 `SetHooks` 是赋值，`AopSurface.cs:342`）。
@@ -106,7 +106,7 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 ### 2. 加一个「触发整个生成管线」的特性
 
-`Base/Analizer.cs:95-107` 的 `TriggerAttributes` 是硬编码清单（`AspectOriented` 在 `:106`）。新特性不进去 ⇒ `Filters.Targets` 从不命中该类，生成器全程不跑。这是**所有**生成器共用的表，改它会影响另外几个生成器 —— 参考 `memory/modules/VeloxDev.Core.Generator/`。
+`Base/Analizer.cs:116-128` 的 `TriggerAttributes` 是硬编码清单（`AspectOriented` 在 `:127`）。新特性不进去 ⇒ `Filters.Targets` 从不命中该类，生成器全程不跑。这是**所有**生成器共用的表，改它会影响另外几个生成器 —— 参考 `memory/modules/VeloxDev.Core.Generator/`。
 
 ### 3. 改「接口 / 代理 / 命名空间段」的拼接方式
 

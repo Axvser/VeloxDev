@@ -183,11 +183,11 @@
 
 （同一段还留着「派发之后不要自己再做一遍」，抄的是 Claude Code 自己的 `Agent` 工具描述：那里写着 "Once you've delegated a search, don't also run it yourself"。）
 
-**`name` 这个参数的读者是**人**，这类参数得单独对待。** 2026-09-22 起它的语义是**任务标题**（不再是标识符），因为面板那一行只印它（§八）。它的特殊性在于**反馈回路断了**：模型观察到的任何东西都不会告诉它「`node-counter` 读起来不对」或「这是个句子」，而一个可省略参数被跳过是**静默**的、不是报错 —— 与上一段 `allowedMcpServers` 被静默省略是同一类失败。所以它按两处写：参数描述（`SubAgentAgentToolkit.cs:86`）+ 标准文本里的一句（`BuildPromptContext`，`:269`，`Title each one with \`name\`: it is what the user reads on the panel…`）。**离线能证的只有两半**：回退是「按父编号」（`AChildWithNoTitle_FallsBackToANumberUnderItsOwnParent`）与那句话在场（`TheStandingText_AsksForATitle_BecauseThePanelShowsOne`）；「模型读了会不会真填」只有实测能答 —— `ARealModel_TitlesTheTaskItDelegates`（`:197-223`）**已通过**（`deepseek-v4-flash`，断言 `Name` 不以 `子代理 ` 开头且长度 ≤ 60）。⇒ **加载荷给一个人看的字符串，别指望模型自己学会它的语域；但没有实测就别声称它学会了。**
+**`name` 这个参数的读者是**人**，这类参数得单独对待。** 2026-09-22 起它的语义是**任务标题**（不再是标识符），因为面板那一行只印它（§八）。它的特殊性在于**反馈回路断了**：模型观察到的任何东西都不会告诉它「`node-counter` 读起来不对」或「这是个句子」，而一个可省略参数被跳过是**静默**的、不是报错 —— 与上一段 `allowedMcpServers` 被静默省略是同一类失败。所以它按两处写：参数描述（`SubAgentAgentToolkit.cs:86`）+ 标准文本里的一句（`BuildPromptContext`，`:269`，`Title each one with \`name\`: it is what the user reads on the panel…`）。**离线能证的只有两半**：回退是「按父编号」（`AChildWithNoTitle_FallsBackToANumberUnderItsOwnParent`）与那句话在场（`TheStandingText_AsksForATitle_BecauseThePanelShowsOne`）；「模型读了会不会真填」只有实测能答 —— `ARealModel_TitlesTheTaskItDelegates`（`:192-218`）**已通过**（`deepseek-v4-flash`，断言 `Name` 不以 `子代理 ` 开头且长度 ≤ 60）。⇒ **加载荷给一个人看的字符串，别指望模型自己学会它的语域；但没有实测就别声称它学会了。**
 
 **孩子那一半缺的是肯定句。** `AppendBriefing` 只写了否定的一半（到深度上限时说「你不能派发，自己做」，`:360-361`），从没有一句说「你可以派发」。于是模型**从没被告知它可以**，而工具在不在与模型会不会去够它是两件事。现在补成对称的两句（`:360-367`）：上限 ⇒ 不能；否则若真握着 `SpawnSubAgent` ⇒ 可以，并同时说明「你派出去的从你上面那句额度里扣」。第二句的守卫是 `MayDispatch`（`:374`）= `_host.IsToolEnabled(ToolNames[0])`，与 `CreateTools()` 的过滤同一个开关，所以「不能派发的两种原因」（到顶 / 白名单没给它）不会读成同一件事 —— `AChildThatCannotDispatch_IsNotToldItCan` 与 `AChildDispatchedWithoutAWhitelist_IsToldItMayDispatchToo` 各钉一半。
 
-**「孩子会不会在没被点名的情况下真的派发」现在是**已证**的一件事。** 离线替身仍然证明不了（`SubAgentHierarchyTests.AChildMayDispatchAChildOfItsOwn` 是被测试**直接调**孩子作用域上的 `SpawnSubAgent`，不是孩子自己想起来的），用 `DispatchInstruction` 的那几条门控实测也确实全是**被明确要求**才派的 —— `DispatchInstruction`（`SubAgentLiveTests.cs:42-46`）里写着 "by dispatching a background sub-agent to do the counting — do not count them yourself"，所以那几条证明的是「叫它派它就派」（新一轮的 `ARealModel_TitlesTheTaskItDelegates` 也走这条指令，它顺带证明的是同一趟派发里 `name` 被填了，不是「它想起来要派」）。补上的是 `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo`（`:226-259`）**通篇没有「派发」两个字**，只给了六章「答案埋在中间」的合成语料和一个「只要六个词」的请求，断言模型**自发**派了孩子。语料是自造的而不是借技能库的，因为**技能列表本身就带每个文档的描述**，「总结这个库」因此是一次调用就能答的题，测不出任何东西 —— 这个坑先前踩过一次。
+**「孩子会不会在没被点名的情况下真的派发」现在是**已证**的一件事。** 离线替身仍然证明不了（`SubAgentHierarchyTests.AChildMayDispatchAChildOfItsOwn` 是被测试**直接调**孩子作用域上的 `SpawnSubAgent`，不是孩子自己想起来的），用 `DispatchInstruction` 的那几条门控实测也确实全是**被明确要求**才派的 —— `DispatchInstruction`（`SubAgentLiveTests.cs:37-41`）里写着 "by dispatching a background sub-agent to do the counting — do not count them yourself"，所以那几条证明的是「叫它派它就派」（新一轮的 `ARealModel_TitlesTheTaskItDelegates` 也走这条指令，它顺带证明的是同一趟派发里 `name` 被填了，不是「它想起来要派」）。补上的是 `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo`（`:221-254`）**通篇没有「派发」两个字**，只给了六章「答案埋在中间」的合成语料和一个「只要六个词」的请求，断言模型**自发**派了孩子。语料是自造的而不是借技能库的，因为**技能列表本身就带每个文档的描述**，「总结这个库」因此是一次调用就能答的题，测不出任何东西 —— 这个坑先前踩过一次。
 
 ---
 
@@ -259,9 +259,9 @@
 
 | 事实 | 为什么 |
 |---|---|
-| 接线点在 `SubscribeAutoScroll` / `UnsubscribeAutoScroll`（`.axaml.cs:265`、`:280`，即那对方法里 `AttachSubAgents` / `DetachSubAgents` 的**调用点** `:276`、`:293`），**不是**构造器 | 这正是它与 MCP 面板（`InitializeMcp`，只跑一次）不同的地方，两条理由各自都够：① `AgentHelper.Mcp` 是属性初始化器，视图构造时就在；`AgentHelper.SubAgents` 是 `ProvideAgent` 在**读到 key、解析出 client 之后**才建的（`AgentHelper.cs:314`），视图构造时它**可能为 null**，所以只能挂载时去查、不能假定；② 换工作流会换 helper，而这一对方法是唯一跟着换的地方 —— 挂在构造器上的话，第二棵树的子代理永远进不了面板 |
-| `SubAgentPanel.IsVisible` 由代码置位（`.axaml.cs:93,101,135`），XAML 里初值是 `False` | `DataContext == null` 这件事绑不出来（没有 `IsNull` 转换器），而无 key 的宿主 `SubAgents` 永远为 null |
-| 换树时 `Dispose()` 树 VM 而**不**动 scope（`.axaml.cs:131`，理由见上面「`Dispose` 不取消任何孩子」那行） | 换一棵树时旧 helper 是直接丢掉的（`InitializeNetworkDemo` 不 `Uninstall`），旧 scope 的孩子仍在跑。不 Dispose 树 VM 的话，它会一直订阅一个没人看的 scope、每变一次就重建一次 |
+| 接线点在 `SubscribeAutoScroll` / `UnsubscribeAutoScroll`（`.axaml.cs:269`、`:284`，即那对方法里 `AttachSubAgents` / `DetachSubAgents` 的**调用点** `:280`、`:297`），**不是**构造器 | 这正是它与 MCP 面板（`InitializeMcp`，只跑一次）不同的地方，两条理由各自都够：① `AgentHelper.Mcp` 是属性初始化器，视图构造时就在；`AgentHelper.SubAgents` 是 `ProvideAgent` 在**读到 key、解析出 client 之后**才建的（`AgentHelper.cs:314`），视图构造时它**可能为 null**，所以只能挂载时去查、不能假定；② 换工作流会换 helper，而这一对方法是唯一跟着换的地方 —— 挂在构造器上的话，第二棵树的子代理永远进不了面板 |
+| `SubAgentPanel.IsVisible` 由代码置位（`.axaml.cs:96,104,138`），XAML 里初值是 `False` | `DataContext == null` 这件事绑不出来（没有 `IsNull` 转换器），而无 key 的宿主 `SubAgents` 永远为 null |
+| 换树时 `Dispose()` 树 VM 而**不**动 scope（`.axaml.cs:134`，理由见上面「`Dispose` 不取消任何孩子」那行） | 换一棵树时旧 helper 是直接丢掉的（`InitializeNetworkDemo` 不 `Uninstall`），旧 scope 的孩子仍在跑。不 Dispose 树 VM 的话，它会一直订阅一个没人看的 scope、每变一次就重建一次 |
 | 节点的默认展开靠 `<Style Selector="TreeViewItem">` 上的 `{ReflectionBinding IsExpanded, Mode=TwoWay}`（`.axaml` `:45-46`） | `SubAgentTreeNodeViewModel.IsExpanded` 默认 `true`，而 `TreeViewItem.IsExpanded` 默认 `false` —— 不接上的话面板一打开全是收起的。**必须是 `ReflectionBinding`**：`Style` 里没有 `x:DataType` 作用域，编译绑定无从下手 |
 | 状态灯是**库外**的一个控件：`SubAgentStatusLight : Ellipse`（`Demo/Views/Workflow/SubAgentStatusLight.cs`），在节点模板里绑 `Row="{Binding Row}"`（`.axaml` `:348`） | 面板 VM 活在库侧而灯是纯视图的事，所以它属于 demo。`Row` 是 `StyledProperty` 而不是普通字段：模板带 `x:DataType`，这样 `{Binding Row}` 走编译绑定，路径错了是**编译错误**。**`Row` 现在可为 null**（顶节点是作用域），灯对此已经有正确行为：`Paint()` 取 `_watched?.State ?? Completed` ⇒ 灰、不呼吸 —— 恰好是一个「没有自己的运行可言」的节点该有的样子 |
 | 树绑的是 `{Binding Tree}`（单个节点），`MaxHeight="340"` 在外层 `ScrollViewer` 上而不是 `TreeView` 上（`.axaml` `:336`） | `Tree` 只有一个元素 —— 作用域节点，`Roots` 是它的 `Children`。高度上限移到外层，是因为 `TreeView` 自己也有滚动条，两个嵌套的滚动区域会在同一处滚轮事件上打架 |
@@ -310,9 +310,9 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 
 原因是时序，不是滚动：
 
-- `AttachSubAgents` 的调用点只有三个，**全部在 `SubscribeAutoScroll` 里**（`.axaml.cs:276`），而 `SubscribeAutoScroll` 的三个调用点是构造器路径（`:61`）与「从文件载入」（`:184`）/ `InitializeNetworkDemo`（`:202`）。
-- `InitializeNetworkDemo`（`:196-212`）会**新建一棵树**（`:199-200`，经 `WorkflowDemoSession.Create()`），于是 helper 是新的、`helper.SubAgents` 在那一刻是 null —— `AgentHelper.Install` 是 `async void`，它要等读 key、建 client、`ProvideAgent` 返回之后才把 `SubAgents` 立起来。
-- 所以那一次 `AttachSubAgents` 走的是 `SubAgentPanel.IsVisible = false` 那条分支（`:93`），**而此后没有任何东西会再调它一次** —— `ToolCalled` / `VisualRefreshRequested` 都不重挂面板。
+- `AttachSubAgents` 的调用点只有三个，**全部在 `SubscribeAutoScroll` 里**（`.axaml.cs:280`），而 `SubscribeAutoScroll` 的三个调用点是构造器路径（`:64`）与「从文件载入」（`:187`）/ `InitializeNetworkDemo`（`:206`）。
+- `InitializeNetworkDemo`（`:199-216`）会**新建一棵树**（`:202-203`，经 `WorkflowDemoSession.Create()`），于是 helper 是新的、`helper.SubAgents` 在那一刻是 null —— `AgentHelper.Install` 是 `async void`，它要等读 key、建 client、`ProvideAgent` 返回之后才把 `SubAgents` 立起来。
+- 所以那一次 `AttachSubAgents` 走的是 `SubAgentPanel.IsVisible = false` 那条分支（`:96`），**而此后没有任何东西会再调它一次** —— `ToolCalled` / `VisualRefreshRequested` 都不重挂面板。
 
 ⇒ **用户要再点一次「Load Workflow Demo」（或从文件载入工作流）面板才会出现**，尽管那时子代理子系统早就准备好了。使用者那张截图里的面板是这么来的。
 
@@ -370,12 +370,12 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 
 `SubAgentLiveTests.cs` 读 `API_KEY_DEEPSEEK`，缺失则 `Assert.Inconclusive`（MSTest 4.0.2 下报成**已跳过**，不是失败 —— 已实测）。六条问的是离线替身**证明不了**的事：
 
-1. `ARealModel_DispatchesAChildAtAll`（`:49-70`）—— **工具描述够不够清楚，模型会不会真的用 `SpawnSubAgent`**。离线套件已经证明「工具被调用时是对的」，所以这条红了只可能是描述的问题。
-   ⚠ **但它问的是「叫它派它就派吗」** —— 它喂的 `DispatchInstruction`（`SubAgentLiveTests.cs:42-46`）里写着 "by dispatching a background sub-agent to do the counting — do not count them yourself"。**自发派发由第 5 条回答**，见下。
-2. `ARealChild_DoesTheWork_AndReportsItBack`（`:73-101`）—— 被夹紧的孩子会不会**真的去调工具**再汇报。断言里带着 `callCount > 0`，因为「从零编一个答案」能通过任何「回复非空」的断言。
-3. `ARealModel_PassesTheNarrowingOnRatherThanIgnoringIt`（`:149-194`）—— 模型会不会**真的去填 `allowedSkills` / `allowedMcpServers`**。这是这两条轴唯一买不到离线答案的地方：描述在人看来通顺、模型却省略参数，而省略现在意味着**拿到父的全量**（旧口径下 MCP 那半是「拿到空集」），两种错法都静默且离线全绿。**已实测通过** —— 被明确要求「只让它读这一个技能」时，模型确实传了。
-4. `ARealModel_TitlesTheTaskItDelegates`（`:197-223`）—— 模型会不会**真的去填 `name`**。与上一条同一类静默失败，但它的读者是**人**（§八的面板那一行），所以连「填得对不对」都没有反馈回路可依。断言是 `Name` 不以 `子代理 ` 开头（即回退没被触发）且长度 ≤ 60。**已实测通过**（`deepseek-v4-flash`）。
-5. `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo`（`:226-259`）—— **要求 1 的唯一判据**：给一个「读一大堆、只要六个词」的任务，**通篇不提「派发」**，模型会不会自发地把材料读进一个孩子的上下文而不是自己的。语料是自造的六章（每章 300 行填充、中间埋一个核心词），因为技能库的列表自带描述、用它造不出这种任务。**这条是先失败后通过的**：第一版判据写成「难度」时它连跑三次都是六次调用 + 零孩子；把判据换成「工作的目的」后才过（§五之末，`SubAgentAgentToolkit.cs:262`）。失败时它会把「花了多少次调用、其中多少次是读、以及模型答了什么」一起打进消息里，这样下一个人不必重跑一遍才知道是哪种失败。
+1. `ARealModel_DispatchesAChildAtAll`（`:44-65`）—— **工具描述够不够清楚，模型会不会真的用 `SpawnSubAgent`**。离线套件已经证明「工具被调用时是对的」，所以这条红了只可能是描述的问题。
+   ⚠ **但它问的是「叫它派它就派吗」** —— 它喂的 `DispatchInstruction`（`SubAgentLiveTests.cs:37-41`）里写着 "by dispatching a background sub-agent to do the counting — do not count them yourself"。**自发派发由第 5 条回答**，见下。
+2. `ARealChild_DoesTheWork_AndReportsItBack`（`:68-96`）—— 被夹紧的孩子会不会**真的去调工具**再汇报。断言里带着 `callCount > 0`，因为「从零编一个答案」能通过任何「回复非空」的断言。
+3. `ARealModel_PassesTheNarrowingOnRatherThanIgnoringIt`（`:144-189`）—— 模型会不会**真的去填 `allowedSkills` / `allowedMcpServers`**。这是这两条轴唯一买不到离线答案的地方：描述在人看来通顺、模型却省略参数，而省略现在意味着**拿到父的全量**（旧口径下 MCP 那半是「拿到空集」），两种错法都静默且离线全绿。**已实测通过** —— 被明确要求「只让它读这一个技能」时，模型确实传了。
+4. `ARealModel_TitlesTheTaskItDelegates`（`:192-218`）—— 模型会不会**真的去填 `name`**。与上一条同一类静默失败，但它的读者是**人**（§八的面板那一行），所以连「填得对不对」都没有反馈回路可依。断言是 `Name` 不以 `子代理 ` 开头（即回退没被触发）且长度 ≤ 60。**已实测通过**（`deepseek-v4-flash`）。
+5. `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo`（`:221-254`）—— **要求 1 的唯一判据**：给一个「读一大堆、只要六个词」的任务，**通篇不提「派发」**，模型会不会自发地把材料读进一个孩子的上下文而不是自己的。语料是自造的六章（每章 300 行填充、中间埋一个核心词），因为技能库的列表自带描述、用它造不出这种任务。**这条是先失败后通过的**：第一版判据写成「难度」时它连跑三次都是六次调用 + 零孩子；把判据换成「工作的目的」后才过（§五之末，`SubAgentAgentToolkit.cs:262`）。失败时它会把「花了多少次调用、其中多少次是读、以及模型答了什么」一起打进消息里，这样下一个人不必重跑一遍才知道是哪种失败。
 6. `ARealChild_ReportsWhatItSpent`（2026-09-25 加）—— **token 计量的另一半**。`UsageChatClient` 证明的是本仓库自己那半：response 上的 `UsageDetails` 会变成行上的数字。**它证明不了另外半**：真实 provider 到底报不报用量、MAF 到底聚不聚合到 `AgentResponse.Usage`。这条红了就说明面板的 token 那一格会**静默变空**，而换 MAF 版本正是最可能的成因。**已实测通过**（`deepseek-v4-flash`，4 秒），断言 `TokensUsed > 0` / `InputTokens > 0` / `Duration > 0`，并顺带断言同一组数字走到了树上（`node.TokensUsed == row.TokensUsed`、单孩子时 `tree.SubtreeTokens` 等于它、`ShowSubtreeTokens` 为假）。
 
 **仍然没被证明的一件事**：宿主 UI 线程在一棵树跑着的时候到底自不自由。整个轮询模型倚赖这一个假设（`TrackedAIFunction.RunOnContextAsync` 是 post + await TCS，理论上会让出），但离线替身**证明不了** —— `SingleThreadContext` 按构造是阻塞式 `Send` 的假货。要拿真 `DispatcherSynchronizationContext` 加真消息泵去验，本仓库目前没有这个环境。

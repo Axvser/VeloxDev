@@ -1,4 +1,4 @@
-# TransitionSystem — Razor (Blazor) 适配器
+﻿# TransitionSystem — Razor (Blazor) 适配器
 
 > 代码：`Src/Adapters/VeloxDev.Razor/PlatformAdapters/`（项目名 `VeloxDev.Razor`，demo 目录却叫
 > `Examples/Transition/Blazor/` —— 这处命名不对称在 `Src/Adapters/` 与 `Examples/` 之间是既成事实，找东西时两边都要看）。
@@ -35,8 +35,8 @@
 （`Examples/Transition/Blazor/Demo/Demo/Models/BoxModel.cs:11`），其中 `Style` 属性负责把若干字段拼成一段 CSS 串
 （同文件 `:74-79` 的 `transform:translateX(..) translateY(..) rotate(..) scale(..)`）。
 适配器侧没有任何元素可挂，于是**「什么时候重绘」变成用户的责任**：demo 在 `Home.razor.cs` 里显式调
-`UIThreadInspector.CaptureUIThread()`（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs:903`），
-并逐个对象挂 `PropertyChanged += (_, _) => InvokeAsync(StateHasChanged)`（同文件 `:910`、`:913`）。
+`UIThreadInspector.CaptureUIThread()`（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs:874`），
+并逐个对象挂 `PropertyChanged += (_, _) => InvokeAsync(StateHasChanged)`（同文件 `:881`、`:884`）。
 
 **推论（写新用例时先想这一条）。** 别家的 `LateUpdate += InvalidateVisual` / `effect.LateUpdate += (_,_) => 重绘`
 之所以能成立，是因为动画目标**就是**渲染对象；这里动画目标与渲染对象之间永远隔着一层用户写的 `PropertyChanged` 桥。
@@ -52,10 +52,10 @@ the renderer's own thread.`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Tran
 各自的 `PlatformAdapters/TransitionInterpreter.cs`），**只有 Razor 没有** —— 它的那个文件里只有类声明。
 
 **由此产生的做法（这是本篇最该记住的一条链）。** 基类 `CreateFramePacer` 默认返回 `null`
-（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:79`）→ `ArmNextFrame` 落到 `ReusableTimerWait`
-（同文件 `:94-110`，`_pacer is null` 分支）→ 整个循环共用一个 `System.Threading.Timer`
+（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:92`）→ `ArmNextFrame` 落到 `ReusableTimerWait`
+（同文件 `:107-123`，`_pacer is null` 分支）→ 整个循环共用一个 `System.Threading.Timer`
 （`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/ReusableTimerWait.cs`），续体在**线程池线程**上跑。
-而 `FrameWait` 刻意**不**还原 `SynchronizationContext`（同文件 `:112-127` 明写「a loop started on a UI thread
+而 `FrameWait` 刻意**不**还原 `SynchronizationContext`（同文件 `:129-140` 明写「a loop started on a UI thread
 therefore drifts to a pool thread after its first frame unless the host supplied a pacer」）。
 
 结论：**在这家，第一帧之后 `Update` / `LateUpdate` 就在线程池线程上跑了。**
@@ -91,7 +91,7 @@ Blazor 这一侧没有这样的类型：**没有任何「可写的元素属性�
 于是 `string` 是这家唯一有意义的平台类型，而字符串插值恰恰需要自己的数学 ——
 颜色要按 R/G/B 通道共用一条 `BoundedProgress` 进度、alpha 走自己的区间
 （`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Samplers/StringSampler.cs:95-107`；
-`BoundedProgress` 本身在 Core：`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/BoundedProgress.cs`），
+`BoundedProgress` 本身在 Core：`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/BoundedProgress.cs`），
 非颜色串只能退化成**离散标记**：先判两端能不能解析成颜色，不能就挂 `DiscreteMarker`，起点保持到进度到 1 才换终点
 （同文件 `:34-51`、`:59`）。
 
@@ -100,7 +100,7 @@ Core 那 15 个本来就够。
 
 **由此得出的联动陷阱。** 这张表是**手写**的（`PlatformAdapters/Transition.cs:35-143`，十六组逐类型重载），
 而不是别家那种泛型 `Property<TValue>`，于是它的两个边缘各有一个坑（`../extension.md:178` 已记 `long`）：
-- **`long` 声明不出来**：Core 注册了 `LongSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:15`），
+- **`long` 声明不出来**：Core 注册了 `LongSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:16`），
   但这张手写表里没有 `long` 重载 → 在 Razor 上**根本写不出**这条路径，不是「写了不生效」而是「写不了」。
 - **`decimal` 声明得出来但不会动**：表里有 `decimal` 重载（`PlatformAdapters/Transition.cs:63-68`），
   但 Core **从没注册过** decimal 采样器 → `Prepare` 走 `Warn(WarnStage.Unsampled, …)` 静默跳过。
@@ -150,7 +150,7 @@ Core 那 15 个本来就够。
 2. **这里的做法是「接入契约的默认路径」而不是「覆写它」。** 别家覆写 `CreateFramePacer` 把循环钉在 UI 线程上；
    这家**不覆写**（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs` 类体为空），
    让循环按 Core 的默认落到线程池定时器
-   （`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:94-110` 与 `:112-127` 的漂移说明），
+   （`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs:107-123` 与 `:129-140` 的漂移说明），
    再靠 `UIThreadInspector` 把每一帧编组回去。理由：Blazor 没有渲染线程定时器可用（§二·2）。
    所以读这家的性能特征要用别家的相反直觉 —— **每帧一次 dispatch 是设计，不是退化**。
 3. **这里的 `Property` 是手写重载表，别家是泛型。** 后果是「Core 有采样器的类型在这家可能声明不出来」
@@ -179,13 +179,13 @@ Core 那 15 个本来就够。
    这家的 circuit 一导航就没了，动画却还在线程池线程上跑、还在往一个已死的 `SynchronizationContext` 上投帧
    （§二·5 的乐观 `true` 意味着**你不会收到任何抱怨**）。写用例时要在 `Dispose` 路径上退出动画，
    并在 `InvokeAsync` 之前检查自己的 `_disposed` 标记 —— demo 的读表定时器就是这么写的：
-   `if (_disposed) return;` 在回调第一行（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs:927-930`，
-   标记声明在 `:756`），注释写明「定时器线程可能在 Dispose 之后才轮到」。
+   `if (_disposed) return;` 在回调第一行（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs:901`，
+   标记声明在 `:734`），注释写明「定时器线程可能在 Dispose 之后才轮到」。
 3. **静态状态在 Blazor Server 下的语义被放大了。** 一个进程多个 circuit，任何 `static` 字段都是**跨用户共享**的。
    这家的适配器里确实有两个 `static`（`UIThreadInspector` 的 context/线程号），它们能成立是因为语义恰好是
    「首个 circuit 的兜底」；**新增任何 `static` 之前先想清楚它是进程级还是 circuit 级** —— 视图侧为同一件事
    专门用了 `AsyncLocal`（`WorkflowSystem/adapters/razor.md` 有依据）。
 4. **`StringSampler` 的端点语义依赖「写回调用方给的字符串本身」。** 它的 XML 明写端点精确靠 `t == 0` 写 start 原文、
-   `t == 1` 写 end 原文（`Samplers/StringSampler.cs:18-19`、`:26-27`）；中间帧才解析颜色。所以
+   `t == 1` 写 end 原文（`Samplers/StringSampler.cs:20-22`、`:28-29`）；中间帧才解析颜色。所以
    **不要试图在端点做归一化**（例如统一成 `rgba(...)`）—— 那会改掉调用方声明的字面文本，
    在回放/快照路径上是可观察的行为变化。这条对「非颜色串」更硬：它们直接退化成离散标记（§二·3）。

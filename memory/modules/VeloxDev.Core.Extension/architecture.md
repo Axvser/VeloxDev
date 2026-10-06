@@ -102,7 +102,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 其余落在同一趟里；旗标**在刷新执行之前**清，所以刷新期间来的请求会再排一次 —— 那一轮才代表刷新后的最新状态）。
 
 **七家的现状是三种，不是一种**（2026-09-27 逐家核过）：Avalonia / WPF / WinUI / WinForms / Jalium **每调用一次就全量刷新**
-（本次接上合并器）；**MAUI 早就自己做了同一件事** —— `ScheduleRefresh()`（`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs:378`）用一个
+（本次接上合并器）；**MAUI 早就自己做了同一件事** —— `ScheduleRefresh()`（`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs:382`）用一个
 `bool _layoutRefreshPending` 门控 + `MainThread.BeginInvokeOnMainThread`，而且同样是**先清旗标再刷新**，与 `CoalescedRefresh`
 的契约逐条一致（差别只在门是普通 `bool`、非原子；眼下都从主线程来，所以行为正确）⇒ **不要再叠第二套**；**Blazor 压根不
 在这两个事件上刷新**（页面既不订阅 `ToolCalled` 也不订阅 `VisualRefreshRequested`，而是反应式重渲：`Nodes`/`Links` 的 `CollectionChanged`、`Controller.PropertyChanged`、`Layout.PropertyChanged`，外加 `MCP.Status.PropertyChanged` —— `Workflow.razor.cs:77-89` 的订阅、`:146-150` 的处理器），所以那条前提在它身上不成立。
@@ -181,7 +181,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 | `ReadReference`（单个）/ `ListReferences` | `AgentEmbeddedResources.cs:86 / :92` | **零调用者**（只有一个「全读」的 `ReadAllReferences` 是活的：`WorkflowAgentScope.cs:1019`、`:1143`） |
 | `ProvideAllContexts` | `WorkflowAgentScope.cs:1005 / :1008` | **仓库内零外部调用者**（无参重载只转发给有参重载）。是给宿主的另一档提示模式，宿主样例走的是渐进模式（`AgentHelper.cs` 调 `ProvideProgressiveContextPrompt`）。**它和渐进模式一样会写骨架收据**，所以两档都算「骨架已交付」 |
 | `BuildDynamicInstructions()` | `WorkflowAgentScope.cs:1872` | **2b 起不再是预留坑位**：渲染**能力包络**（闸门 / 被关掉的工具 / 调用预算的分档用量 / 相对骨架的漂移段）。按 `ContextKey` 缓存，空闲轮零分配；**绝不调用** `ProvideProgressiveContextPrompt`（骨架一次 870 KB、是框架每轮基线的 19 倍，见 `WorkflowAgentScope.cs:1752-1753`；旧文说的「1,100 倍」不可复核） |
-| `WorkflowToolCategory.Layout`（`1<<5`）、`Composite`（`1<<8`） | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | 保留位，**没有工具注册在这两个类别下**（与 `WorkflowAgentToolkit.cs:185-186` 的「不做复合工具」一致） |
+| `WorkflowToolCategory.Layout`（`1<<5`）、`Composite`（`1<<8`） | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | 保留位，**没有工具注册在这两个类别下**（与 `WorkflowAgentToolkit.cs:190-192` 的「不做复合工具」一致） |
 
 **推论**：改 `Resources/` 时不要以为加一个 `Scripts/` 目录就会被自动加载 —— 加载器在（`ListScriptCategory`），调用者在（`ReadAllScripts`），但**没有第三方调用它**。同理，加 `Safety/Level4.md` 不会有任何效果，档位取值域是 `_interactionSafety > 0`（且 `WithInteractionSafety` 夹在 0–3）而文件名按 `$"Level{_interactionSafety}"` 拼（`WorkflowAgentScope.cs:821`），级别的语义定义在 `McpSelfServiceLevel.cs` 之外的那套交互挡位上，要新加挡位必须同时改宿主。
 
@@ -304,5 +304,5 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 **⚠ 修的是生成器，所以 Release 不受益。** `VeloxJsonRegistry` / `ReadValue` 那半边在源码里、两种配置都生效；
 但**工厂是生成代码**，而 Release 走的是 NuGet 包（`VeloxDev.Core.csproj:19` 的 `Version="10.0.0"`、
-`VeloxDev.Core.Extension.Test.csproj:33` 的生成器包 `Version="10.0.0"`）—— 不升包，Release 下带连接的树仍然读不回来。
+`VeloxDev.Core.Extension.Test.csproj:37` 的生成器包 `Version="10.0.0"`）—— 不升包，Release 下带连接的树仍然读不回来。
 哪几处要一起升见 [`VeloxDev.Core.Generator/extension.md`](../VeloxDev.Core.Generator/extension.md) §四。
