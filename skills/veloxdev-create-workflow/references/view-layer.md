@@ -134,6 +134,8 @@ Right-pressing a link shows the menu the surface declares: the adapter resolves 
 
 ⚙ **To refuse a menu, veto the press on the link itself.** Subscribe that link's `Input.PointerPressed` and set `e.Handle.PreventDefault = true`; the surface's own handler runs later (the route reaches the target before its ancestors) and skips the popup. Ordering is fixed by construction, so a refusal cannot race the popup.
 
+⚙ **The same veto covers the framework's own four gestures.** Subscribe the tree's or the component's `Input.PointerPressed` and set `e.Handle.PreventDefault = true`, and that one gesture does not start — canvas pan, node drag, slot connection, and Ctrl+wheel zoom (`PointerWheel`) each read the handle before they act. That is the whole of "Shift-drag on empty canvas draws my own selection rectangle": refuse the press when `e.Target is null` and the modifiers say Shift, and the canvas stays still under your own handler. The gestures do not tell you which one you just refused — you refuse the press, and whatever would have started is what stands down. Blazor is the one place the refusal costs a round trip, because the gesture runs in JS and the route in .NET: the gesture starts one SignalR message later, and the move deltas are not lost.
+
 ### Which way the data goes
 
 A settled link carries a **travelling highlight**, so its direction is read from the motion rather than from a mark that is a few pixels wide and invisible at 40% zoom. Every full demo does this; the Trimmed suites deliberately do not, because it is decoration rather than part of the editor.
