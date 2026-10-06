@@ -422,7 +422,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 六�
 
 **改配色的落点**：网格与标尺集中在各家的 `WorkflowGridDecorator`（WinForms 拆在适配器的 `WorkflowGridDecorator.cs` 与 `WorkflowTreeView.cs` 两处；Razor 在适配器 `WorkflowGridDecorator.razor.cs` 加 surface）。连线的默认色一般在各家自己的连线视图里，**MAUI 模板是例外：模板没有本地连线视图，用的是适配器** `Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowLinkOverlay.cs`（demo 已于 2026-10-03 改成每线一视图，见 §五），在那里改会**同时改掉 Trimmed MAUI**（2026-09-25 删箭头就是这么做的）。
 
-**连线：七家都没有箭头了。** 箭头原先七家都有（长 12、宽 8，`!IsVirtual` 时画），2026-09-25 全部删除。
+**连线：七家都没有箭头。** 那套箭头（长 12、宽 8，`!IsVirtual` 时画）七家都不画。
 模板与各家 Trimmed demo 现在都是**一条平线 + 悬停高亮**：高亮时绕线画一圈白色 halo
 （如 Avalonia Trimmed `Demo/Demo/Views/Workflow/LinkView.axaml.cs:192` 的 `(color, 0.25)`、`thickness + 6`）。
 **动的光带（旧称「流光」）只在部分非 Trimmed demo 里**，例如 Avalonia 的
@@ -430,7 +430,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 六�
 中文注释在 `:28`）—— 它**不在模板、也不在 Trimmed demo 里**。
 旧的「渐变刷三个停靠点 `0.06 / 0.34 / 0.66 / 0.94` + `550/650/550 ms`」那套已随 demo 重写消失，不要再照抄。
 
-**旧的两处死代码已消失**：WPF / WinUI 的贝塞尔版 `BezierCurveView` 已随 demo 重写删除（全仓只剩 Avalonia 非 Trimmed demo 里的一个，且被 `WorkflowView.axaml` 引用，不是死代码）。
+**只剩一处 `BezierCurveView`**：WPF / WinUI 的贝塞尔版都没有了（全仓只剩 Avalonia 非 Trimmed demo 里的一个，且被 `WorkflowView.axaml` 引用，不是死代码）。
 
 ---
 

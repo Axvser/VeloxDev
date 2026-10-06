@@ -121,12 +121,12 @@
 其余几条容易记错的：
 
 - **重试不是新一轮**。`Attempt` 数的是过图的趟数，同时是产物表的戳（`RuntimeContext.cs` 的 `_outputs` 与 `CollectGroupedInputs`），重试绝不碰它；重试只对**抛出的异常**生效，节点自己 `Error()`/`Warn()` 是刻意的重定向请求、不重试（`RuntimeEngine.NextRetryAsync` 先看 `RedirectRequested`）。
-- **`ExponentialBackoffRetry` 的 `maxAttempts` 是总尝试次数（含首次）**。实现原先 `RetryNumber + 1 >= maxAttempts` 少给一次，与它自己的文档矛盾；本轮按文档改成 `RetryNumber >= maxAttempts`，两条重试测试正是被它咬出来的。
+- **`ExponentialBackoffRetry` 的 `maxAttempts` 是总尝试次数（含首次）**：实现用 `RetryNumber >= maxAttempts`（`RetryNumber + 1 >= maxAttempts` 会少给一次，与文档矛盾）。两条重试测试钉住这条。
 - **补偿看的是整轮、不是单趟**。列表是 `RuntimeContext.CompletedThisRun`（按驱动序、每节点一条、重跑移到末尾），只有 `ResetOutputs` 清它 —— 重定向跳过的前缀只被驱动过一趟，若按趟清就永远补偿不到它。`ExecutionCompensationTests.AfterARedirect_...` 钉住这条（顺序 `r, s1, x, s0`）。
 - **取消只进 sink，不进日志**：宿主自己停的运行不是失败，写一行 `[Error]` 会让以后读 `Logs` 的人以为出过错。`RunOutcome` 才是把 `"Stopped"` 拆成 Failed / Cancelled 的那个成员（`RunOutcome.Unknown` = 取消之外没跑完，例如异常穿出 `RunAsync`）。
 - **观察者与 sink 抛异常都不改运行**（各留一行日志）；补偿器抛异常不掩盖原始失败、也不中断其余节点；重试策略抛异常当作「不再试」。
 
-**同笔修掉的两处宿主契约缺陷（行为变更）**：`ResolveRouteKey` 与 `ResolveRedirectAsync` 原先无守卫，宿主实现一抛异常就穿出 `RunAsync`、`Status` 停在 `"Running"`（会话谎称还在跑）；`IRuntimeAware.AttachRuntimeContext` 在 `try` 之外调用，异常落进空 catch ⇒ 节点被**无声跳过**。现在三者都走与节点体同一套失败纪律（记 Error → 重定向或结束），`EngineHostContractFailureTests` 三条分别钉住。重定向上限那条路也顺手补了 `Status = "Stopped"`（原先同样停在 `"Running"`）—— 这条**已由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 覆盖**（2026-10-04 核）。
+**宿主契约的三处失败点都与节点体同一套失败纪律（记 Error → 重定向或结束）**：`ResolveRouteKey`、`ResolveRedirectAsync` 与 `IRuntimeAware.AttachRuntimeContext`。少了它，宿主实现一抛异常就穿出 `RunAsync`、`Status` 停在 `"Running"`（会话谎称还在跑），或被空 catch 吞掉、节点被**无声跳过**。`EngineHostContractFailureTests` 三条分别钉住；重定向上限那条路补 `Status = "Stopped"`，由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 覆盖（2026-10-04 核）。
 
 **注释风格别照抄**：`CompilerEx` 的 `internal`/`private` 成员上还是规范生效前写的英语 `///`（`RuntimeEngine` 里那几个老私有方法、`BranchRuntimeContext` 整份）。本轮新写的行按手册 §二 用中文 `//`，所以文件里两种并存 —— **以手册为准，不要拿旁边的老注释当标准**。
 
@@ -157,8 +157,8 @@
 
 ## 十二、重定向与分支的三处边界（2026-09-27 实测，做 demo 那张展示图时撞出来的）
 
-1. ~~**目标落进（嵌套）分支内部时，整条分支会被跳过。**~~ **已修（2026-09-27，同一笔）。** 原先 `RunBranchAsync` 写的是 `if (redirectTarget is int t && routerOrder < t) return false;` —— 注释说「目标在分支之前则整条跳过」，条件表达的却是「路由器在目标之前」⇒ 目标落在分支内部时整条被跳过，这一趟**一个节点都不会重跑**（实测：日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`）。**修法是删掉这条整分支跳过**：分支一律进，让「**目标之前不驱动**」这条统一规则去跳节点；顺带把路由器的驱动条件改成 `target < routerOrder` —— 目标在路由器之后（含落在分支内部）时，路由器属于保留前缀，**不再驱动**（原先会驱动，违反同一条规则）。`RuntimeRedirectTests.RedirectIntoABranch_EntersIt_AndDrivesFromTheTargetInside` 是判别测试：修复前该分支里那个目标只被驱动 1 次，修复后 2 次。demo 那张图一度为此把回退目标绕成分支之外的 `Ticker`，修好后已改回 `Generate Dataset`（注释也一并订正 —— 它原本写着「分支内部的节点够不到」，那句话现在不成立）。
-2. **一条分支的所有选项都通向的节点，只会被编进其中一个选项。** demo 里 `Publish` 原本挂在三个报告节点之后 ⇒ 编译器把它编进遍历时先遇到的那个选项（实测它的 order 11 只属于 `Zero` 选项）⇒ 路由到 `Low` 的那一轮它根本不跑。想「分支之后再收拢」的步骤，得放到分支**之前**。
+1. **目标落进（嵌套）分支内部时，分支照进、只跳「目标之前」的节点。** `RunBranchAsync` 不整分支跳过：分支一律进，跳节点交给「**目标之前不驱动**」这条统一规则；路由器的驱动条件是 `target < routerOrder` —— 目标在路由器之后（含落在分支内部）时，路由器属于保留前缀、**不再驱动**。写成 `routerOrder < t` 会把「目标落在分支内部」误判成「整条跳过」，那一趟**一个节点都不会重跑**（实测：日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`）。`RuntimeRedirectTests.RedirectIntoABranch_EntersIt_AndDrivesFromTheTargetInside` 是判别测试：目标在分支内被驱动 2 次。demo 的回退目标 `Generate Dataset` 就落在分支内部，正是这条的实例。
+2. **一条分支的所有选项都通向的节点，只会被编进其中一个选项。** demo 里 `Publish` 挂在三个报告节点之后 ⇒ 编译器把它编进遍历时先遇到的那个选项（实测它的 order 11 只属于 `Zero` 选项）⇒ 路由到 `Low` 的那一轮它根本不跑。想「分支之后再收拢」的步骤，得放到分支**之前**。
 3. **报错的那一趟给下游留 null，而重定向不会中断当趟。** 报错的驱动记 `null`（§六）＋ `RunExecuteAsync` 记下回退目标后继续走完这条链 ⇒ 被拒绝的那一趟，**尾巴拿到的全是 null**。demo 的尾巴脚本因此按「空载荷就记一行 warning 返回」写 —— 否则一次拒绝会换来一屏堆栈。
 
 ## 十三、未做（别当成遗漏）

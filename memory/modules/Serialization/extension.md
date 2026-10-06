@@ -54,7 +54,7 @@
 ## 三、想加一个新拼写/新成员类型（例如一种新的容器形状）
 
 1. `Base/VeloxJsonModel.cs` 的 `Classify` 决定成员算标量、集合还是字典 —— 新形状先在这里加。它的返回值是四元组 `(Kind, Element, Key, InterfaceKeyed)`：**`Key` 是字典的键类型，也是 `Reachable` 的入口之一**（2026-10-04 起），新形状要么给它一个键，要么显式给 `null`。
-2. 若它需要**读回来**（不是只写得出去），还要 `CollectNestedContainers` 与 `IsContainerReadable` 认它。**只加写侧是一条已知的坑**：嵌套容器曾经写得出去读不回来，见 `VeloxJsonRegistry.RegisterContainerFactory` 的 remarks。
+2. 若它需要**读回来**（不是只写得出去），还要 `CollectNestedContainers` 与 `IsContainerReadable` 认它。**只加写侧是一条已知的坑**：只加写侧会让嵌套容器写得出去、读不回来，见 `VeloxJsonRegistry.RegisterContainerFactory` 的 remarks。
 3. `Writers/VeloxJsonCodeWriter.cs` 的 `ReadMember` 发对应的读法。
 4. 跑 `Src/Core/VeloxDev.Core.Extension.Test` —— 逐字节黄金与幂等测试会当场告诉你产物变了没有。
 

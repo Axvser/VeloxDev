@@ -190,12 +190,9 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
    （`skills/veloxdev-create-workflow/references/gui/maui.md:39` 同结论）。
 7. **Windows 上原生 `ScrollViewer` 是彻底被动的，且平移不再走 manipulation（2026-10-01 重做，见 §五）。**
    `IsScrollInertiaEnabled = false` 且 **`ManipulationMode = None`**（`WorkflowSurfaceBehavior.cs` 的
-   `OnScrollViewerHandlerChanged`）。
-   **订正**：这里原先写的是「降级成 `ManipulationMode = TranslateX|TranslateY|Scale` 就够，并警告不要用 `None`」——
-   那是错的，两半都错。`TranslateX|TranslateY` 正是 ScrollViewer 用来做**操纵滚动**的那两个轴，留着它们它就还是
-   第二个滚动驱动者，并会在松手那一刻把自己累积的偏移补上（实测：松手后 60ms 从 423 跳到 186）；
-   而 `None` 会让平移失灵这条，只对「平移仍靠 manipulation」那套成立 —— 平移现在改走原生指针事件，
-   全树不再需要任何 manipulation，`None` 因此是它该有的取值。详见 §五。
+   `OnScrollViewerHandlerChanged`）—— 两半都必要：`TranslateX|TranslateY` 正是 ScrollViewer 用来做**操纵滚动**的那两个轴，
+   留着它们它就还是第二个滚动驱动者，并会在松手那一刻把自己累积的偏移补上（实测：松手后 60ms 从 423 跳到 186）；
+   而平移现在改走原生指针事件，全树不再需要任何 manipulation，所以 `None` 是它该有的取值。详见 §五。
 8. **平移用绝对锚点，不用每帧增量累积**：`SurfaceState` 里那组 `PanAccumulated*` / `PanAnchorTotal*`（`:27-39` 的注释）
    在 `Started` 记一次锚，每次 `Running` 用 `anchor − (Total − anchorTotal)` 算绝对目标（`:1288-1297`），
    并让**在飞的上一笔 `ScrollToAsync` 被取消**（`PanCts`，`:48-50`、`:1494-1495`）。注释给的教训：读每帧实际 `ScrollX` 会闪回，
@@ -258,7 +255,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
 本家与另外六家不同形：**连线不是视图**，是满屏 `GraphicsView` 一趟画完（§二·4）。本层因此只做两件平台的事：
 **把每条可见链的曲线按 canvas-local 发布给 Core 当命中几何**、**把指针/按键翻译成标准输入事件转发进输入路由**
 （`AttachInteraction` `:1016-1022`）。**命中裁决归 Core 的共享判定**（本层调 `input.Tree.HitTestVisibleLinks`，只提供坐标），
-**高亮与删除归宿主/demo**，右键请求由本层转发、菜单由表面（适配器）弹 —— 本层**自己不算命中**（旧的 `HitTestLink` 已删）。
+**高亮与删除归宿主/demo**，右键请求由本层转发、菜单由表面（适配器）弹 —— 本层**自己不算命中**（没有 `HitTestLink`）。
 非 Trimmed demo 的池因此不物化连线（数据源直绑 `Helper.VisibleItems`，由 §二·1 的入队过滤跳过），
 模板/demo 的 code-behind 里没有一行过滤代码。
 
@@ -295,8 +292,8 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
 5. **菜单条目来自声明的资源，接线与呈现都在适配层（2026-10-03 改定）**：模板/demo 在 XAML 里声明 `LinkContextMenu`
    （`WorkflowView.xaml:16` 的 `LinkMenuKey="LinkContextMenu"` 属性 + 资源里那条
    `MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"`），表面按这个键取菜单。
-   **模板/demo 的 code-behind 因此没有一行菜单代码**：`UpdateInteraction` / `ShowLinkMenu` / `BuildPlatformMenu` / `RunItem` /
-   `SelectMenuItem` / `DismissLinkMenu` / `OnLinkMenuScrimTapped` 那整套都已删，落进 `WorkflowSurfaceBehavior.cs` 的
+   **模板/demo 的 code-behind 因此没有一行菜单代码**：那整套菜单代码（`UpdateInteraction` / `ShowLinkMenu` / `BuildPlatformMenu` / `RunItem` /
+   `SelectMenuItem` / `DismissLinkMenu` / `OnLinkMenuScrimTapped`）都不在，落点在 `WorkflowSurfaceBehavior.cs` 的
    `WireLinkMenu` / `ShowLinkMenu` / `RunItem`。弹出分两路：
    - **Windows**：把声明的条目翻成原生 `Microsoft.UI.Xaml.Controls.MenuFlyout`（`BuildPlatformMenu`）
      再 `ShowAt` —— 只有原生 flyout 能在指定点弹。这份 flyout 记在 `state.OpenFlyout` 里（`Hide()` 得用它，

@@ -158,7 +158,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 浏览器直接**丢弃**这条声明，于是标尺刻度不再跟随滚动。JS 侧反过来永远是对的（ECMAScript 的 `toFixed`
 恒定用 `.`），于是**解析侧也有一半**。
 
-**已修（做对的范本，改这类代码照这几处抄）：**
+**做对的范本（改这类代码照这几处抄）：**
 - `Attached/Workflow/WorkflowNodeDragBehavior.razor.cs:64` —— 节点位置串走 `InvariantCulture`。
 - `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:680-683` —— 推给 JS 的节点几何数组走 `InvariantCulture`。
 - `Attached/Workflow/WorkflowGridDecorator.razor.cs:169-183` —— 标尺**文字**走 `InvariantCulture`
@@ -270,8 +270,8 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
    `:229` 的 `BuildFlow()`），所以它的属性写入与它的重渲染在同一对象上 —— 这在别家是常态，在这家是特例。
 2. **区域设置陷阱已清零（2026-10-03）**：见 §4·1 —— 写侧 6 组位置（含 `WorkflowCanvasTransformBehavior.ToCss`
    这个**公开静态 API**）与解析侧那 1 处全部改成不变文化，模板与镜像的 `ToCss`/`SlotSizeCss` 同批修完。
-   **规则不变、位置变了**：以前是「适配器里有 7 处雷」，现在是「写这类代码必须带 `InvariantCulture`，
-   判据与漏掉的表现见 §4·1」。新增/改动任何进 CSS/SVG/JS 的数字时照着那张判据自查。
+   **规则**：写这类进 CSS/SVG/JS 的数字必须带 `InvariantCulture`，
+   判据与漏掉的表现见 §4·1。新增/改动任何进 CSS/SVG/JS 的数字时照着那张判据自查。
 
 ---
 
@@ -289,7 +289,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 |---|---|
 | 命中 | `Components/Workflow/TemplateLinkView.razor:39-42` —— 只给画线的 `<g>` 一层 `pointer-events="@HitTargetCss"`（`"stroke"`，虚拟连线 `"none"`，`TemplateLinkView.razor.cs:542`）；`<svg>` 的 `pointer-events:none` **一行未动**（`TemplateLinkView.razor:32`） |
 | 悬停转发 | `Components/Workflow/TemplateLinkView.razor.cs:547-565` —— `OnPointerEnter/OnPointerExit` 把 `PointerPhase.Entered/Exited` 交给表面的 `ForwardPointerAsync`；**没有 IsSuspended 判断**（挂起由 `WorkflowInput.ApplyDefault` 在 `IsSuspended` 时直接返回挡掉：`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs:203`） |
-| 右键入口 | `Attached/Workflow/WorkflowSurfaceBehavior.razor:12` —— 表面根一层 `@oncontextmenu="OnSurfaceContextMenu"` + `@oncontextmenu:preventDefault="true"`；`OnSurfaceContextMenu`（同目录 `.razor.cs`）先记客户端坐标（取整成整数字符串避开区域设置），再 `ForwardPointerAsync(PointerPhase.Pressed, PointerButtonKind.Right)` 喂进输入路由。**宿主不再有右键入口**（demo 的 `div.wf-canvas-wrapper` 上那条已删） |
+| 右键入口 | `Attached/Workflow/WorkflowSurfaceBehavior.razor:12` —— 表面根一层 `@oncontextmenu="OnSurfaceContextMenu"` + `@oncontextmenu:preventDefault="true"`；`OnSurfaceContextMenu`（同目录 `.razor.cs`）先记客户端坐标（取整成整数字符串避开区域设置），再 `ForwardPointerAsync(PointerPhase.Pressed, PointerButtonKind.Right)` 喂进输入路由。**宿主没有右键入口**（demo 的 `div.wf-canvas-wrapper` 上没有这条） |
 | 弹菜单 | 组件 `WireLinkMenu` 订输入面 `Input.PointerPressed` → `ShowLinkMenu`：`e.Target` 不是连线直接返回（空白处也路由一次），否则 `MenuLink = link` 并置 `input.IsSuspended = true`（`WorkflowSurfaceBehavior.razor.cs:392-404`）。输入路由按树取用（`WorkflowInput.For`，Core 缓存），换树按实例比对重接（`:351-376`）。**宿主不再订旧的按组件事件** |
 | 收菜单 | 组件 `CloseLinkMenu` 清掉 `MenuLink` 后复位 `input.IsSuspended` —— 点面板（`OnMenuPanelClick`）、点透明 backdrop、按 Escape（`OnSurfaceKeyDown`）三处都走它（`WorkflowSurfaceBehavior.razor.cs:407-414`）。**树的单主守卫也落进这里**：`WireLinkMenu` 内的 `LinkRemoved` 处理只判 `ReferenceEquals(MenuLink, link)` 后调它（`:368-375`），不另开第二条关闭路径 |
 | 菜单 chrome | `Attached/Workflow/WorkflowSurfaceBehavior.razor:41-58`：透明 backdrop + 面板，类名仍是 `.wf-link-menu-backdrop` / `.wf-link-menu` / `.wf-link-menu-item`；样式随组件迁进 `Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.css`（宿主经 `App.razor` 已加载），demo `wwwroot/app.css:912-945` 保留同名基础样式与它那条红色 `.wf-link-menu-item:hover` 覆盖 |
@@ -304,7 +304,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 3. `FocusAsync` 的 **`preventScroll: true` 是必须的**：表面根和画布一样大，让它自己滚进来会把画布拽走。另外 `outline:none` 也是必须的（否则整张画布套一个巨大焦点框；选中线的白色就是焦点指示）。**焦点这一路不触发页面重渲染** —— 收焦点在组件里（`ForwardPointerAsync`），高亮是每条线自己的本地态（`TemplateLinkView.razor.cs:547-552`，订自己的 `Input.PointerEntered/Exited`），页面不再订任何旧的按组件事件。
 4. **原生右键菜单被整个表面无条件压掉**：`@oncontextmenu:preventDefault="true"`（`Attached/Workflow/WorkflowSurfaceBehavior.razor:12`，在组件里）是**渲染期指令** —— 值在渲染时定死，没法按「这一次按下有没有命中连线」逐次决定，所以表面对整块画布一律 `preventDefault`，筛选只能放进事件里做（`e.Target` 不是连线才不弹，`ShowLinkMenu`）。**否决菜单在链上更靠前的一级（连线自己）**：订同一条 `Input.PointerPressed` 并置 `e.Handle.PreventDefault`；`ShowLinkMenu` 读它（`WorkflowSurfaceBehavior.razor.cs:397-398`）。
 
-**右键入口只留表面根一条**：连线视图 `<g>` 上原有的 `@oncontextmenu` 与 `TemplateLinkView` 上那个已删的右键参数都不再存在（`TemplateLinkView.razor:39-42` 只剩 `pointer-events` / `onmouseenter` / `onmouseleave`）—— 留两条时同一次右键会被 `g` 与表面根各喂输入路由一次，输入路由对同一回按下报两回。宿主页上的那条入口（demo 的 `div.wf-canvas-wrapper`、模板/Trimmed 的外层 div）也随本次重构删掉，入口只此一处。
+**右键入口只有表面根一条**：连线视图 `<g>` 上没有 `@oncontextmenu`，`TemplateLinkView` 也没有右键参数（`TemplateLinkView.razor:39-42` 只有 `pointer-events` / `onmouseenter` / `onmouseleave`）—— 留两条时同一次右键会被 `g` 与表面根各喂输入路由一次，输入路由对同一回按下报两回。宿主页上也没有入口（demo 的 `div.wf-canvas-wrapper`、模板/Trimmed 的外层 div），入口只此一处。
 
 已知代价（不是缺陷，别当 bug 修）：菜单打开时那层**透明 backdrop 会吞掉画布手势**（这正是菜单该做的，`Attached/Workflow/WorkflowSurfaceBehavior.razor:41-58`），于是此时右键另一条线只是先关掉菜单。悬停 / 选中的重绘只落在**连线视图自己**（`TemplateLinkView.razor.cs:527-528,547-552`），不会整页重渲染。**demo 页为选中态保留了唯一的菜单相关代码**：一个 `_surface`（`@ref`）用来读组件的 `MenuLink`（`IsSelected="@(_surface?.MenuLink == link)"`）—— 这是「条目归宿主、接线归组件」之外的视觉读，不属于接线。
 

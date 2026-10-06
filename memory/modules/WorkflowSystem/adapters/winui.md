@@ -219,9 +219,9 @@ skill 文档 `gui/winui.md:5` 指的参考实现就是这个 Trimmed 目录。
 **这条与本文件 P4 是同一个教训**（「已置位状态……永久停止且不报错」），该家自己的正确范形在 `SyncSlotEnumerator`：
 用可判定的条件（`ActualWidth <= 0`）判断「还没测量」并**排 Low 重试**。
 
-**订正（2026-09-27，同日两次）**：先按用户一句「已修复」写成「P8 已确认是成因」，**随即被用户推翻**：症状仍在 ——
-**只要 Agent 对话进行中就可能出现**，可见元素数量也未必实时同步，节点/连线**概率**消失，且**重入 Viewport 也救不回来**。
-⇒ 真正的成因**不在这家**，在 Core 的空间索引：`Insert` 时边界为空的条目只登记、不进网格，之后只靠 `PropertyChanged`
+**这一症状的成因在 Core 的空间索引，不在本家**：**只要 Agent 对话进行中，节点/连线就可能概率消失**，
+可见元素数量也未必实时同步，且**重入 Viewport 也救不回来**。
+`Insert` 时边界为空的条目只登记、不进网格，之后只靠 `PropertyChanged`
 补进去，而那个事件可能压根不来（视图没测量）或正好落在别人那一趟里被延后 ⇒ 它**不在任何格子里** ⇒ 任何视口变化都
 查不到它（「救不回来」这句正是这条的指纹）。修在查询侧（`SpatialGridHashMap.Query` 先 `EnsureIndexed()`），见
 [`WorkflowSystem/architecture.md`](../architecture.md) §3.5 那条新规则与判别测试 `SpatialIndexFreshnessTests`。
@@ -268,13 +268,13 @@ Trimmed 的 `SlotView` 与 `Src/Templates/VeloxDev.WinUI.Templates/` 的那份**
 **祖辈（节点视图）被折叠对子元素完全不可观察**：`Visibility` 不继承、`IsLoaded` 仍为 true、
 `EffectiveViewportChanged` 在祖辈 `Collapsed` 时根本不触发 —— 所以「被回收」这件事只有 `DataContext` 一个入口。
 
-### P9 · 每帧写「布局属性」＝ 每帧让整块画布重排一次（2026-10-01 实测确诊并已修）
+### P9 · 每帧写「布局属性」＝ 每帧让整块画布重排一次（2026-10-01 实测）
 
 **这是这一家所有「卡顿」报告的第一嫌疑人，先量它再谈别的。** XAML 里改 `Shape` 的几何（`PathGeometry`
 的点）或 `Width/Height`/`StrokeThickness`，会让该元素的**测量**失效，而失效会一路向上冒到画布
 ⇒ 整个 `PART_Canvas` 重排一次。视图是不是喂给池、是不是 `Collapsed`，都拦不住 —— 只要它还挂在树上。
 
-**实测方法**（探针已删，需要时照这个重建）：`PART_Canvas.LayoutUpdated` 计数 + 一个 1s 的
+**实测方法**（需要时照这个重建探针）：`PART_Canvas.LayoutUpdated` 计数 + 一个 1s 的
 `DispatcherQueueTimer` 把计数写进 `%TEMP%` 的日志文件；demo 里两处动画各加一行计数。
 用文件而不是 `Debug.WriteLine`，是为了能在**不挂调试器**的情况下启动、跑十几秒、再杀掉读文件。
 
@@ -367,7 +367,7 @@ code-behind 因此只剩 `InitializeComponent()`（Trimmed / 模板）或自身�
 **虚拟连接（橡皮筋）的可见性：先分清「被卡挡住」与「没画出来」**（2026-09-26 实测）。
 
 - **「被卡挡住」是合法的**：橡皮筋在连线层，而连线层在节点卡之下（非 Trimmed `Canvas.SetZIndex(this, -100)`，Trimmed 模板 `Canvas.ZIndex="-1"`）⇒ 指针还压在卡上时它本来就被挡住，「越过一段距离才看到」的距离 = 从插槽到**卡外**。实测（非 Trimmed，输出插槽在卡右边缘）：向上/向下拖第 20px 就看到；向卡内拖到 650px 看不到；卡外开阔处另有正面对照。
-- **「没画出来」是缺陷（本家 Trimmed 曾有，已修）**：`LinkView.UpdateLayoutSubscription()` 只从 `Sender/Receiver.Parent.Parent` 找承载树，而虚拟连线两端**故意没有父节点**（`IsVirtualLink` 就是按这个判的）⇒ `_layout` 恒为 null ⇒ `UpdatePath` 的 `if (w > 0 && h > 0) { Width = w; Height = h; }` 从不生效 ⇒ 视图盒子退化成 `actualH=0`（探针实测，正常应为 1340）⇒ 保留模式的 `Path` 被元素边界剪掉 ⇒ **橡皮筋从按下第一帧起就不可能可见**，与象限、与拖拽距离都无关（修前 20/60/150/300/600/900/1200px 每一档整幅画布都是 **0** 像素变化）。
+- **「没画出来」是缺陷（`LinkView.UpdateLayoutSubscription()` 从 `Sender/Receiver.Parent.Parent` 找承载树）**：`LinkView.UpdateLayoutSubscription()` 只从 `Sender/Receiver.Parent.Parent` 找承载树，而虚拟连线两端**故意没有父节点**（`IsVirtualLink` 就是按这个判的）⇒ `_layout` 恒为 null ⇒ `UpdatePath` 的 `if (w > 0 && h > 0) { Width = w; Height = h; }` 从不生效 ⇒ 视图盒子退化成 `actualH=0`（探针实测，正常应为 1340）⇒ 保留模式的 `Path` 被元素边界剪掉 ⇒ **橡皮筋从按下第一帧起就不可能可见**，与象限、与拖拽距离都无关（修前 20/60/150/300/600/900/1200px 每一档整幅画布都是 **0** 像素变化）。
 - **修法**：`tree ??= FindHostTree();` —— 沿宿主链（`Parent as FrameworkElement` → `DataContext is IWorkflowTreeViewModel`）找承载它的树，画布及其后代继承同一份 DataContext。修后同一套测量：`actualH=1340`、20px 拖拽 **30** 像素、150px **346** 像素（bbox 148×4 = 那条 2px 虚线）、连跑两遍读数一致；同轮对照（同二进制同输入）非 Trimmed 的 20px 是 **9281** 像素。
 - **同一段代码也在 item 模板里**（`Src/Templates/VeloxDev.WinUI.Templates/working/content/workflow-link-view/TemplateClass.xaml.cs:165`）⇒ 生成出来的项目同样起不了橡皮筋，已同步修（模板内容在本仓库没有编译校验，这一份只有静态依据 + 同形代码在 demo 侧的运行时验证）。七家的**连线视图**代码里 grep `Sender?.Parent?.Parent` 只命中这两处（Core 里另有两处、语义不同：判定虚拟连线的 `WorkflowLinkEx.cs:19` 与找承载组件的 `ComponentPatcher.cs:229`）⇒ 六个 Trimmed 里**只有这家**是这个成因（另外五家未实测）。
 - **判定：既有**（视图侧文件这几天没被改过）。行为侧也已排除：按下到达行为、`Channel` 是默认的 `MultipleBoth`、`canBeSender=True`、插槽挂在树上、`StandardSendConnection` 走到了写锚点的 step 3 ⇒ **不是**行为/demo 配置的问题。

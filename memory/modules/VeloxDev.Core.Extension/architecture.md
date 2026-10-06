@@ -200,7 +200,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 **2026-10-04 起本项目里**没有**序列化 facade 了**：`ComponentModelEx.cs` 已下沉到
 `Src/Core/VeloxDev.Core/Serialization/ViewModelSerializer.cs`，命名空间 `VeloxDev.MVVM.Serialization`
 并入 **`VeloxDev.Serialization`**，类型改名 `ViewModelSerializer`。扩展方法名一个没动，所以调用点只改了
-`using`。理由：它当初留在这里是因为「Core 没有序列化器」—— 那句话随 2026-10-03 的引擎替换一起过期了。
+`using`。理由：Core 现在有序列化器了，所以它归 `VeloxDev.Serialization`。
 详见 [`Serialization/architecture.md`](../Serialization/architecture.md)。
 
 **留在这里的是 `CheckpointEx.cs` 与 `CompiledGraphEx.cs`**（同命名空间），它们是**工作流领域**对通用面的

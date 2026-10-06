@@ -84,7 +84,7 @@
 
 ## 七、一条被推翻的判定（留着免得重踩）
 
-**曾经的判定**：`McpAgentContextProvider.BuildInstructions` 把**第三方** MCP 服务器元数据拼进 `AIContext.Instructions`（system 角色），违反 MAF「system 不得含不可信输入」。
+**一条看似成立的判定**：`McpAgentContextProvider.BuildInstructions` 把**第三方** MCP 服务器元数据拼进 `AIContext.Instructions`（system 角色），违反 MAF「system 不得含不可信输入」。
 
 **核实后不成立**：`McpScope.BuildInventoryBlock`（`McpScope.cs:395`）只输出 `server.Name`（宿主注册键）、`server.StateText`（宿主本地化文本）、`server.ToolCount`（int）；`McpAgentToolkit.BuildPromptContext`（`:110`）是硬编码库文本。**没有任何第三方撰写的文本进 instructions。**
 

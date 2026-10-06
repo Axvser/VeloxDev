@@ -202,7 +202,7 @@ return accepted;
 ## 五、陷阱（带依据）
 
 1. **参考实现的 code-behind 是空壳，不是探针。** `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/TreeView.xaml.cs` 现在只有 `using Microsoft.UI.Xaml.Controls;` 加一个 `InitializeComponent()` 构造函数（11 行）；`GetTempPath` / `DispatcherTimer` / `File.AppendAllText` 在整个 `WinUI Trimmed` 项目下**零命中**。
-   **2026-09-20 之前它不是这样**：那份文件是深缩放漂移调查用的被动探针，挂 `PART_Canvas.LayoutUpdated` + 一个 250 ms `DispatcherTimer`，把漂移行 `File.AppendAllText` 进 `%TEMP%\veloxdev_winui_drift.log`；已删。**skill 侧已同步**：`skills/veloxdev-create-workflow/references/gui/winui.md` 原来那条「demo 的 `TreeView.xaml.cs` 带着遗留漂移探针」的提示已随探针一起删掉 —— 现在那个目录（`.xaml` 与 `.xaml.cs`）**整体可照抄**。
+   **没有漂移探针**：那份文件是纯空壳（`GetTempPath` / `DispatcherTimer` / `File.AppendAllText` 在该项目下零命中）。**skill 侧已同步**：`skills/veloxdev-create-workflow/references/gui/winui.md` 不再提「demo 的 `TreeView.xaml.cs` 带着遗留漂移探针」—— 现在那个目录（`.xaml` 与 `.xaml.cs`）**整体可照抄**。
 2. **`ViewManager.cs:307` 的延迟闭包不重校验自己还是当前状态。** 跨线程那条 `TryEnqueue(Low, () => ApplyLayout(view, viewModel))` 捕获了 `view`/`viewModel` 后没有确认这一对还在活跃；对照同目录 `WorkflowSurfaceBehavior.cs:1033-1042`（排低优先级之前与落地之后都做 `GetIsEnabled(host)` + `ReferenceEquals(currentState, state)`）。**后果**：一帧内视图被回收并复用给另一个 ViewModel 时，旧几何会写到新宿主上 —— 且不报错。
 3. **`Refresh` 挂在 `ViewChanged` 上 ⇒ 每帧一次全量重解析，且成功是「自己把自己重挂一次」**（§三·2）。改 `ResolveNamedControls` 或 `UnsubscribeResolvedControls` 时记住：**这两段的副作用是热路径**，在滚动期间每帧执行。
 4. **`ViewManager` 模板缓存按 `Type` 键、永不失效**（`ViewManager.cs:22` 的 `_templateMap`，读取短路 `:244-247`）—— `DataTemplateSelector` 对同一类型的第二次返回不会被再问一遍；只有在 `SetTemplateSelector` 时才 `Clear()`（`:31`），没有别的清缓存 API（WPF 同形，见其架构记忆 §五·7）。

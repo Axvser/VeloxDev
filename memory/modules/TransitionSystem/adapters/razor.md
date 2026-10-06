@@ -167,7 +167,7 @@ Core 那 15 个本来就够。
    `StringSampler` 输出颜色用 `string.Create(CultureInfo.InvariantCulture, ...)`（`Samplers/StringSampler.cs:121`），
    解析百分比用 `float.TryParse(..., NumberStyles.Float, CultureInfo.InvariantCulture, ...)`（`:229`）。
    **采样器侧是干净的；坑全在采样器之外** —— 也就是用户/demo 把动画值拼进样式串的地方。
-   已修的两个范本在 demo 里：`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateLinkView.razor.cs:160`
+   两个范本在 demo 里：`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateLinkView.razor.cs:160`
    的注释把规则写成了显式约定（「数值一律走不变文化：Razor 按当前区域写裸 `double`，逗号小数点会让浏览器读不出这个属性」），
    `N(double)` 用 `ToString("0.####", CultureInfo.InvariantCulture)`（`:167`），`ToCss` 用 `FormattableString.Invariant`
    （`:128` 的函数、`:138-139` 的写入）。

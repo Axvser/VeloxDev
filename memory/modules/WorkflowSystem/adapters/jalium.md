@@ -11,7 +11,7 @@
 > 代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`（**9 个文件**，与 WPF 适配器同数）与
 > `Src/Templates/VeloxDev.Jalium.Templates/working/content/`（七个条目，其中四个是 `.jalxaml`）。
 
-## 〇、`.jalxaml` 运行时能力实测（2026-10-05，探针实测后已删）
+## 〇、`.jalxaml` 运行时能力实测（2026-10-05）
 
 **为什么记**：`.jalxaml` 能**编译**不等于能**运行**。下面每条都是在
 `Examples/Workflow/Jalium Trimmed/Demo` 里挂一个真实窗口树、`UpdateLayout()` 之后逐条断言跑出来的
@@ -91,7 +91,7 @@
 
 - **连线视图**：适配器的静态助手 `WorkflowLinkBounds.Apply(view, points, out originX, out originY)`（`WorkflowLinkBounds.cs:42-83`）在每次端点折叠/移动后，把元素自身 `Canvas.SetLeft/Top` 与 `Width/Height` 设成**这条线自己的 canvas-local 包围盒**（`BoxPad = 6`，`:32` 外扩）；调用方是**模板产物** `workflow-link-view/TemplateClass.jalxaml.cs` 的 `Refresh()`（`:243`，四个控制点一起进盒），随后 `BuildCurve()`（`:282-299`）把每个点减去助手交回的原点 —— **定位与烘焙相消**，视觉输出与画在 (0,0) 等价。助手的 `<remarks>`（`:11-27`）把根因写死了：*"the renderer culls a child entirely when its layout box misses the viewport clip and never looks at the drawn content…"*。
   ⇒ **这是本仓库"深缩放连线消失"谱系在 Jalium 的最后一环**，与共享 Core 的负侧 cover 无关，别去 Core 里找。改连线视图时若把 `WorkflowLinkBounds.Apply` 这一步删掉或让它滞后一帧，盒子就是陈旧的，**线会在深缩放下静默消失**。
-- **节点视图**：节点定位现在全在 item template 标记里 —— `workflow-node-view` 产出的 `UserControl` 由 tree-view 模板的 `NodeTemplate` 用 `Canvas.Left="{Binding Anchor.Horizontal}"` / `Canvas.Top="{Binding Anchor.Vertical}"` / `Width="{Binding Size.Width}"` / `Height="{Binding Size.Height}"` / `Panel.ZIndex="{Binding Anchor.Layer}"` 摆位（`workflow-tree-view/TemplateClass.jalxaml:21-28`）。**没有对应的适配器类型**（`WorkflowNodeView` 已删），也不存在 `ApplyPosition()`。
+- **节点视图**：节点定位现在全在 item template 标记里 —— `workflow-node-view` 产出的 `UserControl` 由 tree-view 模板的 `NodeTemplate` 用 `Canvas.Left="{Binding Anchor.Horizontal}"` / `Canvas.Top="{Binding Anchor.Vertical}"` / `Width="{Binding Size.Width}"` / `Height="{Binding Size.Height}"` / `Panel.ZIndex="{Binding Anchor.Layer}"` 摆位（`workflow-tree-view/TemplateClass.jalxaml:21-28`）。**没有对应的适配器类型**（没有 `WorkflowNodeView`），也不存在 `ApplyPosition()`。
 
 **当前形状**：「自绘但宿主 box-cull」成立，且有 IL 级证据（本节）。「梯度交接测量」不在本家 —— 指的不是这里，是 TransitionSystem 的 `Samplers/BrushSampler.cs:79-94`，见 `memory/modules/TransitionSystem/adapters/jalium.md` §2.3。「连线视图自盒化（盒 == 每线 bbox，定位+烘焙相消）」归 `WorkflowLinkBounds.Apply`（`WorkflowLinkBounds.cs:42-83`）＋ 模板的 `BuildCurve()`（`workflow-link-view/TemplateClass.jalxaml.cs:282-299`）。本家**没有** `IsVirtual` / `IsDragPreview` / `PortCenter`（全适配器与模板一处都没有）—— 只跳过树的拖拽预览，判据是 `IsVirtualLink(link) => link.Sender.Parent is null && link.Receiver.Parent is null`（`workflow-link-view/TemplateClass.jalxaml.cs:277-278`）：两端都还没落到卡片上的占位槽（`slot.Parent` 为 `null`），脱了插槽的真实连线照样渲染。连线端点直接取绑定送来的 `Sender/Receiver.Anchor`，`slot.Anchor` 是量测结果（§2.3）—— 不从模型几何反查端口中心。
 
@@ -143,9 +143,9 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 
 ### 2.4.2 连线视图照 WPF 用绑定 —— 但要多一道 NaN 守卫（2026-10-05 更正）
 
-**原先这里写的是「几何别走绑定，要用模型读」，依据是「绑定晚一拍」。那条归因不成立** ——
-当时那批症状（连线冻住、从原点画一条）的主导原因是另一个 bug（槽锚点没重测，见 §四-0），
-我没把它隔离出来就下了结论。**重新测过：WPF 的写法（四个 `StartLeft/…` 绑定）在本家能用。**
+**「几何别走绑定，要用模型读」这条归因不成立** ——
+那批症状（连线冻住、从原点画一条）的主导原因是另一个 bug（槽锚点没重测，见 §四-0），与绑定无关。
+**实测：WPF 的写法（四个 `StartLeft/…` 绑定）在本家能用。**
 
 ⚠ 但有一处 WPF 不需要、本家**必须**加的东西：
 
@@ -195,13 +195,13 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 
 ## 三、与 WPF 的差异 —— 只有实测挡住的才留（2026-10-05 重测）
 
-**基准是 WPF。** 下面每一条都**当场量过**才留；量不过就照 WPF 改。旧的那批「这家特殊」的结论一律作废。
+**基准是 WPF。** 下面每一条都**当场量过**才留；量不过就照 WPF 改，不接受「这家特殊」。
 
 | 差异 | 现在的依据（当场量的） |
 |---|---|
 | ~~没有画布变换通道~~ | **已消除**（2026-10-05）：值照样以附着属性发布（`WorkflowSurfaceBehavior.CanvasTransform`），模板改绑树视图模板类上那个**同名 CLR 属性**（`workflow-tree-view/TemplateClass.jalxaml.cs:19-22`，DP 对象是同一个）。括号路径读不到是唯一的不同，而它只影响「怎么拼这行绑定」 |
 | **有 `WorkflowLinkBounds`** | 渲染器按 `RenderSize` 盒裁剪子元素、内容画到盒外**静默丢弃**（§2.1 的 IL 级依据）。WPF 让连线视图铺满整块画布即可，本家那样做会在缩放里陈盒掉整层线 |
-| ~~`LinkView` 从模型读几何~~ | **已消除**（2026-10-05 重测）：照 WPF 用四个 DP 绑定可以跑，只需多一道 `IsNaN` 守卫（不加会**抛异常退出**）。原先那条「绑定晚一拍」的归因不成立 |
+| ~~`LinkView` 从模型读几何~~ | **已消除**（2026-10-05 重测）：照 WPF 用四个 DP 绑定可以跑，只需多一道 `IsNaN` 守卫（不加会**抛异常退出**）。「绑定晚一拍」这条归因不成立 |
 | ~~槽锚点用 `SlotAnchorFromCanvasLocal`~~ | **已消除**（2026-10-05）：位移改发布在宿主上之后，与其余六家同用 `SlotAnchorFromVisualCenter` |
 | **槽再同步靠 `Loaded`/`SizeChanged`/模型变更 + `Dispatcher.Render` 排一拍** | 本家**没有 `LayoutUpdated` 事件**（26.10.9 反射清点，一个都没有） |
 
@@ -231,7 +231,7 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 
 ### 4.x 连线右键菜单：条目归模板资源，订阅/定位/开合归表面行为（2026-10-05 改写）
 
-Jalium 已无 `WorkflowTreeView`，`OnBuildLinkMenu` / `OnConnecting` / `OnConnected` 全部作废。现在分成四件：
+Jalium 没有 `WorkflowTreeView`，也没有 `OnBuildLinkMenu` / `OnConnecting` / `OnConnected`。现在分成四件：
 
 - **条目由宿主的标记声明。** tree-view 模板在 `UserControl.Resources` 里放一个 `<ContextMenu x:Key="LinkContextMenu">`
   （`workflow-tree-view/TemplateClass.jalxaml:40-42`；demo 里就一条 `Delete`），表面用附着属性 `LinkMenuKey="LinkContextMenu"`

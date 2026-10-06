@@ -44,7 +44,7 @@
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 以为 `canExecute: false` 会挡住执行 | **`CanExecute` 只被报告，从不被强制** —— `Execute` 不查它，消费方的 `ExecuteCommand` 也不查。生成器那条 `if (!c.CanExecute(parameter)) return false;` 已经删掉（它曾经与这条不变量矛盾） | `AgentCommandDiscoverer.cs` 的 `Execute` / `CanExecuteCommand`；`.../Agent/AgentObjectToolkit.cs:232`、`:247` |
+| 以为 `canExecute: false` 会挡住执行 | **`CanExecute` 只被报告，从不被强制** —— `Execute` 不查它，消费方的 `ExecuteCommand` 也不查。生成器**不**发 `if (!c.CanExecute(parameter)) return false;`（那与这条不变量矛盾） | `AgentCommandDiscoverer.cs` 的 `Execute` / `CanExecuteCommand`；`.../Agent/AgentObjectToolkit.cs:232`、`:247` |
 | 用 `FindBackingCommand` 当通用的「属性→命令」映射 | 它只认两种命名：`Set{X}Command` 与 `{X}Command`；别的命名返回 `null`（调用方通常据此当成「没有命令」）。形参仍是 `Type`，但只读它的 `FullName` 查目录 | `AgentCommandDiscoverer.FindBackingCommand` |
 | 用 `Execute(target, "saveCommand")` 之类的大小写变体 | 规范化是 `EndsWith("Command")`，大小写敏感 → 拼成 `saveCommandCommand` 然后找不到 | `AgentCommandDiscoverer.NormalizeCommandName` |
 | 让命令属性抛异常 | 异常被吞成 `ExecuteResult.Error` 字符串，**栈不保留**（只留 `ex.Message`） | `AgentCommandDiscoverer.cs` 的 `Execute` 的 try/catch |

@@ -34,7 +34,7 @@
 | 枚举 | 写 `ToString()` 的**名字**，读 `Enum.Parse(ignoreCase: true)` —— 一致 | 同上 |
 | 其它（`int` / `double` / …） | 写读**同为不变区域性** | 写 `WriteMap`，读 `ReadMapKey` |
 
-第三行曾经是不对称的（写用当前区域性、读用 invariant），`double` / `decimal` 这类 `IFormattable` 键在非 invariant 区域下会漂。**改任何一侧都要同时看另一侧。**
+第三行若不对称（写用当前区域性、读用 invariant），`double` / `decimal` 这类 `IFormattable` 键在非 invariant 区域下会漂。**改任何一侧都要同时看另一侧。**
 
 **接口键的字典是这套格式独有的形状**：键写成键对象的**引用 id**，而且映射本身不写 `$id`、不写 `$type`。STJ / Json.NET 都没有这种形状，互操作时对不上。
 
@@ -93,7 +93,7 @@
 - **写侧不受影响**：读写器表按 `Type` 索引；且 `$type` 只在声明类型 ≠ 运行期类型时才写。
 - **读侧会受影响**，只在 `$type` 真的出现时：解析可能落到另一个封闭实例 → `Create()` 造出错类型 → 生成 reader 那句 `(SlotEnumerator<X>)` 转型失败。
 - 今天没被触发：`SlotEnumerator` 只作为**具体声明类型**出现（声明类型 == 运行期类型 → 不写 `$type`），而四份黄金文件里的 `$type` **全是非泛型**。
-- **`ConditionalSlot<T>` 曾经同样会撞**，不止 SlotEnumerator。
+- **`ConditionalSlot<T>` 同样会撞**，不止 SlotEnumerator。
 
 现在 `WrittenName` **逐层**带上实参：`SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, VeloxDev.Core`。**非泛型类型的名字一个字节没变**，所以黄金文件不受影响（这是能安全改的前提）。
 
@@ -115,9 +115,9 @@
 3. **引用程序集剥掉非 public 成员 —— 消费方看不见它们。** 实测：测试程序集看 `SlotEnumerator<SlotDefaultViewModel>` 得到 `members=51`，里面**没有** `internal` 的 `OnDeserializing`/`OnDeserialized`。所以**钩子方法要能被别的程序集调，就必须是 `public`**；`internal` 只在「类型由它自己的程序集序列化」时够用。判据是 `IsReachableFromGeneratedCode`，它按**程序集**判。
    **推论**：外程序集里 `internal`/`private` 的钩子生成器**根本看不到**，也就**无法**为它出声 —— 症状是那个回调静默不跑。`VELOX_JSON_HOOK002` / `VELOX_JSON_MEMBER001` 只覆盖够得着却不可调的情况。
 
-**钩子就是 BCL 那四个**（`System.Runtime.Serialization` 的 `[OnSerializing]` / `[OnSerialized]` / `[OnDeserializing]` / `[OnDeserialized]`），生成器沿基类链先基后派生地调，带 `StreamingContext` 的传 `default(...)`。四个 `IVeloxJson*` 钩子接口已删。
+**钩子就是 BCL 那四个**（`System.Runtime.Serialization` 的 `[OnSerializing]` / `[OnSerialized]` / `[OnDeserializing]` / `[OnDeserialized]`），生成器沿基类链先基后派生地调，带 `StreamingContext` 的传 `default(...)`。没有四个 `IVeloxJson*` 钩子接口。
 
-> ⚠ **这四条特性在 2026-10-04 之前是死的**：它们一直写在这些方法上，而生成器只认接口 —— 每个钩子都拖着一个不生效的转发壳。别再照着那种写法加钩子。
+> ⚠ **不要用「接口 + 转发壳」加钩子**：那样每个钩子都拖着一个不生效的转发壳（活的是这四条 BCL 特性）。
 
 ---
 
@@ -125,7 +125,7 @@
 
 **`[RequiredMember]` 是编译器在 emit 阶段合成的**，所以对**本次编译里声明的**类型，`ISymbol.GetAttributes()` **看不到它** —— 只有从元数据读回来的符号才有。我第一版按特性找 required 成员，实测静默失败：生成的 `Create()` 里没有对象初始化器，于是带 required 成员的类型**编不过**。
 
-判据是编译器 API `IPropertySymbol.IsRequired` / `IFieldSymbol.IsRequired`（**Roslyn ≥ 4.4**，生成器已从 4.3.1 抬到 4.8.0；`VeloxDev.Core.Test` 那处按它自己的注释要同步抬）。判定与工厂初始化器在 `Base/RequiredMembers.cs`，**两个生成器共用** —— VeloxJson 与 AIContextTree 都要发工厂调用，那个洞曾经两边都有。
+判据是编译器 API `IPropertySymbol.IsRequired` / `IFieldSymbol.IsRequired`（**Roslyn ≥ 4.4**，生成器已从 4.3.1 抬到 4.8.0；`VeloxDev.Core.Test` 那处按它自己的注释要同步抬）。判定与工厂初始化器在 `Base/RequiredMembers.cs`，**两个生成器共用** —— VeloxJson 与 AIContextTree 都要发工厂调用，漏一处就是一个洞。
 
 同类的还有一处：**`typeof(可空的枚举)` 拿到的是 `Nullable<T>`，不是枚举本身**，`Enum.Parse` 会当场抛「Type provided must be an Enum」。写 `EnumName` 的读法时，`typeof` 要用 `UnwrapNullable` 之后的类型，而赋值那侧的转型仍用可空类型。
 

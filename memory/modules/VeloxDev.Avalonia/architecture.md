@@ -98,7 +98,7 @@
 - 平台版本锚点 `AvaloniaVersion=11.1.0`（csproj:15），三处 `PackageReference` 共用（`:27-29`）：升版本改这一处。
 - 另外三条：`AvaloniaUseCompiledBindingsByDefault=true`（`:8`，所以 `{Binding $parent[local:TreeView].(behaviors:…)}` 这类写法按编译期绑定解析）、`GeneratePackageOnBuild=True`（`:9`）、`AvaloniaResource Include="Assets\**"`（`:23`）—— 最后一条指向的目录**在仓库里不存在**（`git ls-files` 与磁盘都没有 `Assets/`），空 glob，别按它去找资源。
 - `Debug` 走 `ProjectReference`、非 Debug 走 `PackageReference`（`:30-31`）是**七家统一形状**（版本 10.0.0），规则与原因见 `VeloxDev.Core.Generator/architecture.md` §五。
-- `obj/` 下另有 `net8.0` / `net10.0` 两个 **csproj 未声明**的 TFM 产物；当前裁剪元数据只落在 `net8.0` 上（`obj/Debug/net8.0/VeloxDev.Avalonia.AssemblyInfo.cs:13` 的 `IsTrimmable`，`net10.0` 那份没有）。机制与 Core 那边同：外部 MSBuild 属性覆盖 ⇒ **不能反推「这个包本身可裁剪」**。这家是七家里唯一有裁剪 demo 的（`Examples/Workflow/Avalonia Trimmed/`，其 `Directory.Build.props` 曾显式 root 住 `VeloxDev.Core.Extension`，现已不再需要 —— 理由写在 `:6-11`）。
+- `obj/` 下另有 `net8.0` / `net10.0` 两个 **csproj 未声明**的 TFM 产物；当前裁剪元数据只落在 `net8.0` 上（`obj/Debug/net8.0/VeloxDev.Avalonia.AssemblyInfo.cs:13` 的 `IsTrimmable`，`net10.0` 那份没有）。机制与 Core 那边同：外部 MSBuild 属性覆盖 ⇒ **不能反推「这个包本身可裁剪」**。这家是七家里唯一有裁剪 demo 的（`Examples/Workflow/Avalonia Trimmed/`，其 `Directory.Build.props` 不再显式 root `VeloxDev.Core.Extension`，理由写在 `:6-11`）。
 
 ---
 

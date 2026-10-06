@@ -89,7 +89,7 @@ SetProperty(obj, "Name", v)     → 节点（CanWrite 标志）→ 访问器 Set
 
 ## 四、不变量
 
-1. **`CanExecute` 只被报告，从不拦截。** `AgentCommandDiscoverer.Execute` 不查 `CanExecute`，消费方也不查 —— `AgentObjectToolkit` 把 `CanExecute` 原样放进 `ListCommands` 的输出（`.../Agent/AgentObjectToolkit.cs:232`），而 `ExecuteCommand` 直接调 `Execute`（`.../Agent/AgentObjectToolkit.cs:247`）。要拦只能由工具层自己拦。**生成器那条闸已经删掉了**：`WriteTryExecuteCommand` 曾经发一句 `if (!c.CanExecute(parameter)) return false;`，与 `IAIContextAccessor.CanExecuteCommand` 的注释直接矛盾 —— 搬入时按不变量改成不查（`Src/Core/VeloxDev.Core.Test/AI/AgentCommandDiscovererTests.cs` 的 `CanExecute_IsReportedAndNeverEnforced` 锁住）。
+1. **`CanExecute` 只被报告，从不拦截。** `AgentCommandDiscoverer.Execute` 不查 `CanExecute`，消费方也不查 —— `AgentObjectToolkit` 把 `CanExecute` 原样放进 `ListCommands` 的输出（`.../Agent/AgentObjectToolkit.cs:232`），而 `ExecuteCommand` 直接调 `Execute`（`.../Agent/AgentObjectToolkit.cs:247`）。要拦只能由工具层自己拦。**生成器那条闸不存在**：`WriteTryExecuteCommand` **不**发 `if (!c.CanExecute(parameter)) return false;`（那与 `IAIContextAccessor.CanExecuteCommand` 的注释直接矛盾）。按不变量不查，`Src/Core/VeloxDev.Core.Test/AI/AgentCommandDiscovererTests.cs` 的 `CanExecute_IsReportedAndNeverEnforced` 锁住。
 2. **`CanExecute` 的实参恒为 `null`**（`AgentCommandDiscoverer.cs` 的 `DiscoverCommands` 与 `CanExecuteCommand`）—— 命令的 `ParameterType` 完全不参与。后果：需要非空参数才返回 `true` 的命令被报成 `canExecute: false`（假阴）。
 3. **命令名规范化单向且大小写敏感**：`name.EndsWith("Command") ? name : name + "Command"`（`AgentCommandDiscoverer.cs:191-192`）。发现时给的是**原始属性名**（`"SaveCommand"`），执行时 `"Save"` 与 `"SaveCommand"` 都行，但 `"savecommand"` 会被拼成 `"savecommandCommand"` 然后找不到。
 4. **`[AgentContext]` 的语言参数占了位置参数第一位**（`AgentContextAttribute.cs:5`），所以写不出 `[AgentContext("说明")]`（字符串撞 `AgentLanguages`，编译不过）。官方写法是 `[AgentContext(AgentLanguages.Chinese, "说明")]`，全仓一致，例 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowViewModel.cs:8`。
@@ -133,7 +133,7 @@ SetProperty(obj, "Name", v)     → 节点（CanWrite 标志）→ 访问器 Set
 
 ## 七、AIContextTree：编译期静态目录（Core 与 Extension 都已全部接入）
 
-**为什么有它。** §五·10 记的那条 —— 整套 Agent 面靠运行期反射，没有任何裁剪/AOT 契约。`AIContextTree` 是把「Agent 面是什么」和「怎么对一个对象动手」都前移到编译期的那条路，目标就是让这套东西在 NativeAOT 下工作。**它现在是唯一的路径**：Core 五个助手与 Extension 的 `AgentContextCollector`/`CommandInvoker`/`ComponentPatcher`/`TypeIntrospector`/`WorkflowAgentScope` 全部读目录；原先那些 `…ByReflection` 实现搬进了测试工程当 parity 的 oracle。
+**为什么有它。** §五·10 记的那条 —— 整套 Agent 面靠运行期反射，没有任何裁剪/AOT 契约。`AIContextTree` 是把「Agent 面是什么」和「怎么对一个对象动手」都前移到编译期的那条路，目标就是让这套东西在 NativeAOT 下工作。**它现在是唯一的路径**：Core 五个助手与 Extension 的 `AgentContextCollector`/`CommandInvoker`/`ComponentPatcher`/`TypeIntrospector`/`WorkflowAgentScope` 全部读目录；`…ByReflection` 实现只在测试工程里当 parity 的 oracle。
 
 ### 两半，必须分开理解
 
@@ -158,7 +158,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
   …同上
 ```
 
-`Components` 下四分不是发明的：`WorkflowAgentScope` 的自动发现本来就按这四个接口分类。四个默认视图模型、框架枚举/接口/数据也都在 `Framework/` 里；那些曾经手维护的 `Type[]` 已经删除，`WithAutoDiscovery` 现在只是按目录列举（`WorkflowAgentScope.cs:969-986`）。
+`Components` 下四分不是发明的：`WorkflowAgentScope` 的自动发现本来就按这四个接口分类。四个默认视图模型、框架枚举/接口/数据也都在 `Framework/` 里；`WithAutoDiscovery` 只按目录列举（`WorkflowAgentScope.cs:969-986`），没有手维护的 `Type[]`。
 
 ### 惰性：一个目录一个 `Lazy`
 
@@ -221,7 +221,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 | `ComponentPatcher` | 目录标志（`CanWrite`/`IsSingleSlot`/`HasSlotSelectors`）+ `accessor.Set`；`DeserializeToType` 的目标 `Type` 来自 `MemberType` |
 | `TypeIntrospector` | 目录 + `MemberType` + `accessor.Create`；`FriendlyTypeName` 只吃访问器给的 `Type?`（`typeof` 字面量），不再拿反射对象 |
 | `WorkflowStateTracker` | `MembersAcross(type,"Properties")` + `accessor.TryGet` |
-| `WorkflowAgentToolkit` | 一组共享助手：原先散落的 `GetProperty(...)`/`GetMethod(...)`/`GetInterfaces()` 反射调用换成目录查询、访问器转型与类型解析包装 |
+| `WorkflowAgentToolkit` | 一组共享助手：目录查询、访问器转型与类型解析包装（取代散落的 `GetProperty(...)`/`GetMethod(...)`/`GetInterfaces()` 反射调用） |
 | `WorkflowAgentScope` | `WithAutoDiscovery()` 无参化，四个手维护的 `Type[]` 删除 |
 
 **`WithAutoDiscovery` 现在是目录列举**：读 `Customer/{Enums,Interfaces,Data}` 与 `Customer/Components/{Nodes,Slots,Links,Trees}`，每个名字经 `AgentTypeResolver.ResolveType` 换成 `typeof` 字面量再进既有的 `Customer*` 集合。**框架类型不再需要手写的排除表** —— 只读 `Customer/` 就把它们排除了。旧的两趟扫描（`GetTypes()` + 成员深扫推断）整个消失：目录本来就是那次推断的结果。
@@ -300,7 +300,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 - **MVVM 生成器产出的属性也在同一个编译里**，所以 `symbol.GetMembers()` 里既有私有字段又有它提升出的属性。不按名字去掉生成的那份，每个 `[VeloxProperty]` 会在目录里出现两次，顺序也被带偏。
 - **同一个目录里不能有两个同名节点**：类型条目，与代表它成员目录的 Directory 占位。`List` 的去重方向一变就翻车（`SortedDictionary` 时代最后一个赢，换保序实现后第一个赢）。
 - **`AIContextTreeRegistry.List` 不能排序** —— 排序会抹掉声明顺序，而表格逐字复现反射输出。
-- **`Type.FullName` 与 Roslyn 显示名不同形**：嵌套用 `+` 不用 `.`、泛型带反引号元数、不带可空标注、不特殊化关键字（`System.Int32` 而非 `int`）。那个字符串既是索引键也是渲染出来那一行，所以 `Base/AIContextModel.cs` 里 `ReflectionFullName` / `TableType` 两个助手各管一头。**每个要去查目录的名字都必须走 `ReflectionFullName`** —— `BaseTypeName` 曾经图省事写成 `ToDisplayString(FullyQualifiedFormat)`，对嵌套基类型永远查不到，继承来的成员整条丢掉，而只有嵌套类型做基类时才现形（框架那 63 个类型全是顶层类，parity 一直是绿的）。
+- **`Type.FullName` 与 Roslyn 显示名不同形**：嵌套用 `+` 不用 `.`、泛型带反引号元数、不带可空标注、不特殊化关键字（`System.Int32` 而非 `int`）。那个字符串既是索引键也是渲染出来那一行，所以 `Base/AIContextModel.cs` 里 `ReflectionFullName` / `TableType` 两个助手各管一头。**每个要去查目录的名字都必须走 `ReflectionFullName`** —— 写成 `BaseTypeName` 的 `ToDisplayString(FullyQualifiedFormat)` 时，对嵌套基类型永远查不到，继承来的成员整条丢掉，而只有嵌套类型做基类时才现形（框架那 63 个类型全是顶层类，parity 一直是绿的）。
 - **接口上的命令标注要在生成期带回实现类。** 目录只录类型自己声明的成员，而命令的 `[AgentContext]` / `[AgentCommandParameter]` 官方写在接口上；`AIContextModelBuilder.InterfaceCommandProperty` 按同名属性回查 `AllInterfaces` 补齐。**只对命令做** —— 对普通成员做会让 `AgentClass` 表多出行、打翻 parity。
 - **`[VeloxCommand]` 方法在实现类里普遍是 `private`**，而生成出来的命令属性是公开的 —— 命令的收录不能按方法可见性过滤，否则整个命令面漏掉。
 - **诊断要先滤掉 `object` 的四个成员**，否则 `VELOX_AI_TREE001` 会报在每个带强类型 `Equals` 的值类型上，下场是被整仓 `NoWarn` 掉。

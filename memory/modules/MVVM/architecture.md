@@ -70,7 +70,7 @@ OnExecutionCompletedAsync(item)
 
 - **`CanExecute` 与节流无关**。它只读谓词与 `_isForceLocked`（`CanExecuteCore`，`CommandPipeline{TParam,TResult}.cs:415-416`），**不看 `_active.Count`**。所以「队列满了」不会让按钮变灰 —— 想把「忙」反映到 UI，只能自己调 `Lock()`（它才写 `_isForceLocked`），或者读 §十一 的忙碌读模型。
 - **`Notify()` 在 `ExecuteCore` 的末尾**（`:634`，不再是 `finally`）：`Execute` 返回前 `CanExecuteChanged` 一定发过一次，**哪怕这条命令只是进了队列**。
-- **同一次执行只报一条 `Canceled`**（2026-10-01 起）。`InterruptAsync`/`ClearAsync` 会主动报（及时），被中断的命令体随后在 `catch (OperationCanceledException)` 里**还会想再报一条**（晚到）—— 由 `CommandEventArgs.TryMarkCancelReported()`（`CommandEventArgs.cs:87`）的 `Interlocked.Exchange` 挡掉，**先到的那条胜出**；`RaiseCanceled` 在 `CommandPipeline{TParam,TResult}.cs:385`。以前两条都发，按 `CommandEventType` 计数的 handler 会多数一次。
+- **同一次执行只报一条 `Canceled`**（2026-10-01 起）。`InterruptAsync`/`ClearAsync` 会主动报（及时），被中断的命令体随后在 `catch (OperationCanceledException)` 里**还会想再报一条**（晚到）—— 由 `CommandEventArgs.TryMarkCancelReported()`（`CommandEventArgs.cs:87`）的 `Interlocked.Exchange` 挡掉，**先到的那条胜出**；`RaiseCanceled` 在 `CommandPipeline{TParam,TResult}.cs:385`。**不挡的话两条都发，按 `CommandEventType` 计数的 handler 会多数一次。**
 - **`ExecuteCoreAsync` 是 fire-and-forget**（`:631`、`:943`）：`Execute`/`ExecuteAsync` 返回时命令**可能还没跑**（排队中）或**刚跑完**。要等结果不要用 `Completed` / `Exited` 自己配对（那两条「不进 `ExecuteCoreAsync`」的路径不发 `Exited`，会永久挂起）—— 用 `ExecuteAndWaitAsync`，见 §九。
 
 ---
@@ -87,7 +87,7 @@ OnExecutionCompletedAsync(item)
 | `_isCtsNeeded` | **不可变** | 只在管道构造里写一次（`CommandPipeline{TParam,TResult}.cs:57`），各形状经 `isCtsNeeded:` 参数传入（`VeloxCommand.cs` 的各构造/工厂） |
 | 代理/订阅表 | 各自锁 | 见 §五 |
 
-**`_stateLock` 是 `SemaphoreSlim(1,1)`（`:74`），持锁期间绝不调用用户代码**。这条以前只是**写在文档里的愿望** —— 2026-10-01 之前实际有四处违反（`ExecuteCore` 的 `Canceled`/`Enqueued`，以及 `_ = ExecuteCoreAsync(item)` 在第一个 `await` 前同步发出的 `Started`；还有 `ClearAsync` 排空循环里的 `Dequeued`）。现在 `ExecuteCore`/`ClearAsync` 都改成 `TryStartPendingAsync` 那套：**锁内只收集，出锁后才发事件、才启动 `ExecuteCoreAsync`**。
+**`_stateLock` 是 `SemaphoreSlim(1,1)`（`:74`），持锁期间绝不调用用户代码** —— **锁内只收集，出锁后才发事件、才启动 `ExecuteCoreAsync`**（`ExecuteCore`/`ClearAsync` 都走 `TryStartPendingAsync` 那套）。四种典型违反（都要避免）：`ExecuteCore` 的 `Canceled`/`Enqueued`；`_ = ExecuteCoreAsync(item)` 在第一个 `await` 前同步发出的 `Started`；`ClearAsync` 排空循环里的 `Dequeued` —— 它们都在锁内触达用户代码。
 
 **为什么必须拆**：`RaiseCommandEvent` 调的是**用户 handler**。handler 里同步再取同一把锁（`LockAsync().GetAwaiter().GetResult()`）在旧代码里是**真死锁** —— `SemaphoreSlim` 不可重入，而锁的持有者正是当前线程。这正是 `VeloxCommandLockInvariantTests` 钉住的场景。
 
@@ -117,7 +117,7 @@ OnExecutionCompletedAsync(item)
 
 1. **`_isCtsNeeded == false` ⇒ 命令不可打断。** 所有以 `isCtsNeeded: false` 构造的形状都把 `item.Cts` 留成 `null` —— 写入点在 `VeloxCommand.cs`（`:88`、`:129`、`:154`、`:220`、`:261`、`:280`、`:299`；其中 `:220` 的 ValueTask 形态在 `#if` 里）。此时 `Interrupt` / `Clear` 仍然会发 `Canceled` 事件、仍然会从 `_active` 摘掉它，但**底层那个 task 继续跑到底**（`it.Cts?.Cancel()` 是 null 条件调用）。带 `CancellationToken` 的形状才拿得到真 token：兜底主构造（`:36`）、`CreateTaskWithResult`（`:97`）、`CreateTypedWithParameter<T>`（`:171`）、`CreateTaskOnlyWithCancellationToken`（`:184`）、`CreateTaskOnlyWithValueTaskCancellationToken`（`:230`）。**注意 `CreateTaskOnlyWithCancellationToken` 并不是死的** —— 生成器对「零形参 + token」的方法正是发它（`CommandWriter.cs:643` 的 `UntypedTokenOnlyFactory`），测试也直接用它（`VeloxCommandCancellationTests.cs`）。
 2. **事件 handler 抛异常被吞掉，但不再无出口。** `RaiseCanExecuteChanged`（`:274`）与 `RaiseCommandEvent`（`:299`）仍然 `catch` 住不往外抛 —— 这是刻意的：`Exited` 的 handler 若把异常漏出去，`OnExecutionCompletedAsync` 会中断，**队列永远停摆**；`Completed` 的 handler 漏出去则会被 `ExecuteCoreAsync` 的 `catch (Exception)` 抓住，把一次成功误报成 `Failed`。2026-10-01 起新增静态钩子 `HandlerException`（`CommandPipeline{TParam,TResult}.cs:102`），它在非泛型的 `CommandDiagnostics` 上存事件槽（`CommandDiagnostics.cs:12`），默认不订阅 ⇒ 行为与从前逐字节一致。**钩子自身也被 `catch` 包住**（`ReportHandlerException` `:241` / `CommandDiagnostics.Report` `:14-25`），否则一个坏掉的诊断订阅者就能制造上面两种事故。
-3. **`semaphore < 1` 抛 `ArgumentOutOfRangeException`**（2026-10-01 改）：构造 `:58-60`、`ChangeSemaphoreAsync` `:901` 开头、以及同步入口 `ChangeSemaphore` `:441` 各校验一次。**同步版必须自己校验** —— 它是 `_ = ChangeSemaphoreAsync(...)`，异常若只在 async 方法里抛就没人接得住，会变成未观察异常。以前这里是静默夹紧/静默 no-op。
+3. **`semaphore < 1` 抛 `ArgumentOutOfRangeException`**：构造 `:58-60`、`ChangeSemaphoreAsync` `:901` 开头、以及同步入口 `ChangeSemaphore` `:441` 各校验一次。**同步版必须自己校验** —— 它是 `_ = ChangeSemaphoreAsync(...)`，异常若只在 async 方法里抛就没人接得住，会变成未观察异常（静默夹紧/静默 no-op 都会把越界参数藏起来）。
 4. **`Interrupt` / `Clear` 不再清掉调用方已有的锁。** 两者都经 `LockCoreAsync` `:729`，它返回「此前是否已锁」，只有此前**未**锁时才在结尾 `UnlockAsync`（`:799-802` / `:868-871`）。2026-10-01 之前它们无条件 `UnlockAsync()`，于是对一个本来锁着的命令调 `Interrupt()` 会「取消在跑的 + 解锁 + 经 `TryStartPendingAsync` 放行整个排队队列」—— 与 `Interrupt` 的字面语义相反。仓库自带的 WPF/Avalonia demo（`Examples/MVVM/*/Demo/*ViewModel.cs` 的 `Lock(); Interrupt(); Clear(); Unlock();`）注释里假设的就是现在的语义。
 5. **`Interrupt` 与 `Clear` 的差别只在排队项**：`InterruptAsync` 只清 `_active`（`:771-772`），`_pendingQueue` 原封不动、稍后被放行；`ClearAsync` 把两者都清（`:816-822`），先给每个排队项发 `Dequeued`（`:832`）再统一发 `Canceled`。
 6. **`ContinueAsync` 在锁着时是空操作**（`:875` 起，读到已锁就直接 return）。它的存在意义是「解锁之外再踢一次队列」。
@@ -144,13 +144,13 @@ OnExecutionCompletedAsync(item)
 - **两半可以同时声明，认成同一个逻辑属性（2026-10-02）。** 字段 `_id` + `partial` 属性 `Id` 同时标 `[VeloxProperty]` 时：字段路被 `ShouldGenerateFieldProperty` 挡掉（它扫**整条继承链**找同名属性，正是配对所依赖的行为，**2026-10-02 起没有改动**），属性路照常跑，但**不再声明 backing 字段** —— 它去复用那个已存在的字段。于是「默认值/初始化器放字段、访问形态与修饰符放属性」成立，而字段专属特性与属性专属特性各自留在原位。
 - **复用的判据在 `MVVMWriter.ResolveBackingStorage`（新增）。** 按 `_camelCase(属性名)` 推出字段名，用 `FindFieldInHierarchy`（照同文件 `FindEventInHierarchy` / `FindMethodInHierarchy` 的范式）沿基类上溯，再用既有的 `IsAccessibleFromTarget`（`:613-629`）判可访问性。**字段标不标 `[VeloxProperty]` 都算** —— 只写属性、字段是手写私有时也复用。可用性再过滤 `static`/`const`/`readonly`（`CanBackProperty` `:261-269`：只读属性连 `readonly`/`const` 都能用，可写属性不能）。
 - **`MVVMPropertyFactory.ShouldEmitField`（新增）取代 `IsFromField` 当发出判据。** `IsFromField` 仍然存在但已不再被 `GenerateFieldDeclaration` 读 —— 字段路恒 `false`、属性路默认 `true`，复用命中时置 `false`。`SourceName` **不做 `this.` 统一**：属性路它是裸名，同时兼任字段声明名与读写表达式，改成 `this._x` 会写出非法的 `private T this._x`。
-- **类型比较必须走 `Analizer.DisplayFullTypeName`（新增的共享方法）。** 两个 analyzers 原先各写一份私有 `GetFullyQualifiedTypeName`，而字段复用处若改用 `SymbolDisplayFormat.FullyQualifiedFormat` 去比，得到的是 `string` 而 `FullTypeName` 是 `System.String` —— **每一次复用都会被误判成类型冲突**（2026-10-02 实测踩到）。现在两处私有方法都委托给这一个共享实现。
-- **非法字段名不再是崩溃或坏产物。** 单字符字段名 `_` 以前会走 `fieldName[1]` 越界，把生成器整个打崩（AD0001）；`_1x` 以前会生成一个 `1x` 属性（编不过）。现在 `GetPropertyNameFromFieldName` 推不出合法标识符时返回空串，调用方报 `VELOX_MVVM_PROP002`（Warning）并跳过。
+- **类型比较必须走 `Analizer.DisplayFullTypeName`（共享方法）。** 用 `SymbolDisplayFormat.FullyQualifiedFormat` 去比会得到 `string`，而 `FullTypeName` 是 `System.String` —— **每一次复用都会被误判成类型冲突**（2026-10-02 实测踩到）；两处调用都委托给这一个共享实现。
+- **非法字段名不是崩溃或坏产物。** `GetPropertyNameFromFieldName` 推不出合法标识符时返回空串，调用方报 `VELOX_MVVM_PROP002`（Warning）并跳过。所以单字符字段名 `_` 不再走 `fieldName[1]` 越界打崩生成器（AD0001），`_1x` 也不再生成一个编不过的 `1x` 属性。
 - **诊断四件套（2026-10-02，ID 由 `VELOXCMD001` 改名并扩充）**：`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突：字段/属性类型不一致、两个字段推出同一属性名、字段不可作 backing、同名非字段成员，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）、`VELOX_MVVM_PROP003`（`[VeloxProperty]` 属性没写 `partial`，或标在索引器上，Warning）。都在 `Diagnostics.cs`；`MVVMWriter.Diagnostics` 收集、`MVVM.cs` 在 `CanWrite()` **之前**报出去 —— 被拒的声明不会进产物，只能这样让作者看到。**注意 `Diagnostics` 这个实例属性会遮蔽同名静态类**，所以 writer 里引用描述符要全限定 `VeloxDev.Generators.Diagnostics.X`（`CommandWriter` 早就是这么写的）。
 - **没写 `partial` 的属性只能放弃，不能「就地补全」**（`VELOX_MVVM_PROP003`）。生成器只新增代码，改不进用户已经写死的访问器体 —— 所以 `[VeloxProperty] public string Name { get; set; }` 这种写法没有任何补救手段，只能警告。**唯一的例外是 `HasCompetingPropertyGeneratorAttribute`**：属性另有 `[ObservableProperty]` / `[Reactive]` 之类时是把职责让给了别人，属于合法跳过，**不报**（`ShouldGeneratePartialProperty` 两种 `false` 的差别就在这里）。类级缺 `partial` 仍然完全静默 —— 那在 `IsCandidateClass` 就挡掉了，writer 根本不运行，无从报起。
 - **命名是功能性判据，不是风格判据。** 只写字段时不要求下划线：`name` → `Name` 是良构的，**不报警**。按风格严查会在仓库自己的代码里炸出约 130 条告警（实测：字段带下划线 64 处、不带 130 处 —— 这两个数是写作时的口径，现树无法按同一口径复核，**不可复核**），这是刻意的取舍。
 - **不做特性复制/投射/去重。** 生成器只新增代码，改不了用户已写的源文件；两半上的特性各留原位。MVVM 路径下所有 `GetAttributes()` 都是**探测**用途，产物里不含任何特性。
-- **没有「View 只透传、不发通知」这条路径** —— 曾经有（`IsView` / `GenerateProxy()`），2026-09-26 因从未被走到而整体删除（`grep IsView|GenerateProxy Src/Generators/` 现无命中）。现在 `MVVMPropertyFactory.Generate()`（`Base/Analizer.cs:654`，原名 `GenerateViewModel`）是唯一出口，**所有** `[VeloxProperty]` 都按 ViewModel 形态生成通知。
+- **没有「View 只透传、不发通知」这条路径** —— `grep IsView\|GenerateProxy Src/Generators/` 现无命中。`MVVMPropertyFactory.Generate()`（`Base/Analizer.cs:654`）是唯一出口，**所有** `[VeloxProperty]` 都按 ViewModel 形态生成通知。
 - **`CanWrite()` 里含 `IsWorkflowComponent`**（`MVVMWriter.cs:989`）⇒ 一个 `[Node]` / `[Tree]` 类即使零个 `[VeloxProperty]` 也会拿到一份 MVVM 产物，但里面**不是**槽位三件套：`MVVMWriter.cs:1040-1041` 那段的条件是 `!_hasBaseWorkflowSlotInfrastructure && !IsWorkflowComponent && 任一属性 UseWorkflowSlotLifecycle`，**把 workflow 组件本身排除了**，它只服务「非组件、但继承链上有带槽位属性的类」这一种情况。真正 workflow 组件的 `CreateWorkflowSlot<T>` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved` 由 `Writers/WorkflowWriter.cs:923-944` 写。这是与 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/` 的耦合点。
 
 **`[VeloxCommand]` 的方法签名决定它可不可取消**：判定在 `CommandWriter.BuildSpec`（2026-10-02 由 `ParseConstructorType` 改名并扩充），返回类型决定「值怎么变成 Task」，形参决定「走哪个构造入口」与「属性强不强类型」。入口枚举 `CommandConstruction`：
@@ -220,7 +220,7 @@ OnExecutionCompletedAsync(item)
 
 **校验器的形参名跟随源方法（2026-10-02，破坏性）**：生成的是 `CanExecute{名}Command({P} {源形参名})` —— `HandleNote(NotePayload note)` ⇒ `note`。零形参与仅 token 的方法没有源形参名可抄，仍用 `parameter`。**校验器若用了与源形参不同的名字会报 CS8826** —— 仓内 WPF/Avalonia demo 写的是 `sender`，因为它们的源方法形参就叫 `sender`（`Examples/MVVM/WPF/Demo/MainWindowViewModel.cs:74` 的 `Minus(object? sender, ct)` ↔ `:81` 的校验器）。
 
-**参数类型的可访问性现在会外溢（2026-10-02）**：生成的命令属性一律 `public`，而强类型属性的类型里现在带着参数类型 —— 参数类型若不可见（`internal`）就是 **CS0053**。以前 `object?` 形参不暴露任何类型，所以这条约束是新出现的。
+**参数类型的可访问性会外溢（2026-10-02）**：生成的命令属性一律 `public`，而强类型属性的类型里带着参数类型 —— 参数类型若不可见（`internal`）就是 **CS0053**（`object?` 形参不暴露任何类型，所以强类型化才带来这条约束）。
 
 **`CanExecute` 始终可能收到 null 实参，这不是异常路径**（2026-10-02 由 Demo 实跑暴露）：`ICommand.CanExecute(object?)` 是公开的，**WPF 在应用按钮模板时会带着 null 调一次**。于是强类型校验器有两档命运：
 

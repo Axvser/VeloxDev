@@ -31,7 +31,7 @@
 
 ## 二、`SetNodePosition` 的层：省略 ≠ 置零
 
-`layer` 参数已由 `int layer = 0` 改为 `int? layer = null`，省略即**保留当前层**。原先的默认值会把
+`layer` 参数是 `int? layer = null`（不是 `int layer = 0`），省略即**保留当前层**。默认 0 会把
 `Panel.ZIndex`（模板绑 `Anchor.Layer`）每次绝对定位都清零 —— 节点堆叠顺序被静默打乱，看起来像渲染故障。
 
 ## 三、连线画在**槽位锚点**之间，而槽位锚点由视图层测量
@@ -44,10 +44,10 @@
 - 重算的触发是**反应式**的：节点 `Anchor`/`Size` 的 `PropertyChanged` + 框架布局事件（WPF
   `WorkflowSlotLayoutBehavior.cs:162-196`，监听的属性名集合含 `"Anchor"`/`"Size"`）。
 - **`RefreshSlotAnchors(node)` 就是那个「重新发一次通知」的推手**（非变更、不产生 undo，`WorkflowAgentToolkit.cs:3149-3153`）。
-  它原先只被**槽位形状类**工具调用（`:935`/`:948`/`:1046`/`:1063`/`:1822`），**几何工具一个都没调**；
-  现已补到 `MoveNode` / `SetNodePosition` / `ResizeNode`。
+  调用点是**槽位形状类**工具（`:935`/`:948`/`:1046`/`:1063`/`:1822`）与 `MoveNode` / `SetNodePosition` / `ResizeNode`。
+  **新加几何工具时也要调它** —— 漏调就是「卡片动了、线还停在旧端点」。
 
-### 已知的洞里还剩什么（未证实，别当成已修）
+### 已知的洞里还剩什么（未证实）
 
 - **MAUI 与 Razor 的重测是从指针事件里驱动的**（MAUI `WorkflowNodeDragBehavior.cs:229`/`:317` 调
   `WorkflowSlotLayoutBehavior.Refresh`；Razor 由 JS 的 `veloxdev-node-drag-move` 事件驱动），

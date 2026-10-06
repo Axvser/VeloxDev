@@ -55,7 +55,7 @@
 **返回值的四条注意**（2026-10-02）：
 
 1. **校验器形参名必须跟源方法一致** —— `HandleNote(NotePayload note)` 生成的是 `CanExecuteHandleNoteCommand(NotePayload note)`；写别的名字报 **CS8826**（警告，不报错但会挂着）。零形参与仅 token 的方法只能叫 `parameter`。
-2. **参数类型必须可见** —— 生成的命令属性一律 `public`，强类型属性把参数类型带进签名，参数类型不可见就是 **CS0053**。这是本轮新出现的约束（以前 `object?` 形参不暴露任何类型）。
+2. **参数类型必须可见** —— 生成的命令属性一律 `public`，强类型属性把参数类型带进签名，参数类型不可见就是 **CS0053**（`object?` 形参不暴露任何类型，所以强类型化才带来这条约束）。
 3. **`Task<TR>` 那条与前两轮的取用方式不同**：`ExecuteAndWaitAsync` **不抛**、只报 `CommandCompletion` 结局；`ExecuteAsync(p, ct)` / `GetResultOrThrow` **抛**。按调用点想要哪种反应来选。
 4. **同步 `Execute(p, out r)` 会阻塞**（含排队与等锁），且不能从命令体内部对自己调用。
 
@@ -169,5 +169,5 @@
 1. **get-only 的集合 partial 属性**：`GenerateGetter`（`Analizer.cs:701-719`）只按 `IsNotifyCollectionChanged` 就发 `EnsureSubscribed(_, On{名}CollectionChanged)`，而 `GenerateCollectionMembers`（`:832`）在 `!HasSetter` 时返回空 —— 于是 handler 有引用无声明。**推断**会编译失败，但未实际编译过该形态。
 2. **`[VeloxCommand]` 标在 `static` 方法上**：`CommandWriter` 不过滤 `IsStatic`（`CommandWriter.cs:112` 取 `GetMembers().OfType<IMethodSymbol>()`、`:115-119` 只按特性过滤），生成的是 `command: {方法名}` 方法组赋值。**推断**能编译且行为与实例方法一致，未验证。
 3. **`XxxAsync` 与同步孪生的线程语义**：同步版全是 `_ = XxxAsync()`（`CommandPipeline{TParam,TResult}.cs:425-447`），会**吞掉**这些控制方法可能抛出的异常。命令体异常被 `ExecuteCoreAsync` 收口，`_stateLock` 相关的失败没有出口 —— 未实测。
-   2026-10-01 补一条已修的例子：`ChangeSemaphore` 原来只在 async 方法里校验，而同步版丢掉 task ⇒ 越界参数会变成未观察异常、**静默失效**。现在校验同时放在同步入口（`:441`）与 async 方法（`:901`）两处。**再往这套 API 上加校验时照此办理**：凡是同步孪生能触达的失败，都不能只写在 async 方法里。
+   例：`ChangeSemaphore` 的校验同时放在同步入口（`:441`）与 async 方法（`:901`）两处 —— 只在 async 方法里校验、同步版丢掉 task 的话，越界参数会变成未观察异常、**静默失效**。**再往这套 API 上加校验时照此办理**：凡是同步孪生能触达的失败，都不能只写在 async 方法里。
 4. **`ObservableCollectionTracker` 的线程安全**：类注释称「Thread-safe for concurrent getter/setter access」（`:13`），`Entry` 内部确实用 `lock (_handlers)`（`:79`、`:87`），但 `ConditionalWeakTable.GetOrCreateValue` 与 `CollectionChanged += / -=` 都**不在锁内**（`:31-34`、`:54`）。**注释与实现之间存在未覆盖的窗口**，未能判定是否有意；不要把它读成强保证。

@@ -89,7 +89,7 @@ context.RegisterSourceOutput(
 
 **`VeloxJson.cs` 是第二个全程序集生成器**（归档序列化）。它同样订阅 `CompilationProvider`、检查 `VeloxJsonModelBuilder.Applies`（要求编译单元里有 `VeloxPropertyAttribute`，否则不遍历），受 MSBuild 属性 `VeloxJsonSerialization=false` 关闭。与另外两个不同的是它从**根类型**出发沿成员的声明类型做**传递闭包**（`Base/VeloxJsonModel.cs` 的 `Build`）：根是「实现了工作流组件接口的类型」、贴了 `[Archivable]` 的类型、带 `[WorkflowBuilder.*]` 的类型、或带 `[VeloxProperty]` 字段的类型；`[Archivable(typeof(A), typeof(B))]` 还能把别的类型点名成额外根（可链式，去重靠 `included`）。**2026-10-04 起这条闭包比「沿成员声明类型」宽三条**：向下展开派生类（预建的祖先索引 `BuildFamilyIndex`）、交出字典的键类型（`Reachable` 现在也 yield `KeyType`）、沿根形状开放泛型上的类型参数约束收其约束一族。收录的**全量清单**写在生成文件的文件头注释里，构建期只报两类：`VELOX_JSON_INCLUDE001`（Info，只报没有声明点名过的那些 —— 按 TFM 各跑一次，逐条报会变成 `TFM 数 × 类型数`）与 `VELOX_JSON_GENERIC001`（Warning，解析不出的约束）—— 细节见 `memory/modules/Serialization/architecture.md` §一。成员层面由 `[Archive(ArchiveOptions)]` 放行/改名/排除单个成员；生命周期钩子认 BCL 那四个特性（`[OnSerializing]` 等），不认自有名字。
 
-**发工厂调用的两个生成器都要处理 `required` 成员**：`new T()` 在类型有 required 成员时**编不过**，必须带上对象初始化器。判定与初始化器在 `Base/RequiredMembers.cs`（判据是编译器 API `IsRequired`，**不是** `[RequiredMember]` 特性 —— 后者是 emit 阶段合成的，源码符号上看不到；为此 `Microsoft.CodeAnalysis.CSharp` 从 4.3.1 抬到 4.8.0）。VeloxJson 与 AIContextTree 曾经各有一个这样的洞。**诊断由调用方持有而非挂在返回值上** —— `Build` 返回 `null`（这个程序集什么也没产出）恰恰常是「被拒的声明」导致的，把 notices 放进返回值会在最需要它的时候丢掉（`VeloxJson.cs` 先报诊断再判空）。这一模块的三条实现约束记在 `memory/modules/Serialization/pitfalls.md` §七。产物每个程序集一份 `{程序集名}_VeloxJson.g.cs`，命名空间写死 `VeloxDev.Serialization.Generated`，逐个类型出一个 `{程序集名}_JsonWriter{i}` / `{程序集名}_JsonReader{i}`，末尾 `Register()` 把读写器与容器工厂登记进 `VeloxDev.Serialization.VeloxJsonRegistry`（`Writers/VeloxJsonCodeWriter.cs:505-514`）。
+**发工厂调用的两个生成器都要处理 `required` 成员**：`new T()` 在类型有 required 成员时**编不过**，必须带上对象初始化器。判定与初始化器在 `Base/RequiredMembers.cs`（判据是编译器 API `IsRequired`，**不是** `[RequiredMember]` 特性 —— 后者是 emit 阶段合成的，源码符号上看不到；为此 `Microsoft.CodeAnalysis.CSharp` 从 4.3.1 抬到 4.8.0）。**两个生成器都必须处理它，漏一处就是一个洞。诊断由调用方持有而非挂在返回值上** —— `Build` 返回 `null`（这个程序集什么也没产出）恰恰常是「被拒的声明」导致的，把 notices 放进返回值会在最需要它的时候丢掉（`VeloxJson.cs` 先报诊断再判空）。这一模块的三条实现约束记在 `memory/modules/Serialization/pitfalls.md` §七。产物每个程序集一份 `{程序集名}_VeloxJson.g.cs`，命名空间写死 `VeloxDev.Serialization.Generated`，逐个类型出一个 `{程序集名}_JsonWriter{i}` / `{程序集名}_JsonReader{i}`，末尾 `Register()` 把读写器与容器工厂登记进 `VeloxDev.Serialization.VeloxJsonRegistry`（`Writers/VeloxJsonCodeWriter.cs:505-514`）。
 
 ### 产物命名（hint name = 文件名）
 
@@ -149,7 +149,7 @@ context.RegisterSourceOutput(
 
 - 报的是 `VELOX_MVVM_CMD001`（Error），位置是**用户那一行**，消息里点名方法并说明改法。
 - 跳过是因为产物**注定编不过** —— 再冒一个 CS1503 只会把真正的错误埋掉。全部方法都被拒时 `CanWrite()` 为假，**整个文件都不生成**。
-- 这与之前的行为差别很大：以前报的是生成文件里的 `CS1503 无法从"方法组"转换…`，作者看到的是一个自己没写过的方法组和构造签名。
+- **拒掉比产出好**：照旧产出时，作者看到的是生成文件里的 `CS1503 无法从"方法组"转换…` —— 一个自己没写过的方法组和构造签名。
 
 被拒的四种（消息里的措辞就是「该怎么改」）：**类型参数不出现在参数类型里的**泛型方法、返回类型不认识、前导形参多于 **15 个**、`void` 带 `CancellationToken`。2026-10-02 起又加了两条同 ID 的理由：情形 2 的泛型方法撞上「接口已声明非强类型命令属性」（只能给方法、接口要属性，无法退让）、以及 `{名}Command` 已被同名成员占用（此前会静默产出 CS0102）。
 
@@ -187,7 +187,7 @@ context.RegisterSourceOutput(
 
 `Symbol.ContainingNamespace.ToDisplayString()` 在全局命名空间下返回的是字面量 `"<global namespace>"` —— 那个尖括号既是**非法文件名字符**也是**非法标识符字符**。2026-10-01 之前有**两处**会因此炸，而且报错都指向别处：
 
-1. **文件名**（`GetFileName`）—— 拼进 hintName 会让生成器整个抛 `ArgumentException`，宿主只报一句 `CS8785 生成器"Command"未能生成源`，跟命名空间毫不相干。`WriterBase.NamespaceFileSegment()` 统一兜底成 `"Global"`；**五个调用点**（`CommandWriter`/`MVVMWriter`/`AopWriter` ×2/`TickWriter`）都改用它。`MVVMWriter` 原先自己处理过，现在是同一份。
+1. **文件名**（`GetFileName`）—— 拼进 hintName 会让生成器整个抛 `ArgumentException`，宿主只报一句 `CS8785 生成器"Command"未能生成源`，跟命名空间毫不相干。`WriterBase.NamespaceFileSegment()` 统一兜底成 `"Global"`；**五个调用点**（`CommandWriter`/`MVVMWriter`/`AopWriter` ×2/`TickWriter`）都用它，是同一份。
 2. **生成文件内容**（`WriterBase.Write`）—— 无条件写 `namespace {ContainingNamespace};`，全局命名空间下产出 `namespace <global namespace>;`，**非法语法，产物编不过**。`WriterBase.AppendNamespace()` 在全局命名空间时什么都不写。
 
 AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间片段 —— 那两处不走 `NamespaceFileSegment()`，走 `Base/AopNames.cs:21-24` 的 `Segment()`（算法等价，同样把全局命名空间写成 `"Global"`）。代理类必须与接口**同名同命名空间**，所以 AOP 这套名字只能有一个算法（`AopNames.InterfaceFor` / `ProxyFor`，`:15-19`）。

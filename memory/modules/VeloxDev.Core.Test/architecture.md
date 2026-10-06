@@ -167,7 +167,7 @@ Src/Core/VeloxDev.Core.Test/MSTestSettings.cs:1
 
 （`TransitionSystem/EaseOvershootTests.cs:48` 用了真实 120ms 时长，但断言走 `FixedEase`，与帧时序无关 —— 不是风险源。）
 
-**已记录的失败样本（不可复核）**：`TestResults/step4.trx`（gitignored 本地产物，早已不在树里）里失败的是 `AgainstTheDefaultSourceTheStepsTrackItsOwnClock`，栈顶落在 `CompensatingTimeSamplerTests.cs:284-286`，消息给的实测值是 `position 00:00:00.0875088, pushed 00:00:00.0700000` —— 最后一次内部读时钟与断言再读时钟之间过去了约 17.5ms。**持久的锚点是 `:284-286` 这几行**，不是那个 trx。
+**失败样本（trx 不可复核）**：`TestResults/step4.trx` 是 gitignored 本地产物、不在树里；它记录的失败是 `AgainstTheDefaultSourceTheStepsTrackItsOwnClock`，栈顶落在 `CompensatingTimeSamplerTests.cs:284-286`，消息给的实测值是 `position 00:00:00.0875088, pushed 00:00:00.0700000` —— 最后一次内部读时钟与断言再读时钟之间过去了约 17.5ms。**持久的锚点是 `:284-286` 这几行**，不是那个 trx。
 
 **代码与注释不一致（以代码为准）**：
 

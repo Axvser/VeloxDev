@@ -36,7 +36,7 @@
 `CreateLinkView` → `new LinkView { ViewModel = link }`）、以及一个 `OnBuildLinkMenu` 空 override
 （右键菜单的增删点，基类默认加 "Delete"）。
 
-以前写在模板里、现在全在适配器基类 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 的：
+全在适配器基类 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 里（模板里没有这些）：
 外壳与三个部件（`SetScrollViewer/SetCanvas/SetGridDecorator` 在 `:381-383`）、`PART_GridDecorator => PART_Canvas`
 别名（`:62`）、池数据源与虚拟化（`ApplyPan` 里写
 `helper.Viewport`）、`ArrangeLinkViews` 的 z 序、小地图 `MinimapOverlay` 属性接线、布局/平移流水线。
@@ -55,20 +55,17 @@
 
 ## 三、这一家模板特有的坑
 
-### P1 · 只生成 tree 不生成 minimap ⇒ **生成出来的代码编译不过** —— **2026-10-03 已修（对 tree-view）**
+### P1 · 只生成 tree 不生成 minimap ⇒ **生成出来的代码编译不过** —— **tree-view 这一处已消除**
 
-⚠ 下面这段描述的是修复前的形状。那个接口已搬进适配器
+`IWorkflowMinimapScrollSource` 声明在适配器
 （`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs`），tree 的基类引它、
-不再引 minimap 产物；minimap 模板与它的镜像都删掉了本地声明。现在 `winforms-v-tree` 的编译期兄弟只剩
-NodeView 与 LinkView，而 `verify-workflow-item-templates-all.ps1` 会把七条一起生成并编译（旧脚本 `verify-workflow-item-templates.ps1` 现在转发到它），再出现这类漏依赖会当场红。
+不引 minimap 产物；minimap 模板与它的镜像都没有本地声明。`winforms-v-tree` 的编译期兄弟只剩
+NodeView 与 LinkView，而 `verify-workflow-item-templates-all.ps1` 会把七条一起生成并编译（`verify-workflow-item-templates.ps1` 现在转发到它），再出现这类漏依赖会当场红。
 
-`IWorkflowMinimapScrollSource` 这个接口**原先只存在于这一家的模板里**：它声明在
-`workflow-minimap-overlay/TemplateClass.cs` 文件末尾（`TemplateNamespace` 内；那处声明已随接口迁移删除），
-没有任何 `using` 能引到它；tree-view 当时在同命名空间下直接用它做模式匹配
-（那两行也随接口迁移消失）。⇒ **修复前两个条目必须一起生成**，否则 tree-view 报 CS0246。
-修复前全仓库 `grep IWorkflowMinimapScrollSource` 只命中这四个位置（均在 `Src/Templates/VeloxDev.WinForms.Templates/` 内）。
-对照 Avalonia 那条"生成即失败"是**写在注释里的设计**（`../architecture.md` §7.3），
-这一条**没有任何地方写过**，只能靠读代码发现。
+⚠ **这类耦合本身没有任何文件写明，只能读代码发现**：若接口只声明在
+`workflow-minimap-overlay/TemplateClass.cs`（`TemplateNamespace` 内）、没有任何 `using` 能引到它，而 tree-view
+又在同命名空间下直接用它做模式匹配，那两个条目就**必须一起生成**，否则 tree-view 报 CS0246。
+对照 Avalonia 那条"生成即失败"是**写在注释里的设计**（`../architecture.md` §7.3）。
 
 ### P2 · 六个 `ParseColor` 副本，而且这一家多一条 `Color.FromName` 兜底
 

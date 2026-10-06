@@ -160,7 +160,7 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 现在连线交互不再挤在连线视图里：视图只画线（构造里 `IsHitTestVisible = false`，`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs:98`），**命中归 Core 的共享曲线判定**（适配器把指针位置交给 `tree.HitTestVisibleLinks`），**高亮与删除归宿主/demo**，指针与按键的转发归适配器，菜单的**接线**也归适配器。模板与两个 demo 只剩一行附着属性 `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"`（`Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-tree-view/TemplateClass.xaml:15`、`Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/TreeView.xaml:14`、`Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml:19`）与那个带键资源本身（条目由用户增删）；模板与 Trimmed 的 `TreeView.xaml.cs` 现在只剩 `InitializeComponent()`（`TemplateClass.xaml.cs`、`TreeView.xaml.cs` 全文仅构造函数），完整版 `WorkflowView.xaml.cs` 仍保留 Load/Save/MCP 等宿主代码，但已无一行连线交互。所以本节对模板与两个 demo 都成立。
 
-> 2026-10-03：这条落点刚搬过家 —— 以前接线在**宿主 code-behind**（`WorkflowView.xaml.cs` / `TreeView.xaml.cs` 里自己订连线事件），现在整段进了**适配器**的 `WireLinkMenu`，与 WinUI/MAUI 已是同一形状（它们的模板同样只带 `LinkMenuKey`）。
+> 2026-10-03：接线在**适配器**的 `WireLinkMenu`（模板与 demo 的 code-behind 没有一行连线事件代码），与 WinUI/MAUI 已是同一形状（它们的模板同样只带 `LinkMenuKey`）。
 
 | 事 | 落点 | 依据 |
 |---|---|---|

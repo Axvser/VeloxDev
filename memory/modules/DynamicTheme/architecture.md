@@ -155,7 +155,7 @@ RunSwitch (:201)
 
 1. **`StartModel.Reflect` 时活动表完全不参与起点**：`Reflect` 分支只有 `propertyInfo.GetValue(target)`（`ThemeManager.cs:497`），不查 active cache。所以「我用 `SetThemeValue` 覆盖过这个属性」在 `Reflect` 模式下**对起点无效**，只在 `Cache` 模式下被优先读取（`:509-518`）。
 2. **`ThemeCache` 里有三处死代码**（声明存在、**全仓库零调用者**，已核对）：`RegisterConverter`（`ThemeCache.cs:74`）、`GetConverter`（`:87`）与它们背后的 `_converters` / `_converterIndex`（`:21-22`）、`RemoveActiveEntry`（`:149`）。生成器**不用**这条转换器缓存 —— 它在生成代码里**内联** `new` 一个转换器：`((IThemeValueConverter)Activator.CreateInstance(typeof(...))!).Convert(...)`（`Theme.cs:237`）。**所以每个属性、每次 `InitializeTheme` 都会新建一个转换器实例**（在懒注册守卫之内，因此每类型一次），不是单例。
-3. **`ThemeManager._def_cache`（`:27`）是死字段**：声明后再无任何读写，也无任何注释解释它原本要做什么。
+3. **`ThemeManager._def_cache`（`:27`）是死字段**：声明后再无任何读写，也没有注释解释它要做什么。
 4. **`Theme.cs:192` 的 `converterKey` 算了不用**：局部变量赋值后从未被引用，`:191` 的注释自己承认「only placeholder—converter created inline」。
 5. **7 个主题声明得出来、用不了。** Core 提供了 arity 8 的 `ThemeConfigAttribute<TConverter, TTheme1..TTheme7>`（`ThemeConfigAttribute.cs:102`），但生成器只注册了 arity `` `3 ``–`` `7 `` 五个 `ForAttributeWithMetadataName` 提供器（`Theme.cs:33-56`）。⇒ **arity 8 的标注不会让那个类进入生成管线**（`ForAttributeWithMetadataName` 不命中，连 `Transform` 都不跑），该类的 `IThemeObject` 实现**根本不会生成**。这与 `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:29` 的注释「supports at most one Converter plus seven Themes」**不一致**：**以代码为准，实际上限是 1 个 converter + 6 个主题**。
 6. **`RegisterType` 幂等 ⇒ 改静态表需要重启或改类型。** `InitializeTheme` 的懒注册以类型为守卫（`Theme.cs:392`），一旦注册过，**同一类型再调 `InitializeTheme` 不会重写静态表**。热重载场景下静态表不会刷新。

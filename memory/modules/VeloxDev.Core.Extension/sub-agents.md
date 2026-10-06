@@ -69,7 +69,7 @@
 ① 省略 `allowedTools` ⇒ 关停循环看不见它们 ⇒ 全部留开，孩子**能**派发；
 ② 点名 `allowedTools` ⇒ 当时那段专门补的 `foreach (SubAgentAgentToolkit.ToolNames)` 把它们全关掉，孩子**不能**派发；
 ③ 模型点名 `SpawnSubAgent` ⇒ 不在 `available` 里 ⇒ 被当成「本代理没有这个工具」丢进 `dropped`。
-合起来就是：**模型只有在「没想过自己授予了什么」时才派得动，而它一旦认真考虑并点名，就派不动了**，而且它问也问不出所以然 —— 这是「agent 不积极创建子代理 / 子代理不再创建子代理」的结构性成因，不是提示词写坏了。修法是把这五个并进 `everyName`（`:444`），于是 `:506-508` 那个循环成为**唯一**的关停点，原先那段专用循环随之删掉（它变成冗余）。五个工具在 `BuildQueryToolNames` 里已归只读，因此走继承分支 ⇒ **孩子的默认面就含这五个**，孙代理默认成立。
+合起来就是：**模型只有在「没想过自己授予了什么」时才派得动，而它一旦认真考虑并点名，就派不动了**，而且它问也问不出所以然 —— 这是「agent 不积极创建子代理 / 子代理不再创建子代理」的结构性成因，不是提示词写坏了。修法是把这五个并进 `everyName`（`:444`），于是 `:506-508` 那个循环成为**唯一**的关停点 —— 再加一段专用循环就是冗余。五个工具在 `BuildQueryToolNames` 里已归只读，因此走继承分支 ⇒ **孩子的默认面就含这五个**，孙代理默认成立。
 
 **MCP 名字漏在 `everyName` 之外时，症状就是「MCP 子工具被判定为失败」**（2026-09-22 修，`SubAgentScope.cs:452-454`）。原子句是「MCP 服务器默认不继承 ⇒ 孩子手上一个 MCP 工具都没有」，所以模型点名一个 MCP 工具时，它不在 `available` 里，回报的是 `{name}: not available to this agent, or switched off by the host`（`:466`）—— **而它明明是父开着、孩子也够得着的**。这条与上面那五个名字是同一个病的两个分支：**`everyName` 少收一个来源，那个来源就只能在「省略时留着、点名时被判不存在」之间二选一**。修完的两条断言是 `NamingAnMcpTool_IsNotARefusal`（点名不进 `dropped`、确实在孩子的 `McpSurfaceOf` 里、`IsToolEnabled` 为真）与 `AWhitelistThatOmitsAnMcpTool_TakesItOffTheChildsSurface`。
 
@@ -87,7 +87,7 @@
 
 **`dropped` 必定回报**，而且理由文案按成因分叉，**每一条都指出是哪一堵墙**：超出父能力 / 父没开这个开关（`:466`）/ 父的读或写档位不够（`ApplyCap` `:713-733`）/ 父不允许跑节点业务代码（`RequestableNodeExecution` `:743-754`）/ 父不在某个 `allowedGenericCommands` 的白名单里（`RequestableCommands` `:756-781`）/ 授予了零个技能因而连技能工具一起收走（`:480-485`）。**能给出的集合与报告出去的名字必须是同一个集合**：授权清单里出现一个孩子拿不到的名字，等于让模型围绕一个不存在的能力做计划 —— 这正是 MCP 那条缺陷（§3.1）的另一面。
 
-**「无 UI 上下文 ⇒ 变更类工具全被 drop」这道闸门已经取消**（曾经在 `GetAvailableTools` 一带）。它当时有真实理由，写在这里以免下一个人以为它是被误删的：父与子的工体之间**唯一的串行化来源**是 `TrackedAIFunction` 的编组，没有 UI 上下文就没有串行化，后台孩子改图是真的在和父竞态。现在的答案是**把宿主自己的 UI 上下文转交给孩子**（`child.WithSynchronizationContext(parent.UIContext)`，`:551`）而不是收回权限 —— 于是孩子仍然串行化到同一个泵上，只是这个事实由继承表达，不再由拒绝表达。**代价**：一个没有 UI 上下文的无头宿主，其孩子现在也能改图，而它没有任何东西替它们串行化；`WithNoUIContext_TheSurfaceIsStillTheParentsOwn` 与 `TheUIContext_ChangesNothingAboutWhatIsGranted` 一起钉的就是「有没有上下文，授出面逐字相同」。
+**没有「无 UI 上下文 ⇒ 变更类工具全被 drop」这道闸门**（`GetAvailableTools` 一带没有它）。**为什么不做这道闸**：父与子的工体之间**唯一的串行化来源**是 `TrackedAIFunction` 的编组，没有 UI 上下文就没有串行化，后台孩子改图是真的在和父竞态。**答案是**把宿主自己的 UI 上下文转交给孩子（`child.WithSynchronizationContext(parent.UIContext)`，`:551`）**而不是收回权限** —— 于是孩子仍然串行化到同一个泵上，只是这个事实由继承表达，不再由拒绝表达。**代价**：一个没有 UI 上下文的无头宿主，其孩子也能改图，而它没有任何东西替它们串行化；`WithNoUIContext_TheSurfaceIsStillTheParentsOwn` 与 `TheUIContext_ChangesNothingAboutWhatIsGranted` 一起钉的就是「有没有上下文，授出面逐字相同」。
 
 ### 3.2 技能与 MCP：名字表达不了，所以给的是**视图**
 
@@ -125,7 +125,7 @@
 
 ## 四、孩子拿到的东西与父**同权**，以及为此付掉的代价
 
-**2026-09-22 反转。** 这里原先写的是「三条无条件约束」：`child.WithInteractionSafety(0)`、`child.WithToolEnabled("ResetToolCallLimit", false)`、无 UI 上下文时只给查询工具，以及 `NoChildMayHold`（`{ ResetToolCallLimit, RequestConfirmation, RequestSelection }`）那份减法。**这些现在都不存在了** —— 用户的口径是「Mcp、Skill、Tools 原样提供给子代理」，并明确选择连结构闸一起取消。新的不变式是：**省略 `allowedTools` ⇒ 孩子与父同权**，白名单是唯一收窄手段。
+**2026-09-22 用户定：孩子与父同权。** 没有「三条无条件约束」（`child.WithInteractionSafety(0)`、`child.WithToolEnabled("ResetToolCallLimit", false)`、无 UI 上下文时只给查询工具，以及 `NoChildMayHold` 那份 `{ ResetToolCallLimit, RequestConfirmation, RequestSelection }` 减法）—— 用户的口径是「Mcp、Skill、Tools 原样提供给子代理」，连结构闸一起取消。不变式是：**省略 `allowedTools` ⇒ 孩子与父同权**，白名单是唯一收窄手段。
 
 反转后**孩子确实持有 `ResetToolCallLimit`，并且调得动**（`AChild_HoldsTheResetTool` 断言开关为真、在 `SurfaceOf` 里、点名它不是一次拒绝）。
 
@@ -206,7 +206,7 @@
 | 五个名字并入只读集合（与技能工具同一段） | `BuildQueryToolNames` `:372-393`（`:389-390`） |
 | 自定义工具分组（可继承的前提） | `_customToolGroups` `:81`、`AppendCustomToolPrompt` `:209`、`GrantCustomToolsTo` `:247` |
 
-**`CheckBudget` 的顺序是有讲究的**：禁用 → 逃生舱（`ResetToolCallLimit` 无条件放行）→ **根锅** → 本层额度 → 读/写分档。根锅排在**本层之前**，因为它更硬、且是模型唯一绕不过去的墙；报错时必须指名对的那堵墙，否则模型会围绕错误的限制做推理。根 scope 上这条**跳过**（`WorkflowAgentToolkit.cs:335-336`），不然同一个计数器会对同一个上限报两次。禁用判定排在最前，所以「被关掉的工具」永远赢 —— 这是宿主能对孩子单独关掉一把工具的唯一入口（`SubAgentScope.cs:506-508` 那个循环），而**它不再被用来对任何一类工具做无条件关停**（`NoChildMayHold` 已删，§四）。
+**`CheckBudget` 的顺序是有讲究的**：禁用 → 逃生舱（`ResetToolCallLimit` 无条件放行）→ **根锅** → 本层额度 → 读/写分档。根锅排在**本层之前**，因为它更硬、且是模型唯一绕不过去的墙；报错时必须指名对的那堵墙，否则模型会围绕错误的限制做推理。根 scope 上这条**跳过**（`WorkflowAgentToolkit.cs:335-336`），不然同一个计数器会对同一个上限报两次。禁用判定排在最前，所以「被关掉的工具」永远赢 —— 这是宿主能对孩子单独关掉一把工具的唯一入口（`SubAgentScope.cs:506-508` 那个循环），而**它不对任何一类工具做无条件关停**（没有 `NoChildMayHold`，§四）。
 
 **五个工具全部计入只读**（`:389` 把 `SubAgentAgentToolkit.ToolNames` 并进 `QueryToolNames`）：spawn/wait/cancel 既不改图也不该标脏。`ASpawnIsAQuery_AndSoIsNotChargedToTheMutationBudget` 连「读预算花光时 spawn 会被拒」一起钉住。
 
@@ -247,7 +247,7 @@
 |---|---|
 | **token 的接缝在 `SubAgentScope.cs:795`**：`response` 是 `AgentResponse`，`response.Usage` 是 `Microsoft.Extensions.AI.UsageDetails?`，`Finish` 收下它并写三个字段 | 那里是**唯一**拿得到用量的地方 —— 五个管理工具、`AgentTranscript`、`AgentPipeline` 的事件全都没有 token 概念（`CallUsage` 是**调用次数**，别混）。走这条路**不必动 `AgentEvent` 的公共构造器**，改动面因此只在 SubAgents 子系统内。token 只在**成功分支**写：被取消或抛异常的孩子其 response 已经无从取得，留 null 让面板显示「未计量」，而不是一个没测过的 0 |
 | **MAF 1.22.0 确实把 `ChatResponse.Usage` 聚合进 `AgentResponse.Usage`**（`SubAgentMetricsTests.TokenUsage_FromTheProvider_ReachesTheRowAndTheSummary` 钉住） | 这条查文档查不到、只能实测：框架里有 `UsageAggregator` / `UsageAggregationExtensions.ApplyAggregatedUsage`，但「这条路径上到底调没调」只有一条喂了 usage 的假 client 能回答。**换 MAF 版本时先跑这条**，它红了就是面板开始静默显示空白的日子 |
-| `Republish()` 原先**不投影** `StartedAt` / `FinishedAt`，所以 `Snapshot` 上根本没有时长 | 面板走 `Children` 才看得见，而 `Snapshot` 是跨线程那一份、也是五个工具那一份。加 token 时必须一并把它们补进去，否则「面板有、模型没有」 |
+| `Republish()` 必须投影 `StartedAt` / `FinishedAt`，否则 `Snapshot` 上根本没有时长 | 面板走 `Children` 才看得见，而 `Snapshot` 是跨线程那一份、也是五个工具那一份。漏投影就是「面板有、模型没有」 |
 | 时长是**算出来的**（`FinishedAt ?? Now − StartedAt`），不是存的；`NotifyElapsed()` / `TickElapsed()` 才是通知 | 运行中的孩子没有「已完成」那一刻可言。库**故意不持有计时器**：面板会跳、进程会活，两者寿命不同，计时器属于宿主。demo 用 1 秒的 `DispatcherTimer`（`WorkflowView.axaml.cs` 的 `StartSubAgentTick`），只跟面板的挂载/卸载走 —— **不是**「有孩子在跑才走」，因为下一个孩子可能是某个正在跑的孩子派出来的，「此刻空闲」不是一个能可靠观察到并唤醒的状态 |
 | **行存自身消耗，节点算子树合计**（`TokensUsed` vs `SubtreeTokens`） | 二者不能相加：父只报自身会藏起它底下的工作，父报合计则整列无法求和。面板同时印两者，`ShowSubtreeTokens` 只在**自身有值且子树更大**时为真。自下而上的顺序是构造保证的 —— `Fill` 先递归孩子、再 `RecomputeAggregates()` |
 | 顶节点代表作用域（`Row == null`，`Id` 是固定的 `__scope__`），`Roots` 就是它的 `Children` | 照 agent map 的形状：最上面那个是「会话本身」，不是某个子代理。`ScopeTokens` / `ScopeTitle` 由宿主填 —— **库测不出主代理的用量**（那是宿主的对话），所以留 null 时顶节点退回去显示子树合计，而不是替宿主猜一个数。`ScopeTokens` 可以在树建好之后再设，所以它的 `partial` 钩子里**必须重算**而不只是发通知 |
@@ -271,7 +271,7 @@
 | 2026-09-25 又砍掉两样，用者的口径是「更精简美观」：**调用数**不再上屏，**状态文字只在灯说不清时才印**（`ShowStateText` = 非 `Completed`） | 调用数与 token 争同一个「代价」位置，而 token 是更好的那个；它仍在 `SubAgentSummary` / 五个工具上。状态文字同理：灰灯已经说了「完成了」，而那是最常见的状态 —— 每行再印一遍「已完成」等于把同一件事说 N 次。灯分不清的是其余几档：排队与运行都在呼吸、取消与失败都是灰的，那才是文字该出现的地方。表头的「共 N」也一并改成「N 个」，因为它和「N 次调用」用了同一个数字形状，读起来会串 |
 | 选中与悬停的**强调色块要在两处同时盖**：`UserControl.Resources` 里四个 `TreeViewItemBackground*` 画刷设为 `Transparent`，再加 `Style Selector="TreeViewItem:selected"` / `:pointerover` / `:selected:pointerover` 的 `Background` | 这块面板只读，选中什么都不改变，而 Fluent 默认会画一个蓝色块 —— 深色侧栏里非常刺眼。**`SelectionMode` 没有 `None` 这一档**（只有 `Single` / `Multiple` / `Toggle` / `AlwaysSelected`），关不掉。两处都写是因为 Fluent 12 把主题编译进了二进制资源，既取不到键名也取不到模板部件名；键名不存在时只是一个没人用的资源，无害。**这两处是本模块唯一「防不住也不会报错」的改动** —— 见 §八之末的复核记录 |
 | 模板只绑**节点自己的成员**（`Title` / `DurationText` / `TokensText` / `SubtreeTokensText` / `CallCount` / `StateText` / `HasDroppedRequests`），一个 `Row.*` 路径都没有 | 顶节点代表作用域、**没有行**（`Row` 是 `SubAgentStatusViewModel?`），所以任何以 `Row` 起头的路径恰好会在面板围着建的那个节点上指向空。节点把这些成员全部转发一遍（`NotifyRow`），就是为了让模板有一个不依赖 `Row` 的面。**编译绑定抓不出这种错** —— `{Binding Row.Name}` 在类型上仍然合法，只是永远取不到值 |
-| 标题那一格是节点的 `Title`（= `Row?.Name ?? ScopeTitle`），而 `Name` 现在是**任务标题**不是标识符（`SubAgentScope.Describe` `:616`） | 原先印的是 id 前八位。位置已经由树本身说清楚了，所以标识符在这里花掉了一格标题的宽度却什么也没告诉看的人。省略 `name` 时回退成 `子代理 N`，**N 按父各自编号**（`Describe` 收的是 `Children.Count + 1`），不是全树的序号 —— 孙代理是它自己父的第一个孩子。标题**裁剪而不折行**：它是模型填的，行必须扛得住一个填成了句子的标题 |
+| 标题那一格是节点的 `Title`（= `Row?.Name ?? ScopeTitle`），而 `Name` 现在是**任务标题**不是标识符（`SubAgentScope.Describe` `:616`） | **不印 id**：位置已经由树本身说清楚了，标识符在这里花掉了一格标题的宽度却什么也没告诉看的人。省略 `name` 时回退成 `子代理 N`，**N 按父各自编号**（`Describe` 收的是 `Children.Count + 1`），不是全树的序号 —— 孙代理是它自己父的第一个孩子。标题**裁剪而不折行**：它是模型填的，行必须扛得住一个填成了句子的标题 |
 
 **一条可复用的验证杠杆**：Avalonia demo 的 `Demo.csproj:8` 是 `AvaloniaUseCompiledBindingsByDefault=true`，于是**绑错的路径是编译错误而不是运行时静默失效** —— 实测把一个绑定名改错，报的是
 
@@ -290,9 +290,9 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 
 **2026-09-25 第四次改（度量那一批，节点从一行变两行、树顶多了一个根节点），构建与启动复核一次通过**：`dotnet build-server shutdown` → `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **0 错误、1 个既有警告** → 启动 14 s 后读到 `MainWindowHandle=1246990` / `Responding=True` / `MainWindowTitle=Demo`。
 
-**2026-09-26 起上面那条「1 个既有警告」的基线作废**：`WorkflowAgentToolkit.cs:2050` 的 CS8602 已随 `TryGetNode` 加 `[NotNullWhen(true)]` 而消失（`netstandard2.0` 没有这个特性，靠本程序集内 `Compat/NotNullWhenAttribute.cs` 的 internal 补丁提供），同批退掉的还有 26 处 `node!` 与 2 处 `slot!`。现在 `VeloxDev.Core.Extension` 与其测试项目都是 **0 警告 0 错误** —— 所以此后读到本文任何「N 个既有警告」都是**历史观测**，不是当下基线。
+**2026-09-26 起基线是 0 警告**：`WorkflowAgentToolkit.cs:2050` 的 CS8602 由 `TryGetNode` 加 `[NotNullWhen(true)]` 消掉（`netstandard2.0` 没有这个特性，靠本程序集内 `Compat/NotNullWhenAttribute.cs` 的 internal 补丁提供），同批退掉 26 处 `node!` 与 2 处 `slot!`。`VeloxDev.Core.Extension` 与其测试项目都是 **0 警告 0 错误** —— 此后读到本文任何「N 个既有警告」都是**历史观测**，不是当下基线。
 
-**同日发现：截图是可以读回来的 —— 「视觉复核做不了」这条从前的结论作废。** 用 PowerShell 的 `System.Drawing` 抓窗口（`GetWindowRect` + `Graphics.CopyFromScreen`）存 PNG，再用 `Read` 读它，**能看清内容**（`PrintWindow` 不行：对这块 GPU 合成的窗口会返回缺元素的残帧，实测两次得到的画面都是不完整的，别用它）。这条能力的**边界**同样实测过：
+**截图是可以读回来的（「视觉复核做不了」不成立）。** 用 PowerShell 的 `System.Drawing` 抓窗口（`GetWindowRect` + `Graphics.CopyFromScreen`）存 PNG，再用 `Read` 读它，**能看清内容**（`PrintWindow` 不行：对这块 GPU 合成的窗口会返回缺元素的残帧，实测两次得到的画面都是不完整的，别用它）。这条能力的**边界**同样实测过：
 
 | 能做 | 不能做 |
 |---|---|
@@ -326,7 +326,7 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 
 **加第六个管理工具**：`SubAgentAgentToolkit` 加方法 + `CreateAllTools` 里 `AIFunctionFactory.Create(Xxx, ToolNames[n])` + 把名字加进 `ToolNames`（`BuildQueryToolNames` 会自动跟上，只读分类与不标脏都靠这一条）+ 在 `BuildPromptContext` 里按需说一句（它按 `CreateTools()` 的实际结果分叉，被宿主关掉的工具不会被广告）。
 
-**加第四条能力轴**：先问「它是不是一个工具名能表达的」。是 ⇒ 并入 `available` / `everyName` 那两份名单就够了 —— **但四个来源一个都不能漏**（§3.1 的表：漏一个，这条轴就在「省略时留着、点名时被判不存在」之间二选一）。否 ⇒ 照 §3.2：给父的那个源加一个 `CreateNarrowed` / `CreateGrantedView`，并把「本轴省略参数时的默认值」定成**继承父的全量** —— 三条轴现在共用这一个默认（§3.2），2026-09-22 之前那份「刻意不同」的表已经作废，别照抄。
+**加第四条能力轴**：先问「它是不是一个工具名能表达的」。是 ⇒ 并入 `available` / `everyName` 那两份名单就够了 —— **但四个来源一个都不能漏**（§3.1 的表：漏一个，这条轴就在「省略时留着、点名时被判不存在」之间二选一）。否 ⇒ 照 §3.2：给父的那个源加一个 `CreateNarrowed` / `CreateGrantedView`，并把「本轴省略参数时的默认值」定成**继承父的全量** —— 三条轴现在共用这一个默认（§3.2），没有「刻意不同」的表。
 
 | 捷径（能编译，但是错的） | 为什么错 |
 |---|---|
@@ -356,7 +356,7 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 | 只把 `CreateAllTools()` 的名字当 `everyName`，另外给 provider 贡献的工具名补一段「专用关停循环」 | 关停循环只关得掉它**看得见**的名字。看不见时那一段专用循环与它并存，两条路径对同一个名字给出不同答案，而这种不一致不会报错 —— 它表现为整条轴反过来：省略参数就留着、点名就全关掉（`SubAgentScope.cs:444` 的注释记了完整症状）。**MCP 那一源是同一个病的另一个分支**，只是症状不同：它被漏掉时不进 `dropped` 的是「点名即失败」（`:466`）—— 用户报的「MCP 子工具被判定为失败」就是它 |
 | 照抄技能那行的 `if (parent.Skills is not null)` 去守卫子代理工具名 | 两条轴的**所有关系**刚好相反：技能工具由**父的**技能源贡献（父没有就没有），子代理工具由 `child.WithSubAgents(grand)` 无条件地挂到**孩子**身上（`:584`）。守卫照抄 ⇒ 父没挂子系统的那些孩子的名字又掉出 `everyName`，缺陷原样回来 |
 | 把孩子那半提示词只写成否定的（「到深度上限就不能派发」） | 模型**从没被告知它可以**派发，而「工具在不在」与「模型会不会去够它」是两件事。同一段里「不能派发的两种原因」（到顶 / 白名单没给）也必须分开写，否则孩子分不清那是限制还是自己的 bug |
-| 拿 `CallUsage` / `ToolCallLedger.Usage` 当 token 计量 | 那是**调用次数**（`(ToolCalls, ReadCalls, WriteCalls)`），与 token 没有关系。子代理子系统里原先一处 token 都没有，`grep -i "token"` 是空的 |
+| 拿 `CallUsage` / `ToolCallLedger.Usage` 当 token 计量 | 那是**调用次数**（`(ToolCalls, ReadCalls, WriteCalls)`），与 token 没有关系。真正的 token 接缝只有 `SubAgentScope.cs:795` 那一处（见本表上方） |
 | 去 `AgentEvent` / `AgentPipeline` / `AgentTranscript` 上接 token，或给 `AgentTurnCompleted` 的公共构造器加参数 | 这三处都没有 token，接上去要动一个公共构造器。**接缝早就有了**：`SubAgentScope.cs:795` 那句 `var response = await agent.RunAsync(...)` 手上的就是 `AgentResponse`，`response.Usage` 直接可读 —— 改动因此完全关在 SubAgents 子系统里 |
 | 给被取消 / 抛异常的孩子补一个 `TokensUsed = 0` | 那两条路径上 response 已经不存在了，0 是编的。留 null，面板据此不显示 —— `HasTokens` 存在的全部意义就是让「没测过」与「花了 0」在界面上不是一件事 |
 | 在树节点模板里写 `{Binding Row.Name}` 这类路径 | 顶节点代表作用域、没有行，所以这些路径**恰好会在面板围着建的那个节点上**取不到值。而且编译绑定**不会报错**（路径在类型上合法）。节点的 `Title` / `StateText` / `CallCount` / `DurationText` / `TokensText` 就是为此转发的一层 |

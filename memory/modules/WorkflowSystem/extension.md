@@ -30,7 +30,7 @@
 | **否决某一次**连线动作（而不是全局关开关） | 订标准输入（如 `KeyDown`）并在 `e.Handle.PreventDefault` 里拒绝这一次 —— 框架那一手（Delete 删线）就不执行；`StopPropagation` 则是「到此为止、祖先一个都收不到」。**两个标志都不设 = 一切照旧** | `GUI/Events/WorkflowEventHandle.cs` |
 | **把节点/插槽/树的动作也接成标准事件** | 取该组件的 Helper 并按**能力接口**转型：`((IWorkflowNodeEvents)node.GetHelper())`、`IWorkflowSlotEvents`、`IWorkflowTreeEvents`。已实现五对：`Moving/Moved`、`Resizing/Resized`、`Deleting/Deleted`（node）、`ChannelChanging/Changed`（slot）、`Connecting/Connected`（tree） | `GUI/Events/{Node,Slot,Tree}/IWorkflow*Events.cs` |
 | **把模型事件交给宿主，按平台族分三种**（2026-10-03 用户定：**模型事件不由 Core 统一广播，走各家自己的宿主接线**；2026-10-05 Jalium 归入①） | ①**有附加属性的五家**（WPF/Avalonia/WinUI/MAUI/Jalium）：附加属性 + 绑定一个 sink 对象 —— `behaviors:WorkflowEvents.Node="{Binding NodeEvents}"`（`.Slot` / `.Tree` 同形）；②**Razor**（类 XAML）：沿用订阅；③**无标记语言的 WinForms**：**适配器基类提供 `protected virtual OnXxx(args)` 钩子**，宿主重写即得 | `GUI/Events/IWorkflow*EventSink.cs`、`GUI/Events/WorkflowEventRelay.cs`；WPF 参考实现 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowEvents.cs` |
-| **连线的右键菜单** | **归模板**（2026-10-03 用户定，推翻原先「菜单是 demo 策略」那条）：条目声明在 `workflow-tree-view` 条目里，用户改模板增删；无标记语言的 WinForms 由 `WorkflowTreeView` 基类的 `OnBuildLinkMenu` 钩子给出，Jalium 与标记五家一样走 `WorkflowSurfaceBehavior.LinkMenuKey` | [item-template-specifications.md](../specifications/item-template-specifications.md) §五 |
+| **连线的右键菜单** | **归模板**（2026-10-03 用户定）：条目声明在 `workflow-tree-view` 条目里，用户改模板增删；无标记语言的 WinForms 由 `WorkflowTreeView` 基类的 `OnBuildLinkMenu` 钩子给出，Jalium 与标记五家一样走 `WorkflowSurfaceBehavior.LinkMenuKey` | [item-template-specifications.md](../specifications/item-template-specifications.md) §五 |
 | 右键菜单的请求与开合 | Core **没有**菜单事件了（2026-10-04 起）：**适配器从自己的 `PointerPressed(Right, link)` 里弹**（模板只声明条目，见 `WorkflowSurfaceBehavior.LinkMenuKey`）；宿主想否决，就在链上更靠前的一级（连线自己）订同一个事件并置 `PreventDefault` —— 顺序由「目标先于祖先」保证。开合由适配器自己置 `WorkflowInput.IsSuspended` | 七家适配器的 `WorkflowSurfaceBehavior` / `WorkflowTreeView` 基类 |
 | **让菜单不活得比它的线久**（Delete 键外的删除也算：Undo、Agent 改树） | 订**既有的** `tree.GetHelper().LinkRemoved`（Delete/Undo/Agent 改树都会发），比对是不是自己那份菜单指着的那条，是就关掉并放开挂起。**接线落点是适配层**（WPF/Avalonia/WinUI/MAUI/Jalium 五家：`WorkflowSurfaceBehavior.LinkMenuKey` 那个附着行为；Razor：组件参数 `LinkMenu` + RenderFragment；无标记语言的 WinForms：基类），模板不参与 | `Templates/Helpers/TreeHelper.cs`（`OnLinksChanged`） |
 
@@ -48,14 +48,14 @@
 > ⚠ **Delete 需要一条「焦点路由」，而它和命中是两件事**（2026-10-03 实测踩过，七家里五家缺）。Delete 是键盘事件：它只会沿着**焦点所在的元素**往上冒泡。所以适配器必须①能持有焦点、②在悬停到连线上时**把焦点收到自己身上/那个可视对象上**。只做①不做②的话「悬停（不点）后按 Delete」没有任何路由，而且**不报错**。完整 demo 掩盖了这个缺口 —— 它们有窗口级预览兜底（`MainWindow.OnPreviewWindowKeyDown`），生成出来的工程没有。
 > - 各家已落地的形态：WPF/Avalonia「焦点给画线的控件，控件不可聚焦时**退回宿主**」、WinUI/WinForms「焦点给宿主/画布」、Razor「表面根 `tabindex` + 悬停 `FocusAsync(preventScroll: true)`」、MAUI「焦点给交互源」、Jalium「`Focusable` + 悬停收焦点，并用 `RequestBringIntoView` 吃掉那次『把整块画布卷进视口』」。
 > - **取焦点一定会带来「平台把画布卷进视口」的连带效应**，各家都要挡：WPF/Avalonia/Jalium 是吃掉 `RequestBringIntoView`，Razor 是 `preventScroll`。
-> - ⚠ **`UserControl` / `Control` 的 `Focusable` 默认是 `false`**（WPF、Avalonia 都是）。所以「退回宿主」这条兜底曾经是**空的** —— 焦点落不到宿主上，键也就不来。WPF/Avalonia 的适配器现在在 Attach 里自己开 `control.Focusable = true`，**不要删**。WinUI 没有这个属性（用 `Focus(FocusState)`，宿主本来就能拿焦点）。
+> - ⚠ **`UserControl` / `Control` 的 `Focusable` 默认是 `false`**（WPF、Avalonia 都是）——「退回宿主」这条兜底不生效：焦点落不到宿主上，键也就不来。WPF/Avalonia 的适配器因此在 Attach 里自己开 `control.Focusable = true`，**不要删**。WinUI 没有这个属性（用 `Focus(FocusState)`，宿主本来就能拿焦点）。
 
 > 🧪 **怎么验这一类东西：`Src/Verification/agent-ui-harness.ps1`。** 「悬停一下再按 Delete」用构建验不了、读代码也读不出来 —— 上面那五家的缺口正是这么漏的。这个脚本用真实输入驱动桌面 demo 并截图：
 > ```
 > powershell -NoProfile -ExecutionPolicy Bypass -File Src/Verification/agent-ui-harness.ps1 `
 >   -Exe <demo.exe> -Actions "drag:687,399,757,433; wait:600; move:724,414; wait:700; probe:724,414; key:Delete; wait:900; probe:724,414"
 > ```
-> 坐标是**窗口相对**（直接照着截图读），`probe` 报一个像素的颜色，所以可以断言状态而不是靠看。两个坑都踩过且已修：进程必须 **DPI aware**（否则三套坐标互相错位，输入看着像「没到」）；`INPUT` 结构必须是 **40 字节**（并集按最大成员算），小一号时 `SendInput` **静默**返回 0，所有按键凭空消失 —— 脚本现在会报 REJECTED。
+> 坐标是**窗口相对**（直接照着截图读），`probe` 报一个像素的颜色，所以可以断言状态而不是靠看。两个坑都要守：进程必须 **DPI aware**（否则三套坐标互相错位，输入看着像「没到」）；`INPUT` 结构必须是 **40 字节**（并集按最大成员算），小一号时 `SendInput` **静默**返回 0，所有按键凭空消失 —— 脚本现在会报 REJECTED。
 >
 > 2026-10-03 补的动作（验缩放/按住拖拽要用）：`wheel:<x>,<y>,<delta>`（一次滚轮，120 = 上/放大，配 `keydown:Control` 就是 Ctrl+滚轮缩放）、`keydown:` / `keyup:`（按住不放）、`down:` / `up:`（按下/松开鼠标左键，中间可以 `move`+`shot` 抓**拖拽途中**的样子 —— `drag:` 是一口气做完的，抓不到中态）。
 > ⚠ **PowerShell 的成员解析不区分大小写**：C# 里同时有一个 `WHEEL` 常量和一个 `Wheel()` 方法时，`[Ui]::Wheel(...)` 会解析到那个**常量**上并报 `MethodNotFound`（方法明明在）。常量因此一律带 `_FLAG` 后缀（`WHEEL_FLAG` / `KEYUP_FLAG`）。
@@ -84,7 +84,7 @@
 | 4 | 依赖 `WorkflowGuard.Fail` 在 Release 里挡错误输入 | `[Conditional("DEBUG")]` 把**整个调用点连同消息参数**编译掉。Release 是彻底空操作 | 在调用方自己判断并处理；把它当 debug 断言，不当运行时防御 | `WorkflowGuard.cs:12-21`；`StandardEx/WorkflowSlotEx.cs:19` |
 | 5 | 手动往 `Helper.VisibleItems` 里塞/删元素 | 空间索引与实际可见集脱钩，之后查询与渲染都不一致 | 改 `Viewport`（同步虚拟化）或 `MarkDirty()`（下一 tick 虚拟化 + 广播布局） | `GUI/Virtualization/WorkflowSpatialEx.cs:118`；`Templates/Helpers/TreeHelper.cs:66,335` |
 | 6 | 在 `Virtualize` 之外自己写一套「哪些节点可见」的副本 | 副本会漂；`BroadcastVisibleItemLayout` 只对权威 `VisibleItems` 重发 `Anchor`/`Size` | 只用 `VisibleItems` + `VisibleItemAdded/Removed` 事件 | `Templates/Helpers/TreeHelper.cs:89-106` |
-| 7 | 在适配器里重新实现坐标换算（`ToWorld`/`ClampScrollOffset`/`SlotAnchorFrom*`） | 七家以前各自内联过，行为各不相同；`WorkflowSurfaceMath` 是收敛后的唯一实现 | 调 `WorkflowSurfaceMath` 的静态方法 | `GUI/Math/WorkflowSurfaceMath.cs:17` |
+| 7 | 在适配器里重新实现坐标换算（`ToWorld`/`ClampScrollOffset`/`SlotAnchorFrom*`） | 自己内联会让七家行为各不相同；`WorkflowSurfaceMath` 是唯一的坐标数学 | 调 `WorkflowSurfaceMath` 的静态方法 | `GUI/Math/WorkflowSurfaceMath.cs:17` |
 | 8 | 手写一个 ViewModel 但不在构造函数里调 `InitializeWorkflow()` | Helper 永远不会 `Install`，命令与事件全都不工作，且**不报错** | 构造函数第一行 `InitializeWorkflow();` | `Templates/ViewModels/NodeDefaultViewModel.cs:31` |
 | 9 | 在 `InitializeWorkflowCore` 里用 `CreateSlotCommand` 挂初始插槽 | 那时 `node.Parent == null`；`StandardCreateSlot` 的幂等守卫也会把重复派发吞掉，队列里留下幽灵 undo 项 | 按生成器的方式：直接 `field.Parent = this; Slots.Add(field);` | `Writers/WorkflowWriter.cs:1674-1676` 及其上方注释；`StandardEx/WorkflowNodeEx.cs:28` |
 | 10 | `[WorkflowBuilder.NodeAttribute]` 的类里手写 `Helper` 属性 / `GetHelper()` / `InitializeWorkflow()` / `SetHelper()` | 生成器会再生成一份，直接编译冲突（这条**会**报错，算运气好的） | 只写业务成员，这些留给生成器 | `Writers/WorkflowWriter.cs:484-541` |
@@ -202,7 +202,7 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 3. **`Viewport` 是画布局部坐标，只有适配器写它**；写完同步触发虚拟化（`Templates/Helpers/TreeHelper.cs:109`）。
 4. **连线视图首行必须过渲染就绪门**：`if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;`（`GUI/Rendering/WorkflowLinkRenderEx.cs:27`）。NaN 锚点 = 未测量，这是**跨平台统一**的机制，不需要各家自己发明时序。
 5. **插槽锚点写入用 Core 提供的三个函数之一**（按你测量到的坐标系选）：`SlotAnchorFromVisualCenter` / `SlotAnchorFromNode` / `SlotAnchorFromCanvasLocal`（`GUI/Math/WorkflowSurfaceMath.cs:230,237,248`）。
-6. **滚轮方向统一：上滚 = 放大**，放大即 `Scale *= 1/1.1`（`Scale` 是折叠因子）；`Scale` 夹在 `[0.1, 10]`。七家一致：`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs:558-559`，其余六家同形。**写反成 `delta > 0 ? 1.1 : 1/1.1` 是七家曾经一起犯过的错**。
+6. **滚轮方向统一：上滚 = 放大**，放大即 `Scale *= 1/1.1`（`Scale` 是折叠因子）；`Scale` 夹在 `[0.1, 10]`。七家一致：`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs:558-559`，其余六家同形。**写反成 `delta > 0 ? 1.1 : 1/1.1` 会把方向弄反**。
 7. **一次缩放的提交顺序**：枢轴 → `Scale` → `EnsureNegativeCover` → 重布局 → `PivotCenterScroll` → `ClampScrollOffset`（`GUI/Math/WorkflowSurfaceMath.cs:438` 的时序约束）。
 8. **既有默认实现可以直接复用**：`TreeDefaultViewModel` / `NodeDefaultViewModel` / `SlotDefaultViewModel` / `LinkDefaultViewModel`（`Templates/ViewModels/`）。一家适配器**不需要**定义新的 ViewModel 类型。
 9. **适配器不引用其它适配器**，也没有共享适配器基类 —— 七家各写各的（`Src/Adapters/VeloxDev.*/Attached/Workflow/`）。能从自家平台 API 拿到的东西不要去 Core 里加开关。

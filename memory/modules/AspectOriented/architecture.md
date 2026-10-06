@@ -167,7 +167,7 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 3. **一个切面到底拦的是哪个成员，取决于生成器把什么放进了接口。** 字段必须同时有 MVVM 特性与 `[AspectOriented]`（`AopSurface.cs:94-95`），且它生成的是**推导出的属性名**（`_name` → `Name`，`AnalizeHelper.cs:55-65`）。只用 `[AspectOriented]` 标字段、不标 MVVM 特性 ⇒ 接口里没有该成员，**静默无效**。
 4. **接口成员一律给 `{ get; set; }`（字段那条路，`AopSurface.cs:105`）**，所以「接口上看得见 setter」不等于「真身可写」—— 一个只读属性会生成出 setter，然后编译失败。属性那条路则按真身的可访问性给（`:122-124`）。
 5. **`Analizer.Filters.Targets` 决定「这个类有没有活干」走符号**（`:127` 的 `VeloxDev.AspectOriented.AspectOrientedAttribute` 是 10 个触发特性之一）；**接口里有哪些成员走语法文本**：`attribute.Name.ToString() == "AspectOriented"`（`AnalizeHelper.cs:52`）。后果是一个**别的**叫 `AspectOriented` 的特性同样会被当成标记；字段那条路认的 MVVM 特性也是文本匹配 `Contains("Observable") || Contains("Property")`（`AopSurface.cs:94`）—— `[VeloxProperty]` 与 CommunityToolkit 的 `[ObservableProperty]` 都算。这是本模块唯一一处「两种匹配方式并存」，改任一侧都要想到另一侧。
-6. **裁剪 / AOT 不再是问题，但两个 IL 警告曾经是。** `AopCache` 的 `TInterface` 带着 `[DynamicallyAccessedMembers(PublicParameterlessConstructor)]`（`AopCache.cs:18-23`、`:41-43`）—— 这是为消掉 `ConditionalWeakTable` 的 IL2091 而传下去的标注，**不是**对调用方的真实要求（详见 §八）。
+6. **裁剪 / AOT 不是问题 —— 两个 IL 警告的来源在下面。** `AopCache` 的 `TInterface` 带着 `[DynamicallyAccessedMembers(PublicParameterlessConstructor)]`（`AopCache.cs:18-23`、`:41-43`）—— 这是为消掉 `ConditionalWeakTable` 的 IL2091 而传下去的标注，**不是**对调用方的真实要求（详见 §八）。
 7. **没有 `AopInterface` 这个名字**，接口与代理都由 `AopSurface.cs` 一个文件产出 —— `AopInterface.cs` / `ProxyInstance.cs` / `DispatchProxy` 也都不存在。
 
 ---
@@ -184,7 +184,7 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 | 覆盖 | 方法三阶段、`coverage` 替换、getter/setter 分离、字段+MVVM 特性那条路、`GetTarget` 反查、每实例缓存 |
 | 回归面 | Core 全量 947 个测试通过（2026-10-02 那次运行的计数，**不可复核** —— 当前 `Src/Core/VeloxDev.Core.Test/` 已有 1129 个 `[TestMethod]`）；`Examples/AOP/WPF`、`Examples/AOP/Avalonia` 均 0 警告 0 错误 |
 
-**两个曾经挡住 AOT 的点，现在都在生成期解决了**：`DispatchProxy`（`RequiresDynamicCode`，靠 `Reflection.Emit`）与 `ProxyEx` 里的 `dynamic`（需要 `Microsoft.CSharp` 运行期绑定器）。
+**两个 AOT 障碍都在生成期解决了**：`DispatchProxy`（`RequiresDynamicCode`，靠 `Reflection.Emit`）与 `ProxyEx` 里的 `dynamic`（需要 `Microsoft.CSharp` 运行期绑定器）。
 
 **环境坑，不是兼容性问题**：NativeAOT 的链接阶段要找 `vswhere.exe`，而它不在 PATH 上（实际位置 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`）。不加会看到 `link.exe … 退出代码 123` 与「文件名、目录名或卷标语法不正确」——**那是工具链寻址失败，不要读成 AOT 不兼容**。把该目录加进 PATH 即可。
 

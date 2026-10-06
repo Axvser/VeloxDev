@@ -52,7 +52,7 @@
    仅声明四个参数（`Tree` / `ScrollViewerId` / `CanvasId` / `NodeTemplate`）与 `GridSpacing`（`:17-34`），
    基类是 `ComponentBase` 而**不是** `IDisposable`（`:14`）。重渲染、槽枚举、默认调色板都由适配器的
    `WorkflowSurfaceBehavior` 与 `WorkflowPresentation` 提供（类注释 `:7-12` 已这么写）。
-   ⇒ 旧的"模板自己订阅五类事件、`UnsubscribeTree` 有一处与注释不符"那段**已随重构作废**：
+   ⇒ 模板**不自己订阅五类事件**（也没有 `UnsubscribeTree`）：
    改重渲染行为要改 `Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor.cs`，
    不是在模板里补订阅。
 
@@ -71,8 +71,7 @@
    画曲线的那一个元素必须带 `data-veloxdev-link-curve`（`:27,38`），JS 只写带它的元素
    （`wwwroot/veloxdev.workflow.js:261` 的 `LINK_CURVE_ATTR`、`:277-280` 的 `resolveLinkCurve`）—— 少了它不报错，
    缩放那一帧的曲线停在旧端点，整条线在缩放期间不跟手；多画几个元素时**只标一个**是有意的，标记即"这个由 JS 接管"。
-   ⚠ JS 侧 `wwwroot/veloxdev.workflow.js:274-276` 的注释已按"连线也进池"改写（原句 "Link SVGs are not
-   pooled" 已删）。**结论不变**：`resolveLinkCurve` 每趟重新 query `[data-veloxdev-link-id]`、不缓存元素
+   ⚠ JS 侧 `wwwroot/veloxdev.workflow.js:274-276` 的注释按"连线也进池"写。**结论**：`resolveLinkCurve` 每趟重新 query `[data-veloxdev-link-id]`、不缓存元素
    引用 —— 池化后元素随可见集进出 DOM，缓存本来也站不住。
 
 4. **slot-view 必须被 `WorkflowSlotConnectionBehavior` 包住，且只能包一层**

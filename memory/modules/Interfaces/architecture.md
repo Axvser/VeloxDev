@@ -36,7 +36,7 @@
 | `IConditionalSlot`（1） | `Src/Core/VeloxDev.Core/WorkflowSystem/SelectorEx/ConditionalSlot.cs:12` | SelectorEx 内部 |
 | `IAopHookTarget`（1） | `Src/Core/VeloxDev.Core/AspectOriented/AspectHooks.cs:66` | AOP 运行期内部 |
 | 强类型命令族 `IVeloxCommand<TParam1..TParamN, TResult>`（14）与 `IVeloxCommandEvents<TParam,TResult>`（1） | `Src/Core/VeloxDev.Core/MVVM/CommandArities.cs`、`MVVM/CommandEventArgs{TParam,TResult}.cs:31` | MVVM 模块内部管线 |
-| `IVeloxJson*`（2） | `Src/Core/VeloxDev.Core/Serialization/VeloxJsonRegistry.cs` | 序列化模块内部。**2026-10-04 起只剩读写器这两个** —— 原来的四个生命周期钩子接口已删，钩子改用 BCL 那四个特性，见 `memory/modules/Serialization/pitfalls.md` §七 |
+| `IVeloxJson*`（2） | `Src/Core/VeloxDev.Core/Serialization/VeloxJsonRegistry.cs` | 序列化模块内部。**只有读写器这两个**（没有生命周期钩子接口，钩子用 BCL 那四个特性，见 `memory/modules/Serialization/pitfalls.md` §七） |
 
 **可执行的判据**：契约进 `Interfaces/`，当且仅当它**跨越实现模块的边界** —— 由一个核心实现 + 若干外部（应用/适配器/生成器）各自实现。只被一个子系统实现、外部从不实现的，跟实现同住。`IContext` 的 XML 自己把这棵树写出来了（`IContext.cs:10-11`：派生 `IAccessContext`/`ITaskContext`/`IRuntimeContext`/`ICompileContext`），其中前两个在 `Interfaces/` 而 `IRuntimeContext`/`ICompileContext` 在 `CompilerEx/` —— 同一棵树，跨目录。
 
@@ -94,7 +94,7 @@
 四条，都能在代码里指到：
 
 1. **生成器用字符串全名引用契约。** `Src/Generators/VeloxDev.Core.Generator/Theme.cs:18-20`（`"global::VeloxDev.DynamicTheme.ITheme"` 等三条）、`Writers/TickWriter.cs:70`、`AopSurface.cs:82`、`Writers/CommandWriter.cs:570`、`Writers/WorkflowWriter.cs:342-358`。契约一旦改名或换命名空间，生成器**不会**跟着重构（它只认字符串），所以契约必须住在一个稳定、被所有下游共享的位置。
-2. **七家适配器要共享同一份定义。** 这件事在本仓真的发生过：`IWorkflowGridDecorator.cs:9-11` 与 `IWorkflowMinimapOverlay.cs:12-14` 的 XML 明说以前每家各有一份相同副本（Jalium 那份还是派生形状），统一到 Core 后由各平台实现（谁在适配器、谁在模板、谁没有实现见上表）。
+2. **七家适配器要共享同一份定义。** `IWorkflowGridDecorator.cs:9-11` 与 `IWorkflowMinimapOverlay.cs:12-14` 的 XML 都写明这一点：每家自己留一份相同副本会分叉（Jalium 那份还是派生形状），定义统一放 Core、由各平台实现（谁在适配器、谁在模板、谁没有实现见上表）。
 3. **契约是注册表的键。** `TimerCore.CreateTimeSource<TContract>() where TContract : class, ITimeSourceControl`（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs:109`）按**精确契约类型**查表，且 XML 明说不做宽/窄回退（`:102-107`）。契约类型本身是 API 的一部分。
 4. **契约层不引用任何 GUI。** `Interfaces/` 的全部 `using` 只有 5 个系统命名空间（`System.Reflection`/`System.Linq.Expressions`/`System.ComponentModel`/`System.Threading`/`System.Threading.Tasks`）与 6 个仓内模块（见 §五）。`IVeloxCommand : ICommand` 用的是 `System.Windows.Input`（`IVeloxCommand.cs:1`），在 .NET Core 上由 `System.ObjectModel` 提供，不是 WPF 依赖。
 
@@ -108,7 +108,7 @@
 |---|---|---|
 | `VeloxDev.AI` | 11 | `[AgentContext]`/`[AgentCommandParameter]` 标在 WorkflowSystem 的契约上（`IWorkflowViewModel.cs:7-8`、`IWorkflowTreeViewModel.cs:31-33`、`IContext.cs:10-11` 等）。读取规则见 `memory/modules/AI/architecture.md` |
 | `VeloxDev.MVVM` | 5 | `IVeloxCommand` 作为契约的属性类型（`IWorkflowViewModel.cs:31`、`IWorkflowTreeViewModel.cs:41` 等 22 个命令属性） |
-| `VeloxDev.TimeLine` | 1 | `ITickable.cs:1`（`FrameEventArgs`）。2026-10-04 之前这里还有第二处：`ITransitionInterpreter.cs` 的 `using VeloxDev.TimeLine`，在 `TransitionEventArgs` 从 `VeloxDev.TimeLine` 移入 `VeloxDev.TransitionSystem` 之后就成了死引用，已删 |
+| `VeloxDev.TimeLine` | 1 | `ITickable.cs:1`（`FrameEventArgs`）。没有第二处：`ITransitionInterpreter.cs` 不 `using VeloxDev.TimeLine`（`TransitionEventArgs` 现在在 `VeloxDev.TransitionSystem`） |
 | `VeloxDev.Threading` | 1 | `ITransitionHost.cs:14` 的 `IThreadDispatcher<TPriorityCore>` |
 | `VeloxDev.Lifetime` | 1 | `ITransitionHost.cs:14` 的 `IApplicationState` |
 | `VeloxDev.TransitionSystem.Abstractions` | 2 | `ITransitionScheduler.cs:1`（`InterpolatorCore`）、`ITransitionInterpreter.cs:1`（`SamplerSet<TPriorityCore>`）—— **契约引用了具体类**，见 §八·4 |

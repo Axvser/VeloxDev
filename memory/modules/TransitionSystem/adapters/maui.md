@@ -107,41 +107,40 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
 
 ## 四、改这里时最容易踩的坑
 
-### 1. `RectFSampler` 的键与实现一度是两个不同的类型（已修，2026-09-20）
+### 1. `RectFSampler` 的键与实现必须是同一个 `RectF` 类型
 
-- **旧形状**：注册处 `Interpolator.cs:20` 是 `RegisterInterpolator(typeof(RectF), new RectFSampler());`，该文件只有
+- **注册键**：`Interpolator.cs:20` 是 `RegisterInterpolator(typeof(RectF), new RectFSampler());`，该文件只有
   `using Microsoft.Maui.Controls.Shapes;` 与 `using VeloxDev.Adapters.NativeSamplers;`（`:1-2`），**没有 `System.Drawing`**；
   而 `System.Drawing` 里根本没有 `RectF` 这个名字（它叫 `RectangleF`）⇒ 这个键只能是 `Microsoft.Maui.Graphics.RectF`。
-  实现处 `Samplers/RectFSampler.cs` 却 `using System.Drawing;`、解的是 `System.Drawing.RectangleF`。
-  **同名不是原因**：键是 `Type`，两者本可并存；错在**实现解的不是自己那条键的类型**。
-- **旧后果**：声明为 Maui `RectF` 的属性（声明入口在本家自己的 `Transition.cs:127` 的 `Property(Expression<Func<T, RectF>>…)`）
+  **同名不是原因**：键是 `Type`，两者本可并存；错在**实现解的不是自己那条键的类型**（`Samplers/RectFSampler.cs`
+  一旦 `using System.Drawing;` 就解成 `System.Drawing.RectangleF`）。
+- **后果**：声明为 Maui `RectF` 的属性（声明入口在本家自己的 `Transition.cs:127` 的 `Property(Expression<Func<T, RectF>>…)`）
   走注册表时，第一帧在采样器里抛 `InvalidCastException`；`SamplerSet.ApplyCore` 只报一次 `ErrorStage.Sampling` 诊断然后
   `CancelQuietly()` —— **整条 run 被取消**，不是静默降级（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs:136-142`）。
-- **为什么长期没露头**（两条独立原因）：① 单精度矩形在仓库里一直按 `System.Drawing.RectangleF` 用，而那个类型由
+- **为什么不易露头**（两条独立原因）：① 单精度矩形在仓库里按 `System.Drawing.RectangleF` 用时，由
   **Core** 注册（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:22` 的 `RectangleFSampler`），根本不经过 MAUI 这条键；
   ② demo 的验收路径用 `SetInterpolator` 逐条覆盖，注册表被整个绕过（`Examples/Transition/MAUI/Demo/MainPage.xaml.cs:443`）。
-- **修法（已落地）= 让体去解自己那条键的类型**：删掉 `using System.Drawing;`，改解 Maui `RectF`
-  （`Samplers/RectFSampler.cs:15-16` 现在是 `(RectF)(start ?? new RectF())`）。名字 / 注册键 / 实现三处就此对齐。
-  `System.Drawing.RectangleF` 的覆盖**没有丢**：它本来就由 Core 那条独立承担，纯数据套件里也一直有自己的表项
+- **对齐方式 = 让体去解自己那条键的类型**：不留 `using System.Drawing;`，解 Maui `RectF`
+  （`Samplers/RectFSampler.cs:15-16` 是 `(RectF)(start ?? new RectF())`）。名字 / 注册键 / 实现三处就此对齐。
+  `System.Drawing.RectangleF` 的覆盖不丢：它由 Core 那条独立承担，纯数据套件里也一直有自己的表项
   （`Examples/Transition/AUTO TEST/Samplers/CoreSamplerEntries.cs:171` 的 `new RectangleFSampler()`，标着 `"Core"`）。
-- **反方向为什么不能走**：把键改成 `typeof(System.Drawing.RectangleF)` 会经 `AddOrUpdate` **顶掉 Core 的
+- **反方向不能走**：把键改成 `typeof(System.Drawing.RectangleF)` 会经 `AddOrUpdate` **顶掉 Core 的
   `RectangleFSampler`**（安装是 last-writer-wins，`../extension.md` §二·1）—— 一个适配器版本静默替换 Core 的实现，
   之后两家各自演化。**同一个 `Type` 才会顶，同名不会。**
-- **测试为什么抓不到这类错**：`SamplerCoverageTests` 对的是**采样器类型**集合（反射 vs 两张表），不是 `(键, 采样器)`
+- **测试抓不到这类错**：`SamplerCoverageTests` 对的是**采样器类型**集合（反射 vs 两张表），不是 `(键, 采样器)`
   配对，所以「键与体不符」在库里完全不可见（`Examples/Transition/AUTO TEST/Samplers/SamplerCoverageTests.cs:63-86`）。
-  **这道网现已补上**（2026-09-20）：`Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs` 先把七家 + Core 的注册入口
+  这道网在 `Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs`：它先把七家 + Core 的注册入口
   在这个进程里真跑起来，再问**真实注册表**「条目声明的类型解析到谁」，断言它等于条目写的那条采样器、且接得住该类型的值
   （`EveryEntry_ValueTypeResolvesToTheSamplerItNames` `:54`、`EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey` `:98`）。
-  依据是条目新增的 `ValueType`（声明类型 = 注册键）与 `UnregisteredReason`（`SamplerEntry.cs:43,50`）。
-- **这次一起动的三处连带**（都不在 `Src/` 里）：
-  1. demo 的 subject 属性由 `SysRectangleF` 改 `MauiRectF`（`Examples/Transition/MAUI/Demo/SamplerSubject.cs:68,101`），
+  依据是条目的 `ValueType`（声明类型 = 注册键）与 `UnregisteredReason`（`SamplerEntry.cs:43,50`）。
+- **连带要一起动的三处**（都不在 `Src/` 里）：
+  1. demo 的 subject 属性用 `MauiRectF`（`Examples/Transition/MAUI/Demo/SamplerSubject.cs:68,101`），
      端点工厂同步（同目录 `SamplerProbe.cs:130-131`）；
   2. 纯数据表 `MauiEntries` 的 `Target.BoundsF` 与端点（`Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs:34,174-181`）——
      注意这张表是**按名字反射**到 `VeloxDev.Adapters.NativeSamplers.RectFSampler` 的（`:55`），端点类型不对会直接炸；
-  3. live 载荷的**类型标签**由 `"RectangleF"` 改 `"RectF"`（`SamplerProbe.cs:270`），`MauiConformance.cs:100` 同步 ——
+  3. live 载荷的**类型标签**是 `"RectF"`（`SamplerProbe.cs:270`），`MauiConformance.cs:100` 同步 ——
      `ConformanceEntry.TypeTag` 的定义就是「产物必须有的类型名」，由 `ConformanceChecks.cs:409` 与 demo 报回的标签逐字比对。
-     `LiveContract` 里 `["RectF"]` 是**新增**的键，`["RectangleF"]` 保留（它现在没有 live 生产者，但仍是 Core 那条
-     `System.Drawing.RectangleF` 的形状声明）—— 这两条 key 都只有 MAUI/Core 一侧相关，改动不外溢。
+     `LiveContract` 里 `["RectF"]` 与 `["RectangleF"]` 两条 key 都只有 MAUI/Core 一侧相关，改动不外溢。
 
 ### 2. 新加一个采样器时，「在哪一侧注册」比类名重要
 

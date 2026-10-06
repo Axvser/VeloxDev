@@ -37,8 +37,8 @@ item template 的 `replaces` token，逐个在生成文件里搜，残留即“�
 `primaryOutputs` 完整、七个生成文件能对着适配器一起编译、模板文本 == `Examples/Workflow/<GUI> Trimmed` 的镜像
 （机械改动除外）；证明不了任何运行期行为，也分不出颜色对不对（错的颜色照样编译）。
 
-⚠ **占位符守卫第一次跑就抓到 Jalium pack 的一个真缺陷**：**`workflow-link-view`** 模板引用了 `TemplateLinkColor`，
-而该条 `template.json` 当时并没有声明这个 symbol。**现已修好**：`workflow-link-view/.template.config/template.json:33`
+⚠ **占位符守卫能抓到 pack 的真缺陷**（第一次跑就抓到 Jalium 的）：**`workflow-link-view`** 模板引用了 `TemplateLinkColor`，
+而该条 `template.json` 必须声明这个 symbol —— `workflow-link-view/.template.config/template.json:33`
 声明了 `"replaces": "TemplateLinkColor"`（默认值 `#DDFFFFFF`），源码侧因此**保持占位符 token、不写死颜色**
 （`workflow-link-view/TemplateClass.jalxaml.cs:102` 把它交给 `ParseColor`）。
 这一轮全平台化同时补了四对镜像同步：WinUI `LinkView`、MAUI `LinkView` / `TreeView` / `SlotView`、WPF `SlotView`。

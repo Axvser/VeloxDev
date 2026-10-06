@@ -56,7 +56,7 @@
 
 注册处因此有一条**归属规则**（`VeloxJsonRegistry.cs`）：**声明方的注册永远写得上；消费方只在还没有条目时写得上**。这不是推断出来的 —— `RegisterWriter` / `RegisterReader` **收一个 `declaresType` 参数**，由生成的注册代码给出。
 
-**为什么必须是说出来的**：曾经有一版从 `implementation.GetType().Assembly == type.Assembly` 推断（「生成器把读写器类发进发起注册的那个编译」）。那条不变量没有任何东西强制，而且它躲在两个文件之外 —— 只要将来把读写器类发到公共程序集，判断就静默反向，且没有测试会红。
+**为什么必须是说出来的**：从 `implementation.GetType().Assembly == type.Assembly` 推断（「生成器把读写器类发进发起注册的那个编译」）不行 —— 那条不变量没有任何东西强制，而且它躲在两个文件之外：只要把读写器类发到公共程序集，判断就静默反向，且没有测试会红。
 
 **为什么不是「先到先得」**：消费方是通过别的程序集看这个类型的，它的产物是**窄的那一份** —— `IsReachableFromGeneratedCode` 把外程序集的 `internal` 成员与 `internal` 回调全部排除，所以两边产物不同；而 `[ModuleInitializer]` 跨程序集的执行顺序语言不保证，先到先得会随机选中窄的那份，症状是**静默少成员、少回调**。
 
@@ -78,13 +78,13 @@
 
 `[JsonIgnore]` 按它本来的意思被认下来（理由与钩子那次相同：使用方不必为了同一件事改写代码）：`Always` = 排除该成员，`Never` = 显式放行，`WhenWritingNull` / `WhenWritingDefault` = **条件写出**（`VeloxJsonMember.WriteCondition`，写侧发一条守卫，读侧不必配合）。它的 `Condition` **按名字判、不按数值** —— 理由见 [pitfalls.md](pitfalls.md) §七。
 
-**生命周期钩子是 BCL 那四个特性**（`[OnSerializing]` / `[OnSerialized]` / `[OnDeserializing]` / `[OnDeserialized]`），生成器沿基类链先基后派生地调，带 `StreamingContext` 的传 `default`。原来的四个 `IVeloxJson*` 钩子接口已删。
+**生命周期钩子是 BCL 那四个特性**（`[OnSerializing]` / `[OnSerialized]` / `[OnDeserializing]` / `[OnDeserialized]`），生成器沿基类链先基后派生地调，带 `StreamingContext` 的传 `default`。没有四个 `IVeloxJson*` 钩子接口。
 
 ---
 
 ## 二、热路径上的三个结构事实
 
-1. **注册表读取无锁。** 五张表收在一个不可变 `Snapshot` 里，用 `private static volatile Snapshot _snapshot`（`VeloxJsonRegistry.cs:102`）发布；注册在 `Gate` 内造新快照再换，**五个查询方法一把锁都不拿**。查询在每一步都发生（写：`WriterFor` 每个值一次、`NameOf` 每个类型不符一次；读：`TypeOf` + `ReaderFor` 每个对象各一次），原先的全局锁因此是每节点的固定开销。
+1. **注册表读取无锁。** 五张表收在一个不可变 `Snapshot` 里，用 `private static volatile Snapshot _snapshot`（`VeloxJsonRegistry.cs:102`）发布；注册在 `Gate` 内造新快照再换，**五个查询方法一把锁都不拿**。查询在每一步都发生（写：`WriterFor` 每个值一次、`NameOf` 每个类型不符一次；读：`TypeOf` + `ReaderFor` 每个对象各一次）—— 用全局锁就是每节点的固定开销。
 2. **成员名不落成字符串。** 生成器发出的是 `while (reader.NextMember())` + `reader.MemberNameEquals("字面量")` 的 `if/else if` 链（`Writers/VeloxJsonCodeWriter.cs:272`），名字在原文上就地比对（`VeloxJsonReader.cs:266`、`:306`）。**旧的 `while (NextMember(out var name)) switch (name)` 每读一个成员先分配一个字符串，只为和字面量比一次就丢掉。**
 3. **转义拼法只有一份。** 在 `VeloxJsonText.EscapeSequence`（`VeloxJsonText.cs:52`）—— 归档写入器与 JSON 树都从它取。**没有转义字符的字符串整串一次写出**，不再每字符一次虚调用。
 
@@ -329,9 +329,9 @@
 （顺带：这也说明归档的四个数字本身是能当基准锚用的。）
 
 **与桥接之前（2026-10-04）那张表的关系**：那一版的 STJ 文档是 312 K / 3.12 M / 31.5 M —— 小 2.3×。
-配上多态之后变成 795 K / 7.92 M / 79.6 M。**差的不是 STJ 变慢了，是它以前写的文档缺 `$type`、根本读不回来。**
-所以旧的「归档比 STJ 快 1.5–1.9×、文档小 2.34×」整批作废，不要再引用。同样地，「STJ 读不了这张图」
-这条也过期了 —— 它现在能读，代价就是上面那个 `StjSerializationBridge.cs`。
+配上多态之后变成 795 K / 7.92 M / 79.6 M。**差的不是 STJ 变慢了，是不带 `$type` 的 STJ 文档根本读不回来。**
+所以「归档比 STJ 快 1.5–1.9×、文档小 2.34×」这组数字不能用，不要再引用。同样地，「STJ 读不了这张图」
+也不成立 —— 它现在能读，代价就是上面那个 `StjSerializationBridge.cs`。
 
 **噪声：报告自带自校，而它给出的大小每次都不一样。** 同一个归档写被两个类各量了一次，两者之差就是这一档的
 噪声 —— 2026-10-05 那次是 `9.1 / 31.1 / 13.4 / 11.1%`（小 → 超大，**最差这次落在「中」档**）。所以
@@ -341,7 +341,7 @@
 那不是结论、是抖动。自校同时给出每一侧自己的 IQR（那次是 4.0–6.3%），**它远小于「差」** —— 说明主导误差是
 两次测量之间的整体漂移，不是迭代尖峰。完整结论见 §四。
 
-> ⚠ **别拿被污染的那次当结论。** 曾经记过一次「归档读在大档到超大档是 3× 数据换 6.8× 时间」，那来自一次**我同时还在跑 demo 与重建**的测量。干净跑出来是 3.24×（线性）。量基准时不要在机器上做别的事 —— 这条比任何一条数字都值得记。
+> ⚠ **别拿被污染的那次当结论 —— 量基准时不要在机器上做别的事。** 机器上同时跑了 demo 与重建时，归档读在大档到超大档量到「3× 数据换 6.8× 时间」（污染值）；干净跑出来是 3.24×（线性）。这条比任何一条数字都值得记。
 
 **STJ 在这张图上的失败，以及 2026-10-04 用配置补上它们的过程**（全部实测，不是推测）。
 补在 `Src/Verification/VeloxDev.Serialization.Benchmarks/StjSerializationBridge.cs`：
@@ -355,7 +355,7 @@
 每一行带的是什么 —— 报告的表下那段图例就是干这个的。
 
 **配上多态的代价（实测）**：STJ 写出的文档从 312 K 涨到 795 K（小档）——**也就是说在那之前它写的是一份没有
-`$type`、读不回来的文档**，拿它比大小与耗时对归档是不公平的。旧的倍率因此整批作废，表要重跑。
+`$type`、读不回来的文档**，拿它比大小与耗时对归档是不公平的。倍率表要按现在的文档重跑。
 
 **没解决的**：树的 `LinksMap`（接口键套接口键）是这套格式最贵的形状，而**这张语料里它是空的**。
 `Corpus.BuildTree` 用的是 `NodeDefaultViewModel` / `SlotDefaultViewModel`，只有 `SlotEnumerator` 会往
@@ -367,7 +367,7 @@
 
 ### 一个**没有**采纳的方案，别再试一遍
 
-计划里原本要把内部游标从 UTF-16 换成 UTF-8 字节。**证据不支持**：
+一个没采纳的方案：把内部游标从 UTF-16 换成 UTF-8 字节。**证据不支持**：
 
 - `ReadString`/`ReadText` 与所有属性赋值都要 `string`，成员名也要（生成器那条链虽已改成就地比对，但值仍然要字符串），所以字节化省不掉字符串物化；
 - 公开的 `VeloxJsonReader` 是 **class**，而 `Utf8JsonReader` 是 `ref struct`，**不能当它的字段**——想借 STJ 的分词器就得把公开类型改成 ref struct；
@@ -378,7 +378,7 @@
 - 读侧：`VeloxJsonReader` 多了一个 `TextReader`/`Stream` 入口。`_position` 改成**文档绝对偏移**，窗口压缩时改 `_origin` 而不动任何偏移字段；一个 `Require(floorAbs, count)` 原语负责压缩、增长、续读。**一个 token 在窗口里始终连续**这条不变量靠 `floorAbs` 保证 —— 扫描不定长 token 的循环把它的起点传下去。
 - 两个「钉住下限」的字段容易忘：`_checkpointFloor`（`$ref`/`$id`/`$type` 探测回退期间，必须 `try/finally`）与 `_memberHeld`（`NextMember()` 记下名字后置位，**任何取值方法都要清掉**，否则一个长字符串值会把下限钉在名字上，内存又变回 O(整份文档)）。
 - 写侧本来就在流式写（`WriteTo(TextWriter, …)`），只是补了 `WriteTo(Stream, …)`。
-- **`$ref` 从来只向后指**（写侧先分配 id 再写对象，重复出现才写引用），所以**单遍前向读就够了**，不需要两遍式重设计 —— 早先记忆里那句「需要两遍」是错的，已删。
+- **`$ref` 只向后指**（写侧先分配 id 再写对象，重复出现才写引用），所以**单遍前向读就够了**，不需要两遍式重设计。
 
 峰值的实际形态：`缓冲区 + 对象图`，而不是 `整份文档 + 对象图`。缓冲区会为一个超长 token 增长到那个 token 的大小。
 
@@ -404,7 +404,7 @@
 
 ## 六、生成器产物**不会**落到 `obj/` 下，除非显式打开
 
-`obj/Debug/*/generated/...` 里那份 `*_VeloxJson.g.cs` 可能是**很久以前的遗留**。Roslyn 默认只在内存里持有生成结果；要落盘得加 `-p:EmitCompilerGeneratedFiles=true`。
+`obj/Debug/*/generated/...` 里那份 `*_VeloxJson.g.cs` 可能是**上一次显式开启 `EmitCompilerGeneratedFiles` 时的遗留**。Roslyn 默认只在内存里持有生成结果；要落盘得加 `-p:EmitCompilerGeneratedFiles=true`。
 
 **别用文件时间戳判断生成器跑没跑**——2026-10-04 就因此误判过一次，差点把一次真实的产物改动当成没生效。
 

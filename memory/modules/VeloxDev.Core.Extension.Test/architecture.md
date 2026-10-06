@@ -126,7 +126,7 @@ System.InvalidOperationException: Environment variable 'API_KEY_DEEPSEEK' is not
 
 **中止点的计数是竞态的，别把某一次的读数当基准**。三次实测分别是 `失败 3 + 通过 240 + 跳过 3 = 246`、`失败 0 + 通过 206 + 跳过 3 = 209` 与 `通过 122 = 122` —— 崩在哪一刻决定了有多少条测试还没来得及报结果，其中那几条「失败」全是**正在跑的**子代理测试被连坐成的 `TimeoutException`，没有一条是完整的断言失败。第三次的 122 比前两次低，原因是可复现的：demo 的宿主接线为了挂子代理，把「解析模型」挪到了骨架渲染之前（`AgentHelper.cs:297-315`），于是缺 key 这件事**更早**抛。这是同一个缺陷更早触发，不是新增的缺陷。（注：上面栈里的 `:293`/`:149`/`:144` 是 2026-10-04 复核时的行号；`async void` 这个缺陷本身未动。）
 
-那么为什么**以前不红**：抛出的时机是竞态的 —— 异常从 `async void` 逃逸后由线程池接住，只有它恰好落在测试宿主收集结果的窗口内才会崩掉整轮。本模块原有的 281 条跑完只要 0.45 s，不够久也不够忙；加了 90 条子代理测试（它们各自在 `Thread.Sleep(5)` 轮询、把整轮拉长了十几倍）之后，它稳定地落进来了。**是「时长」还是「线程池压力」在起决定作用，我没有单独隔离**，能确定的是子代理那一批就是那个差。三条独立实验钉住这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除门控测试、只留下子代理那批（当时 94 条），仍然红**。
+**它为什么平时不红**：抛出的时机是竞态的 —— 异常从 `async void` 逃逸后由线程池接住，只有它恰好落在测试宿主收集结果的窗口内才会崩掉整轮。本模块 281 条只跑 0.45 s，不够久也不够忙；加上 90 条子代理测试（它们各自在 `Thread.Sleep(5)` 轮询、把整轮拉长了十几倍）之后，它稳定地落进来了。**是「时长」还是「线程池压力」在起决定作用，没有单独隔离**，能确定的是子代理那一批就是那个差。三条独立实验钉住这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除门控测试、只留下子代理那批（当时 94 条），仍然红**。
 
 **结论**：本模块自己的门控约定是成立的 —— `SubAgentLiveTests` 缺 key 时 `Assert.Inconclusive`，MSTest 4.0.2 下报成**已跳过**（`--filter FullyQualifiedName~Agent.SubAgents` 无 key = 96 通过 + 5 跳过，0 失败，0.42–0.45 s）。红的是全量轮次，根因在 `Examples/` 的 `async void`。**修它要动 demo，本仓库当前的选择是不动** —— 所以这条要一直记着，别把它误判成本模块的回归。
 **「子代理那批」现在是 110 条 `[TestMethod]`**（2026-10-04 实测 `grep -c` 于 `Agent/SubAgents/*.cs`，含 6 条门控），其余 **532** 条（642 − 110）。旧读数（473 / 362 / 281 其余 / 101 或 96 子代理）已过期；那条「历轮只动子代理那批」的观察本身仍然成立。
@@ -146,7 +146,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 **子代理那一批没有改变这一点，但它把边界推近了一格**：`SubAgentDoubles.cs:149,592` 的两处 `Thread.Sleep(5)` 轮询带着 5000 ms 的墙钟超时，在满载的 CI 上是「真实时钟断言」的雏形。它今天仍然安全，因为超时只用来**把死锁变成失败**而不是断言性能 —— 一个卡住的 `GateChatClient` 会让测试红，而不会让它假绿。加到 `[DoNotParallelize]` 的门槛是「超时值本身成为断言对象」，不是「存在超时」。
 
-### ⚠ 但「0 个 `[DoNotParallelize]`」不等于「曾经没有抖动」—— 有一次真实抖动，已定位并修掉
+### ⚠ 但「0 个 `[DoNotParallelize]`」不等于「不会抖动」—— 这条抖动的成因与修法（见下）
 
 **必须记下来的一笔**，因为上面那句「本模块没有真实时钟断言」在本轮之前是**错的**：在子代理那一批落地之后、本轮修复之前，未改动的树上实测 **5 次全量跑里有 3 次红**，每次都是同一条 —— `SubAgentTreeViewModelTests.AStoppedChild_IsNotCountedAsAFailedOne`，症状是 `tree.CompletedCount == 0` 而 `TotalCount == 2`（一个孩子无辜变红）。**隔离单跑 5/5 全绿**，所以它是负载敏感的、只在方法级并行下出现。
 
@@ -170,7 +170,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 **结论**：这不是「加 `[DoNotParallelize]`」能解决的，也不是线程池饿死（隔离跑同样红）。它是一个待查的引擎缺陷，归 `WorkflowSystem/CompilerEx`。
 
-#### 2026-10-01 已修复：根因是**日志集合被并发读写**
+#### 2026-10-01：根因是**日志集合被并发读写**
 
 **根因**：`RuntimeContext._logs` 是 `ObservableCollection<string>`（**不是线程安全的**），引擎在跑的同时 `GetCompiledRunStatus` 会读它。`LogTail` 的 `lines.ToList()` 先读 `Count` 再 `CopyTo`，中间只要有一次写入，目标数组就不够大：
 
