@@ -156,14 +156,13 @@ Src/Core/VeloxDev.Core.Test/MSTestSettings.cs:1
 | 纵深防御 | `TransitionSystem/InterpolatorCoreTests.cs:13` | 注释（`:9-12`）自己写明：这些断言与并行无关，保留 `[DoNotParallelize]` 纯粹是防御 |
 | 未注明理由 | `MVVM/CommandArityTests.cs:40` | 只有裸 `[DoNotParallelize]`，类注释里没写为什么串行 |
 
-**「用真实时钟但没摘出去」的类 —— 这就是偶发失败的全部来源**（原为 4 个，`MVVM/` 于 2026-10-01 消除，剩 3 个）：
+**「用真实时钟但没摘出去」的类 —— 这就是偶发失败的全部来源**（3 个）：
 
 | 类 | 真实时钟用法 | `[DoNotParallelize]` |
 |---|---|---|
 | `Timing/CompensatingTimeSamplerTests.cs` | `:271` `Thread.Sleep(60)`；`:284-286` 断言余数 `< 11ms` | ✗ |
 | `Timing/UncompensatedTimeSamplerTests.cs` | `:112` `Thread.Sleep(60)`（暂停区间）、`:154` `Thread.Sleep(30)`；`:157-159` 断言落在 20–200ms | ✗ |
 | `TransitionSystem/ChainRepeatTests.cs` | `:194/:215/:233/:248/:270/:302` 固定 `Task.Delay(80)` 稳定窗；`:332` `Task.Delay(40)` 与 `:334` `Task.Delay(150)` 再稳定；`:338` 断言精确顺序 | ✗ |
-| ~~`MVVM/VeloxCommandTests.cs`~~ | **2026-10-01 已消除**：该文件重写为 TCS 门控，MVVM 目录新增的测试也全部走 `CommandTestKit` 的信号等待，无一处真实时钟 | — |
 
 （`TransitionSystem/EaseOvershootTests.cs:48` 用了真实 120ms 时长，但断言走 `FixedEase`，与帧时序无关 —— 不是风险源。）
 

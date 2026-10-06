@@ -78,7 +78,7 @@
 - 引擎子集：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`，**19 文件 / 79 条**（2026-10-04 实测；2026-09-27 时为 16 文件 / 77 条，同日从 44 条经「五个可选能力契约」涨到 66、「报告不打断运行」到 72、「检查点与恢复」到 77）。**全部用手写探针**（`ProbeNode` 实现 `ICompileTimeAware` / `IRuntimeAware`，`RedirectableNode : ProbeNode` 实现 `IRedirectable`）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
 - 并发契约由 `ParallelExecutionTests` 钉住（6 条，其中 `FanOut_CompilesToAParallelSegment` 是前置确认）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。**做法是先写测试**：其中两条在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`），改完才绿 —— 这类「先让测试证明它能判别」的次序值得沿用。
 - 日志 sink 与上限另由 `CompilerLogWriterTests`（`Core.Test`）钉住：writer 与 `Logs` 逐行同序、上限只裁内存（`0` = 只落 writer）、**writer 抛异常不改变运行**（吞掉并报 `LogWriteFailed`）、分支的 `Warn` 不置会话的 `RedirectRequested`；Agent 路径那条在 `Core.Extension.Test` 的 `WorkflowLifecycleFidelityTests.WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink`。
-- **没测**（2026-09-27 更新：**取消已补测**，见第十节）：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 三个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值。~~重定向上限（50 次）那条路只有代码审查~~ **2026-10-04 已补测：`RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException`**（断言异常消息含 `"50"`）。
+- **没测**（2026-09-27 更新：**取消已补测**，见第十节）：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 三个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值。（重定向上限 50 次那条路由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 钉住，见第七节。）
 
 ## 八、编译图作为可序列化文档（2026-09-27 起）
 

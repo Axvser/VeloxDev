@@ -182,9 +182,10 @@
 
 ### 4.6 本模块**不需要**联动的东西（省掉无谓的搜索）
 
-- ~~**没有生成器**~~ —— **2026-10-03 起不但有，而且它就是这套东西的行为来源。** `Src/Generators/VeloxDev.Core.Generator/AIContextTree.cs` 往每个程序集里加一个只读的上下文分片与一组访问器（见 `architecture.md` §七），五个助手全部读它。**所以「哪些成员进 Agent 面」「命令叫什么」「说明与参数类型从哪来」这些问题要改生成器，改 Core 的助手改不动它们**；反过来，改助手的拒绝文案/错误形状只动 Core。两条交叉线：命名规则抽在生成器的 `Base/AIContextNaming.cs`（`MVVMFieldAnalizer` 与 `CommandWriter` 都转调它），成员遍历抽在 Core 的 `AIContextDirectory.MembersAcross`（渲染器与三个助手都转调它）。
 - **Release 构建用的是 NuGet 上的 `VeloxDev.Core.Generator` 包，不是本地源码**（`Condition="'$(Configuration)' != 'Debug'"`）。生成器改了而包没重发，Release 下的目录仍是旧形状 —— Debug（含 `dotnet test` 默认配置）才跑本地生成器。
 - **没有平台适配器**：加一家 GUI 不需要在本模块改任何一行；交互 UI 归各 demo。
+
+**反过来，有一处必须联动、而且它不在本模块：生成器。** `Src/Generators/VeloxDev.Core.Generator/AIContextTree.cs` 往每个程序集里加一个只读的上下文分片与一组访问器（见 `architecture.md` §七），五个助手全部读它。**所以「哪些成员进 Agent 面」「命令叫什么」「说明与参数类型从哪来」这些问题要改生成器，改 Core 的助手改不动它们**；反过来，改助手的拒绝文案/错误形状只动 Core。两条交叉线：命名规则抽在生成器的 `Base/AIContextNaming.cs`（`MVVMFieldAnalizer` 与 `CommandWriter` 都转调它），成员遍历抽在 Core 的 `AIContextDirectory.MembersAcross`（渲染器与三个助手都转调它）。
 - **没有序列化契约**：`AgentLanguages` 是 `byte` 枚举，但没有任何地方对它做自定义序列化；跨进程传的是它自己的值。
 
 ---
