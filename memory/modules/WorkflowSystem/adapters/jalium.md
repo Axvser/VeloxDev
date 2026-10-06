@@ -199,13 +199,10 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 
 | 差异 | 现在的依据（当场量的） |
 |---|---|
-| ~~没有画布变换通道~~ | **已消除**（2026-10-05）：值照样以附着属性发布（`WorkflowSurfaceBehavior.CanvasTransform`），模板改绑树视图模板类上那个**同名 CLR 属性**（`workflow-tree-view/TemplateClass.jalxaml.cs:19-22`，DP 对象是同一个）。括号路径读不到是唯一的不同，而它只影响「怎么拼这行绑定」 |
 | **有 `WorkflowLinkBounds`** | 渲染器按 `RenderSize` 盒裁剪子元素、内容画到盒外**静默丢弃**（§2.1 的 IL 级依据）。WPF 让连线视图铺满整块画布即可，本家那样做会在缩放里陈盒掉整层线 |
-| ~~`LinkView` 从模型读几何~~ | **已消除**（2026-10-05 重测）：照 WPF 用四个 DP 绑定可以跑，只需多一道 `IsNaN` 守卫（不加会**抛异常退出**）。「绑定晚一拍」这条归因不成立 |
-| ~~槽锚点用 `SlotAnchorFromCanvasLocal`~~ | **已消除**（2026-10-05）：位移改发布在宿主上之后，与其余六家同用 `SlotAnchorFromVisualCenter` |
 | **槽再同步靠 `Loaded`/`SizeChanged`/模型变更 + `Dispatcher.Render` 排一拍** | 本家**没有 `LayoutUpdated` 事件**（26.10.9 反射清点，一个都没有） |
 
-⇒ **这五条都是「WPF 那么做在本家跑不起来」，不是「本家想不一样」。** 谁要是能证明其中一条现在能跑了，
+⇒ **这两条都是「WPF 那么做在本家跑不起来」，不是「本家想不一样」。** 谁要是能证明其中一条现在能跑了，
 就照 WPF 改 —— 记忆不是理由，测量才是。
 
 ## 四、坑（带依据）
