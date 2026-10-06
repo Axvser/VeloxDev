@@ -297,6 +297,66 @@ public static class WorkflowSpatialEx
         return manager.QueryNodes(viewport);
     }
 
+    /// <summary>
+    /// Selects every node inside the rectangle the two points describe.
+    /// </summary>
+    ///
+    /// <param name="tree">
+    /// The tree to search. Its spatial map must already be enabled — see
+    /// <see cref="EnableMap{T}(IWorkflowTreeViewModel, double, T)"/>.
+    /// </param>
+    ///
+    /// <param name="from">
+    /// One corner of the rectangle, in the frame <see cref="IWorkflowNodeViewModel.Anchor"/> is read in.
+    /// </param>
+    ///
+    /// <param name="to">The opposite corner, in the same frame.</param>
+    ///
+    /// <returns>
+    /// The intersecting nodes, materialized: a selection is a result to keep, not a query to run again.
+    /// </returns>
+    ///
+    /// <remarks>
+    /// <para>
+    /// The two corners may be given in either order, and a drag that never moved describes no area —
+    /// that yields an empty selection rather than an error, matching what the viewport overload does
+    /// with a zero-sized viewport.
+    /// </para>
+    ///
+    /// <para>
+    /// The frame is the one <see cref="QueryNodes(IWorkflowTreeViewModel, Viewport)"/> queries in. A node's
+    /// <see cref="IWorkflowNodeViewModel.Anchor"/> getter returns that frame, and
+    /// <see cref="WorkflowSurfaceMath.ToWorldAnchor(double, double, int, CanvasLayout)"/> produces a point in
+    /// it from a pointer position — so a marquee built from two routed pointer positions needs no
+    /// scaling of its own. Multiplying by <see cref="CanvasLayout.Scale"/> here would size the rectangle
+    /// wrongly everywhere except at 100% zoom. (Writing a node's <c>Anchor</c> is the other direction and
+    /// does want that factor: the setter stores what the getter divides.)
+    /// </para>
+    /// </remarks>
+    ///
+    /// <seealso cref="QueryNodes(IWorkflowTreeViewModel, Viewport)"/>
+    public static IReadOnlyList<IWorkflowNodeViewModel> QueryNodes(
+        this IWorkflowTreeViewModel tree,
+        Anchor from,
+        Anchor to)
+    {
+        if (tree is null)
+            throw new ArgumentNullException(nameof(tree));
+
+        if (from is null)
+            throw new ArgumentNullException(nameof(from));
+
+        if (to is null)
+            throw new ArgumentNullException(nameof(to));
+
+        var left = Math.Min(from.Horizontal, to.Horizontal);
+        var top = Math.Min(from.Vertical, to.Vertical);
+        var width = Math.Abs(to.Horizontal - from.Horizontal);
+        var height = Math.Abs(to.Vertical - from.Vertical);
+
+        return [.. tree.QueryNodes(new Viewport(left, top, width, height))];
+    }
+
     private static void AddIfMissing(Collection<IWorkflowViewModel> observable, IWorkflowViewModel item)
     {
         if (!observable.Contains(item))
