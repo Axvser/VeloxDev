@@ -137,6 +137,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private int _menuLeft;
     private int _menuTop;
 
+    // 悬停命中的节点/插槽（JS 只在命中 id 变了时回传）：Moved 路由据此把目标认成节点/插槽，
+    // 认不到才回退到共享的连线曲线命中。
+    private IWorkflowViewModel? _hoverTarget;
+
     // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的渲染不再把用户滚回去。
     private IWorkflowTreeViewModel? _lastRestoreTree;
     private bool _hasPendingRestore;
@@ -232,14 +236,15 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     }
 
     // 指针移动/松开/滚轮也进输入路由：占位法（surface 自己转发）与逐线转发汇到同一个入口。
+    // 悬停到节点/插槽时把那一级当目标交出去（否则只认连线，链上 slot → node → tree 永远走不到）。
     private async Task OnSurfacePointerMove(PlatformInput.PointerEventArgs e)
-        => await RoutePointerAsync(SurfacePointerKind.Moved, e.ClientX, e.ClientY);
+        => await RoutePointerAsync(SurfacePointerKind.Moved, e.ClientX, e.ClientY, target: _hoverTarget);
 
     private async Task OnSurfacePointerUp(PlatformInput.PointerEventArgs e)
-        => await RoutePointerAsync(SurfacePointerKind.Released, e.ClientX, e.ClientY, Wf.MouseButton.Left);
+        => await RoutePointerAsync(SurfacePointerKind.Released, e.ClientX, e.ClientY, Wf.MouseButton.Left, target: _hoverTarget);
 
     private async Task OnSurfaceWheel(WheelEventArgs e)
-        => await RoutePointerAsync(SurfacePointerKind.Wheel, e.ClientX, e.ClientY, deltaY: e.DeltaY);
+        => await RoutePointerAsync(SurfacePointerKind.Wheel, e.ClientX, e.ClientY, deltaY: e.DeltaY, target: _hoverTarget);
 
     // 换树才重接：按模型实例比对，同一棵树在重复的 OnParametersSet 里不再动订阅。
     private void SyncTreeSubscriptions()
@@ -361,6 +366,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         }
 
         _input = input;
+        // 换树：上一棵树上认出来的悬停目标不再成立，清掉等 JS 重新报。
+        _hoverTarget = null;
         if (input is null) return;
 
         var bound = input.Tree;
@@ -469,6 +476,109 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             await _surfaceRoot.FocusAsync(preventScroll: true);
         }
     }
+
+    /// <summary>
+    /// Answers the JavaScript that is about to start one of the surface's own gestures (canvas pan):
+    /// routes the press through <see cref="WorkflowInput"/> and hands back whether a subscriber refused it.
+    /// </summary>
+    /// <param name="localX">Canvas-local x of the press.</param>
+    /// <param name="localY">Canvas-local y of the press.</param>
+    /// <param name="button">The browser's <c>MouseEvent.button</c> number.</param>
+    /// <param name="modifiers">The Core modifier bitmask (the browser's flags map onto it one for one).</param>
+    /// <param name="targetId">The node or slot id under the press, or <see langword="null"/> over empty canvas or a link.</param>
+    /// <returns><see langword="true"/> when a subscriber set <see cref="WorkflowEventHandle.PreventDefault"/>.</returns>
+    [JSInvokable]
+    public bool RequestPressVerdict(double localX, double localY, int button, int modifiers, string? targetId)
+        => Tree is { } tree
+           && RoutePress(tree, ResolveComponentTarget(targetId, tree), localX, localY,
+                  ToButton(button), (Wf.InputModifiers)modifiers).PreventDefault;
+
+    /// <summary>
+    /// Answers the JavaScript's Ctrl + wheel before it zooms: routes the wheel through <see cref="WorkflowInput"/>
+    /// and hands back whether a subscriber refused this notch.
+    /// </summary>
+    /// <param name="localX">Canvas-local x of the pointer.</param>
+    /// <param name="localY">Canvas-local y of the pointer.</param>
+    /// <param name="deltaY">Wheel movement in the adapter's shared sign convention (up, zoom-in, is positive).</param>
+    /// <param name="modifiers">The Core modifier bitmask.</param>
+    /// <param name="targetId">The node or slot id under the pointer, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when a subscriber set <see cref="WorkflowEventHandle.PreventDefault"/>.</returns>
+    [JSInvokable]
+    public bool RequestWheelVerdict(double localX, double localY, double deltaY, int modifiers, string? targetId)
+    {
+        if (Tree is not { } tree)
+        {
+            return false;
+        }
+
+        var input = WorkflowInput.For(tree);
+        var target = ResolveComponentTarget(targetId, tree)
+                     ?? tree.HitTestVisibleLinks(localX, localY, input.HitRadius);
+        var handle = new WorkflowEventHandle();
+        input.Route(new Wf.PointerWheelEventArgs(
+            new Anchor(localX, localY, 0), (Wf.InputModifiers)modifiers, null, target, 0d, deltaY, handle));
+        return handle.PreventDefault;
+    }
+
+    /// <summary>
+    /// Records which node or slot the pointer is hovering, as reported by JavaScript (only when the hit
+    /// changes). The move route resolves its target from this, so a node's or slot's own relay hears the
+    /// hover; only when nothing is under the pointer does it fall back to the shared link-curve hit test.
+    /// </summary>
+    /// <param name="id">The hovered <c>data-veloxdev-node-id</c> / <c>-slot-id</c>, or <see langword="null"/>.</param>
+    [JSInvokable]
+    public void OnHoverTarget(string? id) => _hoverTarget = ResolveComponentTarget(id, Tree);
+
+    // 这一笔按下建一次句柄：订阅者在树上置 PreventDefault，本家的手势（平移/拖拽/连线/缩放）就不执行 ——
+    // 与六家原生适配器读句柄同一契约，只是这里裁决要跨一次 JS↔.NET 往返。
+    private static WorkflowEventHandle RoutePress(
+        IWorkflowTreeViewModel tree, IWorkflowViewModel? target, double x, double y,
+        Wf.MouseButton button, Wf.InputModifiers modifiers)
+    {
+        var input = WorkflowInput.For(tree);
+        target ??= tree.HitTestVisibleLinks(x, y, input.HitRadius);
+        var handle = new WorkflowEventHandle();
+        input.Route(new Wf.PointerPressedEventArgs(new Anchor(x, y, 0), modifiers, null, target, button, 1, handle));
+        return handle;
+    }
+
+    // 落在节点/插槽上的按下由组件自己路由 —— Blazor 没有隧道相，表面的起手（JS mousedown）比组件晚，
+    // 句柄只能由组件这一侧取。返回订阅者是否否决了这一笔。
+    internal static bool RouteComponentPress(
+        IWorkflowTreeViewModel tree, IWorkflowViewModel target, double x, double y, int button, int modifiers)
+        => RoutePress(tree, target, x, y, ToButton(button), (Wf.InputModifiers)modifiers).PreventDefault;
+
+    // JS 回传的 data-veloxdev-node-id / -slot-id 换回组件；认不到（空白、连线、已换树）返回 null。
+    private static IWorkflowViewModel? ResolveComponentTarget(string? id, IWorkflowTreeViewModel? tree)
+    {
+        if (tree is null || string.IsNullOrEmpty(id))
+        {
+            return null;
+        }
+
+        if (WorkflowRuntimeIds.TryFind<IWorkflowNodeViewModel>(id, out var node) && node is not null)
+        {
+            return node;
+        }
+
+        if (WorkflowRuntimeIds.TryFind<IWorkflowSlotViewModel>(id, out var slot) && slot is not null)
+        {
+            return slot;
+        }
+
+        return null;
+    }
+
+    // 浏览器 MouseEvent.button：0 左 / 1 中 / 2 右 / 3、4 两个扩展键。
+    private static Wf.MouseButton ToButton(int button) => button switch
+    {
+        0 => Wf.MouseButton.Left,
+        1 => Wf.MouseButton.Middle,
+        2 => Wf.MouseButton.Right,
+        3 => Wf.MouseButton.XButton1,
+        4 => Wf.MouseButton.XButton2,
+        _ => Wf.MouseButton.None,
+    };
 
     // 视口坐标 → canvas-local：容器是纯平移，所以换算整个交给 JS（与槽口锚点测量同一公式）。
     // 模块未加载（IsEnabled 关掉）时没有可转发的位置，直接放弃。

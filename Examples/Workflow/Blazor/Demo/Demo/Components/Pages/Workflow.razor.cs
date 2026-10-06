@@ -94,6 +94,8 @@ public partial class Workflow : ComponentBase, IDisposable
             helper.ConfirmationHandler = ShowConfirmationAsync;
             _ = helper.LoadMcpServersAsync();
         }
+        // 跟着会话一起订：OnInitialized / Reset / Load 三处换树都走这里，探针因此总落在屏幕上那棵树。
+        VetoShiftDragOnBlankCanvas(_session.Tree);
     }
 
     private void OnMcpStatusChanged(object? sender, PropertyChangedEventArgs e)
@@ -376,6 +378,27 @@ public partial class Workflow : ComponentBase, IDisposable
             if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
 
             link.DeleteCommand.Execute(null);
+        };
+    }
+
+    /// <summary>
+    /// Shift-drag on empty canvas: the framework stands down and the host takes over.
+    /// </summary>
+    /// <remarks>
+    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a
+    /// press-and-drag interaction of one's own on the blank canvas. Re-subscribed on every tree swap,
+    /// the same way the session's own wiring is: this component renders many times and the tree is
+    /// replaced wholesale by Reset / Load, so a subscription kept on the tree the component first saw
+    /// would go on hearing a tree that is no longer on screen.
+    /// </remarks>
+    private static void VetoShiftDragOnBlankCanvas(TreeViewModel tree)
+    {
+        ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
+        {
+            if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
+            {
+                e.Handle.PreventDefault = true;
+            }
         };
     }
 

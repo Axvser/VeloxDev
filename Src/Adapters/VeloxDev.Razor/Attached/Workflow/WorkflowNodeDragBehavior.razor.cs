@@ -142,6 +142,32 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Answers the JavaScript's press before it starts a drag: routes the press on the node's own relay and
+    /// hands back whether a subscriber refused it.
+    /// </summary>
+    /// <param name="localX">Canvas-local x of the press.</param>
+    /// <param name="localY">Canvas-local y of the press.</param>
+    /// <param name="button">The browser's <c>MouseEvent.button</c> number.</param>
+    /// <param name="modifiers">The Core modifier bitmask.</param>
+    /// <param name="targetId">
+    /// The id the shared JavaScript resolved from the DOM. Unused here: this component already knows the
+    /// component it is (the parameter is only there so both sides of the interop agree on the signature).
+    /// </param>
+    /// <returns><see langword="true"/> when a subscriber set <see cref="WorkflowEventHandle.PreventDefault"/>.</returns>
+    [JSInvokable]
+    public bool RequestPressVerdict(double localX, double localY, int button, int modifiers, string? targetId)
+    {
+        // 拖拽由这一笔按下触发；订阅者在节点自己的 InputRelay 上置 PreventDefault 就是「这一次别拖」。
+        // 节点必须已在树上，路由才有从（Node.Parent 就是它所属的树）。
+        if (Node is not { } node || node.Parent is not { } tree)
+        {
+            return false;
+        }
+
+        return WorkflowSurfaceBehavior.RouteComponentPress(tree, node, localX, localY, button, modifiers);
+    }
+
     [JSInvokable]
     public void OnNodeDrag(double dx, double dy)
     {

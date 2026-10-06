@@ -23,6 +23,26 @@ public partial class MainView : UserControl
         var tree = new TreeViewModel();
         LoadTree(tree);
         DataContext = tree;
+        VetoShiftDragOnBlankCanvas(tree);
+    }
+
+    /// <summary>
+    /// Shift-drag on empty canvas: the framework stands down and the host takes over.
+    /// </summary>
+    /// <remarks>
+    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a
+    /// press-and-drag interaction of one's own on the blank canvas. Subscribed to the tree this view builds
+    /// and hands over; this demo never swaps it, so one subscription lasts the window's life.
+    /// </remarks>
+    private static void VetoShiftDragOnBlankCanvas(TreeViewModel tree)
+    {
+        ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
+        {
+            if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
+            {
+                e.Handle.PreventDefault = true;
+            }
+        };
     }
 
     private static void LoadTree(TreeViewModel tree)

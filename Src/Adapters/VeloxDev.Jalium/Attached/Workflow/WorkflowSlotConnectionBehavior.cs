@@ -3,6 +3,8 @@ using Jalium.UI;
 using Jalium.UI.Controls;
 using Jalium.UI.Input;
 using VeloxDev.WorkflowSystem;
+using PlatformInput = Jalium.UI.Input;
+using Wf = VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -58,12 +60,14 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
             return;
         }
 
-        control.PreviewMouseLeftButtonDown -= OnPointerPressed;
+        // 按下订**隧道相**：这一笔只有插槽自己路由得到（见 OnPointerPressed），而左键专用的那一个是从
+        // 隧道相翻译出来的 Direct 事件、args 是另建的一份 —— 用它就没法和按下源对「是不是同一笔」。
+        control.PreviewMouseDown -= OnPointerPressed;
         control.PreviewMouseLeftButtonUp -= OnPointerReleased;
 
         if (e.NewValue is true)
         {
-            control.PreviewMouseLeftButtonDown += OnPointerPressed;
+            control.PreviewMouseDown += OnPointerPressed;
             control.PreviewMouseLeftButtonUp += OnPointerReleased;
         }
     }
@@ -71,6 +75,18 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
     private static void OnPointerPressed(object? sender, MouseButtonEventArgs e)
     {
         if (sender is not Control { DataContext: IWorkflowSlotViewModel slot } control)
+        {
+            return;
+        }
+
+        if (e.ChangedButton != PlatformInput.MouseButton.Left)
+        {
+            return;
+        }
+
+        // 这一笔由插槽自己交给表面路由 —— 宿主上收不到按下，句柄只有这里取得到。订阅者在插槽自己的
+        // InputRelay 上置 PreventDefault 就是「这一次别连」；不读它，插槽上就没有任何可定制的地方。
+        if (WorkflowSurfaceBehavior.RouteComponentPress(control, slot, e)?.PreventDefault == true)
         {
             return;
         }

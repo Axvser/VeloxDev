@@ -58,6 +58,9 @@ public sealed class WorkflowSurfaceBehavior
         /// <c>OnPlatformPanPressed</c>).</summary>
         public bool PointerPanActive { get; set; }
 
+        // 订阅者否决了这一笔平移（非 Windows 由手势读句柄得出）：Running 不再提交任何滚动。
+        public bool PanPrevented { get; set; }
+
         /// <summary>Pointer position at the pan anchor, in the press source's coordinate space.
         /// The pointer's distance from the anchor is the same quantity the gesture's TotalX/TotalY
         /// carried.</summary>
@@ -902,6 +905,14 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var delta = e.GetCurrentPoint(source).Properties.MouseWheelDelta;
+
+        // 缩放也要能被订阅者否决。这一处只做「读得到句柄」这一步：转发一笔滚轮、把句柄读出来。
+        // 否决后要不要退回平台自己的滚动，全仓还没拉平，暂不在这里单独定。
+        if (RouteSurfaceWheel(state, e, delta)?.PreventDefault == true)
+        {
+            return;
+        }
+
         // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
@@ -1252,8 +1263,18 @@ public sealed class WorkflowSurfaceBehavior
                     state.PanAnchorTotalX = e.TotalX;
                     state.PanAnchorTotalY = e.TotalY;
                     state.PanGestureActive = true;
+                    // 这一笔的否决由别人转发时给出：本家没有隧道路由相，链接层挂在交互源上的按下转发
+                    // 在平台手势之前跑完，句柄现成（见 RouteComponentPress）。手势这里没有可转发的东西
+                    // —— PanUpdated 不给指针位置，转发一笔没有位置的按下只会让宿主听见一笔假的。
+                    state.PanPrevented = ResolveTreeViewModel(host, state) is { } startedTree
+                        && PeekRoutedPress(startedTree)?.PreventDefault == true;
                     break;
                 case GestureStatus.Running:
+                    if (state.PanPrevented)
+                    {
+                        break;
+                    }
+
                     if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
                     {
                         // 节点/连线拖拽压制画布平移期间，把锚点贴在当前滚动 + 指针上；这样拖拽在手势中途结束、平移恢复时是从当前位置继续，而不是跳过一段节点拖拽的指针距离。
@@ -1272,6 +1293,7 @@ public sealed class WorkflowSurfaceBehavior
                         state.PanCts?.Cancel();
                         state.PanCts = null;
                         state.PanGestureActive = false;
+                        state.PanPrevented = false;
                         state.PanAccumulatedX = state.ScrollViewer.ScrollX;
                         state.PanAccumulatedY = state.ScrollViewer.ScrollY;
                         // 不强制收尾：最后一次 ChangeView 落地会发 Scrolled → OnScrolled → Refresh，从稳定的原生偏移写装饰块。OnScrolled 现在是唯一的装饰写入者、直接读 ScrollX（原生真相），丢掉标记是安全的。
@@ -1371,6 +1393,15 @@ public sealed class WorkflowSurfaceBehavior
 
         // 节点/插槽拖拽优先：按下落在它们身上时画布不动
         if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
+        {
+            state.PointerPanActive = false;
+            return;
+        }
+
+        // 这一笔由表面自己转发（与别家的表面同一手）：本家没有隧道路由相，链接层挂在交互源上的按下
+        // 转发比这里晚，句柄只能在这里现做。订阅者置 PreventDefault 就是「这一次别平移」—— 连指针
+        // 捕获都不做，那一笔要走的定制（宿主自己的拖拽）才拿得到指针。
+        if (RouteSurfacePress(state, e)?.PreventDefault == true)
         {
             state.PointerPanActive = false;
             return;
@@ -1478,6 +1509,66 @@ public sealed class WorkflowSurfaceBehavior
             state.PanAccumulatedX = state.ScrollViewer.ScrollX;
             state.PanAccumulatedY = state.ScrollViewer.ScrollY;
         }
+    }
+
+    // 表面自己那一笔输入的落点：指针在画布元素里的坐标 —— 画布就摆在 Ruler + ContentOffset −
+    // ScrollOffset 处（见链接层的类文档），所以这就是链接层那个 canvas-local 帧，两条路的句柄才指着
+    // 同一处。量不到画布元素或树时返回 null：把这一笔让给链接层（它挂得更外，照样会转发）。
+    private static (IWorkflowTreeViewModel Tree, VisualElement Canvas, Point Point)? ResolveSurfaceInput(
+        SurfaceState state, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (state.Host is not { } host
+            || state.Canvas is not { } canvas
+            || canvas.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement canvasElement
+            || ResolveTreeViewModel(host, state) is not { } tree)
+        {
+            return null;
+        }
+
+        var point = e.GetCurrentPoint(canvasElement).Position;
+        return (tree, canvas, new Point(point.X, point.Y));
+    }
+
+    // 表面自己那一笔按下的转发。订阅者在画布或它命中的连线上置 PreventDefault 就是「这一次别平移」。
+    private static WorkflowEventHandle? RouteSurfacePress(
+        SurfaceState state, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (ResolveSurfaceInput(state, e) is not { } input)
+        {
+            return null;
+        }
+
+        return RoutePressOnce(input.Tree, () =>
+        {
+            var routed = WorkflowInput.For(input.Tree);
+            var handle = new WorkflowEventHandle();
+            routed.Route(new Wf.PointerPressedEventArgs(
+                new Anchor(input.Point.X, input.Point.Y, 0), Modifiers(e.KeyModifiers), input.Canvas,
+                ResolveTarget(null, input.Tree, input.Point, routed.HitRadius),
+                Wf.MouseButton.Left, 1, handle));
+            return handle;
+        });
+    }
+
+    // 表面自己那一笔滚轮的转发。滚轮的两条路（链接层与 Ctrl+滚轮的缩放）共用它，见 RouteWheelOnce。
+    private static WorkflowEventHandle? RouteSurfaceWheel(
+        SurfaceState state, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e, int delta)
+    {
+        if (ResolveSurfaceInput(state, e) is not { } input)
+        {
+            return null;
+        }
+
+        return RouteWheelOnce(input.Tree, () =>
+        {
+            var handle = new WorkflowEventHandle();
+            var routed = WorkflowInput.For(input.Tree);
+            routed.Route(new Wf.PointerWheelEventArgs(
+                new Anchor(input.Point.X, input.Point.Y, 0), Modifiers(e.KeyModifiers), input.Canvas,
+                ResolveTarget(null, input.Tree, input.Point, routed.HitRadius),
+                0d, delta, handle));
+            return handle;
+        });
     }
 #endif
 
@@ -1754,4 +1845,168 @@ public sealed class WorkflowSurfaceBehavior
                 $"[WorkflowSurfaceBehavior] ScrollRestore error: {ex.Message}");
         }
     }
+
+    // ── 组件自己转发输入（本家没有隧道路由相）────────────────────────────────────
+
+    // 「这一笔输入已经路由过」的标记：本家没有隧道路由相，组件（节点/插槽）自己的处理器比链接层挂在
+    // 交互源上的钩子更早跑（平台事件从命中元素往上冒泡，越深越早），所以句柄只能由先到者那次路由产出。
+    // 同一笔再让后到者转发一次，宿主就会一笔听见两次，还会多收一对 Entered/Exited。
+    // 按下的登记留到转发松手时才作废（平移在 Started 与第一帧读的是同一条），滚轮的由后到者读走。
+    private static IWorkflowTreeViewModel? RoutedPressTree;
+    private static WorkflowEventHandle? RoutedPressHandle;
+    private static IWorkflowTreeViewModel? RoutedWheelTree;
+    private static WorkflowEventHandle? RoutedWheelHandle;
+
+    // 组件把落在自己身上的一笔按下转发出去：目标就是它自己（沿视图的 BindingContext 链认，含自身）。
+    // 于是 WorkflowInput.Chain 里 slot → node → tree 那条链走得到 —— 只认连线的路由永远只答「连线或
+    // 空白」，那两级是死代码。订阅者在组件自己的 InputRelay 上置 PreventDefault，就是「这一次别拖 / 别连」。
+    // pointerInCanvas 是画布坐标系里的指针位置；量不到（非 Windows 的 Pan 手势不给位置）就退回组件
+    // 自己的锚点。返回 null 表示找不到表面或树，调用方按「没人否决」继续。
+    internal static WorkflowEventHandle? RouteComponentPress(View source, Point? pointerInCanvas)
+    {
+        if (FindAncestorContentView(source) is not { } host
+            || host.GetValue(StateProperty) is not SurfaceState state
+            || ResolveTreeViewModel(host, state) is not { } tree)
+        {
+            return null;
+        }
+
+        var input = WorkflowInput.For(tree);
+        var target = ResolveTarget(source, tree, pointerInCanvas, input.HitRadius);
+        var handle = new WorkflowEventHandle();
+
+        input.Route(new Wf.PointerPressedEventArgs(
+            AnchorFor(target, pointerInCanvas), ModifiersNow(), source, target,
+            Wf.MouseButton.Left, 1, handle));
+
+        RoutedPressTree = tree;
+        RoutedPressHandle = handle;
+        return handle;
+    }
+
+    // 一笔按下只转发一次：已经转发过（登记在案）就读现成的，否则自己转发并登记。链接层与平移都用它 ——
+    // 两者谁先跑到由平台的钩子顺序决定，先到的那条转发，后到的那条只是读。
+    internal static WorkflowEventHandle RoutePressOnce(IWorkflowTreeViewModel tree, Func<WorkflowEventHandle> route)
+    {
+        if (ReferenceEquals(RoutedPressTree, tree) && RoutedPressHandle is { } routed)
+        {
+            return routed;
+        }
+
+        var handle = route();
+        RoutedPressTree = tree;
+        RoutedPressHandle = handle;
+        return handle;
+    }
+
+    // 只读这一笔按下的句柄（不转发、不登记）：非 Windows 的平移手势读的就是它 —— 那一笔由链接层
+    // 转发过（PanUpdated 不给位置，手势自己转发不出来）。
+    internal static WorkflowEventHandle? PeekRoutedPress(IWorkflowTreeViewModel tree)
+        => ReferenceEquals(RoutedPressTree, tree) ? RoutedPressHandle : null;
+
+    // 松手：这一笔按下的登记作废，下一次按下重新开始记。
+    internal static void ClearRoutedPress(IWorkflowTreeViewModel tree)
+    {
+        if (!ReferenceEquals(RoutedPressTree, tree))
+        {
+            return;
+        }
+
+        RoutedPressTree = null;
+        RoutedPressHandle = null;
+    }
+
+    // 滚轮：链接层与缩放两条路都跑在同一笔滚轮上，谁先到谁转发、后到的读现成的 —— 两份都要拿到同一个
+    // 句柄。滚轮没有松手可挂，登记就由后到的那一条读走并清掉。
+    internal static WorkflowEventHandle RouteWheelOnce(IWorkflowTreeViewModel tree, Func<WorkflowEventHandle> route)
+    {
+        if (ReferenceEquals(RoutedWheelTree, tree) && RoutedWheelHandle is { } routed)
+        {
+            RoutedWheelTree = null;
+            RoutedWheelHandle = null;
+            return routed;
+        }
+
+        var handle = route();
+        RoutedWheelTree = tree;
+        RoutedWheelHandle = handle;
+        return handle;
+    }
+
+    // 指针底下是什么：沿命中视图及其可视祖先找 BindingContext 是节点/插槽的那个（含自身），找不到
+    // 再回退到共享的曲线判定。只认连线的话，路由的 Target 就永远只是「连线或空白」。
+    internal static IWorkflowViewModel? ResolveTarget(
+        Element? hit, IWorkflowTreeViewModel tree, Point? pointerInCanvas, double radius)
+    {
+        for (var current = hit; current is not null; current = current.Parent)
+        {
+            switch (current.BindingContext)
+            {
+                case IWorkflowNodeViewModel node:
+                    return node;
+                case IWorkflowSlotViewModel slot:
+                    return slot;
+            }
+        }
+
+        return pointerInCanvas is { } point
+            ? tree.HitTestVisibleLinks(point.X, point.Y, radius)
+            : null;
+    }
+
+    // 转发用的锚点：量到指针就用指针（画布坐标系，与插槽布局、平移同一条），量不到就用组件自己的。
+    private static Anchor AnchorFor(IWorkflowViewModel? target, Point? pointerInCanvas)
+    {
+        if (pointerInCanvas is { } point)
+        {
+            return new Anchor(point.X, point.Y, 0);
+        }
+
+        return target switch
+        {
+            IWorkflowNodeViewModel node => node.Anchor,
+            IWorkflowSlotViewModel slot => slot.Anchor,
+            _ => new Anchor(),
+        };
+    }
+
+    // 平台事件自带的修饰键逐个映射。只在本家 Windows 头可用 —— 那一头的 PointerRoutedEventArgs 带 KeyModifiers
+    // （与 WinUI 同形）；KeyRoutedEventArgs 不带，走 ModifiersNow()。
+#if WINDOWS
+    internal static Wf.InputModifiers Modifiers(Windows.System.VirtualKeyModifiers keys)
+    {
+        var modifiers = Wf.InputModifiers.None;
+        if ((keys & Windows.System.VirtualKeyModifiers.Menu) != 0) modifiers |= Wf.InputModifiers.Alt;
+        if ((keys & Windows.System.VirtualKeyModifiers.Control) != 0) modifiers |= Wf.InputModifiers.Control;
+        if ((keys & Windows.System.VirtualKeyModifiers.Shift) != 0) modifiers |= Wf.InputModifiers.Shift;
+        if ((keys & Windows.System.VirtualKeyModifiers.Windows) != 0) modifiers |= Wf.InputModifiers.Meta;
+        return modifiers;
+    }
+#endif
+
+    // 不带修饰键状态的输入（指针悬停/按下、组件转发）只能问当前线程的键盘状态。Windows 头与 WinUI 同源
+    // （Microsoft.UI.Input 现取）；其余平台 MAUI 没有跨平台键态 API（PointerEventArgs 只有 Button/PlatformArgs），
+    // Android/iOS/MacCatalyst 无从现取，返回 None。
+    internal static Wf.InputModifiers ModifiersNow()
+    {
+#if WINDOWS
+        var modifiers = Wf.InputModifiers.None;
+        if (IsDown(Windows.System.VirtualKey.Menu)) modifiers |= Wf.InputModifiers.Alt;
+        if (IsDown(Windows.System.VirtualKey.Control)) modifiers |= Wf.InputModifiers.Control;
+        if (IsDown(Windows.System.VirtualKey.Shift)) modifiers |= Wf.InputModifiers.Shift;
+        if (IsDown(Windows.System.VirtualKey.LeftWindows) || IsDown(Windows.System.VirtualKey.RightWindows)) modifiers |= Wf.InputModifiers.Meta;
+        return modifiers;
+
+        static bool IsDown(Windows.System.VirtualKey key)
+            => (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key) & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
+#else
+        return Wf.InputModifiers.None;
+#endif
+    }
+
+    // 组件量指针位置用：指针要换算到画布元素自己的坐标系，组件才有和内部各处一致的那个点。
+    internal static VisualElement? ResolveCanvasForRouting(View source)
+        => FindAncestorContentView(source) is { } host && host.GetValue(StateProperty) is SurfaceState state
+            ? state.Canvas
+            : null;
 }

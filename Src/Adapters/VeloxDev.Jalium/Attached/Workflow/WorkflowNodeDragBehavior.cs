@@ -5,6 +5,8 @@ using Jalium.UI.Controls;
 using Jalium.UI.Input;
 using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem;
+using PlatformInput = Jalium.UI.Input;
+using Wf = VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -100,7 +102,9 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
     {
         Detach(element);
         element.SetValue(StateProperty, new DragState());
-        element.PreviewMouseLeftButtonDown += OnMouseDown;
+        // 按下订**隧道相**：这一笔只有组件自己路由得到（见 OnMouseDown），而左键专用的那一个是从隧道
+        // 相翻译出来的 Direct 事件、args 是另建的一份 —— 用它就没法和按下源对「是不是同一笔」。
+        element.PreviewMouseDown += OnMouseDown;
         element.PreviewMouseMove += OnMouseMove;
         element.PreviewMouseLeftButtonUp += OnMouseUp;
         element.LostMouseCapture += OnLostMouseCapture;
@@ -108,7 +112,7 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
 
     private static void Detach(UIElement element)
     {
-        element.PreviewMouseLeftButtonDown -= OnMouseDown;
+        element.PreviewMouseDown -= OnMouseDown;
         element.PreviewMouseMove -= OnMouseMove;
         element.PreviewMouseLeftButtonUp -= OnMouseUp;
         element.LostMouseCapture -= OnLostMouseCapture;
@@ -118,6 +122,25 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
     private static void OnMouseDown(object? sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement control || control.GetValue(StateProperty) is not DragState state)
+        {
+            return;
+        }
+
+        if (e.ChangedButton != PlatformInput.MouseButton.Left)
+        {
+            return;
+        }
+
+        var node = ResolveNode(control);
+        if (node is null)
+        {
+            return;
+        }
+
+        // 这一笔由节点自己交给表面路由 —— 宿主上收不到按下，句柄只有这里取得到。订阅者在节点自己的
+        // InputRelay 上置 PreventDefault，就是「这一次别拖」；不读它，节点上任何按住拖的定制都会和
+        // 拖动抢同一串指针事件。
+        if (WorkflowSurfaceBehavior.RouteComponentPress(control, node, e)?.PreventDefault == true)
         {
             return;
         }

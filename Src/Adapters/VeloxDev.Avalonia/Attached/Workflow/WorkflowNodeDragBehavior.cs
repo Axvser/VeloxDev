@@ -92,8 +92,16 @@ public sealed class WorkflowNodeDragBehavior : AvaloniaObject
         if (state.CoordinateHost is null)
             return;
 
+        var position = e.GetPosition(state.CoordinateHost);
+
+        // 这一笔按下已经由表面在隧道相里路由过 —— 它比这里更早，句柄就存在表面里。订阅者在节点自己的
+        // InputRelay 上置 PreventDefault，就是「这一次别拖」；不读它，节点上任何按住拖的定制都会和
+        // 拖动抢同一串指针事件。
+        if (WorkflowSurfaceBehavior.GetPressHandle(control)?.PreventDefault == true)
+            return;
+
         state.IsDragging = true;
-        state.LastPosition = e.GetPosition(state.CoordinateHost);
+        state.LastPosition = position;
         e.Pointer.Capture(control);
         e.Handled = true;
     }

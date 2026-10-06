@@ -163,6 +163,14 @@ public sealed class WorkflowNodeDragBehavior
             return;
         }
 
+        // 这一笔按下由表面路由 —— 卡片是启用的子控件，画布自己的 MouseDown 收不到它。订阅者在节点自己的
+        // InputRelay 上置 PreventDefault 就是「这一次别拖」；不读它，节点上任何按住拖的定制都会和拖动
+        // 抢同一串指针事件。
+        if (WorkflowSurfaceBehavior.RouteComponentPress(control, node, e.Button, 1)?.PreventDefault == true)
+        {
+            return;
+        }
+
         var state = GetState(control);
         state.CoordinateHost = ResolveCoordinateHost(control);
         if (state.CoordinateHost is null)

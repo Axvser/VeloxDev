@@ -31,6 +31,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public FrameworkElement? PointerPressSource { get; set; }
         public PointerEventHandler? ZoomHandler { get; set; }
 
+        // 这一笔按下已被路由过（组件自己路由的，或表面在平移那一处路由的）。
+        // 不能用 e.Handled 代替：表面的按下处理器是 handledEventsToo:true 挂的，它无视 Handled 照跑，
+        // 于是同一笔会被路由第二遍。这个标记是那一笔「已经路由」的唯一凭据。
+        public bool PressRouted { get; set; }
+
         // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、挂起都在这里。
         public MenuFlyout? LinkMenu { get; set; }
         public IWorkflowLinkViewModel? MenuLink { get; set; }
@@ -558,6 +563,21 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var delta = e.GetCurrentPoint(source as UIElement ?? host).Properties.MouseWheelDelta;
+
+        // Ctrl+滚轮也进路由，订阅者才有机会说「这一次别缩放」。不会造成二次路由：非 Ctrl 的滚轮走
+        // OnLinkPointerWheel 那一条，两支笔各走各的。
+        if (host.GetValue(StateProperty) is SurfaceState zoomState)
+        {
+            var zoomHandle = RoutePointer(zoomState, viewModel, e, host, e.OriginalSource as DependencyObject,
+                (position, target, handle) => new Wf.PointerWheelEventArgs(
+                    position, Modifiers(e.KeyModifiers), host, target, 0d, delta, handle));
+
+            if (zoomHandle.PreventDefault)
+            {
+                return;
+            }
+        }
+
         // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
@@ -645,7 +665,33 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (!ShouldStartPan(e, state))
+        // 节点卡片或插槽（比表面先跑）已经为这一笔路由过：这次不归表面 —— 不平移，也不再路由。
+        // 标记留在这里不清，由最后跑的连线处理器消费；清了那一处就会把同一笔再路由一遍。
+        if (state.PressRouted)
+        {
+            return;
+        }
+
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        // 平台说不出是哪个键就不路由（与连线那一处同一判据），否则会造出一笔无键的按下。
+        var button = CurrentButton(e, host);
+        if (button == Wf.MouseButton.None)
+        {
+            return;
+        }
+
+        // 表面是自己的身体，这一笔只能自己路由：句柄在手才能让订阅者否决这一次平移。若留给更外层
+        // （连线那一处）去路由，本处理器先跑，读到的只会是上一次按下的句柄。
+        var handle = RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
+            (position, target, h) => new Wf.PointerPressedEventArgs(
+                position, Modifiers(e.KeyModifiers), host, target, button, 1, h));
+        state.PressRouted = true;
+
+        if (handle.PreventDefault || !ShouldStartPan(e, state))
         {
             return;
         }
@@ -679,8 +725,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var anchor = ToCanvasLocalAnchor(state, e, viewModel.Layout);
         viewModel.SetPointerCommand.Execute(anchor);
 
-        // 把同一份 canvas-local 坐标交给输入面：被指到的那条线由 Core 那条共享的曲线命中判出来。
-        RoutePointer(state, viewModel, e, host,
+        // 把同一份 canvas-local 坐标交给输入面：被指到的对象由适配器从来源视觉的 DataContext 判出来。
+        RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
             (position, target, handle) => new Wf.PointerMovedEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
     }
 
@@ -697,7 +743,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        RoutePointer(state, viewModel, e, host,
+        RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
             (position, target, handle) => new Wf.PointerEnteredEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
     }
 
@@ -761,7 +807,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var delta = e.GetCurrentPoint(host).Properties.MouseWheelDelta;
-        RoutePointer(state, viewModel, e, host,
+        RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
             (position, target, handle) => new Wf.PointerWheelEventArgs(position, Modifiers(e.KeyModifiers), host, target, 0d, delta, handle));
     }
 
@@ -770,6 +816,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
         {
+            return;
+        }
+
+        // 这一笔已经有人路由过（节点卡片/插槽自己，或表面在平移那一处）：不再路由第二遍，只把标记
+        // 消费掉 —— 本处理器是冒泡链上最后一个，把它清了就不会泄漏到下一次按下。
+        if (state.PressRouted)
+        {
+            state.PressRouted = false;
             return;
         }
 
@@ -788,7 +842,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        RoutePointer(state, viewModel, e, host,
+        RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
             (position, target, handle) => new Wf.PointerPressedEventArgs(
                 position, Modifiers(e.KeyModifiers), host, target, button, 1, handle));
 
@@ -830,22 +884,92 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             ToKey(e.Key), (int)e.Key, KeyModifiersNow(), false, host, input.HoveredLink, new WorkflowEventHandle()));
     }
 
-    // 指针进来时统一在这里翻译：位置的 Z 取来源视图所在图层，被指到的线由共享的曲线命中判出来。
-    private static void RoutePointer(
+    // 指针进来时统一在这里翻译：位置的 Z 取来源视图所在图层，被指到的对象由 ResolveTarget 回答。
+    // 返回这一笔输入的句柄 —— 订阅者说「这一次不要框架那一手」的地方，而框架那一手就在调用方手上；
+    // 丢掉句柄，订阅者的否决就没有任何人会读（Ctrl+滚轮缩放现在读它）。
+    private static WorkflowEventHandle RoutePointer(
         SurfaceState state, IWorkflowTreeViewModel tree, PointerRoutedEventArgs e, UserControl host,
+        DependencyObject? hit,
         Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         var anchor = ToCanvasLocalAnchor(state, e, tree.Layout);
         var input = WorkflowInput.For(tree);
-        var target = tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
-        input.Route(args(anchor, target, new WorkflowEventHandle()));
+        var handle = new WorkflowEventHandle();
+        input.Route(args(anchor, target, handle));
 
         // 悬停到连线上就把焦点收到宿主：Delete 要的按键事件经过它，而「悬停（不点）就能删」是契约。
         if (input.HoveredLink is not null)
         {
             host.Focus(FocusState.Pointer);
         }
+
+        return handle;
+    }
+
+    // 组件（节点卡片 / 插槽）把落在自己身上的按下交回来路由：这家没有隧道相，组件在表面的冒泡处理器
+    // 之前跑，所以句柄只能由组件自己取。target 就是组件本身，`WorkflowInput.Chain` 里
+    // slot → node → tree 那条链才走得通。解析不出宿主/树时返回 null，调用方按「没否决」处理。
+    internal static WorkflowEventHandle? RouteComponentPress(
+        DependencyObject? control, IWorkflowViewModel component, PointerRoutedEventArgs e)
+    {
+        var host = ResolveSurfaceHost(control);
+        if (host?.GetValue(StateProperty) is not SurfaceState state
+            || host.DataContext is not IWorkflowTreeViewModel tree
+            || state.ScrollViewer is null)
+        {
+            return null;
+        }
+
+        var anchor = ToCanvasLocalAnchor(state, e, tree.Layout);
+        var handle = new WorkflowEventHandle();
+        WorkflowInput.For(tree).Route(new Wf.PointerPressedEventArgs(
+            anchor, Modifiers(e.KeyModifiers), host, component, CurrentButton(e, host), 1, handle));
+
+        // 标记这一笔已路由：表面那两处（平移、连线）到此为止，不重复路由同一个物理按下。
+        state.PressRouted = true;
+        return handle;
+    }
+
+    // 沿父链找启用着本行为的表面宿主 —— 组件把自己那一笔交回表面时用它定位。
+    private static UserControl? ResolveSurfaceHost(DependencyObject? control)
+    {
+        if (control is null)
+        {
+            return null;
+        }
+
+        return EnumerateVisualAncestors(control).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+    }
+
+    // 按下的键：平台把三键压在同一份 PointerPointProperties 上，逐个问。
+    private static Wf.MouseButton CurrentButton(PointerRoutedEventArgs e, UIElement relativeTo)
+    {
+        var properties = e.GetCurrentPoint(relativeTo).Properties;
+        return properties.IsRightButtonPressed ? Wf.MouseButton.Right
+            : properties.IsMiddleButtonPressed ? Wf.MouseButton.Middle
+            : properties.IsLeftButtonPressed ? Wf.MouseButton.Left
+            : Wf.MouseButton.None;
+    }
+
+    // 指针底下是什么，由适配器回答 —— 节点和插槽也是答案的一部分。只认连线的话，路由的 Target 就永远
+    // 只是「连线或空白」，`WorkflowInput.Chain` 里 slot → node → tree 那条链于是永远走不到。
+    private static IWorkflowViewModel? ResolveTarget(
+        DependencyObject? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    {
+        for (var current = hit; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            switch (current)
+            {
+                case FrameworkElement { DataContext: IWorkflowNodeViewModel node }:
+                    return node;
+                case FrameworkElement { DataContext: IWorkflowSlotViewModel slot }:
+                    return slot;
+            }
+        }
+
+        return tree.HitTestVisibleLinks(x, y, radius);
     }
 
     private static Wf.InputModifiers Modifiers(VirtualKeyModifiers keys)
@@ -928,7 +1052,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var button = properties.IsRightButtonPressed ? Wf.MouseButton.Right
             : properties.IsMiddleButtonPressed ? Wf.MouseButton.Middle
             : Wf.MouseButton.Left;
-        RoutePointer(state, viewModel, e, host,
+        RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
             (position, target, handle) => new Wf.PointerReleasedEventArgs(
                 position, Modifiers(e.KeyModifiers), host, target, button, 1, handle));
     }

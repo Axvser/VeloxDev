@@ -98,6 +98,14 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
             return;
         }
 
+        // 这一笔按下已经由表面路由过了 —— 它的隧道处理器在更外层，比这里先跑。订阅者在节点自己的
+        // InputRelay 上置 PreventDefault，就是「这一次别拖」；不读它，节点上任何按住拖的定制都会和
+        // 拖动抢同一串指针事件。
+        if (WorkflowSurfaceBehavior.GetPressHandle(control)?.PreventDefault == true)
+        {
+            return;
+        }
+
         state.IsDragging = true;
         state.LastPosition = e.GetPosition(state.CoordinateHost);
         Mouse.Capture(control);

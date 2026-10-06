@@ -224,6 +224,14 @@ public sealed class WorkflowSlotConnectionBehavior
             return false;
         }
 
+        // 这一笔按下由插槽自己转发（本家没有隧道路由相：链接层挂在交互源上的转发比这里晚，而句柄
+        // 必须先有）。订阅者在插槽自己的 InputRelay 上置 PreventDefault，就是「这一笔别连」。
+        // pointer 已经在画布坐标系里（见调用方的 FindCoordinateHost），量不到就用插槽自己的锚点。
+        if (WorkflowSurfaceBehavior.RouteComponentPress(view, pointer)?.PreventDefault == true)
+        {
+            return false;
+        }
+
         CancelActiveConnection();
 
         var coordinateHost = FindCoordinateHost(view);

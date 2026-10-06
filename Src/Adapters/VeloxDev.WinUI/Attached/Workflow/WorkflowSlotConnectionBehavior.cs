@@ -36,7 +36,14 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
 
     private static void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot })
+        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot } control)
+        {
+            return;
+        }
+
+        // 这一笔由表面路由 —— 这家没有隧道相，组件比表面先跑，句柄只有这里取得到。订阅者在插槽自己的
+        // InputRelay 上置 PreventDefault 就是「这一次别连」；不读它，插槽上就没有可定制的地方。
+        if (WorkflowSurfaceBehavior.RouteComponentPress(control, slot, e)?.PreventDefault == true)
         {
             return;
         }

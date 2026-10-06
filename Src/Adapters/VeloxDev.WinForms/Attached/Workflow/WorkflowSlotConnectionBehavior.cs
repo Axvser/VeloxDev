@@ -89,6 +89,13 @@ public sealed class WorkflowSlotConnectionBehavior
             return;
         }
 
+        // 这一笔按下由表面路由 —— 插槽是启用的子控件，画布自己的 MouseDown 收不到它。订阅者在插槽自己的
+        // InputRelay 上置 PreventDefault 就是「这一笔别连」，无论它是开始还是完成。
+        if (WorkflowSurfaceBehavior.RouteComponentPress(control, slot, e.Button, 1)?.PreventDefault == true)
+        {
+            return;
+        }
+
         if (_activeConnection is not null)
         {
             TryCompleteConnection(control, slot);

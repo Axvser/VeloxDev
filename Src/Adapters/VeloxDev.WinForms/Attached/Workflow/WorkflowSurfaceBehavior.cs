@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using PlatformInput = System.Windows.Forms;
+using Wf = VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 
@@ -63,6 +65,15 @@ public sealed class WorkflowSurfaceBehavior
             }
 
             var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
+
+            // 缩放也要能被订阅者否决。滚轮在消息层就被这里接住、画布收不到它，所以路由只能在这一层补一次；
+            // 否决即吞掉消息 —— 不缩放，也不让任何控件滚动。
+            if (RouteWheel(host, tree, m.HWnd, delta))
+            {
+                m.Result = IntPtr.Zero;
+                return true;
+            }
+
             // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
             var factor = delta > 0 ? 1 / 1.1 : 1.1;
             var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
@@ -487,6 +498,113 @@ public sealed class WorkflowSurfaceBehavior
 
         return null;
     }
+
+    // 缩放这一手的路由：位置取光标在画布客户区的坐标（与表面自己那条滚轮路同一系），目标用与表面同一套
+    // 解析。返回 true 表示订阅者否决了这一次缩放。
+    private static bool RouteWheel(Control host, IWorkflowTreeViewModel tree, IntPtr hwnd, int delta)
+    {
+        var canvas = ResolveCanvas(host) ?? host;
+        var point = canvas.PointToClient(Cursor.Position);
+        var anchor = new Anchor(point.X, point.Y, 0);
+        var input = WorkflowInput.For(tree);
+        var target = ResolveTarget(Control.FromHandle(hwnd), tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        var handle = new WorkflowEventHandle();
+
+        input.Route(new Wf.PointerWheelEventArgs(anchor, Modifiers(), canvas, target, 0d, delta, handle));
+        return handle.PreventDefault;
+    }
+
+    /// <summary>
+    /// Routes one press that landed on a component view rather than on the surface's canvas.
+    /// </summary>
+    /// <param name="source">The control the press landed on — a node card or a slot view, or a control inside one.</param>
+    /// <param name="target">The workflow component <paramref name="source"/> renders.</param>
+    /// <param name="button">Which button went down.</param>
+    /// <param name="clickCount">How many clicks this press completes.</param>
+    /// <returns>The handle the route produced, or <see langword="null"/> when no surface or tree was found.</returns>
+    /// <remarks>
+    /// WinForms delivers a press to the enabled child control under the pointer, so the surface's own
+    /// <c>MouseDown</c> never runs for a node card or a slot. Its gesture behaviours route the press here instead,
+    /// with the component itself as the target — which is what makes the slot → node → tree chain reachable. A
+    /// subscriber that sets <see cref="WorkflowEventHandle.PreventDefault"/> on the returned handle refuses this one
+    /// press, exactly as it would on the surface.
+    /// </remarks>
+    internal static WorkflowEventHandle? RouteComponentPress(
+        Control source, IWorkflowViewModel target, PlatformInput.MouseButtons button, int clickCount)
+    {
+        var host = FindSurfaceHost(source);
+        if (host is null) return null;
+
+        var tree = ResolveTree(host);
+        if (tree is null) return null;
+
+        var canvas = ResolveCanvas(host) ?? host;
+        var point = canvas.PointToClient(Cursor.Position);
+        var handle = new WorkflowEventHandle();
+
+        WorkflowInput.For(tree).Route(new Wf.PointerPressedEventArgs(
+            new Anchor(point.X, point.Y, 0), Modifiers(), canvas, target, ToButton(button), clickCount, handle));
+        return handle;
+    }
+
+    // 指针底下是什么：先沿命中控件及其可视祖先找节点/插槽 —— 本家没有标记语言，视图把模型放在
+    // Tag/ViewModel/DataContext 上 —— 找不到再回退到共享的曲线判定。只认连线的话，输入链里
+    // slot → node → tree 那两级永远走不到。
+    internal static IWorkflowViewModel? ResolveTarget(
+        Control? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    {
+        for (var current = hit; current is not null; current = current.Parent)
+        {
+            var model = ResolveValue(current, "ViewModel")
+                ?? ResolveValue(current, "DataContext")
+                ?? ResolveValue(current, "BindingContext")
+                ?? current.Tag;
+
+            switch (model)
+            {
+                case IWorkflowNodeViewModel node:
+                    return node;
+                case IWorkflowSlotViewModel slot:
+                    return slot;
+            }
+        }
+
+        return tree.HitTestVisibleLinks(x, y, radius);
+    }
+
+    // 沿父链找启用着本行为的表面宿主 —— 与 zoom 过滤器那条 ResolveSurfaceHost 同一判据。
+    private static Control? FindSurfaceHost(Control control)
+    {
+        for (var current = control; current is not null; current = current.Parent)
+        {
+            if (States.TryGetValue(current, out var state) && state.IsEnabled)
+            {
+                return current;
+            }
+        }
+
+        return null;
+    }
+
+    private static Wf.InputModifiers Modifiers()
+    {
+        var keys = Control.ModifierKeys;
+        var modifiers = Wf.InputModifiers.None;
+        if ((keys & Keys.Alt) != 0) modifiers |= Wf.InputModifiers.Alt;
+        if ((keys & Keys.Control) != 0) modifiers |= Wf.InputModifiers.Control;
+        if ((keys & Keys.Shift) != 0) modifiers |= Wf.InputModifiers.Shift;
+        return modifiers;
+    }
+
+    private static Wf.MouseButton ToButton(PlatformInput.MouseButtons button) => button switch
+    {
+        PlatformInput.MouseButtons.Left => Wf.MouseButton.Left,
+        PlatformInput.MouseButtons.Right => Wf.MouseButton.Right,
+        PlatformInput.MouseButtons.Middle => Wf.MouseButton.Middle,
+        PlatformInput.MouseButtons.XButton1 => Wf.MouseButton.XButton1,
+        PlatformInput.MouseButtons.XButton2 => Wf.MouseButton.XButton2,
+        _ => Wf.MouseButton.None,
+    };
 
     private static Offset ResolveScrollOffset(Control host, IWorkflowTreeViewModel? tree)
         => ResolveScrollOffset(host, tree, out _);

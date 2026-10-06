@@ -102,6 +102,20 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
             return;
         }
 
+        var node = ResolveNode(control);
+        if (node is null)
+        {
+            return;
+        }
+
+        // 这一笔由表面路由 —— 这家没有隧道相，组件比表面先跑，句柄只有这里取得到。订阅者在节点自己的
+        // InputRelay 上置 PreventDefault 就是「这一次别拖」；不读它，节点上任何按住拖的定制都会和拖动
+        // 抢同一串指针事件。
+        if (WorkflowSurfaceBehavior.RouteComponentPress(control, node, e)?.PreventDefault == true)
+        {
+            return;
+        }
+
         state.CoordinateHost = ResolveCoordinateHost(control);
         if (state.CoordinateHost is null)
         {

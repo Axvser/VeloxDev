@@ -28,6 +28,10 @@ public sealed class WorkflowNodeDragBehavior
         public double LastPanY { get; set; }
         public VisualElement? CoordinateHost { get; set; }
         public View? OwnerView { get; set; }
+
+        // 这一笔按下被订阅者否决了（非 Windows 在 Pan 的 Started 上读到）：整笔不拖，Started 之后
+        // 的 Running 也不再启用拖拽。
+        public bool IsPressPrevented { get; set; }
 #if WINDOWS
         public UIElement? PlatformElement { get; set; }
 #endif
@@ -185,12 +189,34 @@ public sealed class WorkflowNodeDragBehavior
             return;
         }
 
+        // 这一笔按下由节点自己转发（本家没有隧道路由相：链接层挂在交互源上的转发比这里晚，而这里的
+        // 句柄必须先有）。订阅者在节点自己的 InputRelay 上置 PreventDefault，就是「这一次别拖」——
+        // 否决了连指针捕获也不做，那一笔要走的定制才拿得到指针。
+        if (state.OwnerView is { } owner
+            && WorkflowSurfaceBehavior.RouteComponentPress(owner, CanvasPoint(owner, e))?.PreventDefault == true)
+        {
+            state.IsDragging = false;
+            return;
+        }
+
         state.LastX = point.Position.X;
         state.LastY = point.Position.Y;
         state.IsDragging = true;
         IsDraggingNode = true;
         element.CapturePointer(e.Pointer);
         e.Handled = true;
+    }
+
+    // 指针在画布元素里的坐标：转发那一笔按下的落点，与适配器各处（插槽中心、平移锚）同一条坐标系。
+    private static Point? CanvasPoint(View view, PointerRoutedEventArgs e)
+    {
+        if (WorkflowSurfaceBehavior.ResolveCanvasForRouting(view)?.Handler?.PlatformView is not UIElement canvas)
+        {
+            return null;
+        }
+
+        var point = e.GetCurrentPoint(canvas).Position;
+        return new Point(point.X, point.Y);
     }
 
     private static void OnPlatformPointerMoved(object sender, PointerRoutedEventArgs e)
@@ -284,10 +310,20 @@ public sealed class WorkflowNodeDragBehavior
                 state.CoordinateHost ??= ResolveCoordinateHost(view);
                 state.LastPanX = 0d;
                 state.LastPanY = 0d;
-                state.IsDragging = true;
-                IsDraggingNode = true;
+                // 非 Windows 没有可用的按下事件，Started 是这一笔的第一个点 —— 由节点自己转发它。
+                // 转发没有指针位置（PanUpdated 不给），锚点退回节点自己的锚点。订阅者在节点自己的
+                // InputRelay 上置 PreventDefault，就是「这一次别拖」。
+                state.IsPressPrevented =
+                    WorkflowSurfaceBehavior.RouteComponentPress(view, null)?.PreventDefault == true;
+                state.IsDragging = !state.IsPressPrevented;
+                IsDraggingNode = state.IsDragging;
                 break;
             case GestureStatus.Running:
+                if (state.IsPressPrevented)
+                {
+                    break;
+                }
+
                 // PanGestureRecognizer 总是先发 Started，下面的 !state.IsDragging 分支只是防御 —— 针对某些 MAUI 平台可能不发 Started 就发 Running 的理论情况。
                 if (!state.IsDragging)
                 {
@@ -354,6 +390,7 @@ public sealed class WorkflowNodeDragBehavior
     {
         state.ActiveButton = default;
         state.IsDragging = false;
+        state.IsPressPrevented = false;
         state.LastPanX = 0d;
         state.LastPanY = 0d;
         IsDraggingNode = false;

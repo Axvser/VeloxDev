@@ -70,6 +70,14 @@ public static class WorkflowSurfaceBehavior
 
         public WorkflowInput? Input;
 
+        // 刚刚那一次按下建出来的句柄；订阅者否决了它，平移与组件就都不动手。
+        public WorkflowEventHandle? PressHandle;
+
+        // 这一笔按下已经路由过 —— 组件自己路由的，或表面在按下源上路由的，谁先跑谁留下它。
+        // 存的是**事件对象本身**：一次物理按下自始至终是同一个 args 实例走完整条隧道，下一次按下必然是
+        // 新实例，所以没有谁需要去清它，也就漏不到下一笔。用 bool 就得有人负责收尾，而收尾的人选不出来。
+        public MouseButtonEventArgs? RoutedPress;
+
         public ContextMenu? LinkMenu;
 
         public IWorkflowLinkViewModel? MenuLink;
@@ -91,8 +99,6 @@ public static class WorkflowSurfaceBehavior
         public INotifyPropertyChanged? LayoutSource;
 
         // 解订要用同一个委托实例，所以每一处订阅都留一份。
-        public MouseButtonEventHandler? MouseDownHandler;
-
         public MouseButtonEventHandler? PressSourceDownHandler;
 
         public MouseEventHandler? MouseMoveHandler;
@@ -360,7 +366,6 @@ public static class WorkflowSurfaceBehavior
         // 表面必须能拿焦点：Delete 只有这一条到达本层的路。
         host.Focusable = true;
 
-        state.MouseDownHandler = OnMouseDown;
         state.MouseMoveHandler = OnMouseMove;
         state.MouseUpHandler = OnMouseUp;
         state.MouseWheelHandler = OnMouseWheel;
@@ -373,7 +378,9 @@ public static class WorkflowSurfaceBehavior
         host.Loaded += OnLoaded;
         host.Unloaded += OnUnloaded;
         host.DataContextChanged += OnDataContextChanged;
-        host.AddHandler(UIElement.PreviewMouseDownEvent, state.MouseDownHandler);
+        // 按下**不挂宿主**：Jalium 的隧道在这条树上到不了宿主（实测：宿主上的 PreviewMouseDown 从不
+        // 触发，而 PreviewMouseMove 照常触发），挂在宿主上的按下处理器是永不执行的路由器。按下改由
+        // 具名按下源与节点、插槽各自负责，见 OnPointerPressSourceDown 与 RouteComponentPress。
         host.AddHandler(UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
         host.AddHandler(UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
         host.AddHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler);
@@ -403,7 +410,6 @@ public static class WorkflowSurfaceBehavior
         host.Loaded -= OnLoaded;
         host.Unloaded -= OnUnloaded;
         host.DataContextChanged -= OnDataContextChanged;
-        RemoveHandler(host, UIElement.PreviewMouseDownEvent, state.MouseDownHandler);
         RemoveHandler(host, UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
         RemoveHandler(host, UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
         RemoveHandler(host, Mouse.MouseWheelEvent, state.MouseWheelHandler);
@@ -558,6 +564,16 @@ public static class WorkflowSurfaceBehavior
         }
 
         if (e.KeyboardModifiers != ModifierKeys.Control)
+        {
+            return;
+        }
+
+        // Ctrl+滚轮也先过路由：订阅者在树自己的 InputRelay 上置 PreventDefault 就是「这一次别缩放」。
+        // 不读它，这条唯一不进路由的手势就没人能否决。非 Ctrl 的滚轮走 OnMouseWheel 那条，两支笔互不重叠。
+        var zoomHandle = RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), e.OriginalSource as DependencyObject,
+            (p, t, h) => new Wf.PointerWheelEventArgs(
+                p, Modifiers(e.KeyboardModifiers), host, t, 0d, e.Delta / 120d, h));
+        if (zoomHandle.PreventDefault)
         {
             return;
         }
@@ -879,7 +895,7 @@ public static class WorkflowSurfaceBehavior
         var input = WorkflowInput.For(tree);
         state.Input = input;
 
-        if (tree.GetHelper() is IInputEvents events)
+        if (tree.GetHelper() is Wf.IInputEvents events)
         {
             state.InputPressedHandler = (_, e) => OnLinkPointerPressed(state, e);
             events.Input.PointerPressed += state.InputPressedHandler;
@@ -898,7 +914,7 @@ public static class WorkflowSurfaceBehavior
         }
 
         var helper = tree.GetHelper();
-        if (helper is IInputEvents events && state.InputPressedHandler is not null)
+        if (helper is Wf.IInputEvents events && state.InputPressedHandler is not null)
         {
             events.Input.PointerPressed -= state.InputPressedHandler;
         }
@@ -925,18 +941,8 @@ public static class WorkflowSurfaceBehavior
         }
     }
 
-    private static void OnMouseDown(object? sender, MouseButtonEventArgs e)
-    {
-        if (sender is not FrameworkElement host || !States.TryGetValue(host, out var state) || state.Tree is null)
-        {
-            return;
-        }
-
-        RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), (p, t, h) => new Wf.PointerPressedEventArgs(
-            p, Modifiers(e.KeyboardModifiers), host, t, ButtonOf(e.ChangedButton), 1, h));
-    }
-
-    // 起平移。挂在具名按下源的预览相上（见 ResolveNamedParts），所以一定收得到。
+    // 起平移，并且**路由这一笔按下**。挂在具名按下源的预览相上（见 ResolveNamedParts）：宿主上收不到，
+    // 按下源上收得到（实测），所以这里就是表面能拿到句柄的唯一位置 —— 句柄在手，订阅者才能否决这一次平移。
     private static void OnPointerPressSourceDown(object? sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement source
@@ -954,6 +960,24 @@ public static class WorkflowSurfaceBehavior
 
         // 按在卡片/端口上的那一按是它们自己的手势 —— 具名源可能包着它们，所以这一道仍要有。
         if (e.OriginalSource is DependencyObject originalSource && !IsBlankSurfaceInteraction(originalSource, state))
+        {
+            return;
+        }
+
+        // 这一笔可能已经由节点卡片或插槽自己路由过（两者与按下源谁先跑，取决于路径怎么搭起来，
+        // 这里不做假设）：这次不归表面 —— 不平移，也不再路由。
+        if (ReferenceEquals(state.RoutedPress, e))
+        {
+            return;
+        }
+
+        state.PressHandle = RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), e.OriginalSource as DependencyObject,
+            (p, t, h) => new Wf.PointerPressedEventArgs(
+                p, Modifiers(e.KeyboardModifiers), host, t, ButtonOf(e.ChangedButton), 1, h));
+        state.RoutedPress = e;
+
+        // 订阅者在这一笔上说「走自己的路」，平移就让开。
+        if (state.PressHandle.PreventDefault)
         {
             return;
         }
@@ -992,8 +1016,9 @@ public static class WorkflowSurfaceBehavior
         // 橡皮筋挂着的那段时间不转发 PointerMoved，否则沿途经过的实连线会一路亮起。
         if (!tree.VirtualLink.IsVisible)
         {
-            RoutePointer(state, host, e.GetPosition(host), world, (p, t, h) => new Wf.PointerMovedEventArgs(
-                p, Modifiers(e.KeyboardModifiers), host, t, h));
+            RoutePointer(state, host, e.GetPosition(host), world, e.OriginalSource as DependencyObject,
+                (p, t, h) => new Wf.PointerMovedEventArgs(
+                    p, Modifiers(e.KeyboardModifiers), host, t, h));
         }
     }
 
@@ -1055,8 +1080,9 @@ public static class WorkflowSurfaceBehavior
 
         if (state.Tree is not null)
         {
-            RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), (p, t, h) => new Wf.PointerReleasedEventArgs(
-                p, Modifiers(e.KeyboardModifiers), host, t, ButtonOf(e.ChangedButton), 1, h));
+            RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), e.OriginalSource as DependencyObject,
+                (p, t, h) => new Wf.PointerReleasedEventArgs(
+                    p, Modifiers(e.KeyboardModifiers), host, t, ButtonOf(e.ChangedButton), 1, h));
         }
 
         if (state.IsPanning)
@@ -1110,8 +1136,9 @@ public static class WorkflowSurfaceBehavior
             return;
         }
 
-        RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), (p, t, h) => new Wf.PointerWheelEventArgs(
-            p, Modifiers(e.KeyboardModifiers), host, t, 0d, e.Delta / 120d, h));
+        RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), e.OriginalSource as DependencyObject,
+            (p, t, h) => new Wf.PointerWheelEventArgs(
+                p, Modifiers(e.KeyboardModifiers), host, t, 0d, e.Delta / 120d, h));
     }
 
     private static void OnKeyDown(object? sender, PlatformInput.KeyEventArgs e)
@@ -1150,28 +1177,107 @@ public static class WorkflowSurfaceBehavior
     // 两个系各取一次：anchor 是宿主系（菜单定位按宿主坐标算屏幕坐标），world 是画布系。
     // 命中判定在 Core 里拿指针去比 node.Anchor / node.Size（模型系），画布自己带着世界位移，
     // 所以画布系坐标**就是**模型系 —— 不需要再减什么，减了就是那个静默的系统性偏移。
-    private static void RoutePointer(
+    private static WorkflowEventHandle RoutePointer(
         SurfaceState state,
         FrameworkElement host,
         Point anchorPoint,
         Point worldPoint,
+        DependencyObject? hit,
         Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         if (state.Input is not { } input)
         {
-            return;
+            return new WorkflowEventHandle();
         }
 
-        var anchor = new Anchor(anchorPoint.X, anchorPoint.Y, 0);
-        var target = input.Tree.HitTestVisibleLinks(worldPoint.X, worldPoint.Y, input.HitRadius);
+        var target = ResolveTarget(hit, input.Tree, worldPoint.X, worldPoint.Y, input.HitRadius);
+        return RouteTo(state, host, anchorPoint, target, args);
+    }
 
-        input.Route(args(anchor, target, new WorkflowEventHandle()));
+    // 已经知道目标是谁的那一处（组件自报家门）走这里，不再由指针位置反推。
+    private static WorkflowEventHandle RouteTo(
+        SurfaceState state,
+        FrameworkElement host,
+        Point anchorPoint,
+        IWorkflowViewModel? target,
+        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+    {
+        var handle = new WorkflowEventHandle();
+
+        if (state.Input is not { } input)
+        {
+            return handle;
+        }
+
+        input.Route(args(new Anchor(anchorPoint.X, anchorPoint.Y, 0), target, handle));
 
         // 命中一条线就把键盘焦点收到表面：Delete 才进得来（与其余六家一致）。
         if (input.HoveredLink is not null)
         {
             host.Focus();
         }
+
+        return handle;
+    }
+
+    // 指针底下是什么，由适配器回答 —— 节点和插槽也是答案的一部分。只认连线的话，路由的 Target 就永远
+    // 只是「连线或空白」，`WorkflowInput.Chain` 里 slot → node → tree 那条链于是永远走不到。
+    private static IWorkflowViewModel? ResolveTarget(
+        DependencyObject? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    {
+        if (hit is not null)
+        {
+            foreach (var candidate in EnumerateSelfAndVisualAncestors(hit))
+            {
+                switch (candidate)
+                {
+                    case FrameworkElement { DataContext: IWorkflowNodeViewModel node }:
+                        return node;
+                    case FrameworkElement { DataContext: IWorkflowSlotViewModel slot }:
+                        return slot;
+                }
+            }
+        }
+
+        return tree.HitTestVisibleLinks(x, y, radius);
+    }
+
+    // 组件（节点卡片 / 插槽）把落在自己身上的按下交回来路由：这家没有一条覆盖到组件的宿主隧道，
+    // 组件比按下源更深、在隧道里更晚跑，句柄只能由它们各自取。target 就是组件本身，
+    // `WorkflowInput.Chain` 里 slot → node → tree 那条链才走得通。解析不出宿主或树时返回 null，
+    // 调用方按「没否决」处理。
+    internal static WorkflowEventHandle? RouteComponentPress(
+        DependencyObject? control, IWorkflowViewModel component, MouseButtonEventArgs e)
+    {
+        if (control is null)
+        {
+            return null;
+        }
+
+        var host = FindHost(control);
+        if (host is null
+            || !States.TryGetValue(host, out var state)
+            || state.Tree is null
+            || state.ScrollViewer is null)
+        {
+            return null;
+        }
+
+        // 这一笔已经由表面在按下源上路由过（谁先跑不一定，所以两边都问一遍）：句柄现成，
+        // 再路由一次就是把同一笔按下送给订阅者两遍。
+        if (ReferenceEquals(state.RoutedPress, e))
+        {
+            return state.PressHandle;
+        }
+
+        var handle = RouteTo(state, host, e.GetPosition(host), component,
+            (p, t, h) => new Wf.PointerPressedEventArgs(
+                p, Modifiers(e.KeyboardModifiers), host, component, ButtonOf(e.ChangedButton), 1, h));
+
+        // 标记这一笔已路由：表面在按下源上不再重复路由同一个物理按下。
+        state.RoutedPress = e;
+        state.PressHandle = handle;
+        return handle;
     }
 
     // 画布自己带着世界位移，所以它的局部系就是模型系。

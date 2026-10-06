@@ -322,6 +322,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (s is null) return;
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, s.Tree);
         AttachLinkInput(s.Tree);
+        VetoShiftDragOnBlankCanvas(s.Tree);
         s.Tree.Nodes.CollectionChanged += OnNodesChanged;
         s.Tree.Links.CollectionChanged += OnLinksChanged;
         s.Controller.PropertyChanged += OnControllerPropertyChanged;
@@ -781,8 +782,12 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         if (e.Button != MouseButtons.Left) return;
 
-        RoutePointer(e.Location, (p, t, h) => new Wf.PointerPressedEventArgs(
+        // 这一笔的句柄留着读：「订阅、置 PreventDefault，框架自己那一手就跳过」是写进文档的契约 ——
+        // 适配器基类 WorkflowTreeView 就是这么做的；先前建完即丢，于是这条契约在平移上不成立。
+        var press = RoutePointer(e.Location, (p, t, h) => new Wf.PointerPressedEventArgs(
             p, Modifiers(), this, t, Wf.MouseButton.Left, 1, h));
+
+        if (press.PreventDefault) return;
 
         if (_session?.Tree.VirtualLink.IsVisible == true)
         {
@@ -888,6 +893,26 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         _input = input;
     }
 
+    /// <summary>
+    /// Shift-drag on empty canvas: the framework stands down and the host takes over.
+    /// </summary>
+    /// <remarks>
+    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a
+    /// press-and-drag interaction of one's own on the blank canvas. Subscribed from <see cref="AttachSession"/>,
+    /// so it lands on the tree actually on screen: the canvas is handed a fresh session at construction and
+    /// again on every reload or file load, and the constructor's tree is not the one the form ends up showing.
+    /// </remarks>
+    private static void VetoShiftDragOnBlankCanvas(TreeViewModel tree)
+    {
+        ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
+        {
+            if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
+            {
+                e.Handle.PreventDefault = true;
+            }
+        };
+    }
+
     private void DetachLinkInput()
     {
         if (_input is not { } input) return;
@@ -907,14 +932,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     // 指针位置在这里是「世界坐标」：曲线就是在世界坐标里发布的（画布内部按世界坐标绘制），两边必须同系。
     // 命中由共享的曲线判定器回答，事件交给输入路由。
-    private void RoutePointer(Point client, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+    private WorkflowEventHandle RoutePointer(Point client, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
-        if (_input is not { } input) return;
+        var handle = new WorkflowEventHandle();
+        if (_input is not { } input) return handle;
 
         var anchor = ClientToWorld(client);
         var target = input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
-        input.Route(args(anchor, target, new WorkflowEventHandle()));
+        input.Route(args(anchor, target, handle));
 
         // 高亮是这本 demo 的事：画布把「现在轮到谁」写回画着那条线的渲染器 —— 互斥因此不需要谁记账。
         foreach (var lv in _linkRenderers)
@@ -924,6 +950,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         // 这里同时补平台欠的焦点，Delete 才进得来这块画布。
         if (input.HoveredLink is not null && CanFocus) Focus();
+
+        return handle;
     }
 
     private static Wf.MouseButton ButtonOf(MouseButtons button) => button switch

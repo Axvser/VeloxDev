@@ -55,6 +55,31 @@ public partial class WorkflowSlotConnectionBehavior : ComponentBase, IAsyncDispo
         }
     }
 
+    /// <summary>
+    /// Answers the JavaScript's press before it starts a connection: routes the press on the slot's own relay
+    /// and hands back whether a subscriber refused it.
+    /// </summary>
+    /// <param name="localX">Canvas-local x of the press.</param>
+    /// <param name="localY">Canvas-local y of the press.</param>
+    /// <param name="button">The browser's <c>MouseEvent.button</c> number.</param>
+    /// <param name="modifiers">The Core modifier bitmask.</param>
+    /// <param name="targetId">
+    /// The id the shared JavaScript resolved from the DOM. Unused here: this component already knows the
+    /// component it is (the parameter is only there so both sides of the interop agree on the signature).
+    /// </param>
+    /// <returns><see langword="true"/> when a subscriber set <see cref="WorkflowEventHandle.PreventDefault"/>.</returns>
+    [JSInvokable]
+    public bool RequestPressVerdict(double localX, double localY, int button, int modifiers, string? targetId)
+    {
+        // 连线由这一笔按下触发；订阅者在插槽自己的 InputRelay 上置 PreventDefault 就是「这一次别连」。
+        if (Tree is not { } tree || Slot is not { } slot)
+        {
+            return false;
+        }
+
+        return WorkflowSurfaceBehavior.RouteComponentPress(tree, slot, localX, localY, button, modifiers);
+    }
+
     [JSInvokable]
     public void OnSlotConnectionStart(double worldX, double worldY)
     {

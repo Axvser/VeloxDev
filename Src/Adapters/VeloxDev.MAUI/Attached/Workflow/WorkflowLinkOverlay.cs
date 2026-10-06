@@ -579,33 +579,36 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         // 键盘钩子要升级到窗口根，而 XamlRoot 在挂钩子那会儿还没就绪（见 AttachKeyHook 的注释）
         TryUpgradeKeyHook();
 #endif
-        RoutePointer(point, (p, t, h) => new Wf.PointerMovedEventArgs(p, Wf.InputModifiers.None, this, t, h));
+        RoutePointer(point, (p, t, h) => new Wf.PointerMovedEventArgs(p, WorkflowSurfaceBehavior.ModifiersNow(), this, t, h));
     }
 
     // 指针离开整块输入面：指针目标跟着走 —— 留在身后会让「现在按 Delete 删哪条」变得没有答案。
     // 菜单弹出引起的那一次离开由输入路由自己挡（它认 IsSuspended），本层不再重复拦一遍。
     private void OnHoverExited()
     {
-        _input?.Route(new Wf.PointerExitedEventArgs(new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
+        _input?.Route(new Wf.PointerExitedEventArgs(new Anchor(), WorkflowSurfaceBehavior.ModifiersNow(), this, null, new WorkflowEventHandle()));
     }
 
     // 指针进入整块输入面。
     private void OnHoverEntered(Point point)
     {
-        RoutePointer(point, (p, t, h) => new Wf.PointerEnteredEventArgs(p, Wf.InputModifiers.None, this, t, h));
+        RoutePointer(point, (p, t, h) => new Wf.PointerEnteredEventArgs(p, WorkflowSurfaceBehavior.ModifiersNow(), this, t, h));
     }
 
     // 指针进来时统一在这里翻译：被指到的线由共享的曲线命中判出来，事件交给输入路由。
-    private void RoutePointer(
+    // 返回这一笔的句柄 —— 订阅者说「这一次不要框架那一手」的地方；丢掉句柄，否决就没人读。
+    private WorkflowEventHandle RoutePointer(
         Point point, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
-        if (_input is not { } input) return;
+        var handle = new WorkflowEventHandle();
+        if (_input is not { } input) return handle;
 
         var anchor = ToCanvasLocal(point);
         var target = input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
-        input.Route(args(anchor, target, new WorkflowEventHandle()));
+        input.Route(args(anchor, target, handle));
         FocusHoveredLink();
+        return handle;
     }
 
     /// <summary>
@@ -617,7 +620,14 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// <param name="button">Which button.</param>
     private void OnPressed(Point onOverlay, Wf.MouseButton button)
     {
-        RoutePointer(onOverlay, (p, t, h) => new Wf.PointerPressedEventArgs(p, Wf.InputModifiers.None, this, t, button, 1, h));
+        // 一笔按下只转发一次：本家没有隧道路由相，节点/插槽的处理器与表面自己那一手都比这一层先跑
+        // （平台事件从命中元素往上冒泡，越深越早），它们已经转发过的这一笔不再重复发给宿主。
+        if (_input is { } input)
+        {
+            WorkflowSurfaceBehavior.RoutePressOnce(input.Tree, () =>
+                RoutePointer(onOverlay, (p, t, h) => new Wf.PointerPressedEventArgs(
+                    p, WorkflowSurfaceBehavior.ModifiersNow(), this, t, button, 1, h)));
+        }
 
         if (_input?.HoveredLink is null)
         {
@@ -632,6 +642,29 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         {
             MainThread.BeginInvokeOnMainThread(() => source.Focus());
         }
+    }
+
+    // 松手：这一笔按下的登记到此作废（组件与表面读的是同一条，见 RoutePressOnce），下一次按下重新记。
+    private void OnReleased(Point onOverlay, Wf.MouseButton button)
+    {
+        RoutePointer(onOverlay, (p, t, h) => new Wf.PointerReleasedEventArgs(
+            p, WorkflowSurfaceBehavior.ModifiersNow(), this, t, button, 1, h));
+
+        if (WorkflowTree is { } tree)
+        {
+            WorkflowSurfaceBehavior.ClearRoutedPress(tree);
+        }
+    }
+
+    // 一笔滚轮只转发一次：链接层与 Ctrl+滚轮的缩放都跑在同一笔上（两条都挂在交互源的元素上，谁先跑
+    // 由注册顺序决定），RouteWheelOnce 让先到者转发、后到者读同一个句柄。
+    private void RouteWheel(Point onOverlay, double delta)
+    {
+        if (WorkflowTree is not { } tree) return;
+
+        WorkflowSurfaceBehavior.RouteWheelOnce(tree, () =>
+            RoutePointer(onOverlay, (p, t, h) => new Wf.PointerWheelEventArgs(
+                p, WorkflowSurfaceBehavior.ModifiersNow(), this, t, 0d, delta, h)));
     }
 
     // 视口像素 → canvas-local 锚点：ToViewport 的逆（一条纯平移，所以逐轴减回去就是）。
@@ -691,8 +724,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         if (e.GetPosition(this) is { } onOverlay)
         {
-            RoutePointer(onOverlay, (p, t, h) => new Wf.PointerReleasedEventArgs(
-                p, Wf.InputModifiers.None, this, t, Wf.MouseButton.Left, 1, h));
+            OnReleased(onOverlay, Wf.MouseButton.Left);
         }
     }
 
@@ -704,6 +736,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         CancelLongPress();
         if (origin is { } point)
         {
+            // 长按只存在于非 Windows 平台（Android/iOS/MacCatalyst），这些平台没有键态来源，修饰键保持 None。
             RoutePointer(point, (p, t, h) => new Wf.PointerPressedEventArgs(
                 p, Wf.InputModifiers.None, this, t, Wf.MouseButton.Right, 1, h));
         }
@@ -791,8 +824,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
             if (ToOverlayPoint(e) is { } onOverlay)
             {
-                RoutePointer(onOverlay, (p, t, h) => new Wf.PointerReleasedEventArgs(
-                    p, Wf.InputModifiers.None, this, t, button, 1, h));
+                OnReleased(onOverlay, button);
             }
         };
         _wheelHandler = (_, e) =>
@@ -801,8 +833,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             if (ToOverlayPoint(e) is { } onOverlay)
             {
                 var delta = properties.MouseWheelDelta;
-                RoutePointer(onOverlay, (p, t, h) => new Wf.PointerWheelEventArgs(
-                    p, Wf.InputModifiers.None, this, t, 0d, delta, h));
+                RouteWheel(onOverlay, delta);
             }
         };
 
@@ -932,7 +963,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         input.Route(new Wf.KeyDownEventArgs(
-            ToKey(e.Key), (int)e.Key, Wf.InputModifiers.None, false, this, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, WorkflowSurfaceBehavior.ModifiersNow(), false, this, input.HoveredLink, new WorkflowEventHandle()));
 
         if (e.Key == Windows.System.VirtualKey.Delete) e.Handled = true;
     }

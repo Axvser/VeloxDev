@@ -40,6 +40,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
+
+        // 刚刚那一次按下建出来的句柄。路由在本类里、比节点与插槽的处理器更早（隧道相），所以句柄
+        // 现成 —— 组件行为读它就知道订阅者有没有否决这一笔。每次按下都会重写，不会拿到上一笔的。
+        public WorkflowEventHandle? PressHandle { get; set; }
         public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
         public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
         public RoutedEventHandler? MenuOpened { get; set; }
@@ -554,6 +558,22 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        // Ctrl+滚轮也进路由，订阅者才有机会说「这一次别缩放」。不会造成二次路由：非 Ctrl 的滚轮走
+        // OnLinkPointerWheel 那一条，两支笔各走各的。
+        if (host.GetValue(StateProperty) is SurfaceState zoomState
+            && source is FrameworkElement zoomSource)
+        {
+            WorkflowEventHandle zoomHandle = RoutePointer(zoomState, viewModel,
+                e.GetPosition(zoomState.Canvas ?? zoomSource), zoomSource, e.OriginalSource as DependencyObject,
+                (anchor, target, handle) => new Wf.PointerWheelEventArgs(
+                    anchor, Modifiers(), host, target, 0d, e.Delta, handle));
+
+            if (zoomHandle.PreventDefault)
+            {
+                return;
+            }
+        }
+
         // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = e.Delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
@@ -644,6 +664,13 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        // 订阅者在这一笔上说要走自己的路，框架那一手就让开。路由在本类里、比这里更早跑完（隧道相），
+        // 句柄已经在了 —— 先前建完就丢，于是这条写进文档的契约在平移上不成立。
+        if (state.PressHandle?.PreventDefault == true)
+        {
+            return;
+        }
+
         state.IsPanning = true;
         state.PanStart = e.GetPosition(host);
         state.PanStartOffset = new Vector(state.ScrollViewer.HorizontalOffset, state.ScrollViewer.VerticalOffset);
@@ -707,7 +734,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         // 拉线时指针下正挂着橡皮筋，那段时间不转发，否则沿途实连线会一路亮起。
         if (!viewModel.VirtualLink.IsVisible)
         {
-            RoutePointer(state, viewModel, point, host,
+            RoutePointer(state, viewModel, point, host, e.OriginalSource as DependencyObject,
                 (anchor, target, handle) => new Wf.PointerMovedEventArgs(anchor, Modifiers(), host, target, handle));
         }
     }
@@ -727,7 +754,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host,
+        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host, e.OriginalSource as DependencyObject,
             (anchor, target, handle) => new Wf.PointerEnteredEventArgs(anchor, Modifiers(), host, target, handle));
     }
 
@@ -770,7 +797,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host,
+        state.PressHandle = RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host, e.OriginalSource as DependencyObject,
             (anchor, target, handle) => new Wf.PointerPressedEventArgs(
                 anchor, Modifiers(), host, target, button, e.ClickCount, handle));
     }
@@ -794,7 +821,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host,
+        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host, e.OriginalSource as DependencyObject,
             (anchor, target, handle) => new Wf.PointerReleasedEventArgs(
                 anchor, Modifiers(), host, target, button, e.ClickCount, handle));
     }
@@ -814,23 +841,68 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host,
+        RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host, e.OriginalSource as DependencyObject,
             (anchor, target, handle) => new Wf.PointerWheelEventArgs(
                 anchor, Modifiers(), host, target, 0d, e.Delta, handle));
     }
 
     // 指针进来时统一在这里翻译：Anchor 带上来源视图所在图层当 Z，被指到的那条线由 Core 那条共享的曲线命中判出来 ——
     // 表面一个人画完所有线、没有「每线的可视对象」，所以命中只能对着发布出去的曲线做。
-    private static void RoutePointer(
-        SurfaceState state, IWorkflowTreeViewModel tree, Point point, FrameworkElement source,
+    private static WorkflowEventHandle RoutePointer(
+        SurfaceState state, IWorkflowTreeViewModel tree, Point point, FrameworkElement source, DependencyObject? hit,
         Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, Panel.GetZIndex(source), tree.Layout);
         var input = WorkflowInput.For(tree);
-        var target = tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
-        input.Route(args(anchor, target, new WorkflowEventHandle()));
+        var handle = new WorkflowEventHandle();
+        input.Route(args(anchor, target, handle));
         FocusHoveredLink(input, state);
+        return handle;
+    }
+
+    // 指针底下是什么，由适配器回答 —— 节点和插槽也是答案的一部分。只认连线的话，路由的 Target 就永远
+    // 只是「连线或空白」，`WorkflowInput.Chain` 里 slot → node → tree 那条链于是永远走不到。
+    // 自身在前，再沿可视祖先往外走。不用 Enumerable.Prepend：本工程多档 TFM，它不都在。
+    private static IEnumerable<DependencyObject> SelfThenAncestors(DependencyObject element)
+    {
+        yield return element;
+
+        foreach (DependencyObject ancestor in EnumerateVisualAncestors(element))
+        {
+            yield return ancestor;
+        }
+    }
+
+    private static IWorkflowViewModel? ResolveTarget(
+        DependencyObject? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    {
+        if (hit is not null)
+        {
+            // 含自身：指针可能正好落在节点或插槽视图本身上，那一层不能跳过。
+            foreach (DependencyObject candidate in SelfThenAncestors(hit))
+            {
+                switch (candidate)
+                {
+                    case FrameworkElement { DataContext: IWorkflowNodeViewModel node }:
+                        return node;
+                    case FrameworkElement { DataContext: IWorkflowSlotViewModel slot }:
+                        return slot;
+                }
+            }
+        }
+
+        return tree.HitTestVisibleLinks(x, y, radius);
+    }
+
+    // 组件行为用它读这一笔按下的句柄：路由在本类里、比它们更早，句柄只能由这里交出。
+    internal static WorkflowEventHandle? GetPressHandle(DependencyObject? descendant)
+    {
+        if (descendant is null) return null;
+
+        var host = EnumerateVisualAncestors(descendant).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        return host is null ? null : host.GetValue(StateProperty) is SurfaceState state ? state.PressHandle : null;
     }
 
     private static Wf.MouseButton ToButton(PlatformInput.MouseButton button) => button switch

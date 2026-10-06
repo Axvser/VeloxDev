@@ -556,8 +556,12 @@ public abstract class WorkflowTreeView : UserControl
 
         if (e.Button != MouseButtons.Left || _isPanning) return;
 
-        RoutePointer(e.Location, (p, t, h) => new Wf.PointerPressedEventArgs(
+        // 这一笔的句柄留着读：「订阅、置 PreventDefault，框架自己那一手就跳过」是写进文档的契约 ——
+        // 先前建完就丢，于是这条契约在平移上不成立。
+        var press = RoutePointer(e.Location, (p, t, h) => new Wf.PointerPressedEventArgs(
             p, Modifiers(), PART_Canvas, t, Wf.MouseButton.Left, 1, h));
+
+        if (press.PreventDefault) return;
 
         _isPanning = true;
         _panPressScreen = Cursor.Position;
@@ -650,18 +654,25 @@ public abstract class WorkflowTreeView : UserControl
 
     // 画布客户区坐标就是 slot.Anchor 的空间（见 WorkflowSlotLayoutBehavior 的坐标宿主），与发布的曲线同系。
     // 命中由共享的曲线判定器回答（本家画所有线、没有每线的可视对象），事件交给输入路由。
-    private void RoutePointer(
+    private WorkflowEventHandle RoutePointer(
         Point client, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
-        if (_input is not { } input) return;
+        var handle = new WorkflowEventHandle();
+        if (_input is not { } input) return handle;
 
+        // 指针底下的那颗（子）控件由几何判定给出，禁用控件也算 —— 连线视图是一个禁用的窗口，它盖住的那条线
+        // 正是要靠它在祖先链上的 Tag 认出来。
+        var hit = PART_Canvas.GetChildAtPoint(client);
         var anchor = new Anchor(client.X, client.Y, 0);
-        var target = input.Tree.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        var target = WorkflowSurfaceBehavior.ResolveTarget(
+            hit, input.Tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
-        input.Route(args(anchor, target, new WorkflowEventHandle()));
+        input.Route(args(anchor, target, handle));
 
         // 命中一条线就把键盘焦点收到画布：Delete 才进得来（同其它六家）。
         if (input.HoveredLink is not null && PART_Canvas.CanFocus) PART_Canvas.Focus();
+
+        return handle;
     }
 
     private static Wf.MouseButton ButtonOf(MouseButtons button) => button switch

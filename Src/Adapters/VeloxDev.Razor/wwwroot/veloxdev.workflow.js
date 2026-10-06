@@ -722,14 +722,28 @@ window.veloxdevWorkflow = (() => {
         document.addEventListener('keydown', keydown);
         document.addEventListener('keyup', keyup);
 
+        // Pan is the framework's own hand here, so the press is routed first and a refusal skips it.
         scrollerEl.addEventListener('mousedown', function (e) {
-            if (e.button === 1) { e.preventDefault(); startPan(e); return; }
-            if (e.button === 0 && spaceHeld) { e.preventDefault(); startPan(e); return; }
+            if (e.button === 1) { e.preventDefault(); pressWhenAllowed(dotnetRef, canvasEl, e, function () { startPan(e); }); return; }
+            if (e.button === 0 && spaceHeld) { e.preventDefault(); pressWhenAllowed(dotnetRef, canvasEl, e, function () { startPan(e); }); return; }
             if (e.button === 0 &&
                 !e.target.closest('.veloxdev-wf-node-drag, .veloxdev-wf-slot, select, input, button, textarea')) {
-                startPan(e);
+                pressWhenAllowed(dotnetRef, canvasEl, e, function () { startPan(e); });
             }
         });
+
+        // Hover onto a node/slot is reported only when the hit id actually changes (over/out fire on
+        // every element boundary crossed). The surface's move route resolves Target from it — a node's
+        // or slot's own relay then hears the hover, and only empty canvas falls back to the link curves.
+        let lastHitId = null;
+        const onHoverChange = function (e) {
+            const id = hitTargetId(e.clientX, e.clientY);
+            if (id === lastHitId) return;
+            lastHitId = id;
+            if (dotnetRef) dotnetRef.invokeMethodAsync('OnHoverTarget', id);
+        };
+        scrollerEl.addEventListener('pointerover', onHoverChange);
+        scrollerEl.addEventListener('pointerout', onHoverChange);
 
         const onMove = function (e) {
             if (!panState) return;
@@ -829,6 +843,8 @@ window.veloxdevWorkflow = (() => {
                 delete surfaceZoomState[scrollerEl.id];
                 delete surfaceSettleRunning[scrollerEl.id];
                 scrollerEl.removeEventListener('scroll', onScroll);
+                scrollerEl.removeEventListener('pointerover', onHoverChange);
+                scrollerEl.removeEventListener('pointerout', onHoverChange);
                 document.removeEventListener('keydown', keydown);
                 document.removeEventListener('keyup', keyup);
                 document.removeEventListener('mousemove', onMove);
@@ -879,7 +895,10 @@ window.veloxdevWorkflow = (() => {
             // this mousedown, so dragging a node never selects surrounding content.
             e.preventDefault();
             e.stopPropagation();
-            dragState = { startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY };
+            // Dragging is the framework's own hand: route the press first, and a refusal skips the drag.
+            pressWhenAllowed(dotnetRef, nodeEl.closest('.veloxdev-wf-canvas'), e, function () {
+                dragState = { startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY };
+            });
         });
 
         const flushDelta = function () {
@@ -956,7 +975,6 @@ window.veloxdevWorkflow = (() => {
             if (e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
-            active = true;
             // Measure this slot's own world position up-front so the virtual link starts from the
             // slot even if its anchor was never laid out (e.g. freshly created selector slots).
             const canvasEl = slotEl.closest('.veloxdev-wf-canvas');
@@ -968,7 +986,11 @@ window.veloxdevWorkflow = (() => {
                 worldX = (r.left + r.width / 2) - rect.left - (contentEl ? contentEl.offsetLeft : 0);
                 worldY = (r.top + r.height / 2) - rect.top - (contentEl ? contentEl.offsetTop : 0);
             }
-            if (dotnetRef) dotnetRef.invokeMethodAsync('OnSlotConnectionStart', worldX, worldY);
+            // Connecting is the framework's own hand: route the press first, and a refusal skips the gesture.
+            pressWhenAllowed(dotnetRef, canvasEl, e, function () {
+                active = true;
+                if (dotnetRef) dotnetRef.invokeMethodAsync('OnSlotConnectionStart', worldX, worldY);
+            });
         });
 
         const onMove = function (e) {
@@ -1202,12 +1224,23 @@ window.veloxdevWorkflow = (() => {
                 document.dispatchEvent(new CustomEvent('veloxdev-wf-layout-changed'));
             });
         }
+        let verdictBusy = false;
         function onWheel(e) {
             if (!e.ctrlKey) return;
+            // preventDefault must run synchronously — awaiting the verdict first would already have
+            // scrolled the page. A refusal swallows the zoom; it does not hand the browser default back.
             e.preventDefault();
             e.stopPropagation();
             pending += e.deltaY > 0 ? -120 : 120;
-            pump();
+            // One verdict per burst: events arriving while it is in flight join pending and are applied
+            // (or dropped, when refused) together once it returns.
+            if (verdictBusy) return;
+            verdictBusy = true;
+            requestWheelVerdict(dotnetRef, scrollerEl, e).then(function (prevented) {
+                verdictBusy = false;
+                if (prevented) { pending = 0; return; }
+                pump();
+            });
         }
         scrollerEl.addEventListener('wheel', onWheel, { passive: false });
         return {
@@ -1348,6 +1381,81 @@ window.veloxdevWorkflow = (() => {
                 if (minimapRects[scrollerId]) delete minimapRects[scrollerId];
             }
         };
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // GESTURE VERDICT — before a built-in gesture (pan, node drag, slot
+    // connection, zoom) acts, .NET routes the press and answers whether
+    // a subscriber refused it (WorkflowEventHandle.PreventDefault). The
+    // cross-boundary round trip is the price of that contract here: the
+    // gesture does not start at all when it is refused.
+    // ════════════════════════════════════════════════════════════
+    // Client (viewport) point → a surface's canvas-local space. Same formula as toCanvasLocal, but
+    // keyed by the canvas element the gesture already holds (a node/slot drag has no scroller id).
+    function canvasLocalFrom(canvasEl, clientX, clientY) {
+        if (!canvasEl) return null;
+        const rect = canvasEl.getBoundingClientRect();
+        const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
+        return [
+            clientX - rect.left - (contentEl ? contentEl.offsetLeft : 0),
+            clientY - rect.top - (contentEl ? contentEl.offsetTop : 0)
+        ];
+    }
+
+    // Which workflow component is under the point: walk the hit element's visual ancestors (itself
+    // first) for the id the node/slot wrappers stamp. Null means empty canvas or a link — that side
+    // is left to the shared curve hit test in .NET.
+    function hitTargetId(clientX, clientY) {
+        let el = document.elementFromPoint(clientX, clientY);
+        while (el && el !== document.body) {
+            if (el.getAttribute) {
+                const id = el.getAttribute('data-veloxdev-node-id') || el.getAttribute('data-veloxdev-slot-id');
+                if (id) return id;
+            }
+            el = el.parentElement;
+        }
+        return null;
+    }
+
+    // The browser's modifier flags map onto Wf.InputModifiers one for one: Alt=1 Ctrl=2 Shift=4 Meta=8.
+    function modifiersOf(e) {
+        return (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.shiftKey ? 4 : 0) | (e.metaKey ? 8 : 0);
+    }
+
+    // Asks .NET whether a subscriber refused this press before a gesture starts (the contract: a
+    // PreventDefault on the route keeps the framework's own hand from executing). Returns Promise<bool>.
+    // A failed round trip counts as "not refused" — the verdict gates the gesture, it must not wedge it.
+    function requestPressVerdict(dotnetRef, canvasEl, e) {
+        if (!dotnetRef) return Promise.resolve(false);
+        const local = canvasLocalFrom(canvasEl, e.clientX, e.clientY);
+        if (!local) return Promise.resolve(false);
+        return dotnetRef.invokeMethodAsync('RequestPressVerdict',
+                local[0], local[1], e.button, modifiersOf(e), hitTargetId(e.clientX, e.clientY))
+            .then(function (v) { return v === true; }, function () { return false; });
+    }
+
+    // Same for Ctrl+wheel. delta carries the adapter's shared sign convention: up (zoom in) is positive.
+    function requestWheelVerdict(dotnetRef, scrollerEl, e) {
+        if (!dotnetRef) return Promise.resolve(false);
+        const local = canvasLocalFrom(scrollerEl.querySelector('.veloxdev-wf-canvas'), e.clientX, e.clientY);
+        if (!local) return Promise.resolve(false);
+        const delta = e.deltaY > 0 ? -120 : 120;
+        return dotnetRef.invokeMethodAsync('RequestWheelVerdict',
+                local[0], local[1], delta, modifiersOf(e), hitTargetId(e.clientX, e.clientY))
+            .then(function (v) { return v === true; }, function () { return false; });
+    }
+
+    // Starts a gesture only once the verdict says it may. If the button was released while the verdict
+    // was in flight the start is dropped — otherwise a pan/drag would be left with no button holding it.
+    function pressWhenAllowed(dotnetRef, canvasEl, e, start) {
+        let released = false;
+        const onEarlyUp = function () { released = true; };
+        document.addEventListener('mouseup', onEarlyUp, { once: true });
+        requestPressVerdict(dotnetRef, canvasEl, e).then(function (prevented) {
+            document.removeEventListener('mouseup', onEarlyUp);
+            if (prevented || released) return;
+            start();
+        });
     }
 
     return {

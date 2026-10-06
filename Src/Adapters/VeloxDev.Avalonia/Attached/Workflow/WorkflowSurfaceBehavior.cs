@@ -29,6 +29,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public Canvas? Canvas { get; set; }
         public Control? GridDecorator { get; set; }
         public Control? PointerPressSource { get; set; }
+
+        // 刚刚那一次按下建出来的句柄。路由在隧道相、比节点与插槽的处理器更早，所以句柄现成 ——
+        // 组件行为读它就知道订阅者有没有否决这一笔。每次按下都会重写，不会拿到上一笔的。
+        public WorkflowEventHandle? PressHandle { get; set; }
         public Control? MinimapOverlay { get; set; }
         public EventHandler<PlatformInput.PointerWheelEventArgs>? ZoomHandler { get; set; }
 
@@ -282,21 +286,49 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     // 指针位置换算到连线发布曲线的那个坐标系（canvas-local 锚点空间）：指针在 Canvas 的局部坐标里，
     // 减去 ActualOffset 即连线视图自身的几何空间（见 WorkflowSurfaceMath / 各连线视图的 StartLeft 绑定）。
     // 命中由共享的曲线判定器回答（适配器负责「谁被指到」），事件交给输入路由（负责「谁听到」）。
-    private static void RoutePointer(
+    //
+    // 返回这一笔输入的句柄。句柄是订阅者说「这一次不要框架那一手」的地方，而框架那一手就在调用方手上 ——
+    // 平移、拖动、连线、缩放都在路由之后才决定动不动。丢掉句柄，订阅者的否决就没有任何人会读。
+    private static WorkflowEventHandle? RoutePointer(
         UserControl host, SurfaceState state, PlatformInput.PointerEventArgs e,
         Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.Canvas is null)
-            return;
+            return null;
 
         var point = e.GetPosition(state.Canvas);
         var layer = (e.Source as Visual)?.ZIndex ?? 0;
         var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, layer, viewModel.Layout);
         var input = WorkflowInput.For(viewModel);
-        var target = viewModel.HitTestVisibleLinks(anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        var target = ResolveTarget(e.Source, viewModel, anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
-        input.Route(args(anchor, target, new WorkflowEventHandle()));
+        var handle = new WorkflowEventHandle();
+        input.Route(args(anchor, target, handle));
         FocusHoveredLink(input, state);
+        return handle;
+    }
+
+    // 指针底下是什么，由适配器回答 —— 节点和插槽也是答案的一部分。只认连线的话，路由的 Target 就永远
+    // 只是「连线或空白」，`WorkflowInput.Chain` 里 slot → node → tree 那条链于是永远走不到，组件自己的
+    // InputRelay 收不到指针，使用方也就没有任何办法在节点的输入上做文章。
+    private static IWorkflowViewModel? ResolveTarget(
+        object? source, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    {
+        if (source is Visual visual)
+        {
+            foreach (Visual candidate in visual.GetSelfAndVisualAncestors())
+            {
+                switch (candidate)
+                {
+                    case StyledElement { DataContext: IWorkflowNodeViewModel node }:
+                        return node;
+                    case StyledElement { DataContext: IWorkflowSlotViewModel slot }:
+                        return slot;
+                }
+            }
+        }
+
+        return tree.HitTestVisibleLinks(x, y, radius);
     }
 
     private static Wf.InputModifiers Modifiers(KeyModifiers keys)
@@ -426,6 +458,9 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         control.AttachedToVisualTree += OnAttachedToVisualTree;
         control.DetachedFromVisualTree += OnDetachedFromVisualTree;
         control.DataContextChanged += OnDataContextChanged;
+        // 按下走隧道相：节点与插槽的处理器在视觉树上更深，冒泡相里它们先跑，那时句柄还不存在。
+        // 隧道相从根往下走，这里比谁都早 —— 路由一次、把句柄存进 state，需要它的人去读。
+        control.AddHandler(InputElement.PointerPressedEvent, OnPressRoute, RoutingStrategies.Tunnel);
         control.PointerEntered += OnPointerEntered;
         control.PointerMoved += OnPointerMoved;
         control.PointerExited += OnPointerExited;
@@ -443,6 +478,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         control.AttachedToVisualTree -= OnAttachedToVisualTree;
         control.DetachedFromVisualTree -= OnDetachedFromVisualTree;
         control.DataContextChanged -= OnDataContextChanged;
+        control.RemoveHandler(InputElement.PointerPressedEvent, OnPressRoute);
         control.PointerEntered -= OnPointerEntered;
         control.PointerMoved -= OnPointerMoved;
         control.PointerExited -= OnPointerExited;
@@ -623,6 +659,21 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
         }
 
+        // Ctrl+滚轮也进路由，订阅者才有机会说「这一次别缩放」。先前这条路完全不路由，于是它对
+        // PreventDefault 天然免疫。不会造成二次路由：非 Ctrl 的滚轮走 OnPointerWheel 那一条，
+        // 两支笔各走各的。
+        if (host.GetValue(StateProperty) is SurfaceState zoomState)
+        {
+            WorkflowEventHandle? wheelHandle = RoutePointer(host, zoomState, e, (position, target, handle) =>
+                new Wf.PointerWheelEventArgs(
+                    position, Modifiers(e.KeyModifiers), host, target, e.Delta.X, e.Delta.Y, handle));
+
+            if (wheelHandle?.PreventDefault == true)
+            {
+                return;
+            }
+        }
+
         // 滚轮向上（Delta.Y 为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
         var factor = e.Delta.Y > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
@@ -680,6 +731,34 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         e.Handled = true;
     }
 
+    // 每一次按下都在这里路由一次，并把句柄留在 state 里。隧道相保证它比节点与插槽的处理器更早跑，
+    // 所以那两处的处理器读得到 —— 而"路由只有一处"也让兜底天然成立：落在任何地方的按下都经过这里，
+    // 使用方想定制，就走这条已经注册好的管道。
+    private static void OnPressRoute(object? sender, PlatformInput.PointerPressedEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+            return;
+
+        if (host.DataContext is not IWorkflowTreeViewModel || state.Canvas is null)
+            return;
+
+        // Source 仍是「输入来自哪个视图」：原来那个冒泡处理器收到的 sender 就是按下源，这里保持同一个值。
+        object? source = state.PointerPressSource ?? host;
+
+        state.PressHandle = RoutePointer(host, state, e,
+            (position, target, handle) => new Wf.PointerPressedEventArgs(
+                position, Modifiers(e.KeyModifiers), source, target, ButtonOf(e, state), e.ClickCount, handle));
+    }
+
+    // 组件行为用它读这一笔按下的句柄：路由在隧道相、比它们更早，句柄只能由那里交出。
+    internal static WorkflowEventHandle? GetPressHandle(Visual? descendant)
+    {
+        if (descendant is null) return null;
+
+        var host = descendant.GetVisualAncestors().OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        return host?.GetValue(StateProperty) is SurfaceState state ? state.PressHandle : null;
+    }
+
     private static void OnPointerPressed(object? sender, PlatformInput.PointerPressedEventArgs e)
     {
         if (sender is not Control source)
@@ -691,9 +770,11 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         // 按下先进输入路由：按在哪条连线上由共享的曲线命中裁。左键落在连线上时下面照样会起一次平移
         // （连线算空白），两者互不冲突 —— 路由只报「按到了哪条」，平移是这层的另一件事。
-        RoutePointer(host, state, e,
-            (position, target, handle) => new Wf.PointerPressedEventArgs(
-                position, Modifiers(e.KeyModifiers), source, target, ButtonOf(e, state), e.ClickCount, handle));
+        // 这一笔按下已经由 OnPressRoute 在隧道相里路由过 —— 那时句柄就建好了，存在 state 里。
+        // 订阅者说要走自己的路，框架那一手就让开。先前这里自己路由又立刻把句柄丢掉，于是「订阅、置
+        // PreventDefault，框架就会跳过」这条写进文档的契约，在平移上是不成立的。
+        if (state.PressHandle?.PreventDefault == true)
+            return;
 
         if (!ShouldStartPan(e, state))
             return;
