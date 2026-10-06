@@ -1,0 +1,6 @@
+<UserControl xmlns="http://schemas.jalium.com/jalxaml"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Demo.Views.Workflow"
+             x:Class="Demo.Views.MainView">
+    <local:TreeView Background="#1E1E1E" />
+</UserControl>

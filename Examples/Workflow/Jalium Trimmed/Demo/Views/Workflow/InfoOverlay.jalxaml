@@ -1,0 +1,29 @@
+<Border xmlns="http://schemas.jalium.com/jalxaml"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Demo.Views.Workflow.InfoOverlay"
+        Background="#E612151B"
+        BorderBrush="#CC8EA3B8"
+        BorderThickness="1"
+        CornerRadius="6">
+    <Grid>
+        <StackPanel Spacing="2" Margin="12,10,56,10" IsHitTestVisible="False">
+            <TextBlock x:Name="PART_Line1" Foreground="#DDE4EA" FontSize="12" />
+            <TextBlock x:Name="PART_Line2" Foreground="#DDE4EA" FontSize="12" />
+            <TextBlock x:Name="PART_Line3" Foreground="#DDE4EA" FontSize="12" />
+            <TextBlock x:Name="PART_Line4" Foreground="#DDE4EA" FontSize="12" />
+            <TextBlock x:Name="PART_Line5" Foreground="#DDE4EA" FontSize="12" />
+            <TextBlock x:Name="PART_Line6" Foreground="#DDE4EA" FontSize="12" />
+        </StackPanel>
+        <Button x:Name="PART_Copy"
+                Content="复制"
+                FontSize="11"
+                Background="#1E3A5F"
+                Foreground="#7EC8FF"
+                BorderBrush="#7EC8FF"
+                BorderThickness="1"
+                Padding="8,2,8,2"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,8,8" />
+    </Grid>
+</Border>

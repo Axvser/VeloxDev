@@ -1,106 +1,94 @@
+using System;
 using System.ComponentModel;
 using Jalium.UI;
 using Jalium.UI.Controls;
-using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>
-/// Realtime floating-text info layer for the node-editor surface (a "decorator layer" like the
-/// minimap overlay, but a passive HUD): a translucent rounded panel, anchored bottom-left by the
-/// composing window, showing canvas actual size, the current visible viewport (canvas + world),
-/// zoom/origin and the visible node/link elements materialized by the Core virtualization
-/// (<see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>). It repaints from the Core model
-/// (Layout / helper VisibleItems / Nodes / Links) plus the scroll/viewport numbers the window pushes
-/// on every scroll or surface change (same feed as the minimap). The small 复制 button in the
-/// bottom-right corner copies the current multi-line info to the clipboard for debugging.
+/// Realtime floating-text info layer for the node-editor surface (a "decorator layer" like the minimap
+/// overlay, but a passive HUD): a translucent rounded panel showing canvas actual size, the current visible
+/// viewport (canvas + world), zoom/origin and the visible node/link elements materialized by the Core
+/// virtualization (<see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>).
 /// </summary>
-public sealed class InfoOverlay : Border
+/// <remarks>
+/// <para>
+/// The panel itself is markup; this file is the data side only. It repaints from the Core model
+/// (Layout / helper VisibleItems / Nodes / Links) plus the scroll/viewport numbers fed in as
+/// <see cref="ScrollOffsetXProperty"/> and friends — the same feed the minimap overlay consumes.
+/// </para>
+/// <para>
+/// The small 复制 button copies the current multi-line info to the clipboard for debugging.
+/// </para>
+/// </remarks>
+public sealed partial class InfoOverlay : Border
 {
-    private static readonly SolidColorBrush s_bg = new(Color.FromArgb(0xE6, 0x12, 0x15, 0x1B));
-    private static readonly SolidColorBrush s_border = new(Color.FromArgb(0xCC, 0x8E, 0xA3, 0xB8));
-    private static readonly SolidColorBrush s_text = new(Color.FromRgb(0xDD, 0xE4, 0xEA));
-    private static readonly SolidColorBrush s_btnBg = new(Color.FromRgb(0x1E, 0x3A, 0x5F));
-    private static readonly SolidColorBrush s_btnFg = new(Color.FromRgb(0x7E, 0xC8, 0xFF));
-
+    /// <summary>The tree this HUD reports on.</summary>
     public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.Register(
         "WorkflowTree", typeof(IWorkflowTreeViewModel), typeof(InfoOverlay), new PropertyMetadata(null, OnTreeChanged));
 
-    // The same scroll / content-offset / viewport feeds the minimap overlay consumes; the window pushes
-    // them on every scroll or surface change so the numbers never go stale while panning or zooming.
+    /// <summary>The surface scroll viewer's horizontal offset.</summary>
     public static readonly DependencyProperty ScrollOffsetXProperty = DependencyProperty.Register(
         "ScrollOffsetX", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
+
+    /// <summary>The surface scroll viewer's vertical offset.</summary>
     public static readonly DependencyProperty ScrollOffsetYProperty = DependencyProperty.Register(
         "ScrollOffsetY", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
+
+    /// <summary>The world origin's horizontal position, excluding any ruler reserve.</summary>
     public static readonly DependencyProperty ContentOffsetXProperty = DependencyProperty.Register(
         "ContentOffsetX", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
+
+    /// <summary>The world origin's vertical position, excluding any ruler reserve.</summary>
     public static readonly DependencyProperty ContentOffsetYProperty = DependencyProperty.Register(
         "ContentOffsetY", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
+
+    /// <summary>The measured viewport width.</summary>
     public static readonly DependencyProperty ViewportWidthProperty = DependencyProperty.Register(
         "ViewportWidth", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
+
+    /// <summary>The measured viewport height.</summary>
     public static readonly DependencyProperty ViewportHeightProperty = DependencyProperty.Register(
         "ViewportHeight", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
 
+    /// <summary>The tree this HUD reports on.</summary>
     public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
 
+    /// <summary>The surface scroll viewer's horizontal offset.</summary>
     public double ScrollOffsetX { get => (double)(GetValue(ScrollOffsetXProperty) ?? 0.0); set => SetValue(ScrollOffsetXProperty, value); }
+
+    /// <summary>The surface scroll viewer's vertical offset.</summary>
     public double ScrollOffsetY { get => (double)(GetValue(ScrollOffsetYProperty) ?? 0.0); set => SetValue(ScrollOffsetYProperty, value); }
+
+    /// <summary>The world origin's horizontal position, excluding any ruler reserve.</summary>
     public double ContentOffsetX { get => (double)(GetValue(ContentOffsetXProperty) ?? 0.0); set => SetValue(ContentOffsetXProperty, value); }
+
+    /// <summary>The world origin's vertical position, excluding any ruler reserve.</summary>
     public double ContentOffsetY { get => (double)(GetValue(ContentOffsetYProperty) ?? 0.0); set => SetValue(ContentOffsetYProperty, value); }
+
+    /// <summary>The measured viewport width.</summary>
     public double ViewportWidth { get => (double)(GetValue(ViewportWidthProperty) ?? 0.0); set => SetValue(ViewportWidthProperty, value); }
+
+    /// <summary>The measured viewport height.</summary>
     public double ViewportHeight { get => (double)(GetValue(ViewportHeightProperty) ?? 0.0); set => SetValue(ViewportHeightProperty, value); }
 
     private IWorkflowTreeViewModel? _tree;
-    private readonly TextBlock[] _lineText = new TextBlock[LineCount];
-    private readonly Button _copyButton;
     private string _copyText = "";
-
-    private const int LineCount = 6;
 
     public InfoOverlay()
     {
-        CornerRadius = new CornerRadius(6);
-        BorderBrush = s_border;
-        BorderThickness = new Thickness(1);
-        Background = s_bg;
+        InitializeComponent();
 
-        var grid = new Grid();
-        var lines = new StackPanel { Spacing = 2, Margin = new Thickness(12, 10, 56, 10) };
-        for (int i = 0; i < LineCount; i++)
-        {
-            _lineText[i] = new TextBlock
-            {
-                Foreground = s_text,
-                FontSize = 12,
-                IsHitTestVisible = false, // text area stays click-through; only the copy button is interactive
-            };
-            lines.Children.Add(_lineText[i]);
-        }
-
-        _copyButton = new Button
-        {
-            Content = "复制",
-            FontSize = 11,
-            Background = s_btnBg,
-            Foreground = s_btnFg,
-            BorderBrush = s_btnFg,
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(8, 2, 8, 2),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, 8, 8),
-        };
-        _copyButton.Click += (_, _) =>
+        // 唯一的接线：按钮是互动的，其余都是数据。放在构造里，与「代码后置只剩初始构造」不冲突。
+        PART_Copy.Click += (_, _) =>
         {
             Clipboard.SetText(_copyText);
-            _copyButton.Content = "已复制";
+            PART_Copy.Content = "已复制";
         };
-
-        grid.Children.Add(lines);
-        grid.Children.Add(_copyButton);
-        Child = grid;
     }
+
+    private TextBlock[] Lines => [PART_Line1, PART_Line2, PART_Line3, PART_Line4, PART_Line5, PART_Line6];
 
     private static void OnVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -122,8 +110,6 @@ public sealed class InfoOverlay : Border
         overlay.SubscribeTree();
         overlay.Refresh();
     }
-
-    // ── Model subscriptions ──────────────────────────────────────────────────
 
     private void SubscribeTree()
     {
@@ -161,31 +147,26 @@ public sealed class InfoOverlay : Border
 
     private void OnModelChanged(object? sender, EventArgs e) => Refresh();
 
-    // ── Content ──────────────────────────────────────────────────────────────
-
     /// <summary>Recomputes the display lines + copy text from the current model/scroll state.</summary>
     public void Refresh()
     {
         string[] lines = BuildLines();
-        for (int i = 0; i < lines.Length && i < _lineText.Length; i++)
-        {
-            _lineText[i].Text = lines[i];
-        }
+        var targets = Lines;
 
-        for (int i = lines.Length; i < _lineText.Length; i++)
+        for (int i = 0; i < targets.Length; i++)
         {
-            _lineText[i].Text = string.Empty;
+            targets[i].Text = i < lines.Length ? lines[i] : string.Empty;
         }
 
         _copyText = string.Join(Environment.NewLine, lines);
-        _copyButton.Content = "复制";
+        PART_Copy.Content = "复制";
     }
 
     private string[] BuildLines()
     {
         if (_tree is null)
         {
-            return new[] { "VeloxDev Workflow — 未绑定画布" };
+            return ["VeloxDev Workflow — 未绑定画布"];
         }
 
         var layout = _tree.Layout;
@@ -215,15 +196,15 @@ public sealed class InfoOverlay : Border
             }
         }
 
-        return new[]
-        {
+        return
+        [
             "画布 " + Fmt(actual.Width) + " × " + Fmt(actual.Height),
             "视口(画布) " + Fmt(sx) + ", " + Fmt(sy) + "  " + Fmt(vw) + "×" + Fmt(vh),
             "视口(世界) " + Fmt(wx) + ", " + Fmt(wy) + "  " + Fmt(vw) + "×" + Fmt(vh),
             "缩放 " + Math.Round(zoomPercent).ToString() + "%  ·  Scale " + scale.ToString("0.00"),
             "原点 " + Fmt(ox) + ", " + Fmt(oy),
             "元素 节点 " + visibleNodes + "/" + totalNodes + " · 连线 " + visibleLinks + "/" + totalLinks,
-        };
+        ];
     }
 
     private static string Fmt(double value)
