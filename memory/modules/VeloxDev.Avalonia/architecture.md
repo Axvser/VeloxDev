@@ -1,8 +1,8 @@
 # VeloxDev.Avalonia — 架构
 
-> 代码：`Src/Adapters/VeloxDev.Avalonia/`。**34 个 .cs、4409 行**，分四块：`PlatformAdapters/` 根 9 个、`PlatformAdapters/Samplers/` 14 个、`Attached/Workflow/` 10 个、`GlobalUsings.cs` 1 个。
+> 代码：`Src/Adapters/VeloxDev.Avalonia/`。**34 个 .cs、4506 行**，分四块：`PlatformAdapters/` 根 9 个、`PlatformAdapters/Samplers/` 14 个、`Attached/Workflow/` 10 个、`GlobalUsings.cs` 1 个。
 > 数法：`git ls-files 'Src/Adapters/VeloxDev.Avalonia/*.cs'` 就能得 **34**（git 的 pathspec 通配符**跨 `/` 匹配**，与 shell 不同）；而 `git ls-files 'Src/Adapters/VeloxDev.Avalonia/**/*.cs'` 只得 **33** —— `**/` **不匹配顶层文件**，七家每家都正好漏掉顶层那一个 `GlobalUsings.cs`。核验用 `git ls-files Src/Adapters/VeloxDev.Avalonia | grep -c '\.cs$'`。
-> 最大几个文件：`WorkflowSurfaceBehavior.cs` 1038、`WorkflowMinimapOverlay.cs` 589、`WorkflowSlotLayoutBehavior.cs` 342、`ViewManager.cs` 297、`Samplers/TransformSampler.cs` 292、`ThemeValueConverters.cs` 276、`Transition.cs` 269。
+> 最大几个文件：`WorkflowSurfaceBehavior.cs` 1120、`WorkflowMinimapOverlay.cs` 589、`WorkflowSlotLayoutBehavior.cs` 342、`ViewManager.cs` 297、`Samplers/TransformSampler.cs` 292、`ThemeValueConverters.cs` 276、`Transition.cs` 269。
 > **三条 GUI 轴的平台差异不在这里**：`memory/modules/{TransitionSystem,WorkflowSystem,Templates}/adapters/avalonia.md`；七角色契约与附着属性注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；「怎么用这套 API」在 `skills/`。本文只写这个项目独有的：四块怎么分、注册与工厂在哪、三条轴各自怎么被宿主接上、程序集级约束、csproj 与 TFM。
 
 ---

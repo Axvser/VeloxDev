@@ -1,7 +1,7 @@
 # VeloxDev.WinUI — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinUI/`。**29 个 .cs、4724 行**（`Attached/Workflow/` 9 个 3221 行，
-> 最大三个是 `WorkflowSurfaceBehavior.cs` 1202、`WorkflowMinimapOverlay.cs` 592、`WorkflowSlotLayoutBehavior.cs` 505；
+> 代码：`Src/Adapters/VeloxDev.WinUI/`。**29 个 .cs、4869 行**（`Attached/Workflow/` 9 个 3366 行，
+> 最大三个是 `WorkflowSurfaceBehavior.cs` 1326、`WorkflowMinimapOverlay.cs` 592、`WorkflowSlotLayoutBehavior.cs` 505；
 > `PlatformAdapters/` 9 个 757 行，最大 `ThemeValueConverters.cs` 314、`Transition.cs` 243；
 > `PlatformAdapters/Samplers/` 10 个 743 行，最大 `TransformSampler.cs` 207、`BrushSampler.cs` 199；顶层 `GlobalUsings.cs` 3 行）。
 > **计数写法**：`git ls-files Src/Adapters/VeloxDev.WinUI | grep -c '\.cs$'`。

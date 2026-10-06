@@ -1,6 +1,6 @@
 # VeloxDev.MAUI — 架构
 
-> 代码：`Src/Adapters/VeloxDev.MAUI/`。**31 个 .cs、7721 行**（`Attached/Workflow/` 9 个 6392 行，最大的是 `WorkflowSurfaceBehavior.cs` 1757、`WorkflowLinkOverlay.cs` 1440、`WorkflowMinimapOverlay.cs` 816；`PlatformAdapters/` 本级 9 个 807 行（最大 `ThemeValueConverters.cs` 373、`Transition.cs` 250）；`PlatformAdapters/Samplers/` 12 个 519 行；顶层 `GlobalUsings.cs` 3 行）。
+> 代码：`Src/Adapters/VeloxDev.MAUI/`。**31 个 .cs、8052 行**（`Attached/Workflow/` 9 个 6723 行，最大的是 `WorkflowSurfaceBehavior.cs` 2012、`WorkflowLinkOverlay.cs` 1471、`WorkflowMinimapOverlay.cs` 816；`PlatformAdapters/` 本级 9 个 807 行（最大 `ThemeValueConverters.cs` 373、`Transition.cs` 250）；`PlatformAdapters/Samplers/` 12 个 519 行；顶层 `GlobalUsings.cs` 3 行）。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.MAUI/*.cs' 'Src/Adapters/VeloxDev.MAUI/**/*.cs'`。只写 `'.../**/*.cs'` 会得到 **30** —— 这条 pathspec 只匹配**子目录里**的 `.cs`，本级文件一个都不算（漏掉 `GlobalUsings.cs`；同理 `PlatformAdapters/**/*.cs` 只有 12 个采样器，`PlatformAdapters/` 本级那 9 个要另写 `PlatformAdapters/*.cs`）。七家适配器每家都正好漏这 1 个。
 >
 > 本文只写「读完这 31 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。

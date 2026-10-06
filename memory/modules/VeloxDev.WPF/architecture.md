@@ -1,6 +1,6 @@
 # VeloxDev.WPF — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WPF/`。**31 个 .cs、4394 行**（`Attached/Workflow/` 9 个 2911 行，最大三个是 `WorkflowSurfaceBehavior.cs` 1176、`WorkflowMinimapOverlay.cs` 501、`WorkflowSlotLayoutBehavior.cs` 435；`PlatformAdapters/` 21 个 1480 行，最大 `ThemeValueConverters.cs` 348、`Samplers/TransformSampler.cs` 263、`Transition.cs` 255；顶层 `GlobalUsings.cs` 3 行）。
+> 代码：`Src/Adapters/VeloxDev.WPF/`。**31 个 .cs、4485 行**（`Attached/Workflow/` 9 个 3002 行，最大三个是 `WorkflowSurfaceBehavior.cs` 1248、`WorkflowMinimapOverlay.cs` 501、`WorkflowSlotLayoutBehavior.cs` 435；`PlatformAdapters/` 21 个 1480 行，最大 `ThemeValueConverters.cs` 348、`Samplers/TransformSampler.cs` 263、`Transition.cs` 255；顶层 `GlobalUsings.cs` 3 行）。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WPF/*.cs' 'Src/Adapters/VeloxDev.WPF/**/*.cs'`。只写 `'.../**/*.cs'` 会得到 **30** —— 这条 pathspec 只匹配**子目录里**的 `.cs`，该目录**本级**的文件一个都不算（漏掉 `GlobalUsings.cs`；同理 `PlatformAdapters/**/*.cs` 只有 12 个采样器 / 701 行，`PlatformAdapters/` 本级那 9 个文件要另写 `PlatformAdapters/*.cs`）。
 >
 > 本文只写「读完这 31 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。

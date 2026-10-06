@@ -6,8 +6,8 @@
 > `WorkflowLinkView` 这些类型都不存在；本文下面凡提这些名字的段落，落点以
 > [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇 为准。
 
-> 代码：`Src/Adapters/VeloxDev.Jalium/`。**27 个 .cs、4411 行**
-> （`Attached/Workflow/` 9 个 3435 行，最大 `WorkflowSurfaceBehavior.cs` 1353、`WorkflowSlotLayoutBehavior.cs` 538、`WorkflowMinimapOverlay.cs` 493、`WorkflowNodeDragBehavior.cs` 254；
+> 代码：`Src/Adapters/VeloxDev.Jalium/`。**27 个 .cs、4556 行**
+> （`Attached/Workflow/` 9 个 3580 行，最大 `WorkflowSurfaceBehavior.cs` 1459、`WorkflowSlotLayoutBehavior.cs` 538、`WorkflowMinimapOverlay.cs` 493、`ViewManager.cs` 341、`WorkflowNodeDragBehavior.cs` 277；
 > `PlatformAdapters/` 8 个 325 行，最大 `Transition.cs` 154；`PlatformAdapters/Samplers/` 9 个 648 行，最大 `TransformSampler.cs` 274、`BrushSampler.cs` 134；顶层 `GlobalUsings.cs` 3 行）。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.Jalium/*.cs' 'Src/Adapters/VeloxDev.Jalium/**/*.cs' | sort -u`。`git ls-files` 的 glob `'.../**/*.cs'` 只匹配**子目录**里的文件（七家都漏掉本级 `GlobalUsings.cs`）。
 >

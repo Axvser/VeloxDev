@@ -1,6 +1,6 @@
 # VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/`。**34 个 .cs、7927 行**（`Attached/Workflow/` 23 个 6998 行，最大 `WorkflowTreeView.cs` 1405、`WorkflowSlotLayoutBehavior.cs` 775、`WorkflowSurfaceBehavior.cs` 636、`WorkflowNodeDragBehavior.cs` 529、`WorkflowLinkAttachment.cs` 486、`WorkflowNodeAttachment.cs` 402；`PlatformAdapters/` 9 个 903 行，最大 `ThemeValueConverters.cs` 496、`Transition.cs` 158、`TransitionInterpreter.cs` 96、`UIThreadInspector.cs` 90；`PlatformAdapters/Samplers/` 1 个 23 行；顶层 `GlobalUsings.cs` 3 行）。同目录另有一份 `README.md`（245 行）。
+> 代码：`Src/Adapters/VeloxDev.WinForms/`。**34 个 .cs、8071 行**（`Attached/Workflow/` 23 个 7142 行，最大 `WorkflowTreeView.cs` 1416、`WorkflowSlotLayoutBehavior.cs` 775、`WorkflowSurfaceBehavior.cs` 754、`WorkflowNodeDragBehavior.cs` 537、`WorkflowLinkAttachment.cs` 486、`WorkflowNodeAttachment.cs` 402；`PlatformAdapters/` 9 个 903 行，最大 `ThemeValueConverters.cs` 496、`Transition.cs` 158、`TransitionInterpreter.cs` 96、`UIThreadInspector.cs` 90；`PlatformAdapters/Samplers/` 1 个 23 行；顶层 `GlobalUsings.cs` 3 行）。同目录另有一份 `README.md`（245 行）。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'` = **34**。只写 `'.../**/*.cs'` 得 **33** —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这 1 个）。
 >
 > 本文只写「读完这 34 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
