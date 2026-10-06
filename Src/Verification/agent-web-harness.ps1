@@ -31,6 +31,8 @@ semicolons):
   rclick:<x>,<y>          right click
   drag:<x1>,<y1>,<x2>,<y2> press, move in steps, release (creating a connection)
   key:Delete              press and release a key (Delete | Escape | Enter)
+  keydown:Shift           hold a modifier down (Shift | Control | Alt | Meta) — it is carried on the mouse
+  keyup:Shift             events that follow, so a modified drag can be tested
   eval:<js>               run JavaScript and log its result — use it to locate elements and to assert
   cursor:<js>             move the pointer to a point the page computes (JS returning [x, y])
   waitfor:<selector>      wait until the selector matches something
@@ -141,10 +143,32 @@ function Shot([string] $name) {
 }
 
 function Mouse([string] $type, [int] $x, [int] $y, [string] $button = 'none') {
-    $p = @{ type = $type; x = $x; y = $y; button = $button; clickCount = 1; buttons = 0 }
+    $p = @{ type = $type; x = $x; y = $y; button = $button; clickCount = 1; buttons = 0; modifiers = $script:heldModifiers }
     if ($button -eq 'left') { $p.buttons = 1 }
     if ($button -eq 'right') { $p.buttons = 2 }
     [void](Send-Cdp 'Input.dispatchMouseEvent' $p)
+}
+
+# Modifier bits as CDP defines them. Without a held modifier reaching the mouse events, a
+# Shift-modified gesture is untestable here: the page sees a plain click.
+$script:heldModifiers = 0
+
+function ModifierBit([string] $name) {
+    switch ($name) {
+        'Alt' { 1 } 'Control' { 2 } 'Meta' { 4 } 'Shift' { 8 }
+        default { throw "unsupported modifier: $name" }
+    }
+}
+
+function SetModifier([string] $name, [bool] $down) {
+    $bit = ModifierBit $name
+    if ($down) { $script:heldModifiers = $script:heldModifiers -bor $bit }
+    else { $script:heldModifiers = $script:heldModifiers -band (-bnot $bit) }
+
+    $vk = switch ($name) { 'Alt' { 18 } 'Control' { 17 } 'Meta' { 91 } 'Shift' { 16 } }
+    $type = if ($down) { 'rawKeyDown' } else { 'keyUp' }
+    $base = @{ windowsVirtualKeyCode = $vk; nativeVirtualKeyCode = $vk; key = $name; code = $name; modifiers = $script:heldModifiers }
+    [void](Send-Cdp 'Input.dispatchKeyEvent' ($base + @{ type = $type }))
 }
 
 function Key([string] $name) {
@@ -234,6 +258,8 @@ foreach ($action in ($Actions -split ';;')) {
             Write-Output "cursor => $v"
         }
         'key' { Key $arg; Start-Sleep -Milliseconds 350; Add-Content $log "key $arg" }
+        'keydown' { SetModifier $arg $true; Start-Sleep -Milliseconds 120; Add-Content $log "keydown $arg" }
+        'keyup' { SetModifier $arg $false; Start-Sleep -Milliseconds 120; Add-Content $log "keyup $arg" }
         default { throw "unknown action: $action" }
     }
 }
