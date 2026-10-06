@@ -22,14 +22,16 @@
                                     Height="{Binding Size.Height}"
                                     Canvas.Left="{Binding Anchor.Horizontal}"
                                     Canvas.Top="{Binding Anchor.Vertical}"
-                                    Panel.ZIndex="{Binding Anchor.Layer}" />
+                                    Panel.ZIndex="{Binding Anchor.Layer}"
+                                    RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource AncestorType=UserControl}}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
             <workflowViews:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
                                     StartTop="{Binding Sender.Anchor.Vertical}"
                                     EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                     EndTop="{Binding Receiver.Anchor.Vertical}"
-                                    Panel.ZIndex="-1" />
+                                    Panel.ZIndex="-1"
+                        RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource AncestorType=UserControl}}" />
         </DataTemplate>
         <workflowViews:TemplateSelector x:Key="WorkflowTemplateSelector"
                                         NodeTemplate="{StaticResource NodeTemplate}"

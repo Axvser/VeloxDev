@@ -418,14 +418,17 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             // Jalium 的 TransformToAncestor 交回的是**元素在祖先坐标里的原点**（实测：不是 WPF 那个
             // GeneralTransform），所以中心要自己加半个尺寸。
             //
-            // 用 SlotAnchorFromCanvasLocal 而不是 WPF 那个 SlotAnchorFromVisualCenter：本家把画布的
-            // 世界位移做成**画布自己的 RenderTransform**（见 WorkflowSurfaceBehavior.ApplyLayout），
-            // 而坐标宿主就是那块画布 —— 变换在宿主之上，因此 TransformToAncestor 交回的已经是不含
-            // ActualOffset 的世界坐标，再减一次就是那个「静默的系统性偏移」。
+            // 世界位移现在发布在**宿主的附着属性**上、由节点/连线模板绑进各自的 RenderTransform
+            // （见 WorkflowSurfaceBehavior.CanvasTransform）—— 位移在坐标宿主之内，所以这里与其余六家
+            // 用同一条契约：减去 ActualOffset。
             var origin = control.TransformToAncestor(coordinateHost);
-            slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
-                origin.X + center.X, origin.Y + center.Y, slot.Anchor.Layer);
-            return;
+            var layout = node.Parent?.Layout;
+            if (layout is not null)
+            {
+                slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
+                    origin.X + center.X, origin.Y + center.Y, slot.Anchor.Layer, layout);
+                return;
+            }
         }
 
         var hostOrigin = control.TransformToAncestor(host);

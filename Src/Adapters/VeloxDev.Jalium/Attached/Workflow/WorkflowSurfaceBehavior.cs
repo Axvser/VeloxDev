@@ -146,6 +146,32 @@ public static class WorkflowSurfaceBehavior
     public static readonly DependencyProperty ZoomEnabledProperty = DependencyProperty.RegisterAttached(
         "ZoomEnabled", typeof(bool), typeof(WorkflowSurfaceBehavior), new PropertyMetadata(false, OnZoomEnabledChanged));
 
+    /// <summary>
+    /// The transform that carries the world-to-view translation, published on the surface host.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The node and link templates bind their <c>RenderTransform</c> to this, which is how every pooled view
+    /// follows the world translate. WPF ships the same value as <c>WorkflowCanvasTransformBehavior.Transform</c>;
+    /// the difference here is only that this platform's bindings cannot read an attached property, so the value
+    /// is <b>attached here and mirrored onto a plain property by the tree view's own class</b> (see the
+    /// <c>workflow-tree-view</c> template) — the templates then bind to that plain property.
+    /// </para>
+    /// <para>
+    /// Setting it on the host rather than the canvas is what lets a slot's anchor be measured with the other six
+    /// adapters' contract (<c>WorkflowSurfaceMath.SlotAnchorFromVisualCenter</c>): the translation is inside the
+    /// measured subtree, so the measurement must subtract it.
+    /// </para>
+    /// </remarks>
+    public static readonly DependencyProperty CanvasTransformProperty = DependencyProperty.RegisterAttached(
+        "CanvasTransform", typeof(Transform), typeof(WorkflowSurfaceBehavior), new PropertyMetadata(null));
+
+    /// <summary>Reads the <c>CanvasTransform</c> attached property from <paramref name="element"/>.</summary>
+    public static Transform? GetCanvasTransform(DependencyObject element) => (Transform?)element.GetValue(CanvasTransformProperty);
+
+    /// <summary>Sets the <c>CanvasTransform</c> attached property on <paramref name="element"/>.</summary>
+    public static void SetCanvasTransform(DependencyObject element, Transform? value) => element.SetValue(CanvasTransformProperty, value);
+
     /// <summary>The attached property naming the resource that holds the context menu shown for a link.</summary>
     /// <remarks>
     /// A key rather than the menu itself: this property sits on the surface's own root, where a
@@ -734,15 +760,11 @@ public static class WorkflowSurfaceBehavior
             return;
         }
 
-        // 世界位移做成画布自己的 RenderTransform：池化出来的节点与连线全在画布之下，一起跟着走。
-        //
-        // 这是本家与 WPF 的**刻意背离**：WPF 把同一个变换逐视图镜像给节点/连线模板，靠的是标记里
-        // `Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)`，而实测 Jalium 的绑定路径
-        // 不解析带前缀的附加属性，那条通道建不起来（见 memory/modules/WorkflowSystem/adapters/jalium.md §〇）。
-        // 写在画布上等价，而且没有「视图后到、变换晚一帧」的同步问题。
-        state.Canvas.RenderTransform = new TranslateTransform(
+        // 世界位移**发布在宿主上**（附着属性），由节点/连线模板绑到各自的 RenderTransform —— 与 WPF 同一条路。
+        // 挂在宿主而不是画布上，是槽锚点能用其余六家那个契约的前提：位移在被测量子树之内，测量时就该减掉它。
+        SetCanvasTransform(state.Host, new TranslateTransform(
             state.Tree.Layout.ActualOffset.Horizontal,
-            state.Tree.Layout.ActualOffset.Vertical);
+            state.Tree.Layout.ActualOffset.Vertical));
     }
 
     private static void UpdateViewport(SurfaceState state)

@@ -22,6 +22,8 @@
 |---|---|
 | `UserControl` 作 `.jalxaml` 根 + `x:Class` partial 配对 | ✅ |
 | **`Window` 作 `.jalxaml` 根**（窗口外壳也写标记） | ✅ 2026-10-05 实测：`<Window … x:Class="Demo.MainWindow">` + 9 行 cs（只有 `InitializeComponent`）编译与运行都正常 ⇒ **宿主层不需要留在代码里** |
+| `RelativeSource AncestorLevel` | ✅ 标记里可用。实测：`AncestorType=UserControl` 落在**最近**的 UserControl（节点卡自己），加 `AncestorLevel=2` 就够到树根 —— 这是「不认自定义 `AncestorType`」的替代路径 |
+| **把一个附着属性按 CLR 属性名暴露给绑定** | ✅ 可行：类里写 `public static readonly DependencyProperty XProperty = 那个附着属性;` + `public T? X => GetValue(XProperty) as T;`，模板就能 `{Binding X, RelativeSource=…}`。**这是本家读附着属性值的正解** |
 | `UserControl` 上的 `Background` / 子元素 `ElementName` 绑定 | ✅ 都用过（demo 的 `MainView` 与 HUD 的偏移绑定） |
 | 根 name scope 里按 `x:Name` 做 `FrameworkElement.FindName` | ✅ |
 | `DataTemplate` **内部**的 `x:Name` 对根 `FindName` 可见？ | ❌ 不可见（与 WPF 同）⇒ 枚举器必须走 `ItemContainerGenerator.ContainerFromIndex(i)` + 视觉树后代搜索 |
@@ -114,23 +116,30 @@
 `DataContext` 取槽视图模型，量出**中心**，写回 `slot.Anchor`。⇒ `slot.Anchor` 从此**是**测量结果，
 它成了端口命中与连线端点的唯一来源；丢掉的是一条「端口位置由模型几何算出」的不变式。
 
-⚠ **坐标系是这一步唯一的坑**：本家把世界位移做成**画布自己的 `RenderTransform`**（`ApplyLayout`），
-坐标宿主就是那块画布 —— 变换在宿主**之上**，所以 `TransformToAncestor(canvas)` 交回的已经是不含
-`ActualOffset` 的世界坐标，必须用 **`SlotAnchorFromCanvasLocal`**，不是其余六家那个
-`SlotAnchorFromVisualCenter`（再减一次 `ActualOffset` 就是那个静默的系统性偏移）。
-另：`Visual.TransformToAncestor(ancestor)` 在这家返回 **`Jalium.UI.Point`**（元素在祖先系里的原点），
-不是 WPF 的 `GeneralTransform`，取中心要自己加半个尺寸。
+⚠ **坐标系**：世界位移现在发布在**宿主的附着属性**上、由节点/连线模板绑进各自的 `RenderTransform`
+（见 §2.4），所以位移在坐标宿主**之内** —— 这里与其余六家同一条契约：`SlotAnchorFromVisualCenter`
+（减去 `ActualOffset`）。另：`Visual.TransformToAncestor(ancestor)` 在这家返回 **`Jalium.UI.Point`**
+（元素在祖先系里的原点），不是 WPF 的 `GeneralTransform`，取中心要自己加半个尺寸。
 
-### 2.4 画布变换：没有附着属性通道，写在画布上（2026-10-05 改写）
+### 2.4 画布变换：附着属性发出去，模板绑**普通属性**（2026-10-05 改写）
 
-别家让节点与连线模板用
-`RenderTransform="{Binding RelativeSource={RelativeSource AncestorType=…}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"`
-把画布变换镜像下来。**这半条路在 Jalium 走不通**（§2.2 的两条实测限制）。
+与 WPF 同一条路：世界位移作为**附着属性** `WorkflowSurfaceBehavior.CanvasTransform` 发布在**宿主**上，
+节点/连线模板把它绑进各自的 `RenderTransform`。
 
-⇒ 本家**不设** `WorkflowCanvasTransformBehavior`：`WorkflowSurfaceBehavior.ApplyLayout` 直接把
-`TranslateTransform(ActualOffset)` 写在 **`PART_Canvas` 自己**身上。池化出来的节点与连线全在画布之下，
-一起跟着走 —— 等价，且没有「视图后到、变换晚一帧」的同步问题。代价是**画布系坐标就是模型系**，
-凡是要比模型的地方都不许再减 `ActualOffset`（见 §2.3）。
+**唯一的不同是「怎么读」**：WPF 的模板直接 `Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)`
+读附着属性，而本家的绑定**读不到括号路径**（见 §〇，`(Canvas.Left)` 也不行）。所以树视图的类把那个
+附着属性**用一个 CLR 属性再暴露一次**：
+
+```csharp
+public static readonly DependencyProperty CanvasTransformProperty = WorkflowSurfaceBehavior.CanvasTransformProperty;
+public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transform;
+```
+
+模板于是绑 `CanvasTransform`（按属性名解析，CLR 属性照样带变更通知）。
+**同一个 DP 对象、同一个值、同一种通知，只是换了个名字给绑定看得见** —— 写法不同，能力相同。
+
+⚠ 早先这里写的是「没有这条通道，位移写在画布自己身上」。**已弃用**：那种写法会让位移落在坐标宿主**之上**，
+逼着槽锚点用一个别家都不用的 `SlotAnchorFromCanvasLocal`。现在两边都回到同一条契约（见 §2.3）。
 
 ### 2.4.2 连线视图照 WPF 用绑定 —— 但要多一道 NaN 守卫（2026-10-05 更正）
 
@@ -190,10 +199,10 @@
 
 | 差异 | 现在的依据（当场量的） |
 |---|---|
-| **没有 `WorkflowCanvasTransformBehavior`** | Jalium 的绑定**不支持 `(附加属性)` 这条括号路径语法** —— 2026-10-05 重测：`(behaviors:WorkflowSurfaceBehavior.LinkMenuKey)` 与 **`(Canvas.Left)`（框架类型自己的）** 全都解析不出来，与前缀无关。WPF 的节点/连线模板正是靠 `Path=(behaviors:…Transform)` 读它的，这条通道在本家**建不起来**；补上那个类就是**死 API**（照着模板写会以为生效）。画布变换由表面写在画布自己的 `RenderTransform` 上，观感与 WPF 等价 |
+| ~~没有画布变换通道~~ | **已消除**（2026-10-05）：值照样以附着属性发布，模板改绑树视图上那个**同名 CLR 属性**（DP 对象是同一个）。括号路径读不到是唯一的不同，而它只影响「怎么拼这行绑定」 |
 | **有 `WorkflowLinkBounds`** | 渲染器按 `RenderSize` 盒裁剪子元素、内容画到盒外**静默丢弃**（§2.1 的 IL 级依据）。WPF 让连线视图铺满整块画布即可，本家那样做会在缩放里陈盒掉整层线 |
 | ~~`LinkView` 从模型读几何~~ | **已消除**（2026-10-05 重测）：照 WPF 用四个 DP 绑定可以跑，只需多一道 `IsNaN` 守卫（不加会**抛异常退出**）。原先那条「绑定晚一拍」的归因不成立 |
-| **槽锚点用 `SlotAnchorFromCanvasLocal`** | 画布变换在本家写在画布自己身上（见第一条），坐标宿主之上的变换不进 `TransformToAncestor`，用别家那个 `SlotAnchorFromVisualCenter` 会再减一次 `ActualOffset` |
+| ~~槽锚点用 `SlotAnchorFromCanvasLocal`~~ | **已消除**（2026-10-05）：位移改发布在宿主上之后，与其余六家同用 `SlotAnchorFromVisualCenter` |
 | **槽再同步靠 `Loaded`/`SizeChanged`/模型变更 + `Dispatcher.Render` 排一拍** | 本家**没有 `LayoutUpdated` 事件**（26.10.9 反射清点，一个都没有） |
 
 ⇒ **这五条都是「WPF 那么做在本家跑不起来」，不是「本家想不一样」。** 谁要是能证明其中一条现在能跑了，
