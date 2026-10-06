@@ -1,4 +1,4 @@
-# MAUI — WorkflowSystem 适配器
+﻿# MAUI — WorkflowSystem 适配器
 
 > **另（2026-10-05）：悬停高亮与 Delete 都搬出适配层了** —— overlay 不再有 `SelectedLink`/`SelectedLinkColor`，
 > 删除也不再由库执行；两者都在 demo 里（订 `IInputEvents` 自己画 / 自己执行 `DeleteCommand`）。
@@ -243,19 +243,9 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
       否则池子会把盒子刷回画布尺寸，把上面两条一起作废。
 13. **橡皮筋（虚拟连线）在新旧两版都画得出来 —— 我曾误判成「从来没画过」（2026-10-03 订正）。**
     上一版（overlay 画全部连线的时代）与这一版（每线视图）都能画出橡皮筋；我先前那次「回到改动前也看不到」
-    是因为用 `SetCursorPos` 驱动拖拽，**连线手势根本没起来**（见下面第 15 条），于是把「没驱动起来」当成了
+    是因为用 `SetCursorPos` 驱动拖拽，**连线手势根本没起来**（见下面第 14 条），于是把「没驱动起来」当成了
     「没画出来」，还写进了这条记忆里。教训：截图里「没有某个东西」之前，先确认那次操作**真的发生过**。
-14. **⚠ 未修（历史记录；记的是 per-line 连线视图那条路，两个 demo 现在都是「一层」，那条路已无消费者）：每线视图的高亮改完不重画（2026-10-03 实测，重复 5+ 次）。** 现象与已知的边界：
-    - 当时中枢的 `AutoHighlight`（今天已不存在）**确实**把 `IsHighlighted` 置到了**正在画这条线的那一个实例**上
-      （临时日志：`paint#<hash> hl=True bc=True` 是最后一行），`LinkView.ApplyPaint` 也确实跑了；
-    - 而屏幕**一个像素都不变**（同一帧序列里 rest→hover 逐像素差 = 0；同一串动作改成按 Delete，差 = 1574）；
-    - 试过且**都无效**：换新画刷、`PART_Halo.IsVisible` 开关、重挂一个新 `Data` 实例、`InvalidateMeasure()`；
-    - 反面对照：模型变了（Delete 把连线移出可见集）立刻重画 —— 也就是说重画是被**池子的布局那一路**带出来的，
-      视图自己改属性带不出来。
-    ⇒ 结论：这一步卡在「视图自身的属性变化没有变成 WinUI 的一次重绘」，**不是**输入路由或契约的问题。
-    下一步该查的方向：MAUI 的 `ShapeViewHandler` 在这条嵌套（`AbsoluteLayout` 里的 `ContentView` → `Grid` → `Path`）下
-    是否把属性映射吃掉了，或改用「把高亮做成另一层/另一种元素」绕开它。
-15. **合成输入：本家的**节点拖拽**与**连线手势**只认 `SendInput` 的移动，`SetCursorPos` 驱动的**一个都不生效**。**
+14. **合成输入：本家的**节点拖拽**与**连线手势**只认 `SendInput` 的移动，`SetCursorPos` 驱动的**一个都不生效**。**
     2026-10-03 实测：同一串动作换成 `SendInput`（harness 的 `moveto:`）之后，节点拖拽与橡皮筋立刻都出来了；
     用 `move:`（`SetCursorPos`）则两者都「看着像没反应」—— 而这家的悬停（`PointerMoved` 钩子）又**时而**能收到，
     所以症状是「有时好有时坏」，很容易被误判成坐标不对或功能坏。**验证拖拽类行为一律用 `moveto:`。**
