@@ -56,7 +56,7 @@
 `CreateContextProviders()`（`WorkflowAgentScope.cs:1726` 起）的固定顺序：
 
 ```
-[ Compaction?, self, Skills, MCP, Todo?, AgentMode?, …宿主工厂 ]
+[ Compaction?, self, Skills, MCP, SubAgents?, Todo?, AgentMode?, …宿主工厂 ]
 ```
 
 - **`Compaction` 排最前**：它重写的是消息历史，排在它之后的切片应该看到**裁剪过的**版本而不是完整的。

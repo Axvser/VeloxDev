@@ -1,6 +1,6 @@
 # Interfaces — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/Interfaces/`（**42 个 .cs**，49 个接口声明），7 个子目录按模块分：`AspectOriented/`(1 文件 / 1 接口)、`DynamicTheme/`(3/3)、`MVVM/`(5/5)、`Tickable/`(1/1)、`Timing/`(6/5)、`TransitionSystem/`(9/12)、`WorkflowSystem/`(17/22)。文件数 42；其中 **41** 个含接口声明，剩下 1 个是 `Timing/TimeSample.cs`（一个 `readonly struct`，不是契约）。
+> 代码：`Src/Core/VeloxDev.Core/Interfaces/`（**43 个 .cs**，50 个接口声明），7 个子目录按模块分：`AspectOriented/`(1 文件 / 1 接口)、`DynamicTheme/`(3/3)、`MVVM/`(5/5)、`Tickable/`(1/1)、`Timing/`(6/5)、`TransitionSystem/`(9/12)、`WorkflowSystem/`(18/23)。文件数 43；其中 **42** 个含接口声明，剩下 1 个是 `Timing/TimeSample.cs`（一个 `readonly struct`，不是契约）。
 > 本文与其他模块的 `architecture.md` 写法不同：**这里没有实现，只有契约的集中地**。所以本文不写「这个模块做什么」，只写**契约的分层与归属规则** —— 哪个接口该谁实现、为什么集中在一个目录、跨模块在哪儿咬合。
 > 契约**成员语义**归各实现模块：`ITimeSource`/`ITimeSampler` 看 `memory/modules/Timing/`，过渡相关看 `memory/modules/TransitionSystem/`，工作流相关看 `memory/modules/WorkflowSystem/`。平台差异**不在这里重复七遍**，看 `memory/modules/TransitionSystem/adapters/<平台>.md` 与 `memory/modules/WorkflowSystem/adapters/<平台>.md`。
 
@@ -22,7 +22,7 @@
 
 ## 二、`Interfaces/` 装的是**跨边界契约**，不是全部契约
 
-`Src/Core/VeloxDev.Core` 里一共 **101 个 public interface**：49 个在 `Interfaces/`，**52 个在别处**。这不是遗漏，是分层规则（复核命令：`grep -rn "public interface" Src/Core/VeloxDev.Core --include=*.cs | grep -v /obj/`）。按类归并：
+`Src/Core/VeloxDev.Core` 里一共 **98 个 public interface**：50 个在 `Interfaces/`，**48 个在别处**。这不是遗漏，是分层规则（复核命令：`grep -rn "public interface" Src/Core/VeloxDev.Core --include=*.cs | grep -v /obj/`）。按类归并：
 
 | 契约类别 | 位置 | 为什么不在 `Interfaces/` |
 |---|---|---|
@@ -67,7 +67,7 @@
 | `ITransitionHost<TPriorityCore>` | **7/7**：`PlatformAdapters/UIThreadInspector.cs` 继承 Core 的 `TransitionHostBase<…>` | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs:9`；7 家分别 `Src/Adapters/<平台>/PlatformAdapters/UIThreadInspector.cs` |
 | `ISampler` | **7/7**，但规模差一个量级：Avalonia 14 个文件、WPF 12、MAUI 12、WinUI 10、Jalium 9、**Razor 1、WinForms 1**（`PlatformAdapters/Samplers/*.cs` 文件数） | 同名目录下每文件一个采样器类 |
 | `IWorkflowMinimapOverlay` | **7/7 适配器本体**（`Attached/Workflow/WorkflowMinimapOverlay.cs`；Razor 是 `WorkflowMinimapOverlay.razor.cs`，WinForms 还同时实现 `IWorkflowMinimapScrollSource`） | 各家类声明：Avalonia `:23`、Jalium `:15`、MAUI `:19`、WinForms `:23`、WinUI `:21`、WPF `:19`、Razor `:27` |
-| `IWorkflowGridDecorator` | 适配器本体有 **2 家**（Razor `Attached/Workflow/WorkflowGridDecorator.razor.cs:14`、WinForms `Attached/Workflow/WorkflowGridDecorator.cs:23`）；Avalonia/MAUI/WinUI/WPF 在 `Src/Templates/*/working/content/workflow-grid-decorator/TemplateClass.cs` 与 `Examples/Workflow/<平台>/…` 里实现；**Jalium 仍一个实现都没有**：适配器发的是可继承基类 `WorkflowGridDecorator`（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowGridDecorator.cs:22`，用自己的签名，不实现本接口），模板派生它 | 2/7 在适配器，4/7 在模板/demo，1/7（Jalium）无 —— **「七家适配器都实现」这个印象对本契约是错的** |
+| `IWorkflowGridDecorator` | 适配器本体有 **2 家**（Razor `Attached/Workflow/WorkflowGridDecorator.razor.cs:14`、WinForms `Attached/Workflow/WorkflowGridDecorator.cs:23`）；Avalonia/MAUI/WinUI/WPF/Jalium 在 `Src/Templates/*/working/content/workflow-grid-decorator/TemplateClass.cs` 与 `Examples/Workflow/<平台>/…` 里实现。**Jalium 的可继承基类 `WorkflowGridDecorator`（原 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowGridDecorator.cs`）已删除**，改由模板直接实现接口（`Src/Templates/VeloxDev.Jalium.Templates/working/content/workflow-grid-decorator/TemplateClass.cs:31`） | 2/7 在适配器，5/7 在模板/demo —— **「七家适配器都实现」这个印象对本契约是错的** |
 | `IThemeValueConverter` | **6/7**：`PlatformAdapters/ThemeValueConverters.cs`（Avalonia/MAUI/Razor/WinForms/WinUI/WPF），**Jalium 整个不接 DynamicTheme**（全目录 0 处引用） | 上列六家各一个 `Src/Adapters/VeloxDev.<平台>/PlatformAdapters/ThemeValueConverters.cs`；`Src/Adapters/VeloxDev.Jalium/` 的 `.cs` 里 grep `IThemeValueConverter` 零命中 |
 
 ### C 类：Core 内部管线（Core 自己实现，外部**不该**实现）
@@ -102,7 +102,7 @@
 
 ## 五、跨模块耦合点（真实咬合处，附接口名）
 
-`Interfaces/` 里的 `using` 只有下面这些（对 42 个文件统计），每一条都是一个耦合点：
+`Interfaces/` 里的 `using` 只有下面这些（对 43 个文件统计），每一条都是一个耦合点：
 
 | 被引用的模块 | 处数 | 咬合在哪个接口/成员 |
 |---|---|---|

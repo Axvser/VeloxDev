@@ -124,6 +124,6 @@ AddAsync(config, ct)          McpScope.cs:782   ← 中途加一个，不清空
 
 ## 七、死面 / 仓库内零真实使用者
 
-- **`WithSelfService` 没有任何非测试调用者。** 调用点全部在 `Src/Core/VeloxDev.Core.Extension.Test/Agent/MCP/McpSelfServiceTests.cs` 与 `McpAgentContextProviderTests.cs:130`。三个 demo 都停在 `Closed`，`AgentHelper.cs:281-283` 只是注释里提到「升档会加 AddMcpServer」。所以 **`AddMcpServer` 的完整路径（含确认、含四个级别的 prompt 分支）只有测试在跑**。
+- **`WithSelfService` 没有任何非测试调用者。** 调用点全部在 `Src/Core/VeloxDev.Core.Extension.Test/Agent/MCP/McpSelfServiceTests.cs` 与 `McpAgentContextProviderTests.cs:130`。七家 demo 都停在 `Closed`，`AgentHelper.cs:281-283` 只是注释里提到「升档会加 AddMcpServer」。所以 **`AddMcpServer` 的完整路径（含确认、含四个级别的 prompt 分支）只有测试在跑**。
 - `McpServerRunMode.Pip` / `Uvx` / `Dotnet` / `Exe` 在 demo 里都没有实例 —— demo 只配了 `Http` 与 `Npx`（`AgentHelper.cs:95-124`）。
 - `McpScope.WithMcpRoot`（`:59`）在仓库内无调用者；`.evn/mcp` 是唯一被用到的根。

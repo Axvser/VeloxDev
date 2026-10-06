@@ -1,9 +1,9 @@
 ﻿# VeloxDev.Core.Generator — 架构
 
-> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**25 个 .cs、9558 行**（`Writers/WorkflowWriter.cs` 1705、`Writers/MVVMWriter.cs` 1090、`Base/AIContextModel.cs` 1079、`Base/Analizer.cs` 987、`Writers/AIContextTreeWriter.cs` 851、`Writers/CommandWriter.cs` 754、`Base/VeloxJsonModel.cs` 730、`Theme.cs` 423、`AopSurface.cs` 397、`Writers/VeloxJsonCodeWriter.cs` 340、`Writers/WriterBase.cs` 273、`Writers/TickWriter.cs` 131、`Diagnostics.cs` 106、`Base/AIContextNaming.cs` 104、`Writers/AopWriter.cs` 96、`AIContextTree.cs` 90、`VeloxJson.cs` 82、`Base/AnalizeHelper.cs` 67、`MVVM.cs` / `Command.cs` 各 47、`Workflow.cs` / `Tickable.cs` 各 39、`AopProxy.cs` 38、`Base/AopNames.cs` 26、`Base/ICodeWriter.cs` 17）。
+> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**29 个 .cs、11072 行**（`Writers/WorkflowWriter.cs` 1722、`Base/VeloxJsonModel.cs` 1564、`Base/AIContextModel.cs` 1152、`Writers/MVVMWriter.cs` 1090、`Base/Analizer.cs` 1024、`Writers/AIContextTreeWriter.cs` 852、`Writers/CommandWriter.cs` 737、`Writers/VeloxJsonCodeWriter.cs` 562、`Theme.cs` 423、`AopSurface.cs` 397、`Writers/WriterBase.cs` 273、`Diagnostics.cs` 250、`Writers/TickWriter.cs` 131、`Base/AIContextNaming.cs` 104、`Writers/AopWriter.cs` 96、`AIContextTree.cs` 90、`VeloxJson.cs` 87、`Base/RequiredMembers.cs` 72、`Base/AnalizeHelper.cs` 67、`Base/LanguageVersionGuard.cs` 56、`MVVM.cs` / `Command.cs` 各 47、`Workflow.cs` / `Tickable.cs` / `LanguageVersionCheck.cs` 各 39、`AopProxy.cs` 38、`Base/TypeParameterWalk.cs` 31、`Base/AopNames.cs` 26、`Base/ICodeWriter.cs` 17）。
 > 打包成 NuGet 分析器包，不产出运行期程序集；`TargetFramework=netstandard2.0`（`VeloxDev.Core.Generator.csproj:6`）。
 
-本文只写「读完这 25 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+本文只写「读完这 29 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
@@ -31,7 +31,7 @@
 |---|---|
 | 生成出来的代码**跑起来是什么行为** | 全在 Core。生成器只写声明与转发（例如 `OnWorkflowSlotAdded` 的**声明**由 `Writers/MVVMWriter.cs` 写，`CreateWorkflowSlot<T>()` 的**骨架**也由它写，但生命周期归 `WorkflowSystem`） |
 | 「哪些类会被处理」 | `Base/Analizer.cs:95-107` 那张**硬编码 10 条**的 `TriggerAttributes` 表。自定义特性、第三方特性一律不认 |
-| 编译错误 / 诊断 | 生成器自己发五类（`Diagnostics.cs`；MVVM 侧 2026-10-02 起 ID 统一成 `VELOX_MVVM_*`）：`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）、`VELOX_MVVM_PROP003`（`[VeloxProperty]` 属性没写 `partial`，Warning）、`VELOX_AI_TREE001`（Agent 上下文树里同名同参重载只能暴露一个，Warning，category 是 `VeloxDev.AI`）。另有 MSBuild 侧的 `VELOXCFG0001`：`VeloxDev.Core.Generator.targets:16-19` |
+| 编译错误 / 诊断 | 生成器自己发十三类（`Diagnostics.cs`；MVVM 侧 2026-10-02 起 ID 统一成 `VELOX_MVVM_*`，Serialization 侧统一成 `VELOX_JSON_*`）：`VELOX_LANGVERSION001`（项目 LangVersion 低于生成代码所需，Warning）、`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）、`VELOX_MVVM_PROP003`（`[VeloxProperty]` 属性没写 `partial`，Warning）、`VELOX_AI_TREE001`（Agent 上下文树里同名同参重载只能暴露一个，Warning，category 是 `VeloxDev.AI`）、`VELOX_JSON_ARCH001`（`[Archivable]` 点名的类型无法收录，Error）、`VELOX_JSON_HOOK001`（同一类型上多个同名序列化回调，Warning）、`VELOX_JSON_MEMBER001`（`[Archive]` 声明无法兑现，Error）、`VELOX_JSON_MEMBER002`（`[Archive(KeepField)]` 与旁边的属性冲突，Warning）、`VELOX_JSON_HOOK002`（序列化回调生成代码够不着或签名不可调，Error）、`VELOX_JSON_GENERIC001`（类型参数的约束解析不出，Warning）、`VELOX_JSON_INCLUDE001`（被闭包收进归档格式的类型，Info）。另有 MSBuild 侧的 `VELOXCFG0001`：`VeloxDev.Core.Generator.targets:16-19` |
 | 依赖注入、服务定位、注册表 | 完全不生成。生成的是「这个类自己怎么把自己装起来」，不是容器配置 |
 | 平台差异 | 零。见上 |
 | 版本与发布 | 见 `extension.md` §四「改这里的代价」 |
@@ -236,7 +236,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 | `Examples/MVVM/Common/Lib/Lib.csproj` | `:19` | `:23` |
 | `Examples/Tickable/WPF/Demo/Demo.csproj` | `:17` | `:21` |
 
-**共 12 处 `ProjectReference`、11 处 `PackageReference`。** 包自己的 `<Version>` 是 `10.0.0`（`VeloxDev.Core.Generator.csproj:11`）；11 处引用多数已对齐 `10.0.0`，但有**两个 `Examples/*/Directory.Build.props:10` 尚未对齐**（具体值以工作区为准）。版本落差的历史与「要不要补齐」的判断见 [extension.md](extension.md) §四。
+**共 12 处 `ProjectReference`、11 处 `PackageReference`。** 包自己的 `<Version>` 是 `10.0.0`（`VeloxDev.Core.Generator.csproj:11`）；11 处引用已全部对齐 `10.0.0`（含两个 `Examples/*/Directory.Build.props:10`）。版本落差的历史与「要不要补齐」的判断见 [extension.md](extension.md) §四。
 
 `VeloxDev.Core.Test.csproj` 是**唯一不分 Debug/Release** 的一处（`Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj:23-31` 的注释）：它测的对象就是生成器源码本身，测一个已发布的快照等于没测，所以无条件走 `ProjectReference`，且因为要直接驱动 `Command` 生成器断言诊断，**保留程序集引用**（`OutputItemType="Analyzer"`，`ReferenceOutputAssembly` 默认 true）。
 
@@ -256,7 +256,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 4. **`AopSurface.cs` 一个生成器连着两次 `AddSource`**（`:163` 接口、`:167` 代理）；`AopProxy.cs` 只一次（`:33`）。加第三份产物必须自己保证 hint name 不撞。
 5. **`Theme.cs` 只对 `partial` 类发**（`:113-118`），且无属性注册时返回空串（`:262-265`）。
 6. **`Writers/WriterBase.cs:234-261` 的修饰符重排是「不报重复定义」的依赖**，不是格式化洁癖。
-7. **`Generators.AgentCatalog` 在当前源码里不存在，`obj/` 下的陈旧产物也已复核不到。** 当前源码 25 个 `.cs` 无任何 AgentCatalog，`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/` 下也不再留着那份 `VeloxAgentCatalog.g.cs`。别再按旧记忆去找它。
+7. **`Generators.AgentCatalog` 在当前源码里不存在，`obj/` 下的陈旧产物也已复核不到。** 当前源码 29 个 `.cs` 无任何 AgentCatalog，`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/` 下也不再留着那份 `VeloxAgentCatalog.g.cs`。别再按旧记忆去找它。
 8. **裁剪/AOT 元数据与本模块无关。** 全部 writer 都不产出 `IsTrimmable` / `IsAotCompatible` / trim 注解；引擎侧也没有生成任何 `DynamicDependency` 之类的裁剪提示（全源 grep 无命中）。裁剪这条轴的开关在 csproj 与 MSBuild 属性上，见 §七。
 
 9. **「另一个生成器加上的接口」要在每个地方各自兜底，漏一处就是一整条功能坏掉。** 这是本模块最容易复发的坑，因为它**不报错**：`[WorkflowBuilder.Slot<T>]` / `Node<T>` / `Link<T>` 类型的 `IWorkflow*ViewModel` 是 Workflow 生成器在**同一编译趟**注入的，而另一个生成器扫 `AllInterfaces` 时看不见它 —— 生成器之间看不见彼此的产物。所以凡是「这个类型算不算组件/槽」的判断，都不能只查接口，要**同时认作者写下的那个特性**。已有的三处：
@@ -268,7 +268,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
    | `ComponentKindOf` | `Base/AIContextModel.cs` | 四个特性 → 四个目录段（2026-10-05 补上） |
    | `IsSingleSlotType` | 同上，经 `WorkflowBuilderComponentKind == "Slots"` | 同上（2026-10-05 补上） |
 
-   后两处共用 `AIContextModel.WorkflowBuilderComponentKind`，**别再各写一份** —— 它们本来就是同一条规则。
+   后两处共用 `AIContextModelBuilder.WorkflowBuilderComponentKind`，**别再各写一份** —— 它们本来就是同一条规则。
 
    **这一轮补的是后两处，代价各不相同。** `IsSingleSlotType` 漏最久：消费方声明的槽属性拿不到 `AIContextFlags.IsSingleSlot`，于是 `ListSlotProperties` 不列它、`BuildSlotPropertyMap` 不认它（按属性名解析的连接工具全部报错）、`ComponentPatcher` 也不拒绝对它直接赋值。`ComponentKindOf` 漏的是**整类组件**：只写了 `[WorkflowBuilder.Node<T>]` 的节点类型不进目录，`CreateNode` / `GetTypeSchema` 对它一律答「不在目录里」。详见 [`AI/architecture.md`](../AI/architecture.md) §七·五、§七·六 与 [`WorkflowSystem/architecture.md`](../WorkflowSystem/architecture.md)。
 
@@ -280,7 +280,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 
 ## 七、验证线在哪（以及它不在哪）
 
-**裁剪/AOT 的验证探针不在本仓库。** `Src/Verification/VeloxDev.TrimProbe/` 在工作区里**只剩 `bin/` 与 `obj/`**：没有 `.cs`、没有 `.csproj`，也没有被跟踪文件（`git ls-files` 对它零命中）；`VeloxDev.slnx` 里没有 `TrimProbe`。（注意 `Src/Verification/` 这一层另有 4 个被跟踪的 `.ps1` 脚本，所以「整目录无被跟踪文件」不成立 —— 缺文件的是 `TrimProbe/` 本身。）**所以本记忆给不出探针本体的可复核路径 —— 它在仓库外。**
+**裁剪/AOT 的验证探针不在本仓库。** `Src/Verification/VeloxDev.TrimProbe/` 在工作区里**只剩 `bin/` 与 `obj/`**：没有 `.cs`、没有 `.csproj`，也没有被跟踪文件（`git ls-files` 对它零命中）；`VeloxDev.slnx` 里没有 `TrimProbe`。（注意 `Src/Verification/` 这一层另有 5 个被跟踪的 `.ps1` 脚本 —— `agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`、`verify-workflow-item-templates-all.ps1`，所以「整目录无被跟踪文件」不成立 —— 缺文件的是 `TrimProbe/` 本身。）**所以本记忆给不出探针本体的可复核路径 —— 它在仓库外。**
 
 仓库内能锚住的只有这条轴的**输入侧**：
 

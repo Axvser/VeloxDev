@@ -93,7 +93,7 @@ ARGB 全 0 的透明黑 —— 表现是"这条线/这个背景不见了"。改�
 `g.ScaleTransform(Width / _pathViewBox, …)` `:205`）—— 缩放**在描边之前**，所以 `BorderColor` 那条 `1.5f`
 的描边在 20px 的插槽上只剩约 `1.5 × 20/1024 ≈ 0.03` 设备像素。
 ⚠ 注意这一家是**唯一既真的替换 `slotPath`、又真的画这道描边**的，`slotBorderColor` 在
-WPF/WinUI/Avalonia/Jalium 四家是空转参数（`../architecture.md` §7.1）。
+WPF/WinUI/Avalonia 三家是空转参数（`../architecture.md` §7.1）。
 
 ### P4 · 输入端口靠**反射属性名**决定，没有任何控件名参与
 

@@ -14,7 +14,7 @@
 | 探针 | 结果 |
 |---|---|
 | `Src/Generators/VeloxDev.Core.Generator` 里搜 `Templates` | **零命中** |
-| 本仓库搜脚本（`.ps1` / `.sh` / `.yml` / `.py`）里的 `Templates` | 2026-10-03 起有两处例外：`Src/Verification/verify-workflow-item-templates.ps1` 与 `verify-jalium-item-templates.ps1` 会引用 `Src/Templates/`；其余脚本零命中 |
+| 本仓库搜脚本（`.ps1` / `.sh` / `.yml` / `.py`）里的 `Templates` | 2026-10-04 起 `Src/Verification/verify-workflow-item-templates-all.ps1` 会引用 `Src/Templates/`（旧的 `verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1` 现在是它的薄转发）；其余脚本零命中 |
 | `Src/Templates/` 下的 `.md` / `.sln` / 测试 | `find -name "*.md"` 零命中 |
 
 ⇒ **49 个条目全部手写维护。下面所有清单都是"你必须亲手去改的地方"，不是"某个脚本会替你跟上的地方"。**
@@ -23,7 +23,7 @@
 把 `TemplateClass` / `TemplateNamespace` / `TemplateSlotColor` 这类 token 换成用户传的值。
 ⇒ 加一个新 symbol 的正确做法是**两件事一起做**：在 `symbols` 里加带 `replaces` 的条目，
 **并且**在模板文件里把对应字面量写成那个 token。只加 `symbols` 不写 token 就是
-`architecture.md` §7.1 那 24 个空转参数之一。
+`architecture.md` §7.1 那 12 个空转参数之一。
 
 **改动怎么验证**：模板项目虽然进了 `VeloxDev.slnx:168-175`，但
 `EnableDefaultCompileItems=false` + `IncludeBuildOutput=false`（`VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj:16,18`）
@@ -146,20 +146,20 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 ⚠ **这条只管「模板项目之内」。它不禁「适配器包发基类、生成代码继承」** —— 那是另一条通道，
 而且早就在用：生成文件引用适配器程序集（`TemplateClass.xaml:7` 的 `assembly=VeloxDev.WPF`）本来就要
 用户自己装包，minimap 这个角色在六家就是「包里发控件 + 模板薄派生」（WPF 24 / Avalonia 25 / WinUI 42 /
-MAUI 21 / Jalium 14 / Razor 15 行）。
+MAUI 21 / Jalium 24 / Razor 15 行）。
 
-**2026-10-03 起 WinForms 与 Jalium 的七项全部走这条。**
+**2026-10-03 起 WinForms 的七项全部走这条**（Jalium 在 2026-10-05 转标记驱动后不再派生基类，见下面第二条）。
 
 - WinForms（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）：
 `WorkflowTreeView`（装配、网格、分层窗口标尺、平移引擎、视图池）、`WorkflowNodeView`（绑定、定位、缩放折叠、
 反射读标题/输入口/插槽标签）、`WorkflowSlotView`（含那个 SVG 路径解析器，`WorkflowSlotView.cs:250` 起）、`WorkflowLinkAttachment`
 （雕窗口区域、端点订阅、几何）、`WorkflowMinimapOverlay`、`WorkflowGridDecorator`（网格与标尺的绘制）、
 `WorkflowTemplateSelector`（四个工厂与分流）。模板合计 3257 → 581 行。
-- Jalium（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`，12 文件 2685 行）：
-`WorkflowTreeView`（池化接线、视口、缩放钉、手势、网格/标尺渲染、命中）、`WorkflowNodeView`（绑定、定位、Viewbox、
-端口状态画刷）、`WorkflowLinkAttachment`（绑定、端点订阅、自盒化、烘焙、命中发布）、`WorkflowGridDecorator`（网格与标尺绘制）、
-`WorkflowTemplateSelector`（四工厂与分派）、`WorkflowPortGeometry`（反射读端口 + 定位）、`WorkflowPortLayout`（设计值）、
-`WorkflowMinimapOverlay`。模板合计 1262 → 210 行。
+- Jalium（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`，9 文件 3435 行）：**2026-10-05 起不再走这条** ——
+角色落成附着行为（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` /
+`WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds`）+ 小地图 `WorkflowMinimapOverlay` +
+池 `ViewPool` / `ViewManager`；网格装饰器归**模板**。模板合计 1079 行（四个 `.jalxaml` 条目 + 三个 `.cs`）。
+见 `../WorkflowSystem/adapters/jalium.md` §一。
 
 判据是**「这段代码是不是用户该改的扩展点」**：平台硬限制与机械装配进包，策略（调色板、卡片长什么样、用哪个图形）留在模板里。
 
@@ -170,7 +170,7 @@ MAUI 21 / Jalium 14 / Razor 15 行）。
 
 ⇒ 已经"抽"过的公共物只有一件：`TemplateSlotPath` 那段 SVG。它是**每个条目的 `template.json` 里各存一份字面量**
 （七个平台的 `defaultValue` 逐字节相同，viewBox 1024×1024），**改图标要改七处**，
-而且其中两处（MAUI/Jalium）根本没有 `replaces`。
+而且其中一处（MAUI）根本没有 `replaces`。
 
 ### 4.2 捷径：从另一家复制条目，改后缀
 
@@ -199,9 +199,9 @@ Razor 的 `slotBackground` 就是这一类的正面样本：它的 `description`
 
 | 常量 | 被复制到 |
 |---|---|
-| 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor:20` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**（2026-10-03 起）：WinForms 在适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowGridDecorator.cs:31` 的 `DefaultRulerThickness`（tree-view 的 `RulerReserve` 读它，`WorkflowTreeView.cs:45`），Jalium 在 `WorkflowGridDecorator.cs:25`，模板侧零副本 |
-| 节点设计尺寸 `260×180` | WPF node-view `TemplateClass.xaml:17` / WinUI `:18` 的 `Grid Width/Height`、MAUI `workflow-node-view/TemplateClass.xaml.cs:6` 的 `DesignWidth`、Razor `workflow-node-view/TemplateClass.razor.cs:77`、Jalium `workflow-slot-view/TemplateClass.cs:19-29` 的 `WorkflowPortLayout`（Jalium 的 node/link/tree 三处都读它） |
-| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `TemplateClass.axaml.cs:18`、WPF `:19`、WinUI 是字面量 `Math.Max(40, …)`（`:312`）、Razor `PullMinimum`（`:20`）；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js:262`）；无标记三家在适配器各一份（WinForms `WorkflowLinkAttachment.cs` 的 `pullMinimum`、Jalium `WorkflowLinkAttachment.cs` 的 `PullMinimum` 与 `WorkflowTreeView.cs:335`、MAUI `WorkflowLinkOverlay.cs:306`）。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
+| 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor:20` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**：WinForms 在适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowGridDecorator.cs:31` 的 `DefaultRulerThickness`（tree-view 的 `RulerReserve` 读它，`WorkflowTreeView.cs:45`，2026-10-03 起），Jalium 在**模板** `workflow-grid-decorator/TemplateClass.cs:34` 的 `DefaultRulerThickness = 36`（2026-10-05 起），模板其余文件零副本 |
+| 节点设计尺寸 `260×180` | WPF node-view `TemplateClass.xaml:17` / WinUI `:18` 的 `Grid Width/Height`、MAUI `workflow-node-view/TemplateClass.xaml.cs:6` 的 `DesignWidth`、Razor `workflow-node-view/TemplateClass.razor.cs:77`、Jalium `workflow-node-view/TemplateClass.jalxaml` 的 `Grid Width="260"/Height="180"` |
+| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `TemplateClass.axaml.cs:18`、WPF `:19`、WinUI 是字面量 `Math.Max(40, …)`（`:312`）、Razor `PullMinimum`（`:20`）；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js:262`）；无标记语言的 WinForms 与 MAUI 在适配器各一份（WinForms `WorkflowLinkAttachment.cs` 的 `pullMinimum`、MAUI `WorkflowLinkOverlay.cs:306`），Jalium 在模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `MinimumPull = 40`。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
 
 绑定式的那几家（WPF/Avalonia/WinUI/MAUI 的 tree-view 把 `TranslateTransform` 绑到
 `PART_GridDecorator.RulerThickness`）会自动跟随，**复制式的那几处不会**。

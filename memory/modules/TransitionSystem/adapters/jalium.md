@@ -75,7 +75,7 @@
 
 ### 2.5 csproj：独一家 `net10.0` 无平台后缀
 
-- `VeloxDev.Jalium.csproj:7` 是**单目标 `net10.0`，没有 `-windows` / `-android` 后缀**。七家里 WPF/WinForms 多目标 `netframework4.6.1;net5.0-windows;netcoreapp3.0`，Avalonia `netstandard2.0;net6.0`，MAUI `net10.0;net10.0-windows10.0.19041.0`，WinUI 两个 `-windows10.0.19041.0`，Razor 单目标 `net6.0`。⇒ **这不只是打包口味**：它决定了引用必须是"最低的、跨平台的"那个包 —— `Jalium.UI.Controls` 而不是 `Jalium.UI.Desktop`（理由写在 `VeloxDev.Jalium.csproj:4-6` 与 `:29-32` 的注释里），因此这家能同时服务 Windows / Linux / Android。
+- `VeloxDev.Jalium.csproj:7` 是**单目标 `net10.0`，没有 `-windows` / `-android` 后缀**。七家里 WPF/WinForms 多目标 `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`，Avalonia `netstandard2.0;net6.0;net8.0`，MAUI `net10.0;net10.0-windows10.0.19041.0`，WinUI `net8.0-windows10.0.19041.0;net10.0-windows10.0.19041.0`，Razor `net6.0;net8.0`。⇒ **这不只是打包口味**：它决定了引用必须是"最低的、跨平台的"那个包 —— `Jalium.UI.Controls` 而不是 `Jalium.UI.Desktop`（理由写在 `VeloxDev.Jalium.csproj:4-6` 与 `:29-32` 的注释里），因此这家能同时服务 Windows / Linux / Android。
 - `VeloxDev.Jalium.csproj:12` 的 `NoWarn` 是 `1573;1591`，与 WPF（`:5` 同样 `1573;1591`）相同；三家适配器里只有 MAUI 的 `NoWarn`（`CA1416`）不同。
 
 ---

@@ -1,7 +1,7 @@
 # WorkflowSystem 架构
 
 > 模块位置：`Src/Core/VeloxDev.Core/WorkflowSystem/`
-> 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（17 个文件，命名空间 `VeloxDev.WorkflowSystem`）
+> 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（18 个文件，命名空间 `VeloxDev.WorkflowSystem`）
 > 平台差异见同目录 `adapters/<平台>.md`；扩展做法见 `extension.md`。
 
 ---
@@ -16,8 +16,8 @@
 | 你以为在这里 | 其实在哪 |
 |---|---|
 | 怎么画节点/连线 | 七家适配器 `Src/Adapters/VeloxDev.*/Attached/Workflow/`，Core 只给坐标数学 |
-| 鼠标命中、拖拽、滚轮 | 适配器的七个角色行为（`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSurfaceBehavior` 等；**Jalium 这几个角色现在在适配器的 `WorkflowTreeView` 等可继承基类里，见 `adapters/jalium.md`**） |
-| 持久化格式 | **2026-10-03 起由生成代码定义**（`VeloxDev.Serialization`，入口 `ComponentModelEx`，见 [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八）。本模块只保留**序列化钩子**，且已从 Newtonsoft 特性改为接口：`Anchor` / `Size` 的 `IVeloxJsonSerializing` / `Serialized` / `Deserialized`（`GUI/GeometryModels/Anchor.cs`、`Size.cs`），`SlotEnumerator` 的 `IVeloxJsonDeserializing` / `Deserialized`（`SelectorEx/SlotEnumerator.cs`），`BranchOption` / `BranchSegment` 的 `IVeloxJsonDeserialized`（`CompilerEx/Compile/Model/`） |
+| 鼠标命中、拖拽、滚轮 | 适配器的七个角色行为（`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSurfaceBehavior` 等；**Jalium 这些角色同样是附着行为 —— 表面 `WorkflowSurfaceBehavior`、插槽 `WorkflowSlotLayoutBehavior`、节点拖拽 `WorkflowNodeDragBehavior`、连线手势 `WorkflowSlotConnectionBehavior`，见 `adapters/jalium.md`**） |
+| 持久化格式 | **2026-10-03 起由生成代码定义**（`VeloxDev.Serialization`，入口 `ComponentModelEx`，见 [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八）。本模块只保留**序列化钩子**，且用的仍是 **.NET 序列化特性**（`System.Runtime.Serialization`，不是自定义接口）：`Anchor` / `Size` 的 `[OnSerializing]` / `[OnSerialized]` / `[OnDeserialized]`（`GUI/GeometryModels/Anchor.cs:69,83,96`、`Size.cs:63,77,90`），`SlotEnumerator` 的 `[OnDeserializing]` / `[OnDeserialized]`（`SelectorEx/SlotEnumerator.cs:723,746`），`BranchOption` / `BranchSegment` 的 `[OnDeserialized]`（`CompilerEx/Compile/Model/BranchOption.cs:28`、`BranchSegment.cs:33`）。全仓源码里没有 `IVeloxJsonSerializing` / `IVeloxJsonSerialized` / `IVeloxJsonDeserialized` 这类接口 |
 | 撤销栈的存储 | 栈是 `TreeHelper<T>` 的私有字段；Core 只定义「一对 Redo/Undo 委托」`WorkflowActionPair.cs:6` |
 | 节点「算什么」 | 用户实现 `IWorkflowNodeViewModelHelper.ReceiveAsync`（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:123`）。默认实现返回 `null`，**什么都不往下传**（`Templates/Helpers/NodeHelper.cs:69`） |
 
@@ -126,7 +126,7 @@ RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/Ru
 
 - **`WorkflowSurfaceMath` 是全模块唯一的坐标数学**（`GUI/Math/WorkflowSurfaceMath.cs:17`），七家适配器以前各自内联过。
 - **连线的形状归 Core 算，视图不再各推一遍**：`LinkCurve.LinkCurvePoints(link, 起点, 终点, pullMinimum)` 给出要画的四个控制点，`LinkCurve.BuildLinkCubic(...)` 把同一条采样成命中用的 `LinkCurve` —— 两个函数同源，所以「画出来的」与「能点中的」不可能不一致（`GUI/Interaction/LinkCurve.cs:114,166`）。控制点沿**每个口自己那条边**的外法线拉，不是写死水平：写死的那版在口位于上/下边、或连线反向时会把控制点戳进自己节点（`LinkPortCurveTests.cs` 的 `LinkCurvePoints_NeverFoldsIntoItsOwnNode` 钉的就是这条）。**任一端没有节点就整条退回房规**（起点 +x、终点 −x）—— 拖拽预览的两端都是占位插槽、没有边可读，而两端都不拉会把橡皮筋拉成直线。
-- **方向只看两个端点各自相对于父节点的实际位置**（`PortOutward(x, y, node)`，`:196`）：不读 `slot.Anchor`，也不看谁是发送端、端口画在哪条边 —— 调用方传进来的坐标就是判据。**前提是那两个坐标与 `node.Anchor` / `node.Size` 同系**：坐标是**别的**系时，调用方必须先把它们搬过去再调（WinForms 的 Trimmed 那条路就是 —— 它的 `slot.Anchor` 是客户区坐标，差一个表面投影，见 [`adapters/winforms.md`](adapters/winforms.md) §4.12）。同系的各家（从绑定读 `slot.Anchor` 的六家、以及**从模型推端口位置的 Jalium**：`PortCenter` 给的就是世界坐标）直接用，不用改公式。
+- **方向只看两个端点各自相对于父节点的实际位置**（`PortOutward(x, y, node)`，`:196`）：不读 `slot.Anchor`，也不看谁是发送端、端口画在哪条边 —— 调用方传进来的坐标就是判据。**前提是那两个坐标与 `node.Anchor` / `node.Size` 同系**：坐标是**别的**系时，调用方必须先把它们搬过去再调（WinForms 的 Trimmed 那条路就是 —— 它的 `slot.Anchor` 是客户区坐标，差一个表面投影，见 [`adapters/winforms.md`](adapters/winforms.md) §4.12）。同系的各家（七家都从绑定读 `slot.Anchor` —— Jalium 自 2026-10-05 起也由 `WorkflowSlotLayoutBehavior` 实测写回 `slot.Anchor`，与其余六家同一契约）直接用，不用改公式。
 - **NaN = 未测量**这个约定是渲染就绪门的全部内容。注意**只有 slot 的 anchor 默认 NaN**：`Anchor` 类本身的构造默认是 `0d`（`GUI/GeometryModels/Anchor.cs:11` 的 `Anchor(double left = 0d, double top = 0d, int layer = 0)`），是 slot 的字段给了 NaN —— 生成器版 `Writers/WorkflowWriter.cs:1045-1046`（注释：「Slot anchor defaults to NaN (no value): links don't render until both anchors are measured by the GUI」），默认实现版 `Templates/ViewModels/SlotDefaultViewModel.cs:38`。node 的 anchor 默认 `0` 或 `[DefaultAnchor]`（`Writers/WorkflowWriter.cs:779`），`VirtualLink` 双端在重置时**故意**回到 NaN 而不是原点（`StandardEx/WorkflowTreeEx.cs:196-201`）。检查在 `GUI/Rendering/WorkflowSlotUpdateGate.cs:20`，包装在 `GUI/Rendering/WorkflowLinkRenderEx.cs:27`（额外看 `IsVisible`）。**不需要任何事件订阅或时间戳** —— 测量写入真实坐标后绑定自动刷新。未挂到节点的 slot（`Parent is null`，如拖拽预览）直接算就绪（`WorkflowSlotUpdateGate.cs:28-33`）。
   > ⚠️ `WorkflowSlotUpdateGate.cs:7-8` 的 XML 注释写的是「`Anchor` 默认 horizontal/vertical 为 `double.NaN`」—— **那句话与代码不符**（`Anchor.cs:11` 的构造默认是 `0d`）。它想表达的是 **slot 的约定**，不是 `Anchor` 类的默认值。按下一条行事，别按那句注释。
 - **同一套 NaN 约定还贯穿空间索引**：bounds 为空/NaN 的条目会被登记用于变更跟踪但**不进网格**（`GUI/Virtualization/SpatialGridHashMap.cs:72-78`），端点未定位时连线对返回 `Empty` bounds（`GUI/Virtualization/NodePairBoundsProvider.cs:74`），所以未测量的节点不会以 NaN 坐标进索引。
@@ -185,7 +185,7 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Help
 - 句柄**一次路由一个**：整条链共用，所以祖先能读到目标那级做了什么决定。
 - `IsSuspended` 仍在 Core（`WorkflowInput`）：菜单开着时指针跟踪不动 —— **`Exited` 也要认**（2026-10-03 由 Jalium 实测逼出来的那条不变）。
 
-**右键菜单**（2026-10-04 起）：Core 不再有 `ContextMenuRequested` 这一族。**适配器从自己的 `PointerPressed(Right, link)` 里弹**，宿主想否决就在链上更靠前的一级（连线自己）订同一个事件并置 `PreventDefault` —— 顺序由「目标先于祖先」保证，与订阅先后无关。开合由适配器自己记账（置 `WorkflowInput.IsSuspended`）。**「菜单不能比它指着的那条线活得久」改由 `tree.GetHelper().LinkRemoved` 实现**（树既有的事件，Delete/Undo/Agent 改树都会发）：七家各订一次，WinForms/Jalium 落在基类、标记五家落在 `WorkflowSurfaceBehavior`。
+**右键菜单**（2026-10-04 起）：Core 不再有 `ContextMenuRequested` 这一族。**适配器从自己的 `PointerPressed(Right, link)` 里弹**，宿主想否决就在链上更靠前的一级（连线自己）订同一个事件并置 `PreventDefault` —— 顺序由「目标先于祖先」保证，与订阅先后无关。开合由适配器自己记账（置 `WorkflowInput.IsSuspended`）。**「菜单不能比它指着的那条线活得久」改由 `tree.GetHelper().LinkRemoved` 实现**（树既有的事件，Delete/Undo/Agent 改树都会发）：七家各订一次，WinForms 落在基类、Jalium 与标记五家落在 `WorkflowSurfaceBehavior`。
 
 **光标下的连线视图不再由 Core 点亮**（2026-10-04）：悬停外观是**宿主/demo** 的事 —— 订那条线自己的 `Input.PointerEntered` / `PointerExited` 即可，互斥不需要记账（路由已经保证「离开的先收 Exited、进入的后收 Entered」）。Core 里没有 `ILinkHighlight`、也没有 `AutoHighlight`。
 
@@ -236,7 +236,7 @@ hub 收不了宿主的弹窗，所以这是**请**不是做：宿主关掉自己
 要点：
 
 - **输入只有一个位置**：`WorkflowInput.For(tree)`（`GUI/Events/WorkflowInput.cs`），一棵树一个实例、`ConditionalWeakTable` 缓存。适配器只**转发**，宿主与组件视图都从组件的 Helper 上订 —— 没有「每个表面各持一个」这种说法。它同时是 `HitRadius` / `IsSuspended` / `PointerTarget` / `HoveredLink` 的持有者。
-- **命中判据是「已发布的曲线」**，不是「锚点测没测到」。视图画不出来时用 `PublishCurve(null)` 撤回，所以「没有曲线」就等于「那里没有东西」。**不要**改回按 `IsRenderReady()` 判 —— Jalium 按设计从不写 `slot.Anchor`，那样会让它整家连线静默失效。
+- **命中判据是「已发布的曲线」**，不是「锚点测没测到」。视图画不出来时用 `PublishCurve(null)` 撤回，所以「没有曲线」就等于「那里没有东西」。**不要**改回按 `IsRenderReady()` 判 —— 命中要对着视图**真正画出来的**那条曲线（`PublishCurve` 发布的运行期几何），锚点测没测到是另一回事。
 - **命中面只是画出来的那道描边**，不是整块画布：曲线就是视图画的那条，半径 `LinkHitTestEx.DefaultHitRadius`（6）。
 - **曲线是运行期几何，永远不序列化**（别把它挂上任何归档序列化路径：不给它 `[Archivable]`，也不让它成为某个被收录成员的声明类型）。
 

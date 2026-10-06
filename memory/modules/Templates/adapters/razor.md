@@ -100,7 +100,7 @@
    **搜 `ViewPool.TemplateSelector` 在本家恒空**。
    同族对照：WPF / WinUI / Avalonia / MAUI 在标记里喂 `Helper.VisibleItems`；**WinForms 现在也由适配器喂它**
    （`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:423`，模板不再发散虚拟化）；
-   Jalium 由基类喂。MAUI 的连线由适配器 `ViewManager` 在入队前筛掉，交给共享 overlay 画。
+   Jalium 现在也在标记里绑（`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`）。MAUI 的连线由适配器 `ViewManager` 在入队前筛掉，交给共享 overlay 画。
 
 7. **输入/输出插槽按通道拆的逻辑现在在适配器 `WorkflowPresentation`**：`InputSlotsOf`（只带 source 标志、
    排除任何 target 标志）与 `OutputSlotsOf`（带 target 标志）

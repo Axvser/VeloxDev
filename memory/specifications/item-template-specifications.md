@@ -53,7 +53,7 @@
   - 命中判定归 Core（`LinkHitTestEx` 对着已发布的曲线判距，半径 `LinkHitTestEx.DefaultHitRadius`）；
   - **输入路由只有一个位置**：`WorkflowInput.For(tree)`（一棵树一个实例），适配器把原生指针/按键翻译成标准输入后只往它里面转发；宿主与连线视图都在**组件的 Helper**上订（`IInputEvents`）；
   - **删除也是 demo 的**（2026-10-04 改定）：库只把 `Delete` 键路由过来（target = 指针停着的那条线），宿主订 `KeyDown` 自己执行 `link.DeleteCommand` —— 与悬停高亮同一条路。**菜单里的条目同理**：模板不再自带 `Delete` 项，基类也不加；
-  - **悬停/选中高亮归 demo**：订那条线自己的 `Input.PointerEntered` / `PointerExited`（路由保证「先 Exited 后 Entered」）自己画。模板里的连线视图是**被动视觉**，不含任何高亮外观；适配器给的是**指针语义的覆写钩子**加一个空的画法钩子（WinForms/Jalium 的 `WorkflowLinkView.OnPointerEntered` … / `OnPaintLinkDecoration`）。Core 里没有 `ILinkHighlight`、也没有 `AutoHighlight`。
+  - **悬停/选中高亮归 demo**：订那条线自己的 `Input.PointerEntered` / `PointerExited`（路由保证「先 Exited 后 Entered」）自己画。模板里的连线视图是**被动视觉**，不含任何高亮外观；适配器给的是**指针语义的钩子**加一个空的画法钩子（WinForms 的 `WorkflowLinkAttachment`：指针事件 `PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`，画法 `Paint(Graphics)`）。Core 里没有 `ILinkHighlight`、也没有 `AutoHighlight`。
   ⇒ 判据是「这个角色**有没有指针源**」：任何一家只要它的连线视图或表面把指针位置喂给了 hub，生成的工程就开箱有命中/删除；**高亮要自己按 demo 那份写**。
   - **连线的右键菜单也归模板**（2026-10-03 用户改定，推翻本条原来那句「右键菜单仍是 demo 的策略，不要往模板里推」）：
     理由直说 —— **条目列表本身就是用户要改的东西**，「改模板增删菜单条目」比「读库的文档再自己接一套」直接得多。
@@ -62,13 +62,14 @@
   - **接线必须在适配层，模板只声明**（2026-10-03 用户改定）：**条目**归用户（声明在 `workflow-tree-view` 的资源里），
     而**订阅 / 定位 / 弹出 / 开合上报一行都不许留在模板**。标记五家走一个附着属性
     —— `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="<资源键>"`，与 `ViewPool.TemplateSelector` 同一条线；
-    适配器按这个键取菜单、把全部接线干完；无标记语言的两家走基类钩子（见下一条）。
+    适配器按这个键取菜单、把全部接线干完；无标记语言的 WinForms 走基类钩子（见下一条）。
     ⇒ **模板产物的 code-behind 因此只剩 `InitializeComponent()`。**
     **为什么传资源键、不传菜单本身**：这个属性挂在表面**自己的根元素**上，`{StaticResource}` 在那里会在
     定义它的那个资源字典之前求值；键交给适配器在挂载之后解析，绕开这个顺序。
   - 触发点是 hub 的 `ContextMenuRequested`（**可取消**：宿主 `PreventDefault` 就是「这里不给菜单」），
     开合用 `Publish(ContextMenuEvent)` 报回 hub —— 挂起状态因此不用各家的代码自己记账。
-  - **无标记语言的两家（WinForms / Jalium）**：菜单的条目由**基类的可重写钩子**给出（`WorkflowTreeView` 上
-    一个 `protected virtual` 的建菜单方法，基类负责订阅、定位、弹出），模板产物派生之后增删条目即可 ——
-    与这两家其余的扩展点同一条线（见 [adapter-base-class-specifications.md](adapter-base-class-specifications.md) §2）。
+  - **无标记语言的 WinForms**：菜单的条目由**基类的可重写钩子**给出（`WorkflowTreeView` 上
+    一个 `protected virtual` 的 `OnBuildLinkMenu`，基类负责订阅、定位、弹出），模板产物派生之后增删条目即可 ——
+    与这家其余的扩展点同一条线（见 [adapter-base-class-specifications.md](adapter-base-class-specifications.md) §2）。
+    **Jalium 已随 2026-10-05 转标记驱动，走标记五家那条路**（资源里的 `ContextMenu` + `WorkflowSurfaceBehavior.LinkMenuKey`）。
   ⇒ 反过来，**不要**为了「能点到连线」把连线视图改成吃掉整块画布的命中面（那会吞掉画布手势）；命中面必须仍然只是画出来的那道描边。

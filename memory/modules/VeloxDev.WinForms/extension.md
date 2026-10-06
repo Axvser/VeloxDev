@@ -12,13 +12,13 @@
 | 我想加 | 挂点 | 位置 |
 |---|---|---|
 | 一张新的工作流表面 | **派生 `WorkflowTreeView`**（`abstract`），实现 `CreateNodeView`/`CreateLinkView`，或赋 `TemplateSelector` | `Attached/Workflow/WorkflowTreeView.cs:35`（工厂 `:232`/`:237`） |
-| 一种新的节点卡片 | **派生 `WorkflowNodeView`**（`abstract`），重写事件钩子、设颜色 | `Attached/Workflow/WorkflowNodeView.cs:24`（钩子 `:150-182`） |
-| 一种新的插槽图形 | **派生 `WorkflowSlotView`** | `WorkflowSlotView.cs:24` |
+| 一种新的节点卡片 | **`WorkflowNodeAttachment.Attach(this)`**（2026-10-04 起不再是可继承基类），卡片自绘并按 `PART_*` 名接线 | `Attached/Workflow/WorkflowNodeAttachment.cs:55` |
+| 一种新的插槽图形 | **`WorkflowSlotAttachment.Attach(this)`** | `Attached/Workflow/WorkflowSlotAttachment.cs:66` |
 | 一种新的连线图形 | **自己的控件 + `WorkflowLinkAttachment.Attach(this)`**，在 `OnPaint` 里画（2026-10-04 起不再是基类） | `WorkflowLinkAttachment.cs` |
 | 换网格/标尺外观 | **派生 `WorkflowGridDecorator`**，设调色板与间距 | `WorkflowGridDecorator.cs:23` |
 | 「item 类型 → 视图」的工厂 | `WorkflowTemplateSelector`（设四个工厂）或直接实现 `IWorkflowTemplateSelector.CreateView(object item)` | `WorkflowTemplateSelector.cs:21` / `ViewManager.cs:14` |
 | 一个新的附着行为 | 新建 `public static class` + `ConditionalWeakTable<Control, State>` + 静态 `Get`/`Set`，命名空间写 `VeloxDev.WorkflowSystem.AttachedBehaviors` | `Attached/Workflow/` 下新文件；若需要 `Refresh` 推数据，改 `WorkflowSurfaceBehavior.Refresh`（`:417`） |
-| 一个新的「名字」通道 | 状态里加 `string? XxxName` + 用 `FindControlByName` 解析 | `WorkflowSurfaceBehavior.cs:691` |
+| 一个新的「名字」通道 | 状态里加 `string? XxxName` + 用 `FindControlByName` 解析 | `WorkflowSlotLayoutBehavior.cs:652` |
 | 一个新的 Win32 补偿 | `NativeWindowStyleHelper` 加常量 + 方法 | `:23-40`、`:191`；**必须同时加调用点**（现有 4 处） |
 | 一个采样器 | `PlatformAdapters/Samplers/XxxSampler.cs`，命名空间 `VeloxDev.Adapters.NativeSamplers` | 登记在 `Interpolator.cs:9`；且必须给 AUTO TEST 加表项（§四·3）；要能被 `Transition` 面用可能还要加 `Property` 重载（`Transition.cs:30-135`） |
 | 一个主题转换器 | `PlatformAdapters/ThemeValueConverters.cs` 里加一个 `IThemeValueConverter` 类 | **无注册**（按目标类型键）。但这三个平台上无 demo 可验（`Examples/Theme/` 没有 WinForms） |
@@ -39,10 +39,10 @@
 | 5 | 自绘画布用 `WorkflowCanvasTransformBehavior.GetTransform(host)` 拿平移量 | 写进去了，**全仓零读者**（写值走 `Apply` `:65`）。基类卡片走 `IWorkflowSurfaceNodeView.ApplySurfacePosition`，表面走自己的 pan 字段 | 你既然是自绘，pan 就在你自己手里，不必绕这一圈 | `WorkflowCanvasTransformBehavior.cs:34`、`:65` |
 | 6 | `using VeloxDev.TransitionSystem.NativeSamplers;` 想用这家唯一的采样器 | 这家在 `VeloxDev.Adapters.NativeSamplers`；`VeloxDev.TransitionSystem.NativeSamplers` 是 **Core 自己**那 15 个的命名空间 | 用 `VeloxDev.Adapters.NativeSamplers` | `Samplers/PaddingSampler.cs:1`；`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/ColorSampler.cs:3` |
 | 7 | 在 `Attached/` 里直接用 `Transition<T>`/`Interpolator`（因为编译得过） | 编译得过是因为 `GlobalUsings.cs` 把 `VeloxDev.TransitionSystem` 灌进了每个文件 —— 但「三条轴在程序集内互不引用」是七家共同守的纪律，破了不会报错 | 保持零引用；跨轴的事在宿主侧接 | `GlobalUsings.cs`（3 行）；`architecture.md` §一 |
-| 8 | 照 WPF 的心智模型期待名字作用域 / 重名报错 | 这家是**递归子树顺序查找 + `Ordinal` 比较**，取第一个命中；跨容器、非子孙一律找不到，而且**不抛不报** | 名字只挂在宿主子树里，且保证唯一 | `WorkflowSurfaceBehavior.cs:691` |
+| 8 | 照 WPF 的心智模型期待名字作用域 / 重名报错 | 这家是**递归子树顺序查找 + `Ordinal` 比较**，取第一个命中；跨容器、非子孙一律找不到，而且**不抛不报** | 名字只挂在宿主子树里，且保证唯一 | `WorkflowSlotLayoutBehavior.cs:652` |
 | 9 | 以为 `SetIsEnabled` 会订阅事件、或有早退 | 它只做两件事：置位 + 加 `WS_CLIPCHILDREN`/`WS_EX_COMPOSITED`；订阅是各 `Set*Name` 干的 | 别靠 `SetIsEnabled` 反复调来「重新接入」 | `WorkflowSurfaceBehavior.cs:141` |
 | 10 | 传 `typeof(Panel)` 当坐标宿主，而节点卡与画布之间还夹着一层 `Panel` | 类型档是**就近匹配、无校验**，会静默按错的坐标系写锚点 | 能确定类型就传真正画布的类型（demo 传 `typeof(WorkflowCanvas)`） | `WorkflowSlotLayoutBehavior.cs`（`ResolveCoordinateHost`）；`WorkflowNodeDragBehavior.cs`（同形） |
-| 11 | 给「派生 `WorkflowNodeView`」的卡片加 Dispose 逻辑却不用基类助手 | 卡片是子控件树，直接 `Dispose` 父控件会漏掉订阅（`ModelChangeRelay`）与子控件 | 用 `DisposeChildren(parent)`（`:260`）并按基类 `Dispose(bool)` 的形状收尾 | `WorkflowNodeView.cs:260`、`:290` |
+| 11 | 给节点卡片加 Dispose 逻辑却不用助手 | 卡片是子控件树，直接 `Dispose` 父控件会漏掉订阅（`ModelChangeRelay`）与子控件 | 用 `DisposeChildren(parent)` 收尾 | `WorkflowNodeAttachment.cs:282` |
 | 12 | 以为隐藏的视图会被 `Remove` | `ViewManager` 只把视图 `IsVisible=false` + `ZIndex=-100` 留在画布 `Controls` 里（移除触发昂贵重排） | 遍历子控件时不能假设「看不见 = 不在」 | `ViewManager.cs`（池化重排注释） |
 
 ---
@@ -83,7 +83,7 @@
 1. `Attached/Workflow/WorkflowXxxBehavior.cs`，`namespace VeloxDev.WorkflowSystem.AttachedBehaviors;`，类写 `public static class`。
 2. `private sealed class XxxState` + `static readonly ConditionalWeakTable<Control, XxxState> States`（照 `WorkflowSurfaceBehavior` 的 `GetState`）。
 3. 每个属性一对 `public static T? GetXxx(Control element)` / `SetXxx(Control element, T? value)`；`element is null` 抛 `ArgumentNullException`（全模块一致）。
-4. 若宿主用**名字**指认目标控件，走 `FindControlByName` 那一套（私有，`WorkflowSurfaceBehavior.cs:691` —— 这家没有共享的名字解析工具）。
+4. 若宿主用**名字**指认目标控件，走 `FindControlByName` 那一套（私有，`WorkflowSlotLayoutBehavior.cs:652` —— 这家没有共享的名字解析工具）。
 5. 要不要进 `Refresh`：如果适配器需要在每次刷新周期把值推给你的行为，改 `WorkflowSurfaceBehavior.Refresh`（`:417`）；否则你的行为自己订阅。
 6. **零注册**：加完就能被宿主调用（这也是为什么这家最容易长出「有 API 没读者」的成员，见 `architecture.md` §五·1）。
 
@@ -96,7 +96,7 @@
 ### 4.1 改任何 `Set*` / `Get*` 的名字或语义（这家最重的联动）
 
 - [ ] **本模块 README**（`Src/Adapters/VeloxDev.WinForms/README.md`，245 行，逐表列 API；它自己就是消费者入口）
-- [ ] **7 个模板条目**（`Src/Templates/VeloxDev.WinForms.Templates/working/content/*/`；`tree-view` 现在派生 `WorkflowTreeView`、`node-view` 派生 `WorkflowNodeView`、`slot-view` 派生 `WorkflowSlotView`、`link-view`/`grid-decorator`/`minimap-overlay`/`template-selector` 各有形状）
+- [ ] **7 个模板条目**（`Src/Templates/VeloxDev.WinForms.Templates/working/content/*/`；`tree-view` 现在派生 `WorkflowTreeView`、`node-view` 用 `WorkflowNodeAttachment.Attach`、`slot-view` 用 `WorkflowSlotAttachment.Attach`、`link-view`/`grid-decorator`/`minimap-overlay`/`template-selector` 各有形状）
 - [ ] **两个 Workflow demo**：`Examples/Workflow/WinForms/Demo/` 与 `Examples/Workflow/WinForms Trimmed/Demo/`
 - [ ] `skills/veloxdev-create-workflow/references/gui/winforms.md`
 - [ ] `memory/modules/{WorkflowSystem,TransitionSystem,Templates}/adapters/winforms.md` + 本文
@@ -117,8 +117,8 @@
 
 ### 4.4 改 TFM / 包结构
 
-- [ ] `VeloxDev.WinForms.csproj:4`（TFM 三元组）；下游按 `net5.0-windows` 那份资产解析
-- [ ] `skills/veloxdev-create-workflow/references/gui/winforms.md`（它把三元组写进了面向消费者的摘要）
+- [ ] `VeloxDev.WinForms.csproj:4`（TFM 四元组 `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`）；下游按 `net8.0-windows` 或 `net5.0-windows` 那份资产解析
+- [ ] `skills/veloxdev-create-workflow/references/gui/winforms.md`（它把四元组写进了面向消费者的摘要）
 - [ ] `VeloxDev.slnx`（项目注册）
 - [ ] 生成器双轨引用与 TFM 的关系见 `memory/modules/VeloxDev.Core.Generator/architecture.md` §五
 

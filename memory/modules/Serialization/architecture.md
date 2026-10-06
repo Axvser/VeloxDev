@@ -1,6 +1,6 @@
 # Serialization — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/Serialization/`，11 个 `.cs`。命名空间 `VeloxDev.Serialization`。
+> 代码：`Src/Core/VeloxDev.Core/Serialization/`，13 个 `.cs`。命名空间 `VeloxDev.Serialization`。
 > 读写器各有同步 / 异步两份：`VeloxJsonReader(.Async).cs`、`VeloxJsonWriter(.Async).cs`、`VeloxJsonSerializer(.Async).cs`。
 > 生成器：`Src/Generators/VeloxDev.Core.Generator/`（`VeloxJson.cs` / `Base/VeloxJsonModel.cs` / `Writers/VeloxJsonCodeWriter.cs`）。
 > 通用 VM 序列化面：`Src/Core/VeloxDev.Core/Serialization/ViewModelSerializer.cs`（2026-10-04 从 Extension 下沉，原名 `ComponentModelEx`，命名空间由 `VeloxDev.MVVM.Serialization` 并入 `VeloxDev.Serialization`）。

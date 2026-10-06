@@ -76,7 +76,7 @@ memory/
 
 ## 四、平台差异：`adapters/` 子目录
 
-**什么时候加**：模块的核心代码定义一份契约、各平台各自实现一份 —— 也就是本仓库的 Adapter 模式。当前有两个模块存在这条轴：[`TransitionSystem`](../modules/TransitionSystem/)、[`WorkflowSystem`](../modules/WorkflowSystem/)。
+**什么时候加**：模块的核心代码定义一份契约、各平台各自实现一份 —— 也就是本仓库的 Adapter 模式。当前有三个模块存在这条轴：[`TransitionSystem`](../modules/TransitionSystem/)、[`WorkflowSystem`](../modules/WorkflowSystem/)、[`Templates`](../modules/Templates/)（`memory/modules/Templates/adapters/` 下 7 份平台文件）。
 
 **为什么必须单独成篇**：平台差异是**共性之外的例外**，混进 `architecture.md` 会把共性淹掉 —— 而 `architecture.md` 的价值恰恰是「不用读七份实现就能理解这个模块」。每多一家平台就多一份差异，所以它得有自己的位置。
 

@@ -15,7 +15,7 @@
 
 三问都过，再选子目录：**子目录 = 它服务的模块**（`AspectOriented`/`DynamicTheme`/`MVVM`/`Tickable`/`Timing`/`TransitionSystem`/`WorkflowSystem`），不是按「契约种类」分。一个新模块的契约就新开一个子目录。
 
-**判据的可执行版本**：`grep -rn "public interface" Src/Core/VeloxDev.Core/Interfaces/` 得到 49 条 —— 每一条都能指名它的 ≥2 个实现方家族；做不到的那 52 条都在 `Interfaces/` 外（清单见 `architecture.md` §二）。当前分布（文件数）：`WorkflowSystem` 17 / `TransitionSystem` 9 / `Timing` 6 / `MVVM` 5 / `DynamicTheme` 3 / `Tickable` 1 / `AspectOriented` 1，共 42。
+**判据的可执行版本**：`grep -rn "public interface" Src/Core/VeloxDev.Core/Interfaces/` 得到 50 条 —— 每一条都能指名它的 ≥2 个实现方家族；做不到的那 48 条都在 `Interfaces/` 外（清单见 `architecture.md` §二）。当前分布（文件数）：`WorkflowSystem` 18 / `TransitionSystem` 9 / `Timing` 6 / `MVVM` 5 / `DynamicTheme` 3 / `Tickable` 1 / `AspectOriented` 1，共 43。
 
 ---
 
@@ -102,7 +102,7 @@
 
 ### 3. 别在契约里放「哪些平台支持」的知识
 
-`IThemeValueConverter` 六家实现（Jalium 不接 DynamicTheme），`IWorkflowGridDecorator` 只有 Razor 与 WinForms 2 家把实现放进适配器本体，Avalonia/MAUI/WinUI/WPF 4 家在模板/demo 里，Jalium 没有实现（它发的是可继承基类 `WorkflowGridDecorator`，不接该接口）。契约不记录这些 —— 想确认某契约某平台到底有没有，只能按 `architecture.md` §三·B 的表去各家目录数。
+`IThemeValueConverter` 六家实现（Jalium 不接 DynamicTheme），`IWorkflowGridDecorator` 只有 Razor 与 WinForms 2 家把实现放进适配器本体，Avalonia/MAUI/WinUI/WPF/Jalium 5 家在模板/demo 里（Jalium 的模板直接实现接口，旧的可继承基类已删除）。契约不记录这些 —— 想确认某契约某平台到底有没有，只能按 `architecture.md` §三·B 的表去各家目录数。
 
 ### 4. 改契约名/挪命名空间 = 改一个**字符串常量**，编译器不会提醒你
 

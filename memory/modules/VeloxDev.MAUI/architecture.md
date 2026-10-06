@@ -51,7 +51,7 @@
 | 「主题是什么」「切换什么时候发生」 | DynamicTheme 模块 |
 | 生成器 / 分析器 | **本项目不引用分析器包**（`VeloxDev.MAUI.csproj` 的引用项只有 `Microsoft.Maui.Controls`、`VeloxDev.Core`、`Microsoft.WindowsAppSDK`，`:40-49`），自己一行 `[VeloxProperty]` 都没有 |
 | 装饰器（网格/标尺） | 本家**不提供**实现，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`）。本家只**喂**它，见 §三·3 |
-| `dotnet new` 模板包 | `Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj` 是**纯内容包**（`IncludeBuildOutput=false`、`EnableDefaultCompileItems=false`、无任何 `ProjectReference`）⇒ 装模板**不会**带来 `VeloxDev.MAUI` 依赖，宿主必须自己引。它还把 `skills/veloxdev-workflow-item-templates/references/**` 打进包（`:27`）—— 该 glob 相对 `working/` 算下来指向仓库根 `skills/`，**是活的**（与 WinUI 那条恒不匹配的同名 glob 不同） |
+| `dotnet new` 模板包 | `Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj` 是**纯内容包**（`IncludeBuildOutput=false`、`EnableDefaultCompileItems=false`、无任何 `ProjectReference`）⇒ 装模板**不会**带来 `VeloxDev.MAUI` 依赖，宿主必须自己引。它还把 `skills/veloxdev-workflow-item-templates/references/**` 打进包（`:27`）—— 该 glob 相对 `working/` 算下来是 `Src/Templates/skills/…`，**仓库里不存在，是死的**（与 WinUI 那条恒不匹配的同名 glob 一样） |
 
 ---
 
@@ -98,7 +98,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 
 | 角色 | 怎么挂上去 | 宿主类型门槛 | 每元素状态存哪 | 需要谁的 `DataContext` |
 |---|---|---|---|---|
-| 画布宿主 `WorkflowSurfaceBehavior` | `IsEnabled="True"` + 6 个 `*Name` + `ZoomEnabled` + `LinkMenuKey`（`:89`-`:148`） | **`ContentView`**（`:591`） | 私有附着 DP `State`（`:149`），装 `SurfaceState`（`:9-52`） | 宿主自己，且沿宿主→Canvas→ScrollViewer→GridDecorator→PointerPressSource 逐级试探（`ResolveTreeViewModel` `:1589`） |
+| 画布宿主 `WorkflowSurfaceBehavior` | `IsEnabled="True"` + 5 个 `*Name` + `ZoomEnabled` + `LinkMenuKey`（`:89`-`:148`） | **`ContentView`**（`:591`） | 私有附着 DP `State`（`:149`），装 `SurfaceState`（`:9-52`） | 宿主自己，且沿宿主→Canvas→ScrollViewer→GridDecorator→PointerPressSource 逐级试探（`ResolveTreeViewModel` `:1589`） |
 | 插槽布局 `WorkflowSlotLayoutBehavior` | `IsEnabled="True"` + `SlotNames`/`SlotEnumeratorNames`/`CoordinateHost*` | **`ContentView`**（`:85`） | 私有附着 DP `State`（`:65`） | 被挂的那个 `ContentView` 自己 |
 | 节点拖拽 `WorkflowNodeDragBehavior` | `IsEnabled="True"` + `CoordinateHost*`（`:41-51`） | **`View`**（`:73`）——最宽 | 私有附着 DP `State`（`:53`） | 自己或祖先（`ResolveCoordinateHost` `:361-380` 的 `FindByName` → 祖先类型回退） |
 | 插槽连接 `WorkflowSlotConnectionBehavior` | `IsEnabled="True"`（`:34`） | **`View`**（`:55`） | 私有附着 DP `State`（`:41`） | 自己；坐标宿主与画布**靠遍历祖先现找**，见 §3.2 |

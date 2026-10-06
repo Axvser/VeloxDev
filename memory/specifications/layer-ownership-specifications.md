@@ -64,7 +64,7 @@
 
 ⇒ **七家现在是同一句话**：库给事件与几何（`Curve`），效果画在你自己的视图里。
 
-**适配器基类给无标记两家的可重写钩子，命名规则与模型事件那组同一条**：`On` + 事件名，参数就是那次事件的 args
+**适配器基类给无标记语言那一家（WinForms）的可重写钩子，命名规则与模型事件那组同一条**：`On` + 事件名，参数就是那次事件的 args
 （`OnPointerEntered(PointerEnteredEventArgs)`、`OnMoving(NodeMoveEventArgs)` …）。
 
 ⚠ **钩子名不许断言效果**：写 `OnPointerEntered`，不写 `OnPaintHighlight` —— 用户订的是「指针进来了」，

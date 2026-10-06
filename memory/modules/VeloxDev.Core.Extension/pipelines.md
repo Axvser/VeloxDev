@@ -106,5 +106,5 @@
 
 - `Agent/Pipelines/` 下 7 个文件**全部**在仓库内有真实调用者（`TextPipeline`、`ToolPipeline`、`AgentPipelineAgent` 由 `WorkflowAgentScope.Pipeline` 组装；`AgentTranscript` 由 demo 的 `TreeViewModel` 消费）。这个目录没有死面。
 - 文件计数仍是 7：`AgentMarkdownOptions` 与 `AgentTranscript` **同文件**，没新增文件（同一文件承载多个公开类型是本目录既有做法，`AgentEvent.cs`、`AgentPipeline.cs` 都是）。
-- **`AgentMarkdownOptions` 有一个成员在仓库内无人显式构造**（`ReasoningFence` —— demo 全走默认）。这是**有意**的默认值面而不是死面：它的存在意义就是「宿主不改任何东西也拿到围栏」，仓库里没有第二个消费者是正常的。但它同时意味着**形状回归不会有编译期信号** —— 守卫在 `VeloxDev.Core.Extension.Test/Agent/Pipelines/AgentTranscriptTests.cs` 的 8 条测试里。
+- **`AgentMarkdownOptions` 在仓库内没有生产消费者**（`ReasoningFence` —— demo 全走默认；测试里 `AgentTranscriptTests.cs` 有多处显式构造）。这是**有意**的默认值面而不是死面：它的存在意义就是「宿主不改任何东西也拿到围栏」，仓库里没有第二个消费者是正常的。但它同时意味着**形状回归不会有编译期信号** —— 守卫在 `VeloxDev.Core.Extension.Test/Agent/Pipelines/AgentTranscriptTests.cs` 的 8 条测试里。
 - 唯一值得留意的是**事件种类里没有「交互」类**：`RequestSelection` / `RequestConfirmation` 走的是工具返回 + 宿主 handler，不走事件管线。想在 UI 上看到它们，订阅 `WorkflowAgentScope.ToolCalled` 或让工具自己回调。

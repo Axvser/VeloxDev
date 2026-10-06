@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core/Threading/`（契约在 `IThreadDispatcher.cs`，基类在 `ThreadDispatcherBase.cs`）。
 > **本文只写这条轴本身的扩展做法**：新接一家平台时 Threading 侧要提供什么、哪些写法看着能编译但错、要同步改哪几处。
-> 八类适配器的总清单与其余契约（pacer、采样器、`CreateScheduler`…）在 `memory/modules/TransitionSystem/extension.md` §三·C —— 那里是入口，本文只补这条轴。
+> 七家适配器的总清单与其余契约（pacer、采样器、`CreateScheduler`…）在 `memory/modules/TransitionSystem/extension.md` §三·C —— 那里是入口，本文只补这条轴。
 
 ---
 

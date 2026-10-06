@@ -13,7 +13,7 @@
 | 我要扩展… | 扩展点 | 具体位置 |
 |---|---|---|
 | 给类型/属性/方法/命令补说明文字 | `[AgentContext]` | 声明 `AgentContextAttribute.cs:5`；**运行期没有读取点** —— 生成器在编译期把它渲染成 `AgentText` 存进目录；语言与回退规则唯一在 `AgentTextSelection.Select`（`AgentText.cs`），节点侧入口 `AIContextMembers.DescriptionsFor`，`Type`/`MemberInfo` 侧入口 `AgentContextReader`（`architecture.md` §二） |
-| 声明一个命令要吃什么参数 | `[AgentCommandParameter]` | 声明 `AgentCommandParameterAttribute.cs:10`；**只有生成器读**（`AIContextModel.ReadCommandParameterType`），存成节点上一条 `CommandParameterType` 引用 |
+| 声明一个命令要吃什么参数 | `[AgentCommandParameter]` | 声明 `AgentCommandParameterAttribute.cs:10`；**只有生成器读**（`AIContextModelBuilder.ReadCommandParameterType`），存成节点上一条 `CommandParameterType` 引用 |
 | 限定 `SlotEnumerator<TSlot>` 允许哪些 selector 类型 | `[SlotSelectors]` | 声明 `SlotSelectorsAttribute.cs:38`；**Core 零读取**（生成器读，存成 `SlotSelectorType` 引用），判断全在消费方 |
 | 控制 Agent 能写哪些属性 | `rejected` 集合 | `AgentPropertyAccessor.SetProperties`；由消费方构造时传（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:34`） |
 | 加一个语言 | `AgentLanguages` 枚举 + 码表 + 两处 switch | `AgentLanguages.cs:4-40`、`:45-88`、`:103`（`ToLanguageCode`）、`:186`（`GetDisplayName`）；另有消费方第二张码表（见 §四·1） |
@@ -29,8 +29,8 @@
 
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
-| 把 `[AgentContext]` 写在基类上，指望派生类的属性/方法带下来 | 属性与方法**不继承**：目录按类型分别收录成员，派生类型读自己那份（基类的成员只能通过基类链被"发现"，不会把说明挪到派生类型的同名成员上） | `AIContextModel.ReadMembers`（只读 `symbol.GetMembers()`） |
-| 给**命令**补说明时写在具体类的属性上 | 对 `ICommand` 而言**接口上的才算数** —— 生成器按同名属性回查接口，接口上写了就用接口的（与旧反射路径先扫接口一致） | 生成器 `AIContextModel.InterfaceCommandProperty` |
+| 把 `[AgentContext]` 写在基类上，指望派生类的属性/方法带下来 | 属性与方法**不继承**：目录按类型分别收录成员，派生类型读自己那份（基类的成员只能通过基类链被"发现"，不会把说明挪到派生类型的同名成员上） | `AIContextModelBuilder.ReadMembers`（只读 `symbol.GetMembers()`） |
+| 给**命令**补说明时写在具体类的属性上 | 对 `ICommand` 而言**接口上的才算数** —— 生成器按同名属性回查接口，接口上写了就用接口的（与旧反射路径先扫接口一致） | 生成器 `AIContextModelBuilder.InterfaceCommandProperty` |
 | 给**普通属性/方法**补说明时写在接口上 | **不生效**：只有命令那条路会回查接口，属性/方法不扫接口（旧反射路径也一样） | 同上，`InterfaceCommandProperty` 只在 `isCommand` 时调用 |
 | 只写英文，就以为中文/日文界面下这个成员没有说明 | **有语言回退，但是整目标、全有或全无**：该目标一条目标语言都没有时整体退回英文；只要命中 ≥ 1 条目标语言，就不再夹带英文 | `AgentTextSelection.Select`（`AgentText.cs`）；测试 `.../AgentContextReaderTests.cs` 的 `..._FallsBackToEnglish` / `..._FallbackIsAllOrNothing` |
 | 只写了中文，指望英文界面也能看到 | **英文无处可退**：`language == English` 时直接返回命中集（可能为空） | 同上；测试 `..._EnglishRequestNeverFallsBack` |
@@ -48,7 +48,7 @@
 | 用 `FindBackingCommand` 当通用的「属性→命令」映射 | 它只认两种命名：`Set{X}Command` 与 `{X}Command`；别的命名返回 `null`（调用方通常据此当成「没有命令」）。形参仍是 `Type`，但只读它的 `FullName` 查目录 | `AgentCommandDiscoverer.FindBackingCommand` |
 | 用 `Execute(target, "saveCommand")` 之类的大小写变体 | 规范化是 `EndsWith("Command")`，大小写敏感 → 拼成 `saveCommandCommand` 然后找不到 | `AgentCommandDiscoverer.NormalizeCommandName` |
 | 让命令属性抛异常 | 异常被吞成 `ExecuteResult.Error` 字符串，**栈不保留**（只留 `ex.Message`） | `AgentCommandDiscoverer.cs` 的 `Execute` 的 try/catch |
-| 把命令体写成**显式接口实现** | 目录只收录公开成员，显式实现的那个属性不算 —— 命令整个消失（旧反射路径也读不到它） | `AIContextModel.ReadMembers` 的 `Accessibility.Public` 过滤 |
+| 把命令体写成**显式接口实现** | 目录只收录公开成员，显式实现的那个属性不算 —— 命令整个消失（旧反射路径也读不到它） | `AIContextModelBuilder.ReadMembers` 的 `Accessibility.Public` 过滤 |
 
 ### 3. 让 Agent 改属性
 
@@ -85,7 +85,7 @@
 
 **官方**：特性类 + **生成期的一个读取点**。特性本身在运行期已经没有任何读者 —— 说明文字在编译期被渲染成 `AgentText` 存进目录，运行期只是取值，规则唯一在 `AgentTextSelection.Select`（`AgentText.cs`）。两条取值入口都是转调：节点侧 `AIContextMembers.DescriptionsFor(node, language)`（三个助手用），`Type`/`MemberInfo` 侧 `AgentContextReader`（消费方与表格用）。要新增一种读取语义（「回退英文」正是上一次的例子）改 `Select` 一处即可；**新写一个助手时要照这个形状走**，再把过滤条件抄一遍就又回到了「漏一处没有编译错误、只有行为不一致」的老问题。
 
-**新增一个标注特性**（比上面多一步）：特性类 + `AIContextModel` 里的一处读取 + 目录节点上的承载方式（要么进 `AIContextFlags`，要么进 `AIContextRefKind`）—— 三个特性各自是这三样的一种组合，照抄最近的那个。
+**新增一个标注特性**（比上面多一步）：特性类 + `AIContextModelBuilder` 里的一处读取 + 目录节点上的承载方式（要么进 `AIContextFlags`，要么进 `AIContextRefKind`）—— 三个特性各自是这三样的一种组合，照抄最近的那个。
 
 ### 7. 「我改 Core 的助手，为什么跑起来没变化」
 
@@ -100,7 +100,7 @@
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
 | 在 Core 里改命令的命名规范化/语言过滤，期待 Workflow 工具跟着变 | Workflow 工具走 `CommandInvoker`，不与 Core 共享任何一行实现 —— 改 Core 只影响 `AgentObjectToolkit`（通用对象）那条路 | `AgentObjectToolkit.cs:247` vs `WorkflowAgentToolkit.cs:1041` |
-| 以为 Core 的转换表也管着 Workflow | 两条各有各的：Core 走**生成期那张表**（`AIContextConvert`，需要重新生成才会变），Workflow 那条走生成的 `VeloxJsonSerializer.Deserialize(json, paramType)`（运行期，改了立刻生效） | `CommandInvoker.cs:89` vs `AIContextConvert.cs` |
+| 以为 Core 的转换表也管着 Workflow | 两条各有各的：Core 走**生成期那张表**（`AIContextConvert`，需要重新生成才会变），Workflow 那条走 `AgentJsonValue.Convert(VeloxJsonValue.Parse(json), paramType)`（运行期，改了立刻生效） | `CommandInvoker.cs:89` vs `AIContextConvert.cs` |
 | 以为「命令描述符」是同一个类型 | 有两个同名类：Core 的嵌套 `AgentCommandDiscoverer.CommandDescriptor` 与 `VeloxDev.AI.Workflow.Functions.CommandDescriptor`（`CommandInvoker.cs:120`）；字段也不同（后者带 `Descriptions` 的 `KeyValuePair<AgentLanguages,string>`） | 同上 |
 
 **要一起改的两处**（改命令语义时）：`AgentCommandDiscoverer.cs`（通用路径）与 `CommandInvoker.cs`（Workflow 路径）。反过来说，**只**想要 Workflow 行为变、通用路径不变，也是可行的 —— 那就只改后者。
@@ -113,7 +113,7 @@
 
 1. 定位它**被读取的方式**：命令 → 写在**接口**上；属性/方法/类型 → 写在**声明类**上。
 2. 每种要支持的语言各写一条 `[AgentContext(AgentLanguages.X, "…")]`（同一语言可多条，全部会返回）。
-3. 命令若带参数，另外补 `[AgentCommandParameter(typeof(T))]` —— 参数类型**只从这里来**，没有按名字猜后备方法的启发式：写在实现类属性上就用它，写在接口上由生成器按同名属性回查、复制到实现类的命令节点（`AIContextModel.InterfaceCommandProperty`，`AIContextModel.cs:783`）。
+3. 命令若带参数，另外补 `[AgentCommandParameter(typeof(T))]` —— 参数类型**只从这里来**，没有按名字猜后备方法的启发式：写在实现类属性上就用它，写在接口上由生成器按同名属性回查、复制到实现类的命令节点（`AIContextModelBuilder.InterfaceCommandProperty`，`AIContextModel.cs:783`）。
 4. 自检：用目标语言调一次 `AgentContextReader.GetContexts(...)`。返回空数组 = 该目标**既没有目标语言、也没有英文**标注；只写英文时返回的是英文那几条（回退），不是空，也不是「两种语言都有」。
 
 ### B. 暴露一个新命令

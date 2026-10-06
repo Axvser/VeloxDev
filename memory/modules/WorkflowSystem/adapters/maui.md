@@ -30,7 +30,7 @@
 | 节点拖拽 | `WorkflowNodeDragBehavior.cs` | 见 §三·5 |
 | 插槽连接 | `WorkflowSlotConnectionBehavior.cs` | 见 §三·6 |
 | 插槽布局 | `WorkflowSlotLayoutBehavior.cs` | 见 §二·5 |
-| 网格装饰器 / 小地图 | 小地图有 `WorkflowMinimapOverlay.cs`；**装饰器适配器不提供**，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`） | 与 WPF/Avalonia/WinUI/WinForms 同为「不带装饰器」；Razor 与 Jalium 自带（Jalium 发的是可继承基类 `WorkflowGridDecorator`） |
+| 网格装饰器 / 小地图 | 小地图有 `WorkflowMinimapOverlay.cs`；**装饰器适配器不提供**，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`） | 与 WPF/Avalonia/WinUI/Jalium 同为「适配器不带装饰器」；只有 Razor 与 WinForms 在适配器里自带一份 |
 
 **另有第八个类，它不是七角色里的任何一个，但删不掉**：`WorkflowLinkOverlay.cs` —— 链接层（画 Core 的可见集），见 §三·2。
 

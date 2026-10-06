@@ -30,8 +30,8 @@
 
 | # | MAF 要求 | 差距 | 处置 |
 |---|---|---|---|
-| 1 | 高风险工具需人工批准 | `RequestConfirmation` 是**模型自己调用的工具**，不调就没有闸；源码里 `Approval` 一词零命中 | **已补**：`WithToolApproval(bool)`（默认关）+ `ToolPipeline.Confirm` 钩子，见 §三 |
-| 2 | 可观测性（OpenTelemetry / GenAI 语义约定） | 源码里 `ILogger`/`OpenTelemetry` 零命中 —— 不是「日志漏了敏感数据」，是**根本没有埋点** | **已补**：`AgentTelemetryExtensions.UseAgentTelemetry`/`WithAgentTelemetry`，默认 `EnableSensitiveData = false`，见 §四 |
+| 1 | 高风险工具需人工批准 | `RequestConfirmation` 是**模型自己调用的工具**，不调就没有闸；补前源码里 `Approval` 一词零命中 | **已补**：`WithToolApproval(bool)`（默认关）+ `ToolPipeline.Confirm` 钩子，见 §三 |
+| 2 | 可观测性（OpenTelemetry / GenAI 语义约定） | 补前源码里 `ILogger`/`OpenTelemetry` 零命中 —— 不是「日志漏了敏感数据」，是**根本没有埋点** | **已补**：`AgentTelemetryExtensions.UseAgentTelemetry`/`WithAgentTelemetry`，默认 `EnableSensitiveData = false`，见 §四 |
 | 3 | 会话与历史用 `ChatHistoryProvider` | 无实现、无 session 序列化；`AgentTranscript` 只是 UI 转录（架构文档已声明它不是会话状态） | **未做**，见 §六 |
 | 4 | 校验函数入参（allow-list / 长度 / 路径穿越） | 部分已有：`FileSkillSource` 的 `..` 包含检查、MCP `Options` 未知键抛错、`ComponentPatcher` 拒绝直接 patch | **未做**：工具字符串参数普遍无长度上限 |
 | 5 | 资源上限含输入长度与 `MaxOutputTokens` | 只有工具调用数；`WithContextCompaction` 已收 token 数，说明宿主知道该值 | **只记文档**，不加旋钮（宿主拥有 client） |

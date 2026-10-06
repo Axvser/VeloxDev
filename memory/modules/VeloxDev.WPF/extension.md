@@ -87,7 +87,7 @@
 
 ### E. 改 TFM / 引用方式
 
-1. `VeloxDev.WPF.csproj:7` 的三元组会改 `#if` 的取值：现在没有 `netstandard2.0`，所以 `PlatformAdapters/Transition.cs:224-253` 那 4 个 `System.Numerics` 重载**恒成立**，加回 `netstandard2.0` 会让它们消失（而且 `UseWPF` 与它不相容）。
+1. `VeloxDev.WPF.csproj:7` 的四元组会改 `#if` 的取值：现在没有 `netstandard2.0`，所以 `PlatformAdapters/Transition.cs:224-253` 那 4 个 `System.Numerics` 重载**恒成立**，加回 `netstandard2.0` 会让它们消失（而且 `UseWPF` 与它不相容）。
 2. `:26` / `:27` 是一对**互斥**的双轨（Debug `ProjectReference` / 非 Debug `PackageReference`），改一条要同时看另一条 —— 两者同时生效会报重复成员（理由与生成器那套同形，见 `memory/modules/VeloxDev.Core.Generator/architecture.md` §五）。
 
 ---
@@ -131,11 +131,11 @@
 | WinUI | 9 个文件名逐个相同 —— 唯一可直接对照的 |
 | Avalonia | 多一个 `PlatformDetection.cs`（10 个） |
 | MAUI | **没有 `WorkflowCanvasTransformBehavior.cs`**（换成 `WorkflowLinkOverlay.cs`），其余同 WPF 的 9 个 |
-| Jalium | **七角色的可继承基类**（`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowLinkView` / `WorkflowGridDecorator` / `WorkflowTemplateSelector` / `WorkflowMinimapOverlay` / `WorkflowSlotView` / `WorkflowPortGeometry` / `WorkflowPortLayout` + `IWorkflowTemplateSelector`）+ 池化三件套（`ViewPool.cs` / `ViewManager.cs`），共 12 文件 |
+| Jalium | **9 个附着行为/池文件**（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds` + `WorkflowMinimapOverlay` / `ViewPool` / `ViewManager`）；与 WPF 的差异是**没有 `WorkflowCanvasTransformBehavior`**（变换发在 `WorkflowSurfaceBehavior.CanvasTransform` 上）、多一个 `WorkflowLinkBounds` |
 | WinForms | **基类 + 附着行为混合**：21 个文件，除 WPF 那套外还带 `WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` / `WorkflowGridDecorator` / `WorkflowLinkView` / `WorkflowTemplateSelector` / `WorkflowSurfaceColors` / `WorkflowSurfaceGraphics` / `WorkflowSurfaceGrid` / `ModelChangeRelay` / `IWorkflowSurfaceNodeView` / `IWorkflowMinimapScrollSource` / `NativeWindowStyleHelper`（多出来的，命名也对不上） |
 | Razor | `Attached/Workflow/` 下 **11 个 `.cs` + 7 个 `.razor`**（组件即角色），**完全没有 `ViewManager`**（`git grep -ln "class ViewManager" -- Src/Adapters/VeloxDev.Razor` 零命中），另有 `WorkflowPresentation.cs` / `WorkflowRuntimeIds.cs` / `WorkflowGeometryScope.cs` |
 
-另外两条与「搬」有关的既有事实：**WPF 与 WinForms 的 csproj TFM 三元组逐字相同**（`netframework4.6.1;net5.0-windows;netcoreapp3.0`）；`WorkflowGridDecorator` 现在 **Razor / Jalium / WinForms 三家放在适配器里**（Jalium 发的是可继承基类），WPF 把它放在模板包里（`memory/modules/Templates/adapters/wpf.md` §一）。
+另外两条与「搬」有关的既有事实：**WPF 与 WinForms 的 csproj TFM 四元组逐字相同**（`netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`）；`WorkflowGridDecorator` 现在 **Razor 与 WinForms 两家放在适配器里**，WPF 与 Jalium 把它放在模板包里（`memory/modules/Templates/adapters/wpf.md` §一）。
 
 其余注册位置（`VeloxDev.slnx`、7 个模板条目、两套 demo、skill 平台页、`adapters/<平台>.md`）见 `memory/modules/WorkflowSystem/extension.md` §4.3，不重复。
 

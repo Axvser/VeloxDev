@@ -1,6 +1,6 @@
 # VeloxDev.Core.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Test/`（140 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；120 个 `[TestClass]`，1030 个 `[TestMethod]`）
+> 代码：`Src/Core/VeloxDev.Core.Test/`（152 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；132 个 `[TestClass]`，1129 个 `[TestMethod]`）
 > 被测：`Src/Core/VeloxDev.Core/`（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj:5` 是五目标 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Extension.Test/`（那个引 `Lib`、测 AI 工具面）。两者的共享面只有「同样一行并行设置」。
 
@@ -58,7 +58,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | mock 库 | **没有**。没有 Moq / NSubstitute / FakeItEasy | 全 csproj 的 `PackageReference` 只有 MSTest、coverlet.collector 与一个 `Microsoft.CodeAnalysis.CSharp`（`:31`，供直驱生成器），无一 mock 库 |
 | 断言命名空间 | 全局注入 `Microsoft.VisualStudio.TestTools.UnitTesting` | `:35` |
 | 全局 using | 只有两条：`VeloxDev.Threading`、`VeloxDev.TimeLine` | `GlobalUsings.cs` |
-| 源生成器 | **已引用**（2026-10-02 起）→ 可以 `new VeloxDev.Generators.MVVM()` / `new Command()` 直驱生成器；csproj 把生成器项目同时以 `OutputItemType="Analyzer"` 与普通 `Reference` 引入，并钉 `Microsoft.CodeAnalysis.CSharp` 4.3.1 | `VeloxDev.Core.Test.csproj:27-32` |
+| 源生成器 | **已引用**（2026-10-02 起）→ 可以 `new VeloxDev.Generators.MVVM()` / `new Command()` 直驱生成器；csproj 把生成器项目同时以 `OutputItemType="Analyzer"` 与普通 `Reference` 引入，并钉 `Microsoft.CodeAnalysis.CSharp` 4.8.0 | `VeloxDev.Core.Test.csproj:27-32` |
 | `NoWarn` | `MSTEST0032`、`MSTEST0037`、`CS0067` | `:8` |
 
 **手写替身才是本模块的基础设施**（没有 mock 库的替代品）：
@@ -87,8 +87,8 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 
 | 项 | 值 |
 |---|---|
-| `[TestMethod]` 条数 | **1030**（2026-10-04 在树里数出；另有 Extension.Test 的 473） |
-| `[TestClass]` 条数 | **120**（同一日数出） |
+| `[TestMethod]` 条数 | **1129**（在树里数出；另有 Extension.Test 的 642） |
+| `[TestClass]` 条数 | **132**（同上） |
 | 全量耗时 | **30 s** —— **不可复核**（提交信息里的旧值，没有可重跑的依据） |
 | 8 次连跑的失败次数 | **1** —— **不可复核**（同上；原因见 §六）。**`MVVM/` 已不是来源**：2026-10-01 重写为 TCS 门控后连跑全绿 |
 
@@ -103,7 +103,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | 测试目录 | 文件数（其中 `[TestClass]`） | 测什么 |
 |---|---|---|
 | `TransitionSystem/` | 26（26） | 采样循环、调度器、帧集、pacer、链与 `Repeat`、内建采样器、缓动 |
-| `WorkflowSystem/` | 51（47：30 直接 + 17 `CompilerEx/`；`CompilerEx/` 另有 `ProbeGraph.cs`/`ProbeNodes.cs`，`Support/` 另有 `WorkflowInputTestBase.cs`/`WorkflowTestKit.cs`，共 4 个非测试文件） | 树 / 节点 / slot 枚举 / 虚拟化数学 / 编译运行 |
+| `WorkflowSystem/` | 53（49：32 直接 + 17 `CompilerEx/`；`CompilerEx/` 另有 `ProbeGraph.cs`/`ProbeNodes.cs`，`Support/` 另有 `WorkflowInputTestBase.cs`/`WorkflowTestKit.cs`，共 4 个非测试文件） | 树 / 节点 / slot 枚举 / 虚拟化数学 / 编译运行 |
 | `AI/` | 9（9） | 工具调用与上下文拼装 |
 | `Timing/` | 6（5；`FakeTimeSource.cs` 非测试） | 时钟、两类采样器 |
 | `TimeLine/` | 4（4） | Tickable 总线与管理器 |
@@ -111,18 +111,18 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | `DynamicTheme/` | 2（2） | 主题切换 |
 | `AspectOriented/` | 2（1；`AopFixture.cs` 非测试） | AOP 代理与钩子 |
 | `MVVM/` | 33（22） | `VeloxCommand` 全语义（并发/排队/锁/中断/取消/事件时序/异常路径/CTS 释放/完成等待/忙碌状态/事件编组/分配回归）+ 生成器签名覆盖 + `ObservableCollectionTracker` + `CommandEventArgs`；11 个非测试文件（`CommandTestKit.cs`、各 `*ViewModel.cs`、`GeneratorProbe.cs` 等） |
+| `Serialization/` | 10（10） | 归档序列化：金样本、读写器 / 序列化器的边界与文本拼写、注册表所有权、`[Archive]` 诊断 |
 | 根目录 | 3 | `GlobalUsings.cs`、`MSTestSettings.cs`、`TestHosts.cs`（三者都不是测试） |
 
 **哪些 Core 主题目录没有对应测试目录**：
 
 | Core 目录 | 情况 |
 |---|---|
-| `Src/Core/VeloxDev.Core/Interfaces/`（42 个 .cs） | 只有接口与少量数据（`TimeSample` 等），没有专属测试目录；行为由各实现侧的测试覆盖 |
-| `Src/Core/VeloxDev.Core/Serialization/`（7 个 .cs） | **零测试**：`VeloxJson*` 由生成器产出侧驱动，测试项目里没有直接引它 |
+| `Src/Core/VeloxDev.Core/Interfaces/`（43 个 .cs） | 只有接口与少量数据（`TimeSample` 等），没有专属测试目录；行为由各实现侧的测试覆盖 |
 | `Src/Core/VeloxDev.Core/Lifetime/`（`IApplicationState.cs`） | 零测试目录 |
 | `Src/Core/VeloxDev.Core/Threading/`（4 个 .cs） | 零直接测试，只经由 `TestHosts.cs` 的宿主间接走到 |
 
-（`Src/Core/VeloxDev.Core/AspectOriented/` 曾在这张表里，**现在有测试了** —— 见 `AspectOriented/` 目录。`Properties/` 只有一个 `AssemblyInfo.cs`，不算主题目录。）
+（`Src/Core/VeloxDev.Core/AspectOriented/` 曾在这张表里，**现在有测试了** —— 见 `AspectOriented/` 目录。`Src/Core/VeloxDev.Core/Serialization/` 也曾在这张表里，**现在有测试了** —— 见 `Serialization/` 目录。`Properties/` 只有一个 `AssemblyInfo.cs`，不算主题目录。）
 
 **已知无测试的入口（结构性缺口，不是疏漏）：**
 

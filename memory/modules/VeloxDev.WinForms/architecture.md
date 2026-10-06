@@ -1,9 +1,9 @@
 # VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/`。**32 个 .cs、7489 行**（`Attached/Workflow/` 21 个 6570 行，最大 `WorkflowTreeView.cs` 1288、`WorkflowSlotLayoutBehavior.cs` 775、`WorkflowSurfaceBehavior.cs` 732、`WorkflowNodeDragBehavior.cs` 529、`WorkflowSlotView.cs` 437、`WorkflowNodeView.cs` 423；`PlatformAdapters/` 10 个 893 行，最大 `ThemeValueConverters.cs` 473、`Transition.cs` 138、`UIThreadInspector.cs` 86；`PlatformAdapters/Samplers/` 1 个 23 行；顶层 `GlobalUsings.cs` 3 行）。同目录另有一份 `README.md`（245 行）。
-> **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'` = **32**。只写 `'.../**/*.cs'` 得 **31** —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这 1 个）。
+> 代码：`Src/Adapters/VeloxDev.WinForms/`。**34 个 .cs、7927 行**（`Attached/Workflow/` 23 个 6998 行，最大 `WorkflowTreeView.cs` 1405、`WorkflowSlotLayoutBehavior.cs` 775、`WorkflowSurfaceBehavior.cs` 636、`WorkflowNodeDragBehavior.cs` 529、`WorkflowLinkAttachment.cs` 486、`WorkflowNodeAttachment.cs` 402；`PlatformAdapters/` 9 个 903 行，最大 `ThemeValueConverters.cs` 496、`Transition.cs` 158、`TransitionInterpreter.cs` 96、`UIThreadInspector.cs` 90；`PlatformAdapters/Samplers/` 1 个 23 行；顶层 `GlobalUsings.cs` 3 行）。同目录另有一份 `README.md`（245 行）。
+> **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'` = **34**。只写 `'.../**/*.cs'` 得 **33** —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这 1 个）。
 >
-> 本文只写「读完这 32 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+> 本文只写「读完这 34 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台，不存在平台轴。它在三条轴上的平台差异分别落在
 > `memory/modules/WorkflowSystem/adapters/winforms.md`、`memory/modules/TransitionSystem/adapters/winforms.md`、`memory/modules/Templates/adapters/winforms.md`，本文**指路不抄**。
@@ -30,7 +30,7 @@
 
 ## 二、这套适配器现在「给」什么：整套表面（2026-10-03 重构）
 
-这家**不再是「薄适配器」**。与 Jalium 同批，它按 [adapter-base-class-specifications.md](../specifications/adapter-base-class-specifications.md) 的思路，把**平台机制整体搬进适配器基类**，模板/宿主只派生或赋参数。旧的「网格装饰器/小地图/连线视图的实现一个都没有」已是历史 —— 现在三种实现都在包里。
+这家**不再是「薄适配器」**。2026-10-03 起它按 [adapter-base-class-specifications.md](../specifications/adapter-base-class-specifications.md) 的思路，把**平台机制整体搬进适配器基类**，模板/宿主只派生或赋参数。旧的「网格装饰器/小地图/连线视图的实现一个都没有」已是历史 —— 现在三种实现都在包里。
 
 **基类层（新，宿主派生）：**
 
@@ -60,7 +60,7 @@
 
 **没有属性系统、没有 `DataContext`、没有注册表。** 全模块 grep `ModuleInitializer` / `[assembly:` 零命中，唯一的静态构造是 `PlatformAdapters/Interpolator.cs:7-10`（注册采样器）。状态一律存在 `ConditionalWeakTable<Control, State>` 里，附着属性退化成静态 `Get`/`Set`。
 
-**名字仍是唯一的接线语言。** 所有 `Set*Name` 立即解析，解析器是 `FindControlByName`（`WorkflowSurfaceBehavior.cs:691`）：**递归遍历宿主子树 + `Ordinal` 比较**，取第一个命中。⇒ 与 WPF 的 `NameScope` 不同：只管宿主子树、跨容器/非子孙一律找不到、**找不到不抛也不报**，只在那条数据推送处静默跳过。
+**名字仍是唯一的接线语言。** 所有 `Set*Name` 立即解析，解析器是 `FindControlByName`（`WorkflowSlotLayoutBehavior.cs:652`）：**递归遍历宿主子树 + `Ordinal` 比较**，取第一个命中。⇒ 与 WPF 的 `NameScope` 不同：只管宿主子树、跨容器/非子孙一律找不到、**找不到不抛也不报**，只在那条数据推送处静默跳过。
 
 **三个开关各做什么（这家最容易误判的一处）：**
 
@@ -89,8 +89,8 @@
 
 | 事实 | 行 | 后果 |
 |---|---|---|
-| `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0` | `:4` | 七家里只有这家与 WPF 是这个三元组 |
-| `UseWindowsForms` + `SuppressTfmSupportBuildWarnings` | `:6`、`:9` | 三元组里 `netcoreapp3.0` 不带 `-windows`，靠后者压掉兼容告警（WPF 同形） |
+| `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` | `:4` | 七家里只有这家与 WPF 是这个四元组 |
+| `UseWindowsForms` + `SuppressTfmSupportBuildWarnings` | `:6`、`:9` | 四元组里 `netcoreapp3.0` 不带 `-windows`，靠后者压掉兼容告警（WPF 同形） |
 | `Nullable` + `ImplicitUsings` + `LangVersion latest` | `:5`、`:7`、`:8` | 全模块开可空 |
 | `GeneratePackageOnBuild`（`:10`）+ `<Version>10.0.0</Version>`（`:12`） | — | 与其余六家同；**没有** `GenerateDocumentationFile` |
 | Debug → `ProjectReference`（`:23`）／非 Debug → `PackageReference VeloxDev.Core 10.0.0`（`:24`） | — | 与生成器那套双轨同形；包里唯一的依赖是 Core |
@@ -136,7 +136,7 @@
 | 网格/标尺调色板与间距 | `Attached/Workflow/WorkflowGridDecorator.cs` |
 | 「item 类型 → 视图」的工厂 | `Attached/Workflow/WorkflowTemplateSelector.cs` / `ViewManager.cs:14` 的 `IWorkflowTemplateSelector` |
 | 滚轮缩放 / Ctrl 判定 / 消息过滤器 | `Attached/Workflow/WorkflowSurfaceBehavior.cs`（`SetZoomEnabled` `:170`、过滤器 `:47`） |
-| 名字解析、`Refresh` 推给装饰器/小地图的偏移 | 同上（`FindControlByName` `:691`；`Refresh` `:417`） |
+| 名字解析、`Refresh` 推给装饰器/小地图的偏移 | 同上（`FindControlByName` `WorkflowSlotLayoutBehavior.cs:652`；`Refresh` `:417`） |
 | 节点拖拽的落点、坐标宿主、拖拽期重画 | `Attached/Workflow/WorkflowNodeDragBehavior.cs` |
 | 插槽锚点写回与同步时机（含唯一的同步入口 `SyncNow`） | `Attached/Workflow/WorkflowSlotLayoutBehavior.cs` |
 | 插槽两阶段连接手势 | `Attached/Workflow/WorkflowSlotConnectionBehavior.cs` |

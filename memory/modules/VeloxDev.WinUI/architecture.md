@@ -6,7 +6,8 @@
 > `PlatformAdapters/Samplers/` 10 个 743 行，最大 `TransformSampler.cs` 207、`BrushSampler.cs` 199；顶层 `GlobalUsings.cs` 3 行）。
 > **计数写法**：`git ls-files Src/Adapters/VeloxDev.WinUI | grep -c '\.cs$'`。
 > 只写 `'Src/Adapters/VeloxDev.WinUI/**/*.cs'` 会得到 **28** —— git 的 `**/` 不匹配**目录本级**的文件，
-> 漏掉的正是唯一一个平地文件 `GlobalUsings.cs`（补 `'Src/Adapters/VeloxDev.WinUI/*.cs'` 得 1 个）。
+> 漏掉的正是唯一一个平地文件 `GlobalUsings.cs`。而 `'Src/Adapters/VeloxDev.WinUI/*.cs'` 在 git 里同样得 **29**
+> （`*` 跨 `/`，不是只匹配本级），所以别指望靠它补那一个。
 > **七家适配器每家都正好漏这 1 个**，所以「28」这个数字一出现就是同一个错法。
 >
 > 本文只写「读完这 29 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
@@ -230,7 +231,7 @@ return accepted;
 | 让某个 WinUI 类型可动画 | `PlatformAdapters/Samplers/` + `PlatformAdapters/Interpolator.cs:14-23` 的注册表 |
 | 主题字符串 → 值 | `PlatformAdapters/ThemeValueConverters.cs`（含 `ThemeResourceLookup`，会递归 `ThemeDictionaries` 与 `MergedDictionaries`） |
 | 包结构、TFM、rid、双轨引用 | `VeloxDev.WinUI.csproj` |
-| **宿主怎么把这些接起来（最小可读样本）** | `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/` 下的三个 `.xaml`：`TreeView.xaml`（画布宿主 + 装饰器 + 视图池 + 小地图）、`NodeView.xaml`（节点模板 + 插槽布局 + 节点拖拽）、`SlotView.xaml`（插槽连接）。**只看 `.xaml`；`.xaml.cs` 见 §五·1** |
+| **宿主怎么把这些接起来（最小可读样本）** | `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/` 下的五个 `.xaml`：`TreeView.xaml`（画布宿主 + 装饰器 + 视图池 + 小地图）、`NodeView.xaml`（节点模板 + 插槽布局 + 节点拖拽）、`SlotView.xaml`（插槽连接）、`LinkView.xaml`（连线视图）、`InfoOverlay.xaml`（浮层）。**只看 `.xaml`；`.xaml.cs` 见 §五·1** |
 
 ---
 

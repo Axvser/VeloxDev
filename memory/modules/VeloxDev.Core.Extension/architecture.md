@@ -1,6 +1,6 @@
 ﻿# VeloxDev.Core.Extension — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension/`（59 个源 .cs，`Agent/` 6 + `Agent/MCP/` 8 + `Agent/Skills/` 11 + `Agent/SubAgents/` 6 + `Agent/Pipelines/` 7 + `Agent/Dashboard/` 5 + `Agent/Workflow/` 5 + `Agent/Workflow/Functions/` 6，外加根目录 `AgentEx.cs`、`CheckpointEx.cs`、`CompiledGraphEx.cs`、`ComponentModelEx.cs`、`Compat/NotNullWhenAttribute.cs`）。
+> 代码：`Src/Core/VeloxDev.Core.Extension/`（59 个源 .cs，`Agent/` 6 + `Agent/MCP/` 8 + `Agent/Skills/` 11 + `Agent/SubAgents/` 6 + `Agent/Pipelines/` 7 + `Agent/Dashboard/` 5 + `Agent/Workflow/` 5 + `Agent/Workflow/Functions/` 7，外加根目录 `AgentEx.cs`、`CheckpointEx.cs`、`CompiledGraphEx.cs`、`Compat/NotNullWhenAttribute.cs`）。
 > **依赖**：`Src/Core/VeloxDev.Core/AI/`（命名空间 `VeloxDev.AI`，20 个文件）。本模块**是它的调用方**，Core 对本科目零引用。
 > **外部包**：MAF 固定在 `Microsoft.Agents.AI` **1.22.0**（`Microsoft.Extensions.AI` 必须 ≥ 10.10.0，`ModelContextProtocol` 2.2.0）。MAF 有 51 个类型标着 `[Experimental]`（MAAI001，此数不可复核），**整个 `Microsoft.Agents.AI.Compaction` 命名空间在内** —— 见 `native-capabilities.md`。
 > 嵌入资源：`Resources/Workflow/{en,zh}/{References,Safety,Skills}/`，32 个 .md。
@@ -107,8 +107,8 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 的契约逐条一致（差别只在门是普通 `bool`、非原子；眼下都从主线程来，所以行为正确）⇒ **不要再叠第二套**；**Blazor 压根不
 在这两个事件上刷新**（页面既不订阅 `ToolCalled` 也不订阅 `VisualRefreshRequested`，而是反应式重渲：`Nodes`/`Links` 的 `CollectionChanged`、`Controller.PropertyChanged`、`Layout.PropertyChanged`，外加 `MCP.Status.PropertyChanged` —— `Workflow.razor.cs:77-89` 的订阅、`:146-150` 的处理器），所以那条前提在它身上不成立。
 
-**顺带一条零调用者**：`AgentHelper.VisualRefreshRequested`（demo 的 Lib，`Helper/AgentHelper.cs:189`）**声明了、七家都订阅了、
-从来没有人 raise**。所以七家那份订阅一直是空的 —— 真正的触发只有 `ToolCalled`。（这类"声明了没人发"的面，本模块 §六 有专节。）
+**顺带一条零调用者**：`AgentHelper.VisualRefreshRequested`（demo 的 Lib，`Helper/AgentHelper.cs:189`）**声明了、六家订阅了（Blazor 不订阅）、
+从来没有人 raise**。所以那六家那份订阅一直是空的 —— 真正的触发只有 `ToolCalled`。（这类"声明了没人发"的面，本模块 §六 有专节。）
 
 ## 三点五、编译运行的控制面（2026-09-27 起）
 

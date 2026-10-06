@@ -79,7 +79,7 @@
 
 省略 `allowedTools` = 继承父**当前启用的全部**（`:460-470`），**含变更类**：`CreateNode` / `DeleteNode` / `ExecuteNode` / `ExecuteCommandOnNode` 都在里面。传 `[]` = **一个工具都不给**，与省略不是一回事（`SubAgentRequest.AllowedTools` 的注释 `SubAgentScope.cs:36` 与 `SubAgentNarrowingTests` 里那条断言）。
 
-**2026-09-22 之前，省略的默认是「父的只读半面」**（`IsQueryOnlyTool` 过滤 + `NoChildMayHold` 减法 + 无 UI 上下文闸门，三样现在都没了）。口径改成「省略即与父同权」是用户定的（「Mcp、Skill、Tools 原样提供给子代理」，且明确选择了连结构闸一起取消）：**白名单从此是主动收窄的唯一手段**。`IsQueryOnlyTool`（`WorkflowAgentToolkit.cs`）随之删除 —— 底层 `IsQueryTool` 仍被 `BuildQueryToolNames` 用，保留。
+**2026-09-22 之前，省略的默认是「父的只读半面」**（`IsQueryOnlyTool` 过滤 + `NoChildMayHold` 减法 + 无 UI 上下文闸门，三样现在都没了）。口径改成「省略即与父同权」是用户定的（「Mcp、Skill、Tools 原样提供给子代理」，且明确选择了连结构闸一起取消）：**白名单从此是主动收窄的唯一手段**。`IsQueryOnlyTool`（`WorkflowAgentToolkit.cs`）随之删除 —— 底层的只读集合仍在：`BuildQueryToolNames()` 建出 `QueryToolNames`，`IsQueryTool` 读它，两者都保留。
 
 **这一口径把「名单」变成了一份承诺，而承诺必须与孩子真的能做什么一致**：孩子拿到的每一个名字，都必须在**它自己的** scope 上存在且可调用。两条推论：
 ① 五个管理工具、技能工具、MCP 工具的名字都要进 `everyName`（上表），否则关停循环与授权清单对不上；

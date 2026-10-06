@@ -96,8 +96,8 @@
 这是 2026-10-04 起这家最重的一段新增，模板只留资源、不留交互代码：
 
 - **`LinkMenuKey` 是资源键，不是菜单本身**（`:95-108`，注释 `:99-102` 解释了为什么不能用 `{StaticResource}`：属性挂在根元素上，静态资源会在定义它的字典解析之前求值）。表面在每次 `Refresh` 里重查一次资源（`WireLinkMenu`），开合时自己置/放 `WorkflowInput.IsSuspended`；`UnwireLinkMenu` 在 `Detach` 时把菜单与输入路由两边的订阅都摘掉。菜单的 `DataContext` 就是被点的那条连线（`ShowLinkMenu` `:246-278`，画布坐标 → 屏幕坐标含 DPI 折算，netframework 走呈现源、其余走 `VisualTreeHelper.GetDpi`，`:262-271`）。
-- **悬停 / 按下 / 离开归 Core 判**：`OnPreviewMouseMove`、`OnLinkPointerEntered`、`OnLinkPointerExited`、`OnLinkPointerPressed`、`OnLinkPointerReleased`、`OnLinkPointerWheel` 把指针事件翻成标准输入（`WorkflowPointer*EventArgs`）交给 `WorkflowInput.For(viewModel).Route(...)`，命中由 `HitTestVisibleLinks` 判。拉线时（`VirtualLink.IsVisible`）不转发，免得沿途实连线一路亮起。
-- **键盘焦点由表面接力**：`FocusHoveredLink`（`:772 起`）优先把焦点交给画出那条线的控件，**不可聚焦时退回宿主本身**（模板/Trimmed 的连线视图默认就不可聚焦）—— 否则「悬停 + Delete」在生成出来的工程里没有路由。`OnLinkKeyDown`（`:789 起`）只在 `Key.Delete` 且有悬停连线时发 `KeyEvent(InputKey.Delete)`，走冒泡不隧道（聚焦的输入框先赢）。
+- **悬停 / 按下 / 离开归 Core 判**：`OnPreviewMouseMove`、`OnLinkPointerEntered`、`OnLinkPointerExited`、`OnLinkPointerPressed`、`OnLinkPointerReleased`、`OnLinkPointerWheel` 把指针事件翻成标准输入（`Pointer*EventArgs`，前缀无 `Workflow`）交给 `WorkflowInput.For(viewModel).Route(...)`，命中由 `HitTestVisibleLinks` 判。拉线时（`VirtualLink.IsVisible`）不转发，免得沿途实连线一路亮起。
+- **键盘焦点由表面接力**：`FocusHoveredLink`（`:772 起`）优先把焦点交给画出那条线的控件，**不可聚焦时退回宿主本身**（模板/Trimmed 的连线视图默认就不可聚焦）—— 否则「悬停 + Delete」在生成出来的工程里没有路由。`OnLinkKeyDown`（`:789 起`）在**有悬停连线时对任意按键都转发**（`Wf.KeyDownEventArgs`，`Key` 原样带过，不只看 `Key.Delete`），走冒泡不隧道（聚焦的输入框先赢）。
 - **视口恢复**：`CaptureViewportRestore`（`:282-295`）只在「换了树」时把存档位置排进待恢复（引用比较 `LastRestoreTree`）；`QueueViewportRestore`（`:299-321`）在 `DispatcherPriority.Loaded` 才滚，避免 `DataContext` 变化那一刻 Extent 还是 0 被夹没。
 
 ### 3.4 画布变换的值写在**宿主**上
@@ -128,8 +128,8 @@
 
 | 事实 | 行 | 后果 |
 |---|---|---|
-| `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0` | `:7` | 七家里只有这家与 WinForms 是这个三元组；`netcoreapp3.0` 是三元组里唯一不带 `-windows` 的，`UseWPF`（`:10`）由此成立，配 `SuppressTfmSupportBuildWarnings`（`:18`）压告警 |
-| 三元组里**没有 netstandard2.0** | — | `PlatformAdapters/Transition.cs:224-253` 的 `#if !NETSTANDARD2_0`（4 个 `System.Numerics` 重载）在这家**恒为真**。六家写了这个守卫，只有 Avalonia（`netstandard2.0;net6.0`）那条是真的 |
+| `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` | `:7` | 七家里只有这家与 WinForms 是这个四元组；`netcoreapp3.0` 是四元组里唯一不带 `-windows` 的，`UseWPF`（`:10`）由此成立，配 `SuppressTfmSupportBuildWarnings`（`:18`）压告警 |
+| 四元组里**没有 netstandard2.0** | — | `PlatformAdapters/Transition.cs:224-253` 的 `#if !NETSTANDARD2_0`（4 个 `System.Numerics` 重载）在这家**恒为真**。六家写了这个守卫，只有 Avalonia（`netstandard2.0;net6.0;net8.0`）那条是真的 |
 | Debug → `ProjectReference`（`:26`）／非 Debug → `PackageReference`（`:27`） | — | 与生成器那套双轨同形；包里唯一的依赖是 `VeloxDev.Core` 10.0.0 |
 | `GeneratePackageOnBuild`（`:12`）+ `GenerateDocumentationFile`（`:6`） | — | 全仓只有 Core、Jalium、WPF 三个项目生成 XML 文档 |
 | `NoWarn` 写成**一条** `1573;1591`（`:5`，注释在 `:4`） | — | 正确形；过去「两条属性后者覆盖前者」的坑已修（见 §五·2） |

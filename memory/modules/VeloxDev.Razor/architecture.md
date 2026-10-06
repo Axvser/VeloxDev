@@ -229,7 +229,7 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 | 事实 | 行 | 后果 |
 |---|---|---|
 | `Microsoft.NET.Sdk.Razor` | `:1` | 唯一让 `.razor` 成为编译输入、`wwwroot/` 成为静态资源的 SDK |
-| `<TargetFramework>net6.0</TargetFramework>`（**单一**） | `:4` | 七家里只有这家与 Jalium 是单 TFM；`Transition.cs` 的 `#if !NETSTANDARD2_0` 因此恒真 |
+| `<TargetFrameworks>net6.0;net8.0</TargetFrameworks>`（**两个**） | `:4` | 七家里只有 Jalium 是单 TFM；这里没有 `netstandard2.0`，所以 `Transition.cs` 的 `#if !NETSTANDARD2_0` 恒真 |
 | `Nullable` / `ImplicitUsings` / `AddRazorSupportForMvc` / `LangVersion` | `:5-9` | — |
 | `<FrameworkReference Include="Microsoft.AspNetCore.App" />` | `:22` | 提供 `ComponentBase` / `IJSRuntime` / `DotNetObjectReference`；**不是** `PackageReference` |
 | Core 双轨（Debug `ProjectReference` / 非 Debug `PackageReference` 10.0.0） | `:26-27` | 与生成器那套同形；改一条要同时看另一条 |
@@ -255,19 +255,18 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 4. **有 5 个 ES 导出在 C# 侧零调用点。** 底部 `export`（`:1378-1396`）共 **19** 条，全仓按名字数调用点：
    `getCanvasTranslate` / `getViewportSize` / `scrollToRatio` / `scrollByDelta`(若导出) / `ensureCanvasSize` 等少数几条为 0
    （具体集合以 `grep 'export const'` 与 C# 侧 `InvokeVoidAsync/InvokeAsync` 名字为准）。其中 `ensureCanvasSize` 的注释写着
-   「工作区缩放路径必须让 DOM 宿主长大」，但缩放路径走的是 `applyZoomSurface`；`scrollToPosition` 则是 **demo 通过
-   `window.veloxdevWorkflow` 全局调的**，不走 export。⇒ 删这些之前先确认没有宿主在用它们 —— 它们是 `window.veloxdevWorkflow` 的公开面。
+   「工作区缩放路径必须让 DOM 宿主长大」，但缩放路径走的是 `applyZoomSurface`；`scrollToPosition` 则由适配器**走模块导入**调（`_module.InvokeVoidAsync("scrollToPosition", …)`，`WorkflowSurfaceBehavior.razor.cs:568`）。⇒ 删这些之前先确认没有宿主在用它们 —— 它们是 `window.veloxdevWorkflow` 的公开面。
 5. **`ScrollViewerId` / `CanvasId` 之外，宿主还要给 `Minimap` 传一次同样的 id。** surface 的 id 只管自己，
    小地图要**再传一次** —— 两者是各自独立的参数，不是级联。
 6. **`WorkflowGeometryScope` 是 `AsyncLocal`，不是线程静态。** `Attached/Workflow/WorkflowGeometryScope.cs` 用
    `AsyncLocal<int>` 计深度，`IsZooming` 期间各几何写手自己让开（`WorkflowNodeDragBehavior.razor.cs`、`.razor.cs:279`）。
    ⇒ 一次缩放手势里所有 **await 之后仍在同一 `ExecutionContext`** 的代码都能读到它；但**放到 `Task.Run` 或另一个
    circuit 的线程上就读不到**。新增「缩放中让开」的写手时，先确认自己在那条 `AsyncLocal` 链上。
-7. **全模块没有一个 `_disposed` 标记 —— 但「没有标记」不等于「没有收尾」，两种既有收尾形状都有效。**
+7. **组件收尾不靠 `_disposed` 标记**（全模块唯一的 `_disposed` 在 `WorkflowGeometryScope.cs:37`，那是 `AsyncLocal` 作用域自己的幂等保护）—— 但「没有标记」不等于「没有收尾」，两种既有收尾形状都有效。
    其一是**退订**（`WorkflowGridDecorator` 订阅 `SurfaceViewportFeed` 后在 `Dispose` 里摘掉）。其二是**取消令牌**：
    `WorkflowMinimapOverlay` 的 `MarkDirty` 每次重建 `CancellationTokenSource`，`RebuildAfterThrottleAsync` 用
    `await Task.Delay(16, ct)` 当闸门，`DisposeAsync`（`:403` 附近）先 `Cancel` 再摘模型订阅。⇒ 新写「带延时 / 带订阅」的组件，
-   照这两种形状之一收尾即可；**不要**引一个全模块都还没有的标记。
+   照这两种形状之一收尾即可；**不要**给组件引一个本层还没有的标记。
 8. **`OnSlotLayoutBatch` 的解析现在是不变文化的。** `WorkflowSlotLayoutBehavior.razor.cs:72-73` 用 `NumberStyles.Float` + `InvariantCulture`；
    过去那条「`:70` 是漏网」的记录已不成立（2026-10-04 的「every number … culture-invariant」提交修掉了）。新增跨端数字解析时照这里的形状。
 9. **「Blazor Trimmed」这个 demo 并没有被裁剪。** `Examples/Workflow/Blazor Trimmed/Demo/Demo.csproj` 里

@@ -44,7 +44,7 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 | 坐标换算、缩放折叠、每帧记账 | 用哪个模板选择器 |
 | 反射读模型里的名字（标题、输入口、插槽标签） | |
 
-**模型事件也是基类的扩展点**（2026-10-03 用户定）：无标记语言的两家没有附加属性可挂，所以**基类必须为它管的那个角色提供可重写的钩子** ——
+**模型事件也是基类的扩展点**（2026-10-03 用户定）：无标记语言的 WinForms 没有附加属性可挂，所以**基类必须为它管的那个角色提供可重写的钩子** ——
 `WorkflowNodeView` 出 `OnMoving/OnMoved/OnResizing/OnResized/OnDeleting/OnDeleted`、`WorkflowSlotView` 出 `OnChannelChanging/OnChannelChanged`、
 `WorkflowTreeView` 出 `OnConnecting/OnConnected`（都 `protected virtual`，默认空实现）。基类自己用 `WorkflowEventRelay.Attach(...)` 接上模型事件并转发进这些钩子，
 宿主（模板产物）只需重写。转发逻辑在 Core 一份，七家共用 —— 不要在基类里重新订阅一遍 Helper 的事件。
@@ -174,26 +174,19 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 `WorkflowSurfaceGrid`（网格线判定与刻度标签格式化，此前在包内有**两份**逐字相同的私有副本）。
 校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform WinForms -Strict` 全绿。
 
-**Jalium 的七个角色**（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`，2026-10-05 转标记驱动后重写）：
-`WorkflowSurfaceBehavior`（宿主表面的 8 个附着属性）、`WorkflowSlotLayoutBehavior`（`slot.Anchor` 的唯一写回点）、
+**Jalium 的七个角色**（适配器在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`，2026-10-05 转标记驱动后重写；
+**网格装饰器与另外六家一样归模板**，见 §2.2）：
+`WorkflowSurfaceBehavior`（宿主表面的 9 个附着属性）、`WorkflowSlotLayoutBehavior`（`slot.Anchor` 的唯一写回点，走 Core 的 `SlotAnchorFromVisualCenter`）、
 `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds`
-（四个与 WPF 同名同形的行为）、`WorkflowGridDecorator`（**已是控件**，`Grid, IWorkflowGridDecorator`，
-16 个 DP）、`WorkflowMinimapOverlay`（14 个 DP）、`ViewPool` / `ViewManager`（用 Jalium 自己的
-`DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退）。**没有** `WorkflowTreeView`、
-三个 `*Attachment`、`WorkflowPortGeometry`、`WorkflowPortLayout`、`IWorkflowTemplateSelector` —— 那一整套已删。
+（与 WPF 同名同形的行为；`WorkflowLinkBounds` 是唯一刻意背离，见 §三）、`WorkflowMinimapOverlay`（22 个 DP）、
+`ViewPool` / `ViewManager`（用 Jalium 自己的 `DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退）。
+`workflow-grid-decorator` 模板产物是 `sealed class : Grid, IWorkflowGridDecorator`（15 个 DP）。
+**没有** `WorkflowTreeView`、三个 `*Attachment`、适配器里的 `WorkflowGridDecorator`、`WorkflowPortGeometry`、
+`WorkflowPortLayout`、`IWorkflowTemplateSelector` —— 那一整套已删。
 四个模板条目是 `TemplateClass.jalxaml` + `.jalxaml.cs`（node / slot / link / tree），三个仍是 `.cs`。
 校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict` 全绿
 （generated 7/7、built True、match 9 / expected-diff 2 / drift 0）。
 
-**六个角色是「基类 + 派生」，连线那一角色是「附加助手」**（2026-10-04，见 §2.1.1）。 曾经不是：`slot-view` 的产物一度是一份「端口在哪」的静态几何，
-**端口图形由卡片自己画成圆点**；现在 `WorkflowSlotView` 是一个真正的控件，卡片按 `WorkflowPortLayout` 托管
-一个实例在每个端口位置上，模板的 `slot-view` 条目是它的子类。剩下的 `WorkflowPortLayout` 是**设计值**
-（尺寸与端口位置），不是「因为造不出控件而留下的替代品」。
-
-**连线交互那层归属已决**（此前是这一项最大的纠结点，见 [item-template-specifications.md](item-template-specifications.md) §五最后一条）：
-Jalium 的连线命中/拖拽/虚拟预览**进了包**（`WorkflowTreeView` 的手势与 `WorkflowLinkAttachment` 的拖拽预览跳过），
-模板与 Trimmed demo 因此不必自绘那层 —— 交互在**适配器基类**里，生成的模板拿到的仍是「被动视觉 + 可覆写画法」。
-
-**外观那一半也归用户**（2026-10-04）：这两家的 `WorkflowLinkAttachment` **只画静息线、且只在用户调 `Paint` 时才画**；
+**外观那一半也归用户**（2026-10-04）：WinForms 的 `WorkflowLinkAttachment` **只画静息线、且只在用户调 `Paint` 时才画**；
 悬停光、焦点环、角标一律由用户的视图自己在 `OnPaint` / `OnRender` 里画，事件从助手上订
 （`PointerEntered` / `PointerLeft` / `PointerPressed` / `PointerReleased`，名字与 `IInputEvents` 一致）。

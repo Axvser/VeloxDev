@@ -182,7 +182,7 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 | 发布 | `dotnet publish -c Debug -r win-x64`，`<PublishAot>true</PublishAot>` —— 成功，**零 IL 警告** |
 | 运行 | 原生 exe 输出与 JIT 逐行一致：代理类型 = `VeloxDev.AopInterfaces.Probe_Global_AopProxy`，且 `proxy.GetType().Assembly == 消费者程序集` |
 | 覆盖 | 方法三阶段、`coverage` 替换、getter/setter 分离、字段+MVVM 特性那条路、`GetTarget` 反查、每实例缓存 |
-| 回归面 | Core 全量 947 个测试通过（2026-10-02 那次运行的计数，**不可复核** —— 当前 `Src/Core/VeloxDev.Core.Test/` 已有 1034 个 `[TestMethod]`）；`Examples/AOP/WPF`、`Examples/AOP/Avalonia` 均 0 警告 0 错误 |
+| 回归面 | Core 全量 947 个测试通过（2026-10-02 那次运行的计数，**不可复核** —— 当前 `Src/Core/VeloxDev.Core.Test/` 已有 1129 个 `[TestMethod]`）；`Examples/AOP/WPF`、`Examples/AOP/Avalonia` 均 0 警告 0 错误 |
 
 **两个曾经挡住 AOT 的点，现在都在生成期解决了**：`DispatchProxy`（`RequiresDynamicCode`，靠 `Reflection.Emit`）与 `ProxyEx` 里的 `dynamic`（需要 `Microsoft.CSharp` 运行期绑定器）。
 

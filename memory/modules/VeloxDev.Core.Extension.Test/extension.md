@@ -81,12 +81,12 @@
 | 工具线程归属 / 亲和性 | `Agent/Workflow/Functions/ToolThreadAffinityTests.cs`（`SingleThreadContext` 是唯一范本） |
 | 子代理的能力面（`Agent/SubAgents/`、`ToolCallLedger`、`WorkflowAgentScope.WithSubAgents`） | `Agent/SubAgents/` 那 9 个 `[TestClass]`，按职责分：窄化与两份名单 → `SubAgentNarrowingTests.cs`、一口锅与夹紧算术 → `SubAgentBudgetTests.cs`、能力授予（技能/MCP/自定义工具三轴）→ `SubAgentCapabilityGrantTests.cs`、名册隔离 / 深度 / 任意深度 → `SubAgentHierarchyTests.cs`、派发 / 等待 / 取消 / 超时 → `SubAgentDispatchTests.cs`、工具的 JSON schema 与可选参数 → `SubAgentToolSchemaTests.cs`、度量（token/时长）→ `SubAgentMetricsTests.cs`、树面板 → `SubAgentTreeViewModelTests.cs`、实时门控 → `SubAgentLiveTests.cs`。改之前先读 `memory/modules/VeloxDev.Core.Extension/sub-agents.md`，那里面写着哪几处是**故意**的（`ResetChain` 只向上、拒绝文案分叉、`[]` ≠ `null`） |
 | `Examples/Workflow/Common/Lib/` 里 `AgentHelper.Install` 的构造期行为 | **先把无 key 的机器想清楚**。`Install` 是 `async void`（`AgentHelper.cs:144`），里面 `Agent = await ProvideAgent`（`:149`）在缺 `API_KEY_DEEPSEEK` 时于 `:293` 抛，异常逃逸到线程池 → **测试宿主进程崩溃**。实测：无 key 跑全量，整轮在跑到 122~246 条之间被中止（计数是竞态的），被连坐的失败全是**正在跑的**子代理测试的超时，没有一条是完整的断言失败。根因在 demo（本仓库当前的选择是不动它），但**凡是构造 `TreeViewModel` + `AgentHelper` 的测试都踩在同一颗雷上**（`Examples/AgentTranscriptTests.cs:136,138`）。判据、复现与三条隔离实验写在 `memory/modules/VeloxDev.Core.Extension.Test/architecture.md` §四 |
-| 给某条测试引入进程级静态写入或真实时钟 | 自己加 `[DoNotParallelize]`，并照姊妹模块的风格在类注释里写明理由 —— 本项目**没有先例可抄** |
+| 给某条测试引入进程级静态写入或真实时钟 | 自己加 `[DoNotParallelize]`，并照姊妹模块的风格在类注释里写明理由 —— 本项目**只有一个先例**（`Agent/AgentTelemetryExtensionsTests.cs:23`） |
 
 ---
 
 ## 五、给这个模块写记忆 / 复核时的注意
 
 - 依据只能是 `.cs` / `.csproj` 的行号。`TestResults/*.trx` 是 gitignored 本地产物，**不能当依据**。
-- 本项目离线部分跑得快（约 0.7 s / 473 条），所以「多跑几遍」的成本很低 —— 但**它没有偶发失败的历史**这个说法要按下面两条拆开来看：稳定来自「离线部分没有真实时钟 + 0 个 `[DoNotParallelize]`」这两条代码事实；而**「无 key 的机器上红」不是偶发，是必现**（根因在 `Examples/` 的 `async void`，见 §四），只是以前整轮只要 0.45 s、赶不上那个竞态，现在整轮长了才露出来。
+- 本项目离线部分跑得快（约 0.7 s / 473 条），所以「多跑几遍」的成本很低 —— 但**它没有偶发失败的历史**这个说法要按下面两条拆开来看：稳定来自「离线部分没有真实时钟 + 只有 1 个 `[DoNotParallelize]`（`Agent/AgentTelemetryExtensionsTests.cs:23`）」这两条代码事实；而**「无 key 的机器上红」不是偶发，是必现**（根因在 `Examples/` 的 `async void`，见 §四），只是以前整轮只要 0.45 s、赶不上那个竞态，现在整轮长了才露出来。
 - 有 `API_KEY_DEEPSEEK` 时整轮 6–7 s，其中约 6 s 是那 6 条门控测试在真调模型。**报数字要说清是哪一种**，否则「本模块很快」和「本模块要跑 7 秒」听起来像在互相打脸。

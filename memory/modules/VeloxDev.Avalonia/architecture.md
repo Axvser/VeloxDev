@@ -94,7 +94,7 @@
 ## 七、`GlobalUsings.cs` 与 csproj
 
 - `GlobalUsings.cs` 只三条：`VeloxDev.TransitionSystem`、`VeloxDev.TransitionSystem.Abstractions`、`VeloxDev.Threading`。**七家逐字相同**（`git ls-files 'Src/Adapters/*/GlobalUsings.cs'` 全部核过）。所以这家的文件里看不到这三个 using 是正常的（`Interpolator.cs:9` 的 `InterpolatorCore`、`TransitionInterpreter.cs:7` 的 `TransitionInterpreterCore<>` 都靠它）。它**不含** `DynamicTheme` 与 `WorkflowSystem`；后者靠 §三.3 的命名空间嵌套，前者各文件自己写。
-- TFM：`netstandard2.0;net6.0`（`VeloxDev.Avalonia.csproj:4`）。**七家里只有这一家声明 `netstandard2.0`**（`grep -l netstandard2.0 Src/Adapters/*/*.csproj` 只命中它）。代价是**全模块只有两处条件编译**：`Transition.cs:238-263`（`System.Numerics` 的四个重载）与 `BoxShadowsSampler.cs` 的零调用者死代码，细节见 `TransitionSystem/adapters/avalonia.md` §二.6。
+- TFM：`netstandard2.0;net6.0;net8.0`（`VeloxDev.Avalonia.csproj:4`）。**七家里只有这一家声明 `netstandard2.0`**（`grep -l netstandard2.0 Src/Adapters/*/*.csproj` 只命中它）。代价是**全模块只有两处条件编译**：`Transition.cs:238-263`（`System.Numerics` 的四个重载）与 `BoxShadowsSampler.cs` 的零调用者死代码，细节见 `TransitionSystem/adapters/avalonia.md` §二.6。
 - 平台版本锚点 `AvaloniaVersion=11.1.0`（csproj:14），三处 `PackageReference` 共用（`:26-28`）：升版本改这一处。
 - 另外三条：`AvaloniaUseCompiledBindingsByDefault=true`（`:7`，所以 `{Binding $parent[local:TreeView].(behaviors:…)}` 这类写法按编译期绑定解析）、`GeneratePackageOnBuild=True`（`:8`）、`AvaloniaResource Include="Assets\**"`（`:22`）—— 最后一条指向的目录**在仓库里不存在**（`git ls-files` 与磁盘都没有 `Assets/`），空 glob，别按它去找资源。
 - `Debug` 走 `ProjectReference`、非 Debug 走 `PackageReference`（`:29-30`）是**七家统一形状**（版本 10.0.0），规则与原因见 `VeloxDev.Core.Generator/architecture.md` §五。

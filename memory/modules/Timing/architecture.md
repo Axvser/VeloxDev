@@ -95,7 +95,7 @@
 | | `UncompensatedTimeSampler` | `CompensatingTimeSampler` |
 |---|---|---|
 | 输出 | 距上次采样的**实测间隔** | **固定步数** + 每步时长 |
-| 状态 | 两个 `long`（`_lastTicks`/`_originTicks`） | 六个 `long`（`_acc`/`_earned`/`_delivered`/`_dropped`/`_lastTicks`/`_epoch`） |
+| 状态 | 两个 `long`（`_lastTicks`/`_originTicks`） | 七个 `long`（`_stepTicks`/`_acc`/`_earned`/`_delivered`/`_dropped`/`_lastTicks`/`_epoch`） |
 | 欠账 | 没有「欠」的概念 | 有，且**可被宽恕**（`_dropped`） |
 | 暂停后首帧 | 天然干净：源不前进，下次采样只覆盖 resume 之后的帧（`UncompensatedTimeSampler.cs:8-12`） | epoch 变了 → 基准归零（`CompensatingTimeSampler.cs:134-142`） |
 | 适用 | **帧循环**：一帧一个增量，不关心帧率 | **固定步物理/积分**：步数必须与时间成严格函数 |

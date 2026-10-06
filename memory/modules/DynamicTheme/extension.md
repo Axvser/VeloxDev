@@ -38,7 +38,7 @@
 
 `RunSwitch` 的第二个分支就是 `interpolator is null → ApplyImmediately`（`ThemeManager.cs:207-210`）。所以**不调它不会报错**，只是「有动画的切换」静默退化成瞬切。
 
-调用点只有 4 个 Examples + 测试：`Examples/Theme/WPF/Demo/App.xaml.cs:16`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:47`、`Examples/Theme/Avalonia/Demo/App.axaml.cs:25`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs:46`。**`Src/` 与 `Src/Adapters/` 里一个都没有** —— 这是纯用户责任。
+调用点只有 4 个 Examples + 测试：`Examples/Theme/WPF/Demo/App.xaml.cs:15`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs:39`、`Examples/Theme/Avalonia/Demo/App.axaml.cs:24`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs:41`。**`Src/Adapters/` 里一个都没有**；`Src/` 里只有测试在调（`Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs`，8 处）—— 对适配器而言这是纯用户责任。
 
 **官方做法**：`ThemeManager.SetPlatformInterpolator(new Interpolator());`（每家适配器各有一个 `Interpolator` 类型）。它同时也是「平台的 sampler 注册」被触发的时机。
 
@@ -94,11 +94,11 @@
 > **其它不支持。**
 
 原来 `ObjectConverter` 用 `TypeDescriptor.GetConverter(targetType)` 兜底，「任何带 TypeConverter 的 .NET 类型」
-都算数 —— 无界，裁剪器跟不了。**这条界只落在可 AOT 的三家**（Avalonia / MAUI / WinUI，已删）；
-**WPF 与 WinForms 保留宽的那条**：在那两家 `TypeDescriptor` 是**主路径**（`return converter.ConvertFrom(strValue)`），
-删掉是实打实的能力缩减，而 Windows Desktop 不能 NativeAOT，删了换不来任何 AOT 收益。
-**所以这不是漏改，是判过之后留的分歧。** 哪天要收窄那两家，先在**那两家**选一条：接受能力缩减，
-或者把该家主题真正用到的类型列成具名转换器（先盘清 demo 与宿主声明了哪些类型）。
+都算数 —— 无界，裁剪器跟不了。**现在无一家再用它**：`TypeDescriptor.GetConverter(Type)` 带
+`RequiresUnreferencedCode`（转换器要靠反射发现），一用整条主题转换在裁剪/AOT 下就被标成不可用，
+所以六家的 `ThemeValueConverters.cs` 统一改成**显式转换表**，并在注释里写明「刻意不用」
+（WPF `:258`、WinForms `:465`）。表外的类型返回 `null`（与转换失败同一条路）—— 需要更多类型的宿主
+自己写一个 `IThemeValueConverter`。**所以这不是判过之后留的分歧，是全仓统一后的结果，七家一致。**
 
 ### 2. 加一个主题类型（例如 `Solarized`）
 

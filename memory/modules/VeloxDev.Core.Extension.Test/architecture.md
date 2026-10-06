@@ -1,7 +1,7 @@
 # VeloxDev.Core.Extension.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（60 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；54 个 `[TestClass]`）
-> —— 2026-10-03 复核。本文其余处若与新的计数冲突，以本条为准。
+> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（93 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；85 个 `[TestClass]`，642 个 `[TestMethod]`）
+> —— 2026-10 复核。本文其余处若与新的计数冲突，以本条为准。
 > 被测：`Src/Core/VeloxDev.Core.Extension/`（AI 工具面，命名空间 `VeloxDev.AI.*`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Test/`。两者只共享「逐字相同的一行并行设置」，其余差异很大 —— 见 §六那张对照表。
 
@@ -82,7 +82,7 @@ csproj 的 `PackageReference` 只有 MSTest + coverlet 两个（`:14-15`），�
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **656**（2026-10-05 复核。含**门控**的真模型用例 **7** 条：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 473/472/399/391/382 都已过期） |
+| 测试条数 | **659**（2026-10-06 实测：**652 通过 + 7 跳过**。跳过的那 7 条即**门控**的真模型用例：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 473/472/399/391/382 都已过期） |
 | 耗时 | **2 s**（默认，真模型用例全部跳过；2026-10-05 实测）。开关打开时每条真模型用例另算，实测单条约 13 s |
 | 失败 | 0 |
 
@@ -129,7 +129,7 @@ System.InvalidOperationException: Environment variable 'API_KEY_DEEPSEEK' is not
 那么为什么**以前不红**：抛出的时机是竞态的 —— 异常从 `async void` 逃逸后由线程池接住，只有它恰好落在测试宿主收集结果的窗口内才会崩掉整轮。本模块原有的 281 条跑完只要 0.45 s，不够久也不够忙；加了 90 条子代理测试（它们各自在 `Thread.Sleep(5)` 轮询、把整轮拉长了十几倍）之后，它稳定地落进来了。**是「时长」还是「线程池压力」在起决定作用，我没有单独隔离**，能确定的是子代理那一批就是那个差。三条独立实验钉住这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除门控测试、只留下子代理那批（当时 94 条），仍然红**。
 
 **结论**：本模块自己的门控约定是成立的 —— `SubAgentLiveTests` 缺 key 时 `Assert.Inconclusive`，MSTest 4.0.2 下报成**已跳过**（`--filter FullyQualifiedName~Agent.SubAgents` 无 key = 96 通过 + 5 跳过，0 失败，0.42–0.45 s）。红的是全量轮次，根因在 `Examples/` 的 `async void`。**修它要动 demo，本仓库当前的选择是不动** —— 所以这条要一直记着，别把它误判成本模块的回归。
-**「子代理那批」现在是 110 条 `[TestMethod]`**（2026-10-04 实测 `grep -c` 于 `Agent/SubAgents/*.cs`，含 6 条门控），其余 **363** 条（473 − 110）。旧读数（362 / 281 其余 / 101 或 96 子代理）已过期；那条「历轮只动子代理那批」的观察本身仍然成立。
+**「子代理那批」现在是 110 条 `[TestMethod]`**（2026-10-04 实测 `grep -c` 于 `Agent/SubAgents/*.cs`，含 6 条门控），其余 **532** 条（642 − 110）。旧读数（473 / 362 / 281 其余 / 101 或 96 子代理）已过期；那条「历轮只动子代理那批」的观察本身仍然成立。
 
 ---
 
@@ -142,7 +142,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 [assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]
 ```
 
-但**全项目 0 个 `[DoNotParallelize]`**（姊妹模块有 12 个）。这个差异不是风格，是**结果**：本模块既没有进程级静态写入，也没有真实时钟断言，所以不需要摘出去。
+但**全项目只有 1 个 `[DoNotParallelize]`**（`Agent/AgentTelemetryExtensionsTests.cs:23`；姊妹模块有 16 个）。这个差异不是风格，是**结果**：本模块既没有进程级静态写入，也没有真实时钟断言，所以基本不需要摘出去。
 
 **子代理那一批没有改变这一点，但它把边界推近了一格**：`SubAgentDoubles.cs:106,535` 的两处 `Thread.Sleep(5)` 轮询带着 5000 ms 的墙钟超时，在满载的 CI 上是「真实时钟断言」的雏形。它今天仍然安全，因为超时只用来**把死锁变成失败**而不是断言性能 —— 一个卡住的 `GateChatClient` 会让测试红，而不会让它假绿。加到 `[DoNotParallelize]` 的门槛是「超时值本身成为断言对象」，不是「存在超时」。
 
@@ -156,7 +156,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 **对 `[DoNotParallelize]` 的结论没变，但理由要更准确**：这条抖动**不是**并行度太大造成的，所以摘掉并行只是掩盖；正确的做法是把共享状态锁上，已经做了。往后再遇到抖动，先按「某个共享可变状态缺锁」查，别直接上 `[DoNotParallelize]`。
 
-**推论**：往这里加一条测试时，如果引入了「进程级静态状态」或「毫秒级真实时钟断言」，`[DoNotParallelize]` 得**由你自己加** —— 本项目没有先例可抄，抄要去姊妹模块抄（`memory/modules/VeloxDev.Core.Test/architecture.md` §六 列了 12 个类各自的理由）。
+**推论**：往这里加一条测试时，如果引入了「进程级静态状态」或「毫秒级真实时钟断言」，`[DoNotParallelize]` 得**由你自己加** —— 本项目只有一个先例（`Agent/AgentTelemetryExtensionsTests.cs:23`），要看更多理由去姊妹模块抄（`memory/modules/VeloxDev.Core.Test/architecture.md` §六 列了 16 个类各自的理由）。
 
 ### ⚠ 2026-10-01：`CompiledRunControlTests` 的「抖动」其实是**产品挂起**，不是测试问题
 
@@ -210,9 +210,9 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 
 | 目录 | 文件数 | 备注 |
 |---|---|---|
-| `Agent/` | 45 | 含 `Workflow/` 20（9 直接 + `Functions/` 11）、`SubAgents/` 10（9 个 `[TestClass]` + 1 个替身文件）、`MCP/` 5、`Skills/` 3、`Pipelines/` 3、`Dashboard/` 1，以及直接放在 `Agent/` 下的 3 |
-| `Examples/` | 1 | `AgentTranscriptTests.cs`（守 demo 面板的契约，见 §一；**也是 §四那个无 key 崩溃的触发者**） |
-| `Serialization/` | 8 | 守 `ComponentModelEx` 一族与新的生成式引擎：`ComponentModelExTests`、`VeloxJsonSerializerTests`、`SerializationGoldenTests`（+ `Golden/` 四份冻结文档）、`SerializationOrderTests`、`CompiledGraphSerializationTests`、`ExecutionCheckpointSerializationTests`、`ExecutionCheckpointMigrationTests`，以及 `DemoTreeRoundTripTests`（2026-10-03 加；守 demo 自己那棵树，含带连接的一条）。**golden 的 `tree.json` 没有连接**，容器的嵌套读法只能靠 `DemoTreeRoundTripTests` 与 `Agent/…/WorkflowSerializationTests` 守 —— 见 [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八·四 |
+| `Agent/` | 55 | 含 `Workflow/` 29（10 直接 + `Functions/` 19）、`SubAgents/` 10（9 个 `[TestClass]` + 1 个替身文件）、`MCP/` 5、`Skills/` 3、`Pipelines/` 3、`Dashboard/` 1，以及直接放在 `Agent/` 下的 4 |
+| `Examples/` | 6 | 5 个测试 + `StubPythonHelper.cs`（替身）；`AgentTranscriptTests.cs` 守 demo 面板的契约（见 §一）**也是 §四那个无 key 崩溃的触发者** |
+| `Serialization/` | 31 | 守归档序列化全族：`ComponentModelEx` 一族、生成式引擎的往返 / 闭包 / 枚举名 / 泛型名 / 数字与文本拼写、`[Archive]` 诊断、`JsonIgnore` 兼容、注册表并发与所有权、`CompiledGraph`/`ExecutionCheckpoint`/demo 树的往返。含 `Golden/` 四份冻结文档 —— **`tree.json` 没有连接**，容器的嵌套读法只能靠 `DemoTreeRoundTripTests` 与 `Agent/…/WorkflowSerializationTests` 守，见 [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八·四 |
 | 根 | 1 | `MSTestSettings.cs` |
 
 **与姊妹模块的结构性差异**（加测试时最容易踩的四个反直觉点）：
@@ -222,7 +222,7 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 | `GlobalUsings.cs` | 有（2 条） | **没有** → 每个文件自己写全 using（连 `System.Threading` 都显式写） |
 | 共享替身文件（如 `TestHosts.cs`） | 有 | **有且仅有两个**：`Agent/Workflow/RecordingChatClient.cs`（+ 同文件的 `OfflineAgent.RunOnce`）与 `Agent/SubAgents/SubAgentDoubles.cs`（六个类型 + 一组静态探针，见 §三）。前者是两个消费者（`AgentCapabilityProvidersTests`、`CapabilityEnvelopeTests`）出现后才提取的；后者是子代理那一批**一次到位**的 —— 因为它那六件替身互相咬着（`SubAgentFixture` 造 scope，scope 要 client，`GateChatClient` 要 `CountingUIContext`）。后来按第二、第三条能力轴又长出了那组探针，但**类型数没变**：探针是静态方法，消费者（`SubAgentCapabilityGrantTests`）与替身住在同一个命名空间里，够用。其余仍是每类各持私有辅助，第一个消费者出现时不要急着上提 |
 | 源生成器引用 | 无 | **有**（§二），Debug 走本地 / Release 走包 |
-| `[DoNotParallelize]` | 12 个类 | **0** |
+| `[DoNotParallelize]` | 16 个类 | **1** |
 
 **未覆盖的类型**（`Src/Core/VeloxDev.Core.Extension/` 里有源文件、本模块**零引用**，逐个核过）：
 
