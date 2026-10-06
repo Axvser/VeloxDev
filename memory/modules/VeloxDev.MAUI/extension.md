@@ -38,11 +38,11 @@
 
 **官方做法**：需要两套同名类型共存时，**逐字全限定**，并在文件头一句话说明「同名类型一律显式取 MAUI 的那一侧」。
 
-### 2.2 「`RectF` 那条注册是坏的，我把它注册对了就行」——已按此修（2026-09-20）
+### 2.2 「`RectF` 那条注册是坏的，我把它注册对了就行」
 
-**当时的形状**：`Interpolator.cs:20` 注册 `typeof(RectF)`（= `Microsoft.Maui.Graphics.RectF`）却给了个解 `System.Drawing.RectangleF` 的采样器（旧 `Samplers/RectFSampler.cs`）。
+**判据**：`Interpolator.cs:20` 注册 `typeof(RectF)`（= `Microsoft.Maui.Graphics.RectF`），采样器侧就得解同一个类型 —— `Samplers/RectFSampler.cs` 一旦 `using System.Drawing;` 就解成 `System.Drawing.RectangleF`，与键不符。
 
-**修法是改体，不是改键**：`RectFSampler` 现在解 Maui `RectF`，与自己的注册键一致。`System.Drawing.RectangleF` 的覆盖本来就**不归它** —— 那是 Core 的 `RectangleFSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:23`），纯数据套件里也一直有自己的表项。
+**做法是改体，不是改键**：`RectFSampler` 现在解 Maui `RectF`，与自己的注册键一致。`System.Drawing.RectangleF` 的覆盖本来就**不归它** —— 那是 Core 的 `RectangleFSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:23`），纯数据套件里也一直有自己的表项。
 
 **为什么不能反过来改键**：`RegisterInterpolator` 是 `AddOrUpdate`、**last-writer-wins**（Core `TransitionSystem/Sampling/Interpolator.cs:94-100`），把键写成 `typeof(System.Drawing.RectangleF)` 会**顶掉 Core 的 `RectangleFSampler`** —— 一个适配器版本静默替换 Core 的实现，之后两家各自演化。**同名不冲突**（注册键就是 `Type`），**同一个 `Type`** 才冲突。
 

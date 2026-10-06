@@ -178,7 +178,7 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // :20 —�
 
 | 事实 | 行 | 后果 |
 |---|---|---|
-| `<TargetFramework>net10.0</TargetFramework>`（**单 TFM、不带平台后缀**） | `:7` | 七家里**只有这家**是单 TFM 且不带 `-windows`（Razor 已改成多 TFM `net6.0;net8.0`，仍不带 `-windows`）。`:4-6` 的注释把理由写明了：适配器只用跨平台核心，**不用 `net10.0-windows` 的 `Jalium.UI.Desktop` 入口包**，所以能同时服务 Windows / Linux / Android |
+| `<TargetFramework>net10.0</TargetFramework>`（**单 TFM、不带平台后缀**） | `:7` | 七家里**只有这家**是单 TFM 且不带 `-windows`（Razor 是多 TFM `net6.0;net8.0`，仍不带 `-windows`）。`:4-6` 的注释把理由写明了：适配器只用跨平台核心，**不用 `net10.0-windows` 的 `Jalium.UI.Desktop` 入口包**，所以能同时服务 Windows / Linux / Android |
 | 唯一的 Jalium 引用是 `Jalium.UI.Controls 26.10.9` | `:34` | `:31-33` 的注释：这是**能提供 `Canvas`/`ScrollViewer`/`Border`/`Control` + `DrawingContext`/`Geometry`/`FormattedText` 的**最低**平台中立包。**别名包 `Jalium.UI.Desktop` 由消费 demo 自己引** ⇒ 适配器与 demo 的包版本可以不同步 |
 | Debug → `ProjectReference`（`:29`）／非 Debug → `PackageReference VeloxDev.Core 10.0.0`（`:30`） | — | 与另外六家同形的双轨；两条同时生效会报重复成员 |
 | `NoWarn` 写成**一条** `1573;1591`（`:14`） | — | 与 WPF 现状同形。**注意**：`8605` / `8604`（DP 的 CLR 包装拆箱）在这个集合里没有触发点 —— 模板里值类型 DP 走泛型 `Read<T>`，不注册任何 DP 的 CLR 包装 |

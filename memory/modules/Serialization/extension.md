@@ -42,7 +42,7 @@
 **联动清单（漏一处不会报错，只会静默不同步）：**
 
 - 生成器的 `<Version>`（`VeloxDev.Core.Generator.csproj`）
-- 每一处 `PackageReference Include="VeloxDev.Core.Generator"` —— **11 处**，其中两处 `Examples/*/Directory.Build.props` 历史上就曾滞后
+- 每一处 `PackageReference Include="VeloxDev.Core.Generator"` —— **11 处**，其中 `Examples/*/Directory.Build.props` 那两处容易滞后
 - 每一处配套的 `ProjectReference`（`Condition="'$(Configuration)' == 'Debug'"`）—— **12 处**
 - `Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 是唯一不分 Debug/Release 的一处，动机写在它的注释里
 
@@ -70,7 +70,7 @@
 
 走不到也不打紧，**写它时会抛 `MissingWriter`，错误信息本身写着为什么**。不要为了「让它能写」去加反射兜底 —— 闭世界正是这套东西能裁剪的前提。
 
-**成员类型声明成基类时，本程序集里它的派生类 / 实现类会被自动收进来**（2026-10-04 起对**具体**基类也成立，此前只有接口与抽象类）；跨程序集的实现者要自己贴 `[Archivable]`。失败形态（写抛 `MissingWriter`、读抛 `MissingReader`、`object` 成员静默降级成字典）见 [pitfalls.md](pitfalls.md) §六。
+**成员类型声明成基类时，本程序集里它的派生类 / 实现类会被自动收进来**（2026-10-04 起对**具体**基类也成立）；跨程序集的实现者要自己贴 `[Archivable]`。失败形态（写抛 `MissingWriter`、读抛 `MissingReader`、`object` 成员静默降级成字典）见 [pitfalls.md](pitfalls.md) §六。
 
 **收录了什么可以不用猜**：全量清单（类型名 + `$type` 名 + 出处）写在生成文件 `*_VeloxJson.g.cs` 的**文件头注释**里（VS：Dependencies → Analyzers；CLI：`-p:EmitCompilerGeneratedFiles=true`）。构建期只有两类出声：`VELOX_JSON_INCLUDE001`（Info）**只报没有声明点名过的**那些，`VELOX_JSON_GENERIC001`（Warning）报解析不出的类型参数。
 

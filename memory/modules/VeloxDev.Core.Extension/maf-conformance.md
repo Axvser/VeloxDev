@@ -35,7 +35,7 @@
 | 3 | 会话与历史用 `ChatHistoryProvider` | 无实现、无 session 序列化；`AgentTranscript` 只是 UI 转录（架构文档已声明它不是会话状态） | **未做**，见 §六 |
 | 4 | 校验函数入参（allow-list / 长度 / 路径穿越） | 部分已有：`FileSkillSource` 的 `..` 包含检查、MCP `Options` 未知键抛错、`ComponentPatcher` 拒绝直接 patch | **未做**：工具字符串参数普遍无长度上限 |
 | 5 | 资源上限含输入长度与 `MaxOutputTokens` | 只有工具调用数；`WithContextCompaction` 已收 token 数，说明宿主知道该值 | **只记文档**，不加旋钮（宿主拥有 client） |
-| 6 | 不用过时 API | `MCP9007` 曾被 `NoWarn` 压住 | **已迁移**到 `AuthorizationCallbackHandler`，见 §五 |
+| 6 | 不用过时 API | `MCP9007` 不压制 | 走 `AuthorizationCallbackHandler`，见 §五 |
 | 7 | 只挂可信 provider；`system` 不得含不可信输入 | —— | **判定被推翻**，见 §七 |
 
 ---

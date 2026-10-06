@@ -138,7 +138,7 @@ public Transform? CanvasTransform => GetValue(CanvasTransformProperty) as Transf
 模板于是绑 `CanvasTransform`（按属性名解析，CLR 属性照样带变更通知）。
 **同一个 DP 对象、同一个值、同一种通知，只是换了个名字给绑定看得见** —— 写法不同，能力相同。
 
-⚠ 早先这里写的是「没有这条通道，位移写在画布自己身上」。**已弃用**：那种写法会让位移落在坐标宿主**之上**，
+⚠ **位移不能写在画布自己身上** —— 那种写法会让位移落在坐标宿主**之上**，
 逼着槽锚点用一个别家都不用的 `SlotAnchorFromCanvasLocal`。现在两边都回到同一条契约（见 §2.3）。
 
 ### 2.4.2 连线视图照 WPF 用绑定 —— 但要多一道 NaN 守卫（2026-10-05 更正）

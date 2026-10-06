@@ -113,7 +113,7 @@ WinUI 是七家里唯一需要挂两级的。
 对节点/插槽用 `DataContext is IWorkflowNodeViewModel or IWorkflowSlotViewModel`（`IsWorkflowNodeOrSlotVisual`，`:1185-1186`），
 对连线视图用 `DataContext is IWorkflowLinkViewModel`（`IsWorkflowLinkVisual`，`:1189-1190`）—— 都是**契约类型，可靠**，演示重命名视图类型不再影响判定。
 唯一的字符串比较留给 `ScrollContentPresenter`（WinUI 内部类型，适配器引不到）：`string.Equals(x.GetType().Name, "ScrollContentPresenter", StringComparison.Ordinal)`（`:1182`）。
-**推论**：旧版靠 `GetType().Name` 认 `BezierCurveView`/`PolylineCurveView` 的兜底已在 2026-10 去掉（注释 `:1188` 自陈「the former class-name fallback was redundant with it and made this path stringly typed」），
+**推论**：靠 `GetType().Name` 认 `BezierCurveView`/`PolylineCurveView` 的兜底没有（注释 `:1188`：the former class-name fallback was redundant with it and made this path stringly typed），
 所以这条不再是「重命名演示里的连线视图类型会静默改变手势」的来源。
 
 ---
@@ -136,8 +136,8 @@ WPF/Avalonia 的做法是「适配器设一个附着属性，节点与连线视�
 **这里的做法和其他家不一样，因为**这一家的池化宿主是挂在 `PART_Canvas` 上的 `behaviors:ViewPool`，
 `ViewManager` 把模板视图**直接** `Children.Add` 到 Canvas（`ViewManager.cs:182`），几何因此也由适配器在挂树后亲手写一遍 ——
 模板上那三条绑定与它并存、取同一个 `Anchor`，互为保险。
-（旧版 demo 曾用一个 `CanvasItemsControl` 把模板根的 Left/Top 抄到 ItemsControl 容器上；该文件已从源码树删除，
-别再去 `Examples/Workflow/WinUI/Demo/Views/Workflow/CanvasItemsControl.cs` 找，它只剩 `obj/` 里的生成物。）
+（这里不用 `CanvasItemsControl` 抄 Left/Top —— `Examples/Workflow/WinUI/Demo/Views/Workflow/CanvasItemsControl.cs` 不在源码树里，
+别去找，它只剩 `obj/` 里的生成物。）
 `Width/Height` 则是本家必需的（见 D3）。
 
 **D3 · `Size` 为 `(0,0)` 时写 `Width/Height = double.NaN`，而不是 0。**
@@ -214,7 +214,7 @@ skill 文档 `gui/winui.md:5` 指的参考实现就是这个 Trimmed 目录。
 （`:122`）与 `WorkflowSurfaceBehavior.UpdateVisibleRegion`（`:1031-1033`）都是「先置旗标 → `TryEnqueue` → 在回调里清旗标」，
 而后者的返回值被丢掉了：队列一旦拒绝（正在关闭），回调永远不跑 ⇒ 旗标永远立着 ⇒ 之后每次调用都在第一行返回
 ⇒ **画布一个视图都不会再加**。**症状很好认：小地图照旧画（它读的是模型，不是这批视图），画布上节点/连线却没了。**
-已改成「没有入队成功就立刻复位旗标 + `Debug.WriteLine`」。同族还有两处同样丢返回值、但没有旗标（
+现在「没有入队成功就立刻复位旗标 + `Debug.WriteLine`」。同族还有两处同样丢返回值、但没有旗标（
 `WorkflowSlotLayoutBehavior.cs:250/372`、`WorkflowMinimapOverlay.cs:232`）：它们只丢一次更新，下一次事件会补上。
 **这条与本文件 P4 是同一个教训**（「已置位状态……永久停止且不报错」），该家自己的正确范形在 `SyncSlotEnumerator`：
 用可判定的条件（`ActualWidth <= 0`）判断「还没测量」并**排 Low 重试**。
@@ -343,7 +343,7 @@ code-behind 因此只剩 `InitializeComponent()`（Trimmed / 模板）或自身�
 （`_boundLink?.PublishCurve(RenderReady ? _curve : null, this)`，`:518-519`），适配器 `RoutePointer`
 用 `tree.HitTestVisibleLinks` 做几何判定（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:834-840`），
 半径 `LinkHitTestEx.DefaultHitRadius = 6d`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs:18`，
-画布单位、**不随缩放放大**，见 `:14-17`）。带宽因此 ≈±6px —— 与旧版「把 halo 描边设成可命中」得到的 ±5.5px
+画布单位、**不随缩放放大**，见 `:14-17`）。带宽因此 ≈±6px —— 与「把 halo 描边设成可命中」那套的 ±5.5px
 同量级，但机制完全不同。**输入仍要够得着宿主**：`PART_Canvas` 自身 `Background="Transparent"`
 （`TreeView.xaml:106`）提供元素级命中面，画布手势与连线判定都靠它把指针事件冒泡到 `UserControl`；
 行为侧 `PointerMoved += OnPointerMoved`（`WorkflowSurfaceBehavior.cs:375`）、按下走
@@ -359,9 +359,9 @@ code-behind 因此只剩 `InitializeComponent()`（Trimmed / 模板）或自身�
 四条要记住的：
 
 1. **视图整块不可命中是有意的，别再给它加元素级命中面。** 给连线视图加 `Background` 仍然是错的：它是**整块画布大小**（§四·P3），加了背景就会把画布平移整个吃掉 —— 这正是现在恒置 `IsHitTestVisible = false` 的原因（理由自陈 `PolylineCurveView.xaml.cs:157-158`）。`SlotView.xaml:21,33` 那句「命中面是控件自己的 `Background`」是给**小控件**的规矩，别照抄到连线视图上；命中落在 Core 的曲线判定上。
-2. **历史坑（元素命中的那一版，已被 Core 几何判定取代）**：修之前根 `UserControl` 没有 `Background`，画出来的内容全是 `Path` 且逐个 `IsHitTestVisible = false`，容器 `Grid` 也无背景 ⇒ 元素命中面为空，`PointerEntered`/`PointerMoved`/`RightTapped` 一个都不会派发。**实测（2026-09-26，SendInput + 闭环伺服取点）**：指针停在线体正上方（48×48 邻域内体色像素 120–186）线体仍是静息青色；从窗口外跳进来再压线体也没有高亮（`PointerEntered` 是无条件置高亮的，所以没高亮就是没派发）；同一窗口里空画布左键拖动照常平移 —— 窗口收得到输入，是**这个视图**收不到。判别法仍有用：**一旦又回到元素命中，「窗口收得到、这个视图收不到」照旧成立。**
+2. **元素命中那条路的坑（现已被 Core 几何判定取代）**：根 `UserControl` 没有 `Background` 时，画出来的内容全是 `Path` 且逐个 `IsHitTestVisible = false`，容器 `Grid` 也无背景 ⇒ 元素命中面为空，`PointerEntered`/`PointerMoved`/`RightTapped` 一个都不会派发。**实测（2026-09-26，SendInput + 闭环伺服取点）**：指针停在线体正上方（48×48 邻域内体色像素 120–186）线体仍是静息青色；从窗口外跳进来再压线体也没有高亮（`PointerEntered` 是无条件置高亮的，所以没高亮就是没派发）；同一窗口里空画布左键拖动照常平移 —— 窗口收得到输入，是**这个视图**收不到。判别法仍有用：**一旦又回到元素命中，「窗口收得到、这个视图收不到」照旧成立。**
 3. **右键入口是表面的 `PointerPressed`（右键），不是 `RightTapped`**：`WorkflowSurfaceBehavior` 冒泡转发按下（`AddHandler(PointerPressedEvent, handledEventsToo: true)`，`:381`、`:769-793`），`ShowLinkMenu` 订在输入面的 `Input.PointerPressed` 上、判 `e.Button == Right` 与 `e.Target is IWorkflowLinkViewModel`。**否决菜单在链上更靠前的一级（连线自己）**：在同一条 `Input.PointerPressed` 上置 `e.Handle.PreventDefault`，`ShowLinkMenu` 读它（`WorkflowSurfaceBehavior.cs:271-272`）。
-4. **WinUI 特有的四件（现在都落在适配器里）**：(a) **`MenuFlyout` 继承 `FlyoutBase` → `DependencyObject`，不是 `FrameworkElement`，因而没有 `DataContext`** —— 资源里的菜单不在可视树上，绑定拿不到上下文，所以 `ShowLinkMenu` 在 `ShowAt` 之前**逐条**把这条连线喂给条目（`foreach (var item in state.LinkMenu.Items) if (item is FrameworkElement element) element.DataContext = e.Link;`，`WorkflowSurfaceBehavior.cs:285-291`）；用户只要在 `MenuFlyoutItem` 上写 `Command="{Binding …}"` 就行（`TreeView.xaml:78`）—— **这一版和旧版相反：条目现在绑命令**。(b) **资源 `MenuFlyout` 仍要自己给 `XamlRoot`**：它不属于任何元素，只有 `ShowAt(element)` 的 `element` 在树上，所以在 `ShowAt` 之前写一次 `state.LinkMenu.XamlRoot = host.XamlRoot`（`:282`）；`MenuFlyout.Closed` 是**唯一的收起通知**，订在 `WireLinkMenu` 里报 `Closed`（`:190-196`）。(c) **弹窗的寿命由树的 `LinkRemoved` 判、表面只收自己的弹窗**：菜单指着的那条线一离开 `tree.Links`（Agent、Undo、别处删都算），树就报 `LinkRemoved`；表面只在 `ReferenceEquals(state.MenuLink, link)` 时对自己的 `MenuFlyout` 调 `Hide()`（`:218-223`），收起照常走上面那条 `Closed` 报回输入路由、`IsSuspended` 由此放开。**「树」与「打开的菜单」同时知道的只有表面，所以「该不该收」由表面按 `MenuLink` 比对判。** (d) **WinUI 没有 `TryFindResource`**：`FindResource` 从宿主沿父链逐级查 `Resources`、最后落到 `Application.Current.Resources`（`:298-309`）；菜单资源声明在该表面自己的 `<UserControl.Resources>` 里，第一站就是宿主本身，所以这条查找对模板产物同样成立。
+4. **WinUI 特有的四件（现在都落在适配器里）**：(a) **`MenuFlyout` 继承 `FlyoutBase` → `DependencyObject`，不是 `FrameworkElement`，因而没有 `DataContext`** —— 资源里的菜单不在可视树上，绑定拿不到上下文，所以 `ShowLinkMenu` 在 `ShowAt` 之前**逐条**把这条连线喂给条目（`foreach (var item in state.LinkMenu.Items) if (item is FrameworkElement element) element.DataContext = e.Link;`，`WorkflowSurfaceBehavior.cs:285-291`）；用户只要在 `MenuFlyoutItem` 上写 `Command="{Binding …}"` 就行（`TreeView.xaml:78`）—— **条目绑命令**。(b) **资源 `MenuFlyout` 仍要自己给 `XamlRoot`**：它不属于任何元素，只有 `ShowAt(element)` 的 `element` 在树上，所以在 `ShowAt` 之前写一次 `state.LinkMenu.XamlRoot = host.XamlRoot`（`:282`）；`MenuFlyout.Closed` 是**唯一的收起通知**，订在 `WireLinkMenu` 里报 `Closed`（`:190-196`）。(c) **弹窗的寿命由树的 `LinkRemoved` 判、表面只收自己的弹窗**：菜单指着的那条线一离开 `tree.Links`（Agent、Undo、别处删都算），树就报 `LinkRemoved`；表面只在 `ReferenceEquals(state.MenuLink, link)` 时对自己的 `MenuFlyout` 调 `Hide()`（`:218-223`），收起照常走上面那条 `Closed` 报回输入路由、`IsSuspended` 由此放开。**「树」与「打开的菜单」同时知道的只有表面，所以「该不该收」由表面按 `MenuLink` 比对判。** (d) **WinUI 没有 `TryFindResource`**：`FindResource` 从宿主沿父链逐级查 `Resources`、最后落到 `Application.Current.Resources`（`:298-309`）；菜单资源声明在该表面自己的 `<UserControl.Resources>` 里，第一站就是宿主本身，所以这条查找对模板产物同样成立。
 
 **这家没有「悬停取焦点 ⇒ 画布跳一段」这条代价**（即 Avalonia/WPF 那个 `ScrollViewer.BringIntoViewOnFocusChange` 症状）。焦点现在由适配器给：悬停到线上时 `OnPointerMoved` 对宿主 `UserControl` 做一次 `Focus(FocusState.Pointer)`（`WorkflowSurfaceBehavior.cs:661`；按下时在 `:798` 再来一次）。**实测（2026-09-26）**：把视口滚到非零偏移（`视口(画布) 1998, 421`）后，让指针**走**到线上（伺服逐步逼近）→ 同一点由体色（105 像素）变暖色（306）= 高亮，随后 `VK_DELETE` 把那条线删掉（浮层「元素 节点 8/11 · 连线 6/10」，总数由 11 降 10）= `Focus(FocusState.Pointer)` 确实拿到了焦点，而 `视口(画布)` 前后都是 **1998, 421**（视口用 UI Automation 读浮层文本得到，不依赖哪个窗口在最前）。⇒ WinUI 这条路径对「指针焦点 + 比视口大的元素」没有实际动作；**没查到官方文档里的明确条件**（测的时候这台机器取不到 learn.microsoft.com），所以只留实测结论。连线视图如今 `IsTabStop = false`（`PolylineCurveView.xaml.cs:249`），Tab 聚焦不到它、焦点只会落在宿主上；若日后有人改这条路径，可用的单行防线仍是 `ScrollViewer.SetBringIntoViewOnFocusChange(…)`（别把整块画布的自动滚进视口关掉）。
 **虚拟连接（橡皮筋）的可见性：先分清「被卡挡住」与「没画出来」**（2026-09-26 实测）。
@@ -377,7 +377,7 @@ code-behind 因此只剩 `InitializeComponent()`（Trimmed / 模板）或自身�
 - 顺带记虚拟连线的判定边界：`Slot.Parent` 是 `IWorkflowNodeViewModel?`、插槽脱离节点时置 `null`（`SlotEnumerator.cs:561`）⇒「两端都无父节点」= 虚拟连线；正常连线两端都挂在节点上、不会误判，只有「两端都脱挂的孤儿连线」会被画成虚线（本 demo 到不了）。
 **「白线画在白卡上」这条机制本身**：调色板里卡的底色与连线默认色都是 `#DDFFFFFF`，实测 Trimmed 样张的卡底色是 **(225,225,225)**（= 0.867·255 + 0.133·30，正是 `#DDFFFFFF` 压在那块深色画布上的值）⇒ 若橡皮筋真画在卡上，它的合成色是 (251,251,251)，与卡底**只差约 25 级**（在深色画布上则差约 195 级）—— 低对比成立，但**不是**「完全不可分」，而且**非 Trimmed 那家的橡皮筋是青色**（高对比），所以这条不是用户那次报告的观察到的成因；可观测的成因仍是上一条的**卡遮挡**。
 **两个会让测量得出假结论的陷阱（我都踩过）**：
-1. **Trimmed demo 的线是白色、不是青色**：它的 `LinkTemplate` 给每条线都写 `LineColor="#DDFFFFFF"`，而「是不是虚拟」由 `LinkView.IsVirtualLink` 从数据上下文推出来 —— `IsVirtual || DataContext is IWorkflowLinkViewModel { Sender.Parent: null, Receiver.Parent: null }`（模板**从不**绑 `IsVirtual` 那个 DP）⇒ 拿青色去筛 Trimmed 的线必然**一个像素都找不到**，会误判成「根本没画」（我第一轮就是这么误判的，第二轮换白色/全区域差分才发现**这次是真的没画**）。顺带记该判据的边界：`Parent` 是 `IWorkflowNodeViewModel?`，插槽脱离节点时被置 `null`（`SlotEnumerator.cs:561`）⇒「两端都没有父节点」= 虚拟连线，**正常**连线两端都挂在节点上、不会被误判；只有「两个端点都脱挂的孤儿连线」会被画成虚线（本 demo 到不了：样张 0 条连线、也没有删节点的入口）。
+1. **Trimmed demo 的线是白色、不是青色**：它的 `LinkTemplate` 给每条线都写 `LineColor="#DDFFFFFF"`，而「是不是虚拟」由 `LinkView.IsVirtualLink` 从数据上下文推出来 —— `IsVirtual || DataContext is IWorkflowLinkViewModel { Sender.Parent: null, Receiver.Parent: null }`（模板**从不**绑 `IsVirtual` 那个 DP）⇒ 拿青色去筛 Trimmed 的线必然**一个像素都找不到**，会误判成「根本没画」—— 要用白色/全区域差分。顺带记该判据的边界：`Parent` 是 `IWorkflowNodeViewModel?`，插槽脱离节点时被置 `null`（`SlotEnumerator.cs:561`）⇒「两端都没有父节点」= 虚拟连线，**正常**连线两端都挂在节点上、不会被误判；只有「两个端点都脱挂的孤儿连线」会被画成虚线（本 demo 到不了：样张 0 条连线、也没有删节点的入口）。
 2. **插槽拖拽同时会平移画布**：`WorkflowSlotConnectionBehavior` 冒泡指针事件且**不置 `e.Handled`**（§二·L1 已记）⇒ 从插槽往外拖时画布也在跟着平移（实测：一次 260px 的插槽拖拽让整幅画布变了 7154 个像素）。所以任何「拖拽过程中」的像素测量都必须先扣掉平移，否则「看不到」既可能是被卡挡住、也可能是被平移带走。
 3. 用 `WindowFromPoint` 断言「这个点属于我的窗口」时要**比较进程号**，不能比较窗口句柄：WinUI 把 XAML 内容放在一个子窗口（`InputSiteWindowClass`）里，`WindowFromPoint` 往往返回那个子窗口而不是外层框架窗口 —— 按句柄比较会把**每一次移动都拒掉**，量出来是「什么都没发生」的假象。
 

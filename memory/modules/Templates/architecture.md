@@ -117,7 +117,7 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
 |---|---|---|
 | WPF | `workflowViews:NodeView` / `LinkView` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay`；前缀指向本命名空间 | `workflow-tree-view/TemplateClass.xaml:18,26,37,50,69` |
 | WinUI | `local:NodeView` / `LinkView` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay` | `workflow-tree-view/TemplateClass.xaml:18,26,34,47,66` |
-| Avalonia | `local:NodeView` / `LinkView` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay`（2026-09-25 起把视图模板挪成 keyed 资源 + 声明选择器；此前是隐式 `DataTemplate`、不引用 selector 条目） | `workflow-tree-view/TemplateClass.axaml:28,35,44,60,75` |
+| Avalonia | `local:NodeView` / `LinkView` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay`（2026-09-25 起：视图模板是 keyed 资源 + 声明选择器，不是隐式 `DataTemplate`） | `workflow-tree-view/TemplateClass.axaml:28,35,44,60,75` |
 | MAUI | `local:NodeView` / `TemplateSelector` / `GridDecorator` / `LinkView` | `workflow-tree-view/TemplateClass.xaml:19,24,37,41` |
 | Razor | 组件标签 `<GridDecorator>` / `<LinkView>` / `<MinimapOverlay>` / `<TemplateSelector>` / `<NodeView>` | `workflow-tree-view/TemplateClass.razor:18,27,35,55,65` |
 | WinForms | 产物是基类的两个工厂：`CreateNodeView` 里 `new NodeView()`、`CreateLinkView` 里 `new LinkView()`；**不引用 `GridDecorator`**（整个文件里连这个类型名都没有，网格由基类自带的内部 `SurfaceCanvas` 承担），小地图只经基类属性引用 | `workflow-tree-view/TemplateClass.cs:29,44` |
@@ -139,7 +139,7 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
 - 对照：**WinForms 的可见集现在也由适配器喂给池**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs:428`
   取 `_tree?.GetHelper().VisibleItems`），模板不再自己发散虚拟化。WPF/WinUI/Avalonia/Razor 在标记里绑
   `Helper.VisibleItems`，MAUI 由适配器 `ViewManager` 在入队前筛掉连线交给共享 overlay 画；
-  Jalium 现在也在标记里绑 `behaviors:ViewPool.ItemsSource`（`workflow-tree-view/TemplateClass.jalxaml`）。⚠ 早期本家模板曾把全量 `Nodes` 喂给池，那条形状已随 2026-10-03 重构消失。
+  Jalium 现在也在标记里绑 `behaviors:ViewPool.ItemsSource`（`workflow-tree-view/TemplateClass.jalxaml`）—— 绑的是可见集，**不要**改成全量 `Nodes`。
   Razor 的 `Items="Tree.GetHelper().VisibleItems"` 在 `workflow-tree-view/TemplateClass.razor:35`；MAUI 的连线
   由适配器 `ViewManager` 在入队前筛掉（选择器给不出 `LinkTemplate`），交给共享 overlay 画
   （见 `adapters/maui.md` §2.2 与 `WorkflowSystem/adapters/maui.md` §二·1）。
@@ -250,9 +250,7 @@ Jalium 那 24 行设四个颜色符号（`workflow-minimap-overlay/TemplateClass
 包内七个控件在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`，另有三个共用件
 （`WorkflowSurfaceColors` / `WorkflowSurfaceGraphics` / `WorkflowSurfaceGrid`）。
 
-**这一条把「离群值」那把尺子换掉了。** 中途我曾用「`grid-decorator` 279 行落在其余六家 110–535 的中间、
-不是离群值」当理由没做它 —— 那是**错的**：判据是「**这一段是不是用户该改的扩展点**」，
-不是「这个角色像不像用户的」。该角色含平台机制（网格线的世界坐标换算、刻度与标签排版、每帧重绘），
+**判据是「这一段是不是用户该改的扩展点」**，不是「这个角色像不像用户的」，也不是「离群不离群」——「`grid-decorator` 279 行落在其余六家 110–535 的中间」不能当理由跳过它。该角色含平台机制（网格线的世界坐标换算、刻度与标签排版、每帧重绘），
 用户该拿到的是派生 + 调色板。用户 2026-10-03 把这条定成规范，见
 [`adapter-base-class-specifications.md`](../../specifications/adapter-base-class-specifications.md) §2.2。
 
@@ -301,7 +299,7 @@ Jalium 那 24 行设四个颜色符号（`workflow-minimap-overlay/TemplateClass
 ⚠ **这是刻意的跨 GUI 契约，不是漏接**（[skills/veloxdev-create-workflow/references/templates.md](../../../skills/veloxdev-create-workflow/references/templates.md)
 「Style parameters」一节）：七家接受**同一套参数名、同一套默认值**，命令行因此能在 GUI 之间原样搬。
 **别因为「它不生效」就把它删掉** —— 删了 `dotnet new` 会对这条参数报未知参数，命令行就不通了。
-12 个现已全部自陈（此前只有 Razor 的 `slotBackground` 写了那句话）；补的是**说明**，
+12 个全部自陈（都有那句话）；补的是**说明**，
 不是删参数，也不是给它硬造一个样式点。
 
 分布上值得记住的两条：
@@ -447,7 +445,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 六�
 | 卡 | 成因 | 修法 |
 |---|---|---|
 | `Examples/Workflow/Avalonia/Demo/Views/Workflow/ControllerView.axaml` | 端口**没有 `ZIndex`**，被卡面盖掉内侧一半。`TimerNodeView.axaml` 一直把端口包在 `ZIndex="6"` 的层里，Controller 漏了 | 补 `ZIndex="6"` |
-| `…/EnumSelectorNodeView.axaml` | 输入端口原本放在 `<Border Grid.Row="1" ClipToBounds="True">` **里面** —— 那个裁剪是为「滚动内容不溢出圆角」而设的，**不能去掉** | 把端口挪成该 Border 的**兄弟**，直接挂根 Grid（与 Controller 同形） |
+| `…/EnumSelectorNodeView.axaml` | 输入端口若放在 `<Border Grid.Row="1" ClipToBounds="True">` **里面**就会被裁 —— 那个 Border 的裁剪是为「滚动内容不溢出圆角」而设的，**不能去掉** | 端口要挪成该 Border 的**兄弟**，直接挂根 Grid（与 Controller 同形） |
 
 **Python 走的是第三条路**：它用「ScrollViewer 视口外扩 N / ItemsControl 内容内缩 N / 端口外溢 N」把端口留在滚动视口内。**三个 N 必须相等，且等于端口尺寸的一半** —— 端口从 16 换到 24 时 N 必须从 8 一起改到 12。这条约束在 `…/PythonNodeView.axaml` 的两条端口带里各有一份（左输入、右输出），改一处不改另一处就是对不齐。
 

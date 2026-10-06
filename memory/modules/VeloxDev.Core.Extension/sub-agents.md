@@ -67,7 +67,7 @@
 
 **这五个名字漏在 `everyName` 之外时，整条轴是反的**（2026-09-22 修，`SubAgentScope.cs:444`）：
 ① 省略 `allowedTools` ⇒ 关停循环看不见它们 ⇒ 全部留开，孩子**能**派发；
-② 点名 `allowedTools` ⇒ 当时那段专门补的 `foreach (SubAgentAgentToolkit.ToolNames)` 把它们全关掉，孩子**不能**派发；
+② 点名 `allowedTools` ⇒ 那段 `foreach (SubAgentAgentToolkit.ToolNames)` 把它们全关掉，孩子**不能**派发；
 ③ 模型点名 `SpawnSubAgent` ⇒ 不在 `available` 里 ⇒ 被当成「本代理没有这个工具」丢进 `dropped`。
 合起来就是：**模型只有在「没想过自己授予了什么」时才派得动，而它一旦认真考虑并点名，就派不动了**，而且它问也问不出所以然 —— 这是「agent 不积极创建子代理 / 子代理不再创建子代理」的结构性成因，不是提示词写坏了。修法是把这五个并进 `everyName`（`:444`），于是 `:506-508` 那个循环成为**唯一**的关停点 —— 再加一段专用循环就是冗余。五个工具在 `BuildQueryToolNames` 里已归只读，因此走继承分支 ⇒ **孩子的默认面就含这五个**，孙代理默认成立。
 
@@ -117,7 +117,7 @@
 
 ### 3.3 自定义工具：名字够用，但**分组**才可以继承
 
-自定义工具本来是清单能表达的，却一度根本无法继承：`WithTools(prompt, tools)`（`WorkflowAgentScope.cs:181`）除了注册工具，还把那段 `promptContext` 追加进一个私有的 `StringBuilder`（`:209`），而**只有**整份骨架读它（`AppendCustomToolsSection` `:1208`）。孩子不读骨架，所以工具到了、用法说明没到。
+自定义工具本该由清单继承，但只靠 `WithTools(prompt, tools)`（`WorkflowAgentScope.cs:181`）继承不了：它除了注册工具，还把那段 `promptContext` 追加进一个私有的 `StringBuilder`（`:209`），而**只有**整份骨架读它（`AppendCustomToolsSection` `:1208`）。孩子不读骨架，所以工具到了、用法说明没到。
 
 修法是让**分组**成为继承单位：`_customToolGroups`（`:81`）记下每一组的提示与工具，`GrantCustomToolsTo`（`:247`）按被授予的工具**筛组建新组**给孩子 —— 于是孩子拿到的提示恰好覆盖它持有的工具。一个被完全拒绝的组，连提示一起消失（`TheGuidanceGoesWithTheTools_NotWithTheGroupTheParentRegistered` 两边都断言）。
 
@@ -177,7 +177,7 @@
 
 **「你可能派发」是个坏句子，因为它回答的是模型没在问的问题。** 它只说明了没有东西禁止派发 —— 而模型本来就这么假设。它没给的是**什么时候派发更好**，缺了这个，自己做永远是最优解：多花一轮、从不出错、也不需要被推理。
 
-**2026-09-22 改成强制式，而且这次改的是**判据**不是语气**（`:262`）。要求是「耗时长但结论短的任务（如 web 搜索）**必须**发起子代理」。第一版把判据写成「难度」——「只有一次你已经知道怎么发的调用才自己做」—— **而那个例外把规则整个吃掉了**：每一次读都是模型已经知道怎么发的调用。实测（`deepseek-v4-flash`、六章语料）的结果是它在**自己的上下文里发了六次调用、一个孩子都没派**（`SubAgentLiveTests.ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo` 就是为此而写）。
+**2026-09-22 改成强制式，而且这次改的是**判据**不是语气**（`:262`）。要求是「耗时长但结论短的任务（如 web 搜索）**必须**发起子代理」。**判据若写成「难度」**——「只有一次你已经知道怎么发的调用才自己做」——**那个例外会把规则整个吃掉**：每一次读都是模型已经知道怎么发的调用。实测（`deepseek-v4-flash`、六章语料）的结果是它在**自己的上下文里发了六次调用、一个孩子都没派**（`SubAgentLiveTests.ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo` 就是为此而写）。
 
 改后的判据是**工作的目的**：`Work whose purpose is to gather material rather than to act — a web search, reading a document, surveying several files, working through a library — … must be dispatched to a sub-agent rather than done by you`，例外收窄成 `only when the entire answer is one value read off a single call and quoted as it stands`。**改完之后那条实测通过。** 所以这段话的措辞是有实测支撑的，不要凭语感把它改回去 —— `TheStandingText_MakesDelegationARule_NotAPermission` 离线钉住「must be dispatched」「web search」两处锚点，并**反向**断言 `one call you already know how to make` 不再出现。
 

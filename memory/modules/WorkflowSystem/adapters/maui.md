@@ -100,7 +100,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
 `WorkflowSurfaceBehavior.cs:1138-1141` 的注释：MAUI 在每次原生 `ViewChanged` 上都会发 `Scrolled`，`ScrollX/ScrollY` 是那一刻的
 原生真值；而 `ScrollToAsync` 可能落不到请求值（Windows 上原生 ScrollViewer 还会自己动内容）。结论：
 
-- **不许**在平移期间抑制 `Scrolled` —— 抑制过装饰器就被冻在「请求值」上，原生最后落在别处时松手一跳（那正是当初调查的「松手跳」）。
+- **不许**在平移期间抑制 `Scrolled` —— 抑制过装饰器就被冻在「请求值」上，原生最后落在别处时松手一跳（那就是「松手跳」）。
 - 装饰器与视口**只从 `ScrollX/ScrollY` 写**（`ApplyLayout` 里 `:1224-1228`、`ApplyVisibleRegion` 里 `:1645-1660`），
   请求的目标值从不作为写入源（`:1646` 的注释明写：写请求值会让网格在松手后弹回真位置）。
 
@@ -238,7 +238,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
       现在做法是 `LinkView.EnsureBox`：盒子 = 画布 + 一圈余量，**建一次就不动**，只有连线真的跑出这个区域才长大一次（长大之后又稳定）。
     - **`ViewManager.ApplyLayout` 对连线的分支必须保持「不写 bounds」**（`ViewManager.cs` 里那段），
       否则池子会把盒子刷回画布尺寸，把上面两条一起作废。
-13. **橡皮筋（虚拟连线）在新旧两版都画得出来 —— 我曾误判成「从来没画过」（2026-10-03 订正）。**
+13. **橡皮筋（虚拟连线）在新旧两版都画得出来 —— 别读成「从来没画过」（2026-10-03 核实）。**
     上一版（overlay 画全部连线的时代）与这一版（每线视图）都能画出橡皮筋；我先前那次「回到改动前也看不到」
     是因为用 `SetCursorPos` 驱动拖拽，**连线手势根本没起来**（见下面第 14 条），于是把「没驱动起来」当成了
     「没画出来」，还写进了这条记忆里。教训：截图里「没有某个东西」之前，先确认那次操作**真的发生过**。
@@ -246,7 +246,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs:523-527`）：`StartInteraction`
     2026-10-03 实测：同一串动作换成 `SendInput`（harness 的 `moveto:`）之后，节点拖拽与橡皮筋立刻都出来了；
     用 `move:`（`SetCursorPos`）则两者都「看着像没反应」—— 而这家的悬停（`PointerMoved` 钩子）又**时而**能收到，
     所以症状是「有时好有时坏」，很容易被误判成坐标不对或功能坏。**验证拖拽类行为一律用 `moveto:`。**
-    （这条推翻了本文早先「`SetCursorPos` 也能驱动拖拽」的隐含假设。）
+    **不要假设 `SetCursorPos` 也能驱动拖拽**（这条假设是错的）。
 
 ---
 

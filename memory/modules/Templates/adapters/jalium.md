@@ -35,7 +35,7 @@
 
 ⇒ 三条"读完文件才知道"的推论：
 
-1. **`workflow-slot-view` 现在是标记 + 薄 code-behind**：`UserControl` 里一个 `Viewbox` 包 `Path`（`Data="TemplateSlotPath"`，`Fill` 绑 `Foreground`），code-behind 只按 `SlotState` 写 `Foreground` 四色（`cs:37-46`），连接手势由标记里的 `WorkflowSlotConnectionBehavior` 承担。**端口位置不再是模板里的一个 `Layout` 值** —— 由 `WorkflowSlotLayoutBehavior` 量测写回 `slot.Anchor`（见 `WorkflowSystem/adapters/jalium.md` §2.3）。旧版那套「表面/卡片/连线三处共读同一个 `WorkflowPortLayout` 实例」已随 `WorkflowPortLayout` / `WorkflowPortGeometry` 一起删除。
+1. **`workflow-slot-view` 现在是标记 + 薄 code-behind**：`UserControl` 里一个 `Viewbox` 包 `Path`（`Data="TemplateSlotPath"`，`Fill` 绑 `Foreground`），code-behind 只按 `SlotState` 写 `Foreground` 四色（`cs:37-46`），连接手势由标记里的 `WorkflowSlotConnectionBehavior` 承担。**端口位置不再是模板里的一个 `Layout` 值** —— 由 `WorkflowSlotLayoutBehavior` 量测写回 `slot.Anchor`（见 `WorkflowSystem/adapters/jalium.md` §2.3）。**没有「表面/卡片/连线三处共读同一个 `WorkflowPortLayout` 实例」这套** —— `WorkflowPortLayout` / `WorkflowPortGeometry` 都不存在。
 2. **`grid-decorator` 仍是 `.cs`，但形态变了**：`sealed class TemplateClass : Grid, IWorkflowGridDecorator`（**不再是派生适配器基类** —— 没有那个基类了）。两面自绘子层在构造器里装配，`RulerThickness` DP 默认值就是 `DefaultRulerThickness = 36`（`:34`）。整个渲染器都在这一个文件里 —— 改网格外观/间距/刻度就改它。
 3. **`selector` 条目现在是 `DataTemplateSelector` 的派生类**（不是工厂方法）：tree-view 模板在 `Resources` 里 `new` 它（把 `NodeTemplate`／`LinkTemplate` 两个 `StaticResource` 赋进去），交给 `ViewPool.TemplateSelector`。`SlotTemplate`／`TreeTemplate` 未设 ⇒ 槽/树 item 一旦进池就抛 `InvalidOperationException`（`:41-46`）—— 这两类 item 从不进本仓库的池。
 
@@ -64,7 +64,7 @@
 tree-view 的标记 `xmlns` 引用这些兄弟条目的类型：`workflowViews:NodeView` / `workflowViews:LinkView`（两个 `DataTemplate` 里，`:22`/`:30`）、`workflowViews:TemplateSelector`（`:37`）、`workflowViews:GridDecorator`（`:50`）、`workflowViews:MinimapOverlay`（`:62`）。
 node-view 的标记引用 `local:SlotView`（`:41`、`:65`）。
 ⇒ **只生成 `jalium-v-tree` 会 CS0246**（缺 `NodeView`/`LinkView`/`TemplateSelector`/`GridDecorator`/`MinimapOverlay` 五个类型），**只生成 `jalium-v-node` 会缺 `SlotView`**。
-slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引用兄弟条目**（连线端点、端口位置全靠适配器行为/绑定），所以耦合面比旧版小。与 WinForms 那条同源，见 `../architecture.md` §五 与 `winforms.md` §三·P1。
+slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引用兄弟条目**（连线端点、端口位置全靠适配器行为/绑定），所以耦合面小。与 WinForms 那条同源，见 `../architecture.md` §五 与 `winforms.md` §三·P1。
 
 ### 2.4 符号是**内联进表达式**的，所以数值符号只能用数值
 
@@ -83,7 +83,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 ## 三、这一家模板特有的坑
 
-### P1 · 本家现在 **0 个**「没有 `replaces`」的空转 symbol（旧版 12 个已全部补上）
+### P1 · 本家 **0 个**「没有 `replaces`」的空转 symbol（12 个都已补上）
 
 `../architecture.md` §7.1 的判据是「`type: parameter` 而**没有 `replaces`**」——`dotnet new --help` 收得下、命令行能传、不报错、也不替换文本。逐文件核当前七个 `template.json`：**每个 symbol 都带了 `replaces`** ⇒ Jalium 侧现在 **0 个**空转符号。
 
@@ -91,7 +91,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 ⚠ 一处残留：**`slotBorderColor` 的 token（`TemplateSlotBorderColor`）在 Jalium 的 slot-view 产物里一处都不出现**（`git grep TemplateSlotBorderColor -- Src/Templates/VeloxDev.Jalium.Templates` 只命中它自己的 `template.json`）。它按 §7.1 的定义不算「空转」（有 `replaces`），但传 `--slotBorderColor` 实际仍什么都不改变 —— 新的 slot-view 是一条 `Path`，没有独立的边框面。
 
-（`../architecture.md` §7.1 的跨平台表仍按旧版记着 Jalium 这 12 个；那份不在本文维护范围，以本节为准。）
+（`../architecture.md` §7.1 的跨平台表可能仍记着 Jalium 这 12 个；那份不在本文维护范围，以本节为准。）
 
 ### P2 · 标尺厚度 `36` 的单一来源在**模板的 grid-decorator**
 

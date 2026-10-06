@@ -24,7 +24,7 @@
 
 **为什么 `Examples/AgentTranscriptTests.cs` 长在这里** —— 因为只有本项目引了 `Lib`，所以任何守 `Lib` 契约的测试只能放这。（它的 `using` 是 `Demo.ViewModels` —— 命名空间来自 `Lib`，不是本模块的。）
 
-**但它的守卫对象和文件头一度宣称的不一样，这点已核实并改正**：它守的是**结构化模型**（`AgentMessageViewModel` / `AgentMessageRole`）与 `TreeViewModel` 的 `AgentLog` / `ConversationMarkdown` 之间的契约，**不是「七个平台面板的渲染」**。全仓核对（`.axaml` / `.xaml` / `.razor` / `.cs` 逐类搜）：**没有任何面板绑定 `AgentMessageViewModel`，也没有任何地方按 `AgentMessageRole` 分支**。七个面板实际绑的是 `TreeViewModel.AgentLog`（`ObservableCollection<string>`，来自 `AgentTranscript.ToPlainTextLines()`），Avalonia 例外，绑 `ConversationMarkdown`（来自 `ToMarkdown()`）。
+**它守的是**结构化模型（`AgentMessageViewModel` / `AgentMessageRole`）与 `TreeViewModel` 的 `AgentLog` / `ConversationMarkdown` 之间的契约，**不是「七个平台面板的渲染」**（文件头现已改正）。全仓核对（`.axaml` / `.xaml` / `.razor` / `.cs` 逐类搜）：**没有任何面板绑定 `AgentMessageViewModel`，也没有任何地方按 `AgentMessageRole` 分支**。七个面板实际绑的是 `TreeViewModel.AgentLog`（`ObservableCollection<string>`，来自 `AgentTranscript.ToPlainTextLines()`），Avalonia 例外，绑 `ConversationMarkdown`（来自 `ToMarkdown()`）。
 
 后果有两面，都值得记住：
 
@@ -48,7 +48,7 @@
 | | Debug | Release |
 |---|---|---|
 | 生成器来源 | 本地 `ProjectReference` | NuGet 包 **10.0.0**（不是本地版本） |
-| 本模块能用生成器 | ✅ | ✅，但用的是**已发布的旧版** |
+| 本模块能用生成器 | ✅ | ✅，但用的是**已发布版** |
 
 后果分两层：
 
@@ -148,7 +148,7 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 ### ⚠ 但「0 个 `[DoNotParallelize]`」不等于「不会抖动」—— 这条抖动的成因与修法（见下）
 
-**必须记下来的一笔**，因为上面那句「本模块没有真实时钟断言」在本轮之前是**错的**：在子代理那一批落地之后、本轮修复之前，未改动的树上实测 **5 次全量跑里有 3 次红**，每次都是同一条 —— `SubAgentTreeViewModelTests.AStoppedChild_IsNotCountedAsAFailedOne`，症状是 `tree.CompletedCount == 0` 而 `TotalCount == 2`（一个孩子无辜变红）。**隔离单跑 5/5 全绿**，所以它是负载敏感的、只在方法级并行下出现。
+**必须记下来的一笔**（它推翻过「本模块没有真实时钟断言」这句）：在子代理那一批落地、共享状态加锁之前，未改动的树上实测 **5 次全量跑里有 3 次红**，每次都是同一条 —— `SubAgentTreeViewModelTests.AStoppedChild_IsNotCountedAsAFailedOne`，症状是 `tree.CompletedCount == 0` 而 `TotalCount == 2`（一个孩子无辜变红）。**隔离单跑 5/5 全绿**，所以它是负载敏感的、只在方法级并行下出现。
 
 根因不在断言，在 `SubAgentTreeViewModel`：`_ui == null`（每个测试、任何无头宿主）时那条「一切都在绑定的线程上」的假设**静默退化成了「完全没有串行化」**，而一次扇出（父同时开两个孩子）按构造就是两个线程同时进 `Fill` 改同一个 `ObservableCollection`。更阴的是它**不在这里被观察** —— 抛出的异常来自 `Finish` 内部的 `PropertyChanged` 处理器，而 `Finish` 活在 `RunAsync` 的 `try` 里，于是被**当成那个孩子自己的失败原因**记账。所以它表现为「孩子失败」，而不是「面板坏了」。
 

@@ -174,7 +174,7 @@ TreeHelper.Viewport 写入 / MarkDirty() → 10fps Tickable tick  Templates/Help
 
 - **API 形状抄 Avalonia**（`GUI/Events/Input/`）：`PointerEventArgs` 六个具体子类（Entered/Exited/Moved/Pressed/Released/Wheel）、`KeyEventArgs` 两个（Down/Up）、`MouseButton`（`None/Left/Right/Middle/XButton1/XButton2`）、`InputModifiers`、`InputKey`（务实子集，其余报 `Unknown` + `RawKeyCode`）。**2026-10-05 起这些名字不再带 `Workflow` 前缀**（`WorkflowKey` → `InputKey`，其余直接删前缀：`PointerPressedEventArgs` / `KeyEventArgs` / `MouseButton` …）。原文那句「前缀是硬要求，因为适配器同时 `using` 平台命名空间」只说了表层，**真正的机制是命名空间的从属关系**：适配器文件的命名空间是 `VeloxDev.WorkflowSystem.AttachedBehaviors` —— **Core 命名空间的子命名空间**；C# 先解析外层命名空间里**声明**的成员、全都找不到才轮到 `using` 引入的名字，所以 Core 的裸名会**静默盖住平台同名类型**：不报 CS0104 歧义，而在下游报 `CS1061 未包含 GetPosition/Handled/Pointer`、`CS0019 运算符 != 无法应用于 MouseButton 和 MouseButton`、`CS0115 没有找到适合的方法来重写` 这类看着毫不相干的错（去掉前缀后第一次全量构建：134 个错误、11 个文件）。
 
-- **平台层怎么引用这 15 个名字 = 规范，不在这里**（用户 2026-10-05 定为规范）：适配器与 item template 每个文件**同时持有 `Wf` / `PlatformInput` 两个别名、处处带前缀**（哪怕该名字在本文件里并不冲突、哪怕某个别名一次没用上）；demo 只在**真冲突**处留别名 —— 本轮只有五个 demo 文件留：Avalonia Demo `Views/Workflow/SlotView.cs` 与 `Views/Workflow/WorkflowView.axaml.cs`、Jalium Demo `Views/Workflow/NodeEditorSurface.cs`、WPF Demo `Views/Workflow/WorkflowView.xaml.cs`、WinForms Demo `Controls/WorkflowCanvas.cs`，其余 demo 保持裸名。这 15 个之外的 Core 名字（`WorkflowInput` / `WorkflowEventHandle` / `Anchor` / `IWorkflowTreeViewModel` …、以及按组件定制的那三个事件族）也保持裸名。清单、判据（按用途不按名字）、核查命令与自查表都在 [memory/specifications/input-alias-specifications.md](../../specifications/input-alias-specifications.md)。
+- **平台层怎么引用这 15 个名字 = 规范，不在这里**（用户 2026-10-05 定为规范）：适配器与 item template 每个文件**同时持有 `Wf` / `PlatformInput` 两个别名、处处带前缀**（哪怕该名字在本文件里并不冲突、哪怕某个别名一次没用上）；demo 只在**真冲突**处留别名 —— 只有五个 demo 文件留：Avalonia Demo `Views/Workflow/SlotView.cs` 与 `Views/Workflow/WorkflowView.axaml.cs`、Jalium Demo `Views/Workflow/NodeEditorSurface.cs`、WPF Demo `Views/Workflow/WorkflowView.xaml.cs`、WinForms Demo `Controls/WorkflowCanvas.cs`，其余 demo 保持裸名。这 15 个之外的 Core 名字（`WorkflowInput` / `WorkflowEventHandle` / `Anchor` / `IWorkflowTreeViewModel` …、以及按组件定制的那三个事件族）也保持裸名。清单、判据（按用途不按名字）、核查命令与自查表都在 [memory/specifications/input-alias-specifications.md](../../specifications/input-alias-specifications.md)。
 - **位置是 `Anchor`，`Position.Layer` 取来源视图所在图层**。但**指针本身没有图层**：`SetPointerCommand` / 虚拟连线端点仍按旧规则取起点那一端的图层。
 - **能力接口 + 一个 relay**：`IInputEvents { InputRelay Input; }`，四组 Helper（`TreeHelper<T>`/`NodeHelper<T>`/`SlotHelper<T>`/`LinkHelper<T>`）都实现。宿主订阅：`((IInputEvents)link.GetHelper()).Input.PointerEntered += …`。
 - **命中归适配器判**（`LinkHitTestEx.HitTestVisibleLinks` 是它调的那个共享算法）：Core 不新增 node/slot 命中。
@@ -324,8 +324,7 @@ provider 一律 `isFresh = true`。
 **症状**：Agent 的 `SetEnumSlotCollection` 走的正是这条路，provider 类型永远是同一个 —— 所以**同一个节点
 第二次改端口不起作用**。用户报的「Merge Report 的输入口无法扩展」有一半是这个（另一半是没有
 `[Archivable]` 的 provider，见 [AI 记忆](../AI/architecture.md) §七·五）。
-`PythonScriptNodeViewModel` 的构造函数注释曾把这个缓存当作「端口不能在构造函数里设」的理由 —— 那条注释
-已随这次修复改写，别再照着它推理。
+`PythonScriptNodeViewModel` 的构造函数注释与上面这条一致，别把它读成「端口不能在构造函数里设」的理由。
 
 守卫：`Core.Test/WorkflowSystem/SlotEnumeratorTests.ReSettingAProviderSelector_RebuildsTheSlots`
 （Core 这一层）与 `Extension.Test/…/SetEnumSlotCollectionTests.ReshapingThePortsASecondTime_AppliesTheNewSet`

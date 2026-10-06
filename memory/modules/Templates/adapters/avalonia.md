@@ -85,7 +85,7 @@ tree-view 用两个 **keyed** `<DataTemplate x:Key="NodeTemplate" …>`（`workf
 与 `LinkTemplate`（`:34`），在 `:44-46` 声明 `local:TemplateSelector`，并在 `Canvas` 上设
 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`（`:65`）。
 ⇒ 生成出来的 `workflow-template-selector` 条目现在是**真的被接上**的
-（不再是旧版那个"生成但不接线"的 selector）。selector 的 XML 注释仍告诉你要 assign 四个模板
+（不是「生成但不接线」的 selector）。selector 的 XML 注释仍告诉你要 assign 四个模板
 （`workflow-template-selector/TemplateClass.cs:8-12`），tree-view 这一份只给了 Node/Link 两个。
 
 ⚠ 模板查找找不到时 `Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs` 会

@@ -43,7 +43,7 @@
 | `InsertFrame` 里就地改 `start`/`end`（例如拿 start 当 scratch） | 它们与快照**共享**，改了污染快照，下一次迭代/另一个目标读到被改过的端点 | `ISampler.cs:6-9` 明写 |
 | `t <= 0` / `t >= 1` 返回 scratch，而不是调用方给的 start/end 本身 | 嵌套路径（`((TranslateTransform)x.RenderTransform).X`）依赖端点声明时的**运行时类型**，scratch 会把类型换掉 | `skills/veloxdev-create-animation/references/adapter.md:75` |
 | 只注册具体类型，却希望基类型属性也走它 | 查找**只向上走**：精确 → 基类由近及远 → 接口按名字序。注册 `SolidColorBrush` 不会命中 `LinearGradientBrush`；而**声明类型本身就是抽象基类**时更彻底 —— 一条键都没有，`Prepare` 报一次 `Unsampled` 把该属性整个跳过。WPF 走过这个形状（注册 `DropShadowEffect`，而它自己的 `UIElement.Effect` DP 声明成 `Effect`），2026-09-20 改成注册基类型（见 `adapters/wpf.md` 坑 7） | `Sampling/Interpolator.cs:51-91`、`Sampling/Interpolator.cs:181-185` |
-| 注册了基类型却只处理具体类型 | 反过来同样成立：注册 `Brush` 就承诺处理整个家族，梯度也会进来。**改注成基类型是这条义务的开始，不是结束** —— WPF 2026-09-20 改注 `Effect` 的同一次改动里，兜底分支就从「凭空造一个 `DropShadowEffect` 顶替」改成了如实交出端点（否则 `BlurEffect` 会被静默画成阴影） | `adapter.md:153`、`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/DropShadowEffectSampler.cs:44` |
+| 注册了基类型却只处理具体类型 | 反过来同样成立：注册 `Brush` 就承诺处理整个家族，梯度也会进来。**改注成基类型是这条义务的开始，不是结束** —— 注册 `Effect` 后，兜底分支必须如实交出端点（凭空造一个 `DropShadowEffect` 顶替就会让 `BlurEffect` 被静默画成阴影） | `adapter.md:153`、`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/DropShadowEffectSampler.cs:44` |
 | 用 `UnregisterInterpolator` 做「临时替换，用完恢复」 | 安装是 **last-writer-wins 的原子 AddOrUpdate**（`Sampling/Interpolator.cs:98`），并发下先后顺序不由你定，恢复可能盖掉别人的注册 | `Sampling/Interpolator.cs:94-100` |
 | 在 `Prepare` 之后才注册，以为能生效 | 采样器**每个 property 每趟动画只解析一次**，且在首趟的 `Prepare` 里 | `Sampling/Interpolator.cs:165-189` |
 

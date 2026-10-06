@@ -132,7 +132,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 - [ ] 若新表面要池化：在 `PART_Canvas` 上同时给 `ViewPool.ItemsSource` 与 `ViewPool.TemplateSelector`（**两个都要**）
 - [ ] 两套 demo 都要过：`Examples/Workflow/Jalium/Demo/`（自己写的 `NodeEditorSurface : Canvas`，不接适配器行为）与 `Examples/Workflow/Jalium Trimmed/Demo/`（标记 + 行为那条）
 - [ ] 跑 `Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`（旧的 `verify-jalium-item-templates.ps1` 是它的转发器）
-  - 这个通用校验（2026-10-04 起）能抓到旧 Jalium 脚本漏掉的一类**pack 缺陷**：模板引用了自己 pack 未声明的符号 —— 例如 `jalium-v-tree` 曾调用 `ColorConverter.ConvertFromString("TemplateLinkColor")` 而 tree pack 无 `linkColor` 符号，字面量直达运行期；旧脚本在比较前把这个调用归一化掉，所以看不见。已改为模板硬编码颜色、七个 tree pack 的参数集保持一致。
+  - 这个通用校验（2026-10-04 起）能抓到一类**pack 缺陷**：模板引用了自己 pack 未声明的符号 —— 例如 `jalium-v-tree` 若调用 `ColorConverter.ConvertFromString("TemplateLinkColor")` 而 tree pack 无 `linkColor` 符号，字面量会直达运行期。模板现硬编码颜色，七个 tree pack 的参数集保持一致。
 - [ ] `skills/veloxdev-create-workflow/references/gui/jalium.md`
 - [ ] `memory/modules/WorkflowSystem/adapters/jalium.md`
 - [ ] `memory/modules/Templates/adapters/jalium.md`（模板侧形状变了才动）

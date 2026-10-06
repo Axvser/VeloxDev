@@ -123,7 +123,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 `CaptureViewportRestore`（`Tree` 引用变了才算），首帧作为两个新增的可选尾参交给 `initSurface`（在
 `ensureRulerReserve()` 之后、首次 `report()` 之前应用，免得第一份上报是原点），之后换树走 `scrollToPosition`。
 坐标要加本家那段 ruler 超出预留的平移 —— 与 `OnSurfaceScroll` 里 effX/effY 同式。
-**`scrollToPosition` 收的是像素滚动位置、不是世界坐标**，它此前的注释写反了（demo 也照错的用）。
+**`scrollToPosition` 收的是像素滚动位置、不是世界坐标**（别信注释的正反，这一处曾写反）。
 见 [../extension.md](../extension.md) §3.9-10。
 
 ---
@@ -162,7 +162,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 - `Attached/Workflow/WorkflowNodeDragBehavior.razor.cs:64` —— 节点位置串走 `InvariantCulture`。
 - `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:680-683` —— 推给 JS 的节点几何数组走 `InvariantCulture`。
 - `Attached/Workflow/WorkflowGridDecorator.razor.cs:169-183` —— 标尺**文字**走 `InvariantCulture`
-  （这个文件曾是「一半对一半错」的样本：文字对了、同一文件里算位置的几处没对；现在全对）。
+  （这个文件现在全对）。
 - demo 侧：`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateSlotView.razor.cs:255` 的注释
   把这条规则写成了显式约定（「Razor 用当前区域写裸 double，逗号小数点会写出浏览器读不了的 SVG 属性」），
   `N()` 与各 `*Css => N(...)` 包装都走不变文化（`N()` 在同文件 `:256`）。
@@ -280,7 +280,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 **自 2026-10-03 起这是库与模板的能力，不再是非 Trimmed demo 专属**：连线视图只负责画出曲线并发布出去，**命中**由 Core 的共享判定承担，**高亮 / 删除**归宿主/适配器，`Blazor Trimmed` 与 Razor item template 因此同样开箱可用（判据与理由见 `memory/specifications/item-template-specifications.md` §五）。
 同日的第二轮重构把**右键菜单的接线整体移进适配器组件 `WorkflowSurfaceBehavior`** —— Razor 没有附着属性，所以用「参数 + RenderFragment」对应 Avalonia 的 `LinkMenuKey` + ContextMenu 资源：**条目归宿主**（`<LinkMenu Context="link">`），**右键入口、坐标记录、定位、弹出、开合上报、Escape 全在组件里**。宿主的代码后置因此不再有任何菜单（或输入面）接线；两个 demo 与模板的 `<LinkMenu>` 条目形状一致。
 
-**重渲染订阅与展示助手也归适配器（2026-10-04）**：Blazor 没有数据绑定自动刷新，此前 `workflow-tree-view` 的 code-behind 自己订树的节点/连线集合、树自身、虚拟连线与每个节点的 `Anchor`/`Size`，变化时 `StateHasChanged` 重渲染整棵子树。这套订阅整体搬进 `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs`（`SyncTreeSubscriptions`/`SubscribeTree`/`UnsubscribeTree` + 逐节点订阅；换树按**模型实例**比对重接，`DisposeAsync` 里先摘订阅）。**为什么搬得动**：模板标记长在组件的 `ChildContent` 里（`Attached/Workflow/WorkflowSurfaceBehavior.razor:23-26` 渲染它），表面 `StateHasChanged` 会重新执行 `ChildContent`；该 RenderFragment 由宿主在渲染期创建、闭包读的是宿主的实例成员（`Tree`、`GridSpacing` 等），所以标记照常拿到新值 —— **不是**「重渲染子组件才会更新」。**证据**：Trimmed demo 的 `TreeView` code-behind 现在只剩 `[Parameter]`，拖一条线进 `tree.Links` 后连线照样出现（连线数 0→1，2026-10-04 无头 Chrome + CDP 实测）；节点拖拽同样工作。**边界**：表面重渲染不会重渲染宿主页面本身，所以「表面之外」的读（非 Trimmed demo 侧栏的节点/连接计数）仍由页面自己订 `Nodes`/`Links` 维持，那一处不是残留机制。
+**重渲染订阅与展示助手归适配器（2026-10-04）**：Blazor 没有数据绑定自动刷新，订阅（树的节点/连线集合、树自身、虚拟连线与每个节点的 `Anchor`/`Size`，变化时 `StateHasChanged` 重渲染整棵子树）整在 `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs`，**不**在 `workflow-tree-view` 的 code-behind（`SyncTreeSubscriptions`/`SubscribeTree`/`UnsubscribeTree` + 逐节点订阅；换树按**模型实例**比对重接，`DisposeAsync` 里先摘订阅）。**为什么搬得动**：模板标记长在组件的 `ChildContent` 里（`Attached/Workflow/WorkflowSurfaceBehavior.razor:23-26` 渲染它），表面 `StateHasChanged` 会重新执行 `ChildContent`；该 RenderFragment 由宿主在渲染期创建、闭包读的是宿主的实例成员（`Tree`、`GridSpacing` 等），所以标记照常拿到新值 —— **不是**「重渲染子组件才会更新」。**证据**：Trimmed demo 的 `TreeView` code-behind 现在只剩 `[Parameter]`，拖一条线进 `tree.Links` 后连线照样出现（连线数 0→1，2026-10-04 无头 Chrome + CDP 实测）；节点拖拽同样工作。**边界**：表面重渲染不会重渲染宿主页面本身，所以「表面之外」的读（非 Trimmed demo 侧栏的节点/连接计数）仍由页面自己订 `Nodes`/`Links` 维持，那一处不是残留机制。
 同时搬走的还有模板标记用到的展示助手：调色板（`MinorGridColor`/`RulerBackground`/`RulerTickColor`/`RulerDividerColor`/`NodeForegroundCss`）、`ToCss`/`HexByte`、以及默认节点标记用的 `InputSlotsOf`/`OutputSlotsOf`/`SlotNamesOf`，落在新类型 `Attached/Workflow/WorkflowPresentation.cs`（公开静态、命名空间同适配器，标记里 `@WorkflowPresentation.X` 直接调）。模板的 `TemplateClass.razor.cs`（35 行）与 Trimmed 的 `TreeView.razor.cs`（34 行）因此只剩 `[Parameter]`；`Interaction` 属性（全仓无消费者）删除。模板符号 `surfaceBackground`（`template.json` 把 `TemplateSurfaceBackground` 替成 `#1E1E1E`）保留替换目标：模板把符号直接传进表面的 `Background` 参数（`Src/Templates/VeloxDev.Razor.Templates/working/content/workflow-tree-view/TemplateClass.razor:17`）—— 与 `surfaceBorderBrush/Thickness/CornerRadius` 三个无目标参数不同。
 
 **单主守卫（2026-10-03）由树的 `LinkRemoved` 提供，不归宿主**：菜单所指的连线一旦离开 `tree.Links`（Delete / Agent / Undo / 任何删除路径），树报 `LinkRemoved`（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:106`、`Templates/Helpers/TreeHelper.cs:121`）——**输入路由不自行解 `IsSuspended`**。Razor 这家的处理在组件内：`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` 的 `WireLinkMenu` 在订 `Input.PointerPressed` 的同一处订 `LinkRemoved`（`:368-375`），只做「是我这份菜单（`ReferenceEquals(MenuLink, link)`）就 `CloseLinkMenu()`」；`CloseLinkMenu` 照常复位 `IsSuspended`，挂起随之放开。**树只报告、宿主（这里就是组件）收自己的弹窗**。

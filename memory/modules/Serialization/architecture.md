@@ -17,7 +17,7 @@
 | **引擎** | `Src/Core/VeloxDev.Core/Serialization/` | 手写、**零反射**的 JSON 读写。`VeloxJsonSerializer` 是门面，`VeloxJsonReader` / `VeloxJsonWriter` 是游标 |
 | **代码生成** | `Src/Generators/VeloxDev.Core.Generator/` | 为每个类型编出直写的 reader/writer，产物是**消费者项目里的 C# 文本** |
 | **通用序列化面** | `Src/Core/VeloxDev.Core/Serialization/ViewModelSerializer.cs` | VM 的 `Serialize` / `TryDeserialize` / `Deserialize` / 流 / 字节。**没有引擎逻辑** |
-| **领域封装** | `Src/Core/VeloxDev.Core.Extension/` | `CheckpointEx`（检查点 + 文件存储）、`CompiledGraphEx`（编译图快照）。它们当初留在 Extension 的理由（「Core 没有序列化器」）已经过期，留着是因为它们是**工作流领域**对通用面的预设 |
+| **领域封装** | `Src/Core/VeloxDev.Core.Extension/` | `CheckpointEx`（检查点 + 文件存储）、`CompiledGraphEx`（编译图快照）。它们留在 Extension 是因为它们是**工作流领域**对通用面的预设（与「Core 有没有序列化器」无关） |
 
 引擎**不在生成器里**——生成器只产出调用它的代码。要改行为先判断改的是哪一层；改错层的后果是 Debug 通过、Release 不变（见 §五）。
 
@@ -406,7 +406,7 @@
 
 `obj/Debug/*/generated/...` 里那份 `*_VeloxJson.g.cs` 可能是**上一次显式开启 `EmitCompilerGeneratedFiles` 时的遗留**。Roslyn 默认只在内存里持有生成结果；要落盘得加 `-p:EmitCompilerGeneratedFiles=true`。
 
-**别用文件时间戳判断生成器跑没跑**——2026-10-04 就因此误判过一次，差点把一次真实的产物改动当成没生效。
+**别用文件时间戳判断生成器跑没跑** —— 会把一次真实的产物改动误判成没生效（2026-10-04 踩过）。
 
 ---
 

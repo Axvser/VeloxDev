@@ -32,11 +32,11 @@
 
 ## 三、确定性政策一律「按分支序」
 
-- **日志**：**严格按真实时序**，分支直写会话、不按分支归块（2026-09-27 改，推翻了此前「按分支成块合并」的做法）。所以序号在 `Logs` 里单调递增，而文件 sink（`ILogWriter`）与 `Logs` 逐行一致 —— 这是拿日志文件对时序的前提，不要为「读起来整齐」再把缓冲加回来。
+- **日志**：**严格按真实时序**，分支直写会话、不按分支归块（2026-09-27 改）。所以序号在 `Logs` 里单调递增，而文件 sink（`ILogWriter`）与 `Logs` 逐行一致 —— 这是拿日志文件对时序的前提，不要为「读起来整齐」再把缓冲加回来。
 - **重定向**：多个分支同时请求时**分支序最先者胜**，其余写一行日志忽略。注意「最先」实现为**按编译顺序**而非按墙钟先到，为的是让一轮运行可复现。
 - **`Data`**：跑完留下**最后一支**的载荷，与串行时留下的残留值逐字一致（Agent 工具在 `RunAsync` 返回后读它，见 `WorkflowAgentToolkit` 的结果 JSON）。
 - **语义变化**：`Task.WhenAll` 下一个分支抛异常不再立即中止兄弟，而是整组跑完再抛。节点异常在它自己的驱动里就被消化成「报告 + 记 null」（§六），本来也到不了 `Task.WhenAll`，所以实际影响面小 —— 已写进方法注释。
-- 汇合点仍在整组之后，且分支是**单线程交错**（不是线程并行），所以产物表 `_outputs` **没有加锁**、也不需要 —— 这一点此前记错过（写成「加锁就够」），以代码为准。前提是宿主把运行钉在一个 `SynchronizationContext` 上；节点内部若自己 `Task.Run` 就会破坏这个前提。
+- 汇合点仍在整组之后，且分支是**单线程交错**（不是线程并行），所以产物表 `_outputs` **没有加锁**、也不需要 —— **不要写成「加锁就够」** —— 产物表根本没加锁。前提是宿主把运行钉在一个 `SynchronizationContext` 上；节点内部若自己 `Task.Run` 就会破坏这个前提。
 
 ## 四、三个契约是**可选**实现的，而 Core 自带的节点一个都没实现
 
@@ -82,7 +82,7 @@
 
 ## 八、编译图作为可序列化文档（2026-09-27 起）
 
-`CompiledGraph` 本就是标准 VM（段 + `ObservableCollection`，自身不含 slot/link），所以**列表视图可以直接绑**（`Entries` → `BranchSegment.Options` → `ParallelSegment.Branches` 的嵌套模板；仓库里此前零处绑定）。序列化走 Core.Extension 的专用扩展 `CompiledGraphEx`：`SerializeCompiledGraph(graph, includeTree = false, options)` / `DeserializeCompiledGraph(json)`。
+`CompiledGraph` 本就是标准 VM（段 + `ObservableCollection`，自身不含 slot/link），所以**列表视图可以直接绑**（`Entries` → `BranchSegment.Options` → `ParallelSegment.Branches` 的嵌套模板；这类绑法全仓仅此一处）。序列化走 Core.Extension 的专用扩展 `CompiledGraphEx`：`SerializeCompiledGraph(graph, includeTree = false, options)` / `DeserializeCompiledGraph(json)`。
 
 **第一次往返验证就暴露两件事 —— 都是先实测、再设计：**
 
@@ -128,7 +128,7 @@
 
 **宿主契约的三处失败点都与节点体同一套失败纪律（记 Error → 重定向或结束）**：`ResolveRouteKey`、`ResolveRedirectAsync` 与 `IRuntimeAware.AttachRuntimeContext`。少了它，宿主实现一抛异常就穿出 `RunAsync`、`Status` 停在 `"Running"`（会话谎称还在跑），或被空 catch 吞掉、节点被**无声跳过**。`EngineHostContractFailureTests` 三条分别钉住；重定向上限那条路补 `Status = "Stopped"`，由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 覆盖（2026-10-04 核）。
 
-**注释风格别照抄**：`CompilerEx` 的 `internal`/`private` 成员上还是规范生效前写的英语 `///`（`RuntimeEngine` 里那几个老私有方法、`BranchRuntimeContext` 整份）。本轮新写的行按手册 §二 用中文 `//`，所以文件里两种并存 —— **以手册为准，不要拿旁边的老注释当标准**。
+**注释风格别照抄**：`CompilerEx` 的 `internal`/`private` 成员上还是规范生效前写的英语 `///`（`RuntimeEngine` 里那几个老私有方法、`BranchRuntimeContext` 整份）。新写的行按手册 §二 用中文 `//`，所以文件里两种并存 —— **以手册为准，不要拿旁边的老注释当标准**。
 
 ## 十一、检查点与恢复（2026-09-27 起）
 
@@ -169,4 +169,4 @@
 | 只编译的两个工具纳入闸门 | Agent 侧的 `CompileWorkflow`/`CompileNodeResult` 会写节点编译身份却不受 `WithAllowNodeExecution` 约束 —— 属 `VeloxDev.Core.Extension` 模块 |
 | 编译执行时补 `Sender`/`Receiver` | 第五节的不对称仍未消 |
 | `ExecuteCommandOnNode` 的完成语义 | Agent 侧它同步返回、不等完成，而同族的 `ExecuteNode` 会等 `Exited` —— 属 Extension 模块 |
-| 七家 demo 的运行控制**在像素层仍未验** | 七家的控件与处理器都已接上、构建 0 错误，但**点下去的样子**没人看过：除 Avalonia 外合成输入进不了输入管线（已实测），而且这七处是七种 UI 栈（两家还是命令式搭界面）⇒ 只能人眼验。**依据订正（2026-09-27，2026-10-04 复核）**：WinForms 的四个控制器按钮**不在** `Form1.cs:325-347`（那里是 `ReloadExecutionLog` 的日志刷新），而在节点卡 `Controls/WorkflowNodeCard.cs:654-658`（Compile/Run/Stop/Close）—— 那条旧依据写错了文件与行号 |
+| 七家 demo 的运行控制**在像素层仍未验** | 七家的控件与处理器都已接上、构建 0 错误，但**点下去的样子**没人看过：除 Avalonia 外合成输入进不了输入管线（已实测），而且这七处是七种 UI 栈（两家还是命令式搭界面）⇒ 只能人眼验。**依据**：WinForms 的四个控制器按钮在节点卡 `Controls/WorkflowNodeCard.cs:654-658`（Compile/Run/Stop/Close），**不在** `Form1.cs:325-347`（那里是 `ReloadExecutionLog` 的日志刷新） |

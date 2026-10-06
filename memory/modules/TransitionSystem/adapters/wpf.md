@@ -107,7 +107,7 @@
    - **两处都绕开注册表**：demo 用 `SetInterpolator` 逐条覆盖（`Examples/Transition/WPF/Demo/MainWindow.xaml.cs:314`），纯数据表直接拿采样器实例。⇒ 只按具体类型注册时，「`Effect` 属性能动画」在仓库里**没有任何一条经注册表的证据**；注册成基类型之后才有。
    - **公开 API 暴露的是具体类型**：`Transition.cs:125` 的重载签名是 `Expression<Func<T, DropShadowEffect?>>`。这条重载仍是「编译期就知道是阴影」时的最短写法，但**它不是走通 `Effect` 声明的前提** —— 泛型 `Property<TValue>` 配 `typeof(Effect)` 那条键即可，demo 与纯数据表用的都是后者。
    - **兜底分支同时被改诚实了**：`Samplers/DropShadowEffectSampler.cs:49` 现在是 `property.SetValue(target, t >= 0.5d ? end : start)` —— 两端不是同一类具体效果时（例如 `BlurEffect`）**如实交出调用方给的实例**，不再凭空造一个 `DropShadowEffect` 顶替。这正是 `adapter.md:153` 那句「改注成基类型是义务的开始，不是结束」的落地：改注把 `BlurEffect` 引进来，兜底决定它被静默画成阴影还是被原样交出。
-   - **这一条现在由两条测试钉着**：`SamplerKeyTests.cs:140` 的 `ASamplerRegisteredForABaseType_HandsBackTheFamilyItWasGiven` 用 `Assert.AreSame` 证明交出的不是替身对象；`WpfEntries.cs:212-213` 那条条目的声明类型回到键校验里（此前挂的是 `UnregisteredReason`「该键不该存在」的可证伪声明），由 `SamplerKeyTests` 的 `EveryEntry_ValueTypeResolvesToTheSamplerItNames` 核。**两条都做过变异验证**：注册退回 `typeof(DropShadowEffect)` 时两条同时红，兜底退回「造 `DropShadowEffect`」时 `AreSame` 那条红。
+   - **这一条现在由两条测试钉着**：`SamplerKeyTests.cs:140` 的 `ASamplerRegisteredForABaseType_HandsBackTheFamilyItWasGiven` 用 `Assert.AreSame` 证明交出的不是替身对象；`WpfEntries.cs:212-213` 那条条目的声明类型回到键校验里（不再挂 `UnregisteredReason`「该键不该存在」的可证伪声明），由 `SamplerKeyTests` 的 `EveryEntry_ValueTypeResolvesToTheSamplerItNames` 核。**两条都做过变异验证**：注册退回 `typeof(DropShadowEffect)` 时两条同时红，兜底退回「造 `DropShadowEffect`」时 `AreSame` 那条红。
 
 ---
 

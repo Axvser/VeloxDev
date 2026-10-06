@@ -43,7 +43,7 @@
 |---|---|
 | `ITransitionEffect.cs:74` 的 `InvokeCancled` | 拼写错（`Canceled` 在 `:44` 是对的，`InvokeCancled` 少一个 `c`）。**改名是破坏性变更**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:55` 的私有字段也叫 `_cancled`。新契约别复制这个拼写 |
 | `IVeloxCommand`（`IVeloxCommand.cs:6`） | 它 `: System.Windows.Input.ICommand` —— 契约直接继承了一个 BCL 接口，于是实现方必须同时满足两边。只在「所有实现方本来就都要实现 BCL 接口」时才这么做 |
-| `Interfaces/Tickable/ITickable.cs` | 名字里曾有 U+200B，**2026-10-01 已清除**（见 architecture.md §八·9）。**新契约绝对不要**引入 Cf 类字符：编译器忽略它，所以能编译，但裸路径打不开、`grep -l` 漏、文档生成器可能崩 —— 而代码评审看不出来 |
+| `Interfaces/Tickable/ITickable.cs` | **当心不可见字符** —— 这个名字曾带着一个 U+200B（2026-10-01 已清除，见 architecture.md §八·9）。**新契约绝对不要**引入 Cf 类字符：编译器忽略它，所以能编译，但裸路径打不开、`grep -l` 漏、文档生成器可能崩 —— 而代码评审看不出来 |
 | `IWorkflowTreeViewModel.cs:10` | 单个文件里声明 2–3 个接口（`ITransitionScheduler.cs` 3 个、四族 VM 各 2 个）是既有做法，但代价是**按文件名找接口会失效**；新契约优先一文件一接口 |
 
 ---

@@ -65,7 +65,7 @@
 
 ## 五、成员声明成基类：派生类**跨程序集不会被自动收进来**
 
-闭包那一趟（`Base/VeloxJsonModel.cs`）按一张祖先索引（`BuildFamilyIndex`，键是「自己 + 基类链 + 全部接口」）收集**本程序集里派生 / 实现了这个类型**的具体类型。接口、抽象类、**具体基类**都走这一条 —— 2026-10-04 起具体基类也展开，此前只有接口与抽象类（那是「声明成 `Animal`、装的却是 `Dog`」写得出读不回来的原因）。两点要记住：
+闭包那一趟（`Base/VeloxJsonModel.cs`）按一张祖先索引（`BuildFamilyIndex`，键是「自己 + 基类链 + 全部接口」）收集**本程序集里派生 / 实现了这个类型**的具体类型。接口、抽象类、**具体基类**都走这一条（具体基类自 2026-10-04 起也展开）—— 只展开接口/抽象类就会让「声明成 `Animal`、装的却是 `Dog`」写得出读不回来。两点要记住：
 
 - 抽象类型与接口**自己永远没有条目** —— `IsWritableType` 只认 `Class`/`Struct` 且显式拒绝抽象，所以 `ReaderFor(I你的接口)` 恒为 `null`。
 - 候选集只有 `candidates`，即**本程序集**的类型；跨程序集的具体类要 `IsWritableType` 放行，而它对外程序集只放**封闭泛型 + 公开无参构造**。所以一个普通具体类若在别的程序集、且在那儿不是 root，**不会被自动收进来**。
@@ -111,7 +111,7 @@
 
 1. **生成器不能引用它为之生成代码的程序集。** 所以 `ArchiveOptions` 在生成器里镜像成 `ArchiveFlags`，枚举值只能手工保持同步。特性实参到达时是**底层整数**，不是枚举。
    **`JsonIgnoreCondition` 故意没有镜像**：它按名字判（`ReadJsonIgnoreCondition` 拿常量值反查字段名再 `switch`）。理由是实测踩过 —— 它的顺序是 `Never=0, Always=1, WhenWritingDefault=2, WhenWritingNull=3`（.NET 10 又加了 `WhenWriting=4`/`WhenReading=5`），我第一版按 `Always/Never/WhenWritingNull/WhenWritingDefault` 记，**把后两个写反了**，症状是 `WhenWritingDefault` 静默不生效。**枚举顺序不是它表达的意思，别记它**。
-2. **源生成器看不见别的生成器的产物。** `[VeloxProperty]` 提升出来的属性在 VeloxJson 生成器的视图里**不存在** —— 所以「忽略字段、改用属性」不可表达（两者产出的代码完全一样），`IgnoreField` 因此取「该成员整个不进文档」这个唯一可实现、且此前真正缺位的语义。
+2. **源生成器看不见别的生成器的产物。** `[VeloxProperty]` 提升出来的属性在 VeloxJson 生成器的视图里**不存在** —— 所以「忽略字段、改用属性」不可表达（两者产出的代码完全一样），`IgnoreField` 因此取「该成员整个不进文档」这个唯一可实现的语义。
 3. **引用程序集剥掉非 public 成员 —— 消费方看不见它们。** 实测：测试程序集看 `SlotEnumerator<SlotDefaultViewModel>` 得到 `members=51`，里面**没有** `internal` 的 `OnDeserializing`/`OnDeserialized`。所以**钩子方法要能被别的程序集调，就必须是 `public`**；`internal` 只在「类型由它自己的程序集序列化」时够用。判据是 `IsReachableFromGeneratedCode`，它按**程序集**判。
    **推论**：外程序集里 `internal`/`private` 的钩子生成器**根本看不到**，也就**无法**为它出声 —— 症状是那个回调静默不跑。`VELOX_JSON_HOOK002` / `VELOX_JSON_MEMBER001` 只覆盖够得着却不可调的情况。
 

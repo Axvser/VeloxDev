@@ -45,7 +45,7 @@
 | 断言里读 `DateTime.Now` / `Stopwatch` / `Environment.TickCount64` | 方法级并行下有别的测试在抢 CPU，测出来的值没有上界 | `FakeTimeSource` 手推 |
 | 用 `GC.GetTotalAllocatedBytes` 量分配 | 进程级计数，并行时会把别的测试的分配算进来 | 用 `GC.GetAllocatedBytesForCurrentThread()`（线程本地）；`TransitionSystem/FramePathAllocationTests.cs:92-134` 就是这么写的 |
 | 覆盖 `ITimeSourceControl` 来造时钟 | 会让每个并发动画拿到冻结时钟，而冻结时钟上的动画**挂起不报错**（`Timing/TimerCoreRegistryTests.cs:9-16` 明说） | 用 `FakeTimeSource` 这个**参数注入**的手驱源；不要改进程级注册表 |
-| 「反正是单项目，`Thread.Sleep` 更真实」 | 真实时钟断言 + 方法级并行 = 偶发失败；本模块曾实测 8 次连跑红 1 次（**不可复核**） | 见 §二 |
+| 「反正是单项目，`Thread.Sleep` 更真实」 | 真实时钟断言 + 方法级并行 = 偶发失败；实测（不可复核）：8 次连跑红 1 次 | 见 §二 |
 | 自己 `new` 一个平台件（`DispatcherTimer` 之类） | 平台件在测试项目里根本引不进来（没有适配器引用） | 手写替身；跨项目的范本是姊妹模块的 `SingleThreadContext` |
 | 为了测一个 `internal` 而放宽访问性 | 不必要 | `InternalsVisibleTo` 已经有了（`Src/Core/VeloxDev.Core/Properties/AssemblyInfo.cs:3`），直接测 |
 | 用 `[DataRow]` 去覆盖 netstandard2.0 / net461 分支 | 覆盖不到：只有 net8.0 资产被加载（见 `architecture.md` §二） | 要么给 csproj 加 TFM，要么承认这条分支不可测 |
@@ -92,4 +92,4 @@
 ## 六、给这个模块写记忆 / 复核时的注意
 
 - 依据只能是 `.cs` / `.csproj` 的行号。`TestResults/*.trx` 是 gitignored 本地产物（`.gitignore` 的 `[Tt]est[Rr]esult*/`），**不能当依据**，只能当线索。
-- `dotnet test` 两次结果可能不同（偶发失败）。**别把一次绿当成「不存在」** —— 曾实测 8 次连跑里红 1 次（**不可复核**）。
+- `dotnet test` 两次结果可能不同（偶发失败）。**别把一次绿当成「不存在」** —— 实测（不可复核）：8 次连跑里红 1 次。

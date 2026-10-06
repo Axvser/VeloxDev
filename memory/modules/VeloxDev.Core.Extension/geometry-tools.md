@@ -11,7 +11,7 @@
 
 | | 人类拖拽 | Agent 工具 |
 |---|---|---|
-| 派发的命令 | **`MoveCommand` + `Offset` 增量**（七家适配器的 `WorkflowNodeDragBehavior`，如 WPF `Attached/Workflow/WorkflowNodeDragBehavior.cs:121`） | `MoveNode` 曾用 `SetAnchorCommand` + 自己算的**绝对**锚点 |
+| 派发的命令 | **`MoveCommand` + `Offset` 增量**（七家适配器的 `WorkflowNodeDragBehavior`，如 WPF `Attached/Workflow/WorkflowNodeDragBehavior.cs:121`） | `MoveNode` 也派发 `MoveCommand`（世界位移），**不**用 `SetAnchorCommand` + 自算绝对锚点 |
 | 增量语义 | 视图空间增量，由 `StandardMove`（`WorkflowNodeEx.cs:110-112`）按 `Scale` 换算 | 无 |
 
 **铁律：`node.Anchor` 的 getter 返回的是被画布 `Scale` 坍缩过的值**（`NodeDefaultViewModel.cs:44`
@@ -26,8 +26,8 @@
 回归测试是 `NodeGeometryToolTests.MoveNode_LandsWhereADragWould_AtANonUnitScale`（两个节点、`Scale = 0.5`、
 一个用工具移、一个直接 `MoveCommand`，断言**世界位移相等**）。
 
-> 工具的 `[Description]` 曾写着「Mirrors GUI node-drag: dispatches `SetAnchorCommand`」——**描述与事实不符**，
-> 拖拽从不派发 `SetAnchorCommand`。改工具语义时顺手核一遍描述，模型是照着它做决策的。
+> ⚠ **核工具的 `[Description]` 与事实是否相符** —— 若写着「Mirrors GUI node-drag: dispatches `SetAnchorCommand`」就与事实不符
+>（拖拽从不派发 `SetAnchorCommand`）。模型是照着描述做决策的。
 
 ## 二、`SetNodePosition` 的层：省略 ≠ 置零
 

@@ -163,7 +163,7 @@
 
 ### 4.2 加一个 `[AgentContext]` 的读取点（新助手 / 新发现器）
 
-**转调 `AgentTextSelection.Select(...)` 就完了** —— 语言与回退规则只在那一个方法里。今天的两条取值入口是 `AIContextMembers.DescriptionsFor(node, language)`（三个助手用）与 `AgentContextReader`（`Type`/`MemberInfo` 用），都是转调。**不要**在助手内部再写一次 `Where(a => a.Language == language)`：那正是这次修掉的历史形态，它会静默地不回退。
+**转调 `AgentTextSelection.Select(...)` 就完了** —— 语言与回退规则只在那一个方法里。今天的两条取值入口是 `AIContextMembers.DescriptionsFor(node, language)`（三个助手用）与 `AgentContextReader`（`Type`/`MemberInfo` 用），都是转调。**不要**在助手内部再写一次 `Where(a => a.Language == language)` —— 它会静默地不回退。
 
 ### 4.3 给发现器加一个字段（例如 `CommandDescriptor` 上再挂一个属性）
 

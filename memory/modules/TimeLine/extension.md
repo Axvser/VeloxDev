@@ -33,7 +33,7 @@
 | | 做法 | 结果 |
 |---|---|---|
 | ✅ 官方 | `[Tickable("我的通道", fps: 30)] public partial class Foo { partial void Update(FrameEventArgs e) { ... } }`，然后在合适的时机调 `InitializeTickable()` | 生成器补一个 partial 部分，实现 `ITickable` 的七个成员，把 `Invoke*` 转成你那五个 `partial void` |
-| ❌ 捷径 | 手写 `class Foo : ITickable { public void InvokeUpdate(FrameEventArgs e) ... }` | 你要自己实现全部七个成员（`InitializeTickable` / `CloseTickable` / 五个 `Invoke*`，模板见 `TickWriter.cs:86-125`），并且放弃生成器的 `SetTargetFPS` 展开与钩子转发 —— 抄漏一个成员就是 `CS0535`。**注意标识符里曾是零宽空格的历史已清除**（见 `architecture.md` §八·1），现在按普通拼写写 `ITickable` 即可 |
+| ❌ 捷径 | 手写 `class Foo : ITickable { public void InvokeUpdate(FrameEventArgs e) ... }` | 你要自己实现全部七个成员（`InitializeTickable` / `CloseTickable` / 五个 `Invoke*`，模板见 `TickWriter.cs:86-125`），并且放弃生成器的 `SetTargetFPS` 展开与钩子转发 —— 抄漏一个成员就是 `CS0535`。**按普通拼写写 `ITickable` 即可**（这个名字曾带过零宽空格，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1） |
 | ❌ 捷径 | 贴了 `[Tickable]` 就以为生效 | 特性**只有生成器读**（`TickWriter.cs:20-51`），运行时的 `TickManager` 从不反射它。而不调 `InitializeTickable()` 就永远不注册（生成器也不会替你调） |
 | ❌ 捷径 | `[Tickable]` 贴在**非 partial** 类上 | 生成器**静默跳过**：`Analizer.cs:191-194` 的 `IsCandidateClass` 要求 `IsPartialClass(declaration)`。编译通过、什么都不生成 |
 | ⚠️ 注意 | `fps` 参数传 `-1`（默认） | `TickWriter.cs:81-83` 的 `TargetFPS >= 1` 不成立，**整句 `SetTargetFPS` 不生成**。想要帧率就得写正数 |
@@ -101,7 +101,7 @@
 
 | 改动 | 联动 |
 |---|---|
-| 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（标识符里曾有的 ZWSP 已于 2026-10-01 清除，见 `architecture.md` §八·1）② `TickWriter.cs:85-126` 的模板与 `GenerateBaseInterfaces`（`:68-71`）③ 五个 `partial void` 声明 ④ `Src/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
+| 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（这个名字曾带 ZWSP，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1）② `TickWriter.cs:85-126` 的模板与 `GenerateBaseInterfaces`（`:68-71`）③ 五个 `partial void` 声明 ④ `Src/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
 | 加/改 `[Tickable]` 的参数 | ① `TickableAttribute.cs` ② `TickWriter.cs:33-49`（位置参数 + 命名参数两条读取路径，**命名参数覆盖位置参数**）③ `TickableAttributeTests.cs` |
 | 改 `TriggerAttributes` 的组合方式 | `Src/Generators/VeloxDev.Core.Generator/Base/Analizer.cs:116-128`；`"VeloxDev.TimeLine.TickableAttribute"` 在 `:124`。**它同时决定了「哪些类会进入生成器」**，删掉它等于整个特性失效 |
 | 改事件参数族的形状 | `TransitionSystem`（`Runtime/TransitionDiagnostics.cs:41`、`Runtime/TransitionInterpreter.cs:218,222,315`、`Effects/Transition.cs:349`）+ `Events/TransitionEventArgs{TStage,TValue}.cs`、`Enums/{Warn,Error}Stage.cs` + `TimeLineEventArgsTests.cs` |

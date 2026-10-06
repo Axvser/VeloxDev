@@ -75,7 +75,7 @@
 
 `Interpolator.cs:10-21` 的 12 个键里有 **6 个是本家独有的类型对**：MAUI 同时提供单精度的 `Microsoft.Maui.Graphics.PointF/SizeF/RectF` 与 Controls 的 `Point/Size/Rect/Thickness`，所以别家各一份的采样器在这里成对注册（`Point:PointF`、`Size:SizeF`、`Rect:RectF`），另加 `ShadowSampler`。这条的展开在 `TransitionSystem/adapters/maui.md` §一/§三·3，本文不重复。
 
-**`Interpolator.cs` 与 12 个采样器**一个都不 `using System.Drawing`，所以两个文件里的裸名 `PointF`/`SizeF`/`RectF` 一律绑到 MAUI 一侧，与注册键一致（2026-09-20 修好了 `RectFSampler` 曾单方面 import `System.Drawing` 的问题，见 §五·1）。
+**`Interpolator.cs` 与 12 个采样器**一个都不 `using System.Drawing`，所以两个文件里的裸名 `PointF`/`SizeF`/`RectF` 一律绑到 MAUI 一侧，与注册键一致（`RectFSampler` 不 import `System.Drawing`，见 §五·1）。
 
 ### 2.3 `Property(...)` 重载表由本家自己写，Core 一个都没有
 

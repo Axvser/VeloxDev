@@ -208,7 +208,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 | `VeloxDev.Core.Extension` | **0** |
 | `VeloxDev.Core` | **4**，全在 `AI/` 之外 |
 
-那 4 条：`CompileKeyNormalizer.cs`（`Type.GetType(string)`）、`SlotEnumerator.ResolveTypeByName`（`Assembly.GetType`，反序列化时按名字还原 `SelectorType`）、`TransitionSystem/Binding/TransitionProperty.cs` 与 `TransitionSystem/Sampling/Interpolator.cs`。**前两条属于反序列化**，第三条属于另一个模块 —— 都不在本轮的「Agent 面清零」范围内。
+那 4 条：`CompileKeyNormalizer.cs`（`Type.GetType(string)`）、`SlotEnumerator.ResolveTypeByName`（`Assembly.GetType`，反序列化时按名字还原 `SelectorType`）、`TransitionSystem/Binding/TransitionProperty.cs` 与 `TransitionSystem/Sampling/Interpolator.cs`。**前两条属于反序列化**，第三条属于另一个模块 —— 都不在「Agent 面清零」范围内。
 
 **注意**：`IsTrimmable=true` 单独用**不够**。SDK 10 上它不引 `Microsoft.NET.ILLink.Tasks`，于是「0 警告」是假象 —— 必须显式 `-p:EnableTrimAnalyzer=true`，并且 Core 也要多目标到 net8.0（否则 Extension 的 net8.0 构建引用不到它）。历史上那条 `-p:TargetFrameworks=...` 的命令在 SDK 10 上已经不成立（属性会泄漏给 Core，报 MSB3277）。
 
@@ -291,7 +291,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 ### 没有回退暴露出来的两条契约（不是 bug，是代价）
 
-1. **夹具必须 `internal` 以上。** 生成器跳过私有 / `protected` / `file` 类型，所以任何要被 Agent 描述的类型都得可见 —— 测试里那批 `private sealed class` 夹具因此读不到说明，已改成 `internal`。真实场景同理：用户的组件类不能是嵌套私有的。
+1. **夹具必须 `internal` 以上。** 生成器跳过私有 / `protected` / `file` 类型，所以任何要被 Agent 描述的类型都得可见 —— 测试里那批 `private sealed class` 夹具因此读不到说明 —— 要改成 `internal`。真实场景同理：用户的组件类不能是嵌套私有的。
 2. **`AgentTypeResolver.ResolveType` 成了封闭世界。** `ResolveType("System.String")` 返回 `null` —— 没有分片的类型解析不到。旧的实现扫 `AppDomain.CurrentDomain.GetAssemblies()`，那正是裁剪器跟不上的那一步。
 
 ### 生成期撞出来、改代码前必须知道的（都吃过一次）
@@ -359,7 +359,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 - 写进去 (3120, 940)，读回来 (2836.36, 854.55)，**比例随用户缩放变**；
 - 位置无法往返核对，两次不同缩放下的读数也无法互比。
 
-`ListNodes` / `GetNodeDetail` 已改成乘回缩放报世界坐标（`WorldAnchor` / `WorldSize`），说明里也写明用的是哪个空间。**改动只在读侧** —— 渲染确实需要折叠值，错的是把渲染用的 getter 当成对外的位置读数。守卫在 `NodeGeometryToolTests`（非单位缩放的读数与往返各一条）。
+`ListNodes` / `GetNodeDetail` 报世界坐标（乘回缩放，`WorldAnchor` / `WorldSize`），说明里也写明用的是哪个空间。**只在读侧乘回** —— 渲染确实需要折叠值，错的是把渲染用的 getter 当成对外的位置读数。守卫在 `NodeGeometryToolTests`（非单位缩放的读数与往返各一条）。
 
 ### 七·八、目录的「谁算组件」判据也漏了同一个兜底（2026-10-05）
 
@@ -371,7 +371,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 **demo 看不见这个缺口**，因为 demo 的每个节点都另外带了 `[AgentContext]`；它只在消费方第一次写下不带标注的
 节点时出现。归档那一侧早就不这样：`VeloxJsonModel.RootReason` 第二条就是 `[WorkflowBuilder.*]`。
 
-⚠ **这是对消费方目录的加宽**：他们声明的每个组件开始进目录（此前只有带标注的进）。方向是对的 —— 否则 Agent
+⚠ **这是对消费方目录的加宽**：他们声明的每个组件都进目录（不只带标注的）。方向是对的 —— 否则 Agent
 建不了用户自己的节点 —— 但 prompt 体积会涨。回退点：`ComponentKindOf` 里那一行。
 
 守卫：`DiscoveryCoverageTests`。同一条用例还钉住了**「枚举器不带 `[SlotSelectors]` = 不设限」**：白名单才是
@@ -396,11 +396,11 @@ Agent 在一处列表里读到 `List<X>`，去问 X 是「不在目录里」。�
 `Data` 条目不会被当成可创建类型报给模型。
 
 **放宽之后 `VeloxDev.Core.Extension` 自己多出 2 条 `VELOX_AI_TREE001`**（`AgentPipeline.Use`、
-`WorkflowAgentScope.WithSkills`）—— 被成员类型捎带进来的宿主 API，此前不在目录里。于是 `DetectNotices`
+`WorkflowAgentScope.WithSkills`）—— 被成员类型捎带进来的宿主 API，现在也在目录里。于是 `DetectNotices`
 多收一个 `declared` 集合（第一趟填的），只对**作者自己声明进目录**的类型报。理由：诊断是说给作者的行动建议
 （「你的这个声明会被目录丢掉一部分」），一个只因为出现在成员的类型名里才进来的类型没有这样的行动，
-而诊断落在它的源码行上，看上去像在说那个人写错了。此前枚举/结构体那一趟没产生过任何诊断，所以这条收窄
-不改变任何既有输出。
+而诊断落在它的源码行上，看上去像在说那个人写错了。枚举/结构体那一趟本就产生不了诊断，所以这条收窄
+不改变任何输出。
 
 > 写这个过滤时踩了一次真空引用：`if (type.Symbol is not null && !declared.Contains(type.Symbol)) continue;`
 > —— `Symbol` 为 null 时不 continue，下一句就用它取 `Locations`。编译器 CS8602 报了；**nullable 警告在这条

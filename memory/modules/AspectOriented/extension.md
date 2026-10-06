@@ -110,7 +110,7 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 ### 3. 改「接口 / 代理 / 命名空间段」的拼接方式
 
-**只有一个地方**：`Base/AopNames.cs`。接口名与代理名由 `InterfaceFor` / `ProxyFor` 派生（`ProxyFor` = `InterfaceFor + "Proxy"`），扩展类名用的是同一个 `Segment`（`AopWriter.cs:64`）。这三者必须对同一个类给出一致的名字 —— 历史上它们曾在三处各算一遍、且在全局命名空间下产出非法的 `<global namespace>`（宿主只报 CS8785）。**不要在任何一处重新手写拼接**；要改就改 `AopNames`。
+**只有一个地方**：`Base/AopNames.cs`。接口名与代理名由 `InterfaceFor` / `ProxyFor` 派生（`ProxyFor` = `InterfaceFor + "Proxy"`），扩展类名用的是同一个 `Segment`（`AopWriter.cs:64`）。这三者必须对同一个类给出一致的名字 —— 三处各算一遍会在全局命名空间下产出非法的 `<global namespace>`（宿主只报 CS8785）。**不要在任何一处重新手写拼接**；要改就改 `AopNames`。
 
 本仓库的 `Src/Adapters/` **没有任何** AOP 使用者（`Src/` 里只有契约、生成器与测试提到这个命名空间），所以这类回归**跑不出来** —— 但 `Src/Core/VeloxDev.Core.Test/AspectOriented/` 与 `Examples/AOP/*` 会先红。
 

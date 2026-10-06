@@ -151,9 +151,9 @@ context.RegisterSourceOutput(
 - 跳过是因为产物**注定编不过** —— 再冒一个 CS1503 只会把真正的错误埋掉。全部方法都被拒时 `CanWrite()` 为假，**整个文件都不生成**。
 - **拒掉比产出好**：照旧产出时，作者看到的是生成文件里的 `CS1503 无法从"方法组"转换…` —— 一个自己没写过的方法组和构造签名。
 
-被拒的四种（消息里的措辞就是「该怎么改」）：**类型参数不出现在参数类型里的**泛型方法、返回类型不认识、前导形参多于 **15 个**、`void` 带 `CancellationToken`。2026-10-02 起又加了两条同 ID 的理由：情形 2 的泛型方法撞上「接口已声明非强类型命令属性」（只能给方法、接口要属性，无法退让）、以及 `{名}Command` 已被同名成员占用（此前会静默产出 CS0102）。
+被拒的四种（消息里的措辞就是「该怎么改」）：**类型参数不出现在参数类型里的**泛型方法、返回类型不认识、前导形参多于 **15 个**、`void` 带 `CancellationToken`。2026-10-02 起又加了两条同 ID 的理由：情形 2 的泛型方法撞上「接口已声明非强类型命令属性」（只能给方法、接口要属性，无法退让）、以及 `{名}Command` 已被同名成员占用（这种会静默产出 CS0102）。
 
-`DiagnosticDescriptor` 在 `Diagnostics.cs`；`CommandWriter.Diagnostics` 收集，`Command.cs` 用 `context.ReportDiagnostic` 报出去。**这是本仓库第一个 Roslyn 诊断**（此前只有 `.targets` 里的 `VELOXCFG0001` 那条 MSBuild 警告）。
+`DiagnosticDescriptor` 在 `Diagnostics.cs`；`CommandWriter.Diagnostics` 收集，`Command.cs` 用 `context.ReportDiagnostic` 报出去。**这是本仓库第一个 Roslyn 诊断**（`.targets` 里的 `VELOXCFG0001` 只是 MSBuild 警告，不算）。
 
 **形参这一维**（2026-10-01 起，后由 arity 族扩展）：前导形参支持 **0..15 个**（`Writers/CommandWriter.cs:180` 的 `MaxLeadingParameters = 15`），末尾可再跟一个 `CancellationToken`；多于 15 个报 `VELOX_MVVM_CMD001`。生成物按 `isTyped`（`Writers/CommandWriter.cs:284`）分两路：
 
@@ -177,11 +177,11 @@ context.RegisterSourceOutput(
 | `(CancellationToken)` | `ct => Foo(ct).AsTask()` | `UntypedTokenOnlyFactory` | **true** |
 | `(object?, CancellationToken)` | `(parameter, ct) => Foo(parameter, ct).AsTask()` | `UntypedMainCtor` | **true** |
 
-前两行是单参 lambda、后一行是双参，**这个差别是刻意的**：早先 1 参一律发双参 lambda，只能绑主构造，于是 `ValueTask (object?)` 每次执行白建一个命令体根本看不到的 `CancellationTokenSource`（72 B），与 `Task (object?)` 不一致。`AParameterOnlyBody_GetsNoCancellationTokenSource_ForEitherReturnType`（`CommandSignatureTests.cs:78`）钉住了这个对称性。
+前两行是单参 lambda、后一行是双参，**这个差别是刻意的**：1 参若一律发双参 lambda，就只能绑主构造，于是 `ValueTask (object?)` 每次执行白建一个命令体根本看不到的 `CancellationTokenSource`（72 B），与 `Task (object?)` 不一致。`AParameterOnlyBody_GetsNoCancellationTokenSource_ForEitherReturnType`（`CommandSignatureTests.cs:78`）钉住了这个对称性。
 
 - thunk 产出 `Func<object?, CancellationToken, Task>` —— **这个签名在四个 TFM 上都存在**，所以生成代码不依赖运行时的 ValueTask 入口，`netstandard2.0` / `net461` 的生成目标照样编得过。**不要**给生成器加 TFM 感知或 MSBuild 属性管线，那是多余的。
 - **不要**把 `Foo(...)` 提到 lambda 外面再 `AsTask()`：`IValueTaskSource` 只能消费一次，第二次执行会抛 `InvalidOperationException`。
-- 零参形态 `() => Foo().AsTask()` **实测无二义性**（红队曾断言它会 CS0121，**是错的**）：它绑到 `Func<Task>`，命令体确实被 await，且拿到 `_isCtsNeeded = false`。
+- 零参形态 `() => Foo().AsTask()` **实测无二义性**（不会 CS0121）：它绑到 `Func<Task>`，命令体确实被 await，且拿到 `_isCtsNeeded = false`。
 
 ### 全局命名空间：`ContainingNamespace` 有两个陷阱
 
@@ -272,7 +272,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 
    **这一轮补的是后两处，代价各不相同。** `IsSingleSlotType` 漏最久：消费方声明的槽属性拿不到 `AIContextFlags.IsSingleSlot`，于是 `ListSlotProperties` 不列它、`BuildSlotPropertyMap` 不认它（按属性名解析的连接工具全部报错）、`ComponentPatcher` 也不拒绝对它直接赋值。`ComponentKindOf` 漏的是**整类组件**：只写了 `[WorkflowBuilder.Node<T>]` 的节点类型不进目录，`CreateNode` / `GetTypeSchema` 对它一律答「不在目录里」。详见 [`AI/architecture.md`](../AI/architecture.md) §七·五、§七·六 与 [`WorkflowSystem/architecture.md`](../WorkflowSystem/architecture.md)。
 
-   ⚠ 补 `ComponentKindOf` 会**加宽消费方的目录**（此前只有带标注的组件才进），这是要的方向，但 prompt 体积会涨；回退点就是那一行。
+   ⚠ 补 `ComponentKindOf` 会**加宽消费方的目录**（不只带标注的组件），这是要的方向，但 prompt 体积会涨；回退点就是那一行。
 
    写这条判据时**按包含类型判、不按名字前缀**：`WorkflowBuilder.Slot<T>` 是泛型嵌套特性，`ToDisplayString` 把嵌套类型渲染成 `.` 而不是元数据里的 `+`，前缀匹配永远匹配不上。**新增这类判据时先 grep 上面这张表**，照着已有那处的写法写。
 

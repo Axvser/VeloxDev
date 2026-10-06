@@ -69,7 +69,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | `InlinePostHost<TPriority>` | `TestHosts.cs:24` | 永远**不在**目标线程 → 逼所有写入走 post 通道、逼断言去看 priority 参数 |
 | `DeferredHost` | `TestHosts.cs:44` | 即发即弃的适配器：写入排队，`Pump()` 才落地（模拟「动画已取消但消息还在队列里」） |
 | `FakeTimeSource` | `Timing/FakeTimeSource.cs:21` | 手驱动的 `ITimeSourceControl`。`Advance`/`AdvanceSteps` 移时钟**不做 rebase**；`Pause()`/`Resume()`（`:73`/`:81`）、`Stall()`/`Feed()`（`:58`/`:66`）控制 `IsAdvancing`（`:41`） |
-| `StubCommand` / `StubSlot` / `StubNode` / `StubTree` | `WorkflowSystem/Support/WorkflowTestKit.cs:14,44,66,92` | 工作流四组件的空实现（此前在三个测试文件里各抄一份，现集中） |
+| `StubCommand` / `StubSlot` / `StubNode` / `StubTree` | `WorkflowSystem/Support/WorkflowTestKit.cs:14,44,66,92` | 工作流四组件的空实现（集中在 `WorkflowTestKit`，不在三个测试文件里各抄一份） |
 | `TestCommand` / `TestSlot` / `ProbeNode` | `WorkflowSystem/CompilerEx/ProbeNodes.cs:20,60,123` | 编译 / 运行测试的图件：不需要树、不需要撤销栈 |
 
 `InternalsVisibleTo` 有两处，**形式不同**：Core 用特性（`Src/Core/VeloxDev.Core/Properties/AssemblyInfo.cs:3`），Core.Extension 用 csproj 项（`Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj:52`）。所以本模块可以直接测 `internal` 类型（`TransitionRun` 就是 internal）。
@@ -122,7 +122,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | `Src/Core/VeloxDev.Core/Lifetime/`（`IApplicationState.cs`） | 零测试目录 |
 | `Src/Core/VeloxDev.Core/Threading/`（4 个 .cs） | 零直接测试，只经由 `TestHosts.cs` 的宿主间接走到 |
 
-（`Src/Core/VeloxDev.Core/AspectOriented/` 曾在这张表里，**现在有测试了** —— 见 `AspectOriented/` 目录。`Src/Core/VeloxDev.Core/Serialization/` 也曾在这张表里，**现在有测试了** —— 见 `Serialization/` 目录。`Properties/` 只有一个 `AssemblyInfo.cs`，不算主题目录。）
+（`AspectOriented/` 与 `Serialization/` 都有自己的测试目录，不在上表。`Properties/` 只有一个 `AssemblyInfo.cs`，不算主题目录。）
 
 **已知无测试的入口（结构性缺口，不是疏漏）：**
 

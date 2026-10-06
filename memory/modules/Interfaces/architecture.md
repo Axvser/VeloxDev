@@ -127,7 +127,7 @@
 6. **命令属性的数量按语义给，不按对称**：`IVeloxCommand` 属性在五个契约里是 1（基）/8（Tree）/8（Node）/4（Slot）/1（Link），共 22 个。
 7. **异步成员一律把取消参数放最后**，但默认值不统一：`ITimeSource.cs:100`（`CancellationToken cancellationToken = default`）与 `ITransitionScheduler.cs:17`/`:37`（`CancellationTokenSource? externCts = default`）给默认值，WorkflowSystem 的 `ReceiveAsync`/`BroadcastAsync`/`ReverseBroadcastAsync`/`AccessAsync`（`IWorkflowNodeViewModel.cs:123-141`）不给，必须显式传。
 8. **契约里的拼写错误会被固化。** `ITransitionEffectCore` 有 `Canceled` 事件（`:44`）却只有 `InvokeCancled(...)`（`:74`，少一个 `c`），全仓按错拼写用（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs:55` 的字段就叫 `_cancled`）。
-9. **`ITickable` 的名字里曾藏着一个 U+200B 零宽空格 —— 2026-10-01 随重命名一并清除**（当时它还叫 `IMonoBehaviour`）。记录留下是因为它**编译得过、代码评审看不出来**，值一条纪律：文件名与 `ITickable` / `InitializeTickable` 两个标识符里各有一个，而编译器忽略 Cf 类字符 ⇒ 两种拼写**是同一个标识符**，元数据里落地的还是无 ZWSP 的写法。坑**全在人这一侧**：裸路径打不开文件（实测 `FileNotFoundError`）、`grep -l` 漏、**连 `git ls-files` 都把路径转义成 `"…\342\200\213.cs"`**，于是 `git ls-files … | grep -c '\.cs$'` 数出 37 而不是 38。
+9. **改 `ITickable` 这类名字时当心不可见字符** —— 它曾带着一个 U+200B 零宽空格（2026-10-01 随重命名一并清除，当时它还叫 `IMonoBehaviour`）。为什么值得记：它**编译得过、代码评审看不出来** ——文件名与 `ITickable` / `InitializeTickable` 两个标识符里各有一个，而编译器忽略 Cf 类字符 ⇒ 两种拼写**是同一个标识符**，元数据里落地的还是无 ZWSP 的写法。坑**全在人这一侧**：裸路径打不开文件（实测 `FileNotFoundError`）、`grep -l` 漏、**连 `git ls-files` 都把路径转义成 `"…\342\200\213.cs"`**，于是 `git ls-files … | grep -c '\.cs$'` 数出 37 而不是 38。
    **现在这些都不成立了** —— 名字就是普通的 `ITickable`，上面的数法也正常了。**纪律**：新契约的名字里绝不允许出现 Cf 类字符；它编译得过，所以唯一的防线是知道这件事。
 
 ---

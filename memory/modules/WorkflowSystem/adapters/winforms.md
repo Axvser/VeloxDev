@@ -3,7 +3,7 @@
 > **另：连线的那个基类已换成附加助手**（2026-10-04）—— 这一角色现在由用户自己的控件 + `WorkflowLinkAttachment.Attach(this)` 组成，
 > 下文凡是 `WorkflowLinkView` 的类名与行号，按 `WorkflowLinkAttachment` 读；机制（自盒化 / 雕窗口区域 / 端点订阅 / 命中发布）没变。
 > **另（2026-10-04）：slot / node 的基类也换成了附加助手** —— `WorkflowSlotAttachment` / `WorkflowNodeAttachment`；
-> 树（`WorkflowTreeView`）仍是基类（它是引擎不是视图），但 WinForms 那家的表面行为改成了**按对象**交部件，不再按名字找。
+> 树（`WorkflowTreeView`）仍是基类（它是引擎不是视图），但 WinForms 那家的表面行为是**按对象**交部件（不按名字找）。
 > 下文凡提 `WorkflowSlotView` / `WorkflowNodeView` 的类名，按对应的 `*Attachment` 读。
 >
 > 连线交互规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)：输入是标准输入
@@ -123,7 +123,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 三条共用的语义两条：**控件销毁即解订**（挂在 `Control.Disposed` 上，因为控件比模型活得短）；
 跨线程编组复用 `ModelChangeRelay`（这家只有那一份「订阅 / 退订 / `InvokeRequired` 编排」，
-**别再抄第二份** —— 它是容易写错的一类代码，这也是当初把它抽出来的理由）。
+**别再抄第二份** —— 它是容易写错的一类代码，这就是把它抽出来的理由）。
 
 ⚠ **它是给用户自己写的视图用的**。适配器自带的那几个视图走各自的助手（`WorkflowNodeAttachment` 等），
 不用它；不要把这两条路合成一条。
@@ -181,11 +181,11 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 **2026-10-03：这些名字现在有了一个真实来源。** 适配器包发了 `WorkflowTreeView`
 （`Attached/Workflow/WorkflowTreeView.cs`），生成模板与 `WinForms Trimmed` 的树视图都从它派生 ——
 `PanOffset`、`OnMinimapScrollRequested`、四个 `PART_*` 名不再靠用户代码碰巧起对名字，反射是对着包内类型解析的。
-⇒ 那三处反射**可以**改成真实接口（本轮没做）；在那之前，**基类上这些名字同样不能改名**，
+⇒ 那三处反射**可以**改成真实接口（尚未做）；在那之前，**基类上这些名字同样不能改名**，
 而且改坏不会有编译错误，只会让卡片不跟手、缩放枢轴漂移。
 
-**视口往返在这家是 2026-10-03 才补齐的**：此前 `Refresh` 只推 `helper.Viewport`，既不持久化
-`Layout.ViewportOffset`、也没有挂树恢复 —— 七家里唯一两半都缺的。现在：
+**视口往返现在两半都齐**（2026-10-03 起）：`Refresh` 推 `helper.Viewport`，也持久化
+`Layout.ViewportOffset`、并做挂树恢复。做法：
 写回用 `WorkflowSurfaceMath.ViewportOffsetFromScroll`，**只在 `ResolveScrollOffset` 走真实 pan 来源时写**
 （`out bool measured`）—— 上表那一行说的「退回 `ViewportOffset`」那条兜底不能用，写回去就是枢轴漂移那个坑；
 恢复是 `CaptureViewportRestore`（`Refresh` 里、写 Viewport 之前）+ `QueueViewportRestore`（`BeginInvoke`；
