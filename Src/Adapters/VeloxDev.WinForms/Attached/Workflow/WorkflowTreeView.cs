@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -438,7 +438,7 @@ public abstract class WorkflowTreeView : UserControl
             WorkflowSurfaceBehavior.Refresh(this);
         }
 
-        AttachLinkInteraction();
+        AttachLinkInput();
     }
 
     private void AttachVisibleItems(ObservableCollection<IWorkflowViewModel>? items)
@@ -724,9 +724,9 @@ public abstract class WorkflowTreeView : UserControl
 
     // 输入归 Core：本家只做平台的事 —— 把画布的指针/按键翻译成标准输入事件转发进去，命中时给画布取焦点。
     // 删除与悬停外观都是宿主的；本家只做平台的事。
-    private void AttachLinkInteraction()
+    private void AttachLinkInput()
     {
-        DetachLinkInteraction();
+        DetachLinkInput();
         if (_tree is null) return;
 
         // 路由由 Core 按树缓存：这里取到的就是同一棵树在任意界面上的那一个，本家不再自己造实例。
@@ -742,7 +742,7 @@ public abstract class WorkflowTreeView : UserControl
         _tree.GetHelper().LinkRemoved += OnLinkRemoved;
     }
 
-    private void DetachLinkInteraction()
+    private void DetachLinkInput()
     {
         if (_input is null) return;
 
@@ -972,7 +972,7 @@ public abstract class WorkflowTreeView : UserControl
     {
         if (disposing)
         {
-            DetachLinkInteraction();
+            DetachLinkInput();
             ViewPool.SetItemsSource(PART_Canvas, null);
             ViewPool.SetTemplateSelector(PART_Canvas, null);
             AttachVisibleItems(null);

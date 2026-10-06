@@ -1,4 +1,4 @@
-using Demo.ViewModels;
+﻿using Demo.ViewModels;
 using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -321,7 +321,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         if (s is null) return;
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, s.Tree);
-        AttachLinkInteraction(s.Tree);
+        AttachLinkInput(s.Tree);
         s.Tree.Nodes.CollectionChanged += OnNodesChanged;
         s.Tree.Links.CollectionChanged += OnLinksChanged;
         s.Controller.PropertyChanged += OnControllerPropertyChanged;
@@ -503,7 +503,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         // 时钟属于这块画布的链接面，链接面属于会话
         StopLinkFlow();
-        DetachLinkInteraction();
+        DetachLinkInput();
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, null);
         _infoOverlay.Bind(null);
         HandleCreated -= OnHandleCreatedForInitialSync;
@@ -869,9 +869,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     // 输入归 Core：本家只做平台的事 —— 把指针/按键翻译成标准输入事件转发进去、命中时给画布取键盘焦点、
     // 右键时弹菜单、按悬停结果给渲染器上色、Delete 键自己删（见 OnKeyDown）—— 这些都是宿主的策略。
-    private void AttachLinkInteraction(IWorkflowTreeViewModel tree)
+    private void AttachLinkInput(IWorkflowTreeViewModel tree)
     {
-        DetachLinkInteraction();
+        DetachLinkInput();
 
         // 路由由 Core 按树缓存：同一棵树在任何界面上都是这一个，本家不再自己造；半径沿用本家原先的值。
         var input = WorkflowInput.For(tree);
@@ -888,7 +888,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         _input = input;
     }
 
-    private void DetachLinkInteraction()
+    private void DetachLinkInput()
     {
         if (_input is not { } input) return;
 
