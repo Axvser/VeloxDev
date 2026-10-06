@@ -22,10 +22,10 @@
 | 附着属性名 / `PART_*` 命名约定（`../extension.md:201`） | **组件 + `[Parameter]` + `RenderFragment`**（`Attached/Workflow/WorkflowSurfaceBehavior.razor:14,18,31-38`） | Blazor 没有附着属性系统，也没有可附着的元素树。别家在标记里写 `behaviors:WorkflowXxx.IsEnabled="True"`，这里只能 `<WorkflowXxx IsEnabled="true">…</WorkflowXxx>` |
 | 按 `x:Name` 找画布 / 找装饰器 | 直接传 `ScrollViewerId`/`CanvasId`，装饰器与小地图以 `RenderFragment` 传入（`Attached/Workflow/WorkflowSurfaceBehavior.razor:14,18,31-38`） | 服务端没有名字作用域可查；`@ref` 拿到的是组件实例，不是元素 |
 | 视图池 `ViewPool.TemplateSelector` | `ViewPool.ItemTemplate` + 消费方自己 `@switch` 派发（`Attached/Workflow/ViewPool.razor.cs:22`） | 没有 DataTemplate 选择器可挂 |
-| 插槽几何写入用 `SlotAnchorFrom*`（`../extension.md:204`） | **不调这三个函数**：世界坐标在 JS 里算完才回传（`wwwroot/veloxdev.workflow.js:1051-1060`），C# 只把结果写进 `slot.Anchor`（`Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:83`） | 量像素这件事整个发生在浏览器里；Core 的那三个函数要的是一个**能读控件几何的宿主**，服务端没有 |
+| 插槽几何写入用 `SlotAnchorFrom*`（`../extension.md:204`） | **不调这三个函数**：世界坐标在 JS 里算完才回传（`wwwroot/veloxdev.workflow.js:1073-1082`），C# 只把结果写进 `slot.Anchor`（`Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:83`） | 量像素这件事整个发生在浏览器里；Core 的那三个函数要的是一个**能读控件几何的宿主**，服务端没有 |
 
 **契约之外多出来的一个东西（读这家的代码必须知道）**：`SurfaceViewportFeed`。
-它是一个这家的级联值（`WorkflowSurfaceBehavior.razor.cs:493` 的 `_feed`，经
+它是一个这家的级联值（`WorkflowSurfaceBehavior.razor.cs:603` 的 `_feed`，经
 `Attached/Workflow/WorkflowSurfaceBehavior.razor:6` 的 `CascadingValue` 下发），
 让标尺装饰器能在不拖动节点/连线子树的情况下重渲染（`WorkflowGridDecorator.razor.cs:97-111`）。
 别家是同一个控件树里同步重绘，不需要这条旁路。
@@ -46,11 +46,11 @@
 - **元素带稳定 id 往返**：`WorkflowRuntimeIds` 用 `ConditionalWeakTable<object,string>` 按**引用身份**发
   `Guid`（`Attached/Workflow/WorkflowRuntimeIds.cs:17-23`），元素上写 `data-veloxdev-node-id` /
   `data-veloxdev-slot-id`，JS 靠这些属性回指同一个对象（`WorkflowSlotConnectionBehavior.razor:3`；
-  JS 侧 `wwwroot/veloxdev.workflow.js:1042-1043`）。id 必须跨越重渲染稳定，所以键是**组件实例**而不是位置。
+  JS 侧 `wwwroot/veloxdev.workflow.js:1064-1065`）。id 必须跨越重渲染稳定，所以键是**组件实例**而不是位置。
 - **批量而非逐条**：插槽布局一次测量**所有** `[data-veloxdev-slot-id]` 后代，凑成一个批次回传
   （`[JSInvokable] OnSlotLayoutBatch(string[][] batch)`，`Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:54-55`；
-  JS 侧打包 `wwwroot/veloxdev.workflow.js:1051-1052`、`:1060`）。逐槽一次调用 = 每槽一次 SignalR 往返。
-  附带好处是**没有 `SlotNames` 清单要维护**（`README.md:131-133`）。
+  JS 侧打包 `wwwroot/veloxdev.workflow.js:1073-1074`、`:1082`）。逐槽一次调用 = 每槽一次 SignalR 往返。
+  附带好处是**没有 `SlotNames` 清单要维护**。
 - **测量在 JS 侧持续进行**：`ResizeObserver` + `MutationObserver` + 拖拽期 rAF 活测（`wwwroot/veloxdev.workflow.js` 的
   `initSlotLayout`），否则「拖着节点时连线跟着走」在服务端是不可能实现的。
 
@@ -64,13 +64,13 @@
 
 - 画布宿主（`veloxdev-wf-canvas-host`）的**像素尺寸只由 JS 设置**，C# 从不写它；
   网格层与两条坐标轴是 JS 定位的独立层，**画布本身只有纯色背景**（`Attached/Workflow/WorkflowSurfaceBehavior.razor:16-19`，
-  同一理由在 `WorkflowSurfaceBehavior.razor.cs:501-506` 的样式注释里再写了一遍）。
+  同一理由在 `WorkflowSurfaceBehavior.razor.cs:611-616` 的样式注释里再写了一遍）。
   扩展发生在 JS 内部：滚动余量到边（`onScroll` 判据 50px 内）就调 `expandCanvas`，后者把宿主宽/高各加 800
   （触发 `wwwroot/veloxdev.workflow.js:688-689`，加宽 `:632,637`）。
   JS 侧把这条分区写成了显式理由：**「async renders never write the content translate, host size, or scroll
   (those are JS-owned)」**（同文件 `:451-453`，在 `:424-427` 再写一遍作为 settle 守卫只覆盖节点几何与连线点的依据）。
 - 小地图的**视口块也归 JS**（`setMinimapViewport`/`refreshMinimapViewport`），C# 只推映射关系。
-- C# 侧 `OnParametersSet` 里对 `_offsetX/_offsetY` 的写入只增不减（`WorkflowSurfaceBehavior.razor.cs:525-526`），
+- C# 侧 `OnParametersSet` 里对 `_offsetX/_offsetY` 的写入只增不减（`WorkflowSurfaceBehavior.razor.cs:635-636`），
   镜像 JS 侧的边缘扩展语义。
 
 **这条是「别家能照抄什么」的正确答案**：别家的画布尺寸与网格由控件树/框架渲染拥有，没有这个问题；
@@ -84,18 +84,18 @@
 
 **做法（三层，缺一层就漏）：**
 
-1. **`WorkflowGeometryScope`**：`OnWheelZoom` 全程持一个作用域（`WorkflowSurfaceBehavior.razor.cs:593` 的
+1. **`WorkflowGeometryScope`**：`OnWheelZoom` 全程持一个作用域（`WorkflowSurfaceBehavior.razor.cs:703` 的
    `using var _zoomScope = WorkflowGeometryScope.Zoom();`），所有逐节点几何写者见到
    `WorkflowGeometryScope.IsZooming` 就停手（`WorkflowNodeDragBehavior.razor.cs:94,108`）。
    它是 **`AsyncLocal<int>` 而不是 static 标志** —— 一个 Blazor Server 进程跑很多 circuit，
    `AsyncLocal` 才让它们互不可见，且计数器支持重入（`Attached/Workflow/WorkflowGeometryScope.cs:23-33`）。
 2. **一次手势一个原子提交**：整个滚轮突发只算**一个枢轴**（`WorldAtViewportCenter(...)` 在循环外算一次，
-   `WorkflowSurfaceBehavior.razor.cs:598`），净增量折成 `count` 次复合步（`:602`），
+   `WorkflowSurfaceBehavior.razor.cs:708`），净增量折成 `count` 次复合步（`:712`），
    且**只把最终状态推给 DOM** —— 一次 `applyZoomSurface` 同时落地 translate + scroll + 节点几何 + 连线点位
-   （`:572-579` 的 XML、JS 侧 `applyZoomSurface`）。
+   （`:682-689` 的 XML、JS 侧 `applyZoomSurface`）。
 3. **滚轮合并在 JS**：JS 把一次 SignalR 往返窗口内的多个 wheel 事件**净 delta** 累加后调一次
-   `OnWheelZoom`（`wwwroot/veloxdev.workflow.js:1209` 的 `pending += e.deltaY > 0 ? -120 : 120` 与
-   `:1184` 的 `invokeMethodAsync('OnWheelZoom', …)`），并带一个 **250ms 尾窗**的 settle 守卫
+   `OnWheelZoom`（`wwwroot/veloxdev.workflow.js:1234` 的 `pending += e.deltaY > 0 ? -120 : 120` 与
+   `:1206` 的 `invokeMethodAsync('OnWheelZoom', …)`），并带一个 **250ms 尾窗**的 settle 守卫
    （`SETTLE_TAIL_MS = 250`，`:533-555`），在最后一步之后仍逐 rAF 重断节点几何与连线点
    —— 因为每个节点的重渲染是**各自一条 SignalR 消息**，两次缩放突发在服务端重叠时，
    第一批的渲染可能晚于第二批落地（`:446-453` 的注释）。
@@ -114,8 +114,8 @@ circuit 一导航就销毁，但 JS 侧的回调、`_dotNetRef`、挂着的定�
 ### 5. 滚轮事件的方向在 JS 侧就已经翻过号
 
 C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `factor = wheelDelta > 0 ? 1 / 1.1 : 1.1`
-（`WorkflowSurfaceBehavior.razor.cs:604`）——与 `../extension.md:205` 的统一方向一致。
-翻号发生在 JS：`pending += e.deltaY > 0 ? -120 : 120`（`wwwroot/veloxdev.workflow.js:1209`，
+（`WorkflowSurfaceBehavior.razor.cs:714`）——与 `../extension.md:205` 的统一方向一致。
+翻号发生在 JS：`pending += e.deltaY > 0 ? -120 : 120`（`wwwroot/veloxdev.workflow.js:1234`，
 浏览器下滚是正 `deltaY`，翻成负数 = 缩小），一格固定 ±120。
 **这条容易在改 JS 时被反向**：`deltaY` 与 `wheelDelta` 的正方向相反，谁在哪一层翻号必须两边一致。
 
@@ -125,6 +125,34 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 坐标要加本家那段 ruler 超出预留的平移 —— 与 `OnSurfaceScroll` 里 effX/effY 同式。
 **`scrollToPosition` 收的是像素滚动位置、不是世界坐标**（别信注释的正反，这一处曾写反）。
 见 [../extension.md](../extension.md) §3.9-10。
+
+### 6. 自带手势的 `PreventDefault` 裁决要跨一次 JS↔.NET 往返（2026-10-06）
+
+**限制。** 契约要求四个自带手势（平移、节点拖动、插槽连线、缩放）尊重 `WorkflowEventHandle.PreventDefault`。
+六家原生适配器里路由与手势在同一个同步调用里，路由完顺手读句柄；这里**手势全在 JS**（`initSurface` 的 `mousedown`、
+`initNodeDrag`、`initSlotConnection`、`initWheelZoom` 的 `wheel`），而路由在 C# 侧，按下那一刻 C# 什么都没被告知。
+
+**做法（甲：先问再动手）。** JS 起手势前调 `RequestPressVerdict` / `RequestWheelVerdict`；C# 侧是
+`WorkflowSurfaceBehavior.razor.cs` 的 `[JSInvokable]`（节点/插槽各自的组件也有一个同名方法），建 args、路由、
+把 `PreventDefault` 当返回值交回；JS await 到 `true` 就不起手势。三个要点：
+
+- **节点/插槽走「组件各自路由」**（与 WinForms 同形，非 WPF 那套隧道相）：`WorkflowSurfaceBehavior.RouteComponentPress`，
+  目标就是组件自己的模型 —— 表面在 JS 的 `mousedown` 上比组件晚，句柄只能组件自己取。
+- **平移没有组件可归**，由表面路由；`targetId` 由 JS 的 `hitTargetId` 沿 `elementFromPoint` 的祖先链（含自身）找
+  `data-veloxdev-node-id` / `-slot-id`，C# 再 `WorkflowRuntimeIds.TryFind` 换回组件。**这是这家「Target 能是节点/插槽」
+  的唯一来源**（六家靠 `DataContext`）；认不到才回退 `HitTestVisibleLinks`。悬停另一条：JS 的
+  `pointerover`/`pointerout` 只在命中 id 变了时回传 `OnHoverTarget`，表面的 `Moved`/`Released`/`Wheel` 路由用它当 Target。
+- **两个竞态**：`pressWhenAllowed` 等裁决时挂一次性 `mouseup`，回来若已松开就不起手势（否则留下没有按键在场的
+  pan/drag 态）；缩放的 `e.preventDefault()` 必须同步调（等回来页面已经滚了），所以裁决排在它之后，一段突发只问一次
+  （`verdictBusy`），否决则丢掉整段 `pending`。
+
+**代价（已知且接受）。** Blazor WASM 下这次 await 只让出一次微任务，可忽略；**Blazor Server 下它是一个 SignalR RTT**
+（本机个位数 ms、跨网数十 ms），手势的 DOM 起步会晚这么多（delta 不丢：快照取自 mousedown，回来会追上）。
+判据：这家**本来就**为每个手势的**效果**付往返（`OnNodeDrag` / `OnSlotConnectionMove` 每次移动一次），
+这里只是把第一笔提前；平移是唯一原本零往返的手势。
+
+**没做的一件**：插槽连线的**完成**（mouseup 落在目标插槽上）不单独路由 —— 这家完成是松手不是按下，
+为它合成一次按下会在目标插槽上造出宿主没预期的事件。WinForms 那条「无论开始还是完成」在这家只覆盖开始。
 
 ---
 
@@ -141,11 +169,15 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 5. **这里是唯一一家几何写入要跨一次网络往返的适配器**，因此它的 id 机制、批量回传、JS 活测都不是「实现细节」
    而是**性能主线**（§二·1）。
 6. **这里是唯一一家不调用 Core 的 `SlotAnchorFrom*` 三件套的适配器**：世界坐标在 JS 里算完才回传
-   （`wwwroot/veloxdev.workflow.js:1051-1060`），C# 只把结果写进 `slot.Anchor`
+   （`wwwroot/veloxdev.workflow.js:1073-1082`），C# 只把结果写进 `slot.Anchor`
    （`Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:83`）。`../extension.md:204` 的「必须用三件套之一」
    这条契约在这家**没有对应物**（三件套要的是能读控件几何的宿主）。**新平台若也把测量放进 JS，
    不要为了「守契约」硬套一个 Core 函数 —— 那会把 JS 已经算好的世界坐标再换算一次。**
    代价是这家的 slot 锚点写入绕开了 Core 的坐标系收敛点，属于「已知的、有理由的例外」。
+7. **这里是唯一一家自带手势要先跨一次往返问 `PreventDefault` 才动手的适配器**（§二·6）。
+   别家的手势与路由在同一个同步调用里；这里手势在 JS、路由在 C#，所以是「先问再动手」而不是「路由完顺手读句柄」。
+   **新平台若也把手势放进 JS/服务端，照这里的三件事做**（组件各自路由、`hitTargetId` 供 Target、鼠标松手竞态守卫），
+   但要先想清它的往返代价 —— 这家为每个手势效果本来就付一次，别家在「效果」上也是同步的。
 
 ---
 
@@ -160,7 +192,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 
 **做对的范本（改这类代码照这几处抄）：**
 - `Attached/Workflow/WorkflowNodeDragBehavior.razor.cs:64` —— 节点位置串走 `InvariantCulture`。
-- `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:680-683` —— 推给 JS 的节点几何数组走 `InvariantCulture`。
+- `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:790-793` —— 推给 JS 的节点几何数组走 `InvariantCulture`。
 - `Attached/Workflow/WorkflowGridDecorator.razor.cs:169-183` —— 标尺**文字**走 `InvariantCulture`
   （这个文件现在全对）。
 - demo 侧：`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateSlotView.razor.cs:255` 的注释
@@ -182,7 +214,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
   映射后的 `XCss/YCss/WCss/HCss`、`WorkflowSurfaceBehavior.razor.cs` 的 `--veloxdev-gs` 网格间距 CSS 变量、
   **`WorkflowCanvasTransformBehavior.ToCss`**（公开静态 API，消费方会直接拿来拼 `style`）。
 - 解析侧：`WorkflowSlotLayoutBehavior.razor.cs:72`。原来 `double.TryParse(entry[1], out var x)` 不传 provider，
-  而值是 JS 的 `toFixed(2)` 生成的、**恒定用 `.`**（`wwwroot/veloxdev.workflow.js:1051-1052`）；逗号小数点区域的
+  而值是 JS 的 `toFixed(2)` 生成的、**恒定用 `.`**（`wwwroot/veloxdev.workflow.js:1073-1074`）；逗号小数点区域的
   默认风格含 `AllowThousands`，`.` 被当成**千位分隔符** ⇒ **静默量错**（不抛异常、也不是零），插槽锚点整体错位。
   现在传 `NumberStyles.Float, CultureInfo.InvariantCulture` —— 顺带把 `AllowThousands` 也去掉了。
 - 模板与镜像：五个条目各自的 `ToCss` rgba 副本（`grid-decorator`/`minimap-overlay`/`node-view`/`slot-view`
@@ -198,10 +230,10 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 ### 2. `OnWheelZoom` 里那两步顺序不能换，`EnsureNegativeCover` 不能省
 
 `layout.Scale` 写入 → `WorkflowSurfaceMath.EnsureNegativeCover(Tree)` → 才读 `ActualOffset`/`ActualSize`
-（`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:606-619`，理由写在 `:612-613`）。
+（`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs:716-729`，理由写在 `:722-723`）。
 漏掉 `EnsureNegativeCover` 的后果与别家同源：深缩放（`Scale ≲ 0.4`）下负侧内容越出固定负偏移、**连线永久截断**
 （`../extension.md:93` 的 #13）。这里额外要注意的是：**JS 侧读到的 `reachW/H` 是浏览器里的可达内容宽度，
-不是模型值**，夹取时要用两者的大者（`WorkflowSurfaceBehavior.razor.cs:618-619`），否则一次边缘平移过的宿主会被缩回去。
+不是模型值**，夹取时要用两者的大者（`WorkflowSurfaceBehavior.razor.cs:728-729`），否则一次边缘平移过的宿主会被缩回去。
 
 ### 3. `WorkflowRuntimeIds.TryFind` 是一次**线性扫描**
 
@@ -215,7 +247,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 
 - `Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:11` 与 `:32` 的 XML 说插槽元素暴露 **`data-slot-id`**，
   实际属性是 **`data-veloxdev-slot-id`**（`Attached/Workflow/WorkflowSlotConnectionBehavior.razor:3`；
-  JS 侧全部按 `data-veloxdev-slot-id` 查询，`wwwroot/veloxdev.workflow.js:293-294,994,1005,1042-1043,1110`）。
+  JS 侧全部按 `data-veloxdev-slot-id` 查询，`wwwroot/veloxdev.workflow.js:293-294,1016,1027,1064-1065,1132`）。
   **照注释写会拿不到任何测量结果、且不报错。**
 - `Attached/Workflow/ViewPool.razor.cs:11-12` 说「Blazor 的渲染器自己做 diff/pooling，所以这只是个薄包装」，
   但同文件 `:58-65` 又做了**只在集合引用变化时才重快照**的优化 —— 这两句不矛盾，但**只看注释会以为这里可以随便
@@ -239,7 +271,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 
 `Attached/Workflow/WorkflowCanvasTransformBehavior.cs:6-9` 明说：因为 Blazor 没有元素属性系统，
 它把 translate 偏移**以数据和 CSS 串两种形态**暴露出去。**它不写任何东西、也不申请任何所有权**；
-真正做左右上扩展的是 surface 自己的内容层（`README.md:179-182`），所以消费方**通常不该**再自己套一次
+真正做左右上扩展的是 surface 自己的内容层（`Attached/Workflow/WorkflowSurfaceBehavior.razor:22`），所以消费方**通常不该**再自己套一次
 `transform` —— 叠两层会让坐标算两次。
 
 ### 7. `_Imports.razor` 一删，本工程**所有** `.razor` 的 `@on…` 静默失效
@@ -283,26 +315,26 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 **重渲染订阅与展示助手归适配器（2026-10-04）**：Blazor 没有数据绑定自动刷新，订阅（树的节点/连线集合、树自身、虚拟连线与每个节点的 `Anchor`/`Size`，变化时 `StateHasChanged` 重渲染整棵子树）整在 `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs`，**不**在 `workflow-tree-view` 的 code-behind（`SyncTreeSubscriptions`/`SubscribeTree`/`UnsubscribeTree` + 逐节点订阅；换树按**模型实例**比对重接，`DisposeAsync` 里先摘订阅）。**为什么搬得动**：模板标记长在组件的 `ChildContent` 里（`Attached/Workflow/WorkflowSurfaceBehavior.razor:23-26` 渲染它），表面 `StateHasChanged` 会重新执行 `ChildContent`；该 RenderFragment 由宿主在渲染期创建、闭包读的是宿主的实例成员（`Tree`、`GridSpacing` 等），所以标记照常拿到新值 —— **不是**「重渲染子组件才会更新」。**证据**：Trimmed demo 的 `TreeView` code-behind 现在只剩 `[Parameter]`，拖一条线进 `tree.Links` 后连线照样出现（连线数 0→1，2026-10-04 无头 Chrome + CDP 实测）；节点拖拽同样工作。**边界**：表面重渲染不会重渲染宿主页面本身，所以「表面之外」的读（非 Trimmed demo 侧栏的节点/连接计数）仍由页面自己订 `Nodes`/`Links` 维持，那一处不是残留机制。
 同时搬走的还有模板标记用到的展示助手：调色板（`MinorGridColor`/`RulerBackground`/`RulerTickColor`/`RulerDividerColor`/`NodeForegroundCss`）、`ToCss`/`HexByte`、以及默认节点标记用的 `InputSlotsOf`/`OutputSlotsOf`/`SlotNamesOf`，落在新类型 `Attached/Workflow/WorkflowPresentation.cs`（公开静态、命名空间同适配器，标记里 `@WorkflowPresentation.X` 直接调）。模板的 `TemplateClass.razor.cs`（35 行）与 Trimmed 的 `TreeView.razor.cs`（34 行）因此只剩 `[Parameter]`；`Interaction` 属性（全仓无消费者）删除。模板符号 `surfaceBackground`（`template.json` 把 `TemplateSurfaceBackground` 替成 `#1E1E1E`）保留替换目标：模板把符号直接传进表面的 `Background` 参数（`Src/Templates/VeloxDev.Razor.Templates/working/content/workflow-tree-view/TemplateClass.razor:17`）—— 与 `surfaceBorderBrush/Thickness/CornerRadius` 三个无目标参数不同。
 
-**单主守卫（2026-10-03）由树的 `LinkRemoved` 提供，不归宿主**：菜单所指的连线一旦离开 `tree.Links`（Delete / Agent / Undo / 任何删除路径），树报 `LinkRemoved`（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:106`、`Templates/Helpers/TreeHelper.cs:121`）——**输入路由不自行解 `IsSuspended`**。Razor 这家的处理在组件内：`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` 的 `WireLinkMenu` 在订 `Input.PointerPressed` 的同一处订 `LinkRemoved`（`:368-375`），只做「是我这份菜单（`ReferenceEquals(MenuLink, link)`）就 `CloseLinkMenu()`」；`CloseLinkMenu` 照常复位 `IsSuspended`，挂起随之放开。**树只报告、宿主（这里就是组件）收自己的弹窗**。
+**单主守卫（2026-10-03）由树的 `LinkRemoved` 提供，不归宿主**：菜单所指的连线一旦离开 `tree.Links`（Delete / Agent / Undo / 任何删除路径），树报 `LinkRemoved`（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs:106`、`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/TreeHelper.cs:121`）——**输入路由不自行解 `IsSuspended`**。Razor 这家的处理在组件内：`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` 的 `WireLinkMenu` 在订 `Input.PointerPressed` 的同一处订 `LinkRemoved`（`:375-380`），只做「是我这份菜单（`ReferenceEquals(MenuLink, link)`）就 `CloseLinkMenu()`」；`CloseLinkMenu` 照常复位 `IsSuspended`，挂起随之放开。**树只报告、宿主（这里就是组件）收自己的弹窗**。
 
 | 事 | 落点 |
 |---|---|
 | 命中 | `Components/Workflow/TemplateLinkView.razor:39-42` —— 只给画线的 `<g>` 一层 `pointer-events="@HitTargetCss"`（`"stroke"`，虚拟连线 `"none"`，`TemplateLinkView.razor.cs:542`）；`<svg>` 的 `pointer-events:none` **一行未动**（`TemplateLinkView.razor:32`） |
-| 悬停转发 | `Components/Workflow/TemplateLinkView.razor.cs:547-565` —— `OnPointerEnter/OnPointerExit` 把 `PointerPhase.Entered/Exited` 交给表面的 `ForwardPointerAsync`；**没有 IsSuspended 判断**（挂起由 `WorkflowInput.ApplyDefault` 在 `IsSuspended` 时直接返回挡掉：`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs:203`） |
-| 右键入口 | `Attached/Workflow/WorkflowSurfaceBehavior.razor:12` —— 表面根一层 `@oncontextmenu="OnSurfaceContextMenu"` + `@oncontextmenu:preventDefault="true"`；`OnSurfaceContextMenu`（同目录 `.razor.cs`）先记客户端坐标（取整成整数字符串避开区域设置），再 `ForwardPointerAsync(PointerPhase.Pressed, PointerButtonKind.Right)` 喂进输入路由。**宿主没有右键入口**（demo 的 `div.wf-canvas-wrapper` 上没有这条） |
-| 弹菜单 | 组件 `WireLinkMenu` 订输入面 `Input.PointerPressed` → `ShowLinkMenu`：`e.Target` 不是连线直接返回（空白处也路由一次），否则 `MenuLink = link` 并置 `input.IsSuspended = true`（`WorkflowSurfaceBehavior.razor.cs:392-404`）。输入路由按树取用（`WorkflowInput.For`，Core 缓存），换树按实例比对重接（`:351-376`）。**宿主不再订旧的按组件事件** |
-| 收菜单 | 组件 `CloseLinkMenu` 清掉 `MenuLink` 后复位 `input.IsSuspended` —— 点面板（`OnMenuPanelClick`）、点透明 backdrop、按 Escape（`OnSurfaceKeyDown`）三处都走它（`WorkflowSurfaceBehavior.razor.cs:407-414`）。**树的单主守卫也落进这里**：`WireLinkMenu` 内的 `LinkRemoved` 处理只判 `ReferenceEquals(MenuLink, link)` 后调它（`:368-375`），不另开第二条关闭路径 |
+| 悬停转发 | `Components/Workflow/TemplateLinkView.razor.cs:547-565` —— `OnPointerEnter/OnPointerExit` 把 `SurfacePointerKind.Entered/Exited` 交给表面的 `RoutePointerAsync`；**没有 IsSuspended 判断**（挂起由 `WorkflowInput.ApplyDefault` 在 `IsSuspended` 时直接返回挡掉：`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs:203`） |
+| 右键入口 | `Attached/Workflow/WorkflowSurfaceBehavior.razor:12` —— 表面根一层 `@oncontextmenu="OnSurfaceContextMenu"` + `@oncontextmenu:preventDefault="true"`；`OnSurfaceContextMenu`（同目录 `.razor.cs`）先记客户端坐标（取整成整数字符串避开区域设置），再 `RoutePointerAsync(SurfacePointerKind.Pressed, e.ClientX, e.ClientY, Wf.MouseButton.Right)` 喂进输入路由。**宿主没有右键入口**（demo 的 `div.wf-canvas-wrapper` 上没有这条） |
+| 弹菜单 | 组件 `WireLinkMenu` 订输入面 `Input.PointerPressed` → `ShowLinkMenu`：`e.Target` 不是连线直接返回（空白处也路由一次），否则 `MenuLink = link` 并置 `input.IsSuspended = true`（`WorkflowSurfaceBehavior.razor.cs:399-411`）。输入路由按树取用（`WorkflowInput.For`，Core 缓存），换树按实例比对重接（`:356-383`）。**宿主不再订旧的按组件事件** |
+| 收菜单 | 组件 `CloseLinkMenu` 清掉 `MenuLink` 后复位 `input.IsSuspended` —— 点面板（`OnMenuPanelClick`）、点透明 backdrop、按 Escape（`OnSurfaceKeyDown`）三处都走它（`WorkflowSurfaceBehavior.razor.cs:414-421`）。**树的单主守卫也落进这里**：`WireLinkMenu` 内的 `LinkRemoved` 处理只判 `ReferenceEquals(MenuLink, link)` 后调它（`:375-380`），不另开第二条关闭路径 |
 | 菜单 chrome | `Attached/Workflow/WorkflowSurfaceBehavior.razor:41-58`：透明 backdrop + 面板，类名仍是 `.wf-link-menu-backdrop` / `.wf-link-menu` / `.wf-link-menu-item`；样式随组件迁进 `Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.css`（宿主经 `App.razor` 已加载），demo `wwwroot/app.css:912-945` 保留同名基础样式与它那条红色 `.wf-link-menu-item:hover` 覆盖 |
 | 条目 | 宿主传给组件的 `LinkMenu`（`RenderFragment<IWorkflowLinkViewModel>`，`WorkflowSurfaceBehavior.razor.cs` 的 `[Parameter]`）。条目拿到 `link` 直接绑命令 —— demo `Components/Pages/Workflow.razor` 的 `<button class="wf-link-menu-item" @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>`；模板 `Src/Templates/VeloxDev.Razor.Templates/working/content/workflow-tree-view/TemplateClass.razor` 与 Trimmed `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/TreeView.razor` 同形。与 Avalonia `Command="{ReflectionBinding DeleteCommand}"` 同义，宿主代码后置零接线 |
 | 选中视觉 | `Components/Workflow/TemplateLinkView.razor.cs:510-538`（`SelectedColor = "#FFFFFFFF"` `:512`、线宽 +1.5 `:513`、线体 alpha 0.55→0.85 `:538`；`IsLit` = `_hover` 或 `IsSelected` `:533`，管壁与彗星底色一起跟）。`IsSelected` 的来源改成组件公开的 `MenuLink`：`IsSelected="@(_surface?.MenuLink == link)"`（demo 页，表面 `@ref`）—— 指针移到菜单上后连线的本地 `_hover` 会灭，选中态得由菜单状态维持。**这是 demo 独有**；模板/Trimmed 的连线视图没有选中态 |
-| 键盘焦点 | 悬停收焦点由组件做：`ForwardPointerAsync` 命中后 `_surfaceRoot.FocusAsync(preventScroll: true)`（`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs`）。**`Delete` 与 `Escape` 都由表面根的 `@onkeydown`**（`.razor:10` → `OnSurfaceKeyDown`）收口；demo 连线层不再挂 `tabindex` / `@ref` / `@onkeydown`（那条路由已并入组件） |
+| 键盘焦点 | 悬停收焦点由组件做：`RoutePointerAsync` 命中后 `_surfaceRoot.FocusAsync(preventScroll: true)`（`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs`）。**`Delete` 与 `Escape` 都由表面根的 `@onkeydown`**（`.razor:10` → `OnSurfaceKeyDown`）收口；demo 连线层不再挂 `tabindex` / `@ref` / `@onkeydown`（那条路由已并入组件） |
 
 四条结论：
 
 1. **命中半径 = 画出来的最外圈管壁的半宽（实测 ±5.5px）**，靠浏览器原生的 `pointer-events: stroke` 拿到，**没有加任何额外的透明宽描边、也没有加元素**。静止态最外层管壁宽 = `LitThickness + 9 = 11px`（`TemplateLinkView.razor.cs:164-165`），半宽 5.5；选中态 `LitThickness = 2 + 1.5` ⇒ 12.5px，命中面随画出来的范围一起变大。实测（无头 Chrome + CDP 真手势）：沿弧长中点做法向二分，边界正好 `stroke-width: 11px` 的一半；8px / 20px 处 `elementFromPoint` 落到 `<div>`；整块 svg 盒子（2580×1252px）的左上角也落到 `<div>` ⇒ **不是包围盒**。七家一致的不是半径数值，而是「不超出画出来的范围」。
-2. **`@foreach (var link in tree.Links)` 必须带 `@key="link"`**（`Components/Pages/Workflow.razor`）。没有它时删掉一条连线，DOM 会**少两个** svg —— `TemplateLinkView` 的 `CanRender` / `IsVirtual` / 端点订阅只在 `OnInitialized` 里 `Sync(Link)` 播种（`TemplateLinkView.razor.cs:570-600`），按位置复用会把这几样连同悬停状态交给**旁边那条线**；模型只少 1 条（`tree.Serialize()` 可证）。原 demo 没有任何删连线入口，所以这是个**触发不到**的潜伏 bug，被本次的删除功能踩了出来。
-3. `FocusAsync` 的 **`preventScroll: true` 是必须的**：表面根和画布一样大，让它自己滚进来会把画布拽走。另外 `outline:none` 也是必须的（否则整张画布套一个巨大焦点框；选中线的白色就是焦点指示）。**焦点这一路不触发页面重渲染** —— 收焦点在组件里（`ForwardPointerAsync`），高亮是每条线自己的本地态（`TemplateLinkView.razor.cs:547-552`，订自己的 `Input.PointerEntered/Exited`），页面不再订任何旧的按组件事件。
-4. **原生右键菜单被整个表面无条件压掉**：`@oncontextmenu:preventDefault="true"`（`Attached/Workflow/WorkflowSurfaceBehavior.razor:12`，在组件里）是**渲染期指令** —— 值在渲染时定死，没法按「这一次按下有没有命中连线」逐次决定，所以表面对整块画布一律 `preventDefault`，筛选只能放进事件里做（`e.Target` 不是连线才不弹，`ShowLinkMenu`）。**否决菜单在链上更靠前的一级（连线自己）**：订同一条 `Input.PointerPressed` 并置 `e.Handle.PreventDefault`；`ShowLinkMenu` 读它（`WorkflowSurfaceBehavior.razor.cs:397-398`）。
+2. **`@foreach (var link in tree.Links)` 必须带 `@key="link"`**（`Components/Pages/Workflow.razor`）。没有它时删掉一条连线，DOM 会**少两个** svg —— `TemplateLinkView` 的 `CanRender` / `IsVirtual` / 端点订阅只在 `OnInitialized` 里 `Sync(Link)` 播种（`TemplateLinkView.razor.cs:574-610`），按位置复用会把这几样连同悬停状态交给**旁边那条线**；模型只少 1 条（`tree.Serialize()` 可证）。原 demo 没有任何删连线入口，所以这是个**触发不到**的潜伏 bug，被本次的删除功能踩了出来。
+3. `FocusAsync` 的 **`preventScroll: true` 是必须的**：表面根和画布一样大，让它自己滚进来会把画布拽走。另外 `outline:none` 也是必须的（否则整张画布套一个巨大焦点框；选中线的白色就是焦点指示）。**焦点这一路不触发页面重渲染** —— 收焦点在组件里（`RoutePointerAsync`），高亮是每条线自己的本地态（`TemplateLinkView.razor.cs:547-552`，订自己的 `Input.PointerEntered/Exited`），页面不再订任何旧的按组件事件。
+4. **原生右键菜单被整个表面无条件压掉**：`@oncontextmenu:preventDefault="true"`（`Attached/Workflow/WorkflowSurfaceBehavior.razor:12`，在组件里）是**渲染期指令** —— 值在渲染时定死，没法按「这一次按下有没有命中连线」逐次决定，所以表面对整块画布一律 `preventDefault`，筛选只能放进事件里做（`e.Target` 不是连线才不弹，`ShowLinkMenu`）。**否决菜单在链上更靠前的一级（连线自己）**：订同一条 `Input.PointerPressed` 并置 `e.Handle.PreventDefault`；`ShowLinkMenu` 读它（`WorkflowSurfaceBehavior.razor.cs:405`）。
 
 **右键入口只有表面根一条**：连线视图 `<g>` 上没有 `@oncontextmenu`，`TemplateLinkView` 也没有右键参数（`TemplateLinkView.razor:39-42` 只有 `pointer-events` / `onmouseenter` / `onmouseleave`）—— 留两条时同一次右键会被 `g` 与表面根各喂输入路由一次，输入路由对同一回按下报两回。宿主页上也没有入口（demo 的 `div.wf-canvas-wrapper`、模板/Trimmed 的外层 div），入口只此一处。
 
