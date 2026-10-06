@@ -111,6 +111,20 @@
 
 **升版本的完整动作**：`VeloxDev.Core.Generator.csproj:11` → 上表 11 处 `Version=` 全改 → 想清 Release 会不会静默还原旧包（Debug 看不出问题）。路径基准注意 `Examples/Workflow/Directory.Build.props:5` 的说法：基准是导入方项目目录，必须走 `MSBuildThisFileDirectory`。
 
+**要拿本地打出来的 `.nupkg` 当包源做验证时，别让一个与 nuget.org 同号的版本进全局缓存。** 缓存键是「包名+版本」：`~/.nuget/packages/veloxdev.core.generator/<版本>/` 一旦存在，**任何**源都不再被取用 —— 还原时不校验、不重取；而 nuget.org 的版本不可覆盖。于是「改完生成器 → 用同一个版本号重新发布 → Release 仍报旧错」是**必然**，删掉缓存里那一个版本目录是唯一解法。三条规避路，按省事程度排：
+
+```sh
+# ① 首选：验证全程不碰全局缓存（临时目录放仓库外）
+dotnet restore --packages <仓库外的临时目录>
+
+# ③ 已经用了同号，就当场收尾 —— 只删这一个包的这一个版本
+rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
+```
+
+② 本地验证用**另一个版本号**（预发布号）：缓存键天然不与真号相撞，也不必记任何收尾命令，最省心。**不要**用 `global-packages --clear` 收 ③ —— 那会连带重下全部包。
+
+**症状辨识**：报错全落在 `obj/<Config>/<tfm>/VeloxDev.Core.Generator/**/*.g.cs`（典型 `CS0535`：生成的 `…JsonWriterN` / `…JsonReaderN` 不实现 `IVeloxJsonWriter.WriteAsync` / `IVeloxJsonReader.ReadAsync`）—— **看着像生成器的锅，实际是本机装着旧生成器**。判据：`…/<版本>/analyzers/dotnet/cs/VeloxDev.Core.Generator.dll` 的哈希对不上 nuget.org 同版本（`https://api.nuget.org/v3-flatcontainer/veloxdev.core.generator/<版本>/veloxdev.core.generator.<版本>.nupkg` 下下来解压比）；同目录 `.nupkg.metadata` 的 `source` 若写着 `…\bin\Debug` 这类**本地目录**，就是留下错位件的那一次。**与 `NuGet.Config` 无关 —— 别去动它。**
+
 > **复核口径**：全仓 grep `VeloxDev.Core.Generator` 的引用点就是上表 11 条 `PackageReference` 加对应的 `ProjectReference`（`VeloxDev.Core.csproj:44`、`VeloxDev.Core.Extension.csproj:30`、`VeloxDev.Core.Extension.Test.csproj:33`、`VeloxDev.Core.Test.csproj:28`、`Examples/Workflow/Directory.Build.props:6`、`Examples/Theme/Directory.Build.props:6`、四个 demo 的 `:17/:35/:19/:37`、`Examples/MVVM/Common/Lib/Lib.csproj:19`、`Examples/Tickable/WPF/Demo/Demo.csproj:17`）。`Src/Adapters/*` 只在 `bin/` 的 `.pdb` 里偶然命中该字符串，源码与 csproj 一律不引用（见 [architecture.md](architecture.md) §一）。
 
 ---
