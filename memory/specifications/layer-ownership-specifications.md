@@ -15,7 +15,7 @@
 | 层 | 收什么 | 举例 |
 |---|---|---|
 | **Core**（`Src/Core/VeloxDev.Core/`） | **平台无关的机制**：状态、算法、输入面 | 连线命中算法（对着已发布的曲线判距）、**标准输入的输入路由** `WorkflowInput.For(tree)`（`Route` + 目标冒泡）、`IInputEvents`（组件上的指针/键盘事件）、`WorkflowEventHandle` |
-| **适配器**（`Src/Adapters/VeloxDev.*/`） | **平台机制**，以及**直接触及后端命令 / 数据 / 逻辑**者 | 指针与按键翻译后转发进枢纽、键盘焦点路由（Delete 键靠它才能到达）、WinForms 的窗口区域雕刻、几何与每帧记账 |
+| **适配器**（`Src/Adapters/VeloxDev.*/`） | **平台机制**，以及**直接触及后端命令 / 数据 / 逻辑**者 | 指针与按键翻译后转发进输入路由、键盘焦点路由（Delete 键靠它才能到达）、WinForms 的窗口区域雕刻、几何与每帧记账 |
 | **item template**（`Src/Templates/*/working/content/`） | **被动视觉**：把模型画出来，不含任何交互外观 | 画线、`PublishCurve(curve, this)`、NaN 就绪门、调色板与线宽 |
 | **demo**（`Examples/Workflow/…`） | **外观与策略**：交互效果在这里演示怎么写 | 悬停/选中高亮、流光、菜单条目、`InfoOverlay` 那类 HUD |
 
@@ -26,7 +26,7 @@
 订 Core 的事件，自己画 —— 这是本规范要求演示的写法：
 
 ```csharp
-// demo only：hub 通知所有订阅者，每条线只在轮到自己时重画
+// demo only：每条线只在轮到自己时重画，没有广播
 // 订这条线自己的 Helper 就够了 —— 路由会告诉它指针何时来、何时走
 ((IInputEvents)link.GetHelper()).Input.PointerEntered += (_, _) => _lit = true;
 ((IInputEvents)link.GetHelper()).Input.PointerExited += (_, _) => _lit = false;
@@ -80,7 +80,7 @@
 | 「命中判定是交互，那它该在适配器」 | **Core** | 命中是算法，对着视图发布的曲线判距，七家一份 |
 | 「发布曲线是命中逻辑，那它该进适配器」 | **item template** | 只有视图知道自己画了什么形状；曲线由视图发布，`this` 一并交出去（既是命中载体，也是事件的 `sender`） |
 | 「右键菜单是外观，那它该进 demo」 | **适配器接线 + 模板声明条目** | 菜单条目是用户要改的内容（在 `workflow-tree-view` 的资源里声明）；订阅、定位、弹出、开合上报一行都不许留在模板 |
-| 「Delete 是交互，那它该进 demo」 | **适配器（焦点）+ Core（裁决）** | 键盘事件沿焦点冒泡，适配器必须能把焦点收到连线视图上；删哪一条由枢纽判 |
+| 「Delete 是交互，那它该进 demo」 | **适配器（焦点）+ Core（裁决）** | 键盘事件沿焦点冒泡，适配器必须能把焦点收到连线视图上；删哪一条由 Core 侧的共享命中判定（`LinkHitTestEx`）给出 |
 
 ---
 

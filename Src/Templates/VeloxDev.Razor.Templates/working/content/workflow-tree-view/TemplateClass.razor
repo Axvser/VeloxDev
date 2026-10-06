@@ -37,8 +37,8 @@
                                   LinkTemplate="RenderGenericLink(sc)" />
             </ChildContent>
             @* VeloxDev customization: the link context menu's entries. The surface renders the chrome,
-               positions the menu, and wires it to the interaction hub; each entry receives the link it
-               acts on. Add or remove the item buttons here. *@
+               positions the menu, and suspends the input router while it is open; each entry receives the
+               link it acts on. Add or remove the item buttons here. *@
             <LinkMenu Context="link">
                 @* Add the entries this project wants; each one receives the link it acts on.
                    Nothing is here by default — deleting, renaming, opening properties are all yours to write. *@

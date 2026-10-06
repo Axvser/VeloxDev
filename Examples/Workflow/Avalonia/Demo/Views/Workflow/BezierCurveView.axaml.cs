@@ -13,9 +13,9 @@ namespace Demo;
 /// <para>
 /// The no-band counterpart of <see cref="PolylineCurveView"/>: same curve, without the travelling light. It
 /// flattens that curve into a <see cref="LinkCurve"/> and publishes it to the link's helper, so the surface
-/// hit-tests the exact shape this view painted; hover, press and Delete all come from Core. The highlight is
-/// this demo's: it subscribes to <see cref="LinkInteraction.HoverChanged"/> and writes
-/// <see cref="IsHighlighted"/> when the hovered link is its own, which then only decides how lit it looks.
+/// hit-tests the exact shape this view painted; hover and press are routed by Core's shared input router. The
+/// highlight is this demo's: it subscribes to this link's own <see cref="IInputEvents"/> pointer events and
+/// writes <see cref="IsHighlighted"/> when the hovered link is its own, which then only decides how lit it looks.
 /// </para>
 /// </summary>
 public partial class BezierCurveView : Control
@@ -164,8 +164,6 @@ public partial class BezierCurveView : Control
         UnsubscribeHub();
     }
 
-    // 高亮是这本 demo 的事：中枢只报「现在轮到谁」，每条线各自决定自己亮不亮 —— 互斥不需要谁记账。
-    // 视图比树活得短，改绑与摘树都要退订。
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;

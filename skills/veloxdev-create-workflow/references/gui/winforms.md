@@ -62,7 +62,7 @@ on it — skip the region instead of widening.
 
 ⚙ **If you host the canvas yourself, set the virtualize inset before writing `Viewport`.** This adapter has no decorator-hosted ruler to ask, so the reserve is passed explicitly; skipping it culls nodes that are still visible under the ruler.
 
-⚙ **The link context menu is built in code, not markup.** The tree subclass overrides `OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)`; the base adds a Delete item, and the adapter subscribes to the interaction hub, positions the strip and reports its open and close. Add or remove `ToolStripMenuItem`s in that override.
+⚙ **The link context menu is built in code, not markup.** The tree subclass overrides `OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)`; the base adds a Delete item, and the adapter opens the strip on right-press, positions it, and suspends the input router while it is open. Add or remove `ToolStripMenuItem`s in that override.
 
 ## Item templates — `VeloxDev.WinForms.Templates`
 

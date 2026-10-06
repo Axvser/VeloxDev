@@ -17,9 +17,9 @@ namespace Demo.Views.Workflow;
 /// Cubic Bézier connection that leaves each port horizontally.
 /// Passive visual only — never hit-testable, so it cannot swallow canvas gestures. It publishes the curve it
 /// draws, in raw canvas-local DP values, so the surface can hit-test it.
-/// The hover highlight below is <b>this demo's</b> reading of
-/// <see cref="LinkInteraction.HoverChanged"/> — the template ships the same view without it (see the repo's
-/// layering rule), so delete these members to get that back.
+/// The hover highlight below is <b>this demo's</b> — it listens to this link's own input events and decides
+/// how lit it looks; the template ships the same view without it (see the repo's layering rule), so delete
+/// these members to get that back.
 /// </summary>
 public sealed partial class LinkView : UserControl
 {
@@ -156,8 +156,6 @@ public sealed partial class LinkView : UserControl
         ScheduleUpdate();
     }
 
-    // VeloxDev customization: the hover highlight. The hub only reports whose turn it is; each view decides
-    // whether it lights up, so mutual exclusion needs no bookkeeping. The view lives shorter than the tree.
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;

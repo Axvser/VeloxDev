@@ -56,7 +56,7 @@ So: put your controls on the design-size card as usual. The browser scales them.
 
 ⚙ Siblings resolve by bare type name through `@namespace <your -ns>` + `@using <your -ns>` (`<GridDecorator>`, `<MinimapOverlay>`, `<LinkView>`, `<TemplateSelector>`, `<NodeView>`, `<SlotView>`), so all seven go into one namespace as usual.
 
-⚙ **The tree declares the link menu as a fragment.** The generated surface passes `<LinkMenu Context="link">…</LinkMenu>`; each entry receives the right-pressed link, and the surface renders the chrome and wires right-press, positioning and open/close to the hub. Add or remove entry `<button>`s there (this GUI has no binding for menu items, so the handler is inline).
+⚙ **The tree declares the link menu as a fragment.** The generated surface passes `<LinkMenu Context="link">…</LinkMenu>`; each entry receives the right-pressed link, and the surface renders the chrome and, on right-press, opens the menu itself, positions it, and suspends the input router while it is open. Add or remove entry `<button>`s there (this GUI has no binding for menu items, so the handler is inline).
 
 ⚙ **Inert on this pack, each marked "accepted for cross-GUI CLI parity":** slot `slotBackground`; tree `surfaceBorderBrush`, `surfaceBorderThickness`, `surfaceCornerRadius`; decorator `gridBackground`, `minorGridColor`, `majorGridColor`. Those three decorator colours are drawn by the surface's own CSS/JS rather than by the decorator's parameters.
 

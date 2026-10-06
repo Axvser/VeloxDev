@@ -9,9 +9,9 @@ namespace Demo;
 
 /// <summary>
 /// Cubic Bézier connection that leaves each port horizontally.
-/// The hover highlight below is <b>this demo's</b> reading of <see cref="LinkInteraction.HoverChanged"/> —
-/// the template ships the same view without it (see the repo's layering rule), so delete these members to get
-/// that back.
+/// The hover highlight below is <b>this demo's</b> — it listens to this link's own input events and decides
+/// how lit it looks; the template ships the same view without it (see the repo's layering rule), so delete
+/// these members to get that back.
 /// </summary>
 public partial class LinkView : Control
 {
@@ -119,7 +119,7 @@ public partial class LinkView : Control
         set => SetValue(LineThicknessProperty, value);
     }
 
-    // Set by the surface's interaction hub while the pointer is over this link; the render below repaints on change.
+    // Set by this view while the pointer is over this link (see ResubscribeHub); the render below repaints on change.
     public bool IsHighlighted
     {
         get => GetValue(IsHighlightedProperty);
@@ -165,9 +165,6 @@ public partial class LinkView : Control
         }
     }
 
-    // VeloxDev customization: the hover highlight. The hub only reports whose turn it is; each view decides
-    // whether it lights up, so mutual exclusion needs no bookkeeping. The view lives shorter than the tree,
-    // and a pooled control is rebound (not unloaded), so the subscription follows the data context.
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;

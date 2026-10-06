@@ -75,18 +75,18 @@ internal sealed class NodeEditorSurface : Canvas
 
     // 当前被点亮的连线。链接和端口一样是表面画的，没有控件能担任这个角色；
     // 悬停即点亮（与其它六家一致），它只决定绘制时给哪条上高亮色。
-    // 由输入路由的指针事件驱动（见 RoutePointer），表面自己不再判命中；Delete 由路由按指针目标裁决
+    // 由输入路由的指针事件驱动（见 RoutePointer），表面自己不再判命中；Delete 键转发给路由，由表面按命中结果执行
     private IWorkflowLinkViewModel? _selectedLink;
 
     // 连线的命中与输入裁决归 Core（见 WorkflowInput）：表面只负责把指针/按键翻译成标准输入事件转发进去，
-    // 并订阅结果（选中上色、右键菜单、删除请求）。命中的算法不在这家
+    // 并订阅结果（选中上色、右键菜单）；删除是表面自己执行的（见 OnKeyDown）。命中的算法不在这家
     private WorkflowInput? _input;
 
     // 右键菜单每次现建、收起即弃 —— 复用一份会带着上一次那条链接的捕获；同时只会开一个，
     // 字段只用来挡住重复请求与换树时收尾
     private ContextMenu? _linkMenu;
 
-    // 这份菜单指着的那条线。收起请求会带着 hub 记的那条线来，比对上才收 —— 同刻只会开一份菜单，但判定照守。
+    // 这份菜单指着的那条线。树报某条线离场（LinkRemoved）时带着那条线来，比对上才收 —— 同刻只会开一份菜单，但判定照守。
     private IWorkflowLinkViewModel? _menuLink;
 
     private enum DragKind { None, Node, Link, Pan }
@@ -147,7 +147,7 @@ internal sealed class NodeEditorSurface : Canvas
     /// Returns whether there was one to delete.</summary>
     public bool DeleteSelectedLink()
     {
-        // 「哪条在指针下」归 hub：窗口级预览走的就是这一条，与表面自己的 KeyDown 得到同一个答案
+        // 「哪条在指针下」归输入路由：窗口级预览走的就是这一条，与表面自己的 KeyDown 得到同一个答案
         if (_input?.HoveredLink is not { } link)
         {
             return false;
@@ -208,7 +208,7 @@ internal sealed class NodeEditorSurface : Canvas
     // ── Link interaction (forwarded to Core) ───────────────────────────────
 
     // 输入归 Core（同树同实例，见 WorkflowInput.For）—— 表面不持有实例，只把事件转进去、订它的结果。
-    // 这家一个表面画完所有线、没有「每线的可视对象」，所以选中由这里订阅 HoverChanged 自己画 ——
+    // 这家一个表面画完所有线、没有「每线的可视对象」，所以选中由这里读输入路由的悬停目标（HoveredLink）自己画 ——
     // 这也是七家现在的统一做法（高亮与删除都是宿主的）。
     private void AttachInteraction()
     {
@@ -1508,7 +1508,7 @@ internal sealed class NodeEditorSurface : Canvas
             return;
         }
 
-        // 右键只在连线上有含义（弹出删除菜单），落在别处什么也不做：命中的裁决在 hub —— 按下转发进去，
+        // 右键只在连线上有含义（弹出删除菜单），落在别处什么也不做：命中的裁决在共享判定（LinkHitTestEx）—— 按下转发进去，
         // 命中了它才进菜单（见 OnLinkPointerPressed）；空白处右键不置 Handled
         if (e.ChangedButton == PlatformInput.MouseButton.Right)
         {
@@ -1663,8 +1663,8 @@ internal sealed class NodeEditorSurface : Canvas
                 break;
             }
 
-            // 没在拖任何东西：更新端口与连线的悬停。端口是表面自己画的，就地更新；连线的悬停转发给 hub，
-            // 由输入路由裁决后写回 _selectedLink（悬停即选中）
+            // 没在拖任何东西：更新端口与连线的悬停。端口是表面自己画的，就地更新；连线的悬停转发给输入路由，
+            // 由它裁决后写回 _selectedLink（悬停即选中）
             default:
                 var canvasPos = e.GetPosition(this);
                 UpdatePortHover(canvasPos);

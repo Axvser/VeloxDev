@@ -77,7 +77,7 @@ public sealed class WorkflowSurfaceBehavior
         /// <summary>The press source's platform element with the native pointer handlers attached.</summary>
         public Microsoft.UI.Xaml.UIElement? PlatformPressSource { get; set; }
 
-        // Windows 上正在弹的原生 flyout；hub 收不了它，由这里 Hide，并在它的 Closed 里清掉。
+        // Windows 上正在弹的原生 flyout；输入路由管不到它，由这里 Hide，并在它的 Closed 里清掉。
         public Microsoft.UI.Xaml.Controls.MenuFlyout? OpenFlyout { get; set; }
 #else
         // 非 Windows 没有点弹出物：条目物化进这个由适配器自建的浮层（模板不再携带它）。
@@ -136,8 +136,8 @@ public sealed class WorkflowSurfaceBehavior
     /// <summary>
     /// Resource key of the context menu a right press on a link opens. The entries are the user's — declare a
     /// <see cref="MenuFlyout"/> resource under that key, put its items in it, and name the key here; the surface
-    /// resolves the menu by key, feeds the pressed link to each item, positions it, opens it, and reports
-    /// open/close to the interaction hub.
+    /// resolves the menu by key, feeds the pressed link to each item, positions it, opens it, and suspends the
+    /// tree's <see cref="WorkflowInput"/> while it is open.
     /// <para>
     /// A key rather than the menu itself: this property sits on the surface's own root element, and a
     /// <c>{StaticResource}</c> there would be resolved before the very resource dictionary that defines it.

@@ -609,7 +609,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     }
 
     /// <summary>
-    /// One press on the surface, translated and forwarded. Both buttons are forwarded — the hub's rule is
+    /// One press on the surface, translated and forwarded. Both buttons are forwarded — the input router's rule is
     /// "the one you pressed is the one that gets selected", and a left press is the only event a click on a
     /// link produces.
     /// </summary>
@@ -1015,7 +1015,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     // 再把裁决结果画出来。命中的算法不在这家。
     private void AttachInteraction(IWorkflowTreeViewModel tree)
     {
-        // hub 只有一个位置：同树同实例（别家也走这个调用，不再各自发明取用方式）。
+        // 输入路由按树取用，同树同实例（别家也走这个调用，不再各自发明取用方式）。
         // 删除是宿主的（订 KeyDown 自己执行命令）—— 本家不订它；
         // 悬停外观也不订 —— 那是宿主的事（它自己叠一层、沿发布的曲线画）。
         _input = WorkflowInput.For(tree);

@@ -95,7 +95,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     [Parameter]
     public bool IsSelected { get; set; }
 
-    // 表面把自身级联下来，本视图据此把指针事件转发进它的连线交互枢纽；画在表面之外时为 null
+    // 表面把自身级联下来，本视图据此把指针事件转发进它的输入路由；画在表面之外时为 null
     [CascadingParameter]
     private WorkflowSurfaceBehavior? Surface { get; set; }
 
@@ -541,9 +541,9 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     // 虚拟连线整层不参与 —— 它是指针下的橡皮筋，命中了就会抢掉正在拖它的那次手势
     private string HitTargetCss => EffectiveIsVirtual ? "none" : "stroke";
 
-    // 悬停高亮：本视图进入即先亮（这张脸是逐元素的，浏览器进出即可，不必等枢纽走一圈），
-    // 路由随后按命中把 IsHighlighted 落在真正在最上的那条上 —— 本视图转发的只是位置，
-    // 哪条线在最上由枢纽裁决，它不替枢纽下结论。
+    // 悬停高亮：本视图进入即先亮（这张脸是逐元素的，浏览器进出即可，不必等输入路由走一圈）；
+    // 同时把这次进入按本视图这条线转发给路由 —— 命中与否由共享的 LinkHitTestEx 说了算，
+    // 本视图不替它下结论。
     private async Task OnPointerEnter(MouseEventArgs e)
     {
         IsHighlighted = true;

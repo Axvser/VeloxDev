@@ -94,8 +94,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     /// <summary>
     /// Resource key of the context menu a right press on a link opens. The entries are the user's — declare a
     /// <see cref="MenuFlyout"/> resource under that key, put its items in it, and name the key here; the surface
-    /// resolves the menu by key, feeds the pressed link to each item, positions it, opens it, and reports
-    /// open/close to the interaction hub.
+    /// resolves the menu by key, feeds the pressed link to each item, positions it, opens it, and suspends the
+    /// tree's <see cref="WorkflowInput"/> while it is open.
     /// <para>
     /// A key rather than the menu itself: this property sits on the surface's own root element, and a
     /// <c>{StaticResource}</c> there would be resolved before the very resource dictionary that defines it.
@@ -1185,7 +1185,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     private static bool IsWorkflowNodeOrSlotVisual(DependencyObject source)
         => source is FrameworkElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
 
-    // 只为「空白处平移」判定做连线识别：指针下是哪条连线由枢纽（LinkInteraction）决定。这里 DataContext 就够 —— 连线视图的内容会继承它；原先把类名当兜底是多余的，还让这条路径变成字符串类型化。
+    // 只为「空白处平移」判定做连线识别：指针下是哪条连线由共享命中判定（LinkHitTestEx）决定。这里 DataContext 就够 —— 连线视图的内容会继承它；原先把类名当兜底是多余的，还让这条路径变成字符串类型化。
     private static bool IsWorkflowLinkVisual(DependencyObject source)
         => source is FrameworkElement { DataContext: IWorkflowLinkViewModel };
 

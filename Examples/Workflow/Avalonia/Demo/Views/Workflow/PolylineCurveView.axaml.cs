@@ -18,9 +18,9 @@ namespace Demo;
 /// </para>
 /// <para>
 /// The flattened curve comes from <see cref="LinkCurve"/> and is published to the link's own helper, so the
-/// surface hit-tests the exact shape this view painted (see <see cref="LinkHitTestEx"/>). Hit-testing and input
-/// handling stay in Core: hover, press and Delete are resolved once, there. The highlight is this demo's own
-/// reading — it subscribes to <see cref="LinkInteraction.HoverChanged"/> and decides how lit it looks.
+/// surface hit-tests the exact shape this view painted (see <see cref="LinkHitTestEx"/>). Hit-testing and routing
+/// stay in Core: hover and press are resolved once, there. The highlight is this demo's own reading — it
+/// subscribes to this link's own <see cref="IInputEvents"/> pointer events and decides how lit it looks.
 /// </para>
 /// </summary>
 public partial class PolylineCurveView : Control
@@ -202,8 +202,6 @@ public partial class PolylineCurveView : Control
         UnsubscribeHub();
     }
 
-    // 高亮是这本 demo 的事：中枢只报「现在轮到谁」，每条线各自决定自己亮不亮 —— 互斥不需要谁记账。
-    // 视图比树活得短，改绑与摘树都要退订。
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;

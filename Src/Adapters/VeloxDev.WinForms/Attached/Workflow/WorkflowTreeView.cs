@@ -312,7 +312,7 @@ public abstract class WorkflowTreeView : UserControl
     // 当前弹出的连线菜单。每次右键现建、收起即弃 —— 复用一份会带着上一次那条链接的捕获。
     private ContextMenuStrip? _linkMenu;
 
-    // 当前这份菜单指着的那条线：hub 报「这条线离树了」时用它认领是不是自己这份菜单，认领了才收。
+    // 当前这份菜单指着的那条线：树报 LinkRemoved「这条线离树了」时用它认领是不是自己这份菜单，认领了才收。
     private IWorkflowLinkViewModel? _menuLink;
 
     // 最近一次指针位置与它是否还在画布上：平移/缩放挪的是几何而指针没动，命中会变，得拿这两个值重判。

@@ -100,7 +100,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     /// <summary>
     /// Resource key of the context menu a right press on a link opens. The entries are the user's — declare a
     /// <see cref="ContextMenu"/> resource under that key, put its items in it, and name the key here; the surface
-    /// resolves which link, positions the menu, opens it, and reports open/close to the interaction hub.
+    /// resolves which link, positions the menu, opens it, and suspends the tree's <see cref="WorkflowInput"/> while it is open.
     /// <para>
     /// A key rather than the menu itself: this property sits on the surface's own root element, and a
     /// <c>{StaticResource}</c> there would be resolved before the very resource dictionary that defines it.
@@ -148,8 +148,9 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         QueueViewportRestore(host, state);
     }
 
-    // 连线右键菜单：**条目由模板声明**（挂在 LinkMenuProperty 上），**接线在这里** —— 订中枢、定位、弹出、
-    // 把开合报回去，模板因此没有一行交互代码。菜单指着的那条线离树时中枢发 DismissRequested，这里收自己那份。
+    // 连线右键菜单：**条目由模板声明**（挂在 LinkMenuProperty 上），**接线在这里** —— 订输入路由的
+    // PointerPressed、定位、弹出，开着时置 WorkflowInput.IsSuspended、收起时放开，模板因此没有一行
+    // 交互代码。菜单指着的那条线离树时树报 LinkRemoved，这里收自己那份。
     private static void WireLinkMenu(UserControl host, SurfaceState state)
     {
         // 资源在 attach 之后才一定就绪（第一次 Refresh 可能早于 Resources 解析完），所以每次 Refresh 都重查一次。

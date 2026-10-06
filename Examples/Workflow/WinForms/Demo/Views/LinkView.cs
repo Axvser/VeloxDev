@@ -28,9 +28,9 @@ namespace Demo.Views;
 /// <para>
 /// The host canvas draws this link (<see cref="Render"/>) rather than showing it as a child window, so it never
 /// participates in WinForms' fragile transparent compositing. Having no window, it can be neither hovered nor
-/// focused: both live in the host. The canvas subscribes to the Core hub's
-/// <see cref="LinkInteraction.HoverChanged"/> and writes <see cref="IsHighlighted"/> back onto the renderer that
-/// drew the hovered link; the <c>Delete</c> key is the hub's own.
+/// focused: both live in the host. The canvas reads the hovered link off Core's shared input route
+/// (<see cref="WorkflowInput.HoveredLink"/>) and writes <see cref="IsHighlighted"/> back onto the renderer that
+/// drew the hovered link; the <c>Delete</c> key is the host's own.
 /// </para>
 /// </summary>
 public sealed class LinkView : Control
@@ -42,7 +42,7 @@ public sealed class LinkView : Control
     private const float LineThickness = 2f;
     private const float HighlightThickness = 3.5f;
 
-    // 选中色：柔和的淡青高光（与适配器 hub 的默认同色）。橙红太刺眼，用户明确否掉了。
+    // 选中色：柔和的淡青高光（与其它六家一致）。橙红太刺眼，用户明确否掉了。
     private static readonly Color HighlightColor = Color.FromArgb(255, 0xFF, 0xFF, 0xFF);
 
     // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
@@ -113,8 +113,8 @@ public sealed class LinkView : Control
     public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; RequestPaint(); } }
 
     /// <summary>
-    /// Whether the host considers this link highlighted. The canvas sets it from the hub's
-    /// <see cref="LinkInteraction.HoverChanged"/>; nothing sets it by default.
+    /// Whether the host considers this link highlighted. The canvas sets it from the shared input route's
+    /// <see cref="WorkflowInput.HoveredLink"/>; nothing sets it by default.
     /// </summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]

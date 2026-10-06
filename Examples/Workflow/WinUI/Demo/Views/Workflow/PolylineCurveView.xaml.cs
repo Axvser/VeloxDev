@@ -45,14 +45,14 @@ namespace Demo.Views;
 /// </para>
 /// <para>
 /// The view is a painting surface only: it publishes the <see cref="LinkCurve"/> it draws
-/// (<see cref="LinkHitTestEx.PublishCurve"/>) in canvas-local coordinates, and the tree's
-/// <see cref="LinkInteraction"/> decides what the pointer is on. Nothing here is hit-testable — the view is
+/// (<see cref="LinkHitTestEx.PublishCurve"/>) in canvas-local coordinates, and the shared hit test
+/// (<see cref="LinkHitTestEx"/>) decides what the pointer is on. Nothing here is hit-testable — the view is
 /// canvas sized, so a hit-testable one would swallow every canvas gesture.
 /// </para>
 /// <para>
-/// The hover highlight is this demo's: the view subscribes to
-/// <see cref="LinkInteraction.HoverChanged"/> and writes <see cref="IsHighlighted"/> when the hovered link is
-/// its own. Deleting and the right-click menu belong to the demo too, off the same hub.
+/// The hover highlight is this demo's: the view subscribes to this link's own
+/// <see cref="IInputEvents"/> pointer events and writes <see cref="IsHighlighted"/> when the hovered link is
+/// its own. Deleting and the right-click menu belong to the demo's surface too, off the same input route.
 /// </para>
 /// </summary>
 public sealed partial class PolylineCurveView : UserControl
@@ -155,7 +155,7 @@ public sealed partial class PolylineCurveView : UserControl
         _container = new Grid { Clip = null };
 
         // 三层都不可命中：这是整块画布大小的视图，可命中就会把画布手势整个吃掉。
-        // 命中判定不落在元素上，由 LinkInteraction 对发布出去的曲线做几何判定。
+        // 命中判定不落在元素上，由共享的 LinkHitTestEx 对发布出去的曲线做几何判定。
         _halo = CreateRestingStroke(_container, LineThickness + 9);
         _glow = CreateRestingStroke(_container, LineThickness + 4);
         _line = CreateRestingStroke(_container, LineThickness);
@@ -241,7 +241,7 @@ public sealed partial class PolylineCurveView : UserControl
         }
     }
 
-    // 命中判定归 LinkInteraction（几何式，走发布出去的曲线），视图因此整块不可命中 ——
+    // 命中判定归共享的 LinkHitTestEx（几何式，走发布出去的曲线），视图因此整块不可命中 ——
     // 它是画布大小的，一旦可命中就会把画布手势全部吃掉。
     private void UpdateInteractivity()
     {
@@ -442,7 +442,7 @@ public sealed partial class PolylineCurveView : UserControl
             _boundLink?.PublishCurve(null);
             _boundLink = link;
             // 池化复用后旧链接的高亮会留在本视图上，先熄灭；换订新那棵树之后，
-            // 指针再动时中枢会按当前悬停重新点亮
+            // 指针再动时输入路由会把 Entered 交给新那条线，由它自己重新点亮
             IsHighlighted = false;
             ResubscribeHub();
         }
@@ -458,8 +458,6 @@ public sealed partial class PolylineCurveView : UserControl
         Hide();
     }
 
-    // 高亮是这本 demo 的事：中枢只报「现在轮到谁」，每条线各自决定自己亮不亮 —— 互斥不需要谁记账。
-    // 视图比树活得短，改绑与回收都要退订（两者都走 OnDataContextChanged）。
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;

@@ -165,8 +165,8 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   它是呈现、不是声明，已随接线一起搬进 `WorkflowSurfaceBehavior.EnsureLinkMenuLayer`；不翻转、不出窗口、
   不是 OS 菜单、嵌套项会拍平）。非 Windows 的「请求菜单」手势是**长按**（`LongPressDelay = 500` ms，
   位移超过 `LongPressMoveSlop = 8` 设备无关单位即取消），由链接层翻译成一次合成右键，交给输入路由。
-  ⚠ **菜单不会活得比它指着的那条线久**（2026-10-03）：判定归 Core —— hub 在「菜单开着、那条线却离开树」时发
-  `LinkRemoved`；**接线在适配层，模板不参与**（`WorkflowSystem/architecture.md`）。
+  ⚠ **菜单不会活得比它指着的那条线久**（2026-10-03）：判据是树既有的事件 —— 「菜单开着、那条线却离开树」时
+  树发 `LinkRemoved`，适配器据此收自己那份菜单；**接线在适配层，模板不参与**（`WorkflowSystem/architecture.md`）。
   ⚠ **模板里的注释一律英文**（2026-10-03 用户定，见 [code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五）：
   只标扩展点、一行说清，函数体注释也算在内 —— 不是每个成员都配得上一行。
   ⚠ **2026-10-03 起 MAUI 的 Trimmed demo 与它的模板故意分叉了**：demo 已经改成**每线一视图**

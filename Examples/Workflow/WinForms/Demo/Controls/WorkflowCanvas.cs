@@ -37,7 +37,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // looked too small visually, so it was enlarged to 36px.
     private const int RulerThickness = 36;
 
-    // 连线的命中半径，交给 hub 用。6 是七家统一的值（Core 的 LinkHitTestEx.DefaultHitRadius）：
+    // 连线的命中半径，交给输入路由用。6 是七家统一的值（Core 的 LinkHitTestEx.DefaultHitRadius）：
     // 它落在本家画出的最外圈辉光管壁（thickness+9 ⇒ 半宽约 5.5px）之内，所以仍然等于
     // 「只有画出来的部分能命中」——命中面不比描边宽。
     private const float LinkHitRadius = 6f;
@@ -59,7 +59,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // 右键菜单只在连线上弹，所以不能挂成画布的 ContextMenuStrip（那会变成右键画布任意处都弹）
     private ContextMenuStrip? _linkMenu;
 
-    // 当前这份菜单指着的那条线：hub 报「这条线离树了」时用它认领是不是自己这份菜单，认领了才收。
+    // 当前这份菜单指着的那条线：树报「这条线离树了」（LinkRemoved）时用它认领是不是自己这份菜单，认领了才收。
     private IWorkflowLinkViewModel? _menuLink;
 
     // 指针最近一次的客户区位置，以及它是否还在画布上：平移/滚动/缩放挪的是几何而指针没动，
@@ -263,15 +263,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     }
 
     /// <summary>
-    /// The link interaction hub for the bound session — the same instance Core gives every other surface over
+    /// The shared input route for the bound session — the same instance Core gives every other surface over
     /// that session's tree (see <see cref="VeloxDev.WorkflowSystem.WorkflowInput.For"/>); <see langword="null"/>
     /// until a session is attached.
     /// </summary>
     /// <remarks>
-    /// The hub already turns the hover into a highlight and performs the Delete request, so the canvas only adds
-    /// the platform part: opening the delete menu on a right-press and focusing itself so Delete can arrive. The
-    /// hit test walks the curves the <see cref="Views.LinkView"/> renderers published, in the world coordinates
-    /// this canvas draws in.
+    /// The route performs no action of its own: the canvas reads the hovered link off it to paint the highlight,
+    /// performs the Delete request, and opens the delete menu on a right-press — plus focuses itself so Delete can
+    /// arrive. The hit test walks the curves the <see cref="Views.LinkView"/> renderers published, in the world
+    /// coordinates this canvas draws in.
     /// </remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -357,7 +357,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     private void RebuildLinkRenderers()
     {
-        // 渲染器整体换新：旧的即将被 Dispose、曲线也被撤，先把悬停清掉。否则 hub 还握着被换掉的那条线，
+        // 渲染器整体换新：旧的即将被 Dispose、曲线也被撤，先把悬停清掉。否则输入路由还握着被换掉的那条线，
         // 新渲染器不会被点亮，直到指针再动一次。
         _input?.Route(new Wf.PointerExitedEventArgs(
             new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
@@ -771,7 +771,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         base.OnMouseDown(e);
 
-        // 右键只对连线有意义：转发给 Core，命中时它才发 ContextMenuRequested，表面据弹菜单；空白处右键不启动平移
+        // 右键只对连线有意义：转发进输入路由，本家订的 PointerPressed（OnLinkPointerPressed）在命中的连线上弹菜单；空白处右键不启动平移
         if (e.Button == MouseButtons.Right)
         {
             RoutePointer(e.Location, (p, t, h) => new Wf.PointerPressedEventArgs(
@@ -1264,7 +1264,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             0);
     }
 
-    // ClientToWorld 的逆：hub 给的位置是世界坐标，弹菜单要先落回客户区才能取屏幕坐标。
+    // ClientToWorld 的逆：输入路由交过来的位置是世界坐标，弹菜单要先落回客户区才能取屏幕坐标。
     private Point WorldToClient(Anchor world)
     {
         var scroll = AutoScrollPosition;

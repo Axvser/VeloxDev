@@ -98,7 +98,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     /// <summary>
     /// Resource key of the context menu a right press on a link opens. The entries are the user's — declare a
     /// <see cref="ContextMenu"/> resource under that key, put its items in it, and name the key here; the surface
-    /// resolves which link, positions the menu, opens it, and reports open/close to the interaction hub.
+    /// resolves which link, positions the menu, opens it, and suspends the tree's <see cref="WorkflowInput"/> while it is open.
     /// <para>
     /// A key rather than the menu itself: this property sits on the surface's own root element, and a
     /// <c>{StaticResource}</c> there would be resolved before the very resource dictionary that defines it.

@@ -60,8 +60,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// Gets or sets the entries of the link context menu. The fragment receives the link the menu is
     /// about, so a host binds it directly in its buttons (for example
     /// <c>@onclick="() =&gt; link.DeleteCommand.Execute(null)"</c>) and writes no other wiring: the
-    /// surface renders the chrome, positions the menu, opens and closes it, and reports both to the
-    /// interaction hub.
+    /// surface renders the chrome, positions the menu, opens and closes it, and suspends the tree's
+    /// <see cref="WorkflowInput"/> while it is open.
     /// </summary>
     [Parameter]
     public RenderFragment<IWorkflowLinkViewModel>? LinkMenu { get; set; }
@@ -220,8 +220,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private string MenuLeftCss => _menuLeft.ToString(CultureInfo.InvariantCulture);
     private string MenuTopCss => _menuTop.ToString(CultureInfo.InvariantCulture);
 
-    // 右键落在表面上：屏幕坐标只有 DOM 事件知道（先记下），再把这次右键喂进枢纽 ——
-    // 枢纽命中连线才报 ContextMenuRequested，菜单据此弹出；空白画布不给菜单。
+    // 右键落在表面上：屏幕坐标只有 DOM 事件知道（先记下），再把这次右键喂进输入路由 ——
+    // 命中由共享判定 LinkHitTestEx 给出，Target 非空时适配器自己订的 PointerPressed 才弹菜单；空白画布不给菜单。
     private async Task OnSurfaceContextMenu(MouseEventArgs e)
     {
         // 客户端坐标取整后写出去：整数字符串没有小数点，区域设置就碰不到它。

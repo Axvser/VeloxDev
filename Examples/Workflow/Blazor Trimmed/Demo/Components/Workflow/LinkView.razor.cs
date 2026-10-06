@@ -48,7 +48,7 @@ public partial class LinkView : ComponentBase, IDisposable
     public bool? CanRenderOverride { get; set; }
 
     // The surface cascades itself down, so a link view drawn inside one can forward the pointer
-    // into the shared interaction hub; null when the view is rendered outside a surface.
+    // into the shared input route; null when the view is rendered outside a surface.
     [CascadingParameter]
     private WorkflowSurfaceBehavior? Surface { get; set; }
 
@@ -293,10 +293,10 @@ public partial class LinkView : ComponentBase, IDisposable
             $"M {points[0].X:F1},{points[0].Y:F1} C {points[1].X:F1},{points[1].Y:F1} {points[2].X:F1},{points[2].Y:F1} {points[3].X:F1},{points[3].Y:F1}");
     }
 
-    // Forwarding the pointer into the hub is what makes the link interactive: the hub decides which link
-    // is under the pointer; the hover highlight and Delete are this demo's own
-    // (OnPointerEntered). Nothing here decides anything — the browser's stroke-only hit region is the outer
-    // gate, and the hub is the judge.
+    // Forwarding the pointer into the shared input route is what makes the link interactive: the surface
+    // resolves the hit against the tree's published curves (LinkHitTestEx), and the route delivers it; the
+    // hover highlight and Delete are this demo's own (OnPointerEntered / OnKeyDown). Nothing here decides
+    // anything — the browser's stroke-only hit region is the outer gate, and LinkHitTestEx is the judge.
     private async Task OnPointerEnter(MouseEventArgs e)
     {
         if (Surface is not null)

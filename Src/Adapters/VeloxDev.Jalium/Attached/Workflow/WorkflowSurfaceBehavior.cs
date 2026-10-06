@@ -16,7 +16,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
 /// The Jalium workflow surface: it finds the template's named parts, keeps the view pool bound to the tree's
-/// visible set, drives the viewport and the pan, and forwards pointer and keyboard input to Core's input hub.
+/// visible set, drives the viewport and the pan, and forwards pointer and keyboard input to Core's shared input router.
 /// </summary>
 /// <remarks>
 /// <para>
