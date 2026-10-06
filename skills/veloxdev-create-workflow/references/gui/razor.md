@@ -8,7 +8,7 @@
 
 ⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
-There is a long-form adapter README at `Src/Adapters/VeloxDev.Razor/README.md`.
+The adapter's API surface is the components themselves: each role is a `.razor` component under `Src/Adapters/VeloxDev.Razor/Attached/Workflow/`, and its `[Parameter]`s are the contract.
 
 ## Writing the surface
 

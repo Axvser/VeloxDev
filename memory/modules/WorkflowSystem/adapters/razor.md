@@ -4,7 +4,7 @@
 > （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），命中归 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
 >
 > 代码：`Src/Adapters/VeloxDev.Razor/Attached/Workflow/`（组件）+ `Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js`（手势与几何）。
-> 契约与七角色共性见 `../extension.md` §3.9；组件参数表见 `Src/Adapters/VeloxDev.Razor/README.md`（那是 API 面，本文不重复）。
+> 契约与七角色共性见 `../extension.md` §3.9；这家没有独立 README —— **组件参数就是 API 面**，见 `Attached/Workflow/` 下各组件的 `[Parameter]`，本文不重复。
 > **逐平台怎么写视图层**见 `skills/veloxdev-create-workflow/references/view-layer.md` 与
 > `skills/veloxdev-create-workflow/references/gui/razor.md`，本文不重复。
 >
@@ -19,9 +19,9 @@
 
 | 合同里的东西 | 这家的对应物 | 为什么不能照抄别家 |
 |---|---|---|
-| 附着属性名 / `PART_*` 命名约定（`../extension.md:201`） | **组件 + `[Parameter]` + `RenderFragment`**（`Src/Adapters/VeloxDev.Razor/README.md:5-15`） | Blazor 没有附着属性系统，也没有可附着的元素树。别家在标记里写 `behaviors:WorkflowXxx.IsEnabled="True"`，这里只能 `<WorkflowXxx IsEnabled="true">…</WorkflowXxx>` |
+| 附着属性名 / `PART_*` 命名约定（`../extension.md:201`） | **组件 + `[Parameter]` + `RenderFragment`**（`Attached/Workflow/WorkflowSurfaceBehavior.razor:14,18,31-38`） | Blazor 没有附着属性系统，也没有可附着的元素树。别家在标记里写 `behaviors:WorkflowXxx.IsEnabled="True"`，这里只能 `<WorkflowXxx IsEnabled="true">…</WorkflowXxx>` |
 | 按 `x:Name` 找画布 / 找装饰器 | 直接传 `ScrollViewerId`/`CanvasId`，装饰器与小地图以 `RenderFragment` 传入（`Attached/Workflow/WorkflowSurfaceBehavior.razor:14,18,31-38`） | 服务端没有名字作用域可查；`@ref` 拿到的是组件实例，不是元素 |
-| 视图池 `ViewPool.TemplateSelector` | `ViewPool.ItemTemplate` + 消费方自己 `@switch` 派发（`README.md:15`） | 没有 DataTemplate 选择器可挂 |
+| 视图池 `ViewPool.TemplateSelector` | `ViewPool.ItemTemplate` + 消费方自己 `@switch` 派发（`Attached/Workflow/ViewPool.razor.cs:22`） | 没有 DataTemplate 选择器可挂 |
 | 插槽几何写入用 `SlotAnchorFrom*`（`../extension.md:204`） | **不调这三个函数**：世界坐标在 JS 里算完才回传（`wwwroot/veloxdev.workflow.js:1051-1060`），C# 只把结果写进 `slot.Anchor`（`Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs:83`） | 量像素这件事整个发生在浏览器里；Core 的那三个函数要的是一个**能读控件几何的宿主**，服务端没有 |
 
 **契约之外多出来的一个东西（读这家的代码必须知道）**：`SurfaceViewportFeed`。
@@ -131,7 +131,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 ## 三、与其它六家的刻意背离
 
 1. **这里是唯一一家七角色全是 `.razor` 组件的适配器，别家全是附着属性类。** 因为 Blazor 没有附着属性系统
-   也没有可附着的元素树（`Src/Adapters/VeloxDev.Razor/README.md:5-15`）。**新平台若同样没有附着属性面，
+   也没有可附着的元素树（`Attached/Workflow/*.razor` 的 `[Parameter]` 就是全部契约）。**新平台若同样没有附着属性面，
    照抄这里的「组件 + 参数 + RenderFragment」而不是照抄别家的附着属性**。
 2. **这里是唯一一家由 JS 独占一部分 DOM 区域的适配器**（画布宿主尺寸、网格、坐标轴、小地图视口块，§二·2）。
    别家的画布尺寸/网格都是框架渲染的产物。

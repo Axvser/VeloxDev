@@ -46,7 +46,8 @@ All seven ship from this repository as NuGet packages — not community forks or
 
 > Every adapter now carries a `net8.0` rung, so a `net8.0` app gets a TFM-specific build and the trim/AOT analyzers run against the adapter's own code. **Trimming is still not the same as support**: WPF and WinForms are [not AOT-compatible](https://learn.microsoft.com/gaming/gdk/docs/gdk-dev/pc-dev/tutorials/get-started-with-custom-engine/native-aot-for-gaming) as frameworks, and no adapter declares `IsAotCompatible` yet — see [Scope and status](#scope-and-status).
 
-Adapter API docs: [WinForms](Src/Adapters/VeloxDev.WinForms/README.md) · [Razor](Src/Adapters/VeloxDev.Razor/README.md)
+Adapter API docs: [WinForms](Src/Adapters/VeloxDev.WinForms/README.md) — the one adapter with no markup
+language, so its attached-property surface needs spelling out. The other six express it in markup.
 
 ## 🤔 Is this the right library for you?
 
