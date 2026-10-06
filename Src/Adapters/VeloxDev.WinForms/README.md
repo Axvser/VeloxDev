@@ -79,20 +79,18 @@ Interfaces your controls implement to receive data pushed by the surface:
 
 ```csharp
 WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(canvas, true);
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewerName(canvas, "PART_Scroll");
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(canvas, "PART_Canvas");
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecoratorName(canvas, "PART_Grid");
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlayName(canvas, "PART_Minimap");
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(canvas, "PART_Surface");
+WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewer(canvas, scrollViewer);
+WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvas(canvas, canvasPanel);
+WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecorator(canvas, gridDecorator);
+WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlay(canvas, minimap);
 WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(canvas, tree);
 ```
 
 | API | Notes |
 |-----|-------|
 | `Get/SetIsEnabled(Control)` | Master switch. |
-| `Get/SetScrollViewerName` · `Get/SetCanvasName` | Name-based element wiring (searched in the host subtree). |
-| `Get/SetGridDecoratorName` · `Get/SetMinimapOverlayName` | Named control should implement `IWorkflowGridDecorator`/`IWorkflowMinimapOverlay`; offsets are pushed on every refresh. |
-| `Get/SetPointerPressSourceName` | The control that starts canvas panning on a blank-press. |
+| `Get/SetScrollViewer` · `Get/SetCanvas` | Element wiring — you hand over the **control itself**, not a name to be looked up in the host subtree. |
+| `Get/SetGridDecorator` · `Get/SetMinimapOverlay` | The control should implement `IWorkflowGridDecorator`/`IWorkflowMinimapOverlay`; offsets are pushed on every refresh. |
 | `Get/SetWorkflowTree(Control, IWorkflowTreeViewModel?)` | Explicit tree binding (the WinForms analogue of setting `DataContext`). |
 | `Refresh(Control host)` | **Manual pull**: updates the tree viewport, pushes scroll/content offsets into the decorator & minimap, applies the canvas transform, then `PerformLayout` + `Invalidate`. |
 
@@ -222,11 +220,11 @@ translates its drawing origin, mirroring how XAML node/link views bind their `Re
 `WorkflowCanvas` (host) + `WorkflowNodeCard` (node) wire up like this:
 
 ```csharp
-// Host canvas: surface + decorator/minimap offsets + explicit tree binding.
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewerName(this, nameof(WorkflowCanvas));
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(this, nameof(WorkflowCanvas));
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecoratorName(this, nameof(WorkflowCanvas));
-WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(this, nameof(WorkflowCanvas));
+// Host canvas: surface + decorator/minimap wiring + explicit tree binding.
+WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewer(this, this);
+WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvas(this, this);
+WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecorator(this, this);
+WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlay(this, minimap);
 WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(this, true);
 WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, session.Tree);
 
