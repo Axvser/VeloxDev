@@ -125,7 +125,12 @@ file sealed class StubNode : IWorkflowNodeViewModel
     public void InitializeWorkflow() { }
     public void OnPropertyChanging(string propertyName) => PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
     public void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    public IWorkflowNodeViewModelHelper GetHelper() => throw new NotSupportedException();
+    // 用真的 NodeHelper：`SlotEnumerator.Install` 会把枚举器登记到节点的
+    // IConditionalSlotProviders 能力上，而那个能力正是 NodeHelper 提供的。桩若照旧抛异常，
+    // 每一次 Install 都会炸（这条路径是 2026-10-05 加上的）。
+    private readonly NodeHelper<StubNode> _helper = new();
+
+    public IWorkflowNodeViewModelHelper GetHelper() => _helper;
     public void SetHelper(IWorkflowNodeViewModelHelper helper) { }
 }
 
