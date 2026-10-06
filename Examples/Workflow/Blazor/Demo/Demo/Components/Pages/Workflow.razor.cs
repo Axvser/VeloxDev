@@ -382,20 +382,22 @@ public partial class Workflow : ComponentBase, IDisposable
     }
 
     /// <summary>
-    /// Shift-drag on empty canvas: the framework stands down and the host takes over.
+    /// The gestures this host has claimed: Shift-drag on the empty canvas, and Ctrl-drag anywhere — the
+    /// framework's own hand stands down and the host's takes over.
     /// </summary>
     /// <remarks>
-    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of a
-    /// press-and-drag interaction of one's own. One subscription covers the blank canvas and the cards alike,
-    /// because the refusal is read wherever the framework's hand would have started: pan, node drag and slot
-    /// connection. Wheel zoom is a wheel gesture, not a press — subscribe <c>PointerWheel</c> to refuse that
-    /// one. Re-subscribed on every tree swap, the same way the session's own wiring is: this component renders
-    /// many times and the tree is replaced wholesale by Reset / Load, so a subscription kept on the tree the
-    /// component first saw would go on hearing a tree that is no longer on screen.
+    /// Subscribe, test the condition, set <c>PreventDefault</c> — the whole starting point of an interaction of
+    /// one's own. The press subscription covers the blank canvas and the cards alike, because the refusal is read
+    /// wherever the framework's hand would have started: pan, node drag and slot connection. Re-subscribed on every
+    /// tree swap, the same way the session's own wiring is: this component renders many times and the tree is
+    /// replaced wholesale by Reset / Load, so a subscription kept on the tree the component first saw would go on
+    /// hearing a tree that is no longer on screen.
     /// </remarks>
     private static void VetoFrameworkGestures(TreeViewModel tree)
     {
-        ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
+        var input = ((IInputEvents)tree.GetHelper()).Input;
+
+        input.PointerPressed += (_, e) =>
         {
             if (e.Modifiers.HasFlag(InputModifiers.Control)
                 || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
@@ -403,6 +405,11 @@ public partial class Workflow : ComponentBase, IDisposable
                 e.Handle.PreventDefault = true;
             }
         };
+
+        // No wheel subscription here, and that is this adapter's shape rather than an omission: the gesture runs in
+        // the browser, whose zoom handler returns before asking .NET unless Ctrl is held — Ctrl+wheel is the only
+        // wheel that reaches the verdict, and this demo wants it to zoom. A host that wants Ctrl+wheel for itself
+        // instead refuses it on <c>PointerWheelChanged</c>, exactly as the press clause above does.
     }
 
 }
