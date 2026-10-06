@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
@@ -191,7 +191,7 @@ public partial class PolylineCurveView : Control
         base.OnAttachedToVisualTree(e);
         PublishCurve();
         StartFlow();
-        ResubscribeHub();
+        ResubscribeInput();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -199,19 +199,19 @@ public partial class PolylineCurveView : Control
         base.OnDetachedFromVisualTree(e);
         // A pooled view released and reused for another link must not leave the old animation running on it.
         StopFlow();
-        UnsubscribeHub();
+        UnsubscribeInput();
     }
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;
 
-    private void ResubscribeHub()
+    private void ResubscribeInput()
     {
         var link = DataContext as IWorkflowLinkViewModel;
         if (ReferenceEquals(link, _inputLink)) return;
 
-        UnsubscribeHub();
+        UnsubscribeInput();
         if (link?.GetHelper() is not IInputEvents events) return;
 
         _inputLink = link;
@@ -219,7 +219,7 @@ public partial class PolylineCurveView : Control
         events.Input.PointerExited += OnPointerExited;
     }
 
-    private void UnsubscribeHub()
+    private void UnsubscribeInput()
     {
         if (_inputLink?.GetHelper() is not IInputEvents events) return;
 
@@ -251,7 +251,7 @@ public partial class PolylineCurveView : Control
             }
 
             PublishCurve();
-            ResubscribeHub();
+            ResubscribeInput();
         }
 
         // A link becomes drawable only once both endpoints have been measured, and the flow has nothing to

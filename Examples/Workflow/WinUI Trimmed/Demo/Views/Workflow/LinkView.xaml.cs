@@ -1,4 +1,4 @@
-// VeloxDev customization: Customize line geometry, color, thickness, and highlight here.
+﻿// VeloxDev customization: Customize line geometry, color, thickness, and highlight here.
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -127,7 +127,7 @@ public sealed partial class LinkView : UserControl
         UpdateLayoutSubscription();
         EnsureGeometry();
         ScheduleUpdate();
-        ResubscribeHub();
+        ResubscribeInput();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -135,7 +135,7 @@ public sealed partial class LinkView : UserControl
         _isLoaded = false;
         _updatePending = false;
         UnsubscribeLayout();
-        UnsubscribeHub();
+        UnsubscribeInput();
         _boundLink?.PublishCurve(null);
     }
 
@@ -147,7 +147,7 @@ public sealed partial class LinkView : UserControl
             // Pool reuse / hide: retract the previous link's curve, or it keeps answering hit tests.
             _boundLink?.PublishCurve(null);
             _boundLink = link;
-            ResubscribeHub();
+            ResubscribeInput();
         }
 
         // Pool reuse re-assigns DataContext (and hides show a null DataContext first), so the layout
@@ -160,12 +160,12 @@ public sealed partial class LinkView : UserControl
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;
 
-    private void ResubscribeHub()
+    private void ResubscribeInput()
     {
         var link = _boundLink;
         if (ReferenceEquals(link, _inputLink)) return;
 
-        UnsubscribeHub();
+        UnsubscribeInput();
         if (link?.GetHelper() is not IInputEvents events) return;
 
         _inputLink = link;
@@ -174,7 +174,7 @@ public sealed partial class LinkView : UserControl
         events.Input.KeyDown += OnKeyDown;
     }
 
-    private void UnsubscribeHub()
+    private void UnsubscribeInput()
     {
         if (_inputLink?.GetHelper() is not IInputEvents events) return;
 

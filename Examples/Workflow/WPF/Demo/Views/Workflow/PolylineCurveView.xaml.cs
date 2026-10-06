@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -94,7 +94,7 @@ public partial class PolylineCurveView : UserControl
     {
         InitializeComponent();
         // 指针输入不在视图里：命中归 Core，指针与按键由表面行为转发；悬停高亮由本 demo 订这条线自己的输入
-        // 事件自己画（见 ResubscribeHub），悬停焦点由适配器交给画线的那台控件（见 WorkflowSurfaceBehavior.FocusHoveredLink）。
+        // 事件自己画（见 ResubscribeInput），悬停焦点由适配器交给画线的那台控件（见 WorkflowSurfaceBehavior.FocusHoveredLink）。
         IsHitTestVisible = false;
         Focusable = true;
         Panel.SetZIndex(this, -100);
@@ -210,19 +210,19 @@ public partial class PolylineCurveView : UserControl
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         RefreshGeometry();
-        ResubscribeHub();
+        ResubscribeInput();
     }
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;
 
-    private void ResubscribeHub()
+    private void ResubscribeInput()
     {
         var link = DataContext as IWorkflowLinkViewModel;
         if (ReferenceEquals(link, _inputLink)) return;
 
-        UnsubscribeHub();
+        UnsubscribeInput();
         if (link?.GetHelper() is not IInputEvents events) return;
 
         _inputLink = link;
@@ -230,7 +230,7 @@ public partial class PolylineCurveView : UserControl
         events.Input.PointerExited += OnPointerExited;
     }
 
-    private void UnsubscribeHub()
+    private void UnsubscribeInput()
     {
         if (_inputLink?.GetHelper() is not IInputEvents events) return;
 
@@ -312,13 +312,13 @@ public partial class PolylineCurveView : UserControl
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         StartFlow();
-        ResubscribeHub();
+        ResubscribeInput();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         StopFlow();
-        UnsubscribeHub();
+        UnsubscribeInput();
     }
 
     #endregion

@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Hosting;
@@ -359,7 +359,7 @@ public sealed partial class PolylineCurveView : UserControl
         _isLoaded = true;
         EnsureComet();
         Refresh();
-        ResubscribeHub();
+        ResubscribeInput();
     }
 
     // 彗星的 24 段在合成层里建一次。端点变化只改已有的几何对象，不重建任何东西 —— 这也是它不再进布局的原因
@@ -444,7 +444,7 @@ public sealed partial class PolylineCurveView : UserControl
             // 池化复用后旧链接的高亮会留在本视图上，先熄灭；换订新那棵树之后，
             // 指针再动时输入路由会把 Entered 交给新那条线，由它自己重新点亮
             IsHighlighted = false;
-            ResubscribeHub();
+            ResubscribeInput();
         }
 
         if (link is not null)
@@ -462,12 +462,12 @@ public sealed partial class PolylineCurveView : UserControl
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;
 
-    private void ResubscribeHub()
+    private void ResubscribeInput()
     {
         var link = _boundLink;
         if (ReferenceEquals(link, _inputLink)) return;
 
-        UnsubscribeHub();
+        UnsubscribeInput();
         if (link?.GetHelper() is not IInputEvents events) return;
 
         _inputLink = link;
@@ -475,7 +475,7 @@ public sealed partial class PolylineCurveView : UserControl
         events.Input.PointerExited += OnPointerExited;
     }
 
-    private void UnsubscribeHub()
+    private void UnsubscribeInput()
     {
         if (_inputLink?.GetHelper() is not IInputEvents events) return;
 

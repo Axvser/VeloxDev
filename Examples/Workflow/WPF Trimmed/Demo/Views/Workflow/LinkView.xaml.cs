@@ -1,4 +1,4 @@
-// VeloxDev customization: Customize line geometry, color, and thickness here.
+﻿// VeloxDev customization: Customize line geometry, color, and thickness here.
 using System;
 using System.Windows;
 using System.Windows.Controls;
@@ -77,19 +77,19 @@ public partial class LinkView : UserControl
         _publishedLink?.PublishCurve(null);
         _publishedLink = null;
         InvalidateVisual();
-        ResubscribeHub();
+        ResubscribeInput();
     }
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;
 
-    private void ResubscribeHub()
+    private void ResubscribeInput()
     {
         var link = DataContext as IWorkflowLinkViewModel;
         if (ReferenceEquals(link, _inputLink)) return;
 
-        UnsubscribeHub();
+        UnsubscribeInput();
         if (link?.GetHelper() is not IInputEvents events) return;
 
         _inputLink = link;
@@ -98,7 +98,7 @@ public partial class LinkView : UserControl
         events.Input.KeyDown += OnKeyDown;
     }
 
-    private void UnsubscribeHub()
+    private void UnsubscribeInput()
     {
         if (_inputLink?.GetHelper() is not IInputEvents events) return;
 

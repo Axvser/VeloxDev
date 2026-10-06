@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
@@ -119,7 +119,7 @@ public partial class LinkView : Control
         set => SetValue(LineThicknessProperty, value);
     }
 
-    // Set by this view while the pointer is over this link (see ResubscribeHub); the render below repaints on change.
+    // Set by this view while the pointer is over this link (see ResubscribeInput); the render below repaints on change.
     public bool IsHighlighted
     {
         get => GetValue(IsHighlightedProperty);
@@ -161,7 +161,7 @@ public partial class LinkView : Control
             || change.Property == DataContextProperty)
         {
             RefreshGeometry();
-            ResubscribeHub();
+            ResubscribeInput();
         }
     }
 
@@ -169,12 +169,12 @@ public partial class LinkView : Control
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private IWorkflowLinkViewModel? _inputLink;
 
-    private void ResubscribeHub()
+    private void ResubscribeInput()
     {
         var link = DataContext as IWorkflowLinkViewModel;
         if (ReferenceEquals(link, _inputLink)) return;
 
-        UnsubscribeHub();
+        UnsubscribeInput();
         if (link?.GetHelper() is not IInputEvents events) return;
 
         _inputLink = link;
@@ -183,7 +183,7 @@ public partial class LinkView : Control
         events.Input.KeyDown += OnKeyDown;
     }
 
-    private void UnsubscribeHub()
+    private void UnsubscribeInput()
     {
         if (_inputLink?.GetHelper() is not IInputEvents events) return;
 
