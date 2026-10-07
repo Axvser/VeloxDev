@@ -1,7 +1,8 @@
 # VeloxDev.Core.Extension.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（93 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；85 个 `[TestClass]`，642 个 `[TestMethod]`）
-> —— 2026-10 复核。本文其余处若与新的计数冲突，以本条为准。
+> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（94 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；86 个 `[TestClass]`，662 个 `[TestMethod]`）
+> —— 2026-10-08 复核。本文其余处若与新的计数冲突，以本条为准。
+> 属性数**小于**运行条数（现在 661 对 678）：`[DataRow]` 会把一条展开成多条，差值是它。别拿属性数去对运行结果。
 > 被测：`Src/Core/VeloxDev.Core.Extension/`（AI 工具面，命名空间 `VeloxDev.AI.*`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Test/`。两者只共享「逐字相同的一行并行设置」，其余差异很大 —— 见 §六那张对照表。
 
@@ -82,7 +83,7 @@ csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 三个�
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **659**（2026-10-06 实测：**652 通过 + 7 跳过**。跳过的那 7 条即**门控**的真模型用例：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 473/472/399/391/382 都已过期） |
+| 测试条数 | **679**（2026-10-08 实测：**672 通过 + 7 跳过**。跳过的那 7 条即**门控**的真模型用例：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 678/659/652/473/472/399/391/382 都已过期） |
 | 耗时 | **2 s**（默认，真模型用例全部跳过；2026-10-05 实测）。开关打开时每条真模型用例另算，实测单条约 13 s |
 | 失败 | 0 |
 
@@ -156,6 +157,34 @@ Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
 
 **对 `[DoNotParallelize]` 的结论没变，但理由要更准确**：这条抖动**不是**并行度太大造成的，所以摘掉并行只是掩盖；正确的做法是把共享状态锁上，已经做了。往后再遇到抖动，先按「某个共享可变状态缺锁」查，别直接上 `[DoNotParallelize]`。
 
+### ⚠ 2026-10-08：又一例「不是测试的问题」—— `AIContextTreeRegistry.PathFor` 的 ABBA 死锁
+
+**症状**：**测试主机挂起**（不是断言失败、也不是崩溃），只在两个**只读**用例同时跑时出现。最小复现是一对：
+
+```
+dotnet vstest <test dll> --TestCaseFilter:"FullyQualifiedName~EveryWorkflowBuilder|FullyQualifiedName~APromotedField_IsNamed"
+```
+
+两个都是一次目录/注册表读取，各自单跑必绿，换成别的配对也常常绿 —— 所以「哪两条会挂」看着像随机的。
+
+**根因不在测试里**，在 `Src/Core/VeloxDev.Core/AI/AIContextTreeRegistry.cs` 的 `PathFor`：它**在 `_lock` 内**调 `BuildTypeIndex()`，而后者要读 `fragment.TypeNames` —— 那是**另一个程序集**的静态类，首次读取会把那个程序集的**模块初始化器**拉起来；而生成出来的初始化器（`{程序集名}_AIContextRegistration.Register()`）里调的 `RegisterFragment` / `RegisterAccessor`**要的就是同一把 `_lock`**。于是：
+
+| 线程 | 持有什么 | 等什么 |
+|---|---|---|
+| A（正在跑用例，顺手触发了 Lib 的模块初始化器） | 模块初始化器 | `_lock` |
+| B（`MembersAcross` → `PathFor` → `BuildTypeIndex`） | `_lock` | 分片类型的静态初始化 |
+
+**单线程下不会发生**（Monitor 可重入，同一线程重入 `_lock` 直接过），所以它只在方法级并行下露头。
+
+**修法**：锁内取分片快照、**锁外**建索引，再按 `_fragmentVersion` 校验后发布（快照之后有分片注册过就重来，次数自然很小）。同一文件里的 `List` **早就是**「锁内取快照、锁外碰分片」的写法 —— 只有 `PathFor` 破了例，这是判据。
+
+**排查手法（值得复用）**：`--Blame` 能直接给出挂起转储与涉事用例名 ——
+`dotnet vstest <dll> --TestCaseFilter:"…" --Blame:"CollectHangDump;TestTimeout=30000"`，
+再用 `dotnet-dump analyze <dump> -c "clrstack -all"` 看两个线程的栈，一次就定位。
+`dotnet-dump` 是本轮临时装的全局工具（`dotnet tool install -g dotnet-dump`）。
+
+**别把这类现象记成「测试抖动」**：两次挂起、两次崩溃，根因都不在测试工程里（上一例是 `Examples/AgentTranscriptTests.cs` 的 `async void`，这一例是 Core 的注册表）。
+
 **推论**：往这里加一条测试时，如果引入了「进程级静态状态」或「毫秒级真实时钟断言」，`[DoNotParallelize]` 得**由你自己加** —— 本项目只有一个先例（`Agent/AgentTelemetryExtensionsTests.cs:23`），要看更多理由去姊妹模块抄（`memory/modules/VeloxDev.Core.Test/architecture.md` §六 列了 16 个类各自的理由）。
 
 ### ⚠ 2026-10-01：`CompiledRunControlTests` 的「抖动」其实是**产品挂起**，不是测试问题
@@ -210,7 +239,7 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 
 | 目录 | 文件数 | 备注 |
 |---|---|---|
-| `Agent/` | 55 | 含 `Workflow/` 29（10 直接 + `Functions/` 19）、`SubAgents/` 10（9 个 `[TestClass]` + 1 个替身文件）、`MCP/` 5、`Skills/` 3、`Pipelines/` 3、`Dashboard/` 1，以及直接放在 `Agent/` 下的 4 |
+| `Agent/` | 56 | 含 `Workflow/` 30（10 直接 + `Functions/` 20）、`SubAgents/` 10（9 个 `[TestClass]` + 1 个替身文件）、`MCP/` 5、`Skills/` 3、`Pipelines/` 3、`Dashboard/` 1，以及直接放在 `Agent/` 下的 4 |
 | `Examples/` | 6 | 5 个测试 + `StubPythonHelper.cs`（替身）；`AgentTranscriptTests.cs` 守 demo 面板的契约（见 §一）**也是 §四那个无 key 崩溃的触发者** |
 | `Serialization/` | 31 | 守归档序列化全族：`ComponentModelEx` 一族、生成式引擎的往返 / 闭包 / 枚举名 / 泛型名 / 数字与文本拼写、`[Archive]` 诊断、`JsonIgnore` 兼容、注册表并发与所有权、`CompiledGraph`/`ExecutionCheckpoint`/demo 树的往返。含 `Golden/` 四份冻结文档 —— **`tree.json` 没有连接**，容器的嵌套读法只能靠 `DemoTreeRoundTripTests` 与 `Agent/…/WorkflowSerializationTests` 守，见 [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八·四 |
 | 根 | 1 | `MSTestSettings.cs` |
@@ -260,5 +289,6 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 | 声明一个生成类型 | `Agent/Workflow/Functions/WorkflowSerializationTests.cs:12-30`（唯一先例） |
 | 等后台线程做完 | `Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs:222` 的 `WaitUntilAsync` |
 | 改 `AgentTranscript` 的渲染形状 | **两个** `AgentTranscriptTests`：库侧形状在 `Agent/Pipelines/AgentTranscriptTests.cs`（当前 8 条），`Lib` 契约转发在 `Examples/AgentTranscriptTests.cs`（当前 9 条） |
+| 加一条「某个标注机制能被发现」的用例 | `Agent/Workflow/Functions/DiscoveryCoverageTests.cs`（声明 → 归类 → 可列举，夹具声明在本文件顶部）与 `Agent/Workflow/Functions/ComponentContextDiscoveryTests.cs`（`GetComponentContext` / `ListCreatableTypes` 两个工具的形状契约）。两条工具以前零覆盖，见 `VeloxDev.Core.Extension/architecture.md` §六 |
 
 **同名类 `AgentTranscriptTests` 出现两次**（`Agent/Pipelines/` 与 `Examples/`，命名空间不同所以合法）。搜类名会拿到两个结果，这不是重复文件 —— 前者守库的输出形状，后者守它经过 `TreeViewModel` 转发到面板绑定字符串的那一跳。改动渲染时必须同时想到两边。

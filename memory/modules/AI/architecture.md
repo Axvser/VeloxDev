@@ -172,7 +172,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 ### 三条必须记住的坑
 
-1. **生成器之间看不见彼此的产物。** 目录里的 `Channel` 是 MVVM 生成器写出来的属性，`SaveCommand` 是 CommandWriter 写出来的 —— `AIContextTree` 生成器**看不到它们**，只能复现命名规则。所以规则抽在 `Base/AIContextNaming.cs`，`MVVMFieldAnalizer`（`Analizer.cs:244`，转调点 `:291`）与 `CommandWriter.cs:155` 都改为转调它。**改命名规则只改那一处；改一处漏一处会让目录开始命名不存在的成员，报错落在消费方编译里。**
+1. **生成器之间看不见彼此的产物。** 目录里的 `Channel` 是 MVVM 生成器写出来的属性，`SaveCommand` 是 CommandWriter 写出来的 —— `AIContextTree` 生成器**看不到它们**，只能复现命名规则。所以规则抽在 `Base/AIContextNaming.cs`，`MVVMFieldAnalizer`（`Analizer.cs:244`，转调点 `:291`）与 `CommandWriter.cs:155` 都改为转调它。**改命名规则只改那一处；改一处漏一处会让目录开始命名不存在的成员，报错落在消费方编译里。** ⚠ 2026-10-08 起**多一个运行时依赖**：`AgentContextReader.EntryFor(MemberInfo)` 要靠这条规则把 `FieldInfo` 认回它那个提升条目（见 §七·十三）。它按**匹配**而不是按**构造**用规则（只认目录里已经存在的名字），所以规则改了它不会开始瞎认，只会静默认不到 —— 症状是「字段的标注读不出来」，与迁移前那份反射实现的症状一样。
 2. **`[VeloxCommand]` 方法在实现类里普遍是 `private`。** 生成出来的命令属性却是公开的，所以命令的收录**不能按方法可见性过滤** —— 按 `Public` 过滤会把整个命令面漏掉（`SlotDefaultViewModel` 的四条命令全是 private）。
 3. **访问器够不着别的类型的 `private` 成员。** 提升属性靠的是**生成出来的那个属性**（同一个类里，编得过），不是字段本身。
 
@@ -197,7 +197,9 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 - `Src/Core/VeloxDev.Core.Test/AI/AIContextTreeTests.cs`（8 条）—— 注册、目录列举、条目查找、访问器读写与执行。含**反向对照**：一个没被标注的类型必须查不到路径也没有访问器 —— 目录一旦放宽收录规则，那条会先红。
 - `Src/Core/VeloxDev.Core.Test/AI/AIContextTreeGeneratorTests.cs`（5 条）—— 走 `GeneratorProbe` 驱动生成器，断言提升名、命令名、重载诊断、以及没有 Agent 面时**不产出**。
-- `Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentContextTreeParityTests.cs` —— **最重要的一条**（单个 `[TestMethod]`，运行时遍历 `Framework/` 下每个类型条目 × 2 种语言）：目录渲染与反射渲染逐字对比。它是「换数据源不换输出」的唯一保证。**块数不可静态复核** —— 记忆写下时是 63 个框架类型 × 2 语言 = 126 个块，以测试实际遍历为准。
+- `Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentContextTreeParityTests.cs` —— **最重要的一条**（单个 `[TestMethod]`，运行时遍历 `Framework/` 下每个类型条目 × 2 种语言）：目录渲染与反射渲染逐字对比。它是「换数据源不换输出」的唯一保证。**块数不可静态复核** —— 2026-10-08 实测 **226 个块**（失败信息里直接报 `8 of 226`），旧读数 126（63 个类型 × 2 语言）已过期，以测试实际遍历为准。
+
+  ⚠ **它有一个盲点，直到 2026-10-08 才补上**：oracle（`ReflectionContextOracle`）调的是 `AgentContextCollector.GetAgentContext(MemberInfo, …)`，而那一路当时对**提升字段**永远返回空（见 §七·十三）—— 于是 oracle 的「提升字段」那一趟是死代码，`Framework/` 里又没有这种形状的组件（没有一个 `[VeloxProperty]` 字段带 `[AgentContext]`），两件事叠在一起让 `Class` 表**把提升属性列两遍**这个缺陷在绿着的 parity 下活了很久。**parity 绿 ≠ 这一档被验过**：它只验 Framework 根，且 oracle 自己也曾是错的。修 §七·十三 时只修一半，parity 立刻以 `8 of 226` 报出来 —— 那一刻它才真正开始守这一档。
 
 ### 当前状态（2026-10-03，第三站已落：**Extension 侧也清零了**）
 
@@ -429,3 +431,57 @@ Agent 在一处列表里读到 `List<X>`，去问 X 是「不在目录里」。�
 
 （这条目前记在模块记忆里。如果它要成为全仓的规矩 —— 例如将来有别的工具面 —— 应当升到
 `memory/specifications/` 并在 `AGENTS.md` 的索引表里占一行。）
+
+### 七·十二、注册表的锁**不能**盖住「读别的程序集的静态成员」（2026-10-08 修）
+
+`AIContextTreeRegistry.PathFor` 原来在 `_lock` 里调 `BuildTypeIndex()`，而它要读 `fragment.TypeNames`
+—— 那是**另一个程序集**的静态类，首次读取会把那个程序集的**模块初始化器**拉起来，而生成出来的初始化器
+（`{程序集名}_AIContextRegistration.Register()`）里调的 `RegisterFragment` / `RegisterAccessor`
+**要的就是同一把 `_lock`**。两个线程各碰一半就是一个 ABBA 死锁；单线程下 Monitor 可重入，不会发生。
+
+**规则**：注册表可以持 `_lock` 做**快照**，但凡是会碰到分片自身静态状态的动作，都要在**锁外**做。
+同一文件里的 `List` 早就是这个写法（`Fragments` 锁内取快照，`fragment.ChildrenOf` 在锁外）——
+只有 `PathFor` 破了例。修完是「锁内快照 + 锁外建索引 + 按 `_fragmentVersion` 校验后发布」。
+
+**症状**：宿主**挂起**，且只在并发下出现 —— 所以它看起来像测试抖动。实测复现、挂起转储与定位手法记在
+[`VeloxDev.Core.Extension.Test/architecture.md`](../VeloxDev.Core.Extension.Test/architecture.md) §五。
+
+**守卫**：`Src/Core/VeloxDev.Core.Test/AI/AIContextTreeLockingTests.cs`（一条，`[DoNotParallelize]`）。
+它**不**去赛两个 `PathFor` —— 那个窗口在索引建好之后就永久关闭，赛出来的用例无论锁持没持都会绿，是空验证。
+它把环直接摆出来：探针分片的 `TypeNames` 被读到时放行另一个线程去做一次普通 `PathFor`（**那正是要拿这把锁的操作**），
+再看那次查找能否在本次读取返回之前完成。持锁的写法下它 **5 秒超时后断言失败**（不是挂起整轮），撤掉修复即红。
+
+两处细节都不是随手写的：
+
+- **只有发起用例的那个线程才拦探针**（比 `Environment.CurrentManagedThreadId`）。另一个线程的重建若也被拦，
+  它就等一个只有它自己能置位的信号 —— 自锁。
+- **它必须把注册表原样还回去**。为此新增了 `internal static AIContextTreeRegistry.UnregisterFragment(string)`：
+  注册在生产里是单向的（模块初始化器只跑一次、没有程序集会被卸载），这一条只对 `Core.Test` 可见（`AssemblyInfo.cs`
+  的 `InternalsVisibleTo`），作用就是让用例结束时断言「分片集合与顺序与开始时逐条相同」。**别把它做成 public** ——
+  它不是消费者的能力，是测试把进程级状态归位的钩子。
+
+### 七·十三、提升条目属于**字段**，不属于生成出来的属性（2026-10-08 修）
+
+`AgentContextReader.EntryFor(MemberInfo)` 原来是「按成员自己的名字查一次」。`[VeloxProperty]` 字段在目录里
+存的是**提升后的**名字（`payload` → `Payload`），于是**拿着 `FieldInfo` 按 `payload` 查永远是 null** ——
+即 `GetAgentContext(field, lang)` 对每个 `[VeloxProperty]` 字段都返回空。迁移之前那份反射实现是直接读字段上的
+特性，所以这正是「换数据源不换输出」漏掉的一处。**Framework 分片里没有一个 `[VeloxProperty]` 字段带
+`[AgentContext]`，所以 parity 一直看不到它。**
+
+**修法是两半，缺一不可**：
+
+| 问谁 | 答什么 |
+|---|---|
+| `FieldInfo` | 先按自己的名字查；查不到就按**字段承载的条目**反查（名字与声明类型都对上才算），`Properties` 与 `Fields` 两个目录都找 |
+| `PropertyInfo` | 命中字段承载的条目时**答空** —— `[VeloxProperty]` 从来没写在属性上 |
+
+**只修前半会让 parity 当场红**（实测：226 个块里 8 个不一致）。原因是同一个条目会被字段和属性各认领一次，
+两条路都算「有描述」，于是每一行变成两行 —— 在 `Data` 那一档（`Anchor` / `Offset` / `Size` 的提升字段）
+与 `Class` 那一档都会翻倍。**parity 是这两半必须成对的证明**：修完两半它重新变绿。
+
+**判据是 `Kind` + flag，不是「在哪个目录」**：`AIContextNodeKind.Field`（普通公开字段、以及只带
+`[AgentContext]` 的私有字段）与 `Kind == Property && IsPromotedField`（提升出来的属性）都算「字段承载」。
+只带 `[AgentContext]` 的私有字段**也按提升名收录**（`BuildDescribedOnlyField(field, PromotedPropertyName(...))`），
+所以它和提升字段一样按名字查不到 —— 这是容易只想到一半的地方。
+
+**歧义时答空**：`volume` 与 `_volume` 会提升成同一个名字，两个都命中就返回 null，不猜。

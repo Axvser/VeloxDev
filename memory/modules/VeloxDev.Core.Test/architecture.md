@@ -1,6 +1,7 @@
 # VeloxDev.Core.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Test/`（152 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；132 个 `[TestClass]`，1129 个 `[TestMethod]`）
+> 代码：`Src/Core/VeloxDev.Core.Test/`（154 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；134 个 `[TestClass]`，1138 个 `[TestMethod]`）
+> —— 2026-10-08 复核。旧读数 152/132/1129 已过期（不全是本轮变的：那三个数在本轮之前就已经落后于树了）。
 > 被测：`Src/Core/VeloxDev.Core/`（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj:5` 是五目标 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Extension.Test/`（那个引 `Lib`、测 AI 工具面）。两者的共享面只有「同样一行并行设置」。
 
@@ -87,7 +88,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 
 | 项 | 值 |
 |---|---|
-| `[TestMethod]` 条数 | **1129**（在树里数出；另有 Extension.Test 的 642） |
+| `[TestMethod]` 条数 | **1138**（2026-10-08 在树里数出；另有 Extension.Test 的 662。旧读数 1129 / 642 都已过期） |
 | `[TestClass]` 条数 | **132**（同上） |
 | 全量耗时 | **30 s** —— **不可复核**（提交信息里的旧值，没有可重跑的依据） |
 | 8 次连跑的失败次数 | **1** —— **不可复核**（同上；原因见 §六）。**`MVVM/` 已不是来源**：2026-10-01 重写为 TCS 门控后连跑全绿 |
@@ -146,11 +147,11 @@ Src/Core/VeloxDev.Core.Test/MSTestSettings.cs:1
 
 方法级 = **同一个类的两个方法可以同时在跑**。已全仓搜过，没有任何 `.runsettings` 文件，所以这一行就是并行的唯一事实源。
 
-**16 个类用 `[DoNotParallelize]` 把自己摘出去**，理由分四档（档内按行号）：
+**18 个类用 `[DoNotParallelize]` 把自己摘出去**，理由分四档（档内按行号）：
 
 | 档 | 类（`文件:行`） | 为什么 |
 |---|---|---|
-| 进程级静态状态 | `TimeLine/TickableBusTests.cs:23`、`TimeLine/TickManagerTests.cs:10`、`DynamicTheme/ThemeTransitionTests.cs:19`、`Timing/TimerCoreRegistryTests.cs:16`、`MVVM/VeloxCommandDiagnosticsTests.cs:16` | 静态注册表 / 总线 / 进程级静态事件（诊断钩子）。`TimerCoreRegistryTests.cs:9-16` 自己写明：覆盖 `ITimeSourceControl` 会把「时钟永不动」的源交给每个并发动画，而停在冻结时钟上的动画**不报错，它挂起** |
+| 进程级静态状态 | `TimeLine/TickableBusTests.cs:23`、`TimeLine/TickManagerTests.cs:10`、`DynamicTheme/ThemeTransitionTests.cs:19`、`Timing/TimerCoreRegistryTests.cs:16`、`MVVM/VeloxCommandDiagnosticsTests.cs:16`、`AI/AIContextTreeLockingTests.cs:27` | 静态注册表 / 总线 / 进程级静态事件（诊断钩子）。`TimerCoreRegistryTests.cs:9-16` 自己写明：覆盖 `ITimeSourceControl` 会把「时钟永不动」的源交给每个并发动画，而停在冻结时钟上的动画**不报错，它挂起**。`AIContextTreeLockingTests` 是另一回事：它注册探针分片、**作废 `AIContextTreeRegistry` 的类型索引**并等另一线程在重建途中完成一次查找；若别的方例同时调 `PathFor` 就会抢先消费掉探针 —— 那时自证守卫会红，所以是「吵」不是「假绿」。**它不留下副作用**：结束时用 `internal` 的 `UnregisterFragment` 收回探针，并断言分片集合与顺序与开始时逐条相同（见 [`AI/architecture.md`](../AI/architecture.md) §七·十二） |
 | 进程级测量 | `TransitionSystem/ReusableTimerWaitTests.cs:16`、`MVVM/CommandAllocationTests.cs:15`、`MVVM/CommandBoxingTests.cs:18` | 分配断言量的是 `GC.GetTotalAllocatedBytes`（进程级），并行时别的方法的分配会落进测量窗口，best-of-2 只是缓解 |
 | 实时动画 / 时钟 | `Timing/TimeSourceContractTests.cs:15`、`TransitionSystem/FramePacerTests.cs:17`、`TransitionSystem/TimelineControlTests.cs:18`、`TransitionSystem/TransitionRunThreadAffinityTests.cs:18`、`TransitionSystem/TransitionSchedulerAwakeTests.cs:16`、`TransitionSystem/TransitionSchedulerPrepareTests.cs:16` | `TimelineControlTests.cs:8-18` 写明：观察的是实时运行的动画，断言是比值不是绝对时间 |
 | 纵深防御 | `TransitionSystem/InterpolatorCoreTests.cs:13` | 注释（`:9-12`）自己写明：这些断言与并行无关，保留 `[DoNotParallelize]` 纯粹是防御 |
