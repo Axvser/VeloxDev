@@ -32,9 +32,12 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// Names of the management tools, in registration order. Exposed so a host composing several tool
     /// sources can classify them without repeating the literals.
     /// <para>
-    /// A granted view (see <see cref="McpScope.CreateGrantedView"/>) registers only
-    /// <see cref="ListName"/> and <see cref="DescribeName"/> — the two that read. The other two are in this
-    /// array because they are names the host needs to recognise, not because every scope registers them.
+    /// These are the four every scope registers, granted view aside — a host can rely on them without asking.
+    /// The two that change what software runs on this machine (<see cref="AddToolName"/> and
+    /// <see cref="SetArgumentsName"/>) are deliberately <b>not</b> here: they exist only once the host has
+    /// opened <see cref="McpScope.WithSelfService"/>, so a host that wants to recognise them has to opt in to
+    /// the gate as well. A granted view (see <see cref="McpScope.CreateGrantedView"/>) registers only
+    /// <see cref="ListName"/> and <see cref="DescribeName"/> — the two that read.
     /// </para>
     /// </summary>
     public static readonly string[] ToolNames =
@@ -52,6 +55,13 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// <see cref="McpSelfServiceLevel.Closed"/>.
     /// </summary>
     public const string AddToolName = "AddMcpServer";
+
+    /// <summary>
+    /// Name of the tool that points an already-known server at new launch arguments — a filesystem server's
+    /// allowed directory, say. Registered under the same gate as <see cref="AddToolName"/>, and for the same
+    /// reason: it restarts the server, which for a local mode means launching software on the user's machine.
+    /// </summary>
+    public const string SetArgumentsName = "SetMcpServerArguments";
 
     /// <summary>
     /// Creates the MCP management tools: query / load / unload / describe capabilities. Adding a server
@@ -80,7 +90,10 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         // At Closed the tool is absent rather than present-and-refusing: a tool the model can see but
         // never use only wastes prompt budget and invites retries.
         if (_scope.SelfServiceLevel != McpSelfServiceLevel.Closed && !_scope.IsGrantedView)
+        {
             tools.Add(AIFunctionFactory.Create(AddServer, AddToolName));
+            tools.Add(AIFunctionFactory.Create(SetServerArguments, SetArgumentsName));
+        }
 
         return tools;
     }
@@ -144,9 +157,9 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// require the higher rungs, and the rungs below <see cref="McpSelfServiceLevel.Unrestricted"/>
     /// require the user's agreement.
     /// </summary>
-    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. The host must have enabled this. Run modes: 'Http' for a remote server (give endpoint), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server launched locally (give package) — local modes install and start software on the user's machine, so they may be refused outright or require confirmation. Ask the user first when the server is one they did not mention.")]
+    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. The host must have enabled this. Run modes: 'Http' for a remote server (give endpoint), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server launched locally (give package) — local modes install and start software on the user's machine, so they may be refused outright or require confirmation. Ask the user first when the server is one they did not mention. Reusing the name of a server that is already connected RECONFIGURES it — that is how a server's launch arguments (a filesystem server's allowed directory, say) are changed; its tools keep their names, and a configuration that cannot be reached leaves the existing connection serving.")]
     private async Task<string> AddServer(
-        [Description("Server name. Must not already be registered or connected.")] string name,
+        [Description("Server name. Reusing the name of a connected server reconfigures it rather than adding a second one.")] string name,
         [Description("Run mode: 'Http' for remote, or 'Npx','Npm','Pip','Uvx','Dotnet','Exe' for local.")] string runMode,
         [Description("Remote mode only: the endpoint URL.")] string? endpoint = null,
         [Description("Local modes only: the package name, or the path for Dotnet/Exe.")] string? package = null,
@@ -225,6 +238,115 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         }.ToJson();
     }
 
+    /// <summary>
+    /// Points a server at new launch arguments, leaving its identity alone.
+    /// </summary>
+    /// <remarks>
+    /// Narrower than <see cref="AddServer"/> on purpose: the model changes one directory without having to
+    /// restate the run mode and package, so a slip of the pen cannot silently turn an npx server into
+    /// something else. Everything else about the configuration — including the host's connection options,
+    /// which the model never sees — is carried over untouched.
+    /// </remarks>
+    [Description("Changes the launch arguments of an MCP server that is already configured — a filesystem server's allowed directory, for example — and leaves everything else about it alone. Pass the whole argument list as a JSON array of strings, e.g. [\"C:/data\",\"C:/work\"]; it REPLACES the current list, it does not append. Only servers launched locally take arguments; a remote (Http) server is launched by the host and has none. Call ListMcpServers first to see the current arguments. This restarts the server: its tools keep their names, and if the new arguments cannot be reached the connection that is serving now keeps serving. The host must have enabled this.")]
+    private async Task<string> SetServerArguments(
+        [Description("Server name, as ListMcpServers reports it.")] string name,
+        [Description("The complete new argument list as a JSON array of strings, e.g. [\"C:/data\"]. Replaces the current list.")] string argumentsJson,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Error("A server name is required.");
+
+        if (ConfigurationOf(name) is not { } current)
+            return Error($"Unknown MCP server '{name}'. Known servers: {string.Join(", ", _scope.RegisteredServers.Select(s => s.Name))}.");
+
+        if (current.RunMode == McpServerRunMode.Http)
+            return Error($"'{name}' is a remote (Http) server — the host launches it, so it takes no launch arguments.");
+
+        if (!_scope.CanAddServer(current.RunMode))
+            return Error($"Reconfiguring a local '{current.RunMode}' server is disabled by host policy — it restarts software on this machine. The host must raise WithSelfService.");
+
+        string[] arguments;
+        try
+        {
+            var parsed = (VeloxJsonArray)VeloxJsonValue.Parse(argumentsJson);
+            var values = new List<string>(parsed.Count);
+            foreach (var element in parsed)
+            {
+                // Strict rather than silently dropping what it cannot read: an argument list the model got
+                // wrong must not quietly become a shorter one.
+                if ((element as VeloxJsonScalar)?.AsString() is not { } text)
+                    return Error("Every element of 'argumentsJson' must be a string.");
+                values.Add(text);
+            }
+
+            arguments = [.. values];
+        }
+        catch (Exception ex)
+        {
+            return Error($"Invalid arguments JSON: {ex.Message}");
+        }
+
+        if (_scope.RequiresConfirmationToAdd())
+        {
+            var description = $"Restart the MCP server '{name}' with launch arguments [{string.Join(", ", arguments)}]. "
+                              + "Its tools keep their names, and the current connection keeps serving if the new arguments cannot be reached.";
+            // Awaited without ConfigureAwait: this tool is registered through the scope, so it runs on the
+            // UI thread, and everything after this point reads the UI-bound status collection.
+            if (!await _scope.ConfirmationResolver($"mcp-args:{name}", description))
+                return new VeloxJsonObject
+                {
+                    ["status"] = "denied",
+                    ["message"] = "The user declined to change this server's launch arguments. Do not retry without asking them.",
+                }.ToJson();
+        }
+
+        var reconfigured = new McpServerConfiguration
+        {
+            Name = current.Name,
+            Description = current.Description,
+            RunMode = current.RunMode,
+            Package = current.Package,
+            Version = current.Version,
+            Arguments = arguments,
+            Endpoint = current.Endpoint,
+            // Carried over by reference: the host configured these, the model never sees them, and a
+            // reconfigure must not quietly drop an authorization header or an environment variable.
+            Options = current.Options,
+        };
+
+        var applied = await _scope.ReconfigureAsync(reconfigured, ct);
+        var status = _scope.Status.Servers.FirstOrDefault(
+            s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        return new VeloxJsonObject
+        {
+            ["status"] = applied == false ? "error" : "ok",
+            ["server"] = name,
+            ["arguments"] = VeloxJsonValue.From(arguments),
+            // Whether the new arguments are in force NOW — false both when the server is not connected and when
+            // the attempt failed. "An attempt was made" is a different question, and the message answers it.
+            ["applied"] = applied == true,
+            ["state"] = status?.State.ToString(),
+            ["error"] = status?.Error,
+            ["message"] = applied switch
+            {
+                null => $"'{name}' is registered but not connected — the new arguments take effect when it is next loaded.",
+                true => $"'{name}' restarted with the new launch arguments.",
+                _ => $"'{name}' could not be reached with the new arguments; the connection that was serving is still in use. See 'error'.",
+            },
+        }.ToJson();
+    }
+
+    /// <summary>
+    /// The configuration behind a server name: what the scope has registered, else what the host handed this
+    /// toolkit. Null when the name is known only from its status row, which has no configuration behind it.
+    /// </summary>
+    private McpServerConfiguration? ConfigurationOf(string name)
+        => _scope.RegisteredServers.FirstOrDefault(
+               c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))
+           ?? _servers.FirstOrDefault(
+               c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+
     private static string Error(string message)
         => new VeloxJsonObject { ["status"] = "error", ["message"] = message }.ToJson();
 
@@ -286,14 +408,14 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         }.ToJson();
     }
 
-    [Description("Lists the configured MCP servers and their current status: name, run mode, state (NotStarted/Installing/Connecting/Connected/Error), tool count, whether the host has switched it on, and error message. A server can be connected but switched off by the host — its tools are then NOT available to you even though it is alive. Also returns aggregate counts (connected/error). Pure query — call it first to see which servers are alive, still installing, connecting, or failed.")]
+    [Description("Lists the configured MCP servers: name, description, how it is launched (run mode, package, launch arguments, endpoint), current state (NotStarted/Installing/Connecting/Connected/Error), tool count, whether the host has switched it on, and error message. A server can be connected but switched off by the host — its tools are then NOT available to you even though it is alive. Also returns aggregate counts (connected/error). Pure query — call it first to see which servers are alive, still installing, connecting, or failed, and what they were launched with. Host-supplied connection options (credentials, headers, environment) are deliberately NOT included.")]
     private string ListServers()
     {
         var status = _scope.Status;
         var arr = new VeloxJsonArray();
         foreach (var s in status.Servers)
         {
-            arr.Add(new VeloxJsonObject
+            var entry = new VeloxJsonObject
             {
                 ["name"] = s.Name,
                 ["runMode"] = s.RunMode.ToString(),
@@ -305,7 +427,21 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
                 ["toolCount"] = s.IsEnabled ? s.ToolCount : 0,
                 ["loadedToolCount"] = s.ToolCount,
                 ["error"] = s.Error,
-            });
+            };
+
+            // What it was launched with, when this scope knows the configuration. Null for a server known only
+            // from its status row (a test seed, or one whose configuration the host never handed over).
+            //
+            // Options is deliberately not projected: it carries authorization headers, an OAuth client secret
+            // and environment variables — credentials the host supplied, which have no business in a prompt.
+            var config = ConfigurationOf(s.Name);
+            entry["description"] = config?.Description;
+            entry["package"] = config?.Package;
+            entry["version"] = config?.Version;
+            entry["arguments"] = config is null ? null : VeloxJsonValue.From(config.Arguments);
+            entry["endpoint"] = config?.Endpoint;
+
+            arr.Add(entry);
         }
 
         return new VeloxJsonObject
@@ -323,7 +459,7 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// then launch the process; remote modes connect over HTTP. This can take a while for a fresh
     /// local install — inform the user and prefer loading only the servers you actually need.
     /// </summary>
-    [Description("Loads (installs if needed and connects) the host-registered MCP servers. By default loads ALL pre-registered servers; pass a JSON array of server names to load only those (e.g. [\"filesystem\"]). Local modes install npm/pip packages and launch the process; remote modes connect over HTTP. Can take a while for a fresh install. Returns the updated status. Only loads configurations the host pre-registered.")]
+    [Description("Loads (installs if needed and connects) the host-registered MCP servers. By default loads ALL pre-registered servers; pass a JSON array of server names to load only those (e.g. [\"filesystem\"]). This REPLACES what is loaded — every server not named here is unloaded, so use it to change which servers are open, not to add one to what is already open. Local modes install npm/pip packages and launch the process; remote modes connect over HTTP. Can take a while for a fresh install. Returns the updated status. Only loads configurations the host pre-registered.")]
     private async Task<string> LoadServers(
         [Description("Optional JSON array of server names to load, e.g. [\"filesystem\"]. Empty or null loads all.")] string? namesJson = null,
         CancellationToken ct = default)
