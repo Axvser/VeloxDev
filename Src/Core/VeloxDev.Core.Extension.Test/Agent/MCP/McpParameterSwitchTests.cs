@@ -429,21 +429,34 @@ public class McpParameterSwitchTests
         Assert.IsEmpty(connector.Clients, "and nothing was launched to find that out");
     }
 
-    /// <summary>The tool does not exist until the host opens the gate, like the one that adds servers.</summary>
+    /// <summary>The tool appears only on the rung where it can actually do something.</summary>
+    /// <remarks>
+    /// One rung above adding, and not the same rung: a remote server takes no launch arguments, and a local one is
+    /// not reconfigurable below <see cref="McpSelfServiceLevel.AllConfirmed"/>. Registering it at
+    /// <see cref="McpSelfServiceLevel.RemoteConfirmed"/> would put a tool in front of the model whose every call
+    /// is refused — the thing this toolkit is otherwise careful never to ship.
+    /// </remarks>
     [TestMethod]
-    public void SetMcpServerArguments_IsAbsentUntilTheHostOpensTheGate()
+    public void SetMcpServerArguments_AppearsOnlyWhereItCanSucceed()
     {
         var scope = new McpScope();
 
-        Assert.IsFalse(
-            new McpAgentToolkit(scope, []).CreateTools().Any(t => t.Name == McpAgentToolkit.SetArgumentsName),
-            "at Closed a tool the model can see but never use only wastes prompt budget");
+        Assert.IsFalse(HasSetArgumentsTool(scope), "at Closed no write tool exists at all");
 
         scope.WithSelfService(McpSelfServiceLevel.RemoteConfirmed);
+        Assert.IsTrue(HasAddServerTool(scope), "the adding tool opens a rung earlier, for remote servers");
+        Assert.IsFalse(HasSetArgumentsTool(scope),
+            "on this rung every call would be refused — Http servers take no arguments and local ones are not reconfigurable yet");
 
-        Assert.IsTrue(
-            new McpAgentToolkit(scope, []).CreateTools().Any(t => t.Name == McpAgentToolkit.SetArgumentsName));
+        scope.WithSelfService(McpSelfServiceLevel.AllConfirmed);
+        Assert.IsTrue(HasSetArgumentsTool(scope));
     }
+
+    private static bool HasSetArgumentsTool(McpScope scope)
+        => new McpAgentToolkit(scope, []).CreateTools().Any(t => t.Name == McpAgentToolkit.SetArgumentsName);
+
+    private static bool HasAddServerTool(McpScope scope)
+        => new McpAgentToolkit(scope, []).CreateTools().Any(t => t.Name == McpAgentToolkit.AddToolName);
 
     // ── Fixtures ────────────────────────────────────────────────────────────
 

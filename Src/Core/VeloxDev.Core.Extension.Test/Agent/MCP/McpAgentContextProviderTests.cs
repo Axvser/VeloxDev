@@ -125,7 +125,7 @@ public class McpAgentContextProviderTests
 
         var closed = provider.BuildContext();
         Assert.IsFalse(closed.Tools!.Any(t => t.Name == McpAgentToolkit.AddToolName), "at Closed the tool is absent");
-        Assert.Contains("cannot add a server yourself", closed.Instructions!);
+        Assert.Contains("host-side setting", closed.Instructions!);
 
         scope.WithSelfService(McpSelfServiceLevel.AllConfirmed);
         var opened = provider.BuildContext();

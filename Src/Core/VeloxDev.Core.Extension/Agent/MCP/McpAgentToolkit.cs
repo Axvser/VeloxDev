@@ -90,10 +90,13 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         // At Closed the tool is absent rather than present-and-refusing: a tool the model can see but
         // never use only wastes prompt budget and invites retries.
         if (_scope.SelfServiceLevel != McpSelfServiceLevel.Closed && !_scope.IsGrantedView)
-        {
             tools.Add(AIFunctionFactory.Create(AddServer, AddToolName));
+
+        // One rung higher than adding, and for a reason of its own: a remote server takes no launch arguments,
+        // and a local one is not reconfigurable below AllConfirmed. At RemoteConfirmed the tool would therefore
+        // exist and every call would fail — the one thing this class is careful never to ship.
+        if (_scope.SelfServiceLevel >= McpSelfServiceLevel.AllConfirmed && !_scope.IsGrantedView)
             tools.Add(AIFunctionFactory.Create(SetServerArguments, SetArgumentsName));
-        }
 
         return tools;
     }
@@ -123,29 +126,36 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     public string BuildPromptContext()
     {
         if (_scope.IsGrantedView)
-            return "MCP server tools: ListMcpServers shows each server's state and tool count; "
+            return "MCP server tools: ListMcpServers shows each server's state, tool count and how it was launched; "
                  + "DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools). "
-                 + "The servers listed are the whole of your MCP surface — loading, unloading and adding servers are the "
-                 + "host's decisions, no tool to take any of them exists here, and asking for one will not produce it. "
+                 + "The servers listed are the whole of your MCP surface — loading, unloading, adding and reconfiguring "
+                 + "servers are the host's decisions, and no tool to take any of them exists on this scope. "
+                 + "If the user asks for one of those, tell them it is a setting on the host's side. "
                  + "Use the tools the servers offer.";
 
         var sb = new StringBuilder();
-        sb.Append("MCP server management tools: ListMcpServers shows each server's alive/installing/connecting/error state and tool count; ");
+        sb.Append("MCP server management tools: ListMcpServers shows each server's alive/installing/connecting/error state, its tool count, and how it was launched (run mode, package, launch arguments, endpoint); ");
         sb.Append("DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools) so you can tell the user what it can do; ");
         sb.Append("LoadMcpServers loads the servers the host pre-registered (installing and connecting when needed); ");
         sb.Append("UnloadMcpServer removes a server mid-session — its tools leave the next turn's tool set, and it can be loaded again. ");
         sb.Append(_scope.SelfServiceLevel switch
         {
             McpSelfServiceLevel.Closed =>
-                "You cannot add a server yourself: the configuration is fixed by the host, and no tool to author one exists. "
-                + "Do not attempt to modify or reconfigure servers.",
+                "This session has no tool that adds or reconfigures a server: what exists is fixed by the host, and that "
+                + "is a setting on the host's side, not something to work around — do not try to change a server's "
+                + "configuration by other means. When the user asks for a server change — one more allowed directory, a "
+                + "different package — say plainly that it is a host-side setting and ask them to change it there, and "
+                + "say what the current launch arguments are. Do not hand them a configuration file for it: the host's "
+                + "form of that is not yours to guess.",
             McpSelfServiceLevel.RemoteConfirmed =>
                 "AddMcpServer can connect a REMOTE (Http) server, but only after the user confirms it — ask them first, and expect a refusal if they decline. "
                 + "Locally launched servers must be pre-registered by the host.",
             McpSelfServiceLevel.AllConfirmed =>
-                "AddMcpServer can connect a remote or a locally launched server, but only after the user confirms it — ask them first, and expect a refusal if they decline.",
+                "AddMcpServer can connect a remote or a locally launched server, but only after the user confirms it — ask them first, and expect a refusal if they decline. "
+                + "SetMcpServerArguments changes a locally launched server's launch arguments — a filesystem server's allowed directories, for example — and asks the same way.",
             _ =>
-                "AddMcpServer can connect any server without asking. Prefer the servers the host pre-registered, and add one of your own only when the task needs it.",
+                "AddMcpServer can connect any server without asking. SetMcpServerArguments changes a locally launched server's launch arguments in place, and the servers' tools keep their names across it. "
+                + "Prefer the servers the host pre-registered, and add or reconfigure one only when the task needs it.",
         });
         sb.Append(" Loading a local server installs npm/pip runtimes and may take time — confirm with the user before calling.");
         return sb.ToString();
@@ -157,7 +167,9 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// require the higher rungs, and the rungs below <see cref="McpSelfServiceLevel.Unrestricted"/>
     /// require the user's agreement.
     /// </summary>
-    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. The host must have enabled this. Run modes: 'Http' for a remote server (give endpoint), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server launched locally (give package) — local modes install and start software on the user's machine, so they may be refused outright or require confirmation. Ask the user first when the server is one they did not mention. Reusing the name of a server that is already connected RECONFIGURES it — that is how a server's launch arguments (a filesystem server's allowed directory, say) are changed; its tools keep their names, and a configuration that cannot be reached leaves the existing connection serving.")]
+    // 静态说明配动态档位：这里**只列有哪些模式**，不承诺这一档允许哪些 —— 那是提示词的活，
+    // 而提示词按档位逐轮重渲染。写死了就会在某几档上撒谎。
+    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. The host must have enabled this, and which run modes the CURRENT level allows is stated in your prompt — a mode it does not allow is refused outright. Run modes: 'Http' for a remote server (give endpoint), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server launched locally (give package), which installs and starts software on the user's machine. Ask the user first when the server is one they did not mention. Reusing the name of a server that is already connected RECONFIGURES it: its tools keep their names, and a configuration that cannot be reached leaves the existing connection serving. To change only a local server's launch arguments, prefer SetMcpServerArguments.")]
     private async Task<string> AddServer(
         [Description("Server name. Reusing the name of a connected server reconfigures it rather than adding a second one.")] string name,
         [Description("Run mode: 'Http' for remote, or 'Npx','Npm','Pip','Uvx','Dotnet','Exe' for local.")] string runMode,

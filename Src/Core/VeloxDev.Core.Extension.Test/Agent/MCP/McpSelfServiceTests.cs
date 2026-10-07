@@ -240,4 +240,38 @@ public class McpSelfServiceTests
         await scope.UnloadServerAsync("a");
         Assert.IsTrue(scope.Version > afterAdd, "unloading a server must invalidate it too");
     }
+
+    /// <summary>
+    /// At the closed level the prompt names who <i>can</i> make the change, instead of stopping at "you cannot".
+    /// </summary>
+    /// <remarks>
+    /// A model told only that no tool exists answered a user's request for one more allowed directory by inventing a
+    /// configuration file — an <c>mcpServers</c> JSON block shaped like another client's, which this host has never
+    /// had. The prohibition was true; the missing half was the remedy, and the vacuum is what got filled.
+    /// </remarks>
+    [TestMethod]
+    public void AtTheClosedLevel_ThePromptSaysWhoCanMakeTheChange()
+    {
+        var prompt = new McpAgentToolkit(new McpScope(), []).BuildPromptContext();
+
+        StringAssert.Contains(prompt, "host-side setting", "the user has to be told where the change can be made");
+        StringAssert.Contains(prompt, "not yours to guess",
+            "and the model has to be told not to reproduce a configuration file it cannot know");
+        Assert.IsFalse(prompt.Contains("no tool to author one exists"),
+            "the true claim is about this session's tool set, not about what is possible at all");
+    }
+
+    /// <summary>The prompt tracks the ladder: what is readable always, what is writable only where it works.</summary>
+    [TestMethod]
+    public void ThePrompt_TracksWhatTheSessionCanActuallyDo()
+    {
+        var closed = new McpAgentToolkit(new McpScope(), []).BuildPromptContext();
+        StringAssert.Contains(closed, "launch arguments",
+            "a server's launch arguments are readable at every level, so an answer about them can be grounded");
+        Assert.IsFalse(closed.Contains("SetMcpServerArguments"));
+
+        var gated = new McpAgentToolkit(
+            new McpScope().WithSelfService(McpSelfServiceLevel.AllConfirmed), []).BuildPromptContext();
+        StringAssert.Contains(gated, "SetMcpServerArguments");
+    }
 }
