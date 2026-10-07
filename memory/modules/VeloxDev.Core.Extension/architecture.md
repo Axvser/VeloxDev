@@ -185,6 +185,10 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 | `GetComponentContext` | `WorkflowAgentToolkit.cs:970` | **2026-10-08 前只按 `Type` 的形状三分流，从不看目录条目的 `Kind`** —— 于是值对象（目录里 Data 那一档）被渲染成 Class 形状，而同一条目在 `ProvideFrameworkDataContext`（`WorkflowAgentScope.cs:2189`）与 `WithData` 里走的是 `GetDataContext`：一个条目两种渲染，parity 只验过 Data 那份。**Class 表还比 Data 表少一档**：它只列 `IsPromotedField` / `HasVeloxProperty` / `IsSlotEnumerator` / `IsSingleSlot` 四种成员，`Fields` 目录一个都不读，所以一个声明成**字段**的成员在它下面根本不出现。已修（`Kind == DataType` ⇒ `GetDataContext`），守卫 `Agent/Workflow/Functions/ComponentContextDiscoveryTests.cs` |
 | `AgentContextTreeRenderer.Class` | `Agent/Workflow/AgentContextTreeRenderer.cs:188-192` | **提升出来的属性被列两次**：目录给提升条目同时打了 `IsPromotedField` 与 `HasVeloxProperty`（生成器 `AIContextModel.cs` 的 `BuildPromotedProperty`），而这张表的两趟（先提升字段、再带标注的属性）都认它。反射那条只列一次 —— 生成出来的那个属性不带 `[VeloxProperty]`。`[AgentContext] + [VeloxProperty]` 正是每个 demo 节点写设置项的写法，所以模型每轮都在为此付双份。已修（第二趟加 `!IsPromotedField`），parity 仍绿（Framework 里没有这种形状的组件，这正是它一直没被抓到的原因） |
 
+**语料的三个入口，各自只到一个地方**（2026-10-08 补）：`Shared.md` 是**唯一一处能同时到达 1~3 三档**的文件（`BuildInteractionSafetyPrompt` 先读它、再读 `Level{n}.md`、再叠宿主用 `WithInteractionSafetyPrompt` 加的规则，后者的优先级最高）；`Level{n}.md` 只到那一档；**第 0 档什么都读不到**（`BuildInteractionSafetyPrompt` 在 `_interactionSafety == 0` 时直接返回空串）。默认档位是 **1**，不是 0。
+
+所以「任何宿主都想要的不变量」该写进 `Shared.md`，「某一档才成立的事」才写进 `Level{n}.md`。已有的例子：`Shared.md` 里那条**宿主边界**（不许给自己扩权 —— 既不许逼用户，也不许借一个恰好做得到的工具绕过去）。它在那里之前，语料每一行都只讲「怎么操作图」，于是「我不能给自己提权」是**模型的判断力**而不是本库的指示 —— 而工具面上恰好有能执行命令的节点。守卫在 `CapabilityEnvelopeTests.TheSharedPolicy_CarriesTheHostBoundaries`（连中文那份一起钉，`WithInteractionSafety(0)` 断言它不出现）。
+
 **推论**：改 `Resources/` 时不要以为加一个 `Scripts/` 目录就会被自动加载 —— 加载器在（`ListScriptCategory`），调用者在（`ReadAllScripts`），但**没有第三方调用它**。同理，加 `Safety/Level4.md` 不会有任何效果，档位取值域是 `_interactionSafety > 0`（且 `WithInteractionSafety` 夹在 0–3）而文件名按 `$"Level{_interactionSafety}"` 拼（`WorkflowAgentScope.cs:821`），级别的语义定义在 `McpSelfServiceLevel.cs` 之外的那套交互挡位上，要新加挡位必须同时改宿主。
 
 ---
