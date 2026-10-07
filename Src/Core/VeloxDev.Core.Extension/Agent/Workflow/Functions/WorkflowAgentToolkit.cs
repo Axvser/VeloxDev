@@ -981,6 +981,13 @@ public sealed class WorkflowAgentToolkit
 
         if (type.IsEnum) return AgentContextCollector.GetEnumContext(type, lang);
         if (type.IsInterface) return AgentContextCollector.GetInterfaceContext(type, lang);
+
+        // 值对象（Anchor / Offset / CellKey 这类）在目录里是 Data 那一档：没有命令，也没有「权威默认值」可言。
+        // 按 Type 的形状猜会把它渲染成 Class，与 ProvideFrameworkDataContext / WithData 给同一条目的形状不一致，
+        // 而 Fields 那一档只有 Data 会读 —— 一个声明成字段的成员在 Class 下根本不会出现。
+        if (AgentContextTreeRenderer.TryEntry(type, out var entry) && entry.Kind == AIContextNodeKind.DataType)
+            return AgentContextCollector.GetDataContext(type, lang);
+
         return AgentContextCollector.GetClassContext(type, lang);
     }
 

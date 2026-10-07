@@ -183,10 +183,11 @@ internal static class AgentContextTreeRenderer
             result.AppendLine($"| {field.TypeName} | {field.Name} | {Descriptions(field, language)} |");
         }
 
-        // 提升出来的属性也在这里 —— 反射看到的是「属性」，`[VeloxProperty]` 标在字段上，
-        // 所以它们靠 IsSlotEnumerator / IsSingleSlot 进这张表，不靠 HasVeloxProperty。
+        // 提升出来的属性不靠 HasVeloxProperty 进这张表：反射看到的是「属性」，而 `[VeloxProperty]` 标在字段上，
+        // 生成出来的那个属性不带它 —— 目录却给提升条目同时打了两个标志，上面那一趟已经列过一次了。
+        // 它们仍靠 IsSlotEnumerator / IsSingleSlot 进来，那是按属性类型判的，与反射一致。
         foreach (var prop in properties.Where(static p =>
-                     (p.Has(AIContextFlags.HasVeloxProperty) && p.Descriptions.Length > 0)
+                     (p.Has(AIContextFlags.HasVeloxProperty) && !p.Has(AIContextFlags.IsPromotedField) && p.Descriptions.Length > 0)
                      || p.Has(AIContextFlags.IsSlotEnumerator)
                      || p.Has(AIContextFlags.IsSingleSlot)))
         {

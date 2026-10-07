@@ -68,6 +68,7 @@ public static class AIContextTreeRegistry
     private static readonly List<AIContextFragment> _fragments = [];
     private static readonly Dictionary<string, IAIContextAccessor> _accessors = new(StringComparer.Ordinal);
     private static Dictionary<string, string>? _pathByTypeName;
+    private static int _fragmentVersion;
 
     /// <summary>
     /// Adds one assembly's contribution.
@@ -82,6 +83,22 @@ public static class AIContextTreeRegistry
             _fragments.RemoveAll(f => string.Equals(f.AssemblyName, fragment.AssemblyName, StringComparison.Ordinal));
             _fragments.Add(fragment);
             _pathByTypeName = null;
+            _fragmentVersion++;
+        }
+    }
+
+    // 注册在生产里是单向的：模块初始化器每个程序集只跑一次，也没有程序集会被卸载。这一条不给消费者用 ——
+    // 它是 internal，只对 Core.Test 可见；那条并发用例要注册一个探针分片来观察注册表的行为，而它必须能把
+    // 注册表**原样还回去**，不能给同进程后面每条用例留一份残留。
+    internal static void UnregisterFragment(string assemblyName)
+    {
+        if (assemblyName is null) throw new ArgumentNullException(nameof(assemblyName));
+
+        lock (_lock)
+        {
+            _fragments.RemoveAll(f => string.Equals(f.AssemblyName, assemblyName, StringComparison.Ordinal));
+            _pathByTypeName = null;
+            _fragmentVersion++;
         }
     }
 
@@ -170,11 +187,36 @@ public static class AIContextTreeRegistry
     {
         if (typeFullName is null) throw new ArgumentNullException(nameof(typeFullName));
 
-        lock (_lock)
+        // 索引的构建**不能**在 _lock 里做：读一个分片的 TypeNames 会把那个程序集的模块初始化器拉起来
+        // （分片类型是另一个程序集的静态类），而那个初始化器自己会回来调 RegisterFragment/RegisterAccessor
+        // 拿 _lock —— 于是「持锁等模块初始化器、初始化器所在线程等锁」是一个 ABBA 死锁：单线程下不会出现
+        // （Monitor 可重入），两个线程各碰一半就会。这里改成锁内取快照、锁外构建，与 List 的写法一致。
+        // 快照之后可能有分片注册（那时 _fragmentVersion 变了、这份索引少一个分片），所以按版本校验后重来；
+        // 分片只在模块初始化期注册，循环次数自然很小。
+        for (var attempt = 0; attempt < 4; attempt++)
         {
-            _pathByTypeName ??= BuildTypeIndex();
-            return _pathByTypeName.TryGetValue(typeFullName, out var path) ? path : null;
+            var published = Volatile.Read(ref _pathByTypeName);
+            if (published is not null)
+                return published.TryGetValue(typeFullName, out var known) ? known : null;
+
+            IReadOnlyList<AIContextFragment> fragments;
+            int version;
+            lock (_lock)
+            {
+                fragments = [.. _fragments];
+                version = _fragmentVersion;
+            }
+
+            var built = BuildTypeIndex(fragments);
+
+            lock (_lock)
+            {
+                if (_fragmentVersion != version) continue;
+                _pathByTypeName ??= built;
+            }
         }
+
+        return null;
     }
 
     /// <summary>
@@ -200,11 +242,11 @@ public static class AIContextTreeRegistry
     public static IAIContextAccessor? FindAccessor(object? target)
         => target is null ? null : FindAccessor(target.GetType().FullName ?? target.GetType().Name);
 
-    private static Dictionary<string, string> BuildTypeIndex()
+    private static Dictionary<string, string> BuildTypeIndex(IReadOnlyList<AIContextFragment> fragments)
     {
         var index = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        foreach (var fragment in _fragments)
+        foreach (var fragment in fragments)
         {
             var names = fragment.TypeNames;
             var paths = fragment.TypePaths;
