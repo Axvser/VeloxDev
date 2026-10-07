@@ -1,4 +1,4 @@
-# VeloxDev.Core.Extension — MCP 子系统
+﻿# VeloxDev.Core.Extension — MCP 子系统
 
 > 代码：`Src/Core/VeloxDev.Core.Extension/Agent/MCP/`（10 个文件，2026-10-08 起含 `HostedMcpServer.cs` 与 `McpToolProxy.cs`）。
 > 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`（预注册服务器在 `:95-124`，注册点是 `:57`）。
@@ -9,7 +9,7 @@
 
 `McpSelfServiceLevel`（`McpSelfServiceLevel.cs:15`）四级：`Closed = 0` / `RemoteConfirmed = 1` / `AllConfirmed = 2` / `Unrestricted = 3`。默认 `Closed`（`McpScope.cs:69`）。
 
-**在 `Closed` 下，两个会改动机器上软件的写工具根本不被注册**（`McpAgentToolkit.cs:92-96`）：`AddMcpServer` 与 `SetMcpServerArguments` —— 不是「注册了但会拒绝」。理由写在紧邻的注释里：一个模型看得见却永远用不了的工具只浪费提示预算，还招来重试。**`ToolNames` 里没有它们**（那是「每个非视图 scope 都注册的四个」），宿主要认得它们得自己去认那两个常量。
+**会改动机器上软件的写工具按档位逐步出现，不到那一档就根本不注册**（`McpAgentToolkit.CreateTools`）：`AddMcpServer` 从 `RemoteConfirmed` 起（那一档只放 Http），`SetMcpServerArguments` 从 **`AllConfirmed`** 起 —— 比添加再高一档，理由独立：远程服务器**没有**启动参数，而本地服务器在 `AllConfirmed` 以下**不可重配**，所以在 `RemoteConfirmed` 注册它等于「存在但每次调用都被拒」，正是这个类刻意不做的事。这不是「注册了但会拒绝」——理由写在紧邻的注释里：一个模型看得见却永远用不了的工具只浪费提示预算，还招来重试。**`ToolNames` 里没有它们**（那是「每个非视图 scope 都注册的四个」），宿主要认得它们得自己去认那两个常量。
 
 提示文案也是**按级别生成**的（`McpAgentToolkit.cs:110`），理由同样写在注释里：说「服务器不可添加」在 `Closed` 以上是撒谎，说「可以添加」在 `Closed` 是撒谎。
 
@@ -18,7 +18,7 @@
 1. `McpScope.CanAddServer(runMode)`（`:109`）—— 级别 + 运行模式的组合判定。`RemoteConfirmed` 只放 `Http`，`AllConfirmed` 放本地模式，`Unrestricted` 不问。`AddServer` 里第一件事就是查它（`McpAgentToolkit.cs:160`）。
 2. 确认：在 `Unrestricted` 以下的级别，添加要用户同意（`RequiresConfirmationToAdd()`，`:121`；`ConfirmationResolver`，`:102`）。
 
-**级别与确认处理器是两回事。** `WithSelfService` 只开级别；`WithConfirmationHandler`（`:93`）注册裁决者。**没注册处理器时，需要确认的级别会「拒绝」，而不是「放行」** —— 这条在 `skills/veloxdev-drive-workflow-with-ai/SKILL.md:189` 与 `references/mcp.md:128` 都写死了。
+**级别与确认处理器是两回事。** `WithSelfService` 只开级别；`WithConfirmationHandler`（`:93`）注册裁决者。**没注册处理器时，需要确认的级别会「拒绝」，而不是「放行」** —— 这条在 `skills/veloxdev-drive-workflow-with-ai/SKILL.md` 与同目录 `references/mcp.md` 里都写死了（那两份是**本仓给驱动 agent 看的**文档，不是 demo 模型读到的提示词 —— 模型读到的 MCP 措辞只有 `BuildPromptContext`）。
 
 **接进 `WorkflowAgentScope` 时，你在 `McpScope` 上设的确认处理器会被顶掉。** `WithMcps`（`WorkflowAgentScope.cs:1552`）无条件执行 `mcp.WithConfirmationHandler(ResolveConfirmationAsync)`，注释明说「A handler set directly on the MCP scope is replaced by this」。这是刻意的：审批**只配一次**，工作流工具与 MCP 自服务共用同一个。所以宿主只需要在 **scope** 上调 `WithConfirmationHandler`（`WorkflowAgentScope.cs:753`）。
 
@@ -154,6 +154,10 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 3. `McpScope` 里装载分支：需要装运行时的模式要在 `LoadOneAsync`（`:845`）的 `Installing` 段里接上；需要自己的 transport 要接 `ConnectServerAsync`（`:1055`）。
 4. `McpServerConfiguration` 的必填字段校验：`AddServer`（`McpAgentToolkit.cs:168-171`）与 `EnsureKnownKeys` 的白名单。
 5. `McpAgentToolkit.BuildPromptContext` 的措辞、以及 `AddServer` 的 `[Description]`（`:148`，里面逐条列了模式名）。
+
+**静态 `[Description]` 与动态档位**
+
+档位可以在运行期任意时刻改（`WithSelfService` 会 `Interlocked.Increment(ref _version)`，`BuildPromptContext()` 与 `CreateTools()` 都在调用时读它），所以**提示词与工具集永远同步**。但 `[Description]` 是**静态字符串**，跟不上 —— 凡是「哪一档允许什么」这类事实，说明里只能**让位给提示词**（「which run modes the CURRENT level allows is stated in your prompt」），不要在说明里枚举被允许的模式：写死了就会在某几档上撒谎。`AddServer` 原来说明里把六种模式平铺直叙，就是这样一处。
 
 **给重建/动态切换加测试**
 

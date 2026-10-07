@@ -1,4 +1,4 @@
----
+﻿---
 name: veloxdev-drive-workflow-with-ai
 description: Give an LLM control of a VeloxDev workflow graph — wire a WorkflowAgentScope onto a tree, hand the tools to an IChatClient through one context provider, set the host's policy gates and call budgets, document components for the model with [AgentContext], load switchable skills (embedded documents or Agent-Skills folders on disk), connect external MCP servers, and dispatch background sub-agents — including using the MCP or skill subsystem on its own, without the workflow layer
 ---
@@ -65,7 +65,7 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 
 ⚙ **Do not register a subsystem's management tools yourself.** The provider contributes them; registering them again through `WithTools` / `WithQueryTools` puts every one of them in the prompt twice, because the framework unions tool lists without deduplicating by name. That is also why `AsAIAgent(providers, instructions)` has no tools parameter.
 
-⚙ **The MCP management tools' prompt text follows the self-service level.** It is generated, not fixed: at `Closed` it says the model cannot add a server, and at the higher rungs it describes what `AddMcpServer` will and will not do. Changing the level re-renders on the next turn.
+⚙ **The MCP management tools' prompt text follows the self-service level, and so does the tool set.** Both are generated, not fixed: the text says what the current rung allows (`AddMcpServer` from `RemoteConfirmed`, `SetMcpServerArguments` from `AllConfirmed`), and the tools that a rung does not allow are not registered at all rather than registered-and-refusing. `WithSelfService` advances `Version`, so a level moved mid-session lands on the next turn — text and tools together. A static `[Description]` cannot follow that, which is why the level-dependent ones defer to the prompt for what is allowed.
 
 ⚙ **A skill provider's render is keyed on the scope's version *and* its prompt language.** The language is not part of the version, so `scope.WithPromptLanguage(...)` has to reach `SkillScope` for a language change to take effect — the workflow scope propagates it for you, and a standalone host sets it with `SkillScope.WithPromptLanguage`.
 
@@ -186,7 +186,7 @@ var mcpTools = await mcp.LoadAsync(configs);
 
 ⚙ **Attach the MCP scope with `WithMcps` so its tools are wrapped like every other tool.** Reached that way, a connected server's tools are counted against `MaxToolCalls`, marshalled onto your synchronization context, and raise `ToolCalled`. If you instead merge `mcp.LoadedTools` into `ChatOptions.Tools` by hand, none of that happens — and they will also duplicate, because the provider already offers them.
 
-⚙ **By default the model can only load, unload and inspect pre-registered servers.** It cannot author a configuration — that is the boundary `McpSelfServiceLevel.Closed` draws, and the default. `WithSelfService(level)` opens it in rungs: `RemoteConfirmed` lets it add **remote (Http)** servers with your confirmation; `AllConfirmed` adds local ones too, each still confirmed; `Unrestricted` stops asking. At the two middle rungs the prompt cannot be answered when no confirmation handler is registered, and an unanswerable prompt **denies**.
+⚙ **By default the model can only load, unload and inspect pre-registered servers.** It cannot author a configuration — that is the boundary `McpSelfServiceLevel.Closed` draws, and the default. `WithSelfService(level)` opens it in rungs: `RemoteConfirmed` lets it add **remote (Http)** servers with your confirmation; `AllConfirmed` adds local ones too, each still confirmed, and lets it change a local server's **launch arguments** in place (`SetMcpServerArguments`); `Unrestricted` stops asking. The level is a runtime setting, not a construction-time one — moving it changes the prompt and the tool set on the next turn. At the two middle rungs the prompt cannot be answered when no confirmation handler is registered, and an unanswerable prompt **denies**.
 
 ⚙ **A local rung means the model can cause a package to be installed and launched on the machine.** That is what separates `RemoteConfirmed` from `AllConfirmed`; pick the rung deliberately.
 

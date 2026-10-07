@@ -1,4 +1,4 @@
-# MCP servers
+﻿# MCP servers
 
 `McpScope` installs, launches, connects and monitors external Model Context Protocol servers, and hands their tools back for you to merge into the agent's tool list.
 
@@ -113,7 +113,7 @@ scope.WithMcps(mcp);
 
 That contributes the management tools, the prompt text describing them, the server inventory, and the tools of every connected server — each turn, from the scope's current state.
 
-Management tools: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `DescribeMcpServer`, plus `AddMcpServer` when self-service is open.
+Management tools: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `DescribeMcpServer`; `AddMcpServer` from `RemoteConfirmed` up; `SetMcpServerArguments` from `AllConfirmed` up (a remote server takes no launch arguments, and a local one is not reconfigurable below that rung — so it is not registered a rung earlier, where every call would be refused).
 
 ⚙ **Do not also register them with `WithTools`.** The provider already contributes them, and the framework unions tool lists without deduplicating by name — registering them twice puts every one of them in the prompt twice.
 
@@ -125,7 +125,15 @@ Management tools: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `Descri
 
 ⚙ **A server loaded mid-conversation becomes available on the next turn** without rebuilding the agent: the provider re-renders whenever `McpScope.Version` advances.
 
-⚙ **The default level is `Closed`: the host registers, the agent operates.** Configurations are fixed when you call `LoadAsync`, and the model can only load, unload and inspect. `WithSelfService(level)` opens it in rungs — `RemoteConfirmed` (remote Http servers, confirmed), `AllConfirmed` (local ones too, each confirmed), `Unrestricted` (no asking). Below `Unrestricted`, a level that needs confirmation **denies when no confirmation handler is registered**, rather than allowing.
+⚙ **The default level is `Closed`: the host registers, the agent operates.** There the model can only load, unload and inspect. `WithSelfService(level)` opens it in rungs — `RemoteConfirmed` (remote Http servers, confirmed), `AllConfirmed` (local ones too, each confirmed, and their launch arguments become editable), `Unrestricted` (no asking). Below `Unrestricted`, a level that needs confirmation **denies when no confirmation handler is registered**, rather than allowing.
+
+⚙ **The level is a runtime setting, and the prompt and the tool set follow it.** `WithSelfService` advances `Version`, and both `BuildPromptContext()` and `CreateTools()` read the level when they run — so a level moved mid-session shows up on the next turn, in the text and in which tools exist, together. A `[Description]` is a static string and cannot track that, so the ones that would depend on the level defer to the prompt instead of listing what is allowed.
+
+⚙ **A configuration is not fixed when it is loaded.** `WithServers` re-registers by name at any time, and a server that is already connected follows the new configuration on its next call — connecting first and releasing the old connection only once the new one answers, so a configuration that cannot be reached leaves the working connection serving. `SetMcpServerArguments` does the same for one local server's launch arguments.
+
+⚙ **A server's tools keep their identity across that.** The model holds `McpToolProxy` instances owned by the scope, not the connection's own tools: a rebuild replaces the client underneath, the tool names and objects do not move, and the render is invalidated only when the set of names changes. So a parameter change is invisible to the prompt unless it changes what the server offers.
+
+⚙ **`ListMcpServers` reports how each server was launched** — run mode, package, version, launch arguments, endpoint — so the model can answer questions about them from the real configuration rather than guessing. The host's connection `Options` are deliberately **not** projected: they carry authorization headers, an OAuth client secret and environment variables.
 
 ⚙ **Unloading now tears the connection down.** `UnloadServerAsync` disposes the client, which for stdio modes terminates the child process. The synchronous `UnloadServer` does the same, blocking; prefer the async overload. `McpScope` implements `IAsyncDisposable`, and the clients are retained for as long as their tools are offered — an `McpClientTool` holds a reference to its client, so dropping one would break the other.
 
