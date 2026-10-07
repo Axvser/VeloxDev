@@ -1,6 +1,6 @@
 # VeloxDev.Core.Extension.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（94 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；86 个 `[TestClass]`，662 个 `[TestMethod]`）
+> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（94 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；86 个 `[TestClass]`，679 个 `[TestMethod]`）
 > —— 2026-10-08 复核。本文其余处若与新的计数冲突，以本条为准。
 > 属性数**小于**运行条数（现在 661 对 678）：`[DataRow]` 会把一条展开成多条，差值是它。别拿属性数去对运行结果。
 > 被测：`Src/Core/VeloxDev.Core.Extension/`（AI 工具面，命名空间 `VeloxDev.AI.*`）
@@ -83,7 +83,7 @@ csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 三个�
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **679**（2026-10-08 实测：**672 通过 + 7 跳过**。跳过的那 7 条即**门控**的真模型用例：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 678/659/652/473/472/399/391/382 都已过期） |
+| 测试条数 | **696**（2026-10-08 实测：**689 通过 + 7 跳过**。跳过的那 7 条即**门控**的真模型用例：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 688/679/678/659/652/473/472/399/391/382 都已过期） |
 | 耗时 | **2 s**（默认，真模型用例全部跳过；2026-10-05 实测）。开关打开时每条真模型用例另算，实测单条约 13 s |
 | 失败 | 0 |
 

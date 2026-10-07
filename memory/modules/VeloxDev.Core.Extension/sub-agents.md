@@ -98,7 +98,7 @@
 | | 接口 | 实现 | 关键性质 |
 |---|---|---|---|
 | 技能 | `SkillScope.CreateNarrowed(allowed)` `SkillScope.cs:370` | 新 `SkillScope`，`_narrow` 在 `Apply` **最顶部**过滤 | 过滤在入口，所以**后续 `Refresh()` 仍保持窄化**，不会某次刷新后自己长回来 |
-| MCP | `McpScope.CreateGrantedView(parent, granted, grantedTools)` `McpScope.cs:469` | 新 `McpScope`，`IsGrantedView = true`（`:476`） | `_loadedClients` / `_loadedConfigs` **故意留空**，所以销毁视图不可能拆掉父的连接 |
+| MCP | `McpScope.CreateGrantedView(parent, granted, grantedTools)` `McpScope.cs:469` | 新 `McpScope`，`IsGrantedView = true`（`:476`） | `_hosts` **故意留空**（视图不托管任何服务器，只共享父的 `McpToolProxy`），所以销毁视图不可能拆掉父的连接 |
 
 **三条轴的默认值现在是同一个：省略参数 = 父当前启用的全部**。工具、技能、MCP 都不例外，白名单是这三条轴上唯一的收窄手段。
 
@@ -346,7 +346,7 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 | 用技能/MCP 的**工具名**去表达技能/MCP 的窄化 | 两个子系统都不在 `CreateAllTools()` 里，名字清单只能表达「工具在不在」，表达不了「它能读到哪几个」。要么给孩子一个窄化后的源，要么根本没窄化 |
 | 把父的 `SkillScope` / `McpScope` 直接交给孩子 | 技能会连父的授权开关一起给出去；MCP 更硬 —— `WithMcps` 会无条件顶掉宿主在共享 scope 上设的确认处理器，孩子挂一次就覆盖一次 |
 | 在 `Apply` 之后过滤技能列表（而不是最顶部） | 下一次 `Refresh()` 就把窄化长回来了。视图的过滤必须在 `Apply` 的**入口** |
-| 让 `McpScope.CreateGrantedView` 沿用父的 `_loadedClients` | 销毁视图会拆掉**父的**连接。视图故意一个 client 都不持有 |
+| 让 `McpScope.CreateGrantedView` 沿用父的 `_hosts` | 销毁视图会拆掉**父的**连接。视图故意一个托管对象都不持有 —— 它只复制父的 `AITool` 引用，所以一次调用触发的重建落在**父**那把锁上 |
 | 只在 `TrySpawn` 里按名关掉技能工具、不给窄化视图 | 关掉 `load_skill` 与「它能读到哪个技能」是两件事；而授予了零个技能时又**必须**把关掉做掉，否则模型握着一个必然失败的工具 |
 | 让自定义工具继承工具名却继承父的 `_customToolPrompt` | 那是父所有分组的提示拼在一起；孩子于是被教了它没有的工具。分组才是单位 |
 | 把 `SubAgentTreeViewModel` 的 `_rebuildGate` 当成优化去掉 | 无 UI 上下文时它**就是**唯一的串行化；而损坏会以「某个孩子无辜失败」的形式出现在别处 |
