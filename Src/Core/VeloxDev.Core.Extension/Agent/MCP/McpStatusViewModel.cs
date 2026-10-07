@@ -188,10 +188,13 @@ public partial class McpStatusViewModel
 
     private void OnServerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // ToolCount, Name and IsEnabled are part of the snapshot even though they are not part of the counts.
+        // Everything the snapshot copies has to be listed here — Error included: it is set on its own (a
+        // rebuild that failed reports the reason after the state has already moved), and a snapshot that only
+        // refreshed because of the order two properties happened to be assigned in would be a trap.
         if (e.PropertyName is nameof(McpServerStatusViewModel.State)
             or nameof(McpServerStatusViewModel.ToolCount)
             or nameof(McpServerStatusViewModel.Name)
+            or nameof(McpServerStatusViewModel.Error)
             or nameof(McpServerStatusViewModel.IsEnabled))
             NotifyAggregates();
     }
