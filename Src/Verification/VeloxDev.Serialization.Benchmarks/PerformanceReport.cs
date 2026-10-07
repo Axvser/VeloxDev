@@ -503,26 +503,35 @@ internal static class PerformanceReport
 
         ### 十二、与别家序列化器的边界
 
-        **和 System.Text.Json / Newtonsoft.Json 不兼容 —— 直接互读不了。** 三处结构差异，前两处是词表与形状，
-        第三处不可逆：
+        **与 System.Text.Json 形状不通；与 Newtonsoft.Json 近得多 —— 小的文档两个方向都能无损互读，大的不行。**
+        下表是实测的，不是推断的：
 
         | | 归档 | System.Text.Json | Newtonsoft |
         | --- | --- | --- | --- |
-        | `$type` 的值 | 注册表键 `Namespace.Type, Assembly`（泛型带实参） | `FullName`，无程序集 | 程序集限定名 |
+        | `$type` 的值 | 注册表键 `Namespace.Type, Assembly`（泛型带实参） | `FullName`，无程序集 | **与归档同形**：`FullName, SimpleAssemblyName` |
         | 集合 | 裸数组 | `{"$id":…,"$values":[…]}` | 裸数组 |
+        | 字典的 `$id` | **不写** | 写 | **写** |
         | 成员集 | **生成契约** | 反射公开面 | 反射公开面 |
 
-        **键名却是同一套**（`$id` / `$ref` / `$type`），`$id` 也同样是带引号的字符串 —— 所以它*看起来*像同一份格式。
-        但**值对不上、形状也对不上：键名相通不等于格式相通。**
+        Newtonsoft 那一行不是巧合：`TypeNameAssemblyFormatHandling` 的默认值是 `Simple`，写的正是
+        `Namespace.Type, AssemblyName` —— 与归档注册表键同一个形式。
+
+        **互读实测**（四份冻结文档，读成模型后过 Newtonsoft 再喂回来）：`canvas-layout` 与 `compiled-graph`
+        两个方向**都通**，而且 Newtonsoft 写完再读回归档、重新写出来，与冻结文档**逐字节相同**。
+        `tree` 那份 Newtonsoft 读得进、**归档读不出**（`FormatException`）—— 而这一条**不是 `$type` 造成的**：
+        把类型名关掉之后，它仍在同一个位置失败。
+
+        **成员集才是那条不可逆的线**：`tree` 的 Newtonsoft 文档是归档的 **4.66×**（`$type` 出现 65 次对 7 次），
+        而 `compiled-graph` 两边**一样大** —— 那份的公开面与生成契约恰好重合。差的全在这里少写的那些
+        （命令、`Helper`、`EventContext`、`IsBusy` 这类 UI 管道），在别家的文档里有、在这里没有。
 
         **喂进来会怎样**：`$type` 进不了注册表 → 退回**声明类型** —— 声明类型是具体类时**静默丢多态**
-        （读到的是基类实例、不报错），是接口或抽象时抛 `MissingReader`。反过来一样：
-        System.Text.Json 认不出这里的 `$type` 值，Newtonsoft 认不出 System.Text.Json 的 `$values`。
+        （读到的是基类实例、不报错），是接口或抽象时抛 `MissingReader`。System.Text.Json 认不出这里的
+        `$type` 值，所以这条对它成立；Newtonsoft 的名字落得进注册表。
 
-        **语义层是可转换的**：枚举两边都是底层整数、`byte[]` 两边都是 base64、空容器两边都是 `{}` / `[]`。
-        几处标量拼写不同（`double` 的整数值这里补 `.0`、`DateTime` 这里写 `"O"`、非 ASCII 这里不转义）——
-        都是文本差异，宽容的解析器吃得下。**真正不可逆的是成员集**：这里少写的那些（命令、`Helper`、
-        `EventContext`、`IsBusy` 这类 UI 管道），在别家的文档里有、在这里没有 —— 所以转换是有损的。
+        **词表与形状这一层是可转换的**：枚举两边都是底层整数、`byte[]` 两边都是 base64、空容器两边都是
+        `{}` / `[]`；几处标量拼写不同（`double` 的整数值这里补 `.0`、`DateTime` 这里写 `"O"`、非 ASCII 不转义）
+        —— 都是文本差异，宽容的解析器吃得下。**不可逆的是成员集**，所以转换是有损的。
 
         **这是立场，不是缺陷**：闭世界与零反射是这套格式能裁剪、能 AOT 的前提，代价就是不与别家同源。
         库从未承诺过互操作。

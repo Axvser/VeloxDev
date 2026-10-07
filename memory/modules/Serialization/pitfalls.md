@@ -146,21 +146,48 @@
 
 ---
 
-## 九、与别家的边界：键名相同，格式不通
+## 九、与别家的边界：STJ 形状不通，Newtonsoft 近到能互读
 
-**和 System.Text.Json / Newtonsoft.Json 不兼容 —— 直接互读不了**（2026-10-05 核实）。三处结构差异：
+**与 System.Text.Json 形状不通；与 Newtonsoft 近得多 —— 小文档能无损互读，大的不行**（2026-10-07 实测）。
 
 | | 归档 | System.Text.Json | Newtonsoft |
 | --- | --- | --- | --- |
-| `$type` 的值 | 注册表键 `Namespace.Type, Assembly`（泛型带实参，`WrittenName`） | `FullName`，无程序集 | 程序集限定名 |
+| `$type` 的值 | 注册表键 `Namespace.Type, Assembly`（泛型带实参，`WrittenName`） | `FullName`，无程序集 | **与归档同形**：`FullName, SimpleAssemblyName` |
 | 集合 | 裸数组 | `{"$id":…,"$values":[…]}` | 裸数组 |
+| 字典的 `$id` | **不写**（`WriteStartObjectWithoutReference`，`VeloxJsonWriter.cs:154`） | 写 | **写** —— `"LinksMap": { "$id": "27" }` |
 | 成员集 | **生成契约** | 反射公开面 | 反射公开面 |
 
-**键名却是同一套**（`$id` / `$ref` / `$type`），`$id` 也同样是带引号的字符串 —— 所以它**看起来**像同一份格式。
-**但值对不上、形状也对不上；这个巧合不是互通。** 顺带记一句：STJ 那个 `$type` 是基准里的桥接**自己定的**
-（`StjSerializationBridge.DiscriminatorOf` = `type.FullName`），不是 STJ 的任何标准 —— 换个人写就是另一个词表。
+**NSJ 的 `$type` 为什么同形**：`TypeNameAssemblyFormatHandling` 的默认值就是 `Simple`，而 `Simple` 写出来的
+正是 `FullName, AssemblyName`（不带 `Version` / `Culture` / `PublicKeyToken`）。基准只设了
+`PreserveReferencesHandling.Objects` 与 `TypeNameHandling.Auto`（`ComparisonBenchmarks.cs:82-83`），没碰这一项。
+⚠ **「`Simple` 是默认值」这一条在树里核不到** —— 仓库没有任何一份 NST 文档样本，它来自 Newtonsoft 文档加上述设置。
 
-**喂进来会怎样**：`$type` 进不了注册表 → 退回**声明类型** —— 具体类**静默丢多态**，接口 / 抽象抛 `MissingReader`。
+**互读矩阵**（把四份黄金读成模型、过 NST、再喂回归档）：
+
+| 黄金 | NST 读归档 | 归档读 NST | NST / 归档 文档 |
+| --- | --- | --- | --- |
+| canvas-layout | ok | **ok，再写出来与黄金逐字节相同** | 1.24× |
+| compiled-graph | ok | **ok，再写出来与黄金逐字节相同** | **1.00×** |
+| tree | ok | **抛 `FormatException: expected ','`** | 4.66× |
+| slot-enumerator | 归档侧入口即 `MissingReader`（注册归属，非互操作结论） | 同左 | — |
+
+- **方向一（NST 读归档）三份全通**：NST 默认忽略读不懂的成员，归档少写的那些它直接跳过。
+- **方向二（归档读 NST）小的通、大的断**：`tree` 在 offset 11844 抛，位置是 `Nodes` 数组的两个元素之间
+  （`… ] }, { "$id": "22", …`）。**已排除 `$type`** —— 把 `TypeNameHandling` 关成 `None` 后仍在**同一个逻辑位置**
+  失败（offset 随文档变短挪到 8777）。`PreserveReferencesHandling` 关不掉（NST 自己先抛
+  `Self referencing loop … Path 'Helper'`），那一项因此没单独验。**根因未定位。**
+- **大小差全在成员集**：`tree` 的 NST 文档 16 428 字符对归档 3 525（4.66×）、`$type` 65 对 7；
+  而 `compiled-graph` 两边**一样大**（251 / 251）—— 那份的公开面与生成契约恰好重合。
+
+**`$type` 进不了注册表会怎样**：退回**声明类型** —— 具体类**静默丢多态**，接口 / 抽象抛 `MissingReader`。
+（NST 的名字落得进注册表，这条只对 STJ 成立。）
+
+> ⚠ **上面这套矩阵来自仓库外的一次性探针，树里复核不到**（没有留在仓库里）。要重跑就是「读黄金 →
+> `JsonConvert` 过一遍 → 喂回 `VeloxJsonSerializer`」，两个开关与 `ComparisonBenchmarks.cs:82-83` 逐字相同。
+> 想让它可复核，得把探针落进 `Src/Verification/`。
+
+**STJ 那两格没变**：它的 `$type` 是基准桥接**自己定的**（`StjSerializationBridge.DiscriminatorOf` = `type.FullName`），
+不是 STJ 的任何标准 —— 换个人写就是另一个词表。
 
 **语义层可转换，成员集那条不可逆**：枚举两边都是底层整数、`byte[]` 两边都是 base64、空容器两边都是
 `{}` / `[]`；几处标量拼写不同（`double` 的整数值这里补 `.0`、`DateTime` 这里写 `"O"`、非 ASCII 这里不转义）
@@ -168,7 +195,7 @@
 在别家的文档里有、在这里没有**，所以转换是有损的。
 
 **这是立场不是缺陷**：闭世界与零反射是能裁剪、能 AOT 的前提，代价就是不与别家同源；库从未承诺互操作。
-报告那一章的同名节（§十二）就是写给读者的这一版。
+**报告那一章的对应节（`PerformanceReport.cs:504` 起，§十二）是同一批事实的读者版 —— 改这里就得改那里。**
 
 ---
 
