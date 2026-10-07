@@ -192,6 +192,30 @@ public class CapabilityEnvelopeTests
             "nothing was frozen, so no replacement wording belongs here");
     }
 
+    /// <summary>The policy's shared half carries the boundary the Agent must not negotiate.</summary>
+    /// <remarks>
+    /// Every line of the corpus used to be about <i>how to operate the graph</i>, so "I cannot raise my own
+    /// permissions" was the model's judgement rather than the host's instruction — and a model that judged
+    /// differently had, sitting in its tool set, a node that runs commands. The boundary is a host invariant
+    /// rather than one host's preference, which is why it belongs in the shared file and not in each host's
+    /// own overrides.
+    /// </remarks>
+    [TestMethod]
+    public void TheSharedPolicy_CarriesTheHostBoundaries()
+    {
+        StringAssert.Contains(Scope().ProvideProgressiveContextPrompt(), "Host Boundaries");
+
+        var chinese = new WorkflowAgentScope(new TreeDefaultViewModel())
+            .WithPromptLanguage(AgentLanguages.Chinese)
+            .ProvideProgressiveContextPrompt();
+        StringAssert.Contains(chinese, "宿主边界",
+            "both corpora carry it, or half the hosts keep the policy that said nothing about this");
+
+        var off = new WorkflowAgentScope(new TreeDefaultViewModel()).WithInteractionSafety(0);
+        Assert.IsFalse(off.ProvideProgressiveContextPrompt().Contains("Host Boundaries"),
+            "level 0 renders no policy at all, so it cannot carry this one either");
+    }
+
     [TestMethod]
     public async Task SafetyLevelChangedAfterConstruction_ReachesTheModelAsAReplacement()
     {
