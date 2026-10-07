@@ -80,4 +80,60 @@ public class TypeIntrospectorTests
         Assert.AreEqual(typeof(TreeDefaultViewModel), TypeIntrospector.ResolveType(typeof(TreeDefaultViewModel).FullName!));
         Assert.IsNull(TypeIntrospector.ResolveType("System.String"), "the tree carries no entry for a BCL type");
     }
+
+    /// <summary>A component declared with <c>[WorkflowBuilder.Node&lt;T&gt;]</c> and nothing else still has a schema.</summary>
+    /// <remarks>
+    /// The whole point of the declaration routes being recognised by the catalog is that the Agent can then ask
+    /// about the type before constructing its JSON. A schema that came back as a bare name would answer the
+    /// lookup and still leave the model guessing.
+    /// </remarks>
+    [TestMethod]
+    public void AComponentDeclaredOnlyWithWorkflowBuilder_HasAClassSchema()
+    {
+        var schema = JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(UnannotatedNode)))!;
+
+        Assert.AreEqual("class", schema["kind"]?.GetValue<string>());
+        Assert.IsNotNull(schema["properties"], "a component the Agent may create has to describe what it carries");
+        Assert.IsTrue(schema["jsonReadable"]!.GetValue<bool>(),
+            "and the host has to be able to read it back, or CreateNode builds something that cannot be saved");
+    }
+
+    /// <summary>A <c>[VeloxProperty]</c> field is listed under the property name the Agent addresses it by.</summary>
+    /// <remarks>
+    /// Both spellings of the promotion rule are checked, because that name is what every writing tool takes —
+    /// a schema listing the field name instead would send <c>PatchNodeProperties</c> after a member that does
+    /// not exist.
+    /// </remarks>
+    [TestMethod]
+    public void APromotedFieldIsListedUnderItsPromotedName()
+    {
+        var schema = JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(MemberShapeProbeNode)))!;
+        var properties = schema["properties"]!.AsArray();
+
+        var bare = properties.SingleOrDefault(p => p!["name"]!.GetValue<string>() == "Bare");
+        Assert.IsNotNull(bare, "a field named 'bare' is listed as 'Bare': " + schema);
+        Assert.AreEqual("string", bare!["type"]?.GetValue<string>());
+        Assert.IsTrue(bare["canRead"]!.GetValue<bool>());
+        Assert.IsTrue(bare["canWrite"]!.GetValue<bool>());
+
+        var volume = properties.SingleOrDefault(p => p!["name"]!.GetValue<string>() == "Volume");
+        Assert.IsNotNull(volume, "a field named '_volume' is listed as 'Volume': " + schema);
+        Assert.AreEqual("int", volume!["type"]?.GetValue<string>());
+    }
+
+    /// <summary>The catalog and the archive are two different closed worlds, and the schema states both.</summary>
+    /// <remarks>
+    /// <c>jsonReadable</c> is the reason <c>GetTypeSchema</c> is told to come first: a type the catalog describes
+    /// can still be one the archive has no reader for, and the model should learn that before it hands over a
+    /// document rather than from a failure.
+    /// </remarks>
+    [TestMethod]
+    public void TheCatalogAndTheArchiveAreDifferentClosedWorlds()
+    {
+        Assert.IsTrue(JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(CanvasLayout)))!["jsonReadable"]!.GetValue<bool>(),
+            "a type the archive carries reads its own JSON back");
+
+        Assert.IsFalse(JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(CellKey)))!["jsonReadable"]!.GetValue<bool>(),
+            "and one only the catalog knows about does not — CellKey is in the tree but in no archived document");
+    }
 }
