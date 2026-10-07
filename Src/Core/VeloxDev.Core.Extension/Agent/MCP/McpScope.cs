@@ -117,7 +117,11 @@ public class McpScope
         return SelfServiceLevel >= McpSelfServiceLevel.AllConfirmed;
     }
 
-    /// <summary>Whether adding a server at this level requires the user's agreement.</summary>
+    /// <summary>
+    /// Whether a change the Agent asked for requires the user's agreement — adding a server, or pointing an
+    /// existing one at new launch arguments. Both restart software on this machine, so both answer to the
+    /// same rung.
+    /// </summary>
     public bool RequiresConfirmationToAdd()
         => SelfServiceLevel is McpSelfServiceLevel.RemoteConfirmed or McpSelfServiceLevel.AllConfirmed;
 
@@ -149,18 +153,15 @@ public class McpScope
     private readonly Dictionary<string, IReadOnlyList<AITool>> _loadedToolSets = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Live clients of currently connected servers, keyed the same way as <see cref="_loadedToolSets"/>.
-    /// A client MUST be retained for as long as its tools are offered: every <c>McpClientTool</c> holds a
-    /// reference to its owning <see cref="McpClient"/>, and for stdio modes that client owns the child
-    /// process. Dropping the reference without disposing leaks the process.
+    /// The servers this scope hosts, keyed as <see cref="_loadedToolSets"/> is.
+    /// <para>
+    /// A hosted server owns its live client for as long as it offers tools: every tool it hands out holds a
+    /// reference to that client, and for stdio modes the client owns the child process — dropping the reference
+    /// without releasing it leaks the process. That is why a same-named reload goes through the host rather than
+    /// overwriting a map entry, and why the map holds the host instead of the client.
+    /// </para>
     /// </summary>
-    private readonly Dictionary<string, McpClient> _loadedClients = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Configurations of currently connected servers, so teardown failures can be reported against the
-    /// server they belong to instead of a name alone.
-    /// </summary>
-    private readonly Dictionary<string, McpServerConfiguration> _loadedConfigs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HostedMcpServer> _hosts = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// All tools of currently connected MCP servers (aggregated per server). Once a server loads
@@ -341,10 +342,38 @@ public class McpScope
             if (config is null) continue;
             Remember(config);
             changed = true;
+
+            // Already connected: point the host at the new configuration. Nothing is torn down here — the next
+            // call that server takes is what rebuilds it, so a host rewriting its list every turn does not pay
+            // for reconnecting servers nobody is using.
+            HostedMcpServer? host;
+            lock (_loadedToolsLock) _hosts.TryGetValue(config.Name, out host);
+            host?.SetConfiguration(config);
         }
         // What the Agent may load by name is part of what it is told, so a cached render is stale now.
         if (changed) Interlocked.Increment(ref _version);
         return this;
+    }
+
+    /// <summary>
+    /// Points a server at a new configuration and, when it is connected, applies it now.
+    /// </summary>
+    /// <param name="config">The configuration to move the server to, by name.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>
+    /// Whether the new configuration was reached, or <see langword="null"/> when the server is registered but
+    /// not connected — nothing is running to reconfigure, so it takes effect the next time it is loaded.
+    /// </returns>
+    /// <remarks>
+    /// The difference from <see cref="WithServers"/> is when the work happens: that one only marks the
+    /// connection stale, because a host rewriting its list has no reason to reconnect a server nobody is
+    /// using. A caller that has just been told to change something wants to know whether it worked.
+    /// </remarks>
+    internal async Task<bool?> ReconfigureAsync(McpServerConfiguration config, CancellationToken ct)
+    {
+        WithServers(config);
+        var host = FindHost(config.Name);
+        return host is null ? null : await host.ReloadAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Records a configuration under its name, replacing any earlier one with that name.</summary>
@@ -553,13 +582,13 @@ public class McpScope
     /// </summary>
     public async Task<bool> UnloadServerAsync(string name)
     {
-        McpClient? client;
+        HostedMcpServer? host;
         bool removed;
         lock (_loadedToolsLock)
         {
             removed = _loadedToolSets.Remove(name);
-            if (!_loadedClients.TryGetValue(name, out client)) client = null;
-            _loadedClients.Remove(name);
+            if (!_hosts.TryGetValue(name, out host)) host = null;
+            _hosts.Remove(name);
         }
 
         await RunOnUIAsync(() =>
@@ -574,8 +603,8 @@ public class McpScope
             }
         }).ConfigureAwait(false);
 
-        if (client is not null)
-            await client.DisposeAsync().ConfigureAwait(false);
+        if (host is not null)
+            await host.DisposeAsync().ConfigureAwait(false);
 
         Interlocked.Increment(ref _version);
         return removed;
@@ -587,7 +616,7 @@ public class McpScope
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        var failures = await ReleaseAsync(DetachAllClients()).ConfigureAwait(false);
+        var failures = await ReleaseHostsAsync(DetachAllHosts()).ConfigureAwait(false);
         lock (_loadedToolsLock)
             _loadedToolSets.Clear();
 
@@ -750,7 +779,7 @@ public class McpScope
         await RunOnUIAsync(() => { Status.Reset(); Status.SetLoading(true); }).ConfigureAwait(false);
         // REPLACE semantics: whatever was loaded before is going away, so its clients must be released
         // here — otherwise the stdio child processes of the replaced servers outlive the reload.
-        await ReleaseAsync(DetachAllClients()).ConfigureAwait(false);
+        await ReleaseHostsAsync(DetachAllHosts()).ConfigureAwait(false);
         lock (_loadedToolsLock)
             _loadedToolSets.Clear();
         try
@@ -804,38 +833,34 @@ public class McpScope
         return mcpRoot;
     }
 
-    /// <summary>Detaches every loaded client (and its configuration) so it can be released.</summary>
-    private (McpServerConfiguration? Config, McpClient Client)[] DetachAllClients()
+    /// <summary>Takes every hosted server out of the map, so callers can release them without holding the lock.</summary>
+    private HostedMcpServer[] DetachAllHosts()
     {
         lock (_loadedToolsLock)
         {
-            var live = _loadedClients
-                .Select(kvp => (
-                    Config: _loadedConfigs.TryGetValue(kvp.Key, out var cfg) ? cfg : null,
-                    Client: kvp.Value))
-                .ToArray();
-            _loadedClients.Clear();
-            _loadedConfigs.Clear();
-            return live;
+            var hosts = _hosts.Values.ToArray();
+            _hosts.Clear();
+            return hosts;
         }
     }
 
     /// <summary>
-    /// Releases clients, reporting each failure against its own server and never letting one
+    /// Releases hosted servers, reporting each failure against its own server and never letting one
     /// unresponsive server strand the rest. Returns the failures for callers that must surface them.
     /// </summary>
-    private async Task<List<Exception>> ReleaseAsync((McpServerConfiguration? Config, McpClient Client)[] live)
+    private async Task<List<Exception>> ReleaseHostsAsync(HostedMcpServer[] hosts)
     {
         var failures = new List<Exception>();
-        foreach (var (config, client) in live)
+        foreach (var host in hosts)
         {
+            var config = host.Configuration;
             try
             {
-                await client.DisposeAsync().ConfigureAwait(false);
+                await host.DisposeAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                if (config is not null) ServerError?.Invoke(config, ex);
+                ServerError?.Invoke(config, ex);
                 failures.Add(ex);
             }
         }
@@ -845,9 +870,24 @@ public class McpScope
     private async Task<AITool[]> LoadOneAsync(McpServerConfiguration config, string mcpRoot, CancellationToken ct)
     {
         var status = await TrackServerAsync(config).ConfigureAwait(false);
+        var existing = FindHost(config.Name);
+
         try
         {
-            // Local mode: first install/prepare the runtime (Installing), then connect (Connecting).
+            if (existing is not null)
+            {
+                // Already hosted: hand the host the new configuration. It connects that one and only then
+                // releases the connection serving now, so a configuration that cannot be reached changes
+                // nothing — and the connection it replaces is released properly, which the map overwrite this
+                // replaces got wrong.
+                existing.SetConfiguration(config);
+                await SetServerStateAsync(status, McpServerStatus.Connecting).ConfigureAwait(false);
+
+                // The failure case has already reported itself; the surviving tools stay offered.
+                return await existing.ReloadAsync(ct).ConfigureAwait(false) ? [.. existing.OfferedTools] : [];
+            }
+
+            // First load: a local mode installs its runtime before anything connects.
             if (config.RunMode is McpServerRunMode.Npm or McpServerRunMode.Pip)
             {
                 await SetServerStateAsync(status, McpServerStatus.Installing).ConfigureAwait(false);
@@ -858,21 +898,19 @@ public class McpScope
             }
 
             await SetServerStateAsync(status, McpServerStatus.Connecting).ConfigureAwait(false);
-            var (client, tools) = await ConnectServerAsync(config, mcpRoot, ct).ConfigureAwait(false);
 
-            await RunOnUIAsync(() =>
-            {
-                status.ToolCount = tools.Length;
-                status.State = McpServerStatus.Connected;
-            }).ConfigureAwait(false);
+            var host = new HostedMcpServer(config.Name, config, BindConnector(mcpRoot), ReportFor(config.Name));
+            var tools = await host.StartAsync(ct).ConfigureAwait(false);
+
             lock (_loadedToolsLock)
             {
+                _hosts[config.Name] = host;
                 _loadedToolSets[config.Name] = tools;
-                _loadedClients[config.Name] = client;
-                _loadedConfigs[config.Name] = config;
             }
+
+            await PublishConnectedAsync(status, tools.Count).ConfigureAwait(false);
             Interlocked.Increment(ref _version);
-            return tools;
+            return [.. tools];
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -888,6 +926,100 @@ public class McpScope
             return [];
         }
     }
+
+    /// <summary>
+    /// Replaces the connect step. Internal for tests: the lazy rebuild is otherwise unreachable without a live
+    /// MCP server or a child process, and a test that could not reach it would assert against an empty tool set
+    /// and pass whatever the rebuild did.
+    /// </summary>
+    /// <remarks>Receives the configuration, the resolved installation root, and cancellation.</remarks>
+    internal Func<McpServerConfiguration, string, CancellationToken, Task<McpConnection>>? ConnectOverride { get; set; }
+
+    /// <summary>The hosted server of that name, or null.</summary>
+    private HostedMcpServer? FindHost(string name)
+    {
+        lock (_loadedToolsLock) return _hosts.TryGetValue(name, out var host) ? host : null;
+    }
+
+    /// <summary>Binds the installation root — resolved per load — into the connector a host is built with.</summary>
+    private HostedMcpServer.Connector BindConnector(string mcpRoot)
+        => (config, ct) => ConnectOverride is { } over
+            ? over(config, mcpRoot, ct)
+            : ConnectServerAsync(config, mcpRoot, ct);
+
+    /// <summary>
+    /// Turns a hosted server's reports into status rows and version moves. Raised from outside the server's lock,
+    /// so taking this scope's lock here is safe — the order is always scope then server, never the reverse.
+    /// </summary>
+    private Action<HostedMcpServer.Phase, McpServerConfiguration, Exception?> ReportFor(string name)
+        => (phase, config, error) =>
+        {
+            switch (phase)
+            {
+                case HostedMcpServer.Phase.Connecting:
+                    UpdateStatus(() => SetRow(name, static row => row.State = McpServerStatus.Connecting));
+                    break;
+
+                case HostedMcpServer.Phase.Refreshed:
+                    var tools = RefreshOfferedTools(name);
+                    UpdateStatus(() => SetRow(name, row =>
+                    {
+                        row.State = McpServerStatus.Connected;
+                        row.Error = null;
+                        row.ToolCount = tools.Count;
+                    }));
+                    break;
+
+                case HostedMcpServer.Phase.Failed:
+                    if (error is not null) ServerError?.Invoke(config, error);
+                    // The previous connection is still serving, so the row reports what is actually on offer
+                    // rather than the zero a torn-down server would leave behind.
+                    var kept = FindHost(name)?.OfferedTools.Count ?? 0;
+                    UpdateStatus(() => SetRow(name, row =>
+                    {
+                        row.State = McpServerStatus.Error;
+                        row.Error = error?.Message;
+                        row.ToolCount = kept;
+                    }));
+                    break;
+            }
+        };
+
+    /// <summary>
+    /// Re-reads what a hosted server offers, and advances the version only when the tool names moved — a rebuild
+    /// that changed nothing the model can see leaves the cached render valid, which is what makes a pure
+    /// configuration change invisible to it.
+    /// </summary>
+    private IReadOnlyList<AITool> RefreshOfferedTools(string name)
+    {
+        lock (_loadedToolsLock)
+        {
+            if (!_hosts.TryGetValue(name, out var host)) return [];
+
+            var tools = host.OfferedTools;
+            // The proxies are stable, so an unchanged set is the very same instances in the very same order.
+            var changed = !_loadedToolSets.TryGetValue(name, out var previous) || !previous.SequenceEqual(tools);
+            _loadedToolSets[name] = tools;
+
+            if (changed) Interlocked.Increment(ref _version);
+            return tools;
+        }
+    }
+
+    private void SetRow(string name, Action<McpServerStatusViewModel> mutate)
+    {
+        var row = Status.Servers.FirstOrDefault(
+            s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (row is not null) mutate(row);
+    }
+
+    private Task PublishConnectedAsync(McpServerStatusViewModel status, int toolCount)
+        => RunOnUIAsync(() =>
+        {
+            status.ToolCount = toolCount;
+            status.Error = null;
+            status.State = McpServerStatus.Connected;
+        });
 
     /// <summary>The tools of a connected server (empty when not connected).</summary>
     public IReadOnlyList<AITool> GetServerTools(string name)
@@ -1052,7 +1184,7 @@ public class McpScope
 
     // ── MCP protocol connection ────────────────────────────────────────────
 
-    private async Task<(McpClient Client, AITool[] Tools)> ConnectServerAsync(
+    private async Task<McpConnection> ConnectServerAsync(
         McpServerConfiguration config, string mcpRoot, CancellationToken ct)
     {
         var transport = config.RunMode == McpServerRunMode.Http
@@ -1080,7 +1212,7 @@ public class McpScope
         try
         {
             var tools = await client.ListToolsAsync().ConfigureAwait(false);
-            return (client, [.. tools.Cast<AITool>()]);
+            return new McpConnection(client, [.. tools.Cast<AIFunction>()]);
         }
         catch (OperationCanceledException) when (
             timeoutCts is { IsCancellationRequested: true } && !ct.IsCancellationRequested)
