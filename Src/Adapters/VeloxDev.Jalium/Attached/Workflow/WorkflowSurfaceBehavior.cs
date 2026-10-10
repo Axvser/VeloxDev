@@ -8,6 +8,7 @@ using Jalium.UI.Controls;
 using Jalium.UI.Controls.Primitives;
 using Jalium.UI.Input;
 using Jalium.UI.Media;
+using Jalium.UI.Threading;
 using VeloxDev.WorkflowSystem.StandardEx;
 using PlatformInput = Jalium.UI.Input;
 using Wf = VeloxDev.WorkflowSystem;
@@ -70,6 +71,9 @@ public static class WorkflowSurfaceBehavior
 
         public WorkflowInput? Input;
 
+        // 挂在输入路由上的画布滚动口。本类拥有它、宿主拿它去滚；换树时连同 Input 一起换新。
+        public IWorkflowSurfaceScroller? Scroller;
+
         // 刚刚那一次按下建出来的句柄；订阅者否决了它，平移与组件就都不动手。
         public WorkflowEventHandle? PressHandle;
 
@@ -122,6 +126,17 @@ public static class WorkflowSurfaceBehavior
         public EventHandler<Wf.PointerPressedEventArgs>? InputPressedHandler;
 
         public EventHandler<IWorkflowLinkViewModel>? LinkRemovedHandler;
+
+        // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
+        public IWorkflowTreeViewModel? LastRestoreTree;
+
+        public bool HasPendingRestore;
+
+        public bool RestoreQueued;
+
+        public double PendingRestoreX;
+
+        public double PendingRestoreY;
     }
 
     /// <summary>The attached property that turns the surface on for a host.</summary>
@@ -249,8 +264,11 @@ public static class WorkflowSurfaceBehavior
         ResolveNamedParts(host, state);
         UpdateCanvasSize(state);
         ApplyLayout(state);
+        // 捕获必须早于 UpdateViewport —— 那一步会拿控件当前（还没滚过去的）位置覆盖 ViewportOffset。
+        CaptureViewportRestore(host, state);
         UpdateViewport(state);
         UpdateOverlays(state);
+        QueueViewportRestore(host, state);
     }
 
     /// <summary>Centers the view on a world point, growing the canvas if the target scroll runs past an edge.</summary>
@@ -716,8 +734,11 @@ public static class WorkflowSurfaceBehavior
 
         UpdateCanvasSize(state);
         ApplyLayout(state);
+        // 这条绑定路径先于 Refresh 跑，所以捕获也要在这里先做一次；否则 UpdateViewport 的写回会先抹掉存档。
+        CaptureViewportRestore(host, state);
         UpdateViewport(state);
         UpdateOverlays(state);
+        QueueViewportRestore(host, state);
     }
 
     private static void UnbindTree(SurfaceState state)
@@ -818,23 +839,71 @@ public static class WorkflowSurfaceBehavior
         var viewportWidth = state.ScrollViewer?.ViewportWidth ?? 0d;
         var viewportHeight = state.ScrollViewer?.ViewportHeight ?? 0d;
 
+        // 把浮动标尺带算进虚拟化，免得靠它内侧那条边的节点提前一个标尺厚度被剔除。
+        tree.SetVirtualizeInset(left: RulerBand(state), top: RulerBand(state));
+
         if (viewportWidth <= 0d || viewportHeight <= 0d)
         {
             // 视口还没测量（树可能早于窗口布局绑上，而 Jalium 的视口在初次布局时可能不发 ScrollChanged）。
             // 退回整块画布，让第一次 Virtualize 立刻物化出初始的节点与连线，而不是在 0 尺寸视口上空转。
-            horizontalOffset = layout.ActualOffset.Horizontal;
-            verticalOffset = layout.ActualOffset.Vertical;
-            viewportWidth = Math.Max(CanvasWidth, layout.ActualSize.Width);
-            viewportHeight = Math.Max(CanvasHeight, layout.ActualSize.Height);
+            // 这一支**不写回** ViewportOffset：此时读到的不是用户位置，写回会用一个假位置盖掉存档。
+            tree.GetHelper().Viewport = new Viewport(
+                0d, 0d,
+                Math.Max(CanvasWidth, layout.ActualSize.Width),
+                Math.Max(CanvasHeight, layout.ActualSize.Height));
+            return;
         }
 
-        // 把浮动标尺带算进虚拟化，免得靠它内侧那条边的节点提前一个标尺厚度被剔除。
-        tree.SetVirtualizeInset(left: RulerBand(state), top: RulerBand(state));
-        tree.GetHelper().Viewport = new Viewport(
-            horizontalOffset - layout.ActualOffset.Horizontal,
-            verticalOffset - layout.ActualOffset.Vertical,
-            viewportWidth,
-            viewportHeight);
+        // 视口是画布局部坐标（世界 = 滚动 − ActualOffset），写回模型也走同一个换算 —— 唯一写者在这里。
+        var offset = WorkflowSurfaceMath.ViewportOffsetFromScroll(horizontalOffset, verticalOffset, layout);
+        tree.GetHelper().Viewport = new Viewport(offset.Horizontal, offset.Vertical, viewportWidth, viewportHeight);
+
+        // 持久化视口位置（世界坐标），使其能熬过序列化往返；恢复见 CaptureViewportRestore。
+        layout.ViewportOffset = offset;
+    }
+
+    // 树刚挂上来且不是上一棵：把它存档里的视口位置排进待恢复（世界 → 滚动）。
+    // 必须在任何 UpdateViewport 之前 —— 那一步会拿控件当前（还没滚过去的）位置覆盖 ViewportOffset。
+    private static void CaptureViewportRestore(FrameworkElement host, SurfaceState state)
+    {
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+        if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
+
+        state.LastRestoreTree = viewModel;
+
+        if (!WorkflowSurfaceMath.HasViewportRestore(viewModel.Layout)) return;
+
+        var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(viewModel.Layout);
+        state.PendingRestoreX = scroll.Horizontal;
+        state.PendingRestoreY = scroll.Vertical;
+        state.HasPendingRestore = true;
+    }
+
+    // 布局稳定后再滚：DataContext 变化这一刻控件往往还没排版，Extent 还是 0，直接滚会被夹没。
+    // 控件也还没解析出来时就不清标记 —— 下一次 Refresh 会再排一次，这就是重试。
+    private static void QueueViewportRestore(FrameworkElement host, SurfaceState state)
+    {
+        if (!state.HasPendingRestore || state.RestoreQueued) return;
+
+        state.RestoreQueued = true;
+        host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            state.RestoreQueued = false;
+
+            if (!state.HasPendingRestore || host.GetValue(IsEnabledProperty) is not true || state.ScrollViewer is not { } viewer)
+                return;
+
+            state.HasPendingRestore = false;
+
+            var maxH = viewer.ScrollableWidth;
+            var maxV = viewer.ScrollableHeight;
+            viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(state.PendingRestoreX, 0d, maxH));
+            viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(state.PendingRestoreY, 0d, maxV));
+
+            // 恢复后的位置立刻写回模型，免得控件与 Layout.ViewportOffset 各说各话。
+            UpdateViewport(state);
+            UpdateOverlays(state);
+        }));
     }
 
     private static void UpdateOverlays(SurfaceState state)
@@ -898,6 +967,10 @@ public static class WorkflowSurfaceBehavior
         var input = WorkflowInput.For(tree);
         state.Input = input;
 
+        // 画布滚动归适配器（见 OnMouseWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
+        state.Scroller = new SurfaceScroller(state);
+        input.Scroller = state.Scroller;
+
         if (tree.GetHelper() is Wf.IInputEvents events)
         {
             state.InputPressedHandler = (_, e) => OnLinkPointerPressed(state, e);
@@ -910,6 +983,14 @@ public static class WorkflowSurfaceBehavior
 
     private static void DetachInteraction(SurfaceState state)
     {
+        // 只在还挂着自己那一个时才摘：同一棵树上两个表面时，摘别人的会把对方的滚动口一起清掉。
+        if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
+        {
+            released.Scroller = null;
+        }
+
+        state.Scroller = null;
+
         if (state.Tree is not { } tree)
         {
             state.Input = null;
@@ -954,6 +1035,14 @@ public static class WorkflowSurfaceBehavior
             || state.ScrollViewer is null)
         {
             return;
+        }
+
+        // 键要有人接：焦点得落在表面自己身上，Ctrl+Z 才有路由 —— 先前只在**悬停到连线**时收焦点，
+        // 点一下空白画布是收不到的，键于是静默不来。卡片里的可编辑控件除外：在那里按 Ctrl+Z 撤的该是文字。
+        // 隧道相保证这一条对落在卡片上的按下也成立（按下源是卡片的祖先）。
+        if (!IsInsideEditable(e.OriginalSource as DependencyObject))
+        {
+            host.Focus();
         }
 
         if (e.ChangedButton != PlatformInput.MouseButton.Left)
@@ -1126,6 +1215,9 @@ public static class WorkflowSurfaceBehavior
         }
     }
 
+    // 滚轮也进输入面（缩放那条路是 Ctrl+滚轮，归 ScrollViewer 的预览相，两者不重叠）。
+    // 普通滚轮**整笔归适配器**：平台的滚动容器一次都不许滚，默认竖滚由这里在路由之后补上。
+    // 订阅方置 PreventDefault 就是「这一笔不滚」，由他走 Scroller 决定往哪滚 —— 于是七家宿主是同一段代码。
     private static void OnMouseWheel(object? sender, MouseWheelEventArgs e)
     {
         if (sender is not FrameworkElement host || !States.TryGetValue(host, out var state) || state.Input is null)
@@ -1140,27 +1232,61 @@ public static class WorkflowSurfaceBehavior
             return;
         }
 
-        RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), e.OriginalSource as DependencyObject,
+        var handle = RoutePointer(state, host, e.GetPosition(host), WorldPoint(state, e), e.OriginalSource as DependencyObject,
             (p, t, h) => new Wf.PointerWheelEventArgs(
                 p, Modifiers(e.KeyboardModifiers), host, t, 0d, e.Delta / 120d, h));
+
+        // 到这里为止平台一次都没滚过 —— 拦下来，再按裁决决定这一笔的归属。
+        e.Handled = true;
+        if (!handle.PreventDefault)
+        {
+            state.Scroller?.ScrollBy(0d, e.Delta / 120d);
+        }
+    }
+
+    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
+    // Jalium 的 ScrollViewer 自己一格滚 48（实测：基线一格滚轮视口 Y 0 → 48），取同一个数，
+    // 接管之后手感才不变（与 WPF 那边 3 行 × 16 是同一个值）。
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    {
+        private const double PixelsPerNotch = 48d;
+
+        private readonly SurfaceState state;
+
+        public SurfaceScroller(SurfaceState state) => this.state = state;
+
+        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        {
+            if (state.ScrollViewer is not { } viewer)
+            {
+                return;
+            }
+
+            // 正 = 远离用户 = 视口上移，所以偏移是减。
+            var dx = -wheelDeltaX * PixelsPerNotch;
+            var dy = -wheelDeltaY * PixelsPerNotch;
+
+            viewer.ScrollToHorizontalOffset(
+                WorkflowSurfaceMath.ClampValue(viewer.HorizontalOffset + dx, 0d, viewer.ScrollableWidth));
+            viewer.ScrollToVerticalOffset(
+                WorkflowSurfaceMath.ClampValue(viewer.VerticalOffset + dy, 0d, viewer.ScrollableHeight));
+        }
     }
 
     private static void OnKeyDown(object? sender, PlatformInput.KeyEventArgs e)
     {
-        if (sender is not FrameworkElement host || !States.TryGetValue(host, out var state))
+        if (sender is not FrameworkElement host || !States.TryGetValue(host, out var state) || state.Input is not { } input)
         {
             return;
         }
 
-        if (state.Input is not { } input || input.HoveredLink is null)
-        {
-            return;
-        }
-
-        // Delete 只在指针下有连线时才转发：键从卡片里的控件冒泡上来也一样，路由会据指针目标裁决删哪条。
+        // 键也过输入路由。target 用路由**已经在维护**的那个指针目标，不再要求「指针停在一条线上」：
+        // Ctrl+Z 是树级的键，指针在空白画布上时链的尽头仍是树。
         input.Route(new Wf.KeyDownEventArgs(
-            ToKey(e.Key), (int)e.Key, Modifiers(e.KeyboardModifiers), false, host, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, Modifiers(e.KeyboardModifiers), false, host, input.PointerTarget, new WorkflowEventHandle()));
 
+        // 只吞本层自己那一手管的键。先前只在指针下有连线时才转发、且无条件吞 Delete，方向键与翻页键因此
+        // 进不来；其余六家也只吞 Delete，与它们同形。
         if (e.Key == Key.Delete)
         {
             e.Handled = true;
@@ -1175,7 +1301,7 @@ public static class WorkflowSurfaceBehavior
         }
 
         input.Route(new Wf.KeyUpEventArgs(
-            ToKey(e.Key), (int)e.Key, Modifiers(e.KeyboardModifiers), false, host, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, Modifiers(e.KeyboardModifiers), false, host, input.PointerTarget, new WorkflowEventHandle()));
     }
 
     // 两个系各取一次：anchor 是宿主系（菜单定位按宿主坐标算屏幕坐标），world 是画布系。
@@ -1328,6 +1454,25 @@ public static class WorkflowSurfaceBehavior
             .OfType<FrameworkElement>()
             .Any(x => x.DataContext is IWorkflowSlotViewModel);
 
+    // 落在可编辑控件里的按下，焦点归那个控件 —— 表面不该把它抢走，否则 Ctrl+Z 撤的是画布而不是文字。
+    private static bool IsInsideEditable(DependencyObject? source)
+    {
+        if (source is null)
+        {
+            return false;
+        }
+
+        foreach (var element in EnumerateSelfAndVisualAncestors(source))
+        {
+            if (element is TextBox)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // 右键菜单归表面：右键落在表面上，而弹出要根视觉坐标、模型给的是画布坐标 —— 只有表面同时知道这两件事。
     // 条目由宿主在资源里声明（LinkMenuKey），库只负责订阅、定位、弹出与开合上报。
     private static void OnLinkPointerPressed(SurfaceState state, Wf.PointerPressedEventArgs e)
@@ -1447,6 +1592,17 @@ public static class WorkflowSurfaceBehavior
             Key.Down => Wf.InputKey.Down,
             Key.Insert => Wf.InputKey.Insert,
             Key.Delete => Wf.InputKey.Delete,
+            // 修饰键也要点名：宿主想跟踪「Shift 现在按没按住」只能听它自己的按下与抬起，`Modifiers` 说的是
+            // 「按别的键时谁被按着」。这几个值都在上面三段算术区间之外（反射 Jalium 实测：70、71、116–121，
+            // 而 A–Z 是 44–69、D0–D9 是 34–43、F1–F12 是 90–101），不会被那三条 if 抢走。
+            Key.LeftShift => Wf.InputKey.LeftShift,
+            Key.RightShift => Wf.InputKey.RightShift,
+            Key.LeftCtrl => Wf.InputKey.LeftCtrl,
+            Key.RightCtrl => Wf.InputKey.RightCtrl,
+            Key.LeftAlt => Wf.InputKey.LeftAlt,
+            Key.RightAlt => Wf.InputKey.RightAlt,
+            Key.LWin => Wf.InputKey.LWin,
+            Key.RWin => Wf.InputKey.RWin,
             _ => Wf.InputKey.Unknown,
         };
     }
