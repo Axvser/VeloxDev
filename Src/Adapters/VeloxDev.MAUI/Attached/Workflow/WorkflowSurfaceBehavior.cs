@@ -21,7 +21,14 @@ public sealed class WorkflowSurfaceBehavior
         public double ZoomStartScale { get; set; }
 #if WINDOWS
         public Microsoft.UI.Xaml.Input.PointerEventHandler? ZoomWheelHandler { get; set; }
+
+        // 普通滚轮的钩子挂在画布（滚动容器的内容）上，见 HookWheel。
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? WheelHandler { get; set; }
+        public Microsoft.UI.Xaml.UIElement? WheelElement { get; set; }
 #endif
+
+        // 挂在输入路由上的画布滚动口。本类拥有它、宿主拿它去滚；换树时连同 Input 一起换新（与 WinUI 同形）。
+        public IWorkflowSurfaceScroller? Scroller { get; set; }
         public INotifyPropertyChanged? LayoutNotifier { get; set; }
         public PropertyChangedEventHandler? LayoutChangedHandler { get; set; }
         /// <summary>Anchor scroll offset of the current pan gesture — the scroll position the
@@ -242,6 +249,10 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
+        // 画布滚动归适配器（见 OnSurfaceWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollView。
+        state.Scroller = new SurfaceScroller(state);
+        input.Scroller = state.Scroller;
+
         var bound = input.Tree;
         state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
         state.MenuLinkRemoved = (_, link) =>
@@ -271,6 +282,13 @@ public sealed class WorkflowSurfaceBehavior
             if (state.MenuLinkRemoved is not null) helper.LinkRemoved -= state.MenuLinkRemoved;
         }
 
+        // 只在还挂着自己那一个时才摘：同一棵树上两个表面时，摘别人的会把对方的滚动口一起清掉。
+        if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
+        {
+            released.Scroller = null;
+        }
+
+        state.Scroller = null;
         state.Input = null;
         state.MenuPressed = null;
         state.MenuLinkRemoved = null;
@@ -721,6 +739,11 @@ public sealed class WorkflowSurfaceBehavior
             {
                 state.Canvas.ChildAdded += OnCanvasChildAdded;
                 state.Canvas.ChildRemoved += OnCanvasChildRemoved;
+#if WINDOWS
+                // 滚轮挂在画布上（见 HookWheel）；平台元素可能在本挂接之后才建好，所以也订 handler 的出生。
+                state.Canvas.HandlerChanged += OnCanvasHandlerChanged;
+                HookWheel(state);
+#endif
             }
         }
 
@@ -783,6 +806,10 @@ public sealed class WorkflowSurfaceBehavior
         {
             state.Canvas.ChildAdded -= OnCanvasChildAdded;
             state.Canvas.ChildRemoved -= OnCanvasChildRemoved;
+#if WINDOWS
+            state.Canvas.HandlerChanged -= OnCanvasHandlerChanged;
+            UnhookWheel(state);
+#endif
         }
 
         if (state.PointerPressSource is not null)
@@ -939,7 +966,122 @@ public sealed class WorkflowSurfaceBehavior
         }
         e.Handled = true;
     }
+
+    // 滚轮挂在**画布**（滚动容器的内容）上，不是 ScrollView 自己：本家没有隧道相，平台的 ScrollViewer
+    // 在冒泡路径上比画布更晚处理这一笔、且已经滚过一段，等处理器跑到 ScrollViewer 再置 Handled 已经晚了
+    // （WinUI 同形，实测挂在 ScrollViewer 上照样漏一格）。画布是 ScrollViewer 的内容、位于做滚动那一层之前，
+    // 在这里置 Handled 才真的拦得住 —— 「平台的滚动容器一次都不许滚画布」。
+    // 用 handledEventsToo:true 挂接：节点卡片先处理了滚轮也仍要触发（它们不处理这一笔）。
+    private static void HookWheel(SurfaceState state)
+    {
+        if (state.Canvas is null)
+        {
+            return;
+        }
+
+        state.WheelHandler ??= (_, e) => OnSurfaceWheel(state, e);
+
+        if (state.Canvas.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement element
+            && !ReferenceEquals(state.WheelElement, element))
+        {
+            UnhookWheel(state);
+            element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerWheelChangedEvent, state.WheelHandler, true);
+            state.WheelElement = element;
+        }
+    }
+
+    private static void UnhookWheel(SurfaceState state)
+    {
+        if (state.WheelElement is { } element && state.WheelHandler is not null)
+        {
+            element.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerWheelChangedEvent, state.WheelHandler);
+        }
+
+        state.WheelElement = null;
+    }
+
+    private static void OnCanvasHandlerChanged(object? sender, EventArgs e)
+    {
+        if (sender is AbsoluteLayout canvas
+            && FindAncestorContentView(canvas) is { } host
+            && host.GetValue(StateProperty) is SurfaceState state)
+        {
+            HookWheel(state);
+        }
+    }
+
+    // 普通滚轮**整笔归适配器**：平台的滚动容器一次都不许滚画布，默认竖滚由这里在路由之后补上。
+    // 订阅方置 PreventDefault 就是「这一笔不滚」，由他走 Scroller 决定往哪滚 —— 于是七家宿主是同一段代码。
+    // 位置与目标取自**滚动之前**（挂在下代上），Ctrl+滚轮那条缩放路走的是另一个处理器。
+    private static void OnSurfaceWheel(SurfaceState state, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        var source = state.WheelElement ?? state.Host?.Handler?.PlatformView as Microsoft.UI.Xaml.UIElement;
+
+        // 拦下平台那一手：置 Handled 之后 ScrollViewer 不再滚画布。取不到表面状态时也拦 ——
+        // 滚轮归适配器这条不因为一次查找失败就把画布交回平台。
+        e.Handled = true;
+
+        if (state.Host is not { } host || source is null)
+        {
+            return;
+        }
+
+        // Ctrl+滚轮且开了缩放：这一笔是缩放的，转发与缩放都归 OnZoomWheelChanged（同样挂在这条冒泡路径上）。
+        if (e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control) && GetZoomEnabled(host))
+        {
+            return;
+        }
+
+        var delta = e.GetCurrentPoint(source).Properties.MouseWheelDelta;
+
+        if (RouteSurfaceWheel(state, e, delta)?.PreventDefault != true)
+        {
+            state.Scroller?.ScrollBy(0d, delta);
+        }
+    }
 #endif
+
+    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
+    // 与 ScrollView 自己那一手一致，否则接管之后手感会变。
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    {
+        // 一格滚轮是 WHEEL_DELTA（120）；这家一格走 61.8 DIP（实测：一格 61.8、五格 309、十格 618）——
+        // 复刻它，接管之后手感才不变（与 WPF 那边 48、Avalonia 那边 50、WinUI 那边 74 是同一件事）。
+        private const double Notch = 120d;
+        private const double PixelsPerNotch = 61.8d;
+
+        private readonly SurfaceState state;
+
+        public SurfaceScroller(SurfaceState state) => this.state = state;
+
+        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        {
+            if (state.ScrollViewer is not { } viewer)
+            {
+                return;
+            }
+
+            // 正 = 远离用户 = 视口上移，所以偏移是减。
+            var dx = -(wheelDeltaX / Notch) * PixelsPerNotch;
+            var dy = -(wheelDeltaY / Notch) * PixelsPerNotch;
+
+            var x = WorkflowSurfaceMath.ClampValue(viewer.ScrollX + dx, 0d, GetHorizontalScrollMaximum(state));
+            var y = WorkflowSurfaceMath.ClampValue(viewer.ScrollY + dy, 0d, GetVerticalScrollMaximum(state));
+
+#if WINDOWS
+            // 走原生 ChangeView，不用 MAUI 的 ScrollToAsync：后者会把滚动容器留在键盘焦点上，
+            // 而焦点一旦离开工作流表面那棵子树，挂在交互源上的键盘钩子就整段收不到键（实测）。
+            if (viewer.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer native)
+            {
+                native.ChangeView(x, y, null, disableAnimation: true);
+                return;
+            }
+#endif
+
+            // 落滚会发 Scrolled → OnScrolled → Refresh，装饰块与虚拟化随之跟上（与平移同一条单写入者路径）。
+            _ = viewer.ScrollToAsync(x, y, false);
+        }
+    }
 
     /// <summary>
     /// Fire-and-forget recenter after a viewport-center zoom: sets the scroll so the world point

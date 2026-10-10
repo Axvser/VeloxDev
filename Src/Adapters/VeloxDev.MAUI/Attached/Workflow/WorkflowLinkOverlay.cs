@@ -137,6 +137,11 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     // 键盘钩子实际挂在哪（窗口根，或 XamlRoot 还没就绪时的交互源），与指针钩子分开记，摘的时候才拆得干净
     private Microsoft.UI.Xaml.UIElement? _keyHost;
+
+    // 往窗口根升级的尝试次数（见 TryUpgradeKeyHook）：XamlRoot 在 handler 刚建好时还没有，要等窗口真起来
+    private int _keyUpgradeAttempts;
+
+    private const int KeyUpgradeAttempts = 30;
 #endif
 
     public WorkflowLinkOverlay()
@@ -629,21 +634,23 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 RoutePointer(onOverlay, (p, t, h) => new Wf.PointerPressedEventArgs(
                     p, WorkflowSurfaceBehavior.ModifiersNow(), this, t, button, 1, h)));
         }
-
-        if (_input?.HoveredLink is null)
-        {
-            // 空白处按下不是这条线的事：不置 Handled，也不动焦点
-            return;
-        }
-
-        // 命中连线时把焦点收回交互源，延后一拍（平台在处理这次按下时会自己设焦点，当场设会被它盖掉）。
-        // 这是第二道保险：主修法是把键盘钩子挂到窗口根上（见 AttachKeyHook），键路由因此不再依赖焦点落点。
-        // 只在命中连线时收 —— 否则点节点卡里的输入框也会被抢走焦点。
-        if (_interactionSource is { } source)
-        {
-            MainThread.BeginInvokeOnMainThread(() => source.Focus());
-        }
     }
+
+#if WINDOWS
+    // 落在可编辑控件里的按下，焦点归那个控件 —— 表面不该把它抢走（在那里按 Ctrl+Z 撤的该是文字）。
+    private static bool IsInsideEditable(Microsoft.UI.Xaml.DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current))
+        {
+            if (current is Microsoft.UI.Xaml.Controls.TextBox or Microsoft.UI.Xaml.Controls.RichEditBox or Microsoft.UI.Xaml.Controls.PasswordBox)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+#endif
 
     // 松手：这一笔按下的登记到此作废（组件与表面读的是同一条，见 RoutePressOnce），下一次按下重新记。
     private void OnReleased(Point onOverlay, Wf.MouseButton button)
@@ -805,6 +812,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         };
         _pressedHandler = (_, e) =>
         {
+            // 同上：指针进得来就说明窗口早就就绪了，顺手把键盘钩子升到窗口根。
+            TryUpgradeKeyHook();
+
             var properties = e.GetCurrentPoint(element).Properties;
             var button = properties.IsRightButtonPressed ? Wf.MouseButton.Right
                 : properties.IsMiddleButtonPressed ? Wf.MouseButton.Middle
@@ -813,6 +823,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
             if (button is not null && ToOverlayPoint(e) is { } onOverlay)
             {
+                // 键要有人接：**任何一次**按下都先把焦点收到表面 —— 空白画布、节点、插槽、连线都算，
+                // Ctrl+Z 才有路由。卡片里的可编辑控件除外：在那里按 Ctrl+Z 撤的该是文字。
+                if (!IsInsideEditable(e.OriginalSource as Microsoft.UI.Xaml.DependencyObject))
+                {
+                    _interactionSource?.Focus();
+                }
+
                 OnPressed(onOverlay, button.Value);
             }
         };
@@ -830,6 +847,9 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         };
         _wheelHandler = (_, e) =>
         {
+            // 指针进得来就说明窗口早就就绪了：这里再补一次升级（XamlRoot 那时一定在）。
+            TryUpgradeKeyHook();
+
             var properties = e.GetCurrentPoint(element).Properties;
             if (ToOverlayPoint(e) is { } onOverlay)
             {
@@ -847,15 +867,18 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         _hookElement = element;
         AttachKeyHook(element);
+        TryUpgradeKeyHook();
     }
 
     // 键盘挂在**窗口根**上，不是交互源上：键事件只从「焦点所在的那个元素」往上冒，而平台在按下时会把焦点
     // 挪到被点的元素上 —— 实测点击连线之后，Delete 再也冒不到交互源那棵子树里的钩子（悬停能删、点一下再删
-    // 就不行）。挂窗口根就不依赖焦点落在哪，只在命中连线时才会去删。
+    // 就不行）。更狠的一次：适配器自己按平台的步长落一次滚，焦点会跑到表面之外的按钮上，挂在交互源上的钩子
+    // 于是整段收不到键（KeyUp 都收不到）。挂窗口根就不依赖焦点落在哪。
     // handledEventsToo 取 false 仍然是刻意的：聚焦的输入框吃掉 Delete 改自己的光标时，必须让它赢。
     private void AttachKeyHook(Microsoft.UI.Xaml.UIElement sourceElement)
     {
-        var host = sourceElement.XamlRoot?.Content as Microsoft.UI.Xaml.UIElement ?? sourceElement;
+        var root = sourceElement.XamlRoot?.Content as Microsoft.UI.Xaml.UIElement;
+        var host = root ?? sourceElement;
         if (ReferenceEquals(_keyHost, host))
         {
             return;
@@ -879,8 +902,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         host.AddHandler(Microsoft.UI.Xaml.UIElement.KeyUpEvent, _keyUpHandler, false);
     }
 
-    // 挂窗口根需要 XamlRoot，而它在 Attach 那一刻还是 null（实测），所以升级交给指针移动 ——
-    // 指针进得来就说明窗口早就就绪了。每次移动只做一次引用比较。
+    // 挂窗口根需要 XamlRoot，而它在 Attach 那一刻还没就绪（实测，且之后不会再有指针移动来触发升级），
+    // 所以这里自己排几拍重试 —— 直到窗口真起来为止。指针事件里也各补一次（那时 XamlRoot 一定在）。
     private void TryUpgradeKeyHook()
     {
         if (_hookElement is not { } element)
@@ -889,7 +912,17 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         var host = element.XamlRoot?.Content as Microsoft.UI.Xaml.UIElement;
-        if (host is not null && !ReferenceEquals(_keyHost, host))
+        if (host is null)
+        {
+            if (_keyUpgradeAttempts++ < KeyUpgradeAttempts)
+            {
+                element.DispatcherQueue?.TryEnqueue(TryUpgradeKeyHook);
+            }
+
+            return;
+        }
+
+        if (!ReferenceEquals(_keyHost, host))
         {
             AttachKeyHook(element);
         }
@@ -944,6 +977,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
         _hookElement = null;
         _keyHost = null;
+        _keyUpgradeAttempts = 0;
         _hoverMovedHandler = null;
         _hoverExitedHandler = null;
         _pressedHandler = null;
@@ -972,19 +1006,24 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private void OnSourceKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
         // 键也过输入路由：命中与 target 由它裁决；删不删是宿主的（订 KeyDown 自己执行命令）
-        if (_input is not { } input || input.HoveredLink is null)
+        if (_input is not { } input)
         {
             return;
         }
 
+        // target 用路由**已经在维护**的那个指针目标，不再要求「指针停在一条线上」：Ctrl+Z 是树级的键，
+        // 指针在空白画布上时链的尽头仍是树（占位/拖拽预览那类旧 sender 也不参与判定）。
         input.Route(new Wf.KeyDownEventArgs(
-            ToKey(e.Key), (int)e.Key, WorkflowSurfaceBehavior.ModifiersNow(), false, this, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, WorkflowSurfaceBehavior.ModifiersNow(), false, this, input.PointerTarget, new WorkflowEventHandle()));
 
-        if (e.Key == Windows.System.VirtualKey.Delete) e.Handled = true;
+        // 只吞本层自己那一手管的键，否则方向键、翻页键、空格会被一起吃掉（与 WinUI/Avalonia/Jalium 同形）。
+        if (e.Key == Windows.System.VirtualKey.Delete)
+        {
+            e.Handled = true;
+        }
     }
 
-    // 松手与按下同形，但不筛悬停：另外六家都是无条件上报（键抬起本身没有可删的东西，筛掉只会让
-    // 订阅者在不悬停时收不到配对的 KeyUp）。
+    // 松手与按下同形，同样不筛悬停：键抬起本身没有可删的东西，筛掉只会让订阅者在不悬停时收不到配对的 KeyUp。
     private void OnSourceKeyUp(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
         if (_input is not { } input)
@@ -993,7 +1032,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
 
         input.Route(new Wf.KeyUpEventArgs(
-            ToKey(e.Key), (int)e.Key, WorkflowSurfaceBehavior.ModifiersNow(), false, this, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, WorkflowSurfaceBehavior.ModifiersNow(), false, this, input.PointerTarget, new WorkflowEventHandle()));
     }
 
     // 键按字母/数字/功能键三段连续区间做算术映射（两边枚举的这几段都是连续的），其余逐个点名，没点到的报 Unknown。
@@ -1024,6 +1063,16 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             Windows.System.VirtualKey.Down => Wf.InputKey.Down,
             Windows.System.VirtualKey.Insert => Wf.InputKey.Insert,
             Windows.System.VirtualKey.Delete => Wf.InputKey.Delete,
+            // 八个修饰键逐个点名：它们的值刻意落在三段连续区间的外面，不能走上面的算术映射。
+            // Alt 在 WinRT 里拼作 Menu（LeftMenu/RightMenu）。
+            Windows.System.VirtualKey.LeftShift => Wf.InputKey.LeftShift,
+            Windows.System.VirtualKey.RightShift => Wf.InputKey.RightShift,
+            Windows.System.VirtualKey.LeftControl => Wf.InputKey.LeftCtrl,
+            Windows.System.VirtualKey.RightControl => Wf.InputKey.RightCtrl,
+            Windows.System.VirtualKey.LeftMenu => Wf.InputKey.LeftAlt,
+            Windows.System.VirtualKey.RightMenu => Wf.InputKey.RightAlt,
+            Windows.System.VirtualKey.LeftWindows => Wf.InputKey.LWin,
+            Windows.System.VirtualKey.RightWindows => Wf.InputKey.RWin,
             _ => Wf.InputKey.Unknown,
         };
     }
