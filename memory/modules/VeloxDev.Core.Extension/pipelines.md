@@ -38,22 +38,26 @@
 
 ## 四、`AgentTranscript` 的两条规则（这是这个类型存在的全部理由）
 
-`AgentTranscript.cs:138-165` 的注释说得很直白：**这两条规则属于库，不属于 demo 宿主的视图模型** —— 放在宿主里会实现错，而且因为就是宿主代码所以测不到、反复回归；所以它被移进库里。
+`AgentTranscript.cs:141-168` 的注释说得很直白：**这两条规则属于库，不属于 demo 宿主的视图模型** —— 放在宿主里会实现错，而且因为就是宿主代码所以测不到、反复回归；所以它被移进库里。
 
 | 规则 | 会出错的形态（同一段注释记载） |
 |---|---|
-| **片段只在「开着的、同角色的」条目上继续**（`:227-241`）。中间出现任何别的 —— 工具调用、推理块、用户 —— 就关掉它，答案在**新条目**里续写 | 旧宿主只在「最后一条仍是 assistant 消息」时追加，所以一旦落了工具调用，这次回复之后的所有片段都进了侧边日志、**从不渲染** |
-| **工具调用是条目，不是分隔符**（`:156-160`）。它是一行带名字与结果的记录 | 旧 markdown 路径会追加工具调用行的（空）文本，于是产生**一列空白分隔线** |
+| **片段只在「开着的、同角色的」条目上继续**（`:230-242`）。中间出现任何别的 —— 工具调用、推理块、用户 —— 就关掉它，答案在**新条目**里续写 | 旧宿主只在「最后一条仍是 assistant 消息」时追加，所以一旦落了工具调用，这次回复之后的所有片段都进了侧边日志、**从不渲染** |
+| **工具调用是条目，不是分隔符**（`:159-163`）。它是一行带名字与结果的记录 | 旧 markdown 路径会追加工具调用行的（空）文本，于是产生**一列空白分隔线** |
 
-**唯一实现处**：`Append(role, fragment)`（`:227`）。`IsStreaming` 是 `Assistant or Reasoning`（`:69`），所以这两种角色才可能被续写。
+**唯一实现处**：`Append(role, fragment)`（`:230`）。`IsStreaming` 是 `Assistant or Reasoning`（`:69`），所以这两种角色才可能被续写。**它每次调用都复制整条答案**（`Text += fragment`），所以调用频率决定了代价 —— 由 `TextPipeline` 按千字节批量喂（见 §五），逐片段直接喂它是 O(答案) × 片段数。
 
-**不是线程安全的，且刻意如此**（`:163`）：一个 stage 喂它，在那一个被编组到的线程上。
+**不是线程安全的，且刻意如此**（`:166`）：一个 stage 喂它，在那一个被编组到的线程上。
 
-**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`（`:269`）、`ToPlainTextLines()`（`:341`），以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs:176`、`:180`。`ToMarkdown` 会把**连续的**工具调用攒成一个块（`:276-288`），理由同样是为了让每个 markdown 宿主不必自己写渲染器。
+**宿主侧的消费契约**（`Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs`，七家共用）：内容增长走 120 ms 节流（`QueueConversationRender`），而**新开一个条目会立刻整篇重渲**（`OnTranscriptEntriesChanged`）——`AgentTranscriptTests.ConversationMarkdown_WrapsReasoningInAFence` 钉的就是后者，把新条目也并进节流会打破它（实测过）。`AgentLog` 由尾巴对齐同步（只动与前缀不同的那几条），不再是 `Clear` + 逐条 `Add`。
 
-### 推理的渲染形状（`:249-269` 的文档注释 + `AgentMarkdownOptions`）
+**`AgentLog` 只有一个写者：那条投影。** 曾经 `AppendAgentLog` 也直接往它追加一行，而重渲会把整个 log 对齐到转录 —— 转录里没有那行，于是**追加的会被下一次重渲抹掉**。现在那条路改走转录：`TreeViewModel.AppendAgentError(message)` → `AgentTranscript.AddError`，两条渲染路径各自加自己的前缀（行内 `[Error] …`、markdown `**错误：**`），所以**传裸消息**。于是同一条错误在七家都出现（原来只有 MAUI 的 ListBox 有，且会消失）。`AppendAgentLog` 因此不再碰 `AgentLog`，只喂 `AgentMessages` —— 它现在没有生产调用者，但 `AgentMessages` 是**有意留着的第三种形状**（按角色渲染的宿主可以绑它，见 `Src/.../Test/Examples/AgentTranscriptTests.cs` 的类注释），所以别顺手删。唯一的生产调用者是 MAUI 的发送失败提示，已改调 `AppendAgentError`。
 
-推理走**围栏代码块**，不是加粗段落 —— 段落的形状与 `Assistant` **完全同形**，只差标签，消费端拿到扁平字符串后无法把它独立包裹成一块。形状由 `AgentMarkdownOptions`（`:123`，与 `AgentTranscript` 同文件）决定，两个成员都有出厂默认值，**传 `null` 就是出厂形状**：
+**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`（`:272`）、`ToPlainTextLines()`（`:344`），以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs:176`、`:180`。`ToMarkdown` 会把**连续的**工具调用攒成一个块（`:279-291`），理由同样是为了让每个 markdown 宿主不必自己写渲染器。
+
+### 推理的渲染形状（`:252-272` 的文档注释 + `AgentMarkdownOptions`）
+
+推理走**围栏代码块**，不是加粗段落 —— 段落的形状与 `Assistant` **完全同形**，只差标签，消费端拿到扁平字符串后无法把它独立包裹成一块。形状由 `AgentMarkdownOptions`（`:126`，与 `AgentTranscript` 同文件）决定，两个成员都有出厂默认值，**传 `null` 就是出厂形状**：
 
 | 成员 | 默认 | 语义 |
 |---|---|---|
@@ -62,10 +66,10 @@
 
 两条必须知道的实现细节：
 
-- **围栏长度按正文里最长的连续反引号串 + 1 算**（`FenceLength`，`:400`），下限 3。CommonMark 在遇到第一行「反引号数 ≥ 开围栏」时就闭合 —— 模型思考里写 ` ``` ` 是常态，固定 3 个会被内容自己提前闭合，把**后续整个对话**吞进代码块。
-- **info string 里的反引号被剔除**（`FenceInfo`，`:416`）。它由宿主提供，一个反引号会并进开围栏、把开围栏拉得比闭围栏长，于是**永远闭合不了**。
+- **围栏长度按正文里最长的连续反引号串 + 1 算**（`FenceLength`，`:403`），下限 3。CommonMark 在遇到第一行「反引号数 ≥ 开围栏」时就闭合 —— 模型思考里写 ` ``` ` 是常态，固定 3 个会被内容自己提前闭合，把**后续整个对话**吞进代码块。
+- **info string 里的反引号被剔除**（`FenceInfo`，`:419`）。它由宿主提供，一个反引号会并进开围栏、把开围栏拉得比闭围栏长，于是**永远闭合不了**。
 
-**`ToPlainTextLines()` 一行不动，也不给它对称的 options**：它的「一个条目一行」是一份**契约**而非形状（`:334-339` 的注释），宿主靠 `Count ==` + `SequenceEqual` 同步、再按前缀解析回角色；推理在那儿早就是 `[Thinking] …` 行。纯文本宿主没有歧义要解，加 options 只会多一个面。
+**`ToPlainTextLines()` 一行不动，也不给它对称的 options**：它的「一个条目一行」是一份**契约**而非形状（`:337-342` 的注释），宿主靠 `Count ==` + `SequenceEqual` 同步、再按前缀解析回角色；推理在那儿早就是 `[Thinking] …` 行。纯文本宿主没有歧义要解，加 options 只会多一个面。
 
 ---
 
@@ -75,6 +79,8 @@
 
 1. 片段按顺序落地（fire-and-forget 会乱序）；
 2. 测试不需要真的调度器。
+
+**片段是攒够了才 post 的，不是逐片段 post**（2026-10-11）：`TextPipeline` 持有开着的那条条目的尾巴，每满 `FlushThreshold`（1024 字符）或遇到边界（新回合、工具调用、回合结束）才写一次。所以 dispatcher 往返从「每 token 一次」降到「每千字节一次」——实测 5,000 个 8 字节片段：post 5,000 → 39 次，该段分配 45 KB/片段 → 1.5 KB/片段。边界处**必须先落地再处理**：工具调用会在下游把开着的条目关掉，攒着的尾巴晚一步就会落进工具调用之后新开的那条。**这正是 `WorkflowAgentScope.Pipeline` 里 TextPipeline 必须排第一的原因**（`WorkflowAgentScope.cs:1640-1644`），不再是「两者事件不相交，顺序无所谓」。
 
 同一个模式在 `TrackedAIFunction.RunOnContextAsync`（`:115`）里复现，注释说明了为什么**不能**用阻塞式 `Send`：工具体自己可能在 UI 线程上，阻塞式投递会**死锁**。（对比：`Agent/Skills/SkillScope.cs:464` 的 `RunOnUI` 用的就是阻塞 `Send`，因为技能刷新是纯 UI 侧操作、不在工具体内。）
 
@@ -88,14 +94,14 @@
 
 1. 实现 `IAgentPipelineStage`（`AgentPipeline.cs:16`），或直接用 `DelegateAgentPipelineStage`（`:26`）/ `Use(handler)` 重载（`:62`）。
 2. `pipeline.Use(stage)` 追加。顺序即执行顺序。
-3. 挂在 scope 的 pipeline 上：`WorkflowAgentScope.Pipeline`（`WorkflowAgentScope.cs:1486` 的 getter，首次读时在 `:1490-1505` 组装并缓存进 `_pipeline`）返回的是**新建的组合**：`TextPipeline → SharedTools → CreateToolkit().CreateAccountingStage()`（`:1501`、`:1503`）。想接在最后，就用 `WithPipeline(this AIAgent, …)`（`AgentPipelineAgent.cs:187`）或 `UseAgentPipeline(AIAgentBuilder, …)`（`:182`）。
+3. 挂在 scope 的 pipeline 上：`WorkflowAgentScope.Pipeline`（`WorkflowAgentScope.cs:1627` 的 getter，首次读时在 `:1631-1649` 组装并缓存进 `_pipeline`）返回的是**新建的组合**：`TextPipeline → SharedTools → CreateToolkit().CreateAccountingStage()`（`:1644`、`:1645`、`:1646`）。**这个顺序是承重的**（TextPipeline 攒着尾巴，必须在工具 stage 关掉开着的那条之前落地，见 §五），不是「谁先被读到」的问题。想接在最后，就用 `WithPipeline(this AIAgent, …)`（`AgentPipelineAgent.cs:187`）或 `UseAgentPipeline(AIAgentBuilder, …)`（`:182`）。
 
 **捷径（能编译，但是错的）**
 
 | 捷径 | 为什么错 |
 |---|---|
 | 在 stage 里抛异常来中断 run | 异常被 `InvokeAsync` 吞成 `StageFailed`（`AgentPipeline.cs:103-106`）；在工具路径上它已经被外层 `catch` 变成工具错误了 |
-| 在 stage 里 `await Task.Run(...)` 或 `ConfigureAwait(false)` 之后改 transcript | 片段会落到线程池线程上；`AgentTranscript` 不是线程安全的（`AgentTranscript.cs:163`），且 `ObservableCollection` 的绑定会被跨线程改 |
+| 在 stage 里 `await Task.Run(...)` 或 `ConfigureAwait(false)` 之后改 transcript | 片段会落到线程池线程上；`AgentTranscript` 不是线程安全的（`AgentTranscript.cs:166`），且 `ObservableCollection` 的绑定会被跨线程改 |
 | 自己 `new ToolPipeline(...)` 给子系统用 | 会得到**另一本预算账本**。共享同一个 `WorkflowAgentToolkit.Tools`（`WorkflowAgentToolkit.cs:248`）才是官方做法 —— `CreateContextProviders()` 就是这么把同一个引用递下去的 |
 | 想「抑制」某个事件却只在 stage 里 `return` | 不调 `next` 只对**下游**生效，`AgentPipeline` 自己的 `StageFailed` / 上游观察者仍然看得见 |
 | 往 pipeline 里塞「工具过滤」 | 工具过滤在 `CreateTools` 的 `.Where(IsToolEnabled)`（`WorkflowAgentToolkit.cs:74`）与 `CheckBudget`（`:323`）两处。stage 层过滤会绕过预算记账与脏标记 |
