@@ -140,7 +140,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 | # | 这里的做法和其他家不一样，因为… | 依据 |
 |---|---|---|
 | 1 | **`SetIsEnabled` 顺手改 Win32 窗口样式（七家里唯一）**：启用画布宿主的同时给画布窗口上 `WS_CLIPCHILDREN`、给顶层窗体上 `WS_EX_COMPOSITED`。因为这家没有合成器，自绘画布与子窗口的重绘分离必然产生闪烁/鬼影，只能在窗口层解决。别家没有这一步，也没有对应的 hook 点。 | `WorkflowSurfaceBehavior.cs:212-213` |
-| 2 | **滚轮走应用级 `IMessageFilter`：看得见每一笔滚轮（七家里唯一），且 Ctrl+缩放能真的把消息吃掉（七家里唯一）**：别家都用平台的路由/隧道/预览阶段（WPF `PreviewMouseWheel`、Avalonia `RoutingStrategies.Tunnel`、Jalium `Mouse.PreviewMouseWheelEvent`，见 `wpf.md` §三·1），其中 Avalonia/WinUI 两家拿不到 preview 阶段、会「先滚一丝」。这家没有事件路由，只能抢在消息泵那一层（`WM_MOUSEWHEEL` 发给焦点/光标下的那个窗口，冒泡不到画布），于是分两支：**非 Ctrl（或关掉了缩放）只 `RouteWheel` 汇报、`return false` 放行**（`:95-100`，控件照常滚）；**Ctrl 且开着缩放**才走缩放、被否决即 `m.Result = IntPtr.Zero; return true; // swallow the message`（`:102-108`、`:140`）。设计意图写在 `:61-71`。 | `WorkflowSurfaceBehavior.cs:72-141`、`:96`、`:104-107`、`:140` |
+| 2 | **滚轮走应用级 `IMessageFilter`：看得见每一笔滚轮（七家里唯一），且 Ctrl+缩放能真的把消息吃掉（七家里唯一）**：别家都用平台的路由/隧道/预览阶段（WPF `PreviewMouseWheel`、Avalonia `RoutingStrategies.Tunnel`、Jalium `Mouse.PreviewMouseWheelEvent`，见 `wpf.md` §三·1）；WinUI 没有预览相，得挂滚动容器的**内容**（画布）才不漏（挂容器本身一格漏 74 DIP），见 `wpf.md` §三·1。这家没有事件路由，只能抢在消息泵那一层（`WM_MOUSEWHEEL` 发给焦点/光标下的那个窗口，冒泡不到画布），于是分两支：**非 Ctrl（或关掉了缩放）只 `RouteWheel` 汇报、`return false` 放行**（`:95-100`，控件照常滚）；**Ctrl 且开着缩放**才走缩放、被否决即 `m.Result = IntPtr.Zero; return true; // swallow the message`（`:102-108`、`:140`）。设计意图写在 `:61-71`。 | `WorkflowSurfaceBehavior.cs:72-141`、`:96`、`:104-107`、`:140` |
 | 3 | **插槽连接用消息过滤器 + `WindowFromPoint` + 静态单活动连接（七家里唯一）**：整文件 390 行；对照 WPF 是 72 行，只有 `PreviewMouseLeftButtonDown`（先读表面存的按下句柄，被否决就不起）→ `SendConnectionCommand`、`PreviewMouseLeftButtonUp` → `ReceiveConnectionCommand`（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotConnectionBehavior.cs:39-70`）。这家的复杂度全部来自「按下与抬起可能落在不同的窗口上」，所以必须靠 `WindowFromPoint` 反查目标控件、并自己维护「谁在拖」。**别把 WPF 那种两行式实现当成通用形状往新平台上套。** | `WorkflowSlotConnectionBehavior.cs:31-32`、`:170-189`、`:338`、`:347-380` |
 | 4 | **`WorkflowSlotLayoutBehavior.SyncNow(Control)` 只有这家有**：一个公开的**同步**重测入口。理由是延迟路径 `BeginInvoke` 会合并到消息循环，而消息循环排在强制同步重绘之后，所以缩放折叠/画布扩张期间连线会用旧端点画一帧。别家都不需要它 —— 它们的布局/渲染是同一趟流水线。**调用方**：适配器基类 `WorkflowTreeView.cs:852`（模板与 Trimmed 继承它，自动具备）、节点视图 `Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-node-view/TemplateClass.cs:320` 与 `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/NodeView.cs:316`。 | `WorkflowSlotLayoutBehavior.cs:274-315` |
 | 5 | **表面行为不再按名字找控件**：画布/装饰器/小地图都是宿主**按对象**交进来的（`SetScrollViewer` / `SetCanvas` / `SetGridDecorator` / `SetMinimapOverlay`），改名不再有影响。仍然靠名字找的是**插槽布局** —— `FindControlByName`（Ordinal 全树遍历，`WorkflowSlotLayoutBehavior.cs:652-663`）解析插槽名 / 坐标宿 / 父宿（`:538`、`:560`、`:603`、`:633`），不是 `FindName`/`GetTemplateChild`。`PART_*` 命名约定在这家**只是模板自己遵守的写法**，框架不强制任何前缀。⇒ 给这些具名控件改名，插槽测量会静默失效（不抛）。 | `WorkflowSlotLayoutBehavior.cs:652-663` |
@@ -280,6 +280,18 @@ Trimmed 这条路上（`WorkflowSlotLayoutBehavior.cs:588` 的 `SlotAnchorFromCa
 `canvasNormals` / `modelNormals` —— 修前 `(1,0)(0,1)`、修后 `(1,0)(-1,0)`。
 
 ---
+
+## 四点五、画布滚动与表面级按键（2026-10-11，探针实测）
+
+**这一家的滚轮基线是「什么都不做」** —— 不是「竖滚」，是动的都不动：`PART_ScrollViewer` 是 `AutoScroll=false` 的 `ScrollableControl`，根本没有偏移可移（实测基线 `视口(画布)` 滚前滚后都是 `0, 0`）。所以接管之后那个「默认竖滚」在这家是**新增能力**，不是保持既有行为 —— 读别家的数字时别把这家的当成同一种情形。
+
+- **滚轮在应用级 `IMessageFilter` 里接**（这家没有路由事件，画布自己的 `MouseWheel` 永远不触发：`WM_MOUSEWHEEL` 发给焦点窗口）。现在的形状是：路由 → 没人 `PreventDefault` 就自己执行默认竖滚 → **吞掉消息**（`m.Result = IntPtr.Zero; return true`）。**泄漏 0**（容器本来就滚不动，消息又被吞了）。
+- **步长** `SystemInformation.MouseWheelScrollLines`（默认 3）× 16 = **48 px/格**，与 WPF 同源；`-1`（按页滚）退回视口尺寸。
+- **`ScrollBy` 就是平移画布** —— 走这家自己那套 `ResolveScrollOffset` / `ApplyScrollOffset`（小地图拖拽用的同一条路），两个轴都走它。别去找滚动偏移，这里没有。
+- ⚠ **`ApplyScrollOffset` 的反射曾经永远找不到目标**：它用 `p.GetType()`（运行时是派生的 `Demo.Views.Workflow.TreeView`）找私有的 `OnMinimapScrollRequested`，而**私有成员不参与反射继承** ⇒ 基类 `WorkflowTreeView` 那个方法从来没被找到、`ScrollBy` 静默空转。2026-10-11 改成沿基类链走（`BindingFlags.DeclaredOnly`）。**这条同时修好了「缩放居中」那条路**（签名平移的宿主也吃这个修复）。
+- **焦点**：这家没有附着属性，所以「按下就收焦点」也在同一个消息过滤器里做（`WM_*BUTTONDOWN` 分支，命中在画布子树内且不是 `TextBoxBase` 才收）。实测点**节点卡片**（不只是空白画布）也能让 `节点 4/4 → 3/3`。
+- **键**：`Keys.ShiftKey`(16) / `Keys.ControlKey`(17) / `Keys.Menu`(18) 这些**通用**形式才会到达 `KeyCode`；**侧别形式（`Keys.LShiftKey` 160 等）实测从不出现**。所以 `ToKey` 把八个侧别键照常点名，另外把通用形式按「通用 → 左」映射（`Keys.ShiftKey → LeftShift`）。这几个值都在三段算术区间之外，不会与字母/数字/功能键的差值映射抢。
+- **`OnZoomMouseWheel` 已删**：它不可达（消息过滤器先吞了所有滚轮），而且**不过路由** —— 订阅方的 `PreventDefault` 在它那里根本拦不住缩放，与另外六家不一致。缩放现在完全归消息过滤器。
 
 ## 五、这份文件没写的东西
 

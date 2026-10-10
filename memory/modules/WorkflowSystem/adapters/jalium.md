@@ -205,6 +205,21 @@ Ctrl+滚轮缩放仍挂 `ScrollViewer.PreviewMouseWheel`（`HookZoom`，`:545-55
 
 ⇒ **这家的"链接在深缩放下闪没"有两个独立成因**：表面侧的视口竞态（本节，靠 `ZoomPin` 解）与渲染侧的盒裁剪（§2.1，靠自盒化解）。**修一个不会修好另一个**，别把两者的现象混着查。
 
+### 2.5.1 视口写回与恢复（2026-10-11 补齐，与另外六家一致）
+
+**这家曾经是七家里唯一不写 `CanvasLayout.ViewportOffset` 的**（`ScrollChanged` 只喂虚拟化与两个 overlay ⇒ `HasViewportRestore` 恒 false、宿主读到的视口是陈旧值，而画面看着全对，最难查的那一类）。现在补齐了：
+
+- **写回**：`ScrollChanged` → `Refresh` → `UpdateViewport(state, h, v)`，其中 `SetVirtualizeInset`、`helper.Viewport`、`layout.ViewportOffset` 三者同源于**一次** `WorkflowSurfaceMath.ViewportOffsetFromScroll(h, v, layout)`（单一换算点，世界坐标）。
+- **未测量那一支（`viewportWidth/Height <= 0`）刻意不写回**：那时写进去的是假的 `(0,0)`，会被当成存档。它照旧只做 `SetVirtualizeInset` 与整块画布的 `Helper.Viewport`，所以「首次 Virtualize 空转」那个原行为没变。
+- **恢复**：`CaptureViewportRestore`（按 `LastRestoreTree` 去重，`HasViewportRestore` 为真才存）→ `QueueViewportRestore`（`Dispatcher.BeginInvoke(DispatcherPriority.Loaded, …)`，`ClampValue` 夹到 `ScrollableWidth/Height` 再滚，随后补一次 `UpdateViewport` + `UpdateOverlays`）。
+- ⚠ **`Refresh` 与 `BindTree` 两处都要「先捕获、后 `UpdateViewport`」**：`BindTree` 在 `OnLoaded` 里比 `Refresh` 先跑，漏掉它的话它那一次写回会在捕获之前把存档冲掉。
+- **与 `ZoomPin`（§2.5）不打架**：单参数的 `UpdateViewport(state)` 在 pin 守卫处就返回（陈旧的 `ScrollChanged` 到不了会写回的那个重载），pin 期间走 `UpdateViewport(state, pin.X, pin.Y)` ⇒ 写回的是 pin 的目标值；`NotifyZoomCommitted` 与 `PanMoved` 也走那个重载。
+- 启动瞬间会先写一次 `(0,0)`、再被队列里的恢复盖掉（另外六家同形，不是这家的问题）。
+
+实测（2026-10-11）：滚三格 `ViewportOffset` 走 `(0,0)→(0,48)→(0,96)→(0,144)`；临时种 `ViewportOffset = (300,200)` 后捕获记 `has=True`、启动确实停在 `300,200`（13 秒后仍稳定），种入代码已还原。
+
+⚠ 照旧**不做「没存档就居中」** —— 适配器只负责存与还原，居中是宿主的 UX 决定（[extension.md](../extension.md) §3.9-10 第 10 条）。
+
 ### 2.6 其余平台面的事实
 
 - `WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay.cs:17`），`RulerBand => 0`（`:42`）—— 它不是标尺，所以虚拟化 inset 为 0。

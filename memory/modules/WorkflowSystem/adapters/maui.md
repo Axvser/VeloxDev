@@ -170,6 +170,17 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 
 ---
 
+### 12. 程序化滚动会把键盘焦点留在滚动容器上 —— 键从此不再到达宿主（2026-10-11 实测）
+
+`ScrollView.ScrollToAsync` 会把键盘焦点停到滚动容器上。配上「画布滚动改由适配器执行」（[architecture.md §3.6](../architecture.md)）之后，这一条的后果是**静默的**：滚一次轮，焦点就跑到表面子树之外，于是 Ctrl+Z / Delete / Shift 全都再也到不了宿主的键路由 —— 不报错，只是没反应。
+
+解法两条，都要：
+
+- 滚动走**原生** `ScrollViewer.ChangeView`，不用 `ScrollToAsync`；
+- 键钩子要挂在**窗口根**，而 `XamlRoot` 在 attach 那一刻是 **null** ⇒ 先挂在交互源上，再由 `TryUpgradeKeyHook` 在 dispatcher 上重挂到根出现为止（上限 30 tick），并在 attach / 按下 / 滚轮三处各叫它一次 —— 只靠「悬停时升级」永远等不到。
+
+⇒ 「滚轮能滚」与「键还到得了」在这家是**两个耦合的问题**：别只看滚轮动了就以为改完了。
+
 ## 三、与其它家的刻意背离
 
 1. **七家里唯一没有 `WorkflowCanvasTransformBehavior` 的一家。** 这里的做法和其他家不一样，因为 MAUI 没有 `Viewbox`，

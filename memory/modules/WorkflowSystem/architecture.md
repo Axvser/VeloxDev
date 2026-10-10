@@ -220,7 +220,9 @@ IWorkflowTreeEvents : Connecting/Connected
 - **命中面只是画出来的那道描边**，不是整块画布：曲线就是视图画的那条，半径 `LinkHitTestEx.DefaultHitRadius`（6）。
 - **曲线是运行期几何，永远不序列化**（别把它挂上任何归档序列化路径：不给它 `[Archivable]`，也不让它成为某个被收录成员的声明类型）。
 
-⇒ 「加一个新的连线交互动作」（比如双击重命名）现在就是订标准输入：适配器把那次指针事件路由进来，宿主在组件上订它 —— **不用改 Core**；**手势**（平移、拖动、连线、缩放）仍是适配器的事，但**四个手势都读这一笔按下的句柄**（2026-10-06 起）：订阅者置 `PreventDefault`，框架那一手就不执行 —— 与菜单、Delete 是同一条契约。各家把句柄交到手势手上的路径不同（隧道相 / 组件自己转发 / JS 先问再动手），见 [extension.md](extension.md) 的「否决某一次自带手势」那一行与 `adapters/<平台>.md`。**滚轮要分两半看**：Ctrl+滚轮（缩放）是这四个手势之一、七家都读裁决；**普通滚轮只是一份汇报** —— 七家都把它路由给订阅者（入口在收得到它的那一层），但没有一家读它的裁决，视口照常滚。同理，按键被路由不等于被拦：面只在 `Delete` 上拦（那是它自己那一手管的键），滚动容器认得的键从来不在它手里。
+⇒ 「加一个新的连线交互动作」（比如双击重命名）现在就是订标准输入：适配器把那次指针事件路由进来，宿主在组件上订它 —— **不用改 Core**；**手势**（平移、拖动、连线、缩放）仍是适配器的事，但**四个手势都读这一笔按下的句柄**（2026-10-06 起）：订阅者置 `PreventDefault`，框架那一手就不执行 —— 与菜单、Delete 是同一条契约。各家把句柄交到手势手上的路径不同（隧道相 / 组件自己转发 / JS 先问再动手），见 [extension.md](extension.md) 的「否决某一次自带手势」那一行与 `adapters/<平台>.md`。**普通滚轮整笔归适配器**（2026-10-11 起）：平台的滚动容器**一次都不许滚画布** —— 适配器自己拦下、路由、再按裁决决定这一笔的归属：订阅方置 `PreventDefault` 就是「这一次不滚」，由他经 `WorkflowInput.Scroller`（`IWorkflowSurfaceScroller`，中立滚动请求，收的是**滚轮增量**不是像素）决定往哪滚；没人碰就由适配器执行**默认竖滚**，步长复刻平台自己那一手（WPF 实测一格 48 = `WheelScrollLines` 3 × 16；Avalonia 一格 50）。Ctrl+滚轮（缩放）仍是这四个手势之一，走另一支（挂在滚动容器的预览相上，与本支不重叠）。
+⇒ **平台原生的 Shift+滚轮横滚被这一条有意取代**（Avalonia 实测其 `ScrollViewer` 本来就会横滚，一格 50；WinUI 与浏览器同理，WPF 不会）：默认恒为垂直，横不横**由宿主的订阅决定**。所以「默认滚动是垂直、按住 Shift 横滚」是宿主十来行的事，七家的 demo 是同一段代码；代价是表面没拿到键盘焦点时 Shift 收不到（Shift 由统一 KEY 输入跟踪），那一笔会走默认。
+同理，按键被路由不等于被拦：面只在 `Delete` 上拦（那是它自己那一手管的键），滚动容器认得的键从来不在它手里。**按键的 target 取路由已经在维护的那个指针目标**（不再是「悬停的那条线」），所以树级的键（Ctrl+Z/Ctrl+Y）在指针位于空白画布或节点上时一样到得了树 —— 早先那种「不悬停连线就整笔不路由」的门已经拆掉。
 
 节点命令共 8 个（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs:36-78`），Tree 8 个（`IWorkflowTreeViewModel.cs:41-83`），Slot 4 个（`IWorkflowSlotViewModel.cs:46-64`），Link 1 个（`IWorkflowLinkViewModel.cs:30`），另有全部组件共有的 `CloseCommand`（`IWorkflowViewModel.cs:31`）。
 
@@ -233,7 +235,7 @@ IWorkflowTreeEvents : Connecting/Connected
 违反下面任何一条，通常**不报错**，只是静默行为错。
 
 1. **一次变更只能入栈一次。** 每个改模型的动作必须恰好经过一个 `Submit`。`SetSelector` 内部自己提交了一个 undo pair（`SelectorEx/SlotEnumerator.cs:420`），再包一层 `Submit` 就是两层栈项、Ctrl+Z 语义崩坏。AI 工具面的 `SetEnumSlotCollection` 注释直接写明了这一点（`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs`）。
-2. **`Move` / `SetAnchor` / `SetSize` 按设计不可撤销**（`StandardEx/WorkflowNodeEx.cs:74,93,110`）。同理 `WorkflowAgentToolkit` 的 `MoveNode`/`SetNodePosition` 文档里点明下层 `SetAnchorCommand` 没有 undo 项。
+2. **`Move` / `SetAnchor` / `SetSize` 按设计不可撤销**（`StandardEx/WorkflowNodeEx.cs:74,93,110`）。**理由不是「漏了」，是刻意的内存取舍**（2026-10-11 用户确认）：拖动节点这类几何变更是高频的，逐帧入栈会让撤销栈迅速挤爆内存，所以**何时把它们做成可撤销由用户自己决定** —— 需要就自己提供一个 `IWorkflowActionPair` 走 `tree.GetHelper().Submit(...)`，或订 `IWorkflowNodeEvents` 的 `Moving/Moved` 自己记账。**别把它当缺陷去「修」**。症状上的后果要提前知道：宿主把 Ctrl+Z 接到 `UndoCommand` 之后，拖完节点按 Ctrl+Z 撤的是**更早的一次结构改动**（建/删节点、连线、SetSelector…），不是那次拖动。同理 `WorkflowAgentToolkit` 的 `MoveNode`/`SetNodePosition` 文档里点明下层 `SetAnchorCommand` 没有 undo 项。
 3. **`Anchor` / `Size` 的 getter 是折叠值**（见 §二）。一切修改走 setter，setter 存世界原值。
    ⚠ **对外的读数也必须是世界值**：AI 工具面的 `ListNodes` / `GetNodeDetail` 原来直接读 getter，于是同一个位置写进去、读出来不是同一个数，比例还随缩放变（2026-10-05 修，见 [`AI/architecture.md`](../AI/architecture.md) §七·七）。凡是把节点几何报给宿主/模型的地方，都要乘回 `Layout.Scale` —— 渲染需要折叠值，读数不需要。
 4. **`WorkflowGuard.Fail` 在 Release 里是彻底的空操作**。它是 `[Conditional("DEBUG")]`（`WorkflowGuard.cs:19`），连同消息参数一起被编译掉。所以 `StandardSetChannel` 在 slot 没挂到树上时 `return`（`StandardEx/WorkflowSlotEx.cs:19-23`）—— Debug 抛异常，Release 静默什么都不做。**不要把 `WorkflowGuard.Fail` 当成运行时防御**。

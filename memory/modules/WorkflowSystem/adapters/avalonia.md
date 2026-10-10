@@ -178,6 +178,17 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 ---
 
+## 三点五、画布滚动与表面级按键（2026-10-11，探针实测）
+
+⚠ **这家是「原生就会横滚」的那一家，别照 WPF 推断它**：未改动构建的基线实测 —— 普通滚轮一格竖滚 **50**（X 不动），而 **Shift+滚轮原生就把 X 走 0→50→100、Y 全程不动**。浏览器那家同理；WPF / Jalium / WinUI / MAUI / WinForms 五家则都忽略 Shift。⇒ 接管之后「Shift+滚轮走默认竖滚」在这家是**把原生行为换掉了**，是有意的（见 [architecture.md §3.6](../architecture.md)），不是回归。
+
+- **步长**：这家把一格归一成 `Delta ±1`，一格滚 **50 px**（实测与原生基线逐字相同）；所以 `SurfaceScroller` 是「乘 50」，与 WPF 的「除 120 再乘 `WheelScrollLines × 16`」不同形。
+- **滚轮**：`OnPointerWheel`（挂宿主隧道相）路由之后**无条件 `e.Handled = true`**，`ScrollContentPresenter` 因此一次都不滚；没人 `PreventDefault` 才走默认竖滚。
+- **键**：删掉了两道门 —— `e.Key != Key.Delete → return`（**这家原先只有 Delete 走得到路由**，另外六家是所有键）与 `input.HoveredLink is null → return`。target 改用 `input.PointerTarget`。
+- ⚠ **`Avalonia 12.0.3` 的 `KeyEventArgs` 没有 `IsRepeat`**（反射核对过：只有 `Key / KeyModifiers / PhysicalKey / KeySymbol / KeyDeviceType / Handled / RoutedEvent / Route / Source`）。旧代码把 `KeyModifiers.HasFlag(Shift)` 塞进了那个参数位 —— 语义是错的，现在两个处理器都传 `false`。**这家要「重复键」得自己合成，事件里没有。**
+- **`ToKey` 补八个修饰键**：实测 `LWin=70 / RWin=71 / LeftShift=116 … RightAlt=121`，三段算术区间是 A–Z `44–69`、D0–D9 `34–43`、F1–F12 `90–101` ⇒ 都在区间外。
+- ⚠ **焦点在解手时不在表面上**：只 `moveto` 过去按 Shift，键不会到达（没东西有焦点），于是 demo 的 `_shiftHeld` 一直假、Shift+滚轮走默认。探针的 Actions 里**必须先 `click:` 一次**才能验出横滚。这是设计使然（按下才收焦点），不是缺陷。
+
 ## 四、改这里最容易踩的坑
 
 1. **`PlatformDetection.cs` 是死代码，而且它的注释描述的是一条不存在的路径。** 全类 20 行，`IsTouchPlatform` 只有定义没有调用者（`Src/` 与 `Examples/` 全仓库 grep 零命中）。它的 XML 注释写着「On these platforms, PointerPressed handlers **must be registered with Tunnel routing** to pre-empt the ScrollViewer gesture recognizer」—— 实际做法是 §二.4 的**反射删除识别器**。`Tunnel` 注册现在有两处：§二.3 的滚轮（`WorkflowSurfaceBehavior.cs:633`）与 §二.10 的按下路由（`:463`），两处都不是「抢在识别器之前」。

@@ -103,6 +103,7 @@
 | 高亮等外观 | **demo** —— 订那条线自己的 `IInputEvents` 指针事件自己画。Core 里没有 `ILinkHighlight`、也没有 `AutoHighlight` |
 | 连线的指针/键盘输入 | 一套**标准输入**（抄 Avalonia 的指针/键盘 API；位置转 `Anchor` 并带上来源视图的图层、按 target 冒泡、句柄管「走不走框架那一手 / 还传不传」）。**不要按组件定制事件** |
 | 右键菜单 | **适配器**从自己的 `PointerPressed(Right, link)` 里弹，`LinkRemoved` 收尾 |
+| 画布滚动（滚轮） | **适配器执行、宿主决定去向**（2026-10-11 用户定）：平台滚动容器**一次都不许滚画布**，适配器整笔拦下、路由，没人接管就执行默认竖滚；订阅方置 `PreventDefault` 后经 `WorkflowInput.Scroller`（`IWorkflowSurfaceScroller`）决定往哪滚。**平台原生的 Shift+滚轮横滚被有意取代**，别当回归去「修」 |
 | 平台接线方式 | 标记六家（WPF/Avalonia/WinUI/MAUI/Razor/Jalium，Jalium 与 WPF 逐行同形）；**只剩 WinForms 没有标记语言**，走 `Attach(this)` 那套基类钩子。`slot.Anchor` 由标记里声明的槽控件**实测**写回，不是模型几何算出来的 |
 
 ⇒ 这一层来回翻过不止一次。**再要动它，先问用户**，不要按「上一次是怎么做的」推断。

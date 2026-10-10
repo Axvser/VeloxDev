@@ -99,9 +99,9 @@ PAT='(?<![A-Za-z0-9_.])(IInputEvents|InputRelay|InputKey|InputModifiers|MouseBut
 git grep -nP --untracked "$PAT" -- 'Src/Adapters/*' 'Src/Templates/*'
 ```
 
-**跑完必做正例**：拿同一串 `$PAT` 去扫一个已知有裸名的 demo 文件（如 `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/LinkView.cs`），**得看到行才算这次扫描有效**。`--untracked` 不能省 —— 新建的输入家族文件还没 `git add` 时也要能被扫到。
+**跑完必做正例**：拿同一串 `$PAT` 去扫一个已知有裸名的 demo 文件（⚠ Jalium 2026-10-05 转标记驱动后文件名带扩展名了，现在是 `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/LinkView.jalxaml.cs`），**得看到行才算这次扫描有效**。`--untracked` 不能省 —— 新建的输入家族文件还没 `git add` 时也要能被扫到。
 
-命中的行若是**注释里的散文**，不算违规 —— 这条规矩管的是**代码里的引用**。当前模板的文档注释有 3 处这样的散文（`Src/Templates/*/working/content/workflow-link-view/TemplateClass.*`：`/// … subscribe <c>IInputEvents</c> on the helper`），是预期结果；散文里没必要写 `Wf.`。
+命中的行若是**注释里的散文**，不算违规 —— 这条规矩管的是**代码里的引用**。适配器里那十几行 `// …在 InputRelay 上置 PreventDefault…` 全是散文，模板的文档注释也有 4 处（`Src/Templates/VeloxDev.{Avalonia,Jalium,WPF,WinUI}.Templates/working/content/workflow-link-view/TemplateClass.*`：`/// … subscribe <c>IInputEvents</c> on the helper`），都是预期结果；散文里没必要写 `Wf.`。**判违规看的是代码引用，不是扫描出来的行数**——2026-10-11 实测：适配器+模板扫出 23 行，逐行看全是散文，代码级违规 0。
 
 ⚠ **构建绿不是这条规矩的证据**：裸名解析到**正确**的命名空间时照样编译通过（本轮 6 个适配器文件残留裸名，构建一直是绿的）。这条只认扫描结果。
 

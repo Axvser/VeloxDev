@@ -182,6 +182,18 @@ Razor 与 WinForms 则把它放进了适配器
 
 ---
 
+## 三点五、画布滚动与表面级按键（2026-10-11，探针实测）
+
+这家是**「没有预览相」到底要怎么接**的答案所在，结论与旧笔记相反：
+
+- **挂滚动容器本身会漏，挂滚动容器的内容就不漏。** 没有隧道相时，`handledEventsToo` 也救不回来：`Handled` 在 `ScrollContentPresenter` 已经滚完之后才跑（实测一格漏 **74 DIP**，且改前若照旧挂容器，接管后会是 148 = 原生 + 自己那份）。改挂 `state.Canvas`（画布）之后，它在冒泡路径上**早于 presenter**，`Handled` 真的挡得住 —— 实测一格 **74**、四格 **296**，与基线逐字相同，**泄漏 0**。旧笔记那条「没有隧道相就得付先滚一丝的代价」**作废**（`wpf.md` §三·1 已同步）。
+- **步长** 这家自己的 `ScrollViewer` 一格 **74 DIP**（线性：1 格 74、4 格 296）。
+- **基线**：普通滚轮竖滚 74；**Shift+滚轮也竖滚**（这家原生忽略 Shift，与 WPF/Jalium/MAUI/WinForms 同；只有 Avalonia 与浏览器原生横滚）。
+- **`VirtualKey` 实测**（反射）：`LeftShift=160 / RightShift=161 / LeftControl=162 / RightControl=163 / LeftMenu=164 / RightMenu=165 / LeftWindows=91 / RightWindows=92`，而 A–Z `65–90`、Number0–9 `48–57`、F1–F12 `112–123` ⇒ 八个修饰键都在算术区间外。⚠ **这家把 Alt 拼作 `Menu`**，所以是 `LeftMenu → LeftAlt`。
+- **焦点**：这家没有可设的 `Focusable`，用 `host.Focus(FocusState.Pointer)`；按下就收焦点（挂在 `handledEventsToo` 的那个按下处理器顶端，空白画布/节点/插槽/连线都看得到），`RoutePointer` 里那条「悬停连线才收焦点」原样保留。实测点空白画布后 Ctrl+Z 生效（`节点 4/4 → 3/3`），Ctrl+Y 回到 `4/4`。
+- **键**：去掉 `HoveredLink is null` 门，target 改用 `input.PointerTarget`，Delete 仍是唯一被吞的键。
+- **一处刻意保留的齐一性**：Ctrl 那一支里，订阅方若置 `PreventDefault` 就跳过缩放且**不置 `Handled`**，于是原生滚动仍可能发生 —— 这与 WPF/Avalonia 参考实现逐字相同，是为了「七家同形」而没有为这家特判。
+
 ## 四、坑（改这里时最容易踩的，附依据）
 
 **P1 · `WorkflowCanvasTransformBehavior.cs:28` 的注释与代码不符 —— 这是本家最该抓的一条。**

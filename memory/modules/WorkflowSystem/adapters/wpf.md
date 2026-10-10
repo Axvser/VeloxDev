@@ -107,7 +107,8 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 ## 三、与其它六家的刻意背离
 
-1. **这家用原生 `PreviewMouseWheel` 拿滚轮，因此可以真的吃掉事件**：缩放那一支 `OnZoomPreviewMouseWheel` 挂在 `ScrollViewer` 的预览相上（`WorkflowSurfaceBehavior.cs:533` 由 `HookZoom` 装、受 `ZoomEnabled` 门控，末尾 `e.Handled = true` 在 `:641`）；**普通（非 Ctrl）滚轮是另一支** `OnLinkPointerWheel`，挂在**宿主的预览相**上（`:384` 装、`:402` 卸，处理器 `:833`，**不置 `Handled`**、视口照旧滚）。普通这一支的相是 2026-10-06 换的：先前挂宿主的**冒泡**相 `MouseWheel`，实测两格滚轮 **0 行**到达 —— `ScrollViewer` 是宿主的**下代**，冒泡相里它先吃掉并标记 handled；改到预览相后 **2/2**。Avalonia 与 WinUI **没有** `PreviewMouseWheel`：Avalonia 的普通滚轮也挂在宿主的隧道相上（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs:467-469`），它的缩放那一支另挂 `ScrollViewer`（同文件 `:633`）；WinUI 没有隧道相，普通滚轮只能并进 `ScrollViewer` 上那一支（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:525-532` 的 `OnSurfaceWheel`，注释 `:522-524` 明说「Ctrl+滚轮在处理器跑之前可能还会滚一丁点」）。⇒ **要接一家新平台，先确认它有没有 preview/tunnel 阶段；没有就得付「先滚一丝」的代价，这不是 bug。**
+1. **这家用原生 `PreviewMouseWheel` 拿滚轮，因此可以真的吃掉事件**：缩放那一支 `OnZoomPreviewMouseWheel` 挂在 `ScrollViewer` 的预览相上（`WorkflowSurfaceBehavior.cs:533` 由 `HookZoom` 装、受 `ZoomEnabled` 门控，末尾 `e.Handled = true` 在 `:641`）；**普通（非 Ctrl）滚轮是另一支** `OnLinkPointerWheel`，挂在**宿主的预览相**上（`:384` 装、`:402` 卸，处理器 `:833`；2026-10-11 起**置 `Handled`** —— 普通滚轮整笔改由适配器执行，见 [architecture.md §3.6](../architecture.md)）。普通这一支的相是 2026-10-06 换的：先前挂宿主的**冒泡**相 `MouseWheel`，实测两格滚轮 **0 行**到达 —— `ScrollViewer` 是宿主的**下代**，冒泡相里它先吃掉并标记 handled；改到预览相后 **2/2**。Avalonia 与 WinUI **没有** `PreviewMouseWheel`：Avalonia 的普通滚轮也挂在宿主的隧道相上（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs:467-469`），它的缩放那一支另挂 `ScrollViewer`（同文件 `:633`）。
+⇒ **接一家新平台先确认它有没有 preview/tunnel 阶段**；**没有隧道相时的解法不是「忍一丝」**（2026-10-11 起更正）：挂**滚动容器本身**确实会漏 —— `Handled` 在 `ScrollContentPresenter` 已经滚完之后才跑（WinUI 实测一格漏 74 DIP，且 `handledEventsToo` 也救不回来）；但挂**滚动容器的内容**（画布）就**一点不漏**，它在冒泡路径上早于 presenter，`Handled` 真的挡得住。WinUI 改挂画布后实测一格 74、与基线逐字相同（改前若照旧挂容器会是 148）。
 
 2. **空白判定里多一道按类名字符串识别连线的步骤**：`IsWorkflowLinkVisual` 判 `DataContext is IWorkflowLinkViewModel` **或** 类型名等于 `"BezierCurveView"`/`"PolylineCurveView"`（`WorkflowSurfaceBehavior.cs:1242-1246`，用在 `:1223`）。七家里只有 WPF 与 Avalonia（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs:1031-1035`）有这后一道类名判定；WinUI 的同名方法只判 `DataContext`（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:1189-1190`），Jalium 有独立的表面行为（`WorkflowSurfaceBehavior`）但它的空白判定只判 `DataContext`、没有按类名的白名单（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `IsNodeOrSlotVisual`），MAUI 完全不用空白判定（无 `IsSurfaceBlank*`）—— 它在 Windows 上走原生指针事件平移，其余平台才用 `PanGestureRecognizer`（`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSurfaceBehavior.cs:740-753`）。⇒ 类名白名单只有 WPF 与 Avalonia 吃，换名字就静默失效（WPF 上的生效前提另见坑 1）。
 
@@ -120,6 +121,16 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 6. **`WorkflowCanvasTransformBehavior.Transform` 的变更回调是故意空的**（`WorkflowCanvasTransformBehavior.cs:25-30`，注释：「这个属性只是通知载体；节点与连线视图各自在 XAML 里把自己的 `RenderTransform` 绑到它；宿主自身绝不能收到渲染变换」）。⇒ 别在这里补逻辑；它是被 `Apply`（`:22-23`）写、被 XAML 绑定读的单向值通道。
 
 ---
+
+## 三点五、画布滚动与表面级按键（2026-10-11，探针实测）
+
+这家是七家里第一个落地的（其余六家照它的形状铺开），数字都是探针量的：
+
+- **普通滚轮整笔归适配器**：`OnLinkPointerWheel` 路由之后**无条件 `e.Handled = true`**，再按裁决决定这一笔——没人 `PreventDefault` 就自己竖滚。**宿主预览相上置 `Handled` 确实吃得住**：实测一格走 **48**，不是 96（若 `ScrollViewer` 也滚了就是双倍）。这条是 §三·1 那个「挂预览相」结论的直接后果。
+- **步长** `SystemParameters.WheelScrollLines`（默认 3）× **16** = 48/格 —— 与 WPF 自己 `ScrollViewer` 在同档位下的步长一致（实测逐字相同）。`WheelScrollLines` 为 `-1`（按页滚）时退回视口高度。
+- **键的 target 从「悬停的那条线」改成 `input.PointerTarget`**：树级的键（Ctrl+Z/Ctrl+Y）在指针位于空白画布或节点上时也到得了树。删掉的门是 `if (input.HoveredLink is null) return;`。Delete 仍然只吞它自己那一手。
+- **焦点**：按下时把焦点交给宿主（先前只在**悬停到连线**时收，点空白画布收不到键）。落在 `TextBoxBase` 里的按下**不抢** —— 那里的 Ctrl+Z 撤的是文字。实测：点空白画布后 Ctrl+Z 生效（`节点 4/4 → 3/3 → 2/2 → 1/1 → 0/0`），Ctrl+Y 回到 `4/4`。
+- **`ToKey` 补八个修饰键**：WPF 的 `Key` 实测 `LWin=70 / RWin=71 / LeftShift=116 … RightAlt=121`，而三段算术区间是 A–Z `44–69`、D0–D9 `34–43`、F1–F12 `90–101` ⇒ 修饰键都在区间外，不会被那三条 `if` 抢走。
 
 ## 四、坑（带依据）
 

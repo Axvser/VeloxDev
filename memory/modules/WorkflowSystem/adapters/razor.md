@@ -192,6 +192,29 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 
 ---
 
+## 三点五、画布滚动与表面级按键（2026-10-11，探针实测）
+
+这家是七家里**改动面最大**的：滚动容器是**库渲染的 DOM**，所以「适配器执行默认滚动」只能走 JS interop。
+
+- **`ScrollBy` 落在 JS**（`scrollSurfaceBy`），因为 demo 够不着那个 div。这正是 Core 把滚动做成「适配器实现的能力」而不是宿主自己做的原因。
+- **避免一次物理滚轮被路由两遍**：把普通滚轮**整个搬进 JS** —— 删掉标记里的 `@onwheel="OnSurfaceWheel"` 与那个方法。现在 `initWheelZoom`（以 `if (!e.ctrlKey) return;` 开头）与 `initWheelScroll`（以 `if (e.ctrlKey) return;` 开头）**在 ctrlKey 上互斥** ⇒ 一笔滚轮恰好一条路由。实测证据：连续两格 `scrollTop` 400 → 520 → 640（每格恰好一个 deltaY，从不翻倍）。
+  - 必须进 JS 的理由：`preventDefault` 只能在**事件内部同步**调用，而 Blazor 的 `@onwheel` 给不了这个位置。裁决仍是先 `preventDefault()` 再问 .NET（与 Ctrl+缩放那条路同形）。
+- **修饰键以前是假的**：`RouteKeyAsync` 与指针路由都硬编码 `InputModifiers.None`、`rawKeyCode = 0`。2026-10-11 起键从 `KeyboardEventArgs` 的 `CtrlKey/ShiftKey/AltKey/MetaKey` 取，滚轮从 JS 的 `modifiersOf(e)` 取。⇒ 这家此前**任何** Ctrl+键的组合在 Core 侧都分不出来。
+- **`ToKey` 要按 `KeyboardEvent.code` 分左右**：DOM 的 `key` 只说得出「Shift」，说不出左右。`RawKeyCode` 只能给可打印键的字符码、其余 0 —— 那是这个平台能提供的最多信息（平台没有数字虚拟键码），它只是诊断用。
+- **符号要翻**：浏览器的 `deltaY` **向下为正**，与 Core 的约定相反；JS 侧先取反再交给 .NET。
+- **焦点在 JS 里收**（`onUserPointerDown`）：.NET 那条按下路（`RequestPressVerdict`）拿不到 DOM 目标，所以「别抢可编辑控件的焦点」这道判断只能在 JS 做。
+- **这家不吞 Delete，是有意的**：Blazor 没有 `Handled`，而可编辑元素之外的 Delete 没有浏览器默认动作可压 —— 加了 `preventDefault` 反而会把卡片输入框里的「向后删除」弄坏。⇒ 七家里 Delete 语义唯一不同的一家。
+- **可信滚轮的实测数字**（2026-10-11 补齐；web harness 现在有了 `wheel:` 动词，走 CDP 的 `Input.dispatchMouseEvent {type:'mouseWheel'}`，是**可信事件**、会触发浏览器默认滚动 —— 合成的 `WheelEvent` 不会，所以在此之前这条验不了）：
+
+  | 动作（种子 `scrollTop/scrollLeft = 400/400`） | 基线（未改动） | 移植后 |
+  |---|---|---|
+  | 普通滚轮下一格 | `520/400` | `520/400`，再一格 `640/400` |
+  | Shift+滚轮下一格 | `520/520`（**原生横滚**） | `400/520`（订阅方接管） |
+
+  ⇒ 浏览器原生步长**恰好等于 `deltaY`**（120）；移植后普通滚轮**仍是 120 而不是 240**，这就把「`preventDefault` 有没有压住浏览器默认滚动」从推断变成了实测。
+- ⚠ **页面上没收到过 Shift 键事件时，Shift+滚轮走竖滚**：Shift 由统一 KEY 输入跟踪，而 web harness 的 `keydown:Shift` **只给鼠标事件带修饰位、不向页面派发键盘事件** ⇒ `_shiftHeld` 一直是假。补一个 `dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',code:'ShiftLeft',bubble:true}))` 之后横滚立刻出现。**这是七家共有的依赖**（桌面 harness 的 `keydown:` 走 SendInput，是真的键事件，所以六家没露出这一面）。
+- **被取代的原生行为**：(a) 页面滚动容器不再自行滚动工作流表面；(b) **Shift+滚轮的原生横滚没了**（浏览器原生会横滚，这是七家里最大的一处行为变更，用户已确认接受）；(c) 普通滚轮的位移多了一次 JS↔.NET 往返（几毫秒），这是「适配器持有滚轮、裁决来自 .NET」的固有代价。Ctrl+滚轮缩放不受影响（实测 Scale 1.00 → 0.91，复查通过）。
+
 ## 四、改这里时最容易踩的坑（带依据）
 
 ### 1. 区域设置陷阱：把 `double` 写进 CSS/SVG —— **2026-10-03 已清零，规则仍在**
