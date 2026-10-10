@@ -457,7 +457,7 @@ public partial class WorkflowView : ContentView
         }
         catch (Exception ex)
         {
-            _workflowViewModel.AppendAgentLog($"[Error] Send failed: {ex.Message}");
+            _workflowViewModel.AppendAgentError($"Send failed: {ex.Message}");
         }
     }
 

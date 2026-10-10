@@ -110,15 +110,36 @@ public partial class TreeViewModel
         SetWorkflowRunning(false);
     }
 
-    /// <summary>Appends one plain-text agent line and its message counterpart; a blank entry is ignored.</summary>
+    /// <summary>
+    /// Adds one parsed message to <see cref="AgentMessages"/>, the structured companion list.
+    /// </summary>
+    /// <remarks>
+    /// It deliberately does not touch <see cref="AgentLog"/>: that log is a projection of the transcript
+    /// (see <see cref="RebuildConversationMarkdown"/>), and a line written here directly would be erased by
+    /// the next render — the transcript does not know about it. Anything that belongs in the conversation
+    /// goes through the transcript; <see cref="AppendAgentError"/> is that path for a failure.
+    /// </remarks>
     public void AppendAgentLog(string entry)
     {
         if (string.IsNullOrWhiteSpace(entry))
         {
             return;
         }
-        AgentLog.Add(entry);
         AgentMessages.Add(AgentMessageViewModel.FromLogLine(entry));
+    }
+
+    /// <summary>
+    /// Records a failure in the conversation, the way a turn's own failures arrive.
+    /// </summary>
+    /// <remarks>
+    /// Through the transcript rather than into <see cref="AgentLog"/>, so it reaches every host — the
+    /// markdown panel included — and survives: each renderer writes its own prefix (<c>[Error] …</c> for a
+    /// line, <c>**错误：**</c> for markdown), so pass the message bare.
+    /// </remarks>
+    public void AppendAgentError(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        (Helper as AgentHelper)?.Transcript.AddError(message);
     }
 
     /// <summary>
@@ -132,32 +153,6 @@ public partial class TreeViewModel
     }
 
     // ── Session Markdown transcript (fed directly to the AvalonMarkdown MarkdownView in the Avalonia Full Demo) ──
-
-    partial void OnItemAddedToAgentMessages(IEnumerable<AgentMessageViewModel> items)
-    {
-        foreach (var msg in items)
-            msg.PropertyChanged += OnAgentMessageTextChanged;
-    }
-
-    partial void OnItemRemovedFromAgentMessages(IEnumerable<AgentMessageViewModel> items)
-    {
-        foreach (var msg in items)
-            msg.PropertyChanged -= OnAgentMessageTextChanged;
-    }
-
-    partial void OnItemMovedInAgentMessages(IEnumerable<AgentMessageViewModel> items)
-    {
-    }
-
-    partial void OnItemsResetInAgentMessages()
-    {
-    }
-
-    private void OnAgentMessageTextChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        // Nothing to do: ConversationMarkdown is rendered from the transcript, and AgentMessages survives
-        // only as the plain-text log's companion.
-    }
 
     /// <summary>
     /// Renders the conversation from the pipeline's transcript, which owns the message boundaries and the
@@ -177,11 +172,19 @@ public partial class TreeViewModel
 
         // The platforms that bind the plain-text log get the same conversation, tool calls included —
         // they used to miss those entirely, because a tool call only ever reached the message list.
+        //
+        // Synced from the tail, not by Clear + re-add: the transcript only ever appends an entry and only
+        // ever grows the last one, so everything before the change already matches. Replacing the list whole
+        // fires one collection notification per line, and every bound list re-lays out once per notification
+        // — with a few hundred entries that is the bulk of what a turn costs this host.
         var lines = _subscribedTranscript.ToPlainTextLines();
-        if (AgentLog.Count == lines.Count && AgentLog.SequenceEqual(lines)) return;
 
-        AgentLog.Clear();
-        foreach (var line in lines) AgentLog.Add(line);
+        var common = 0;
+        var shared = Math.Min(AgentLog.Count, lines.Count);
+        while (common < shared && AgentLog[common] == lines[common]) common++;
+
+        while (AgentLog.Count > common) AgentLog.RemoveAt(AgentLog.Count - 1);
+        for (var i = common; i < lines.Count; i++) AgentLog.Add(lines[i]);
     }
 
     private readonly SynchronizationContext? _renderContext = SynchronizationContext.Current;
@@ -227,7 +230,8 @@ public partial class TreeViewModel
             foreach (AgentTranscriptEntry entry in e.NewItems) entry.PropertyChanged += OnTranscriptEntryChanged;
 
         // A streamed entry grows in place, so its text change is what moves the panel — the collection
-        // itself only changes when a new entry opens.
+        // itself only changes when a new entry opens, and that renders at once: a new bubble appearing a
+        // throttle late reads as a stall. What the throttle bounds is the growth above.
         RebuildConversationMarkdown();
     }
 
