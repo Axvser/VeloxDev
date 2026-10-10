@@ -55,6 +55,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
+
+        // 挂在输入路由上的画布滚动口。本类拥有它、宿主拿它去滚；换树时连同 Input 一起换新。
+        public IWorkflowSurfaceScroller? Scroller { get; set; }
+
         public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
         public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
         public EventHandler<RoutedEventArgs>? MenuOpened { get; set; }
@@ -210,6 +214,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
         }
 
+        // 画布滚动归适配器（见 OnPointerWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
+        state.Scroller = new SurfaceScroller(state);
+        input.Scroller = state.Scroller;
+
         state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
         state.MenuLinkRemoved = (_, link) =>
         {
@@ -249,6 +257,13 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             if (state.MenuLinkRemoved is not null) helper.LinkRemoved -= state.MenuLinkRemoved;
         }
 
+        // 只在还挂着自己那一个时才摘：同一棵树上两个表面时，摘别人的会把对方的滚动口一起清掉。
+        if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
+        {
+            released.Scroller = null;
+        }
+
+        state.Scroller = null;
         state.Input = null;
         state.MenuPressed = null;
         state.MenuLinkRemoved = null;
@@ -367,6 +382,16 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             Key.Down => Wf.InputKey.Down,
             Key.Insert => Wf.InputKey.Insert,
             Key.Delete => Wf.InputKey.Delete,
+            // 修饰键也要点名：宿主想跟踪「Shift 现在按没按住」只能听它自己的按下与抬起，`Modifiers` 说的是
+            // 「按别的键时谁被按着」。这几个值都在上面三段算术区间之外（实测 70、71、116–121），不会被那三条 if 抢走。
+            Key.LeftShift => Wf.InputKey.LeftShift,
+            Key.RightShift => Wf.InputKey.RightShift,
+            Key.LeftCtrl => Wf.InputKey.LeftCtrl,
+            Key.RightCtrl => Wf.InputKey.RightCtrl,
+            Key.LeftAlt => Wf.InputKey.LeftAlt,
+            Key.RightAlt => Wf.InputKey.RightAlt,
+            Key.LWin => Wf.InputKey.LWin,
+            Key.RWin => Wf.InputKey.RWin,
             _ => Wf.InputKey.Unknown,
         };
     }
@@ -750,6 +775,27 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         state.PressHandle = RoutePointer(host, state, e,
             (position, target, handle) => new Wf.PointerPressedEventArgs(
                 position, Modifiers(e.KeyModifiers), source, target, ButtonOf(e, state), e.ClickCount, handle));
+
+        // 键要有人接：焦点得落在表面自己身上，Ctrl+Z 才有路由 —— 先前只在**悬停到连线**时收焦点，
+        // 点一下空白画布是收不到的，键于是静默不来。卡片里的可编辑控件除外：在那里按 Ctrl+Z 撤的该是文字。
+        if (!IsInsideEditable(e.Source))
+        {
+            host.Focus();
+        }
+    }
+
+    // 落在可编辑控件里的按下，焦点归那个控件 —— 表面不该把它抢走。
+    private static bool IsInsideEditable(object? source)
+    {
+        if (source is not Visual visual)
+            return false;
+
+        foreach (var element in visual.GetSelfAndVisualAncestors())
+        {
+            if (element is TextBox) return true;
+        }
+
+        return false;
     }
 
     // 组件行为用它读这一笔按下的句柄：路由在隧道相、比它们更早，句柄只能由那里交出。
@@ -798,6 +844,9 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     }
 
     // 滚轮也进输入路由（缩放那条路是 Ctrl+滚轮，挂在 ScrollViewer 上，两者不重叠）。
+    // 普通滚轮**整笔归适配器**：平台的滚动容器一次都不许滚，默认竖滚由这里在路由之后补上。
+    // 订阅方置 PreventDefault 就是「这一笔不滚」，由他走 Scroller 决定往哪滚 —— 于是七家宿主是同一段代码。
+    // 挂宿主的隧道相（它是 ScrollViewer 的祖先），所以位置与目标都还是**滚动之前**的。
     private static void OnPointerWheel(object? sender, PlatformInput.PointerWheelEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
@@ -806,9 +855,47 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (Modifiers(e.KeyModifiers).HasFlag(Wf.InputModifiers.Control))
             return;
 
-        RoutePointer(host, state, e,
-            (position, target, handle) => new Wf.PointerWheelEventArgs(
-                position, Modifiers(e.KeyModifiers), host, target, e.Delta.X, e.Delta.Y, handle));
+        var handle = RoutePointer(host, state, e,
+            (position, target, h) => new Wf.PointerWheelEventArgs(
+                position, Modifiers(e.KeyModifiers), host, target, e.Delta.X, e.Delta.Y, h));
+
+        if (handle is null)
+            return;
+
+        // 到这里为止平台一次都没滚过 —— 拦下来，再按裁决决定这一笔的归属。
+        e.Handled = true;
+        if (!handle.PreventDefault)
+        {
+            state.Scroller?.ScrollBy(0d, e.Delta.Y);
+        }
+    }
+
+    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
+    // Avalonia 的 Delta 已是一格 ±1，而 ScrollViewer 自己每格滚 50（实测，WPF 那边是 120 一格、3 行 × 16），
+    // 取同一个数，接管之后手感才不会变。
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    {
+        private const double PixelsPerDelta = 50d;
+
+        private readonly SurfaceState state;
+
+        public SurfaceScroller(SurfaceState state) => this.state = state;
+
+        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        {
+            if (state.ScrollViewer is not { } viewer)
+            {
+                return;
+            }
+
+            // 正 = 远离用户 = 视口上移，所以偏移是减。
+            var dx = -wheelDeltaX * PixelsPerDelta;
+            var dy = -wheelDeltaY * PixelsPerDelta;
+
+            viewer.Offset = new Vector(
+                WorkflowSurfaceMath.ClampValue(viewer.Offset.X + dx, 0d, GetHorizontalScrollMaximum(viewer)),
+                WorkflowSurfaceMath.ClampValue(viewer.Offset.Y + dy, 0d, GetVerticalScrollMaximum(viewer)));
+        }
     }
 
     private static void OnPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
@@ -847,18 +934,24 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
 
-        if (e.Key != Key.Delete || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
             return;
 
-        // 键也过输入路由：命中与 target 由它裁决；删不删是宿主的（订 KeyDown 自己执行命令）。
         var input = WorkflowInput.For(viewModel);
-        if (input.HoveredLink is null)
-            return;
 
+        // 键也过输入路由。target 用路由**已经在维护**的那个指针目标，不再要求「指针停在一条线上」：
+        // Ctrl+Z 是树级的键，指针在空白画布上时链的尽头仍是树。
+        // Avalonia 的键事件参数不带自动重复标记（WPF 的 IsRepeat 在这里没有对应），所以一律报 false。
         input.Route(new Wf.KeyDownEventArgs(
-            ToKey(e.Key), (int)e.Key, Modifiers(e.KeyModifiers), e.KeyModifiers.HasFlag(KeyModifiers.Shift),
-            host, input.HoveredLink, new WorkflowEventHandle()));
-        e.Handled = true;
+            ToKey(e.Key), (int)e.Key, Modifiers(e.KeyModifiers), false,
+            host, input.PointerTarget, new WorkflowEventHandle()));
+
+        // 只吞本层自己那一手管的键。先前无条件吞，于是指针停在一条线上时方向键、翻页键、空格全被吃掉，
+        // 画布那段时间对键盘整段无响应；其它适配器也只吞 Delete，与它们同形。
+        if (e.Key == Key.Delete)
+        {
+            e.Handled = true;
+        }
     }
 
     private static void OnKeyUp(object? sender, PlatformInput.KeyEventArgs e)
@@ -871,7 +964,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         var input = WorkflowInput.For(viewModel);
         input.Route(new Wf.KeyUpEventArgs(
-            ToKey(e.Key), (int)e.Key, Modifiers(e.KeyModifiers), false, host, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, Modifiers(e.KeyModifiers), false,
+            host, input.PointerTarget, new WorkflowEventHandle()));
     }
 
     private static Wf.MouseButton ButtonOf(PlatformInput.PointerEventArgs e, SurfaceState state)
