@@ -139,4 +139,33 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
         Assert.AreEqual(MouseButton.Middle, button);
         Assert.AreEqual(InputModifiers.Control, modifiers);
     }
+
+    [TestMethod]
+    public void Route_Wheel_PreventDefault_IsReadByTheAdapterThatWouldScroll()
+    {
+        // 滚轮的「框架自己那一手」是**适配器执行的滚动**，所以判据只能是「Route 返回之后那个句柄是什么」——
+        // 适配器自己造句柄、自己传进来、自己读回去，订阅方不需要认识适配器。
+        var tree = TreeWith(ReadyLink(0, 0, 100, 0));
+        Events(tree).Input.PointerWheelChanged += (_, e) => e.Handle.PreventDefault = true;
+
+        var handle = new WorkflowEventHandle();
+        WorkflowInput.For(tree).Route(new PointerWheelEventArgs(
+            new Anchor(500, 500, 0), InputModifiers.Shift, new SourceView(), null, 0d, -120, handle));
+
+        Assert.IsTrue(handle.PreventDefault, "被拦下的那一笔，适配器不再执行默认竖滚");
+    }
+
+    [TestMethod]
+    public void Route_Wheel_LeftAlone_LeavesTheVerdictFalse()
+    {
+        // 没人碰句柄 = 一切照旧：适配器照常执行默认竖滚 —— 这就是「默认滚动是垂直」的机制本身。
+        var tree = TreeWith(ReadyLink(0, 0, 100, 0));
+        Events(tree).Input.PointerWheelChanged += (_, _) => { };
+
+        var handle = new WorkflowEventHandle();
+        WorkflowInput.For(tree).Route(new PointerWheelEventArgs(
+            new Anchor(500, 500, 0), InputModifiers.None, new SourceView(), null, 0d, -120, handle));
+
+        Assert.IsFalse(handle.PreventDefault);
+    }
 }

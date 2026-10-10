@@ -6,9 +6,21 @@ namespace VeloxDev.WorkflowSystem;
 /// <remarks>
 /// <para>
 /// This is a curated subset, not a copy of the platform enums: it holds the keys a graph editor actually binds —
-/// editing and navigation keys, the function row, letters and digits. Anything else is reported as
-/// <see cref="Unknown"/>, and <see cref="KeyEventArgs.RawKeyCode"/> still carries the platform's own code,
-/// so a host can pass an unmapped key through without Core enumerating every key there is.
+/// editing and navigation keys, the function row, letters and digits, and the eight modifier keys. Anything else
+/// is reported as <see cref="Unknown"/>, and <see cref="KeyEventArgs.RawKeyCode"/> still carries the platform's
+/// own code, so a host can pass an unmapped key through without Core enumerating every key there is.
+/// </para>
+/// <para>
+/// The modifier keys are named here as well as on <see cref="InputModifiers"/> because the two answer different
+/// questions: <see cref="InputModifiers"/> reports what was <i>held</i> while some other key went down, while a
+/// member such as <see cref="LeftShift"/> is the key that went down <i>itself</i>. Tracking a held modifier — for
+/// instance to decide that the wheel scrolls horizontally — needs the latter, since a modifier pressed on its own
+/// raises no other key event to read the flags from.
+/// </para>
+/// <para>
+/// The numeric values are this enum's own, not any platform's: what <i>does</i> hold across platforms is that the
+/// letters, the digit row and the function row are three contiguous runs, which is what lets an adapter map a
+/// platform key by arithmetic instead of a table.
 /// </para>
 /// <para>
 /// <see cref="KeyEventArgs.RawKeyCode"/> is platform-native and is therefore <b>not</b> comparable across
@@ -70,6 +82,30 @@ public enum InputKey
 
     /// <summary>Delete — the key a host usually binds to delete the hovered link.</summary>
     Delete = 17,
+
+    /// <summary>The left Shift key.</summary>
+    LeftShift = 18,
+
+    /// <summary>The right Shift key.</summary>
+    RightShift = 19,
+
+    /// <summary>The left Ctrl key.</summary>
+    LeftCtrl = 20,
+
+    /// <summary>The right Ctrl key.</summary>
+    RightCtrl = 21,
+
+    /// <summary>The left Alt key.</summary>
+    LeftAlt = 22,
+
+    /// <summary>The right Alt key.</summary>
+    RightAlt = 23,
+
+    /// <summary>The left Windows / Command key.</summary>
+    LWin = 24,
+
+    /// <summary>The right Windows / Command key.</summary>
+    RWin = 25,
 
     /// <summary>The letter A key.</summary>
     A = 30,

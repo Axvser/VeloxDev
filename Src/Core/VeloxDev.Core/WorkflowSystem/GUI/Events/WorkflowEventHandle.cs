@@ -15,8 +15,10 @@ namespace VeloxDev.WorkflowSystem;
 /// <list type="bullet">
 /// <item><see cref="PreventDefault"/> — the framework's own hand does not execute this time: the handler that
 /// would have acted reads it and stands down. It is how a subscriber nearer the target refuses one action without
-/// changing anything for the whole surface. It never suppresses the <i>platform's</i> own handling of the input —
-/// the routed wheel still scrolls the viewer, a focus change still happens.</item>
+/// changing anything for the whole surface. What the framework's own hand <i>is</i> belongs to the adapter: on a
+/// wheel it is the scroll the adapter applies, so preventing one keeps the surface from scrolling and hands the
+/// wheel to the subscriber (<see cref="IWorkflowSurfaceScroller"/>); on a pointer or key action the platform's own
+/// handling of the input is a separate matter and is not affected — a focus change still happens.</item>
 /// <item><see cref="StopPropagation"/> — the event does not travel further. On the input route that means the
 /// walk up the ancestor chain stops (<c>target → its node → tree</c>), so no ancestor helper hears it; on a model
 /// action it withholds the <c>…ed</c> report from other subscribers while the framework still does its thing.</item>

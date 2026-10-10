@@ -154,6 +154,83 @@ public class WorkflowInputTests : WorkflowInputTestBase
     }
 
 
+    // ── 滚轮：拦给宿主，默认那一手不在这里 ──────────────────────────────────
+
+    [TestMethod]
+    public void Route_Wheel_OnEmptyCanvas_StillReachesTheTree()
+    {
+        // 画布上的滚轮不落在任何组件上，但树自己听得到 —— 宿主的「这一笔不竖滚、改横滚」就从这里接。
+        var tree = TreeWith(ReadyLink(0, 0, 100, 0));
+        var heard = 0;
+        ((IInputEvents)tree.GetHelper()).Input.PointerWheelChanged += (_, _) => heard++;
+
+        WorkflowInput.For(tree).Route(Wheel(500, 500, -120));
+
+        Assert.AreEqual(1, heard);
+    }
+
+    [TestMethod]
+    public void Route_Wheel_CarriesBothDeltasAndTheModifiers()
+    {
+        // 横向增量也要真的传（倾斜滚轮 / 平台自己算出的横向分量），否则订阅方拿不到左右的分量。
+        var tree = TreeWith(ReadyLink(0, 0, 100, 0));
+        var deltas = (x: 0d, y: 0d);
+        var modifiers = InputModifiers.None;
+        ((IInputEvents)tree.GetHelper()).Input.PointerWheelChanged += (_, e) =>
+        {
+            deltas = (e.DeltaX, e.DeltaY);
+            modifiers = e.Modifiers;
+        };
+
+        WorkflowInput.For(tree).Route(Wheel(500, 500, -120, deltaX: 40, modifiers: InputModifiers.Shift));
+
+        Assert.AreEqual(40, deltas.x);
+        Assert.AreEqual(-120, deltas.y);
+        Assert.AreEqual(InputModifiers.Shift, modifiers);
+    }
+
+    [TestMethod]
+    public void Route_KeyDown_AModifierKeyItself_ReachesTheTree()
+    {
+        // 修饰键也要作为**按键本身**上报：`Modifiers` 说的是「按别的键时谁被按着」，
+        // 想跟踪「Shift 现在按没按住」只能听它自己的按下与抬起。
+        var tree = TreeWith(ReadyLink(0, 0, 100, 0));
+        var seen = new List<InputKey>();
+        ((IInputEvents)tree.GetHelper()).Input.KeyDown += (_, e) => seen.Add(e.Key);
+        ((IInputEvents)tree.GetHelper()).Input.KeyUp += (_, e) => seen.Add(e.Key);
+
+        var input = WorkflowInput.For(tree);
+        input.Route(Down(InputKey.LeftShift));
+        input.Route(Up(InputKey.LeftShift));
+
+        CollectionAssert.AreEqual(new[] { InputKey.LeftShift, InputKey.LeftShift }, seen);
+    }
+
+    [TestMethod]
+    public void Scroller_StartsNull_AndRoundTripsWhatAnAdapterRegisters()
+    {
+        // 适配器挂上/摘掉，宿主按「可能没有」读 —— 与 HitRadius / IsSuspended 那种路由自己的状态不同。
+        var tree = TreeWith(ReadyLink(0, 0, 100, 0));
+        var input = WorkflowInput.For(tree);
+        Assert.IsNull(input.Scroller, "没有适配器注册过时必须是 null，宿主才敢直接用");
+
+        var scroller = new StubScroller();
+        input.Scroller = scroller;
+        input.Scroller!.ScrollBy(0d, -120);
+        input.Scroller = null;
+
+        Assert.AreEqual((0d, -120d), scroller.Last, "宿主把收到的滚轮增量原样转发");
+        Assert.IsNull(input.Scroller);
+    }
+
+    private sealed class StubScroller : IWorkflowSurfaceScroller
+    {
+        public (double X, double Y) Last { get; private set; }
+
+        public void ScrollBy(double wheelDeltaX, double wheelDeltaY) => Last = (wheelDeltaX, wheelDeltaY);
+    }
+
+
     // ── 落点 ────────────────────────────────────────────────────────────────
 
     [TestMethod]

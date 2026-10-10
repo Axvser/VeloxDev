@@ -95,8 +95,10 @@ public abstract class WorkflowInputTestBase
         double x, double y, MouseButton button = MouseButton.Left, IWorkflowViewModel? target = null)
         => new(new Anchor(x, y, 0), InputModifiers.None, new SourceView(), target, button, 1, new WorkflowEventHandle());
 
-    protected static PointerWheelEventArgs Wheel(double x, double y, double deltaY, IWorkflowViewModel? target = null)
-        => new(new Anchor(x, y, 0), InputModifiers.None, new SourceView(), target, 0d, deltaY, new WorkflowEventHandle());
+    protected static PointerWheelEventArgs Wheel(
+        double x, double y, double deltaY, IWorkflowViewModel? target = null,
+        double deltaX = 0d, InputModifiers modifiers = InputModifiers.None)
+        => new(new Anchor(x, y, 0), modifiers, new SourceView(), target, deltaX, deltaY, new WorkflowEventHandle());
 
     protected static KeyDownEventArgs Down(
         InputKey key, IWorkflowViewModel? target = null, int rawKeyCode = 0, InputModifiers modifiers = InputModifiers.None)

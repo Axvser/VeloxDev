@@ -77,6 +77,24 @@ public sealed class WorkflowInput
     /// </summary>
     public bool IsSuspended { get; set; }
 
+    /// <summary>
+    /// How a subscriber scrolls this surface after taking a wheel over, or <see langword="null"/> until an adapter
+    /// registers one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The wheel belongs to the adapter: it keeps the platform's scroll container from scrolling the workflow
+    /// surface and applies the scroll itself, so <see cref="WorkflowEventHandle.PreventDefault"/> on a
+    /// <see cref="PointerWheelEventArgs"/> means the surface does not scroll this time. A subscriber that sets it
+    /// has taken that wheel over, and scrolls through here — the alternative is one platform branch per host.
+    /// </para>
+    /// <para>
+    /// Unlike the rest of this type it is not the route's own state: an adapter writes it while it is attached, and
+    /// clears it when it detaches, so a host reads it as a capability that may not be there.
+    /// </para>
+    /// </remarks>
+    public IWorkflowSurfaceScroller? Scroller { get; set; }
+
     /// <summary>Routes a pointer event to the target and its ancestors, then applies the framework's own reaction.</summary>
     /// <param name="e">The event to route.</param>
     /// <exception cref="ArgumentNullException"><paramref name="e"/> is <see langword="null"/>.</exception>

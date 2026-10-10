@@ -50,4 +50,32 @@ public class InputKeyTests : WorkflowInputTestBase
 
         Assert.AreEqual(InputKey.Escape, key);
     }
+
+    [TestMethod]
+    public void ModifierKeys_AreNamedAndStayOutOfTheArithmeticRuns()
+    {
+        // 适配器把平台的字母 / 数字 / 功能键按**差值**映射过来，靠的就是这三段连续；一个修饰键要是插进
+        // 任何一段里，那家的 ToKey 就会把某个字母报成 LeftShift —— 构建照绿，只有按键悄悄错位。
+        var modifiers = new[]
+        {
+            InputKey.LeftShift, InputKey.RightShift,
+            InputKey.LeftCtrl, InputKey.RightCtrl,
+            InputKey.LeftAlt, InputKey.RightAlt,
+            InputKey.LWin, InputKey.RWin,
+        };
+
+        Assert.AreEqual(modifiers.Length, modifiers.Distinct().Count(), "八个修饰键各占一个值");
+        CollectionAssert.DoesNotContain(modifiers, InputKey.Unknown);
+
+        foreach (var key in modifiers)
+        {
+            Assert.IsFalse(key >= InputKey.A && key <= InputKey.Z, $"{key} 落在字母段里了");
+            Assert.IsFalse(key >= InputKey.D0 && key <= InputKey.D9, $"{key} 落在数字段里了");
+            Assert.IsFalse(key >= InputKey.F1 && key <= InputKey.F12, $"{key} 落在功能键段里了");
+        }
+
+        Assert.AreEqual(25, (int)InputKey.Z - (int)InputKey.A);
+        Assert.AreEqual(9, (int)InputKey.D9 - (int)InputKey.D0);
+        Assert.AreEqual(11, (int)InputKey.F12 - (int)InputKey.F1);
+    }
 }
