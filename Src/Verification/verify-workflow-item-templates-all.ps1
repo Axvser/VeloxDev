@@ -84,7 +84,7 @@ $configs = [ordered]@{
         MirrorBase      = @{}
         Aliases         = [ordered]@{}
         Expected        = @{
-            'tree' = 'the mirror carries the demo HUD'
+            'tree' = 'the mirror carries the demo HUD and the demo''s own key/wheel policy (Ctrl+Z/Y undo-redo, Shift+wheel horizontal scroll) - the template ships neither'
             'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
             'node' = 'the mirror sets card.NodeTitle with its own node type; the template cannot - NodeTitle is a Func<IWorkflowNodeViewModel, string> and the node''s name property belongs to the project, so the template ships that line commented out as guidance'
         }
@@ -106,7 +106,7 @@ $configs = [ordered]@{
         Aliases         = [ordered]@{}
         Expected        = @{
             'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
-            'tree' = 'the mirror carries the demo HUD and its own link-menu entries (delete is the host''s, the template ships none)'
+            'tree' = 'the mirror carries the demo HUD, its own link-menu entries (delete is the host''s, the template ships none) and the demo''s own key/wheel policy (Ctrl+Z/Y undo-redo, Shift+wheel horizontal scroll) - the template ships neither'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
@@ -125,7 +125,7 @@ $configs = [ordered]@{
         MirrorBase      = $renameWpfBase
         Aliases         = $renameWpfFamily
         Expected        = @{
-            'tree' = 'the mirror carries the demo HUD'
+            'tree' = 'the mirror carries the demo HUD and the demo''s own key/wheel policy (Ctrl+Z/Y undo-redo, Shift+wheel horizontal scroll) - the template ships neither'
             'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
@@ -199,7 +199,7 @@ public sealed class HelperProxy
         MirrorBase      = $renameWpfBase
         Aliases         = $renameWpfFamily
         Expected        = @{
-            'tree' = 'the mirror carries the demo HUD'
+            'tree' = 'the mirror carries the demo HUD and the demo''s own key/wheel policy (Ctrl+Z/Y undo-redo, Shift+wheel horizontal scroll) - the template ships neither'
             'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
@@ -219,7 +219,7 @@ public sealed class HelperProxy
         MirrorBase      = $renameWpfBase
         Aliases         = $renameWpfFamily
         Expected        = @{
-            'tree' = 'the mirror carries the demo HUD'
+            'tree' = 'the mirror carries the demo HUD and the demo''s own key/wheel policy (Ctrl+Z/Y undo-redo, Shift+wheel horizontal scroll) - the template ships neither'
             'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
@@ -239,7 +239,7 @@ public sealed class HelperProxy
         MirrorBase      = @{ 'selector' = 'CustomTemplateSelector' }
         Aliases         = $renameRazorOnly
         Expected        = @{
-            'tree' = 'the mirror carries the demo HUD'
+            'tree' = 'the mirror carries the demo HUD and the demo''s own key/wheel policy (Ctrl+Z/Y undo-redo, Shift+wheel horizontal scroll) - the template ships neither'
             'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
         }
         ProbeShell      = 'Microsoft.NET.Sdk.Web'

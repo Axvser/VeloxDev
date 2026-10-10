@@ -30,6 +30,9 @@ semicolons):
   click:<x>,<y>           left click
   rclick:<x>,<y>          right click
   drag:<x1>,<y1>,<x2>,<y2> press, move in steps, release (creating a connection)
+  wheel:<x>,<y>,<delta>   one *trusted* wheel notch at (x, y); 120 = up. Unlike a synthetic WheelEvent
+                          dispatched from eval:, this one triggers the page's own default scrolling,
+                          so it is the only way to measure how far the browser scrolls natively
   key:Delete              press and release a key (Delete | Escape | Enter)
   keydown:Shift           hold a modifier down (Shift | Control | Alt | Meta) — it is carried on the mouse
   keyup:Shift             events that follow, so a modified drag can be tested
@@ -256,6 +259,26 @@ foreach ($action in ($Actions -split ';;')) {
             }
             Add-Content $log "cursor [$arg] => $v"
             Write-Output "cursor => $v"
+        }
+        # 可信滚轮：CDP 的 mouseWheel 是真输入事件，会触发页面的默认滚动 —— 合成的 WheelEvent
+        # （eval: 里 dispatchEvent）不会，所以「原生滚了多少」只能靠这一条量。
+        # 与桌面 harness 同号：正 = 远离用户（向上）。$script:heldModifiers 跟着走，Shift+滚轮因此可测。
+        'wheel' {
+            $p = $arg -split ','
+            [void](Send-Cdp 'Input.dispatchMouseEvent' @{
+                type      = 'mouseWheel'
+                x         = [int]$p[0]
+                y         = [int]$p[1]
+                deltaX    = 0
+                # CDP 用的是 DOM 符号（向下为正），桌面 harness 用的是操作系统符号（远离用户为正）——
+                # 这里取反，让两边的 `wheel:` 是同一个意思：正 = 向上。
+                deltaY    = -[int]$p[2]
+                button    = 'none'
+                buttons   = 0
+                modifiers = $script:heldModifiers
+            })
+            Start-Sleep -Milliseconds 250
+            Add-Content $log "wheel $arg"
         }
         'key' { Key $arg; Start-Sleep -Milliseconds 350; Add-Content $log "key $arg" }
         'keydown' { SetModifier $arg $true; Start-Sleep -Milliseconds 120; Add-Content $log "keydown $arg" }
