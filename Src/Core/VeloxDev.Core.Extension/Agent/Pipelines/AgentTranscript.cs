@@ -104,9 +104,12 @@ public partial class AgentTranscriptEntry
     /// <para>
     /// Concatenated on arrival, so <see cref="Text"/> is always the whole answer so far: a host binds it
     /// directly, and deferring the concatenation to render time would leave that binding empty until
-    /// something happened to read the transcript. The repeated copy is real but small — a 20 KB answer
-    /// arriving in fragments costs a few tens of milliseconds in total — and nowhere near the cost of
-    /// re-rendering the panel, which is throttled by the host instead.
+    /// something happened to read the transcript.
+    /// </para>
+    /// <para>
+    /// Every call copies the whole answer, so the cost belongs to whoever decides the call rate:
+    /// <see cref="TextPipeline"/> batches fragments and arrives here once per kilobyte rather than once per
+    /// token. A caller that appends per fragment pays O(answer) per fragment and should not.
     /// </para>
     /// </summary>
     internal void Append(string fragment)

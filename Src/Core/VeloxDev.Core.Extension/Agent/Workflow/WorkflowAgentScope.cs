@@ -1637,8 +1637,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             // afterwards would otherwise end up with a chain that can never feed it. The stage asks for the
             // transcript per event and no-ops while there is none.
             //
-            // Text first, then tools: they handle disjoint events, so the order is only about which a
-            // reader of the chain meets first.
+            // Text first, then tools — and the order is load-bearing rather than cosmetic. The text stage
+            // holds the tail of the open entry between flushes, and a tool call closes that entry, so the
+            // tail must be written before the tool stage reaches AddToolCall: otherwise it lands in the
+            // entry the tool call opened, under the tool call rather than before it.
             pipeline.Use(new TextPipeline(() => _transcript, () => UIContext));
             pipeline.Use(SharedTools);
             pipeline.Use(CreateToolkit().CreateAccountingStage());
