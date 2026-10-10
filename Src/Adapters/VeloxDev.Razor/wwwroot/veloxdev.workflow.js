@@ -168,6 +168,19 @@ window.veloxdevWorkflow = (() => {
         el.scrollTop += dy;
     }
 
+    // Scrolls a surface by a pixel delta and CLAMPS to its own extent — the wheel's default scroll,
+    // which the adapter applies after the route returns (the platform's own scroll is suppressed by
+    // initWheelScroll). Unlike scrollByDelta this never expands the canvas: a wheel at an edge simply
+    // stops there, exactly as the browser's own scroll would.
+    function scrollSurfaceBy(scrollerId, dx, dy) {
+        const el = document.getElementById(scrollerId);
+        if (!el) return;
+        const maxX = Math.max(0, el.scrollWidth - el.clientWidth);
+        const maxY = Math.max(0, el.scrollHeight - el.clientHeight);
+        el.scrollLeft = Math.max(0, Math.min(el.scrollLeft + dx, maxX));
+        el.scrollTop = Math.max(0, Math.min(el.scrollTop + dy, maxY));
+    }
+
     // Updates a surface's grid/axis layers for a new layout (content) offset. Called by .NET when
     // layout.ActualOffset changes (rare). The edge-expansion offset is read from the content
     // wrapper's inline position, so this needs no per-surface closure state.
@@ -780,8 +793,15 @@ window.veloxdevWorkflow = (() => {
         // zoom left is harmless (a node drag re-renders/positions via its own path). Uses pointerdown
         // so every pointer-derived gesture (mouse, pen, touch) pre-empts the guard identically.
         scrollerEl.addEventListener('pointerdown', onUserPointerDown);
-        function onUserPointerDown() {
+        function onUserPointerDown(e) {
             delete surfaceZoomState[scrollerEl.id];
+            // 按下时把键盘焦点收到表面（可编辑控件除外）：Ctrl+Z / Delete 这类键才有路由 —— 与悬停到连线
+            // 取焦点互补（先前只在下发 hover 时收，点一下空白画布收不到）。输入框/下拉/按钮里的按下不动焦点。
+            const surfaceRoot = scrollerEl.closest('.veloxdev-wf-surface');
+            if (surfaceRoot && e && e.target && typeof e.target.closest === 'function'
+                && !e.target.closest('input, textarea, select, button, [contenteditable="true"]')) {
+                surfaceRoot.focus({ preventScroll: true });
+            }
         }
 
         // Reserve the ruler band before the initial report so the viewport offset is correct
@@ -1251,6 +1271,48 @@ window.veloxdevWorkflow = (() => {
     }
 
     // ════════════════════════════════════════════════════════════
+    // WHEEL SCROLL — the canvas wheel belongs entirely to the adapter.
+    // A plain wheel must never scroll the page's own scroll container: a subscriber has to be able to
+    // refuse this notch (and then scroll wherever it wants). preventDefault is the only way to stop the
+    // platform scroll and it must run SYNCHRONOUSLY inside the wheel event, so the whole plain wheel
+    // lives here — it suppresses the default, asks .NET for the verdict, and the adapter applies the
+    // default vertical scroll itself (RequestWheelScroll → SurfaceScroller → scrollSurfaceBy).
+    // Ctrl + wheel is skipped: initWheelZoom owns that gesture. The two listeners split on ctrlKey, so
+    // one physical wheel is routed exactly once (the surface markup no longer binds @onwheel).
+    // ════════════════════════════════════════════════════════════
+
+    // A wheel delta in CSS pixels. deltaMode 1 is lines and 2 is pages on some platforms (Firefox, some
+    // trackpads, page-scroll devices); both are normalised here so the adapter's step is the same
+    // wherever the wheel came from.
+    function wheelPixels(e, scrollerEl) {
+        const unit = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? (scrollerEl.clientHeight || 600) : 1);
+        return { x: (e.deltaX || 0) * unit, y: (e.deltaY || 0) * unit };
+    }
+
+    function initWheelScroll(scrollerEl, dotnetRef) {
+        if (!scrollerEl || !dotnetRef) return null;
+        function onWheel(e) {
+            if (e.ctrlKey) return;
+            // preventDefault must run synchronously — awaiting the verdict first would already have scrolled.
+            e.preventDefault();
+            e.stopPropagation();
+            const px = wheelPixels(e, scrollerEl);
+            const local = canvasLocalFrom(scrollerEl.querySelector('.veloxdev-wf-canvas'), e.clientX, e.clientY);
+            // The adapter's shared sign convention: away from the user (scrolling up) is positive, so the
+            // browser's downward-positive deltaY is negated before it crosses to .NET.
+            dotnetRef.invokeMethodAsync('RequestWheelScroll',
+                local ? local[0] : 0, local ? local[1] : 0,
+                -px.x, -px.y, modifiersOf(e), hitTargetId(e.clientX, e.clientY));
+        }
+        scrollerEl.addEventListener('wheel', onWheel, { passive: false });
+        return {
+            dispose: function () {
+                scrollerEl.removeEventListener('wheel', onWheel);
+            }
+        };
+    }
+
+    // ════════════════════════════════════════════════════════════
     // MINIMAP — always-center navigation (matching the Jalium adapter).
     // Every press maps the minimap point to a world target and centers the viewport on it;
     // dragging keeps the viewport center tracking the cursor. The block itself is moved
@@ -1470,6 +1532,7 @@ window.veloxdevWorkflow = (() => {
         setMinimapViewport,
         refreshMinimapViewport,
         scrollByDelta,
+        scrollSurfaceBy,
         setSurfaceLayout,
         ensureCanvasSize,
         applyZoomSurface,
@@ -1477,7 +1540,8 @@ window.veloxdevWorkflow = (() => {
         initSlotConnection,
         initSlotLayout,
         initMinimap,
-        initWheelZoom
+        initWheelZoom,
+        initWheelScroll
     };
 })();
 
@@ -1494,6 +1558,7 @@ export const setNodePosition = window.veloxdevWorkflow.setNodePosition;
 export const setMinimapViewport = window.veloxdevWorkflow.setMinimapViewport;
 export const refreshMinimapViewport = window.veloxdevWorkflow.refreshMinimapViewport;
 export const scrollByDelta = window.veloxdevWorkflow.scrollByDelta;
+export const scrollSurfaceBy = window.veloxdevWorkflow.scrollSurfaceBy;
 export const setSurfaceLayout = window.veloxdevWorkflow.setSurfaceLayout;
 export const ensureCanvasSize = window.veloxdevWorkflow.ensureCanvasSize;
 export const applyZoomSurface = window.veloxdevWorkflow.applyZoomSurface;
@@ -1502,3 +1567,4 @@ export const initSlotConnection = window.veloxdevWorkflow.initSlotConnection;
 export const initSlotLayout = window.veloxdevWorkflow.initSlotLayout;
 export const initMinimap = window.veloxdevWorkflow.initMinimap;
 export const initWheelZoom = window.veloxdevWorkflow.initWheelZoom;
+export const initWheelScroll = window.veloxdevWorkflow.initWheelScroll;

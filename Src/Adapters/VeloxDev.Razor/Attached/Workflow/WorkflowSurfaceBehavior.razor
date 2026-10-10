@@ -5,10 +5,12 @@
 <CascadingValue TValue="WorkflowSurfaceBehavior" Value="@this" IsFixed="true">
 <CascadingValue TValue="SurfaceViewportFeed" Value="_feed">
     @* The surface is the key host: Delete reaches the input route and Escape closes the menu with no host
-       code. Focus is taken on link hover with preventScroll, and contextmenu is the menu's entry point. *@
+       code. Focus is taken on link hover with preventScroll, and contextmenu is the menu's entry point.
+       The wheel is not bound here: the plain wheel needs a synchronous preventDefault, which only JS can do
+       (see initWheelScroll), so it lives there and hand routes one wheel once. *@
     <div class="veloxdev-wf-surface" tabindex="0" @ref="_surfaceRoot"
          @onkeydown="OnSurfaceKeyDown" @onkeyup="OnSurfaceKeyUp"
-         @onpointermove="OnSurfacePointerMove" @onpointerup="OnSurfacePointerUp" @onwheel="OnSurfaceWheel"
+         @onpointermove="OnSurfacePointerMove" @onpointerup="OnSurfacePointerUp"
          @oncontextmenu="OnSurfaceContextMenu" @oncontextmenu:preventDefault="true"
          style="outline:none;">
         <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">

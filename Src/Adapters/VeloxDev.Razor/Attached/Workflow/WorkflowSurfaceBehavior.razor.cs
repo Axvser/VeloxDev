@@ -108,6 +108,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private DotNetObjectReference<WorkflowSurfaceBehavior>? _dotNetRef;
     private IJSObjectReference? _handle;
     private IJSObjectReference? _wheelHandle;
+    private IJSObjectReference? _scrollHandle;
 
     private double _scrollLeft;
     private double _scrollTop;
@@ -129,6 +130,9 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private IWorkflowTreeViewModel? _subscribedTreeModel;
     private INotifyPropertyChanged? _subscribedTreeNotifier;
     private INotifyPropertyChanged? _subscribedVirtualLink;
+
+    // 挂在输入路由上的画布滚动口。本类拥有它、宿主拿它去滚；滚动容器是库渲染的 DOM，所以滚动走 JS。
+    private SurfaceScroller? _surfaceScroller;
 
     // 连线右键菜单：条目由宿主以 LinkMenu 传入，接线全在这里 —— 订输入面、弹出、挂起指针跟踪。
     private WorkflowInput? _input;
@@ -157,34 +161,53 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             CloseLinkMenu();
         }
 
-        await RouteKeyAsync(e.Key, isDown: true);
+        await RouteKeyAsync(e, isDown: true);
     }
 
-    private async Task OnSurfaceKeyUp(KeyboardEventArgs e) => await RouteKeyAsync(e.Key, isDown: false);
+    private async Task OnSurfaceKeyUp(KeyboardEventArgs e) => await RouteKeyAsync(e, isDown: false);
 
-    private async Task RouteKeyAsync(string key, bool isDown)
+    private async Task RouteKeyAsync(KeyboardEventArgs e, bool isDown)
     {
         if (_input is not { } input) return;
 
-        var mapped = ToKey(key);
+        var mapped = ToKey(e.Key, e.Code);
+        var modifiers = ModifiersOf(e.CtrlKey, e.ShiftKey, e.AltKey, e.MetaKey);
         WorkflowEventHandle handle = new();
 
+        // 键没有坐标，目标取路由**已经在跟踪**的那个指针目标（与六家原生适配器同形）：指针停在空白画布上时
+        // 它是 null，链的尽头仍是树，Ctrl+Z 这类树级的键因此照常走得到。
         if (isDown)
         {
             input.Route(new Wf.KeyDownEventArgs(
-                mapped, 0, Wf.InputModifiers.None, false, _surfaceRoot, input.HoveredLink, handle));
+                mapped, RawKeyCode(e.Key), modifiers, e.Repeat, _surfaceRoot, input.PointerTarget, handle));
         }
         else
         {
             input.Route(new Wf.KeyUpEventArgs(
-                mapped, 0, Wf.InputModifiers.None, false, _surfaceRoot, input.HoveredLink, handle));
+                mapped, RawKeyCode(e.Key), modifiers, e.Repeat, _surfaceRoot, input.PointerTarget, handle));
         }
 
         await Task.CompletedTask;
     }
 
+    // 浏览器把按键身份报成字符串（KeyboardEvent.key），没有数字虚拟键码可交；可打印键带回它的字符码，
+    // 其余留 0 —— RawKeyCode 只服务于诊断与 Unknown 键，本家给不出更多。
+    private static int RawKeyCode(string key) => key.Length == 1 ? key[0] : 0;
+
+    // 浏览器那四个标志位对到 Core 的修饰位：Alt=1 Ctrl=2 Shift=4 Meta=8。
+    private static Wf.InputModifiers ModifiersOf(bool ctrl, bool shift, bool alt, bool meta)
+    {
+        var modifiers = Wf.InputModifiers.None;
+        if (alt) modifiers |= Wf.InputModifiers.Alt;
+        if (ctrl) modifiers |= Wf.InputModifiers.Control;
+        if (shift) modifiers |= Wf.InputModifiers.Shift;
+        if (meta) modifiers |= Wf.InputModifiers.Meta;
+        return modifiers;
+    }
+
     // 浏览器给的是键名（KeyboardEvent.key）：字母数字直接认，其余逐个点名，没点到的报 Unknown。
-    private static Wf.InputKey ToKey(string key)
+    // 修饰键要看**物理键**（KeyboardEvent.code）：`key` 只说 "Shift"，分不出左右。
+    private static Wf.InputKey ToKey(string key, string code)
     {
         if (key.Length == 1)
         {
@@ -198,6 +221,19 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         if (key.Length is 2 or 3 && key[0] == 'F' && int.TryParse(key.AsSpan(1), out var fn) && fn is >= 1 and <= 12)
         {
             return Wf.InputKey.F1 + (fn - 1);
+        }
+
+        // 修饰键逐个点名（它们在 Core 三个算术区间之外）。
+        switch (code)
+        {
+            case "ShiftLeft": return Wf.InputKey.LeftShift;
+            case "ShiftRight": return Wf.InputKey.RightShift;
+            case "ControlLeft": return Wf.InputKey.LeftCtrl;
+            case "ControlRight": return Wf.InputKey.RightCtrl;
+            case "AltLeft": return Wf.InputKey.LeftAlt;
+            case "AltRight": return Wf.InputKey.RightAlt;
+            case "MetaLeft": return Wf.InputKey.LWin;
+            case "MetaRight": return Wf.InputKey.RWin;
         }
 
         return key switch
@@ -232,19 +268,20 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _menuLeft = (int)Math.Round(e.ClientX);
         _menuTop = (int)Math.Round(e.ClientY);
 
-        await RoutePointerAsync(SurfacePointerKind.Pressed, e.ClientX, e.ClientY, Wf.MouseButton.Right);
+        await RoutePointerAsync(SurfacePointerKind.Pressed, e.ClientX, e.ClientY, Wf.MouseButton.Right,
+            modifiers: ModifiersOf(e.CtrlKey, e.ShiftKey, e.AltKey, e.MetaKey));
     }
 
-    // 指针移动/松开/滚轮也进输入路由：占位法（surface 自己转发）与逐线转发汇到同一个入口。
+    // 指针移动/松开也进输入路由：占位法（surface 自己转发）与逐线转发汇到同一个入口。
     // 悬停到节点/插槽时把那一级当目标交出去（否则只认连线，链上 slot → node → tree 永远走不到）。
+    // 普通滚轮不在这里 —— 它整笔归 JS（见 veloxdev.workflow.js 的 initWheelScroll 与 RequestWheelScroll）。
     private async Task OnSurfacePointerMove(PlatformInput.PointerEventArgs e)
-        => await RoutePointerAsync(SurfacePointerKind.Moved, e.ClientX, e.ClientY, target: _hoverTarget);
+        => await RoutePointerAsync(SurfacePointerKind.Moved, e.ClientX, e.ClientY,
+            target: _hoverTarget, modifiers: ModifiersOf(e.CtrlKey, e.ShiftKey, e.AltKey, e.MetaKey));
 
     private async Task OnSurfacePointerUp(PlatformInput.PointerEventArgs e)
-        => await RoutePointerAsync(SurfacePointerKind.Released, e.ClientX, e.ClientY, Wf.MouseButton.Left, target: _hoverTarget);
-
-    private async Task OnSurfaceWheel(WheelEventArgs e)
-        => await RoutePointerAsync(SurfacePointerKind.Wheel, e.ClientX, e.ClientY, deltaY: e.DeltaY, target: _hoverTarget);
+        => await RoutePointerAsync(SurfacePointerKind.Released, e.ClientX, e.ClientY, Wf.MouseButton.Left,
+            target: _hoverTarget, modifiers: ModifiersOf(e.CtrlKey, e.ShiftKey, e.AltKey, e.MetaKey));
 
     // 换树才重接：按模型实例比对，同一棵树在重复的 OnParametersSet 里不再动订阅。
     private void SyncTreeSubscriptions()
@@ -370,6 +407,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _hoverTarget = null;
         if (input is null) return;
 
+        // 画布滚动归适配器（见 RequestWheelScroll）：订阅方被拦下之后从这里滚，不必知道这家的滚动容器是 DOM。
+        _surfaceScroller ??= new SurfaceScroller(this);
+        input.Scroller = _surfaceScroller;
+
         var bound = input.Tree;
         _menuPressed = (_, e) => ShowLinkMenu(e);
         _menuLinkRemoved = (_, link) =>
@@ -389,6 +430,9 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         var helper = input.Tree.GetHelper();
         if (_menuPressed is not null && helper is Wf.IInputEvents events) events.Input.PointerPressed -= _menuPressed;
         if (_menuLinkRemoved is not null) helper.LinkRemoved -= _menuLinkRemoved;
+
+        // 只在还挂着自己那一个时才摘：同一棵树上两个表面时，摘别人的会把对方的滚动口一起清掉。
+        if (ReferenceEquals(input.Scroller, _surfaceScroller)) input.Scroller = null;
 
         _menuPressed = null;
         _menuLinkRemoved = null;
@@ -431,18 +475,20 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// <param name="clientX">Viewport x of the pointer, as reported by the browser.</param>
     /// <param name="clientY">Viewport y of the pointer, as reported by the browser.</param>
     /// <param name="button">Which button, for a press or a release.</param>
-    /// <param name="deltaY">Wheel movement, for a wheel event.</param>
+    /// <param name="deltaY">Wheel movement in the adapter's shared sign convention (up is positive), for a wheel event.</param>
     /// <param name="target">
     /// The component the pointer is on when the DOM element that fired already knows it (a link view's
     /// <c>mouseenter</c>); left <see langword="null"/> the surface resolves it from the position.
     /// </param>
+    /// <param name="modifiers">The modifier keys held, as Core's bitmask.</param>
     /// <remarks>
     /// While <see cref="WorkflowInput.IsSuspended"/> is set (a menu is open) the route keeps the pointer target,
     /// so moving onto the menu does not clear the one the menu acts on.
     /// </remarks>
     public async Task RoutePointerAsync(
         SurfacePointerKind kind, double clientX, double clientY,
-        Wf.MouseButton button = Wf.MouseButton.None, double deltaY = 0, IWorkflowViewModel? target = null)
+        Wf.MouseButton button = Wf.MouseButton.None, double deltaY = 0, IWorkflowViewModel? target = null,
+        Wf.InputModifiers modifiers = Wf.InputModifiers.None)
     {
         // 路由按树取用（Core 只保留一处）：本家不持有实例，换树自然换路由
         if (_input is not { } input)
@@ -461,12 +507,12 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
         input.Route(kind switch
         {
-            SurfacePointerKind.Entered => new Wf.PointerEnteredEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, handle),
-            SurfacePointerKind.Exited => new Wf.PointerExitedEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, handle),
-            SurfacePointerKind.Pressed => new Wf.PointerPressedEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, button, 1, handle),
-            SurfacePointerKind.Released => new Wf.PointerReleasedEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, button, 1, handle),
-            SurfacePointerKind.Wheel => new Wf.PointerWheelEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, 0d, deltaY, handle),
-            _ => new Wf.PointerMovedEventArgs(anchor, Wf.InputModifiers.None, _surfaceRoot, target, handle),
+            SurfacePointerKind.Entered => new Wf.PointerEnteredEventArgs(anchor, modifiers, _surfaceRoot, target, handle),
+            SurfacePointerKind.Exited => new Wf.PointerExitedEventArgs(anchor, modifiers, _surfaceRoot, target, handle),
+            SurfacePointerKind.Pressed => new Wf.PointerPressedEventArgs(anchor, modifiers, _surfaceRoot, target, button, 1, handle),
+            SurfacePointerKind.Released => new Wf.PointerReleasedEventArgs(anchor, modifiers, _surfaceRoot, target, button, 1, handle),
+            SurfacePointerKind.Wheel => new Wf.PointerWheelEventArgs(anchor, modifiers, _surfaceRoot, target, 0d, deltaY, handle),
+            _ => new Wf.PointerMovedEventArgs(anchor, modifiers, _surfaceRoot, target, handle),
         });
 
         // 悬停到连线上就把焦点收到表面根：Delete 才有路由，而「悬停（不点）就能删」是契约。
@@ -518,6 +564,44 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         input.Route(new Wf.PointerWheelEventArgs(
             new Anchor(localX, localY, 0), (Wf.InputModifiers)modifiers, null, target, 0d, deltaY, handle));
         return handle.PreventDefault;
+    }
+
+    /// <summary>
+    /// Answers the plain wheel the JavaScript has already suppressed: routes it through
+    /// <see cref="WorkflowInput"/> and, when no subscriber refused this notch, applies the surface's default
+    /// vertical scroll itself. The page's scroll container must never scroll the workflow surface, so the
+    /// adapter owns the wheel outright — this is the one place the default scroll happens.
+    /// </summary>
+    /// <param name="localX">Canvas-local x of the pointer.</param>
+    /// <param name="localY">Canvas-local y of the pointer.</param>
+    /// <param name="deltaX">Horizontal wheel movement, positive towards the right, in pixels.</param>
+    /// <param name="deltaY">Vertical wheel movement in the adapter's shared sign convention (up is positive), in pixels.</param>
+    /// <param name="modifiers">The Core modifier bitmask.</param>
+    /// <param name="targetId">The node or slot id under the pointer, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when a subscriber set <see cref="WorkflowEventHandle.PreventDefault"/>.</returns>
+    [JSInvokable]
+    public bool RequestWheelScroll(double localX, double localY, double deltaX, double deltaY, int modifiers, string? targetId)
+    {
+        if (Tree is not { } tree)
+        {
+            return false;
+        }
+
+        var input = WorkflowInput.For(tree);
+        var target = ResolveComponentTarget(targetId, tree)
+                     ?? tree.HitTestVisibleLinks(localX, localY, input.HitRadius);
+        var handle = new WorkflowEventHandle();
+        input.Route(new Wf.PointerWheelEventArgs(
+            new Anchor(localX, localY, 0), (Wf.InputModifiers)modifiers, null, target, deltaX, deltaY, handle));
+
+        if (handle.PreventDefault)
+        {
+            return true;
+        }
+
+        // 没被拦下：平台的滚动已经由 JS 同步 preventDefault 掉了，默认竖滚只有这里能补。
+        _surfaceScroller?.ScrollBy(0d, deltaY);
+        return false;
     }
 
     /// <summary>
@@ -670,6 +754,11 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             {
                 _wheelHandle = await _module.InvokeAsync<IJSObjectReference>("initWheelZoom", _scroller, _dotNetRef);
             }
+
+            // 普通滚轮整笔归适配器：JS 在滚轮事件里**同步** preventDefault（平台的滚动容器一次都不许滚画布），
+            // 再把这一笔交给 RequestWheelScroll 定夺 —— 没被拦下时默认竖滚由适配器补上。与 Ctrl+滚轮那条
+            // 缩放路互斥（两边都按 ctrlKey 分流），一笔物理滚轮因此只路由一次。
+            _scrollHandle = await _module.InvokeAsync<IJSObjectReference>("initWheelScroll", _scroller, _dotNetRef);
         }
         else if (_hasPendingRestore && IsEnabled && _module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
         {
@@ -962,6 +1051,28 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _hasPendingRestore = true;
     }
 
+    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成本家（DOM）的步长 ——
+    // 浏览器把滚轮增量报成像素（line/page 模式已由 JS 归一），所以一格就是一格像素，与原生一致。
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    {
+        private readonly WorkflowSurfaceBehavior owner;
+
+        public SurfaceScroller(WorkflowSurfaceBehavior owner) => this.owner = owner;
+
+        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        {
+            var module = owner._module;
+            var id = owner.ScrollViewerId;
+            if (module is null || string.IsNullOrWhiteSpace(id))
+            {
+                return;
+            }
+
+            // 正 = 远离用户 = 视口上移，所以滚动偏移是减。滚动容器是 DOM，只能过 JS 滚它。
+            _ = module.InvokeVoidAsync("scrollSurfaceBy", id, -wheelDeltaX, -wheelDeltaY);
+        }
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -1005,6 +1116,25 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             try
             {
                 await _wheelHandle.DisposeAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        if (_scrollHandle is not null)
+        {
+            try
+            {
+                await _scrollHandle.InvokeVoidAsync("dispose");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await _scrollHandle.DisposeAsync();
             }
             catch
             {
