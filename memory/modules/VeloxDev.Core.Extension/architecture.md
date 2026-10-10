@@ -148,6 +148,23 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 ---
 
+### 四之五、权限模式：**唯一一道能够着 MCP 与技能工具的门**（2026-10-11）
+
+原因是结构性的：只有 `ToolPipeline` 的两个钩子跑在**调用包装器**里，而它被每个切片共享 ——
+`AllowNodeExecution` / `IsGenericCommandAllowed` 是**工具体内的 if**，MCP 与技能来源的工具根本穿不过去。
+新的权限判定故意落在这两个钩子上（`Refuse` 判 Deny、`Confirm` 判 Ask），并且**两道各自都正确** —— 只拆一道，行为仍然对（实测过）。
+
+三条不变量：
+
+1. **`deny` 压得住 `allow`，也压得住 `Bypass`** —— 所以 Bypass 不是「关掉安全系统」。
+2. **`Plan` 的拒绝与 deny 同级**，`allow` 规则开不了它（否则「我做方案时什么都不变」这个承诺就被一条规则偷偷破了）。
+3. **「哪一模式允许什么」只住在提示词里** —— `[Description]` 是静态字符串，跟不上运行期可改的模式；与挡位相关的说明只能**让位**。
+
+拒绝文案必须**点名模式与出口**（`WorkflowAgentScope.DescribePermissionRefusal`）。上一代只说「宿主侧设置」，
+于是模型只能告诉用户「我做不到」—— 而用户手上没有任何可按的东西。
+
+---
+
 ## 五、入口：我要改 X，先打开哪个文件
 
 | 想改的东西 | 先打开 |
@@ -157,7 +174,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 | 工具预算（三档、拒绝文案、重置流程） | `WorkflowAgentToolkit.cs:317`（`CheckBudget`）、`:399`（`AccountAsync`）、`:430`（`ResetToolCallLimit`）、`:515`（`BudgetRefusal` 的根/子分叉）、`Agent/Workflow/Functions/ToolCallLedger.cs`（树共享的那口锅）。**上限本身**由 `WithMax{Tool,Read,Write}ToolCalls` 设，三个都 `BumpVersion()` —— 门（`CheckBudget`）读的是实时属性，包络读的是缓存文本，不 bump 就会让模型读到一个不被执行的上限 |
 | 子代理（派发 / 窄化 / 任意深度为什么终止） | `Agent/SubAgents/`（见 `sub-agents.md`） |
 | 提示词（行为约束、失败处理、渐进模式） | `Agent/Workflow/WorkflowAgentScope.cs:1065`（`ProvideProgressiveContextPrompt`）、`:850`（`BuildFailureHandlingProtocol`） |
-| 各级安全挡位注入什么 | `WorkflowAgentScope.cs:802`（`BuildInteractionSafetyPrompt`）+ `Resources/Workflow/{lang}/Safety/*.md` |
+| 模式与规则注入什么 | `WorkflowAgentScope.BuildInteractionSafetyPrompt`（先 `Shared.md`、再 `{mode}.md`、最后宿主覆盖，自己再画真值表）+ `Resources/Workflow/{lang}/Safety/*.md` |
 | 每轮渲染的指令与工具 | `Agent/Workflow/WorkflowAgentContextProvider.cs:86`（`BuildContext`）；指令是**能力包络**，不是 `null` —— 见 §四.3 |
 | 待办清单 / 运行模式 / 上下文压缩 | 三个都是**框架自带的 provider**，本模块只负责挂上去 —— 见 `native-capabilities.md` |
 | 每轮都用哪些 provider、按什么顺序 | `WorkflowAgentScope.CreateContextProviders()`；工具只从这里出，不走 `ChatOptions.Tools` |
@@ -185,11 +202,25 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 | `GetComponentContext` | `WorkflowAgentToolkit.cs:970` | **2026-10-08 前只按 `Type` 的形状三分流，从不看目录条目的 `Kind`** —— 于是值对象（目录里 Data 那一档）被渲染成 Class 形状，而同一条目在 `ProvideFrameworkDataContext`（`WorkflowAgentScope.cs:2189`）与 `WithData` 里走的是 `GetDataContext`：一个条目两种渲染，parity 只验过 Data 那份。**Class 表还比 Data 表少一档**：它只列 `IsPromotedField` / `HasVeloxProperty` / `IsSlotEnumerator` / `IsSingleSlot` 四种成员，`Fields` 目录一个都不读，所以一个声明成**字段**的成员在它下面根本不出现。已修（`Kind == DataType` ⇒ `GetDataContext`），守卫 `Agent/Workflow/Functions/ComponentContextDiscoveryTests.cs` |
 | `AgentContextTreeRenderer.Class` | `Agent/Workflow/AgentContextTreeRenderer.cs:188-192` | **提升出来的属性被列两次**：目录给提升条目同时打了 `IsPromotedField` 与 `HasVeloxProperty`（生成器 `AIContextModel.cs` 的 `BuildPromotedProperty`），而这张表的两趟（先提升字段、再带标注的属性）都认它。反射那条只列一次 —— 生成出来的那个属性不带 `[VeloxProperty]`。`[AgentContext] + [VeloxProperty]` 正是每个 demo 节点写设置项的写法，所以模型每轮都在为此付双份。已修（第二趟加 `!IsPromotedField`），parity 仍绿（Framework 里没有这种形状的组件，这正是它一直没被抓到的原因） |
 
-**语料的三个入口，各自只到一个地方**（2026-10-08 补）：`Shared.md` 是**唯一一处能同时到达 1~3 三档**的文件（`BuildInteractionSafetyPrompt` 先读它、再读 `Level{n}.md`、再叠宿主用 `WithInteractionSafetyPrompt` 加的规则，后者的优先级最高）；`Level{n}.md` 只到那一档；**第 0 档什么都读不到**（`BuildInteractionSafetyPrompt` 在 `_interactionSafety == 0` 时直接返回空串）。默认档位是 **1**，不是 0。
+**语料按模式切，「挡位」这个概念已经没有了**（2026-10-11 重写）：
+`Resources/Workflow/{en,zh}/Safety/` 下是 `Shared.md` 加五份**同名于模式**的文件（`Plan`/`Manual`/`AutoEdit`/`Auto`/`Bypass`）。
+`BuildInteractionSafetyPrompt` 先读 `Shared.md`（跨模式不变的那一半：宿主边界、选择器约束），再读 `{mode}.md`，
+最后叠宿主用 `WithModePrompt(mode, text)` 加的覆盖，然后**自己再画一张真值表**（模式 × 五个动作类别）与宿主规则清单。
 
-所以「任何宿主都想要的不变量」该写进 `Shared.md`，「某一档才成立的事」才写进 `Level{n}.md`。已有的例子：`Shared.md` 里那条**宿主边界**（不许给自己扩权 —— 既不许逼用户，也不许借一个恰好做得到的工具绕过去）。它在那里之前，语料每一行都只讲「怎么操作图」，于是「我不能给自己提权」是**模型的判断力**而不是本库的指示 —— 而工具面上恰好有能执行命令的节点。守卫在 `CapabilityEnvelopeTests.TheSharedPolicy_CarriesTheHostBoundaries`（连中文那份一起钉，`WithInteractionSafety(0)` 断言它不出现）。
+**新增一个模式要同时改四处**：`AgentPermissionMode` 枚举、`AgentPermissionPolicy.ModeDefault` 的矩阵、
+两份语料同名文件、`AgentPermissionPolicyTests.TheMatrix_...` 里那张写死的表。
+`Shared.md` 里那条**宿主边界**仍在那里，而它的措辞在 2026-10-11 被**收窄过一次**，值得记住为什么：
+它第一版写的是「永远不要自己把可达范围扩大，也不要借一个恰好做得到的工具去绕过去」，括号里还举了
+「a server that reaches outside the directories it was given」—— 那**恰好就是 `SetMcpServerArguments` 的设计用途**。
+于是模型看到「给文件服务器加一个目录」时会照着这条规矩**拒绝**，而那是宿主专门造了工具、由模式问用户、可由规则拒绝的正规路径。
+现在的分界是：**被禁的是绕过那条路**（能执行命令的节点、另一个恰好做得到的工具、磨用户直到同意），
+**不是「问」本身**。教训是：写安全规则时要分清「受管制的能力」与「绕开管制」，两者混在一句里，
+模型只会执行更严的那一读。守卫是 `CapabilityEnvelopeTests.TheSharedPolicy_CarriesTheHostBoundaries`，
+它现在同时钉「点名了正规路径（`SetMcpServerArguments`）」与「点明了被禁的是 going around」。仍在那里，
+守卫是 `CapabilityEnvelopeTests.TheSharedPolicy_CarriesTheHostBoundaries`（现在断言 **Plan 也带它** —— 模式只限制能跑什么，从不放宽边界）。
 
-**推论**：改 `Resources/` 时不要以为加一个 `Scripts/` 目录就会被自动加载 —— 加载器在（`ListScriptCategory`），调用者在（`ReadAllScripts`），但**没有第三方调用它**。同理，加 `Safety/Level4.md` 不会有任何效果，档位取值域是 `_interactionSafety > 0`（且 `WithInteractionSafety` 夹在 0–3）而文件名按 `$"Level{_interactionSafety}"` 拼（`WorkflowAgentScope.cs:821`），级别的语义定义在 `McpSelfServiceLevel.cs` 之外的那套交互挡位上，要新加挡位必须同时改宿主。
+**推论**：改 `Resources/` 时不要以为加一个 `Scripts/` 目录就会被自动加载 —— 加载器在（`ListScriptCategory`），调用者在（`ReadAllScripts`），但**没有第三方调用它**。
+同理，`Safety/` 下加一份名字不对应枚举值的文件不会有任何效果 —— 文件名按 `mode.ToString()` 拼。
 
 ---
 

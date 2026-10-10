@@ -5,22 +5,39 @@
 
 ---
 
-## 一、最承重的一条：安全边界是**代码挡的**，不是提示词挡的
+## 一、最承重的一条：裁决权在**权限模式与规则表**，不在 MCP 自己
 
-`McpSelfServiceLevel`（`McpSelfServiceLevel.cs:15`）四级：`Closed = 0` / `RemoteConfirmed = 1` / `AllConfirmed = 2` / `Unrestricted = 3`。默认 `Closed`（`McpScope.cs:69`）。
+**没有阶梯了**（2026-10-11 删）。原来有一套 `McpSelfServiceLevel`（`Closed`/`RemoteConfirmed`/`AllConfirmed`/`Unrestricted`），
+默认 `Closed` 下两个写工具**根本不注册**。它的问题不是不严，而是**装错了层**：一个模型看得见却永远用不了的工具只浪费提示预算，
+而工具不存在时模型只能回答「我没有这个工具」—— 用户手上没有任何可按的东西。
 
-**会改动机器上软件的写工具按档位逐步出现，不到那一档就根本不注册**（`McpAgentToolkit.CreateTools`）：`AddMcpServer` 从 `RemoteConfirmed` 起（那一档只放 Http），`SetMcpServerArguments` 从 **`AllConfirmed`** 起 —— 比添加再高一档，理由独立：远程服务器**没有**启动参数，而本地服务器在 `AllConfirmed` 以下**不可重配**，所以在 `RemoteConfirmed` 注册它等于「存在但每次调用都被拒」，正是这个类刻意不做的事。这不是「注册了但会拒绝」——理由写在紧邻的注释里：一个模型看得见却永远用不了的工具只浪费提示预算，还招来重试。**`ToolNames` 里没有它们**（那是「每个非视图 scope 都注册的四个」），宿主要认得它们得自己去认那两个常量。
+现在：`AddMcpServer` 与 `SetMcpServerArguments` **永远注册**，能不能跑由
+[`AgentPermissionMode`](architecture.md) 的 `Curate` 那一格（`Auto`/`AutoEdit`/`Manual` 下先问，`Bypass` 下不问）加宿主的规则决定，
+**拒绝文案点名模式或规则**。`McpAgentToolkit.CategoryOf` 把两个读工具归 `Read`、其余归 `Curate`。
 
-提示文案也是**按级别生成**的（`McpAgentToolkit.cs:110`），理由同样写在注释里：说「服务器不可添加」在 `Closed` 以上是撒谎，说「可以添加」在 `Closed` 是撒谎。
+**提问只发生一次。** 组合进工作流 scope 时由包装器问（`WorkflowAgentScope.WithMcps` 把策略接到 `McpScope.PermissionCheck`）；
+**独立使用 `McpScope` 时没有包装器**，所以两个写工具自己问（`McpScope.IsComposed == false` 时）——
+少了这一条，阶梯一删它们就变成无人过问了。
 
-**两级门是独立的，都要过：**
+### 一·一、工具名答不了的那一问：**种类**
 
-1. `McpScope.CanAddServer(runMode)`（`:109`）—— 级别 + 运行模式的组合判定。`RemoteConfirmed` 只放 `Http`，`AllConfirmed` 放本地模式，`Unrestricted` 不问。`AddServer` 里第一件事就是查它（`McpAgentToolkit.cs:160`）。
-2. 确认：在 `Unrestricted` 以下的级别，添加要用户同意（`RequiresConfirmationToAdd()`，`:121`；`ConfirmationResolver`，`:102`）。
+「加一个 MCP 服务器」的危险取决于**参数**：本地包会在用户机器上装软件、起进程，Http 端点只把数据发出去。
+一条按**工具名**匹配的规则区分不了这两者，而包装器只看得到工具名。所以这两个工具把同一个策略**再问一次**，
+用一个合成调用名 `mcp-add:local` / `mcp-add:http`（`McpAgentToolkit.LocalKind` / `HttpKind`）：
 
-**级别与确认处理器是两回事。** `WithSelfService` 只开级别；`WithConfirmationHandler`（`:93`）注册裁决者。**没注册处理器时，需要确认的级别会「拒绝」，而不是「放行」** —— 这条在 `skills/veloxdev-drive-workflow-with-ai/SKILL.md` 与同目录 `references/mcp.md` 里都写死了（那两份是**本仓给驱动 agent 看的**文档，不是 demo 模型读到的提示词 —— 模型读到的 MCP 措辞只有 `BuildPromptContext`）。
+```csharp
+scope.WithPermissionRule(PermissionDecision.Deny, "mcp-add:local");   // 这台机器上永远不许装
+```
 
-**接进 `WorkflowAgentScope` 时，你在 `McpScope` 上设的确认处理器会被顶掉。** `WithMcps`（`WorkflowAgentScope.cs:1552`）无条件执行 `mcp.WithConfirmationHandler(ResolveConfirmationAsync)`，注释明说「A handler set directly on the MCP scope is replaced by this」。这是刻意的：审批**只配一次**，工作流工具与 MCP 自服务共用同一个。所以宿主只需要在 **scope** 上调 `WithConfirmationHandler`（`WorkflowAgentScope.cs:753`）。
+`Ask("mcp-add:local")` 也有效：它在包装器**不会问**的模式下（`Bypass`）由工具自己问 ——
+工具会先看 `Judge(nameof(AddServer), …)` 是不是 `Ask`，是就让包装器去问，避免同一次调用弹两次对话框。
+
+**没注册确认处理器时一律「拒绝」，而不是「放行」。** 这条没变，在 `McpScope.ConfirmationResolver` 与
+`WorkflowAgentScope.ResolveConfirmationAsync` 两处都是同一个形状。
+
+**接进 `WorkflowAgentScope` 时，你在 `McpScope` 上设的确认处理器会被顶掉。** `WithMcps` 无条件执行
+`mcp.WithConfirmationHandler(ResolveConfirmationAsync)`，注释明说「A handler set directly on the MCP scope is replaced by this」。
+这是刻意的：审批**只配一次**。所以宿主只需要在 **scope** 上调 `WithConfirmationHandler`。同一个地方现在也接 `PermissionCheck`。
 
 ---
 
@@ -157,7 +174,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 
 **静态 `[Description]` 与动态档位**
 
-档位可以在运行期任意时刻改（`WithSelfService` 会 `Interlocked.Increment(ref _version)`，`BuildPromptContext()` 与 `CreateTools()` 都在调用时读它），所以**提示词与工具集永远同步**。但 `[Description]` 是**静态字符串**，跟不上 —— 凡是「哪一档允许什么」这类事实，说明里只能**让位给提示词**（「which run modes the CURRENT level allows is stated in your prompt」），不要在说明里枚举被允许的模式：写死了就会在某几档上撒谎。`AddServer` 原来说明里把六种模式平铺直叙，就是这样一处。
+模式可以在运行期任意时刻改（`WithPermissionMode` 推 `Version`，而 `BuildPromptContext()` 在渲染时读它），**提示词与工具集永远同步**。但 `[Description]` 是**静态字符串**，跟不上 —— 凡是「哪一模式允许什么」这类事实，说明里只能**让位给提示词**（`AddServer` 现在写的是「which run modes the CURRENT level allows is stated in your prompt」），不要在说明里枚举被允许的模式：写死了就会在某几档上撒谎。它原来把六种运行模式平铺直叙，就是这样一处。
 
 **给重建/动态切换加测试**
 
@@ -176,13 +193,13 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 | 把「拒绝」实现成返回一句友好文本而不返回 `{"status":"error"}` 信封 | `TrackedAIFunction` 的 `Error()` 信封（`TrackedAIFunction.cs:141`）是模型识别失败的唯一约定；纯文本会被当成成功结果 |
 | 在 `UpdateStatus` 里 await 别的东西 | 它设计成发起即忘且可短路；在 UI 上下文之外调用时行为不同 |
 | 让两个 provider 共用一个 scope 却不给唯一的 `InstanceId` | 框架在 state key 冲突时抛（`McpScope.cs:306-308`），这正是想要的失败 |
-| 认为 `WithSelfService` 开了级别就够了 | 还需 `WithConfirmationHandler`；否则 `RemoteConfirmed`/`AllConfirmed` 下**一律拒绝** |
+| 以为「模式设成 `Auto` 就不会问了」 | 规则表在模式之上 —— 一条 `Ask`/`Deny` 规则照样拦住。反过来，`Bypass` 也压不住 `Deny` |
 
 ---
 
 ## 七、死面 / 仓库内零真实使用者
 
-- **`WithSelfService` 没有任何非测试调用者。** 调用点全部在 `Src/Core/VeloxDev.Core.Extension.Test/Agent/MCP/McpSelfServiceTests.cs` 与 `McpAgentContextProviderTests.cs:130`。七家 demo 都停在 `Closed`，`AgentHelper.cs:281-283` 只是注释里提到「升档会加 AddMcpServer」。所以 **`AddMcpServer` 的完整路径（含确认、含四个级别的 prompt 分支）只有测试在跑**。
+- **两个写工具的「模式 + 规则」路径没有真实宿主使用者。** 七家 demo 用 `AgentPermissionMode.AutoEdit` 加几条 `Ask` 规则，**从不让模型自己加服务器**；`AutoHelper` 的 MCP 列表是一次性预注册。所以 `AddMcpServer` 的完整路径（含种类规则、含确认）**只有测试在跑**。
 - **改参数的两条路都没有真实宿主使用者**：demo 通过 `WithServers` 一次性预注册（`AgentHelper.cs:94-124`），之后从不改；`WithServers` 的「同名 = 重配」也是为这条新路径加的。所以**动态切换目前只有 `McpParameterSwitchTests`（9 条）在跑** —— 它是这条路径唯一的守卫。
 - `McpServerRunMode.Pip` / `Uvx` / `Dotnet` / `Exe` 在 demo 里都没有实例 —— demo 只配了 `Http` 与 `Npx`（`AgentHelper.cs:95-124`）。
 - `McpScope.WithMcpRoot`（`:59`）在仓库内无调用者；`.evn/mcp` 是唯一被用到的根。

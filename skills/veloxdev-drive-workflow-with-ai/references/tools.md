@@ -1,6 +1,6 @@
-# The tool surface
+﻿# The tool surface
 
-67 built-in tools, grouped by the flags of `WorkflowToolCategory` — **69 once the two interaction tools register**, which takes both handlers configured *and* `WithInteractionSafety > 0`. Names are the C# method names and are passed to the model verbatim.
+70 built-in tools, grouped by the flags of `WorkflowToolCategory` — up to **72** once the four interaction tools register, which takes the matching handler configured. The mode no longer decides whether they exist: asking, and the Agent's own move into and out of Plan, are all `Interact`, allowed in every mode, because a mode that removed the asking tools would leave the Agent able only to refuse. Names are the C# method names and are passed to the model verbatim.
 
 `ResetToolCallLimit` is registered in every configuration, whatever the categories — it is the only way out of a spent budget, so it must not disappear exactly when it is needed. It is not a `Query` or `Mutation` member; it asks the user through the confirmation handler and reopens the tree's budget on agreement.
 
@@ -108,7 +108,7 @@ They exist as categories with zero members. Layout is done node by node through 
 
 ## Interaction — registered conditionally
 
-`RequestSelection` only when `WithSelectionHandler` was set; `RequestConfirmation` only when `WithConfirmationHandler` was set; both only when `IsInteractionAllowed` (`WithInteractionSafety > 0`).
+`RequestSelection` only when `WithSelectionHandler` was set; `RequestConfirmation` only when `WithConfirmationHandler` was set. Registering one requires the handler, because the tool is useless without something to ask.
 
 ## Adding your own tools
 
