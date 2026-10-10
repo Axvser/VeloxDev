@@ -7,6 +7,7 @@ using Microsoft.JSInterop;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using VeloxDev.AI;
+using VeloxDev.AI.Safety;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
@@ -32,6 +33,9 @@ public partial class Workflow : ComponentBase, IDisposable
 
     // 会话是否有可续跑的检查点。缓存而不是每次渲染读取：页面在每个节点/连线变化时重渲染，而 HasCheckpoint 会碰磁盘。
     private bool _hasCheckpoint;
+
+    // 权限模式的下拉当前值。会话级设置：换树（Reset / Load）时在 SubscribeSession 里跟着新 helper 重新对齐。
+    private AgentPermissionMode _permissionMode = AgentPermissionMode.AutoEdit;
 
     // ── Link selection ─────────────────────────────────────────────────────
     // 菜单的接线整个在表面组件里（右键入口、定位、开合上报）；页面只读它选中的那条线，画选中态。
@@ -93,6 +97,8 @@ public partial class Workflow : ComponentBase, IDisposable
             helper.SelectionHandler = ShowSelectionAsync;
             helper.ConfirmationHandler = ShowConfirmationAsync;
             _ = helper.LoadMcpServersAsync();
+            // 下拉的初值：会话级设置，跟着刚挂上的这棵树的 helper 走。
+            _permissionMode = helper.PermissionMode;
         }
         // 跟着会话一起订：OnInitialized / Reset / Load 三处换树都走这里，探针因此总落在屏幕上那棵树。
         VetoFrameworkGestures(_session.Tree);
@@ -108,6 +114,20 @@ public partial class Workflow : ComponentBase, IDisposable
             await helper.LoadMcpServersAsync();
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    /// <summary>
+    /// Moves the session to the mode the user picked. There is nothing to rebuild: the gate reads the policy
+    /// per call, so the very next tool call obeys the new mode, and the prompt is re-rendered next turn.
+    /// </summary>
+    private void OnPermissionModeChanged(ChangeEventArgs e)
+    {
+        if (_session?.Tree.GetHelper() is not AgentHelper helper) return;
+        if (e.Value is null || !Enum.TryParse<AgentPermissionMode>(e.Value.ToString(), out var mode)) return;
+
+        _permissionMode = mode;
+        helper.PermissionMode = mode;
+        helper.Scope?.SetPermissionMode(mode);
     }
 
     private void UnsubscribeSession()

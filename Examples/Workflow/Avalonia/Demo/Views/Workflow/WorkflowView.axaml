@@ -216,6 +216,21 @@
 									  IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}" />
 					</Grid>
 
+					<!-- 权限模式：会话级设置，所以与小地图同处侧栏上部，而不是塞在对话面板里 —— 那里在
+					     侧栏底部，下拉在窗口底边会被裁掉，五个模式只剩第一项点得到。同时它也**不是** AgentModes
+					     那一对 build/plan：那一对改的是模型被告知什么，这一个改的是什么允许跑。
+					     切换是运行期生效的：门逐调用读策略，下一次工具调用就按新模式判，提示词下一轮跟上。 -->
+					<Grid Margin="0,10,0,0" ColumnDefinitions="Auto,*">
+						<TextBlock Text="权限模式" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+						<ComboBox x:Name="PermissionModePicker"
+								  Grid.Column="1"
+								  FontSize="12"
+								  MinWidth="120"
+								  HorizontalAlignment="Stretch"
+								  ToolTip.Tip="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
+								  SelectionChanged="OnPermissionModeChanged"/>
+					</Grid>
+
 					<!-- 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
 					     （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
 					     按钮走 code-behind 而不是 Command 绑定：侧栏的 DataContext 是树，而门与检查点都在

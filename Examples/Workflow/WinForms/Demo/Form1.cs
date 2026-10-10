@@ -4,6 +4,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.AI.Safety;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -128,6 +129,7 @@ namespace Demo
             _demo.Tree.AgentLog.CollectionChanged += OnAgentLogCollectionChanged;
             _demo.Tree.Nodes.CollectionChanged += OnNodesCollectionChanged;
             SubscribeHelper(_demo);
+            InitializePermissionMode();
             SetupMcpStatusTab();
 
             _demo.Tree.GetHelper().VisibleItems.CollectionChanged += OnVisibleItemsChanged;
@@ -169,6 +171,40 @@ namespace Demo
             helper.ToolCalled -= OnAgentToolCalled;
             helper.VisualRefreshRequested -= OnAgentToolCalled;
             helper.Mcp.Status.PropertyChanged -= OnMcpStatusChanged;
+        }
+
+        /// <summary>
+        /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
+        /// </summary>
+        /// <remarks>
+        /// Selecting the current mode fires the change handler, which sets the same mode again —
+        /// <c>SetPermissionMode</c> reports that nothing moved and does nothing. Cheaper than arranging not to.
+        /// <para>
+        /// Re-run on every tree swap rather than once at construction: a tree loaded from a file arrives with its
+        /// own helper at that helper's default mode, and a picker still showing the previous one would be a lie
+        /// about the session on screen.
+        /// </para>
+        /// </remarks>
+        private void InitializePermissionMode()
+        {
+            if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+
+            permissionModePicker.Items.Clear();
+            permissionModePicker.Items.AddRange([.. Enum.GetValues<AgentPermissionMode>().Cast<object>()]);
+            permissionModePicker.SelectedItem = helper.PermissionMode;
+        }
+
+        /// <summary>
+        /// Moves the session to the mode the user picked. There is nothing to rebuild: the gate reads the policy
+        /// per call, so the very next tool call obeys the new mode, and the prompt is re-rendered next turn.
+        /// </summary>
+        private void OnPermissionModeChanged(object? sender, EventArgs e)
+        {
+            if (permissionModePicker.SelectedItem is not AgentPermissionMode mode) return;
+            if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+
+            helper.PermissionMode = mode;
+            helper.Scope?.SetPermissionMode(mode);
         }
 
         // ── MCP server status ─────────────────────────────────────────────────

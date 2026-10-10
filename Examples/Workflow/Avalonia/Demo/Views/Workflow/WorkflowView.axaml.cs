@@ -1,4 +1,4 @@
-using VeloxDev.WorkflowSystem;
+﻿using VeloxDev.WorkflowSystem;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
@@ -19,6 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
 using VeloxDev.Serialization;
@@ -66,6 +67,39 @@ public partial class WorkflowView : UserControl
 
         InitializeNetworkDemo();
         InitializeMcp();
+    }
+
+    /// <summary>
+    /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
+    /// </summary>
+    /// <remarks>
+    /// Selecting the current mode fires the change handler, which sets the same mode again —
+    /// <c>SetPermissionMode</c> reports that nothing moved and does nothing. Cheaper than arranging not to.
+    /// <para>
+    /// Re-run on every tree swap rather than once at construction: a tree loaded from a file arrives with its
+    /// own helper at that helper's default mode, and a picker still showing the previous one would be a lie
+    /// about the session on screen.
+    /// </para>
+    /// </remarks>
+    private void InitializePermissionMode()
+    {
+        if (_workflowViewModel.GetHelper() is not AgentHelper helper) return;
+
+        PermissionModePicker.ItemsSource = Enum.GetValues<AgentPermissionMode>();
+        PermissionModePicker.SelectedItem = helper.PermissionMode;
+    }
+
+    /// <summary>
+    /// Moves the session to the mode the user picked. There is nothing to rebuild: the gate reads the policy
+    /// per call, so the very next tool call obeys the new mode, and the prompt is re-rendered next turn.
+    /// </summary>
+    private void OnPermissionModeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (PermissionModePicker.SelectedItem is not AgentPermissionMode mode) return;
+        if (_workflowViewModel.GetHelper() is not AgentHelper helper) return;
+
+        helper.PermissionMode = mode;
+        helper.Scope?.SetPermissionMode(mode);
     }
 
     private void InitializeMcp()
@@ -189,6 +223,7 @@ public partial class WorkflowView : UserControl
             SubscribeAutoScroll(_workflowViewModel);
             VetoFrameworkGestures(_workflowViewModel);
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+            InitializePermissionMode();
             _manager.Show(new Notification("OK", $"Workflow Loaded From {path}"));
         }
     }
@@ -210,6 +245,7 @@ public partial class WorkflowView : UserControl
         VetoFrameworkGestures(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        InitializePermissionMode();
 
         // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。
         // 要跳回 UI 线程：命令体是以 ConfigureAwait(false) 等的，Exited 落在池线程上，

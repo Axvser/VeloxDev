@@ -51,6 +51,8 @@
             pauseButton = new Button();
             resumeButton = new Button();
             continueFromCheckpointButton = new Button();
+            permissionModeLabel = new Label();
+            permissionModePicker = new ComboBox();
             runGateStateLabel = new Label();
             runControlLabel = new Label();
             nodeCountLabel = new Label();
@@ -100,6 +102,8 @@
             toolbarPanel.Controls.Add(pauseButton);
             toolbarPanel.Controls.Add(resumeButton);
             toolbarPanel.Controls.Add(continueFromCheckpointButton);
+            toolbarPanel.Controls.Add(permissionModePicker);
+            toolbarPanel.Controls.Add(permissionModeLabel);
             toolbarPanel.Controls.Add(runGateStateLabel);
             toolbarPanel.Controls.Add(runControlLabel);
             toolbarPanel.Controls.Add(nodeCountCaptionLabel);
@@ -112,7 +116,7 @@
             toolbarPanel.Dock = DockStyle.Top;
             toolbarPanel.Location = new Point(12, 12);
             toolbarPanel.Name = "toolbarPanel";
-            toolbarPanel.Size = new Size(376, 320);
+            toolbarPanel.Size = new Size(376, 350);
             toolbarPanel.TabIndex = 0;
             // 
             // statusValueLabel
@@ -214,42 +218,63 @@
             loadDemoButton.Text = "Load Workflow Demo";
             loadDemoButton.UseVisualStyleBackColor = true;
             loadDemoButton.Click += LoadNetworkDemo;
-            // 
+            //
+            // permissionModeLabel
+            //
+            // 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在左下角的标签页里，不在底部，但模式
+            // 与运行控制同属「这轮怎么跑」，所以挨着放。它也不是 AgentModes 的 build/plan 那一对：
+            // 那一对改的是模型被告知什么，这一个改的是什么允许跑。
+            // 这一行插在运行控制之前，所以运行控制整块下移 30px，面板也跟着长高 30px。
+            permissionModeLabel.AutoSize = true;
+            permissionModeLabel.Location = new Point(4, 248);
+            permissionModeLabel.Name = "permissionModeLabel";
+            permissionModeLabel.TabIndex = 25;
+            permissionModeLabel.Text = "权限模式：";
+            //
+            // permissionModePicker
+            //
+            permissionModePicker.DropDownStyle = ComboBoxStyle.DropDownList;
+            permissionModePicker.Location = new Point(80, 246);
+            permissionModePicker.Name = "permissionModePicker";
+            permissionModePicker.Size = new Size(294, 23);
+            permissionModePicker.TabIndex = 26;
+            permissionModePicker.SelectedIndexChanged += OnPermissionModeChanged;
+            //
             // pauseButton
-            // 
-            pauseButton.Location = new Point(4, 272);
+            //
+            pauseButton.Location = new Point(4, 302);
             pauseButton.Name = "pauseButton";
             pauseButton.Size = new Size(80, 32);
             pauseButton.TabIndex = 20;
             pauseButton.Text = "Pause";
             pauseButton.UseVisualStyleBackColor = true;
             pauseButton.Click += PauseWorkflow;
-            // 
+            //
             // resumeButton
-            // 
-            resumeButton.Location = new Point(90, 272);
+            //
+            resumeButton.Location = new Point(90, 302);
             resumeButton.Name = "resumeButton";
             resumeButton.Size = new Size(80, 32);
             resumeButton.TabIndex = 21;
             resumeButton.Text = "Resume";
             resumeButton.UseVisualStyleBackColor = true;
             resumeButton.Click += ResumeWorkflow;
-            // 
+            //
             // continueFromCheckpointButton
-            // 
+            //
             continueFromCheckpointButton.Enabled = false;
-            continueFromCheckpointButton.Location = new Point(176, 272);
+            continueFromCheckpointButton.Location = new Point(176, 302);
             continueFromCheckpointButton.Name = "continueFromCheckpointButton";
             continueFromCheckpointButton.Size = new Size(166, 32);
             continueFromCheckpointButton.TabIndex = 22;
             continueFromCheckpointButton.Text = "从检查点继续";
             continueFromCheckpointButton.UseVisualStyleBackColor = true;
             continueFromCheckpointButton.Click += ContinueFromCheckpoint;
-            // 
+            //
             // runControlLabel
-            // 
+            //
             runControlLabel.AutoSize = true;
-            runControlLabel.Location = new Point(4, 246);
+            runControlLabel.Location = new Point(4, 276);
             runControlLabel.Name = "runControlLabel";
             runControlLabel.TabIndex = 23;
             runControlLabel.Text = "运行控制：";
@@ -257,7 +282,7 @@
             // runGateStateLabel
             //
             runGateStateLabel.AutoSize = true;
-            runGateStateLabel.Location = new Point(80, 246);
+            runGateStateLabel.Location = new Point(80, 276);
             runGateStateLabel.Name = "runGateStateLabel";
             runGateStateLabel.TabIndex = 24;
             runGateStateLabel.Text = "空闲";
@@ -443,6 +468,8 @@
         private Button pauseButton;
         private Button resumeButton;
         private Button continueFromCheckpointButton;
+        private Label permissionModeLabel;
+        private ComboBox permissionModePicker;
         private Label runControlLabel;
         private Label runGateStateLabel;
         private Label nodeCountCaptionLabel;

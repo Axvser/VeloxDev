@@ -218,6 +218,17 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     public AgentPermissionMode PermissionMode { get; set; } = AgentPermissionMode.AutoEdit;
 
     /// <summary>
+    /// The scope the agent was built over, kept so the host can move the permission mode at any time.
+    /// </summary>
+    /// <remarks>
+    /// The mode is a <b>runtime</b> setting, not a construction-time one: the gate reads the policy per call,
+    /// so a switch here governs the very next tool call, and the prompt catches up on the next turn. Without
+    /// this the only way to change it would be to rebuild the agent — which is the shape this replaced.
+    /// Null until <see cref="ProvideAgent"/> has run.
+    /// </remarks>
+    public WorkflowAgentScope? Scope { get; private set; }
+
+    /// <summary>
     /// Operations this demo puts to the user even in a mode that would otherwise run them. A rule holds
     /// beneath the mode; a <see cref="PermissionDecision.Deny"/> rule would hold in every mode.
     /// </summary>
@@ -349,6 +360,9 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             ChatOptions = new ChatOptions { Instructions = contextPrompt },
             AIContextProviders = scope.CreateContextProviders(),
         });
+
+        // Handed back so the host can move the permission mode later without rebuilding any of this.
+        helper.Scope = scope;
 
         // The pipeline goes in the framework's own middleware slot, which wraps the whole run — so both
         // RunAsync and RunStreamingAsync are observed, and every caller above keeps calling them unchanged.

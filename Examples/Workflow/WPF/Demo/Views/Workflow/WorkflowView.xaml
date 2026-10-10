@@ -162,6 +162,24 @@
                     <TextBlock Margin="0,8,0,0" Text="可见组件数：( Node / Link )" Foreground="White" />
                     <TextBlock Text="{Binding Helper.VisibleItems.Count}" Foreground="White" />
 
+                    <!-- 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边
+                         裁掉，五个模式只剩第一项点得到。它也不是 AgentModes 的 build/plan 那一对：那一对改的是
+                         模型被告知什么，这一个改的是什么允许跑。切换运行期生效：门逐调用读策略，下一次工具调用
+                         就按新模式判，提示词下一轮跟上。 -->
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="权限模式" Foreground="White" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ComboBox Grid.Column="1"
+                                  x:Name="PermissionModePicker"
+                                  MinWidth="120"
+                                  HorizontalAlignment="Stretch"
+                                  ToolTip="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
+                                  SelectionChanged="OnPermissionModeChanged" />
+                    </Grid>
+
                     <!-- 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
                          （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
                          按钮走 code-behind 而不是 Command 绑定：侧栏的 DataContext 是树，而门与检查点都在

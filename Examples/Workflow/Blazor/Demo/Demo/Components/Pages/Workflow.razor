@@ -4,6 +4,7 @@
 @using System.Collections.Specialized
 @using System.ComponentModel
 @using VeloxDev.AI
+@using VeloxDev.AI.Safety
 @using VeloxDev.WorkflowSystem
 @implements IDisposable
 
@@ -29,6 +30,22 @@
         <div class="sb-info">
             <span>节点总数: <strong>@(_session?.Tree?.Nodes.Count ?? 0)</strong></span>
             <span>连接数: <strong>@(_session?.Tree?.Links.Count ?? 0)</strong></span>
+        </div>
+
+        @* 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边
+           裁掉，五个模式只剩第一项点得到。它也不是 AgentModes 的 build/plan 那一对：那一对改的是
+           模型被告知什么，这一个改的是什么允许跑。切换运行期生效：门逐调用读策略，下一次工具调用
+           就按新模式判，提示词下一轮跟上。 *@
+        <div class="sb-panel">
+            <div class="sb-panel-header">
+                <span>权限模式</span>
+            </div>
+            <select class="wf-field" @onchange="OnPermissionModeChanged">
+                @foreach (var mode in Enum.GetValues<AgentPermissionMode>())
+                {
+                    <option value="@mode" selected="@(mode == _permissionMode)">@mode</option>
+                }
+            </select>
         </div>
 
         <div class="sb-divider"></div>

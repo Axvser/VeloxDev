@@ -5,6 +5,7 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Windows.Input;
 using VeloxDev.AI;
+using VeloxDev.AI.Safety;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -180,6 +181,8 @@ public partial class WorkflowView : ContentView
                 helper.Mcp.WithSynchronizationContext(SynchronizationContext.Current);
                 _ = helper.LoadMcpServersAsync();
             }
+            // 会话在这里才到，所以权限模式的初值也得在这里取 —— 构造函数里还没有 helper 可读。
+            InitializePermissionMode();
             newSession.Tree.Layout.UpdateCommand.Execute(null);
 
             // A run only writes its checkpoint on the way out, so the continue button's availability
@@ -189,6 +192,39 @@ public partial class WorkflowView : ContentView
         }
 
         RefreshRunControls();
+    }
+
+    /// <summary>
+    /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
+    /// </summary>
+    /// <remarks>
+    /// Selecting the current mode fires the change handler, which sets the same mode again —
+    /// <c>SetPermissionMode</c> reports that nothing moved and does nothing. Cheaper than arranging not to.
+    /// <para>
+    /// Re-run on every tree swap rather than once at construction: a tree loaded from a file arrives with its
+    /// own helper at that helper's default mode, and a picker still showing the previous one would be a lie
+    /// about the session on screen.
+    /// </para>
+    /// </remarks>
+    private void InitializePermissionMode()
+    {
+        if (_workflowViewModel.GetHelper() is not AgentHelper helper) return;
+
+        PermissionModePicker.ItemsSource = Enum.GetValues<AgentPermissionMode>();
+        PermissionModePicker.SelectedItem = helper.PermissionMode;
+    }
+
+    /// <summary>
+    /// Moves the session to the mode the user picked. There is nothing to rebuild: the gate reads the policy
+    /// per call, so the very next tool call obeys the new mode, and the prompt is re-rendered next turn.
+    /// </summary>
+    private void OnPermissionModeChanged(object? sender, EventArgs e)
+    {
+        if (PermissionModePicker.SelectedItem is not AgentPermissionMode mode) return;
+        if (_workflowViewModel.GetHelper() is not AgentHelper helper) return;
+
+        helper.PermissionMode = mode;
+        helper.Scope?.SetPermissionMode(mode);
     }
 
     private void SubscribeAutoScroll(TreeViewModel vm)

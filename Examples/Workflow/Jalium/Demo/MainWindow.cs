@@ -12,6 +12,7 @@ using Jalium.UI.Threading;
 using Microsoft.Win32;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
+using VeloxDev.AI.Safety;
 using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -44,6 +45,7 @@ internal sealed class MainWindow : Window
     // 合并之后一轮只刷新一次 —— 刷新本身是幂等的，后来的请求要的正是前一次即将看到的状态。
     private CoalescedRefresh? _surfaceRefresh;
     private Button? _continueFromCheckpoint;
+    private ComboBox? _permissionModePicker;
     private McpStatusViewModel? _mcpStatus;
     private readonly HashSet<McpServerStatusViewModel> _mcpServerSubs = new();
 
@@ -179,6 +181,7 @@ internal sealed class MainWindow : Window
         _visibleCount.Foreground = new SolidColorBrush(Colors.White);
         panel.Children.Add(_visibleCount);
 
+        panel.Children.Add(BuildPermissionModePanel());
         panel.Children.Add(BuildRunControlsPanel());
         panel.Children.Add(BuildAgentChatPanel());
         panel.Children.Add(BuildMcpPanel());
@@ -203,6 +206,77 @@ internal sealed class MainWindow : Window
         BorderBrush = new SolidColorBrush(Color.FromRgb(0x4B, 0x4B, 0x4B)),
         BorderThickness = new Thickness(1),
     };
+
+    // 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边裁掉，
+    // 五个模式只剩第一项点得到。它也不是 AgentModes 的 build/plan 那一对：那一对改的是模型被告知什么，
+    // 这一个改的是什么允许跑。
+    private FrameworkElement BuildPermissionModePanel()
+    {
+        var row = new Grid { ColumnSpacing = 6 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+
+        var label = new TextBlock
+        {
+            Text = "权限模式",
+            Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E)),
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(label, 0);
+
+        _permissionModePicker = new ComboBox
+        {
+            FontSize = 12,
+            Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D)),
+            Foreground = new SolidColorBrush(Colors.White),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x4B, 0x4B, 0x4B)),
+            BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        _permissionModePicker.SelectionChanged += (_, _) => OnPermissionModeChanged();
+        Grid.SetColumn(_permissionModePicker, 1);
+
+        row.Children.Add(label);
+        row.Children.Add(_permissionModePicker);
+        return row;
+    }
+
+    /// <summary>
+    /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
+    /// </summary>
+    /// <remarks>
+    /// Selecting the current mode fires the change handler, which sets the same mode again —
+    /// <c>SetPermissionMode</c> reports that nothing moved and does nothing. Cheaper than arranging not to.
+    /// The picker itself is built in the constructor, before any tree exists, so its items are filled here
+    /// instead — the first moment there is a helper to read the initial mode from.
+    /// <para>
+    /// Re-run on every tree swap rather than once at construction: a tree loaded from a file arrives with its
+    /// own helper at that helper's default mode, and a picker still showing the previous one would be a lie
+    /// about the session on screen.
+    /// </para>
+    /// </remarks>
+    private void InitializePermissionMode()
+    {
+        if (_permissionModePicker is null) return;
+        if (_tree.GetHelper() is not AgentHelper helper) return;
+
+        _permissionModePicker.ItemsSource = Enum.GetValues<AgentPermissionMode>();
+        _permissionModePicker.SelectedItem = helper.PermissionMode;
+    }
+
+    /// <summary>
+    /// Moves the session to the mode the user picked. There is nothing to rebuild: the gate reads the policy
+    /// per call, so the very next tool call obeys the new mode, and the prompt is re-rendered next turn.
+    /// </summary>
+    private void OnPermissionModeChanged()
+    {
+        if (_permissionModePicker?.SelectedItem is not AgentPermissionMode mode) return;
+        if (_tree.GetHelper() is not AgentHelper helper) return;
+
+        helper.PermissionMode = mode;
+        helper.Scope?.SetPermissionMode(mode);
+    }
 
     /// <summary>The two capabilities a run cannot press by itself: the pause gate and the checkpoint a
     /// later run carries on from. Both live on the session, so these controls act on the window's
@@ -554,6 +628,7 @@ internal sealed class MainWindow : Window
             helper.ConfirmationHandler = args => AgentDialogs.ShowConfirmationAsync(_uiDispatcher, args);
             helper.ToolCalled += OnAgentToolCalled;
             helper.VisualRefreshRequested += OnVisualRefreshRequested;
+            InitializePermissionMode();
         }
 
         _executionLog.ItemsSource = vm.ExecutionLog;
