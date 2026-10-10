@@ -42,6 +42,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
+
+        // 挂在输入路由上的画布滚动口。本类拥有它、宿主拿它去滚；换树时连同 Input 一起换新。
+        public IWorkflowSurfaceScroller? Scroller { get; set; }
+
         public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
         public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
         public EventHandler<object>? MenuOpened { get; set; }
@@ -219,6 +223,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        // 画布滚动归适配器（见 OnSurfaceWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
+        state.Scroller = new SurfaceScroller(state);
+        input.Scroller = state.Scroller;
+
         state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
         state.MenuLinkRemoved = (_, link) =>
         {
@@ -258,6 +266,13 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             if (state.MenuLinkRemoved is not null) helper.LinkRemoved -= state.MenuLinkRemoved;
         }
 
+        // 只在还挂着自己那一个时才摘：同一棵树上两个表面时，摘别人的会把对方的滚动口一起清掉。
+        if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
+        {
+            released.Scroller = null;
+        }
+
+        state.Scroller = null;
         state.Input = null;
         state.MenuPressed = null;
         state.MenuLinkRemoved = null;
@@ -519,23 +534,26 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         HookWheel(state);
     }
 
-    // WinUI 没有 PreviewMouseWheel，所以滚轮在 SCROLLVIEWER 上处理（它始终位于其全部内容的冒泡路径上）。用 handledEventsToo:true 挂接，节点先处理了滚轮也仍触发。
-    // Ctrl+滚轮在处理器跑之前可能还会滚一丁点 —— 缩放到处都还是会应用（改挂画布则只覆盖其可命中区域）。
+    // 挂在下代（画布）而不是 SCROLLVIEWER 自己：这家没有隧道相，`ScrollPresenter` 在**冒泡路径上比
+    // ScrollViewer 更早**处理这一笔并已经滚过一段，等处理器跑到 ScrollViewer 时再置 Handled 已经晚了
+    // （实测：挂在 ScrollViewer 上即使置 Handled，普通滚轮照样滚 74）。画布是 ScrollViewer 的内容、
+    // 位于 `ScrollPresenter` 之前，在这里置 Handled 才真的拦得住 —— 「平台的滚动容器一次都不许滚画布」。
+    // 用 handledEventsToo:true 挂接，节点卡片先处理了滚轮也仍触发（它们不处理这一笔）。
     // 挂接**不跟缩放开关走**：普通滚轮的汇报与缩放是两件事，关掉缩放的宿主一样要收得到。
     private static void HookWheel(SurfaceState state)
     {
-        if (state.ScrollViewer is not null && state.WheelHandler is null)
+        if (state.Canvas is not null && state.WheelHandler is null)
         {
             state.WheelHandler = new PointerEventHandler(OnSurfaceWheel);
-            state.ScrollViewer.AddHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler, true);
+            state.Canvas.AddHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler, true);
         }
     }
 
     private static void UnhookWheel(SurfaceState state)
     {
-        if (state.ScrollViewer is not null && state.WheelHandler is not null)
+        if (state.Canvas is not null && state.WheelHandler is not null)
         {
-            state.ScrollViewer.RemoveHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler);
+            state.Canvas.RemoveHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler);
             state.WheelHandler = null;
         }
     }
@@ -555,16 +573,26 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         var delta = e.GetCurrentPoint(source as UIElement ?? host).Properties.MouseWheelDelta;
 
-        // 普通滚轮只是一份汇报：路由给订阅者，视口照旧滚（本处理器不置 Handled）。
-        // 挂在这一层是因为它是这家唯一收得到滚轮的地方（宿主上的普通订阅与 handledEventsToo 订阅都实测收不到），
-        // 代价是位置与目标取自**滚动之后** —— 与下面 Ctrl 那条已经接受的取舍相同。
+        // 普通滚轮**整笔归适配器**：平台的滚动容器一次都不许滚画布，默认竖滚由这里在路由之后补上。
+        // 订阅方置 PreventDefault 就是「这一笔不滚」，由他走 Scroller 决定往哪滚 —— 于是七家宿主是同一段代码。
+        // 挂在下代（画布）上，位置与目标因此都还是**滚动之前**的 —— 这一家没有隧道相，挂在 ScrollViewer
+        // 上就只能拿到滚动之后的值、而且拦不住那一滚（见 HookWheel 的注释）。
         if (!e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control) || !GetZoomEnabled(host))
         {
+            // 拦下平台那一手：置 Handled 之后 ScrollPresenter 不再滚画布。取不到表面状态时也拦 ——
+            // 滚轮归适配器这条不因为一次查找失败就把画布交回平台。
+            e.Handled = true;
+
             if (host.GetValue(StateProperty) is SurfaceState reportState)
             {
-                RoutePointer(reportState, viewModel, e, host, e.OriginalSource as DependencyObject,
-                    (position, target, handle) => new Wf.PointerWheelEventArgs(
-                        position, Modifiers(e.KeyModifiers), host, target, 0d, delta, handle));
+                var handle = RoutePointer(reportState, viewModel, e, host, e.OriginalSource as DependencyObject,
+                    (position, target, h) => new Wf.PointerWheelEventArgs(
+                        position, Modifiers(e.KeyModifiers), host, target, 0d, delta, h));
+
+                if (!handle.PreventDefault)
+                {
+                    reportState.Scroller?.ScrollBy(0d, delta);
+                }
             }
 
             return;
@@ -655,6 +683,43 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             }
         }
         e.Handled = true;
+    }
+
+    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
+    // 与 ScrollViewer 自己那一手一致，否则接管之后手感会变。
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    {
+        // 一格滚轮是 WHEEL_DELTA（120）；这家 ScrollViewer 自己一格滚 74（实测：一格 74、四格 296）——
+        // 复刻它，接管之后手感才不变（与 WPF 那边 48、Avalonia 那边 50 是同一件事）。
+        private const double Notch = 120d;
+        private const double PixelsPerNotch = 74d;
+
+        private readonly SurfaceState state;
+
+        public SurfaceScroller(SurfaceState state) => this.state = state;
+
+        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        {
+            if (state.ScrollViewer is not { } viewer)
+            {
+                return;
+            }
+
+            // 正 = 远离用户 = 视口上移，所以偏移是减。
+            var dx = -(wheelDeltaX / Notch) * PixelsPerNotch;
+            var dy = -(wheelDeltaY / Notch) * PixelsPerNotch;
+
+            var x = WorkflowSurfaceMath.ClampValue(viewer.HorizontalOffset + dx, 0d, GetHorizontalScrollMaximum(viewer));
+            var y = WorkflowSurfaceMath.ClampValue(viewer.VerticalOffset + dy, 0d, GetVerticalScrollMaximum(viewer));
+
+            viewer.ChangeView(x, y, null, disableAnimation: true);
+
+            // 用提交的偏移同步重新虚拟化：ChangeView 是异步的，此刻读到的还是旧偏移。
+            if (state.Input is { } input)
+            {
+                VirtualizeAtScroll(input.Tree, x, y, viewer.ViewportWidth, viewer.ViewportHeight);
+            }
+        }
     }
 
     private static void OnPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -801,6 +866,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        // 键要有人接：**任何一次**按下都先把焦点收到表面 —— 空白画布、节点、插槽、连线都算，Ctrl+Z 才有路由。
+        // 先前只在**悬停到连线**时收焦点，点一下空白画布是收不到的，键于是静默不来。卡片里的可编辑控件除外：
+        // 在那里按 Ctrl+Z 撤的该是文字。本处理器挂 handledEventsToo，冒泡链上每一下都经过它，所以这一处就够。
+        if (!IsInsideEditable(e.OriginalSource as DependencyObject))
+        {
+            host.Focus(FocusState.Pointer);
+        }
+
         // 这一笔已经有人路由过（节点卡片/插槽自己，或表面在平移那一处）：不再路由第二遍，只把标记
         // 消费掉 —— 本处理器是冒泡链上最后一个，把它清了就不会泄漏到下一次按下。
         if (state.PressRouted)
@@ -827,12 +900,17 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
             (position, target, handle) => new Wf.PointerPressedEventArgs(
                 position, Modifiers(e.KeyModifiers), host, target, button, 1, handle));
+    }
 
-        // 命中一条线就把焦点收到本宿主：Delete 要的按键事件经过它，悬停才删得掉。
-        if (WorkflowInput.For(viewModel).HoveredLink is not null)
+    // 落在可编辑控件里的按下，焦点归那个控件 —— 表面不该把它抢走。
+    private static bool IsInsideEditable(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
         {
-            host.Focus(FocusState.Pointer);
+            if (current is TextBox or RichEditBox or PasswordBox) return true;
         }
+
+        return false;
     }
 
     // Delete 归 Core：本层只把按键翻译过去，由它决定「现在指针停着的哪条线」要删。
@@ -844,13 +922,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var input = WorkflowInput.For(viewModel);
-        if (input.HoveredLink is null)
-        {
-            return;
-        }
 
+        // target 用路由**已经在维护**的那个指针目标，不再要求「指针停在一条线上」：Ctrl+Z 是树级的键，
+        // 指针在空白画布上时链的尽头仍是树（占位/拖拽预览那类旧 sender 也不参与判定）。
         input.Route(new Wf.KeyDownEventArgs(
-            ToKey(e.Key), (int)e.Key, KeyModifiersNow(), false, host, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, KeyModifiersNow(), false, host, input.PointerTarget, new WorkflowEventHandle()));
 
         // 只吞本层自己那一手管的键。先前无条件吞，于是指针停在一条线上时方向键、翻页键、空格全被吃掉，
         // 画布那段时间对键盘整段无响应；Avalonia 只有 Delete 走得到这里、Jalium 也只吞 Delete，与它们同形。
@@ -869,7 +945,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         var input = WorkflowInput.For(viewModel);
         input.Route(new Wf.KeyUpEventArgs(
-            ToKey(e.Key), (int)e.Key, KeyModifiersNow(), false, host, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.Key), (int)e.Key, KeyModifiersNow(), false, host, input.PointerTarget, new WorkflowEventHandle()));
     }
 
     // 指针进来时统一在这里翻译：位置的 Z 取来源视图所在图层，被指到的对象由 ResolveTarget 回答。
@@ -1009,6 +1085,16 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             VirtualKey.Down => Wf.InputKey.Down,
             VirtualKey.Insert => Wf.InputKey.Insert,
             VirtualKey.Delete => Wf.InputKey.Delete,
+            // 修饰键也要点名：宿主想跟踪「Shift 现在按没按住」只能听它自己的按下与抬起，`Modifiers` 说的是
+            // 「按别的键时谁被按着」。这几个值都在上面三段算术区间之外（实测 16–18、91–92、160–165），不会被那三条 if 抢走。
+            VirtualKey.LeftShift => Wf.InputKey.LeftShift,
+            VirtualKey.RightShift => Wf.InputKey.RightShift,
+            VirtualKey.LeftControl => Wf.InputKey.LeftCtrl,
+            VirtualKey.RightControl => Wf.InputKey.RightCtrl,
+            VirtualKey.LeftMenu => Wf.InputKey.LeftAlt,
+            VirtualKey.RightMenu => Wf.InputKey.RightAlt,
+            VirtualKey.LeftWindows => Wf.InputKey.LWin,
+            VirtualKey.RightWindows => Wf.InputKey.RWin,
             _ => Wf.InputKey.Unknown,
         };
     }
