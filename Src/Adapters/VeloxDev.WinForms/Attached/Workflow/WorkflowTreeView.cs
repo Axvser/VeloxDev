@@ -625,14 +625,18 @@ public abstract class WorkflowTreeView : UserControl
     }
 
     // 键也过输入路由：「现在按 Delete 删哪条」因此与其它六家是同一个答案，不靠各家各记一个选中。
-    // 这块画布只有在悬停命中它时才拿得到焦点，落在别处的键不受影响。
+    // 点在表面上（画布或它里面的卡片/插槽/连线）就会拿到键盘焦点（见 WorkflowSurfaceBehavior 的按下焦点），
+    // 落在表面外的键不受影响。
     private void OnCanvasKeyDown(object? sender, PlatformInput.KeyEventArgs e)
     {
-        if (_input?.HoveredLink is null) return;
+        if (_input is not { } input) return;
 
-        _input.Route(new Wf.KeyDownEventArgs(
-            ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false, PART_Canvas, _input.HoveredLink, new WorkflowEventHandle()));
+        // 键是**表面级**的：目标取路由已经在维护的那个指针目标，不再要求「指针停在一条线上」——
+        // Ctrl+Z 这类树级的键在指针停于空白画布时链的尽头仍是树。
+        input.Route(new Wf.KeyDownEventArgs(
+            ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false, PART_Canvas, input.PointerTarget, new WorkflowEventHandle()));
 
+        // 只吞本层自己那一手管的键。先前无条件吞，于是指针停在一条线上时方向键、翻页键、空格全被吃掉。
         if (e.KeyCode != Keys.Delete) return;
 
         e.Handled = true;
@@ -644,7 +648,7 @@ public abstract class WorkflowTreeView : UserControl
         if (_input is not { } input) return;
 
         input.Route(new Wf.KeyUpEventArgs(
-            ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false, PART_Canvas, input.HoveredLink, new WorkflowEventHandle()));
+            ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false, PART_Canvas, input.PointerTarget, new WorkflowEventHandle()));
     }
 
     // 画布客户区坐标就是 slot.Anchor 的空间（见 WorkflowSlotLayoutBehavior 的坐标宿主），与发布的曲线同系。
@@ -716,6 +720,21 @@ public abstract class WorkflowTreeView : UserControl
             Keys.Down => Wf.InputKey.Down,
             Keys.Insert => Wf.InputKey.Insert,
             Keys.Delete => Wf.InputKey.Delete,
+            // 修饰键也要点名：宿主想跟踪「Shift 现在按没按住」只能听它自己的按下与抬起，`Modifiers` 说的是
+            // 「按别的键时谁被按着」。这八个值都在上面三段算术区间之外（实测 0x5B、0x5C、0xA0–0xA5）。
+            Keys.LShiftKey => Wf.InputKey.LeftShift,
+            Keys.RShiftKey => Wf.InputKey.RightShift,
+            Keys.LControlKey => Wf.InputKey.LeftCtrl,
+            Keys.RControlKey => Wf.InputKey.RightCtrl,
+            Keys.LMenu => Wf.InputKey.LeftAlt,
+            Keys.RMenu => Wf.InputKey.RightAlt,
+            Keys.LWin => Wf.InputKey.LWin,
+            Keys.RWin => Wf.InputKey.RWin,
+            // WinForms 的 KeyEventArgs.KeyCode 对修饰键只报**通用**那个（实测 Shift 发来 Keys.ShiftKey），
+            // 分不出左右，所以通用的一律按左边的报。
+            Keys.ShiftKey => Wf.InputKey.LeftShift,
+            Keys.ControlKey => Wf.InputKey.LeftCtrl,
+            Keys.Menu => Wf.InputKey.LeftAlt,
             _ => Wf.InputKey.Unknown,
         };
     }
@@ -978,6 +997,8 @@ public abstract class WorkflowTreeView : UserControl
     {
         if (disposing)
         {
+            // 摘掉应用层的消息过滤器、并摘下挂在树路由上的滚动口 —— 否则它们活过这个控件，成为泄漏。
+            WorkflowSurfaceBehavior.SetIsEnabled(this, false);
             DetachLinkInput();
             ViewPool.SetItemsSource(PART_Canvas, null);
             ViewPool.SetTemplateSelector(PART_Canvas, null);

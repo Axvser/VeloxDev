@@ -24,6 +24,12 @@ public sealed class WorkflowSurfaceBehavior
         public Control? MinimapOverlay { get; set; }
         public IWorkflowTreeViewModel? WorkflowTree { get; set; }
 
+        // 挂在输入路由上的画布滚动口。本类拥有它，宿主拿它去滚；换树/解绑时连同旧树一起摘。
+        public IWorkflowSurfaceScroller? Scroller { get; set; }
+
+        // Scroller 当前挂在哪棵树上：换树/解绑时用它只摘自己挂的那一个，不动同一棵树上别的表面挂的。
+        public IWorkflowTreeViewModel? ScrollerTree { get; set; }
+
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
         public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
         public bool HasPendingRestore { get; set; }
@@ -32,6 +38,9 @@ public sealed class WorkflowSurfaceBehavior
         public double PendingRestoreY { get; set; }
 
         private const int WmMouseWheel = 0x020A;
+        private const int WmLeftButtonDown = 0x0201;
+        private const int WmRightButtonDown = 0x0204;
+        private const int WmMiddleButtonDown = 0x0207;
 
         // 过滤器归**启用**管，不归缩放管：关掉缩放的宿主一样要收到滚轮汇报（报告与手势是两件事）。
         private bool _filterAdded;
@@ -58,19 +67,19 @@ public sealed class WorkflowSurfaceBehavior
             _filterAdded = false;
         }
 
-        /// <summary>
-        /// Global pre-processing for every wheel over a surface. A wheel is addressed to the control
-        /// under the cursor (WM_MOUSEWHEEL targets the focused/focused-under-mouse window), so message
-        /// handlers on the surface only ever see wheel events routed to the surface itself; a wheel over
-        /// a child window is delivered to that child and never bubbles — which is why the surface's own
-        /// canvas handler cannot be the route. Ctrl+wheel is the zoom gesture: it must be intercepted
-        /// before ANY scrollable control (the workflow's scroll viewer, a node card's AutoScroll panels)
-        /// scrolls, and it swallows the message so nothing scrolls. A plain wheel has no gesture to run:
-        /// the filter routes it as a report and lets the message through, so the control under the cursor
-        /// scrolls exactly as it would without this library.
-        /// </summary>
+        // 应用层预处理：滚轮发给谁取决于焦点，挂在控件上的处理器收不齐（实测三格零到达），所以按**指针底下**
+        // 的控件认领。普通滚轮整笔归适配器 —— 路由之后执行默认竖滚，并吞掉消息，平台的滚动容器一次都不许
+        // 滚画布；Ctrl+滚轮是缩放，同样在消息层接住。按下的那一支只把键盘焦点收到画布，消息照常放行。
         bool IMessageFilter.PreFilterMessage(ref Message m)
         {
+            // 表面上任何一次按下（画布、卡片、插槽、连线）都先把键盘焦点收到画布，Ctrl+Z 这类树级按键才有
+            // 路由。画布之外的按下（缩略图、HUD）与可编辑控件里的按下不动它 —— 见 FocusSurfaceForPress。
+            if (m.Msg is WmLeftButtonDown or WmRightButtonDown or WmMiddleButtonDown)
+            {
+                FocusSurfaceForPress();
+                return false;
+            }
+
             if (m.Msg != WmMouseWheel)
             {
                 return false;
@@ -92,11 +101,17 @@ public sealed class WorkflowSurfaceBehavior
 
             var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
 
-            // 非 Ctrl、或这家关掉了缩放：滚轮只是汇报 —— 路由给订阅者，消息照旧往下走，由控件自己滚。
+            // 普通滚轮（或这家关掉了缩放）**整笔归适配器**：先路由，订阅方置 PreventDefault 就是「这一笔
+            // 不滚」，由他走 Scroller 决定往哪滚；否则执行默认竖滚。两条都吞掉消息，平台一次都不滚画布。
             if (Control.ModifierKeys != Keys.Control || !GetState(host).ZoomEnabled)
             {
-                RouteWheel(host, tree, under ?? host, delta);
-                return false;
+                if (!RouteWheel(host, tree, under ?? host, delta))
+                {
+                    GetState(host).Scroller?.ScrollBy(0d, delta);
+                }
+
+                m.Result = IntPtr.Zero;
+                return true; // 吞掉消息：平台自己一次都不滚画布
             }
 
             // 缩放也要能被订阅者否决。滚轮在消息层就被这里接住、画布收不到它，所以路由只能在这一层补一次；
@@ -159,7 +174,7 @@ public sealed class WorkflowSurfaceBehavior
             return null;
         }
 
-        private static Control? GetControlAtScreenPoint(Point screenPoint)
+        internal static Control? GetControlAtScreenPoint(Point screenPoint)
         {
             var handle = WindowFromPoint(screenPoint);
             return handle == IntPtr.Zero ? null : Control.FromChildHandle(handle) ?? Control.FromHandle(handle);
@@ -215,6 +230,7 @@ public sealed class WorkflowSurfaceBehavior
         else
         {
             state.RemoveMessageFilter();
+            ClearScroller(element);
         }
     }
 
@@ -237,71 +253,9 @@ public sealed class WorkflowSurfaceBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        var state = GetState(element);
-        if (state.ZoomEnabled == value)
-        {
-            return;
-        }
-
-        state.ZoomEnabled = value;
-        if (value)
-        {
-            // 这条只是「滚轮正好发给宿主自己」时的直路；接住 Ctrl+滚轮的是消息过滤器，它跟着 IsEnabled 挂。
-            element.MouseWheel += OnZoomMouseWheel;
-        }
-        else
-        {
-            element.MouseWheel -= OnZoomMouseWheel;
-        }
-    }
-
-    private static void OnZoomMouseWheel(object? sender, MouseEventArgs e)
-    {
-        if (sender is not Control control)
-        {
-            return;
-        }
-
-        var tree = ResolveTree(control);
-        if (tree is null || Control.ModifierKeys != Keys.Control)
-        {
-            return;
-        }
-
-        // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
-        var factor = e.Delta > 0 ? 1 / 1.1 : 1.1;
-        var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
-        var layout = tree.Layout;
-
-        if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
-        {
-            var scrollOffset = ResolveScrollOffset(control, tree);
-            var clientSize = ResolveClientSize(control);
-            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
-                scrollOffset.Horizontal, scrollOffset.Vertical, clientSize.Width, clientSize.Height, layout);
-            layout.CollapsePivot = new Anchor(wx, wy, 0);
-            layout.Scale = new Scale(next, next);
-            // 深度放大把负向内容折叠到 w/Scale、越过固定 NegativeOffset；先扩大覆盖（单调，只有正向内容时无事），下面的 PivotCenterScroll 与 Refresh 才会读到新的 ActualOffset。
-            WorkflowSurfaceMath.EnsureNegativeCover(tree);
-            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, clientSize.Width, clientSize.Height);
-            ApplyScrollOffset(control, tx, ty);
-            Refresh(control);
-        }
-        else
-        {
-            layout.Scale = new Scale(next, next);
-            // 世界原点缩放保持内容左上对齐：下游没人读新的 ActualOffset，所以把长大的覆盖（若有）显式经重绘路径推出去。
-            if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
-            {
-                Refresh(control);
-            }
-        }
-
-        // 把滚轮事件标记为已处理，Ctrl+滚轮才只缩放；否则 MouseWheel 冒泡到 AutoScroll 父级，缩放的同时还会滚动视口。
-        if (e is HandledMouseEventArgs handled)
-        {
-            handled.Handled = true;
-        }
+        // 只记状态：接住 Ctrl+滚轮的是消息过滤器（它跟着 IsEnabled 挂）。滚轮在消息层就被过滤器吞掉，
+        // 控件自己的 MouseWheel 一笔都收不到，所以这里不再另挂一条 —— 那只会是一份不走输入路由的重复缩放。
+        GetState(element).ZoomEnabled = value;
     }
 
     /// <summary>Gets the scroll viewer the host handed over, when it has one.</summary>
@@ -401,6 +355,68 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         GetState(element).WorkflowTree = value;
+        RegisterScroller(element, value);
+    }
+
+    // 把画布滚动口挂到当前这棵树的路由上；换树/解绑时先摘掉自己挂的旧那一个（只摘自己的）。
+    private static void RegisterScroller(Control host, IWorkflowTreeViewModel? tree)
+    {
+        ClearScroller(host);
+        if (tree is null)
+        {
+            return;
+        }
+
+        var state = GetState(host);
+        state.Scroller = new SurfaceScroller(host);
+        state.ScrollerTree = tree;
+        WorkflowInput.For(tree).Scroller = state.Scroller;
+    }
+
+    // 从挂着的树上摘下滚动口 —— 只在自己挂的那一个还挂着时摘，同一棵树上别的表面挂的留给它。
+    private static void ClearScroller(Control host)
+    {
+        var state = GetState(host);
+        if (state.ScrollerTree is { } tree && state.Scroller is { } scroller
+            && ReferenceEquals(WorkflowInput.For(tree).Scroller, scroller))
+        {
+            WorkflowInput.For(tree).Scroller = null;
+        }
+
+        state.Scroller = null;
+        state.ScrollerTree = null;
+    }
+
+    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长再平移画布 ──
+    // 用的是本家自己那套平移（与缩略图拖拽同一条路），不是去动滚动容器的偏移。
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    {
+        // 一格滚轮是 WHEEL_DELTA（120）。本家没有原生滚动步长可复刻（PART_ScrollViewer 的 AutoScroll 是关的，
+        // 视口由平移引擎拥有），所以取系统设置的滚轮行数 × 行高 16px —— 默认 3 行 = 48px，与 WPF 那边一致。
+        private const double Notch = 120d;
+        private const double LineHeight = 16d;
+
+        private readonly Control host;
+
+        public SurfaceScroller(Control host) => this.host = host;
+
+        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        {
+            var tree = ResolveTree(host);
+            var current = ResolveScrollOffset(host, tree);
+            var clientSize = ResolveClientSize(host);
+
+            // WheelScrollLines 为 -1 是「按页滚」，与平台自己的解释一致。
+            var lines = SystemInformation.MouseWheelScrollLines;
+            var stepX = lines > 0 ? lines * LineHeight : clientSize.Width;
+            var stepY = lines > 0 ? lines * LineHeight : clientSize.Height;
+
+            // 正 = 远离用户 = 视口上移，所以滚动量是减。
+            var dx = -(wheelDeltaX / Notch) * stepX;
+            var dy = -(wheelDeltaY / Notch) * stepY;
+
+            ApplyScrollOffset(host, current.Horizontal + dx, current.Vertical + dy);
+        }
     }
 
     /// <summary>
@@ -636,6 +652,62 @@ public sealed class WorkflowSurfaceBehavior
         return null;
     }
 
+    // 表面上任何一次按下（画布、卡片、插槽、连线）都把键盘焦点收到画布 —— Ctrl+Z 这类树级按键要有人接才
+    // 进得来。画布之外的按下（缩略图、HUD 按钮）与可编辑控件里的按下不动它：在那里按 Ctrl+Z 撤的是文字。
+    private static void FocusSurfaceForPress()
+    {
+        var under = SurfaceState.GetControlAtScreenPoint(Cursor.Position);
+        if (under is null)
+        {
+            return;
+        }
+
+        var host = FindSurfaceHost(under);
+        if (host is null)
+        {
+            return;
+        }
+
+        var canvas = GetState(host).Canvas;
+        if (canvas is null || !IsWithinCanvas(under, canvas) || IsInsideEditable(under))
+        {
+            return;
+        }
+
+        if (canvas.CanFocus)
+        {
+            canvas.Focus();
+        }
+    }
+
+    // 这一笔是否落在表面上：沿父链走到画布。缩略图与 HUD 挂在宿主上、不在画布里，因此被排除。
+    private static bool IsWithinCanvas(Control? control, Control canvas)
+    {
+        for (var current = control; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, canvas))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // 落在可编辑控件里的按下，焦点归那个控件 —— 表面不该把它抢走。
+    private static bool IsInsideEditable(Control? control)
+    {
+        for (var current = control; current is not null; current = current.Parent)
+        {
+            if (current is TextBoxBase)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static Wf.InputModifiers Modifiers()
     {
         var keys = Control.ModifierKeys;
@@ -708,17 +780,24 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         // 带符号平移宿主：经它自己的缩略图滚动 handler 重新居中（与平移同一套 _panOffset = (-sx, -sy); ApplyPan()）。跳过完整示例（AutoScroll）—— 上面已处理 —— 以及任何 handler 会递归进消息过滤器的控件。
+        // 反射查方法要**逐级基类**地找（DeclaredOnly）：私有成员不被派生类型继承，而宿主的运行时类型是派生类
+        // （Trimmed demo 的 TreeView），只查 p.GetType() 找不到基类 WorkflowTreeView 上那个私有方法。
         var target = ResolveCanvas(host) ?? host;
         for (var p = target; p is not null; p = p.Parent)
         {
-            var method = p.GetType().GetMethod(
-                "OnMinimapScrollRequested",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
-                binder: null,
-                new[] { typeof(double), typeof(double) },
-                modifiers: null);
-            if (method is not null)
+            for (var type = p.GetType(); type is not null; type = type.BaseType)
             {
+                var method = type.GetMethod(
+                    "OnMinimapScrollRequested",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly,
+                    binder: null,
+                    new[] { typeof(double), typeof(double) },
+                    modifiers: null);
+                if (method is null)
+                {
+                    continue;
+                }
+
                 try
                 {
                     method.Invoke(p, new object[] { x, y });
