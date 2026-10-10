@@ -163,6 +163,17 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 拒绝文案必须**点名模式与出口**（`WorkflowAgentScope.DescribePermissionRefusal`）。上一代只说「宿主侧设置」，
 于是模型只能告诉用户「我做不到」—— 而用户手上没有任何可按的东西。
 
+**宿主侧的运行期开关**：`WorkflowAgentScope.SetPermissionMode`（`WorkflowAgentScope.cs:721`，返回「有没有动」）
+是唯一入口，`WithPermissionMode` 只用于构造期。七家 demo 把它接到侧栏一个下拉上，把手是
+`AgentHelper.Scope`（`AgentHelper.cs:229`，`ProvideAgent` 末尾赋值）—— 没有它就只能重建 agent 才改得动模式。
+门逐调用读策略，所以切换对**下一次工具调用**就生效，提示词下一轮跟上。
+
+**移植这个下拉时唯一会咬人的一处**：初值必须在**每次换树时重取**。Select / Load 换来的是新树、新 helper
+（模式回到它自己的默认值），而控件还留着上一个值 —— 界面于是在撒谎。七家的换树路径各走各的：
+Avalonia / WPF / WinUI 是 `InitializeNetworkDemo` 加文件载入那一支，Blazor 是 `SubscribeSession`，
+MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`。
+摆放位置七家统一为「运行控制之前」—— 只有 Avalonia 有小地图开关可作锚点，别家没有。
+
 ---
 
 ## 五、入口：我要改 X，先打开哪个文件

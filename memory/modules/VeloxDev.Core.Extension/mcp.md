@@ -199,7 +199,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 
 ## 七、死面 / 仓库内零真实使用者
 
-- **两个写工具的「模式 + 规则」路径没有真实宿主使用者。** 七家 demo 用 `AgentPermissionMode.AutoEdit` 加几条 `Ask` 规则，**从不让模型自己加服务器**；`AutoHelper` 的 MCP 列表是一次性预注册。所以 `AddMcpServer` 的完整路径（含种类规则、含确认）**只有测试在跑**。
+- **两个写工具的「模式 + 规则」路径没有真实宿主使用者。** 七家 demo **默认**在 `AgentPermissionMode.AutoEdit`（侧栏下拉可随时改，见 [architecture.md](architecture.md) §四之五）加几条 `Ask` 规则，**从不让模型自己加服务器**；`AutoHelper` 的 MCP 列表是一次性预注册。所以 `AddMcpServer` 的完整路径（含种类规则、含确认）**只有测试在跑**。
 - **改参数的两条路都没有真实宿主使用者**：demo 通过 `WithServers` 一次性预注册（`AgentHelper.cs:94-124`），之后从不改；`WithServers` 的「同名 = 重配」也是为这条新路径加的。所以**动态切换目前只有 `McpParameterSwitchTests`（9 条）在跑** —— 它是这条路径唯一的守卫。
 - `McpServerRunMode.Pip` / `Uvx` / `Dotnet` / `Exe` 在 demo 里都没有实例 —— demo 只配了 `Http` 与 `Npx`（`AgentHelper.cs:95-124`）。
 - `McpScope.WithMcpRoot`（`:59`）在仓库内无调用者；`.evn/mcp` 是唯一被用到的根。
