@@ -9,6 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.Skills;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
@@ -80,8 +81,8 @@ public sealed class WorkflowAgentToolkit
     /// </summary>
     internal IList<AITool> CreateAllTools(WorkflowToolCategory categories = WorkflowToolCategory.All)
     {
-        AITool T(Delegate method, string name)
-            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Tools, _scope.Pipeline);
+        AITool T(Delegate method, string name, AgentActionCategory action)
+            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Tools, _scope.Pipeline, action);
 
         var tools = new List<AITool>();
 
@@ -93,91 +94,91 @@ public sealed class WorkflowAgentToolkit
 
         // ── Query (read-only inspection) ──
         Add(WorkflowToolCategory.Query,
-            T(ListNodes, nameof(ListNodes)),
-            T(GetNodeDetail, nameof(GetNodeDetail)),
-            T(GetNodeDetailById, nameof(GetNodeDetailById)),
-            T(ListConnections, nameof(ListConnections)),
-            T(GetTypeSchema, nameof(GetTypeSchema)),
-            T(GetWorkflowSummary, nameof(GetWorkflowSummary)),
-            T(GetComponentContext, nameof(GetComponentContext)),
-            T(ListComponentCommands, nameof(ListComponentCommands)),
-            T(FindNodes, nameof(FindNodes)),
-            T(ResolveSlotId, nameof(ResolveSlotId)),
-            T(ListSlotProperties, nameof(ListSlotProperties)),
-            T(GetEnumSlotByValue, nameof(GetEnumSlotByValue)),
-            T(GetLinkDetail, nameof(GetLinkDetail)),
-            T(ListCreatableTypes, nameof(ListCreatableTypes)),
-            T(ValidateWorkflow, nameof(ValidateWorkflow)),
-            T(GetFullTopology, nameof(GetFullTopology)),
-            T(CompileWorkflow, nameof(CompileWorkflow)),
-            T(CompileNodeResult, nameof(CompileNodeResult)),
-            T(GetCompileStatus, nameof(GetCompileStatus)),
-            T(GetExecutionLog, nameof(GetExecutionLog)));
+            T(ListNodes, nameof(ListNodes), AgentActionCategory.Read),
+            T(GetNodeDetail, nameof(GetNodeDetail), AgentActionCategory.Read),
+            T(GetNodeDetailById, nameof(GetNodeDetailById), AgentActionCategory.Read),
+            T(ListConnections, nameof(ListConnections), AgentActionCategory.Read),
+            T(GetTypeSchema, nameof(GetTypeSchema), AgentActionCategory.Read),
+            T(GetWorkflowSummary, nameof(GetWorkflowSummary), AgentActionCategory.Read),
+            T(GetComponentContext, nameof(GetComponentContext), AgentActionCategory.Read),
+            T(ListComponentCommands, nameof(ListComponentCommands), AgentActionCategory.Read),
+            T(FindNodes, nameof(FindNodes), AgentActionCategory.Read),
+            T(ResolveSlotId, nameof(ResolveSlotId), AgentActionCategory.Read),
+            T(ListSlotProperties, nameof(ListSlotProperties), AgentActionCategory.Read),
+            T(GetEnumSlotByValue, nameof(GetEnumSlotByValue), AgentActionCategory.Read),
+            T(GetLinkDetail, nameof(GetLinkDetail), AgentActionCategory.Read),
+            T(ListCreatableTypes, nameof(ListCreatableTypes), AgentActionCategory.Read),
+            T(ValidateWorkflow, nameof(ValidateWorkflow), AgentActionCategory.Read),
+            T(GetFullTopology, nameof(GetFullTopology), AgentActionCategory.Read),
+            T(CompileWorkflow, nameof(CompileWorkflow), AgentActionCategory.Read),
+            T(CompileNodeResult, nameof(CompileNodeResult), AgentActionCategory.Read),
+            T(GetCompileStatus, nameof(GetCompileStatus), AgentActionCategory.Read),
+            T(GetExecutionLog, nameof(GetExecutionLog), AgentActionCategory.Read));
 
         // ── State tracking / diff / dirty ──
         Add(WorkflowToolCategory.State,
-            T(TakeSnapshot, nameof(TakeSnapshot)),
-            T(GetChangesSinceSnapshot, nameof(GetChangesSinceSnapshot)),
-            T(MarkDirty, nameof(MarkDirty)));
+            T(TakeSnapshot, nameof(TakeSnapshot), AgentActionCategory.Read),
+            T(GetChangesSinceSnapshot, nameof(GetChangesSinceSnapshot), AgentActionCategory.Read),
+            T(MarkDirty, nameof(MarkDirty), AgentActionCategory.Edit));
 
         // ── Structural mutation (each tool executes exactly one component command — no bundled
         // multi-step gestures, so the framework's undo/redo stack stays the source of truth) ──
         Add(WorkflowToolCategory.Mutation,
-            T(MoveNode, nameof(MoveNode)),
-            T(SetNodePosition, nameof(SetNodePosition)),
-            T(ResizeNode, nameof(ResizeNode)),
-            T(DeleteNode, nameof(DeleteNode)),
-            T(DeleteSlot, nameof(DeleteSlot)),
-            T(ConnectSlots, nameof(ConnectSlots)),
-            T(ConnectSlotsById, nameof(ConnectSlotsById)),
-            T(ConnectByProperty, nameof(ConnectByProperty)),
-            T(DisconnectSlots, nameof(DisconnectSlots)),
-            T(DisconnectSlotsById, nameof(DisconnectSlotsById)),
-            T(SetSlotChannel, nameof(SetSlotChannel)),
-            T(SetEnumSlotChannel, nameof(SetEnumSlotChannel)),
-            T(ConnectEnumSlot, nameof(ConnectEnumSlot)),
-            T(PatchNodeProperties, nameof(PatchNodeProperties)),
-            T(PatchComponentById, nameof(PatchComponentById)),
-            T(CreateNode, nameof(CreateNode)),
-            T(CreateSlotOnNode, nameof(CreateSlotOnNode)),
-            T(AddSlotToCollection, nameof(AddSlotToCollection)),
-            T(RemoveSlotFromCollection, nameof(RemoveSlotFromCollection)),
-            T(SetEnumSlotCollection, nameof(SetEnumSlotCollection)),
-            T(Undo, nameof(Undo)),
-            T(Redo, nameof(Redo)),
-            T(ClearHistory, nameof(ClearHistory)));
+            T(MoveNode, nameof(MoveNode), AgentActionCategory.Edit),
+            T(SetNodePosition, nameof(SetNodePosition), AgentActionCategory.Edit),
+            T(ResizeNode, nameof(ResizeNode), AgentActionCategory.Edit),
+            T(DeleteNode, nameof(DeleteNode), AgentActionCategory.Edit),
+            T(DeleteSlot, nameof(DeleteSlot), AgentActionCategory.Edit),
+            T(ConnectSlots, nameof(ConnectSlots), AgentActionCategory.Edit),
+            T(ConnectSlotsById, nameof(ConnectSlotsById), AgentActionCategory.Edit),
+            T(ConnectByProperty, nameof(ConnectByProperty), AgentActionCategory.Edit),
+            T(DisconnectSlots, nameof(DisconnectSlots), AgentActionCategory.Edit),
+            T(DisconnectSlotsById, nameof(DisconnectSlotsById), AgentActionCategory.Edit),
+            T(SetSlotChannel, nameof(SetSlotChannel), AgentActionCategory.Edit),
+            T(SetEnumSlotChannel, nameof(SetEnumSlotChannel), AgentActionCategory.Edit),
+            T(ConnectEnumSlot, nameof(ConnectEnumSlot), AgentActionCategory.Edit),
+            T(PatchNodeProperties, nameof(PatchNodeProperties), AgentActionCategory.Edit),
+            T(PatchComponentById, nameof(PatchComponentById), AgentActionCategory.Edit),
+            T(CreateNode, nameof(CreateNode), AgentActionCategory.Edit),
+            T(CreateSlotOnNode, nameof(CreateSlotOnNode), AgentActionCategory.Edit),
+            T(AddSlotToCollection, nameof(AddSlotToCollection), AgentActionCategory.Edit),
+            T(RemoveSlotFromCollection, nameof(RemoveSlotFromCollection), AgentActionCategory.Edit),
+            T(SetEnumSlotCollection, nameof(SetEnumSlotCollection), AgentActionCategory.Edit),
+            T(Undo, nameof(Undo), AgentActionCategory.Edit),
+            T(Redo, nameof(Redo), AgentActionCategory.Edit),
+            T(ClearHistory, nameof(ClearHistory), AgentActionCategory.Edit));
 
         // ── Node execution (gated by WithAllowNodeExecution) ──
         Add(WorkflowToolCategory.Execution,
-            T(ExecuteNode, nameof(ExecuteNode)),
-            T(ExecuteNodes, nameof(ExecuteNodes)),
-            T(BroadcastNode, nameof(BroadcastNode)),
-            T(ReverseBroadcastNode, nameof(ReverseBroadcastNode)),
+            T(ExecuteNode, nameof(ExecuteNode), AgentActionCategory.Execute),
+            T(ExecuteNodes, nameof(ExecuteNodes), AgentActionCategory.Execute),
+            T(BroadcastNode, nameof(BroadcastNode), AgentActionCategory.Execute),
+            T(ReverseBroadcastNode, nameof(ReverseBroadcastNode), AgentActionCategory.Execute),
             // Chain-level entry: drives the compiled graph with the execution engine
             // (the demo's Run path). Distinct from ExecuteNode (node-level EXEC).
-            T(RunCompiledWorkflow, nameof(RunCompiledWorkflow)),
+            T(RunCompiledWorkflow, nameof(RunCompiledWorkflow), AgentActionCategory.Execute),
             // Terminal/result entry: compute a single node's result from its ancestor cone.
-            T(GetNodeResult, nameof(GetNodeResult)),
+            T(GetNodeResult, nameof(GetNodeResult), AgentActionCategory.Execute),
             // The same run, but handed back as a handle so the Agent can hold / let go / stop / follow it.
-            T(StartCompiledWorkflow, nameof(StartCompiledWorkflow)),
-            T(ContinueCompiledWorkflow, nameof(ContinueCompiledWorkflow)),
-            T(GetCompiledRunStatus, nameof(GetCompiledRunStatus)),
-            T(PauseCompiledRun, nameof(PauseCompiledRun)),
-            T(ResumeCompiledRun, nameof(ResumeCompiledRun)),
-            T(StopCompiledRun, nameof(StopCompiledRun)));
+            T(StartCompiledWorkflow, nameof(StartCompiledWorkflow), AgentActionCategory.Execute),
+            T(ContinueCompiledWorkflow, nameof(ContinueCompiledWorkflow), AgentActionCategory.Execute),
+            T(GetCompiledRunStatus, nameof(GetCompiledRunStatus), AgentActionCategory.Execute),
+            T(PauseCompiledRun, nameof(PauseCompiledRun), AgentActionCategory.Execute),
+            T(ResumeCompiledRun, nameof(ResumeCompiledRun), AgentActionCategory.Execute),
+            T(StopCompiledRun, nameof(StopCompiledRun), AgentActionCategory.Execute));
 
         // ── Generic command execution (gated by WithAllowedGenericCommands) ──
         Add(WorkflowToolCategory.Command,
-            T(ExecuteCommandOnNode, nameof(ExecuteCommandOnNode)),
-            T(ExecuteCommandById, nameof(ExecuteCommandById)));
+            T(ExecuteCommandOnNode, nameof(ExecuteCommandOnNode), AgentActionCategory.Execute),
+            T(ExecuteCommandById, nameof(ExecuteCommandById), AgentActionCategory.Execute));
 
         // ── Graph traversal ──
         Add(WorkflowToolCategory.Graph,
-            T(SearchForward, nameof(SearchForward)),
-            T(SearchReverse, nameof(SearchReverse)),
-            T(SearchAllRelative, nameof(SearchAllRelative)),
-            T(IsConnected, nameof(IsConnected)),
-            T(FindPath, nameof(FindPath)));
+            T(SearchForward, nameof(SearchForward), AgentActionCategory.Read),
+            T(SearchReverse, nameof(SearchReverse), AgentActionCategory.Read),
+            T(SearchAllRelative, nameof(SearchAllRelative), AgentActionCategory.Read),
+            T(IsConnected, nameof(IsConnected), AgentActionCategory.Read),
+            T(FindPath, nameof(FindPath), AgentActionCategory.Read));
 
         // ── Layout ──
         // No bundled layout tools: aligning/distributing/auto-arranging multiple nodes is
@@ -185,20 +186,19 @@ public sealed class WorkflowAgentToolkit
 
         // ── Analytics ──
         Add(WorkflowToolCategory.Analytics,
-            T(GetNodeStatistics, nameof(GetNodeStatistics)));
+            T(GetNodeStatistics, nameof(GetNodeStatistics), AgentActionCategory.Read));
 
         // ── Composite ──
         // No composite/bundled tools: every operation is a single component-command step so the
         // undo/redo stack (owned by Core) is never bypassed or double-submitted.
 
         // ── Interaction (only registered when handlers are configured AND level > 0) ──
-        if (_scope.IsInteractionAllowed)
-        {
-            if (_scope.SelectionHandler != null)
-                Add(WorkflowToolCategory.Interaction, T(RequestSelection, nameof(RequestSelection)));
-            if (_scope.ConfirmationHandler != null)
-                Add(WorkflowToolCategory.Interaction, T(RequestConfirmation, nameof(RequestConfirmation)));
-        }
+        // Registered whenever the host gave a handler, and never gated by the mode: asking is how a plan gets
+        // agreed to, so a mode that removed these would leave the Agent able only to refuse.
+        if (_scope.SelectionHandler != null)
+            Add(WorkflowToolCategory.Interaction, T(RequestSelection, nameof(RequestSelection), AgentActionCategory.Interact));
+        if (_scope.ConfirmationHandler != null)
+            Add(WorkflowToolCategory.Interaction, T(RequestConfirmation, nameof(RequestConfirmation), AgentActionCategory.Interact));
 
         // Merge developer-registered custom tools (always included). AIFunction-typed tools are
         // wrapped with TrackedAIFunction so they get the same UI-thread marshalling, MaxToolCalls
@@ -206,7 +206,16 @@ public sealed class WorkflowAgentToolkit
         // tools (e.g. raw MCP client tools) are added as-is.
         // Always offered, whatever categories were asked for: this is the way out of a budget the host set,
         // and it would be useless if it disappeared exactly when the budget ran out.
-        tools.Add(T(ResetToolCallLimit, ResetBudgetToolName));
+        // The Agent's own two mode transitions. Registered when there is a handler to ask, like the other
+        // interaction tools: entering plan is a change the user should see, and exiting it is what turns a
+        // plan into work — neither is something to do silently. There is no tool for a wider mode.
+        if (_scope.ConfirmationHandler != null)
+        {
+            tools.Add(T(EnterPlanMode, nameof(EnterPlanMode), AgentActionCategory.Interact));
+            tools.Add(T(ExitPlanMode, nameof(ExitPlanMode), AgentActionCategory.Interact));
+        }
+
+        tools.Add(T(ResetToolCallLimit, ResetBudgetToolName, AgentActionCategory.Interact));
 
         foreach (var tool in _scope.CustomTools)
             tools.Add(WrapTool(tool));
@@ -247,7 +256,7 @@ public sealed class WorkflowAgentToolkit
     /// </summary>
     internal ToolPipeline Tools => _tools ??= new ToolPipeline(() => _scope.Transcript, () => _scope.UIContext)
     {
-        Refuse = CheckBudget,
+        Refuse = CheckInvocation,
         Confirm = ConfirmMutationAsync,
     };
 
@@ -268,12 +277,19 @@ public sealed class WorkflowAgentToolkit
     /// Agent use this capability", not auditing a particular argument list.
     /// </para>
     /// </summary>
-    private async ValueTask<string?> ConfirmMutationAsync(string toolName, CancellationToken cancellationToken)
+    private async ValueTask<string?> ConfirmMutationAsync(ToolInvocation invocation, CancellationToken cancellationToken)
     {
-        if (!_scope.ToolApproval) return null;
-        if (IsQueryTool(toolName)) return null;
+        var decision = _scope.PermissionPolicy.Evaluate(invocation);
 
-        var description = $"The Agent wants to call the tool '{toolName}'.";
+        // Denied calls are already gone by the time this hook runs — this is the second gate, and the policy
+        // is evaluated by both so that either hook is correct on its own. Allow is the common case: the mode
+        // settled it, and a settled call must not turn into a dialog.
+        if (decision == PermissionDecision.Deny) return _scope.DescribePermissionRefusal(invocation);
+        if (decision == PermissionDecision.Allow) return null;
+
+        var toolName = invocation.Name;
+        var description = $"The Agent wants to call the tool '{toolName}'. "
+                        + $"{_scope.PermissionMode} mode puts {invocation.Category} actions to you.";
         if (await _scope.ResolveConfirmationAsync(toolName, description))
             return null;
 
@@ -314,8 +330,10 @@ public sealed class WorkflowAgentToolkit
     /// The pre-flight gate: returns the refusal message when a configured call limit is already reached,
     /// or <c>null</c> to let the call through. Runs inside the marshalled block, before the tool body.
     /// </summary>
-    private string? CheckBudget(string toolName)
+    private string? CheckInvocation(ToolInvocation invocation)
     {
+        var toolName = invocation.Name;
+
         // A tool the host switched off is refused here, not merely filtered out of the workflow tool list:
         // this hook is shared by every slice the scope composes — MCP's and the skills' providers are given
         // this same policy — so one switch reaches all of them. Filtering alone would only reach the
@@ -327,6 +345,12 @@ public sealed class WorkflowAgentToolkit
         // would leave the session with no way forward at all.
         if (string.Equals(toolName, ResetBudgetToolName, StringComparison.OrdinalIgnoreCase))
             return null;
+
+        // ── What the session's mode allows at all ──
+        // Before the budget, deliberately: a call the mode refuses must not be described as a budget problem,
+        // or the model asks for a larger budget and retries something no budget would have allowed.
+        if (_scope.PermissionPolicy.Evaluate(invocation) == PermissionDecision.Deny)
+            return _scope.DescribePermissionRefusal(invocation);
 
         // ── The session's shared allowance, when this scope is spending somebody else's ──
         // Asked before this scope's own share, because it is the harder wall and the only one the model
@@ -433,16 +457,8 @@ public sealed class WorkflowAgentToolkit
         if (exhausted is null)
             return Ok("No tool-call limit is currently reached; there is nothing to extend.");
 
-        // Level 0 means the host asked never to be interrupted. There is then no way to obtain the user's
-        // agreement, and a budget may only be reopened with it — so this denies rather than asking a
-        // question the host said it does not want.
-        if (!_scope.IsInteractionAllowed)
-            return new VeloxJsonObject
-            {
-                ["status"] = "denied",
-                ["message"] = "The host has switched interaction off for this session, so the user cannot be asked. Stop calling tools and report what remains.",
-            }.ToJson();
-
+        // No mode reopens the budget on its own, Bypass included: the budget is the host's number, so the
+        // only way past it is the user's answer. With no handler there is no answer, and no answer denies.
         // Asking is the whole safety property: the Agent cannot widen its own budget, it can only put the
         // question to the user. With no confirmation handler registered the answer is no — an unanswerable
         // prompt must deny, never silently allow.
@@ -989,6 +1005,62 @@ public sealed class WorkflowAgentToolkit
             return AgentContextCollector.GetDataContext(type, lang);
 
         return AgentContextCollector.GetClassContext(type, lang);
+    }
+
+    [Description("Switches this session to Plan mode: you may read and propose, but nothing that changes the graph, runs it, or changes what the session can reach will run until the mode moves. Use it when the user asks for a plan, or before a large change you want looked at first. The user has to agree. Switch back with ExitPlanMode once the plan is agreed.")]
+    private async Task<string> EnterPlanMode()
+    {
+        if (_scope.PermissionMode == AgentPermissionMode.Plan)
+            return new VeloxJsonObject { ["status"] = "ok", ["mode"] = "Plan", ["message"] = "Already planning." }.ToJson();
+
+        if (!await _scope.ResolveConfirmationAsync(
+                "mode:plan",
+                "The Agent wants to switch this session to Plan mode \u2014 it may read and propose, but nothing that changes the graph will run until you agree to change something."))
+        {
+            return new VeloxJsonObject
+            {
+                ["status"] = "denied",
+                ["message"] = "The user declined to switch to Plan mode. Carry on in the current mode, or ask what they want.",
+            }.ToJson();
+        }
+
+        _scope.EnterPlan();
+        return new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["mode"] = "Plan",
+            ["message"] = "Planning. Survey what you need, say what you would change and why, and put the choice to the user. Nothing that changes the graph will run until they agree and you call ExitPlanMode.",
+        }.ToJson();
+    }
+
+    [Description("Leaves Plan mode, restoring the mode the session was in before it entered. Call it once the user has agreed to the plan and you are ready to make the changes. The user has to agree to this too.")]
+    private async Task<string> ExitPlanMode()
+    {
+        if (_scope.PermissionMode != AgentPermissionMode.Plan)
+            return new VeloxJsonObject
+            {
+                ["status"] = "error",
+                ["message"] = $"This session is in {_scope.PermissionMode} mode, not Plan. Nothing to leave.",
+            }.ToJson();
+
+        if (!await _scope.ResolveConfirmationAsync(
+                "mode:build",
+                "The Agent wants to leave Plan mode and start making the changes the two of you agreed on."))
+        {
+            return new VeloxJsonObject
+            {
+                ["status"] = "denied",
+                ["message"] = "The user declined to leave Plan mode. Keep planning, or ask what they want.",
+            }.ToJson();
+        }
+
+        _scope.ExitPlan();
+        return new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["mode"] = _scope.PermissionMode.ToString(),
+            ["message"] = $"Back in {_scope.PermissionMode} mode. Carry out the plan.",
+        }.ToJson();
     }
 
     [Description("Lists commands on a node: name and parameter type.")]

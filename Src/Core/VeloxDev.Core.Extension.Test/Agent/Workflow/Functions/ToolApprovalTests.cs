@@ -1,4 +1,4 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Linq;
@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.Workflow;
 using VeloxDev.WorkflowSystem;
 
@@ -54,7 +55,10 @@ public class ToolApprovalTests
         var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(new NodeDefaultViewModel());
 
-        var scope = new WorkflowAgentScope(tree).WithToolApproval(approval);
+        // The tool-approval axis is now the mode's: Manual puts every non-read action to the user, and Auto
+        // — the library default — runs graph work without asking. Same two behaviours, one knob.
+        var scope = new WorkflowAgentScope(tree)
+            .WithPermissionMode(approval ? AgentPermissionMode.Manual : AgentPermissionMode.Auto);
         if (confirm is not null) scope.WithConfirmationHandler(confirm);
         return (tree, scope);
     }

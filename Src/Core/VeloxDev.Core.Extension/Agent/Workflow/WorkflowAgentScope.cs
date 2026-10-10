@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.Skills;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow.Functions;
@@ -280,9 +281,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     {
         if (child is null) throw new ArgumentNullException(nameof(child));
 
-        child.WithInteractionSafety(_interactionSafety);
-        foreach (var kvp in _safetyPromptOverrides)
-            child.WithInteractionSafetyPrompt(kvp.Key, kvp.Value);
+        // The policy travels whole — mode, every rule, the judge and the per-mode text. A missed rule is a
+        // security hole rather than a cosmetic slip: a child that inherited the parent's Bypass without its
+        // Deny rules would allow what the parent forbids.
+        child._permission = _permission;
+        foreach (var kvp in _modePromptOverrides)
+            child._modePromptOverrides[kvp.Key] = kvp.Value;
 
         // Assigned rather than routed through the public `With…` overloads, which take the host-facing event
         // args: these are the delegates the toolkit actually calls, and re-wrapping them would put a second
@@ -625,37 +629,173 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private readonly HashSet<string> _sessionAllowedOperations = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Controls how aggressively the Agent uses <c>RequestSelection</c> and <c>RequestConfirmation</c>.
-    /// <list type="bullet">
-    ///   <item><b>0 — Silent</b>: Never interact. Act autonomously on best-guess; skip both tools entirely.</item>
-    ///   <item><b>1 — Cautious (default)</b>: Ask only when intent is genuinely ambiguous or the action is bulk/destructive.</item>
-    ///   <item><b>2 — Balanced</b>: Ask whenever there are multiple plausible paths OR the action touches ≥ 2 nodes/links.</item>
-    ///   <item><b>3 — Strict</b>: Ask before every mutation that is not a pure single-node creation. Gate all destructive actions unconditionally.</item>
-    /// </list>
-    /// Valid range: 0–3. Values outside this range are clamped.
+    /// The session's permission policy: one mode, the host's rules, and an optional judge for
+    /// <see cref="AgentPermissionMode.Auto"/>.
+    /// <para>
+    /// Immutable, and swapped as a whole, so a call being evaluated reads one consistent policy and needs no
+    /// lock. Read it per call rather than caching it: the mode and the rules are both runtime settings.
+    /// </para>
     /// </summary>
-    private int _interactionSafety = 1;
+    private volatile AgentPermissionPolicy _permission = AgentPermissionPolicy.For(AgentPermissionPolicy.DefaultMode);
 
-    /// <summary>Whether non-query calls need the host's approval first. Off by default; see WithToolApproval.</summary>
-    private bool _toolApproval;
+    /// <summary>Custom prompt text per mode. Every mode can carry one — unlike the level-keyed dictionary this replaces.</summary>
+    private readonly Dictionary<AgentPermissionMode, string> _modePromptOverrides = [];
 
     /// <summary>
-    /// Custom prompt text per safety level (1–3). Level 0 is always the built-in silent rule.
-    /// Key = level (1/2/3), Value = full body text to embed in the "Interaction Safety Policy" section.
-    /// When a level has no entry the built-in default text is used.
+    /// Advances whenever the policy changes in any way the prompt states — the mode, a rule, the judge, or a
+    /// mode's text. The skeleton receipt records it so the envelope can tell that a frozen policy has moved on.
     /// </summary>
-    private readonly Dictionary<int, string> _safetyPromptOverrides = [];
+    internal long PermissionRevision => Interlocked.Read(ref _permissionRevision);
 
-    /// <summary>
-    /// Sets the interaction safety level (0–3) that governs how often the Agent pauses
-    /// to ask the user via <c>RequestSelection</c> or <c>RequestConfirmation</c>.
-    /// Higher values make the Agent more conservative and user-driven.
-    /// </summary>
-    public WorkflowAgentScope WithInteractionSafety(int level)
+    private long _permissionRevision;
+
+    /// <summary>The mode the Agent was in before it entered <see cref="AgentPermissionMode.Plan"/>.</summary>
+    /// <remarks>
+    /// Leaving Plan restores this rather than picking a mode: the Agent restricted itself to plan something,
+    /// and when the user agrees to the plan the session should be where it was, not somewhere chosen for it.
+    /// </remarks>
+    private AgentPermissionMode? _modeBeforePlan;
+
+    /// <summary>Moves the session to <see cref="AgentPermissionMode.Plan"/>, remembering where to come back to.</summary>
+    /// <remarks>The Agent's own transition, and a narrowing one. The host is free to use it too.</remarks>
+    internal void EnterPlan()
     {
-        _interactionSafety = Math.Max(0, Math.Min(3, level));
+        if (_permission.Mode == AgentPermissionMode.Plan) return;
+
+        _modeBeforePlan = _permission.Mode;
+        _permission = _permission.WithMode(AgentPermissionMode.Plan);
+        Interlocked.Increment(ref _permissionRevision);
+        BumpVersion();
+    }
+
+    /// <summary>Leaves <see cref="AgentPermissionMode.Plan"/>, restoring the mode the session was in before.</summary>
+    internal void ExitPlan()
+    {
+        if (_permission.Mode != AgentPermissionMode.Plan) return;
+
+        _permission = _permission.WithMode(_modeBeforePlan ?? AgentPermissionMode.Manual);
+        _modeBeforePlan = null;
+        Interlocked.Increment(ref _permissionRevision);
+        BumpVersion();
+    }
+
+    /// <summary>The policy in force. Never null.</summary>
+    public AgentPermissionPolicy PermissionPolicy => _permission;
+
+    /// <summary>The mode in force.</summary>
+    public AgentPermissionMode PermissionMode => _permission.Mode;
+
+    /// <summary>Declares the text embedded for a mode, replacing the text the library ships for it.</summary>
+    /// <param name="mode">The mode.</param>
+    /// <param name="promptBody">The body text, or <see langword="null"/> to go back to the shipped text.</param>
+    /// <returns>This scope.</returns>
+    public WorkflowAgentScope WithModePrompt(AgentPermissionMode mode, string? promptBody)
+    {
+        if (string.IsNullOrWhiteSpace(promptBody)) _modePromptOverrides.Remove(mode);
+        else _modePromptOverrides[mode] = promptBody!;
+
+        Interlocked.Increment(ref _permissionRevision);
         BumpVersion();
         return this;
+    }
+
+    /// <summary>
+    /// Moves the session to another mode. The coarse half of the permission system; see
+    /// <see cref="WithPermissionRule"/> for the fine half.
+    /// </summary>
+    /// <param name="mode">The mode to move to.</param>
+    /// <returns>This scope.</returns>
+    public WorkflowAgentScope WithPermissionMode(AgentPermissionMode mode)
+    {
+        if (_permission.Mode == mode) return this;
+
+        _permission = _permission.WithMode(mode);
+        Interlocked.Increment(ref _permissionRevision);
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>Moves the session to another mode, for a host driving it from a binding.</summary>
+    /// <param name="mode">The mode to move to.</param>
+    /// <returns>Whether the mode actually moved.</returns>
+    public bool SetPermissionMode(AgentPermissionMode mode)
+    {
+        if (_permission.Mode == mode) return false;
+
+        WithPermissionMode(mode);
+        return true;
+    }
+
+    /// <summary>
+    /// Adds a rule beneath the mode. A <see cref="PermissionDecision.Deny"/> rule holds in every mode,
+    /// including <see cref="AgentPermissionMode.Bypass"/>.
+    /// </summary>
+    /// <param name="decision">What to do with a call the pattern matches.</param>
+    /// <param name="patterns">Which calls it is about; see <see cref="AgentPermissionRule"/> for the shapes.</param>
+    /// <returns>This scope.</returns>
+    public WorkflowAgentScope WithPermissionRule(PermissionDecision decision, params string[] patterns)
+    {
+        if (patterns is null || patterns.Length == 0) return this;
+
+        _permission = _permission.WithRules([.. patterns.Select(p => new AgentPermissionRule(decision, p))]);
+        Interlocked.Increment(ref _permissionRevision);
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>Removes every rule. The mode is untouched.</summary>
+    /// <returns>This scope.</returns>
+    public WorkflowAgentScope WithoutPermissionRules()
+    {
+        _permission = _permission.WithoutRules();
+        Interlocked.Increment(ref _permissionRevision);
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// Supplies the judge that decides calls in <see cref="AgentPermissionMode.Auto"/> that no rule settled.
+    /// Without one, the mode's own answer stands.
+    /// </summary>
+    /// <param name="judge">The judge, or <see langword="null"/> to remove it.</param>
+    /// <returns>This scope.</returns>
+    public WorkflowAgentScope WithPermissionJudge(Func<ToolInvocation, PermissionDecision>? judge)
+    {
+        _permission = _permission.WithJudge(judge);
+        Interlocked.Increment(ref _permissionRevision);
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// The refusal a call gets when the policy denies it. It names the mode and what to change, because a
+    /// model that can only say "the host must change a setting" leaves the user with nothing to press.
+    /// </summary>
+    /// <param name="invocation">The call that was denied.</param>
+    /// <returns>The message, in the session's language.</returns>
+    internal string DescribePermissionRefusal(ToolInvocation invocation)
+    {
+        var mode = _permission.Mode;
+        var rule = _permission.Rules.FirstOrDefault(
+            r => r.Decision == PermissionDecision.Deny && r.Matches(invocation));
+
+        if (_defaultLanguage == AgentLanguages.Chinese)
+        {
+            return rule is not null
+                ? $"'{invocation.Name}' 被宿主的 deny 规则（'{rule.Pattern}'）拒绝，它在每个模式下都生效。"
+                  + "这次调用没有执行。把是哪条规则挡住的告诉用户，宿主可以去掉它。"
+                : $"'{invocation.Name}' 被当前的权限模式 '{mode}' 拒绝：该模式不允许 {invocation.Category} 类动作。"
+                  + "这次调用没有执行。不要重试，也不要找另一个能做同样改动的工具 —— "
+                  + $"如果用户确实要做，请告诉他切到 Manual 或 AutoEdit（那两个模式允许 {invocation.Category} 类动作）。";
+        }
+
+        return rule is not null
+            ? $"'{invocation.Name}' was refused by a host deny rule ('{rule.Pattern}'), which holds in every mode. "
+              + "The call did not run. Tell the user which rule blocked it — the host can remove it."
+            : $"'{invocation.Name}' was refused by permission mode '{mode}': {invocation.Category} actions are not "
+              + "allowed in it. The call did not run. Do not retry it and do not look for another tool that makes "
+              + "the same change. If the user wants this done, tell them to switch the session to Manual or "
+              + $"AutoEdit — either permits {invocation.Category} actions.";
     }
 
     /// <summary>
@@ -689,31 +829,13 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// No version bump: nothing this contributes reaches the prompt, so no per-turn render depends on it.
     /// </para>
     /// </remarks>
-    public WorkflowAgentScope WithToolApproval(bool enabled = true)
-    {
-        _toolApproval = enabled;
-        return this;
-    }
-
-    /// <summary>Whether non-query calls are put to the host's confirmation handler before they run.</summary>
-    internal bool ToolApproval => _toolApproval;
-
     /// <summary>
-    /// Overrides the prompt body text injected into the system prompt for the specified safety level (1–3).
-    /// Level 0 always uses the built-in silent rule and cannot be overridden.
-    /// The <paramref name="promptBody"/> replaces the entire body of the
-    /// "Interaction Safety Policy" section for that level; the heading and footer are still generated automatically.
-    /// Call multiple times to configure several levels independently.
+    /// Whether a call of this category is put to the user before it runs, under the current mode.
     /// </summary>
-    /// <param name="level">Safety level to override (1, 2, or 3).</param>
-    /// <param name="promptBody">Full body text for that level, written in the language your Agent understands.</param>
-    public WorkflowAgentScope WithInteractionSafetyPrompt(int level, string promptBody)
-    {
-        if (level < 1 || level > 3) return this;
-        _safetyPromptOverrides[level] = promptBody ?? string.Empty;
-        BumpVersion();
-        return this;
-    }
+    /// <param name="category">What the tool does.</param>
+    /// <returns>Whether the mode asks about it.</returns>
+    internal bool RequiresApproval(AgentActionCategory category)
+        => AgentPermissionPolicy.ModeDefault(_permission.Mode, category) == PermissionDecision.Ask;
 
     /// <summary>
     /// Registers an asynchronous handler for the <c>RequestSelection</c> tool.
@@ -792,55 +914,74 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     // ── Interaction safety prompt ───────────────────────────────────────────
 
-    /// <summary>
-    /// Whether interaction tools (RequestSelection / RequestConfirmation) are allowed.
-    /// When <c>false</c> (level 0), no interaction tools are registered and no safety
-    /// policy is emitted, guaranteeing the Agent cannot call them.
-    /// </summary>
-    internal bool IsInteractionAllowed => _interactionSafety > 0;
-
     private string BuildInteractionSafetyPrompt(AgentLanguages language)
     {
-        if (_interactionSafety == 0)
-            return string.Empty; // No tools registered → no policy needed
+        var mode = _permission.Mode;
+        var chinese = language == AgentLanguages.Chinese;
 
         var sb = new StringBuilder();
-        sb.AppendLine("## Interaction Safety Policy");
+        sb.AppendLine(chinese ? "## 权限模式与规则" : "## Permission Mode and Rules");
         sb.AppendLine();
 
-        // Non-level-0 (1–3): load shared gate + per-level rules
+        // ── 跨模式不变的那一半：宿主边界与选择器约束 ──
+        var shared = AgentEmbeddedResources.ReadSafety(SystemName, "Shared", language);
+        if (!string.IsNullOrWhiteSpace(shared))
+            sb.AppendLine(shared!.TrimEnd());
+
+        sb.AppendLine();
+
+        // ── 这一模式的规则 ──
+        var modeFile = AgentEmbeddedResources.ReadSafety(SystemName, mode.ToString(), language);
+        if (!string.IsNullOrWhiteSpace(modeFile))
+            sb.AppendLine(modeFile!.TrimEnd());
+
+        // ── 宿主自定义覆盖（优先级最高） ──
+        if (_modePromptOverrides.TryGetValue(mode, out var custom) && !string.IsNullOrWhiteSpace(custom))
         {
-            // ── Shared gate (levels 1–3): loaded from embedded Safety/Shared.md ──
-            var shared = AgentEmbeddedResources.ReadSafety(SystemName, "Shared", language);
-            if (!string.IsNullOrWhiteSpace(shared))
-                sb.AppendLine(shared!.TrimEnd());
-
             sb.AppendLine();
+            sb.AppendLine(chinese
+                ? "#### 宿主自定义附加规则（优先级高于上述所有默认规则）"
+                : "#### Host-Configured Additional Rules (take priority over all defaults above)");
+            sb.AppendLine(custom.TrimEnd());
+        }
 
-            // ── Per-level rules: loaded from embedded Safety/Level{n}.md ────────
-            var levelFile = AgentEmbeddedResources.ReadSafety(SystemName, $"Level{_interactionSafety}", language);
-            if (!string.IsNullOrWhiteSpace(levelFile))
-                sb.AppendLine(levelFile!.TrimEnd());
+        // ── 这一模式对每类动作的答案，以及宿主的确定性规则 ──
+        sb.AppendLine();
+        sb.AppendLine(chinese ? "| 动作类别 | 本模式下 |" : "| Action category | In this mode |");
+        sb.AppendLine("| --- | --- |");
+        foreach (var category in (AgentActionCategory[])Enum.GetValues(typeof(AgentActionCategory)))
+        {
+            var decision = AgentPermissionPolicy.ModeDefault(mode, category);
+            sb.AppendLine($"| {category} | {Word(decision, chinese)} |");
+        }
 
-            // ── Host-supplied additive overrides ─────────────────────────────────
-            if (_safetyPromptOverrides.TryGetValue(_interactionSafety, out var custom) && !string.IsNullOrWhiteSpace(custom))
-            {
-                sb.AppendLine();
-                if (language == AgentLanguages.Chinese)
-                    sb.AppendLine("#### 宿主自定义附加规则（优先级高于上述所有默认规则）");
-                else
-                    sb.AppendLine("#### Host-Configured Additional Rules (take priority over all defaults above)");
-                sb.AppendLine(custom.TrimEnd());
-            }
+        if (_permission.Rules.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine(chinese
+                ? "**宿主规则（优先级：deny > ask > allow > 上表）：**"
+                : "**Host rules (precedence: deny > ask > allow > the table above):**");
+            foreach (var rule in _permission.Rules)
+                sb.AppendLine($"- `{rule.Decision}` `{rule.Pattern}`");
         }
 
         sb.AppendLine();
-        if (language == AgentLanguages.Chinese)
-            sb.AppendLine($"> 当前安全挡位：**第 {_interactionSafety} 挡**（由宿主通过 `WithInteractionSafety({_interactionSafety})` 设置）。");
+        if (chinese)
+            sb.AppendLine($"> 当前权限模式：**{mode}**（宿主用 `WithPermissionMode(AgentPermissionMode.{mode})` 设置）。被拒绝的调用会告诉你是哪个模式拦的 —— 不要重试，也不要找另一个能做同样改动的工具，把换模式这件事交给用户。");
         else
-            sb.AppendLine($"> Active safety level: **{_interactionSafety}** (set by the host via `WithInteractionSafety({_interactionSafety})`).");
+            sb.AppendLine($"> Active permission mode: **{mode}** (set by the host via `WithPermissionMode(AgentPermissionMode.{mode})`). A refused call names the mode that refused it — do not retry it and do not look for another tool that makes the same change; hand the mode switch to the user instead.");
         return sb.ToString();
     }
+
+    private static string Word(PermissionDecision decision, bool chinese) => (decision, chinese) switch
+    {
+        (PermissionDecision.Allow, true) => "直接执行",
+        (PermissionDecision.Ask, true) => "先问用户",
+        (PermissionDecision.Deny, true) => "直接拒绝",
+        (PermissionDecision.Allow, false) => "runs",
+        (PermissionDecision.Ask, false) => "asks first",
+        _ => "refused",
+    };
 
     /// <summary>
     /// A global, language-agnostic recovery protocol injected into both prompt modes.
@@ -1557,6 +1698,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // an approval is configured once. The delegate resolves lazily, which keeps registration order in
         // the fluent chain irrelevant. A handler set directly on the MCP scope is replaced by this.
         mcp.WithConfirmationHandler(ResolveConfirmationAsync);
+        // And the same policy, for the one question a rule about a tool cannot answer: adding a server from a
+        // local package installs software while an Http endpoint does not, and that difference lives in the
+        // arguments rather than in the tool's name.
+        mcp.PermissionCheck = invocation => _permission.Evaluate(invocation);
         // Same UI thread as the components: the MCP status list is meant to be bound by the host.
         mcp.WithSynchronizationContext(UIContext);
         // Composed with this scope's policy, so MCP-sourced tools join the same budgets and callbacks.
@@ -1775,10 +1920,17 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         /// <summary>The language the skeleton was written in — the envelope's prose follows it.</summary>
         public AgentLanguages Language;
 
-        /// <summary>The interaction-safety level whose policy the skeleton spelled out.</summary>
-        public int SafetyLevel;
+        /// <summary>The permission mode whose policy the skeleton spelled out.</summary>
+        public AgentPermissionMode PermissionMode;
 
-        /// <summary>Length of that level's host override, or -1 when it had none.</summary>
+        /// <summary>
+        /// The policy revision the skeleton was written at. A mode is not the only thing that moves: the host
+        /// can add a <c>Deny</c> rule after the skeleton was rendered, and a model still reading the old
+        /// policy would be told a tool is fine that the host has since forbidden.
+        /// </summary>
+        public long PermissionRevision;
+
+        /// <summary>Length of that mode's host override, or -1 when it had none.</summary>
         public int SafetyOverrideLength;
 
         /// <summary>The output language the skeleton directed, or -1 when none was set.</summary>
@@ -1809,8 +1961,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         _skeletonReceipt = new SkeletonReceipt
         {
             Language = language,
-            SafetyLevel = _interactionSafety,
-            SafetyOverrideLength = OverrideLengthFor(_interactionSafety),
+            PermissionMode = _permission.Mode,
+            PermissionRevision = PermissionRevision,
+            SafetyOverrideLength = OverrideLengthFor(_permission.Mode),
             OutputLanguage = _outputLanguage.HasValue ? (int)_outputLanguage.Value : -1,
             CustomToolPromptLength = _customToolPrompt.Length,
             Enums = CollectTypeNames(CustomerEnums),
@@ -1829,8 +1982,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return names;
     }
 
-    private int OverrideLengthFor(int level)
-        => _safetyPromptOverrides.TryGetValue(level, out var body) ? (body?.Length ?? 0) : -1;
+    private int OverrideLengthFor(AgentPermissionMode mode)
+        => _modePromptOverrides.TryGetValue(mode, out var body) ? (body?.Length ?? 0) : -1;
 
     /// <summary>
     /// The key a per-turn render is cached against: <see cref="Version"/> plus the current budget-usage
@@ -1909,16 +2062,17 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         {
             // No skeleton was ever built, so nothing above has stated any of this and there is nothing to
             // supersede — every section is emitted plainly.
-            AppendInteractionSafetyPolicy(sb, language, supersedesLevel: null);
+            AppendInteractionSafetyPolicy(sb, language, supersedes: false);
             AppendOutputLanguageDirective(sb, language, supersedes: false);
             AppendCustomToolGuidance(sb, language, fromLength: 0);
             AppendRegisteredTypeDelta(sb, language, new SkeletonReceipt());
         }
         else
         {
-            if (receipt.SafetyLevel != _interactionSafety
-                || receipt.SafetyOverrideLength != OverrideLengthFor(_interactionSafety))
-                AppendInteractionSafetyPolicy(sb, language, supersedesLevel: receipt.SafetyLevel);
+            if (receipt.PermissionMode != _permission.Mode
+                || receipt.PermissionRevision != PermissionRevision
+                || receipt.SafetyOverrideLength != OverrideLengthFor(_permission.Mode))
+                AppendInteractionSafetyPolicy(sb, language, supersedes: true);
 
             var outputLanguage = _outputLanguage.HasValue ? (int)_outputLanguage.Value : -1;
             if (receipt.OutputLanguage != outputLanguage)
@@ -2022,31 +2176,17 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             : $"- {label}: {used}/{cap.Value}, {state}");
     }
 
-    private void AppendInteractionSafetyPolicy(StringBuilder sb, AgentLanguages language, int? supersedesLevel)
+    private void AppendInteractionSafetyPolicy(StringBuilder sb, AgentLanguages language, bool supersedes)
     {
         var chinese = language == AgentLanguages.Chinese;
 
-        // Level 0 means no policy at all, and saying so is not the same as saying nothing: a skeleton
-        // written at level 1+ still carries a policy the model will keep obeying unless it is told the
-        // policy was withdrawn. An empty "the following replaces it" would be worse than silence.
-        if (_interactionSafety == 0)
+        // There is no "no policy" state under modes: every mode has text, Plan included. So the only thing
+        // the envelope has to say here is that a frozen policy has moved on.
+        if (supersedes)
         {
             sb.AppendLine(chinese
-                ? "### 交互安全策略已撤销（取代上文）"
-                : "### Interaction safety policy withdrawn (replaces the section above)");
-            sb.AppendLine();
-            sb.AppendLine(chinese
-                ? "> 上文那份交互安全策略**不再适用** —— 宿主已撤销它。"
-                : "> The interaction safety policy above **no longer applies** — the host has withdrawn it.");
-            sb.AppendLine();
-            return;
-        }
-
-        if (supersedesLevel.HasValue)
-        {
-            sb.AppendLine(chinese
-                ? $"### 安全策略已变更（取代上文为第 {supersedesLevel.Value} 挡渲染的那一份）"
-                : $"### Interaction safety policy changed (replaces the one above, written for level {supersedesLevel.Value})");
+                ? "### 权限模式或规则已变更（取代上文）"
+                : "### Permission mode or rules changed (replaces the section above)");
             sb.AppendLine();
             sb.AppendLine(chinese
                 ? "> 上文那份策略已经失效，**以下取代它**。"

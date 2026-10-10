@@ -1,4 +1,4 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.Workflow;
 using VeloxDev.WorkflowSystem;
 
@@ -171,11 +172,11 @@ public class CapabilityEnvelopeTests
     {
         var scope = Scope();
         var skeleton = scope.ProvideProgressiveContextPrompt();
-        StringAssert.Contains(skeleton, "## Interaction Safety Policy", "the skeleton is what carries the policy");
+        StringAssert.Contains(skeleton, "## Permission Mode and Rules", "the skeleton is what carries the policy");
 
         var envelope = Envelope(scope);
 
-        Assert.IsFalse(envelope.Contains("## Interaction Safety Policy"),
+        Assert.IsFalse(envelope.Contains("## Permission Mode and Rules"),
             "the receipt exists precisely so a section the skeleton already wrote is not written again");
     }
 
@@ -186,9 +187,10 @@ public class CapabilityEnvelopeTests
         // there is nothing to supersede and the envelope must carry the whole policy itself.
         var envelope = Envelope(Scope());
 
-        StringAssert.Contains(envelope, "## Interaction Safety Policy");
-        StringAssert.Contains(envelope, "Active safety level: **1**");
-        Assert.IsFalse(envelope.Contains("written for level"),
+        StringAssert.Contains(envelope, "## Permission Mode and Rules");
+        StringAssert.Contains(envelope, "Active permission mode: **Auto**",
+            "the mode that is in force has to be named, or the refusal that tells the model to switch names nothing");
+        Assert.IsFalse(envelope.Contains("replaces the one above"),
             "nothing was frozen, so no replacement wording belongs here");
     }
 
@@ -203,7 +205,12 @@ public class CapabilityEnvelopeTests
     [TestMethod]
     public void TheSharedPolicy_CarriesTheHostBoundaries()
     {
-        StringAssert.Contains(Scope().ProvideProgressiveContextPrompt(), "Host Boundaries");
+        var boundaries = Scope().ProvideProgressiveContextPrompt();
+        StringAssert.Contains(boundaries, "Host Boundaries");
+        StringAssert.Contains(boundaries, "SetMcpServerArguments",
+            "the rule has to name the sanctioned route. Without it the text reads as a ban on widening reach by "
+            + "any means — and the sanctioned route is the one the host built the tool for");
+        StringAssert.Contains(boundaries, "going around", "while the thing it does forbid is the way round it");
 
         var chinese = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithPromptLanguage(AgentLanguages.Chinese)
@@ -211,41 +218,51 @@ public class CapabilityEnvelopeTests
         StringAssert.Contains(chinese, "宿主边界",
             "both corpora carry it, or half the hosts keep the policy that said nothing about this");
 
-        var off = new WorkflowAgentScope(new TreeDefaultViewModel()).WithInteractionSafety(0);
-        Assert.IsFalse(off.ProvideProgressiveContextPrompt().Contains("Host Boundaries"),
-            "level 0 renders no policy at all, so it cannot carry this one either");
+        var planning = new WorkflowAgentScope(new TreeDefaultViewModel())
+            .WithPermissionMode(AgentPermissionMode.Plan)
+            .ProvideProgressiveContextPrompt();
+        StringAssert.Contains(planning, "Host Boundaries",
+            "a mode restricts what may run; it never relaxes the boundary, so Plan carries it too");
     }
 
     [TestMethod]
-    public async Task SafetyLevelChangedAfterConstruction_ReachesTheModelAsAReplacement()
+    public async Task PermissionModeChangedAfterConstruction_ReachesTheModelAsAReplacement()
     {
         // The bug this whole change exists for, asserted end to end: the host renders the skeleton, builds
-        // the agent, and only then turns the safety level down. Before the envelope, the model kept reading
-        // the level-1 policy and the level-1 number for the rest of the run.
+        // the agent, and only then narrows the mode. Before the envelope, the model kept reading the policy
+        // it was built with for the rest of the run.
         var scope = Scope();
         var skeleton = scope.ProvideProgressiveContextPrompt();
-        scope.WithInteractionSafety(3);
+        Assert.Contains("AgentPermissionMode.Auto", skeleton, "precondition: the skeleton names the starting mode");
+
+        scope.WithPermissionMode(AgentPermissionMode.Plan);
 
         var client = await OfflineAgent.RunOnce(scope, skeleton);
 
         var prose = string.Join("\n", client.Prose);
-        StringAssert.Contains(prose, "written for level 1", "the model has to be told the older block is dead");
-        StringAssert.Contains(prose, "Active safety level: **3**");
+        StringAssert.Contains(prose, "Permission mode or rules changed",
+            "the model has to be told the older block is dead");
+        StringAssert.Contains(prose, "Active permission mode: **Plan**");
+        // Both live in the prose: the skeleton is what the host froze and cannot be rewritten, and the
+        // envelope is the correction appended after it. What must hold is that the correction says so.
+        StringAssert.Contains(prose, "the following replaces it");
     }
 
     [TestMethod]
-    public void SafetyLevelTurnedOffAfterConstruction_SaysThePolicyWasWithdrawn()
+    public void ARuleAddedAfterConstruction_AlsoReplacesTheFrozenPolicy()
     {
-        // Level 0 builds no policy text at all. Emitting the replacement heading with nothing under it
-        // would read as "the rules are gone", which is not the same as "there are none to begin with".
+        // A mode is not the only thing that moves. A host can add a Deny rule after the skeleton was
+        // rendered, and a model still reading the frozen policy would be told a tool is fine that the host
+        // has since forbidden — which is the same stale-policy bug one level down.
         var scope = Scope();
         scope.ProvideProgressiveContextPrompt();
-        scope.WithInteractionSafety(0);
+
+        scope.WithPermissionRule(PermissionDecision.Deny, "DeleteNode");
 
         var envelope = Envelope(scope);
 
-        StringAssert.Contains(envelope, "Interaction safety policy withdrawn");
-        Assert.IsFalse(envelope.Contains("**the following replaces it**"));
+        StringAssert.Contains(envelope, "Permission mode or rules changed");
+        StringAssert.Contains(envelope, "`DeleteNode`", "and the rule itself reaches the model");
     }
 
     [TestMethod]

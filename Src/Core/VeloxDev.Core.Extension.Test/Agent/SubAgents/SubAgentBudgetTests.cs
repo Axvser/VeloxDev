@@ -1,8 +1,9 @@
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
@@ -177,7 +178,8 @@ public class SubAgentBudgetTests
         var child = on.ChildScope(on.Spawn("the thing",
             ("allowedTools", new[] { "ListNodes", "RequestConfirmation" })));
 
-        Assert.IsTrue(child.IsInteractionAllowed, "the host's level travels with the tool that needs it");
+        Assert.AreEqual(AgentPermissionMode.Auto, child.PermissionMode,
+            "the host's mode travels with the tool that needs it");
         Assert.IsTrue(SubAgentFixture.SurfaceOf(child).Contains("RequestConfirmation"),
             "and the tool is really on the child's surface, not merely in its grant list");
 
@@ -187,10 +189,11 @@ public class SubAgentBudgetTests
         Assert.AreEqual("ok", (string?)reply["status"]);
         Assert.AreEqual(1, asked, "the host's own handler answered it — which is what 'usable' means here");
 
-        // And a host that switched interaction off hands down the off state, which is the same decision as
-        // not offering the tool: nothing is registered at level zero, on either side of the spawn.
+        // And whatever mode the host is in travels too. It has to be one that permits dispatching a child at
+        // all — a spawn is an execution, so Plan refuses it before the child exists — which is itself the
+        // point: the mode reaches the spawn, not only the spawned.
         await using var off = new SubAgentFixture(maxToolCalls: 10);
-        off.Scope.WithInteractionSafety(0);
+        off.Scope.WithPermissionMode(AgentPermissionMode.Bypass);
         off.Scope.WithConfirmationHandler(args =>
         {
             args.Result = AgentConfirmationResult.AllowAlways;
@@ -199,9 +202,10 @@ public class SubAgentBudgetTests
 
         var quiet = off.ChildScope(off.Spawn("the thing"));
 
-        Assert.IsFalse(quiet.IsInteractionAllowed, "level zero is a decision about the tree, not about one scope");
-        Assert.IsFalse(SubAgentFixture.SurfaceOf(quiet).Contains("RequestConfirmation"),
-            "and at level zero the tool is not offered at all");
+        Assert.AreEqual(AgentPermissionMode.Bypass, quiet.PermissionMode,
+            "a mode is a decision about the tree, not about one scope");
+        Assert.IsTrue(SubAgentFixture.SurfaceOf(quiet).Contains("RequestConfirmation"),
+            "and a read-only child can still ask — otherwise it could only refuse");
     }
 
     [TestMethod]

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI.Pipelines;
+using VeloxDev.AI.Safety;
 
 namespace VeloxDev.AI;
 
@@ -29,9 +30,23 @@ namespace VeloxDev.AI;
 internal sealed class TrackedAIFunction(
     AIFunction inner,
     ToolPipeline? tools = null,
-    AgentPipeline? pipeline = null) : DelegatingAIFunction(inner)
+    AgentPipeline? pipeline = null,
+    AgentActionCategory category = AgentActionCategory.Execute,
+    string? source = null) : DelegatingAIFunction(inner)
 {
     private readonly ToolPipeline _tools = tools ?? new ToolPipeline();
+
+    /// <summary>
+    /// What this tool does, declared once — on the line that registers it — because the permission gate is a
+    /// policy about categories, and a category guessed at call time would be a second, drifting source of truth.
+    /// </summary>
+    private readonly AgentActionCategory _category = category;
+
+    /// <summary>
+    /// Where the tool came from, or <see langword="null"/> for the workflow's own. Two MCP servers can export a
+    /// tool of the same name, so a rule aimed at one of them has nothing else to go on.
+    /// </summary>
+    private readonly string? _source = source;
 
     // Null when the owner composes no chain — a wrapped tool still marshals and still refuses, it just has
     // nowhere to report to.
@@ -56,7 +71,9 @@ internal sealed class TrackedAIFunction(
         AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
         // ── Pre-flight: the owner may refuse the call outright (budgets are enforced here) ──
-        if (_tools.CheckRefusal(Name) is { } refusal)
+        var invocation = new ToolInvocation(Name, _category, _source, arguments);
+
+        if (_tools.CheckRefusal(invocation) is { } refusal)
         {
             // Reported as completed-without-started: the call never ran, so announcing it first would make
             // the pair a lie, and a host counting events would count something that did not happen.
@@ -69,7 +86,7 @@ internal sealed class TrackedAIFunction(
         // marshalled onto the host's context, and the work after the await (reporting, and the tool body when
         // it is approved) must stay on that same thread. A confirmation handler that shows a dialog depends
         // on it. Reported as Refused, like the budget gate: the call never ran.
-        if (await _tools.CheckConfirmationAsync(Name, cancellationToken) is { } denial)
+        if (await _tools.CheckConfirmationAsync(invocation, cancellationToken) is { } denial)
         {
             await ReportAsync(denial, AgentToolOutcome.Refused, TimeSpan.Zero, cancellationToken);
             return Error(denial);

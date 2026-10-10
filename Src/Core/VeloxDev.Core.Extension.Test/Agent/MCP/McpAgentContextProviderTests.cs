@@ -116,23 +116,18 @@ public class McpAgentContextProviderTests
     }
 
     [TestMethod]
-    public void BuildContext_ReRendersWhenTheSelfServiceLevelChanges()
+    public void BuildContext_CarriesBothWriteToolsWhateverTheSessionPolicy()
     {
-        // The level decides whether AddMcpServer exists and what the prompt promises, so it has to be
-        // part of what invalidates a render.
-        var scope = new McpScope();
-        var provider = new McpAgentContextProvider(scope);
+        // The tools are no longer gated by a ladder of their own, so a re-render cannot be triggered by one:
+        // what may run is the session's permission mode, decided at call time and named in the refusal.
+        var provider = new McpAgentContextProvider(new McpScope());
 
-        var closed = provider.BuildContext();
-        Assert.IsFalse(closed.Tools!.Any(t => t.Name == McpAgentToolkit.AddToolName), "at Closed the tool is absent");
-        Assert.Contains("host-side setting", closed.Instructions!);
+        var context = provider.BuildContext();
 
-        scope.WithSelfService(McpSelfServiceLevel.AllConfirmed);
-        var opened = provider.BuildContext();
-
-        Assert.IsTrue(opened.Tools!.Any(t => t.Name == McpAgentToolkit.AddToolName), "the tool must appear");
-        Assert.Contains("only after the user confirms", opened.Instructions!);
-        Assert.AreNotSame(closed.Tools, opened.Tools, "a level change must rebuild");
+        Assert.IsTrue(context.Tools!.Any(t => t.Name == McpAgentToolkit.AddToolName));
+        Assert.IsTrue(context.Tools!.Any(t => t.Name == McpAgentToolkit.SetArgumentsName));
+        Assert.IsTrue(context.Tools!.Any(t => t.Name == McpAgentToolkit.ListName));
+        Assert.IsNotNull(context.Instructions);
     }
 
     [TestMethod]

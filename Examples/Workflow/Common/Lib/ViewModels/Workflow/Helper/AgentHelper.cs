@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.Skills;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
@@ -206,17 +207,31 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     public Func<AgentConfirmationEventArgs, Task>? ConfirmationHandler { get; set; }
 
     /// <summary>
-    /// Controls how aggressively the Agent uses interaction tools (0–3).
-    /// 0 = fully autonomous; 1 = cautious (default); 2 = balanced; 3 = strict.
+    /// How far the Agent may go before it has to ask. The mode is enforced at call time, not only described
+    /// in the prompt, so the switch is the one to reach for when the Agent refuses something.
+    /// <para>
+    /// This demo sits at <see cref="AgentPermissionMode.AutoEdit"/> — edits run, everything with a side
+    /// effect beyond the undo stack is put to the user — plus the <c>Ask</c> rules below, which is what its
+    /// old strict-prompt setting was trying to say.
+    /// </para>
     /// </summary>
-    public int InteractionSafety { get; set; } = 3;
+    public AgentPermissionMode PermissionMode { get; set; } = AgentPermissionMode.AutoEdit;
 
     /// <summary>
-    /// Optional custom prompt body text per safety level (1–3).
-    /// When set, replaces the built-in default text for that level in the system prompt.
-    /// Level 0 is always the built-in silent rule and cannot be overridden.
+    /// Operations this demo puts to the user even in a mode that would otherwise run them. A rule holds
+    /// beneath the mode; a <see cref="PermissionDecision.Deny"/> rule would hold in every mode.
     /// </summary>
-    public Dictionary<int, string> InteractionSafetyPrompts { get; } = [];
+    public (PermissionDecision Decision, string Pattern)[] PermissionRules { get; } =
+    [
+        (PermissionDecision.Ask, "DeleteNode"),
+        (PermissionDecision.Ask, "DeleteSlot"),
+        (PermissionDecision.Ask, "DisconnectSlots"),
+        (PermissionDecision.Ask, "DisconnectSlotsById"),
+        (PermissionDecision.Ask, "PatchNodeProperties"),
+    ];
+
+    /// <summary>Optional custom prompt body text per mode, replacing the text the library ships for it.</summary>
+    public Dictionary<AgentPermissionMode, string> ModePrompts { get; } = [];
 
     public static async Task<AIAgent> ProvideAgent(IWorkflowTreeViewModel tree, AgentHelper helper)
     {
@@ -267,11 +282,13 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         // handing them to a toolkit — is what lets LoadMcpServers bring one back after it was unloaded.
         helper.Mcp.WithServers([.. helper.McpServers]);
 
-        // Interaction-tool aggressiveness 0~3
-        scope.WithInteractionSafety(helper.InteractionSafety);
-        // Register custom safety-level prompt overrides (applies to levels 1~3 only)
-        foreach (var kvp in helper.InteractionSafetyPrompts)
-            scope.WithInteractionSafetyPrompt(kvp.Key, kvp.Value);
+        // The permission mode, then the rules that refine it.
+        scope.WithPermissionMode(helper.PermissionMode);
+        foreach (var (decision, pattern) in helper.PermissionRules)
+            scope.WithPermissionRule(decision, pattern);
+        // And any prompt text this host wants said in a mode's own words.
+        foreach (var kvp in helper.ModePrompts)
+            scope.WithModePrompt(kvp.Key, kvp.Value);
 
         // The MCP and skill management tools are no longer registered here. Each subsystem's context
         // provider contributes its own tools and its own prompt text on every turn, so a host attaches the

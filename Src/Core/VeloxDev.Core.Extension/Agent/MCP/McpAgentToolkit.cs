@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.AI;
 using VeloxDev.AI.Pipelines;
+using VeloxDev.AI.Safety;
 using VeloxDev.Serialization;
 using System;
 using System.Collections.Generic;
@@ -32,19 +33,48 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// Names of the management tools, in registration order. Exposed so a host composing several tool
     /// sources can classify them without repeating the literals.
     /// <para>
-    /// These are the four every scope registers, granted view aside — a host can rely on them without asking.
-    /// The two that change what software runs on this machine (<see cref="AddToolName"/> and
-    /// <see cref="SetArgumentsName"/>) are deliberately <b>not</b> here: they exist only once the host has
-    /// opened <see cref="McpScope.WithSelfService"/>, so a host that wants to recognise them has to opt in to
-    /// the gate as well. A granted view (see <see cref="McpScope.CreateGrantedView"/>) registers only
-    /// <see cref="ListName"/> and <see cref="DescribeName"/> — the two that read.
+    /// Every scope registers all of these, granted view aside — a host can rely on the whole list without
+    /// asking. The two that change what software runs on this machine used to appear only on a rung of a
+    /// ladder of their own; what may run is now the session's permission mode and the host's rules, decided at
+    /// call time and named in the refusal. A granted view (see <see cref="McpScope.CreateGrantedView"/>)
+    /// registers only <see cref="ListName"/> and <see cref="DescribeName"/> — the two that read.
     /// </para>
     /// </summary>
     public static readonly string[] ToolNames =
-        ["ListMcpServers", "LoadMcpServers", "UnloadMcpServer", "DescribeMcpServer"];
+        [ListName, LoadName, UnloadName, DescribeName, AddToolName, SetArgumentsName];
+
+    /// <summary>Loads the host's pre-registered servers by name.</summary>
+    public const string LoadName = "LoadMcpServers";
+
+    /// <summary>Unloads one server mid-session.</summary>
+    public const string UnloadName = "UnloadMcpServer";
 
     /// <summary>Read-only: lists server state.</summary>
     public const string ListName = "ListMcpServers";
+
+    /// <summary>Where these tools came from, as far as a permission rule is concerned.</summary>
+    internal const string ManagementSource = "mcp:management";
+
+    /// <summary>
+    /// What a management tool does: the two that read answer questions, and the rest change what the session
+    /// can reach — which is the category that still asks in every mode but Bypass.
+    /// </summary>
+    /// <param name="toolName">The name the tool is registered under.</param>
+    /// <returns>The category.</returns>
+    internal static AgentActionCategory CategoryOf(string toolName)
+        => string.Equals(toolName, ListName, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(toolName, DescribeName, StringComparison.OrdinalIgnoreCase)
+            ? AgentActionCategory.Read
+            : AgentActionCategory.Curate;
+
+    /// <summary>
+    /// The names a host writes its rules against when the answer depends on the <i>arguments</i> rather than
+    /// the tool: one kind installs software on this machine, the other only sends data out.
+    /// </summary>
+    public const string LocalKind = "mcp-add:local";
+
+    /// <summary>See <see cref="LocalKind"/>.</summary>
+    public const string HttpKind = "mcp-add:http";
 
     /// <summary>Read-only: exports a server's tool-capability prompt.</summary>
     public const string DescribeName = "DescribeMcpServer";
@@ -81,22 +111,21 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
 
         if (!_scope.IsGrantedView)
         {
-            tools.Add(AIFunctionFactory.Create(LoadServers, ToolNames[1]));
-            tools.Add(AIFunctionFactory.Create(UnloadServer, ToolNames[2]));
+            tools.Add(AIFunctionFactory.Create(LoadServers, LoadName));
+            tools.Add(AIFunctionFactory.Create(UnloadServer, UnloadName));
         }
 
         tools.Add(AIFunctionFactory.Create(DescribeServer, DescribeName));
 
-        // At Closed the tool is absent rather than present-and-refusing: a tool the model can see but
-        // never use only wastes prompt budget and invites retries.
-        if (_scope.SelfServiceLevel != McpSelfServiceLevel.Closed && !_scope.IsGrantedView)
+        // Both write tools are always registered, and what may run is decided at call time by the session's
+        // permission mode and the host's rules. They used to appear only on a host-opened rung of a ladder of
+        // their own, which meant a model that hit the ceiling could say nothing better than "the host must
+        // change a setting" — and the user had no setting in front of them.
+        if (!_scope.IsGrantedView)
+        {
             tools.Add(AIFunctionFactory.Create(AddServer, AddToolName));
-
-        // One rung higher than adding, and for a reason of its own: a remote server takes no launch arguments,
-        // and a local one is not reconfigurable below AllConfirmed. At RemoteConfirmed the tool would therefore
-        // exist and every call would fail — the one thing this class is careful never to ship.
-        if (_scope.SelfServiceLevel >= McpSelfServiceLevel.AllConfirmed && !_scope.IsGrantedView)
             tools.Add(AIFunctionFactory.Create(SetServerArguments, SetArgumentsName));
+        }
 
         return tools;
     }
@@ -110,7 +139,9 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     {
         if (tools is null) throw new ArgumentNullException(nameof(tools));
         return [.. CreateTools().Select(tool =>
-            tool is AIFunction function ? (AITool)new TrackedAIFunction(function, tools, pipeline) : tool)];
+            tool is AIFunction function
+                ? (AITool)new TrackedAIFunction(function, tools, pipeline, CategoryOf(tool.Name), ManagementSource)
+                : tool)];
     }
 
     /// <summary>
@@ -138,25 +169,11 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         sb.Append("DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools) so you can tell the user what it can do; ");
         sb.Append("LoadMcpServers loads the servers the host pre-registered (installing and connecting when needed); ");
         sb.Append("UnloadMcpServer removes a server mid-session — its tools leave the next turn's tool set, and it can be loaded again. ");
-        sb.Append(_scope.SelfServiceLevel switch
-        {
-            McpSelfServiceLevel.Closed =>
-                "This session has no tool that adds or reconfigures a server: what exists is fixed by the host, and that "
-                + "is a setting on the host's side, not something to work around — do not try to change a server's "
-                + "configuration by other means. When the user asks for a server change — one more allowed directory, a "
-                + "different package — say plainly that it is a host-side setting and ask them to change it there, and "
-                + "say what the current launch arguments are. Do not hand them a configuration file for it: the host's "
-                + "form of that is not yours to guess.",
-            McpSelfServiceLevel.RemoteConfirmed =>
-                "AddMcpServer can connect a REMOTE (Http) server, but only after the user confirms it — ask them first, and expect a refusal if they decline. "
-                + "Locally launched servers must be pre-registered by the host.",
-            McpSelfServiceLevel.AllConfirmed =>
-                "AddMcpServer can connect a remote or a locally launched server, but only after the user confirms it — ask them first, and expect a refusal if they decline. "
-                + "SetMcpServerArguments changes a locally launched server's launch arguments — a filesystem server's allowed directories, for example — and asks the same way.",
-            _ =>
-                "AddMcpServer can connect any server without asking. SetMcpServerArguments changes a locally launched server's launch arguments in place, and the servers' tools keep their names across it. "
-                + "Prefer the servers the host pre-registered, and add or reconfigure one only when the task needs it.",
-        });
+        // Mode-independent, and deliberately so. What may run is decided at call time by the session's
+        // permission mode and the host's rules, and a refusal names them — so this text does not have to
+        // track a setting that can move mid-session, which is what the switch it replaces was doing.
+        sb.Append("Whether adding or reconfiguring one is allowed is decided by the session's permission mode and the host's rules; ");
+        sb.Append("a refused call says which mode or rule refused it. Adding a server that is launched locally installs and runs software on this machine, so it asks more often than a remote one. ");
         sb.Append(" Loading a local server installs npm/pip runtimes and may take time — confirm with the user before calling.");
         return sb.ToString();
     }
@@ -182,12 +199,17 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             return Error("A server name is required.");
         if (!Enum.TryParse<McpServerRunMode>(runMode, true, out var mode))
             return Error($"Unknown run mode '{runMode}'. Valid: {string.Join(", ", Enum.GetNames(typeof(McpServerRunMode)))}.");
-        if (!_scope.CanAddServer(mode))
+        // What may be added is a question about the *arguments*: a local package installs and runs software
+        // while an Http endpoint only sends data out. So the same policy is asked about a synthesised call
+        // naming the kind, and the host writes a rule like `Deny("mcp-add:local")` in its own vocabulary.
+        var kind = mode == McpServerRunMode.Http ? HttpKind : LocalKind;
+        var kindArguments = new Dictionary<string, object?> { ["name"] = name, ["runMode"] = mode.ToString() };
+        var verdict = _scope.Judge(kind, kindArguments);
+        if (verdict == PermissionDecision.Deny)
         {
-            var isLocal = mode != McpServerRunMode.Http;
-            return Error(isLocal
-                ? $"Adding a local '{mode}' server is disabled by host policy. Only remote (Http) servers may be added at the current level, and local packages must be pre-registered by the host."
-                : "Adding MCP servers is disabled by host policy. The host must enable it via WithSelfService.");
+            return Error(mode == McpServerRunMode.Http
+                ? "Adding remote MCP servers is refused by host policy (a deny rule naming 'mcp-add:http')."
+                : $"Adding a locally launched '{mode}' server is refused by host policy (a deny rule naming '{LocalKind}'): it would install and run software on this machine.");
         }
 
         if (mode == McpServerRunMode.Http && string.IsNullOrWhiteSpace(endpoint))
@@ -218,7 +240,14 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             Arguments = arguments,
         };
 
-        if (_scope.RequiresConfirmationToAdd())
+        // Asking happens once, in the wrapper, which puts every non-read call to the user under Manual and
+        // AutoEdit. The exception is a rule that asks about this *kind* in a mode that would otherwise let the
+        // call run — Bypass plus `Ask("mcp-add:local")` — which the wrapper cannot see, because it knows the
+        // tool's name and not the run mode inside the arguments.
+        // Standalone, nothing else will ask; composed, the wrapper already has, unless the rule that asked
+        // is about the kind — which the wrapper cannot see, because it knows the tool name and not the args.
+        var alreadyAsked = _scope.IsComposed && _scope.Judge(nameof(AddServer), kindArguments) == PermissionDecision.Ask;
+        if (!_scope.IsComposed || (verdict == PermissionDecision.Ask && !alreadyAsked))
         {
             var description = mode == McpServerRunMode.Http
                 ? $"Connect the Agent to the remote MCP server '{name}' at {endpoint}. Its tools become available for the rest of this session."
@@ -232,6 +261,8 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
                     ["message"] = "The user declined to add this server. Do not retry without asking them.",
                 }.ToJson();
         }
+
+        if (verdict == PermissionDecision.Deny) return Error("refused");
 
         var tools = await _scope.AddAsync(config, ct);
         var status = _scope.Status.Servers.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -274,9 +305,6 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         if (current.RunMode == McpServerRunMode.Http)
             return Error($"'{name}' is a remote (Http) server — the host launches it, so it takes no launch arguments.");
 
-        if (!_scope.CanAddServer(current.RunMode))
-            return Error($"Reconfiguring a local '{current.RunMode}' server is disabled by host policy — it restarts software on this machine. The host must raise WithSelfService.");
-
         string[] arguments;
         try
         {
@@ -298,18 +326,17 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             return Error($"Invalid arguments JSON: {ex.Message}");
         }
 
-        if (_scope.RequiresConfirmationToAdd())
+        if (!_scope.IsComposed
+            && !await _scope.ConfirmationResolver(
+                $"mcp-args:{name}",
+                $"Restart the MCP server '{name}' with launch arguments [{string.Join(", ", arguments)}]. "
+                + "Its tools keep their names, and the current connection keeps serving if the new arguments cannot be reached."))
         {
-            var description = $"Restart the MCP server '{name}' with launch arguments [{string.Join(", ", arguments)}]. "
-                              + "Its tools keep their names, and the current connection keeps serving if the new arguments cannot be reached.";
-            // Awaited without ConfigureAwait: this tool is registered through the scope, so it runs on the
-            // UI thread, and everything after this point reads the UI-bound status collection.
-            if (!await _scope.ConfirmationResolver($"mcp-args:{name}", description))
-                return new VeloxJsonObject
-                {
-                    ["status"] = "denied",
-                    ["message"] = "The user declined to change this server's launch arguments. Do not retry without asking them.",
-                }.ToJson();
+            return new VeloxJsonObject
+            {
+                ["status"] = "denied",
+                ["message"] = "The user declined to change this server's launch arguments. Do not retry without asking them.",
+            }.ToJson();
         }
 
         var reconfigured = new McpServerConfiguration

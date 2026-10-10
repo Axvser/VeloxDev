@@ -1,4 +1,5 @@
-﻿using CliWrap;
+﻿using VeloxDev.AI.Safety;
+using CliWrap;
 using VeloxDev.AI.Pipelines;
 using CliWrap.Buffered;
 using Microsoft.Agents.AI;
@@ -63,25 +64,26 @@ public class McpScope
     }
 
     /// <summary>
-    /// How far the Agent may go in adding MCP servers of its own. Defaults to
-    /// <see cref="McpSelfServiceLevel.Closed"/>, under which the add tool does not exist.
+    /// The session's permission policy, when a workflow scope composed this one. Called with a synthesised
+    /// invocation for the calls whose <i>arguments</i> decide the answer — adding a server is the one case:
+    /// from a local package it installs and runs software, over Http it only sends data out, and a rule layer
+    /// that can only match tool names cannot tell those apart.
     /// </summary>
-    public McpSelfServiceLevel SelfServiceLevel { get; private set; } = McpSelfServiceLevel.Closed;
+    internal Func<ToolInvocation, PermissionDecision>? PermissionCheck { get; set; }
 
-    /// <summary>
-    /// Opens the self-service ladder to <paramref name="level"/>. Read the level's documentation before
-    /// raising it: at <see cref="McpSelfServiceLevel.AllConfirmed"/> and above the Agent can cause a
-    /// package to be installed and launched on this machine.
-    /// </summary>
-    public McpScope WithSelfService(McpSelfServiceLevel level)
-    {
-        if (SelfServiceLevel == level) return this;
-        SelfServiceLevel = level;
-        // The level decides whether AddMcpServer exists and what the prompt says the model may do with
-        // it, so a cached render keyed on Version has to be invalidated here.
-        Interlocked.Increment(ref _version);
-        return this;
-    }
+    /// <summary>Whether a composed host is deciding this scope's calls, and so whether the tools must ask.</summary>
+    /// <remarks>
+    /// A standalone <see cref="McpScope"/> has no wrapper around its tools, so nothing else can put a call to
+    /// the user. Without this the two write tools would run unasked the moment the ladder they used to climb
+    /// was removed — a loosening this scope never asked for.
+    /// </remarks>
+    internal bool IsComposed => PermissionCheck is not null;
+
+    /// <summary>What the policy says about a synthesised call — or, when nothing is composed, what the
+    /// default mode would say, which is to ask.</summary>
+    internal PermissionDecision Judge(string name, IReadOnlyDictionary<string, object?> arguments)
+        => PermissionCheck?.Invoke(new ToolInvocation(name, AgentActionCategory.Curate, "mcp:management", arguments))
+           ?? AgentPermissionPolicy.ModeDefault(AgentPermissionPolicy.DefaultMode, AgentActionCategory.Curate);
 
     /// <summary>
     /// Asks the user to approve an operation the Agent requested. Returns <c>true</c> to proceed.
@@ -101,29 +103,6 @@ public class McpScope
     /// <summary>Runs the registered confirmation handler, denying when there is none.</summary>
     internal Func<string, string, Task<bool>> ConfirmationResolver =>
         _confirmationHandler ?? ((_, _) => Task.FromResult(false));
-
-    /// <summary>
-    /// Whether a server of this run mode may be added by the Agent at the current
-    /// <see cref="SelfServiceLevel"/>.
-    /// </summary>
-    public bool CanAddServer(McpServerRunMode runMode)
-    {
-        if (SelfServiceLevel == McpSelfServiceLevel.Closed) return false;
-
-        var isLocal = runMode != McpServerRunMode.Http;
-        if (!isLocal) return true;
-
-        // Local modes install and launch a package, so they open one rung later than remote ones.
-        return SelfServiceLevel >= McpSelfServiceLevel.AllConfirmed;
-    }
-
-    /// <summary>
-    /// Whether a change the Agent asked for requires the user's agreement — adding a server, or pointing an
-    /// existing one at new launch arguments. Both restart software on this machine, so both answer to the
-    /// same rung.
-    /// </summary>
-    public bool RequiresConfirmationToAdd()
-        => SelfServiceLevel is McpSelfServiceLevel.RemoteConfirmed or McpSelfServiceLevel.AllConfirmed;
 
     /// <summary>
     /// Global connection timeout (Http mode only). Acts as the remote server's transport-layer
@@ -179,6 +158,30 @@ public class McpScope
                     .. _loadedToolSets
                         .Where(kv => !_disabledServers.Contains(kv.Key))
                         .SelectMany(kv => kv.Value.Where(t => !_disabledServerTools.Contains(ToolKey(kv.Key, t.Name))))
+                ];
+        }
+    }
+
+    /// <summary>
+    /// Every offered tool paired with the server that exports it, honouring the same switches as
+    /// <see cref="LoadedTools"/>.
+    /// </summary>
+    /// <remarks>
+    /// The pair is what a permission rule aimed at one server needs: two servers can export a tool of the same
+    /// name, so a rule that could only see the name would either miss it or catch both.
+    /// </remarks>
+    internal IReadOnlyList<(string Server, AITool Tool)> LoadedToolsByServer
+    {
+        get
+        {
+            lock (_loadedToolsLock)
+                return
+                [
+                    .. _loadedToolSets
+                        .Where(kv => !_disabledServers.Contains(kv.Key))
+                        .SelectMany(kv => kv.Value
+                            .Where(t => !_disabledServerTools.Contains(ToolKey(kv.Key, t.Name)))
+                            .Select(t => (kv.Key, t)))
                 ];
         }
     }

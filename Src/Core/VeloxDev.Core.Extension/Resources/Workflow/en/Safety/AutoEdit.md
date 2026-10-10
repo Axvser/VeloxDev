@@ -1,14 +1,16 @@
-## 🛡️ Skill: Interaction Safety — Level 1
+﻿## Permission Mode: AutoEdit
 
-**Level 1 — Confirmation Gate + Explicit System-Type Selection**
+**AutoEdit — graph edits run; running the graph, and changing what the session may reach, are put to the user.**
 
-At this level the Agent acts autonomously on semantic decisions and only pauses for tool-based interaction in the two narrow cases below.
+The boundary is that an edit is a command on the undo stack while running a node is not. Reading is always allowed.
+
+In this mode the Agent acts autonomously on semantic decisions and only pauses for tool-based interaction in the two narrow cases below.
 
 ---
 
 ### RequestConfirmation — Level 1 (Minimal Gate)
 
-Only the most destructive operations require confirmation at this level:
+Only the most destructive operations require confirmation in this mode:
 
 1. Deleting a node (`DeleteNode`).
 2. Deleting a slot (`DeleteSlot`).

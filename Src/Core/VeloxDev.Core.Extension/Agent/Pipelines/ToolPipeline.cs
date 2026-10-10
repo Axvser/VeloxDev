@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading;
+using VeloxDev.AI.Safety;
 using System.Threading.Tasks;
 
 namespace VeloxDev.AI.Pipelines;
@@ -34,10 +35,11 @@ public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func
     public Func<SynchronizationContext?>? MarshalTo { get; set; } = marshalTo;
 
     /// <summary>
-    /// Consulted before a tool runs. Returning a message refuses the call — it becomes the tool's error
-    /// result and the tool is not invoked. Call budgets are enforced here.
+    /// Consulted before a tool runs, given the whole call — name, origin, category and arguments. Returning a
+    /// message refuses it, and the tool is not invoked. What a tool is allowed to do at all is decided here,
+    /// and so are call budgets.
     /// </summary>
-    public Func<string, string?>? Refuse { get; set; }
+    public Func<ToolInvocation, string?>? Refuse { get; set; }
 
     /// <summary>
     /// Consulted after <see cref="Refuse"/> and before a tool runs, for calls the owner wants a human to
@@ -50,7 +52,7 @@ public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func
     /// dialog is already on the thread the dialog belongs to.
     /// </para>
     /// </summary>
-    public Func<string, CancellationToken, ValueTask<string?>>? Confirm { get; set; }
+    public Func<ToolInvocation, CancellationToken, ValueTask<string?>>? Confirm { get; set; }
 
     /// <summary>The thread the wrapper should marshal a call onto, resolved now.</summary>
     internal SynchronizationContext? ResolveContext() => MarshalTo?.Invoke();
@@ -58,13 +60,13 @@ public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func
     /// <summary>
     /// Asks the gate whether this call may run. Returns the refusal, or <c>null</c> to allow it.
     /// </summary>
-    internal string? CheckRefusal(string toolName) => Refuse?.Invoke(toolName);
+    internal string? CheckRefusal(ToolInvocation invocation) => Refuse?.Invoke(invocation);
 
     /// <summary>
     /// Asks the human gate whether this call may run. Returns the refusal, or <c>null</c> to allow it.
     /// </summary>
-    internal ValueTask<string?> CheckConfirmationAsync(string toolName, CancellationToken cancellationToken)
-        => Confirm is null ? new ValueTask<string?>((string?)null) : Confirm(toolName, cancellationToken);
+    internal ValueTask<string?> CheckConfirmationAsync(ToolInvocation invocation, CancellationToken cancellationToken)
+        => Confirm is null ? new ValueTask<string?>((string?)null) : Confirm(invocation, cancellationToken);
 
     /// <inheritdoc />
     public async ValueTask OnEventAsync(

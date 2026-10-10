@@ -1,4 +1,5 @@
-﻿using Microsoft.Agents.AI;
+﻿using VeloxDev.AI.Safety;
+using Microsoft.Agents.AI;
 using VeloxDev.AI.Pipelines;
 using Microsoft.Extensions.AI;
 using System;
@@ -109,8 +110,16 @@ public sealed class McpAgentContextProvider : AIContextProvider
 
         // Server tools are AIFunctions (McpClientTool derives from it), so they wrap the same way. A tool
         // that is not falls through unwrapped rather than being dropped.
-        foreach (var tool in _scope.LoadedTools)
-            tools.Add(tool is AIFunction function ? new TrackedAIFunction(function, _toolPipeline, _pipeline) : tool);
+        //
+        // Each carries its server's name, and the category is Execute: a server's tool is whatever the server
+        // says it is — a filesystem one writes files — so the conservative reading is the honest one. A host
+        // that knows better aims a rule at the source.
+        foreach (var (server, tool) in _scope.LoadedToolsByServer)
+        {
+            tools.Add(tool is AIFunction function
+                ? new TrackedAIFunction(function, _toolPipeline, _pipeline, AgentActionCategory.Execute, $"mcp:{server}")
+                : tool);
+        }
 
         return tools;
     }

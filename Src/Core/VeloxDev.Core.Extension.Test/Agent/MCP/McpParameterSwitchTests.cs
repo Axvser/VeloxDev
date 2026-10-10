@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.AI;
+﻿using VeloxDev.AI.Safety;
+using Microsoft.Extensions.AI;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
 using System;
@@ -255,9 +256,7 @@ public class McpParameterSwitchTests
     public async Task ReconfiguringThroughTheAgentTool_ReleasesTheConnectionItReplaces()
     {
         var connector = new FakeConnector();
-        var scope = Scope(connector)
-            .WithSelfService(McpSelfServiceLevel.AllConfirmed)
-            .WithConfirmationHandler((_, _) => Task.FromResult(true));
+        var scope = Scope(connector).WithConfirmationHandler((_, _) => Task.FromResult(true));
 
         await scope.AddAsync(Config("C:/first"));
 
@@ -429,27 +428,29 @@ public class McpParameterSwitchTests
         Assert.IsEmpty(connector.Clients, "and nothing was launched to find that out");
     }
 
-    /// <summary>The tool appears only on the rung where it can actually do something.</summary>
+    /// <summary>Both write tools are on the surface, and what stops one is a rule, not its absence.</summary>
     /// <remarks>
-    /// One rung above adding, and not the same rung: a remote server takes no launch arguments, and a local one is
-    /// not reconfigurable below <see cref="McpSelfServiceLevel.AllConfirmed"/>. Registering it at
-    /// <see cref="McpSelfServiceLevel.RemoteConfirmed"/> would put a tool in front of the model whose every call
-    /// is refused — the thing this toolkit is otherwise careful never to ship.
+    /// The rung this replaces kept <c>SetMcpServerArguments</c> off the surface below one level, so a model
+    /// that was asked to change a server's directory could only report that it had no such tool. Now the tool
+    /// is there and the rule layer is what refuses, by name.
     /// </remarks>
     [TestMethod]
-    public void SetMcpServerArguments_AppearsOnlyWhereItCanSucceed()
+    public void BothWriteTools_AreOnTheSurfaceAndARuleIsWhatRefuses()
     {
         var scope = new McpScope();
 
-        Assert.IsFalse(HasSetArgumentsTool(scope), "at Closed no write tool exists at all");
+        Assert.IsTrue(HasSetArgumentsTool(scope), "the tool is on the surface at every level, including none");
+        Assert.IsTrue(HasAddServerTool(scope));
 
-        scope.WithSelfService(McpSelfServiceLevel.RemoteConfirmed);
-        Assert.IsTrue(HasAddServerTool(scope), "the adding tool opens a rung earlier, for remote servers");
-        Assert.IsFalse(HasSetArgumentsTool(scope),
-            "on this rung every call would be refused — Http servers take no arguments and local ones are not reconfigurable yet");
-
-        scope.WithSelfService(McpSelfServiceLevel.AllConfirmed);
-        Assert.IsTrue(HasSetArgumentsTool(scope));
+        // What a host uses instead of a rung: deny the kind it does not want, and the refusal names the rule.
+        var denied = new McpScope
+        {
+            PermissionCheck = call => call.Name == McpAgentToolkit.LocalKind
+                ? PermissionDecision.Deny
+                : PermissionDecision.Allow,
+        };
+        Assert.AreEqual(PermissionDecision.Deny, denied.Judge(McpAgentToolkit.LocalKind, new Dictionary<string, object?>()));
+        Assert.AreEqual(PermissionDecision.Allow, denied.Judge(McpAgentToolkit.HttpKind, new Dictionary<string, object?>()));
     }
 
     private static bool HasSetArgumentsTool(McpScope scope)
@@ -460,11 +461,9 @@ public class McpParameterSwitchTests
 
     // ── Fixtures ────────────────────────────────────────────────────────────
 
-    /// <summary>A scope whose gate is open and whose user says yes — enough to reach the changing tools.</summary>
+    /// <summary>A scope whose user says yes — enough to reach the changing tools.</summary>
     private static McpScope Gated(FakeConnector connector)
-        => Scope(connector)
-            .WithSelfService(McpSelfServiceLevel.AllConfirmed)
-            .WithConfirmationHandler((_, _) => Task.FromResult(true));
+        => Scope(connector).WithConfirmationHandler((_, _) => Task.FromResult(true));
 
     private static string List(McpScope scope)
         => Invoke(new McpAgentToolkit(scope, []).CreateTools().Single(t => t.Name == McpAgentToolkit.ListName));

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using VeloxDev.AI;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.WorkflowSystem;
@@ -161,11 +162,12 @@ public class BudgetResetTests
     }
 
     [TestMethod]
-    public void AtInteractionLevelZero_NobodyIsAsked_AndTheBudgetStaysClosed()
+    public void InBypass_TheBudgetIsStillTheHostsToReopen()
     {
-        // Level 0 is the host saying "never interrupt me". There is then no way to obtain the user's
-        // agreement, and a budget may only be reopened with it — so this must deny, not ask anyway.
-        var scope = SpendBudget(0).WithInteractionSafety(0);
+        // No mode reopens the budget on its own, Bypass included: the budget is the host's number, and the
+        // only way past it is the user's answer. A mode that could extend its own budget would make the
+        // limit a suggestion.
+        var scope = SpendBudget(0).WithPermissionMode(AgentPermissionMode.Bypass);
         var asked = 0;
         scope.WithConfirmationHandler(args =>
         {
@@ -176,8 +178,9 @@ public class BudgetResetTests
 
         var json = JObject.Parse(Invoke(scope, WorkflowAgentToolkit.ResetBudgetToolName));
 
-        Assert.AreEqual(0, asked, "the host asked not to be interrupted");
-        Assert.AreEqual("denied", json["status"]?.Value<string>());
+        Assert.AreEqual(1, asked, "Bypass turns off the questions about tools, not the one about the budget");
+        Assert.AreEqual("ok", json["status"]?.Value<string>(),
+            "the user's answer is the only way past the budget, and Bypass does not stand in for one");
     }
 
     [TestMethod]
