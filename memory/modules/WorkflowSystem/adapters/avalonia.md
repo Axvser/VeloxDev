@@ -187,6 +187,26 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 - **键**：删掉了两道门 —— `e.Key != Key.Delete → return`（**这家原先只有 Delete 走得到路由**，另外六家是所有键）与 `input.HoveredLink is null → return`。target 改用 `input.PointerTarget`。
 - ⚠ **`Avalonia 12.0.3` 的 `KeyEventArgs` 没有 `IsRepeat`**（反射核对过：只有 `Key / KeyModifiers / PhysicalKey / KeySymbol / KeyDeviceType / Handled / RoutedEvent / Route / Source`）。旧代码把 `KeyModifiers.HasFlag(Shift)` 塞进了那个参数位 —— 语义是错的，现在两个处理器都传 `false`。**这家要「重复键」得自己合成，事件里没有。**
 - **`ToKey` 补八个修饰键**：实测 `LWin=70 / RWin=71 / LeftShift=116 … RightAlt=121`，三段算术区间是 A–Z `44–69`、D0–D9 `34–43`、F1–F12 `90–101` ⇒ 都在区间外。
+### 三点六、内层闸门 + 默认滚复用平移路径（2026-10-11 重构，实测）
+
+**闸门三支，而且能分清朝「谁滚的」**（在闸门与路由各埋一处 trace）：
+
+| 情形 | trace | 谁滚的 |
+|---|---|---|
+| 内层有余量（1–5 格） | `cand=ScrollContentPresenter canvasOwn=False … vRoom=True → true` | **平台原生链**（内层 `0→50→…→248`，HUD `视口(画布)` 恒 `0,0`） |
+| 内层到顶（第 6 格） | `off=(0,248) maxY=248 vRoom=False → false` | **我们**（`[scroll] out offset=(0,50)`，平台链未参与） |
+| 空白处 | `canvasOwn=True → false` | **我们** |
+
+判据：`InnerScrollViewerHasRoom(e.Source as Visual, state, e.Delta.X, e.Delta.Y)` —— `GetSelfAndVisualAncestors()` 找最近的 `ScrollViewer`/`ScrollContentPresenter`，`Offset` 对 `ScrollMax(Extent, Viewport)` 判方向余量；画布自己那台由 `IsCanvasOwnScrollContainer` 排除。**按换轴前的原始 `e.Delta` 判**（Shift 的换轴发生在 presenter 里，我们看不到）。
+
+**边缘**：改前停在 `maxV 506.67`；改后 `maxV 506.67 → 656.67`，画布 `3600×1000 → 1150 → 1322` —— 与平移同款撑出去。中部步长仍 **50**。
+
+### ⚠ 三点七、「单轴写入」不是可区分的 A/B —— 这条对所有家都成立
+
+验收判据原写「先把另一轴弄非零再滚，看那轴动不动」。**这条验不出东西**：竖滚时横轴落在 `[0, maxH]` 内，而旧式 `ClampValue(X + 0, 0, maxH)` 在数值上**也等于 X**。要区分必须**把那一轴先弄出范围**。
+
+⇒ 这同时解释了早先七家探针「都没观测到双轴写副作用」：**不是巧合，是那一轴本来就在范围内**。「两轴齐写」在实践中**可证无害**（`ScrollViewer` 自己会夹住越界值），修它纯粹是**契约一致性**（`IWorkflowSurfaceScroller` 的 remarks 写着「零增量不动那一轴」），**不是修 bug**。写结论时别把它记成缺陷。
+
 - ⚠ **焦点在解手时不在表面上**：只 `moveto` 过去按 Shift，键不会到达（没东西有焦点），于是 demo 的 `_shiftHeld` 一直假、Shift+滚轮走默认。探针的 Actions 里**必须先 `click:` 一次**才能验出横滚。这是设计使然（按下才收焦点），不是缺陷。
 
 ## 四、改这里最容易踩的坑

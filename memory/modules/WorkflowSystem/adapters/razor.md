@@ -235,6 +235,32 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 - **标尺**：滚轮**照常工作**（外层 0→120→240）—— 因为 `.veloxdev-wf-ruler` 的 CSS 是 **`pointer-events:none`**，事件直接穿透到画布滚动 div 上。
   ⇒ **别拿 DOM 结构当行为**：只读探索据此预测「标尺上也不发生」，被实测推翻。这与 §三点五 那条「默认数据不溢出、结构不等于可见」是同一条教训的第二个实例。
 
+### 三点七、滚轮重构：挂点上移、闸门、横滚复位（2026-10-11 实测）
+
+**挂点从滚动 div 上移到 surface 根**（`scrollerEl.closest('.veloxdev-wf-surface') || scrollerEl`）。实测（小地图中心滚一格）：改前 outer `[400,1240] → [400,1240]`（**完全没反应**），改后 `→ [400,880]`（+120）。⇒ 「监听挂在滚动 div 上」这条的真实受害面就是小地图；标尺本来就因 `pointer-events:none` 侥幸正常，改后仍是 +120（未弄坏）。
+
+**闸门**（`innerScrollerHasRoom`，在 `preventDefault` **之前**）：从 `e.target` 沿 `parentElement` 上行到滚动容器/surface 根（不含），`overflowY/X ∈ {auto,scroll}` 认容器，再判方向余量；**有余量 ⇒ 直接 return**（不 preventDefault / 不 stopPropagation / 不路由 / 不滚画布）。命中第一个容器即判。
+实测（注入一个 `sh=480/ch=100` 的合成容器，滚 6 格）：
+
+| | 内层 | 外层 |
+|---|---|---|
+| 改前 | 恒 **0** | 每格 +120（画布全接） |
+| 改后 1–4 格 | 120→240→360→**380（到顶）** | 恒 520（**冻住**） |
+| 改后 5–6 格 | 停 380 | 520→640→760（画布接） |
+
+⚠ **到顶那一笔仍由内层消费**（G4：360→380，余量不够），画布在**下一笔**才接手 —— 这是浏览器原生链的行为。
+⚠ 真实的 `.py-port-strip`（22 个）/`.enum-fields`（2 个）**初始 `scrollHeight == clientHeight`（无余量）** ⇒ 闸门正向用例只能靠**注入的合成容器**（走同一段 `overflowY==='auto'` 代码路径）。`.wf-card-scroll` 实测 `overflow:visible`、未误认成容器。
+
+**默认滚复用平移路径**：`scrollSurfaceBy` 改为先走 `surfaceRegistry[id].scrollBy`（= 平移/小地图那条，带 `growContent`+`expandCanvas`）。实测 `(0,0)` 处向上滚一格：改前 `ct=28, hh=2028`（**钳住**），改后 `ct=148, hh=2148`（**撑开**）。中部步长未变（+120）。
+
+**N3（`RequestWheelScroll` 丢 `deltaX`）已修**：改前向滚动 div 派发合成 `WheelEvent{deltaX:120,deltaY:0}` ⇒ `scrollLeft` **分毫不动**；改后 ⇒ **+120**。
+
+**单轴写入 —— 并且它推进了「不可区分」那条论断**：守卫加在**共享的** `scrollBy` 上之后，「零增量轴在边缘」**变得可区分**：竖向已到底（max 763）时调 `scrollByDelta(id,50,0)`，新码 `[763,1368] → [763,1368]`（不再触发 `expandCanvas`）；**旧码会走 y 轴边界检查、凭空把画布撑大 800**（这一支是**读旧源码**得出、非实测）。⇒ 「两轴齐写」不只是契约问题，**它会误撑画布** —— 比我先前的判断更准。
+
+**Shift 抬起：本家无此缺陷**（改前改后逐格完全相同）。⚠ 但**只有自己 `dispatchEvent` DOM 键盘事件才测得出来** —— 用 harness 的 `keydown:Shift`（只给鼠标事件带修饰位）会得**假阴性**。
+
+**未测**：Ctrl+滚轮落在小地图上（`initWheelZoom` 仍挂滚动容器 ⇒ 那里无缩放；本轮未改动它）。
+
 **Shift：这家是竖滚唯一。** 三种情形（默认 / `keydown:Shift` 让鼠标事件带 `mods:4` / 只派发键盘事件）结果**完全一致**（横 0、竖 +120）—— 没有任何一方消费修饰键做横滚。注意**非 Trimmed 的 Blazor demo 根本没有滚轮订阅**（`Workflow.razor.cs` 明写 "No wheel subscription here"），Shift 宿主只在 Trimmed 各家 TreeView 里。
 另外 `.node-body` 这个容器在本 demo **根本不渲染**（通用节点用空白的 `WorkflowNodeView.razor`）—— 引容器清单时先确认它真的在页面上。
 

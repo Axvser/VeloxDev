@@ -148,6 +148,29 @@ notch6 同上
 另外两条同批实测：
 
 - **滚轮的到达与焦点无关**：焦点在卡片的真 `TextBox` 里时，宿主隧道处理器照样收到（`ADAPTER-ENTRY src=TextBoxView`）。同一笔里**画布滚了 48，而文本框自己一点没滚** —— 缺陷 ① 在文本框上也成立。
+### 三点七、内层闸门 + 默认滚复用平移路径（2026-10-11 重构，实测）
+
+**闸门三分支**（完整版 demo，临时给输入口条灌出溢出，指针压在条上连滚）：
+
+```
+内层 vOff 0 → 48 → 96 → 144 → 192 → 209.673(=vMax)   HUD 视口(画布) 恒 1399,68（画布分毫未动）
+第 6 格（内层到底）gate=ROUTE                          HUD 68 → 116（画布接，+48）
+指针在空白：src=Canvas / gate=ROUTE                    HUD 0 → 48
+```
+
+- 判据 `InnerScrollViewerHasRoom(OriginalSource, state, 0d, e.Delta)`：`SelfThenAncestors` 找**最近的、非 `state.ScrollViewer`** 的 `ScrollViewer`，按 `deltaY<0 → VerticalOffset < ScrollableHeight`、`deltaY>0 → VerticalOffset > 0`（横轴同理）。有 ⇒ 直接 return（不置 `Handled`、不路由、不默认滚）。
+- ⚠ **到边时不再往外找**：这家不链式外传，所以「内层到边」的答案就是「闸门放行、走我们的路由与默认滚」，不是「交给平台链」。
+- **指针停在节点卡上但那张卡内层无余量时判 ROUTE** —— 不误伤。
+
+**默认滚改走平移那条路径**：改前到边即停（整笔无效果）；改后能把画布**撑出去** —— 实测滚一格画布高 `1000 → 1150`（+0.15×1000，即 `DefaultPanExtendRatio`），且**指针底下那个世界点不动**（`视口(世界)` 仍 0,0）。画布中部步长仍是 **48**。
+
+**单轴写入**：先拖平移到横轴 200 再竖滚一格 ⇒ `200,0 → 200,48`，横轴分毫未动。
+
+**两个坑（这一轮踩到的，后六家通用）：**
+
+1. ⚠ **`ScrollTo*` 之后立即读 `VerticalOffset` 拿到的是旧值** —— WPF 把 ScrollInfo 更新推到下一次布局，于是插桩里 `after` 恒等于 `before`，差点被误判成「画布没滚」。**判定以 HUD / 下一帧为准。**
+2. ⚠ **「Shift+滚轮 = `48,48`」这个基线是不成立的**（我自己写错过）：`48,48` 是**累积状态**（先竖滚一格到 `0,48`、再 Shift 横滚到 `48,48`），不是 Shift 那一格自己的增量。而且**完整版 demo 根本没有 `PointerWheelChanged` 订阅**，Shift 横滚只能在 **Trimmed** 上量，量到的是 **`48,0`**（横移 48、竖不动）。
+
 - ⚠ **默认 demo 数据下卡片全都不溢出**（`Generate Dataset` / `Numeric Stats` / `Frequency Dist` / `Merge Report` 实测 `scrollableH=0.0`，连 3 个输入口的也不溢出）。所以「卡片里有 `ScrollViewer`」只是**结构**上的反例，**默认数据下缺陷 ① 不可见** —— 要验它必须先灌数据（探针里用 env 门控注入口子撑到 `scrollableH=156.3` 才让上游结论成立）。这条对七家都适用：**别拿结构当可见性**。
 
 ## 四、坑（带依据）

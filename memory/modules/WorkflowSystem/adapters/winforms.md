@@ -297,6 +297,24 @@ Trimmed 这条路上（`WorkflowSlotLayoutBehavior.cs:588` 的 `SlotAnchorFromCa
 - ⚠ **`ApplyScrollOffset` 的反射曾经永远找不到目标**：它用 `p.GetType()`（运行时是派生的 `Demo.Views.Workflow.TreeView`）找私有的 `OnMinimapScrollRequested`，而**私有成员不参与反射继承** ⇒ 基类 `WorkflowTreeView` 那个方法从来没被找到、`ScrollBy` 静默空转。2026-10-11 改成沿基类链走（`BindingFlags.DeclaredOnly`）。**这条同时修好了「缩放居中」那条路**（签名平移的宿主也吃这个修复）。
 - **焦点**：这家没有附着属性，所以「按下就收焦点」也在同一个消息过滤器里做（`WM_*BUTTONDOWN` 分支，命中在画布子树内且不是 `TextBoxBase` 才收）。实测点**节点卡片**（不只是空白画布）也能让 `节点 4/4 → 3/3`。
 - **键**：`Keys.ShiftKey`(16) / `Keys.ControlKey`(17) / `Keys.Menu`(18) 这些**通用**形式才会到达 `KeyCode`；**侧别形式（`Keys.LShiftKey` 160 等）实测从不出现**。所以 `ToKey` 把八个侧别键照常点名，另外把通用形式按「通用 → 左」映射（`Keys.ShiftKey → LeftShift`）。这几个值都在三段算术区间之外，不会与字母/数字/功能键的差值映射抢。
+### 四点五·补、滚轮重构：闸门是「放行」、到边由自己接、横滚原先是盲区（2026-10-11 实测）
+
+**① 闸门在这家的做法是「放行整笔」而不是「不插手」**：`InnerScrollableHasRoom(under, host, dx, dy)` 从指针底下沿父链走到表面宿主**之前**，遇到能往该方向滚的 `ScrollableControl` 或 `TextBoxBase` 就 **`return false`**（我们本来是把它吞掉的，不显式放行就一点都到不了内层）。实测 A/B：基线三格后文本框仍在首屏、画布上移 144px；改后文本框 `vscr 0→3→6→9→12`、画布 HUD 恒定不动。
+
+**② ⚠ 到边那一格必须由我们自己接 —— 这与 Avalonia/Jalium 相反。** 实测「到边也放过给原生链」那一支：**TextBox 纹丝、画布也纹丝**（`EDIT` 到边仍吞掉 `WM_MOUSEWHEEL`，**原生链根本没走到画布**）⇒ 会掉进**两边都不接的空档**。所以实现取「到边 ⇒ 闸门返回 false ⇒ 我们的路由 + 默认滚」，步长因此稳定 48。**判据：这家虽有原生链，但「到边仍被内层吞掉」，别照抄「有链就让链接」那一条。**
+
+**③ 默认滚现在与平移/小地图是字面同一条路**：`ApplyScrollOffset` 先试宿主的 `OnMinimapScrollRequested`（反射、逐级基类 `DeclaredOnly` 找），成功即返回，取不到才退回 `AutoScrollPosition`。⇒ 滚轮与拖画布/小地图同语义（越界撑出去）。**副产物：全功能 demo 的 HUD 现在会随滚轮刷新了**（走 pan → `Refresh` → `RefreshOverlays`）—— 先前那条「HUD 不随滚轮刷新」只在旧路径下成立。
+
+**④ demo 的 `WorkflowCanvas.Dispose` 补了 `SetIsEnabled(this,false)`**（与基类同序，放在 `DetachSession` 之前）。注：`DetachSession` 经 `SetWorkflowTree(null)` 其实**已经摘掉**树路由上的 `Scroller`；真正泄漏的是**应用级过滤器**（`Application` 对它是**强引用**）。
+
+**⑤ 横向滚轮原本是「整条消息的盲区」，不是「映射错了」**：过滤器只认 `WM_MOUSEWHEEL(0x020A)`，**`WM_MOUSEHWHEEL(0x020E)` 压根没接**（实测：消息到达过滤器后无任何后续，两格倾斜滚轮前后截图**逐像素相同**）。已补 `WmMouseHWheel`，两种消息共用同一套闸门/路由/裁决/默认滚；**倾斜滚轮不进缩放支**。
+- ⚠ **`EDIT` 不认 `WM_MOUSEHWHEEL`** ⇒ 闸门对 `TextBoxBase` **只判竖轴**（否则指针压在文本框上时横滚会掉进两边都不接的空档）。
+- ⚠ **方向**：`deltaX > 0` 使滚动偏移**减小**（画面右移），这是仓库七家共享的 `dx = -(deltaX/Notch)*step` 约定，与操作系统「向右倾斜 = 向右滚」**相反**。本轮照约定接线、未单方面反转 —— **这是横跨七家的语义问题**，待定。
+
+**⑥ Shift 抬起**：这家**本来就对** —— `Keys.ShiftKey(16)` 已在 `WorkflowTreeView.cs:735` 映射到 `LeftShift`；实测 `keyup:Shift` 后一格回到竖滚（`SCROLLBY in=(0,-120) step=(0,48)`）。**无需修**。（MAUI/WinUI 那两家正是栽在这一点上 —— 它们缺无侧码映射。）
+
+**回归**：中部 48/格不变；Ctrl+滚轮缩放 `121% / Scale 0.83`。
+
 - **`OnZoomMouseWheel` 已删**：它不可达（消息过滤器先吞了所有滚轮），而且**不过路由** —— 订阅方的 `PreventDefault` 在它那里根本拦不住缩放，与另外六家不一致。缩放现在完全归消息过滤器。
 
 ## 五、这份文件没写的东西

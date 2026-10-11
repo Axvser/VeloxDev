@@ -237,6 +237,18 @@ Ctrl+滚轮缩放仍挂 `ScrollViewer.PreviewMouseWheel`（`HookZoom`，`:545-55
 
 ⇒ 修的方向不是动 `ZoomPin` 的时长，而是让**滚轮那一路的写回不被 pin 分支吃掉**（滚轮不是缩放的伴随动作，它有自己的新位置）。
 
+### 2.5.3 滚轮重构：换挂点 + 闸门 + 默认滚复用平移（2026-10-11 实测）
+
+**挂点从宿主隧道相改到画布冒泡相 + `handledEventsToo`**（`canvas.AddHandler(Mouse.MouseWheelEvent, handler, true)`，挂/摘共用同一份 `state.MouseWheelHandler`）。实测：`sender=Canvas` 恒成立；**没有双重滚动**；**Ctrl+滚轮缩放不受影响**（同一次 Ctrl 滚轮没有 `ScrollBy` trace —— 两支不重叠）。
+
+**「谁滚的」在这家被钉死了**：trace 显示闸门 `ROUTE` 之后**每一格都有一条 `ScrollBy`** ⇒ 画布滚动**全部由适配器执行，平台链一次都没参与**（`Handled` 在画布处就挡住了 `ScrollContentPresenter`）。这与 Avalonia 相反 —— 那家到边那格是**平台链**送的。
+
+**边缘**：改前 `1920×1080` 且到边即停（`视口 0,0` 不动）；改后 `1920×1242`（+162 = `DefaultPanExtendRatio` 0.15 × 1080），`视口 0,162`、`视口(世界) 0,0`（指针底下的世界点不动）。负向与正向边都能撑。
+
+**闸门在这家触发不到 `ROOM` 分支**：Trimmed 卡片是 `Viewbox`+`Grid`、祖先链里没有第二台 `ScrollViewer`；完整版走 `NodeEditorSurface`、**根本不用适配器表面**。⇒ 只验到「**不误伤**」（指针压 NodeView 卡上滚一格，画布照常 `0→48`），**无法构造「内层有余量」的用例**。
+
+**单轴写入**：与 Avalonia 同 —— **契约一致性已验证、无可区分 A/B**（另一轴在 `[0,max]` 内时新旧数值相同）。
+
 ### 2.6 其余平台面的事实
 
 - `WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay.cs:17`），`RulerBand => 0`（`:42`）—— 它不是标尺，所以虚拟化 inset 为 0。

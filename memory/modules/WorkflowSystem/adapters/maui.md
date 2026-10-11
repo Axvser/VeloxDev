@@ -198,6 +198,22 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 - **「两轴齐写」未复现副作用**：先把 H 平移到 266.67 再竖滚一格，H 精确保持 266.67（第三家一致）。
 - **「滚一格把键盘焦点带走」未复现**：滚完之后 `Ctrl+Z` 仍到达宿主的 KeyDown 订阅并执行。⚠ 但**判据本身要先验** —— Trimmed 初始树没有可撤销项，`UNDO-EXEC nodes=4` 前后都是 `4/4`，「看节点数变没变」这条判据在这家**判定不了**。
 
+### 14. 滚轮重构：挂点、闸门、两条根因（2026-10-11 实测，两条都是跨家的）
+
+**N6-a 的根因：处理器挂的那个平台视图是 `LayoutPanel(0x0)`** —— 一个 **0×0 的面板**，所以空白处的命中根本落不到它身上。证据：在窗口根挂 `handledEventsToo` 探针逐点记录 12 个空画布点，**12/12 都进了 App**，但其中 **7 个**的链从 `OriginalSource` 到窗口根都**没有 `[CANVAS]`**（典型链 `LayoutPanel(2240x1340) < ContentPanel < ScrollContentPresenter < Grid < Border < ScrollViewer < …WindowRootView`）；只有落在节点卡上的点链里才有 `[CANVAS]`。那些点上的 HUD 数字照样 +61.8 —— 是**原生 `ScrollViewer` 自己滚的**，既没进路由、也不是适配器的步长。
+**修**：挂点改到画布平台元素**往上最近的 `ScrollContentPresenter`**（覆盖整个滚动视口，且在做滚动那一层**之前**冒泡），取不到才退回画布元素。改后同一个空画布点 20 格 ⇒ 画布 `2240×1340 → 2240×1772`。
+
+**N6-b 的根因在适配器，不在 demo**：`ToKey` 只点名了 `LeftShift(160)/RightShift(161)`，**无侧的 `VirtualKey.Shift(16)` 落 `Unknown`** —— 真实键盘左右 Shift 的 `WM_KEYDOWN` 报的都是 `0x10`（左右之分在扫描码里），SendInput 合成的更是**只有**这个码。于是 demo 里 `IsShiftKey(e.Key)` 永远为假：**按下那半还有 `e.Modifiers` 兜着，抬起那半永远不触发** ⇒ 松开 Shift 之后一直按横滚走（实测 `keyup:Shift` 后两格仍是 `124,247`）。demo 的写法**与 WPF 那家逐字相同**，所以修在适配器：补 `Shift/Control/Menu → LeftShift/LeftCtrl/LeftAlt`（与 WPF 的 `KeyInterop` 同一条）。改后 `keyup:Shift` 一格 ⇒ `124,371`（回到竖滚 +61.8）。
+⚠ **这是跨家缺陷，不是这家独有**：WinUI 用的是**同一套 `VirtualKey` 词汇**、`ToKey` 里同样只有八个侧别键 —— 2026-10-11 已一并补上（WinUI 的 demo 也是逐字相同的形状）。**别把「Shift+滚轮有效」当成「Shift 抬起也有效」**：上一轮 WinUI 探针量到的横滚生效验的是**按下**那条路。
+
+**闸门**：与 WinUI 同形 —— 实测**内层到边那一格照样置 `Handled`**（`inner=128/128` 时 `handled=True`），`if (e.Handled) return;` 单独不够，判据要叠加「沿方向绝对余量」。三支 A/B：内层有余量 11 格 ⇒ 画布 `视口(画布) 0,0`；第 13 格起画布接；空白点 ⇒ 61.8/格。
+
+**边缘**：撑大后与**平移逐位一致**（24 格 ⇒ `2240×2038 / 0,1360`，平移拖到并越过边也是同一组数）；向上回滚 `1360→1236`，画布保持撑大不缩。
+
+**横滚**：`hwheel:` 实测 `x 62→124`（+61.8）、`y` 不变，通过。
+
+**回归**：中部 1 格 `0,62`、5 格 `0,309`（=61.8/格，**不是 123.6**）；Ctrl+滚轮缩放 `121% / Scale 0.83`。
+
 **两条未决异常（已记录，未定性，勿当结论）：**
 
 1. **Trimmed 上有若干空画布点滚轮没进 `OnSurfaceWheel`**（原生 `ScrollViewer` 自己滚了 61.8），而同 demo 另外几个点进了（`hit=LayoutPanel`）；卡片区稳定进。这动摇「挂在画布上就拦得住」这个前提，得单独查清。
