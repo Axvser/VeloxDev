@@ -55,7 +55,9 @@
 ### 2.2 没有路由/隧道事件 ⇒ `Application.AddMessageFilter`，而且是**进程级单例**
 
 - 滚轮：应用级过滤器由 `SetIsEnabled` 挂（`EnsureMessageFilter`，`WorkflowSurfaceBehavior.cs:39-48`／调用 `:209`，`_filterAdded` 守卫 `:37`），**看得见每一笔 `WM_MOUSEWHEEL`** —— 注释 `:61-71` 写明理由：消息发给**焦点/光标下的那个窗口**，挂在元素上的处理器只在滚轮正好发给它时收得到，被子窗口盖住的地方一笔都到不了（节点卡片内部的 `AutoScroll` 面板会先吃掉滚轮）。`SetZoomEnabled` 只补一条 `element.MouseWheel` 直路（`:250`）。两枝都在 `PreFilterMessage`（`:72-141`）：非 Ctrl（或关掉了缩放）→ `RouteWheel` 汇报 + `return false` 放行（`:95-100`）；Ctrl 且 `ZoomEnabled` → 缩放路径，可被否决并吞消息（`:102-108`）。
-  ⚠ 实测：三格滚轮 = 三行汇报，**但 demo 的视口不动** —— `WM_MOUSEWHEEL` 发给**焦点控件**（demo 里是 SEED 文本框），不是画布；这是平台既有行为，本层不碰它（所以「汇报到了」与「滚了」是两件事，别把后者当成前者失败的证据）。
+  ⚠ 实测：三格滚轮 = 三行汇报，**但 demo 的视口不动**（所以「汇报到了」与「滚了」是两件事）。
+  ⚠⚠ **但原因不是「发给焦点控件」**（2026-10-11 更正）：用 `WindowFromPoint(Cursor.Position)` 与 `m.HWnd` 逐笔对照，**4 次采样全部 `mHWND == 指针底下的窗口`，且恒 ≠ 焦点窗口** ⇒ 这家是**按指针派发**。那时视口不动，是因为指针底下的画布是 `AutoScroll=false` 的 `ScrollableControl`、**没有偏移可移**。
+  ⚠ **限定条件（别忘）**：本机 `HKCU\Control Panel\Desktop\MouseWheelRouting = 2`（「悬停时滚动非活动窗口」开着），**关掉该设置时是否退化为按焦点派发未验证** —— 内层判定按指针做，在这个前提下才是对的。
 - 插槽连接：`_messageFilter` 与 `_activeConnection` 都是**静态字段**（`WorkflowSlotConnectionBehavior.cs:31-32`），即**整个进程同时只有一条在拖的连线**；`EnsureMessageFilter` 惰性挂、`DetachMessageFilter` 摘下（`:170-189`）。过滤器自己监听 `WM_MOUSEMOVE`/`WM_LBUTTONUP` 并用 `NativeMethods.WindowFromPoint`（`:338`、`:347-371`）做命中测试。
 - ⇒ **这条的代价必须记住**：`IMessageFilter` 是应用级的，所以 **(a)** 多个工作流表面同时开着时，靠 `ResolveSurfaceHost` 认领这一笔归谁，而不是靠事件源 —— 先按**光标底下**的控件（`GetControlAtScreenPoint` + `WindowFromPoint` P/Invoke，`WorkflowSurfaceBehavior.cs:162-166`；认领点 `:80-81`），认不到才退回消息目标 `m.HWnd`（`:143-146`）；判据是**启用**着的表面（`state.IsEnabled`，不再是「开着缩放」），因为关掉缩放的宿主也要收到滚轮汇报；**(b)** 任何全局过滤器链上的异常都会影响整个应用的消息泵。
 
@@ -285,7 +287,11 @@ Trimmed 这条路上（`WorkflowSlotLayoutBehavior.cs:588` 的 `SlotAnchorFromCa
 
 **这一家的滚轮基线是「什么都不做」** —— 不是「竖滚」，是动的都不动：`PART_ScrollViewer` 是 `AutoScroll=false` 的 `ScrollableControl`，根本没有偏移可移（实测基线 `视口(画布)` 滚前滚后都是 `0, 0`）。所以接管之后那个「默认竖滚」在这家是**新增能力**，不是保持既有行为 —— 读别家的数字时别把这家的当成同一种情形。
 
-- **滚轮在应用级 `IMessageFilter` 里接**（这家没有路由事件，画布自己的 `MouseWheel` 永远不触发：`WM_MOUSEWHEEL` 发给焦点窗口）。现在的形状是：路由 → 没人 `PreventDefault` 就自己执行默认竖滚 → **吞掉消息**（`m.Result = IntPtr.Zero; return true`）。**泄漏 0**（容器本来就滚不动，消息又被吞了）。
+- **滚轮在应用级 `IMessageFilter` 里接**（这家没有路由事件，画布自己的 `MouseWheel` 永远不触发：`WM_MOUSEWHEEL` 发给**指针底下**的那个窗口 —— 2026-10-11 实测，限定条件见 §2.2）。现在的形状是：路由 → 没人 `PreventDefault` 就自己执行默认竖滚 → **吞掉消息**（`m.Result = IntPtr.Zero; return true`）。**泄漏 0**（容器本来就滚不动，消息又被吞了）。
+- ⚠ **「吞掉整笔」的代价（2026-10-11 三组实测）**：指针底下那个多行文本框（Python 脚本编辑器，15 行、视口约 6 行）在默认适配器下 **`vscr` 恒 0、一格都滚不动**，而画布每格 −48；bypass 组里同一个文本框正常滚（`0→3→5`）、画布**纹丝不动**。⇒ 缺陷① 在这家的形状 = 「断掉原生链 + 连文本框也滚不了」。第三组（无焦点 + bypass）量到**原生链一格是 120px**，与我们自己执行的一格 48 本来就不是一回事。
+- **默认数据下 26 个卡片内层面板全部 `disp == cli`（不溢出）**，全窗只有根 `WorkflowCanvas` 有滚动范围 —— 第四家独立实测同一结论。所以「内层面板也滚不动」这半条是**推的**（消息在过滤器里就被整笔吞掉，根本不进链），不是对面板的独立观测；真正可观测的是上面那个文本框。
+- ⚠ **HUD 的 `视口(画布)` 不随滚轮刷新**：写 `AutoScrollPosition` 不触发 `WorkflowCanvas.OnScroll` → 不 `Refresh`，滚完后 HUD 仍是旧值，要拖动/缩放一次才跳到真值。**量这家滚轮位移不能只读 HUD**，得读 `AutoScrollPosition` 或强制刷新。
+- **demo 自组的画布销毁时不摘过滤器**：基类 `WorkflowTreeView.Dispose` 有 `SetIsEnabled(this,false)`（`:996-1001`），而 `Examples/Workflow/WinForms/Demo/Controls/WorkflowCanvas.cs:1344-1366` 的 `Dispose` **没有** ⇒ 应用级过滤器与挂在树路由上的 Scroller 都留着（读码确认，本轮未修）。
 - **步长** `SystemInformation.MouseWheelScrollLines`（默认 3）× 16 = **48 px/格**，与 WPF 同源；`-1`（按页滚）退回视口尺寸。
 - **`ScrollBy` 就是平移画布** —— 走这家自己那套 `ResolveScrollOffset` / `ApplyScrollOffset`（小地图拖拽用的同一条路），两个轴都走它。别去找滚动偏移，这里没有。
 - ⚠ **`ApplyScrollOffset` 的反射曾经永远找不到目标**：它用 `p.GetType()`（运行时是派生的 `Demo.Views.Workflow.TreeView`）找私有的 `OnMinimapScrollRequested`，而**私有成员不参与反射继承** ⇒ 基类 `WorkflowTreeView` 那个方法从来没被找到、`ScrollBy` 静默空转。2026-10-11 改成沿基类链走（`BindingFlags.DeclaredOnly`）。**这条同时修好了「缩放居中」那条路**（签名平移的宿主也吃这个修复）。

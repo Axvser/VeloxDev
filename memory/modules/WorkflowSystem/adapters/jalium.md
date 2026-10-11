@@ -220,6 +220,23 @@ Ctrl+滚轮缩放仍挂 `ScrollViewer.PreviewMouseWheel`（`HookZoom`，`:545-55
 
 ⚠ 照旧**不做「没存档就居中」** —— 适配器只负责存与还原，居中是宿主的 UX 决定（[extension.md](../extension.md) §3.9-10 第 10 条）。
 
+### 2.5.2 `ZoomPin` 会吞掉滚轮那次视口写回 —— 节点整段消失、且不会自己回来（2026-10-11 实测）
+
+把「归适配器的滚轮」与「`ZoomPin` 守卫」放在一起，就出现一个**没有报错、只有画面错**的窗口：
+
+| 组 | 视口(画布) | Scale | 元素 |
+|---|---|---|---|
+| **爆发**（Ctrl+缩放提交后 <250ms 滚一格普通滚轮） | `41,120` | 0.91 | **节点 0/3**（只剩网格） |
+| **对照**（等 600ms 再滚同样一格） | `41,120` | 0.91 | **3/3** |
+
+同一视口、同一缩放，0/3 对 3/3 ⇒ **模型视口被 pin 吞了**：`OnMouseWheel` → `Scroller.ScrollBy` 真滚了 viewer；随后 `ScrollChanged` → `Refresh` → `UpdateViewport(state)` 走到 pin 分支（pin 未落且 viewer 已离开 pin 目标），于是 `UpdateViewport(state, pin.X, pin.Y)` **写回的是缩放目标**、滚轮的新位置被丢掉 ⇒ 屏上是新视口、池里是旧视口的项。
+
+⚠ **比「250ms 窗口」更重**：pin 的 250ms 是**惰性**的 —— `ageMs > ZoomPinLifetimeMs` 只在**下一次** `UpdateViewport` 调用时才判。所以爆发之后若没有后续滚动/尺寸/缩放事件，模型视口**一直停在 pin**（实测 +1s 仍是 0/3）。补一格滚轮立刻恢复（`→ 1/3`，pin 因 age>250 被清）。
+
+**可见条件**：机制恒成立，但**看不看得见取决于视口边界外 48px 内有没有节点**。默认数据下「恰好一格」两组收尾逐字相同（`41,328 / 1/3`）⇒ 可见集层面**未复现**；一旦那一格跨过节点边界（delta 更大、或边界恰好压着节点）就是**整段消失且不自愈**。
+
+⇒ 修的方向不是动 `ZoomPin` 的时长，而是让**滚轮那一路的写回不被 pin 分支吃掉**（滚轮不是缩放的伴随动作，它有自己的新位置）。
+
 ### 2.6 其余平台面的事实
 
 - `WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay.cs:17`），`RulerBand => 0`（`:42`）—— 它不是标尺，所以虚拟化 inset 为 0。

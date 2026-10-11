@@ -69,6 +69,7 @@
 > ⚠ **而且它那时会骗你**：导航到错误页时 `waitfor:<选择器>` 照样报 `done`（它只轮询 `!!document.querySelector(...)`，超时不报错）。**判据是 `eval:` 读回来的东西** —— `document.querySelectorAll('.veloxdev-wf-scroll').length` 是 0、或 `[id]` 列表里出现 `main-frame-error` / `reload-button`，就是错误页。
 > ⚠ **`keydown:Shift` 不给页面派发键盘事件**：它只把修饰位挂到随后的**鼠标**事件上。所以「由统一 KEY 输入跟踪 Shift」的宿主在浏览器里收不到 Shift —— 要 `eval:` 自己 `dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',code:'ShiftLeft',bubbles:true}))`。（桌面 harness 的 `keydown:` 走 SendInput，是**真的**键事件，没有这个问题。）
 > ℹ 2026-10-11 补了 `wheel:<x>,<y>,<delta>` 动词（CDP `Input.dispatchMouseEvent {type:'mouseWheel'}`，**可信**事件、会触发浏览器默认滚动）；合成 `WheelEvent` 不会，所以在此之前量不了「原生滚了多少」。符号已与桌面 harness 统一：正 = 向上。
+> ⚠ **要测「两个动作之间 <~400ms」的时序，现成动作结构上做不到**：`wheel:` 自带 220ms 尾睡、`keyup:`/`keydown:` 120ms、`ToClient` 70ms ⇒ 相邻两个动作最少隔 ~410ms。2026-10-11 验 Jalium 的 `ZoomPin` 窗口（250ms）时就是卡在这 —— 不加手段的话会因**时序**而不是因**机制**报「未复现」，是**假阴性**。做法：临时加无睡眠变体（那次加的 `wheelat:<delta>` / `keyupf:<name>`），用完还原。**凡是涉及窗口/竞态的探针，先去量一下自己动作之间的真实间隔。**
 >
 > ⚠ **验证时的进程陷阱**：`pkill -f <项目名>` 只杀 `dotnet run` 的包装进程，**子进程会活着继续占端口** —— 之后每一次「重新构建再测」都是**旧二进制**在回答（我因此白查了好几轮 Razor 语法）。要按进程名杀（或按端口 PID）。
 >

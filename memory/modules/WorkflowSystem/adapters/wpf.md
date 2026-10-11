@@ -132,6 +132,24 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 - **焦点**：按下时把焦点交给宿主（先前只在**悬停到连线**时收，点空白画布收不到键）。落在 `TextBoxBase` 里的按下**不抢** —— 那里的 Ctrl+Z 撤的是文字。实测：点空白画布后 Ctrl+Z 生效（`节点 4/4 → 3/3 → 2/2 → 1/1 → 0/0`），Ctrl+Y 回到 `4/4`。
 - **`ToKey` 补八个修饰键**：WPF 的 `Key` 实测 `LWin=70 / RWin=71 / LeftShift=116 … RightAlt=121`，而三段算术区间是 A–Z `44–69`、D0–D9 `34–43`、F1–F12 `90–101` ⇒ 修饰键都在区间外，不会被那三条 `if` 抢走。
 
+### 三点六、滚轮该挂哪一层：实测把「换层」这条路堵死了（2026-10-11 探针）
+
+**内层 `ScrollViewer` 恒置 `Handled`，与能不能滚、到没到边都无关，而且从不链式外传。** 探针原文（插桩在卡片内层 SV 与画布冒泡相各挂一个 handler）：
+
+```
+notch4 SCROLLER-PRE offBefore=144.0 | SCROLLER-POST offAfter=144.0 handledAtExit=True   ← 到底了
+notch5 SCROLLER-PRE offBefore=156.3 | SCROLLER-POST offAfter=156.3 handledAtExit=True   ← 不再动，仍 Handled
+notch6 同上
+每次都有 CANVAS-BUBBLE-ANY called；plain CANVAS-BUBBLE 一条都没有
+```
+
+⇒ **处理器的相必须留在宿主隧道**。改挂**画布冒泡相会静默失效** —— 指针一压在任意节点卡片上，画布永远收不到滚轮（因为内层隧道里就已经 `Handled` 了，冒泡相整段不发）。「给卡片让路」只能在适配器里**显式判**「指针是否落在可滚的内层区、它还能不能滚」，**不能依赖 `Handled`，也不能依赖冒泡**。
+
+另外两条同批实测：
+
+- **滚轮的到达与焦点无关**：焦点在卡片的真 `TextBox` 里时，宿主隧道处理器照样收到（`ADAPTER-ENTRY src=TextBoxView`）。同一笔里**画布滚了 48，而文本框自己一点没滚** —— 缺陷 ① 在文本框上也成立。
+- ⚠ **默认 demo 数据下卡片全都不溢出**（`Generate Dataset` / `Numeric Stats` / `Frequency Dist` / `Merge Report` 实测 `scrollableH=0.0`，连 3 个输入口的也不溢出）。所以「卡片里有 `ScrollViewer`」只是**结构**上的反例，**默认数据下缺陷 ① 不可见** —— 要验它必须先灌数据（探针里用 env 门控注入口子撑到 `scrollableH=156.3` 才让上游结论成立）。这条对七家都适用：**别拿结构当可见性**。
+
 ## 四、坑（带依据）
 
 1. **`IsWorkflowLinkVisual` 的类名白名单在 WPF 侧对一个 WPF 不存在的名字生效。** 白名单字符串是 `"BezierCurveView"`/`"PolylineCurveView"`（`WorkflowSurfaceBehavior.cs:1245-1246`），但 WPF 树下没有 `BezierCurveView` —— 那是 Avalonia demo 的类名（`Examples/Workflow/Avalonia/Demo/Views/Workflow/BezierCurveView.axaml.cs:21`）；完整版 demo 的连线视图是 `PolylineCurveView`（`Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs:58`），模板产物是 `TemplateClass`（`Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-link-view/TemplateClass.xaml.cs:15`），裁剪版 demo 是 `LinkView`。而这三个视图的构造里都设了 `IsHitTestVisible = false`（`PolylineCurveView.xaml.cs:98`、`LinkView.xaml.cs:29`、模板 `TemplateClass.xaml.cs:28`），连线视图因此不会成为指针事件的 `OriginalSource` —— 指针落在连线上时命中的是画布，`IsWorkflowLinkVisual` 在 WPF 的两个 demo 与模板里恒为 false。⇒ 改类名不会影响 WPF 的行为；这条分支是给「用户自己写的、可命中的连线视图」留的后备。（此结论由 `IsHitTestVisible = false` 的 WPF 命中测试语义推出，未跑运行时探针。）
