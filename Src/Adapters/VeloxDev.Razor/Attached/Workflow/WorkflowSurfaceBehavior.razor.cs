@@ -569,7 +569,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// <summary>
     /// Answers the plain wheel the JavaScript has already suppressed: routes it through
     /// <see cref="WorkflowInput"/> and, when no subscriber refused this notch, applies the surface's default
-    /// vertical scroll itself. The page's scroll container must never scroll the workflow surface, so the
+    /// scroll itself — both axes. The page's scroll container must never scroll the workflow surface, so the
     /// adapter owns the wheel outright — this is the one place the default scroll happens.
     /// </summary>
     /// <param name="localX">Canvas-local x of the pointer.</param>
@@ -599,8 +599,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             return true;
         }
 
-        // 没被拦下：平台的滚动已经由 JS 同步 preventDefault 掉了，默认竖滚只有这里能补。
-        _surfaceScroller?.ScrollBy(0d, deltaY);
+        // 没被拦下：平台的滚动已经由 JS 同步 preventDefault 掉了，默认滚只有这里能补。
+        // 两轴都转过去 —— JS 明明把 -deltaX/-deltaY 都送来了，从前这里写死 x 轴 0，纯横滚（deltaX≠0、
+        // deltaY=0）于是变成 ScrollBy(0,0) 什么也不做（N3）。零增量那一轴由 ScrollBy 自己保证不动。
+        _surfaceScroller?.ScrollBy(deltaX, deltaY);
         return false;
     }
 

@@ -168,13 +168,19 @@ window.veloxdevWorkflow = (() => {
         el.scrollTop += dy;
     }
 
-    // Scrolls a surface by a pixel delta and CLAMPS to its own extent — the wheel's default scroll,
-    // which the adapter applies after the route returns (the platform's own scroll is suppressed by
-    // initWheelScroll). Unlike scrollByDelta this never expands the canvas: a wheel at an edge simply
-    // stops there, exactly as the browser's own scroll would.
+    // Scrolls a surface by a pixel delta — the wheel's default scroll, which the adapter applies after
+    // the route returns (the platform's own scroll is suppressed by initWheelScroll). It goes through
+    // the SAME edge-aware path as panning and the minimap (surfaceRegistry's scrollBy), so a wheel at an
+    // edge expands the canvas exactly as a drag there does, instead of stopping at the edge. The direct
+    // clamped scroll is only the fallback for a standalone scroll container with no surface registered.
     function scrollSurfaceBy(scrollerId, dx, dy) {
         const el = document.getElementById(scrollerId);
         if (!el) return;
+        const scrollBy = surfaceRegistry[scrollerId];
+        if (scrollBy) {
+            scrollBy(dx, dy);
+            return;
+        }
         const maxX = Math.max(0, el.scrollWidth - el.clientWidth);
         const maxY = Math.max(0, el.scrollHeight - el.clientHeight);
         el.scrollLeft = Math.max(0, Math.min(el.scrollLeft + dx, maxX));
@@ -705,17 +711,26 @@ window.veloxdevWorkflow = (() => {
             scheduleReport();
         };
 
-        // Applies a scroll delta with edge expansion in all four directions. Used by panning and
-        // by the minimap so both can grow the canvas when the user keeps dragging past an edge.
+        // Applies a scroll delta with edge expansion in all four directions. Used by panning, by the
+        // minimap, and (since the wheel's default scroll reuses this path) by scrollSurfaceBy, so all
+        // three grow the canvas when the user keeps going past an edge.
+        // A zero delta must not touch its axis at ALL — not even the edge check: an axis already sitting
+        // at the edge would otherwise run expandCanvas on a notch that never moved it. So each axis is
+        // moved and boundary-checked only when its own delta is non-zero (the shared
+        // IWorkflowSurfaceScroller.ScrollBy remarks: a zero delta leaves that axis exactly as it was).
         function scrollBy(scrollDx, scrollDy) {
-            let nl = scrollerEl.scrollLeft + scrollDx;
-            let nt = scrollerEl.scrollTop + scrollDy;
-            if (nl < 0) { growContent('x', -nl); nl = 0; }
-            else if (nl >= scrollerEl.scrollWidth - scrollerEl.clientWidth - 50) { expandCanvas(); }
-            if (nt < 0) { growContent('y', -nt); nt = 0; }
-            else if (nt >= scrollerEl.scrollHeight - scrollerEl.clientHeight - 50) { expandCanvas(); }
-            scrollerEl.scrollLeft = nl;
-            scrollerEl.scrollTop = nt;
+            if (scrollDx !== 0) {
+                let nl = scrollerEl.scrollLeft + scrollDx;
+                if (nl < 0) { growContent('x', -nl); nl = 0; }
+                else if (nl >= scrollerEl.scrollWidth - scrollerEl.clientWidth - 50) { expandCanvas(); }
+                scrollerEl.scrollLeft = nl;
+            }
+            if (scrollDy !== 0) {
+                let nt = scrollerEl.scrollTop + scrollDy;
+                if (nt < 0) { growContent('y', -nt); nt = 0; }
+                else if (nt >= scrollerEl.scrollHeight - scrollerEl.clientHeight - 50) { expandCanvas(); }
+                scrollerEl.scrollTop = nt;
+            }
         }
         surfaceRegistry[scrollerEl.id] = scrollBy;
 
@@ -1279,6 +1294,8 @@ window.veloxdevWorkflow = (() => {
     // default vertical scroll itself (RequestWheelScroll → SurfaceScroller → scrollSurfaceBy).
     // Ctrl + wheel is skipped: initWheelZoom owns that gesture. The two listeners split on ctrlKey, so
     // one physical wheel is routed exactly once (the surface markup no longer binds @onwheel).
+    // The listener hangs off the surface ROOT — see initWheelScroll — so the minimap and the ruler,
+    // which sit outside the scroll container, now get a reaction instead of swallowing the wheel.
     // ════════════════════════════════════════════════════════════
 
     // A wheel delta in CSS pixels. deltaMode 1 is lines and 2 is pages on some platforms (Firefox, some
@@ -1291,12 +1308,24 @@ window.veloxdevWorkflow = (() => {
 
     function initWheelScroll(scrollerEl, dotnetRef) {
         if (!scrollerEl || !dotnetRef) return null;
+        // The listener sits on the surface ROOT, not on the scroll container. The minimap and the ruler
+        // are SIBLINGS of .veloxdev-wf-scroll, outside it, so a wheel over them never reached the
+        // listener on the container (nor initWheelZoom's — it hangs off the same node). From the root a
+        // single non-passive wheel listener serves all three jobs: the inner gate, the Ctrl dispatch
+        // (its `if (e.ctrlKey) return` hands Ctrl to initWheelZoom, which still hears the bubbled event
+        // on the container), and the route. Fall back to the container if the surface marker is absent.
+        const surfaceEl = scrollerEl.closest('.veloxdev-wf-surface') || scrollerEl;
         function onWheel(e) {
             if (e.ctrlKey) return;
+            const px = wheelPixels(e, scrollerEl);
+            // Inner gate, BEFORE preventDefault: a nested scroll box under the pointer with room along
+            // this notch gets the notch whole — no preventDefault, no stopPropagation, no route, no
+            // canvas scroll. Its own scroll is the entire answer; the browser chains to the canvas
+            // container by itself once it reaches its edge (see innerScrollerHasRoom).
+            if (innerScrollerHasRoom(e.target, scrollerEl, surfaceEl, px.x, px.y)) return;
             // preventDefault must run synchronously — awaiting the verdict first would already have scrolled.
             e.preventDefault();
             e.stopPropagation();
-            const px = wheelPixels(e, scrollerEl);
             const local = canvasLocalFrom(scrollerEl.querySelector('.veloxdev-wf-canvas'), e.clientX, e.clientY);
             // The adapter's shared sign convention: away from the user (scrolling up) is positive, so the
             // browser's downward-positive deltaY is negated before it crosses to .NET.
@@ -1304,12 +1333,44 @@ window.veloxdevWorkflow = (() => {
                 local ? local[0] : 0, local ? local[1] : 0,
                 -px.x, -px.y, modifiersOf(e), hitTargetId(e.clientX, e.clientY));
         }
-        scrollerEl.addEventListener('wheel', onWheel, { passive: false });
+        surfaceEl.addEventListener('wheel', onWheel, { passive: false });
         return {
             dispose: function () {
-                scrollerEl.removeEventListener('wheel', onWheel);
+                surfaceEl.removeEventListener('wheel', onWheel);
             }
         };
+    }
+
+    // The inner gate. Walks from the wheel target up to (but not including) the surface's own scroll
+    // container and answers whether the NEAREST scroll container it meets still has room along this
+    // notch. A real user-scrollable box is marked by getComputedStyle().overflowY/X of auto|scroll —
+    // `hidden` can only be scrolled by script and `visible` is not a container, so .wf-card-scroll
+    // (overflow:visible) is correctly not one while .py-port-strip / .enum-fields are. Room is measured
+    // in the browser's own sign (deltaY > 0 is downward) with a 1px epsilon for HiDPI sub-pixel offsets.
+    // The nearest container decides on its own (it never chains past its edge — the six native adapters
+    // read the same way), so once found we return for it and do not look for a second one. A direction
+    // whose axis that container cannot scroll counts as no room, which sends the notch to the canvas.
+    function innerScrollerHasRoom(target, scrollerEl, surfaceEl, dx, dy) {
+        if (dx === 0 && dy === 0) return false;
+        let el = target instanceof Element ? target : null;
+        while (el && el !== scrollerEl && el !== surfaceEl && el !== document.body) {
+            const style = getComputedStyle(el);
+            const scrollableY = style.overflowY === 'auto' || style.overflowY === 'scroll';
+            const scrollableX = style.overflowX === 'auto' || style.overflowX === 'scroll';
+            if (scrollableY || scrollableX) {
+                const roomY = dy === 0 ? null
+                    : scrollableY && (dy > 0
+                        ? el.scrollTop + el.clientHeight < el.scrollHeight - 1
+                        : el.scrollTop > 0);
+                const roomX = dx === 0 ? null
+                    : scrollableX && (dx > 0
+                        ? el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+                        : el.scrollLeft > 0);
+                return (roomY === null || roomY) && (roomX === null || roomX);
+            }
+            el = el.parentElement;
+        }
+        return false;
     }
 
     // ════════════════════════════════════════════════════════════
