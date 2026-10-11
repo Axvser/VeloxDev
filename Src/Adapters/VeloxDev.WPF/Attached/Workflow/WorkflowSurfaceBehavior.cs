@@ -880,6 +880,15 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        // 内层闸门：指针底下最近的、且不是画布自己那台的 ScrollViewer，若沿这一笔方向还有余量，这一笔归它。
+        // 本家实测内层 ScrollViewer 恒置 Handled 且从不链式外传（见 memory/modules/WorkflowSystem/adapters/wpf.md §3.6），
+        // 所以这里不是「抢」而是「别插手」：不置 Handled、不路由、不默认滚，让它自己那一笔照常落地。
+        // 它已经到边时返回 false，这笔于是照旧走本类的路由 → 裁决 → 默认滚（画布接）。
+        if (InnerScrollViewerHasRoom(e.OriginalSource as DependencyObject, state, 0d, e.Delta))
+        {
+            return;
+        }
+
         var handle = RoutePointer(state, viewModel, e.GetPosition(state.Canvas), host, e.OriginalSource as DependencyObject,
             (anchor, target, h) => new Wf.PointerWheelEventArgs(
                 anchor, Modifiers(), host, target, 0d, e.Delta, h));
@@ -920,10 +929,49 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             var dx = -(wheelDeltaX / Notch) * stepX;
             var dy = -(wheelDeltaY / Notch) * stepY;
 
-            viewer.ScrollToHorizontalOffset(
-                WorkflowSurfaceMath.ClampValue(viewer.HorizontalOffset + dx, 0d, GetHorizontalScrollMaximum(viewer)));
-            viewer.ScrollToVerticalOffset(
-                WorkflowSurfaceMath.ClampValue(viewer.VerticalOffset + dy, 0d, GetVerticalScrollMaximum(viewer)));
+            // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。
+            var desiredX = dx != 0d ? viewer.HorizontalOffset + dx : viewer.HorizontalOffset;
+            var desiredY = dy != 0d ? viewer.VerticalOffset + dy : viewer.VerticalOffset;
+
+            var maxH = GetHorizontalScrollMaximum(viewer);
+            var maxV = GetVerticalScrollMaximum(viewer);
+
+            var host = state.Host;
+            if (host?.DataContext is not IWorkflowTreeViewModel viewModel)
+            {
+                // 拿不到布局时退回旧的「到边即停」，至少不越界。
+                if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH));
+                if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV));
+                return;
+            }
+
+            // 与平移走同一条边界语义：越界经 ClampScrollOffset 撑大画布（extendRatio 用平移那个），而不是到边即停。
+            // 两处若各留一套语义，同一个画布「拖能撑出去、滚不能」。
+            var newX = dx != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredX, maxH, viewModel.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredX;
+            var newY = dy != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredY, maxV, viewModel.Layout, horizontal: false, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredY;
+
+            if (newX != desiredX || newY != desiredY)
+            {
+                // 撑大过画布：extent 是懒的，先 ApplyLayout + 三连 UpdateLayout 让 ScrollViewer 认下新范围，再重读 max
+                //（与平移 WorkflowSurfaceBehavior.OnCanvasPanMoved 同一套舞蹈，理由见 memory/modules/WorkflowSystem/adapters/wpf.md §2.3）。
+                ApplyLayout(host, state);
+                state.Canvas?.UpdateLayout();
+                viewer.UpdateLayout();
+                host.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(viewer);
+                maxV = GetVerticalScrollMaximum(viewer);
+                newX = Math.Min(newX, maxH);
+                newY = Math.Min(newY, maxV);
+            }
+
+            if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(newX, 0d, maxH));
+            if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(newY, 0d, maxV));
         }
     }
 
@@ -941,6 +989,38 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         input.Route(args(anchor, target, handle));
         FocusHoveredLink(input, state);
         return handle;
+    }
+
+    // 内层闸门用：沿可视祖先链找**最近的、且不是画布自己那台的** ScrollViewer，判它沿这一笔方向还有没有余量。
+    // 「最近的」即判据：它到边就意味着这一笔不归它（本家不链式外传），于是返回 false 交给画布 —— 不再往外找第二台。
+    // 判据 = 沿方向的绝对余量：向下滚（delta < 0）看 VerticalOffset < ScrollableHeight，向上滚看 VerticalOffset > 0，横轴同理。
+    private static bool InnerScrollViewerHasRoom(
+        DependencyObject? source, SurfaceState state, double deltaX, double deltaY)
+    {
+        if (source is null || (deltaX == 0d && deltaY == 0d))
+        {
+            return false;
+        }
+
+        foreach (var candidate in SelfThenAncestors(source))
+        {
+            if (candidate is not ScrollViewer inner || ReferenceEquals(inner, state.ScrollViewer))
+            {
+                continue;
+            }
+
+            var verticalRoom = deltaY < 0d
+                ? inner.VerticalOffset < inner.ScrollableHeight
+                : inner.VerticalOffset > 0d;
+            var horizontalRoom = deltaX < 0d
+                ? inner.HorizontalOffset < inner.ScrollableWidth
+                : inner.HorizontalOffset > 0d;
+
+            // 这一笔里非零的那几轴都要有余量才算「归它」；单轴滚轮到了边就该由画布接。
+            return (deltaY == 0d || verticalRoom) && (deltaX == 0d || horizontalRoom);
+        }
+
+        return false;
     }
 
     // 指针底下是什么，由适配器回答 —— 节点和插槽也是答案的一部分。只认连线的话，路由的 Target 就永远
