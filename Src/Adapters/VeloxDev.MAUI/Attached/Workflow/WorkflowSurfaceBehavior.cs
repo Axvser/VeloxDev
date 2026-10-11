@@ -22,7 +22,7 @@ public sealed class WorkflowSurfaceBehavior
 #if WINDOWS
         public Microsoft.UI.Xaml.Input.PointerEventHandler? ZoomWheelHandler { get; set; }
 
-        // 普通滚轮的钩子挂在画布（滚动容器的内容）上，见 HookWheel。
+        // 普通滚轮的钩子挂在滚动视口的呈现器上（见 HookWheel）。
         public Microsoft.UI.Xaml.Input.PointerEventHandler? WheelHandler { get; set; }
         public Microsoft.UI.Xaml.UIElement? WheelElement { get; set; }
 #endif
@@ -935,7 +935,7 @@ public sealed class WorkflowSurfaceBehavior
 
         // 缩放也要能被订阅者否决。这一处只做「读得到句柄」这一步：转发一笔滚轮、把句柄读出来。
         // 否决后要不要退回平台自己的滚动，全仓还没拉平，暂不在这里单独定。
-        if (RouteSurfaceWheel(state, e, delta)?.PreventDefault == true)
+        if (RouteSurfaceWheel(state, e, 0d, delta)?.PreventDefault == true)
         {
             return;
         }
@@ -967,11 +967,14 @@ public sealed class WorkflowSurfaceBehavior
         e.Handled = true;
     }
 
-    // 滚轮挂在**画布**（滚动容器的内容）上，不是 ScrollView 自己：本家没有隧道相，平台的 ScrollViewer
-    // 在冒泡路径上比画布更晚处理这一笔、且已经滚过一段，等处理器跑到 ScrollViewer 再置 Handled 已经晚了
-    // （WinUI 同形，实测挂在 ScrollViewer 上照样漏一格）。画布是 ScrollViewer 的内容、位于做滚动那一层之前，
-    // 在这里置 Handled 才真的拦得住 —— 「平台的滚动容器一次都不许滚画布」。
-    // 用 handledEventsToo:true 挂接：节点卡片先处理了滚轮也仍要触发（它们不处理这一笔）。
+    // 滚轮不能挂在 ScrollViewer 自己身上：本家没有隧道相，平台的 ScrollViewer 在冒泡路径上比这一层更晚
+    // 处理这一笔、且已经滚过一段，等处理器跑到 ScrollViewer 再置 Handled 已经晚了（WinUI 同形，实测挂在
+    // ScrollViewer 上照样漏一格）。挂在做滚动那一层**之前**的祖先上，置 Handled 才拦得住 ——
+    // 「平台的滚动容器一次都不许滚画布」。用 handledEventsToo:true 挂接：节点卡片先处理了滚轮也仍要触发
+    // （它们不处理这一笔）。
+    // 挂点选**滚动视口的呈现器**，不是画布自己的平台元素：后者实测是个 0x0 的 LayoutPanel，空白处的命中落不到
+    // 它身上（落到祖先/兄弟的 `ScrollContentPresenter` 上），处理器整段收不到 —— 空画布每一格 61.8 全由原生
+    // ScrollViewer 自己滚出来，只有落在节点卡片上的点才进得来。呈现器覆盖整个滚动视口，又在做滚动的那层之前。
     private static void HookWheel(SurfaceState state)
     {
         if (state.Canvas is null)
@@ -981,13 +984,30 @@ public sealed class WorkflowSurfaceBehavior
 
         state.WheelHandler ??= (_, e) => OnSurfaceWheel(state, e);
 
-        if (state.Canvas.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement element
+        if (state.Canvas.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement canvasElement
+            && (FindWheelHost(canvasElement) ?? canvasElement) is { } element
             && !ReferenceEquals(state.WheelElement, element))
         {
             UnhookWheel(state);
             element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerWheelChangedEvent, state.WheelHandler, true);
             state.WheelElement = element;
         }
+    }
+
+    // 画布平台元素往上最近的滚动呈现器；取不到就退回画布元素自己（至少不比现在差）。
+    private static Microsoft.UI.Xaml.UIElement? FindWheelHost(Microsoft.UI.Xaml.UIElement element)
+    {
+        for (Microsoft.UI.Xaml.DependencyObject? current = element;
+             current is not null;
+             current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current))
+        {
+            if (current is Microsoft.UI.Xaml.Controls.ScrollContentPresenter presenter)
+            {
+                return presenter;
+            }
+        }
+
+        return null;
     }
 
     private static void UnhookWheel(SurfaceState state)
@@ -1010,9 +1030,63 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 
+    // 内层闸门：指针底下最近的、画布**之内**的滚动容器，沿这一笔方向还有没有余量。
+    // 这家与 WPF/Avalonia 的挂法不同、与 WinUI 同形：处理器挂在**内层之后**（带 handledEventsToo，内层
+    // ScrollViewer 已经先跑过），所以问的不是「这一笔该不该归内层」，而是「它到底消化了没有」。
+    // 实测（2026-10-11，本家）：内层**到边那一格照样置 `Handled`**（`VerticalOffset` 停在 `ScrollableHeight`
+    // 不再动，入口读到的 `Handled` 仍是 true），所以「Handled == 被消费」不成立。唯一稳的判据是沿方向的
+    // 绝对余量：向下滚（delta < 0）看 `VerticalOffset < ScrollableHeight`，向上滚看 `VerticalOffset > 0`，
+    // 横轴同理。还有余量 ⇒ 这一笔归内层（它自己那一滚已经落地，这里既不路由也不默认滚，否则重复滚）；
+    // 到边 ⇒ 归画布（本类自己滚，可被订阅者否决）。走到挂点就说明底下没有内层滚动容器，这一笔归画布。
+    private static bool InnerScrollViewerHasRoom(
+        Microsoft.UI.Xaml.DependencyObject? source, SurfaceState state, double deltaX, double deltaY)
+    {
+        if (source is null || (deltaX == 0d && deltaY == 0d))
+        {
+            return false;
+        }
+
+        var inner = NearestInnerScrollViewer(source, state);
+        if (inner is null)
+        {
+            return false;
+        }
+
+        var verticalRoom = deltaY == 0d
+            || (deltaY < 0d ? inner.VerticalOffset < inner.ScrollableHeight : inner.VerticalOffset > 0d);
+        var horizontalRoom = deltaX == 0d
+            || (deltaX < 0d ? inner.HorizontalOffset < inner.ScrollableWidth : inner.HorizontalOffset > 0d);
+
+        // 这一笔里非零的那几轴都要有余量才算「归它」；单轴到边就该由画布接。
+        return verticalRoom && horizontalRoom;
+    }
+
+    // 指针底下最近的、不属于本表面那一台的滚动容器。走到挂点就说明底下没有滚动容器（返回 null）。
+    private static Microsoft.UI.Xaml.Controls.ScrollViewer? NearestInnerScrollViewer(
+        Microsoft.UI.Xaml.DependencyObject? source, SurfaceState state)
+    {
+        var own = state.ScrollViewer?.Handler?.PlatformView;
+        for (Microsoft.UI.Xaml.DependencyObject? current = source;
+             current is not null;
+             current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, state.WheelElement))
+            {
+                return null;
+            }
+
+            if (current is Microsoft.UI.Xaml.Controls.ScrollViewer inner && !ReferenceEquals(inner, own))
+            {
+                return inner;
+            }
+        }
+
+        return null;
+    }
+
     // 普通滚轮**整笔归适配器**：平台的滚动容器一次都不许滚画布，默认竖滚由这里在路由之后补上。
     // 订阅方置 PreventDefault 就是「这一笔不滚」，由他走 Scroller 决定往哪滚 —— 于是七家宿主是同一段代码。
-    // 位置与目标取自**滚动之前**（挂在下代上），Ctrl+滚轮那条缩放路走的是另一个处理器。
+    // Ctrl+滚轮那条缩放路走的是另一个处理器。
     private static void OnSurfaceWheel(SurfaceState state, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         var source = state.WheelElement ?? state.Host?.Handler?.PlatformView as Microsoft.UI.Xaml.UIElement;
@@ -1032,11 +1106,23 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        var delta = e.GetCurrentPoint(source).Properties.MouseWheelDelta;
+        // 这一家的 MouseWheelDelta 同时承载竖滚与横滚，方向由 IsHorizontalMouseWheel 分流
+        // （横滚才写 DeltaX，否则零增量轴不许动 —— IWorkflowSurfaceScroller 的 remarks）。
+        var properties = e.GetCurrentPoint(source).Properties;
+        var horizontal = properties.IsHorizontalMouseWheel;
+        var deltaX = horizontal ? properties.MouseWheelDelta : 0d;
+        var deltaY = horizontal ? 0d : (double)properties.MouseWheelDelta;
 
-        if (RouteSurfaceWheel(state, e, delta)?.PreventDefault != true)
+        // 内层闸门：内层 ScrollViewer 挂在本层之下、已经先跑过。它沿这一笔方向还有余量 ⇒ 这一笔归它，
+        // 别插手 —— 它自己那一滚已经落地，这里既不路由也不默认滚（到边时返回 false，于是由画布接）。
+        if (InnerScrollViewerHasRoom(e.OriginalSource as Microsoft.UI.Xaml.DependencyObject, state, deltaX, deltaY))
         {
-            state.Scroller?.ScrollBy(0d, delta);
+            return;
+        }
+
+        if (RouteSurfaceWheel(state, e, deltaX, deltaY)?.PreventDefault != true)
+        {
+            state.Scroller?.ScrollBy(deltaX, deltaY);
         }
     }
 #endif
@@ -1056,6 +1142,19 @@ public sealed class WorkflowSurfaceBehavior
 
         public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
         {
+            if (state.ScrollViewer is null)
+            {
+                return;
+            }
+
+            // 越界撑大画布要先推布局趟、MAUI 的原生范围又是异步重测的，所以要等；接口是同步的，这里即发即忘。
+            _ = ScrollByAsync(wheelDeltaX, wheelDeltaY);
+        }
+
+        // 与平移（ApplyPanTargetAsync）走同一条边界语义：越界经 ClampScrollOffset 撑大画布（extendRatio 用平移
+        // 那个），而不是到边即停；两处若各留一套语义，同一个画布「拖能撑出去、滚不能」。
+        private async Task ScrollByAsync(double wheelDeltaX, double wheelDeltaY)
+        {
             if (state.ScrollViewer is not { } viewer)
             {
                 return;
@@ -1065,21 +1164,67 @@ public sealed class WorkflowSurfaceBehavior
             var dx = -(wheelDeltaX / Notch) * PixelsPerNotch;
             var dy = -(wheelDeltaY / Notch) * PixelsPerNotch;
 
-            var x = WorkflowSurfaceMath.ClampValue(viewer.ScrollX + dx, 0d, GetHorizontalScrollMaximum(state));
-            var y = WorkflowSurfaceMath.ClampValue(viewer.ScrollY + dy, 0d, GetVerticalScrollMaximum(state));
+            // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。
+            var desiredX = dx != 0d ? viewer.ScrollX + dx : viewer.ScrollX;
+            var desiredY = dy != 0d ? viewer.ScrollY + dy : viewer.ScrollY;
 
+            var maxH = GetHorizontalScrollMaximum(state);
+            var maxV = GetVerticalScrollMaximum(state);
+            var host = state.Host;
+            var viewModel = host is null ? null : ResolveTreeViewModel(host, state);
+
+            if (host is null || viewModel is null)
+            {
+                // 拿不到布局时退回旧的「到边即停」，至少不越界。
+                ApplyOffset(viewer, dx, dy,
+                    WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH),
+                    WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV));
+                return;
+            }
+
+            var newX = dx != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredX, maxH, viewModel.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredX;
+            var newY = dy != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredY, maxV, viewModel.Layout, horizontal: false, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredY;
+
+            if (newX != desiredX || newY != desiredY)
+            {
+                // 撑大过画布：画布尺寸经 ApplyLayout 同步长大，但原生范围异步重测 —— 让出一拍再读，
+                // 否则夹取按陈旧范围落短（与 ApplyPanTargetAsync / RecenterOnWorldPointAsync 同一套；
+                // 这家没有同步 UpdateLayout，三连 UpdateLayout 在 MAUI 是无效动作）。
+                ApplyLayout(host, state);
+                await Task.Yield();
+                maxH = GetHorizontalScrollMaximum(state);
+                maxV = GetVerticalScrollMaximum(state);
+                newX = Math.Min(newX, maxH);
+                newY = Math.Min(newY, maxV);
+            }
+
+            // 应用目标再夹到实时原生范围（原生可能仍落后模型，ChangeView 会按原生夹取），只写增量非零的那一轴。
+            ApplyOffset(viewer, dx, dy,
+                dx != 0d ? WorkflowSurfaceMath.ClampValue(newX, 0d, GetNativeScrollMaximum(state, horizontal: true)) : viewer.ScrollX,
+                dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, GetNativeScrollMaximum(state, horizontal: false)) : viewer.ScrollY);
+        }
+
+        // 落滚只写增量非零的那一轴：另一轴传 null，免得把它夹回范围里（零增量不许动那一轴）。
+        private static void ApplyOffset(ScrollView view, double dvx, double dvy, double x, double y)
+        {
 #if WINDOWS
             // 走原生 ChangeView，不用 MAUI 的 ScrollToAsync：后者会把滚动容器留在键盘焦点上，
             // 而焦点一旦离开工作流表面那棵子树，挂在交互源上的键盘钩子就整段收不到键（实测）。
-            if (viewer.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer native)
+            if (view.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer native)
             {
-                native.ChangeView(x, y, null, disableAnimation: true);
+                native.ChangeView(dvx != 0d ? x : null, dvy != 0d ? y : null, null, disableAnimation: true);
                 return;
             }
 #endif
 
             // 落滚会发 Scrolled → OnScrolled → Refresh，装饰块与虚拟化随之跟上（与平移同一条单写入者路径）。
-            _ = viewer.ScrollToAsync(x, y, false);
+            _ = view.ScrollToAsync(x, y, false);
         }
     }
 
@@ -1694,7 +1839,7 @@ public sealed class WorkflowSurfaceBehavior
 
     // 表面自己那一笔滚轮的转发。滚轮的两条路（链接层与 Ctrl+滚轮的缩放）共用它，见 RouteWheelOnce。
     private static WorkflowEventHandle? RouteSurfaceWheel(
-        SurfaceState state, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e, int delta)
+        SurfaceState state, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e, double deltaX, double deltaY)
     {
         if (ResolveSurfaceInput(state, e) is not { } input)
         {
@@ -1708,7 +1853,7 @@ public sealed class WorkflowSurfaceBehavior
             routed.Route(new Wf.PointerWheelEventArgs(
                 new Anchor(input.Point.X, input.Point.Y, 0), Modifiers(e.KeyModifiers), input.Canvas,
                 ResolveTarget(null, input.Tree, input.Point, routed.HitRadius),
-                0d, delta, handle));
+                deltaX, deltaY, handle));
             return handle;
         });
     }

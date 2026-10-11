@@ -1073,6 +1073,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             Windows.System.VirtualKey.RightMenu => Wf.InputKey.RightAlt,
             Windows.System.VirtualKey.LeftWindows => Wf.InputKey.LWin,
             Windows.System.VirtualKey.RightWindows => Wf.InputKey.RWin,
+            // 无侧的修饰键码（Shift=16、Control=17、Menu=18）：真实键盘的 WM_KEYDOWN 里左右 Shift 报的都是
+            // 0x10（左右之分在扫描码里），SendInput 合成的键更是**只有**这个码 —— 实测 `keyup:Shift` 到此，
+            // 报 16。不点名就落 `Unknown`，宿主「按 Shift 判横滚、松手复位」那对按下/抬起就配不上（实测：
+            // 松开 Shift 后仍按横滚执行）。归到左侧变体，与 WPF 的 KeyInterop（VK_SHIFT → Key.LeftShift）同一条。
+            Windows.System.VirtualKey.Shift => Wf.InputKey.LeftShift,
+            Windows.System.VirtualKey.Control => Wf.InputKey.LeftCtrl,
+            Windows.System.VirtualKey.Menu => Wf.InputKey.LeftAlt,
             _ => Wf.InputKey.Unknown,
         };
     }
