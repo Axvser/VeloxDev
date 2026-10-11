@@ -24,6 +24,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public Windows.Foundation.Point PanStart { get; set; }
         public Windows.Foundation.Point PanStartOffset { get; set; }
         public bool IsVisibleRegionUpdateQueued { get; set; }
+        public UserControl? Host { get; set; }
         public ScrollViewer? ScrollViewer { get; set; }
         public Canvas? Canvas { get; set; }
         public FrameworkElement? GridDecorator { get; set; }
@@ -163,6 +164,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         var state = host.GetValue(StateProperty) as SurfaceState ?? new SurfaceState();
         host.SetValue(StateProperty, state);
+        state.Host = host;
         ResolveNamedControls(host, state);
         WireLinkMenu(host, state);
         CaptureViewportRestore(host, state);
@@ -558,6 +560,57 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
     }
 
+    // 内层闸门：指针底下最近的、画布**之内**的滚动容器，沿这一笔方向还有没有余量。
+    // 这家与 WPF/Avalonia 的判据同形，但问题不同：那两家挂在内层**之前**，问的是「这一笔该不该归内层」（前瞻）；
+    // 这家挂在画布上、带 handledEventsToo，内层 ScrollViewer 已经先跑过，问的是「它到底消化了没有」。
+    // 实测（2026-10-11 探针）：内层能滚时置 Handled（它滚了），**不能滚时也置 Handled**（内层到边后再滚两格，
+    // `VerticalOffset` 停在 `ScrollableHeight` 一动不动，入口 `Handled` 仍是 true）。所以「Handled == 被消费」
+    // 不成立；唯一的判据是沿方向的绝对余量：向下滚（delta < 0）看 `VerticalOffset < ScrollableHeight`，
+    // 向上滚看 `VerticalOffset > 0`，横轴同理。还有余量 ⇒ 这一笔归内层（不路由、不默认滚，它自己那一滚已经落地）；
+    // 到边 ⇒ 归画布（本类自己滚，可被订阅者否决）。画布自己那台是**祖先**、卡片里那些是**后代** ——
+    // 向上走、先碰到画布就说明底下没有滚动容器，这一笔归画布。
+    private static bool InnerScrollViewerHasRoom(DependencyObject? source, SurfaceState state, double deltaX, double deltaY)
+    {
+        if (source is null || (deltaX == 0d && deltaY == 0d))
+        {
+            return false;
+        }
+
+        foreach (var candidate in SelfThenAncestors(source))
+        {
+            if (ReferenceEquals(candidate, state.Canvas))
+            {
+                return false;
+            }
+
+            if (candidate is not ScrollViewer inner || ReferenceEquals(inner, state.ScrollViewer))
+            {
+                continue;
+            }
+
+            var verticalRoom = deltaY == 0d
+                || (deltaY < 0d ? inner.VerticalOffset < inner.ScrollableHeight : inner.VerticalOffset > 0d);
+            var horizontalRoom = deltaX == 0d
+                || (deltaX < 0d ? inner.HorizontalOffset < inner.ScrollableWidth : inner.HorizontalOffset > 0d);
+
+            // 这一笔里非零的那几轴都要有余量才算「归它」；单轴到边就该由画布接。
+            return verticalRoom && horizontalRoom;
+        }
+
+        return false;
+    }
+
+    // 自身在前，再沿可视祖先往外走。不用 Enumerable.Prepend：本工程多档 TFM，它不都在。
+    private static IEnumerable<DependencyObject> SelfThenAncestors(DependencyObject element)
+    {
+        yield return element;
+
+        foreach (DependencyObject ancestor in EnumerateVisualAncestors(element))
+        {
+            yield return ancestor;
+        }
+    }
+
     private static void OnSurfaceWheel(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not DependencyObject source)
@@ -571,28 +624,44 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var delta = e.GetCurrentPoint(source as UIElement ?? host).Properties.MouseWheelDelta;
+        // 这一家的 MouseWheelDelta 同时承载竖滚与横滚，方向由 IsHorizontalMouseWheel 分流
+        // （横滚才写 DeltaX，否则零增量轴不许动 —— IWorkflowSurfaceScroller 的 remarks）。
+        var properties = e.GetCurrentPoint(source as UIElement ?? host).Properties;
+        var horizontal = properties.IsHorizontalMouseWheel;
+        var deltaX = horizontal ? properties.MouseWheelDelta : 0d;
+        var deltaY = horizontal ? 0d : (double)properties.MouseWheelDelta;
+        var delta = properties.MouseWheelDelta;
 
-        // 普通滚轮**整笔归适配器**：平台的滚动容器一次都不许滚画布，默认竖滚由这里在路由之后补上。
+        // 普通滚轮（含横向）**整笔归适配器**：平台的滚动容器一次都不许滚画布，默认滚由这里在路由之后补上。
         // 订阅方置 PreventDefault 就是「这一笔不滚」，由他走 Scroller 决定往哪滚 —— 于是七家宿主是同一段代码。
-        // 挂在下代（画布）上，位置与目标因此都还是**滚动之前**的 —— 这一家没有隧道相，挂在 ScrollViewer
-        // 上就只能拿到滚动之后的值、而且拦不住那一滚（见 HookWheel 的注释）。
-        if (!e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control) || !GetZoomEnabled(host))
+        // Ctrl+竖滚走缩放（横滚不参与缩放），所以这里多一个「不是缩放那一笔」的条件。
+        var isZoom = !horizontal && e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control) && GetZoomEnabled(host);
+        if (!isZoom)
         {
-            // 拦下平台那一手：置 Handled 之后 ScrollPresenter 不再滚画布。取不到表面状态时也拦 ——
-            // 滚轮归适配器这条不因为一次查找失败就把画布交回平台。
+            // 取不到表面状态也拦：滚轮归适配器这条不因为一次查找失败就把画布交回平台。
+            if (host.GetValue(StateProperty) is not SurfaceState reportState)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            // 内层闸门：内层 ScrollViewer 已经先跑过。它沿这一笔方向还有余量 ⇒ 这一笔归它，别插手 ——
+            // 它自己那一滚已经落地，这里既不路由也不默认滚（到边时返回 false，于是照旧由画布接）。
+            if (InnerScrollViewerHasRoom(e.OriginalSource as DependencyObject, reportState, deltaX, deltaY))
+            {
+                return;
+            }
+
+            // 拦下平台那一手：置 Handled 之后 ScrollPresenter 不再滚画布。
             e.Handled = true;
 
-            if (host.GetValue(StateProperty) is SurfaceState reportState)
-            {
-                var handle = RoutePointer(reportState, viewModel, e, host, e.OriginalSource as DependencyObject,
-                    (position, target, h) => new Wf.PointerWheelEventArgs(
-                        position, Modifiers(e.KeyModifiers), host, target, 0d, delta, h));
+            var handle = RoutePointer(reportState, viewModel, e, host, e.OriginalSource as DependencyObject,
+                (position, target, h) => new Wf.PointerWheelEventArgs(
+                    position, Modifiers(e.KeyModifiers), host, target, deltaX, deltaY, h));
 
-                if (!handle.PreventDefault)
-                {
-                    reportState.Scroller?.ScrollBy(0d, delta);
-                }
+            if (!handle.PreventDefault)
+            {
+                reportState.Scroller?.ScrollBy(deltaX, deltaY);
             }
 
             return;
@@ -709,16 +778,61 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             var dx = -(wheelDeltaX / Notch) * PixelsPerNotch;
             var dy = -(wheelDeltaY / Notch) * PixelsPerNotch;
 
-            var x = WorkflowSurfaceMath.ClampValue(viewer.HorizontalOffset + dx, 0d, GetHorizontalScrollMaximum(viewer));
-            var y = WorkflowSurfaceMath.ClampValue(viewer.VerticalOffset + dy, 0d, GetVerticalScrollMaximum(viewer));
+            // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。
+            var desiredX = dx != 0d ? viewer.HorizontalOffset + dx : viewer.HorizontalOffset;
+            var desiredY = dy != 0d ? viewer.VerticalOffset + dy : viewer.VerticalOffset;
 
-            viewer.ChangeView(x, y, null, disableAnimation: true);
+            var maxH = GetHorizontalScrollMaximum(viewer);
+            var maxV = GetVerticalScrollMaximum(viewer);
+
+            var host = state.Host;
+            if (host is null || state.Input is not { } input)
+            {
+                // 拿不到布局时退回旧的「到边即停」，至少不越界。
+                viewer.ChangeView(
+                    dx != 0d ? WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH) : null,
+                    dy != 0d ? WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV) : null,
+                    null,
+                    disableAnimation: true);
+                return;
+            }
+
+            // 与平移走同一条边界语义：越界经 ClampScrollOffset 撑大画布（extendRatio 用平移那个），而不是到边即停。
+            // 两处若各留一套语义，同一个画布「拖能撑出去、滚不能」。
+            var newX = dx != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredX, maxH, input.Tree.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredX;
+            var newY = dy != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredY, maxV, input.Tree.Layout, horizontal: false, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredY;
+
+            if (newX != desiredX || newY != desiredY)
+            {
+                // 撑大过画布：extent 是懒的，先强制一次布局趟让 ScrollViewer 认下新范围、再重读 max
+                //（与缩放那支同一套：ChangeView 会按陈旧范围夹取，见 OnSurfaceWheel 的缩放分支）。
+                ApplyLayout(host, state);
+                state.Canvas?.UpdateLayout();
+                viewer.UpdateLayout();
+                host.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(viewer);
+                maxV = GetVerticalScrollMaximum(viewer);
+                newX = Math.Min(newX, maxH);
+                newY = Math.Min(newY, maxV);
+            }
+
+            // 只写增量非零的那一轴：另一轴传 null，免得把它夹回范围里（零增量不许动那一轴）。
+            var committedX = dx != 0d ? WorkflowSurfaceMath.ClampValue(newX, 0d, maxH) : viewer.HorizontalOffset;
+            var committedY = dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, maxV) : viewer.VerticalOffset;
+            viewer.ChangeView(
+                dx != 0d ? committedX : null,
+                dy != 0d ? committedY : null,
+                null,
+                disableAnimation: true);
 
             // 用提交的偏移同步重新虚拟化：ChangeView 是异步的，此刻读到的还是旧偏移。
-            if (state.Input is { } input)
-            {
-                VirtualizeAtScroll(input.Tree, x, y, viewer.ViewportWidth, viewer.ViewportHeight);
-            }
+            VirtualizeAtScroll(input.Tree, committedX, committedY, viewer.ViewportWidth, viewer.ViewportHeight);
         }
     }
 
@@ -1095,6 +1209,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             VirtualKey.RightMenu => Wf.InputKey.RightAlt,
             VirtualKey.LeftWindows => Wf.InputKey.LWin,
             VirtualKey.RightWindows => Wf.InputKey.RWin,
+            // 无侧的修饰键码（Shift=16、Control=17、Menu=18）：真实键盘的 WM_KEYDOWN 里左右 Shift 报的都是
+            // 0x10（左右之分在扫描码里），SendInput 合成的键更是**只有**这个码。不点名就落 Unknown，宿主
+            // 「按 Shift 判横滚、松手复位」那对按下/抬起就配不上 —— 按下那半还有 e.Modifiers 兜着，**抬起那半
+            // 永远不触发**，于是松开 Shift 之后一直按横滚走（MAUI 那家实测过，两家是同一套 VirtualKey 词汇）。
+            // 归到左侧变体，与 WPF 的 KeyInterop（VK_SHIFT → Key.LeftShift）同一条。
+            VirtualKey.Shift => Wf.InputKey.LeftShift,
+            VirtualKey.Control => Wf.InputKey.LeftCtrl,
+            VirtualKey.Menu => Wf.InputKey.LeftAlt,
             _ => Wf.InputKey.Unknown,
         };
     }
