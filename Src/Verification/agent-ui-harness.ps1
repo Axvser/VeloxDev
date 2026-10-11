@@ -38,6 +38,7 @@ be read straight off a captured frame. Supported:
                               or around down:/up: for a Shift-modified drag)
   keyup:Control               release a key
   wheel:<x>,<y>,<delta>       one wheel notch at that point; 120 = up (zoom in), -120 = down
+  hwheel:<x>,<y>,<delta>      one *tilt* wheel notch (WM_MOUSEHWHEEL, a message of its own); positive = right
   type:<text>                 type ASCII text
   wait:<ms>
 
@@ -93,7 +94,7 @@ public class Ui {
   // The *_FLAG suffix is load-bearing, not style: PowerShell resolves members case-insensitively, so a
   // constant named WHEEL or KEYUP would shadow the Wheel()/KeyUp() methods from the call site and the
   // call would fail with "MethodNotFound" while the method is plainly there.
-  public const uint MOVE = 0x0001, ABSOLUTE = 0x8000, WHEEL_FLAG = 0x0800;
+  public const uint MOVE = 0x0001, ABSOLUTE = 0x8000, WHEEL_FLAG = 0x0800, HWHEEL_FLAG = 0x1000;
   public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004, RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
   public const uint KEYUP_FLAG = 0x0002;
 
@@ -117,6 +118,14 @@ public class Ui {
   // positive is away from the user, which every framework reads as "scroll up / zoom in".
   public static uint Wheel(int delta) {
     var a = new INPUT[1]; a[0].type = 0; a[0].mi.flags = WHEEL_FLAG; a[0].mi.data = unchecked((uint)delta);
+    return SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
+  }
+  // Tilt / horizontal wheel — a *separate* Win32 message (WM_MOUSEHWHEEL), not a sign flip on the vertical one.
+  // Positive is to the right. Worth having because the frameworks differ on whether they carry it at all:
+  // WinUI hands it over inside MouseWheelDelta (an adapter that hardcodes DeltaX = 0 loses it silently), while
+  // Razor's JS reads deltaX directly. Without this action "does horizontal wheel work?" is unanswerable.
+  public static uint HWheel(int delta) {
+    var a = new INPUT[1]; a[0].type = 0; a[0].mi.flags = HWHEEL_FLAG; a[0].mi.data = unchecked((uint)delta);
     return SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
   }
   public static uint KeyDown(ushort vk) {
@@ -332,6 +341,16 @@ foreach ($action in ($Actions -split ';')) {
             $accepted = [Ui]::Wheel([int]$p[2])
             if ($accepted -ne 1) { Add-Content $log "wheel $arg REJECTED (SendInput accepted $accepted/1)" }
             else { Add-Content $log "wheel $arg" }
+            Start-Sleep -Milliseconds 220
+        }
+        # 倾斜滚轮 / 横向滚轮：Win32 里它是**另一条消息**（WM_MOUSEHWHEEL），不是竖向那个取负。
+        # 正 = 向右。没有这条就答不了「横向滚轮在这家到底通不通」——这正是 N2 那一类缺陷的盲区。
+        'hwheel' {
+            $p = $arg -split ','
+            ToClient ([int]$p[0]) ([int]$p[1])
+            $accepted = [Ui]::HWheel([int]$p[2])
+            if ($accepted -ne 1) { Add-Content $log "hwheel $arg REJECTED (SendInput accepted $accepted/1)" }
+            else { Add-Content $log "hwheel $arg" }
             Start-Sleep -Milliseconds 220
         }
         'type' {
