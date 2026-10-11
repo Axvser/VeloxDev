@@ -249,7 +249,15 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 | 改后 5–6 格 | 停 380 | 520→640→760（画布接） |
 
 ⚠ **到顶那一笔仍由内层消费**（G4：360→380，余量不够），画布在**下一笔**才接手 —— 这是浏览器原生链的行为。
-⚠ 真实的 `.py-port-strip`（22 个）/`.enum-fields`（2 个）**初始 `scrollHeight == clientHeight`（无余量）** ⇒ 闸门正向用例只能靠**注入的合成容器**（走同一段 `overflowY==='auto'` 代码路径）。`.wf-card-scroll` 实测 `overflow:visible`、未误认成容器。
+⚠ 真实的 `.py-port-strip`（22 个）/`.enum-fields`（2 个）**初始 `scrollHeight == clientHeight`（无余量）** ⇒ 闸门正向用例原先只能靠**注入的合成容器**。**2026-10-11 已用真实容器补验**（临时给 `app.css` 加一条 `min-height` 让 Merge Report 的 `.py-port-strip-in` 溢出到 `sh=916 ch=187`、max=729）：
+
+```
+内层 st 0 → 120 → 240 → 360 → 480 → 600 → 720 → 729(=max)   外层恒 353/1533（分毫未动）
+再一格（内层到底）⇒ 外层 353 → 473（+120，画布接）
+空白处 ⇒ 外层 +120/格
+```
+
+⇒ 三支齐（有余量⇒内层滚；到顶⇒画布接；空白⇒画布滚），用的是**真实**容器。`.wf-card-scroll` 实测 `overflow:visible`、未误认成容器。
 
 **默认滚复用平移路径**：`scrollSurfaceBy` 改为先走 `surfaceRegistry[id].scrollBy`（= 平移/小地图那条，带 `growContent`+`expandCanvas`）。实测 `(0,0)` 处向上滚一格：改前 `ct=28, hh=2028`（**钳住**），改后 `ct=148, hh=2148`（**撑开**）。中部步长未变（+120）。
 
