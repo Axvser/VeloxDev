@@ -689,11 +689,13 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         // Ctrl+滚轮也进路由，订阅者才有机会说「这一次别缩放」。先前这条路完全不路由，于是它对
         // PreventDefault 天然免疫。不会造成二次路由：非 Ctrl 的滚轮走 OnPointerWheel 那一条，
         // 两支笔各走各的。
+        // 这家的平台事件横轴与 OS 相反（MOUSEEVENTF_HWHEEL 正 = 向右，这里向右倾斜却给 Delta.X < 0），
+        // 适配器吸收它，好让契约在七家一致。纵轴不动。
         if (host.GetValue(StateProperty) is SurfaceState zoomState)
         {
             WorkflowEventHandle? wheelHandle = RoutePointer(host, zoomState, e, (position, target, handle) =>
                 new Wf.PointerWheelEventArgs(
-                    position, Modifiers(e.KeyModifiers), host, target, e.Delta.X, e.Delta.Y, handle));
+                    position, Modifiers(e.KeyModifiers), host, target, -e.Delta.X, e.Delta.Y, handle));
 
             if (wheelHandle?.PreventDefault == true)
             {
@@ -866,9 +868,11 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
         }
 
+        // 横轴取反同上（这家平台事件横轴与 OS 相反）；这处的 InnerScrollViewerHasRoom 判的是平台内层
+        // 自己的余量，用平台原样的 e.Delta.X，不改。
         var handle = RoutePointer(host, state, e,
             (position, target, h) => new Wf.PointerWheelEventArgs(
-                position, Modifiers(e.KeyModifiers), host, target, e.Delta.X, e.Delta.Y, h));
+                position, Modifiers(e.KeyModifiers), host, target, -e.Delta.X, e.Delta.Y, h));
 
         if (handle is null)
             return;
