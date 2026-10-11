@@ -38,6 +38,7 @@ public sealed class WorkflowSurfaceBehavior
         public double PendingRestoreY { get; set; }
 
         private const int WmMouseWheel = 0x020A;
+        private const int WmMouseHWheel = 0x020E;
         private const int WmLeftButtonDown = 0x0201;
         private const int WmRightButtonDown = 0x0204;
         private const int WmMiddleButtonDown = 0x0207;
@@ -68,8 +69,9 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         // 应用层预处理：滚轮发给谁取决于焦点，挂在控件上的处理器收不齐（实测三格零到达），所以按**指针底下**
-        // 的控件认领。普通滚轮整笔归适配器 —— 路由之后执行默认竖滚，并吞掉消息，平台的滚动容器一次都不许
-        // 滚画布；Ctrl+滚轮是缩放，同样在消息层接住。按下的那一支只把键盘焦点收到画布，消息照常放行。
+        // 的控件认领。普通滚轮整笔归适配器 —— 先过内层闸门：指针底下若有能滚的内层控件就**放行整笔**让它自己滚；
+        // 否则路由之后执行默认竖滚/横滚，并吞掉消息，平台的滚动容器一次都不许滚画布；Ctrl+滚轮是缩放，同样在
+        // 消息层接住。按下的那一支只把键盘焦点收到画布，消息照常放行。
         bool IMessageFilter.PreFilterMessage(ref Message m)
         {
             // 表面上任何一次按下（画布、卡片、插槽、连线）都先把键盘焦点收到画布，Ctrl+Z 这类树级按键才有
@@ -80,7 +82,9 @@ public sealed class WorkflowSurfaceBehavior
                 return false;
             }
 
-            if (m.Msg != WmMouseWheel)
+            // 两种滚轮都要接：竖滚轮是本家一直认的那条；倾斜滚轮 WM_MOUSEHWHEEL 是**另一条消息**，原先整条
+            // 没人接（既不放行也不路由），横向滚轮因此是这块表面的一条盲区。
+            if (m.Msg is not (WmMouseWheel or WmMouseHWheel))
             {
                 return false;
             }
@@ -99,15 +103,32 @@ public sealed class WorkflowSurfaceBehavior
                 return false;
             }
 
+            // 两种滚轮的增量都在 wParam 的高字，正方向都是「远离/向右」。竖滚轮走 Y、倾斜滚轮走 X（正 = 向右）。
             var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
+            var deltaX = m.Msg == WmMouseHWheel ? delta : 0;
+            var deltaY = m.Msg == WmMouseWheel ? delta : 0;
+
+            // 内层闸门（前瞻式）：本家的过滤器在内层控件**之前**，所以「别插手」就是**放行整笔消息** ——
+            // 指针底下沿父链、还没走到表面宿主之前，若有能往这个方向滚的 ScrollableControl / TextBoxBase，
+            // 这一笔归它，直接 return false（不放行任何东西都不动，因为我们现在是把它吞掉的）。到边时找不到
+            // 有余量的内层控件，于是落回下面的路由 → 裁决 → 默认滚，由画布接。
+            if (InnerScrollableHasRoom(under, host, deltaX, deltaY))
+            {
+                return false;
+            }
 
             // 普通滚轮（或这家关掉了缩放）**整笔归适配器**：先路由，订阅方置 PreventDefault 就是「这一笔
-            // 不滚」，由他走 Scroller 决定往哪滚；否则执行默认竖滚。两条都吞掉消息，平台一次都不滚画布。
-            if (Control.ModifierKeys != Keys.Control || !GetState(host).ZoomEnabled)
+            // 不滚」，由他走 Scroller 决定往哪滚；否则执行默认竖滚/横滚。两条都吞掉消息，平台一次都不滚画布。
+            // 缩放只吃竖滚轮（倾斜滚轮不缩放）。
+            var zoomGesture = m.Msg == WmMouseWheel
+                && Control.ModifierKeys == Keys.Control
+                && GetState(host).ZoomEnabled;
+
+            if (!zoomGesture)
             {
-                if (!RouteWheel(host, tree, under ?? host, delta))
+                if (!RouteWheel(host, tree, under ?? host, deltaX, deltaY))
                 {
-                    GetState(host).Scroller?.ScrollBy(0d, delta);
+                    GetState(host).Scroller?.ScrollBy(deltaX, deltaY);
                 }
 
                 m.Result = IntPtr.Zero;
@@ -116,7 +137,7 @@ public sealed class WorkflowSurfaceBehavior
 
             // 缩放也要能被订阅者否决。滚轮在消息层就被这里接住、画布收不到它，所以路由只能在这一层补一次；
             // 否决即吞掉消息 —— 不缩放，也不让任何控件滚动。
-            if (RouteWheel(host, tree, under ?? host, delta))
+            if (RouteWheel(host, tree, under ?? host, 0d, deltaY))
             {
                 m.Result = IntPtr.Zero;
                 return true;
@@ -179,6 +200,111 @@ public sealed class WorkflowSurfaceBehavior
             var handle = WindowFromPoint(screenPoint);
             return handle == IntPtr.Zero ? null : Control.FromChildHandle(handle) ?? Control.FromHandle(handle);
         }
+
+        // 内层闸门：指针底下、到表面宿主之前的那一段里，有没有能沿这一笔方向滚的容器。判据是**各自的滚动态** ——
+        // ScrollableControl 读 VerticalScroll/HorizontalScroll，TextBoxBase 读它自己的窗口滚动条。只要有一段还
+        // 有余量，这一笔就归它；到边（或根本没有这样的控件）返回 false，让画布接。前瞻式：本过滤器在内层**之前**，
+        // 所以「放手」是放行整笔消息，不是等它滚完了再补一刀。
+        private static bool InnerScrollableHasRoom(Control? under, Control host, int deltaX, int deltaY)
+        {
+            if (under is null || (deltaX == 0 && deltaY == 0))
+            {
+                return false;
+            }
+
+            for (var current = under; current is not null && !ReferenceEquals(current, host); current = current.Parent)
+            {
+                switch (current)
+                {
+                    case TextBoxBase text:
+                        if (TextBoxHasRoom(text, deltaY))
+                        {
+                            return true;
+                        }
+
+                        break;
+
+                    case ScrollableControl scrollable:
+                        if (ScrollableControlHasRoom(scrollable, deltaX, deltaY))
+                        {
+                            return true;
+                        }
+
+                        break;
+                }
+            }
+
+            return false;
+        }
+
+        // 沿方向的绝对余量：向下/向右滚看 Value 还没到 Max - LargeChange + 1，向上/向左看还大于 Minimum。
+        // 滚动条不可见的容器没有余量（默认不溢出的 AutoScroll 面板就落在这里），于是那一笔仍归画布。
+        private static bool ScrollableControlHasRoom(ScrollableControl scrollable, int deltaX, int deltaY)
+        {
+            var vertical = scrollable.VerticalScroll;
+            var horizontal = scrollable.HorizontalScroll;
+
+            var verticalRoom = deltaY == 0
+                || (vertical.Visible && (deltaY > 0
+                    ? vertical.Value > vertical.Minimum
+                    : vertical.Value < vertical.Maximum - vertical.LargeChange + 1));
+            var horizontalRoom = deltaX == 0
+                || (horizontal.Visible && (deltaX > 0
+                    ? horizontal.Value < horizontal.Maximum - horizontal.LargeChange + 1
+                    : horizontal.Value > horizontal.Minimum));
+
+            return verticalRoom && horizontalRoom;
+        }
+
+        // 多行文本框的滚动态只有它自己那对滚动条知道（TextBoxBase 没有托管 API），读窗口的滚动条信息。
+        // ⚠ 只判竖轴：实测底下的 EDIT 认 WM_MOUSEWHEEL（一格 3 行），但**不认** WM_MOUSEHWHEEL —— 放行整笔
+        // 横滚后它的 nPos 纹丝不动（h=[0/0..742 p134] 两格后仍是 0）。所以横滚永远不归文本框，归画布；
+        // 若照竖轴那样也按「有余量」放行，指针压在文本框上时横滚会掉进一个两边都不接的空档。
+        private static bool TextBoxHasRoom(TextBoxBase text, int deltaY)
+        {
+            if (!text.IsHandleCreated || deltaY == 0)
+            {
+                return false;
+            }
+
+            return WindowBarHasRoom(text.Handle, SbVert, deltaY);
+        }
+
+        // 窗口滚动条到边的判据与 Win32 一致：nPos 能落在 [nMin, nMax − nPage + 1]。
+        private static bool WindowBarHasRoom(IntPtr hwnd, int bar, int delta)
+        {
+            var info = new ScrollInfo
+            {
+                cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<ScrollInfo>(),
+                fMask = SifAll,
+            };
+
+            if (!GetScrollInfo(hwnd, bar, ref info))
+            {
+                return false;
+            }
+
+            var max = info.nMax - Math.Max(0, info.nPage - 1);
+            return delta > 0 ? info.nPos > info.nMin : info.nPos < max;
+        }
+
+        private const int SbVert = 1;
+        private const uint SifAll = 0x17; // SIF_RANGE(2) | SIF_PAGE(4) | SIF_POS(8) | SIF_TRACKPOS(16)
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct ScrollInfo
+        {
+            public uint cbSize;
+            public uint fMask;
+            public int nMin;
+            public int nMax;
+            public int nPage;
+            public int nPos;
+            public int nTrackPos;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool GetScrollInfo(IntPtr hwnd, int bar, ref ScrollInfo info);
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern IntPtr WindowFromPoint(Point point);
@@ -411,9 +537,10 @@ public sealed class WorkflowSurfaceBehavior
             var stepX = lines > 0 ? lines * LineHeight : clientSize.Width;
             var stepY = lines > 0 ? lines * LineHeight : clientSize.Height;
 
-            // 正 = 远离用户 = 视口上移，所以滚动量是减。
-            var dx = -(wheelDeltaX / Notch) * stepX;
-            var dy = -(wheelDeltaY / Notch) * stepY;
+            // 正 = 远离用户 = 视口上移，所以滚动量是减。只算增量**非零**的那一轴 —— 另一轴原样沿用当前位置
+            // （IWorkflowSurfaceScroller.ScrollBy 的 remarks：零增量不动那一轴），横滚轮就不该动竖位置。
+            var dx = wheelDeltaX != 0d ? -(wheelDeltaX / Notch) * stepX : 0d;
+            var dy = wheelDeltaY != 0d ? -(wheelDeltaY / Notch) * stepY : 0d;
 
             ApplyScrollOffset(host, current.Horizontal + dx, current.Vertical + dy);
         }
@@ -565,9 +692,10 @@ public sealed class WorkflowSurfaceBehavior
         return null;
     }
 
-    // 缩放这一手的路由：位置取光标在画布客户区的坐标（与表面自己那条滚轮路同一系），目标用与表面同一套
-    // 解析。返回 true 表示订阅者否决了这一次缩放。
-    private static bool RouteWheel(Control host, IWorkflowTreeViewModel tree, Control hit, int delta)
+    // 滚轮这一笔的路由：位置取光标在画布客户区的坐标（与表面自己那条滚轮路同一系），目标用与表面同一套
+    // 解析。两个增量都原样转发（横滚轮走 deltaX、竖滚轮走 deltaY，订阅方按 Shift 改轴时读的就是它们）。
+    // 返回 true 表示订阅者否决了这一次（缩放支用它表示「不缩放」，默认滚支用它表示「不滚」）。
+    private static bool RouteWheel(Control host, IWorkflowTreeViewModel tree, Control hit, double deltaX, double deltaY)
     {
         var canvas = ResolveCanvas(host) ?? host;
         var point = canvas.PointToClient(Cursor.Position);
@@ -576,7 +704,7 @@ public sealed class WorkflowSurfaceBehavior
         var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
         var handle = new WorkflowEventHandle();
 
-        input.Route(new Wf.PointerWheelEventArgs(anchor, Modifiers(), canvas, target, 0d, delta, handle));
+        input.Route(new Wf.PointerWheelEventArgs(anchor, Modifiers(), canvas, target, deltaX, deltaY, handle));
         return handle.PreventDefault;
     }
 
@@ -758,30 +886,33 @@ public sealed class WorkflowSurfaceBehavior
         return tree?.Layout?.ViewportOffset ?? new Offset();
     }
 
-    /// <summary>
-    /// Applies a ViewportCenter-zoom scroll (effective scroll space) back into the host's pan
-    /// translate. Mirrors the capture path in <see cref="ResolveScrollOffset"/>: an AutoScroll host
-    /// receives AutoScrollPosition (negative-signed getter), a signed-pan host receives the scroll
-    /// through its own OnMinimapScrollRequested(sx, sy) → _panOffset = (-sx, -sy) + ApplyPan — the
-    /// exact "put world point (sx, sy) at the viewport origin" contract the recenter needs. Going
-    /// through the host keeps the private pan field, node positions, grid/minimap and viewport all
-    /// consistent — writing the canvas PanOffset property directly would be clobbered by the
-    /// deferred ApplyPan the Layout property change schedules.
-    /// </summary>
+    // 把一次滚动（有效滚动空间）交给宿主自己的平移入口 —— 与拖画布、小地图同一只手：有符号平移宿主把
+    // _panOffset 置成 (-x, -y)、越界折进 NegativeOffset，于是**滚轮与平移共用一套边界语义**，到边能像拖一样
+    // 撑出去。只有完全不暴露平移入口的宿主机才退回 AutoScrollPosition（它被 WinForms 夹在原生范围里）。
+    // 交给宿主还保证私有平移字段、节点位置、网格/小地图与视口保持一致 —— 直接写画布 PanOffset 属性会被
+    // Layout 变更排下的延迟 ApplyPan 覆盖掉。
     private static void ApplyScrollOffset(Control host, double x, double y)
     {
+        if (ApplyViaHostPan(host, x, y))
+        {
+            return;
+        }
+
         if (host is ScrollableControl scrollable && scrollable.AutoScroll)
         {
+            // 宿主没暴露平移入口时才走这里：AutoScrollPosition 被夹在原生范围，到边即停。
             // WinForms 的 AutoScrollPosition setter 会取反参数（getter = −setter），而节点平移含平移偏移，所以要把有效滚动落到 (x, y)，setter 必须收到 (x + panOffset)。
             // 验证：getter scr = −(x + pan)，有效滚动 = −(pan + scr) = x。(x + pan) 的形状与示例自己的缩略图补偿一致（_panOffset = −sx − scroll → setter = sx + panOffset）。
             var pan = ResolvePanOffset(host) ?? new System.Drawing.Point();
             scrollable.AutoScrollPosition = new System.Drawing.Point((int)Math.Round(x + pan.X), (int)Math.Round(y + pan.Y));
-            return;
         }
+    }
 
-        // 带符号平移宿主：经它自己的缩略图滚动 handler 重新居中（与平移同一套 _panOffset = (-sx, -sy); ApplyPan()）。跳过完整示例（AutoScroll）—— 上面已处理 —— 以及任何 handler 会递归进消息过滤器的控件。
-        // 反射查方法要**逐级基类**地找（DeclaredOnly）：私有成员不被派生类型继承，而宿主的运行时类型是派生类
-        // （Trimmed demo 的 TreeView），只查 p.GetType() 找不到基类 WorkflowTreeView 上那个私有方法。
+    // 请宿主自己的平移入口执行滚动（与拖画布 / 小地图同一条路）。返回 false 表示宿主没暴露这个入口。
+    // 反射查方法要**逐级基类**地找（DeclaredOnly）：私有成员不被派生类型继承，而宿主的运行时类型是派生类
+    // （Trimmed demo 的 TreeView），只查 p.GetType() 找不到基类 WorkflowTreeView 上那个私有方法。
+    private static bool ApplyViaHostPan(Control host, double x, double y)
+    {
         var target = ResolveCanvas(host) ?? host;
         for (var p = target; p is not null; p = p.Parent)
         {
@@ -807,9 +938,11 @@ public sealed class WorkflowSurfaceBehavior
                     // 尽力而为；之后那次刷新周期仍会重推视口。
                 }
 
-                return;
+                return true;
             }
         }
+
+        return false;
     }
 
     /// <summary>The canvas the host handed over, if any.</summary>

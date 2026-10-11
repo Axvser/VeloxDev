@@ -1345,6 +1345,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         if (disposing)
         {
+            // 关掉表面行为：它会摘掉应用级的滚轮消息过滤器（Application 对过滤器是强引用，不摘就活过这块画布）
+            // 并摘下挂在树路由上的 Scroller。基类 WorkflowTreeView 在 Dispose 里就是这么做的；这块自组的画布
+            // 原先只走 DetachSession，过滤器因此留在应用上。
+            WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(this, false);
+
             if (_session?.Tree.ResetVirtualLinkCommand.CanExecute(null) == true)
             {
                 _session.Tree.ResetVirtualLinkCommand.Execute(null);
