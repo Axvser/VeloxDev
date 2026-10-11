@@ -5,8 +5,40 @@
 | 东西 | 干什么 |
 | --- | --- |
 | `VeloxDev.Serialization.Benchmarks/` | 归档序列化引擎的基准（BenchmarkDotNet） |
-| `agent-ui-harness.ps1` / `agent-web-harness.ps1` | 用真实输入驱动 demo 并截图 |
+| `agent-ui-harness.ps1` / `agent-web-harness.ps1` | 用真实输入驱动 demo 并截图（前者桌面、后者 CDP 驱动浏览器） |
+| `agent-ui-probe.ps1` | 包一层：构建 → 杀残留 → 跑 harness → **校验窗口标题** → 裁 HUD → 与基线差分 |
 | `verify-*-item-templates*.ps1` | 打包/编译模板项，检查镜像漂移 |
+
+---
+
+## 跑一次 UI 探针：用 `agent-ui-probe.ps1`
+
+```
+./Src/Verification/agent-ui-probe.ps1 `
+  -Project "Examples/Workflow/WPF Trimmed/Demo/Demo.csproj" `
+  -Exe     "Examples/Workflow/WPF Trimmed/Demo/bin/Debug/net10.0-windows/Demo.exe" `
+  -ExpectTitle "WPF Trimmed" -Crop "60,560,340,120" `
+  -Actions "wheel:640,400,-120; wait:700; shot:plain" -Baseline plain -SaveBaseline
+```
+
+它替你把下面**五条纪律**跑掉。每一条都是**至少花掉过一轮错误结论**换来的（2026-10-11 那一轮七家探针）：
+
+| # | 坑 | 症状 | 挡法 |
+|---|---|---|---|
+| 1 | **构建失败留下旧二进制** | 旧二进制与代码 bug **无法区分** —— 你会去查一段根本没跑过的代码 | 先构建，失败就**拒绝探针** |
+| 2 | **七家 Trimmed demo 的可执行文件都叫 `Demo.exe`** | harness 按**进程名**找窗口 ⇒ 别家遗留的实例应答，**截到另一个应用、数字全是它的**，而且不报错 | 跑前杀残留；发现别家的 `Demo` 在跑就**大声警告** |
+| 3 | **不核窗口标题就读数字** | 同上，只是你没发现 | 标题写进 `harness.log`，`-ExpectTitle` 不匹配就**失败** |
+| 4 | **HUD 在 1280×800 截图的角落里** | 读一次数要开一张大图找那个小面板 | `-Crop` 裁出来 |
+| 5 | **用眼睛判断「变没变」** | 48 与 50 的差别，肉眼靠不住 | `-SaveBaseline` / `-Baseline` 出**差分像素数** |
+
+**没被脚本覆盖、必须自己守的几条**（它们不是流程问题，是机制问题）：
+
+- ⚠ **同一时刻只让一个 demo 在跑。** 并行驱动两家会互相污染 —— 脚本只能对**已知名字**（`Demo` / `Demo.Desktop`）报警，改过名的副本它认不出。
+- ⚠ **`ScrollTo*` / `Offset` 赋值之后立刻读回，拿到的是旧值**（WPF 把 ScrollInfo 推到下一次布局）。判定一律以 **HUD / 下一帧**为准。
+- ⚠ **涉及窗口/竞态的探针，先量一下自己动作之间的真实间隔。** harness 的动作**自带睡眠**（`wheel:` 220ms + `keyup:` 120ms + `ToClient` 70ms ≈ 410ms）⇒ 打不进更窄的窗口时会得到**假阴性**（「未复现」其实是「没打进去」）。需要时临时加无睡眠变体，用完还原。
+- ⚠ **探针也可能给出「结构 ≠ 行为」的假前提**：拿 DOM/视觉树结构推行为，两次都被实测推翻（标尺看着在滚动区之外、因 `pointer-events:none` 其实照常响应；卡片里有 `ScrollViewer`、默认数据却根本不溢出所以缺陷不可见）。**能测就别推。**
+- ⚠ **读位移要挑语义对齐的量具**：七家的滚动偏移符号**不统一**（WinForms 的 `panOffset` 就是反的），而 HUD 的 `视口(世界)`（视口原点的世界坐标）七家同一。跨家断言必须用后者。
+- ⚠ **临时插桩与临时数据，用完还原**，并在报告里写清「种了什么 / 观察到什么 / 何时还原」。
 
 **还有一类「不在默认测试里跑」的验证：真模型测试。** 它们在 `VeloxDev.Core.Extension.Test` 里，由
 `VELOXDEV_LIVE` 开关控制（`Agent/LiveModelGate.cs`）—— **不设就是 `Inconclusive`**，默认套件因此确定、免费、

@@ -79,6 +79,14 @@ public class Ui {
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  // The title is how a run proves it captured the app it meant to: every trimmed demo builds to Demo.exe, so a
+  // leftover instance from another family answers the same process-name lookup.
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, System.Text.StringBuilder text, int max);
+  public static string Title(IntPtr h) {
+    var sb = new System.Text.StringBuilder(512);
+    GetWindowTextW(h, sb, 512);
+    return sb.ToString();
+  }
   [DllImport("user32.dll", EntryPoint = "SendInput")] public static extern uint SendInput(uint n, INPUT[] inputs, int size);
   [DllImport("user32.dll", EntryPoint = "SendInput")] public static extern uint SendKeyInput(uint n, INPUTK[] inputs, int size);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
@@ -190,6 +198,9 @@ for ($i = 0; $i -lt 40 -and ($h -eq [IntPtr]::Zero -or $h -eq $null); $i++) {
 
 if ($null -eq $h -or $h -eq [IntPtr]::Zero) { Add-Content $log 'NO_WINDOW'; Write-Output 'NO_WINDOW'; exit 1 }
 Add-Content $log "window handle $h"
+# 标题落进日志，是这次运行「确实抓到了它想抓的那个应用」的唯一凭据 —— 七家 Trimmed demo 的可执行文件
+# 都叫 Demo.exe，别家遗留的实例会答同一个进程名查找（2026-10-11 实测踩过两次）。
+Add-Content $log "window title $([Ui]::Title($h))"
 
 [void][Ui]::SetWindowPos($h, [IntPtr]::Zero, $X, $Y, $Width, $Height, 0x0040)   # SWP_SHOWWINDOW
 [void][Ui]::SetForegroundWindow($h)
