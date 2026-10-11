@@ -94,9 +94,15 @@ public static class WorkflowSurfaceBehavior
 
         public double PanStartVertical;
 
-        // 提交的缩放滚动目标。Jalium 的 ScrollTo 可能异步落地：落地前发来的旧偏移不能改写视口，
-        // 否则下一次 Virtualize 会把刚物化的连线剔掉，而节点（按自己的矩形进池）留下 —— 深缩放闪断。
-        public (double X, double Y, long Ticks)? ZoomPin;
+        // 提交的缩放滚动目标，连同**提交那一刻 viewer 所在的位置**（Base）。Jalium 的 ScrollTo 可能异步
+        // 落地：落地前发来的旧偏移不能改写视口，否则下一次 Virtualize 会把刚物化的连线剔掉，而节点（按自己
+        // 的矩形进池）留下 —— 深缩放闪断。Base 用来分辨这一笔是谁造成的：viewer 若还停在 Base，就是缩放
+        // 那次 ScrollTo 的陈旧回声（压住）；已经挪去别处（滚轮 / 平移 / 小地图）就照写真实位置。
+        public (double X, double Y, double BaseX, double BaseY, long Ticks)? ZoomPin;
+
+        // pin 的主动到期器：惰性判（只在下次 UpdateViewport 时看 age）会让爆发之后再无事件的模型视口
+        // 无限期停在缩放目标上，所以到期就由它来收。
+        public DispatcherTimer? ZoomPinTimer;
 
         public PropertyChangedEventHandler? LayoutChangedHandler;
 
@@ -343,7 +349,7 @@ public static class WorkflowSurfaceBehavior
         }
 
         // 钉住提交的目标：Jalium 可能在落地前发一次带旧偏移的 ScrollChanged，那会覆盖掉下面要写的窗口。
-        state.ZoomPin = (horizontalOffset, verticalOffset, DateTime.UtcNow.Ticks);
+        ArmZoomPin(state, horizontalOffset, verticalOffset);
         UpdateViewport(state, horizontalOffset, verticalOffset);
         tree.GetHelper().Virtualize(tree.GetHelper().Viewport);
         UpdateOverlays(state);
@@ -386,7 +392,6 @@ public static class WorkflowSurfaceBehavior
 
         state.MouseMoveHandler = OnMouseMove;
         state.MouseUpHandler = OnMouseUp;
-        state.MouseWheelHandler = OnMouseWheel;
         state.KeyDownHandler = OnKeyDown;
         state.KeyUpHandler = OnKeyUp;
         state.LostCaptureHandler = OnLostMouseCapture;
@@ -401,10 +406,7 @@ public static class WorkflowSurfaceBehavior
         // 具名按下源与节点、插槽各自负责，见 OnPointerPressSourceDown 与 RouteComponentPress。
         host.AddHandler(UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
         host.AddHandler(UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
-        // 普通滚轮改挂**预览**相：与缩放那条同相，位置与目标取在滚动之前（冒泡相上滚动容器先滚）。
-        // 这家宿主上的预览 MouseDown 收不到（见 §「按下不挂宿主」），滚轮预览是否收得到要靠实测；
-        // 收不到就退回冒泡相（那份是实测能到的，只是位置在滚动之后）。
-        host.AddHandler(Mouse.PreviewMouseWheelEvent, state.MouseWheelHandler);
+        // 普通滚轮不挂宿主：改挂画布的冒泡相，由 ResolveNamedParts 在画布解析出来时装（见 HookWheel）。
         host.AddHandler(UIElement.KeyDownEvent, state.KeyDownHandler);
         host.AddHandler(UIElement.KeyUpEvent, state.KeyUpHandler);
         host.AddHandler(UIElement.LostMouseCaptureEvent, state.LostCaptureHandler);
@@ -428,12 +430,16 @@ public static class WorkflowSurfaceBehavior
 
         UnbindTree(state);
 
+        state.ZoomPin = null;
+        state.ZoomPinTimer?.Stop();
+        state.ZoomPinTimer = null;
+
         host.Loaded -= OnLoaded;
         host.Unloaded -= OnUnloaded;
         host.DataContextChanged -= OnDataContextChanged;
         RemoveHandler(host, UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
         RemoveHandler(host, UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
-        RemoveHandler(host, Mouse.PreviewMouseWheelEvent, state.MouseWheelHandler);
+        UnhookWheel(state);
         RemoveHandler(host, UIElement.KeyDownEvent, state.KeyDownHandler);
         RemoveHandler(host, UIElement.KeyUpEvent, state.KeyUpHandler);
         RemoveHandler(host, UIElement.LostMouseCaptureEvent, state.LostCaptureHandler);
@@ -470,6 +476,7 @@ public static class WorkflowSurfaceBehavior
         if (sender is FrameworkElement host && States.TryGetValue(host, out var state))
         {
             state.ZoomPin = null;
+            state.ZoomPinTimer?.Stop();
             state.IsPanning = false;
         }
     }
@@ -515,7 +522,14 @@ public static class WorkflowSurfaceBehavior
             HookZoom(host, state);
         }
 
-        state.Canvas = ResolvePart<Panel>(host, GetCanvasName(host));
+        var canvas = ResolvePart<Panel>(host, GetCanvasName(host));
+        if (!ReferenceEquals(canvas, state.Canvas))
+        {
+            // 换画布：先把滚轮从旧画布上摘掉（同一委托实例），再装到新画布。
+            UnhookWheel(state);
+            state.Canvas = canvas;
+            HookWheel(state);
+        }
 
         // 「起平移」挂在**具名按下源**的预览相上，与 WPF 同形。挂在宿主的冒泡相上收不到：
         // 滚动视口那一层会把 MouseDown 标成已处理，宿主的处理器于是整场不触发（这里是实测踩到的）。
@@ -556,6 +570,29 @@ public static class WorkflowSurfaceBehavior
         if (d is FrameworkElement host && States.TryGetValue(host, out var state))
         {
             HookZoom(host, state);
+        }
+    }
+
+    // 普通滚轮挂**画布**（滚动容器的后代）的冒泡相，并带 handledEventsToo。
+    // 不挂宿主隧道相：在隧道里置 Handled 会把整个冒泡相抹掉 —— 卡片内层 ScrollViewer 因此一次都滚不到。
+    // 画布在 ScrollContentPresenter 之前，冒泡相里 Handled 真挡得住 —— 与 WinUI 那条同形
+    // （见 memory/modules/WorkflowSystem/adapters/wpf.md §三·1 与 §三点六）。
+    // handledEventsToo:true 是给已被卡片置 Handled 的那一笔留门（卡片自己不处理滚轮）。
+    private static void HookWheel(SurfaceState state)
+    {
+        if (state.Canvas is { } canvas)
+        {
+            state.MouseWheelHandler ??= OnMouseWheel;
+            canvas.AddHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler, true);
+        }
+    }
+
+    // 摘除要用同一个委托实例；state.Canvas 是「当前挂着的那台」，所以必须在改写它之前调用。
+    private static void UnhookWheel(SurfaceState state)
+    {
+        if (state.Canvas is { } canvas && state.MouseWheelHandler is not null)
+        {
+            canvas.RemoveHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler);
         }
     }
 
@@ -814,18 +851,68 @@ public static class WorkflowSurfaceBehavior
             var landed = Math.Abs(viewer.HorizontalOffset - pin.X) < 0.5
                       && Math.Abs(viewer.VerticalOffset - pin.Y) < 0.5;
             var ageMs = (DateTime.UtcNow.Ticks - pin.Ticks) / TimeSpan.TicksPerMillisecond;
+
             if (landed || ageMs > ZoomPinLifetimeMs)
             {
                 state.ZoomPin = null;
             }
-            else
+            else if (Math.Abs(viewer.HorizontalOffset - pin.BaseX) < 0.5
+                  && Math.Abs(viewer.VerticalOffset - pin.BaseY) < 0.5)
             {
+                // viewer 还停在提交前的位置 —— 这一笔只能是缩放那次 ScrollTo 的陈旧回声，压住它，
+                // 照写提交后的目标。（pin 存在的理由就是这一条：别让陈旧窗口把刚物化的连线裁掉。）
                 UpdateViewport(state, pin.X, pin.Y);
                 return;
+            }
+            else
+            {
+                // viewer 已经离开了提交前的位置 —— 是滚轮 / 平移 / 小地图把它滚走的，这一笔写的是真实
+                // 位置，没有理由再压。压了就是「屏上是新视口、池里是旧视口的项」。
+                state.ZoomPin = null;
             }
         }
 
         UpdateViewport(state, state.ScrollViewer?.HorizontalOffset ?? 0d, state.ScrollViewer?.VerticalOffset ?? 0d);
+    }
+
+    // 记下提交的目标与提交那一刻 viewer 的位置，并**主动**排一个到期器。惰性到期只在「下一次有人来调
+    // UpdateViewport」时才判 —— 爆发之后再没有后续滚动 / 尺寸 / 缩放事件时，pin 会一直挂着。
+    private static void ArmZoomPin(SurfaceState state, double horizontalOffset, double verticalOffset)
+    {
+        state.ZoomPin = (
+            horizontalOffset,
+            verticalOffset,
+            state.ScrollViewer?.HorizontalOffset ?? horizontalOffset,
+            state.ScrollViewer?.VerticalOffset ?? verticalOffset,
+            DateTime.UtcNow.Ticks);
+
+        var timer = state.ZoomPinTimer;
+        if (timer is null)
+        {
+            timer = new DispatcherTimer(DispatcherPriority.Normal, state.Host.Dispatcher);
+            timer.Tick += (_, _) => ExpireZoomPin(state);
+            state.ZoomPinTimer = timer;
+        }
+
+        timer.Stop();
+        timer.Interval = TimeSpan.FromMilliseconds(ZoomPinLifetimeMs);
+        timer.Start();
+    }
+
+    private static void ExpireZoomPin(SurfaceState state)
+    {
+        state.ZoomPinTimer?.Stop();
+        if (state.ZoomPin is null)
+        {
+            return;
+        }
+
+        // 到期即清，并按 viewer 的真实位置重写模型视口 —— 把「一直停在缩放目标」这个状态主动收掉，
+        // 而不是等下一次事件（那可能永远不来）。
+        state.ZoomPin = null;
+        UpdateViewport(state);
+        UpdateOverlays(state);
+        state.Host.InvalidateVisual();
     }
 
     private static void UpdateViewport(SurfaceState state, double horizontalOffset, double verticalOffset)
@@ -1218,16 +1305,30 @@ public static class WorkflowSurfaceBehavior
     // 滚轮也进输入面（缩放那条路是 Ctrl+滚轮，归 ScrollViewer 的预览相，两者不重叠）。
     // 普通滚轮**整笔归适配器**：平台的滚动容器一次都不许滚，默认竖滚由这里在路由之后补上。
     // 订阅方置 PreventDefault 就是「这一笔不滚」，由他走 Scroller 决定往哪滚 —— 于是七家宿主是同一段代码。
+    // 挂在**画布**的冒泡相（见 HookWheel）：位置与目标都还是**滚动之前**的（画布早于 presenter）。
     private static void OnMouseWheel(object? sender, MouseWheelEventArgs e)
     {
-        if (sender is not FrameworkElement host || !States.TryGetValue(host, out var state) || state.Input is null)
+        if (sender is not DependencyObject source
+            || FindHost(source) is not { } host
+            || !States.TryGetValue(host, out var state)
+            || state.Input is null)
         {
             return;
         }
 
-        // Ctrl+滚轮归缩放那一支（挂滚动容器的预览相，在隧道里比本处理器**更晚**跑）——这里先让开，
-        // 否则同一笔会被两支各处理一遍。
+        // Ctrl+滚轮归缩放那一支（挂滚动容器的**预览**相，隧道里比本处理器先跑、并已置 Handled）。
+        // 本处理器挂着 handledEventsToo，那一笔照样送到这里，所以必须自己让开，否则同一笔被两支各处理一遍。
         if (e.KeyboardModifiers == ModifierKeys.Control)
+        {
+            return;
+        }
+
+        // 内层闸门：指针底下最近的、且不是画布自己那台的 ScrollViewer，若沿这一笔方向还有余量，这一笔归它。
+        // 这家**有原生滚动链**（到边不置 Handled、冒泡给外层），所以这里不是「抢」而是「别插手」：
+        // 不置 Handled、不路由、不默认滚，让平台那一笔照常落在内层。到边返回 false，这一笔照旧走本类的
+        // 路由 → 裁决 → 默认滚 —— 于是「画布接」是本类自己滚的、可被订阅者否决，不是平台链送过来的。
+        // 本家 `MouseWheelEventArgs` 只有纵轴 `Delta`（没有 `DeltaX`），所以横轴恒 0。
+        if (InnerScrollViewerHasRoom(e.OriginalSource as DependencyObject, state, 0d, e.Delta))
         {
             return;
         }
@@ -1242,6 +1343,38 @@ public static class WorkflowSurfaceBehavior
         {
             state.Scroller?.ScrollBy(0d, e.Delta / 120d);
         }
+    }
+
+    // 内层闸门用：沿可视祖先链找**最近的、且不是画布自己那台的** ScrollViewer，判它沿这一笔方向还有没有余量。
+    // 「最近的」即判据：到边就意味着这一笔不归它 —— 不再往外找第二台（画布自己那台之上没有别的滚动容器）。
+    // 判据 = 沿方向的绝对余量：向下滚（delta < 0）看 VerticalOffset < ScrollableHeight，向上滚看 VerticalOffset > 0，横轴同理。
+    private static bool InnerScrollViewerHasRoom(
+        DependencyObject? source, SurfaceState state, double deltaX, double deltaY)
+    {
+        if (source is null || (deltaX == 0d && deltaY == 0d))
+        {
+            return false;
+        }
+
+        foreach (var candidate in EnumerateSelfAndVisualAncestors(source))
+        {
+            if (candidate is not ScrollViewer inner || ReferenceEquals(inner, state.ScrollViewer))
+            {
+                continue;
+            }
+
+            var verticalRoom = deltaY < 0d
+                ? inner.VerticalOffset < inner.ScrollableHeight
+                : inner.VerticalOffset > 0d;
+            var horizontalRoom = deltaX < 0d
+                ? inner.HorizontalOffset < inner.ScrollableWidth
+                : inner.HorizontalOffset > 0d;
+
+            // 这一笔里非零的那几轴都要有余量才算「归它」；单轴滚轮到了边就该由画布接。
+            return (deltaY == 0d || verticalRoom) && (deltaX == 0d || horizontalRoom);
+        }
+
+        return false;
     }
 
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
@@ -1266,10 +1399,46 @@ public static class WorkflowSurfaceBehavior
             var dx = -wheelDeltaX * PixelsPerNotch;
             var dy = -wheelDeltaY * PixelsPerNotch;
 
-            viewer.ScrollToHorizontalOffset(
-                WorkflowSurfaceMath.ClampValue(viewer.HorizontalOffset + dx, 0d, viewer.ScrollableWidth));
-            viewer.ScrollToVerticalOffset(
-                WorkflowSurfaceMath.ClampValue(viewer.VerticalOffset + dy, 0d, viewer.ScrollableHeight));
+            // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。
+            var desiredX = dx != 0d ? viewer.HorizontalOffset + dx : viewer.HorizontalOffset;
+            var desiredY = dy != 0d ? viewer.VerticalOffset + dy : viewer.VerticalOffset;
+
+            if (state.Tree is not { } tree)
+            {
+                // 拿不到布局时退回旧的「到边即停」，至少不越界。
+                if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(desiredX, 0d, viewer.ScrollableWidth));
+                if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(desiredY, 0d, viewer.ScrollableHeight));
+                return;
+            }
+
+            // 与平移走同一条边界语义：越界经 ClampScrollOffset 撑大画布（extendRatio 用平移那个），而不是到边即停。
+            // 两处若各留一套语义，同一个画布「拖能撑出去、滚不能」。
+            var newX = dx != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredX, viewer.ScrollableWidth, tree.Layout, horizontal: true,
+                    extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredX;
+            var newY = dy != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredY, viewer.ScrollableHeight, tree.Layout, horizontal: false,
+                    extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredY;
+
+            if (newX != desiredX || newY != desiredY)
+            {
+                // 撑大过画布：extent 是懒的，先按新范围重算 + UpdateLayout 让 ScrollViewer 认下，再重读 max
+                //（与缩放那支同一套，见 OnZoomPreviewMouseWheel 与 memory/modules/WorkflowSystem/adapters/wpf.md §2.3）。
+                UpdateCanvasSize(state);
+                ApplyLayout(state);
+                state.Host.UpdateLayout();
+                viewer.UpdateLayout();
+                newX = Math.Min(newX, viewer.ScrollableWidth);
+                newY = Math.Min(newY, viewer.ScrollableHeight);
+            }
+
+            // 只写增量非零的那一轴：另一轴原样沿用当前偏移，免得把它夹回范围里（零增量不许动那一轴）。
+            if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(newX, 0d, viewer.ScrollableWidth));
+            if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(newY, 0d, viewer.ScrollableHeight));
         }
     }
 
