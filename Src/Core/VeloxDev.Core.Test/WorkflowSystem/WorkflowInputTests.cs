@@ -223,6 +223,37 @@ public class WorkflowInputTests : WorkflowInputTestBase
         Assert.IsNull(input.Scroller);
     }
 
+    [TestMethod]
+    public void Route_WheelAndPress_AlsoUpdateThePointerTarget()
+    {
+        // 键没有自己的命中 —— 七家的键盘一律拿 PointerTarget 当 target。所以**任何带 Target 的指针事件**
+        // 都要更新它：只认 Entered/Moved 的话，「滚过一格但指针没移动过」之后按键盘，target 还停在上一次移动那一个。
+        var link = ReadyLink(0, 0, 100, 0);
+        var tree = TreeWith(link);
+        var input = WorkflowInput.For(tree);
+
+        input.Route(Wheel(50, 0, -120, link));
+        Assert.AreSame(link, input.PointerTarget, "滚轮之后指针目标要跟上");
+
+        input.Route(Press(500, 500, MouseButton.Right));
+        Assert.IsNull(input.PointerTarget, "按在空白上，目标随之清空");
+    }
+
+    [TestMethod]
+    public void Route_ASlotWithNoParent_StillReachesTheTree()
+    {
+        // 链的树一律取路由自己那棵，**不从模型的 Parent 推**：拖拽预览的插槽、还没挂上树的节点，Parent 都是
+        // null，而适配器手里那棵永远是对的。这条钉住「树永远在最后一级」。
+        var tree = TreeWith();
+        var orphan = new SlotDefaultViewModel();
+        var heard = 0;
+        Events(tree).Input.KeyDown += (_, _) => heard++;
+
+        WorkflowInput.For(tree).Route(Down(InputKey.Delete, orphan));
+
+        Assert.AreEqual(1, heard);
+    }
+
     private sealed class StubScroller : IWorkflowSurfaceScroller
     {
         public (double X, double Y) Last { get; private set; }

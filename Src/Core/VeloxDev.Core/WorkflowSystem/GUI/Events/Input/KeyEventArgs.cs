@@ -54,6 +54,13 @@ public abstract class KeyEventArgs : EventArgs
     public InputModifiers Modifiers { get; }
 
     /// <summary>Whether the platform reports this as an auto-repeat rather than a fresh press.</summary>
+    /// <remarks>
+    /// Best effort. An adapter passes <see langword="true"/> only where its platform actually distinguishes a
+    /// repeat; where it cannot tell, it passes <see langword="false"/> for every press rather than guessing — so
+    /// <see langword="false"/> means "not reported as a repeat", not "definitely a fresh press". Each adapter's own
+    /// notes say which side of that line its platform is on, and <see cref="RawKeyCode"/> is there for a host that
+    /// needs to tell repeats apart on its own.
+    /// </remarks>
     public bool IsRepeat { get; }
 
     /// <summary>The view that had the keyboard focus when the key was handled.</summary>

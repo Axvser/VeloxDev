@@ -131,6 +131,11 @@ public sealed class WorkflowInput
     // 指针换了目标：先给留下那个发一次 Exited，再给新那个发一次 Entered，然后才是这一条本身。
     // 逐组件订阅因此只需要 enter/leave 两件事，不必盯着每一条别人的事件比 target。
     // Exited 与 Entered 本身不合成 —— 那两条就是这件事本身，适配器已经按平台的意思报过了。
+    //
+    // ⚠ 这两条**各自是一个独立的动作**（「离开了 A」「进入了 B」），所以各自领一个新句柄。这与
+    // 「一个动作一个句柄」不冲突：那里的「动作」指它们本身，不指触发它们的这次移动。
+    // ⚠ 返回值**故意丢掉**：框架对「指针进来了」没有自己的手可执行，`PreventDefault` 在这两条上
+    // 没有消费者；而 `StopPropagation` 照样有用 —— 它截断的是这一条自己的冒泡，在 `Bubble` 里就生效了。
     private void EnterAndLeaveTargets(PointerEventArgs e)
     {
         if (e is PointerExitedEventArgs or PointerEnteredEventArgs) return;
@@ -186,50 +191,40 @@ public sealed class WorkflowInput
         return prevented;
     }
 
-    // 目标 -> 祖先。树永远在最后：连线的树用适配器传进来的那棵，不从 Sender 推 —— 占位与拖拽预览的旧 Sender 可能是 null。
+    // 目标 -> 祖先，**树永远是最后一级**。
+    // 树的取法一律用适配器传进来的那棵（`tree`），**不从模型的 Parent 推**：拖拽预览的插槽、还没挂到树上的
+    // 节点、以及占位用的旧 Sender，它们的 Parent 链随时可能是 null 或指向别处，而适配器手里那棵永远是对的。
+    // 中间那几级才走模型关系（只有 slot → 它所属的 node 这一跳）。
     private IEnumerable<IWorkflowHelper> Chain(IWorkflowViewModel? target)
     {
         switch (target)
         {
             case IWorkflowSlotViewModel slot:
                 yield return slot.GetHelper();
-                if (slot.Parent is not { } owner) break;
-                yield return owner.GetHelper();
-                if (owner.Parent is { } slotTree) yield return slotTree.GetHelper();
+                if (slot.Parent is { } owner) yield return owner.GetHelper();
                 break;
 
             case IWorkflowNodeViewModel node:
                 yield return node.GetHelper();
-                if (node.Parent is { } nodeTree) yield return nodeTree.GetHelper();
                 break;
 
             case IWorkflowLinkViewModel link:
                 yield return link.GetHelper();
-                yield return tree.GetHelper();
-                break;
-
-            // 空白画布（target 为 null）与树本身：只有树一级。
-            default:
-                yield return tree.GetHelper();
                 break;
         }
+
+        // 空白画布（target 为 null）与树本身也落到这里：链上只剩树一级。
+        yield return tree.GetHelper();
     }
 
-    // 框架自己的反应，只有两件事：记住指针停在哪（供宿主与 Delete 用），以及 Delete 落在连线上就删掉它。
+    // 框架自己的反应只有一件：记住指针停在哪。宿主与 Delete 读它，**七家的键盘也一律拿它当 target**
+    // （键没有自己的命中）。所以**任何带 Target 的指针事件都要更新它**，不能只认 Entered/Moved ——
+    // 否则「滚过一格但指针没移动过」之后按键盘，target 还是上一次移动时的那一个。
     private void ApplyDefault(PointerEventArgs e)
     {
         if (IsSuspended) return;
 
-        switch (e)
-        {
-            case PointerEnteredEventArgs or PointerMovedEventArgs:
-                pointerTarget = e.Target;
-                break;
-
-            case PointerExitedEventArgs:
-                pointerTarget = null;
-                break;
-        }
+        pointerTarget = e is PointerExitedEventArgs ? null : e.Target;
     }
 
     // 键没有默认动作：Core 只把按键路由出去。删除是宿主的事 —— 订 KeyDown、自己执行 link.DeleteCommand
