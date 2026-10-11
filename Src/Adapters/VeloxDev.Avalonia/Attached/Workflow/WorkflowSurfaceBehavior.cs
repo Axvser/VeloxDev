@@ -855,6 +855,17 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (Modifiers(e.KeyModifiers).HasFlag(Wf.InputModifiers.Control))
             return;
 
+        // 内层闸门：指针底下最近的、且不是画布自己那台的滚动容器，若沿这一笔方向还有余量，这一笔归它。
+        // 这家**有原生滚动链**（内层滚到边自动冒泡给外层，`IsScrollChainingEnabled` 默认 true），所以
+        // 这里不是「抢」而是「别插手」：不置 Handled、不路由、不默认滚，让平台那一笔照常落在内层。
+        // 到边时返回 false，这一笔照旧走本类的路由 → 裁决 → 默认滚 —— 于是「画布接」是本类自己滚的、
+        // 可被订阅者否决，不是平台链送过来的。
+        // ⚠ 这家的 Shift 换轴发生在 presenter 里，所以这里看到的是**未换轴的原始 delta**，按原始 e.Delta 判。
+        if (InnerScrollViewerHasRoom(e.Source as Visual, state, e.Delta.X, e.Delta.Y))
+        {
+            return;
+        }
+
         var handle = RoutePointer(host, state, e,
             (position, target, h) => new Wf.PointerWheelEventArgs(
                 position, Modifiers(e.KeyModifiers), host, target, e.Delta.X, e.Delta.Y, h));
@@ -892,10 +903,99 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             var dx = -wheelDeltaX * PixelsPerDelta;
             var dy = -wheelDeltaY * PixelsPerDelta;
 
+            // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。
+            var desiredX = dx != 0d ? viewer.Offset.X + dx : viewer.Offset.X;
+            var desiredY = dy != 0d ? viewer.Offset.Y + dy : viewer.Offset.Y;
+
+            var maxH = GetHorizontalScrollMaximum(viewer);
+            var maxV = GetVerticalScrollMaximum(viewer);
+
+            var host = state.Host;
+            if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+            {
+                // 拿不到布局时退回旧的「到边即停」，至少不越界。
+                viewer.Offset = new Vector(
+                    dx != 0d ? WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH) : viewer.Offset.X,
+                    dy != 0d ? WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV) : viewer.Offset.Y);
+                return;
+            }
+
+            // 与平移走同一条边界语义：越界经 ClampScrollOffset 撑大画布（extendRatio 用平移那个），而不是到边即停。
+            // 两处若各留一套语义，同一个画布「拖能撑出去、滚不能」。
+            var newX = dx != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredX, maxH, viewModel.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredX;
+            var newY = dy != 0d
+                ? WorkflowSurfaceMath.ClampScrollOffset(
+                    desiredY, maxV, viewModel.Layout, horizontal: false, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
+                : desiredY;
+
+            if (newX != desiredX || newY != desiredY)
+            {
+                // 撑大过画布：extent 是懒的，先 ApplyLayout + UpdateLayout 让 ScrollViewer 认下新范围，再重读 max
+                //（与缩放那支同一套：Avalonia 一次 UpdateLayout 就是整棵树一次布局 pass，见 memory/modules/WorkflowSystem/adapters/avalonia.md §二.6）。
+                ApplyLayout(host, state);
+                viewer.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(viewer);
+                maxV = GetVerticalScrollMaximum(viewer);
+                newX = Math.Min(newX, maxH);
+                newY = Math.Min(newY, maxV);
+            }
+
+            // 只写增量非零的那一轴：另一轴原样沿用当前偏移，免得把它夹回范围里（零增量不许动那一轴）。
             viewer.Offset = new Vector(
-                WorkflowSurfaceMath.ClampValue(viewer.Offset.X + dx, 0d, GetHorizontalScrollMaximum(viewer)),
-                WorkflowSurfaceMath.ClampValue(viewer.Offset.Y + dy, 0d, GetVerticalScrollMaximum(viewer)));
+                dx != 0d ? WorkflowSurfaceMath.ClampValue(newX, 0d, maxH) : viewer.Offset.X,
+                dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, maxV) : viewer.Offset.Y);
         }
+    }
+
+    // 内层闸门用：沿可视祖先链找**最近的、且不是画布自己那台的**滚动容器，判它沿这一笔方向还有没有余量。
+    // 「最近的」即判据：它到边就意味着这一笔不归它 —— 不再往外找第二台（画布自己那台之上没有别的滚动容器）。
+    // 判据 = 沿方向的绝对余量：向下滚（delta < 0）看 Offset < max，向上滚看 Offset > 0，横轴同理；max = extent − viewport。
+    private static bool InnerScrollViewerHasRoom(Visual? source, SurfaceState state, double deltaX, double deltaY)
+    {
+        if (source is null || (deltaX == 0d && deltaY == 0d))
+            return false;
+
+        foreach (var candidate in source.GetSelfAndVisualAncestors())
+        {
+            if (candidate is not (ScrollViewer or ScrollContentPresenter))
+                continue;
+
+            // 画布自己那台（含它的 presenter）：到边也不由闸门拦，这一笔归画布（见 IsCanvasOwnScrollContainer）。
+            if (IsCanvasOwnScrollContainer(candidate, state))
+                return false;
+
+            // ⚠ Size 必须全限定：本文件的命名空间是 VeloxDev.WorkflowSystem 的下级，裸 Size 会解析到 Core 的同名类型。
+            (Vector offset, Avalonia.Size extent, Avalonia.Size viewport) = candidate switch
+            {
+                ScrollViewer viewer => (viewer.Offset, viewer.Extent, viewer.Viewport),
+                ScrollContentPresenter presenter => (presenter.Offset, presenter.Extent, presenter.Viewport),
+                _ => (default, default, default),
+            };
+
+            var maxX = WorkflowSurfaceMath.ScrollMax(extent.Width, viewport.Width);
+            var maxY = WorkflowSurfaceMath.ScrollMax(extent.Height, viewport.Height);
+
+            var verticalRoom = deltaY == 0d || (deltaY < 0d ? offset.Y < maxY : offset.Y > 0d);
+            var horizontalRoom = deltaX == 0d || (deltaX < 0d ? offset.X < maxX : offset.X > 0d);
+
+            // 这一笔里非零的那几轴都要有余量才算「归它」；单轴滚轮到边就该由画布接。
+            return verticalRoom && horizontalRoom;
+        }
+
+        return false;
+    }
+
+    // 画布自己那台滚动容器（画布的 ScrollViewer 与它的 ScrollContentPresenter）是画布的**祖先**；
+    // 卡片里那些内层滚动容器是画布的**后代** —— 判据正好相反，用「画布在不在它的后代里」把两者分开。
+    private static bool IsCanvasOwnScrollContainer(Visual candidate, SurfaceState state)
+    {
+        if (ReferenceEquals(candidate, state.ScrollViewer))
+            return true;
+
+        return state.Canvas is { } canvas && canvas.GetVisualAncestors().Contains(candidate);
     }
 
     private static void OnPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
