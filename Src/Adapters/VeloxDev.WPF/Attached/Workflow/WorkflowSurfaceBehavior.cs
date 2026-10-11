@@ -925,8 +925,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             var stepX = lines > 0 ? lines * LineHeight : viewer.ViewportWidth;
             var stepY = lines > 0 ? lines * LineHeight : viewer.ViewportHeight;
 
-            // 正 = 远离用户 = 视口上移，所以偏移是减。
-            var dx = -(wheelDeltaX / Notch) * stepX;
+            // 横轴正 = 向右，偏移同向取加；纵轴正 = 远离用户 = 视口上移，偏移取减 —— 两轴的「正」不是同一个物理方向。
+            var dx = (wheelDeltaX / Notch) * stepX;
             var dy = -(wheelDeltaY / Notch) * stepY;
 
             // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。

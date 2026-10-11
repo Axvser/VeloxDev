@@ -537,9 +537,10 @@ public sealed class WorkflowSurfaceBehavior
             var stepX = lines > 0 ? lines * LineHeight : clientSize.Width;
             var stepY = lines > 0 ? lines * LineHeight : clientSize.Height;
 
-            // 正 = 远离用户 = 视口上移，所以滚动量是减。只算增量**非零**的那一轴 —— 另一轴原样沿用当前位置
+            // 横轴正 = 向右，偏移同向取加；纵轴正 = 远离用户 = 视口上移，偏移取减 —— 两轴的「正」不是同一个物理方向。
+            // 只算增量**非零**的那一轴 —— 另一轴原样沿用当前位置
             // （IWorkflowSurfaceScroller.ScrollBy 的 remarks：零增量不动那一轴），横滚轮就不该动竖位置。
-            var dx = wheelDeltaX != 0d ? -(wheelDeltaX / Notch) * stepX : 0d;
+            var dx = wheelDeltaX != 0d ? (wheelDeltaX / Notch) * stepX : 0d;
             var dy = wheelDeltaY != 0d ? -(wheelDeltaY / Notch) * stepY : 0d;
 
             ApplyScrollOffset(host, current.Horizontal + dx, current.Vertical + dy);

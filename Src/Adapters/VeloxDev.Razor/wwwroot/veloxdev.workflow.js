@@ -1329,9 +1329,10 @@ window.veloxdevWorkflow = (() => {
             const local = canvasLocalFrom(scrollerEl.querySelector('.veloxdev-wf-canvas'), e.clientX, e.clientY);
             // The adapter's shared sign convention: away from the user (scrolling up) is positive, so the
             // browser's downward-positive deltaY is negated before it crosses to .NET.
+            // 横轴不取反：浏览器 deltaX 的「正」本就是向右，与 PointerWheelEventArgs.DeltaX 同向；纵轴的「正」是向下，才要取反。
             dotnetRef.invokeMethodAsync('RequestWheelScroll',
                 local ? local[0] : 0, local ? local[1] : 0,
-                -px.x, -px.y, modifiersOf(e), hitTargetId(e.clientX, e.clientY));
+                px.x, -px.y, modifiersOf(e), hitTargetId(e.clientX, e.clientY));
         }
         surfaceEl.addEventListener('wheel', onWheel, { passive: false });
         return {

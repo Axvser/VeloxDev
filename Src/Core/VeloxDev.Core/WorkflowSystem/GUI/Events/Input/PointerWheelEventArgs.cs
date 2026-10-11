@@ -38,8 +38,15 @@ public sealed class PointerWheelEventArgs : PointerEventArgs
     /// Horizontal wheel movement, positive towards the right; <c>0</c> on a mouse that has no tilt wheel.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Same scale as <see cref="DeltaY"/> — a notch is one unit if the platform counts notches, or whatever the
     /// platform reports if it counts something else. Only the sign is contractual.
+    /// </para>
+    /// <para>
+    /// The sign is the platform's own: tilting the wheel to the right (or swiping a touchpad right) is positive,
+    /// the same way <c>WM_MOUSEHWHEEL</c> and a browser's <c>deltaX</c> mean it. A surface that scrolls on this
+    /// therefore moves towards the content on its right — see <see cref="IWorkflowSurfaceScroller.ScrollBy"/>.
+    /// </para>
     /// </remarks>
     public double DeltaX { get; }
 

@@ -104,6 +104,7 @@ public partial class TreeView : ContentView
         if (!_shiftHeld || _tree is not { } tree) return;
 
         e.Handle.PreventDefault = true;
-        WorkflowInput.For(tree).Scroller?.ScrollBy(e.DeltaY, 0d);
+        // 竖轴正 = 远离用户，塞进横轴要取反 —— 横轴正 = 向右，而「远离用户」在画面上是向左。
+        WorkflowInput.For(tree).Scroller?.ScrollBy(-e.DeltaY, 0d);
     }
 }

@@ -1070,8 +1070,9 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
                 return;
             }
 
-            // 正 = 远离用户 = 视口上移，所以滚动偏移是减。滚动容器是 DOM，只能过 JS 滚它。
-            _ = module.InvokeVoidAsync("scrollSurfaceBy", id, -wheelDeltaX, -wheelDeltaY);
+            // 横轴正 = 向右，偏移同向取加；纵轴正 = 远离用户 = 视口上移，偏移取减 —— 两轴的「正」不是同一个物理方向。
+            // 滚动容器是 DOM，只能过 JS 滚它。
+            _ = module.InvokeVoidAsync("scrollSurfaceBy", id, wheelDeltaX, -wheelDeltaY);
         }
     }
 
