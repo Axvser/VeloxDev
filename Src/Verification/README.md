@@ -18,8 +18,10 @@
   -Project "Examples/Workflow/WPF Trimmed/Demo/Demo.csproj" `
   -Exe     "Examples/Workflow/WPF Trimmed/Demo/bin/Debug/net10.0-windows/Demo.exe" `
   -ExpectTitle "WPF Trimmed" -Crop "60,560,340,120" `
-  -Actions "wheel:640,400,-120; wait:700; shot:plain" -Baseline plain -SaveBaseline
+  -Actions "wheel:640,400,-120; wait:700; shot:plain" -SaveBaseline
 ```
+
+基线是**按截图各自命名**的（`<shot>.baseline.png`）—— 改完源码后把最后一行换成 `-CompareBaseline`，它会打出每一张与**自己那份**基线的**差分像素数**。（一次运行里用同一个基线名会让每张都覆盖同一份文件，差分就变成「拿最后一张当基准」，别那么用。）
 
 它替你把下面**五条纪律**跑掉。每一条都是**至少花掉过一轮错误结论**换来的（2026-10-11 那一轮七家探针）：
 
@@ -29,7 +31,7 @@
 | 2 | **七家 Trimmed demo 的可执行文件都叫 `Demo.exe`** | harness 按**进程名**找窗口 ⇒ 别家遗留的实例应答，**截到另一个应用、数字全是它的**，而且不报错 | 跑前杀残留；发现别家的 `Demo` 在跑就**大声警告** |
 | 3 | **不核窗口标题就读数字** | 同上，只是你没发现 | 标题写进 `harness.log`，`-ExpectTitle` 不匹配就**失败** |
 | 4 | **HUD 在 1280×800 截图的角落里** | 读一次数要开一张大图找那个小面板 | `-Crop` 裁出来 |
-| 5 | **用眼睛判断「变没变」** | 48 与 50 的差别，肉眼靠不住 | `-SaveBaseline` / `-Baseline` 出**差分像素数** |
+| 5 | **用眼睛判断「变没变」** | 48 与 50 的差别，肉眼靠不住 | `-SaveBaseline` 存、`-CompareBaseline` 出**差分像素数**（**按截图各自命名**，见下） |
 
 **没被脚本覆盖、必须自己守的几条**（它们不是流程问题，是机制问题）：
 

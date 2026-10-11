@@ -35,18 +35,17 @@
 .PARAMETER Crop
     "x,y,w,h", window-relative — crops every shot into <name>-crop.png as well.
 
-.PARAMETER Baseline
-    Compare every shot against <OutDir>\baseline-<name>.png and print the differing-pixel count.
-
 .PARAMETER SaveBaseline
-    Write those baselines instead of comparing against them.
+    Save each shot as <shot>.baseline.png — one baseline per shot, so a later comparison is against that shot
+    rather than against whichever shot happened to be saved last.
+
+.PARAMETER CompareBaseline
+    Diff every shot against its own <shot>.baseline.png and print the differing-pixel count.
 
 .EXAMPLE
-    ./agent-ui-probe.ps1 `
-      -Project "Examples/Workflow/WPF Trimmed/Demo/Demo.csproj" `
-      -Exe "Examples/Workflow/WPF Trimmed/Demo/bin/Debug/net10.0-windows/Demo.exe" `
-      -ExpectTitle "WPF Trimmed" -Crop "60,560,340,120" `
-      -Actions "wheel:640,400,-120; wait:700; shot:plain"
+    # save the reference, then after a change compare against it
+    ./agent-ui-probe.ps1 ... -Actions "wheel:640,400,-120; wait:700; shot:plain" -SaveBaseline
+    ./agent-ui-probe.ps1 ... -Actions "wheel:640,400,-120; wait:700; shot:plain" -CompareBaseline
 #>
 param(
     [Parameter(Mandatory = $true)][string] $Project,
@@ -55,8 +54,8 @@ param(
     [Parameter(Mandatory = $true)][string] $Actions,
     [string] $ExpectTitle = '',
     [string] $Crop = '',
-    [string] $Baseline = '',
     [switch] $SaveBaseline,
+    [switch] $CompareBaseline,
     [string] $OutDir = "$env:TEMP\veloxprobe",
     [int] $Tolerance = 8
 )
@@ -98,6 +97,10 @@ Write-Host "exe   $exePath" -ForegroundColor DarkGray
 Write-Host "built $((Get-Item $exePath).LastWriteTime)" -ForegroundColor DarkGray
 
 Stop-Leftovers
+# Only the shots this run produced are compared later: OutDir is a scratch dir, and a leftover from an earlier
+# probe with a different action list is a png too — comparing against it would report a difference that means
+# nothing.
+$runStart = Get-Date
 & $harness -Exe $exePath -Actions $Actions -OutDir $OutDir
 $log = Join-Path $OutDir 'harness.log'
 
@@ -131,14 +134,17 @@ if ($Crop) {
 }
 
 # Trap 5. "Did it change?" is a number, not an impression.
-if ($Baseline -or $SaveBaseline) {
-    Get-ChildItem (Join-Path $OutDir '*.png') -Exclude '*-crop.png', 'baseline-*.png' | ForEach-Object {
-        $base = Join-Path $OutDir ("baseline-$Baseline.png")
+if ($SaveBaseline -or $CompareBaseline) {
+    # One baseline PER SHOT — a single name for the whole run makes every shot overwrite the same file, so the
+    # comparison would silently be against whichever shot happened to be last.
+    Get-ChildItem (Join-Path $OutDir '*.png') -Exclude '*-crop.png', '*.baseline.png' |
+        Where-Object { $_.LastWriteTime -ge $runStart } | ForEach-Object {
+        $base = Join-Path $OutDir ($_.BaseName + '.baseline.png')
         if ($SaveBaseline) {
             Copy-Item $_.FullName $base -Force
             Write-Output "baseline $base"
         }
-        elseif (Test-Path $base) {
+        elseif ($CompareBaseline -and (Test-Path $base)) {
             $a = New-Object System.Drawing.Bitmap($base)
             $bb = New-Object System.Drawing.Bitmap($_.FullName)
             if ($a.Width -ne $bb.Width -or $a.Height -ne $bb.Height) {
@@ -152,10 +158,10 @@ if ($Baseline -or $SaveBaseline) {
                         if (([Math]::Abs($pa.R - $pb.R) + [Math]::Abs($pa.G - $pb.G) + [Math]::Abs($pa.B - $pb.B)) -gt $Tolerance) { $n++ }
                     }
                 }
-                Write-Output "diff $($_.Name): $n px differ from baseline-$Baseline"
+                Write-Output "diff $($_.Name): $n px differ from $([IO.Path]::GetFileName($base))"
             }
             $a.Dispose(); $bb.Dispose()
         }
-        else { Write-Output "diff $($_.Name): no baseline-$Baseline.png (run with -SaveBaseline first)" }
+        else { Write-Output "diff $($_.Name): no $([IO.Path]::GetFileName($base)) (run with -SaveBaseline first)" }
     }
 }
