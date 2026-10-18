@@ -94,28 +94,29 @@ internal abstract class NodeViewBase : Canvas
             Build(node, content);
         }
 
-        // 卡片排在设计尺寸的内层画布上，Viewbox 铺满被折叠的盒子并整体缩放它
-        // （外壳、字、以及表面画在它上面的端口都按同一比例），与 WPF 那家节点视图的 Viewbox 一致
-        _viewbox = new Viewbox { Child = card, Stretch = Stretch.Uniform };
-        Canvas.SetLeft(_viewbox, 0);
-        Canvas.SetTop(_viewbox, 0);
-        Children.Add(_viewbox);
-
-        // Agent 工作集：在视图外面套一层紫罗兰描边。放在 Viewbox 之外，所以缩放时线宽保持不变；
-        // 它不参与命中，节点拖拽/连线仍由表面接管。
+        // 卡片与 Agent 选中环都排在设计尺寸的内层画布上，Viewbox 铺满被折叠的盒子并整体缩放它们
+        // （外壳、字、环、以及表面画在卡片上的端口都按同一比例）。环必须和卡片同在一个设计坐标系里：
+        // 放在 Viewbox 外面时，Uniform 的 letterbox 会让环套住节点边界而不是卡片的实际边缘。
         _agentRing = new Border
         {
-            Width = Width,
-            Height = Height,
+            Width = DesignWidth,
+            Height = DesignHeight,
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(2),
             BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0xA7, 0x8B, 0xFA)),
             IsHitTestVisible = false,
             Visibility = Visibility.Collapsed,
         };
-        Canvas.SetLeft(_agentRing, 0);
-        Canvas.SetTop(_agentRing, 0);
-        Children.Add(_agentRing);
+
+        var frame = new Grid { Width = DesignWidth, Height = DesignHeight };
+        frame.Children.Add(card);
+        frame.Children.Add(_agentRing);
+
+        _viewbox = new Viewbox { Child = frame, Stretch = Stretch.Uniform };
+        Canvas.SetLeft(_viewbox, 0);
+        Canvas.SetTop(_viewbox, 0);
+        Children.Add(_viewbox);
+
         AgentSelection.Changed -= OnAgentSelectionChanged;
         AgentSelection.Changed += OnAgentSelectionChanged;
         RefreshAgentSelection();
