@@ -50,11 +50,17 @@ If you add content to a node, **it will not scale with the zoom by itself.** Ext
 
 ⚙ The platform element has no `DataContext`. If you write your own platform-level handler, recover the tree from the host in a closure (`host.BindingContext as IWorkflowTreeViewModel`) — a handler written the WPF way finds nothing.
 
+## The connection preview and the wheel
+
+⚙ **The candidate receiver is reported from the slot-connection behaviour, not the surface.** `WorkflowSlotConnectionBehavior.UpdatePointer` calls `tree.StandardSetPreviewReceiver(SlotHitTestEx.HitTest(tree, x, y))` while the drag is active, because this adapter's input surface is an overlay: the visual under the pointer cannot answer "which slot". The stage lands on the virtual link (`IConnectionPreviewLink.Preview`) and the slot's `PreviewReceiver` bit.
+
+⚙ **The wheel scrolls through `WorkflowInput.Scroller`.** The surface registers the adapter's `SurfaceScroller` while attached; a plain wheel is routed first and applied only when no subscriber refused it. Ctrl+wheel is the platform zoom path.
+
 ## Item templates — `VeloxDev.MAUI.Templates`
 
 **Generates** `.xaml` + `.xaml.cs` for node, slot, link and tree, and a `.cs` for selector, decorator and minimap.
 
-⚙ **`x:Name="Root"` is required on the link view and the tree view.** It is the binding source for the inner overlay — `{Binding WorkflowTree, Source={x:Reference Root}}` and the same for `ScrollOffsetX/Y`, `ContentOffsetX/Y`, `RulerThickness`, `LinkLineColor`, `VirtualLineColor` and `StrokeWidth`. Remove it and every one of those bindings resolves to nothing. Node and slot views do not need it.
+⚙ **`x:Name="Root"` is required on the link view and the tree view.** It is the binding source for the inner overlay — `{Binding WorkflowTree, Source={x:Reference Root}}`, `InteractionSource="{x:Reference Root}"`, and the same for `ScrollOffsetX/Y`, `ContentOffsetX/Y`, `RulerThickness`, `LinkLineColor`, `VirtualLineColor` and `StrokeWidth`. Remove it and every one of those bindings resolves to nothing. **`InteractionSource` is what makes links interactive**: the overlay itself is input-transparent, so it hooks the element you name there; leave it unset and links draw but cannot be hovered or deleted. Node and slot views do not need it.
 
 ⚙ **The tree declares no `LinkTemplate` and the link view is a thin forwarding shell.** The generated link view forwards its properties to the adapter's sealed `WorkflowLinkOverlay`, and the tree's template selector carries a `NodeTemplate` only — links are no longer pooled as views. If a version of this pack still gives you a per-link `LinkTemplate`, it is behind the demo: copy `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml` instead.
 

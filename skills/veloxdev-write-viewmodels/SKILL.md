@@ -1,52 +1,67 @@
 ---
 name: veloxdev-write-viewmodels
-description: Write ViewModels with VeloxDev's source generators — observable properties with [VeloxProperty], async commands with [VeloxCommand], collection change hooks, and interoperating with CommunityToolkit/Prism/ReactiveUI/Caliburn
+description: Write ViewModels with VeloxDev's source generators — observable properties with [VeloxProperty], typed and async commands with [VeloxCommand], result channels, collection change hooks, and interoperating with CommunityToolkit/Prism/ReactiveUI/Caliburn
 ---
 ## Responsibility
 
-Write a class that the compile-time generators turn into a full ViewModel — properties that notify, commands with cancellation and a semaphore, collection hooks — without hand-writing `INotifyPropertyChanged` plumbing or a `RelayCommand`.
+Write a class that the compile-time generators turn into a full ViewModel — properties that notify, commands with cancellation, a result channel and a semaphore, collection hooks — without hand-writing `INotifyPropertyChanged` plumbing or a `RelayCommand`.
 
-Package: **`VeloxDev.Core`**. No GUI adapter is needed and the behaviour is identical on every platform.
+Package: **`VeloxDev.Core`** (runtime, namespace `VeloxDev.MVVM`) plus the analyzer-only package **`VeloxDev.Core.Generator`**. Reference the generator as an analyzer (`OutputItemType="Analyzer"` for a project reference — project references do not flow analyzers). No GUI adapter is needed and the behaviour is identical on every platform. The generator targets `netstandard2.0` and references `Microsoft.CodeAnalysis.CSharp` **4.8.0**, so a .NET 8 SDK or newer is required. `VeloxDev.Core` targets `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`.
 
-⚙ **Read this first: the class must be `partial`.** Every generator in the repository matches on the `partial` modifier, and a non-partial **class** still produces no file, no warning and no error — the member you expected simply is not there. If `[VeloxProperty]` "does nothing", this is why.
+⚙ **Read this first: the class must be `partial`.** Every generator in the repository matches on the `partial` modifier, and a non-partial **class** still produces no file, no warning and no error — the member you expected simply is not there. If `[VeloxProperty]` or `[VeloxCommand]` "does nothing", this is why.
 
-⚙ **A non-partial `[VeloxProperty]` property is the same trap, and it now warns.** The generator only ever *adds* code, so it cannot complete accessors you already wrote — mark the property `partial` or drop the attribute. This one reports `VELOX_MVVM_PROP003` rather than passing silently; the rest of the `VELOX_MVVM_PROP*` family is documented in the `VeloxDev.Core.Generator` module memory.
+⚙ **A non-partial `[VeloxProperty]` property cannot be completed either, and it now warns.** The generator only ever *adds* code, so it cannot complete accessors you already wrote — mark the property `partial` or drop the attribute. This reports `VELOX_MVVM_PROP003`; the rest of the diagnostics are listed under [Diagnostics](#diagnostics).
 
-⚙ **The generator only sees the class if the file it is in compiles as syntax** — the same `partial` check runs before anything else, so a class in an excluded file or behind a bad preprocessor branch is skipped too.
+⚙ **The generator only sees the class if the file it is in compiles as syntax** — the `partial` check runs before anything else, so a class in an excluded file or behind a bad preprocessor branch is skipped too.
+
+⚙ **Language level.** Generated code needs C# 12 (collection expressions); a lower `LangVersion` reports `VELOX_LANGVERSION001`. The `partial`-property form needs C# 13 on top of that, which the guard cannot detect for you.
 
 ## `[VeloxProperty]`
 
 Two forms, both valid, and which one you use is a convention rather than a rule:
 
 ```csharp
-[VeloxProperty] private string _name = string.Empty;          // field form
+[VeloxProperty] private string _name = string.Empty;          // field form: generates the property
 ```
 
 ```csharp
-[VeloxProperty] public partial SlotViewModel InputSlot { get; set; }   // property form
+[VeloxProperty] public partial SlotViewModel InputSlot { get; set; }   // property form: generates the backing field
 ```
 
-The field form generates the property; the property form generates the backing field. The example above is the workflow idiom: **fields for plain state, `partial` properties for anything with a lifecycle** (see [the workflow skill](../veloxdev-create-workflow/references/model.md)).
+The example above is the workflow idiom: **fields for plain state, `partial` properties for anything with a lifecycle** (see [the workflow skill](../veloxdev-create-workflow/references/model.md)).
 
 Generated from `[VeloxProperty] private int _index = 0;`:
 
 ```csharp
-public int Index { get => this._index; set { … } }
+public int Index
+{
+    get => this._index;
+    set
+    {
+        if (global::System.Object.Equals(this._index, value)) return;
+        var old = this._index;
+        OnPropertyChanging(nameof(Index));
+        OnIndexChanging(old, value);
+        this._index = value;
+        OnIndexChanged(old, value);
+        OnPropertyChanged(nameof(Index));
+    }
+}
 partial void OnIndexChanging(int oldValue, int newValue);
 partial void OnIndexChanged(int oldValue, int newValue);
-public event PropertyChangingEventHandler? PropertyChanging;
-public event PropertyChangedEventHandler? PropertyChanged;
-public virtual void OnPropertyChanging(string propertyName);
-public virtual void OnPropertyChanged(string propertyName);
 ```
+
+When nothing in the hierarchy already supplies the notification plumbing, the class also receives `INotifyPropertyChanging` / `INotifyPropertyChanged`, the `PropertyChanging` / `PropertyChanged` events, and `public virtual void OnPropertyChanging(string)` / `OnPropertyChanged(string)` (non-virtual when the class is sealed). A base that already supplies them is reused rather than duplicated.
 
 ⚙ **The callbacks take `(oldValue, newValue)` in one method.** This is *not* CommunityToolkit's `OnNameChanging(value)`; if you have used that generator, this is the signature to unlearn.
 
-⚙ **Naming**: one leading `_` is stripped and the next character upper-cased; otherwise just the first character. `_index` → `Index`, `title` → `Title`, `intervalMilliseconds` → `IntervalMilliseconds`, `m_value` → `M_value`. There is no camel-case splitting, and the rest is preserved verbatim — so `[VeloxProperty] private string user_name;` gives you a `User_name` property, not `UserName`: first character upper-cased, the underscore and everything after it left untouched.
+⚙ **Naming**: one leading `_` is dropped and the next character upper-cased; otherwise just the first character. `_index` → `Index`, `title` → `Title`, `intervalMilliseconds` → `IntervalMilliseconds`, `m_value` → `M_value`. There is no camel-case splitting and the rest is preserved verbatim — `[VeloxProperty] private string user_name;` gives `User_name`, not `UserName`.
 
-⚙ The property form synthesises `_camelCase` (`InputSlot` → `_inputSlot`). Generated init code elsewhere depends on that exact name, so a hand-written field of a different name breaks it silently.
+⚙ The field form always emits a `public` property; the property form preserves the accessibility and accessor visibility you declared. The property form synthesises a field by lower-casing only the first character: `InputSlot` → `_inputSlot`, `URL` → `_uRL`. Generated code elsewhere depends on that exact name, so a hand-written field of a different name breaks it silently. An accessible field of that conventional name is reused; otherwise one is emitted as `private T _name = <default>;` (`false`, `0`, `string.Empty`, `default(T)`, or `null` for a nullable type).
 
-⚙ The setter short-circuits on `Object.Equals(field, value)`, then runs, in order: capture old → slot uninstall → `OnPropertyChanging(name)` → `OnXChanging(old, value)` → collection unsubscribe → assign → slot install → collection subscribe → `OnXChanged(old, value)` → `OnPropertyChanged(name)`. If a lifecycle step looks like it fires at the wrong time, that order is the answer.
+⚙ **Equality guard.** The setter short-circuits on `Object.Equals(field, value)` — except for `float` / `double` (including their nullable forms), which compare bit patterns so `-0.0` and the various `NaN` values are not collapsed.
+
+⚙ **Setter order.** Capture old → slot uninstall → `OnPropertyChanging(name)` → `OnXChanging(old, value)` → collection unsubscribe (and `OnItemRemovedFromX`) → assign → slot install → collection subscribe (and `OnItemAddedToX`) → `OnXChanged(old, value)` → `OnPropertyChanged(name)`. If a lifecycle step looks like it fires at the wrong time, that order is the answer.
 
 ## Collections
 
@@ -59,106 +74,167 @@ partial void OnItemMovedInItems(IEnumerable<Item> items);
 partial void OnItemsResetInItems();
 ```
 
-and a `protected virtual void OnCollectionChanged<T>(string propertyName, NotifyCollectionChangedEventArgs e, IEnumerable<T>? oldItems, IEnumerable<T>? newItems)`.
+and, unless a base already declares a matching method, a `protected virtual void OnCollectionChanged<T>(string propertyName, NotifyCollectionChangedEventArgs e, IEnumerable<T>? oldItems, IEnumerable<T>? newItems)`.
 
-⚙ **The four `OnItem…` hooks are the ergonomic path**; reach for the generic `OnCollectionChanged<T>` only when you need the raw event args.
+⚙ **The four `OnItem…` hooks are the ergonomic path**; reach for `OnCollectionChanged<T>` only when you need the raw event args. `Replace` calls the removed hook then the added hook; `Reset` calls `OnItemsResetInItems`.
 
-⚙ **`OnCollectionChanged<T>` is generated only if no base class already declares that exact four-parameter signature** — that signature *is* how the generator detects an existing implementation. Changing it in a base class makes the generator emit a duplicate.
+⚙ **Base-class detection is loose.** The generator treats a base as already supplying `OnCollectionChanged<T>` when it finds a non-static generic method with one type parameter, four parameters, and a `string` first parameter. It does not compare the other three parameter types, so a same-named four-parameter method with different types also suppresses generation.
 
-⚙ The getter installs a subscription through `ObservableCollectionTracker`, so a collection that is replaced is unsubscribed automatically; you never manage the subscription yourself.
+⚙ The getter installs a subscription through `ObservableCollectionTracker.EnsureSubscribed`, so a collection initialised with `= []` is still observed even though the field initializer bypasses the setter. Replacing the collection unsubscribes the old instance and subscribes the new one automatically. Deduplication is by `(Method, Target)`, and entries live in a `ConditionalWeakTable`.
 
 ## `[VeloxCommand]`
 
 ```csharp
-[VeloxCommand] private void Save() { … }                       // → SaveCommand
-[VeloxCommand("Reset")] private Task ResetAsync(CancellationToken ct) { … }   // → ResetCommand
+[VeloxCommand] private void Save() { … }                                    // → SaveCommand (IVeloxCommand)
+[VeloxCommand("Reset")] private Task ResetAsync(CancellationToken ct) { … } // → ResetCommand
 ```
 
-Generates a lazily-cached `SaveCommand` / `ResetCommand` exposed as `IVeloxCommand`.
+Names: `name: "Auto"` (the default) uses `methodName.Replace("Async", "")` and appends `Command`; any other value is used verbatim and still gets `Command` appended. The replacement removes **every** `Async`, not just the suffix. Two methods that collapse to the same stem emit duplicate members — a `CS0102` in the generated file, not a Velox diagnostic.
 
-Accepted signatures — `Task` or `void` return, and one of:
+The generated property (or accessor) is lazily cached on first read.
+
+### Accepted signatures
+
+The return type must be `Task`, `Task<T>`, `ValueTask`, `ValueTask<T>` or `void`. Leading parameters are optional, at most **15**, and may be followed by one trailing `CancellationToken`.
+
+| Body shape | Generated member |
+|---|---|
+| no leading parameter; `Task`, `ValueTask`, `void` | untyped `IVeloxCommand` |
+| no leading parameter; `Task<T>` / `ValueTask<T>` | untyped `IVeloxCommand`, with the value in the boxed result channel |
+| one `object` / `object?` parameter (any return) | untyped `IVeloxCommand`; the argument and any value stay boxed |
+| one parameter of a concrete type `T`; no value | `IVeloxCommand<T, object?>` |
+| one parameter of a concrete type `T`; `Task<TR>` / `ValueTask<TR>` | `IVeloxCommand<T, TR>` |
+| 2–15 leading parameters | `IVeloxCommand<T1, …, Tn, TR>` from the arity family in `CommandArities.cs` |
+| generic method `M<T>(T value)` | cached accessor `IVeloxCommand<T, TR> GetMCommand<T>()` |
+
+`TR` is the body's `T` for `Task<T>` / `ValueTask<T>`, and `object?` (always `null`) otherwise. The two-parameter-plus arity classes pack the arguments into a `ValueTuple` internally; the public surface is tuple-free and a `ValueTuple` allocates nothing.
 
 ```csharp
-Task M(object? parameter, CancellationToken ct);
-Task M(object? parameter);
-Task M(CancellationToken ct);
-Task M();
-void M(object? parameter);
-void M();
+[VeloxCommand] private Task<int> AddAsync(int left, int right) { … }   // → IVeloxCommand<int, int, int>
+int sum = await vm.AddCommand.ExecuteAsync(2, 3, CancellationToken.None);
 ```
 
-**A concrete parameter type makes the command strongly typed.** `Task M(MoveArgs a)` produces `IVeloxCommand<MoveArgs, object?>` instead of `IVeloxCommand`, and the `canValidate` hook takes `MoveArgs` rather than `object?`. If the type argument comes from the *containing class* (`partial class Vm<T>` with `Task M(T value)`), the property carries it too.
+**Rejected shapes** report `VELOX_MVVM_CMD001` on the method's own line and are skipped; the rest of the class still generates:
 
-**Up to 15 parameters, and no tuple in sight.** A method with several parameters gets an arity-typed command — `IVeloxCommand<TParam1, …, TParamN, TResult>`, the last type argument always being the result — and you still call it with the arguments:
+- `void M(CancellationToken ct)` — a synchronous body cannot observe the token.
+- A generic method whose type parameters do not appear in its parameter types — `Task M<T>(object? p)` cannot carry `T` on a command instance.
+- More than 15 leading parameters — the generated `Func<T1..Tn, CancellationToken, Task<TResult>>` would exceed `Func`'s limit of 17 type arguments.
+- A return type outside the accepted set.
+- A member named `{Name}Command` already exists on the type.
+
+⚙ **A generic method produces a method, not a property.** `Task M<T>(T value)` generates `IVeloxCommand<T, TR> GetMCommand<T>()`, so it cannot be bound. The cache is keyed by **all** method type parameters; each closed `T` gets its own command, queue, lock and concurrency cap.
+
+⚙ **`name`, `canValidate` and `semaphore`.** `canValidate: true` makes the generator declare `private partial bool CanExecute{Name}Command(...)` — you must implement it, and the build fails loudly until you do. The validator's parameter list copies **all** leading parameters' types and names from the source method; a method with no leading parameter gets `object? parameter`. A generic method's validator is a generic partial method with the same type parameters and constraints. Any name mismatch is `CS8826`. Call `{Name}Command.Notify()` (or `Get{Name}Command<T>().Notify()` for a generic accessor) when state that affects the predicate changes.
+
+⚠ **The attribute's XML documentation says the member is called `CanXxx`. It is not.** Trust the generator: the name is `CanExecute{Name}Command`.
+
+⚙ **`semaphore`** is the command's concurrency capacity (default 1, serialised). Generated commands clamp it with `Math.Max(1, semaphore)`; the `VeloxCommand` constructor and `ChangeSemaphore` throw `ArgumentOutOfRangeException` for a value below 1.
+
+⚙ **Parameter type visibility.** A generated untyped property is always `public`; when the property is typed, its parameter type is named in that public signature, so an `internal` parameter type fails with `CS0053`. If an interface or base forces the property back to plain `IVeloxCommand`, that particular failure disappears.
+
+⚙ **A declared command property fixes the property's static type.** If an interface or base declares `IVeloxCommand MoveCommand`, the generated property is emitted as `IVeloxCommand` (the buffer and pipeline stay typed). A declaration of the exact matching `IVeloxCommand<TParam, TResult>` is kept. A declaration that cannot accept the generated command is rejected with `VELOX_MVVM_CMD001`.
+
+## Typed commands and the result channel
+
+`IVeloxCommand<TParam, TResult>` derives from `IVeloxCommand`, so the `object?` overloads stay reachable and **strong typing is not a compile-time guarantee**: `vm.MoveCommand.Execute(42)` still compiles and ends as a `Failed` execution carrying `InvalidCastException`. What the typed interface buys is a readable signature, a strongly typed validator, and an unboxed path through the pipeline.
 
 ```csharp
-[VeloxCommand] private Task<int> AddAsync(int left, int right);      // → IVeloxCommand<int, int, int>
-int sum = await vm.AddCommand.ExecuteAsync(2, 3, ct);                // no ValueTuple at the call site
+Task<TResult> ExecuteAsync(TParam parameter, CancellationToken cancellationToken);  // waits for this execution
+void Execute(TParam parameter, out TResult result);                                 // blocking twin
 ```
 
-The tuple that carries them is an implementation detail between the facade and the pipeline, and being a `ValueTuple` it allocates nothing. The cap is 15: the body delegate is `Func<T1..Tn, CancellationToken, Task<TResult>>`, which is n + 2 type arguments against `Func`'s limit of 17 — more than 15 is refused with `VELOX_MVVM_CMD001`.
+The one-argument `ExecuteAsync(TParam)` still returns as soon as the call is accepted. The two-argument overload exists so it *overloads* that member rather than hiding it.
 
-⚙ **A generic method works only when its type parameter appears in the parameter type.** `Task M<T>(T value)` produces a *method* `IVeloxCommand<T> GetMCommand<T>()` — not a property, so it cannot be bound, and each closed `T` gets its own command with its own queue, lock and concurrency cap. `Task M<T>(object? p)` is refused with `VELOX_MVVM_CMD001`: a command instance fixes its type argument when it is built.
-
-⚠ **Strong typing is not a compile-time guarantee, but it is genuinely cheaper.** `IVeloxCommand<T>` derives from `IVeloxCommand`, so the `object?` overloads stay reachable — `vm.MoveCommand.Execute(42)` still compiles and still fails at runtime with `InvalidCastException`. What it buys is the typed signature *and* an unboxed path: the pipeline is generic, so `CanExecute(T)`, `Execute(T)`, `ExecuteAsync(T)`, `ExecuteAsync(T, ct)`, `Execute(T, out TR)` carry a value-type argument and result without boxing. Two things that path does not change: a call through `ICommand` (including every binding, whose `CommandParameter` is already an `object`) still boxes, and the boxed result channel `CommandCompletion.Result` is `object?` by contract.
-
-⚙ **A typed command can also be subscribed to without boxing**, through `IVeloxCommandEvents<TP, TR>`: the eight stage events with `CommandEventArgs<TP, TR>`, whose `TypedParameter` and `TypedResult` are in their own types. Subscribe through a reference typed as that interface — the class-level `Created` and friends stay the `object?`-shaped ones that binding needs.
-
-⚙ **An interface declaring the property as plain `IVeloxCommand` forces the untyped form back.** That is why the workflow view-model interfaces keep working: the generator detects the contract and emits `IVeloxCommand` for the property while everything else stays typed.
-
-⚙ **`name: "Auto"` (the default) derives the command name as `methodName.Replace("Async", "")`** — and that replaces *every* occurrence, not just the suffix. Two methods whose names collapse to the same stem produce duplicate members, which is a compile error.
-
-**A body that returns `Task<T>` or `ValueTask<T>` hands its value back.** `Task<MoveArgs> Build()` produces `IVeloxCommand<object?, MoveArgs>`, and `await cmd.ExecuteAsync(p, cancellationToken)` yields the `T`:
+**A body returning `Task<T>` or `ValueTask<T>` fills the result channel.** When the command is typed, the value comes back unboxed. A command with **no** leading parameter stays untyped (`IVeloxCommand`) even when its body returns a value, so there the value is available only through the boxed interfaces below.
 
 ```csharp
-[VeloxCommand] private Task<int> MeasureAsync(NotePayload note, CancellationToken ct);  // → IVeloxCommand<NotePayload, int>
+[VeloxCommand] private Task<int> MeasureAsync(NotePayload note, CancellationToken ct) { … } // → IVeloxCommand<NotePayload, int>
+
+// Typed: unboxed, throws when the execution did not complete.
 int weight = await vm.MeasureCommand.ExecuteAsync(note, CancellationToken.None);
+
+// Untyped: boxed through IVeloxCommandResult.
+object? value = await ((IVeloxCommandResult)vm.MeasureCommand).ExecuteAsync(note, CancellationToken.None);
+
+// Outcome without throwing.
+CommandCompletion completion = await vm.MeasureCommand.ExecuteAndWaitAsync(note);
+if (completion.Succeeded)
+    weight = completion.GetResultOrThrow<int>();   // GetResultOrThrow() returns boxed object?
 ```
 
-⚠ **That await throws when the execution did not complete.** `Failed` rethrows the body's own exception, a cancelled execution throws `OperationCanceledException`, and a call refused by `Lock()` throws `InvalidOperationException`. If you would rather read the outcome than catch, use `ExecuteAndWaitAsync`, which never throws and reports a `CommandCompletion` whose `Result` holds the value.
+- `IVeloxCommandResult` declares `Task<object?> ExecuteAsync(object?, CancellationToken)` and `void Execute(object?, out object?)`. The token overload has no default, so a one-argument call cannot become ambiguous.
+- `ExecuteAndWaitAsync` lives on `IVeloxCommandCompletion`; reach it from the interface type of a generated property through the `VeloxCommandExtensions` extension. It never throws for a body failure or a cancellation — it reports `CommandOutcome.Completed` / `Failed` / `Canceled` / `Refused`. Only the caller's own `CancellationToken` aborts the wait, and that does throw.
+- `CommandCompletion` is a `readonly struct` with `Outcome`, `Exception`, `Result` (boxed), `Succeeded`, `GetResultOrThrow()` and `GetResultOrThrow<TR>()`. The awaitable typed `ExecuteAsync` rethrows the body's own exception, throws `OperationCanceledException` when cancelled, and `InvalidOperationException` when refused by `Lock()`.
+- `Refused` has no `CommandEventType` counterpart: a refused call raises `Canceled` and never reaches `Exited`.
+- A command with no return value still has the result channel and always yields `null`, so `null` cannot be told apart from "this command has no value".
 
-⚙ **A command with no return value still has the result channel, and always yields `null`** — `TR` is `object?`. So a `null` result cannot be told apart from "this command has no value".
+⚙ **Typed events without boxing.** `IVeloxCommandEvents<TParam, TResult>` exposes the same eight stages with `CommandEventArgs<TParam, TResult>`, whose `TypedParameter` and `TypedResult` are in their own types. The class-level `Created` / `Failed` / … stay the `object?`-shaped ones that binding needs; subscribe through a reference typed as `IVeloxCommandEvents<,>` to get the typed payload.
 
-⚙ **The parameter type must be at least as visible as the generated property, which is always `public`.** A `[VeloxCommand]` method taking an `internal` type now fails to compile with CS0053, because the value-returning property names that type in its signature.
+## Runtime types
 
-⚙ **`Execute(parameter, out result)`** is the blocking form. It waits for a free slot as well as for the body, so it occupies the calling thread — and calling it from inside the body of the same command deadlocks on the command's own lock.
+| Type | Role |
+|---|---|
+| `IVeloxCommand : ICommand` | Eight lifecycle events and `ExecuteAsync`, `Notify`, `Lock` / `Unlock`, `Interrupt` / `Continue`, `Clear`, `ChangeSemaphore` (each with an `…Async` twin where the synchronous form would block). |
+| `IVeloxCommand<TParam, TResult>` | Typed facade: `CanExecute(TParam)`, `Execute(TParam)`, `ExecuteAsync(TParam)`, `ExecuteAsync(TParam, ct)`, `Execute(TParam, out TResult)`. |
+| `IVeloxCommandEvents<TParam, TResult>` | Typed version of the eight events, carrying `CommandEventArgs<TParam, TResult>`. |
+| `IVeloxCommandResult` | Boxed value channel: `ExecuteAsync(object?, CancellationToken)` and `Execute(object?, out object?)`. |
+| `IVeloxCommandCompletion` | `ExecuteAndWaitAsync(object?, CancellationToken)` returning `Task<CommandCompletion>`. |
+| `IVeloxCommandStatus` | `IsBusy`, `ActiveCount`, `PendingCount`; reached from `IVeloxCommand` through `VeloxCommandExtensions`. |
+| `CommandPipeline<TParam, TResult>` | Public abstract engine implementing `IVeloxCommand`, `IVeloxCommandCompletion`, `IVeloxCommandStatus`, `IVeloxCommandResult`, `IVeloxCommandEvents<TParam, TResult>` and `IDisposable`. Adds `EventContext`, the static `HandlerException` hook, and protected typed helpers (`CanExecuteCore`, `ExecuteAsyncCore`, `ExecuteAndWaitTypedAsync`, `ExecuteAndWaitTyped`). |
+| `VeloxCommand` | **Not sealed**; derives from `CommandPipeline<object?, object?>`. This is the untyped/fallback shape that binding reaches. |
+| `VeloxCommand<TParam, TResult>` | Sealed one-parameter typed shape. The arity family (`CommandArities.cs`) declares sealed `VeloxCommand<T1, …, Tn, TResult>` for 2–15 parameters; each derives from `CommandPipeline<(T1, …, Tn), TResult>`. |
+| `CommandEventArgs` | **Not sealed**; public event payload with `Parameter`, `EventType`, `Exception`, and `With(...)`. The per-execution token source is internal. |
+| `CommandEventArgs<TParam, TResult>` | Sealed subclass adding `TypedParameter` and `TypedResult`; one instance can be delivered to both the typed and the `object?` face. |
+| `CommandCompletion` | `readonly struct` returned by `ExecuteAndWaitAsync`. |
+| `CommandEventType` | `None`, `Created`, `Enqueued`, `Dequeued`, `Started`, `Completed`, `Failed`, `Canceled`, `Exited`. |
+| `CommandOutcome` | `Completed`, `Failed`, `Canceled`, `Refused`. |
 
-⚙ **`canValidate: true` requires `private partial bool CanExecute{Name}Command(<parameter type> <source parameter name>)`** — the type follows the command's parameter (`object?` for an untyped command, the concrete type otherwise), and **the name must match the method's own parameter**. `MoveAsync(MoveArgs args)` needs `CanExecuteMoveCommand(MoveArgs args)`; any other name is CS8826. A method with no leading parameter has no source name to mirror, so there it stays `parameter`. You must implement it, and the build fails loudly until you do.
+**Lifecycle.** Immediate: `Created → Started → Completed → Exited`. Queued: `Created → Enqueued`, then `Dequeued → Started → …` when a slot frees. Refused by `Lock`: `Created → Canceled` only. Cancelled while running: `Created → Started → Canceled → Exited`. An execution reports at most one `Canceled`; a throwing subscriber never disturbs the pipeline and is reported through the static `HandlerException` event. Events are raised inline by default; set `EventContext` to a UI `SynchronizationContext` to post them there.
 
-⚠ **The attribute's own documentation says the required member is called `CanXxx`.** It is not; the generator requires `CanExecuteXxxCommand(object?)`. Trust the generator, not the XML comment.
-
-⚙ **`semaphore`** is the command's concurrency capacity (default 1, serialised). It is the same knob as `workSemaphore: 1` on a workflow node's `[WorkflowBuilder.Node<T>]`.
-
-⚙ `IVeloxCommand` adds lifecycle over `ICommand`: `ExecuteAsync`, `Notify()`, `Lock`/`Unlock`, `Interrupt`/`Continue`, `Clear`, `ChangeSemaphore`, and `Created` / `Enqueued` / `Dequeued` / `Started` / `Completed` / `Failed` / `Canceled` / `Exited` events. Each has an `…Async` counterpart where the synchronous one would block. Cancellation comes from the signature — there is no separate cancellable-command attribute.
+**Cancellation.** Only a `CancellationToken` parameter lets the command actually stop the body. Every other shape builds a command whose body never receives a token: an interrupted execution reports `Canceled`, but the body runs to completion.
 
 ## Interoperating with another MVVM framework
 
-⚙ **The generator detects the host framework and adapts the setter.** If the class derives from Prism's `BindableBase` (or any base with `SetProperty(ref T, T, string)`), implements ReactiveUI's `IReactiveObject`, or derives from Caliburn.Micro's `PropertyChangedBase`, the setter routes through that framework's raise method. CommunityToolkit.Mvvm is detected by its `[ObservableObject]` **attribute** — a class that only *derives* from `ObservableObject` without the attribute still lands on the same path, because the generic `SetProperty(ref T, T, string)` probe matches it. Caliburn is the one that does not delegate the assignment: it still writes the field itself, then calls `NotifyOfPropertyChange`.
+⚙ **The generator detects the host framework and adapts the setter.** CommunityToolkit.Mvvm is detected by its `[ObservableObject]` attribute (a class that only *derives* from `ObservableObject` also matches, via the generic `SetProperty(ref T, T, string)` probe); Prism by a base with such a `SetProperty`; ReactiveUI by implementing `IReactiveObject`; Caliburn.Micro by a base with `NotifyOfPropertyChange(string)`. The setter delegates to that framework's raise method.
 
-⚙ **A member already carrying `[ObservableProperty]`, `[Reactive]` or another competing attribute is skipped by design** — the two generators would fight over the same property.
+⚙ **Caliburn is the exception to the assignment rule**: it still writes the field itself, then calls `NotifyOfPropertyChange`.
+
+⚙ **A member already carrying `[ObservableProperty]` or `[Reactive]` from CommunityToolkit, ReactiveUI, Prism or Caliburn is skipped by design** — the two generators would fight over the same property.
 
 ⚙ **Whether the generated setter also calls `OnPropertyChanged` depends on the framework.** On the `SetProperty` path (CommunityToolkit, Prism) it does **not** — that framework's own method raises the event, and calling it again would double-fire. On the ReactiveUI and Caliburn paths it **does**. Your `OnXChanged` partial runs either way, so the VeloxDev callback contract holds regardless.
 
-## Silent failures
+## Diagnostics
 
-Since there are no diagnostics, these are the failure modes to know by name:
+| ID | Severity | Condition |
+|---|---|---|
+| `VELOX_MVVM_CMD001` | Error | A `[VeloxCommand]` method cannot be turned into a command; that method is skipped. |
+| `VELOX_MVVM_PROP001` | Error | Conflicting property declaration: two members map to one property name, or an existing field cannot back the property (const/static/read-only, or a different type). |
+| `VELOX_MVVM_PROP002` | Warning | A `[VeloxProperty]` field name yields no usable identifier (for example `_` or `_1x`); the property is skipped. |
+| `VELOX_MVVM_PROP003` | Warning | A `[VeloxProperty]` property is not `partial`, so its accessors cannot be completed. |
+| `VELOX_LANGVERSION001` | Warning | The project's `LangVersion` is below C# 12, which the generated code needs. |
+
+⚙ The command diagnostic was renamed from `VELOXCMD001` to `VELOX_MVVM_CMD001`. A `#pragma warning disable VELOXCMD001` no longer suppresses it.
+
+## Silent failures
 
 ⚙ **The class is not `partial`** — nothing is generated for any attribute.
 
-⚙ **The derived property name already exists** on the class or a base — the member is skipped, silently.
-
-⚙ **`[VeloxProperty]` on a property written without the `partial` keyword** — `public string X { get; set; }` looks right and produces nothing. This is the easiest mistake to make.
+⚙ **The derived property name already exists** on the class or a base — the field form is skipped silently. The property form reports `VELOX_MVVM_PROP001` for the conflicts it can see.
 
 ⚙ **A competing MVVM attribute** is present — skipped by design.
 
-⚙ **Two workflow classes with the same name in different namespaces collide**, because that one generator names its file `{ClassName}.g.cs` without a namespace. The MVVM, command and tick generators include the namespace and are unaffected.
+⚙ **Two `[VeloxCommand]` methods collapse to the same command name** — the generated file declares the member twice and fails with `CS0102`.
+
+⚙ **Two workflow classes with the same name in different namespaces collide**, because that generator names its file `{ClassName}.g.cs` without a namespace. The MVVM, command and tick generators include the namespace segment and are unaffected.
 
 ## Reference
 
-⚙ `Examples/MVVM/WPF/Demo` and `Examples/MVVM/Avalonia/Demo` — the richest MVVM sample: observable properties, collections with every hook, seven commands, and the lock / interrupt / clear lifecycle.
+⚙ `Examples/MVVM/Common/Lib/CommandGalleryViewModel.cs` — one method per accepted `[VeloxCommand]` signature: typed, multi-parameter, generic-method and `ValueTask` forms. `Examples/MVVM/WPF/Demo/MainWindowViewModel.cs` and `Examples/MVVM/Avalonia/Demo/ViewModels/MainWindowViewModel.cs` add properties, collection hooks, validators and the lock / interrupt / clear lifecycle.
 
-⚙ `Src/Generators/VeloxDev.Core.Generator/Writers/` — `MVVMWriter.cs`, `CommandWriter.cs`. The generated shape is exactly what these emit, and reading the setter body is faster than guessing.
+⚙ `Src/Generators/VeloxDev.Core.Generator/Writers/` — `MVVMWriter.cs`, `CommandWriter.cs`, `Base/Analizer.cs`, `Base/AIContextNaming.cs`, `Diagnostics.cs`. The generated shape is exactly what these emit; reading the setter body is faster than guessing.
 
-⚙ `Src/Core/VeloxDev.Core/MVVM/` — `VeloxPropertyAttribute`, `VeloxCommandAttribute`, `VeloxCommand`, `ObservableCollectionTracker`.
+⚙ `Src/Core/VeloxDev.Core/MVVM/` and `Src/Core/VeloxDev.Core/Interfaces/MVVM/` — the runtime types listed above, including `CommandArities.cs` and `ObservableCollectionTracker.cs`.
+
+⚙ `Src/Core/VeloxDev.Core.Test/MVVM/` — the behavioural contract, including `CommandSignatureTests`, `CommandArityTests`, `TypedCommandEventTests`, `VeloxCommandLifecycleTests`, `VeloxCommandCompletionTests`, `CommandSignatureDiagnosticsTests` and `CommandAllocationTests`.
 
 ⚙ The workflow node idiom on top of this layer — which members are generated, which you write, and the slot lifecycle behind a `partial` slot property — is in [the workflow skill](../veloxdev-create-workflow/references/model.md).

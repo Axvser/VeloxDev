@@ -18,6 +18,10 @@ xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 
 ⚙ **Attach the zoom handler to the ScrollViewer, not the Canvas**, and expect one native scroll before it can be marked handled: WinUI has no preview/tunnel phase and marks the wheel event handled itself, so the adapter registers with `handledEventsToo: true`. Attaching to the `Canvas` only covers the hit-testable area.
 
+⚙ **A plain wheel is routed and then applied by the adapter.** It marks the event handled, routes `PointerWheelChanged`, and scrolls through its registered `IWorkflowSurfaceScroller` (`WorkflowInput.Scroller`) only when the route did not set `PreventDefault`. Ctrl+wheel remains the zoom gesture.
+
+⚙ **`OnPointerMoved` feeds the connection candidate** with `StandardSetPreviewReceiver(SlotHitTestEx.HitTest(viewModel, x, y))` while `VirtualLink.IsVisible`.
+
 ## Adding your own content to a node
 
 `<Viewbox Stretch="Uniform">` around content pinned to design size, as on WPF — your controls go inside the design canvas at design-size coordinates.

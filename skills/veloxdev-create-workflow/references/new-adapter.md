@@ -41,8 +41,7 @@ it when a tree arrives (`HasViewportRestore` → `ViewportRestoreScroll` → cla
 implementation — without the restore a saved graph opens at the origin, without the persist the file records
 nothing. Capture the offset **before** your own first refresh: the refresh writes `ViewportOffset` from the
 control's current position and would erase it. One restore per tree, keyed on the tree reference. Centering a
-graph with no saved position is the host's call, not yours. Every adapter here is a worked example —
-`WorkflowSystem/extension.md` §3.9-10 is the contract.
+graph with no saved position is the host's call, not yours. Every adapter here is a worked example.
 
 ### 2. Scale container
 
@@ -131,7 +130,10 @@ A workable order, bottom-up — each step is verifiable on its own:
 3. **`Interpolator`** — an `InterpolatorCore` subclass that registers those samplers and implements `CreateScheduler`. This is also what makes a theme switch animate on your platform.
 4. **State, interpreter, scheduler** — only if your framework's value types need their own write path.
 5. **The surface behaviour** and the named-part resolution.
-6. **The node, slot and link behaviours** — drag, connect, slot measurement, and translating the platform's pointer and keys into the standard input route (`WorkflowInput.For(tree).Route(...)`, resolving the target with `HitTestVisibleLinks`; see [view-layer.md](view-layer.md#making-a-link-interactive)).
+6. **The node, slot and link behaviours** — drag, connect, slot measurement, and translating the platform's pointer and keys into the standard input route (`WorkflowInput.For(tree).Route(...)`, resolving the target with `HitTestVisibleLinks`; see [view-layer.md](view-layer.md#making-a-link-interactive)). Three details belong here:
+   - **The connection preview feed.** On every pointer move while `tree.VirtualLink.IsVisible`, report the slot under the pointer: `tree.StandardSetPreviewReceiver(SlotHitTestEx.HitTest(tree, x, y))`. The candidate must be found from the **measured slot anchors**, not the visual tree — the rubber band covers the surface. Do not forward the move as a hover event during the drag, or every link the pointer crosses lights up. See [model.md](model.md#the-connection-preview).
+   - **The wheel and its scroller.** Take the non-Ctrl wheel from the platform, route it as `PointerWheelEventArgs`, and then apply the platform's default scroll yourself unless a subscriber set `PreventDefault`. Register an `IWorkflowSurfaceScroller` at `WorkflowInput.For(tree).Scroller` when the surface attaches and clear it (only if it is still yours) when it detaches. Its `ScrollBy(deltaX, deltaY)` takes wheel deltas and converts them to this platform's step.
+   - **The connection candidate on the seven shipped adapters** is reported from the surface behaviour on WPF/Avalonia/WinUI/Jalium and from the slot-connection behaviour on MAUI/WinForms/Razor. Match whichever shape your host has.
 7. **The grid decorator and minimap**, implementing Core's `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay`.
 
 ⚙ **Do not add per-platform link hit-testing or hover code.** Core gives every adapter the same hit-test against the curves the views publish (`LinkHitTestEx.HitTestVisibleLinks`), and it only routes input — the hover highlight and the Delete command belong to the host/demo, which subscribe to the link's own input events. The adapter's job is to translate the platform's events in. The link context menu is the same split — the entries are yours (a menu resource, a fragment, or a build hook) and the adapter opens it and suspends the input router while it is open (see [view-layer.md](view-layer.md#the-link-context-menu)).

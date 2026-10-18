@@ -2,7 +2,7 @@
 
 **A node-editor and workflow-engine framework for .NET.**
 
-![VeloxDev Flow Studio — a professional node editor built with VeloxDev](https://img.cdn1.vip/i/6ad4b13ec1e64_1792323902.webp)
+![VeloxDev Flow Studio — a professional node editor built with VeloxDev](https://pic1.imgdb.cn/i/034i52aFN0kg2b1nmdDcYp.png)
 
 **One model, seven GUIs.** Build the editor above with **WPF, Avalonia, WinUI, MAUI, WinForms, Blazor/Razor, or Jalium** — the same graph model, commands and execution engine behind all of them. The same model also runs headless through `VeloxDev.Core`, so the interactive and non-interactive paths are one implementation.
 

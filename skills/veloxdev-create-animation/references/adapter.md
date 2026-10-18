@@ -12,9 +12,13 @@ Derive from `TransitionHostBase<TPriorityCore>` and answer **three** members. Ev
 
 | Member | The question it answers |
 |---|---|
-| `ThreadRef ThreadFor(object target)` | which thread owns this target, or `ThreadRef.None` |
-| `bool IsCurrentThread(ThreadRef thread)` | whether the calling thread is that one |
-| `bool PostCore(object target, ThreadRef thread, Action action, TPriorityCore priority)` | the platform's one queue entry point |
+| `public override ThreadRef ThreadFor(object target)` | which thread owns this target, or `ThreadRef.None` |
+| `protected override bool IsCurrentThread(ThreadRef thread)` | whether the calling thread is that one |
+| `protected override bool PostCore(object target, ThreadRef thread, Action action, TPriorityCore priority)` | the platform's one queue entry point |
+
+`IsCurrentFor(object target, ThreadRef thread)` is a `protected virtual` fourth member, not abstract: override it when the target can answer more precisely than the opaque handle — WinForms does (`!control.InvokeRequired`), and the same answer is then handed to `PostCore`.
+
+⚙ **Override `InternalPriority` when your priority type is not `NonPriority`.** It is the priority the blocking `Run<T>` read posts at, and `default(DispatcherPriority)` is `Inactive` — the read would park behind every normal message. WPF, Avalonia and Jalium return `Send`; WinUI returns `Normal`; MAUI, WinForms and Razor leave the default.
 
 **Route by the target, not by a captured global.** If the target is a UI object it already knows its thread, so a background-thread start marshals straight there with no capture and no wrong-thread hop:
 
@@ -24,21 +28,22 @@ public override ThreadRef ThreadFor(object target)
 {
     try
     {
-        var dispatcher = target is DispatcherObject o ? o.Dispatcher
+        var dispatcher = target is DispatcherObject dispatcherObject
+            ? dispatcherObject.Dispatcher
             : System.Windows.Application.Current?.Dispatcher ?? Dispatcher.FromThread(Thread.CurrentThread);
         return ThreadRef.From(dispatcher);
     }
-    catch { return ThreadRef.None; }
+    catch (Exception) { return ThreadRef.None; }
 }
 ```
 
-WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a lazily captured global. Jalium chains three levels — the target, then `Application.Current`, then a static main dispatcher — with the reason written down: *"so even POCO targets marshal correctly."* WinForms cannot name a `Control`'s thread, so it overrides `IsCurrentFor` to ask the Control instead (`!control.InvokeRequired`), which is the same question answered where it is actually known.
+WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a lazily captured global. Jalium chains four levels — the target, `Application.Current`, the calling thread, then `Dispatcher.MainDispatcher` — so even a plain object falls back to the app's main dispatcher. WinForms cannot name a `Control`'s thread, so it overrides `IsCurrentFor` to ask the Control instead (`!control.InvokeRequired`), which is the same question answered where it is actually known.
 
 **`PostCore` must report acceptance honestly.** It returns `false` when the action could not be queued at all, and that flag is the only thing standing between a dropped frame and a hung pipeline — `PostAsync` only waits on a completion source once the queue reported the work was accepted, so an optimistic `true` for work that was silently dropped hangs the consumer for the rest of the process. Check what your host says when the queue is gone (`HasShutdownStarted`, a refused `TryEnqueue`, a detached handle) and return `false`.
 
 ⚙ `IThreadDispatcher.Run<T>` reports the same failure the same way — `default` when the work could not be queued.
 
-**Liveness is a state you have to keep, and it differs per host.** WPF and Avalonia carry none. The others each invent something, and all of them report through `Lifetime` rather than a private flag:
+**Liveness is a state you have to keep, and it differs per host.** WPF and Avalonia carry none (the base's `Lifetime` stays alive). The others each invent something: WinUI reports into `Lifetime` on every enqueue, while MAUI, WinForms and Razor override `IsAlive` from their own signal.
 
 ⚙ WinUI reports both directions, so one refused enqueue no longer kills the application for the rest of the process: `Lifetime.SetAlive(queue.TryEnqueue(...))`.
 
@@ -48,13 +53,15 @@ WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a laz
 
 ⚙ Razor has no signal to observe, so it exposes a manual `NotifyShutdown()` for the host to call.
 
+⚙ **Explicit capture is only a fallback.** WinUI, WinForms and Razor expose `UIThreadInspector.CaptureUIThread()` for the first start from a background thread of a target that cannot name its own thread — a non-`DependencyObject` on WinUI, a plain Blazor model. WPF, Avalonia and MAUI resolve from the target or `Application.Current`.
+
 **`IsCurrentThread` is the one predicate the base cannot supply** — it holds an opaque handle and cannot compare it to the calling thread. Default it from the target, which is correct for any GUI: a view must be created on the UI thread, so the thread a target is on and the application's UI thread are the same one. MAUI inverts its own flag (`!dispatcher.IsDispatchRequired`), so an unknown state is treated as *not* the UI thread and the work is dispatched; WinForms and Razor compare the captured `SynchronizationContext` by reference.
 
 **Exception behaviour is uniform, and Core owns it.** A throw from a callback, a sampler or a host ends the run and is reported through the effect's `Error` event; nothing propagates to the animation's caller. Do not add a `catch { }` of your own on the write path — `SamplerSet` already reports and stops the run there, and a second swallow only hides which layer saw the failure.
 
 ⚙ **Re-check cancellation after marshaling.** Core does this for you in `SamplerSet`, but if you write your own frame path: the write lands on the UI thread whenever the message is pumped, and the animation may have been cancelled in between. Checking only before queueing lets a stale frame overwrite a reset.
 
-**Which one to copy:** WPF if your host has a dispatcher; WinForms if it does not. Add WinUI's `TaskCompletionSource` read if your host cannot read a property from a background thread directly.
+**Which one to copy:** WPF if your host has a dispatcher; WinForms if it does not. The blocking read is not yours to write — `ThreadDispatcherBase.Run<T>` posts and waits on a `TaskCompletionSource` for every host, so overriding `ThreadFor` and (where needed) `IsCurrentFor` is enough.
 
 ### The frame pacer
 
@@ -62,17 +69,19 @@ WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a laz
 
 ⚙ **The timer must re-arm on every `Arm`.** `Arm` is called once per frame and `Disarm` stops the timer on every tick, so exactly one tick per arm is drawn — but only if a later `Start()` fires again. MAUI's `IDispatcherTimer` does not: a non-repeating one fires **once and never again**, which silently caps every animation at two frames — values freeze at their start, the closed-form half of the suite still passes, and nothing throws — so MAUI creates it with `IsRepeating = true`. WinUI's `DispatcherQueueTimer` re-arms correctly with `IsRepeating = false`, so it keeps that flag. Which value is right is a per-host check you have to make, not a rule you can copy across.
 
-⚙ **Release the timer in `Dispose`.** The base's `Dispose` only stops the wait and releases the pending continuation; a host timer with its own teardown (WinForms', Avalonia's) is released by an override calling `base.Dispose()` and then detaching its tick and disposing.
+⚙ **Release the timer in `Dispose`.** `FramePacerCore.Dispose` only stops the wait and releases the pending continuation; a host timer with its own teardown (WPF's, Avalonia's, Jalium's, WinUI's, MAUI's, WinForms') is released by an override calling `base.Dispose()` and then detaching its tick and disposing.
 
 ## 2. Samplers — where an adapter's real value is
 
 One `ISampler` per platform type, registered as a **stateless singleton**. Three members, and the division of labour between them is the first thing to get right:
 
+⚙ `InterpolatorCore.Prepare<TPriorityCore>(object target, IFrameState state, ITransitionEffectCore effect, ITransitionHost<TPriorityCore> host)` is the settlement point: it reads each declared path on the owning thread, binds `PathIndex.Frozen` arguments once, resolves the sampler (custom → registry → `ISampleable`) and stores both normalized endpoints. Override it only to change that chain — and call the base if you do.
+
 ⚙ `NormalizeStart` / `NormalizeEnd` run **once per animation**. `InsertFrame` runs **once per frame**. Put anything expensive in the normalizers.
 
 ⚙ **Never mutate `start` or `end`** — they are shared with the snapshot. Every scratch in every adapter is a copy of the start, recomputed from the pristine endpoints each frame.
 
-⚙ **`t == 0` and `t == 1` return the caller's own instance, not the scratch.** A nested path such as `((TranslateTransform)x.RenderTransform).X` depends on the runtime type the endpoint was declared with, and the interpolated scratch would replace it. Core guarantees the endpoints are exact, so you only have to hand them back.
+⚙ **When the product feeds a nested path, `t == 0` and `t == 1` must hand back the caller's own instance, not the scratch.** A path such as `((TranslateTransform)x.RenderTransform).X` depends on the runtime type the endpoint was declared with, and the interpolated scratch would replace it; the transform samplers early-return `start` / `end` at exactly those times. Core makes the pass's final frame exact (`1` forward, `0` reverse), so you only have to hand them back.
 
 ⚙ **The scratch (`ref object? working`) is per animation.** Derive its type from the endpoint and re-derive it if the type changes:
 
@@ -95,7 +104,7 @@ if (working is not Transform wt || wt.GetType() != startT.GetType()) { /* build 
 
 ⚙ **Width and height share one zero-floored progress**, so an overshoot cannot skew the shape — a negative size is not representable. Position stays unbounded.
 
-⚙ Integer and pixel types floor **after** rounding (`Math.Max(0, …)`).
+⚙ Core's `IntSampler` rounds to the nearest integer; `LongSampler` truncates (a `decimal` intermediate cast to `long`). Pixel types truncate as well (`(int)(delta * progress)`) and clamp sizes at zero (`Math.Max(0, …)`); pixel positions stay unbounded.
 
 ⚙ Some framework types validate in their constructor and *throw* rather than truncate — `GridLength` is one — so clamp before you build the value.
 
@@ -117,7 +126,7 @@ The endpoints are factories, and what you do in between depends on whether the t
 
 ⚙ **Know your host's dead ends before you choose.** Jalium has no compositing brush, and its source documents the two routes that do not work: `RenderTargetBitmap`'s drawing context accepts only solid colours (gradients draw nothing, and `PushOpacity`/`DrawImage` are stubs, leaving the bitmap empty), and `DrawingBrush` renders nothing at all — measured at 0 of 9800 pixels. Either route makes overshoot frames *absent*, and an invisible frame cannot be told apart from an animation that never ran.
 
-⚙ **Transforms**: keep the last transform of each type inside a group, take the union of types across both endpoints, pair by type, interpolate, recombine; on a type mismatch fall back to element-wise matrix lerp. Directional angles need their own helper (wrap the delta into ±360). **Custom transform subclasses must be excluded from the clone fast path** — they are the one case where cloning throws, so gate the fast path on the exact known types. And **never wrap a single transform in a `TransformGroup`**: it changes the runtime type and breaks nested paths; wrap only when there really are several.
+⚙ **Transforms**: keep the last transform of each type inside a group, take the union of types across both endpoints, pair by type, interpolate, recombine; on a type mismatch fall back to element-wise matrix lerp. Directional angles need their own helper (wrap the delta into ±360). **Gate the clone fast path on the exact known types** — Avalonia, Jalium and WinUI do (`IsKnownTransform`), because their `CloneTransform` has no case for a custom subclass. WPF instead falls back to `Freezable.Clone()`, which does not throw, but its `MutateInPlace` also has no case for the subclass, so the scratch is written back unmutated; exclude unknown subclasses in your own adapter. And **never wrap a single transform in a `TransformGroup`**: it changes the runtime type and breaks nested paths; wrap only when there really are several.
 
 ## 3. Registration
 
@@ -166,7 +175,7 @@ Use the framework's dispatcher-priority type when it has one, and `NonPriority` 
 | WinUI | `DispatcherQueuePriority` |
 | MAUI, WinForms, Blazor | `NonPriority` |
 
-⚙ The priority type is used in **two** places, and the table above covers both: the seventh type argument of `Transition<T>`, and the type `CreateScheduler` tests the effect against. Get the second one wrong and the effect never matches — a theme switch degrades to instant switching instead of failing.
+⚙ The priority type is used in **two** places, and the table above covers both: the `TPriorityCore` argument of the core base `TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>` (the seventh in that base's list, which each adapter closes over in `Transition<T>`), and the type `CreateScheduler` tests the effect against. Get the second one wrong and the effect never matches — a theme switch degrades to instant switching instead of failing.
 
 ⚙ `NonPriority` costs nothing per frame: the sampling loop stays on the priority-free path. Carrying the priority as a type parameter rather than an `object?` is itself the point — it stopped a `DispatcherPriority` being boxed on every frame of every animation.
 

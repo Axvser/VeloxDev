@@ -208,7 +208,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 22. **`EmitFrame` 里 `Update` 抛异常 = 整帧作废**（后面的 `apply` 与 `LateUpdate` 都不跑），且结束这一趟 —— 「半坏的动画不该继续以帧率出错」。
 23. **`TransitionDiagnostics` 每个 stage 每个实例最多报一次**（`Runtime/TransitionDiagnostics.cs:5`）——它们大多是每帧都会发生的事。
 24. **`Prepare` 阶段逐属性的 `Warn` 不能否决动画。** `InterpolatorCore.Prepare` 自己 new 的 diagnostics 没传 `run` 参数（`Sampling/Interpolator.cs:146`），而 `TransitionDiagnostics.Raise` 只在 `run is not null` 时才把 `Handled` 落下去（`Runtime/TransitionDiagnostics.cs:41`）。而 `Awake`/`Prepare`/`Dropped` 用的那份（调度器创建的）传了，所以在那些 stage 里 `Handled` 是否决。**同一件事在两个 stage 行为不同**，这是观察所得，没有注释说明是有意的。
-25. **互斥 scheduler 一生不释放。** `MutualSchedulers` 是 `ConditionalWeakTable`，`RemoveMutualScheduler`（`Runtime/TransitionScheduler.cs:266`）在 `Src/` 里**没有任何调用者**。所以「这目标跑过互斥动画」是永真的。
+25. **互斥 scheduler 一生不释放。** `MutualSchedulers` 是 `ConditionalWeakTable`，**没有 `RemoveMutualScheduler` 这个成员**；`Runtime/TransitionScheduler.cs:259` 只有 `TryGetMutualScheduler`，`:266` 是 `TryGetNoMutualScheduler`，`:277` 是 `RemoveNoMutualScheduler`。所以「这目标跑过互斥动画」是永真的（表项随 target 被 GC 才消失）。
 
 ---
 

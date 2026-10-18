@@ -4,7 +4,7 @@
 
 There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md`. This is the summary a consumer needs.
 
-⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — all seven roles are single `.cs` files. `TreeView.cs` is where the pull model lives: the self-driven viewport, the virtualize inset and the `Refresh` calls.
+⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — all seven roles are single `.cs` files. The adapter's `WorkflowTreeView` is where the pull model lives (the self-driven viewport, the virtualize inset and the `Refresh` calls); the demo's `TreeView.cs` is the thin subclass that supplies the palette and view factories.
 
 ⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
 
@@ -24,7 +24,7 @@ WorkflowSurfaceBehavior.Refresh(control);                 // after every mutatio
 
 ## Adding your own content to a node
 
-⚙ **No `Viewbox`.** `NodeView.ApplyPosition` computes the collapse factor and applies it in code — header height, row heights, slot sizes, font sizes — then re-syncs slot anchors in the same frame.
+⚙ **No `Viewbox`.** `WorkflowNodeAttachment.ApplyPosition` computes the collapse factor and raises `CollapseChanged`; the generated card's `OnCollapse` applies it in code — header height, row heights, slot sizes, font sizes — then re-syncs slot anchors in the same frame.
 
 If you add content, add its scaling to that same path. Do not introduce a render transform.
 
@@ -38,12 +38,18 @@ If you add content, add its scaling to that same path. Do not introduce a render
 
 ⚙ If you write your own zoom, wheel-up is `Scale *= 1 / 1.1` — `Scale` is a collapse factor.
 
+⚙ **A plain wheel is routed and applied by the adapter.** The message filter swallows the wheel so no child scrolls, routes it as `PointerWheelChanged`, and scrolls through its registered `IWorkflowSurfaceScroller` (`WorkflowInput.Scroller`) unless a subscriber set `PreventDefault`. Ctrl+wheel is the zoom gesture, and it can be refused the same way.
+
+⚙ **`WorkflowSlotConnectionBehavior.UpdatePointer` feeds the connection candidate.** While the drag is active it calls `StandardSetPreviewReceiver(SlotHitTestEx.HitTest(tree, x, y))` — this adapter's `WindowFromPoint` target resolution only runs on release, so the drag path is geometric.
+
 ## Links
 
 Pooled like the nodes: `ViewPool` materializes one `LinkView` per link in the tree's **visible set**
 (`Helper.VisibleItems`, the gesture's virtual link included) and recycles them as that set changes.
 Each view paints its own cubic Bézier (`DrawPath` over an `AddBezier` path, endpoints from
 `Sender.Anchor` / `Receiver.Anchor`) — nothing draws links on behalf of another control.
+
+⚙ **The attachment owns everything except the drawing.** `WorkflowLinkAttachment.Attach(control)` subscribes the endpoints, carves the window region, publishes the curve for hit-testing and raises the link's pointer events; your `OnPaint` draws the curve. The generated link view exposes it as `Attachment`.
 
 ⚙ **A link view is an opaque child window, so it carves its own window region to the stroke band of
 the curve** (padded by the antialiasing fringe). A bounding box would paint over the grid, and a
@@ -62,20 +68,20 @@ on it — skip the region instead of widening.
 
 ⚙ **If you host the canvas yourself, set the virtualize inset before writing `Viewport`.** This adapter has no decorator-hosted ruler to ask, so the reserve is passed explicitly; skipping it culls nodes that are still visible under the ruler.
 
-⚙ **The link context menu is built in code, not markup.** The tree subclass overrides `OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)`; the base adds a Delete item, and the adapter opens the strip on right-press, positions it, and suspends the input router while it is open. Add or remove `ToolStripMenuItem`s in that override.
+⚙ **The link context menu is built in code, not markup.** The tree subclass overrides `OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)`, and the adapter opens the strip on right-press, positions it, and suspends the input router while it is open. **Neither the base override nor the generated template adds an item** — including Delete — so add or remove `ToolStripMenuItem`s in that override.
 
 ## Item templates — `VeloxDev.WinForms.Templates`
 
-**Generates code only.** All seven items are a single `.cs` file — no markup at all. Node and slot views are `UserControl` subclasses with `OnPaint`; node, slot, and link views are all pooled children, and the tree paints the grid surface itself.
+**Generates code only.** All seven items are a single `.cs` file — no markup at all. The tree paints the grid surface itself and pools node and link views; a node card and a slot view are `UserControl`/`Control` subclasses that carry an attachment, and a link view is a `Control` that draws itself.
 
-⚙ **All seven items are thin.** Every one derives from a control the adapter ships and supplies only what is yours:
+⚙ **All seven items are thin.** The adapter owns the wiring through attachments; each generated file supplies only what is yours:
 
 | item | derives from | you supply |
 |---|---|---|
 | tree | `WorkflowTreeView` | the palette, `CreateNodeView` / `CreateLinkView`, `OnBuildLinkMenu` (plus `OnTreeAttached` / `OnSurfaceRefreshed` if you add an overlay) |
-| node | `WorkflowNodeView` | the card itself — its panels, its paint — plus `OnNodeRebound` / `OnCollapseChanged` / `OnTitleChanged` |
-| slot | `WorkflowSlotView` | the glyph path and its colours |
-| link | `WorkflowLinkView` | `LineColor` / `Thickness` / `SurfaceBackground` |
+| node | `UserControl` + `WorkflowNodeAttachment.Attach(this)` | the card itself — its panels and `OnPaint`; the attachment owns binding, placement, zoom collapse and the title/slot lookups |
+| slot | `Control` + `WorkflowSlotAttachment.Attach(this)` | the glyph path and its by-state colours |
+| link | `Control` + `WorkflowLinkAttachment.Attach(this)` | `OnPaint` — the attachment owns the endpoints, region carving and pointer events |
 | minimap | `WorkflowMinimapOverlay` | the four palette colours |
 | grid-decorator | `WorkflowGridDecorator` | eight colours, the spacing, how many lines make a major one |
 | template-selector | `WorkflowTemplateSelector` | which view each item kind gets (the generated file wires node and link) |
@@ -83,7 +89,7 @@ on it — skip the region instead of widening.
 Three helpers are shared by all of them: `WorkflowSurfaceColors.Parse`, `WorkflowSurfaceGraphics.RoundedRectangle`,
 `WorkflowSurfaceGrid` (grid-line classification and ruler-label formatting).
 
-The node card implements `IWorkflowSurfaceNodeView` so the surface can place it on every pan — keep that when you edit it. The card is the one item that stays large: what it looks like is yours, and there is no markup language to carry it.
+⚙ **Placement belongs to the attachment, not the card.** `WorkflowNodeAttachment` implements `IWorkflowSurfaceNodeView`, so the surface re-places the card on every pan. The generated card exposes its attachment (`view.Attachment`) and its `PART_DynamicOutputs` host; keep both when you edit it. Node and link views are pooled by the surface; a slot view is a child of its node card, not a separately pooled item.
 
 ⚙ **This is the only fully-wired pack.** Every declared parameter, including all four slot colours and `slotPath`, has a consumer here — which makes it the pack to read when you want to know what a parameter is supposed to do on a framework where it is inert.
 
@@ -91,6 +97,6 @@ The node card implements `IWorkflowSurfaceNodeView` so the surface can place it 
 
 ⚙ Siblings are referenced as **static members**, not through markup namespace aliases, so all seven items must still be generated into one namespace.
 
-⚙ **The generated tree calls `SetVirtualizeInset` before writing `Viewport`** and carries the `using VeloxDev.WorkflowSystem.StandardEx;` that makes it possible. Keep both when you edit it.
+⚙ **The adapter's `WorkflowTreeView` calls `SetVirtualizeInset` before writing `Viewport`** (`RulerReserve` on both axes) and carries the `using VeloxDev.WorkflowSystem.StandardEx;` that makes it possible. The generated tree now only supplies the palette and the two view factories, so there is nothing to keep in step there.
 
 ⚙ Style values are assigned in the generated `OnPaint` / constructor code, so a colour change is a normal C# edit — there is no markup layer to keep in sync.

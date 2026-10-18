@@ -2,6 +2,8 @@
 
 Each adapter ships a `dotnet new` item-template pack that generates the seven view roles with the behaviours already wired, in your namespace and with your colours. This is the normal way to get a working canvas on screen — write the ViewModels yourself (see [model.md](model.md)) and let the templates produce the view layer.
 
+⚙ **The packs in this checkout are version `10.0.1`**, and so are the adapter and Core packages they are built against. `dotnet new install VeloxDev.<GUI>.Templates` without a version takes the latest published; do not pin an older pack against a newer adapter.
+
 ## The seven items
 
 | Kind | Default class name | What it is |
@@ -77,7 +79,7 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 
 ⚙ **The wiring.** Add the `VeloxDev.<GUI>` package, set the tree's `DataContext` (or `Tree` parameter) to your `IWorkflowTreeViewModel`, and make sure your node view's `DataContext` is your node ViewModel.
 
-⚙ **The link menu is already declared.** The tree item emits a Delete link-context-menu entry and wires it — a `LinkMenuKey` plus its menu resource on the markup platforms, a `<LinkMenu>` fragment on Razor, an `OnBuildLinkMenu` override on WinForms. Add or remove entries there rather than writing right-press code; see [view-layer.md](view-layer.md#the-link-context-menu).
+⚙ **The link menu is declared but ships empty.** The tree item declares the menu and wires the right-press to it — `LinkMenuKey` plus a resource on the markup platforms (WPF/Avalonia/WinUI/MAUI/Jalium), a `<LinkMenu>` fragment on Razor, an `OnBuildLinkMenu` override on WinForms — but **no pack adds a Delete entry any more**, and the WinForms base implementation adds none either. Add the entries you want there rather than writing right-press code; each entry is bound to the pressed link, so `Command="{Binding DeleteCommand}"` (or the GUI's equivalent) is the whole entry. See [view-layer.md](view-layer.md#the-link-context-menu).
 
 ⚙ **Anything the debug HUD does.** The demos carry an `InfoOverlay` read-only diagnostics panel; it is deliberately not part of the packs, because it is a debugging aid rather than part of the editor.
 

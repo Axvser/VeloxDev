@@ -1,6 +1,6 @@
 ﻿# MCP servers
 
-`McpScope` installs, launches, connects and monitors external Model Context Protocol servers, and hands their tools back for you to merge into the agent's tool list.
+`McpScope` installs, launches, connects and monitors external Model Context Protocol servers, and contributes their tools to the agent through one context provider, wrapped like every other tool.
 
 ```csharp
 var mcp = new McpScope()
@@ -27,7 +27,7 @@ var tools = await mcp.LoadAsync(configs, cancellationToken);
 | `Version` | honoured by `Npm` and `Pip` only; ignored by `Npx`, `Uvx`, `Dotnet`, `Exe` |
 | `Arguments` | passed through to the server |
 | `Endpoint` | the URL, for `Http` |
-| `Options` | an `IReadOnlyDictionary<string, object?>` of option name → value (a primitive, a nested map, or an array) — see the option table |
+| `Options` | an `IReadOnlyDictionary<string, object?>?` of option name → value (a primitive, a nested map, or an array) — see the option table |
 
 | `McpServerRunMode` | Launches | `Package` is |
 |---|---|---|
@@ -113,19 +113,23 @@ scope.WithMcps(mcp);
 
 That contributes the management tools, the prompt text describing them, the server inventory, and the tools of every connected server — each turn, from the scope's current state.
 
-Management tools: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `DescribeMcpServer`; `AddMcpServer` from `RemoteConfirmed` up; `SetMcpServerArguments` from `AllConfirmed` up (a remote server takes no launch arguments, and a local one is not reconfigurable below that rung — so it is not registered a rung earlier, where every call would be refused).
+Management tools — six, all registered on a normal scope: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `DescribeMcpServer`, `AddMcpServer`, `SetMcpServerArguments`. `ListMcpServers` and `DescribeMcpServer` are `Read`; the other four are `Curate`, because they change what the session can reach. A **granted view** (the MCP surface handed to a spawned child) registers only the two read tools.
 
 ⚙ **Do not also register them with `WithTools`.** The provider already contributes them, and the framework unions tool lists without deduplicating by name — registering them twice puts every one of them in the prompt twice.
 
 ⚙ **Registering configurations on the scope is what makes them reloadable.** `mcp.WithServers(...)` pre-registers the ones the Agent may load by name; `LoadAsync` and `AddAsync` also record whatever they are given, so a host that only loads directly still ends up with a reloadable set.
 
-⚙ **`WithMcps` is what makes a connected server's tools first-class.** They join the per-turn tool set through the context provider, wrapped like every other tool, so they are counted against `MaxToolCalls` / `MaxReadToolCalls` / `MaxWriteToolCalls`, marshalled onto your synchronization context, and raise `ToolCalled`. It also wires MCP self-service to the scope's own confirmation handler, so approval is configured once.
+⚙ **`WithMcps` is what makes a connected server's tools first-class.** They join the per-turn tool set through the context provider, wrapped like every other tool, so they are counted against `MaxToolCalls` / `MaxReadToolCalls` / `MaxWriteToolCalls`, marshalled onto your synchronization context, and raise `ToolCalled`. It also wires the MCP management tools to the scope's own confirmation handler and hands them the scope's permission policy, so approval is configured once.
 
 ⚙ **Merging `mcp.LoadedTools` into `ChatOptions.Tools` by hand is now the wrong path twice over** — it bypasses the wrapper, and it duplicates every tool, because the provider already offers them and the framework unions tool lists without deduplicating by name.
 
 ⚙ **A server loaded mid-conversation becomes available on the next turn** without rebuilding the agent: the provider re-renders whenever `McpScope.Version` advances.
 
-⚙ **There is no ladder any more: the session's permission mode decides, and the tools are always registered.** `AddMcpServer` and `SetMcpServerArguments` reach the model on every scope; whether a call runs is the mode's `Curate` row (asking under `Auto`, `AutoEdit` and `Manual`; allowed under `Bypass`) plus the host's rules, and a refusal names which of the two refused it. A **standalone** `McpScope` has no wrapper around its tools, so those two ask for themselves — and with no confirmation handler an unanswerable prompt denies.
+⚙ **Two classifications, one per origin.** A connected server's own tools are third-party code and are wrapped as `AgentActionCategory.Execute`, so a host rule such as `WithPermissionRule(PermissionDecision.Ask, "source:mcp:*")` gates them. The management tools are `Curate` — except `ListMcpServers` / `DescribeMcpServer`, which are `Read`.
+
+⚙ **The session's permission mode decides, and on a normal scope all six management tools are always registered.** `LoadMcpServers`, `UnloadMcpServer`, `AddMcpServer` and `SetMcpServerArguments` are `Curate`: `Auto` asks for them, `Manual` and `AutoEdit` ask too, `Plan` refuses them, and `Bypass` runs them unless a `Deny` rule matches. A refusal names the mode or the rule. A **standalone** `McpScope` has no wrapper around its tools, so those four ask for themselves through `WithConfirmationHandler` — and with no handler an unanswerable prompt denies.
+
+⚙ **`AddMcpServer` asks about the kind, not only the name.** A local run mode installs and launches software; an Http endpoint only sends data out. The tool puts a synthesised `mcp-add:local` / `mcp-add:http` call to the same policy, which is what lets the host write `WithPermissionRule(Deny, "mcp-add:local")` and leave Http servers alone.
 
 ⚙ **The mode is a runtime setting, and the prompt follows it.** `WithPermissionMode` advances `Version`, and `BuildInteractionSafetyPrompt` reads the mode when it renders — so a mode moved mid-session shows up on the next turn, together with the truth table and the host's rules it prints. A static `[Description]` cannot track that, which is why the descriptions that would depend on the mode defer to the prompt for what is allowed.
 
@@ -139,7 +143,7 @@ Management tools: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `Descri
 
 ## Prompting
 
-`ProvideProgressiveContextPrompt(language)` builds the system prompt. The shipped resources are `Resources/Workflow/{en,zh}/` — seven `Skills/`, five `References/` and four `Safety/` documents.
+`ProvideProgressiveContextPrompt(language)` builds the system prompt. The shipped resources are `Resources/Workflow/{en,zh}/` — seven `Skills/`, five `References/` and six `Safety/` documents.
 
 ⚙ **Language selection maps `Chinese → "zh"` and everything else to `"en"`, with a per-file fallback to English.** A partially translated resource set degrades document by document rather than all at once.
 

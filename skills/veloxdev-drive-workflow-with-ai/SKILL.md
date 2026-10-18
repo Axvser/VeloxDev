@@ -7,7 +7,7 @@ description: Give an LLM control of a VeloxDev workflow graph — wire a Workflo
 
 Turn a workflow `Tree` into a **tool surface** an LLM can operate: list and inspect nodes, create and delete them, connect slots, patch properties, run a compiled chain or reverse-compute one node's result — through the *same* undoable commands the GUI uses.
 
-Package: **`VeloxDev.Core.Extension`**. It also carries the graph serializer, which is a separate reason to reference it.
+Package: **`VeloxDev.Core.Extension`** (`netstandard2.0;net8.0`). It also carries the graph serializer, which is a separate reason to reference it.
 
 ## The wiring
 
@@ -42,7 +42,9 @@ var response = await agent.RunAsync(message, session);
 
 ⚙ **`ProvideTools()` still exists, but it is a one-shot snapshot** for hosts that build the agent by hand — it does not pick up later registrations. `CreateToolkit()` returns one instance per scope, so the call counters and the snapshot history behind `GetChangesSinceSnapshot` stay consistent.
 
-⚙ **`WithAutoDiscovery` is how the model learns your node types.** It registers every type the compiled agent context tree carries under the customer root — components (filed by the four component interfaces), enums, interfaces and data types. There is no assembly scan behind it: the generator has already filed each annotated or referenced type, so a type nothing annotated and no member references is not offered. `ListCreatableTypes` and `CreateNode` can only offer what was registered; register anything the tree does not carry by explicit type through `WithEnums` / `WithInterfaces` / `WithComponents` / `WithData` (each takes a `Type[]`).
+⚙ **`WithAutoDiscovery(AgentLanguages? language = null)` is how the model learns your node types.** It lists the compiled agent context tree's `Customer/` directories — components (filed by the four component interfaces), enums, interfaces and data types — and registers what the generator admitted for prompt rendering. There is no assembly scan behind it: a type nothing annotated, no component interface reaches and no member references is not in the tree. `ListCreatableTypes` and `CreateNode` resolve against that same compiled tree (framework and customer roots), independently of whether `WithAutoDiscovery` ran, so a name the tree does not carry cannot be created; `WithEnums` / `WithInterfaces` / `WithComponents` / `WithData` (each takes a `Type[]` and an optional `AgentLanguages?`) only add its context block to the prompt.
+
+⚙ **Customer context and framework context take their language differently.** `ProvideCustomerContext()` and `ProvideCustomerDataContext()` take no argument — they render each registered type in the language it was registered under. `ProvideFrameworkContext(language)` and `ProvideFrameworkDataContext(language)` take one.
 
 ## MCP and Skills without the workflow layer
 
@@ -65,7 +67,7 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 
 ⚙ **Do not register a subsystem's management tools yourself.** The provider contributes them; registering them again through `WithTools` / `WithQueryTools` puts every one of them in the prompt twice, because the framework unions tool lists without deduplicating by name. That is also why `AsAIAgent(providers, instructions)` has no tools parameter.
 
-⚙ **The MCP write tools are always registered; the session's permission mode decides whether they run.** `AddMcpServer` and `SetMcpServerArguments` used to appear only on a rung of a ladder of their own, which left a model able to say only that it had no such tool — nothing the user could act on. Now a refused call names the mode or the rule that refused it. The one question a rule about a *tool* cannot answer is which **kind** of server to add, so the tool asks the same policy about a synthesised call named `mcp-add:local` / `mcp-add:http`: a local package installs and runs software, an Http endpoint does not, and a host forbids one without forbidding the other by writing `WithPermissionRule(Deny, "mcp-add:local")`.
+⚙ **The MCP management tools that change the server set are always registered on a normal scope; the session's permission mode decides whether they run.** `AddMcpServer` and `SetMcpServerArguments` used to appear only on a rung of a ladder of their own, which left a model able to say only that it had no such tool — nothing the user could act on. Now a refused call names the mode or the rule that refused it. The one question a rule about a *tool* cannot answer is which **kind** of server to add, so the tool asks the same policy about a synthesised call named `mcp-add:local` / `mcp-add:http`: a local package installs and runs software, an Http endpoint does not, and a host forbids one without forbidding the other by writing `WithPermissionRule(Deny, "mcp-add:local")`.
 
 ⚙ **A skill provider's render is keyed on the scope's version *and* its prompt language.** The language is not part of the version, so `scope.WithPromptLanguage(...)` has to reach `SkillScope` for a language change to take effect — the workflow scope propagates it for you, and a standalone host sets it with `SkillScope.WithPromptLanguage`.
 
@@ -75,19 +77,24 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 
 | Gate | Default | Unlocks |
 |---|---|---|
-| `WithAllowNodeExecution(bool)` | **off** | `ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`, `RunCompiledWorkflow`, `GetNodeResult`, `StartCompiledWorkflow`, `ContinueCompiledWorkflow`, `PauseCompiledRun`, `ResumeCompiledRun`, `StopCompiledRun` — `GetCompiledRunStatus` reads a handle that only those produce |
+| `WithAllowNodeExecution(bool)` | **off** | `ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`, `RunCompiledWorkflow`, `GetNodeResult`, `StartCompiledWorkflow`, `ContinueCompiledWorkflow` — the four handle operations (`GetCompiledRunStatus`, `PauseCompiledRun`, `ResumeCompiledRun`, `StopCompiledRun`) are **not** gated |
 | `WithAllowedGenericCommands(params string[])` | **empty** | `ExecuteCommandOnNode`, `ExecuteCommandById` — and it *narrows* them to the listed names |
-| `WithSelectionHandler` / `WithConfirmationHandler` | **null** | registers `RequestSelection` / `RequestConfirmation` |
+| `WithSelectionHandler` / `WithConfirmationHandler` | **null** | registers `RequestSelection` / `RequestConfirmation`; a confirmation handler also backs every `Ask` decision and enables `EnterPlanMode` / `ExitPlanMode` |
 | `WithPermissionMode(AgentPermissionMode)` | `Auto` | `Plan` read-only · `Manual` every non-read asks · `AutoEdit` edits run, execution asks · `Auto` only curation asks · `Bypass` nothing asks |
 | `WithPermissionRule(decision, patterns…)` | none | the fine layer beneath the mode; `Deny` holds in every mode, `Bypass` included |
+| `WithoutPermissionRules()` | — | removes every rule; the mode is untouched |
 | `WithPermissionJudge(Func<ToolInvocation,PermissionDecision>)` | none | decides what `Auto` would otherwise settle; a judge that throws denies |
 | `WithModePrompt(mode, text)` | none | replaces the corpus text shipped for one mode |
 | `WithAutoMarkDirty(bool)` | off | marks the tree dirty after every non-query tool call, instead of requiring one `MarkDirty` at the end |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | pre-flight caps; exceeding one returns an error object rather than throwing |
 
+`AgentPermissionMode` is `Plan` · `Manual` · `AutoEdit` · `Auto` (the default) · `Bypass`. A rule is `new AgentPermissionRule(PermissionDecision.X, pattern)`, where `X` is `Allow`, `Ask` or `Deny`; the pattern matches a tool name (`DeleteNode`, `Get*`), a category (`category:Edit`), or a source (`source:mcp:*`, `source:skill`). `WithPermissionJudge` receives a `ToolInvocation` — `Name`, `AgentActionCategory` (`Read` / `Edit` / `Execute` / `Curate` / `Interact`), `Source`, `Arguments` — and runs only in `Auto`, for calls no rule settled. `SetPermissionMode` is the runtime switch and returns whether the mode moved; the policy is read per call, so the very next call obeys a mid-session change.
+
+⚙ **The handle operations sit outside the execution gate.** `GetCompiledRunStatus`, `PauseCompiledRun`, `ResumeCompiledRun` and `StopCompiledRun` act on a handle an earlier `StartCompiledWorkflow` / `ContinueCompiledWorkflow` produced, so they do not check `AllowNodeExecution`; the two start tools and the rest of the execution family do.
+
 ⚙ **The mode is enforced, not described.** The gate runs inside the call wrapper, on the two hooks every slice shares, so it reaches MCP-sourced and skill-sourced tools as well — which the per-capability flags inside tool bodies never could. Reading a mode's policy text and calling that enforcement is the mistake this replaced: the old numbered level injected prompt text and registered two interaction tools, and no tool body consulted it.
 
-⚙ **`WithToolApproval` is gone: it was the same axis as the mode.** Its gate wrapped every non-query call, which is exactly what `Manual` does — and a host that set a strict level without it was asking for nothing, because the level was prompt text. A tool call is now put to `WithConfirmationHandler` when the mode says `Ask` for its category; with no handler registered that becomes a denial (an unanswerable prompt denies).
+⚙ **The old tool-approval switch is gone: it was the same axis as the mode.** Its gate wrapped every non-query call, which is exactly what `Manual` does — and a host that set a strict level without it was asking for nothing, because the level was prompt text. A tool call is now put to `WithConfirmationHandler` when the mode says `Ask` for its category; with no handler registered that becomes a denial (an unanswerable prompt denies).
 
 ⚙ **A spent budget is not a dead end.** The model always has `ResetToolCallLimit`, which puts the question to the user through the confirmation handler and reopens the tree's budget only on agreement; every refusal that names a limit points at it.
 
@@ -95,12 +102,12 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 
 ## What the model gets
 
-67 tools in ten categories, all documented in [references/tools.md](references/tools.md). (69 once the two interaction tools register.) The shape worth knowing up front:
+**66 built-in tools** in the unconditional category groups, all documented in [references/tools.md](references/tools.md), plus `ResetToolCallLimit` and up to four handler-gated tools (two interaction, two plan-mode) — **71** when both handlers are registered. The shape worth knowing up front:
 
 - **Query** (all read-only) — `GetWorkflowSummary`, `GetFullTopology`, `ListNodes`, `GetNodeDetail`, `FindNodes`, `ResolveSlotId`, `ListSlotProperties`, `GetTypeSchema`, `GetComponentContext`, `ValidateWorkflow`, `CompileWorkflow`, `CompileNodeResult`, …
 - **Mutation** — `CreateNode`, `DeleteNode`, `ConnectSlots` / `ConnectByProperty`, `DisconnectSlots`, `SetSlotChannel`, `PatchNodeProperties`, `SetEnumSlotCollection`, `Undo` / `Redo`, …
 - **Execution** — node-level (`ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`), chain-level (`RunCompiledWorkflow`, plus the handle form `StartCompiledWorkflow` / `ContinueCompiledWorkflow` with `GetCompiledRunStatus` / `PauseCompiledRun` / `ResumeCompiledRun` / `StopCompiledRun`) and result-level (`GetNodeResult`).
-- **Interaction** — `RequestSelection`, `RequestConfirmation`, registered only when the host wired the matching handler.
+- **Interaction** — `RequestSelection`, `RequestConfirmation`, plus `EnterPlanMode` / `ExitPlanMode`, registered only when the matching handler (for the plan pair, the confirmation handler) is wired.
 - **Budget** — `ResetToolCallLimit`, always offered, whatever the configured categories.
 
 ⚙ **Indices are unstable; ids are not.** Creating or deleting shifts node indices, and a selector change rebuilds a slot enumerator's slots. The shipped prompt tells the model to prefer `GetFullTopology`, `ResolveSlotId` and `ConnectByProperty`. Any custom prompt you write should say the same.
@@ -180,7 +187,7 @@ var configs = new[]
 var mcpTools = await mcp.LoadAsync(configs);
 ```
 
-`RunMode` is `Npm` · `Npx` · `Uvx` · `Pip` · `Dotnet` · `Exe` · `Http`. Local modes install into `<root>/{node,python,dotnet,exe}` idempotently; HTTP uses Streamable HTTP with an SSE fallback.
+`RunMode` is `Npm` · `Npx` · `Uvx` · `Pip` · `Dotnet` · `Exe` · `Http`. Local modes install into `<root>/{node,py,dotnet,exe}` idempotently; HTTP uses Streamable HTTP with an SSE fallback.
 
 ⚙ **One failing server does not fail the batch.** A bad config sets that server's state to `Error`, raises `ServerError`, and returns an empty tool set; the rest load. Inspect `mcp.Status` (a bindable `McpStatusViewModel` with `Servers`, `ConnectedCount`, `ErrorCount`, `IsAllReady`).
 
@@ -188,9 +195,9 @@ var mcpTools = await mcp.LoadAsync(configs);
 
 ⚙ **Attach the MCP scope with `WithMcps` so its tools are wrapped like every other tool.** Reached that way, a connected server's tools are counted against `MaxToolCalls`, marshalled onto your synchronization context, and raise `ToolCalled`. If you instead merge `mcp.LoadedTools` into `ChatOptions.Tools` by hand, none of that happens — and they will also duplicate, because the provider already offers them.
 
-⚙ **The model can add servers and change their launch arguments, and the session's mode says whether it may.** `AddMcpServer` connects one the host did not pre-register; `SetMcpServerArguments` changes a local server's arguments in place, keeping its tools' identity. Under the default `Auto` only this curation asks; under `Manual` and `AutoEdit` it asks too; under `Bypass` nothing does. What no mode opens is a `Deny` rule — `WithPermissionRule(Deny, "mcp-add:local")` forbids installing software on this machine whatever the mode. The mode is a runtime setting: `SetPermissionMode` from a binding, and the prompt follows on the next turn.
+⚙ **The model can add servers and change their launch arguments, and the session's mode says whether it may.** `AddMcpServer` connects one the host did not pre-register; `SetMcpServerArguments` changes a local server's arguments in place, keeping its tools' identity. Under the default `Auto` only this curation asks; under `Manual` and `AutoEdit` it asks too; `Plan` refuses it; under `Bypass` nothing does. What no mode opens is a `Deny` rule — `WithPermissionRule(Deny, "mcp-add:local")` forbids installing software on this machine whatever the mode. The mode is a runtime setting: `SetPermissionMode` from a binding, and the prompt follows on the next turn.
 
-⚙ **A local rung means the model can cause a package to be installed and launched on the machine.** That is what separates `RemoteConfirmed` from `AllConfirmed`; pick the rung deliberately.
+⚙ **Adding a local server means the model can cause a package to be installed and launched on the machine.** The rule to forbid that is `WithPermissionRule(Deny, "mcp-add:local")`: it holds in every mode, `Bypass` included, while an Http endpoint is unaffected. The tool asks the same policy about a synthesised `mcp-add:local` / `mcp-add:http` call because the difference lives in the arguments, not the tool name.
 
 Details and the full option surface are in [references/mcp.md](references/mcp.md).
 
@@ -208,7 +215,7 @@ scope.WithSubAgents(subAgents);
 
 ⚙ **The budget is one ledger for the whole tree, and every grant is strictly smaller than what remains** — that is what makes any spawn depth terminate. `WithSubAgentDepth(n)` is what makes it usable; set both, or a single unlimited root permits an arbitrarily deep chain.
 
-⚙ **A child holds its own share, not the parent's.** A reset the child itself makes (`ResetToolCallLimit`) goes up through the tree and reaches the user, so a stuck child can reopen the budget rather than sit rejected; a parent's reset does not reach down into a child. The interaction configuration is inherited — level, safety-prompt overrides and the two handlers — so `RequestSelection` / `RequestConfirmation` really exist on the child rather than being listed and unreachable.
+⚙ **A child holds its own share, not the parent's.** A reset the child itself makes (`ResetToolCallLimit`) goes up through the tree and reaches the user, so a stuck child can reopen the budget rather than sit rejected; a parent's reset does not reach down into a child. The interaction configuration is inherited — the whole permission policy (mode, rules, judge), the per-mode prompt overrides and the two handlers — so `RequestSelection` / `RequestConfirmation` really exist on the child rather than being listed and unreachable.
 
 ## Framework-native providers
 
@@ -216,12 +223,12 @@ Three capabilities are the Agent Framework's own, attached through the scope rat
 
 ## Checking your wiring
 
-⚙ **Start by asking the agent to orient itself** — `GetWorkflowSummary`, then `GetFullTopology`. If those come back empty or error, the scope is not bound to the tree; if they work but mutations do not, it is `WithSynchronizationContext` or the auto-discovery list.
+⚙ **Start by asking the agent to orient itself** — `GetWorkflowSummary`, then `GetFullTopology`. If those come back empty or error, the scope is not bound to the tree; if they work but mutations do not, it is `WithSynchronizationContext`, the permission mode, or a refusal rule.
 
 ⚙ **Try a mutation the agent should be allowed to make and one it should not.** With node execution off, asking it to run a chain should come back `disabled by host policy` — that reply is the confirmation your gates are wired, not a failure.
 
 ⚙ **Watch the undo stack.** Every structural tool call the agent makes should appear as one entry. If nothing lands there, the agent is reaching a code path you added yourself rather than the library's commands.
 
-⚙ `Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs` is a complete working host — scope setup, an MCP panel, a sub-agent panel (`SubAgentScope.ForClient(chatClient).WithSubAgentDepth(3)`), per-conversation tool assembly and the safety-prompt wiring. Read it before writing your own, whether from NuGet or from a checkout.
+⚙ `Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs` is a complete working host — scope setup, an MCP panel, a sub-agent panel (`SubAgentScope.ForClient(chatClient).WithSubAgentDepth(3)`), per-conversation tool assembly and the permission-mode wiring. Read it before writing your own, whether from NuGet or from a checkout.
 
-⚙ The prompts that ship to the model are under `Src/Core/VeloxDev.Core.Extension/Resources/Workflow/{en,zh}/` — seven `Skills/`, five `References/` and four `Safety/` documents, selected by `ProvideProgressiveContextPrompt(language)`. Read them to know what the model has already been told **before** you add to it, so your instructions do not fight the built-in ones.
+⚙ The prompts that ship to the model are under `Src/Core/VeloxDev.Core.Extension/Resources/Workflow/{en,zh}/` — seven `Skills/`, five `References/` and six `Safety/` documents, selected by `ProvideProgressiveContextPrompt(language)`. Read them to know what the model has already been told **before** you add to it, so your instructions do not fight the built-in ones.

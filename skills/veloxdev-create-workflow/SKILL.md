@@ -19,16 +19,17 @@ Everything else about this repository (how the adapters are built, how the demos
 |---|---|
 | Model, canvas math, execution engine | `VeloxDev.Core` |
 | The canvas on screen | one adapter: `VeloxDev.WPF` · `VeloxDev.Avalonia` · `VeloxDev.WinUI` · `VeloxDev.MAUI` · `VeloxDev.WinForms` · `VeloxDev.Razor` · `VeloxDev.Jalium` |
-| `Serialize()` / `Deserialize()` | `VeloxDev.Core.Extension` — the entry points are **not in Core** (the engine is Core's own `VeloxDev.Serialization`), so a project that saves graphs needs it |
+| `Serialize()` / `Deserialize()` | `VeloxDev.Core` itself — the entry points are extension methods in `VeloxDev.Serialization` (backed by `VeloxJsonSerializer`); no extra package |
 | Driving the graph from an LLM | `VeloxDev.Core.Extension` |
 
-An adapter package brings `VeloxDev.Core` in transitively. Versions are deliberately not stated: take the latest published. Rendering the canvas needs an adapter; using only the model and the engine needs neither.
+An adapter package brings `VeloxDev.Core` in transitively. Versions are deliberately not stated for installation: take the latest published (the source in this checkout builds `10.0.1`). Rendering the canvas needs an adapter; using only the model and the engine needs neither.
 
 ## The model in sixty seconds
 
 - A **Tree** owns `Nodes`, `Links`, `LinksMap` and a `CanvasLayout`. Nodes own **Slots**; a slot is a sender or a receiver; two slots wired together are a **Link**.
 - Every component is a `partial` class split in two: a **ViewModel** holding identity, state and geometry, and a **Helper** holding behaviour. `[WorkflowBuilder.Node<MyNodeHelper>]` generates the ViewModel half; you write the helper.
 - **A slot channel says how many connections it accepts** — `OneTarget` / `OneSource` / `MultipleBoth` / … Validation happens on the **receiver** side only.
+- **A connection drag has a live preview.** `WorkflowInput.For(tree)` carries `ConnectionSender`, `PreviewReceiver`, `PreviewState` and `PreviewCheck`; the adapters feed the candidate slot on every pointer move, and the tree's `VirtualLink` (as `IConnectionPreviewLink`) publishes the stage a link view paints. `StandardCheckConnection(sender, receiver)` is the pure rule set behind it. **The preview may tighten the framework's verdict, never relax it** — a host can make a green candidate red for this drag, but cannot make a refusal green.
 - **Every structural mutation is an undoable command** — create, connect, delete, `SetSelector` all build a `WorkflowActionPair` and go through `Submit`. It is how the undo stack and the GUI stay in step, and how an AI agent sees the same changes a mouse does.
 - **Angles are in `Scale`-collapsed space.** Node `Anchor`/`Size` *store* world coordinates but their *getters* return canvas-local ones (`world ÷ Scale`). That single fact explains most of the traps below.
 
@@ -43,6 +44,8 @@ An adapter package brings `VeloxDev.Core` in transitively. Versions are delibera
 | Scaffold the canvas views with `dotnet new` | [references/templates.md](references/templates.md) |
 | Customize or debug those views | [references/view-layer.md](references/view-layer.md), then `gui/<your-gui>.md` |
 | React to zoom, panning, or links that do not line up | [references/canvas-math.md](references/canvas-math.md) |
+| Paint a red/green connection preview while a drag is in progress | [references/model.md](references/model.md#the-connection-preview) |
+| Take over the wheel, or scroll the surface from your own handler | [references/view-layer.md](references/view-layer.md#wheel-and-scrolling) |
 | Support a GUI that has no adapter | [references/new-adapter.md](references/new-adapter.md) |
 | Drive the graph from an LLM | [../veloxdev-drive-workflow-with-ai/SKILL.md](../veloxdev-drive-workflow-with-ai/SKILL.md) |
 
@@ -72,6 +75,8 @@ Open your GUI's reference alongside whichever of the above you are reading — i
 
 ⚙ **Structural mutations go through `Submit`.** A mutation written as a direct collection edit is invisible to undo and to anything watching the tree.
 
+⚙ **The connection preview is advisory.** `PreviewValidating` runs only for candidates the framework already accepts, and its `Reject` affects the painted preview only. The release-time `IWorkflowTreeEvents.Connecting` veto plus `ValidateConnection` are still the final decision.
+
 ⚙ **Virtualization is off until you ask for it.** The parameterless `TreeHelper` disables it; only `TreeHelper(cellSize)` turns it on. A graph that always realizes every node is usually this, not a rendering problem.
 
 ## Customizing on top of VeloxDev
@@ -83,6 +88,7 @@ VeloxDev is meant to be extended, and each of these is the seam the library expe
 | Give a node behaviour | your own `NodeHelper<T>` overriding `ReceiveAsync` / `AccessAsync` | put logic in the generated node class |
 | Use your own link type | override `TreeHelper.CreateLink` | construct a link and add it to `Links` yourself |
 | Constrain what may connect | override `TreeHelper.ValidateConnection(sender, receiver)` — the only connection predicate | remove links after the fact |
+| Constrain a candidate for one drag only | subscribe `WorkflowInput.PreviewValidating` and call `e.Reject(message)` — it paints that candidate red for this preview and never changes the release decision | make `ValidateConnection` return `false` for a warning, or filter links afterwards |
 | Give a node a variable number of ports | `SlotEnumerator<TSlot>` + an `ISlotProvider` named by `[SlotSelectors]` | adding and removing slots by hand |
 | Change how a node looks | the GUI's node view, generated by the item templates and then edited | edit the adapter |
 | Add a property that changes with the theme | `[ThemeConfig]` — see the theme skill | branch on the theme in the view |
@@ -96,7 +102,7 @@ VeloxDev is meant to be extended, and each of these is the seam the library expe
 
 The behaviour that matters is visual and interactive, so check it in a running app rather than by reading code:
 
-⚙ Drag a node, drag a slot onto another slot, pan and zoom until the pointer stays under what you grabbed, then save and reload the graph. Those cover most of the model, the canvas and the serialization at once.
+⚙ Drag a node, drag a slot onto another slot, pan and zoom until the pointer stays under what you grabbed, then save and reload the graph. Those cover most of the model, the canvas and the serialization at once. While the slot drag is in progress, the candidate under the pointer should show the **preview** state and the rubber band its `ValidTarget` / `InvalidTarget` stage — and a candidate your `PreviewValidating` rejects should turn red without cancelling the drag.
 
 ⚙ **Test at a deep zoom, not at 100%.** Links that vanish, links that detach from their port and a camera that drifts are all invisible at 100% and obvious at 40%.
 

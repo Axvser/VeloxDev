@@ -38,6 +38,10 @@ The canvas is a `ScrollViewer` + `Canvas`, and node and link views bind their `R
 
 ⚙ If you write your own zoom, wheel-up is `Scale *= 1 / 1.1` — `Scale` is a collapse factor.
 
+⚙ **A plain wheel is routed and then applied by the surface**, not by the platform's scroll container: `OnPointerWheel` feeds `WorkflowInput.PointerWheelChanged`, and unless a subscriber sets `PreventDefault` the surface calls its registered `IWorkflowSurfaceScroller` (`WorkflowInput.Scroller`). Ctrl+wheel is the zoom gesture.
+
+⚙ **During a connection drag, `OnPointerMoved` feeds the candidate receiver** with `StandardSetPreviewReceiver(SlotHitTestEx.HitTest(viewModel, x, y))` while `VirtualLink.IsVisible`, and does not route the move as hover.
+
 ⚙ **On mobile targets, leave the adapter's gesture handling alone.** It reflects into `GestureRecognizers` to remove the built-in `ScrollGestureRecognizer`; without that, the platform gesture and the zoom fight each other.
 
 ## Links

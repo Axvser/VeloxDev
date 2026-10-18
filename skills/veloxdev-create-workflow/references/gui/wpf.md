@@ -57,6 +57,10 @@ The tree's two `DataTemplate`s are where node positioning is declared:
 
 ⚙ If you write your own zoom, wheel-up is `Scale *= 1 / 1.1`. `Scale` is a collapse factor, so zoom-in *decreases* it.
 
+⚙ **The surface owns both wheel jobs.** Ctrl+wheel zooms; a plain wheel is routed as `PointerWheelChanged` and then applied by the surface itself (`state.Scroller?.ScrollBy(0, e.Delta)`) unless a subscriber set `PreventDefault`. The scroller is registered at `WorkflowInput.For(tree).Scroller` while the surface is attached, so a host that takes a wheel over can scroll without knowing it is WPF.
+
+⚙ **While `VirtualLink.IsVisible`, `OnPreviewMouseMove` reports the candidate receiver** with `StandardSetPreviewReceiver(SlotHitTestEx.HitTest(viewModel, x, y))` and returns before hover routing — otherwise every link the rubber band crosses would light up. See [model.md](../model.md#the-connection-preview).
+
 ## Links
 
 ⚙ WPF has no surface limit, so the shipped link view draws directly in canvas coordinates from `OnRender(DrawingContext)` — the simplest of the seven. Keep the render-ready gate as the first line:
@@ -71,7 +75,7 @@ protected override void OnRender(DrawingContext dc)
 
 ⚙ Slot anchors on this adapter are measured in **screen space** and converted with `SlotAnchorFromVisualCenter`. That is why links stay aligned through a pan: the canvas itself is *not* translated for the child views, so the visual centre genuinely is a screen coordinate here. If you rewrite the layout behaviour and it starts offsetting every link by the pan amount, this is the line you changed.
 
-⚙ **Link input is Core's, forwarded by this adapter.** The surface translates the platform's pointer and keys into the standard input and routes them through `WorkflowInput.For(tree)`, resolving which link is under the pointer with `HitTestVisibleLinks` and taking keyboard focus when one is hovered; Delete-to-delete is the route's default (its `AutoDelete`), and the right-press link menu is wired through `WorkflowSurfaceBehavior.LinkMenuKey` plus a `ContextMenu` resource (closed when `GetHelper().LinkRemoved` names that link). Hover appearance is the host's — subscribe the link's own `IInputEvents` (see [view-layer.md](../view-layer.md#making-a-link-interactive)).
+⚙ **Link input is Core's, forwarded by this adapter.** The surface translates the platform's pointer and keys into the standard input and routes them through `WorkflowInput.For(tree)`, resolving which link is under the pointer with `HitTestVisibleLinks` and taking keyboard focus when one is hovered. **Core routes keys but performs no delete** — the host subscribes the tree's `Input.KeyDown`, checks `e.Target is IWorkflowLinkViewModel`, and runs `DeleteCommand` (the trimmed demo's `TreeView.xaml.cs` does exactly this). The right-press link menu is wired through `WorkflowSurfaceBehavior.LinkMenuKey` plus a `ContextMenu` resource (closed when `GetHelper().LinkRemoved` names that link). Hover appearance is the host's — subscribe the link's own `IInputEvents` (see [view-layer.md](../view-layer.md#making-a-link-interactive)).
 
 ⚙ `System.Windows.Shapes.Path` versus `System.IO.Path`: unlike WinUI, the WPF demo does not need an alias, but code-first views that use both namespaces will.
 
@@ -81,7 +85,7 @@ protected override void OnRender(DrawingContext dc)
 
 ⚙ **Siblings resolve by default class name through a markup namespace alias**, so all seven items must be generated into **one** namespace: the tree maps `xmlns:workflowViews="clr-namespace:<your -ns>"` and refers to `workflowViews:NodeView`, `workflowViews:LinkView`, `workflowViews:GridDecorator`, `workflowViews:TemplateSelector`, `workflowViews:MinimapOverlay`.
 
-⚙ **The tree's link context menu is a resource plus a key.** The generated `TreeView.xaml` declares `<ContextMenu x:Key="LinkContextMenu">` with a Delete item and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` at it; the code-behind is otherwise empty because the adapter owns the right-press wiring. Add or remove `<MenuItem>`s in that resource — each is bound to the pressed link, so `Command="{Binding DeleteCommand}"` (or your own command) is the whole entry.
+⚙ **The tree's link context menu is a resource plus a key.** The generated `TreeView.xaml` declares an **empty** `<ContextMenu x:Key="LinkContextMenu">` and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` at it; the code-behind is otherwise empty because the adapter owns the right-press wiring. Add or remove `<MenuItem>`s in that resource — each is bound to the pressed link, so `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (or your own command) is the whole entry.
 
 ⚙ **`slotBorderColor` (`-bc`) is accepted and discarded** on this pack — the slot template declares it for cross-GUI CLI parity and says so in the pack's own `template.json`; the slot view draws a filled path and has no border element. If a slot border colour refuses to appear, edit the generated file rather than the command line.
 

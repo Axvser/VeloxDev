@@ -1,6 +1,6 @@
 # The model side — Tree, Node, Slot, Link
 
-Everything here is in `VeloxDev.Core`, namespace `VeloxDev.WorkflowSystem` (plus `VeloxDev.Core.WorkflowSystem.CompilerEx` for the engine contracts). No UI framework is involved.
+Everything here is in `VeloxDev.Core`, namespace `VeloxDev.WorkflowSystem` (plus `VeloxDev.WorkflowSystem.StandardEx` for the standard operations — `StandardSendConnection`, `StandardCheckConnection`, the undo helpers — and `VeloxDev.Core.WorkflowSystem.CompilerEx` for the engine contracts). No UI framework is involved.
 
 ## The four components
 
@@ -114,7 +114,7 @@ Two shapes, and the compiler tells you which is which:
 
 ⚙ **Only `One*` channels ever auto-clean.** Connecting to a slot whose channel is `OneTarget`/`OneSource`/`OneBoth` removes the conflicting existing links first; `Multiple*` never removes anything. And the "clean the opposite direction too" case is gated on `HasFlag(OneBoth)` — literally both one-bits — so `MultipleBoth` does not trigger it.
 
-`SlotState` is a **flags** enum with five members: `StandBy`, the two drag-time preview bits `PreviewSender` / `PreviewReceiver`, and the two established bits `Sender` / `Receiver`. The established pair is **derived from `Targets` and `Sources`**, never assigned by hand; the preview pair is what a slot shows while a connection is being dragged onto it, and it clears when the drag ends.
+`SlotState` is a **flags** enum with five members: `StandBy` (1), the two drag-time preview bits `PreviewSender` (2) / `PreviewReceiver` (4), and the two established bits `Sender` (8) / `Receiver` (16). The established pair is **derived from `Targets` and `Sources`** by `StandardUpdateState`, never assigned by hand. The preview pair is owned by the **connection drag**, not by the connection lists: `StandardUpdateState` computes the established bits and ORs the two preview bits back in, so a connection completing or being removed mid-drag cannot clear the sender's / candidate's highlight. `StandardSendConnection` sets `PreviewSender`; `WorkflowInput` sets and clears `PreviewReceiver` as the pointer moves across candidates.
 
 ### Connecting two slots
 
@@ -127,9 +127,81 @@ Two phases, and the whole connection is submitted as one undoable action.
 
 ⚙ **All validation is on the receiver.** `SendConnection` only checks that the slot may send and cleans up its own capacity. `ReceiveConnection` runs, in order: can this slot receive → `tree.GetHelper().ValidateConnection(sender, receiver)` → reject same-node → clean up same-direction duplicates → clean up receiver capacity → create the link.
 
-⚙ **`TreeHelper.ValidateConnection` is virtual and returns `true`.** It is the single user-supplied connection predicate — override it for connection rules.
+⚙ **`TreeHelper.ValidateConnection` is virtual and returns `true`.** It is the single user-supplied connection predicate — override it for connection rules. `tree.StandardCheckConnection(sender, receiver)` is the pure form of the whole rule set (direction, same-node, then this predicate); use it to ask "would this connect?" before a drag starts.
 
 ⚙ **A slot must be attached to a tree**, and same-node connections are always refused.
+
+### The connection preview
+
+The drag preview is not a second connection implementation: it runs the same rule set the completed connection will run, so the green rubber band and the finished link cannot disagree. Everything is in `VeloxDev.WorkflowSystem` (`WorkflowInput`, `ConnectionCheck`, `SlotHitTestEx`, `IConnectionPreviewLink`), plus the tree extensions in `VeloxDev.WorkflowSystem.StandardEx` (add that `using` before calling `StandardSetPreviewReceiver` and friends).
+
+| Type | Members |
+|---|---|
+| `ConnectionCheck` | `readonly struct`: `IsValid`, `Reason` (`ConnectionRejectReason`), `Message`; `ConnectionCheck.Valid`, `ConnectionCheck.Rejected(reason, message)` |
+| `ConnectionRejectReason` | `None`, `SenderCannotSend`, `ReceiverCannotReceive`, `SameNode`, `RejectedByRule`, `RejectedByHost` |
+| `ConnectionPreviewState` | `None`, `Started`, `ValidTarget`, `InvalidTarget` |
+| `IConnectionPreviewLink` | optional capability of the virtual link: `Preview` and `SetPreview(state)`; `LinkDefaultViewModel` implements it |
+
+```csharp
+// Pure: no events, no state changes. Direction, same-node, then the helper's rule.
+ConnectionCheck check = tree.StandardCheckConnection(senderSlot, receiverSlot);
+if (!check.IsValid) Console.WriteLine(check.Reason);   // RejectedByRule / SameNode / …
+```
+
+⚙ **Channel capacity is not a rejection.** A passing check means "acceptable, possibly after the cleanup the channel specifies"; the cleanup itself happens only on release.
+
+⚙ **`StandardCheckConnection` excludes the release-time `Connecting` veto.** `Connecting` and `ValidateConnection` are asked again when the pointer is released — the preview is advisory, not the verdict.
+
+`WorkflowInput.For(tree)` owns the drag state:
+
+| Member | Meaning |
+|---|---|
+| `ConnectionSender` | the port the drag started from, or `null` when no drag is in progress |
+| `PreviewReceiver` | the candidate port under the pointer, or `null` |
+| `PreviewState` | `None` / `Started` / `ValidTarget` / `InvalidTarget` |
+| `PreviewCheck` | the check for the candidate; `null` when there is no candidate. An **invalid** candidate still carries its check, so a view can explain the red band |
+| `PreviewChanged` | snapshot event (`Sender`, `Receiver`, `State`, `Check`) whenever any of the above changes, including the end of the drag |
+| `PreviewValidating` | once per **new candidate the framework already accepts**, before it is marked valid |
+
+⚙ **The preview tightens only.** `PreviewValidating` is never raised for a candidate the framework already refused, and a subscriber's `e.Reject(message)` replaces that candidate's check with `RejectedByHost` **for this preview only**. It cannot turn a refusal green and it does not cancel the drag; the release-time decision is unchanged.
+
+⚙ **The same candidate is not re-validated every frame.** Reporting the same slot again is a cheap reference comparison. Call `tree.StandardRefreshConnectionPreview()` after an asynchronous verdict lands — it forces the check for the candidate already under the pointer (and is a no-op when no drag is in progress). Start that asynchronous work from `PreviewValidating`.
+
+⚙ **Passing the sender itself means "no candidate".** The drag starts with the pointer on the sender; reporting it would paint the just-started drag red.
+
+#### What the adapter feeds, and what your view paints
+
+The rubber band covers the whole surface, so the platform view under the pointer is usually the surface itself. Adapters therefore hit-test **slot anchors**, not the visual tree:
+
+```csharp
+// On every pointer move while the virtual link is visible:
+tree.StandardSetPreviewReceiver(
+    SlotHitTestEx.HitTest(tree, x, y));   // nearest measured slot within 12 units, NaN anchors skipped
+```
+
+`SlotHitTestEx.HitTest(tree, x, y, radius = 12)` is in `VeloxDev.WorkflowSystem`, works in the same collapsed frame as `slot.Anchor`, and costs O(nodes × slots) only for the duration of the drag.
+
+| Adapter | Where the candidate is reported |
+|---|---|
+| WPF | `WorkflowSurfaceBehavior.OnPreviewMouseMove`, while `VirtualLink.IsVisible` (returns before hover routing) |
+| Avalonia | `WorkflowSurfaceBehavior.OnPointerMoved` |
+| WinUI | `WorkflowSurfaceBehavior.OnPointerMoved` |
+| Jalium | `WorkflowSurfaceBehavior.OnMouseMove` |
+| MAUI | `WorkflowSlotConnectionBehavior.UpdatePointer` |
+| WinForms | `WorkflowSlotConnectionBehavior.UpdatePointer` |
+| Razor | `WorkflowSlotConnectionBehavior.OnSlotConnectionMove` (`[JSInvokable]`) |
+
+A link view paints the stage by reading the virtual link, not by deciding anything:
+
+```csharp
+if (DataContext is IConnectionPreviewLink link)
+{
+    // Started / ValidTarget / InvalidTarget
+    var stage = link.Preview;
+}
+```
+
+⚙ **The stage is published on the tree's `VirtualLink`.** `LinkDefaultViewModel` implements `IConnectionPreviewLink` and raises `PropertyChanged` for `Preview`; a custom virtual link may implement the same interface. Subscribe the link's `INotifyPropertyChanged` (what the demos do) or `WorkflowInput.PreviewChanged`; both describe the same snapshot. A link view should not read `WorkflowInput` itself — pooled views are rebound, and the component they are bound to is the one that changes.
 
 ### Conditional slot sets
 
@@ -223,19 +295,21 @@ Undoable: create node, create/delete slot, connect, delete node, delete link, `S
 
 ## Serialization
 
-It lives in `VeloxDev.Core.Extension`, namespace `VeloxDev.MVVM.Serialization`; the engine is
-`VeloxDev.Serialization` in `VeloxDev.Core`. **There is no Newtonsoft anywhere.**
+It lives in **`VeloxDev.Core`**, namespace `VeloxDev.Serialization` (`ViewModelSerializer`, backed by
+`VeloxJsonSerializer`). **There is no Newtonsoft anywhere, and no extra package to reference.**
 
 ```csharp
+await tree.GetHelper().CloseAsync();                       // flush in-flight work (closes the components too — the demo saves at the end of a run)
 var json = tree.Serialize();
 await writer.WriteAsync(json);
 
 var restored = json.Deserialize<TreeViewModel>();          // or TryDeserialize, which never throws
 restored.Layout.UpdateCommand.Execute(null);               // recompute ActualSize / ActualOffset
-WorkflowSurfaceBehavior.Refresh(view);                     // re-bind the views
+// Hand the restored tree to the surface. Notification-driven adapters re-bind;
+// on WinForms (pull-driven) also call WorkflowSurfaceBehavior.Refresh(view).
 ```
 
-⚙ **Add `VeloxDev.Core.Extension` to save or load a graph.** `VeloxDev.Core` alone has no serializer.
+⚙ **No extra package is needed to save or load a graph.** `Serialize` / `Deserialize` / `TryDeserialize` are extension methods in `VeloxDev.Serialization` inside `VeloxDev.Core`; `VeloxDev.Core.Extension` is the agent surface, not the serializer.
 
 ⚙ **The world is closed.** A type takes part in the document when the generator compiled a writer for it: a
 workflow component, a type carrying `[VeloxProperty]` / `[VeloxCommand]` / `[Archivable]`, or a type
@@ -264,8 +338,8 @@ collapse again when read.
 constructor's default does not survive.
 
 ⚙ **The saved viewport comes back by itself.** The surface restores `Layout.ViewportOffset` when the tree is
-handed to it, so a load path scrolls nothing itself — see `WorkflowSystem/extension.md` §3.9-10. What the host
-still owes is the two lines above (`UpdateCommand` + `Refresh`, and the binding that delivers the tree).
+handed to it, so a load path scrolls nothing itself — the adapter persists `Layout.ViewportOffset` with `ViewportOffsetFromScroll` and restores it with `ViewportRestoreScroll`/`HasViewportRestore`. What the host
+still owes is `Layout.UpdateCommand`, the binding that delivers the tree, and `Refresh` on a pull-driven adapter.
 
 ## Pitfalls
 

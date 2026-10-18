@@ -50,6 +50,12 @@ So: put your controls on the design-size card as usual. The browser scales them.
 
 ⚙ If you write your own zoom, take the pivot from `Math.Max(0, scroll)` — the effective scroll is `DOM scrollLeft − edgeX`, and a negative value feeds `WorldAtViewportCenter` nonsense.
 
+## Connection preview and scroll
+
+⚙ **`WorkflowSlotConnectionBehavior.OnSlotConnectionMove` (`[JSInvokable]`) reports the candidate receiver.** JS knows only the press and release targets, so the drag path is completed geometrically: `Tree.StandardSetPreviewReceiver(SlotHitTestEx.HitTest(Tree, worldX, worldY))`. The stage is read back from the virtual link in the normal way.
+
+⚙ **Plain wheel scrolling goes through `WorkflowInput.Scroller`,** which the surface component registers while attached. The JS wheel listener hands the deltas to .NET; the surface routes them and, when no subscriber refused, scrolls through its `SurfaceScroller` instead of letting the DOM scroll the canvas.
+
 ## Item templates — `VeloxDev.Razor.Templates`
 
 **Generates a `.razor` + `.razor.cs` pair for all seven items** — not just the four markup-style ones. Fourteen files.
@@ -68,6 +74,6 @@ private string BackgroundCss => Background ?? ToCss("TemplateNodeBackground");
 
 So on this GUI a colour can be set at generation time *or* at render time, which the other packs cannot do.
 
-⚙ **There is no decorator with a `RulerBand` to ask.** Pass the ruler thickness to the virtualize inset explicitly, as the generated tree does.
+⚙ **There is no decorator with a `RulerBand` to ask.** The surface passes its `RulerThickness` parameter straight into `Tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness)`, so nodes under the ruler are not culled.
 
 ⚙ **The generic node's input slot does not wrap `WorkflowSlotConnectionBehavior`** — `SlotView` already wraps itself, and wrapping twice doubles both the anchor measurement and the gesture. The demo carries the same comment.

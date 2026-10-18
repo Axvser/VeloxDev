@@ -316,4 +316,4 @@
 ## 五、死扩展点与已失效的钩子
 
 - **`StateSnapshotCore.CoreRecordState()`（`State/StateSnapshot.cs:109`，实现于 `Effects/Transition.cs:331`）没有任何调用者**：`Src/`、`Examples/` 里搜不到。覆写它不会产生任何效果。
-- **`TransitionSchedulerCore.RemoveMutualScheduler` 已于 2026-10-18 删除**（`Src/` 内零调用者）。判断「还在跑」仍要读**数组长度**，不要读 `TryGetMutualScheduler` 的 bool：互斥 scheduler 每 target 缓存一生，`true` 只说明「这个 target 跑过互斥动画」（`Effects/Transition.cs:231-257`、`Examples/Transition/Avalonia/Demo/Views/MainWindow.axaml.cs:733-740`）。
+- **`TransitionSchedulerCore` 没有 `RemoveMutualScheduler`。** 判断「还在跑」要读**数组长度**，不要读 `TryGetMutualScheduler` 的 bool：互斥 scheduler 每 target 缓存一生，`true` 只说明「这个 target 跑过互斥动画」（`Effects/Transition.cs:231-257`、`Examples/Transition/Avalonia/Demo/Views/MainWindow.axaml.cs:733-740`）。并发那一侧的可移除入口是 `RemoveNoMutualScheduler`（`Runtime/TransitionScheduler.cs:277`）。

@@ -1,6 +1,8 @@
 # Jalium
 
-`VeloxDev.Jalium` · targets `net10.0` on `Jalium.UI.Controls` · **platform-neutral** (Windows, Linux and Android)
+`VeloxDev.Jalium` · single target `net10.0` on `Jalium.UI.Controls` **26.10.8** · **platform-neutral** (Windows, Linux and Android)
+
+⚙ **The floor is `Jalium.UI.Controls` `26.10.8`, the lowest platform-neutral package.** The in-repo Jalium demos target `net10.0-windows` and add `Jalium.UI.Desktop` `26.10.9` (the Windows desktop entry package — app host, windowing and `Jalium.UI.Build` trim props); that is a demo dependency, not a requirement of the adapter. A consumer that hosts on desktop may take `Jalium.UI.Desktop`; a cross-platform host takes `Jalium.UI.Controls`.
 
 ⚙ **Reference implementation:** `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/` — a `.jalxaml` + `.jalxaml.cs` pair for each of tree, node, slot and link, plus a single `.cs` for `GridDecorator`, `MinimapOverlay` and `TemplateSelector`. `InfoOverlay.*` beside them is the demo's debug HUD, not part of any pack.
 
@@ -36,7 +38,7 @@ As of the 2026-10-05 refactor this platform is **markup-driven with attached beh
 | `LinkMenuKey` | resource key of the link context menu (below) |
 | `CanvasTransform` | set **by** the behavior — the world transform the templates bind (below) |
 
-The tree is the host's `DataContext`, and `WorkflowSurfaceBehavior` itself is a `static class` — nothing derives from it. The pool looks its selector up under the fixed resource key `WorkflowTemplateSelector` (`WorkflowSurfaceBehavior.cs:43,683`).
+The tree is the host's `DataContext`, and `WorkflowSurfaceBehavior` itself is a `static class` — nothing derives from it. The pool looks its selector up under the fixed resource key `WorkflowTemplateSelector` (`WorkflowSurfaceBehavior.cs:44,757`).
 
 ## The canvas transform, and why Jalium spells it differently
 
@@ -69,11 +71,15 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 
 ## Zoom and pan
 
-⚙ The gesture is `PreviewMouseWheel` on the named scroll viewer, gated on `Keyboard.Modifiers == Control` (`WorkflowSurfaceBehavior.cs:536-560`). **`ZoomEnabled="True"` is the whole switch — the host window writes no zoom code.** Without Ctrl the wheel scrolls normally and is forwarded to Core as pointer input.
+⚙ The gesture is `PreviewMouseWheel` on the named scroll viewer, gated on `Keyboard.Modifiers == Control` (`OnZoomPreviewMouseWheel` in `WorkflowSurfaceBehavior.cs`). **`ZoomEnabled="True"` is the whole switch — the host window writes no zoom code.** Without Ctrl the wheel scrolls normally and is forwarded to Core as pointer input.
 
 ⚙ Zoom-in is `Scale *= 1 / 1.1`: `Scale` is a collapse factor, so zooming in *decreases* it. The behavior pins the world point under the viewport centre, commits the new scale and offsets, and re-virtualizes itself (`NotifyZoomCommitted`) — that call is the behavior's own, not something a host calls.
 
 ⚙ Panning begins on a left-press reaching the `PointerPressSourceName` element in the preview phase; a press that lands on a card or a port is excluded, so dragging a node moves the node, not the camera.
+
+⚙ **A plain wheel is routed and then applied by the behavior.** `OnMouseMove` is not involved; the wheel handler routes `PointerWheelChanged`, and only when nobody set `PreventDefault` does the behavior call its registered `IWorkflowSurfaceScroller` (`WorkflowInput.Scroller`). Ctrl+wheel is the zoom gesture.
+
+⚙ **`OnMouseMove` feeds the connection candidate** with `StandardSetPreviewReceiver(SlotHitTestEx.HitTest(tree, world.X, world.Y))` while `VirtualLink.IsVisible`, and skips hover routing for that move.
 
 ## Links
 
@@ -83,7 +89,7 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 
 ## The link context menu
 
-⚙ The menu is **a resource plus a key**, not an override. Declare `<ContextMenu x:Key="LinkContextMenu">` in the tree's resources and point `WorkflowSurfaceBehavior.LinkMenuKey` at it; the behavior opens it on a right-press on a link and sets the menu's `DataContext` to that link (`WorkflowSurfaceBehavior.cs:1238,1248`), so each entry is `Command="{Binding DeleteCommand}"` or your own. There is **no `OnBuildLinkMenu` to override and no Delete item added for you** — the template ships the resource empty and the demo adds one entry. Add or remove `<MenuItem>`s there.
+⚙ The menu is **a resource plus a key**, not an override. Declare `<ContextMenu x:Key="LinkContextMenu">` in the tree's resources and point `WorkflowSurfaceBehavior.LinkMenuKey` at it; the behavior opens it on a right-press on a link and sets the menu's `DataContext` to that link (`WorkflowSurfaceBehavior.cs`, the link-menu handler), so each entry is `Command="{Binding DeleteCommand}"` or your own. There is **no `OnBuildLinkMenu` to override and no Delete item added for you** — the template ships the resource empty and the demo adds one entry. Add or remove `<MenuItem>`s there.
 
 ## Item templates — `VeloxDev.Jalium.Templates`
 

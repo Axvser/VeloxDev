@@ -25,7 +25,9 @@ The adapter package brings `VeloxDev.Core` in transitively, so that one referenc
 
 If the project's GUI is **not** in that table, stop and read [references/adapter.md](references/adapter.md) before writing any animation code.
 
-One `using` covers everything: `using VeloxDev.TransitionSystem;` — every adapter exposes the same namespaces, so the same animation code compiles on all of them.
+`using VeloxDev.TransitionSystem;` covers the everyday API — `Transition<T>`, `TransitionEffect`, `Eases`, `TransitionEffects`, `PathIndex`, the event args and the path exceptions. The support types live one namespace down: `using VeloxDev.TransitionSystem.Abstractions;` is needed when you name `TransitionProperty` (`ReadableMembers` / `Members`), `InterpolatorCore`, or a scheduler / interpreter / host base. Every adapter exposes the same `VeloxDev.TransitionSystem` surface. Six of the seven also declare the generic `Property<TValue>` overload; **Razor is the exception** — it offers only typed overloads (`int`, `string?`, `double`, `float`, `decimal`, the `System.Drawing` structs and the `System.Numerics` types), so generic `Property` code does not compile there unchanged.
+
+Typed `Property` overloads are per adapter otherwise. Jalium's are generic `TValue`, `Point`, `Rect`, `Thickness`, `CornerRadius`, `Size`, `Color`, `Brush`, `Transform`, `Transform3D`, `int`, `double` and `float` — notably **no `decimal`** (Core registers no decimal sampler either).
 
 ## The canonical layout
 
@@ -51,7 +53,7 @@ private static readonly Transition<Rectangle> Shift =
 
 ⚙ **The opening brace follows the initializer's shape.** For a multi-member initializer the repo writes `new TransitionEffect()` and puts `{` on the **next** line, members one per line, closing with `});` — as above. For a one- or two-member initializer written on a single line, the brace stays on that line: `.Effect(new TransitionEffect { Duration = …, Ease = … })`. What you should not do is start the brace on the same line and then continue for several lines — that form appears nowhere in the repository.
 
-⚙ The declaration ends at `Create()...Effect(...)`. `Execute` is a separate statement, at the place where the animation is actually wanted.
+⚙ The declaration ends at `Create()...Effect(...)`. `Execute` is the terminal call: a separate statement for a reused declaration, and it may be chained at the end of a one-shot declaration (as below). It is never part of the cached declaration itself.
 
 ## Static declaration, reused
 
@@ -75,11 +77,11 @@ Fade.Execute(rect);
 
 ⚙ `Execute(target)` is the only step with a side effect, and it returns immediately (the pipeline is `async void`). To know a run finished, read the target's real value, or sequence on it with `AwaitThen`.
 
-⚙ **Mutual by default.** `Execute(target)` supersedes whatever is already running on that target. `Execute(target, CanMutualTask: false)` runs alongside instead.
+⚙ **Mutual by default.** `Execute(target)` supersedes the target's running mutual animation. `Execute(target, CanMutualTask: false)` runs alongside instead (concurrent runs are tracked separately and are not cancelled by a later mutual `Execute`).
 
 ⚙ **Never cache a declaration that reads a local.** A captured local becomes part of the path's identity and is shared by every later `Execute` — the second call would silently animate the first call's value. Locals belong in the create-and-discard form below.
 
-⚙ `Execute(target, timeline)` anchors several animations to one `ITimeSourceControl` when they must share one transport (pause / rate / seek act on it as a unit). The parameter is positional — it is named `timeline`, not `source`. The default implementation is `TimeSourceCore` (`VeloxDev.Timing`), and `TimerCore.CreateTimeSource<ITimeSourceControl>()` is what resolves it — a platform can register its own there. A tick channel's own source comes from `TickManager.Bus(channel)`, which is how an animation shares the frame loop's clock: one `Pause` then stops the frames and the animation together.
+⚙ `Execute(target, timeline)` anchors several animations to one `ITimeSourceControl` when they must share one transport (pause / rate / seek act on it as a unit). The parameter is positional — it is named `timeline`, not `source`. The default implementation is `TimeSourceCore` (`VeloxDev.Timing`), and `TimerCore.CreateTimeSource<ITimeSourceControl>()` is what resolves it — a platform can register its own there. A tick channel's own source comes from `TickManager.Bus(channel)` (null until that channel has started), which is how an animation shares the frame loop's clock: one `Pause` then stops the frames and the animation together.
 
 ## Created on the spot, discarded
 
@@ -146,7 +148,7 @@ private sealed class RampTarget
 
 ### Index caveats
 
-⚙ **Out of range is silent.** A read that does not resolve skips that property for the frame; a write that does not resolve does nothing. Nothing throws, and nothing is logged — if an animation appears to do nothing, suspect the index before anything else.
+⚙ **Out of range is silent at frame time.** The compiled accessor maps `IndexOutOfRangeException` / `ArgumentOutOfRangeException` / `KeyNotFoundException` to a miss: a write that does not resolve does nothing, and a read that does not resolve skips the property. Nothing throws. A miss seen while `Prepare` reads the start value is reported once through the effect's `Warn` as `WarnStage.Unreadable`; per-frame misses are not reported. If an animation appears to do nothing, suspect the index before anything else.
 
 ⚙ A get-only indexer as the **last** segment cannot be written to, exactly like a read-only property. The same indexer used as a **step** on the way to a writable member is fine.
 
@@ -159,7 +161,7 @@ private sealed class RampTarget
 {
     Duration = TimeSpan.FromSeconds(2),   // how long one segment runs
     IsAutoReverse = true,                 // run back to the start when it reaches the end
-    LoopTime = 2,                         // repeat the whole thing; int.MaxValue = forever
+    LoopTime = 2,                         // repeat this segment's pass; int.MaxValue = forever
     FPS = 60,                             // a maximum sample rate, not a frame grid
     Ease = Eases.Cubic.Out,               // the easing curve
 })
@@ -170,6 +172,10 @@ private sealed class RampTarget
 ⚙ **Easing is not clamped.** `Back` and `Elastic` are meant to leave `[0,1]` and overshoot the end value. What an overshoot *means* is currently per-sampler and **not yet unified**: numeric samplers extrapolate past the endpoint, while the remaining ones pin to it. Do not read a type's overshoot behaviour as a designed contract — unifying the two is an open pass on the library.
 
 ⚙ Adapters also ship ready-made effects: `TransitionEffects.Empty` is a zero-duration one for "land here now", and `TransitionEffects.Theme` is the duration the theme switch uses. `TransitionEffects.Hover` is declared too, but nothing in the repository consumes it — treat it as a starting point rather than a convention to follow.
+
+⚙ **The event args carry position, not an outcome triple.** The seven lifecycle events (`Awaked`, `Start`, `Update`, `LateUpdate`, `Canceled`, `Completed`, `Finally`) are `EventHandler<TransitionEventArgs>`. `TransitionEventArgs` has `Loop` (`int`, the pass of the running segment, `0` on its first) and `Cycle` (`long`, the run-wide pass count), plus `Handled` / `DeltaTime` / `TotalTime` inherited from `TimeLineEventArgs`; setting `Handled = true` ends the run.
+
+⚙ The two diagnostic events are typed: `Warn` is `EventHandler<TransitionEventArgs<WarnStage, string>>` and `Error` is `EventHandler<TransitionEventArgs<ErrorStage, Exception>>`; each argument exposes `Stage` and `Value`. There is no `Stage` / `Message` / `Exception` triple. `WarnStage` is `Unreadable` / `Unsampled` / `Dropped`; `ErrorStage` names the failed step — `Sampling`, `Run`, `Marshaling`, `Awake`, `Prepare`, then `Start` / `Update` / `LateUpdate` / `Completed` / `Canceled` / `Finally` when a subscriber of that event threw. Each stage is reported at most once per run.
 
 ## Segments
 
@@ -221,7 +227,7 @@ private static readonly Transition<LinkView> Flow =
 
 ⚙ **A declaration whose endpoints come from the caller is built per caller, not cached.** Two of the phase endpoints above are the link's own colours, so the declaration is built once per view (or per component) and rebuilt when that colour changes — the rule below about locals applies to it: a `static readonly` declaration reading a local shares it with every later execution.
 
-⚙ **When the platform needs a frame hook, attach it with the setter overload.** WPF does not repaint from a gradient-stop write, so a port there ends each segment with `.Effect(e => { e.Duration = …; e.Ease = …; e.LateUpdate += (_, _) => InvalidateVisual(); })` — `Update` runs *before* the frame is applied and `LateUpdate` after, and a replay fires them per cycle like any other pass. An instance handler is safe exactly because the declaration is per view; on a `static readonly` one it would keep the view alive.
+⚙ **When the platform needs a frame hook, attach it with the setter overload.** A renderer that keeps retained drawing — WPF, or Blazor's component tree — only sees the change when told, so such a view can end each segment with `.Effect(e => { e.Duration = …; e.Ease = …; e.LateUpdate += (_, _) => InvalidateVisual(); })` (for Blazor: `InvokeAsync(StateHasChanged)`). `Update` runs *before* the frame is applied and `LateUpdate` after, and a replay fires them per cycle like any other pass. An instance handler is safe exactly because the declaration is per view; on a `static readonly` one it would keep the view alive. Prefer the platform's own change notification where one exists — a WPF dependency property registered with `AffectsRender`, or a `PropertyMetadata` callback into `InvalidateVisual`, needs no per-frame handler.
 
 ## Controlling a running animation
 
@@ -237,11 +243,14 @@ Transition.Exit(target, IncludeMutual: true, IncludeNoMutual: true);
 var at = Transition.Position(target);
 var pass = Transition.Cycle(target);
 var paused = Transition.IsPaused(target);
+var rate = Transition.Rate(target);
 ```
 
 ⚙ `Exit` **freezes in place** — it does not jump to the end. Writing the declared start back is a separate step, and it is the caller's job.
 
-⚙ `IncludeMutual` / `IncludeNoMutual` select which animations the call reaches: mutual ones (started with the default `Execute`) and concurrent ones (started with `CanMutualTask: false`). Pass both unless you have a reason not to.
+⚙ `IncludeMutual` / `IncludeNoMutual` select which animations the call reaches: mutual ones (started with the default `Execute`) and concurrent ones (started with `CanMutualTask: false`). Pass both unless you have a reason not to. The defaults are `IncludeMutual: true`, `IncludeNoMutual: false`, so a bare `Transition.Pause(target)` leaves concurrent runs alone.
+
+⚙ The schedulers under a target are also readable directly (`using VeloxDev.TransitionSystem.Abstractions;`): `TransitionSchedulerCore.TryGetMutualScheduler(target, out var mutual)` and `TryGetNoMutualScheduler(target, out var schedulers)` exist, and `RemoveNoMutualScheduler(target)` stops and removes the concurrent ones. Read the returned array's **length** to count live concurrent runs — the table entry itself outlives them. There is no `RemoveMutualScheduler`: the mutual scheduler is cached for the target's lifetime.
 
 ⚙ Pause keeps the position frozen and costs no timer wake-ups; rate changes take effect without a jump; time only moves forwards (there is no reverse playback, and a negative rate is rejected rather than clamped).
 
@@ -291,3 +300,5 @@ Full contract, per class, including the traps that differ between the seven ship
 ⚙ Both of those are `internal` to the demo project — read them for the shape, do not reference them.
 
 ⚙ `Examples/Transition/AUTO TEST/AGENTS.md` — how the acceptance suite is run and extended.
+
+⚙ The engine contract is pinned by `Src/Core/VeloxDev.Core.Test/TransitionSystem/` and `.../Timing/`: 287 test cases with `dotnet test Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj --filter "FullyQualifiedName~TransitionSystem|FullyQualifiedName~Timing"`.

@@ -8,11 +8,11 @@ Open your GUI's reference alongside this one — `gui/<gui>.md` carries that fra
 
 | Role | Class | Job |
 |---|---|---|
-| Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu |
+| Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu, and registers `WorkflowInput.Scroller` |
 | Canvas transform | `WorkflowCanvasTransformBehavior` — **Jalium spells it `WorkflowSurfaceBehavior.CanvasTransform`**; MAUI has no carrier (see below) | owns the pan offset your node and link views bind to |
 | View pool | `ViewPool` / `ViewManager` | object-pooled views over the visible-items collection |
 | Node drag | `WorkflowNodeDragBehavior` | a drag on a node executes `MoveCommand` |
-| Slot connection | `WorkflowSlotConnectionBehavior` | press one slot, release on another, connect them |
+| Slot connection | `WorkflowSlotConnectionBehavior` | press one slot, release on another, connect them; on the frameworks without a surface pointer-move hook it also reports the candidate receiver |
 | Slot layout | `WorkflowSlotLayoutBehavior` | measures each port and writes its anchor back |
 | Grid decorator / minimap | `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | grid, ruler and thumbnail |
 
@@ -116,9 +116,34 @@ h.Input.PointerExited  += (_, _) => { _lit = false; InvalidateVisual(); };
 
 ⚙ **The curve is runtime geometry — never serialize it.** It belongs to the view, not to the model.
 
+### Painting the connection preview
+
+While a connection drag is in progress, the tree's `VirtualLink` is the rubber band, and it carries the drag's stage as an optional capability:
+
+```csharp
+if (DataContext is IConnectionPreviewLink link)
+{
+    var pen = link.Preview switch
+    {
+        ConnectionPreviewState.ValidTarget   => validPen,
+        ConnectionPreviewState.InvalidTarget => invalidPen,
+        _                                    => startedPen,   // None / Started
+    };
+    // draw the same cubic Bézier, with that pen
+}
+```
+
+⚙ **The view paints a stage; it does not decide the connection.** `Preview` is `None`, `Started` (sender fixed, pointer over no candidate), `ValidTarget` or `InvalidTarget`. `WorkflowInput` writes it through `IConnectionPreviewLink.SetPreview`; a link view subscribes the link's `INotifyPropertyChanged` for `Preview` (what the demos do) or `WorkflowInput.PreviewChanged`, which carries the same snapshot.
+
+⚙ **An invalid candidate is still a candidate.** `WorkflowInput.PreviewReceiver` stays set and `PreviewCheck` explains why it is red (`SenderCannotSend`, `ReceiverCannotSend`, `SameNode`, `RejectedByRule`, `RejectedByHost`). Do not clear your highlight when the check fails.
+
+⚙ **A host can only tighten the preview.** Subscribers of `WorkflowInput.PreviewValidating` see candidates the framework already accepts and may call `e.Reject(message)`; that paints this candidate red for this drag and changes nothing at release time. The release-time `IWorkflowTreeEvents.Connecting` veto and `ValidateConnection` remain the verdict.
+
+⚙ **The candidate is found by geometry, not hit-testing.** The rubber band covers the surface, so `SlotHitTestEx.HitTest(tree, x, y)` compares against measured slot anchors (radius 12 by default, `NaN` anchors skipped). The adapter does this for you on every pointer move; do not add a visual-tree hit test of your own.
+
 ### The link context menu
 
-Right-pressing a link shows the menu the surface declares: the adapter resolves the link, and (unless a subscriber on the link itself set `Handle.PreventDefault`) pops the resource named by `WorkflowSurfaceBehavior.LinkMenuKey`. Adding an entry is markup, not code.
+Right-pressing a link shows the menu the surface declares: the adapter resolves the link, and (unless a subscriber on the link itself set `Handle.PreventDefault`) pops the resource named by `WorkflowSurfaceBehavior.LinkMenuKey`. Adding an entry is one declaration in your markup — or one line in WinForms' `OnBuildLinkMenu` override — not gesture code.
 
 | GUI | How the menu is declared |
 |---|---|
@@ -130,13 +155,34 @@ Right-pressing a link shows the menu the surface declares: the adapter resolves 
 
 ⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms adds or removes items in the `OnBuildLinkMenu` override; Jalium declares them in the menu resource, exactly like the other markup platforms.
 
+⚙ **The generated menus are empty, and WinForms' base override adds nothing.** The packs declare the resource/fragment/override and wire it, but every entry is yours — including Delete. That is deliberate: the library supplies the event and the timing, the host decides the actions.
+
 ⚙ **The surface owns the open/closed bookkeeping.** It sets `WorkflowInput.IsSuspended` while its menu is up, so the pointer travelling onto the menu cannot clear the link the menu acts on, and releases it on close. When the link an open menu was about leaves the tree (Delete, Undo, an agent edit) the tree reports it through `GetHelper().LinkRemoved` — close your popup when it names yours. **There is no menu event in Core any more; the surface opens it off the routed right-press.**
 
 ⚙ **To refuse a menu, veto the press on the link itself.** Subscribe that link's `Input.PointerPressed` and set `e.Handle.PreventDefault = true`; the surface's own handler runs later (the route reaches the target before its ancestors) and skips the popup. Ordering is fixed by construction, so a refusal cannot race the popup.
 
 ⚙ **The same veto covers the framework's own four gestures.** Subscribe the tree's or the component's `Input.PointerPressed` and set `e.Handle.PreventDefault = true`, and that one gesture does not start — canvas pan, node drag, slot connection, and Ctrl+wheel zoom (`PointerWheel`) each read the handle before they act. That is the whole of "Shift-drag on empty canvas draws my own selection rectangle": refuse the press when `e.Target is null` and the modifiers say Shift, and the canvas stays still under your own handler. The gestures do not tell you which one you just refused — you refuse the press, and whatever would have started is what stands down. Blazor is the one place the refusal costs a round trip, because the gesture runs in JS and the route in .NET: the gesture starts one SignalR message later, and the move deltas are not lost.
 
-⚙ **A plain wheel is not one of those gestures — it is a report.** Every adapter routes a non-Ctrl wheel to the same subscription, but **none** reads its verdict: the framework has no action of its own to skip, and the platform's scrolling is not yours to refuse. Ctrl+wheel zoom is the only wheel gesture on that list, and it is the only wheel whose refusal does anything. The same distinction decides keys: a routed `KeyDown`/`KeyUp` reaches your subscription, but the surface only keeps the key from travelling further when it is the key the surface itself acts on (`Delete`) — the keys the scroll container uses (arrows, PageDown, Space) were never the surface's to swallow.
+### Wheel and scrolling
+
+⚙ **A plain wheel is the adapter's gesture, and it reads your verdict.** Every adapter routes a non-Ctrl wheel through `PointerWheelChanged` and then applies the platform's default scroll itself — the platform's scroll container never scrolls the workflow surface. Set `e.Handle.PreventDefault` on that event to take the notch over: the adapter then does not scroll, and you scroll through `WorkflowInput.For(tree).Scroller?.ScrollBy(deltaX, deltaY)`.
+
+```csharp
+var input = WorkflowInput.For(tree);
+var relay = ((IInputEvents)tree.GetHelper()).Input;
+relay.PointerWheelChanged += (_, e) =>
+{
+    if ((e.Modifiers & InputModifiers.Shift) == 0) return;
+    e.Handle.PreventDefault = true;          // this wheel does not scroll
+    input.Scroller?.ScrollBy(e.DeltaY, 0d);  // …it scrolls sideways instead
+};
+```
+
+⚙ **`Scroller` is a capability, not route state.** The attached surface registers an `IWorkflowSurfaceScroller` when it binds to a tree and clears it on detach, so a host reads it as nullable. The deltas are **wheel deltas** — the same values as `PointerWheelEventArgs.DeltaX` / `DeltaY`, not scroll offsets: positive X is towards the content on the right, positive Y is away from the user. The adapter converts them to its platform's step (a WPF line count, a DOM scroll, a translated canvas), clamps to the reachable range, and leaves an axis alone when its delta is zero. That is the whole point — one subscriber looks the same on all seven.
+
+⚙ **Ctrl+wheel is the zoom gesture, not a scroll.** It is routed first, so `PreventDefault` on `PointerWheelChanged` suppresses the zoom as well; without Ctrl the wheel never zooms.
+
+⚙ **Keys are a different contract.** A routed `KeyDown`/`KeyUp` reaches your subscription, but the surface only keeps the key from travelling further when it is the key the surface itself acts on (`Delete`) — the keys the scroll container uses (arrows, PageDown, Space) were never the surface's to swallow.
 
 ### Which way the data goes
 
@@ -184,7 +230,7 @@ The adapters fall into two camps, and which one you are in decides whether you m
 
 ## Checking your views
 
-⚙ Generate, build, run — then **drag a node, make a connection, and zoom until the pointer stays under what you grabbed.** Those three exercise the surface, the drag behaviour, the connection protocol, the slot measurement and the zoom chain.
+⚙ Generate, build, run — then **drag a node, make a connection, and zoom until the pointer stays under what you grabbed.** Those three exercise the surface, the drag behaviour, the connection protocol, the slot measurement and the zoom chain. While the connection drag is live, watch the candidate slot and the rubber band: the slot's `PreviewReceiver` state and the link's `Preview` stage must follow the pointer, and an invalid candidate must be red rather than unmarked.
 
 ⚙ **Zoom to about 40% and look at the links.** Almost every view-layer problem — links that vanish, links that detach from their port, a camera that drifts — is invisible at 100%.
 

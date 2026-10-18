@@ -1,6 +1,6 @@
 ﻿# The tool surface
 
-70 built-in tools, grouped by the flags of `WorkflowToolCategory` — up to **72** once the four interaction tools register, which takes the matching handler configured. The mode no longer decides whether they exist: asking, and the Agent's own move into and out of Plan, are all `Interact`, allowed in every mode, because a mode that removed the asking tools would leave the Agent able only to refuse. Names are the C# method names and are passed to the model verbatim.
+**66 built-in tools** in the unconditional groups of `WorkflowToolCategory` (`Layout` and `Composite` are reserved and empty, and the `Execution` / `Command` gates are checked inside each tool body rather than by withholding the tool). On top of them: `ResetToolCallLimit`, always; `RequestSelection` / `RequestConfirmation`, each when its handler exists; `EnterPlanMode` / `ExitPlanMode`, both when a confirmation handler exists. With both handlers configured that is **71**. The mode no longer decides whether they exist: asking, and the Agent's own move into and out of Plan, are all `Interact`, allowed in every mode, because a mode that removed the asking tools would leave the Agent able only to refuse. Names are the C# method names and are passed to the model verbatim.
 
 `ResetToolCallLimit` is registered in every configuration, whatever the categories — it is the only way out of a spent budget, so it must not disappear exactly when it is needed. It is not a `Query` or `Mutation` member; it asks the user through the confirmation handler and reopens the tree's budget on agreement.
 
@@ -24,7 +24,7 @@
 | `GetTypeSchema(fullTypeName)` | a .NET type as a JSON schema — properties, types, current values |
 | `GetComponentContext(fullTypeName, language)` | the runtime `[AgentContext]` documentation for a type |
 | `ListComponentCommands(nodeIndex)` | command names and parameter types |
-| `ListCreatableTypes` | concrete node and slot types discovered by the auto-discovery registrations |
+| `ListCreatableTypes` | concrete node and slot types the compiled context tree carries (framework and customer roots) that have a public parameterless constructor |
 | `ValidateWorkflow` | warnings for zero-size nodes, isolated nodes, slot-less nodes and duplicate links |
 | `CompileWorkflow(startNodeIndex)` | the Root-role plan: segments, branches, `Order` / `ChainIndex` / `Offset` |
 | `CompileNodeResult(nodeIndex)` | the Terminal-role reverse compile of that node's ancestor cone |
@@ -48,6 +48,8 @@ A category of its own with exactly one member — its flag is neither `Query` no
 ## State
 
 `TakeSnapshot` (R), `GetChangesSinceSnapshot` (R), `MarkDirty` (M) — the only writing member.
+
+⚙ `WorkflowStateTracker` builds its snapshots and diffs with `VeloxJsonObject` / `VeloxJsonFormat` from `VeloxDev.Serialization` — not Newtonsoft `JObject`. Its `TakeSnapshot` / `GetChangesSinceLastSnapshot` return indented JSON.
 
 ## Mutation — all undoable unless marked
 
@@ -73,9 +75,9 @@ A category of its own with exactly one member — its flag is neither `Query` no
 
 ⚙ **`PatchNodeProperties` refuses `[SlotSelectors]` properties** with an explicit pointer at `SetEnumSlotCollection`.
 
-## Execution — gated by `WithAllowNodeExecution(true)`
+## Execution — eight gated by `WithAllowNodeExecution(true)`, four handle operations not gated
 
-Each of these re-checks the policy at call time and returns `disabled by host policy` when it is off.
+The eight that start or drive node code re-check the policy at call time and return `disabled by host policy` when it is off. The four handle operations act on a handle an earlier `StartCompiledWorkflow` / `ContinueCompiledWorkflow` produced and do **not** consult the gate.
 
 | Tool | Effect |
 |---|---|
@@ -86,15 +88,15 @@ Each of these re-checks the policy at call time and returns `disabled by host po
 | `GetNodeResult(nodeIndex, seed?)` | result-level: compile the ancestor cone as `Terminal` and return that node's output |
 | `StartCompiledWorkflow(startNodeIndex, seed?)` | the same chain-level path as `RunCompiledWorkflow`, but **returns a handle at once** while the run keeps going |
 | `ContinueCompiledWorkflow(startNodeIndex, seed?)` | starts a run that carries on from the scope's checkpoint store instead of starting over |
-| `GetCompiledRunStatus(handle)` | a run's `isRunning` / `outcome` / `isPaused` / `failures` / log tail / `logFile`; reporting a finished run retires its handle |
-| `PauseCompiledRun(handle)` / `ResumeCompiledRun(handle)` | hold a run at its next node boundary, and release it |
-| `StopCompiledRun(handle)` | ends the run at the next boundary with `outcome = Cancelled`, leaving its checkpoint behind for `ContinueCompiledWorkflow` |
+| `GetCompiledRunStatus(handle)` | a run's `isRunning` / `outcome` / `isPaused` / `failures` / log tail / `logFile`; reporting a finished run retires its handle. **Not gated.** |
+| `PauseCompiledRun(handle)` / `ResumeCompiledRun(handle)` | hold a run at its next node boundary, and release it. **Not gated.** |
+| `StopCompiledRun(handle)` | ends the run at the next boundary with `outcome = Cancelled`, leaving its checkpoint behind for `ContinueCompiledWorkflow`. **Not gated.** |
 
-⚙ **`GetNodeResult` reports `TargetReached` explicitly.** Read it — `Data` can hold the last driven node's value even when the requested target was never reached, because a router took a sibling branch. That is the reverse-compilation contract, not a failure to retry blindly.
+⚙ **`GetNodeResult` reports `targetReached` explicitly.** If a router on the cone selects a sibling branch, the target is not reached: the tool returns `status:"error"` naming it, with no data. Never treat another branch's payload as this node's result — point the router at the branch that leads to the node, then retry.
 
 ⚙ `ExecuteNode` **blocks until the node completes**, unlike the GUI's fire-and-forget `ReceiveCommand`.
 
-⚙ **`RunCompiledWorkflow` also waits for the whole run to end**, which is why the handle form exists: use `StartCompiledWorkflow` when the run may be long or need holding, poll `GetCompiledRunStatus` for its outcome, and drive it with the pause / resume / stop tools. `GetCompiledRunStatus` is a pure query but only resolves a handle the start tools produced. `WithCheckpointStore` and `WithLogWriter` are the host's hooks behind `ContinueCompiledWorkflow` and `logFile`.
+⚙ **`RunCompiledWorkflow` also waits for the whole run to end**, which is why the handle form exists: use `StartCompiledWorkflow` when the run may be long or need holding, poll `GetCompiledRunStatus` for its outcome, and drive it with the pause / resume / stop tools. `GetCompiledRunStatus` starts no code and only resolves a handle the start tools produced, but it is classified `Execute` and counts against `MaxWriteToolCalls`. `WithCheckpointStore` and `WithLogWriter` are the host's hooks behind `ContinueCompiledWorkflow` and `logFile`.
 
 ## Command — gated by `WithAllowedGenericCommands(...)`
 
@@ -109,6 +111,8 @@ They exist as categories with zero members. Layout is done node by node through 
 ## Interaction — registered conditionally
 
 `RequestSelection` only when `WithSelectionHandler` was set; `RequestConfirmation` only when `WithConfirmationHandler` was set. Registering one requires the handler, because the tool is useless without something to ask.
+
+`EnterPlanMode` / `ExitPlanMode` are added outside the `Interaction` flag whenever a confirmation handler exists — both ask through it (`mode:plan` / `mode:build`) before moving the mode. `ResetToolCallLimit` is always registered and asks under `extend-tool-call-budget`.
 
 ## Adding your own tools
 
