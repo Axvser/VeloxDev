@@ -1494,20 +1494,23 @@ internal sealed class NodeEditorSurface : Canvas
         return null;
     }
 
-    private bool HitTestCard(Point pos)
+    private bool HitTestCard(Point pos) => HitTestNode(pos) is not null;
+
+    private IWorkflowNodeViewModel? HitTestNode(Point pos)
     {
-        if (_tree is null) return false;
+        if (_tree is null) return null;
+
         for (int n = _tree.Nodes.Count - 1; n >= 0; n--)
         {
             var node = _tree.Nodes[n];
             if (pos.X >= node.Anchor.Horizontal && pos.X <= node.Anchor.Horizontal + node.Size.Width
                 && pos.Y >= node.Anchor.Vertical && pos.Y <= node.Anchor.Vertical + node.Size.Height)
             {
-                return true;
+                return node;
             }
         }
 
-        return false;
+        return null;
     }
 
     // ── Mouse interaction ──────────────────────────────────────────────────
@@ -1534,6 +1537,22 @@ internal sealed class NodeEditorSurface : Canvas
 
         if (e.ChangedButton != PlatformInput.MouseButton.Left)
         {
+            return;
+        }
+
+        // Ctrl+left is the Agent-selection gesture. It never starts a drag/pan — the same veto the other
+        // six demos apply in VetoFrameworkGestures — and it toggles the node under the pointer, if any.
+        if (e.ChangedButton == PlatformInput.MouseButton.Left
+            && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            var ctrlPos = e.GetPosition(this);
+            var ctrlWorld = new Point(ctrlPos.X - OriginX, ctrlPos.Y - OriginY);
+            if (HitTestNode(ctrlWorld) is { } ctrlNode)
+            {
+                Demo.Workflow.AgentSelection.Toggle(ctrlNode);
+            }
+
+            e.Handled = true;
             return;
         }
 
