@@ -1987,13 +1987,21 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private int OverrideLengthFor(AgentPermissionMode mode)
         => _modePromptOverrides.TryGetValue(mode, out var body) ? (body?.Length ?? 0) : -1;
 
-    /// <summary>
-    /// The key a per-turn render is cached against: <see cref="Version"/> plus the current budget-usage
-    /// band. The band is the one fact that moves without a version bump — every tool call consumes one —
-    /// and it is part of what the envelope says, so folding it in is what lets the provider hand back a
-    /// single cached context while the model still hears about a budget that is filling up.
-    /// </summary>
-    internal long ContextKey => unchecked((Version << 3) | (uint)UsageBand());
+    // 每轮渲染的缓存键：Version、预算档位与当前树的选中集 revision。
+    // 档位与选中集都会在 Version 不变时移动 —— 选中集是宿主输入，不是 scope 配置。
+    // revision 刻意不进 Version：那会连带让 BuildDynamicTools 重建全部工具包装。
+    // 三段位不重叠（版本与 revision 各 24 位、档位 3 位），现实运行中不会碰撞。
+    internal long ContextKey
+    {
+        get
+        {
+            var version = Version & 0xFFFFFFL;
+            var revision = WorkflowAgentSelection.RevisionFor(Tree) & 0xFFFFFFL;
+            var band = (long)(UsageBand() & 0x7);
+
+            return unchecked((version << 32) | (revision << 8) | band);
+        }
+    }
 
     /// <summary>
     /// How close this run is to any of its call budgets, as 0–5: 0 while there is headroom, 4 once past 80%
@@ -2055,6 +2063,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             : "> The prompt above was a snapshot taken at startup. Below is how things stand **now**; where the two disagree, this section wins.");
         sb.AppendLine();
 
+        AppendAgentSelection(sb, language);
         AppendGates(sb, language);
         AppendToolSwitches(sb, language);
         AppendBudgets(sb, chinese);
@@ -2089,6 +2098,14 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         var text = sb.ToString();
         sb.Clear(); // Hand the buffer back empty; this instance is reused on the next render.
         return text;
+    }
+
+    private void AppendAgentSelection(StringBuilder sb, AgentLanguages language)
+    {
+        var rendered = WorkflowAgentSelection.Render(Tree, language);
+        if (rendered.Length == 0) return;
+
+        sb.Append(rendered);
     }
 
     private void AppendGates(StringBuilder sb, AgentLanguages language)

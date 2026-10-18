@@ -7,6 +7,7 @@ namespace Demo.Views
         public NodeView()
         {
             InitializeComponent();
+            AgentSelectionVisual.Attach(this);
         }
     }
 }

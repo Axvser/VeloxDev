@@ -10,5 +10,6 @@ public partial class NodeView : ContentView
     public NodeView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 }

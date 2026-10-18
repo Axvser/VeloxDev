@@ -9,6 +9,7 @@ public partial class ControllerView : ContentView
     public ControllerView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 
     protected override void OnSizeAllocated(double width, double height)

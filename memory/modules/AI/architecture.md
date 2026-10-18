@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core/AI/`（20 个 .cs）。**目录名 `AI`，命名空间是 `VeloxDev.AI`** —— 两者不同名，`grep VeloxDev.AI` 会连带命中消费方。
 > **这个模块已经一行反射都没有了**（2026-10-03 起）。五个助手全部读编译期目录 `AIContextTree`（见 §七），动作经每类型生成的 `IAIContextAccessor` 落地：`AgentContextReader` / `AgentTypeResolver` / `AgentCommandDiscoverer` / `AgentMethodInvoker` / `AgentPropertyAccessor`。三个标注特性**在 Core 里已经没有读取点**，只有生成器读它们。**下面 §一~§六 仍然成立**（讲的是可观察行为，那些基本都保住了），但凡涉及「怎么做的」的句子都以 §七 为准。
-> 消费方：`Src/Core/VeloxDev.Core.Extension/Agent/`（**55** 个 .cs，命名空间同样以 `VeloxDev.AI` 起头：`VeloxDev.AI.Pipelines`、`VeloxDev.AI.Workflow`、`VeloxDev.AI.MCP`、`VeloxDev.AI.Skills`、`VeloxDev.AI.SubAgents` 等）。**别把 `Agent/` 与整个 `VeloxDev.Core.Extension` 项目搞混**：整个项目是 59 个 .cs（2026-10 实测），`Agent/` 只是其中 55 个（其余 4 个是根目录的 `AgentEx.cs`、`CheckpointEx.cs`、`CompiledGraphEx.cs` 与 `Compat/NotNullWhenAttribute.cs`，与本模块无关）。**依赖方向单向：Extension → Core**。Core/AI 不引用 Extension 的任何东西，也不引用 `VeloxDev.WorkflowSystem` 的类型 —— 唯一一处提及是 `SlotSelectorsAttribute.cs:4` 的 XML 注释 `cref`（同程序集，所以能解析，但不是编译期依赖）。
+> 消费方：`Src/Core/VeloxDev.Core.Extension/Agent/`（**64** 个 .cs，命名空间同样以 `VeloxDev.AI` 起头：`VeloxDev.AI.Pipelines`、`VeloxDev.AI.Workflow`、`VeloxDev.AI.MCP`、`VeloxDev.AI.Skills`、`VeloxDev.AI.SubAgents` 等）。**别把 `Agent/` 与整个 `VeloxDev.Core.Extension` 项目搞混**：整个项目是 69 个源码 .cs（2026-10-18 实测，不含 `obj/`、`bin/`），`Agent/` 只是其中 64 个（其余 5 个是根目录的 `AgentEx.cs`、`CheckpointEx.cs`、`CompiledGraphEx.cs` 与 `Compat/IsExternalInit.cs`、`Compat/NotNullWhenAttribute.cs`，与本模块无关）。**依赖方向单向：Extension → Core**。Core/AI 不引用 Extension 的任何东西，也不引用 `VeloxDev.WorkflowSystem` 的类型 —— 唯一一处提及是 `SlotSelectorsAttribute.cs:4` 的 XML 注释 `cref`（同程序集，所以能解析，但不是编译期依赖）。
 > 平台差异：**本模块没有平台轴**。整个 `AI/` 只用两个 BCL using —— `System.Reflection`（`AgentContextReader.cs:1` 取 `MemberInfo` 的声明类型与名字，不是对元数据做遍历）与 `System.Globalization`（`AIContextConvert.cs:1`）；没有任何 GUI 依赖。所以本模块没有 `adapters/`。
 
 本文只写「读完 20 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
@@ -485,3 +485,33 @@ Agent 在一处列表里读到 `List<X>`，去问 X 是「不在目录里」。�
 所以它和提升字段一样按名字查不到 —— 这是容易只想到一半的地方。
 
 **歧义时答空**：`volume` 与 `_volume` 会提升成同一个名字，两个都命中就返回 null，不猜。
+
+## 八、Agent 节点选中：动态提示词，不是新工具（2026-10-18）
+
+`VeloxDev.Core.Extension` 新增 `Agent/Workflow/WorkflowAgentSelectionExtensions.cs`，把宿主选中的节点作为**每轮动态提示词**的一部分交给模型：
+
+- `node.SelectForAgent()` / `IReadOnlyCollection<IWorkflowNodeViewModel>.SelectForAgent()` **并入**该树的选中集（并集，重复不计）；`tree.ClearAgentSelection()` / `tree.GetAgentSelection()` 清空与读取。
+- `node.DeselectForAgent()` / `IReadOnlyCollection<IWorkflowNodeViewModel>.DeselectForAgent()` 只释放指定的节点，保留其余节点与顺序；未选中/未挂载的节点忽略，未命中任何快照时不推进 revision。
+- **返回值是 HashSet 风格且全程静默**：单节点注册/释放返回 `bool`（是否真的新增/移除）；集合注册/释放返回 `int`（实际新增/移除的个数）；内部异常返回 `-1`。null、未挂载、不在 `tree.Nodes`、没有稳定 `RuntimeId` 的节点直接跳过，不抛异常。`ClearAgentSelection` 返回释放数（null 树 / 空集为 0，内部异常 -1）。要“替换”选中集，先 `ClearAgentSelection` 再注册。
+- 存储是**每棵树一份**的 `ConditionalWeakTable<IWorkflowTreeViewModel, State>`（`WorkflowAgentSelection.cs`）。选中集在调用时取快照（稳定 `RuntimeId` + 类型名），渲染不读活模型，所以 agent 线程与 UI 线程不共享可变状态。
+- **移除靠反向表**：`ConditionalWeakTable<IWorkflowNodeViewModel, NodeOwner>`（值是树的 `WeakReference`）。`ConditionalWeakTable` 在 netstandard2.0 上**不可枚举**，所以不能遍历所有树；反向表让节点删除后 `Parent` 已为 null 时仍能找到那棵树。`Set` 负责同步旧/新节点的归属，`Remove` 只清归属未变的那一项。
+- **选中即订阅，删除/重父自动移除**：`Observe` 订阅节点的 `PropertyChanged`（`Parent`）、父树的 `Nodes.CollectionChanged`（Remove/Replace/Reset）与 helper 的 `IWorkflowNodeEvents.Deleted` 三条；`Unobserve` 在节点移出选中集时对称摘除。三条在标准删除路径上都会触发，`Remove` 幂等；`Nodes.Clear()` 的 Reset 与整条 `Nodes` 属性被替换都直接清空该树选中集。**订阅只观察工作流，不写模型**；`TreeObserver` 只持树的弱引用，避免「树 → 集合 → 观察者 → 树」。
+- `WorkflowAgentScope.ContextKey` 把选中集 revision 与 `Version`、`UsageBand` 分开打包（24/24/3 位）；selection 改 → 上下文重渲染，但 `Version` 不变 → `BuildDynamicTools` 不重建工具。**这是「不加工具」的机制保证**。
+- `RenderEnvelope` 在闸门之前调 `AppendAgentSelection`；标题 `## Current Node Selection` / `## 当前选中的节点`，最多列 64 个身份，计数仍是全量。
+- 渲染仍然只读快照，不回头读 `tree.Nodes`（避免在 agent 线程遍历 UI 集合）；删除、重父、从 `Nodes` 移除、集合清空/替换由上面的订阅在 UI 线程上驱动。
+- 守卫：`Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/WorkflowAgentSelectionTests.cs`（33 条：并集/去重/重复注册不计数/跨树分别注册/未挂载跳过/空集为 0/null 集合为 0/静默 -1/版本不变/工具不变/上下文重渲染/同集复用/语言/快照/截断/单删/多删保序/未选中不重渲染/删除后自释放/跨树移除/删除命令/父变更/父树更换/集合移除/集合清空/Deleted 事件/Nodes 集合替换）。
+
+### 八点五、Demo 接线：Ctrl+click 与卡片光环（2026-10-18）
+
+七个**全量** demo 已接入（Trimmed 不接，它们没有 Agent）：
+
+- 共享桥：`Examples/Workflow/Common/Lib/ViewModels/Workflow/AgentSelection.cs`。`Toggle` 调扩展的 `SelectForAgent`/`DeselectForAgent`，再用**静态 `Changed` 事件**广播；不往节点模型写伪属性，也不触发 `PropertyChanged`（第一次尝试用 `node.OnPropertyChanged("IsAgentSelected")` 虽然能通知，但没有必要让模型承担 UI 通知）。
+- 输入点：六家的 `VetoFrameworkGestures`（WPF/Avalonia/WinUI/MAUI/WinForms/Blazor）在 `InputModifiers.Control` 分支里调 `AgentSelection.Toggle(e.Target as IWorkflowNodeViewModel)` 并照旧置 `PreventDefault`；Jalium 在 `NodeEditorSurface.OnLinkPointerPressed` 里处理 Ctrl+左键。Ctrl+click 因此同时阻止框架的拖拽手势。
+- 视觉（紫罗兰 `#A78BFA`）：
+  - WPF：`AgentSelectionVisual` 在外层 `UserControl` 上写 attached `IsSelected`；`Themes/CardTheme.xaml` 的 `CardBorderStyle` 用 DataTrigger 加 2px 边框 + `DropShadowEffect`。节点视图构造函数各调一次 `Attach(this)`。
+  - Avalonia：`AgentSelectionVisual` 给 `UserControl` 加 `agent-selected` 类；`CardTheme.axaml` 的 `.agent-selected Border.card` 设边框 + `BoxShadow`。⚠ **类型选择器 `UserControl.agent-selected` / `Control.agent-selected` 不命中派生视图**，必须用类选择器 `.agent-selected`。
+  - WinUI/MAUI：`AgentSelectionVisual` 在 Loaded 后找到卡片 `Border`，直接改 `BorderBrush`/`BorderThickness`（WinUI）或 `Stroke`/`StrokeThickness`/`Shadow`（MAUI），离开时恢复原值。
+  - Jalium：`NodeViewBase.Bind` 在 Viewbox 外放一个 ring `Border`，`AgentSelection.Changed` 到达时切 `Visibility`。
+  - WinForms：`WorkflowNodeCard.OnPaintBackground` 在卡片圆角路径上画两层紫罗兰描边；`AgentSelection.Changed` 触发 `Invalidate()`。
+  - Blazor：`TemplateNodeView.razor` 给 `.wf-card` 加 `agent-selected`；代码后置订阅 `AgentSelection.Changed` 并 `StateHasChanged`；`app.css` 用 `outline` + `box-shadow`（不改布局）。
+- 所有卡片视觉都按**引用相等**匹配自己的节点；订阅在视图卸载/DataContext 置空时解除，避免静态事件把池化视图拽住。

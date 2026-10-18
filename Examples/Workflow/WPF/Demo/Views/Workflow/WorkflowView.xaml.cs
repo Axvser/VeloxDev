@@ -237,8 +237,12 @@ public partial class WorkflowView : UserControl
     {
         ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
-            if (e.Modifiers.HasFlag(InputModifiers.Control)
-                || (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift)))
+            if (e.Modifiers.HasFlag(InputModifiers.Control))
+            {
+                if (e.Target is IWorkflowNodeViewModel node) AgentSelection.Toggle(node);
+                e.Handle.PreventDefault = true;
+            }
+            else if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
             {
                 e.Handle.PreventDefault = true;
             }

@@ -8,6 +8,7 @@ public partial class TimerNodeView : ContentView
     public TimerNodeView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 
     protected override void OnSizeAllocated(double width, double height)

@@ -282,6 +282,13 @@ html, body {
     box-sizing: border-box;
 }
 
+/* Agent 工作集：紫罗兰细环 + 同色辉光。outline 不占布局，卡片内容不会因为选中而位移。 */
+.wf-card.agent-selected {
+    outline: 2px solid #A78BFA;
+    outline-offset: 0;
+    box-shadow: 0 0 20px 3px rgba(167, 139, 250, 0.55);
+}
+
 .wf-card-header {
     position: relative;
     display: flex;

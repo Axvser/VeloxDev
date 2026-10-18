@@ -8,6 +8,7 @@ public partial class PythonNodeView : ContentView
     public PythonNodeView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 
     protected override void OnSizeAllocated(double width, double height)

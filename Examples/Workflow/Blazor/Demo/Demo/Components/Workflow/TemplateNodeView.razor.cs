@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Demo.ViewModels;
+using Demo.Workflow;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;
 
@@ -254,6 +255,14 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
             _notifier = n;
             n.PropertyChanged += OnNodeChanged;
         }
+
+        AgentSelection.Changed += OnAgentSelectionChanged;
+    }
+
+    private void OnAgentSelectionChanged(IWorkflowNodeViewModel node)
+    {
+        if (ReferenceEquals(node, Node))
+            _ = InvokeAsync(StateHasChanged);
     }
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
@@ -347,6 +356,8 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
             _notifier.PropertyChanged -= OnNodeChanged;
             _notifier = null;
         }
+
+        AgentSelection.Changed -= OnAgentSelectionChanged;
 
         if (_tree is not null)
         {

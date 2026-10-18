@@ -7,6 +7,7 @@ namespace Demo.Views.Workflow
         public ControllerView()
         {
             InitializeComponent();
+            AgentSelectionVisual.Attach(this);
         }
     }
 }

@@ -1,4 +1,5 @@
 using Demo.ViewModels;
+using Demo.Workflow;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
@@ -158,6 +159,9 @@ internal sealed class WorkflowNodeCard : UserControl
             n.PropertyChanged += OnNodePropertyChanged;
         }
 
+        AgentSelection.Changed -= OnAgentSelectionChanged;
+        AgentSelection.Changed += OnAgentSelectionChanged;
+
         BuildLayout(node);
         Refresh(node);
         _layoutReady = true;
@@ -166,6 +170,7 @@ internal sealed class WorkflowNodeCard : UserControl
     /// <summary>Unbinds and resets the card to an empty state.</summary>
     internal void Unbind()
     {
+        AgentSelection.Changed -= OnAgentSelectionChanged;
         UnsubscribeVm();
         _node = null;
         Tag = null;
@@ -230,6 +235,24 @@ internal sealed class WorkflowNodeCard : UserControl
 
         using var pen = new Pen(Views.CardTheme.Border, 1f);
         g.DrawPath(pen, path);
+
+        // Agent 工作集：紫罗兰描边 + 同色外辉。宽度固定、不随缩放变化；卡片的圆角路径已经算好。
+        if (AgentSelection.IsSelected(_node))
+        {
+            var violet = Color.FromArgb(0xA7, 0x8B, 0xFA);
+            using var glow = new Pen(Color.FromArgb(48, violet), 8f);
+            using var ring = new Pen(violet, 2f);
+            g.DrawPath(glow, path);
+            g.DrawPath(ring, path);
+        }
+    }
+
+    private void OnAgentSelectionChanged(IWorkflowNodeViewModel node)
+    {
+        if (ReferenceEquals(node, _node))
+        {
+            Invalidate();
+        }
     }
 
     private static float CardRadius => Views.CardTheme.CardRadius;

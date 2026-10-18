@@ -18,6 +18,13 @@
 		<Setter Property="Background" Value="#161B22" />
 	</Style>
 
+	<!-- Agent 工作集：紫罗兰描边 + 同色辉光。类由 AgentSelectionVisual 挂在外层 UserControl 上，
+	     卡片只负责画 —— 节点视图模型没有为它增加任何属性。 -->
+	<Style Selector=".agent-selected Border.card">
+		<Setter Property="BorderBrush" Value="#A78BFA" />
+		<Setter Property="BoxShadow" Value="0 0 18 2 #A78BFA" />
+	</Style>
+
 	<Style Selector="Border.card-divider">
 		<Setter Property="BorderBrush" Value="#222A34" />
 		<Setter Property="BorderThickness" Value="0,0,0,1" />

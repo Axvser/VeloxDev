@@ -8,6 +8,7 @@ public partial class EnumSelectorNodeView : ContentView
     public EnumSelectorNodeView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 
     protected override void OnSizeAllocated(double width, double height)

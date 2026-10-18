@@ -7,5 +7,6 @@ public partial class EnumSelectorNodeView : UserControl
     public EnumSelectorNodeView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 }

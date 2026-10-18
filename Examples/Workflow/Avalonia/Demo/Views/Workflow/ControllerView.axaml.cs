@@ -7,5 +7,6 @@ public partial class ControllerView : UserControl
     public ControllerView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 }

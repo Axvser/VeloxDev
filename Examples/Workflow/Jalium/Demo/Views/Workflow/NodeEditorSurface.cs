@@ -279,6 +279,17 @@ internal sealed class NodeEditorSurface : Canvas
     // 而弹出要根视觉坐标、模型给的是画布坐标 —— 只有表面同时知道这两件事。
     private void OnLinkPointerPressed(object? sender, Wf.PointerPressedEventArgs e)
     {
+        // Ctrl+左键：把节点加入/移出 Agent 工作集（与其余六家同一手势）。置 PreventDefault 让
+        // 框架这一笔的拖拽/连线手势不启动；节点自己的卡会收到 IsAgentSelected 通知并重画。
+        if (e.Button == Wf.MouseButton.Left
+            && e.Modifiers.HasFlag(Wf.InputModifiers.Control)
+            && e.Target is IWorkflowNodeViewModel node)
+        {
+            Demo.Workflow.AgentSelection.Toggle(node);
+            e.Handle.PreventDefault = true;
+            return;
+        }
+
         if (e.Button != Wf.MouseButton.Right) return;
         if (e.Target is not IWorkflowLinkViewModel link) return;
         if (_linkMenu?.IsOpen == true) return;

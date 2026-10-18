@@ -1,6 +1,7 @@
 @namespace Demo.Components.Workflow
 @using VeloxDev.WorkflowSystem
 @using VeloxDev.WorkflowSystem.AttachedBehaviors
+@using Demo.Workflow
 
 @if (Node is not null)
 {
@@ -14,7 +15,7 @@
                design coordinates inside the body (overflow-y auto). Edge slot hosts are SIBLINGS of the
                scrollable body box, so a half-outside glyph is never clipped by the body's own overflow. *@
             @{ var design = Design; }
-            <div class="wf-card @(IsRunning ? "veloxdev-wf-node-running" : null)"
+            <div class="wf-card @(IsRunning ? "veloxdev-wf-node-running" : null) @(AgentSelection.IsSelected(Node) ? "agent-selected" : null)"
                  style="position:relative;width:@(design.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))px;height:@(design.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))px;
                         transform:scale(@ScaleCss);transform-origin:top left;
                         overflow:@OverflowCss;@SurfaceOverrideCss">

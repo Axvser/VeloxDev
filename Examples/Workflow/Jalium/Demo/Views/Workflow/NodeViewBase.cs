@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Demo.Workflow;
 using Jalium.UI;
 using Jalium.UI.Controls;
 using Jalium.UI.Media;
@@ -15,6 +16,7 @@ internal abstract class NodeViewBase : Canvas
 {
     private Viewbox? _viewbox;
     private Border? _pill;
+    private Border? _agentRing;
 
     // 绑定到这张卡的节点视图模型。
     protected IWorkflowNodeViewModel Node { get; private set; } = null!;
@@ -99,6 +101,25 @@ internal abstract class NodeViewBase : Canvas
         Canvas.SetTop(_viewbox, 0);
         Children.Add(_viewbox);
 
+        // Agent 工作集：在视图外面套一层紫罗兰描边。放在 Viewbox 之外，所以缩放时线宽保持不变；
+        // 它不参与命中，节点拖拽/连线仍由表面接管。
+        _agentRing = new Border
+        {
+            Width = Width,
+            Height = Height,
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(2),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0xA7, 0x8B, 0xFA)),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+        };
+        Canvas.SetLeft(_agentRing, 0);
+        Canvas.SetTop(_agentRing, 0);
+        Children.Add(_agentRing);
+        AgentSelection.Changed -= OnAgentSelectionChanged;
+        AgentSelection.Changed += OnAgentSelectionChanged;
+        RefreshAgentSelection();
+
         if (node is INotifyPropertyChanged notify)
         {
             notify.PropertyChanged += OnNodePropertyChangedHandler;
@@ -150,6 +171,22 @@ internal abstract class NodeViewBase : Canvas
         if (e.PropertyName is not null)
         {
             OnNodePropertyChanged(e.PropertyName);
+        }
+    }
+
+    private void OnAgentSelectionChanged(IWorkflowNodeViewModel node)
+    {
+        if (ReferenceEquals(node, Node))
+        {
+            RefreshAgentSelection();
+        }
+    }
+
+    private void RefreshAgentSelection()
+    {
+        if (_agentRing is not null)
+        {
+            _agentRing.Visibility = AgentSelection.IsSelected(Node) ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 

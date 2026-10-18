@@ -7,6 +7,7 @@ namespace Demo.Views
         public ControllerView()
         {
             InitializeComponent();
+            AgentSelectionVisual.Attach(this);
         }
     }
 }

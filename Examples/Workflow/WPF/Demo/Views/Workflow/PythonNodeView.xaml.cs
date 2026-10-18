@@ -7,5 +7,6 @@ public partial class PythonNodeView : UserControl
     public PythonNodeView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 }

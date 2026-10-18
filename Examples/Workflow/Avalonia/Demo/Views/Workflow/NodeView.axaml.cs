@@ -7,5 +7,6 @@ public partial class NodeView : UserControl
     public NodeView()
     {
         InitializeComponent();
+        AgentSelectionVisual.Attach(this);
     }
 }

@@ -19,6 +19,7 @@
 | 加一个语言 | `AgentLanguages` 枚举 + 码表 + 两处 switch | `AgentLanguages.cs:4-40`、`:45-88`、`:103`（`ToLanguageCode`）、`:186`（`GetDisplayName`）；另有消费方第二张码表（见 §四·1） |
 | 把一个新的对象整体暴露成工具面 | `AsAgentToolkit()` / `AsAgentTools()` | `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs:362`、`:371` |
 | 给确认/选择接自己的交互 | `Func<..., Task>` handler | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs:726`、`:753` |
+| 让用户选中的节点进入 Agent 上下文（不新增工具） | `SelectForAgent` / `DeselectForAgent` / `ClearAgentSelection` / `GetAgentSelection` | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentSelectionExtensions.cs`；动态段在 `WorkflowAgentScope.cs` 的 `RenderEnvelope` → `AppendAgentSelection` |
 | 加一种新的「特性 + 反射读取」能力 | 特性类 + **一个读取助手** | 见 §二·6 —— 说明文字的语言选取规则收敛在 `AgentTextSelection.Select`，新助手照 `AgentContextReader`/`AIContextMembers.DescriptionsFor` 转调它，别再复制过滤条件 |
 
 ---
@@ -105,6 +106,24 @@
 
 **要一起改的两处**（改命令语义时）：`AgentCommandDiscoverer.cs`（通用路径）与 `CommandInvoker.cs`（Workflow 路径）。反过来说，**只**想要 Workflow 行为变、通用路径不变，也是可行的 —— 那就只改后者。
 
+### 8. 节点选中是上下文，不是工具
+
+**官方**：宿主在自己的选中变化处理器里调 `node.SelectForAgent()` 或 `nodes.SelectForAgent()`；scope 的下一次调用自动带上。
+
+| 捷径 | 为什么错 | 依据 |
+|---|---|---|
+| 为「选中」加一个新工具 | 选中集是**每轮都该在系统提示词里**的宿主状态，不需要模型主动查询；用户明确要求不加工具 | `Agent/Workflow/WorkflowAgentSelectionExtensions.cs`；`WorkflowAgentScope.RenderEnvelope` → `AppendAgentSelection` |
+| 在选中变化时 `BumpVersion()` | `Version` 同时驱动 `BuildDynamicTools`，会让工具集重建；选中只该改上下文 | `WorkflowAgentScope.ContextKey` 的 remarks；`BuildDynamicTools` 只按 `Version` 复用 |
+| 以为 `SelectForAgent` 会替换选中集 | 它是**并集**：已在集合里的节点不重复、不计数；要替换先 `ClearAgentSelection` 再注册 | `WorkflowAgentSelectionExtensions.SelectForAgent` / `WorkflowAgentSelection.Add` |
+| 以为无效输入会抛异常 | 注册/释放全程静默：单节点返回 `bool`、集合返回实际新增/移除数、内部异常返回 `-1`；null / 未挂载 / 不在 `Nodes` / 无 `RuntimeId` 一律跳过 | `WorkflowAgentSelectionExtensions` 的 `try/catch` 与 `IsMounted` / `IWorkflowIdentifiable` 检查 |
+| 只为了移除一个节点就重新注册整个集合 | 并集不会移除已有的；要移除用 `DeselectForAgent`，节点自己释放即可，其余节点与顺序原样保留 | `WorkflowAgentSelectionExtensions.DeselectForAgent` |
+| 以为删除/重父后必须手动 `DeselectForAgent` | 选中时已订阅三条变更：`Parent` 的 `PropertyChanged`、父树 `Nodes.CollectionChanged`、helper 的 `IWorkflowNodeEvents.Deleted`；任一命中都会自动移除。`Nodes.Clear()` 与整条 `Nodes` 属性被替换也会清空。显式调用只用于宿主自己的取消选中 | `WorkflowAgentSelection.SyncSubscriptions` / `Observe` / `Unobserve` |
+| 在选中时写工作流上下文（加字段、改状态、改事件） | 选中只**观察**工作流，不写模型；别为了 Agent 上下文改动 `IWorkflow*ViewModel` 或 Core | 同上；`TreeObserver` 只持树的弱引用 |
+| 用 `node.Parent` 找树来移除 | 节点删除后 `Parent` 已经是 null；移除走反向表（节点 → 树的弱引用），所以删除后仍能自释放 | `WorkflowAgentSelection.Owners` / `Remove` |
+| 渲染时读 `node.Anchor` / 遍历 `tree.Nodes` | 上下文渲染可能跑在 agent 线程；遍历 UI 的 `ObservableCollection` 会与宿主编辑竞争。选中集在调用时取快照 | `WorkflowAgentSelection.cs` 的 `Set` / `Render` |
+| 把选中集做成全局单例 | 每个树一份；`ConditionalWeakTable` 随树释放 | `WorkflowAgentSelection.States` |
+| 删除节点后不重设选中 | 快照仍会列出已删除的 `RuntimeId`；下一次 `SelectForAgent` / `ClearAgentSelection` 才更新 | 公开 API 的 remarks |
+
 ---
 
 ## 三、步骤清单
@@ -140,6 +159,16 @@
 ### E. 加一个语言
 
 见 §四·1 的联动表 —— 这条没有「只改一处」的走法。
+
+### F. 让选中的节点成为 Agent 的工作集
+
+1. 宿主在选中变化时调 `node.SelectForAgent()`（单选）或 `nodes.SelectForAgent()`（多选，传 `IReadOnlyCollection<IWorkflowNodeViewModel>`）；这是**并集**，重复注册不计数。要替换选中集，先 `tree.ClearAgentSelection()` 再注册。
+2. 释放单个/多个节点用 `node.DeselectForAgent()` / `nodes.DeselectForAgent()`；回到全图用 `tree.ClearAgentSelection()`；读当前选中集用 `tree.GetAgentSelection()`。删除、重父、从 `Nodes` 移除、`Nodes.Clear()`、整条 `Nodes` 替换、helper 的 `Deleted` 都会自动释放，不需要宿主补调。
+3. 返回值按 HashSet 语义：单节点 `bool`，集合 `int`（实际新增/移除数），内部异常 `-1`；不要期待无效输入抛异常。
+4. 不要加工具、不要 `BumpVersion`、不要在渲染期读活模型，也不要为了让选中可用去改工作流上下文 —— 见 §二·8。
+5. 自检：`scope.BuildDynamicInstructions()` 出现 `## Current Node Selection` 或 `## 当前选中的节点`；`BuildDynamicTools()` 前后同名同数；删除或重父后该 `RuntimeId` 自动消失、其余节点顺序不变。
+
+**Demo 侧接线（2026-10-18，七个全量 demo）**：`Examples/Workflow/Common/Lib/.../AgentSelection.cs` 的 `Toggle` 调扩展并广播静态 `Changed` 事件；六家的 `VetoFrameworkGestures`、Jalium 的 `OnLinkPointerPressed` 在 Ctrl+左键时调用它。卡片视觉：WPF `CardBorderStyle` DataTrigger、Avalonia `.agent-selected Border.card`（⚠ 必须用类选择器，`UserControl.agent-selected` 不命中派生视图）、WinUI/MAUI 直接改卡 Border、Jalium `NodeViewBase` ring、WinForms `WorkflowNodeCard.OnPaintBackground`、Blazor `.wf-card.agent-selected`。不往节点模型写伪属性 —— 静态事件就够了。
 
 ---
 
