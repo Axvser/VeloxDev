@@ -2,6 +2,7 @@ using System;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -110,6 +111,9 @@ public partial class WorkflowSlotConnectionBehavior : ComponentBase, IAsyncDispo
         {
             Tree.SetPointerCommand.Execute(anchor);
         }
+
+        // 拖拽中指针下的候选接收口：JS 只在按下/松手时报目标，拖动路径由锚点几何命中补上。
+        Tree.StandardSetPreviewReceiver(SlotHitTestEx.HitTest(Tree, worldX, worldY));
     }
 
     [JSInvokable]

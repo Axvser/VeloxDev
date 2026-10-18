@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
+using System.ComponentModel;
 using System.Numerics;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
@@ -84,6 +85,14 @@ public sealed partial class PolylineCurveView : UserControl
     private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(450);
 
     private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
+
+    // 虚拟连线是唯一实现 IConnectionPreviewLink 的链接：发起 / 有效候选 / 无效候选是它的阶段。
+    private IConnectionPreviewLink? _previewLink;
+    private ConnectionPreviewState _preview;
+
+    // 阶段色是本 demo 的外观：有效绿、无效红，其余沿用模板给的线色。
+    private static readonly Windows.UI.Color PreviewValidColor = Windows.UI.Color.FromArgb(0xFF, 0x34, 0xD3, 0x99);
+    private static readonly Windows.UI.Color PreviewInvalidColor = Windows.UI.Color.FromArgb(0xFF, 0xF8, 0x71, 0x71);
 
     // 一条「按弧长切出来的描边」在合成层里的全部家当：一个 sprite shape、一份可动端点的线段几何、一支可改色的画刷。
     // 三者都只建一次，之后每帧只写两个端点与一个颜色。
@@ -445,6 +454,7 @@ public sealed partial class PolylineCurveView : UserControl
             // 指针再动时输入路由会把 Entered 交给新那条线，由它自己重新点亮
             IsHighlighted = false;
             ResubscribeInput();
+            ResubscribePreview(link);
         }
 
         if (link is not null)
@@ -456,6 +466,35 @@ public sealed partial class PolylineCurveView : UserControl
         // 被回收了：没有链接可描述。Unloaded 对池化视图永远不来，周期只能在这里停，
         // 否则它会一直往一个没人看的视图里写 27 条 Path，直到这个视图被复用
         Hide();
+    }
+
+    // 虚拟连线的阶段：订模型自己的 Preview。改绑/回收都要换订阅，否则旧橡皮筋的阶段色会留在本视图上。
+    private void ResubscribePreview(IWorkflowLinkViewModel? link)
+    {
+        var preview = link as IConnectionPreviewLink;
+        if (ReferenceEquals(preview, _previewLink)) return;
+
+        UnsubscribePreview();
+        _previewLink = preview;
+        _preview = preview?.Preview ?? ConnectionPreviewState.None;
+        if (preview is INotifyPropertyChanged notifier) notifier.PropertyChanged += OnPreviewChanged;
+
+        UpdateRestingLine();
+    }
+
+    private void UnsubscribePreview()
+    {
+        if (_previewLink is INotifyPropertyChanged notifier) notifier.PropertyChanged -= OnPreviewChanged;
+        _previewLink = null;
+        _preview = ConnectionPreviewState.None;
+    }
+
+    private void OnPreviewChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not nameof(IConnectionPreviewLink.Preview)) return;
+
+        _preview = _previewLink?.Preview ?? ConnectionPreviewState.None;
+        UpdateRestingLine();
     }
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
@@ -575,7 +614,12 @@ public sealed partial class PolylineCurveView : UserControl
     // 圆头圆角，两端才不像被截断的横截面
     private void UpdateRestingLine()
     {
-        var color = IsHighlighted ? HighlightColor : LineColor;
+        var color = _preview switch
+        {
+            ConnectionPreviewState.ValidTarget => PreviewValidColor,
+            ConnectionPreviewState.InvalidTarget => PreviewInvalidColor,
+            _ => IsHighlighted ? HighlightColor : LineColor,
+        };
         var thickness = CurrentThickness;
 
         _halo.Brush.Color = WithAlpha(color, 0.10);

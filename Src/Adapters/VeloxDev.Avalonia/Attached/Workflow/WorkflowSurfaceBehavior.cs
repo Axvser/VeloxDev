@@ -1015,13 +1015,20 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
 
         var point = e.GetPosition(state.Canvas);
-        viewModel.SetPointerCommand.Execute(
-            WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout));
+        var pointer = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout);
+        viewModel.SetPointerCommand.Execute(pointer);
 
         // 连线建立过程中橡皮筋就在指针底下，逐帧判悬停只会把沿途那些实连线点亮（VirtualLink 仅在拖时可见）。
-        if (viewModel.VirtualLink is not { IsVisible: true })
-            RoutePointer(host, state, e,
-                (position, target, handle) => new Wf.PointerMovedEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
+        // 候选接收口仍要报给树：几何命中不看可视树，Slot 的 preview 位与虚拟连线的阶段都由它驱动。
+        if (viewModel.VirtualLink is { IsVisible: true })
+        {
+            viewModel.StandardSetPreviewReceiver(
+                SlotHitTestEx.HitTest(viewModel, pointer.Horizontal, pointer.Vertical));
+            return;
+        }
+
+        RoutePointer(host, state, e,
+            (position, target, handle) => new Wf.PointerMovedEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));
     }
 
     private static void OnPointerExited(object? sender, PlatformInput.PointerEventArgs e)

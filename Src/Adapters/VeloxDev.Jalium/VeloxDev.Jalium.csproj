@@ -30,8 +30,9 @@
     <PackageReference Include="VeloxDev.Core" Version="10.0.0" Condition="'$(Configuration)' != 'Debug'" />
     <!-- Jalium.UI.Controls is the lowest platform-neutral package that carries the
          Canvas/ScrollViewer/Border/Control + DrawingContext/Geometry/FormattedText +
-         TextMeasurement surface the workflow adapter renders with. -->
-    <PackageReference Include="Jalium.UI.Controls" Version="26.10.9" />
+         TextMeasurement surface the workflow adapter renders with. Pinned to the current
+         stable Jalium release; 26.10.0-26.10.6 cannot compile against this adapter. -->
+    <PackageReference Include="Jalium.UI.Controls" Version="26.11.0" />
   </ItemGroup>
 
 </Project>

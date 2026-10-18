@@ -4,6 +4,7 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo;
@@ -25,6 +26,14 @@ public partial class BezierCurveView : Control
 
     // Core 的扁平化曲线，与命中契约共享；本视图只拿它判「画出来的这条」。
     private LinkCurve? _curve;
+
+    // 虚拟连线是唯一实现 IConnectionPreviewLink 的链接：发起 / 有效候选 / 无效候选是它的阶段。
+    private IConnectionPreviewLink? _previewLink;
+    private ConnectionPreviewState _preview;
+
+    // 阶段色是本 demo 的外观：有效绿、无效红，其余沿用模板给的线色。
+    private static readonly Color PreviewValidColor = Color.Parse("#FF34D399");
+    private static readonly Color PreviewInvalidColor = Color.Parse("#FFF87171");
 
     public BezierCurveView()
     {
@@ -156,12 +165,44 @@ public partial class BezierCurveView : Control
         base.OnAttachedToVisualTree(e);
         PublishCurve();
         ResubscribeInput();
+        ResubscribePreview();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
         UnsubscribeInput();
+        UnsubscribePreview();
+    }
+
+    // 虚拟连线的阶段：订模型自己的 Preview。虚线也由它决定 —— 橡皮筋在通用链接模板里没有标记可绑。
+    private void ResubscribePreview()
+    {
+        var link = DataContext as IConnectionPreviewLink;
+        if (ReferenceEquals(link, _previewLink)) return;
+
+        UnsubscribePreview();
+        _previewLink = link;
+        _preview = link?.Preview ?? ConnectionPreviewState.None;
+        if (link is INotifyPropertyChanged notifier) notifier.PropertyChanged += OnPreviewChanged;
+
+        IsVirtual = link is not null;
+        InvalidateVisual();
+    }
+
+    private void UnsubscribePreview()
+    {
+        if (_previewLink is INotifyPropertyChanged notifier) notifier.PropertyChanged -= OnPreviewChanged;
+        _previewLink = null;
+        _preview = ConnectionPreviewState.None;
+    }
+
+    private void OnPreviewChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not nameof(IConnectionPreviewLink.Preview)) return;
+
+        _preview = _previewLink?.Preview ?? ConnectionPreviewState.None;
+        InvalidateVisual();
     }
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
@@ -214,6 +255,7 @@ public partial class BezierCurveView : Control
 
             PublishCurve();
             ResubscribeInput();
+            ResubscribePreview();
         }
 
         // UsePolyline 在两个视图之间切换显示；接手显示的那个要把曲线（与 sender）重新挂到自己身上。
@@ -237,7 +279,12 @@ public partial class BezierCurveView : Control
 
     private void DrawBezierLine(DrawingContext context, StreamGeometry geometry)
     {
-        var color = IsHighlighted ? HighlightColor : LineColor;
+        var color = _preview switch
+        {
+            ConnectionPreviewState.ValidTarget => PreviewValidColor,
+            ConnectionPreviewState.InvalidTarget => PreviewInvalidColor,
+            _ => IsHighlighted ? HighlightColor : LineColor,
+        };
         var thickness = IsHighlighted ? LineThickness + 1.5 : LineThickness;
         var brush = new ImmutableSolidColorBrush(color);
 

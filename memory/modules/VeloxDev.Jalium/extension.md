@@ -106,7 +106,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 
 1. `VeloxDev.Jalium.csproj:7` 是**单 TFM、不带平台后缀**的 `net10.0`，`:4-6` 的注释写明了理由（只用跨平台核心，不用 `Jalium.UI.Desktop`）。改成 `net10.0-windows` 会让这个包**不再能服务 Linux / Android**。
 2. `:29` / `:30` 是一对**互斥**的双轨（Debug `ProjectReference` / 非 Debug `PackageReference`），改一条要同时看另一条。
-3. `Jalium.UI.Controls`（适配器，`:34`）与 `Jalium.UI.Desktop`（消费 demo）是**两个包、两个版本位**；升其中一个不必同步另一个，但 `Jalium.UI.Controls` 是「能编过 `Canvas`/`DrawingContext` 的最低包」，降级会缺绘制面。
+3. `Jalium.UI.Controls`（适配器，`:34`）与 `Jalium.UI.Desktop`（消费 demo）是**两个包、两个版本位**；当前都按最新稳定版 `26.11.0` 钉，升其中一个不必同步另一个。若降级：26.10.7 是能编过的**最低**平台中立版本（26.10.0–26.10.6 缺 `DispatcherPriority`；26.10.7 没有 `MainDispatcher`，兜底需改用 `CurrentDispatcher`）。
 
 ---
 

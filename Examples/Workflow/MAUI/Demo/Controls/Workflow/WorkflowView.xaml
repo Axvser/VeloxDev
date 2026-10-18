@@ -265,6 +265,8 @@
                                                   RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
                                                   LinkLineColor="#CC38BDF8"
                                                   VirtualLineColor="#E2E8F0"
+                                                  VirtualValidTargetColor="#FF34D399"
+                                                  VirtualInvalidTargetColor="#FFF87171"
                                                   StrokeWidth="2"
                                                   LinkFlowEnabled="True" />
                     <!-- VeloxDev customization: 悬停高亮是本 demo 的一层（适配器的连线层只画静息线）。 -->

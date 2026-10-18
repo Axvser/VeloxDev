@@ -97,6 +97,28 @@ ReceiveConnection(receiverSlot) → 校验 receiver 方向 → ValidateConnectio
 
 依据：`StandardEx/WorkflowTreeEx.cs:105-195`。**注意校验全在 receiver 侧**：`SendConnection` 只查 sender 自己的能力和容量。
 
+#### 3.2.1 拖动中的连接预览（候选口与阶段）
+
+```
+每次指针移动 → SlotHitTestEx.HitTest(tree, x, y)            ← 七家共用，槽锚点的几何命中（NaN 跳过，最近的赢）
+             → tree.StandardSetPreviewReceiver(slot)         ← 唯一写入口；同一个候选直接返回，不重跑校验
+                 ├ slot == sender 视为「不在任何候选上」
+                 ├ tree.StandardCheckConnection(sender, slot) → ConnectionCheck
+                 │     SenderCannotSend / ReceiverCannotReceive / SameNode / RejectedByRule
+                 ├ 仅当框架判定有效 → WorkflowInput.PreviewValidating（宿主可 Reject → RejectedByHost）
+                 ├ 候选 Slot.State |= PreviewReceiver（无效候选也标）
+                 └ WorkflowInput.PreviewState / PreviewCheck → 虚拟连线的 IConnectionPreviewLink.Preview
+```
+
+- 状态全部挂在每棵树的 `WorkflowInput.For(tree)`：`ConnectionSender` / `PreviewReceiver` / `PreviewState` / `PreviewCheck` / `PreviewChanged` / `PreviewValidating`。虚拟连线通过可选能力接口 `IConnectionPreviewLink` 拿到 `Preview`（`LinkDefaultViewModel` 实现；真实链接不必实现）。
+- **`ConnectionCheck` 是显式查询口**：`var check = tree.StandardCheckConnection(sender, receiver)`，纯函数、无事件、不改状态，可在拖动前批量预判。它和预览共用同一套规则；`Connecting` 不在这套规则里（松手时按次否决）。
+- **`PreviewCheck` 是当前候选的结果缓存**：没有候选时为 `null`；无效候选也带原因。`PreviewChanged` 的 args 同时带 `Check`。`PreviewValidating` 只在**框架已判定有效**的新候选上触发（同一候选只触发一次），宿主只能把有效收窄为 `RejectedByHost`，不能把框架的拒绝翻成有效。
+- **`StandardRefreshConnectionPreview()` 是异步校验收尾口**：宿主在 `PreviewValidating` 里先 `Reject("checking")`，异步结果回来后调它重跑当前候选。`StandardSetPreviewReceiver` 在候选未变时不会重跑 `ValidateConnection`，所以频繁拖动不会每帧调用户的规则。
+- **`StandardUpdateState` 必须保留 `PreviewSender | PreviewReceiver` 两位**：它按 Targets/Sources 重算 `State`，不保留就会把刚设上的预览位当场抹掉（`PreviewSender` 在 2026-10 前就是这样被抹掉的）。改这个重算时别把保留逻辑去掉。
+- **预览不是裁决**：`PreviewState.ValidTarget` 只表示框架规则会接受（且宿主预览检查没拒）；`IWorkflowTreeEvents.Connecting` 与 `ValidateConnection` 仍是松手时的唯一否决点，拖动期间不抬 `Connecting`。
+- **七家为什么都走几何命中而不是路由 `PointerEntered/Exited`**：WPF / Avalonia / Jalium 在 `VirtualLink.IsVisible` 时整段不转发指针移动（否则沿途实连线会亮起），WinUI / WinForms / MAUI / Razor 虽然能路由，但目标解析口径不一。`SlotHitTestEx` 用与 `SetPointerCommand` 同一个世界坐标帧，七家因此同一套。
+- **橡皮筋在节点卡之下**：连线层 z-index 为负，拖回本节点时红/绿线会被卡片遮住中段，只露出卡外的一截 —— 这不是没画出来。
+
 ### 3.3 编译 → 运行
 
 ```

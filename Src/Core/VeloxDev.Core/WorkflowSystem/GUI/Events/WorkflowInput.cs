@@ -35,6 +35,10 @@ public sealed class WorkflowInput
 
     private readonly IWorkflowTreeViewModel tree;
     private IWorkflowViewModel? pointerTarget;
+    private IWorkflowSlotViewModel? connectionSender;
+    private IWorkflowSlotViewModel? previewReceiver;
+    private ConnectionPreviewState previewState;
+    private ConnectionCheck? previewCheck;
 
     /// <summary>Creates the input route for one tree.</summary>
     /// <param name="tree">The tree whose components receive input.</param>
@@ -63,6 +67,144 @@ public sealed class WorkflowInput
 
     /// <summary>The link the pointer is currently on, or <see langword="null"/> — <see cref="PointerTarget"/> as a link.</summary>
     public IWorkflowLinkViewModel? HoveredLink => pointerTarget as IWorkflowLinkViewModel;
+
+    /// <summary>The port a connection drag started from, or <see langword="null"/> when no drag is in progress.</summary>
+    public IWorkflowSlotViewModel? ConnectionSender => connectionSender;
+
+    /// <summary>The candidate port under the pointer during a connection drag, or <see langword="null"/>.</summary>
+    public IWorkflowSlotViewModel? PreviewReceiver => previewReceiver;
+
+    /// <summary>The current stage of the connection drag.</summary>
+    public ConnectionPreviewState PreviewState => previewState;
+
+    /// <summary>
+    /// The check for the candidate under the pointer, or <see langword="null"/> when the pointer is not over a
+    /// candidate. Invalid candidates still carry a check, so a view can explain why they are red.
+    /// </summary>
+    public ConnectionCheck? PreviewCheck => previewCheck;
+
+    /// <summary>
+    /// Raised whenever <see cref="ConnectionSender"/>, <see cref="PreviewReceiver"/> or <see cref="PreviewState"/>
+    /// changes. A link view subscribes here to paint the rubber band per stage; it does not decide the connection.
+    /// </summary>
+    public event EventHandler<ConnectionPreviewEventArgs>? PreviewChanged;
+
+    /// <summary>
+    /// Raised once for a new candidate the framework would accept, before it is marked as a valid target. A
+    /// subscriber can refuse it for this preview only; it can never turn a framework refusal into a pass.
+    /// </summary>
+    /// <remarks>
+    /// Not raised on every pointer move: the same candidate is reported once, and again only when
+    /// <see cref="StandardEx.WorkflowTreeEx.StandardRefreshConnectionPreview"/> is called explicitly. Use that
+    /// method after an asynchronous check completes. The release-time
+    /// <see cref="IWorkflowTreeEvents.Connecting"/> veto remains the final decision.
+    /// </remarks>
+    public event EventHandler<ConnectionPreviewValidatingEventArgs>? PreviewValidating;
+
+    /// <summary>Starts (or replaces) the connection drag's sender and resets the candidate.</summary>
+    internal void SetConnectionSender(IWorkflowSlotViewModel? sender)
+    {
+        if (sender is null)
+        {
+            ClearConnectionPreview();
+            return;
+        }
+
+        if (ReferenceEquals(connectionSender, sender)) return;
+
+        if (connectionSender is { } previous)
+        {
+            previous.State &= ~SlotState.PreviewSender;
+            previous.GetHelper().UpdateState();
+        }
+
+        connectionSender = sender;
+        ClearPreviewReceiver();
+        previewCheck = null;
+        SetPreviewState(ConnectionPreviewState.Started);
+        RaisePreviewChanged();
+    }
+
+    /// <summary>Records the candidate port under the pointer and the check computed for it.</summary>
+    internal void SetConnectionPreview(IWorkflowSlotViewModel? receiver, ConnectionCheck check)
+    {
+        if (connectionSender is null)
+        {
+            ClearConnectionPreview();
+            return;
+        }
+
+        var nextCheck = receiver is null ? (ConnectionCheck?)null : check;
+        var next = receiver is null
+            ? ConnectionPreviewState.Started
+            : check.IsValid ? ConnectionPreviewState.ValidTarget : ConnectionPreviewState.InvalidTarget;
+
+        if (ReferenceEquals(previewReceiver, receiver)
+            && previewState == next
+            && Nullable.Equals(previewCheck, nextCheck))
+        {
+            return;
+        }
+
+        ClearPreviewReceiver();
+        previewReceiver = receiver;
+        previewCheck = nextCheck;
+
+        if (receiver is not null)
+        {
+            receiver.State |= SlotState.PreviewReceiver;
+            receiver.GetHelper().UpdateState();
+        }
+
+        SetPreviewState(next);
+        RaisePreviewChanged();
+    }
+
+    /// <summary>Ends the drag preview and clears both ports' preview state.</summary>
+    internal void ClearConnectionPreview()
+    {
+        if (connectionSender is null && previewReceiver is null && previewState == ConnectionPreviewState.None)
+            return;
+
+        connectionSender = null;
+        ClearPreviewReceiver();
+        previewCheck = null;
+        SetPreviewState(ConnectionPreviewState.None);
+        RaisePreviewChanged();
+    }
+
+    private void ClearPreviewReceiver()
+    {
+        if (previewReceiver is not null)
+        {
+            previewReceiver.State &= ~SlotState.PreviewReceiver;
+            previewReceiver.GetHelper().UpdateState();
+        }
+
+        previewReceiver = null;
+    }
+
+    private void SetPreviewState(ConnectionPreviewState state)
+    {
+        previewState = state;
+        if (tree.VirtualLink is IConnectionPreviewLink link) link.SetPreview(state);
+    }
+
+    /// <summary>Lets subscribers refuse a framework-valid candidate for this preview.</summary>
+    internal ConnectionCheck RaisePreviewValidating(
+        IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, ConnectionCheck check)
+    {
+        var handler = PreviewValidating;
+        if (handler is null) return check;
+
+        var args = new ConnectionPreviewValidatingEventArgs(sender, receiver, check);
+        handler.Invoke(this, args);
+        return args.Check;
+    }
+
+    private void RaisePreviewChanged()
+        => PreviewChanged?.Invoke(
+            this, new ConnectionPreviewEventArgs(connectionSender, previewReceiver, previewState, previewCheck));
 
     /// <summary>
     /// Reach either side of a drawn line, in the same units the curves were published in. An adapter passes this

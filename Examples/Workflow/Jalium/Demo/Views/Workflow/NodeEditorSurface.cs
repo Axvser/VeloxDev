@@ -60,10 +60,23 @@ internal sealed class NodeEditorSurface : Canvas
         DashStyle = new DashStyle(new double[] { 4, 2 }),
     };
 
+    // 虚拟连线的阶段色（demo 外观）：有效候选绿、无效候选红，发起时沿用线色。
+    private static readonly SolidColorBrush s_previewValidBrush = new(Color.FromArgb(0xFF, 0x34, 0xD3, 0x99));
+    private static readonly SolidColorBrush s_previewInvalidBrush = new(Color.FromArgb(0xFF, 0xF8, 0x71, 0x71));
+    private static readonly Pen s_previewValidPen = new(s_previewValidBrush, LinkThickness)
+    {
+        DashStyle = new DashStyle(new double[] { 4, 2 }),
+    };
+    private static readonly Pen s_previewInvalidPen = new(s_previewInvalidBrush, LinkThickness)
+    {
+        DashStyle = new DashStyle(new double[] { 4, 2 }),
+    };
+
     /// <summary>Raised after any model/view change so overlays (minimap) can redraw.</summary>
     public Action? Changed;
 
     private IWorkflowTreeViewModel? _tree;
+    private INotifyPropertyChanged? _virtualNotifier;
     private readonly Dictionary<IWorkflowNodeViewModel, NodeViewBase> _cards = new();
     private readonly HashSet<IWorkflowNodeViewModel> _nodeSubs = new();
     private readonly HashSet<IWorkflowSlotViewModel> _slotSubs = new();
@@ -458,6 +471,7 @@ internal sealed class NodeEditorSurface : Canvas
         _tree.Nodes.CollectionChanged += OnNodesChanged;
         _tree.Links.CollectionChanged += OnLinksChanged;
         SubscribeLayout();
+        SubscribeVirtualLink();
         foreach (var node in _tree.Nodes)
         {
             AddCard(node);
@@ -477,6 +491,35 @@ internal sealed class NodeEditorSurface : Canvas
         if (_tree?.Layout is INotifyPropertyChanged layoutNotify)
         {
             layoutNotify.PropertyChanged += OnLayoutPropertyChanged;
+        }
+    }
+
+    // 虚拟连线的阶段不是槽状态：候选口从有效变无效时槽位不变，只有模型这一格会动，所以表面自己订。
+    private void SubscribeVirtualLink()
+    {
+        UnsubscribeVirtualLink();
+        if (_tree?.VirtualLink is INotifyPropertyChanged notify)
+        {
+            _virtualNotifier = notify;
+            notify.PropertyChanged += OnVirtualLinkChanged;
+        }
+    }
+
+    private void UnsubscribeVirtualLink()
+    {
+        if (_virtualNotifier is not null)
+        {
+            _virtualNotifier.PropertyChanged -= OnVirtualLinkChanged;
+            _virtualNotifier = null;
+        }
+    }
+
+    private void OnVirtualLinkChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(IConnectionPreviewLink.Preview) && _tree is not null)
+        {
+            InvalidateVisual();
+            Changed?.Invoke();
         }
     }
 
@@ -536,6 +579,7 @@ internal sealed class NodeEditorSurface : Canvas
 
         DetachInteraction();
         UnsubscribeLayout();
+        UnsubscribeVirtualLink();
         _tree.Nodes.CollectionChanged -= OnNodesChanged;
         _tree.Links.CollectionChanged -= OnLinksChanged;
         foreach (var node in _tree.Nodes)
@@ -885,7 +929,14 @@ internal sealed class NodeEditorSurface : Canvas
             var start = ToCanvas(center.X, center.Y);
             var end = ToCanvas(_tree.VirtualLink.Receiver.Anchor.Horizontal, _tree.VirtualLink.Receiver.Anchor.Vertical);
             var preview = VirtualCurve(start, end);
-            dc.DrawGeometry(null, s_virtualPen, LinkSegment(preview, 0, preview.Length));
+            var previewState = (_tree.VirtualLink as IConnectionPreviewLink)?.Preview ?? ConnectionPreviewState.None;
+            var previewPen = previewState switch
+            {
+                ConnectionPreviewState.ValidTarget => s_previewValidPen,
+                ConnectionPreviewState.InvalidTarget => s_previewInvalidPen,
+                _ => s_virtualPen,
+            };
+            dc.DrawGeometry(null, previewPen, LinkSegment(preview, 0, preview.Length));
         }
 
         // 标尺带视口固定（绝对浮贴），排在最后：滚动时它永远贴着视口，也永远在最上面

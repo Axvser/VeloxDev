@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -89,6 +90,15 @@ public partial class PolylineCurveView : UserControl
 
     private Transition<PolylineCurveView>? _flow;
     private bool _running;
+
+    // 虚拟连线是唯一实现 IConnectionPreviewLink 的链接：它自己有阶段（发起/有效候选/无效候选）。
+    // 订模型而不是让表面推，池化改绑与取消都不会留下旧颜色。
+    private IConnectionPreviewLink? _previewLink;
+    private ConnectionPreviewState _preview;
+
+    // 阶段色是本 demo 的外观，不是 Core 的：有效候选绿、无效候选红，其余用模板给的线色。
+    private static readonly Color PreviewValidColor = (Color)ColorConverter.ConvertFromString("#FF34D399");
+    private static readonly Color PreviewInvalidColor = (Color)ColorConverter.ConvertFromString("#FFF87171");
 
     public PolylineCurveView()
     {
@@ -211,6 +221,38 @@ public partial class PolylineCurveView : UserControl
     {
         RefreshGeometry();
         ResubscribeInput();
+        ResubscribePreview();
+    }
+
+    // 虚拟连线的阶段：订模型自己的 Preview。IsVirtual 也由它决定 —— 橡皮筋就该是虚线、不可聚焦，
+    // 而它在 WPF 的通用链接模板里没有标记可绑。
+    private void ResubscribePreview()
+    {
+        var link = DataContext as IConnectionPreviewLink;
+        if (ReferenceEquals(link, _previewLink)) return;
+
+        UnsubscribePreview();
+        _previewLink = link;
+        _preview = link?.Preview ?? ConnectionPreviewState.None;
+        if (link is INotifyPropertyChanged notifier) notifier.PropertyChanged += OnPreviewChanged;
+
+        IsVirtual = link is not null;
+        InvalidateVisual();
+    }
+
+    private void UnsubscribePreview()
+    {
+        if (_previewLink is INotifyPropertyChanged notifier) notifier.PropertyChanged -= OnPreviewChanged;
+        _previewLink = null;
+        _preview = ConnectionPreviewState.None;
+    }
+
+    private void OnPreviewChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not nameof(IConnectionPreviewLink.Preview)) return;
+
+        _preview = _previewLink?.Preview ?? ConnectionPreviewState.None;
+        InvalidateVisual();
     }
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
@@ -313,12 +355,14 @@ public partial class PolylineCurveView : UserControl
     {
         StartFlow();
         ResubscribeInput();
+        ResubscribePreview();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         StopFlow();
         UnsubscribeInput();
+        UnsubscribePreview();
     }
 
     #endregion
@@ -392,7 +436,12 @@ public partial class PolylineCurveView : UserControl
         if (!CanRender) return;
         if (_curve is null || _curve.Length <= 0) return;
 
-        var color = IsHighlighted ? HighlightColor : LineColor;
+        var color = _preview switch
+        {
+            ConnectionPreviewState.ValidTarget => PreviewValidColor,
+            ConnectionPreviewState.InvalidTarget => PreviewInvalidColor,
+            _ => IsHighlighted ? HighlightColor : LineColor,
+        };
         var thickness = IsHighlighted ? LineWidthHighlighted : LineWidth;
         var body = BuildSegment(0, _curve.Length);
 

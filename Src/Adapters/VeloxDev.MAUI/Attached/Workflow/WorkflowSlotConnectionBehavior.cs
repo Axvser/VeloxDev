@@ -1,4 +1,5 @@
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 using PlatformInput = Microsoft.Maui.Controls;
 using Wf = VeloxDev.WorkflowSystem;
 
@@ -278,6 +279,10 @@ public sealed class WorkflowSlotConnectionBehavior
         {
             active.Tree.SetPointerCommand.Execute(active.Pointer);
         }
+
+        // 拖拽中指针下的候选接收口：MAUI 的输入面是覆盖层，命中只能对锚点做，不能沿可视树找。
+        active.Tree.StandardSetPreviewReceiver(
+            SlotHitTestEx.HitTest(active.Tree, active.Pointer.Horizontal, active.Pointer.Vertical));
 
         if (active.Surface is not null)
         {

@@ -909,6 +909,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var anchor = ToCanvasLocalAnchor(state, e, viewModel.Layout);
         viewModel.SetPointerCommand.Execute(anchor);
 
+        // 拉线期间把指针下的候选接收口报给树：槽的 preview 位和虚拟连线的阶段都靠它；
+        // 这一笔输入路由本来就没被压掉，所以不额外改写它。
+        if (viewModel.VirtualLink.IsVisible)
+        {
+            viewModel.StandardSetPreviewReceiver(
+                SlotHitTestEx.HitTest(viewModel, anchor.Horizontal, anchor.Vertical));
+        }
+
         // 把同一份 canvas-local 坐标交给输入面：被指到的对象由适配器从来源视觉的 DataContext 判出来。
         RoutePointer(state, viewModel, e, host, e.OriginalSource as DependencyObject,
             (position, target, handle) => new Wf.PointerMovedEventArgs(position, Modifiers(e.KeyModifiers), host, target, handle));

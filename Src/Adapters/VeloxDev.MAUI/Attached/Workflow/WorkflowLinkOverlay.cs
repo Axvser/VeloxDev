@@ -82,6 +82,20 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public static readonly BindableProperty VirtualLineColorProperty = BindableProperty.Create(
         nameof(VirtualLineColor), typeof(Color), typeof(WorkflowLinkOverlay), DefaultWhite, propertyChanged: OnVisualPropertyChanged);
 
+    /// <summary>
+    /// The color of the virtual link while it hangs over a valid receiver. <see langword="null"/> keeps
+    /// <see cref="VirtualLineColor"/>; the overlay never supplies a stage color on its own.
+    /// </summary>
+    public static readonly BindableProperty VirtualValidTargetColorProperty = BindableProperty.Create(
+        nameof(VirtualValidTargetColor), typeof(Color), typeof(WorkflowLinkOverlay), null, propertyChanged: OnVisualPropertyChanged);
+
+    /// <summary>
+    /// The color of the virtual link while it hangs over a slot that would refuse the connection.
+    /// <see langword="null"/> keeps <see cref="VirtualLineColor"/>.
+    /// </summary>
+    public static readonly BindableProperty VirtualInvalidTargetColorProperty = BindableProperty.Create(
+        nameof(VirtualInvalidTargetColor), typeof(Color), typeof(WorkflowLinkOverlay), null, propertyChanged: OnVisualPropertyChanged);
+
     public static readonly BindableProperty StrokeWidthProperty = BindableProperty.Create(
         nameof(StrokeWidth), typeof(double), typeof(WorkflowLinkOverlay), 4d, propertyChanged: OnVisualPropertyChanged);
 
@@ -171,6 +185,12 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public double RulerThickness { get => (double)GetValue(RulerThicknessProperty); set => SetValue(RulerThicknessProperty, value); }
     public Color? LinkLineColor { get => (Color?)GetValue(LinkLineColorProperty); set => SetValue(LinkLineColorProperty, value); }
     public Color? VirtualLineColor { get => (Color?)GetValue(VirtualLineColorProperty); set => SetValue(VirtualLineColorProperty, value); }
+
+    /// <summary>Gets or sets the virtual link's color while it hangs over a valid receiver.</summary>
+    public Color? VirtualValidTargetColor { get => (Color?)GetValue(VirtualValidTargetColorProperty); set => SetValue(VirtualValidTargetColorProperty, value); }
+
+    /// <summary>Gets or sets the virtual link's color while it hangs over a slot that would refuse the connection.</summary>
+    public Color? VirtualInvalidTargetColor { get => (Color?)GetValue(VirtualInvalidTargetColorProperty); set => SetValue(VirtualInvalidTargetColorProperty, value); }
     public double StrokeWidth { get => (double)GetValue(StrokeWidthProperty); set => SetValue(StrokeWidthProperty, value); }
 
     /// <summary>Whether a settled link carries the travelling highlight that shows which way its data
@@ -1357,6 +1377,13 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             return;
         }
 
+        // 虚拟连线的阶段：候选口从有效变无效时槽位不变，只有模型这一格会动。
+        if (e.PropertyName is nameof(IConnectionPreviewLink.Preview))
+        {
+            ScheduleInvalidate();
+            return;
+        }
+
         if (e.PropertyName is nameof(IWorkflowLinkViewModel.Sender) or nameof(IWorkflowLinkViewModel.Receiver)
             && sender is IWorkflowLinkViewModel link && _subscribedLinks.Contains(link))
         {
@@ -1443,6 +1470,22 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private static bool IsVirtualLink(IWorkflowLinkViewModel link)
         => link.Sender.Parent is null || link.Receiver.Parent is null;
 
+    // 阶段色由宿主给：没有赋值就用 VirtualLineColor，适配器不替宿主发明交互反馈。
+    private Color? VirtualColorFor(IWorkflowLinkViewModel link, Color? fallback)
+    {
+        if (link is not IConnectionPreviewLink preview)
+        {
+            return fallback;
+        }
+
+        return preview.Preview switch
+        {
+            ConnectionPreviewState.ValidTarget => VirtualValidTargetColor ?? fallback,
+            ConnectionPreviewState.InvalidTarget => VirtualInvalidTargetColor ?? fallback,
+            _ => fallback,
+        };
+    }
+
     private sealed class LinkOverlayDrawable(WorkflowLinkOverlay owner) : IDrawable
     {
         public void Draw(ICanvas canvas, RectF dirtyRect)
@@ -1484,7 +1527,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 }
 
                 var isVirtual = IsVirtualLink(link);
-                var color = isVirtual ? virtualColor : linkColor;
+                var color = isVirtual ? owner.VirtualColorFor(link, virtualColor) : linkColor;
                 if (color is null)
                 {
                     continue;

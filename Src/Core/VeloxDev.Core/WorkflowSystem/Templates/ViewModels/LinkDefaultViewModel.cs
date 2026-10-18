@@ -6,9 +6,10 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>The default implementation of <see cref="IWorkflowLinkViewModel"/>.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Link组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Link component interface")]
-public sealed partial class LinkDefaultViewModel : IWorkflowLinkViewModel, IWorkflowIdentifiable
+public sealed partial class LinkDefaultViewModel : IConnectionPreviewLink, IWorkflowIdentifiable
 {
     private IWorkflowLinkViewModelHelper helper = new LinkHelper();
+    private ConnectionPreviewState preview = ConnectionPreviewState.None;
 
     /// <summary>The helper that carries this component's behaviour.</summary>
     public IWorkflowLinkViewModelHelper Helper
@@ -47,6 +48,15 @@ public sealed partial class LinkDefaultViewModel : IWorkflowLinkViewModel, IWork
 
     /// <inheritdoc />
     public IWorkflowLinkViewModelHelper GetHelper() => Helper;
+    /// <inheritdoc />
+    public ConnectionPreviewState Preview => preview;
+    /// <inheritdoc />
+    public void SetPreview(ConnectionPreviewState state)
+    {
+        if (preview == state) return;
+        preview = state;
+        OnPropertyChanged(nameof(Preview));
+    }
     /// <inheritdoc />
     public void InitializeWorkflow()
     {

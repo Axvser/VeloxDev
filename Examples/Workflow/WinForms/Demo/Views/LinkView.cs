@@ -45,6 +45,10 @@ public sealed class LinkView : Control
     // 选中色：柔和的淡青高光（与其它六家一致）。橙红太刺眼，用户明确否掉了。
     private static readonly Color HighlightColor = Color.FromArgb(255, 0xFF, 0xFF, 0xFF);
 
+    // 虚拟连线的阶段色：发起时沿用线色，有效候选绿、无效候选红。这是本 demo 的外观。
+    private static readonly Color PreviewValidColor = Color.FromArgb(255, 0x34, 0xD3, 0x99);
+    private static readonly Color PreviewInvalidColor = Color.FromArgb(255, 0xF8, 0x71, 0x71);
+
     // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
     private const double TailFraction = 0.30;
 
@@ -63,6 +67,7 @@ public sealed class LinkView : Control
     private bool _canRender = true;
     private bool _isVirtual;
     private bool _isHighlighted;
+    private ConnectionPreviewState _preview;
     private Color _lineColor = CardTheme.FromHex("#CC38BDF8");
 
     // 本帧彗星的头部走到全长的几成、以及它有多亮：每次 Render 前由画布从它的时钟推入（SetFlow）——
@@ -154,6 +159,12 @@ public sealed class LinkView : Control
     private void RequestPaint()
     {
         RefreshGeometry();
+        RequestRepaint();
+    }
+
+    // 只重画、不重建弧长表：预览阶段每动一格只换颜色，几何没有变。
+    private void RequestRepaint()
+    {
         if (ExternalInvalidate is { } external) external();
         else Invalidate();
     }
@@ -263,6 +274,13 @@ public sealed class LinkView : Control
         {
             SyncEndpoints();
         }
+
+        // 虚拟连线的阶段属于模型：候选口从有效变无效时槽位不变，只有这一格会动。
+        if (e.PropertyName is nameof(IConnectionPreviewLink.Preview) or null or "")
+        {
+            _preview = (_link as IConnectionPreviewLink)?.Preview ?? ConnectionPreviewState.None;
+            RequestRepaint();
+        }
     }
 
     private void SyncEndpoints()
@@ -284,6 +302,7 @@ public sealed class LinkView : Control
         }
 
         IsVirtual = IsVirtualLink(_link);
+        _preview = (_link as IConnectionPreviewLink)?.Preview ?? ConnectionPreviewState.None;
 
         // 唯一重建弧长表之处：画布写回的锚点都经此（四个锚点 setter 只在这里与 Bind 里被写）
         RefreshGeometry();
@@ -362,7 +381,12 @@ public sealed class LinkView : Control
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        var color = _isHighlighted ? HighlightColor : _lineColor;
+        var color = _preview switch
+        {
+            ConnectionPreviewState.ValidTarget => PreviewValidColor,
+            ConnectionPreviewState.InvalidTarget => PreviewInvalidColor,
+            _ => _isHighlighted ? HighlightColor : _lineColor,
+        };
         var thickness = _isHighlighted ? HighlightThickness : LineThickness;
 
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，

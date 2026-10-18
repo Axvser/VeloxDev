@@ -133,6 +133,120 @@ public static class WorkflowTreeEx
         cache.CurrentSender = slot;
         slot.State = SlotState.PreviewSender;
         slot.GetHelper().UpdateState();
+        WorkflowInput.For(component).SetConnectionSender(slot);
+    }
+
+    /// <summary>
+    /// Reports the slot currently under the pointer during a connection drag. Adapters call this on every pointer
+    /// move; it updates the <see cref="SlotState.PreviewReceiver"/> bit and the virtual link's
+    /// <see cref="ConnectionPreviewState"/>.
+    /// </summary>
+    /// <param name="component">The tree the drag belongs to.</param>
+    /// <param name="slot">The candidate slot, or <see langword="null"/> when the pointer is not over one.</param>
+    /// <remarks>
+    /// Repeating the same candidate is cheap: the host's validation is not consulted again until the candidate
+    /// changes. Call <see cref="StandardRefreshConnectionPreview"/> to force a re-check of the current candidate.
+    /// </remarks>
+    public static void StandardSetPreviewReceiver(
+        this IWorkflowTreeViewModel component, IWorkflowSlotViewModel? slot)
+        => SetPreviewReceiver(component, slot, force: false);
+
+    /// <summary>
+    /// Re-runs the check for the candidate currently under the pointer.
+    /// </summary>
+    /// <param name="component">The tree the drag belongs to.</param>
+    /// <remarks>
+    /// The entry for asynchronous host validation: start the work from <see cref="WorkflowInput.PreviewValidating"/>,
+    /// then call this when the verdict lands. The method is a no-op when no connection drag is in progress.
+    /// </remarks>
+    public static void StandardRefreshConnectionPreview(this IWorkflowTreeViewModel component)
+    {
+        if (component is null) return;
+
+        var input = WorkflowInput.For(component);
+        if (input.ConnectionSender is null)
+        {
+            input.ClearConnectionPreview();
+            return;
+        }
+
+        SetPreviewReceiver(component, input.PreviewReceiver, force: true);
+    }
+
+    /// <summary>
+    /// Checks whether the framework would accept a connection from <paramref name="sender"/> to
+    /// <paramref name="receiver"/>. Pure: no events, no state changes.
+    /// </summary>
+    /// <param name="component">The tree that owns both slots; its helper's
+    /// <see cref="IWorkflowTreeViewModelHelper.ValidateConnection"/> is the final rule.</param>
+    /// <param name="sender">The port the connection would leave.</param>
+    /// <param name="receiver">The port the connection would enter.</param>
+    /// <returns>
+    /// A passing check, or a failing one naming the first rule that refused it: direction, same node, or the
+    /// helper's own validation.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// This is the same rule set the preview uses, so a caller can ask "would this connect?" before a drag starts.
+    /// It deliberately does not raise <see cref="IWorkflowTreeEvents.Connecting"/>; that event is a per-attempt
+    /// veto raised only when a connection is actually completed. The release path assumes the sender was validated
+    /// when the drag started, while this method re-checks it so it can also be used outside a drag.
+    /// </remarks>
+    public static ConnectionCheck StandardCheckConnection(
+        this IWorkflowTreeViewModel component,
+        IWorkflowSlotViewModel sender,
+        IWorkflowSlotViewModel receiver)
+    {
+        if (component is null) throw new ArgumentNullException(nameof(component));
+        if (sender is null) throw new ArgumentNullException(nameof(sender));
+        if (receiver is null) throw new ArgumentNullException(nameof(receiver));
+
+        if (!sender.StandardCanBeSender())
+            return ConnectionCheck.Rejected(ConnectionRejectReason.SenderCannotSend);
+
+        if (!receiver.StandardCanBeReceiver())
+            return ConnectionCheck.Rejected(ConnectionRejectReason.ReceiverCannotReceive);
+
+        if (ReferenceEquals(sender.Parent, receiver.Parent))
+            return ConnectionCheck.Rejected(ConnectionRejectReason.SameNode);
+
+        return component.GetHelper().ValidateConnection(sender, receiver)
+            ? ConnectionCheck.Valid
+            : ConnectionCheck.Rejected(ConnectionRejectReason.RejectedByRule);
+    }
+
+    private static void SetPreviewReceiver(
+        IWorkflowTreeViewModel component, IWorkflowSlotViewModel? slot, bool force)
+    {
+        if (component is null) return;
+
+        var input = WorkflowInput.For(component);
+        var sender = input.ConnectionSender;
+        if (sender is null)
+        {
+            input.ClearConnectionPreview();
+            return;
+        }
+
+        // The pointer starts on the sender, and it is not a candidate for itself: reporting it would paint the
+        // just-started drag as invalid before the pointer has moved anywhere.
+        if (ReferenceEquals(slot, sender)) slot = null;
+
+        // Moving inside the same candidate must not re-run the host's validation every frame. An explicit refresh
+        // bypasses this so an asynchronous verdict can land on the candidate already under the pointer.
+        if (!force && ReferenceEquals(input.PreviewReceiver, slot)) return;
+
+        var check = slot is null
+            ? ConnectionCheck.Valid
+            : component.StandardCheckConnection(sender, slot);
+
+        // A preview may tighten the framework's verdict, never relax it.
+        if (slot is not null && check.IsValid)
+        {
+            check = input.RaisePreviewValidating(sender, slot, check);
+        }
+
+        input.SetConnectionPreview(slot, check);
     }
 
     /// <summary>Completes a connection at <paramref name="slot"/>.</summary>
@@ -209,6 +323,7 @@ public static class WorkflowTreeEx
         }
 
         cache.CurrentSender = null;
+        WorkflowInput.For(component).ClearConnectionPreview();
     }
     #endregion
 

@@ -1192,13 +1192,17 @@ public static class WorkflowSurfaceBehavior
         var world = WorldPoint(state, e);
         tree.SetPointerCommand.Execute(new Anchor(world.X, world.Y, 0));
 
-        // 橡皮筋挂着的那段时间不转发 PointerMoved，否则沿途经过的实连线会一路亮起。
-        if (!tree.VirtualLink.IsVisible)
+        // 橡皮筋挂着的那段时间不转发 PointerMoved，否则沿途经过的实连线会一路亮起；
+        // 候选接收口仍报给树，槽的 preview 位与虚拟连线的阶段由几何命中回答。
+        if (tree.VirtualLink.IsVisible)
         {
-            RoutePointer(state, host, e.GetPosition(host), world, e.OriginalSource as DependencyObject,
-                (p, t, h) => new Wf.PointerMovedEventArgs(
-                    p, Modifiers(e.KeyboardModifiers), host, t, h));
+            tree.StandardSetPreviewReceiver(SlotHitTestEx.HitTest(tree, world.X, world.Y));
+            return;
         }
+
+        RoutePointer(state, host, e.GetPosition(host), world, e.OriginalSource as DependencyObject,
+            (p, t, h) => new Wf.PointerMovedEventArgs(
+                p, Modifiers(e.KeyboardModifiers), host, t, h));
     }
 
     private static void PanMoved(FrameworkElement host, SurfaceState state, MouseEventArgs e)

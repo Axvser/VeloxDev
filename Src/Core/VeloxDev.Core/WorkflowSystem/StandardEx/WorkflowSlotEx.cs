@@ -89,18 +89,20 @@ public static class WorkflowSlotEx
     }
 
     /// <summary>Recomputes the slot's connection state from its targets and sources.</summary>
+    /// <remarks>The two preview bits are owned by an in-progress drag, not by the connection lists; they survive the recompute.</remarks>
     public static void StandardUpdateState(this IWorkflowSlotViewModel component)
     {
         bool hasOutgoingConnections = component.Targets.Count > 0;
         bool hasIncomingConnections = component.Sources.Count > 0;
 
-        component.State = (hasOutgoingConnections, hasIncomingConnections) switch
+        var preview = component.State & (SlotState.PreviewSender | SlotState.PreviewReceiver);
+        component.State = preview | ((hasOutgoingConnections, hasIncomingConnections) switch
         {
             (true, false) => SlotState.Sender,
             (false, true) => SlotState.Receiver,
             (true, true) => SlotState.Sender | SlotState.Receiver,
             (false, false) => SlotState.StandBy,
-        };
+        });
     }
 
     /// <summary>Starts a connection from the slot through its tree.</summary>

@@ -103,6 +103,20 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private INotifyPropertyChanged? _senderNotifier;
     private INotifyPropertyChanged? _receiverNotifier;
 
+    // 虚拟连线的阶段（发起 / 有效候选 / 无效候选）：本视图的外观，读模型自己的 Preview。
+    private ConnectionPreviewState _preview;
+
+    // 阶段色是本 demo 的外观：有效绿、无效红，其余沿用模板给的线色。
+    private const string PreviewValidColor = "#FF34D399";
+    private const string PreviewInvalidColor = "#FFF87171";
+
+    private string StageColor => _preview switch
+    {
+        ConnectionPreviewState.ValidTarget => ToCss(PreviewValidColor),
+        ConnectionPreviewState.InvalidTarget => ToCss(PreviewInvalidColor),
+        _ => LineColor,
+    };
+
     private string LineColor => LineColorOverride ?? ToCss("#CC38BDF8");
 
     private double Thickness
@@ -532,7 +546,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     // 亮起来的两个理由：指针在线上，或页面把这条线选住了（右键菜单开着时指针已经不在线上）
     private bool IsLit => _hover || IsSelected;
 
-    private string LitColor => IsLit ? ToCss(SelectedColor) : LineColor;
+    private string LitColor => IsLit ? ToCss(SelectedColor) : StageColor;
     private double LitThickness => IsLit ? Thickness + SelectedWidthBonus : Thickness;
     private string LitThicknessCss => N(LitThickness);
     private string BodyOpacity => IsLit ? "0.85" : "0.55";
@@ -577,6 +591,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
         CanRender = link.IsVisible;
         IsVirtual = IsVirtualLink(link);
+        _preview = (link as IConnectionPreviewLink)?.Preview ?? ConnectionPreviewState.None;
 
         if (link is INotifyPropertyChanged n)
         {
@@ -621,6 +636,12 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
             or null or "")
         {
             IsVirtual = IsVirtualLink(Link);
+        }
+
+        // 候选口从有效变无效时槽位状态不变，只有模型这一格会动。
+        if (e.PropertyName is nameof(IConnectionPreviewLink.Preview) or null or "")
+        {
+            _preview = (Link as IConnectionPreviewLink)?.Preview ?? ConnectionPreviewState.None;
         }
 
         SyncFlow();

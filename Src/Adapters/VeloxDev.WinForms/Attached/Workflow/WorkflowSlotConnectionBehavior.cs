@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -214,6 +215,10 @@ public sealed class WorkflowSlotConnectionBehavior
         {
             activeConnection.Tree.SetPointerCommand.Execute(pointer);
         }
+
+        // 拖拽中指针下的候选接收口：几何命中不看可视树，本家靠 WindowFromPoint 找目标的那一套只在松手时用。
+        activeConnection.Tree.StandardSetPreviewReceiver(
+            SlotHitTestEx.HitTest(activeConnection.Tree, pointer.Horizontal, pointer.Vertical));
 
         WorkflowSurfaceBehavior.Refresh(activeConnection.SurfaceControl);
     }

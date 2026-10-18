@@ -745,14 +745,20 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var point = e.GetPosition(state.Canvas);
-        viewModel.SetPointerCommand.Execute(WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout));
+        var pointer = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout);
+        viewModel.SetPointerCommand.Execute(pointer);
 
-        // 拉线时指针下正挂着橡皮筋，那段时间不转发，否则沿途实连线会一路亮起。
-        if (!viewModel.VirtualLink.IsVisible)
+        // 拉线时指针下正挂着橡皮筋，那段时间不转发，否则沿途实连线会一路亮起；
+        // 但候选接收口仍要报给树 —— 拖动经过哪些口由几何命中回答，Slot 的 preview 位和虚拟连线的阶段都靠它。
+        if (viewModel.VirtualLink.IsVisible)
         {
-            RoutePointer(state, viewModel, point, host, e.OriginalSource as DependencyObject,
-                (anchor, target, handle) => new Wf.PointerMovedEventArgs(anchor, Modifiers(), host, target, handle));
+            viewModel.StandardSetPreviewReceiver(
+                SlotHitTestEx.HitTest(viewModel, pointer.Horizontal, pointer.Vertical));
+            return;
         }
+
+        RoutePointer(state, viewModel, point, host, e.OriginalSource as DependencyObject,
+            (anchor, target, handle) => new Wf.PointerMovedEventArgs(anchor, Modifiers(), host, target, handle));
     }
 
     // 悬停到连线上的指针消息：进入与移动走同一条翻译 —— 输入面只看点在哪，不看事件叫什么。
