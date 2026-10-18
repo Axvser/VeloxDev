@@ -32,20 +32,17 @@ public partial class TreeView : ContentView
     // 平台的输入翻译过来，这里决定收到之后做什么。
     private IInputEvents? _linkInput;
     private IWorkflowTreeViewModel? _tree;
-    private bool _shiftHeld;
 
     private void SyncLinkInput()
     {
         if (_linkInput is not null)
         {
             _linkInput.Input.KeyDown -= OnKeyDown;
-            _linkInput.Input.KeyUp -= OnKeyUp;
             _linkInput.Input.PointerWheelChanged -= OnWheel;
             _linkInput = null;
         }
 
         _tree = BindingContext as IWorkflowTreeViewModel;
-        _shiftHeld = false;
 
         if (_tree is not null && _tree.GetHelper() is IInputEvents events)
         {
@@ -54,7 +51,6 @@ public partial class TreeView : ContentView
             // VeloxDev customization: 删除与撤销/重做都是宿主的 —— 路由把这次按键交过来（target 就是
             // 指针下的那条线，空白画布时链的尽头是树）。
             events.Input.KeyDown += OnKeyDown;
-            events.Input.KeyUp += OnKeyUp;
             events.Input.PointerWheelChanged += OnWheel;
         }
     }
@@ -64,9 +60,6 @@ public partial class TreeView : ContentView
     // 撤销栈），撤掉的是更早的一次结构改动。要可撤销的拖动就自己提供 ActionPair 走 tree.GetHelper().Submit。
     private void OnKeyDown(object? sender, KeyDownEventArgs e)
     {
-        // 任何一次按下都带着当时的修饰键状态，所以它既设 Shift，也能把失焦期间留下的陈旧状态纠正回来。
-        _shiftHeld = IsShiftKey(e.Key) || e.Modifiers.HasFlag(InputModifiers.Shift);
-
         if (e.Handle.PreventDefault) return;
 
         if (e.Key == InputKey.Delete)
@@ -89,19 +82,12 @@ public partial class TreeView : ContentView
         e.Handle.PreventDefault = true;
     }
 
-    private void OnKeyUp(object? sender, KeyUpEventArgs e)
-    {
-        // Shift 自己抬起时平台**仍然**报它按着（修饰键状态在事件之后才更新），所以这一条只能按 Key 判。
-        if (IsShiftKey(e.Key)) _shiftHeld = false;
-    }
-
-    private static bool IsShiftKey(InputKey key) => key is InputKey.LeftShift or InputKey.RightShift;
-
     // VeloxDev customization: 画布滚轮由适配器整笔接管，所以这里是**唯一**能改写它去哪的机会。
     // 不按 Shift 就什么都不做 —— 适配器按平台的步长执行默认竖滚；按住了就拦下这一笔，改从轴上横着滚。
+    // 修饰键读事件自带的那一份：它不依赖键盘焦点。用 KeyDown/KeyUp 跟踪的话，表面没焦点时 Shift 永远不来。
     private void OnWheel(object? sender, PointerWheelEventArgs e)
     {
-        if (!_shiftHeld || _tree is not { } tree) return;
+        if (!e.Modifiers.HasFlag(InputModifiers.Shift) || _tree is not { } tree) return;
 
         e.Handle.PreventDefault = true;
         // 竖轴正 = 远离用户，塞进横轴要取反 —— 横轴正 = 向右，而「远离用户」在画面上是向左。

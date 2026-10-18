@@ -212,7 +212,7 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
   | Shift+滚轮下一格 | `520/520`（**原生横滚**） | `400/520`（订阅方接管） |
 
   ⇒ 浏览器原生步长**恰好等于 `deltaY`**（120）；移植后普通滚轮**仍是 120 而不是 240**，这就把「`preventDefault` 有没有压住浏览器默认滚动」从推断变成了实测。
-- ⚠ **页面上没收到过 Shift 键事件时，Shift+滚轮走竖滚**：Shift 由统一 KEY 输入跟踪，而 web harness 的 `keydown:Shift` **只给鼠标事件带修饰位、不向页面派发键盘事件** ⇒ `_shiftHeld` 一直是假。补一个 `dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',code:'ShiftLeft',bubble:true}))` 之后横滚立刻出现。**这是七家共有的依赖**（桌面 harness 的 `keydown:` 走 SendInput，是真的键事件，所以六家没露出这一面）。
+- **Shift+滚轮不再依赖页面收到键盘事件**（2026-10-18 起）：demo 读滚轮 args 的 `Modifiers`，来源是 JS 从鼠标事件读到的 `shiftKey`；web harness 的 `keydown:Shift` 只给后续鼠标事件带修饰位，已经足够。未点击、未派发 DOM 键盘事件时实测：普通一格纵移 120、Shift+一格横移 120、另一轴不动。`_shiftHeld` 与 `KeyUp` 订阅已从七个 Trimmed demo 删除。
 - **被取代的原生行为**：(a) 页面滚动容器不再自行滚动工作流表面；(b) **Shift+滚轮的原生横滚没了**（浏览器原生会横滚，这是七家里最大的一处行为变更，用户已确认接受）；(c) 普通滚轮的位移多了一次 JS↔.NET 往返（几毫秒），这是「适配器持有滚轮、裁决来自 .NET」的固有代价。Ctrl+滚轮缩放不受影响（实测 Scale 1.00 → 0.91，复查通过）。
 
 ### 三点六、内层滚动区被掐掉、标尺/小地图的真实结局（2026-10-11 探针）
@@ -265,11 +265,11 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 
 **单轴写入 —— 并且它推进了「不可区分」那条论断**：守卫加在**共享的** `scrollBy` 上之后，「零增量轴在边缘」**变得可区分**：竖向已到底（max 763）时调 `scrollByDelta(id,50,0)`，新码 `[763,1368] → [763,1368]`（不再触发 `expandCanvas`）；**旧码会走 y 轴边界检查、凭空把画布撑大 800**（这一支是**读旧源码**得出、非实测）。⇒ 「两轴齐写」不只是契约问题，**它会误撑画布** —— 比我先前的判断更准。
 
-**Shift 抬起：本家无此缺陷**（改前改后逐格完全相同）。⚠ 但**只有自己 `dispatchEvent` DOM 键盘事件才测得出来** —— 用 harness 的 `keydown:Shift`（只给鼠标事件带修饰位）会得**假阴性**。
+**Shift 抬起：不再需要 keyup 跟踪。** 每个滚轮事件自带当时的修饰位，松开 Shift 后的下一格自然回到竖滚；旧写法 `_shiftHeld` + `KeyUp` 已移除（2026-10-18）。
 
 **未测**：Ctrl+滚轮落在小地图上（`initWheelZoom` 仍挂滚动容器 ⇒ 那里无缩放；本轮未改动它）。
 
-**Shift：这家是竖滚唯一。** 三种情形（默认 / `keydown:Shift` 让鼠标事件带 `mods:4` / 只派发键盘事件）结果**完全一致**（横 0、竖 +120）—— 没有任何一方消费修饰键做横滚。注意**非 Trimmed 的 Blazor demo 根本没有滚轮订阅**（`Workflow.razor.cs` 明写 "No wheel subscription here"），Shift 宿主只在 Trimmed 各家 TreeView 里。
+**Shift：** 2026-10-11 时这家还是竖滚唯一（三种情形横 0、竖 +120）；2026-10-18 起 demo 读滚轮事件自带的修饰键，未点击实测 Shift+一格横移 120、纵轴不动。注意**非 Trimmed 的 Blazor demo 根本没有滚轮订阅**（`Workflow.razor.cs` 明写 "No wheel subscription here"），Shift 宿主只在 Trimmed 各家 TreeView 里。
 另外 `.node-body` 这个容器在本 demo **根本不渲染**（通用节点用空白的 `WorkflowNodeView.razor`）—— 引容器清单时先确认它真的在页面上。
 
 ## 四、改这里时最容易踩的坑（带依据）

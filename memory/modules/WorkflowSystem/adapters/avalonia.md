@@ -224,7 +224,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 ⇒ 这同时解释了早先七家探针「都没观测到双轴写副作用」：**不是巧合，是那一轴本来就在范围内**。「两轴齐写」在实践中**可证无害**（`ScrollViewer` 自己会夹住越界值），修它纯粹是**契约一致性**（`IWorkflowSurfaceScroller` 的 remarks 写着「零增量不动那一轴」），**不是修 bug**。写结论时别把它记成缺陷。
 
-- ⚠ **焦点在解手时不在表面上**：只 `moveto` 过去按 Shift，键不会到达（没东西有焦点），于是 demo 的 `_shiftHeld` 一直假、Shift+滚轮走默认。探针的 Actions 里**必须先 `click:` 一次**才能验出横滚。这是设计使然（按下才收焦点），不是缺陷。
+- **Shift+滚轮不需要焦点，也不需要先点击**：适配器构造 `PointerWheelEventArgs` 时已带上 `Modifiers(e.KeyModifiers)`（`WorkflowSurfaceBehavior.cs:874`），七个 Trimmed demo 2026-10-18 起改读 `e.Modifiers`，删掉了靠 KeyDown/KeyUp 维护的 `_shiftHeld`。未点击画布实测七家（只 `moveto` + `keydown:Shift`）：普通一格只动纵轴、Shift+一格只动横轴 —— WPF 48/48、Avalonia 50/50、WinForms 48/48、WinUI 74/74、Jalium 48/48、MAUI 62/62、Blazor 120/120。
 
 ## 四、改这里最容易踩的坑
 

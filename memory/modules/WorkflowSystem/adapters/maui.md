@@ -204,7 +204,7 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 **修**：挂点改到画布平台元素**往上最近的 `ScrollContentPresenter`**（覆盖整个滚动视口，且在做滚动那一层**之前**冒泡），取不到才退回画布元素。改后同一个空画布点 20 格 ⇒ 画布 `2240×1340 → 2240×1772`。
 
 **N6-b 的根因在适配器，不在 demo**：`ToKey` 只点名了 `LeftShift(160)/RightShift(161)`，**无侧的 `VirtualKey.Shift(16)` 落 `Unknown`** —— 真实键盘左右 Shift 的 `WM_KEYDOWN` 报的都是 `0x10`（左右之分在扫描码里），SendInput 合成的更是**只有**这个码。于是 demo 里 `IsShiftKey(e.Key)` 永远为假：**按下那半还有 `e.Modifiers` 兜着，抬起那半永远不触发** ⇒ 松开 Shift 之后一直按横滚走（实测 `keyup:Shift` 后两格仍是 `124,247`）。demo 的写法**与 WPF 那家逐字相同**，所以修在适配器：补 `Shift/Control/Menu → LeftShift/LeftCtrl/LeftAlt`（与 WPF 的 `KeyInterop` 同一条）。改后 `keyup:Shift` 一格 ⇒ `124,371`（回到竖滚 +61.8）。
-⚠ **这是跨家缺陷，不是这家独有**：WinUI 用的是**同一套 `VirtualKey` 词汇**、`ToKey` 里同样只有八个侧别键 —— 2026-10-11 已一并补上（WinUI 的 demo 也是逐字相同的形状）。**别把「Shift+滚轮有效」当成「Shift 抬起也有效」**：上一轮 WinUI 探针量到的横滚生效验的是**按下**那条路。
+⚠ **这是跨家缺陷，不是这家独有**：WinUI 用的是**同一套 `VirtualKey` 词汇**、`ToKey` 里同样只有八个侧别键 —— 2026-10-11 已一并补上（WinUI 的 demo 也是逐字相同的形状）。**2026-10-18 起 demo 不再用 KeyUp 跟踪 Shift**：滚轮事件自带修饰位，按下/抬起都由每一格自己带着；上面这条映射仍对 KeyDown 有用（Ctrl+Z 等）。
 
 **闸门**：与 WinUI 同形 —— 实测**内层到边那一格照样置 `Handled`**（`inner=128/128` 时 `handled=True`），`if (e.Handled) return;` 单独不够，判据要叠加「沿方向绝对余量」。三支 A/B：内层有余量 11 格 ⇒ 画布 `视口(画布) 0,0`；第 13 格起画布接；空白点 ⇒ 61.8/格。
 
@@ -214,10 +214,10 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 
 **回归**：中部 1 格 `0,62`、5 格 `0,309`（=61.8/格，**不是 123.6**）；Ctrl+滚轮缩放 `121% / Scale 0.83`。
 
-**两条未决异常（已记录，未定性，勿当结论）：**
+**未决异常（已记录，未定性，勿当结论）：**
 
 1. **Trimmed 上有若干空画布点滚轮没进 `OnSurfaceWheel`**（原生 `ScrollViewer` 自己滚了 61.8），而同 demo 另外几个点进了（`hit=LayoutPanel`）；卡片区稳定进。这动摇「挂在画布上就拦得住」这个前提，得单独查清。
-2. **`keyup:Shift` 之后仍按横滚执行**（`dx=61.8`）⇒ 疑 `_shiftHeld` 未复位（`OnKeyUp` 靠 `IsShiftKey` 判）。这正是用统一 KEY 输入跟踪修饰键的**陈旧态风险**，在 WPF 上未出现、在这家出现了。
+**`keyup:Shift` 之后仍按横滚执行 —— 已消解（2026-10-18）。** 旧写法用 `_shiftHeld` + `KeyUp` 跟踪修饰键；七个 Trimmed demo 已改为读滚轮事件自带的 `Modifiers`，每个事件各带当时的修饰位，不存在陈旧态。适配器把无侧 `VirtualKey.Shift` 映射到 `LeftShift` 仍保留 —— KeyDown（Ctrl+Z 等）还要用。
 
 ## 三、与其它家的刻意背离
 

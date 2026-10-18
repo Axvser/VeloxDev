@@ -76,7 +76,7 @@
 > ⚠ **验证时的进程陷阱**：`pkill -f <项目名>` 只杀 `dotnet run` 的包装进程，**子进程会活着继续占端口** —— 之后每一次「重新构建再测」都是**旧二进制**在回答（我因此白查了好几轮 Razor 语法）。要按进程名杀（或按端口 PID）。
 >
 > ⚠ **七家 Trimmed demo 的可执行文件全叫 `Demo.exe`，而 harness 是按进程名找窗口的**（Avalonia 那家是 `Demo.Desktop.exe`）—— 别家遗留的实例会被当成目标抓走，**截到的是另一个应用，而且不报错**（2026-10-11 实测：Jalium 的探针截到了 WinUI 的窗口，读数一路是别人的）。跑之前先 `taskkill /F /IM Demo.exe /T`，跑完**先核对截图里的窗口标题**再读任何一个数字。⇒ **同一时刻只让一家在跑探针**：并行驱动两家 demo 会互相污染，得出的数字比没有更糟。
-> ⚠ **验 Shift+滚轮那一下 `click:` 必须落在空白画布上，不能落在 HUD 上**：焦点是按下给的，点到左下角那块 `视口(画布)` 面板上（如 `click:200,700`）表面就没拿到焦点，`_shiftHeld` 一直假，**Shift+滚轮静默退化成竖滚**（2026-10-11 实测 Jalium：`0,96` 而不是 `48,48`；改 `click:450,700` 立刻正常）。这与「先点一下画布」是同一件事，只是坐标得真的落在画布上。
+> **验 Shift+滚轮不需要先 `click:`**（2026-10-18 起）：七个 Trimmed demo 读滚轮事件自带的 `Modifiers`，它由适配器从平台键盘状态填入，不依赖焦点。若横滚退化成竖滚，先查这条链（该平台滚轮事件的修饰位来源、或它是否真的带着 Shift），不要先补一次点击。
 | 给 AI 工具面加工具 | 在 `WorkflowAgentToolkit` 加 `[AgentCommand]` 方法，并用 `WorkflowToolCategory` 分类 | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs`；`WorkflowToolCategory.cs:13` |
 
 > `[SlotSelectors]` **不在** `WorkflowSystem` 命名空间下，它在 `Src/Core/VeloxDev.Core/AI/SlotSelectorsAttribute.cs:38`（`VeloxDev.AI`）。别去 WorkflowSystem 目录里找。
