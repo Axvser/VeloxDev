@@ -25,7 +25,6 @@
 | 插槽连接 | `WorkflowSlotConnectionBehavior`（`sealed class : AvaloniaObject`，59 行） | 按下发送、同元素上松开接收；按下后**主动释放指针捕获**，见 §三.3 |
 | 插槽布局 | `WorkflowSlotLayoutBehavior`（`sealed class : AvaloniaObject`，342 行） | **三条写回路径**，见 §三.5 |
 | 网格装饰器 / 小地图 | `WorkflowMinimapOverlay`（`class Control, IWorkflowMinimapOverlay`，589 行）；**网格装饰器适配器不自带** | 自绘走 `public override void Render(DrawingContext)`；`RulerBand => 0`（`:137`，小地图不占标尺带）；装饰器由 demo 提供（`Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/WorkflowGridDecorator.cs`，`sealed class : Panel, IWorkflowGridDecorator`，`RulerBand => RulerThickness`），与 WPF 同形 |
-| 平台探测 | `PlatformDetection`（`internal static class`，20 行） | **零调用者，死代码**，见 §四.1 |
 
 ---
 
@@ -228,7 +227,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 ## 四、改这里最容易踩的坑
 
-1. **`PlatformDetection.cs` 是死代码，而且它的注释描述的是一条不存在的路径。** 全类 20 行，`IsTouchPlatform` 只有定义没有调用者（`Src/` 与 `Examples/` 全仓库 grep 零命中）。它的 XML 注释写着「On these platforms, PointerPressed handlers **must be registered with Tunnel routing** to pre-empt the ScrollViewer gesture recognizer」—— 实际做法是 §二.4 的**反射删除识别器**。`Tunnel` 注册现在有两处：§二.3 的滚轮（`WorkflowSurfaceBehavior.cs:633`）与 §二.10 的按下路由（`:463`），两处都不是「抢在识别器之前」。
+1. **`PlatformDetection.cs` 已于 2026-10-18 删除。** 它全类 20 行、`IsTouchPlatform` 零调用者，而且 XML 注释描述的是一条不存在的路径（「On these platforms, PointerPressed handlers **must be registered with Tunnel routing**」）；实际做法是 §二.4 的**反射删除识别器**。`Tunnel` 注册现在有两处：§二.3 的滚轮（`WorkflowSurfaceBehavior.cs:633`）与 §二.10 的按下路由（`:463`），两处都不是「抢在识别器之前」。
 2. **`IsSurfaceBlankInteraction` 会把 ScrollViewer 内部的一切都算成空白**（`:1101-1110` 的祖先判定里有 `ReferenceEquals(x, state.ScrollViewer)`）。WPF 那份在此之后**显式排除**滚动条（WPF `:1217-1220`：`source is ScrollBar || ancestors.Any(x => x is ScrollBar)`），Avalonia 没有这段。
    - **未验证**：Avalonia 里滚动条（Thumb）按下时是否会把 `PointerPressed` 标成已处理、从而根本到不了 `OnPointerPressed`（这家是 `+=` 注册、默认不接收已处理事件）。若会，这条就不会触发；若不会，点击滚动条会**同时**启动一次画布平移。**下一个动这块的人应该先用一次实测把它定下来**，别按 WPF 的结论直接补排除。
 3. **拖拽手柄必须有不透明背景，否则收不到指针事件。** `Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/NodeView.axaml` 里拖拽用的 Grid 带 `Background="Transparent"`（`:27`）；插槽视图 `Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/SlotView.axaml:5` 用 `Background="#01000000"`（近透明，仍参与命中测试）。空背景的 `Grid`/`Panel` 在 Avalonia 里不做命中测试 —— 这与 `memory/modules/WorkflowSystem/…` 里「XAML node drag header needs Background="Transparent"」是同一件事，属平台硬限制，不是 demo 的随手写法。

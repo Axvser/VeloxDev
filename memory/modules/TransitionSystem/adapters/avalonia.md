@@ -78,7 +78,7 @@ Input -1 · Default 0 · Loaded 1 · UiThreadRender 2 · AfterRender 3 · Render
 `Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj` 的 `TargetFrameworks = netstandard2.0;net6.0`。后果：
 
 - `System.Numerics` 的重载与 Core 一样带 `#if !NETSTANDARD2_0` 守卫（`Transition.cs:238`、`267`）。
-- `BoxShadowsSampler.cs:103-108` 留了一段 `#if NETSTANDARD` 的 `Clamp(byte, byte, byte)` —— **全文读完确认零调用者，两个 TFM 下都是死代码**（该文件里 `Channel` 自己做饱和，见 `:96-101`）。这类残留是「照着别家抄一半」留下的，不要以为它说明了什么平台限制。
+- `BoxShadowsSampler.cs` 里那段 `#if NETSTANDARD` 的 `Clamp(byte, byte, byte)` 已于 2026-10-18 删除（零调用者；该文件的 `Channel` 自己做饱和）。
 
 ### 7. 为什么这家的采样器比别家宽：**类型系统驱动，不是实现驱动**
 

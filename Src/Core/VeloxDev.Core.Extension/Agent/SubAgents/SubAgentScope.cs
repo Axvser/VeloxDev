@@ -899,13 +899,13 @@ public sealed class SubAgentScope : IAsyncDisposable
             // The delay task is the one that lost only when something else completed first; comparing by
             // reference is the only way to tell them apart, since both complete successfully.
             var timedOut = !ReferenceEquals(finished, all);
-            return (RowsFor(targets, ids), timedOut);
+            return (RowsFor(targets), timedOut);
         }
 
-        return (RowsFor(targets, ids), false);
+        return (RowsFor(targets), false);
     }
 
-    private IReadOnlyList<SubAgentSummary> RowsFor(List<SubAgentEntry> targets, string[]? ids)
+    private IReadOnlyList<SubAgentSummary> RowsFor(List<SubAgentEntry> targets)
     {
         RefreshCallCounts();
         Republish();

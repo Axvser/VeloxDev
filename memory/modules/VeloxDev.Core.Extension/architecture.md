@@ -200,13 +200,10 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 
 ## 六、代码与注释不一致 / 零调用者的面
 
-**这是本模块最值得先知道的一条：`Agent/AgentEmbeddedResources.cs` 有一整段「Scripts」API 和一段死掉的 Safety 组合器，它们读的资源目录不存在。**
+**`Agent/AgentEmbeddedResources.cs` 的 Scripts / 单文件读取 API 已于 2026-10-18 删除**（它们零调用者，且 `Resources/{system}/Scripts/` 目录不存在）。活着的入口是 `ReadAllReferences` / `ReadAllSafety` / `ReadAllSkills` 与单个 `ReadSafety`。
 
 | 成员 | 位置 | 状态 |
 |---|---|---|
-| `ReadScript` / `ListScripts` / `ReadAllScripts` | `AgentEmbeddedResources.cs:135 / :141 / :147` | **零调用者**（三个只互相调用）。XML 注释宣称读 `Resources/{system}/Scripts/{name}`（`:132`），而 `Resources/Workflow/` 下**只有 `en/`、`zh/` 两个目录**，其下只有 `References/`、`Safety/`、`Skills/`。**没有 `Scripts/`** |
-| `ReadSafetyFiles` | `AgentEmbeddedResources.cs:114` | **零调用者**。单个 `ReadSafety`（`:108`）是活的（`WorkflowAgentScope.cs:814`、`:821`） |
-| `ReadReference`（单个）/ `ListReferences` | `AgentEmbeddedResources.cs:86 / :92` | **零调用者**（只有一个「全读」的 `ReadAllReferences` 是活的：`WorkflowAgentScope.cs:1019`、`:1143`） |
 | `ProvideAllContexts` | `WorkflowAgentScope.cs:1005 / :1008` | **仓库内零外部调用者**（无参重载只转发给有参重载）。是给宿主的另一档提示模式，宿主样例走的是渐进模式（`AgentHelper.cs` 调 `ProvideProgressiveContextPrompt`）。**它和渐进模式一样会写骨架收据**，所以两档都算「骨架已交付」 |
 | `BuildDynamicInstructions()` | `WorkflowAgentScope.cs:1872` | **2b 起不再是预留坑位**：渲染**能力包络**（闸门 / 被关掉的工具 / 调用预算的分档用量 / 相对骨架的漂移段）。按 `ContextKey` 缓存，空闲轮零分配；**绝不调用** `ProvideProgressiveContextPrompt`（骨架一次 870 KB、是框架每轮基线的 19 倍，见 `WorkflowAgentScope.cs:1752-1753`；旧文说的「1,100 倍」不可复核） |
 | `WorkflowToolCategory.Layout`（`1<<5`）、`Composite`（`1<<8`） | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | 保留位，**没有工具注册在这两个类别下**（与 `WorkflowAgentToolkit.cs:190-192` 的「不做复合工具」一致） |

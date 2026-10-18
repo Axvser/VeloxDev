@@ -95,7 +95,7 @@ public static class AgentSelectionVisual
             {
                 card.Stroke = _originalStroke;
                 card.StrokeThickness = _originalThickness;
-                card.Shadow = _originalShadow;
+                card.Shadow = _originalShadow!;
                 _originalStroke = null;
             }
         }

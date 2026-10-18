@@ -7,7 +7,7 @@
 | `VeloxDev.Serialization.Benchmarks/` | 归档序列化引擎的基准（BenchmarkDotNet） |
 | `agent-ui-harness.ps1` / `agent-web-harness.ps1` | 用真实输入驱动 demo 并截图（前者桌面、后者 CDP 驱动浏览器） |
 | `agent-ui-probe.ps1` | 包一层：构建 → 杀残留 → 跑 harness → **校验窗口标题** → 裁 HUD → 与基线差分 |
-| `verify-*-item-templates*.ps1` | 打包/编译模板项，检查镜像漂移 |
+| `verify-*-item-templates*.ps1` | 打包/编译模板项，检查镜像漂移；`verify-workflow-item-templates-all.ps1` 还统计**生成集的构建警告**（`warnings` 列），`-Strict` 时警告与漂移都会失败 |
 
 ---
 

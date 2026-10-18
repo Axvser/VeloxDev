@@ -99,12 +99,5 @@ namespace VeloxDev.Adapters.NativeSamplers
             if (value >= 255d) return 255;
             return (byte)value;
         }
-
-#if NETSTANDARD
-        private static byte Clamp(byte value, byte min, byte max)
-        {
-            return value < min ? min : (value > max ? max : value);
-        }
-#endif
     }
 }

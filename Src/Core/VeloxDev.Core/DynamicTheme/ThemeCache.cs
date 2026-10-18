@@ -17,10 +17,6 @@ namespace VeloxDev.DynamicTheme
         // ── Active (runtime-override) per-instance cache ──
         private static readonly ConditionalWeakTable<IThemeObject, InstanceCache> _activeCache = new();
 
-        // ── Shared converter instances ──
-        private static readonly Dictionary<string, IThemeValueConverter> _converters = [];
-        private static int _converterIndex;
-
         private readonly struct PropertyEntry(PropertyInfo property, Dictionary<Type, object?> values)
         {
             public PropertyInfo Property { get; } = property;
@@ -65,30 +61,6 @@ namespace VeloxDev.DynamicTheme
                     }
                     _staticCache[type] = entries;
                 }
-            }
-        }
-
-        /// <summary>
-        /// Register a converter instance for reuse across types.
-        /// </summary>
-        public static string RegisterConverter(IThemeValueConverter converter)
-        {
-            lock (_lock)
-            {
-                var key = $"__velox_global_converter_{_converterIndex++}__";
-                _converters[key] = converter;
-                return key;
-            }
-        }
-
-        /// <summary>
-        /// Get a converter by key.
-        /// </summary>
-        public static IThemeValueConverter? GetConverter(string key)
-        {
-            lock (_lock)
-            {
-                return _converters.TryGetValue(key, out var c) ? c : null;
             }
         }
 
@@ -141,14 +113,6 @@ namespace VeloxDev.DynamicTheme
         {
             _activeCache.TryGetValue(instance, out var entry);
             return entry;
-        }
-
-        /// <summary>
-        /// Remove the active cache entry for an instance.
-        /// </summary>
-        public static void RemoveActiveEntry(IThemeObject instance)
-        {
-            _activeCache.Remove(instance);
         }
 
         /// <summary>

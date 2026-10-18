@@ -123,9 +123,10 @@ public sealed class WorkflowInput
     {
         if (e is null) throw new ArgumentNullException(nameof(e));
 
-        if (Bubble(e)) return;
-
-        ApplyDefault(e);
+        // Keys have no default action: Core only routes them. Deleting is the host's — subscribe to KeyDown
+        // and run link.DeleteCommand (the demos and the overlay take the same path: the library reports, the
+        // host decides).
+        Bubble(e);
     }
 
     // 指针换了目标：先给留下那个发一次 Exited，再给新那个发一次 Entered，然后才是这一条本身。
@@ -225,11 +226,5 @@ public sealed class WorkflowInput
         if (IsSuspended) return;
 
         pointerTarget = e is PointerExitedEventArgs ? null : e.Target;
-    }
-
-    // 键没有默认动作：Core 只把按键路由出去。删除是宿主的事 —— 订 KeyDown、自己执行 link.DeleteCommand
-    // （Demo 与 InfoOverlay 同一条路：库给事件，效果归你）。
-    private static void ApplyDefault(KeyEventArgs e)
-    {
     }
 }

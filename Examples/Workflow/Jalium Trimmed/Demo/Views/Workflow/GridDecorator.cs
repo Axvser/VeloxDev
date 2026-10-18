@@ -128,14 +128,14 @@ public sealed class GridDecorator : Grid, IWorkflowGridDecorator
         Children.Add(_gridLayer);
         Children.Add(_rulerLayer);
 
-        MinorGridColor = Color.FromRgb(0x2A, 0x2D, 0x2E);
-        MajorGridColor = Color.FromRgb(0x3A, 0x3D, 0x40);
-        AxisColor = Color.FromRgb(0x4D, 0x4D, 0x4D);
-        RulerBackground = Color.FromArgb(0xC8, 0x2D, 0x2D, 0x30);
-        RulerLabelColor = Color.FromRgb(0xC8, 0xC8, 0xC8);
-        RulerTickColor = Color.FromRgb(0x6E, 0x6E, 0x6E);
-        RulerDividerColor = Color.FromRgb(0x4D, 0x4D, 0x4D);
-        SurfaceBackground = Color.FromRgb(0x1E, 0x1E, 0x1E);
+        MinorGridColor = ParseColor("#2A2D2E");
+        MajorGridColor = ParseColor("#3A3D40");
+        AxisColor = ParseColor("#4D4D4D");
+        RulerBackground = ParseColor("#C8252526");
+        RulerLabelColor = ParseColor("#888888");
+        RulerTickColor = ParseColor("#555555");
+        RulerDividerColor = ParseColor("#3A3D40");
+        SurfaceBackground = ParseColor("#1E1E1E");
         GridStep = 40d;
         MajorLineEvery = 5;
 
@@ -145,6 +145,11 @@ public sealed class GridDecorator : Grid, IWorkflowGridDecorator
             _rulerLayer.InvalidateVisual();
         };
     }
+
+    // A colour placeholder is always a valid string at generation time; the fallback keeps the unboxing
+    // warning-free for a consumer who edits one by hand.
+    private static Color ParseColor(string text)
+        => ColorConverter.ConvertFromString(text) is Color color ? color : Color.FromArgb(0xFF, 0, 0, 0);
 
     /// <summary>Ruler band thickness, in pixels.</summary>
     public double RulerThickness

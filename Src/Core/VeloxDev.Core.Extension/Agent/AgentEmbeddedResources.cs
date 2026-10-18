@@ -79,20 +79,6 @@ public static class AgentEmbeddedResources
     // ── References ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Reads the content of <c>Resources/{system}/{lang}/References/{name}.md</c>.
-    /// Falls back to the English variant when the requested language is not found.
-    /// Returns <c>null</c> if neither variant exists.
-    /// </summary>
-    public static string? ReadReference(string system, string name, AgentLanguages language = AgentLanguages.English)
-        => ReadWithFallback(system, "References", name, language);
-
-    /// <summary>
-    /// Returns the base names of all reference files for the given system and language.
-    /// </summary>
-    public static IEnumerable<string> ListReferences(string system, AgentLanguages language = AgentLanguages.English)
-        => ListCategory(system, "References", language);
-
-    /// <summary>
     /// Concatenates all reference files for the given system and language, separated by blank lines.
     /// </summary>
     public static string ReadAllReferences(string system, AgentLanguages language = AgentLanguages.English)
@@ -107,57 +93,6 @@ public static class AgentEmbeddedResources
     /// </summary>
     public static string? ReadSafety(string system, string name, AgentLanguages language = AgentLanguages.English)
         => ReadWithFallback(system, "Safety", name, language);
-
-    /// <summary>
-    /// Concatenates specific safety files for the given system and language in the specified order.
-    /// </summary>
-    public static string ReadSafetyFiles(string system, AgentLanguages language, params string[] names)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var name in names)
-        {
-            var content = ReadSafety(system, name, language);
-            if (!string.IsNullOrWhiteSpace(content))
-            {
-                sb.AppendLine(content);
-                sb.AppendLine();
-            }
-        }
-        return sb.ToString();
-    }
-
-    // ── Scripts ──────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Reads the content of <c>Resources/{system}/Scripts/{name}</c> (exact file name, language-neutral).
-    /// Returns <c>null</c> if the file does not exist.
-    /// </summary>
-    public static string? ReadScript(string system, string name)
-        => Read($"Resources.{system}.Scripts.{name}");
-
-    /// <summary>
-    /// Returns the file names of all script files for the given system.
-    /// </summary>
-    public static IEnumerable<string> ListScripts(string system)
-        => ListScriptCategory(system);
-
-    /// <summary>
-    /// Concatenates all script files for the given system, separated by blank lines.
-    /// </summary>
-    public static string ReadAllScripts(string system)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var name in ListScripts(system))
-        {
-            var content = ReadScript(system, name);
-            if (!string.IsNullOrWhiteSpace(content))
-            {
-                sb.AppendLine(content);
-                sb.AppendLine();
-            }
-        }
-        return sb.ToString();
-    }
 
     // ── Core helpers ─────────────────────────────────────────────────────────
 
@@ -206,8 +141,7 @@ public static class AgentEmbeddedResources
     /// Lists base names (without .md) for <c>Resources/{system}/{lang}/{category}/</c>.
     /// Falls back to "en" entries when the requested language has no files of its own.
     /// </summary>
-    private static IEnumerable<string> ListCategory(string system, string category, AgentLanguages language)
-    {
+    private static IEnumerable<string> ListCategory(string system, string category, AgentLanguages language)    {
         var lang = ToLangCode(language);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var langCode in lang == "en" ? new[] { "en" } : new[] { lang, "en" })
@@ -247,16 +181,6 @@ public static class AgentEmbeddedResources
     /// <summary>
     /// Lists file names for <c>Resources/{system}/Scripts/</c> (language-neutral).
     /// </summary>
-    private static IEnumerable<string> ListScriptCategory(string system)
-    {
-        var scanPrefix = $"{Prefix}Resources.{system}.Scripts.";
-        foreach (var name in _assembly.GetManifestResourceNames())
-        {
-            if (name.StartsWith(scanPrefix, StringComparison.Ordinal))
-                yield return name.Substring(scanPrefix.Length);
-        }
-    }
-
     /// <summary>
     /// Reads an embedded resource by its path relative to the assembly prefix.
     /// Returns <c>null</c> if not found.

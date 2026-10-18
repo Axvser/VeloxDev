@@ -170,7 +170,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
    - **测试为什么抓不到**：`SamplerCoverageTests` 对的是**采样器类型**集合，不是 `(键, 采样器)` 配对。这类断言在 `Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs`：它拿真实注册表问「条目声明的类型解析到谁」，`EveryEntry_ValueTypeResolvesToTheSamplerItNames`（`:54`）比采样器类型、`EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey`（`:98`）跑一帧看接不接得住。
    - 与 `memory/modules/TransitionSystem/adapters/maui.md` §四·1 的结论一致，**不冲突**。
 
-2. **`ViewManager.TryFindTemplateByResourceKey` 是死代码**（`ViewManager.cs:472-503`）。`:475` 写死 `var resourceKey = (string?)null;`，`:477` 立刻 `if (resourceKey is null) return false;` ⇒ 后面遍历 `_layout` 祖先与 `Application.Current.Resources` 的查找**永远不可达**。所以 `FindDataTemplate`（`:422`）只有「`TemplateSelector` 选中」这一条活路 —— 与 `ViewPool.EnsureManager` 要求 `GetTemplateSelector(layout) is not null`（`ViewPool.cs:96`）正好印证。⇒ **不要以为放一个 `DataTemplate` 到 `Resources` 里就能被选中**。
+2. **`ViewManager.TryFindTemplateByResourceKey` 已于 2026-10-18 删除**（原 `ViewManager.cs:472-503` 的 `resourceKey` 写死为 `null`，后面永远不可达）。所以 `FindDataTemplate`（`:422`）只有「`TemplateSelector` 选中」这一条活路 —— 与 `ViewPool.EnsureManager` 要求 `GetTemplateSelector(layout) is not null`（`ViewPool.cs:96`）正好印证。⇒ **不要以为放一个 `DataTemplate` 到 `Resources` 里就能被选中**。
 
 3. **`WorkflowMinimapOverlay.RulerBand => 0`**（`:63`），而宿主只把**网格装饰器**的 `RulerBand` 转发给虚拟化 inset（`WorkflowSurfaceBehavior.cs:1688` 的 `SetVirtualizeInset(left: decorator.RulerBand, top: ...)`）。⇒ 小地图自己的标尺带永远不参与 inset；这条与 WPF 同结论（`WorkflowSystem/adapters/wpf.md` 坑 2）。
 

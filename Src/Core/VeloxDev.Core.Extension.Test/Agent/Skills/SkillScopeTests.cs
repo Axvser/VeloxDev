@@ -318,7 +318,7 @@ public class SkillScopeTests
             .WithSource(new FileSkillSource(root));
         scope.Refresh();
 
-        var advertisement = scope.BuildAdvertisement(AgentLanguages.English);
+        var advertisement = scope.BuildAdvertisement();
 
         Assert.Contains("<name>disk-skill</name>", advertisement);
         Assert.Contains("<description>A disk skill.</description>", advertisement);
@@ -377,6 +377,6 @@ public class SkillScopeTests
         scope.Refresh();
         scope.Disable("disk-skill");
 
-        Assert.AreEqual(string.Empty, scope.BuildAdvertisement(AgentLanguages.English));
+        Assert.AreEqual(string.Empty, scope.BuildAdvertisement());
     }
 }

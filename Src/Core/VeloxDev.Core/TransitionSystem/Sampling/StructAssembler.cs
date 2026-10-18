@@ -9,7 +9,7 @@ internal static class StructAssembler
 {
     /// <summary>Returns a struct-assembling sampler, or null when the struct cannot be assembled (unresolvable
     /// member sampler or missing member value) — the property is skipped.</summary>
-    public static ISampler? Create(ITransitionProperty property, ISampleable sampleable, object? start, object? end)
+    public static ISampler? Create(ISampleable sampleable, object? start, object? end)
     {
         try
         {

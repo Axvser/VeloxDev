@@ -140,7 +140,7 @@
 
 - **动画语义、时间轴、scheduler 契约**：全部在 TransitionSystem。本模块只是它的「入口 B」，见 `memory/modules/TransitionSystem/architecture.md` §三·入口 B 与 `extension.md` 的手工驱动范本。
 - **平台能不能动、各家的 sampler 覆盖**：见 `memory/modules/TransitionSystem/adapters/<平台>.md`。**不要在这里重复那七份差异。**
-- **`ThemeCache` 里的死成员**（`RegisterConverter` / `GetConverter` / `RemoveActiveEntry`，`ThemeCache.cs:74`、`:87`、`:149`）与死字段 `ThemeManager._def_cache`（`ThemeManager.cs:27`）：**零调用者的遗迹**（生成器内联 `Activator.CreateInstance`，`Theme.cs:237`）。**扩展时不要以为它们已经接上** —— 直接实现新路径，或顺手删掉。
+- **`ThemeCache` 里的死成员**（`RegisterConverter` / `GetConverter` / `RemoveActiveEntry`）与死字段 `ThemeManager._def_cache` **已于 2026-10-18 删除**；生成器一直内联 `Activator.CreateInstance`（`Theme.cs:237`），所以不要再按「有共享转换器缓存」去设计。
 - **`Theme.cs:192` 的 `converterKey` 是算了不用的局部变量**：注释自己写着 "only placeholder—converter created inline"。加转换器缓存要从这里重新设计，不是复用。
 
 ---

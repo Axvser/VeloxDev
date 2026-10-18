@@ -2558,7 +2558,7 @@ public sealed class WorkflowAgentToolkit
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node, role);
+            var graphs = await compiler.CompileAsync(node, role, ct);
 
             var entries = new VeloxJsonArray();
             foreach (var g in graphs)

@@ -62,7 +62,7 @@
 
 **看着**：`ViewManager.FindDataTemplate` 有第三条路 `TryFindTemplateByResourceKey`（`:472-503`，看起来会遍历 `_layout` 祖先与 `Application.Current.Resources`），所以「按 key 放模板」应该能用。
 
-**错在哪**：那段是**死代码** —— `:475` 写死 `var resourceKey = (string?)null;`，`:477` 立刻 `return false`，后面永远不可达。视图池的模板**只能**来自 `TemplateSelector`（这与 `ViewPool.EnsureManager` `:96` 要求 `GetTemplateSelector(layout) is not null` 正好互证）。
+**错在哪**：那段是**死代码**（已于 2026-10-18 删除 —— 原 `resourceKey` 写死为 `null`，后面永远不可达）。视图池的模板**只能**来自 `TemplateSelector`（这与 `ViewPool.EnsureManager` `:96` 要求 `GetTemplateSelector(layout) is not null` 正好互证）。
 
 **官方做法**：写一个 `DataTemplateSelector` 子类并赋给 `ViewPool.TemplateSelector`（`Src/Templates/VeloxDev.MAUI.Templates/working/content/workflow-template-selector/` 就是这件事的模板）。**别把「按资源键找模板」当成一个待接的能力** —— 要接它得先把死代码救活，而 `resourceKey` 从哪来本身就是个没答案的问题。
 

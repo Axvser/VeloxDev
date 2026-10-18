@@ -53,7 +53,7 @@
 
 ## 四、`Attached/Workflow/` 的挂载模型（入口清单）
 
-十个文件里 `PlatformDetection` 是死代码（`WorkflowSystem/adapters/avalonia.md` §四.1），其余九个按「挂在哪 + 谁来开」分档：
+（`PlatformDetection` 已于 2026-10-18 删除；其余九个）按「挂在哪 + 谁来开」分档：
 
 | 挂载点（`RegisterAttached<Owner, THost, T>` 的 `THost`） | 开关 | 入口/要点 |
 |---|---|---|

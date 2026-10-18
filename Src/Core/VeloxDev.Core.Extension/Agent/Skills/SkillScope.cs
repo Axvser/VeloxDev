@@ -296,7 +296,7 @@ public class SkillScope
     /// load a skill's body before following it. The text follows the Agent Skills convention so a model
     /// trained on that convention recognises it.
     /// </summary>
-    public string BuildAdvertisement(AgentLanguages language)
+    public string BuildAdvertisement()
     {
         var sb = new StringBuilder();
         foreach (var skill in ActiveSkills(SkillSourceKind.File))

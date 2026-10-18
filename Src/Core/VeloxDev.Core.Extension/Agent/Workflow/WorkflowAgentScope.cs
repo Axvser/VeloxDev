@@ -949,7 +949,11 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         sb.AppendLine();
         sb.AppendLine(chinese ? "| 动作类别 | 本模式下 |" : "| Action category | In this mode |");
         sb.AppendLine("| --- | --- |");
+#if NET5_0_OR_GREATER
+        foreach (var category in Enum.GetValues<AgentActionCategory>())
+#else
         foreach (var category in (AgentActionCategory[])Enum.GetValues(typeof(AgentActionCategory)))
+#endif
         {
             var decision = AgentPermissionPolicy.ModeDefault(mode, category);
             sb.AppendLine($"| {category} | {Word(decision, chinese)} |");
@@ -988,7 +992,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// Gives the Agent a deterministic procedure when a tool returns error/rejected,
     /// and tells it that some tools may be disabled by host policy.
     /// </summary>
-    private string BuildFailureHandlingProtocol(AgentLanguages language)
+    private string BuildFailureHandlingProtocol()
     {
         var sb = new StringBuilder();
         sb.AppendLine("## Failure Handling Protocol (apply on every error/rejection)");
@@ -1170,15 +1174,15 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine();
         result.AppendLine("## Customer Context");
         result.AppendLine();
-        result.AppendLine(ProvideCustomerContext(language));
+        result.AppendLine(ProvideCustomerContext());
         result.AppendLine();
         result.AppendLine("## Customer Data Types");
         result.AppendLine();
-        result.AppendLine(ProvideCustomerDataContext(language));
+        result.AppendLine(ProvideCustomerDataContext());
         result.AppendLine();
 
         // ── Failure Handling Protocol ──
-        result.AppendLine(BuildFailureHandlingProtocol(language));
+        result.AppendLine(BuildFailureHandlingProtocol());
 
         // ── Custom Tools ──
         AppendCustomToolsSection(result);
@@ -1277,7 +1281,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("- Reconnect → `DisconnectSlots` then `ConnectSlots` (or `ConnectByProperty`); reconnecting is a two-step command sequence, never one bundled call");
         result.AppendLine("Only use `DeleteNode` when the user explicitly asks to remove a node, or when in-place mutation is genuinely impossible (e.g. the node type itself must change). If a patch is rejected, first try the suggested alternative tool; if that also fails, delete+recreate is acceptable as a last resort.");
         result.AppendLine();
-        result.AppendLine(BuildFailureHandlingProtocol(language));
+        result.AppendLine(BuildFailureHandlingProtocol());
         result.AppendLine();
 
         // ── Built-in References ──
@@ -1324,7 +1328,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine();
         result.AppendLine("**MANDATE:** the FIRST time you operate on a type this session, call **GetComponentContext** with its full type name (e.g. `GetComponentContext(\"Demo.ViewModels.HttpNodeViewModel\")`) to load its complete property/command table. Never guess a type's shape from its name or from its one-line summary.");
         result.AppendLine();
-        AppendPreloadedComponentSummaries(result, language);
+        AppendPreloadedComponentSummaries(result);
         result.AppendLine();
         result.AppendLine("> Before operating on any type: `GetComponentContext(\"<Full.Type.Name>\")` first.");
         result.AppendLine();
@@ -1408,8 +1412,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return result.ToString();
     }
 
-    /// <summary>Renders the developer-registered types' context in <paramref name="language"/>.</summary>
-    public string ProvideCustomerContext(AgentLanguages language = AgentLanguages.English)
+    /// <summary>Renders the developer-registered types' context, each in the language it was registered under.</summary>
+    public string ProvideCustomerContext()
     {
         var result = new StringBuilder();
 
@@ -2322,7 +2326,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine();
     }
 
-    private void AppendPreloadedComponentSummaries(StringBuilder result, AgentLanguages language)
+    private void AppendPreloadedComponentSummaries(StringBuilder result)
     {
         void AppendSummary(Type t, AgentLanguages lang)
         {
@@ -2356,9 +2360,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     }
 
     /// <summary>
-    /// All mode: full context for developer-registered data types.
+    /// All mode: full context for developer-registered data types, each in the language it was registered under.
     /// </summary>
-    public string ProvideCustomerDataContext(AgentLanguages language = AgentLanguages.English)
+    public string ProvideCustomerDataContext()
     {
         var result = new StringBuilder();
         foreach (var kvp in CustomerData)

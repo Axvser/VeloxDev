@@ -151,9 +151,7 @@
 | `WorkflowAgentScope.BuildDynamicInstructions()` | `WorkflowAgentScope.cs:1872` | **活的钩子**：渲染**能力包络**。`WorkflowAgentContextProvider.cs:115` 是唯一调用它。包络走 provider 通道，追加在骨架之后 |
 | `WorkflowAgentScope.ProvideAllContexts` | `WorkflowAgentScope.cs:1005`、`:1008` | **仓库内无外部调用者**；是「另一档提示模式」，宿主样例走的是渐进模式。两档都会写骨架收据 |
 | `WorkflowAgentScope.WithPromptLanguage` 的漂移 | `WorkflowAgentScope.cs:107` | **不修**：语言变了，结构上无法用「追加」纠正（不能说一句「忘掉上面那段旧语言」）。文档把它定死为构造期首个调用；包络的措辞跟随**骨架渲染时的**语言 |
-| `AgentEmbeddedResources.ReadScript` / `ListScripts` / `ReadAllScripts` | `AgentEmbeddedResources.cs:135`、`:141`、`:147` | **零调用者，且要读的 `Resources/{system}/Scripts/` 目录不存在** —— 加目录不会自动生效 |
-| `AgentEmbeddedResources.ReadSafetyFiles` | `AgentEmbeddedResources.cs:114` | **零调用者**。逐级读的是单个 `ReadSafety`（`WorkflowAgentScope.cs:814`、`:821`） |
-| `AgentEmbeddedResources.ReadReference` / `ListReferences` | `AgentEmbeddedResources.cs:86`、`:92` | **零调用者**。活的是「全读」的 `ReadAllReferences` |
+| `AgentEmbeddedResources` 的 Scripts / 单文件读取 API | 已删除（2026-10-18） | 零调用者，且 `Resources/{system}/Scripts/` 目录不存在；活的是 `ReadAllReferences` / `ReadAllSafety` / `ReadAllSkills` 与单个 `ReadSafety` |
 | `McpScope.WithMcpRoot` | `McpScope.cs:59` | 仓库内无调用者；`.evn/mcp` 是唯一用到的根 |
 | `McpScope.WithSelfService` | `McpScope.cs:76` | **非测试调用者为零** —— 三个 demo 都停在 `Closed`，`AddMcpServer` 的完整路径只有测试在跑 |
 | `AgentDashboardViewModel` | `Agent/Dashboard/AgentDashboardViewModel.cs` | 有测试、**无 UI 消费者**；三个 demo 绑的是 `McpScope.Status` |

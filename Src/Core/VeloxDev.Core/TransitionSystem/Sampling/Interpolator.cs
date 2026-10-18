@@ -175,7 +175,7 @@ public abstract class InterpolatorCore
             {
                 // Struct ISampleable → assemble the whole value from its interpolated members (member paths can't
                 // be written back through a value type). Null when the struct can't be assembled → skip.
-                sampler = StructAssembler.Create(kvp.Key, sampleable, currentValue, newValue);
+                sampler = StructAssembler.Create(sampleable, currentValue, newValue);
             }
 
             if (sampler == null)

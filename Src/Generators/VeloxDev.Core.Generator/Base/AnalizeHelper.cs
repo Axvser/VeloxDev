@@ -9,13 +9,6 @@ namespace VeloxDev.Generators.Base
     {
         internal const string NAME_ASPECTORIENTED = "AspectOriented";
 
-        internal static bool IsAopClass(ClassDeclarationSyntax classDecl)
-        {
-            return classDecl.Members
-                    .OfType<MemberDeclarationSyntax>()
-                    .Any(HasAspectOriented);
-        }
-
         /// <summary>
         /// Every declaration of <paramref name="symbol"/>. A type split over several partial files has
         /// one per file, and the attributed members can be on any of them.

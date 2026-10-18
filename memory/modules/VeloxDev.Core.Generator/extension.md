@@ -166,7 +166,7 @@ rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
 
 | 东西 | 位置 | 现状 |
 |---|---|---|
-| `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | `Base/AnalizeHelper.cs:12-17` | **没有调用者**。实际用的是同名的符号重载 `:43-46`（调用点 `AopSurface.cs:65`、`Writers/AopWriter.cs:23`）。语法版只扫**单份声明**的成员，是符号版之前的写法；留着但无效 |
+| `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | 已于 2026-10-18 删除 | 它没有调用者；实际用的是同名的符号重载（调用点 `AopSurface.cs:65`、`Writers/AopWriter.cs:23`） |
 | `Generators.AgentCatalog` | 无（源码 29 个 `.cs` 无此类；`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` 也不在树里） | **不存在**。别去找它 |
 | `GenerateBaseTypes()` | `Writers/AopWriter.cs:40`、`Writers/CommandWriter.cs:596`、`Writers/TickWriter.cs:130`、`Writers/MVVMWriter.cs:1010` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs:73` 真正用到了它 |
 | MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：全源 grep 已无 `IsView` / `isView`；`MVVMPropertyFactory` 现在只有两个构造 —— 从字段（`Base/Analizer.cs:432`）与从 partial 属性（`:453`），`Generate()`（原 `GenerateViewModel` 改名，`:654`）是唯一出口。**要恢复 View 支持，必须同时改构造、`Generate()` 与调用点** —— 别再只加参数不加分支 |

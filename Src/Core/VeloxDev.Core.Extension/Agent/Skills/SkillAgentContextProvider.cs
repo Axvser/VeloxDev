@@ -111,7 +111,7 @@ public sealed class SkillAgentContextProvider : AIContextProvider
         var embedded = _embeddedCorpusDelivered
             ? _scope.BuildWithdrawnBlock(language)
             : _scope.BuildEmbeddedBlock(language);
-        var advertised = _scope.BuildAdvertisement(language);
+        var advertised = _scope.BuildAdvertisement();
 
         // Both empty means no skill is enabled: contribute nothing rather than an empty heading.
         if (string.IsNullOrWhiteSpace(embedded) && string.IsNullOrWhiteSpace(advertised)) return null;

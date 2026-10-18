@@ -457,49 +457,9 @@ public sealed class ViewManager
             }
         }
 
-        if (TryFindTemplateByResourceKey(context, out var resourceTemplate) && resourceTemplate is not null)
-        {
-            _templateMap[contextType] = resourceTemplate;
-            Log($"FindDataTemplate.resource: vm={contextType.Name}, template={resourceTemplate.GetType().Name}");
-            return resourceTemplate;
-        }
-
         _unsupportedTypes.Add(contextType);
         Log($"FindDataTemplate.miss: vm={contextType.Name}");
         return null;
-    }
-
-    private bool TryFindTemplateByResourceKey(object context, out DataTemplate? template)
-    {
-        template = null;
-        var resourceKey = (string?)null;
-
-        if (resourceKey is null)
-        {
-            return false;
-        }
-
-        for (Element? current = _layout; current is not null; current = current.Parent)
-        {
-            if (current is VisualElement visualElement
-                && visualElement.Resources.TryGetValue(resourceKey, out var resource)
-                && resource is DataTemplate resourceTemplate)
-            {
-                template = resourceTemplate;
-                Log($"TryFindTemplateByResourceKey.hitLocal: key={resourceKey}, owner={visualElement.GetType().Name}");
-                return true;
-            }
-        }
-
-        if (Application.Current?.Resources.TryGetValue(resourceKey, out var appResource) == true && appResource is DataTemplate appTemplate)
-        {
-            template = appTemplate;
-            Log($"TryFindTemplateByResourceKey.hitApp: key={resourceKey}");
-            return true;
-        }
-
-        Log($"TryFindTemplateByResourceKey.miss: key={resourceKey}");
-        return false;
     }
 
     private static void RemoveReference(List<object> list, object item)

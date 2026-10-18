@@ -25,8 +25,6 @@ public sealed class WorkflowSlotLayoutBehavior
         public string? CoordinateHostName { get; set; }
         public Type? CoordinateHostType { get; set; }
         public string? ParentHostName { get; set; }
-        public string? LayoutPropertyName { get; set; } = "Layout";
-        public string? ActualOffsetPropertyName { get; set; } = "ActualOffset";
         public HashSet<string> SlotPropertyNames { get; } = [];
     }
 
@@ -201,60 +199,6 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         GetState(element).ParentHostName = value;
-        ScheduleSync(element);
-    }
-
-    /// <summary>
-    /// Gets the configured layout property name.
-    /// </summary>
-    public static string? GetLayoutPropertyName(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return GetState(element).LayoutPropertyName;
-    }
-
-    /// <summary>
-    /// Sets the configured layout property name.
-    /// </summary>
-    public static void SetLayoutPropertyName(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        GetState(element).LayoutPropertyName = value;
-        ScheduleSync(element);
-    }
-
-    /// <summary>
-    /// Gets the configured actual offset property name.
-    /// </summary>
-    public static string? GetActualOffsetPropertyName(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return GetState(element).ActualOffsetPropertyName;
-    }
-
-    /// <summary>
-    /// Sets the configured actual offset property name.
-    /// </summary>
-    public static void SetActualOffsetPropertyName(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        GetState(element).ActualOffsetPropertyName = value;
         ScheduleSync(element);
     }
 
@@ -738,36 +682,6 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         return property.GetValue(control);
-    }
-
-    private static Offset GetActualOffset(Control control, IWorkflowTreeViewModel? tree)
-    {
-        if (tree is null)
-        {
-            return new Offset();
-        }
-
-        var layoutPropertyName = GetLayoutPropertyName(control);
-        if (string.IsNullOrWhiteSpace(layoutPropertyName))
-        {
-            return new Offset();
-        }
-
-        var layoutProperty = tree.GetType().GetProperty(layoutPropertyName, BindingFlags.Instance | BindingFlags.Public);
-        var layout = layoutProperty?.GetValue(tree);
-        if (layout is null)
-        {
-            return new Offset();
-        }
-
-        var actualOffsetPropertyName = GetActualOffsetPropertyName(control);
-        if (string.IsNullOrWhiteSpace(actualOffsetPropertyName))
-        {
-            return new Offset();
-        }
-
-        var actualOffsetProperty = layout.GetType().GetProperty(actualOffsetPropertyName, BindingFlags.Instance | BindingFlags.Public);
-        return actualOffsetProperty?.GetValue(layout) is Offset offset ? offset : new Offset();
     }
 
     private static LayoutState GetState(Control element)

@@ -128,14 +128,14 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         Children.Add(_gridLayer);
         Children.Add(_rulerLayer);
 
-        MinorGridColor = (Color)ColorConverter.ConvertFromString("TemplateMinorGridColor");
-        MajorGridColor = (Color)ColorConverter.ConvertFromString("TemplateMajorGridColor");
-        AxisColor = (Color)ColorConverter.ConvertFromString("TemplateAxisColor");
-        RulerBackground = (Color)ColorConverter.ConvertFromString("TemplateRulerBackground");
-        RulerLabelColor = (Color)ColorConverter.ConvertFromString("TemplateRulerLabelColor");
-        RulerTickColor = (Color)ColorConverter.ConvertFromString("TemplateRulerTickColor");
-        RulerDividerColor = (Color)ColorConverter.ConvertFromString("TemplateRulerDividerColor");
-        SurfaceBackground = (Color)ColorConverter.ConvertFromString("TemplateGridBackground");
+        MinorGridColor = ParseColor("TemplateMinorGridColor");
+        MajorGridColor = ParseColor("TemplateMajorGridColor");
+        AxisColor = ParseColor("TemplateAxisColor");
+        RulerBackground = ParseColor("TemplateRulerBackground");
+        RulerLabelColor = ParseColor("TemplateRulerLabelColor");
+        RulerTickColor = ParseColor("TemplateRulerTickColor");
+        RulerDividerColor = ParseColor("TemplateRulerDividerColor");
+        SurfaceBackground = ParseColor("TemplateGridBackground");
         GridStep = TemplateGridSpacing;
         MajorLineEvery = TemplateMajorLineEvery;
 
@@ -145,6 +145,11 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
             _rulerLayer.InvalidateVisual();
         };
     }
+
+    // A colour placeholder is always a valid string at generation time; the fallback keeps the unboxing
+    // warning-free for a consumer who edits one by hand.
+    private static Color ParseColor(string text)
+        => ColorConverter.ConvertFromString(text) is Color color ? color : Color.FromArgb(0xFF, 0, 0, 0);
 
     /// <summary>Ruler band thickness, in pixels.</summary>
     public double RulerThickness

@@ -365,7 +365,7 @@ internal sealed class HostedMcpServer
     }
 
     private static string Error(string message)
-        => $"{{\"status\":\"error\",\"message\":{JsonSerializer.Serialize(message)}}}";
+        => $"{{\"status\":\"error\",\"message\":\"{JsonEncodedText.Encode(message)}\"}}";
 
     /// <summary>What a proxy reports for the tool behind it.</summary>
     internal readonly record struct ToolShape(string Description, JsonElement Schema)

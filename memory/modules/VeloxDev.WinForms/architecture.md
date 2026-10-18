@@ -107,7 +107,7 @@
    | 成员 | 写出处 | 读取处 |
    |---|---|---|
    | `WorkflowCanvasTransformBehavior.GetTransform` | `:34` 公开 getter（值存在 `ConditionalWeakTable<Control, TransformBox>`，`:29`）；写值走 `Apply`（`:65`） | 全仓零命中 —— 基类卡片靠 `IWorkflowSurfaceNodeView.ApplySurfacePosition` 拿投影，不读它 |
-   | `WorkflowSlotLayoutBehavior.Get/SetLayoutPropertyName`（`:210`/`:223`）、`Get/SetActualOffsetPropertyName`（`:237`/`:250`） | — | 唯一消费者是私有 `GetActualOffset`（`:743`），而它**自己零调用者** ⇒ 四个公共成员连成的整条链还是死的（README `:176` 却在描述它） |
+   | `WorkflowSlotLayoutBehavior.Get/SetLayoutPropertyName`、`Get/SetActualOffsetPropertyName` 与私有 `GetActualOffset` | — | 已于 2026-10-18 删除：整条链零调用者（README `:176` 的描述也一并过期） |
    | `WorkflowSurfaceBehavior.GetScrollViewer`/`GetCanvas`/`GetGridDecorator`/`GetMinimapOverlay`（`:247`/`:262`/`:277`/`:292`） | 对应的 `Set*` 写进 state（`:254`/`:269`/`:284`/`:307`） | 四个 getter 全仓零读取 |
 
    ⇒ 这类「加完没人用」的成员是这家的历史包袱；改之前先 grep 调用点。

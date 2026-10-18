@@ -262,13 +262,6 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
         scheduler = null;
         return false;
     }
-    /// <summary>Stops and removes the mutual scheduler registered for <paramref name="source"/>.</summary>
-    public static bool RemoveMutualScheduler(object source)
-    {
-        if (MutualSchedulers.TryGetValue(source, out var scheduler)) scheduler.Exit();
-        return MutualSchedulers.Remove(source);
-    }
-
     /// <summary>Tries to read the non-mutual schedulers registered for <paramref name="source"/>.</summary>
     public static bool TryGetNoMutualScheduler(object source, out ITransitionSchedulerCore[] schedulers)
     {

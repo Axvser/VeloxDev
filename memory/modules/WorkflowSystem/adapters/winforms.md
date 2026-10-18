@@ -163,9 +163,9 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 成员注释写着：「自绘画布的宿主可以在它的 `OnPaint` 里读 `GetTransform` 来平移绘制原点」（`WorkflowCanvasTransformBehavior.cs:14-21`）。**仓库里没有任何地方读它** —— `grep GetTransform` 在这家只命中定义本身；模板与两个 demo 都不读，它们直接读自己的 `_panOffset`。⇒ 这是一条**只写不读的通知通道**（`Apply` 是唯一写者，`WorkflowSurfaceBehavior.cs:412`）。要在自家宿主上用它是可以的，但要知道**目前没人这么用过**，别以为「宿主要在 `OnPaint` 里读它」是既有约定。
 
-### 4.3 `WorkflowSlotLayoutBehavior` 里有一条零调用者的死链
+### 4.3 `WorkflowSlotLayoutBehavior` 里那条零调用者的死链已删除（2026-10-18）
 
-`GetActualOffset(Control, IWorkflowTreeViewModel?)`（`WorkflowSlotLayoutBehavior.cs:743-771`）**全仓库没有调用者**，而它依赖的三个访问器也只是为了喂它才存在：状态字段 `LayoutPropertyName`（`:28`）/`ActualOffsetPropertyName`（`:29`）与四个公开访问器 `Get/SetLayoutPropertyName`（`:210`/`:223`）、`Get/SetActualOffsetPropertyName`（`:237`/`:250`）。这六个成员在 `Src/` 与 `Examples/` 内的命中只有它们自己。⇒ **别以为可以通过设 `LayoutPropertyName` 来改行为**，也别在这里照着补功能；实际生效的坐标换算走的是 `ResolveCoordinateHost` + `PointToClient`（见 §4.4）。
+`GetActualOffset`、状态字段 `LayoutPropertyName` / `ActualOffsetPropertyName` 与四个公开访问器 `Get/SetLayoutPropertyName`、`Get/SetActualOffsetPropertyName` 在 `Src/` 与 `Examples/` 内的命中只有它们自己，已于 2026-10-18 删除。实际生效的坐标换算走的是 `ResolveCoordinateHost` + `PointToClient`（见 §4.4）；别再按「设 `LayoutPropertyName` 改行为」去设计。
 
 ### 4.4 插槽锚点**必须**用 `SlotAnchorFromCanvasLocal`，用 `SlotAnchorFromVisualCenter` 会系统性偏移
 

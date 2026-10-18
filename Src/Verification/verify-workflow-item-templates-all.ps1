@@ -595,7 +595,7 @@ foreach ($name in $Platform) {
     $templateProject = Join-Path $repoRoot $config.TemplateProject
     $mirrorRoot = Join-Path $repoRoot $config.MirrorRoot
 
-    $result = [ordered]@{ Platform = $name; Items = @(); Generated = 0; Built = $false; Matches = 0; Differs = 0; Expected = 0; Comments = 0; Error = $null }
+    $result = [ordered]@{ Platform = $name; Items = @(); Generated = 0; Built = $false; Matches = 0; Differs = 0; Expected = 0; Comments = 0; Warnings = 0; Error = $null }
 
     try {
         New-Item -ItemType Directory -Force -Path $probe, $nupkgs, (Join-Path $probe 'Views') | Out-Null
@@ -644,6 +644,16 @@ foreach ($name in $Platform) {
             throw 'build failed'
         }
         $result.Built = $true
+
+        # A warning is a warning: the generated set must build clean, and the same log is the only place that says so.
+        # Dependencies are in this log too (the adapter and Core are built through the reference), which is what a
+        # consumer of the template will see on their first build.
+        $warnings = @($buildOutput | Where-Object { $_ -match '\bwarning\s+[A-Za-z]+\d+' })
+        $result.Warnings = $warnings.Count
+        if ($warnings.Count -gt 0) {
+            Write-Host "  $($warnings.Count) warning(s):" -ForegroundColor Yellow
+            $warnings | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+        }
 
         Write-Host 'Comparing each generated file against its mirror' -ForegroundColor Cyan
         foreach ($key in $itemOrder) {
@@ -708,17 +718,21 @@ foreach ($r in $summary) {
         Write-Host ("{0,-9} ERROR  {1}" -f $r.Platform, $r.Error) -ForegroundColor Red
     }
     else {
-        $colour = if ($r.Differs -gt 0) { 'Red' } elseif (($r.Expected + $r.Comments) -gt 0) { 'Yellow' } else { 'Green' }
-        Write-Host ("{0,-9} generated {1}/7  built {2}  match {3}  formatting {4}  expected-diff {5}  drift {6}" -f $r.Platform, $r.Generated, $r.Built, $r.Matches, $r.Comments, $r.Expected, $r.Differs) -ForegroundColor $colour
+        $colour = if ($r.Differs -gt 0) { 'Red' } elseif (($r.Expected + $r.Comments + $r.Warnings) -gt 0) { 'Yellow' } else { 'Green' }
+        Write-Host ("{0,-9} generated {1}/7  built {2}  match {3}  formatting {4}  expected-diff {5}  drift {6}  warnings {7}" -f $r.Platform, $r.Generated, $r.Built, $r.Matches, $r.Comments, $r.Expected, $r.Differs, $r.Warnings) -ForegroundColor $colour
     }
 }
 
 $totalDrift = @($summary | Where-Object { $_.Differs -gt 0 }).Count
 $totalErrors = @($summary | Where-Object { $_.Error }).Count
+$totalWarnings = ($summary | Measure-Object -Property Warnings -Sum).Sum
 
 if ($totalErrors -gt 0) {
     Write-Host "$totalErrors platform(s) could not be generated or built" -ForegroundColor Red
     exit 3
+}
+if ($Strict -and $totalWarnings -gt 0) {
+    throw "$totalWarnings warning(s) in the generated sets — a clean template must build without them"
 }
 if ($totalDrift -gt 0) {
     $message = "$totalDrift platform(s) have real template/mirror drift"

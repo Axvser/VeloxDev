@@ -22,8 +22,8 @@ namespace VeloxDev.WorkflowSystem;
 /// looking the same on all seven.
 /// </para>
 /// <para>
-/// <b>Direction.</b> A positive <paramref name="wheelDeltaX"/> moves the surface towards the content on its right,
-/// and a positive <paramref name="wheelDeltaY"/> towards the content above it — the platform's own sense in both
+/// <b>Direction.</b> A positive <c>wheelDeltaX</c> moves the surface towards the content on its right,
+/// and a positive <c>wheelDeltaY</c> towards the content above it — the platform's own sense in both
 /// cases (tilt right is positive, wheel away from the user is positive). A caller that wants the wheel to drive
 /// the other axis flips the sign itself: the two axes are <i>not</i> interchangeable, because "up" and "left" are
 /// the same direction only if you also invert one of them.
