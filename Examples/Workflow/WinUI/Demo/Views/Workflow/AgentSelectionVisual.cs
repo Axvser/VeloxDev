@@ -32,6 +32,7 @@ public static class AgentSelectionVisual
         private Border? _card;
         private Brush? _originalBrush;
         private Thickness _originalThickness;
+        private bool _captured;
 
         internal void Bind()
         {
@@ -79,20 +80,26 @@ public static class AgentSelectionVisual
 
             if (selected)
             {
-                if (_originalBrush is null)
+                if (!_captured)
                 {
                     _originalBrush = card.BorderBrush;
                     _originalThickness = card.BorderThickness;
+                    _captured = true;
                 }
 
                 card.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0xA7, 0x8B, 0xFA));
                 card.BorderThickness = new Thickness(2);
             }
-            else if (_originalBrush is not null)
+            else if (_captured)
             {
-                card.BorderBrush = _originalBrush;
+                // The card's normal border may be "no local brush, no thickness" — the style, not this
+                // Border, draws it. Clear the local value rather than writing null back, so the style
+                // takes over again.
+                if (_originalBrush is null) card.ClearValue(Border.BorderBrushProperty);
+                else card.BorderBrush = _originalBrush;
+
                 card.BorderThickness = _originalThickness;
-                _originalBrush = null;
+                _captured = false;
             }
         }
 

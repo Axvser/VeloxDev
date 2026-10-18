@@ -32,6 +32,7 @@ public static class AgentSelectionVisual
         private Brush? _originalStroke;
         private double _originalThickness;
         private Shadow? _originalShadow;
+        private bool _captured;
 
         internal void Bind()
         {
@@ -79,11 +80,12 @@ public static class AgentSelectionVisual
 
             if (selected)
             {
-                if (_originalStroke is null)
+                if (!_captured)
                 {
                     _originalStroke = card.Stroke;
                     _originalThickness = card.StrokeThickness;
                     _originalShadow = card.Shadow;
+                    _captured = true;
                 }
 
                 var brush = new SolidColorBrush(Color.FromArgb("#A78BFA"));
@@ -91,12 +93,14 @@ public static class AgentSelectionVisual
                 card.StrokeThickness = 2;
                 card.Shadow = new Shadow { Brush = brush, Radius = 18, Opacity = 0.85f, Offset = Point.Zero };
             }
-            else if (_originalStroke is not null)
+            else if (_captured)
             {
-                card.Stroke = _originalStroke;
+                if (_originalStroke is null) card.ClearValue(Border.StrokeProperty);
+                else card.Stroke = _originalStroke;
+
                 card.StrokeThickness = _originalThickness;
                 card.Shadow = _originalShadow!;
-                _originalStroke = null;
+                _captured = false;
             }
         }
 

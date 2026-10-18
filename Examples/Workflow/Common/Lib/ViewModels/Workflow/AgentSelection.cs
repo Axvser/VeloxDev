@@ -33,7 +33,8 @@ public static class AgentSelection
     {
         if (node?.Parent is null) return false;
 
-        var changed = IsSelected(node)
+        var before = IsSelected(node);
+        var changed = before
             ? node.DeselectForAgent()
             : node.SelectForAgent();
 
