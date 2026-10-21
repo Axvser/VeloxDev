@@ -213,7 +213,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 **语料按模式切，「挡位」这个概念已经没有了**（2026-10-11 重写）：
 `Resources/Workflow/{en,zh}/Safety/` 下是 `Shared.md` 加五份**同名于模式**的文件（`Plan`/`Manual`/`AutoEdit`/`Auto`/`Bypass`）。
 `BuildInteractionSafetyPrompt` 先读 `Shared.md`（跨模式不变的那一半：宿主边界、选择器约束），再读 `{mode}.md`，
-最后叠宿主用 `WithModePrompt(mode, text)` 加的覆盖，然后**自己再画一张真值表**（模式 × 五个动作类别）与宿主规则清单。
+最后**追加**宿主用 `WithModePrompt(mode, text)` 加的规则（`WorkflowAgentScope.cs:927-946`；它不替换随包的 Shared/mode 语料），然后**自己再画一张真值表**（模式 × 五个动作类别）与宿主规则清单。
 
 **新增一个模式要同时改四处**：`AgentPermissionMode` 枚举、`AgentPermissionPolicy.ModeDefault` 的矩阵、
 两份语料同名文件、`AgentPermissionPolicyTests.TheMatrix_...` 里那张写死的表。

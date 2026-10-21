@@ -1,13 +1,13 @@
-﻿---
+---
 name: veloxdev-drive-workflow-with-ai
-description: Give an LLM control of a VeloxDev workflow graph — wire a WorkflowAgentScope onto a tree, hand the tools to an IChatClient through one context provider, set the host's policy gates and call budgets, document components for the model with [AgentContext], load switchable skills (embedded documents or Agent-Skills folders on disk), connect external MCP servers, and dispatch background sub-agents — including using the MCP or skill subsystem on its own, without the workflow layer
+description: Give an LLM control of a VeloxDev workflow graph — wire a WorkflowAgentScope onto a tree, hand the tools to an IChatClient through one context provider, set the host's policy gates and call budgets, document components for the model with [AgentContext], load switchable skills (embedded documents or Agent-Skills folders on disk), connect external MCP servers, and dispatch background sub-agents — including using the MCP or skill subsystem on its own, without the workflow layer. Use when connecting an LLM or agent to a workflow graph, or when adding MCP servers, agent skills or sub-agents.
 ---
 
 ## Responsibility
 
 Turn a workflow `Tree` into a **tool surface** an LLM can operate: list and inspect nodes, create and delete them, connect slots, patch properties, run a compiled chain or reverse-compute one node's result — through the *same* undoable commands the GUI uses.
 
-Package: **`VeloxDev.Core.Extension`** (`netstandard2.0;net8.0`). It also carries the graph serializer, which is a separate reason to reference it.
+Package: **`VeloxDev.Core.Extension`** (`netstandard2.0;net8.0`). It also carries the compiled-graph and checkpoint helpers, which are a separate reason to reference it.
 
 ## The wiring
 
@@ -32,11 +32,11 @@ var response = await agent.RunAsync(message, session);
 
 ⚙ **`WithSynchronizationContext` is not optional.** Workflow components are UI-bound and every tool call is marshalled through it. Call it while on the UI thread; without it, tool calls touch the graph from a thread pool thread.
 
-⚙ **The whole call stays on that context — including everything after an `await`.** The wrapper posts the call, and a posted callback resumes on the context, so a tool's post-await work (verifying a connection, the second node of an `ExecuteNodes` batch, the execution engine driving a compiled chain) runs where the components live. This is why the tool bodies carry no `ConfigureAwait(false)`: adding one silently moves exactly that work onto a thread-pool thread. It applies to your own `WithTools` / `WithQueryTools` tools too — they get the same wrapper.
+⚙ **The whole call stays on that context — including everything after an `await`.** The wrapper posts the call, and a posted callback resumes on the context, so a tool's post-await work (verifying a connection, the second node of an `ExecuteNodes` batch, the execution engine driving a compiled chain) runs where the components live. This is why the tool bodies carry no `ConfigureAwait(false)`: adding one silently moves exactly that work onto a thread-pool thread. It applies to your own `WithTools` / `WithQueryTools` tools too — an `AIFunction` gets the same wrapper (any other `AITool` type passes through untouched).
 
 ⚙ **The prompt is not rendered on that context.** The agent invocation thread builds each turn's instructions and tool list, so anything read there must be thread-safe. That is what `McpStatusViewModel.Snapshot` and `SkillsViewModel.Snapshot` are for: immutable copies republished on the bound thread whenever the collection changes. Read `Servers` / `Skills` from your UI, and the snapshots from anywhere else.
 
-⚙ **The context provider is the single source of tools, and it re-renders per turn.** The scope's own provider (a `WorkflowAgentContextProvider`, from `CreateContextProvider()`) contributes the current tool set — built-in, custom, and every connected MCP server's — on each invocation, and the attached subsystems' providers contribute theirs beside it. That is what lets a skill switched off, a tool registered late, or a server loaded mid-session reach the model on the next turn without rebuilding the agent.
+⚙ **The context provider is the single source of tools, and it re-renders per turn.** The scope's own provider (a `WorkflowAgentContextProvider`, from `CreateContextProvider()`) contributes the current tool set — the built-in and custom tools only — on each invocation, and the attached subsystems' providers contribute theirs beside it; a connected MCP server's tools come from the MCP provider, not from this one. That is what lets a skill switched off, a tool registered late, or a server loaded mid-session reach the model on the next turn without rebuilding the agent.
 
 ⚙ **Never also pass the tools through `ChatOptions.Tools`.** MAF unions that list with the providers' contribution and does not deduplicate by name, so a tool offered through both channels is sent to the model twice.
 
@@ -84,11 +84,11 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 | `WithPermissionRule(decision, patterns…)` | none | the fine layer beneath the mode; `Deny` holds in every mode, `Bypass` included |
 | `WithoutPermissionRules()` | — | removes every rule; the mode is untouched |
 | `WithPermissionJudge(Func<ToolInvocation,PermissionDecision>)` | none | decides what `Auto` would otherwise settle; a judge that throws denies |
-| `WithModePrompt(mode, text)` | none | replaces the corpus text shipped for one mode |
+| `WithModePrompt(mode, text)` | none | appends host rules after the shipped Shared and mode text — it does not replace them |
 | `WithAutoMarkDirty(bool)` | off | marks the tree dirty after every non-query tool call, instead of requiring one `MarkDirty` at the end |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | pre-flight caps; exceeding one returns an error object rather than throwing |
 
-`AgentPermissionMode` is `Plan` · `Manual` · `AutoEdit` · `Auto` (the default) · `Bypass`. A rule is `new AgentPermissionRule(PermissionDecision.X, pattern)`, where `X` is `Allow`, `Ask` or `Deny`; the pattern matches a tool name (`DeleteNode`, `Get*`), a category (`category:Edit`), or a source (`source:mcp:*`, `source:skill`). `WithPermissionJudge` receives a `ToolInvocation` — `Name`, `AgentActionCategory` (`Read` / `Edit` / `Execute` / `Curate` / `Interact`), `Source`, `Arguments` — and runs only in `Auto`, for calls no rule settled. `SetPermissionMode` is the runtime switch and returns whether the mode moved; the policy is read per call, so the very next call obeys a mid-session change.
+`AgentPermissionMode` is `Plan` · `Manual` · `AutoEdit` · `Auto` (the default) · `Bypass`. A rule is `new AgentPermissionRule(PermissionDecision.X, pattern)`, where `X` is `Allow`, `Ask` or `Deny`; the pattern matches a tool name (`DeleteNode`, `Get*`), a category (`category:Edit`), or a source (`source:mcp:*`). Only MCP tools carry a source (`mcp:<server>`, `mcp:management`); skill and sub-agent tools are wrapped with a null source, so a `source:` rule matches neither today. `WithPermissionJudge` receives a `ToolInvocation` — `Name`, `Category` (an `AgentActionCategory`: `Read` / `Edit` / `Execute` / `Curate` / `Interact`), `Source`, `Arguments` — and runs only in `Auto`, for calls no rule settled. `SetPermissionMode` is the runtime switch and returns whether the mode moved; the policy is read per call, so the very next call obeys a mid-session change.
 
 ⚙ **The handle operations sit outside the execution gate.** `GetCompiledRunStatus`, `PauseCompiledRun`, `ResumeCompiledRun` and `StopCompiledRun` act on a handle an earlier `StartCompiledWorkflow` / `ContinueCompiledWorkflow` produced, so they do not check `AllowNodeExecution`; the two start tools and the rest of the execution family do.
 
@@ -142,7 +142,7 @@ scope.WithSkills("skills");    // relative paths resolve against AppContext.Base
 
 That is the whole wiring: the skill context provider contributes the corpus *and* the four tools. They are `ListSkills`, `load_skill`, `UnloadSkill` and `read_skill_resource`.
 
-⚙ **They are classified as query tools wherever they come from** — contributed by the provider, they are charged to `MaxReadToolCalls` and never mark the tree dirty, because switching a skill changes what the model is shown and never the graph. That classification used to depend on the host registering them through `WithQueryTools`; it is now taken from `SkillAgentToolkit.ToolNames`, so it holds either way.
+⚙ **They are classified as query tools for the budget wherever they come from** — contributed by the provider, they are charged to `MaxReadToolCalls` and never mark the tree dirty, because switching a skill changes what the model is shown and never the graph. That classification used to depend on the host registering them through `WithQueryTools`; it is now taken from `SkillAgentToolkit.ToolNames`, so it holds either way. For **permissions**, though, they carry the default `AgentActionCategory.Execute`, so `Plan` denies them and `AutoEdit` asks — the budget and the permission gate read different things. The same split applies to the five sub-agent tools: query for the budget, `Execute` for the mode.
 
 ⚙ **Two injection shapes, chosen by origin, and not interchangeable.** Embedded documents are architectural prompt text: when enabled, their body is injected **in full**. Disk skills follow the Agent Skills convention: only `name` and `description` are advertised, and the body arrives through `load_skill`. That is what keeps a large external skill library from costing every turn.
 
@@ -152,7 +152,7 @@ That is the whole wiring: the skill context provider contributes the corpus *and
 
 ⚙ **All skills start enabled,** so adding a root never silently empties the prompt. `Refresh()` rediscovers and preserves the flags — call it when a root's contents changed; do **not** call it per turn, since it always advances `Skills.Version` and invalidates the provider's render.
 
-⚙ **With skills attached, the static prompt no longer carries the corpus.** `ProvideProgressiveContextPrompt()` omits it and the provider renders it instead; leaving it in both would send every document twice.
+⚙ **With skills attached before the skeleton renders, the static prompt no longer carries the corpus.** `ProvideProgressiveContextPrompt()` omits it and the provider renders it instead; leaving it in both would send every document twice. Attaching skills *after* that string was built leaves the corpus frozen in: the provider sees it was already delivered and contributes only the documents withdrawn since.
 
 ## MCP
 
@@ -213,7 +213,7 @@ scope.WithSubAgents(subAgents);
 
 ⚙ **The grant is a whitelist, and omitting it means "inherit everything".** `allowedTools`, `allowedSkills` and `allowedMcpServers` each default to the parent's currently-enabled set; an empty array grants none. A child is never shown a capability it does not hold — a request it cannot satisfy is reported in `dropped` with the wall named. Skills and MCP servers are handed down as narrowed *views*, not by name lists: the child's `ListSkills` / `ListMcpServers` shows only what it was granted.
 
-⚙ **The budget is one ledger for the whole tree, and every grant is strictly smaller than what remains** — that is what makes any spawn depth terminate. `WithSubAgentDepth(n)` is what makes it usable; set both, or a single unlimited root permits an arbitrarily deep chain.
+⚙ **The budget is one ledger for the whole tree, and every grant is strictly smaller than what remains** — that is what makes any spawn depth terminate. `WithSubAgentDepth(n)` is what makes it usable; set both, or a single unlimited root is bounded only by the fallback `SpawnBudget` (default 64), not by the depth you intended.
 
 ⚙ **A child holds its own share, not the parent's.** A reset the child itself makes (`ResetToolCallLimit`) goes up through the tree and reaches the user, so a stuck child can reopen the budget rather than sit rejected; a parent's reset does not reach down into a child. The interaction configuration is inherited — the whole permission policy (mode, rules, judge), the per-mode prompt overrides and the two handlers — so `RequestSelection` / `RequestConfirmation` really exist on the child rather than being listed and unreachable.
 

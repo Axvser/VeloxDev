@@ -17,7 +17,7 @@ public partial class TickerNode
 {
     public TickerNode() => InitializeWorkflow();
 
-    [VeloxProperty] public partial QuickSlot OutputSlot { get; set; }
+    [VeloxProperty] public partial SlotDefaultViewModel OutputSlot { get; set; }
 }
 
 public class TickerHelper : NodeHelper<TickerNode>
@@ -79,8 +79,8 @@ Each forwards to a `protected virtual Task Xxx(object?, CancellationToken)` hand
 Two shapes, and the compiler tells you which is which:
 
 ```csharp
-[VeloxProperty] public partial SlotViewModel InputSlot { get; set; }              // one slot
-[VeloxProperty] public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }  // a fan-out set
+[VeloxProperty] public partial SlotDefaultViewModel InputSlot { get; set; }              // one slot
+[VeloxProperty] public partial SlotEnumerator<SlotDefaultViewModel> OutputSlots { get; set; }  // a fan-out set
 ```
 
 ⚙ **Slot properties must be written as `[VeloxProperty] public partial T X { get; set; }`.** The generator synthesises the backing field as `_camelCase` and `InitializeWorkflowCore` references that exact name; a hand-written field with a different name breaks the generated init code.
@@ -125,7 +125,7 @@ tree.GetHelper().ReceiveConnection(receiverSlot);
 
 Two phases, and the whole connection is submitted as one undoable action.
 
-⚙ **All validation is on the receiver.** `SendConnection` only checks that the slot may send and cleans up its own capacity. `ReceiveConnection` runs, in order: can this slot receive → `tree.GetHelper().ValidateConnection(sender, receiver)` → reject same-node → clean up same-direction duplicates → clean up receiver capacity → create the link.
+⚙ **All validation is on the receiver.** `SendConnection` only checks that the slot may send and cleans up its own capacity. `ReceiveConnection` runs, in order: can this slot receive → `IWorkflowTreeEvents.Connecting` (the per-drag host veto, `WorkflowTreeEx.cs:258-270`) → `tree.GetHelper().ValidateConnection(sender, receiver)` → reject same-node → clean up same-direction duplicates → clean up receiver capacity → create the link.
 
 ⚙ **`TreeHelper.ValidateConnection` is virtual and returns `true`.** It is the single user-supplied connection predicate — override it for connection rules. `tree.StandardCheckConnection(sender, receiver)` is the pure form of the whole rule set (direction, same-node, then this predicate); use it to ask "would this connect?" before a drag starts.
 
@@ -209,8 +209,8 @@ For a node with a variable number of ports (a python worker whose ports depend o
 
 ```csharp
 [VeloxProperty]
-[SlotSelectors(typeof(PythonPortProvider))]
-public partial SlotEnumerator<SlotViewModel> InputSlots { get; set; }
+[SlotSelectors(typeof(MyPortProvider))]   // your own ISlotProvider — declare it on your side
+public partial SlotEnumerator<SlotDefaultViewModel> InputSlots { get; set; }
 ```
 
 `SlotEnumerator<TSlot>` holds `Items` (`ConditionalSlot<TSlot>` — a name, a value and a slot), a `SelectorType` and a `CurrentValue`. `SetSelector` (the model-side method; the Agent tool that reaches it is `SetEnumSlotCollection`) accepts three shapes: an `enum` or `bool` `Type`, a fully-qualified type-name `string`, or an `ISlotProvider` returning named `SlotDefinition`s.

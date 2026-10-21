@@ -1,4 +1,4 @@
-﻿# The tool surface
+# The tool surface
 
 **66 built-in tools** in the unconditional groups of `WorkflowToolCategory` (`Layout` and `Composite` are reserved and empty, and the `Execution` / `Command` gates are checked inside each tool body rather than by withholding the tool). On top of them: `ResetToolCallLimit`, always; `RequestSelection` / `RequestConfirmation`, each when its handler exists; `EnterPlanMode` / `ExitPlanMode`, both when a confirmation handler exists. With both handlers configured that is **71**. The mode no longer decides whether they exist: asking, and the Agent's own move into and out of Plan, are all `Interact`, allowed in every mode, because a mode that removed the asking tools would leave the Agent able only to refuse. Names are the C# method names and are passed to the model verbatim.
 
@@ -55,7 +55,7 @@ A category of its own with exactly one member — its flag is neither `Query` no
 
 | Tool | Effect |
 |---|---|
-| `CreateNode` | creates a node of a discovered type; offsets by 30 px and sizes from the type's default, else 300 × 260 |
+| `CreateNode` | creates a node of a discovered type; lands exactly at `(left, top)` when there is no overlap, otherwise shifts right past each overlapping node with a 30 px gap in a retry loop. Sizes from the type's default, else 300 × 260 |
 | `DeleteNode` | an atomic four-phase cascade — connections, slots, node, index |
 | `CreateSlotOnNode` / `AddSlotToCollection` / `RemoveSlotFromCollection` | slot lifecycle |
 | `DeleteSlot` | removes a slot and its connections |

@@ -164,7 +164,7 @@ Scroll below `0` grows `NegativeOffset`; above `max` it grows `PositiveOffset`. 
 | `SlotAnchorFromCanvasLocal(x, y, layer)` | `(x, y, layer)` — identity | **already collapsed**, because the host applies the canvas translation itself |
 | `SlotAnchorFromNode(nodeX, nodeY, localX, localY, layer)` | `(nodeX + localX, nodeY + localY, layer)` | a **collapsed node anchor plus a local offset** — no coordinate host at all |
 
-All three return a **collapsed** value. WPF, Avalonia **and Jalium** use the first, WinUI/MAUI/WinForms the second; all fall back to `SlotAnchorFromNode`. **No adapter computes a port centre from model geometry any more** — every one of them measures a control and writes `slot.Anchor`.
+All three return a **collapsed** value. WPF, Avalonia **and Jalium** use the first; WinUI/MAUI/WinForms the second and fall back to `SlotAnchorFromNode`. **Razor calls none of them** — it belongs to the canvas-local group, but its JS measures the port and the code-behind assigns `slot.Anchor` directly (`WorkflowSlotConnectionBehavior.razor.cs:93`; the layout behaviour does the same at `WorkflowSlotLayoutBehavior.razor.cs:83`), so there is no call site to choose. **No adapter computes a port centre from model geometry any more** — every one of them measures a control and writes `slot.Anchor`.
 
 ⚙ WinForms' own comment states the failure mode exactly: using `SlotAnchorFromVisualCenter` there subtracts `ActualOffset` a second time and shifts every link by `−ActualOffset`.
 
@@ -173,18 +173,22 @@ All three return a **collapsed** value. WPF, Avalonia **and Jalium** use the fir
 ### Links
 
 ```csharp
-var s  = new Point(StartLeft, StartTop);          // sender slot anchor, collapsed
-var e  = new Point(EndLeft,   EndTop);            // receiver slot anchor, collapsed
-double dx = EndLeft - StartLeft;
-double pull = Math.Max(40, Math.Abs(dx) * 0.5);   // 40px floor, else half the gap
-var c1 = new Point(s.X + pull, s.Y);              // control points, each horizontal
-var c2 = new Point(e.X - pull, e.Y);
-// cubic Bézier: s → (c1, c2) → e
+var s = new Point(StartLeft, StartTop);          // sender slot anchor, collapsed
+var e = new Point(EndLeft,   EndTop);            // receiver slot anchor, collapsed
+
+// The shared control points: each one leaves along its OWN port's outward normal.
+var points = LinkCurve.LinkCurvePoints(link, s.X, s.Y, e.X, e.Y, pullMinimum);
+// points = start, c1, c2, end — cubic Bézier: s → (c1, c2) → e
+
+// …or the sampled curve in one call (the same geometry the hit test uses):
+var curve = LinkCurve.BuildLinkCubic(link, s.X, s.Y, e.X, e.Y, pullMinimum);
 ```
 
-The cubic Bézier with both control points pulled horizontally is the shared geometry — every adapter draws it. It leaves each port horizontally and turns through the middle with no corner; the 40px floor keeps two ports close together from degenerating the curve into a straight segment.
+`LinkCurve.LinkCurvePoints` (and `BuildLinkCubic`, which samples its result) pulls each control point along the outward normal of its own port's node edge — `PortOutward` picks the edge nearest the port, normalised, so a wide node does not favour its horizontal edges (`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkCurve.cs:136-148,165-182,234`). A port on the right edge leaves horizontally, one on the top edge leaves upward; the pull distance is measured on the normal's axis, so the two ends stay independent. The 40px floor keeps two ports close together from degenerating the curve into a straight segment, and swapping sender and receiver returns the same four points in reverse.
 
-⚙ **That formula is duplicated wherever a platform needs the geometry outside its render pass, and the copies do not follow each other automatically.** Razor's adapter re-derives it in `wwwroot/veloxdev.workflow.js` to rewrite link curves in the same frame a wheel zoom collapses the nodes (it only touches elements marked `data-veloxdev-link-curve`); WinForms widens the same four points into the window region it carves out of the stroke band. Change the shape and all of them change with it.
+⚙ **The horizontal rule is the degenerate fallback, not the shared rule.** `c1 = s + (pull, 0)` and `c2 = e − (pull, 0)` are used only when an end has no node — the drag preview, whose ends are placeholder slots, and an unbound pooled view (`LinkCurvePoints` :180-181). It happens to equal the outward-normal result whenever the sender is on its node's right edge and the receiver on the other's left, which is why the old horizontal copies looked correct until a port moved to a top or bottom edge. `LinkCurve.BuildCubic` still exposes that horizontal house curve for a caller with no link; do not use it to draw a real link.
+
+⚙ **The fallback formula is duplicated wherever a platform needs the geometry outside its render pass, and the copies do not follow each other automatically.** Razor's adapter still re-derives the **horizontal** form in `wwwroot/veloxdev.workflow.js:330-334` (the comment there still names `LinkView.BuildCurve`) to rewrite link curves in the same frame a wheel zoom collapses the nodes (it only touches elements marked `data-veloxdev-link-curve`), while its .NET link view uses `LinkCurve.LinkCurvePoints` — so a port on a top or bottom edge can render differently in the two paths. WinForms widens the same four points into the window region it carves out of the stroke band. Change the shape and all of them change with it.
 
 ⚙ **Never hand a renderer an unbounded absolute coordinate or a whole-world canvas size.** That is the contract that keeps links visible at deep zoom. A host with a size or coordinate limit needs one of: a viewport-sized overlay outside the growing canvas (MAUI), an offset frame that bakes the pan into the geometry (WinUI), or self-bounding geometry (Jalium).
 

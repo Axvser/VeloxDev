@@ -8,7 +8,7 @@ An adapter needs three namespaces: `VeloxDev.TransitionSystem` for the types use
 
 ## 1. `UIThreadInspector` — the only class that needs real platform knowledge
 
-Derive from `TransitionHostBase<TPriorityCore>` and answer **three** members. Everything else — inline-versus-queue, the await-only-when-accepted rule, the blocking read, liveness — lives in the base and in the two subsystems underneath it (`VeloxDev.Threading`, `VeloxDev.Lifetime`), so no adapter can derive it differently from another.
+Derive from `TransitionHostBase<TPriorityCore>` and answer **three** members. Everything else — inline-versus-queue, the await-only-when-accepted rule and the blocking read — lives in the base and in the two subsystems underneath it (`VeloxDev.Threading`, `VeloxDev.Lifetime`), so no adapter can derive it differently from another. Liveness is the exception: the base offers `Lifetime` / `IsAlive`, but four adapters supply their own signal (see below).
 
 | Member | The question it answers |
 |---|---|
@@ -41,6 +41,8 @@ WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a laz
 
 **`PostCore` must report acceptance honestly.** It returns `false` when the action could not be queued at all, and that flag is the only thing standing between a dropped frame and a hung pipeline — `PostAsync` only waits on a completion source once the queue reported the work was accepted, so an optimistic `true` for work that was silently dropped hangs the consumer for the rest of the process. Check what your host says when the queue is gone (`HasShutdownStarted`, a refused `TryEnqueue`, a detached handle) and return `false`.
 
+**Razor is the documented exception.** `SynchronizationContext.Post` reports nothing — it returns `void` and neither throws nor signals when the circuit's queue is gone — so Razor's `PostCore` returns `true` unconditionally once it has a context (`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs:66-73`). The one half it can report is a `ThreadRef` with no `SynchronizationContext`, which returns `false`. This is a platform limitation, not a shortcut. Its mitigations are the stale-frame guards in `SamplerSet.Apply`, which drop a late frame, and the run's cancellation token / the host's `Dispose` as the only reliable "still running" signal — never the post's return value.
+
 ⚙ `IThreadDispatcher.Run<T>` reports the same failure the same way — `default` when the work could not be queued.
 
 **Liveness is a state you have to keep, and it differs per host.** WPF and Avalonia carry none (the base's `Lifetime` stays alive). The others each invent something: WinUI reports into `Lifetime` on every enqueue, while MAUI, WinForms and Razor override `IsAlive` from their own signal.
@@ -53,7 +55,7 @@ WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a laz
 
 ⚙ Razor has no signal to observe, so it exposes a manual `NotifyShutdown()` for the host to call.
 
-⚙ **Explicit capture is only a fallback.** WinUI, WinForms and Razor expose `UIThreadInspector.CaptureUIThread()` for the first start from a background thread of a target that cannot name its own thread — a non-`DependencyObject` on WinUI, a plain Blazor model. WPF, Avalonia and MAUI resolve from the target or `Application.Current`.
+⚙ **Explicit capture is only a fallback.** WinUI, WinForms and Razor expose `UIThreadInspector.CaptureUIThread()` for the first start from a background thread of a target that cannot name its own thread — a non-`DependencyObject` on WinUI, a plain Blazor model. WPF and MAUI resolve from the target or `Application.Current`; Avalonia answers `Dispatcher.UIThread` unconditionally (`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/UIThreadInspector.cs:10`), which is the same thread for a single-dispatcher application.
 
 **`IsCurrentThread` is the one predicate the base cannot supply** — it holds an opaque handle and cannot compare it to the calling thread. Default it from the target, which is correct for any GUI: a view must be created on the UI thread, so the thread a target is on and the application's UI thread are the same one. MAUI inverts its own flag (`!dispatcher.IsDispatchRequired`), so an unknown state is treated as *not* the UI thread and the work is dispatched; WinForms and Razor compare the captured `SynchronizationContext` by reference.
 
@@ -65,7 +67,7 @@ WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a laz
 
 ### The frame pacer
 
-`TransitionInterpreterCore.CreateFramePacer` returns a `FramePacerCore` the loop waits through, or null to fall back to the thread-pool timer. Derive the pacer from `affinity.ThreadFor(target)`, never from the platform — a pacer that disagrees with the write path turns every frame into a dispatch, which is the one thing the sampling path avoids.
+`TransitionInterpreterCore.CreateFramePacer` returns a `FramePacerCore` the loop waits through, or null to fall back to the thread-pool timer. The invariant is that the pacer runs on **the same thread the write path resolves**: derive it from `affinity.ThreadFor(target)`, never from the platform. A pacer that disagrees with the write path turns every frame into a dispatch, which is the one thing the sampling path avoids. WinForms shows both halves: `CreateFramePacer` returns its pacer only when `affinity.IsCurrent(target)` and null otherwise (`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/TransitionInterpreter.cs:20-21`); the pacer itself is a thread-pool timer whose tick posts the frame with `Control.BeginInvoke`, so the writes stay direct and on the control's thread. The null path is the documented fallback, where each write marshals itself.
 
 ⚙ **The timer must re-arm on every `Arm`.** `Arm` is called once per frame and `Disarm` stops the timer on every tick, so exactly one tick per arm is drawn — but only if a later `Start()` fires again. MAUI's `IDispatcherTimer` does not: a non-repeating one fires **once and never again**, which silently caps every animation at two frames — values freeze at their start, the closed-form half of the suite still passes, and nothing throws — so MAUI creates it with `IsRepeating = true`. WinUI's `DispatcherQueueTimer` re-arms correctly with `IsRepeating = false`, so it keeps that flag. Which value is right is a per-host check you have to make, not a rule you can copy across.
 
@@ -77,13 +79,13 @@ One `ISampler` per platform type, registered as a **stateless singleton**. Three
 
 ⚙ `InterpolatorCore.Prepare<TPriorityCore>(object target, IFrameState state, ITransitionEffectCore effect, ITransitionHost<TPriorityCore> host)` is the settlement point: it reads each declared path on the owning thread, binds `PathIndex.Frozen` arguments once, resolves the sampler (custom → registry → `ISampleable`) and stores both normalized endpoints. Override it only to change that chain — and call the base if you do.
 
-⚙ `NormalizeStart` / `NormalizeEnd` run **once per animation**. `InsertFrame` runs **once per frame**. Put anything expensive in the normalizers.
+⚙ `NormalizeStart` / `NormalizeEnd` run **once per segment**, not once per animation: `Prepare` runs for each segment, and the end value is read when that segment starts. `InsertFrame` runs **once per frame**. Put anything expensive in the normalizers.
 
 ⚙ **Never mutate `start` or `end`** — they are shared with the snapshot. Every scratch in every adapter is a copy of the start, recomputed from the pristine endpoints each frame.
 
 ⚙ **When the product feeds a nested path, `t == 0` and `t == 1` must hand back the caller's own instance, not the scratch.** A path such as `((TranslateTransform)x.RenderTransform).X` depends on the runtime type the endpoint was declared with, and the interpolated scratch would replace it; the transform samplers early-return `start` / `end` at exactly those times. Core makes the pass's final frame exact (`1` forward, `0` reverse), so you only have to hand them back.
 
-⚙ **The scratch (`ref object? working`) is per animation.** Derive its type from the endpoint and re-derive it if the type changes:
+⚙ **The scratch (`ref object? working`) is per segment**, like the endpoints it was built from. Derive its type from the endpoint and re-derive it if the type changes:
 
 ```csharp
 // Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/TransformSampler.cs
@@ -149,7 +151,7 @@ public class Interpolator : InterpolatorCore
 }
 ```
 
-⚙ **`CreateScheduler` is what lets a theme switch animate on your platform.** A theme switch runs on the transition system rather than on a timer of its own, and this is the one thing Core cannot answer for it: which inspector, interpreter and priority make up a scheduler, for a target Core only knows as an `object`. Leave it out and the switch still happens — **instantly**, with nothing logged. The same silent degradation as a missing `SetPlatformInterpolator`.
+⚙ **`CreateScheduler` is what lets a theme switch animate on your platform.** A theme switch runs on the transition system rather than on a timer of its own, and this is the one thing Core cannot answer for it: which inspector, interpreter and priority make up a scheduler, for a target Core only knows as an `object`. Leave it out and the switch still happens — **instantly**, with nothing logged. The same silent degradation as a missing `SetPlatformInterpolator` — and the host must in fact call `ThemeManager.SetPlatformInterpolator(new Interpolator())` once at startup (`Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs:61`; the WPF demo does it in `Examples/Theme/WPF/Demo/App.xaml.cs:15`). Without that call Core never reaches `CreateScheduler` at all.
 
 ⚙ **Go through `FindOrCreate`, never a `new` scheduler.** Only `FindOrCreate` files it under the target, and that registration is what a later `Transition.Pause` / `Seek` / `Exit(target)` reads. A scheduler constructed directly animates correctly and can never be controlled.
 

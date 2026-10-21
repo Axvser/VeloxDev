@@ -25,10 +25,12 @@ else Console.WriteLine("target NOT reached — no value fabricated");
 ```csharp
 Task<IReadOnlyList<CompiledGraph>> CompileAsync<T>(T component, CompileRole role, CancellationToken ct = default)
     where T : IWorkflowViewModel;
-Task RunAsync(CompiledGraph graph, IRuntimeContext context, CancellationToken ct);
+Task RunAsync(CompiledGraph graph, IRuntimeContext context, CancellationToken ct, ExecutionCheckpoint? resumeFrom = null);
 ```
 
 ⚙ **`RunAsync`'s `CancellationToken` has no default.** It is required.
+
+⚙ **`resumeFrom` is optional; passing it resumes instead of restarting.** The checkpoint records the nodes already done, and those are not driven again; its `Shape` must match the graph or the call throws `InvalidOperationException` before the session is touched. The usual value is what the context's checkpoint store holds. The rest of the run controls are capabilities configured on the context, all under `CompilerEx/Runtime/Contracts/`: `IExecutionCheckpointStore` (`RuntimeContext.CheckpointStore` — the engine saves the run's current place after each successful node, and the host loads it and hands it back as `resumeFrom`), `INodeRetryPolicy` (`RetryPolicy` — only thrown exceptions are retried, never an `Error`/`Warn` that a node asked for), `IExecutionGate` (`ExecutionGate` — awaited before each node, so a host can pause a run between nodes and resume it), and `IExecutionErrorSink` (`ErrorSink` — every failure as an `ExecutionError` record rather than only a log line).
 
 ⚙ `CompileAsync` requires a **node** (anything else throws `ArgumentException`), clears and refills `Compiler.Graphs`, and currently returns exactly one graph.
 
@@ -43,7 +45,7 @@ Compilation can throw `InvalidOperationException` when a `Terminal` cone cannot 
 
 ## The plan
 
-`CompiledGraph` is a nestable `ObservableCollection<CompileSegment>`. `CompileSegment` carries only structural state (`Id`, `Depth`).
+`CompiledGraph` is a class holding a `[VeloxProperty] ObservableCollection<CompileSegment> _entries` (`Compile/Model/CompiledGraph.cs:12-14`), not an `ObservableCollection` itself. It is nestable: `BranchSegment` / `ParallelSegment` each hold a child `CompiledGraph`. `CompileSegment` carries only structural state (`Id`, `Depth`).
 
 | Segment | Drives |
 |---|---|
@@ -101,7 +103,7 @@ A node computes in `ReceiveAsync` and **returns its output**; the engine writes 
 
 ⚙ **A node must not broadcast downward during a compiled run.** The engine drives every node itself; a node that relies on its own broadcast does nothing.
 
-⚙ `context.Error(...)` / `context.Warn(...)` are not logging — see [Redirects](#redirects).
+⚙ `context.Error(...)` / `context.Warn(...)` are not logging — see [Redirects](#redirects--loops-without-cycles).
 
 ## The context hierarchy
 
@@ -182,11 +184,13 @@ public interface IRedirectable
 }
 ```
 
-⚙ **`context.Warn(...)` and `context.Error(...)` request a redirect — they are not logging.** On a node that does not implement `IRedirectable`, either one ends the run: `Status = "Stopped"`, `CurrentOrder = -1`. A node whose helper calls `Warn` for an empty input quietly kills the chain.
+⚙ **`context.Warn(...)` is a note, not a stop.** The line is logged with a `[Warning]` marker and the run carries on with whatever the node returned: the value is not discarded, and no redirect is asked for (`IRuntimeContext.cs:103-109`). The engine skips redirect handling for warnings (`RuntimeEngine.cs:203-204`), so a node whose helper calls `Warn` for an empty input keeps going.
+
+⚙ **`context.Error(...)` is a stop, and also not logging.** On a node that does not implement `IRedirectable`, the run ends: `Status = "Stopped"`, `CurrentOrder = -1`. The same happens to an uncaught exception (`RuntimeEngine.cs:207-214`). With `IRedirectable`, its answer decides where the run goes instead.
 
 ⚙ **A redirect target must be strictly earlier than the requesting node's `Order`.** Anything else is ignored with a single log line and the flow carries on as if nothing had happened.
 
-⚙ **This is a contract, not a shipped feature.** The engine drives `IRedirectable` end to end and the behaviour is covered by contract tests, but **nothing outside the test suite implements it** — no node in `Examples/Workflow/Common/Lib` or in any demo does. Treat it as an engine capability you would be the first to exercise, not as a pattern to copy from somewhere.
+⚙ **It is shipped and exercised.** `Examples/Workflow/Common/Lib/ViewModels/Workflow/PythonScriptNodeViewModel.cs:21,125` implements `IRedirectable` (`ResolveRedirectAsync` resolves a named node back to its compile order), and `Helper/PythonHelper.cs:105-109` drives it: a script's `redirect` field becomes the node's `RedirectTo`, and an `error` in the same output is what makes the engine ask `ResolveRedirectAsync` for that target order. Read those before writing your own — the engine behaviour is the same one the contract tests cover.
 
 ⚙ The whole graph is re-run from the accepted target, with `Order < target` skipped; `Attempt` increments per pass. **50 redirects** is the cap, after which it throws. If the target is a router's own order, only the branch is re-routed and the router is not driven again.
 

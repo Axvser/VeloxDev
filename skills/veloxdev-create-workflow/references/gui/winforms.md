@@ -6,7 +6,7 @@ There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md
 
 ⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — all seven roles are single `.cs` files. The adapter's `WorkflowTreeView` is where the pull model lives (the self-driven viewport, the virtualize inset and the `Refresh` calls); the demo's `TreeView.cs` is the thin subclass that supplies the palette and view factories.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — see [the rule in SKILL.md](../../SKILL.md#checking-your-work).
 
 ## This adapter is different: nothing binds
 

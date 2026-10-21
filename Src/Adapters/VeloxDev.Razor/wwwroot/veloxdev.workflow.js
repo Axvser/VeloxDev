@@ -325,8 +325,10 @@ window.veloxdevWorkflow = (() => {
         const ey = (rr.top + rr.height / 2) - rect.top - contentY;
         if (!isFinite(sx) || !isFinite(sy) || !isFinite(ex) || !isFinite(ey)) return '';
         const dx = ex - sx;
-        // Both control points pulled horizontally, as in LinkView.BuildCurve. The minimum pull keeps
-        // the curve from degenerating into a straight segment when the two ports are close.
+        // Horizontal fallback, matching LinkCurve's no-node path only. The .NET link view now uses
+        // LinkCurvePoints, which pulls each control point along its port's outward normal, so a port on
+        // a top or bottom edge renders differently here until this copy follows it. The minimum pull
+        // keeps the curve from degenerating into a straight segment when the two ports are close.
         const pull = Math.max(LINK_PULL_MIN, Math.abs(dx) * 0.5);
         return 'M ' + sx.toFixed(1) + ',' + sy.toFixed(1) +
             ' C ' + (sx + pull).toFixed(1) + ',' + sy.toFixed(1) +

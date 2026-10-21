@@ -6,7 +6,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/` — a `.jalxaml` + `.jalxaml.cs` pair for each of tree, node, slot and link, plus a single `.cs` for `GridDecorator`, `MinimapOverlay` and `TemplateSelector`. `InfoOverlay.*` beside them is the demo's debug HUD, not part of any pack.
 
-⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read publish-time safety into the folder name.
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — see [the rule in SKILL.md](../../SKILL.md#checking-your-work).
 
 ## Writing the surface
 
@@ -107,7 +107,7 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 
 ⚙ **`jalium-v-tree` has no `linkColor` symbol** (only `jalium-v-link` declares it), so `-lc` is rejected on the tree and the tree's `LinkView` entry takes the link item's own default. Change the link colour on `jalium-v-link`.
 
-⚙ **One symbol on this pack is accepted and discarded:** the slot's `slotBorderColor` (`-bc`) declares `replaces: TemplateSlotBorderColor`, but that token appears in no generated file — the slot view paints a filled `Path` tinted from its own `Foreground` and has no border element. Every other declared symbol's token is live. (The tree's `surfaceBorderBrush` / `surfaceBorderThickness` / `surfaceCornerRadius` carry a "this GUI's tree has no border element" note in `template.json`, yet their tokens do sit on the generated `Border` — the note is stale, the substitution happens.)
+⚙ **One symbol on this pack is accepted and discarded:** the slot's `slotBorderColor` (`-bc`) declares `replaces: TemplateSlotBorderColor`, but that token appears in no generated file — the slot view paints a filled `Path` tinted from its own `Foreground` and has no border element. Every other declared symbol's token is live.
 
 ⚙ Colours are substituted into parser calls (`ColorConverter.ConvertFromString("TemplateSlotColor")`), not into literals — which is why the mirror comparison normalises colour spelling before diffing.
 

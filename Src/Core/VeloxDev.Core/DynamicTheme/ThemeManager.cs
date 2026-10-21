@@ -98,9 +98,11 @@ namespace VeloxDev.DynamicTheme
         /// <param name="themeType">target theme</param>
         /// <param name="effect">transition effect</param>
         /// <remarks>
-        /// Every target of one switch is anchored to a single shared <see cref="ITimeSourceControl"/>, so the
-        /// timeline control the transition system already exposes works on it unchanged: pausing, seeking or
-        /// re-rating any one target moves the whole switch, because there is only one transport to move.
+        /// Every target of one switch is anchored to a single shared <see cref="ITimeSourceControl"/>, so
+        /// <c>Pause</c>, <c>Resume</c> and <c>SetRate</c> on any one target move the whole switch, because there
+        /// is only one transport to move. <c>Seek</c> re-anchors only the runs of the target it is given, and
+        /// <c>Exit</c> cancels only that target's runs; the other targets keep their own anchors and continue.
+        /// <c>Cycle</c> and <c>Position</c> read the first run on that target.
         /// <para>
         /// The effect is used as given and is read per frame by every target, so it must be the platform's own
         /// effect type and must not be mutated while a switch that uses it is running. The shared
@@ -231,8 +233,9 @@ namespace VeloxDev.DynamicTheme
                 planned.Add((scheduler, group));
             }
 
-            // 整场共用一条时间轴：所有目标锚在同一个 transport 上，于是对任一目标 Pause / Seek / SetRate 都会同时
-            // 移动全部目标。这就是「不新增控制面、直接用既有 Transition.*」能够成立的全部原因。
+            // 整场共用一条时间轴：所有目标锚在同一个 transport 上，于是对任一目标 Pause / Resume / SetRate
+            // 都会同时移动全部目标。Seek 只重锚该目标的 run，Exit 只取消该目标的 run —— 这两条不是整场操作。
+            // 这就是「不新增控制面、直接用既有 Transition.*」能够成立的原因。
             var timeline = TimerCore.CreateTimeSource<ITimeSourceControl>();
             var runs = new List<SwitchTarget>(planned.Count);
             var faulted = false;

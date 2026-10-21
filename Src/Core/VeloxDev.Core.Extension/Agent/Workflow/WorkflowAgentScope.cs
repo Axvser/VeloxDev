@@ -685,10 +685,14 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// <summary>The mode in force.</summary>
     public AgentPermissionMode PermissionMode => _permission.Mode;
 
-    /// <summary>Declares the text embedded for a mode, replacing the text the library ships for it.</summary>
+    /// <summary>Adds host rules for a mode, after the text the library ships for it.</summary>
     /// <param name="mode">The mode.</param>
-    /// <param name="promptBody">The body text, or <see langword="null"/> to go back to the shipped text.</param>
+    /// <param name="promptBody">The rules to append, or <see langword="null"/> to remove this mode's addition.</param>
     /// <returns>This scope.</returns>
+    /// <remarks>
+    /// The shipped text is not replaced. The prompt renders the shared corpus and the mode's own corpus first,
+    /// then appends this text under a heading that tells the model it takes priority.
+    /// </remarks>
     public WorkflowAgentScope WithModePrompt(AgentPermissionMode mode, string? promptBody)
     {
         if (string.IsNullOrWhiteSpace(promptBody)) _modePromptOverrides.Remove(mode);

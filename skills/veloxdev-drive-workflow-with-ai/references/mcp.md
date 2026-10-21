@@ -1,4 +1,4 @@
-﻿# MCP servers
+# MCP servers
 
 `McpScope` installs, launches, connects and monitors external Model Context Protocol servers, and contributes their tools to the agent through one context provider, wrapped like every other tool.
 
@@ -127,7 +127,7 @@ Management tools — six, all registered on a normal scope: `ListMcpServers`, `L
 
 ⚙ **Two classifications, one per origin.** A connected server's own tools are third-party code and are wrapped as `AgentActionCategory.Execute`, so a host rule such as `WithPermissionRule(PermissionDecision.Ask, "source:mcp:*")` gates them. The management tools are `Curate` — except `ListMcpServers` / `DescribeMcpServer`, which are `Read`.
 
-⚙ **The session's permission mode decides, and on a normal scope all six management tools are always registered.** `LoadMcpServers`, `UnloadMcpServer`, `AddMcpServer` and `SetMcpServerArguments` are `Curate`: `Auto` asks for them, `Manual` and `AutoEdit` ask too, `Plan` refuses them, and `Bypass` runs them unless a `Deny` rule matches. A refusal names the mode or the rule. A **standalone** `McpScope` has no wrapper around its tools, so those four ask for themselves through `WithConfirmationHandler` — and with no handler an unanswerable prompt denies.
+⚙ **The session's permission mode decides, and on a normal scope all six management tools are always registered.** `LoadMcpServers`, `UnloadMcpServer`, `AddMcpServer` and `SetMcpServerArguments` are `Curate`: `Auto` asks for them, `Manual` and `AutoEdit` ask too, `Plan` refuses them, and `Bypass` runs them unless a `Deny` rule matches. A refusal names the mode or the rule. A **standalone** `McpScope` has no wrapper around its tools. Only `AddMcpServer` and `SetMcpServerArguments` ask for themselves, through `WithConfirmationHandler` — and with no handler an unanswerable prompt denies. `LoadMcpServers` and `UnloadMcpServer` have no gate of their own, so a standalone host must gate those two itself.
 
 ⚙ **`AddMcpServer` asks about the kind, not only the name.** A local run mode installs and launches software; an Http endpoint only sends data out. The tool puts a synthesised `mcp-add:local` / `mcp-add:http` call to the same policy, which is what lets the host write `WithPermissionRule(Deny, "mcp-add:local")` and leave Http servers alone.
 

@@ -80,7 +80,7 @@ outer collapsed box      positioned at the node's Anchor, sized to its Size
 
 ## Links
 
-A link view binds its endpoints to `Sender.Anchor` / `Receiver.Anchor` and draws the shared cubic Bézier — the geometry is in [canvas-math.md](canvas-math.md#links).
+A link view binds its endpoints to `Sender.Anchor` / `Receiver.Anchor` and draws the shared cubic Bézier — each control point leaves along its own port's outward normal (`LinkCurve.LinkCurvePoints` / `BuildLinkCubic`). The geometry is in [canvas-math.md](canvas-math.md#links).
 
 ⚙ **Every link view starts with the render-ready gate:**
 
@@ -104,6 +104,9 @@ if (DataContext is IWorkflowLinkViewModel link)
 Then, if you want the hover to be *visible*, subscribe to the routed pointer events on that link's own helper:
 
 ```csharp
+// _lit is a field on the link view; h is that link's own routed input.
+var h = link.GetHelper() as IInputEvents;
+if (h is null) return;
 h.Input.PointerEntered += (_, _) => { _lit = true;  InvalidateVisual(); };
 h.Input.PointerExited  += (_, _) => { _lit = false; InvalidateVisual(); };
 ```
@@ -115,6 +118,26 @@ h.Input.PointerExited  += (_, _) => { _lit = false; InvalidateVisual(); };
 ⚙ **Retract when you draw nothing.** Call `PublishCurve(null)` on the same paths that draw nothing (hidden, endpoints not measured, pooled view rebound to another link). A published curve *is* the answer to "is there something here", so a stale one makes a link hittable where nothing is painted.
 
 ⚙ **The curve is runtime geometry — never serialize it.** It belongs to the view, not to the model.
+
+### How the surface picks a link
+
+Publishing the curve is the whole opt-in. The framework answers the rest, and these rules are what decide a click near a line — or which of two links it picks:
+
+⚙ **Six canvas units either side, and the radius does not scale with zoom.** `LinkHitTestEx.DefaultHitRadius` is 6; a pointer is a physical thing, and the demos never scaled it. An adapter passes `WorkflowInput.HitRadius` (same default) when it resolves a target, so a surface can widen it for touch without touching the curve.
+
+⚙ **`ILinkHitTestable` is a capability of the link's Helper, not of the view model.** `LinkHelper` — the helper every generated link uses — implements it, so a normal link is hittable. A hand-written helper that does not derive from `LinkHelper` must implement `ILinkHitTestable` itself, or the link is never hit; there is no fallback to the view's box.
+
+⚙ **The gate is visibility plus a published curve, not anchor measurement.** A published curve is the evidence that something was painted there, so a link whose endpoints were measured but that draws nothing does not answer. That is also why retracting with `PublishCurve(null)` matters.
+
+⚙ **Topmost wins, and the search runs back to front.** `HitTestVisibleLinks` walks `VisibleItems` from the end — the last drawn link is on top — and returns the first match. It skips `tree.VirtualLink`: the rubber band sits under the pointer by construction and must never answer for the link you are trying to hit.
+
+⚙ **A node card occludes the link under it — except at the link's own ports.** A link that passes underneath a node is not drawn there, so it does not answer there either; a point within the hit radius of `Sender.Anchor` or `Receiver.Anchor` still counts, because ports are drawn on the card's edge.
+
+⚙ **Coordinates must be in the space the surface queries.** `PublishCurve` stores the curve by reference and does not transform it. Publish the same geometry you draw, in the surface's coordinates; rebuilding it on every render is fine.
+
+⚙ **`visual` is what gives Delete a route.** Pass the control that drew the link, or `null` where one surface draws every link. The surface focuses it while the pointer is on the link, so the key can bubble through it; an immediate-mode layer reads it to skip a link it has already painted.
+
+⚙ **`Contains(x, y, radius)` is the only test.** The helper measures against the flattened curve it was given; a custom helper applies the same distance rule in the space it published in.
 
 ### Painting the connection preview
 
@@ -173,8 +196,8 @@ var relay = ((IInputEvents)tree.GetHelper()).Input;
 relay.PointerWheelChanged += (_, e) =>
 {
     if ((e.Modifiers & InputModifiers.Shift) == 0) return;
-    e.Handle.PreventDefault = true;          // this wheel does not scroll
-    input.Scroller?.ScrollBy(e.DeltaY, 0d);  // …it scrolls sideways instead
+    e.Handle.PreventDefault = true;           // this wheel does not scroll
+    input.Scroller?.ScrollBy(-e.DeltaY, 0d);  // …it scrolls sideways instead; the axes' signs differ
 };
 ```
 
@@ -234,4 +257,4 @@ The adapters fall into two camps, and which one you are in decides whether you m
 
 ⚙ **Zoom to about 40% and look at the links.** Almost every view-layer problem — links that vanish, links that detach from their port, a camera that drifts — is invisible at 100%.
 
-⚙ `Examples/Workflow/<GUI> Trimmed/Demo` is a complete, minimal view suite for your GUI and the fastest way to answer "what is this supposed to look like". `Examples/Workflow/<GUI>/Demo` is the same with every optional feature on. If you installed from NuGet they are on GitHub.
+⚙ `Examples/Workflow/<GUI> Trimmed/Demo` is a complete, minimal view suite for your GUI and the fastest way to answer "what is this supposed to look like". `Examples/Workflow/<GUI>/Demo` is the same with every optional feature on. If you installed from NuGet they are on GitHub. (Blazor's folder is `Examples/Workflow/Blazor Trimmed/Demo` — named after the platform, not the adapter — and Avalonia's demo is nested one level deeper: `Examples/Workflow/Avalonia Trimmed/Demo/Demo`.)

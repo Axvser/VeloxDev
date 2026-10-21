@@ -53,7 +53,7 @@ dotnet build
 
 ## Style parameters
 
-Beyond `namespace`, the parameters only affect colours and geometry, and **all seven packs expose the same names with the same CLI aliases** — so a command line moves between GUIs unchanged. The defaults match too, with two documented exceptions on WinForms: its link item adds a `surfaceBackground` parameter, and its decorator's `rulerBackground` defaults to `#70252526` (lower alpha) rather than the other packs' `#C8252526`. See [gui/winforms.md](gui/winforms.md).
+Beyond `namespace`, the parameters only affect colours and geometry, and **all seven packs expose the same names with the same CLI aliases** — so a command line moves between GUIs unchanged. Each item's aliases live in `.template.config/dotnetcli.host.json` (`symbolInfo.shortName`); `template.json` declares the symbol and its default. Both files are required to reproduce the CLI surface — an alias in `template.json` alone does nothing. The defaults match too, with two documented exceptions on WinForms: its link item adds a `surfaceBackground` parameter, and its decorator's `rulerBackground` defaults to `#70252526` (lower alpha) rather than the other packs' `#C8252526`. See [gui/winforms.md](gui/winforms.md).
 
 | Item | Options (short → symbol) | Defaults |
 |---|---|---|

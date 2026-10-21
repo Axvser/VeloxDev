@@ -186,3 +186,6 @@
    模板写死 `transparent`（见 `Templates/adapters/razor.md` P4），要改观感得改模板那一行。
 7. **`Interpolator.cs:7-10` 那一行不要随手加类型当试验**：加错了不会报错，只会让某个类型静默走到「无采样器」路径
    （`decimal` 就是六家共有的这一格：声明得出、没有采样器）。
+8. **JS 与 .NET 的连线几何不是同一份**：`wwwroot/veloxdev.workflow.js:328-334` 仍按水平控制点重算曲线
+   （注释还写着 `LinkView.BuildCurve`），而 .NET 的 link view 已改用 `LinkCurve.LinkCurvePoints`（沿端口外法线）。
+   两端都在左右边时两者一致；任一端落在上下边时会画得不一样。改连线几何时两处都要动。

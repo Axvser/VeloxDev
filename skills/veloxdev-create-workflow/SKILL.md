@@ -1,6 +1,6 @@
 ---
 name: veloxdev-create-workflow
-description: Build a workflow editor in your own project with VeloxDev — reference the right package, author Tree/Node/Slot/Link ViewModels with [WorkflowBuilder], make nodes compute, compile and run a graph forwards or backwards, scaffold and customize the canvas views with the dotnet new template packs, and extend the library at its intended seams (custom link type, connection rules, variable port sets, custom sampler, adapter for another GUI) without patching generated code
+description: Build a workflow editor in your own project with VeloxDev — reference the right package, author Tree/Node/Slot/Link ViewModels with [WorkflowBuilder], make nodes compute, compile and run a graph forwards or backwards, scaffold and customize the canvas views with the dotnet new template packs, and extend the library at its intended seams (custom link type, connection rules, variable port sets, a workflow view adapter for another GUI; a custom sampler is covered by veloxdev-create-animation) without patching generated code. Use when building or modifying a workflow editor, graph, node canvas, or its views.
 ---
 
 ## Responsibility
@@ -46,6 +46,7 @@ An adapter package brings `VeloxDev.Core` in transitively. Versions are delibera
 | React to zoom, panning, or links that do not line up | [references/canvas-math.md](references/canvas-math.md) |
 | Paint a red/green connection preview while a drag is in progress | [references/model.md](references/model.md#the-connection-preview) |
 | Take over the wheel, or scroll the surface from your own handler | [references/view-layer.md](references/view-layer.md#wheel-and-scrolling) |
+| Hear pointer/key input, or find out why a click near a link misses | [references/input.md](references/input.md), [references/view-layer.md](references/view-layer.md#how-the-surface-picks-a-link) |
 | Support a GUI that has no adapter | [references/new-adapter.md](references/new-adapter.md) |
 | Drive the graph from an LLM | [../veloxdev-drive-workflow-with-ai/SKILL.md](../veloxdev-drive-workflow-with-ai/SKILL.md) |
 
@@ -108,7 +109,7 @@ The behaviour that matters is visual and interactive, so check it in a running a
 
 ⚙ When something does not work, the order to suspect is: `partial` on the class → `InitializeWorkflow()` called → the slot's channel permits the connection → the slot has been measured (is the anchor still `NaN`?) → the view is bound to the right property.
 
-⚙ If you are working against a checkout rather than NuGet, `Examples/Workflow/Common/Lib` is a working node library to compare against — a controller, a dynamic router, a python worker, a timer and an agent message node — and `Examples/Workflow/<GUI> Trimmed/Demo` is a complete, minimal editor on your GUI. `Src/Core/VeloxDev.Core/WorkflowSystem/` holds the model and `Src/Adapters/VeloxDev.<GUI>/` the view layer; both are small enough to read when a reference here does not answer the question.
+⚙ If you are working against a checkout rather than NuGet, `Examples/Workflow/Common/Lib` is a working node library to compare against — a controller, a dynamic router, a python worker, a timer and an agent message node — and `Examples/Workflow/<GUI> Trimmed/Demo` is a complete, minimal editor on your GUI. (Blazor's folder is `Examples/Workflow/Blazor Trimmed/Demo` — named after the platform, not the adapter — and Avalonia's demo is nested one level deeper: `Examples/Workflow/Avalonia Trimmed/Demo/Demo`.) `Src/Core/VeloxDev.Core/WorkflowSystem/` holds the model and `Src/Adapters/VeloxDev.<GUI>/` the view layer; both are small enough to read when a reference here does not answer the question.
 
 ⚙ **The `"Trimmed"` in those folder names means *minimal demo*, not trim configuration.** The name is a demo-size choice, not a publish setting: `VeloxDev.Core`'s `net8.0` target sets `IsAotCompatible=true` and its agent surface is reflection-free, so the package declares itself usable under trimming and NativeAOT. Do not read the folder name as publish-time guidance.
 

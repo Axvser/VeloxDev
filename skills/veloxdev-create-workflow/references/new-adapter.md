@@ -63,7 +63,7 @@ The single highest-risk choice in the whole adapter. Ask: **what frame is the me
 | a screen-space centre, and nothing has applied the canvas pan for you | `SlotAnchorFromVisualCenter` | WPF, Avalonia, Jalium |
 | a centre already inside the canvas-local frame (the host applies the pan itself) | `SlotAnchorFromCanvasLocal` | WinUI, MAUI, WinForms |
 | no coordinate host at all, and nothing you can measure | compute the centre in your adapter from model geometry (`node.Anchor` + design-local · `node.Size/DesignSize`) | *(none of the seven — this is the fallback for a GUI whose ports are not controls)* |
-| a value from outside the process, already canvas-local (e.g. JavaScript) | `SlotAnchorFromCanvasLocal` | Blazor |
+| a value from outside the process, already canvas-local (e.g. JavaScript) | write `slot.Anchor` directly — no `SlotAnchorFrom*` call | Blazor (Razor) |
 
 ⚙ **Get this wrong and every link in the graph is off by a constant** — by `−ActualOffset` in the visual-centre/identity mix-up. There is no exception, no log and no visual clue other than the offset.
 
@@ -130,7 +130,7 @@ A workable order, bottom-up — each step is verifiable on its own:
 3. **`Interpolator`** — an `InterpolatorCore` subclass that registers those samplers and implements `CreateScheduler`. This is also what makes a theme switch animate on your platform.
 4. **State, interpreter, scheduler** — only if your framework's value types need their own write path.
 5. **The surface behaviour** and the named-part resolution.
-6. **The node, slot and link behaviours** — drag, connect, slot measurement, and translating the platform's pointer and keys into the standard input route (`WorkflowInput.For(tree).Route(...)`, resolving the target with `HitTestVisibleLinks`; see [view-layer.md](view-layer.md#making-a-link-interactive)). Three details belong here:
+6. **The node, slot and link behaviours** — drag, connect, slot measurement, and translating the platform's pointer and keys into the standard input route (`WorkflowInput.For(tree).Route(...)`, resolving the target with `HitTestVisibleLinks`; the route, the handle and the argument types are in [input.md](input.md), the link-hit rules in [view-layer.md](view-layer.md#how-the-surface-picks-a-link)). Three details belong here:
    - **The connection preview feed.** On every pointer move while `tree.VirtualLink.IsVisible`, report the slot under the pointer: `tree.StandardSetPreviewReceiver(SlotHitTestEx.HitTest(tree, x, y))`. The candidate must be found from the **measured slot anchors**, not the visual tree — the rubber band covers the surface. Do not forward the move as a hover event during the drag, or every link the pointer crosses lights up. See [model.md](model.md#the-connection-preview).
    - **The wheel and its scroller.** Take the non-Ctrl wheel from the platform, route it as `PointerWheelEventArgs`, and then apply the platform's default scroll yourself unless a subscriber set `PreventDefault`. Register an `IWorkflowSurfaceScroller` at `WorkflowInput.For(tree).Scroller` when the surface attaches and clear it (only if it is still yours) when it detaches. Its `ScrollBy(deltaX, deltaY)` takes wheel deltas and converts them to this platform's step.
    - **The connection candidate on the seven shipped adapters** is reported from the surface behaviour on WPF/Avalonia/WinUI/Jalium and from the slot-connection behaviour on MAUI/WinForms/Razor. Match whichever shape your host has.
@@ -154,7 +154,7 @@ Build the demo before building the template pack — the demo is where the behav
 
 If you are going to build this GUI more than once, the time to wrap the seven views as a `dotnet new` item pack is after the demo works — the pack is then a mechanical transcription of it, and [templates.md](templates.md) gives the CLI surface.
 
-⚙ **Name the symbols and defaults exactly as the seven shipped packs do** — `nodeBackground`, `slotColor`, `linkColor`, `gridSpacing` and so on. The names are a cross-GUI contract, and a developer who has used one pack expects the command line to carry over.
+⚙ **Name the symbols and defaults exactly as the seven shipped packs do** — `nodeBackground`, `slotColor`, `linkColor`, `gridSpacing` and so on. The names are a cross-GUI contract, and a developer who has used one pack expects the command line to carry over. Each item carries two files: `.template.config/template.json` declares the symbol with its default and replacement token, and `.template.config/dotnetcli.host.json` declares its short alias under `symbolInfo.shortName`. The alias is **not** in `template.json` — a pack without the host file accepts only the long name.
 
 ⚙ **Never accept an option and silently discard it.** Either wire it, or declare it with the "accepted for cross-GUI CLI parity" note the shipped packs use, so the person passing it finds out from the file rather than from a missing colour.
 

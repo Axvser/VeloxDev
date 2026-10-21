@@ -22,7 +22,7 @@
 | 字符串/画刷怎么变成值 | `IThemeValueConverter`，实现全在**适配器**（六家的 `PlatformAdapters/ThemeValueConverters.cs`；Jalium 不接主题）。Core 一个也不带。**可声明的类型是有界的**（平台原生类型的构造 ＋ 可插值的自定义类型）。六家全用**显式转换表**、**无一家走 `TypeDescriptor`**（WPF/WinForms 的 `ThemeValueConverters.cs` 里各自写着「刻意不用」的注释），所以这条界七家一致，理由见 [extension.md](extension.md) §四·1 |
 | 动画的采样、缓动、帧、时间轴 | TransitionSystem。本模块只用它的 `TransitionSchedulerCore.Track/Execute/Untrack`、`TransitionRun`、`StateCore`、`TransitionProperty` |
 | 什么时候能动、什么时候不能（哪家平台画得出来） | 各家的 `Interpolator.CreateScheduler`。**这就是「主题切换为什么在这个平台不动」的答案所在** —— 判定在适配器，不在本模块 |
-| 反播、暂停/Seek 的**额外**控制面 | 不新增。整场共用一条时间轴，于是既有的 `Transition.Pause/Seek/SetRate` 对整场生效（`ThemeManager.cs:235-236` 的注释） |
+| 反播、暂停/速率 的**额外**控制面 | 不新增。整场共用一条时间轴，`Pause` / `Resume` / `SetRate` 对整场生效；`Seek` / `Exit` **不是整场操作**：`SeekRun` 只改该 run 的 `PassAnchor`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs:170-175`），`Exit` 只取消传入 target 的 run（`RunSwitch` 的注释 `ThemeManager.cs:236-238` 与 `Transition(Type, …)` 的 `<remarks>` 都按此写） |
 | 无采样器属性的动画 | **做不到**。降级为「切换结束后直接跳变」，见 §三·5 |
 | 线程归属 | Core 不解决。`ThemeManager` 直接 `scheduler.Execute(...)`，编组由适配器的 scheduler 负责 |
 
@@ -96,7 +96,7 @@ RunSwitch (:201)
 1. **所有 scheduler 先解析齐，再启动任何一个**（`:212-213` 的注释）：只让一部分目标动、另一部分瞬切，比整场都不动更糟；而答案只取决于平台与 effect，与目标无关，所以对整场一致。
 2. **`WriteStartValues` 必须在 `Prepare` 之前**（`:245-246`）：`InterpolatorCore.Prepare` 只能从目标上**读**起点，等价于只实现了 `StartModel.Reflect`。要先按配置的模式把起点写回目标，默认的 `Cache` 档才成立 —— 否则起点是「目标上碰巧是什么」。
 3. **`Track` 早于 `Execute`**（`:249-252` 的注释）：`Execute` 正是靠 `run.Cts` 在 scheduler 的活跃表里找回这个 run；找回失败，采样集合会拿一条**没人控制得住的私有时间轴**。这是 TransitionSystem 的不变量 A1，在 `memory/modules/TransitionSystem/architecture.md` §五。
-4. **共用一条时间轴**（`:235-236` 的注释）：所有目标锚在同一个 `ITimeSourceControl` 上 ⇒ 对任一目标 `Pause`/`Seek`/`SetRate` 会同时移动全部目标。这就是「不新增控制面」能成立的全部原因。
+4. **共用一条时间轴**（`RunSwitch` 的注释，`ThemeManager.cs:236-238`）：所有目标锚在同一个 `ITimeSourceControl` 上 ⇒ `Pause`/`Resume`/`SetRate` 作用于共享时间轴，对任一目标调用都会移动全部目标；但 `Seek` 只重锚该 target 的 run（`Transition.cs:170-175` 写 `run.PassAnchor`），`Exit` 只取消该 target 的 run。这就是「不新增控制面」能成立的原因 —— 新增的只是共享时间轴上的 Pause/Resume/SetRate，seek/exit 是 per-run 的。
 5. **`stopped` 时提前返回，不推进 `Current`、不发 `ExecuteThemeChanged`**（`:286`、`:292-295`）。被取消的那一场**属性值停在半路**，`Current` 还是旧的主题 —— 「值已变一半、`Current` 说没变」是**有意的**，不是 bug：下一个切换的开始值会经由 `WriteStartValues` / `Reflect` 重新取得。
 
 **无采样器的属性走的是「收尾跳变」而不是不动**：`PrepareSamplers` 里 `hasSampler` 只判一次（`ThemeManager.cs:563`，用 `InterpolatorCore.TryGetInterpolator(类型, out _)` —— **只看属性类型，不看值**）。没有采样器的属性在 `Prepare` 里被静默跳过（全程保持旧值），到 `ApplyHeldValues`（`:391-409`）才**直接写终值**。`ApplyHeldValues` 只在**落地**的那一场跑（`:298`）；被取消的那一场**不会**补写。

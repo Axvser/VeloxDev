@@ -1,6 +1,6 @@
-﻿---
+---
 name: veloxdev-create-animation
-description: Write VeloxDev interpolation animations — pick the adapter package for the project's GUI, declare transitions in the layout the shipped demos use, choose static-reuse or create-and-discard, express indices (constant, live, frozen), and build an adapter for a GUI that has no official one
+description: Write VeloxDev interpolation animations — pick the adapter package for the project's GUI, declare transitions in the layout the shipped demos use, choose static-reuse or create-and-discard, express indices (constant, live, frozen), and build an adapter for a GUI that has no official one. Use when adding, fixing or porting an animation or transition, or when animating a custom view on any supported GUI.
 ---
 
 ## Responsibility
@@ -27,7 +27,7 @@ If the project's GUI is **not** in that table, stop and read [references/adapter
 
 `using VeloxDev.TransitionSystem;` covers the everyday API — `Transition<T>`, `TransitionEffect`, `Eases`, `TransitionEffects`, `PathIndex`, the event args and the path exceptions. The support types live one namespace down: `using VeloxDev.TransitionSystem.Abstractions;` is needed when you name `TransitionProperty` (`ReadableMembers` / `Members`), `InterpolatorCore`, or a scheduler / interpreter / host base. Every adapter exposes the same `VeloxDev.TransitionSystem` surface. Six of the seven also declare the generic `Property<TValue>` overload; **Razor is the exception** — it offers only typed overloads (`int`, `string?`, `double`, `float`, `decimal`, the `System.Drawing` structs and the `System.Numerics` types), so generic `Property` code does not compile there unchanged.
 
-Typed `Property` overloads are per adapter otherwise. Jalium's are generic `TValue`, `Point`, `Rect`, `Thickness`, `CornerRadius`, `Size`, `Color`, `Brush`, `Transform`, `Transform3D`, `int`, `double` and `float` — notably **no `decimal`** (Core registers no decimal sampler either).
+Typed `Property` overloads are per adapter otherwise. Jalium's are generic `TValue`, `Point`, `Rect`, `Thickness`, `CornerRadius`, `Size`, `Color`, `Brush`, `Transform`, `Transform3D`, `int`, `double` and `float`. **`decimal` is not animatable on any adapter:** Core registers no decimal sampler (`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs:11-29`), so with the shipped registry the six adapters that declare a `decimal` overload accept the call and skip the path at run time, and Jalium — which declares no `decimal` overload — reaches the same skip through its generic `Property<TValue>`.
 
 ## The canonical layout
 
@@ -79,7 +79,7 @@ Fade.Execute(rect);
 
 ⚙ **Mutual by default.** `Execute(target)` supersedes the target's running mutual animation. `Execute(target, CanMutualTask: false)` runs alongside instead (concurrent runs are tracked separately and are not cancelled by a later mutual `Execute`).
 
-⚙ **Never cache a declaration that reads a local.** A captured local becomes part of the path's identity and is shared by every later `Execute` — the second call would silently animate the first call's value. Locals belong in the create-and-discard form below.
+⚙ **Never cache a declaration that reads a local.** The two cases differ in *when* the value is read, but neither is safe to share. An endpoint local is passed by value and frozen when the declaration is built, so a cached declaration keeps the first caller's endpoint for every later `Execute` and the second call silently animates the first call's value. An index local such as `Items[i]` is captured through the closure instance and read live on every frame, but the closure itself is shared by the cached declaration, so one later change to `i` drives every execution of it. Endpoint locals and per-call index locals both belong in the create-and-discard form below.
 
 ⚙ `Execute(target, timeline)` anchors several animations to one `ITimeSourceControl` when they must share one transport (pause / rate / seek act on it as a unit). The parameter is positional — it is named `timeline`, not `source`. The default implementation is `TimeSourceCore` (`VeloxDev.Timing`), and `TimerCore.CreateTimeSource<ITimeSourceControl>()` is what resolves it — a platform can register its own there. A tick channel's own source comes from `TickManager.Bus(channel)` (null until that channel has started), which is how an animation shares the frame loop's clock: one `Pause` then stops the frames and the animation together.
 
@@ -136,7 +136,7 @@ private sealed class RampTarget
 
 ⚙ **Every frame is the default.** Reach for `PathIndex.Frozen` only when you need the other behaviour — it is the exception, not the safe choice.
 
-⚙ **The deciding question is where the end value must land.** The end value is read once, when the animation starts. With the live form, an index that drifts mid-flight writes an end value computed against the *old* slot into the *new* one. When the end value must land where it was read from, freeze.
+⚙ **The deciding question is where the end value must land.** Each segment prepares its own endpoints: the end value is read once, when that segment starts. With the live form, an index that drifts mid-flight writes an end value computed against the *old* slot into the *new* one. When the end value must land where it was read from, freeze.
 
 ⚙ **The index must be readable from the target.** `t.Selected` works because `t` is the object being animated. An index that lives somewhere else has to be reachable from the target — which is why the target is sometimes a small model rather than the control itself.
 
@@ -175,7 +175,7 @@ private sealed class RampTarget
 
 ⚙ **The event args carry position, not an outcome triple.** The seven lifecycle events (`Awaked`, `Start`, `Update`, `LateUpdate`, `Canceled`, `Completed`, `Finally`) are `EventHandler<TransitionEventArgs>`. `TransitionEventArgs` has `Loop` (`int`, the pass of the running segment, `0` on its first) and `Cycle` (`long`, the run-wide pass count), plus `Handled` / `DeltaTime` / `TotalTime` inherited from `TimeLineEventArgs`; setting `Handled = true` ends the run.
 
-⚙ The two diagnostic events are typed: `Warn` is `EventHandler<TransitionEventArgs<WarnStage, string>>` and `Error` is `EventHandler<TransitionEventArgs<ErrorStage, Exception>>`; each argument exposes `Stage` and `Value`. There is no `Stage` / `Message` / `Exception` triple. `WarnStage` is `Unreadable` / `Unsampled` / `Dropped`; `ErrorStage` names the failed step — `Sampling`, `Run`, `Marshaling`, `Awake`, `Prepare`, then `Start` / `Update` / `LateUpdate` / `Completed` / `Canceled` / `Finally` when a subscriber of that event threw. Each stage is reported at most once per run.
+⚙ The two diagnostic events are typed: `Warn` is `EventHandler<TransitionEventArgs<WarnStage, string>>` and `Error` is `EventHandler<TransitionEventArgs<ErrorStage, Exception>>`; each argument exposes `Stage` and `Value`. There is no `Stage` / `Message` / `Exception` triple. `WarnStage` is `Unreadable` / `Unsampled` / `Dropped`; `ErrorStage` names the failed step — `Sampling`, `Run`, `Marshaling`, `Awake`, `Prepare`, then `Start` / `Update` / `LateUpdate` / `Completed` / `Canceled` / `Finally` when a subscriber of that event threw. Deduplication is per diagnostics instance, not per animation: `Prepare` creates one per segment and the interpreter creates its own, so a multi-segment chain can report the same stage once per segment.
 
 ## Segments
 
@@ -188,34 +188,43 @@ private sealed class RampTarget
 ⚙ **A chain runs every segment, and `Repeat(n)` loops it.** `Repeat` configures the segment it is written after, and that segment's loop wraps the chain *from its first segment through that one*, n further iterations — so a count on the last segment repeats the whole chain, and counts on several segments nest by where they end:
 
 ```csharp
-private static readonly Transition<LinkView> Flow =
-    Transition<LinkView>.Create()
-        .Property(v => v.Brush.GradientStops[1].Offset, BandFormed)
-        .Property(v => v.Brush.GradientStops[1].Color, Lit)
+// The view's two phase scalars: how far the light has travelled, and how lit it is.
+private const double BandFormed = 0.30;
+private const double BandLeaving = 0.78;
+
+private static readonly Transition<PolylineCurveView> Flow =
+    Transition<PolylineCurveView>.Create()
+        // phase one: leave the sender, lighting up as it goes
+        .Property(v => v.BandHead, BandFormed)
+        .Property(v => v.BandIntensity, 1d)
         .Effect(new TransitionEffect()
         {
-            Duration = TimeSpan.FromMilliseconds(550),
+            Duration = TimeSpan.FromMilliseconds(450),
             Ease = Eases.Default,
         })
         .Then()
-        .Property(v => v.Brush.GradientStops[1].Offset, BandLeaving)
+        // phase two: fully lit, travelling — this is the segment that reads as a flow, not a pulse
+        .Property(v => v.BandHead, BandLeaving)
         .Effect(new TransitionEffect()
         {
-            Duration = TimeSpan.FromMilliseconds(650),
+            Duration = TimeSpan.FromMilliseconds(700),
             Ease = Eases.Default,
         })
         .Then()
-        .Property(v => v.Brush.GradientStops[1].Offset, BandExit)
-        .Property(v => v.Brush.GradientStops[1].Color, Dim)
+        // phase three: arrive and go dark. Both ends are the "no light" state, so the loop seam is invisible.
+        .Property(v => v.BandHead, 1d)
+        .Property(v => v.BandIntensity, 0d)
         .Effect(new TransitionEffect()
         {
-            Duration = TimeSpan.FromMilliseconds(550),
+            Duration = TimeSpan.FromMilliseconds(450),
             Ease = Eases.Default,
         })
         .Repeat(int.MaxValue);
 ```
 
-⚙ **Animate the thing you are drawing with, and reach into it with indexed paths.** `T` is the view, the component or the surface that owns the brush — not a carrier object holding a scalar for the setter to map back into geometry. `Brush.GradientStops[1]` is part of the path, so a phase is a handful of writes whose endpoints a reader can check against the constants, and there is no arithmetic in between to get wrong. Introduce a carrier only when there is nothing else to write into: an object whose members the framework does not repaint from, or a value shared by several drawn items (a surface-level band position, say).
+`PolylineCurveView` here stands for the view the light is drawn on: its `BandHead` and `BandIntensity` are styled properties registered with `AffectsRender`, so each frame the transition writes is a frame the view repaints.
+
+⚙ **Animate a scalar phase property on the view, and derive the drawing from it.** Every shipped Flow does this: the link view writes `BandHead` / `BandIntensity`, the WinForms canvas writes the same pair on the surface, the Jalium surface writes a single `FlowPhase`, and the Blazor link writes `Phase` (`Examples/Workflow/Blazor/Demo/Demo/Components/Workflow/TemplateLinkView.razor.cs:243-255`). None of them writes `Brush.GradientStops`. The scalar is part of the path, so a phase is a handful of writes whose endpoints a reader can check against the constants, and there is no arithmetic in between to get wrong. Give the view an animatable scalar — a dependency, styled or bindable property — that triggers the platform's repaint, and compute geometry and colour from it in the draw pass. An indexed brush path belongs in a one-off probe (see `SamplerProbe.cs` under Reference), not in a moving light: on a retained-mode framework the write changes the value without repainting, and on Jalium the gradient-stop route was measured to produce an identical frame.
 
 ⚙ **Every iteration of a segment after its first replays the endpoints that first iteration captured**, which is the same rule a single segment's `LoopTime` follows. A segment therefore starts from the value captured when it first ran, not from wherever the previous iteration left the target. Make the end of a loop land in the same state as its start and the seam is invisible; leave them different and the value snaps back at every seam, exactly as a looping single segment does.
 
@@ -225,7 +234,7 @@ private static readonly Transition<LinkView> Flow =
 
 ⚙ **A forever loop needs a pass that takes time.** A pass with `Duration = 0` writes its frame and finishes without yielding, so a loop — segment-level or chain-level — built on zero-duration passes spins instead of looping and cannot be stopped from the thread it is spinning on.
 
-⚙ **A declaration whose endpoints come from the caller is built per caller, not cached.** Two of the phase endpoints above are the link's own colours, so the declaration is built once per view (or per component) and rebuilt when that colour changes — the rule below about locals applies to it: a `static readonly` declaration reading a local shares it with every later execution.
+⚙ **A declaration whose endpoints come from the caller is built per caller, not cached.** The Flow declarations above read nothing but constants, so they can be `static readonly`; a view whose phase endpoints come from its own colours builds the declaration once per view (or per component) and rebuilds it when that colour changes — and the rule below about locals applies to it: a `static readonly` declaration reading a local shares it with every later execution.
 
 ⚙ **When the platform needs a frame hook, attach it with the setter overload.** A renderer that keeps retained drawing — WPF, or Blazor's component tree — only sees the change when told, so such a view can end each segment with `.Effect(e => { e.Duration = …; e.Ease = …; e.LateUpdate += (_, _) => InvalidateVisual(); })` (for Blazor: `InvokeAsync(StateHasChanged)`). `Update` runs *before* the frame is applied and `LateUpdate` after, and a replay fires them per cycle like any other pass. An instance handler is safe exactly because the declaration is per view; on a `static readonly` one it would keep the view alive. Prefer the platform's own change notification where one exists — a WPF dependency property registered with `AffectsRender`, or a `PropertyMetadata` callback into `InvalidateVisual`, needs no per-frame handler.
 
@@ -270,7 +279,7 @@ Interpolator.RegisterInterpolator(typeof(MyColor), new MyColorSampler());
 
 ⚙ `.Interpolator(...)` is an **extension method**, so its generic arguments are inferred from the lambda. Write the lambda's parameter type explicitly (`(MyNode n) => …`); `.Property(...)` does not need this because it is an instance method on `Transition<T>`.
 
-⚙ A **struct** with no registered sampler can still be animated as a whole by implementing `ISampleable`. That interface has two members: `GetAnimatableMembers()` returns the members to interpolate, in the order the second member expects them, and `CreateFrameValue(memberValues)` rebuilds the value from them. Declare the members with `TransitionProperty.ReadableMembers<T>(…)` (or `Members<T>(…)`) and return that from `GetAnimatableMembers()`; `CreateFrameValue` then constructs through the struct's own constructor.
+⚙ A **struct** with no registered sampler can still be animated as a whole by implementing `ISampleable`. That interface has two members: `GetAnimatableMembers()` returns the members to interpolate, in the order the second member expects them, and `CreateFrameValue(memberValues)` rebuilds the value from them. Declare the members with `TransitionProperty.ReadableMembers<T>(…)` and return that from `GetAnimatableMembers()`; `CreateFrameValue` then constructs through the struct's own constructor. Use `ReadableMembers`, not `Members<T>`: `Members<T>` keeps only readable **and writable** members, so on a readonly struct it returns an empty list, the struct assembler returns null, and the value is silently skipped.
 
 ## Building an adapter
 
@@ -288,14 +297,14 @@ Full contract, per class, including the traps that differ between the seven ship
 
 ⚙ **Do not assume `Execute` has finished** when it returns. It never has.
 
-⚙ **Do not rebuild a brush or a transform per frame** to animate part of it. Address the part you mean with an index path; the framework redraws on its own.
+⚙ **Do not rebuild a brush or a transform per frame, and do not assume an indexed write into one is visible.** An index path does change the value — the sampler probe relies on that — but a retained-mode framework only repaints when told: WPF needs `LateUpdate` → `InvalidateVisual`, Blazor needs `StateHasChanged` (see the frame-hook note under Segments). Jalium measured gradient-stop writes, whole-collection swaps and axis moves as producing an identical frame, which is why its Flow animates arc-length geometry from a scalar instead. Drive a scalar the view repaints from, or use an index path only where the platform's own change notification already covers the write.
 
 ## Reference
 
 ⚙ `Examples/Transition/<GUI>/Demo` — one runnable demo per supported GUI, all of them exercising the same API. (Blazor's is nested one level deeper: `Examples/Transition/Blazor/Demo/Demo`.) Two files in most of them are the reference for the parts above:
 
-- **`SamplerSubject.cs`** — the object the animations write into: a real control in the visual tree, one dependency property per sampler, typed exactly like the sampler's product. This is the shape to copy for `Transition<T>`'s `T` when the target is the control itself. Blazor has no copy of this file: the object it animates is a plain `INotifyPropertyChanged` model (`Demo/Demo/Models/BoxModel.cs`), not a visual-tree control.
-- **`SamplerProbe.cs`** — one row per sampler, each declaring its endpoints and, where relevant, its path. It holds the two indexed paths (`GradientStops[0].Color` and `[1].Color`) side by side, which is the worked example of "adjacent indices must never overwrite each other", and it is also where the constant-index and live-index forms can be compared directly.
+- **`SamplerSubject.cs`** — the object the animations write into: a real control in the visual tree, one animatable property per sampler, typed exactly like the sampler's product. The property kind follows the platform: dependency properties on WPF and Avalonia, bindable properties on MAUI, and plain CLR properties on WinForms, whose setters call `Invalidate()` themselves because there is no property system to hook. This is the shape to copy for `Transition<T>`'s `T` when the target is the control itself. Blazor has no copy of this file: the object it animates is a plain `INotifyPropertyChanged` model (`Demo/Demo/Models/BoxModel.cs`), not a visual-tree control.
+- **`SamplerProbe.cs`** — one row per sampler, each declaring its endpoints and, where relevant, its path. It holds the two indexed paths (`GradientStops[0].Color` and `[1].Color`) side by side, which is the worked example of "adjacent indices must never overwrite each other". Both rows are built by the same helper from a captured constant `index` (`Examples/Transition/WPF/Demo/SamplerProbe.cs:126-147`), so the file does **not** compare the constant-index and live-index forms; `Src/Core/VeloxDev.Core.Test/TransitionSystem/TransitionPropertyIndexerTests.cs` is the reference for live and frozen index behaviour.
 
 ⚙ Both of those are `internal` to the demo project — read them for the shape, do not reference them.
 

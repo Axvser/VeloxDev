@@ -1,6 +1,6 @@
 ---
 name: veloxdev-add-aspects
-description: Add aspects to VeloxDev classes with compile-time proxies — mark members with [AspectOriented], reach them through Aop(), and hook behaviour before, instead of, and after the member runs, without editing the member's own body
+description: Add aspects to VeloxDev classes with compile-time proxies — mark members with [AspectOriented], reach them through Aop(), and hook behaviour before, instead of, and after the member runs, without editing the member's own body. Use when you need to log, veto, replace or react to an existing member's execution without changing that member.
 ---
 
 ## Responsibility
@@ -15,7 +15,7 @@ Wrap behaviour around an existing member — log it, veto it, replace it, react 
 
 ⚙ **Only calls made through the proxy are intercepted.** This is the single thing to get right — see [Calling through the proxy](#calling-through-the-proxy).
 
-⚙ It is not general interception: constructors, static members and events are not interceptable. A field is only a way to mark the property the MVVM generator creates from it — the property is what gets intercepted.
+⚙ It is not general interception. Constructors and events cannot carry the attribute at all — `AttributeUsage` is `Method | Property | Field` — so applying it there is `CS0592`. A public static method *is* collected like any other, but the generated proxy calls it as `_target.M(…)`, which fails to compile with `CS0176`: marking one breaks the build rather than intercepting it. A field is only a way to mark the property the MVVM generator creates from it — the property is what gets intercepted.
 
 ## Which package
 
@@ -24,6 +24,8 @@ Wrap behaviour around an existing member — log it, veto it, replace it, react 
 ⚙ The AOP runtime is wrapped in `#if NET`. The package ships it in its `net5.0` and `net8.0` assets, so a `net5.0`-or-later project resolves a compatible asset. A `netcoreapp3.0`, `netstandard2.0` or `netframework4.6.1` target does not define `NET` and gets neither the attribute nor the runtime types.
 
 ⚙ `AspectOrientedAttribute` and the hook types live in `VeloxDev.AspectOriented`; `IAspectOriented` is the empty marker every generated interface inherits. The NuGet package brings `VeloxDev.Core.Generator` as a dependency, so referencing `VeloxDev.Core` is enough — an in-repo `ProjectReference` does not carry analyzers, which is why the demos add the generator separately.
+
+⚙ The toolchain has a floor. The generator requires Roslyn 4.0+ / VS 2022 17.0+ / .NET SDK 6+ (`VeloxDev.Core.Generator.targets`); on an older Roslyn it reports `VELOXCFG0001` and disables itself rather than silently producing nothing. Its `LanguageVersionCheck` warns `VELOX_LANGVERSION001` when the project's `LangVersion` maps below C# 12 (`Base/LanguageVersionGuard.cs:28`). The emitted AOP files themselves are C# 10 syntax (file-scoped namespaces), but the package-wide guard asks for 12 — set `LangVersion` to `12` or `latest`. That option is only accepted by Roslyn 4.8 or later, so the practical floor is a .NET 8 SDK (or VS 2022 17.8+); an older SDK loads the analyzer but rejects the language version.
 
 ## What gets generated
 
@@ -55,7 +57,7 @@ Three kinds of member can be marked, and each has a rule about what actually lan
 
 ⚙ The proxy exposes the **generated property** (`Name`), not the field. A field marked `[AspectOriented]` without an MVVM attribute produces no proxy member.
 
-**A property** — mark it, and it has to be **public**, with a public accessor for whichever direction you want to intercept.
+**A property** — mark it, and it has to be **public**, with a public accessor for whichever direction you want to intercept. A write-only property (a setter and no getter) makes the generated proxy read the target and fail to compile with `CS0154`; an `init`-only property gets no setter slot, so `ProxyMembers.Setter` on it throws `ArgumentOutOfRangeException`.
 
 **A method** — mark it, and it has to be **public**:
 
@@ -84,37 +86,41 @@ var p = data.Aop();
 
 ⚙ **One proxy per instance, cached.** The cache is a weak table keyed by the target, and the reverse lookup is another weak table, so the proxy goes away once your code drops the instance — nothing is held for the life of the process. Caching means you can call `Aop()` wherever you need it rather than storing it.
 
-⚙ `Aop.GetTarget<T>(proxy)` goes the other way, from a proxy back to the instance it wraps.
+⚙ `Aop.GetTarget<TTarget>(proxy)` goes the other way, from a proxy back to the instance it wraps. `TTarget` is `where TTarget : class`, and the lookup returns `null` when the proxy is not in the reverse map — a hand-written `IAspectOriented`, for instance.
 
 ## The three hooks
 
 ```csharp
+using VeloxDev.AspectOriented;
+
 var p = data.Aop();
 
-p.SetProxy(ProxyMembers.Getter, nameof(TeamViewModel.Name), start, coverage, end);
-p.SetProxy(ProxyMembers.Setter, nameof(TeamViewModel.Name), start, coverage, end);
-p.SetProxy(ProxyMembers.Method, nameof(TeamViewModel.Reset), start, coverage, end);
+ProxyHandler logStart = (_, previous) => previous;
+ProxyHandler replace = (_, _) => null;   // coverage: its return becomes the member's result
+ProxyHandler logEnd = (_, _) => { /* react */ return null; };
+
+p.SetProxy(ProxyMembers.Getter, nameof(TeamViewModel.Name), logStart, null, logEnd);
+p.SetProxy(ProxyMembers.Setter, nameof(TeamViewModel.Name), logStart, replace, logEnd);
+p.SetProxy(ProxyMembers.Method, nameof(TeamViewModel.Reset), logStart, replace, logEnd);
 ```
 
 ⚙ A handler is the `ProxyHandler` delegate: `object? ProxyHandler(object?[]? parameters, object? previous)`. `AspectHooks` bundles the three stages, and `ProxyEx.SetProxy` is the installation method.
 
 ⚙ **`ProxyMembers.Getter` / `Setter` / `Method` pick the kind, and the name is the plain member name** — `nameof(TeamViewModel.Name)`, not `get_Name`. A property needs its getter and setter hooked separately.
 
-⚙ **`parameters` are the call's arguments.** `parameters[0]` is the first one — a setter's new value, a method's first parameter; a getter has none. Cast before you read (`parameters?[1] is NotifyCollectionChangedEventArgs e`).
+⚙ **`parameters` are the call's arguments** — a snapshot, not a channel back into the member (see [Pitfalls](#pitfalls)). `parameters[0]` is the first one — a setter's new value, a method's first parameter; a getter has none. Cast before you read (`parameters?[1] is NotifyCollectionChangedEventArgs e`).
 
 ⚙ The three stages run in order, and they are the whole model:
 
 | stage | when | its return value |
 |---|---|---|
-| `start` | before the member | passed on as the next stage's `previous` |
+| `start` | before the member | passed to `coverage` as its `previous`; ignored when there is no `coverage` |
 | `coverage` | **non-null replaces the member** — the body does not run at all | **becomes the member's return value** |
 | `end` | after the member | **discarded** |
 
-⚙ Pass `null` for any stage you do not need. A hook that only logs is `end` alone; a hook that vetoes is `coverage` alone.
+⚙ Pass `null` for any stage you do not need. A hook that only logs is `end` alone; a hook that vetoes is `coverage` alone. To change what the caller receives, use `coverage` — `end` cannot do it.
 
-⚙ **`end`'s return is thrown away** — a handler that "returns the new result" changes nothing. To change what the caller receives, use `coverage`.
-
-⚙ **A getter's `previous` on `end` is the value that was read**, because a getter returns it and so it flows through. **A setter's is `null`** — a setter returns `void`, so there is nothing to pass on, and the written value reaches you only through `parameters?[0]`. Reacting to a write is therefore `(parameters, previous) => { var written = parameters?[0]; … }` on the `end` stage, never `previous`.
+⚙ `start`'s return does not reach `end` directly. Without a `coverage` hook, `end` receives the member's own result — the value for a getter or a value-returning method, `null` for a setter or a `void` method. With a `coverage` hook, it receives `coverage`'s return. A setter's written value is never in `previous`; read it from `parameters?[0]`, so reacting to a write is `(parameters, previous) => { var written = parameters?[0]; … }` on the `end` stage.
 
 ### Worked examples
 
@@ -124,7 +130,7 @@ Log every read of a property:
 p.SetProxy(ProxyMembers.Getter, nameof(TeamViewModel.Name),
     null,
     null,
-    (_, _) => { log.Write($"read at {DateTime.Now}"); return null; });
+    (_, _) => { Console.WriteLine($"read at {DateTime.Now}"); return null; });
 ```
 
 Veto a method — its body never runs:
@@ -132,7 +138,7 @@ Veto a method — its body never runs:
 ```csharp
 p.SetProxy(ProxyMembers.Method, nameof(TeamViewModel.Reset),
     null,
-    (_, _) => { log.Write("Reset() was cancelled"); return null; },
+    (_, _) => { Console.WriteLine("Reset() was cancelled"); return null; },
     null);
 ```
 
@@ -145,7 +151,7 @@ p.SetProxy(ProxyMembers.Method, nameof(TeamViewModel.AOP_OnMemberAdded),
     (parameters, _) =>
     {
         if (parameters?[1] is not NotifyCollectionChangedEventArgs e || e.NewItems is null) return null;
-        foreach (MemberViewModel member in e.NewItems) log.Write($"{member.Name} added");
+        foreach (MemberViewModel member in e.NewItems) Console.WriteLine($"{member.Name} added");
         return null;
     });
 ```
@@ -196,9 +202,9 @@ public MainWindow()
 
 ⚙ **A `coverage` hook makes the member's body dead.** If the member had side effects the rest of the class depends on, they stop happening. That is the point of `coverage`, but it is easy to reach for it when `end` was what you wanted.
 
-⚙ **Aspect on the wrong kind.** A property whose *field* is marked needs the MVVM attribute on that field, otherwise the generator has nothing to put on the proxy. A non-public property or method is skipped without a diagnostic, so the aspect silently never fires.
+⚙ **Aspect on the wrong kind.** A property whose *field* is marked needs the MVVM attribute on that field, otherwise the generator has nothing to put on the proxy. A non-public property or method is skipped without a diagnostic, so the aspect silently never fires — and installing a hook on it throws `ArgumentOutOfRangeException` from the generated `SetHooks` switch, which has no slot for it.
 
-⚙ **Expecting `end` to shape the result.** It cannot — see the table above.
+⚙ **`parameters` is a snapshot, not a channel back into the member.** The generated proxy calls the target with its own original values/locals, so `parameters?[0] = …` changes nothing for the member; only later stages in the same call see the new value. To change the behaviour, use `coverage`.
 
 ⚙ **Do not mark an overloaded method.** A member's hook slot is named after the member alone, so two methods sharing a name collide — the generated proxy then fails to compile with `CS0102`, and the error points into generated code rather than at your method.
 
