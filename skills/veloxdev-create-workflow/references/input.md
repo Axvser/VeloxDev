@@ -132,6 +132,60 @@ WorkflowInput.For(tree).PreviewValidating += (_, e) =>
 
 ⚙ **What you refuse is the press, not a named gesture.** Core does not tell you which gesture would have started; whatever reads the handle stands down.
 
+### Undo/redo on a modifier chord
+
+The tree is the last element of every route, so a subscription on its helper hears every key — whether the pointer is over a node, a link, or empty canvas.
+
+```csharp
+private IWorkflowTreeViewModel? _tree;
+private IInputEvents? _input;
+
+// Call whenever the surface is handed a tree: DataContextChanged on WPF/Avalonia,
+// BindingContextChanged on MAUI, OnParametersSet on Blazor, SetTree on WinForms/Jalium.
+private void BindTree(IWorkflowTreeViewModel? tree)
+{
+    if (_input is not null) _input.Input.KeyDown -= OnKeyDown;
+
+    _tree = null;
+    _input = null;
+    if (tree is null) return;
+    if (tree.GetHelper() is not IInputEvents input) return;
+
+    _tree = tree;
+    _input = input;
+    input.Input.KeyDown += OnKeyDown;
+}
+
+private void OnKeyDown(object? sender, KeyDownEventArgs e)
+{
+    if (_tree is not { } tree) return;
+    if (!e.Modifiers.HasFlag(InputModifiers.Control)) return;
+
+    var shift = e.Modifiers.HasFlag(InputModifiers.Shift);
+    if (e.Key == InputKey.Z && !shift) tree.UndoCommand.Execute(null);
+    else if (e.Key == InputKey.Y || (e.Key == InputKey.Z && shift)) tree.RedoCommand.Execute(null);
+    else return;
+
+    e.Handle.PreventDefault = true;
+}
+```
+
+⚙ **Subscribe on the tree helper, not on every component.** The route always ends at the tree, so one subscription hears the chord wherever the pointer is. A component's helper hears a key only while that component is the target — right for `Delete` on a link, wrong for a canvas-wide chord.
+
+⚙ **The modifiers arrive with the key.** `e.Modifiers` is filled by the adapter from the platform's keyboard state, not tracked with `KeyDown` / `KeyUp` — so a modifier pressed before the surface had focus is still correct. The key event itself still has to reach the adapter: WPF's surface takes focus on press (outside a `TextBoxBase`) for exactly that reason.
+
+⚙ **`Ctrl+Shift+Z` and `Ctrl+Y` are the same action.** Test `InputKey.Z` with the Shift modifier and `InputKey.Y` without; both run `RedoCommand`.
+
+⚙ **Set `PreventDefault` only on the branch that acted.** It suppresses the framework's own reaction for that key; setting it for every Ctrl chord would also swallow the chords you did not handle.
+
+⚙ **Held keys auto-repeat.** `IsRepeat` is best effort; return on `e.IsRepeat` when one press should be one undo.
+
+⚙ **Text editors inside a node keep their own Ctrl+Z.** The adapter routes what reaches the surface; WPF's surface does not steal focus from a `TextBoxBase` on press, and a key the editor already handled never reaches the surface handler. If you want the chord owned locally instead, set `StopPropagation` in a subscriber nearer the target.
+
+⚙ **Dragging is not on the undo stack by design.** `Move` / `SetAnchor` / `SetSize` are high-frequency geometry and do not push. `Ctrl+Z` undoes the last structural change (create, connect, delete, `SetSelector`); to make a drag undoable, submit your own `WorkflowActionPair` through `tree.GetHelper().Submit`.
+
+⚙ **Unwire when the surface is handed another tree.** The subscription belongs to the tree instance, not to the view; a surface rebound to a different tree must not keep the old one alive.
+
 ## Reference
 
 ⚙ `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs` — the route, the state and the preview events.
