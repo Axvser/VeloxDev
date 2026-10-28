@@ -20,7 +20,7 @@
 
 这个项目叫「Razor 适配器」，但它和 WPF/WinForms 那几家有一条结构性的不同：**它同时是一个 Razor 类库（`Microsoft.NET.Sdk.Razor`），
 带一个 `wwwroot/`**。三条轴的平台契约照旧在 C# 里，但很大一部分**平台实现**跑在浏览器里 —— 1504 行 JS 与 269 行 CSS
-（`VeloxDev.Razor.csproj:1` 的 SDK；`wwwroot/` 两个文件）。
+（`VeloxDev.Razor.csproj` 的 `Sdk="Microsoft.NET.Sdk.Razor"`；`wwwroot/` 两个文件）。
 
 | 轴 | Core 契约 | 本项目落点 | 平台差异记在哪 |
 |---|---|---|---|
@@ -38,7 +38,7 @@
 | 七个角色的职责、契约成员、注册位置 | `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3 |
 | 缩放/平移/虚拟化/槽位锚点的**数学** | Core `WorkflowSurfaceMath`、`WorkflowSlotUpdateGate` 等 |
 | 自带手势的 `PreventDefault` 裁决（先问 .NET 再动手） | JS 末尾「GESTURE VERDICT」段的 `requestPressVerdict` / `requestWheelVerdict` / `pressWhenAllowed`，C# 侧 `WorkflowSurfaceBehavior.razor.cs` 的 `RequestPressVerdict` / `RequestWheelVerdict` / `RoutePress` / `RouteComponentPress` / `ResolveComponentTarget` |
-| 生成器 / 分析器 | **本项目不引用分析器包** —— `VeloxDev.Razor.csproj` 的引用项只有 `VeloxDev.Core` 一条（`:28-29`） |
+| 生成器 / 分析器 | **本项目不引用分析器包** —— `VeloxDev.Razor.csproj` 的引用项只有 `VeloxDev.Core` 一条（`VeloxDev.Razor.csproj` 的 Core 双轨引用） |
 | `dotnet new` 模板包 | `Src/Templates/VeloxDev.Razor.Templates/`（模板侧的形状见 `memory/modules/Templates/adapters/razor.md`） |
 | 「怎么用这套模板搭一个 Blazor 工作流视图」（人面向） | `skills/veloxdev-create-workflow/references/gui/razor.md` |
 
@@ -50,7 +50,7 @@
 
 | 文件 | 角色 |
 |---|---|
-| `veloxdev.workflow.js` | **几何与手势的权威**：画布宿主尺寸、内容/网格/坐标轴平移、滚动上报、边缘扩张、节点拖拽、插槽连接手势、槽位实时测量、Ctrl+滚轮缩放、小地图视口块。全部包在 `window.veloxdevWorkflow` 这个 IIFE 里（`:37`），底部再给一份 ES 模块 `export const`（`:1486-1504`） |
+| `veloxdev.workflow.js` | **几何与手势的权威**：画布宿主尺寸、内容/网格/坐标轴平移、滚动上报、边缘扩张、节点拖拽、插槽连接手势、槽位实时测量、Ctrl+滚轮缩放、小地图视口块。全部包在 `window.veloxdevWorkflow` 这个 IIFE 里，底部再给一份 ES 模块 `export const` 块 |
 | `veloxdev.workflow.css` | **不只是外观，还是测量契约的一部分**（见 §2.5） |
 
 JS 里另有两个 `window` 级工具函数 `downloadFile` / `openFileDialog`，**适配器自己不用**，只有 demo 调。
@@ -64,30 +64,30 @@ JS 则由组件在 `OnAfterRenderAsync` 里按**模块路径**导入：
 import "./_content/VeloxDev.Razor/veloxdev.workflow.js"
 ```
 
-三处（`WorkflowSurfaceBehavior.razor.cs:658`、`WorkflowMinimapOverlay.razor.cs:191`、`WorkflowSlotLayoutBehavior.razor.cs:48`），
+五处（`WorkflowSurfaceBehavior.razor.cs`、`WorkflowMinimapOverlay.razor.cs`、`WorkflowSlotLayoutBehavior.razor.cs`、`WorkflowNodeDragBehavior.razor.cs`、`WorkflowSlotConnectionBehavior.razor.cs` 各自的 `OnAfterRenderAsync`），
 各自拿一个 `IJSObjectReference` 句柄存起来，`DisposeAsync` 时释放。⇒ **路径是硬编码的 `_content/` 约定**，
 它由包 id 与 `wwwroot/` 的相对位置决定（`VeloxDev.Razor.csproj` 的包 id = `VeloxDev.Razor`）。
 
 **模块内部是「按 scroller id 键控的 10 个模块级字典」**（这是这家独有的结构，也是它最容易踩的坑，见 §六·2）：
-`surfaceRegistry:82`、`minimapMappings:87`、`minimapRects:92`、`minimapLastWorld:96`、`surfaceLayouts:102`、`surfaceSizers:108`、
-`surfaceNodeWrappers:444`、`surfaceZoomState:454`、`surfaceSettleRunning:457`、`surfaceReporters:559`。
-键一律是**滚动器的 DOM id**（即 `WorkflowSurfaceBehavior.ScrollViewerId`，默认 `"veloxdev-wf-scroll"`，`.razor.cs:41`）。
+`surfaceRegistry`、`minimapMappings`、`minimapRects`、`minimapLastWorld`、`surfaceLayouts`、`surfaceSizers`、
+`surfaceNodeWrappers`、`surfaceZoomState`、`surfaceSettleRunning`、`surfaceReporters`。
+键一律是**滚动器的 DOM id**（即 `WorkflowSurfaceBehavior.ScrollViewerId`，默认 `"veloxdev-wf-scroll"`）。
 
 ### 2.3 C# ↔ JS 的数据形状：哪一侧定义，哪一侧消费
 
-**（a）JS 用 `document.getElementById(scrollerId)` 找滚动器，其余一切靠 class 找**（`getElementById` 的全部 **12** 处命中
-`:65/160/175/204/365/465/513/866/877/1281/1312/1363` 拿的都是**滚动器**；`.veloxdev-wf-canvas-host` / `-canvas-content` /
-`-grid` / `-axis-x` / `-axis-y` / `-canvas` 一律 `querySelector`）。⇒ **`CanvasId`（默认 `"veloxdev-wf-canvas"`，`.razor.cs:45`）
-被渲染成元素 id（`WorkflowSurfaceBehavior.razor:18`）却再也没有人读它** —— `initSurface` 的形参里没有它
-（`veloxdev.workflow.js:561` 与调用点 `WorkflowSurfaceBehavior.razor.cs`）。
+**（a）JS 用 `document.getElementById(scrollerId)` 找滚动器，其余一切靠 class 找**（`getElementById` 的全部 **13** 处
+（分布在 `toCanvasLocal`、`scrollByDelta`、`scrollSurfaceBy`、`setSurfaceLayout`、`ensureCanvasSize`、`applyZoomSurface`、`applyZoomGeometrySettle`、`applyZoomLinkSettle`、`getViewportSize`、`scrollToPosition`、`initMinimap`、`initWheelScroll`）拿的都是**滚动器**；`.veloxdev-wf-canvas-host` / `-canvas-content` /
+`-grid` / `-axis-x` / `-axis-y` / `-canvas` 一律 `querySelector`）。⇒ **`CanvasId`（默认 `"veloxdev-wf-canvas"`）
+被渲染成元素 id（`WorkflowSurfaceBehavior.razor` 的 `id="@CanvasId"`）却再也没有人读它** —— `initSurface` 的形参里没有它
+（`veloxdev.workflow.js` 的 `initSurface` 与调用点 `WorkflowSurfaceBehavior.razor.cs` 的 `OnAfterRenderAsync`）。
 它是给 XAML 那几家 `CanvasName` 对齐用的**空转参数**：改它没有任何后果。
 
 **（b）适配器写、JS 读的 DOM 钩子（只有两个）：**
 
 | 钩子 | 写在哪 | JS 拿它做什么 |
 |---|---|---|
-| `data-veloxdev-node-id` | `WorkflowNodeDragBehavior.razor` | 拖拽起手、`setNodePosition`、缩放的节点几何（扫 `.veloxdev-wf-node-drag` 建 `{id: wrapper}` 映射，`:399-408`/`:469-478`） |
-| `data-veloxdev-slot-id` | `WorkflowSlotConnectionBehavior.razor` | 槽位实时测量（`initSlotLayout` 的 `measure()`，`:1047` 起扫 `[data-veloxdev-slot-id]`，`:1064`）与连接手势的命中判定（`:1016`/`:1027`） |
+| `data-veloxdev-node-id` | `WorkflowNodeDragBehavior.razor` | 拖拽起手、`setNodePosition`、缩放的节点几何（`applyZoomSurface` 与 `applyZoomGeometrySettle` 扫 `.veloxdev-wf-node-drag` 建 `{id: wrapper}` 映射） |
+| `data-veloxdev-slot-id` | `WorkflowSlotConnectionBehavior.razor` | 槽位实时测量（`initSlotLayout` 的 `measure()` 扫 `[data-veloxdev-slot-id]`）与连接手势的命中判定（`initSlotConnection` 的 `resolveSlotAt`） |
 
 **（c）消费方（模板 / demo）写、JS 读的钩子 —— 适配器保证不了它们：**
 
@@ -95,19 +95,19 @@ import "./_content/VeloxDev.Razor/veloxdev.workflow.js"
 |---|---|---|
 | `.veloxdev-wf-node-card` | 模板/demo 的 node-view | 深缩放时卡片不跟着 wrapper 缩放与 settle 重断言；**不报错** |
 | `.veloxdev-wf-slot-svg` | 模板/demo 的 slot-view | `glyphRect` 退化成量整个插槽盒，锚点会因内联 SVG 的基线间隙漂 |
-| `data-veloxdev-link-id` / `-sender-slot` / `-receiver-slot` | 模板/demo 的 link-view | 深缩放时曲线端点折不动（`:279`、`:328-337`）；**不报错** |
-| `data-veloxdev-link-curve` | 模板/demo 里画曲线的那一个元素 | 同上：JS 只写带这个标记的元素（`:261`/`:341`），少了它那条线在缩放帧里停在旧端点；**不报错** |
+| `data-veloxdev-link-id` / `-sender-slot` / `-receiver-slot` | 模板/demo 的 link-view | 深缩放时曲线端点折不动（`applyZoomLinkCurves` 读这三个属性）；**不报错** |
+| `data-veloxdev-link-curve` | 模板/demo 里画曲线的那一个元素 | 同上：JS 只写带这个标记的元素（`applyNodeGeometry` 与 `applyZoomLinkCurves`），少了它那条线在缩放帧里停在旧端点；**不报错** |
 
 **（d）两个方向的载荷形状：**
 
 | 方向 | 名字 | 形状 |
 |---|---|---|
-| JS → .NET | `OnSurfaceScroll`（C# `.razor.cs:801`） | 8 个 `double`：`scrollLeft, scrollTop, viewportW, viewportH, canvasW, canvasH, offsetX, offsetY`（JS `:649-658`） |
-| JS → .NET | `OnWheelZoom`（C# `.razor.cs:691`） | 7 个：`wheelDelta, scrollX, scrollY, viewportW, viewportH, reachW, reachH`。`scrollX/Y` 与 `reachW/H` 是「有效长度」 |
-| JS → .NET | `OnSlotLayoutBatch`（C# `WorkflowSlotLayoutBehavior.razor.cs:55`） | `string[][]`，每项 `[id, cx, cy]`，数字是 JS 的 `toFixed(2)` 字符串；C# 侧现在用 `InvariantCulture` 解析（`:72-73`） |
+| JS → .NET | `OnSurfaceScroll`（C# `WorkflowSurfaceBehavior.razor.cs` 的 `OnSurfaceScroll`） | 8 个 `double`：`scrollLeft, scrollTop, viewportW, viewportH, canvasW, canvasH, offsetX, offsetY`（JS `initSurface` 的 `report()`） |
+| JS → .NET | `OnWheelZoom`（C# `WorkflowSurfaceBehavior.razor.cs` 的 `OnWheelZoom`） | 7 个：`wheelDelta, scrollX, scrollY, viewportW, viewportH, reachW, reachH`。`scrollX/Y` 与 `reachW/H` 是「有效长度」 |
+| JS → .NET | `OnSlotLayoutBatch`（C# `WorkflowSlotLayoutBehavior.razor.cs` 的 `OnSlotLayoutBatch`） | `string[][]`，每项 `[id, cx, cy]`，数字是 JS 的 `toFixed(2)` 字符串；C# 侧现在用 `InvariantCulture` 解析（同一成员里的 `double.TryParse`） |
 | JS → .NET | `OnNodeDrag(dx,dy)` / `OnNodeDragEnd` / `OnSlotConnectionStart/Move/End` | 见 `WorkflowNodeDragBehavior.razor.cs`、`WorkflowSlotConnectionBehavior.razor.cs` |
 | JS → .NET | **`RequestPressVerdict`**（表面 + 节点 + 插槽各一份，**返回 bool**）/ **`RequestWheelVerdict`**（表面，返回 bool）/ **`OnHoverTarget(id)`** | `(localX, localY, button, modifiers, targetId)` 五参（表面/滚轮加 delta）；裁决协议见 `WorkflowSystem/adapters/razor.md` §二·6 |
-| .NET → JS | `applyZoomSurface` 的 `nodeGeometry`（C# `.razor.cs:744`，JS `:364`） | `string[][]`，每项 `[nodeId, left, top, w, h]`，由 C# 用 `"0.###"` + `InvariantCulture` 写成 |
+| .NET → JS | `applyZoomSurface` 的 `nodeGeometry`（C# `OnWheelZoom` 里的 `applyZoomSurface` 调用，JS `applyZoomSurface`） | `string[][]`，每项 `[nodeId, left, top, w, h]`，由 C# 用 `"0.###"` + `InvariantCulture` 写成 |
 | .NET → JS | `setMinimapMapping` / `setMinimapViewport` / `setSurfaceLayout` / `setNodePosition` / `refreshMinimapViewport` | 一维数值 + id |
 
 **契约里最硬的一条写在 JS 的注释里**（`veloxdev.workflow.js` 的 `applyZoomSurface` 附近）：
@@ -116,30 +116,30 @@ import "./_content/VeloxDev.Razor/veloxdev.workflow.js"
 > **.NET 绝不该传入一个用它自己（滞后的）边缘算出来的原始 host/scroll 值。**
 
 ⇒ 这是这家「C# 与服务端模型在一边、DOM 在另一边」的必然结果：**边缘扩张的量只有 JS 知道**，
-.NET 那份 `_offsetX/_offsetY` 只是「不小于标尺厚度」的镜像（`WorkflowSurfaceBehavior.razor.cs:635-636`），
+.NET 那份 `_offsetX/_offsetY` 只是「不小于标尺厚度」的镜像（`WorkflowSurfaceBehavior.OnParametersSet` 里的 `Math.Max(_offsetX, RulerThickness)`），
 它会因为 JS 侧的自动扩张而落后。凡是新增跨端参数，先问一句「这个长度是哪一侧在权威地维护」。
 
 ### 2.4 必须同帧完成的事：`applyZoomSurface` 是唯一一个原子事务
 
 一次 Ctrl+滚轮突发在服务端被折成**一次** `OnWheelZoom` 调用（JS 侧先把净 `deltaY` 加总再发），
-C# 侧一个 `using var _zoomScope = WorkflowGeometryScope.Zoom()`（`.razor.cs:703`）罩住整段，然后：
+C# 侧一个 `using var _zoomScope = WorkflowGeometryScope.Zoom()`（`OnWheelZoom` 里）罩住整段，然后：
 
 1. 写出枢轴 → `Scale`（复合 `count` 次）→ `EnsureNegativeCover`；
 2. 用 `reachW/H`（JS 现读）夹一次 `contentW/H`、算一次 `PivotCenterScroll` + `ClampScrollOffset`，
    **再用夹完之后的新 offset 重算一次 scroll**；
-3. `await _module.InvokeVoidAsync("applyZoomSurface", …)`（`.razor.cs:744`）。
+3. `await _module.InvokeVoidAsync("applyZoomSurface", …)`（`OnWheelZoom` 的 `applyZoomSurface` 调用）。
 
-JS 那一边（`:364-439`）在**一个同步块**里依次写：内容/网格/坐标轴平移 → 宿主尺寸增长 → 每个节点 wrapper 与卡片的
-折叠几何 → 用 `getBoundingClientRect` 现读槽位中心重写曲线（只写带 `data-veloxdev-link-curve` 的元素）→ `scrollLeft/Top` → 打戳 `surfaceZoomState`（`:428`）并启动
+JS 那一边（`applyZoomSurface`）在**一个同步块**里依次写：内容/网格/坐标轴平移 → 宿主尺寸增长 → 每个节点 wrapper 与卡片的
+折叠几何 → 用 `getBoundingClientRect` 现读槽位中心重写曲线（只写带 `data-veloxdev-link-curve` 的元素）→ `scrollLeft/Top` → 打戳 `surfaceZoomState` 并启动
 settle 循环 → 回报 `surfaceReporters`。
 
 **为什么必须同帧**：节点几何与连线端点在 .NET 侧要经过「JS 测量 → `OnSlotLayoutBatch` 回传 →
 写 `slot.Anchor` → 组件重渲染」这一整圈异步 SignalR 往返；中间任何一帧用旧 translate / 旧 scale 画出来就是**闪烁或错位**。
 所以这一家把「DOM 上的最终几何」在 JS 里就地写定，再由 .NET 的 `applyZoomSurface` **await 到底**。
 
-**settle 尾窗**是这台机器的另一半：`stampedAt` + `SETTLE_TAIL_MS = 250`（`:533`）。每个动画帧重断言被戳上的节点几何与连线端点
-（`scheduleZoomSettle :534-555`），直到最后一次戳之后 250 ms 内没有新的戳 —— 用来盖住「上一轮突发的 .NET 渲染比下一轮到达得还晚」。
-用户的真实 pointerdown 会**删掉这个戳**（`:782-784`），让守卫让位于手势。⇒ 别把 250 当调参旋钮：它是「一轮 SignalR 往返 +
+**settle 尾窗**是这台机器的另一半：`stampedAt` + `SETTLE_TAIL_MS = 250`。每个动画帧重断言被戳上的节点几何与连线端点
+（`scheduleZoomSettle`），直到最后一次戳之后 250 ms 内没有新的戳 —— 用来盖住「上一轮突发的 .NET 渲染比下一轮到达得还晚」。
+用户的真实 pointerdown 会**删掉这个戳**（`initSurface` 的 `onUserPointerDown`），让守卫让位于手势。⇒ 别把 250 当调参旋钮：它是「一轮 SignalR 往返 +
 渲染」的量级估计，改小会漏帧、改大会和用户平移打架。
 
 ### 2.5 CSS 是测量契约的一部分
@@ -161,15 +161,15 @@ settle 循环 → 回报 `surfaceReporters`。
 
 | 要注册的东西 | 注册点 | 什么时候真的发生 |
 |---|---|---|
-| 1 个采样器（`string`） | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs:7-10`） | 第一次构造 `Transition<T>` 时（Core 的字段初始化器 `new()`） |
+| 1 个采样器（`string`） | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs`） | 第一次构造 `Transition<T>` 时（Core 的字段初始化器 `new()`） |
 | 宿主/解释器/优先级 | `TransitionScheduler` 的类型实参（`TransitionScheduler.cs`） | 编译期写死 |
-| DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler`（`Interpolator.cs:12-15`） | 宿主必须显式调 `ThemeManager.SetPlatformInterpolator(new Interpolator())` |
+| DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler` | 宿主必须显式调 `ThemeManager.SetPlatformInterpolator(new Interpolator())` |
 
-**没有程序集级入口，也没有 `Initialize()`**；唯一的静态构造就是 `Interpolator.cs:7`。
-工厂写 `FindOrCreate` 而不是 `new`（`Interpolator.cs:13`）—— 只有它会把调度器按 target 归档。
+**没有程序集级入口，也没有 `Initialize()`**；唯一的静态构造就是 `Interpolator` 的静态构造。
+工厂写 `FindOrCreate` 而不是 `new`（`Interpolator.CreateScheduler`）—— 只有它会把调度器按 target 归档。
 
-**`Transition<T>` 的 `Property` 是逐类型手写的重载表**（`PlatformAdapters/Transition.cs`，16 个，首行 `:31` 附近；
-`#if !NETSTANDARD2_0` 块从 `:119` 附近起，因本家只有一个 TFM 而**恒为真**）。后果与缺口（`long` 声明不出来、`decimal` 声明得出但无采样器）
+**`Transition<T>` 的 `Property` 是逐类型手写的重载表**（`PlatformAdapters/Transition.cs`，16 个，首个重载是 `int` 版本；
+`#if !NETSTANDARD2_0` 块包住 `Vector2` / `Vector3` / `Vector4` / `Quaternion` 四个，因本家只有一个 TFM 而**恒为真**）。后果与缺口（`long` 声明不出来、`decimal` 声明得出但无采样器）
 已经在 `memory/modules/TransitionSystem/adapters/razor.md` §二·3 写全，本文不重复 —— 只补一句：
 **在这家，漏登记采样器的症状是「写不出来」，不是别家的「运行期静默」**，因为那张表没有泛型兜底。
 
@@ -182,8 +182,8 @@ XAML 那几家靠 `DependencyProperty.RegisterAttached` 把行为挂到任意元
 
 - 画布宿主 `WorkflowSurfaceBehavior`（`.razor`）用 `CascadingValue TValue="SurfaceViewportFeed"` 把视口快照发给子树，
   用四个 `RenderFragment` 形参接收装饰器/小地图/**内容**/**连线菜单**
-  （`.razor.cs:49`（`GridDecorator`）、`:53`（`Minimap`）、`:57`（`ChildContent`）、`:67`（`LinkMenu`））；
-- `@namespace VeloxDev.WorkflowSystem.AttachedBehaviors` 写在每个 `.razor` 的第一行（`WorkflowSurfaceBehavior.razor:1`）——
+  （`GridDecorator`、`Minimap`、`ChildContent`、`LinkMenu` 四个 `[Parameter]`）；
+- `@namespace VeloxDev.WorkflowSystem.AttachedBehaviors` 写在每个 `.razor` 的第一行（`WorkflowSurfaceBehavior.razor`）——
   **这是七家共用的同一份命名空间**（Core 里不存在它），宿主必须 `@using VeloxDev.WorkflowSystem.AttachedBehaviors`。
   换命名空间 = 宿主找不到组件、**且不报错**。
 
@@ -193,8 +193,9 @@ XAML 那几家靠 `DependencyProperty.RegisterAttached` 把行为挂到任意元
 OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模块 → init* → 存句柄 }
 ```
 
-三处（`WorkflowSurfaceBehavior.razor.cs:652-658`、`WorkflowSlotLayoutBehavior.razor.cs:42-48`、
-`WorkflowMinimapOverlay.razor.cs:185-193`）。两个后果：
+五处（`WorkflowSurfaceBehavior.razor.cs`、`WorkflowSlotLayoutBehavior.razor.cs`、
+`WorkflowMinimapOverlay.razor.cs`、`WorkflowNodeDragBehavior.razor.cs`、`WorkflowSlotConnectionBehavior.razor.cs`
+各自的 `OnAfterRenderAsync`）。两个后果：
 
 1. **`IsEnabled` / `ZoomEnabled` 只在第一次渲染读一次。** 之后改这两个参数**没有任何效果**，也不会重新初始化 ——
    与五家（WPF/Avalonia/WinUI/MAUI/Jalium）各自注册 `OnIsEnabledChanged` 的做法是**刻意背离**（WinForms 现在也用基类而非回调，
@@ -202,12 +203,12 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 2. **`firstRender` 是闸门，不是提示** —— 组件若在第一帧被条件渲染挡住，之后再出现也不会去 `import`。
    模板在 `@if (Tree is not null)` 里包住整个 surface，就是这个形状的实例。
 
-`WorkflowMinimapOverlay` 多一道门槛：它的 `ScrollViewerId` **没有默认值**（`WorkflowMinimapOverlay.razor.cs:83` 是可空 string），
-而 `initMinimap` 被 `!string.IsNullOrWhiteSpace(ScrollViewerId)` 挡住（`:189`）⇒ **不传 `ScrollViewerId` 的小地图只画不动**。
+`WorkflowMinimapOverlay` 多一道门槛：它的 `ScrollViewerId` **没有默认值**（`WorkflowMinimapOverlay.razor.cs` 是可空 string），
+而 `initMinimap` 被 `!string.IsNullOrWhiteSpace(ScrollViewerId)` 挡住（`OnAfterRenderAsync`）⇒ **不传 `ScrollViewerId` 的小地图只画不动**。
 宿主必须显式传。
 
 **谁掌握重渲染**：这家没有「模型改了就自动刷」的绑定。`WorkflowSurfaceBehavior` 用 `SurfaceViewportFeed`（Core 类型）
-把视口快照按廉价通道广播给装饰器（`.razor.cs:603` 的 `_feed`；`WorkflowGridDecorator.razor.cs:26` 订阅），
+把视口快照按廉价通道广播给装饰器（`WorkflowSurfaceBehavior` 的 `_feed`；`WorkflowGridDecorator.razor.cs` 的 `ViewportFeed` 订阅），
 避免拖着一个子树重渲染；而**节点/连线的重渲染由模板负责**（`memory/modules/Templates/adapters/razor.md` §二·2）。
 
 **`WorkflowPresentation.cs`**（2026-10-04 新增）是给模板共用的展示助手：默认树调色板、XAML `#AARRGGBB` → CSS 颜色转换
@@ -223,19 +224,19 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 `global using` 是编译期的，**不随包传给消费者**。
 
 **参数默认值要以代码为准**（这家没有 README，组件参数就是 API 面，见 `Attached/Workflow/` 下各组件的 `[Parameter]`）：
-它与 `WorkflowMinimapOverlay.ViewportFill` 的默认（`.razor.cs:67` 是 `rgba(255,255,255,0.15)`，而模板写死 `transparent`，
+它与 `WorkflowMinimapOverlay.ViewportFill` 的默认（`rgba(255,255,255,0.15)`，而模板写死 `transparent`，
 见 `Templates/adapters/razor.md` P4）这类地方容易各说各话。
 
 `VeloxDev.Razor.csproj` 里影响代码的取值：
 
-| 事实 | 行 | 后果 |
+| 事实 | 元素 | 后果 |
 |---|---|---|
-| `Microsoft.NET.Sdk.Razor` | `:1` | 唯一让 `.razor` 成为编译输入、`wwwroot/` 成为静态资源的 SDK |
-| `<TargetFrameworks>net6.0;net8.0</TargetFrameworks>`（**两个**） | `:4` | 七家里只有 Jalium 是单 TFM；这里没有 `netstandard2.0`，所以 `Transition.cs` 的 `#if !NETSTANDARD2_0` 恒真 |
-| `Nullable` / `ImplicitUsings` / `AddRazorSupportForMvc` / `LangVersion` | `:7-11` | — |
-| `<FrameworkReference Include="Microsoft.AspNetCore.App" />` | `:24` | 提供 `ComponentBase` / `IJSRuntime` / `DotNetObjectReference`；**不是** `PackageReference` |
-| Core 双轨（Debug `ProjectReference` / 非 Debug `PackageReference` 10.0.0） | `:28-29` | 与生成器那套同形；改一条要同时看另一条 |
-| `GeneratePackageOnBuild` | `:10` | 所以 `obj/` 下会堆各版本 `.nupkg`，**那是产物、不是配置** |
+| `Microsoft.NET.Sdk.Razor` | `Sdk` 属性 | 唯一让 `.razor` 成为编译输入、`wwwroot/` 成为静态资源的 SDK |
+| `<TargetFrameworks>net6.0;net8.0</TargetFrameworks>`（**两个**） | `TargetFrameworks` | 七家里只有 Jalium 是单 TFM；这里没有 `netstandard2.0`，所以 `Transition.cs` 的 `#if !NETSTANDARD2_0` 恒真 |
+| `Nullable` / `ImplicitUsings` / `AddRazorSupportForMvc` / `LangVersion` | 同名属性 | — |
+| `<FrameworkReference Include="Microsoft.AspNetCore.App" />` | `FrameworkReference` | 提供 `ComponentBase` / `IJSRuntime` / `DotNetObjectReference`；**不是** `PackageReference` |
+| Core 双轨（Debug `ProjectReference` / 非 Debug `PackageReference` 10.0.0） | `ProjectReference` / `PackageReference` | 与生成器那套同形；改一条要同时看另一条 |
+| `GeneratePackageOnBuild` | `GeneratePackageOnBuild` | 所以 `obj/` 下会堆各版本 `.nupkg`，**那是产物、不是配置** |
 
 **`obj/` 里存在 `net8.0` / `net10.0` 两个 csproj 未声明的 TFM 目录** ⇒ csproj 的单一 TFM
 不是最终值，那两个目录只能来自树外的 `-p:TargetFramework=…` 覆盖。**别按 obj 目录推本项目的 TFM。**
@@ -244,33 +245,33 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 
 ## 六、陷阱（带依据）
 
-1. **`refreshMinimapViewport` 的理由引用了一个不存在的成员。** `WorkflowMinimapOverlay.razor.cs:197-200` 每次渲染都
+1. **`refreshMinimapViewport` 的理由引用了一个不存在的成员。** `WorkflowMinimapOverlay.OnAfterRenderAsync` 每次渲染都
    调它，注释说「重渲染会用过期的 .NET 状态（`MappedViewport`）覆盖视口块」；而 **`MappedViewport` 在全仓只出现在注释里**
-   （`.razor.cs:197`、`veloxdev.workflow.js` 附近），没有任何声明。⇒ 这条调用**不是空转**（JS 侧会重放 `minimapLastWorld`，幂等），
+   （`WorkflowMinimapOverlay.OnAfterRenderAsync` 的注释、`veloxdev.workflow.js` 的 `refreshMinimapViewport` 附近），没有任何声明。⇒ 这条调用**不是空转**（JS 侧会重放 `minimapLastWorld`，幂等），
    但**注释描述的机制不存在**。读它时以代码为准。
 2. **默认 id 在同一页上必须唯一，否则两个画布会串。** §2.2 那 10 个字典都以滚动器 id 为键，而默认值是常量
-   （`WorkflowSurfaceBehavior.razor.cs:41` 的 `"veloxdev-wf-scroll"`）。两个 surface 都不传 id 时，第二个 `initSurface`
+   （`WorkflowSurfaceBehavior.ScrollViewerId` 的 `"veloxdev-wf-scroll"`）。两个 surface 都不传 id 时，第二个 `initSurface`
    会覆盖第一个的注册项 ⇒ 前者**滚动不上报、边缘不扩张**，而两个小地图会一起指向后一个滚动器。**不报错。**
 3. **小地图的 XML 与 JS 对导航方式的说法相反，以 JS 为准。** 类文档说「抓取块导航（与其他适配器一致）」
    （`WorkflowMinimapOverlay.razor.cs` 顶部），JS 在按下的第一行就写「点击点**始终**成为视口中心 —— 指示块上没有抓取锚点」。
    改导航手感前先把这两句对齐。
-4. **有 5 个 ES 导出在 C# 侧零调用点。** 底部 `export`（`:1486-1504`）共 **19** 条，全仓按名字数调用点：
-   `getCanvasTranslate` / `getViewportSize` / `scrollToRatio` / `scrollByDelta`(若导出) / `ensureCanvasSize` 等少数几条为 0
+4. **有 5 个 ES 导出在 C# 侧零调用点。** 底部 `export const` 块共 **22** 条，全仓按名字数调用点：
+   `getCanvasTranslate` / `getViewportSize` / `scrollToRatio` / `scrollByDelta` / `ensureCanvasSize` 这 5 条为 0
    （具体集合以 `grep 'export const'` 与 C# 侧 `InvokeVoidAsync/InvokeAsync` 名字为准）。其中 `ensureCanvasSize` 的注释写着
-   「工作区缩放路径必须让 DOM 宿主长大」，但缩放路径走的是 `applyZoomSurface`；`scrollToPosition` 则由适配器**走模块导入**调（`_module.InvokeVoidAsync("scrollToPosition", …)`，`WorkflowSurfaceBehavior.razor.cs:678`）。⇒ 删这些之前先确认没有宿主在用它们 —— 它们是 `window.veloxdevWorkflow` 的公开面。
+   「工作区缩放路径必须让 DOM 宿主长大」，但缩放路径走的是 `applyZoomSurface`；`scrollToPosition` 则由适配器**走模块导入**调（`_module.InvokeVoidAsync("scrollToPosition", …)`，`WorkflowSurfaceBehavior.OnAfterRenderAsync`）。⇒ 删这些之前先确认没有宿主在用它们 —— 它们是 `window.veloxdevWorkflow` 的公开面。
 5. **`ScrollViewerId` / `CanvasId` 之外，宿主还要给 `Minimap` 传一次同样的 id。** surface 的 id 只管自己，
    小地图要**再传一次** —— 两者是各自独立的参数，不是级联。
 6. **`WorkflowGeometryScope` 是 `AsyncLocal`，不是线程静态。** `Attached/Workflow/WorkflowGeometryScope.cs` 用
-   `AsyncLocal<int>` 计深度，`IsZooming` 期间各几何写手自己让开（`WorkflowNodeDragBehavior.razor.cs`、`WorkflowSurfaceBehavior.razor.cs:335`）。
+   `AsyncLocal<int>` 计深度，`IsZooming` 期间各几何写手自己让开（`WorkflowNodeDragBehavior.razor.cs`、`WorkflowSurfaceBehavior.OnNodePropertyChanged`）。
    ⇒ 一次缩放手势里所有 **await 之后仍在同一 `ExecutionContext`** 的代码都能读到它；但**放到 `Task.Run` 或另一个
    circuit 的线程上就读不到**。新增「缩放中让开」的写手时，先确认自己在那条 `AsyncLocal` 链上。
-7. **组件收尾不靠 `_disposed` 标记**（全模块唯一的 `_disposed` 在 `WorkflowGeometryScope.cs:37`，那是 `AsyncLocal` 作用域自己的幂等保护）—— 但「没有标记」不等于「没有收尾」，两种既有收尾形状都有效。
+7. **组件收尾不靠 `_disposed` 标记**（全模块唯一的 `_disposed` 在 `WorkflowGeometryScope` 里，那是 `AsyncLocal` 作用域自己的幂等保护）—— 但「没有标记」不等于「没有收尾」，两种既有收尾形状都有效。
    其一是**退订**（`WorkflowGridDecorator` 订阅 `SurfaceViewportFeed` 后在 `Dispose` 里摘掉）。其二是**取消令牌**：
    `WorkflowMinimapOverlay` 的 `MarkDirty` 每次重建 `CancellationTokenSource`，`RebuildAfterThrottleAsync` 用
-   `await Task.Delay(16, ct)` 当闸门，`DisposeAsync`（`:403` 附近）先 `Cancel` 再摘模型订阅。⇒ 新写「带延时 / 带订阅」的组件，
+   `await Task.Delay(16, ct)` 当闸门，`DisposeAsync` 先 `Cancel` 再摘模型订阅。⇒ 新写「带延时 / 带订阅」的组件，
    照这两种形状之一收尾即可；**不要**给组件引一个本层还没有的标记。
-8. **`OnSlotLayoutBatch` 的解析现在是不变文化的。** `WorkflowSlotLayoutBehavior.razor.cs:72-73` 用 `NumberStyles.Float` + `InvariantCulture`；
-   过去那条「`:70` 是漏网」的记录已不成立（2026-10-04 的「every number … culture-invariant」提交修掉了）。新增跨端数字解析时照这里的形状。
+8. **`OnSlotLayoutBatch` 的解析现在是不变文化的。** `WorkflowSlotLayoutBehavior.OnSlotLayoutBatch` 用 `double.TryParse` + `NumberStyles.Float` + `InvariantCulture`；
+   过去那条「漏网」的记录已不成立（2026-10-04 的「every number … culture-invariant」提交修掉了）。新增跨端数字解析时照这里的形状。
 9. **「Blazor Trimmed」这个 demo 并没有被裁剪。** `Examples/Workflow/Blazor Trimmed/Demo/Demo.csproj` 里
    **没有 `PublishTrimmed`**（Avalonia Trimmed / Jalium Trimmed 有，WinUI Trimmed 显式关掉）。⇒ 别拿它当
    「Blazor 侧过了裁剪验证」的证据；本项目也从不产出裁剪元数据。
@@ -283,13 +284,13 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 
 | 想改的东西 | 先打开 |
 |---|---|
-| 滚轮缩放、平移、滚动上报、边缘扩张、每帧原子提交 | `wwwroot/veloxdev.workflow.js` 的 `initSurface`（`:561`）/ `applyZoomSurface`（`:364`）/ `scheduleZoomSettle`（`:534`），C# 侧是 `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` |
-| 缩放的枢轴与夹取顺序 | `WorkflowSurfaceBehavior.razor.cs` 的 `OnWheelZoom`（`:691`）—— 数学在 Core `WorkflowSurfaceMath` |
+| 滚轮缩放、平移、滚动上报、边缘扩张、每帧原子提交 | `wwwroot/veloxdev.workflow.js` 的 `initSurface` / `applyZoomSurface` / `scheduleZoomSettle`，C# 侧是 `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` |
+| 缩放的枢轴与夹取顺序 | `WorkflowSurfaceBehavior.razor.cs` 的 `OnWheelZoom` —— 数学在 Core `WorkflowSurfaceMath` |
 | 节点拖拽的落点、包装盒尺寸、z-index | `Attached/Workflow/WorkflowNodeDragBehavior.razor(.cs)` |
 | 插槽连接的两阶段命令 | `Attached/Workflow/WorkflowSlotConnectionBehavior.razor(.cs)` |
-| 槽位锚点回传与写回 | `WorkflowSlotLayoutBehavior.razor.cs`（`:55`）+ JS 的 `initSlotLayout`（`:1047`） |
+| 槽位锚点回传与写回 | `WorkflowSlotLayoutBehavior.razor.cs`（`OnSlotLayoutBatch`）+ JS 的 `initSlotLayout` |
 | 标尺/网格装饰器 | `WorkflowGridDecorator.razor(.cs)`（模板侧的形状见 `Templates/adapters/razor.md`） |
-| 小地图外观与导航 | `WorkflowMinimapOverlay.razor(.cs)` + JS 的 `initMinimap`（`:1259`） |
+| 小地图外观与导航 | `WorkflowMinimapOverlay.razor(.cs)` + JS 的 `initMinimap` |
 | 视图池 | `ViewPool.razor(.cs)` |
 | 组件 ↔ DOM 的挂钩名 | `wwwroot/veloxdev.workflow.js` §2.3 那四张表 |
 | 线程、优先级、pacer、采样器 | `PlatformAdapters/` —— 差异与坑见 `TransitionSystem/adapters/razor.md` |

@@ -154,12 +154,12 @@
 | --- | --- | --- | --- |
 | `$type` 的值 | 注册表键 `Namespace.Type, Assembly`（泛型带实参，`WrittenName`） | `FullName`，无程序集 | **与归档同形**：`FullName, SimpleAssemblyName` |
 | 集合 | 裸数组 | `{"$id":…,"$values":[…]}` | 裸数组 |
-| 字典的 `$id` | **不写**（`WriteStartObjectWithoutReference`，`VeloxJsonWriter.cs:154`） | 写 | **写** —— `"LinksMap": { "$id": "27" }` |
+| 字典的 `$id` | **不写**（`VeloxJsonWriter.WriteStartObjectWithoutReference`） | 写 | **写** —— `"LinksMap": { "$id": "27" }` |
 | 成员集 | **生成契约** | 反射公开面 | 反射公开面 |
 
 **NSJ 的 `$type` 为什么同形**：`TypeNameAssemblyFormatHandling` 的默认值就是 `Simple`，而 `Simple` 写出来的
 正是 `FullName, AssemblyName`（不带 `Version` / `Culture` / `PublicKeyToken`）。基准只设了
-`PreserveReferencesHandling.Objects` 与 `TypeNameHandling.Auto`（`ComparisonBenchmarks.cs:82-83`），没碰这一项。
+`PreserveReferencesHandling.Objects` 与 `TypeNameHandling.Auto`（`ComparisonBenchmarks.cs` 的 `PreserveReferencesHandling`/`TypeNameHandling` 设置），没碰这一项。
 ⚠ **「`Simple` 是默认值」这一条在树里核不到** —— 仓库没有任何一份 NST 文档样本，它来自 Newtonsoft 文档加上述设置。
 
 **互读矩阵**（把四份黄金读成模型、过 NST、再喂回归档）：
@@ -183,7 +183,7 @@
 （NST 的名字落得进注册表，这条只对 STJ 成立。）
 
 > ⚠ **上面这套矩阵来自仓库外的一次性探针，树里复核不到**（没有留在仓库里）。要重跑就是「读黄金 →
-> `JsonConvert` 过一遍 → 喂回 `VeloxJsonSerializer`」，两个开关与 `ComparisonBenchmarks.cs:82-83` 逐字相同。
+> `JsonConvert` 过一遍 → 喂回 `VeloxJsonSerializer`」，两个开关与 `ComparisonBenchmarks.cs` 的 `PreserveReferencesHandling`/`TypeNameHandling` 设置逐字相同。
 > 想让它可复核，得把探针落进 `Src/Verification/`。
 
 **STJ 那两格没变**：它的 `$type` 是基准桥接**自己定的**（`StjSerializationBridge.DiscriminatorOf` = `type.FullName`），
@@ -195,7 +195,7 @@
 在别家的文档里有、在这里没有**，所以转换是有损的。
 
 **这是立场不是缺陷**：闭世界与零反射是能裁剪、能 AOT 的前提，代价就是不与别家同源；库从未承诺互操作。
-**报告那一章的对应节（`PerformanceReport.cs:504` 起，§十二）是同一批事实的读者版 —— 改这里就得改那里。**
+**报告那一章的对应节（`PerformanceReport.cs` 的 `Surface` 常量 §十二「与别家序列化器的边界」）是同一批事实的读者版 —— 改这里就得改那里。**
 
 ---
 

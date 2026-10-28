@@ -11,17 +11,17 @@
 
 | | 人类拖拽 | Agent 工具 |
 |---|---|---|
-| 派发的命令 | **`MoveCommand` + `Offset` 增量**（七家适配器的 `WorkflowNodeDragBehavior`，如 WPF `Attached/Workflow/WorkflowNodeDragBehavior.cs:121`） | `MoveNode` 也派发 `MoveCommand`（世界位移），**不**用 `SetAnchorCommand` + 自算绝对锚点 |
-| 增量语义 | 视图空间增量，由 `StandardMove`（`WorkflowNodeEx.cs:110-112`）按 `Scale` 换算 | 无 |
+| 派发的命令 | **`MoveCommand` + `Offset` 增量**（七家适配器的 `WorkflowNodeDragBehavior`，如 WPF `Attached/Workflow/WorkflowNodeDragBehavior.cs` 的 `OnMouseMove`） | `MoveNode` 也派发 `MoveCommand`（世界位移），**不**用 `SetAnchorCommand` + 自算绝对锚点 |
+| 增量语义 | 视图空间增量，由 `StandardMove` 按 `Scale` 换算 | 无 |
 
-**铁律：`node.Anchor` 的 getter 返回的是被画布 `Scale` 坍缩过的值**（`NodeDefaultViewModel.cs:44`
-→ `Anchor.Collapse`，`Anchor.cs:58`），而 setter 把入参**当世界坐标直接存**。所以
+**铁律：`node.Anchor` 的 getter 返回的是被画布 `Scale` 坍缩过的值**（`NodeDefaultViewModel.Anchor` 的 getter
+→ `Anchor.Collapse`），而 setter 把入参**当世界坐标直接存**。所以
 `new Anchor(node.Anchor.H + dx, …)` 再交给 `SetAnchorCommand` 是一个**读-改-写陷阱**：
 画布不是 1:1 时落点就错，越移越偏。**缩放越大错得越多，而这正是 agent 摆几十个节点时的状态**（要看全图必然缩小）。
 `Anchor.Collapse` 只缩 H/V、**保留 `Layer`**，所以读 `Layer` 是安全的。
 
 ⇒ **相对移动一律用 `MoveCommand(new Offset(dx,dy))`**：它与拖拽是同一条代码路径，缩放换算、`Layer` 保留、
-`MarkDirty()`（`NodeHelper.cs:98-102`）全部自动继承。这条已由
+`MarkDirty()` 全部自动继承。这条已由
 `Agent/Workflow/Functions/WorkflowAgentToolkit.cs` 的 `MoveNode` 落实，
 回归测试是 `NodeGeometryToolTests.MoveNode_LandsWhereADragWould_AtANonUnitScale`（两个节点、`Scale = 0.5`、
 一个用工具移、一个直接 `MoveCommand`，断言**世界位移相等**）。
@@ -37,19 +37,19 @@
 ## 三、连线画在**槽位锚点**之间，而槽位锚点由视图层测量
 
 - 连线模板直接绑 `Sender.Anchor.Horizontal` / `Receiver.Anchor.Horizontal`（
-  `Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-tree-view/TemplateClass.xaml:25-28`）——
+  `Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-tree-view/TemplateClass.xaml` 的 `LinkTemplate`）——
   **link 自己不存坐标、不缓存**，端点就是两个 slot 的锚点。
 - slot 锚点**不是 Core 算的**，是各适配器的 `WorkflowSlotLayoutBehavior` 量出来的（用
   `WorkflowSurfaceMath` 的三个函数之一）。所以**任何程序化的几何改动都必须让平台重算**，否则节点卡片动了、线还停在旧端点。
 - 重算的触发是**反应式**的：节点 `Anchor`/`Size` 的 `PropertyChanged` + 框架布局事件（WPF
-  `WorkflowSlotLayoutBehavior.cs:162-196`，监听的属性名集合含 `"Anchor"`/`"Size"`）。
-- **`RefreshSlotAnchors(node)` 就是那个「重新发一次通知」的推手**（非变更、不产生 undo，`WorkflowAgentToolkit.cs:3149-3153`）。
-  调用点是**槽位形状类**工具（`:935`/`:948`/`:1046`/`:1063`/`:1822`）与 `MoveNode` / `SetNodePosition` / `ResizeNode`。
+  `WorkflowSlotLayoutBehavior` 的 `OnLayoutUpdated` / `OnSizeChanged` / `OnNodePropertyChanged`，监听的属性名集合由 `SlotPropertyNames` 维护，含 `"Anchor"`/`"Size"`）。
+- **`RefreshSlotAnchors(node)` 就是那个「重新发一次通知」的推手**（非变更、不产生 undo，`WorkflowAgentToolkit.RefreshSlotAnchors`）。
+  调用点是**槽位形状类**工具（`PatchNodeProperties` / `PatchComponentById` / `ExecuteCommandOnNode` / `ExecuteCommandById` / `SetEnumSlotChannel`）与 `MoveNode` / `SetNodePosition` / `ResizeNode`。
   **新加几何工具时也要调它** —— 漏调就是「卡片动了、线还停在旧端点」。
 
 ### 已知的洞里还剩什么（未证实）
 
-- **MAUI 与 Razor 的重测是从指针事件里驱动的**（MAUI `WorkflowNodeDragBehavior.cs:229`/`:317` 调
+- **MAUI 与 Razor 的重测是从指针事件里驱动的**（MAUI `WorkflowNodeDragBehavior` 的 `OnPlatformPointerMoved` / `OnPanUpdated` 调
   `WorkflowSlotLayoutBehavior.Refresh`；Razor 由 JS 的 `veloxdev-node-drag-move` 事件驱动），
   **程序化写入结构上到不了那条路**。Razor 另有 `MutationObserver` 兜底。
 - 「被虚拟化掉的节点重新实体化时会不会重测」**没有找到证据**（WPF 侧有 `Loaded`/`DataContextChanged` 触发，
@@ -58,7 +58,7 @@
 
 ## 四、布局：没有布局工具是**设计如此**，知识才是补强点
 
-`WorkflowAgentToolkit.cs:182-184` 明写不做 bundled layout 工具（理由是每一步都落到单个组件命令，undo 栈不被绕过）。
+`WorkflowAgentToolkit.CreateAllTools` 里 Layout 那段的注释明写不做 bundled layout 工具（理由是每一步都落到单个组件命令，undo 栈不被绕过）。
 `WorkflowToolCategory.Layout` 是保留位、无工具注册。Core 里也**没有布局引擎**（`CanvasLayout` 是视口偏移/缩放，不是节点排布）。
 
 于是「排得好看」全靠提示词语料：`Resources/Workflow/{en,zh}/Skills/SmartLayout.md`（最长路径分层、barycenter 交叉最小化、

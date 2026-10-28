@@ -1,6 +1,6 @@
 # VeloxDev.Core.Extension — 框架原生能力
 
-> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs:1604`（「框架自带的能力 provider」区）。
+> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs` 的「框架自带的能力 provider」区。
 > 宿主接线：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`（`WithTodoTracking` / `WithAgentModes`）。
 > 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentCapabilityProvidersTests.cs`。
 
@@ -28,12 +28,12 @@
 
 `Microsoft.Agents.AI.Compaction` 下的**每一个**类型都带 `[Experimental("MAAI001")]`：`CompactionProvider`、`CompactionStrategy`、全部六个策略、`CompactionTrigger(s)`。1.22.0 里共有 **51 个** `[Experimental]` 类型（此数不可复核；另含 `LoopAgent`、`LoopEvaluator`、`FileAccessProvider`、`BackgroundAgentsProvider`、`AgentFileStore`）。
 
-**本模块的处理方式是把引用圈进一个 `#pragma`**（`WorkflowAgentScope.cs:1677` 起的那段），于是：
+**本模块的处理方式是把引用圈进一个 `#pragma`**（`WithContextCompaction` 里 `#pragma warning disable MAAI001` 那段），于是：
 
 - 诊断只落在**本库编译时**，宿主不会因为引用 `VeloxDev.Core.Extension` 而吃到 `MAAI001`。
 - `WithContextCompaction(int, int)` 收两个整数、**不对外暴露 `CompactionStrategy`**。宿主因此永远不必写出那个实验类型名 —— 这是刻意的：若签名收 `CompactionStrategy`，每个调用方都得自己 `#pragma`。
 
-**要核这条，去看 `WorkflowAgentScope.cs:1677` 的 ctor 与它的 `#pragma`，别看 commit。**
+**要核这条，去看 `WithContextCompaction` 的 ctor 与它的 `#pragma`，别看 commit。**
 
 **反面**：`TodoProvider`、`AgentModeProvider`、`TodoItem`、`ChatClientAgent` 全部是 **stable**。所以「MAF 的实验面」不能一概而论 —— 挂之前先核具体类型。
 
@@ -43,9 +43,9 @@
 
 | 没做的事 | 为什么 |
 |---|---|
-| **不用 `TrackedAIFunction` 包它们的工具** | 这 7 个工具来自框架自带的 provider，根本不经过 `WorkflowAgentToolkit.CreateAllTools()`，所以没有东西需要编组到宿主线程、没有东西该计入调用预算、也没有东西该标脏。（对比 `ResetToolCallLimit`：它由 `CreateAllTools` 注册、**确实**被 `TrackedAIFunction` 包（`WorkflowAgentToolkit.cs:209`、`:83-84`），只是 `AccountAsync` 里用 `IsBudgetTool` 把它排除在记账之外（`:404`、`:417`）—— 两者只是「不计入预算」这一点相同，包装方式不同。） |
+| **不用 `TrackedAIFunction` 包它们的工具** | 这 7 个工具来自框架自带的 provider，根本不经过 `WorkflowAgentToolkit.CreateAllTools()`，所以没有东西需要编组到宿主线程、没有东西该计入调用预算、也没有东西该标脏。（对比 `ResetToolCallLimit`：它由 `CreateAllTools` 注册、**确实**被 `TrackedAIFunction` 包（`CreateAllTools` 里 `ResetToolCallLimit` 的注册、`T` 的包装），只是 `AccountAsync` 里用 `IsBudgetTool` 把它排除在记账之外（`AccountAsync` 的 `IsBudgetTool` 分支）—— 两者只是「不计入预算」这一点相同，包装方式不同。） |
 | **不把 `TodoProvider` / `AgentModeProvider` 的 `StateKeys` 改成每 scope 一个** | 它们的 key 是框架写死的常量（实测就是 `TodoProvider` / `AgentModeProvider`）。框架在同一个 agent 上撞 key 时会抛，**那正是想要的失败**：一个 agent 不该挂两个待办 provider |
-| **不在 `CreateContextProviders()` 之外自己 new 一遍** | 同一个 provider 挂两次 = 同一套工具与文本各送两遍。框架的并集**不按名去重**（`WorkflowAgentContextProvider.cs:15-19`）。`WithTodoTracking` 把实例存在字段里，`CreateContextProviders()` 复用它 —— 所以 `scope.Todo` 与组合里那一个是**同一个对象** |
+| **不在 `CreateContextProviders()` 之外自己 new 一遍** | 同一个 provider 挂两次 = 同一套工具与文本各送两遍。框架的并集**不按名去重**（`WorkflowAgentContextProvider` 的类注释）。`WithTodoTracking` 把实例存在字段里，`CreateContextProviders()` 复用它 —— 所以 `scope.Todo` 与组合里那一个是**同一个对象** |
 
 `WithContextCompaction` 的 state key 反而是**每 scope 一个**（`$"{nameof(CompactionProvider)}:{StateDiscriminator}"`），因为框架允许不同 agent 用不同压缩策略在同一个 session 里共存，此时必须能分开存。
 
@@ -53,7 +53,7 @@
 
 ## 四、顺序：压缩排最前，待办与模式排最后
 
-`CreateContextProviders()`（`WorkflowAgentScope.cs:1726` 起）的固定顺序：
+`CreateContextProviders()` 的固定顺序：
 
 ```
 [ Compaction?, self, Skills, MCP, SubAgents?, Todo?, AgentMode?, …宿主工厂 ]

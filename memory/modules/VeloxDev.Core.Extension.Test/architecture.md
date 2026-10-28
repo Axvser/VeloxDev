@@ -1,8 +1,8 @@
 # VeloxDev.Core.Extension.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（94 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；86 个 `[TestClass]`，679 个 `[TestMethod]`）
-> —— 2026-10-08 复核。本文其余处若与新的计数冲突，以本条为准。
-> 属性数**小于**运行条数（现在 661 对 678）：`[DataRow]` 会把一条展开成多条，差值是它。别拿属性数去对运行结果。
+> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（97 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；89 个 `[TestClass]`，724 个 `[TestMethod]`）
+> —— 2026-10-28 复核。本文其余处若与新的计数冲突，以本条为准。
+> 属性数**小于**运行条数：`[DataRow]` 会把一条展开成多条（当前 20 个 `[DataRow]`），差值是它。别拿属性数去对运行结果。
 > 被测：`Src/Core/VeloxDev.Core.Extension/`（AI 工具面，命名空间 `VeloxDev.AI.*`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Test/`。两者只共享「逐字相同的一行并行设置」，其余差异很大 —— 见 §六那张对照表。
 
@@ -12,7 +12,7 @@
 
 ## 一、这是什么、不解决什么
 
-**是什么。** `VeloxDev.Core.Extension`（Agent / MCP / Skills / 管线 / 工作流工具函数）的**纯逻辑**测试宿主。它同时是**整个仓库里唯一引用 `Examples/Workflow/Common/Lib/Lib.csproj` 的测试项目**（`VeloxDev.Core.Extension.Test.csproj:28`）。
+**是什么。** `VeloxDev.Core.Extension`（Agent / MCP / Skills / 管线 / 工作流工具函数）的**纯逻辑**测试宿主。它同时是**整个仓库里唯一引用 `Examples/Workflow/Common/Lib/Lib.csproj` 的测试项目**（`VeloxDev.Core.Extension.Test.csproj` 的 `ProjectReference`）。
 
 **不是什么：**
 
@@ -36,7 +36,7 @@
 
 ## 二、最大的一条不对称：本模块引了源生成器
 
-`VeloxDev.Core.Extension.Test.csproj:31-39` 是「生成器不随 ProjectReference 传递」这条仓库通则的**唯一一处测试项目级复现**，且注释就写在旁边：
+`VeloxDev.Core.Extension.Test.csproj` 的生成器引用组是「生成器不随 ProjectReference 传递」这条仓库通则的**唯一一处测试项目级复现**，且注释就写在旁边：
 
 ```xml
 <!-- 本项目自己也用生成器特性，而 analyzer 不随 ProjectReference 传递。 -->
@@ -54,27 +54,27 @@
 后果分两层：
 
 1. 姊妹模块 `VeloxDev.Core.Test` **没有**这组引用 → 那边写不出任何生成器类型。
-2. 本模块是**两个测试项目中唯一能声明生成类型的**：`Agent/Workflow/Functions/WorkflowSerializationTests.cs:19` 的 `TestEnumNode`（`:12` 的 `enum TestRouteKind`、`:18` 的 `[WorkflowBuilder.Node<NodeHelper<TestEnumNode>>(workSemaphore: 1)]`、`:19-30` 的 `[VeloxProperty] partial` 属性 + 构造函数里的 `OutputSlots.SetSelector(typeof(TestRouteKind))`）是全仓库测试项目里**唯一**一处生成类型。
+2. 本模块是**两个测试项目中唯一能声明生成类型的**：`Agent/Workflow/Functions/WorkflowSerializationTests.cs` 的 `TestEnumNode`（`enum TestRouteKind`、`[WorkflowBuilder.Node<NodeHelper<TestEnumNode>>(workSemaphore: 1)]`、`[VeloxProperty] partial` 属性 + 构造函数里的 `OutputSlots.SetSelector(typeof(TestRouteKind))`）是全仓库测试项目里**唯一**一处生成类型。
 
-同一文件里的 `TreeZoomedBeforeSave_NodesVisibleAfterRoundTrip`（`:155`）和 `TreeZoomedBeforeSave_NodeDefaultViewModel_KeepsAnchorAndSize`（`:221`）是这条通道唯一的价值证明：断言保存进 JSON 的是**世界**坐标 Anchor，且 getter 在加载后恰好折叠一次。
+同一文件里的 `TreeZoomedBeforeSave_NodesVisibleAfterRoundTrip` 和 `TreeZoomedBeforeSave_NodeDefaultViewModel_KeepsAnchorAndSize` 是这条通道唯一的价值证明：断言保存进 JSON 的是**世界**坐标 Anchor，且 getter 在加载后恰好折叠一次。
 
 ---
 
 ## 三、测试替身（同样没有 mock 库）
 
-csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 三个（`:14`、`:18-19`），外加生成器那条（Debug 走 `ProjectReference`、Release 走 `PackageReference`，`:33-38`）。
+csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 三个，外加生成器那条（Debug 走 `ProjectReference`、Release 走 `PackageReference`）。
 
 | 替身 | 在哪 | 顶替什么 |
 |---|---|---|
-| `ScriptedChatClient` | `Agent/Pipelines/AgentPipelineTests.cs:26` | 手写的 `IChatClient`，重放固定流。类注释（`:12-21`）写明它证明的是「管线怎么处理模型输出」，**不是**「某个模型会不会产出推理」—— 后者的所有者是端点，不是这里 |
-| `SingleThreadContext : SynchronizationContext, IDisposable` | `Agent/Workflow/Functions/ToolThreadAffinityTests.cs:27` | 专用线程 + 真 `BlockingCollection` 队列；断言线程 id 在进入 / await 后 / 返回时不变 |
-| 手写 skill 目录 | `Agent/Skills/SkillScopeTests.cs:19` | `%TEMP%\veloxdev-skill-tests\<guid>` 下写 `SKILL.md` |
-| `RecordingChatClient` / `OfflineAgent.RunOnce` | `Agent/Workflow/RecordingChatClient.cs:17` | 记录型 `IChatClient`：跑一次真 agent，把 `ChatOptions.Tools` 的名字与所有系统文本录下来。用来断言**模型实际被喂了什么**，而不是「provider 说自己会喂什么」。**共享替身文件之一**（另一个是下面那个）—— 见 §六 |
-| `InstantChatClient` / `GateChatClient` / `ToolCallingChatClient` / `FaultingChatClient` / `CountingUIContext` / `SubAgentFixture` | `Agent/SubAgents/SubAgentDoubles.cs` | 子代理专用的整套离线替身，**同一文件里六个类型**：立即答完 / 卡在 `TaskCompletionSource` 上等测试放行（并发、超时、取消全靠它）/ 第二轮往返时回一个指定名字的工具调用（于是轮询路径能离线穿过真 agent）/ 抛异常 / 记录线程 id 的 `SynchronizationContext` / 组装 `WorkflowAgentScope` + 父 `SubAgentScope` + 按名调工具的入口。**`GateChatClient.WaitForCalls`（`:142`）与 `SubAgentFixture.WaitFor`（`:586`）都是 `Thread.Sleep(5)` 轮询、超时 5000 ms**，所以在无 key 的机器上跑全量时它们会成为本模块唯一的真实等待（见 §四） |
+| `ScriptedChatClient` | `Agent/Pipelines/AgentPipelineTests.cs` 的 `ScriptedChatClient` | 手写的 `IChatClient`，重放固定流。类注释写明它证明的是「管线怎么处理模型输出」，**不是**「某个模型会不会产出推理」—— 后者的所有者是端点，不是这里 |
+| `SingleThreadContext : SynchronizationContext, IDisposable` | `Agent/Workflow/Functions/ToolThreadAffinityTests.cs` 的 `SingleThreadContext` | 专用线程 + 真 `BlockingCollection` 队列；断言线程 id 在进入 / await 后 / 返回时不变 |
+| 手写 skill 目录 | `Agent/Skills/SkillScopeTests.cs` 的临时目录夹具 | `%TEMP%\veloxdev-skill-tests\<guid>` 下写 `SKILL.md` |
+| `RecordingChatClient` / `OfflineAgent.RunOnce` | `Agent/Workflow/RecordingChatClient.cs` 的 `RecordingChatClient` / `RunOnce` | 记录型 `IChatClient`：跑一次真 agent，把 `ChatOptions.Tools` 的名字与所有系统文本录下来。用来断言**模型实际被喂了什么**，而不是「provider 说自己会喂什么」。**共享替身文件之一**（另一个是下面那个）—— 见 §六 |
+| `InstantChatClient` / `GateChatClient` / `ToolCallingChatClient` / `FaultingChatClient` / `CountingUIContext` / `SubAgentFixture` | `Agent/SubAgents/SubAgentDoubles.cs` | 子代理专用的整套离线替身，**同一文件里六个类型**：立即答完 / 卡在 `TaskCompletionSource` 上等测试放行（并发、超时、取消全靠它）/ 第二轮往返时回一个指定名字的工具调用（于是轮询路径能离线穿过真 agent）/ 抛异常 / 记录线程 id 的 `SynchronizationContext` / 组装 `WorkflowAgentScope` + 父 `SubAgentScope` + 按名调工具的入口。**`GateChatClient.WaitForCalls` 与 `SubAgentFixture.WaitFor` 都是 `Thread.Sleep(5)` 轮询、超时 5000 ms**，所以在无 key 的机器上跑全量时它们会成为本模块唯一的真实等待（见 §四） |
 
-`SubAgentFixture` 的构造器（`:329`）在 2026-09 扩过一次：除了 `client` / `factory` / `ui` / `maxToolCalls` / `maxDepth` / `spawnBudget`，现在还收 `skills` / `mcp` / `customTools`，并在挂子代理**之前**按 `WithSkills` → `WithMcps` → `WithTools` 的顺序装到父 scope 上 —— 顺序是契约，窄化在 spawn 时读的是父**当时**的配置。同一文件里还有一组**探针**（不是替身，但只有这里能写）：`SurfaceOf(:422)` / `SubAgentSurfaceOf(:441)` / `SkillSurfaceOf(:453)` / `McpSurfaceOf(:460)` / `CustomSurfaceOf(:467)` / `PromptOf(:480)` / `ProviderToolOf(:497)` / `SubAgentToolOf(:570)`。前几个问的是「这个 scope **真正**提供哪些工具名」，后几个取出具体的 provider 工具与实际拼出的提示词 —— 于是「窄化」可以被断言在**孩子的真实能力面**上，而不是视图自己的记账上。**它们都是按具体 provider 类型分叉的 `switch`，不是对 `AIContextProvider` 的多态调用** —— `BuildContext()` 是各子系统 provider 自己的 `internal`，基类上没有。
+`SubAgentFixture` 的构造器在 2026-09 扩过一次：除了 `client` / `factory` / `ui` / `maxToolCalls` / `maxDepth` / `spawnBudget`，现在还收 `skills` / `mcp` / `customTools`，并在挂子代理**之前**按 `WithSkills` → `WithMcps` → `WithTools` 的顺序装到父 scope 上 —— 顺序是契约，窄化在 spawn 时读的是父**当时**的配置。同一文件里还有一组**探针**（不是替身，但只有这里能写）：`SurfaceOf` / `SubAgentSurfaceOf` / `SkillSurfaceOf` / `McpSurfaceOf` / `CustomSurfaceOf` / `PromptOf` / `ProviderToolOf` / `SubAgentToolOf`。前几个问的是「这个 scope **真正**提供哪些工具名」，后几个取出具体的 provider 工具与实际拼出的提示词 —— 于是「窄化」可以被断言在**孩子的真实能力面**上，而不是视图自己的记账上。**它们都是按具体 provider 类型分叉的 `switch`，不是对 `AIContextProvider` 的多态调用** —— `BuildContext()` 是各子系统 provider 自己的 `internal`，基类上没有。
 
-**工具是按公共注册路径调的，不是反射**：`Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs:24-28` 写明走 `scope.ProvideTools()` → `AIFunction.InvokeAsync`，「the same route an AI host uses — not by reflecting into private methods」。
+**工具是按公共注册路径调的，不是反射**：`Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs` 的辅助方法注释写明走 `scope.ProvideTools()` → `AIFunction.InvokeAsync`，「the same route an AI host uses — not by reflecting into private methods」。
 
 ---
 
@@ -83,7 +83,7 @@ csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 三个�
 | 项 | 值 |
 |---|---|
 | 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
-| 测试条数 | **696**（2026-10-08 实测：**689 通过 + 7 跳过**。跳过的那 7 条即**门控**的真模型用例：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 688/679/678/659/652/473/472/399/391/382 都已过期） |
+| 测试条数 | **724** 个 `[TestMethod]`（2026-10-28 树内计数；`[DataRow]` 展开后运行条数更多。其中 7 条是**门控**的真模型用例：`Agent/Workflow/AgentWorkflowLiveTests.cs` 1 条 + `Agent/SubAgents/SubAgentLiveTests.cs` 6 条。旧读数 696/688/679/678/659/652/473/472/399/391/382 都已过期） |
 | 耗时 | **2 s**（默认，真模型用例全部跳过；2026-10-05 实测）。开关打开时每条真模型用例另算，实测单条约 13 s |
 | 失败 | 0 |
 
@@ -103,11 +103,11 @@ VELOXDEV_LIVE=1 dotnet test … --filter "FullyQualifiedName~LiveTests"
 
 **为什么离线部分比姊妹模块快得多**：这里几乎没有真实时钟。全部真实等待只有三处：
 
-| 文件:行 | 用法 |
+| 文件 | 用法 |
 |---|---|
-| `Agent/Workflow/Functions/ToolThreadAffinityTests.cs:105` | `await Task.Delay(1, ct)` |
-| `Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs:214` | `WaitUntilAsync`：`Stopwatch` + `Task.Delay(5)` 轮询，`timeoutMs = 3000`（`:222`） |
-| `Agent/SubAgents/SubAgentDoubles.cs:142,586` | `WaitForCalls` / `WaitFor`：`Environment.TickCount64` + `Thread.Sleep(5)` 轮询，`timeoutMs = 5000` |
+| `Agent/Workflow/Functions/ToolThreadAffinityTests.cs` | `RegisteredTool_StaysOnTheContextAcrossAnAwait` 里的 `await Task.Delay(1, ct)` |
+| `Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs` | `WaitUntilAsync`：`Stopwatch` + `Task.Delay(5)` 轮询，`timeoutMs = 3000` |
+| `Agent/SubAgents/SubAgentDoubles.cs` | `WaitForCalls` / `WaitFor`：`Environment.TickCount64` + `Thread.Sleep(5)` 轮询，`timeoutMs = 5000` |
 
 前两处是「等一个后台线程把它做完」；子代理那两处是**「等一个孩子跑到某一步」**，形态更接近并发测试 —— 这也解释了有 key 时的 5–9 s：那 5 条门控测试在真调模型，与它们并行的子代理测试各自在轮询自己的 `Thread.Sleep(5)`。这直接决定了 §五。
 
@@ -123,14 +123,14 @@ System.InvalidOperationException: Environment variable 'API_KEY_DEEPSEEK' is not
    at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
 ```
 
-**直接原因是 `Examples/` 的既有缺陷，不是子代理代码**：`AgentHelper.Install` 是 `public async override void`（`AgentHelper.cs:144`），里面 `Agent = await ProvideAgent(tree, this)`（`:149`）在缺 key 时于 `:293` 抛，异常从 `async void` 逃逸到线程池 → **宿主进程崩溃**。触发它的测试是 `Examples/AgentTranscriptTests.cs:138`（那里把一个 `TreeViewModel` 的 `Helper` 转成 `AgentHelper`，构造即 `Install`）。
+**直接原因是 `Examples/` 的既有缺陷，不是子代理代码**：`AgentHelper.Install` 是 `public async override void`，里面 `Agent = await ProvideAgent(tree, this)` 在缺 key 时于 `ProvideAgent` 抛，异常从 `async void` 逃逸到线程池 → **宿主进程崩溃**。触发它的测试是 `Examples/AgentTranscriptTests`（那里把一个 `TreeViewModel` 的 `Helper` 转成 `AgentHelper`，构造即 `Install`）。
 
-**中止点的计数是竞态的，别把某一次的读数当基准**。三次实测分别是 `失败 3 + 通过 240 + 跳过 3 = 246`、`失败 0 + 通过 206 + 跳过 3 = 209` 与 `通过 122 = 122` —— 崩在哪一刻决定了有多少条测试还没来得及报结果，其中那几条「失败」全是**正在跑的**子代理测试被连坐成的 `TimeoutException`，没有一条是完整的断言失败。第三次的 122 比前两次低，原因是可复现的：demo 的宿主接线为了挂子代理，把「解析模型」挪到了骨架渲染之前（`AgentHelper.cs:297-315`），于是缺 key 这件事**更早**抛。这是同一个缺陷更早触发，不是新增的缺陷。（注：上面栈里的 `:293`/`:149`/`:144` 是 2026-10-04 复核时的行号；`async void` 这个缺陷本身未动。）
+**中止点的计数是竞态的，别把某一次的读数当基准**。三次实测分别是 `失败 3 + 通过 240 + 跳过 3 = 246`、`失败 0 + 通过 206 + 跳过 3 = 209` 与 `通过 122 = 122` —— 崩在哪一刻决定了有多少条测试还没来得及报结果，其中那几条「失败」全是**正在跑的**子代理测试被连坐成的 `TimeoutException`，没有一条是完整的断言失败。第三次的 122 比前两次低，原因是可复现的：demo 的宿主接线为了挂子代理，把「解析模型」挪到了骨架渲染之前（`AgentHelper` 里构造/解析的那一段），于是缺 key 这件事**更早**抛。这是同一个缺陷更早触发，不是新增的缺陷。（注：上面栈里的行号是 2026-10-04 复核时的快照；`async void` 这个缺陷本身未动。）
 
 **它为什么平时不红**：抛出的时机是竞态的 —— 异常从 `async void` 逃逸后由线程池接住，只有它恰好落在测试宿主收集结果的窗口内才会崩掉整轮。本模块 281 条只跑 0.45 s，不够久也不够忙；加上 90 条子代理测试（它们各自在 `Thread.Sleep(5)` 轮询、把整轮拉长了十几倍）之后，它稳定地落进来了。**是「时长」还是「线程池压力」在起决定作用，没有单独隔离**，能确定的是子代理那一批就是那个差。三条独立实验钉住这一点：`FullyQualifiedName~Test.Examples` 单跑绿（167 ms）；`FullyQualifiedName!~Agent.SubAgents` 跑全部其余 281 条也绿（626 ms）；**排除门控测试、只留下子代理那批（当时 94 条），仍然红**。
 
 **结论**：本模块自己的门控约定是成立的 —— `SubAgentLiveTests` 缺 key 时 `Assert.Inconclusive`，MSTest 4.0.2 下报成**已跳过**（`--filter FullyQualifiedName~Agent.SubAgents` 无 key = 96 通过 + 5 跳过，0 失败，0.42–0.45 s）。红的是全量轮次，根因在 `Examples/` 的 `async void`。**修它要动 demo，本仓库当前的选择是不动** —— 所以这条要一直记着，别把它误判成本模块的回归。
-**「子代理那批」现在是 110 条 `[TestMethod]`**（2026-10-04 实测 `grep -c` 于 `Agent/SubAgents/*.cs`，含 6 条门控），其余 **532** 条（642 − 110）。旧读数（473 / 362 / 281 其余 / 101 或 96 子代理）已过期；那条「历轮只动子代理那批」的观察本身仍然成立。
+**「子代理那批」现在是 110 条 `[TestMethod]`**（2026-10-28 于 `Agent/SubAgents/*.cs` 数出，含 6 条门控），其余 **614**（724 − 110）。旧读数（642 − 110 = 532、473 / 362 / 281 其余 / 101 或 96 子代理）已过期；那条「历轮只动子代理那批」的观察本身仍然成立。
 
 ---
 
@@ -139,13 +139,13 @@ System.InvalidOperationException: Environment variable 'API_KEY_DEEPSEEK' is not
 与姊妹模块**逐字相同**的一行：
 
 ```
-Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs:1
+Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs
 [assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]
 ```
 
-但**全项目只有 1 个 `[DoNotParallelize]`**（`Agent/AgentTelemetryExtensionsTests.cs:23`；姊妹模块有 16 个）。这个差异不是风格，是**结果**：本模块既没有进程级静态写入，也没有真实时钟断言，所以基本不需要摘出去。
+但**全项目只有 1 个 `[DoNotParallelize]`**（`Agent/AgentTelemetryExtensionsTests.cs`；姊妹模块有 17 个）。这个差异不是风格，是**结果**：本模块既没有进程级静态写入，也没有真实时钟断言，所以基本不需要摘出去。
 
-**子代理那一批没有改变这一点，但它把边界推近了一格**：`SubAgentDoubles.cs:149,592` 的两处 `Thread.Sleep(5)` 轮询带着 5000 ms 的墙钟超时，在满载的 CI 上是「真实时钟断言」的雏形。它今天仍然安全，因为超时只用来**把死锁变成失败**而不是断言性能 —— 一个卡住的 `GateChatClient` 会让测试红，而不会让它假绿。加到 `[DoNotParallelize]` 的门槛是「超时值本身成为断言对象」，不是「存在超时」。
+**子代理那一批没有改变这一点，但它把边界推近了一格**：`SubAgentDoubles.cs` 的两处 `Thread.Sleep(5)` 轮询（`GateChatClient.WaitForCalls` / `SubAgentFixture.WaitFor`）带着 5000 ms 的墙钟超时，在满载的 CI 上是「真实时钟断言」的雏形。它今天仍然安全，因为超时只用来**把死锁变成失败**而不是断言性能 —— 一个卡住的 `GateChatClient` 会让测试红，而不会让它假绿。加到 `[DoNotParallelize]` 的门槛是「超时值本身成为断言对象」，不是「存在超时」。
 
 ### ⚠ 但「0 个 `[DoNotParallelize]`」不等于「不会抖动」—— 这条抖动的成因与修法（见下）
 
@@ -185,7 +185,7 @@ dotnet vstest <test dll> --TestCaseFilter:"FullyQualifiedName~EveryWorkflowBuild
 
 **别把这类现象记成「测试抖动」**：两次挂起、两次崩溃，根因都不在测试工程里（上一例是 `Examples/AgentTranscriptTests.cs` 的 `async void`，这一例是 Core 的注册表）。
 
-**推论**：往这里加一条测试时，如果引入了「进程级静态状态」或「毫秒级真实时钟断言」，`[DoNotParallelize]` 得**由你自己加** —— 本项目只有一个先例（`Agent/AgentTelemetryExtensionsTests.cs:23`），要看更多理由去姊妹模块抄（`memory/modules/VeloxDev.Core.Test/architecture.md` §六 列了 16 个类各自的理由）。
+**推论**：往这里加一条测试时，如果引入了「进程级静态状态」或「毫秒级真实时钟断言」，`[DoNotParallelize]` 得**由你自己加** —— 本项目只有一个先例（`Agent/AgentTelemetryExtensionsTests.cs`），要看更多理由去姊妹模块抄（`memory/modules/VeloxDev.Core.Test/architecture.md` §六 列了 17 个类各自的理由）。
 
 ### ⚠ 2026-10-01：`CompiledRunControlTests` 的「抖动」其实是**产品挂起**，不是测试问题
 
@@ -193,7 +193,7 @@ dotnet vstest <test dll> --TestCaseFilter:"FullyQualifiedName~EveryWorkflowBuild
 
 `GetCompiledRunStatus` 报告 `isRunning: true / runStatus: "Running"` 整整 30 秒不结束，而日志里最后**四个 `PythonScriptNodeViewModel` 全部只记了「开始」没有「finished」** —— `run.Task` 永不完成，即 `RuntimeEngine.RunAsync` 卡在某次 `await` 上不返回。
 
-触发点在**审计重定向之后的重试路径**上（`RuntimeEngine.cs:105` 那条 `Redirecting to compile state #…` 之后）。重定向本身是有界的（`MaxRedirects` 守着），日志里也只出现一次，所以**不是重定向死循环**，是那一轮里卡住。
+触发点在**审计重定向之后的重试路径**上（`RuntimeEngine` 里那条 `Redirecting to compile state #…` 日志之后）。重定向本身是有界的（`MaxRedirects` 守着），日志里也只出现一次，所以**不是重定向死循环**，是那一轮里卡住。
 
 **测试侧顺带修掉的那半**：`WaitForEndAsync` 原来把「非 ok」当成终点、交回上一份快照，于是调用方拿到的是 `outcome: "Unknown"` 的中途状态 —— 报出来的是「outcome 不对」，把挂起盖住了。现在它只认 `isRunning == false` 才返回，非 ok 继续轮询，超时才失败并带上最后一份状态。**改完失败率没变**（仍约 40%），变的是失败信息从「断言不符」变成「运行 30 秒没结束」—— 这才是真相。
 
@@ -251,7 +251,7 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 | `GlobalUsings.cs` | 有（2 条） | **没有** → 每个文件自己写全 using（连 `System.Threading` 都显式写） |
 | 共享替身文件（如 `TestHosts.cs`） | 有 | **有且仅有两个**：`Agent/Workflow/RecordingChatClient.cs`（+ 同文件的 `OfflineAgent.RunOnce`）与 `Agent/SubAgents/SubAgentDoubles.cs`（六个类型 + 一组静态探针，见 §三）。前者是两个消费者（`AgentCapabilityProvidersTests`、`CapabilityEnvelopeTests`）出现后才提取的；后者是子代理那一批**一次到位**的 —— 因为它那六件替身互相咬着（`SubAgentFixture` 造 scope，scope 要 client，`GateChatClient` 要 `CountingUIContext`）。后来按第二、第三条能力轴又长出了那组探针，但**类型数没变**：探针是静态方法，消费者（`SubAgentCapabilityGrantTests`）与替身住在同一个命名空间里，够用。其余仍是每类各持私有辅助，第一个消费者出现时不要急着上提 |
 | 源生成器引用 | 无 | **有**（§二），Debug 走本地 / Release 走包 |
-| `[DoNotParallelize]` | 16 个类 | **1** |
+| `[DoNotParallelize]` | 17 个类 | **1** |
 
 **未覆盖的类型**（`Src/Core/VeloxDev.Core.Extension/` 里有源文件、本模块**零引用**，逐个核过）：
 
@@ -268,7 +268,7 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 
 **子代理那一批的边界（这张表为什么没有新增行）**：`Agent/SubAgents/` 里**没有**任何类型落进上表 —— 包括内部的 `SubAgentScope` / `SubAgentAgentToolkit` / `SubAgentAgentContextProvider`，它们因 `InternalsVisibleTo` 被直接构造。真正按名零引用的是三个 `internal`：`ChildBriefing`、`SubAgentEntry`、`ToolCallLedger`。前两个是纯粹的载体（没有行为可断言，它们的字段经由 `SubAgentSummary` 与面板行被检查），**`ToolCallLedger` 不是缺口而是刻意的** —— 它的每一条性质都由 `SubAgentBudgetTests` 从 `SubAgentScope` 那一侧钉住（一口锅、沿路径递减、`ResetChain` 只向上）。**别为它单写一个测试类**：那样就多了一份「账本自己说自己」，而既有那几条断言的价值正在于它们从不直接读账本。
 
-**不能离线证明的事集中在 `SubAgentLiveTests`**（类注释在 `Agent/SubAgents/SubAgentLiveTests.cs:17-34`），2026-09-25 起是**六条**（2026-09-22 是五条，更早四条）：工具描述够不够清楚、模型会不会真的调用 `SpawnSubAgent`；被夹紧的孩子会不会**真的去调工具**再汇报（断言里带 `callCount > 0`，因为从零编一个答案能通过任何「回复非空」的断言）；模型会不会**真的去填** `allowedSkills` / `allowedMcpServers`；模型会不会**真的去填** `name`；以及**自发派发** —— 给一个「读一大堆、只要六个词」的合成语料、通篇不提「派发」，模型会不会自己把材料读进一个孩子；最后是 **token 计量**（`ARealChild_ReportsWhatItSpent`，2026-09-25 加）—— 真实 provider 到底报不报用量、MAF 到底聚不聚合到 `AgentResponse.Usage`。自发派发那条问的是「会不会被调用」这一半，其余几条问的是「参数或计量会不会真的到位」。第 2、3 条是两张能力轴唯一买不到离线答案的地方 —— 参数描述在人看来通顺、模型却省略掉，而两条轴的默认值（都是**父的全量**）就会静默生效，离线测试全绿。第 4 条是同一类静默失败，而它更硬一层：`name` 的读者是**人**（面板那一行，见 [`VeloxDev.Core.Extension/sub-agents.md`](../VeloxDev.Core.Extension/sub-agents.md) §八），所以连「填得对不对」都没有反馈回路可依。一句话：离线套件能证明「被调用时是对的」，证明不了「会不会被调用」，也证明不了「参数会不会被填」。
+**不能离线证明的事集中在 `SubAgentLiveTests`**（类注释在 `Agent/SubAgents/SubAgentLiveTests.cs`），2026-09-25 起是**六条**（2026-09-22 是五条，更早四条）：工具描述够不够清楚、模型会不会真的调用 `SpawnSubAgent`；被夹紧的孩子会不会**真的去调工具**再汇报（断言里带 `callCount > 0`，因为从零编一个答案能通过任何「回复非空」的断言）；模型会不会**真的去填** `allowedSkills` / `allowedMcpServers`；模型会不会**真的去填** `name`；以及**自发派发** —— 给一个「读一大堆、只要六个词」的合成语料、通篇不提「派发」，模型会不会自己把材料读进一个孩子；最后是 **token 计量**（`ARealChild_ReportsWhatItSpent`，2026-09-25 加）—— 真实 provider 到底报不报用量、MAF 到底聚不聚合到 `AgentResponse.Usage`。自发派发那条问的是「会不会被调用」这一半，其余几条问的是「参数或计量会不会真的到位」。第 2、3 条是两张能力轴唯一买不到离线答案的地方 —— 参数描述在人看来通顺、模型却省略掉，而两条轴的默认值（都是**父的全量**）就会静默生效，离线测试全绿。第 4 条是同一类静默失败，而它更硬一层：`name` 的读者是**人**（面板那一行，见 [`VeloxDev.Core.Extension/sub-agents.md`](../VeloxDev.Core.Extension/sub-agents.md) §八），所以连「填得对不对」都没有反馈回路可依。一句话：离线套件能证明「被调用时是对的」，证明不了「会不会被调用」，也证明不了「参数会不会被填」。
 
 **第四条是先失败后通过的，记在这里以免被当成一次就写对的**：判据第一版写成「这次调用难不难」（例外是「一次你已经知道怎么发的调用就自己做」），而那个例外把规则整个吃掉了 —— 每一次读都是模型知道怎么发的调用。实测（`deepseek-v4-flash`、六章语料）结果是**六次调用全在模型自己的上下文里、零孩子**，而当时离线套件全绿。把判据换成「工作的目的」（gather material vs. act）、例外收窄到「整个答案是一次调用读出的一个值」之后才通过。详见 `sub-agents.md` §五之末与 §十。
 
@@ -278,16 +278,16 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 
 | 我想改 | 打开 |
 |---|---|
-| 并行度 | `MSTestSettings.cs:1` |
-| 加一个模型替身 | `Agent/Pipelines/AgentPipelineTests.cs:26` 的 `ScriptedChatClient`（目前私有） |
-| 加一个同步上下文替身 | `Agent/Workflow/Functions/ToolThreadAffinityTests.cs:27` 的 `SingleThreadContext` |
-| 加一个「卡住 / 放行」的模型替身 | `Agent/SubAgents/SubAgentDoubles.cs:95` 的 `GateChatClient`（并发、超时、取消全靠它；`WaitForCalls` 在 `:142`） |
-| 造一个父子 scope 现场 | `Agent/SubAgents/SubAgentDoubles.cs:327` 的 `SubAgentFixture`（`WaitFor` 在 `:586`；`DescendantSubAgents(path)` 拿任意一层孙代理的名册；`skills` / `mcp` / `customTools` 三个可选参数把父装成带能力的宿主） |
-| 断言「窄化真的落到了能力上」 | `Agent/SubAgents/SubAgentDoubles.cs:453-497` 的探针组：`SkillSurfaceOf` / `McpSurfaceOf` / `CustomSurfaceOf` / `PromptOf` / `ProviderToolOf` |
-| 加一个带真实语料的能力源 | `Agent/SubAgents/SubAgentCapabilityGrantTests.cs:41` 的 `EmbeddedSkills()`（库自带的 7 个技能）与 `:49` 的 `TwoServers()`（`SeedLoadedTools` 假的两个 MCP 服务器） |
-| 让测试能用生成器类型 | `VeloxDev.Core.Extension.Test.csproj:33-38` 那组引用 |
-| 声明一个生成类型 | `Agent/Workflow/Functions/WorkflowSerializationTests.cs:12-30`（唯一先例） |
-| 等后台线程做完 | `Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs:222` 的 `WaitUntilAsync` |
+| 并行度 | `MSTestSettings.cs` 的 `Parallelize` |
+| 加一个模型替身 | `Agent/Pipelines/AgentPipelineTests.cs` 的 `ScriptedChatClient`（目前私有） |
+| 加一个同步上下文替身 | `Agent/Workflow/Functions/ToolThreadAffinityTests.cs` 的 `SingleThreadContext` |
+| 加一个「卡住 / 放行」的模型替身 | `Agent/SubAgents/SubAgentDoubles.cs` 的 `GateChatClient`（并发、超时、取消全靠它；`WaitForCalls` 同文件） |
+| 造一个父子 scope 现场 | `Agent/SubAgents/SubAgentDoubles.cs` 的 `SubAgentFixture`（`WaitFor` 同文件；`DescendantSubAgents(path)` 拿任意一层孙代理的名册；`skills` / `mcp` / `customTools` 三个可选参数把父装成带能力的宿主） |
+| 断言「窄化真的落到了能力上」 | `Agent/SubAgents/SubAgentDoubles.cs` 的探针组：`SkillSurfaceOf` / `McpSurfaceOf` / `CustomSurfaceOf` / `PromptOf` / `ProviderToolOf` |
+| 加一个带真实语料的能力源 | `Agent/SubAgents/SubAgentCapabilityGrantTests.cs` 的 `EmbeddedSkills()`（库自带的 7 个技能）与 `TwoServers()`（`SeedLoadedTools` 假的两个 MCP 服务器） |
+| 让测试能用生成器类型 | `VeloxDev.Core.Extension.Test.csproj` 那组生成器引用 |
+| 声明一个生成类型 | `Agent/Workflow/Functions/WorkflowSerializationTests.cs` 的 `TestEnumNode` / `TestRouteKind`（唯一先例） |
+| 等后台线程做完 | `Agent/Workflow/Functions/WorkflowLifecycleFidelityTests.cs` 的 `WaitUntilAsync` |
 | 改 `AgentTranscript` 的渲染形状 | **两个** `AgentTranscriptTests`：库侧形状在 `Agent/Pipelines/AgentTranscriptTests.cs`（当前 8 条），`Lib` 契约转发在 `Examples/AgentTranscriptTests.cs`（当前 9 条） |
 | 加一条「某个标注机制能被发现」的用例 | `Agent/Workflow/Functions/DiscoveryCoverageTests.cs`（声明 → 归类 → 可列举，夹具声明在本文件顶部）与 `Agent/Workflow/Functions/ComponentContextDiscoveryTests.cs`（`GetComponentContext` / `ListCreatableTypes` 两个工具的形状契约）。两条工具以前零覆盖，见 `VeloxDev.Core.Extension/architecture.md` §六 |
 

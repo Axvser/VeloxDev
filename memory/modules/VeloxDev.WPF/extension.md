@@ -11,20 +11,20 @@
 
 | 我想加 | 官方挂点（具体成员） | 位置 |
 |---|---|---|
-| 让一个 WPF 类型可动画 | 实现 `ISampler`，再 `RegisterInterpolator(typeof(T), new XSampler())` | `PlatformAdapters/Interpolator.cs:12-28`（唯一的注册表，12 条注册） |
-| 换线程句柄 / 优先级 / 解释器 | 改 `TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>` 的类型实参 | `PlatformAdapters/TransitionScheduler.cs:5-9` |
-| 让 DynamicTheme 在这家真动画 | 覆写 `InterpolatorCore.CreateScheduler` | `PlatformAdapters/Interpolator.cs:31-34` |
+| 让一个 WPF 类型可动画 | 实现 `ISampler`，再 `RegisterInterpolator(typeof(T), new XSampler())` | `PlatformAdapters/Interpolator.cs` 的静态构造函数（唯一的注册表，12 条注册） |
+| 换线程句柄 / 优先级 / 解释器 | 改 `TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>` 的类型实参 | `PlatformAdapters/TransitionScheduler.cs` 的类声明 |
+| 让 DynamicTheme 在这家真动画 | 覆写 `InterpolatorCore.CreateScheduler` | `PlatformAdapters/Interpolator.cs` 的 `CreateScheduler` |
 | 主题里的字符串/画刷怎么解析成值 | 实现 `IThemeValueConverter.Convert(Type targetType, string propertyName, object?[] parameters)` | `PlatformAdapters/ThemeValueConverters.cs`（7 个 public 类） |
-| 一条过渡时长预设 | `TransitionEffects` 的三个静态属性（可 `set`，进程级） | `PlatformAdapters/TransitionEffects.cs:6` / `:11` / `:16` |
+| 一条过渡时长预设 | `TransitionEffects` 的三个静态属性（可 `set`，进程级） | `PlatformAdapters/TransitionEffects.cs` 的 `Empty` / `Theme` / `Hover` |
 | 一个新的画布操作面 | `DependencyProperty.RegisterAttached("IsEnabled", …)` + 一个私有附着 `State` DP 存每元素状态 | `Attached/Workflow/` |
 | 换七角色里某一个的实现 | 同名文件（七家同分法） | `Attached/Workflow/` |
-| 一条表达式形式的 `Property(…)` 重载 | 手写 `Transition<T>` 重载（Core 一个都没有） | `PlatformAdapters/Transition.cs:39-247`（28 个） |
+| 一条表达式形式的 `Property(…)` 重载 | 手写 `Transition<T>` 重载（Core 一个都没有） | `PlatformAdapters/Transition.cs` 的 `Property(...)` 重载组（28 个） |
 | 把模型事件交给宿主的 sink | 在元素上绑 `WorkflowEvents.Node` / `.Slot` / `.Tree` | `Attached/Workflow/WorkflowEvents.cs` |
 | 小地图换皮 | 继承 `WorkflowMinimapOverlay`（全模块唯一非 `sealed` 的元素类） | `Attached/Workflow/WorkflowMinimapOverlay.cs` |
 
 **这里没有的扩展点（别去找）：**
 
-- **没有程序集级入口，也没有 `Initialize()`**：全模块 `ModuleInitializer` / `[assembly:` 零命中，唯一的静态构造是 `Interpolator.cs:12`。所以「注册」这件事没有统一挂点 —— 要么落在那个静态构造里，要么由宿主自己调（见 §二·1）。
+- **没有程序集级入口，也没有 `Initialize()`**：全模块 `ModuleInitializer` / `[assembly:` 零命中，唯一的静态构造是 `Interpolator.cs` 的静态构造函数。所以「注册」这件事没有统一挂点 —— 要么落在那个静态构造里，要么由宿主自己调（见 §二·1）。
 - **没有「注册一个 ViewModel 类型」的地方**：适配器不 `new` Tree/Node，只消费宿主给的模型（`WorkflowSystem/extension.md` 二·20）。
 
 ---
@@ -35,19 +35,19 @@
 
 | # | 错的捷径 | 为什么错 | 官方做法 | 依据 |
 |---|---|---|---|---|
-| 1 | 在 `Samplers/` 加一个 `ISampler` 类就以为生效了 | 注册表是唯一开关；没登记 = 该采样器**永不运行**，而库里没有任何东西会报错 | 同时在 `Interpolator` 的静态构造里加一行 | `PlatformAdapters/Interpolator.cs:12-28` |
-| 2 | 把注册代码写在采样器自己的文件里 / `App` 里 / `Main` 里 | 没人保证它会跑在第一个 `new Transition<T>()` 之前；`RegisterInterpolator` 是**末位胜出**，谁先谁后直接改解析结果 | 只在静态构造里集中登记 | Core `Effects/Transition.cs:296` 的字段初始化器；`Src/Core/VeloxDev.Core.Test/TransitionSystem/InterpolatorCoreTests.cs:58`（`RegisterInterpolator_OverwritesExisting`） |
-| 3 | 主题转换器做成单例 / `internal` / 带参构造 | 生成器**内联** `((IThemeValueConverter)Activator.CreateInstance(typeof(TConverter))!).Convert(...)`，所以「public + 无参」是**运行期**要求；`ThemeConfigAttribute` 只约束 `where TConverter : class, IThemeValueConverter`（没有 `new()`），错的写法**编译得过** | 每个转换器都写 `public class` + 隐式无参构造 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs:237`；`Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs` |
-| 4 | 在 `VeloxDev.DynamicTheme` 命名空间里用短名 `BrushConverter` / `ColorConverter` / `ThicknessConverter` / `CornerRadiusConverter` | 这四个名字本文件里也有，短名解析到**本项目**那一个，且不报错，转换结果只是悄悄不对 | 要用 WPF 自带的那个就全限定：`new System.Windows.Media.BrushConverter()` | `PlatformAdapters/ThemeValueConverters.cs:161`、`:216`、`:253` |
-| 5 | 新附着行为放进别的命名空间（哪怕更合理的名字） | 宿主 XAML 的 `xmlns` 写的是 `clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF`，换命名空间 = XAML 找不到，**且不报错** | 命名空间固定为 `VeloxDev.WorkflowSystem.AttachedBehaviors` | 该命名空间在 Core 里 0 次、七家适配器各声明一次（`git grep -l "namespace VeloxDev.WorkflowSystem.AttachedBehaviors"`）；宿主写法见 `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/TreeView.xaml:6` |
-| 6 | 给 `WorkflowCanvasTransformBehavior` 的变更回调补逻辑 | 它是**刻意的空回调**，值由 `WorkflowSurfaceBehavior.ApplyLayout` 写到宿主上 | 改「画布怎么变换」去改写值处 | `Attached/Workflow/WorkflowCanvasTransformBehavior.cs:25-30` 对 `Attached/Workflow/WorkflowSurfaceBehavior.cs:1055` |
+| 1 | 在 `Samplers/` 加一个 `ISampler` 类就以为生效了 | 注册表是唯一开关；没登记 = 该采样器**永不运行**，而库里没有任何东西会报错 | 同时在 `Interpolator` 的静态构造里加一行 | `PlatformAdapters/Interpolator.cs` 的静态构造函数 |
+| 2 | 把注册代码写在采样器自己的文件里 / `App` 里 / `Main` 里 | 没人保证它会跑在第一个 `new Transition<T>()` 之前；`RegisterInterpolator` 是**末位胜出**，谁先谁后直接改解析结果 | 只在静态构造里集中登记 | Core `Effects/Transition.cs` 的字段初始化器 `protected TInterpolatorCore interpolator = new();`；`Src/Core/VeloxDev.Core.Test/TransitionSystem/InterpolatorCoreTests.cs` 的 `RegisterInterpolator_OverwritesExisting` |
+| 3 | 主题转换器做成单例 / `internal` / 带参构造 | 生成器**内联** `((IThemeValueConverter)Activator.CreateInstance(typeof(TConverter))!).Convert(...)`，所以「public + 无参」是**运行期**要求；`ThemeConfigAttribute` 只约束 `where TConverter : class, IThemeValueConverter`（没有 `new()`），错的写法**编译得过** | 每个转换器都写 `public class` + 隐式无参构造 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `Activator.CreateInstance`；`Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs` |
+| 4 | 在 `VeloxDev.DynamicTheme` 命名空间里用短名 `BrushConverter` / `ColorConverter` / `ThicknessConverter` / `CornerRadiusConverter` | 这四个名字本文件里也有，短名解析到**本项目**那一个，且不报错，转换结果只是悄悄不对 | 要用 WPF 自带的那个就全限定：`new System.Windows.Media.BrushConverter()` | `PlatformAdapters/ThemeValueConverters.cs` 里 `BrushConverter`/`ObjectConverter` 的三处 `new System.Windows.Media.BrushConverter()` |
+| 5 | 新附着行为放进别的命名空间（哪怕更合理的名字） | 宿主 XAML 的 `xmlns` 写的是 `clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF`，换命名空间 = XAML 找不到，**且不报错** | 命名空间固定为 `VeloxDev.WorkflowSystem.AttachedBehaviors` | 该命名空间在 Core 里 0 次、七家适配器各声明一次（`git grep -l "namespace VeloxDev.WorkflowSystem.AttachedBehaviors"`）；宿主写法见 `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/TreeView.xaml` 的 `xmlns:behaviors` |
+| 6 | 给 `WorkflowCanvasTransformBehavior` 的变更回调补逻辑 | 它是**刻意的空回调**，值由 `WorkflowSurfaceBehavior.ApplyLayout` 写到宿主上 | 改「画布怎么变换」去改写值处 | `Attached/Workflow/WorkflowCanvasTransformBehavior.cs` 的 `OnTransformChanged` 对 `Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `ApplyLayout` |
 | 7 | 让 `Attached/` 里的行为直接驱动一个 `Transition<T>`（或反过来） | 三条轴在程序集内互不引用是既成事实（`Attached/` 下零 `Transition`/`Interpolator`/`ThemeManager` 符号，`PlatformAdapters/` 下零 `Workflow` 符号）；跨一条就再也拆不开 | 想跨轴就在宿主侧接线，别在适配器里接 | `architecture.md` §一 的实测 |
-| 8 | 用静态 `Dictionary<element, state>` 存每元素状态 | 会漏 `Detach` 时的清理，多个同类型元素之间还会串 | 私有附着 DP `"State"`（三个行为的既有形） | `WorkflowSurfaceBehavior.cs:113-117`、`WorkflowSlotLayoutBehavior.cs:55-59`、`WorkflowNodeDragBehavior.cs:38-42` |
-| 9 | 以为重复置 `IsEnabled="True"` 会叠加订阅 | 每个 `OnIsEnabledChanged` 都**先 `Detach` 再 `Attach`**，并 `ClearValue(StateProperty)` 顺带丢状态 | 直接依赖这个幂等性 | `WorkflowSurfaceBehavior.cs:344-358`（`Attach` 第一行 `:362`）、`:407` |
-| 10 | 把 `WorkflowSurfaceBehavior.Refresh(host)` 当「总是会重算」用 | 第一行就被 `IsEnabled` 挡掉：没打开开关时它**什么也不做、不抛** | 先确认开关已开，再调 | `WorkflowSurfaceBehavior.cs:143-158`（判断在 `:145-148`） |
-| 11 | 改采样器类名（如 `PointSampler` → `WpfPointSampler`）只改文件 | 测试工程按**字符串**反射取类型（`GetType($"VeloxDev.Adapters.NativeSamplers.{samplerName}", throwOnError: true)`），编译不报错，测试运行时才炸 | 改名要同步那 12 个字符串 | `Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs:53-54` |
-| 12 | 以为登记的先后有意义；或随手登记一个具体类型 | 顺序无意义（精确命中优先），但**登记基类型会接住整族**：`typeof(Brush)`（`:14`）、`typeof(Transform)`（`:18`）、`typeof(Effect)`（`:25`）就是这种「一登记一个家族」的写法。最后一条是 2026-09-20 补的 —— WPF 自己的 `UIElement.Effect` DP 声明成 `Effect`，注册具体类型会让它静默 `Unsampled` | 登记基类型时，把子类型差异在采样器内部写完：能插的插，插不了（异型效果）就**如实交出端点**而不是造替身（代价样貌见 `Samplers/TransformSampler.cs`、`Samplers/DropShadowEffectSampler.cs:49`） | `PlatformAdapters/Interpolator.cs:14`、`:18`、`:25` |
-| 13 | 想「把两条 `NoWarn` 合起来」于是只改一行、或新增一行 | 同名 MSBuild 属性按序求值、**后者覆盖前者**。旧写法是两条（`:4`=`1573`、`:5`=`1591`），实际只有 `1591` 生效 | 写成一条分号分隔的列表 —— **现状已是** `NoWarn` `1573;1591`（`VeloxDev.WPF.csproj:5`），别再拆行 | `VeloxDev.WPF.csproj:5`；正确形见 `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj:4` |
+| 8 | 用静态 `Dictionary<element, state>` 存每元素状态 | 会漏 `Detach` 时的清理，多个同类型元素之间还会串 | 私有附着 DP `"State"`（三个行为的既有形） | `WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` 各自的 `StateProperty` |
+| 9 | 以为重复置 `IsEnabled="True"` 会叠加订阅 | 每个 `OnIsEnabledChanged` 都**先 `Detach` 再 `Attach`**，并 `ClearValue(StateProperty)` 顺带丢状态 | 直接依赖这个幂等性 | `WorkflowSurfaceBehavior.OnIsEnabledChanged`（`Attach` 第一行 `Detach(control)`）、`Detach` 末尾的 `ClearValue(StateProperty)` |
+| 10 | 把 `WorkflowSurfaceBehavior.Refresh(host)` 当「总是会重算」用 | 第一行就被 `IsEnabled` 挡掉：没打开开关时它**什么也不做、不抛** | 先确认开关已开，再调 | `WorkflowSurfaceBehavior.Refresh` 第一行的 `if (!GetIsEnabled(host)) return;` |
+| 11 | 改采样器类名（如 `PointSampler` → `WpfPointSampler`）只改文件 | 测试工程按**字符串**反射取类型（`GetType($"VeloxDev.Adapters.NativeSamplers.{samplerName}", throwOnError: true)`），编译不报错，测试运行时才炸 | 改名要同步那 12 个字符串 | `Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs` 的 `CrossAdapter` |
+| 12 | 以为登记的先后有意义；或随手登记一个具体类型 | 顺序无意义（精确命中优先），但**登记基类型会接住整族**：`typeof(Brush)`、`typeof(Transform)`、`typeof(Effect)` 就是这种「一登记一个家族」的写法。最后一条是 2026-09-20 补的 —— WPF 自己的 `UIElement.Effect` DP 声明成 `Effect`，注册具体类型会让它静默 `Unsampled` | 登记基类型时，把子类型差异在采样器内部写完：能插的插，插不了（异型效果）就**如实交出端点**而不是造替身（代价样貌见 `Samplers/TransformSampler.cs`、`Samplers/DropShadowEffectSampler.cs`） | `PlatformAdapters/Interpolator.cs` 静态构造函数里的 `RegisterInterpolator(typeof(Brush)/typeof(Transform)/typeof(Effect), …)` |
+| 13 | 想「把两条 `NoWarn` 合起来」于是只改一行、或新增一行 | 同名 MSBuild 属性按序求值、**后者覆盖前者**。旧写法是两条（`1573`、`1591`），实际只有 `1591` 生效 | 写成一条分号分隔的列表 —— **现状已是** `NoWarn` `1573;1591`（`VeloxDev.WPF.csproj` 的 `NoWarn`），别再拆行 | `VeloxDev.WPF.csproj` 的 `NoWarn`；正确形见 `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `NoWarn` |
 
 ---
 
@@ -56,9 +56,9 @@
 ### A. 让一个新的 WPF 类型可动画（加一个采样器）—— 最常见的路径
 
 1. **建文件** `PlatformAdapters/Samplers/XxxSampler.cs`，命名空间 `VeloxDev.Adapters.NativeSamplers`，实现 `ISampler`。端点约定：`t == 0` / `t == 1` 原样交出调用方给的起点/终点实例（范式见 `PlatformAdapters/Samplers/TransformSampler.cs`）。
-2. **登记**：`PlatformAdapters/Interpolator.cs:14-27` 加一行 `RegisterInterpolator(typeof(X), new XxxSampler());`。
-3. **补验证表**（**最容易漏的一步**）：`Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs` 加 ① 私有 `Target` 类上的一条属性（`:30` 起），② 一条 `Entry(CrossAdapter("XxxSampler"), SamplerRule.Xxx, start, end, selector, t => …)`，③ 放进 `All`（`:178-260`）。漏了这三步不会在库里报错，但 `EveryShippedSampler_IsAccountedFor` 会红 —— 判定是**反射**所有 `VeloxDev.*` 程序集里的 `ISampler`（`Samplers/SamplerCoverageTests.cs:45`）再与 `SamplerRegistry.Entries` 求差（`:65-87`），而 `Entries` 的传递链是 `SamplerRegistry.cs:18-21` → `AdapterSamplerEntries.cs:11` → `WpfEntries.All`。
-4. **命名空间不能换**：新类型的名字若与 Core 或别家适配器撞名，`VeloxDev.Adapters.NativeSamplers` 是唯一能让它编得过去的位置（七家都用这个名字，所以同时引用两家的工程必然 CS0433，绕法就是 `WpfEntries.cs:53-54` 那条反射）。
+2. **登记**：`PlatformAdapters/Interpolator.cs` 静态构造函数加一行 `RegisterInterpolator(typeof(X), new XxxSampler());`。
+3. **补验证表**（**最容易漏的一步**）：`Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs` 加 ① 私有 `Target` 类上的一条属性，② 一条 `Entry(CrossAdapter("XxxSampler"), SamplerRule.Xxx, start, end, selector, t => …)`，③ 放进 `All`。漏了这三步不会在库里报错，但 `EveryShippedSampler_IsAccountedFor` 会红 —— 判定是**反射**所有 `VeloxDev.*` 程序集里的 `ISampler`（`Samplers/SamplerCoverageTests.cs` 的 `ShippedSamplers`）再与 `SamplerRegistry.Entries` 求差，而 `Entries` 的传递链是 `SamplerRegistry.Entries` → `AdapterSamplerEntries.All` → `WpfEntries.All`。
+4. **命名空间不能换**：新类型的名字若与 Core 或别家适配器撞名，`VeloxDev.Adapters.NativeSamplers` 是唯一能让它编得过去的位置（七家都用这个名字，所以同时引用两家的工程必然 CS0433，绕法就是 `WpfEntries.cs` 的 `CrossAdapter`）。
 5. **同步 `memory/modules/TransitionSystem/adapters/wpf.md`** 的条数与清单。
 
 > 判断「我登记对了没」：`RegisterInterpolator` 返回什么也不告诉你，`TryGetInterpolator` 才告诉你（`ISampler.cs` 的 `<see cref="…RegisterInterpolator"/>` 指向的就是它）。**没有「列出全部登记项」的公开 API**。
@@ -75,7 +75,7 @@
 
 1. **建文件** `Attached/Workflow/<Name>Behavior.cs`，`namespace VeloxDev.WorkflowSystem.AttachedBehaviors`，`sealed class : DependencyObject`。
 2. **开关**：`IsEnabledProperty = DependencyProperty.RegisterAttached("IsEnabled", typeof(bool), typeof(X), new PropertyMetadata(false, OnIsEnabledChanged))` —— 默认值必须是 `false`（四个既有开关都是），回调里判宿主类型后 `Attach` / `Detach`。
-3. **宿主类型门槛**照 `architecture.md` §3.1 的表选：要 `FindName` 找部件就只能挂 `UserControl`；要跨 `DataTemplate` 找部件得走 `ItemContainerGenerator` + 视觉树下钻（`WorkflowSlotLayoutBehavior.cs:321-326`、`:405-415`）；只要 `DataContext` 就放宽到 `UIElement`（但要先想清是「自己」还是「自己或任一祖先」）。
+3. **宿主类型门槛**照 `architecture.md` §3.1 的表选：要 `FindName` 找部件就只能挂 `UserControl`；要跨 `DataTemplate` 找部件得走 `ItemContainerGenerator` + 视觉树下钻（`WorkflowSlotLayoutBehavior` 里的 `ItemContainerGenerator`/视觉树查找）；只要 `DataContext` 就放宽到 `UIElement`（但要先想清是「自己」还是「自己或任一祖先」）。
 4. **每元素状态**放私有附着 DP `"State"`（`state` 类型是个私有类），`Detach` 里 `ClearValue(StateProperty)`。
 5. **订阅**一律在 `Attach` 开头先 `Detach` 一次，保证重挂幂等。
 6. **驱动重算**：改了模型几何要让宿主重算时，调 `WorkflowSurfaceBehavior.Refresh(host)` —— 但它被 `IsEnabled` 挡着（§二·10）。
@@ -87,8 +87,8 @@
 
 ### E. 改 TFM / 引用方式
 
-1. `VeloxDev.WPF.csproj:7` 的四元组会改 `#if` 的取值：现在没有 `netstandard2.0`，所以 `PlatformAdapters/Transition.cs:224-253` 那 4 个 `System.Numerics` 重载**恒成立**，加回 `netstandard2.0` 会让它们消失（而且 `UseWPF` 与它不相容）。
-2. `:28` / `:29` 是一对**互斥**的双轨（Debug `ProjectReference` / 非 Debug `PackageReference`），改一条要同时看另一条 —— 两者同时生效会报重复成员（理由与生成器那套同形，见 `memory/modules/VeloxDev.Core.Generator/architecture.md` §五）。
+1. `VeloxDev.WPF.csproj` 的 `TargetFrameworks` 四元组会改 `#if` 的取值：现在没有 `netstandard2.0`，所以 `PlatformAdapters/Transition.cs` 的 `#if !NETSTANDARD2_0` 那 4 个 `System.Numerics` 重载**恒成立**，加回 `netstandard2.0` 会让它们消失（而且 `UseWPF` 与它不相容）。
+2. `ProjectReference` / `PackageReference` 是一对**互斥**的双轨（Debug `ProjectReference` / 非 Debug `PackageReference`），改一条要同时看另一条 —— 两者同时生效会报重复成员（理由与生成器那套同形，见 `memory/modules/VeloxDev.Core.Generator/architecture.md` §五）。
 
 ---
 
@@ -99,11 +99,11 @@
 ### 4.1 加一个平台采样器
 
 - [ ] `Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/XxxSampler.cs`
-- [ ] `Src/Adapters/VeloxDev.WPF/PlatformAdapters/Interpolator.cs:14-27` 登记（**不登记 = 永不运行**）
-- [ ] `Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs`：`Target` 属性 + 一条 `Entry` + 放进 `All`（`:178`）—— **漏了直接红**
+- [ ] `Src/Adapters/VeloxDev.WPF/PlatformAdapters/Interpolator.cs` 静态构造函数里登记（**不登记 = 永不运行**）
+- [ ] `Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs`：`Target` 属性 + 一条 `Entry` + 放进 `All` —— **漏了直接红**
 - [ ] 与 Core / 别家撞名时，命名空间留在 `VeloxDev.Adapters.NativeSamplers`
 - [ ] `memory/modules/TransitionSystem/adapters/wpf.md`（采样器条数与清单；同时引用两家的探针工程要不要加别名）
-- [ ] 这条类型在别家也该有时：各家的 `Interpolator.cs` 各加一份 —— **条数本来就不等**（Avalonia 14 / WPF 12 / MAUI 12 / WinUI 10 / Jalium 10 / WinForms 1 / Razor 1，见 `memory/modules/TransitionSystem/adapters/wpf.md`），别按 WPF 的数去猜
+- [ ] 这条类型在别家也该有时：各家的 `Interpolator.cs` 各加一份 —— **条数本来就不等**（Avalonia 14 / WPF 12 / MAUI 12 / WinUI 10 / Jalium 9 / WinForms 1 / Razor 1，见 `memory/modules/TransitionSystem/adapters/wpf.md`），别按 WPF 的数去猜
 
 ### 4.2 加一个主题值转换器
 
@@ -129,7 +129,7 @@
 | 家 | 与 WPF 的差异 |
 |---|---|
 | WinUI | 9 个文件名逐个相同 —— 唯一可直接对照的 |
-| Avalonia | 多一个 `PlatformDetection.cs`（10 个） |
+| Avalonia | 9 个，与 WPF 同名文件一一对应（`PlatformDetection.cs` 已于 2026-10-18 删除） |
 | MAUI | **没有 `WorkflowCanvasTransformBehavior.cs`**（换成 `WorkflowLinkOverlay.cs`），其余同 WPF 的 9 个 |
 | Jalium | **9 个附着行为/池文件**（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds` + `WorkflowMinimapOverlay` / `ViewPool` / `ViewManager`）；与 WPF 的差异是**没有 `WorkflowCanvasTransformBehavior`**（变换发在 `WorkflowSurfaceBehavior.CanvasTransform` 上）、多一个 `WorkflowLinkBounds` |
 | WinForms | **基类 + 附着行为混合**：21 个文件，除 WPF 那套外还带 `WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` / `WorkflowGridDecorator` / `WorkflowLinkView` / `WorkflowTemplateSelector` / `WorkflowSurfaceColors` / `WorkflowSurfaceGraphics` / `WorkflowSurfaceGrid` / `ModelChangeRelay` / `IWorkflowSurfaceNodeView` / `IWorkflowMinimapScrollSource` / `NativeWindowStyleHelper`（多出来的，命名也对不上） |
@@ -143,8 +143,8 @@
 
 ## 五、几个「以为能改、其实不该改」的地方
 
-1. **`TransitionEffects` 的三个时长**（`PlatformAdapters/TransitionEffects.cs:6/11/16`：`Empty` 0s、`Theme` 0.46s、`Hover` 0.32s）**六家逐字相同** —— 改这里等于改所有平台的默认观感，不是 WPF 一家的事。
-2. **不要给 `UIThreadInspector.ThreadFor` 加「总是取 UI 线程」的兜底**。这家的语义是「从 target 上取它自己的 dispatcher」，这是它与 Jalium 之外六家的区别所在（`PlatformAdapters/UIThreadInspector.cs:11-25`；对照 `Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/UIThreadInspector.cs:10`）。
-3. **`WorkflowCanvasTransformBehavior.OnTransformChanged` 的空实现**（§二·6），以及 `WorkflowMinimapOverlay.RulerBand => 0`（`WorkflowMinimapOverlay.cs:132`）—— 后者是「标尺避让在模板里做」的产物，理由见 `memory/modules/WorkflowSystem/adapters/wpf.md` 坑 2。
-4. **`Interpolator.cs:12-28` 的静态构造不要动顺序、也不要删注册**：删一行不会报错，只会让某个类型的动画静默失效（§二·1）。
-5. **连线交互（右键菜单 / 悬停焦点 / Delete）不要搬回模板**：菜单资源由模板声明（`LinkMenuKey` 指过去），但订阅、定位、弹出、开合上报在表面里（`WorkflowSurfaceBehavior.cs:162-299`）；`FocusHoveredLink` 那条「不可聚焦就退回宿主」的兜底是 Delete 在生成工程里唯一的路由（`:891-905`）。
+1. **`TransitionEffects` 的三个时长**（`PlatformAdapters/TransitionEffects.cs` 的 `Empty` 0s、`Theme` 0.46s、`Hover` 0.32s）**六家逐字相同** —— 改这里等于改所有平台的默认观感，不是 WPF 一家的事。
+2. **不要给 `UIThreadInspector.ThreadFor` 加「总是取 UI 线程」的兜底**。这家的语义是「从 target 上取它自己的 dispatcher」，这是它与 Jalium 之外六家的区别所在（`PlatformAdapters/UIThreadInspector.cs` 的 `ThreadFor`；对照 `Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/UIThreadInspector.cs` 的 `ThreadFor`）。
+3. **`WorkflowCanvasTransformBehavior.OnTransformChanged` 的空实现**（§二·6），以及 `WorkflowMinimapOverlay.RulerBand => 0` —— 后者是「标尺避让在模板里做」的产物，理由见 `memory/modules/WorkflowSystem/adapters/wpf.md` 坑 2。
+4. **`Interpolator.cs` 静态构造不要动顺序、也不要删注册**：删一行不会报错，只会让某个类型的动画静默失效（§二·1）。
+5. **连线交互（右键菜单 / 悬停焦点 / Delete）不要搬回模板**：菜单资源由模板声明（`LinkMenuKey` 指过去），但订阅、定位、弹出、开合上报在表面里（`WorkflowSurfaceBehavior` 的 `WireLinkMenu`/`ShowLinkMenu`）；`FocusHoveredLink` 那条「不可聚焦就退回宿主」的兜底是 Delete 在生成工程里唯一的路由。

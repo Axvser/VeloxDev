@@ -83,8 +83,8 @@ using PlatformInput = <平台输入命名空间>;      // 平台侧 → Platform
 
 **同一个方法里两种都可能有**，逐个出现判，不要按「这个文件是 Core 侧还是平台侧」一刀切：
 
-- `ToButton(PlatformInput.MouseButton button)` 返回 `Wf.MouseButton`（WPF `WorkflowSurfaceBehavior.cs:836`）；
-- `Modifiers(KeyModifiers keys)` 返回 `Wf.InputModifiers`（Avalonia `WorkflowSurfaceBehavior.cs:301`）。
+- `ToButton(PlatformInput.MouseButton button)` 返回 `Wf.MouseButton`（WPF `WorkflowSurfaceBehavior.cs` 的 `ToButton`）；
+- `Modifiers(KeyModifiers keys)` 返回 `Wf.InputModifiers`（Avalonia `WorkflowSurfaceBehavior.cs` 的 `Modifiers`）。
 
 ⚠ 参数里的 `Key` / `Keys` / `KeyModifiers` / `VirtualKey` / `MouseButtons` **不在 15 个里**，保持裸名 —— 它们与 Core 的不同名（Core 是 `InputKey` / `InputModifiers` / `MouseButton`），不冲突。
 

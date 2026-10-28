@@ -17,41 +17,41 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| link-view | **空壳**（6 行，XAML 的全部内容是根元素上的 `Clip="{x:Null}"`），几何在代码里构造 | `workflow-link-view/TemplateClass.xaml:5`、`.xaml.cs:28-31,63-64` |
-| node-view | `Viewbox` + 固定设计尺寸卡片，三处 `Clip="{x:Null}"`，两侧 `SlotState` 都绑 | `workflow-node-view/TemplateClass.xaml:12,18,39-40,63` |
-| slot-view | `Viewbox` + 一个 `Path`，状态在 code-behind 里换算成 `Fill` | `workflow-slot-view/TemplateClass.xaml:15-18`、`.xaml.cs:33-42` |
-| tree-view | 外壳 + 两个 `DataTemplate` 资源 + 一个 `TemplateSelector` 资源 + `LinkContextMenu` | `workflow-tree-view/TemplateClass.xaml:17-40` |
-| grid-decorator | `sealed class : Grid, IWorkflowGridDecorator`，**池化** `Line`/`TextBlock`，八个静态画刷 | `workflow-grid-decorator/TemplateClass.cs:28,32-39` |
-| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个画刷（42 行） | `workflow-minimap-overlay/TemplateClass.cs:13-41` |
-| template-selector | `DataTemplateSelector` 子类，四个 `DataTemplate?` 属性 | `workflow-template-selector/TemplateClass.cs:12-20` |
+| link-view | **空壳**（6 行，XAML 的全部内容是根元素上的 `Clip="{x:Null}"`），几何在代码里构造 | `workflow-link-view/TemplateClass.xaml` 的根元素、`workflow-link-view/TemplateClass.xaml.cs` 的三个 `Path` 字段与构造器 |
+| node-view | `Viewbox` + 固定设计尺寸卡片，三处 `Clip="{x:Null}"`，两侧 `SlotState` 都绑 | `workflow-node-view/TemplateClass.xaml` 的根、设计尺寸 `Grid`、插槽宿主 `Grid` 与输出槽 `SlotView` |
+| slot-view | `Viewbox` + 一个 `Path`，状态在 code-behind 里换算成 `Fill` | `workflow-slot-view/TemplateClass.xaml` 的 `Viewbox` / `RootPath`、`workflow-slot-view/TemplateClass.xaml.cs` 的 `UpdateForeground` |
+| tree-view | 外壳 + 两个 `DataTemplate` 资源 + 一个 `TemplateSelector` 资源 + `LinkContextMenu` | `workflow-tree-view/TemplateClass.xaml` 的 `UserControl.Resources` |
+| grid-decorator | `sealed class : Grid, IWorkflowGridDecorator`，**池化** `Line`/`TextBlock`，八个静态画刷 | `workflow-grid-decorator/TemplateClass.cs` 的类声明与八个 `SolidColorBrush` 字段 |
+| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个画刷（42 行） | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
+| template-selector | `DataTemplateSelector` 子类，四个 `DataTemplate?` 属性 | `workflow-template-selector/TemplateClass.cs` 的四个 `DataTemplate?` 属性 |
 
 三个不出 XAML 的条目**仍然可以有 XAML 之外的形状差**：template-selector 是七家里唯一
 **同时覆写两个重载**的（`SelectTemplateCore(object)` 与 `SelectTemplateCore(object, DependencyObject)`，
-后者直接转发给前者，`workflow-template-selector/TemplateClass.cs:22,36-37`）。
+后者直接转发给前者，`workflow-template-selector/TemplateClass.cs` 的两个 `SelectTemplateCore`）。
 
 ---
 
 ## 二、模板里必须手写、委派不掉的接线
 
-1. **节点模板不绑 `RenderTransform`**。`workflow-tree-view/TemplateClass.xaml:18-22` 只绑
+1. **节点模板不绑 `RenderTransform`**。`workflow-tree-view/TemplateClass.xaml` 的 `NodeTemplate` 只绑
    `Width` / `Height` / `Canvas.Left` / `Canvas.Top` / `Canvas.ZIndex` 五项，**没有**第四项变换绑定 ——
    对比 WPF/Avalonia 两家都在模板根上绑了 `WorkflowCanvasTransformBehavior.Transform`。
    原因（画布平移走合成变换、不镜像到子元素）在 `memory/modules/WorkflowSystem/adapters/winui.md` §三·D1，
    本文只指路。⇒ **跨平台抄这段模板时，"少了一个绑定"是这一家的正确形态，不是漏写。**
-2. **连线模板故意不绑 `Width`/`Height`**，理由写在 `workflow-tree-view/TemplateClass.xaml:25`：
+2. **连线模板故意不绑 `Width`/`Height`**，理由写在 `workflow-tree-view/TemplateClass.xaml` 的 `LinkTemplate` 注释里：
    `Do not bind Width/Height here; LinkView sizes its own box.`
    ⇒ 与 WPF 的 `Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"` **正好相反**。
 3. **`PART_Canvas` 的几何走 `Layout.ActualSize`**，不是 `ElementName=PART_Canvas` 自引用：
-   `workflow-tree-view/TemplateClass.xaml:53-54`。而 `Background="Transparent"`（`:55`）与
-   `ViewPool` 两个属性（`:56-57`）与其他家一致。
-4. **`ScrollViewer` 要显式 `ZoomMode="Disabled"`**（`workflow-tree-view/TemplateClass.xaml:51`）——
+   `workflow-tree-view/TemplateClass.xaml` 的 `PART_Canvas`。而 `Background="Transparent"` 与
+   `ViewPool` 两个属性（`behaviors:ViewPool.ItemsSource` / `TemplateSelector`）也与其他家一致。
+4. **`ScrollViewer` 要显式 `ZoomMode="Disabled"`**（`workflow-tree-view/TemplateClass.xaml` 的 `PART_ScrollViewer`）——
    WinUI 的 `ScrollViewer` 自带缩放，不关掉会与适配器的 Ctrl+滚轮打架。
    ⚠ 这条在 WPF/Avalonia/MAUI/Razor 的 tree-view 里**没有对应物**（那几个没有这个属性），
    抄这段时容易一起漏。
 5. **标尺避让由模板自己做**：`Canvas.RenderTransform` 里的 `TranslateTransform` 绑
-   `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.xaml:59-60`）。
-6. **`Clip="{x:Null}"` 是一条链，不是一处**。link-view 的根（`workflow-link-view/TemplateClass.xaml:5`）
-   与 node-view 的三处（`:12` 根、`:18` 设计尺寸卡片、`:39` 插槽宿主 Grid）都要写。
+   `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.xaml` 的 `Canvas.RenderTransform`）。
+6. **`Clip="{x:Null}"` 是一条链，不是一处**。link-view 的根（`workflow-link-view/TemplateClass.xaml`）
+   与 node-view 的三处（`workflow-node-view/TemplateClass.xaml` 的根、设计尺寸 `Grid`、插槽宿主 `Grid`）都要写。
    理由（这一家的保留式几何会被元素盒裁掉）在 `memory/modules/WorkflowSystem/adapters/winui.md` §二·L2
    与 §三·D1，本文只指路。
 
@@ -61,20 +61,20 @@
 
 ### P1 · link-view 的 `Path` 是**代码构造的保留式几何**，不是 `OnRender`
 
-`TemplateClass.xaml.cs:12` 有一句别名注释：`using System.IO.Path` 的隐式 using 会撞名，
+`TemplateClass.xaml.cs` 文件头有一句别名注释：`using System.IO.Path` 的隐式 using 会撞名，
 所以 `using Path = Microsoft.UI.Xaml.Shapes.Path;`。几何是三个字段
-`_path` / `_pathGeometry` / `_pathFigure`（`:29`、`:31`、`:32`），在构造函数里 new 出来并 `container.Children.Add(_path)`（`:63-65`），
-DP 变更回调调 `UpdatePath()`（`:104` / `:240`），`UpdatePath` 里 `EnsureGeometry()`（`:247`）后写 `_path.Data`（`:292`）。
-`:58-62` 的注释点明了动机：**WPF 的连线是 `OnRender` 画的、永不被裁，这里用整条 `Clip = null` 链复现那个"不被裁"的效果**。
+`_path` / `_pathGeometry` / `_pathFigure`，在构造函数里 new 出来并 `container.Children.Add(_path)`，
+DP 变更回调调 `UpdatePath()`，`UpdatePath` 里 `EnsureGeometry()` 后写 `_path.Data`。
+构造函数上方的注释点明了动机：**WPF 的连线是 `OnRender` 画的、永不被裁，这里用整条 `Clip = null` 链复现那个"不被裁"的效果**。
 
 ⇒ 改这一家的连线时，**不要去找 `OnRender`**；要改的是三个字段的生命周期与 `UpdatePath` 的触发点。
 
 ### P2 · grid-decorator 是**池化 + 结构值守卫**，不是每帧重画
 
-八个静态画刷在 `workflow-grid-decorator/TemplateClass.cs:32-39` 各从一个 `TemplateXxx` 占位符解析；
-`Loaded` / `SizeChanged` 都挂 `RebuildSurface()`（`:164-165`），`LayoutUpdated` 挂 `ApplyChildLayout()`（`:166`）。
-`ApplyChildLayout` 有一个**结构值守卫**：`_lastWidth` 初值 `-1`（`:63`），宽度/高度/标尺厚度三个值
-**都**在 `0.5` 以内（`:240-242`）才早退，否则重排并把三个值写回（`:247` 起）。
+八个静态画刷在 `workflow-grid-decorator/TemplateClass.cs` 的八个 `CreateBrush` 字段里各从一个 `TemplateXxx` 占位符解析；
+`Loaded` / `SizeChanged` 都挂 `RebuildSurface()`，`LayoutUpdated` 挂 `ApplyChildLayout()`。
+`ApplyChildLayout` 有一个**结构值守卫**：`_lastWidth` 初值 `-1`，宽度/高度/标尺厚度三个值
+**都**在 `0.5` 以内才早退，否则重排并把三个值写回。
 
 ⇒ **改这里的第 2 步是"要不要多一个守卫量"**：新增一个会影响子元素布局的输入（比如新的边距常量）时，
 必须把它一起纳入那个 `0.5` 判断，否则要么每次 `LayoutUpdated` 都重排（卡），
@@ -83,13 +83,13 @@ DP 变更回调调 `UpdatePath()`（`:104` / `:240`），`UpdatePath` 里 `Ensur
 ### P3 · `slotBorderColor` 在这一家的 slot-view 里是空转参数
 
 `workflow-slot-view/.template.config/template.json` 声明了 `slotBorderColor` 但**没有 `replaces`**。
-slot-view 的 `Path` 只有一个 `Fill`（`workflow-slot-view/TemplateClass.xaml:17` 的 `RootPath`），
-`UpdateForeground()` 只写 `RootPath.Fill`（`.xaml.cs:35-41`）。⇒ 传这个参数**什么也不会发生**，
+slot-view 的 `Path` 只有一个 `Fill`（`workflow-slot-view/TemplateClass.xaml` 的 `RootPath`），
+`UpdateForeground()` 只写 `RootPath.Fill`（`workflow-slot-view/TemplateClass.xaml.cs` 的 `UpdateForeground`）。⇒ 传这个参数**什么也不会发生**，
 而且不报错。全平台共有 12 个这样的参数，见 `../architecture.md` §7.1。
 
 ### P4 · 两处 `ParseColor` 是**逐字重复**的
 
-`workflow-slot-view/TemplateClass.xaml.cs:44-59` 与 `workflow-minimap-overlay/TemplateClass.cs:26-41`
+`workflow-slot-view/TemplateClass.xaml.cs` 与 `workflow-minimap-overlay/TemplateClass.cs`
 各有一份完全相同的 `ParseColor(string hex)`（处理 8 位 `#AARRGGBB` 与 6 位 `#RRGGBB` 两种长度）。
 ⇒ 改一处的解析规则（比如支持 3 位缩写）时，另一处不会跟着变。同一份 `ParseColor` 在
 Razor 模板里有**六份**逐字重复（`../adapters/razor.md` §二·7），所以这条不是 WinUI 独有；
