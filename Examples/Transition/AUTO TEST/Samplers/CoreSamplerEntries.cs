@@ -233,7 +233,9 @@ internal static class CoreSamplerEntries
             .GetMethod("Create", BindingFlags.Public | BindingFlags.Static)
             ?? throw new MissingMethodException("StructAssembler.Create 不在了，条目需要跟着改。");
 
-        var arguments = new object?[] { property, start, start, end };
+        // StructAssembler.Create 现在收 (ISampleable, start, end)：成员列表来自装箱的起点值本身，
+        // 属性只在 InsertFrame 里用来写回。旧签名多传了一个 property，反射调用因此参数个数不匹配。
+        var arguments = new object?[] { start, start, end };
 
         return new SamplerEntry
         {
