@@ -61,16 +61,58 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
     private double CellSize { get; } = 200;
 
     private readonly bool useVirtualization = false;
-    private bool isDirty = false;
+    private int isDirty;
+    // 安装线程的同步上下文。可见集绑在 UI 上，tick 线程自己不能碰 —— 只能把这一趟送回宿主上下文执行。
+    private volatile SynchronizationContext? hostContext;
+    // 宿主显式设过（包括显式设成 null 表示「就地执行」）时，Install 不再猜。
+    private bool hostContextSet;
+    private int uiPassQueued;
+    // 每次 Install 递增；投递时把版本一并带走，卸载/换线程重装后旧上下文里的回投才会被丢掉。
+    private int installVersion;
 
     partial void Update(FrameEventArgs e)
     {
-        if (useVirtualization && isDirty)
+        if (!useVirtualization || Volatile.Read(ref isDirty) == 0) return;
+
+        var context = hostContext;
+        if (context is null || ReferenceEquals(context, SynchronizationContext.Current))
         {
-            Component?.Virtualize(Viewport);
-            isDirty = false;
-            BroadcastVisibleItemLayout();
+            RunVirtualizationPass();
+            return;
         }
+
+        // 合并背压：UI 忙时只留一趟排队，tick 不会把它堆成一条长队。
+        if (Interlocked.Exchange(ref uiPassQueued, 1) != 0) return;
+
+        try
+        {
+            var version = Volatile.Read(ref installVersion);
+            context.Post(_ => RunQueuedVirtualizationPass(version), null);
+        }
+        catch (Exception ex)
+        {
+            // 上下文关停（应用退出）时 Post 会抛。放回旗标，下一 tick 再试；这一帧不做事。
+            Interlocked.Exchange(ref uiPassQueued, 0);
+            Debug.WriteLine($"TreeHelper: failed to post the virtualization pass to the host context: {ex.Message}");
+        }
+    }
+
+    private void RunQueuedVirtualizationPass(int version)
+    {
+        // 旧安装留下的回投：它盯的那一树已经换掉了，别拿新组件在旧线程上跑。
+        if (version != Volatile.Read(ref installVersion)) return;
+
+        Interlocked.Exchange(ref uiPassQueued, 0);
+        RunVirtualizationPass();
+    }
+
+    private void RunVirtualizationPass()
+    {
+        // 先取走脏标记：这一趟执行期间的变更会重新标脏，由下一 tick 接手，不会被这里吞掉。
+        if (Interlocked.Exchange(ref isDirty, 0) == 0) return;
+
+        Component?.Virtualize(Viewport);
+        BroadcastVisibleItemLayout();
     }
 
     private void BroadcastVisibleItemLayout()
@@ -135,6 +177,12 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
 
         if (!useVirtualization) return;
 
+        // 上下文跟着这一次安装走：每次安装都重新取安装线程的上下文（宿主显式指定的除外）。
+        if (!hostContextSet) hostContext = SynchronizationContext.Current;
+        Interlocked.Increment(ref installVersion);
+        // 上一次安装可能留下没被消费的投递；新安装必须能重新排队，否则这一树永远等不到虚拟化。
+        Interlocked.Exchange(ref uiPassQueued, 0);
+
         if (Component is null || tree.EnableMap(CellSize, VisibleItems) < 0)
         {
             Debug.Fail("EnableMap did not return a non-negative value as expected. Please check the implementation of EnableMap in the IWorkflowTreeViewModel.");
@@ -157,6 +205,9 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
             Debug.WriteLine("ClearMap did not return 5 as expected. Please check the implementation of ClearMap in the IWorkflowTreeViewModel.");
         }
         VisibleItems.Clear();
+        // 自动捕获的上下文属于这一次安装；卸载后不再持有，免得移除 tickable 生效前还往旧 UI 投递。
+        if (!hostContextSet) hostContext = null;
+        Interlocked.Exchange(ref uiPassQueued, 0);
         CloseTickable();
     }
 
@@ -192,6 +243,32 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
     public virtual void Virtualize(Viewport viewport)
         => Component?.Virtualize(viewport);
 
+    /// <summary>
+    /// Binds the virtualization passes that <see cref="MarkDirty"/> schedules to <paramref name="context"/>, the
+    /// host's UI context.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A virtualizing helper rebuilds <see cref="VisibleItems"/> and re-raises node layout notifications, both of
+    /// which are normally bound to UI. Its tick runs on a timer thread, so the pass is posted to this context rather
+    /// than executed there. Every <see cref="Install"/> captures
+    /// <see cref="SynchronizationContext.Current"/> afresh when nothing was set explicitly, so a helper moved to a
+    /// different tree is rebound to that installation's thread; <see cref="Uninstall"/> drops the captured context.
+    /// </para>
+    /// <para>
+    /// Pass null for a host with no UI context (a service, a headless test): the pass then runs inline on the tick
+    /// thread, as it always did. An explicit value — null included — survives later installations.
+    /// </para>
+    /// </remarks>
+    /// <param name="context">The context the visible set may be touched on, or null to run inline.</param>
+    /// <returns>This helper, so the call can be chained onto a constructor.</returns>
+    public TreeHelper<T> WithSynchronizationContext(SynchronizationContext? context)
+    {
+        hostContextSet = true;
+        hostContext = context;
+        return this;
+    }
+
     #region Data CallBack
     private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -204,7 +281,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
                     if (item is IWorkflowNodeViewModel node)
                     {
                         OnNodeAdded(node);
-                        isDirty = true;
+                        Interlocked.Exchange(ref isDirty, 1);
                     }
                 }
                 break;
@@ -215,7 +292,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
                     if (item is IWorkflowNodeViewModel node)
                     {
                         OnNodeRemoved(node);
-                        isDirty = true;
+                        Interlocked.Exchange(ref isDirty, 1);
                     }
                 }
                 break;
@@ -238,7 +315,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
                     if (item is IWorkflowLinkViewModel link)
                     {
                         OnLinkAdded(link);
-                        isDirty = true;
+                        Interlocked.Exchange(ref isDirty, 1);
                     }
                 }
                 break;
@@ -249,7 +326,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
                     if (item is IWorkflowLinkViewModel link)
                     {
                         OnLinkRemoved(link);
-                        isDirty = true;
+                        Interlocked.Exchange(ref isDirty, 1);
                     }
                 }
                 break;
@@ -332,6 +409,6 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
         => Component?.StandardClearHistory();
 
     /// <inheritdoc />
-    public virtual void MarkDirty() => isDirty = true;
+    public virtual void MarkDirty() => Interlocked.Exchange(ref isDirty, 1);
     #endregion
 }
