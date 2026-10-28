@@ -1,5 +1,10 @@
 ﻿# Running the acceptance suite — a working guide
 
+> **2026-10-23 — 逐步退役中。** 五家（WPF / Avalonia / WinForms / Razor / Jalium）的日常回归已经迁到
+> [`Src/Verification/HeadlessAdapters/`](../../../Src/Verification/HeadlessAdapters/README.md)：那里不打开窗口，
+> 普通 CI runner 可跑。本套件继续为 **WinUI / MAUI** 提供真实窗口验收（这两家没有真正的无头宿主），
+> 并在需要时复核五家的端到端行为。默认验收路径是前者；本文件保留为真实窗口那一层的操作手册。
+
 For an agent asked to "run the AT" / "跑一次验收" / "check the transition demos". Everything here was learned by running
 it; the numbers are measured, not estimated.
 

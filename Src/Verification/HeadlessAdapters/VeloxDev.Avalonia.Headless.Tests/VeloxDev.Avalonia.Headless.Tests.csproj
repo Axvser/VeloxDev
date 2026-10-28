@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Avalonia 适配器的无头测试：Avalonia.Headless 提供真实输入与渲染树，但不需要窗口系统。
+    与 WPF 那套共享同一份 TestGraph，断言的是同一组表面契约。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);MSTEST0032;MSTEST0037;CS0067</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="11.1.0" />
+    <!-- ScrollViewer/Window 需要模板，空 Application 不会加载主题，Viewport 会一直是 0。 -->
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.0" />
+    <PackageReference Include="MSTest" Version="4.0.2" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../Core/VeloxDev.Core/VeloxDev.Core.csproj" />
+    <ProjectReference Include="../../../Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj" />
+    <ProjectReference Include="../VeloxDev.AdapterTestKit/VeloxDev.AdapterTestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>

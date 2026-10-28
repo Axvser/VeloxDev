@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    WinForms 适配器的无头测试：STA 线程上建控件、CreateControl() 但不 Show()，用代码触发平移与刷新。
+    WinForms 没有可用的无头平台包；它的「无头」= 不创建可见窗口，但仍需要桌面 SDK。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);MSTEST0032;MSTEST0037;CS0067</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../Core/VeloxDev.Core/VeloxDev.Core.csproj" />
+    <ProjectReference Include="../../../Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj" />
+    <ProjectReference Include="../VeloxDev.AdapterTestKit/VeloxDev.AdapterTestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    WPF 适配器的无头测试：只在测试线程上建可视树、排版、泵 dispatcher，不显示窗口。
+    与 AUTO TEST 的区别是它不需要交互式桌面 —— 可以在 CI 里跑。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);MSTEST0032;MSTEST0037;CS0067</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../Core/VeloxDev.Core/VeloxDev.Core.csproj" />
+    <ProjectReference Include="../../../Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" />
+    <ProjectReference Include="../VeloxDev.AdapterTestKit/VeloxDev.AdapterTestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>

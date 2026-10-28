@@ -177,4 +177,12 @@
   <Folder Name="/Verification/">
     <Project Path="Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Serialization.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/Verification/Headless/">
+    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.AdapterTestKit/VeloxDev.AdapterTestKit.csproj" />
+    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.WPF.Headless.Tests/VeloxDev.WPF.Headless.Tests.csproj" />
+    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.Avalonia.Headless.Tests/VeloxDev.Avalonia.Headless.Tests.csproj" />
+    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.WinForms.Headless.Tests/VeloxDev.WinForms.Headless.Tests.csproj" />
+    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.Razor.Headless.Tests/VeloxDev.Razor.Headless.Tests.csproj" />
+    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.Jalium.Headless.Tests/VeloxDev.Jalium.Headless.Tests.csproj" />
+  </Folder>
 </Solution>

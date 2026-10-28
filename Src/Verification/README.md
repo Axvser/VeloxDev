@@ -5,6 +5,7 @@
 | 东西 | 干什么 |
 | --- | --- |
 | `VeloxDev.Serialization.Benchmarks/` | 归档序列化引擎的基准（BenchmarkDotNet） |
+| `HeadlessAdapters/` | 适配器的无头回归（WPF/Avalonia/WinForms/Razor/Jalium）：不显示窗口，普通 CI runner 可跑 |
 | `agent-ui-harness.ps1` / `agent-web-harness.ps1` | 用真实输入驱动 demo 并截图（前者桌面、后者 CDP 驱动浏览器） |
 | `agent-ui-probe.ps1` | 包一层：构建 → 杀残留 → 跑 harness → **校验窗口标题** → 裁 HUD → 与基线差分 |
 | `verify-*-item-templates*.ps1` | 打包/编译模板项，检查镜像漂移；`verify-workflow-item-templates-all.ps1` 还统计**生成集的构建警告**（`warnings` 列），`-Strict` 时警告与漂移都会失败 |
@@ -41,6 +42,20 @@
 - ⚠ **探针也可能给出「结构 ≠ 行为」的假前提**：拿 DOM/视觉树结构推行为，两次都被实测推翻（标尺看着在滚动区之外、因 `pointer-events:none` 其实照常响应；卡片里有 `ScrollViewer`、默认数据却根本不溢出所以缺陷不可见）。**能测就别推。**
 - ⚠ **读位移要挑语义对齐的量具**：七家的滚动偏移符号**不统一**（WinForms 的 `panOffset` 就是反的），而 HUD 的 `视口(世界)`（视口原点的世界坐标）七家同一。跨家断言必须用后者。
 - ⚠ **临时插桩与临时数据，用完还原**，并在报告里写清「种了什么 / 观察到什么 / 何时还原」。
+
+---
+
+## 跑适配器无头测试
+
+```powershell
+./Src/Verification/HeadlessAdapters/run-headless-tests.ps1
+./Src/Verification/HeadlessAdapters/check-coverage.ps1
+```
+
+与上面的 UI 探针相反：这些套件**不打开窗口**，验证的是适配器把平台事件/布局翻译成模型状态的那一层。
+今天覆盖 WPF / Avalonia / WinForms / Razor / Jalium；WinUI 与 MAUI 没有真正的无头宿主，
+仍由 [`AUTO TEST`](../../Examples/Transition/AUTO%20TEST/AGENTS.md) 覆盖真实窗口那一条路。
+细节与可行性见 [`HeadlessAdapters/README.md`](HeadlessAdapters/README.md)。
 
 **还有一类「不在默认测试里跑」的验证：真模型测试。** 它们在 `VeloxDev.Core.Extension.Test` 里，由
 `VELOXDEV_LIVE` 开关控制（`Agent/LiveModelGate.cs`）—— **不设就是 `Inconclusive`**，默认套件因此确定、免费、

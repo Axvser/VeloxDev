@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Jalium 适配器的无头测试：Jalium 自己的测试套件就是无显示运行的（控件可 Measure/Arrange，
+    不需要真实窗口），这里沿用同一条路。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);MSTEST0032;MSTEST0037;CS0067</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+    <PackageReference Include="Jalium.UI.Xaml" Version="26.10.8" />
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../Core/VeloxDev.Core/VeloxDev.Core.csproj" />
+    <ProjectReference Include="../../../Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj" />
+    <ProjectReference Include="../VeloxDev.AdapterTestKit/VeloxDev.AdapterTestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>

@@ -20,6 +20,11 @@
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="4.0.2" />
+    <!-- 采样器覆盖要与五套适配器无头套件合并，所以它也得出 cobertura。 -->
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <ProjectReference Include="../../../../Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" />
     <ProjectReference Include="../../../../Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" />
     <ProjectReference Include="../../../../Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj" />

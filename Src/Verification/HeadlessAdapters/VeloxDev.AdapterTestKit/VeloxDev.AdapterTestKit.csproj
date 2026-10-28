@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    适配器无头测试的共享夹具：只依赖 VeloxDev.Core，不含任何 GUI 类型。
+    目的只有一个 —— 让七家适配器的测试对同一棵图、同一组断言说话，
+    而不是每家自己拼一棵「差不多」的树。
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../Core/VeloxDev.Core/VeloxDev.Core.csproj" />
+  </ItemGroup>
+
+</Project>
