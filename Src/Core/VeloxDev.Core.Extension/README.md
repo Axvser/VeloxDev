@@ -294,7 +294,7 @@ mcp.WithOAuthAuthorizationRedirect(async (authUri, redirectUri, ct) =>
 
 `McpScope.CreateContextProvider()` contributes the management tools — `ListMcpServers` (status), `DescribeMcpServer` (export tool-capability prompts), `LoadMcpServers` (install & connect), `UnloadMcpServer` (tear down mid-session) — plus the tools of every connected server. Do not also register them with `WithTools`: the framework unions tool lists without deduplicating, so they would reach the model twice.
 
-By default (`McpSelfServiceLevel.Closed`) the model can only load, unload and inspect servers the host pre-registered, and cannot author a configuration. `WithSelfService(level)` opens that in rungs — see `McpSelfServiceLevel`; at each rung the prompt text describing what the model may do is generated to match, and `AddMcpServer` is registered only once the gate is open.
+Adding or reconfiguring a server is always offered as a tool; whether a call runs is decided at call time by the session's permission mode and the host's rules. Those actions are `Curate`, so `Auto` and `AutoEdit` ask about them (`Manual` asks about every non-read call) and an unanswerable prompt denies; a refusal names the mode or rule that blocked it. A granted view registers only the two read tools, because loading installs software and unloading tears down a connection the parent may still be using.
 
 `WithServers(...)` pre-registers the configurations the Agent may load by name; `LoadAsync` and `AddAsync` also record whatever they are given, so a host that only loads directly still ends up with a reloadable set.
 

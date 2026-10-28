@@ -13,9 +13,9 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// Covers the human gate on mutating tool calls: <see cref="WorkflowAgentScope.WithToolApproval"/> must put a
-/// non-query call to the host's confirmation handler, must let a query through untouched, and must deny when
-/// there is nobody to ask.
+/// Covers the human gate on mutating tool calls: with the session in <see cref="AgentPermissionMode.Manual"/>,
+/// a non-query call must go to the host's confirmation handler, a query must pass untouched, and with no
+/// handler the call must be denied.
 /// </summary>
 [TestClass]
 public class ToolApprovalTests

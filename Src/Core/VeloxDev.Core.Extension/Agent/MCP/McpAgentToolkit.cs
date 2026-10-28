@@ -80,24 +80,23 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     public const string DescribeName = "DescribeMcpServer";
 
     /// <summary>
-    /// Name of the tool that lets the model add a server of its own. Registered only when the scope's
-    /// <see cref="McpScope.SelfServiceLevel"/> has been opened past
-    /// <see cref="McpSelfServiceLevel.Closed"/>.
+    /// Name of the tool that lets the model add a server of its own. Always registered; whether a call runs
+    /// is decided by the session's permission mode and the host's rules.
     /// </summary>
     public const string AddToolName = "AddMcpServer";
 
     /// <summary>
     /// Name of the tool that points an already-known server at new launch arguments — a filesystem server's
-    /// allowed directory, say. Registered under the same gate as <see cref="AddToolName"/>, and for the same
-    /// reason: it restarts the server, which for a local mode means launching software on the user's machine.
+    /// allowed directory, say. Registered like <see cref="AddToolName"/>; the same permission check applies
+    /// at call time, because it restarts the server, which for a local mode means launching software on the
+    /// user's machine.
     /// </summary>
     public const string SetArgumentsName = "SetMcpServerArguments";
 
     /// <summary>
-    /// Creates the MCP management tools: query / load / unload / describe capabilities. Adding a server
-    /// the host did not pre-register is a separate opt-in — see
-    /// <see cref="McpScope.WithSelfService"/> — and its tool is registered only once the host has opened
-    /// that gate.
+    /// Creates the MCP management tools: query / load / unload / describe capabilities. Adding or
+    /// reconfiguring a server is always offered; whether such a call runs is decided at call time by the
+    /// session's permission mode and the host's rules.
     /// <para>
     /// A granted view registers the two reading tools only. It is the MCP surface handed to a spawned
     /// child, and a child runs while its parent's turn is suspended: loading installs and launches
@@ -147,11 +146,9 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// <summary>
     /// The prompt text describing these tools.
     /// <para>
-    /// Generated rather than fixed, because what the model may do with MCP depends on the host's
-    /// <see cref="McpScope.SelfServiceLevel"/>: a paragraph promising that servers cannot be added would
-    /// be a lie at every level above <see cref="McpSelfServiceLevel.Closed"/>, and one inviting the model
-    /// to add them would be a lie at it. A granted view forks off the same way — it is told to use the
-    /// servers it has rather than named tools it does not hold.
+    /// Generated rather than fixed, because a granted view sees a different surface: it is told to use the
+    /// servers it has rather than named tools it does not hold. The text does not track a permission level
+    /// — a refusal names the mode or rule at call time — so it stays true while the session's mode changes.
     /// </para>
     /// </summary>
     public string BuildPromptContext()
@@ -179,14 +176,14 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     }
 
     /// <summary>
-    /// Adds a server the host did not pre-register and connects it. Available only when the host raised
-    /// <see cref="McpScope.SelfServiceLevel"/>; local run modes (which install and launch a package)
-    /// require the higher rungs, and the rungs below <see cref="McpSelfServiceLevel.Unrestricted"/>
-    /// require the user's agreement.
+    /// Adds a server the host did not pre-register and connects it. Whether the call runs is decided by the
+    /// session's permission mode and the host's rules; a refusal names which of them blocked it. Local run
+    /// modes install and launch software on the user's machine, so they are the ones a host most often
+    /// restricts.
     /// </summary>
     // 静态说明配动态档位：这里**只列有哪些模式**，不承诺这一档允许哪些 —— 那是提示词的活，
     // 而提示词按档位逐轮重渲染。写死了就会在某几档上撒谎。
-    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. The host must have enabled this, and which run modes the CURRENT level allows is stated in your prompt — a mode it does not allow is refused outright. Run modes: 'Http' for a remote server (give endpoint), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server launched locally (give package), which installs and starts software on the user's machine. Ask the user first when the server is one they did not mention. Reusing the name of a server that is already connected RECONFIGURES it: its tools keep their names, and a configuration that cannot be reached leaves the existing connection serving. To change only a local server's launch arguments, prefer SetMcpServerArguments.")]
+    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. Whether this is allowed is decided by the session's permission mode and the host's rules; a refusal says which mode or rule blocked it. Run modes: 'Http' for a remote server (give endpoint), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server launched locally (give package), which installs and starts software on the user's machine. Ask the user first when the server is one they did not mention. Reusing the name of a server that is already connected RECONFIGURES it: its tools keep their names, and a configuration that cannot be reached leaves the existing connection serving. To change only a local server's launch arguments, prefer SetMcpServerArguments.")]
     private async Task<string> AddServer(
         [Description("Server name. Reusing the name of a connected server reconfigures it rather than adding a second one.")] string name,
         [Description("Run mode: 'Http' for remote, or 'Npx','Npm','Pip','Uvx','Dotnet','Exe' for local.")] string runMode,

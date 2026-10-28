@@ -306,9 +306,9 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         // subsystem and is done. Registering them here as well would duplicate every one of them — the
         // framework unions tool lists without deduplicating by name.
         //
-        // This demo stays at McpSelfServiceLevel.Closed, so the Agent may load/unload/inspect the servers
-        // below but never author one. Raising the level via Mcp.WithSelfService(...) adds AddMcpServer and
-        // changes what the prompt says the model may do; see McpSelfServiceLevel.
+        // The MCP management tools are always registered. Adding or reconfiguring a server is a Curate
+        // action, and this demo runs at AutoEdit — which asks about Curate — so the call reaches the host's
+        // confirmation handler instead of being blocked by an absent tool.
 
         // Attach the conversation before the agent exists: the scope composes its stage chain from this, and
         // the agent below is wrapped with that chain — so every turn's answer, reasoning and tool calls land

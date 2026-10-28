@@ -267,7 +267,7 @@ public sealed class WorkflowAgentToolkit
     /// <para>
     /// Lives on this shared policy rather than in each slice, so a single switch reaches the workflow
     /// built-ins, the host's own tools and every MCP server's tools alike, exactly as
-    /// <see cref="CheckBudget"/> does. A denial is reported as <see cref="AgentToolOutcome.Refused"/> and
+    /// <see cref="CheckInvocation"/> does. A denial is reported as <see cref="AgentToolOutcome.Refused"/> and
     /// never reaches the body.
     /// </para>
     /// <para>

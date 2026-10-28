@@ -803,37 +803,6 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     }
 
     /// <summary>
-    /// Requires a human to approve every tool call that is not a read-only query, before it runs. Off by
-    /// default.
-    /// </summary>
-    /// <param name="enabled">
-    /// <c>true</c> to put each such call to <see cref="WithConfirmationHandler"/>; <c>false</c> to remove the
-    /// step again. Takes effect on the next call, including mid-session.
-    /// </param>
-    /// <remarks>
-    /// <para>
-    /// <b>This is a code gate, not a prompt one.</b> The refusal happens inside the tool wrapper, so a model
-    /// that is misaligned, confused or steered by injected content cannot skip it by declining to ask — which
-    /// is exactly the hole <c>RequestConfirmation</c> leaves, since that is a tool the model has to remember
-    /// to call. It complements <see cref="WithInteractionSafety"/> rather than replacing it: that one shapes
-    /// what the model is <i>told</i> to ask about, this one decides what it may do.
-    /// </para>
-    /// <para>
-    /// The host keeps the decision. <see cref="WithConfirmationHandler"/> sees a key and a description per
-    /// call and answers allow-once, allow-for-the-session or deny; a host that never registers one denies
-    /// every such call, because an unanswerable prompt denies.
-    /// </para>
-    /// <para>
-    /// What counts as a query is the same classification the budgets use (the toolkit's read-only set,
-    /// which already folds in the skill and sub-agent tool names). It is a judgement about the
-    /// <i>workflow</i>: a tool that does not change the graph passes. Tools contributed by an MCP server are
-    /// third-party code and are treated as mutations, so they are gated as well.
-    /// </para>
-    /// <para>
-    /// No version bump: nothing this contributes reaches the prompt, so no per-turn render depends on it.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Whether a call of this category is put to the user before it runs, under the current mode.
     /// </summary>
     /// <param name="category">What the tool does.</param>
@@ -1901,7 +1870,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     //
     // 骨架（ProvideProgressiveContextPrompt）是「调用那一刻的快照」，宿主把它冻进 ChatOptions.Instructions
     // 之后就不再变。而本 scope 的 Version 会在二十多处配置变更时自增，那些变更全都只喂给那个冻住的字符串。
-    // 于是模型会拿着过期的自我描述工作：宿主在 agent 造好之后调 WithInteractionSafety(1)，模型仍按旧挡位行事。
+    // 于是模型会拿着过期的自我描述工作：宿主在 agent 造好之后调 SetPermissionMode(...)，模型仍按旧挡位行事。
     //
     // 这一块补的就是那个差。它只讲「现在能做什么」，不讲框架是什么（骨架的事）、也不讲图长什么样
     // （ListNodes 渐进披露的事）。它必须由一个专用廉价渲染器产出 —— 骨架一次分配 870 KB，是框架每轮

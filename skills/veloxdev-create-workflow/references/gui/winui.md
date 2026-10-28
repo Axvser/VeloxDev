@@ -16,7 +16,7 @@ xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 
 ⚙ **WinUI has no `clr-namespace:…;assembly=` form.** Copying the WPF spelling into a WinUI file leaves the attached properties unresolved — the `using:` form above is this dialect's equivalent, and it takes no `;assembly=` suffix.
 
-⚙ **Attach the zoom handler to the ScrollViewer, not the Canvas**, and expect one native scroll before it can be marked handled: WinUI has no preview/tunnel phase and marks the wheel event handled itself, so the adapter registers with `handledEventsToo: true`. Attaching to the `Canvas` only covers the hit-testable area.
+⚙ **Attach the wheel handler to the Canvas with `handledEventsToo: true`.** WinUI has no preview/tunnel phase, so by the time the event reaches the canvas the inner `ScrollViewer` has already run; the handler asks whether that scroll consumed the gesture (it has no room left in that direction) rather than trying to pre-empt it.
 
 ⚙ **A plain wheel is routed and then applied by the adapter.** It marks the event handled, routes `PointerWheelChanged`, and scrolls through its registered `IWorkflowSurfaceScroller` (`WorkflowInput.Scroller`) only when the route did not set `PreventDefault`. Ctrl+wheel remains the zoom gesture.
 
