@@ -237,6 +237,17 @@ public sealed class WorkflowInput
     /// </remarks>
     public IWorkflowSurfaceScroller? Scroller { get; set; }
 
+    /// <summary>
+    /// How a host centers this surface on a world point, or <see langword="null"/> until an adapter registers one.
+    /// </summary>
+    /// <remarks>
+    /// The absolute companion of <see cref="Scroller"/>: that one turns a wheel delta into a scroll, this one
+    /// places a target point at the viewport center. Like the scroller it is written by an adapter while attached
+    /// and cleared when it detaches, so a host reads it as an optional capability.
+    /// <see cref="StandardEx.WorkflowNavigationEx"/> uses it to locate nodes, slots and links.
+    /// </remarks>
+    public IWorkflowSurfaceNavigator? Navigator { get; set; }
+
     /// <summary>Routes a pointer event to the target and its ancestors, then applies the framework's own reaction.</summary>
     /// <param name="e">The event to route.</param>
     /// <exception cref="ArgumentNullException"><paramref name="e"/> is <see langword="null"/>.</exception>

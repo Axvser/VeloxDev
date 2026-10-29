@@ -318,6 +318,26 @@ public static class WorkflowSurfaceMath
         => (worldX - viewportWidth / 2 + contentOffsetX, worldY - viewportHeight / 2 + contentOffsetY);
 
     /// <summary>
+    /// The scroll offset that centers the world point (<paramref name="worldX"/>, <paramref name="worldY"/>) in a
+    /// viewport: <c>scroll = world − viewportSize/2 + ActualOffset</c>.
+    /// </summary>
+    /// <remarks>
+    /// The five callers (WPF / Avalonia / WinUI / MAUI / Razor) resolve the result against their own scrollable
+    /// range by passing it through <see cref="ClampScrollOffset"/> with <c>extendRatio: 0</c> (growing
+    /// <see cref="CanvasLayout.NegativeOffset"/> / <see cref="CanvasLayout.PositiveOffset"/> by the exact excess)
+    /// and then re-reading the range; a surface that cannot grow clamps with <see cref="ClampValue"/>, so the
+    /// point lands as close to the center as it allows. Jalium computes its own target in
+    /// <c>WorkflowSurfaceBehavior.NavigateToWorld</c> (and grows there too); WinForms' pan engine accepts signed
+    /// targets and needs no ceiling. This is the absolute counterpart of the wheel scroll:
+    /// <see cref="CanvasLayout.ViewportOffset"/> holds <c>scroll − ActualOffset</c>, so the inverse is exactly the
+    /// offset added here.
+    /// </remarks>
+    public static (double ScrollX, double ScrollY) CenterScroll(
+        double worldX, double worldY, double viewportWidth, double viewportHeight, CanvasLayout layout)
+        => (worldX - viewportWidth / 2 + layout.ActualOffset.Horizontal,
+            worldY - viewportHeight / 2 + layout.ActualOffset.Vertical);
+
+    /// <summary>
     /// Scroll-space coordinates of the center of the currently visible viewport:
     /// <c>center = scrollOffset + viewportSize/2</c>. This is the point whose world position a
     /// viewport-center zoom keeps fixed (<see cref="LayoutPivot"/>). Clamped to the scrollable
