@@ -57,6 +57,17 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public bool HasPendingRestore { get; set; }
         public double PendingRestoreX { get; set; }
         public double PendingRestoreY { get; set; }
+
+        // 已经请求、但 ChangeView 还没落地的滚动目标（NaN = 该轴没有在途请求）。WinUI 的 ChangeView 是异步的，
+        // 而负向扩画布会同时把 ActualOffset 写进 Canvas.Translation（合成变换当帧生效）；两边不同步就会出现
+        // 「内容先被平移、再被滚动拉回」的闪动。挂起期间 Translate = ActualOffset − (目标 − 实际滚动)，
+        // 内容当帧就落在目标位置；ViewChanged 落地后清掉目标，Translate 回到 ActualOffset，画面不二次跳。
+        public double PendingScrollX { get; set; } = double.NaN;
+        public double PendingScrollY { get; set; } = double.NaN;
+
+        // 在途目标的最长寿命：ChangeView 落地会立即清；若它被夹取/忽略、或用户在途中自己拖了滚动条，
+        // 这个 150ms 的定时器兜底清掉补偿，避免画面永远挂在到不了的目标上。每次请求都重新计时。
+        public Microsoft.UI.Dispatching.DispatcherQueueTimer? PendingScrollTimer { get; set; }
     }
 
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
@@ -226,8 +237,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         // 画布滚动归适配器（见 OnSurfaceWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
-        state.Scroller = new SurfaceScroller(state);
-        input.Scroller = state.Scroller;
+        var scroller = new SurfaceScroller(state);
+        state.Scroller = scroller;
+        input.Scroller = scroller;
+        input.Navigator = scroller;
 
         state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
         state.MenuLinkRemoved = (_, link) =>
@@ -272,6 +285,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
         {
             released.Scroller = null;
+            released.Navigator = null;
         }
 
         state.Scroller = null;
@@ -357,11 +371,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         state.HasPendingRestore = false;
 
-        viewer.ChangeView(
+        RequestScroll(
+            state,
             WorkflowSurfaceMath.ClampValue(state.PendingRestoreX, 0, GetHorizontalScrollMaximum(viewer)),
-            WorkflowSurfaceMath.ClampValue(state.PendingRestoreY, 0, GetVerticalScrollMaximum(viewer)),
-            null,
-            disableAnimation: true);
+            WorkflowSurfaceMath.ClampValue(state.PendingRestoreY, 0, GetVerticalScrollMaximum(viewer)));
         return true;
     }
 
@@ -388,8 +401,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var state = new SurfaceState();
         control.SetValue(StateProperty, state);
 
-        // 这一家没有可设的 `Focusable`（WinUI 是 `IsTabStop` + `Focus(FocusState)`）：宿主本来就能拿焦点，
-        // 悬停时 `Focus(FocusState.Pointer)` 收得回来，Delete 的按键事件因此经过它。
+        // 这一家没有可设的 `Focusable`（WinUI 是 `IsTabStop` + `Focus(FocusState)`）。焦点要落在**滚动容器**上，
+        // 不是宿主：宿主里第一个可聚焦的后代常常是节点卡里的 TextBox，`host.Focus()` 会把焦点交给它，
+        // 而滚动容器随后会把它 BringIntoView —— 平移或 Locate 之后点一下画布，视口就被拽回那个输入框。
+        // 滚动容器本身在视口里、不会因此滚动，键仍从它冒泡到宿主的 KeyDown。悬停到连线时收焦点同理。
 
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
@@ -424,6 +439,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
+            state.PendingScrollTimer?.Stop();
+            state.PendingScrollTimer = null;
             UnsubscribeResolvedControls(state);
             UnwireLinkMenu(state);
         }
@@ -451,6 +468,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     {
         if (sender is UserControl control)
         {
+            // 换了树：上一棵树排的滚动目标不再有意义，别让补偿带到新树上。
+            if (control.GetValue(StateProperty) is SurfaceState state)
+            {
+                state.PendingScrollX = double.NaN;
+                state.PendingScrollY = double.NaN;
+                state.PendingScrollTimer?.Stop();
+            }
+
             Refresh(control);
         }
     }
@@ -462,7 +487,22 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var scrollViewerName = GetScrollViewerName(control);
         if (!string.IsNullOrWhiteSpace(scrollViewerName))
         {
-            state.ScrollViewer = control.FindName(scrollViewerName) as ScrollViewer;
+            var resolvedViewer = control.FindName(scrollViewerName) as ScrollViewer;
+            if (!ReferenceEquals(resolvedViewer, state.ScrollViewer))
+            {
+                // 换了滚动容器：旧容器上的在途目标不能带过来。
+                state.PendingScrollX = double.NaN;
+                state.PendingScrollY = double.NaN;
+                state.PendingScrollTimer?.Stop();
+                state.PendingScrollTimer = null;
+            }
+
+            state.ScrollViewer = resolvedViewer;
+
+            // 焦点要能落在滚动容器本身上（见 Attach 的注释）。模板里的 ScrollViewer 默认不可 Tab 停留，
+            // 不置这一位的话 `Focus()` 会失败，平台转而把焦点交给画布里第一个可聚焦的后代（节点卡的 TextBox），
+            // 随后 BringIntoView 就把视口拽回那个输入框。
+            if (state.ScrollViewer is { } viewer) viewer.IsTabStop = true;
         }
 
         var canvasName = GetCanvasName(control);
@@ -690,7 +730,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             && state.ScrollViewer is { } sv)
         {
             var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
-                sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
+                EffectiveScrollX(state), EffectiveScrollY(state), sv.ViewportWidth, sv.ViewportHeight, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
             // 深度放大把负向内容折叠越过固定画布平移（ActualOffset == NegativeOffset）；必须在 ApplyLayout 采纳新偏移前扩大覆盖。
@@ -722,7 +762,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
             var committedX = WorkflowSurfaceMath.ClampValue(tx, 0, maxH);
             var committedY = WorkflowSurfaceMath.ClampValue(ty, 0, maxV);
-            sv.ChangeView(committedX, committedY, null, disableAnimation: true);
+            RequestScroll(state, committedX, committedY);
 
             // 在提交的滚动目标处同步重新虚拟化（与 Jalium TreeView.NotifyZoomCommitted 一致）。否则 helper 在约 10fps 的脏 tick / 低优先级视口队列上重新虚拟化，
             // 缩放连发期间池化的节点/连线视图比刚折叠的锚点慢约 100ms —— 那个窗口里连线消失/弹出。用提交的偏移，而不是 sv.HorizontalOffset（ChangeView 可能还没应用）。
@@ -747,7 +787,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             if (host.GetValue(StateProperty) is SurfaceState elseState
                 && elseState.ScrollViewer is { } elseViewer)
             {
-                VirtualizeAtScroll(viewModel, elseViewer.HorizontalOffset, elseViewer.VerticalOffset,
+                VirtualizeAtScroll(viewModel, EffectiveScrollX(elseState), EffectiveScrollY(elseState),
                     elseViewer.ViewportWidth, elseViewer.ViewportHeight);
             }
         }
@@ -756,7 +796,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
     // 与 ScrollViewer 自己那一手一致，否则接管之后手感会变。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
     {
         // 一格滚轮是 WHEEL_DELTA（120）；这家 ScrollViewer 自己一格滚 74（实测：一格 74、四格 296）——
         // 复刻它，接管之后手感才不变（与 WPF 那边 48、Avalonia 那边 50 是同一件事）。
@@ -779,8 +819,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             var dy = -(wheelDeltaY / Notch) * PixelsPerNotch;
 
             // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。
-            var desiredX = dx != 0d ? viewer.HorizontalOffset + dx : viewer.HorizontalOffset;
-            var desiredY = dy != 0d ? viewer.VerticalOffset + dy : viewer.VerticalOffset;
+            // 起点取逻辑位置：上一笔 ChangeView 可能还在途，此时实际偏移是旧的。
+            var desiredX = dx != 0d ? EffectiveScrollX(state) + dx : EffectiveScrollX(state);
+            var desiredY = dy != 0d ? EffectiveScrollY(state) + dy : EffectiveScrollY(state);
 
             var maxH = GetHorizontalScrollMaximum(viewer);
             var maxV = GetVerticalScrollMaximum(viewer);
@@ -789,11 +830,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             if (host is null || state.Input is not { } input)
             {
                 // 拿不到布局时退回旧的「到边即停」，至少不越界。
-                viewer.ChangeView(
+                RequestScroll(
+                    state,
                     dx != 0d ? WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH) : null,
-                    dy != 0d ? WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV) : null,
-                    null,
-                    disableAnimation: true);
+                    dy != 0d ? WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV) : null);
                 return;
             }
 
@@ -823,16 +863,49 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             }
 
             // 只写增量非零的那一轴：另一轴传 null，免得把它夹回范围里（零增量不许动那一轴）。
-            var committedX = dx != 0d ? WorkflowSurfaceMath.ClampValue(newX, 0d, maxH) : viewer.HorizontalOffset;
-            var committedY = dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, maxV) : viewer.VerticalOffset;
-            viewer.ChangeView(
+            var committedX = dx != 0d ? WorkflowSurfaceMath.ClampValue(newX, 0d, maxH) : EffectiveScrollX(state);
+            var committedY = dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, maxV) : EffectiveScrollY(state);
+            RequestScroll(
+                state,
                 dx != 0d ? committedX : null,
-                dy != 0d ? committedY : null,
-                null,
-                disableAnimation: true);
+                dy != 0d ? committedY : null);
 
             // 用提交的偏移同步重新虚拟化：ChangeView 是异步的，此刻读到的还是旧偏移。
             VirtualizeAtScroll(input.Tree, committedX, committedY, viewer.ViewportWidth, viewer.ViewportHeight);
+        }
+
+        public void CenterOn(double worldX, double worldY)
+        {
+            if (state.ScrollViewer is not { } viewer) return;
+            if (state.Host is not { } host || host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+
+            var layout = viewModel.Layout;
+            var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
+                worldX, worldY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+            var maxH = GetHorizontalScrollMaximum(viewer);
+            var maxV = GetVerticalScrollMaximum(viewer);
+
+            // 画布不够大时和滚轮/平移一样按差额长出去，而不是把目标夹到边上。
+            var clampedX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, layout, horizontal: true);
+            var clampedY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, layout, horizontal: false);
+            if (clampedX != desiredX || clampedY != desiredY)
+            {
+                // 负向增长会改动 ActualOffset，正向增长会改动 ActualSize；先让布局认下新范围，再按新偏移重算目标。
+                ApplyLayout(host, state);
+                state.Canvas?.UpdateLayout();
+                viewer.UpdateLayout();
+                host.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(viewer);
+                maxV = GetVerticalScrollMaximum(viewer);
+                (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
+                    worldX, worldY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+            }
+
+            var committedX = WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH);
+            var committedY = WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV);
+
+            RequestScroll(state, committedX, committedY);
+            VirtualizeAtScroll(viewModel, committedX, committedY, viewer.ViewportWidth, viewer.ViewportHeight);
         }
     }
 
@@ -883,7 +956,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var point = e.GetCurrentPoint(host);
         state.IsPanning = true;
         state.PanStart = point.Position;
-        state.PanStartOffset = new Windows.Foundation.Point(state.ScrollViewer.HorizontalOffset, state.ScrollViewer.VerticalOffset);
+        // 起点取逻辑位置：上一笔 Locate/滚轮的 ChangeView 可能还没落地。
+        state.PanStartOffset = new Windows.Foundation.Point(EffectiveScrollX(state), EffectiveScrollY(state));
         source.CapturePointer(e.Pointer);
         e.Handled = true;
     }
@@ -954,8 +1028,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         return WorkflowSurfaceMath.ToWorldAnchor(
-            state.ScrollViewer!.HorizontalOffset + point.X - canvasTranslateX,
-            state.ScrollViewer!.VerticalOffset + point.Y - canvasTranslateY,
+            EffectiveScrollX(state) + point.X - canvasTranslateX,
+            EffectiveScrollY(state) + point.Y - canvasTranslateY,
             0,
             layout);
     }
@@ -988,12 +1062,21 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        // 宿主常把侧栏与画布装在同一个 UserControl 里（完整 Demo 的元素列表就是）：这一处挂在整个宿主上，
+        // 只该处理**画布自己那块区域**里的按下。否则侧栏按钮一按就被收走焦点，慢速点击时按钮的 Click
+        // 不再落地 —— 表现为「点 Locate 只让输入栏获得焦点，什么都不发生」。滚轮那处用的是同一道门。
+        if (state.ScrollViewer is not { } surfaceViewer
+            || !IsWithinScrollViewer(e.OriginalSource as DependencyObject, surfaceViewer))
+        {
+            return;
+        }
+
         // 键要有人接：**任何一次**按下都先把焦点收到表面 —— 空白画布、节点、插槽、连线都算，Ctrl+Z 才有路由。
         // 先前只在**悬停到连线**时收焦点，点一下空白画布是收不到的，键于是静默不来。卡片里的可编辑控件除外：
         // 在那里按 Ctrl+Z 撤的该是文字。本处理器挂 handledEventsToo，冒泡链上每一下都经过它，所以这一处就够。
         if (!IsInsideEditable(e.OriginalSource as DependencyObject))
         {
-            host.Focus(FocusState.Pointer);
+            surfaceViewer.Focus(FocusState.Pointer);
         }
 
         // 这一笔已经有人路由过（节点卡片/插槽自己，或表面在平移那一处）：不再路由第二遍，只把标记
@@ -1085,10 +1168,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var handle = new WorkflowEventHandle();
         input.Route(args(anchor, target, handle));
 
-        // 悬停到连线上就把焦点收到宿主：Delete 要的按键事件经过它，而「悬停（不点）就能删」是契约。
+        // 悬停到连线上就把焦点收到表面：Delete 要的按键事件经过它，而「悬停（不点）就能删」是契约。
+        // 焦点放在滚动容器上，不放在宿主（理由见 Attach 上方的注释）。
         if (input.HoveredLink is not null)
         {
-            host.Focus(FocusState.Pointer);
+            state.ScrollViewer?.Focus(FocusState.Pointer);
         }
 
         return handle;
@@ -1271,6 +1355,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var host = EnumerateVisualAncestors(viewer).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
         if (host is not null)
         {
+            // 滚动落地后才清目标；Refresh 里的 ApplyLayout 于是回到 ActualOffset，与已落地的滚动对齐。
+            if (host.GetValue(StateProperty) is SurfaceState state)
+            {
+                TryClearPendingScroll(state);
+            }
+
             Refresh(host);
         }
     }
@@ -1304,6 +1394,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (layoutChanged)
         {
             ApplyLayout(host, state);
+            // 画布的长大要先落进布局，ScrollViewer 的 Extent 才会跟着变 —— 否则这里读到的仍是旧范围，
+            // 下面那次 ChangeView 会按旧 max 落短，拖到边缘再松手时画面就被扯回旧边界。
+            state.Canvas?.UpdateLayout();
+            state.ScrollViewer.UpdateLayout();
+            host.UpdateLayout();
             maxH = GetHorizontalScrollMaximum(state.ScrollViewer);
             maxV = GetVerticalScrollMaximum(state.ScrollViewer);
             newOffsetX = Math.Min(newOffsetX, maxH);
@@ -1317,11 +1412,127 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var appliedOffsetX = WorkflowSurfaceMath.ClampValue(newOffsetX, 0, maxH);
         var appliedOffsetY = WorkflowSurfaceMath.ClampValue(newOffsetY, 0, maxV);
 
-        state.ScrollViewer.ChangeView(appliedOffsetX, appliedOffsetY, null, true);
+        RequestScroll(state, appliedOffsetX, appliedOffsetY);
         state.PanStart = current;
         state.PanStartOffset = new Windows.Foundation.Point(appliedOffsetX, appliedOffsetY);
         UpdateVisibleRegion(host, state);
         e.Handled = true;
+    }
+
+    // 当前逻辑上的滚动位置：有在途请求时取目标，否则取 ScrollViewer 实际值。
+    // 所有「读当前位置」的地方都经它，避免在 ChangeView 落地前读到旧值（平移起点、指针换算、可见区、装饰器）。
+    private static double EffectiveScrollX(SurfaceState state)
+        => state.ScrollViewer is { } viewer
+            ? (double.IsNaN(state.PendingScrollX) ? viewer.HorizontalOffset : state.PendingScrollX)
+            : 0d;
+
+    private static double EffectiveScrollY(SurfaceState state)
+        => state.ScrollViewer is { } viewer
+            ? (double.IsNaN(state.PendingScrollY) ? viewer.VerticalOffset : state.PendingScrollY)
+            : 0d;
+
+    // ChangeView 落地后清掉目标；两轴独立，按 0.5 的容差判断。
+    private static void TryClearPendingScroll(SurfaceState state)
+    {
+        if (state.ScrollViewer is not { } viewer)
+        {
+            state.PendingScrollX = double.NaN;
+            state.PendingScrollY = double.NaN;
+            return;
+        }
+
+        var maxH = GetHorizontalScrollMaximum(viewer);
+        var maxV = GetVerticalScrollMaximum(viewer);
+
+        // 到达目标，或目标已经落在当前可滚范围外（ScrollViewer 会夹取，永远到不了）——两种情况都要清掉，
+        // 否则补偿会一直挂在一个到不了的位置上，画面与实际滚动永久错开。
+        if (!double.IsNaN(state.PendingScrollX)
+            && (Math.Abs(viewer.HorizontalOffset - state.PendingScrollX) <= 0.5
+                || state.PendingScrollX < -0.5
+                || state.PendingScrollX > maxH + 0.5))
+        {
+            state.PendingScrollX = double.NaN;
+        }
+
+        if (!double.IsNaN(state.PendingScrollY)
+            && (Math.Abs(viewer.VerticalOffset - state.PendingScrollY) <= 0.5
+                || state.PendingScrollY < -0.5
+                || state.PendingScrollY > maxV + 0.5))
+        {
+            state.PendingScrollY = double.NaN;
+        }
+
+        if (double.IsNaN(state.PendingScrollX) && double.IsNaN(state.PendingScrollY))
+        {
+            state.PendingScrollTimer?.Stop();
+        }
+    }
+
+    // 所有滚动写入的唯一入口。先记目标、让 ApplyLayout 把内容按「目标位置」摆好，再交 ChangeView；
+    // 这样 ChangeView 异步落地的那一两帧里画面已经停在目标处，落地只是把补偿收回，不会再跳一次。
+    // 别的控件（小地图）也要走同一个写入口：否则它的 ChangeView 会绕过在途补偿，留在途目标把画面钉在旧位置。
+    internal static bool TryRequestScroll(DependencyObject source, double x, double y)
+    {
+        var host = EnumerateVisualAncestors(source).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        if (host?.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return false;
+        }
+
+        RequestScroll(state, x, y);
+        return true;
+    }
+
+    // 在途目标的兜底寿命：ChangeView 正常落地时由 TryClearPendingScroll 立即清；这里只处理
+    // 「被夹取/被忽略/用户途中拖动滚动条」这几种不会自己到达目标的情况。
+    private static void ArmPendingScrollTimer(SurfaceState state)
+    {
+        if (state.ScrollViewer is not { } viewer)
+        {
+            return;
+        }
+
+        if (state.PendingScrollTimer is null)
+        {
+            var timer = viewer.DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(150);
+            timer.IsRepeating = false;
+            timer.Tick += (_, _) =>
+            {
+                if (state.Host is not { } host
+                    || (double.IsNaN(state.PendingScrollX) && double.IsNaN(state.PendingScrollY)))
+                {
+                    return;
+                }
+
+                state.PendingScrollX = double.NaN;
+                state.PendingScrollY = double.NaN;
+                Refresh(host);
+            };
+            state.PendingScrollTimer = timer;
+        }
+
+        state.PendingScrollTimer.Stop();
+        state.PendingScrollTimer.Start();
+    }
+
+    private static void RequestScroll(SurfaceState state, double? x, double? y)
+    {
+        if (state.ScrollViewer is not { } viewer)
+        {
+            return;
+        }
+
+        if (x is { } targetX) state.PendingScrollX = targetX;
+        if (y is { } targetY) state.PendingScrollY = targetY;
+
+        if (state.Host is { } host && host.DataContext is IWorkflowTreeViewModel)
+        {
+            ApplyLayout(host, state);
+        }
+
+        viewer.ChangeView(x, y, null, disableAnimation: true);
+        ArmPendingScrollTimer(state);
     }
 
     private static void ApplyLayout(UserControl host, SurfaceState state)
@@ -1331,16 +1542,33 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        var translateX = viewModel.Layout.ActualOffset.Horizontal;
+        var translateY = viewModel.Layout.ActualOffset.Vertical;
+
+        // 在途滚动：内容当帧就按目标位置摆放，抵消 ChangeView 落地前的时差（负向扩画布时 ActualOffset 也变了）。
+        if (state.ScrollViewer is { } pendingViewer)
+        {
+            if (!double.IsNaN(state.PendingScrollX))
+            {
+                translateX -= state.PendingScrollX - pendingViewer.HorizontalOffset;
+            }
+
+            if (!double.IsNaN(state.PendingScrollY))
+            {
+                translateY -= state.PendingScrollY - pendingViewer.VerticalOffset;
+            }
+        }
+
         var transform = new TranslateTransform
         {
-            X = viewModel.Layout.ActualOffset.Horizontal,
-            Y = viewModel.Layout.ActualOffset.Vertical
+            X = translateX,
+            Y = translateY
         };
 
         // WinUI 子元素（不同于 WPF）不把 RenderTransform 绑到 CanvasTransformBehavior.Transform；直接经合成变换把偏移应用到画布（布局感知的做法）。
         state.Canvas.Translation = new System.Numerics.Vector3(
-            (float)viewModel.Layout.ActualOffset.Horizontal,
-            (float)viewModel.Layout.ActualOffset.Vertical,
+            (float)translateX,
+            (float)translateY,
             0f);
 
         WorkflowCanvasTransformBehavior.Apply(host, transform);
@@ -1396,8 +1624,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
-        var viewportX = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.HorizontalOffset, viewModel.Layout.ActualOffset.Horizontal);
-        var viewportY = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.VerticalOffset, viewModel.Layout.ActualOffset.Vertical);
+        // 有在途滚动时按目标位置算可见区：内容当帧已经在目标处（见 ApplyLayout 的补偿）。
+        var viewportX = WorkflowSurfaceMath.ToWorld(EffectiveScrollX(state), viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToWorld(EffectiveScrollY(state), viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             viewportX, viewportY,
             state.ScrollViewer.ViewportWidth,
@@ -1431,8 +1660,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        decorator.ScrollOffsetX = state.ScrollViewer.HorizontalOffset;
-        decorator.ScrollOffsetY = state.ScrollViewer.VerticalOffset;
+        decorator.ScrollOffsetX = EffectiveScrollX(state);
+        decorator.ScrollOffsetY = EffectiveScrollY(state);
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
 
@@ -1447,8 +1676,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        minimap.ScrollOffsetX = state.ScrollViewer.HorizontalOffset;
-        minimap.ScrollOffsetY = state.ScrollViewer.VerticalOffset;
+        minimap.ScrollOffsetX = EffectiveScrollX(state);
+        minimap.ScrollOffsetY = EffectiveScrollY(state);
         minimap.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         minimap.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
         // 推实际可见区（ScrollViewer 的渲染尺寸）。窗口缩小时 ViewportWidth 可能报有效/更大的值；缩略图的可拖块必须跟踪真实屏幕区域（与缩略图自己的 OnScrollViewerResized 一致，后者用布局趟后落定的 ActualWidth）。
@@ -1516,6 +1745,21 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     // 只为「空白处平移」判定做连线识别：指针下是哪条连线由共享命中判定（LinkHitTestEx）决定。这里 DataContext 就够 —— 连线视图的内容会继承它；原先把类名当兜底是多余的，还让这条路径变成字符串类型化。
     private static bool IsWorkflowLinkVisual(DependencyObject source)
         => source is FrameworkElement { DataContext: IWorkflowLinkViewModel };
+
+    // Whether a press actually happened over the canvas's own scroll container — the side bar's buttons
+    // and lists are siblings of it, not descendants, and must keep their own clicks and focus.
+    private static bool IsWithinScrollViewer(DependencyObject? source, ScrollViewer viewer)
+    {
+        if (source is null) return false;
+        if (ReferenceEquals(source, viewer)) return true;
+
+        foreach (var ancestor in EnumerateVisualAncestors(source))
+        {
+            if (ReferenceEquals(ancestor, viewer)) return true;
+        }
+
+        return false;
+    }
 
     private static IEnumerable<DependencyObject> EnumerateVisualAncestors(DependencyObject source)
     {

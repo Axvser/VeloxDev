@@ -250,8 +250,10 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         // 画布滚动归适配器（见 OnSurfaceWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollView。
-        state.Scroller = new SurfaceScroller(state);
-        input.Scroller = state.Scroller;
+        var scroller = new SurfaceScroller(state);
+        state.Scroller = scroller;
+        input.Scroller = scroller;
+        input.Navigator = scroller;
 
         var bound = input.Tree;
         state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
@@ -286,6 +288,7 @@ public sealed class WorkflowSurfaceBehavior
         if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
         {
             released.Scroller = null;
+            released.Navigator = null;
         }
 
         state.Scroller = null;
@@ -1129,7 +1132,7 @@ public sealed class WorkflowSurfaceBehavior
 
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
     // 与 ScrollView 自己那一手一致，否则接管之后手感会变。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
     {
         // 一格滚轮是 WHEEL_DELTA（120）；这家一格走 61.8 DIP（实测：一格 61.8、五格 309、十格 618）——
         // 复刻它，接管之后手感才不变（与 WPF 那边 48、Avalonia 那边 50、WinUI 那边 74 是同一件事）。
@@ -1208,6 +1211,39 @@ public sealed class WorkflowSurfaceBehavior
             ApplyOffset(viewer, dx, dy,
                 dx != 0d ? WorkflowSurfaceMath.ClampValue(newX, 0d, GetNativeScrollMaximum(state, horizontal: true)) : viewer.ScrollX,
                 dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, GetNativeScrollMaximum(state, horizontal: false)) : viewer.ScrollY);
+        }
+
+        public void CenterOn(double worldX, double worldY) => _ = CenterOnAsync(worldX, worldY);
+
+        // 越界时和滚轮/平移一样按差额长画布；MAUI 的原生范围异步重测，所以增长后让出一拍再读。
+        private async Task CenterOnAsync(double worldX, double worldY)
+        {
+            if (state.ScrollViewer is not { } viewer || state.Host is not { } host) return;
+            var viewModel = ResolveTreeViewModel(host, state);
+            if (viewModel is null) return;
+
+            var w = double.IsNaN(viewer.Width) ? 1d : viewer.Width;
+            var h = double.IsNaN(viewer.Height) ? 1d : viewer.Height;
+            var layout = viewModel.Layout;
+            var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(worldX, worldY, w, h, layout);
+
+            var maxH = GetHorizontalScrollMaximum(state);
+            var maxV = GetVerticalScrollMaximum(state);
+            var clampedX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, layout, horizontal: true);
+            var clampedY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, layout, horizontal: false);
+            if (clampedX != desiredX || clampedY != desiredY)
+            {
+                ApplyLayout(host, state);
+                await Task.Yield();
+                maxH = GetHorizontalScrollMaximum(state);
+                maxV = GetVerticalScrollMaximum(state);
+                (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(worldX, worldY, w, h, layout);
+            }
+
+            var x = WorkflowSurfaceMath.ClampValue(desiredX, 0d, GetNativeScrollMaximum(state, horizontal: true));
+            var y = WorkflowSurfaceMath.ClampValue(desiredY, 0d, GetNativeScrollMaximum(state, horizontal: false));
+            ApplyOffset(viewer, 1d, 1d, x, y);
+            UpdateVisibleRegion(host, state);
         }
 
         // 落滚只写增量非零的那一轴：另一轴传 null，免得把它夹回范围里（零增量不许动那一轴）。

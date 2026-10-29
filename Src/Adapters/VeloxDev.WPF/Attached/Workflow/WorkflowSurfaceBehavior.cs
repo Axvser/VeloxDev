@@ -222,8 +222,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         // 画布滚动归适配器（见 OnLinkPointerWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
-        state.Scroller = new SurfaceScroller(state);
-        input.Scroller = state.Scroller;
+        var scroller = new SurfaceScroller(state);
+        state.Scroller = scroller;
+        input.Scroller = scroller;
+        input.Navigator = scroller;
 
         state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
         state.MenuLinkRemoved = (_, link) =>
@@ -268,6 +270,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
         {
             released.Scroller = null;
+            released.Navigator = null;
         }
 
         state.Scroller = null;
@@ -886,6 +889,13 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        // 轮子只在画布自己那块区域里归本类。宿主常把侧栏与画布装在同一个 UserControl 里；侧栏列表滚到边后，
+        // 事件照样会冒到这里 —— 没有这道门，列表一到上下限就会带着画布一起滚。
+        if (!IsWithinScrollViewer(e.OriginalSource as DependencyObject, state.ScrollViewer))
+        {
+            return;
+        }
+
         // 内层闸门：指针底下最近的、且不是画布自己那台的 ScrollViewer，若沿这一笔方向还有余量，这一笔归它。
         // 本家实测内层 ScrollViewer 恒置 Handled 且从不链式外传（见 memory/modules/WorkflowSystem/adapters/wpf.md §3.6），
         // 所以这里不是「抢」而是「别插手」：不置 Handled、不路由、不默认滚，让它自己那一笔照常落地。
@@ -910,7 +920,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
     // 与 WPF 自己 ScrollViewer 在 CanContentScroll=false 时的步长一致（实测一格 48 = 3 行 × 16），
     // 否则接管之后手感会变。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
     {
         private const double Notch = 120d;
         private const double LineHeight = 16d;
@@ -978,6 +988,37 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
             if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(newX, 0d, maxH));
             if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(newY, 0d, maxV));
+        }
+
+        public void CenterOn(double worldX, double worldY)
+        {
+            if (state.ScrollViewer is not { } viewer) return;
+            if (state.Host is not { } host || host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+
+            var layout = viewModel.Layout;
+            var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
+                worldX, worldY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+            var maxH = GetHorizontalScrollMaximum(viewer);
+            var maxV = GetVerticalScrollMaximum(viewer);
+
+            // 画布不够大时和滚轮/平移一样按差额长出去，而不是把目标夹到边上：夹取会让元素停在边缘而不是中心。
+            var clampedX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, layout, horizontal: true);
+            var clampedY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, layout, horizontal: false);
+            if (clampedX != desiredX || clampedY != desiredY)
+            {
+                // 负向增长会改动 ActualOffset，正向增长会改动 ActualSize；先让布局认下新范围，再按新偏移重算目标。
+                ApplyLayout(host, state);
+                state.Canvas?.UpdateLayout();
+                viewer.UpdateLayout();
+                host.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(viewer);
+                maxV = GetVerticalScrollMaximum(viewer);
+                (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
+                    worldX, worldY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+            }
+
+            viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH));
+            viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV));
         }
     }
 
@@ -1425,6 +1466,21 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             yield return current;
             current = VisualTreeHelper.GetParent(current);
         }
+    }
+
+    // Whether the wheel actually happened over the canvas's own scroll container — the side bar's lists are
+    // siblings of it, not descendants, and must keep their wheel to themselves even at their scroll limits.
+    private static bool IsWithinScrollViewer(DependencyObject? source, ScrollViewer? viewer)
+    {
+        if (source is null || viewer is null) return false;
+        if (ReferenceEquals(source, viewer)) return true;
+
+        foreach (var ancestor in EnumerateVisualAncestors(source))
+        {
+            if (ReferenceEquals(ancestor, viewer)) return true;
+        }
+
+        return false;
     }
 }
 }

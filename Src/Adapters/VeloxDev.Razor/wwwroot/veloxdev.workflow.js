@@ -459,6 +459,39 @@ window.veloxdevWorkflow = (() => {
         if (reporter) reporter();
     }
 
+    // Applies a new layout offset, content extent and scroll in one synchronous block — the navigation
+    // path (Locate). Same DOM writes as applyZoomSurface, without node geometry or the zoom settle loop:
+    // navigation does not change the scale, so there is no collapsed geometry to stamp.
+    function applySurfaceNavigation(scrollerId, layoutX, layoutY, contentW, contentH, scrollX, scrollY) {
+        const el = document.getElementById(scrollerId);
+        if (!el) return;
+        const host = el.querySelector('.veloxdev-wf-canvas-host');
+        if (!host) return;
+        const st = surfaceLayouts[scrollerId];
+        const edgeX = st ? st.edgeX : 0;
+        const edgeY = st ? st.edgeY : 0;
+        const gx = edgeX + (layoutX || 0);
+        const gy = edgeY + (layoutY || 0);
+        const contentEl = host.querySelector('.veloxdev-wf-canvas-content');
+        if (contentEl) { contentEl.style.left = gx + 'px'; contentEl.style.top = gy + 'px'; }
+        if (st) { st.layoutX = layoutX || 0; st.layoutY = layoutY || 0; }
+        const gridEl = host.querySelector('.veloxdev-wf-grid');
+        if (gridEl) gridEl.style.backgroundPosition = gx + 'px ' + gy + 'px';
+        const axisXEl = host.querySelector('.veloxdev-wf-axis-x');
+        if (axisXEl) axisXEl.style.left = gx + 'px';
+        const axisYEl = host.querySelector('.veloxdev-wf-axis-y');
+        if (axisYEl) axisYEl.style.top = gy + 'px';
+        // Grow-only: the model extent can exceed the current host, and the scroll must reach the center.
+        const w = Math.max(edgeX + (contentW || 0), host.offsetWidth || 0);
+        const h = Math.max(edgeY + (contentH || 0), host.offsetHeight || 0);
+        if (w !== (host.offsetWidth || 0)) host.style.width = w + 'px';
+        if (h !== (host.offsetHeight || 0)) host.style.height = h + 'px';
+        el.scrollLeft = Math.max(0, edgeX + (scrollX || 0));
+        el.scrollTop = Math.max(0, edgeY + (scrollY || 0));
+        const reporter = surfaceReporters[scrollerId];
+        if (reporter) reporter();
+    }
+
     // Per-surface node-wrapper lookup (by data-veloxdev-node-id), built lazily on the first zoom that
     // carries node geometry. Cleared when the surface is disposed; a node added/removed mid-session is
     // still found because applyNodeGeometry misses are harmless and the map re-syncs on the next zoom.
@@ -1600,6 +1633,7 @@ window.veloxdevWorkflow = (() => {
         setSurfaceLayout,
         ensureCanvasSize,
         applyZoomSurface,
+        applySurfaceNavigation,
         initNodeDrag,
         initSlotConnection,
         initSlotLayout,
@@ -1625,6 +1659,7 @@ export const scrollByDelta = window.veloxdevWorkflow.scrollByDelta;
 export const scrollSurfaceBy = window.veloxdevWorkflow.scrollSurfaceBy;
 export const setSurfaceLayout = window.veloxdevWorkflow.setSurfaceLayout;
 export const ensureCanvasSize = window.veloxdevWorkflow.ensureCanvasSize;
+export const applySurfaceNavigation = window.veloxdevWorkflow.applySurfaceNavigation;
 export const applyZoomSurface = window.veloxdevWorkflow.applyZoomSurface;
 export const initNodeDrag = window.veloxdevWorkflow.initNodeDrag;
 export const initSlotConnection = window.veloxdevWorkflow.initSlotConnection;

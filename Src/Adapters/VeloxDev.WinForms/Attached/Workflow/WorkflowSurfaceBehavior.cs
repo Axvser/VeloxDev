@@ -494,9 +494,12 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var state = GetState(host);
-        state.Scroller = new SurfaceScroller(host);
+        var scroller = new SurfaceScroller(host);
+        state.Scroller = scroller;
         state.ScrollerTree = tree;
-        WorkflowInput.For(tree).Scroller = state.Scroller;
+        var input = WorkflowInput.For(tree);
+        input.Scroller = scroller;
+        input.Navigator = scroller;
     }
 
     // 从挂着的树上摘下滚动口 —— 只在自己挂的那一个还挂着时摘，同一棵树上别的表面挂的留给它。
@@ -506,7 +509,9 @@ public sealed class WorkflowSurfaceBehavior
         if (state.ScrollerTree is { } tree && state.Scroller is { } scroller
             && ReferenceEquals(WorkflowInput.For(tree).Scroller, scroller))
         {
-            WorkflowInput.For(tree).Scroller = null;
+            var input = WorkflowInput.For(tree);
+            input.Scroller = null;
+            input.Navigator = null;
         }
 
         state.Scroller = null;
@@ -515,7 +520,7 @@ public sealed class WorkflowSurfaceBehavior
 
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长再平移画布 ──
     // 用的是本家自己那套平移（与缩略图拖拽同一条路），不是去动滚动容器的偏移。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
     {
         // 一格滚轮是 WHEEL_DELTA（120）。本家没有原生滚动步长可复刻（PART_ScrollViewer 的 AutoScroll 是关的，
         // 视口由平移引擎拥有），所以取系统设置的滚轮行数 × 行高 16px —— 默认 3 行 = 48px，与 WPF 那边一致。
@@ -544,6 +549,16 @@ public sealed class WorkflowSurfaceBehavior
             var dy = wheelDeltaY != 0d ? -(wheelDeltaY / Notch) * stepY : 0d;
 
             ApplyScrollOffset(host, current.Horizontal + dx, current.Vertical + dy);
+        }
+
+        public void CenterOn(double worldX, double worldY)
+        {
+            if (ResolveTree(host) is null) return;
+
+            var clientSize = ResolveClientSize(host);
+            // 这家没有原生滚动偏移：ApplyScrollOffset 收的是「有效滚动」（视口原点的世界坐标），
+            // 所以这里直接减半个视口，不再加 ActualOffset。
+            ApplyScrollOffset(host, worldX - clientSize.Width / 2d, worldY - clientSize.Height / 2d);
         }
     }
 

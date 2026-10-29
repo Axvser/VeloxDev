@@ -466,10 +466,15 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true);
             scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false);
 
-            _scrollViewer.ChangeView(
-                WorkflowSurfaceMath.ClampValue(scrollX, 0, maxH),
-                WorkflowSurfaceMath.ClampValue(scrollY, 0, maxV),
-                null, true);
+            var targetX = WorkflowSurfaceMath.ClampValue(scrollX, 0, maxH);
+            var targetY = WorkflowSurfaceMath.ClampValue(scrollY, 0, maxV);
+
+            // 走表面的统一写入口：它会记下在途目标并补偿画布平移；绕过它会让表面上一笔尚未落地的滚动
+            // 把画面钉在旧位置。找不到表面时退回直接 ChangeView。
+            if (!WorkflowSurfaceBehavior.TryRequestScroll(this, targetX, targetY))
+            {
+                _scrollViewer.ChangeView(targetX, targetY, null, true);
+            }
         }
     }
 

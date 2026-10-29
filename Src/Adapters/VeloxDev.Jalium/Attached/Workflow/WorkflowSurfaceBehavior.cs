@@ -1055,8 +1055,10 @@ public static class WorkflowSurfaceBehavior
         state.Input = input;
 
         // 画布滚动归适配器（见 OnMouseWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
-        state.Scroller = new SurfaceScroller(state);
-        input.Scroller = state.Scroller;
+        var scroller = new SurfaceScroller(state);
+        state.Scroller = scroller;
+        input.Scroller = scroller;
+        input.Navigator = scroller;
 
         if (tree.GetHelper() is Wf.IInputEvents events)
         {
@@ -1074,6 +1076,7 @@ public static class WorkflowSurfaceBehavior
         if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
         {
             released.Scroller = null;
+            released.Navigator = null;
         }
 
         state.Scroller = null;
@@ -1384,7 +1387,7 @@ public static class WorkflowSurfaceBehavior
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
     // Jalium 的 ScrollViewer 自己一格滚 48（实测：基线一格滚轮视口 Y 0 → 48），取同一个数，
     // 接管之后手感才不变（与 WPF 那边 3 行 × 16 是同一个值）。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
     {
         private const double PixelsPerNotch = 48d;
 
@@ -1444,6 +1447,9 @@ public static class WorkflowSurfaceBehavior
             if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(newX, 0d, viewer.ScrollableWidth));
             if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(newY, 0d, viewer.ScrollableHeight));
         }
+
+        public void CenterOn(double worldX, double worldY)
+            => NavigateToWorld(state.Host, worldX, worldY);
     }
 
     private static void OnKeyDown(object? sender, PlatformInput.KeyEventArgs e)

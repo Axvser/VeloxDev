@@ -1012,10 +1012,25 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     /// <see cref="ICanvas"/> draws into, so its space is the drawn one by construction.
     /// </para>
     /// </summary>
+    // 交互源是整页根（侧栏与画布同在一个 ContentView 里），但这一层只盖住画布那一列：
+    // 侧栏里的按下/悬停/滚轮换算到本层会是负坐标，必须在这里挡掉 —— 否则点 Locate 会被本层先收走焦点，
+    // 真实慢点击下按钮的 Click 不再落地（合成点击同一刻 down+up 看不出来）。
     private Point? ToOverlayPoint(Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        => this.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement overlay && ToElementPoint(e, overlay) is { } point
+    {
+        if (this.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement overlay
+            || ToElementPoint(e, overlay) is not { } point)
+        {
+            return null;
+        }
+
+        var width = this.Width;
+        var height = this.Height;
+        // 还没排过版：不拿未定的尺寸挡输入。
+        if (!double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0) return point;
+        return point.X >= 0 && point.Y >= 0 && point.X <= width && point.Y <= height
             ? point
             : null;
+    }
 
     private static Point? ToElementPoint(Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e, Microsoft.UI.Xaml.UIElement element)
     {

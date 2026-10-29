@@ -215,8 +215,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
 
         // 画布滚动归适配器（见 OnPointerWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
-        state.Scroller = new SurfaceScroller(state);
-        input.Scroller = state.Scroller;
+        var scroller = new SurfaceScroller(state);
+        state.Scroller = scroller;
+        input.Scroller = scroller;
+        input.Navigator = scroller;
 
         state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
         state.MenuLinkRemoved = (_, link) =>
@@ -261,6 +263,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.Input is { } released && ReferenceEquals(released.Scroller, state.Scroller))
         {
             released.Scroller = null;
+            released.Navigator = null;
         }
 
         state.Scroller = null;
@@ -888,7 +891,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
     // Avalonia 的 Delta 已是一格 ±1，而 ScrollViewer 自己每格滚 50（实测，WPF 那边是 120 一格、3 行 × 16），
     // 取同一个数，接管之后手感才不会变。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
     {
         private const double PixelsPerDelta = 50d;
 
@@ -951,6 +954,36 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             viewer.Offset = new Vector(
                 dx != 0d ? WorkflowSurfaceMath.ClampValue(newX, 0d, maxH) : viewer.Offset.X,
                 dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, maxV) : viewer.Offset.Y);
+        }
+
+        public void CenterOn(double worldX, double worldY)
+        {
+            if (state.ScrollViewer is not { } viewer) return;
+            if (state.Host is not { } host || host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+
+            var layout = viewModel.Layout;
+            var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
+                worldX, worldY, viewer.Viewport.Width, viewer.Viewport.Height, layout);
+            var maxH = GetHorizontalScrollMaximum(viewer);
+            var maxV = GetVerticalScrollMaximum(viewer);
+
+            // 画布不够大时和滚轮/平移一样按差额长出去，而不是把目标夹到边上。
+            var clampedX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, layout, horizontal: true);
+            var clampedY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, layout, horizontal: false);
+            if (clampedX != desiredX || clampedY != desiredY)
+            {
+                // 负向增长会改动 ActualOffset，正向增长会改动 ActualSize；先让布局认下新范围，再按新偏移重算目标。
+                ApplyLayout(host, state);
+                viewer.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(viewer);
+                maxV = GetVerticalScrollMaximum(viewer);
+                (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
+                    worldX, worldY, viewer.Viewport.Width, viewer.Viewport.Height, layout);
+            }
+
+            viewer.Offset = new Vector(
+                WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH),
+                WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV));
         }
     }
 

@@ -410,6 +410,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         // 画布滚动归适配器（见 RequestWheelScroll）：订阅方被拦下之后从这里滚，不必知道这家的滚动容器是 DOM。
         _surfaceScroller ??= new SurfaceScroller(this);
         input.Scroller = _surfaceScroller;
+        input.Navigator = _surfaceScroller;
 
         var bound = input.Tree;
         _menuPressed = (_, e) => ShowLinkMenu(e);
@@ -432,7 +433,11 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         if (_menuLinkRemoved is not null) helper.LinkRemoved -= _menuLinkRemoved;
 
         // 只在还挂着自己那一个时才摘：同一棵树上两个表面时，摘别人的会把对方的滚动口一起清掉。
-        if (ReferenceEquals(input.Scroller, _surfaceScroller)) input.Scroller = null;
+        if (ReferenceEquals(input.Scroller, _surfaceScroller))
+        {
+            input.Scroller = null;
+            input.Navigator = null;
+        }
 
         _menuPressed = null;
         _menuLinkRemoved = null;
@@ -1053,9 +1058,41 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         _hasPendingRestore = true;
     }
 
+    /// <summary>
+    /// Centers a world point, growing the DOM canvas when the target is outside the current scroll range.
+    /// </summary>
+    /// <remarks>
+    /// The model grows first (<see cref="WorkflowSurfaceMath.ClampScrollOffset"/>, exact 1:1), then one JS call
+    /// applies the new offset/extent and the scroll together — otherwise the browser would clamp the scroll to
+    /// the old extent and the point would stop at the edge instead of the center.
+    /// </remarks>
+    private async Task CenterOnAsync(double worldX, double worldY)
+    {
+        var module = _module;
+        var id = ScrollViewerId;
+        if (module is null || string.IsNullOrWhiteSpace(id) || Tree?.Layout is not { } layout) return;
+
+        var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(worldX, worldY, _viewportW, _viewportH, layout);
+        var maxH = Math.Max(0d, _canvasW - _viewportW - _offsetX);
+        var maxV = Math.Max(0d, _canvasH - _viewportH - _offsetY);
+
+        var clampedX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, layout, horizontal: true);
+        var clampedY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, layout, horizontal: false);
+        if (clampedX != desiredX || clampedY != desiredY)
+        {
+            // 负向增长改 ActualOffset，正向增长改 ActualSize；按新布局重算目标和内容范围，再一次性下发给 DOM。
+            (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(worldX, worldY, _viewportW, _viewportH, layout);
+        }
+
+        await module.InvokeVoidAsync("applySurfaceNavigation", id,
+            layout.ActualOffset.Horizontal, layout.ActualOffset.Vertical,
+            Math.Max(1d, layout.ActualSize.Width), Math.Max(1d, layout.ActualSize.Height),
+            Math.Max(0d, desiredX), Math.Max(0d, desiredY));
+    }
+
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成本家（DOM）的步长 ——
     // 浏览器把滚轮增量报成像素（line/page 模式已由 JS 归一），所以一格就是一格像素，与原生一致。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
     {
         private readonly WorkflowSurfaceBehavior owner;
 
@@ -1074,6 +1111,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             // 滚动容器是 DOM，只能过 JS 滚它。
             _ = module.InvokeVoidAsync("scrollSurfaceBy", id, wheelDeltaX, -wheelDeltaY);
         }
+
+        public void CenterOn(double worldX, double worldY) => _ = owner.CenterOnAsync(worldX, worldY);
     }
 
     /// <inheritdoc />
