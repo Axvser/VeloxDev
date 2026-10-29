@@ -6,7 +6,7 @@
 
 **One model, seven GUIs.** Build the editor above with **WPF, Avalonia, WinUI, MAUI, WinForms, Blazor/Razor, or Jalium** — the same graph model, commands and execution engine behind all of them. The same model also runs headless through `VeloxDev.Core`, so the interactive and non-interactive paths are one implementation.
 
-[Documentation](https://axvser.github.io/CloudGlyph/) · [NuGet](https://www.nuget.org/packages/VeloxDev.Core) · [Examples](Examples/) · [MIT License](LICENSE.txt)
+[Documentation](https://axvser.github.io/VeloxDev.Docs/) · [NuGet](https://www.nuget.org/packages/VeloxDev.Core) · [Examples](Examples/) · [MIT License](LICENSE.txt)
 
 ## What this repository is
 
