@@ -43,14 +43,14 @@
 - `TargetFPS` 是**配置值**（`CreateFrameEventArgs` 读 `_targetFPS`），`CurrentFPS` 是**实测值**（同方法读 `_currentFPS`，由 `UpdatePerformanceStats` 用墙钟每秒更新一次）。
 - 所以「TargetFPS 和 CurrentFPS 不一样」是正常的，不是 bug。
 
-**stage 现在是一个枚举，不再是自由文本**（2026-10-04 起，定义在 `TransitionSystem/Enums/`）。诊断走两条带载荷的通道，各配一个枚举，值只能取成员 —— 写一个不存在的 stage 名不再编译得过：
+**stage 现在是一个枚举，不再是自由文本**（2026-10-04 起，定义在 `Interfaces/TransitionSystem/Enums/`）。诊断走两条带载荷的通道，各配一个枚举，值只能取成员 —— 写一个不存在的 stage 名不再编译得过：
 
 | 枚举 | 成员 | 从哪里发出 |
 |---|---|---|
-| `WarnStage`（3 值，`Enums/WarnStage.cs` 的 `WarnStage`） | `Unreadable` | `Sampling/Interpolator.cs` 的 `Prepare` 里 `WarnStage.Unreadable` |
+| `WarnStage`（3 值，`Interfaces/TransitionSystem/Enums/WarnStage.cs` 的 `WarnStage`） | `Unreadable` | `Sampling/Interpolator.cs` 的 `Prepare` 里 `WarnStage.Unreadable` |
 | | `Unsampled` | `Sampling/Interpolator.cs` 的 `Prepare` 里 `WarnStage.Unsampled` |
 | | `Dropped` | `Runtime/TransitionScheduler.cs` 的 `if (!awoken)` 分支（Awake 投递被拒）与 `Sampling/SamplerSet.cs` 的 `Apply`（帧被宿主拒收）——**同一个枚举成员，两个不同的事** |
-| `ErrorStage`（11 值，`Enums/ErrorStage.cs` 的 `ErrorStage`） | `Sampling` / `Run` / `Marshaling` | `Sampling/SamplerSet.cs` 的 `ApplyCore` / `Runtime/TransitionInterpreter.cs` 的 `Execute` + `Effects/Transition.cs` 的 `InvokeError` / `Runtime/TransitionInterpreter.cs` 的 `ReportMarshaling`（`ErrorStage.Marshaling`） |
+| `ErrorStage`（11 值，`Interfaces/TransitionSystem/Enums/ErrorStage.cs` 的 `ErrorStage`） | `Sampling` / `Run` / `Marshaling` | `Sampling/SamplerSet.cs` 的 `ApplyCore` / `Runtime/TransitionInterpreter.cs` 的 `Execute` + `Effects/Transition.cs` 的 `InvokeError` / `Runtime/TransitionInterpreter.cs` 的 `ReportMarshaling`（`ErrorStage.Marshaling`） |
 | | `Awake` / `Prepare` | `Runtime/TransitionScheduler.cs` 的 `ErrorStage.Awake` / `ErrorStage.Prepare` |
 | | `Start` / `Update` / `LateUpdate` / `Completed` / `Canceled` / `Finally` | `Runtime/TransitionInterpreter.cs` 的 `Report` 调用点（对应各 `ErrorStage`）/ `EmitFrame` / `Execute` 的 catch —— 这六个表示「**那个事件的某个订阅者抛了**」，不是引擎自己的步骤 |
 
@@ -223,7 +223,7 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 | 注册为什么没生效 | `TickManager.cs` 的 `RegisterBehaviour`（只入队）→ `ProcessAddedBehaviors`（帧体里结算） |
 | 钩子怎么被声明出来 | 契约 `Interfaces/Tickable/ITickable.cs` + 生成器 `Src/Generators/VeloxDev.Core.Generator/Writers/TickWriter.cs` |
 | `Handled` 在动画一侧的含义 | `TransitionSystem/Runtime/TransitionDiagnostics.cs` 的 `Raise` + `TransitionSystem/Runtime/TransitionInterpreter.cs` 三处 `Args.Handled` 检查 |
-| 跨模块共用的参数形状 | `TimeLine/TimeLineEventArgs.cs`、`TimeLine/FrameEventArgs.cs`；`TransitionSystem/Events/TransitionEventArgs.cs`、`Events/TransitionEventArgs{TStage,TValue}.cs`、`Enums/{Warn,Error}Stage.cs` |
+| 跨模块共用的参数形状 | `TimeLine/TimeLineEventArgs.cs`、`TimeLine/FrameEventArgs.cs`；`TransitionSystem/Events/TransitionEventArgs.cs`、`Events/TransitionEventArgs{TStage,TValue}.cs`、`Interfaces/TransitionSystem/Enums/{Warn,Error}Stage.cs` |
 
 ---
 

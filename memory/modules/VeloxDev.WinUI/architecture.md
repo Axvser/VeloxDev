@@ -164,7 +164,7 @@ return accepted;
 
 ### 3.5 小地图：`RulerBand` 恒为 0，而虚拟化 inset 读的**不是**它
 
-- `WorkflowMinimapOverlay` 是**基类**，宿主写子类（demo 的空壳子类只设画刷）；它继承 `Canvas` 并实现 `IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay` 的类声明），因此**同时满足 `IWorkflowGridDecorator`**（契约 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowMinimapOverlay.cs` 的 `IWorkflowMinimapOverlay : IWorkflowGridDecorator`）。
+- `WorkflowMinimapOverlay` 是**基类**，宿主写子类（demo 的空壳子类只设画刷）；它继承 `Canvas` 并实现 `IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay` 的类声明），因此**同时满足 `IWorkflowGridDecorator`**（契约 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Surface/IWorkflowMinimapOverlay.cs` 的 `IWorkflowMinimapOverlay : IWorkflowGridDecorator`）。
 - 它的 `public double RulerBand => 0;`（带 `/// <inheritdoc />`），而 `RulerThicknessProperty` 与它的 CLR 访问器（`RulerThickness`）**全模块从不被读**（grep 只有声明与访问器命中）—— 与 WPF 逐条同形（那条坑在 `WorkflowSystem/adapters/wpf.md` 坑 2，本条是它在 WinUI 侧的**推论**）。
 - 而虚拟化 inset 的真实来源是**宿主配在 `GridDecoratorName` 上的那个装饰器**：`WorkflowSurfaceBehavior.UpdateGridDecorator` 里的 `viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand)`。demo 的 `WorkflowGridDecorator.RulerBand` 返回它的 `RulerThickness`。
   ⇒ **把 `GridDecoratorName` 指到小地图上会编译通过、跑起来也不抛**，但 inset 静默变成 0（浮标尺带下面的节点会被提前裁掉一整个尺宽）。`MinimapOverlayName` 与 `GridDecoratorName` 各自独立解析（`ResolveNamedControls`），不要混用。

@@ -382,7 +382,7 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
    `WorkflowInput.ApplyDefault` 在 `IsSuspended` 时直接返回、不改指针目标（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs` 的 `ApplyDefault`）。挂起/恢复由**表面**自己报：弹出时置 `input.IsSuspended = true`、收起时复位
    （`WorkflowSurfaceBehavior.cs` 的 `ShowLinkMenu` / `DismissLinkMenu`）。**本层没有 `_menuOpen`，平台侧也没有 `IsSuspended` 守卫** —— 这个状态只能有一个家，在输入路由上。
    **「菜单不得比它作用的连线活得久」这条守卫由树的 `LinkRemoved` 实现**：那条线离开 `tree.Links` 时树报 `LinkRemoved`
-   （`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs` 的 `LinkRemoved`、`Templates/Helpers/TreeHelper.cs` 的 `LinkRemoved`），表面按 `ReferenceEquals(state.MenuLink, link)` 判定后收自己那份弹窗 —— Windows 调原生
+   （`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/IWorkflowTreeViewModel.cs` 的 `LinkRemoved`、`Templates/Helpers/TreeHelper.cs` 的 `LinkRemoved`），表面按 `ReferenceEquals(state.MenuLink, link)` 判定后收自己那份弹窗 —— Windows 调原生
    flyout 的 `Hide()`，非 Windows 走 `DismissLinkMenu(state)`（`WorkflowSurfaceBehavior.cs` 的两条 `LinkRemoved` 处理）。收起照常复位 `IsSuspended`，单一责任人不变。
 5. **菜单条目来自声明的资源，接线与呈现都在适配层（2026-10-03 改定）**：模板/demo 在 XAML 里声明 `LinkContextMenu`
    （`WorkflowView.xaml` 的 `LinkMenuKey="LinkContextMenu"` 属性 + 资源里那条

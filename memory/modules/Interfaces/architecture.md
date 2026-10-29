@@ -1,6 +1,6 @@
 # Interfaces — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/Interfaces/`（**45 个 .cs**，51 个接口声明），7 个子目录按模块分：`AspectOriented/`(1 文件 / 1 接口)、`DynamicTheme/`(3/3)、`MVVM/`(5/5)、`Tickable/`(1/1)、`Timing/`(6/5)、`TransitionSystem/`(9/12)、`WorkflowSystem/`(20/24)。文件数 45；其中 **43** 个含接口声明，剩下 2 个是 `Timing/TimeSample.cs`（一个 `readonly struct`，不是契约）与 `WorkflowSystem/ConnectionCheck.cs`（枚举 + 结果 struct）。
+> 代码：`Src/Core/VeloxDev.Core/Interfaces/`（**49 个 .cs**，51 个接口声明），7 个子目录按模块分：`AspectOriented/`(1 文件 / 1 接口)、`DynamicTheme/`(3/3)、`MVVM/`(5/5)、`Tickable/`(1/1)、`Timing/`(6/5)、`TransitionSystem/`(12/12)、`WorkflowSystem/`(21/24)。文件数 49；其中 **43** 个含接口声明，剩下 6 个不是接口：`Timing/TimeSample.cs`（一个 `readonly struct`）、`WorkflowSystem/Connections/ConnectionCheck.cs`（枚举 + 结果 struct），以及两模块 `Enums/` 下的 4 个枚举文件。
 > 本文与其他模块的 `architecture.md` 写法不同：**这里没有实现，只有契约的集中地**。所以本文不写「这个模块做什么」，只写**契约的分层与归属规则** —— 哪个接口该谁实现、为什么集中在一个目录、跨模块在哪儿咬合。
 > 契约**成员语义**归各实现模块：`ITimeSource`/`ITimeSampler` 看 `memory/modules/Timing/`，过渡相关看 `memory/modules/TransitionSystem/`，工作流相关看 `memory/modules/WorkflowSystem/`。平台差异**不在这里重复七遍**，看 `memory/modules/TransitionSystem/adapters/<平台>.md` 与 `memory/modules/WorkflowSystem/adapters/<平台>.md`。
 
@@ -8,7 +8,9 @@
 
 ## 一、第一条要记住的：`Interfaces/` 是**目录**，不是**命名空间**
 
-`Interfaces/Timing/ITimeSource.cs` 写的是 `namespace VeloxDev.Timing`，不是 `VeloxDev.Timing.Interfaces`；`Interfaces/WorkflowSystem/*` 是 `VeloxDev.WorkflowSystem`；`Interfaces/TransitionSystem/*` 是 `VeloxDev.TransitionSystem`。
+`Interfaces/Timing/ITimeSource.cs` 写的是 `namespace VeloxDev.Timing`，不是 `VeloxDev.Timing.Interfaces`；`Interfaces/WorkflowSystem/**` 是 `VeloxDev.WorkflowSystem`；`Interfaces/TransitionSystem/*` 是 `VeloxDev.TransitionSystem`。
+
+**`WorkflowSystem/` 内部再分层**（2026-10-30 用户定）：`Common/`（被多个组件族广泛实现的基础契约：`IWorkflowViewModel` / `IWorkflowIdentifiable` / `IWorkflowHelper`）、`Components/`（Node/Slot/Link/Tree + Helper）、`Connections/`（连接预览与裁决）、`Commands/`（`IWorkflowActionPair`；只有一种实现，不算 Common）、`Providers/`、`Spatial/`、`Surface/`、`Execution/`、`Enums/`（`SlotChannel`）。**模块自己的枚举统一放在对应 `Interfaces/<模块>/Enums/` 下**（TransitionSystem 的 `WarnStage`/`ErrorStage`/`RotationDirection` 同理），不留在实现目录里。`Common/` 的收口规则：**至少两个组件族实现、且至少一个其它层依赖**，否则放自己的层。`Layout/` 留给布局管道的注入面。
 
 后果有三条，都是实际操作上的：
 
@@ -137,9 +139,9 @@
 | 想改的东西 | 先打开 |
 |---|---|
 | 「消费者能干什么」的边界（读侧/写侧、谁收到什么接口） | `Interfaces/Timing/ITimeSourceControl.cs` 的 `<remarks>`（本仓唯一的拆分范式） |
-| 平台必须实现哪些成员 | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs`（数据交换契约，逐家实现），以及 `Interfaces/TransitionSystem/ITransitionHost.cs`（组合契约，无成员） |
-| 节点/树/槽/链的数据形状 | `Interfaces/WorkflowSystem/IWorkflow{Tree,Node,Slot,Link}ViewModel.cs`（4 族各含 VM + Helper 两个接口） |
-| 一次数据流访问的入参 | `Interfaces/WorkflowSystem/IAccessContext.cs`（编译期/运行期共用，靠 `IsCompilePhase` 区分） |
+| 平台必须实现哪些成员 | `Interfaces/WorkflowSystem/Surface/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs`（数据交换契约，逐家实现），以及 `Interfaces/TransitionSystem/ITransitionHost.cs`（组合契约，无成员） |
+| 节点/树/槽/链的数据形状 | `Interfaces/WorkflowSystem/Components/IWorkflow{Tree,Node,Slot,Link}ViewModel.cs`（4 族各含 VM + Helper 两个接口） |
+| 一次数据流访问的入参 | `Interfaces/WorkflowSystem/Execution/IAccessContext.cs`（编译期/运行期共用，靠 `IsCompilePhase` 区分） |
 | 生成器会注入哪些成员、注入到哪个接口 | `Src/Generators/VeloxDev.Core.Generator/Writers/`（`TickWriter.cs` 的 `GenerateBaseInterfaces`、`WorkflowWriter.cs` 的 `GetWorkflowInterfaceName`、`CommandWriter.cs` 的 `CanUpcastTo`、`Theme.cs` 的 `GenerateThemeConfigClass`、`AopSurface.cs` 的 `interfaceDeclaration`） |
-| Agent 能否看见这个契约 | `Interfaces/WorkflowSystem/*.cs` 里的 `[AgentContext]`（`IWorkflowTreeViewModel` 的 `[AgentContext]` 对是范式），读取规则在 `memory/modules/AI/architecture.md` |
+| Agent 能否看见这个契约 | `Interfaces/WorkflowSystem/**/*.cs` 里的 `[AgentContext]`（`IWorkflowTreeViewModel` 的 `[AgentContext]` 对是范式），读取规则在 `memory/modules/AI/architecture.md` |
 | 平台差异（不要在这里找） | `memory/modules/TransitionSystem/adapters/<平台>.md`、`memory/modules/WorkflowSystem/adapters/<平台>.md` |

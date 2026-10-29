@@ -1,7 +1,7 @@
 # WorkflowSystem 架构
 
 > 模块位置：`Src/Core/VeloxDev.Core/WorkflowSystem/`
-> 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（18 个文件，命名空间 `VeloxDev.WorkflowSystem`）
+> 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（21 个文件，按 `Common/Components/Connections/Commands/Providers/Spatial/Surface/Execution/Enums/` 分层；命名空间统一 `VeloxDev.WorkflowSystem`）
 > 平台差异见同目录 `adapters/<平台>.md`；扩展做法见 `extension.md`。
 
 ---
@@ -19,7 +19,7 @@
 | 鼠标命中、拖拽、滚轮 | 适配器的七个角色行为（`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSurfaceBehavior` 等；**Jalium 这些角色同样是附着行为 —— 表面 `WorkflowSurfaceBehavior`、插槽 `WorkflowSlotLayoutBehavior`、节点拖拽 `WorkflowNodeDragBehavior`、连线手势 `WorkflowSlotConnectionBehavior`，见 `adapters/jalium.md`**） |
 | 持久化格式 | **2026-10-03 起由生成代码定义**（`VeloxDev.Serialization`，入口 `ComponentModelEx`，见 [`VeloxDev.Core.Extension/architecture.md`](../VeloxDev.Core.Extension/architecture.md) §八）。本模块只保留**序列化钩子**，且用的仍是 **.NET 序列化特性**（`System.Runtime.Serialization`，不是自定义接口）：`Anchor` / `Size` 的 `[OnSerializing]` / `[OnSerialized]` / `[OnDeserialized]`（`GUI/GeometryModels/Anchor.cs` 的 `OnSerializing` / `OnSerialized` / `OnDeserialized`，`Size.cs` 同名三个），`SlotEnumerator` 的 `[OnDeserializing]` / `[OnDeserialized]`（`SelectorEx/SlotEnumerator.cs` 的同名两个方法），`BranchOption` / `BranchSegment` 的 `[OnDeserialized]`（`CompilerEx/Compile/Model/BranchOption.cs` 的 `NormalizeKey`、`BranchSegment.cs` 的 `NormalizeCompileKey`）。全仓源码里没有 `IVeloxJsonSerializing` / `IVeloxJsonSerialized` / `IVeloxJsonDeserialized` 这类接口 |
 | 撤销栈的存储 | 栈是 `TreeHelper<T>` 的私有字段；Core 只定义「一对 Redo/Undo 委托」`WorkflowActionPair.cs` 的 `WorkflowActionPair` |
-| 节点「算什么」 | 用户实现 `IWorkflowNodeViewModelHelper.ReceiveAsync`（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs` 的 `ReceiveAsync`）。默认实现返回 `null`，**什么都不往下传**（`Templates/Helpers/NodeHelper.cs` 的 `ReceiveAsync`） |
+| 节点「算什么」 | 用户实现 `IWorkflowNodeViewModelHelper.ReceiveAsync`（`Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `ReceiveAsync`）。默认实现返回 `null`，**什么都不往下传**（`Templates/Helpers/NodeHelper.cs` 的 `ReceiveAsync`） |
 
 **AI 工具面不在本模块内**：`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/`（命名空间 `VeloxDev.AI.Workflow`）是本模块的**消费方**，不是组成部分；它引用 `VeloxDev.Core`（`Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj` 的 ProjectReference/PackageReference 对）。改 Core 的契约会连带打断它，但不要把它的逻辑写进 Core。
 
@@ -27,16 +27,16 @@
 
 ## 二、四组件 + Helper：状态归谁
 
-四个组件接口都继承 `IWorkflowViewModel`（`Interfaces/WorkflowSystem/IWorkflowViewModel.cs` 的 `IWorkflowViewModel`），四个 Helper 接口都继承 `IWorkflowHelper`（`Interfaces/WorkflowSystem/IWorkflowHelper.cs` 的 `IWorkflowHelper`，只有 `Closing/CloseAsync/Closed` 三个钩子）。
+四个组件接口都继承 `IWorkflowViewModel`（`Interfaces/WorkflowSystem/Common/IWorkflowViewModel.cs` 的 `IWorkflowViewModel`），四个 Helper 接口都继承 `IWorkflowHelper`（`Interfaces/WorkflowSystem/Common/IWorkflowHelper.cs` 的 `IWorkflowHelper`，只有 `Closing/CloseAsync/Closed` 三个钩子）。
 
 **分界线是固定的：ViewModel 存状态，Helper 存行为与订阅。**
 
 | 组件 | ViewModel 拥有（可序列化的状态） | Helper 拥有（运行时状态） | 依据 |
 |---|---|---|---|
-| Tree | `Layout`、`Nodes`、`Links`、`LinksMap`、`VirtualLink` | 撤销/重做栈（`TreeCache`）、`VisibleItems`、`Viewport`、`CurrentSender`、`SpatialManager` | `Interfaces/WorkflowSystem/IWorkflowTreeViewModel.cs` 的 `Layout` / `VirtualLink` / `Nodes` / `Links` / `LinksMap`；`StandardEx/WorkflowTreeEx.cs` 的 `_cache` 与 `TreeCache` |
-| Node | `Parent`、`Anchor`、`Size`、`Slots` | `_scaleTracker`、子 Helper 的并发信号量 | `Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs` 的 `Parent` / `Anchor` / `Size` / `Slots`；`Templates/ViewModels/NodeDefaultViewModel.cs` 的 `_scaleTracker` |
-| Slot | `Parent`、`Channel`、`State`、`Anchor`、`Targets`、`Sources` | 无独立运行时状态（`SlotHelper<T>` 只有事件） | `Interfaces/WorkflowSystem/IWorkflowSlotViewModel.cs` 的 `Targets` / `Sources` / `Parent` / `Channel` / `State` / `Anchor`；`Templates/Helpers/SlotHelper.cs` 的 `SlotHelper<T>` |
-| Link | `Sender`、`Receiver`、`IsVisible` | 无 | `Interfaces/WorkflowSystem/IWorkflowLinkViewModel.cs` 的 `Sender` / `Receiver` / `IsVisible`；`Templates/Helpers/LinkHelper.cs` 的 `LinkHelper<T>` |
+| Tree | `Layout`、`Nodes`、`Links`、`LinksMap`、`VirtualLink` | 撤销/重做栈（`TreeCache`）、`VisibleItems`、`Viewport`、`CurrentSender`、`SpatialManager` | `Interfaces/WorkflowSystem/Components/IWorkflowTreeViewModel.cs` 的 `Layout` / `VirtualLink` / `Nodes` / `Links` / `LinksMap`；`StandardEx/WorkflowTreeEx.cs` 的 `_cache` 与 `TreeCache` |
+| Node | `Parent`、`Anchor`、`Size`、`Slots` | `_scaleTracker`、子 Helper 的并发信号量 | `Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `Parent` / `Anchor` / `Size` / `Slots`；`Templates/ViewModels/NodeDefaultViewModel.cs` 的 `_scaleTracker` |
+| Slot | `Parent`、`Channel`、`State`、`Anchor`、`Targets`、`Sources` | 无独立运行时状态（`SlotHelper<T>` 只有事件） | `Interfaces/WorkflowSystem/Components/IWorkflowSlotViewModel.cs` 的 `Targets` / `Sources` / `Parent` / `Channel` / `State` / `Anchor`；`Templates/Helpers/SlotHelper.cs` 的 `SlotHelper<T>` |
+| Link | `Sender`、`Receiver`、`IsVisible` | 无 | `Interfaces/WorkflowSystem/Components/IWorkflowLinkViewModel.cs` 的 `Sender` / `Receiver` / `IsVisible`；`Templates/Helpers/LinkHelper.cs` 的 `LinkHelper<T>` |
 
 **Helper 是「按实例挂」的，不是全局单例**。`EnsureWorkflowHelper()` 里 `if (Helper is not <具体类型>) Helper = new <具体类型>()` 是生成器写的（`Src/Generators/VeloxDev.Core.Generator/Writers/WorkflowWriter.cs` 的 `GenerateWorkflowLifecycleBody`），所以**手写 ViewModel 必须自己在构造函数里调 `InitializeWorkflow()`**，见 `Templates/ViewModels/NodeDefaultViewModel.cs` 的 `NodeDefaultViewModel()` 构造函数。
 
@@ -253,7 +253,7 @@ IWorkflowTreeEvents : Connecting/Connected
 ⚠ 横轴在这三家**到不了换算行**（不是漏修，是结构使然）：**WPF 与 Jalium 的滚轮事件本身没有横轴分量**（`MouseWheelEventArgs` 只有 `Delta`）；**Avalonia 的事件带着 `e.Delta.X`，但默认滚那一支调的是 `ScrollBy(0d, …)`**（默认就是竖滚，宿主若要横滚得自己调）。Razor 有**两处**取反（JS 边界 × C#），翻一处会把那家弄反。
 同理，按键被路由不等于被拦：面只在 `Delete` 上拦（那是它自己那一手管的键），滚动容器认得的键从来不在它手里。**按键的 target 取路由已经在维护的那个指针目标**（不再是「悬停的那条线」），所以树级的键（Ctrl+Z/Ctrl+Y）在指针位于空白画布或节点上时一样到得了树 —— 早先那种「不悬停连线就整笔不路由」的门已经拆掉。
 
-节点命令共 8 个（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs` 的 `MoveCommand` … `ReverseBroadcastCommand`），Tree 8 个（`IWorkflowTreeViewModel.cs` 的 `CreateNodeCommand` … `UndoCommand`），Slot 4 个（`IWorkflowSlotViewModel.cs` 的 `SetChannelCommand` … `DeleteCommand`），Link 1 个（`IWorkflowLinkViewModel.cs` 的 `DeleteCommand`），另有全部组件共有的 `CloseCommand`（`IWorkflowViewModel.cs` 的 `CloseCommand`）。
+节点命令共 8 个（`Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `MoveCommand` … `ReverseBroadcastCommand`），Tree 8 个（`IWorkflowTreeViewModel.cs` 的 `CreateNodeCommand` … `UndoCommand`），Slot 4 个（`IWorkflowSlotViewModel.cs` 的 `SetChannelCommand` … `DeleteCommand`），Link 1 个（`IWorkflowLinkViewModel.cs` 的 `DeleteCommand`），另有全部组件共有的 `CloseCommand`（`IWorkflowViewModel.cs` 的 `CloseCommand`）。
 
 **这意味着「加一个新的交互手势」通常完全不改 Core** —— 在适配器里发一条已有的命令即可；只有命令语义不够时才回 Core 加 `StandardXxx`。
 
@@ -282,7 +282,7 @@ IWorkflowTreeEvents : Connecting/Connected
 ## 五、分层与依赖方向
 
 ```
-Interfaces/WorkflowSystem/     纯契约，零实现
+Interfaces/WorkflowSystem/    纯契约，零实现（按 Common/Components/Connections/Commands/Providers/Spatial/Surface/Execution/Enums/ 分层）
         ↑
 WorkflowSystem/                实现（Templates 默认实现、StandardEx 扩展方法、CompilerEx、GUI）
         ↑
@@ -302,10 +302,10 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 
 | 我想改 | 打开 |
 |---|---|
-| 节点收到数据时算什么 | `Templates/Helpers/NodeHelper.cs` 的 `ReceiveAsync`（`Interfaces/WorkflowSystem/IWorkflowNodeViewModel.cs` 的 `ReceiveAsync` 是契约）。默认返回 `null` = 静默不往下传 |
+| 节点收到数据时算什么 | `Templates/Helpers/NodeHelper.cs` 的 `ReceiveAsync`（`Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `ReceiveAsync` 是契约）。默认返回 `null` = 静默不往下传 |
 | 一条边能不能连 | `Templates/Helpers/TreeHelper.cs` 的 `ValidateConnection`（`TreeHelper<T>.ValidateConnection`，默认 `true`）。协议见 §3.2 |
 | 用户拖出的连线用什么类型 | `TreeHelper<T>.CreateLink`（`Templates/Helpers/TreeHelper.cs` 的 `CreateLink`，默认 `LinkDefaultViewModel`） |
-| 连接的容量/自动清理规则 | `Enums/Slot.cs` 的 `SlotChannel` + `StandardEx/WorkflowTreeEx.cs` 的 `ShouldCleanupConnections` |
+| 连接的容量/自动清理规则 | `Interfaces/WorkflowSystem/Enums/Slot.cs` 的 `SlotChannel` + `StandardEx/WorkflowTreeEx.cs` 的 `ShouldCleanupConnections` |
 | slot 的状态位怎么算 | `StandardEx/WorkflowSlotEx.cs` 的 `StandardUpdateState`（由 `Targets.Count`/`Sources.Count` 推导） |
 | 改通道时旧连接怎么清 | `StandardEx/WorkflowSlotEx.cs` 的 `StandardSetChannel`（按**旧**通道的位决定删哪些） |
 | 图怎么被切成执行段 | `CompilerEx/Compile/CompilerViewModel.cs`（正向）与 `CompilerViewModel.Reverse.cs`（逆向锥） |
@@ -320,8 +320,8 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 | 网格索引的数据结构 | `GUI/Virtualization/SpatialGridHashMap.cs`（注意 `OnItemPropertyChanged` 里 `_reindexing` 上方那段注释：重入时改 `Dictionary` 会毁内部状态） |
 | 可见集变化后怎么让视图刷新 | `Templates/Helpers/TreeHelper.cs` 的 `BroadcastVisibleItemLayout()`（对每个可见节点重发 `Anchor`/`Size`） |
 | 撤销/重做栈 | `StandardEx/WorkflowTreeEx.cs`（`StandardRedo`/`StandardSubmit`/`StandardUndo`/`StandardClearHistory`） |
-| slot 数量可变的节点（选择器） | `SelectorEx/SlotEnumerator.cs`、`SelectorEx/ConditionalSlot.cs`、`Interfaces/WorkflowSystem/IConditionalSlotProvider.cs`（**两个重载：泛型 + 非泛型，见下**） |
-| 网格装饰器 / 小地图的 Core 契约 | `Interfaces/WorkflowSystem/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs` |
+| slot 数量可变的节点（选择器） | `SelectorEx/SlotEnumerator.cs`、`SelectorEx/ConditionalSlot.cs`、`Interfaces/WorkflowSystem/Providers/IConditionalSlotProvider.cs`（**两个重载：泛型 + 非泛型，见下**） |
+| 网格装饰器 / 小地图的 Core 契约 | `Interfaces/WorkflowSystem/Surface/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs` |
 
 ---
 
@@ -335,7 +335,7 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 
 | 泛型 | 非泛型 | 擦掉的是什么 |
 |---|---|---|
-| `IConditionalSlotProvider<TSlot>` | `IConditionalSlotProvider`（`Interfaces/WorkflowSystem/IConditionalSlotProvider.cs`） | `TSlot`：留 `Parent` / `SelectorTypeName` / `SelectorType` / `Slots`（`IReadOnlyList<IConditionalSlot>`）/ `TrySelect(object, out IWorkflowSlotViewModel?)` / `SetSelector(object?)` |
+| `IConditionalSlotProvider<TSlot>` | `IConditionalSlotProvider`（`Interfaces/WorkflowSystem/Providers/IConditionalSlotProvider.cs`） | `TSlot`：留 `Parent` / `SelectorTypeName` / `SelectorType` / `Slots`（`IReadOnlyList<IConditionalSlot>`）/ `TrySelect(object, out IWorkflowSlotViewModel?)` / `SetSelector(object?)` |
 | `ConditionalSlot<TSlot>` | `IConditionalSlot`（`SelectorEx/ConditionalSlot.cs`） | `TSlot`：留 `Name` / `Value` / `Slot`（`IWorkflowSlotViewModel`） |
 
 **三处必须显式实现，别想着改成隐式**：`Slots`（属性类型不协变，`Items` 是

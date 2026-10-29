@@ -464,7 +464,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 六�
 
 输出槽在 `DataTemplate` 里（`ItemsSource="{Binding OutputSlots.Items}"`），那个 `DataTemplate` 的 DataContext 是**包装项**（成员是 `Slot` 与 `Name`，模板里两个都用到过）。所以 `DataContext="{Binding Slot}"` / `BindingContext="{Binding Slot}"` 是对的 —— 槽视图的上下文就该是槽自己。
 
-错的是**同一个元素上**再写 `SlotState="{Binding Slot.State}"`：`DataContext` 一被设成槽 VM，这一行就改在槽 VM 里求值，而 `IWorkflowSlotViewModel` 的成员只有 `Targets` / `Sources` / `Parent` / `Channel` / `State` / `Anchor`（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/IWorkflowSlotViewModel.cs`），**没有 `Slot`** ⇒ 绑定失败、槽永远拿不到自己的状态，而**不报错**：编译通过、槽照常画出来。
+错的是**同一个元素上**再写 `SlotState="{Binding Slot.State}"`：`DataContext` 一被设成槽 VM，这一行就改在槽 VM 里求值，而 `IWorkflowSlotViewModel` 的成员只有 `Targets` / `Sources` / `Parent` / `Channel` / `State` / `Anchor`（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/IWorkflowSlotViewModel.cs`），**没有 `Slot`** ⇒ 绑定失败、槽永远拿不到自己的状态，而**不报错**：编译通过、槽照常画出来。
 
 正确写法是 `SlotState="{Binding State}"`（与输入槽那行 `{Binding State}` 同形 —— 输入槽的上下文本来就是槽）。
 

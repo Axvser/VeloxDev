@@ -1,6 +1,6 @@
 ﻿# TransitionSystem — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`（42 个 .cs，2026-10-04 起按角色分子目录：`Events/`2、`Effects/`4、`Binding/`5、`Sampling/`3、`State/`2、`Runtime/`8、`Enums/`3、`NativeSamplers/`15；命名空间不变）、契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`；
+> 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`（39 个 .cs，2026-10-04 起按角色分子目录：`Events/`2、`Effects/`4、`Binding/`5、`Sampling/`3、`State/`2、`Runtime/`8、`NativeSamplers/`15；命名空间不变）、契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，枚举在 `Interfaces/TransitionSystem/Enums/`；
 > 七家平台实现在 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`。
 > 依赖的子系统：`Timing/`（时钟）、`Threading/`（线程归属与编组）、`TimeLine/`（事件参数）、`WeakTypes/`、`Lifetime/`。
 
@@ -228,7 +228,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 | 时钟（暂停/倍速/锚点/epoch/park 信号） | `Timing/TimeSourceCore.cs` |
 | 线程归属与编组 | `Threading/ThreadDispatcherBase.cs` + 各家的 `UIThreadInspector` |
 | 错误的可见性（哪些 stage、是否已报过） | `TransitionSystem/Runtime/TransitionDiagnostics.cs` |
-| 事件参数（无载荷的 `Handled`/`DeltaTime`/`TotalTime`/`Loop`/`Cycle`；带载荷的 `Stage`/`Value`） | `TimeLine/TimeLineEventArgs.cs`、`TransitionSystem/Events/TransitionEventArgs.cs`、`Events/TransitionEventArgs{TStage,TValue}.cs`、`Enums/{Warn,Error}Stage.cs` |
+| 事件参数（无载荷的 `Handled`/`DeltaTime`/`TotalTime`/`Loop`/`Cycle`；带载荷的 `Stage`/`Value`） | `TimeLine/TimeLineEventArgs.cs`、`TransitionSystem/Events/TransitionEventArgs.cs`、`Events/TransitionEventArgs{TStage,TValue}.cs`、`Interfaces/TransitionSystem/Enums/{Warn,Error}Stage.cs` |
 | 「主题切换为什么在这个平台不animate」 | `DynamicTheme/ThemeManager.cs` 的 `RunSwitch` + 该家的 `Interpolator.CreateScheduler` |
 
 ---

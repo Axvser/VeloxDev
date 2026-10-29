@@ -27,7 +27,7 @@
 | 索引实参的求值时机 | `PathIndex.Frozen<T>` | `TransitionSystem/Binding/PathIndex.cs` 的 `Frozen<T>`；身份在 `Binding/PathSegment.cs` 的 `identity`（`frozen|{key}` / `live|{key}`） |
 | 新平台适配器 | 见 §三·C | 八个类 + 联动清单 §四 |
 
-**本模块的枚举有三个**：`RotationDirection`（唯一跨 Core 与适配器都被消费的，详见 §4.6）、`WarnStage` 与 `ErrorStage`（效果 `Warn`/`Error` 事件的 stage，定义在 `TransitionSystem/Enums/`）。stage **不再是自由字符串**：诊断只能取枚举成员，写一个不存在的 stage 名**编译不过**；新增一个 stage = 给对应枚举加一个成员（`Enums/WarnStage.cs` / `Enums/ErrorStage.cs`）并在某个 `diagnostics.Warn/Error` 调用点用它（调用点逐个列在 `memory/modules/TimeLine/architecture.md` §二）。消费方 `switch` 该枚举时，新增成员会在未覆盖处被编译器指出（`switch` 表达式无 `default` 时 CS8509）。所以要盯的不再是「漏了哪处 `switch`」，而是**新成员有没有调用点** —— 引擎侧没有覆盖全部 stage 的中央 `switch`，编译器不会替你提醒这一条。
+**本模块的枚举有三个**：`RotationDirection`（唯一跨 Core 与适配器都被消费的，详见 §4.6）、`WarnStage` 与 `ErrorStage`（效果 `Warn`/`Error` 事件的 stage，定义在 `Interfaces/TransitionSystem/Enums/`）。stage **不再是自由字符串**：诊断只能取枚举成员，写一个不存在的 stage 名**编译不过**；新增一个 stage = 给对应枚举加一个成员（`Interfaces/TransitionSystem/Enums/WarnStage.cs` / `Interfaces/TransitionSystem/Enums/ErrorStage.cs`）并在某个 `diagnostics.Warn/Error` 调用点用它（调用点逐个列在 `memory/modules/TimeLine/architecture.md` §二）。消费方 `switch` 该枚举时，新增成员会在未覆盖处被编译器指出（`switch` 表达式无 `default` 时 CS8509）。所以要盯的不再是「漏了哪处 `switch`」，而是**新成员有没有调用点** —— 引擎侧没有覆盖全部 stage 的中央 `switch`，编译器不会替你提醒这一条。
 
 ---
 
@@ -294,11 +294,11 @@
 
 ### 4.6 加一个 `RotationDirection` 方向值
 
-`RotationDirection` 是**唯一一个跨 Core 与适配器都被消费的枚举**（`TransitionSystem/Enums/RotationDirection.cs` 的 `RotationDirection`，`[Flags]`，作为 `Property(..., interpolationOptions)` 透传）。加一个值要同步的消费者：
+`RotationDirection` 是**唯一一个跨 Core 与适配器都被消费的枚举**（`Interfaces/TransitionSystem/Enums/RotationDirection.cs` 的 `RotationDirection`，`[Flags]`，作为 `Property(..., interpolationOptions)` 透传）。加一个值要同步的消费者：
 
 | # | 位置 | 说明 |
 |---|---|---|
-| 1 | `Enums/RotationDirection.cs` | 加 `1 << n` 的位值 |
+| 1 | `Interfaces/TransitionSystem/Enums/RotationDirection.cs` | 加 `1 << n` 的位值 |
 | 2 | `NativeSamplers/DoubleSampler.cs` 的 `InsertFrame` | 2-D/无轴旋转的角度取近方向 |
 | 3 | `NativeSamplers/QuaternionSampler.cs` 的 `SlerpDirectional` | 3-D Slerp 的方向选择 |
 | 4 | 各家的 transform/projection 采样器（WPF/Avalonia/Jalium 各家 `TransformSampler` 的 `LerpAngle`、WinUI `ProjectionSampler` 的 `LerpAngle`） | 逐轴方向 |
@@ -307,7 +307,7 @@
 
 ### 4.7 本模块**不需要**联动的东西（省掉无谓的搜索）
 
-- **事件 stage 现在是枚举，但加一个 stage 仍不需要跨模块联动**：给 `WarnStage`/`ErrorStage` 加一个成员（`TransitionSystem/Enums/`）并在某个 `diagnostics.Warn/Error` 调用点用它即可，没有生成器、适配器、模板要同步。消费方 `switch` 该枚举时新增成员会被编译器指出（`switch` 表达式无 `default` 时 CS8509）。注意引擎侧没有覆盖全部成员的中央 `switch`，所以**不会有编译器提醒你「新成员没有调用点」**。
+- **事件 stage 现在是枚举，但加一个 stage 仍不需要跨模块联动**：给 `WarnStage`/`ErrorStage` 加一个成员（`Interfaces/TransitionSystem/Enums/`）并在某个 `diagnostics.Warn/Error` 调用点用它即可，没有生成器、适配器、模板要同步。消费方 `switch` 该枚举时新增成员会被编译器指出（`switch` 表达式无 `default` 时 CS8509）。注意引擎侧没有覆盖全部成员的中央 `switch`，所以**不会有编译器提醒你「新成员没有调用点」**。
 - **没有生成器**：`VeloxDev.Core.Generator` 不参与 TransitionSystem（对比 `WorkflowSystem` 有生成器联动）。
 - **Core 不为新平台改任何一行**：采样器注册与 `CreateScheduler` 都在适配器侧。Core 侧要动的只有测试与 demo 清单（§4.3）。
 

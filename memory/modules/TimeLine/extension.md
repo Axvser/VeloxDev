@@ -104,7 +104,7 @@
 | 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（这个名字曾带 ZWSP，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1）② `TickWriter` 的 `GenerateBody` 模板与 `GenerateBaseInterfaces` ③ 五个 `partial void` 声明 ④ `Src/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
 | 加/改 `[Tickable]` 的参数 | ① `TickableAttribute.cs` ② `TickWriter.ReadTickableConfig`（位置参数 + 命名参数两条读取路径，**命名参数覆盖位置参数**）③ `TickableAttributeTests.cs` |
 | 改 `TriggerAttributes` 的组合方式 | `Src/Generators/VeloxDev.Core.Generator/Base/Analizer.cs` 的 `TriggerAttributes`；`"VeloxDev.TimeLine.TickableAttribute"` 是其中一项。**它同时决定了「哪些类会进入生成器」**，删掉它等于整个特性失效 |
-| 改事件参数族的形状 | `TransitionSystem`（`Runtime/TransitionDiagnostics.cs` 的 `Raise`、`Runtime/TransitionInterpreter.cs` 三处 `Args.Handled` 检查、`Effects/Transition.cs` 的 `InvokeError`）+ `Events/TransitionEventArgs{TStage,TValue}.cs`、`Enums/{Warn,Error}Stage.cs` + `TimeLineEventArgsTests.cs` |
+| 改事件参数族的形状 | `TransitionSystem`（`Runtime/TransitionDiagnostics.cs` 的 `Raise`、`Runtime/TransitionInterpreter.cs` 三处 `Args.Handled` 检查、`Effects/Transition.cs` 的 `InvokeError`）+ `Events/TransitionEventArgs{TStage,TValue}.cs`、`Interfaces/TransitionSystem/Enums/{Warn,Error}Stage.cs` + `TimeLineEventArgsTests.cs` |
 | 改 channel 的静态 API 面 | `TickManager.cs` 的静态命令面与查询面七组；注意**命令面走 `GetOrCreateChannel`、查询面走 `TryGetValue`**（`TickManager.Bus` 的注释写死了这条不对称） |
 | 加一条「跨线程可见」的字段 | 检查它的写者是否只在一条泵的线程上：`_state` 那种「一条泵一个字段」的写法见 `Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs` 的 `_updateSeenFrame` / `_lastFixedIndex` 等字段 |
 | 改暂停/倍速语义 | 实现全在 `Src/Core/VeloxDev.Core/Timing/TimeSourceCore.cs`；本模块只转发（`LoopChannel.SetTimeScale` / `Pause` / `Resume`） |
