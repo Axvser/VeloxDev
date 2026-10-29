@@ -23,6 +23,10 @@ internal sealed class WpfHeadlessSurface : IDisposable
         Graph = graph;
         Tree = graph.Tree;
 
+        // The template binds the canvas to Layout.ActualSize; the hand-built fixture must do the same or an
+        // overscroll-grown canvas has no extent to scroll into.
+        Tree.Layout.OriginSize = new VeloxDev.WorkflowSystem.Size(CanvasWidth, CanvasHeight);
+
         Host = new UserControl
         {
             Width = HostWidth,
@@ -47,6 +51,13 @@ internal sealed class WpfHeadlessSurface : IDisposable
             Height = CanvasHeight,
             Background = Brushes.Transparent,
         };
+
+        // The template binds the canvas to Layout.ActualSize; the hand-built fixture must do the same or an
+        // overscroll-grown canvas has no extent to scroll into.
+        Canvas.SetBinding(FrameworkElement.WidthProperty,
+            new System.Windows.Data.Binding("ActualSize.Width") { Source = Tree.Layout });
+        Canvas.SetBinding(FrameworkElement.HeightProperty,
+            new System.Windows.Data.Binding("ActualSize.Height") { Source = Tree.Layout });
 
         Decorator = new TestGridDecorator();
 

@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.Avalonia.Headless.Tests.Infrastructure;
+using VeloxDev.WorkflowSystem.StandardEx;
 using Behaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 using Wf = VeloxDev.WorkflowSystem;
 
@@ -357,4 +358,67 @@ public sealed class WorkflowSurfaceHeadlessTests
 
         Assert.Fail("timed out waiting for the adapter to update the model");
     }
+
+    [TestMethod]
+    public void Locate_ScrollsTheNodeToTheViewportCenter()
+        => Run(() =>
+        {
+            var graph = TestGraph.Create();
+            using var surface = new AvaloniaHeadlessSurface(graph);
+            surface.Scroll.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            var node = graph.Far;
+            var expectedX = node.Anchor.Horizontal + node.Size.Width / 2d
+                - surface.Scroll.Viewport.Width / 2d + graph.Tree.Layout.ActualOffset.Horizontal;
+            var expectedY = node.Anchor.Vertical + node.Size.Height / 2d
+                - surface.Scroll.Viewport.Height / 2d + graph.Tree.Layout.ActualOffset.Vertical;
+
+            Assert.IsTrue(node.Locate(), "an attached surface registers a navigator");
+            surface.Scroll.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.AreEqual(
+                Math.Max(0d, expectedX), surface.Scroll.Offset.X, 1d,
+                "the far node's center must land at the viewport center");
+            Assert.AreEqual(Math.Max(0d, expectedY), surface.Scroll.Offset.Y, 1d);
+        });
+
+    [TestMethod]
+    public void Locate_GrowsTheCanvasWhenTheElementCannotBeCenteredInIt()
+        => Run(() =>
+        {
+            var graph = TestGraph.Create();
+            using var surface = new AvaloniaHeadlessSurface(graph);
+            surface.Scroll.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            // Before the origin: centering needs a negative scroll, so the canvas must grow instead of clamping.
+            Assert.IsTrue(graph.Left.Locate());
+            surface.Scroll.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            var leftX = graph.Left.Anchor.Horizontal + graph.Left.Size.Width / 2d
+                + graph.Tree.Layout.ActualOffset.Horizontal - surface.Scroll.Offset.X;
+            Assert.AreEqual(surface.Scroll.Viewport.Width / 2d, leftX, 1d, "negative edge");
+            Assert.IsTrue(graph.Tree.Layout.NegativeOffset.Horizontal > 0d, "the canvas grew before the origin");
+
+            // Past the far edge: the node is outside the current extent, so the extent has to grow.
+            var edge = new Wf.NodeDefaultViewModel
+            {
+                Parent = graph.Tree,
+                Anchor = new Wf.Anchor(9000, 4000, 0),
+                Size = new Wf.Size(160, 90),
+            };
+            graph.Tree.Nodes.Add(edge);
+            surface.Scroll.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.IsTrue(edge.Locate());
+            surface.Scroll.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            var rightX = edge.Anchor.Horizontal + edge.Size.Width / 2d
+                + graph.Tree.Layout.ActualOffset.Horizontal - surface.Scroll.Offset.X;
+            Assert.AreEqual(surface.Scroll.Viewport.Width / 2d, rightX, 1d, "positive edge");
+            Assert.IsTrue(graph.Tree.Layout.PositiveOffset.Horizontal > 0d, "the canvas grew past the content");
+        });
 }

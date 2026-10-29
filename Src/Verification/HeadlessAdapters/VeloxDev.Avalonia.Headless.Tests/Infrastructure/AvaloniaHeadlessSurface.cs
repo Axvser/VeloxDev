@@ -22,6 +22,10 @@ internal sealed class AvaloniaHeadlessSurface : IDisposable
         Graph = graph;
         Tree = graph.Tree;
 
+        // The template binds the canvas to Layout.ActualSize; the hand-built fixture must do the same or an
+        // overscroll-grown canvas has no extent to scroll into.
+        Tree.Layout.OriginSize = new VeloxDev.WorkflowSystem.Size(CanvasWidth, CanvasHeight);
+
         Host = new UserControl
         {
             Width = HostWidth,
@@ -42,10 +46,13 @@ internal sealed class AvaloniaHeadlessSurface : IDisposable
 
         Canvas = new Canvas
         {
-            Width = CanvasWidth,
-            Height = CanvasHeight,
             Background = Brushes.Transparent,
         };
+
+        Canvas.Bind(global::Avalonia.Layout.Layoutable.WidthProperty,
+            new global::Avalonia.Data.Binding("ActualSize.Width") { Source = Tree.Layout });
+        Canvas.Bind(global::Avalonia.Layout.Layoutable.HeightProperty,
+            new global::Avalonia.Data.Binding("ActualSize.Height") { Source = Tree.Layout });
 
         Decorator = new TestGridDecorator();
 

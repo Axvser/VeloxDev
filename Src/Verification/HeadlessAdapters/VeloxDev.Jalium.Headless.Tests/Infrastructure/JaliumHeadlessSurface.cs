@@ -89,6 +89,12 @@ internal sealed class JaliumHeadlessSurface : IDisposable
     {
         Scroll.ScrollToHorizontalOffset(horizontal);
         Scroll.ScrollToVerticalOffset(vertical);
+        Settle();
+    }
+
+    /// <summary>Re-runs measure/arrange and the refresh that publishes the new scroll offset.</summary>
+    public void Settle()
+    {
         // 偏移先被记成 requested，下一次 Measure/Arrange 才成为 HorizontalOffset/Viewport。
         Layout();
         WorkflowSurfaceBehavior.Refresh(Host);

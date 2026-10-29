@@ -1,6 +1,7 @@
 using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WinForms.Headless.Tests.Infrastructure;
+using VeloxDev.WorkflowSystem.StandardEx;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -105,5 +106,27 @@ public sealed class WorkflowSurfaceHeadlessTests
         WorkflowSurfaceBehavior.SetIsEnabled(surface.View, false);
 
         Assert.IsNull(WorkflowInput.For(graph.Tree).Scroller);
+    }
+
+    [TestMethod]
+    public void Locate_MovesTheViewport()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        var node = graph.Far;
+        var expectedX = node.Anchor.Horizontal + node.Size.Width / 2d - surface.View.ClientSize.Width / 2d;
+        var expectedY = node.Anchor.Vertical + node.Size.Height / 2d - surface.View.ClientSize.Height / 2d;
+
+        Assert.IsNotNull(WorkflowInput.For(graph.Tree).Navigator, "an attached surface registers a navigator");
+        Assert.IsTrue(node.Locate());
+        Application.DoEvents();
+        WorkflowSurfaceBehavior.Refresh(surface.View);
+        Application.DoEvents();
+
+        Assert.AreEqual(
+            System.Math.Max(0d, expectedX), graph.Tree.Helper.Viewport.Horizontal, 2d,
+            "the far node's center must land at the viewport center");
+        Assert.AreEqual(System.Math.Max(0d, expectedY), graph.Tree.Helper.Viewport.Vertical, 2d);
     }
 }

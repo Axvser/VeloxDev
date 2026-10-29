@@ -1,7 +1,11 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WPF.Headless.Tests.Infrastructure;
+using VeloxDev.WorkflowSystem.StandardEx;
 using Behaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 using Wf = VeloxDev.WorkflowSystem;
 
@@ -158,5 +162,126 @@ public sealed class WorkflowSurfaceHeadlessTests
             1e-9,
             "after detach the surface must not keep feeding the model");
         Assert.AreEqual(before.Vertical, graph.Tree.Helper.Viewport.Vertical, 1e-9);
+    }
+
+    [TestMethod]
+    public void Locate_ScrollsTheNodeToTheViewportCenter()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WpfHeadlessSurface(graph);
+        surface.Layout();
+
+        var node = graph.Far;
+        var expectedX = node.Anchor.Horizontal + node.Size.Width / 2d
+            - surface.Scroll.ViewportWidth / 2d + graph.Tree.Layout.ActualOffset.Horizontal;
+        var expectedY = node.Anchor.Vertical + node.Size.Height / 2d
+            - surface.Scroll.ViewportHeight / 2d + graph.Tree.Layout.ActualOffset.Vertical;
+
+        Assert.IsTrue(node.Locate(), "an attached surface registers a navigator");
+        WpfHeadlessSurface.Pump();
+
+        Assert.AreEqual(
+            Math.Max(0d, expectedX), surface.Scroll.HorizontalOffset, 1d,
+            "the far node's center must land at the viewport center");
+        Assert.AreEqual(Math.Max(0d, expectedY), surface.Scroll.VerticalOffset, 1d);
+    }
+
+    [TestMethod]
+    public void Locate_WorksAtAnyZoom()
+    {
+        foreach (var factor in new[] { 0.5, 2.0 })
+        {
+            var graph = TestGraph.Create();
+            using var surface = new WpfHeadlessSurface(graph);
+
+            // 真实模板里画布的 Width/Height 绑到 Layout.ActualSize；无头夹具是手搭的，这里照同一契约补上，
+            // 否则 0.5 倍缩小后 ActualSize 翻倍、夹具仍停在 8000，滚动范围会先把目标夹掉。
+            graph.Tree.Layout.OriginSize = new Wf.Size(8000d, 6000d);
+            graph.Tree.Layout.Scale = new Wf.Scale(factor, factor);
+            Behaviors.WorkflowSurfaceBehavior.Refresh(surface.Host);
+            surface.Layout();
+            WpfHeadlessSurface.Pump();
+
+            var node = graph.Far;
+            var expectedX = node.Anchor.Horizontal + node.Size.Width / 2d
+                - surface.Scroll.ViewportWidth / 2d + graph.Tree.Layout.ActualOffset.Horizontal;
+            var expectedY = node.Anchor.Vertical + node.Size.Height / 2d
+                - surface.Scroll.ViewportHeight / 2d + graph.Tree.Layout.ActualOffset.Vertical;
+
+            Assert.IsTrue(node.Locate(), $"scale {factor}: an attached surface registers a navigator");
+            WpfHeadlessSurface.Pump();
+
+            Assert.AreEqual(
+                Math.Max(0d, expectedX), surface.Scroll.HorizontalOffset, 1d,
+                $"scale {factor}: the node's collapsed center must land at the viewport center");
+            Assert.AreEqual(Math.Max(0d, expectedY), surface.Scroll.VerticalOffset, 1d, $"scale {factor}");
+        }
+    }
+
+    [TestMethod]
+    public void WheelOverASiblingControl_DoesNotScrollTheCanvas()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WpfHeadlessSurface(graph);
+        surface.Layout();
+        WpfHeadlessSurface.Pump();
+
+        // Put a control next to the surface inside the same host the behaviour is attached to — the shape of
+        // the full demo, where the sidebar and the canvas share one UserControl.
+        var sidebar = new Button { Content = "side" };
+        var root = new DockPanel();
+        surface.Host.Content = null;
+        root.Children.Add(sidebar);
+        root.Children.Add(surface.Border);
+        surface.Host.Content = root;
+        surface.Layout();
+        WpfHeadlessSurface.Pump();
+
+        var before = surface.Scroll.VerticalOffset;
+        sidebar.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
+        {
+            RoutedEvent = UIElement.PreviewMouseWheelEvent,
+            Source = sidebar,
+        });
+        WpfHeadlessSurface.Pump();
+
+        Assert.AreEqual(
+            before, surface.Scroll.VerticalOffset, 1e-9,
+            "a wheel over a sibling control must not move the canvas, even when that control has no scroll room");
+    }
+
+    [TestMethod]
+    public void Locate_GrowsTheCanvasWhenTheElementCannotBeCenteredInIt()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WpfHeadlessSurface(graph);
+        surface.Layout();
+        WpfHeadlessSurface.Pump();
+
+        // Before the origin: centering needs a negative scroll, so the canvas must grow instead of clamping to 0.
+        Assert.IsTrue(graph.Left.Locate());
+        WpfHeadlessSurface.Pump();
+        var leftX = graph.Left.Anchor.Horizontal + graph.Left.Size.Width / 2d
+            + graph.Tree.Layout.ActualOffset.Horizontal - surface.Scroll.HorizontalOffset;
+        Assert.AreEqual(surface.Scroll.ViewportWidth / 2d, leftX, 1d, "negative edge");
+        Assert.IsTrue(graph.Tree.Layout.NegativeOffset.Horizontal > 0d, "the canvas grew before the origin");
+
+        // Past the far edge: the node is outside the current extent, so the extent has to grow.
+        var edge = new Wf.NodeDefaultViewModel
+        {
+            Parent = graph.Tree,
+            Anchor = new Wf.Anchor(9000, 4000, 0),
+            Size = new Wf.Size(160, 90),
+        };
+        graph.Tree.Nodes.Add(edge);
+        surface.Layout();
+        WpfHeadlessSurface.Pump();
+
+        Assert.IsTrue(edge.Locate());
+        WpfHeadlessSurface.Pump();
+        var rightX = edge.Anchor.Horizontal + edge.Size.Width / 2d
+            + graph.Tree.Layout.ActualOffset.Horizontal - surface.Scroll.HorizontalOffset;
+        Assert.AreEqual(surface.Scroll.ViewportWidth / 2d, rightX, 1d, "positive edge");
+        Assert.IsTrue(graph.Tree.Layout.PositiveOffset.Horizontal > 0d, "the canvas grew past the content");
     }
 }

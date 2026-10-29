@@ -1,6 +1,7 @@
 using Jalium.UI.Media;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.Jalium.Headless.Tests.Infrastructure;
+using VeloxDev.WorkflowSystem.StandardEx;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -90,5 +91,26 @@ public sealed class WorkflowSurfaceHeadlessTests
             graph.Tree.Helper.VisibleItems.Count,
             surface.Canvas.Children.Count,
             "the pool must materialize exactly one view for each visible item");
+    }
+
+    [TestMethod]
+    public void Locate_ScrollsTheNodeToTheViewportCenter()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new JaliumHeadlessSurface(graph);
+
+        var node = graph.Far;
+        var expectedX = node.Anchor.Horizontal + node.Size.Width / 2d
+            - surface.Scroll.ViewportWidth / 2d + graph.Tree.Layout.ActualOffset.Horizontal;
+        var expectedY = node.Anchor.Vertical + node.Size.Height / 2d
+            - surface.Scroll.ViewportHeight / 2d + graph.Tree.Layout.ActualOffset.Vertical;
+
+        Assert.IsTrue(node.Locate(), "an attached surface registers a navigator");
+        surface.Settle();
+
+        Assert.AreEqual(
+            System.Math.Max(0d, expectedX), surface.Scroll.HorizontalOffset, 1d,
+            "the far node's center must land at the viewport center");
+        Assert.AreEqual(System.Math.Max(0d, expectedY), surface.Scroll.VerticalOffset, 1d);
     }
 }
