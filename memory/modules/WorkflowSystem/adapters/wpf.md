@@ -159,6 +159,8 @@ notch6 同上
 ```
 
 - 判据 `InnerScrollViewerHasRoom(OriginalSource, state, 0d, e.Delta)`：`SelfThenAncestors` 找**最近的、非 `state.ScrollViewer`** 的 `ScrollViewer`，按 `deltaY<0 → VerticalOffset < ScrollableHeight`、`deltaY>0 → VerticalOffset > 0`（横轴同理）。有 ⇒ 直接 return（不置 `Handled`、不路由、不默认滚）。
+- **轮子只在画布自己的 `ScrollViewer` 内归表面**（2026-10-29 起）：`OnLinkPointerWheel` 先判 `IsWithinScrollViewer(e.OriginalSource, state.ScrollViewer)`，不在就 return。宿主把侧栏与画布装在同一个 `UserControl` 时，侧栏列表滚到上下限后事件仍会冒到宿主；没有这道门，`InnerScrollViewerHasRoom` 返回 false 后画布会接走那一笔。回归：`WheelOverASiblingControl_DoesNotScrollTheCanvas`（把守卫注释掉即红，画布滚 48）。
+- **`CenterOn` 在画布不够大时延展，而不是夹断**（2026-10-29 起）：先按 `CenterScroll` 求目标，越界时用 `ClampScrollOffset`（`extendRatio: 0`）把差额写进 `Negative/PositiveOffset`，再 `ApplyLayout` + `UpdateLayout` 让 ScrollViewer 认下新 extent，随后按新 `ActualOffset` 重算目标并滚动。回归：`Locate_GrowsTheCanvasWhenTheElementCannotBeCenteredInIt`（负向长 `NegativeOffset`、正向长 `PositiveOffset`，两边的元素中心都落在视口中心）。无头夹具因此把 Canvas 的 Width/Height 绑到 `Layout.ActualSize`，与模板同一条契约。
 - ⚠ **到边时不再往外找**：这家不链式外传，所以「内层到边」的答案就是「闸门放行、走我们的路由与默认滚」，不是「交给平台链」。
 - **指针停在节点卡上但那张卡内层无余量时判 ROUTE** —— 不误伤。
 

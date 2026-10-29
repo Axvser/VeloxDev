@@ -203,6 +203,20 @@ relay.PointerWheelChanged += (_, e) =>
 
 ⚙ **`Scroller` is a capability, not route state.** The attached surface registers an `IWorkflowSurfaceScroller` when it binds to a tree and clears it on detach, so a host reads it as nullable. The deltas are **wheel deltas** — the same values as `PointerWheelEventArgs.DeltaX` / `DeltaY`, not scroll offsets: positive X is towards the content on the right, positive Y is away from the user. The adapter converts them to its platform's step (a WPF line count, a DOM scroll, a translated canvas), clamps to the reachable range, and leaves an axis alone when its delta is zero. That is the whole point — one subscriber looks the same on all seven.
 
+⚙ **`Navigator` is the absolute twin of `Scroller`.** The same surface object implements `IWorkflowSurfaceNavigator` and registers it at `WorkflowInput.Navigator` on attach (clearing only its own on detach). `CenterOn(worldX, worldY)` puts that world point at the viewport center; Core's `WorkflowNavigationEx` turns a component into the point:
+
+```csharp
+using VeloxDev.WorkflowSystem.StandardEx;
+
+node.Locate();   // the node's own rectangle center
+slot.Locate();   // its parent node's rectangle center
+link.Locate();   // the midpoint of its two endpoint nodes' centers
+```
+
+⚙ **`Locate()` reads model data only.** A slot targets its parent node (not its measured anchor), and a link targets the midpoint of its endpoints (not its published curve), so an element that is off-screen, unmeasured or not yet drawn still reaches the center. It pans only — the zoom is untouched — and returns `false` without changing anything when the tree has no navigator or the target has no finite position.
+
+⚙ **A target outside the current extent grows the canvas.** Five surfaces (WPF / Avalonia / WinUI / MAUI / Razor) apply `ClampScrollOffset` with `extendRatio: 0`, then re-read the extent before scrolling; Jalium's `NavigateToWorld` grows by the same rule; WinForms' pan engine accepts signed targets and has no extent ceiling. An implementation that cannot grow clamps, so the point lands as close to the center as it allows.
+
 ⚙ **Ctrl+wheel is the zoom gesture, not a scroll.** It is routed first, so `PreventDefault` on `PointerWheelChanged` suppresses the zoom as well; without Ctrl the wheel never zooms.
 
 ⚙ **Keys are a different contract.** A routed `KeyDown`/`KeyUp` reaches your subscription, but the surface only keeps the key from travelling further when it is the key the surface itself acts on (`Delete`) — the keys the scroll container uses (arrows, PageDown, Space) were never the surface's to swallow.

@@ -10,8 +10,8 @@
 
 代码：`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/`。
 
-**参考实现是 `Examples/Workflow/WinUI Trimmed/`，不是 `Examples/Workflow/WinUI/`** ——
-后者还停在 offset frame 之前的老做法（见 §四·P3）。
+**参考实现是 `Examples/Workflow/WinUI Trimmed/`（offset frame）**；完整版用另一条腿：**每条线自己的包围盒**
+（见 §四·P3）。两者都避免按画布尺寸裁线，别把任何一边的盒子绑回画布 `ActualWidth/Height`。
 
 ---
 
@@ -192,6 +192,10 @@ Razor 与 WinForms 则把它放进了适配器
 - **焦点**：这家没有可设的 `Focusable`，用 `host.Focus(FocusState.Pointer)`；按下就收焦点（挂在 `handledEventsToo` 的那个按下处理器顶端，空白画布/节点/插槽/连线都看得到），`RoutePointer` 里那条「悬停连线才收焦点」原样保留。实测点空白画布后 Ctrl+Z 生效（`节点 4/4 → 3/3`），Ctrl+Y 回到 `4/4`。
 - **键**：去掉 `HoveredLink is null` 门，target 改用 `input.PointerTarget`，Delete 仍是唯一被吞的键。
 - **一处刻意保留的齐一性**：Ctrl 那一支里，订阅方若置 `PreventDefault` 就跳过缩放且**不置 `Handled`**，于是原生滚动仍可能发生 —— 这与 WPF/Avalonia 参考实现逐字相同，是为了「七家同形」而没有为这家特判。
+- **宿主级按下处理器只处理画布区域**（2026-10-30 起）：完整 Demo 把侧栏与画布装在同一个 `UserControl` 里，而 `OnLinkPointerPressed` 挂在宿主上、`handledEventsToo`。它在按下时无条件 `host.Focus(FocusState.Pointer)`（为了让 Ctrl+Z 有落点），于是侧栏元素列表里的按钮在**真实慢点击**（按住 100–150ms）时会失焦：焦点跳到画布里的 SEED `TextBox`，按钮的 `Click` 不落地 —— 表现为「点 Locate 只让输入栏获得焦点、HUD 不动」。同一刻 down+up 的合成点击不会触发这个竞态。现在处理器开头用 `IsWithinScrollViewer(e.OriginalSource, state.ScrollViewer)` 判门：不在画布滚动容器里的按下直接 return，焦点与路由都留给侧栏自己；画布/节点/插槽/连线的按下（都在容器内）不受影响。
+  **焦点不能再落在宿主上**（同一次修复）：`host.Focus(FocusState.Pointer)` 会沿焦点链落到节点卡的第一个 `TextBox`（完整 Demo 的 SEED 输入框），`ScrollViewer` 随后 `BringIntoView` 把它滚进视口 —— 这就是「Locate 几下再进画布 / 大幅度拖动后画布闪回」的另一半根因。现在把 `PART_ScrollViewer.IsTabStop = true`（`ResolveNamedControls`）并把两处 `host.Focus` 改成 `viewer.Focus(FocusState.Pointer)`（按下处理器与 `RoutePointer` 的悬停连线收焦点）；键仍从滚动容器冒泡到宿主的 KeyDown。Trimmed Demo 没有可聚焦的节点输入，因此从来看不到这一条。
+- **滚动写入只有一个入口，读位置只认逻辑目标**（2026-10-30 起）：`RequestScroll(state, x, y)` 先记 `PendingScrollX/Y`（NaN = 该轴在途）→ `ApplyLayout` 用 `ActualOffset − (pending − 实际滚动)` 写 `Canvas.Translation` → 再 `ChangeView`。`OnViewChanged` 落地后清 pending，Translate 回到 `ActualOffset`；`OnDataContextChanged`、滚动容器换实例、目标落到可滚范围外都会清。所有「读当前位置」的地方（平移起点、`ToCanvasLocalAnchor`、可见区、grid/minimap、滚轮/缩放起点）都走 `EffectiveScrollX/Y`，绝不能在 ChangeView 未落地时读 `HorizontalOffset`。**理由**：ChangeView 异步，负向扩画布又同时改 `ActualOffset`（合成变换当帧生效），不补偿就会「内容先平移、再被滚动拉回」——这就是非 Trimmed 大幅拖动/Locate 后的闪回；补偿让「逻辑滚动位置」成为唯一真相，落的滚只是为了追上来。小地图的拖拽导航也必须走同一个入口（`WorkflowSurfaceBehavior.TryRequestScroll(this, x, y)`）；它若自己 `ChangeView`，会绕过在途目标，把画面钉在旧位置。在途目标另有一个 **150ms 的一次性定时器**兜底：ChangeView 被夹取/被忽略、或用户在途中自己拖了滚动条时，定时器清掉补偿并 `Refresh`，避免画面永远挂在到不了的位置。
+- **平移越过画布边缘时，先让布局认下新 extent，再读 `ExtentWidth/Height`**（2026-10-29 起）：`ClampScrollOffset` 只改模型（`Negative/PositiveOffset` → `ActualSize`/`ActualOffset`），`ScrollViewer` 的范围要到下一次布局才更新。`OnCanvasPanMoved` 原在 `ApplyLayout` 后立刻读 max 并 `ChangeView`，读到的是旧范围，越界那一截被夹短，松手后画面停在旧边界（非 Trimmed Demo 的 3600×1000 画布最容易碰到；Trimmed 画布大，普通拖动到不了边）。修法与 `CenterOn` 同形：`ApplyLayout` → `Canvas.UpdateLayout()` → `ScrollViewer.UpdateLayout()` → `host.UpdateLayout()` → 再读 max。滚轮与定位那两路本来就有这套三连。
 
 ### 三点六、「内外一起滚」的 A/B 实测（2026-10-11 探针）
 
@@ -259,15 +263,15 @@ WHEEL handled=True delta=-120 | INNER off=(0,12) max=(0,12)   ← 仍然 True
 **后果**：一帧内视图被回收并复用给另一个 ViewModel 时，旧几何会写到新宿主上 —— 且不报错。
 改这里时照 L6 的表补一条重校验。
 
-**P3 · `Examples/Workflow/WinUI/`（非 Trimmed）是 offset frame 之前的老做法，不要照它抄。**
-它的连线模板把视图的 `Width/Height` 绑到画布元素的 `ActualWidth/ActualHeight`
-（`Examples/Workflow/WinUI/Demo/Views/Workflow/TreeView.xaml` 的 `LinkTemplate`），
-`PolylineCurveView.xaml.cs` 全文没有 `ActualOffset`/`Canvas.SetLeft`/`ActualSize`
-（grep 命中 0）—— 也就是说它整幅铺在画布上、靠尺寸而不是靠负偏移定位，
-正是 `skills/.../gui/winui.md` 里「**Do not bind the link view's `Width`/`Height` to the canvas element.**」那条明确劝退的写法（「会重新引入 offset frame 想避免的裁剪」）。
-**确证过的对照**：`Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/LinkView.xaml.cs` 的 `UpdatePath` 才是 offset frame
-（注释讲清 `[-ActualOffset, ActualSize - ActualOffset]` 与烘焙几何的关系，末尾是 `Canvas.SetLeft(this, -ox)`）。
-skill 文档 `gui/winui.md` 的「Reference implementation」那条指的参考实现就是这个 Trimmed 目录。
+**P3 · 连线视图的盒子绝不能绑画布尺寸；完整版现在用「每条线的包围盒」。**
+完整版曾经把 `PolylineCurveView` 的 `Width/Height` 绑到画布 `ActualWidth/ActualHeight`（`TreeView.xaml` 的 `LinkTemplate`），
+于是曲线伸出画布（节点的锚点/尺寸不必落在 `OriginSize` 内）或缩放/长大的一帧里尺寸落后时，线被裁在画布边
+——2026-10-30 修：`PolylineCurveView.RefreshGeometry` 取四次贝塞尔四个点的 min/max（加 `BoxPadding` 覆盖光晕/圆头），
+把视图 `Width/Height` 设为这个包围盒、`RenderTransform` 平移回包围盒原点，几何与合成线段都写成「原始坐标 − 原点」；
+元素和 `ShapeVisual` 的 Size 因此都装得下整条线，且与画布尺寸无关。模板里的 `Width/Height` 绑定已删除。
+**另一条腿**：Trimmed 的 `LinkView.UpdatePath` 用 offset frame（`Canvas.SetLeft(−ActualOffset)`、宽高 `ActualSize`、几何烘 `+offset`），
+适用于「画布尺寸能覆盖内容」的模板。两条路都行，共同点是**不要按画布尺寸裁线**；skill `gui/winui.md` 的
+「Do not bind the link view's `Width`/`Height` to the canvas element.」仍成立。
 
 **P4 · `Sync` 的 `Syncing` 守卫是 try/finally —— 这是有意的，别简化成 try/catch。**
 `WorkflowSlotLayoutBehavior.Sync`，注释就在 `state.Syncing = true` 上方：`TransformToVisual` 抛异常时不能让守卫留在

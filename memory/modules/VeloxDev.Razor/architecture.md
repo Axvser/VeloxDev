@@ -75,8 +75,8 @@ import "./_content/VeloxDev.Razor/veloxdev.workflow.js"
 
 ### 2.3 C# ↔ JS 的数据形状：哪一侧定义，哪一侧消费
 
-**（a）JS 用 `document.getElementById(scrollerId)` 找滚动器，其余一切靠 class 找**（`getElementById` 的全部 **13** 处
-（分布在 `toCanvasLocal`、`scrollByDelta`、`scrollSurfaceBy`、`setSurfaceLayout`、`ensureCanvasSize`、`applyZoomSurface`、`applyZoomGeometrySettle`、`applyZoomLinkSettle`、`getViewportSize`、`scrollToPosition`、`initMinimap`、`initWheelScroll`）拿的都是**滚动器**；`.veloxdev-wf-canvas-host` / `-canvas-content` /
+**（a）JS 用 `document.getElementById(scrollerId)` 找滚动器，其余一切靠 class 找**（`getElementById` 的全部 **14** 处
+（分布在 `toCanvasLocal`、`scrollByDelta`、`scrollSurfaceBy`、`setSurfaceLayout`、`ensureCanvasSize`、`applyZoomSurface`、`applyZoomGeometrySettle`、`applyZoomLinkSettle`、`applySurfaceNavigation`、`getViewportSize`、`scrollToPosition`、`initMinimap`、`initWheelScroll`）拿的都是**滚动器**；`.veloxdev-wf-canvas-host` / `-canvas-content` /
 `-grid` / `-axis-x` / `-axis-y` / `-canvas` 一律 `querySelector`）。⇒ **`CanvasId`（默认 `"veloxdev-wf-canvas"`）
 被渲染成元素 id（`WorkflowSurfaceBehavior.razor` 的 `id="@CanvasId"`）却再也没有人读它** —— `initSurface` 的形参里没有它
 （`veloxdev.workflow.js` 的 `initSurface` 与调用点 `WorkflowSurfaceBehavior.razor.cs` 的 `OnAfterRenderAsync`）。
@@ -255,10 +255,10 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 3. **小地图的 XML 与 JS 对导航方式的说法相反，以 JS 为准。** 类文档说「抓取块导航（与其他适配器一致）」
    （`WorkflowMinimapOverlay.razor.cs` 顶部），JS 在按下的第一行就写「点击点**始终**成为视口中心 —— 指示块上没有抓取锚点」。
    改导航手感前先把这两句对齐。
-4. **有 5 个 ES 导出在 C# 侧零调用点。** 底部 `export const` 块共 **22** 条，全仓按名字数调用点：
+4. **有 5 个 ES 导出在 C# 侧零调用点。** 底部 `export const` 块共 **23** 条，全仓按名字数调用点：
    `getCanvasTranslate` / `getViewportSize` / `scrollToRatio` / `scrollByDelta` / `ensureCanvasSize` 这 5 条为 0
    （具体集合以 `grep 'export const'` 与 C# 侧 `InvokeVoidAsync/InvokeAsync` 名字为准）。其中 `ensureCanvasSize` 的注释写着
-   「工作区缩放路径必须让 DOM 宿主长大」，但缩放路径走的是 `applyZoomSurface`；`scrollToPosition` 则由适配器**走模块导入**调（`_module.InvokeVoidAsync("scrollToPosition", …)`，`WorkflowSurfaceBehavior.OnAfterRenderAsync`）。⇒ 删这些之前先确认没有宿主在用它们 —— 它们是 `window.veloxdevWorkflow` 的公开面。
+   「工作区缩放路径必须让 DOM 宿主长大」，但缩放路径走的是 `applyZoomSurface`；`scrollToPosition` 则由适配器**走模块导入**调（`_module.InvokeVoidAsync("scrollToPosition", …)`，`WorkflowSurfaceBehavior.OnAfterRenderAsync`）。`applySurfaceNavigation` 是 `Locate` 的落点（`CenterOnAsync` 调它），不在这 5 条里。⇒ 删这些之前先确认没有宿主在用它们 —— 它们是 `window.veloxdevWorkflow` 的公开面。
 5. **`ScrollViewerId` / `CanvasId` 之外，宿主还要给 `Minimap` 传一次同样的 id。** surface 的 id 只管自己，
    小地图要**再传一次** —— 两者是各自独立的参数，不是级联。
 6. **`WorkflowGeometryScope` 是 `AsyncLocal`，不是线程静态。** `Attached/Workflow/WorkflowGeometryScope.cs` 用

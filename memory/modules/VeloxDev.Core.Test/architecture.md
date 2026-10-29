@@ -1,7 +1,7 @@
 # VeloxDev.Core.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Test/`（156 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；136 个 `[TestClass]`，1166 个 `[TestMethod]`）
-> —— 2026-10-28 复核。旧读数 154/134/1138 已过期（其中只有 1/1/4 是本轮变的：`TreeHelperTickTests` 的四条；其余在本轮之前就已经落后于树了）。
+> 代码：`Src/Core/VeloxDev.Core.Test/`（157 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；137 个 `[TestClass]`，1171 个 `[TestMethod]`）
+> —— 2026-10-29 复核。旧读数 154/134/1138 已过期（本轮新增 `TreeHelperTickTests` 四条与 `WorkflowNavigationExTests` 五条：1/1/9；其余在本轮之前就已经落后于树了）。
 > 被测：`Src/Core/VeloxDev.Core/`（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 是五目标 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Extension.Test/`（那个引 `Lib`、测 AI 工具面）。两者的共享面只有「同样一行并行设置」。
 

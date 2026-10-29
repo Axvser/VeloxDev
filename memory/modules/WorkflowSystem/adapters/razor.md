@@ -126,6 +126,8 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 **`scrollToPosition` 收的是像素滚动位置、不是世界坐标**（别信注释的正反，这一处曾写反）。
 见 [../extension.md](../extension.md) §3.9-10。
 
+**绝对定位（`Locate`）走另一条 JS 入口 `applySurfaceNavigation`（2026-10-29）**：`CenterOnAsync` 先用 `CenterScroll` 求逻辑目标，越界时 `ClampScrollOffset(extendRatio: 0)` 把差额写进模型，再**一次**下发 `ActualOffset` / `ActualSize` / 最终 scroll —— JS 先把 host 宽高 grow-only 到 `edge + content`，再写 `scrollLeft/Top`。**不要退回 `scrollToPosition`**：它只写滚动位置，浏览器会按旧 extent 夹短，越界元素停不到中心。
+
 ### 6. 自带手势的 `PreventDefault` 裁决要跨一次 JS↔.NET 往返（2026-10-06）
 
 **限制。** 契约要求四个自带手势（平移、节点拖动、插槽连线、缩放）尊重 `WorkflowEventHandle.PreventDefault`。

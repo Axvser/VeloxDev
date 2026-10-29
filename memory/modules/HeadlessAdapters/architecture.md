@@ -95,9 +95,9 @@ Avalonia 55.2%、WinForms 35.3%、Razor 41.9%、Jalium 35.6%；地板 44/55/35/4
 
 | 平台 | 状态 |
 | --- | --- |
-| WinForms | ✅ 已落地（7 条）：`WorkflowTreeView` + `CreateControl()`，不 `Show()` |
-| Razor/Blazor | ✅ 已落地（6 条）：`bunit` 渲染 + 直接驱动 `[JSInvokable]` |
-| Jalium | ✅ 已落地（9 条）：控件可 `Measure/Arrange`，表面用 `NameScope` 认领部件 |
+| WinForms | ✅ 已落地：`WorkflowTreeView` + `CreateControl()`，不 `Show()` |
+| Razor/Blazor | ✅ 已落地：`bunit` 渲染 + 直接驱动 `[JSInvokable]` |
+| Jalium | ✅ 已落地：控件可 `Measure/Arrange`，表面用 `NameScope` 认领部件 |
 | WinUI | ❌ 需要 Windows App SDK + XAML 线程/窗口，没有真正无头模式 |
 | MAUI | ❌ 没有一方无窗口宿主 |
 

@@ -44,7 +44,7 @@ The point is to keep the geometry non-negative and inside the element's own box,
 
 ⚙ **`Clip` is cleared in three places** — the container `Grid`, the `Path`, and the root XAML. If you re-template a WinUI link view and lines get truncated at large coordinates, a clip reappeared.
 
-⚙ **Do not bind the link view's `Width`/`Height` to the canvas element.** That reintroduces exactly the clipping the offset frame exists to avoid; the view drives its own box from `ActualSize`.
+⚙ **Do not bind the link view's `Width`/`Height` to the canvas element.** That reintroduces exactly the clipping the offset frame exists to avoid. Two shipped shapes work: the trimmed reference drives its box from `ActualSize` (offset frame), and the full demo sizes each link to **its own curve bounds** (min/max of the four Bézier points + padding, `RenderTransform` to the box origin, geometry and composition strips written relative to that origin). The full-demo shape is the one to copy when a curve can extend past the canvas.
 
 ⚙ Slot anchors on this adapter are measured **canvas-local** and written through `SlotAnchorFromCanvasLocal` (the identity form), because the composition translation already inverts the canvas pan. Taking the visual-centre form here subtracts `ActualOffset` a second time and shifts **every** link by a constant — the single most likely mistake if you port view code from WPF or Avalonia.
 

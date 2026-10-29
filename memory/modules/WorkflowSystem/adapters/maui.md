@@ -219,6 +219,12 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 1. **Trimmed 上有若干空画布点滚轮没进 `OnSurfaceWheel`**（原生 `ScrollViewer` 自己滚了 61.8），而同 demo 另外几个点进了（`hit=LayoutPanel`）；卡片区稳定进。这动摇「挂在画布上就拦得住」这个前提，得单独查清。
 **`keyup:Shift` 之后仍按横滚执行 —— 已消解（2026-10-18）。** 旧写法用 `_shiftHeld` + `KeyUp` 跟踪修饰键；七个 Trimmed demo 已改为读滚轮事件自带的 `Modifiers`，每个事件各带当时的修饰位，不存在陈旧态。适配器把无侧 `VirtualKey.Shift` 映射到 `LeftShift` 仍保留 —— KeyDown（Ctrl+Z 等）还要用。
 
+### 15. 链接层的指针钩子挂在整页根上，必须按 overlay 边界过滤（2026-10-30）
+
+`WorkflowLinkOverlay` 的 `InteractionSource` 在完整 Demo 里是**整页 `ContentView` 根**（`x:Reference Root`），而侧栏（元素列表）与画布同在这个根里。它的原生 `PointerPressed` 钩子会收到侧栏按钮的按下，`ToOverlayPoint` 又把相对 overlay 的坐标算成负值照收，于是按下瞬间 `_interactionSource.Focus()` 把焦点抢走 —— 真实鼠标按住 100–150ms 时按钮的 `Click` 不再落地；**同一刻 down+up 的合成点击仍然会触发**，所以快速探针会假通过。表现：点元素列表的 Locate 只让 SEED 输入框获得焦点，HUD 不动。
+
+**修**：`ToOverlayPoint` 在负坐标或超出 `Width/Height` 时返回 `null`（未排版时 `Width/Height <= 0` 仍放行）。侧栏的按下/悬停/滚轮不再被链接层接走，画布内的不变。WinUI 的同源问题在表面宿主的 `OnLinkPointerPressed`（用 `IsWithinScrollViewer` 判门），见 [winui.md](winui.md) 三点五。
+
 ## 三、与其它家的刻意背离
 
 1. **七家里唯一没有 `WorkflowCanvasTransformBehavior` 的一家。** 这里的做法和其他家不一样，因为 MAUI 没有 `Viewbox`，

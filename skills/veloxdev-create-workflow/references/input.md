@@ -68,6 +68,7 @@ Every `PointerEventArgs` carries:
 | `PreviewChanged` | a snapshot whenever the sender, receiver or state changes |
 | `PreviewValidating` | once per new framework-valid candidate, before it is marked valid; a subscriber may refuse it for this preview only |
 | `Scroller` | the surface's `IWorkflowSurfaceScroller`, or `null` until an adapter registers one |
+| `Navigator` | the surface's `IWorkflowSurfaceNavigator`, or `null` until an adapter registers one; `Locate()` asks it to center a world point |
 | `IsSuspended` | while set, pointer movement stops updating `PointerTarget` — the route still delivers events |
 | `HitRadius` | the reach passed to link hit-testing; `LinkHitTestEx.DefaultHitRadius` (6) by default |
 
@@ -79,7 +80,7 @@ Every `PointerEventArgs` carries:
 
 | Side | Owns |
 |---|---|
-| Adapter | translating platform input; resolving `Target`; applying the default scroll; pan, drag, connect and zoom gestures; registering `Scroller` |
+| Adapter | translating platform input; resolving `Target`; applying the default scroll; pan, drag, connect and zoom gestures; registering `Scroller` and `Navigator` |
 | Core | routing and bubbling; the hover diff; `PointerTarget`; connection-preview state |
 | Host / view | subscribing `IInputEvents.Input`; deciding Delete, highlight and menu actions |
 
