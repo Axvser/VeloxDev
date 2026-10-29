@@ -76,6 +76,11 @@ public sealed partial class PolylineCurveView : UserControl
     private const double BloomWidth = 9;
     private const double BloomAlpha = 0.22;
 
+    // 视图自己的盒子按曲线的包围盒来定，而不是按画布尺寸：曲线可以伸出画布（节点的锚点/尺寸不必落在
+    // OriginSize 内），画布大小的盒子会把它裁在画布边缘；合成层的 ShapeVisual 又是按自己的 Size 裁的。
+    // 这个 padding 覆盖光晕半宽、线宽与圆头。
+    private const double BoxPadding = BloomWidth / 2 + 8;
+
     // 三段相位各自结束时头部走过的比例：出发、行进、到达
     private const double BandFormed = 0.30;
     private const double BandLeaving = 0.78;
@@ -149,6 +154,13 @@ public sealed partial class PolylineCurveView : UserControl
     // 本视图当前描述的链接（池化复用会把 DataContext 改到另一条 / 置空），撤曲线时要认它。
     private IWorkflowLinkViewModel? _boundLink;
 
+    // 包围盒原点：几何写成「原始 canvas-local 坐标 − 原点」，元素再平移回原点，画出来的位置仍是原始坐标；
+    // 形状因此都落在本视图的盒子里，合成层不会在盒子边缘把它们裁掉。
+    // 用 RenderTransform 而不是 Canvas.Left/Top：虚拟连线的载体是 Grid，不是 Canvas，Canvas 定位对它无效。
+    private double _boxMinX;
+    private double _boxMinY;
+    private readonly TranslateTransform _boxTransform = new();
+
     private Transition<PolylineCurveView>? _flow;
     private bool _running;
     private bool _isLoaded;
@@ -162,6 +174,7 @@ public sealed partial class PolylineCurveView : UserControl
         // 裁到框内，除非整条链上的 Clip 都是 null（同目录 NodeView 用的也是这个办法）；Avalonia 那边是
         // 自绘的，从来没有裁剪这回事。
         _container = new Grid { Clip = null };
+        RenderTransform = _boxTransform;
 
         // 三层都不可命中：这是整块画布大小的视图，可命中就会把画布手势整个吃掉。
         // 命中判定不落在元素上，由共享的 LinkHitTestEx 对发布出去的曲线做几何判定。
@@ -539,14 +552,41 @@ public sealed partial class PolylineCurveView : UserControl
         var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         _curve = LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
 
+        // 盒子 = 曲线的包围盒（含控制点），与画布尺寸无关：
+        // 1) 曲线可以伸出画布（节点/锚点不必落在 OriginSize 内），按画布尺寸定的盒子会把线裁在画布边；
+        // 2) 合成层的 ShapeVisual 按自己的 Size 裁切，盒子里必须真的装得下整条线；
+        // 3) 元素放在包围盒原点、几何减去原点，画出来的 canvas-local 坐标不变，与节点/命中曲线仍是同一套坐标系。
+        var minX = Math.Min(Math.Min(points[0].X, points[1].X), Math.Min(points[2].X, points[3].X)) - BoxPadding;
+        var minY = Math.Min(Math.Min(points[0].Y, points[1].Y), Math.Min(points[2].Y, points[3].Y)) - BoxPadding;
+        var maxX = Math.Max(Math.Max(points[0].X, points[1].X), Math.Max(points[2].X, points[3].X)) + BoxPadding;
+        var maxY = Math.Max(Math.Max(points[0].Y, points[1].Y), Math.Max(points[2].Y, points[3].Y)) + BoxPadding;
+        var boxWidth = maxX - minX;
+        var boxHeight = maxY - minY;
+
+        if (boxWidth > 0 && boxHeight > 0)
+        {
+            _boxMinX = minX;
+            _boxMinY = minY;
+            _boxTransform.X = minX;
+            _boxTransform.Y = minY;
+            Width = boxWidth;
+            Height = boxHeight;
+
+            // 合成层不参与 XAML 布局，Size 要直接写；等 ActualWidth 会晚一帧。
+            if (_cometVisual is not null)
+            {
+                _cometVisual.Size = new Vector2((float)boxWidth, (float)boxHeight);
+            }
+        }
+
         // 静息线就是那条三次贝塞尔本身，直接用 BezierSegment 画：一个段就是精确曲线，
         // 不必拿采样点去拼（那是给「按弧长切」用的表）。三层各写一份 —— 几何不能共用，理由见 RestingStroke
         foreach (var stroke in _resting)
         {
-            stroke.Figure.StartPoint = new Point(points[0].X, points[0].Y);
-            stroke.Segment.Point1 = new Point(points[1].X, points[1].Y);
-            stroke.Segment.Point2 = new Point(points[2].X, points[2].Y);
-            stroke.Segment.Point3 = new Point(points[3].X, points[3].Y);
+            stroke.Figure.StartPoint = new Point(points[0].X - _boxMinX, points[0].Y - _boxMinY);
+            stroke.Segment.Point1 = new Point(points[1].X - _boxMinX, points[1].Y - _boxMinY);
+            stroke.Segment.Point2 = new Point(points[2].X - _boxMinX, points[2].Y - _boxMinY);
+            stroke.Segment.Point3 = new Point(points[3].X - _boxMinX, points[3].Y - _boxMinY);
         }
     }
 
@@ -765,7 +805,9 @@ public sealed partial class PolylineCurveView : UserControl
         strip.Geometry.End = ToVector(curve.PointAtLength(b));
     }
 
-    private static Vector2 ToVector((double X, double Y) point) => new((float)point.X, (float)point.Y);
+    // 与静息线同一套：合成线段也减去包围盒原点，尺寸盒才装得下整条线。
+    private Vector2 ToVector((double X, double Y) point)
+        => new((float)(point.X - _boxMinX), (float)(point.Y - _boxMinY));
 
     // 静息线的一层：自己的几何 + 自己的路径，颜色与厚度都归调用方（UpdateRestingLine）写。
     private static RestingStroke CreateRestingStroke(Grid host, double thickness)

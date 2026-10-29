@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="Demo.Views.TreeView"
     x:Name="Root"
@@ -20,6 +20,46 @@
 
     <UserControl.Resources>
         <local:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <!-- 元素行的两个动作按钮：与 WPF / Avalonia 的 ElementListView 同一套暗色。 -->
+        <Style x:Key="ElementActionButton" TargetType="Button">
+            <Setter Property="Background" Value="#0F3460" />
+            <Setter Property="Foreground" Value="#7EC8FF" />
+            <Setter Property="BorderBrush" Value="#7EC8FF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+        <!-- 元素列表的容器：内容拉伸占满行宽，行高收紧到文本高度。 -->
+        <Style x:Key="ElementItemContainer" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="2,1" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <!-- 一行：Label + Locate + Delete。三个列表共用，行模板只写一次。 -->
+        <DataTemplate x:Key="ElementRowTemplate">
+            <Grid ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Label}"
+                           Foreground="#D8D8D8"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="1"
+                        Content="Locate"
+                        Style="{StaticResource ElementActionButton}"
+                        Click="OnLocateElement"
+                        ToolTipService.ToolTip="滚到视口中心；插槽定位所属节点，连线定位两端节点中心" />
+                <Button Grid.Column="2"
+                        Content="Delete"
+                        Style="{StaticResource ElementActionButton}"
+                        Click="OnDeleteElement"
+                        ToolTipService.ToolTip="删除该元素；插槽与节点会一并删除它们的连线" />
+            </Grid>
+        </DataTemplate>
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView Width="{Binding Size.Width}"
                             Height="{Binding Size.Height}"
@@ -62,8 +102,6 @@
                                      EndTop="{Binding Receiver.Anchor.Vertical}"
                                      CanRender="{Binding IsVisible}"
                                      LineColor="#CC38BDF8"
-                                     Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                     Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
                                      Canvas.ZIndex="-1" />
         </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"
@@ -119,9 +157,7 @@
                                                          EndTop="{Binding Receiver.Anchor.Vertical}"
                                                          CanRender="{Binding IsVisible}"
                                                          IsVirtual="True"
-                                                         LineColor="#CC38BDF8"
-                                                         Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                                         Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}" />
+                                                         LineColor="#CC38BDF8" />
                             </Grid>
                         </Canvas>
                     </ScrollViewer>
@@ -162,6 +198,57 @@
                     <TextBlock Text="{Binding Nodes.Count}" Foreground="White" />
                     <TextBlock Margin="0,8,0,0" Text="可见组件数：( Node / Link )" Foreground="White" />
                     <TextBlock Text="{Binding Helper.VisibleItems.Count}" Foreground="White" />
+
+                    <!-- 元素列表：从 Tree 加载节点 / 插槽 / 连线，每行可 Locate / Delete。与其它完整 Demo
+                         共用 WorkflowElementCatalog，行为一致；列表状态在 code-behind 里建立并按换树重绑。 -->
+                    <Border Margin="0,12,0,0"
+                            Padding="10"
+                            Background="#202020"
+                            BorderBrush="#4C4C4C"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="元素（从 Tree 加载）" Foreground="#7EC8FF" FontWeight="Bold" />
+
+                            <TextBlock Text="节点" Foreground="#A0A0A0" FontSize="11" />
+                            <ListView x:Name="ElementNodeList"
+                                      MaxHeight="120"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      SelectionMode="None"
+                                      ItemTemplate="{StaticResource ElementRowTemplate}"
+                                      ItemContainerStyle="{StaticResource ElementItemContainer}"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+
+                            <TextBlock Text="插槽" Foreground="#A0A0A0" FontSize="11" />
+                            <ListView x:Name="ElementSlotList"
+                                      MaxHeight="120"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      SelectionMode="None"
+                                      ItemTemplate="{StaticResource ElementRowTemplate}"
+                                      ItemContainerStyle="{StaticResource ElementItemContainer}"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+
+                            <TextBlock Text="连线" Foreground="#A0A0A0" FontSize="11" />
+                            <ListView x:Name="ElementLinkList"
+                                      MaxHeight="120"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      SelectionMode="None"
+                                      ItemTemplate="{StaticResource ElementRowTemplate}"
+                                      ItemContainerStyle="{StaticResource ElementItemContainer}"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+
+                            <TextBlock x:Name="ElementStatus"
+                                       Foreground="#A0A0A0"
+                                       FontSize="11"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
 
                     <!-- 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边
                          裁掉，五个模式只剩第一项点得到。它也不是 AgentModes 的 build/plan 那一对：那一对改的是

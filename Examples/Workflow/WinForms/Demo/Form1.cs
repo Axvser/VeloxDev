@@ -131,6 +131,7 @@ namespace Demo
             SubscribeHelper(_demo);
             InitializePermissionMode();
             SetupMcpStatusTab();
+            SetupElementTab();
 
             _demo.Tree.GetHelper().VisibleItems.CollectionChanged += OnVisibleItemsChanged;
 
@@ -288,6 +289,29 @@ namespace Demo
         {
             if (_demo?.Tree.GetHelper() is ViewModels.Workflow.Helper.AgentHelper helper)
                 await helper.LoadMcpServersAsync();
+        }
+
+        // ── 元素列表 ──────────────────────────────────────────────────────────
+
+        private Views.Workflow.WorkflowElementPanel? _elementPanel;
+
+        // 标签页只建一次；树每换一次（重置示例、载入文件）都重绑到新树 —— 旧树的集合事件由目录自己退订。
+        private void SetupElementTab()
+        {
+            if (_elementPanel is null)
+            {
+                _elementPanel = new Views.Workflow.WorkflowElementPanel { Dock = DockStyle.Fill };
+                var tab = new TabPage("元素")
+                {
+                    Padding = new Padding(4),
+                    BackColor = Views.CardTheme.Ground,
+                    ForeColor = Views.CardTheme.Value,
+                };
+                tab.Controls.Add(_elementPanel);
+                logTabControl.TabPages.Add(tab);
+            }
+
+            _elementPanel.Tree = _demo?.Tree;
         }
 
         private void OnAgentToolCalled() => _surfaceRefresh?.Request();

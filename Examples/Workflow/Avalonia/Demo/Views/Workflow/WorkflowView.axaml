@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -207,6 +207,66 @@
 							<TextBlock Grid.Row="1" Grid.Column="0" Text="可见组件数 ( Node / Link )" Foreground="#94A3B8" TextWrapping="Wrap" />
 							<TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Helper.VisibleItems.Count}" Foreground="#E2E8F0" FontWeight="SemiBold" />
 						</Grid>
+					</Border>
+
+					<!-- 元素列表：从 Tree 加载节点/插槽/连线，每行可 Locate / Delete。与其它完整 Demo 共用
+					     WorkflowElementCatalog，行为一致。 -->
+					<Border Background="#1A2029" CornerRadius="4" Padding="10">
+						<StackPanel Spacing="6">
+							<TextBlock Text="元素（从 Tree 加载）" Foreground="#7EC8FF" FontWeight="Bold"/>
+							<TabControl Height="220">
+								<TabItem Header="节点">
+									<ListBox x:Name="ElementNodeList" Background="Transparent">
+										<ListBox.ItemTemplate>
+											<DataTemplate x:DataType="vm:WorkflowElementEntry">
+												<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+													<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
+															   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+													<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
+															Padding="6,1" FontSize="11" Click="OnLocateElement"
+															ToolTip.Tip="滚到视口中心；插槽定位所属节点，连线定位两端节点中心"/>
+													<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
+															Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
+												</Grid>
+											</DataTemplate>
+										</ListBox.ItemTemplate>
+									</ListBox>
+								</TabItem>
+								<TabItem Header="插槽">
+									<ListBox x:Name="ElementSlotList" Background="Transparent">
+										<ListBox.ItemTemplate>
+											<DataTemplate x:DataType="vm:WorkflowElementEntry">
+												<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+													<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
+															   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+													<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
+															Padding="6,1" FontSize="11" Click="OnLocateElement"/>
+													<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
+															Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
+												</Grid>
+											</DataTemplate>
+										</ListBox.ItemTemplate>
+									</ListBox>
+								</TabItem>
+								<TabItem Header="连线">
+									<ListBox x:Name="ElementLinkList" Background="Transparent">
+										<ListBox.ItemTemplate>
+											<DataTemplate x:DataType="vm:WorkflowElementEntry">
+												<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+													<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
+															   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+													<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
+															Padding="6,1" FontSize="11" Click="OnLocateElement"/>
+													<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
+															Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
+												</Grid>
+											</DataTemplate>
+										</ListBox.ItemTemplate>
+									</ListBox>
+								</TabItem>
+							</TabControl>
+							<TextBlock x:Name="ElementStatus" Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap"/>
+						</StackPanel>
 					</Border>
 
 					<!-- 小地图开关 -->

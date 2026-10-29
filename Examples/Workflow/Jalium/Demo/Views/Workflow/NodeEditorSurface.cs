@@ -22,7 +22,7 @@ namespace Demo.Views.Workflow;
 /// trimmed demo; the only difference is the data source — generic node/slot enumeration through
 /// <see cref="NodePorts"/> instead of the trimmed demo's reduced view-model shape.
 /// </summary>
-internal sealed class NodeEditorSurface : Canvas
+internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 {
     private const double GridStep = 40;
     private const double MajorStep = 200;
@@ -239,6 +239,9 @@ internal sealed class NodeEditorSurface : Canvas
         }
 
         _tree.GetHelper().LinkRemoved += OnLinkRemoved;
+        // 完整 Demo 用自己的 NodeEditorSurface（不是适配器的 WorkflowSurfaceBehavior），
+        // 所以 Locate 需要的 Navigator 由这里挂到同一棵树的路由上。
+        input.Navigator = this;
         _input = input;
     }
 
@@ -254,6 +257,7 @@ internal sealed class NodeEditorSurface : Canvas
         helper.LinkRemoved -= OnLinkRemoved;
         // 换树/解绑时菜单还开着就先收：Closed 会顺手把挂起放开
         _linkMenu?.Close();
+        if (ReferenceEquals(input.Navigator, this)) input.Navigator = null;
         _input = null;
     }
 
@@ -814,6 +818,9 @@ internal sealed class NodeEditorSurface : Canvas
 
     /// <summary>Center the view on a world point, growing the canvas if the target scroll runs
     /// past an edge. Shared by pan and the minimap's drag-to-pan (same as the NodeEditorDemo).</summary>
+    /// <inheritdoc />
+    public void CenterOn(double worldX, double worldY) => NavigateToWorld(worldX, worldY);
+
     public void NavigateToWorld(double wx, double wy)
     {
         if (_scrollViewer == null)

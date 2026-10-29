@@ -3,6 +3,7 @@
 @rendermode RenderMode.InteractiveServer
 @using System.Collections.Specialized
 @using System.ComponentModel
+@using Demo.ViewModels
 @using VeloxDev.AI
 @using VeloxDev.AI.Safety
 @using VeloxDev.WorkflowSystem
@@ -30,6 +31,51 @@
         <div class="sb-info">
             <span>节点总数: <strong>@(_session?.Tree?.Nodes.Count ?? 0)</strong></span>
             <span>连接数: <strong>@(_session?.Tree?.Links.Count ?? 0)</strong></span>
+        </div>
+
+        @* 元素列表：从当前树上取节点 / 插槽 / 连线，每行可 Locate / Delete。状态在共享目录
+           WorkflowElementCatalog 里，与 WPF / Avalonia 的完整 Demo 同一份；这里只渲染它、把两个
+           动作转给目录。换树（Reset / Load）时 SubscribeSession 会把它重新挂到新树上。 *@
+        <div class="sb-panel">
+            <div class="sb-panel-header">
+                <span>元素（从 Tree 加载）</span>
+            </div>
+            <div class="wf-element-tabs">
+                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Node ? "active" : null)"
+                        @onclick="() => SelectElementTab(WorkflowElementKind.Node)">节点</button>
+                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Slot ? "active" : null)"
+                        @onclick="() => SelectElementTab(WorkflowElementKind.Slot)">插槽</button>
+                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Link ? "active" : null)"
+                        @onclick="() => SelectElementTab(WorkflowElementKind.Link)">连线</button>
+            </div>
+            @if (_elements is not null)
+            {
+                <div class="wf-element-list">
+                    @if (ElementRows.Count == 0)
+                    {
+                        <div class="wf-element-empty">（空）</div>
+                    }
+                    @foreach (var entry in ElementRows)
+                    {
+                        <div class="wf-element-row">
+                            <span class="wf-element-label" title="@entry.Label">@entry.Label</span>
+                            <button class="sb-btn wf-element-action"
+                                    title="滚到视口中心；插槽定位所属节点，连线定位两端节点中心"
+                                    @onclick="() => LocateElement(entry)">Locate</button>
+                            <button class="sb-btn wf-element-action"
+                                    title="删除该元素；插槽与节点会一并删除它们的连线"
+                                    @onclick="() => DeleteElement(entry)">Delete</button>
+                        </div>
+                    }
+                </div>
+            }
+            <div class="wf-element-status">
+                <span>@(_elements?.Summary)</span>
+                @if (!string.IsNullOrEmpty(_elementStatus))
+                {
+                    <span> · @_elementStatus</span>
+                }
+            </div>
         </div>
 
         @* 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边

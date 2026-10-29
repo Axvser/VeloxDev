@@ -41,6 +41,23 @@ public partial class Workflow : ComponentBase, IDisposable
     // 菜单的接线整个在表面组件里（右键入口、定位、开合上报）；页面只读它选中的那条线，画选中态。
     private WorkflowSurfaceBehavior? _surface;
 
+    // ── Element list (nodes / slots / links loaded from the tree) ──────────
+    // 列表状态在共享目录里，与 WPF / Avalonia 的完整 Demo 是同一份；页面只渲染它、把 Locate / Delete
+    // 转给目录。目录在构造时捕获渲染器的同步上下文，所以它的 Changed 是在渲染线程上发出的。
+    private WorkflowElementCatalog? _elements;
+    private WorkflowElementKind _elementTab;
+    private string _elementStatus = "";
+
+    /// <summary>The list backing the selected tab of the element panel.</summary>
+    private IReadOnlyList<WorkflowElementEntry> ElementRows => _elements is not { } elements
+        ? []
+        : _elementTab switch
+        {
+            WorkflowElementKind.Slot => elements.Slots,
+            WorkflowElementKind.Link => elements.Links,
+            _ => elements.Nodes,
+        };
+
     // ── Agent interaction modals (RequestSelection / RequestConfirmation) ──
     private SelectionRequest? _selection;
     private ConfirmationRequest? _confirmation;
@@ -72,6 +89,10 @@ public partial class Workflow : ComponentBase, IDisposable
     {
         _session = WorkflowDemoSession.Create();
         HookLinkKeys(_session.Tree);
+        // Born on this component's own synchronization context: the catalog marshals its rebuilds to the
+        // context it captured, so it has to be constructed where the page renders.
+        _elements = new WorkflowElementCatalog(_session.Tree);
+        _elements.Changed += OnElementsChanged;
         SubscribeSession();
         UpdateCanvasSize();
     }
@@ -79,6 +100,8 @@ public partial class Workflow : ComponentBase, IDisposable
     private void SubscribeSession()
     {
         if (_session is null) return;
+        // 换树（Reset / Load）都走这里，面板因此总挂着屏幕上那棵树。
+        _elements?.SetTree(_session.Tree);
         _session.Tree.Nodes.CollectionChanged += OnNodesOrLinksChanged;
         _session.Tree.Links.CollectionChanged += OnNodesOrLinksChanged;
         _session.Controller.PropertyChanged += OnControllerPropertyChanged;
@@ -171,6 +194,25 @@ public partial class Workflow : ComponentBase, IDisposable
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
+
+    // ── Element list ───────────────────────────────────────────────────────
+    private void OnElementsChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
+
+    private void SelectElementTab(WorkflowElementKind kind) => _elementTab = kind;
+
+    private void LocateElement(WorkflowElementEntry entry)
+    {
+        _elementStatus = _elements?.Locate(entry) == true
+            ? $"已定位 {entry.Label}"
+            : "没有可用的表面，或该元素还没有有限坐标";
+    }
+
+    private void DeleteElement(WorkflowElementEntry entry)
+    {
+        // 状态先落：Delete 会触发目录的 Changed → StateHasChanged，渲染可能排在这一行之前。
+        _elementStatus = $"已删除 {entry.Label}";
+        _elements?.Delete(entry);
+    }
 
     private async Task StopWorkflow()
     {
@@ -384,6 +426,12 @@ public partial class Workflow : ComponentBase, IDisposable
 
     public void Dispose()
     {
+        // 目录没有 Dispose：先摘 Changed（页面此后不再重渲染），再把树连同它的集合订阅一起放掉。
+        if (_elements is not null)
+        {
+            _elements.Changed -= OnElementsChanged;
+            _elements.SetTree(null);
+        }
         UnsubscribeSession();
     }
     // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），

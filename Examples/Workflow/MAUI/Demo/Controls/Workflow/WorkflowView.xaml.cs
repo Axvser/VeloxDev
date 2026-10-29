@@ -16,6 +16,7 @@ namespace Demo.Controls;
 public partial class WorkflowView : ContentView
 {
     private TreeViewModel _workflowViewModel = new();
+    private readonly WorkflowElementCatalog _elements = new();
     private bool _layoutRefreshPending;
     private Page MainPage => Application.Current?.Windows[0].Page ?? throw new InvalidOperationException();
 
@@ -27,6 +28,13 @@ public partial class WorkflowView : ContentView
         // which the surface behavior refreshes; the model events cover scale / visible counts).
         PART_ScrollViewer.Scrolled += (_, _) => InfoOverlay.Update();
         PART_ScrollViewer.SizeChanged += (_, _) => InfoOverlay.Update();
+
+        ElementNodeList.ItemsSource = _elements.Nodes;
+        ElementSlotList.ItemsSource = _elements.Slots;
+        ElementLinkList.ItemsSource = _elements.Links;
+        _elements.Changed += (_, _) => ElementStatus.Text = _elements.Summary;
+        _elements.SetTree(_workflowViewModel);
+        ElementStatus.Text = _elements.Summary;
     }
 
     private void LoadNetworkDemo()
@@ -95,6 +103,25 @@ public partial class WorkflowView : ContentView
         LoadNetworkDemo();
     }
 
+    // ── Element lists ───────────────────────────────────────────────────────
+
+    private void OnLocateElement(object? sender, EventArgs e)
+    {
+        if ((sender as Button)?.BindingContext is not WorkflowElementEntry entry) return;
+
+        ElementStatus.Text = _elements.Locate(entry)
+            ? $"已定位 {entry.Label}"
+            : "没有可用的表面，或该元素还没有有限坐标";
+    }
+
+    private void OnDeleteElement(object? sender, EventArgs e)
+    {
+        if ((sender as Button)?.BindingContext is not WorkflowElementEntry entry) return;
+
+        _elements.Delete(entry);
+        ElementStatus.Text = $"已删除 {entry.Label}";
+    }
+
     // ── Run controls ────────────────────────────────────────────────────────
 
     // The gate and the checkpoint live on the session, not on the tree, so these controls are only
@@ -160,6 +187,7 @@ public partial class WorkflowView : ContentView
         }
 
         _workflowViewModel = newSession?.Tree ?? new TreeViewModel();
+        _elements.SetTree(_workflowViewModel);
         HookLinkKeys(_workflowViewModel);
         VetoFrameworkGestures(_workflowViewModel);
         // MAUI propagates BindingContext through the visual tree automatically,

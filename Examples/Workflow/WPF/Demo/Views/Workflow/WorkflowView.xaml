@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="Demo.Views.Workflow.WorkflowView"
+<UserControl x:Class="Demo.Views.Workflow.WorkflowView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -98,7 +98,7 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="2*" />
+            <ColumnDefinition Width="2*" MinWidth="300" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="8*" />
         </Grid.ColumnDefinitions>
@@ -161,6 +161,11 @@
                     <TextBlock Text="{Binding Nodes.Count}" Foreground="White" />
                     <TextBlock Margin="0,8,0,0" Text="可见组件数：( Node / Link )" Foreground="White" />
                     <TextBlock Text="{Binding Helper.VisibleItems.Count}" Foreground="White" />
+
+                    <!-- Demo-only: load nodes / slots / links straight from the tree and exercise Locate + Delete
+                         from a list instead of clicking the canvas. Locate is the Core extension: a node centers
+                         on its rectangle, a slot on its node's rectangle, a link between its endpoint nodes. -->
+                    <local:ElementListView x:Name="ElementList" Tree="{Binding}" Margin="0,12,0,0" />
 
                     <!-- 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边
                          裁掉，五个模式只剩第一项点得到。它也不是 AgentModes 的 build/plan 那一对：那一对改的是

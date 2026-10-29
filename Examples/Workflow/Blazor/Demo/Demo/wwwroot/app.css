@@ -981,3 +981,56 @@ html, body {
     border-radius: 4px;
     cursor: pointer;
 }
+
+/* ── Element list panel (nodes / slots / links loaded from the tree) ─────── */
+/* The sidebar is 200px wide, so the row is a flexible label and two small ghost
+   actions; the label ellipsizes rather than pushing the buttons out of reach. */
+.wf-element-tabs { display: flex; gap: 4px; }
+.wf-element-tab {
+    flex: 1;
+    padding: 3px 0;
+    background: transparent;
+    border: 1px solid #4C4C4C;
+    border-radius: 3px;
+    color: #A0A0A0;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+.wf-element-tab:hover { color: #D8D8D8; border-color: #7EC8FF; }
+.wf-element-tab.active {
+    background: #0f3460;
+    border-color: #7EC8FF;
+    color: #7EC8FF;
+}
+.wf-element-list {
+    max-height: 180px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.wf-element-row { display: flex; align-items: center; gap: 4px; }
+.wf-element-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: #D8D8D8;
+}
+.wf-element-action {
+    flex: none;
+    width: auto;
+    padding: 1px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+}
+.wf-element-empty { padding: 4px 0; font-size: 11px; color: #6B7280; }
+.wf-element-status {
+    font-size: 11px;
+    line-height: 1.4;
+    color: #A0A0A0;
+    word-wrap: break-word;
+}

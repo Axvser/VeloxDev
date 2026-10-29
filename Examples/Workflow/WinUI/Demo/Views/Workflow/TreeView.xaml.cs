@@ -26,6 +26,7 @@ namespace Demo.Views
     public sealed partial class TreeView : UserControl
     {
         private TreeViewModel ViewModel = new();
+        private readonly WorkflowElementCatalog _elements;
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetActiveWindow();
@@ -47,6 +48,15 @@ namespace Demo.Views
         public TreeView()
         {
             InitializeComponent();
+
+            // The element lists render WorkflowElementCatalog (shared with the other full demos); this
+            // control only binds it and forwards Locate / Delete. Rebound per tree swap below.
+            _elements = new WorkflowElementCatalog(ViewModel);
+            ElementNodeList.ItemsSource = _elements.Nodes;
+            ElementSlotList.ItemsSource = _elements.Slots;
+            ElementLinkList.ItemsSource = _elements.Links;
+            _elements.Changed += (_, _) => ElementStatus.Text = _elements.Summary;
+            ElementStatus.Text = _elements.Summary;
 
             // Keep the canvas-info HUD current on every scroll / viewport change. The overlay subscribes to
             // the Core model itself (scale / actual size / visible items); the scroll and content offsets come
@@ -155,6 +165,7 @@ namespace Demo.Views
                 UnsubscribeAutoScroll(ViewModel);
                 ViewModel = result;
                 DataContext = ViewModel;
+                _elements.SetTree(ViewModel);
                 SubscribeAutoScroll(ViewModel);
                 VetoFrameworkGestures(ViewModel);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
@@ -180,6 +191,7 @@ namespace Demo.Views
             ViewModel = _demo.Tree;
         HookLinkKeys(ViewModel);
             DataContext = ViewModel;
+            _elements.SetTree(ViewModel);
             SubscribeAutoScroll(ViewModel);
             VetoFrameworkGestures(ViewModel);
             if (ViewModel.GetHelper() is AgentHelper helper)
@@ -625,6 +637,23 @@ namespace Demo.Views
 
             await dialog.ShowAsync();
         }
+        private void OnLocateElement(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not WorkflowElementEntry entry) return;
+
+            ElementStatus.Text = _elements.Locate(entry)
+                ? $"已定位 {entry.Label}"
+                : "没有可用的表面，或该元素还没有有限坐标";
+        }
+
+        private void OnDeleteElement(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not WorkflowElementEntry entry) return;
+
+            _elements.Delete(entry);
+            ElementStatus.Text = $"已删除 {entry.Label}";
+        }
+
     // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
     // 删不删由这里写（与悬停高亮同一条路）。
     private void HookLinkKeys(IWorkflowTreeViewModel tree)

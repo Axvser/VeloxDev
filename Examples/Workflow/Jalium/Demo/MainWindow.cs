@@ -6,6 +6,7 @@ using Demo.Views.Workflow;
 using Demo.Workflow;
 using Jalium.UI;
 using Jalium.UI.Controls;
+using Jalium.UI.Data;
 using Jalium.UI.Input;
 using Jalium.UI.Media;
 using Jalium.UI.Threading;
@@ -37,6 +38,9 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _mcpSummary = new();
     private readonly StackPanel _mcpServers = new() { Spacing = 3 };
     private readonly TextBlock _runGateState = new();
+    private readonly WorkflowElementCatalog _elementCatalog = new();
+    private readonly TextBlock _elementStatus = new();
+    private string _lastElementAction = "就绪";
 
     private TreeViewModel _tree = new();
     private WorkflowDemoSession? _demo;
@@ -181,6 +185,7 @@ internal sealed class MainWindow : Window
         _visibleCount.Foreground = new SolidColorBrush(Colors.White);
         panel.Children.Add(_visibleCount);
 
+        panel.Children.Add(BuildElementListPanel());
         panel.Children.Add(BuildPermissionModePanel());
         panel.Children.Add(BuildRunControlsPanel());
         panel.Children.Add(BuildAgentChatPanel());
@@ -468,6 +473,130 @@ internal sealed class MainWindow : Window
         return Section("", body);
     }
 
+    private FrameworkElement BuildElementListPanel()
+    {
+        var body = new StackPanel { Spacing = 6 };
+        body.Children.Add(new TextBlock
+        {
+            Text = "元素（从 Tree 加载）",
+            Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
+            FontWeight = FontWeights.Bold,
+        });
+
+        var tabs = new TabControl
+        {
+            Height = 220,
+            Margin = new Thickness(0, 6, 0, 0),
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+        };
+        var rowTemplate = BuildElementRowTemplate();
+        tabs.Items.Add(BuildElementTab("节点", _elementCatalog.Nodes, rowTemplate));
+        tabs.Items.Add(BuildElementTab("插槽", _elementCatalog.Slots, rowTemplate));
+        tabs.Items.Add(BuildElementTab("连线", _elementCatalog.Links, rowTemplate));
+        body.Children.Add(tabs);
+
+        _elementStatus.Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xA0));
+        _elementStatus.FontSize = 11;
+        _elementStatus.TextWrapping = TextWrapping.Wrap;
+        _elementStatus.Margin = new Thickness(0, 6, 0, 0);
+        body.Children.Add(_elementStatus);
+
+        _elementCatalog.Changed += (_, _) => UpdateElementStatus();
+        UpdateElementStatus();
+
+        return Section("", body);
+    }
+
+    private TabItem BuildElementTab(string header, IEnumerable<WorkflowElementEntry> items, DataTemplate rowTemplate)
+    {
+        var list = new ListBox
+        {
+            ItemsSource = items,
+            ItemTemplate = rowTemplate,
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            MaxHeight = 190,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        };
+
+        return new TabItem
+        {
+            Header = header,
+            Content = list,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
+            IndicatorBrush = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
+            SelectedBackground = new SolidColorBrush(Color.FromRgb(0x0F, 0x34, 0x60)),
+            HoverBackground = new SolidColorBrush(Color.FromRgb(0x1A, 0x2A, 0x3A)),
+        };
+    }
+
+    private DataTemplate BuildElementRowTemplate()
+    {
+        var template = new DataTemplate(typeof(WorkflowElementEntry));
+        template.SetVisualTree(() =>
+        {
+            var row = new Grid { Margin = new Thickness(0, 1, 0, 1) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Color.FromRgb(0xD8, 0xD8, 0xD8)),
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+            label.SetBinding(TextBlock.TextProperty, new Binding(nameof(WorkflowElementEntry.Label)));
+
+            var locate = ElementRowButton("Locate");
+            locate.ToolTip = "滚到视口中心；插槽定位所属节点，连线定位两端节点中心";
+            locate.Click += (sender, _) =>
+            {
+                if ((sender as FrameworkElement)?.DataContext is not WorkflowElementEntry entry) return;
+
+                _lastElementAction = _elementCatalog.Locate(entry)
+                    ? $"已定位 {entry.Label}"
+                    : "没有可用的表面，或该元素还没有有限坐标";
+                UpdateElementStatus();
+            };
+
+            var delete = ElementRowButton("Delete");
+            delete.ToolTip = "删除该元素；插槽与节点会一并删除它们的连线";
+            delete.Click += (sender, _) =>
+            {
+                if ((sender as FrameworkElement)?.DataContext is not WorkflowElementEntry entry) return;
+
+                _elementCatalog.Delete(entry);
+                _lastElementAction = $"已删除 {entry.Label}";
+                UpdateElementStatus();
+            };
+
+            Grid.SetColumn(locate, 1);
+            Grid.SetColumn(delete, 2);
+            row.Children.Add(label);
+            row.Children.Add(locate);
+            row.Children.Add(delete);
+            return row;
+        });
+
+        return template;
+    }
+
+    private static Button ElementRowButton(string text) => new()
+    {
+        Content = text,
+        Margin = new Thickness(4, 0, 0, 0),
+        Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x34, 0x60)),
+        Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
+        BorderBrush = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
+        BorderThickness = new Thickness(1),
+        Padding = new Thickness(6, 1, 6, 1),
+        FontSize = 11,
+    };
+
+    private void UpdateElementStatus() => _elementStatus.Text = $"{_elementCatalog.Summary} · {_lastElementAction}";
+
     private static Border Section(string title, FrameworkElement content)
     {
         var panel = new StackPanel { Spacing = 6 };
@@ -633,6 +762,7 @@ internal sealed class MainWindow : Window
 
         _executionLog.ItemsSource = vm.ExecutionLog;
         _agentLog.ItemsSource = vm.AgentLog;
+        _elementCatalog.SetTree(vm);
     }
 
     private void UnsubscribeTree(TreeViewModel vm)

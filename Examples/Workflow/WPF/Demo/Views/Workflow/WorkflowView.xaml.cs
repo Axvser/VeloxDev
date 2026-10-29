@@ -34,6 +34,7 @@ public partial class WorkflowView : UserControl
         PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
 
         DataContext = _workflowViewModel;
+        ElementList.Tree = _workflowViewModel;
         InitializeNetworkDemo();
         InitializeMcp();
     }
@@ -112,6 +113,7 @@ public partial class WorkflowView : UserControl
                 UnsubscribeAutoScroll(_workflowViewModel);
                 _workflowViewModel = result;
                 DataContext = _workflowViewModel;
+                ElementList.Tree = _workflowViewModel;
                 SubscribeAutoScroll(_workflowViewModel);
         VetoFrameworkGestures(_workflowViewModel);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
@@ -153,6 +155,7 @@ public partial class WorkflowView : UserControl
         _workflowViewModel = _demo.Tree;
         HookLinkKeys(_workflowViewModel);
         DataContext = _workflowViewModel;
+        ElementList.Tree = _workflowViewModel;
         SubscribeAutoScroll(_workflowViewModel);
         VetoFrameworkGestures(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);

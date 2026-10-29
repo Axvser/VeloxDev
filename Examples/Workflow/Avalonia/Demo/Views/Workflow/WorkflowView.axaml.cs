@@ -32,6 +32,7 @@ namespace Demo;
 public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
+    private readonly WorkflowElementCatalog _elements;
     private WindowNotificationManager _manager;
 
     // 面板的树，建立在当前显示的 helper 子系统上。留成字段是因为它要被从建它时的作用域上摘下来：
@@ -60,6 +61,12 @@ public partial class WorkflowView : UserControl
         PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
 
         DataContext = _workflowViewModel;
+        _elements = new WorkflowElementCatalog(_workflowViewModel);
+        ElementNodeList.ItemsSource = _elements.Nodes;
+        ElementSlotList.ItemsSource = _elements.Slots;
+        ElementLinkList.ItemsSource = _elements.Links;
+        _elements.Changed += (_, _) => ElementStatus.Text = _elements.Summary;
+        ElementStatus.Text = _elements.Summary;
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
 
         SubscribeAutoScroll(_workflowViewModel);
@@ -220,6 +227,7 @@ public partial class WorkflowView : UserControl
             UnsubscribeAutoScroll(_workflowViewModel);
             _workflowViewModel = result;
             DataContext = _workflowViewModel;
+            _elements.SetTree(_workflowViewModel);
             SubscribeAutoScroll(_workflowViewModel);
             VetoFrameworkGestures(_workflowViewModel);
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
@@ -241,6 +249,7 @@ public partial class WorkflowView : UserControl
         _workflowViewModel = _demo.Tree;
         HookLinkKeys(_workflowViewModel);
         DataContext = _workflowViewModel;
+        _elements.SetTree(_workflowViewModel);
         SubscribeAutoScroll(_workflowViewModel);
         VetoFrameworkGestures(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
@@ -715,6 +724,23 @@ public partial class WorkflowView : UserControl
     {
         if (scroller is null) return;
         scroller.Offset = new Vector(scroller.Offset.X, scroller.Extent.Height);
+    }
+
+    private void OnLocateElement(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is not WorkflowElementEntry entry) return;
+
+        ElementStatus.Text = _elements.Locate(entry)
+            ? $"已定位 {entry.Label}"
+            : "没有可用的表面，或该元素还没有有限坐标";
+    }
+
+    private void OnDeleteElement(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is not WorkflowElementEntry entry) return;
+
+        _elements.Delete(entry);
+        ElementStatus.Text = $"已删除 {entry.Label}";
     }
 
     // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
