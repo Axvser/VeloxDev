@@ -99,6 +99,8 @@
 
 配套地，`WorkflowSurfaceBehavior.Refresh` 默认**异步**失效，只在 `host.Capture`（平移/拖拽进行中）时才 `Update()`（`Refresh` 里的注释与 `host.Capture` 分支）。⇒ **这家的刷新策略是「默认异步、手势中同步」，别家靠合成器自动解决这个问题。** 别把这里的 `Update()` 调用当成冗余删掉。
 
+**覆盖层也要同帧**（2026-10-30）：全功能 demo 的 `RefreshOverlays` 在 `Capture` 时对 `_minimap.Update()`。只 `Invalidate()` 的话，拖画布期间小地图的 `WM_PAINT` 被鼠标消息一直推迟，它比画布晚几帧才走一步 —— 表现是「拖画布时小地图抖」，而反过来拖小地图时画布没有捕获，所以看不到。同一处还有两条配套：平移中的 `OnScroll` 是 `UpdateCanvasMinSize` 改滚动范围带来的**回声**（`OnMouseMove` 之后还会用同一份状态 `Refresh` 一次），`WorkflowCanvas.OnScroll` 在 `_isPanning` 时直接返回，把每帧的画布+小地图重绘减半；原先由那条回声代劳的指针命中重判，改由 `OnMouseMove` 显式 `RefreshLinkHover()` 补上。
+
 ### 2.8 没有命中测试的「透明背景」问题，但有「哪个子控件被按住」的问题
 
 WinForms 的每个控件都是真窗口，所以对**本身就是控件**的内容不存在 WPF 那种「无背景的 `Grid` 收不到命中」的问题。**这只到「内容有窗口」为止**：非 Trimmed 的 demo 把连线画在画布的 `OnPaint` 里，那条线没有窗口，于是 WPF 那个问题原样存在 —— 命中必须在画布的指针处理里手写（§4.9）；反过来，被不透明卡片或浮层的真窗口盖住的那一段连线，画布收不到鼠标消息，也就不可能被命中。

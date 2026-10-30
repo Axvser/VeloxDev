@@ -421,6 +421,10 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         {
             if (_minimap is Views.MinimapOverlay minimap) minimap.PositionAtTopRight();
             _minimap.Invalidate();
+            // 与画布同帧：捕获期间（平移/拖节点）刷新是按鼠标消息来的，异步 WM_PAINT 会被一直往后排，
+            // 小地图因此比画布晚几帧才走一步 —— 看上去就是「拖画布时小地图抖」。画布自己在这条路径上
+            // 已经同步 Update（见 WorkflowSurfaceBehavior.Refresh），覆盖层照做。
+            if (Capture) _minimap.Update();
         }
 
         // 读 helper.Viewport（由 surface 的 Refresh 推送保持）与 Core 模型
@@ -849,6 +853,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
                 _panOffsetAtPress.X + cur.X - _panPressScreen.X,
                 _panOffsetAtPress.Y + cur.Y - _panPressScreen.Y);
             RelayoutAllCards();
+            // 内容在指针底下移动了，命中要重判。原先由 UpdateCanvasMinSize 触发的 OnScroll 回声代劳；
+            // 回声现在被跳过（见 OnScroll），这里显式补上。
+            RefreshLinkHover();
             return;
         }
 
@@ -1417,6 +1424,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     protected override void OnScroll(ScrollEventArgs se)
     {
         base.OnScroll(se);
+        // 平移中的滚动事件是 UpdateCanvasMinSize 改范围带来的回声：RelayoutAllCards 在这之后还会
+        // 用同一份状态 Refresh 一次，这里再刷一遍只会把每帧的重绘（画布 + 小地图）翻倍。
+        if (_isPanning) return;
         // Link renderers are not part of the control tree; panning/scrolling is handled uniformly
         // by the canvas OnPaint origin transform.
         RefreshLinkHover();
