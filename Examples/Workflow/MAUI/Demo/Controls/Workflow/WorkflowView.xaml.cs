@@ -23,6 +23,7 @@ public partial class WorkflowView : ContentView
     public WorkflowView()
     {
         InitializeComponent();
+        LayoutMenu.StatusSink = status => ElementStatus.Text = status;
 
         // Keep the canvas-info HUD current on every scroll / viewport change (it reads helper.Viewport,
         // which the surface behavior refreshes; the model events cover scale / visible counts).

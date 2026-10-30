@@ -101,11 +101,12 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 
 ## What the model gets
 
-**66 built-in tools** in the unconditional category groups, all documented in [references/tools.md](references/tools.md), plus `ResetToolCallLimit` and up to four handler-gated tools (two interaction, two plan-mode) — **71** when both handlers are registered. The shape worth knowing up front:
+**69 built-in tools** in the unconditional category groups, all documented in [references/tools.md](references/tools.md), plus `ResetToolCallLimit` and up to four handler-gated tools (two interaction, two plan-mode) — **74** when both handlers are registered. The shape worth knowing up front:
 
 - **Query** (all read-only) — `GetWorkflowSummary`, `GetFullTopology`, `ListNodes`, `GetNodeDetail`, `FindNodes`, `ResolveSlotId`, `ListSlotProperties`, `GetTypeSchema`, `GetComponentContext`, `ValidateWorkflow`, `CompileWorkflow`, `CompileNodeResult`, …
 - **Mutation** — `CreateNode`, `DeleteNode`, `ConnectSlots` / `ConnectByProperty`, `DisconnectSlots`, `SetSlotChannel`, `PatchNodeProperties`, `SetEnumSlotCollection`, `Undo` / `Redo`, …
 - **Execution** — node-level (`ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`), chain-level (`RunCompiledWorkflow`, plus the handle form `StartCompiledWorkflow` / `ContinueCompiledWorkflow` with `GetCompiledRunStatus` / `PauseCompiledRun` / `ResumeCompiledRun` / `StopCompiledRun`) and result-level (`GetNodeResult`).
+- **Layout** — `GetLayoutInfo`, `PreviewLayout` (read-only dry run) and `ArrangeLayout` (one undoable action). They run the `IWorkflowLayoutSolver` registered on the tree's helper, so a host's custom solution is what the Agent previews and applies; `nodeIndex` scopes the run to that node's reachable subgraph.
 - **Interaction** — `RequestSelection`, `RequestConfirmation`, plus `EnterPlanMode` / `ExitPlanMode`, registered only when the matching handler (for the plan pair, the confirmation handler) is wired.
 - **Budget** — `ResetToolCallLimit`, always offered, whatever the configured categories.
 
@@ -114,6 +115,39 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 ⚙ **Some mutations are deliberately not undoable**: `MoveNode` / `SetNodePosition` / `ResizeNode` (they mirror the GUI drag, which writes continuously) and `PatchNodeProperties` / `PatchComponentById` (direct property writes). Everything structural — create, delete, connect, disconnect, `SetEnumSlotCollection` — is undoable.
 
 ⚙ **Unmounted components are rejected, and operating on one elsewhere is a silent no-op.** A node must be in a tree before a tool can reach it.
+
+## Custom auto-layout
+
+The layout solution belongs to the **tree**, not to the Agent and not to the demo. A tree helper that implements `IWorkflowLayoutHost` exposes `LayoutSolver`; register one solution there and every entry point uses it — the host's `node.Arrange(options)`, the demo's right-click menu, and the Agent's `GetLayoutInfo` / `PreviewLayout` / `ArrangeLayout`.
+
+```csharp
+var helper = (IWorkflowLayoutHost)tree.GetHelper();
+
+// Replace only the planner and/or cost; the default solver still snapshots, solves and applies.
+helper.LayoutSolver = new DefaultWorkflowLayoutSolver(
+    planner: new MyPlanner(),
+    cost: new DefaultWorkflowLayoutCost());
+
+// Or replace the whole composition.
+helper.LayoutSolver = new MyLayoutSolver();
+```
+
+A planner picks the stages for one problem:
+
+```csharp
+sealed class MyPlanner : IWorkflowLayoutPlanner
+{
+    public IReadOnlyList<IWorkflowLayoutStage> CreateStages(
+        WorkflowLayoutProblem problem, WorkflowLayoutOptions options)
+        => [new MyLayeringStage(), new HierarchyAlignmentStage(), new TileSeparationStage()];
+}
+```
+
+A stage only reads the immutable `problem` and `options`, and writes its own arrays in `WorkflowLayoutState` (`X`/`Y`, plus the reserved `Rank`/`Order`/`RouteX`/`RouteY`). It must not read the model, the view, or `Problem.Sources`, and it must never write a pinned node; `WorkflowLayoutPipeline` copies pinned positions back after the stages run. `IWorkflowLayoutCost` measures the solved arrays only — do not read a curve the view published before the solve.
+
+A full `IWorkflowLayoutSolver` owns the whole composition (`snapshot → solve → apply`). If you implement one, honour `WorkflowLayoutOptions.DryRun`: `PreviewLayout` sets it and expects no anchor to change. `ArrangeLayout` expects the solver to apply; the default applier writes all moves as one `WorkflowActionPair`, so a custom solver should keep that one-undo contract.
+
+Useful knobs live on `WorkflowLayoutOptions`: `StartNode`/`Traversal`/`MaxDepth`/`PinStartNode` for a scoped run, `ColumnGap`/`RowGap`/`PositionTolerance` for spacing, and `PositionTolerance = 0` for strict canonical placement. `GetLayoutInfo` reports the registered solver and whether it differs from `DefaultWorkflowLayoutSolver` (`custom: true`), so an Agent can tell a host's solution from the fallback.
 
 ## Documenting your own components
 

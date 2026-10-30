@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Demo.ViewModels;
+using Demo.Workflow;
 using Jalium.UI;
 using Jalium.UI.Controls;
 using Jalium.UI.Input;
@@ -77,6 +78,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     private IWorkflowTreeViewModel? _tree;
     private INotifyPropertyChanged? _virtualNotifier;
+    private double _nodeLayoutTolerance = 8d;
     private readonly Dictionary<IWorkflowNodeViewModel, NodeViewBase> _cards = new();
     private readonly HashSet<IWorkflowNodeViewModel> _nodeSubs = new();
     private readonly HashSet<IWorkflowSlotViewModel> _slotSubs = new();
@@ -369,6 +371,44 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         };
     }
 
+    /// <summary>Demo-only: the node's own right-click menu, built from the shared layout presets.</summary>
+    private void ShowNodeLayoutMenu(IWorkflowNodeViewModel node, Wf.Anchor worldPosition)
+    {
+        var menu = new ContextMenu();
+
+        var layout = new MenuItem { Header = "自动布局" };
+        foreach (var (label, traversal) in WorkflowLayoutDemo.Traversals)
+        {
+            var item = new MenuItem { Header = label };
+            item.Click += (_, _) => ApplyNodeLayout(node, traversal);
+            layout.Items.Add(item);
+        }
+        menu.Items.Add(layout);
+
+        var tolerance = new MenuItem { Header = "布局容差" };
+        foreach (var (label, value) in WorkflowLayoutDemo.Tolerances)
+        {
+            var item = new MenuItem { Header = label };
+            item.Click += (_, _) => _nodeLayoutTolerance = value;
+            tolerance.Items.Add(item);
+        }
+        menu.Items.Add(tolerance);
+
+        menu.Open(ToMenuPosition(worldPosition));
+    }
+
+    private void ApplyNodeLayout(IWorkflowNodeViewModel node, WorkflowLayoutTraversal traversal)
+    {
+        try
+        {
+            WorkflowLayoutDemo.Arrange(node, traversal, _nodeLayoutTolerance);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Layout failed: {ex}");
+        }
+    }
+
     // 条目在这里增删。与 WorkflowTreeView 基类的 OnBuildLinkMenu 同一角色：这块画布是自绘的 Canvas、
     // 不是 WorkflowTreeView，拿不到那个 protected 钩子，所以自带一份同形的扩展点（条目与 Trimmed demo 一致）。
     private void OnBuildLinkMenu(ContextMenu menu, IWorkflowLinkViewModel link)
@@ -659,6 +699,15 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         var card = NodeViewFactory.Create(node);
         card.Bind(node);
         card.ApplyScale();
+        // The card is a child visual, so its right-click never reaches the surface's link menu route.
+        // Give the card its own layout menu and let the event stop here.
+        card.MouseDown += (_, e) =>
+        {
+            if (e.ChangedButton != PlatformInput.MouseButton.Right) return;
+            var local = e.GetPosition(this);
+            ShowNodeLayoutMenu(node, new Wf.Anchor(local.X, local.Y, 0));
+            e.Handled = true;
+        };
         _cards[node] = card;
         Children.Add(card);
         Canvas.SetLeft(card, node.Anchor.Horizontal + _tree.Layout.ActualOffset.Horizontal);

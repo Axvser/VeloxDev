@@ -85,6 +85,7 @@ csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 这几�
 | 条数与耗时 | 以 `dotnet test` 现跑为准，不在这里维护。默认套件跳过门控的真模型用例；打开开关后每条用例另算 |
 | 门控用例 | 真模型用例集中在 `Agent/Workflow/AgentWorkflowLiveTests.cs` 与 `Agent/SubAgents/SubAgentLiveTests.cs`，由 `Agent/LiveModelGate.cs` 的 `VELOXDEV_LIVE` 决定是否执行；不设开关时全部 `Inconclusive` |
 | 布局集成 | `Examples/DemoGraphTests.cs` 的 `Layout_FanInMergeSitsOnTheAnalyserGroupCentre`：用真实 demo 图跑 `tree.Arrange`，断言 Merge Report 中心 = 三个分析节点的包围盒中心、左边缘 = 最右父右边缘 + 64。它同时守住 demo 图的扇出/扇入连接形状 |
+| 布局工具 | `Agent/Workflow/Functions/LayoutToolTests.cs`：`GetLayoutInfo` 报告注册的 solver、`PreviewLayout` 不写锚点、`ArrangeLayout` 走 `Tree.Arrange`、自定义 `IWorkflowLayoutSolver` 被调用、`pinnedNodeIndicesJson` 生效、工具注册在 `WorkflowToolCategory.Layout` 下 |
 
 ### 真模型用例由 `VELOXDEV_LIVE` 开关决定，不再由「有没有 key」决定（2026-10-05 改）
 

@@ -8,6 +8,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -23,6 +24,7 @@ namespace Demo.Views.Workflow;
 public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
+    private double _nodeLayoutTolerance = 8d;
 
     public WorkflowView()
     {
@@ -32,6 +34,7 @@ public partial class WorkflowView : UserControl
         // the Core model itself (scale / actual size / visible items); the scroll and content offsets come
         // from the grid decorator's DPs, which WorkflowSurfaceBehavior pushes on this same event.
         PART_ScrollViewer.ScrollChanged += (_, _) => InfoOverlay.Refresh();
+        AddHandler(PreviewMouseUpEvent, new MouseButtonEventHandler(OnNodeRightButtonUp), true);
 
         DataContext = _workflowViewModel;
         ElementList.Tree = _workflowViewModel;
@@ -250,6 +253,95 @@ public partial class WorkflowView : UserControl
                 e.Handle.PreventDefault = true;
             }
         };
+    }
+
+    // Right-click menus must open on the UP event: a ContextMenu opened on PreviewMouseDown is dismissed
+    // by the corresponding MouseUp before the user sees it. The Core input route still owns the hit test,
+    // but WPF's own bubbling event is the stable place to pop a native menu.
+    private void OnNodeRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != PlatformInput.MouseButton.Right) return;
+        if (IsInsideTextInput(e.OriginalSource as DependencyObject)) return;
+
+        var element = FindNodeElement(e.OriginalSource as DependencyObject);
+        if (element?.DataContext is not IWorkflowNodeViewModel node) return;
+
+        ShowNodeLayoutMenu(node, element);
+        e.Handled = true;
+    }
+
+    private static bool IsInsideTextInput(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is TextBoxBase or PasswordBox or RichTextBox) return true;
+            if (current is WorkflowView) break;
+        }
+
+        return false;
+    }
+
+    private static FrameworkElement? FindNodeElement(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is FrameworkElement element && element.DataContext is IWorkflowNodeViewModel)
+            {
+                return element;
+            }
+
+            if (current is WorkflowView) break;
+        }
+
+        return null;
+    }
+
+    /// <summary>Demo-only: the node's own right-click menu, built from the shared layout presets.</summary>
+    private void ShowNodeLayoutMenu(IWorkflowNodeViewModel node, UIElement? source)
+    {
+        var menu = new ContextMenu();
+
+        var layout = new MenuItem { Header = "自动布局" };
+        foreach (var (label, traversal) in WorkflowLayoutDemo.Traversals)
+        {
+            var item = new MenuItem { Header = label };
+            item.Click += (_, _) => ApplyNodeLayout(node, traversal);
+            layout.Items.Add(item);
+        }
+        menu.Items.Add(layout);
+
+        var tolerance = new MenuItem { Header = "布局容差" };
+        foreach (var (label, value) in WorkflowLayoutDemo.Tolerances)
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                IsCheckable = true,
+                IsChecked = Math.Abs(_nodeLayoutTolerance - value) < 1e-9,
+            };
+            item.Click += (_, _) => _nodeLayoutTolerance = value;
+            tolerance.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        menu.Items.Add(tolerance);
+
+        menu.PlacementTarget = source ?? this;
+        menu.Placement = PlacementMode.MousePoint;
+        menu.IsOpen = true;
+    }
+
+    private void ApplyNodeLayout(IWorkflowNodeViewModel node, WorkflowLayoutTraversal traversal)
+    {
+        try
+        {
+            var result = WorkflowLayoutDemo.Arrange(node, traversal, _nodeLayoutTolerance);
+            ElementStatus.Text = WorkflowLayoutDemo.Describe(result, $"从 {node.GetType().Name}");
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        }
+        catch (Exception ex)
+        {
+            ElementStatus.Text = $"布局失败：{ex.Message}";
+        }
     }
 
     private void SubscribeAutoScroll(TreeViewModel vm)

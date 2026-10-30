@@ -214,6 +214,13 @@ public partial class Workflow : ComponentBase, IDisposable
         _elements?.Delete(entry);
     }
 
+    /// <summary>Receives the one-line layout summary from the node card's right-click menu.</summary>
+    private void SetElementStatus(string status)
+    {
+        _elementStatus = status;
+        StateHasChanged();
+    }
+
     private async Task StopWorkflow()
     {
         if (_session is null) return;

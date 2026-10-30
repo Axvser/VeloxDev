@@ -21,8 +21,10 @@
                         overflow:@OverflowCss;@SurfaceOverrideCss">
                 @* One 32px title row: the type accent bar, a left-aligned title, then the readouts.
                    Nothing here is centred and nothing sits on a coloured band — the accent is a 2px
-                   rule at the head of the row, which leaves the title the whole width to be read in. *@
-                <div class="wf-card-header">
+                   rule at the head of the row, which leaves the title the whole width to be read in.
+                   The layout menu hangs off the header only: right-clicking a body input must keep the
+                   browser's own text menu. *@
+                <div class="wf-card-header" @oncontextmenu="OnContextMenu" @oncontextmenu:preventDefault>
                     <span class="wf-card-accent" style="background:@AccentCss;"></span>
                     <span class="wf-card-title">@(Title ?? FallbackTitle)</span>
                     @if (HasOrderBadge)
@@ -64,4 +66,23 @@
             </div>
         </WorkflowNodeDragBehavior>
     </WorkflowSlotLayoutBehavior>
+
+    @if (_layoutMenuOpen)
+    {
+        <div class="wf-layout-menu-backdrop" @onclick="CloseLayoutMenu"></div>
+        <div class="wf-layout-menu" @onclick:stopPropagation
+             style="left:@(_layoutMenuX.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))px;top:@(_layoutMenuY.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))px;">
+            @foreach (var (label, traversal) in WorkflowLayoutDemo.Traversals)
+            {
+                <button type="button" @onclick="() => ApplyLayoutAsync(traversal)">@label</button>
+            }
+            <div class="wf-layout-menu-sep"></div>
+            <div class="wf-layout-menu-title">布局容差</div>
+            @foreach (var (label, tolerance) in WorkflowLayoutDemo.Tolerances)
+            {
+                <button type="button" class="@(_layoutTolerance == tolerance ? "selected" : null)"
+                        @onclick="() => SetLayoutTolerance(tolerance)">@label</button>
+            }
+        </div>
+    }
 }

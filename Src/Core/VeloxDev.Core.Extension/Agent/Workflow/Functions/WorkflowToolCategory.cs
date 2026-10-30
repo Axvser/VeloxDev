@@ -27,7 +27,7 @@ public enum WorkflowToolCategory
     /// <summary>Graph traversal &amp; path finding: SearchForward/Reverse/AllRelative, IsConnected, FindPath.</summary>
     Graph = 1 << 4,
 
-    /// <summary>Reserved. No bundled layout tools — multi-node layout is done node-by-node via MoveNode/SetNodePosition.</summary>
+    /// <summary>Auto layout: inspect the tree's registered solver, preview a solution, or apply it.</summary>
     Layout = 1 << 5,
 
     /// <summary>Analytics: GetNodeStatistics.</summary>

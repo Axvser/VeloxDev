@@ -10,6 +10,7 @@ public partial class ControllerView : ContentView
     {
         InitializeComponent();
         AgentSelectionVisual.Attach(this);
+        LayoutMenu.Attach(this);
     }
 
     protected override void OnSizeAllocated(double width, double height)

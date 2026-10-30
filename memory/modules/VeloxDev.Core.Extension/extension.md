@@ -74,7 +74,7 @@
 ### A. 加一个工作流工具
 
 1. `Agent/Workflow/Functions/WorkflowAgentToolkit.cs`：加一个 `private async Task<string> Xxx(...)`，参数上用 `[Description]` 写清每个参数；返回 `Ok(...)` / `Error(...)` 信封。
-2. 同一个文件，在 `CreateAllTools` 里选一个 `WorkflowToolCategory` 并 `Add(类别, T(Xxx, nameof(Xxx)))`。**类别只影响 `ProvideTools(类别)` 的切片**；`Layout` 与 `Composite` 是保留位，别用。
+2. 同一个文件，在 `CreateAllTools` 里选一个 `WorkflowToolCategory` 并 `Add(类别, T(Xxx, nameof(Xxx)))`。**类别只影响 `ProvideTools(类别)` 的切片**；`Composite` 是保留位。`Layout` 已注册 `GetLayoutInfo` / `PreviewLayout` / `ArrangeLayout`，它们走 `Tree.Arrange`，不要在 toolkit 里另写一套布局算法。
 3. **若它是只读的**：加进 `BuildQueryToolNames` 的字面量集合。这决定它计入读还是写预算，以及 `AutoMarkDirty` 打开时会不会标脏。
 4. **若它会在提示里被点名**：`WorkflowAgentScope.ProvideProgressiveContextPrompt` 与 `ProvideAllContexts`；失败协议里的工具名清单在 `BuildFailureHandlingProtocol`。**另加**：闸门 / 关闭开关 / 预算上限若属于这个工具的语义，包络（`RenderEnvelope`）也要跟着说。
 5. **若它属于某个能力闸门**：闸门判定在 `WorkflowAgentScope.cs`（`AllowNodeExecution` / `IsGenericCommandAllowed`），注册的条件也在这里判断，不是「注册了再拒」——见 `WorkflowAgentToolkit.CreateAllTools` 里按 handler 非空注册的那段。
@@ -155,6 +155,7 @@
 | `McpScope.WithMcpRoot` | `WithMcpRoot` | 仓库内无调用者；`.evn/mcp` 是唯一用到的根 |
 | `McpScope.WithSelfService` | 已删除（2026-10-11） | **随阶梯一起删除** —— 两个写工具永远注册，能否执行由权限模式与宿主规则决定；`AddMcpServer` 的完整路径仍然只有测试在跑 |
 | `AgentDashboardViewModel` | `Agent/Dashboard/AgentDashboardViewModel.cs` | 有测试、**无 UI 消费者**；三个 demo 绑的是 `McpScope.Status` |
-| `WorkflowToolCategory.Layout` / `Composite` | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | 保留位，无工具注册 |
+| `WorkflowToolCategory.Layout` | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | 已注册 `GetLayoutInfo` / `PreviewLayout` / `ArrangeLayout`，使用树 helper 的 solver |
+| `WorkflowToolCategory.Composite` | 同上 | 保留位，无工具注册 |
 | `WithInteractionSafetyPrompt(level, body)` 的覆盖段 | 已删除（与 `WithInteractionSafety` 一起） | 交互工具改为**按处理器是否存在注册**；模式的附加文本走 `WithModePrompt`，落在 `BuildInteractionSafetyPrompt` 里 |
 | `SubAgentScope.WithSubAgentDepth` | `Agent/SubAgents/SubAgentScope.cs` 的 `WithSubAgentDepth` | **不是死代码，但没有它「任意深度」会很难看**：预算已经保证树终止，深度上限才是让它可用的东西。宿主该两个都设（类注释里写死了这句） |

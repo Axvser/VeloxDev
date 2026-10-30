@@ -118,7 +118,8 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
 | 新位置策略 | 实现 `IWorkflowLayoutPositionPolicy`，传给 `TileSeparationStage` / `DefaultWorkflowLayoutPlanner` | 改 `TileSeparationStage` 里的判断；把 tolerance 写死在阶段里 |
 | 新代价函数 | 实现 `IWorkflowLayoutCost`，传给 `WorkflowLayoutPipeline` | 让 cost 反向改 `state` 的位置 |
 | 换整套规划 | 换 `IWorkflowLayoutPlanner` | 在 `WorkflowLayoutPipeline` 里加 `if` 分支 |
-| Demo 入口 | WinUI 完整 Demo 的**节点右键菜单**：`自动布局 → 从该节点整理（下游/上游/双向）`，另有 `布局容差` 子菜单（0/8/32）。入口在 `TreeView.xaml.cs` 的 `OnNodeRightTapped` / `ArrangeFrom`，侧栏只保留被动的元素索引；目前只有 WinUI | 把容差/触发时机写进 Core 阶段 |
+| Demo 入口 | 七家全量 Demo 的**节点右键菜单**：`自动布局 → 从该节点整理（下游/上游/双向）`，另有 `布局容差`（0/8/32）。标签/预设集中在 Lib 的 `WorkflowLayoutDemo`；WinUI 用 `RightTapped`，WPF 用右键抬起，Avalonia / MAUI / WinForms / Jalium 用各自 context menu，Blazor 用 `@oncontextmenu` | 把容差/触发时机写进 Core 阶段 |
+| Agent 工具 | Core.Extension 的 `WorkflowAgentToolkit` 在 `WorkflowToolCategory.Layout` 下注册 `GetLayoutInfo` / `PreviewLayout` / `ArrangeLayout`；都走 `Tree.Arrange`，使用树 helper 上注册的 `IWorkflowLayoutSolver`；`PreviewLayout` 用 `DryRun`，`ArrangeLayout` 一次 undoable 写入 | 在 toolkit 里另写布局算法；那会让 Agent 与 GUI 看到不同的解 |
 
 `WorkflowLayoutPipeline` 是唯一把阶段串起来的地方；它不做任何布局决策，只负责 `pinned` 收尾与 cost 汇总。
 

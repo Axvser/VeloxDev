@@ -11,5 +11,6 @@ public partial class NodeView : ContentView
     {
         InitializeComponent();
         AgentSelectionVisual.Attach(this);
+        LayoutMenu.Attach(this);
     }
 }

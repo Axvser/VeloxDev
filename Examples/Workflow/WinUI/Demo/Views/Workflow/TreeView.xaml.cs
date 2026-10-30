@@ -652,15 +652,17 @@ namespace Demo.Views
         private void BuildNodeLayoutMenu()
         {
             var layout = new MenuFlyoutSubItem { Text = "自动布局" };
-            layout.Items.Add(CreateLayoutItem("从该节点整理（下游）", WorkflowLayoutTraversal.Downstream));
-            layout.Items.Add(CreateLayoutItem("从该节点整理（上游）", WorkflowLayoutTraversal.Upstream));
-            layout.Items.Add(CreateLayoutItem("从该节点整理（双向）", WorkflowLayoutTraversal.Both));
+            foreach (var (label, traversal) in WorkflowLayoutDemo.Traversals)
+            {
+                layout.Items.Add(CreateLayoutItem(label, traversal));
+            }
             _nodeLayoutMenu.Items.Add(layout);
 
             var tolerance = new MenuFlyoutSubItem { Text = "布局容差" };
-            tolerance.Items.Add(CreateToleranceItem("严格整理 (0)", 0d));
-            tolerance.Items.Add(CreateToleranceItem("默认 (8)", 8d));
-            tolerance.Items.Add(CreateToleranceItem("宽松 (32)", 32d));
+            foreach (var (label, value) in WorkflowLayoutDemo.Tolerances)
+            {
+                tolerance.Items.Add(CreateToleranceItem(label, value));
+            }
             _nodeLayoutMenu.Items.Add(new MenuFlyoutSeparator());
             _nodeLayoutMenu.Items.Add(tolerance);
         }
@@ -729,42 +731,14 @@ namespace Demo.Views
             // tree's helper. The demo therefore exercises the same path a host would use.
             try
             {
-                var result = start.Arrange(new WorkflowLayoutOptions
-                {
-                    PositionTolerance = _nodeLayoutTolerance,
-                    Traversal = traversal,
-                    PinStartNode = true,
-                });
-                ShowLayoutResult(result, $"从 {start.GetType().Name}");
+                var result = WorkflowLayoutDemo.Arrange(start, traversal, _nodeLayoutTolerance);
+                ElementStatus.Text = WorkflowLayoutDemo.Describe(result, $"从 {start.GetType().Name}");
+                WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
             }
             catch (Exception ex)
             {
                 ElementStatus.Text = $"布局失败：{ex.Message}";
             }
-        }
-
-        private void ShowLayoutResult(WorkflowLayoutResult result, string scope)
-        {
-            var cost = result.Solution.Cost;
-            var summary = $"整理（{scope}）：写入 {result.AppliedCount} 个节点";
-            if (result.SkippedCount > 0)
-            {
-                summary += $" · 跳过 {result.SkippedCount} 个已变动的节点";
-            }
-
-            summary += $" · 重叠 {cost.Overlaps} · 交叉 {cost.Crossings}";
-            if (cost.CrossingsApproximate)
-            {
-                summary += "（中心线近似）";
-            }
-
-            if (!cost.CostMeasured)
-            {
-                summary += "（代价未测量）";
-            }
-
-            ElementStatus.Text = summary;
-            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         }
 
         private void OnLocateElement(object sender, RoutedEventArgs e)

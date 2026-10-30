@@ -272,7 +272,7 @@ WorkflowLayoutProblemBuilder.Build(tree, options)      ← 唯一读模型的一
   → WorkflowLayoutSolution { Placements, Cost, Diagnostics }
   → WorkflowLayoutApplier.Apply(problem, solution)     ← 调用线程；一个 IWorkflowActionPair，一次 MarkDirty
   → WorkflowLayoutEx.Arrange(tree, options)             ← 经 tree.GetHelper() 的 IWorkflowLayoutHost
-  → WorkflowLayoutEx.Arrange(node, options)             ← Parent → tree → helper.LayoutSolver（Demo 的节点右键入口）
+  → WorkflowLayoutEx.Arrange(node, options)             ← Parent → tree → helper.LayoutSolver（Demo / Agent 的节点入口）
 ```
 
 - 阶段只读快照、写 `state` 数组；**不许读模型、视图或 `Problem.Sources`**（后者只给 applier）。
@@ -283,6 +283,8 @@ WorkflowLayoutProblemBuilder.Build(tree, options)      ← 唯一读模型的一
 - **默认两段**：`HierarchyAlignmentStage` 按拓扑序自顶向下写规范位置 —— 扇出组（父 + 2 个以上子）子列左边缘 = 父右边缘 + `ColumnGap`，以父垂心为中心按 `RowGap` 堆叠，子序取快照出边顺序；扇入合流点（2 个以上父）垂直中心 = 父组包围盒中心，左边缘 = 最右父右边缘 + `ColumnGap`；单子边垂直中心 = 父中心，左边缘 = 父右边缘 + `ColumnGap`。扇出优先于后两条，组内有 pinned 子则整组跳过。`TileSeparationStage` 只做冲突投影 —— tile 切块（中心归格，查询带 1 格 halo）→ 列带垂向扫描 → 行带水平扫描 → 按 `MaxSweeps` 重复，不夹取，允许负方向生长。
 - **从指定节点开始**：`WorkflowLayoutOptions.StartNode` 非空时，只把沿 `Traversal`、`MaxDepth` 可达的节点当可动集，其余有限节点作为 pinned 障碍；起点默认固定（`PinStartNode`），布局从它向外长。`StartNode` 必须在树内且几何有限，否则 builder 抛 `ArgumentException`。
 - `PositionTolerance` 同时约束两段：`0` 表示严格规范位置（对齐段总写计算位置，分离段只修硬违规）；大于 `0` 时扇出组全员在容差内且保持最小间距就不动，单子/扇入节点的中心偏差不超过容差也不动，分离段的软位移只在超出容差时执行。**硬违规永远修**，pinned 永不移动。分离段没有远距离软目标，因此不需要额外的位移上限。
+- **Agent 面**：Core.Extension 的 `WorkflowAgentToolkit` 在 `WorkflowToolCategory.Layout` 下注册 `GetLayoutInfo` / `PreviewLayout` / `ArrangeLayout`。三者都走 `Tree.Arrange`，所以用的是树 helper 上注册的 solver（自定义实现也覆盖）；`PreviewLayout` 只是 `Options.DryRun`。不要把布局算法第二份抄进 toolkit。
+- **七家全量 Demo 都有节点右键布局菜单**：WinUI 用 `RightTapped`，WPF 用右键抬起，Avalonia / MAUI / WinForms / Jalium 用各自的 context menu，Blazor 用 `@oncontextmenu`；条目来自 `Examples/Workflow/Common/Lib` 的 `WorkflowLayoutDemo` 预设。
 - **命名空间是 `VeloxDev.WorkflowSystem`，不是 `.Layout`**（会遮蔽 MAUI 的 `Layout` 类型，适配器报 CS0118）。完整依据见 [layout.md](layout.md) §一。
 
 ---

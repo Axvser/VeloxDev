@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Demo.ViewModels;
 using Demo.Workflow;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Components.Workflow;
@@ -70,6 +71,10 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     [Parameter]
     public string? StatusProperty { get; set; }
 
+    /// <summary>Raised with the one-line summary after a right-click layout runs.</summary>
+    [Parameter]
+    public EventCallback<string> StatusChanged { get; set; }
+
     /// <summary>Gets or sets an optional card background override (defaults to the shared card surface).</summary>
     [Parameter]
     public string? Background { get; set; }
@@ -97,6 +102,10 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     private INotifyPropertyChanged? _notifier;
     private TreeViewModel? _tree;
     private string _title = "";
+    private bool _layoutMenuOpen;
+    private double _layoutMenuX;
+    private double _layoutMenuY;
+    private double _layoutTolerance = 8d;
 
     // Execution feedback. The order badge and the status capsule come off the node view-model
     // (looked up reflectively, same as the title); "running" does NOT — it comes off the tree,
@@ -346,6 +355,38 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
 
         var property = Node.GetType().GetProperty("Name") ?? Node.GetType().GetProperty("Title");
         _title = property?.GetValue(Node)?.ToString() ?? "";
+    }
+
+    /// <summary>Demo-only: opens the layout menu at the pointer and keeps the browser menu away.</summary>
+    private void OnContextMenu(MouseEventArgs e)
+    {
+        if (Node is null) return;
+
+        _layoutMenuX = e.ClientX;
+        _layoutMenuY = e.ClientY;
+        _layoutMenuOpen = true;
+    }
+
+    private void CloseLayoutMenu() => _layoutMenuOpen = false;
+
+    private void SetLayoutTolerance(double tolerance) => _layoutTolerance = tolerance;
+
+    private async Task ApplyLayoutAsync(WorkflowLayoutTraversal traversal)
+    {
+        if (Node is null) return;
+
+        try
+        {
+            var result = WorkflowLayoutDemo.Arrange(Node, traversal, _layoutTolerance);
+            await StatusChanged.InvokeAsync(
+                WorkflowLayoutDemo.Describe(result, $"从 {Node.GetType().Name}"));
+        }
+        catch (Exception ex)
+        {
+            await StatusChanged.InvokeAsync($"布局失败：{ex.Message}");
+        }
+
+        _layoutMenuOpen = false;
     }
 
     /// <inheritdoc />

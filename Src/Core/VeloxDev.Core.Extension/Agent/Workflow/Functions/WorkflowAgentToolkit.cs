@@ -181,8 +181,12 @@ public sealed class WorkflowAgentToolkit
             T(FindPath, nameof(FindPath), AgentActionCategory.Read));
 
         // ── Layout ──
-        // No bundled layout tools: aligning/distributing/auto-arranging multiple nodes is
-        // performed node-by-node via MoveNode / SetNodePosition (each one SetAnchorCommand).
+        // The tree owns the solution: these tools read the registered IWorkflowLayoutSolver, preview it
+        // without writing (DryRun), or run it through the same Tree.Arrange path the GUI menu uses.
+        Add(WorkflowToolCategory.Layout,
+            T(GetLayoutInfo, nameof(GetLayoutInfo), AgentActionCategory.Read),
+            T(PreviewLayout, nameof(PreviewLayout), AgentActionCategory.Read),
+            T(ArrangeLayout, nameof(ArrangeLayout), AgentActionCategory.Edit));
 
         // ── Analytics ──
         Add(WorkflowToolCategory.Analytics,
@@ -405,6 +409,7 @@ public sealed class WorkflowAgentToolkit
             "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
             "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation", "ResetToolCallLimit",
             "CompileWorkflow", "CompileNodeResult", "GetCompileStatus", "GetExecutionLog",
+            "GetLayoutInfo", "PreviewLayout",
         };
 
         foreach (var name in SkillAgentToolkit.ToolNames)
@@ -2405,6 +2410,209 @@ public sealed class WorkflowAgentToolkit
         {
             return Error($"Run failed: {ex.Message}");
         }
+    }
+
+    // ────────────────────────── Layout Functions ──────────────────────────
+
+    [Description("Describes the layout solution registered on this tree: the solver type, whether the tree helper hosts a custom solver, and the default layout options. Use PreviewLayout to inspect a solution or ArrangeLayout to apply it.")]
+    private string GetLayoutInfo()
+    {
+        var helper = Tree.GetHelper();
+        var host = helper as IWorkflowLayoutHost;
+        var solver = host?.LayoutSolver;
+        var defaults = new WorkflowLayoutOptions();
+
+        return new VeloxJsonObject
+        {
+            ["solver"] = solver is null ? "DefaultWorkflowLayoutSolver (fallback)" : solver.GetType().Name,
+            ["host"] = host is not null,
+            ["custom"] = solver is not null && solver.GetType() != typeof(DefaultWorkflowLayoutSolver),
+            ["nodes"] = Tree.Nodes.Count,
+            ["defaults"] = new VeloxJsonObject
+            {
+                ["tileSize"] = defaults.TileSize,
+                ["columnGap"] = defaults.ColumnGap,
+                ["rowGap"] = defaults.RowGap,
+                ["maxSweeps"] = defaults.MaxSweeps,
+                ["positionTolerance"] = defaults.PositionTolerance,
+                ["traversal"] = defaults.Traversal.ToString(),
+                ["maxDepth"] = defaults.MaxDepth,
+                ["pinStartNode"] = defaults.PinStartNode,
+                ["measureCost"] = defaults.MeasureCost,
+            },
+        }.ToJson();
+    }
+
+    [Description("Solves the tree's registered layout without writing anchors. Returns every placement, the cost breakdown and diagnostics. Use nodeIndex to scope the run to the subgraph reachable from that node.")]
+    private string PreviewLayout(
+        [Description("Optional zero-based start node. Omit for the whole tree; when set, only the reachable subgraph moves and the start node is pinned by default.")] int? nodeIndex = null,
+        [Description("Downstream (default), Upstream, or Both. Ignored when nodeIndex is omitted.")] string? traversal = null,
+        [Description("Maximum link hops from the start node; 0 = unlimited.")] int maxDepth = 0,
+        [Description("Keep the start node fixed (default true).")] bool pinStartNode = true,
+        [Description("Per-axis distance within which the existing placement is kept; 0 = strict canonical.")] double? positionTolerance = null,
+        [Description("Minimum horizontal gap in world units.")] double? columnGap = null,
+        [Description("Minimum vertical gap in world units.")] double? rowGap = null,
+        [Description("Maximum separation sweeps.")] int? maxSweeps = null,
+        [Description("Separation grid tile size in world units.")] double? tileSize = null,
+        [Description("Measure overlaps and crossings (default true).")] bool measureCost = true,
+        [Description("JSON array of node indices that must not move, e.g. [0,2].")] string? pinnedNodeIndicesJson = null)
+        => RunLayout(true, nodeIndex, traversal, maxDepth, pinStartNode, positionTolerance,
+            columnGap, rowGap, maxSweeps, tileSize, measureCost, pinnedNodeIndicesJson);
+
+    [Description("Runs the tree's registered layout and writes the anchors in one undoable action. Same parameters as PreviewLayout. Returns every placement, the applied/skipped counts, cost and diagnostics.")]
+    private string ArrangeLayout(
+        [Description("Optional zero-based start node. Omit for the whole tree; when set, only the reachable subgraph moves and the start node is pinned by default.")] int? nodeIndex = null,
+        [Description("Downstream (default), Upstream, or Both. Ignored when nodeIndex is omitted.")] string? traversal = null,
+        [Description("Maximum link hops from the start node; 0 = unlimited.")] int maxDepth = 0,
+        [Description("Keep the start node fixed (default true).")] bool pinStartNode = true,
+        [Description("Per-axis distance within which the existing placement is kept; 0 = strict canonical.")] double? positionTolerance = null,
+        [Description("Minimum horizontal gap in world units.")] double? columnGap = null,
+        [Description("Minimum vertical gap in world units.")] double? rowGap = null,
+        [Description("Maximum separation sweeps.")] int? maxSweeps = null,
+        [Description("Separation grid tile size in world units.")] double? tileSize = null,
+        [Description("Measure overlaps and crossings (default true).")] bool measureCost = true,
+        [Description("JSON array of node indices that must not move, e.g. [0,2].")] string? pinnedNodeIndicesJson = null)
+        => RunLayout(false, nodeIndex, traversal, maxDepth, pinStartNode, positionTolerance,
+            columnGap, rowGap, maxSweeps, tileSize, measureCost, pinnedNodeIndicesJson);
+
+    private string RunLayout(
+        bool preview,
+        int? nodeIndex,
+        string? traversal,
+        int maxDepth,
+        bool pinStartNode,
+        double? positionTolerance,
+        double? columnGap,
+        double? rowGap,
+        int? maxSweeps,
+        double? tileSize,
+        bool measureCost,
+        string? pinnedNodeIndicesJson)
+    {
+        var options = new WorkflowLayoutOptions
+        {
+            MaxDepth = maxDepth,
+            PinStartNode = pinStartNode,
+            MeasureCost = measureCost,
+            DryRun = preview,
+        };
+
+        if (nodeIndex is { } index)
+        {
+            if (!TryGetNode(index, out var node, out var error)) return error;
+            options.StartNode = node;
+        }
+
+        if (!string.IsNullOrWhiteSpace(traversal))
+        {
+            if (!Enum.TryParse<WorkflowLayoutTraversal>(traversal, ignoreCase: true, out var parsed))
+                return Error("traversal must be Downstream, Upstream or Both.");
+            options.Traversal = parsed;
+        }
+
+        if (positionTolerance is { } tolerance) options.PositionTolerance = tolerance;
+        if (columnGap is { } column) options.ColumnGap = column;
+        if (rowGap is { } row) options.RowGap = row;
+        if (maxSweeps is { } sweeps) options.MaxSweeps = sweeps;
+        if (tileSize is { } tile) options.TileSize = tile;
+
+        if (!string.IsNullOrWhiteSpace(pinnedNodeIndicesJson))
+        {
+            int[] indices;
+            try
+            {
+                indices = [.. ((VeloxJsonArray)VeloxJsonValue.Parse(pinnedNodeIndicesJson!))
+                    .Select(value => ((VeloxJsonScalar)value).AsInt32())];
+            }
+            catch (Exception ex)
+            {
+                return Error($"Invalid pinnedNodeIndicesJson: {ex.Message}");
+            }
+
+            var pinned = new HashSet<IWorkflowNodeViewModel>();
+            foreach (var pinnedIndex in indices)
+            {
+                if (!TryGetNode(pinnedIndex, out var node, out var error)) return error;
+                pinned.Add(node);
+            }
+
+            options.Pinned = pinned.Contains;
+        }
+
+        try
+        {
+            // 走 Tree.Arrange，落到 helper 上注册的 IWorkflowLayoutSolver：Agent 看到的就是宿主那套解，
+            // 不是 toolkit 里另开的第二份管道。
+            var result = Tree.Arrange(options);
+            return BuildLayoutResultJson(result, preview);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Error($"Layout failed: {ex.Message}");
+        }
+    }
+
+    private string BuildLayoutResultJson(WorkflowLayoutResult result, bool preview)
+    {
+        var solution = result.Solution;
+        var sources = solution.Problem.Sources;
+        var placements = new VeloxJsonArray();
+
+        foreach (var placement in solution.Placements)
+        {
+            var node = placement.Index >= 0 && placement.Index < sources.Count
+                ? sources[placement.Index]
+                : null;
+            placements.Add(new VeloxJsonObject
+            {
+                ["i"] = placement.Index,
+                ["id"] = node is null ? null : GetComponentId(node),
+                ["x"] = placement.X,
+                ["y"] = placement.Y,
+                ["ox"] = placement.OriginalX,
+                ["oy"] = placement.OriginalY,
+                ["dx"] = placement.DeltaX,
+                ["dy"] = placement.DeltaY,
+                ["w"] = placement.Width,
+                ["h"] = placement.Height,
+                ["pinned"] = placement.IsPinned,
+                ["moved"] = placement.Moved,
+            });
+        }
+
+        var cost = solution.Cost;
+        var bounds = cost.Bounds;
+        var diagnostics = new VeloxJsonArray();
+        foreach (var message in solution.Diagnostics) diagnostics.Add(message);
+
+        return new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["mode"] = preview ? "preview" : "apply",
+            ["applied"] = result.Applied,
+            ["dryRun"] = result.DryRun,
+            ["appliedCount"] = result.AppliedCount,
+            ["skipped"] = result.SkippedCount,
+            ["cost"] = new VeloxJsonObject
+            {
+                ["measured"] = cost.CostMeasured,
+                ["overlaps"] = cost.Overlaps,
+                ["overlapArea"] = cost.OverlapArea,
+                ["crossings"] = cost.Crossings,
+                ["crossingsApproximate"] = cost.CrossingsApproximate,
+                ["displacement"] = cost.Displacement,
+                ["maxDisplacement"] = cost.MaxDisplacement,
+            },
+            ["bounds"] = new VeloxJsonObject
+            {
+                ["l"] = bounds.Left,
+                ["t"] = bounds.Top,
+                ["w"] = bounds.Width,
+                ["h"] = bounds.Height,
+            },
+            ["placements"] = placements,
+            ["diagnostics"] = diagnostics,
+        }.ToJson();
     }
 
     // ────────────────────────── Analytics Functions ──────────────────────────

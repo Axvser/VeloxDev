@@ -45,6 +45,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // ── State ──────────────────────────────────────────────────────────────────
     private WorkflowDemoSession? _session;
     private readonly Dictionary<IWorkflowNodeViewModel, WorkflowNodeCard> _cards = [];
+    private double _nodeLayoutTolerance = 8d;
 
     // Link renderer: template LinkView (VirtualLink + all real links). They are not child
     // controls; they reuse the template LinkView geometry (Render), drawn uniformly by the
@@ -572,6 +573,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         var card = new WorkflowNodeCard();
         card.Bind(node);
+        // The card is a child control, so a right-click over it never reaches the canvas. Give the card
+        // its own context menu; WinForms opens it on the platform's right-click gesture.
+        card.ContextMenuStrip = BuildNodeLayoutMenu(node);
 
         // Subscribe to node position/size changes
         if (node is INotifyPropertyChanged n) n.PropertyChanged += OnNodePropertyChanged;
@@ -590,6 +594,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         if (node is INotifyPropertyChanged n) n.PropertyChanged -= OnNodePropertyChanged;
         card.Unbind();
         Controls.Remove(card);
+        card.ContextMenuStrip?.Dispose();
         card.Dispose();
         _cards.Remove(node);
     }
@@ -1065,6 +1070,48 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     private void OnBuildLinkMenu(ContextMenuStrip menu, IWorkflowLinkViewModel link)
     {
         menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null));
+    }
+
+    /// <summary>Demo-only: the node card's context menu, built from the shared layout presets.</summary>
+    private ContextMenuStrip BuildNodeLayoutMenu(IWorkflowNodeViewModel node)
+    {
+        var menu = new ContextMenuStrip();
+
+        var layout = new ToolStripMenuItem("自动布局");
+        foreach (var (label, traversal) in WorkflowLayoutDemo.Traversals)
+        {
+            var item = new ToolStripMenuItem(label);
+            item.Click += (_, _) => ApplyNodeLayout(node, traversal);
+            layout.DropDownItems.Add(item);
+        }
+        menu.Items.Add(layout);
+
+        var tolerance = new ToolStripMenuItem("布局容差");
+        foreach (var (label, value) in WorkflowLayoutDemo.Tolerances)
+        {
+            var item = new ToolStripMenuItem(label)
+            {
+                Checked = Math.Abs(_nodeLayoutTolerance - value) < 1e-9,
+            };
+            item.Click += (_, _) => _nodeLayoutTolerance = value;
+            tolerance.DropDownItems.Add(item);
+        }
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(tolerance);
+
+        return menu;
+    }
+
+    private void ApplyNodeLayout(IWorkflowNodeViewModel node, WorkflowLayoutTraversal traversal)
+    {
+        try
+        {
+            WorkflowLayoutDemo.Arrange(node, traversal, _nodeLayoutTolerance);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"布局失败：{ex.Message}", "自动布局");
+        }
     }
 
     // 平移/滚动/缩放挪的是几何而不是指针：指针没动，命中却变了，所以拿最近一次位置重发一次。

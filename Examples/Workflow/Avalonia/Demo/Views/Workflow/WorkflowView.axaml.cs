@@ -34,6 +34,7 @@ public partial class WorkflowView : UserControl
     private TreeViewModel _workflowViewModel = new();
     private readonly WorkflowElementCatalog _elements;
     private WindowNotificationManager _manager;
+    private double _nodeLayoutTolerance = 8d;
 
     // 面板的树，建立在当前显示的 helper 子系统上。留成字段是因为它要被从建它时的作用域上摘下来：
     // 换工作流会换 helper，留在旧树上的订阅会一直重建一个没人看的面板。
@@ -327,7 +328,7 @@ public partial class WorkflowView : UserControl
     /// verdict, while Ctrl+wheel zoom is the only wheel gesture the framework itself runs. Re-subscribed on every
     /// tree swap, the same way auto-scroll is: the tree on screen is not the one the constructor started with.
     /// </remarks>
-    private static void VetoFrameworkGestures(TreeViewModel tree)
+    private void VetoFrameworkGestures(TreeViewModel tree)
     {
         ((IInputEvents)tree.GetHelper()).Input.PointerPressed += (_, e) =>
         {
@@ -336,11 +337,62 @@ public partial class WorkflowView : UserControl
                 if (e.Target is IWorkflowNodeViewModel node) AgentSelection.Toggle(node);
                 e.Handle.PreventDefault = true;
             }
+            else if (e.Button == Wf.MouseButton.Right && e.Target is IWorkflowNodeViewModel node)
+            {
+                ShowNodeLayoutMenu(node, e.Source as Control);
+                e.Handle.PreventDefault = true;
+            }
             else if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
             {
                 e.Handle.PreventDefault = true;
             }
         };
+    }
+
+    /// <summary>Demo-only: the node's own right-click menu, built from the shared layout presets.</summary>
+    private void ShowNodeLayoutMenu(IWorkflowNodeViewModel node, Control? source)
+    {
+        var menu = new ContextMenu { Placement = PlacementMode.Pointer };
+
+        var layout = new MenuItem { Header = "自动布局" };
+        foreach (var (label, traversal) in WorkflowLayoutDemo.Traversals)
+        {
+            var item = new MenuItem { Header = label };
+            item.Click += (_, _) => ApplyNodeLayout(node, traversal);
+            layout.Items.Add(item);
+        }
+        menu.Items.Add(layout);
+
+        var tolerance = new MenuItem { Header = "布局容差" };
+        foreach (var (label, value) in WorkflowLayoutDemo.Tolerances)
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                ToggleType = MenuItemToggleType.CheckBox,
+                IsChecked = Math.Abs(_nodeLayoutTolerance - value) < 1e-9,
+            };
+            item.Click += (_, _) => _nodeLayoutTolerance = value;
+            tolerance.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        menu.Items.Add(tolerance);
+
+        menu.Open(source ?? this);
+    }
+
+    private void ApplyNodeLayout(IWorkflowNodeViewModel node, WorkflowLayoutTraversal traversal)
+    {
+        try
+        {
+            var result = WorkflowLayoutDemo.Arrange(node, traversal, _nodeLayoutTolerance);
+            ElementStatus.Text = WorkflowLayoutDemo.Describe(result, $"从 {node.GetType().Name}");
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        }
+        catch (Exception ex)
+        {
+            ElementStatus.Text = $"布局失败：{ex.Message}";
+        }
     }
 
     private void SubscribeAutoScroll(TreeViewModel vm)

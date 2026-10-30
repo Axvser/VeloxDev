@@ -279,6 +279,7 @@
                                 {
                                     case ControllerViewModel c:
                                         <TemplateNodeView Node="c" Title="Network Flow Controller"
+                                                          StatusChanged="SetElementStatus"
                                                           Accent="var(--wf-accent-controller)"
                                                           AllowOverflow="true"
                                                           BorderBrush="@(c.IsActive ? "var(--wf-accent-controller)" : null)">
@@ -292,7 +293,7 @@
                                         </TemplateNodeView>
                                         break;
                                     case EnumSelectorNodeViewModel e:
-                                        <TemplateNodeView Node="e"
+                                        <TemplateNodeView Node="e" StatusChanged="SetElementStatus"
                                                           Accent="var(--wf-accent-enum)"
                                                           StatusProperty="LastRouted"
                                                           AllowOverflow="true">
@@ -305,7 +306,7 @@
                                         </TemplateNodeView>
                                         break;
                                     case PythonScriptNodeViewModel p:
-                                        <TemplateNodeView Node="p"
+                                        <TemplateNodeView Node="p" StatusChanged="SetElementStatus"
                                                           Accent="var(--wf-accent-worker)"
                                                           StatusProperty="LastStatus"
                                                           AllowOverflow="true">
@@ -315,7 +316,7 @@
                                         </TemplateNodeView>
                                         break;
                                     case TimerNodeViewModel t:
-                                        <TemplateNodeView Node="t"
+                                        <TemplateNodeView Node="t" StatusChanged="SetElementStatus"
                                                           Accent="var(--wf-accent-worker)"
                                                           AllowOverflow="true">
                                             <BodyContent>
@@ -333,7 +334,7 @@
                                         @* Generic catch-all: a foreign node still lands on the same card
                                            family, with the neutral slate accent, because there is no type
                                            here to give it a colour. *@
-                                        <TemplateNodeView Node="g" AllowOverflow="true">
+                                        <TemplateNodeView Node="g" StatusChanged="SetElementStatus" AllowOverflow="true">
                                             <BodyContent>
                                                 <WorkflowNodeView Node="g" />
                                             </BodyContent>

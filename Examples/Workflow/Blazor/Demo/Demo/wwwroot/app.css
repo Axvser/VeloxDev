@@ -1034,3 +1034,32 @@ html, body {
     color: #A0A0A0;
     word-wrap: break-word;
 }
+
+/* Demo-only: the node card's right-click layout menu. */
+.wf-layout-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
+.wf-layout-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 220px;
+    padding: 6px;
+    background: var(--wf-surface);
+    border: 1px solid #2D3748;
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .55);
+}
+.wf-layout-menu button {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #E6EDF3;
+    text-align: left;
+    font-size: 12px;
+    cursor: pointer;
+}
+.wf-layout-menu button:hover { background: #21262D; }
+.wf-layout-menu button.selected { color: var(--wf-accent-controller); }
+.wf-layout-menu-sep { height: 1px; margin: 4px 0; background: #2D3748; }
+.wf-layout-menu-title { padding: 4px 10px; font-size: 11px; color: #8B949E; }

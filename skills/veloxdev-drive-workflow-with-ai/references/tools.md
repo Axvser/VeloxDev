@@ -1,6 +1,6 @@
 # The tool surface
 
-**66 built-in tools** in the unconditional groups of `WorkflowToolCategory` (`Layout` and `Composite` are reserved and empty, and the `Execution` / `Command` gates are checked inside each tool body rather than by withholding the tool). On top of them: `ResetToolCallLimit`, always; `RequestSelection` / `RequestConfirmation`, each when its handler exists; `EnterPlanMode` / `ExitPlanMode`, both when a confirmation handler exists. With both handlers configured that is **71**. The mode no longer decides whether they exist: asking, and the Agent's own move into and out of Plan, are all `Interact`, allowed in every mode, because a mode that removed the asking tools would leave the Agent able only to refuse. Names are the C# method names and are passed to the model verbatim.
+**69 built-in tools** in the unconditional groups of `WorkflowToolCategory` (`Composite` is reserved and empty; `Layout` now carries the three solution tools below, and the `Execution` / `Command` gates are checked inside each tool body rather than by withholding the tool). On top of them: `ResetToolCallLimit`, always; `RequestSelection` / `RequestConfirmation`, each when its handler exists; `EnterPlanMode` / `ExitPlanMode`, both when a confirmation handler exists. With both handlers configured that is **74**. The mode no longer decides whether they exist: asking, and the Agent's own move into and out of Plan, are all `Interact`, allowed in every mode, because a mode that removed the asking tools would leave the Agent able only to refuse. Names are the C# method names and are passed to the model verbatim.
 
 `ResetToolCallLimit` is registered in every configuration, whatever the categories — it is the only way out of a spent budget, so it must not disappear exactly when it is needed. It is not a `Query` or `Mutation` member; it asks the user through the confirmation handler and reopens the tree's budget on agreement.
 
@@ -104,9 +104,21 @@ The eight that start or drive node code re-check the policy at call time and ret
 
 ⚙ Calling `WithAllowedGenericCommands("Receive", "Delete")` **restricts** these two tools to that set; it does not merely permit those two on top of everything. The `"Command"` suffix is appended automatically and matching is case-insensitive.
 
-## Layout and Composite — reserved, no tools
+## Layout — the tree's registered solution
 
-They exist as categories with zero members. Layout is done node by node through `MoveNode` / `SetNodePosition`; there are deliberately no bundled layout gestures, so that Core's undo stack is never bypassed.
+Registered under `WorkflowToolCategory.Layout`. All three go through `Tree.Arrange`, so they use the `IWorkflowLayoutSolver` registered on the tree's helper (or the default solver when the helper is not a host) — a custom solution is what the Agent sees, not a private second pipeline. See [SKILL.md](../SKILL.md#custom-auto-layout) for registering one.
+
+| Tool | Effect |
+|---|---|
+| `GetLayoutInfo()` **R** | Solver type, whether the helper hosts a custom solver, node count, and the default option values. |
+| `PreviewLayout(...)` **R** | Solves with `DryRun` and returns every placement, cost and diagnostic without writing anchors. |
+| `ArrangeLayout(...)` **M** | Solves and applies in one undoable `WorkflowActionPair`; returns the same shape plus applied/skipped counts. |
+
+Shared parameters: `nodeIndex?` (omit for the whole tree; when set, only the reachable subgraph moves and the start node is pinned by default), `traversal` (`Downstream` / `Upstream` / `Both`), `maxDepth` (0 = unlimited), `pinStartNode`, `positionTolerance` (0 = strict canonical), `columnGap`, `rowGap`, `maxSweeps`, `tileSize`, `measureCost`, and `pinnedNodeIndicesJson` (a JSON array such as `"[0,2]"`). The result is `{status, mode, applied, dryRun, appliedCount, skipped, cost, bounds, placements, diagnostics}`.
+
+## Composite — reserved, no tools
+
+`Composite` is a reserved category with no members: each operation stays a single component-command step, so Core's undo stack is never bypassed.
 
 ## Interaction — registered conditionally
 
