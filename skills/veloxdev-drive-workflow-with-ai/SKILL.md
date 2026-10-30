@@ -120,6 +120,14 @@ The workflow layer is a composition of exactly these: `scope.CreateContextProvid
 
 The layout solution belongs to the **tree**, not to the Agent and not to the demo. A tree helper that implements `IWorkflowLayoutHost` exposes `LayoutSolver`; register one solution there and every entry point uses it — the host's `node.Arrange(options)`, the demo's right-click menu, and the Agent's `GetLayoutInfo` / `PreviewLayout` / `ArrangeLayout`.
 
+### What the default solution assumes
+
+⚙ **The default pipeline is a hierarchy layout over an untyped edge list.** `WorkflowLayoutProblem` stores node rectangles and directed edges; it has no record of which slot a link came from, so every link is a parent→child edge to `HierarchyAlignmentStage`. The default fits a graph whose links all mean one thing (a workflow's output→input). When a graph mixes semantics — a timeline/sequence chain beside ownership fan-out — the sequence successor enters its predecessor's fan-out group, and the two structures interleave into columns and crossings that no gap setting fixes.
+
+⚙ **The demos use the solution node-scoped.** Every shipped demo entry is `node.Arrange(...)`, invoked from the node's right-click menu, with `Downstream` / `Upstream` / `Both` and the start node pinned; none offers a whole-tree arrange. `nodeIndex` is optional on the Agent tools because the solver accepts the whole tree, not because omitting it is the recommended run for a mixed-semantics graph.
+
+⚙ **When the default does not fit, the seam is a stage or planner.** Classify or filter the edges before the default stages, or add a stage that writes the positions the hierarchy stage cannot know about. Replacing the whole `IWorkflowLayoutSolver` is the larger step, for a different snapshot→solve→apply composition — not the first response to "the default produced a wide graph".
+
 ```csharp
 var helper = (IWorkflowLayoutHost)tree.GetHelper();
 

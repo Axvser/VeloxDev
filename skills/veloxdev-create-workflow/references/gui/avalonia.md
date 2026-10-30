@@ -55,7 +55,7 @@ The decorator has two hit-test-transparent layers: the grid at the bottom and th
 
 ⚙ **The inner grid must be pinned to the design size, not bound to `Size`.** The `DataTemplate` already sizes the outer view to the node's **collapsed** `Size`; a `Viewbox` child that also binds `Width="{Binding Size.Width}"` squeezes the design a second time and clips its text when the canvas zooms out. The demo cards write `Width="300" Height="170"` (or `260 × 180`) on the inner grid and leave the outer `Width/Height` to the template.
 
-⚙ **Slots live inside that fixed grid**, with `ZIndex="6"` so the half that overlaps the card is not covered by the card surface. The slot-layout behaviour measures them with `TranslatePoint`, so the `Viewbox` scale is accounted for — do not compensate for it in markup.
+⚙ **Slots live inside that fixed grid**, with `ZIndex="6"` so the half that overlaps the card is not covered by the card surface. The slot-layout behaviour measures them with `TranslatePoint`, so the `Viewbox` scale is accounted for — do not compensate for it in markup. Which controls it measures is the name correspondence described in [view-layer.md](../view-layer.md#ports-the-model--view-correspondence); the item template fills it for its standard input/output pair.
 
 ⚙ **Do not compensate for zoom in your markup**, and do not move the port visuals; the links follow the measured anchors.
 

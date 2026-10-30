@@ -116,6 +116,8 @@ Registered under `WorkflowToolCategory.Layout`. All three go through `Tree.Arran
 
 Shared parameters: `nodeIndex?` (omit for the whole tree; when set, only the reachable subgraph moves and the start node is pinned by default), `traversal` (`Downstream` / `Upstream` / `Both`), `maxDepth` (0 = unlimited), `pinStartNode`, `positionTolerance` (0 = strict canonical), `columnGap`, `rowGap`, `maxSweeps`, `tileSize`, `measureCost`, and `pinnedNodeIndicesJson` (a JSON array such as `"[0,2]"`). The result is `{status, mode, applied, dryRun, appliedCount, skipped, cost, bounds, placements, diagnostics}`.
 
+⚙ **Omit `nodeIndex` only when the graph is a pure hierarchy.** It is optional because the solver accepts the whole tree; the default pipeline treats every link as a hierarchy edge, so a graph that also carries a sequence/timeline chain interleaves that chain with the fan-out columns on a whole-tree run. Every demo menu passes a start node.
+
 ## Composite — reserved, no tools
 
 `Composite` is a reserved category with no members: each operation stays a single component-command step, so Core's undo stack is never bypassed.

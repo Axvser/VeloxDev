@@ -82,6 +82,19 @@ outer collapsed box      positioned at the node's Anchor, sized to its Size
 
 ⚙ **Do not touch the ports.** Slot positions come from the layout behaviour measuring your `SlotView` and writing `slot.Anchor`. If you move port visuals, the links follow the model, not your markup — they will disconnect visually.
 
+### Ports: the model ↔ view correspondence
+
+The model never computes a port's position. A slot's `Anchor` begins as `(NaN, NaN, 0)`; the only writer is `WorkflowSlotLayoutBehavior`, which measures a named control and stores its visual centre. The behaviour finds that control through the name lists on the node view, so the correspondence is:
+
+| Model side | View side | Registered through |
+|---|---|---|
+| one slot property | one named `SlotView` whose `DataContext` is that slot | `SlotNames` |
+| a collection of slots | a named `ItemsControl` whose item container is a `SlotView` | `SlotEnumeratorNames` |
+
+⚙ **The correspondence is name-based, and it is the only path by which a slot becomes measured.** A slot whose control is not on the list keeps a `NaN` anchor forever; there is no fallback that derives it from the node rectangle, and no diagnostic that says a name is missing.
+
+⚙ **The item templates carry the standard pair, not the model's full surface.** The generated node view draws one input and one output (`PART_InputSlot` / `PART_OutputSlot`, with `SlotNames` already filled for those two). That is the template's default surface. A node type whose ViewModel exposes other or more slots establishes the same correspondence for each slot it wants measured; renaming an existing part is only the narrowest case of that rule.
+
 ## Links
 
 A link view binds its endpoints to `Sender.Anchor` / `Receiver.Anchor` and draws the shared cubic Bézier — each control point leaves along its own port's outward normal (`LinkCurve.LinkCurvePoints` / `BuildLinkCubic`). The geometry is in [canvas-math.md](canvas-math.md#links).
@@ -93,6 +106,8 @@ if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;
 ```
 
 A link whose endpoints have not been measured must draw nothing. Some adapters spell the same predicate as a `CanRender` property bound to `IsVisible` plus a NaN check; the meaning is identical. **If your links are invisible, suspect an unmeasured slot before anything else.**
+
+⚙ **`CanRender` bound to `IsVisible` is not the gate by itself.** Without the finite check, an unmeasured endpoint still reaches the renderer, and `NaN` does not hide the curve — it degenerates into long, arbitrary geometry. The symptom is therefore not "missing link" but "link wired to the wrong place", and it sends a reader looking at the camera, the layout or the zoom instead of the slot correspondence. When a link looks attached to the wrong point, check the correspondence and the gate before anything else.
 
 ⚙ **Never hand a renderer an unbounded coordinate or a whole-world canvas size.** If you customize a link view on a framework with a size limit, keep the geometry local — your GUI's reference describes the technique its adapter uses (viewport-sized overlay, offset frame, or self-bounding).
 

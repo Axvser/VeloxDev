@@ -4,7 +4,9 @@ Each adapter ships a `dotnet new` item-template pack that generates the seven vi
 
 ⚙ **Default: generate all seven roles.** The decorator supplies the floating top/left ruler bands; the minimap supplies the thumbnail and navigation. A tree + node + link suite has neither. The **Generating a suite** block below is the default — run every command in it, then add your content to the generated node view.
 
-⚙ **The packs in this checkout are version `10.0.1`**, and so are the adapter and Core packages they are built against. `dotnet new install VeloxDev.<GUI>.Templates` without a version takes the latest published; do not pin an older pack against a newer adapter.
+⚙ **The packs in this checkout are version `10.1.0`**, and so are the adapter and Core packages they are built against. `dotnet new install VeloxDev.<GUI>.Templates` without a version takes the latest published; do not pin an older pack against a newer adapter.
+
+⚙ **The generated node view's port set is the template's default surface, not the node model's contract.** The item template draws one input and one output. A node type whose ViewModel exposes other slots keeps the same name-based correspondence for each slot it wants measured — see [view-layer.md](view-layer.md#ports-the-model--view-correspondence).
 
 ## The seven items
 

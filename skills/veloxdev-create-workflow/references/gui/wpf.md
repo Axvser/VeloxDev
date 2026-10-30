@@ -41,7 +41,7 @@ The tree's two `DataTemplate`s are where node positioning is declared:
 
 ⚙ **The `RenderTransform` binding must be on the `DataTemplate` root**, exactly as above. Move it onto an element inside `NodeView` and it resolves against the item's own tree and finds nothing — the canvas will pan in the model and not on screen.
 
-`WorkflowNodeDragBehavior` adds `CoordinateHostName` / `CoordinateHostType` (default `Canvas`); `WorkflowSlotLayoutBehavior` adds `SlotNames` / `SlotEnumeratorNames`. Set them only if you rename the parts.
+`WorkflowNodeDragBehavior` adds `CoordinateHostName` / `CoordinateHostType` (default `Canvas`); `WorkflowSlotLayoutBehavior` adds `SlotNames` / `SlotEnumeratorNames`. Those lists are the name-based correspondence between a node's slots and the `SlotView` controls that draw them — the generated view fills the standard input/output pair, and a node type whose model exposes other slots establishes the same correspondence for each. See [view-layer.md](../view-layer.md#ports-the-model--view-correspondence).
 
 ## Adding your own content to a node
 

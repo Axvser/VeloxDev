@@ -28,7 +28,7 @@ Everything else about this repository (how the adapters are built, how the demos
 | `Serialize()` / `Deserialize()` | `VeloxDev.Core` itself — the entry points are extension methods in `VeloxDev.Serialization` (backed by `VeloxJsonSerializer`); no extra package |
 | Driving the graph from an LLM | `VeloxDev.Core.Extension` |
 
-An adapter package brings `VeloxDev.Core` in transitively. Versions are deliberately not stated for installation: take the latest published (the source in this checkout builds `10.0.1`). Rendering the canvas needs an adapter; using only the model and the engine needs neither.
+An adapter package brings `VeloxDev.Core` in transitively. Versions are deliberately not stated for installation: take the latest published (the source in this checkout builds `10.1.0`). Rendering the canvas needs an adapter; using only the model and the engine needs neither.
 
 ## The model in sixty seconds
 
@@ -112,6 +112,8 @@ The behaviour that matters is visual and interactive, so check it in a running a
 ⚙ Drag a node, drag a slot onto another slot, pan and zoom until the pointer stays under what you grabbed, then save and reload the graph. Those cover most of the model, the canvas and the serialization at once. While the slot drag is in progress, the candidate under the pointer should show the **preview** state and the rubber band its `ValidTarget` / `InvalidTarget` stage — and a candidate your `PreviewValidating` rejects should turn red without cancelling the drag.
 
 ⚙ **Test at a deep zoom, not at 100%.** Links that vanish, links that detach from their port and a camera that drifts are all invisible at 100% and obvious at 40%.
+
+⚙ **Check the port correspondence before calling a view done.** Every slot the node model can connect has to be measured through a named control on that node's view; the item template fills the standard input/output pair, and the rest is the node type's own model. An unmeasured slot is silent at 100% and shows up as a link attached to the wrong place — see [view-layer.md](references/view-layer.md#ports-the-model--view-correspondence).
 
 ⚙ When something does not work, the order to suspect is: `partial` on the class → `InitializeWorkflow()` called → the slot's channel permits the connection → the slot has been measured (is the anchor still `NaN`?) → the view is bound to the right property.
 
