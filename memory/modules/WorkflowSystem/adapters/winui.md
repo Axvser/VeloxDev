@@ -390,9 +390,10 @@ Trimmed 的 `SlotView` 与 `Src/Templates/VeloxDev.WinUI.Templates/` 的那份**
 不减重排；把每条 `Path` 的 Width/Height 钉死也不减 —— `Shape` 只要几何变了就无条件失效测量）。
 不是 → 它可能是免费的（`SlotView` 改完之后就是这样）。
 
-**`PolylineCurveView` 的两个标量只触发一次重画**：`BandHead` / `BandIntensity` 的 setter 只写字段；
-`BuildFlow` 的每个 `TransitionEffect` 挂同一个缓存的 `LateUpdate` 回调，解释器在写完本段全部属性后触发，
-所以相位一/三相每帧只 `RedrawComet()` 一次。动画仍保留两个标量，与另外六家一致。
+**`PolylineCurveView` 不再自己跑周期**：WPF / Avalonia / WinUI 共用 `Examples/Workflow/Common/Lib` 的
+`WorkflowFlowClock`，每棵树一条 30fps 的周期，所有 LinkView 订同一个 `LateUpdate`；视图 tick 只把
+`BandHead` / `BandIntensity` 抄进字段并 `RedrawComet()` 一次。这样一棵树无论多少链接都只有一个帧调度器，
+且两个标量在同一帧一起落地。动画仍保留两个标量，与另外六家一致。
 
 **教训（写给下一个拿到「卡顿」报告的人）**：这一轮前面三次全是**没有一次实测**的推断，方向全错，
 其中一次还把 demo 改得更卡。官方那套「先量基线 → 选一项改 → 再量」在这里不是流程洁癖：

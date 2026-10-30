@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Demo.Workflow;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 
@@ -81,6 +82,12 @@ public partial class PolylineCurveView : UserControl
     private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(700);
     private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(450);
 
+    // 平台驱动只装一次：共享时钟负责周期与订户计数，本类只提供 WPF 的 Transition 构造方式。
+    static PolylineCurveView()
+    {
+        WorkflowFlowClock.RegisterDriver(static clock => new FlowDriver(clock));
+    }
+
     // 本视图的弧长表：绘制、取点、发布给 Core 做命中，三处共用这一份，不再各推一份几何。
     private LinkCurve? _curve;
 
@@ -88,8 +95,10 @@ public partial class PolylineCurveView : UserControl
     // 否则一条已经不在场上的线仍然可被点中。
     private IWorkflowLinkViewModel? _publishedLink;
 
-    private Transition<PolylineCurveView>? _flow;
-    private bool _running;
+    // 本视图订的那棵树共用的时钟；每次 tick 把它的两个标量抄进本视图的属性。
+    private WorkflowFlowClock? _clock;
+    private readonly Action _clockTick;
+    private bool _loaded;
 
     // 虚拟连线是唯一实现 IConnectionPreviewLink 的链接：它自己有阶段（发起/有效候选/无效候选）。
     // 订模型而不是让表面推，池化改绑与取消都不会留下旧颜色。
@@ -102,6 +111,8 @@ public partial class PolylineCurveView : UserControl
 
     public PolylineCurveView()
     {
+        // 缓存字段：每帧交给时钟的是同一个委托，不随 tick 新建。
+        _clockTick = OnClockTick;
         InitializeComponent();
         // 指针输入不在视图里：命中归 Core，指针与按键由表面行为转发；悬停高亮由本 demo 订这条线自己的输入
         // 事件自己画（见 ResubscribeInput），悬停焦点由适配器交给画线的那台控件（见 WorkflowSurfaceBehavior.FocusHoveredLink）。
@@ -195,14 +206,7 @@ public partial class PolylineCurveView : UserControl
         // 两端测量完才可绘制，在那之前流光无物可循；虚拟链接是指针下的橡皮筋，没有稳定连接可描述
         if (e.Property == CanRenderProperty || e.Property == IsVirtualProperty)
         {
-            if (control.IsVirtual || !control.CanRender)
-            {
-                control.StopFlow();
-            }
-            else
-            {
-                control.StartFlow();
-            }
+            control.RefreshFlowSubscription();
         }
     }
 
@@ -222,6 +226,7 @@ public partial class PolylineCurveView : UserControl
         RefreshGeometry();
         ResubscribeInput();
         ResubscribePreview();
+        RefreshFlowSubscription();
     }
 
     // 虚拟连线的阶段：订模型自己的 Preview。IsVirtual 也由它决定 —— 橡皮筋就该是虚线、不可聚焦，
@@ -289,80 +294,99 @@ public partial class PolylineCurveView : UserControl
 
     #region Flow effect
 
-    // 每视图构建：周期只写两个标量，几何、配色与弧长表都不参与
-    // 匀速（Eases.Default 就是恒等）—— 流水不该有缓动，头部的速度一变化就不像在流了
-    private Transition<PolylineCurveView> BuildFlow() => Transition<PolylineCurveView>.Create()
-        // 相位一：从发送端出发，一边走一边亮起
-        .Property(v => v.BandHead, BandFormed)
-        .Property(v => v.BandIntensity, 1d)
-        .Effect(e =>
-        {
-            e.Duration = EnterDuration;
-            e.Ease = Eases.Default;
-        })
-        .Then()
-        // 相位二：全亮行进——这一段读起来才是流动而非脉冲
-        .Property(v => v.BandHead, BandLeaving)
-        .Effect(e =>
-        {
-            e.Duration = TravelDuration;
-            e.Ease = Eases.Default;
-        })
-        .Then()
-        // 相位三：到达并熄灭。两端都是「没有光」的状态，循环接缝才看不出来
-        .Property(v => v.BandHead, 1d)
-        .Property(v => v.BandIntensity, 0d)
-        .Effect(e =>
-        {
-            e.Duration = ExitDuration;
-            e.Ease = Eases.Default;
-        })
-        .Repeat(int.MaxValue);
-
-    // 从发送端起动周期；视图复用后会换链接，所以在挂载时起动
-    private void StartFlow()
+    // 订本树共用的时钟：只有真正在屏、可画、非虚拟、且挂在某棵树上的链接才加入。
+    // 池化改绑会先退旧树再订新树，摘树则退订；订阅数归零时时钟自己停表（一棵树始终只有一条周期）。
+    private void RefreshFlowSubscription()
     {
-        if (IsVirtual || !CanRender)
+        var clock = _loaded && !IsVirtual && CanRender
+            ? WorkflowFlowClock.ForLink(DataContext as IWorkflowLinkViewModel)
+            : null;
+
+        if (ReferenceEquals(clock, _clock)) return;
+
+        if (_clock is not null)
         {
-            StopFlow();
-            return;
+            _clock.Unsubscribe(_clockTick);
+
+            // 旧一帧的光不该留在改绑后的新链接上；下一帧由新时钟重新写入。
+            BandHead = 0d;
+            BandIntensity = 0d;
         }
 
-        RefreshGeometry();
-        _flow ??= BuildFlow();
-
-        // 声明从目标读起值，所以执行前必须把两个标量摆到周期起点；循环在每个接缝重放这一份起始状态
-        BandHead = 0;
-        BandIntensity = 0;
-
-        _flow.Execute(this);
-        _running = true;
+        _clock = clock;
+        _clock?.Subscribe(_clockTick);
     }
 
-    // 停周期：视图被释放复用时不能留着旧动画在跑
-    private void StopFlow()
+    // 每帧只抄两个标量：属性回调负责重画，几何、配色与弧长表都不参与。
+    private void OnClockTick()
     {
-        if (!_running)
-        {
-            return;
-        }
+        var clock = _clock;
+        if (clock is null) return;
 
-        Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
-        _running = false;
+        BandHead = clock.BandHead;
+        BandIntensity = clock.BandIntensity;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        StartFlow();
+        _loaded = true;
         ResubscribeInput();
         ResubscribePreview();
+        RefreshFlowSubscription();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        StopFlow();
+        _loaded = false;
+        RefreshFlowSubscription();
         UnsubscribeInput();
         UnsubscribePreview();
+    }
+
+    // 每棵树只建一次：共享时钟把两个标量写到自身，LateUpdate 再把这一帧扇出给订户。
+    // 30fps 是唯一故意的差别 —— 每条链接不再各起一条 60fps 的采样循环。
+    private sealed class FlowDriver : IWorkflowFlowDriver
+    {
+        private readonly WorkflowFlowClock _clock;
+        private readonly Transition<WorkflowFlowClock> _flow;
+
+        public FlowDriver(WorkflowFlowClock clock)
+        {
+            _clock = clock;
+            _flow = Transition<WorkflowFlowClock>.Create()
+                // 相位一：从发送端出发，一边走一边亮起
+                .Property(c => c.BandHead, BandFormed)
+                .Property(c => c.BandIntensity, 1d)
+                .Effect(PhaseEffect(clock, EnterDuration))
+                .Then()
+                // 相位二：全亮行进——这一段读起来才是流动而非脉冲
+                .Property(c => c.BandHead, BandLeaving)
+                .Effect(PhaseEffect(clock, TravelDuration))
+                .Then()
+                // 相位三：到达并熄灭。两端都是「没有光」的状态，循环接缝才看不出来
+                .Property(c => c.BandHead, 1d)
+                .Property(c => c.BandIntensity, 0d)
+                .Effect(PhaseEffect(clock, ExitDuration))
+                .Repeat(int.MaxValue);
+        }
+
+        public void Start() => _flow.Execute(_clock);
+
+        // 停的是这棵树共享的那条周期，不是某个视图自己的。
+        public void Stop() => Transition.Exit(_clock, IncludeMutual: true, IncludeNoMutual: true);
+
+        // 每段匀速（Eases.Default 就是恒等）；LateUpdate 挂在时钟缓存的那个委托上。
+        private static TransitionEffect PhaseEffect(WorkflowFlowClock clock, TimeSpan duration)
+        {
+            var effect = new TransitionEffect
+            {
+                Duration = duration,
+                Ease = Eases.Default,
+                FPS = 30,
+            };
+            effect.LateUpdate += clock.LateUpdateHandler;
+            return effect;
+        }
     }
 
     #endregion

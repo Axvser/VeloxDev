@@ -25,7 +25,8 @@
        segments are cut by arc length and a bare control-point rewrite cannot reproduce them. The
        marker is how a view opts in; without it the geometry here stays the only thing that writes
        these paths. *@
-    <svg width="@CanvasWidthCss" height="@CanvasHeightCss"
+    <svg @ref="_svgRef"
+         width="@CanvasWidthCss" height="@CanvasHeightCss"
          data-veloxdev-link-id="@wfLinkId"
          data-veloxdev-sender-slot="@wfSenderSlotId"
          data-veloxdev-receiver-slot="@wfReceiverSlotId"
@@ -63,16 +64,24 @@
             {
                 @* The resting curve is dim: with the light absent it is only a dark line, and that is
                    what lets the comet read as contrast. Selected, it turns white and grows 1.5. *@
-                <path d="@BodyPath"
+                <path class="wf-flow-source"
+                      d="@BodyPath"
                       stroke="@LitColor"
                       stroke-opacity="@BodyOpacity"
                       stroke-width="@LitThicknessCss" />
 
-                @* 彗星：光晕一遍（更宽更淡）在前，本体一遍在后，两遍都跟着头走。
-                   段数固定，够不着的那几段只是把不透明度压到零 —— 元素数不变，DOM 才稳定。 *@
-                @foreach (var s in _comet)
+                @* 32 comet paths with no animated attributes here: flow.js owns d, stroke,
+                   stroke-opacity and stroke-width, so a Blazor render never touches the running
+                   light. Blazor still owns the element count and identity, which keeps the DOM
+                   stable while the attributes change every JS frame. The comet must not capture
+                   the pointer: hit testing stays on the body strokes above. *@
+                @for (var k = 0; k < TailSegments; k++)
                 {
-                    <path d="@s.D" stroke="@s.Color" stroke-opacity="@s.Opacity" stroke-width="@s.Width" />
+                    <path class="wf-flow-halo" data-wf-index="@k" pointer-events="none" />
+                }
+                @for (var k = 0; k < TailSegments; k++)
+                {
+                    <path class="wf-flow-comet" data-wf-index="@k" pointer-events="none" />
                 }
             }
         </g>

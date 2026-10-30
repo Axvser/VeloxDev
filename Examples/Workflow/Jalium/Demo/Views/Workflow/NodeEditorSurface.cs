@@ -1235,7 +1235,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
             var p0 = ToCanvas(from.X, from.Y);
             var p1 = ToCanvas(to.X, to.Y);
 
-            // 视口之外的链接整条跳过。这一条在这里比在别处更要紧：彗星每帧要按弧长切出十几段几何
+            // 视口之外的链接整条跳过。这一条在这里比在别处更要紧：彗星每帧要沿弧长画十几段
             // （尾段 × 两遍），是整块绘制里最贵的一处，而它只在画得到的地方才有意义
             if (!CrossesViewport(p0, p1))
             {
@@ -1292,9 +1292,6 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     // 虚拟连线（指针下那根橡皮筋）也有自己的一条曲线：同时只会有一根，端点一变就重算
     private (Point From, Point To, LinkCurve Curve)? _virtualPreview;
-
-    // 彗星各段复用的一张折线几何（见 FillSegment）：同一时刻只有一次绘制在读它
-    private PathGeometry? _cometScratch;
 
     // 建一条 Core 的扁曲线：控制点水平拉出 max(PullMinimum, 0.5·dx)，与这里画出来的是同一条贝塞尔。
     // 命中、取弧长都读它，表面不再自存一份采样表
@@ -1363,7 +1360,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return geometry;
     }
 
-    // 一张空的单折线几何。彗星每帧要重填十几次，复用同一张（见 FillSegment），所以建法与填法分开
+    // 一张空的单折线几何。线体几何在曲线变化时建一次就冻结（见 CurveFor），所以建法与填法分开
     private static PathGeometry CreateSegmentGeometry()
     {
         var figure = new PathFigure { IsClosed = false, IsFilled = false };
@@ -1373,8 +1370,8 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return geometry;
     }
 
-    // 把 [from, to] 这段弧长重新填进一张现成的折线几何：清点、重设起点、再按采样点补中间。
-    // 复用是安全的：本平台按次读取非冷冻几何，不在对象上缓存；整帧录制那条路也会先克隆一份
+    // 把 [from, to] 这段弧长填进一张折线几何：清点、重设起点、再按采样点补中间。
+    // 只在曲线变化时建线体几何用一次，随后由 CurveFor 冻结；彗星不再走几何（见 DrawComet）
     private static void FillSegment(PathGeometry geometry, LinkCurve curve, double from, double to)
     {
         to = Math.Min(to, curve.Length);
@@ -1452,8 +1449,11 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 彗星：沿弧长切出 [头−尾, 头] 这一段，再分若干小段画，每段一个递减的透明度与一个向白偏的颜色。
     // 不用渐变刷有两个理由，第二个才是新的：本平台的渐变写停靠点不出帧（见 flow 声明），所以原先那版
     // 流光只能画成「裁剪几何 + 宽度动画」；而且渐变刷的轴是两端之间的直线，在曲线上会把光打偏 ——
-    // 亮度不再跟着弯走，绕弯时看着忽快忽慢。改成按弧长切出来的几何之后，这两条一起消失：
-    // 几何本来就是切出来的，不再依赖渐变刷。
+    // 亮度不再跟着弯走，绕弯时看着忽快忽慢。按弧长取段之后，这两条一起消失。
+    //
+    // 每段直接切成一条 DrawLine：段只占全长的 1.875%，弦与弧的差不到半个像素。更重要的是它不碰
+    // PathFigure.StartPoint —— 那是依赖属性，每段每帧写一次就要装箱一个 Point，几何还要被渲染器
+    // 再复制进一遍 float[]。端帽 DrawLine 不带，唯一看得见的那颗在下面单独补。
     private void DrawComet(DrawingContext dc, LinkCurve curve, bool selected)
     {
         double intensity = CometIntensity(FlowPhase);
@@ -1464,13 +1464,10 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
         double head = Math.Clamp(FlowPhase, 0, 1) * curve.Length;
         double tail = TailFraction * curve.Length;
-
-        // 各段共用同一张折线几何：画完一段就重填下一段（FillSegment），不再每段新建
-        var geometry = _cometScratch ??= CreateSegmentGeometry();
         int state = selected ? 1 : 0;
 
         // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来。
-        // 光晕只跟亮头那半段：尾梢那半边按 f0² 已经淡到看不见，画它只是白开几何
+        // 光晕只跟亮头那半段：尾梢那半边按 f0² 已经淡到看不见，画它只是白开绘制
         for (int pass = 0; pass < 2; pass++)
         {
             bool bloom = pass == 0;
@@ -1498,12 +1495,21 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
                 // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部。混色在预建笔时已经算好，
                 // 这里只剩透明度（光晕再乘 0.22）
                 var pen = pens[state, k];
-                FillSegment(geometry, curve, l0, l1);
+                var from = ToPoint(curve.PointAtLength(Math.Clamp(l0, 0, curve.Length)));
+                var to = ToPoint(curve.PointAtLength(Math.Clamp(l1, 0, curve.Length)));
 
                 // 透明度压栈而不是写回笔刷：Windows 上默认走整帧录制，笔按引用进命令、重放前会被后续段改写；
                 // 压栈的是一个数值，录得进去，直出与录制两条路都得到同一段透明度
                 dc.PushOpacity(bloom ? a * 0.22 : a);
-                dc.DrawGeometry(null, pen, geometry);
+                dc.DrawLine(pen, from, to);
+
+                // 光晕的笔本来就没有端帽；本体的亮头那颗要补 —— 半径是半个笔宽，与原先几何描边
+                // 在端点补的圆一致（段与段之间的接缝不补：共享端点且方向差极小，平帽留下的楔形看不见）
+                if (!bloom && k == TailSegments - 1 && pen.Brush is { } capBrush)
+                {
+                    dc.DrawEllipse(capBrush, null, to, pen.Thickness / 2, pen.Thickness / 2);
+                }
+
                 dc.Pop();
             }
         }
@@ -1556,7 +1562,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 其二，它属于表面而不是属于链接：这个表面一笔画完所有链接、又画完所有端口（端口也归它画，
     // 理由见 DrawPorts），没有 per-link 的视图可写，所以这一个成员就是全部的动画状态。
     // 写它就重绘，因为画它的是表面自己的 OnRender / OnPostRender，没有别人会告诉它光走了 ——
-    // 一帧一次重绘是「动画画在表面自己身上」的代价，转换本来就按 60fps 走。
+    // 一帧一次重绘是「动画画在表面自己身上」的代价，转换按 Effect 自己的 FPS 走（Flow 定的是 30）。
     public double FlowPhase
     {
         get => _flowPhase;
@@ -1571,13 +1577,15 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // LoopTime = int.MaxValue 是这套系统唯一的「永久」，且时长不能为零 —— 零长度的一趟不消耗时间，
     // 于是永久循环会空转而不是循环，Transition.Exit 也就再打断不了它
     // 本 build 只认每帧变化的几何——渐变写停靠点/换整组/移轴/每帧新刷子截图全同（实测），
-    // 所以流光画成按弧长切出来的一段几何，不靠渐变刷（见 DrawComet）
+    // 所以流光画成按弧长切出来的十几条短线，不靠渐变刷（见 DrawComet）
     private static readonly Transition<NodeEditorSurface> Flow =
         Transition<NodeEditorSurface>.Create()
             .Property(s => s.FlowPhase, 1d)
             .Effect(new TransitionEffect()
             {
                 Duration = FlowPeriod,
+                // 30 帧：一帧要把所有可见链接的彗星重画一遍，这段匀速流动在 30 帧下看不出与 60 帧的差别
+                FPS = 30,
                 LoopTime = int.MaxValue,
                 Ease = Eases.Default,
             });

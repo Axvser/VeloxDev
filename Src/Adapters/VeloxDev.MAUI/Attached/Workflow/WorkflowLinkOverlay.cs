@@ -241,6 +241,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private const double FlowHeadArrived = 1d;
 
     // 匀速（Eases.Default 就是恒等）—— 流水不该有缓动，头部的速度一变化就不像在流了
+    // 帧率压到 30：这一层每帧要沿弧长重画十几段折线，匀速流动在 30 帧下与 60 帧看不出差别
+    private const int FlowFps = 30;
     private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(450);
     private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(700);
     private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(450);
@@ -256,6 +258,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             .Effect(new TransitionEffect()
             {
                 Duration = EnterDuration,
+                FPS = FlowFps,
                 Ease = Eases.Default,
             })
             .Then()
@@ -264,6 +267,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             .Effect(new TransitionEffect()
             {
                 Duration = TravelDuration,
+                FPS = FlowFps,
                 Ease = Eases.Default,
             })
             .Then()
@@ -273,6 +277,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             .Effect(new TransitionEffect()
             {
                 Duration = ExitDuration,
+                FPS = FlowFps,
                 Ease = Eases.Default,
             })
             .Repeat(int.MaxValue);

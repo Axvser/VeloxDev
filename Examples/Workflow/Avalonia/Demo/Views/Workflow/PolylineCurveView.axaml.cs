@@ -1,10 +1,9 @@
 ﻿using Avalonia;
-using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
-using System.Collections.Generic;
+using Demo.Workflow;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 
@@ -31,6 +30,7 @@ public partial class PolylineCurveView : Control
     private const double TailFraction = 0.30;
 
     // 拖尾分几段画。每段一个透明度，衰减因此是连续的而不需要渐变刷。
+    // 每段只是一条弦：它占全长的 1.875%，弦与弧的差不到半个像素（与 WPF/Jalium 同一假设）。
     private const int TailSegments = 16;
 
     // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
@@ -50,9 +50,10 @@ public partial class PolylineCurveView : Control
     // 静息线体的几何与曲线同生共死：曲线不变它就不变，动画帧上不必重建。
     private StreamGeometry? _body;
 
-    // 彗星复用同一批几何与画笔：每帧只改写点集与透明度，不再为每一段新建对象。
-    private readonly (PolylineGeometry Geometry, AvaloniaList<Point> Points)[] _tail = CreateTail();
-    private readonly List<Point> _segmentPoints = [];
+    // 彗星每帧只算每段的两个端点，直接用预建的画笔各画一条弦：不碰点集，也不让几何逐帧失效。
+    // 两遍绘制共用同一份端点，所以每帧的点只取一次。
+    private readonly Point[] _tailFrom = new Point[TailSegments];
+    private readonly Point[] _tailTo = new Point[TailSegments];
     private readonly double[] _tailOpacity = new double[TailSegments];
     private readonly bool[] _tailActive = new bool[TailSegments];
 
@@ -68,11 +69,15 @@ public partial class PolylineCurveView : Control
     private Pen? _bodyPen;
     private Pen? _dashedPen;
 
-    private Transition<PolylineCurveView>? _flow;
-    private bool _running;
+    // 本视图订的那棵树共用的时钟；每次 tick 把它的两个标量抄进本视图的属性。
+    private WorkflowFlowClock? _clock;
+    private readonly Action _clockTick;
+    private bool _attached;
 
     public PolylineCurveView()
     {
+        // 缓存字段：每帧交给时钟的是同一个委托，不随 tick 新建。
+        _clockTick = OnClockTick;
         InitializeComponent();
         IsHitTestVisible = true;
         Focusable = true;
@@ -111,7 +116,7 @@ public partial class PolylineCurveView : Control
     /// <summary>How far along the link the comet's head has travelled, as a fraction of its length.</summary>
     /// <remarks>
     /// Animated rather than computed, and registered with <see cref="AffectsRender{T}"/> so each frame the
-    /// transition writes is also a frame this view repaints. The value carries no geometry of its own — the
+    /// shared clock writes is also a frame this view repaints. The value carries no geometry of its own — the
     /// published arc-length table turns it into a point — which is what lets the light follow a curve.
     /// </remarks>
     public static readonly StyledProperty<double> BandHeadProperty =
@@ -141,87 +146,63 @@ public partial class PolylineCurveView : Control
             CanRenderProperty, IsVirtualProperty, LineColorProperty,
             LineThicknessProperty, IsHighlightedProperty, HighlightColorProperty,
             BandHeadProperty, BandIntensityProperty);
+
+        // 平台驱动只装一次：共享时钟负责周期与订户计数，本类只提供 Avalonia 的 Transition 构造方式。
+        WorkflowFlowClock.RegisterDriver(static clock => new FlowDriver(clock));
     }
 
     #endregion
 
     #region Flow effect
 
-    // 每视图构建：周期只写两个标量，几何、配色与弧长表都不参与
-    // 匀速（Eases.Default 就是恒等）—— 流水不该有缓动，头部的速度一变化就不像在流了
-    private Transition<PolylineCurveView> BuildFlow() => Transition<PolylineCurveView>.Create()
-        // 相位一：从发送端出发，一边走一边亮起
-        .Property(v => v.BandHead, BandFormed)
-        .Property(v => v.BandIntensity, 1d)
-        .Effect(new TransitionEffect()
-        {
-            Duration = EnterDuration,
-            Ease = Eases.Default,
-        })
-        .Then()
-        // 相位二：全亮行进——这一段读起来才是流动而非脉冲
-        .Property(v => v.BandHead, BandLeaving)
-        .Effect(new TransitionEffect()
-        {
-            Duration = TravelDuration,
-            Ease = Eases.Default,
-        })
-        .Then()
-        // 相位三：到达并熄灭。两端都是「没有光」的状态，循环接缝才看不出来
-        .Property(v => v.BandHead, 1d)
-        .Property(v => v.BandIntensity, 0d)
-        .Effect(new TransitionEffect()
-        {
-            Duration = ExitDuration,
-            Ease = Eases.Default,
-        })
-        .Repeat(int.MaxValue);
-
-    // 从发送端起动周期；视图复用后会换链接，所以在挂载时起动
-    private void StartFlow()
+    // 订本树共用的时钟：只有真正在屏、可画、非虚拟、且挂在某棵树上的链接才加入。
+    // 池化改绑会先退旧树再订新树，摘树则退订；订阅数归零时时钟自己停表（一棵树始终只有一条周期）。
+    private void RefreshFlowSubscription()
     {
-        if (IsVirtual || !CanRender)
+        var clock = _attached && !IsVirtual && CanRender
+            ? WorkflowFlowClock.ForLink(DataContext as IWorkflowLinkViewModel)
+            : null;
+
+        if (ReferenceEquals(clock, _clock)) return;
+
+        if (_clock is not null)
         {
-            StopFlow();
-            return;
+            _clock.Unsubscribe(_clockTick);
+
+            // 旧一帧的光不该留在改绑后的新链接上；下一帧由新时钟重新写入。
+            BandHead = 0d;
+            BandIntensity = 0d;
         }
 
-        RefreshGeometry();
-        _flow ??= BuildFlow();
-
-        // 声明从目标读起值，所以执行前必须把两个标量摆到周期起点；循环在每个接缝重放这一份起始状态
-        BandHead = 0;
-        BandIntensity = 0;
-
-        _flow.Execute(this);
-        _running = true;
+        _clock = clock;
+        _clock?.Subscribe(_clockTick);
     }
 
-    // 停周期：视图被释放复用时不能留着旧动画在跑
-    private void StopFlow()
+    // 每帧只抄两个标量；两个属性都注册了 AffectsRender，写值就是这一次重画。
+    private void OnClockTick()
     {
-        if (!_running)
-        {
-            return;
-        }
+        var clock = _clock;
+        if (clock is null) return;
 
-        Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
-        _running = false;
+        BandHead = clock.BandHead;
+        BandIntensity = clock.BandIntensity;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        _attached = true;
         PublishCurve();
-        StartFlow();
         ResubscribeInput();
+        RefreshFlowSubscription();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
         // A pooled view released and reused for another link must not leave the old animation running on it.
-        StopFlow();
+        _attached = false;
+        RefreshFlowSubscription();
         UnsubscribeInput();
     }
 
@@ -275,6 +256,7 @@ public partial class PolylineCurveView : Control
 
             PublishCurve();
             ResubscribeInput();
+            RefreshFlowSubscription();
         }
 
         // A link becomes drawable only once both endpoints have been measured, and the flow has nothing to
@@ -282,20 +264,59 @@ public partial class PolylineCurveView : Control
         // settled connection to describe.
         if (change.Property == CanRenderProperty || change.Property == IsVirtualProperty)
         {
-            if (IsVirtual || !CanRender)
-            {
-                StopFlow();
-            }
-            else
-            {
-                StartFlow();
-            }
+            RefreshFlowSubscription();
         }
 
         // UsePolyline 在两个视图之间切换显示；接手显示的那个要把曲线（与 sender）重新挂到自己身上。
         if (change.Property == IsVisibleProperty)
         {
             PublishCurve();
+        }
+    }
+
+    // 每棵树只建一次：共享时钟把两个标量写到自身，LateUpdate 再把这一帧扇出给订户。
+    // 30fps 是唯一故意的差别 —— 每条链接不再各起一条 60fps 的采样循环。
+    private sealed class FlowDriver : IWorkflowFlowDriver
+    {
+        private readonly WorkflowFlowClock _clock;
+        private readonly Transition<WorkflowFlowClock> _flow;
+
+        public FlowDriver(WorkflowFlowClock clock)
+        {
+            _clock = clock;
+            _flow = Transition<WorkflowFlowClock>.Create()
+                // 相位一：从发送端出发，一边走一边亮起
+                .Property(c => c.BandHead, BandFormed)
+                .Property(c => c.BandIntensity, 1d)
+                .Effect(PhaseEffect(clock, EnterDuration))
+                .Then()
+                // 相位二：全亮行进——这一段读起来才是流动而非脉冲
+                .Property(c => c.BandHead, BandLeaving)
+                .Effect(PhaseEffect(clock, TravelDuration))
+                .Then()
+                // 相位三：到达并熄灭。两端都是「没有光」的状态，循环接缝才看不出来
+                .Property(c => c.BandHead, 1d)
+                .Property(c => c.BandIntensity, 0d)
+                .Effect(PhaseEffect(clock, ExitDuration))
+                .Repeat(int.MaxValue);
+        }
+
+        public void Start() => _flow.Execute(_clock);
+
+        // 停的是这棵树共享的那条周期，不是某个视图自己的。
+        public void Stop() => Transition.Exit(_clock, IncludeMutual: true, IncludeNoMutual: true);
+
+        // 每段匀速（Eases.Default 就是恒等）；LateUpdate 挂在时钟缓存的那个委托上。
+        private static TransitionEffect PhaseEffect(WorkflowFlowClock clock, TimeSpan duration)
+        {
+            var effect = new TransitionEffect()
+            {
+                Duration = duration,
+                Ease = Eases.Default,
+                FPS = 30,
+            };
+            effect.LateUpdate += clock.LateUpdateHandler;
+            return effect;
         }
     }
 
@@ -310,28 +331,7 @@ public partial class PolylineCurveView : Control
         _curve = curve;
         _body = curve.Length > 0 ? BuildSegment(0, curve.Length) : null;
 
-        // 每段最多「采样数 + 两个端点」个点；容量一次给足，动画帧上的 Clear/Add 就不会再扩容。
-        if (_segmentPoints.Capacity < curve.Count + 2)
-        {
-            _segmentPoints.Capacity = curve.Count + 2;
-        }
-
         PublishCurve();
-    }
-
-    // 每段一个可复用的折线几何。默认构造不订阅点集；经属性赋一次值，后续改写才会触发路径失效。
-    private static (PolylineGeometry Geometry, AvaloniaList<Point> Points)[] CreateTail()
-    {
-        var slots = new (PolylineGeometry, AvaloniaList<Point>)[TailSegments];
-        for (var i = 0; i < slots.Length; i++)
-        {
-            var geometry = new PolylineGeometry();
-            var points = new AvaloniaList<Point>();
-            geometry.Points = points;
-            slots[i] = (geometry, points);
-        }
-
-        return slots;
     }
 
     // 把画出来的形状交给链接的 Helper，界面据此判命中（见 ILinkHitTestable）。
@@ -370,31 +370,6 @@ public partial class PolylineCurveView : Control
         }
 
         return geo;
-    }
-
-    // 把 [from, to] 的点写进复用的几何。点集变化会通知几何失效，下一帧 Avalonia 据此重算路径。
-    private void BuildTailSegment(int slot, double from, double to)
-    {
-        var curve = _curve!;
-        to = Math.Min(to, curve.Length);
-        from = Math.Clamp(from, 0, curve.Length);
-
-        var buffer = _segmentPoints;
-        buffer.Clear();
-        buffer.Add(PointAtLength(from));
-
-        for (int i = 0; i < curve.Count; i++)
-        {
-            double l = curve.LengthAt(i);
-            if (l <= from || l >= to) continue;
-            buffer.Add(new Point(curve.XAt(i), curve.YAt(i)));
-        }
-
-        buffer.Add(PointAtLength(to));
-
-        var points = _tail[slot].Points;
-        points.Clear();
-        points.AddRange(buffer);
     }
 
     // 弧长 → 点（Core 二分 + 段内插值，精确到亚像素，不受采样密度限制）
@@ -464,6 +439,8 @@ public partial class PolylineCurveView : Control
         {
             double f = k / (double)TailSegments;
             var c = Mix(color, Colors.White, f);
+
+            // 光晕笔不设端帽（默认平头），与原来的光晕描边一致；圆头只在下面的本体笔上
             _cometBloomPens[k] = new Pen(new ImmutableSolidColorBrush(c), thickness + 9);
             _cometBodyPens[k] = new Pen(new ImmutableSolidColorBrush(c), thickness * (0.45 + (0.95 * f)))
             {
@@ -475,13 +452,15 @@ public partial class PolylineCurveView : Control
 
     // 彗星：沿弧长切出 [头-尾, 头] 这一段，分若干小段画，每段给一个递减的透明度与变化的颜色。
     // 不用渐变刷是因为它的轴是两端之间的直线，在曲线上会把光打偏（见类注释）。
+    // 每段直接画一条弦，而不是改写复用几何的点集：弦只占全长的 1.875%，弧与弦的差不到半个像素，
+    // 而点集的逐帧通知、路径失效与平台几何的建立都不再发生。
     private void DrawComet(DrawingContext context)
     {
         var curve = _curve!;
         double head = Math.Clamp(BandHead, 0, 1) * curve.Length;
         double tail = TailFraction * curve.Length;
 
-        // 先算好每段的弧长范围与透明度；两遍绘制共用同一份几何，只有画笔与透明度不同。
+        // 先算好每段的两个端点与透明度；两遍绘制共用这两份点，只有画笔与透明度不同。
         for (int k = 0; k < TailSegments; k++)
         {
             double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
@@ -496,7 +475,9 @@ public partial class PolylineCurveView : Control
             double a = BandIntensity * f0 * f0;
             if (a <= 0.004) continue;
 
-            BuildTailSegment(k, l0, l1);
+            // PointAtLength 自己会把弧长夹到 [0, Length]，跨过起点的那一段因此不会取到曲线外
+            _tailFrom[k] = PointAtLength(l0);
+            _tailTo[k] = PointAtLength(l1);
             _tailOpacity[k] = a;
             _tailActive[k] = true;
         }
@@ -512,9 +493,10 @@ public partial class PolylineCurveView : Control
                 if (!_tailActive[k]) continue;
 
                 // 画笔的颜色已含白热程度，这里只把随帧变化的透明度乘上去。
+                // 本体的笔是圆头：最后一段的终点就是亮头，圆帽由 DrawLine 按笔的端帽补上。
                 using (context.PushOpacity(bloom ? _tailOpacity[k] * 0.22 : _tailOpacity[k]))
                 {
-                    context.DrawGeometry(null, pens[k], _tail[k].Geometry);
+                    context.DrawLine(pens[k], _tailFrom[k], _tailTo[k]);
                 }
             }
         }

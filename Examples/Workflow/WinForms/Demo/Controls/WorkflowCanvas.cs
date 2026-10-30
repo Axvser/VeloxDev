@@ -47,6 +47,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     private readonly Dictionary<IWorkflowNodeViewModel, WorkflowNodeCard> _cards = [];
     private double _nodeLayoutTolerance = 8d;
 
+    // 槽位世界坐标快照与遍历缓冲：画布每帧都要重填这张表，逐帧新建容器会直接落进动画的帧预算。
+    // 每帧先 Clear 再重填，节点/槽的增删自然被反映，不需要另设失效条件；两张表分开是因为
+    // OnPaint 的快照要活到绘制结束，而 SyncAllSlotAnchors 的暂存在逐卡片之间反复清空。
+    private readonly Dictionary<IWorkflowSlotViewModel, PointF> _slotWorldMap =
+        new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<IWorkflowSlotViewModel, PointF> _slotScratch =
+        new(ReferenceEqualityComparer.Instance);
+    private readonly List<Views.SlotView> _slotButtons = [];
+
     // Link renderer: template LinkView (VirtualLink + all real links). They are not child
     // controls; they reuse the template LinkView geometry (Render), drawn uniformly by the
     // canvas OnPaint — this avoids overlapping full-size transparent sibling windows in
@@ -285,21 +294,22 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     // 三段相位依次声明、Repeat(int.MaxValue) 整链重复并重放首周期抓到的起值；接缝不可见因首尾皆无光
     // 端点全是常量故可 static readonly；匀速故 Eases.Default 即恒等
+    // 每段钉 30fps：这条链每帧都让整块画布重绘，30 足够顺滑，而默认的 60 会把重绘次数翻倍
     private static readonly Transition<WorkflowCanvas> Flow =
         Transition<WorkflowCanvas>.Create()
             // 相位一：从发送端出发，一边走一边亮起
             .Property(c => c.BandHead, BandFormed)
             .Property(c => c.BandIntensity, 1d)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(450), Ease = Eases.Default })
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(450), Ease = Eases.Default, FPS = 30 })
             .Then()
             // 相位二：全亮行进——这一段读起来才是流动而非脉冲；BandIntensity 不在路径里，留在亮处
             .Property(c => c.BandHead, BandLeaving)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(700), Ease = Eases.Default })
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(700), Ease = Eases.Default, FPS = 30 })
             .Then()
             // 相位三：到达并熄灭
             .Property(c => c.BandHead, 1d)
             .Property(c => c.BandIntensity, 0d)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(450), Ease = Eases.Default })
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(450), Ease = Eases.Default, FPS = 30 })
             .Repeat(int.MaxValue);
 
     // 起动彗星时钟：会话挂载与句柄创建两处调用，取较晚发生的那次
@@ -700,29 +710,41 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     private Dictionary<IWorkflowSlotViewModel, PointF> BuildSlotWorldMap()
     {
         var scroll = AutoScrollPosition;
-        var map = new Dictionary<IWorkflowSlotViewModel, PointF>(ReferenceEqualityComparer.Instance);
+        // 复用同一张快照表：先清空再重填，槽位增删会被自然覆盖，无需追踪模型结构
+        var map = _slotWorldMap;
+        map.Clear();
         foreach (var (_, card) in _cards)
-            CollectNodeSlotPositions(card, map, scroll, _panOffset);
+            CollectNodeSlotPositions(card, map, _slotButtons, scroll, _panOffset);
         return map;
     }
 
     private void SyncAllSlotAnchors()
     {
         var scroll = AutoScrollPosition;
+        // 暂存表逐卡片清空复用；不能与 _slotWorldMap 共用 —— 那份快照可能正被一次绘制持有
+        var map = _slotScratch;
         foreach (var (_, card) in _cards)
         {
-            var map = new Dictionary<IWorkflowSlotViewModel, PointF>(ReferenceEqualityComparer.Instance);
-            CollectNodeSlotPositions(card, map, scroll, _panOffset);
+            map.Clear();
+            CollectNodeSlotPositions(card, map, _slotButtons, scroll, _panOffset);
             foreach (var (slot, pt) in map)
-            {
-                slot.Anchor = new Anchor(pt.X, pt.Y, slot.Anchor.Layer);
-            }
+                WriteSlotAnchor(slot, pt);
         }
+    }
+
+    // Anchor 是不可变的 sealed 类（字段私有，只有构造函数与 Clone），没有可改的 setter；
+    // 但坐标没变时不必造新对象：生成的 setter 本身就按 Object.Equals 判等，这里先比一次再赋，语义不变。
+    private static void WriteSlotAnchor(IWorkflowSlotViewModel slot, PointF pt)
+    {
+        var current = slot.Anchor;
+        if (current.Horizontal == pt.X && current.Vertical == pt.Y) return;
+        slot.Anchor = new Anchor(pt.X, pt.Y, current.Layer);
     }
 
     private static void CollectNodeSlotPositions(
         WorkflowNodeCard card,
         Dictionary<IWorkflowSlotViewModel, PointF> map,
+        List<Views.SlotView> buttons,
         Point scroll,
         Point panOffset)
     {
@@ -734,7 +756,10 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         CollectSlotButton(card.InputSlotButton, card, cardOriginX, cardOriginY, map);
         CollectSlotButton(card.OutputSlotButton, card, cardOriginX, cardOriginY, map);
-        foreach (var btn in EnumerateSlotButtons(card))
+        // 复用缓冲收集嵌套槽位，避免每帧生成迭代器
+        buttons.Clear();
+        CollectSlotButtons(card, buttons);
+        foreach (var btn in buttons)
             CollectSlotButton(btn, card, cardOriginX, cardOriginY, map);
     }
 
@@ -762,13 +787,12 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         map[btn.ViewModel] = new PointF(cardOriginX + cx, cardOriginY + cy);
     }
 
-    private static IEnumerable<Views.SlotView> EnumerateSlotButtons(Control root)
+    private static void CollectSlotButtons(Control root, List<Views.SlotView> into)
     {
         foreach (Control child in root.Controls)
         {
-            if (child is Views.SlotView sb) yield return sb;
-            foreach (var nested in EnumerateSlotButtons(child))
-                yield return nested;
+            if (child is Views.SlotView sb) into.Add(sb);
+            CollectSlotButtons(child, into);
         }
     }
 
@@ -1181,7 +1205,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // Compute a live world-coordinate snapshot of all slots and write back slot.Anchor (for link endpoints and hit-testing)
         var slotMap = BuildSlotWorldMap();
         foreach (var (slot, pt) in slotMap)
-            slot.Anchor = new Anchor(pt.X, pt.Y, slot.Anchor.Layer);
+            WriteSlotAnchor(slot, pt);
 
         // Links: the template LinkView geometry is drawn uniformly on the canvas (using world
         // coordinates after TranslateTransform(origin)). Renderers are not added to the control
@@ -1228,7 +1252,10 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         foreach (var (_, card) in _cards)
         {
-            foreach (var port in card.Ports())
+            // 与槽位收集共用同一只缓冲：逐卡片清空重填，不在绘制里生成迭代器
+            _slotButtons.Clear();
+            CollectSlotButtons(card, _slotButtons);
+            foreach (var port in _slotButtons)
             {
                 if (!port.Visible || port.ViewModel is null) continue;
                 if (!slotMap.TryGetValue(port.ViewModel, out var world)) continue;

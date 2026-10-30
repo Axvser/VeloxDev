@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
-using VeloxDev.TransitionSystem;
+using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -19,11 +19,10 @@ namespace Demo.Components.Workflow;
 /// line between the two ends, so on a curve it lights the string rather than the rope.
 /// </para>
 /// <para>
-/// The view is also the object the flow animates — <c>Transition&lt;TemplateLinkView&gt;</c>. A Razor
-/// component is a class, so the cycle's position is this component's own member and the markup reads
-/// it straight off, with nothing in between to map back into stops. There is exactly one animated
-/// value, <see cref="Phase"/>: the head's position and the comet's intensity are both derived from it
-/// rather than being two animations that could interrupt each other.
+/// The animation itself is not a Blazor render. The markup paints the curve and 16 + 16 comet paths
+/// once; <c>wwwroot/flow.js</c> then owns the per-frame geometry and alpha for every link through one
+/// shared <c>requestAnimationFrame</c> loop. This component only registers the SVG after the first
+/// render and pushes an update when the geometry, selection or colour changes.
 /// </para>
 /// <para>
 /// Every number the SVG carries goes through <see cref="N"/>. Razor writes a bare <c>double</c> in the
@@ -31,32 +30,13 @@ namespace Demo.Components.Workflow;
 /// which for a path means no path at all.
 /// </para>
 /// </summary>
-public partial class TemplateLinkView : ComponentBase, IDisposable
+public partial class TemplateLinkView : ComponentBase, IDisposable, IAsyncDisposable
 {
     // 控制点的最小水平拉出量：两个端口靠得很近时，0.5·dx 会让曲线退化成一条直线段。
     private const double PullMinimum = 40;
 
-    // 拖尾占全长的比例。这是彗星唯一的观感旋钮：调大＝更长的尾、更像流光；调小＝更像一个亮点在跑。
-    private const double TailFraction = 0.30;
-
-    // 拖尾分几段画。每段一个颜色与一个不透明度，衰减因此是连续的，不需要渐变刷。
+    // 拖尾分几段画。flow.js 与这里共享同一个元素数：改这个常量必须同时改 JS 的 SEGMENTS。
     private const int TailSegments = 16;
-
-    // 三段相位各自结束时头部走过的比例：出发、行进、到达
-    private const double BandFormed = 0.30;
-    private const double BandLeaving = 0.78;
-
-    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(450);
-    private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(700);
-    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(450);
-
-    private static readonly TimeSpan CycleDuration = EnterDuration + TravelDuration + ExitDuration;
-
-    // 三段在周期里的占比。头部位置与亮度都从 Phase 按这三个占比推出来，所以时长改一处就够。
-    private static readonly double EnterShare = EnterDuration.TotalMilliseconds / CycleDuration.TotalMilliseconds;
-    private static readonly double TravelShare = TravelDuration.TotalMilliseconds / CycleDuration.TotalMilliseconds;
-
-    private static readonly double ExitStart = EnterShare + TravelShare;
 
     /// <summary>Gets or sets the link rendered by this view.</summary>
     [Parameter]
@@ -98,6 +78,10 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     // 表面把自身级联下来，本视图据此把指针事件转发进它的输入路由；画在表面之外时为 null
     [CascadingParameter]
     private WorkflowSurfaceBehavior? Surface { get; set; }
+
+    // flow.js 只有一个模块实例，所有连线共享同一条 rAF 循环
+    [Inject]
+    private IJSRuntime JS { get; set; } = null!;
 
     private INotifyPropertyChanged? _notifier;
     private INotifyPropertyChanged? _senderNotifier;
@@ -244,145 +228,118 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
     private static string N(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
-    #region Flow effect
+    #region Flow effect (JS-owned)
 
-    /// <summary>
-    /// The clock's phase, 0 to 1, repeating. Written by the transition, read by everything the comet
-    /// draws — never set by a caller.
-    /// </summary>
-    private double Phase { get; set; }
+    // 逐帧工作全在 flow.js：这里只在几何、选中态或线色变化时登记 / 更新一次。
+    // Blazor 的渲染频率因此回到「几何变了才画」，与动画时钟彻底脱钩。
+    private IJSObjectReference? _flowModule;
+    private ElementReference _svgRef;
+    private int _flowId;
+    private bool _flowRegistered;
 
-    private Transition<TemplateLinkView>? _flow;
-    private bool _flowRunning;
-    private IWorkflowLinkViewModel? _flowLink;
+    // 版本号在 Prepare 里由几何 / 样式 / 配色的缓存更新时自增；OnAfterRender 只把变化推给 JS，
+    // 父级因平移缩放重渲染时版本不变，因此不会产生任何互操作。
+    private int _flowVersion;
+    private int _flowVersionSent;
+    private bool _flowBusy;
+    private bool _disposed;
 
-    /// <summary>How far along the link the comet's head has travelled, as a fraction of its length.</summary>
-    /// <remarks>
-    /// Derived, not animated: <see cref="Phase"/> is the one animated value, and this is the piecewise
-    /// map from the cycle onto the head's three legs (leave, travel, arrive). Two animations on one
-    /// component would interrupt each other — <c>Transition.Exit</c> stops per target — so there is
-    /// only ever one.
-    /// </remarks>
-    private double Head
+    // 与标记里的绘制条件同一判据：能画、不是虚拟连线、端点已测量。
+    private bool ShouldFlow => !EffectiveIsVirtual && EffectiveCanRender
+        && Link is not null && TryEndpoints(out _, out _, out _, out _);
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        get
+        await base.OnAfterRenderAsync(firstRender);
+
+        if (_disposed) return;
+
+        if (!ShouldFlow)
         {
-            if (Phase <= EnterShare)
-            {
-                return BandFormed * (Phase / EnterShare);
-            }
-
-            if (Phase <= ExitStart)
-            {
-                return BandFormed + ((BandLeaving - BandFormed) * ((Phase - EnterShare) / TravelShare));
-            }
-
-            return BandLeaving + ((1 - BandLeaving) * ((Phase - ExitStart) / EnterShare));
-        }
-    }
-
-    /// <summary>How lit the comet is: 0 while it is absent, 1 while it travels.</summary>
-    private double Intensity
-    {
-        get
-        {
-            if (Phase <= EnterShare)
-            {
-                return Phase / EnterShare;
-            }
-
-            if (Phase <= ExitStart)
-            {
-                return 1.0;
-            }
-
-            return 1.0 - ((Phase - ExitStart) / EnterShare);
-        }
-    }
-
-    // 每组件构建：周期只写一个标量，几何、配色与弧长表都不参与。
-    // 匀速（Eases.Default 就是恒等）—— 流水不该有缓动，头部的速度一变化就不像在流了。
-    // LoopTime = int.MaxValue 是这套系统里唯一的「永远」，而时长不能是零：零时长的趟不占时间，
-    // 一个永远循环于是空转，Exit 也就再也打断不了它。
-    private Transition<TemplateLinkView> BuildFlow()
-    {
-        var effect = new TransitionEffect
-        {
-            Duration = CycleDuration,
-            Ease = Eases.Default,
-            LoopTime = int.MaxValue,
-        };
-
-        // 一相的效果：直线时长 + 本组件的重绘。这里没有可达渲染对象的画刷，只能逐帧交给渲染器。
-        // 用 LateUpdate 而非 Update：它在当帧的写入落地后才触发，渲染的是刚写下的那帧。
-        effect.LateUpdate += (_, _) => RequestRender();
-
-        return Transition<TemplateLinkView>.Create()
-            .Property(v => v.Phase, 1d)
-            .Effect(effect);
-    }
-
-    // 每帧最多排一次渲染：同一帧里若有多帧回调，后续的合并进已排好的那一次。
-    // 动画时钟不变，只是把重复的 StateHasChanged 排队去掉。
-    private bool _renderQueued;
-    private Action? _flushRender;
-
-    private void RequestRender()
-    {
-        if (_renderQueued) return;
-        _renderQueued = true;
-        _ = InvokeAsync(_flushRender ??= FlushRender);
-    }
-
-    private void FlushRender()
-    {
-        _renderQueued = false;
-        StateHasChanged();
-    }
-
-    // 已连接的链接从发送端起周期，虚拟链接停周期：橡皮筋上流动会宣称一条还不存在的连接
-    // 换链接时重起——渲染就绪门让复用成为常态，池中视图常在首个链接测出前就被复用
-    private void SyncFlow()
-    {
-        if (EffectiveIsVirtual || !EffectiveCanRender)
-        {
-            StopFlow();
+            await DropFlowAsync();
             return;
         }
 
-        if (_flowRunning && ReferenceEquals(_flowLink, Link)) return;
+        // 插槽测量会在首帧后连发几次渲染：不能有两个导入 / 登记同时在飞，否则同一个 SVG
+        // 会被登记两次，先完成的那个 id 随后落在一个已被去重删掉的表项上。
+        if (_flowBusy) return;
 
-        _flowLink = Link;
-        StartFlow();
-    }
-
-    // 从发送端起周期：视图被复用到另一条链接上时，动的是新那条
-    private void StartFlow()
-    {
-        if (EffectiveIsVirtual || !EffectiveCanRender)
+        _flowBusy = true;
+        try
         {
-            StopFlow();
+            if (!_flowRegistered)
+            {
+                var module = _flowModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./flow.js");
+                // 记下调用前（而非返回后）的版本：往返期间若有新渲染，post-check 会把它补推一次。
+                var versionAtCall = _flowVersion;
+                _flowId = await module.InvokeAsync<int>("register", _svgRef, _mixColors, Thickness, LitThickness);
+                _flowRegistered = true;
+                _flowVersionSent = versionAtCall;
+            }
+            else if (_flowVersionSent != _flowVersion)
+            {
+                _flowVersionSent = _flowVersion;
+                if (_flowModule is { } current)
+                {
+                    await current.InvokeVoidAsync("update", _flowId, _mixColors, Thickness, LitThickness);
+                }
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // 电路在往返途中断开：组件随后会被释放，注册表随页面一起消失
+        }
+        catch (ObjectDisposedException)
+        {
+            // 模块先于本次回调被释放，同样无需再做什么
+        }
+        finally
+        {
+            _flowBusy = false;
+        }
+
+        // 飞行期间落地的那次渲染被忙标记跳过了：把它的最新状态在这里补推一次。
+        if (_disposed || !_flowRegistered) return;
+
+        if (!ShouldFlow)
+        {
+            await DropFlowAsync();
             return;
         }
 
-        _flow ??= BuildFlow();
+        if (_flowVersionSent == _flowVersion) return;
 
-        // 转换从目标读起始值，所以 Execute 前组件必须已经在周期起点；
-        // 循环在每个接缝重放它，后续每轮都从它开始。
-        Phase = 0;
-        _flow.Execute(this);
-        _flowRunning = true;
+        _flowVersionSent = _flowVersion;
+        if (_flowModule is { } latestModule)
+        {
+            try
+            {
+                await latestModule.InvokeVoidAsync("update", _flowId, _mixColors, Thickness, LitThickness);
+            }
+            catch
+            {
+                // 电路已断开：注册表随页面消失，无需处理
+            }
+        }
     }
 
-    // 停周期：不再可绘、渲染已结束的视图，不能留着旧动画在跑
-    private void StopFlow()
+    private async Task DropFlowAsync()
     {
-        if (!_flowRunning) return;
+        if (!_flowRegistered) return;
 
-        // 周期起在组件自身上，这里也是注销它的那次调用：此后没有帧能经由它到达渲染器
-        Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
-        _flowRunning = false;
-        _flowLink = null;
+        _flowRegistered = false;
+        if (_flowModule is { } module)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("unregister", _flowId);
+            }
+            catch
+            {
+                // 电路可能已经断开；JS 注册表随页面一起消失，这里无需再做什么
+            }
+        }
     }
 
     #endregion
@@ -406,20 +363,9 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     /// <summary>The full resting curve, as one path.</summary>
     private string BodyPath { get; set; } = "";
 
-    // 彗星的两遍（光晕在前、本体在后）拼成一条列表，Razor 只跑一次循环。
-    // 够不着的段把不透明度压到零而不是删掉：元素数恒定，diff 才不会每帧建删元素。
-    // 元素对象与列表都复用到定长：每帧只改写字段，不再逐帧构造记录。
-    private readonly List<CometStop> _comet = new(TailSegments * 2);
-    private readonly CometStop[] _cometPool = CreateCometPool();
-
-    // 每帧只随头位置变化的量；颜色与宽度留在下面的缓存里
-    private readonly string[] _segmentD = new string[TailSegments];
-    private readonly double[] _segmentA = new double[TailSegments];
-    private readonly bool[] _segmentHidden = new bool[TailSegments];
-
-    // 固定样式：随选中状态 / 线宽 / 线色变化，而不是随帧变化
+    // 固定样式：随选中状态 / 线宽 / 线色变化，而不是随帧变化。
+    // _mixColors 是彗星 16 段的调色板（尾梢本色 → 头部白热），样式变化时算一次，登记/更新时整组交给 flow.js。
     private readonly string[] _mixColors = new string[TailSegments];
-    private readonly string[] _bodyWidthCss = new string[TailSegments];
     private bool _styleValid;
     private bool _styleLit;
     private double _styleThickness = double.NaN;
@@ -432,30 +378,9 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private bool _cometColorLit;
     private string? _cometColorKey;
 
-    /// <summary>One drawn piece of the comet: a polyline run, its colour, its opacity and its width.</summary>
-    /// <remarks>
-    /// Mutable and pooled: a frame only rewrites these fields, so the 32 stops cost no per-frame
-    /// allocation. Blazor reads the fields when it builds the render tree, so the new values are diffed
-    /// exactly as they were when each stop was a fresh record.
-    /// </remarks>
-    private sealed class CometStop
-    {
-        public string D { get; set; } = "";
-        public string Color { get; set; } = "";
-        public string Opacity { get; set; } = "0";
-        public string Width { get; set; } = "";
-    }
-
-    private static CometStop[] CreateCometPool()
-    {
-        var pool = new CometStop[TailSegments * 2];
-        for (int i = 0; i < pool.Length; i++) pool[i] = new CometStop();
-        return pool;
-    }
-
     /// <summary>
-    /// Refreshes the arc-length table (only when the endpoints moved) and rebuilds the comet for this
-    /// frame's <see cref="Phase"/>. Returns false when the link cannot be drawn at all.
+    /// Refreshes the arc-length table when the endpoints moved, and the style / colour caches when
+    /// the selection or line colour changed. Returns false when the link cannot be drawn at all.
     /// </summary>
     private bool Prepare()
     {
@@ -480,7 +405,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         }
 
         EnsureStyles();
-        BuildComet();
+        if (!EffectiveIsVirtual) EnsureCometColors();
         return true;
     }
 
@@ -514,7 +439,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     }
 
     // 曲线变化时才重建：每个采样点的 "Lx,y" 与整条线体的 d 都只格式化一次。
-    // 之后逐帧切段只拼缓存好的采样文本，不再每点重跑 ToString。
+    // 彗星切段已交给 flow.js，这里只留下线体与命中用的采样文本。
     private void CacheCurveText()
     {
         var curve = _curve;
@@ -522,6 +447,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         {
             _samplePoints = Array.Empty<string>();
             BodyPath = "";
+            _flowVersion++;
             return;
         }
 
@@ -536,6 +462,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         }
 
         BodyPath = curve.Length > 0 ? SegmentPath(0, curve.Length) : "";
+        _flowVersion++;
     }
 
     // 取 [from, to] 这一段弧长上的折线。两端各自插值到精确位置，中间用现成采样点。
@@ -580,7 +507,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return lo;
     }
 
-    // 选中 / 线宽变化时才重新格式化：这些字符串每帧都被 Razor 读到
+    // 选中 / 线宽变化时才重新格式化：这些字符串每次 Blazor 渲染都会被 Razor 读到
     private void EnsureStyles()
     {
         var thickness = Thickness;
@@ -594,11 +521,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         _litThicknessCss = N(LitThickness);
         _haloOuterCss = N(HaloOuterWidth);
         _haloInnerCss = N(HaloInnerWidth);
-        for (int k = 0; k < TailSegments; k++)
-        {
-            double f0 = k / (double)TailSegments;
-            _bodyWidthCss[k] = N(thickness * (0.45 + (0.95 * f0)));
-        }
+        _flowVersion++;
     }
 
     // 彗星配色只在选中状态或线色变化时重算；每段“尾梢本色 → 头部白热”也因此只混一次
@@ -620,70 +543,8 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         {
             _mixColors[k] = MixToWhite(body, k / (double)TailSegments);
         }
-    }
 
-    /// <summary>
-    /// The comet: the arc-length window [head − tail, head] cut into <see cref="TailSegments"/> pieces,
-    /// drawn twice — the halo pass first (wider, fainter, same segments) and the body pass after it.
-    /// </summary>
-    private void BuildComet()
-    {
-        _comet.Clear();
-        var curve = _curve;
-        double length = curve?.Length ?? 0;
-
-        // 线体 d 已随曲线缓存，逐帧只需重算彗星
-        if (curve is null || length <= 0 || EffectiveIsVirtual)
-        {
-            return;
-        }
-
-        EnsureCometColors();
-
-        double intensity = Intensity;
-        double head = Math.Clamp(Head, 0, 1) * length;
-        double tail = TailFraction * length;
-
-        // 每段只算一次：光晕与本体共用同一段 d，颜色与宽度都取缓存
-        for (int k = 0; k < TailSegments; k++)
-        {
-            double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
-            double f1 = (k + 1) / (double)TailSegments;
-
-            double l0 = head - (tail * (1 - f0));
-            double l1 = head - (tail * (1 - f1));
-
-            // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
-            double a = intensity * f0 * f0;
-            bool hidden = l1 <= 0 || l0 >= length || a <= 0.004;
-            _segmentHidden[k] = hidden;
-            _segmentA[k] = a;
-            _segmentD[k] = hidden ? "" : SegmentPath(l0, l1);
-        }
-
-        // 光晕一遍在前
-        for (int k = 0; k < TailSegments; k++)
-        {
-            var stop = _cometPool[k];
-            bool hidden = _segmentHidden[k];
-            stop.D = _segmentD[k];
-            stop.Color = hidden ? LineColor : _mixColors[k];
-            stop.Opacity = hidden ? "0" : N(_segmentA[k] * 0.22);
-            stop.Width = _haloOuterCss;
-            _comet.Add(stop);
-        }
-
-        // 本体一遍在后
-        for (int k = 0; k < TailSegments; k++)
-        {
-            var stop = _cometPool[TailSegments + k];
-            bool hidden = _segmentHidden[k];
-            stop.D = _segmentD[k];
-            stop.Color = hidden ? LineColor : _mixColors[k];
-            stop.Opacity = hidden ? "0" : N(_segmentA[k]);
-            stop.Width = hidden ? _thicknessCss : _bodyWidthCss[k];
-            _comet.Add(stop);
-        }
+        _flowVersion++;
     }
 
     // 把模板符号带的 XAML 色值解析成四通道
@@ -784,7 +645,6 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     protected override void OnInitialized()
     {
         Sync(Link);
-        SyncFlow();
     }
 
     private void Sync(IWorkflowLinkViewModel? link)
@@ -846,7 +706,6 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
             _preview = (Link as IConnectionPreviewLink)?.Preview ?? ConnectionPreviewState.None;
         }
 
-        SyncFlow();
         InvokeAsync(StateHasChanged);
     }
 
@@ -854,7 +713,6 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     protected override void OnParametersSet()
     {
         base.OnParametersSet();
-        SyncFlow();
         if (IsVirtualOverride is not null || CanRenderOverride is not null)
         {
             InvokeAsync(StateHasChanged);
@@ -875,11 +733,44 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+
+        DisposeManaged();
+
+        // 渲染器实现了 IAsyncDisposable 时会走 DisposeAsync；同步路径只做尽力而为的清理。
+        var module = _flowModule;
+        _flowModule = null;
+        if (module is not null)
+        {
+            var registered = _flowRegistered;
+            _flowRegistered = false;
+            _ = ShutdownModuleAsync(module, registered, _flowId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        DisposeManaged();
+
+        var module = _flowModule;
+        _flowModule = null;
+        if (module is not null)
+        {
+            var registered = _flowRegistered;
+            _flowRegistered = false;
+            await ShutdownModuleAsync(module, registered, _flowId);
+        }
+    }
+
+    private void DisposeManaged()
+    {
         // 视图走了就不再画这条线，撤掉发布出去的曲线，免得它继续替一条不存在的线回答命中
         Link?.PublishCurve(null);
-
-        // 已释放的视图不能继续流动：那会一直向已经走掉的渲染器发 StateHasChanged
-        StopFlow();
 
         if (_notifier is not null)
         {
@@ -904,6 +795,29 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         {
             events.Input.PointerEntered -= OnPointerEntered;
             events.Input.PointerExited -= OnPointerExited;
+        }
+    }
+
+    // 卸载时电路可能已经断开：注销与模块释放都只是尽力而为，绝不让它冒泡到卸载流程。
+    private static async Task ShutdownModuleAsync(IJSObjectReference module, bool registered, int id)
+    {
+        if (registered)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("unregister", id);
+            }
+            catch
+            {
+            }
+        }
+
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch
+        {
         }
     }
 }

@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.ComponentModel;
 using System.Numerics;
+using Demo.Workflow;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 using Windows.Foundation;
@@ -89,6 +90,12 @@ public sealed partial class PolylineCurveView : UserControl
     private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(700);
     private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(450);
 
+    // 平台驱动只装一次：共享时钟负责周期与订户计数，本类只提供 WinUI 的 Transition 构造方式。
+    static PolylineCurveView()
+    {
+        WorkflowFlowClock.RegisterDriver(static clock => new FlowDriver(clock));
+    }
+
     private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
 
     // 虚拟连线是唯一实现 IConnectionPreviewLink 的链接：发起 / 有效候选 / 无效候选是它的阶段。
@@ -161,16 +168,17 @@ public sealed partial class PolylineCurveView : UserControl
     private double _boxMinY;
     private readonly TranslateTransform _boxTransform = new();
 
-    private Transition<PolylineCurveView>? _flow;
-    private bool _running;
     private bool _isLoaded;
 
+    // 本视图订的那棵树共用的时钟；每次 tick 把它的两个标量抄进本视图的字段并重画一次。
+    private WorkflowFlowClock? _clock;
+
     // 每帧一次重画的入口。存成字段只建一次：就地写 lambda 会捕获 this，那就是每帧一次分配。
-    private readonly EventHandler<TransitionEventArgs> _flowLateUpdate;
+    private readonly Action _clockTick;
 
     public PolylineCurveView()
     {
-        _flowLateUpdate = OnFlowLateUpdate;
+        _clockTick = OnClockTick;
         InitializeComponent();
         Canvas.SetZIndex(this, -100);
 
@@ -283,9 +291,9 @@ public sealed partial class PolylineCurveView : UserControl
     /// <remarks>
     /// Animated rather than computed, and the armature the whole comet hangs off: the value carries no geometry of
     /// its own — the arc-length table turns it into points — which is what lets the light follow a curve. A plain
-    /// property rather than a dependency property, deliberately: the transition system writes animatable members
-    /// through compiled reflection paths, and the write lands in the field instead of going through <c>SetValue</c>
-    /// first. The setter does not draw by itself: both scalars of a frame are written before the flow redraws once.
+    /// property rather than a dependency property, deliberately: the shared clock's tick copies it into the field
+    /// and then redraws once, so the setter is not a second repaint entry. The clock itself is the transition's
+    /// target; this view only samples it.
     /// </remarks>
     public double BandHead
     {
@@ -303,80 +311,86 @@ public sealed partial class PolylineCurveView : UserControl
     private double _bandHead;
     private double _bandIntensity;
 
-    // 每视图构建。匀速（Eases.Default 就是恒等）—— 流水不该有缓动，头部的速度一变化就不像在流了。
-    // 同一控件上只跑这一条链：Transition.Exit 按目标停，两条会互相打断，所以两个标量合在一条链里。
-    private Transition<PolylineCurveView> BuildFlow() => Transition<PolylineCurveView>.Create()
-        // 相位一：从发送端出发，一边走一边亮起
-        .Property(v => v.BandHead, BandFormed)
-        .Property(v => v.BandIntensity, 1d)
-        .Effect(FlowEffect(EnterDuration))
-        .Then()
-        // 相位二：全亮行进——这一段读起来才是流动而非脉冲
-        .Property(v => v.BandHead, BandLeaving)
-        .Effect(FlowEffect(TravelDuration))
-        .Then()
-        // 相位三：到达并熄灭。两端都是「没有光」的状态，循环接缝才看不出来
-        .Property(v => v.BandHead, 1d)
-        .Property(v => v.BandIntensity, 0d)
-        .Effect(FlowEffect(ExitDuration))
-        .Repeat(int.MaxValue);
-
-    // 一段相位的效果：时长固定、匀速（流水不该有缓动，头部的速度一变化就不像在流了）。
-    // 每帧只重画一次挂在这里，而不是挂在两个标量的 setter 上：解释器的次序是
-    // 「Update → 写本段全部属性 → LateUpdate」（TransitionInterpreterCore.RunPassAsync），
-    // 所以 LateUpdate 到达时这一帧的两个标量都已落地，画一次合成的结果即可。
-    // setter 各自重画会在相位一/三相把同一帧画两遍（实测加权 ≈1.56 次/帧），那是白烧的 CPU。
-    private TransitionEffect FlowEffect(TimeSpan duration)
+    // 订本树共用的时钟：只有真正在屏、可画、非虚拟、且挂在某棵树上的链接才加入。
+    // 池化改绑会先退旧树再订新树，摘树则退订；订阅数归零时时钟自己停表（一棵树始终只有一条周期）。
+    private void RefreshFlowSubscription()
     {
-        var effect = new TransitionEffect()
+        var link = DataContext as IWorkflowLinkViewModel;
+        var clock = _isLoaded && !IsVirtual && RenderReady
+            ? WorkflowFlowClock.ForLink(link)
+            : null;
+
+        if (ReferenceEquals(clock, _clock)) return;
+
+        if (_clock is not null)
         {
-            Duration = duration,
-            Ease = Eases.Default,
-        };
-        effect.LateUpdate += _flowLateUpdate;
-        return effect;
+            _clock.Unsubscribe(_clockTick);
+
+            // 旧一帧的光不该留在改绑后的新链接上；下一帧由新时钟重新写入。
+            _bandHead = 0d;
+            _bandIntensity = 0d;
+            RedrawComet();
+        }
+
+        _clock = clock;
+        _clock?.Subscribe(_clockTick);
     }
 
-    // WinUI 的帧调度器（DispatcherQueueFramePacer）把采样循环留在 UI 线程上，所以这里可以直接写合成对象，
-    // 不必像 Blazor 那样再经 InvokeAsync 编组一次。
-    private void OnFlowLateUpdate(object? sender, TransitionEventArgs e) => RedrawComet();
-
-    // 从发送端起动周期；视图复用后会换链接，所以在挂载与改绑时都要重起一次
-    private void StartFlow()
+    // 每帧只抄两个标量并重画一次：setter 不自己重画，两个值都落地后合成一次结果。
+    private void OnClockTick()
     {
-        // 属性变更可能在池化视图还没上树时到来（正为下一条链接做准备），那时起动会去动画一条没人看的链接，
-        // 也没有卸载来停它，所以略过；Loaded 真上屏时再起动
-        if (!_isLoaded || IsVirtual || !CanRender)
-        {
-            return;
-        }
+        var clock = _clock;
+        if (clock is null) return;
 
-        // 已经在跑的就是当前这条链接的周期。端点每帧都在变，重起会把彗星按回起点 —— 那是抖，不是流动
-        if (_running)
-        {
-            return;
-        }
-
-        _flow ??= BuildFlow();
-
-        // 声明从目标读起值，所以执行前必须把两个标量摆到周期起点；循环在每个接缝重放这一份起始状态
-        _bandHead = 0;
-        _bandIntensity = 0;
-
-        _flow.Execute(this);
-        _running = true;
+        _bandHead = clock.BandHead;
+        _bandIntensity = clock.BandIntensity;
+        RedrawComet();
     }
 
-    // 停周期：视图被释放复用时不能留着旧动画在跑
-    private void StopFlow()
+    // 每棵树只建一次：共享时钟把两个标量写到自身，LateUpdate 再把这一帧扇出给订户。
+    // 30fps 是唯一故意的差别 —— 每条链接不再各起一条 60fps 的采样循环。
+    private sealed class FlowDriver : IWorkflowFlowDriver
     {
-        if (!_running)
+        private readonly WorkflowFlowClock _clock;
+        private readonly Transition<WorkflowFlowClock> _flow;
+
+        public FlowDriver(WorkflowFlowClock clock)
         {
-            return;
+            _clock = clock;
+            _flow = Transition<WorkflowFlowClock>.Create()
+                // 相位一：从发送端出发，一边走一边亮起
+                .Property(c => c.BandHead, BandFormed)
+                .Property(c => c.BandIntensity, 1d)
+                .Effect(PhaseEffect(clock, EnterDuration))
+                .Then()
+                // 相位二：全亮行进——这一段读起来才是流动而非脉冲
+                .Property(c => c.BandHead, BandLeaving)
+                .Effect(PhaseEffect(clock, TravelDuration))
+                .Then()
+                // 相位三：到达并熄灭。两端都是「没有光」的状态，循环接缝才看不出来
+                .Property(c => c.BandHead, 1d)
+                .Property(c => c.BandIntensity, 0d)
+                .Effect(PhaseEffect(clock, ExitDuration))
+                .Repeat(int.MaxValue);
         }
 
-        Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
-        _running = false;
+        public void Start() => _flow.Execute(_clock);
+
+        // 停的是这棵树共享的那条周期，不是某个视图自己的。
+        public void Stop() => Transition.Exit(_clock, IncludeMutual: true, IncludeNoMutual: true);
+
+        // 每段匀速（Eases.Default 就是恒等）；LateUpdate 挂在时钟缓存的那个委托上。
+        private static TransitionEffect PhaseEffect(WorkflowFlowClock clock, TimeSpan duration)
+        {
+            var effect = new TransitionEffect()
+            {
+                Duration = duration,
+                Ease = Eases.Default,
+                FPS = 30,
+            };
+            effect.LateUpdate += clock.LateUpdateHandler;
+            return effect;
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -452,7 +466,7 @@ public sealed partial class PolylineCurveView : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
-        StopFlow();
+        RefreshFlowSubscription();
     }
 
     // 改绑（池化视图换链接）与回收（DataContext 先被置空）都只在这里露出：两者都不触发 Loaded/Unloaded。
@@ -626,15 +640,15 @@ public sealed partial class PolylineCurveView : UserControl
         UpdateRestingLine();
         UpdateVisibility(true);
         RedrawComet();
-        StartFlow();
+        RefreshFlowSubscription();
         PublishCurve();
     }
 
-    // 无可绘制：收起静息线与彗星，并停掉周期 —— 停在这一步是有代价的，不停的话周期会一直写下去
+    // 无可绘制：收起静息线与彗星，并退订共享时钟 —— 退订是有代价的，不退的话这条线会一直跟着树重画
     private void Hide()
     {
         UpdateVisibility(false);
-        StopFlow();
+        RefreshFlowSubscription();
         PublishCurve();
     }
 
