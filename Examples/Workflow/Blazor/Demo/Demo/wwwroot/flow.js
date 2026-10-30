@@ -101,6 +101,11 @@ export function register(svg, colors, thickness, litThickness) {
 
     entries.set(entry.id, entry);
     byElement.set(svg, entry);
+    // The surface's drag pass rewrites the source path from the live slot boxes. The cached arc
+    // length belongs to the old geometry, so drop it and let the next frame re-measure once.
+    svg.addEventListener('veloxdev-link-geometry', function () {
+        entry.length = 0;
+    });
     applyStyle(entry);
     observe(entry);
     ensureLoop();

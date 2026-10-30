@@ -1,6 +1,6 @@
 @namespace VeloxDev.WorkflowSystem.AttachedBehaviors
 
-<div class="veloxdev-wf-ruler">
+<div class="veloxdev-wf-ruler" data-veloxdev-ruler-thickness="@Css(RulerThickness)">
     <div class="veloxdev-wf-ruler-corner"
          style="width:@RulerThicknessCss;height:@RulerThicknessCss;background:@RulerBackground;border-right:1px solid @DividerColor;border-bottom:1px solid @DividerColor;"></div>
     <div class="veloxdev-wf-ruler-top"
@@ -8,7 +8,7 @@
         <div class="veloxdev-wf-ruler-inner" style="transform:@TopTransform;">
             @foreach (var tick in TopTicks)
             {
-                <span class="veloxdev-wf-ruler-label" style="left:@Css(tick.Pos)px;">
+                <span class="veloxdev-wf-ruler-label" style="left:@Css(tick.Pos)px;" @key="tick.Pos">
                     <span class="veloxdev-wf-ruler-tickline" style="height:@TickLengthCss(tick.IsMajor);background:@(tick.IsZero ? AxisColorCss : TickColor);"></span>
                     @if (tick.IsMajor)
                     {
@@ -23,7 +23,7 @@
         <div class="veloxdev-wf-ruler-inner" style="transform:@LeftTransform;">
             @foreach (var tick in LeftTicks)
             {
-                <span class="veloxdev-wf-ruler-label" style="top:@Css(tick.Pos)px;">
+                <span class="veloxdev-wf-ruler-label" style="top:@Css(tick.Pos)px;" @key="tick.Pos">
                     <span class="veloxdev-wf-ruler-tickline" style="width:@TickLengthCss(tick.IsMajor);background:@(tick.IsZero ? AxisColorCss : TickColor);"></span>
                     @if (tick.IsMajor)
                     {

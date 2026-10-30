@@ -301,20 +301,18 @@ window.veloxdevWorkflow = (() => {
 
     // Measures one link's endpoints from the LIVE slot elements using the same formula as
     // initSlotLayout's measure() (element center relative to the canvas, minus the content-wrapper
-    // translate) and formats the cubic curve with LinkView.BuildCurve's control points. Returns ''
-    // when an endpoint has no measurable slot DOM yet (virtual-gesture receiver, virtualized node,
-    // fresh mount) — .NET owns those links until a real measurement lands, so the caller leaves
-    // them alone.
-    function linkCurveFromSlotElements(host, senderSlotId, receiverSlotId) {
-        if (!host || !senderSlotId || !receiverSlotId) return '';
+    // translate). Returns null when an endpoint has no measurable slot DOM yet (virtual-gesture
+    // receiver, virtualized node, fresh mount) — .NET owns those links until a real measurement lands.
+    function linkEndsFromSlotElements(host, senderSlotId, receiverSlotId) {
+        if (!host || !senderSlotId || !receiverSlotId) return null;
         const canvasEl = host.querySelector('.veloxdev-wf-canvas');
-        if (!canvasEl) return '';
+        if (!canvasEl) return null;
         const sEl = canvasEl.querySelector('[data-veloxdev-slot-id="' + senderSlotId + '"]');
         const rEl = canvasEl.querySelector('[data-veloxdev-slot-id="' + receiverSlotId + '"]');
-        if (!sEl || !rEl) return '';
+        if (!sEl || !rEl) return null;
         const sr = glyphRect(sEl);
         const rr = glyphRect(rEl);
-        if (!sr || !rr || sr.width <= 0 || sr.height <= 0 || rr.width <= 0 || rr.height <= 0) return '';
+        if (!sr || !rr || sr.width <= 0 || sr.height <= 0 || rr.width <= 0 || rr.height <= 0) return null;
         const rect = canvasEl.getBoundingClientRect();
         const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
         const contentX = contentEl ? contentEl.offsetLeft : 0;
@@ -323,17 +321,135 @@ window.veloxdevWorkflow = (() => {
         const sy = (sr.top + sr.height / 2) - rect.top - contentY;
         const ex = (rr.left + rr.width / 2) - rect.left - contentX;
         const ey = (rr.top + rr.height / 2) - rect.top - contentY;
-        if (!isFinite(sx) || !isFinite(sy) || !isFinite(ex) || !isFinite(ey)) return '';
-        const dx = ex - sx;
-        // Horizontal fallback, matching LinkCurve's no-node path only. The .NET link view now uses
-        // LinkCurvePoints, which pulls each control point along its port's outward normal, so a port on
-        // a top or bottom edge renders differently here until this copy follows it. The minimum pull
-        // keeps the curve from degenerating into a straight segment when the two ports are close.
-        const pull = Math.max(LINK_PULL_MIN, Math.abs(dx) * 0.5);
-        return 'M ' + sx.toFixed(1) + ',' + sy.toFixed(1) +
-            ' C ' + (sx + pull).toFixed(1) + ',' + sy.toFixed(1) +
-            ' ' + (ex - pull).toFixed(1) + ',' + ey.toFixed(1) +
-            ' ' + ex.toFixed(1) + ',' + ey.toFixed(1);
+        if (!isFinite(sx) || !isFinite(sy) || !isFinite(ex) || !isFinite(ey)) return null;
+
+        // LinkCurve.PortOutward: a port leaves along the edge of its own node it sits nearest.
+        // Either end without a node → the house rule (start +x, end −x), same as LinkCurvePoints.
+        const n1 = portNormal(sEl);
+        const n2 = portNormal(rEl);
+        if (!n1 || !n2) {
+            return { sx: sx, sy: sy, ex: ex, ey: ey, n1x: 1, n1y: 0, n2x: -1, n2y: 0 };
+        }
+
+        return { sx: sx, sy: sy, ex: ex, ey: ey, n1x: n1.x, n1y: n1.y, n2x: n2.x, n2y: n2.y };
+    }
+
+    // The outward normal of the node edge the port sits nearest, measured from the LIVE DOM boxes
+    // (node wrapper center vs slot glyph center). Normalised so a wide card does not favour its
+    // horizontal edges — the same rule as LinkCurve.PortOutward. Returns null when the port has no
+    // node wrapper (placeholder ends).
+    function portNormal(slotEl) {
+        const nodeEl = slotEl.closest('.veloxdev-wf-node-drag');
+        if (!nodeEl) return null;
+        const nr = nodeEl.getBoundingClientRect();
+        const sr = glyphRect(slotEl);
+        if (!nr || !sr || nr.width <= 0 || nr.height <= 0) return null;
+        const dx = ((sr.left + sr.width / 2) - (nr.left + nr.width / 2)) / Math.max(1e-6, nr.width * 0.5);
+        const dy = ((sr.top + sr.height / 2) - (nr.top + nr.height / 2)) / Math.max(1e-6, nr.height * 0.5);
+        return Math.abs(dx) >= Math.abs(dy)
+            ? { x: dx >= 0 ? 1 : -1, y: 0 }
+            : { x: 0, y: dy >= 0 ? 1 : -1 };
+    }
+
+    // One control point pulled along its port's outward normal; zero pull for a free end (matches
+    // LinkCurve.CurvePoints / Pull).
+    function pullControl(x, y, ex, ey, nx, ny) {
+        if (nx === 0 && ny === 0) return { x: x, y: y };
+        const gap = Math.abs(nx !== 0 ? ex - x : ey - y);
+        const pull = Math.max(LINK_PULL_MIN, gap * 0.5);
+        return { x: x + nx * pull, y: y + ny * pull };
+    }
+
+    function curveControlPoints(e) {
+        const c1 = pullControl(e.sx, e.sy, e.ex, e.ey, e.n1x, e.n1y);
+        const c2 = pullControl(e.ex, e.ey, e.sx, e.sy, e.n2x, e.n2y);
+        return [e.sx, e.sy, c1.x, c1.y, c2.x, c2.y, e.ex, e.ey];
+    }
+
+    // The trimmed demo's link path: the four control points, F1 like LinkView.BuildCurve.
+    function cubicPathFromEnds(e) {
+        const p = curveControlPoints(e);
+        return 'M ' + p[0].toFixed(1) + ',' + p[1].toFixed(1) +
+            ' C ' + p[2].toFixed(1) + ',' + p[3].toFixed(1) +
+            ' ' + p[4].toFixed(1) + ',' + p[5].toFixed(1) +
+            ' ' + p[6].toFixed(1) + ',' + p[7].toFixed(1);
+    }
+
+    // The full demo's body path: LinkCurve.Sample's 128-point polyline, in the same 0.#### form.
+    const LINK_SAMPLE_COUNT = 128;
+    function polylinePathFromEnds(e) {
+        const p = curveControlPoints(e);
+        const parts = new Array(LINK_SAMPLE_COUNT);
+        for (let i = 0; i < LINK_SAMPLE_COUNT; i++) {
+            const t = i / (LINK_SAMPLE_COUNT - 1);
+            const u = 1 - t;
+            const a = u * u * u;
+            const b = 3 * u * u * t;
+            const c = 3 * u * t * t;
+            const d = t * t * t;
+            const x = a * p[0] + b * p[2] + c * p[4] + d * p[6];
+            const y = a * p[1] + b * p[3] + c * p[5] + d * p[7];
+            parts[i] = (i === 0 ? 'M' : 'L') + n4(x) + ',' + n4(y);
+        }
+        return parts.join('');
+    }
+
+    function n4(value) {
+        return String(Math.round(value * 10000) / 10000);
+    }
+
+    // The zoom pass only needs the cubic form (it never targets the full demo's arc-length paths).
+    function linkCurveFromSlotElements(host, senderSlotId, receiverSlotId) {
+        const ends = linkEndsFromSlotElements(host, senderSlotId, receiverSlotId);
+        return ends ? cubicPathFromEnds(ends) : '';
+    }
+
+    // Re-derives every link touching one node from the LIVE slot DOM while that node is dragged.
+    // Without this the link waits for the drag delta to travel to .NET and back (node MoveCommand →
+    // slot.Anchor → LinkView render), so the end attached to the moving node visibly trails. The
+    // formula is the same one a .NET render converges on, so the post-drag render is a no-op.
+    function syncLinksForNode(host, nodeEl) {
+        if (!host || !nodeEl) return null;
+        const slots = nodeEl.querySelectorAll('[data-veloxdev-slot-id]');
+        if (!slots.length) return null;
+        const slotIds = new Set();
+        for (let i = 0; i < slots.length; i++) {
+            slotIds.add(slots[i].getAttribute('data-veloxdev-slot-id'));
+        }
+
+        const touched = [];
+        const linkEls = host.querySelectorAll('[data-veloxdev-link-id]');
+        for (let i = 0; i < linkEls.length; i++) {
+            const svg = linkEls[i];
+            const senderId = svg.getAttribute('data-veloxdev-sender-slot');
+            const receiverId = svg.getAttribute('data-veloxdev-receiver-slot');
+            if (!slotIds.has(senderId) && !slotIds.has(receiverId)) continue;
+
+            const ends = linkEndsFromSlotElements(host, senderId, receiverId);
+            if (!ends) continue;
+
+            const marked = svg.querySelectorAll('[' + LINK_CURVE_ATTR + ']');
+            if (marked.length) {
+                const d = cubicPathFromEnds(ends);
+                for (let k = 0; k < marked.length; k++) {
+                    if (marked[k].getAttribute('d') !== d) marked[k].setAttribute('d', d);
+                    touched.push(marked[k]);
+                }
+            } else {
+                const d = polylinePathFromEnds(ends);
+                const paths = svg.querySelectorAll('path:not(.wf-flow-halo):not(.wf-flow-comet)');
+                for (let k = 0; k < paths.length; k++) {
+                    if (paths[k].getAttribute('d') !== d) paths[k].setAttribute('d', d);
+                    touched.push(paths[k]);
+                }
+            }
+
+            // flow.js caches the path length; tell it the geometry moved so its next frame re-measures
+            // instead of following the old total.
+            svg.dispatchEvent(new CustomEvent('veloxdev-link-geometry'));
+        }
+
+        return touched;
     }
 
     // Writes every link's curve synchronously from its endpoints' CURRENT slot DOM. Runs inside
@@ -644,6 +760,50 @@ window.veloxdevWorkflow = (() => {
             layoutX: layoutOffsets.x, layoutY: layoutOffsets.y
         };
 
+        // The ruler bands live next to the scroller (outside it), so scrolling cannot move them by
+        // itself. Their tick layers are translated here — per scroll frame — instead of waiting for
+        // the current viewport to round-trip through .NET and come back in a re-render, which is the
+        // ruler trailing the canvas during a pan. Blazor still renders the ticks (with a margin) and
+        // may write a now-older transform; the observer below puts this one back before paint.
+        const surfaceRoot = scrollerEl.parentElement;
+        const rulerRoot = surfaceRoot ? surfaceRoot.querySelector('.veloxdev-wf-ruler') : null;
+        const rulerBandX = surfaceRoot ? surfaceRoot.querySelector('.veloxdev-wf-ruler-top') : null;
+        const rulerBandY = surfaceRoot ? surfaceRoot.querySelector('.veloxdev-wf-ruler-left') : null;
+        const rulerInnerX = rulerBandX ? rulerBandX.querySelector('.veloxdev-wf-ruler-inner') : null;
+        const rulerInnerY = rulerBandY ? rulerBandY.querySelector('.veloxdev-wf-ruler-inner') : null;
+        // The component's own thickness (not offsetHeight: the band adds a 1px divider border).
+        const rulerThickness = rulerRoot
+            ? (parseFloat(rulerRoot.getAttribute('data-veloxdev-ruler-thickness')) || 28)
+            : 28;
+
+        function applyRulerPosition() {
+            if (!rulerInnerX && !rulerInnerY) return;
+            const st = surfaceLayouts[scrollerEl.id];
+            const edgeX = st ? st.edgeX : offsets.x;
+            const edgeY = st ? st.edgeY : offsets.y;
+            const layX = st ? st.layoutX : layoutOffsets.x;
+            const layY = st ? st.layoutY : layoutOffsets.y;
+            // Same frame as WorkflowGridDecorator used to compute server-side:
+            // content offset (= layout offset + the part of the edge reserve past the ruler) + ruler − scroll.
+            const tx = layX + Math.max(0, edgeX - rulerThickness) + rulerThickness - scrollerEl.scrollLeft;
+            const ty = layY + Math.max(0, edgeY - rulerThickness) + rulerThickness - scrollerEl.scrollTop;
+            const txCss = 'translateX(' + tx + 'px)';
+            const tyCss = 'translateY(' + ty + 'px)';
+            if (rulerInnerX && rulerInnerX.style.transform !== txCss) rulerInnerX.style.transform = txCss;
+            if (rulerInnerY && rulerInnerY.style.transform !== tyCss) rulerInnerY.style.transform = tyCss;
+        }
+
+        // A .NET render can still write this transform (initial paint, or a rare tick-window
+        // refresh). Re-assert the JS value before that stale frame paints — a MutationObserver
+        // callback runs before the next paint, so the ruler never jumps back to the old offset.
+        let rulerObserver = null;
+        if (typeof MutationObserver !== 'undefined' && (rulerInnerX || rulerInnerY)) {
+            rulerObserver = new MutationObserver(function () { applyRulerPosition(); });
+            if (rulerInnerX) rulerObserver.observe(rulerInnerX, { attributes: true, attributeFilter: ['style'] });
+            if (rulerInnerY) rulerObserver.observe(rulerInnerY, { attributes: true, attributeFilter: ['style'] });
+        }
+        applyRulerPosition();
+
         // Aligns the grid pattern + world-0 axis with world coordinates. The grid is canvas-fixed
         // (world-fixed), so it scrolls naturally; it only re-positions when the edge offset or the
         // layout offset changes (rare). background-position = edge offset + layout offset.
@@ -655,6 +815,7 @@ window.veloxdevWorkflow = (() => {
             if (gridEl) gridEl.style.backgroundPosition = gx + 'px ' + gy + 'px';
             if (axisXEl) axisXEl.style.left = gx + 'px';
             if (axisYEl) axisYEl.style.top = gy + 'px';
+            applyRulerPosition();
         }
 
         function growContent(axis, amount) {
@@ -739,6 +900,7 @@ window.veloxdevWorkflow = (() => {
         }
 
         const onScroll = function () {
+            applyRulerPosition();
             if (scrollerEl.scrollLeft + scrollerEl.clientWidth >= scrollerEl.scrollWidth - 50 ||
                 scrollerEl.scrollTop + scrollerEl.clientHeight >= scrollerEl.scrollHeight - 50) {
                 expandCanvas();
@@ -922,6 +1084,7 @@ window.veloxdevWorkflow = (() => {
                 scrollerEl.removeEventListener('pointerdown', onUserPointerDown);
                 if (pendingReport) cancelAnimationFrame(pendingReport);
                 if (roFill) roFill.disconnect();
+                if (rulerObserver) rulerObserver.disconnect();
                 scrollerEl.style.cursor = '';
             }
         };
@@ -957,6 +1120,27 @@ window.veloxdevWorkflow = (() => {
         if (!nodeEl) return null;
         let dragState = null;
         let pendingDelta = null;
+        let linkObserver = null;
+        const observedPaths = new WeakSet();
+
+        // The drag pass rewrites the touched links every frame from the live slot boxes. A .NET
+        // render started from an older delta can still land after such a write and put the stale
+        // path back; watching the paths we own lets us re-derive them before that frame paints.
+        const observeLinkPaths = function (paths) {
+            if (!paths || !paths.length || typeof MutationObserver === 'undefined') return;
+            if (!linkObserver) {
+                linkObserver = new MutationObserver(function () {
+                    const host = nodeEl.closest('.veloxdev-wf-surface');
+                    if (host) syncLinksForNode(host, nodeEl);
+                });
+            }
+            for (let i = 0; i < paths.length; i++) {
+                if (!observedPaths.has(paths[i])) {
+                    observedPaths.add(paths[i]);
+                    linkObserver.observe(paths[i], { attributes: true, attributeFilter: ['d'] });
+                }
+            }
+        };
 
         nodeEl.addEventListener('mousedown', function (e) {
             if (e.button !== 0) return;
@@ -979,6 +1163,11 @@ window.veloxdevWorkflow = (() => {
             // Let the enclosing slot-layout behavior re-measure slots live while dragging,
             // so links follow the node in real time (not just after the drop).
             nodeEl.dispatchEvent(new CustomEvent('veloxdev-node-drag-move', { bubbles: true }));
+            // And redraw the links touching this node from the live slot boxes in the SAME frame:
+            // their .NET render cannot get here before the next round-trip, which is the visible
+            // one-end-trails-the-node lag.
+            const host = nodeEl.closest('.veloxdev-wf-surface');
+            if (host) observeLinkPaths(syncLinksForNode(host, nodeEl));
         };
 
         const onMove = function (e) {
@@ -1019,6 +1208,16 @@ window.veloxdevWorkflow = (() => {
             if (dotnetRef) dotnetRef.invokeMethodAsync('OnNodeDragEnd');
             // Let the enclosing slot-layout behavior re-measure this node's slots now that they moved.
             nodeEl.dispatchEvent(new CustomEvent('veloxdev-node-drag-end', { bubbles: true }));
+
+            // Keep the stale-render guard a little past the drop: the last round-trip is still in
+            // flight and must not paint an older path over the final geometry.
+            const host = nodeEl.closest('.veloxdev-wf-surface');
+            if (host) syncLinksForNode(host, nodeEl);
+            if (linkObserver) {
+                setTimeout(function () {
+                    if (linkObserver) { linkObserver.disconnect(); linkObserver = null; }
+                }, 400);
+            }
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
@@ -1027,6 +1226,7 @@ window.veloxdevWorkflow = (() => {
             dispose: function () {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+                if (linkObserver) { linkObserver.disconnect(); linkObserver = null; }
                 pendingDelta = null;
             }
         };

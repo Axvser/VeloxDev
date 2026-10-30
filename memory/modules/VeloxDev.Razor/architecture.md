@@ -154,6 +154,15 @@ settle 循环 → 回报 `surfaceReporters`。
 
 （CSS 具体行号随版本变动；判据是这几处声明本身。）
 
+### 2.6 手势进行时的逐帧视觉归 JS（2026-10-30）
+
+> 症状只在「拖动进行时」出现、松手后自动对齐：连线有一端跟着节点走却慢一拍，标尺跟着画布走也慢一拍。根因是每帧都等一次 SignalR 往返（JS 量到 → 回 .NET 改模型 → 组件重渲染 → 推回浏览器）。**用户实测：完整 Demo 有这两处瓶颈，Trimmed Demo 没有** —— 完整 Demo 的模板连线是「弧长拖尾 + 逐条 LinkView」，重渲染链路更重；修复落在适配器层，对两家都生效。
+
+- **拖动节点 → 连线**：`initNodeDrag` 的 `flushDelta` 在写节点 `left/top` 的同一个 rAF 里调 `syncLinksForNode`（`veloxdev.workflow.js`）：从实时槽位 DOM 量端点（`linkEndsFromSlotElements`），用与 `LinkCurve.PortOutward`/`CurvePoints`/`Sample` 相同的公式重写曲线 —— 无 `data-veloxdev-link-curve` 的模板按 128 点折线，Trimmed 的标记路径按同一控制点的三次曲线。写过的 path 装 MutationObserver：迟到的旧渲染会在下一帧前被改回来；拖放后守卫保留 400ms。每次写完整条链接后 `dispatchEvent('veloxdev-link-geometry')`，`flow.js` 据此作废缓存的 `getTotalLength()`。
+- **平移画布 → 标尺**：标尺在滚动容器外，`initSurface` 的 `applyRulerPosition` 每帧写 `.veloxdev-wf-ruler-inner` 的 translate，公式与 `WorkflowGridDecorator.TopTransform` 相同：`布局偏移 + max(0, 边缘偏移 − 标尺厚度) + 标尺厚度 − scroll`。厚度从装饰器的 `data-veloxdev-ruler-thickness` 读（不能读 `offsetHeight`：标尺带带 1px 分隔线）。MutationObserver 同样盖住迟到的 .NET 渲染。
+- **装饰器只负责「刻度够用」**：`EnsureWindow` 按「可见范围 ± 一个视口」渲染，视口移出窗口余量的一半才 `StateHasChanged`；`@key="tick.Pos"` 让刷新只增删边缘刻度。平移动画期间 .NET 渲染从每帧降到约每 0.75 个视口一次。
+- 依据：`veloxdev.workflow.js` 的 `syncLinksForNode` / `applyRulerPosition` / `EnsureWindow`（`WorkflowGridDecorator.razor.cs`）。验证用 `Src/Verification/agent-web-harness.ps1`：**服务端必须以 `--launch-profile Demo` 启动**（不带 profile 时静态资源返回空响应，页面无 CSS）；拖动态测 path 起点与实时槽位中心的距离，滚动后测标尺 transform 与刻度覆盖。
+
 ---
 
 ## 三、`PlatformAdapters/`：注册与工厂

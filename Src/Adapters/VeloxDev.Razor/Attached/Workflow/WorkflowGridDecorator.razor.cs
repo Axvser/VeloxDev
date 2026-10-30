@@ -107,6 +107,14 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
         ScrollOffsetY = vp.ScrollTop;
         ContentOffsetX = vp.ContentOffsetX;
         ContentOffsetY = vp.ContentOffsetY;
+
+        // The band itself is moved by the surface's JS in the same frame as the scroll; only the
+        // tick window can require a server render, and that is rare (see EnsureWindow).
+        if (!EnsureWindow(vp.ViewportWidth, vp.ViewportHeight, force: false))
+        {
+            return;
+        }
+
         InvokeAsync(StateHasChanged);
     }
 
@@ -121,6 +129,7 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
             ScrollOffsetY = vp.ScrollTop;
             ContentOffsetX = vp.ContentOffsetX;
             ContentOffsetY = vp.ContentOffsetY;
+            EnsureWindow(vp.ViewportWidth, vp.ViewportHeight, force: false);
         }
     }
 
@@ -137,17 +146,62 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     /// <summary>
     /// Tick positions along the horizontal (top) ruler, in band-local pixels. The band is
     /// translated by -ScrollOffsetX, and world <c>v</c> sits at band-local <c>v</c> (world 0 lands
-    /// on the ruler/content boundary), mirroring the XAML adapters' content translation. Emits the
-    /// viewport-visible range plus one spacing of margin so edges stay covered while scrolling.
+    /// on the ruler/content boundary), mirroring the XAML adapters' content translation.
     /// </summary>
+    /// <remarks>
+    /// The tick set covers a WINDOW around the visible range, not the exact visible range: the band's
+    /// translate is applied by the surface's JS every scroll frame (see <see cref="EnsureWindow"/>),
+    /// so this component only has to keep enough ticks materialized on either side. Re-rendering per
+    /// frame was what made the ruler trail the canvas — the transform arrived one round-trip late.
+    /// </remarks>
     private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> TopTicks
-        => ComputeTicks(ScrollOffsetX - ContentOffsetX - RulerThickness, Viewport?.ViewportWidth ?? 0);
+        => ComputeTicks(_windowStartX, _windowExtentX);
 
     /// <summary>
     /// Tick positions along the vertical (left) ruler, in band-local pixels. See <see cref="TopTicks"/>.
     /// </summary>
     private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> LeftTicks
-        => ComputeTicks(ScrollOffsetY - ContentOffsetY - RulerThickness, Viewport?.ViewportHeight ?? 0);
+        => ComputeTicks(_windowStartY, _windowExtentY);
+
+    // Rendered tick window (world range), plus whether one has been chosen yet.
+    private double _windowStartX, _windowExtentX;
+    private double _windowStartY, _windowExtentY;
+    private bool _windowValid;
+
+    // One viewport of margin on each side of the visible range. The component re-renders only after
+    // the view has moved through most of that margin, so a continuous pan costs one render per
+    // ~0.75 viewport instead of one per frame.
+    private const double WindowMarginRatio = 1.0;
+
+    /// <summary>
+    /// Ensures the rendered tick window still covers the visible range with margin to spare.
+    /// Returns true when a re-render is needed (the window was chosen or moved).
+    /// </summary>
+    private bool EnsureWindow(double viewportW, double viewportH, bool force)
+    {
+        var extentX = Math.Max(1, viewportW);
+        var extentY = Math.Max(1, viewportH);
+        var marginX = Math.Max(Spacing, extentX * WindowMarginRatio);
+        var marginY = Math.Max(Spacing, extentY * WindowMarginRatio);
+        var startX = ScrollOffsetX - ContentOffsetX - RulerThickness;
+        var startY = ScrollOffsetY - ContentOffsetY - RulerThickness;
+
+        if (!force && _windowValid
+            && startX >= _windowStartX + marginX * 0.5
+            && startX + extentX <= _windowStartX + _windowExtentX - marginX * 0.5
+            && startY >= _windowStartY + marginY * 0.5
+            && startY + extentY <= _windowStartY + _windowExtentY - marginY * 0.5)
+        {
+            return false;
+        }
+
+        _windowStartX = startX - marginX;
+        _windowExtentX = extentX + marginX * 2;
+        _windowStartY = startY - marginY;
+        _windowExtentY = extentY + marginY * 2;
+        _windowValid = true;
+        return true;
+    }
 
     private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> ComputeTicks(double rangeStart, double extent)
     {
