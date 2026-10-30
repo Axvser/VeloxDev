@@ -1071,10 +1071,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        // 键要有人接：**任何一次**按下都先把焦点收到表面 —— 空白画布、节点、插槽、连线都算，Ctrl+Z 才有路由。
-        // 先前只在**悬停到连线**时收焦点，点一下空白画布是收不到的，键于是静默不来。卡片里的可编辑控件除外：
-        // 在那里按 Ctrl+Z 撤的该是文字。本处理器挂 handledEventsToo，冒泡链上每一下都经过它，所以这一处就够。
-        if (!IsInsideEditable(e.OriginalSource as DependencyObject))
+        // 键要有人接：任何一次按下都先把焦点收到表面，Ctrl+Z 才有路由（原先只在悬停到连线时收，点空白收不到）。
+        // 可编辑控件与按钮除外 —— 前者要输入，后者要靠这一串指针完成 Click；焦点被收走，按钮的点击就不落地。
+        // 本处理器挂 handledEventsToo，冒泡链上每一下都经过它，所以这一处就是那道门。
+        if (!OwnsItsFocus(e.OriginalSource as DependencyObject))
         {
             surfaceViewer.Focus(FocusState.Pointer);
         }
@@ -1107,12 +1107,13 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 position, Modifiers(e.KeyModifiers), host, target, button, 1, handle));
     }
 
-    // 落在可编辑控件里的按下，焦点归那个控件 —— 表面不该把它抢走。
-    private static bool IsInsideEditable(DependencyObject? source)
+    // 落在可编辑控件或按钮里的按下，焦点归那个控件 —— 表面不该把它抢走。
+    private static bool OwnsItsFocus(DependencyObject? source)
     {
         for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
         {
-            if (current is TextBox or RichEditBox or PasswordBox) return true;
+            if (current is TextBox or RichEditBox or PasswordBox
+                or ButtonBase or ComboBox or ToggleSwitch or RangeBase) return true;
         }
 
         return false;
