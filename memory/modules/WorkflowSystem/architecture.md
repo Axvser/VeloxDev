@@ -180,7 +180,7 @@ TreeHelper.MarkDirty() → 10fps Tickable tick（tick 线程只判脏）     Tem
                    → BroadcastVisibleItemLayout()（对每个可见节点重发 Anchor/Size）
 ```
 
-- **移动/缩放节点也要 `MarkDirty()`**：`Viewport` 没变，但节点矩形变了，可见集可能变；只在写 `Viewport` 时重算会让 `VisibleItems` 与 HUD 停在旧集合，直到下一次滚动/缩放。Jalium 表面在 `OnNodeChanged` 的 `Anchor`/`Size` 分支里补 `MarkDirty()`（`NodeEditorSurface.cs`）。
+- **节点移动/缩放不标脏（2026-10-30 用户决定）**：`Viewport` 没变时重算可见集只能靠 `MarkDirty()`，但那会让 helper 在拖动期间按 tick 反复重跑 `Virtualize` —— 用户判断这项开销高于「`VisibleItems` 与 HUD 晚一拍」。七家现在一致：节点几何变化只摆卡片/重画，可见集等下一次滚动/缩放收敛。Jalium 表面曾按旧结论在 `OnNodeChanged` 的 `Anchor`/`Size` 分支补过 `MarkDirty()`（`8f85056f`），已按此决定移除（`NodeEditorSurface.cs`）。不要把它当漏写再补回去。
 - **tick 线程不碰可见集（2026-10-28 起）**：装了虚拟化的 helper 在 `Install` 时记下 `SynchronizationContext.Current`（安装线程就是宿主 UI 线程），脏了就把 `Virtualize + BroadcastVisibleItemLayout` 整趟 post 回该上下文，并用 `uiPassQueued` 合并 —— UI 忙时只留一趟。**上下文跟着安装走**：每次 `Install` 都重新取并递增 `installVersion`，投递时把版本带走；`Uninstall` 清掉自动捕获的值并重置 `uiPassQueued`。所以换一个 UI 线程重装会自然改绑，上一次安装遗留的排队不会把新安装锁死，旧 UI 线程里迟到的回投也会因版本不符被丢掉（否则它会拿着新组件在旧线程上跑）。没有上下文的宿主（服务端、控制台、无头测试）保持原来的 tick 线程内联执行。宿主在非 UI 线程装 helper 时，必须 `new TreeHelper<T>(cellSize).WithSynchronizationContext(ctx)` 显式给（`Templates/Helpers/TreeHelper.cs` 的 `WithSynchronizationContext`），否则这一趟仍会落在 tick 线程；显式值（含显式 null）跨安装保留。**原因**：`VisibleItems` 绑在 UI 上，tick 线程直接改会和 `ViewManager` 的同步 Remove 分支并发 —— 下游实测症状是连线随机消失。回归测试 `TreeHelperTickTests.TheDirtyPassTouchesTheVisibleSetOnTheThreadThatInstalledTheHelper`（把 helper 显式设成 null 上下文即红）。
 
 - **只有 `TreeHelper(double cellSize)` 这个构造开虚拟化**，无参构造把 `useVirtualization = false`（`Templates/Helpers/TreeHelper.cs` 的 `TreeHelper()` 与 `TreeHelper(double cellSize)` 两个构造函数）。「图每次都全渲染」十有八九是用了无参构造。
