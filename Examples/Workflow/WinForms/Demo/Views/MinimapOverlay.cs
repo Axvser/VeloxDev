@@ -75,9 +75,52 @@ public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMi
     {
         if (Parent is null) return;
 
+        // 挂在滚动容器之外时按画布本身定位（两者是同一个父容器下的兄弟）：画布滚动的是内容，
+        // 画布控件自己的边界不动，覆盖层因此不会被滚走。
+        if (_anchor is { } anchor && ReferenceEquals(anchor.Parent, Parent))
+        {
+            Location = new Point(
+                Math.Max(0, anchor.Right - Width - CornerMargin),
+                anchor.Top + CornerMargin);
+            return;
+        }
+
         Location = new Point(
             Math.Max(0, Parent.ClientSize.Width - Width - CornerMargin),
             CornerMargin);
+    }
+
+    private Control? _anchor;
+
+    /// <summary>
+    /// The surface the overlay is pinned to when it is parented OUTSIDE that surface (sibling, not
+    /// child). Without this the overlay would pin to its parent's corner, which is only the same
+    /// place while the surface happens to fill the parent.
+    /// </summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    internal Control? AnchorControl
+    {
+        get => _anchor;
+        set
+        {
+            if (ReferenceEquals(_anchor, value)) return;
+            if (_anchor is not null)
+            {
+                _anchor.Resize -= OnParentResized;
+                _anchor.LocationChanged -= OnParentResized;
+            }
+
+            _anchor = value;
+
+            if (_anchor is not null)
+            {
+                _anchor.Resize += OnParentResized;
+                _anchor.LocationChanged += OnParentResized;
+            }
+
+            PositionAtTopRight();
+        }
     }
 
     [Browsable(false)]

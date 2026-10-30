@@ -99,7 +99,7 @@
 
 配套地，`WorkflowSurfaceBehavior.Refresh` 默认**异步**失效，只在 `host.Capture`（平移/拖拽进行中）时才 `Update()`（`Refresh` 里的注释与 `host.Capture` 分支）。⇒ **这家的刷新策略是「默认异步、手势中同步」，别家靠合成器自动解决这个问题。** 别把这里的 `Update()` 调用当成冗余删掉。
 
-**覆盖层也要同帧**（2026-10-30）：全功能 demo 的 `RefreshOverlays` 在 `Capture` 时对 `_minimap.Update()`。只 `Invalidate()` 的话，拖画布期间小地图的 `WM_PAINT` 被鼠标消息一直推迟，它比画布晚几帧才走一步 —— 表现是「拖画布时小地图抖」，而反过来拖小地图时画布没有捕获，所以看不到。同一处还有两条配套：平移中的 `OnScroll` 是 `UpdateCanvasMinSize` 改滚动范围带来的**回声**（`OnMouseMove` 之后还会用同一份状态 `Refresh` 一次），`WorkflowCanvas.OnScroll` 在 `_isPanning` 时直接返回，把每帧的画布+小地图重绘减半；原先由那条回声代劳的指针命中重判，改由 `OnMouseMove` 显式 `RefreshLinkHover()` 补上。
+**浮动覆盖层不能是 AutoScroll 画布的子控件**（2026-10-30）：全功能 demo 的画布是 `Panel` + `AutoScroll`，WinForms 滚动时**直接移动子窗口**；小地图每帧被滚走、再由 `PositionAtTopRight` 钉回来 —— 拖画布时表现为「小地图渲染抖动」，而拖小地图时（捕获在覆盖层、平移对 `AutoScrollPosition` 做了补偿）看不到。Trimmed 的画布固定、从不滚动子控件，所以这个现象只有非 Trimmed 版本有。修法：`WorkflowCanvas.MinimapOverlay` 把覆盖层挂到画布的**父容器**（不滚动），`MinimapOverlay.AnchorControl` 指向画布，按画布的 `Right/Top` 定位（两者是同一父容器下的兄弟）。测量判据：连续平移时抓帧，覆盖层边框的屏幕 bbox 必须逐帧一致（修复前会随滚动漂移）。两条配套：`RefreshOverlays` 在画布 `Capture` 时也对小地图 `Update()`（这家没有合成器，异步 `WM_PAINT` 会被高频鼠标消息推迟）；平移中的 `OnScroll` 是 `UpdateCanvasMinSize` 改范围的**回声**，`_isPanning` 时直接返回，原先由它代劳的命中重判改由 `OnMouseMove` 补 `RefreshLinkHover()`。
 
 ### 2.8 没有命中测试的「透明背景」问题，但有「哪个子控件被按住」的问题
 

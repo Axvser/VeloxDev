@@ -165,7 +165,8 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
                     oldMm.WorkflowTree = null;
                 }
 
-                Controls.Remove(_minimap);
+                // 挂在哪由 setter 决定（见下），这里从实际父容器摘掉
+                _minimap.Parent?.Controls.Remove(_minimap);
                 _minimap = null;
             }
 
@@ -182,11 +183,15 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
                     mm.WorkflowTree = _session?.Tree;
                 }
 
-                // 与树视图模板一致的接线：覆盖层成为子控件，并把**对象**交给表面行为（不靠名字找）
-                Controls.Add(value);
+                // 覆盖层不能挂在滚动容器里：本画布开着 AutoScroll，WinForms 滚动时直接移动子窗口，
+                // 覆盖层每帧被滚走、再由 PositionAtTopRight 钉回来 —— 拖画布时看上去就是小地图抖。
+                // 挂到画布的父容器（不滚动的那个），并让它按画布右上角定位；滚动只再动画布内容。
+                var overlayHost = Parent ?? (Control)this;
+                overlayHost.Controls.Add(value);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlay(this, value);
                 if (value is Views.MinimapOverlay minimap)
                 {
+                    minimap.AnchorControl = ReferenceEquals(overlayHost, this) ? null : this;
                     minimap.PositionAtTopRight();
                 }
 

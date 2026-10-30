@@ -423,11 +423,11 @@
             //
             // minimapOverlay
             //
-            // Created here but parented by the surface: WorkflowSurfaceBehavior.MinimapOverlayName
-            // resolves the overlay by name inside the surface host, so the canvas adopts this control
-            // as its child named PART_MinimapOverlay (Form1 assigns it to WorkflowCanvas.MinimapOverlay).
-            // Its Location is computed by MinimapOverlay.PositionAtTopRight from the parent size, so it
-            // is not set here.
+            // Created here, parented by WorkflowCanvas.MinimapOverlay: the overlay goes into the
+            // canvas's PARENT (not the canvas itself — the canvas auto-scrolls, and WinForms moves
+            // scrolled child windows, which made the minimap jitter during canvas pans). The canvas
+            // pins it to its own top-right through MinimapOverlay.AnchorControl; its Location is
+            // therefore not set here.
             minimapOverlay.Name = "minimapOverlay";
             minimapOverlay.TabIndex = 1;
             // 
