@@ -28,6 +28,23 @@ WorkflowSurfaceBehavior.Refresh(host);                 // after a mutation
 
 If you add content to a node, **it will not scale with the zoom by itself.** Extend the node view's `OnSizeAllocated` / `ApplyScale` with your own sizes, following the factor the view already computes (`collapsedWidth / 260`, where 260 is that node's design width).
 
+```csharp
+private const double DesignWidth = 260;
+
+protected override void OnSizeAllocated(double width, double height)
+{
+    base.OnSizeAllocated(width, height);
+    ApplyScale(width);
+}
+
+private void ApplyScale(double width)
+{
+    var k = Math.Max(0.1, width / DesignWidth);
+    // The generated view already scales the header, title font and slot glyphs by k.
+    myLabel.FontSize = Math.Max(4, 11 * k);   // example for content you add
+}
+```
+
 ⚙ **Do not "fix" this with a render transform.** The comment in `NodeView` is explicit: layout-only changes, no transforms. Switching to a transform breaks the anchor measurement.
 
 ## Links — one overlay for the whole graph

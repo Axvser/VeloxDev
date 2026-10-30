@@ -13,6 +13,12 @@ Write **application code** against VeloxDev — from the NuGet packages, or agai
 
 Everything else about this repository (how the adapters are built, how the demos are maintained, how a release is cut) is out of scope here.
 
+## Default: the whole item-template suite, elastic nodes
+
+⚙ **Start every canvas from the adapter's item-template pack and generate all seven roles: tree, node, slot, link, selector, decorator and minimap.** The decorator is what draws the floating top/left ruler bands; the minimap is the canvas's thumbnail and navigation. A canvas built from only tree + node + link is missing both, so it is not the default this skill wants. The commands are in [references/templates.md](references/templates.md); all seven files go into one namespace.
+
+⚙ **The generated node view is elastic.** It is a `<Viewbox Stretch="Uniform">` over a grid pinned to the node's design size (260 × 180), or the platform's layout-only equivalent in MAUI/WinForms and the CSS transform in Razor. The outer view is sized to the node's collapsed `Size`; the inner design scales by `1/Scale`. Put added content on the design-size grid and do not apply zoom yourself. Each [gui reference](references/gui/) carries the exact code for its framework; keep that container when you edit the node.
+
 ## Which packages
 
 | Need | Package |
@@ -41,7 +47,7 @@ An adapter package brings `VeloxDev.Core` in transitively. Versions are delibera
 | Make a node actually compute something | [references/execution.md](references/execution.md) |
 | Run a chain, or ask "what would this node output?" | [references/execution.md](references/execution.md) |
 | Save and restore a graph | [references/model.md](references/model.md) |
-| Scaffold the canvas views with `dotnet new` | [references/templates.md](references/templates.md) |
+| Scaffold the whole canvas view layer (all seven roles) with `dotnet new` | [references/templates.md](references/templates.md) |
 | Customize or debug those views | [references/view-layer.md](references/view-layer.md), then `gui/<your-gui>.md` |
 | React to zoom, panning, or links that do not line up | [references/canvas-math.md](references/canvas-math.md) |
 | Paint a red/green connection preview while a drag is in progress | [references/model.md](references/model.md#the-connection-preview) |

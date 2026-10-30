@@ -36,6 +36,22 @@ transform: scale(collapsedWidth / 260);   /* the node's design width */
 transform-origin: top left;
 ```
 
+```razor
+<div class="veloxdev-wf-node-card"
+     style="position:relative;width:260px;height:180px;
+            transform:scale(@ScaleCss);transform-origin:top left;">
+    @* Your content, at design-size coordinates. *@
+</div>
+```
+
+```csharp
+private const double DesignWidth = 260;
+
+private string ScaleCss => Node is null || Node.Size.Width <= 0
+    ? "1"
+    : (Node.Size.Width / DesignWidth).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+```
+
 ⚙ **`getBoundingClientRect()` includes that transform**, which is why slot anchors and links stay correct through a zoom without any of the measuring code the desktop adapters need. **Do not replace the transform with a layout-based position** — the measurement contract depends on the transform being in the rect.
 
 So: put your controls on the design-size card as usual. The browser scales them.

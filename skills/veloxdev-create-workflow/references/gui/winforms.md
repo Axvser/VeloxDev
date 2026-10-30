@@ -28,6 +28,16 @@ WorkflowSurfaceBehavior.Refresh(control);                 // after every mutatio
 
 If you add content, add its scaling to that same path. Do not introduce a render transform.
 
+```csharp
+// Extend the generated card's OnCollapse(double collapse).
+private void OnCollapse(double collapse)
+{
+    // The generated path already scales the header, rows, slot glyphs and fonts.
+    myLabel.Font = new Font(myLabel.Font.FontFamily, 11f * (float)collapse);
+    WorkflowSlotLayoutBehavior.SyncNow(this);   // re-measure the scaled slots in this frame
+}
+```
+
 ⚙ **Do not move the port visuals**, and take the anchor frame seriously: this adapter measures with `PointToScreen`/`PointToClient` and writes through `SlotAnchorFromCanvasLocal`, because the canvas client area *is* the link rendering space and a node's `Location` already includes the pan and `ActualOffset`. Using the visual-centre form here subtracts `ActualOffset` a second time and shifts every link by `−ActualOffset` — this was a real bug in this adapter once.
 
 ## Zoom and pan

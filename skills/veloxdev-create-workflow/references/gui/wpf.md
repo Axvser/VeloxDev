@@ -47,6 +47,17 @@ The tree's two `DataTemplate`s are where node positioning is declared:
 
 `NodeView.xaml` is a `<Viewbox Stretch="Uniform">` wrapping content pinned to the node's **design size** (the demo uses 260 × 180). Put your controls inside that design canvas and give them design-size coordinates — the `Viewbox` scales the whole thing by `1/Scale` for you.
 
+```xml
+<!-- The template sizes this view to the node's collapsed Size; the inner Grid stays at design size. -->
+<Viewbox Stretch="Uniform" ClipToBounds="False">
+  <Grid Width="260" Height="180" ClipToBounds="False" Background="Transparent">
+    <!-- Your content, at design-size coordinates. -->
+  </Grid>
+</Viewbox>
+```
+
+⚙ **Do not bind the inner Grid to `Size`.** A `Viewbox` child whose `Width`/`Height` follow the collapsed `Size` squeezes the design a second time and clips its text when the canvas zooms out.
+
 ⚙ **Do not compensate for zoom in your markup.** The `Viewbox` is why the factor is exactly `1/Scale` and why you can lay out at design size.
 
 ⚙ **Do not move the port visuals.** Slot positions come from `WorkflowSlotLayoutBehavior` measuring the `SlotView`; the links follow the measured anchors, not your layout.

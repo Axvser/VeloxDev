@@ -26,6 +26,15 @@ xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 
 `<Viewbox Stretch="Uniform">` around content pinned to design size, as on WPF — your controls go inside the design canvas at design-size coordinates.
 
+```xml
+<!-- The template sizes this view to the node's collapsed Size; the inner Grid stays at design size. -->
+<Viewbox Stretch="Uniform">
+  <Grid Width="260" Height="180" Clip="{x:Null}">
+    <!-- Your content, at design-size coordinates. -->
+  </Grid>
+</Viewbox>
+```
+
 ⚙ **Alias `Path` in code-first views.** Generated code uses `Microsoft.UI.Xaml.Shapes.Path` because an implicit `using System.IO` collides with it. The demo avoids the alias only because it does not pull in those implicit usings; your project may.
 
 ## Links — the offset frame

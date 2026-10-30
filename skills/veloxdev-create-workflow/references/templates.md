@@ -2,6 +2,8 @@
 
 Each adapter ships a `dotnet new` item-template pack that generates the seven view roles with the behaviours already wired, in your namespace and with your colours. This is the normal way to get a working canvas on screen — write the ViewModels yourself (see [model.md](model.md)) and let the templates produce the view layer.
 
+⚙ **Default: generate all seven roles.** The decorator supplies the floating top/left ruler bands; the minimap supplies the thumbnail and navigation. A tree + node + link suite has neither. The **Generating a suite** block below is the default — run every command in it, then add your content to the generated node view.
+
 ⚙ **The packs in this checkout are version `10.0.1`**, and so are the adapter and Core packages they are built against. `dotnet new install VeloxDev.<GUI>.Templates` without a version takes the latest published; do not pin an older pack against a newer adapter.
 
 ## The seven items
@@ -45,7 +47,7 @@ dotnet new wpf-v-minimap   -n MinimapOverlay   -ns MyApp.Views -o Views
 dotnet build
 ```
 
-⚙ **`-ns` is the namespace and `-n` the class name.** `preferNameDirectory` is `false` on every item, so `-o Views` puts the files directly in `Views/` with no per-name subfolder.
+⚙ **Do not trim the suite.** The tree names its selector, decorator and minimap siblings through the namespace alias; leaving one out means editing the tree by hand, and leaving out the decorator or minimap ships a canvas with no floating rulers or thumbnail. The generated node view is already elastic — keep its design-size container when you add content (each [gui reference](gui/) has the code). `preferNameDirectory` is `false` on every item, so `-o Views` puts the files directly in `Views/` with no per-name subfolder.
 
 ⚙ **`-n` is load-bearing.** The tree view references its siblings by the default class names through a namespace alias, so renaming one means editing the tree by hand. Generate with the defaults unless you are prepared to do that.
 

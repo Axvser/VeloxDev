@@ -2,6 +2,8 @@
 
 The canvas you put on screen is assembled from seven view roles, and the item templates generate all seven for you — see [templates.md](templates.md). This file is what you need in order to **customize and debug** them: how they are composed, which parts are yours to change, and the handful of rules that make them silently not work when broken.
 
+⚙ **Default: generate all seven roles from the item templates.** The decorator is the floating ruler; the minimap is the thumbnail. Do not hand-write a tree + node + link subset. The generated node view is the elastic container (`Viewbox` on WPF/Avalonia/WinUI/Jalium, layout-only scaling on MAUI/WinForms, the CSS transform on Razor); keep that container when you add content — each `gui/<gui>.md` has the code.
+
 Open your GUI's reference alongside this one — `gui/<gui>.md` carries that framework's specifics, and most surprises live in the difference between the seven.
 
 ## The seven roles
@@ -17,6 +19,8 @@ Open your GUI's reference alongside this one — `gui/<gui>.md` carries that fra
 | Grid decorator / minimap | `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | grid, ruler and thumbnail |
 
 ⚙ **Only the first six do anything on their own; the decorator and minimap you write or generate.** `IWorkflowGridDecorator` and `IWorkflowMinimapOverlay` are small interfaces defined in Core (namespace `VeloxDev.WorkflowSystem`) — the surface pushes scroll and content offsets into them each pass, and the minimap's interface derives from the decorator's because it needs the same numbers. `RulerBand` is the one member that affects more than drawing: the surface forwards it to the virtualizer so nodes under the floating ruler are not culled.
+
+⚙ **Grid lines alone are not a grid decorator.** The floating top/left ruler bands are part of the expected surface chrome: draw them in a hit-test-transparent top layer (the templates use `ZIndex="100"`), return the band thickness from `RulerBand`, and offset the world canvas by that band (the XAML adapters do it with `Canvas.RenderTransform`; the grid maths use the same band as their content offset). The templates ship the full decorator — copy it rather than reimplementing only the lines.
 
 ## Wiring the surface
 

@@ -63,6 +63,15 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 
 `NodeView.jalxaml` is a `<Viewbox Stretch="Uniform">` over a `Grid` pinned to the **design size** `260 × 180`, as on the other XAML adapters — put your content inside at design coordinates and write nothing for zoom. Its title-bar `Grid` carries `WorkflowNodeDragBehavior` (`IsEnabled` + `CoordinateHostName="PART_Canvas"`; the host type defaults to `Canvas`), which turns a left-drag into `MoveCommand`. Keep it on the bar, not the whole card, or dragging a port will drag the node too.
 
+```xml
+<!-- NodeView.jalxaml; the template sizes this view to the node's collapsed Size. -->
+<Viewbox Stretch="Uniform" ClipToBounds="False">
+  <Grid Width="260" Height="180" ClipToBounds="False" Background="Transparent">
+    <!-- Your content, at design-size coordinates. -->
+  </Grid>
+</Viewbox>
+```
+
 ⚙ **Ports are markup, measured back into the model.** The card names its controls — `local:SlotView x:Name="PART_InputSlot"` and `ItemsControl x:Name="PART_OutputSlots"` — and declares them to `WorkflowSlotLayoutBehavior` as `SlotNames` / `SlotEnumeratorNames`, with `CoordinateHostName="PART_Canvas"`. The behavior finds each control, reads its slot from its `DataContext`, measures its visual centre and writes `slot.Anchor` through Core's `WorkflowSurfaceMath.SlotAnchorFromVisualCenter` (`WorkflowSlotLayoutBehavior.cs:428`) — the same contract the other six adapters use. The old `WorkflowPortGeometry` / `WorkflowPortLayout` are gone.
 
 ⚙ Nothing enumerates `node.Slots`, so a slot the card shows but does not name is never measured; rename a `PART_` in the markup and you must rename it in the behavior attribute too. The enumerator branch reads containers through `ItemContainerGenerator` because the slot inside an `ItemsControl` item template is out of the host's name scope.

@@ -18,6 +18,47 @@ The canvas is a `ScrollViewer` + `Canvas`, and node and link views bind their `R
 
 ⚙ **Keep that binding on the `DataTemplate` root.** On Avalonia the failure is worse than on WPF: with compiled bindings on, an ancestor type is resolved at compile time; without them the lookup is deferred and the resulting exception is swallowed by the view manager. Either way you get a canvas with no nodes and no error.
 
+⚙ **If the ancestor type sits inside a binding *path*, use an assembly-qualified namespace.** `xmlns:views="using:MyApp.Views"` resolves fine for elements in the same file, but `{Binding $parent[views:MyView].(...)}` can still throw `Unable to resolve type views:MyView ...` while the template is being built. Write `clr-namespace:MyApp.Views;assembly=MyApp` for that prefix — and the same for an attached-property segment: `(clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.Avalonia)WorkflowCanvasTransformBehavior.Transform`. The view manager catches the build exception and only logs it, so the symptom is again a blank canvas.
+
+## Surface chrome — the grid and the floating rulers
+
+⚙ **Use the template's whole `WorkflowGridDecorator`, not just its grid lines.** The generated surface wraps the scroll viewer in that panel and translates the canvas by the ruler band:
+
+```xml
+<local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+  <ScrollViewer x:Name="PART_ScrollViewer">...</ScrollViewer>
+</local:WorkflowGridDecorator>
+
+<Canvas x:Name="PART_Canvas" ...>
+  <Canvas.RenderTransform>
+    <TranslateTransform X="{Binding RulerThickness, ElementName=PART_GridDecorator}"
+                        Y="{Binding RulerThickness, ElementName=PART_GridDecorator}" />
+  </Canvas.RenderTransform>
+</Canvas>
+```
+
+The decorator has two hit-test-transparent layers: the grid at the bottom and the ruler at `ZIndex="100"` — translucent top/left bands, ticks and world-value labels. Its `RulerBand => RulerThickness` is read by `WorkflowSurfaceBehavior` and forwarded to the virtualizer; a decorator that returns `0` while still covering the top/left with a band culls nodes that are visibly under it. The grid maths use the same `RulerThickness` as the content offset (`GridWorldLeft` / `GridX`), so ticks and nodes stay in one coordinate space while panning.
+
+## Adding your own content to a node
+
+`<Viewbox Stretch="Uniform">` around content pinned to the node's design size, same as WPF — put your controls inside the design canvas and give them design-size coordinates.
+
+```xml
+<!-- The DataTemplate sizes this view to the node's collapsed Size; keep the inner Grid fixed. -->
+<Viewbox Stretch="Uniform" ClipToBounds="False">
+  <Grid Width="260" Height="180" ClipToBounds="False" Background="Transparent">
+    <!-- Your content, at design-size coordinates. -->
+    <!-- Ports: ZIndex="6" so the half that overlaps the card edge is not covered. -->
+  </Grid>
+</Viewbox>
+```
+
+⚙ **The inner grid must be pinned to the design size, not bound to `Size`.** The `DataTemplate` already sizes the outer view to the node's **collapsed** `Size`; a `Viewbox` child that also binds `Width="{Binding Size.Width}"` squeezes the design a second time and clips its text when the canvas zooms out. The demo cards write `Width="300" Height="170"` (or `260 × 180`) on the inner grid and leave the outer `Width/Height` to the template.
+
+⚙ **Slots live inside that fixed grid**, with `ZIndex="6"` so the half that overlaps the card is not covered by the card surface. The slot-layout behaviour measures them with `TranslatePoint`, so the `Viewbox` scale is accounted for — do not compensate for it in markup.
+
+⚙ **Do not compensate for zoom in your markup**, and do not move the port visuals; the links follow the measured anchors.
+
 ## Compiled bindings — the thing that actually bites
 
 ⚙ **Set `AvaloniaUseCompiledBindingsByDefault=true`** in your project (the shipped demos do). Without it you must write `x:DataType` explicitly on every binding scope or you get `AVLN2100`.
@@ -25,12 +66,6 @@ The canvas is a `ScrollViewer` + `Canvas`, and node and link views bind their `R
 ⚙ **A `DataTemplate` needs a concrete `x:DataType`**, not an interface. The canvas binds `Helper.VisibleItems`, and `IWorkflowTreeViewModel` exposes only `GetHelper()` with no `Helper` property, so an interface `DataType` fails with `AVLN2000`. Point it at your tree ViewModel type.
 
 ⚙ The **node** view in the template ships `x:CompileBindings="False"` with an inline note — replace it with your concrete `x:DataType` once your ViewModel exists. The **tree** view instead ships a placeholder `x:DataType="vm:TreeViewModel"` with `xmlns:vm="using:MyApp.Views"`, which **fails to compile until you repoint it** at your ViewModels namespace. That failure is deliberate: a clear error beats a canvas that silently renders nothing. See [templates.md](../templates.md#checking-the-generated-suite).
-
-## Adding your own content to a node
-
-`<Viewbox Stretch="Uniform">` around content pinned to the node's design size, same as WPF — put your controls inside the design canvas and give them design-size coordinates.
-
-⚙ **Do not compensate for zoom in your markup**, and do not move the port visuals; the links follow the measured anchors.
 
 ## Zoom and pan
 

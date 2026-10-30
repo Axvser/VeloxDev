@@ -1,6 +1,9 @@
 # Skills
 
-Claude Code skills this repository ships **for developers using the library**. They are part of the repository, not of anyone's local configuration — the copies under a machine's `.claude/skills/` are installs of these.
+Claude Code skills this repository ships. The seven developer skills are for developers using the
+library; `veloxdev-release/` is a maintainer-only skill, documented separately below. All of them are
+part of the repository, not of anyone's local configuration — the copies under a machine's
+`.claude/skills/` are installs of these.
 
 ## What these skills are for
 
@@ -12,6 +15,8 @@ That means two things, in every skill:
 - **customization happens at the intended seam** — where each extension point is, and the shortcut to avoid, because almost every extension point in this library can also be reached the wrong way and still compile.
 
 They are written for a developer who has added a NuGet package or cloned the repository, not for someone maintaining the repository itself. How this repository's own adapter projects and demos are maintained, and how a release is cut, are deliberately out of scope; building an adapter for a GUI the library does not support is in scope.
+
+The `veloxdev-create-workflow` skill's default canvas is the **whole item-template suite** — all seven roles, including the decorator (floating rulers) and the minimap. Its generated node view is the elastic `Viewbox`/layout-only container; extend that container rather than replacing it with a fixed or clipped layout.
 
 ## Install
 
@@ -25,7 +30,7 @@ Copy the skill's **whole directory** into the `.claude/skills/` of the project y
 
 Copy it to `~/.claude/skills/` instead to have it available in every project on that machine.
 
-The seven skills are written as a set, and a few link into a sibling. `veloxdev-write-viewmodels` and `veloxdev-create-workflow` cross-reference `veloxdev-create-workflow`, `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so install all seven when you can, and read a dead cross-link as "install that skill, or find the same rule in this one".
+The seven developer skills are written as a set, and a few link into a sibling. `veloxdev-write-viewmodels` and `veloxdev-create-workflow` cross-reference `veloxdev-create-workflow`, `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so install all seven when you can, and read a dead cross-link as "install that skill, or find the same rule in this one". The maintainer-only `veloxdev-release` is **not** part of this set and is documented separately below.
 
 The **directory name is the skill name** — it has to match the `name:` in the file's frontmatter. Nothing else is needed: Claude Code reads the frontmatter `description` and loads the skill on its own when a request matches.
 
@@ -34,8 +39,8 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 ## What is here
 
 | Skill | When it fires |
-|---|---|
-| `veloxdev-create-workflow` | Building a workflow editor — authoring Tree / Node / Slot / Link ViewModels, compiling and running a graph, putting the canvas on screen on any of the seven supported GUIs, or designing an adapter and item templates for a GUI that has none |
+| --- | --- |
+| `veloxdev-create-workflow` | Building a workflow editor — authoring Tree / Node / Slot / Link ViewModels, compiling and running a graph, scaffolding all seven item-template views (floating rulers and minimap included), putting the canvas on screen on any of the seven supported GUIs, or designing an adapter and item templates for a GUI that has none |
 | `veloxdev-drive-workflow-with-ai` | Letting an LLM inspect, build and run a workflow graph — the Workflow Agent tool surface, host policy gates and call budgets, `[AgentContext]` documentation, switchable skills, MCP servers, and background sub-agents (each subsystem usable on its own, too) |
 | `veloxdev-create-animation` | Writing VeloxDev interpolation animations — which adapter package to reference, the canonical declaration layout, static-reuse versus create-and-discard, the index forms, and building an adapter for a GUI with no official one |
 | `veloxdev-switch-themes` | Runtime themes that can animate when they change — declaring a theme, `[ThemeConfig]`, `InitializeTheme()`, and switching with `SetCurrent` / `Jump` / `Transition` |
@@ -46,10 +51,21 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 ## Skills with references
 
 | Skill | References |
-|---|---|
+| --- | --- |
 | `veloxdev-create-workflow` | `references/model.md` (Tree/Node/Slot/Link, helpers, undo, serialization) · `canvas-math.md` (the complete coordinate model) · `execution.md` (the compiler and runtime engine) · `view-layer.md` (what any GUI must supply) · `input.md` (the input route, the handle and the argument family) · `templates.md` (the `dotnet new` packs) · `new-adapter.md` (supporting an unsupported GUI) · `gui/<gui>.md` × 7 (per-GUI adapter and template detail) |
 | `veloxdev-drive-workflow-with-ai` | `references/tools.md` (the tool surface, by category) · `references/mcp.md` (MCP configuration and lifecycle) |
 | `veloxdev-create-animation` | `references/adapter.md` (the transition-system adapter contract) |
+
+## Maintainer skill
+
+`veloxdev-release/` is **not** one of the seven developer skills. It cuts this repository's own
+NuGet release, and it is self-contained and unrelated to the others. Its frontmatter sets
+`disable-model-invocation: true`: it may only be run when the maintainer explicitly asks, never
+automatically and never from another skill. Do not install it into a consuming project.
+
+The copy under `.claude/skills/veloxdev-release/` is the local install of this source; keep the
+`skills/` copy as the versioned one. Its only reference is `references/package-plan.md` (the 16
+packages, the bump script and the publish/verify commands).
 
 ## Keeping them accurate
 

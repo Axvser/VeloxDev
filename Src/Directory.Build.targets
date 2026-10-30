@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    A build-only release run packs the dependents in Release, but the Core version that run is
+    about to publish does not exist on NuGet yet. With VeloxDevLocalCore=true, swap the package
+    reference for the working tree's project.
+
+    This lives here, not in each csproj: the version stays written directly in every project
+    (e.g. Version="10.1.0"), and the release procedure rewrites that literal. The condition applies
+    only to projects that actually consume VeloxDev.Core, so the Core project itself and unrelated
+    projects under Src/ are left alone.
+  -->
+  <ItemGroup Condition="'$(VeloxDevLocalCore)' == 'true' And '$(Configuration)' != 'Debug'">
+    <_VeloxDevCoreConsumer Include="@(PackageReference->WithMetadataValue('Identity', 'VeloxDev.Core'))" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(VeloxDevLocalCore)' == 'true' And '$(Configuration)' != 'Debug' And '@(_VeloxDevCoreConsumer)' != ''">
+    <PackageReference Remove="VeloxDev.Core" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Core/VeloxDev.Core/VeloxDev.Core.csproj" />
+  </ItemGroup>
+
+</Project>
