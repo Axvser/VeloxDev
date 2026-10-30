@@ -849,6 +849,10 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
                 card.ApplyScale();
                 Canvas.SetLeft(card, node.Anchor.Horizontal + _tree.Layout.ActualOffset.Horizontal);
                 Canvas.SetTop(card, node.Anchor.Vertical + _tree.Layout.ActualOffset.Vertical);
+
+                // 节点移动/缩放会改变哪些节点和连线落在视口里，但视口本身没变，不会自己重跑虚拟化。
+                // 标脏让 helper 在下一 tick 重算 VisibleItems；否则 HUD 的「元素 节点/连线」要等下一次滚动才更新。
+                _tree.GetHelper().MarkDirty();
             }
         }
 

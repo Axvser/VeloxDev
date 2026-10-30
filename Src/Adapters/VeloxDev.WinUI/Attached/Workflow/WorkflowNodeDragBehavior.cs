@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
@@ -102,6 +103,14 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
             return;
         }
 
+        // 卡片里也有按钮、文本框、下拉框和滑块：它们自己要吃这一笔（按钮的 Click、文本的选择/编辑、
+        // 下拉的展开）。WinUI 的指针事件先到子元素、再冒泡到这里，若这里无条件 CapturePointer 并置
+        // Handled，子控件就再也收不到 Release，Compile/Run 这类按钮因此像“点了没反应”。
+        if (IsInteractiveSource(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
         var node = ResolveNode(control);
         if (node is null)
         {
@@ -126,6 +135,21 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
         state.IsDragging = true;
         control.CapturePointer(e.Pointer);
         e.Handled = true;
+    }
+
+    // 只拦真正要输入的控件；卡面、标题、脚本外框仍可从任意位置拖动。
+    private static bool IsInteractiveSource(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is ButtonBase or TextBox or RichEditBox or PasswordBox
+                or ComboBox or ToggleSwitch or RangeBase)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void OnPointerMoved(object sender, PointerRoutedEventArgs e)

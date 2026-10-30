@@ -122,7 +122,7 @@ WinUI 是七家里唯一需要挂两级的。
 所以这条不再是「重命名演示里的连线视图类型会静默改变手势」的来源。路由的 `Target` 也用同一套 DataContext 判定（`ResolveTarget`）—— 见 L9。
 
 **L9 · 四个自带手势的否决：组件自己路由这一笔按下，`PressRouted` 保证一笔只路由一次。**
-这家没有隧道相，节点卡片与插槽比表面先跑，所以句柄只能由组件自己交回路由：`RouteComponentPress(control, component, e)` 的 `Target` 就是组件本身（`WorkflowSurfaceBehavior.RouteComponentPress`），节点拖动（`WorkflowNodeDragBehavior.cs` 的 `OnPointerPressed`）与插槽连接（`WorkflowSlotConnectionBehavior.cs` 的 `OnPointerPressed`）起手势前读它的 `PreventDefault`；表面平移那处先看 `SurfaceState.PressRouted`（`SurfaceState` 的字段），没被路由过就自己路由并置位（`OnPointerPressed`），Ctrl+滚轮同样路由（`OnSurfaceWheel` 的缩放分支）。
+这家没有隧道相，节点卡片与插槽比表面先跑，所以句柄只能由组件自己交回路由：`RouteComponentPress(control, component, e)` 的 `Target` 就是组件本身（`WorkflowSurfaceBehavior.RouteComponentPress`），节点拖动（`WorkflowNodeDragBehavior.cs` 的 `OnPointerPressed`）与插槽连接（`WorkflowSlotConnectionBehavior.cs` 的 `OnPointerPressed`）起手势前读它的 `PreventDefault`；表面平移那处先看 `SurfaceState.PressRouted`（`SurfaceState` 的字段），没被路由过就自己路由并置位（`OnPointerPressed`），Ctrl+滚轮同样路由（`OnSurfaceWheel` 的缩放分支）。**卡片内的 `ButtonBase` / `TextBox` / `RichEditBox` / `PasswordBox` / `ComboBox` / `ToggleSwitch` / `RangeBase` 不能起拖动**：它们自己要吃下这一笔；`WorkflowNodeDragBehavior.OnPointerPressed` 若仍 `CapturePointer` 并置 `Handled`，子控件收不到 Release，Compile/Run 等按钮表现为「点了没反应」。`IsInteractiveSource` 从 `OriginalSource` 向上找这些基类并直接返回。
 **坑**：不能用 `e.Handled` 代替这个标记 —— 表面的按下处理器是 `handledEventsToo: true` 挂的（`Attach` 里的 `AddHandler`），无视 `Handled` 照跑；标记只由冒泡链上最后的连线处理器消费并清除（`OnLinkPointerPressed`），所以那个处理器必须保持 `handledEventsToo: true`。
 
 ---

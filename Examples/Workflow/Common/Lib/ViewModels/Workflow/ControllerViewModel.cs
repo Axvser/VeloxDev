@@ -11,7 +11,28 @@ namespace Demo.ViewModels;
 [DefaultSize(230, 170)]
 public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
 {
-    public ControllerViewModel() => InitializeWorkflow();
+    // 命令体在管线的线程池线程上继续执行（CommandPipeline 在锁后 ConfigureAwait(false)），而这里的
+    // HasCompiledGraphs / RuntimeContext / IsActive 都被 WinUI 绑定。WinUI 不像 WPF 那样替后台
+    // PropertyChanged 编组，所以把 UI 可见的写入送回创建时的上下文；无上下文（headless）时原地执行。
+    private readonly SynchronizationContext? _hostContext;
+
+    public ControllerViewModel()
+    {
+        _hostContext = SynchronizationContext.Current;
+        InitializeWorkflow();
+    }
+
+    private void OnHost(Action action)
+    {
+        var context = _hostContext;
+        if (context is null || ReferenceEquals(SynchronizationContext.Current, context))
+        {
+            action();
+            return;
+        }
+
+        context.Post(static state => ((Action)state!)(), action);
+    }
 
     // ── Compile / Run ──────────────────────────────────────────────────────────
     /// <summary>Compilation result (the compiled graphs rooted at this controller).</summary>
@@ -50,10 +71,14 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     private async Task Compile(object? parameters, CancellationToken ct)
     {
         await Compiler.CompileAsync(this, CompileRole.Root);
-        OnPropertyChanged(nameof(HasCompiledGraphs));
 
         // 推给树，和 Run 推 BeginWorkflowRun 是同一套：树不订阅控制器的属性变化。
-        (Parent as TreeViewModel)?.RefreshCompiledStructure(this);
+        // 两者都回到 UI 上下文再写，WinUI 的 IsEnabled 绑定才会看到。
+        OnHost(() =>
+        {
+            OnPropertyChanged(nameof(HasCompiledGraphs));
+            (Parent as TreeViewModel)?.RefreshCompiledStructure(this);
+        });
     }
 
     /// <summary>
@@ -94,8 +119,11 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         _configureSession?.Invoke(context);
 
         // 会话先挂上去，下面「没有检查点」的那行才有人看得到。
-        RuntimeContext = context;
-        OnPropertyChanged(nameof(RuntimeContext));
+        OnHost(() =>
+        {
+            RuntimeContext = context;
+            OnPropertyChanged(nameof(RuntimeContext));
+        });
 
         ExecutionCheckpoint? place = null;
         if (resume)
@@ -111,8 +139,11 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         // IsActive 是这里写、别处读的：Blazor 的状态栏与 Stop 按钮直接绑它，树的 IsWorkflowRunning 由它推导。
         // 在此之前它从没被写过，所以状态栏永远显示 Idle、Stop 永远禁用。
         var tree = Parent as TreeViewModel;
-        IsActive = true;
-        tree?.BeginWorkflowRun();
+        OnHost(() =>
+        {
+            IsActive = true;
+            tree?.BeginWorkflowRun();
+        });
 
         _runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
@@ -126,8 +157,11 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
 
             // 先清自己的标志再让树重新推导 —— RefreshWorkflowRunningState 读的正是 IsActive，
             // 而同一棵树上可能有多个控制器，只有全部停下才算停
-            IsActive = false;
-            tree?.RefreshWorkflowRunningState();
+            OnHost(() =>
+            {
+                IsActive = false;
+                tree?.RefreshWorkflowRunningState();
+            });
         }
     }
 
