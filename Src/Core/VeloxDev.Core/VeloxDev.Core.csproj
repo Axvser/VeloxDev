@@ -16,7 +16,7 @@
 		<!-- 本程序集的 Agent 面属于框架侧：生成的分片挂在 Framework/ 根下，而不是 Customer/。 -->
 		<VeloxAgentContextTreeRoot>Framework</VeloxAgentContextTreeRoot>
 		<Title>VeloxDev.Core</Title>
-		<Version>10.0.1</Version>
+		<Version>10.1.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI ...</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>

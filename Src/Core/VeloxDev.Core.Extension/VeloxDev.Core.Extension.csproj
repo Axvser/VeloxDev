@@ -8,7 +8,7 @@
 		<!-- 见 VeloxDev.Core.csproj：net8.0 那一档承载裁剪/AOT 契约，分析器常开。 -->
 		<IsAotCompatible Condition="'$(TargetFramework)' == 'net8.0'">true</IsAotCompatible>
 		<Title>VeloxDev.Core.Extension</Title>
-		<Version>10.0.1</Version>
+		<Version>10.1.0</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<Description>Optional companion to the dependency-free VeloxDev.Core. Adds MAF-based Workflow Agent tools (60+ function-calling tools, MCP support) and runtime extensions for building AI-controllable workflow editors on WPF, Avalonia, WinUI, MAUI, WinForms, and Blazor/Razor.</Description>
@@ -22,7 +22,7 @@
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.10.0" />
 		<PackageReference Include="ModelContextProtocol" Version="2.2.0" />
 		<ProjectReference Include="../VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="10.0.1" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="10.1.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 	<!-- 本项目自己也用生成器特性，而 analyzer 不随 ProjectReference 传递。 -->
