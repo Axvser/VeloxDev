@@ -165,6 +165,7 @@ RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/Ru
 - **同一套 NaN 约定还贯穿空间索引**：bounds 为空/NaN 的条目会被登记用于变更跟踪但**不进网格**（`GUI/Virtualization/SpatialGridHashMap.cs` 的 `Insert` 里 `if (!b.IsEmpty) IndexItem(...) else _unindexed.Add(item)`），端点未定位时连线对返回 `Empty` bounds（`GUI/Virtualization/NodePairBoundsProvider.cs` 的 `CalculateBounds` 里 `if (bA.IsEmpty || bB.IsEmpty) return Viewport.Empty;`），所以未测量的节点不会以 NaN 坐标进索引。
 - 坐标系约定：`SlotAnchorFromVisualCenter` = `视觉中心 − ActualOffset`（即画布局部），`SlotAnchorFromNode` = 节点锚点 + 局部偏移，`SlotAnchorFromCanvasLocal` 用于已经是画布局部坐标的情形。三个都在 `GUI/Math/WorkflowSurfaceMath.cs` 的 `SlotAnchorFromVisualCenter` / `SlotAnchorFromNode` / `SlotAnchorFromCanvasLocal`。
 - 渲染变换是 `ScaleCollapse` = `(1/scaleX, 1/scaleY, -anchorX, -anchorY)`（`WorkflowSurfaceMath.cs` 的 `ScaleCollapse`）。`CanvasLayout.Update()` 在 `Scale < 1` 时把 `ActualSize` 放大 `1/Scale`（`CanvasLayout.cs` 的 `Update`），否则折叠后的内容会越出画布。
+- **流光的每帧成本按平台不同**：WinUI 用 composition 预建 strips，每帧只写 `Start`/`End`/`Brush.Color`；MAUI overlay 预分配采样与 body，每帧 `DrawLine`；WPF / Avalonia / WinForms / Jalium 复用 body 几何、静态笔和尾段几何槽，透明度用 `PushOpacity`（Avalonia 的 `PolylineGeometry` 点集合必须经属性赋值一次才会订阅变更；WPF 的 `PathGeometry` 可原地改点；Jalium 的整帧录制会克隆可变几何）。Blazor 仍逐 Link 重渲染，但 body / 采样文本 / 颜色 / 线宽 / `CometStop` 已缓存；每帧仍生成 tail path 字符串。详见各适配器记忆与 demo 源码。
 
 ### 3.5 虚拟化
 

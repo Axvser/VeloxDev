@@ -165,8 +165,12 @@ public sealed partial class PolylineCurveView : UserControl
     private bool _running;
     private bool _isLoaded;
 
+    // 每帧一次重画的入口。存成字段只建一次：就地写 lambda 会捕获 this，那就是每帧一次分配。
+    private readonly EventHandler<TransitionEventArgs> _flowLateUpdate;
+
     public PolylineCurveView()
     {
+        _flowLateUpdate = OnFlowLateUpdate;
         InitializeComponent();
         Canvas.SetZIndex(this, -100);
 
@@ -280,28 +284,20 @@ public sealed partial class PolylineCurveView : UserControl
     /// Animated rather than computed, and the armature the whole comet hangs off: the value carries no geometry of
     /// its own — the arc-length table turns it into points — which is what lets the light follow a curve. A plain
     /// property rather than a dependency property, deliberately: the transition system writes animatable members
-    /// through compiled reflection paths, and the write lands straight in the redraw instead of going through
-    /// <c>SetValue</c> first.
+    /// through compiled reflection paths, and the write lands in the field instead of going through <c>SetValue</c>
+    /// first. The setter does not draw by itself: both scalars of a frame are written before the flow redraws once.
     /// </remarks>
     public double BandHead
     {
         get => _bandHead;
-        set
-        {
-            _bandHead = value;
-            RedrawComet();
-        }
+        set => _bandHead = value;
     }
 
     /// <summary>How lit the comet is: 0 while it is absent, 1 while it travels.</summary>
     public double BandIntensity
     {
         get => _bandIntensity;
-        set
-        {
-            _bandIntensity = value;
-            RedrawComet();
-        }
+        set => _bandIntensity = value;
     }
 
     private double _bandHead;
@@ -313,29 +309,37 @@ public sealed partial class PolylineCurveView : UserControl
         // 相位一：从发送端出发，一边走一边亮起
         .Property(v => v.BandHead, BandFormed)
         .Property(v => v.BandIntensity, 1d)
-        .Effect(new TransitionEffect()
-        {
-            Duration = EnterDuration,
-            Ease = Eases.Default,
-        })
+        .Effect(FlowEffect(EnterDuration))
         .Then()
         // 相位二：全亮行进——这一段读起来才是流动而非脉冲
         .Property(v => v.BandHead, BandLeaving)
-        .Effect(new TransitionEffect()
-        {
-            Duration = TravelDuration,
-            Ease = Eases.Default,
-        })
+        .Effect(FlowEffect(TravelDuration))
         .Then()
         // 相位三：到达并熄灭。两端都是「没有光」的状态，循环接缝才看不出来
         .Property(v => v.BandHead, 1d)
         .Property(v => v.BandIntensity, 0d)
-        .Effect(new TransitionEffect()
-        {
-            Duration = ExitDuration,
-            Ease = Eases.Default,
-        })
+        .Effect(FlowEffect(ExitDuration))
         .Repeat(int.MaxValue);
+
+    // 一段相位的效果：时长固定、匀速（流水不该有缓动，头部的速度一变化就不像在流了）。
+    // 每帧只重画一次挂在这里，而不是挂在两个标量的 setter 上：解释器的次序是
+    // 「Update → 写本段全部属性 → LateUpdate」（TransitionInterpreterCore.RunPassAsync），
+    // 所以 LateUpdate 到达时这一帧的两个标量都已落地，画一次合成的结果即可。
+    // setter 各自重画会在相位一/三相把同一帧画两遍（实测加权 ≈1.56 次/帧），那是白烧的 CPU。
+    private TransitionEffect FlowEffect(TimeSpan duration)
+    {
+        var effect = new TransitionEffect()
+        {
+            Duration = duration,
+            Ease = Eases.Default,
+        };
+        effect.LateUpdate += _flowLateUpdate;
+        return effect;
+    }
+
+    // WinUI 的帧调度器（DispatcherQueueFramePacer）把采样循环留在 UI 线程上，所以这里可以直接写合成对象，
+    // 不必像 Blazor 那样再经 InvokeAsync 编组一次。
+    private void OnFlowLateUpdate(object? sender, TransitionEventArgs e) => RedrawComet();
 
     // 从发送端起动周期；视图复用后会换链接，所以在挂载与改绑时都要重起一次
     private void StartFlow()
@@ -355,8 +359,7 @@ public sealed partial class PolylineCurveView : UserControl
 
         _flow ??= BuildFlow();
 
-        // 声明从目标读起值，所以执行前必须把两个标量摆到周期起点（直接写字段，不经过 setter，
-        // 免得在 Execute 之前先画一帧假的）；循环在每个接缝重放这一份起始状态
+        // 声明从目标读起值，所以执行前必须把两个标量摆到周期起点；循环在每个接缝重放这一份起始状态
         _bandHead = 0;
         _bandIntensity = 0;
 

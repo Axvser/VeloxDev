@@ -109,28 +109,61 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     // 阶段色是本 demo 的外观：有效绿、无效红，其余沿用模板给的线色。
     private const string PreviewValidColor = "#FF34D399";
     private const string PreviewInvalidColor = "#FFF87171";
+    private const string DefaultLineColor = "#CC38BDF8";
+
+    // 常量色只解析一次：这几个属性每帧被 Razor 读多次，解析结果本身不会变
+    private static readonly string PreviewValidCss = ToCss(PreviewValidColor);
+    private static readonly string PreviewInvalidCss = ToCss(PreviewInvalidColor);
+    private static readonly string DefaultLineCss = ToCss(DefaultLineColor);
+    private static readonly string SelectedColorCss = ToCss(SelectedColor);
 
     private string StageColor => _preview switch
     {
-        ConnectionPreviewState.ValidTarget => ToCss(PreviewValidColor),
-        ConnectionPreviewState.InvalidTarget => ToCss(PreviewInvalidColor),
+        ConnectionPreviewState.ValidTarget => PreviewValidCss,
+        ConnectionPreviewState.InvalidTarget => PreviewInvalidCss,
         _ => LineColor,
     };
 
-    private string LineColor => LineColorOverride ?? ToCss("#CC38BDF8");
+    // 线色按值缓存：父级每帧传入同一个字符串时不再重跑 ToCss
+    private string? _lineColorKey;
+    private bool _lineColorKeySet;
+    private string _lineColorCss = DefaultLineCss;
+
+    private string LineColor
+    {
+        get
+        {
+            var value = LineColorOverride;
+            if (!_lineColorKeySet || !string.Equals(_lineColorKey, value, StringComparison.Ordinal))
+            {
+                _lineColorKeySet = true;
+                _lineColorKey = value;
+                _lineColorCss = value ?? DefaultLineCss;
+            }
+
+            return _lineColorCss;
+        }
+    }
+
+    // 线宽解析同样只在参数变化时做一次：光晕、管壁与每段宽度都要问它
+    private string? _thicknessKey;
+    private double _thicknessValue = 2;
 
     private double Thickness
     {
         get
         {
-            if (ThicknessOverride is not null
-                && double.TryParse(ThicknessOverride, NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out var t))
+            var key = ThicknessOverride;
+            if (!string.Equals(_thicknessKey, key, StringComparison.Ordinal))
             {
-                return t;
+                _thicknessKey = key;
+                _thicknessValue = key is not null
+                    && double.TryParse(key, NumberStyles.Float, CultureInfo.InvariantCulture, out var t)
+                        ? t
+                        : 2;
             }
 
-            return 2;
+            return _thicknessValue;
         }
     }
 
@@ -172,9 +205,40 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private bool EffectiveIsVirtual => IsVirtualOverride ?? IsVirtual;
 
     // 数值一律走不变文化：Razor 按当前区域写裸 double，逗号小数点会让浏览器读不出这个属性
-    private string CanvasWidthCss => N(CanvasWidth);
-    private string CanvasHeightCss => N(CanvasHeight);
-    private string ThicknessCss => N(Thickness);
+    // 画布尺寸按值缓存，参数不动时不再每帧格式化
+    private bool _canvasWidthSet;
+    private double _canvasWidthValue;
+    private string _canvasWidthCss = "";
+
+    private string CanvasWidthCss
+    {
+        get
+        {
+            if (_canvasWidthSet && _canvasWidthValue == CanvasWidth) return _canvasWidthCss;
+            _canvasWidthSet = true;
+            _canvasWidthValue = CanvasWidth;
+            return _canvasWidthCss = N(CanvasWidth);
+        }
+    }
+
+    private bool _canvasHeightSet;
+    private double _canvasHeightValue;
+    private string _canvasHeightCss = "";
+
+    private string CanvasHeightCss
+    {
+        get
+        {
+            if (_canvasHeightSet && _canvasHeightValue == CanvasHeight) return _canvasHeightCss;
+            _canvasHeightSet = true;
+            _canvasHeightValue = CanvasHeight;
+            return _canvasHeightCss = N(CanvasHeight);
+        }
+    }
+
+    private string ThicknessCss => _thicknessCss;
+    private string HaloOuterCss => _haloOuterCss;
+    private string HaloInnerCss => _haloInnerCss;
     private double HaloOuterWidth => LitThickness + 9;
     private double HaloInnerWidth => LitThickness + 4;
 
@@ -251,11 +315,29 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
         // 一相的效果：直线时长 + 本组件的重绘。这里没有可达渲染对象的画刷，只能逐帧交给渲染器。
         // 用 LateUpdate 而非 Update：它在当帧的写入落地后才触发，渲染的是刚写下的那帧。
-        effect.LateUpdate += (_, _) => InvokeAsync(StateHasChanged);
+        effect.LateUpdate += (_, _) => RequestRender();
 
         return Transition<TemplateLinkView>.Create()
             .Property(v => v.Phase, 1d)
             .Effect(effect);
+    }
+
+    // 每帧最多排一次渲染：同一帧里若有多帧回调，后续的合并进已排好的那一次。
+    // 动画时钟不变，只是把重复的 StateHasChanged 排队去掉。
+    private bool _renderQueued;
+    private Action? _flushRender;
+
+    private void RequestRender()
+    {
+        if (_renderQueued) return;
+        _renderQueued = true;
+        _ = InvokeAsync(_flushRender ??= FlushRender);
+    }
+
+    private void FlushRender()
+    {
+        _renderQueued = false;
+        StateHasChanged();
     }
 
     // 已连接的链接从发送端起周期，虚拟链接停周期：橡皮筋上流动会宣称一条还不存在的连接
@@ -317,12 +399,59 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private double _cacheEx;
     private double _cacheEy;
 
+    // 采样点的文本与整条线体路径随曲线缓存：曲线不动时它们逐帧复用，不再重建
+    private string[] _samplePoints = Array.Empty<string>();
+    private readonly StringBuilder _segmentBuilder = new(256);
+
+    /// <summary>The full resting curve, as one path.</summary>
+    private string BodyPath { get; set; } = "";
+
     // 彗星的两遍（光晕在前、本体在后）拼成一条列表，Razor 只跑一次循环。
     // 够不着的段把不透明度压到零而不是删掉：元素数恒定，diff 才不会每帧建删元素。
+    // 元素对象与列表都复用到定长：每帧只改写字段，不再逐帧构造记录。
     private readonly List<CometStop> _comet = new(TailSegments * 2);
+    private readonly CometStop[] _cometPool = CreateCometPool();
+
+    // 每帧只随头位置变化的量；颜色与宽度留在下面的缓存里
+    private readonly string[] _segmentD = new string[TailSegments];
+    private readonly double[] _segmentA = new double[TailSegments];
+    private readonly bool[] _segmentHidden = new bool[TailSegments];
+
+    // 固定样式：随选中状态 / 线宽 / 线色变化，而不是随帧变化
+    private readonly string[] _mixColors = new string[TailSegments];
+    private readonly string[] _bodyWidthCss = new string[TailSegments];
+    private bool _styleValid;
+    private bool _styleLit;
+    private double _styleThickness = double.NaN;
+    private string _thicknessCss = "2";
+    private string _litThicknessCss = "2";
+    private string _haloOuterCss = "11";
+    private string _haloInnerCss = "6";
+
+    private bool _cometColorValid;
+    private bool _cometColorLit;
+    private string? _cometColorKey;
 
     /// <summary>One drawn piece of the comet: a polyline run, its colour, its opacity and its width.</summary>
-    private readonly record struct CometStop(string D, string Color, string Opacity, string Width);
+    /// <remarks>
+    /// Mutable and pooled: a frame only rewrites these fields, so the 32 stops cost no per-frame
+    /// allocation. Blazor reads the fields when it builds the render tree, so the new values are diffed
+    /// exactly as they were when each stop was a fresh record.
+    /// </remarks>
+    private sealed class CometStop
+    {
+        public string D { get; set; } = "";
+        public string Color { get; set; } = "";
+        public string Opacity { get; set; } = "0";
+        public string Width { get; set; } = "";
+    }
+
+    private static CometStop[] CreateCometPool()
+    {
+        var pool = new CometStop[TailSegments * 2];
+        for (int i = 0; i < pool.Length; i++) pool[i] = new CometStop();
+        return pool;
+    }
 
     /// <summary>
     /// Refreshes the arc-length table (only when the endpoints moved) and rebuilds the comet for this
@@ -346,9 +475,11 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
             _cacheEx = ex;
             _cacheEy = ey;
             _curve = LinkCurve.BuildLinkCubic(Link, sx, sy, ex, ey, PullMinimum, LinkCurve.DefaultSampleCount);
+            CacheCurveText();
             Link?.PublishCurve(_curve, this);
         }
 
+        EnsureStyles();
         BuildComet();
         return true;
     }
@@ -382,6 +513,31 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return !double.IsNaN(sx) && !double.IsNaN(sy) && !double.IsNaN(ex) && !double.IsNaN(ey);
     }
 
+    // 曲线变化时才重建：每个采样点的 "Lx,y" 与整条线体的 d 都只格式化一次。
+    // 之后逐帧切段只拼缓存好的采样文本，不再每点重跑 ToString。
+    private void CacheCurveText()
+    {
+        var curve = _curve;
+        if (curve is null || curve.Count == 0)
+        {
+            _samplePoints = Array.Empty<string>();
+            BodyPath = "";
+            return;
+        }
+
+        if (_samplePoints.Length != curve.Count) _samplePoints = new string[curve.Count];
+
+        var sb = _segmentBuilder;
+        for (int i = 0; i < curve.Count; i++)
+        {
+            sb.Clear();
+            sb.Append('L').Append(N(curve.XAt(i))).Append(',').Append(N(curve.YAt(i)));
+            _samplePoints[i] = sb.ToString();
+        }
+
+        BodyPath = curve.Length > 0 ? SegmentPath(0, curve.Length) : "";
+    }
+
     // 取 [from, to] 这一段弧长上的折线。两端各自插值到精确位置，中间用现成采样点。
     // 返回 SVG 的 path d —— 一段拖尾就是一个独立的元素，才能各带各的颜色与不透明度
     private string SegmentPath(double from, double to)
@@ -393,15 +549,16 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         from = Math.Clamp(from, 0, curve.Length);
         if (to <= from) return "";
 
-        var sb = new StringBuilder();
+        var sb = _segmentBuilder;
+        sb.Clear();
         var start = curve.PointAtLength(from);
         sb.Append('M').Append(N(start.X)).Append(',').Append(N(start.Y));
 
-        for (int i = 0; i < curve.Count; i++)
+        // 弧长单调，二分到第一个 > from 的采样点，只走这段窗口内的点
+        for (int i = FirstIndexAfter(curve, from); i < curve.Count; i++)
         {
-            double l = curve.LengthAt(i);
-            if (l <= from || l >= to) continue;
-            sb.Append('L').Append(N(curve.XAt(i))).Append(',').Append(N(curve.YAt(i)));
+            if (curve.LengthAt(i) >= to) break;
+            sb.Append(_samplePoints[i]);
         }
 
         var end = curve.PointAtLength(to);
@@ -409,8 +566,61 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         return sb.ToString();
     }
 
-    /// <summary>The full resting curve, as one path.</summary>
-    private string BodyPath { get; set; } = "";
+    private static int FirstIndexAfter(LinkCurve curve, double length)
+    {
+        int lo = 0;
+        int hi = curve.Count;
+        while (lo < hi)
+        {
+            int mid = (lo + hi) >> 1;
+            if (curve.LengthAt(mid) <= length) lo = mid + 1;
+            else hi = mid;
+        }
+
+        return lo;
+    }
+
+    // 选中 / 线宽变化时才重新格式化：这些字符串每帧都被 Razor 读到
+    private void EnsureStyles()
+    {
+        var thickness = Thickness;
+        if (_styleValid && _styleLit == IsLit && _styleThickness == thickness) return;
+
+        _styleValid = true;
+        _styleLit = IsLit;
+        _styleThickness = thickness;
+
+        _thicknessCss = N(thickness);
+        _litThicknessCss = N(LitThickness);
+        _haloOuterCss = N(HaloOuterWidth);
+        _haloInnerCss = N(HaloInnerWidth);
+        for (int k = 0; k < TailSegments; k++)
+        {
+            double f0 = k / (double)TailSegments;
+            _bodyWidthCss[k] = N(thickness * (0.45 + (0.95 * f0)));
+        }
+    }
+
+    // 彗星配色只在选中状态或线色变化时重算；每段“尾梢本色 → 头部白热”也因此只混一次
+    private void EnsureCometColors()
+    {
+        var key = IsLit ? SelectedColor : (LineColorOverride ?? DefaultLineColor);
+        if (_cometColorValid && _cometColorLit == IsLit
+            && string.Equals(_cometColorKey, key, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _cometColorValid = true;
+        _cometColorLit = IsLit;
+        _cometColorKey = key;
+
+        var body = ParseColor(key);
+        for (int k = 0; k < TailSegments; k++)
+        {
+            _mixColors[k] = MixToWhite(body, k / (double)TailSegments);
+        }
+    }
 
     /// <summary>
     /// The comet: the arc-length window [head − tail, head] cut into <see cref="TailSegments"/> pieces,
@@ -421,21 +631,20 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         _comet.Clear();
         var curve = _curve;
         double length = curve?.Length ?? 0;
-        BodyPath = length > 0 ? SegmentPath(0, length) : "";
 
+        // 线体 d 已随曲线缓存，逐帧只需重算彗星
         if (curve is null || length <= 0 || EffectiveIsVirtual)
         {
             return;
         }
 
+        EnsureCometColors();
+
         double intensity = Intensity;
         double head = Math.Clamp(Head, 0, 1) * length;
         double tail = TailFraction * length;
 
-        // 复用同一批颜色，别每段都解析一次。选中时彗星跟线体一起换色，否则高亮的线上会套一层原色光
-        var body = ParseColor(IsLit ? SelectedColor : (LineColorOverride ?? "#CC38BDF8"));
-
-        // 光晕一遍在前
+        // 每段只算一次：光晕与本体共用同一段 d，颜色与宽度都取缓存
         for (int k = 0; k < TailSegments; k++)
         {
             double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
@@ -446,41 +655,34 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
             // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
             double a = intensity * f0 * f0;
-            if (l1 <= 0 || l0 >= length || a <= 0.004)
-            {
-                _comet.Add(new CometStop("", LineColor, "0", N(HaloOuterWidth)));
-                continue;
-            }
+            bool hidden = l1 <= 0 || l0 >= length || a <= 0.004;
+            _segmentHidden[k] = hidden;
+            _segmentA[k] = a;
+            _segmentD[k] = hidden ? "" : SegmentPath(l0, l1);
+        }
 
-            // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部
-            _comet.Add(new CometStop(
-                SegmentPath(l0, l1),
-                MixToWhite(body, f0),
-                N(a * 0.22),
-                N(HaloOuterWidth)));
+        // 光晕一遍在前
+        for (int k = 0; k < TailSegments; k++)
+        {
+            var stop = _cometPool[k];
+            bool hidden = _segmentHidden[k];
+            stop.D = _segmentD[k];
+            stop.Color = hidden ? LineColor : _mixColors[k];
+            stop.Opacity = hidden ? "0" : N(_segmentA[k] * 0.22);
+            stop.Width = _haloOuterCss;
+            _comet.Add(stop);
         }
 
         // 本体一遍在后
         for (int k = 0; k < TailSegments; k++)
         {
-            double f0 = k / (double)TailSegments;
-            double f1 = (k + 1) / (double)TailSegments;
-
-            double l0 = head - (tail * (1 - f0));
-            double l1 = head - (tail * (1 - f1));
-
-            double a = intensity * f0 * f0;
-            if (l1 <= 0 || l0 >= length || a <= 0.004)
-            {
-                _comet.Add(new CometStop("", LineColor, "0", ThicknessCss));
-                continue;
-            }
-
-            _comet.Add(new CometStop(
-                SegmentPath(l0, l1),
-                MixToWhite(body, f0),
-                N(a),
-                N(Thickness * (0.45 + (0.95 * f0)))));
+            var stop = _cometPool[TailSegments + k];
+            bool hidden = _segmentHidden[k];
+            stop.D = _segmentD[k];
+            stop.Color = hidden ? LineColor : _mixColors[k];
+            stop.Opacity = hidden ? "0" : N(_segmentA[k]);
+            stop.Width = hidden ? _thicknessCss : _bodyWidthCss[k];
+            _comet.Add(stop);
         }
     }
 
@@ -546,9 +748,9 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     // 亮起来的两个理由：指针在线上，或页面把这条线选住了（右键菜单开着时指针已经不在线上）
     private bool IsLit => _hover || IsSelected;
 
-    private string LitColor => IsLit ? ToCss(SelectedColor) : StageColor;
+    private string LitColor => IsLit ? SelectedColorCss : StageColor;
     private double LitThickness => IsLit ? Thickness + SelectedWidthBonus : Thickness;
-    private string LitThicknessCss => N(LitThickness);
+    private string LitThicknessCss => _litThicknessCss;
     private string BodyOpacity => IsLit ? "0.85" : "0.55";
 
     // 命中交回描边：只有真正画出来的那圈参与命中（最宽的是外层管壁），距离判定由浏览器做。

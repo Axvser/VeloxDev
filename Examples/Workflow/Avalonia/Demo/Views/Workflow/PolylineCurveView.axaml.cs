@@ -1,8 +1,10 @@
 ﻿using Avalonia;
+using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
+using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
 
@@ -44,6 +46,27 @@ public partial class PolylineCurveView : Control
 
     // Core 的扁平化曲线：采样、弧长、包围盒都归它，本视图只读。端点变化时重建并发布给命中契约。
     private LinkCurve? _curve;
+
+    // 静息线体的几何与曲线同生共死：曲线不变它就不变，动画帧上不必重建。
+    private StreamGeometry? _body;
+
+    // 彗星复用同一批几何与画笔：每帧只改写点集与透明度，不再为每一段新建对象。
+    private readonly (PolylineGeometry Geometry, AvaloniaList<Point> Points)[] _tail = CreateTail();
+    private readonly List<Point> _segmentPoints = [];
+    private readonly double[] _tailOpacity = new double[TailSegments];
+    private readonly bool[] _tailActive = new bool[TailSegments];
+
+    // 配色/粗细只在属性变化时重建；动画帧只改透明度，所以这些 Pen 可以一直复用。
+    private readonly Pen[] _cometBloomPens = new Pen[TailSegments];
+    private readonly Pen[] _cometBodyPens = new Pen[TailSegments];
+    private Color _styleColor;
+    private double _styleThickness;
+    private bool _styleHighlighted;
+    private bool _styleReady;
+    private Pen? _glowOuter;
+    private Pen? _glowInner;
+    private Pen? _bodyPen;
+    private Pen? _dashedPen;
 
     private Transition<PolylineCurveView>? _flow;
     private bool _running;
@@ -283,8 +306,32 @@ public partial class PolylineCurveView : Control
     // 曲线由 Core 构建一次：与绘制读的是同一次构建，所以命中与画出来的永远是一条。
     private void RefreshGeometry()
     {
-        _curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        var curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        _curve = curve;
+        _body = curve.Length > 0 ? BuildSegment(0, curve.Length) : null;
+
+        // 每段最多「采样数 + 两个端点」个点；容量一次给足，动画帧上的 Clear/Add 就不会再扩容。
+        if (_segmentPoints.Capacity < curve.Count + 2)
+        {
+            _segmentPoints.Capacity = curve.Count + 2;
+        }
+
         PublishCurve();
+    }
+
+    // 每段一个可复用的折线几何。默认构造不订阅点集；经属性赋一次值，后续改写才会触发路径失效。
+    private static (PolylineGeometry Geometry, AvaloniaList<Point> Points)[] CreateTail()
+    {
+        var slots = new (PolylineGeometry, AvaloniaList<Point>)[TailSegments];
+        for (var i = 0; i < slots.Length; i++)
+        {
+            var geometry = new PolylineGeometry();
+            var points = new AvaloniaList<Point>();
+            geometry.Points = points;
+            slots[i] = (geometry, points);
+        }
+
+        return slots;
     }
 
     // 把画出来的形状交给链接的 Helper，界面据此判命中（见 ILinkHitTestable）。
@@ -325,6 +372,31 @@ public partial class PolylineCurveView : Control
         return geo;
     }
 
+    // 把 [from, to] 的点写进复用的几何。点集变化会通知几何失效，下一帧 Avalonia 据此重算路径。
+    private void BuildTailSegment(int slot, double from, double to)
+    {
+        var curve = _curve!;
+        to = Math.Min(to, curve.Length);
+        from = Math.Clamp(from, 0, curve.Length);
+
+        var buffer = _segmentPoints;
+        buffer.Clear();
+        buffer.Add(PointAtLength(from));
+
+        for (int i = 0; i < curve.Count; i++)
+        {
+            double l = curve.LengthAt(i);
+            if (l <= from || l >= to) continue;
+            buffer.Add(new Point(curve.XAt(i), curve.YAt(i)));
+        }
+
+        buffer.Add(PointAtLength(to));
+
+        var points = _tail[slot].Points;
+        points.Clear();
+        points.AddRange(buffer);
+    }
+
     // 弧长 → 点（Core 二分 + 段内插值，精确到亚像素，不受采样密度限制）
     private Point PointAtLength(double len)
     {
@@ -339,77 +411,111 @@ public partial class PolylineCurveView : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        if (!CanRender || _curve is not { Length: > 0 } curve) return;
+        if (!CanRender || _curve is not { Length: > 0 } || _body is null) return;
 
         var color = IsHighlighted ? HighlightColor : LineColor;
         var thickness = IsHighlighted ? LineThickness + 1.5 : LineThickness;
-        var body = BuildSegment(0, curve.Length);
+        EnsureStyle(color, thickness, IsHighlighted);
 
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
         // 两端才不像被截断的横截面
-        context.DrawGeometry(null, new Pen(new ImmutableSolidColorBrush(color, 0.10), thickness + 9) { LineCap = PenLineCap.Round }, body);
-        context.DrawGeometry(null, new Pen(new ImmutableSolidColorBrush(color, 0.16), thickness + 4) { LineCap = PenLineCap.Round }, body);
+        context.DrawGeometry(null, _glowOuter!, _body);
+        context.DrawGeometry(null, _glowInner!, _body);
 
         // 虚拟连线是指针下的橡皮筋：虚线、不流动
         if (IsVirtual)
         {
-            var dashed = new Pen(new ImmutableSolidColorBrush(color, 0.75), thickness)
-            {
-                DashStyle = new DashStyle([4.0, 2.0], 0),
-            };
-            context.DrawGeometry(null, dashed, body);
+            context.DrawGeometry(null, _dashedPen!, _body);
             return;
         }
 
         // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
-        var bodyAlpha = IsHighlighted ? 0.85 : 0.55;
-        context.DrawGeometry(null,
-            new Pen(new ImmutableSolidColorBrush(color, bodyAlpha), thickness) { LineCap = PenLineCap.Round }, body);
+        context.DrawGeometry(null, _bodyPen!, _body);
 
         if (BandIntensity > 0.001)
         {
-            DrawComet(context, color, thickness);
+            DrawComet(context);
+        }
+    }
+
+    // 画笔只在颜色、粗细或高亮变化时重建 —— 动画帧（BandHead/BandIntensity）不会走到这里。
+    private void EnsureStyle(Color color, double thickness, bool highlighted)
+    {
+        if (_styleReady && _styleColor == color && _styleThickness == thickness && _styleHighlighted == highlighted)
+        {
+            return;
+        }
+
+        _styleReady = true;
+        _styleColor = color;
+        _styleThickness = thickness;
+        _styleHighlighted = highlighted;
+
+        _glowOuter = new Pen(new ImmutableSolidColorBrush(color, 0.10), thickness + 9) { LineCap = PenLineCap.Round };
+        _glowInner = new Pen(new ImmutableSolidColorBrush(color, 0.16), thickness + 4) { LineCap = PenLineCap.Round };
+        _bodyPen = new Pen(new ImmutableSolidColorBrush(color, highlighted ? 0.85 : 0.55), thickness) { LineCap = PenLineCap.Round };
+        _dashedPen = new Pen(new ImmutableSolidColorBrush(color, 0.75), thickness)
+        {
+            DashStyle = new DashStyle([4.0, 2.0], 0),
+        };
+
+        // 彗星每段的白热颜色与宽度只取决于颜色和粗细；随帧变化的透明度留给 PushOpacity 去乘。
+        for (int k = 0; k < TailSegments; k++)
+        {
+            double f = k / (double)TailSegments;
+            var c = Mix(color, Colors.White, f);
+            _cometBloomPens[k] = new Pen(new ImmutableSolidColorBrush(c), thickness + 9);
+            _cometBodyPens[k] = new Pen(new ImmutableSolidColorBrush(c), thickness * (0.45 + (0.95 * f)))
+            {
+                // 圆头：头部因此是一个逐渐收拢的圆端，而不是截断的一刀
+                LineCap = PenLineCap.Round,
+            };
         }
     }
 
     // 彗星：沿弧长切出 [头-尾, 头] 这一段，分若干小段画，每段给一个递减的透明度与变化的颜色。
     // 不用渐变刷是因为它的轴是两端之间的直线，在曲线上会把光打偏（见类注释）。
-    private void DrawComet(DrawingContext context, Color color, double thickness)
+    private void DrawComet(DrawingContext context)
     {
         var curve = _curve!;
         double head = Math.Clamp(BandHead, 0, 1) * curve.Length;
         double tail = TailFraction * curve.Length;
 
+        // 先算好每段的弧长范围与透明度；两遍绘制共用同一份几何，只有画笔与透明度不同。
+        for (int k = 0; k < TailSegments; k++)
+        {
+            double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
+            double f1 = (k + 1) / (double)TailSegments;
+
+            double l0 = head - (tail * (1 - f0));
+            double l1 = head - (tail * (1 - f1));
+            _tailActive[k] = false;
+            if (l1 <= 0 || l0 >= curve.Length) continue;
+
+            // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
+            double a = BandIntensity * f0 * f0;
+            if (a <= 0.004) continue;
+
+            BuildTailSegment(k, l0, l1);
+            _tailOpacity[k] = a;
+            _tailActive[k] = true;
+        }
+
         // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来
         for (int pass = 0; pass < 2; pass++)
         {
             bool bloom = pass == 0;
+            var pens = bloom ? _cometBloomPens : _cometBodyPens;
 
             for (int k = 0; k < TailSegments; k++)
             {
-                double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
-                double f1 = (k + 1) / (double)TailSegments;
+                if (!_tailActive[k]) continue;
 
-                double l0 = head - (tail * (1 - f0));
-                double l1 = head - (tail * (1 - f1));
-                if (l1 <= 0 || l0 >= curve.Length) continue;
-
-                // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
-                double a = BandIntensity * f0 * f0;
-                if (a <= 0.004) continue;
-
-                // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部
-                var c = Mix(color, Colors.White, f0);
-
-                var pen = bloom
-                    ? new Pen(new ImmutableSolidColorBrush(c, a * 0.22), thickness + 9)
-                    : new Pen(new ImmutableSolidColorBrush(c, a), thickness * (0.45 + 0.95 * f0))
-                    {
-                        // 圆头：头部因此是一个逐渐收拢的圆端，而不是截断的一刀
-                        LineCap = PenLineCap.Round,
-                    };
-
-                context.DrawGeometry(null, pen, BuildSegment(l0, l1));
+                // 画笔的颜色已含白热程度，这里只把随帧变化的透明度乘上去。
+                using (context.PushOpacity(bloom ? _tailOpacity[k] * 0.22 : _tailOpacity[k]))
+                {
+                    context.DrawGeometry(null, pens[k], _tail[k].Geometry);
+                }
             }
         }
     }

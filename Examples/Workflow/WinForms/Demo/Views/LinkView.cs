@@ -1,6 +1,5 @@
 // VeloxDev customization: Customize line geometry, color, and thickness here.
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -78,6 +77,22 @@ public sealed class LinkView : Control
     // 本帧这条线的扁平化几何（画布/世界坐标，与指针同一系）。弧长、包围盒与命中判定都归它 ——
     // 本视图不再自存采样表。端点变化时重建一次。
     private LinkCurve? _curve;
+
+    // 每帧要画三十多段，路径、画笔与采样缓冲都不能按段新建。线体路径随 _curve 重建，其余全程复用。
+    // GDI+ 在 Draw* 调用时取用笔与路径，画完再改它们不影响已经画出的段。
+    private GraphicsPath? _bodyPath;
+    private LinkCurve? _bodyPathOwner;
+    private readonly Pen _strokePen = new(Color.Black);
+    private readonly Pen _dashPen = new(Color.Black) { DashStyle = DashStyle.Custom, DashPattern = [4f, 2f] };
+    private readonly GraphicsPath _segmentPath = new();
+    private PointF[] _segmentPoints = [];
+
+    // 彗星每段的混色与线宽只随外观变化，缓存起来；每帧变的只有透明度
+    private Color[]? _cometColors;
+    private float[]? _cometWidths;
+    private Color _cometLookColor;
+    private float _cometLookThickness;
+    private bool _cometLookReady;
 
     public LinkView()
     {
@@ -333,6 +348,11 @@ public sealed class LinkView : Control
                 _notifier.PropertyChanged -= OnLinkChanged;
                 _notifier = null;
             }
+
+            _bodyPath?.Dispose();
+            _segmentPath.Dispose();
+            _strokePen.Dispose();
+            _dashPen.Dispose();
         }
 
         base.Dispose(disposing);
@@ -377,7 +397,6 @@ public sealed class LinkView : Control
         if (_link is not null && !WorkflowSlotUpdateGate.IsLinkRenderReady(_link)) return;
         var curve = _curve;
         if (curve is null || curve.Length <= 0) return;
-        var length = curve.Length;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -390,21 +409,22 @@ public sealed class LinkView : Control
         var thickness = _isHighlighted ? HighlightThickness : LineThickness;
 
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
-        // 两端才不像被截断的横截面
-        DrawSegment(g, 0, length, Fade(color, 0.10), thickness + 9);
-        DrawSegment(g, 0, length, Fade(color, 0.16), thickness + 4);
+        // 两端才不像被截断的横截面。整条线只用一条缓存路径，三遍描边共用
+        var body = BodyPath(curve);
+        StrokePath(g, body, Fade(color, 0.10), thickness + 9);
+        StrokePath(g, body, Fade(color, 0.16), thickness + 4);
 
         // 虚拟连线是指针下的橡皮筋：虚线、不流动
         if (_isVirtual)
         {
-            using var pen = new Pen(Fade(color, 0.75), thickness) { DashStyle = DashStyle.Custom, DashPattern = [4f, 2f] };
-            using var path = BuildPath(0, length);
-            g.DrawPath(pen, path);
+            _dashPen.Color = Fade(color, 0.75);
+            _dashPen.Width = thickness;
+            g.DrawPath(_dashPen, body);
             return;
         }
 
         // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来；选中时抬透明度，线更实
-        DrawSegment(g, 0, length, Fade(color, _isHighlighted ? 0.85 : 0.55), thickness);
+        StrokePath(g, body, Fade(color, _isHighlighted ? 0.85 : 0.55), thickness);
 
         if (_bandIntensity > 0.001)
         {
@@ -419,6 +439,8 @@ public sealed class LinkView : Control
         var curve = _curve!;
         double head = Math.Clamp(_bandHead, 0, 1) * curve.Length;
         double tail = TailFraction * curve.Length;
+
+        EnsureCometLook(color, thickness);
 
         // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来
         for (int pass = 0; pass < 2; pass++)
@@ -438,47 +460,103 @@ public sealed class LinkView : Control
                 double a = _bandIntensity * f0 * f0;
                 if (a <= 0.004) continue;
 
-                // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部
-                var c = Mix(color, Color.White, f0);
+                // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部。混色与线宽已经缓存，
+                // 每帧只重算透明度
+                var c = _cometColors![k];
+                var alpha = (int)Math.Round(Math.Clamp(bloom ? a * 0.22 : a, 0, 1) * 255);
 
-                DrawSegment(
-                    g, l0, l1,
-                    Fade(c, bloom ? a * 0.22 : a),
-                    bloom ? thickness + 9 : (float)(thickness * (0.45 + (0.95 * f0))),
+                StrokeSegment(
+                    g, Color.FromArgb(alpha, c.R, c.G, c.B),
+                    bloom ? thickness + 9 : _cometWidths![k],
+                    l0, l1,
                     roundCap: true);
             }
         }
     }
 
-    // 取 [from, to] 这一段弧长上的几何并描边。两端各自插值到精确位置，中间用现成采样点
-    private void DrawSegment(Graphics g, double from, double to, Color color, float thickness, bool roundCap = false)
+    // 彗星的混色与线宽缓存：外观（线色、线宽）不变就不重算
+    private void EnsureCometLook(Color color, float thickness)
     {
-        using var path = BuildPath(from, to);
-        using var pen = new Pen(color, thickness);
-        if (roundCap) pen.StartCap = pen.EndCap = LineCap.Round;
-        g.DrawPath(pen, path);
+        if (_cometLookReady && _cometLookColor == color && _cometLookThickness == thickness) return;
+
+        var colors = _cometColors ??= new Color[TailSegments];
+        var widths = _cometWidths ??= new float[TailSegments];
+        for (int k = 0; k < TailSegments; k++)
+        {
+            double f0 = k / (double)TailSegments;
+            colors[k] = Mix(color, Color.White, f0);
+            widths[k] = (float)(thickness * (0.45 + (0.95 * f0)));
+        }
+
+        _cometLookColor = color;
+        _cometLookThickness = thickness;
+        _cometLookReady = true;
     }
 
-    private GraphicsPath BuildPath(double from, double to)
+    // 取 [from, to] 这一段弧长上的几何并描边。两端各自插值到精确位置，中间用现成采样点。
+    // 采样缓冲与路径复用，不按段分配
+    private void StrokeSegment(Graphics g, Color color, float thickness, double from, double to, bool roundCap)
     {
-        var path = new GraphicsPath();
+        int count = FillSegmentPoints(from, to);
+        if (count < 2) return;
+
+        _strokePen.Color = color;
+        _strokePen.Width = thickness;
+        _strokePen.StartCap = _strokePen.EndCap = roundCap ? LineCap.Round : LineCap.Flat;
+
+        _segmentPath.Reset();
+        _segmentPath.AddLines(_segmentPoints.AsSpan(0, count));
+        g.DrawPath(_strokePen, _segmentPath);
+    }
+
+    // 把 [from, to] 的采样点写进复用缓冲，返回点数
+    private int FillSegmentPoints(double from, double to)
+    {
         var curve = _curve;
-        if (curve is null || curve.Length <= 0) return path;
+        if (curve is null || curve.Length <= 0) return 0;
+
+        int capacity = curve.Count + 2;
+        if (_segmentPoints.Length < capacity) _segmentPoints = new PointF[capacity];
 
         to = Math.Min(to, curve.Length);
         from = Math.Clamp(from, 0, curve.Length);
 
-        var points = new List<PointF>(curve.Count + 2) { PointAtLength(from) };
+        var points = _segmentPoints;
+        int count = 0;
+        points[count++] = PointAtLength(from);
         for (int i = 0; i < curve.Count; i++)
         {
             double l = curve.LengthAt(i);
             if (l <= from || l >= to) continue;
-            points.Add(new PointF((float)curve.XAt(i), (float)curve.YAt(i)));
+            points[count++] = new PointF((float)curve.XAt(i), (float)curve.YAt(i));
         }
 
-        points.Add(PointAtLength(to));
-        path.AddLines(points.ToArray());
+        points[count++] = PointAtLength(to);
+        return count;
+    }
+
+    // 整条线体的路径只随曲线重建：三层整段描边与虚线预览共用它
+    private GraphicsPath BodyPath(LinkCurve curve)
+    {
+        if (_bodyPath is not null && ReferenceEquals(_bodyPathOwner, curve)) return _bodyPath;
+
+        int count = FillSegmentPoints(0, curve.Length);
+        var path = new GraphicsPath();
+        if (count >= 2) path.AddLines(_segmentPoints.AsSpan(0, count));
+
+        _bodyPath?.Dispose();
+        _bodyPath = path;
+        _bodyPathOwner = curve;
         return path;
+    }
+
+    // 复用同一支笔：只改颜色与线宽，不按段新建
+    private void StrokePath(Graphics g, GraphicsPath path, Color color, float thickness)
+    {
+        _strokePen.Color = color;
+        _strokePen.Width = thickness;
+        _strokePen.StartCap = _strokePen.EndCap = LineCap.Flat;
+        g.DrawPath(_strokePen, path);
     }
 
     // ── Hit testing ──────────────────────────────────────────────────────────────
@@ -499,12 +577,31 @@ public sealed class LinkView : Control
         return _curve.Contains(worldPoint.X, worldPoint.Y, radius);
     }
 
+    // 视口裁剪：本帧曲线（世界坐标）的包围盒是否与视口相交。外扩量盖住最外圈辉光（半宽约 6px）与圆头
+    internal bool Intersects(RectangleF worldViewport)
+    {
+        var curve = _curve;
+        if (!_canRender || curve is null || curve.Length <= 0) return false;
+
+        const float margin = 8f;
+        var bounds = curve.Bounds;
+        return bounds.Right + margin >= worldViewport.Left
+            && bounds.Left - margin <= worldViewport.Right
+            && bounds.Bottom + margin >= worldViewport.Top
+            && bounds.Top - margin <= worldViewport.Bottom;
+    }
+
     // ── Geometry ─────────────────────────────────────────────────────────────────
 
     // 端点变化时重建这条线的扁平化几何，并提交给 Core（LinkHelper 持有它做命中）。
     // 画与命中共用同一条曲线 —— 本视图不再各自推一遍采样点与弧长。
     private void RefreshGeometry()
     {
+        // 曲线要换了：缓存的线体路径随之作废
+        _bodyPath?.Dispose();
+        _bodyPath = null;
+        _bodyPathOwner = null;
+
         if (!float.IsFinite(_startLeft) || !float.IsFinite(_startTop)
             || !float.IsFinite(_endLeft) || !float.IsFinite(_endTop))
         {

@@ -158,6 +158,14 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 上了个色」；红像告警、青像另一条线，都试过，用户否掉了
     private static readonly Color SelectedLinkColor = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
 
+    // 线体三层笔：颜色与粗细只有普通 / 选中两套，都是常量 —— 静态建一次，每帧直接用
+    private static readonly Pen[] s_linkBodyPens = CreateLinkBodyPens(LinkColor, LinkThickness);
+    private static readonly Pen[] s_selectedLinkBodyPens = CreateLinkBodyPens(SelectedLinkColor, SelectedLinkThickness);
+
+    // 彗星每段一支笔，两遍（本体 / 光晕）× 两种状态。颜色在静态时按 f0 混好，透明度每帧压栈（见 DrawComet）
+    private static readonly Pen[,] s_cometBodyPens = CreateCometPens(bloom: false);
+    private static readonly Pen[,] s_cometBloomPens = CreateCometPens(bloom: true);
+
     /// <summary>Delete the link currently under the pointer, as a <c>Delete</c> key press does.
     /// Returns whether there was one to delete.</summary>
     public bool DeleteSelectedLink()
@@ -1237,7 +1245,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
             // 线体是静息的，光不在时它只是一根暗线 —— 有了对比，沿它跑的那段彗星才亮得出来。
             // 端点每次绘制现读：拖节点只动 Anchor，链接本身收不到通知，所以几何按端点缓存。
             // 这条曲线同时发布给 Core 做命中，画出来的与能点中的是同一条（退化成一点的不发布，免得被当可命中）
-            var curve = CurveFor(link, p0, p1, out var hitCurve);
+            var curve = CurveFor(link, p0, p1, out var hitCurve, out var body);
             link.PublishCurve(curve.Length > 0 ? hitCurve : null);
             if (curve.Length <= 0)
             {
@@ -1246,11 +1254,11 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
             // 选中（＝指针搭上）的那条整条换色加粗，彗星跟着走：它跑在这条线上，亮着红尾巴的蓝线读起来像两条线
             bool selected = ReferenceEquals(link, _selectedLink);
-            var color = selected ? SelectedLinkColor : LinkColor;
-            double thickness = selected ? SelectedLinkThickness : LinkThickness;
 
-            DrawLink(dc, curve, color, thickness);
-            DrawComet(dc, curve, color, thickness);
+            // 线体几何随曲线缓存在 _curves 里，笔是按「普通 / 选中」预建的两套常量笔（见 s_linkBodyPens），
+            // 所以静息帧里这两处都不再新建任何东西
+            DrawLink(dc, body, selected);
+            DrawComet(dc, curve, selected);
         }
     }
 
@@ -1276,13 +1284,17 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     // ── 链接几何（发布给 Core 的扁曲线 + 弧长取段）────────────────────────
 
-    // 每条链接当前的两条曲线。Core 的 LinkCurve 一旦建好就不可变，端点变了就换一条；
-    // 缓存只为省下每帧的采样开销，判据就是建曲线时的那两个端点。
-    // Curve 是画布系（画用），ModelCurve 是模型系（发布给 Core 做命中），两者只差一个 Origin 平移。
-    private readonly Dictionary<IWorkflowLinkViewModel, (Point From, Point To, LinkCurve Curve, LinkCurve ModelCurve)> _curves = new();
+    // 每条链接当前的两条曲线与线体几何。Core 的 LinkCurve 一旦建好就不可变，端点变了就换一条；
+    // 缓存只为省下每帧的采样与切段开销，判据就是建曲线时的那两个端点。
+    // Curve 是画布系（画用），ModelCurve 是模型系（发布给 Core 做命中），两者只差一个 Origin 平移；
+    // Body 是 Curve 的整条折线几何，只随 Curve 换（彗星不进这里，它每帧都要沿弧长重新切）
+    private readonly Dictionary<IWorkflowLinkViewModel, (Point From, Point To, LinkCurve Curve, LinkCurve ModelCurve, PathGeometry Body)> _curves = new();
 
     // 虚拟连线（指针下那根橡皮筋）也有自己的一条曲线：同时只会有一根，端点一变就重算
     private (Point From, Point To, LinkCurve Curve)? _virtualPreview;
+
+    // 彗星各段复用的一张折线几何（见 FillSegment）：同一时刻只有一次绘制在读它
+    private PathGeometry? _cometScratch;
 
     // 建一条 Core 的扁曲线：控制点水平拉出 max(PullMinimum, 0.5·dx)，与这里画出来的是同一条贝塞尔。
     // 命中、取弧长都读它，表面不再自存一份采样表
@@ -1290,11 +1302,12 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         => LinkCurve.BuildCubic(from.X, from.Y, to.X, to.Y, PullMinimum, LinkCurve.DefaultSampleCount);
 
     // 同时给出模型系的那一份（hitCurve）：发布给 Core 的是它，而不是画用的这一条，理由见 ForwardPointer。
-    private LinkCurve CurveFor(IWorkflowLinkViewModel link, Point from, Point to, out LinkCurve hitCurve)
+    private LinkCurve CurveFor(IWorkflowLinkViewModel link, Point from, Point to, out LinkCurve hitCurve, out PathGeometry body)
     {
         if (_curves.TryGetValue(link, out var entry) && entry.From == from && entry.To == to)
         {
             hitCurve = entry.ModelCurve;
+            body = entry.Body;
             return entry.Curve;
         }
 
@@ -1315,7 +1328,15 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
             points[3].X + OriginX, points[3].Y + OriginY,
             LinkCurve.DefaultSampleCount);
 
-        _curves[link] = (from, to, curve, model);
+        // 线体几何只在曲线换时重切一次；冻结后渲染器会把包围盒与填充图按对象缓存起来
+        // （RenderTargetDrawingContext 的冷冻几何表），每帧不再重量。换曲线就整张换新，这张之后不会再改
+        body = LinkSegment(curve, 0, curve.Length);
+        if (body.CanFreeze)
+        {
+            body.Freeze();
+        }
+
+        _curves[link] = (from, to, curve, model, body);
         hitCurve = model;
         return curve;
     }
@@ -1335,12 +1356,35 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 从 Core 的扁曲线切出 [from, to] 这段弧长的折线几何：两端各插值到精确位置，中间用现成采样点。
     // 几何由发布给 Core 的那条曲线切出来，画与取点因此共享同一张弧长表。
     // 用 PathGeometry + PolyLineSegment 而不是 StreamGeometry：后者的上下文接口在本平台没有文档。
-    private static Geometry LinkSegment(LinkCurve curve, double from, double to)
+    private static PathGeometry LinkSegment(LinkCurve curve, double from, double to)
+    {
+        var geometry = CreateSegmentGeometry();
+        FillSegment(geometry, curve, from, to);
+        return geometry;
+    }
+
+    // 一张空的单折线几何。彗星每帧要重填十几次，复用同一张（见 FillSegment），所以建法与填法分开
+    private static PathGeometry CreateSegmentGeometry()
+    {
+        var figure = new PathFigure { IsClosed = false, IsFilled = false };
+        figure.Segments.Add(new PolyLineSegment());
+        var geometry = new PathGeometry();
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    // 把 [from, to] 这段弧长重新填进一张现成的折线几何：清点、重设起点、再按采样点补中间。
+    // 复用是安全的：本平台按次读取非冷冻几何，不在对象上缓存；整帧录制那条路也会先克隆一份
+    private static void FillSegment(PathGeometry geometry, LinkCurve curve, double from, double to)
     {
         to = Math.Min(to, curve.Length);
         from = Math.Clamp(from, 0, curve.Length);
 
-        var points = new List<Point>(curve.Count + 2) { ToPoint(curve.PointAtLength(from)) };
+        var figure = geometry.Figures[0];
+        var points = ((PolyLineSegment)figure.Segments[0]).Points;
+        points.Clear();
+        figure.StartPoint = ToPoint(curve.PointAtLength(from));
+
         for (var i = 1; i < curve.Count - 1; i++)
         {
             var l = curve.LengthAt(i);
@@ -1353,25 +1397,18 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         }
 
         points.Add(ToPoint(curve.PointAtLength(to)));
-
-        var figure = new PathFigure { StartPoint = points[0], IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(points, true));
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
-        return geometry;
     }
 
     private static Point ToPoint((double X, double Y) p) => new(p.X, p.Y);
 
-    private static void DrawLink(DrawingContext dc, LinkCurve curve, Color color, double thickness)
+    private static void DrawLink(DrawingContext dc, PathGeometry body, bool selected)
     {
-        var body = LinkSegment(curve, 0, curve.Length);
-
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。
-        // 圆头：两端才不像被截断的横截面
-        dc.DrawGeometry(null, Capped(new Pen(CardPalette.Alpha(color, 0.10), thickness + 9)), body);
-        dc.DrawGeometry(null, Capped(new Pen(CardPalette.Alpha(color, 0.16), thickness + 4)), body);
-        dc.DrawGeometry(null, Capped(new Pen(CardPalette.Alpha(color, 0.55), thickness)), body);
+        // 圆头：两端才不像被截断的横截面。颜色与粗细只有普通 / 选中两种，笔在静态时就建好了
+        var pens = selected ? s_selectedLinkBodyPens : s_linkBodyPens;
+        dc.DrawGeometry(null, pens[0], body);
+        dc.DrawGeometry(null, pens[1], body);
+        dc.DrawGeometry(null, pens[2], body);
     }
 
     private static Pen Capped(Pen pen)
@@ -1381,12 +1418,43 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return pen;
     }
 
+    // 线体三层：外层更宽更淡、内层更窄更实
+    private static Pen[] CreateLinkBodyPens(Color color, double thickness) =>
+    [
+        Capped(new Pen(CardPalette.Alpha(color, 0.10), thickness + 9)),
+        Capped(new Pen(CardPalette.Alpha(color, 0.16), thickness + 4)),
+        Capped(new Pen(CardPalette.Alpha(color, 0.55), thickness)),
+    ];
+
+    // 彗星每段的颜色只取决于 f0（相位只改透明度），所以颜色与粗细在这里一次算定。
+    // 索引 [状态, 段号]：0 = 普通，1 = 选中；光晕那遍更宽、不带头帽（与原绘制一致）
+    private static Pen[,] CreateCometPens(bool bloom)
+    {
+        var pens = new Pen[2, TailSegments];
+        for (var state = 0; state < 2; state++)
+        {
+            var color = state == 0 ? LinkColor : SelectedLinkColor;
+            var thickness = state == 0 ? LinkThickness : SelectedLinkThickness;
+
+            for (var k = 0; k < TailSegments; k++)
+            {
+                var f0 = k / (double)TailSegments;
+                var pen = new Pen(
+                    CardPalette.Alpha(Mix(color, Colors.White, f0), 1),
+                    bloom ? thickness + 9 : thickness * (0.45 + (0.95 * f0)));
+                pens[state, k] = bloom ? pen : Capped(pen);
+            }
+        }
+
+        return pens;
+    }
+
     // 彗星：沿弧长切出 [头−尾, 头] 这一段，再分若干小段画，每段一个递减的透明度与一个向白偏的颜色。
     // 不用渐变刷有两个理由，第二个才是新的：本平台的渐变写停靠点不出帧（见 flow 声明），所以原先那版
     // 流光只能画成「裁剪几何 + 宽度动画」；而且渐变刷的轴是两端之间的直线，在曲线上会把光打偏 ——
     // 亮度不再跟着弯走，绕弯时看着忽快忽慢。改成按弧长切出来的几何之后，这两条一起消失：
     // 几何本来就是切出来的，不再依赖渐变刷。
-    private void DrawComet(DrawingContext dc, LinkCurve curve, Color color, double thickness)
+    private void DrawComet(DrawingContext dc, LinkCurve curve, bool selected)
     {
         double intensity = CometIntensity(FlowPhase);
         if (intensity <= 0.004 || curve.Length <= 0)
@@ -1397,11 +1465,16 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         double head = Math.Clamp(FlowPhase, 0, 1) * curve.Length;
         double tail = TailFraction * curve.Length;
 
+        // 各段共用同一张折线几何：画完一段就重填下一段（FillSegment），不再每段新建
+        var geometry = _cometScratch ??= CreateSegmentGeometry();
+        int state = selected ? 1 : 0;
+
         // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来。
         // 光晕只跟亮头那半段：尾梢那半边按 f0² 已经淡到看不见，画它只是白开几何
         for (int pass = 0; pass < 2; pass++)
         {
             bool bloom = pass == 0;
+            var pens = bloom ? s_cometBloomPens : s_cometBodyPens;
 
             for (int k = bloom ? TailSegments / 2 : 0; k < TailSegments; k++)
             {
@@ -1422,14 +1495,16 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
                     continue;
                 }
 
-                // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部
-                var c = Mix(color, Colors.White, f0);
+                // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部。混色在预建笔时已经算好，
+                // 这里只剩透明度（光晕再乘 0.22）
+                var pen = pens[state, k];
+                FillSegment(geometry, curve, l0, l1);
 
-                dc.DrawGeometry(null,
-                    bloom
-                        ? new Pen(CardPalette.Alpha(c, a * 0.22), thickness + 9)
-                        : Capped(new Pen(CardPalette.Alpha(c, a), thickness * (0.45 + (0.95 * f0)))),
-                    LinkSegment(curve, l0, l1));
+                // 透明度压栈而不是写回笔刷：Windows 上默认走整帧录制，笔按引用进命令、重放前会被后续段改写；
+                // 压栈的是一个数值，录得进去，直出与录制两条路都得到同一段透明度
+                dc.PushOpacity(bloom ? a * 0.22 : a);
+                dc.DrawGeometry(null, pen, geometry);
+                dc.Pop();
             }
         }
     }

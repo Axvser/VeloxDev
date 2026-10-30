@@ -1189,8 +1189,14 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // WS_CLIPSIBLINGS; slots are drawn by the template SlotView inside the cards.
         var linkState = g.Save();
         g.TranslateTransform(origin.X, origin.Y);
+
+        // 视口在世界坐标里的矩形：画布已按 origin 平移，客户区左上角对应世界坐标 -origin。
+        // 包围盒落在视口外的连线整条跳过 —— 只是不画，绘制顺序与重叠关系不变。
+        var viewport = new RectangleF(-origin.X, -origin.Y, ClientSize.Width, ClientSize.Height);
         foreach (var lv in _linkRenderers)
         {
+            if (!lv.Intersects(viewport)) continue;
+
             // 本帧的两个数从唯一存放处推入：渲染器不持有周期，同一对值给每条链接，且在读它的绘制之前
             lv.SetFlow(_bandHead, _bandIntensity);
             lv.Render(g);

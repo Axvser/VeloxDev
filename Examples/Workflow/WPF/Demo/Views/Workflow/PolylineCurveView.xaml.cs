@@ -372,7 +372,12 @@ public partial class PolylineCurveView : UserControl
     // 弧长表由 Core 的 LinkCurve 拥有：端点变化时重建，同一份同时用于绘制、取点与命中。
     private void RefreshGeometry()
     {
-        _curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        var curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        _curve = curve;
+
+        // 线体只在曲线变化时重建；帧回调（BandHead/BandIntensity）不再碰它
+        _bodyGeometry = curve.Length > 0 ? BuildSegment(0, curve.Length) : null;
+
         PublishCurve();
     }
 
@@ -421,7 +426,7 @@ public partial class PolylineCurveView : UserControl
             ctx.LineTo(PointAtLength(to), true, false);
         }
 
-        // 冻结：几何每帧被重画（彗星的每一小段都是它），不再变的就不该再花校验与通知的钱
+        // 线体只在端点变化时重建一次，建好后不再变，冻结掉校验与通知的开销
         geo.Freeze();
         return geo;
     }
@@ -429,6 +434,31 @@ public partial class PolylineCurveView : UserControl
     #endregion
 
     #region Render
+
+    // 线体几何：随曲线重建一次，帧回调只取用
+    private StreamGeometry? _bodyGeometry;
+
+    // 静息笔（两层光晕、线体、虚拟虚线）：只在配色/线宽/高亮/虚拟态变化时重建
+    private Pen _glowOuterPen = null!;
+    private Pen _glowInnerPen = null!;
+    private Pen _bodyPen = null!;
+    private Pen _dashedPen = null!;
+    private Color _linePensColor;
+    private double _linePensThickness;
+    private bool _linePensVirtual;
+    private bool _linePensHighlighted;
+    private bool _linePensReady;
+
+    // 彗星每段的笔：混合色与线宽只随段号与配色/线宽变化，逐帧变的透明度交给 PushOpacity
+    private readonly Pen[] _bloomPens = new Pen[TailSegments];
+    private readonly Pen[] _cometPens = new Pen[TailSegments];
+    private Color _cometPensColor;
+    private double _cometPensThickness;
+    private bool _cometPensReady;
+
+    // 彗星每段一个可复用的几何槽：PathGeometry 能原地改点，冻结的 StreamGeometry 不能
+    private readonly TailSlot[] _tailSlots = CreateTailSlots();
+    private readonly bool[] _tailLive = new bool[TailSegments];
 
     protected override void OnRender(DrawingContext ctx)
     {
@@ -443,38 +473,71 @@ public partial class PolylineCurveView : UserControl
             _ => IsHighlighted ? HighlightColor : LineColor,
         };
         var thickness = IsHighlighted ? LineWidthHighlighted : LineWidth;
-        var body = BuildSegment(0, _curve.Length);
+        var body = _bodyGeometry;
+        if (body is null) return;
+
+        EnsureLinePens(color, thickness);
 
         // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
         // 两端才不像被截断的横截面（WPF 没有 Avalonia 那种一个管两端的 LineCap，两个端点各写一次）
-        ctx.DrawGeometry(null, GlowPen(color, 0.10, thickness + 9), body);
-        ctx.DrawGeometry(null, GlowPen(color, 0.16, thickness + 4), body);
+        ctx.DrawGeometry(null, _glowOuterPen, body);
+        ctx.DrawGeometry(null, _glowInnerPen, body);
 
         // 虚拟连线是指针下的橡皮筋：虚线、不流动
         if (IsVirtual)
         {
-            var dashed = new Pen(new SolidColorBrush(AtAlpha(color, 0.75)), thickness)
-            {
-                DashStyle = new DashStyle([4.0, 2.0], 0),
-                DashCap = PenLineCap.Round,
-            };
-            ctx.DrawGeometry(null, dashed, body);
+            ctx.DrawGeometry(null, _dashedPen, body);
             return;
         }
 
         // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
-        var bodyPen = new Pen(new SolidColorBrush(AtAlpha(color, IsHighlighted ? 0.85 : 0.55)), thickness)
-        {
-            StartLineCap = PenLineCap.Round,
-            EndLineCap = PenLineCap.Round,
-            LineJoin = PenLineJoin.Round,
-        };
-        ctx.DrawGeometry(null, bodyPen, body);
+        ctx.DrawGeometry(null, _bodyPen, body);
 
         if (BandIntensity > 0.001)
         {
             DrawComet(ctx, color, thickness);
         }
+    }
+
+    // 同一份状态每帧都会走到这里：颜色、线宽、高亮与虚拟态都没变就直接复用
+    private void EnsureLinePens(Color color, double thickness)
+    {
+        if (_linePensReady
+            && color == _linePensColor
+            && thickness == _linePensThickness
+            && IsVirtual == _linePensVirtual
+            && IsHighlighted == _linePensHighlighted)
+        {
+            return;
+        }
+
+        _glowOuterPen = GlowPen(color, 0.10, thickness + 9);
+        _glowInnerPen = GlowPen(color, 0.16, thickness + 4);
+
+        var dashedBrush = new SolidColorBrush(AtAlpha(color, 0.75));
+        dashedBrush.Freeze();
+        _dashedPen = new Pen(dashedBrush, thickness)
+        {
+            DashStyle = new DashStyle([4.0, 2.0], 0),
+            DashCap = PenLineCap.Round,
+        };
+        _dashedPen.Freeze();
+
+        var bodyBrush = new SolidColorBrush(AtAlpha(color, IsHighlighted ? 0.85 : 0.55));
+        bodyBrush.Freeze();
+        _bodyPen = new Pen(bodyBrush, thickness)
+        {
+            StartLineCap = PenLineCap.Round,
+            EndLineCap = PenLineCap.Round,
+            LineJoin = PenLineJoin.Round,
+        };
+        _bodyPen.Freeze();
+
+        _linePensColor = color;
+        _linePensThickness = thickness;
+        _linePensVirtual = IsVirtual;
+        _linePensHighlighted = IsHighlighted;
+        _linePensReady = true;
     }
 
     private static Pen GlowPen(Color color, double alpha, double thickness)
@@ -489,6 +552,44 @@ public partial class PolylineCurveView : UserControl
         return pen;
     }
 
+    // 每段的混合色与线宽是静态的；透明度才是每帧的量，所以笔不随 BandIntensity 重建
+    private void EnsureCometPens(Color color, double thickness)
+    {
+        if (_cometPensReady && color == _cometPensColor && thickness == _cometPensThickness)
+        {
+            return;
+        }
+
+        for (int k = 0; k < TailSegments; k++)
+        {
+            double f0 = k / (double)TailSegments;
+            var mixed = AtAlpha(Mix(color, Colors.White, f0), 1.0);
+
+            var brush = new SolidColorBrush(mixed);
+            brush.Freeze();
+
+            // 光晕笔保持默认平头：原来的临时笔没设 cap，圆头只在两层静息光晕上
+            var bloom = new Pen(brush, thickness + 9);
+            bloom.Freeze();
+
+            var comet = new Pen(brush, thickness * (0.45 + (0.95 * f0)))
+            {
+                // 圆头：头部因此是一个逐渐收拢的圆端，而不是截断的一刀
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round,
+            };
+            comet.Freeze();
+
+            _bloomPens[k] = bloom;
+            _cometPens[k] = comet;
+        }
+
+        _cometPensColor = color;
+        _cometPensThickness = thickness;
+        _cometPensReady = true;
+    }
+
     // 彗星：沿弧长切出 [头-尾, 头] 这一段，分若干小段画，每段给一个递减的透明度与变化的颜色。
     // 不用渐变刷是因为它的轴是两端之间的直线，在曲线上会把光打偏（见类注释）。
     private void DrawComet(DrawingContext ctx, Color color, double thickness)
@@ -496,40 +597,104 @@ public partial class PolylineCurveView : UserControl
         double head = Math.Clamp(BandHead, 0, 1) * _curve!.Length;
         double tail = TailFraction * _curve.Length;
 
+        EnsureCometPens(color, thickness);
+
+        // 两遍共用同一批分段几何：每段只改点，不再每帧新建几何
+        for (int k = 0; k < TailSegments; k++)
+        {
+            double f0 = k / (double)TailSegments;
+            double f1 = (k + 1) / (double)TailSegments;
+
+            double l0 = head - (tail * (1 - f0));
+            double l1 = head - (tail * (1 - f1));
+            if (l1 <= 0 || l0 >= _curve.Length)
+            {
+                _tailLive[k] = false;
+                continue;
+            }
+
+            // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
+            double a = BandIntensity * f0 * f0;
+            if (a <= 0.004)
+            {
+                _tailLive[k] = false;
+                continue;
+            }
+
+            UpdateTailGeometry(k, l0, l1);
+            _tailLive[k] = true;
+        }
+
         // 两遍：先光晕（更宽更淡）再本体，两遍都跟着头走，所以动感在光晕上也读得出来
         for (int pass = 0; pass < 2; pass++)
         {
             bool bloom = pass == 0;
+            var pens = bloom ? _bloomPens : _cometPens;
 
             for (int k = 0; k < TailSegments; k++)
             {
-                double f0 = k / (double)TailSegments;      // 0 = 尾梢，1 = 头
-                double f1 = (k + 1) / (double)TailSegments;
+                if (!_tailLive[k]) continue;
 
-                double l0 = head - (tail * (1 - f0));
-                double l1 = head - (tail * (1 - f1));
-                if (l1 <= 0 || l0 >= _curve.Length) continue;
-
-                // 平方衰减：让透明集中在尾段，读起来才像拖尾而不是一条均匀的带
+                double f0 = k / (double)TailSegments;
                 double a = BandIntensity * f0 * f0;
-                if (a <= 0.004) continue;
 
-                // 尾梢是本体的颜色，越靠近头越白 —— 白热只发生在头部
-                var c = Mix(color, Colors.White, f0);
-
-                var pen = bloom
-                    ? new Pen(new SolidColorBrush(AtAlpha(c, a * 0.22)), thickness + 9)
-                    : new Pen(new SolidColorBrush(AtAlpha(c, a)), thickness * (0.45 + (0.95 * f0)))
-                    {
-                        // 圆头：头部因此是一个逐渐收拢的圆端，而不是截断的一刀
-                        StartLineCap = PenLineCap.Round,
-                        EndLineCap = PenLineCap.Round,
-                        LineJoin = PenLineJoin.Round,
-                    };
-
-                ctx.DrawGeometry(null, pen, BuildSegment(l0, l1));
+                // 笔是静态的：逐帧变化的只有这一段的不透明度
+                ctx.PushOpacity(Math.Clamp(bloom ? a * 0.22 : a, 0, 1));
+                ctx.DrawGeometry(null, pens[k], _tailSlots[k].Geometry);
+                ctx.Pop();
             }
         }
+    }
+
+    // 把 [from, to] 的采样点写进第 k 个几何槽，结构与 BuildSegment 相同，只是原地改写
+    private void UpdateTailGeometry(int k, double from, double to)
+    {
+        var curve = _curve!;
+        to = Math.Min(to, curve.Length);
+        from = Math.Clamp(from, 0, curve.Length);
+
+        var slot = _tailSlots[k];
+        slot.Points.Clear();
+
+        for (int i = 0; i < curve.Count; i++)
+        {
+            double l = curve.LengthAt(i);
+            if (l <= from || l >= to) continue;
+            slot.Points.Add(new Point(curve.XAt(i), curve.YAt(i)));
+        }
+
+        slot.Points.Add(PointAtLength(to));
+        slot.Figure.StartPoint = PointAtLength(from);
+    }
+
+    private static TailSlot[] CreateTailSlots()
+    {
+        var slots = new TailSlot[TailSegments];
+        for (int i = 0; i < slots.Length; i++)
+        {
+            slots[i] = new TailSlot();
+        }
+
+        return slots;
+    }
+
+    // 一段彗星的几何：一个图元 + 一个点集合，重复绘制时只改点
+    private sealed class TailSlot
+    {
+        public TailSlot()
+        {
+            var segment = new PolyLineSegment();
+            Figure = new PathFigure { IsClosed = false, IsFilled = false };
+            Figure.Segments.Add(segment);
+            Points = segment.Points;
+
+            Geometry = new PathGeometry();
+            Geometry.Figures.Add(Figure);
+        }
+
+        public PathGeometry Geometry { get; }
+        public PathFigure Figure { get; }
+        public PointCollection Points { get; }
     }
 
     // 两色之间线性混合（含 alpha），用于尾梢到头部的那一段渐变

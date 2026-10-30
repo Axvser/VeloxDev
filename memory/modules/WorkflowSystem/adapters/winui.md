@@ -390,10 +390,9 @@ Trimmed 的 `SlotView` 与 `Src/Templates/VeloxDev.WinUI.Templates/` 的那份**
 不减重排；把每条 `Path` 的 Width/Height 钉死也不减 —— `Shape` 只要几何变了就无条件失效测量）。
 不是 → 它可能是免费的（`SlotView` 改完之后就是这样）。
 
-**还有一条与上面并列、但这一轮没证的**：`PolylineCurveView` 的链上只该有一个动画标量。`BandHead` +
-`BandIntensity` 两个 setter 各自调 `RedrawComet()`，相位一/三相每帧重画两次（加权 ≈1.56 次/帧）。
-改成只动画 `BandHead`、亮度由头部比例分段推出是精确等价的，但在几何搬运之后这条的收益已经很小
-（重画不再进布局），而且它是**一处刻意背离**（另外六家仍旧动画第二个标量），所以没做。
+**`PolylineCurveView` 的两个标量只触发一次重画**：`BandHead` / `BandIntensity` 的 setter 只写字段；
+`BuildFlow` 的每个 `TransitionEffect` 挂同一个缓存的 `LateUpdate` 回调，解释器在写完本段全部属性后触发，
+所以相位一/三相每帧只 `RedrawComet()` 一次。动画仍保留两个标量，与另外六家一致。
 
 **教训（写给下一个拿到「卡顿」报告的人）**：这一轮前面三次全是**没有一次实测**的推断，方向全错，
 其中一次还把 demo 改得更卡。官方那套「先量基线 → 选一项改 → 再量」在这里不是流程洁癖：
