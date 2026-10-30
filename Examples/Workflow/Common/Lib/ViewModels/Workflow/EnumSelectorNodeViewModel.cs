@@ -73,7 +73,19 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     public object? SelectedValue
     {
         get => OutputSlots?.CurrentValue;
-        set { if (OutputSlots is not null) OutputSlots.CurrentValue = value; }
+        set
+        {
+            // 卡片被复用/重新实例化时，ComboBox 的 SelectedItem 会因 ItemsSource 换了一份而复位，并经 TwoWay
+            // 把 null 写回来源 —— 那是控件自己的复位，不是用户清空选择。忽略它，再把真值推回目标；否则
+            // Static 模式在编译时拿不到分支键，整条下游都会被剪成 Order = -1。
+            if (OutputSlots is null) return;
+            if (value is null)
+            {
+                OnPropertyChanged(nameof(SelectedValue));
+                return;
+            }
+            OutputSlots.CurrentValue = value;
+        }
     }
 
     [VeloxProperty] private string lastRouted = "-";
@@ -150,6 +162,41 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
 
     /// <summary>Options for the compile-mode dropdown.</summary>
     public RouterCompileMode[] CompileModeOptions => [RouterCompileMode.Static, RouterCompileMode.Dynamic];
+
+    private static readonly string[] CompileModeNamesCache = [nameof(RouterCompileMode.Static), nameof(RouterCompileMode.Dynamic)];
+
+    /// <summary>String form of the compile-mode options, for dropdowns whose SelectedItem is bound two-way.</summary>
+    public string[] CompileModeNames => CompileModeNamesCache;
+
+    /// <summary>
+    /// String-form compile mode for two-way dropdowns.
+    /// </summary>
+    /// <remarks>
+    /// A ComboBox resets its selection when its ItemsSource is swapped (recycled card, new DataContext) and writes
+    /// null back through the two-way SelectedItem binding. Bound straight to <see cref="CompileMode"/>, that null
+    /// converts to <c>default</c> = <c>Static</c> — the selector then compiles with no branch key and prunes every
+    /// downstream node. This property drops the null instead and pushes the real value back to the control.
+    /// </remarks>
+    public string CompileModeName
+    {
+        get => CompileMode.ToString();
+        set
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                OnPropertyChanged(nameof(CompileModeName));
+                return;
+            }
+
+            if (Enum.TryParse<RouterCompileMode>(value, out var mode) && mode != CompileMode)
+            {
+                CompileMode = mode;
+            }
+        }
+    }
+
+    partial void OnCompileModeChanged(RouterCompileMode oldValue, RouterCompileMode newValue)
+        => OnPropertyChanged(nameof(CompileModeName));
 
     /// <summary>
     /// Unified route-key entry point:

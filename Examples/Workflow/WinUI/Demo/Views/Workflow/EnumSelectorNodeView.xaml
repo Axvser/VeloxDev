@@ -84,8 +84,8 @@
                                   BorderBrush="{StaticResource CardBorderBrush}"
                                   BorderThickness="1"
                                   Foreground="{StaticResource CardValueBrush}"
-                                  ItemsSource="{Binding CompileModeOptions}"
-                                  SelectedItem="{Binding CompileMode, Mode=TwoWay}" />
+                                  ItemsSource="{Binding CompileModeNames}"
+                                  SelectedItem="{Binding CompileModeName, Mode=TwoWay}" />
                         <TextBlock Style="{StaticResource CardLabelTextStyle}" Text="OUTPUT SLOTS" Margin="0,6,0,0" />
                         <ItemsControl ItemsSource="{Binding OutputSlots.Items}"
                                       x:Name="PART_OutputSlotsList"
