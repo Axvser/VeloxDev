@@ -50,8 +50,8 @@
 								  SelectedValue="{Binding SelectedValue, Mode=TwoWay}" />
 						<TextBlock Classes="card-label" Text="COMPILE MODE" Margin="0,4,0,0" />
 						<ComboBox Classes="card-field"
-								  ItemsSource="{Binding CompileModeOptions}"
-								  SelectedItem="{Binding CompileMode, Mode=TwoWay}" />
+								  ItemsSource="{Binding CompileModeNames}"
+								  SelectedItem="{Binding CompileModeName, Mode=TwoWay}" />
 						<TextBlock Classes="card-label" Text="OUTPUT SLOTS" Margin="0,6,0,0" />
 						<ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
 							<ItemsControl.ItemTemplate>
