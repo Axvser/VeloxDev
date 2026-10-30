@@ -21,6 +21,14 @@ public partial class TreeViewModel
     {
         InitializeWorkflow();
         SubscribeTranscript();
+
+        // 侧栏的两行计数（七家同一口径）跟着这三处变化走：总数挂在 Nodes/Links，可见数挂在虚拟化集合。
+        Nodes.CollectionChanged += OnCountSourceChanged;
+        Links.CollectionChanged += OnCountSourceChanged;
+        if (Helper is { } helper)
+        {
+            helper.VisibleItems.CollectionChanged += OnVisibleItemsChanged;
+        }
     }
 
     // …… freely extend your workflow tree view-model
@@ -337,5 +345,62 @@ public partial class TreeViewModel
         if (controller.Compiler.Graphs.FirstOrDefault() is not { } graph) return;
 
         foreach (var row in CompiledOutline.Of(graph)) CompiledStructure.Add(row);
+    }
+
+    // ── 侧栏计数（七家 GUI 同一口径）──────────────────────────────────────────
+    // 「元素」只算节点与连线：插槽不进 VisibleItems，算进来两个数就永远对不上。虚拟连线也不是元素。
+
+    /// <summary>Every node and link on the canvas (slots excluded — they are never in the visible set).</summary>
+    public int TotalElementCount => Nodes.Count + Links.Count;
+
+    /// <summary>How many of <see cref="TotalElementCount"/> are currently realized.</summary>
+    public int VisibleElementCount => VisibleNodeCount + VisibleLinkCount;
+
+    /// <summary>Realized nodes in the virtualization set.</summary>
+    public int VisibleNodeCount
+    {
+        get
+        {
+            if (Helper?.VisibleItems is not { } items) return 0;
+            var count = 0;
+            foreach (var item in items)
+                if (item is IWorkflowNodeViewModel) count++;
+            return count;
+        }
+    }
+
+    /// <summary>Realized links in the virtualization set (the rubber-band virtual link is not one of them).</summary>
+    public int VisibleLinkCount
+    {
+        get
+        {
+            if (Helper?.VisibleItems is not { } items) return 0;
+            var count = 0;
+            foreach (var item in items)
+                if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, VirtualLink)) count++;
+            return count;
+        }
+    }
+
+    /// <summary>Sidebar line: total elements with the node/link breakdown.</summary>
+    public string TotalElementText => $"{TotalElementCount}（节点 {Nodes.Count} · 连线 {Links.Count}）";
+
+    /// <summary>Sidebar line: realized elements with the node/link breakdown.</summary>
+    public string VisibleElementText => $"{VisibleElementCount}（节点 {VisibleNodeCount} · 连线 {VisibleLinkCount}）";
+
+    private void OnCountSourceChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(TotalElementCount));
+        OnPropertyChanged(nameof(TotalElementText));
+        OnPropertyChanged(nameof(VisibleElementCount));
+        OnPropertyChanged(nameof(VisibleElementText));
+    }
+
+    private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(VisibleNodeCount));
+        OnPropertyChanged(nameof(VisibleLinkCount));
+        OnPropertyChanged(nameof(VisibleElementCount));
+        OnPropertyChanged(nameof(VisibleElementText));
     }
 }

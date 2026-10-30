@@ -293,7 +293,7 @@
             nodeCountCaptionLabel.Location = new Point(4, 202);
             nodeCountCaptionLabel.Name = "nodeCountCaptionLabel";
             nodeCountCaptionLabel.TabIndex = 16;
-            nodeCountCaptionLabel.Text = "节点总数：";
+            nodeCountCaptionLabel.Text = "总元素数：";
             // 
             // nodeCountLabel
             // 
@@ -309,7 +309,7 @@
             visibleCountCaptionLabel.Location = new Point(4, 222);
             visibleCountCaptionLabel.Name = "visibleCountCaptionLabel";
             visibleCountCaptionLabel.TabIndex = 18;
-            visibleCountCaptionLabel.Text = "可见组件数：";
+            visibleCountCaptionLabel.Text = "可见元素数：";
             // 
             // visibleCountLabel
             // 

@@ -199,14 +199,15 @@
 						<Button Grid.Row="2" Grid.ColumnSpan="2" Content="Load Workflow Demo" Click="LoadNetworkDemo" HorizontalAlignment="Stretch" />
 					</Grid>
 
-					<!-- 模型计数：标签与数值分列，长数值挤不掉标签 -->
+					<!-- 模型计数：标签在上、数值在下。并排放不下「31（节点 15 · 连线 16）」，
+					     这一栏曾被挤到标签逐字竖排、数值被裁掉。 -->
 					<Border Background="#1A2029" CornerRadius="4" Padding="10">
-						<Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="4">
-							<TextBlock Grid.Row="0" Grid.Column="0" Text="节点总数" Foreground="#94A3B8" />
-							<TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Nodes.Count}" Foreground="#E2E8F0" FontWeight="SemiBold" />
-							<TextBlock Grid.Row="1" Grid.Column="0" Text="可见组件数 ( Node / Link )" Foreground="#94A3B8" TextWrapping="Wrap" />
-							<TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Helper.VisibleItems.Count}" Foreground="#E2E8F0" FontWeight="SemiBold" />
-						</Grid>
+						<StackPanel Spacing="2">
+							<TextBlock Text="总元素数" Foreground="#94A3B8" />
+							<TextBlock Text="{Binding TotalElementText}" Foreground="#E2E8F0" FontWeight="SemiBold" TextWrapping="Wrap" />
+							<TextBlock Text="可见元素数" Foreground="#94A3B8" Margin="0,4,0,0" />
+							<TextBlock Text="{Binding VisibleElementText}" Foreground="#E2E8F0" FontWeight="SemiBold" TextWrapping="Wrap" />
+						</StackPanel>
 					</Border>
 
 					<!-- 元素列表：从 Tree 加载节点/插槽/连线，每行可 Locate / Delete。与其它完整 Demo 共用

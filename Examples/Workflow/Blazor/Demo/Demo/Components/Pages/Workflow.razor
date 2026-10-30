@@ -29,8 +29,8 @@
         <div class="sb-divider"></div>
 
         <div class="sb-info">
-            <span>节点总数: <strong>@(_session?.Tree?.Nodes.Count ?? 0)</strong></span>
-            <span>连接数: <strong>@(_session?.Tree?.Links.Count ?? 0)</strong></span>
+            <span>总元素数: <strong>@(_session?.Tree?.TotalElementText ?? "0")</strong></span>
+            <span>可见元素数: <strong>@(_session?.Tree?.VisibleElementText ?? "0")</strong></span>
         </div>
 
         @* 元素列表：从当前树上取节点 / 插槽 / 连线，每行可 Locate / Delete。状态在共享目录

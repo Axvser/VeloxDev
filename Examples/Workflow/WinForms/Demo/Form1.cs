@@ -411,8 +411,8 @@ namespace Demo
             var isActive = _demo?.Controller.IsActive == true;
             stopButton.Enabled = isActive;
             statusValueLabel.Text = isActive ? "运行中" : "空闲";
-            nodeCountLabel.Text = (_demo?.Tree.Nodes.Count ?? 0).ToString();
-            visibleCountLabel.Text = (_demo?.Tree.Helper?.VisibleItems?.Count ?? 0).ToString();
+            nodeCountLabel.Text = _demo?.Tree.TotalElementText ?? "0";
+            visibleCountLabel.Text = _demo?.Tree.VisibleElementText ?? "0";
         }
 
         // 门与检查点都在会话上、不在树上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做

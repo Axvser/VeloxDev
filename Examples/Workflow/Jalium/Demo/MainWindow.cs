@@ -178,10 +178,10 @@ internal sealed class MainWindow : Window
         load.Click += (_, _) => LoadNetworkDemo();
         panel.Children.Add(Section("Actions", new StackPanel { Spacing = 8, Children = { undo, redo, save, select, load } }));
 
-        panel.Children.Add(new TextBlock { Text = "节点总数：", Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E)), Margin = new Thickness(0, 6, 0, 0) });
+        panel.Children.Add(new TextBlock { Text = "总元素数：", Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E)), Margin = new Thickness(0, 6, 0, 0) });
         _nodeCount.Foreground = new SolidColorBrush(Colors.White);
         panel.Children.Add(_nodeCount);
-        panel.Children.Add(new TextBlock { Text = "连线总数：", Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E)), Margin = new Thickness(0, 4, 0, 0) });
+        panel.Children.Add(new TextBlock { Text = "可见元素数：", Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E)), Margin = new Thickness(0, 4, 0, 0) });
         _visibleCount.Foreground = new SolidColorBrush(Colors.White);
         panel.Children.Add(_visibleCount);
 
@@ -746,6 +746,8 @@ internal sealed class MainWindow : Window
         vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
         vm.AgentLog.CollectionChanged += OnAgentLogChanged;
         vm.Nodes.CollectionChanged += OnTreeCollectionsChanged;
+        // 可见元素数跟着虚拟化集合走：滚动/平移只改它，不改 Nodes。
+        vm.GetHelper().VisibleItems.CollectionChanged += OnVisibleItemsChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
             // 一个 surface 一个合并器：换树会重新走到这里，但合并器跟着窗口走，不该重建。
@@ -770,6 +772,7 @@ internal sealed class MainWindow : Window
         vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
         vm.AgentLog.CollectionChanged -= OnAgentLogChanged;
         vm.Nodes.CollectionChanged -= OnTreeCollectionsChanged;
+        vm.GetHelper().VisibleItems.CollectionChanged -= OnVisibleItemsChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
             helper.SelectionHandler = null;
@@ -781,8 +784,8 @@ internal sealed class MainWindow : Window
 
     private void UpdateCounts()
     {
-        _nodeCount.Text = _tree.Nodes.Count.ToString();
-        _visibleCount.Text = _tree.Links.Count.ToString();
+        _nodeCount.Text = _tree.TotalElementText;
+        _visibleCount.Text = _tree.VisibleElementText;
     }
 
     private void CenterViewport()
@@ -796,6 +799,8 @@ internal sealed class MainWindow : Window
     }
 
     private void OnTreeCollectionsChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateCounts();
+
+    private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateCounts();
 
     private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

@@ -104,6 +104,8 @@ public partial class Workflow : ComponentBase, IDisposable
         _elements?.SetTree(_session.Tree);
         _session.Tree.Nodes.CollectionChanged += OnNodesOrLinksChanged;
         _session.Tree.Links.CollectionChanged += OnNodesOrLinksChanged;
+        // 可见元素数跟着虚拟化集合走；表面滚动时它才会变，所以侧栏要自己订这一份。
+        _session.Tree.GetHelper().VisibleItems.CollectionChanged += OnVisibleItemsChanged;
         _session.Controller.PropertyChanged += OnControllerPropertyChanged;
         // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。
         _session.Controller.RunCommand.Exited += OnRunCommandExited;
@@ -158,6 +160,7 @@ public partial class Workflow : ComponentBase, IDisposable
         if (_session is null) return;
         _session.Tree.Nodes.CollectionChanged -= OnNodesOrLinksChanged;
         _session.Tree.Links.CollectionChanged -= OnNodesOrLinksChanged;
+        _session.Tree.GetHelper().VisibleItems.CollectionChanged -= OnVisibleItemsChanged;
         _session.Controller.PropertyChanged -= OnControllerPropertyChanged;
         _session.Controller.RunCommand.Exited -= OnRunCommandExited;
         _session.Controller.ResumeCommand.Exited -= OnRunCommandExited;
@@ -190,6 +193,9 @@ public partial class Workflow : ComponentBase, IDisposable
 
     // 树/连线的重渲染归表面组件；页面订阅只是为了让侧栏的节点数、连接数跟着变。
     private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
+    private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)

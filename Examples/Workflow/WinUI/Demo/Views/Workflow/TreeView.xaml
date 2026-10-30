@@ -194,10 +194,10 @@
                     <Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
                     <Button Content="Load Workflow Demo" Width="140" Height="50" Click="LoadNetworkDemo" />
 
-                    <TextBlock Margin="0,12,0,0" Text="节点总数：" Foreground="White" />
-                    <TextBlock Text="{Binding Nodes.Count}" Foreground="White" />
-                    <TextBlock Margin="0,8,0,0" Text="可见组件数：( Node / Link )" Foreground="White" />
-                    <TextBlock Text="{Binding Helper.VisibleItems.Count}" Foreground="White" />
+                    <TextBlock Margin="0,12,0,0" Text="总元素数：" Foreground="White" />
+                    <TextBlock Text="{Binding TotalElementText}" Foreground="White" />
+                    <TextBlock Margin="0,8,0,0" Text="可见元素数：" Foreground="White" />
+                    <TextBlock Text="{Binding VisibleElementText}" Foreground="White" />
 
                     <!-- 元素列表：从 Tree 加载节点 / 插槽 / 连线，每行可 Locate / Delete。与其它完整 Demo
                          共用 WorkflowElementCatalog，行为一致；列表状态在 code-behind 里建立并按换树重绑。 -->
