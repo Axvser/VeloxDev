@@ -11,7 +11,7 @@
 ## 一、这一家实现契约的方式（只说与契约有关的取舍）
 
 骨架与 WPF 一一对照（`DispatcherQueue` 换 `Dispatcher`，`DispatcherQueuePriority` 换 `DispatcherPriority`），
-七个类都是薄壳；真正有内容的只有 `UIThreadInspector`、`Interpolator.CreateScheduler` 与十个采样器。
+契约里的类都是薄壳；真正有内容的只有 `UIThreadInspector`、`Interpolator.CreateScheduler` 与采样器面。
 
 契约之外，这一家**多了一个公开成员**：`UIThreadInspector.CaptureUIThread()`（`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs`）。
 理由见 §二·L5 —— 它是 WinUI 拿不到全局 UI 队列时唯一的补救入口，别家（有 `Application.Current.Dispatcher` / `Dispatcher.UIThread`）不需要。
@@ -20,10 +20,10 @@
 正是 `extension.md` §二·5 要避免的每帧一次 dispatch；本家用 `DispatcherQueue` 建一个 `DispatcherQueueTimer` 当 pacer
 （`PlatformAdapters/TransitionInterpreter.cs` 的 `CreateFramePacer`）。
 
-采样器共十个（`PlatformAdapters/Interpolator.cs` 的静态构造）：Brush / Thickness / Point / CornerRadius / Transform /
-Projection / Size / Rect / GridLength / Color。其中三个（Brush、Projection、Transform）的端点值是 WinRT
+采样器（`PlatformAdapters/Interpolator.cs` 的静态构造）：Brush / Thickness / Point / CornerRadius / Transform /
+Projection / Size / Rect / GridLength / Color。其中 Brush、Projection、Transform 的端点值是 WinRT
 对象，**在纯数据进程里无法构造**，所以它们不在闭式解套件里、改由真跑起来的 AT 覆盖
-（`Examples/Transition/AUTO TEST/Samplers/UnreachableSamplers.cs` 里 `VeloxDev.WinUI` 那三条、`Samplers/WinUiEntries.cs` 的 remarks）。
+（`Examples/Transition/AUTO TEST/Samplers/UnreachableSamplers.cs` 里 `VeloxDev.WinUI` 的那几条、`Samplers/WinUiEntries.cs` 的 remarks）。
 
 ---
 
@@ -53,13 +53,13 @@ Projection / Size / Rect / GridLength / Color。其中三个（Brush、Projectio
 （`Attached/Workflow/WorkflowSlotLayoutBehavior.cs` 的 `AttachCoordinateHost`；理由注释在 `LayoutState.CoordinateHost` 那几行：
 只挂节点那份会在节点**移动前**的画布位置上量到槽位，表现为折叠缩放时「连线端点悬在端口外」）。**WPF 免疫**：它的 `LayoutUpdated` 是整棵树一次
 layout pass、永远 post-arrange（同注释）。WinUI 是七家里唯一挂两级 `LayoutUpdated` 的。
-附带两条同源事实：`LayoutUpdated` 的 `sender` 恒为 `null`，只能用闭包捕获控件（`Attach` 里 `state.LayoutUpdatedHandler` 的注释）；
+附带同源事实：`LayoutUpdated` 的 `sender` 恒为 `null`，只能用闭包捕获控件（`Attach` 里 `state.LayoutUpdatedHandler` 的注释）；
 `SizeChanged` 与之并行挂（`OnSizeChanged`），两者都**同步**调 `Sync`，异步 hop 会晚一帧（`ScheduleSync` 的 `TryEnqueue` 正是反例）。
 
 **L4 · WinRT 的 `DependencyObject` 需要进程里有真正的 XAML 运行时才能类激活。**
 纯数据进程里 `new SolidColorBrush()` 直接 `REGDB_E_CLASSNOTREG`（`UnreachableSamplers.cs` 顶部注释记着实测到的
-`RPC_E_WRONG_THREAD` / `REGDB_E_CLASSNOTREG` 两层底）。后果是这三个采样器的正确性**不可能**在纯数据套件里验。
-这不是懒，是硬限制；但它意味着改这三个采样器时，闭式解套件不会拦你。
+`RPC_E_WRONG_THREAD` / `REGDB_E_CLASSNOTREG` 两层底）。后果是这几个采样器的正确性**不可能**在纯数据套件里验。
+这不是懒，是硬限制；但它意味着改这几个采样器时，闭式解套件不会拦你。
 
 **L5 · WinUI 没有「应用的 DispatcherQueue」这个全局句柄。** `DispatcherQueue.GetForCurrentThread()` 是唯一的入口，
 没有 `Application.Current.DispatcherQueue` 可兜底（`UIThreadInspector.cs` 全文无 `Application.Current`）。
@@ -82,7 +82,7 @@ WinUI 取 `High`，并用注释解释为什么（`PlatformAdapters/TransitionEff
 **L7 · 这一家的值类型会在构造/写入时抛，不是截断。**
 `Microsoft.UI.Xaml.CornerRadius` 拒绝负分量（`PlatformAdapters/Samplers/CornerRadiusSampler.cs` 里 `ClampAtZero` 上方的注释写明「越界是抛异常，不是截断」），
 `GridLength` 同（`Samplers/GridLengthSampler.cs` 里「连构造函数都会 Validate —— 越界是抛异常，不是截断」）。
-所以这两个采样器**必须钳**，不能照 `ThicknessSampler`/`PointSampler` 那样裸 lerp。
+所以 `CornerRadius` 与 `GridLength` 的采样器**必须钳**，不能照 `ThicknessSampler`/`PointSampler` 那样裸 lerp。
 
 **L8 · `Projection` 家族里真正被支持的只有 `PlaneProjection`。** 注册的是**抽象基类** `Projection`
 （`PlatformAdapters/Interpolator.cs` 的静态构造），而 `Normalize` 把任何非 `PlaneProjection` 的值换成默认 `PlaneProjection`
@@ -106,15 +106,15 @@ WinUI 取 `High`，并用注释解释为什么（`PlatformAdapters/TransitionEff
 `Samplers/BrushSampler.cs` 的 `LerpColorPremultiplied`：先乘 alpha、在预乘空间插值、最后除回来；
 进度取自**肉眼所见的颜色**而不是预乘后的通道，因为每个预乘通道里都裹着 alpha、在那里钳不住色相
 （理由注释就在 `LerpColorPremultiplied` 里）。其余六家都在非预乘空间插值，同一份 `ColorSampler` 的独立实现也是非预乘的
-（`Samplers/ColorSampler.cs` 的 `InsertFrame`），**两个文件对同一件事用两套算法**是刻意的，不是疏漏。
+（`Samplers/ColorSampler.cs` 的 `InsertFrame`），**`ColorSampler` 与 `BrushSampler` 对同一件事用两套算法**是刻意的，不是疏漏。
 
-**D3 · 只有这一家把圆角的四个分量各自钳制、不共享进度。**
-`Samplers/CornerRadiusSampler.cs` 的 `InsertFrame` 及上方注释：四个圆角互不相干，逼它们同进同退会让还能缩的角无谓停住。
+**D3 · 只有这一家把圆角的各分量各自钳制、不共享进度。**
+`Samplers/CornerRadiusSampler.cs` 的 `InsertFrame` 及上方注释：各圆角互不相干，逼它们同进同退会让还能缩的角无谓停住。
 其余四家的 `CornerRadiusSampler` **完全不钳**（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/CornerRadiusSampler.cs`、
 Avalonia/MAUI/Jalium 同）。`adapter.md` §2 的「Colours」明说这一家是「the one to copy」。
 **顺带一条承重事实**：`CornerRadius` 的构造参数顺序这一家是 `(topLeft, topRight, bottomRight, bottomLeft)`
 （树内见 `Samplers/CornerRadiusSampler.cs` 的 `new CornerRadius(ClampAtZero(Lerp(c1.TopLeft…)), …)`），而 MAUI 是 `(topLeft, topRight, bottomLeft, bottomRight)`
-（`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/Samplers/CornerRadiusSampler.cs` 里先分别算出四个变量再按下标传）
+（`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/Samplers/CornerRadiusSampler.cs` 里先分别算出各个分量再按下标传）
 —— 抄过去下面两个角会**每一帧**都对调，且从第一帧就错。
 
 **D4 · `RotationDirection` 在这一家只对 `Projection` 生效，对 `RotateTransform` 是空操作。**

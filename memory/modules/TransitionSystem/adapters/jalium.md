@@ -9,13 +9,13 @@
 
 ## 一、这家要写什么，为什么是这些
 
-八个类一个不少（表见 extension.md §三·C）。这家唯一"有内容"的选择是**第七型参填 `DispatcherPriority`**（`TransitionScheduler.cs` 的 `TransitionScheduler`），与 WPF/Avalonia 同族。这个选择牵动的四处与 WPF 逐条同形：`CreateScheduler` 里测 `effect is ITransitionEffect<DispatcherPriority>`（`Interpolator.cs` 的 `CreateScheduler`；**这一处属 DynamicTheme 轴，在本家是休眠的** —— 它唯一的调用者是 `Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs` 的 `RunSwitch`，而全仓没有任何 Jalium 调用 `SetPlatformInterpolator`、`Examples/Theme/` 下也没有 Jalium）、宿主覆写 `InternalPriority`（`UIThreadInspector.cs` 的 `InternalPriority` 给 `Send`）、pacer 有真优先级可用（`TransitionInterpreter.cs` 的 `CreateFramePacer` 建 `DispatcherFramePacer`、`CreateTimer` 建带优先级的 `DispatcherTimer`）、`TransitionEffect.Priority` 给 `Render`（`TransitionEffect.cs` 的 `Priority`）。
+契约要求的类一个不少（表见 extension.md §三·C）。这家唯一"有内容"的选择是**第七型参填 `DispatcherPriority`**（`TransitionScheduler.cs` 的 `TransitionScheduler`），与 WPF/Avalonia 同族。这个选择牵动的几处与 WPF 逐条同形：`CreateScheduler` 里测 `effect is ITransitionEffect<DispatcherPriority>`（`Interpolator.cs` 的 `CreateScheduler`；**这一处属 DynamicTheme 轴，在本家是休眠的** —— 它唯一的调用者是 `Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs` 的 `RunSwitch`，而全仓没有任何 Jalium 调用 `SetPlatformInterpolator`、`Examples/Theme/` 下也没有 Jalium）、宿主覆写 `InternalPriority`（`UIThreadInspector.cs` 的 `InternalPriority` 给 `Send`）、pacer 有真优先级可用（`TransitionInterpreter.cs` 的 `CreateFramePacer` 建 `DispatcherFramePacer`、`CreateTimer` 建带优先级的 `DispatcherTimer`）、`TransitionEffect.Priority` 给 `Render`（`TransitionEffect.cs` 的 `Priority`）。
 
 **这家的过渡层基本上是 WPF 的逐字副本**：`TransitionInterpreter.cs`（含 `DispatcherFramePacer` 的 `Arm`/`Disarm`/`Dispose`）与 `Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs` 除注释外逐字相同；`State.cs`、`TransitionScheduler.cs`、`TransitionEffects.cs`、`TransitionEffect.cs` 只换了 `using`。**⇒ 差异全部集中在采样器面与 `Property` 重载面；要给别家找跨平台范本，这两家等价，要理解 Jalium 只需要看那两处。**
 
-### 1.1 采样器面：9 个类 / 10 条注册
+### 1.1 采样器面：类与注册条数不等
 
-`Interpolator.cs` 的静态构造注册十条，但 `Samplers/` 下只有九个文件 —— **这是七家里唯一"类数 ≠ 注册条数"的一家**：`typeof(Brush)` 与 `typeof(SolidColorBrush)` 共用同一个 `BrushSampler` 实例。
+`Interpolator.cs` 的静态构造里，`typeof(Brush)` 与 `typeof(SolidColorBrush)` 共用同一个 `BrushSampler` 实例 —— **这是七家里唯一「类数 ≠ 注册条数」的一家**。
 
 相对 WPF 的采样器面：
 
@@ -24,14 +24,14 @@
 | 独有 | `Transform3D`（`Interpolator.cs` 的 `typeof(Jalium.UI.Media.Media3D.Transform3D)`）+ `Samplers/Transform3DSampler.cs` | `Vector`、`Effect`（效果家族，**键是抽象基类** `Effect`）、`Point3D`、`Vector3D` |
 | 共有 | `Point`/`Rect`/`Thickness`/`CornerRadius`/`Size`/`Color`/`Brush`/`Transform` | 同 |
 
-- **三维面换了一个类型**：Jalium 用**一个聚合类型** `Jalium.UI.Media.Media3D.Transform3D`（反射 `Jalium.UI.Managed` 可证其存在）替掉 WPF 的 `Point3D` + `Vector3D` 两个结构 ⇒ 两家的三维动画**声明面不同形**（`Transition.cs` 的 `Property(Expression<Func<T, Jalium.UI.Media.Media3D.Transform3D?>>…)` 是 Jalium 的 `Transform3D` 重载，WPF 没有）。`Transform3DSampler.cs` 的 `RotateTransform3D` 轴守卫 + `Matrix3D` 回退就是为这个聚合类型付的代价。
+- **三维面换了一个类型**：Jalium 用**一个聚合类型** `Jalium.UI.Media.Media3D.Transform3D`（反射 `Jalium.UI.Managed` 可证其存在）替掉 WPF 的 `Point3D` + `Vector3D` ⇒ 两家的三维动画**声明面不同形**（`Transition.cs` 的 `Property(Expression<Func<T, Jalium.UI.Media.Media3D.Transform3D?>>…)` 是 Jalium 的 `Transform3D` 重载，WPF 没有）。`Transform3DSampler.cs` 的 `RotateTransform3D` 轴守卫 + `Matrix3D` 回退就是为这个聚合类型付的代价。
 - **`Vector` 与 `Vector3D` 的类型存在、但没有采样器**：`Jalium.UI.Vector` 与 `Jalium.UI.Media.Media3D.Vector3D` 都反射得到（后者在 `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 顶部还被 `using` 别名引用，说明可编译）。⇒ **Jalium 上 `Vector` / `Vector3D` 属性不可动画，这是缺口不是平台限制**，代码与注释里都没写理由。要补就照 WPF 的 `Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/VectorSampler.cs`：加注册 +（要声明就）加重载。
 
-### 1.2 `Property` 重载面：1 个泛型 + 12 个手写
+### 1.2 `Property` 重载面：泛型 + 一批手写
 
-`Transition.cs` 的逐类型重载：泛型 `Property<TValue>` 一个，手写十二个（`Brush`、`Transform` 的 `ICollection`、`Transform3D`、`Point`、`Rect`、`Thickness`、`CornerRadius`、`Size`、`Color`、`int`、`double`、`float`）。WPF 同位置有 28 个（手写多出 15 个：4 个 WPF 平台类型 `Vector`/`DropShadowEffect`/`Point3D`/`Vector3D`，加 `decimal` 与 Core 已注册的 `System.Drawing.*` / `System.Numerics.*` 全铺）。
+`Transition.cs` 的逐类型重载：泛型 `Property<TValue>` 一个，外加一批手写（`Brush`、`Transform` 的 `ICollection`、`Transform3D`、`Point`、`Rect`、`Thickness`、`CornerRadius`、`Size`、`Color`、`int`、`double`、`float`）。WPF 同位置的手写更多（多出 WPF 平台类型 `Vector`/`DropShadowEffect`/`Point3D`/`Vector3D`，加 `decimal` 与 Core 已注册的 `System.Drawing.*` / `System.Numerics.*` 全铺）。
 
-**这不是能力缺失**：泛型 `Property<TValue>`（`Transition.cs` 的 `Property<TValue>`）覆盖那些类型；手写只为"泛型表达不了的形状"服务。Jalium 手写的十二个里只有 `Transform` 的 `ICollection<Transform>` 那一个（`Transition.cs` 的 `Property(Expression<Func<T, Transform?>>, ICollection<Transform>)`）有泛型表达不了的语义 —— 单个 transform 必须**直接赋值**、不能包进 `TransformGroup`，否则嵌套路径 `((TranslateTransform)x.RenderTransform).X` 的运行时类型会被换掉（同条理由的完整版见 WPF 那份 `memory/modules/TransitionSystem/adapters/wpf.md`）。另外注意 `decimal` 在 Core 侧也没有采样器（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造，基元只有 `double`/`float`/`int`/`long`）⇒ 少那十五个重载并没有额外损失什么。
+**这不是能力缺失**：泛型 `Property<TValue>`（`Transition.cs` 的 `Property<TValue>`）覆盖那些类型；手写只为"泛型表达不了的形状"服务。Jalium 手写的那批里只有 `Transform` 的 `ICollection<Transform>` 那一个（`Transition.cs` 的 `Property(Expression<Func<T, Transform?>>, ICollection<Transform>)`）有泛型表达不了的语义 —— 单个 transform 必须**直接赋值**、不能包进 `TransformGroup`，否则嵌套路径 `((TranslateTransform)x.RenderTransform).X` 的运行时类型会被换掉（同条理由的完整版见 WPF 那份 `memory/modules/TransitionSystem/adapters/wpf.md`）。另外注意 `decimal` 在 Core 侧也没有采样器（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造，基元只有 `double`/`float`/`int`/`long`）⇒ 少那些重载并没有额外损失什么。
 
 ---
 
@@ -68,25 +68,25 @@
 
 ### 2.4 有 dispatcher ⇒ 存活问它；但这家多一级兜底，且不接线 `Lifetime`
 
-- `UIThreadInspector.cs` 的 `ThreadFor` 是**四级链**：`target is DispatcherObject` → `Application.Current?.Dispatcher` → `Dispatcher.FromThread(Thread.CurrentThread)` → **`Dispatcher.MainDispatcher`**。最后一级是 WPF 没有的（WPF 三级，`Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs` 的 `ThreadFor`）。
+- `UIThreadInspector.cs` 的 `ThreadFor` 是**四级链**：`target is DispatcherObject` → `Application.Current?.Dispatcher` → `Dispatcher.FromThread(Thread.CurrentThread)` → **`Dispatcher.MainDispatcher`**。最后一级是 WPF 没有的（WPF 的 `ThreadFor` 只兜到 `Dispatcher.FromThread`，`Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs` 的 `ThreadFor`）。
 - 整段包在 `try` 里，异常兜底 `ThreadRef.None`（`UIThreadInspector.cs` 的 `ThreadFor` 的 `catch`）；按注释，`None` 只让这个目标失去 pacer（退回 `ArmNextFrame`），不抛。
 - `PostCore` 先看 `dispatcher.HasShutdownStarted` 再入队（`UIThreadInspector.cs` 的 `PostCore`）。⇒ **这家不接线 `Lifetime`、不覆写 `IsAlive`**，所以 `CanSetValue()` 恒为 true，真正的存活判据是 `HasShutdownStarted`。与 WPF 同一份守卫；对照：**Avalonia 有 dispatcher 却没有这道守卫**（`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore` 搜不到 `HasShutdownStarted`）。
-- 入队用的是 `dispatcher.BeginInvoke(priority, action)`（`UIThreadInspector.cs` 的 `PostCore`），而 WPF/Avalonia 用 `InvokeAsync(action, priority)`。**这不是背离**：Jalium 的 `Dispatcher` 两套都有（反射 `Jalium.UI.Managed`：`BeginInvoke(DispatcherPriority, Action)` 与 `InvokeAsync(Action, DispatcherPriority)` 各 7 个重载），语义相同，只是命名。
+- 入队用的是 `dispatcher.BeginInvoke(priority, action)`（`UIThreadInspector.cs` 的 `PostCore`），而 WPF/Avalonia 用 `InvokeAsync(action, priority)`。**这不是背离**：Jalium 的 `Dispatcher` 两套都有（反射 `Jalium.UI.Managed` 可证 `BeginInvoke(DispatcherPriority, Action)` 与 `InvokeAsync(Action, DispatcherPriority)` 都在），语义相同，只是命名。
 
 ### 2.5 csproj：独一家 `net10.0` 无平台后缀
 
 - `VeloxDev.Jalium.csproj` 的 `TargetFramework` 是**单目标 `net10.0`，没有 `-windows` / `-android` 后缀**。七家里 WPF/WinForms 多目标 `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`，Avalonia `netstandard2.0;net6.0;net8.0`，MAUI `net10.0;net10.0-windows10.0.19041.0`，WinUI `net8.0-windows10.0.19041.0;net10.0-windows10.0.19041.0`，Razor `net6.0;net8.0`。⇒ **这不只是打包口味**：它决定了引用必须是"最低的、跨平台的"那个包 —— `Jalium.UI.Controls` 而不是 `Jalium.UI.Desktop`（理由写在 `VeloxDev.Jalium.csproj` 顶部与 `Jalium.UI.Controls` 那条 `PackageReference` 的注释里），因此这家能同时服务 Windows / Linux / Android。
-- `VeloxDev.Jalium.csproj` 的 `NoWarn` 是 `1573;1591`，与 WPF（同样 `1573;1591`）相同；三家适配器里只有 MAUI 的 `NoWarn`（`CA1416`）不同。
+- `VeloxDev.Jalium.csproj` 的 `NoWarn` 是 `1573;1591`，与 WPF（同样 `1573;1591`）相同；适配器里只有 MAUI 的 `NoWarn`（`CA1416`）不同。
 
 ---
 
 ## 三、与其它六家的差异
 
-> **先给一个校准**：这一层的差异比看起来少。`TransitionScheduler` 是**非泛型空壳**（`TransitionScheduler.cs`，与 WPF/MAUI/WinForms/Razor 同，只有 Avalonia/WinUI 用 `TransitionScheduler<TTarget>`）；`TransitionEffect.Priority` 给 `DispatcherPriority.Render`（`TransitionEffect.cs` 的 `Priority`，与 WPF/Avalonia 同，WinUI 给 `DispatcherQueuePriority.High`）；`TransitionEffects` 三条时长与六家逐字相同（`TransitionEffects.cs`）。下面只列真正的背离。
+> **先给一个校准**：这一层的差异比看起来少。`TransitionScheduler` 是**非泛型空壳**（`TransitionScheduler.cs`，与 WPF/MAUI/WinForms/Razor 同，只有 Avalonia/WinUI 用 `TransitionScheduler<TTarget>`）；`TransitionEffect.Priority` 给 `DispatcherPriority.Render`（`TransitionEffect.cs` 的 `Priority`，与 WPF/Avalonia 同，WinUI 给 `DispatcherQueuePriority.High`）；`TransitionEffects` 的预置时长与六家逐字相同（`TransitionEffects.cs`）。下面只列真正的背离。
 
 1. **这里的注册表是七家里唯一的"同族双注册"，而且它的注释是错的。** `typeof(Brush)` 与 `typeof(SolidColorBrush)` 都指向 `BrushSampler`（`Interpolator.cs` 的静态构造）。`Interpolator.cs` 里的注释说这是**必须**的（"Exact-type lookup: register BOTH Brush and SolidColorBrush so brush properties declared as either type animate"）—— **这句与 Core 的查找规则不符**：查找是精确 → 基类由近及远 → 接口按名字序（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `TryGetInterpolator`），而 `SolidColorBrush : Brush`（反射可证：`SolidColorBrush → Brush → Animatable → …`），所以**只留 `typeof(Brush)` 那一行同样命中 `SolidColorBrush`**；第二行是冗余（但无害：两个 key 指向同一实例）。⇒ **别把这段注释当契约抄到别家，也别据此认为"Jalium 的查找和别家不同"。**
-2. **唯独这家把 3-D 面注册成一个聚合类型**：`Transform3D`（`Interpolator.cs` 的静态构造）+ `Samplers/Transform3DSampler.cs`，而 WPF 用 `Point3D` + `Vector3D` 两个结构、两个采样器（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/Point3DSampler.cs`、`Vector3DSampler.cs`）。⇒ 三维动画的**声明面在两家不同形**，没有可抄的关系；`Transform3DSampler` 里的轴守卫就是聚合类型的代价。
-3. **这里的 `Property` 手写重载只有 12 个，而别家把 `System.Drawing` / `System.Numerics` 全铺了一遍。** 这不是"少写了"：泛型 `Property<TValue>` 覆盖它们（见 §1.2）。**唯一的实际差异是声明风格** —— 在 Jalium 上写 `Property(Expression<Func<T, System.Drawing.Point>>, ...)` 要走泛型，签名里显式写类型即可，没有别的后果。
+2. **唯独这家把 3-D 面注册成一个聚合类型**：`Transform3D`（`Interpolator.cs` 的静态构造）+ `Samplers/Transform3DSampler.cs`，而 WPF 用 `Point3D` + `Vector3D`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/Point3DSampler.cs`、`Vector3DSampler.cs`）。⇒ 三维动画的**声明面在两家不同形**，没有可抄的关系；`Transform3DSampler` 里的轴守卫就是聚合类型的代价。
+3. **这里的 `Property` 手写重载比别家少，而别家把 `System.Drawing` / `System.Numerics` 全铺了一遍。** 这不是"少写了"：泛型 `Property<TValue>` 覆盖它们（见 §1.2）。**唯一的实际差异是声明风格** —— 在 Jalium 上写 `Property(Expression<Func<T, System.Drawing.Point>>, ...)` 要走泛型，签名里显式写类型即可，没有别的后果。
 4. **没有第四条。** 另两处容易误判成背离的地方其实是共性，列在这里免去下一次比对：① 存活判据用 `HasShutdownStarted` 而不是 `Lifetime`/`IsAlive`，WPF 同款（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore`），而 Avalonia 有 dispatcher 却没这道守卫；② `PostCore` 用 `BeginInvoke`、WPF/Avalonia 用 `InvokeAsync`，Jalium 两套 API 都在、语义相同（反射 `Jalium.UI.Managed`），只是命名。
 
 ---
@@ -97,7 +97,7 @@
 2. **`RectSampler` / `SizeSampler` 的 `BoundedProgress(t, 0, +∞)` 是 2.1 的平台补偿，不是审美。** 换成 `Clamp01` 之类会同时改掉两件事：上界从 `+∞` 变成 1（过冲被夹，但那两个采样器本来就该允许过冲）与位置的外推方式。
 3. **`BrushSampler` 的第三条路（复用 scratch `SolidColorBrush` 写 `Color`/`Opacity`）是兜底，不要"优化"回真交叉淡出** —— 见 2.3 的实测数字。
 4. **`ColorSampler` 的 `BoundedProgress(t, 0, 255)` 与饱和 `Channel()` 成对出现**，删一个另一个就不够。画刷那条同款在 `Samplers/BrushSampler.cs` 的 `InterpolateColor`。
-5. **测试表没有逃逸口。** Jalium 的 9 个采样器**全部**能在纯数据进程里造出端点（`Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs`），**一条都不在** `Examples/Transition/AUTO TEST/Samplers/UnreachableSamplers.cs`（那份只有 WinUI 3 条 + MAUI 3 条）。⇒ 漏一行 `JaliumEntries.cs` 就是 `SamplerCoverageTests.EveryShippedSampler_IsAccountedFor` 直接红，没有"这个造不出来"可退。
+5. **测试表没有逃逸口。** Jalium 的采样器**全部**能在纯数据进程里造出端点（`Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs`），**一条都不在** `Examples/Transition/AUTO TEST/Samplers/UnreachableSamplers.cs`（那份只有 WinUI 与 MAUI 的条目）。⇒ 漏一行 `JaliumEntries.cs` 就是 `SamplerCoverageTests.EveryShippedSampler_IsAccountedFor` 直接红，没有"这个造不出来"可退。
 6. **`JaliumEntries.cs` 顶部记着一条形状上的坑，写别家适配器也会撞上**：七个适配器把采样器放在同一个命名空间 `VeloxDev.Adapters.NativeSamplers` 且类名相同，而桌面 SDK 的隐式 `using`（`System.Drawing` / `System.Windows.Media` / `System.Windows.Media.Media3D`）与 Jalium 的类型在 `Point`/`Rect`/`Size`/`Thickness`/`CornerRadius`/`Color`/`Brush`/`Transform` 上大量同名 ⇒ 那份文件用一长串 `using X = Jalium.UI...` 别名把类型钉死。**任何同时引用 Jalium 与别家的项目都要付这份成本**（WPF 侧同形，见 `memory/modules/TransitionSystem/adapters/wpf.md` 的坑 6）。
 7. **`Transform3DSampler` 的 `RotateTransform3D` 分支有轴守卫 + `Matrix3D` 回退**（`Samplers/Transform3DSampler.cs`）。聚合类型的轴/角度形状和 WPF 的结构不同，改三维插值时别照 WPF 的 `LerpAngle` 形状直接搬。
 
@@ -105,6 +105,6 @@
 
 ## 五、这份文件没写的东西
 
-- 八个类的成员列表、继承树、文件清单 —— IDE 里一按就有。
+- 契约类的成员列表、继承树、文件清单 —— IDE 里一按就有。
 - 契约本身（要实现的接口、注册在哪、`FindOrCreate` 的理由、pacer 的可重复定时器要求）—— 在 `memory/modules/TransitionSystem/extension.md`。
 - 怎么写一个新采样器 / 怎么注册一个新类型 / 端点与 scratch 的规则 / 一条新缓动的三条联动 —— 同上 §三 与 `skills/veloxdev-create-animation/references/adapter.md`。

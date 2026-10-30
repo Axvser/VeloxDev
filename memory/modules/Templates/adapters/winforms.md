@@ -13,25 +13,25 @@
 ## 一、这一家的条目产出什么形状
 
 **七个条目全部只产出一个 `TemplateClass.cs`**，一个标记文件都没有（`primaryOutputs` 在各条目
-`.template.config/template.json` 里都是 1 条；`ls workflow-*/` 下除 `.template.config/` 外只有
+`.template.config/template.json` 里都只有一条；`ls workflow-*/` 下除 `.template.config/` 外只有
 `TemplateClass.cs`）。⇒ **这一家的"平台语言"就是 C# 本身**，所有 `PART_*` 约定都退化成了
 `Name = "PART_..."` 字符串字面量，没有任何名字作用域可依赖。
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| tree-view | **2026-10-03 起**：`sealed class TemplateClass : WorkflowTreeView`（52 行）——调色板 + `CreateNodeView` / `CreateLinkView` / `OnBuildLinkMenu`。搭壳、两个私有嵌套类（`SurfaceCanvas` / `RulerOverlayForm`）、平移引擎、视图池全在适配器的基类里：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` | 基类见左；模板只剩构造器、两个工厂 override 与 `OnBuildLinkMenu` |
+| tree-view | **2026-10-03 起**：`sealed class TemplateClass : WorkflowTreeView`——调色板 + `CreateNodeView` / `CreateLinkView` / `OnBuildLinkMenu`。搭壳、两个私有嵌套类（`SurfaceCanvas` / `RulerOverlayForm`）、平移引擎、视图池全在适配器的基类里：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` | 基类见左；模板只剩构造器、两个工厂 override 与 `OnBuildLinkMenu` |
 | link-view | **2026-10-04 起**：`sealed class : Control` + `WorkflowLinkAttachment.Attach(this)`——自己的控件、自己的 `OnPaint`；雕窗口区域、端点订阅、几何、命中发布全在助手 `WorkflowLinkAttachment` | 助手见左；不再是基类派生 |
-| node-view（**2026-10-04 起不再是薄派生**：自己的 `UserControl` + `WorkflowNodeAttachment.Attach`） | **2026-10-04 起**：`sealed class : UserControl`（436 行）——三个私有嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` / `DoubleBufferedPanel`）、`OnRebound` / `OnCollapse`、绘制。绑定/定位/折叠/标题与端口解析在适配器的 `WorkflowNodeAttachment` | 附件见左 |
-| slot-view（**2026-10-04 起不再是薄派生**：自己的 `Control` + `WorkflowSlotAttachment.Attach`） | **2026-10-04 起**：`sealed class : Control`（70 行）—— 图形 + 调色值 + `SlotPath`。**那个 `SvgPathParser` 搬进了适配器**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/SvgPathParser.cs`（`BuildPath`）；该文件共 197 行） | 附件见左 |
-| grid-decorator | **2026-10-03 起**：`sealed class : WorkflowGridDecorator`（41 行）——八个颜色 + 间距 + 每几条一条主线。网格与标尺的绘制（含 `OnPaintBackground` 那一趟）在基类 | 基类见左 |
-| minimap-overlay | **2026-10-03 起**：`sealed class : WorkflowMinimapOverlay`（22 行）——4 个调色值。定位、拖拽映射、布局数学全在基类（它并实现了 `IWorkflowMinimapScrollSource`，那个接口也搬进了适配器） | 基类见左 |
-| template-selector | **2026-10-03 起**：`sealed class : WorkflowTemplateSelector`（19 行）——构造函数里给 node / link 两个工厂赋值。四个 `Func<…, Control>` 工厂、分流与诊断都在基类。**树视图不再引用它**——树的基类自带一个记录视图角色的选择器 | 基类见左 |
+| node-view（**2026-10-04 起不再是薄派生**：自己的 `UserControl` + `WorkflowNodeAttachment.Attach`） | **2026-10-04 起**：`sealed class : UserControl`——三个私有嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` / `DoubleBufferedPanel`）、`OnRebound` / `OnCollapse`、绘制。绑定/定位/折叠/标题与端口解析在适配器的 `WorkflowNodeAttachment` | 附件见左 |
+| slot-view（**2026-10-04 起不再是薄派生**：自己的 `Control` + `WorkflowSlotAttachment.Attach`） | **2026-10-04 起**：`sealed class : Control` —— 图形 + 调色值 + `SlotPath`。**那个 `SvgPathParser` 搬进了适配器**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/SvgPathParser.cs`（`BuildPath`）） | 附件见左 |
+| grid-decorator | **2026-10-03 起**：`sealed class : WorkflowGridDecorator`——八个颜色 + 间距 + 每几条一条主线。网格与标尺的绘制（含 `OnPaintBackground` 那一趟）在基类 | 基类见左 |
+| minimap-overlay | **2026-10-03 起**：`sealed class : WorkflowMinimapOverlay`——一组调色值。定位、拖拽映射、布局数学全在基类（它并实现了 `IWorkflowMinimapScrollSource`，那个接口也搬进了适配器） | 基类见左 |
+| template-selector | **2026-10-03 起**：`sealed class : WorkflowTemplateSelector`——构造函数里给 node / link 两个工厂赋值。四个 `Func<…, Control>` 工厂、分流与诊断都在基类。**树视图不再引用它**——树的基类自带一个记录视图角色的选择器 | 基类见左 |
 
 ---
 
 ## 二、模板里手写的是什么（其余 2026-10-03 起全委派给基类）
 
-**模板只剩三件事**（`workflow-tree-view/TemplateClass.cs`，52 行）：调色板（构造器里从 `Template*`
+**模板只剩少数几件事**（`workflow-tree-view/TemplateClass.cs`）：调色板（构造器里从 `Template*`
 符号解析四个表面颜色）、两个工厂 override（`CreateNodeView` → `new NodeView { ViewModel = node }`、
 `CreateLinkView` → `new LinkView { ViewModel = link }`）、以及一个 `OnBuildLinkMenu` 空 override
 （右键菜单的增删点，基类默认加 "Delete"）。
@@ -67,16 +67,16 @@ NodeView 与 LinkView，而 `verify-workflow-item-templates-all.ps1` 会把七�
 又在同命名空间下直接用它做模式匹配，那两个条目就**必须一起生成**，否则 tree-view 报 CS0246。
 对照 Avalonia 那条"生成即失败"是**写在注释里的设计**（`../architecture.md` §7.3）。
 
-### P2 · 六个 `ParseColor` 副本，而且这一家多一条 `Color.FromName` 兜底
+### P2 · 多份 `ParseColor` 副本，而且这一家多一条 `Color.FromName` 兜底
 
-**2026-10-03 起这六份没了**：解析器只有一处 —— 适配器的 `WorkflowSurfaceColors.Parse`
+**2026-10-03 起这些副本没了**：解析器只有一处 —— 适配器的 `WorkflowSurfaceColors.Parse`
 （`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceColors.cs`），模板通过各自基类的
 `protected static ParseColor` 调它。下面这段记的是修复前的形状，**结论（`Color.FromName` 兜底会静默吃掉写错的占位符）仍然成立**：
 
 这一家的实现**比其他平台多一个兜底**：解析不出 `#RRGGBB`/`#AARRGGBB` 时
 `return Color.FromName(value);`（现在只此一处：适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceColors.cs` 的 `Parse`）。
 ⇒ 占位符写错（少一位、拼错名字）时**不抛也不报**，`Color.FromName` 对未知名字返回
-ARGB 全 0 的透明黑 —— 表现是"这条线/这个背景不见了"。改解析规则要动六处。
+ARGB 全 0 的透明黑 —— 表现是"这条线/这个背景不见了"。改解析规则要动多处。
 
 ### P3 · `slotPath` 是**真的被解析**的，但只认 `M/m`、`A/a`、`Z`
 

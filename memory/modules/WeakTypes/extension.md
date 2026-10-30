@@ -1,7 +1,7 @@
 # WeakTypes — 扩展
 
 > 契约/行为的代码事实在 `architecture.md`，本文只写「要动手时走哪条路、哪条路看着能编译但是错的」。
-> 代码：`Src/Core/VeloxDev.Core/WeakTypes/`（4 个 .cs），测试 `Src/Core/VeloxDev.Core.Test/WeakTypes/`（4 个文件，35 个 `[TestMethod]`）。
+> 代码：`Src/Core/VeloxDev.Core/WeakTypes/`，测试 `Src/Core/VeloxDev.Core.Test/WeakTypes/`。
 
 ---
 
@@ -28,7 +28,7 @@
 
 ### 2. 事件挂在**哪个实例**上，决定订阅者会不会被钉住
 
-`static readonly` 的 owner + 长活订阅者 = 泄漏照旧（强缓存钉住 handler，owner 又永不释放）。官方是**每个视图/每次调用一个 owner 实例**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的 9 个 `WeakDelegate` 全是实例字段，`skills/veloxdev-create-animation/SKILL.md` 里 "An instance handler is safe exactly because the declaration is per view…" 那段把这条写成了规则。反例就在测试里：`WeakDelegateTests` 的 `Holder` 是 `static readonly`，正是为了让 `ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent` 那条"保活"断言成立。
+`static readonly` 的 owner + 长活订阅者 = 泄漏照旧（强缓存钉住 handler，owner 又永不释放）。官方是**每个视图/每次调用一个 owner 实例**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的 `WeakDelegate` 事件全是实例字段，`skills/veloxdev-create-animation/SKILL.md` 里 "An instance handler is safe exactly because the declaration is per view…" 那段把这条写成了规则。反例就在测试里：`WeakDelegateTests` 的 `Holder` 是 `static readonly`，正是为了让 `ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent` 那条"保活"断言成立。
 
 ### 3. 迭代期间不要在回调/循环体里改容器 —— 锁救不了你
 
@@ -45,13 +45,13 @@
 
 ### 5. 别指望"确定性地回收"
 
-任何容器都没有"已死"通知、没有回调、没有事件（4 个文件里 `event` 关键字 0 处，除了 `WeakDelegate` 的 `Delegate` 泛型约束）。要在确定时刻腾空间，只能显式 `Remove`（`WeakCache.Remove`）/`Clear`（`WeakQueue.Clear`）/`TrimExcess`。**所以别把正确性建立在 GC 时序上**（清扫永远是"事后清尸"，见 `architecture.md` §一末）。
+任何容器都没有"已死"通知、没有回调、没有事件（容器源码里 `event` 关键字不出现，除了 `WeakDelegate` 的 `Delegate` 泛型约束）。要在确定时刻腾空间，只能显式 `Remove`（`WeakCache.Remove`）/`Clear`（`WeakQueue.Clear`）/`TrimExcess`。**所以别把正确性建立在 GC 时序上**（清扫永远是"事后清尸"，见 `architecture.md` §一末）。
 
 ---
 
 ## 三、新增一个容器（`WeakX<T>`）的步骤与联动清单
 
-四个文件是同一套骨架，照抄最近的一个（`WeakQueue.cs` 或 `WeakStack.cs`，150/151 行，逐段同构）：
+这些文件是同一套骨架，照抄最近的一个（`WeakQueue.cs` 或 `WeakStack.cs`，逐段同构）：
 
 | 步骤 | 具体做什么 | 参照 |
 |---|---|---|
@@ -64,9 +64,9 @@
 
 **联动清单（漏一处通常不报错，只是少一个能力）**：
 
-1. `Src/Core/VeloxDev.Core.Test/WeakTypes/` 加 `WeakXTests.cs` —— 现有 4 个文件的测试数分别是 8/10/10/7；**别在测试里断言回收**（字符串会被驻留），要断言就自己在 helper 方法里造对象 + `Release` 且不挂调试器（仓内没有现成先例，见 `architecture.md` §二末）。
+1. `Src/Core/VeloxDev.Core.Test/WeakTypes/` 加 `WeakXTests.cs` —— **别在测试里断言回收**（字符串会被驻留），要断言就自己在 helper 方法里造对象 + `Release` 且不挂调试器（仓内没有现成先例，见 `architecture.md` §二末）。
 2. 本模块记忆：`architecture.md` §一/§二的表。
-3. **不必**动：七家适配器、`Src/Generators/`、`Src/Templates/` —— 本模块是纯 `System.*` 的，没有任何平台或生成器联动（这也是它与仓内其它模块最大的不同）。
+3. **不必**动：各适配器、`Src/Generators/`、`Src/Templates/` —— 本模块是纯 `System.*` 的，没有任何平台或生成器联动（这也是它与仓内其它模块最大的不同）。
 
 ---
 
@@ -76,9 +76,9 @@
 
 | 位置 | 内容 |
 |---|---|
-| `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的 `_awaked`…`_error` 字段 | 9 个 `WeakDelegate` 字段：7 个 `WeakDelegate<EventHandler<TransitionEventArgs>>` + 2 个带载荷的泛型 `Warn`/`Error`（`<EventHandler<TransitionEventArgs<WarnStage, string>>>`、`<…<ErrorStage, Exception>>>`） |
-| `Awaked`…`Error` 九个事件访问器 | 9 对 `add => _x.AddHandler(value); remove => _x.RemoveHandler(value);` |
-| `InvokeAwake`…`InvokeError` | 9 个 `InvokeXxx`，走 `_x.GetInvocationList()?.Invoke(sender, e)` |
-| `Clone()` | `Clone()` 里 9 次 `_x.Clone()` |
+| `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的 `_awaked`…`_error` 字段 | 一组 `WeakDelegate` 字段：多数是 `WeakDelegate<EventHandler<TransitionEventArgs>>`，另有带载荷的泛型 `Warn`/`Error`（`<EventHandler<TransitionEventArgs<WarnStage, string>>>`、`<…<ErrorStage, Exception>>>`） |
+| `Awaked`…`Error` 事件访问器 | 各对 `add => _x.AddHandler(value); remove => _x.RemoveHandler(value);` |
+| `InvokeAwake`…`InvokeError` | 各 `InvokeXxx`，走 `_x.GetInvocationList()?.Invoke(sender, e)` |
+| `Clone()` | `Clone()` 里各 `_x.Clone()` |
 
 `TransitionEffectCore<TPriorityCore>.Clone()` 是 `new`（非 virtual）且返回**基类型**，所以别顺手把它改成 virtual —— 那是另一个模块（`TransitionSystem`）的事，见 `memory/modules/TransitionSystem/`。

@@ -19,7 +19,7 @@
 
 ## 一、这家要写什么，为什么是这些
 
-七个视图角色在适配器里各有实现文件（视图池由 `ViewPool` + `ViewManager` 两个文件承担），外加一个**契约外的平台补偿文件**：
+七个视图角色在适配器里各有实现文件（视图池由 `ViewPool` + `ViewManager` 承担），外加一个**契约外的平台补偿文件**：
 
 | 角色 | 这家的实现 | 这家特有的形状 |
 |---|---|---|
@@ -37,7 +37,7 @@
 ⚠ **这家的 `WorkflowMinimapOverlay` 不订阅节点**（与 Jalium / WPF 等的同名控件相反），两个后果都要先知道再改它：
 
 - **内容不能缓存**：没有「节点动过」的信号，缓存会按旧位置反解点击。所以它每次绘制走一趟把包围盒与缩略框一起收齐（`ComputeLayout(List<(double,double,double,double)>? thumbnails = null)`，绘制传 `_nodeRects`），每次拖拽移动再走一趟 —— 后者与其余六家等价（那几家的视口是 DP，一变就整份重算）。
-- **纯节点移动不会重画它**：适配器这份控件自己不订阅节点 —— 给它 `Invalidate()` 的只有 `WorkflowTreeView.ApplyPan`（`WorkflowTreeView.cs` 的 `ApplyPan`）与几个配色 setter，而 `ApplyPan` 只跟着平移/缩放/尺寸走。于是单独用适配器这份控件时，「拖动节点但没触发平移」缩略图会停在旧位置；模板与 `WinForms Trimmed` 各自在 `CreateNodeView` 里补了一座 `view.Attachment.AnchorChanged → PART_MinimapOverlay.Invalidate()` 的桥（`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-tree-view/TemplateClass.cs` 里 `AnchorChanged` 那座桥），那两家因此没有这个毛病。**要给这家加缓存，必须同时补上订阅**，否则缩略图会彻底冻住。`WorkflowTreeView` 在构造时把 `PART_Canvas` 同时交给网格装饰器（`SetGridDecorator`），并把 `MinimapOverlay` 属性挂成 `PART_MinimapOverlay`（`MinimapOverlay` 属性 setter）。模板与 `WinForms Trimmed` 各自派生一层只改配色（`Src/Templates/VeloxDev.WinForms.Templates/working/content/` 下 7 个模板包一个不少，`workflow-grid-decorator` / `workflow-minimap-overlay` 已是薄子类）。
+- **纯节点移动不会重画它**：适配器这份控件自己不订阅节点 —— 给它 `Invalidate()` 的只有 `WorkflowTreeView.ApplyPan`（`WorkflowTreeView.cs` 的 `ApplyPan`）与几个配色 setter，而 `ApplyPan` 只跟着平移/缩放/尺寸走。于是单独用适配器这份控件时，「拖动节点但没触发平移」缩略图会停在旧位置；模板与 `WinForms Trimmed` 各自在 `CreateNodeView` 里补了一座 `view.Attachment.AnchorChanged → PART_MinimapOverlay.Invalidate()` 的桥（`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-tree-view/TemplateClass.cs` 里 `AnchorChanged` 那座桥），那两家因此没有这个毛病。**要给这家加缓存，必须同时补上订阅**，否则缩略图会彻底冻住。`WorkflowTreeView` 在构造时把 `PART_Canvas` 同时交给网格装饰器（`SetGridDecorator`），并把 `MinimapOverlay` 属性挂成 `PART_MinimapOverlay`（`MinimapOverlay` 属性 setter）。模板与 `WinForms Trimmed` 各自派生一层只改配色（`Src/Templates/VeloxDev.WinForms.Templates/working/content/` 下的模板包一个不少，`workflow-grid-decorator` / `workflow-minimap-overlay` 已是薄子类）。
 
 ---
 

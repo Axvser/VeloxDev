@@ -1,17 +1,17 @@
 # VeloxDev.Jalium — 架构
 
 > ⚠ **2026-10-05：Jalium 适配器已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
-> `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
+> `WorkflowTreeView` / 各个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
 > `IWorkflowTemplateSelector` / `WorkflowTemplateSelector` / `WorkflowNodeView` / `WorkflowSlotView` /
 > `WorkflowLinkView` 这些类型都不存在；本文下面凡提这些名字的段落，落点以
 > [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇 为准。
 
-> 代码：`Src/Adapters/VeloxDev.Jalium/`。**27 个 .cs、4889 行**
-> （`Attached/Workflow/` 9 个 3913 行，最大 `WorkflowSurfaceBehavior.cs` 1792、`WorkflowSlotLayoutBehavior.cs` 538、`WorkflowMinimapOverlay.cs` 493、`ViewManager.cs` 341、`WorkflowNodeDragBehavior.cs` 277；
-> `PlatformAdapters/` 8 个 325 行，最大 `Transition.cs` 154；`PlatformAdapters/Samplers/` 9 个 648 行，最大 `TransformSampler.cs` 274、`BrushSampler.cs` 134；顶层 `GlobalUsings.cs` 3 行）。
+> 代码：`Src/Adapters/VeloxDev.Jalium/`
+> （`Attached/Workflow/` 最大的几个是 `WorkflowSurfaceBehavior.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowMinimapOverlay.cs`、`ViewManager.cs`、`WorkflowNodeDragBehavior.cs`；
+> `PlatformAdapters/` 最大的是 `Transition.cs`；`PlatformAdapters/Samplers/` 最大的是 `TransformSampler.cs`、`BrushSampler.cs`；顶层另有 `GlobalUsings.cs`）。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.Jalium/*.cs' 'Src/Adapters/VeloxDev.Jalium/**/*.cs' | sort -u`。`git ls-files` 的 glob `'.../**/*.cs'` 只匹配**子目录**里的文件（七家都漏掉本级 `GlobalUsings.cs`）。
 >
-> 本文只写「读完这 27 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+> 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台，不存在平台轴。它在两条轴上的平台差异分别落在
 > `memory/modules/TransitionSystem/adapters/jalium.md`、`memory/modules/WorkflowSystem/adapters/jalium.md`、`memory/modules/Templates/adapters/jalium.md`，本文**指路不抄**。
@@ -24,17 +24,17 @@
 
 | 轴 | Core 契约 | 本项目落点 | 平台差异记在哪 |
 |---|---|---|---|
-| TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `PlatformAdapters/`（8 个类型 + `Samplers/` 9 个） | `memory/modules/TransitionSystem/adapters/jalium.md` |
-| WorkflowSystem | 七个视图角色 | `Attached/Workflow/`（9 文件：表面/插槽/拖拽/连线手势/模型事件五个附着行为 + 连线自盒化助手 + 小地图 + 视图池两件套；见 §三） | `memory/modules/WorkflowSystem/adapters/jalium.md` |
+| TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `PlatformAdapters/`（平台类型 + 一组采样器） | `memory/modules/TransitionSystem/adapters/jalium.md` |
+| WorkflowSystem | 七个视图角色 | `Attached/Workflow/`（一组文件：表面/插槽/拖拽/连线手势/模型事件五个附着行为 + 连线自盒化助手 + 小地图 + 视图池两件套；见 §三） | `memory/modules/WorkflowSystem/adapters/jalium.md` |
 
 **第三条轴（DynamicTheme）在这一家是空的，这是它与 WPF / Avalonia / WinUI / MAUI / WinForms / Razor 的六家差异里最容易被忽略的一条**：
 
 - 全模块**没有 `ThemeValueConverters.cs`**；`IThemeValueConverter` 在本项目零命中。
 - Jalium 也**没有主题 demo**：`Examples/Theme/` 下只有 `Avalonia` / `Avalonia Trimmed` / `WPF` / `WPF Trimmed`。
-- 所以 `Interpolator.CreateScheduler` 在本仓库**是一条无人的路**：它的唯一调用者是 Core `Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs`，而 `ThemeManager.SetPlatformInterpolator` 在本仓库只有 4 个非测试调用点，全是 Avalonia / WPF。
+- 所以 `Interpolator.CreateScheduler` 在本仓库**是一条无人的路**：它的唯一调用者是 Core `Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs`，而 `ThemeManager.SetPlatformInterpolator` 在本仓库只有少数非测试调用点，全是 Avalonia / WPF。
   ⇒ **别把它当成过渡轴的优先级选择来读**：过渡轴走的是 `Transition<T>` 的编译期类型实参，`CreateScheduler` 只是 DynamicTheme 的工厂接缝（休眠，但留着是对的）。
 
-**两条轴的命名空间都寄生在 Core 上**：`VeloxDev.TransitionSystem`（`PlatformAdapters/*`）与 `VeloxDev.WorkflowSystem.AttachedBehaviors`（`Attached/Workflow/*`）。唯一例外是 9 个采样器，它们在 `VeloxDev.Adapters.NativeSamplers`（`PlatformAdapters/Samplers/` 的 `namespace` 声明）—— 与另外六家同名同命名空间，所以**同时引用两家适配器的工程必然 CS0433**。
+**两条轴的命名空间都寄生在 Core 上**：`VeloxDev.TransitionSystem`（`PlatformAdapters/*`）与 `VeloxDev.WorkflowSystem.AttachedBehaviors`（`Attached/Workflow/*`）。唯一例外是采样器，它们在 `VeloxDev.Adapters.NativeSamplers`（`PlatformAdapters/Samplers/` 的 `namespace` 声明）—— 与另外六家同名同命名空间，所以**同时引用两家适配器的工程必然 CS0433**。
 
 **目录名与轴不对齐，别按目录推契约**：`Attached/` 只有 WorkflowSystem 一条轴。
 
@@ -46,13 +46,13 @@
 
 | 要注册的东西 | 注册点 | 什么时候真的发生 |
 |---|---|---|
-| 9 个采样器（10 条登记） | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs`） | 第一次构造 `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();` |
+| 全部采样器（含一条重复登记） | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs`） | 第一次构造 `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();` |
 | 采样器所在的宿主 / 解释器 / 优先级 | `TransitionScheduler` 的类型实参（`PlatformAdapters/TransitionScheduler.cs`） | 同上，全部编译期写死 |
 | DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler`（`Interpolator.cs`） | 宿主显式调 `SetPlatformInterpolator` —— **本仓库无人调**（§一） |
 
 **没有程序集级入口，也没有 `Initialize()`**：全模块 `ModuleInitializer` / `[assembly:` 零命中，唯一的静态构造就是 `Interpolator` 的静态构造。⇒ 只用 `Transition<T>` 的宿主什么都不用做。
 
-### 2.2 十行登记里的两条非常规写法
+### 2.2 登记里的两条非常规写法
 
 ```csharp
 // Interpolator 静态构造的注释：按精确类型查找 —— Brush 与 SolidColorBrush 都要注册
@@ -65,35 +65,35 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 1. **`BrushSampler` 是唯一被登记两次的采样器**（两条 `RegisterInterpolator` 共享一个实例）。Core 的解析次序是「精确类型 → 最近基类 → 接口按名」，`SolidColorBrush` 的最近基类本来就是 `Brush`，所以第二条严格来说是**冗余**的 —— 它防的是「宿主把属性声明成 `SolidColorBrush` 且基类回溯在某些路径下不生效」，代价为零。**别以为漏登记的族类型会被基类接住而放心不加**：这一家的姿态是所有要动画的类型都显式登记。
 2. **`Transform3D` 用了全限定名**（`Interpolator` 静态构造里的 `Jalium.UI.Media.Media3D.Transform3D`）—— 因为 `Jalium.UI.Media` 下同时有 `Transform`（2D）与 `Media3D.Transform3D`。这一条与 WPF 的 `Transform` 家族登记是两个不同的形状：WPF 登记 `typeof(Transform)` 一登记就接住整族，Jalium 两个都显式登记（`Transform` + `Transform3D`），**没有登记 `TransformGroup` / `TranslateTransform` 这些子类**。
 
-### 2.3 这家的三个平台类型是它独有的
+### 2.3 这家的平台类型是它独有的
 
 `TransitionEffect.Priority` 硬编码为 `DispatcherPriority.Render`，`UIThreadInspector.InternalPriority` 是 `Send` —— 两个优先级**语义不同、刻意不同**：前者是动画帧写入用的优先级，后者是「让回调插队到最前」用的。改成同一个会静默改变观感（帧晚一档）。
 `UIThreadInspector.ThreadFor` 的兜底链是**四级**：target 自己的 `Dispatcher` → `Application.Current?.Dispatcher` → `Dispatcher.FromThread(CurrentThread)` → `Dispatcher.MainDispatcher`；整块包在 `try` 里，落空退 `ThreadRef.None`，后果只是这个目标**没有 pacer**。`PostCore` 另有两道闸：拿不到 dispatcher 返回 false，`HasShutdownStarted` 也返回 false。
 
-`.Property(...)` 的**流式重载集不属于 Core**：Core 的 `TransitionCore<...>` 基类里一个 `Property` 都没有，13 个重载全写在各家适配器里（Jalium 13 个在 `PlatformAdapters/Transition.cs`；对照 WPF 28、Avalonia 30、WinForms 17）。⇒ **重载表的长度就是这一家「能被 `.Property(...)` 顺滑写出来的平台类型」的数量**，Jalium 的是：`Brush?`、`ICollection<Transform>`、`Transform3D?`、`Point`、`Rect`、`Thickness`、`CornerRadius`、`Size`、`Color`、`int`、`double`、`float`、`decimal`。注意 **`SolidColorBrush` 没有自己的重载**（虽然它被登记了）—— 声明成 `SolidColorBrush` 的属性靠泛型 `Property<TValue>` 走。
+`.Property(...)` 的**流式重载集不属于 Core**：Core 的 `TransitionCore<...>` 基类里一个 `Property` 都没有，重载全写在各家适配器里（Jalium 的在 `PlatformAdapters/Transition.cs`；各家数量不等）。⇒ **重载表就是这一家「能被 `.Property(...)` 顺滑写出来的平台类型」的清单**，Jalium 的是：`Brush?`、`ICollection<Transform>`、`Transform3D?`、`Point`、`Rect`、`Thickness`、`CornerRadius`、`Size`、`Color`、`int`、`double`、`float`、`decimal`。注意 **`SolidColorBrush` 没有自己的重载**（虽然它被登记了）—— 声明成 `SolidColorBrush` 的属性靠泛型 `Property<TValue>` 走。
 
 `Property(Expression<Func<T, Transform?>>, ICollection<Transform>)` 是**唯一带分支的重载**（`Transition.cs` 的 `Transform` 重载）：`Count == 1` 时把**单个实例**直接 `SetValue`，否则才包 `TransformGroup`。该重载里的注释写明了理由。⇒ **顺手「统一成总是包 TransformGroup」会让依赖具体变换子类类型的宿主静默失效**。
 
 ---
 
-## 三、`Attached/Workflow/`：9 个文件，五个附着行为 + 自盒化助手 + 池 + 小地图
+## 三、`Attached/Workflow/`：附着行为 + 自盒化助手 + 池 + 小地图
 
 **2026-10-05 重构：适配器转成标记驱动，与 WPF 逐项对齐。** 表面不再是可继承的 `Canvas` 基类，
-而是**挂在模板根上的附着行为**；节点/连线的样子由模板的 `.jalxaml` 决定。九个文件：
+而是**挂在模板根上的附着行为**；节点/连线的样子由模板的 `.jalxaml` 决定。文件构成：
 
-| 文件 | 行 | 角色 | 附着属性 |
-|---|---|---|---|
-| `WorkflowSurfaceBehavior.cs` | 1792 | **表面**（`static`）：按名字认领模板声明的部件、喂视口、平移、Ctrl+滚轮缩放、把指针与按键翻译进 Core 的输入路由、弹连线菜单、发布画布变换 | **9**：`IsEnabled` / `ScrollViewerName` / `CanvasName` / `GridDecoratorName` / `PointerPressSourceName` / `MinimapOverlayName` / `ZoomEnabled` / `CanvasTransform` / `LinkMenuKey` |
-| `WorkflowSlotLayoutBehavior.cs` | 538 | **槽锚点的唯一写回点**：按 `SlotNames` / `SlotEnumeratorNames` 找控件、量中心、写 `slot.Anchor`（`SlotAnchorFromVisualCenter`） | 6：`IsEnabled` / `SlotNames` / `SlotEnumeratorNames` / `CoordinateHostName` / `CoordinateHostType` / `State` |
-| `WorkflowMinimapOverlay.cs` | 493 | 小地图，`FrameworkElement, IWorkflowMinimapOverlay`；22 个 DP（尺寸、调色板、视口），`ScrollViewerName` 由模板给 | — |
-| `ViewManager.cs` | 341 | 视图池本体：按类型分桶、`DataTemplateSelector` + 三级回退、每批 3 个走 `DispatcherPriority.Background` | — |
-| `WorkflowNodeDragBehavior.cs` | 277 | 标题栏拖拽 → `node.MoveCommand` | 4 |
-| `WorkflowSlotConnectionBehavior.cs` | 168 | 端口手势：按下送出、松开接收，**并收拾失败**（松回自己、落空 ⇒ 收回虚拟连线） | 1：`IsEnabled` |
-| `WorkflowEvents.cs` | 148 | 模型事件转给宿主 | 3：`Node` / `Slot` / `Tree` |
-| `WorkflowLinkBounds.cs` | 84 | **自盒化助手**（`static`）：把连线元素的布局盒挪到曲线包围盒上（`BoxPad = 6`）—— 渲染器按 `RenderSize` 盒裁剪，画到盒外会被**静默丢弃** | — |
-| `ViewPool.cs` | 72 | 池的挂点：`Panel` 上的 `ItemsSource` / `TemplateSelector` | 2 |
+| 文件 | 角色 | 附着属性 |
+|---|---|---|
+| `WorkflowSurfaceBehavior.cs` | **表面**（`static`）：按名字认领模板声明的部件、喂视口、平移、Ctrl+滚轮缩放、把指针与按键翻译进 Core 的输入路由、弹连线菜单、发布画布变换 | `IsEnabled` / `ScrollViewerName` / `CanvasName` / `GridDecoratorName` / `PointerPressSourceName` / `MinimapOverlayName` / `ZoomEnabled` / `CanvasTransform` / `LinkMenuKey` |
+| `WorkflowSlotLayoutBehavior.cs` | **槽锚点的唯一写回点**：按 `SlotNames` / `SlotEnumeratorNames` 找控件、量中心、写 `slot.Anchor`（`SlotAnchorFromVisualCenter`） | `IsEnabled` / `SlotNames` / `SlotEnumeratorNames` / `CoordinateHostName` / `CoordinateHostType` / `State` |
+| `WorkflowMinimapOverlay.cs` | 小地图，`FrameworkElement, IWorkflowMinimapOverlay`；一组 DP（尺寸、调色板、视口），`ScrollViewerName` 由模板给 | — |
+| `ViewManager.cs` | 视图池本体：按类型分桶、`DataTemplateSelector` + 三级回退、每批 3 个走 `DispatcherPriority.Background` | — |
+| `WorkflowNodeDragBehavior.cs` | 标题栏拖拽 → `node.MoveCommand` | 若干附着属性 |
+| `WorkflowSlotConnectionBehavior.cs` | 端口手势：按下送出、松开接收，**并收拾失败**（松回自己、落空 ⇒ 收回虚拟连线） | `IsEnabled` |
+| `WorkflowEvents.cs` | 模型事件转给宿主 | `Node` / `Slot` / `Tree` |
+| `WorkflowLinkBounds.cs` | **自盒化助手**（`static`）：把连线元素的布局盒挪到曲线包围盒上（`BoxPad = 6`）—— 渲染器按 `RenderSize` 盒裁剪，画到盒外会被**静默丢弃** | — |
+| `ViewPool.cs` | 池的挂点：`Panel` 上的 `ItemsSource` / `TemplateSelector` | `ItemsSource` / `TemplateSelector` |
 
-> 9 个文件都在命名空间 `VeloxDev.WorkflowSystem.AttachedBehaviors`（与六家同名同形），所以**同时引用两家适配器必然 CS0433**。
+> 这些文件都在命名空间 `VeloxDev.WorkflowSystem.AttachedBehaviors`（与六家同名同形），所以**同时引用两家适配器必然 CS0433**。
 
 ### 3.1 表面与「七个角色」的边界
 
@@ -114,9 +114,9 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 ### 3.2 模板与 Trimmed demo 是「标记 + 薄 code-behind」
 
 模板产物与 Trimmed demo 同形：`workflow-{tree,node,slot,link}-view` 各是一对 `.jalxaml` + `.jalxaml.cs`，
-标记里声明部件、写绑定、挂附着行为，code-behind 只剩 `InitializeComponent`（node 9 行、tree 25 行）。
-`workflow-grid-decorator`（449 行）、`workflow-minimap-overlay`（24）、`workflow-template-selector`（49）
-仍是 `.cs`。逐个角色的行数与形状见 `memory/modules/Templates/adapters/jalium.md`。
+标记里声明部件、写绑定、挂附着行为，code-behind 只剩 `InitializeComponent`。
+`workflow-grid-decorator`、`workflow-minimap-overlay`、`workflow-template-selector`
+仍是 `.cs`。逐个角色的形状见 `memory/modules/Templates/adapters/jalium.md`。
 
 ### 3.3 小地图的 `ScrollViewer` 现在由模板按名字接上
 
@@ -151,13 +151,13 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 
 ## 五、仓库里到底被消费了什么（实测）
 
-引用 `VeloxDev.Jalium` **项目**的工程只有 4 个（`git grep -ln 'VeloxDev.Jalium.csproj' -- Examples Src`）：`Examples/Transition/Jalium/Demo/`、`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj`、`Examples/Workflow/Jalium/Demo/`、`Examples/Workflow/Jalium Trimmed/Demo/`。逐个核它们真正用到的类型：
+引用 `VeloxDev.Jalium` **项目**的工程只有少数几个（`git grep -ln 'VeloxDev.Jalium.csproj' -- Examples Src`）：`Examples/Transition/Jalium/Demo/`、`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj`、`Examples/Workflow/Jalium/Demo/`、`Examples/Workflow/Jalium Trimmed/Demo/`。逐个核它们真正用到的类型：
 
 | 工程 | 用到的适配器类型 |
 |---|---|
 | `Examples/Transition/Jalium/Demo/` | 只用到 `PlatformAdapters/` 的 `TransitionEffect` 与 `Transition<T>`（`MainWindow.cs` 一族）；**`Interpolator` / `UIThreadInspector` 名字零命中**（`TransitionScheduler` **不是** —— `MainWindow.NoMutualCount` 直接调了 `TransitionScheduler.TryGetNoMutualScheduler`）—— 前两个只在 `Transition<T>` 的类型实参里被间接使用 |
 | `Examples/Transition/AUTO TEST/Samplers/` | 只走**反射**（`JaliumEntries.cs`、`SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies`） |
-| `Examples/Workflow/Jalium Trimmed/Demo/` | 附着行为挂了**四个**（`WorkflowSurfaceBehavior` 最多，另有 `WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`、`WorkflowSlotConnectionBehavior`）—— 第五个 `WorkflowEvents` 在这个 demo 的标记里**没有引用**，加 `WorkflowLinkBounds`、`WorkflowMinimapOverlay`，以及标记里绑的 `ViewPool.ItemsSource`/`TemplateSelector`；`GridDecorator` 实现 `IWorkflowGridDecorator` |
+| `Examples/Workflow/Jalium Trimmed/Demo/` | 附着行为挂了**若干**（`WorkflowSurfaceBehavior` 最多，另有 `WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`、`WorkflowSlotConnectionBehavior`）—— 第五个 `WorkflowEvents` 在这个 demo 的标记里**没有引用**，加 `WorkflowLinkBounds`、`WorkflowMinimapOverlay`，以及标记里绑的 `ViewPool.ItemsSource`/`TemplateSelector`；`GridDecorator` 实现 `IWorkflowGridDecorator` |
 | `Examples/Workflow/Jalium/Demo/` | 只有 `WorkflowMinimapOverlay`（作为基类）；**不用**池化，也不派生其它基类（它自己写 `NodeEditorSurface`） |
 
 **哪些类型在全仓库零消费者**：**选择器的 `SlotTemplate` / `TreeTemplate`**（模板 `workflow-template-selector/TemplateClass.cs`）—— 本仓库所有宿主只给节点与连线两项赋值（`workflow-tree-view/TemplateClass.jalxaml` 只写 `NodeTemplate=` 与 `LinkTemplate=`），插槽与树 item 从不进池；若进了而模板未设，`SelectTemplate` 会抛 `InvalidOperationException`。
@@ -179,7 +179,7 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 | 事实 | 元素 | 后果 |
 |---|---|---|
 | `<TargetFramework>net10.0</TargetFramework>`（**单 TFM、不带平台后缀**） | `TargetFramework` | 七家里**只有这家**是单 TFM 且不带 `-windows`（Razor 是多 TFM `net6.0;net8.0`，仍不带 `-windows`）。csproj 顶部注释把理由写明了：适配器只用跨平台核心，**不用 `net10.0-windows` 的 `Jalium.UI.Desktop` 入口包**，所以能同时服务 Windows / Linux / Android |
-| 唯一的 Jalium 引用是 `Jalium.UI.Controls 26.10.8` | `PackageReference Include="Jalium.UI.Controls"` | csproj 的注释：这是**能提供 `Canvas`/`ScrollViewer`/`Border`/`Control` + `DrawingContext`/`Geometry`/`FormattedText` 的最低平台中立包**，也是**同代码最低可编版本**（26.10.7 缺 `MainDispatcher`，26.10.0–26.10.6 缺 `DispatcherPriority`）。三个 Jalium demo 用 26.10.9（消费端可自行拉高；26.10.8 多次测量 9.2–12.5s/10s，26.10.9 约 8.4–9.3s；26.11.0 的 `ScrollViewer` classic gutter 会在 `ArrangeOverride` 内 `InvalidateMeasure`，空闲每帧跑 layout，约 11.1s）。**别名包 `Jalium.UI.Desktop` 由消费 demo 自己引** ⇒ 两个包仍是两个版本位，可以不同步 |
+| 唯一的 Jalium 引用是 `Jalium.UI.Controls 26.10.8` | `PackageReference Include="Jalium.UI.Controls"` | csproj 的注释：这是**能提供 `Canvas`/`ScrollViewer`/`Border`/`Control` + `DrawingContext`/`Geometry`/`FormattedText` 的最低平台中立包**，也是**同代码最低可编版本**（26.10.7 缺 `MainDispatcher`，26.10.0–26.10.6 缺 `DispatcherPriority`）。Jalium 的 demo 用 26.10.9（消费端可自行拉高；26.10.8 多次测量 9.2–12.5s/10s，26.10.9 约 8.4–9.3s；26.11.0 的 `ScrollViewer` classic gutter 会在 `ArrangeOverride` 内 `InvalidateMeasure`，空闲每帧跑 layout，约 11.1s）。**别名包 `Jalium.UI.Desktop` 由消费 demo 自己引** ⇒ 两个包仍是两个版本位，可以不同步 |
 | Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 10.0.1` | 两个引用项 | 与另外六家同形的双轨；两条同时生效会报重复成员 |
 | `NoWarn` 写成**一条** `1573;1591` | `NoWarn` | 与 WPF 现状同形。**注意**：`8605` / `8604`（DP 的 CLR 包装拆箱）在这个集合里没有触发点 —— 模板里值类型 DP 走泛型 `Read<T>`，不注册任何 DP 的 CLR 包装 |
 
@@ -201,7 +201,7 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 
 | 想改的东西 | 先打开 |
 |---|---|
-| 画布平移 / 缩放 / 指针路由 / 命中 / 右键菜单 | `Attached/Workflow/WorkflowSurfaceBehavior.cs`（表面行为，`static` 类 + 9 个附着属性） |
+| 画布平移 / 缩放 / 指针路由 / 命中 / 右键菜单 | `Attached/Workflow/WorkflowSurfaceBehavior.cs`（表面行为，`static` 类 + 若干附着属性） |
 | 节点拖拽 | `Attached/Workflow/WorkflowNodeDragBehavior.cs` |
 | 插槽连接手势 | `Attached/Workflow/WorkflowSlotConnectionBehavior.cs` |
 | 槽的锚点（量测写回 `slot.Anchor`） | `Attached/Workflow/WorkflowSlotLayoutBehavior.cs` |
@@ -213,9 +213,9 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 | 视图池、每元素视图的创建/复用/回收 | `Attached/Workflow/ViewManager.cs`（挂点 `ViewPool.cs`；`DataTemplate` 由模板产出） |
 | 「item 类型 → 视图」的模板分派 | **模板** `workflow-template-selector/TemplateClass.cs`（`sealed class : DataTemplateSelector`）+ `ViewPool.TemplateSelector` |
 | 小地图外观与导航 | `Attached/Workflow/WorkflowMinimapOverlay.cs`（模板只是 `MinimapOverlay` 薄派生设四色） |
-| 线程、优先级、pacer、调度器 | `PlatformAdapters/` 那 8 个短文件 + `PlatformAdapters/UIThreadInspector.cs` |
+| 线程、优先级、pacer、调度器 | `PlatformAdapters/` 那组短文件 + `PlatformAdapters/UIThreadInspector.cs` |
 | 让某个 Jalium 类型可动画 | `PlatformAdapters/Samplers/` + `PlatformAdapters/Interpolator.cs` 静态构造的登记表 |
-| 流式 `.Property(...)` 支持哪些类型 | `PlatformAdapters/Transition.cs`（13 个重载） |
+| 流式 `.Property(...)` 支持哪些类型 | `PlatformAdapters/Transition.cs`（重载表） |
 | 包结构、TFM、双轨引用 | `VeloxDev.Jalium.csproj` |
 | **宿主怎么接上适配器** | 纯标记：表面在 `UserControl` 根写 `behaviors:WorkflowSurfaceBehavior.*`（具名部件 + `ZoomEnabled` + `LinkMenuKey`）、`ViewPool.ItemsSource/TemplateSelector` 给 `PART_Canvas`、小地图 `ScrollViewerName="PART_ScrollViewer"`。缩放与视口由表面自己管 —— **不再有** `AttachScrollViewer` / `SetTree` / `NotifyZoomCommitted` 这些宿主调用 |
 
@@ -223,10 +223,10 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 
 ## 九、这份文件没写的东西
 
-- 9 个文件各自的成员列表、继承树、文件清单 —— IDE 里一按就有。
+- 各文件各自的成员列表、继承树、文件清单 —— IDE 里一按就有。
 - 七个角色各自的职责、`PART_*` 约定、契约本身 —— `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；**Jalium 侧的角色机制现在都在适配器附着行为里（`Attached/Workflow/`），模板是标记 + 薄派生**。
 - 这一家的平台硬限制与刻意背离（`Visual.ShouldRenderChild` 按 `RenderSize` 盒裁剪 ⇒ `WorkflowLinkBounds` 自盒化；`IsVirtualLink` 跳过拖拽预览；`CanvasTransform` 通道与括号路径限制；`ZoomPin` 的来龙去脉）—— `memory/modules/WorkflowSystem/adapters/jalium.md`。
 - 过渡轴侧采样器逐一分析、`TransformSampler` 的端点短路与草稿实例类型守卫、`BrushSampler` 为什么只能混一个代表色 —— `memory/modules/TransitionSystem/adapters/jalium.md`。
-- 模板侧：七个条目产出什么形状（四个 `.jalxaml` + 三个 `.cs`）、0 个空转符号、标尺 36 现在单一来源在**模板**的 `workflow-grid-decorator` —— `memory/modules/Templates/adapters/jalium.md`。
+- 模板侧：各条目产出什么形状、标尺 36 现在单一来源在**模板**的 `workflow-grid-decorator` —— `memory/modules/Templates/adapters/jalium.md`。
 - 主题切换的完整流向 —— **这一家没有这条线**（§一），见 `memory/modules/DynamicTheme/architecture.md`。
 - 人面向的「怎么用这套模板搭一个 Jalium 工作流视图」—— `skills/veloxdev-create-workflow/references/gui/jalium.md`。

@@ -1,6 +1,6 @@
 ﻿# TransitionSystem — Avalonia
 
-> 代码：`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/`（八个类 + `Samplers/` 14 个采样器）。
+> 代码：`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/`（契约要求的类 + `Samplers/` 下的采样器）。
 > 契约、扩展点、注册位置在 `memory/modules/TransitionSystem/extension.md`；「怎么用这套 API」在
 > `skills/veloxdev-create-animation/SKILL.md`，逐平台差异的写法在 `skills/veloxdev-create-animation/references/adapter.md`。
 > 本文只写：这家必须实现哪些成员、这家的平台硬限制、与其它六家的刻意背离、改这里最容易踩的坑。
@@ -15,14 +15,14 @@
 | 成员 | 这家的形态 | 为什么是这个形态 |
 |---|---|---|
 | `TPriorityCore` | `DispatcherPriority`（`TransitionScheduler.cs` 的 `TransitionScheduler<TTarget>`、`TransitionEffect.cs` 的 `TransitionEffect`） | Avalonia 有 dispatcher 优先级，按 `extension.md` §三·C 的选型规则就该用它。**但它是 struct 不是 enum**，见 §二.1 |
-| `Interpolator` 注册 | 14 项，`Interpolator.cs` 的静态构造 | 注册的是**接口** `IBrush` / `ITransform`，不是基类 `Brush` / `Transform`。Avalonia 的 `IBrush` 是接口，注册接口能把非 `Brush` 的实现（`ImageBrush` 等）一并接住，走 `InterpolatorCore.TryGetInterpolator` 的接口分支（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs`）。Jalium 反过来同时注册 `Brush` 与 `SolidColorBrush`，两种都对，差别只在覆盖面 |
+| `Interpolator` 注册 | `Interpolator.cs` 的静态构造里那批 | 注册的是**接口** `IBrush` / `ITransform`，不是基类 `Brush` / `Transform`。Avalonia 的 `IBrush` 是接口，注册接口能把非 `Brush` 的实现（`ImageBrush` 等）一并接住，走 `InterpolatorCore.TryGetInterpolator` 的接口分支（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs`）。Jalium 反过来同时注册 `Brush` 与 `SolidColorBrush`，两种都对，差别只在覆盖面 |
 | `CreateScheduler` | 判 `effect is ITransitionEffect<DispatcherPriority>` 后走 `FindOrCreate`（`Interpolator.cs` 的 `CreateScheduler`） | 契约要求的写法，无本家特殊之处 |
 | `UIThreadInspector` | `ThreadFor` 恒返回 `Dispatcher.UIThread`，**不看 target**（`UIThreadInspector.cs` 的 `ThreadFor`） | 平台所致，见 §二.2 |
 | `InternalPriority` | `DispatcherPriority.Send`（`UIThreadInspector.cs` 的 `InternalPriority`） | 必须覆写；不覆写在这家会落到 `Default`（=0），理由与 Core 注释说的不同，见 §二.1 |
 | 存活 | **完全不报**（`UIThreadInspector.cs` 没有 `IsAlive` / `Lifetime` 覆写） | 与 WPF 同属「不携带存活」的一类（`skills/veloxdev-create-animation/references/adapter.md` §1 的「Liveness is a state you have to keep」明写「WPF and Avalonia carry none」）。Avalonia 不是没法报，是没报，见 §三.1 |
 | pacer | 私有 `UiThreadFramePacer` 包一个 `DispatcherTimer`（`TransitionInterpreter.cs` 的 `UiThreadFramePacer`） | `DispatcherTimer` 是这家唯一的 UI 线程定时器；无参构造即绑定唯一 dispatcher，见 §二.4 |
 | `TransitionEffect.Priority` | `DispatcherPriority.Render`（`TransitionEffect.cs` 的 `Priority`） | 与 WPF/Jalium 取值相同。注意 Avalonia 的 `Render` = 4 = `DataBind`（别名），`Normal` 是 5 —— 名字直觉在这家不成立，见 §二.1 |
-| `Transition<T>` | 泛型 `Property<TValue>`（`Transition.cs`）+ 29 个显式重载（同文件的逐类型 `Property` 重载） | 泛型那一条覆盖大部分场景；显式重载是为了**保留值类型的装箱前形态**与 `Expression` 的重载解析，见 §三.4 |
+| `Transition<T>` | 泛型 `Property<TValue>`（`Transition.cs`）+ 一批显式重载（同文件的逐类型 `Property` 重载） | 泛型那一条覆盖大部分场景；显式重载是为了**保留值类型的装箱前形态**与 `Expression` 的重载解析，见 §三.4 |
 | `State` | 空实现（`State.cs`） | 同六家 |
 
 注册位置、契约违背的后果**不在本文**：见 `extension.md` §二、§三·C。
@@ -77,12 +77,12 @@ Input -1 · Default 0 · Loaded 1 · UiThreadRender 2 · AfterRender 3 · Render
 
 `Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj` 的 `TargetFrameworks = netstandard2.0;net6.0`。后果：
 
-- `System.Numerics` 的重载与 Core 一样带 `#if !NETSTANDARD2_0` 守卫（`Transition.cs` 里 `System.Numerics.Vector2`/`Vector3`/`Vector4`/`Quaternion` 那四个重载所在的 `#if` 区）。
+- `System.Numerics` 的重载与 Core 一样带 `#if !NETSTANDARD2_0` 守卫（`Transition.cs` 里 `System.Numerics.Vector2`/`Vector3`/`Vector4`/`Quaternion` 那几个重载所在的 `#if` 区）。
 - `BoxShadowsSampler.cs` 里那段 `#if NETSTANDARD` 的 `Clamp(byte, byte, byte)` 已于 2026-10-18 删除（零调用者；该文件的 `Channel` 自己做饱和）。
 
 ### 7. 为什么这家的采样器比别家宽：**类型系统驱动，不是实现驱动**
 
-这是最容易被误读成「Avalonia 更完整」的一处。把四家的注册表摊开对比（`VeloxDev.{Avalonia,WPF,WinUI,MAUI}/PlatformAdapters/Interpolator.cs` 的静态构造）：
+这是最容易被误读成「Avalonia 更完整」的一处。把这几家的注册表摊开对比（`VeloxDev.{Avalonia,WPF,WinUI,MAUI}/PlatformAdapters/Interpolator.cs` 的静态构造）：
 
 | 家 | 独有项 | 为什么只有它有 |
 |---|---|---|
@@ -93,7 +93,7 @@ Input -1 · Default 0 · Loaded 1 · UiThreadRender 2 · AfterRender 3 · Render
 
 **一句话结论：采样器覆盖面是「平台把多少概念命名成了取值类型」的函数，不是「适配器写得全不全」的函数。** 新平台写注册表时按本家类型集合去盘，不要按本表的差异去凑。
 
-**唯一的例外（这一处不是类型驱动，是缺口）**：Avalonia **有** `Avalonia.Rect` 与 `Avalonia.Vector`（实测存在；`Visual.Bounds` 就是 `Avalonia.Rect`），但注册表里既没有 `Rect` 也没有 `Vector`，`Samplers/` 目录下也没有对应的采样器文件（14 个文件全数列过）。而 WPF、WinUI、MAUI **三家都注册了 `Rect`**。代码与注释里没有任何地方解释这个缺口 —— **视为遗漏而非背离**：Avalonia 上任何 `Rect` / `Vector` 类型的属性动画都会走 `Warn(WarnStage.Unsampled, …)` 静默跳过（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `Prepare` 里 `sampler == null` 分支）。要不要补是一个决定，但**不该被当成「Avalonia 就是这样」**。
+**唯一的例外（这一处不是类型驱动，是缺口）**：Avalonia **有** `Avalonia.Rect` 与 `Avalonia.Vector`（实测存在；`Visual.Bounds` 就是 `Avalonia.Rect`），但注册表里既没有 `Rect` 也没有 `Vector`，`Samplers/` 目录下也没有对应的采样器文件。而 WPF、WinUI、MAUI **三家都注册了 `Rect`**。代码与注释里没有任何地方解释这个缺口 —— **视为遗漏而非背离**：Avalonia 上任何 `Rect` / `Vector` 类型的属性动画都会走 `Warn(WarnStage.Unsampled, …)` 静默跳过（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `Prepare` 里 `sampler == null` 分支）。要不要补是一个决定，但**不该被当成「Avalonia 就是这样」**。
 
 ---
 
@@ -113,9 +113,9 @@ Input -1 · Default 0 · Loaded 1 · UiThreadRender 2 · AfterRender 3 · Render
 
 **这里的做法和其他家不一样，因为 Avalonia 的这条分支选择了「不动」而不是「收敛」**：单位不一样（`Auto` vs `Star` vs 像素）时没有可插值的量，两种选择都是「离散切换」，区别只在切换点。`skills/veloxdev-create-animation/references/adapter.md` §2 的「Sizes and lengths」明确站 WinUI 那边：「prefer the branch that still reaches the target over the one that holds the start ... only the former ever arrives」。**要保持一致的话，这处该改成 WinUI 的写法**；保持现状则要接受「跨单位的 GridLength 动画在 Avalonia 上画不出终点」这个静默结果（不抛、不报，只是永远停在起点）。
 
-### 3. 同一类分支还有两处：`RelativePoint` 与 `RelativeRect`
+### 3. 同一类分支还有 `RelativePoint` 与 `RelativeRect`
 
-`Samplers/RelativePointSampler.cs`、`Samplers/RelativeRectSampler.cs` 是同一个形状：「单位不同无法插值；保持起始值」。这两处**没有对应家可对比**（别家没有 `RelativePoint`/`RelativeRect` 类型），所以不是背离，而是**同一条决策被复制到三个采样器上**：改 §三.2 时要顺手看这两处，否则会得到「GridLength 会收敛、RelativePoint 不会」的不一致。
+`Samplers/RelativePointSampler.cs`、`Samplers/RelativeRectSampler.cs` 是同一个形状：「单位不同无法插值；保持起始值」。这两处**没有对应家可对比**（别家没有 `RelativePoint`/`RelativeRect` 类型），所以不是背离，而是**同一条决策被复制到这几个采样器上**：改 §三.2 时要顺手看这两处，否则会得到「GridLength 会收敛、RelativePoint 不会」的不一致。
 
 ### 4. 重载表：`Point3D/Vector3D/Vector` 没有（与 WPF 的类型集差），`ICollection<Transform>` 那一条是独有
 
@@ -138,10 +138,10 @@ Input -1 · Default 0 · Loaded 1 · UiThreadRender 2 · AfterRender 3 · Render
 2. **`BoxShadowsSampler` 没有用 `working`，每帧分配。** `InsertFrame` 每帧 `new List<BoxShadow>()`，末尾每帧 `GetRange(1, …).ToArray()`。`ISampler` 的 scratch 约定（`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ISampler.cs` 的 `InsertFrame` remarks）是「每动画临时值放 `ref object? working`」，这个采样器没遵守 —— 功能正确，但在采样热路径上每帧两次分配。要优化时先看这里。
 3. **一对多的 BoxShadow 没有淡入淡出，只有「取存在的那一侧」。** `InterpolateBoxShadow` 里：某索引只有一侧存在时直接返回那一侧（不是插值）。后果是**增加阴影时，新阴影从第一帧就是它的终值**（`s1 == default` → 返回 `s2`）；**减少阴影时，多的那条一直保持起始值到最后一帧才消失**（`s2 == default` → 返回 `s1`）。这是本家独有的多阴影路径，没有别家可对比；`BoxShadows` 是唯一一个「值里有集合」的采样器，任何改动都要同时照看这两个方向。
 4. **`IsInset` 在 `t = 0.5` 切换**（`InterpolateBoxShadow` 里的 `t < 0.5 ? s1.IsInset : s2.IsInset`）。它只能在离散点取值（`BoxShadow.IsInset` 是 bool），所以用的是 `adapter.md` 说的「离散值用阈值切」而不是插值。改这里时不要试图「平滑」，bool 没有中间态。
-5. **`TransformSampler` 的 `IsKnownTransform` 门禁是「防抛」而不是「白名单」。** 只有名单上的六种（`TranslateTransform` / `RotateTransform` / `ScaleTransform` / `SkewTransform` / `Rotate3DTransform` / `MatrixTransform`，`Samplers/TransformSampler.cs` 的 `IsKnownTransform`）才走「就地变更暂存对象」的快路径；`CloneTransform` 对名单外的类型**抛 `InvalidOperationException`**，所以自定义 `Transform` 子类被刻意挡在快路径外，走矩阵路径。名单上方的注释（`// 只有这几种变换既能被 CloneTransform 克隆…`）就是写这件事的。
+5. **`TransformSampler` 的 `IsKnownTransform` 门禁是「防抛」而不是「白名单」。** 只有名单上的那几种（`TranslateTransform` / `RotateTransform` / `ScaleTransform` / `SkewTransform` / `Rotate3DTransform` / `MatrixTransform`，`Samplers/TransformSampler.cs` 的 `IsKnownTransform`）才走「就地变更暂存对象」的快路径；`CloneTransform` 对名单外的类型**抛 `InvalidOperationException`**，所以自定义 `Transform` 子类被刻意挡在快路径外，走矩阵路径。名单上方的注释（`// 只有这几种变换既能被 CloneTransform 克隆…`）就是写这件事的。
    - **因此：新增自定义 `Transform` 子类时不要顺手把类型名加进 `IsKnownTransform`** —— 加进去 = 走进快路径 = 撞 `CloneTransform` 的 `throw`。要在快路径上支持它，得同时补 `CloneTransform` 与 `MutateInPlace` 两个 `switch`。
    - 不改名单的后果是自定义子类走矩阵路径：能动画，但产物是 `MatrixTransform` / `TransformGroup`（端点两帧例外，`InsertFrame` 的 `t == 0d` / `t == 1d` 会把调用方自己的实例原样写回，所以嵌套路径的运行时类型仍然保得住）。
    - 这是这家采样器里唯一一处「类型名单」硬编码，也是唯一一处会抛的路径。
-6. **`netstandard2.0` 那条腿不要按想象改。** 框架列表在 csproj 里（§二.6）；`Transition.cs` 里 `System.Numerics` 那四个重载的 `#if` 与 `BoxShadowsSampler.cs` 的 `#if NETSTANDARD` 都是为它服务的。`netstandard2.0` 下没有 `System.Numerics` 的那四个重载，声明端会少一批 —— 调试「某个重载找不到」时先确认 TFM。
+6. **`netstandard2.0` 那条腿不要按想象改。** 框架列表在 csproj 里（§二.6）；`Transition.cs` 里 `System.Numerics` 那几个重载的 `#if` 与 `BoxShadowsSampler.cs` 的 `#if NETSTANDARD` 都是为它服务的。`netstandard2.0` 下没有 `System.Numerics` 的那几个重载，声明端会少一批 —— 调试「某个重载找不到」时先确认 TFM。
 7. **`Examples/Transition/AUTO TEST/Samplers/AvaloniaEntries.cs` 用程序集限定反射取采样器类型**（`SamplerAssembly.GetType("VeloxDev.Adapters.NativeSamplers." + name)`）。原因写在文件里：WPF/WinUI/Jalium 把**同名**采样器（`BrushSampler`、`PointSampler`……）放在同一个命名空间 `VeloxDev.Adapters.NativeSamplers`，编译期直接写类型名会 CS0433。**给 Avalonia 加采样器时照抄这条反射路径**，不要在测试工程里直接引类型名。
-   - 顺带：Avalonia 的 14 个采样器**全部能在纯数据进程里构造**，所以 `UnreachableSamplers.cs` 里**没有 Avalonia 的条目**（那份只有 WinUI 3 个与 MAUI 3 个）。这是这家测试面比别家轻的原因。
+   - 顺带：Avalonia 的采样器**全部能在纯数据进程里构造**，所以 `UnreachableSamplers.cs` 里**没有 Avalonia 的条目**（那份只有 WinUI 与 MAUI 的条目）。这是这家测试面比别家轻的原因。

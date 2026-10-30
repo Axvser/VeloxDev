@@ -1,11 +1,11 @@
 ﻿# VeloxDev.Core.Extension — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension/`（69 个源 .cs，`Agent/` 6 + `Agent/MCP/` 9 + `Agent/Safety/` 6 + `Agent/Skills/` 11 + `Agent/SubAgents/` 6 + `Agent/Pipelines/` 7 + `Agent/Dashboard/` 5 + `Agent/Workflow/` 7 + `Agent/Workflow/Functions/` 7，外加根目录 `AgentEx.cs`、`CheckpointEx.cs`、`CompiledGraphEx.cs` 与 `Compat/` 2 个）。
-> **依赖**：`Src/Core/VeloxDev.Core/AI/`（命名空间 `VeloxDev.AI`，20 个文件）。本模块**是它的调用方**，Core 对本科目零引用。
-> **外部包**：MAF 固定在 `Microsoft.Agents.AI` **1.22.0**（`Microsoft.Extensions.AI` 必须 ≥ 10.10.0，`ModelContextProtocol` 2.2.0）。MAF 有 51 个类型标着 `[Experimental]`（MAAI001，此数不可复核），**整个 `Microsoft.Agents.AI.Compaction` 命名空间在内** —— 见 `native-capabilities.md`。
-> 嵌入资源：`Resources/Workflow/{en,zh}/{References,Safety,Skills}/`，36 个 .md。
+> 代码：`Src/Core/VeloxDev.Core.Extension/`（`Agent/` 下按子目录分组：`MCP/`、`Safety/`、`Skills/`、`SubAgents/`、`Pipelines/`、`Dashboard/`、`Workflow/` 与 `Workflow/Functions/`，外加根目录 `AgentEx.cs`、`CheckpointEx.cs`、`CompiledGraphEx.cs` 与 `Compat/`）。
+> **依赖**：`Src/Core/VeloxDev.Core/AI/`（命名空间 `VeloxDev.AI`）。本模块**是它的调用方**，Core 对本科目零引用。
+> **外部包**：MAF 固定在 `Microsoft.Agents.AI` **1.22.0**（`Microsoft.Extensions.AI` 必须 ≥ 10.10.0，`ModelContextProtocol` 2.2.0）。MAF 有一批类型标着 `[Experimental]`（MAAI001），**整个 `Microsoft.Agents.AI.Compaction` 命名空间在内** —— 见 `native-capabilities.md`。
+> 嵌入资源：`Resources/Workflow/{en,zh}/{References,Safety,Skills}/`，若干 .md。
 > 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`。
-> 测试：`Src/Core/VeloxDev.Core.Extension.Test/`（97 个 .cs，724 条 `[TestMethod]`，89 个 `[TestClass]`）。
+> 测试：`Src/Core/VeloxDev.Core.Extension.Test/`（条数与耗时以 `dotnet test` 现跑为准）。
 
 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
@@ -112,7 +112,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 ## 三点五、编译运行的控制面（2026-09-27 起）
 
-`RunCompiledWorkflow` 是**跑到完才返回**的，所以模型说什么都到不了"还在跑的那一轮"。新增一条后台入口 + 一组控制工具后，六个编译执行能力里"需要有人按一下"的那两件（暂停门、检查点）才真的能被 Agent 用：
+`RunCompiledWorkflow` 是**跑到完才返回**的，所以模型说什么都到不了"还在跑的那一轮"。新增一条后台入口 + 一组控制工具后，一组编译执行能力里"需要有人按一下"的那两件（暂停门、检查点）才真的能被 Agent 用：
 
 | 工具 | 作用 |
 |---|---|
@@ -180,7 +180,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 
 | 想改的东西 | 先打开 |
 |---|---|
-| 工具清单 / 分类 / 某个工具的 JSON 形状 | `Agent/Workflow/Functions/WorkflowAgentToolkit.cs`（约 3150 行） |
+| 工具清单 / 分类 / 某个工具的 JSON 形状 | `Agent/Workflow/Functions/WorkflowAgentToolkit.cs` |
 | 哪些工具算「只读」、脏标记怎么落 | `WorkflowAgentToolkit.BuildQueryToolNames` + `AccountAsync` 的 `MarkDirty` 分支 |
 | 工具预算（三档、拒绝文案、重置流程） | `WorkflowAgentToolkit.CheckInvocation`、`AccountAsync`、`ResetToolCallLimit`、`BudgetRefusal` 的根/子分叉、`Agent/Workflow/Functions/ToolCallLedger.cs`（树共享的那口锅）。**上限本身**由 `WithMax{Tool,Read,Write}ToolCalls` 设，三个都 `BumpVersion()` —— 门（`CheckInvocation`）读的是实时属性，包络读的是缓存文本，不 bump 就会让模型读到一个不被执行的上限 |
 | 子代理（派发 / 窄化 / 任意深度为什么终止） | `Agent/SubAgents/`（见 `sub-agents.md`） |
@@ -211,11 +211,11 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 | `AgentContextTreeRenderer.Class` | `Agent/Workflow/AgentContextTreeRenderer.cs` 的 `Class` | **提升出来的属性被列两次**：目录给提升条目同时打了 `IsPromotedField` 与 `HasVeloxProperty`（生成器 `AIContextModel.cs` 的 `BuildPromotedProperty`），而这张表的两趟（先提升字段、再带标注的属性）都认它。反射那条只列一次 —— 生成出来的那个属性不带 `[VeloxProperty]`。`[AgentContext] + [VeloxProperty]` 正是每个 demo 节点写设置项的写法，所以模型每轮都在为此付双份。已修（第二趟加 `!IsPromotedField`），parity 仍绿（Framework 里没有这种形状的组件，这正是它一直没被抓到的原因） |
 
 **语料按模式切，「挡位」这个概念已经没有了**（2026-10-11 重写）：
-`Resources/Workflow/{en,zh}/Safety/` 下是 `Shared.md` 加五份**同名于模式**的文件（`Plan`/`Manual`/`AutoEdit`/`Auto`/`Bypass`）。
+`Resources/Workflow/{en,zh}/Safety/` 下是 `Shared.md` 加一组**同名于模式**的文件（`Plan`/`Manual`/`AutoEdit`/`Auto`/`Bypass`）。
 `BuildInteractionSafetyPrompt` 先读 `Shared.md`（跨模式不变的那一半：宿主边界、选择器约束），再读 `{mode}.md`，
 最后**追加**宿主用 `WithModePrompt(mode, text)` 加的规则（`WorkflowAgentScope.BuildInteractionSafetyPrompt`；它不替换随包的 Shared/mode 语料），然后**自己再画一张真值表**（模式 × 五个动作类别）与宿主规则清单。
 
-**新增一个模式要同时改四处**：`AgentPermissionMode` 枚举、`AgentPermissionPolicy.ModeDefault` 的矩阵、
+**新增一个模式要同时改几处**：`AgentPermissionMode` 枚举、`AgentPermissionPolicy.ModeDefault` 的矩阵、
 两份语料同名文件、`AgentPermissionPolicyTests.TheMatrix_...` 里那张写死的表。
 `Shared.md` 里那条**宿主边界**仍在那里，而它的措辞在 2026-10-11 被**收窄过一次**，值得记住为什么：
 它第一版写的是「永远不要自己把可达范围扩大，也不要借一个恰好做得到的工具去绕过去」，括号里还举了
@@ -286,12 +286,12 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 ### 八·二、逐字节兼容
 
 新引擎的输出与旧 Newtonsoft 引擎**逐字节相同**，这是硬要求（用户机器上已有存档）。冻结在
-`Src/Core/VeloxDev.Core.Extension.Test/Serialization/Golden/` 的四份文档是契约，由
+`Src/Core/VeloxDev.Core.Extension.Test/Serialization/Golden/` 的文档是契约，由
 `VeloxJsonSerializerTests` 逐字节比对。**成员顺序是最难的一条**，量出来的规则是：
 
 > 手写的可写属性按声明顺序在前，`[VeloxProperty]` 提升出来的属性按字段顺序在后。
 
-`SerializationOrderTests` 对六个代表形状（含 `SlotEnumerator<TSlot>` 这种混合的）钉住它。**改生成器的
+`SerializationOrderTests` 对若干代表形状（含 `SlotEnumerator<TSlot>` 这种混合的）钉住它。**改生成器的
 成员收录顺序会直接打翻这条**，改之前先看那份测试。
 
 ### 八·三、读入侧只有两处按名字找类型（实测确认消不掉）
@@ -301,7 +301,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 
 | 处 | 换过去会怎样 |
 |---|---|
-| `CompileKeyNormalizer` 的路由键 | Extension 4 条编译图序列化测试当场红，症状 `Branch 'Low' has no downstream node` —— 键停在 `long`，动态分支谁都不匹配 |
+| `CompileKeyNormalizer` 的路由键 | Extension 的编译图序列化测试当场红，症状 `Branch 'Low' has no downstream node` —— 键停在 `long`，动态分支谁都不匹配 |
 | `TransitionProperty.FindIndexer` 的索引器属性 | `Expression must be writeable (Parameter 'left')` —— 写路径是 `Expression.Assign(<成员访问>, value)`，方法调用不是可赋值的左值 |
 
 两处都是「宿主在运行期选定的类型、编译单元里没有任何地方提到它」，所以目录收录不到。**代价写在各自的
@@ -310,7 +310,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 **⚠ 一个可写属性会被写出去，包括委托。** 新引擎同样只看「能不能写」：一个
 `public Action<T>? Hook { get; set; }` 写出去没问题，**读回来时构造委托会抛**。运行期状态用
 `{ get; private set; }`，需要外部可设就用**方法**而不是属性。2026-09-27 实测过一次（`ControllerViewModel`
-加了这样的钩子，三条编译图快照测试当场红），那条结论不受引擎更换影响。
+加了这样的钩子，编译图快照测试当场红），那条结论不受引擎更换影响。
 
 ### 八·四、嵌在容器里的容器：写得出、读不回（2026-10-03 修）
 
@@ -339,7 +339,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 （接口类型落到 `Dictionary<K,V>` / `List<T>`）。
 
 **守卫只有两处，`Golden/tree.json` 不守这条**（那棵树是 `SerializationGoldenTests.BuildTree` 建的，
-**没有连接**，`LinksMap` 恰好是 `{}`）：`Serialization/DemoTreeRoundTripTests.cs` 三条
+**没有连接**，`LinksMap` 恰好是 `{}`）：`Serialization/DemoTreeRoundTripTests.cs` 几条
 （空树 / 单节点 / 带连接）与 `Agent/Workflow/Functions/WorkflowSerializationTests.cs` 的
 `TreeWithAConnection_RoundTripsItsLinksMap`。改容器的写读两侧之前先看它们。
 

@@ -17,12 +17,12 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| link-view | **空壳**：`TemplateClass.axaml` 全文只有一个空 `<Control>`（9 行），几何全在 code-behind | `workflow-link-view/TemplateClass.axaml` |
+| link-view | **空壳**：`TemplateClass.axaml` 全文只有一个空 `<Control>`，几何全在 code-behind | `workflow-link-view/TemplateClass.axaml` |
 | node-view | `Viewbox` + 固定设计尺寸卡片，**`x:CompileBindings="False"`** | `workflow-node-view/TemplateClass.axaml` 的 `x:CompileBindings`、`Viewbox` 与设计尺寸 `Grid` |
 | slot-view | `Viewbox` + 一个 `Path`，**没有状态属性** | `workflow-slot-view/TemplateClass.axaml` 的 `Viewbox` / `Path` |
 | tree-view | 外壳 + 两个 **keyed** `DataTemplate`（`NodeTemplate` / `LinkTemplate`）+ 一个声明出来的 `TemplateSelector` 资源 | `workflow-tree-view/TemplateClass.axaml` 的 `NodeTemplate` / `LinkTemplate` / `TemplateSelector` |
 | grid-decorator | `sealed class : Panel, IWorkflowGridDecorator` + 两个私有嵌套 `Control` 覆写 `public override void Render(DrawingContext)` | `workflow-grid-decorator/TemplateClass.cs` 的类声明、`GridLayer.Render`、`RulerLayer.Render` |
-| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个画刷（25 行） | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
+| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个画刷 | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
 | template-selector | `IDataTemplate` 子类（**不是** `DataTemplateSelector`） | `workflow-template-selector/TemplateClass.cs` 的 `IDataTemplate` 实现 |
 
 画刷解析用 `Color.Parse(hex)` 包成 `ImmutableSolidColorBrush`（`workflow-minimap-overlay/TemplateClass.cs` 的 `CreateBrush`）。
@@ -67,7 +67,7 @@ VeloxDev.Avalonia.Templates/working/content/` 零命中）。slot-view 只把描
 ```
 
 `workflow-slot-view/TemplateClass.axaml` 里 `Path` 的 `Fill` 绑定 —— 而 `workflow-slot-view/TemplateClass.axaml.cs`
-是一个**只有 `InitializeComponent()` 的空 partial 类**（12 行），没有任何地方会写 `Foreground`。
+是一个**只有 `InitializeComponent()` 的空 partial 类**，没有任何地方会写 `Foreground`。
 ⇒ 插槽在 Avalonia 上不会随连线状态变色，**且不报错**。对照：WPF/WinUI/MAUI 在 slot-view 里注册了
 `SlotState` DP/BindableProperty 并在 node-view 里绑上；Jalium/Razor/WinForms 在 C# 里算。
 全表在 `../architecture.md` §7.4。

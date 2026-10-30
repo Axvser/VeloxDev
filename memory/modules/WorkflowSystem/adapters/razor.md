@@ -22,7 +22,7 @@
 | 附着属性名 / `PART_*` 命名约定（`../extension.md` §3.9） | **组件 + `[Parameter]` + `RenderFragment`**（`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` 的 `[Parameter]`：`ScrollViewerId` / `CanvasId` / `GridDecorator` / `Minimap`） | Blazor 没有附着属性系统，也没有可附着的元素树。别家在标记里写 `behaviors:WorkflowXxx.IsEnabled="True"`，这里只能 `<WorkflowXxx IsEnabled="true">…</WorkflowXxx>` |
 | 按 `x:Name` 找画布 / 找装饰器 | 直接传 `ScrollViewerId`/`CanvasId`，装饰器与小地图以 `RenderFragment` 传入（`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` 的 `ScrollViewerId` / `CanvasId` / `GridDecorator` / `Minimap` 参数） | 服务端没有名字作用域可查；`@ref` 拿到的是组件实例，不是元素 |
 | 视图池 `ViewPool.TemplateSelector` | `ViewPool.ItemTemplate` + 消费方自己 `@switch` 派发（`Attached/Workflow/ViewPool.razor.cs` 的 `ItemTemplate`） | 没有 DataTemplate 选择器可挂 |
-| 插槽几何写入用 `SlotAnchorFrom*`（`../extension.md` §3.9 第 5 条） | **不调这三个函数**：世界坐标在 JS 里算完才回传（`wwwroot/veloxdev.workflow.js` 的 `initSlotLayout` / `measure`），C# 只把结果写进 `slot.Anchor`（`Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs` 的 `OnSlotLayoutBatch`） | 量像素这件事整个发生在浏览器里；Core 的那三个函数要的是一个**能读控件几何的宿主**，服务端没有 |
+| 插槽几何写入用 `SlotAnchorFrom*`（`../extension.md` §3.9 第 5 条） | **不调 `SlotAnchorFrom*` 这一族函数**：世界坐标在 JS 里算完才回传（`wwwroot/veloxdev.workflow.js` 的 `initSlotLayout` / `measure`），C# 只把结果写进 `slot.Anchor`（`Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs` 的 `OnSlotLayoutBatch`） | 量像素这件事整个发生在浏览器里；Core 的那一族函数要的是一个**能读控件几何的宿主**，服务端没有 |
 
 **契约之外多出来的一个东西（读这家的代码必须知道）**：`SurfaceViewportFeed`。
 它是一个这家的级联值（`WorkflowSurfaceBehavior.razor.cs` 的 `_feed`，经
@@ -276,7 +276,7 @@ JS 的 `initWheelScroll` 把**任何**非 Ctrl 滚轮经 `RequestWheelScroll` �
 
 ## 四、改这里时最容易踩的坑（带依据）
 
-### 1. 区域设置陷阱：把 `double` 写进 CSS/SVG —— **2026-10-03 已清零，规则仍在**
+### 1. 区域设置陷阱：把 `double` 写进 CSS/SVG —— **已在 2026-10-03 全部修掉，规则仍在**
 
 这是这家最贵的一条，也是全仓库唯一有这一类 bug 的平台（别家动画产物是 CLR 值，不用格式化进字符串）。
 **为什么会有这类 bug**：C# 把 `double` 格式化成 CSS 属性值，在逗号小数点的区域下写出 `translateX(28,5px)`，
@@ -300,7 +300,7 @@ JS 的 `initWheelScroll` 把**任何**非 Ctrl 滚轮经 `RequestWheelScroll` �
   （`wwwroot/veloxdev.workflow.js` 的 `linkCurveFromSlotElements`），JS 恒用 `.`，两边格式一旦分叉，settle 守卫每一帧都会把值改回去，
   表现为缩放期间曲线反复闪。
 
-**2026-10-03 清掉的 7 处（原来「仍然活着」的两张清单，现已为空）：**
+**2026-10-03 清掉的那几处（原来「仍然活着」的清单现已为空）：**
 
 - 写侧：`WorkflowGridDecorator.razor.cs` 的标尺厚度/两条 transform/刻度长度（收进一个新的 `Css(double)` 助手，
   `.razor` 里那两处内联 `style` 也改走它）、`WorkflowMinimapOverlay.razor.cs` 的宽高/节点半径/视口描边宽与
@@ -310,11 +310,11 @@ JS 的 `initWheelScroll` 把**任何**非 Ctrl 滚轮经 `RequestWheelScroll` �
   而值是 JS 的 `toFixed(2)` 生成的、**恒定用 `.`**（`wwwroot/veloxdev.workflow.js` 的 `initSlotLayout` / `measure`）；逗号小数点区域的
   默认风格含 `AllowThousands`，`.` 被当成**千位分隔符** ⇒ **静默量错**（不抛异常、也不是零），插槽锚点整体错位。
   现在传 `NumberStyles.Float, CultureInfo.InvariantCulture` —— 顺带把 `AllowThousands` 也去掉了。
-- 模板与镜像：五个条目各自的 `ToCss` rgba 副本（`grid-decorator`/`minimap-overlay`/`node-view`/`slot-view`
-  ＋`link-view`）与 `slot-view` 的 `SlotSizeCss`（进 SVG `width`/`height` 属性）。（第六个 `tree-view` 的
+- 模板与镜像：各条目的 `ToCss` rgba 副本（`grid-decorator`/`minimap-overlay`/`node-view`/`slot-view`
+  ＋`link-view`）与 `slot-view` 的 `SlotSizeCss`（进 SVG `width`/`height` 属性）。（`tree-view` 的
   `ToCss`/调色板 2026-10-04 已移入适配器 `WorkflowPresentation`，见 §六。）
 
-**刻意保留的 1 处**：`Examples/Workflow/*/{InfoOverlay}` 的 `scale.ToString("0.00")` 是 HUD 的**显示文字**，
+**刻意保留的例外**：`Examples/Workflow/*/{InfoOverlay}` 的 `scale.ToString("0.00")` 是 HUD 的**显示文字**，
 不进 CSS 属性、不被任何代码解析，七家各一份。它按当前区域显示「1,25」是显示层的事 —— 要统一属于另一件事。
 
 **判据（给下一个改这里的人）**：在 Razor 适配器里搜索 `ToString("0` 与 `double.TryParse`，
@@ -393,8 +393,8 @@ JS 的 `initWheelScroll` 把**任何**非 Ctrl 滚轮经 `RequestWheelScroll` �
    `Src/Adapters/VeloxDev.Razor/` 下**没有任何** `LateUpdate` 使用；这条是 demo 侧的用法，不是适配器的机制。
    顺带：这条 demo 里**动画对象就是那个 `.razor` 组件自身**（`Transition<TemplateLinkView>`，
    `BuildFlow()`），所以它的属性写入与它的重渲染在同一对象上 —— 这在别家是常态，在这家是特例。
-2. **区域设置陷阱已清零（2026-10-03）**：见 §4·1 —— 写侧 6 组位置（含 `WorkflowCanvasTransformBehavior.ToCss`
-   这个**公开静态 API**）与解析侧那 1 处全部改成不变文化，模板与镜像的 `ToCss`/`SlotSizeCss` 同批修完。
+2. **区域设置陷阱已全部修掉（2026-10-03）**：见 §4·1 —— 写侧各处位置（含 `WorkflowCanvasTransformBehavior.ToCss`
+   这个**公开静态 API**）与解析侧那一处全部改成不变文化，模板与镜像的 `ToCss`/`SlotSizeCss` 同批修完。
    **规则**：写这类进 CSS/SVG/JS 的数字必须带 `InvariantCulture`，
    判据与漏掉的表现见 §4·1。新增/改动任何进 CSS/SVG/JS 的数字时照着那张判据自查。
 
@@ -406,7 +406,7 @@ JS 的 `initWheelScroll` 把**任何**非 Ctrl 滚轮经 `RequestWheelScroll` �
 同日的第二轮重构把**右键菜单的接线整体移进适配器组件 `WorkflowSurfaceBehavior`** —— Razor 没有附着属性，所以用「参数 + RenderFragment」对应 Avalonia 的 `LinkMenuKey` + ContextMenu 资源：**条目归宿主**（`<LinkMenu Context="link">`），**右键入口、坐标记录、定位、弹出、开合上报、Escape 全在组件里**。宿主的代码后置因此不再有任何菜单（或输入面）接线；两个 demo 与模板的 `<LinkMenu>` 条目形状一致。
 
 **重渲染订阅与展示助手归适配器（2026-10-04）**：Blazor 没有数据绑定自动刷新，订阅（树的节点/连线集合、树自身、虚拟连线与每个节点的 `Anchor`/`Size`，变化时 `StateHasChanged` 重渲染整棵子树）整在 `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs`，**不**在 `workflow-tree-view` 的 code-behind（`SyncTreeSubscriptions`/`SubscribeTree`/`UnsubscribeTree` + 逐节点订阅；换树按**模型实例**比对重接，`DisposeAsync` 里先摘订阅）。**为什么搬得动**：模板标记长在组件的 `ChildContent` 里（`Attached/Workflow/WorkflowSurfaceBehavior.razor` 里渲染 `ChildContent` 的那段），表面 `StateHasChanged` 会重新执行 `ChildContent`；该 RenderFragment 由宿主在渲染期创建、闭包读的是宿主的实例成员（`Tree`、`GridSpacing` 等），所以标记照常拿到新值 —— **不是**「重渲染子组件才会更新」。**证据**：Trimmed demo 的 `TreeView` code-behind 现在只剩 `[Parameter]`，拖一条线进 `tree.Links` 后连线照样出现（连线数 0→1，2026-10-04 无头 Chrome + CDP 实测）；节点拖拽同样工作。**边界**：表面重渲染不会重渲染宿主页面本身，所以「表面之外」的读（非 Trimmed demo 侧栏的节点/连接计数）仍由页面自己订 `Nodes`/`Links` 维持，那一处不是残留机制。
-同时搬走的还有模板标记用到的展示助手：调色板（`MinorGridColor`/`RulerBackground`/`RulerTickColor`/`RulerDividerColor`/`NodeForegroundCss`）、`ToCss`/`HexByte`、以及默认节点标记用的 `InputSlotsOf`/`OutputSlotsOf`/`SlotNamesOf`，落在新类型 `Attached/Workflow/WorkflowPresentation.cs`（公开静态、命名空间同适配器，标记里 `@WorkflowPresentation.X` 直接调）。模板的 `TemplateClass.razor.cs`（35 行）与 Trimmed 的 `TreeView.razor.cs`（34 行）因此只剩 `[Parameter]`；`Interaction` 属性（全仓无消费者）删除。模板符号 `surfaceBackground`（`template.json` 把 `TemplateSurfaceBackground` 替成 `#1E1E1E`）保留替换目标：模板把符号直接传进表面的 `Background` 参数（`Src/Templates/VeloxDev.Razor.Templates/working/content/workflow-tree-view/TemplateClass.razor` 的 `Background="TemplateSurfaceBackground"`）—— 与 `surfaceBorderBrush/Thickness/CornerRadius` 三个无目标参数不同。
+同时搬走的还有模板标记用到的展示助手：调色板（`MinorGridColor`/`RulerBackground`/`RulerTickColor`/`RulerDividerColor`/`NodeForegroundCss`）、`ToCss`/`HexByte`、以及默认节点标记用的 `InputSlotsOf`/`OutputSlotsOf`/`SlotNamesOf`，落在新类型 `Attached/Workflow/WorkflowPresentation.cs`（公开静态、命名空间同适配器，标记里 `@WorkflowPresentation.X` 直接调）。模板的 `TemplateClass.razor.cs` 与 Trimmed 的 `TreeView.razor.cs` 因此只剩 `[Parameter]`；`Interaction` 属性（全仓无消费者）删除。模板符号 `surfaceBackground`（`template.json` 把 `TemplateSurfaceBackground` 替成 `#1E1E1E`）保留替换目标：模板把符号直接传进表面的 `Background` 参数（`Src/Templates/VeloxDev.Razor.Templates/working/content/workflow-tree-view/TemplateClass.razor` 的 `Background="TemplateSurfaceBackground"`）—— 与 `surfaceBorderBrush/Thickness/CornerRadius` 三个无目标参数不同。
 
 **单主守卫（2026-10-03）由树的 `LinkRemoved` 提供，不归宿主**：菜单所指的连线一旦离开 `tree.Links`（Delete / Agent / Undo / 任何删除路径），树报 `LinkRemoved`（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/IWorkflowTreeViewModel.cs` 的 `LinkRemoved`、`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/TreeHelper.cs` 的 `LinkRemoved`）——**输入路由不自行解 `IsSuspended`**。Razor 这家的处理在组件内：`Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` 的 `WireLinkMenu` 在订 `Input.PointerPressed` 的同一处订 `LinkRemoved`（同方法的 `_menuLinkRemoved`），只做「是我这份菜单（`ReferenceEquals(MenuLink, link)`）就 `CloseLinkMenu()`」；`CloseLinkMenu` 照常复位 `IsSuspended`，挂起随之放开。**树只报告、宿主（这里就是组件）收自己的弹窗**。
 

@@ -17,12 +17,12 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| link-view | **不是几何视图**：一个 `ContentView`（`InputTransparent="True"`）里放适配器的 `behaviors:WorkflowLinkOverlay`，把树＋交互源＋四个滚动/内容偏移＋标尺厚度＋三个颜色绑过去 | `workflow-link-view/TemplateClass.xaml` 的 `WorkflowLinkOverlay`、`workflow-link-view/TemplateClass.xaml.cs` 的十个 `BindableProperty` |
+| link-view | **不是几何视图**：一个 `ContentView`（`InputTransparent="True"`）里放适配器的 `behaviors:WorkflowLinkOverlay`，把树＋交互源＋四个滚动/内容偏移＋标尺厚度＋三个颜色绑过去 | `workflow-link-view/TemplateClass.xaml` 的 `WorkflowLinkOverlay`、`workflow-link-view/TemplateClass.xaml.cs` 的一组 `BindableProperty` |
 | node-view | `ContentView` 自己挂 `WorkflowSlotLayoutBehavior` 的三个名字 | `workflow-node-view/TemplateClass.xaml` 根上的 `WorkflowSlotLayoutBehavior.*` |
 | slot-view | 圆点由 `IDrawable` **按几何画**，不是 SVG | `workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotDrawable.Draw` |
 | tree-view | `ContentView`（`x:Name="Root"`）+ 池数据源直绑 `Helper.VisibleItems`（连线由适配器的入队过滤跳过） | `workflow-tree-view/TemplateClass.xaml` 的根 `x:Name` 与 `PART_Canvas`、`workflow-tree-view/TemplateClass.xaml.cs` |
 | grid-decorator | `sealed class : Grid, IWorkflowGridDecorator`，两个 `GraphicsView` + `IDrawable` | `workflow-grid-decorator/TemplateClass.cs` 的类声明、两个 `GraphicsView` 字段与构造器 |
-| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个颜色（21 行） | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
+| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个颜色 | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
 | template-selector | `DataTemplateSelector` 子类，四个 `DataTemplate?`，`OnSelectTemplate` 抛 `"Xxx is not set."` | `workflow-template-selector/TemplateClass.cs` 的 `OnSelectTemplate` 与四处抛出 |
 
 三层 z 序写在 tree-view 的注释里：`grid < links < nodes < rulers`（`workflow-tree-view/TemplateClass.xaml` 的 `LinkView` 上方注释）。
@@ -95,7 +95,7 @@
 根因在代码：`SlotDrawable.Draw` 用 `canvas.FillCircle` / `canvas.DrawCircle`
 按 `dirtyRect` 算半径（`workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotDrawable.Draw`），
 一份 SVG 路径都没有。⇒ **想在 MAUI 上换插槽图标，要改的是 `SlotDrawable`，不是任何 `TemplateSlotPath`。**
-其余 11 个空转参数与全局清单见 `../architecture.md` §7.1。
+其余空转参数与全局清单见 `../architecture.md` §7.1。
 
 ### P2 · `Replace` / `Move` 仍无人处理（现在归适配器）
 

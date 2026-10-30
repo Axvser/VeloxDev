@@ -19,7 +19,7 @@
 - **不要写 `using Microsoft.VisualStudio.TestTools.UnitTesting;`** —— csproj 的 `<Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />` 已全局注入。
 - `VeloxDev.Threading` / `VeloxDev.TimeLine` 也不用写（`GlobalUsings.cs` 有）；**其余命名空间必须显式 using**。
 - `[TestClass]` + `[TestMethod]`；参数化只用 `[DataRow]`。
-- 只被一个文件用的桩就写成文件内 `private sealed class`（`ChainRepeatTests` 的 `RecordingSampler` 是这个形态）；**被第二个文件用到时**才上提到 `TestHosts.cs` 或 `WorkflowSystem/Support/WorkflowTestKit.cs` —— 后者的存在理由正是「三个文件各抄一份」被合并（见 `WorkflowTestKit.cs` 头部注释）。
+- 只被一个文件用的桩就写成文件内 `private sealed class`（`ChainRepeatTests` 的 `RecordingSampler` 是这个形态）；**被第二个文件用到时**才上提到 `TestHosts.cs` 或 `WorkflowSystem/Support/WorkflowTestKit.cs` —— 后者的存在理由正是「多个文件各抄一份」被合并（见 `WorkflowTestKit.cs` 头部注释）。
 
 ---
 
@@ -51,7 +51,7 @@
 | 用 `[DataRow]` 去覆盖 netstandard2.0 / net461 分支 | 覆盖不到：只有 net8.0 资产被加载（见 `architecture.md` §二） | 要么给 csproj 加 TFM，要么承认这条分支不可测 |
 | 断言「两个匹配的接口按反射顺序取第一个」 | 反射顺序无保证；`TransitionSystem/InterpolatorCoreTests.cs` 的 `TryGetInterpolator_WithTwoMatchingInterfaces_IsDeterministic` 用注释写明了这点 | 断言**同一次选择可复现**（`AreSame(first, second)`）加**显式规则**（名字序），不要断言「等于某个具体实现」之外的东西 |
 
-**写新测试时先问自己**：这条断言在「CPU 被别的类占满」时还成立吗？不成立就换 §二的 rig，或者加 `[DoNotParallelize]` 并**在类注释里写明为什么**（本模块 17 个类带 `[DoNotParallelize]`，多数在类注释里写清理由，如 `TimerCoreRegistryTests`、`ReusableTimerWaitTests`、`TimelineControlTests`；`MVVM/CommandArityTests` 是没写的那一个）。
+**写新测试时先问自己**：这条断言在「CPU 被别的类占满」时还成立吗？不成立就换 §二的 rig，或者加 `[DoNotParallelize]` 并**在类注释里写明为什么**（本模块多个类带 `[DoNotParallelize]`，多数在类注释里写清理由，如 `TimerCoreRegistryTests`、`ReusableTimerWaitTests`、`TimelineControlTests`；`MVVM/CommandArityTests` 是没写的那一个）。
 
 ---
 
@@ -78,14 +78,14 @@
 
 | 你改了 Core 的 | 必须同步 |
 |---|---|
-| 新增一个内建采样器 | **三处手写期望表**：`TransitionSystem/NativeSamplersTests.cs`、`TransitionSystem/NativeSamplersExtendedTests.cs`、`TransitionSystem/SamplerConformanceTests.cs`（都是逐类型手写的，没有反射枚举兜底） |
+| 新增一个内建采样器 | **多处手写期望表**：`TransitionSystem/NativeSamplersTests.cs`、`TransitionSystem/NativeSamplersExtendedTests.cs`、`TransitionSystem/SamplerConformanceTests.cs`（都是逐类型手写的，没有反射枚举兜底） |
 | 改 `ITimeSourceControl` 的形状 | `Timing/FakeTimeSource.cs` 的 `FakeTimeSource` 会编译不过 —— **这是刻意的**，别用 `throw new NotImplementedException()` 蒙过去 |
 | 改 `TransitionHostBase<TPriority>` 的虚方法签名 | `TestHosts.cs` 的三个宿主（`ImmediateHost` / `InlinePostHost<T>` / `DeferredHost`） |
 | 改 `IWorkflow{Tree,Node,Slot,Link}ViewModel` | `WorkflowSystem/Support/WorkflowTestKit.cs` 的四个 Stub（`StubCommand` / `StubSlot` / `StubNode` / `StubTree`）+ `WorkflowSystem/CompilerEx/ProbeNodes.cs` 的 `TestCommand`/`TestSlot`/`ProbeNode` |
 | 改名一个 `internal` 成员 | 本模块大量直测 internal（`Src/Core/VeloxDev.Core/Properties/AssemblyInfo.cs` 的 `InternalsVisibleTo`）；改名前先 grep 本目录 |
 | 改 `TransitionEx` 的扩展方法 | `ChainRepeatTests` 的 `ChainNode` 是唯一经手 `Then`/`Repeat` 的地方；`AwaitThen` / `Await` 目前**零测试** |
 | 新增一个 Core 主题目录 | `architecture.md` §五的「零测试」缺口表要一起改 |
-| 改核心的取消 / 生命周期时序 | 至少两条类注释里写着「这里为什么必须串行」：`Timing/TimerCoreRegistryTests.cs`、`TransitionSystem/ReusableTimerWaitTests.cs` —— 时序变了这些理由也要重写 |
+| 改核心的取消 / 生命周期时序 | 多处类注释里写着「这里为什么必须串行」：`Timing/TimerCoreRegistryTests.cs`、`TransitionSystem/ReusableTimerWaitTests.cs` —— 时序变了这些理由也要重写 |
 
 ---
 

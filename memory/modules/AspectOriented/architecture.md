@@ -1,6 +1,6 @@
 # AspectOriented — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/AspectOriented/`（5 个 .cs），契约在 `Src/Core/VeloxDev.Core/Interfaces/AspectOriented/IAspectOriented.cs`（一个空标记接口）。
+> 代码：`Src/Core/VeloxDev.Core/AspectOriented/`，契约在 `Src/Core/VeloxDev.Core/Interfaces/AspectOriented/IAspectOriented.cs`（一个空标记接口）。
 > 生成器：`Src/Generators/VeloxDev.Core.Generator/`。**下文不带路径的文件名都指这个目录**：`AopSurface.cs`、`AopProxy.cs`（根）、`Writers/AopWriter.cs`、`Base/AopNames.cs`、`Base/AnalizeHelper.cs`、`Base/Analizer.cs`。它们**不在本模块目录下**，别在 `AspectOriented/` 里找。
 > 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
@@ -35,15 +35,15 @@
 | 拦截未标记的成员 | 生成器只把**被标记的 public 成员**放进镜像接口（`AopSurface.GenerateSource` 里 `OfType<FieldDeclarationSyntax>()` / `OfType<PropertyDeclarationSyntax>()` / `OfType<MethodDeclarationSyntax>()` 三个分支） |
 | 非 public 成员「至少能编译」 | **静默失效**：类被判为 AOP 类（`AnalizeHelper.IsAopClass` 按类回答 yes），接口里却没有那个成员，`Aop()` 照常返回、调用照常直达真身 —— 没有诊断、没有异常 |
 | 标了重载方法 / 表达式体属性 | **生成代码编译失败**（CS0102 / CS0548），不是运行期问题 —— 见 §七·1、§七·2 |
-| 在 `netstandard2.0` / `net461` 上降级 | **不存在**。五个 .cs 全部包在 `#if NET` 里，而 `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0` ⇒ 前两个 TFM 上这个命名空间**根本不存在**（编译器报「类型不存在」，不是运行期静默降级） |
+| 在 `netstandard2.0` / `net461` 上降级 | **不存在**。这些 .cs 全部包在 `#if NET` 里，而 `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0` ⇒ 前两个 TFM 上这个命名空间**根本不存在**（编译器报「类型不存在」，不是运行期静默降级） |
 
 **Core 与适配器都不消费它**：`Src/Adapters/` 下没有任何一处引用 `VeloxDev.AspectOriented`；`Src/` 里提到这个命名空间的只有它自己的契约（`Interfaces/AspectOriented/IAspectOriented.cs`）、生成器（`AopSurface.cs`/`AopWriter.cs`/`Analizer.cs` 里的字符串）与测试。真正的使用者是 `Examples/AOP/WPF`、`Examples/AOP/Avalonia` 与 `skills/veloxdev-add-aspects/SKILL.md`。所以它是**纯对外能力**，没有内部回归压力。
 
 ---
 
-## 二、三个产物、一次遍历、一个命名算法
+## 二、产物、一次遍历、一个命名算法
 
-**产物一：镜像接口**，命名空间 `VeloxDev.AopInterfaces`（`AopNames.InterfaceNamespace`），基接口两个（`AopSurface.GenerateSource` 里的 `baseList`）：
+**产物一：镜像接口**，命名空间 `VeloxDev.AopInterfaces`（`AopNames.InterfaceNamespace`），基接口（`AopSurface.GenerateSource` 里的 `baseList`）：
 
 - `VeloxDev.AspectOriented.IAspectOriented` —— 空标记，标识「这是代理」；
 - `VeloxDev.AspectOriented.IAopHookTarget` —— **带成员**的安装面，只有一个 `SetHooks(string, AspectHooks?)`（`AspectHooks.cs` 的 `IAopHookTarget`）。
@@ -124,7 +124,7 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 | `AopCache.Entry<TClass,TInterface>.Instances` | `ConditionalWeakTable<TClass,TInterface>` | 真身 → 代理 | `Resolve` 的 `GetValue`（`Entry<,>.Instances`、`AopCache.Resolve`） |
 | 每个成员的 `AspectHooks?` 字段 | 代理实例字段 | 成员键 → 三元组 | 生成的 `SetHooks`（`AopSurface.WriteProxy`） |
 
-**代理与真身现在会一起被回收。** 旧实现有两张**静态 `Dictionary` 强引用表**（`ProxyInstances` / `ProxyIDs`），只增不减，把每个代理 —— 并经由代理的 `_target` 字段把每个真身 —— 钉到进程结束。这两张表随 `ProxyInstance.cs` 一起删除了，现在只剩两个弱表。实测钉在 `AopProxyTests.AProxyIsCollectableOnceItsTargetIs`（弱引用 + 强制 GC，跑三次稳定通过）。
+**代理与真身现在会一起被回收。** 旧实现有两张**静态 `Dictionary` 强引用表**（`ProxyInstances` / `ProxyIDs`），只增不减，把每个代理 —— 并经由代理的 `_target` 字段把每个真身 —— 钉到进程结束。这两张表随 `ProxyInstance.cs` 一起删除了，现在只剩两个弱表。实测钉在 `AopProxyTests.AProxyIsCollectableOnceItsTargetIs`（弱引用 + 强制 GC，稳定通过）。
 
 **注意这条是为「重构回归」写的**：重新引入任何静态注册表都不会让别的测试失败，只有这一条会红。
 
@@ -166,9 +166,9 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 2. **表达式体属性 = 生成代码编译失败。** `hasGetter` / `hasSetter` 的推导在 `property.AccessorList` 为 null 时两者都给 false（`AopSurface.GenerateSource` 的属性分支），于是生成的属性是 `{ }` —— CS0548「属性或索引器必须至少有一个访问器」，接口与代理两处各报一次。实测复现。写成 `public string X => "x";` 并标 `[AspectOriented]` 即触发；`{ get; }` 与 `{ get; set; }` 都正常。
 3. **一个切面到底拦的是哪个成员，取决于生成器把什么放进了接口。** 字段必须同时有 MVVM 特性与 `[AspectOriented]`（`AopSurface.GenerateSource` 的字段过滤分支），且它生成的是**推导出的属性名**（`_name` → `Name`，`AnalizeHelper.GetPropertyNameByFieldName`）。只用 `[AspectOriented]` 标字段、不标 MVVM 特性 ⇒ 接口里没有该成员，**静默无效**。
 4. **接口成员一律给 `{ get; set; }`（字段那条路，`AopSurface.GenerateSource` 里的 `accessorList(get: true, set: true)`）**，所以「接口上看得见 setter」不等于「真身可写」—— 一个只读属性会生成出 setter，然后编译失败。属性那条路则按真身的可访问性给（同一个分支里的 `accessorList(hasGetter, hasSetter)`）。
-5. **`Analizer.Filters.Targets` 决定「这个类有没有活干」走符号**（`Filters.Targets` 的触发特性列表里的 `VeloxDev.AspectOriented.AspectOrientedAttribute` 是 10 个触发特性之一）；**接口里有哪些成员走语法文本**：`HasAspectOriented` 里的 `attribute.Name.ToString() == NAME_ASPECTORIENTED`（`AnalizeHelper.cs`）。后果是一个**别的**叫 `AspectOriented` 的特性同样会被当成标记；字段那条路认的 MVVM 特性也是文本匹配 `Contains("Observable") || Contains("Property")`（`AopSurface.GenerateSource` 的字段过滤分支）—— `[VeloxProperty]` 与 CommunityToolkit 的 `[ObservableProperty]` 都算。这是本模块唯一一处「两种匹配方式并存」，改任一侧都要想到另一侧。
+5. **`Analizer.Filters.Targets` 决定「这个类有没有活干」走符号**（`Filters.Targets` 的触发特性列表里的 `VeloxDev.AspectOriented.AspectOrientedAttribute` 就在这份清单里）；**接口里有哪些成员走语法文本**：`HasAspectOriented` 里的 `attribute.Name.ToString() == NAME_ASPECTORIENTED`（`AnalizeHelper.cs`）。后果是一个**别的**叫 `AspectOriented` 的特性同样会被当成标记；字段那条路认的 MVVM 特性也是文本匹配 `Contains("Observable") || Contains("Property")`（`AopSurface.GenerateSource` 的字段过滤分支）—— `[VeloxProperty]` 与 CommunityToolkit 的 `[ObservableProperty]` 都算。这是本模块唯一一处「两种匹配方式并存」，改任一侧都要想到另一侧。
 6. **裁剪 / AOT 不是问题 —— 两个 IL 警告的来源在下面。** `AopCache` 的 `TInterface` 带着 `[DynamicallyAccessedMembers(PublicParameterlessConstructor)]`（`AopCache.Entry<,>` 与 `AopCache.Resolve` 的声明）—— 这是为消掉 `ConditionalWeakTable` 的 IL2091 而传下去的标注，**不是**对调用方的真实要求（详见 §八）。
-7. **没有 `AopInterface` 这个名字**，接口与代理都由 `AopSurface.cs` 一个文件产出 —— `AopInterface.cs` / `ProxyInstance.cs` / `DispatchProxy` 也都不存在。
+7. **没有 `AopInterface` 这个名字**，接口与代理都由 `AopSurface.cs` 产出 —— `AopInterface.cs` / `ProxyInstance.cs` / `DispatchProxy` 也都不存在。
 
 ---
 
@@ -182,10 +182,10 @@ default: throw new ArgumentOutOfRangeException(nameof(memberKey), memberKey, "no
 | 发布 | `dotnet publish -c Debug -r win-x64`，`<PublishAot>true</PublishAot>` —— 成功，**零 IL 警告** |
 | 运行 | 原生 exe 输出与 JIT 逐行一致：代理类型 = `VeloxDev.AopInterfaces.Probe_Global_AopProxy`，且 `proxy.GetType().Assembly == 消费者程序集` |
 | 覆盖 | 方法三阶段、`coverage` 替换、getter/setter 分离、字段+MVVM 特性那条路、`GetTarget` 反查、每实例缓存 |
-| 回归面 | Core 全量 947 个测试通过（2026-10-02 那次运行的计数，**不可复核** —— 当前 `Src/Core/VeloxDev.Core.Test/` 已有 1129 个 `[TestMethod]`）；`Examples/AOP/WPF`、`Examples/AOP/Avalonia` 均 0 警告 0 错误 |
+| 回归面 | Core 全量测试通过（那次运行的计数已不可复核 —— 当前测试数已变）；`Examples/AOP/WPF`、`Examples/AOP/Avalonia` 均无警告无错误 |
 
 **两个 AOT 障碍都在生成期解决了**：`DispatchProxy`（`RequiresDynamicCode`，靠 `Reflection.Emit`）与 `ProxyEx` 里的 `dynamic`（需要 `Microsoft.CSharp` 运行期绑定器）。
 
 **环境坑，不是兼容性问题**：NativeAOT 的链接阶段要找 `vswhere.exe`，而它不在 PATH 上（实际位置 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`）。不加会看到 `link.exe … 退出代码 123` 与「文件名、目录名或卷标语法不正确」——**那是工具链寻址失败，不要读成 AOT 不兼容**。把该目录加进 PATH 即可。
 
-**关于那两个 IL2091**：`ConditionalWeakTable<TKey,TValue>` 的 `TValue` 带 `DynamicallyAccessedMembers(PublicParameterlessConstructor)` 标注（服务于 `GetOrCreateValue()`，本模块只走带工厂的 `GetValue`，永远不碰那条路）。触发条件是**类型实参为未标注的泛型形参**；具体类型不查构造器 —— 一个没有公共无参构造的类作实参也不报。所以修法是把标注传递到 `TInterface` 上，调用点传的都是生成的具体接口类型，不会因此多出警告。实测：修前发布报 2 条 IL2091，修后干净。
+**关于那两个 IL2091**：`ConditionalWeakTable<TKey,TValue>` 的 `TValue` 带 `DynamicallyAccessedMembers(PublicParameterlessConstructor)` 标注（服务于 `GetOrCreateValue()`，本模块只走带工厂的 `GetValue`，永远不碰那条路）。触发条件是**类型实参为未标注的泛型形参**；具体类型不查构造器 —— 一个没有公共无参构造的类作实参也不报。所以修法是把标注传递到 `TInterface` 上，调用点传的都是生成的具体接口类型，不会因此多出警告。实测：修前发布会报 IL2091，修后干净。

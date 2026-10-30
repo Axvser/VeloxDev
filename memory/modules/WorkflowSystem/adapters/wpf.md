@@ -13,7 +13,7 @@
 
 ## 一、这家要写什么，为什么是这些
 
-WPF 把七个视图角色**一对一**落成 8 个实现（视图池拆成「挂点」与「管理器」两个文件），**没有任何一个角色被合并、也没有多出契约外的角色**：
+WPF 把七个视图角色**一对一**落成一组实现（视图池拆成「挂点」与「管理器」），**没有任何一个角色被合并、也没有多出契约外的角色**：
 
 | 角色 | 这家的实现 | 为什么是它 |
 |---|---|---|
@@ -27,7 +27,7 @@ WPF 把七个视图角色**一对一**落成 8 个实现（视图池拆成「挂
 
 **为什么这家没有第八个角色**：WPF 的渲染层不需要额外托管——连线视图自己 `OnRender` 画（`Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`）。别家的额外文件都不是契约要求，是各家的平台补偿：MAUI 用 `WorkflowLinkOverlay` 换掉 `WorkflowCanvasTransformBehavior`（它不需要一个独立的变换载体，但需要一个链接层）；Avalonia 多一个 `PlatformDetection.cs`；WinForms 多一个 `NativeWindowStyleHelper.cs`（外加 `IWorkflowTemplateSelector` / `WorkflowTreeView` 等一整套基类）；Jalium 用 `WorkflowLinkBounds` 换掉 `WorkflowCanvasTransformBehavior`（渲染器按 `RenderSize` 盒裁剪的补偿，见 `adapters/jalium.md` §2.1；变换直接发在 `WorkflowSurfaceBehavior` 上）；Razor 的装饰器也在适配器里，且每个行为都是 `.razor` + `.razor.cs` 一对。
 
-**唯一与 WPF 逐文件同构的是 WinUI**（8 个文件、同名同分法）。这条的实际用处：**想把 WPF 的适配器结构照搬到某一家之前，先确认目标是 WinUI；对另外五家都搬不过去。**
+**唯一与 WPF 逐文件同构的是 WinUI**（同名同分法）。这条的实际用处：**想把 WPF 的适配器结构照搬到某一家之前，先确认目标是 WinUI；对另外五家都搬不过去。**
 
 ---
 

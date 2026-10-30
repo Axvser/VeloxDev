@@ -3,7 +3,7 @@
 > 面向「我要加一个新东西」和「我要挂一个切面」。架构见 [architecture.md](architecture.md)。
 > 依据只写树里的**路径 + 唯一符号或引文**。
 > **下文不带路径的文件名都指 `Src/Generators/VeloxDev.Core.Generator/`**（`AopSurface.cs`、`AopProxy.cs`、`Writers/AopWriter.cs`、`Base/AopNames.cs`、`Base/AnalizeHelper.cs`、`Base/Analizer.cs`），不在本模块目录下。
-> **本模块没有 `adapters/`，因为不存在平台轴**：五个运行期 .cs 全在 `#if NET` 内、零 GUI 引用，`Src/Adapters/` 下也无人引用它（见 architecture.md §一末）。
+> **本模块没有 `adapters/`，因为不存在平台轴**：运行期 .cs 全在 `#if NET` 内、零 GUI 引用，`Src/Adapters/` 下也无人引用它（见 architecture.md §一末）。
 
 ---
 
@@ -76,7 +76,7 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 1. **标记成员。** 字段：`[VeloxProperty][AspectOriented] private string _name;`（顺序无关，但两个都要有）。属性 / 方法：`[AspectOriented]` + `public`。
 2. **确认类是 `partial`。** 不是为了 AOP —— 是共享管线只放行 partial 类（`Base/Analizer.cs` 的 `Filters.IsCandidateClass`）；非 partial 类连 `Aop()` 都不会生成。
-3. **重新构建。** 产物三个文件，都在 `VeloxDev.AopInterfaces` / `VeloxDev.AspectOriented` 命名空间下：`<类>_<ns段>_Aop.g.cs`（接口）、`<类>_<ns段>_AopProxy.g.cs`（代理实现）、`<类>_<ns段>_AopExt.g.cs`（扩展方法）。
+3. **重新构建。** 产物文件都在 `VeloxDev.AopInterfaces` / `VeloxDev.AspectOriented` 命名空间下：`<类>_<ns段>_Aop.g.cs`（接口）、`<类>_<ns段>_AopProxy.g.cs`（代理实现）、`<类>_<ns段>_AopExt.g.cs`（扩展方法）。
    **要看到它们得加 `-p:EmitCompilerGeneratedFiles=true`**，否则根本不落盘 —— 落点是 `obj/<配置>/<TFM>/generated/VeloxDev.Core.Generator/VeloxDev.Generators.{AopSurface,AopProxy}/`。文件不在那里**不是**「生成器没跑」的证据（同理见 `Docs/…/06_tickable/01_install/index.md`）。
 4. **在对象构造之后、一次装钩子。** `var p = obj.Aop();` 然后按需 `p.SetProxy(ProxyMembers.Getter|Setter|Method, nameof(类.成员), start, coverage, end)`。装一次够 —— 代理每实例一个且被缓存（`AopCache.Resolve`）。重复装同一成员是**替换**不是叠加（生成的 `SetHooks` 是赋值，`AopSurface.WriteProxy`）。
 5. **把内部调用改成走代理**（若切点是被类自己调用的方法）。照抄 demos 的 `AOP_` 转发模式。
@@ -92,7 +92,7 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 ### 1. 加一种「可拦截的成员种类」（例如索引器、事件）
 
-按顺序动这 5 处，缺一处就是静默失效：
+按顺序动这几处，缺一处就是静默失效：
 
 | # | 文件 | 要加什么 | 漏了的后果 |
 |---|---|---|---|
@@ -120,6 +120,6 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 - **重载 = 生成代码编译失败**：两个同名方法撞同一个 `_hooks_{名}` 字段（`AopSurface.Slot`）⇒ CS0102；`SetHooks` 的 switch 也会撞重复 `case`。实测复现。`SKILL.md` §Pitfalls 把它写成「不要标记重载方法」。
 - **表达式体属性 = 生成代码编译失败**：`AccessorList` 为 null 时 `hasGetter` / `hasSetter` 都是 false（`AopSurface.GenerateSource` 的属性分支）⇒ 生成 `{ }` ⇒ CS0548，接口与代理各报一次。实测复现（`public string X => "x";`）。
-- **代理会回收**：两张静态强引用表（`ProxyInstances` / `ProxyIDs`）随旧实现删除，现在只剩两个 `ConditionalWeakTable`。实测钉在 `Src/Core/VeloxDev.Core.Test/AspectOriented/AopProxyTests.AProxyIsCollectableOnceItsTargetIs`（弱引用 + 强制 GC，跑三次稳定通过）。**这条是为重构回归写的** —— 重新引入静态注册表只会让这一条红。
+- **代理会回收**：两张静态强引用表（`ProxyInstances` / `ProxyIDs`）随旧实现删除，现在只剩两个 `ConditionalWeakTable`。实测钉在 `Src/Core/VeloxDev.Core.Test/AspectOriented/AopProxyTests.AProxyIsCollectableOnceItsTargetIs`（弱引用 + 强制 GC，稳定通过）。**这条是为重构回归写的** —— 重新引入静态注册表只会让这一条红。
 - **AOT 可用**：NativeAOT 发布 + 运行实测通过，零 IL 警告。做法、环境坑（`vswhere.exe` 不在 PATH）与 IL2091 的成因写在 architecture.md §八。
-- **`#if NET`**：五个运行期 .cs 全在 `#if NET` 内，`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 含 `netstandard2.0`/`netframework4.6.1` ⇒ 那两个 TFM 上命名空间不存在。`SKILL.md` §Which package 也这么写（「.NET 5 及以后」）。
+- **`#if NET`**：运行期 .cs 全在 `#if NET` 内，`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 含 `netstandard2.0`/`netframework4.6.1` ⇒ 那两个 TFM 上命名空间不存在。`SKILL.md` §Which package 也这么写（「.NET 5 及以后」）。

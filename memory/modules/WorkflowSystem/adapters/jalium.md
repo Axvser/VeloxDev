@@ -8,8 +8,8 @@
 
 > **读法**：契约与注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3，本文不重复；
 > 人面向的「这家怎么用」在 `skills/veloxdev-create-workflow/references/gui/jalium.md`，本文只指路不抄。
-> 代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`（**9 个文件**，与 WPF 适配器同数）与
-> `Src/Templates/VeloxDev.Jalium.Templates/working/content/`（七个条目，其中四个是 `.jalxaml`）。
+> 代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/` 与
+> `Src/Templates/VeloxDev.Jalium.Templates/working/content/`（其中一部分条目是 `.jalxaml`）。
 
 ## 〇、`.jalxaml` 运行时能力实测（2026-10-05）
 
@@ -21,7 +21,7 @@
 | 能力 | 结果 |
 |---|---|
 | `UserControl` 作 `.jalxaml` 根 + `x:Class` partial 配对 | ✅ |
-| **`Window` 作 `.jalxaml` 根**（窗口外壳也写标记） | ✅ 2026-10-05 实测：`<Window … x:Class="Demo.MainWindow">` + 9 行 cs（只有 `InitializeComponent`）编译与运行都正常 ⇒ **宿主层不需要留在代码里** |
+| **`Window` 作 `.jalxaml` 根**（窗口外壳也写标记） | ✅ 2026-10-05 实测：`<Window … x:Class="Demo.MainWindow">` + 几行 cs（只有 `InitializeComponent`）编译与运行都正常 ⇒ **宿主层不需要留在代码里** |
 | `RelativeSource AncestorLevel` | ✅ 标记里可用。实测：`AncestorType=UserControl` 落在**最近**的 UserControl（节点卡自己），加 `AncestorLevel=2` 就够到树根 —— 这是「不认自定义 `AncestorType`」的替代路径 |
 | **把一个附着属性按 CLR 属性名暴露给绑定** | ✅ 可行：类里写 `public static readonly DependencyProperty XProperty = 那个附着属性;` + `public T? X => GetValue(XProperty) as T;`，模板就能 `{Binding X, RelativeSource=…}`。**这是本家读附着属性值的正解** |
 | `UserControl` 上的 `Background` / 子元素 `ElementName` 绑定 | ✅ 都用过（demo 的 `MainView` 与 HUD 的偏移绑定） |
@@ -60,13 +60,13 @@
 
 | 角色 | 落点 | 形态 |
 |---|---|---|
-| 表面 | `WorkflowSurfaceBehavior` | `static` + 9 个附着属性，按 `FindName` 解析模板声明的部件 |
-| 插槽 | `WorkflowSlotLayoutBehavior` | `static` + 5 个附着属性；**`slot.Anchor` 的唯一写回点** |
+| 表面 | `WorkflowSurfaceBehavior` | `static` + 一组附着属性，按 `FindName` 解析模板声明的部件 |
+| 插槽 | `WorkflowSlotLayoutBehavior` | `static` + 一组附着属性；**`slot.Anchor` 的唯一写回点** |
 | 节点拖拽 | `WorkflowNodeDragBehavior` | `static` + `IsEnabled` / `CoordinateHostName` / `CoordinateHostType` |
 | 连线手势 | `WorkflowSlotConnectionBehavior` | `static` + `IsEnabled` |
 | 模型事件 | `WorkflowEvents` | `static` + `Node` / `Slot` / `Tree` 三个 sink 附着属性 |
 | 连线自盒化 | `WorkflowLinkBounds` | `static` 助手（**唯一刻意背离**，见 §2.1） |
-| 小地图 | `WorkflowMinimapOverlay` | `FrameworkElement`，22 个 DP；`ScrollViewerName` 由模板给 |
+| 小地图 | `WorkflowMinimapOverlay` | `FrameworkElement`，一组 DP；`ScrollViewerName` 由模板给 |
 | 视图池 | `ViewPool` / `ViewManager` | Jalium 自己的 `DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退 |
 
 **网格装饰器不在这里**：与 WPF / Avalonia / WinUI / MAUI / Razor 五家一致，它归**模板**
@@ -328,14 +328,14 @@ demo 往里放了一条 `<MenuItem Header="Delete" Command="{Binding DeleteComma
 
 ## 五、非 Trimmed demo 的落点（2026-10-05 更新）
 
-**`Examples/Workflow/Jalium/`（4556 行）在 2026-10-05 那次改造里零改动。** 它只派生适配器的一个类型
-（`Views/Workflow/Minimap.cs` 的 `Minimap : WorkflowMinimapOverlay`），其余 `NodeEditorSurface`(1879) /
+**`Examples/Workflow/Jalium/` 在 2026-10-05 那次改造里零改动。** 它只派生适配器的一个类型
+（`Views/Workflow/Minimap.cs` 的 `Minimap : WorkflowMinimapOverlay`），其余 `NodeEditorSurface` /
 `NodeViewBase` / `NodePorts` / `PortGlyph` / `NodeChrome` 全是它**自己的自绘代码**，不引被删的那一套。
 ⇒ 下次再动 Jalium 适配器时，**先按这一条估爆炸半径**：全 demo 与适配器的耦合面只有小地图一个类。
 
 ## 六、这份文件没写的东西
 
-- 适配器 9 个文件的成员列表、继承树、文件清单 —— IDE 里一按就有。
+- 适配器的成员列表、继承树、文件清单 —— IDE 里一按就有。
 - 契约本身（七角色职责、绑定挂在哪、`Viewport` 谁写、渲染就绪门、滚轮方向、缩放提交顺序、注册位置表、`dotnet new` 模板约定）—— 在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3 与 `skills/veloxdev-create-workflow/references/new-adapter.md`。
 - 这家怎么用（模板包怎么生成、demo 怎么跑、七个 GUI 页面的对照）—— `skills/veloxdev-create-workflow/references/gui/jalium.md` 与 `references/view-layer.md`。
 - 其余六家的差异 —— 同目录另外六份。

@@ -22,7 +22,7 @@
 | fail-closed 默认 | 各闸默认关；确认默认 `Deny` | `WorkflowAgentScope.WithAllowNodeExecution`、`McpScope.ConfirmationResolver`、`AgentConfirmationEventArgs.Result` |
 | 实验 API 隔离 | `MAAI001` 只在本文件 pragma，不进公开签名 | `WorkflowAgentScope.cs` 的 Compaction 处、`AgentTelemetryExtensions.cs` 的源名处 |
 
-**框架版本坐标（换版本前先看这段）**：MAF 1.22.0 里 **51 个**类型带 `[Experimental("MAAI001")]`（此数不可复核），整个 `Microsoft.Agents.AI.Compaction` 命名空间都在内；但 `TodoProvider`/`AgentModeProvider`/`ChatClientAgent` 是稳定的 —— **「MAF 的实验面」不能一概而论**。另有一条只能实测的结论：MAF 1.22.0 会把 `ChatResponse.Usage` 聚合进 `AgentResponse.Usage`（文档查不到、树内复核不到，由 `SubAgentMetricsTests.TokenUsage_FromTheProvider_ReachesTheRowAndTheSummary` 守卫），**换 MAF 版本时要重跑这条**。
+**框架版本坐标（换版本前先看这段）**：MAF 1.22.0 里有一批类型带 `[Experimental("MAAI001")]`，整个 `Microsoft.Agents.AI.Compaction` 命名空间都在内；但 `TodoProvider`/`AgentModeProvider`/`ChatClientAgent` 是稳定的 —— **「MAF 的实验面」不能一概而论**。另有一条只能实测的结论：MAF 1.22.0 会把 `ChatResponse.Usage` 聚合进 `AgentResponse.Usage`（文档查不到、树内复核不到，由 `SubAgentMetricsTests.TokenUsage_FromTheProvider_ReachesTheRowAndTheSummary` 守卫），**换 MAF 版本时要重跑这条**。
 
 ---
 
@@ -73,7 +73,7 @@
 
 | 未做 | 理由 |
 |---|---|
-| 框架自带批准中间件那条路（`ApprovalRequiredAIFunction` + `ToolApprovalAgent`） | 需要宿主回消息重入的闭环，且要覆盖 5 处工具构造点；默认那条已闭合同一个人审缺口 |
+| 框架自带批准中间件那条路（`ApprovalRequiredAIFunction` + `ToolApprovalAgent`） | 需要宿主回消息重入的闭环，且要覆盖各工具构造点；默认那条已闭合同一个人审缺口 |
 | `ChatHistoryProvider` / session 序列化 | 会改变多轮 token 行为，需单独评估；且会话反序列化的安全要求（不可信来源等同不可信输入）要一并设计 |
 | 工具入参长度/范围校验 | 需要先定「哪些工具、什么上限」，属于新增策略而非修正 |
 | `HarnessAgent`（`Microsoft.Agents.AI.Harness`） | **其最新版 1.21.0 落后于本项目 pin 的 core 1.22.0**（同轨发版），引入会逼版本回退；且它自带 agent 循环，与 `AgentPipelineAgent` 打架；它的每个部件在 1.22.0 里都已单独存在（`TodoProvider`/`AgentModeProvider`/`CompactionProvider`/`BackgroundAgentsProvider`/`AgentFileStore`/`ToolApprovalAgent`/`OpenTelemetryAgent`） |

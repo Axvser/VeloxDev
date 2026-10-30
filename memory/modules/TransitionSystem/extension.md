@@ -13,21 +13,21 @@
 
 | 我要扩展… | 扩展点 | 具体成员 / 位置 |
 |---|---|---|
-| 让某个类型可以动画 | `ISampler` | `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ISampler.cs` 的 `ISampler`（三个成员）+ `InterpolatorCore.RegisterInterpolator`（`TransitionSystem/Sampling/Interpolator.cs`） |
+| 让某个类型可以动画 | `ISampler` | `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ISampler.cs` 的 `ISampler` + `InterpolatorCore.RegisterInterpolator`（`TransitionSystem/Sampling/Interpolator.cs`） |
 | 让一个**值类型**整体动画（不写新采样器） | `ISampleable` | `Interfaces/TransitionSystem/ISampleable.cs` 的 `ISampleable`；由 `StructAssembler.Create` 在 `Sampling/Interpolator.cs` 的 `InterpolatorCore.Prepare` 里装配 |
 | 只给某条路径换采样器（不动全局注册表） | `State.SetInterpolator` | `TransitionSystem/State/State.cs` 的 `StateCore.SetInterpolator`；`Prepare` 里 override 优先于注册表（`Sampling/Interpolator.cs` 的 `InterpolatorCore.Prepare`） |
 | 缓动曲线 | `IEaseCalculator` | `Interfaces/TransitionSystem/IEaseCalculator.cs` 的 `IEaseCalculator`（`double Ease(double t)`）+ `TransitionSystem/Effects/Eases.cs` 的静态成员 + `TransitionEffect.Ease` |
 | 帧的等待方式（宿主定时器/中央帧循环） | `TransitionInterpreterCore.CreateFramePacer` | `TransitionSystem/Runtime/TransitionInterpreter.cs` 的 `CreateFramePacer` + `FramePacerCore` 的 `Arm`/`Disarm`（`TransitionSystem/Runtime/FramePacerCore.cs`） |
 | 帧唤醒的兜底路径（不用 pacer） | `TransitionInterpreterCore.ArmNextFrame` | `Runtime/TransitionInterpreter.cs` 的 `ArmNextFrame` |
-| 线程归属 / 编组 / 存活 | `TransitionHostBase<TPriorityCore>` | `TransitionSystem/Runtime/TransitionHostBase.cs`；三个成员见 §三·C |
+| 线程归属 / 编组 / 存活 | `TransitionHostBase<TPriorityCore>` | `TransitionSystem/Runtime/TransitionHostBase.cs`；成员见 §三·C |
 | 平台接缝：给一个只有 `object` 的 target 找到 scheduler | `InterpolatorCore.CreateScheduler` | `Sampling/Interpolator.cs` 的 `InterpolatorCore.CreateScheduler` |
 | 时钟（宿主拥有时间） | `TimerCore.RegisterTimeSource<TContract>` | `Timing/TimerCore.cs` 的 `RegisterTimeSource`；`TimeSourceCore` 的 protected 构造（`Timing/TimeSourceCore.cs`） + `SetHostFeeding` |
 | 链式动词（`Then`/`Await`/`Repeat`/…） | `StateSnapshotCore.Core*` + `TransitionCoreEx` | `TransitionSystem/State/StateSnapshot.cs` 的 `StateSnapshotCore` 里那组 `internal abstract Core*` 成员、`TransitionSystem/Effects/TransitionEx.cs` 的 `TransitionCoreEx` |
-| 效果事件 | 9 个 `WeakDelegate` 事件（7 个无载荷 `EventHandler<TransitionEventArgs>` + 2 个带载荷泛型 `Warn`/`Error`） | `Effects/TransitionEffect.cs` 里那 9 个 `WeakDelegate` 字段；参数 `TransitionSystem/Events/TransitionEventArgs.cs` 的 `TransitionEventArgs` 与 `Events/TransitionEventArgs{TStage,TValue}.cs` 的 `TransitionEventArgs<TStage, TValue>` |
+| 效果事件 | 一组 `WeakDelegate` 事件（无载荷的 `EventHandler<TransitionEventArgs>` + 带载荷泛型 `Warn`/`Error`） | `Effects/TransitionEffect.cs` 里那些 `WeakDelegate` 字段；参数 `TransitionSystem/Events/TransitionEventArgs.cs` 的 `TransitionEventArgs` 与 `Events/TransitionEventArgs{TStage,TValue}.cs` 的 `TransitionEventArgs<TStage, TValue>` |
 | 索引实参的求值时机 | `PathIndex.Frozen<T>` | `TransitionSystem/Binding/PathIndex.cs` 的 `Frozen<T>`；身份在 `Binding/PathSegment.cs` 的 `identity`（`frozen|{key}` / `live|{key}`） |
-| 新平台适配器 | 见 §三·C | 八个类 + 联动清单 §四 |
+| 新平台适配器 | 见 §三·C | 要写的类 + 联动清单 §四 |
 
-**本模块的枚举有三个**：`RotationDirection`（唯一跨 Core 与适配器都被消费的，详见 §4.6）、`WarnStage` 与 `ErrorStage`（效果 `Warn`/`Error` 事件的 stage，定义在 `Interfaces/TransitionSystem/Enums/`）。stage **不再是自由字符串**：诊断只能取枚举成员，写一个不存在的 stage 名**编译不过**；新增一个 stage = 给对应枚举加一个成员（`Interfaces/TransitionSystem/Enums/WarnStage.cs` / `Interfaces/TransitionSystem/Enums/ErrorStage.cs`）并在某个 `diagnostics.Warn/Error` 调用点用它（调用点逐个列在 `memory/modules/TimeLine/architecture.md` §二）。消费方 `switch` 该枚举时，新增成员会在未覆盖处被编译器指出（`switch` 表达式无 `default` 时 CS8509）。所以要盯的不再是「漏了哪处 `switch`」，而是**新成员有没有调用点** —— 引擎侧没有覆盖全部 stage 的中央 `switch`，编译器不会替你提醒这一条。
+**本模块的枚举**：`RotationDirection`（唯一跨 Core 与适配器都被消费的，详见 §4.6）、`WarnStage` 与 `ErrorStage`（效果 `Warn`/`Error` 事件的 stage，定义在 `Interfaces/TransitionSystem/Enums/`）。stage **不再是自由字符串**：诊断只能取枚举成员，写一个不存在的 stage 名**编译不过**；新增一个 stage = 给对应枚举加一个成员（`Interfaces/TransitionSystem/Enums/WarnStage.cs` / `Interfaces/TransitionSystem/Enums/ErrorStage.cs`）并在某个 `diagnostics.Warn/Error` 调用点用它（调用点逐个列在 `memory/modules/TimeLine/architecture.md` §二）。消费方 `switch` 该枚举时，新增成员会在未覆盖处被编译器指出（`switch` 表达式无 `default` 时 CS8509）。所以要盯的不再是「漏了哪处 `switch`」，而是**新成员有没有调用点** —— 引擎侧没有覆盖全部 stage 的中央 `switch`，编译器不会替你提醒这一条。
 
 ---
 
@@ -74,7 +74,7 @@
 
 **样本的判据是「这条路径动了没有」，不是「有没有报错」** —— 排查「某条路径不生效」时，先确认它的类型在不在该家 `Interpolator` 静态构造的注册表里。
 
-**顺带校准「采样器条数」这个数**（`adapters/` 下多份文件都引它）：它**度量的是「这家框架自带的、Core 未覆盖的可动画值类型有多少个」，不是实现完整度**。Core 已把无 GUI 依赖的一整族注册完（4 个基元 + `System.Drawing` 的 7 个 + `System.Numerics` 的 4 个，`Sampling/Interpolator.cs` 的静态构造），所以 WinForms（值类型面就是 `System.Drawing`）只剩 `Padding` 一个、Razor（动画面是内联 CSS 字符串，无带类型值）只有 `string` 一个，而 Avalonia/WPF/MAUI 各自带一整族平台类型所以是两位数。**数类数与数注册条数仅在 Jalium 上不同**（9 类 / 10 条 —— 它的 `BrushSampler` 同时注册 `Brush` 与 `SolidColorBrush`）。
+**顺带校准「采样器条数」这个数**（`adapters/` 下多份文件都引它）：它**度量的是「这家框架自带的、Core 未覆盖的可动画值类型有多少个」，不是实现完整度**。Core 已把无 GUI 依赖的一整族注册完（基元类型 + `System.Drawing` 的几何/颜色类型 + `System.Numerics` 的向量与四元数，`Sampling/Interpolator.cs` 的静态构造），所以 WinForms（值类型面就是 `System.Drawing`）只剩 `Padding`、Razor（动画面是内联 CSS 字符串，无带类型值）只有 `string`，而 Avalonia/WPF/MAUI 各自带一整族平台类型，数量自然更多。**类数与注册条数只在 Jalium 上不同**（它的 `BrushSampler` 同时注册 `Brush` 与 `SolidColorBrush`）。
 
 ### 3. `CreateScheduler`（平台接缝）
 
@@ -84,7 +84,7 @@
 |---|---|---|
 | 直接 `new TransitionSchedulerCore<...>()` | **编译通过、动画正常跑、永远不可控**：只有 `FindOrCreate` 会把它登记到 target 名下，而登记正是 `Transition.Pause`/`Seek`/`Exit` 查找的依据 | `Sampling/Interpolator.cs` 的 `CreateScheduler` remarks 明写；`Runtime/TransitionScheduler.cs` 的 `FindOrCreate` |
 | 不按 effect 类型做判断，无脑返回一个 scheduler | 拿到一个跑起来**画不出任何东西**的 scheduler（scheduler 自己开头就会做同一个 cast 并静默 return） | `Sampling/Interpolator.cs` 的 `CreateScheduler` remarks、`Runtime/TransitionScheduler.cs` 的 `Execute`（`effect is not ITransitionEffect<TPriorityCore>` 就 return） |
-| 干脆不写 `CreateScheduler`（基类默认返回 null） | 主题切换**仍然发生，但是瞬时的，什么都不记录** —— 与缺一个采样器同样的静默降级 | `Sampling/Interpolator.cs` 的 `InterpolatorCore.CreateScheduler`；`ThemeManager.cs` 的 `RunSwitch` 里两处 `ApplyImmediately` 回退 |
+| 干脆不写 `CreateScheduler`（基类默认返回 null） | 主题切换**仍然发生，但是瞬时的，什么都不记录** —— 与缺一个采样器同样的静默降级 | `Sampling/Interpolator.cs` 的 `InterpolatorCore.CreateScheduler`；`ThemeManager.cs` 的 `RunSwitch` 里的 `ApplyImmediately` 回退 |
 
 ### 4. 覆写 `InterpolatorCore.Prepare`
 
@@ -169,8 +169,8 @@
 
 ### A. 新增一个采样器（让某个类型可动画）
 
-1. **写采样器类**：`ISampler` 三成员，无状态。
-   - 无 GUI 依赖的类型 → `Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/`（现有 15 个是范本）。
+1. **写采样器类**：`ISampler` 的成员，无状态。
+   - 无 GUI 依赖的类型 → `Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/`（现有的采样器是范本）。
    - 平台类型 → `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/Samplers/`。
 2. **注册**：在该家的 `Interpolator` 静态构造里 `RegisterInterpolator(typeof(X), new XSampler());`
    - Core 类型 → `TransitionSystem/Sampling/Interpolator.cs` 的静态构造。
@@ -192,7 +192,7 @@
 
 ### C. 新增一个平台适配器
 
-**要写的八个类**（全部镜像七家现成的；放 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`）：
+**要写的类**（全部镜像七家现成的；放 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`）：
 
 | 类 | 基类 | 必须提供 |
 |---|---|---|
@@ -271,7 +271,7 @@
 
 | # | 位置 | 漏了会怎样 |
 |---|---|---|
-| 1 | 八个类（§三·C 的表） | 编译不过或画不出来 |
+| 1 | 要写的类（§三·C 的表） | 编译不过或画不出来 |
 | 2 | `Examples/.../Samplers/<平台>Entries.cs` | 覆盖校验少一批 |
 | 3 | `Samplers/AdapterSamplerEntries.cs` 聚合 | 同上 |
 | 4 | `Samplers/SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies` | 程序集没被反射到 → 覆盖校验**在少验一批的情况下显示绿色**（该测试就是为此存在的） |
@@ -288,7 +288,7 @@
 
 ### 4.5 加一条缓动
 
-1. `IEaseCalculator` 实现类（`TransitionSystem/Effects/Eases.cs` 里现有 31 个实现类，其中 30 条曲线是范本）。
+1. `IEaseCalculator` 实现类（`TransitionSystem/Effects/Eases.cs` 里现有的实现类是范本）。
 2. `Eases` 的静态嵌套类加 `In`/`Out`/`InOut` 属性（`Effects/Eases.cs` 里 `Eases.Sine` 的形状）。
 3. 注意 `Eases.Xxx.In` 这类 getter **每次访问都 new 一个**（`Effects/Eases.cs` 的 `Eases.Sine.In`）。一条缓动若内部要用另一条，**必须在类里持一个 `static readonly` 实例**而不是走 `Eases.Xxx.Out` —— 否则每帧分配一个对象，而这是采样循环的热路径（`EaseInBounce`/`EaseInOutBounce` 就是这么做的，理由写在 `EaseInBounce` 与 `EaseInOutBounce` 的 `static readonly Out` 注释里）。
 

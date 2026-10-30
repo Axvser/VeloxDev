@@ -21,7 +21,7 @@
 
 | 角色 | 本家的实现 | 说明 |
 |---|---|---|
-| 画布宿主 | `WorkflowSurfaceBehavior.cs` | 唯一的「知晓一切」的类（2012 行）：解析命名控件、喂装饰器、平移、缩放、可见区、连线右键菜单接线、以及组件自己那次输入转发的入口与「已路由」登记（§三·9） |
+| 画布宿主 | `WorkflowSurfaceBehavior.cs` | 唯一的「知晓一切」的类：解析命名控件、喂装饰器、平移、缩放、可见区、连线右键菜单接线、以及组件自己那次输入转发的入口与「已路由」登记（§三·9） |
 | 画布变换 | —— **本家没有这个类** | 见 §三·1；职责由宿主 + `ViewManager` 分担 |
 | 视图池 | `ViewPool.cs` / `ViewManager.cs` | 见 §二·1 |
 | 节点拖拽 | `WorkflowNodeDragBehavior.cs` | 见 §三·5 |
@@ -29,7 +29,7 @@
 | 插槽布局 | `WorkflowSlotLayoutBehavior.cs` | 见 §二·5 |
 | 网格装饰器 / 小地图 | 小地图有 `WorkflowMinimapOverlay.cs`；**装饰器适配器不提供**，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`） | 与 WPF/Avalonia/WinUI/Jalium 同为「适配器不带装饰器」；只有 Razor 与 WinForms 在适配器里自带一份 |
 
-**另有第八个类，它不是七角色里的任何一个，但删不掉**：`WorkflowLinkOverlay.cs` —— 链接层（画 Core 的可见集），见 §三·2。
+**另有一个契约外的类，它不是七角色里的任何一个，但删不掉**：`WorkflowLinkOverlay.cs` —— 链接层（画 Core 的可见集），见 §三·2。
 
 本家必须自己写、且别家写法不能照搬的成员就三处：`WorkflowSurfaceBehavior` 里的平移/滚动提交顺序（§二·6/§二·7）、
 `WorkflowSlotLayoutBehavior` 的重同步信号源（§二·5）、`WorkflowLinkOverlay` 的整层绘制与裁剪（§二·9/§二·8）。
@@ -429,8 +429,7 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
      `KeyUpEvent`（`AttachKeyHook`；`DetachPlatformHooks` 同摘），`OnSourceKeyUp` 与 `OnSourceKeyDown` 同形，
      但**不置 `Handled`、也不筛悬停** —— 另外六家都无条件上报，键抬起本身没有可删的东西，筛掉只会让订阅者
      在不悬停时收不到配对的 `KeyUp`。这家此前**一封 `KeyUp` 都不上报**；实测补上后按 Delete / Escape 各得一行。
-   - **验证**：点击 → Delete（HUD `连线 1/1 → 0/0`）、悬停 → Delete、右键/长按弹菜单；
-     适配器五个 TFM + 两个 demo 0 警告 0 错误、Core 1012 测试全过。
+   - **验证**：点击 → Delete（HUD `连线 1/1 → 0/0`）、悬停 → Delete、右键/长按弹菜单。
    - **demo 侧的订阅要按「树实例」去重，而且要用一张集合**（`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs` 的 `HashSet<TreeViewModel> ProbedTrees`）：demo 的会话会被换上好几轮（A → B → A），只比「上一棵」的话回到 A 时会再订一遍 ⇒ 同一棵树上挂两个订阅，每笔输入送达两次（实测：一格滚轮两行、args 是同一个实例）。这是 demo 的写法，不是适配器契约。
 
 改这块时的两条禁令：**别去掉 `InputTransparent = true`**（`WorkflowLinkOverlay` 的构造函数，同 §四·6）；**别把命中半径放大**
@@ -440,7 +439,7 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 
 ## 六、demo 的界面控件放在哪：`MainPage` 是裸宿主
 
-2026-09-27 把「运行控制」（Pause / Resume / 从检查点继续）接进七家时的一条：**MAUI 的 `MainPage.xaml` 只是一个满屏宿主**（`<controls:WorkflowView x:Name="WorkflowSurface" Session="{Binding DemoSession}" />`，全文件十来行），demo 自己的命令（Save / Select / Load Workflow Demo）与整条侧栏都在**被它托管的 `Controls/Workflow/WorkflowView.xaml`** 里。
+2026-09-27 把「运行控制」（Pause / Resume / 从检查点继续）接进七家时的一条：**MAUI 的 `MainPage.xaml` 只是一个满屏宿主**（`<controls:WorkflowView x:Name="WorkflowSurface" Session="{Binding DemoSession}" />`，全文件只有寥寥几行），demo 自己的命令（Save / Select / Load Workflow Demo）与整条侧栏都在**被它托管的 `Controls/Workflow/WorkflowView.xaml`** 里。
 
 ⇒ 新控件放 `WorkflowView.xaml`，处理器也只能放**它自己的** code-behind：XAML 的 `Clicked` 处理器必须声明在写出这个名字的那个 XAML 文件的 code-behind 中，所以「标记一处、处理器另一处」是编译不过的。会话经 `WorkflowView.Session` 传进来（`MainPage` 把它设成 `_demo`），与 `MainPage` 手里那个是同一个对象。
 

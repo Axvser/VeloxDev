@@ -1,8 +1,8 @@
 # VeloxDev.Core.Extension — 子代理子系统
 
-> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/SubAgents/`（6 个 .cs，命名空间 `VeloxDev.AI.SubAgents`）。
-> 账本：`Agent/Workflow/Functions/ToolCallLedger.cs`（1 个 `internal` 类型，跨子代理与 Workflow 两侧）。
-> 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/SubAgents/`（10 个 .cs，9 个 `[TestClass]`）。
+> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/SubAgents/`（命名空间 `VeloxDev.AI.SubAgents`）。
+> 账本：`Agent/Workflow/Functions/ToolCallLedger.cs`（`internal` 类型，跨子代理与 Workflow 两侧）。
+> 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/SubAgents/`。
 > 不依赖 MAF 的 `BackgroundAgentsProvider`：那个类型构造时吃死的 `IEnumerable<AIAgent>`，**没有「按次配置子能力」这个概念**，且整体标着 `[Experimental("MAAI001")]`。
 
 本文只写「读完这些文件才知道的东西」。
@@ -284,13 +284,13 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 
 它也证明不了**渲染**：`TreeViewItem.IsExpanded` 那条样式绑定、`TreeView` + `TreeDataTemplate` 的实际排版、呼吸灯的观感（9px 的 `Ellipse`、`#6BFFB8` 上 `Opacity` 0.3↔1.0 的 800ms 正弦往返）、以及外层 `ScrollViewer`（`MaxHeight="340"`）与 `TreeView` 自身滚动条的嵌套滚动，都**只经过编译校验，没有视觉复核**（跑它需要 key + 真窗口）。失效时的退路是优雅的：节点渲染成收起状态、灯不动，而不是崩。
 **2026-09-22 实测到的那一步**：改完这份 XAML 后 `-t:Rebuild` 0 错误，并**真的启动过一次** demo（随后连它自己的 `msedgewebview2.exe` 子进程一起收掉，见 [`VeloxDev.Avalonia/architecture.md`](../VeloxDev.Avalonia/architecture.md) §八.5、§八.6）。这一层证明的是「程序集可用」，不是「画面对」。
-**同日第二次改动这份 XAML，同一步又跑了一遍**：`Demo.csproj` 先是无论增量还是 `-t:Rebuild` 都报 `AVLN9999`（文件被占），而**查不到任何 `avalonia.buildservices` 进程** —— 占着它的是上一步整解并行构建留下的 MSBuild node-reuse 节点，`dotnet build-server shutdown` 一条即解；随后 `-t:Rebuild` **20 s、0 错误**。**所以「Rebuild 绿 + 真启动」这个复核动作本身要连着「先关构建服务」一起做**，否则会误把一次 `AVLN9999` 当成「改坏了」。
+**同日第二次改动这份 XAML，同一步又跑了一遍**：`Demo.csproj` 先是无论增量还是 `-t:Rebuild` 都报 `AVLN9999`（文件被占），而**查不到任何 `avalonia.buildservices` 进程** —— 占着它的是上一步整解并行构建留下的 MSBuild node-reuse 节点，`dotnet build-server shutdown` 一条即解；随后 `-t:Rebuild` **0 错误**。**所以「Rebuild 绿 + 真启动」这个复核动作本身要连着「先关构建服务」一起做**，否则会误把一次 `AVLN9999` 当成「改坏了」。
 **但紧接着这一步就被使用者当场证伪了，这是这一节最该记住的一笔。** 上面两次我都拿「**跑满 N 秒、日志为空**」当通过 —— 那**不是**证据：它区分不了「窗口在」和「进程刚好还没崩」，而这一轮我正是拿它把一版**启动即抛 `No precompiled XAML found for Demo.App`** 的 demo 报成「可用」，使用者一句「demo 起不来」才把它翻出来。判据换成**窗口句柄**：`Get-Process Demo | Select MainWindowHandle` 非 0 且 `Responding=True`（`MainWindowTitle` 应当读到 `Demo`；读早了会拿到 0，隔几秒再读）。⇒ **凡是「起来了吗」这类断言，判据必须是那个东西本身，不能是它的一个代理量 —— 代理量恰好也能被「坏得安静」满足。**
-**同日第三次改这份 XAML，改后的复核第一次就用了新判据并一次通过**：`dotnet build-server shutdown`（这一步仍不能省，见上一段）→ `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **40 s、0 错误、1 个既有警告**（`WorkflowAgentToolkit` 的 CS8602）→ 启动后读到 `MainWindowHandle=6819388` / `Responding=True` / `MainWindowTitle=Demo`，进程持续存活且日志为空。**注意这一轮没有任何一处验证是「构建绿」** —— 单行节点到底长什么样、`CharacterEllipsis` 截在哪个字上、9px 的灯在深色底上够不够醒目，仍然**只经过编译校验**。
+**同日第三次改这份 XAML，改后的复核第一次就用了新判据并一次通过**：`dotnet build-server shutdown`（这一步仍不能省，见上一段）→ `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **0 错误**（`WorkflowAgentToolkit` 的 CS8602 当时仍是既有警告）→ 启动后读到 `MainWindowHandle=6819388` / `Responding=True` / `MainWindowTitle=Demo`，进程持续存活且日志为空。**注意这一轮没有任何一处验证是「构建绿」** —— 单行节点到底长什么样、`CharacterEllipsis` 截在哪个字上、9px 的灯在深色底上够不够醒目，仍然**只经过编译校验**。
 
-**2026-09-25 第四次改（度量那一批，节点从一行变两行、树顶多了一个根节点），构建与启动复核一次通过**：`dotnet build-server shutdown` → `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **0 错误、1 个既有警告** → 启动 14 s 后读到 `MainWindowHandle=1246990` / `Responding=True` / `MainWindowTitle=Demo`。
+**2026-09-25 第四次改（度量那一批，节点从一行变两行、树顶多了一个根节点），构建与启动复核一次通过**：`dotnet build-server shutdown` → `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **0 错误**（`WorkflowAgentToolkit` 的 CS8602 当时仍是既有警告）→ 启动后读到 `MainWindowHandle=1246990` / `Responding=True` / `MainWindowTitle=Demo`。
 
-**2026-09-26 起基线是 0 警告**：`WorkflowAgentToolkit` 的 CS8602 由 `TryGetNode` 加 `[NotNullWhen(true)]` 消掉（`netstandard2.0` 没有这个特性，靠本程序集内 `Compat/NotNullWhenAttribute.cs` 的 internal 补丁提供），同批退掉 26 处 `node!` 与 2 处 `slot!`。`VeloxDev.Core.Extension` 与其测试项目都是 **0 警告 0 错误** —— 此后读到本文任何「N 个既有警告」都是**历史观测**，不是当下基线。
+**2026-09-26 起基线是 0 警告**：`WorkflowAgentToolkit` 的 CS8602 由 `TryGetNode` 加 `[NotNullWhen(true)]` 消掉（`netstandard2.0` 没有这个特性，靠本程序集内 `Compat/NotNullWhenAttribute.cs` 的 internal 补丁提供），同批退掉一批 `node!` 与 `slot!`。`VeloxDev.Core.Extension` 与其测试项目都是 **0 警告 0 错误** —— 此后读到本文任何「N 个既有警告」都是**历史观测**，不是当下基线。
 
 **截图是可以读回来的（「视觉复核做不了」不成立）。** 用 PowerShell 的 `System.Drawing` 抓窗口（`GetWindowRect` + `Graphics.CopyFromScreen`）存 PNG，再用 `Read` 读它，**能看清内容**（`PrintWindow` 不行：对这块 GPU 合成的窗口会返回缺元素的残帧，实测两次得到的画面都是不完整的，别用它）。这条能力的**边界**同样实测过：
 
@@ -302,7 +302,7 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 
 ⇒ 结论：**样式类改动可以自己验，交互类改动不能。** 「那个蓝色选中块到底盖掉了没有」属于前者，本可以验；这一轮改完没来得及做（同一天晚些时候补做）。
 
-**2026-09-25 第五次改（精简那一批：砍掉调用数与冗余的状态文字、把选中/悬停的强调色块盖掉），验证到什么程度**：`Demo.csproj` 构建 0 错误、`Extension.Test` **391/391 通过**（含新增的那条实时测试，真跑了 `deepseek-v4-flash`）。**没有做视觉复核**，所以下面这些**没有**被证明：那个蓝块是否真的被 `TreeViewItem` 的 `Background` 样式 / 主题资源键盖掉了（Fluent 12 的主题编译在二进制资源里，取不到键名也取不到模板部件名，**两处都写是在赌其中一个命中**，而且不命中时**不会报错**，只是继续蓝）、两行节点在侧栏宽度下会不会把第二行挤到换行、表头三个数字并排会不会溢出。⇒ 这一节里凡是形容观感的句子（「读起来像」「够不够醒目」）都是**未经复核的判断**，不是记录下来的事实。
+**2026-09-25 第五次改（精简那一批：砍掉调用数与冗余的状态文字、把选中/悬停的强调色块盖掉），验证到什么程度**：`Demo.csproj` 构建 0 错误、`Extension.Test` **全部通过**（含新增的那条实时测试，真跑了 `deepseek-v4-flash`）。**没有做视觉复核**，所以下面这些**没有**被证明：那个蓝块是否真的被 `TreeViewItem` 的 `Background` 样式 / 主题资源键盖掉了（Fluent 12 的主题编译在二进制资源里，取不到键名也取不到模板部件名，**两处都写是在赌其中一个命中**，而且不命中时**不会报错**，只是继续蓝）、两行节点在侧栏宽度下会不会把第二行挤到换行、表头三个数字并排会不会溢出。⇒ 这一节里凡是形容观感的句子（「读起来像」「够不够醒目」）都是**未经复核的判断**，不是记录下来的事实。
 
 ### 一个已知缺口：新启动时面板不显示，且之后没有东西会重新挂它
 
@@ -360,15 +360,15 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 | 去 `AgentEvent` / `AgentPipeline` / `AgentTranscript` 上接 token，或给 `AgentTurnCompleted` 的公共构造器加参数 | 这三处都没有 token，接上去要动一个公共构造器。**接缝早就有了**：`SubAgentScope.RunAsync` 里那句 `var response = await agent.RunAsync(...)` 手上的就是 `AgentResponse`，`response.Usage` 直接可读 —— 改动因此完全关在 SubAgents 子系统里 |
 | 给被取消 / 抛异常的孩子补一个 `TokensUsed = 0` | 那两条路径上 response 已经不存在了，0 是编的。留 null，面板据此不显示 —— `HasTokens` 存在的全部意义就是让「没测过」与「花了 0」在界面上不是一件事 |
 | 在树节点模板里写 `{Binding Row.Name}` 这类路径 | 顶节点代表作用域、没有行，所以这些路径**恰好会在面板围着建的那个节点上**取不到值。而且编译绑定**不会报错**（路径在类型上合法）。节点的 `Title` / `StateText` / `CallCount` / `DurationText` / `TokensText` 就是为此转发的一层 |
-| 把树 VM 里那个 `[VeloxProperty]` 字段删掉（比如把 `Roots` 改成 `ScopeRoot.Children` 的别名时顺手删） | 生成器按「类里有没有 `VeloxProperty` 成员」决定注入不注入 `OnPropertyChanged`。删掉它，`NotifyCounts()` 里的九行全部编译不过 —— 而这个类的计数**全是**派生属性，没有一条是自己会通知的 |
+| 把树 VM 里那个 `[VeloxProperty]` 字段删掉（比如把 `Roots` 改成 `ScopeRoot.Children` 的别名时顺手删） | 生成器按「类里有没有 `VeloxProperty` 成员」决定注入不注入 `OnPropertyChanged`。删掉它，`NotifyCounts()` 里的那些通知行全部编译不过 —— 而这个类的计数**全是**派生属性，没有一条是自己会通知的 |
 | 让 `SubAgentTreeViewModel` 自己起一个计时器来推动时长 | 库的寿命与面板的寿命不是一回事，这是本仓库「帧源由适配器/宿主提供」那条分工的另一处体现。而且计时器一旦起了就得管：一个没被停在 `DetachSubAgents` 的 `DispatcherTimer` 会一直往一个没人看的树上写属性 |
 | 在 `Fill` 里 `level.Clear()` 之后再重建 | 名册在每一行的**每一次属性写入**上都重发，所以这是每孩子好几趟的容器拆装，连带丢掉展开状态与选中项。就地重整（先移除离开的、再按序 `Insert` / `Move`）才有 `ARebuild_ReconcilesTheLevelInPlace` 断言的那三条 |
 
 ---
 
-## 十、实测才能回答的六件事（门控测试）
+## 十、实测才能回答的几件事（门控测试）
 
-`SubAgentLiveTests.cs` 读 `API_KEY_DEEPSEEK`，缺失则 `Assert.Inconclusive`（MSTest 4.0.2 下报成**已跳过**，不是失败 —— 已实测）。六条问的是离线替身**证明不了**的事：
+`SubAgentLiveTests.cs` 读 `API_KEY_DEEPSEEK`，缺失则 `Assert.Inconclusive`（MSTest 4.0.2 下报成**已跳过**，不是失败 —— 已实测）。几条问的是离线替身**证明不了**的事：
 
 1. `ARealModel_DispatchesAChildAtAll`—— **工具描述够不够清楚，模型会不会真的用 `SpawnSubAgent`**。离线套件已经证明「工具被调用时是对的」，所以这条红了只可能是描述的问题。
    ⚠ **但它问的是「叫它派它就派吗」** —— 它喂的 `DispatchInstruction`（`SubAgentLiveTests.DispatchInstruction`）里写着 "by dispatching a background sub-agent to do the counting — do not count them yourself"。**自发派发由第 5 条回答**，见下。

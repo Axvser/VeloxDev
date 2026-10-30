@@ -27,6 +27,9 @@ namespace Demo.Views
     {
         private TreeViewModel ViewModel = new();
         private readonly WorkflowElementCatalog _elements;
+        private readonly MenuFlyout _nodeLayoutMenu = new();
+        private IWorkflowNodeViewModel? _nodeLayoutTarget;
+        private double _nodeLayoutTolerance = 8d;
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetActiveWindow();
@@ -57,6 +60,12 @@ namespace Demo.Views
             ElementLinkList.ItemsSource = _elements.Links;
             _elements.Changed += (_, _) => ElementStatus.Text = _elements.Summary;
             ElementStatus.Text = _elements.Summary;
+
+            // Demo-only policy: layout is offered on the node itself, so no sidebar controls are needed.
+            BuildNodeLayoutMenu();
+            // handledEventsToo: node children may mark the routed event handled; we still want the card's
+            // layout menu, except over a text input (that keeps its own text menu).
+            AddHandler(UIElement.RightTappedEvent, new RightTappedEventHandler(OnNodeRightTapped), true);
 
             // Keep the canvas-info HUD current on every scroll / viewport change. The overlay subscribes to
             // the Core model itself (scale / actual size / visible items); the scroll and content offsets come
@@ -637,6 +646,127 @@ namespace Demo.Views
 
             await dialog.ShowAsync();
         }
+        // Demo-only: the node itself is the entry point. Right-clicking it opens this menu; the row/list
+        // stays a passive index. The Core pipeline remains a pure snapshot/solve and the first invocation
+        // of a layout is one undo step inside the applier.
+        private void BuildNodeLayoutMenu()
+        {
+            var layout = new MenuFlyoutSubItem { Text = "自动布局" };
+            layout.Items.Add(CreateLayoutItem("从该节点整理（下游）", WorkflowLayoutTraversal.Downstream));
+            layout.Items.Add(CreateLayoutItem("从该节点整理（上游）", WorkflowLayoutTraversal.Upstream));
+            layout.Items.Add(CreateLayoutItem("从该节点整理（双向）", WorkflowLayoutTraversal.Both));
+            _nodeLayoutMenu.Items.Add(layout);
+
+            var tolerance = new MenuFlyoutSubItem { Text = "布局容差" };
+            tolerance.Items.Add(CreateToleranceItem("严格整理 (0)", 0d));
+            tolerance.Items.Add(CreateToleranceItem("默认 (8)", 8d));
+            tolerance.Items.Add(CreateToleranceItem("宽松 (32)", 32d));
+            _nodeLayoutMenu.Items.Add(new MenuFlyoutSeparator());
+            _nodeLayoutMenu.Items.Add(tolerance);
+        }
+
+        private MenuFlyoutItem CreateLayoutItem(string text, WorkflowLayoutTraversal traversal)
+        {
+            var item = new MenuFlyoutItem { Text = text };
+            item.Click += (_, _) => ArrangeFrom(_nodeLayoutTarget, traversal);
+            return item;
+        }
+
+        private MenuFlyoutItem CreateToleranceItem(string text, double tolerance)
+        {
+            var item = new MenuFlyoutItem { Text = text };
+            item.Click += (_, _) =>
+            {
+                _nodeLayoutTolerance = tolerance;
+                ElementStatus.Text = $"布局容差 = {tolerance}";
+            };
+            return item;
+        }
+
+        private void OnNodeRightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            var source = e.OriginalSource as DependencyObject;
+            if (IsInsideTextInput(source)) return;
+
+            var element = FindNodeElement(source);
+            if (element?.DataContext is not IWorkflowNodeViewModel node) return;
+
+            _nodeLayoutTarget = node;
+            _nodeLayoutMenu.ShowAt(element);
+            e.Handled = true;
+        }
+
+        private static bool IsInsideTextInput(DependencyObject? source)
+        {
+            for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+            {
+                if (current is TextBox or RichEditBox or PasswordBox) return true;
+            }
+
+            return false;
+        }
+
+        private FrameworkElement? FindNodeElement(DependencyObject? source)
+        {
+            for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+            {
+                if (current is FrameworkElement element && element.DataContext is IWorkflowNodeViewModel)
+                {
+                    return element;
+                }
+
+                if (ReferenceEquals(current, this)) break;
+            }
+
+            return null;
+        }
+
+        private void ArrangeFrom(IWorkflowNodeViewModel? start, WorkflowLayoutTraversal traversal)
+        {
+            if (start is null) return;
+
+            // The node is the entry point: it finds its tree, which finds the solver registered on that
+            // tree's helper. The demo therefore exercises the same path a host would use.
+            try
+            {
+                var result = start.Arrange(new WorkflowLayoutOptions
+                {
+                    PositionTolerance = _nodeLayoutTolerance,
+                    Traversal = traversal,
+                    PinStartNode = true,
+                });
+                ShowLayoutResult(result, $"从 {start.GetType().Name}");
+            }
+            catch (Exception ex)
+            {
+                ElementStatus.Text = $"布局失败：{ex.Message}";
+            }
+        }
+
+        private void ShowLayoutResult(WorkflowLayoutResult result, string scope)
+        {
+            var cost = result.Solution.Cost;
+            var summary = $"整理（{scope}）：写入 {result.AppliedCount} 个节点";
+            if (result.SkippedCount > 0)
+            {
+                summary += $" · 跳过 {result.SkippedCount} 个已变动的节点";
+            }
+
+            summary += $" · 重叠 {cost.Overlaps} · 交叉 {cost.Crossings}";
+            if (cost.CrossingsApproximate)
+            {
+                summary += "（中心线近似）";
+            }
+
+            if (!cost.CostMeasured)
+            {
+                summary += "（代价未测量）";
+            }
+
+            ElementStatus.Text = summary;
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        }
+
         private void OnLocateElement(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is not WorkflowElementEntry entry) return;

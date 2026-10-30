@@ -12,7 +12,7 @@
 |---|---|---|
 | 声明「哪个属性、哪些主题、什么值」 | `[ThemeConfig<TConverter, TTheme1..Tn>(属性名, [主题1的构造参数], [主题2的...], ...)]`（`ThemeConfigAttribute.cs`，arity 3..8） | 用户 |
 | 主题是什么 | 实现空标记 `ITheme`（`Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/ITheme.cs`）。Core 只带 `Dark.cs` / `Light.cs` | 用户 / Core |
-| 字符串怎么变成值 | `IThemeValueConverter.Convert(Type targetType, string propertyName, object?[] parameters)`（`Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/IThemeValueConverter.cs`） | **适配器**（6 家，见 §二·2） |
+| 字符串怎么变成值 | `IThemeValueConverter.Convert(Type targetType, string propertyName, object?[] parameters)`（`Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/IThemeValueConverter.cs`） | **适配器**（各家，见 §二·2） |
 | 主题对象的运行期面 | `IThemeObject`（`Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/IThemeObject.cs`）—— 生成器**全部实现**，手写时才需要自己写 | 生成器 |
 | 「这个平台画得出来吗」 | 该家 `Interpolator.CreateScheduler`（返回 `null` = 画不出来） | 适配器 |
 | 让平台接缝生效 | `ThemeManager.SetPlatformInterpolator<T>(T)`（`ThemeManager.cs` 的 `SetPlatformInterpolator`），**每进程一次** | 用户 |
@@ -38,7 +38,7 @@
 
 `RunSwitch` 的第二个分支就是 `interpolator is null → ApplyImmediately`（`ThemeManager.RunSwitch` 里的 `interpolator is null` 判断）。所以**不调它不会报错**，只是「有动画的切换」静默退化成瞬切。
 
-调用点只有 4 个 Examples + 测试：`Examples/Theme/WPF/Demo/App.xaml.cs`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs`、`Examples/Theme/Avalonia/Demo/App.axaml.cs`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs`。**`Src/Adapters/` 里一个都没有**；`Src/` 里只有测试在调（`Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs`，8 处）—— 对适配器而言这是纯用户责任。
+调用点在 Examples 与测试：`Examples/Theme/WPF/Demo/App.xaml.cs`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs`、`Examples/Theme/Avalonia/Demo/App.axaml.cs`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs`。**`Src/Adapters/` 里一个都没有**；`Src/` 里只有测试在调（`Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs`）—— 对适配器而言这是纯用户责任。
 
 **官方做法**：`ThemeManager.SetPlatformInterpolator(new Interpolator());`（每家适配器各有一个 `Interpolator` 类型）。它同时也是「平台的 sampler 注册」被触发的时机。
 
@@ -77,11 +77,11 @@
 
 ### 1. 加一个转换器（平台侧）
 
-> **本模块没有 `adapters/` 子目录，这是有意的。** 转换器这条平台轴只影响「哪些属性类型能被声明」，覆盖面窄且六家高度同形（同名的 `DoubleConverter` / `PointConverter` / …），不值得一家一篇。真正需要逐家展开的是**动画侧**的平台差异（`Interpolator.CreateScheduler`、sampler 覆盖），那些已在 `memory/modules/TransitionSystem/adapters/<平台>.md` 里，本模块**指路而不重复**。若将来转换器的差异真的分化到需要逐家说明，再建 `adapters/`。
+> **本模块没有 `adapters/` 子目录，这是有意的。** 转换器这条平台轴只影响「哪些属性类型能被声明」，覆盖面窄且各家高度同形（同名的 `DoubleConverter` / `PointConverter` / …），不值得一家一篇。真正需要逐家展开的是**动画侧**的平台差异（`Interpolator.CreateScheduler`、sampler 覆盖），那些已在 `memory/modules/TransitionSystem/adapters/<平台>.md` 里，本模块**指路而不重复**。若将来转换器的差异真的分化到需要逐家说明，再建 `adapters/`。
 
 | # | 做什么 | 依据 |
 |---|---|---|
-| 1 | 在**该家**的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs` 加一个实现 `IThemeValueConverter` 的类 | 六家都在 `namespace VeloxDev.DynamicTheme`（同名类各写一份） |
+| 1 | 在**该家**的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs` 加一个实现 `IThemeValueConverter` 的类 | 各家都在 `namespace VeloxDev.DynamicTheme`（同名类各写一份） |
 | 2 | **必须有无参构造** | 生成器用 `Activator.CreateInstance(typeof(...))` 内联 new（`Theme.cs` 的 `convertExpr`） |
 | 3 | 类名要能作为特性泛型实参直接写 | 用户在 `[ThemeConfig<BrushConverter, ...>]` 里裸写类名（demo 的 `[ThemeConfig<...>]`），所以命名空间必须能被 `using VeloxDev.DynamicTheme;` 覆盖 |
 
@@ -96,9 +96,9 @@
 原来 `ObjectConverter` 用 `TypeDescriptor.GetConverter(targetType)` 兜底，「任何带 TypeConverter 的 .NET 类型」
 都算数 —— 无界，裁剪器跟不了。**现在无一家再用它**：`TypeDescriptor.GetConverter(Type)` 带
 `RequiresUnreferencedCode`（转换器要靠反射发现），一用整条主题转换在裁剪/AOT 下就被标成不可用，
-所以六家的 `ThemeValueConverters.cs` 统一改成**显式转换表**，并在注释里写明「刻意不用」
+所以各家的 `ThemeValueConverters.cs` 统一改成**显式转换表**，并在注释里写明「刻意不用」
 （WPF `ThemeValueConverters.cs` 的 `ObjectConverter` 注释、WinForms 同名文件的 `ObjectConverter` 注释）。表外的类型返回 `null`（与转换失败同一条路）—— 需要更多类型的宿主
-自己写一个 `IThemeValueConverter`。**所以这不是判过之后留的分歧，是全仓统一后的结果，七家一致。**
+自己写一个 `IThemeValueConverter`。**所以这不是判过之后留的分歧，是全仓统一后的结果，各家一致。**
 
 ### 2. 加一个主题类型（例如 `Solarized`）
 
@@ -119,14 +119,14 @@
 3. 用户侧调 `SetPlatformInterpolator`。
 4. **不要**为了「某类型画不出来」让 `CreateScheduler` 返回 null（§二·3）。
 
-### 4. 让 arity 8（7 个主题）真的可用 —— **三处必须同改**
+### 4. 让 arity 8（7 个主题）真的可用 —— **多处必须同改**
 
 现状：Core 声明了 arity 8（`ThemeConfigAttribute.cs` 的 `ThemeConfigAttribute<TConverter, TTheme1..TTheme7>`），但生成器只注册到 arity `` `7 ``（`Theme.cs` 的 `classWith3Params`…`classWith7Params`）。补上需要：
 
 | # | 位置 | 改什么 |
 |---|---|---|
 | 1 | `Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs` | 已存在，无需改 |
-| 2 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `Initialize` | 加第 6 个 `ForAttributeWithMetadataName("...ThemeConfigAttribute\`8", ...)` |
+| 2 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `Initialize` | 加一个 `ForAttributeWithMetadataName("...ThemeConfigAttribute\`8", ...)` |
 | 3 | `Theme.cs` 的 `Combine` 链 | **必须跟着改**：那一串是**定长元组**（`var ((((classes3, classes4), classes5), classes6), classes7) = combined;`），加一个 provider 就要加一层 `.Combine(...)` 并改解构，同时把新集合加进 `allItems` |
 | 4 | `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 的注释 | 改掉「at most one Converter plus seven Themes」—— 代码支持之后它才成立；在那之前它是**错的** |
 
@@ -148,6 +148,6 @@
 ## 五、只能存疑的地方
 
 1. **`PropertyInfo` 作为字典键的等值语义**：`ThemeCache` 的二级键与三级键都是 `PropertyInfo`，生成器两处都写 `typeof(X).GetProperty(nameof(P))`（`Theme.cs` 的 `Transform` 与生成 `SetThemeValue` 时的取属性）。这能命中**依赖 BCL 的 `PropertyInfo` 按元数据（而非引用）比较**。这条我**没有在仓库内验证**（没有测试专门覆盖「两个 `GetProperty` 调用返回的实例互相命中」），只是从「这套代码在 demo 与测试里跑通」反推。若某天出现「覆盖值不生效」，这是第一个要查的地方。
-2. **`ThemeConfigAttribute` 各 arity 的构造签名差异**：`Examples/Theme/WPF Trimmed` 用的是 `[ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]`（`MainWindow.xaml.cs`），即「属性名 + 每主题一个参数数组」；而生成器按 `attribute.ConstructorArguments[0]` 取属性名、`TypeArguments[0]` 取转换器、`TypeArguments[1..]` 取主题（`Theme.cs` 的 `Transform`）。**未逐 arity 核对 6 个类的构造参数形状是否一致**。
+2. **`ThemeConfigAttribute` 各 arity 的构造签名差异**：`Examples/Theme/WPF Trimmed` 用的是 `[ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]`（`MainWindow.xaml.cs`），即「属性名 + 每主题一个参数数组」；而生成器按 `attribute.ConstructorArguments[0]` 取属性名、`TypeArguments[0]` 取转换器、`TypeArguments[1..]` 取主题（`Theme.cs` 的 `Transform`）。**未逐 arity 核对各类的构造参数形状是否一致**。
 3. **`UpdatePropertyToCurrentTheme` 会绕过 setter**：它直接 `propertyInfo.SetValue(this, value)`（`Theme.cs` 生成的 `UpdatePropertyToCurrentTheme`），所以对 `[VeloxProperty]` 属性而言**会绕过生成的通知**。这是从代码直读的事实，但「是不是有意的」没有注释说明，也**没有测试覆盖**这一交叉场景（`VeloxProperty` + `ThemeConfig` 同属性）。
 4. **`SetPlatformInterpolator` 的「每进程一次」是注释里的约定**（`ThemeManager.SetPlatformInterpolator` 的 remarks「This method only needs to be called once」），代码本身不阻止重复调用 —— `_interpolator` 是普通静态字段，最后一次赋值胜出。重复调用是否有代价（例如 sampler 注册表被重复写）**未核实**。

@@ -3,7 +3,7 @@
 > 代码：`Src/Adapters/VeloxDev.MAUI/`。本文只讲**怎么在这家正确地加东西**。
 > 契约本身的扩展点（要实现的接口、注册方式、生命周期钩子）在 `memory/modules/TransitionSystem/extension.md` 与
 > `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；本家的平台差异在 `memory/modules/{TransitionSystem,WorkflowSystem}/adapters/maui.md`。
-> 结构与本家的 31 个文件见 `architecture.md`。
+> 结构与本家的文件见 `architecture.md`。
 
 ---
 
@@ -93,7 +93,7 @@
 
 ### 2.9 「`GlobalUsings.cs` 是给宿主的便利」
 
-**错在哪**：`global using` 是编译期、不随包/`ProjectReference` 传递。宿主要用 `Transition<T>` 仍得自己 `using VeloxDev.TransitionSystem;`。加一行到 `GlobalUsings.cs` 影响的只有本模块自己的 31 个文件。
+**错在哪**：`global using` 是编译期、不随包/`ProjectReference` 传递。宿主要用 `Transition<T>` 仍得自己 `using VeloxDev.TransitionSystem;`。加一行到 `GlobalUsings.cs` 影响的只有本模块自己的文件。
 
 ---
 
@@ -116,9 +116,9 @@
 4. `Attach` 的第一行 **`Detach(control)`**（`WorkflowSurfaceBehavior.Attach`）；`Detach` 必须幂等（先 `-=` 所有事件，再清 `State`，最后 `ClearValue(StateProperty)`）。
 5. 坐标宿主的两种约定**二选一，不要新发明第三种**：`CoordinateHostName` + `CoordinateHostType` 附着属性（`WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`），解析照 `WorkflowNodeDragBehavior.ResolveCoordinateHost`；或者「最近的祖先 `AbsoluteLayout`」（`WorkflowSlotConnectionBehavior.FindCoordinateHost`）。后者**没有附着属性**，别给它的使用者留一个不存在的开关。
 6. 需要从控件名找部件时用 `FindByName<T>(name)`（`WorkflowSurfaceBehavior.ResolveNamedControls`），并考虑 `Loaded` 时重跑一次 —— 数据绑定晚到或换模板重建后名字作用域会重来。
-7. **要动画/要重绘的属性必须带 `propertyChanged` 并把一帧内的多次写入合并**（`WorkflowLinkOverlay` 的 `ScheduleInvalidate`、小地图 `MarkDirty`/`FlushInvalidate`）：`ApplyVisibleRegion` 一帧就连写 6 个 DP，不合并就是一帧六次 `Invalidate`。
+7. **要动画/要重绘的属性必须带 `propertyChanged` 并把一帧内的多次写入合并**（`WorkflowLinkOverlay` 的 `ScheduleInvalidate`、小地图 `MarkDirty`/`FlushInvalidate`）：`ApplyVisibleRegion` 一帧就连写多个 DP，不合并就是一帧多次 `Invalidate`。
 8. **要在 Windows 上做原生的事**：`#if WINDOWS` + `control.Handler?.PlatformView`，并遵守三条时序纪律（平台元素没有 `BindingContext`；`HandlerChanged` 早于平台视图创建，所以延后重试**必须有界**；换 handler 必须在 `OnHandlerChanging` 里摘钩子）—— 见 `WorkflowSystem/adapters/maui.md` §二·8。
-9. **宿主/模板联动**：`Src/Templates/VeloxDev.MAUI.Templates/working/content/` 下 7 个模板、以及它要挂的那个 demo 页面，都要跟着加附着属性；第 3 步的宿主类型门槛决定了它挂在哪个元素上（弄错 = 静默不生效）。
+9. **宿主/模板联动**：`Src/Templates/VeloxDev.MAUI.Templates/working/content/` 下各模板、以及它要挂的那个 demo 页面，都要跟着加附着属性；第 3 步的宿主类型门槛决定了它挂在哪个元素上（弄错 = 静默不生效）。
 
 ### 3.3 换掉链接层的绘制 / 加一条视觉 DP
 
@@ -137,9 +137,9 @@
 ## 四、联动清单（漏一处通常不报错）
 
 1. **改任何一个公开类型名**（`ViewManager`、`ViewPool`、`WorkflowSurfaceBehavior`、`WorkflowMinimapOverlay`、`WorkflowLinkOverlay`、`WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`、`WorkflowSlotConnectionBehavior`、`WorkflowEvents`）→ **七家各有一份同名类型，同在一个命名空间**（`architecture.md` §1.2）。漏改的症状只在「同时引用两家」的项目里出现（CS0433）。至少检查：`Src/Templates/VeloxDev.MAUI.Templates/working/content/` 下带 `assembly=VeloxDev.MAUI` 的 XAML、`Examples/Workflow/MAUI*/` 的 XAML、`skills/veloxdev-create-workflow/references/gui/maui.md`。
-2. **改公开附着属性名** → 同上：模板包（7 个模板）、两个 MAUI workflow demo 的 XAML、`ViewPool` 的 `ItemsSource`/`TemplateSelector` 用法，以及其它六家的同名属性。
+2. **改公开附着属性名** → 同上：模板包（各模板）、MAUI workflow demo 的 XAML、`ViewPool` 的 `ItemsSource`/`TemplateSelector` 用法，以及其它六家的同名属性。
 3. **加/删一个采样器类** → `Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs`（闭式解）或 `UnreachableSamplers.cs`（造不出端点值）+ `Conformance/MauiConformance.cs`（真 app 侧）。**覆盖率测试读的是产品程序集里的 `ISampler` 类型集合**，所以新类不被登记就一定红；反过来，登记表按**类名**取类型（`MauiEntries.Entry<TValue>` 的程序集限定反射）。
-4. **动 `#if WINDOWS`** → 记住本家有两个 TFM（中立 + windows），50 处分支会编出**两份不同的实现**；而 demo 的 Windows TFM 是**条件的**（`Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj` 的 `IsOSPlatform('windows')`），非 Windows 机器上这 50 处根本不参与编译。改完至少在一台 Windows 上编一次。
+4. **动 `#if WINDOWS`** → 记住本家有两个 TFM（中立 + windows），多处分支会编出**两份不同的实现**；而 demo 的 Windows TFM 是**条件的**（`Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj` 的 `IsOSPlatform('windows')`），非 Windows 机器上这些分支根本不参与编译。改完至少在一台 Windows 上编一次。
 5. **动 `MauiVersion` 或 Windows TFM 的下限** → 会整体决定「`#if WINDOWS` 的代码能不能编进库」（csproj 顶部注释记着 `10.0.0` 那版就是这么丢的）。同时 `Microsoft.WindowsAppSDK` 的版本要与消费 app 里 MAUI 解析到的那个对齐。
 6. **不需要联动的**：生成器/分析器（本项目不引用它，`VeloxDev.MAUI.csproj` 的引用项）；`Docs/`（那套文档站点**不在本仓库**）。
 
@@ -147,9 +147,9 @@
 
 ## 五、几个「以为能改、其实不该改」
 
-1. **`WorkflowNodeDragBehavior.IsDraggingNode` 与 `WorkflowSlotConnectionBehavior._activeConnection` / `IsDraggingConnection` 是刻意的进程级静态**。前者被**平移逻辑**读（`WorkflowSurfaceBehavior` 的三处平移锚点计算），删它会连累平移的锚点策略；后者保证「同一时刻只有一次连线拖拽」，`TryBeginConnection` 的第一件事就是取消活跃连接。
+1. **`WorkflowNodeDragBehavior.IsDraggingNode` 与 `WorkflowSlotConnectionBehavior._activeConnection` / `IsDraggingConnection` 是刻意的进程级静态**。前者被**平移逻辑**读（`WorkflowSurfaceBehavior` 的多处平移锚点计算），删它会连累平移的锚点策略；后者保证「同一时刻只有一次连线拖拽」，`TryBeginConnection` 的第一件事就是取消活跃连接。
    顺带一条：`WorkflowSlotConnectionBehavior.SetIsDraggingConnection`（`public`）在**全仓库没有外部调用点** —— 它由内部置真/置假，别以为外部有人在用它。
-2. **两个 overlay 的不对称是有意的**：小地图**被推**（实现 `IWorkflowMinimapOverlay`，由 `UpdateMinimapOverlay` 写 6 个值），链接层**自己拉**（不实现任何 Core 接口，偏移从装饰器实例上绑）。给链接层加 Core 接口实现会牵动宿主 XAML 的绑定形态；把装饰器的值改成推给链接层则要新增一条写路径。**改之前先读 `architecture.md` §三·3。**
+2. **两个 overlay 的不对称是有意的**：小地图**被推**（实现 `IWorkflowMinimapOverlay`，由 `UpdateMinimapOverlay` 写一组值），链接层**自己拉**（不实现任何 Core 接口，偏移从装饰器实例上绑）。给链接层加 Core 接口实现会牵动宿主 XAML 的绑定形态；把装饰器的值改成推给链接层则要新增一条写路径。**改之前先读 `architecture.md` §三·3。**
 3. **`WorkflowLinkOverlay.InputTransparent = true` 与它在 XAML 里的位置都是承重的**：这一层满屏盖在节点上，去掉 `InputTransparent` 会吞掉全部节点交互；z 序靠 XAML 位置。挪位置等于改层序。
 4. **`ViewManager` 把隐藏视图留在 `_layout.Children` 里**（只 `IsVisible=false` + `ZIndex=-100`，理由：移除会触发昂贵的 MAUI 重排）。想「清理一下」把它们 `Remove` 掉是在改性能特征，不是在整理。
 5. **`Refresh` 的两道闸不能为了「让它一定生效」拆掉**：`IsEnabled` 那道保证没开开关时静默；`IsRefreshing` 那道记着「每次画布扩张级联多次 Refresh，正反馈减速螺旋」。

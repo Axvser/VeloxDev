@@ -85,7 +85,7 @@
 
 ### 7. 采样器的状态 —— 别往基类塞
 
-`TimeSamplerCore` 只有 `Source` 和两个换算助手（`TimeSamplerCore` 的 `Source`/`ToTimeSpan`/`ToTicks`）。新的采样模式**全部状态放自己身上**：epoch 基准、累计量、上次读数都各是各的（对比 `CompensatingTimeSampler` 的七个字段与 `UncompensatedTimeSampler` 的两个字段）。不要为了「共用」把 epoch 判断搬进基类 —— 不记账的采样器根本不需要它。
+`TimeSamplerCore` 只有 `Source` 和换算助手（`TimeSamplerCore` 的 `Source`/`ToTimeSpan`/`ToTicks`）。新的采样模式**全部状态放自己身上**：epoch 基准、累计量、上次读数都各是各的（对比 `CompensatingTimeSampler` 与 `UncompensatedTimeSampler` 各自的状态字段）。不要为了「共用」把 epoch 判断搬进基类 —— 不记账的采样器根本不需要它。
 
 ---
 
@@ -144,4 +144,4 @@
 | `TimeSamplerCore.ToTicks` | 只有 `CompensatingTimeSampler.Step` 用（`CompensatingTimeSampler.Step` setter 的 `_stepTicks = ToTicks(value)`） | — |
 | 「定时器」能力（延迟触发、超时） | **不存在**，也不该在这里加 | `TimeSample` 刻意不带绝对位置；`TimerCore` 类注释把时间与循环分开（`TimerCore` 的类 remarks） |
 
-**这意味着**：本模块的扩展缝是「已经建好、但仓库内没人走」的形态。写新代码时别把「没人用」当成「可以删」——`TimerCore` 的类 remarks 与 `TimeSourceCore` 的 protected 构造 XML 注释都把这条缝写成了对外承诺，七家 GUI 适配器现在是间接消费者（经 `Transition<T>`），加第八家或加一个非 GUI 宿主时它就会有人走。
+**这意味着**：本模块的扩展缝是「已经建好、但仓库内没人走」的形态。写新代码时别把「没人用」当成「可以删」——`TimerCore` 的类 remarks 与 `TimeSourceCore` 的 protected 构造 XML 注释都把这条缝写成了对外承诺，GUI 适配器现在是间接消费者（经 `Transition<T>`），加第八家或加一个非 GUI 宿主时它就会有人走。

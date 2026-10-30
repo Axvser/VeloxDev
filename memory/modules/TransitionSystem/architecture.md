@@ -1,10 +1,10 @@
 ﻿# TransitionSystem — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`（39 个 .cs，2026-10-04 起按角色分子目录：`Events/`2、`Effects/`4、`Binding/`5、`Sampling/`3、`State/`2、`Runtime/`8、`NativeSamplers/`15；命名空间不变）、契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，枚举在 `Interfaces/TransitionSystem/Enums/`；
+> 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`（2026-10-04 起按角色分子目录：`Events/`、`Effects/`、`Binding/`、`Sampling/`、`State/`、`Runtime/`、`NativeSamplers/`；命名空间不变）、契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，枚举在 `Interfaces/TransitionSystem/Enums/`；
 > 七家平台实现在 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`。
 > 依赖的子系统：`Timing/`（时钟）、`Threading/`（线程归属与编组）、`TimeLine/`（事件参数）、`WeakTypes/`、`Lifetime/`。
 
-本文只写「读完 42 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+本文只写「读完整个模块的代码才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
@@ -144,11 +144,11 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 | 类型 | 拥有什么状态 | 谁可以改 | 备注 |
 |---|---|---|---|
 | `TransitionCore<T,...>`（`Effects/Transition.cs`） | 声明期状态：`state` / `effect` / `interpolator` / `next` / `RepeatTime` / `delay` | 只在声明时（`Create()` 后的链式调用） | **一个声明可被多个 target 同时 Execute**，只读。`Root` 由 `AsRoot()` 在 `Create()` 里定 |
-| `StateCore`（`State/State.cs`） | 三个字典：`Values` / `Interpolators` / `Options` | `Set*` 方法 | 路径冲突检查**只在 `SetValue`**（`StateCore.RejectPathConflict` 由它调用），`SetInterpolator`/`SetOptions` 不做；只覆盖**同一个** transition 内的路径 |
+| `StateCore`（`State/State.cs`） | 字典：`Values` / `Interpolators` / `Options` | `Set*` 方法 | 路径冲突检查**只在 `SetValue`**（`StateCore.RejectPathConflict` 由它调用），`SetInterpolator`/`SetOptions` 不做；只覆盖**同一个** transition 内的路径 |
 | `TransitionProperty`（`Binding/TransitionProperty.cs`） | 路径身份（`PathSegment[]`）+ 惰性编译的 getter/setter | 惰性、幂等 | **`Path` 文本不是身份，`Equals`/`GetHashCode` 才是**。`UnreadablePath` 哨兵（`TransitionProperty.UnreadablePath`）区分「中间对象为 null」与「类型不符」 |
 | `InterpolatorCore`（`Sampling/Interpolator.cs`） | 进程级 **static** sampler 注册表 | `RegisterInterpolator` / `UnregisterInterpolator` | 静态构造函数装 Core 默认（double/float/int/long/Point/PointF/Size/SizeF/Color/Rectangle/RectangleF + `!NETSTANDARD2_0` 的 Vector2/3/4、Quaternion）。实例成员 `Prepare` / `CreateScheduler` 是**适配器接缝** |
 | `SamplerSet<TPriorityCore>`（`Sampling/SamplerSet.cs`） | 一段**首趟**备下的端点快照 + 每 property 的 `Working` scratch | `Add` 只在 Prepare 里 | 段的首趟建一次，之后每次迭代 `Replay` 复用**同一个实例** |
-| `TransitionEffectCore`（`Effects/TransitionEffect.cs`） | 配置（FPS/Duration/IsAutoReverse/LoopTime/Ease/Priority）+ 9 个 `WeakDelegate` 事件 | 声明时 | **运行的不是你写的那个对象**：每段 `Clone()` 一份。`TransitionEffectCore<TPriorityCore>.Clone()` 返回**基类型**实例（见 §七陷阱） |
+| `TransitionEffectCore`（`Effects/TransitionEffect.cs`） | 配置（FPS/Duration/IsAutoReverse/LoopTime/Ease/Priority）+ 一组 `WeakDelegate` 事件 | 声明时 | **运行的不是你写的那个对象**：每段 `Clone()` 一份。`TransitionEffectCore<TPriorityCore>.Clone()` 返回**基类型**实例（见 §七陷阱） |
 | `TransitionInterpreterCore`（`Runtime/TransitionInterpreter.cs`） | 一次采样的循环 + `Args` + `_pacer` + `_wait` | 每段 / 每次重放 `new()` 一个 | `Args` 因此是**每段一个**，`Handled` 不跨段 |
 | `TransitionSchedulerCore`（`Runtime/TransitionScheduler.cs`） | `_activeRuns`（`ConcurrentDictionary<cts, run>`）、`_gate`、`_generation`、`targetref` | `Track`/`Untrack`/`DrainActive` 是仅有的写者 | 互斥 scheduler 每 target **缓存一生**；非互斥每次 `Execute` 新建 |
 | `TransitionRun`（`Runtime/TransitionRun.cs`，internal） | `Cts` + `Timeline` + `PassAnchor` + `Cycle` + `Thread` | anchor/cycle 由 loop 与 Seek 改；Thread 由调度器钉一次 | `IDisposable` 只释放 Cts，**由 `TransitionCore` 在链尾做** |

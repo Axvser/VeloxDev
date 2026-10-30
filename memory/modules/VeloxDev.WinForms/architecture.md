@@ -1,9 +1,9 @@
 # VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/`。**34 个 .cs、8269 行**（`Attached/Workflow/` 23 个 7340 行，最大 `WorkflowTreeView.cs` 1432、`WorkflowSurfaceBehavior.cs` 1017、`WorkflowSlotLayoutBehavior.cs` 689、`WorkflowNodeDragBehavior.cs` 537、`WorkflowLinkAttachment.cs` 486、`WorkflowNodeAttachment.cs` 402；`PlatformAdapters/` 9 个 903 行，最大 `ThemeValueConverters.cs` 496、`Transition.cs` 158、`TransitionInterpreter.cs` 96、`UIThreadInspector.cs` 90；`PlatformAdapters/Samplers/` 1 个 23 行；顶层 `GlobalUsings.cs` 3 行）。同目录另有一份 `README.md`（245 行）。
-> **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'` = **34**。只写 `'.../**/*.cs'` 得 **33** —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这 1 个）。
+> 代码：`Src/Adapters/VeloxDev.WinForms/`（`Attached/Workflow/` 最大的几个是 `WorkflowTreeView.cs`、`WorkflowSurfaceBehavior.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowLinkAttachment.cs`、`WorkflowNodeAttachment.cs`；`PlatformAdapters/` 最大的是 `ThemeValueConverters.cs`、`Transition.cs`、`TransitionInterpreter.cs`、`UIThreadInspector.cs`，其下另有一个采样器；顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。
+> **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这处）。
 >
-> 本文只写「读完这 34 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+> 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台，不存在平台轴。它在三条轴上的平台差异分别落在
 > `memory/modules/WorkflowSystem/adapters/winforms.md`、`memory/modules/TransitionSystem/adapters/winforms.md`、`memory/modules/Templates/adapters/winforms.md`，本文**指路不抄**。
@@ -14,17 +14,17 @@
 
 | 轴 | Core 契约 | 本项目落点 | 平台差异记在哪 |
 |---|---|---|---|
-| WorkflowSystem | 七个视图角色 + 模型事件 | `Attached/Workflow/`（23 文件） | `WorkflowSystem/adapters/winforms.md` |
-| TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `PlatformAdapters/`（9 类型 + `Samplers/` 1 个） | `TransitionSystem/adapters/winforms.md` |
-| DynamicTheme | `IThemeValueConverter` | `PlatformAdapters/ThemeValueConverters.cs`（13 个转换器） | DynamicTheme 模块记忆 |
+| WorkflowSystem | 七个视图角色 + 模型事件 | `Attached/Workflow/` | `WorkflowSystem/adapters/winforms.md` |
+| TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `PlatformAdapters/`（平台类型 + 一个采样器） | `TransitionSystem/adapters/winforms.md` |
+| DynamicTheme | `IThemeValueConverter` | `PlatformAdapters/ThemeValueConverters.cs`（一组转换器） | DynamicTheme 模块记忆 |
 
 三个只在读这个目录时才会发现的结构事实：
 
 1. **三条轴互不引用，但没有任何编译期阻挡。** 实测 `Attached/` 下零 `Transition`/`Interpolator`/`ThemeManager` 符号、`PlatformAdapters/` 下零 `Workflow` 符号 —— 靠的是纪律：`GlobalUsings.cs` 已经把 `VeloxDev.TransitionSystem` 灌进了**每一个**文件（含 `Attached/`）。⇒ 「在这家写了一条跨轴的调用」不会被拦下，七家都维持着零引用，改的人得自己守。
-2. **命名空间全部寄生在 Core 上，唯一例外的命名空间还和 Core 撞了名。** 唯一的采样器在 `VeloxDev.Adapters.NativeSamplers`（`PlatformAdapters/Samplers/PaddingSampler.cs` 的命名空间），而 **Core 自己的 15 个采样器在 `VeloxDev.TransitionSystem.NativeSamplers`**（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/ColorSampler.cs` 的命名空间）—— 两个不同命名空间。⇒ 写 Core 那一支的 `using` 引不到这家唯一自带的采样器（AUTO TEST 用的是前者：`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs`）。
+2. **命名空间全部寄生在 Core 上，唯一例外的命名空间还和 Core 撞了名。** 唯一的采样器在 `VeloxDev.Adapters.NativeSamplers`（`PlatformAdapters/Samplers/PaddingSampler.cs` 的命名空间），而 **Core 自己的采样器在 `VeloxDev.TransitionSystem.NativeSamplers`**（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/ColorSampler.cs` 的命名空间）—— 两个不同命名空间。⇒ 写 Core 那一支的 `using` 引不到这家唯一自带的采样器（AUTO TEST 用的是前者：`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs`）。
 3. **`VeloxDev.WorkflowSystem.AttachedBehaviors` 在 Core 里不存在**：七家各声明一份同名命名空间。XAML 平台靠 `assembly=` 消歧，C# 宿主只能写全名或别名。
 
-**DynamicTheme 这条轴在这家没有消费者**：`Examples/Theme/` 下只有 Avalonia/WPF 两族目录（无 WinForms），`ThemeManager.SetPlatformInterpolator` 的仓内调用点无一处是本平台。496 行转换器没有任何 demo/测试碰过 —— 它是三条轴里唯一「有实现、零使用」的。
+**DynamicTheme 这条轴在这家没有消费者**：`Examples/Theme/` 下只有 Avalonia/WPF 两族目录（无 WinForms），`ThemeManager.SetPlatformInterpolator` 的仓内调用点无一处是本平台。这些转换器没有任何 demo/测试碰过 —— 它是三条轴里唯一「有实现、零使用」的。
 
 ---
 
@@ -96,7 +96,7 @@
 | Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 10.0.1` | 两个引用项 | 与生成器那套双轨同形；包里唯一的依赖是 Core |
 | 三个 TFM 一起编 | — | 新写的 BCL 调用必须在 netframework4.6.1 与 netcoreapp3.0 上都存在，否则只在对应的那一次编译里报错（`bin/` 下每个 TFM 一份产物） |
 
-**别用 `bin/`/`obj/` 目录名推支持的框架**：这家的 `bin/Debug/` 下有 `net8.0-windows`/`net10.0-windows` 两个 **csproj 未声明**的目录（与 `memory/modules/VeloxDev.Core.Test` 记的同类现象）；而两个下游 demo 分别是 `net10.0-windows` 与 `net9.0-windows`，它们解析到的是 `net5.0-windows` 那一份资产。
+**别用 `bin/`/`obj/` 目录名推支持的框架**：这家的 `bin/Debug/` 下有 csproj 未声明的 `net8.0-windows`/`net10.0-windows` 目录（与 `memory/modules/VeloxDev.Core.Test` 记的同类现象）；而两个下游 demo 分别是 `net10.0-windows` 与 `net9.0-windows`，它们解析到的是 `net5.0-windows` 那一份资产。
 
 ---
 
@@ -118,7 +118,7 @@
 
 4. **`SyncSlot` 的 `SlotAnchorFromNode` 兜底不可达。** 那一段只在 `coordinateHost` 为 `null` 时执行，而所有调用点传进来的都是 `ResolveCoordinateHost` 的返回值 —— 那个方法**永不返回 null**。⇒ 这家事实上只有 `SlotAnchorFromCanvasLocal` 一条路（这也是唯一正确的路）。
 
-5. **`ThemeValueConverters.cs` 的类名与 `System.Drawing` 撞名，写短名解析到自己。** 文件里凡要用 GDI+ 那个必须全限定：`new System.Drawing.ColorConverter()`（三处）、`new System.Drawing.FontConverter()`；`ObjectConverter` 那条通用路径刻意**不用** `TypeDescriptor.GetConverter`（注释写明），改走显式转换表。⇒ 在这个命名空间下新写转换器时写短名**不报错**，只是转换结果悄悄不对。13 个类：`DoubleConverter`、`IntConverter`、`FloatConverter`、`PointConverter`、`PointFConverter`、`SizeConverter`、`SizeFConverter`、`RectangleConverter`、`RectangleFConverter`、`PaddingConverter`、`ColorConverter`、`FontConverter`、`ObjectConverter`。
+5. **`ThemeValueConverters.cs` 的类名与 `System.Drawing` 撞名，写短名解析到自己。** 文件里凡要用 GDI+ 那个必须全限定：`new System.Drawing.ColorConverter()`（三处）、`new System.Drawing.FontConverter()`；`ObjectConverter` 那条通用路径刻意**不用** `TypeDescriptor.GetConverter`（注释写明），改走显式转换表。⇒ 在这个命名空间下新写转换器时写短名**不报错**，只是转换结果悄悄不对。转换器类：`DoubleConverter`、`IntConverter`、`FloatConverter`、`PointConverter`、`PointFConverter`、`SizeConverter`、`SizeFConverter`、`RectangleConverter`、`RectangleFConverter`、`PaddingConverter`、`ColorConverter`、`FontConverter`、`ObjectConverter`。
 
 6. **`NativeWindowStyleHelper` 里 `WS_CLIPCHILDREN` 与 `WS_EX_COMPOSITED` 是同一个数值 `0x02000000`**，却被喂给 `SetWindowLong` 的两个**不同 index**（普通样式 vs 扩展样式）。⇒ 改这两个常量时把两者当成「可互换的字面量」会静默改错样式位；`ApplyStyle` 只在对应位缺失时才调 `SetWindowPos(SWP_FRAMECHANGED)`，所以症状是「有时生效」。`CompositedMaxControlCount = 100`（判据 `CountDescendants`）不是防御性代码 —— 超了就不合成，坑的机制见 `WorkflowSystem/adapters/winforms.md`。
 
@@ -155,5 +155,5 @@
 - 七个角色各自要暴露什么成员、附着属性名、`PART_*` 命名约定 —— `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3。
 - 这家的平台硬限制（无透明分层、两套平移模型、同步重画、反射接缝…）与逐条坑 —— `memory/modules/WorkflowSystem/adapters/winforms.md`。
 - TransitionSystem 侧：`NonPriority`、手写 `Property` 重载、`CreateFramePacer` 条件、`"WindowsFormsSynchronizationContext"` 字符串比较、`PaddingSampler` 的截断 —— `memory/modules/TransitionSystem/adapters/winforms.md`。
-- 模板侧：七个条目产出什么形状、`IWorkflowMinimapScrollSource` 的 CS0246 耦合、六份 `ParseColor` —— `memory/modules/Templates/adapters/winforms.md`。
+- 模板侧：各条目产出什么形状、`IWorkflowMinimapScrollSource` 的 CS0246 耦合、多份 `ParseColor` —— `memory/modules/Templates/adapters/winforms.md`。
 - 「怎么用这套模板搭一个 WinForms 工作流视图」（人面向）—— `skills/veloxdev-create-workflow/references/gui/winforms.md`。

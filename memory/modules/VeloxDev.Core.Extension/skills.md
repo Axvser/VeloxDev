@@ -1,7 +1,7 @@
 # VeloxDev.Core.Extension — Skills 子系统
 
-> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Skills/`（11 个文件）。
-> 内置技能语料：`Resources/Workflow/{en,zh}/Skills/*.md`（各 7 个：CompilerUsage / ConnectionValidation / DiscoveryFlow / NodeCreation / OperationOrdering / SlotEnumerator / SmartLayout）。
+> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Skills/`。
+> 内置技能语料：`Resources/Workflow/{en,zh}/Skills/*.md`（CompilerUsage / ConnectionValidation / DiscoveryFlow / NodeCreation / OperationOrdering / SlotEnumerator / SmartLayout 等）。
 
 ---
 
@@ -24,7 +24,7 @@
 - `WithSkills(...)` 之后建的 provider 拿到这个事实（`SkillScope.CreateContextProvider(..., embeddedCorpusDelivered: true)`），于是**不再贡献 `BuildEmbeddedBlock`**，改为贡献 `SkillScope.BuildWithdrawnBlock`：**当前处于停用状态的嵌入技能名单**。
 - 为什么不是干脆闭嘴：骨架冻住的是「当时的启用状态」，之后 `SetEnabled(name, false)` 若不发声就成了静默空操作。报一份「上面那几篇请忽略」既不说两遍正文，也不丢掉这次关闭。
 
-**两种宿主顺序都能跑**，但语义不同：先 `WithSkills` 再取骨架 ⇒ 语料归子系统（默认推荐，`AgentHelper.cs` 就是这个顺序）；先取骨架再 `WithSkills` ⇒ 语料冻在骨架里，子系统此后只报差量。文件技能永远不进 `BuildWithdrawnBlock`（它们本就只做广告，不在提示里）。测试：`ComposedProvidersTests.cs` 的 `SkeletonBuiltBeforeSkills_*` / `SkeletonBuiltAfterSkills_*` 四条，以及 `SkillScopeTests.cs` 的 `WithdrawnBlock_*` 五条。
+**两种宿主顺序都能跑**，但语义不同：先 `WithSkills` 再取骨架 ⇒ 语料归子系统（默认推荐，`AgentHelper.cs` 就是这个顺序）；先取骨架再 `WithSkills` ⇒ 语料冻在骨架里，子系统此后只报差量。文件技能永远不进 `BuildWithdrawnBlock`（它们本就只做广告，不在提示里）。测试：`ComposedProvidersTests.cs` 的 `SkeletonBuiltBeforeSkills_*` / `SkeletonBuiltAfterSkills_*` 那组，以及 `SkillScopeTests.cs` 的 `WithdrawnBlock_*` 那组。
 
 ---
 

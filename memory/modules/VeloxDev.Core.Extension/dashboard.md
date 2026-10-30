@@ -1,13 +1,13 @@
 # VeloxDev.Core.Extension — Dashboard（宿主面板投影）
 
-> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Dashboard/`（5 个文件）。
+> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Dashboard/`。
 > 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/Dashboard/AgentDashboardViewModelTests.cs`。
 
 ---
 
 ## 一、第一件该知道的事：这一层在仓库里没有 UI 消费者
 
-`AgentDashboardViewModel` 的全部引用都在**它自己的测试**里（`AgentDashboardViewModelTests` 里 21 处 `Create(scope)`，全文件 26 处 `Create`）。三个 demo 都不用它 —— Avalonia / Blazor / Jalium 是**各自**绑 `McpScope.Status`（`McpStatusViewModel`）建自己的 MCP 面板：
+`AgentDashboardViewModel` 的全部引用都在**它自己的测试**里。三个 demo 都不用它 —— Avalonia / Blazor / Jalium 是**各自**绑 `McpScope.Status`（`McpStatusViewModel`）建自己的 MCP 面板：
 
 - `Examples/Workflow/Avalonia/Demo/Views/Workflow/WorkflowView.axaml.cs` 的 `InitializeMcp`：`McpStatusPanel.DataContext = helper.Mcp.Status;`
 - `Examples/Workflow/Blazor/Demo/Demo/Components/Pages/Workflow.razor.cs` 的 `McpStatus` 属性：`=> (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;`
@@ -89,5 +89,5 @@
 
 ## 六、死面
 
-- 本目录**全部 5 个文件都有调用者**（在模块内部）+ 测试覆盖，**不存在零调用者成员**。
+- 本目录**全部文件都有调用者**（在模块内部）+ 测试覆盖，**不存在零调用者成员**。
 - 但**整个目录在仓库里没有 UI 消费者**（见第一节）。这是本模块最容易被误判的一处：看见 demo 里有 MCP 状态面板就以为它在用 Dashboard，其实 demo 绑的是 `McpScope.Status` 那个更薄的对象。

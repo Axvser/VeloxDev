@@ -9,12 +9,12 @@
 
 ## 一、契约成员里哪些在这家有实质内容，为什么
 
-八个类一个不少，但只有三个承载这家的答案，其余五个是「契约默认行为恰好就是对的」。判断哪三个值得读，
+契约要求的类一个不少，但只有少数几个承载这家的答案，其余是「契约默认行为恰好就是对的」。判断哪些值得读，
 不用看类体长短，只要问一句：**这个成员要不要接触「浏览器/电路」这个概念？**
 
 | 成员 | 这里的实质内容 | 为什么只有它有事做 |
 |---|---|---|
-| `Interpolator` | 注册 `string` 一个采样器 + `CreateScheduler` 的选择依据 | 唯一要回答「这家平台上什么东西可动画」的地方；答案与别家完全不同（§二·3） |
+| `Interpolator` | 注册 `string` 采样器 + `CreateScheduler` 的选择依据 | 唯一要回答「这家平台上什么东西可动画」的地方；答案与别家完全不同（§二·3） |
 | `UIThreadInspector` | 线程归属 = **circuit 的** `SynchronizationContext` | 唯一要回答「UI 线程是谁」的地方，而在这家这个答案不是进程级的（§二·4） |
 | `Transition<T>` | 逐类型手写的 `Property` 重载表 | 唯一要回答「用户能声明出什么」的地方，而这张表是手写的、因此有缺口（§二·3 末） |
 | `State` / `TransitionEffect` / `TransitionEffects` / `TransitionScheduler` / `TransitionInterpreter` | —— | `TransitionScheduler` 只是把三个型参绑好；**`TransitionEffect` 类体为空、连 `Priority` 都不声明**，靠 Core 非泛型基类已经实现好的 `ITransitionEffect<NonPriority>`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的 `TransitionEffectCore`）—— 这是「这家的 `TPriorityCore` = `NonPriority`」的必然结果，别等着一份优先级默认值；`TransitionInterpreter` 的类体为空**本身就是这家的核心决定**，见 §二·2 |
@@ -66,25 +66,25 @@ therefore drifts to a pool thread after its first frame unless the host supplied
 这与 mem 里那条「Blazor 刻意没有 pacer」是同一件事的两个面，别把「没有 pacer」当成漏写 —— 它是**做不到**，
 而且理由写在了类上。
 
-### 3. 浏览器里没有那些 CLR 类型 → 所以只有一个采样器（Q1）
+### 3. 浏览器里没有那些 CLR 类型 → 所以只注册 `string` 采样器（Q1）
 
-**事实。** 这家的静态构造只注册了一个采样器：`RegisterInterpolator(typeof(string), new StringSampler());`
-（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Interpolator.cs` 的静态构造里 `RegisterInterpolator(typeof(string), new StringSampler());`），`PlatformAdapters/Samplers/` 下也只有这一个文件。
+**事实。** 这家的静态构造只注册 `string` 采样器：`RegisterInterpolator(typeof(string), new StringSampler());`
+（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Interpolator.cs` 的静态构造里 `RegisterInterpolator(typeof(string), new StringSampler());`），`PlatformAdapters/Samplers/` 下也只有 `StringSampler`。
 
-**先把「数量对比」这件事本身说准**（它比看起来更容易被误读）。七家的注册数：
-WPF 12、Avalonia 14、MAUI 12、WinUI 10、Jalium 10、**WinForms 1、Razor 1**（各家 `PlatformAdapters/Interpolator.cs`
-静态构造里 `RegisterInterpolator` 的条数）。所以「只有一个采样器」不是 Razor 独有 —— **WinForms 也只有一个**。
+**先把「数量对比」这件事本身说准**（它比看起来更容易被误读）。别家注册的都是自己 GUI 框架里的一族类型，
+**WinForms 只注册 `Padding`，Razor 只注册 `string`**（各家 `PlatformAdapters/Interpolator.cs`
+静态构造里 `RegisterInterpolator` 的条数）。所以「采样器少」不是 Razor 独有 —— **WinForms 同样少**。
 但两者性质完全不同，这正是这条问题的答案：
-- WinForms 的那一个是 `RegisterInterpolator(typeof(Padding), new PaddingSampler());`
+- WinForms 注册的是 `RegisterInterpolator(typeof(Padding), new PaddingSampler());`
   （`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/Interpolator.cs` 的 `RegisterInterpolator(typeof(Padding), new PaddingSampler());`）—— `System.Windows.Forms.Padding`
-  是**那个框架自己拥有的 CLR 类型**，只是 WinForms 的可动画面确实只剩这一个值得注册。
-- Razor 的那一个是 `string` —— `string` **不是 Blazor 的类型**，它是**服务端把值送到浏览器去的唯一载体**。
+  是**那个框架自己拥有的 CLR 类型**，只是 WinForms 的可动画面确实只剩它值得注册。
+- Razor 注册的是 `string` —— `string` **不是 Blazor 的类型**，它是**服务端把值送到浏览器去的唯一载体**。
 
 **真实原因（不是「偷懒」也不是「缺功能」）。** Core 的静态构造**已经把每一个可动画的 CLR 值类型装好了** ——
 `double`/`float`/`int`/`long`/`Point`/`PointF`/`Size`/`SizeF`/`Color`/`Rectangle`/`RectangleF`
-以及 `Vector2/3/4`/`Quaternion`，共 15 个（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造），
+以及 `Vector2/3/4`/`Quaternion`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造），
 查找还会向上走「精确类型 → 基类由近及远 → 接口按名字序」（同文件的 `TryGetInterpolator`）。
-别家那 12 / 14 个采样器**全都是自己 GUI 框架里的类型**（WPF 的 `Brush`/`Transform`/`Thickness`/…，Avalonia 的 `IBrush`/`ITransform`/…），
+别家注册的采样器**全都是自己 GUI 框架里的类型**（WPF 的 `Brush`/`Transform`/`Thickness`/…，Avalonia 的 `IBrush`/`ITransform`/…），
 它们之所以要注册，是因为**那些 CLR 类型只存在于那个框架的进程里**。
 
 Blazor 这一侧没有这样的类型：**没有任何「可写的元素属性」是 CLR 对象**，动画的产物是一段**字符串**（CSS / SVG 属性）。
@@ -96,9 +96,9 @@ Blazor 这一侧没有这样的类型：**没有任何「可写的元素属性�
 （同文件 `InsertFrame` 的离散分支与 `DiscreteMarker`）。
 
 这家 demo 的动画面就是「几个 double + 一个 CSS 颜色串」（`Examples/Transition/Blazor/Demo/Demo/Models/BoxModel.cs` 的 `Style` 属性），
-Core 那 15 个本来就够。
+Core 注册的那一族本来就够。
 
-**由此得出的联动陷阱。** 这张表是**手写**的（`PlatformAdapters/Transition.cs` 里 `Transition<T>` 的逐类型 `Property` 重载，十六组），
+**由此得出的联动陷阱。** 这张表是**手写**的（`PlatformAdapters/Transition.cs` 里 `Transition<T>` 的逐类型 `Property` 重载），
 而不是别家那种泛型 `Property<TValue>`，于是它的两个边缘各有一个坑（`../extension.md` §三·C 已记 `long`）：
 - **`long` 声明不出来**：Core 注册了 `LongSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造），
   但这张手写表里没有 `long` 重载 → 在 Razor 上**根本写不出**这条路径，不是「写了不生效」而是「写不了」。
@@ -107,7 +107,7 @@ Core 那 15 个本来就够。
   这一格在**六家都存在**（WPF/Avalonia/WinUI/MAUI/WinForms/Razor 的重载表都有 `decimal`；**只有 Jalium 没有**，它的 `Transition.cs` 里搜不到 `decimal`），不是 Razor 特有；写在这是因为手写表没有编译器帮你对账。
 
 **加一个类型的完整动作**：写采样器 → 在该家 `Interpolator` 静态构造里注册 → **顺手在这张手写表里补一个重载**
-→ 补 `Examples/Transition/AUTO TEST/Samplers/RazorEntries.cs` 的一行（现行只有 `SamplerRule.Saturate` 一条）
+→ 补 `Examples/Transition/AUTO TEST/Samplers/RazorEntries.cs` 的一行（现行只有 `SamplerRule.Saturate`）
 → 跑 `SamplerCoverageTests`。漏第三步的后果与其他家不同：别家漏了是运行期静默，这里是**声明期就写不出来**。
 
 ### 4. `SynchronizationContext` 属于 circuit，不属于进程
@@ -121,7 +121,7 @@ Core 那 15 个本来就够。
 调度器在启动这趟动画的线程上把答案钉进 `TransitionRun.Thread`（`../architecture.md` §三），
 这才让两个同时活着的 circuit 不会互相投递。
 
-**陷阱。** `_uiSyncContext` / `_uiThreadId` 是 **static**（`UIThreadInspector` 顶部的两个静态字段），所以它记住的是**第一个**触碰它的 circuit 的 context。
+**陷阱。** `_uiSyncContext` / `_uiThreadId` 是 **static**（`UIThreadInspector` 顶部的静态字段），所以它记住的是**第一个**触碰它的 circuit 的 context。
 因此 `ThreadFor` 的兜底只在「动画从后台线程启动」这一种情形下有意义 —— 这正是 `CaptureUIThread` 的 XML 说的用法
 （`CaptureUIThread` 的 remarks），别把那个 static 当成「本进程的 UI 线程」。同理 `IsAlive` 只由 `NotifyShutdown()` 翻牌（`IsAlive`），
 没有框架生命周期可依赖。
@@ -182,7 +182,7 @@ Core 那 15 个本来就够。
    `if (_disposed) return;` 在回调第一行（`Examples/Transition/Blazor/Demo/Demo/Components/Pages/Home.razor.cs` 的读表定时器回调，
    标记声明在同文件的 `_disposed` 字段），注释写明「定时器线程可能在 Dispose 之后才轮到」。
 3. **静态状态在 Blazor Server 下的语义被放大了。** 一个进程多个 circuit，任何 `static` 字段都是**跨用户共享**的。
-   这家的适配器里确实有两个 `static`（`UIThreadInspector` 的 context/线程号），它们能成立是因为语义恰好是
+   这家的适配器里确实有 `static` 字段（`UIThreadInspector` 的 context/线程号），它们能成立是因为语义恰好是
    「首个 circuit 的兜底」；**新增任何 `static` 之前先想清楚它是进程级还是 circuit 级** —— 视图侧为同一件事
    专门用了 `AsyncLocal`（`WorkflowSystem/adapters/razor.md` 有依据）。
 4. **`StringSampler` 的端点语义依赖「写回调用方给的字符串本身」。** 它的 XML 明写端点精确靠 `t == 0` 写 start 原文、

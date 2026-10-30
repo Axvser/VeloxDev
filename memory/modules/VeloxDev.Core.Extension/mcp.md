@@ -1,6 +1,6 @@
 ﻿# VeloxDev.Core.Extension — MCP 子系统
 
-> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/MCP/`（9 个文件，2026-10-08 起含 `HostedMcpServer.cs` 与 `McpToolProxy.cs`）。
+> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/MCP/`（2026-10-08 起含 `HostedMcpServer.cs` 与 `McpToolProxy.cs`）。
 > 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`（预注册服务器在 `DemoMcpServers`，注册点是 `helper.Mcp.WithServers([.. helper.McpServers])`）。
 
 ---
@@ -118,7 +118,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 
 `McpScope.CreateContextProvider(ToolPipeline? tools, AgentPipeline? pipeline)`。
 
-- `McpAgentToolkit.CreateTools()` 返回**未包装**的六个管理工具（`ToolNames`）；`CreateTools(ToolPipeline, AgentPipeline?)` 返回包装过的 —— **provider 用的是后者**（`McpAgentContextProvider.BuildTools`），所以 MCP 工具与内置工具受同一套预算闸门管。
+- `McpAgentToolkit.CreateTools()` 返回**未包装**的那组管理工具（`ToolNames`）；`CreateTools(ToolPipeline, AgentPipeline?)` 返回包装过的 —— **provider 用的是后者**（`McpAgentContextProvider.BuildTools`），所以 MCP 工具与内置工具受同一套预算闸门管。
 - `CreateTools()` 全部按 `ToolNames` 里的常量注册（`ListName` / `LoadName` / …）；数组位置没有消费者，顺序只为宿主分类方便。`AddMcpServer` / `SetMcpServerArguments` 也永远注册（`IsGrantedView` 的授权视图除外）。
 - `McpAgentContextProvider` 只按 **`scope.Version`** 缓存（**没有语言维度**）。`Version` 在装载 / 添加 / 卸载 / 新增预注册 / 服务器失败时自增（`McpScope.Version` 的写入点）。
 - `McpScope.BuildInventoryBlock()` 读 **`Status.Snapshot`** 而不是绑定的 `ObservableCollection` —— 注释写明理由：提示是在 **agent 调用线程**上渲染的，不是 UI 线程。
@@ -160,7 +160,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
    「每个非视图 scope 都注册」的进 `ToolNames`；`AddMcpServer` / `SetMcpServerArguments` 也永远注册，名字同样放进 `ToolNames`。把名字写死在 `CreateTools` 里而不进 `ToolNames` 会让
    `McpAgentContextProviderTests.BuildContext_ContributesTheManagementToolsAndTheirDescription` 当场红（它会红是对的：
    那条断言就是 `ToolNames` 的定义）。
-3. **如果它该算只读**：把名字加进 `WorkflowAgentToolkit.BuildQueryToolNames` —— 注意这里**没有** `McpAgentToolkit.ToolNames` 的自动并入（技能与子代理工具才是自动的）。目前四个 MCP 管理工具**都不在**那个只读集合里。
+3. **如果它该算只读**：把名字加进 `WorkflowAgentToolkit.BuildQueryToolNames` —— 注意这里**没有** `McpAgentToolkit.ToolNames` 的自动并入（技能与子代理工具才是自动的）。目前这些 MCP 管理工具**都不在**那个只读集合里。
 4. 若它的行为受权限模式影响，同步改 `BuildPromptContext()` 的措辞 —— 现在这段文本刻意与模式无关，拒绝文案由权限层给出。
 
 **加一个运行模式**
@@ -199,6 +199,6 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 ## 七、死面 / 仓库内零真实使用者
 
 - **两个写工具的「模式 + 规则」路径没有真实宿主使用者。** 七家 demo **默认**在 `AgentPermissionMode.AutoEdit`（侧栏下拉可随时改，见 [architecture.md](architecture.md) §四之五）加几条 `Ask` 规则，**从不让模型自己加服务器**；`AutoHelper` 的 MCP 列表是一次性预注册。所以 `AddMcpServer` 的完整路径（含种类规则、含确认）**只有测试在跑**。
-- **改参数的两条路都没有真实宿主使用者**：demo 通过 `WithServers` 一次性预注册（`AgentHelper.DemoMcpServers`），之后从不改；`WithServers` 的「同名 = 重配」也是为这条新路径加的。所以**动态切换目前只有 `McpParameterSwitchTests`（9 条）在跑** —— 它是这条路径唯一的守卫。
+- **改参数的两条路都没有真实宿主使用者**：demo 通过 `WithServers` 一次性预注册（`AgentHelper.DemoMcpServers`），之后从不改；`WithServers` 的「同名 = 重配」也是为这条新路径加的。所以**动态切换目前只有 `McpParameterSwitchTests` 在跑** —— 它是这条路径唯一的守卫。
 - `McpServerRunMode.Pip` / `Uvx` / `Dotnet` / `Exe` 在 demo 里都没有实例 —— demo 只配了 `Http` 与 `Npx`（`AgentHelper.DemoMcpServers`）。
 - `McpScope.WithMcpRoot` 在仓库内无调用者；`.evn/mcp` 是唯一被用到的根。

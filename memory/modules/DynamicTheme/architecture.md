@@ -1,7 +1,7 @@
 ﻿# DynamicTheme — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/DynamicTheme/`（5 个 .cs），契约在 `Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/`（`ITheme.cs` / `IThemeObject.cs` / `IThemeValueConverter.cs`）。
-> 生成器：`Src/Generators/VeloxDev.Core.Generator/Theme.cs`。**下文不带路径的 `Theme.cs` 指这一个**（注意：本模块目录下**没有** `Theme.cs`，别在 `DynamicTheme/` 里找；运行期那 5 个文件是 `Dark.cs` / `Light.cs` / `ThemeCache.cs` / `ThemeConfigAttribute.cs` / `ThemeManager.cs`）。
+> 代码：`Src/Core/VeloxDev.Core/DynamicTheme/`，契约在 `Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/`（`ITheme.cs` / `IThemeObject.cs` / `IThemeValueConverter.cs`）。
+> 生成器：`Src/Generators/VeloxDev.Core.Generator/Theme.cs`。**下文不带路径的 `Theme.cs` 指这一个**（注意：本模块目录下**没有** `Theme.cs`，别在 `DynamicTheme/` 里找；运行期文件是 `Dark.cs` / `Light.cs` / `ThemeCache.cs` / `ThemeConfigAttribute.cs` / `ThemeManager.cs`）。
 > 平台侧：各家的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs`。
 > 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
@@ -19,7 +19,7 @@
 |---|---|
 | 主题是什么 | **空标记类型**。Core 只提供 `Dark.cs` / `Light.cs` 两个空类，`ITheme` 也是空接口（`Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/ITheme.cs`）。主题的身份就是 **`Type` 对象本身**，可以自定义 |
 | 属性变更通知 | 不产生。`SetThemeValue` 走生成器的 `UpdatePropertyToCurrentTheme` → `propertyInfo.SetValue`（`Theme.cs` 生成的 `UpdatePropertyToCurrentTheme`），**绕过 setter 的语义**（对 `[VeloxProperty]` 属性来说就是绕过生成的通知） |
-| 字符串/画刷怎么变成值 | `IThemeValueConverter`，实现全在**适配器**（六家的 `PlatformAdapters/ThemeValueConverters.cs`；Jalium 不接主题）。Core 一个也不带。**可声明的类型是有界的**（平台原生类型的构造 ＋ 可插值的自定义类型）。六家全用**显式转换表**、**无一家走 `TypeDescriptor`**（WPF/WinForms 的 `ThemeValueConverters.cs` 里各自写着「刻意不用」的注释），所以这条界七家一致，理由见 [extension.md](extension.md) §四·1 |
+| 字符串/画刷怎么变成值 | `IThemeValueConverter`，实现全在**适配器**（各家的 `PlatformAdapters/ThemeValueConverters.cs`；Jalium 不接主题）。Core 一个也不带。**可声明的类型是有界的**（平台原生类型的构造 ＋ 可插值的自定义类型）。各家全用**显式转换表**、**无一家走 `TypeDescriptor`**（WPF/WinForms 的 `ThemeValueConverters.cs` 里各自写着「刻意不用」的注释），所以这条界各家一致，理由见 [extension.md](extension.md) §四·1 |
 | 动画的采样、缓动、帧、时间轴 | TransitionSystem。本模块只用它的 `TransitionSchedulerCore.Track/Execute/Untrack`、`TransitionRun`、`StateCore`、`TransitionProperty` |
 | 什么时候能动、什么时候不能（哪家平台画得出来） | 各家的 `Interpolator.CreateScheduler`。**这就是「主题切换为什么在这个平台不动」的答案所在** —— 判定在适配器，不在本模块 |
 | 反播、暂停/速率 的**额外**控制面 | 不新增。整场共用一条时间轴，`Pause` / `Resume` / `SetRate` 对整场生效；`Seek` / `Exit` **不是整场操作**：`SeekRun` 只改该 run 的 `PassAnchor`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs` 的 `SeekRun`），`Exit` 只取消传入 target 的 run（`RunSwitch` 的注释与 `Transition(Type, …)` 的 `<remarks>` 都按此写） |
@@ -56,7 +56,7 @@
 
 ## 三、一次切换的完整流向
 
-两个入口：`Transition(Type, effect)`（带动画，`ThemeManager.Transition`）与 `Jump(Type)`（瞬时，`ThemeManager.Jump`）。**两者开头完全一样** —— 校验、`CancelActiveSwitch()`、清死弱引用、对每个目标 `ExecuteThemeChanging(old, new)`（两个入口各自那一遍）。
+入口有 `Transition(Type, effect)`（带动画，`ThemeManager.Transition`）与 `Jump(Type)`（瞬时，`ThemeManager.Jump`）。**两者开头完全一样** —— 校验、`CancelActiveSwitch()`、清死弱引用、对每个目标 `ExecuteThemeChanging(old, new)`（两个入口各自那一遍）。
 
 ``` 
 Transition(themeType, effect)          async void, 调用方接不住异常 (:111)
@@ -125,7 +125,7 @@ RunSwitch (:201)
 1. **`Track` 必须早于 `Execute`**（`RunSwitch` 里的 `scheduler.Track(run)` 前于 `Execute`）。违反的后果见 TransitionSystem；本模块专门为它写了注释。
 2. **整场一条时间轴**（`RunSwitch` 里的 `TimerCore.CreateTimeSource<ITimeSourceControl>()`）。绝不为每个目标各建一条 —— 那会让「Pause 一次」只停一个目标。
 3. **`Track` ↔ `Untrack` 成对，且都在 `finally`**。`Interlocked.Exchange` ↔ `CompareExchange` 同理 —— 用 `CompareExchange` 而不是直接置 null，是为了不把**后来那一场**装进去的值覆盖掉。
-4. **`EndValue is null` 表示「这个主题不管这个属性」**，三个地方都要跳过它：`BuildState`、`ApplyHeldValues`、`ApplyImmediately`。注释说得很直白：把 null 交给采样器就是「整场被丢在地上」。
+4. **`EndValue is null` 表示「这个主题不管这个属性」**，相关地方都要跳过它：`BuildState`、`ApplyHeldValues`、`ApplyImmediately`。注释说得很直白：把 null 交给采样器就是「整场被丢在地上」。
 5. **`StartValue` / `EndValue` 都是「原值」，不归一化**：归一化交给 `Prepare`，在这里做会**归一化两次**（`TransitionEntry` 的注释）。
 6. **`StateCore` 里只放终点**（`BuildState`）：起点由 `Prepare` 从目标上读回。
 7. **`PropertyInfo` 是键，所以要复用 `TransitionProperty.FromProperty(propertyInfo)`**：注释说复用 entry 自己那条路径而不是让 `StateCore` 从 `PropertyInfo` 再造一条，两者等值，但同一个实例（同一个键对象）更好，还省一次路径构造。
@@ -142,7 +142,7 @@ RunSwitch (:201)
 | 一次切换怎么推进（计划、时间轴、Track/Execute、收尾） | `ThemeManager.cs` 的 `RunSwitch` |
 | 起点怎么取（`StartModel` 的两档语义） | 同上 `PrepareSamplers` 的 `switch (StartModel)` |
 | 「哪些属性参与一场切换」 | 同上 `PrepareSamplers` —— 由目标的 `GetStaticThemeCache()` 决定 |
-| 声明语法的形状（arity 上限、converter 在哪） | `Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs`（6 个泛型类，arity 3..8） |
+| 声明语法的形状（arity 上限、converter 在哪） | `Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs`（arity 3..8） |
 | 生成出来的 `IThemeObject` 实现长什么样 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs`（生成的 `InitializeTheme`、`SetThemeValue`、`UpdatePropertyToCurrentTheme`） |
 | 字符串/画刷怎么解析成值 | 各家的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs` |
 | **「主题切换为什么在这个平台不animate」** | 该家的 `Interpolator.CreateScheduler`。契约与各家的差异见 `memory/modules/TransitionSystem/architecture.md` §六末行与 `memory/modules/TransitionSystem/adapters/<平台>.md` |
@@ -154,12 +154,12 @@ RunSwitch (:201)
 ## 七、陷阱（带依据）
 
 1. **`StartModel.Reflect` 时活动表完全不参与起点**：`Reflect` 分支只有 `propertyInfo.GetValue(target)`（`PrepareSamplers` 的 `case StartModel.Reflect`），不查 active cache。所以「我用 `SetThemeValue` 覆盖过这个属性」在 `Reflect` 模式下**对起点无效**，只在 `Cache` 模式下被优先读取（`case StartModel.Cache`）。
-2. **`ThemeCache` 原有的三处死代码已于 2026-10-18 删除**：`RegisterConverter`、`GetConverter`、`_converters` / `_converterIndex` 与 `RemoveActiveEntry`。生成器**从来不用**这条转换器缓存 —— 它在生成代码里**内联** `new` 一个转换器：`((IThemeValueConverter)Activator.CreateInstance(typeof(...))!).Convert(...)`（`Theme.cs` 的 `convertExpr`）。**所以每个属性、每次 `InitializeTheme` 都会新建一个转换器实例**（在懒注册守卫之内，因此每类型一次），不是单例。
+2. **`ThemeCache` 原有的死代码已于 2026-10-18 删除**：`RegisterConverter`、`GetConverter`、`_converters` / `_converterIndex` 与 `RemoveActiveEntry`。生成器**从来不用**这条转换器缓存 —— 它在生成代码里**内联** `new` 一个转换器：`((IThemeValueConverter)Activator.CreateInstance(typeof(...))!).Convert(...)`（`Theme.cs` 的 `convertExpr`）。**所以每个属性、每次 `InitializeTheme` 都会新建一个转换器实例**（在懒注册守卫之内，因此每类型一次），不是单例。
 3. **`ThemeManager._def_cache` 已于 2026-10-18 删除**：它声明后再无任何读写。
 4. **`Theme.cs` 的 `converterKey` 算了不用**：局部变量赋值后从未被引用，其上方的注释自己承认「only placeholder—converter created inline」。
-5. **7 个主题声明得出来、用不了。** Core 提供了 arity 8 的 `ThemeConfigAttribute<TConverter, TTheme1..TTheme7>`（`ThemeConfigAttribute.cs`），但生成器只注册了 arity `` `3 ``–`` `7 `` 五个 `ForAttributeWithMetadataName` 提供器（`Theme.cs` 的五个 `classWith*Params`）。⇒ **arity 8 的标注不会让那个类进入生成管线**（`ForAttributeWithMetadataName` 不命中，连 `Transform` 都不跑），该类的 `IThemeObject` 实现**根本不会生成**。这与 `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 的注释「supports at most one Converter plus seven Themes」**不一致**：**以代码为准，实际上限是 1 个 converter + 6 个主题**。
+5. **7 个主题声明得出来、用不了。** Core 提供了 arity 8 的 `ThemeConfigAttribute<TConverter, TTheme1..TTheme7>`（`ThemeConfigAttribute.cs`），但生成器只注册了 arity `` `3 ``–`` `7 `` 的 `ForAttributeWithMetadataName` 提供器（`Theme.cs` 的五个 `classWith*Params`）。⇒ **arity 8 的标注不会让那个类进入生成管线**（`ForAttributeWithMetadataName` 不命中，连 `Transform` 都不跑），该类的 `IThemeObject` 实现**根本不会生成**。这与 `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 的注释「supports at most one Converter plus seven Themes」**不一致**：**以代码为准，实际上限是 1 个 converter + 6 个主题**。
 6. **`RegisterType` 幂等 ⇒ 改静态表需要重启或改类型。** `InitializeTheme` 的懒注册以类型为守卫（`Theme.cs` 生成的 `if (!ThemeCache.IsTypeRegistered(...))`），一旦注册过，**同一类型再调 `InitializeTheme` 不会重写静态表**。热重载场景下静态表不会刷新。
 7. **`CollectStaticForType` 的「整条名字覆盖」不是合并**（`ThemeCache.CollectStaticForType`）：派生类声明了与基类**同名**属性时，基类那条的 `Values` 字典被整个丢换。想在派生类**追加**一个主题的同一属性做不到 —— 只能在派生类把该属性的全部主题重写一遍。
-8. **`activeThemes` 的清理只发生在三个入口**（`Transition`、`Jump`、`Unregister`）。一个目标被 GC 之后，它的弱引用会一直躺在 `activeThemes` 里，直到下一次切换来临。`RunSwitch` 内部**不再**过滤 null（`actives` 在入口就过滤好了）—— 所以 `PrepareSamplers` 里的 `target == null` 分支在正常路径上到不了。
+8. **`activeThemes` 的清理只发生在入口处**（`Transition`、`Jump`、`Unregister`）。一个目标被 GC 之后，它的弱引用会一直躺在 `activeThemes` 里，直到下一次切换来临。`RunSwitch` 内部**不再**过滤 null（`actives` 在入口就过滤好了）—— 所以 `PrepareSamplers` 里的 `target == null` 分支在正常路径上到不了。
 9. **`Validate` 失败时**只 `Debug.WriteLine` 并打一句 "jumping to current theme"，**什么都不做** —— 既不是 Jump、也不抛异常。传一个 `int` 当主题类型就是静默无操作。
 10. **`Transition` 的 `landed == false` 也不发 `ExecuteThemeChanged`，但 `ExecuteThemeChanging` 已经发过了**。所以成对回调在取消场景下**只有前半**。写 `OnThemeChanging/OnThemeChanged` 时要按「可能只有 changing」处理。

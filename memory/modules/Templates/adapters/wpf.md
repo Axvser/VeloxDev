@@ -19,12 +19,12 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| link-view | **空壳**：`TemplateClass.xaml` 全文只有一个空 `<UserControl>`（5 行），几何全在 code-behind | `workflow-link-view/TemplateClass.xaml`、`workflow-link-view/TemplateClass.xaml.cs` 的 `OnRender` |
+| link-view | **空壳**：`TemplateClass.xaml` 全文只有一个空 `<UserControl>`，几何全在 code-behind | `workflow-link-view/TemplateClass.xaml`、`workflow-link-view/TemplateClass.xaml.cs` 的 `OnRender` |
 | node-view | `Viewbox` + 固定设计尺寸卡片 | `workflow-node-view/TemplateClass.xaml` 的 `Viewbox` 与 `Grid Width="260" Height="180"` |
 | slot-view | `Viewbox` + 一个 `Path` | `workflow-slot-view/TemplateClass.xaml` 的 `Viewbox` 与 `Path` |
 | tree-view | 五层嵌套外壳（`Border` → `GridDecorator` → `ScrollViewer` → `Canvas` + 平级 `MinimapOverlay`） | `workflow-tree-view/TemplateClass.xaml` |
 | grid-decorator | `RulerThickness` 默认 **28**，`RulerBand => RulerThickness` | `workflow-grid-decorator/TemplateClass.cs` 的 `RulerThicknessProperty` / `RulerBand` |
-| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，构造器里只设四个画刷（24 行） | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
+| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，构造器里只设四个画刷 | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
 | template-selector | `DataTemplateSelector` 子类 | `workflow-template-selector/TemplateClass.cs` |
 
 画刷解析用 `ColorConverter.ConvertFromString(hex)`（`workflow-minimap-overlay/TemplateClass.cs` 的 `CreateBrush`）——
@@ -34,7 +34,7 @@
 
 ## 二、模板里必须手写、委派不掉的接线
 
-这六条不在适配器里，也不是任何生成器补的：
+这几条不在适配器里，也不是任何生成器补的：
 
 1. **两个 `xmlns` 前缀指向同一个命名空间** —— `xmlns:local` 与 `xmlns:workflowViews` **都是**
    `clr-namespace:TemplateNamespace`（`workflow-tree-view/TemplateClass.xaml` 的 `xmlns:local` 与 `xmlns:workflowViews`）。

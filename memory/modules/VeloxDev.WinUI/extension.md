@@ -12,8 +12,8 @@
 
 ### 步骤
 
-1. **写类**：`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/Samplers/<名字>Sampler.cs`，命名空间必须是 `VeloxDev.Adapters.NativeSamplers`（本模块 10 个采样器全在这个命名空间，见 `Samplers/PointSampler.cs` 的 `namespace`）。
-   形状照 `Samplers/PointSampler.cs`（最小的一份）：实现 `ISampler` 的三个方法 `NormalizeStart` / `NormalizeEnd` / `InsertFrame`；`ISampler` 由 `GlobalUsings.cs` 的 `global using VeloxDev.TransitionSystem.Abstractions;` 提供，**不要**再写一行 `using`。
+1. **写类**：`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/Samplers/<名字>Sampler.cs`，命名空间必须是 `VeloxDev.Adapters.NativeSamplers`（本模块的采样器全在这个命名空间，见 `Samplers/PointSampler.cs` 的 `namespace`）。
+   形状照 `Samplers/PointSampler.cs`（最小的一份）：实现 `ISampler` 的那几个方法 `NormalizeStart` / `NormalizeEnd` / `InsertFrame`；`ISampler` 由 `GlobalUsings.cs` 的 `global using VeloxDev.TransitionSystem.Abstractions;` 提供，**不要**再写一行 `using`。
 2. **注册**：在 `PlatformAdapters/Interpolator.cs` 静态构造函数里加一行 `RegisterInterpolator(typeof(你要动画的类型), new <名字>Sampler());`。这一张表就是全部注册；没有别的注册点。
 3. **登记到闭式解套件**（只有「产出的值本身是值」的采样器才能走这条）：`Examples/Transition/AUTO TEST/Samplers/WinUiEntries.cs` 加一条 `SamplerEntry`，并在同文件的 `Target` 类上补一个属性让 `Write` 有真实目标可写。
 4. **登记到验收表**（产出的值是 **WinRT `DependencyObject`** 的那一类走这条）：`Examples/Transition/AUTO TEST/Conformance/WinUiConformance.cs`（`All` 成员）加一条，并由真跑起来的 demo 驱动（`Samplers/UnreachableSamplers.cs` 是这条路的名字来源）。
@@ -31,7 +31,7 @@
 ### 官方做法 vs 看着能编译但错的捷径
 
 - ❌ **不注册，指望 `Transition<T>` 自己按类型找**。没有反射兜底，注册表就是唯一的路（`Interpolator.cs` 的静态构造是唯一注册点）。
-- ❌ **注册基类型，却没打算处理这一族的每个子类**。`Interpolator.cs` 静态构造函数里 `RegisterInterpolator(typeof(Projection), …)` 注册的是**整个 `Projection` 基类**（WPF 那边没有这一条）⇒ 注册表会把**任意** `Projection` 子类都路由到这个采样器上。而 `ProjectionSampler` 实际只认 `PlaneProjection`：`Normalize`（`ProjectionSampler.Normalize`）对不是 `PlaneProjection` 的输入**直接返回一个全新的默认 `PlaneProjection`**（当作「无旋转无位移」的初值），`InsertFrame` 又无条件把它写回去—— 所以 `Matrix3x4Projection` 这类真正的其它子类不是「也算得对」，是**会被当成单位变换吃掉、再写回一个类型不对的对象**。注册基类型 = 对注册表许下一个你必须自己兑现的承诺；许不起就逐个具体类型注册（另九条都是这么做的）。
+- ❌ **注册基类型，却没打算处理这一族的每个子类**。`Interpolator.cs` 静态构造函数里 `RegisterInterpolator(typeof(Projection), …)` 注册的是**整个 `Projection` 基类**（WPF 那边没有这一条）⇒ 注册表会把**任意** `Projection` 子类都路由到这个采样器上。而 `ProjectionSampler` 实际只认 `PlaneProjection`：`Normalize`（`ProjectionSampler.Normalize`）对不是 `PlaneProjection` 的输入**直接返回一个全新的默认 `PlaneProjection`**（当作「无旋转无位移」的初值），`InsertFrame` 又无条件把它写回去—— 所以 `Matrix3x4Projection` 这类真正的其它子类不是「也算得对」，是**会被当成单位变换吃掉、再写回一个类型不对的对象**。注册基类型 = 对注册表许下一个你必须自己兑现的承诺；许不起就逐个具体类型注册（其余各条都是这么做的）。
 - ❌ **把产物是 WinRT `DependencyObject` 的采样器写进闭式解套件**。纯数据进程里 `new SolidColorBrush()` 直接就是 `REGDB_E_CLASSNOTREG`（`Samplers/UnreachableSamplers.cs` 里 `UnreachableSamplers` 类上方的 remarks 写明了这一点），所以 `BrushSampler` / `ProjectionSampler` / `TransformSampler` 三个**不在** `WinUiEntries` 里，而在 `UnreachableSamplers` + 真 demo 驱动的验收表里。新采样器属于哪一类，先问「它的产物能不能在无 XAML 运行时的进程里构造」。
 - ❌ **采样器构造函数的参数约定乱来**。绝大多数采样器是**无参**构造（这是「宿主按名字注册」的前提，`SamplerEntry.cs` 的 remarks 明说默认走无参构造，`Create` 回退到 `Activator.CreateInstance(SamplerType)`）；端点烘进每动画构造函数的那些要自己在 `SamplerEntry` 里 `new`。加构造函数前先看有没有同类先例。
 
@@ -41,13 +41,13 @@
 
 ### 步骤
 
-1. 在 `PlatformAdapters/ThemeValueConverters.cs`（或本模块任何文件）里写一个类，**命名空间必须是 `VeloxDev.DynamicTheme`**（该文件的 `namespace`），实现 `IThemeValueConverter`。现有 7 个：`DoubleConverter`、`PointConverter`、`ThicknessConverter`、`CornerRadiusConverter`、`ColorConverter`、`BrushConverter`、`ObjectConverter`。
+1. 在 `PlatformAdapters/ThemeValueConverters.cs`（或本模块任何文件）里写一个类，**命名空间必须是 `VeloxDev.DynamicTheme`**（该文件的 `namespace`），实现 `IThemeValueConverter`。现有这些：`DoubleConverter`、`PointConverter`、`ThicknessConverter`、`CornerRadiusConverter`、`ColorConverter`、`BrushConverter`、`ObjectConverter`。
 2. **没有第二步。** 转换器**不存在宿主注册调用** —— 消费方在代码里用 `[ThemeConfig<YourConverter, TThemeA, TThemeB>(nameof(Prop), [..], [..])]` 点名（仓内用法样例：`Examples/Theme/Avalonia/Demo/ThemeTile.cs` 的两个 `[ThemeConfig<...>]`），**生成器**把类型名写进生成的代码里，运行期由 `System.Activator.CreateInstance` 激活（`Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `Activator.CreateInstance`）。⇒ 转换器类只需是**有公开无参构造**的 `class`，与 `VeloxDev.WinUI` 被引没被引无关。
 
 ### 官方做法 vs 看着能编译但错的捷径
 
 - ❌ **调 `ThemeCache.RegisterConverter(...)` 注册**。这个 API 在当前源码里不存在（`grep -rn RegisterConverter Src/ Examples/ --include=*.cs` 零命中）；转换器只由生成器按 `[ThemeConfig<>]` 把类型名写死，没有运行期注册入口。走它等于把转换器挂在一个没人会去查的名字上。
-- ⚠ **短文名一律解析到本模块这 7 个转换器**：`BrushConverter.Convert` 里两处 `new ColorConverter()` **有意**指向本文件 `ColorConverter` 的那一个（把字符串解析成 `Windows.UI.Color` 再包成 `SolidColorBrush`）。所以在这个命名空间里新写转换器时，别指望平台自带的转换器 —— WinUI 侧只有 `ColorHelper` 这类 static helper，没有实现 `IThemeValueConverter` 的类型。**反过来说：WPF 那条「必须全限定平台自带转换器」的坑在这里不存在**（全模块 `grep 'Microsoft.UI.Xaml.Media.BrushConverter'` 零命中），不要照搬。
+- ⚠ **短文名一律解析到本模块这几个转换器**：`BrushConverter.Convert` 里两处 `new ColorConverter()` **有意**指向本文件 `ColorConverter` 的那一个（把字符串解析成 `Windows.UI.Color` 再包成 `SolidColorBrush`）。所以在这个命名空间里新写转换器时，别指望平台自带的转换器 —— WinUI 侧只有 `ColorHelper` 这类 static helper，没有实现 `IThemeValueConverter` 的类型。**反过来说：WPF 那条「必须全限定平台自带转换器」的坑在这里不存在**（全模块 `grep 'Microsoft.UI.Xaml.Media.BrushConverter'` 零命中），不要照搬。
 - ⚠ **`ThemeResourceLookup` 的 `Application.Current` 只有一条路径，而且是守住的**（`ThemeValueConverters.cs` 的 `Application.Current?.Resources`，紧跟其后的 `resources is null` 检查）—— 全文件 `Application.Current` 只出现这一处（模块内另一次在 `ViewManager.cs`，同样有 `is not null` 守卫）。所以 WPF 的 `ObjectConverter` 那条「两条路径、一条没守、无 `Application` 的进程静默拿到 null」的坑**在这里不存在**，别照抄过来「顺手加固」。真正要记的是它的**返回语义**：找不到资源时返回 `false`（不抛），调用方 `ObjectConverter` 于是给出 null ⇒ 无 `Application` 的进程（单测、控制台探针）症状仍是**静默 null**，不是异常。查找本身是**递归**的：`TryFindInDictionary` 依次看字典自己、`ThemeDictionaries`、`MergedDictionaries`，所以写在主题字典或合并字典里的键也找得到 —— 这在 WinUI 上是必须的（浅色/深色值常规就放在 `ThemeDictionaries` 里）。
 - ⚠ **本文件的 `catch` 全部吞掉异常**（`DoubleConverter`/`ThicknessConverter` 的 `catch` 块内 `return null`、`CornerRadiusConverter`/`ColorConverter` 的 `catch { return null; }`、`PointConverter`/`BrushConverter`/`ObjectConverter` 的空 `catch { }`）—— 这是刻意姿态，与 DynamicTheme「异常不逃逸」一致，别顺手「修」成抛异常。
 - ⚠ **本模块的转换器在仓内没有任何消费方**（`Examples/Theme/` 下只有 Avalonia 与 WPF 两套）。想在 WinUI 上验证主题切换，得自己起一个宿主并按上面第 2 步写 `[ThemeConfig<>]`。
@@ -79,7 +79,7 @@
 ### 官方做法 vs 看着能编译但错的捷径
 
 - ❌ **给新行为也用 `FindName` 找祖先**（或反之）。编译过、跑起来是「没有缩放 / 没有小地图 / 锚点不更新」。
-- ❌ **把开关的默认值写成 `true`**。**五个**布尔开关（四个 `IsEnabled` + 画布宿主的 `ZoomEnabled`，`WorkflowSurfaceBehavior` 的 `IsEnabledProperty`/`ZoomEnabledProperty`）的 `PropertyMetadata(false, …)` 是刻意的；默认开会在每个模板实例上挂处理器。
+- ❌ **把开关的默认值写成 `true`**。各布尔开关（各 `IsEnabled` + 画布宿主的 `ZoomEnabled`，`WorkflowSurfaceBehavior` 的 `IsEnabledProperty`/`ZoomEnabledProperty`）的 `PropertyMetadata(false, …)` 是刻意的；默认开会在每个模板实例上挂处理器。
 - ❌ **以为名字解析失败会抛**。`FindName` 返回 `null` 就退化成「没这个能力」；改完模板布局后唯一的补救是调 `WorkflowSurfaceBehavior.Refresh(UserControl)` 或触发 `Loaded`/`DataContextChanged`。
 - ❌ **在 `Refresh` 里加「先退订再重挂」之外的顺序改动**。`ResolveNamedControls` 的退订-重挂是**热路径**：它被 `ScrollViewer.ViewChanged` 每帧调用一次（`architecture.md` §三·2），在那里加锁、加分配、加 `UpdateLayout()` 都要先算成本。
 - ❌ **把 `WorkflowCanvasTransformBehavior` 当「画布变换的实现」改**。它只有一个 DP 和一个故意空的回调（`WorkflowCanvasTransformBehavior.OnTransformChanged`）；真正的写值处在 `WorkflowSurfaceBehavior.ApplyLayout`，而且 WinUI 的平移走的是 `Canvas.Translation` 合成变换（`ApplyLayout` 里的 `state.Canvas.Translation`），**不是**那个附着属性（`OnTransformChanged` 的注释与代码不符，见 `memory/modules/WorkflowSystem/adapters/winui.md` §四·P1）。**照那句注释去模板里补 `RenderTransform` 绑定，会和合成平移叠加成双倍位移。**
@@ -111,14 +111,14 @@
 
 | 改这里 | 必须同步 |
 |---|---|
-| `VeloxDev.WinUI.csproj` 的 `TargetFrameworks` | 三个 WinUI demo 各自的 `SetTargetFramework`（`Examples/Workflow/WinUI Trimmed/Demo/Demo.csproj`、`Examples/Transition/WinUI/Demo/Demo.csproj`、`Examples/Workflow/WinUI/Demo/Demo.csproj`）—— 三处**写死的 TFM 与两个 Workflow demo 的 `TargetFramework`（一个是 net10、一个是 net8）分别对齐**，不锁就会用错框架引用；`Examples/Transition/AUTO TEST/Drivers/WinUIDemoDriver.cs` 还把 `net8.0-windows10.0.19041.0` 连同 RID 一起写死在启动路径里 |
+| `VeloxDev.WinUI.csproj` 的 `TargetFrameworks` | 各 WinUI demo 各自的 `SetTargetFramework`（`Examples/Workflow/WinUI Trimmed/Demo/Demo.csproj`、`Examples/Transition/WinUI/Demo/Demo.csproj`、`Examples/Workflow/WinUI/Demo/Demo.csproj`）—— 几处**写死的 TFM 与各 Workflow demo 的 `TargetFramework` 分别对齐**，不锁就会用错框架引用；`Examples/Transition/AUTO TEST/Drivers/WinUIDemoDriver.cs` 还把 `net8.0-windows10.0.19041.0` 连同 RID 一起写死在启动路径里 |
 | `RuntimeIdentifier`（默认 `win-x64`）/ `RuntimeIdentifiers` | 产物路径里会多一层 `win-x64/`；`WinUIDemoDriver.cs` 的启动路径是**整条硬编码**的字符串（含配置、TFM、RID 三段），改其中任何一段都会让它指向一个不存在的 exe ⇒ 表现为 AutoTest 直接找不到进程 |
 | `PackageReference Microsoft.WindowsAppSDK`（现 1.6.241114003） | **demo 侧是 1.8.x**，两个版本号同进程并存是现状；升其中一侧前先确认另一侧是否要跟 |
 | `VeloxDev.Core` 的 Debug/Release 双轨（`ProjectReference` / `PackageReference`） | 与生成器那套同形，**两条必须互斥**；Release 走的是包 `Version 10.0.1` |
 | 采样器的引用（`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj` 里指向 `VeloxDev.WinUI` 的 `ProjectReference`） | 摘掉会让 `EveryAdapterAssembly_IsLoadedSoItsSamplersAreCounted` 失败（设计如此，消息直接指过来） |
 | 想让新类型出现在模板里 | `Src/Templates/VeloxDev.WinUI.Templates/` 是**纯内容包**，改它不产生任何依赖；面向用户的一侧在 `skills/veloxdev-create-workflow/references/gui/winui.md` |
 
-**加 TFM 之前先问一句**：本模块唯一一处条件编译是 `PlatformAdapters/Transition.cs` 的 `#if !NETSTANDARD2_0`（4 个 `System.Numerics` 重载），而现有两个 TFM 都不带 netstandard ⇒ **它恒为真，是死守卫**。加一个 `netstandard2.0` 会让那 4 个重载真的消失（这正是 Avalonia 那条同款守卫存在的意义）—— 这是改 TFM 时**唯一**一处会被动的代码，其余全是 MSBuild 层的事。
+**加 TFM 之前先问一句**：本模块唯一一处条件编译是 `PlatformAdapters/Transition.cs` 的 `#if !NETSTANDARD2_0`（`System.Numerics` 那组重载），而现有两个 TFM 都不带 netstandard ⇒ **它恒为真，是死守卫**。加一个 `netstandard2.0` 会让那些重载真的消失（这正是 Avalonia 那条同款守卫存在的意义）—— 这是改 TFM 时**唯一**一处会被动的代码，其余全是 MSBuild 层的事。
 
 ---
 

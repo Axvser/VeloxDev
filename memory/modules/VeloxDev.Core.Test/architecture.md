@@ -1,7 +1,7 @@
 # VeloxDev.Core.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Test/`（157 个 .cs，不含 `bin/`、`obj/`、`TestResults/`；137 个 `[TestClass]`，1171 个 `[TestMethod]`）
-> —— 2026-10-29 复核。旧读数 154/134/1138 已过期（本轮新增 `TreeHelperTickTests` 四条与 `WorkflowNavigationExTests` 五条：1/1/9；其余在本轮之前就已经落后于树了）。
+> 代码：`Src/Core/VeloxDev.Core.Test/`（不含 `bin/`、`obj/`、`TestResults/`）。具体条数与耗时以 `dotnet test` 现跑为准，不在这里维护。
+> `WorkflowSystem/Layout` 下有独立的布局测试与 `LayoutTestKit`；布局的规范与坑见 [WorkflowSystem/layout.md](../WorkflowSystem/layout.md)。
 > 被测：`Src/Core/VeloxDev.Core/`（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 是五目标 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Extension.Test/`（那个引 `Lib`、测 AI 工具面）。两者的共享面只有「同样一行并行设置」。
 
@@ -29,12 +29,7 @@
 
 Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Core.Test.csproj` 的 `TargetFramework`），所以 ProjectReference 从 Core 的五份资产里挑出**最近兼容的那一份 = `net8.0`**。
 
-实测（两份 DLL 的 md5 相同，故这是硬结论而非推断）：
-
-| 文件 | 字节 | md5 |
-|---|---|---|
-| `Src/Core/VeloxDev.Core/bin/Debug/net8.0/VeloxDev.Core.dll` | 1110528 | `fd09b4c6ef3f1a5c06f8b5a4f6ce89bd` |
-| `Src/Core/VeloxDev.Core.Test/bin/Debug/net10.0/VeloxDev.Core.dll` | 1110528 | 同上（`fd09b4c6ef3f1a5c06f8b5a4f6ce89bd`） |
+实测（`Src/Core/VeloxDev.Core/bin/Debug/net8.0/VeloxDev.Core.dll` 与 `Src/Core/VeloxDev.Core.Test/bin/Debug/net10.0/VeloxDev.Core.dll` 的 md5 相同，故这是硬结论而非推断；该读数随每次重建变化，不可复核）。
 
 旁证：`Src/Core/VeloxDev.Core.Test/obj/project.assets.json` 里 `VeloxDev.Core` 资产的 `"framework": ".NETCoreApp,Version=v8.0"`。
 
@@ -84,16 +79,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | `dotnet test Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` | 单项目 |
 | `dotnet test Src/Core/VeloxDev.Core.Test --filter "FullyQualifiedName~CompilerEx"` | 按命名空间定位一个目录 |
 
-实测（本机，Debug）：
-
-| 项 | 值 |
-|---|---|
-| `[TestMethod]` 条数 | **1166**（2026-10-28 在树里数出；另有 Extension.Test 的 724。旧读数 1138 / 679 / 1129 / 671 / 662 / 642 都已过期） |
-| `[TestClass]` 条数 | **136**（同上） |
-| 全量耗时 | **30 s** —— **不可复核**（提交信息里的旧值，没有可重跑的依据） |
-| 8 次连跑的失败次数 | **1** —— **不可复核**（同上；原因见 §六）。**`MVVM/` 已不是来源**：2026-10-01 重写为 TCS 门控后连跑全绿 |
-
-`TestResults/` 被 `.gitignore` 的 `[Tt]est[Rr]esult*/` 排除 —— 里面 `.trx` 是本地产物，**不可作为依据**。
+条数与耗时以 `dotnet test` 现跑为准，不在这里维护；测试方法的分布见 §五。`TestResults/` 被 `.gitignore` 的 `[Tt]est[Rr]esult*/` 排除 —— 里面 `.trx` 是本地产物，**不可作为依据**。连跑偶发失败的结构性原因见 §六。
 
 ---
 
@@ -101,27 +87,27 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 
 **目录镜像被测目录**；命名空间 = `VeloxDev.Core.Test.<目录路径>`（`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/` → `VeloxDev.Core.Test.WorkflowSystem.CompilerEx`）；类名一律 `<被测类型>Tests`。参数化用 `[DataRow]`，没有别的参数化机制。
 
-| 测试目录 | 文件数（其中 `[TestClass]`） | 测什么 |
-|---|---|---|
-| `TransitionSystem/` | 26（26） | 采样循环、调度器、帧集、pacer、链与 `Repeat`、内建采样器、缓动 |
-| `WorkflowSystem/` | 53（49：32 直接 + 17 `CompilerEx/`；`CompilerEx/` 另有 `ProbeGraph.cs`/`ProbeNodes.cs`，`Support/` 另有 `WorkflowInputTestBase.cs`/`WorkflowTestKit.cs`，共 4 个非测试文件） | 树 / 节点 / slot 枚举 / 虚拟化数学 / 编译运行 |
-| `AI/` | 9（9） | 工具调用与上下文拼装 |
-| `Timing/` | 6（5；`FakeTimeSource.cs` 非测试） | 时钟、两类采样器 |
-| `TimeLine/` | 4（4） | Tickable 总线与管理器 |
-| `WeakTypes/` | 4（4） | 弱引用集合 |
-| `DynamicTheme/` | 2（2） | 主题切换 |
-| `AspectOriented/` | 2（1；`AopFixture.cs` 非测试） | AOP 代理与钩子 |
-| `MVVM/` | 33（22） | `VeloxCommand` 全语义（并发/排队/锁/中断/取消/事件时序/异常路径/CTS 释放/完成等待/忙碌状态/事件编组/分配回归）+ 生成器签名覆盖 + `ObservableCollectionTracker` + `CommandEventArgs`；11 个非测试文件（`CommandTestKit.cs`、各 `*ViewModel.cs`、`GeneratorProbe.cs` 等） |
-| `Serialization/` | 10（10） | 归档序列化：金样本、读写器 / 序列化器的边界与文本拼写、注册表所有权、`[Archive]` 诊断 |
-| 根目录 | 3 | `GlobalUsings.cs`、`MSTestSettings.cs`、`TestHosts.cs`（三者都不是测试） |
+| 测试目录 | 测什么 |
+|---|---|
+| `TransitionSystem/` | 采样循环、调度器、帧集、pacer、链与 `Repeat`、内建采样器、缓动 |
+| `WorkflowSystem/` | 树 / 节点 / slot 枚举 / 虚拟化数学 / 编译运行；`CompilerEx/` 与 `Support/` 下另有测试基类与非测试文件 |
+| `AI/` | 工具调用与上下文拼装 |
+| `Timing/` | 时钟、两类采样器 |
+| `TimeLine/` | Tickable 总线与管理器 |
+| `WeakTypes/` | 弱引用集合 |
+| `DynamicTheme/` | 主题切换 |
+| `AspectOriented/` | AOP 代理与钩子 |
+| `MVVM/` | `VeloxCommand` 全语义（并发/排队/锁/中断/取消/事件时序/异常路径/CTS 释放/完成等待/忙碌状态/事件编组/分配回归）+ 生成器签名覆盖 + `ObservableCollectionTracker` + `CommandEventArgs`；`CommandTestKit.cs`、各 `*ViewModel.cs`、`GeneratorProbe.cs` 等是共享替身/夹具 |
+| `Serialization/` | 归档序列化：金样本、读写器 / 序列化器的边界与文本拼写、注册表所有权、`[Archive]` 诊断 |
+| 根目录 | `GlobalUsings.cs`、`MSTestSettings.cs`、`TestHosts.cs`（三者都不是测试） |
 
 **哪些 Core 主题目录没有对应测试目录**：
 
 | Core 目录 | 情况 |
 |---|---|
-| `Src/Core/VeloxDev.Core/Interfaces/`（43 个 .cs） | 只有接口与少量数据（`TimeSample` 等），没有专属测试目录；行为由各实现侧的测试覆盖 |
+| `Src/Core/VeloxDev.Core/Interfaces/` | 只有接口与少量数据（`TimeSample` 等），没有专属测试目录；行为由各实现侧的测试覆盖 |
 | `Src/Core/VeloxDev.Core/Lifetime/`（`IApplicationState.cs`） | 零测试目录 |
-| `Src/Core/VeloxDev.Core/Threading/`（4 个 .cs） | 零直接测试，只经由 `TestHosts.cs` 的宿主间接走到 |
+| `Src/Core/VeloxDev.Core/Threading/` | 零直接测试，只经由 `TestHosts.cs` 的宿主间接走到 |
 
 （`AspectOriented/` 与 `Serialization/` 都有自己的测试目录，不在上表。`Properties/` 只有一个 `AssemblyInfo.cs`，不算主题目录。）
 
@@ -132,7 +118,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | `RotationDirection`（`Src/Core/VeloxDev.Core/TransitionSystem/`） | 两个测试项目里**零引用**；只有适配器采样器（如 `Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Samplers/TransformSampler.cs`）与 `Examples/` 演示消费它 —— 测它等于测适配器，而适配器不在引用图里 |
 | `TransitionCoreEx.AwaitThen` / `.Await`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEx.cs` 的同名成员） | 两个测试项目里零调用；只出现在七家 `Examples/` 演示里。`Repeat` / `Then` 是唯一被间接走到的（经 `ChainRepeatTests` 的 `ChainNode`） |
 | `MVVM/` 的 `VeloxCommandAttribute.cs`、`VeloxPropertyAttribute.cs` | 两个纯声明特性，没有行为可测 —— 它们的效果全在生成器产物里 |
-| `AI/` 的 20 个源文件里的 11 个 | 20 源 vs 9 测试文件 |
+| `AI/` 的相当一部分源文件 | 只有一部分源文件有对应测试 |
 
 ---
 
@@ -147,7 +133,7 @@ Src/Core/VeloxDev.Core.Test/MSTestSettings.cs
 
 方法级 = **同一个类的两个方法可以同时在跑**。已全仓搜过，没有任何 `.runsettings` 文件，所以这一行就是并行的唯一事实源。
 
-**17 个类用 `[DoNotParallelize]` 把自己摘出去**，理由分四档（档内按文件）：
+**若干类用 `[DoNotParallelize]` 把自己摘出去**，理由分几档（档内按文件）：
 
 | 档 | 类（`文件`） | 为什么 |
 |---|---|---|
@@ -157,7 +143,7 @@ Src/Core/VeloxDev.Core.Test/MSTestSettings.cs
 | 纵深防御 | `TransitionSystem/InterpolatorCoreTests.cs` | 注释自己写明：这些断言与并行无关，保留 `[DoNotParallelize]` 纯粹是防御 |
 | 未注明理由 | `MVVM/CommandArityTests.cs` | 只有裸 `[DoNotParallelize]`，类注释里没写为什么串行 |
 
-**「用真实时钟但没摘出去」的类 —— 这就是偶发失败的全部来源**（3 个）：
+**「用真实时钟但没摘出去」的类 —— 这就是偶发失败的全部来源**：
 
 | 类 | 真实时钟用法 | `[DoNotParallelize]` |
 |---|---|---|

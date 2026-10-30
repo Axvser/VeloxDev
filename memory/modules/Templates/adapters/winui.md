@@ -17,12 +17,12 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| link-view | **空壳**（6 行，XAML 的全部内容是根元素上的 `Clip="{x:Null}"`），几何在代码里构造 | `workflow-link-view/TemplateClass.xaml` 的根元素、`workflow-link-view/TemplateClass.xaml.cs` 的三个 `Path` 字段与构造器 |
+| link-view | **空壳**（XAML 的全部内容是根元素上的 `Clip="{x:Null}"`），几何在代码里构造 | `workflow-link-view/TemplateClass.xaml` 的根元素、`workflow-link-view/TemplateClass.xaml.cs` 的三个 `Path` 字段与构造器 |
 | node-view | `Viewbox` + 固定设计尺寸卡片，三处 `Clip="{x:Null}"`，两侧 `SlotState` 都绑 | `workflow-node-view/TemplateClass.xaml` 的根、设计尺寸 `Grid`、插槽宿主 `Grid` 与输出槽 `SlotView` |
 | slot-view | `Viewbox` + 一个 `Path`，状态在 code-behind 里换算成 `Fill` | `workflow-slot-view/TemplateClass.xaml` 的 `Viewbox` / `RootPath`、`workflow-slot-view/TemplateClass.xaml.cs` 的 `UpdateForeground` |
 | tree-view | 外壳 + 两个 `DataTemplate` 资源 + 一个 `TemplateSelector` 资源 + `LinkContextMenu` | `workflow-tree-view/TemplateClass.xaml` 的 `UserControl.Resources` |
 | grid-decorator | `sealed class : Grid, IWorkflowGridDecorator`，**池化** `Line`/`TextBlock`，八个静态画刷 | `workflow-grid-decorator/TemplateClass.cs` 的类声明与八个 `SolidColorBrush` 字段 |
-| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个画刷（42 行） | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
+| minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个画刷 | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
 | template-selector | `DataTemplateSelector` 子类，四个 `DataTemplate?` 属性 | `workflow-template-selector/TemplateClass.cs` 的四个 `DataTemplate?` 属性 |
 
 三个不出 XAML 的条目**仍然可以有 XAML 之外的形状差**：template-selector 是七家里唯一
@@ -85,14 +85,14 @@ DP 变更回调调 `UpdatePath()`，`UpdatePath` 里 `EnsureGeometry()` 后写 `
 `workflow-slot-view/.template.config/template.json` 声明了 `slotBorderColor` 但**没有 `replaces`**。
 slot-view 的 `Path` 只有一个 `Fill`（`workflow-slot-view/TemplateClass.xaml` 的 `RootPath`），
 `UpdateForeground()` 只写 `RootPath.Fill`（`workflow-slot-view/TemplateClass.xaml.cs` 的 `UpdateForeground`）。⇒ 传这个参数**什么也不会发生**，
-而且不报错。全平台共有 12 个这样的参数，见 `../architecture.md` §7.1。
+而且不报错。全平台共有那批这样的参数，见 `../architecture.md` §7.1。
 
 ### P4 · 两处 `ParseColor` 是**逐字重复**的
 
 `workflow-slot-view/TemplateClass.xaml.cs` 与 `workflow-minimap-overlay/TemplateClass.cs`
 各有一份完全相同的 `ParseColor(string hex)`（处理 8 位 `#AARRGGBB` 与 6 位 `#RRGGBB` 两种长度）。
 ⇒ 改一处的解析规则（比如支持 3 位缩写）时，另一处不会跟着变。同一份 `ParseColor` 在
-Razor 模板里有**六份**逐字重复（`../adapters/razor.md` §二·7），所以这条不是 WinUI 独有；
+Razor 模板里有**多份**逐字重复（`../adapters/razor.md` §二·7），所以这条不是 WinUI 独有；
 WinUI 独有的是"只重复两份、且两份之间逐字相同"。
 
 ---

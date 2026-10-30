@@ -17,10 +17,10 @@
 
 | 我想加 | 官方挂点（具体成员） | 位置 |
 |---|---|---|
-| 让一个 Jalium 类型可动画 | 实现 `ISampler`，再 `RegisterInterpolator(typeof(T), new XSampler())` | `PlatformAdapters/Interpolator.cs` 的静态构造（唯一的登记表，10 行） |
+| 让一个 Jalium 类型可动画 | 实现 `ISampler`，再 `RegisterInterpolator(typeof(T), new XSampler())` | `PlatformAdapters/Interpolator.cs` 的静态构造（唯一的登记表） |
 | 换线程句柄 / 优先级 / 解释器 | 改 `TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>` 的类型实参 | `PlatformAdapters/TransitionScheduler.cs` |
 | 一条过渡时长预设 | `TransitionEffects` 的三个静态属性（可 `set`，进程级） | `PlatformAdapters/TransitionEffects.cs` 的 `Empty` / `Theme` / `Hover` |
-| 让 `.Property(...)` 能顺滑写某个 Jalium 类型 | 加一个 `Property(Expression<Func<T, TXxx>>, TXxx, object?)` 重载 | `PlatformAdapters/Transition.cs`（**这一家 13 个**） |
+| 让 `.Property(...)` 能顺滑写某个 Jalium 类型 | 加一个 `Property(Expression<Func<T, TXxx>>, TXxx, object?)` 重载 | `PlatformAdapters/Transition.cs`（**这一家的重载都在这里**） |
 | 加 / 换工作流表面 | 在 item template 的 `UserControl` 根上写 `behaviors:WorkflowSurfaceBehavior.*`（具名部件 + `ZoomEnabled` + `LinkMenuKey`）；要改手势/命中/视口/菜单数学就改表面行为 | `Src/Templates/…/workflow-tree-view/TemplateClass.jalxaml`、`Attached/Workflow/WorkflowSurfaceBehavior.cs` |
 | 卡片长什么样 | 改 `workflow-node-view` 的标记（`UserControl` + `Viewbox` + 设计尺寸 `Grid`），节点拖拽挂 `WorkflowNodeDragBehavior` | `Src/Templates/…/workflow-node-view/TemplateClass.jalxaml` |
 | 换连线外观（颜色 / 线宽 / 命中 / 虚线段） | 改 `workflow-link-view` 的 code-behind（`UserControl`，`LineColor` DP + `TemplateLinkColor`/`TemplateLinkThickness` 符号）；自盒化助手在适配器 | `Src/Templates/…/workflow-link-view/TemplateClass.jalxaml.cs`、`Attached/Workflow/WorkflowLinkBounds.cs` |
@@ -51,14 +51,14 @@
 |---|---|---|---|---|
 | 1 | 在 `Samplers/` 加一个 `ISampler` 类就以为生效了 | 登记表是唯一开关；没登记 = 该采样器**永不运行**，且库里没有任何东西会报错 | 同时在 `Interpolator` 的静态构造里加一行 | `PlatformAdapters/Interpolator.cs` 的静态构造 |
 | 2 | 登记了但忘了改测试表 | 不会编译错，运行到 `EveryShippedSampler_IsAccountedFor` 才红：它反射所有 `VeloxDev.*` 程序集里的 `ISampler`，再与 `SamplerRegistry.Entries` ∪ `UnreachableSamplers.All` 求差 | `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 加一条 `Entry(...)`（`All` 属性、`Adapter` 常量） | `Samplers/SamplerCoverageTests.cs` 的 `EveryShippedSampler_IsAccountedFor`；`SamplerRegistry.cs` → `AdapterSamplerEntries.All` → `JaliumEntries.All` |
-| 3 | 改采样器类名只改文件 | 测试按**字符串**反射取类型：`Type.GetType($"VeloxDev.Adapters.NativeSamplers.{name}, {JaliumAssembly}", throwOnError: true)`。编译不报错，**测试运行时才炸** | 改名要同步 `JaliumEntries.cs` 里那 9 个字符串 | `JaliumEntries` 的类型解析表达式（`throwOnError: true`） |
+| 3 | 改采样器类名只改文件 | 测试按**字符串**反射取类型：`Type.GetType($"VeloxDev.Adapters.NativeSamplers.{name}, {JaliumAssembly}", throwOnError: true)`。编译不报错，**测试运行时才炸** | 改名要同步 `JaliumEntries.cs` 里的字符串 | `JaliumEntries` 的类型解析表达式（`throwOnError: true`） |
 | 4 | 把登记代码写在采样器自己的文件里 / `App` 里 / `Main` 里 | 没人保证它会跑在第一个 `new Transition<T>()` 之前；`RegisterInterpolator` 是**末位胜出** | 只在静态构造里集中登记 | Core `Effects/Transition.cs` 的字段初始化器 |
 | 5 | 照 WPF 的样子「登记基类型接住整族」，于是给 `TranslateTransform` / `RotateTransform` / `TransformGroup` 各登记一条 | 这家的姿态是**只登记基类型**（`typeof(Transform)`）＋ 精确类型的少数几条；多余登记会被精确命中抢先 | 只登记 `Transform` 与 `Media3D.Transform3D` 两条 | `PlatformAdapters/Interpolator.cs` 静态构造里的那两条 |
 | 6 | 只设 `ViewPool.ItemsSource`（或只设 `TemplateSelector`）就以为视图会出来 | 两个 DP 共用 `OnChanged`，只有**两者都非空**才建 manager；否则走 `else` 分支把 manager `Detach()` | 两个一起给 —— 模板里两者都写在 `PART_Canvas` 上（或由表面行为从资源按 `WorkflowSurfaceBehavior.TemplateSelectorKey` 一并设） | `Attached/Workflow/ViewPool.cs` 的 `OnChanged`；`WorkflowSurfaceBehavior.BindTree` |
 | 7 | 把 `Property(…, ICollection<Transform>)` 的「单个直接赋值」分支改成统一 `TransformGroup` | 会改运行时类型，破坏 `((TranslateTransform)x.RenderTransform).X` 这类嵌套路径 | 保持 `Count == 1` 直赋、其余包组 | `PlatformAdapters/Transition.cs` 的 `Transform` 重载（及其中注释） |
-| 8 | 把 `.Property(...)` 的某个重载「补进 Core」 | Core 的 `TransitionCore<...>` 里**一个 `Property` 都没有**，13/28/30/17 个重载分别写在各家适配器里 —— 补进 Core 等于改七家的形状 | 重载留在本家 `PlatformAdapters/Transition.cs` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs` 全文无 `Property` 方法 |
+| 8 | 把 `.Property(...)` 的某个重载「补进 Core」 | Core 的 `TransitionCore<...>` 里**一个 `Property` 都没有**，重载分别写在各家适配器里，数量不等 —— 补进 Core 等于改七家的形状 | 重载留在本家 `PlatformAdapters/Transition.cs` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs` 全文无 `Property` 方法 |
 | 9 | 让 `Attached/` 里的东西直接驱动一个 `Transition<T>`（或反过来） | 两条轴在程序集内互不引用是既成事实；跨一条就再也拆不开 | 想跨轴就在宿主侧接线 | `architecture.md` §一 |
-| 10 | 按别家的条数猜这一家有几种采样器 | 条数本来就不等（Jalium 9 个类 / 10 条登记；WPF 12、Avalonia 14、WinUI 10、WinForms 1、Razor 1） | 按 `Interpolator` 静态构造现读 | 同左 |
+| 10 | 按别家的条数猜这一家有几种采样器 | 条数本来就不等（各家的采样器与登记数量各不相同） | 按 `Interpolator` 静态构造现读 | 同左 |
 | 11 | 在模板/demo 里重写适配器行为已经做掉的机制（自己管缩放/视口、自己算端口锚点、自己写连线自盒化） | 机制与策略会分叉；两边都会编译通过，出问题时看不出谁是对的 | 平台机制改 `Attached/Workflow/` 下的行为 / 助手，策略留模板标记或 code-behind，判据见 `adapter-base-class-specifications.md` §2.1 | `architecture.md` §四；`Src/Templates/…/workflow-*`（表面/卡片/槽/连线是标记 + 薄 code-behind，网格/小地图/选择器是 `.cs`） |
 
 ---
@@ -84,7 +84,7 @@
 3. **连线**：改 `workflow-link-view` 的 `.jalxaml.cs`（`LineColor` DP、`Refresh` 里的自盒化调用、`BuildCurve` 的烘焙、`OnRender` 的笔）。自盒化助手 `WorkflowLinkBounds` 在适配器里，别在模板里造第二份。
 4. **网格/标尺**：改 `workflow-grid-decorator/TemplateClass.cs`（`sealed class : Grid, IWorkflowGridDecorator`），设调色板与 `GridStep` / `MajorLineEvery`。
 5. **端口图形与连接手势**：改 `workflow-slot-view` 的标记与 code-behind（`SlotState` 配色），手势挂 `WorkflowSlotConnectionBehavior`。**没有 `WorkflowPortLayout` 值了** —— 端口位置是量测出来的。
-6. **选择器**：改 `workflow-template-selector/TemplateClass.cs`（`sealed class : DataTemplateSelector`，四个 `DataTemplate?` 属性），tree-view 模板的 `Resources` 里构造它并交给 `ViewPool.TemplateSelector`（或由表面行为按资源键设）。
+6. **选择器**：改 `workflow-template-selector/TemplateClass.cs`（`sealed class : DataTemplateSelector`，一组 `DataTemplate?` 属性），tree-view 模板的 `Resources` 里构造它并交给 `ViewPool.TemplateSelector`（或由表面行为按资源键设）。
 7. **模板与 Trimmed demo 是镜像**（`Src/Templates/…/working/content/` 与 `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/`），同一笔改两处；改完跑 `Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`（旧的 `verify-jalium-item-templates.ps1` 现在是它的转发器，调用照旧可用）。
 
 ### C. 让宿主接上适配器
@@ -106,7 +106,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 
 1. `VeloxDev.Jalium.csproj` 是**单 TFM、不带平台后缀**的 `net10.0`，csproj 顶部注释写明了理由（只用跨平台核心，不用 `Jalium.UI.Desktop`）。改成 `net10.0-windows` 会让这个包**不再能服务 Linux / Android**。
 2. csproj 里的 `ProjectReference` / `PackageReference` 是一对**互斥**的双轨（Debug `ProjectReference` / 非 Debug `PackageReference`），改一条要同时看另一条。
-3. `Jalium.UI.Controls`（适配器）与 `Jalium.UI.Desktop`（消费 demo）是**两个包、两个版本位**。适配器钉 `26.10.8`（同代码最低可编；26.10.7 没有 `MainDispatcher`，26.10.0–26.10.6 缺 `DispatcherPriority`），三个 Jalium demo 用 `26.10.9`（消费端可自行拉高）。**不要把适配器抬到 26.11.0**：它的 `ScrollViewer` classic gutter 在 `ArrangeOverride` 内调用 `InvalidateMeasure`，空闲也每帧跑 layout（实测 11.0–11.2s/10s vs 26.10.9 的 8.4–9.3s）。26.10.8 能编但多次测量为 9.2–12.5s/10s（连续三次 11.8s），所以 demo 用 26.10.9。
+3. `Jalium.UI.Controls`（适配器）与 `Jalium.UI.Desktop`（消费 demo）是**两个包、两个版本位**。适配器钉 `26.10.8`（同代码最低可编；26.10.7 没有 `MainDispatcher`，26.10.0–26.10.6 缺 `DispatcherPriority`），Jalium 的 demo 用 `26.10.9`（消费端可自行拉高）。**不要把适配器抬到 26.11.0**：它的 `ScrollViewer` classic gutter 在 `ArrangeOverride` 内调用 `InvalidateMeasure`，空闲也每帧跑 layout（实测 11.0–11.2s/10s vs 26.10.9 的 8.4–9.3s）。26.10.8 能编但多次测量为 9.2–12.5s/10s，所以 demo 用 26.10.9。
 
 ---
 

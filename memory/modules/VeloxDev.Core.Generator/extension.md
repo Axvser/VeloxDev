@@ -25,8 +25,8 @@
 
 三个位置，缺一不可：
 
-1. **`Base/Analizer.cs` 的 `TriggerAttributes`**（10 条 `readonly string[]`）—— 加一条**元数据名**（`Namespace.Type+嵌套名`，泛型特性带 `` `1 `` 这类元数后缀，照表里 `WorkflowBuilder+TreeAttribute\`1` 的写法）。这是**所有生成器共用的同一张表**。
-2. **写或复用 writer**：实现 `Base/ICodeWriter.cs` 的四个成员（`Initialize` / `CanWrite` / `Write` / `GetFileName`），或继承 `Writers/WriterBase.cs` 只实现它的五个抽象成员。
+1. **`Base/Analizer.cs` 的 `TriggerAttributes`**（`readonly string[]`）—— 加一条**元数据名**（`Namespace.Type+嵌套名`，泛型特性带 `` `1 `` 这类元数后缀，照表里 `WorkflowBuilder+TreeAttribute\`1` 的写法）。这是**所有生成器共用的同一张表**。
+2. **写或复用 writer**：实现 `Base/ICodeWriter.cs` 的成员（`Initialize` / `CanWrite` / `Write` / `GetFileName`），或继承 `Writers/WriterBase.cs` 只实现它的抽象成员。
 3. **一个生成器类**：`[Generator(LanguageNames.CSharp)]` + `IIncrementalGenerator`，`Initialize` 写 `context.RegisterSourceOutput(Analizer.Filters.Targets(context).Combine(context.CompilationProvider), GenerateSource)`，`GenerateSource` 走 `Filters.Resolve` → `new writer` → `CanWrite()` → `AddSource(writer.GetFileName(), writer.Write())`。照 `MVVM.cs` 的 `Initialize`/`GenerateSource` 抄最短。
 
 **候选闸门也是硬性的**：`Base/Analizer.cs` 的 `IsCandidateClass` 要求类是 **`partial`**。不 `partial` ⇒ 该类型不进入流程，**没有诊断**。
@@ -40,13 +40,13 @@
 
 ### C. 加一个全新生成器
 
-在一个类里做四件事：`[Generator(LanguageNames.CSharp)]`（`MVVM.cs` 等 10 处的 `[Generator]` 同形）→ `IIncrementalGenerator` → `Initialize` 注册 → `GenerateSource` 里循环。**不要写 `ISourceGenerator`**（`architecture.md` §二）。
+在一个类里做四件事：`[Generator(LanguageNames.CSharp)]`（`MVVM.cs` 等处的 `[Generator]` 同形）→ `IIncrementalGenerator` → `Initialize` 注册 → `GenerateSource` 里循环。**不要写 `ISourceGenerator`**（`architecture.md` §二）。
 
 **引用点不用改**：`VeloxDev.Core.Generator.csproj` 里把 `bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).dll` 整包进 `analyzers/dotnet/cs` 的那个 `None` 项，新增的生成器类自然进包。
 
 ### D. 加一个特性元数（以 Theme 为例）
 
-`Theme.cs` 里是 **5 条并列的 `ForAttributeWithMetadataName`**（`ThemeConfigAttribute\`3` … `` `7 ``），`.Collect()` 后逐级 `.Combine(...)`。加第 6 个元数要改**两处**：新增一条流 + 把新流 `.Combine` 进 `allClasses`。漏掉 Combine 不会报错，只会让该元数的类**永不生成**。
+`Theme.cs` 里是**多条并列的 `ForAttributeWithMetadataName`**（`ThemeConfigAttribute\`3` … `` `7 ``），`.Collect()` 后逐级 `.Combine(...)`。再加一个元数要改**两处**：新增一条流 + 把新流 `.Combine` 进 `allClasses`。漏掉 Combine 不会报错，只会让该元数的类**永不生成**。
 
 ### E. 改「谁算 AOP 类」这类判定
 
@@ -70,13 +70,13 @@
 | 命名产物 | `GetFileName()` 返回 `{类}_{命名空间}_X.g.cs`，命名空间段走 `WriterBase.NamespaceFileSegment()` | 用 `ToDisplayString().Replace('.','_')` 拼完事 | 全局命名空间会生成出 `{类}_<global namespace>_Aop`；`Writers/WriterBase.cs` 的 `AppendNamespace` 若回退更会写出非法的 `namespace <global namespace>;`。**统一样板是 `Writers/WriterBase.cs` 的 `NamespaceFileSegment()`** |
 | 加基础接口 | 返回 `GenerateBaseInterfaces()` 数组 | 在 `GenerateBody()` 或模板串里手写 `: IFoo` | 类型声明由 `Writers/WriterBase.cs` 一处拼出，模板串里写的会出现在类体里 ⇒ 语法错误 |
 | 让生成器报错 | 在 `Diagnostics.cs` 加一条 `DiagnosticDescriptor`，照 `CommandWriter.cs` 的 `List<Diagnostic> Diagnostics` + `Command.cs` 那一对（writer 收集，生成器类在 `CanWrite()` **之前**逐条 `ReportDiagnostic`） | 随手 `context.ReportDiagnostic(...)` | 诊断号要按模块+种类命名（`VELOX_MVVM_CMD…` / `VELOX_MVVM_PROP…`，2026-10-02 起；Agent 树那条是 `VELOX_AI_TREE001`）。`EnforceExtendedAnalyzerRules`（`VeloxDev.Core.Generator.csproj` 的 `EnforceExtendedAnalyzerRules`）已开但当前**零告警** —— 因为分析器是 `IIncrementalGenerator`，不需要 `SupportedDiagnostics`；**而 RS2008（分析器发布跟踪）要的两份文件是齐的** —— `AnalyzerReleases.Shipped.md` / `Unshipped.md` 由 csproj 的 `AdditionalFiles` 纳入，文件本身也在树里。**零告警正是它们齐了的结果，不是「没被要求」** |
-| 发版 | 改 `VeloxDev.Core.Generator.csproj` 的 `<Version>` **并且**改 §四那张表的 11 处引用 | 只改 csproj | Debug 走源码仍是对的，Release **静默**还原旧包 —— 本地怎么调都复现不出来 |
+| 发版 | 改 `VeloxDev.Core.Generator.csproj` 的 `<Version>` **并且**改 §四那张表的各处引用 | 只改 csproj | Debug 走源码仍是对的，Release **静默**还原旧包 —— 本地怎么调都复现不出来 |
 
 ---
 
-## 四、改这里的代价（版本锁：11 处引用与包版本）
+## 四、改这里的代价（版本锁：引用与包版本）
 
-**当前状态：包版本 `10.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）。** 11 处 `PackageReference` 的 `Version=` 需逐一核对 —— 当前已全部对齐 `10.0.0`（含两个 `Examples/*/Directory.Build.props`）。Debug 走 `ProjectReference`，包版本号根本不参与；Release 才会解析到 NuGet 上已发布的生成器，即**不含这条线上后续本地改动的那一版**。看到源码版本与某处引用不相同时，第一反应不该是补齐，而是先确认「这一轮是不是仍然只要 Debug」。
+**当前状态：包版本 `10.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）。** 各处 `PackageReference` 的 `Version=` 需逐一核对 —— 当前已全部对齐 `10.0.0`（含两个 `Examples/*/Directory.Build.props`）。Debug 走 `ProjectReference`，包版本号根本不参与；Release 才会解析到 NuGet 上已发布的生成器，即**不含这条线上后续本地改动的那一版**。看到源码版本与某处引用不相同时，第一反应不该是补齐，而是先确认「这一轮是不是仍然只要 Debug」。
 
 **版本历史**（提版说明只存在于提交信息里 —— **不可复核**；能复核的只有当前 csproj 里的 `10.0.0`）：
 - 2026-09-26：Core 与其余库统一停在 `9.0.x`，只保证 Debug。
@@ -87,7 +87,7 @@
 - 2026-10-02：arity 族一版（命令支持最多 15 个形参，按前导形参个数选元数族）。
 - 此后提到 `10.0.0`（当前值）。
 
-下面 11 处 `PackageReference`（`Version=` 以工作区各 csproj 为准）：
+下面各处 `PackageReference`（`Version=` 以工作区各 csproj 为准）：
 
 | # | 文件 |
 |---|---|
@@ -109,7 +109,7 @@
 
 **两条引用必须互斥**（`Examples/Workflow/Directory.Build.props` 的注释）：「两者必须互斥，否则生成器执行两次、报重复成员」。改这一对时不要图省事让它们同时生效。
 
-**升版本的完整动作**：`VeloxDev.Core.Generator.csproj` 的 `<Version>` → 上表 11 处 `Version=` 全改 → 想清 Release 会不会静默还原旧包（Debug 看不出问题）。路径基准注意 `Examples/Workflow/Directory.Build.props` 的说法：基准是导入方项目目录，必须走 `MSBuildThisFileDirectory`。
+**升版本的完整动作**：`VeloxDev.Core.Generator.csproj` 的 `<Version>` → 上表各处 `Version=` 全改 → 想清 Release 会不会静默还原旧包（Debug 看不出问题）。路径基准注意 `Examples/Workflow/Directory.Build.props` 的说法：基准是导入方项目目录，必须走 `MSBuildThisFileDirectory`。
 
 **要拿本地打出来的 `.nupkg` 当包源做验证时，别让一个与 nuget.org 同号的版本进全局缓存。** 缓存键是「包名+版本」：`~/.nuget/packages/veloxdev.core.generator/<版本>/` 一旦存在，**任何**源都不再被取用 —— 还原时不校验、不重取；而 nuget.org 的版本不可覆盖。于是「改完生成器 → 用同一个版本号重新发布 → Release 仍报旧错」是**必然**，删掉缓存里那一个版本目录是唯一解法。三条规避路，按省事程度排：
 
@@ -125,7 +125,7 @@ rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
 
 **症状辨识**：报错全落在 `obj/<Config>/<tfm>/VeloxDev.Core.Generator/**/*.g.cs`（典型 `CS0535`：生成的 `…JsonWriterN` / `…JsonReaderN` 不实现 `IVeloxJsonWriter.WriteAsync` / `IVeloxJsonReader.ReadAsync`）—— **看着像生成器的锅，实际是本机装着旧生成器**。判据：`…/<版本>/analyzers/dotnet/cs/VeloxDev.Core.Generator.dll` 的哈希对不上 nuget.org 同版本（`https://api.nuget.org/v3-flatcontainer/veloxdev.core.generator/<版本>/veloxdev.core.generator.<版本>.nupkg` 下下来解压比）；同目录 `.nupkg.metadata` 的 `source` 若写着 `…\bin\Debug` 这类**本地目录**，就是留下错位件的那一次。**与 `NuGet.Config` 无关 —— 别去动它。**
 
-> **复核口径**：全仓 grep `VeloxDev.Core.Generator` 的引用点就是上表 11 条 `PackageReference` 加对应的 `ProjectReference`（`VeloxDev.Core.csproj`、`VeloxDev.Core.Extension.csproj`、`VeloxDev.Core.Extension.Test.csproj`、`VeloxDev.Core.Test.csproj`、`Examples/Workflow/Directory.Build.props`、`Examples/Theme/Directory.Build.props`、四个 demo 各自的 `ProjectReference`、`Examples/MVVM/Common/Lib/Lib.csproj`、`Examples/Tickable/WPF/Demo/Demo.csproj`）。`Src/Adapters/*` 只在 `bin/` 的 `.pdb` 里偶然命中该字符串，源码与 csproj 一律不引用（见 [architecture.md](architecture.md) §一）。
+> **复核口径**：全仓 grep `VeloxDev.Core.Generator` 的引用点就是上表那些 `PackageReference` 加对应的 `ProjectReference`（`VeloxDev.Core.csproj`、`VeloxDev.Core.Extension.csproj`、`VeloxDev.Core.Extension.Test.csproj`、`VeloxDev.Core.Test.csproj`、`Examples/Workflow/Directory.Build.props`、`Examples/Theme/Directory.Build.props`、四个 demo 各自的 `ProjectReference`、`Examples/MVVM/Common/Lib/Lib.csproj`、`Examples/Tickable/WPF/Demo/Demo.csproj`）。`Src/Adapters/*` 只在 `bin/` 的 `.pdb` 里偶然命中该字符串，源码与 csproj 一律不引用（见 [architecture.md](architecture.md) §一）。
 
 ---
 
@@ -158,7 +158,7 @@ rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
 
 **为什么改生成器必须跑它**：生成器改的是「哪些类型/成员存在」，而裁剪删的是「没人引用的类型/成员」—— 两条轴正好作用在同一个集合上（`architecture.md` §六·8 已确认生成器**不产出任何裁剪提示**，所以没有任何自动保护）。**本地 Debug 构建看不出任何问题。**
 
-> **复核（2026-10-04）**：`Src/Verification/VeloxDev.TrimProbe/` 底下**只有 `bin/` 与 `obj/`**，没有源码 —— `git ls-files` 对它零命中。但注意 `Src/Verification/` 这一层**并非全空**：`git ls-files Src/Verification/` 现在命中 4 个被跟踪的 `.ps1`（`agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`），磁盘上还有一个尚未 `git add` 的新脚本 `verify-workflow-item-templates-all.ps1`（另两个同名脚本是转发到它的薄包装）。准确的说法是「**TrimProbe 本体无被跟踪文件**」—— 不是「`Src/Verification/` 为空」。`VeloxDev.slnx` 里依旧没有 `TrimProbe`。**结论不变：这里没有可写的代码事实，裁剪探针的本体在仓库外。**
+> **复核（2026-10-04）**：`Src/Verification/VeloxDev.TrimProbe/` 底下**只有 `bin/` 与 `obj/`**，没有源码 —— `git ls-files` 对它零命中。但注意 `Src/Verification/` 这一层**并非全空**：`git ls-files Src/Verification/` 现在命中若干被跟踪的 `.ps1`（`agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`），磁盘上还有一个尚未 `git add` 的新脚本 `verify-workflow-item-templates-all.ps1`（另有同名脚本是转发到它的薄包装）。准确的说法是「**TrimProbe 本体无被跟踪文件**」—— 不是「`Src/Verification/` 为空」。`VeloxDev.slnx` 里依旧没有 `TrimProbe`。**结论不变：这里没有可写的代码事实，裁剪探针的本体在仓库外。**
 
 ---
 
@@ -167,7 +167,7 @@ rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
 | 东西 | 位置 | 现状 |
 |---|---|---|
 | `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | 已删除 | 它没有调用者；实际用的是同名的符号重载（调用点 `AopSurface.cs`、`Writers/AopWriter.cs`） |
-| `Generators.AgentCatalog` | 无（源码 29 个 `.cs` 无此类；`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` 也不在树里） | **不存在**。别去找它 |
+| `Generators.AgentCatalog` | 无（源码里无此类；`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` 也不在树里） | **不存在**。别去找它 |
 | `GenerateBaseTypes()` | `Writers/AopWriter.cs`、`Writers/CommandWriter.cs`、`Writers/TickWriter.cs`、`Writers/MVVMWriter.cs` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs` 真正用到了它 |
 | MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：全源 grep 已无 `IsView` / `isView`；`MVVMPropertyFactory` 现在只有两个构造 —— 从字段与从 partial 属性，`Generate()`（原 `GenerateViewModel` 改名）是唯一出口。**要恢复 View 支持，必须同时改构造、`Generate()` 与调用点** —— 别再只加参数不加分支 |
 | `VeloxDev.Core.Generator.targets` 的版本门槛 | `VeloxDev.Core.Generator.targets` 的 `VeloxDevCheckRoslynVersion` | **活着，但条件刻意放宽**：`RoslynVersion` 为空时**跳过检查**（注释：现代宿主上的 netframework TFM 拿不到该属性，跳过以免误报）。所以这条诊断**不会**在每个项目上都出现 |

@@ -275,6 +275,39 @@ public class DemoGraphTests
             "the merge had not run when the run stopped, so the resume drives it");
     }
 
+    /// <summary>
+    /// The demo graph is also the reference picture for layout: Generate Dataset fans out into three analysers,
+    /// and Merge Report joins them. The merge must sit on the analysers' overall centre line, not on the last one.
+    /// </summary>
+    [TestMethod]
+    public void Layout_FanInMergeSitsOnTheAnalyserGroupCentre()
+    {
+        var session = Stubbed();
+        var tree = session.Tree;
+        var generate = PythonNode(session, "Generate Dataset");
+        var merge = PythonNode(session, "Merge Report");
+        var analysers = new[] { "Numeric Stats", "Frequency Dist", "Anomaly Scan" }
+            .Select(title => PythonNode(session, title))
+            .ToArray();
+
+        tree.Arrange(new WorkflowLayoutOptions
+        {
+            StartNode = generate,
+            Traversal = WorkflowLayoutTraversal.Downstream,
+            PositionTolerance = 0,
+        });
+
+        var top = analysers.Min(node => node.Anchor.Vertical);
+        var bottom = analysers.Max(node => node.Anchor.Vertical + node.Size.Height);
+        var groupCentre = (top + bottom) / 2d;
+        var right = analysers.Max(node => node.Anchor.Horizontal + node.Size.Width);
+
+        Assert.AreEqual(groupCentre, merge.Anchor.Vertical + (merge.Size.Height / 2d), 1e-6,
+            "the merge is centred on the analysers as a group");
+        Assert.AreEqual(right + 64d, merge.Anchor.Horizontal, 1e-6,
+            "the merge starts one column to the right of the rightmost analyser");
+    }
+
     private static StubPythonHelper StubOf(WorkflowDemoSession session, string title)
         => (StubPythonHelper)PythonNode(session, title).GetHelper();
 }

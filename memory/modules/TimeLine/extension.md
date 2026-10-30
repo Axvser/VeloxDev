@@ -14,7 +14,7 @@
 |---|---|---|
 | `[Tickable(channel, fps)]` | `TimeLine/TickableAttribute.cs` 的 `TickableAttribute` | **首选**：声明一个行为 |
 | 生成的 `InitializeTickable()` / `CloseTickable()` | `TickWriter.cs` 的 `GenerateBody` 模板 | 与上一条配对，**必须由你调** |
-| 生成的五个 `partial void` 钩子：`Awake`/`Start`/`Update`/`LateUpdate`/`FixedUpdate` | `TickWriter.cs` 的 `GenerateBody` 里五个 `partial void` 声明 | 上面那条的实现位置 |
+| 生成的 `partial void` 钩子：`Awake`/`Start`/`Update`/`LateUpdate`/`FixedUpdate` | `TickWriter.cs` 的 `GenerateBody` 里五个 `partial void` 声明 | 上面那条的实现位置 |
 | `TickManager.RegisterBehaviour/UnregisterBehaviour`（实例版） | `TickManager.cs` 的 `LoopChannel.RegisterBehaviour` / `UnregisterBehaviour` | 手写 `ITickable` 实现时用（**不推荐**，见 §二·2） |
 | `TickManager.Bus(channel)`（实例版） | `TickManager.cs` 的 `TickManager.Bus` 静态门面 | 让一条动画与 channel 共用时间轴 |
 | 全局 channel 事件 `OnChannelStarted/Paused/Resumed/Stopped` | `TickManager.cs` 的 `OnChannel*` 静态事件 | 观察 channel 生命周期 |
@@ -32,8 +32,8 @@
 
 | | 做法 | 结果 |
 |---|---|---|
-| ✅ 官方 | `[Tickable("我的通道", fps: 30)] public partial class Foo { partial void Update(FrameEventArgs e) { ... } }`，然后在合适的时机调 `InitializeTickable()` | 生成器补一个 partial 部分，实现 `ITickable` 的七个成员，把 `Invoke*` 转成你那五个 `partial void` |
-| ❌ 捷径 | 手写 `class Foo : ITickable { public void InvokeUpdate(FrameEventArgs e) ... }` | 你要自己实现全部七个成员（`InitializeTickable` / `CloseTickable` / 五个 `Invoke*`，模板见 `TickWriter.cs` 的 `GenerateBody`），并且放弃生成器的 `SetTargetFPS` 展开与钩子转发 —— 抄漏一个成员就是 `CS0535`。**按普通拼写写 `ITickable` 即可**（这个名字曾带过零宽空格，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1） |
+| ✅ 官方 | `[Tickable("我的通道", fps: 30)] public partial class Foo { partial void Update(FrameEventArgs e) { ... } }`，然后在合适的时机调 `InitializeTickable()` | 生成器补一个 partial 部分，实现 `ITickable` 的成员，把 `Invoke*` 转成你那些 `partial void` |
+| ❌ 捷径 | 手写 `class Foo : ITickable { public void InvokeUpdate(FrameEventArgs e) ... }` | 你要自己实现全部成员（`InitializeTickable` / `CloseTickable` / 各 `Invoke*`，模板见 `TickWriter.cs` 的 `GenerateBody`），并且放弃生成器的 `SetTargetFPS` 展开与钩子转发 —— 抄漏一个成员就是 `CS0535`。**按普通拼写写 `ITickable` 即可**（这个名字曾带过零宽空格，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1） |
 | ❌ 捷径 | 贴了 `[Tickable]` 就以为生效 | 特性**只有生成器读**（`TickWriter.ReadTickableConfig`），运行时的 `TickManager` 从不反射它。而不调 `InitializeTickable()` 就永远不注册（生成器也不会替你调） |
 | ❌ 捷径 | `[Tickable]` 贴在**非 partial** 类上 | 生成器**静默跳过**：`Analizer.cs` 的 `IsCandidateClass` 要求 `IsPartialClass(declaration)`。编译通过、什么都不生成 |
 | ⚠️ 注意 | `fps` 参数传 `-1`（默认） | `TickWriter.GenerateBody` 里 `TargetFPS >= 1` 不成立，**整句 `SetTargetFPS` 不生成**。想要帧率就得写正数 |
@@ -70,7 +70,7 @@
 | ❌ 捷径 | 自己在一个 `bool _frozen` 上判、在钩子里 `return` | 泵仍在按目标帧率唤醒，暂停的 channel 还在烧 CPU；而且 `TotalTime` 会继续走，因为 `TotalTime` 是**总线**的，不是你的标志的（`CreateFrameEventArgs` 的注释与 `UpdatePerformanceStats`） |
 | ⚠️ 陷阱 | `SetTimeScale(0)` 之后调 `Resume()` | 不会恢复。rate 为 0 是「冻结不是暂停」，`Resume` 只解除暂停（`Timing/TimeSourceCore.cs` 的 `Resume` 注释）。要恢复得把 rate 调回非零。demo 的单元格工具提示明说这条（`MainWindow.xaml.cs` 的 `ChannelLine.ToolTip`） |
 
-### 6. 目标帧率与固定步长 —— 走对公器的两个入口
+### 6. 目标帧率与固定步长 —— 走对公器的入口
 
 | 想改 | 用 | 为什么 |
 |---|---|---|
@@ -101,11 +101,11 @@
 
 | 改动 | 联动 |
 |---|---|
-| 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（这个名字曾带 ZWSP，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1）② `TickWriter` 的 `GenerateBody` 模板与 `GenerateBaseInterfaces` ③ 五个 `partial void` 声明 ④ `Src/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
+| 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（这个名字曾带 ZWSP，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1）② `TickWriter` 的 `GenerateBody` 模板与 `GenerateBaseInterfaces` ③ 各个 `partial void` 声明 ④ `Src/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
 | 加/改 `[Tickable]` 的参数 | ① `TickableAttribute.cs` ② `TickWriter.ReadTickableConfig`（位置参数 + 命名参数两条读取路径，**命名参数覆盖位置参数**）③ `TickableAttributeTests.cs` |
 | 改 `TriggerAttributes` 的组合方式 | `Src/Generators/VeloxDev.Core.Generator/Base/Analizer.cs` 的 `TriggerAttributes`；`"VeloxDev.TimeLine.TickableAttribute"` 是其中一项。**它同时决定了「哪些类会进入生成器」**，删掉它等于整个特性失效 |
 | 改事件参数族的形状 | `TransitionSystem`（`Runtime/TransitionDiagnostics.cs` 的 `Raise`、`Runtime/TransitionInterpreter.cs` 三处 `Args.Handled` 检查、`Effects/Transition.cs` 的 `InvokeError`）+ `Events/TransitionEventArgs{TStage,TValue}.cs`、`Interfaces/TransitionSystem/Enums/{Warn,Error}Stage.cs` + `TimeLineEventArgsTests.cs` |
-| 改 channel 的静态 API 面 | `TickManager.cs` 的静态命令面与查询面七组；注意**命令面走 `GetOrCreateChannel`、查询面走 `TryGetValue`**（`TickManager.Bus` 的注释写死了这条不对称） |
+| 改 channel 的静态 API 面 | `TickManager.cs` 的静态命令面与查询面；注意**命令面走 `GetOrCreateChannel`、查询面走 `TryGetValue`**（`TickManager.Bus` 的注释写死了这条不对称） |
 | 加一条「跨线程可见」的字段 | 检查它的写者是否只在一条泵的线程上：`_state` 那种「一条泵一个字段」的写法见 `Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs` 的 `_updateSeenFrame` / `_lastFixedIndex` 等字段 |
 | 改暂停/倍速语义 | 实现全在 `Src/Core/VeloxDev.Core/Timing/TimeSourceCore.cs`；本模块只转发（`LoopChannel.SetTimeScale` / `Pause` / `Resume`） |
 | 改固定步长 | `Timing/CompensatingTimeSampler.cs`（`Step` 的 setter 会清 `_acc`） |

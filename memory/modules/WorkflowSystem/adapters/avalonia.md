@@ -3,7 +3,7 @@
 > 连线交互规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)：输入是标准输入
 > （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），命中归 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
 >
-> 代码：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/`（10 个类）。
+> 代码：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/`。
 > 契约、注册位置、七角色职责表在 `memory/modules/WorkflowSystem/extension.md` §3.9 与
 > `skills/veloxdev-create-workflow/references/view-layer.md`；「怎么搭一个工作流界面」在
 > `skills/veloxdev-create-workflow/references/gui/avalonia.md`。
@@ -18,13 +18,13 @@
 
 | 角色 | 这家的类 | 形状要点（为什么） |
 |---|---|---|
-| 画布宿主 | `WorkflowSurfaceBehavior`（`sealed class : AvaloniaObject`，1122 行） | 附着 9 个属性（8 公开 + 1 私有 `State`），命名控件靠 `control.FindControl<T>(name)` 解析 |
+| 画布宿主 | `WorkflowSurfaceBehavior`（`sealed class : AvaloniaObject`） | 附着公开属性与一个私有 `State`，命名控件靠 `control.FindControl<T>(name)` 解析 |
 | 画布变换 | `WorkflowCanvasTransformBehavior`（**`sealed class : AvaloniaObject`**） | WPF/WinUI 的同名类是 `static class`，这家不行 —— 理由在 §二.1 |
 | 视图池 | `ViewPool`（`sealed class : AvaloniaObject`）+ `ViewManager`（普通 `sealed class`） | `ViewPool` 要注册附着属性所以继承 `AvaloniaObject`；`ViewManager` 不是行为类、没有附着属性，所以不继承 |
 | 节点拖拽 | `WorkflowNodeDragBehavior`（`sealed class : AvaloniaObject`） | 只认左键；位移在**坐标宿主空间**里算，不是 Canvas 空间 |
-| 插槽连接 | `WorkflowSlotConnectionBehavior`（`sealed class : AvaloniaObject`，59 行） | 按下发送、同元素上松开接收；按下后**主动释放指针捕获**，见 §三.3 |
-| 插槽布局 | `WorkflowSlotLayoutBehavior`（`sealed class : AvaloniaObject`，342 行） | **三条写回路径**，见 §三.5 |
-| 网格装饰器 / 小地图 | `WorkflowMinimapOverlay`（`class Control, IWorkflowMinimapOverlay`，589 行）；**网格装饰器适配器不自带** | 自绘走 `public override void Render(DrawingContext)`；`RulerBand => 0`（`WorkflowMinimapOverlay.cs` 的 `RulerBand`，小地图不占标尺带）；装饰器由 demo 提供（`Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/WorkflowGridDecorator.cs`，`sealed class : Panel, IWorkflowGridDecorator`，`RulerBand => RulerThickness`），与 WPF 同形 |
+| 插槽连接 | `WorkflowSlotConnectionBehavior`（`sealed class : AvaloniaObject`） | 按下发送、同元素上松开接收；按下后**主动释放指针捕获**，见 §三.3 |
+| 插槽布局 | `WorkflowSlotLayoutBehavior`（`sealed class : AvaloniaObject`） | **三条写回路径**，见 §三.5 |
+| 网格装饰器 / 小地图 | `WorkflowMinimapOverlay`（`class Control, IWorkflowMinimapOverlay`）；**网格装饰器适配器不自带** | 自绘走 `public override void Render(DrawingContext)`；`RulerBand => 0`（`WorkflowMinimapOverlay.cs` 的 `RulerBand`，小地图不占标尺带）；装饰器由 demo 提供（`Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/WorkflowGridDecorator.cs`，`sealed class : Panel, IWorkflowGridDecorator`，`RulerBand => RulerThickness`），与 WPF 同形 |
 
 ---
 
@@ -32,7 +32,7 @@
 
 ### 1. 附着属性只能走泛型 `AvaloniaProperty.RegisterAttached<TOwner, THost, TValue>` —— 于是行为类**不能**是 `static class`
 
-这家的注册签名把所有者类型放在**类型参数**里（`WorkflowSurfaceBehavior.cs` 的 `IsEnabledProperty` 等 `AvaloniaProperty.RegisterAttached<…>`、`ViewPool.cs` 的 `ItemsSourceProperty` / `TemplateSelectorProperty` 全是这个形状）。而 C# 不允许静态类作类型参数（CS0718），所以这家的行为类必须是可实例化的类；仓库里的做法统一是 **`public sealed class X : AvaloniaObject`**。6 个行为类无一例外：
+这家的注册签名把所有者类型放在**类型参数**里（`WorkflowSurfaceBehavior.cs` 的 `IsEnabledProperty` 等 `AvaloniaProperty.RegisterAttached<…>`、`ViewPool.cs` 的 `ItemsSourceProperty` / `TemplateSelectorProperty` 全是这个形状）。而 C# 不允许静态类作类型参数（CS0718），所以这家的行为类必须是可实例化的类；仓库里的做法统一是 **`public sealed class X : AvaloniaObject`**。各行为类无一例外：
 
 - `WorkflowSurfaceBehavior`（`WorkflowSurfaceBehavior.cs` 的类声明）
 - `WorkflowCanvasTransformBehavior`（同文件的类声明）
@@ -71,7 +71,7 @@ WPF 的对应写法是 `state.ScrollViewer.PreviewMouseWheel += …`（WPF `Work
 ### 5. 自绘入口是 `Render(DrawingContext)` + `AffectsRender<T>(…)`；Avalonia 没有 `OnRender`
 
 实测：`Avalonia.Visual` 上**不存在** `OnRender`，`Render` 是 `public virtual`。所以小地图是
-`public override void Render(DrawingContext context)`（`WorkflowMinimapOverlay.cs` 的 `Render`），用 `context.PushClip` / `FillRectangle(brush, rect, cornerRadius)` / `DrawRectangle(null, new Pen(…), rect, cr)` 画（同在 `Render` 里）；重绘靠静态构造里登记 `AffectsRender<WorkflowMinimapOverlay>(…)` 列出全部相关属性（`WorkflowMinimapOverlay` 的静态构造，约 25 个），属性一变自动 `InvalidateVisual`。WPF 那份是 `FrameworkElement` + `OnRender` + `DrawingContext`。
+`public override void Render(DrawingContext context)`（`WorkflowMinimapOverlay.cs` 的 `Render`），用 `context.PushClip` / `FillRectangle(brush, rect, cornerRadius)` / `DrawRectangle(null, new Pen(…), rect, cr)` 画（同在 `Render` 里）；重绘靠静态构造里登记 `AffectsRender<WorkflowMinimapOverlay>(…)` 列出全部相关属性（`WorkflowMinimapOverlay` 的静态构造），属性一变自动 `InvalidateVisual`。WPF 那份是 `FrameworkElement` + `OnRender` + `DrawingContext`。
 
 - **改这家的自绘时不要去找 `OnRender`**，也不要在属性 setter 里手写 `InvalidateVisual`：属性已在 `AffectsRender` 名单里就够；名单外的属性（例如只在 `Render` 内部读的派生值）才需要手动 `InvalidateVisual`。
 - 小地图的 `InstanceMarkDirty` 是例外：它可能在**非 UI 线程**被调用（注释：`OnNodePropChanged` 可能来自 `TickManager` 的循环线程），所以先 `Dispatcher.UIThread.CheckAccess()`，不行才 `Post(InvalidateVisual)`。`InvalidateVisual` 要求 UI 线程，这是平台硬约束。
@@ -215,7 +215,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 **修法**：在**构造 `Wf.PointerWheelEventArgs` 的两处**（Ctrl+缩放路 `OnZoomPointerWheelChanged`、普通路 `OnPointerWheel`）把横轴取反，纵轴一字不动。
 ⚠ **但 `InnerScrollViewerHasRoom(...)`（`OnPointerWheel` 里的调用）那处不能取反** —— 它判的是**平台内层滚动容器自己**的余量，必须用**平台原样符号**。机械地「把这家的 X 都取反」会正好改坏这一处（已在注释里写明依据）。
 
-回归（同一组动作，HUD 逐字比对）：普通竖滚、Shift+竖滚、Ctrl+缩放 **5/5 全同**。
+回归（同一组动作，HUD 逐字比对）：普通竖滚、Shift+竖滚、Ctrl+缩放均逐字相同。
 
 ### ⚠ 三点八、「单轴写入」不是可区分的 A/B —— 这条对所有家都成立
 
@@ -227,7 +227,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 ## 四、改这里最容易踩的坑
 
-1. **`PlatformDetection.cs` 已于 2026-10-18 删除。** 它全类 20 行、`IsTouchPlatform` 零调用者，而且 XML 注释描述的是一条不存在的路径（「On these platforms, PointerPressed handlers **must be registered with Tunnel routing**」）；实际做法是 §二.4 的**反射删除识别器**。`Tunnel` 注册现在有两处：§二.3 的滚轮（`WorkflowSurfaceBehavior.cs` 的 `HookZoom`）与 §二.10 的按下路由（`Attach`），两处都不是「抢在识别器之前」。
+1. **`PlatformDetection.cs` 已于 2026-10-18 删除。** 它整类寥寥几行、`IsTouchPlatform` 零调用者，而且 XML 注释描述的是一条不存在的路径（「On these platforms, PointerPressed handlers **must be registered with Tunnel routing**」）；实际做法是 §二.4 的**反射删除识别器**。`Tunnel` 注册现在有两处：§二.3 的滚轮（`WorkflowSurfaceBehavior.cs` 的 `HookZoom`）与 §二.10 的按下路由（`Attach`），两处都不是「抢在识别器之前」。
 2. **`IsSurfaceBlankInteraction` 会把 ScrollViewer 内部的一切都算成空白**（`WorkflowSurfaceBehavior.cs` 的祖先判定里有 `ReferenceEquals(x, state.ScrollViewer)`）。WPF 那份在此之后**显式排除**滚动条（WPF `WorkflowSurfaceBehavior.cs` 的 `IsSurfaceBlankInteraction`：`source is ScrollBar || ancestors.Any(x => x is ScrollBar)`），Avalonia 没有这段。
    - **未验证**：Avalonia 里滚动条（Thumb）按下时是否会把 `PointerPressed` 标成已处理、从而根本到不了 `OnPointerPressed`（这家是 `+=` 注册、默认不接收已处理事件）。若会，这条就不会触发；若不会，点击滚动条会**同时**启动一次画布平移。**下一个动这块的人应该先用一次实测把它定下来**，别按 WPF 的结论直接补排除。
 3. **拖拽手柄必须有不透明背景，否则收不到指针事件。** `Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/NodeView.axaml` 里拖拽用的 Grid 带 `Background="Transparent"`；插槽视图 `Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/SlotView.axaml` 用 `Background="#01000000"`（近透明，仍参与命中测试）。空背景的 `Grid`/`Panel` 在 Avalonia 里不做命中测试 —— 这与 `memory/modules/WorkflowSystem/…` 里「XAML node drag header needs Background="Transparent"」是同一件事，属平台硬限制，不是 demo 的随手写法。
@@ -246,8 +246,8 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 
 11. **Android 头那一行 `AndroidEnableProfiledAot` 会把整个解决方案的 Debug 构建挡在门外。**
    `Examples/Workflow/Avalonia Trimmed/Demo/Demo.Android/Demo.Android.csproj` 的 `AndroidEnableProfiledAot` 一旦无条件设为 `true`，就让 Android SDK 在**求值阶段**就打开 AOT（`Microsoft.Android.Sdk.Windows/36.1.69/targets/Microsoft.Android.Sdk.Aot.targets` 里那段以 `'$(AotAssemblies)' == 'true'` 为条件的 `ImportGroup`），于是去解析 `Microsoft.NET.Runtime.MonoAOTCompiler.Task` 与 `Microsoft.NETCore.App.Runtime.AOT.Cross.android-*`；工作负载不全的机器上解不出来，**`dotnet build VeloxDev.slnx` 连 MSBuild 求值都过不去**（错误挂在 `Microsoft.Android.Sdk.Aot.targets` 上，看着像环境问题，其实是这一行）。**全仓只有这一处设了它**（`grep AndroidEnableProfiledAot` 只有这一行）。现在带上 `Condition="'$(Configuration)' == 'Release'"` —— Debug 不需要 AOT。
-   判据：改前 `dotnet clean VeloxDev.slnx -c Debug` 4 个 error、`dotnet build … -p:AotAssemblies=false` 才能过（还带 3 条 `XA1029`）；改后 `dotnet clean` 与 `dotnet build VeloxDev.slnx -c Debug` 都是 **0 错误 0 警告**。
-   另注：**`dotnet build VeloxDev.slnx -t:Rebuild` 在解决方案上不安全** —— 那是「每个项目各自 Clean+Build」，引用项目的 clean 会与依赖方的 build 抢文件（实测 25 个 error：`CS0006 找不到元数据文件`、`MSB3030 复制失败`、WinUI 的 `XamlCompiler.exe` 退出、NuGet 打包找不到 xml）。VS 的「重新生成解决方案」是整解先 clean 再 build，CLI 的等价写法是 `dotnet clean` + `dotnet build` 两步。
+   判据：改前 `dotnet clean VeloxDev.slnx -c Debug` 过不去、要 `dotnet build … -p:AotAssemblies=false` 才能过（还带 `XA1029`）；改后 `dotnet clean` 与 `dotnet build VeloxDev.slnx -c Debug` 都能直接通过。
+   另注：**`dotnet build VeloxDev.slnx -t:Rebuild` 在解决方案上不安全** —— 那是「每个项目各自 Clean+Build」，引用项目的 clean 会与依赖方的 build 抢文件（实测报出一串错误：`CS0006 找不到元数据文件`、`MSB3030 复制失败`、WinUI 的 `XamlCompiler.exe` 退出、NuGet 打包找不到 xml）。VS 的「重新生成解决方案」是整解先 clean 再 build，CLI 的等价写法是 `dotnet clean` + `dotnet build` 两步。
 
 ---
 

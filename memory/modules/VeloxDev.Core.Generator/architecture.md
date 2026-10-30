@@ -1,9 +1,9 @@
 ﻿# VeloxDev.Core.Generator — 架构
 
-> 代码：`Src/Generators/VeloxDev.Core.Generator/`。**29 个 .cs、11065 行**（`Writers/WorkflowWriter.cs` 1722、`Base/VeloxJsonModel.cs` 1564、`Base/AIContextModel.cs` 1152、`Writers/MVVMWriter.cs` 1090、`Base/Analizer.cs` 1024、`Writers/AIContextTreeWriter.cs` 852、`Writers/CommandWriter.cs` 737、`Writers/VeloxJsonCodeWriter.cs` 562、`Theme.cs` 423、`AopSurface.cs` 397、`Writers/WriterBase.cs` 273、`Diagnostics.cs` 250、`Writers/TickWriter.cs` 131、`Base/AIContextNaming.cs` 104、`Writers/AopWriter.cs` 96、`AIContextTree.cs` 90、`VeloxJson.cs` 87、`Base/RequiredMembers.cs` 72、`Base/AnalizeHelper.cs` 60、`Base/LanguageVersionGuard.cs` 56、`MVVM.cs` / `Command.cs` 各 47、`Workflow.cs` / `Tickable.cs` / `LanguageVersionCheck.cs` 各 39、`AopProxy.cs` 38、`Base/TypeParameterWalk.cs` 31、`Base/AopNames.cs` 26、`Base/ICodeWriter.cs` 17）。
+> 代码：`Src/Generators/VeloxDev.Core.Generator/`。文件按 `Base/`、`Writers/` 与生成器类分组；其中 `Writers/WorkflowWriter.cs` 最大，`Base/VeloxJsonModel.cs`、`Base/AIContextModel.cs`、`Writers/MVVMWriter.cs`、`Base/Analizer.cs` 次之，其余多为小文件（具体行数不在这里维护）。
 > 打包成 NuGet 分析器包，不产出运行期程序集；`TargetFramework=netstandard2.0`（`VeloxDev.Core.Generator.csproj` 的 `TargetFramework`）。
 
-本文只写「读完这 29 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
@@ -19,19 +19,19 @@
 | MVVM | `VeloxPropertyAttribute` / `VeloxCommandAttribute` | `MVVM.cs` + `Command.cs` |
 | TimeLine | `TickableAttribute` | `Tickable.cs` |
 | AspectOriented | `AspectOrientedAttribute` | `AopSurface.cs`（接口 + 代理实现）+ `AopProxy.cs`（扩展方法） |
-| AI（AIContextTree，2026-10-03 起） | `AgentContextAttribute` 等三个 Agent 特性 | `AIContextTree.cs` —— **全程序集遍历，一次 `AddSource`**，不被任何特性触发，见 §三·四 |
-| DynamicTheme | `ThemeConfigAttribute\`3..\`7`（5 个元数） | `Theme.cs` |
+| AI（AIContextTree，2026-10-03 起） | `AgentContextAttribute` 等 Agent 特性 | `AIContextTree.cs` —— **全程序集遍历，一次 `AddSource`**，不被任何特性触发，见 §三·四 |
+| DynamicTheme | `ThemeConfigAttribute\`3..\`7`（多个元数） | `Theme.cs` |
 | Serialization（VeloxJson） | `ArchivableAttribute`（根之一；另一个根是「实现了工作流组件接口」）+ 成员级 `ArchiveAttribute` | `VeloxJson.cs` —— **全程序集遍历，一次 `AddSource`**，不被任何特性触发，见 §三·四 |
 
-**这七家 GUI 适配器在本模块里是零代码 —— 这正是「契约不该重复七遍」的实例。** 适配器全都不做特性解析、不写生成逻辑，**源码里也一个生成器特性都不用**（`grep -rn 'VeloxProperty\|\[Velox' Src/Adapters/ --include=*.cs` 零命中），因此它们**一个都不引用这个分析器包** —— 七份 `Src/Adapters/*/*.csproj` 只引用 `VeloxDev.Core` 加各家自己的 GUI 包，而 §五 那张 12 对 `PackageReference`/`ProjectReference` 的表里**没有任何适配器**；`[VeloxProperty]` 在 WPF、Avalonia、WinUI、MAUI、WinForms、Razor、Jalium 上生成的东西**逐字相同**，因为生成器读的是符号语义，从不问平台（`Base/AnalizeHelper.cs` 全文没有平台概念，`VeloxDev.Core.Generator.csproj` 也没有任何 GUI 引用）。要改「生成的属性长什么样」，改这一处就同时改了七家；要改「某家在某个平台上怎么渲染」，与本模块无关 —— 那是 `memory/modules/<WorkflowSystem|TransitionSystem>/adapters/<平台>.md` 的事。**所以本模块没有 `adapters/` 子目录，也不该有。**
+**这七家 GUI 适配器在本模块里是零代码 —— 这正是「契约不该重复七遍」的实例。** 适配器全都不做特性解析、不写生成逻辑，**源码里也一个生成器特性都不用**（`grep -rn 'VeloxProperty\|\[Velox' Src/Adapters/ --include=*.cs` 零命中），因此它们**一个都不引用这个分析器包** —— 七份 `Src/Adapters/*/*.csproj` 只引用 `VeloxDev.Core` 加各家自己的 GUI 包，而 §五 那张 `PackageReference`/`ProjectReference` 的表里**没有任何适配器**；`[VeloxProperty]` 在 WPF、Avalonia、WinUI、MAUI、WinForms、Razor、Jalium 上生成的东西**逐字相同**，因为生成器读的是符号语义，从不问平台（`Base/AnalizeHelper.cs` 全文没有平台概念，`VeloxDev.Core.Generator.csproj` 也没有任何 GUI 引用）。要改「生成的属性长什么样」，改这一处就同时改了七家；要改「某家在某个平台上怎么渲染」，与本模块无关 —— 那是 `memory/modules/<WorkflowSystem|TransitionSystem>/adapters/<平台>.md` 的事。**所以本模块没有 `adapters/` 子目录，也不该有。**
 
 **不解决什么（这些边界常在别处被误以为在这里）：**
 
 | 不在模块内 | 实际归谁 |
 |---|---|
 | 生成出来的代码**跑起来是什么行为** | 全在 Core。生成器只写声明与转发（例如 `OnWorkflowSlotAdded` 的**声明**由 `Writers/MVVMWriter.cs` 写，`CreateWorkflowSlot<T>()` 的**骨架**也由它写，但生命周期归 `WorkflowSystem`） |
-| 「哪些类会被处理」 | `Base/Analizer.cs` 里那张**硬编码 10 条**的 `TriggerAttributes` 表。自定义特性、第三方特性一律不认 |
-| 编译错误 / 诊断 | 生成器自己发十三类（`Diagnostics.cs`；MVVM 侧 2026-10-02 起 ID 统一成 `VELOX_MVVM_*`，Serialization 侧统一成 `VELOX_JSON_*`）：`VELOX_LANGVERSION001`（项目 LangVersion 低于生成代码所需，Warning）、`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）、`VELOX_MVVM_PROP003`（`[VeloxProperty]` 属性没写 `partial`，Warning）、`VELOX_AI_TREE001`（Agent 上下文树里同名同参重载只能暴露一个，Warning，category 是 `VeloxDev.AI`）、`VELOX_JSON_ARCH001`（`[Archivable]` 点名的类型无法收录，Error）、`VELOX_JSON_HOOK001`（同一类型上多个同名序列化回调，Warning）、`VELOX_JSON_MEMBER001`（`[Archive]` 声明无法兑现，Error）、`VELOX_JSON_MEMBER002`（`[Archive(KeepField)]` 与旁边的属性冲突，Warning）、`VELOX_JSON_HOOK002`（序列化回调生成代码够不着或签名不可调，Error）、`VELOX_JSON_GENERIC001`（类型参数的约束解析不出，Warning）、`VELOX_JSON_INCLUDE001`（被闭包收进归档格式的类型，Info）。另有 MSBuild 侧的 `VELOXCFG0001`：`VeloxDev.Core.Generator.targets` 里定义它的那一段 |
+| 「哪些类会被处理」 | `Base/Analizer.cs` 里那张**硬编码的** `TriggerAttributes` 表。自定义特性、第三方特性一律不认 |
+| 编译错误 / 诊断 | 生成器自己发一组诊断（`Diagnostics.cs`；MVVM 侧 2026-10-02 起 ID 统一成 `VELOX_MVVM_*`，Serialization 侧统一成 `VELOX_JSON_*`）：`VELOX_LANGVERSION001`（项目 LangVersion 低于生成代码所需，Warning）、`VELOX_MVVM_CMD001`（不支持的 `[VeloxCommand]` 签名，Error）、`VELOX_MVVM_PROP001`（`[VeloxProperty]` 声明冲突，Error）、`VELOX_MVVM_PROP002`（名字推不出合法成员，Warning）、`VELOX_MVVM_PROP003`（`[VeloxProperty]` 属性没写 `partial`，Warning）、`VELOX_AI_TREE001`（Agent 上下文树里同名同参重载只能暴露一个，Warning，category 是 `VeloxDev.AI`）、`VELOX_JSON_ARCH001`（`[Archivable]` 点名的类型无法收录，Error）、`VELOX_JSON_HOOK001`（同一类型上多个同名序列化回调，Warning）、`VELOX_JSON_MEMBER001`（`[Archive]` 声明无法兑现，Error）、`VELOX_JSON_MEMBER002`（`[Archive(KeepField)]` 与旁边的属性冲突，Warning）、`VELOX_JSON_HOOK002`（序列化回调生成代码够不着或签名不可调，Error）、`VELOX_JSON_GENERIC001`（类型参数的约束解析不出，Warning）、`VELOX_JSON_INCLUDE001`（被闭包收进归档格式的类型，Info）。另有 MSBuild 侧的 `VELOXCFG0001`：`VeloxDev.Core.Generator.targets` 里定义它的那一段 |
 | 依赖注入、服务定位、注册表 | 完全不生成。生成的是「这个类自己怎么把自己装起来」，不是容器配置 |
 | 平台差异 | 零。见上 |
 | 版本与发布 | 见 `extension.md` §四「改这里的代价」 |
@@ -41,7 +41,7 @@
 
 ## 二、三个阶段的边界：筛选 → 解析 → 写
 
-除 `Theme.cs`、`AIContextTree.cs`、`VeloxJson.cs` 外，6 个生成器的 `Initialize` 是同一行形状（`MVVM.cs`、`AopProxy.cs`、`AopSurface.cs`、`Command.cs`、`Tickable.cs`、`Workflow.cs` 各自的 `Initialize`）：
+除 `Theme.cs`、`AIContextTree.cs`、`VeloxJson.cs` 外，其余生成器的 `Initialize` 是同一行形状（`MVVM.cs`、`AopProxy.cs`、`AopSurface.cs`、`Command.cs`、`Tickable.cs`、`Workflow.cs` 各自的 `Initialize`）：
 
 ```csharp
 context.RegisterSourceOutput(
@@ -51,7 +51,7 @@ context.RegisterSourceOutput(
 
 ### 阶段 1：筛选 —— `Base/Analizer.cs` 的 `Targets()`
 
-- 对 `TriggerAttributes` 的 **10 条**逐条 `ForAttributeWithMetadataName`，各 `.Collect()`，再 `.Combine().Select(AddRange)` 折成**一条**流，末尾 `Deduplicate`。
+- 对 `TriggerAttributes` 的每一条逐条 `ForAttributeWithMetadataName`，各 `.Collect()`，再 `.Combine().Select(AddRange)` 折成**一条**流，末尾 `Deduplicate`。
 - 候选资格另有一道闸：`IsCandidateClass` **要求类是 `partial`**。非 `partial` 的类即使贴了特性也不会进入流程，且不报错。
 - 特性是**按符号**解析而非按名字匹配的（`Targets` 上方的 remarks），所以全限定写法与 `using` 别名都认。
 
@@ -69,7 +69,7 @@ context.RegisterSourceOutput(
 - 给某个 writer 加「读更多语义」的逻辑是**安全**的 —— 它本来就拿到的是新鲜 symbol。
 - 给 `GeneratorTarget` 加 symbol 字段是**不安全**的，且不会立刻报错，只会在增量场景下偶发错码。要加信息就加 `TypeKey` 这类字符串。
 
-`Deduplicate` **按 `TypeKey` 去重，不按 symbol 去重**：`Deduplicate` 的 remarks 说明按 symbol 去重会让同一个类型在两条缓存条目持不同 `Compilation` 的 symbol 时进来两次，第二次 `AddSource` 会因为 hint name 重复被拒。一个类拆成多个 partial、每个 partial 各贴一个触发特性时，只有**一个代表**进入 writer；谁当代表由 `IsClassLevelAttribute` 决定（类级特性优先）。**AOP 这一侧现在已经不受它影响**：`AopSurface.cs` 与 `Writers/AopWriter.cs` 都走符号（`AnalizeHelper.Members` / `IsAopClass`），代表是哪份声明只决定产物的**文件名**。`TickWriter` 同理走符号 —— 所以「代表」当前只影响字段名与文件名这类表面（三个生成器都按符号读特性，不按声明）。
+`Deduplicate` **按 `TypeKey` 去重，不按 symbol 去重**：`Deduplicate` 的 remarks 说明按 symbol 去重会让同一个类型在两条缓存条目持不同 `Compilation` 的 symbol 时进来两次，第二次 `AddSource` 会因为 hint name 重复被拒。一个类拆成多个 partial、每个 partial 各贴一个触发特性时，只有**一个代表**进入 writer；谁当代表由 `IsClassLevelAttribute` 决定（类级特性优先）。**AOP 这一侧现在已经不受它影响**：`AopSurface.cs` 与 `Writers/AopWriter.cs` 都走符号（`AnalizeHelper.Members` / `IsAopClass`），代表是哪份声明只决定产物的**文件名**。`TickWriter` 同理走符号 —— 所以「代表」当前只影响字段名与文件名这类表面（这几个生成器都按符号读特性，不按声明）。
 
 ### 阶段 3：写 —— 各生成器的 `GenerateSource`
 
@@ -77,7 +77,7 @@ context.RegisterSourceOutput(
 
 闸门是**静默**的：`CanWrite()` 返回 false 就不 `AddSource`，没有诊断、没有空文件。`Writers/MVVMWriter.cs`、`Writers/CommandWriter.cs`、`Writers/TickWriter.cs`、`Writers/AopWriter.cs` 的 `CanWrite()` 都是符号判定。
 
-`Theme.cs` 是**第一个**不走 `Targets/Resolve` 的（它自己建 5 条流，按 `ThemeConfigAttribute` 的 5 个元数分别订阅），**且只对 `partial` 类发**（`GenerateThemeConfigClass` 里的 `isPartial` 检查），没有可用属性注册时返回 `string.Empty` —— 同样是静默无输出。后来 `AIContextTree.cs` 与 `VeloxJson.cs` 也各自走全程序集（见下），所以「不走 `Targets`」不是 `Theme.cs` 独有的。
+`Theme.cs` 是**第一个**不走 `Targets/Resolve` 的（它自己建一组流，按 `ThemeConfigAttribute` 的各个元数分别订阅），**且只对 `partial` 类发**（`GenerateThemeConfigClass` 里的 `isPartial` 检查），没有可用属性注册时返回 `string.Empty` —— 同样是静默无输出。后来 `AIContextTree.cs` 与 `VeloxJson.cs` 也各自走全程序集（见下），所以「不走 `Targets`」不是 `Theme.cs` 独有的。
 
 #### 三·四、`AIContextTree.cs` 与 `VeloxJson.cs`：另两个不走 `Targets` 的生成器
 
@@ -89,7 +89,7 @@ context.RegisterSourceOutput(
 
 **`VeloxJson.cs` 是第二个全程序集生成器**（归档序列化）。它同样订阅 `CompilationProvider`、检查 `VeloxJsonModelBuilder.Applies`（要求编译单元里有 `VeloxPropertyAttribute`，否则不遍历），受 MSBuild 属性 `VeloxJsonSerialization=false` 关闭。与另外两个不同的是它从**根类型**出发沿成员的声明类型做**传递闭包**（`Base/VeloxJsonModel.cs` 的 `Build`）：根是「实现了工作流组件接口的类型」、贴了 `[Archivable]` 的类型、带 `[WorkflowBuilder.*]` 的类型、或带 `[VeloxProperty]` 字段的类型；`[Archivable(typeof(A), typeof(B))]` 还能把别的类型点名成额外根（可链式，去重靠 `included`）。**2026-10-04 起这条闭包比「沿成员声明类型」宽三条**：向下展开派生类（预建的祖先索引 `BuildFamilyIndex`）、交出字典的键类型（`Reachable` 现在也 yield `KeyType`）、沿根形状开放泛型上的类型参数约束收其约束一族。收录的**全量清单**写在生成文件的文件头注释里，构建期只报两类：`VELOX_JSON_INCLUDE001`（Info，只报没有声明点名过的那些 —— 按 TFM 各跑一次，逐条报会变成 `TFM 数 × 类型数`）与 `VELOX_JSON_GENERIC001`（Warning，解析不出的约束）—— 细节见 `memory/modules/Serialization/architecture.md` §一。成员层面由 `[Archive(ArchiveOptions)]` 放行/改名/排除单个成员；生命周期钩子认 BCL 那四个特性（`[OnSerializing]` 等），不认自有名字。
 
-**发工厂调用的两个生成器都要处理 `required` 成员**：`new T()` 在类型有 required 成员时**编不过**，必须带上对象初始化器。判定与初始化器在 `Base/RequiredMembers.cs`（判据是编译器 API `IsRequired`，**不是** `[RequiredMember]` 特性 —— 后者是 emit 阶段合成的，源码符号上看不到；为此 `Microsoft.CodeAnalysis.CSharp` 从 4.3.1 抬到 4.8.0）。**两个生成器都必须处理它，漏一处就是一个洞。诊断由调用方持有而非挂在返回值上** —— `Build` 返回 `null`（这个程序集什么也没产出）恰恰常是「被拒的声明」导致的，把 notices 放进返回值会在最需要它的时候丢掉（`VeloxJson.cs` 先报诊断再判空）。这一模块的三条实现约束记在 `memory/modules/Serialization/pitfalls.md` §七。产物每个程序集一份 `{程序集名}_VeloxJson.g.cs`，命名空间写死 `VeloxDev.Serialization.Generated`，逐个类型出一个 `{程序集名}_JsonWriter{i}` / `{程序集名}_JsonReader{i}`，末尾 `Register()` 把读写器与容器工厂登记进 `VeloxDev.Serialization.VeloxJsonRegistry`（`Writers/VeloxJsonCodeWriter.cs` 里的 `Register()`）。
+**发工厂调用的两个生成器都要处理 `required` 成员**：`new T()` 在类型有 required 成员时**编不过**，必须带上对象初始化器。判定与初始化器在 `Base/RequiredMembers.cs`（判据是编译器 API `IsRequired`，**不是** `[RequiredMember]` 特性 —— 后者是 emit 阶段合成的，源码符号上看不到；为此 `Microsoft.CodeAnalysis.CSharp` 从 4.3.1 抬到 4.8.0）。**两个生成器都必须处理它，漏一处就是一个洞。诊断由调用方持有而非挂在返回值上** —— `Build` 返回 `null`（这个程序集什么也没产出）恰恰常是「被拒的声明」导致的，把 notices 放进返回值会在最需要它的时候丢掉（`VeloxJson.cs` 先报诊断再判空）。这一模块的几条实现约束记在 `memory/modules/Serialization/pitfalls.md` §七。产物每个程序集一份 `{程序集名}_VeloxJson.g.cs`，命名空间写死 `VeloxDev.Serialization.Generated`，逐个类型出一个 `{程序集名}_JsonWriter{i}` / `{程序集名}_JsonReader{i}`，末尾 `Register()` 把读写器与容器工厂登记进 `VeloxDev.Serialization.VeloxJsonRegistry`（`Writers/VeloxJsonCodeWriter.cs` 里的 `Register()`）。
 
 ### 产物命名（hint name = 文件名）
 
@@ -114,7 +114,7 @@ context.RegisterSourceOutput(
 
 `Write()` 的固定次序：`// <auto-generated>` → `#pragma warning disable` → `#nullable enable` → namespace（`AppendNamespace()`）→ 外层 partial 类（嵌套类才走）→ 当前类声明（修饰符 + 名字 + 类型参数 + 基类型 + 约束）→ `GenerateBody()` → 补外层大括号。
 
-**子类只有五个扩展点**（`Base/ICodeWriter.cs` 定接口，`Writers/WriterBase.cs` 的抽象成员定实现）：`CanWrite` / `GetFileName` / `GenerateBaseTypes` / `GenerateBaseInterfaces` / `GenerateBody`。
+**子类只有这几个扩展点**（`Base/ICodeWriter.cs` 定接口，`Writers/WriterBase.cs` 的抽象成员定实现）：`CanWrite` / `GetFileName` / `GenerateBaseTypes` / `GenerateBaseInterfaces` / `GenerateBody`。
 
 两个不显眼但关键的机制：
 
@@ -129,9 +129,9 @@ context.RegisterSourceOutput(
 
 | writer | 职责 | 它读的配置 | 需要注意 |
 |---|---|---|---|
-| `Writers/WorkflowWriter.cs`（1722 行，最大） | `TreeAttribute/NodeAttribute/SlotAttribute/LinkAttribute` 四种模型；`WorkflowType` 1..4 分派；另支持一个**没贴特性、只重声明节点默认值**的子类路径 | 四个特性的构造参数 | 节点布局/尺寸/`RuntimeId` 的初始化代码都在这里 |
-| `Writers/MVVMWriter.cs`（1090 行） | 属性的 setter 体、通知事件、集合订阅、Workflow 槽位生命周期 | `VeloxPropertyAttribute` + `DetectSetterMode()` 探测基类 | 见下 |
-| `Writers/CommandWriter.cs`（737 行） | 懒建 `IVeloxCommand` 属性 + 可选 `CanExecute{名}Command` partial 钩子 | `VeloxCommandAttribute`，**位置参数先读、具名参数覆盖**；名字为 `"Auto"` 时取方法名去掉 `Async` | 构造选择 `BuildSpec` + `CommandConstruction` 枚举，转换 thunk 的构造已并入其中 |
+| `Writers/WorkflowWriter.cs`（最大） | `TreeAttribute/NodeAttribute/SlotAttribute/LinkAttribute` 四种模型；`WorkflowType` 1..4 分派；另支持一个**没贴特性、只重声明节点默认值**的子类路径 | 四个特性的构造参数 | 节点布局/尺寸/`RuntimeId` 的初始化代码都在这里 |
+| `Writers/MVVMWriter.cs` | 属性的 setter 体、通知事件、集合订阅、Workflow 槽位生命周期 | `VeloxPropertyAttribute` + `DetectSetterMode()` 探测基类 | 见下 |
+| `Writers/CommandWriter.cs` | 懒建 `IVeloxCommand` 属性 + 可选 `CanExecute{名}Command` partial 钩子 | `VeloxCommandAttribute`，**位置参数先读、具名参数覆盖**；名字为 `"Auto"` 时取方法名去掉 `Async` | 构造选择 `BuildSpec` + `CommandConstruction` 枚举，转换 thunk 的构造已并入其中 |
 
 **返回类型决定「值怎么变成 `Task`」，形参决定「走哪个构造入口」，两件事分开判**（2026-10-01 起）：
 
@@ -187,7 +187,7 @@ context.RegisterSourceOutput(
 
 `Symbol.ContainingNamespace.ToDisplayString()` 在全局命名空间下返回的是字面量 `"<global namespace>"` —— 那个尖括号既是**非法文件名字符**也是**非法标识符字符**。2026-10-01 之前有**两处**会因此炸，而且报错都指向别处：
 
-1. **文件名**（`GetFileName`）—— 拼进 hintName 会让生成器整个抛 `ArgumentException`，宿主只报一句 `CS8785 生成器"Command"未能生成源`，跟命名空间毫不相干。`WriterBase.NamespaceFileSegment()` 统一兜底成 `"Global"`；**五个调用点**（`CommandWriter`/`MVVMWriter`/`AopWriter` ×2/`TickWriter`）都用它，是同一份。
+1. **文件名**（`GetFileName`）—— 拼进 hintName 会让生成器整个抛 `ArgumentException`，宿主只报一句 `CS8785 生成器"Command"未能生成源`，跟命名空间毫不相干。`WriterBase.NamespaceFileSegment()` 统一兜底成 `"Global"`；**各调用点**（`CommandWriter`/`MVVMWriter`/`AopWriter` ×2/`TickWriter`）都用它，是同一份。
 2. **生成文件内容**（`WriterBase.Write`）—— 无条件写 `namespace {ContainingNamespace};`，全局命名空间下产出 `namespace <global namespace>;`，**非法语法，产物编不过**。`WriterBase.AppendNamespace()` 在全局命名空间时什么都不写。
 
 AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间片段 —— 那两处不走 `NamespaceFileSegment()`，走 `Base/AopNames.cs` 的 `Segment()`（算法等价，同样把全局命名空间写成 `"Global"`）。代理类必须与接口**同名同命名空间**，所以 AOP 这套名字只能有一个算法（`AopNames.InterfaceFor` / `ProxyFor`）。
@@ -201,10 +201,10 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 **泛型类本身与普通嵌套类都没问题**（实测已可用），坏的只有「泛型外类 + 嵌套类」这一个组合。
 
 **泛型方法只在「类型参数不出现在参数类型里」时才拒绝**（2026-10-02 放宽）：那种情况下生成的方法组 `Foo` 无法从 `(object?, CancellationToken)` 推断出 `T`（实测 CS0411 + CS0029）。`M<T>(T value)` 这类现在**支持** —— 生成的访问器 `Get{名}Command<T>()` 自带类型参数，见 [MVVM 架构](../../MVVM/architecture.md) §六。
-| `Writers/TickWriter.cs` | `InitializeTickable` / `CloseTickable` / 5 个 `partial void` 钩子 | `TickableAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeTickable()` 等于什么都没发生 |
+| `Writers/TickWriter.cs` | `InitializeTickable` / `CloseTickable` / 多个 `partial void` 钩子 | `TickableAttribute` 的 `(channel, fps)` | **只实现、不调用** —— 只贴特性而不调 `InitializeTickable()` 等于什么都没发生 |
 | `Writers/AopWriter.cs` | 只出 `Aop()` 扩展方法（接口与代理在 `AopSurface.cs`） | — | 见 §三 |
 | `AopSurface.cs` | AOP 接口**与代理实现**（`VeloxDev.AopInterfaces` 命名空间） | — | 它**不在 `Writers/` 下**（`Theme.cs`、`AIContextTree.cs`、`VeloxJson.cs` 也把生成逻辑写在生成器类里）；两个产物从同一次遍历渲染，所以接口与实现的签名不会漂移 |
-| `Theme.cs` | `IThemeObject` 实现、主题缓存、`SetThemeValue<T>` 一族 | 5 个 `ThemeConfigAttribute` 元数 | 只对 `partial` 类发 |
+| `Theme.cs` | `IThemeObject` 实现、主题缓存、`SetThemeValue<T>` 一族 | 各个 `ThemeConfigAttribute` 元数 | 只对 `partial` 类发 |
 
 **两处会咬人的耦合：**
 
@@ -236,7 +236,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 | `Examples/MVVM/Common/Lib/Lib.csproj` | `ProjectReference` | `PackageReference` |
 | `Examples/Tickable/WPF/Demo/Demo.csproj` | `ProjectReference` | `PackageReference` |
 
-**共 12 处 `ProjectReference`、11 处 `PackageReference`。** 包自己的 `<Version>` 是 `10.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）；11 处引用已全部对齐 `10.0.0`（含两个 `Examples/*/Directory.Build.props` 的 `PackageReference`）。版本落差的历史与「要不要补齐」的判断见 [extension.md](extension.md) §四。
+**上表就是 `ProjectReference` 与 `PackageReference` 的完整配对。** 包自己的 `<Version>` 是 `10.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）；各处引用已全部对齐 `10.0.0`（含 `Examples/*/Directory.Build.props` 的 `PackageReference`）。版本落差的历史与「要不要补齐」的判断见 [extension.md](extension.md) §四。
 
 `VeloxDev.Core.Test.csproj` 是**唯一不分 Debug/Release** 的一处（`Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 里 `ProjectReference` 上方的注释）：它测的对象就是生成器源码本身，测一个已发布的快照等于没测，所以无条件走 `ProjectReference`，且因为要直接驱动 `Command` 生成器断言诊断，**保留程序集引用**（`OutputItemType="Analyzer"`，`ReferenceOutputAssembly` 默认 true）。
 
@@ -252,11 +252,11 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
    - **AOP 不走上面两条**，走 `Base/AopNames.cs` 的 `Segment`（同样返回 `Global`）—— 因为代理实现类必须与接口**同名同命名空间**，这两处名字只能有一个算法。
    新增一个产物名字时，挑一种走，**不要再手写 `ToDisplayString().Replace('.', '_')`**：`INamespaceSymbol.ToDisplayString()` 对全局命名空间返回字面量 `"<global namespace>"`，尖括号与空格都是非法的标识符与文件名。
 2. **特性名拼错、类忘了写 `partial`（`Base/Analizer.cs` 的 `IsCandidateClass`）、`CanWrite()` 为 false、`Theme.cs` 没注册属性 —— 这四种情况仍然是「编译通过、什么都没生成」，不报错。** 注意生成器**确实会发诊断**（见 §一、§四），但只对「已进入流程却被拒的声明」（不支持的 `[VeloxCommand]` 签名、冲突的 `[VeloxProperty]`、Agent 树的歧义重载）；`TriggerAttributes` 之外的东西、没写 `partial` 的类根本进不了流程，也就没有诊断可发。排查时先看 `obj/<配置>/<TFM>/generated/...` 下有没有产物，别指望错误列表。
-3. **`TriggerAttributes` 只有 10 条且硬编码**（`Base/Analizer.cs` 的 `TriggerAttributes`）。新特性不进去，生成器对该类型**完全无感且不报错**。
+3. **`TriggerAttributes` 硬编码且条目固定**（`Base/Analizer.cs` 的 `TriggerAttributes`）。新特性不进去，生成器对该类型**完全无感且不报错**。
 4. **`AopSurface.cs` 一个生成器连着两次 `AddSource`**（接口一次、代理一次）；`AopProxy.cs` 只一次。加第三份产物必须自己保证 hint name 不撞。
 5. **`Theme.cs` 只对 `partial` 类发**（`GenerateThemeConfigClass` 里的 `isPartial` 检查），且无属性注册时返回空串（`configRegistrations.Count == 0` 分支）。
 6. **`Writers/WriterBase.cs` 的 `FormatModifiers` 修饰符重排是「不报重复定义」的依赖**，不是格式化洁癖。
-7. **`Generators.AgentCatalog` 不存在。** 当前源码 29 个 `.cs` 无任何 AgentCatalog，`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/` 下也没有那份 `VeloxAgentCatalog.g.cs`。别去找它。
+7. **`Generators.AgentCatalog` 不存在。** 当前源码里没有任何 AgentCatalog，`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/` 下也没有那份 `VeloxAgentCatalog.g.cs`。别去找它。
 8. **裁剪/AOT 元数据与本模块无关。** 全部 writer 都不产出 `IsTrimmable` / `IsAotCompatible` / trim 注解；引擎侧也没有生成任何 `DynamicDependency` 之类的裁剪提示（全源 grep 无命中）。裁剪这条轴的开关在 csproj 与 MSBuild 属性上，见 §七。
 
 9. **「另一个生成器加上的接口」要在每个地方各自兜底，漏一处就是一整条功能坏掉。** 这是本模块最容易复发的坑，因为它**不报错**：`[WorkflowBuilder.Slot<T>]` / `Node<T>` / `Link<T>` 类型的 `IWorkflow*ViewModel` 是 Workflow 生成器在**同一编译趟**注入的，而另一个生成器扫 `AllInterfaces` 时看不见它 —— 生成器之间看不见彼此的产物。所以凡是「这个类型算不算组件/槽」的判断，都不能只查接口，要**同时认作者写下的那个特性**。已有的三处：
@@ -280,7 +280,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 
 ## 七、验证线在哪（以及它不在哪）
 
-**裁剪/AOT 的验证探针不在本仓库。** `Src/Verification/VeloxDev.TrimProbe/` 在工作区里**只剩 `bin/` 与 `obj/`**：没有 `.cs`、没有 `.csproj`，也没有被跟踪文件（`git ls-files` 对它零命中）；`VeloxDev.slnx` 里没有 `TrimProbe`。（注意 `Src/Verification/` 这一层另有 5 个被跟踪的 `.ps1` 脚本 —— `agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`、`verify-workflow-item-templates-all.ps1`，所以「整目录无被跟踪文件」不成立 —— 缺文件的是 `TrimProbe/` 本身。）**所以本记忆给不出探针本体的可复核路径 —— 它在仓库外。**
+**裁剪/AOT 的验证探针不在本仓库。** `Src/Verification/VeloxDev.TrimProbe/` 在工作区里**只剩 `bin/` 与 `obj/`**：没有 `.cs`、没有 `.csproj`，也没有被跟踪文件（`git ls-files` 对它零命中）；`VeloxDev.slnx` 里没有 `TrimProbe`。（注意 `Src/Verification/` 这一层另有若干被跟踪的 `.ps1` 脚本 —— `agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`、`verify-workflow-item-templates-all.ps1`，所以「整目录无被跟踪文件」不成立 —— 缺文件的是 `TrimProbe/` 本身。）**所以本记忆给不出探针本体的可复核路径 —— 它在仓库外。**
 
 仓库内能锚住的只有这条轴的**输入侧**：
 
@@ -288,7 +288,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 |---|---|
 | `VeloxDev.Core` 把 `net8.0` 这一档声明为 AOT 兼容 | `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `<IsAotCompatible Condition="'$(TargetFramework)' == 'net8.0'">true</IsAotCompatible>`；其上方的注释写明「net8.0 那一档是裁剪/AOT 契约的载体」 |
 | `VeloxDev.Core.Extension` 同样只在 `net8.0` 上声明 AOT 兼容 | `Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj` 的 `TargetFrameworks`（两目标 `netstandard2.0;net8.0`）与 `IsAotCompatible` |
-| `VeloxDev.Core` 声明 **5 个** TFM | `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks`（`netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`） |
+| `VeloxDev.Core` 声明**这组** TFM | `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks`（`netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`） |
 | 裁剪 demo 现在**不再**显式 root `VeloxDev.Core.Extension` | `Examples/Workflow/Avalonia Trimmed/Directory.Build.props` 的注释：该树过去 root 过它，「it no longer needs to」—— 反射面已改走编译期的 Agent 上下文树与归档序列化器，不再有 trim 警告，再 root 只会保留没人读的元数据 |
 
 **注意：`IsTrimmable=false` 这个声明已经从 `VeloxDev.Core.csproj` 里消失。** 产物侧的证据（`Src/Core/VeloxDev.Core/obj/Debug/net8.0/VeloxDev.Core.AssemblyInfo.cs` 里的 `[assembly: AssemblyMetadata("IsTrimmable", "True")]`）说明 `net8.0` 那档带裁剪元数据；这与「csproj 写死不可裁剪」的旧说法相反，**以代码为准**。与本条互补的边界说明在 `memory/modules/VeloxDev.Core.Test/architecture.md` 与 `extension.md`（那边讲的是「测试覆盖不到它，它有自己的验证线」），两处不冲突。

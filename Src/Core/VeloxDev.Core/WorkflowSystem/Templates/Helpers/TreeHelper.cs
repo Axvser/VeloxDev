@@ -31,9 +31,11 @@ public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 /// </summary>
 /// <typeparam name="T">The type of the Tree ViewModel that this helper is designed for.</typeparam>
 [Tickable(channel: nameof(TreeHelper), fps: 10)]
-public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTreeEvents, IInputEvents
+public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTreeEvents, IInputEvents, IWorkflowLayoutHost
     where T : class, IWorkflowTreeViewModel
 {
+    private IWorkflowLayoutSolver? layoutSolver;
+
     /// <inheritdoc />
     public InputRelay Input { get; } = new();
 
@@ -410,5 +412,35 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper, IWorkflowTree
 
     /// <inheritdoc />
     public virtual void MarkDirty() => Interlocked.Exchange(ref isDirty, 1);
+    #endregion
+
+    #region Layout
+    /// <summary>
+    /// The layout solution registered for this tree; the default separation solver until replaced.
+    /// </summary>
+    /// <remarks>
+    /// One helper belongs to one tree (one node editor), so a replacement here never leaks into another
+    /// editor. Custom solutions can replace the whole solver, or construct
+    /// <see cref="DefaultWorkflowLayoutSolver"/> with a different planner/cost.
+    /// </remarks>
+    public virtual IWorkflowLayoutSolver LayoutSolver
+    {
+        get => layoutSolver ??= new DefaultWorkflowLayoutSolver();
+        set => layoutSolver = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <inheritdoc />
+    public virtual WorkflowLayoutResult Arrange(
+        IWorkflowNodeViewModel? start, WorkflowLayoutOptions? options = null)
+    {
+        if (Component is not { } tree)
+        {
+            throw new InvalidOperationException("The tree helper is not installed on a tree.");
+        }
+
+        options ??= new WorkflowLayoutOptions();
+        if (start is not null) options.StartNode = start;
+        return LayoutSolver.Arrange(tree, options);
+    }
     #endregion
 }

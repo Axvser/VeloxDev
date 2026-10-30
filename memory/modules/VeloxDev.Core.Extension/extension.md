@@ -25,7 +25,7 @@
 | 出 OpenTelemetry 埋点 | `UseAgentTelemetry(AIAgentBuilder, 源名?, 敏感数据?)` / `WithAgentTelemetry(AIAgent, …)` | `AgentTelemetryExtensions.cs` | 库自己**不产出任何埋点**，只是把框架的接线收成一次调用；宿主仍须自己 `AddSource(源名)` 与持有导出器。默认 `EnableSensitiveData = false` |
 | 写工具要人工批准 | 由权限模式决定：`Manual` 把每个非读动作都问人，`Auto` / `AutoEdit` 只问它们各自仍管的那几类 | `ToolPipeline.Confirm` → `WorkflowAgentToolkit.ConfirmMutationAsync` → `AgentPermissionPolicy.Evaluate` | **没有 handler 也拒绝**（fail-closed）。以**工具名**为键，`AllowAlways` 对该工具整会话生效 |
 
-**八个能力闸门，逐个确认是「代码挡」还是「提示说」。** 本模块的立场是**代码挡**（`WorkflowAgentScope` 的「Capability gates (enforced in code, not just prompt)」小节标题就是这句话）：
+**逐个能力闸门，确认是「代码挡」还是「提示说」。** 本模块的立场是**代码挡**（`WorkflowAgentScope` 的「Capability gates (enforced in code, not just prompt)」小节标题就是这句话）：
 
 | 闸门 | 默认 | 代码在哪拒 |
 |---|---|---|
@@ -47,7 +47,7 @@
 | 想做的事 | 官方做法 | 捷径（能编译，但是错的） |
 |---|---|---|
 | 让模型用上某套工具 | 挂 provider：`scope.CreateContextProviders()` → `AIAgent` 的 `AIContextProviders` | 把工具塞进 `ChatOptions.Tools`。框架把两者**并集且不按名去重** ⇒ 模型收到两遍（`WorkflowAgentContextProvider` 的类注释） |
-| 给模型加指令 | `ChatOptions.Instructions = scope.ProvideProgressiveContextPrompt()`（宿主样例 `AgentHelper.cs` 就是这么做的）。**每轮变化的那部分不用你管**：`BuildDynamicInstructions()` 渲染能力包络，由 provider 自动追加在骨架之后 | 把会变的东西也写进 `ChatOptions.Instructions`：那是构造期冻住的一份，之后 `BumpVersion()` 的 27 处调用点都到不了它 |
+| 给模型加指令 | `ChatOptions.Instructions = scope.ProvideProgressiveContextPrompt()`（宿主样例 `AgentHelper.cs` 就是这么做的）。**每轮变化的那部分不用你管**：`BuildDynamicInstructions()` 渲染能力包络，由 provider 自动追加在骨架之后 | 把会变的东西也写进 `ChatOptions.Instructions`：那是构造期冻住的一份，之后 `BumpVersion()` 的各调用点都到不了它 |
 | 给 Agent 加待办清单 / 运行模式 | `WithTodoTracking()` / `WithAgentModes(options)` —— **挂框架自带的** | 自己写一套 todo 工具：MAF 已经给了 `todos_*` 与配套的提示文本，自己写的还得自己维护 |
 | 给 Agent 加上下文压缩 | `WithContextCompaction(窗口, 输出上限)`，两个数必须是**宿主模型的真实值** | ① 猜一个窗口大小 —— 策略拿 `窗口 - 输出上限` 当输入预算，猜错就在错误的时刻压缩；② 让签名收 `CompactionStrategy` —— 那会把宿主拖进 `[Experimental]` 命名空间 |
 | 读 Agent 当前的待办 / 模式 | `scope.Todo` / `scope.AgentMode`（框架 provider 的公开访问器） | 自己再 new 一个 provider —— 拿到的是**第二本账**，与模型实际看到的那份无关 |
@@ -98,7 +98,7 @@
 
 ### D. 加一个 MCP 运行模式 / 打开自服务
 
-见 `mcp.md` §六。要点：枚举、`GetRuntimeDir`、装载分支、`EnsureKnownKeys` 白名单、`BuildPromptContext` 文案、`AddServer` 的 `[Description]`，六处。
+见 `mcp.md` §六。要点：枚举、`GetRuntimeDir`、装载分支、`EnsureKnownKeys` 白名单、`BuildPromptContext` 文案、`AddServer` 的 `[Description]`，这几处。
 
 ### E. 宿主接线（照着做的那一份）
 
@@ -132,12 +132,12 @@
 | `WorkflowToolCategory` | 类别只影响切片；新增类别要确认 `All` 覆盖到它 |
 | `WorkflowAgentToolkit.BuildQueryToolNames` | 决定读/写预算与标脏 |
 | `SkillAgentToolkit.ToolNames`（若属于技能） | 会自动并入只读集合 |
-| `SubAgentAgentToolkit.ToolNames`（子代理的五个） | 同样自动并入（`BuildQueryToolNames` 里并入子代理工具名的循环）—— 改名字要改这一处，别另起一份清单 |
+| `SubAgentAgentToolkit.ToolNames`（子代理的那组） | 同样自动并入（`BuildQueryToolNames` 里并入子代理工具名的循环）—— 改名字要改这一处，别另起一份清单 |
 | `WorkflowAgentToolkit.CreateTools` 的 `.Where(IsToolEnabled)` | 自动生效，**但前提是名字能对上**（`OrdinalIgnoreCase`） |
 | `WorkflowAgentScope` 的提示文本 | 模型不知道存在就不会用 |
 | `Resources/Workflow/{en,zh}/Safety/*.md` | 若新工具与安全挡位有关 |
 | `skills/veloxdev-drive-workflow-with-ai/references/tools.md`、同目录 `mcp.md`、`SKILL.md` | 公开文档里的工具清单 |
-| `Src/Core/VeloxDev.Core.Extension/README.md` 与 csproj 的 `Description` | 里面有「60+ function-calling tools」这类会过期的数字 |
+| `Src/Core/VeloxDev.Core.Extension/README.md` 与 csproj 的 `Description` | 里面有会过期的工具数量 |
 | `VeloxDev.Core.Extension.Test/Agent/**` | `ProvideTools()` 按名取工具；改名会让测试静默找不到（`Single` 会抛，`FirstOrDefault` 不会） |
 
 **最容易漏的一条**：`WorkflowAgentToolkit.CreateTools` 与 `CreateAllTools` 的差别。宿主 UI 要用 `CreateAllTools`（要看得到被关掉的工具），模型要用 `CreateTools`（过滤后）。**两个都存在，选错会在两个方向各出一次事故。**

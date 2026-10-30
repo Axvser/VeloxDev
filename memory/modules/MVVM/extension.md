@@ -3,7 +3,7 @@
 > 面向「我要加一个新东西」和「我要写一个新视图模型」。架构见 [architecture.md](architecture.md)。
 > 依据只写树里的 `文件` + 能唯一定位的符号或原文引文。
 > **下文不带路径的文件名都指 `Src/Generators/VeloxDev.Core.Generator/`**（`Writers/MVVMWriter.cs`、`Writers/CommandWriter.cs`、`Base/Analizer.cs`），不在本模块目录下。
-> **本模块没有 `adapters/`，因为不存在平台轴**：运行期只依赖 `System.Windows.Input.ICommand` 与 BCL，七家适配器里没有一行 MVVM 代码。
+> **本模块没有 `adapters/`，因为不存在平台轴**：运行期只依赖 `System.Windows.Input.ICommand` 与 BCL，各适配器里没有一行 MVVM 代码。
 
 ---
 
@@ -50,7 +50,7 @@
 | `public Task FooAsync(MoveArgs a, CancellationToken ct)` | `new VeloxCommand<MoveArgs, object?>(…)`（`CommandWriter.ConstructionPrefix`），属性类型 `IVeloxCommand<MoveArgs, object?>` | **true** | 能 |
 | `public Task FooAsync<T>(T x) where T : class` | `IVeloxCommand<T, object?> GetFooCommand<T>()`，`ConcurrentDictionary` 按 `typeof(T)` 缓存（`CommandWriter.AppendTypeParameterAccessor`） | false | **不能** |
 
-**强类型不是「编译期保证」**（2026-10-02 实测）：`IVeloxCommand<T>` 派生自非强类型接口，`c.Execute(42)` 仍然编译通过、仍然只在运行期 `Failed`。它给的是类型信息与强类型校验钩子。**但强类型入口确实不装箱了**（2026-10-02 起，管道已泛型化为 `CommandPipeline<TParam,TResult>`）—— 六个入口：`CanExecute(T)`、`Execute(T)`、`ExecuteAsync(T)`、`ExecuteAsync(T, ct)`、`Execute(T, out TR)`、强类型事件投递。兜底面（`ICommand`/`IVeloxCommand*`/`e.Parameter`/`Completion.Result`）按契约仍是 `object?`，仍然装箱；**绑定过来的值本来就已装箱**，所以省下的只对代码调用点有效。**情形 2 的访问器不可绑定**，且每个封闭 `T` 独立持有队列/锁/并发上限。
+**强类型不是「编译期保证」**（2026-10-02 实测）：`IVeloxCommand<T>` 派生自非强类型接口，`c.Execute(42)` 仍然编译通过、仍然只在运行期 `Failed`。它给的是类型信息与强类型校验钩子。**但强类型入口确实不装箱了**（2026-10-02 起，管道已泛型化为 `CommandPipeline<TParam,TResult>`）—— 那几个入口：`CanExecute(T)`、`Execute(T)`、`ExecuteAsync(T)`、`ExecuteAsync(T, ct)`、`Execute(T, out TR)`、强类型事件投递。兜底面（`ICommand`/`IVeloxCommand*`/`e.Parameter`/`Completion.Result`）按契约仍是 `object?`，仍然装箱；**绑定过来的值本来就已装箱**，所以省下的只对代码调用点有效。**情形 2 的访问器不可绑定**，且每个封闭 `T` 独立持有队列/锁/并发上限。
 
 **返回值的四条注意**（2026-10-02）：
 
@@ -115,7 +115,7 @@
 
 ### 3c. 加一个新框架的 setter 模式（如某天接 Fody / 自家基类）
 
-`MVVMWriter.DetectSetterMode` 返回 `SetterMode` 枚举，结果塞进每个 `MVVMPropertyFactory.FrameworkSetterMode`（`Analizer.MVVMPropertyFactory.FrameworkSetterMode`；两个 analyzers 在 `MVVMWriter.ReadMVVMConfig` / `ReadAutoProperties` 装配）。加一家 = 加一个枚举值（`Analizer.SetterMode`）+ 在 `DetectSetterMode` 里加一段探测 + 在 `Analizer.MVVMPropertyFactory.GetSetterBodyLines` 里处理该模式生成什么 setter。**探测顺序有先手**：CommunityToolkit → Prism → ReactiveUI → Caliburn，靠前命中就返回（`DetectSetterMode` 里依次的 `return SetterMode.*`）。插在中间会改掉后面几家的行为。
+`MVVMWriter.DetectSetterMode` 返回 `SetterMode` 枚举，结果塞进每个 `MVVMPropertyFactory.FrameworkSetterMode`（`Analizer.MVVMPropertyFactory.FrameworkSetterMode`；几个 analyzers 在 `MVVMWriter.ReadMVVMConfig` / `ReadAutoProperties` 装配）。加一家 = 加一个枚举值（`Analizer.SetterMode`）+ 在 `DetectSetterMode` 里加一段探测 + 在 `Analizer.MVVMPropertyFactory.GetSetterBodyLines` 里处理该模式生成什么 setter。**探测顺序有先手**：CommunityToolkit → Prism → ReactiveUI → Caliburn，靠前命中就返回（`DetectSetterMode` 里依次的 `return SetterMode.*`）。插在中间会改掉后面几家的行为。
 
 ---
 
@@ -126,15 +126,15 @@
 | # | 位置 | 漏了的后果 |
 |---|---|---|
 | 1 | `CommandEventType.cs` 的 `CommandEventType` | 没有值可用 |
-| 2 | `CommandPipeline{TParam,TResult}.cs` 的 `event CommandEventHandler?`（另有强类型那 8 个显式实现） | 无处发 |
+| 2 | `CommandPipeline{TParam,TResult}.cs` 的 `event CommandEventHandler?`（另有强类型那些显式实现） | 无处发 |
 | 3 | `Src/Core/VeloxDev.Core/Interfaces/MVVM/IVeloxCommand.cs` 的事件声明 | **绑定侧永远看不到** —— 生成的属性类型是 `IVeloxCommand`（`CommandWriter.AppendProperty`） |
 | 4 | 实际的 `RaiseCommandEvent(...)` 调用点（`ExecuteCore`、`ExecuteCoreAsync`、`OnExecutionCompletedAsync`、`InterruptAsync`、`ClearAsync`、`TryStartPendingAsync`） | 事件声明了但永不触发 |
 
-注意**同一个 `CommandEventType` 有多个发射点**：`Canceled` 有**五处** —— `ExecuteCore` 的被锁挡下分支、`ExecuteCoreAsync` 的 catch、`InterruptAsync`、`ClearAsync` 的排队项、`ClearAsync` 的在跑项；`Dequeued` 有两处 —— `ClearAsync` 排空与 `TryStartPendingAsync` 正常出队。加事件时要决定**所有**语义上该发的点，漏一个就是「某些路径上不发」。
+注意**同一个 `CommandEventType` 有多个发射点**：`Canceled` 有**多处** —— `ExecuteCore` 的被锁挡下分支、`ExecuteCoreAsync` 的 catch、`InterruptAsync`、`ClearAsync` 的排队项、`ClearAsync` 的在跑项；`Dequeued` 也有多处 —— `ClearAsync` 排空与 `TryStartPendingAsync` 正常出队。加事件时要决定**所有**语义上该发的点，漏一个就是「某些路径上不发」。
 
-**但 `Canceled` 的五处不等于一次执行会发五条**：2026-10-01 起由 `RaiseCanceled` 经 `CommandEventArgs.TryMarkCancelReported()` 去重，**一次执行只发一条，先到的那条胜出**。加新发射点时走 `RaiseCanceled` 而不是直接 `RaiseCommandEventAs(Canceled, …)`。
+**但 `Canceled` 的多处发射点不等于一次执行会发多条**：2026-10-01 起由 `RaiseCanceled` 经 `CommandEventArgs.TryMarkCancelReported()` 去重，**一次执行只发一条，先到的那条胜出**。加新发射点时走 `RaiseCanceled` 而不是直接 `RaiseCommandEventAs(Canceled, …)`。
 
-**新增第 5 条纪律**：新加的发事件点必须落在**锁外**，否则会重新引入死锁（见 [architecture.md](architecture.md) §三）。照 `TryStartPendingAsync` 的写法：锁内只收集，`Release()` 之后才发。
+**新增一条纪律**：新加的发事件点必须落在**锁外**，否则会重新引入死锁（见 [architecture.md](architecture.md) §三）。照 `TryStartPendingAsync` 的写法：锁内只收集，`Release()` 之后才发。
 
 ### 加一个 `NotifyCollectionChangedAction` 分支
 
@@ -143,13 +143,13 @@
 - `Analizer.GenerateCollectionMembers` 里 `CollectionItemTypeName` 为空、用 `IEnumerable` 的那份模板
 - 同方法里有元素类型、用 `IEnumerable<T>` 的那份模板
 
-两份里的四个 `partial void` 声明也各写了一遍。**加一个分支必须改两处**，且两份的 `Enumerate{名}Items` 重载签名不同—— 只改一份不会报错，而是**某一类集合属性默默少一个回调**。
+两份里的四个 `partial void` 声明也各写了一遍。**加一个分支必须改两份模板**，且两份的 `Enumerate{名}Items` 重载签名不同—— 只改一份不会报错，而是**某一类集合属性默默少一个回调**。
 
 ### 加一个触发整个生成管线的特性
 
 `Base/Analizer.cs` 的 `TriggerAttributes` 是硬编码清单（其中包含 `VeloxPropertyAttribute` 与 `VeloxCommandAttribute`）。不进去 ⇒ `Filters.Targets` 从不命中 ⇒ 生成器全程不跑。
 
-**同一个清单被两个生成器共用**：`VeloxDev.Generators.MVVM`（`MVVM.cs`）与 `VeloxDev.Generators.Command`（`Command.cs`）都调 `Analizer.Filters.Targets(context)`，各自再靠 `CanWrite()` 过滤（`MVVMWriter.CanWrite` 含 `IsWorkflowComponent`，所以两个生成器对同一个类**都可能**产出）。加一个特性进清单会**同时**喂给这两个 writer。
+**同一个清单被几个生成器共用**：`VeloxDev.Generators.MVVM`（`MVVM.cs`）与 `VeloxDev.Generators.Command`（`Command.cs`）都调 `Analizer.Filters.Targets(context)`，各自再靠 `CanWrite()` 过滤（`MVVMWriter.CanWrite` 含 `IsWorkflowComponent`，所以这些生成器对同一个类**都可能**产出）。加一个特性进清单会**同时**喂给这些 writer。
 
 ### 改 `_stateLock` 的持锁范围
 
@@ -157,7 +157,7 @@
 
 ### 与别的模块的联动
 
-- **生成器版本**：本项目 `Src/Generators/VeloxDev.Core.Generator/` 的改动要落进 **9 处** `PackageReference` 才在 Release 生效（Debug 走 `ProjectReference`，analyzer 不随它传递）—— 那属于 Generator 模块，9 处的清单见 `memory/modules/VeloxDev.Core.Generator/extension.md` §四。
+- **生成器版本**：本项目 `Src/Generators/VeloxDev.Core.Generator/` 的改动要落进各处的 `PackageReference` 才在 Release 生效（Debug 走 `ProjectReference`，analyzer 不随它传递）—— 那属于 Generator 模块，清单见 `memory/modules/VeloxDev.Core.Generator/extension.md` §四。
 - **Workflow 槽位**：`MVVMWriter.GenerateBody` 会为 `UseWorkflowSlotLifecycle` 的属性发 `CreateWorkflowSlot<T>` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved`，其中引用 `SlotDefaultViewModel` 与 `CreateSlotCommand` —— **这条契约的归口在 WorkflowSystem**，见 `memory/modules/WorkflowSystem/`。MVVM 侧只知道「有这么三个方法要被生成」。
 
 ---

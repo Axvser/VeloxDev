@@ -1,16 +1,16 @@
 ﻿# Timing 架构
 
-> 代码：`Src/Core/VeloxDev.Core/Timing/`（5 个 .cs）、契约在 `Src/Core/VeloxDev.Core/Interfaces/Timing/`（6 个文件）。
+> 代码：`Src/Core/VeloxDev.Core/Timing/`、契约在 `Src/Core/VeloxDev.Core/Interfaces/Timing/`。
 > 这是**全仓库唯一的时间权威**。任何「现在几点、走了多远、还走不走」的问题，答案只在这里。
 > 帧节奏（每次唤醒隔多久、下一个续体怎么排队）归 `TransitionSystem`，见 `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/FramePacerCore.cs`；本模块只回答「时间轴在哪」。
 
-本文只写「读完这 5 个文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
+本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
 ## 一、这个模块是什么，不解决什么
 
-**是什么。** 一条**绝对、从不重启**的虚拟时间轴，外加把它包成帧增量的两个采样器。
+**是什么。** 一条**绝对、从不重启**的虚拟时间轴，外加把它包成帧增量的采样器。
 
 三件事各自独立地定义它：
 
@@ -36,7 +36,7 @@
 
 ## 二、一份状态，两套协议：写者串行、读者无锁
 
-这是本模块第一个「读代码才知道」的点。`TimeSourceCore` 的状态是 6 个 `long`（`_version`/`_epoch`/`_anchorReal`/`_anchorVirtual`/`_speed`/`_rate`，见 `TimeSourceCore` 的这些字段）+ 3 个 `bool`/`TaskCompletionSource`（`_paused`/`_hostFeeding`/`_parkGate`）。两套协议分开管：
+这是本模块第一个「读代码才知道」的点。`TimeSourceCore` 的状态是一组 `long`（`_version`/`_epoch`/`_anchorReal`/`_anchorVirtual`/`_speed`/`_rate`，见 `TimeSourceCore` 的这些字段）+ 一组 `bool`/`TaskCompletionSource`（`_paused`/`_hostFeeding`/`_parkGate`）。两套协议分开管：
 
 - **写**：`lock (_writeGate)`（`TimeSourceCore._writeGate`）。所有控制调用都在里面改状态。
 - **读**：`Now` 走 sequence counter（seqlock）：读前读后各看一次 `_version`，奇数或变了就 `SpinOnce` 重来（`TimeSourceCore.Now`）。读者**从不碰锁**。
@@ -60,9 +60,9 @@
 - **`SetHostFeeding` 不是 rebase。** 它**不动 epoch、不动锚点**（`SetHostFeeding` 的 remarks 明说 `Not a rebase`）：位置原样接上，累加器的基准仍然有效。宿主自己的钟在 feed 静默期间还在走，那是「跳变」不是「停摆」，该用 `Seek` 表达。
 - **`Wake()` 是替换 gate，不是就地 complete。** `_parkGate = NewGate()` 之后才 `TrySetResult` 旧的那个（`Wake`）。就地 complete 会让停着的消费者下一次 `await` 立刻返回，一帧帧空转。
 
-**「暂停期间不记账」是怎么实现的：不是判 `_paused`，而是 `speed = 0`。** 读者 `Now` 从来不读 `_paused`/`_rate`，只读 `_anchorVirtual`/`_anchorReal`/`_speed`（`Now` 里读取 `_anchorVirtual`/`_anchorReal`/`_speed`）。所以暂停语义完全落在 `Pause` 把那三个字段写成什么上。改了 `Pause` 的写入就等于改了暂停语义，而 `RefreshParkGate` 那边看的是 `Advances`，两者由 `Advances` 一个表达式绑定，不可能不一致（`Advances` 的注释）。
+**「暂停期间不记账」是怎么实现的：不是判 `_paused`，而是 `speed = 0`。** 读者 `Now` 从来不读 `_paused`/`_rate`，只读 `_anchorVirtual`/`_anchorReal`/`_speed`（`Now` 里读取 `_anchorVirtual`/`_anchorReal`/`_speed`）。所以暂停语义完全落在 `Pause` 把那组字段写成什么上。改了 `Pause` 的写入就等于改了暂停语义，而 `RefreshParkGate` 那边看的是 `Advances`，两者由 `Advances` 一个表达式绑定，不可能不一致（`Advances` 的注释）。
 
-**续体在锁外完成。** `Pause`/`Resume`/`SetRate`/`Seek`/`SetHostFeeding` 五个调用都是「锁内改状态 + 拿回待完成的 gate，锁外 `TrySetResult`」（`Pause`/`Resume`/`SetRate`/`Seek`/`SetHostFeeding` 末尾的 `woken?.TrySetResult(true)`）。理由是 `resume` 的注释原文：完成 gate 会**同步**跑续体，续体若重入控制调用就死在不可重入的锁上（`Resume` 的锁外注释）。
+**续体在锁外完成。** `Pause`/`Resume`/`SetRate`/`Seek`/`SetHostFeeding` 这些调用都是「锁内改状态 + 拿回待完成的 gate，锁外 `TrySetResult`」（`Pause`/`Resume`/`SetRate`/`Seek`/`SetHostFeeding` 末尾的 `woken?.TrySetResult(true)`）。理由是 `resume` 的注释原文：完成 gate 会**同步**跑续体，续体若重入控制调用就死在不可重入的锁上（`Resume` 的锁外注释）。
 
 ---
 
@@ -90,12 +90,12 @@
 
 ---
 
-## 四、两个采样器：一个记账，一个不记
+## 四、采样器：一个记账，一个不记
 
 | | `UncompensatedTimeSampler` | `CompensatingTimeSampler` |
 |---|---|---|
 | 输出 | 距上次采样的**实测间隔** | **固定步数** + 每步时长 |
-| 状态 | 两个 `long`（`_lastTicks`/`_originTicks`） | 七个 `long`（`_stepTicks`/`_acc`/`_earned`/`_delivered`/`_dropped`/`_lastTicks`/`_epoch`） |
+| 状态 | 若干 `long`（`_lastTicks`/`_originTicks`） | 若干 `long`（`_stepTicks`/`_acc`/`_earned`/`_delivered`/`_dropped`/`_lastTicks`/`_epoch`） |
 | 欠账 | 没有「欠」的概念 | 有，且**可被宽恕**（`_dropped`） |
 | 暂停后首帧 | 天然干净：源不前进，下次采样只覆盖 resume 之后的帧（`UncompensatedTimeSampler` 的 `<remarks>`） | epoch 变了 → 基准归零（`CompensatingTimeSampler.Advance` 的 `epoch != _epoch` 分支） |
 | 适用 | **帧循环**：一帧一个增量，不关心帧率 | **固定步物理/积分**：步数必须与时间成严格函数 |
@@ -124,7 +124,7 @@
 
 ## 五、`TimerCore`：按契约注册，不按实现注册
 
-`TimerCore` 是静态注册表 + 工厂，两个 `ConcurrentDictionary<Type, Func<...>>`（`TimerCore.SourceFactories`/`SamplerFactories`），静态构造装上 Core 默认，所以**对这三个内置契约（`ITimeSourceControl` / `IUncompensatedTimeSampler` / `ICompensatingTimeSampler`），查找永远解析得到**，除非平台在同一契约上覆盖过。
+`TimerCore` 是静态注册表 + 工厂，用 `ConcurrentDictionary<Type, Func<...>>` 管源与采样器（`TimerCore.SourceFactories`/`SamplerFactories`），静态构造装上 Core 默认，所以**对内置契约（`ITimeSourceControl` / `IUncompensatedTimeSampler` / `ICompensatingTimeSampler`），查找永远解析得到**，除非平台在同一契约上覆盖过。
 
 四条读代码才知道的规矩：
 
@@ -142,9 +142,9 @@
 | `TimerCore.CreateTimeSource<ITimeSourceControl>()` | `TransitionSystem/Effects/Transition.cs`（默认时间轴）、`TransitionSystem/Sampling/SamplerSet.Run`（没人控制得住的私有时间轴）、`DynamicTheme/ThemeManager.cs`（整场共享一条轴）、`TimeLine/TickManager.cs` 的 channel `_bus`（每个 channel 一条总线） |
 | `TimerCore.CreateTimeSampler<...>` | `TimeLine/TickManager.cs` 的 channel 构造（`_updateSampler`/`_fixedSampler`，显式 16ms 步长） |
 
-也就是说 **Timing 只服务 `TransitionSystem`、`DynamicTheme` 与 `TimeLine` 三个模块**（都与本模块同在 `Src/Core/VeloxDev.Core/` 内）。`Src/Adapters/` 下七家 GUI 适配器**一家都不直接引用 Timing**（它们经 `Transition<T>`/`TransitionHostBase` 间接用）。
+也就是说 **Timing 只服务 `TransitionSystem`、`DynamicTheme` 与 `TimeLine` 这几个模块**（都与本模块同在 `Src/Core/VeloxDev.Core/` 内）。`Src/Adapters/` 下 GUI 适配器**一家都不直接引用 Timing**（它们经 `Transition<T>`/`TransitionHostBase` 间接用）。
 
-**`Src/` 里零个非测试注册者。** `RegisterTimeSource`/`RegisterTimeSampler` 的调用者只有 `TimerCore` 的静态构造和测试（`Src/Core/VeloxDev.Core.Test/Timing/TimerCoreRegistryTests.cs`）。宿主自有钟那条缝（`protected TimeSourceCore(Func<long>, long)` + `SetHostFeeding`）在生产代码里**没有任何实现**——仓库内只有测试走过它（`Src/Core/VeloxDev.Core.Test/Timing/HostTimeSourceTests.cs` 的 `PullHostSource`/`PushHostSource`）；`FakeTimeSource` 则是直接实现 `ITimeSourceControl`，不走这条缝。所以那条缝是「给未来的宿主预留的、已建好但没人走的路」。
+**`Src/` 里的注册者全是测试。** `RegisterTimeSource`/`RegisterTimeSampler` 的调用者只有 `TimerCore` 的静态构造和测试（`Src/Core/VeloxDev.Core.Test/Timing/TimerCoreRegistryTests.cs`）。宿主自有钟那条缝（`protected TimeSourceCore(Func<long>, long)` + `SetHostFeeding`）在生产代码里**没有任何实现**——仓库内只有测试走过它（`Src/Core/VeloxDev.Core.Test/Timing/HostTimeSourceTests.cs` 的 `PullHostSource`/`PushHostSource`）；`FakeTimeSource` 则是直接实现 `ITimeSourceControl`，不走这条缝。所以那条缝是「给未来的宿主预留的、已建好但没人走的路」。
 
 ---
 
@@ -172,7 +172,7 @@
 12. **`_nowStamp` 是委托字段，不是虚方法**（`TimeSourceCore._nowStamp` 及其注释）。刻意的：stamp 在构造函数里读一次，虚方法会在子类自己的构造赋值之前跑 override —— 经典的构造顺序陷阱，这里以时钟为症状。
 13. **`TimeSourceCore` 的默认构造把 `MachineStamp` 与 `DefaultTicksPerSecond` 一起传下去**（`TimeSourceCore()` 默认构造），所以两个默认值是**绑定的**：换了自定义 stamp 却忘了 ticksPerSecond，就得到上面第 10 条的静默比例错误。
 14. **`Advance` 的溢出边界被量化过**（`Advance` 的 remarks）：先乘后除在 `long.MaxValue / speed` 处溢出 —— speed 10000 时 Windows 约 **2.9 年**、Linux 约 **10.7 天**（Linux 上一个 Stopwatch tick 是一纳秒）。C# 算术 unchecked，失败不是异常而是静默回绕成负位置，消费者从此永久卡住。先除后乘的性能代价被量过并写进注释：乘在前 **0.23 ns**、除在前 **0.61 ns**，安全成本 **0.38 ns**；一次动画每帧跑一次，100 个动画 60FPS 下是**每秒 2.3 µs**（`Advance` remarks 里的量测段）。
-15. **`protected TimeSourceCore(Func<long>, long)` 的守卫刻意不用 `ThrowIfNull`/`ThrowIfLessThan`**：Core 多目标到 netstandard2.0 与 netframework4.6.1，那两个助手在这些目标上不存在（`TimeSourceCore` 的 protected 构造里的注释）。
+15. **`protected TimeSourceCore(Func<long>, long)` 的守卫刻意不用 `ThrowIfNull`/`ThrowIfLessThan`**：Core 多目标到 netstandard2.0 与 netframework4.6.1，`ThrowIfNull`/`ThrowIfLessThan` 在这些目标上不存在（`TimeSourceCore` 的 protected 构造里的注释）。
 16. **`Ticks` 是绝对虚拟 tick，`Position` 是相对 `_origin` 的 `TimeSpan`**（`TimeSourceCore.Ticks`/`Position`）。`PassAnchor` 这类锚点用 `Ticks`（绝对），人看的用 `Position`（相对）。`_origin` 在构造时一次性记下（`TimeSourceCore._origin` 的赋值），之后没有任何写者。
 
 ---

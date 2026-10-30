@@ -1,6 +1,6 @@
 # HeadlessAdapters — 架构
 
-> 代码：`Src/Verification/HeadlessAdapters/`。六个工程：共享夹具 `VeloxDev.AdapterTestKit`（`netstandard2.0`，只引用 Core），
+> 代码：`Src/Verification/HeadlessAdapters/`。共享夹具 `VeloxDev.AdapterTestKit`（`netstandard2.0`，只引用 Core），
 > 加五套测试 —— WPF（`net8.0-windows` + `UseWPF`）、Avalonia（`net8.0` + `Avalonia.Headless` 11.1.0）、
 > WinForms（`net8.0-windows` + `UseWindowsForms`）、Razor（`net8.0` + `bunit` 2.12.5）、
 > Jalium（`net10.0-windows` + `Jalium.UI.Controls` 26.10.8）。
@@ -17,7 +17,7 @@
 | 本目录 | 普通测试进程 | 适配器在没有窗口系统时仍遵守的表面契约 |
 
 `AUTO TEST` 的 AGENTS.md 已经写明「Nothing here needs a headless CI today」。本目录补的是那句之后留下的空白：
-39.5k 行平台代码此前没有可在 CI 里跑的回归。
+平台代码此前没有可在 CI 里跑的回归。
 
 ---
 

@@ -1,25 +1,25 @@
 ﻿# MAUI — TransitionSystem 适配器
 
 > 代码：`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/`（采样器在 `Samplers/`）。
-> 本文只写这一家的差异。契约本身、要实现的八个类、以及所有平台共通的坑，在 `../extension.md`；用法层文档在
-> `skills/veloxdev-create-animation/references/adapter.md`（MAUI 段落含 `IsRepeating` 与「首个 stop」两条），本文不重抄。
-> 该目录下 `ThemeValueConverters.cs` / `TransitionEffects.cs` **不属于八件套**：前者是 `VeloxDev.DynamicTheme` 的
-> 值转换器，后者是三条预置 effect（`TransitionEffects.cs` 的 `Empty`/`Theme`/`Hover`），照八件套清单核对时跳过它们。
+> 本文只写这一家的差异。契约本身、要实现的类、以及所有平台共通的坑，在 `../extension.md`；用法层文档在
+> `skills/veloxdev-create-animation/references/adapter.md`（MAUI 段落含 `IsRepeating` 与「首个 stop」），本文不重抄。
+> 该目录下 `ThemeValueConverters.cs` / `TransitionEffects.cs` **不属于契约**：前者是 `VeloxDev.DynamicTheme` 的
+> 值转换器，后者是预置 effect（`TransitionEffects.cs` 的 `Empty`/`Theme`/`Hover`），照契约清单核对时跳过它们。
 
 ---
 
 ## 一、这家必须实现哪些契约成员，为什么是这些
 
-八件套里 MAUI 真正写逻辑的只有四处，其余四个是空壳（`TransitionScheduler`、`State`、`TransitionEffect` 三个空壳各一行，外加 `Transition.cs` 里的非泛型 `Transition`）：
+契约要求的类里 MAUI 真正承载逻辑的只有 `UIThreadInspector`、`TransitionInterpreter`、`Interpolator` 的 `CreateScheduler` 与静态构造注册这几处，其余是空壳（`TransitionScheduler`、`State`、`TransitionEffect` 各为空壳，外加 `Transition.cs` 里的非泛型 `Transition`）：
 
 | 成员 | MAUI 的选择 | 为什么 |
 |---|---|---|
-| `UIThreadInspector`（`UIThreadInspector.cs` 的 `UIThreadInspector`） | `TransitionHostBase<NonPriority>`；覆写 `ThreadFor` / `IsCurrentThread` / `PostCore` / `IsAlive` | MAUI 没有可传的 dispatcher 优先级，所以 `TPriorityCore` 取 `NonPriority`，也就**没有 `InternalPriority` 这条路可走**（`../extension.md` §三·C 的选型表把 MAUI 与 WinForms/Razor 归同类）。四处的型参必须一致：`UIThreadInspector`、`Transition<T>`、`TransitionScheduler`、`Interpolator.CreateScheduler` 里对 `NonPriority` 的引用。 |
+| `UIThreadInspector`（`UIThreadInspector.cs` 的 `UIThreadInspector`） | `TransitionHostBase<NonPriority>`；覆写 `ThreadFor` / `IsCurrentThread` / `PostCore` / `IsAlive` | MAUI 没有可传的 dispatcher 优先级，所以 `TPriorityCore` 取 `NonPriority`，也就**没有 `InternalPriority` 这条路可走**（`../extension.md` §三·C 的选型表把 MAUI 与 WinForms/Razor 归同类）。这几处的型参必须一致：`UIThreadInspector`、`Transition<T>`、`TransitionScheduler`、`Interpolator.CreateScheduler` 里对 `NonPriority` 的引用。 |
 | `TransitionInterpreter`（`TransitionInterpreter.cs` 的 `TransitionInterpreter`） | 必须覆写 `CreateFramePacer` | MAUI 上「活着的帧时钟」只有 `IDispatcherTimer`，由本家提供；见 §二·2 |
 | `Interpolator`（`Interpolator.cs` 的 `CreateScheduler`） | 必须覆写 `CreateScheduler` | 七家同形，走 `FindOrCreate`；漏了主题切换静默瞬切（`../extension.md` §二·3） |
-| `Interpolator` 静态构造（`Interpolator.cs`） | **12 条**注册 | 见下 |
+| `Interpolator` 静态构造（`Interpolator.cs`） | **一整族**注册 | 见下 |
 
-**为什么是这 12 条**：MAUI 是七家里唯一自带一套**单精度几何类型**的平台 —— `Microsoft.Maui.Graphics.PointF/SizeF/RectF`
+**为什么是这一批**：MAUI 是七家里唯一自带一套**单精度几何类型**的平台 —— `Microsoft.Maui.Graphics.PointF/SizeF/RectF`
 与 MAUI Controls 的 `Point/Size/Rect/Thickness` 同时存在。所以别家各一份的采样器在这里要**成对**注册：
 
 ```
@@ -30,7 +30,7 @@ Rect   : RectF    (Interpolator.cs:19,20)
 
 `*FSampler` 里的 **F 就是单精度 `float`**，对应 MAUI 的 `PointF/SizeF/RectF` —— 名字里的 F 与 .NET 的
 `PointF`/`SizeF`/`RectangleF` 同源，不是「Frame」也不是平台缩写。七家里只有 MAUI 有这套重复类型，所以
-`PointFSampler` / `SizeFSampler` / `RectFSampler` / `ShadowSampler` 这四个类**只有 MAUI 有**
+`PointFSampler` / `SizeFSampler` / `RectFSampler` / `ShadowSampler` 这几个类**只有 MAUI 有**
 （对比：`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/Samplers/`、`…/Avalonia/…`、`…/WPF/…` 等六家的目录清单里都没有）。
 校验身份时按**注册键类型**核对，不要按类名 —— 注册表的 key 就是 `Type` 本身（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `Interpolators` 是 `ConcurrentDictionary<Type, ISampler>`，查找是 `TryGetInterpolator` 的精确命中→基类→接口），同名而不同程序集的两个类型是两个键、各注册各的；只有把**同一个 `Type`** 注册两次才会被 `AddOrUpdate` 顶掉（历史上那条 `RectFSampler` 的教训见 §四·1）。
 
@@ -95,11 +95,11 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
 2. **pacer 的定时器是可重复的，WinUI 是反的。** 这里的做法和其他家不一样，因为 MAUI 的 `IDispatcherTimer` 一旦
    `IsRepeating = false`，`Stop()` 后再 `Start()` 不再装填（`TransitionInterpreter.cs` 的 `CreateTimer` 注释，WinUI 对位的是
    `Src/Adapters/VeloxDev.WinUI/PlatformAdapters/TransitionInterpreter.cs` 的 `CreateTimer` 里 `IsRepeating = false`）。
-3. **多三家单精度采样器 + 一个 `Shadow` 采样器**（`PointFSampler`/`SizeFSampler`/`RectFSampler`/`ShadowSampler`）。
+3. **多出单精度几何采样器与 `Shadow` 采样器**（`PointFSampler`/`SizeFSampler`/`RectFSampler`/`ShadowSampler`）。
    这里的做法和其他家不一样，因为只有 MAUI 同时暴露单精度几何类型（§一）与 `Microsoft.Maui.Controls.Shadow`；
    WPF 的对应物是 `DropShadowEffectSampler`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/`），别家没有对应类型。
 4. **引用型值用 scratch 复用，但它的 brush 是「中点硬切」而不是插值。** `ShadowSampler` 每帧只改
-   一个复用 `Shadow` 的四个字段（`Samplers/ShadowSampler.cs` 的 `InsertFrame` 里复用 scratch 的那段），**`Brush` 在 `t >= 0.5` 时整体切换**（`ws.Brush = t >= 0.5 ? brush2 : brush1;`，注释自称
+   一个复用 `Shadow` 的几个字段（`Samplers/ShadowSampler.cs` 的 `InsertFrame` 里复用 scratch 的那段），**`Brush` 在 `t >= 0.5` 时整体切换**（`ws.Brush = t >= 0.5 ? brush2 : brush1;`，注释自称
    "Simple transition handling"）。这和 `BrushSampler` 的「梯度细节丢失、退到 `gradientStops[0]` 当代表」是同一类让步：
    引用型且带内部结构的属性，本家只保证**容器级**平滑。改动画效果前先确认真实行为，别按「颜色会渐变过去」写用例。
 
@@ -110,18 +110,18 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
 ### 1. `RectFSampler` 的键与实现必须是同一个 `RectF` 类型
 
 - **注册键**：`Interpolator.cs` 静态构造里 `RegisterInterpolator(typeof(RectF), new RectFSampler());`，该文件只有
-  `using Microsoft.Maui.Controls.Shapes;` 与 `using VeloxDev.Adapters.NativeSamplers;`（文件头的两条 `using`），**没有 `System.Drawing`**；
+  `using Microsoft.Maui.Controls.Shapes;` 与 `using VeloxDev.Adapters.NativeSamplers;`（文件头的 `using`），**没有 `System.Drawing`**；
   而 `System.Drawing` 里根本没有 `RectF` 这个名字（它叫 `RectangleF`）⇒ 这个键只能是 `Microsoft.Maui.Graphics.RectF`。
   **同名不是原因**：键是 `Type`，两者本可并存；错在**实现解的不是自己那条键的类型**（`Samplers/RectFSampler.cs`
   一旦 `using System.Drawing;` 就解成 `System.Drawing.RectangleF`）。
 - **后果**：声明为 Maui `RectF` 的属性（声明入口在本家自己的 `Transition.cs` 的 `Property(Expression<Func<T, RectF>>…)`）
   走注册表时，第一帧在采样器里抛 `InvalidCastException`；`SamplerSet.ApplyCore` 只报一次 `ErrorStage.Sampling` 诊断然后
   `CancelQuietly()` —— **整条 run 被取消**，不是静默降级（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `ApplyCore` 里 `catch`）。
-- **为什么不易露头**（两条独立原因）：① 单精度矩形在仓库里按 `System.Drawing.RectangleF` 用时，由
+- **为什么不易露头**（几条独立原因）：① 单精度矩形在仓库里按 `System.Drawing.RectangleF` 用时，由
   **Core** 注册（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造里那条 `RectangleFSampler`），根本不经过 MAUI 这条键；
   ② demo 的验收路径用 `SetInterpolator` 逐条覆盖，注册表被整个绕过（`Examples/Transition/MAUI/Demo/MainPage.xaml.cs` 的 `SetInterpolator` 调用）。
 - **对齐方式 = 让体去解自己那条键的类型**：不留 `using System.Drawing;`，解 Maui `RectF`
-  （`Samplers/RectFSampler.cs` 的 `InsertFrame` 是 `(RectF)(start ?? new RectF())`）。名字 / 注册键 / 实现三处就此对齐。
+  （`Samplers/RectFSampler.cs` 的 `InsertFrame` 是 `(RectF)(start ?? new RectF())`）。名字 / 注册键 / 实现就此对齐。
   `System.Drawing.RectangleF` 的覆盖不丢：它由 Core 那条独立承担，纯数据套件里也一直有自己的表项
   （`Examples/Transition/AUTO TEST/Samplers/CoreSamplerEntries.cs` 的 `new RectangleFSampler()` 条目，标着 `"Core"`）。
 - **反方向不能走**：把键改成 `typeof(System.Drawing.RectangleF)` 会经 `AddOrUpdate` **顶掉 Core 的
@@ -133,14 +133,14 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
   在这个进程里真跑起来，再问**真实注册表**「条目声明的类型解析到谁」，断言它等于条目写的那条采样器、且接得住该类型的值
   （`EveryEntry_ValueTypeResolvesToTheSamplerItNames`、`EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey`）。
   依据是条目的 `ValueType`（声明类型 = 注册键）与 `UnregisteredReason`（`SamplerEntry.cs` 的 `ValueType` 与 `UnregisteredReason`）。
-- **连带要一起动的三处**（都不在 `Src/` 里）：
+- **连带要一起动的几处**（都不在 `Src/` 里）：
   1. demo 的 subject 属性用 `MauiRectF`（`Examples/Transition/MAUI/Demo/SamplerSubject.cs` 的 `Register(nameof(AreaF), …)` 与 `AreaF`），
      端点工厂同步（同目录 `SamplerProbe.cs` 的 `RectFSampler` 探针与 `MauiRectF` 端点工厂）；
   2. 纯数据表 `MauiEntries` 的 `Target.BoundsF` 与端点（`Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs` 的 `Target.BoundsF` 与 `RectFSampler` 条目的端点）——
      注意这张表是**按名字反射**到 `VeloxDev.Adapters.NativeSamplers.RectFSampler` 的（`MauiEntries.Entry` 里 `SamplerAssembly.GetType("VeloxDev.Adapters.NativeSamplers.{samplerName}")`），端点类型不对会直接炸；
   3. live 载荷的**类型标签**是 `"RectF"`（`SamplerProbe.cs` 的 `MauiRectF rectF => new("RectF", …)`），`MauiConformance.cs` 的 `new("RectFSampler", "RectF", …)` 同步 ——
      `ConformanceEntry.TypeTag` 的定义就是「产物必须有的类型名」，由 `ConformanceChecks.cs` 的 `live.TypeTag != entry.TypeTag` 检查与 demo 报回的标签逐字比对。
-     `LiveContract` 里 `["RectF"]` 与 `["RectangleF"]` 两条 key 都只有 MAUI/Core 一侧相关，改动不外溢。
+     `LiveContract` 里 `["RectF"]` 与 `["RectangleF"]` 都只有 MAUI/Core 一侧相关，改动不外溢。
 
 ### 2. 新加一个采样器时，「在哪一侧注册」比类名重要
 
@@ -149,8 +149,8 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
 所以「加一个单精度采样器」时：
 先写 `(MauiXxxF)(start ?? …)`，再确认 `Interpolator.cs` 里注册的是**同一个**类型；`Interpolator.cs` 没有 `using System.Drawing`，
 同名类型天然取 MAUI 那一侧，但**不要靠这个巧合** —— 一旦有人为了别的采样器加了 `using System.Drawing`，
-文件里所有裸名 `PointF/SizeF` 会静默改指 `System.Drawing`（这两个名字在两边都有），`Interpolator.cs` 静态构造里的 `PointF`/`SizeF` 两条注册立刻变成注册 Core 的类型。
-`Examples/Transition/MAUI/Demo/MainPage.xaml.cs`、`SamplerSubject.cs`、`SamplerProbe.cs` 三处文件头那条「同名类型一律显式取 MAUI 的那一侧」注释就是为此：
+文件里所有裸名 `PointF/SizeF` 会静默改指 `System.Drawing`（这两个名字在两边都有），`Interpolator.cs` 静态构造里对 `PointF`/`SizeF` 的注册立刻变成注册 Core 的类型。
+`Examples/Transition/MAUI/Demo/MainPage.xaml.cs`、`SamplerSubject.cs`、`SamplerProbe.cs` 的文件头那条「同名类型一律显式取 MAUI 的那一侧」注释就是为此：
 **同名类型一律显式取 MAUI 那一侧**。
 
 ### 3. 采样器必须无状态；引用型值只能落在 `ref object? working`
@@ -162,8 +162,8 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
 
 ### 4. 别把 `ThemeValueConverters.cs` / `TransitionEffects.cs` 当成契约的一部分
 
-它们与 TransitionSystem 的平台契约无关（见本文开头）。按 `../extension.md` §三·C 核对「八件套齐不齐」时，
-这两个文件既不是缺项也不是多出来的实现；反过来，把它们的改动当成「适配器行为变更」去跑采样器验收套件是白跑。
+它们与 TransitionSystem 的平台契约无关（见本文开头）。按 `../extension.md` §三·C 核对「契约齐不齐」时，
+它们既不是缺项也不是多出来的实现；反过来，把它们的改动当成「适配器行为变更」去跑采样器验收套件是白跑。
 
 ### 5. 本家没有一处 `#if WINDOWS`
 

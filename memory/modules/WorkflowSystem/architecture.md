@@ -1,7 +1,7 @@
 # WorkflowSystem 架构
 
 > 模块位置：`Src/Core/VeloxDev.Core/WorkflowSystem/`
-> 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（21 个文件，按 `Common/Components/Connections/Commands/Providers/Spatial/Surface/Execution/Enums/` 分层；命名空间统一 `VeloxDev.WorkflowSystem`）
+> 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（按 `Common/Components/Connections/Commands/Providers/Spatial/Surface/Execution/Enums/Layout/` 分层；命名空间统一 `VeloxDev.WorkflowSystem`）
 > 平台差异见同目录 `adapters/<平台>.md`；扩展做法见 `extension.md`。
 
 ---
@@ -10,6 +10,8 @@
 
 **是什么**：节点图编辑器的「模型树 + 编译运行 + 画布几何/虚拟化」三层，**零 UI 依赖** ——
 `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `<TargetFrameworks>` 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`，整个项目运行期只引了一个 `Microsoft.Bcl.HashCode`（另有生成器包与项目引用，见 §五）。
+
+**自动布局也在本模块（2026-10-30 起）**：`WorkflowSystem/Layout/` 是可注入的布局管道。第一版实现**层级对齐**（`HierarchyAlignmentStage`：扇出组、扇入合流点、单子边）与**坐标后的分离约束投影**（`TileSeparationStage`），没有断环/分层/排序/正交走线；宿主入口是节点扩展 `node.Arrange(options)`（从 Parent 找到树、再走该树 helper 上注册的 `IWorkflowLayoutSolver`），细节、扩展路径和坑见 [layout.md](layout.md)。
 
 **不解决**（这几条决定了你找不到代码时该往哪看）：
 
@@ -68,7 +70,7 @@
 | `SetAnchorCommand` | **世界**帧，原样存 | `StandardEx/WorkflowNodeEx.cs` 的 `StandardSetAnchor` |
 | `MoveCommand` | **视图**增量，内部乘 `Scale` | `StandardEx/WorkflowNodeEx.cs` 的 `StandardMove` + `ViewToWorldFactors` |
 
-⇒ 把节点的位置**报出去**（Agent 工具面、宿主、外层 API）要乘 `Scale` 回到世界帧（`VeloxDev.Core.Extension` 的 `WorkflowAgentToolkit.WorldFrame`，工具面在 `Scale=0.5 / 2.0` 上有测试）；渲染与空间索引则**留在折叠帧**，两者不要互相"修正"。另外 `WorkflowSurfaceMath.ToWorldAnchor` 名字里的 "world" 是**折叠帧**（`screen − ActualOffset`），全类同名的还有好几处，判据见 `skills/veloxdev-create-workflow/references/canvas-math.md` 的那张表。非 1 缩放的读/写往返由 `VeloxDev.Core.Extension.Test` 的 `NodeGeometryToolTests` 的 `MoveNode_LandsWhereADragWould_AtANonUnitScale` / `QueryTools_ReportTheWorldPosition_ThePlacementToolsTake` / `SetNodePosition_ReadsBackThroughGetNodeDetail_AtANonUnitScale` 三条钉住 —— `AnchorSizeCollapseTests` 只钉 `Collapse` 这一个纯变换，不覆盖 VM getter、命令与序列化。
+⇒ 把节点的位置**报出去**（Agent 工具面、宿主、外层 API）要乘 `Scale` 回到世界帧（`VeloxDev.Core.Extension` 的 `WorkflowAgentToolkit.WorldFrame`，工具面在 `Scale=0.5 / 2.0` 上有测试）；渲染与空间索引则**留在折叠帧**，两者不要互相"修正"。另外 `WorkflowSurfaceMath.ToWorldAnchor` 名字里的 "world" 是**折叠帧**（`screen − ActualOffset`），全类同名的还有好几处，判据见 `skills/veloxdev-create-workflow/references/canvas-math.md` 的那张表。非 1 缩放的读/写往返由 `VeloxDev.Core.Extension.Test` 的 `NodeGeometryToolTests` 的 `MoveNode_LandsWhereADragWould_AtANonUnitScale` / `QueryTools_ReportTheWorldPosition_ThePlacementToolsTake` / `SetNodePosition_ReadsBackThroughGetNodeDetail_AtANonUnitScale` 这几条钉住 —— `AnchorSizeCollapseTests` 只钉 `Collapse` 这一个纯变换，不覆盖 VM getter、命令与序列化。
 
 ---
 
@@ -206,9 +208,9 @@ TreeHelper.MarkDirty() → 10fps Tickable tick（tick 线程只判脏）     Tem
     → Core 自己不做任何动作：KeyDown 只路由，删不删由定了 KeyDown 的宿主决定
 ```
 
-- **API 形状抄 Avalonia**（`GUI/Events/Input/`）：`PointerEventArgs` 六个具体子类（Entered/Exited/Moved/Pressed/Released/Wheel）、`KeyEventArgs` 两个（Down/Up）、`MouseButton`（`None/Left/Right/Middle/XButton1/XButton2`）、`InputModifiers`、`InputKey`（务实子集，其余报 `Unknown` + `RawKeyCode`）。**2026-10-05 起这些名字不再带 `Workflow` 前缀**（`WorkflowKey` → `InputKey`，其余直接删前缀：`PointerPressedEventArgs` / `KeyEventArgs` / `MouseButton` …）。原文那句「前缀是硬要求，因为适配器同时 `using` 平台命名空间」只说了表层，**真正的机制是命名空间的从属关系**：适配器文件的命名空间是 `VeloxDev.WorkflowSystem.AttachedBehaviors` —— **Core 命名空间的子命名空间**；C# 先解析外层命名空间里**声明**的成员、全都找不到才轮到 `using` 引入的名字，所以 Core 的裸名会**静默盖住平台同名类型**：不报 CS0104 歧义，而在下游报 `CS1061 未包含 GetPosition/Handled/Pointer`、`CS0019 运算符 != 无法应用于 MouseButton 和 MouseButton`、`CS0115 没有找到适合的方法来重写` 这类看着毫不相干的错（去掉前缀后第一次全量构建：134 个错误、11 个文件）。
+- **API 形状抄 Avalonia**（`GUI/Events/Input/`）：`PointerEventArgs` 的几个具体子类（Entered/Exited/Moved/Pressed/Released/Wheel）、`KeyEventArgs`（Down/Up）、`MouseButton`（`None/Left/Right/Middle/XButton1/XButton2`）、`InputModifiers`、`InputKey`（务实子集，其余报 `Unknown` + `RawKeyCode`）。**2026-10-05 起这些名字不再带 `Workflow` 前缀**（`WorkflowKey` → `InputKey`，其余直接删前缀：`PointerPressedEventArgs` / `KeyEventArgs` / `MouseButton` …）。原文那句「前缀是硬要求，因为适配器同时 `using` 平台命名空间」只说了表层，**真正的机制是命名空间的从属关系**：适配器文件的命名空间是 `VeloxDev.WorkflowSystem.AttachedBehaviors` —— **Core 命名空间的子命名空间**；C# 先解析外层命名空间里**声明**的成员、全都找不到才轮到 `using` 引入的名字，所以 Core 的裸名会**静默盖住平台同名类型**：不报 CS0104 歧义，而在下游报 `CS1061 未包含 GetPosition/Handled/Pointer`、`CS0019 运算符 != 无法应用于 MouseButton 和 MouseButton`、`CS0115 没有找到适合的方法来重写` 这类看着毫不相干的错（去掉前缀后第一次全量构建就报出成片错误，横跨多个文件）。
 
-- **平台层怎么引用这 15 个名字 = 规范，不在这里**（用户 2026-10-05 定为规范）：适配器与 item template 每个文件**同时持有 `Wf` / `PlatformInput` 两个别名、处处带前缀**（哪怕该名字在本文件里并不冲突、哪怕某个别名一次没用上）；demo 只在**真冲突**处留别名 —— 只有五个 demo 文件留：Avalonia Demo `Views/Workflow/SlotView.cs` 与 `Views/Workflow/WorkflowView.axaml.cs`、Jalium Demo `Views/Workflow/NodeEditorSurface.cs`、WPF Demo `Views/Workflow/WorkflowView.xaml.cs`、WinForms Demo `Controls/WorkflowCanvas.cs`，其余 demo 保持裸名。这 15 个之外的 Core 名字（`WorkflowInput` / `WorkflowEventHandle` / `Anchor` / `IWorkflowTreeViewModel` …、以及按组件定制的那三个事件族）也保持裸名。清单、判据（按用途不按名字）、核查命令与自查表都在 [memory/specifications/input-alias-specifications.md](../../specifications/input-alias-specifications.md)。
+- **平台层怎么引用这一族名字 = 规范，不在这里**（用户 2026-10-05 定为规范）：适配器与 item template 每个文件**同时持有 `Wf` / `PlatformInput` 两个别名、处处带前缀**（哪怕该名字在本文件里并不冲突、哪怕某个别名一次没用上）；demo 只在**真冲突**处留别名 —— 只有下面这几个 demo 文件留：Avalonia Demo `Views/Workflow/SlotView.cs` 与 `Views/Workflow/WorkflowView.axaml.cs`、Jalium Demo `Views/Workflow/NodeEditorSurface.cs`、WPF Demo `Views/Workflow/WorkflowView.xaml.cs`、WinForms Demo `Controls/WorkflowCanvas.cs`，其余 demo 保持裸名。这些之外的 Core 名字（`WorkflowInput` / `WorkflowEventHandle` / `Anchor` / `IWorkflowTreeViewModel` …、以及按组件定制的那些事件族）也保持裸名。清单、判据（按用途不按名字）、核查命令与自查表都在 [memory/specifications/input-alias-specifications.md](../../specifications/input-alias-specifications.md)。
 - **位置是 `Anchor`，`Position.Layer` 取来源视图所在图层**。但**指针本身没有图层**：`SetPointerCommand` / 虚拟连线端点仍按旧规则取起点那一端的图层。
 - **能力接口 + 一个 relay**：`IInputEvents { InputRelay Input; }`，四组 Helper（`TreeHelper<T>`/`NodeHelper<T>`/`SlotHelper<T>`/`LinkHelper<T>`）都实现。宿主订阅：`((IInputEvents)link.GetHelper()).Input.PointerEntered += …`。
 - **命中归适配器判**：适配器回答的是「指针底下是谁」，**节点与插槽也是答案的一部分** —— 从来源视觉的 `DataContext`（五家标记平台的视图都把它挂在视图上）、控件的 `ViewModel`/`Tag`（WinForms）、JS 回的 `data-veloxdev-node-id` / `-slot-id`（Razor）认出组件模型，认不到才回退 `LinkHitTestEx.HitTestVisibleLinks`（它仍是那条共享的曲线判定，Core 不新增 node/slot 命中）。链里 `slot → node → tree` 因此才走得通 —— 只认连线时 `Target` 永远是「连线或空白」。
@@ -253,9 +255,35 @@ IWorkflowTreeEvents : Connecting/Connected
 ⚠ 横轴在这三家**到不了换算行**（不是漏修，是结构使然）：**WPF 与 Jalium 的滚轮事件本身没有横轴分量**（`MouseWheelEventArgs` 只有 `Delta`）；**Avalonia 的事件带着 `e.Delta.X`，但默认滚那一支调的是 `ScrollBy(0d, …)`**（默认就是竖滚，宿主若要横滚得自己调）。Razor 有**两处**取反（JS 边界 × C#），翻一处会把那家弄反。
 同理，按键被路由不等于被拦：面只在 `Delete` 上拦（那是它自己那一手管的键），滚动容器认得的键从来不在它手里。**按键的 target 取路由已经在维护的那个指针目标**（不再是「悬停的那条线」），所以树级的键（Ctrl+Z/Ctrl+Y）在指针位于空白画布或节点上时一样到得了树 —— 早先那种「不悬停连线就整笔不路由」的门已经拆掉。
 
-节点命令共 8 个（`Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `MoveCommand` … `ReverseBroadcastCommand`），Tree 8 个（`IWorkflowTreeViewModel.cs` 的 `CreateNodeCommand` … `UndoCommand`），Slot 4 个（`IWorkflowSlotViewModel.cs` 的 `SetChannelCommand` … `DeleteCommand`），Link 1 个（`IWorkflowLinkViewModel.cs` 的 `DeleteCommand`），另有全部组件共有的 `CloseCommand`（`IWorkflowViewModel.cs` 的 `CloseCommand`）。
+节点命令（`Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `MoveCommand` … `ReverseBroadcastCommand`）、Tree 命令（`IWorkflowTreeViewModel.cs` 的 `CreateNodeCommand` … `UndoCommand`）、Slot 命令（`IWorkflowSlotViewModel.cs` 的 `SetChannelCommand` … `DeleteCommand`）与 Link 命令（`IWorkflowLinkViewModel.cs` 的 `DeleteCommand`）各自按组件职责给出；另有全部组件共有的 `CloseCommand`（`IWorkflowViewModel.cs` 的 `CloseCommand`）。
 
 **这意味着「加一个新的交互手势」通常完全不改 Core** —— 在适配器里发一条已有的命令即可；只有命令语义不够时才回 Core 加 `StandardXxx`。
+
+### 3.7 自动布局（分离投影）
+
+```
+WorkflowLayoutProblemBuilder.Build(tree, options)      ← 唯一读模型的一步
+  → WorkflowLayoutProblem { Nodes, Edges, Sources }    ← 不可变快照（世界坐标）
+  → WorkflowLayoutPipeline.Solve(problem, options, ctx)
+      ├ IWorkflowLayoutPlanner.CreateStages(...)       ← 默认 [HierarchyAlignmentStage, TileSeparationStage]
+      ├ WorkflowLayoutState { X/Y/Rank/Order/Route* }  ← 阶段共享的可写数组
+      ├ 收尾把 pinned 节点的位置抄回快照
+      └ DefaultWorkflowLayoutCost.Measure
+  → WorkflowLayoutSolution { Placements, Cost, Diagnostics }
+  → WorkflowLayoutApplier.Apply(problem, solution)     ← 调用线程；一个 IWorkflowActionPair，一次 MarkDirty
+  → WorkflowLayoutEx.Arrange(tree, options)             ← 经 tree.GetHelper() 的 IWorkflowLayoutHost
+  → WorkflowLayoutEx.Arrange(node, options)             ← Parent → tree → helper.LayoutSolver（Demo 的节点右键入口）
+```
+
+- 阶段只读快照、写 `state` 数组；**不许读模型、视图或 `Problem.Sources`**（后者只给 applier）。
+- 快照跳过世界几何非有限的节点及其边，原始下标记在 `WorkflowLayoutProblem.SkippedIndices`；`Sources` 与过滤后的节点逐位对齐。
+- 两次 band 扫描之后还有一次**全局正面积重叠修复**（tile 索引、确定性 mover、最小位移轴、迭代上限）；pinned-pinned 保留并在诊断里说明。band 局部判定看不到「跨列且跨行」的重叠，这一遍是兜底。
+- 代价只读 solved 数组（交叉用 solved 中心线，不读已发布曲线），重叠/交叉走临时 `LayoutTileIndex` 网格；`WorkflowLayoutOptions.MeasureCost` 可在超大图上关掉这两项。
+- `WorkflowLayoutApplier.Apply` 会核对节点的当前 anchor/layer/父树是否仍等于快照；不一致的节点跳过并计入 `WorkflowLayoutResult.SkippedCount`，不覆盖 Solve 之后的并发改动。
+- **默认两段**：`HierarchyAlignmentStage` 按拓扑序自顶向下写规范位置 —— 扇出组（父 + 2 个以上子）子列左边缘 = 父右边缘 + `ColumnGap`，以父垂心为中心按 `RowGap` 堆叠，子序取快照出边顺序；扇入合流点（2 个以上父）垂直中心 = 父组包围盒中心，左边缘 = 最右父右边缘 + `ColumnGap`；单子边垂直中心 = 父中心，左边缘 = 父右边缘 + `ColumnGap`。扇出优先于后两条，组内有 pinned 子则整组跳过。`TileSeparationStage` 只做冲突投影 —— tile 切块（中心归格，查询带 1 格 halo）→ 列带垂向扫描 → 行带水平扫描 → 按 `MaxSweeps` 重复，不夹取，允许负方向生长。
+- **从指定节点开始**：`WorkflowLayoutOptions.StartNode` 非空时，只把沿 `Traversal`、`MaxDepth` 可达的节点当可动集，其余有限节点作为 pinned 障碍；起点默认固定（`PinStartNode`），布局从它向外长。`StartNode` 必须在树内且几何有限，否则 builder 抛 `ArgumentException`。
+- `PositionTolerance` 同时约束两段：`0` 表示严格规范位置（对齐段总写计算位置，分离段只修硬违规）；大于 `0` 时扇出组全员在容差内且保持最小间距就不动，单子/扇入节点的中心偏差不超过容差也不动，分离段的软位移只在超出容差时执行。**硬违规永远修**，pinned 永不移动。分离段没有远距离软目标，因此不需要额外的位移上限。
+- **命名空间是 `VeloxDev.WorkflowSystem`，不是 `.Layout`**（会遮蔽 MAUI 的 `Layout` 类型，适配器报 CS0118）。完整依据见 [layout.md](layout.md) §一。
 
 ---
 
@@ -276,6 +304,7 @@ IWorkflowTreeEvents : Connecting/Connected
 10. **`InitializeWorkflowCore` 注册 slot 时刻意绕过 `CreateSlotCommand`**，因为那时 `node.Parent == null`。手写这条路会踩到 `WorkflowNodeEx.StandardCreateSlot` 里的幂等守卫（`StandardEx/WorkflowNodeEx.cs` 的 `StandardCreateSlot` 里 `if (component.Slots.Any(s => ReferenceEquals(s, slot))) return;`：同引用的 slot 二次派发直接 `return`）—— 守卫的存在正是为了不让「迟到的延迟派发」推进一个幽灵 undo 项，其 Undo 会把 slot 撕出来。
 11. **`Channel` 的自动清理只发生在 `One*` 通道上**。`ShouldCleanupConnections` 只看 `OneTarget`/`OneSource`/`OneBoth` 位（`StandardEx/WorkflowTreeEx.cs` 的 `ShouldCleanupConnections`），`Multiple*` 从不删任何东西；「顺带清理反方向」那一条门控在 `HasFlag(OneBoth)`（两个 one 位同时存在），所以 `MultipleBoth` 不触发。
 12. **两种 Slot 实现的默认 Channel 不一致**：生成器造的 slot 体默认 `MultipleBoth`（`Writers/WorkflowWriter.cs` 的 `GenerateSlotBody`），而 `SlotDefaultViewModel` 默认 `OneBoth`（`Templates/ViewModels/SlotDefaultViewModel.cs` 的 `channel` 字段）。行为对不上 demo 时先查这里。
+13. **自动布局只在 applier 里写模型，一次 `Apply` 只入栈一次。** 阶段只读快照、写 `WorkflowLayoutState`；`WorkflowLayoutApplier.Apply` 把全部移动包成一个 `IWorkflowActionPair` 交给 `tree.GetHelper().Submit(...)`，结束后只 `MarkDirty()` 一次。pinned 节点既不写也不入栈；没有移动时不提交（不造空 undo 项）。模型在 Solve 之后被改过、或节点已离开树的，跳过不覆盖，计入 `WorkflowLayoutResult.SkippedCount`。详见 [layout.md](layout.md) §五。
 
 ---
 
@@ -284,7 +313,7 @@ IWorkflowTreeEvents : Connecting/Connected
 ```
 Interfaces/WorkflowSystem/    纯契约，零实现（按 Common/Components/Connections/Commands/Providers/Spatial/Surface/Execution/Enums/ 分层）
         ↑
-WorkflowSystem/                实现（Templates 默认实现、StandardEx 扩展方法、CompilerEx、GUI）
+WorkflowSystem/                实现（Templates 默认实现、StandardEx 扩展方法、CompilerEx、GUI、Layout）
         ↑
 VeloxDev.Core.Extension/Agent/ 消费方（AI 工具面），命名空间 VeloxDev.AI.Workflow
         ↑
@@ -314,6 +343,8 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 | 暂停 / 观察 / 重试 / 结构化错误 / 补偿 / 检查点 | 六个可选能力都是 `RuntimeContext` 的具体类成员，引擎在 `DriveAsync` 与 `RunAsync` 的收尾里读；见 [compiler-execution.md](compiler-execution.md) §十（前五个）与 §十一（检查点） |
 | 汇合点的输入怎么聚合 | `CompilerEx/Runtime/Model/RuntimeContext.cs` 的 `CollectGroupedInputs`；结构 `GroupData.cs` 的 `GroupData` |
 | 画布坐标换算 | `GUI/Math/WorkflowSurfaceMath.cs`（全模块唯一数学，别在适配器里重写） |
+| 节点自动布局 / 分离投影 | `WorkflowSystem/Layout/TileSeparationStage.cs`；管道 `WorkflowLayoutPipeline.cs`，展开见 [layout.md](layout.md) |
+| 布局阶段 / 策略 / 代价的注入面 | `Interfaces/WorkflowSystem/Layout/` 的 `IWorkflowLayoutStage.cs`、`IWorkflowLayoutPositionPolicy.cs`、`IWorkflowLayoutCost.cs`、`IWorkflowLayoutPlanner.cs`、`IWorkflowLayoutApplier.cs` |
 | 缩放时画布怎么长 | `GUI/GeometryModels/CanvasLayout.cs` 的 `Update()` |
 | 缩放后保存/加载丢东西 | `GUI/GeometryModels/Anchor.cs` 的 `OnSerializing` / `OnSerialized` / `OnDeserialized` 三个钩子（`Size.cs` 同构） |
 | 什么进可见集 | `GUI/Virtualization/WorkflowSpatialEx.cs` 的 `VirtualizeCore`；暂存与补挂 `WorkflowSpatialManager.cs` 的 `InsertLink` / `RetryPendingLinks` |
@@ -382,7 +413,7 @@ provider 一律 `isFresh = true`。
 **类型没变按名字**（同一 provider 的端口表被改，序号配对会把连线悄悄挪到另一个口上 —— 那是看起来正常的错图，
 比丢掉更难发现）。名字在旧集合里找不到的分支就是新端口，不接任何线。
 
-守卫三条：`SlotEnumeratorTests` 的 `RebuildingAProvidersSlots_KeepsTheLinksThatFeedThem` 与
+守卫：`SlotEnumeratorTests` 的 `RebuildingAProvidersSlots_KeepsTheLinksThatFeedThem` 与
 `…_PairsBranchesByName_NotByPosition`，加上工具侧的
 `SetEnumSlotCollectionTests.GrowingThePythonNodesPorts_KeepsTheLinksThatFeedThem`。
 
