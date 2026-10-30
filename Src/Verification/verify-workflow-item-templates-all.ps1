@@ -595,7 +595,7 @@ foreach ($name in $Platform) {
     $templateProject = Join-Path $repoRoot $config.TemplateProject
     $mirrorRoot = Join-Path $repoRoot $config.MirrorRoot
 
-    $result = [ordered]@{ Platform = $name; Items = @(); Generated = 0; Built = $false; Matches = 0; Differs = 0; Expected = 0; Comments = 0; Warnings = 0; Error = $null }
+    $result = [pscustomobject]@{ Platform = $name; Items = @(); Generated = 0; Built = $false; Matches = 0; Differs = 0; Expected = 0; Comments = 0; Warnings = 0; Error = $null }
 
     try {
         New-Item -ItemType Directory -Force -Path $probe, $nupkgs, (Join-Path $probe 'Views') | Out-Null
