@@ -2,6 +2,7 @@
 using VeloxDev.Serialization;
 using System;
 using System.Diagnostics;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI.Pipelines;
@@ -135,14 +136,23 @@ internal sealed class TrackedAIFunction(
     {
         var limit = _tools.MaxResultChars?.Invoke();
         if (limit is not int cap || cap <= 0) return result;
-        if (result is not string text || text.Length <= cap) return result;
+
+        // AIFunctionFactory returns a JsonElement for a string-returning tool, so checking only `string` left
+        // the global cap inert for every built-in tool: the cap was reported as a guarantee but never applied.
+        var length = result switch
+        {
+            string text => text.Length,
+            JsonElement element => element.GetRawText().Length,
+            _ => -1,
+        };
+        if (length < 0 || length <= cap) return result;
 
         return new VeloxJsonObject
         {
             ["status"] = "truncated",
-            ["message"] = $"The tool result was {text.Length} characters, over the {cap}-character limit. "
+            ["message"] = $"The tool result was {length} characters, over the {cap}-character limit. "
                         + "Narrow the query (filters, smaller ranges, or a summary tool) and retry.",
-            ["originalLength"] = text.Length,
+            ["originalLength"] = length,
             ["limit"] = cap,
         }.ToJson();
     }

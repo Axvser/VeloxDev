@@ -2503,6 +2503,12 @@ public sealed class WorkflowAgentToolkit
                 return Error($"{toolName} timed out after {timeoutMs} ms.");
             }
 
+            // The engine reports a cancelled run as a normal outcome rather than throwing, so the timeout has
+            // to be recognised here too — otherwise a timed-out run answers "ok, Cancelled", which reads as a
+            // finished run the caller chose to stop.
+            if (timeoutCts is { IsCancellationRequested: true } && !ct.IsCancellationRequested)
+                return Error($"{toolName} timed out after {timeoutMs} ms.");
+
             // Forward-consistent semantics: a Terminal run only reports a result when the target node was
             // actually driven. If a router on its cone decided on a sibling branch, the target is simply not
             // reached and no value is fabricated.
@@ -3830,12 +3836,21 @@ public sealed class WorkflowAgentToolkit
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(ms);
-        var completion = await command.ExecuteAndWaitAsync(parameter, timeoutCts.Token).ConfigureAwait(false);
+        try
+        {
+            var completion = await command.ExecuteAndWaitAsync(parameter, timeoutCts.Token).ConfigureAwait(false);
 
-        if (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+            if (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+                throw new TimeoutException($"The command did not finish within {ms} ms.");
+
+            ThrowIfBad(completion);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            // The command may surface its cancellation as an exception instead of a Canceled completion. Without
+            // this translation the timeout reads as "the node cancelled" and the caller cannot tell the two apart.
             throw new TimeoutException($"The command did not finish within {ms} ms.");
-
-        ThrowIfBad(completion);
+        }
     }
 
     private static void ThrowIfBad(CommandCompletion completion)
