@@ -77,6 +77,39 @@ namespace Demo.Views
             InitializeNetworkDemo();
         }
 
+        // 侧栏一次只显示一页：资源管理器 / 运行 / Agent / MCP / 输出。
+        private void OnActivityClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: string view } clicked) return;
+
+            // 活动栏是 Button 而不是 RadioButton，选中态在这里画：左侧蓝条 + 白色字形。
+            var accent = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x00, 0x7A, 0xCC));
+            var clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            var activeText = new SolidColorBrush(Microsoft.UI.Colors.White);
+            var idleText = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x9D, 0x9D, 0x9D));
+            foreach (var button in ActivityBar.Children.OfType<Button>())
+            {
+                var active = ReferenceEquals(button, clicked);
+                button.BorderBrush = active ? accent : clear;
+                button.Foreground = active ? activeText : idleText;
+            }
+
+            ExplorerPanel.Visibility = view == "explorer" ? Visibility.Visible : Visibility.Collapsed;
+            RunPanel.Visibility = view == "run" ? Visibility.Visible : Visibility.Collapsed;
+            AgentPanel.Visibility = view == "agent" ? Visibility.Visible : Visibility.Collapsed;
+            McpPanel.Visibility = view == "mcp" ? Visibility.Visible : Visibility.Collapsed;
+            OutputPanel.Visibility = view == "output" ? Visibility.Visible : Visibility.Collapsed;
+
+            SidebarHeader.Text = view switch
+            {
+                "run" => "运行",
+                "agent" => "AGENT",
+                "mcp" => "MCP",
+                "output" => "输出",
+                _ => "资源管理器",
+            };
+        }
+
         /// <summary>
         /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
         /// </summary>

@@ -20,13 +20,552 @@ namespace Demo
         // 合并之后一轮只刷新一次 —— 刷新本身是幂等的，后来的请求要的正是前一次即将看到的状态。
         private ViewModels.Workflow.Helper.CoalescedRefresh? _surfaceRefresh;
 
+        // ── VS Code 式左栏 ───────────────────────────────────────────────────
+        // 活动栏 48px + 侧栏；五个活动页一次只显示一个。命名控件仍由 Designer 创建，
+        // BuildSidebar 只把它们从原来的 toolbarPanel / 标签页里搬到对应页，事件与绑定原样保留。
+        private static readonly Color ActivityBack = Color.FromArgb(0x33, 0x33, 0x33);
+        private static readonly Color ActivityHover = Color.FromArgb(0x2A, 0x2D, 0x2E);
+        private static readonly Color ActivityActive = Color.FromArgb(0x00, 0x7A, 0xCC);
+        private static readonly Color ActivityGlyph = Color.FromArgb(0x9D, 0x9D, 0x9D);
+        private static readonly Color SidebarBack = Views.CardTheme.FromHex("#252526");
+        private static readonly Color SidebarField = Views.CardTheme.FromHex("#1E1E1E");
+        private static readonly Color SidebarText = Views.CardTheme.FromHex("#CCCCCC");
+        private static readonly Color SidebarValue = Views.CardTheme.FromHex("#E7E7E7");
+        private static readonly Color SidebarMuted = Views.CardTheme.FromHex("#94A3B8");
+        private static readonly Color SidebarAccent = Views.CardTheme.FromHex("#7EC8FF");
+        private static readonly Color SidebarHover = Views.CardTheme.FromHex("#3A3D41");
+        private static readonly Color SidebarButtonBack = Views.CardTheme.FromHex("#333333");
+        private static readonly Color SidebarBorder = Views.CardTheme.FromHex("#3C3C3C");
+
+        private readonly Dictionary<string, Control> _sidebarPages = [];
+        private readonly Dictionary<string, ActivityButton> _activityButtons = [];
+        private Label _sidebarHeaderLabel = null!;
+        private Panel _sidebarPageHost = null!;
+        private Panel _explorerElementHost = null!;
+        private Panel _mcpHost = null!;
+        private ToolTip _toolTip = null!;
+
         public Form1()
         {
             InitializeComponent();
+            BuildSidebar();
             WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(workflowSurfaceControl, true);
             WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvas(workflowSurfaceControl, workflowSurfaceControl);
             workflowSurfaceControl.MinimapOverlay = minimapOverlay;
             LoadDemo(WorkflowDemoSession.Create());
+        }
+
+        /// <summary>
+        /// Replaces the designer's stacked toolbar + log tabs with a VS Code-style rail:
+        /// a 48px activity bar, a dark sidebar, and five pages that are shown one at a time.
+        /// </summary>
+        /// <remarks>
+        /// The named controls are not rebuilt — they are moved out of <see cref="toolbarPanel"/> and the
+        /// log tabs into their new page. WinForms moves a control, its bindings and its event handlers
+        /// together when it is added to a new parent, so this preserves every existing handler and
+        /// the seed binding that <see cref="LoadDemo"/> installs.
+        /// </remarks>
+        private void BuildSidebar()
+        {
+            _toolTip = new ToolTip
+            {
+                AutoPopDelay = 5000,
+                InitialDelay = 300,
+                ReshowDelay = 100,
+                ShowAlways = true,
+            };
+            components.Add(_toolTip);
+
+            splitContainer.Panel1.SuspendLayout();
+            splitContainer.Panel1.Controls.Clear();
+            splitContainer.Panel1.BackColor = Views.CardTheme.Ground;
+
+            var sidebarLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = SidebarBack,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            sidebarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+            sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            _sidebarHeaderLabel = new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "资源管理器",
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = SidebarText,
+                BackColor = SidebarBack,
+                Font = new Font(Views.CardTheme.UiFamily, 9F, FontStyle.Bold),
+                Padding = new Padding(12, 0, 12, 0),
+                Margin = Padding.Empty,
+            };
+            _sidebarPageHost = new Panel { Dock = DockStyle.Fill, BackColor = SidebarBack };
+
+            sidebarLayout.Controls.Add(_sidebarHeaderLabel, 0, 0);
+            sidebarLayout.Controls.Add(_sidebarPageHost, 0, 1);
+
+            BuildExplorerPage();
+            BuildRunPage();
+            BuildAgentPage();
+            BuildMcpPage();
+            BuildOutputPage();
+
+            var activityBar = new Panel { Dock = DockStyle.Fill, BackColor = ActivityBack };
+            var activityStack = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                ColumnCount = 1,
+                RowCount = 5,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = ActivityBack,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            activityStack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            for (var i = 0; i < 5; i++) activityStack.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+
+            AddActivityButton(activityStack, 0, "explorer", "", "资源管理器");
+            AddActivityButton(activityStack, 1, "run", "", "运行");
+            AddActivityButton(activityStack, 2, "agent", "", "Agent 对话");
+            AddActivityButton(activityStack, 3, "mcp", "", "MCP 服务器");
+            AddActivityButton(activityStack, 4, "output", "", "执行输出");
+            activityBar.Controls.Add(activityStack);
+
+            var rail = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Views.CardTheme.Ground,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            rail.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48F));
+            rail.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            rail.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            rail.Controls.Add(activityBar, 0, 0);
+            rail.Controls.Add(sidebarLayout, 1, 0);
+
+            splitContainer.Panel1.Controls.Add(rail);
+            splitContainer.Panel1.ResumeLayout(false);
+
+            // Both old hosts are empty by now: every named child was re-parented above.
+            toolbarPanel.Dispose();
+            logTabControl.Dispose();
+
+            SelectActivity("explorer");
+        }
+
+        private void AddActivityButton(TableLayoutPanel stack, int row, string key, string glyph, string tooltip)
+        {
+            var button = new ActivityButton
+            {
+                Text = glyph,
+                Tag = key,
+                Dock = DockStyle.Fill,
+                Margin = Padding.Empty,
+            };
+            _toolTip.SetToolTip(button, tooltip);
+            button.Click += OnActivityClick;
+            _activityButtons[key] = button;
+            stack.Controls.Add(button, 0, row);
+        }
+
+        private Panel CreateSidebarPage(string key)
+        {
+            var page = new Panel { Dock = DockStyle.Fill, BackColor = SidebarBack, Visible = false };
+            _sidebarPages[key] = page;
+            _sidebarPageHost.Controls.Add(page);
+            return page;
+        }
+
+        private void OnActivityClick(object? sender, EventArgs e)
+        {
+            if (sender is Control { Tag: string key }) SelectActivity(key);
+        }
+
+        /// <summary>Shows one page at a time and moves the activity bar's active marker and the header.</summary>
+        private void SelectActivity(string key)
+        {
+            foreach (var (name, page) in _sidebarPages)
+                page.Visible = name == key;
+
+            if (_sidebarPages.TryGetValue(key, out var active)) active.BringToFront();
+
+            _sidebarHeaderLabel.Text = key switch
+            {
+                "run" => "运行",
+                "agent" => "AGENT",
+                "mcp" => "MCP",
+                "output" => "输出",
+                _ => "资源管理器",
+            };
+
+            foreach (var (name, button) in _activityButtons)
+            {
+                button.IsActive = name == key;
+                button.Invalidate();
+            }
+        }
+
+        // ── Page builders ────────────────────────────────────────────────────
+
+        private void BuildExplorerPage()
+        {
+            var page = CreateSidebarPage("explorer");
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 5,
+                BackColor = SidebarBack,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            titleLabel.AutoSize = true;
+            titleLabel.ForeColor = SidebarValue;
+            titleLabel.BackColor = Color.Transparent;
+            titleLabel.Margin = new Padding(12, 12, 12, 0);
+            layout.Controls.Add(titleLabel, 0, 0);
+
+            var actions = CreateButtonFlow();
+            actions.Padding = new Padding(10, 2, 10, 0);
+            foreach (var button in new[] { saveButton, selectButton, undoButton, redoButton, reloadButton, loadDemoButton })
+            {
+                StyleSidebarActionButton(button);
+                actions.Controls.Add(button);
+            }
+            layout.Controls.Add(actions, 0, 1);
+
+            layout.Controls.Add(CreateSectionLabel("元素"), 0, 2);
+
+            _explorerElementHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = SidebarBack,
+                Margin = new Padding(12, 0, 12, 0),
+            };
+            layout.Controls.Add(_explorerElementHost, 0, 3);
+
+            summaryLabel.ForeColor = SidebarMuted;
+            summaryLabel.BackColor = Color.Transparent;
+            summaryLabel.Visible = false;
+            layout.Controls.Add(summaryLabel, 0, 4);
+
+            page.Controls.Add(layout);
+        }
+
+        private void BuildRunPage()
+        {
+            var page = CreateSidebarPage("run");
+            var scroll = new Panel { Dock = DockStyle.Fill, BackColor = SidebarBack, AutoScroll = true };
+            var stack = CreateVerticalStack();
+
+            AddStackRow(stack, CreateSectionLabel("运行控制"));
+
+            StyleCaptionLabel(runControlLabel);
+            StyleValueLabel(runGateStateLabel);
+            StyleCaptionLabel(statusLabel);
+            StyleValueLabel(statusValueLabel);
+            AddStackRow(stack, CreatePairRow(runControlLabel, runGateStateLabel));
+            AddStackRow(stack, CreatePairRow(statusLabel, statusValueLabel));
+
+            var runButtons = CreateButtonFlow();
+            foreach (var button in new[] { stopButton, pauseButton, resumeButton, continueFromCheckpointButton })
+            {
+                StyleSidebarControlButton(button);
+                runButtons.Controls.Add(button);
+            }
+            stopButton.ForeColor = Views.CardTheme.ActionStop;
+            AddStackRow(stack, runButtons);
+
+            AddStackRow(stack, CreateSectionLabel("画布"));
+            StyleCaptionLabel(nodeCountCaptionLabel);
+            StyleValueLabel(nodeCountLabel);
+            StyleCaptionLabel(visibleCountCaptionLabel);
+            StyleValueLabel(visibleCountLabel);
+            AddStackRow(stack, CreatePairRow(nodeCountCaptionLabel, nodeCountLabel));
+            AddStackRow(stack, CreatePairRow(visibleCountCaptionLabel, visibleCountLabel));
+
+            AddStackRow(stack, CreateSectionLabel("本次运行"));
+            StyleCaptionLabel(seedLabel);
+            seedTextBox.BackColor = SidebarField;
+            seedTextBox.ForeColor = SidebarValue;
+            seedTextBox.BorderStyle = BorderStyle.FixedSingle;
+            AddStackRow(stack, CreatePairRow(seedLabel, seedTextBox, stretchValue: true));
+
+            scroll.Controls.Add(stack);
+            page.Controls.Add(scroll);
+        }
+
+        private void BuildAgentPage()
+        {
+            var page = CreateSidebarPage("agent");
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = SidebarBack,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            // 会话权限与 Agent 放一起：模式决定模型能做什么，不决定一次运行怎么被驱动。
+            var session = CreateVerticalStack();
+            AddStackRow(session, CreateSectionLabel("会话"));
+            StyleCaptionLabel(permissionModeLabel);
+            permissionModePicker.BackColor = SidebarField;
+            permissionModePicker.ForeColor = SidebarValue;
+            permissionModePicker.FlatStyle = FlatStyle.Flat;
+            AddStackRow(session, CreatePairRow(permissionModeLabel, permissionModePicker, stretchValue: true));
+            layout.Controls.Add(session, 0, 0);
+
+            var chatHeader = new Label
+            {
+                Text = "Agent 对话",
+                AutoSize = true,
+                ForeColor = SidebarAccent,
+                BackColor = Color.Transparent,
+                Font = new Font(Views.CardTheme.UiFamily, 9F, FontStyle.Bold),
+                Margin = new Padding(12, 6, 12, 4),
+            };
+            layout.Controls.Add(chatHeader, 0, 1);
+
+            var chat = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = SidebarBack,
+                Margin = Padding.Empty,
+                Padding = new Padding(8, 0, 8, 8),
+            };
+            chat.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            chat.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            chat.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
+
+            agentLogListBox.BackColor = SidebarField;
+            agentLogListBox.ForeColor = SidebarValue;
+            agentLogListBox.BorderStyle = BorderStyle.FixedSingle;
+            agentLogListBox.Dock = DockStyle.Fill;
+
+            agentInputPanel.BackColor = SidebarBack;
+            agentInputPanel.Dock = DockStyle.Fill;
+            agentInputTextBox.BackColor = SidebarField;
+            agentInputTextBox.ForeColor = Color.White;
+            agentInputTextBox.BorderStyle = BorderStyle.FixedSingle;
+
+            StyleSidebarControlButton(agentSendButton);
+            agentSendButton.AutoSize = false;
+            agentSendButton.Width = 70;
+
+            chat.Controls.Add(agentLogListBox, 0, 0);
+            chat.Controls.Add(agentInputPanel, 0, 1);
+            layout.Controls.Add(chat, 0, 2);
+
+            page.Controls.Add(layout);
+        }
+
+        private void BuildMcpPage()
+        {
+            var page = CreateSidebarPage("mcp");
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = SidebarBack,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.Controls.Add(CreateSectionLabel("服务器"), 0, 0);
+
+            _mcpHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = SidebarBack,
+                Margin = new Padding(12, 0, 12, 0),
+            };
+            layout.Controls.Add(_mcpHost, 0, 1);
+            page.Controls.Add(layout);
+        }
+
+        private void BuildOutputPage()
+        {
+            var page = CreateSidebarPage("output");
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = SidebarBack,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.Controls.Add(CreateSectionLabel("执行输出"), 0, 0);
+
+            executionLogListBox.BackColor = SidebarField;
+            executionLogListBox.ForeColor = SidebarValue;
+            executionLogListBox.BorderStyle = BorderStyle.FixedSingle;
+            executionLogListBox.Dock = DockStyle.Fill;
+            executionLogListBox.Margin = new Padding(8, 0, 8, 8);
+            layout.Controls.Add(executionLogListBox, 0, 1);
+            page.Controls.Add(layout);
+        }
+
+        // ── Sidebar building blocks ─────────────────────────────────────────
+
+        private static TableLayoutPanel CreateVerticalStack()
+        {
+            var stack = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 0,
+                BackColor = SidebarBack,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            return stack;
+        }
+
+        private static void AddStackRow(TableLayoutPanel stack, Control control)
+        {
+            var row = stack.RowStyles.Count;
+            stack.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            stack.RowCount = stack.RowStyles.Count;
+            control.Dock = DockStyle.Top;
+            stack.Controls.Add(control, 0, row);
+        }
+
+        private static Label CreateSectionLabel(string text) => new()
+        {
+            Text = text,
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            ForeColor = Views.CardTheme.FromHex("#BBBBBB"),
+            BackColor = Color.Transparent,
+            Font = new Font(Views.CardTheme.UiFamily, 9F, FontStyle.Bold),
+            Margin = new Padding(12, 14, 12, 6),
+        };
+
+        private static TableLayoutPanel CreatePairRow(Control caption, Control value, bool stretchValue = false)
+        {
+            caption.AutoSize = true;
+            caption.Anchor = AnchorStyles.Left;
+            caption.Margin = new Padding(0, 0, 8, 0);
+            caption.BackColor = Color.Transparent;
+            value.Margin = Padding.Empty;
+            if (stretchValue)
+            {
+                value.Dock = DockStyle.Fill;
+            }
+            else
+            {
+                value.Anchor = AnchorStyles.Left;
+            }
+
+            var row = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = SidebarBack,
+                Margin = new Padding(12, 2, 12, 2),
+                Padding = Padding.Empty,
+            };
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            row.Controls.Add(caption, 0, 0);
+            row.Controls.Add(value, 1, 0);
+            return row;
+        }
+
+        private static FlowLayoutPanel CreateButtonFlow() => new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = SidebarBack,
+            Margin = Padding.Empty,
+            Padding = new Padding(12, 4, 12, 4),
+            MaximumSize = new Size(320, 0),
+        };
+
+        private static void StyleSidebarActionButton(Button button)
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 0;
+            button.FlatAppearance.MouseOverBackColor = SidebarHover;
+            button.FlatAppearance.MouseDownBackColor = SidebarField;
+            button.BackColor = SidebarBack;
+            button.ForeColor = SidebarText;
+            button.UseVisualStyleBackColor = false;
+            button.AutoSize = true;
+            button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            button.Padding = new Padding(8, 3, 8, 3);
+            button.Margin = new Padding(0, 0, 6, 6);
+            button.Cursor = Cursors.Hand;
+        }
+
+        private static void StyleSidebarControlButton(Button button)
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.BorderColor = SidebarBorder;
+            button.FlatAppearance.MouseOverBackColor = SidebarHover;
+            button.FlatAppearance.MouseDownBackColor = SidebarField;
+            button.BackColor = SidebarButtonBack;
+            button.ForeColor = SidebarText;
+            button.UseVisualStyleBackColor = false;
+            button.AutoSize = true;
+            button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            button.Padding = new Padding(8, 3, 8, 3);
+            button.Margin = new Padding(0, 0, 6, 6);
+            button.Cursor = Cursors.Hand;
+        }
+
+        private static void StyleCaptionLabel(Label label)
+        {
+            label.ForeColor = SidebarText;
+            label.BackColor = Color.Transparent;
+        }
+
+        private static void StyleValueLabel(Label label)
+        {
+            label.ForeColor = SidebarValue;
+            label.BackColor = Color.Transparent;
         }
 
         private ControllerViewModel Controller => _demo!.Controller;
@@ -210,16 +749,14 @@ namespace Demo
 
         // ── MCP server status ─────────────────────────────────────────────────
 
-        private TabPage? _mcpStatusTab;
         private FlowLayoutPanel? _mcpStatusPanel;
 
         private void SetupMcpStatusTab()
         {
             if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
 
-            if (_mcpStatusTab is null)
+            if (_mcpStatusPanel is null)
             {
-                _mcpStatusTab = new TabPage("MCP 服务器状态");
                 _mcpStatusPanel = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Fill,
@@ -227,9 +764,9 @@ namespace Demo
                     WrapContents = false,
                     AutoScroll = true,
                     Padding = new Padding(10),
+                    BackColor = SidebarBack,
                 };
-                _mcpStatusTab.Controls.Add(_mcpStatusPanel);
-                logTabControl.TabPages.Add(_mcpStatusTab);
+                _mcpHost.Controls.Add(_mcpStatusPanel);
             }
 
             // Marshal status updates to the UI thread (ObservableCollection bindings require the same thread).
@@ -257,6 +794,8 @@ namespace Demo
             {
                 Text = $"MCP: 存活 {status.ConnectedCount} · 错误 {status.ErrorCount} · 安装/连接 {status.WorkingCount}",
                 AutoSize = true,
+                ForeColor = Views.CardTheme.FromHex("#6BFFB8"),
+                BackColor = Color.Transparent,
                 Font = new Font(Font, FontStyle.Bold),
             });
 
@@ -267,6 +806,7 @@ namespace Demo
                 {
                     Text = line,
                     AutoSize = true,
+                    BackColor = Color.Transparent,
                     ForeColor = s.IsError ? Color.Red
                         : s.IsConnected ? Color.FromArgb(80, 220, 130)
                         : Color.Gray,
@@ -276,11 +816,15 @@ namespace Demo
                     {
                         Text = "    " + s.Error,
                         AutoSize = true,
+                        BackColor = Color.Transparent,
                         ForeColor = Color.Red,
                     });
             }
 
             var reload = new Button { Text = "重载", AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+            StyleSidebarControlButton(reload);
+            reload.AutoSize = true;
+            reload.Margin = new Padding(0, 8, 0, 0);
             reload.Click += OnReloadMcp;
             _mcpStatusPanel.Controls.Add(reload);
         }
@@ -295,20 +839,13 @@ namespace Demo
 
         private Views.Workflow.WorkflowElementPanel? _elementPanel;
 
-        // 标签页只建一次；树每换一次（重置示例、载入文件）都重绑到新树 —— 旧树的集合事件由目录自己退订。
+        // 元素面板只建一次；树每换一次（重置示例、载入文件）都重绑到新树 —— 旧树的集合事件由目录自己退订。
         private void SetupElementTab()
         {
             if (_elementPanel is null)
             {
                 _elementPanel = new Views.Workflow.WorkflowElementPanel { Dock = DockStyle.Fill };
-                var tab = new TabPage("元素")
-                {
-                    Padding = new Padding(4),
-                    BackColor = Views.CardTheme.Ground,
-                    ForeColor = Views.CardTheme.Value,
-                };
-                tab.Controls.Add(_elementPanel);
-                logTabControl.TabPages.Add(tab);
+                _explorerElementHost.Controls.Add(_elementPanel);
             }
 
             _elementPanel.Tree = _demo?.Tree;
@@ -510,6 +1047,76 @@ namespace Demo
             }
 
             agentLogListBox.EndUpdate();
+        }
+
+        /// <summary>
+        /// One square button in the 48px activity bar. WinForms' flat button can outline every edge but not
+        /// draw the 2px active strip on the left alone, so the face is painted here: hover lifts the ground,
+        /// active adds the #007ACC strip and brightens the glyph.
+        /// </summary>
+        private sealed class ActivityButton : Button
+        {
+            private bool _hover;
+
+            public ActivityButton()
+            {
+                SetStyle(
+                    ControlStyles.AllPaintingInWmPaint |
+                    ControlStyles.OptimizedDoubleBuffer |
+                    ControlStyles.ResizeRedraw |
+                    ControlStyles.UserPaint,
+                    true);
+
+                FlatStyle = FlatStyle.Flat;
+                FlatAppearance.BorderSize = 0;
+                UseVisualStyleBackColor = false;
+                BackColor = ActivityBack;
+                ForeColor = ActivityGlyph;
+                Cursor = Cursors.Hand;
+                TabStop = false;
+                Font = new Font("Segoe MDL2 Assets", 14F, FontStyle.Regular, GraphicsUnit.Point);
+            }
+
+            // 运行时绘制状态，不是设计器属性；显式隐藏，WFO1000 才不会要求为它生成序列化代码。
+            [System.ComponentModel.Browsable(false)]
+            [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+            internal bool IsActive { get; set; }
+
+            protected override void OnMouseEnter(EventArgs e)
+            {
+                _hover = true;
+                Invalidate();
+                base.OnMouseEnter(e);
+            }
+
+            protected override void OnMouseLeave(EventArgs e)
+            {
+                _hover = false;
+                Invalidate();
+                base.OnMouseLeave(e);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                e.Graphics.Clear(_hover ? ActivityHover : ActivityBack);
+
+                if (IsActive)
+                {
+                    using var strip = new SolidBrush(ActivityActive);
+                    e.Graphics.FillRectangle(strip, 0, 0, 2, Height);
+                }
+
+                var glyph = IsActive ? Color.White : _hover ? SidebarValue : ActivityGlyph;
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    Text,
+                    Font,
+                    ClientRectangle,
+                    glyph,
+                    TextFormatFlags.HorizontalCenter |
+                    TextFormatFlags.VerticalCenter |
+                    TextFormatFlags.NoPrefix);
+            }
         }
     }
 }

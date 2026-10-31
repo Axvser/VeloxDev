@@ -12,180 +12,281 @@
 <PageTitle>VeloxDev Workflow — Blazor Demo</PageTitle>
 
 <div class="wf-app">
-    <!-- Sidebar -->
+    <!-- Left rail: a 48px activity bar and one sidebar page at a time, as in the WPF complex demo. -->
     <aside class="wf-sidebar">
-        <button class="sb-btn" title="Undo" @onclick="Undo" disabled="@(_session?.Tree?.UndoCommand?.CanExecute(null) != true)">
-            ↩ Undo
-        </button>
-        <button class="sb-btn" title="Redo" @onclick="Redo" disabled="@(_session?.Tree?.RedoCommand?.CanExecute(null) != true)">
-            ↪ Redo
-        </button>
-        <button class="sb-btn" title="Save workflow as JSON" @onclick="SaveWorkflow">
-            Save
-        </button>
-        <button class="sb-btn" title="Load workflow from JSON" @onclick="LoadWorkflow">
-            Load
-        </button>
-        <div class="sb-divider"></div>
-
-        <div class="sb-info">
-            <span>总元素数: <strong>@(_session?.Tree?.TotalElementText ?? "0")</strong></span>
-            <span>可见元素数: <strong>@(_session?.Tree?.VisibleElementText ?? "0")</strong></span>
-        </div>
-
-        @* 元素列表：从当前树上取节点 / 插槽 / 连线，每行可 Locate / Delete。状态在共享目录
-           WorkflowElementCatalog 里，与 WPF / Avalonia 的完整 Demo 同一份；这里只渲染它、把两个
-           动作转给目录。换树（Reset / Load）时 SubscribeSession 会把它重新挂到新树上。 *@
-        <div class="sb-panel">
-            <div class="sb-panel-header">
-                <span>元素（从 Tree 加载）</span>
-            </div>
-            <div class="wf-element-tabs">
-                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Node ? "active" : null)"
-                        @onclick="() => SelectElementTab(WorkflowElementKind.Node)">节点</button>
-                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Slot ? "active" : null)"
-                        @onclick="() => SelectElementTab(WorkflowElementKind.Slot)">插槽</button>
-                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Link ? "active" : null)"
-                        @onclick="() => SelectElementTab(WorkflowElementKind.Link)">连线</button>
-            </div>
-            @if (_elements is not null)
-            {
-                <div class="wf-element-list">
-                    @if (ElementRows.Count == 0)
-                    {
-                        <div class="wf-element-empty">（空）</div>
-                    }
-                    @foreach (var entry in ElementRows)
-                    {
-                        <div class="wf-element-row">
-                            <span class="wf-element-label" title="@entry.Label">@entry.Label</span>
-                            <button class="sb-btn wf-element-action"
-                                    title="滚到视口中心；插槽定位所属节点，连线定位两端节点中心"
-                                    @onclick="() => LocateElement(entry)">Locate</button>
-                            <button class="sb-btn wf-element-action"
-                                    title="删除该元素；插槽与节点会一并删除它们的连线"
-                                    @onclick="() => DeleteElement(entry)">Delete</button>
-                        </div>
-                    }
-                </div>
-            }
-            <div class="wf-element-status">
-                <span>@(_elements?.Summary)</span>
-                @if (!string.IsNullOrEmpty(_elementStatus))
-                {
-                    <span> · @_elementStatus</span>
-                }
-            </div>
-        </div>
-
-        @* 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边
-           裁掉，五个模式只剩第一项点得到。它也不是 AgentModes 的 build/plan 那一对：那一对改的是
-           模型被告知什么，这一个改的是什么允许跑。切换运行期生效：门逐调用读策略，下一次工具调用
-           就按新模式判，提示词下一轮跟上。 *@
-        <div class="sb-panel">
-            <div class="sb-panel-header">
-                <span>权限模式</span>
-            </div>
-            <select class="wf-field" @onchange="OnPermissionModeChanged">
-                @foreach (var mode in Enum.GetValues<AgentPermissionMode>())
-                {
-                    <option value="@mode" selected="@(mode == _permissionMode)">@mode</option>
-                }
-            </select>
-        </div>
-
-        <div class="sb-divider"></div>
-
-        @* 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
-           （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
-           按钮走 code-behind 而不是 Command 绑定：门与检查点都在会话上、不在树上
-           —— 与同栏的 Save / Load 同一个理由。 *@
-        <div class="sb-panel">
-            <div class="sb-panel-header">
-                <span>运行控制</span>
-                <span style="color:#a0a0a0;font-weight:normal;">@_runGateState</span>
-            </div>
-            <div style="display:flex;gap:6px;">
-                <button class="sb-btn" style="flex:1;" @onclick="PauseWorkflow">Pause</button>
-                <button class="sb-btn" style="flex:1;" @onclick="ResumeWorkflow">Resume</button>
-            </div>
-            <button class="sb-btn" @onclick="ContinueFromCheckpoint" disabled="@(!_hasCheckpoint)">
-                从检查点继续
+        <nav class="wf-activity-bar">
+            <button class="wf-activity-btn @(_sidebarView == "explorer" ? "active" : null)" title="资源管理器"
+                    @onclick="@(() => SelectSidebarView("explorer"))">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 7V5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v2" />
+                    <path d="M3 9h18l-2 10H5z" />
+                </svg>
             </button>
-        </div>
+            <button class="wf-activity-btn @(_sidebarView == "run" ? "active" : null)" title="运行"
+                    @onclick="@(() => SelectSidebarView("run"))">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M8 5l11 7-11 7z" />
+                </svg>
+            </button>
+            <button class="wf-activity-btn @(_sidebarView == "agent" ? "active" : null)" title="Agent 对话"
+                    @onclick="@(() => SelectSidebarView("agent"))">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 5h16v11H9l-5 4z" />
+                </svg>
+            </button>
+            <button class="wf-activity-btn @(_sidebarView == "mcp" ? "active" : null)" title="MCP 服务器"
+                    @onclick="@(() => SelectSidebarView("mcp"))">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="4" y="4" width="16" height="6" rx="1" />
+                    <rect x="4" y="14" width="16" height="6" rx="1" />
+                    <path d="M8 7h.01M8 17h.01" />
+                </svg>
+            </button>
+            <button class="wf-activity-btn @(_sidebarView == "output" ? "active" : null)" title="执行输出"
+                    @onclick="@(() => SelectSidebarView("output"))">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <path d="M7 9l3 3-3 3M12 15h5" />
+                </svg>
+            </button>
+        </nav>
 
-        <div class="sb-divider"></div>
+        <div class="wf-sidebar-panel">
+            <div class="wf-sidebar-header">@SidebarTitle</div>
+            <div class="wf-sidebar-body">
 
-        <!-- Agent Chat Panel -->
-        <div class="sb-panel">
-            <div class="sb-panel-header">
-                <span>Agent 对话</span>
-                <label class="sb-toggle">
-                    <input type="checkbox" checked="@_useStreaming" @onchange="OnStreamingToggle" />
-                    流式
-                </label>
-            </div>
-            <div class="sb-agent-log">
-                @if (_session?.Tree?.AgentLog is { } log)
+                @* Explorer: the Save / Load / Undo / Redo / reload actions and the element list. *@
+                @if (_sidebarView == "explorer")
                 {
-                    @foreach (var entry in log)
-                    {
-                        <div class="sb-log-entry">@entry</div>
-                    }
-                }
-            </div>
-            <div class="sb-agent-input-row">
-                <input class="sb-agent-input" type="text" @bind="_agentMessage"
-                       @onkeydown="OnAgentKeyDown" placeholder="输入消息..." />
-                <button class="sb-agent-send" @onclick="SendToAgent" disabled="@string.IsNullOrWhiteSpace(_agentMessage)">
-                    发送
-                </button>
-            </div>
-        </div>
-
-        <div class="sb-divider"></div>
-
-        <!-- Execution Log Panel -->
-        <div class="sb-panel">
-            <div class="sb-panel-header">
-                <span>实际执行顺序</span>
-            </div>
-            <div class="sb-exec-log">
-                @if (_session?.Tree?.ExecutionLog is { } execLog)
-                {
-                    <div class="sb-log-entry">已记录: @execLog.Count</div>
-                    @foreach (var entry in execLog)
-                    {
-                        <div class="sb-log-entry">@entry</div>
-                    }
-                }
-            </div>
-        </div>
-
-        <!-- MCP Server Status Panel -->
-        <div class="sb-panel">
-            <div class="sb-panel-header">
-                <span>MCP 服务器</span>
-            </div>
-            <div class="sb-exec-log">
-                @if (McpStatus is { } mcp)
-                {
-                    <div class="sb-log-entry">存活 @mcp.ConnectedCount · 错误 @mcp.ErrorCount · 安装/连接 @mcp.WorkingCount</div>
-                    @foreach (var s in mcp.Servers)
-                    {
-                        <div class="sb-log-entry">
-                            <span>@s.Name — @s.StateText</span>
-                            @if (s.ToolCount > 0)
-                            {
-                                <span> · @s.ToolCount tools</span>
-                            }
+                    <div class="wf-sidebar-page">
+                        <div class="wf-sidebar-actions">
+                            <button class="wf-action-btn" title="保存工作流" @onclick="SaveWorkflow">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M5 3h11l3 3v15H5z" />
+                                    <path d="M8 3v6h8V3" />
+                                    <path d="M8 14h8v7H8z" />
+                                </svg>
+                            </button>
+                            <button class="wf-action-btn" title="加载工作流" @onclick="LoadWorkflow">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M3 6h6l2 2h9v2" />
+                                    <path d="M3 10h17l-2 8H5z" />
+                                </svg>
+                            </button>
+                            <button class="wf-action-btn" title="撤销" @onclick="Undo"
+                                    disabled="@(_session?.Tree?.UndoCommand?.CanExecute(null) != true)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M9 5 4 10l5 5" />
+                                    <path d="M4 10h8a6 6 0 0 1 6 6v1" />
+                                </svg>
+                            </button>
+                            <button class="wf-action-btn" title="重做" @onclick="Redo"
+                                    disabled="@(_session?.Tree?.RedoCommand?.CanExecute(null) != true)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M15 5l5 5-5 5" />
+                                    <path d="M20 10h-8a6 6 0 0 0-6 6v1" />
+                                </svg>
+                            </button>
+                            <button class="wf-action-btn" title="重新载入示例" @onclick="ResetDemo">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M20 11a8 8 0 1 0-2.3 6.7" />
+                                    <path d="M20 4v7h-7" />
+                                </svg>
+                            </button>
                         </div>
-                        @if (s.IsError && !string.IsNullOrEmpty(s.Error))
-                        {
-                            <div class="sb-log-entry" style="color:#ff6b6b">@s.Error</div>
-                        }
-                    }
-                    <button class="sb-action-btn" @onclick="ReloadMcpAsync">重载</button>
+
+                        <div class="wf-section-title">元素</div>
+
+                        @* 元素列表：从当前树上取节点 / 插槽 / 连线，每行可 Locate / Delete。状态在共享目录
+                           WorkflowElementCatalog 里，与 WPF / Avalonia 的完整 Demo 同一份；这里只渲染它、把两个
+                           动作转给目录。换树（Reset / Load）时 SubscribeSession 会把它重新挂到新树上。 *@
+                        <div class="sb-panel">
+                            <div class="sb-panel-header">
+                                <span>元素（从 Tree 加载）</span>
+                            </div>
+                            <div class="wf-element-tabs">
+                                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Node ? "active" : null)"
+                                        @onclick="() => SelectElementTab(WorkflowElementKind.Node)">节点</button>
+                                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Slot ? "active" : null)"
+                                        @onclick="() => SelectElementTab(WorkflowElementKind.Slot)">插槽</button>
+                                <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Link ? "active" : null)"
+                                        @onclick="() => SelectElementTab(WorkflowElementKind.Link)">连线</button>
+                            </div>
+                            @if (_elements is not null)
+                            {
+                                <div class="wf-element-list">
+                                    @if (ElementRows.Count == 0)
+                                    {
+                                        <div class="wf-element-empty">（空）</div>
+                                    }
+                                    @foreach (var entry in ElementRows)
+                                    {
+                                        <div class="wf-element-row">
+                                            <span class="wf-element-label" title="@entry.Label">@entry.Label</span>
+                                            <button class="sb-btn wf-element-action"
+                                                    title="滚到视口中心；插槽定位所属节点，连线定位两端节点中心"
+                                                    @onclick="() => LocateElement(entry)">Locate</button>
+                                            <button class="sb-btn wf-element-action"
+                                                    title="删除该元素；插槽与节点会一并删除它们的连线"
+                                                    @onclick="() => DeleteElement(entry)">Delete</button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            <div class="wf-element-status">
+                                <span>@(_elements?.Summary)</span>
+                                @if (!string.IsNullOrEmpty(_elementStatus))
+                                {
+                                    <span> · @_elementStatus</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* Run: the pause gate and checkpoint resume, plus the live element counts. *@
+                @if (_sidebarView == "run")
+                {
+                    <div class="wf-sidebar-page">
+                        <div class="wf-section-title">运行</div>
+
+                        @* 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
+                           （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
+                           按钮走 code-behind 而不是 Command 绑定：门与检查点都在会话上、不在树上
+                           —— 与同栏的 Save / Load 同一个理由。 *@
+                        <div class="sb-panel">
+                            <div class="sb-panel-header">
+                                <span>运行控制</span>
+                                <span style="color:#a0a0a0;font-weight:normal;">@_runGateState</span>
+                            </div>
+                            <div style="display:flex;gap:6px;">
+                                <button class="sb-btn" style="flex:1;" @onclick="PauseWorkflow">Pause</button>
+                                <button class="sb-btn" style="flex:1;" @onclick="ResumeWorkflow">Resume</button>
+                            </div>
+                            <button class="sb-btn" @onclick="ContinueFromCheckpoint" disabled="@(!_hasCheckpoint)">
+                                从检查点继续
+                            </button>
+                        </div>
+
+                        <div class="wf-section-title">画布</div>
+                        <div class="sb-info">
+                            <span>总元素数: <strong>@(_session?.Tree?.TotalElementText ?? "0")</strong></span>
+                            <span>可见元素数: <strong>@(_session?.Tree?.VisibleElementText ?? "0")</strong></span>
+                        </div>
+                    </div>
+                }
+
+                @* Agent: session permission sits with the chat, because it decides what the model may do. *@
+                @if (_sidebarView == "agent")
+                {
+                    <div class="wf-sidebar-page">
+                        <div class="wf-section-title">会话</div>
+
+                        @* 权限模式：会话级设置，与 Agent 对话放在同一页。它也不是 AgentModes 的 build/plan
+                           那一对：那一对改的是模型被告知什么，这一个改的是什么允许跑。切换运行期生效：
+                           门逐调用读策略，下一次工具调用就按新模式判，提示词下一轮跟上。 *@
+                        <div class="sb-panel">
+                            <div class="sb-panel-header">
+                                <span>权限模式</span>
+                            </div>
+                            <select class="wf-field" @onchange="OnPermissionModeChanged">
+                                @foreach (var mode in Enum.GetValues<AgentPermissionMode>())
+                                {
+                                    <option value="@mode" selected="@(mode == _permissionMode)">@mode</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="sb-panel">
+                            <div class="sb-panel-header">
+                                <span>Agent 对话</span>
+                                <label class="sb-toggle">
+                                    <input type="checkbox" checked="@_useStreaming" @onchange="OnStreamingToggle" />
+                                    流式
+                                </label>
+                            </div>
+                            <div class="sb-agent-log">
+                                @if (_session?.Tree?.AgentLog is { } log)
+                                {
+                                    @foreach (var entry in log)
+                                    {
+                                        <div class="sb-log-entry">@entry</div>
+                                    }
+                                }
+                            </div>
+                            <div class="sb-agent-input-row">
+                                <input class="sb-agent-input" type="text" @bind="_agentMessage"
+                                       @onkeydown="OnAgentKeyDown" placeholder="输入消息..." />
+                                <button class="sb-agent-send" @onclick="SendToAgent" disabled="@string.IsNullOrWhiteSpace(_agentMessage)">
+                                    发送
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* MCP: the connected server list and its reload action. *@
+                @if (_sidebarView == "mcp")
+                {
+                    <div class="wf-sidebar-page">
+                        <div class="sb-panel">
+                            <div class="sb-panel-header">
+                                <span>MCP 服务器</span>
+                            </div>
+                            <div class="sb-exec-log">
+                                @if (McpStatus is { } mcp)
+                                {
+                                    <div class="sb-log-entry">存活 @mcp.ConnectedCount · 错误 @mcp.ErrorCount · 安装/连接 @mcp.WorkingCount</div>
+                                    @foreach (var s in mcp.Servers)
+                                    {
+                                        <div class="sb-log-entry">
+                                            <span>@s.Name — @s.StateText</span>
+                                            @if (s.ToolCount > 0)
+                                            {
+                                                <span> · @s.ToolCount tools</span>
+                                            }
+                                        </div>
+                                        @if (s.IsError && !string.IsNullOrEmpty(s.Error))
+                                        {
+                                            <div class="sb-log-entry" style="color:#ff6b6b">@s.Error</div>
+                                        }
+                                    }
+                                    <button class="sb-action-btn" @onclick="ReloadMcpAsync">重载</button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* Output: the execution log. *@
+                @if (_sidebarView == "output")
+                {
+                    <div class="wf-sidebar-page">
+                        <div class="sb-panel">
+                            <div class="sb-panel-header">
+                                <span>实际执行顺序</span>
+                            </div>
+                            <div class="sb-exec-log">
+                                @if (_session?.Tree?.ExecutionLog is { } execLog)
+                                {
+                                    <div class="sb-log-entry">已记录: @execLog.Count</div>
+                                    @foreach (var entry in execLog)
+                                    {
+                                        <div class="sb-log-entry">@entry</div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    </div>
                 }
             </div>
         </div>

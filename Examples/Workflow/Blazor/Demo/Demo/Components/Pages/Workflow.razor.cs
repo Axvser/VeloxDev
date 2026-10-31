@@ -24,6 +24,21 @@ public partial class Workflow : ComponentBase, IDisposable
     private string _agentMessage = "";
     private bool _useStreaming = true;
 
+    // ── Sidebar rail ───────────────────────────────────────────────────────
+    // 五个活动页一次只显示一页，键与活动栏按钮的展开一一对应。
+    private string _sidebarView = "explorer";
+
+    private string SidebarTitle => _sidebarView switch
+    {
+        "run" => "运行",
+        "agent" => "AGENT",
+        "mcp" => "MCP",
+        "output" => "输出",
+        _ => "资源管理器",
+    };
+
+    private void SelectSidebarView(string view) => _sidebarView = view;
+
     private VeloxDev.AI.MCP.McpStatusViewModel? McpStatus
         => (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;
     private string _canvasLayoutSize = "";

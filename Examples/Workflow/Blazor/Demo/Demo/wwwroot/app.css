@@ -79,18 +79,104 @@ html, body {
     overflow: hidden;
 }
 
-/* ── Sidebar ──────────────────────────────── */
+/* ── Sidebar: VS Code-style rail ─────────────────────────────────────────
+   48px activity bar plus one 300px page at a time, matching the WPF complex
+   demo. The activity bar owns the accent: a 2px #007ACC edge on the selected
+   button, #2A2D2E on hover. */
 .wf-sidebar {
-    width: 200px;
-    min-width: 200px;
-    background: #1a1a2e;
-    padding: 12px;
+    flex: 0 0 auto;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    overflow-y: auto;
+    flex-direction: row;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: #252526;
     border-right: 1px solid #333344;
 }
+.wf-activity-bar {
+    display: flex;
+    flex-direction: column;
+    width: 48px;
+    min-width: 48px;
+    background: #333333;
+}
+.wf-activity-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    box-sizing: border-box;
+    background: transparent;
+    border: none;
+    border-left: 2px solid transparent;
+    color: #9D9D9D;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.wf-activity-btn:hover { background: #2A2D2E; color: #E7E7E7; }
+.wf-activity-btn.active { border-left-color: #007ACC; color: #FFFFFF; }
+.wf-activity-btn svg { width: 20px; height: 20px; }
+.wf-sidebar-panel {
+    display: flex;
+    flex-direction: column;
+    width: 300px;
+    min-width: 300px;
+    min-height: 0;
+    background: #252526;
+}
+.wf-sidebar-header {
+    padding: 12px 12px 4px;
+    color: #CCCCCC;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+.wf-sidebar-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.wf-sidebar-page {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 12px 12px;
+    min-height: 0;
+}
+
+/* Explorer action row: flat ghost icon buttons, same shape as the WPF rail. */
+.wf-sidebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 0 0;
+}
+.wf-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    color: #CCCCCC;
+    cursor: pointer;
+}
+.wf-action-btn:hover:not(:disabled) { background: #3A3D41; }
+.wf-action-btn:disabled { color: #5A5A5A; cursor: default; }
+.wf-action-btn svg { width: 15px; height: 15px; }
+.wf-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #BBBBBB;
+}
+
 .sb-btn {
     display: block;
     width: 100%;
@@ -116,8 +202,8 @@ html, body {
     gap: 4px;
 }
 .sb-panel {
-    background: #202020;
-    border: 1px solid #4C4C4C;
+    background: #1E1E1E;
+    border: 1px solid #3C3C3C;
     border-radius: 4px;
     padding: 8px;
     display: flex;
@@ -983,8 +1069,8 @@ html, body {
 }
 
 /* ── Element list panel (nodes / slots / links loaded from the tree) ─────── */
-/* The sidebar is 200px wide, so the row is a flexible label and two small ghost
-   actions; the label ellipsizes rather than pushing the buttons out of reach. */
+/* The sidebar panel is 300px wide, so the row is a flexible label and two small
+   ghost actions; the label ellipsizes rather than pushing the buttons out of reach. */
 .wf-element-tabs { display: flex; gap: 4px; }
 .wf-element-tab {
     flex: 1;

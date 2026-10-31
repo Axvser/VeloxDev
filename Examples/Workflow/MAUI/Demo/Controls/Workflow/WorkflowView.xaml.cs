@@ -36,6 +36,43 @@ public partial class WorkflowView : ContentView
         _elements.Changed += (_, _) => ElementStatus.Text = _elements.Summary;
         _elements.SetTree(_workflowViewModel);
         ElementStatus.Text = _elements.Summary;
+
+        ShowSidebarPage("explorer");
+    }
+
+    // ── Sidebar activity ────────────────────────────────────────────────────
+
+    // 侧栏只切换可见性：每个页面都保持存活，元素目录、MCP 列表与 Agent 订阅在别的页面显示时依然连着。
+    private void OnActivityTapped(object? sender, TappedEventArgs e)
+    {
+        // 平台把 sender 报成手势识别器或视图，CommandParameter 都在 TappedEventArgs 上。
+        if (e.Parameter is not string view) return;
+        ShowSidebarPage(view);
+    }
+
+    private void ShowSidebarPage(string view)
+    {
+        ExplorerPanel.IsVisible = view == "explorer";
+        RunPanel.IsVisible = view == "run";
+        AgentPanel.IsVisible = view == "agent";
+        McpPanel.IsVisible = view == "mcp";
+        OutputPanel.IsVisible = view == "output";
+
+        SidebarHeader.Text = view switch
+        {
+            "run" => "运行",
+            "agent" => "AGENT",
+            "mcp" => "MCP",
+            "output" => "输出",
+            _ => "资源管理器",
+        };
+
+        var accent = Color.FromArgb("#007ACC");
+        ActivityExplorerIndicator.Color = view == "explorer" ? accent : Colors.Transparent;
+        ActivityRunIndicator.Color = view == "run" ? accent : Colors.Transparent;
+        ActivityAgentIndicator.Color = view == "agent" ? accent : Colors.Transparent;
+        ActivityMcpIndicator.Color = view == "mcp" ? accent : Colors.Transparent;
+        ActivityOutputIndicator.Color = view == "output" ? accent : Colors.Transparent;
     }
 
     private void LoadNetworkDemo()
@@ -439,7 +476,19 @@ public partial class WorkflowView : ContentView
     private void OnAgentToolCalled() => ScheduleRefresh();
     private void OnVisualRefreshRequested() => ScheduleRefresh();
 
-    private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScheduleRefresh();
+    private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        ScheduleRefresh();
+
+        if (_workflowViewModel.ExecutionLog is { Count: > 0 } log)
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                try { ExecutionLogScroller?.ScrollTo(log.Count - 1, position: ScrollToPosition.End, animate: false); }
+                catch { /* UI exceptions from auto-scroll are non-fatal */ }
+            });
+        }
+    }
 
     /// <summary>
     /// Debounces layout refreshes to avoid flooding MAUI's layout system.

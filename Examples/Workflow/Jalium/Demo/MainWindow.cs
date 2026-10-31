@@ -21,12 +21,26 @@ namespace Demo;
 
 /// <summary>The full WorkflowSystem demo on Jalium: the voltage-analysis chain
 /// (WorkflowDemoSession.Create) rendered through the SAME NodeEditorSurface the trimmed demo uses
-/// (drag / connect / pan / auto-grow / minimap all identical), plus a control sidebar (Controller
-/// Compile/Run/Stop/Close, Undo/Redo/Save/Select/Load, node counts, run controls (pause gate +
-/// checkpoint resume), Agent chat, MCP status, execution log). The Agent/MCP panels mirror the
-/// WPF/Avalonia full demos; the Agent only responds when an OpenAI-compatible key is configured.</summary>
+/// (drag / connect / pan / auto-grow / minimap all identical), plus a VS Code-style left rail
+/// (48px activity bar; Explorer / Run / Agent / MCP / Output pages) holding the workflow actions,
+/// node counts, run controls (pause gate + checkpoint resume), Agent chat, MCP status and execution
+/// log. The Agent/MCP pages mirror the WPF full demo; the Agent only responds when an
+/// OpenAI-compatible key is configured.</summary>
 internal sealed class MainWindow : Window
 {
+    // VS Code palette: the activity bar is lighter than the sidebar, the active item gets a blue
+    // left strip, hover only lifts the button behind the icon.
+    private static readonly SolidColorBrush s_activityBarBrush = new(Color.FromRgb(0x33, 0x33, 0x33));
+    private static readonly SolidColorBrush s_activityHoverBrush = new(Color.FromRgb(0x2A, 0x2D, 0x2E));
+    private static readonly SolidColorBrush s_activityActiveBrush = new(Color.FromRgb(0x00, 0x7A, 0xCC));
+    private static readonly SolidColorBrush s_activityInactiveBrush = new(Color.FromRgb(0x9D, 0x9D, 0x9D));
+    private static readonly SolidColorBrush s_activityHoverTextBrush = new(Color.FromRgb(0xE7, 0xE7, 0xE7));
+    private static readonly SolidColorBrush s_activityActiveTextBrush = new(Colors.White);
+    private static readonly SolidColorBrush s_sidebarBrush = new(Color.FromRgb(0x25, 0x25, 0x26));
+    private static readonly SolidColorBrush s_sidebarHoverBrush = new(Color.FromRgb(0x3A, 0x3D, 0x41));
+    private static readonly SolidColorBrush s_sidebarIconBrush = new(Color.FromRgb(0xCC, 0xCC, 0xCC));
+    private static readonly SolidColorBrush s_transparentBrush = new(Colors.Transparent);
+
     private readonly NodeEditorSurface _surface;
     private readonly ScrollViewer _surfaceViewer;
     private readonly Dispatcher _uiDispatcher;
@@ -40,7 +54,15 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _runGateState = new();
     private readonly WorkflowElementCatalog _elementCatalog = new();
     private readonly TextBlock _elementStatus = new();
+    private readonly List<ActivityItem> _activityItems = new();
     private string _lastElementAction = "就绪";
+    private string _activeActivity = "explorer";
+    private TextBlock _sidebarHeader = null!;
+    private FrameworkElement _explorerPage = null!;
+    private FrameworkElement _runPage = null!;
+    private FrameworkElement _agentPage = null!;
+    private FrameworkElement _mcpPage = null!;
+    private FrameworkElement _outputPage = null!;
 
     private TreeViewModel _tree = new();
     private WorkflowDemoSession? _demo;
@@ -71,10 +93,11 @@ internal sealed class MainWindow : Window
         };
 
         var root = new Grid();
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.FromStar(2) });
+        // The rail is fixed-width (48px bar + 300px page), so the surface takes all remaining width.
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 320 });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.FromStar(8) });
-        sidebar.Margin = new Thickness(16, 20, 0, 20);
+        sidebar.Margin = new Thickness(20, 20, 0, 20);
         Grid.SetColumn(sidebar, 0);
         Grid.SetColumn(splitter, 1);
         surfaceArea.Margin = new Thickness(0, 20, 20, 20);
@@ -161,43 +184,429 @@ internal sealed class MainWindow : Window
 
     // ── Sidebar ────────────────────────────────────────────────────────────
 
+    /// <summary>Builds the VS Code-style left rail: a 48px activity bar beside a 300px sidebar with
+    /// exactly one page visible at a time.</summary>
     private FrameworkElement BuildSidebar()
     {
-        var panel = new StackPanel { Spacing = 10 };
+        var rail = new Grid();
+        rail.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.FromPixels(48) });
+        rail.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.FromPixels(300) });
 
-        // ── Workflow actions ───────────────────────────────────────────────
-        var undo = ActionButton("Undo");
-        undo.Click += (_, _) => _tree.UndoCommand.Execute(null);
-        var redo = ActionButton("Redo");
-        redo.Click += (_, _) => _tree.RedoCommand.Execute(null);
-        var save = ActionButton("Save");
-        save.Click += (_, _) => SaveWorkflow();
-        var select = ActionButton("Select");
-        select.Click += (_, _) => _ = SelectWorkflowAsync();
-        var load = ActionButton("Load Workflow Demo");
-        load.Click += (_, _) => LoadNetworkDemo();
-        panel.Children.Add(Section("Actions", new StackPanel { Spacing = 8, Children = { undo, redo, save, select, load } }));
+        var activities = new StackPanel();
+        activities.Children.Add(BuildActivityButton("explorer", RailIconKind.Explorer, "资源管理器"));
+        activities.Children.Add(BuildActivityButton("run", RailIconKind.Run, "运行"));
+        activities.Children.Add(BuildActivityButton("agent", RailIconKind.Agent, "Agent 对话"));
+        activities.Children.Add(BuildActivityButton("mcp", RailIconKind.Mcp, "MCP 服务器"));
+        activities.Children.Add(BuildActivityButton("output", RailIconKind.Output, "执行输出"));
 
-        panel.Children.Add(new TextBlock { Text = "总元素数：", Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E)), Margin = new Thickness(0, 6, 0, 0) });
-        _nodeCount.Foreground = new SolidColorBrush(Colors.White);
-        panel.Children.Add(_nodeCount);
-        panel.Children.Add(new TextBlock { Text = "可见元素数：", Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E)), Margin = new Thickness(0, 4, 0, 0) });
-        _visibleCount.Foreground = new SolidColorBrush(Colors.White);
-        panel.Children.Add(_visibleCount);
+        var activityBar = new Border { Background = s_activityBarBrush, Child = activities };
+        Grid.SetColumn(activityBar, 0);
+        rail.Children.Add(activityBar);
 
-        panel.Children.Add(BuildElementListPanel());
-        panel.Children.Add(BuildPermissionModePanel());
-        panel.Children.Add(BuildRunControlsPanel());
-        panel.Children.Add(BuildAgentChatPanel());
-        panel.Children.Add(BuildMcpPanel());
-        panel.Children.Add(BuildExecutionLogPanel());
-
-        var scroller = new ScrollViewer
+        _sidebarHeader = new TextBlock
         {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Content = panel,
+            Text = "资源管理器",
+            Margin = new Thickness(12, 12, 12, 4),
+            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
         };
-        return scroller;
+
+        _explorerPage = BuildExplorerPage();
+        _runPage = BuildRunPage();
+        _agentPage = BuildAgentPage();
+        _mcpPage = BuildMcpPage();
+        _outputPage = BuildOutputPage();
+
+        var pages = new Grid();
+        pages.Children.Add(_explorerPage);
+        pages.Children.Add(_runPage);
+        pages.Children.Add(_agentPage);
+        pages.Children.Add(_mcpPage);
+        pages.Children.Add(_outputPage);
+
+        var sidebarBody = new Grid();
+        sidebarBody.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        sidebarBody.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+        Grid.SetRow(_sidebarHeader, 0);
+        Grid.SetRow(pages, 1);
+        sidebarBody.Children.Add(_sidebarHeader);
+        sidebarBody.Children.Add(pages);
+
+        var sidebar = new Border { Background = s_sidebarBrush, Child = sidebarBody };
+        Grid.SetColumn(sidebar, 1);
+        rail.Children.Add(sidebar);
+
+        ShowActivity("explorer");
+        return rail;
+    }
+
+    // 活动栏上的一个图标项：按钮本体管点击与悬停底色，左侧 2px 条只表示当前页。
+    private FrameworkElement BuildActivityButton(string tag, RailIconKind kind, string tooltip)
+    {
+        var label = new RailIcon
+        {
+            Kind = kind,
+            Width = 20,
+            Height = 20,
+            Foreground = s_activityInactiveBrush,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var button = new Button
+        {
+            Width = 48,
+            Height = 48,
+            // Jalium 的 Button 默认样式带 MinWidth/MinHeight；不压成 0 时，48px 的实际宽度会被抬到
+            // 默认下限，活动栏于是压进侧栏、第五个图标被裁掉。
+            MinWidth = 0,
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            Background = s_transparentBrush,
+            BorderThickness = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Content = label,
+            ToolTip = tooltip,
+            Cursor = Cursors.Hand,
+        };
+        var strip = new Border
+        {
+            Width = 2,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Background = s_transparentBrush,
+            IsHitTestVisible = false,
+        };
+
+        _activityItems.Add(new ActivityItem(tag, button, strip, label));
+        button.Click += (_, _) => ShowActivity(tag);
+        button.MouseEnter += (_, _) =>
+        {
+            if (_activeActivity == tag)
+            {
+                return;
+            }
+
+            button.Background = s_activityHoverBrush;
+            label.Foreground = s_activityHoverTextBrush;
+        };
+        button.MouseLeave += (_, _) =>
+        {
+            if (_activeActivity == tag)
+            {
+                return;
+            }
+
+            button.Background = s_transparentBrush;
+            label.Foreground = s_activityInactiveBrush;
+        };
+
+        var host = new Grid();
+        host.Children.Add(button);
+        host.Children.Add(strip);
+        return host;
+    }
+
+    // 切页：五个页面只亮一个，标题跟着活动项走；活动项的白字由这里统一落回。
+    private void ShowActivity(string view)
+    {
+        _activeActivity = view;
+
+        _explorerPage.Visibility = view == "explorer" ? Visibility.Visible : Visibility.Collapsed;
+        _runPage.Visibility = view == "run" ? Visibility.Visible : Visibility.Collapsed;
+        _agentPage.Visibility = view == "agent" ? Visibility.Visible : Visibility.Collapsed;
+        _mcpPage.Visibility = view == "mcp" ? Visibility.Visible : Visibility.Collapsed;
+        _outputPage.Visibility = view == "output" ? Visibility.Visible : Visibility.Collapsed;
+
+        _sidebarHeader.Text = view switch
+        {
+            "run" => "运行",
+            "agent" => "AGENT",
+            "mcp" => "MCP",
+            "output" => "输出",
+            _ => "资源管理器",
+        };
+
+        foreach (var item in _activityItems)
+        {
+            bool active = item.Tag == view;
+            item.Strip.Background = active ? s_activityActiveBrush : s_transparentBrush;
+            item.Glyph.Foreground = active ? s_activityActiveTextBrush : s_activityInactiveBrush;
+            item.Button.Background = s_transparentBrush;
+        }
+    }
+
+    private static TextBlock SidebarSectionHeader(string text) => new()
+    {
+        Text = text,
+        Foreground = new SolidColorBrush(Color.FromRgb(0xBB, 0xBB, 0xBB)),
+        FontSize = 11,
+        FontWeight = FontWeights.SemiBold,
+        Margin = new Thickness(12, 14, 12, 6),
+    };
+
+    private static Button SidebarIconButton(RailIconKind kind, string tooltip)
+    {
+        var label = new RailIcon
+        {
+            Kind = kind,
+            Width = 16,
+            Height = 16,
+            Foreground = s_sidebarIconBrush,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var button = new Button
+        {
+            Width = 26,
+            Height = 26,
+            MinWidth = 0,
+            MinHeight = 0,
+            Margin = new Thickness(0, 0, 4, 0),
+            Padding = new Thickness(0),
+            Background = s_transparentBrush,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(3),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Content = label,
+            ToolTip = tooltip,
+            Cursor = Cursors.Hand,
+        };
+        button.MouseEnter += (_, _) => button.Background = s_sidebarHoverBrush;
+        button.MouseLeave += (_, _) => button.Background = s_transparentBrush;
+        return button;
+    }
+
+    private FrameworkElement BuildExplorerPage()
+    {
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10, 2, 10, 0) };
+        var save = SidebarIconButton(RailIconKind.Save, "保存工作流");
+        save.Click += (_, _) => SaveWorkflow();
+        var select = SidebarIconButton(RailIconKind.Open, "加载工作流");
+        select.Click += (_, _) => _ = SelectWorkflowAsync();
+        var undo = SidebarIconButton(RailIconKind.Undo, "撤销");
+        undo.Click += (_, _) => _tree.UndoCommand.Execute(null);
+        var redo = SidebarIconButton(RailIconKind.Redo, "重做");
+        redo.Click += (_, _) => _tree.RedoCommand.Execute(null);
+        var reload = SidebarIconButton(RailIconKind.Reload, "重新载入示例");
+        reload.Click += (_, _) => LoadNetworkDemo();
+        actions.Children.Add(save);
+        actions.Children.Add(select);
+        actions.Children.Add(undo);
+        actions.Children.Add(redo);
+        actions.Children.Add(reload);
+
+        var body = new StackPanel();
+        body.Children.Add(actions);
+        body.Children.Add(SidebarSectionHeader("元素"));
+
+        var elements = BuildElementListPanel();
+        elements.Margin = new Thickness(12, 0, 12, 0);
+        body.Children.Add(elements);
+
+        return new ScrollViewer
+        {
+            Background = s_transparentBrush,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = body,
+        };
+    }
+
+    private FrameworkElement BuildRunPage()
+    {
+        var body = new StackPanel();
+        body.Children.Add(SidebarSectionHeader("运行"));
+
+        var controls = BuildRunControlsPanel();
+        controls.Margin = new Thickness(12, 0, 12, 0);
+        body.Children.Add(controls);
+
+        body.Children.Add(SidebarSectionHeader("画布"));
+        body.Children.Add(new TextBlock
+        {
+            Text = "总元素数：",
+            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            Margin = new Thickness(12, 0, 12, 0),
+        });
+        _nodeCount.Foreground = new SolidColorBrush(Color.FromRgb(0xE7, 0xE7, 0xE7));
+        _nodeCount.Margin = new Thickness(12, 0, 12, 0);
+        body.Children.Add(_nodeCount);
+        body.Children.Add(new TextBlock
+        {
+            Text = "可见元素数：",
+            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            Margin = new Thickness(12, 8, 12, 0),
+        });
+        _visibleCount.Foreground = new SolidColorBrush(Color.FromRgb(0xE7, 0xE7, 0xE7));
+        _visibleCount.Margin = new Thickness(12, 0, 12, 12);
+        body.Children.Add(_visibleCount);
+
+        return new ScrollViewer
+        {
+            Background = s_transparentBrush,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = body,
+        };
+    }
+
+    private FrameworkElement BuildAgentPage()
+    {
+        var page = new Grid();
+        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        // 会话权限与 Agent 放同一页：它决定模型能不能动手，而不是一次运行怎么走。
+        var session = new StackPanel();
+        session.Children.Add(SidebarSectionHeader("会话"));
+        var permission = BuildPermissionModePanel();
+        permission.Margin = new Thickness(12, 0, 12, 4);
+        session.Children.Add(permission);
+        Grid.SetRow(session, 0);
+        page.Children.Add(session);
+
+        var chatHeader = BuildAgentChatHeader();
+        chatHeader.Margin = new Thickness(12, 4, 12, 4);
+        Grid.SetRow(chatHeader, 1);
+        page.Children.Add(chatHeader);
+
+        _agentLog.Background = s_transparentBrush;
+        _agentLog.BorderThickness = new Thickness(0);
+        _agentLog.Foreground = new SolidColorBrush(Color.FromRgb(0xD8, 0xD8, 0xD8));
+        _agentLog.Margin = new Thickness(8, 0, 8, 0);
+        Grid.SetRow(_agentLog, 2);
+        page.Children.Add(_agentLog);
+
+        var inputRow = BuildAgentInputRow();
+        inputRow.Margin = new Thickness(12, 6, 12, 12);
+        Grid.SetRow(inputRow, 3);
+        page.Children.Add(inputRow);
+
+        return page;
+    }
+
+    private FrameworkElement BuildAgentChatHeader()
+    {
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var header = new TextBlock
+        {
+            Text = "Agent 对话",
+            Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
+            FontWeight = FontWeights.Bold,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var streamToggle = new CheckBox
+        {
+            Content = "流式",
+            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            IsChecked = true,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        streamToggle.Checked += (_, _) => _tree.UseStreamingAgentResponse = true;
+        streamToggle.Unchecked += (_, _) => _tree.UseStreamingAgentResponse = false;
+        Grid.SetColumn(header, 0);
+        Grid.SetColumn(streamToggle, 1);
+        row.Children.Add(header);
+        row.Children.Add(streamToggle);
+        return row;
+    }
+
+    private FrameworkElement BuildAgentInputRow()
+    {
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        _agentInput.Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
+        _agentInput.Foreground = new SolidColorBrush(Colors.White);
+        _agentInput.BorderBrush = new SolidColorBrush(Color.FromRgb(0x3C, 0x3C, 0x3C));
+        _agentInput.BorderThickness = new Thickness(1);
+        _agentInput.Padding = new Thickness(8, 6);
+        _agentInput.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                SendToAgent();
+                e.Handled = true;
+            }
+        };
+
+        var sendBtn = new Button
+        {
+            Content = "发送",
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x34, 0x60)),
+            Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 5),
+        };
+        sendBtn.Click += (_, _) => SendToAgent();
+
+        Grid.SetColumn(_agentInput, 0);
+        Grid.SetColumn(sendBtn, 1);
+        row.Children.Add(_agentInput);
+        row.Children.Add(sendBtn);
+        return row;
+    }
+
+    private FrameworkElement BuildMcpPage()
+    {
+        var body = new StackPanel();
+        body.Children.Add(SidebarSectionHeader("服务器"));
+
+        var panel = BuildMcpPanel();
+        panel.Margin = new Thickness(12, 0, 12, 12);
+        body.Children.Add(panel);
+
+        return new ScrollViewer
+        {
+            Background = s_transparentBrush,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = body,
+        };
+    }
+
+    private FrameworkElement BuildOutputPage()
+    {
+        var page = new Grid();
+        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+
+        var header = SidebarSectionHeader("执行输出");
+        Grid.SetRow(header, 0);
+        page.Children.Add(header);
+
+        _executionLog.Background = s_transparentBrush;
+        _executionLog.BorderThickness = new Thickness(0);
+        _executionLog.Foreground = new SolidColorBrush(Color.FromRgb(0xD8, 0xD8, 0xD8));
+        _executionLog.Margin = new Thickness(8, 0, 8, 8);
+        Grid.SetRow(_executionLog, 1);
+        page.Children.Add(_executionLog);
+
+        return page;
+    }
+
+    // 活动栏的一项：标签是切页依据，也用来判断悬停时该不该改色。
+    private sealed class ActivityItem
+    {
+        public ActivityItem(string tag, Button button, Border strip, RailIcon glyph)
+        {
+            Tag = tag;
+            Button = button;
+            Strip = strip;
+            Glyph = glyph;
+        }
+
+        public string Tag { get; }
+        public Button Button { get; }
+        public Border Strip { get; }
+        public RailIcon Glyph { get; }
     }
 
     private static Button ActionButton(string text) => new()
@@ -212,9 +621,8 @@ internal sealed class MainWindow : Window
         BorderThickness = new Thickness(1),
     };
 
-    // 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边裁掉，
-    // 五个模式只剩第一项点得到。它也不是 AgentModes 的 build/plan 那一对：那一对改的是模型被告知什么，
-    // 这一个改的是什么允许跑。
+    // 权限模式是会话级设置，和 Agent 对话放同一页：它决定模型能做什么，而不是一次运行怎么走。
+    // 它也不是 AgentModes 的 build/plan 那一对：那一对改的是模型被告知什么，这一个改的是什么允许跑。
     private FrameworkElement BuildPermissionModePanel()
     {
         var row = new Grid { ColumnSpacing = 6 };
@@ -368,60 +776,6 @@ internal sealed class MainWindow : Window
         _runGateState.Text = _demo?.Gate.IsPaused == true ? "已暂停" : "空闲";
     }
 
-    private FrameworkElement BuildAgentChatPanel()
-    {
-        var body = new StackPanel { Spacing = 6 };
-
-        var headerRow = new Grid();
-        headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
-        headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var header = new TextBlock { Text = "Agent 对话", Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)), FontWeight = FontWeights.Bold };
-        var streamToggle = new CheckBox { Content = "流式", Foreground = new SolidColorBrush(Colors.White), IsChecked = true, VerticalAlignment = VerticalAlignment.Center };
-        streamToggle.Checked += (_, _) => _tree.UseStreamingAgentResponse = true;
-        streamToggle.Unchecked += (_, _) => _tree.UseStreamingAgentResponse = false;
-        Grid.SetColumn(header, 0);
-        Grid.SetColumn(streamToggle, 1);
-        headerRow.Children.Add(header);
-        headerRow.Children.Add(streamToggle);
-        body.Children.Add(headerRow);
-
-        _agentLog.MaxHeight = 220;
-        body.Children.Add(_agentLog);
-
-        var inputRow = new Grid();
-        inputRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
-        inputRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _agentInput.Background = new SolidColorBrush(Color.FromRgb(0x0D, 0x11, 0x17));
-        _agentInput.Foreground = new SolidColorBrush(Colors.White);
-        _agentInput.Padding = new Thickness(8, 6);
-        _agentInput.KeyDown += (_, e) =>
-        {
-            if (e.Key == Key.Enter)
-            {
-                SendToAgent();
-                e.Handled = true;
-            }
-        };
-        var sendBtn = new Button
-        {
-            Content = "发送",
-            Margin = new Thickness(4, 0, 0, 0),
-            Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x34, 0x60)),
-            Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 5),
-        };
-        sendBtn.Click += (_, _) => SendToAgent();
-        Grid.SetColumn(_agentInput, 0);
-        Grid.SetColumn(sendBtn, 1);
-        inputRow.Children.Add(_agentInput);
-        inputRow.Children.Add(sendBtn);
-        body.Children.Add(inputRow);
-
-        return Section("", body);
-    }
-
     private FrameworkElement BuildMcpPanel()
     {
         var body = new StackPanel { Spacing = 6 };
@@ -464,29 +818,13 @@ internal sealed class MainWindow : Window
         return Section("", body);
     }
 
-    private FrameworkElement BuildExecutionLogPanel()
-    {
-        var body = new StackPanel { Spacing = 6 };
-        var header = new TextBlock { Text = "实际执行顺序", Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)), FontWeight = FontWeights.Bold };
-        body.Children.Add(header);
-        body.Children.Add(_executionLog);
-        return Section("", body);
-    }
-
     private FrameworkElement BuildElementListPanel()
     {
         var body = new StackPanel { Spacing = 6 };
-        body.Children.Add(new TextBlock
-        {
-            Text = "元素（从 Tree 加载）",
-            Foreground = new SolidColorBrush(Color.FromRgb(0x7E, 0xC8, 0xFF)),
-            FontWeight = FontWeights.Bold,
-        });
 
         var tabs = new TabControl
         {
             Height = 220,
-            Margin = new Thickness(0, 6, 0, 0),
             Background = new SolidColorBrush(Colors.Transparent),
             BorderThickness = new Thickness(0),
         };
@@ -499,13 +837,13 @@ internal sealed class MainWindow : Window
         _elementStatus.Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xA0));
         _elementStatus.FontSize = 11;
         _elementStatus.TextWrapping = TextWrapping.Wrap;
-        _elementStatus.Margin = new Thickness(0, 6, 0, 0);
+        _elementStatus.Margin = new Thickness(0, 6, 0, 12);
         body.Children.Add(_elementStatus);
 
         _elementCatalog.Changed += (_, _) => UpdateElementStatus();
         UpdateElementStatus();
 
-        return Section("", body);
+        return body;
     }
 
     private TabItem BuildElementTab(string header, IEnumerable<WorkflowElementEntry> items, DataTemplate rowTemplate)

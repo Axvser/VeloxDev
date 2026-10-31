@@ -77,6 +77,27 @@ public partial class WorkflowView : UserControl
         InitializeMcp();
     }
 
+    // 侧栏在资源管理器 / 运行 / Agent / MCP / 输出之间切换，同一时刻只显示一页。
+    private void OnActivityClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string view }) return;
+
+        ExplorerPanel.IsVisible = view == "explorer";
+        RunPanel.IsVisible = view == "run";
+        AgentPanel.IsVisible = view == "agent";
+        McpPanel.IsVisible = view == "mcp";
+        OutputPanel.IsVisible = view == "output";
+
+        SidebarHeader.Text = view switch
+        {
+            "run" => "运行",
+            "agent" => "AGENT",
+            "mcp" => "MCP",
+            "output" => "输出",
+            _ => "资源管理器",
+        };
+    }
+
     /// <summary>
     /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
     /// </summary>

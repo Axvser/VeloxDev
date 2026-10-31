@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -59,6 +59,79 @@
 		</Style>
 		<Style Selector="TreeViewItem:selected:pointerover">
 			<Setter Property="Background" Value="Transparent" />
+		</Style>
+
+		<!-- VS Code-style rail: activity buttons, flat sidebar actions, and section headers. -->
+		<!-- Icon font: Segoe MDL2 Assets does not resolve on Avalonia 12 here (the code points render
+		     as tofu boxes); Segoe Fluent Icons covers the same code points, so this demo uses it. -->
+		<Style Selector="RadioButton.Activity">
+			<Setter Property="Width" Value="48" />
+			<Setter Property="Height" Value="48" />
+			<Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+			<Setter Property="FontSize" Value="19" />
+			<Setter Property="Foreground" Value="#9D9D9D" />
+			<Setter Property="Cursor" Value="Hand" />
+			<Setter Property="Padding" Value="0" />
+			<Setter Property="Template">
+				<ControlTemplate>
+					<Border x:Name="Chrome" Background="Transparent"
+							BorderBrush="Transparent" BorderThickness="2,0,0,0">
+						<!-- A ContentPresenter inside a control template does not pick up the content or
+						     the text properties on its own; without these bindings the icons are invisible. -->
+						<ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+										  Content="{TemplateBinding Content}"
+										  ContentTemplate="{TemplateBinding ContentTemplate}"
+										  FontFamily="{TemplateBinding FontFamily}"
+										  FontSize="{TemplateBinding FontSize}"
+										  Foreground="{TemplateBinding Foreground}" />
+					</Border>
+				</ControlTemplate>
+			</Setter>
+		</Style>
+		<Style Selector="RadioButton.Activity:pointerover">
+			<Setter Property="Foreground" Value="#E7E7E7" />
+		</Style>
+		<Style Selector="RadioButton.Activity:pointerover /template/ Border#Chrome">
+			<Setter Property="Background" Value="#2A2D2E" />
+		</Style>
+		<Style Selector="RadioButton.Activity:checked">
+			<Setter Property="Foreground" Value="#FFFFFF" />
+		</Style>
+		<Style Selector="RadioButton.Activity:checked /template/ Border#Chrome">
+			<Setter Property="BorderBrush" Value="#007ACC" />
+		</Style>
+
+		<Style Selector="Button.SidebarIcon">
+			<Setter Property="Width" Value="26" />
+			<Setter Property="Height" Value="26" />
+			<Setter Property="Margin" Value="0,0,4,0" />
+			<Setter Property="Padding" Value="0" />
+			<Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+			<Setter Property="FontSize" Value="13" />
+			<Setter Property="Foreground" Value="#CCCCCC" />
+			<Setter Property="Cursor" Value="Hand" />
+			<Setter Property="Template">
+				<ControlTemplate>
+					<Border x:Name="Chrome" Background="Transparent" CornerRadius="3">
+						<ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+										  Content="{TemplateBinding Content}"
+										  ContentTemplate="{TemplateBinding ContentTemplate}"
+										  FontFamily="{TemplateBinding FontFamily}"
+										  FontSize="{TemplateBinding FontSize}"
+										  Foreground="{TemplateBinding Foreground}" />
+					</Border>
+				</ControlTemplate>
+			</Setter>
+		</Style>
+		<Style Selector="Button.SidebarIcon:pointerover /template/ Border#Chrome">
+			<Setter Property="Background" Value="#3A3D41" />
+		</Style>
+
+		<Style Selector="TextBlock.SidebarSection">
+			<Setter Property="Foreground" Value="#BBBBBB" />
+			<Setter Property="FontSize" Value="11" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Margin" Value="12,14,12,6" />
 		</Style>
 	</UserControl.Styles>
 
@@ -142,7 +215,8 @@
 		</DataTemplate>
 	</UserControl.DataTemplates>
 
-	<Grid ColumnDefinitions="2*,auto,8*">
+	<!-- 左侧固定 48 活动栏 + 300 侧栏，与 WPF 复杂 demo 一致；剩余宽度给画布。 -->
+	<Grid ColumnDefinitions="348,auto,*">
 		<!-- Node editor rendering (virtualization support + minimap thumbnail) -->
 		<Grid Grid.Column="2" x:Name="WorkflowContainer">
 			<Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="3">
@@ -183,275 +257,283 @@
 							   Margin="44,0,0,12"/>
 		</Grid>
 
-		<!-- 宿主外壳：侧栏是本 demo 自己的界面（模板止于画布）；按带内边距与背景的面板排，而不是贴窗
-		     口边缘——2:8 分栏下侧栏只占五分之一，不换行不拉伸的内容会被裁掉而非回流 -->
-		<Border Grid.Column="0" Background="#12161C" Padding="12,12,12,12"
-				BorderBrush="#1F2937" BorderThickness="0,0,1,0">
-			<ScrollViewer HorizontalScrollBarVisibility="Disabled">
-				<StackPanel Orientation="Vertical" Spacing="10">
+		<!-- Host shell: a VS Code-style rail. The canvas is all the template owns; this is the demo's own UI. -->
+		<Grid Grid.Column="0" ColumnDefinitions="48,*">
+			<!-- Activity bar -->
+			<Border Grid.Column="0" Background="#333333">
+				<StackPanel>
+					<RadioButton Classes="Activity" GroupName="SidebarActivity" Tag="explorer" IsChecked="True"
+								 Content="&#xE8B7;" ToolTip.Tip="资源管理器" Click="OnActivityClick" />
+					<RadioButton Classes="Activity" GroupName="SidebarActivity" Tag="run"
+								 Content="&#xE768;" ToolTip.Tip="运行" Click="OnActivityClick" />
+					<RadioButton Classes="Activity" GroupName="SidebarActivity" Tag="agent"
+								 Content="&#xE8BD;" ToolTip.Tip="Agent 对话" Click="OnActivityClick" />
+					<RadioButton Classes="Activity" GroupName="SidebarActivity" Tag="mcp"
+								 Content="&#xE774;" ToolTip.Tip="MCP 服务器" Click="OnActivityClick" />
+					<RadioButton Classes="Activity" GroupName="SidebarActivity" Tag="output"
+								 Content="&#xE756;" ToolTip.Tip="执行输出" Click="OnActivityClick" />
+				</StackPanel>
+			</Border>
 
-					<!-- 命令按钮：拉伸而非固定像素宽，才跟得上分隔条 -->
-					<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="6">
-						<Button Grid.Row="0" Grid.Column="0" Content="Undo" Command="{Binding UndoCommand}" HorizontalAlignment="Stretch" />
-						<Button Grid.Row="0" Grid.Column="1" Content="Redo" Command="{Binding RedoCommand}" HorizontalAlignment="Stretch" />
-						<Button Grid.Row="1" Grid.Column="0" Content="Save" Click="SaveWorkflow" HorizontalAlignment="Stretch" />
-						<Button Grid.Row="1" Grid.Column="1" Content="Select" Click="SelectWorkflow" HorizontalAlignment="Stretch" />
-						<Button Grid.Row="2" Grid.ColumnSpan="2" Content="Load Workflow Demo" Click="LoadNetworkDemo" HorizontalAlignment="Stretch" />
-					</Grid>
+			<!-- Sidebar: one page visible at a time -->
+			<Border Grid.Column="1" Background="#252526">
+				<Grid RowDefinitions="Auto,*">
+					<TextBlock x:Name="SidebarHeader" Grid.Row="0" Text="资源管理器"
+							   Margin="12,12,12,4" Foreground="#CCCCCC" FontSize="11" FontWeight="SemiBold" />
 
-					<!-- 模型计数：标签在上、数值在下。并排放不下「31（节点 15 · 连线 16）」，
-					     这一栏曾被挤到标签逐字竖排、数值被裁掉。 -->
-					<Border Background="#1A2029" CornerRadius="4" Padding="10">
-						<StackPanel Spacing="2">
-							<TextBlock Text="总元素数" Foreground="#94A3B8" />
-							<TextBlock Text="{Binding TotalElementText}" Foreground="#E2E8F0" FontWeight="SemiBold" TextWrapping="Wrap" />
-							<TextBlock Text="可见元素数" Foreground="#94A3B8" Margin="0,4,0,0" />
-							<TextBlock Text="{Binding VisibleElementText}" Foreground="#E2E8F0" FontWeight="SemiBold" TextWrapping="Wrap" />
-						</StackPanel>
-					</Border>
+					<Grid Grid.Row="1">
+						<!-- Explorer -->
+						<ScrollViewer x:Name="ExplorerPanel" VerticalScrollBarVisibility="Auto">
+							<StackPanel>
+								<StackPanel Orientation="Horizontal" Margin="10,2,10,0">
+									<Button Classes="SidebarIcon" Content="&#xE74E;" ToolTip.Tip="保存工作流" Click="SaveWorkflow" />
+									<Button Classes="SidebarIcon" Content="&#xE8E5;" ToolTip.Tip="加载工作流" Click="SelectWorkflow" />
+									<Button Classes="SidebarIcon" Content="&#xE7A7;" ToolTip.Tip="撤销" Command="{Binding UndoCommand}" />
+									<Button Classes="SidebarIcon" Content="&#xE7A6;" ToolTip.Tip="重做" Command="{Binding RedoCommand}" />
+									<Button Classes="SidebarIcon" Content="&#xE72C;" ToolTip.Tip="重新载入示例" Click="LoadNetworkDemo" />
+								</StackPanel>
 
-					<!-- 元素列表：从 Tree 加载节点/插槽/连线，每行可 Locate / Delete。与其它完整 Demo 共用
-					     WorkflowElementCatalog，行为一致。 -->
-					<Border Background="#1A2029" CornerRadius="4" Padding="10">
-						<StackPanel Spacing="6">
-							<TextBlock Text="元素（从 Tree 加载）" Foreground="#7EC8FF" FontWeight="Bold"/>
-							<TabControl Height="220">
-								<TabItem Header="节点">
-									<ListBox x:Name="ElementNodeList" Background="Transparent">
-										<ListBox.ItemTemplate>
-											<DataTemplate x:DataType="vm:WorkflowElementEntry">
-												<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
-													<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
-															   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-													<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
-															Padding="6,1" FontSize="11" Click="OnLocateElement"
-															ToolTip.Tip="滚到视口中心；插槽定位所属节点，连线定位两端节点中心"/>
-													<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
-															Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
-												</Grid>
-											</DataTemplate>
-										</ListBox.ItemTemplate>
-									</ListBox>
-								</TabItem>
-								<TabItem Header="插槽">
-									<ListBox x:Name="ElementSlotList" Background="Transparent">
-										<ListBox.ItemTemplate>
-											<DataTemplate x:DataType="vm:WorkflowElementEntry">
-												<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
-													<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
-															   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-													<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
-															Padding="6,1" FontSize="11" Click="OnLocateElement"/>
-													<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
-															Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
-												</Grid>
-											</DataTemplate>
-										</ListBox.ItemTemplate>
-									</ListBox>
-								</TabItem>
-								<TabItem Header="连线">
-									<ListBox x:Name="ElementLinkList" Background="Transparent">
-										<ListBox.ItemTemplate>
-											<DataTemplate x:DataType="vm:WorkflowElementEntry">
-												<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
-													<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
-															   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-													<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
-															Padding="6,1" FontSize="11" Click="OnLocateElement"/>
-													<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
-															Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
-												</Grid>
-											</DataTemplate>
-										</ListBox.ItemTemplate>
-									</ListBox>
-								</TabItem>
-							</TabControl>
-							<TextBlock x:Name="ElementStatus" Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap"/>
-						</StackPanel>
-					</Border>
-
-					<!-- 小地图开关 -->
-					<Grid Margin="0,2,0,0" ColumnDefinitions="*,Auto">
-						<TextBlock Text="小地图" Foreground="#94A3B8" VerticalAlignment="Center" />
-						<ToggleSwitch Grid.Column="1"
-									  IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}" />
-					</Grid>
-
-					<!-- 权限模式：会话级设置，所以与小地图同处侧栏上部，而不是塞在对话面板里 —— 那里在
-					     侧栏底部，下拉在窗口底边会被裁掉，五个模式只剩第一项点得到。同时它也**不是** AgentModes
-					     那一对 build/plan：那一对改的是模型被告知什么，这一个改的是什么允许跑。
-					     切换是运行期生效的：门逐调用读策略，下一次工具调用就按新模式判，提示词下一轮跟上。 -->
-					<Grid Margin="0,10,0,0" ColumnDefinitions="Auto,*">
-						<TextBlock Text="权限模式" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
-						<ComboBox x:Name="PermissionModePicker"
-								  Grid.Column="1"
-								  FontSize="12"
-								  MinWidth="120"
-								  HorizontalAlignment="Stretch"
-								  ToolTip.Tip="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
-								  SelectionChanged="OnPermissionModeChanged"/>
-					</Grid>
-
-					<!-- 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
-					     （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
-					     按钮走 code-behind 而不是 Command 绑定：侧栏的 DataContext 是树，而门与检查点都在
-					     会话上、不在树上 —— 与同栏的 Save / Load 同一个理由。 -->
-					<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
-						<StackPanel Spacing="6">
-							<Grid ColumnDefinitions="*,Auto">
-								<TextBlock Grid.Column="0" Text="运行控制" Foreground="#E2E8F0" FontWeight="SemiBold" />
-								<TextBlock Grid.Column="1" x:Name="RunGateState" Text="空闲" Foreground="#a0a0a0" />
-							</Grid>
-							<Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-								<Button Grid.Column="0" Content="Pause" Click="PauseWorkflow" HorizontalAlignment="Stretch" />
-								<Button Grid.Column="1" Content="Resume" Click="ResumeWorkflow" HorizontalAlignment="Stretch" />
-							</Grid>
-							<Button x:Name="ContinueFromCheckpointButton"
-									Content="从检查点继续"
-									Click="ContinueFromCheckpoint"
-									HorizontalAlignment="Stretch"
-									IsEnabled="False" />
-						</StackPanel>
-					</Border>
-						<!-- Agent chat -->
-						<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
-							<StackPanel Spacing="6">
-								<Grid ColumnDefinitions="*,Auto">
-									<TextBlock Text="Agent 对话" Foreground="#7ec8ff" FontWeight="Bold"/>
+								<!-- Minimap toggle -->
+								<Grid Margin="12,8,12,0" ColumnDefinitions="*,Auto">
+									<TextBlock Text="小地图" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center" />
 									<ToggleSwitch Grid.Column="1"
-												  IsChecked="{Binding UseStreamingAgentResponse}"
-												  OnContent="流式"
-												  OffContent="普通"
-												  FontSize="11"
-												  Margin="0,-6,0,-6"/>
+												  IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}" />
 								</Grid>
-								<!-- MarkdownView has its own internal scrolling; put it directly in the panel, not inside a ScrollViewer -->
-								<md:MarkdownView Text="{Binding ConversationMarkdown}"
-												 Height="360"
-												 HorizontalAlignment="Stretch"
-												 VerticalAlignment="Stretch"/>
-								<Grid ColumnDefinitions="*,Auto">
-									<TextBox x:Name="AgentInput"
-											 Grid.Column="0"
-											 PlaceholderText="输入消息..."
-											 Background="#2d2d2d"
-											 Foreground="White"
-											 AcceptsReturn="False"
-											 KeyDown="OnAgentInputKeyDown"/>
-									<Button Grid.Column="1"
-											Content="发送"
-											Margin="4,0,0,0"
-											Click="OnSendToAgent"/>
-								</Grid>
+
+								<TextBlock Text="元素" Classes="SidebarSection" />
+								<Border Margin="12,0,12,0" Padding="4" Background="#1E1E1E"
+										BorderBrush="#3C3C3C" BorderThickness="1" CornerRadius="4">
+									<TabControl Height="220">
+										<TabItem Header="节点">
+											<ListBox x:Name="ElementNodeList" Background="Transparent">
+												<ListBox.ItemTemplate>
+													<DataTemplate x:DataType="vm:WorkflowElementEntry">
+														<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+															<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
+																	   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+															<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
+																	Padding="6,1" FontSize="11" Click="OnLocateElement"
+																	ToolTip.Tip="滚到视口中心；插槽定位所属节点，连线定位两端节点中心"/>
+															<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
+																	Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
+														</Grid>
+													</DataTemplate>
+												</ListBox.ItemTemplate>
+											</ListBox>
+										</TabItem>
+										<TabItem Header="插槽">
+											<ListBox x:Name="ElementSlotList" Background="Transparent">
+												<ListBox.ItemTemplate>
+													<DataTemplate x:DataType="vm:WorkflowElementEntry">
+														<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+															<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
+																	   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+															<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
+																	Padding="6,1" FontSize="11" Click="OnLocateElement"/>
+															<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
+																	Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
+														</Grid>
+													</DataTemplate>
+												</ListBox.ItemTemplate>
+											</ListBox>
+										</TabItem>
+										<TabItem Header="连线">
+											<ListBox x:Name="ElementLinkList" Background="Transparent">
+												<ListBox.ItemTemplate>
+													<DataTemplate x:DataType="vm:WorkflowElementEntry">
+														<Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+															<TextBlock Text="{Binding Label}" Foreground="#E2E8F0"
+																	   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+															<Button Grid.Column="1" Content="Locate" Margin="4,0,0,0"
+																	Padding="6,1" FontSize="11" Click="OnLocateElement"/>
+															<Button Grid.Column="2" Content="Delete" Margin="4,0,0,0"
+																	Padding="6,1" FontSize="11" Click="OnDeleteElement"/>
+														</Grid>
+													</DataTemplate>
+												</ListBox.ItemTemplate>
+											</ListBox>
+										</TabItem>
+									</TabControl>
+								</Border>
+								<TextBlock x:Name="ElementStatus" Margin="12,8,12,12" Foreground="#94A3B8"
+										   FontSize="11" TextWrapping="Wrap" />
 							</StackPanel>
-						</Border>
-						<!-- MCP servers -->
-						<Border x:Name="McpStatusPanel" x:DataType="mcp:McpStatusViewModel" Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
-							<StackPanel Spacing="6">
-								<Grid ColumnDefinitions="*,Auto">
-									<TextBlock Text="MCP 服务器" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
-									<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-										<TextBlock Text="{Binding ConnectedCount, StringFormat=存活 {0}}" Foreground="#6bffb8" FontWeight="Bold"/>
-										<TextBlock Text="{Binding ErrorCount, StringFormat=· 错误 {0}}" Foreground="#ff6b6b"/>
-										<Button Content="重载" FontSize="11" Click="OnReloadMcp"/>
+						</ScrollViewer>
+
+						<!-- Run -->
+						<ScrollViewer x:Name="RunPanel" IsVisible="False" VerticalScrollBarVisibility="Auto">
+							<StackPanel>
+								<TextBlock Text="运行" Classes="SidebarSection" />
+								<Border Margin="12,0,12,0" Padding="10" Background="#1E1E1E"
+										BorderBrush="#3C3C3C" BorderThickness="1" CornerRadius="4">
+									<StackPanel Spacing="6">
+										<Grid ColumnDefinitions="*,Auto">
+											<TextBlock Grid.Column="0" Text="运行控制" Foreground="#E2E8F0" FontWeight="SemiBold" VerticalAlignment="Center" />
+											<TextBlock Grid.Column="1" x:Name="RunGateState" Text="空闲" Foreground="#A0A0A0" VerticalAlignment="Center" />
+										</Grid>
+										<Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+											<Button Grid.Column="0" Content="Pause" Margin="0,0,3,0" HorizontalAlignment="Stretch" Click="PauseWorkflow" />
+											<Button Grid.Column="1" Content="Resume" Margin="3,0,0,0" HorizontalAlignment="Stretch" Click="ResumeWorkflow" />
+										</Grid>
+										<Button x:Name="ContinueFromCheckpointButton" Content="从检查点继续" Margin="0,6,0,0"
+												HorizontalAlignment="Stretch" Click="ContinueFromCheckpoint" IsEnabled="False" />
 									</StackPanel>
-								</Grid>
-								<ItemsControl ItemsSource="{Binding Servers}">
-									<ItemsControl.ItemTemplate>
-										<DataTemplate x:DataType="mcp:McpServerStatusViewModel">
-											<StackPanel Spacing="2">
-												<StackPanel Orientation="Horizontal" Spacing="6">
-													<TextBlock Text="{Binding Name}" Foreground="#e0e0e0" FontWeight="SemiBold"/>
-													<TextBlock Text="{Binding StateText}" Foreground="#a0a0a0"/>
-													<TextBlock Text="{Binding ToolCount, StringFormat=· {0} tools}" Foreground="#6bffb8"/>
-												</StackPanel>
-												<TextBlock Text="{Binding Error}" Foreground="#ff6b6b" FontSize="11" TextWrapping="Wrap"
-														   IsVisible="{Binding IsError}" Margin="14,0,0,0"/>
-											</StackPanel>
-										</DataTemplate>
-									</ItemsControl.ItemTemplate>
-								</ItemsControl>
-							</StackPanel>
-						</Border>
-						<!-- 编译结构：一段一行、按 Depth 缩进，读起来就是它描述的那棵树。内容由控制器在编译后推给树
-						     填充（TreeViewModel.RefreshCompiledStructure），这块面板不订阅控制器的属性变化。 -->
-						<Border x:Name="CompiledStructurePanel" Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
-							<StackPanel Spacing="6">
-								<Grid ColumnDefinitions="*,Auto">
-									<TextBlock Text="编译结构" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
-									<TextBlock Grid.Column="1" Text="{Binding CompiledStructure.Count, StringFormat={}{0} 段}" Foreground="#a0a0a0"/>
-								</Grid>
-								<ItemsControl ItemsSource="{Binding CompiledStructure}">
-									<ItemsControl.ItemTemplate>
-										<DataTemplate x:DataType="cex:CompiledOutlineRow">
-											<Grid ColumnDefinitions="Auto,*" Margin="{Binding Depth, Converter={StaticResource DepthIndent}}">
-												<TextBlock Text="{Binding Kind}" Foreground="#f0c674" FontSize="11" Width="58"/>
-												<TextBlock Grid.Column="1" Text="{Binding Label}" Foreground="#e0e0e0" FontSize="11" TextWrapping="Wrap"/>
-											</Grid>
-										</DataTemplate>
-									</ItemsControl.ItemTemplate>
-								</ItemsControl>
-							</StackPanel>
-						</Border>
-						<!-- Sub-agents the Agent dispatched, at every depth, under the scope's own node. The tree is the
-						     library's own (VeloxDev.AI.SubAgents.SubAgentTreeViewModel), built over helper.SubAgents in the
-						     code-behind once the subsystem exists. IsVisible starts False because a host with no key never gets
-						     one — the panel is wired on, not assumed. -->
-						<Border x:Name="SubAgentPanel" x:DataType="sub:SubAgentTreeViewModel" IsVisible="False" Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
-							<StackPanel Spacing="6">
-								<Grid ColumnDefinitions="*,Auto">
-									<TextBlock Text="子代理" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
-									<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-										<TextBlock Text="{Binding RunningCount, StringFormat=运行中 {0}}" Foreground="#6bffb8" FontWeight="Bold" IsVisible="{Binding !IsIdle}"/>
-										<TextBlock Text="{Binding TotalCount, StringFormat={}{0} 个}" Foreground="#a0a0a0"/>
-										<TextBlock Text="{Binding SubtreeTokensText, StringFormat=· {0} tokens}" Foreground="#c8b6ff" IsVisible="{Binding ScopeRoot.HasTokens}"/>
-										<TextBlock Text="{Binding FailedCount, StringFormat=· 失败 {0}}" Foreground="#ff6b6b" IsVisible="{Binding HasFailed}"/>
+								</Border>
+
+								<TextBlock Text="画布" Classes="SidebarSection" />
+								<StackPanel Margin="12,0,12,0" Spacing="2">
+									<TextBlock Text="总元素数：" Foreground="#CCCCCC" />
+									<TextBlock Text="{Binding TotalElementText}" Foreground="#E7E7E7" TextWrapping="Wrap" />
+									<TextBlock Margin="0,8,0,0" Text="可见元素数：" Foreground="#CCCCCC" />
+									<TextBlock Text="{Binding VisibleElementText}" Foreground="#E7E7E7" TextWrapping="Wrap" />
+								</StackPanel>
+
+								<!-- Compiled outline: one span per row, indented by Depth. Filled by the controller
+								     (TreeViewModel.RefreshCompiledStructure); this panel does not subscribe to it. -->
+								<Border x:Name="CompiledStructurePanel" Margin="12,14,12,12" Padding="10" Background="#1E1E1E" BorderBrush="#3C3C3C" BorderThickness="1" CornerRadius="4">
+									<StackPanel Spacing="6">
+										<Grid ColumnDefinitions="*,Auto">
+											<TextBlock Text="编译结构" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
+											<TextBlock Grid.Column="1" Text="{Binding CompiledStructure.Count, StringFormat={}{0} 段}" Foreground="#a0a0a0"/>
+										</Grid>
+										<ItemsControl ItemsSource="{Binding CompiledStructure}">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate x:DataType="cex:CompiledOutlineRow">
+													<Grid ColumnDefinitions="Auto,*" Margin="{Binding Depth, Converter={StaticResource DepthIndent}}">
+														<TextBlock Text="{Binding Kind}" Foreground="#f0c674" FontSize="11" Width="58"/>
+														<TextBlock Grid.Column="1" Text="{Binding Label}" Foreground="#e0e0e0" FontSize="11" TextWrapping="Wrap"/>
+													</Grid>
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
 									</StackPanel>
-								</Grid>
-								<TextBlock Text="尚无子代理。让 Agent「派一个子代理去数一数节点」试试。" Foreground="#6b7280" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding IsEmpty}"/>
-								<ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-									<TreeView ItemsSource="{Binding Tree}" Background="Transparent" BorderThickness="0">
-										<TreeView.ItemTemplate>
-											<TreeDataTemplate x:DataType="sub:SubAgentTreeNodeViewModel" ItemsSource="{Binding Children}">
-												<!-- What an agent map is read for. A lamp for the state, the title for which piece of work this is, and
-												     under it what the run cost: how long it took, what it spent, and the subtree total beside the node's
-												     own when the two differ. The task and the result are deliberately absent — a task is often a paragraph
-												     and a result often longer, and printing them made every row four wrapped blocks and turned the tree
-												     unreadable at exactly the moment it got interesting, a fan-out. Both live on SubAgentSummary and come
-												     back through the tools, which is where anyone who needs them should look.
-												     Everything is bound off the node, never through Row: the top node stands for the scope and has none. -->
-												<Grid ColumnDefinitions="Auto,*" Margin="0,0,0,6">
-													<local:SubAgentStatusLight Grid.Column="0" Row="{Binding Row}" Width="9" Height="9"
-																	   VerticalAlignment="Top" Margin="0,4,7,0"/>
-													<StackPanel Grid.Column="1" Spacing="1">
-														<TextBlock Text="{Binding Title}" Foreground="#e0e0e0" FontWeight="SemiBold"
-																   TextTrimming="CharacterEllipsis"/>
-														<StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding !IsScopeRoot}">
-															<TextBlock Text="{Binding DurationText}" Foreground="#8a8a8a" FontSize="11"
-																	   IsVisible="{Binding HasDuration}"/>
-															<TextBlock Text="{Binding TokensText, StringFormat=· {0}}" Foreground="#9d8cff" FontSize="11"
-																	   IsVisible="{Binding HasTokens}"/>
-															<TextBlock Text="{Binding SubtreeTokensText, StringFormat=· 子树 {0}}" Foreground="#7ec8ff" FontSize="11"
-																	   IsVisible="{Binding ShowSubtreeTokens}"/>
-															<TextBlock Text="{Binding DroppedRequestCount, StringFormat=· 有 {0} 项请求被拒}" Foreground="#ffd166" FontSize="11"
-																	   IsVisible="{Binding HasDroppedRequests}"/>
-															<TextBlock Text="{Binding StateText}" Foreground="#8a8a8a" FontSize="11"
-																	   IsVisible="{Binding ShowStateText}"/>
-														</StackPanel>
-													</StackPanel>
-												</Grid>
-											</TreeDataTemplate>
-										</TreeView.ItemTemplate>
-									</TreeView>
-								</ScrollViewer>
+								</Border>
 							</StackPanel>
-						</Border>
-						<!-- Execution log -->
-						<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
-							<ScrollViewer MaxHeight="250" VerticalScrollBarVisibility="Auto" x:Name="ExecutionLogScroller">
+						</ScrollViewer>
+
+						<!-- Agent -->
+						<Grid x:Name="AgentPanel" IsVisible="False" RowDefinitions="Auto,Auto,*,Auto,Auto">
+							<!-- Session permission belongs to the Agent: it decides what the model may do, not how a run is driven. -->
+							<StackPanel Grid.Row="0" Margin="0,0,0,4">
+								<TextBlock Text="会话" Classes="SidebarSection" />
+								<Grid Margin="12,0,12,0" ColumnDefinitions="Auto,*">
+									<TextBlock Text="权限模式" Foreground="#CCCCCC" VerticalAlignment="Center" Margin="0,0,6,0" />
+									<ComboBox Grid.Column="1" x:Name="PermissionModePicker" MinWidth="120" HorizontalAlignment="Stretch"
+											  ToolTip.Tip="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
+											  SelectionChanged="OnPermissionModeChanged" />
+								</Grid>
+							</StackPanel>
+							<Grid Grid.Row="1" Margin="12,4,12,4" ColumnDefinitions="*,Auto">
+								<TextBlock Text="Agent 对话" Foreground="#7EC8FF" FontWeight="Bold" VerticalAlignment="Center" />
+								<ToggleSwitch Grid.Column="1" IsChecked="{Binding UseStreamingAgentResponse}"
+											  OnContent="流式" OffContent="普通" FontSize="11" Margin="0,-6,0,-6" />
+							</Grid>
+							<!-- MarkdownView scrolls internally; put it straight in the page, not in a ScrollViewer. -->
+							<md:MarkdownView Grid.Row="2" Text="{Binding ConversationMarkdown}" Margin="8,0"
+											 MinHeight="120" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+							<Grid Grid.Row="3" Margin="12,6,12,8" ColumnDefinitions="*,Auto">
+								<TextBox x:Name="AgentInput" Grid.Column="0" PlaceholderText="输入消息..."
+										 Background="#2d2d2d" Foreground="White" AcceptsReturn="False"
+										 KeyDown="OnAgentInputKeyDown" />
+								<Button Grid.Column="1" Content="发送" Margin="4,0,0,0" Click="OnSendToAgent" />
+							</Grid>
+							<!-- Sub-agents the Agent dispatched, at every depth, under the scope's own node. The tree is the
+							     library's own (VeloxDev.AI.SubAgents.SubAgentTreeViewModel), built over helper.SubAgents in the
+							     code-behind once the subsystem exists. IsVisible starts False because a host with no key never gets
+							     one — the panel is wired on, not assumed. -->
+							<Border x:Name="SubAgentPanel" Grid.Row="4" x:DataType="sub:SubAgentTreeViewModel" IsVisible="False"
+									Margin="12,4,12,12" Padding="10" Background="#1E1E1E" BorderBrush="#3C3C3C" BorderThickness="1" CornerRadius="4">
 								<StackPanel Spacing="6">
-									<TextBlock Text="实际执行顺序" Foreground="#7ec8ff" FontWeight="Bold"/>
-									<TextBlock Text="{Binding ExecutionLog.Count, StringFormat=已记录: {0}}" Foreground="#bdbdbd"/>
+									<Grid ColumnDefinitions="*,Auto">
+										<TextBlock Text="子代理" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
+										<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+											<TextBlock Text="{Binding RunningCount, StringFormat=运行中 {0}}" Foreground="#6bffb8" FontWeight="Bold" IsVisible="{Binding !IsIdle}"/>
+											<TextBlock Text="{Binding TotalCount, StringFormat={}{0} 个}" Foreground="#a0a0a0"/>
+											<TextBlock Text="{Binding SubtreeTokensText, StringFormat=· {0} tokens}" Foreground="#c8b6ff" IsVisible="{Binding ScopeRoot.HasTokens}"/>
+											<TextBlock Text="{Binding FailedCount, StringFormat=· 失败 {0}}" Foreground="#ff6b6b" IsVisible="{Binding HasFailed}"/>
+										</StackPanel>
+									</Grid>
+									<TextBlock Text="尚无子代理。让 Agent「派一个子代理去数一数节点」试试。" Foreground="#6b7280" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding IsEmpty}"/>
+									<ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+										<TreeView ItemsSource="{Binding Tree}" Background="Transparent" BorderThickness="0">
+											<TreeView.ItemTemplate>
+												<TreeDataTemplate x:DataType="sub:SubAgentTreeNodeViewModel" ItemsSource="{Binding Children}">
+													<!-- What an agent map is read for. A lamp for the state, the title for which piece of work this is, and
+													     under it what the run cost: how long it took, what it spent, and the subtree total beside the node's
+													     own when the two differ. The task and the result are deliberately absent — a task is often a paragraph
+													     and a result often longer, and printing them made every row four wrapped blocks and turned the tree
+													     unreadable at exactly the moment it got interesting, a fan-out. Both live on SubAgentSummary and come
+													     back through the tools, which is where anyone who needs them should look.
+													     Everything is bound off the node, never through Row: the top node stands for the scope and has none. -->
+													<Grid ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+														<local:SubAgentStatusLight Grid.Column="0" Row="{Binding Row}" Width="9" Height="9"
+																		   VerticalAlignment="Top" Margin="0,4,7,0"/>
+														<StackPanel Grid.Column="1" Spacing="1">
+															<TextBlock Text="{Binding Title}" Foreground="#e0e0e0" FontWeight="SemiBold"
+																	   TextTrimming="CharacterEllipsis"/>
+															<StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding !IsScopeRoot}">
+																<TextBlock Text="{Binding DurationText}" Foreground="#8a8a8a" FontSize="11"
+																		   IsVisible="{Binding HasDuration}"/>
+																<TextBlock Text="{Binding TokensText, StringFormat=· {0}}" Foreground="#9d8cff" FontSize="11"
+																		   IsVisible="{Binding HasTokens}"/>
+																<TextBlock Text="{Binding SubtreeTokensText, StringFormat=· 子树 {0}}" Foreground="#7ec8ff" FontSize="11"
+																		   IsVisible="{Binding ShowSubtreeTokens}"/>
+																<TextBlock Text="{Binding DroppedRequestCount, StringFormat=· 有 {0} 项请求被拒}" Foreground="#ffd166" FontSize="11"
+																		   IsVisible="{Binding HasDroppedRequests}"/>
+																<TextBlock Text="{Binding StateText}" Foreground="#8a8a8a" FontSize="11"
+																		   IsVisible="{Binding ShowStateText}"/>
+															</StackPanel>
+														</StackPanel>
+													</Grid>
+												</TreeDataTemplate>
+											</TreeView.ItemTemplate>
+										</TreeView>
+									</ScrollViewer>
+								</StackPanel>
+							</Border>
+						</Grid>
+
+						<!-- MCP -->
+						<ScrollViewer x:Name="McpPanel" IsVisible="False" VerticalScrollBarVisibility="Auto">
+							<StackPanel>
+								<TextBlock Text="服务器" Classes="SidebarSection" />
+								<Border x:Name="McpStatusPanel" x:DataType="mcp:McpStatusViewModel" Margin="12,0,12,0" Padding="10" Background="#1E1E1E" BorderBrush="#3C3C3C" BorderThickness="1" CornerRadius="4">
+									<StackPanel Spacing="6">
+										<Grid ColumnDefinitions="*,Auto">
+											<TextBlock Text="MCP 服务器" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
+											<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+												<TextBlock Text="{Binding ConnectedCount, StringFormat=存活 {0}}" Foreground="#6bffb8" FontWeight="Bold"/>
+												<TextBlock Text="{Binding ErrorCount, StringFormat=· 错误 {0}}" Foreground="#ff6b6b"/>
+												<Button Content="重载" FontSize="11" Click="OnReloadMcp"/>
+											</StackPanel>
+										</Grid>
+										<ItemsControl ItemsSource="{Binding Servers}">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate x:DataType="mcp:McpServerStatusViewModel">
+													<StackPanel Spacing="2">
+														<StackPanel Orientation="Horizontal" Spacing="6">
+															<TextBlock Text="{Binding Name}" Foreground="#e0e0e0" FontWeight="SemiBold"/>
+															<TextBlock Text="{Binding StateText}" Foreground="#a0a0a0"/>
+															<TextBlock Text="{Binding ToolCount, StringFormat=· {0} tools}" Foreground="#6bffb8"/>
+														</StackPanel>
+														<TextBlock Text="{Binding Error}" Foreground="#ff6b6b" FontSize="11" TextWrapping="Wrap"
+																   IsVisible="{Binding IsError}" Margin="14,0,0,0"/>
+													</StackPanel>
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
+									</StackPanel>
+								</Border>
+							</StackPanel>
+						</ScrollViewer>
+
+						<!-- Output -->
+						<Grid x:Name="OutputPanel" IsVisible="False" RowDefinitions="Auto,*">
+							<TextBlock Grid.Row="0" Text="执行输出" Classes="SidebarSection" />
+							<ScrollViewer Grid.Row="1" x:Name="ExecutionLogScroller" Margin="8,0,8,8" VerticalScrollBarVisibility="Auto">
+								<StackPanel Spacing="6">
+									<TextBlock Text="实际执行顺序" Foreground="#7ec8ff" FontWeight="Bold" Margin="4,0,0,0"/>
+									<TextBlock Text="{Binding ExecutionLog.Count, StringFormat=已记录: {0}}" Foreground="#bdbdbd" Margin="4,0,0,0"/>
 									<ListBox ItemsSource="{Binding ExecutionLog}"
 											 Background="Transparent" BorderThickness="0"
 											 ScrollViewer.VerticalScrollBarVisibility="Disabled">
@@ -468,10 +550,11 @@
 									</ListBox>
 								</StackPanel>
 							</ScrollViewer>
-						</Border>
-				</StackPanel>
-			</ScrollViewer>
-		</Border>
+						</Grid>
+					</Grid>
+				</Grid>
+			</Border>
+		</Grid>
 
 		<GridSplitter Grid.Column="1" Width="5" Background="#1F2937"/>
 	</Grid>

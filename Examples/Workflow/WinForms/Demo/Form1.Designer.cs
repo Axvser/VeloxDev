@@ -78,6 +78,8 @@
             splitContainer.FixedPanel = FixedPanel.Panel1;
             splitContainer.Location = new Point(0, 0);
             splitContainer.Name = "splitContainer";
+            // 这两个容器只负责在 Designer 里创建并持有命名控件；运行时 Form1.BuildSidebar
+            // 清空 Panel1、把子控件搬到 VS Code 式左栏的五个页里，再释放这两个空壳。
             splitContainer.Panel1.Controls.Add(logTabControl);
             splitContainer.Panel1.Controls.Add(toolbarPanel);
             splitContainer.Panel1.Padding = new Padding(12);
@@ -221,10 +223,9 @@
             //
             // permissionModeLabel
             //
-            // 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在左下角的标签页里，不在底部，但模式
-            // 与运行控制同属「这轮怎么跑」，所以挨着放。它也不是 AgentModes 的 build/plan 那一对：
-            // 那一对改的是模型被告知什么，这一个改的是什么允许跑。
-            // 这一行插在运行控制之前，所以运行控制整块下移 30px，面板也跟着长高 30px。
+            // 权限模式：会话级设置，所以和 Agent 对话放在同一页 —— 它决定模型能做什么，不决定一次
+            // 运行怎么被驱动。这里的 Location/Size 只是 Designer 的占位值：运行时 Form1.BuildSidebar
+            // 会把这两个控件连同其余命名控件搬到 VS Code 式左栏对应页，布局由那边的 TableLayout 接管。
             permissionModeLabel.AutoSize = true;
             permissionModeLabel.Location = new Point(4, 248);
             permissionModeLabel.Name = "permissionModeLabel";

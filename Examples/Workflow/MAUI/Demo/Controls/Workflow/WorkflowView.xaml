@@ -46,329 +46,529 @@
         <MenuFlyout x:Key="LinkContextMenu">
             <MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}" />
         </MenuFlyout>
+
+        <!-- VS Code-style sidebar: a flat section heading and compact action row. -->
+        <Style x:Key="SidebarSectionStyle" TargetType="Label">
+            <Setter Property="TextColor" Value="#BBBBBB" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontAttributes" Value="Bold" />
+            <Setter Property="Margin" Value="12,14,12,6" />
+        </Style>
+        <Style x:Key="SidebarActionButtonStyle" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="Transparent" />
+            <Setter Property="TextColor" Value="#CCCCCC" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="HeightRequest" Value="26" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="CornerRadius" Value="3" />
+        </Style>
     </ContentView.Resources>
 
     <Grid ColumnDefinitions="Auto,*">
-        <!-- Sidebar -->
-        <ScrollView Grid.Column="0"
-                    BackgroundColor="#1a1a2e"
-                    Padding="8">
-            <VerticalStackLayout Spacing="6"
-                                 WidthRequest="240">
-                <Button Text="Undo"
-                        HeightRequest="40"
-                        BackgroundColor="#0f3460"
-                        TextColor="White"
-                        Command="{Binding UndoCommand}" />
-                <Button Text="Redo"
-                        HeightRequest="40"
-                        BackgroundColor="#0f3460"
-                        TextColor="White"
-                        Command="{Binding RedoCommand}" />
-                <BoxView HeightRequest="1"
-                         Color="#333344" />
-                <Button Text="Save"
-                        HeightRequest="40"
-                        BackgroundColor="#0f3460"
-                        TextColor="White"
-                        Clicked="OnSaveClicked" />
-                <Button Text="Select"
-                        HeightRequest="40"
-                        BackgroundColor="#0f3460"
-                        TextColor="White"
-                        Clicked="OnSelectClicked" />
-                <BoxView HeightRequest="1"
-                         Color="#333344" />
-                <Button Text="Load Workflow Demo"
-                        HeightRequest="40"
-                        BackgroundColor="#0f3460"
-                        TextColor="White"
-                        Clicked="OnLoadNetworkDemoClicked" />
-                <BoxView HeightRequest="1"
-                         Color="#333344" />
-                <Label Text="总元素数："
-                       TextColor="#b0b0b0"
-                       FontSize="11"
-                       Margin="0,6,0,0" />
-                <Label Text="{Binding TotalElementText}"
-                       TextColor="White"
-                       FontSize="13" />
-                <Label Text="可见元素数："
-                       TextColor="#b0b0b0"
-                       FontSize="11"
-                       Margin="0,6,0,0" />
-                <Label Text="{Binding VisibleElementText}"
-                       TextColor="White"
-                       FontSize="13" />
-                <BoxView HeightRequest="1"
-                         Color="#333344" />
+        <!-- Left rail: 48px activity bar plus the 300px sidebar. -->
+        <Grid Grid.Column="0" ColumnDefinitions="48,300">
+            <!-- Activity bar -->
+            <Border Grid.Column="0" BackgroundColor="#333333" StrokeThickness="0">
+                <VerticalStackLayout Spacing="0">
+                    <Grid x:Name="ActivityExplorer"
+                          HeightRequest="48"
+                          WidthRequest="48"
+                          BackgroundColor="#333333"
+                          ToolTipProperties.Text="资源管理器">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="explorer" />
+                        </Grid.GestureRecognizers>
+                        <BoxView x:Name="ActivityExplorerIndicator"
+                                 WidthRequest="2"
+                                 HorizontalOptions="Start"
+                                 Color="#007ACC"
+                                 InputTransparent="True" />
+                        <!-- A document outline. -->
+                        <Path Data="M5,3 L13,3 L19,9 L19,21 L5,21 Z M13,3 L13,9 L19,9 M8,13 L16,13 M8,16 L16,16"
+                              Fill="Transparent"
+                              Stroke="#CCCCCC"
+                              StrokeThickness="1.4"
+                              Aspect="Uniform"
+                              WidthRequest="20"
+                              HeightRequest="20"
+                              HorizontalOptions="Center"
+                              VerticalOptions="Center"
+                              InputTransparent="True" />
+                    </Grid>
 
-                <!-- 元素列表：从 Tree 加载节点/插槽/连线，每行可 Locate / Delete。与其它完整 Demo 共用
-                     WorkflowElementCatalog，行为一致。三张列表各自定高，才能在这个侧栏的 ScrollView 里滚动。 -->
-                <Border Margin="0,12,0,0"
-                        Padding="10"
-                        BackgroundColor="#202020"
-                        Stroke="#4C4C4C"
-                        StrokeThickness="1"
-                        StrokeShape="RoundRectangle 4">
-                    <VerticalStackLayout Spacing="6">
-                        <Label Text="元素（从 Tree 加载）"
-                               TextColor="#7EC8FF"
-                               FontAttributes="Bold" />
+                    <Grid x:Name="ActivityRun"
+                          HeightRequest="48"
+                          WidthRequest="48"
+                          BackgroundColor="#333333"
+                          ToolTipProperties.Text="运行">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="run" />
+                        </Grid.GestureRecognizers>
+                        <BoxView x:Name="ActivityRunIndicator"
+                                 WidthRequest="2"
+                                 HorizontalOptions="Start"
+                                 Color="Transparent"
+                                 InputTransparent="True" />
+                        <!-- A play triangle. -->
+                        <Path Data="M8,4 L20,12 L8,20 Z"
+                              Fill="#CCCCCC"
+                              Aspect="Uniform"
+                              WidthRequest="20"
+                              HeightRequest="20"
+                              HorizontalOptions="Center"
+                              VerticalOptions="Center"
+                              InputTransparent="True" />
+                    </Grid>
 
-                        <Label Text="节点"
-                               TextColor="#B0B0B0"
-                               FontSize="11" />
-                        <CollectionView x:Name="ElementNodeList"
-                                        HeightRequest="150"
-                                        SelectionMode="None">
-                            <CollectionView.ItemTemplate>
-                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
-                                    <Grid ColumnDefinitions="*,Auto,Auto"
-                                          ColumnSpacing="4"
-                                          Margin="0,1">
-                                        <Label Text="{Binding Label}"
-                                               TextColor="#E0E0E0"
-                                               FontSize="10"
-                                               VerticalTextAlignment="Center"
-                                               LineBreakMode="TailTruncation" />
-                                        <Button Grid.Column="1"
-                                                Text="Locate"
-                                                FontSize="9"
-                                                Padding="4,0"
-                                                HeightRequest="24"
-                                                BackgroundColor="#0F3460"
-                                                TextColor="#7EC8FF"
-                                                Clicked="OnLocateElement" />
-                                        <Button Grid.Column="2"
-                                                Text="Delete"
-                                                FontSize="9"
-                                                Padding="4,0"
-                                                HeightRequest="24"
-                                                BackgroundColor="#0F3460"
-                                                TextColor="#7EC8FF"
-                                                Clicked="OnDeleteElement" />
-                                    </Grid>
-                                </DataTemplate>
-                            </CollectionView.ItemTemplate>
-                        </CollectionView>
+                    <Grid x:Name="ActivityAgent"
+                          HeightRequest="48"
+                          WidthRequest="48"
+                          BackgroundColor="#333333"
+                          ToolTipProperties.Text="Agent 对话">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="agent" />
+                        </Grid.GestureRecognizers>
+                        <BoxView x:Name="ActivityAgentIndicator"
+                                 WidthRequest="2"
+                                 HorizontalOptions="Start"
+                                 Color="Transparent"
+                                 InputTransparent="True" />
+                        <!-- A chat bubble. -->
+                        <Path Data="M4,4 L20,4 L20,15 L11,15 L7,20 L7,15 L4,15 Z"
+                              Fill="Transparent"
+                              Stroke="#CCCCCC"
+                              StrokeThickness="1.4"
+                              Aspect="Uniform"
+                              WidthRequest="20"
+                              HeightRequest="20"
+                              HorizontalOptions="Center"
+                              VerticalOptions="Center"
+                              InputTransparent="True" />
+                    </Grid>
 
-                        <Label Text="插槽"
-                               TextColor="#B0B0B0"
-                               FontSize="11" />
-                        <CollectionView x:Name="ElementSlotList"
-                                        HeightRequest="150"
-                                        SelectionMode="None">
-                            <CollectionView.ItemTemplate>
-                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
-                                    <Grid ColumnDefinitions="*,Auto,Auto"
-                                          ColumnSpacing="4"
-                                          Margin="0,1">
-                                        <Label Text="{Binding Label}"
-                                               TextColor="#E0E0E0"
-                                               FontSize="10"
-                                               VerticalTextAlignment="Center"
-                                               LineBreakMode="TailTruncation" />
-                                        <Button Grid.Column="1"
-                                                Text="Locate"
-                                                FontSize="9"
-                                                Padding="4,0"
-                                                HeightRequest="24"
-                                                BackgroundColor="#0F3460"
-                                                TextColor="#7EC8FF"
-                                                Clicked="OnLocateElement" />
-                                        <Button Grid.Column="2"
-                                                Text="Delete"
-                                                FontSize="9"
-                                                Padding="4,0"
-                                                HeightRequest="24"
-                                                BackgroundColor="#0F3460"
-                                                TextColor="#7EC8FF"
-                                                Clicked="OnDeleteElement" />
-                                    </Grid>
-                                </DataTemplate>
-                            </CollectionView.ItemTemplate>
-                        </CollectionView>
+                    <Grid x:Name="ActivityMcp"
+                          HeightRequest="48"
+                          WidthRequest="48"
+                          BackgroundColor="#333333"
+                          ToolTipProperties.Text="MCP 服务器">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="mcp" />
+                        </Grid.GestureRecognizers>
+                        <BoxView x:Name="ActivityMcpIndicator"
+                                 WidthRequest="2"
+                                 HorizontalOptions="Start"
+                                 Color="Transparent"
+                                 InputTransparent="True" />
+                        <!-- A plug. -->
+                        <Path Data="M9,3 L9,7 M15,3 L15,7 M6,7 L18,7 L18,11 C18,14.3 15.3,17 12,17 C8.7,17 6,14.3 6,11 Z M12,17 L12,21"
+                              Fill="Transparent"
+                              Stroke="#CCCCCC"
+                              StrokeThickness="1.4"
+                              Aspect="Uniform"
+                              WidthRequest="20"
+                              HeightRequest="20"
+                              HorizontalOptions="Center"
+                              VerticalOptions="Center"
+                              InputTransparent="True" />
+                    </Grid>
 
-                        <Label Text="连线"
-                               TextColor="#B0B0B0"
-                               FontSize="11" />
-                        <CollectionView x:Name="ElementLinkList"
-                                        HeightRequest="150"
-                                        SelectionMode="None">
-                            <CollectionView.ItemTemplate>
-                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
-                                    <Grid ColumnDefinitions="*,Auto,Auto"
-                                          ColumnSpacing="4"
-                                          Margin="0,1">
-                                        <Label Text="{Binding Label}"
-                                               TextColor="#E0E0E0"
-                                               FontSize="10"
-                                               VerticalTextAlignment="Center"
-                                               LineBreakMode="TailTruncation" />
-                                        <Button Grid.Column="1"
-                                                Text="Locate"
-                                                FontSize="9"
-                                                Padding="4,0"
-                                                HeightRequest="24"
-                                                BackgroundColor="#0F3460"
-                                                TextColor="#7EC8FF"
-                                                Clicked="OnLocateElement" />
-                                        <Button Grid.Column="2"
-                                                Text="Delete"
-                                                FontSize="9"
-                                                Padding="4,0"
-                                                HeightRequest="24"
-                                                BackgroundColor="#0F3460"
-                                                TextColor="#7EC8FF"
-                                                Clicked="OnDeleteElement" />
-                                    </Grid>
-                                </DataTemplate>
-                            </CollectionView.ItemTemplate>
-                        </CollectionView>
+                    <Grid x:Name="ActivityOutput"
+                          HeightRequest="48"
+                          WidthRequest="48"
+                          BackgroundColor="#333333"
+                          ToolTipProperties.Text="执行输出">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="output" />
+                        </Grid.GestureRecognizers>
+                        <BoxView x:Name="ActivityOutputIndicator"
+                                 WidthRequest="2"
+                                 HorizontalOptions="Start"
+                                 Color="Transparent"
+                                 InputTransparent="True" />
+                        <!-- A terminal prompt. -->
+                        <Path Data="M4,4 L20,4 L20,20 L4,20 Z M7,9 L10,12 L7,15 M12,15 L17,15"
+                              Fill="Transparent"
+                              Stroke="#CCCCCC"
+                              StrokeThickness="1.4"
+                              Aspect="Uniform"
+                              WidthRequest="20"
+                              HeightRequest="20"
+                              HorizontalOptions="Center"
+                              VerticalOptions="Center"
+                              InputTransparent="True" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
 
-                        <Label x:Name="ElementStatus"
-                               TextColor="#A0A0A0"
-                               FontSize="10"
-                               LineBreakMode="WordWrap" />
-                    </VerticalStackLayout>
-                </Border>
-
-                <!-- 权限模式：会话级设置，所以留在侧栏上部 —— 对话面板在侧栏底部，下拉在那里会被窗口底边
-                     裁掉，五个模式只剩第一项点得到。它也不是 AgentModes 的 build/plan 那一对：那一对改的是
-                     模型被告知什么，这一个改的是什么允许跑。切换运行期生效：门逐调用读策略，下一次工具调用
-                     就按新模式判，提示词下一轮跟上。 -->
-                <Label Text="权限模式"
-                       TextColor="#b0b0b0"
-                       FontSize="11"
-                       Margin="0,6,0,0" />
-                <Picker x:Name="PermissionModePicker"
-                        TextColor="White"
-                        FontSize="12"
-                        SelectedIndexChanged="OnPermissionModeChanged" />
-
-                <!-- 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
-                     （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
-                     按钮走 Clicked 而不是 Command 绑定：侧栏的 BindingContext 是树，而门与检查点都在
-                     会话上、不在树上 —— 与同栏的 Save / Select 同一个理由。 -->
-                <Border Margin="0,12,0,0"
-                        Padding="10"
-                        BackgroundColor="#202020"
-                        Stroke="#4C4C4C"
-                        StrokeThickness="1"
-                        StrokeShape="RoundRectangle 4">
-                    <VerticalStackLayout Spacing="6">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="运行控制" TextColor="#7EC8FF" FontAttributes="Bold" VerticalOptions="Center"/>
-                            <Label x:Name="RunGateState" Grid.Column="1" Text="空闲" TextColor="#B0B0B0" VerticalOptions="Center"/>
-                        </Grid>
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-                            <Button Text="Pause"
-                                    HeightRequest="40"
-                                    BackgroundColor="#0f3460"
-                                    TextColor="White"
-                                    Clicked="OnPauseClicked"/>
-                            <Button Grid.Column="1"
-                                    Text="Resume"
-                                    HeightRequest="40"
-                                    BackgroundColor="#0f3460"
-                                    TextColor="White"
-                                    Clicked="OnResumeClicked"/>
-                        </Grid>
-                        <Button x:Name="ContinueFromCheckpointButton"
-                                Text="从检查点继续"
-                                HeightRequest="40"
-                                BackgroundColor="#0f3460"
-                                TextColor="White"
-                                IsEnabled="False"
-                                Clicked="OnContinueFromCheckpointClicked"/>
-                    </VerticalStackLayout>
-                </Border>
-                <BoxView HeightRequest="1"
-                         Color="#333344" />
-                <!-- Agent Chat -->
-                <Label Text="Agent 对话"
-                       FontAttributes="Bold"
-                       FontSize="14"
-                       TextColor="#7EC8FF"
-                       Margin="0,4,0,0" />
-                <HorizontalStackLayout Spacing="4">
-                    <Label Text="流式"
-                           TextColor="#CBD5E1"
+            <!-- Sidebar -->
+            <Border Grid.Column="1" BackgroundColor="#252526" StrokeThickness="0">
+                <Grid RowDefinitions="Auto,*">
+                    <Label x:Name="SidebarHeader"
+                           Grid.Row="0"
+                           Text="资源管理器"
+                           Margin="12,12,12,4"
+                           TextColor="#CCCCCC"
                            FontSize="11"
-                           VerticalTextAlignment="Center" />
-                    <Switch IsToggled="{Binding UseStreamingAgentResponse}"
-                            Scale="0.7" />
-                </HorizontalStackLayout>
-                <CollectionView x:Name="AgentLogScroller"
-                                HeightRequest="120"
-                                VerticalScrollBarVisibility="Always"
-                                ItemsSource="{Binding AgentLog}">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate>
-                            <Label Text="{Binding .}"
-                                   TextColor="#D8D8D8"
-                                   FontSize="10"
-                                   Margin="0,1" />
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                    <Entry x:Name="AgentInput"
-                           Placeholder="输入消息..."
-                           BackgroundColor="#2D2D2D"
-                           TextColor="White"
-                           FontSize="12"
-                           HeightRequest="32"
-                           Completed="OnAgentInputCompleted" />
-                    <Button Grid.Column="1"
-                            Text="发送"
-                            FontSize="12"
-                            HeightRequest="32"
-                            BackgroundColor="#0f3460"
-                            TextColor="White"
-                            Clicked="OnSendToAgent" />
-                </Grid>
+                           FontAttributes="Bold" />
 
-                <!-- MCP servers -->
-                <Border x:Name="McpStatusPanel"
-                        Margin="0,12,0,0"
-                        Padding="10"
-                        BackgroundColor="#202020"
-                        Stroke="#4C4C4C"
-                        StrokeThickness="1"
-                        StrokeShape="RoundRectangle 4">
-                    <VerticalStackLayout Spacing="6">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="MCP 服务器" TextColor="#7EC8FF" FontAttributes="Bold" VerticalOptions="Center"/>
-                            <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
-                                <Label Text="{Binding Helper.Mcp.Status.ConnectedCount, StringFormat='存活 {0}'}" TextColor="#6BFFB8" FontAttributes="Bold"/>
-                                <Label Text="{Binding Helper.Mcp.Status.ErrorCount, StringFormat='· 错误 {0}'}" TextColor="#FF6B6B"/>
-                                <Button Text="重载" FontSize="11" Clicked="OnReloadMcp"/>
-                            </HorizontalStackLayout>
-                        </Grid>
-                        <CollectionView ItemsSource="{Binding Helper.Mcp.Status.Servers}" HeightRequest="140">
-                            <CollectionView.ItemsLayout>
-                                <LinearItemsLayout Orientation="Vertical" ItemSpacing="2"/>
-                            </CollectionView.ItemsLayout>
-                            <CollectionView.ItemTemplate>
-                                <DataTemplate>
-                                    <VerticalStackLayout Spacing="2">
-                                        <HorizontalStackLayout Spacing="6">
-                                            <Label Text="{Binding Name}" TextColor="#E0E0E0" FontAttributes="Bold"/>
-                                            <Label Text="{Binding StateText}" TextColor="#A0A0A0"/>
-                                            <Label Text="{Binding ToolCount, StringFormat='· {0} tools'}" TextColor="#6BFFB8"/>
-                                        </HorizontalStackLayout>
-                                        <Label Text="{Binding Error}" TextColor="#FF6B6B" FontSize="11"
-                                               IsVisible="{Binding IsError}"/>
+                    <Grid Grid.Row="1">
+                        <!-- Explorer: file actions and the element list. -->
+                        <ScrollView x:Name="ExplorerPanel" VerticalScrollBarVisibility="Default">
+                            <VerticalStackLayout Spacing="0">
+                                <HorizontalStackLayout Margin="10,2,10,0" Spacing="2">
+                                    <Button Text="保存"
+                                            Style="{StaticResource SidebarActionButtonStyle}"
+                                            ToolTipProperties.Text="保存工作流"
+                                            Clicked="OnSaveClicked" />
+                                    <Button Text="加载"
+                                            Style="{StaticResource SidebarActionButtonStyle}"
+                                            ToolTipProperties.Text="加载工作流"
+                                            Clicked="OnSelectClicked" />
+                                    <Button Text="撤销"
+                                            Style="{StaticResource SidebarActionButtonStyle}"
+                                            ToolTipProperties.Text="撤销"
+                                            Command="{Binding UndoCommand}" />
+                                    <Button Text="重做"
+                                            Style="{StaticResource SidebarActionButtonStyle}"
+                                            ToolTipProperties.Text="重做"
+                                            Command="{Binding RedoCommand}" />
+                                    <Button Text="重载"
+                                            Style="{StaticResource SidebarActionButtonStyle}"
+                                            ToolTipProperties.Text="重新载入示例"
+                                            Clicked="OnLoadNetworkDemoClicked" />
+                                </HorizontalStackLayout>
+
+                                <Label Text="元素" Style="{StaticResource SidebarSectionStyle}" />
+
+                                <!-- Element list: nodes, slots and links from the tree, each row can
+                                     Locate / Delete. Fixed heights let the three lists scroll here. -->
+                                <Border Margin="12,0,12,0"
+                                        Padding="10"
+                                        BackgroundColor="#202020"
+                                        Stroke="#4C4C4C"
+                                        StrokeThickness="1"
+                                        StrokeShape="RoundRectangle 4">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Label Text="元素（从 Tree 加载）"
+                                               TextColor="#7EC8FF"
+                                               FontAttributes="Bold" />
+
+                                        <Label Text="节点"
+                                               TextColor="#B0B0B0"
+                                               FontSize="11" />
+                                        <CollectionView x:Name="ElementNodeList"
+                                                        HeightRequest="150"
+                                                        SelectionMode="None">
+                                            <CollectionView.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto"
+                                                          ColumnSpacing="4"
+                                                          Margin="0,1">
+                                                        <Label Text="{Binding Label}"
+                                                               TextColor="#E0E0E0"
+                                                               FontSize="10"
+                                                               VerticalTextAlignment="Center"
+                                                               LineBreakMode="TailTruncation" />
+                                                        <Button Grid.Column="1"
+                                                                Text="Locate"
+                                                                FontSize="9"
+                                                                Padding="4,0"
+                                                                HeightRequest="24"
+                                                                BackgroundColor="#0F3460"
+                                                                TextColor="#7EC8FF"
+                                                                Clicked="OnLocateElement" />
+                                                        <Button Grid.Column="2"
+                                                                Text="Delete"
+                                                                FontSize="9"
+                                                                Padding="4,0"
+                                                                HeightRequest="24"
+                                                                BackgroundColor="#0F3460"
+                                                                TextColor="#7EC8FF"
+                                                                Clicked="OnDeleteElement" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </CollectionView.ItemTemplate>
+                                        </CollectionView>
+
+                                        <Label Text="插槽"
+                                               TextColor="#B0B0B0"
+                                               FontSize="11" />
+                                        <CollectionView x:Name="ElementSlotList"
+                                                        HeightRequest="150"
+                                                        SelectionMode="None">
+                                            <CollectionView.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto"
+                                                          ColumnSpacing="4"
+                                                          Margin="0,1">
+                                                        <Label Text="{Binding Label}"
+                                                               TextColor="#E0E0E0"
+                                                               FontSize="10"
+                                                               VerticalTextAlignment="Center"
+                                                               LineBreakMode="TailTruncation" />
+                                                        <Button Grid.Column="1"
+                                                                Text="Locate"
+                                                                FontSize="9"
+                                                                Padding="4,0"
+                                                                HeightRequest="24"
+                                                                BackgroundColor="#0F3460"
+                                                                TextColor="#7EC8FF"
+                                                                Clicked="OnLocateElement" />
+                                                        <Button Grid.Column="2"
+                                                                Text="Delete"
+                                                                FontSize="9"
+                                                                Padding="4,0"
+                                                                HeightRequest="24"
+                                                                BackgroundColor="#0F3460"
+                                                                TextColor="#7EC8FF"
+                                                                Clicked="OnDeleteElement" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </CollectionView.ItemTemplate>
+                                        </CollectionView>
+
+                                        <Label Text="连线"
+                                               TextColor="#B0B0B0"
+                                               FontSize="11" />
+                                        <CollectionView x:Name="ElementLinkList"
+                                                        HeightRequest="150"
+                                                        SelectionMode="None">
+                                            <CollectionView.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto"
+                                                          ColumnSpacing="4"
+                                                          Margin="0,1">
+                                                        <Label Text="{Binding Label}"
+                                                               TextColor="#E0E0E0"
+                                                               FontSize="10"
+                                                               VerticalTextAlignment="Center"
+                                                               LineBreakMode="TailTruncation" />
+                                                        <Button Grid.Column="1"
+                                                                Text="Locate"
+                                                                FontSize="9"
+                                                                Padding="4,0"
+                                                                HeightRequest="24"
+                                                                BackgroundColor="#0F3460"
+                                                                TextColor="#7EC8FF"
+                                                                Clicked="OnLocateElement" />
+                                                        <Button Grid.Column="2"
+                                                                Text="Delete"
+                                                                FontSize="9"
+                                                                Padding="4,0"
+                                                                HeightRequest="24"
+                                                                BackgroundColor="#0F3460"
+                                                                TextColor="#7EC8FF"
+                                                                Clicked="OnDeleteElement" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </CollectionView.ItemTemplate>
+                                        </CollectionView>
+
+                                        <Label x:Name="ElementStatus"
+                                               TextColor="#A0A0A0"
+                                               FontSize="10"
+                                               LineBreakMode="WordWrap" />
                                     </VerticalStackLayout>
-                                </DataTemplate>
-                            </CollectionView.ItemTemplate>
-                        </CollectionView>
-                    </VerticalStackLayout>
-                </Border>
-            </VerticalStackLayout>
-        </ScrollView>
+                                </Border>
+                            </VerticalStackLayout>
+                        </ScrollView>
+
+                        <!-- Run: pause / resume / checkpoint and the canvas counts. -->
+                        <ScrollView x:Name="RunPanel"
+                                    IsVisible="False"
+                                    VerticalScrollBarVisibility="Default">
+                            <VerticalStackLayout Spacing="0">
+                                <Label Text="运行" Style="{StaticResource SidebarSectionStyle}" />
+                                <Border Margin="12,0,12,0"
+                                        Padding="10"
+                                        BackgroundColor="#1E1E1E"
+                                        Stroke="#3C3C3C"
+                                        StrokeThickness="1"
+                                        StrokeShape="RoundRectangle 4">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Text="运行控制" TextColor="#E2E8F0" FontAttributes="Bold" VerticalOptions="Center"/>
+                                            <Label x:Name="RunGateState" Grid.Column="1" Text="空闲" TextColor="#A0A0A0" VerticalOptions="Center"/>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                                            <Button Text="Pause"
+                                                    HeightRequest="40"
+                                                    BackgroundColor="#0f3460"
+                                                    TextColor="White"
+                                                    Clicked="OnPauseClicked"/>
+                                            <Button Grid.Column="1"
+                                                    Text="Resume"
+                                                    HeightRequest="40"
+                                                    BackgroundColor="#0f3460"
+                                                    TextColor="White"
+                                                    Clicked="OnResumeClicked"/>
+                                        </Grid>
+                                        <Button x:Name="ContinueFromCheckpointButton"
+                                                Text="从检查点继续"
+                                                HeightRequest="40"
+                                                BackgroundColor="#0f3460"
+                                                TextColor="White"
+                                                IsEnabled="False"
+                                                Clicked="OnContinueFromCheckpointClicked"/>
+                                    </VerticalStackLayout>
+                                </Border>
+
+                                <Label Text="画布" Style="{StaticResource SidebarSectionStyle}" />
+                                <VerticalStackLayout Margin="12,0,12,0">
+                                    <Label Text="总元素数：" TextColor="#CCCCCC"/>
+                                    <Label Text="{Binding TotalElementText}" TextColor="#E7E7E7"/>
+                                    <Label Margin="0,8,0,0" Text="可见元素数：" TextColor="#CCCCCC"/>
+                                    <Label Text="{Binding VisibleElementText}" TextColor="#E7E7E7"/>
+                                </VerticalStackLayout>
+                            </VerticalStackLayout>
+                        </ScrollView>
+
+                        <!-- Agent: session permission first, then the chat. -->
+                        <Grid x:Name="AgentPanel"
+                              IsVisible="False"
+                              RowDefinitions="Auto,Auto,*,Auto">
+                            <!-- Session permission belongs to the Agent: it decides what the model may do,
+                                 not how a run is driven. It is not the AgentModes build/plan pair, which
+                                 changes what the model is told; this one changes what is allowed to run. -->
+                            <VerticalStackLayout Grid.Row="0" Margin="0,0,0,4">
+                                <Label Text="会话" Style="{StaticResource SidebarSectionStyle}" />
+                                <Grid Margin="12,0,12,0" ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                                    <Label Text="权限模式"
+                                           TextColor="#CCCCCC"
+                                           VerticalOptions="Center" />
+                                    <Picker Grid.Column="1"
+                                            x:Name="PermissionModePicker"
+                                            TextColor="White"
+                                            FontSize="12"
+                                            HorizontalOptions="Fill"
+                                            ToolTipProperties.Text="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
+                                            SelectedIndexChanged="OnPermissionModeChanged" />
+                                </Grid>
+                            </VerticalStackLayout>
+
+                            <Grid Grid.Row="1" Margin="12,4,12,4" ColumnDefinitions="*,Auto">
+                                <Label Text="Agent 对话"
+                                       TextColor="#7EC8FF"
+                                       FontAttributes="Bold"
+                                       VerticalOptions="Center" />
+                                <HorizontalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
+                                    <Label Text="流式"
+                                           TextColor="#CBD5E1"
+                                           FontSize="11"
+                                           VerticalTextAlignment="Center" />
+                                    <Switch IsToggled="{Binding UseStreamingAgentResponse}"
+                                            Scale="0.7" />
+                                </HorizontalStackLayout>
+                            </Grid>
+
+                            <CollectionView x:Name="AgentLogScroller"
+                                            Grid.Row="2"
+                                            Margin="8,0,8,0"
+                                            VerticalScrollBarVisibility="Always"
+                                            ItemsSource="{Binding AgentLog}">
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Label Text="{Binding .}"
+                                               TextColor="#D8D8D8"
+                                               FontSize="10"
+                                               Margin="0,1" />
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+
+                            <Grid Grid.Row="3" Margin="12,6,12,12" ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                <Entry x:Name="AgentInput"
+                                       Placeholder="输入消息..."
+                                       BackgroundColor="#2D2D2D"
+                                       TextColor="White"
+                                       FontSize="12"
+                                       HeightRequest="32"
+                                       Completed="OnAgentInputCompleted" />
+                                <Button Grid.Column="1"
+                                        Text="发送"
+                                        FontSize="12"
+                                        HeightRequest="32"
+                                        BackgroundColor="#0f3460"
+                                        TextColor="White"
+                                        Clicked="OnSendToAgent" />
+                            </Grid>
+                        </Grid>
+
+                        <!-- MCP servers -->
+                        <ScrollView x:Name="McpPanel"
+                                    IsVisible="False"
+                                    VerticalScrollBarVisibility="Default">
+                            <VerticalStackLayout Spacing="0">
+                                <Label Text="服务器" Style="{StaticResource SidebarSectionStyle}" />
+                                <Border x:Name="McpStatusPanel"
+                                        Margin="12,0,12,0"
+                                        Padding="10"
+                                        BackgroundColor="#1E1E1E"
+                                        Stroke="#3C3C3C"
+                                        StrokeThickness="1"
+                                        StrokeShape="RoundRectangle 4">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Text="MCP 服务器" TextColor="#7EC8FF" FontAttributes="Bold" VerticalOptions="Center"/>
+                                            <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
+                                                <Label Text="{Binding Helper.Mcp.Status.ConnectedCount, StringFormat='存活 {0}'}" TextColor="#6BFFB8" FontAttributes="Bold"/>
+                                                <Label Text="{Binding Helper.Mcp.Status.ErrorCount, StringFormat='· 错误 {0}'}" TextColor="#FF6B6B"/>
+                                                <Button Text="重载" FontSize="11" Clicked="OnReloadMcp"/>
+                                            </HorizontalStackLayout>
+                                        </Grid>
+                                        <CollectionView ItemsSource="{Binding Helper.Mcp.Status.Servers}" HeightRequest="140">
+                                            <CollectionView.ItemsLayout>
+                                                <LinearItemsLayout Orientation="Vertical" ItemSpacing="2"/>
+                                            </CollectionView.ItemsLayout>
+                                            <CollectionView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <VerticalStackLayout Spacing="2">
+                                                        <HorizontalStackLayout Spacing="6">
+                                                            <Label Text="{Binding Name}" TextColor="#E0E0E0" FontAttributes="Bold"/>
+                                                            <Label Text="{Binding StateText}" TextColor="#A0A0A0"/>
+                                                            <Label Text="{Binding ToolCount, StringFormat='· {0} tools'}" TextColor="#6BFFB8"/>
+                                                        </HorizontalStackLayout>
+                                                        <Label Text="{Binding Error}" TextColor="#FF6B6B" FontSize="11"
+                                                               IsVisible="{Binding IsError}"/>
+                                                    </VerticalStackLayout>
+                                                </DataTemplate>
+                                            </CollectionView.ItemTemplate>
+                                        </CollectionView>
+                                    </VerticalStackLayout>
+                                </Border>
+                            </VerticalStackLayout>
+                        </ScrollView>
+
+                        <!-- Output: the tree's ExecutionLog. -->
+                        <Grid x:Name="OutputPanel"
+                              IsVisible="False"
+                              RowDefinitions="Auto,Auto,*">
+                            <Label Grid.Row="0" Text="执行输出" Style="{StaticResource SidebarSectionStyle}" />
+                            <Label Grid.Row="1"
+                                   Text="{Binding ExecutionLog.Count, StringFormat='已记录: {0}'}"
+                                   Margin="12,0,12,4"
+                                   TextColor="#BDBDBD"
+                                   FontSize="11" />
+                            <CollectionView x:Name="ExecutionLogScroller"
+                                            Grid.Row="2"
+                                            Margin="8,0,8,8"
+                                            VerticalScrollBarVisibility="Always"
+                                            ItemsSource="{Binding ExecutionLog}">
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Label Text="{Binding .}"
+                                               TextColor="#D8D8D8"
+                                               FontSize="10"
+                                               LineBreakMode="WordWrap"
+                                               Margin="4,1" />
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
 
         <!-- Workflow surface -->
         <Grid Grid.Column="1">
