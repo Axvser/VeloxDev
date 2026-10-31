@@ -125,6 +125,8 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 所有节点级执行与等待式运行都接受 `timeoutMs`（`ExecuteNode` / `ExecuteNodes` / `BroadcastNode` / `ReverseBroadcastNode` / `RunCompiledWorkflow` / `GetNodeResult`）；超时返回错误，图保持原样。
 
+**超时不能只靠 `catch (OperationCanceledException)`**：`RuntimeEngine` 把取消当作正常结果返回（`outcome = Cancelled`，不抛 OCE），命令层也可能把取消包成异常。等待式入口必须在 `await` 之后检查超时令牌，否则超时被答成 `ok`/`Cancelled`，调用方无法区分用户停止与超时（2026-10-31 实测，两条路径都已修）。
+
 两条 `With*` 是宿主的口子：`WithCheckpointStore`（默认给每个 scope 一个内存 store，所以 Continue 开箱可用）与 `WithSessionConfiguration(Action<RuntimeContext>)`（重试策略 / 观察者 / sink / 补偿 / 门 / 检查点，一次配齐）。**填充顺序是契约**：scope 自己的设置 → 宿主钩子 → 工具需要的（门与 store 只在仍是 `null` 时补 ✗ 不覆盖宿主）✓（`WorkflowAgentToolkit.NewSession`）；失败记录与宿主的 sink **并存**（`RecordingErrorSink` 转发 ✓）。
 
 **日志读取取决于宿主的配置，而结果会把答案带出来**：配了文件 `ILogWriter` ⇒ 结果里有 `logFile`（**绝对路径**）⇒ 模型用它自己的文件工具打开即可；默认的内存日志 ⇒ 结果里的 `logs` 就是记录，不需要任何文件工具。`TextWriterLogWriter.Path`（`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Model/LogWriters.cs`，`For(path)` 时填、包装外部 `TextWriter` 时为 null）就是为这一条加的。
@@ -132,6 +134,8 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 ### 三点六、结果的规模、并发与持久化（2026-10-31）
 
 **结果封顶分三层，越靠内越好用**：工具自己带 `max*` 参数（`GetFullTopology.maxNodes`、`ListNodes.maxNodes`、`FindNodes.maxMatches`、`GetExecutionLog.maxEntries`、`GetCompiledRunStatus.maxDataChars`、`GetTypeSchema.maxChars`、`GetComponentContext.maxChars`、`ReadMcpResource.maxChars`、`GetSubAgentResult.maxChars`），被裁的回复带 `truncated` 与总数；`ListNodes`/`FindNodes` 只在给了上限时改成对象信封，不给仍是裸数组（既有解析不破）；最后一道是 `ToolPipeline.MaxResultChars`（scope 的 `WithMaxToolResultChars`，默认 64 KiB），它把**整个结果**换成截断信封 —— 所以能分页的工具要自己分页。
+
+**全局这一道看到的 `result` 往往是 `JsonElement`，不是 `string`**：`AIFunctionFactory` 把字符串返回值包成 `JsonElement`，`TrackedAIFunction.CapResult` 必须同时量两种形态的长度。只认 `string` 时这道闸对全部内置工具静默失效（2026-10-31 实测：200 字符上限下 `ListNodes` 仍返回 10251 字符）。
 
 **一树一个写者**：`WorkflowAgentScope.MutationGate` 是 `ConditionalWeakTable<IWorkflowTreeViewModel, SemaphoreSlim>` 里的每树一把锁，`TrackedAIFunction` 只对 `Edit` / `Execute` 类别取它（`Read` 不取）。同一棵树上两个 scope 的编辑因此串行，父子 scope 也一样。它防的是交错写，不是 lost update（没有版本检查）。
 
