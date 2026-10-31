@@ -1,0 +1,72 @@
+# WinUI 3 / Windows App SDK
+
+`VeloxDev.WinUI` · targets `net8.0-windows10.0.19041.0` and `net10.0-windows10.0.19041.0`
+
+⚙ **Reference implementation:** `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/` — read `TreeView.xaml` and `LinkView.xaml` **together**; they are the pair that implements the offset frame described below. ViewModels at `Demo/ViewModels/Workflow/`.
+
+⚙ **The "Trimmed" in that path means *minimal demo*.** It is a demo-size choice, not a publish setting — see [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
+
+## Writing the surface
+
+The attached properties and the `PART_` names are the same as WPF — see [wpf.md](wpf.md#writing-the-surface) for the markup and each property's meaning; only the namespace declaration changes, and WinUI spells it differently:
+
+```xml
+xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+```
+
+⚙ **WinUI has no `clr-namespace:…;assembly=` form.** The `using:` form above is this dialect's equivalent, and it takes no `;assembly=` suffix. Copying the WPF spelling leaves the attached properties unresolved.
+
+⚙ **Attach the wheel handler to the Canvas with `handledEventsToo: true`.** WinUI has no preview/tunnel phase, so by the time the event reaches the canvas the inner `ScrollViewer` has already run; the handler asks whether that scroll consumed the gesture (it has no room left in that direction) rather than trying to pre-empt it.
+
+⚙ **A plain wheel is routed and then applied by the adapter.** It marks the event handled, routes `PointerWheelChanged`, and scrolls through its registered `IWorkflowSurfaceScroller` (`WorkflowInput.Scroller`) only when the route did not set `PreventDefault`. Ctrl+wheel remains the zoom gesture.
+
+⚙ **`OnPointerMoved` feeds the connection candidate** with `StandardSetPreviewReceiver(SlotHitTestEx.HitTest(viewModel, x, y))` while `VirtualLink.IsVisible`.
+
+## Adding your own content to a node
+
+`<Viewbox Stretch="Uniform">` around content pinned to design size, as on WPF — your controls go inside the design canvas at design-size coordinates.
+
+```xml
+<!-- The template sizes this view to the node's collapsed Size; the inner Grid stays at design size. -->
+<Viewbox Stretch="Uniform">
+  <Grid Width="260" Height="180" Clip="{x:Null}">
+    <!-- Your content, at design-size coordinates. -->
+  </Grid>
+</Viewbox>
+```
+
+⚙ **Alias `Path` in code-first views.** Generated code uses `Microsoft.UI.Xaml.Shapes.Path` because an implicit `using System.IO` collides with it. The demo avoids the alias only because it does not pull in those implicit usings; your project may.
+
+## Links — the offset frame
+
+WinUI has a real constraint the desktop-shaped code has to respect, so this adapter positions and draws links differently from WPF:
+
+⚙ **The canvas pan is baked into the link geometry, and the element is positioned at the negative offset:**
+
+```csharp
+Canvas.SetLeft(this, -layout.ActualOffset.Horizontal);
+Canvas.SetTop(this,  -layout.ActualOffset.Vertical);
+// Width/Height come from layout.ActualSize; the baked geometry lands inside [0, ActualSize]
+```
+
+The point is to keep the geometry non-negative and inside the element's own box, so nothing is clipped and no renderer limit is approached.
+
+⚙ **`Clip` is cleared in three places** — the container `Grid`, the `Path`, and the root XAML. When you re-template a WinUI link view and lines get truncated at large coordinates, check those three.
+
+⚙ **Size the link view from `ActualSize` or from its own curve bounds.** Binding `Width`/`Height` to the canvas element reintroduces the clipping the offset frame exists to avoid. Two shipped shapes work: the trimmed reference drives its box from `ActualSize` (offset frame), and the full demo sizes each link to **its own curve bounds** (min/max of the four Bézier points plus padding, `RenderTransform` to the box origin, geometry and composition strips written relative to that origin). The full-demo shape is the one to copy when a curve can extend past the canvas.
+
+⚙ Slot anchors on this adapter are measured **canvas-local** and written through `SlotAnchorFromCanvasLocal` (the identity form), because the composition translation already inverts the canvas pan. The visual-centre form here subtracts `ActualOffset` a second time and shifts **every** link by a constant.
+
+⚙ Pooled views can lag a zoom by ~100 ms unless the surface virtualizes right after repositioning. The adapter does this for you; a custom surface does the same.
+
+## Item templates — `VeloxDev.WinUI.Templates`
+
+**Generates** `.xaml` + `.xaml.cs` for node, slot, link and tree, and a single `.cs` for selector, decorator and minimap.
+
+⚙ **The tree uses the offset frame**, subscribing to `CanvasLayout.ActualOffset` and `ActualSize`, positioning with `Canvas.SetLeft/Top(−offset)`, baking `+offset` into the geometry, and clearing `Clip` in all three places. That is the code to read when you need to change how links are drawn.
+
+⚙ **The link context menu is a `MenuFlyout` resource plus `LinkMenuKey`.** The generated tree declares `<MenuFlyout x:Key="LinkContextMenu">` and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` at it; the adapter positions it and reports open/close. `MenuFlyout` has no `DataContext`, so the adapter feeds each `MenuFlyoutItem.DataContext` the pressed link — `Command="{Binding DeleteCommand}"` works per item.
+
+⚙ **`slotBorderColor` (`-bc`) is accepted and discarded** on this pack — declared for cross-GUI CLI parity, with that note in the pack's own `template.json`; the slot view draws a filled path and has no border element.
+
+⚙ **The template does not emit `x:Name="Root"`.** The demo's tree has one and MAUI's template requires it; the packs are not symmetric.
