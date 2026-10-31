@@ -184,5 +184,19 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
     }
 
     private static string Describe(IWorkflowNodeViewModel? node)
-        => node is null ? "?" : node.GetType().Name;
+    {
+        if (node is null) return "?";
+
+        // 列表是给人看的：优先显示节点自己的标题，没有标题的类型再退回类型名（去掉 ViewModel）。
+        var title = node switch
+        {
+            TimerNodeViewModel timer => timer.Title,
+            EnumSelectorNodeViewModel selector => selector.Title,
+            PythonScriptNodeViewModel python => python.Title,
+            _ => null,
+        };
+
+        if (!string.IsNullOrWhiteSpace(title)) return title!;
+        return node.GetType().Name.Replace("ViewModel", string.Empty);
+    }
 }

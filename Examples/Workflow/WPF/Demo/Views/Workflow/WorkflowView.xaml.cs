@@ -42,6 +42,27 @@ public partial class WorkflowView : UserControl
         InitializeMcp();
     }
 
+    /// <summary>Switches the sidebar between the explorer, run controls, agent, MCP and output views.</summary>
+    private void OnActivityClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string view }) return;
+
+        ExplorerPanel.Visibility = view == "explorer" ? Visibility.Visible : Visibility.Collapsed;
+        RunPanel.Visibility = view == "run" ? Visibility.Visible : Visibility.Collapsed;
+        AgentPanel.Visibility = view == "agent" ? Visibility.Visible : Visibility.Collapsed;
+        McpPanel.Visibility = view == "mcp" ? Visibility.Visible : Visibility.Collapsed;
+        OutputPanel.Visibility = view == "output" ? Visibility.Visible : Visibility.Collapsed;
+
+        SidebarHeader.Text = view switch
+        {
+            "run" => "运行",
+            "agent" => "AGENT",
+            "mcp" => "MCP",
+            "output" => "输出",
+            _ => "资源管理器",
+        };
+    }
+
     /// <summary>
     /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
     /// </summary>
