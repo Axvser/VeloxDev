@@ -46,6 +46,120 @@ await.** Register it while on the UI thread. The prompt, by contrast, is rendere
 thread: bind `Mcp.Status.Servers` / `Skills.Status.Skills` from your UI, and read their `Snapshot`
 counterparts from anywhere else.
 
+## Multimodal input
+
+Media is a `DataContent` (local bytes) or `UriContent` (remote URL) inside the **user** message. The library
+adds the part the framework leaves to the caller: it sniffs the container, classifies the kind, corrects a
+wrong media type, reads image dimensions, enforces per-kind limits, and can hand the payload to a host
+transcoder before anything is sent.
+
+| Kind | Containers recognised by content |
+| --- | --- |
+| **Image** | PNG, JPEG, WebP, GIF, BMP, TIFF, AVIF, HEIC, SVG |
+| **Audio** | MP3, WAV, FLAC, Ogg, AAC, M4A |
+| **Video** | MP4, WebM, Matroska, AVI, MPEG, QuickTime, FLV |
+| **Document** | PDF, RTF, Office (OOXML), OpenDocument, EPUB (ZIP-based, classified by the declared type) |
+| **Text** | plain, Markdown, HTML, CSV, JSON, XML |
+| **Binary** | anything else; opt-in via `AllowedKinds` |
+
+```csharp
+var image = await AgentMedia.FromFileAsync("var/preview/agent/frame-001.000.png");
+var audio = await AgentMedia.FromFileAsync("var/audio/note.mp3");
+var pdf   = await AgentMedia.FromFileAsync("docs/spec.pdf");
+
+var options = AgentMediaOptions.CreateVisionDefault();   // images: 1280×720
+options.Transcoder = myHostTranscoder;                   // optional; see below
+
+await foreach (var update in agent.RunStreamingWithMediaAsync(
+    "Check the frame, the voice note and the spec.", new[] { image, audio, pdf }, options, session))
+{
+    // each payload travelled as its own image_url / input_audio / file block
+}
+
+// Or build the message yourself:
+var message = await AgentMessage.CreateUserAsync("Review these", new[] { image, pdf }, options);
+
+// Escape hatch for raw AIContent blocks this layer does not wrap:
+var raw = AgentMessage.FromContents(new TextContent("raw"), new DataContent(bytes, "application/octet-stream"));
+```
+
+⚙ **Media belongs in a user message, not in a tool result.** On OpenAI-compatible chat completions the tool
+message has a text channel only; a `DataContent` returned by an `AIFunction` reaches the model as a base64
+JSON string, not as pixels or sound. A screenshot/audio tool returns its report (and a path); the host sends
+the payload back as a user turn.
+
+⚙ **Provider support is per kind and per model.** An endpoint that accepts `image_url`, `input_audio` or a
+file block does not mean the selected model consumes it. That is a model choice, not something this layer
+can detect; keep a text-only fallback.
+
+⚙ **The declared media type is not trusted.** `AgentMedia.FromBytes` sniffs the bytes; an alias such as
+`image/jpg` is normalised, and a contradiction is corrected unless `AgentMediaOptions.StrictMediaType` is
+set.
+
+⚙ **Unrecognised containers.** A declared image with no image magic is kept as an image with an unknown
+container and can only pass through a transcoder; without one, `Normalize` throws `UnknownFormat` rather than
+sending bytes under a type no provider can read. A non-image declaration without a sniffable header is
+trusted (some containers have none); the policy still checks kind, media type and size. Bytes with no
+declaration at all are text if they are valid UTF-8, otherwise `application/octet-stream` / `Binary`, which
+is opt-in. `AgentMediaReference` never fetches the URL, so its bytes are the provider's responsibility.
+
+⚙ **The file extension is a hint, not the truth.** `FromFile` maps Markdown to `text/markdown` and common
+source/configuration extensions (`.cs`, `.py`, `.ts`, `.yaml`, …) to `text/plain`; a text hint is accepted
+only when the bytes really look like text, so a binary file misnamed `.md` becomes `Binary` rather than
+Markdown. An explicit `mediaType` argument overrides the extension; a recognised magic still overrides both.
+An unknown extension leaves the content heuristic in charge.
+
+⚙ **What the OpenAI chat-completions adapter actually accepts.** Its `DataContent` mapping is: image/* →
+`image_url`; audio/mpeg or audio/wav → `input_audio`; application/pdf → a `file` part; **every other media
+type is dropped**. `UriContent` is mapped for images only. The library therefore inlines Text-kind media as
+`TextContent` (with a short file header) instead of sending a text file as `DataContent`. PDF/audio/file
+support still depends on the endpoint and model: a `file` part in the schema is not proof that the model
+accepts a PDF, and an audio part is not proof that the model hears it. Check the provider's
+[file-input guide](https://developers.openai.com/api/docs/guides/file-inputs) and the model's modality
+support.
+
+⚙ **There is no media codec in this package.** Converting BMP/TIFF/AVIF/HEIC/SVG, flattening animation,
+shrinking an image, transcoding audio/video or reading a non-PDF document needs a platform codec. Implement
+`IAgentMediaTranscoder` (or wrap a lambda in `DelegateAgentMediaTranscoder`) and set
+`AgentMediaOptions.Transcoder`; the library validates the returned payload against the same kind, type,
+byte/dimension and animation limits, so a transcoder cannot silently return something disallowed. Without a
+transcoder such a payload is rejected with an `AgentMediaException` that names the reason — no request is
+made, no tokens are spent.
+
+```csharp
+// SkiaSharp host example (the resize overload depends on your SkiaSharp version);
+// WPF can do the same with BitmapDecoder + TransformedBitmap + BitmapEncoder.
+options.Transcoder = new DelegateAgentMediaTranscoder((source, request, _) =>
+{
+    if (source.Kind != AgentMediaKind.Image)
+        throw new NotSupportedException("This sample host only transcodes images.");
+
+    using var bitmap = SKBitmap.Decode(source.Bytes.ToArray());
+    var scale = Math.Min(1d, Math.Min(
+        (double)request.MaxWidth / bitmap.Width,
+        (double)request.MaxHeight / bitmap.Height));
+    var width = Math.Max(1, (int)(bitmap.Width * scale));
+    var height = Math.Max(1, (int)(bitmap.Height * scale));
+    using var resized = bitmap.Resize(new SKImageInfo(width, height), SKFilterQuality.High)
+        ?? throw new InvalidOperationException("SkiaSharp could not resize the frame.");
+    using var image = SKImage.FromBitmap(resized);
+    using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+    return Task.FromResult(AgentMedia.FromBytes(data.ToArray(), "image/png", source.Name));
+});
+```
+
+⚙ **Limits are per kind.** `MaxBytesByKind` defaults to 10 MiB for images, 25 MiB for audio/documents,
+100 MiB for video, 2 MiB for text. `MaxWidth` / `MaxHeight` / `AllowAnimated` apply to images only.
+`AllowedMediaTypes` is the fine-grained switch; `null` allows every type of an allowed kind.
+
+⚙ **Base64 inflates by about a third.** The limits are raw bytes; the request body is larger. For long
+sessions, send only the frames/notes that matter: media remains in the agent session's history and is
+charged on later turns.
+
+⚙ **The transcript shows attachments without keeping them.** `AgentTurnStarted.Attachments` carries name,
+media type and size (not pixels or sound), `AgentTranscript.ToMarkdown` renders a `附件：…` line, and
+`AgentAttachment.Kind` derives the broad class.
+
 ## Telemetry
 
 Nothing in this library emits telemetry: `AgentEvent` and `AgentTranscript` are the in-process surface, and

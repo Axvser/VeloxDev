@@ -65,6 +65,12 @@ public partial class AgentTranscriptEntry
     public string Detail { get; private set; } = string.Empty;
 
     /// <summary>
+    /// What a user turn attached besides text, in order. Empty for every other role and for a text-only
+    /// user turn. The list is a display record — it does not retain the image bytes.
+    /// </summary>
+    public IReadOnlyList<AgentAttachment> Attachments { get; private set; } = [];
+
+    /// <summary>
     /// Whether more fragments may be appended. Streamed answer and reasoning entries stay open until
     /// something else arrives; every other kind is complete the moment it is created.
     /// </summary>
@@ -81,7 +87,17 @@ public partial class AgentTranscriptEntry
     public bool HasDetail => Detail.Length > 0;
 
     /// <summary>A message from the user.</summary>
-    public static AgentTranscriptEntry User(string text) => new(AgentTranscriptRole.User, text);
+    /// <param name="text">What the user said.</param>
+    public static AgentTranscriptEntry User(string text) => User(text, null);
+
+    /// <summary>A message from the user, with the images the turn carried.</summary>
+    /// <param name="text">What the user said.</param>
+    /// <param name="attachments">The images the turn carried, in order; empty for a text-only turn.</param>
+    public static AgentTranscriptEntry User(string text, IReadOnlyList<AgentAttachment>? attachments)
+        => new(AgentTranscriptRole.User, text)
+        {
+            Attachments = attachments ?? [],
+        };
 
     /// <summary>A new, empty answer — fragments are appended as they arrive.</summary>
     public static AgentTranscriptEntry Assistant() => new(AgentTranscriptRole.Assistant, string.Empty);
@@ -104,13 +120,15 @@ public partial class AgentTranscriptEntry
     /// <summary>An entry rebuilt from a stored transcript document.</summary>
     internal static AgentTranscriptEntry Restore(
         AgentTranscriptRole role, string text, DateTimeOffset timestamp,
-        string toolName, string detail, AgentToolOutcome? outcome)
+        string toolName, string detail, AgentToolOutcome? outcome,
+        IReadOnlyList<AgentAttachment>? attachments = null)
         => new(role, text)
         {
             Timestamp = timestamp,
             ToolName = toolName,
             Detail = detail,
             Outcome = outcome,
+            Attachments = attachments ?? [],
         };
 
     /// <summary>
@@ -219,6 +237,18 @@ public partial class AgentTranscript
         var array = new VeloxJsonArray();
         foreach (var entry in Entries)
         {
+            var attachments = new VeloxJsonArray();
+            foreach (var attachment in entry.Attachments)
+            {
+                attachments.Add(new VeloxJsonObject
+                {
+                    ["name"] = attachment.Name,
+                    ["mediaType"] = attachment.MediaType,
+                    ["byteCount"] = attachment.ByteCount,
+                    ["uri"] = attachment.Uri,
+                });
+            }
+
             array.Add(new VeloxJsonObject
             {
                 ["role"] = entry.Role.ToString(),
@@ -227,6 +257,7 @@ public partial class AgentTranscript
                 ["toolName"] = entry.ToolName,
                 ["detail"] = entry.Detail,
                 ["outcome"] = entry.Outcome?.ToString(),
+                ["attachments"] = attachments,
             });
         }
 
@@ -264,13 +295,33 @@ public partial class AgentTranscript
                 ? parsedTime
                 : DateTimeOffset.Now;
 
+            var attachments = new List<AgentAttachment>();
+            if (obj["attachments"] is VeloxJsonArray attachmentArray)
+            {
+                foreach (var item in attachmentArray)
+                {
+                    if (item is not VeloxJsonObject attachment) continue;
+                    var byteCount = AsString(attachment["byteCount"]);
+                    long? parsedBytes = long.TryParse(byteCount, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                        ? parsed
+                        : null;
+
+                    attachments.Add(new AgentAttachment(
+                        AsString(attachment["name"]),
+                        AsString(attachment["mediaType"]) ?? "application/octet-stream",
+                        parsedBytes,
+                        AsString(attachment["uri"])));
+                }
+            }
+
             Entries.Add(AgentTranscriptEntry.Restore(
                 role,
                 AsString(obj["text"]) ?? string.Empty,
                 timestamp,
                 AsString(obj["toolName"]) ?? string.Empty,
                 AsString(obj["detail"]) ?? string.Empty,
-                outcome));
+                outcome,
+                attachments));
         }
     }
 
@@ -278,9 +329,15 @@ public partial class AgentTranscript
         => value is VeloxJsonScalar scalar ? scalar.AsString() : null;
 
     /// <summary>Records something the user said, closing any open answer.</summary>
-    public AgentTranscriptEntry AddUser(string text)
+    /// <param name="text">What the user said.</param>
+    public AgentTranscriptEntry AddUser(string text) => AddUser(text, null);
+
+    /// <summary>Records something the user said, closing any open answer.</summary>
+    /// <param name="text">What the user said.</param>
+    /// <param name="attachments">The images the turn carried, in order; empty for a text-only turn.</param>
+    public AgentTranscriptEntry AddUser(string text, IReadOnlyList<AgentAttachment>? attachments)
     {
-        var entry = AgentTranscriptEntry.User(text);
+        var entry = AgentTranscriptEntry.User(text, attachments);
         Close(entry);
         return entry;
     }
@@ -392,6 +449,15 @@ public partial class AgentTranscript
             {
                 case AgentTranscriptRole.User:
                     sb.Append("**你：** ").Append(entry.Text);
+                    if (entry.Attachments.Count > 0)
+                    {
+                        sb.Append("\n\n");
+                        for (var i = 0; i < entry.Attachments.Count; i++)
+                        {
+                            if (i > 0) sb.Append('\n');
+                            sb.Append("> 附件：").Append(entry.Attachments[i].Describe());
+                        }
+                    }
                     break;
                 case AgentTranscriptRole.Assistant:
                     sb.Append("**助手：**\n\n").Append(entry.Text);

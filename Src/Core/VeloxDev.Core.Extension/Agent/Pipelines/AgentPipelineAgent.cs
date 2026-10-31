@@ -44,9 +44,9 @@ public sealed class AgentPipelineAgent(AIAgent innerAgent, AgentPipeline pipelin
         // Materialized once: the prompt is read from these messages and then the same sequence is handed to
         // the inner agent, so a lazy or single-shot enumerable would be consumed twice.
         var request = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
-        var prompt = LastUserText(request);
+        var (prompt, attachments) = LastUserMessage(request);
         var started = Stopwatch.StartNew();
-        await PublishAsync(new AgentTurnStarted(AgentRunKind.Complete, prompt), cancellationToken).ConfigureAwait(false);
+        await PublishAsync(new AgentTurnStarted(AgentRunKind.Complete, prompt, attachments), cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -82,9 +82,9 @@ public sealed class AgentPipelineAgent(AIAgent innerAgent, AgentPipeline pipelin
     {
         // Materialized once, for the same reason as the non-streaming path.
         var request = messages as IReadOnlyList<ChatMessage> ?? [.. messages];
-        var prompt = LastUserText(request);
+        var (prompt, attachments) = LastUserMessage(request);
         var started = Stopwatch.StartNew();
-        await PublishAsync(new AgentTurnStarted(AgentRunKind.Streaming, prompt), cancellationToken).ConfigureAwait(false);
+        await PublishAsync(new AgentTurnStarted(AgentRunKind.Streaming, prompt, attachments), cancellationToken).ConfigureAwait(false);
 
         var failed = false;
 
@@ -154,6 +154,12 @@ public sealed class AgentPipelineAgent(AIAgent innerAgent, AgentPipeline pipelin
                 case UsageContent usage when usage.Details is { } details:
                     await PublishAsync(new AgentUsageReported(details), cancellationToken).ConfigureAwait(false);
                     break;
+
+                case DataContent:
+                case UriContent:
+                    if (AgentAttachment.TryFromContent(content, out var attachment))
+                        await PublishAsync(new AgentMediaReceived(attachment, content), cancellationToken).ConfigureAwait(false);
+                    break;
             }
         }
     }
@@ -161,15 +167,26 @@ public sealed class AgentPipelineAgent(AIAgent innerAgent, AgentPipeline pipelin
     private ValueTask PublishAsync(AgentEvent agentEvent, CancellationToken cancellationToken)
         => _pipeline.PublishAsync(agentEvent, cancellationToken);
 
-    private static string? LastUserText(IReadOnlyList<ChatMessage>? messages)
+    private static (string? Text, IReadOnlyList<AgentAttachment> Attachments) LastUserMessage(
+        IReadOnlyList<ChatMessage>? messages)
     {
-        if (messages is null) return null;
+        if (messages is null) return (null, []);
 
-        string? last = null;
+        string? lastText = null;
+        IReadOnlyList<AgentAttachment> lastAttachments = [];
         foreach (var message in messages)
-            if (message.Role == ChatRole.User)
-                last = message.Text;
-        return last;
+        {
+            if (message.Role != ChatRole.User) continue;
+
+            lastText = message.Text;
+            var attachments = new List<AgentAttachment>();
+            foreach (var content in message.Contents)
+                if (AgentAttachment.TryFromContent(content, out var attachment))
+                    attachments.Add(attachment);
+            lastAttachments = attachments;
+        }
+
+        return (lastText, lastAttachments);
     }
 }
 

@@ -107,8 +107,11 @@ public sealed class TextPipeline(Func<AgentTranscript?> transcript, Func<Synchro
 
                 switch (agentEvent)
                 {
-                    case AgentTurnStarted started when !string.IsNullOrEmpty(started.Prompt):
-                        await PipelineDispatch.RunAsync(context, () => transcript.AddUser(started.Prompt!)).ConfigureAwait(false);
+                    case AgentTurnStarted started
+                        when !string.IsNullOrEmpty(started.Prompt) || started.Attachments.Count > 0:
+                        await PipelineDispatch.RunAsync(context,
+                            () => transcript.AddUser(started.Prompt ?? string.Empty, started.Attachments))
+                            .ConfigureAwait(false);
                         break;
 
                     case AgentTurnCompleted:

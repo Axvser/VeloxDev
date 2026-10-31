@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Microsoft.Extensions.AI;
 
 namespace VeloxDev.AI.Pipelines;
@@ -23,14 +24,39 @@ public abstract class AgentEvent
     public DateTimeOffset Timestamp { get; } = DateTimeOffset.Now;
 }
 
-/// <summary>A run began. Carries the prompt that started it.</summary>
-public sealed class AgentTurnStarted(AgentRunKind kind, string? prompt) : AgentEvent
+/// <summary>A run began. Carries the prompt that started it, and the images it attached.</summary>
+public sealed class AgentTurnStarted : AgentEvent
 {
+    /// <summary>A text-only turn.</summary>
+    /// <param name="kind">Whether this came from <c>RunAsync</c> or <c>RunStreamingAsync</c>.</param>
+    /// <param name="prompt">The user message that started the run.</param>
+    public AgentTurnStarted(AgentRunKind kind, string? prompt)
+        : this(kind, prompt, null)
+    {
+    }
+
+    /// <summary>A turn with optional image attachments.</summary>
+    /// <param name="kind">Whether this came from <c>RunAsync</c> or <c>RunStreamingAsync</c>.</param>
+    /// <param name="prompt">The user message that started the run.</param>
+    /// <param name="attachments">The images the message carried, in order.</param>
+    public AgentTurnStarted(AgentRunKind kind, string? prompt, IReadOnlyList<AgentAttachment>? attachments)
+    {
+        Kind = kind;
+        Prompt = prompt;
+        Attachments = attachments ?? [];
+    }
+
     /// <summary>Whether this came from <c>RunAsync</c> or <c>RunStreamingAsync</c>.</summary>
-    public AgentRunKind Kind { get; } = kind;
+    public AgentRunKind Kind { get; }
 
     /// <summary>The user message that started the run, when one was passed.</summary>
-    public string? Prompt { get; } = prompt;
+    public string? Prompt { get; }
+
+    /// <summary>
+    /// The images the user message carried, in order. Empty for a text-only turn. The attachment is the
+    /// display record (name, media type, size), not the pixel data.
+    /// </summary>
+    public IReadOnlyList<AgentAttachment> Attachments { get; }
 }
 
 /// <summary>A run finished. Reported for the streaming and non-streaming paths alike.</summary>
@@ -98,6 +124,25 @@ public sealed class AgentTextDelta(string text) : AgentEvent
 {
     /// <summary>The fragment.</summary>
     public string Text { get; } = text;
+}
+
+/// <summary>
+/// The model produced media — an image, audio clip, document or any other <see cref="AIContent"/> that is
+/// not text or reasoning. The host decides how to render or store it.
+/// <para>
+/// The event carries the content block itself (bytes for a <see cref="DataContent"/>, a location for a
+/// <see cref="UriContent"/>) plus the display record. It is the output-side counterpart of the input-side
+/// <see cref="AgentMedia"/>: the pipeline does not put either into the transcript, because a host that
+/// renders an image needs the block while a transcript needs a name.
+/// </para>
+/// </summary>
+public sealed class AgentMediaReceived(AgentAttachment attachment, AIContent content) : AgentEvent
+{
+    /// <summary>The display record: name, media type, size or location.</summary>
+    public AgentAttachment Attachment { get; } = attachment ?? throw new ArgumentNullException(nameof(attachment));
+
+    /// <summary>The content block the provider returned.</summary>
+    public AIContent Content { get; } = content ?? throw new ArgumentNullException(nameof(content));
 }
 
 /// <summary>
