@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>VeloxDev.Jalium.Templates</PackageId>
     <Title>VeloxDev.Jalium.Templates</Title>
-    <Version>10.1.0</Version>
+    <Version>10.3.0</Version>
     <Authors>Axvser</Authors>
     <Description>dotnet new item templates for VeloxDev workflow views on Jalium.UI.</Description>
     <PackageType>Template</PackageType>

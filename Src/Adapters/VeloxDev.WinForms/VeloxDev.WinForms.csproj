@@ -11,7 +11,7 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinForms</Title>
-		<Version>10.1.0</Version>
+		<Version>10.3.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinForms</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -23,7 +23,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="10.1.0" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="10.3.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>
