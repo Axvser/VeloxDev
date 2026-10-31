@@ -114,6 +114,16 @@
 - 绘制全在 `OnRender`，交互全在自己覆写的四个鼠标方法 —— 见 `WorkflowSystem/adapters/wpf.md` §2.6。
 - `RulerBand` 硬编码返回 `0`，而 `RulerThickness` DP 全模块从不被读 —— 这条已在 `WorkflowSystem/adapters/wpf.md` 坑 2，本文不重复。
 
+### 3.6 节点拖入预览：`NodeDropSurface`（第二个被继承的角色）
+
+`Attached/Workflow/NodeDropSurface.cs` 的 `NodeDropSurface : FrameworkElement, IWorkflowNodeDropSurface<IWorkflowGridDecorator>` 是宿主写子类、只覆写 `DrawNode` 的预览层。它**不进 ViewPool、不碰 DataTemplate**，画在装饰器的视口坐标里。
+
+- **找装饰器**：`BeginDrop`/`Begin` 用传入的 context，否则沿**视觉父链**找最近的 `IWorkflowGridDecorator`；找不到就抛，而不是静默不画。
+- **坐标**：draft 的 `Anchor` 是输入路由给的折叠帧；用 `GridWorldLeft/Top = ScrollOffset − ContentOffset` 与 `RulerBand` 经 `GridX/GridY` 换成视口坐标。draft 的 `Size` 是**世界值**（草稿没有 Parent，getter 不折叠），所以按 `tree.Layout.Scale` 除一次才是卡片的外框尺寸。
+- **树从哪来**：`Tree` 属性优先，否则 `DataContext as IWorkflowTreeViewModel`；只用于缩放与订阅 `Layout.PropertyChanged`。
+- **失效**：每次 `Move` 自己 `InvalidateVisual`；另外订阅装饰器的 `LayoutUpdated`（滚动/布局）与树 `Layout.PropertyChanged`（缩放），只在激活期间订阅，`End` 时全摘。
+- **命中透明**：构造函数里 `IsHitTestVisible = false`，预览不抢指针。
+
 ---
 
 ## 四、`GlobalUsings.cs` 与 `VeloxDev.WPF.csproj`
@@ -160,6 +170,7 @@
 | 插槽两阶段连接命令 | `Attached/Workflow/WorkflowSlotConnectionBehavior.cs` |
 | 视图池、`DataTemplate` 查找、分批 | `Attached/Workflow/ViewManager.cs`（挂点 `ViewPool.cs`） |
 | 小地图外观与导航 | `Attached/Workflow/WorkflowMinimapOverlay.cs` |
+| 节点拖入预览（不参与视图池） | `Attached/Workflow/NodeDropSurface.cs` 的 `NodeDropSurface` / `NodeDropDrawingContext`；Core 侧见 `WorkflowNodeDrop` |
 | 把模型事件接给宿主的 sink | `Attached/Workflow/WorkflowEvents.cs`（转发在 Core `WorkflowEventRelay`） |
 | 画布变换的值（写值处） | `Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `ApplyLayout`（不是 `WorkflowCanvasTransformBehavior.cs`） |
 | 线程、优先级、pacer、调度器 | `PlatformAdapters/` 那组类型 —— 差异与坑见 `memory/modules/TransitionSystem/adapters/wpf.md` |

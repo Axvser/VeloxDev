@@ -21,6 +21,7 @@
 | 一条表达式形式的 `Property(…)` 重载 | 手写 `Transition<T>` 重载（Core 一个都没有） | `PlatformAdapters/Transition.cs` 的 `Property(...)` 重载组 |
 | 把模型事件交给宿主的 sink | 在元素上绑 `WorkflowEvents.Node` / `.Slot` / `.Tree` | `Attached/Workflow/WorkflowEvents.cs` |
 | 小地图换皮 | 继承 `WorkflowMinimapOverlay`（全模块唯一非 `sealed` 的元素类） | `Attached/Workflow/WorkflowMinimapOverlay.cs` |
+| 节点拖入的预览怎么画 | 继承 `NodeDropSurface`，覆写 `DrawNode(NodeDropDrawingContext)`；它本身是 `IWorkflowNodeDropSurface<IWorkflowGridDecorator>` | `Attached/Workflow/NodeDropSurface.cs` |
 
 **这里没有的扩展点（别去找）：**
 

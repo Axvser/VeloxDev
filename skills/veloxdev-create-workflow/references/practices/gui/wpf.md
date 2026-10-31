@@ -93,6 +93,43 @@ protected override void OnRender(DrawingContext dc)
 
 ⚙ `System.Windows.Shapes.Path` versus `System.IO.Path`: this demo does not need an alias, but code-first views that use both namespaces will.
 
+## Node drag-in — `NodeDropSurface`
+
+Drag-in previews do not go through the view pool or a data template. Put a subclass of `NodeDropSurface` inside the decorator (as the last child, above the content) and override one method:
+
+```xml
+<local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+    <ScrollViewer ...>...</ScrollViewer>
+    <local:MyNodeDropSurface />
+</local:WorkflowGridDecorator>
+```
+
+```csharp
+public sealed class MyNodeDropSurface : NodeDropSurface
+{
+    protected override void DrawNode(NodeDropDrawingContext context)
+    {
+        // Viewport coordinates: context.Bounds is the draft's collapsed rectangle.
+        context.DrawingContext.DrawRectangle(null, _outlinePen, context.Bounds);
+        // context.Node, context.Decorator and context.ScaleX/Y are available for richer previews.
+    }
+}
+```
+
+Start a drag with the base's own entry:
+
+```csharp
+var drop = WorkflowNodeDrop.For(tree);
+var draft = new NodeDefaultViewModel { Size = new VeloxDev.WorkflowSystem.Size(260, 180) };
+nodeDropSurface.BeginDrop(drop, draft, pointerWorld);
+```
+
+⚙ **The base owns the geometry.** It finds the nearest `IWorkflowGridDecorator` ancestor, maps the draft's collapsed `Anchor` through `ScrollOffsetX/Y` and `ContentOffsetX/Y` plus `RulerBand`, and divides the draft's world `Size` by the tree's `Scale` before handing you `Bounds`. The tree comes from `Tree` when set, otherwise from `DataContext`.
+
+⚙ **It is a hit-test transparent overlay.** `IsHitTestVisible` is false so the preview never steals the pointer; keep it that way. The base invalidates itself on pointer moves, on the decorator's layout (scroll) and on the tree's layout property changes (zoom).
+
+⚙ **Core still owns the gesture.** `BeginDrop` is only a convenience over `WorkflowNodeDrop.Begin`; release, leave-to-cancel and the create command stay in `WorkflowInput`, exactly as described in [input.md](../input.md#dragging-a-node-in).
+
 ## Item templates — `VeloxDev.WPF.Templates`
 
 **Generates** a markup + code-behind pair for node, slot, link and tree, and a single `.cs` for selector, decorator and minimap — eleven files.
