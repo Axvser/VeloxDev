@@ -142,39 +142,6 @@ WorkflowInput.For(tree).PreviewValidating += (_, e) =>
 
 ⚙ **The refusal is of the press, not of a named gesture.** Core does not tell you which gesture would have started; whatever reads the handle stands down.
 
-### Dragging a node in
-
-`WorkflowNodeDrop.For(tree)` is the node-side counterpart of `VirtualLink`. Set a **fresh, unattached** draft and the gesture is live; Core follows the pointer through this same route:
-
-```csharp
-var drop = WorkflowNodeDrop.For(tree);
-
-// On the drag source's press. The context is whatever the surface draws into.
-var draft = new MyNodeViewModel { Size = new Size(260, 180) };
-drop.Begin(draft, mySurface, myCanvas, pointerWorld);
-```
-
-`mySurface` implements `IWorkflowNodeDropSurface<TCanvas>`:
-
-```csharp
-public interface IWorkflowNodeDropSurface<TRenderContext>
-{
-    void Begin(IWorkflowNodeViewModel node, TRenderContext context);
-    void Move(IWorkflowNodeViewModel node, TRenderContext context);
-    void End(IWorkflowNodeViewModel node, TRenderContext context, bool committed);
-}
-```
-
-⚙ **Core owns the rules, the surface owns the pixels.** `Begin` is called once (after the draft's anchor is set to the initial pointer), `Move` on every pointer move, and `End` exactly once — `committed: true` when the node was created, `false` for a cancel. Draw a full node card, a ghost or an outline; Core never inspects the context, so a decorator layer and a bare parent container are both fine.
-
-⚙ **The draft is not in the tree while dragging.** It is not in `Nodes`, `VisibleItems` or the spatial index; the surface draws it. `node.Anchor` receives the pointer's **world** position on every move (the layer already on the draft is kept); the surface may adjust it for centering or snapping, and whatever the node carries when the gesture ends is what gets created.
-
-⚙ **Release over the canvas creates, leaving cancels.** A release routed through `WorkflowInput` commits the draft through `CreateNodeCommand` — one undo entry, like any other create. The pointer leaving the surface (`PointerExited`) cancels it without touching the tree. A host that vetoes the release with `PreventDefault` cancels the draft instead of creating it. `Cancel()` is also how you drop the draft when the surface or window goes away, and beginning a second draft cancels the first.
-
-⚙ **Hosts without a surface can still drive it.** `Begin(node, pointerWorld)` takes no surface; bind a preview to `PendingNode` and listen to `Changed`. The pointer, release and cancel rules are the same.
-
-⚙ **WPF ships that surface as a base class.** Derive from `VeloxDev.WorkflowSystem.AttachedBehaviors.NodeDropSurface`, override `DrawNode(NodeDropDrawingContext)`, and place it inside the decorator; it does the collapsed-anchor → viewport mapping and never touches the view pool. See [gui/wpf.md](gui/wpf.md#node-drag-in--nodedropsurface).
-
 ### Undo/redo on a modifier chord
 
 The tree is the last element of every route, so a subscription on its helper hears every key — whether the pointer is over a node, a link, or empty canvas.

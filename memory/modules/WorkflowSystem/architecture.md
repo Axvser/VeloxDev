@@ -359,7 +359,6 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 | 撤销/重做栈 | `StandardEx/WorkflowTreeEx.cs`（`StandardRedo`/`StandardSubmit`/`StandardUndo`/`StandardClearHistory`） |
 | slot 数量可变的节点（选择器） | `SelectorEx/SlotEnumerator.cs`、`SelectorEx/ConditionalSlot.cs`、`Interfaces/WorkflowSystem/Providers/IConditionalSlotProvider.cs`（**两个重载：泛型 + 非泛型，见下**） |
 | 网格装饰器 / 小地图的 Core 契约 | `Interfaces/WorkflowSystem/Surface/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs` |
-| 节点拖入（草稿预览 / 松手创建 / 离开取消） | `GUI/Events/WorkflowNodeDrop.cs` 的 `WorkflowNodeDrop`；预览契约 `Interfaces/WorkflowSystem/Surface/IWorkflowNodeDropSurface.cs`；指针接线在 `GUI/Events/WorkflowInput.cs` 的 `Route(PointerEventArgs)` |
 
 ---
 

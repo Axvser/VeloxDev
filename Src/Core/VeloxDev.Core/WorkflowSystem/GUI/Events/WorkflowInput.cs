@@ -264,29 +264,7 @@ public sealed class WorkflowInput
 
         EnterAndLeaveTargets(e);
 
-        // 拖入的草稿比冒泡更早跟上指针：一个订阅者否决了「这次事件」不代表预览可以停在上一帧。
-        // 离开画布直接取消 —— 这是拖入契约里「没松手就离开 = 放弃」的那一半。
-        var drop = WorkflowNodeDrop.TryFor(tree);
-        switch (e)
-        {
-            case PointerMovedEventArgs moved:
-                drop?.MoveTo(moved.Position);
-                break;
-            case PointerExitedEventArgs:
-                drop?.Cancel();
-                break;
-        }
-
-        if (Bubble(e))
-        {
-            // 释放被否决 = 这次放置不被接受。草稿不能留着，否则画面上会挂一个再也放不下的预览。
-            if (e is PointerReleasedEventArgs) drop?.Cancel();
-            return;
-        }
-
-        // 松手在画布上 ⇒ 创建。位置取这一次释放的坐标，而不是最后一次移动的坐标。
-        if (e is PointerReleasedEventArgs released)
-            drop?.Commit(released.Position);
+        if (Bubble(e)) return;
 
         ApplyDefault(e);
     }
