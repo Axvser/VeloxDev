@@ -43,6 +43,13 @@ public partial class SkillStatusViewModel
     /// <summary>Whether this skill ships bundled resources that can be read on demand.</summary>
     public bool HasResources => ResourceCount > 0;
 
+    /// <summary>
+    /// Bundled resource paths, relative to the skill directory and using <c>/</c> separators — the exact
+    /// strings <c>read_skill_resource</c> takes. Republished by every discovery, so it is read without
+    /// change notification.
+    /// </summary>
+    public IReadOnlyList<string> ResourceNames { get; set; } = [];
+
     /// <summary>Chinese display text for the state (directly usable by UI / Agent).</summary>
     public string StateText => State switch
     {

@@ -5,7 +5,7 @@ description: 驱动工作流编译器——CompileWorkflow（Root 计划）与 C
 
 ## 🧭 技能：编译器与编译期路由
 
-WorkflowSystem 内置编译器：把一张子图分解为编译计划——`ExecuteEntry` 线性段、`BranchEntry` 分支点、`ParallelEntry` 扇出组——并给每个编译感知节点分配固定的**编译身份**。编译工具能给你编译器 UI 看到的同一视图。
+WorkflowSystem 内置编译器：把一张子图分解为编译计划——线性段（`ChainSegment`，工具输出中记为 `Execute`）、分支点（`BranchSegment`，记为 `Branch`）、扇出组（`ParallelSegment`，记为 `Parallel`）——并给每个编译感知节点分配固定的**编译身份**。编译工具能给你编译器 UI 看到的同一视图。
 
 每次编译调用都指定一个节点及其角色：
 - **Root** —— 节点作为启动/入口（如控制器）；沿下游编译它可达的子图。
@@ -27,7 +27,7 @@ WorkflowSystem 内置编译器：把一张子图分解为编译计划——`Exec
 
 ### Terminal（结果）语义——router 不会被绕过
 
-Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持真实的 `BranchEntry` 行为，且只编译通往锥的那一支（兄弟支直接不存在）。
+Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持真实的 `BranchSegment` 行为，且只编译通往锥的那一支（兄弟支直接不存在）。
 
 - 若 router 的实际决策选中通往目标的那一支 → 目标被驱动并返回其输出（`targetReached: true`）。
 - 若 router 运行期选到**兄弟支** → 目标**不可达**。`GetNodeResult` 返回 `status: error`，其 `message` 指名目标（… `was NOT reached` … `No result was produced.`）。**绝不要把别的支的最终载荷当成该节点的结果**——不会编造值。
@@ -73,5 +73,17 @@ Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持�
 4. **运行整条链** —— 调用 `RunCompiledWorkflow(nodeIndex)` 端到端执行编译链（即 Demo Run 按钮的路径）。读取返回的 `runStatus`（`Completed`/`Stopped`）、`logs`（执行轨迹）、`data`（最终载荷）与 `endedWithError`。
 5. **取单个节点结果** —— 调用 `GetNodeResult(nodeIndex)` 从其祖先锥算该节点。若返回错误说目标 `was NOT reached`，说明 router 选了别的分支（见上）——不要编造，按恢复步骤处理。
 6. **运行时会话** —— 编译驱动时引擎会给实现 `IRuntimeAware` 的节点注入 `IRuntimeContext` 会话（UID / 日志 / 共享变量 / 执行位置）。共享变量用 `Set(key, value)` 写入、`TryGet(key, ...)` 读取。
+
+### 长运行、可暂停、可续跑的句柄式运行
+
+`RunCompiledWorkflow` 与 `GetNodeResult` 会一直等到运行结束。若运行可能很长、需要中途暂停，或你还有别的事要做，改用句柄形式：
+
+1. **启动** —— `StartCompiledWorkflow(nodeIndex, seed?)` 立刻返回句柄；运行继续在宿主线程上进行。
+2. **轮询** —— `GetCompiledRunStatus(handle)` 报告 `isRunning`、`runStatus`、`outcome`（`Completed` / `Cancelled` / `Failed`——`runStatus` 的 `Stopped` 同时覆盖失败与取消，`outcome` 才是准确读数）、`isPaused`、attempts、failures、最终数据与日志尾部。弄丢句柄时用 `ListCompiledRuns` 找回。
+3. **暂停或结束** —— `PauseCompiledRun` / `ResumeCompiledRun` / `StopCompiledRun`。
+4. **从检查点续跑** —— `ContinueCompiledWorkflow(...)` 从已保存的检查点继续，而不是从入口节点重跑。
+5. **回收** —— `ClearFinishedRuns` 释放已结束的句柄；仍在运行的不会被碰。
+
+所有运行与节点执行工具都接受 `timeoutMs`。与其让一个卡住的节点拖住整轮对话，不如设了超时：超时的调用返回错误，图保持原样。
 
 > 只需当前编译身份时，优先用 `GetCompileStatus`（廉价、不重新编译），而不是重复编译工具。要执行时：整条链用 `RunCompiledWorkflow`、单个节点值用 `GetNodeResult`——除非确实只想单独触发某个节点，否则不要用 `ExecuteNode`。

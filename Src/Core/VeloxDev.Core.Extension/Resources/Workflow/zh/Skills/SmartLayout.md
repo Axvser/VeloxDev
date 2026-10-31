@@ -1,11 +1,22 @@
 ---
 name: smart-layout
-description: 手动整理、排列或换象限工作流图形——用 ListNodes 读拓扑，按最长路径分层加重心启发式减少交叉，按 Size.Width/Size.Height 以 80px / 40px 间距计算坐标并做包围盒重叠检测，逐个调用 SetNodePosition 或 MoveNode 应用结果
+description: 整理、排列或换象限工作流图形——先跑树自带的布局：PreviewLayout 预览、ArrangeLayout 一次可撤销地应用；只有求解器表达不了该请求时，才退回手工分层（ListNodes、最长路径、重心启发式、80px / 40px 间距、包围盒重叠检测）并逐个调用 SetNodePosition / MoveNode
 ---
 
 ## 🗺️ Skill: 智能布局
 
 当你需要批量排布节点时——无论是从零创建、重新整理已有图形，还是响应"整理一下"、"自动排列"、"修正布局"等用户请求——请使用本技能。
+
+> **优先用树自带的布局。** `GetLayoutInfo`、`PreviewLayout`、`ArrangeLayout` 运行的是树注册的布局求解器，且一次动作即可撤销。这正是"整理一下"、"自动排列"、"修正布局"该走的路径。只有求解器表达不了请求时（用户手写了具体形状、要求换象限、或预览被否决）才走下面的手工流程。
+
+---
+
+### 第零步 — 先跑注册的布局
+
+1. 调用 **`GetLayoutInfo`**，看清这棵树用的是哪个求解器、默认参数是什么。每棵树都有：宿主没注册时回落到 `DefaultWorkflowLayoutSolver`。
+2. 调用 **`PreviewLayout`**，在不改图的前提下查看落点、代价与诊断。只搬一个分支时用 `nodeIndex` 收窄；`traversal`、`maxDepth`、`pinnedNodeIndicesJson` 与各间距参数可以调整结果。
+3. 用同样参数调用 **`ArrangeLayout`** 应用。它把全部锚点写在**一次可撤销动作**里，`Undo` 能整体回退。
+4. 预览不可接受时，调整参数再预览。只有换遍参数都表达不了用户要求时，才继续走下面的手工步骤。
 
 ---
 
@@ -75,11 +86,11 @@ description: 手动整理、排列或换象限工作流图形——用 ListNodes
 
 ---
 
-### 第五步 — 应用坐标
+### 第五步 — 应用坐标（手工兜底）
 
-不存在一步到位的自动布局组合工具——必须自行按上面各步计算坐标，然后对**每个节点**逐个调用 `SetNodePosition` 或 `MoveNode` 应用其坐标。
+只有注册的求解器表达不了这次布局时，才走这一步。逐节点应用**不是**一次可撤销动作，能套用 `ArrangeLayout` 时优先用它：
 
-对局部或手动布局，同样使用 `MoveNode`（单节点）或逐个调用 `SetNodePosition`（多节点）应用计算出的坐标。
+对**每个节点**逐个调用 `SetNodePosition` 或 `MoveNode` 应用上面算出的坐标（局部微调用 `MoveNode`）。
 
 移动完成后，调用 `ListNodes` 一次确认实际坐标是否符合预期（工具可能已对部分节点自动偏移以避免重叠）。
 

@@ -131,9 +131,14 @@ public class SubAgentNarrowingTests
 
         var id = fx.Spawn("think, do not touch", ("allowedTools", Array.Empty<string>()));
 
-        Assert.AreEqual(0, fx.RowOf(id).GrantedToolCount);
-        Assert.AreEqual(0, SubAgentFixture.SurfaceOf(fx.ChildScope(id)).Count,
-            "an empty whitelist leaves the child with no workflow tools at all");
+        // The budget escape hatch is exempt from every tool switch, so it is the one workflow tool a
+        // zero-grant child still holds. Everything else is gone.
+        CollectionAssert.AreEquivalent(
+            new[] { WorkflowAgentToolkit.ResetBudgetToolName },
+            SubAgentFixture.SurfaceOf(fx.ChildScope(id)).ToArray(),
+            "an empty whitelist leaves the child with no workflow tools beyond the budget escape hatch");
+        Assert.AreEqual(1, fx.RowOf(id).GrantedToolCount,
+            "and the report says exactly that, rather than claiming a surface the child does not hold");
     }
 
     [TestMethod]

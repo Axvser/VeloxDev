@@ -54,6 +54,18 @@ public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func
     /// </summary>
     public Func<ToolInvocation, CancellationToken, ValueTask<string?>>? Confirm { get; set; }
 
+    /// <summary>
+    /// The cap on a tool result's text, resolved per call, or <c>null</c>/<c>0</c> for no cap. A result over
+    /// the cap is replaced by a short truncation envelope rather than handed to the model whole.
+    /// </summary>
+    public Func<int?>? MaxResultChars { get; set; }
+
+    /// <summary>
+    /// The gate that serialises graph-mutating calls across every scope on one tree, resolved per call.
+    /// <c>null</c> leaves calls ungated. Read and execute tools acquire it; queries do not.
+    /// </summary>
+    public Func<SemaphoreSlim?>? MutationGate { get; set; }
+
     /// <summary>The thread the wrapper should marshal a call onto, resolved now.</summary>
     internal SynchronizationContext? ResolveContext() => MarshalTo?.Invoke();
 

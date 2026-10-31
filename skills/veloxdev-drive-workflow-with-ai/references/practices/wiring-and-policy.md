@@ -37,7 +37,7 @@ The policy is read per call, so the next call obeys a mid-session change.
 
 | Gate | Default | Effect |
 |---|---|---|
-| `WithAllowNodeExecution(bool)` | off | The eight execution tools that start or drive node code re-check this at call time and return `disabled by host policy` when it is off. The four handle operations are not gated. |
+| `WithAllowNodeExecution(bool)` | off | The eight execution tools that start or drive node code re-check this at call time and return `disabled by host policy` when it is off. The handle operations are not gated. |
 | `WithAllowedGenericCommands(params string[])` | empty | Narrows `ExecuteCommandOnNode` / `ExecuteCommandById` to the listed command names. |
 | `WithSelectionHandler` / `WithConfirmationHandler` | null | Registers the interaction tools. A confirmation handler also backs every `Ask` decision and enables the plan-mode pair. |
 | `WithPermissionMode(AgentPermissionMode)` | `Auto` | The mode matrix below. |
@@ -47,6 +47,8 @@ The policy is read per call, so the next call obeys a mid-session change.
 | `WithModePrompt(mode, text)` | none | Appends host rules after the shipped Shared and mode text. |
 | `WithAutoMarkDirty(bool)` | off | Marks the tree dirty after every non-query tool call. |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | Pre-flight caps; exceeding one returns an error object rather than throwing. |
+| `WithMaxTokens(int)` | unlimited | Cap on provider-reported tokens. `TokenUsageStage` adds `AgentTurnCompleted.Usage` and `AgentUsageReported`; once `TotalTokens` reaches the cap, tool calls are refused (the model can still answer). `ResetTokenUsage()` clears the ledger. |
+| `WithMaxToolResultChars(int)` | 64 KiB | Cap on one tool result's text. A longer result is replaced by a truncation envelope; `0` disables. Per-tool `max*` parameters give a better answer than this last line of defence. |
 
 ### The mode matrix
 
@@ -74,11 +76,13 @@ The policy is read per call, so the next call obeys a mid-session change.
 
 ⚙ **The budget split follows the tool's classification, not only its flag.** Query tools count against `MaxReadToolCalls`; everything else counts against `MaxWriteToolCalls`. `GetCompiledRunStatus` is classified `Execute` and counts as a write even though it starts no code.
 
-⚙ **Skills and sub-agent tools are query tools for the budget** (their names are read from `SkillAgentToolkit.ToolNames` / `SubAgentAgentToolkit.ToolNames`), and `Execute` for the permission mode. The budget and the permission gate read different things.
+⚙ **Skills and sub-agent tools are query tools for the budget** (their names are read from `SkillAgentToolkit.ToolNames` / `SubAgentAgentToolkit.ToolNames`), and `Execute` for the permission mode. The budget and the permission gate read different things. MCP joins through `McpAgentToolkit.ReadToolNames` — the six reading tools (`List`/`Describe`, resources, prompts) count as queries; `Load`/`Unload`/`Add`/`SetArguments` count as writes.
 
 ⚙ **`WithAutoMarkDirty` marks the tree after every non-query call.** A query-only custom tool registered with `WithQueryTools` is never marked dirty.
 
-⚙ **`ToolCalled` fires after every wrapped call.** Use it for host-side logging or UI feedback.
+⚙ **`ToolCalled` fires after every *successful* wrapped call.** Refused and failed calls do not raise it; they are published on `scope.Pipeline` as `AgentToolCallCompleted` with an `AgentToolOutcome`. Use `ToolCalled` for host-side logging or UI feedback.
+
+⚙ **Edits are serialised per tree.** `WorkflowAgentScope.MutationGate` is one lock per tree shared by every scope over it; the wrapper takes it for `Edit` and `Execute` calls and not for `Read`. Two agents over one tree cannot interleave their edits, but reads are not protected and there is no version check (last write still wins at the semantic level).
 
 ## Custom tools
 

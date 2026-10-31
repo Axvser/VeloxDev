@@ -57,6 +57,12 @@ public sealed class AgentSelectionEventArgs(string prompt, string[] options) : E
 /// Contract for any Agent scope or toolkit that can ask the user to pick one or more items
 /// from a list via the <c>RequestSelection</c> interaction tool.
 /// </summary>
+/// <remarks>
+/// No library type implements or raises this interface; hosts ask through
+/// <c>WorkflowAgentScope.WithSelectionHandler(Func&lt;AgentSelectionEventArgs, Task&gt;)</c> instead.
+/// It is kept only so existing source that names it still compiles.
+/// </remarks>
+[Obsolete("Hosts supply a handler through WorkflowAgentScope.WithSelectionHandler instead; nothing in the library implements or raises this event.")]
 public interface IAgentSelectionNotifier
 {
     /// <summary>

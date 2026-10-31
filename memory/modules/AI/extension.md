@@ -229,7 +229,7 @@
 | `IAIContextAccessor.CopyScalarFrom` | 生成代码里，每个访问器一份 | 目前唯一的调用者就是上面那个零调用者的包装（`AgentPropertyAccessor.CopyScalarProperties`）—— 等到 `ComponentPatcher` 那条分叉也搬过来才有真实用途 |
 | `AgentContextReader.HasAgentContext` | `AgentContextReader.cs` | 零非测试调用者 |
 | `AgentLanguagesExtensions.ParseLanguageCode` | `AgentLanguages.cs` | **零调用者**（连测试都没有；测试用的是 `TryParseLanguageCode`）。`ToLanguageCode`/`GetDisplayName` 相反，消费方在用（`.../Agent/Workflow/WorkflowAgentScope.cs` 的 `GetDisplayName()` / `ToLanguageCode()`） |
-| `IAgentConfirmationNotifier` / `IAgentSelectionNotifier` | `AgentConfirmationEventArgs.cs`、`AgentSelectionEventArgs.cs` | **全仓零实现者**。`IAgent*Notifier` 里只有 `IAgentToolCallNotifier` 被实现了（`.../Agent/AgentObjectToolkit.cs` 的类声明、`.../Agent/Workflow/WorkflowAgentScope.cs` 的类声明）。确认/选择的实际通路是消费方的 `Func<..., Task>` handler —— 因为 `EventHandler` 没法表达「等用户点完」 |
+| `IAgentConfirmationNotifier` / `IAgentSelectionNotifier` | `AgentConfirmationEventArgs.cs`、`AgentSelectionEventArgs.cs` | **全仓零实现者，现已标 `[Obsolete]`**（保留仅为源码兼容）。`IAgent*Notifier` 里只有 `IAgentToolCallNotifier` 被实现了（`.../Agent/AgentObjectToolkit.cs` 的类声明、`.../Agent/Workflow/WorkflowAgentScope.cs` 的类声明）。确认/选择的实际通路是消费方的 `Func<..., Task>` handler —— 因为 `EventHandler` 没法表达「等用户点完」 |
 
 **已经不在这个表里的**（2026-10-03 删除或改变了地位）：`AgentMethodInvoker.InvokeStatic`（删除）、`DiscoverMethods(includeStatic:)`（删除）、`AgentCommandDiscoverer.CanExecuteCommand`（不再零调用者 —— `DiscoverCommands` 与它自己都走它）。
 

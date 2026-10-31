@@ -1,14 +1,14 @@
 ---
 name: node-creation
-description: Create a node per the shipped protocol — pick the type from the pre-loaded list not ListCreatableTypes, read defaults from [AgentContext] not GetComponentContext, prefer developer instructions over GetTypeSchema defaultJson zero values, keep a 30 px gap, then CreateNode and check repositioned=true
+description: Create a node per the shipped protocol — use the pre-loaded type list when the host enabled discovery (otherwise call ListCreatableTypes), read defaults from [AgentContext] and use GetComponentContext for the full property/command table, prefer developer instructions over GetTypeSchema defaultJson zero values, keep a 30 px gap, then CreateNode and check repositioned=true
 ---
 
 ## 🔧 Node Creation Protocol
 
 When the user asks to create a node, follow these steps **in order**:
 
-1. **Choose the most appropriate node type** from the pre-loaded customer component types already visible in your context above. **Do NOT call `ListCreatableTypes`** — all available types are already listed. If only one type exists, use it. If multiple exist, pick the best fit or ask the user.
-2. **Read the pre-loaded `[AgentContext]` description** for that type (already in your context above). Extract the default size and any other defaults. **Do NOT call `GetComponentContext`** — the description is already present.
+1. **Choose the most appropriate node type.** If the pre-loaded customer component types are visible in your context above, choose from that list — the host enabled discovery and it is complete. If that list is absent or empty, call **`ListCreatableTypes`** to get the available types; do not invent a type name. If only one type exists, use it. If multiple exist, pick the best fit or ask the user.
+2. **Read the `[AgentContext]` description** for that type (pre-loaded when the list above was). Extract the default size and any other defaults. When you need a property or command the one-line description does not cover, call **`GetComponentContext`** once for that type and use its full table; do not guess the shape from the name.
 3. **Apply defaults from `[AgentContext]`**: If the description says "default size: 200×100", use `width=200, height=100` in `CreateNode`. User-specified values override defaults.
 4. **Choose a non-overlapping position**: Check existing node positions (via `ListNodes` or cached knowledge) and pick a position with at least 30 px gap. The tool auto-offsets on overlap, but proactively choosing good positions produces better layouts.
    - **Empty canvas**: Start the first node near the origin (e.g. `(20, 20)`) unless the user specifies a different region.

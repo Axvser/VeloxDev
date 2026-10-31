@@ -1,4 +1,5 @@
 ﻿using System;
+using Microsoft.Extensions.AI;
 
 namespace VeloxDev.AI.Pipelines;
 
@@ -33,7 +34,7 @@ public sealed class AgentTurnStarted(AgentRunKind kind, string? prompt) : AgentE
 }
 
 /// <summary>A run finished. Reported for the streaming and non-streaming paths alike.</summary>
-public sealed class AgentTurnCompleted(AgentRunKind kind, string? text, TimeSpan elapsed) : AgentEvent
+public sealed class AgentTurnCompleted(AgentRunKind kind, string? text, TimeSpan elapsed, UsageDetails? usage = null) : AgentEvent
 {
     /// <summary>Whether this came from <c>RunAsync</c> or <c>RunStreamingAsync</c>.</summary>
     public AgentRunKind Kind { get; } = kind;
@@ -46,6 +47,24 @@ public sealed class AgentTurnCompleted(AgentRunKind kind, string? text, TimeSpan
 
     /// <summary>Wall-clock duration of the run.</summary>
     public TimeSpan Elapsed { get; } = elapsed;
+
+    /// <summary>
+    /// What the provider reported the turn cost, when it reported anything. The streaming path may report
+    /// this separately as <see cref="AgentUsageReported"/>.
+    /// </summary>
+    public UsageDetails? Usage { get; } = usage;
+}
+
+/// <summary>
+/// Token usage the provider reported during a streaming run. The framework may deliver it as a
+/// <see cref="UsageContent"/> inside an update rather than on the final response, so it is published as its
+/// own event; a host that adds these to the non-streaming <see cref="AgentTurnCompleted.Usage"/> has the
+/// whole turn.
+/// </summary>
+public sealed class AgentUsageReported(UsageDetails usage) : AgentEvent
+{
+    /// <summary>The reported counts.</summary>
+    public UsageDetails Usage { get; } = usage ?? throw new ArgumentNullException(nameof(usage));
 }
 
 /// <summary>

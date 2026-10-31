@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text;
 using VeloxDev.MVVM;
+using VeloxDev.Serialization;
 
 namespace VeloxDev.AI.Pipelines;
 
@@ -50,8 +52,8 @@ public partial class AgentTranscriptEntry
     /// <summary>What this entry is.</summary>
     public AgentTranscriptRole Role { get; }
 
-    /// <summary>When it was first created.</summary>
-    public DateTimeOffset Timestamp { get; } = DateTimeOffset.Now;
+    /// <summary>When it was first created. Settable only by a restore, which reads it from the document.</summary>
+    public DateTimeOffset Timestamp { get; private set; } = DateTimeOffset.Now;
 
     /// <summary>Tool name, for <see cref="AgentTranscriptRole.ToolCall"/>.</summary>
     public string ToolName { get; private set; } = string.Empty;
@@ -96,6 +98,18 @@ public partial class AgentTranscriptEntry
         {
             ToolName = toolName ?? string.Empty,
             Detail = result ?? string.Empty,
+            Outcome = outcome,
+        };
+
+    /// <summary>An entry rebuilt from a stored transcript document.</summary>
+    internal static AgentTranscriptEntry Restore(
+        AgentTranscriptRole role, string text, DateTimeOffset timestamp,
+        string toolName, string detail, AgentToolOutcome? outcome)
+        => new(role, text)
+        {
+            Timestamp = timestamp,
+            ToolName = toolName,
+            Detail = detail,
             Outcome = outcome,
         };
 
@@ -190,6 +204,78 @@ public partial class AgentTranscript
         Open = null;
         Entries.Clear();
     }
+
+    /// <summary>
+    /// Writes the conversation as a JSON array that <see cref="Restore"/> reads back — the display record,
+    /// not the model's side of the conversation.
+    /// </summary>
+    /// <remarks>
+    /// A transcript is what the host shows; the messages the model actually receives live in the framework's
+    /// agent session. Persisting this document resumes the <i>view</i>, not the model's memory — to resume a
+    /// conversation, persist the agent session with the framework as well.
+    /// </remarks>
+    public string ToJson()
+    {
+        var array = new VeloxJsonArray();
+        foreach (var entry in Entries)
+        {
+            array.Add(new VeloxJsonObject
+            {
+                ["role"] = entry.Role.ToString(),
+                ["text"] = entry.Text,
+                ["timestamp"] = entry.Timestamp.ToString("O", CultureInfo.InvariantCulture),
+                ["toolName"] = entry.ToolName,
+                ["detail"] = entry.Detail,
+                ["outcome"] = entry.Outcome?.ToString(),
+            });
+        }
+
+        return array.ToJson();
+    }
+
+    /// <summary>Replaces every entry with the document <see cref="ToJson"/> produced.</summary>
+    /// <param name="json">The transcript document.</param>
+    /// <exception cref="FormatException">The document is not a JSON array.</exception>
+    public void Restore(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            Clear();
+            return;
+        }
+
+        if (VeloxJsonValue.Parse(json) is not VeloxJsonArray array)
+            throw new FormatException("A transcript document must be a JSON array of entries.");
+
+        Open = null;
+        Entries.Clear();
+        foreach (var value in array)
+        {
+            if (value is not VeloxJsonObject obj) continue;
+
+            var role = Enum.TryParse<AgentTranscriptRole>(AsString(obj["role"]), true, out var parsedRole)
+                ? parsedRole
+                : AgentTranscriptRole.User;
+            var outcome = Enum.TryParse<AgentToolOutcome>(AsString(obj["outcome"]), true, out var parsedOutcome)
+                ? parsedOutcome
+                : (AgentToolOutcome?)null;
+            var timestamp = DateTimeOffset.TryParse(
+                AsString(obj["timestamp"]), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedTime)
+                ? parsedTime
+                : DateTimeOffset.Now;
+
+            Entries.Add(AgentTranscriptEntry.Restore(
+                role,
+                AsString(obj["text"]) ?? string.Empty,
+                timestamp,
+                AsString(obj["toolName"]) ?? string.Empty,
+                AsString(obj["detail"]) ?? string.Empty,
+                outcome));
+        }
+    }
+
+    private static string? AsString(VeloxJsonValue? value)
+        => value is VeloxJsonScalar scalar ? scalar.AsString() : null;
 
     /// <summary>Records something the user said, closing any open answer.</summary>
     public AgentTranscriptEntry AddUser(string text)

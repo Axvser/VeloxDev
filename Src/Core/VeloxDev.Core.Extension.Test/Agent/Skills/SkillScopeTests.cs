@@ -249,6 +249,35 @@ public class SkillScopeTests
         Assert.IsNull(source.ReadResource("my-skill", Path.Combine(root, "outside.md"), AgentLanguages.English));
     }
 
+    /// <summary>
+    /// Discovery enumerates resource paths so the model can name one without guessing. They must be the
+    /// strings <see cref="FileSkillSource.ReadResource"/> accepts: relative, forward slashes.
+    /// </summary>
+    [TestMethod]
+    public void FileSource_ListsResourceNames_TheReadAccepts()
+    {
+        var root = NewTempRoot();
+        WriteSkill(root, "my-skill", "---\nname: my-skill\ndescription: d\n---", "body",
+            [("references/b.md", "b"), ("references/a.md", "a"), ("data.json", "{}")]);
+
+        var descriptor = new FileSkillSource(root).Discover().Single();
+
+        CollectionAssert.AreEquivalent(
+            new[] { "references/a.md", "references/b.md", "data.json" },
+            descriptor.ResourceNames.ToArray(),
+            "resource paths are relative to the skill directory and use '/'");
+        Assert.AreEqual(3, descriptor.ResourceCount);
+
+        foreach (var name in descriptor.ResourceNames)
+            Assert.AreEqual(name switch
+            {
+                "references/a.md" => "a",
+                "references/b.md" => "b",
+                _ => "{}",
+            }, new FileSkillSource(root).ReadResource("my-skill", name, AgentLanguages.English),
+                $"the listed path '{name}' must be readable exactly as listed");
+    }
+
     [TestMethod]
     public void FileSource_FolderNameMismatch_IsReportedNotSwallowed()
     {

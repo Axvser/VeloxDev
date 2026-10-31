@@ -5,7 +5,7 @@ description: Drive the workflow compiler — CompileWorkflow (Root plan) vs Comp
 
 ## 🧭 Skill: Compiler & Compile-Time Routing
 
-The WorkflowSystem has a compiler that decomposes a sub-graph into a compiled plan — `ExecuteEntry` linear segments, `BranchEntry` routing points, `ParallelEntry` fan-out groups — and assigns every compile-aware node a fixed **compile identity**. The compile tools give you the same view the compiler UI shows.
+The WorkflowSystem has a compiler that decomposes a sub-graph into a compiled plan — chain segments (`ChainSegment`, reported as `Execute`), routing points (`BranchSegment`, reported as `Branch`) and fan-out groups (`ParallelSegment`, reported as `Parallel`) — and assigns every compile-aware node a fixed **compile identity**. The compile tools give you the same view the compiler UI shows.
 
 Every compile call names one node and a role for it:
 - **Root** — the node is the start/entry (e.g. a controller); compile its reachable sub-graph downstream.
@@ -27,7 +27,7 @@ Choose `RunCompiledWorkflow` when the task is "run the workflow / execute the wh
 
 ### Terminal (result) semantics — routers are NOT bypassed
 
-Terminal compile is **consistent with forward semantics**: a router on the target's cone keeps its real `BranchEntry` behavior, and only the branch that leads into the cone is compiled (sibling branches are simply absent).
+Terminal compile is **consistent with forward semantics**: a router on the target's cone keeps its real `BranchSegment` behavior, and only the branch that leads into the cone is compiled (sibling branches are simply absent).
 
 - If the router's actual decision picks the branch that leads to the target → the target runs and its output is returned (`targetReached: true`).
 - If the router decides on a **sibling branch** at runtime → the target is **not reached**. `GetNodeResult` returns `status: error` whose `message` names the target (… `was NOT reached` … `No result was produced.`). **Never treat another branch's final payload as this node's result** — no value is fabricated.
@@ -73,5 +73,17 @@ Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset,
 4. **Run the whole chain** — call `RunCompiledWorkflow(nodeIndex)` to execute the compiled chain end-to-end (the demo's Run path). Read the returned `runStatus` (`Completed` / `Stopped`), `logs` (the execution trail), `data` (final payload) and `endedWithError`.
 5. **Get one node's result** — call `GetNodeResult(nodeIndex)` to compute just that node from its ancestor cone. If it returns an error saying the node was NOT reached, the router selected a different branch (see above) — do not fabricate, follow the recovery steps instead.
 6. **Runtime session** — during a compiled run the engine injects an `IRuntimeContext` session (UID / logs / shared variables / execution position) into nodes implementing `IRuntimeAware`. Shared variables are written with `Set(key, value)` and read with `TryGet(key, ...)`.
+
+### Long, holdable or recoverable runs
+
+`RunCompiledWorkflow` and `GetNodeResult` wait for the run to end. When the run may be long, may need holding, or you have other work to do meanwhile, use the handle form instead:
+
+1. **Start** — `StartCompiledWorkflow(nodeIndex, seed?)` returns a handle at once; the run keeps going on the host's thread.
+2. **Poll** — `GetCompiledRunStatus(handle)` reports `isRunning`, `runStatus`, `outcome` (`Completed` / `Cancelled` / `Failed` — the precise reading, since `runStatus` shares `Stopped` between failure and cancellation), `isPaused`, attempts, failures, final data and the log tail. `ListCompiledRuns` finds a handle you lost.
+3. **Hold or end** — `PauseCompiledRun` / `ResumeCompiledRun` / `StopCompiledRun`.
+4. **Continue after a checkpoint** — `ContinueCompiledWorkflow(...)` restarts from a saved checkpoint rather than from the entry node.
+5. **Retire** — `ClearFinishedRuns` releases finished handles; running ones are left alone.
+
+Every run and node-execution tool accepts `timeoutMs`. Use it instead of letting a stuck node hold the turn: a timed-out call returns an error and leaves the graph as it was.
 
 > Prefer `GetCompileStatus` (cheap, no recompile) over re-running the compile tools once you only need the current identity. To execute: use `RunCompiledWorkflow` for a whole chain, `GetNodeResult` for a single node's value — not `ExecuteNode` — unless you genuinely intend to poke a single node.

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI;
 using VeloxDev.AI.Pipelines;
 using VeloxDev.Serialization;
 using System;
@@ -9,6 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.AI.MCP;
 using VeloxDev.AI.Safety;
 using VeloxDev.AI.Skills;
 using VeloxDev.AI.SubAgents;
@@ -72,7 +73,9 @@ public sealed class WorkflowAgentToolkit
     /// </para>
     /// </summary>
     public IList<AITool> CreateTools(WorkflowToolCategory categories = WorkflowToolCategory.All)
-        => [.. CreateAllTools(categories).Where(t => _scope.IsToolEnabled(t.Name))];
+        => [.. CreateAllTools(categories).Where(t =>
+            string.Equals(t.Name, ResetBudgetToolName, StringComparison.OrdinalIgnoreCase)
+            || _scope.IsToolEnabled(t.Name))];
 
     /// <summary>
     /// Every tool this toolkit can offer — the built-ins for <paramref name="categories"/>, the custom
@@ -113,7 +116,12 @@ public sealed class WorkflowAgentToolkit
             T(CompileWorkflow, nameof(CompileWorkflow), AgentActionCategory.Read),
             T(CompileNodeResult, nameof(CompileNodeResult), AgentActionCategory.Read),
             T(GetCompileStatus, nameof(GetCompileStatus), AgentActionCategory.Read),
-            T(GetExecutionLog, nameof(GetExecutionLog), AgentActionCategory.Read));
+            T(GetExecutionLog, nameof(GetExecutionLog), AgentActionCategory.Read),
+            T(SerializeWorkflow, nameof(SerializeWorkflow), AgentActionCategory.Read),
+            T(LocateNode, nameof(LocateNode), AgentActionCategory.Read),
+            T(LocateSlot, nameof(LocateSlot), AgentActionCategory.Read),
+            T(LocateLink, nameof(LocateLink), AgentActionCategory.Read),
+            T(ListCompiledRuns, nameof(ListCompiledRuns), AgentActionCategory.Read));
 
         // ── State tracking / diff / dirty ──
         Add(WorkflowToolCategory.State,
@@ -146,7 +154,9 @@ public sealed class WorkflowAgentToolkit
             T(SetEnumSlotCollection, nameof(SetEnumSlotCollection), AgentActionCategory.Edit),
             T(Undo, nameof(Undo), AgentActionCategory.Edit),
             T(Redo, nameof(Redo), AgentActionCategory.Edit),
-            T(ClearHistory, nameof(ClearHistory), AgentActionCategory.Edit));
+            T(ClearHistory, nameof(ClearHistory), AgentActionCategory.Edit),
+            T(LoadWorkflow, nameof(LoadWorkflow), AgentActionCategory.Edit),
+            T(ClearFinishedRuns, nameof(ClearFinishedRuns), AgentActionCategory.Edit));
 
         // ── Node execution (gated by WithAllowNodeExecution) ──
         Add(WorkflowToolCategory.Execution,
@@ -262,6 +272,8 @@ public sealed class WorkflowAgentToolkit
     {
         Refuse = CheckInvocation,
         Confirm = ConfirmMutationAsync,
+        MaxResultChars = () => _scope.MaxToolResultChars,
+        MutationGate = () => _scope.MutationGate,
     };
 
     /// <summary>
@@ -338,17 +350,17 @@ public sealed class WorkflowAgentToolkit
     {
         var toolName = invocation.Name;
 
+        // The escape hatch survives every gate it exists to open — including the host's per-tool switch.
+        // Refusing it exactly when the budget is spent would leave the session with no way forward at all.
+        if (string.Equals(toolName, ResetBudgetToolName, StringComparison.OrdinalIgnoreCase))
+            return null;
+
         // A tool the host switched off is refused here, not merely filtered out of the workflow tool list:
         // this hook is shared by every slice the scope composes — MCP's and the skills' providers are given
         // this same policy — so one switch reaches all of them. Filtering alone would only reach the
         // workflow built-ins, and a switch on, say, "ListSkills" would silently do nothing.
         if (!_scope.IsToolEnabled(toolName))
             return $"'{toolName}' is disabled by host policy. Do not try to work around it — use another tool or report it to the user.";
-
-        // The escape hatch survives the gate it exists to open. Refusing it exactly when the budget is spent
-        // would leave the session with no way forward at all.
-        if (string.Equals(toolName, ResetBudgetToolName, StringComparison.OrdinalIgnoreCase))
-            return null;
 
         // ── What the session's mode allows at all ──
         // Before the budget, deliberately: a call the mode refuses must not be described as a budget problem,
@@ -378,6 +390,11 @@ public sealed class WorkflowAgentToolkit
             return BudgetRefusal($"Mutation tool call limit ({_scope.MaxWriteToolCalls.Value}) reached.");
         if (isQueryTool && _scope.MaxReadToolCalls.HasValue && readCalls >= _scope.MaxReadToolCalls.Value)
             return BudgetRefusal($"Query tool call limit ({_scope.MaxReadToolCalls.Value}) reached.");
+
+        // A token cap is a cap on the whole run, not on one kind of call. It is checked last because a
+        // call-count refusal is more actionable, and the model should hear the narrower wall first.
+        if (_scope.MaxTokens.HasValue && _scope.TotalTokens >= _scope.MaxTokens.Value)
+            return BudgetRefusal($"Token budget ({_scope.MaxTokens.Value}) reached.");
 
         return null;
     }
@@ -409,13 +426,18 @@ public sealed class WorkflowAgentToolkit
             "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
             "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation", "ResetToolCallLimit",
             "CompileWorkflow", "CompileNodeResult", "GetCompileStatus", "GetExecutionLog",
-            "GetLayoutInfo", "PreviewLayout",
+            "GetLayoutInfo", "PreviewLayout", "SerializeWorkflow",
+            "LocateNode", "LocateSlot", "LocateLink", "ListCompiledRuns",
         };
 
         foreach (var name in SkillAgentToolkit.ToolNames)
             names.Add(name);
 
         foreach (var name in SubAgentAgentToolkit.ToolNames)
+            names.Add(name);
+
+        // MCP 只并入只读的那几个：Load/Unload/Add/SetArguments 会安装软件、拆连接，不是查询。
+        foreach (var name in McpAgentToolkit.ReadToolNames)
             names.Add(name);
 
         return names;
@@ -482,6 +504,7 @@ public sealed class WorkflowAgentToolkit
         // session whose root allowance is still spent would refuse the very next call — the extension would
         // undo itself. At the root the chain is this scope, so the behaviour is unchanged.
         _ledger.ResetChain();
+        _scope.ResetTokenUsage();
 
         return Ok("Tool-call budget reset by the user. You may continue.");
     }
@@ -518,6 +541,8 @@ public sealed class WorkflowAgentToolkit
             parts.Add($"{readCalls}/{_scope.MaxReadToolCalls.Value} 次查询");
         if (_scope.MaxWriteToolCalls.HasValue && writeCalls >= _scope.MaxWriteToolCalls.Value)
             parts.Add($"{writeCalls}/{_scope.MaxWriteToolCalls.Value} 次变更");
+        if (_scope.MaxTokens.HasValue && _scope.TotalTokens >= _scope.MaxTokens.Value)
+            parts.Add($"{_scope.TotalTokens}/{_scope.MaxTokens.Value} tokens");
 
         return parts.Count == 0 ? null : string.Join("、", parts);
     }
@@ -560,12 +585,14 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Query Functions ──────────────────────────
 
-    [Description("Lists all nodes. Returns compact JSON: [{i,id,t,x,y,l,w,h,slots,...props}]. x/y/w/h are WORLD coordinates — the same frame CreateNode and SetNodePosition take, unaffected by the canvas zoom. Use GetNodeDetail for full info.")]
-    private string ListNodes()
+    [Description("Lists all nodes. Returns compact JSON: [{i,id,t,x,y,l,w,h,slots,...props}]. x/y/w/h are WORLD coordinates — the same frame CreateNode and SetNodePosition take, unaffected by the canvas zoom. Use GetNodeDetail for full info. maxNodes keeps the first N nodes; with a cap the reply becomes {status,totalNodes,returnedNodes,truncated,nodes} — check 'truncated' before treating it as the whole graph.")]
+    private string ListNodes(
+        [Description("Maximum nodes to return, from the start of the node list. 0 = all (the reply is then a bare array).")] int maxNodes = 0)
     {
         var nodes = Tree.Nodes;
+        var limit = maxNodes > 0 ? Math.Min(maxNodes, nodes.Count) : nodes.Count;
         var result = new VeloxJsonArray();
-        for (int i = 0; i < nodes.Count; i++)
+        for (int i = 0; i < limit; i++)
         {
             var node = nodes[i];
             var world = WorldAnchor(node);
@@ -585,7 +612,17 @@ public sealed class WorkflowAgentToolkit
             AppendScalarProperties(obj, node);
             result.Add(obj);
         }
-        return result.ToJson();
+
+        if (maxNodes <= 0) return result.ToJson();
+
+        return new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["totalNodes"] = nodes.Count,
+            ["returnedNodes"] = result.Count,
+            ["truncated"] = result.Count < nodes.Count,
+            ["nodes"] = result,
+        }.ToJson();
     }
 
     [Description("Gets full detail of a node by index: properties, slots with connections. x/y/w/h are WORLD coordinates — the same frame CreateNode and SetNodePosition take, unaffected by the canvas zoom. Use ListComponentCommands for commands.")]
@@ -691,7 +728,37 @@ public sealed class WorkflowAgentToolkit
         return result.ToJson();
     }
 
-    // ────────────────────────── Mutation Functions ──────────────────────────
+    [Description("Scrolls the host's canvas so the node sits at the viewport center. Read-only with respect to the graph; returns an error when no surface navigator is attached (the host is not showing this tree). Zoom is preserved.")]
+    private string LocateNode(
+        [Description("Node index.")] int nodeIndex)
+    {
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+        return node.Locate()
+            ? Ok($"Node {nodeIndex} centered in the viewport.")
+            : Error("The node could not be located: no surface navigator is attached, or the node has no finite position.");
+    }
+
+    [Description("Scrolls the host's canvas so the slot's parent node sits at the viewport center. Read-only; returns an error when no surface navigator is attached.")]
+    private string LocateSlot(
+        [Description("Node index.")] int nodeIndex,
+        [Description("Slot index within the node.")] int slotIndex)
+    {
+        if (!TryGetSlot(nodeIndex, slotIndex, out var slot, out var error)) return error;
+        return slot!.Locate()
+            ? Ok($"Slot [{nodeIndex}][{slotIndex}] centered in the viewport.")
+            : Error("The slot could not be located: no surface navigator is attached, or its node has no finite position.");
+    }
+
+    [Description("Scrolls the host's canvas so the midpoint of the link's endpoint nodes sits at the viewport center. Read-only; returns an error when no surface navigator is attached.")]
+    private string LocateLink(
+        [Description("Link runtime ID.")] string linkId)
+    {
+        if (FindComponentById(linkId) is not IWorkflowLinkViewModel link)
+            return Error($"Link '{linkId}' not found.");
+        return link.Locate()
+            ? Ok($"Link '{linkId}' centered in the viewport.")
+            : Error("The link could not be located: no surface navigator is attached, or its endpoints have no finite position.");
+    }
 
     [Description("Moves a node by relative offset. Coordinate system: +offsetX = rightward, +offsetY = downward (origin is top-left). Mirrors GUI node-drag exactly: dispatches MoveCommand with an Offset delta, so the delta is applied in view space and scaled to world, and the node's z-order (Anchor.Layer) is preserved. NOT undoable (Core's move has no undo entry).")]
     private async Task<string> MoveNode(
@@ -863,10 +930,11 @@ public sealed class WorkflowAgentToolkit
         return Error("No connection found between the specified slots.");
     }
 
-    [Description("Executes ReceiveCommand on a node and WAITS until the node actually completes. Returns 'ok' only after real completion; returns an error if the receive fails. Disabled by default: the host must call WithAllowNodeExecution(true) on the scope.")]
+    [Description("Executes ReceiveCommand on a node and WAITS until the node actually completes. Returns 'ok' only after real completion; returns an error if the receive fails or exceeds timeoutMs. Disabled by default: the host must call WithAllowNodeExecution(true) on the scope.")]
     private async Task<string> ExecuteNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Optional parameter (becomes ITaskContext.Data, nullable).")] string? parameter = null,
+        [Description("Optional timeout in milliseconds. Omit to wait indefinitely (the tool call's own cancellation still applies).")] int? timeoutMs = null,
         CancellationToken cancellationToken = default)
     {
         if (!_scope.AllowNodeExecution)
@@ -874,7 +942,7 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node.ReceiveCommand, new TaskContext(data: parameter), cancellationToken);
+            await WaitForCommandAsync(node.ReceiveCommand, new TaskContext(data: parameter), cancellationToken, timeoutMs);
             return Ok($"Receive on node {nodeIndex} completed.");
         }
         catch (OperationCanceledException)
@@ -891,6 +959,7 @@ public sealed class WorkflowAgentToolkit
     private async Task<string> BroadcastNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Optional parameter.")] string? parameter = null,
+        [Description("Optional timeout in milliseconds.")] int? timeoutMs = null,
         CancellationToken cancellationToken = default)
     {
         if (!_scope.AllowNodeExecution)
@@ -898,7 +967,7 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node.BroadcastCommand, parameter, cancellationToken);
+            await WaitForCommandAsync(node.BroadcastCommand, parameter, cancellationToken, timeoutMs);
             return Ok($"Broadcast on node {nodeIndex} completed.");
         }
         catch (Exception ex)
@@ -935,18 +1004,19 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Introspection Functions ──────────────────────────
 
-    [Description("Gets JSON schema of a .NET type by full name. Returns properties, types, defaults.")]
+    [Description("Gets JSON schema of a .NET type by full name. Returns properties, types, defaults. maxChars caps the document; an over-long schema is replaced by a truncation envelope naming the original length.")]
     private string GetTypeSchema(
-        [Description("Fully-qualified type name.")] string fullTypeName)
+        [Description("Fully-qualified type name.")] string fullTypeName,
+        [Description("Maximum characters of the schema document. 0 = no cap.")] int maxChars = 32768)
     {
         var type = TypeIntrospector.ResolveType(fullTypeName);
         if (type == null)
             return Error($"Type '{fullTypeName}' not found.");
 
-        return TypeIntrospector.GetTypeSchema(type);
+        return CapText(TypeIntrospector.GetTypeSchema(type), maxChars, "type schema");
     }
 
-    [Description("Patches custom properties on a node. Rejects: command-backed props (Anchor,Size), framework-managed props (Parent,Slots,RuntimeId,Helper), and source-gen slot props (InputSlot,OutputSlot etc). Use dedicated tools for those.")]
+    [Description("Patches custom properties on a node. Rejects: command-backed props (Anchor,Size), framework-managed props (Parent,Slots,RuntimeId,Helper), and source-gen slot props (InputSlot,OutputSlot etc). Use dedicated tools for those. NOT undoable: direct property writes are not history entries.")]
     private string PatchNodeProperties(
         [Description("Node index.")] int nodeIndex,
         [Description("JSON patch object, e.g. '{\"Title\":\"New\"}'.")] string jsonPatch)
@@ -957,7 +1027,7 @@ public sealed class WorkflowAgentToolkit
         return result;
     }
 
-    [Description("Patches custom properties on any component by runtime ID. Same rejection rules as PatchNodeProperties.")]
+    [Description("Patches custom properties on any component by runtime ID. Same rejection rules as PatchNodeProperties, and likewise NOT undoable.")]
     private string PatchComponentById(
         [Description("Runtime ID of the component.")] string runtimeId,
         [Description("JSON patch object.")] string jsonPatch)
@@ -987,10 +1057,11 @@ public sealed class WorkflowAgentToolkit
         return obj.ToJson();
     }
 
-    [Description("Gets AgentContext docs for a .NET type. Use to learn about properties/commands on demand.")]
+    [Description("Gets AgentContext docs for a .NET type. Use to learn about properties/commands on demand. The language argument maps any value containing 'Chinese' to Chinese and every other value to English. maxChars caps the document; an over-long table is replaced by a truncation envelope naming the original length.")]
     private string GetComponentContext(
         [Description("Fully-qualified type name.")] string fullTypeName,
-        [Description("'English' or 'Chinese'.")] string language = "English")
+        [Description("A language name; 'Chinese' (or a name containing it) selects Chinese, anything else English.")] string language = "English",
+        [Description("Maximum characters of the documentation. 0 = no cap.")] int maxChars = 32768)
     {
         var lang = language.Contains("Chinese") || language.Contains("chinese")
             ? AgentLanguages.Chinese
@@ -1000,16 +1071,18 @@ public sealed class WorkflowAgentToolkit
         if (type == null)
             return Error($"Type '{fullTypeName}' not found.");
 
-        if (type.IsEnum) return AgentContextCollector.GetEnumContext(type, lang);
-        if (type.IsInterface) return AgentContextCollector.GetInterfaceContext(type, lang);
-
         // 值对象（Anchor / Offset / CellKey 这类）在目录里是 Data 那一档：没有命令，也没有「权威默认值」可言。
         // 按 Type 的形状猜会把它渲染成 Class，与 ProvideFrameworkDataContext / WithData 给同一条目的形状不一致，
         // 而 Fields 那一档只有 Data 会读 —— 一个声明成字段的成员在 Class 下根本不会出现。
-        if (AgentContextTreeRenderer.TryEntry(type, out var entry) && entry.Kind == AIContextNodeKind.DataType)
-            return AgentContextCollector.GetDataContext(type, lang);
+        var context = type.IsEnum
+            ? AgentContextCollector.GetEnumContext(type, lang)
+            : type.IsInterface
+                ? AgentContextCollector.GetInterfaceContext(type, lang)
+                : AgentContextTreeRenderer.TryEntry(type, out var entry) && entry.Kind == AIContextNodeKind.DataType
+                    ? AgentContextCollector.GetDataContext(type, lang)
+                    : AgentContextCollector.GetClassContext(type, lang);
 
-        return AgentContextCollector.GetClassContext(type, lang);
+        return CapText(context, maxChars, "component context");
     }
 
     [Description("Switches this session to Plan mode: you may read and propose, but nothing that changes the graph, runs it, or changes what the session can reach will run until the mode moves. Use it when the user asks for a plan, or before a large change you want looked at first. The user has to agree. Switch back with ExitPlanMode once the plan is agreed.")]
@@ -1182,8 +1255,11 @@ public sealed class WorkflowAgentToolkit
             return Error($"Failed to create node: {ex.Message}");
         }
 
-        // Auto-offset to avoid overlapping existing nodes using spatial query
+        // Auto-offset to avoid overlapping existing nodes using spatial query. The query runs in the
+        // collapsed frame (QueryNodes reads Anchor's getter frame), while the caller's left/top/width/height
+        // are world coordinates; convert the rectangle once instead of comparing the two frames.
         const double padding = 30;
+        var (scaleX, scaleY) = CollapsedFactors(Tree);
         bool moved = false;
         try
         {
@@ -1191,15 +1267,17 @@ public sealed class WorkflowAgentToolkit
             {
                 // Query only nodes that intersect with the candidate region (padded)
                 var queryViewport = new Viewport(
-                    left - padding, top - padding,
-                    width + padding * 2, height + padding * 2);
+                    (left - padding) / scaleX, (top - padding) / scaleY,
+                    (width + padding * 2) / scaleX, (height + padding * 2) / scaleY);
                 var nearby = Tree.QueryNodes(queryViewport);
 
                 bool overlap = false;
                 foreach (var existing in nearby)
                 {
-                    double ex = existing.Anchor.Horizontal;
-                    double ew = existing.Size.Width;
+                    var existingAnchor = WorldAnchor(existing);
+                    var existingSize = WorldSize(existing);
+                    double ex = existingAnchor.Horizontal;
+                    double ew = existingSize.Width;
 
                     // Shift right of the overlapping node
                     left = ex + ew + padding;
@@ -1212,16 +1290,18 @@ public sealed class WorkflowAgentToolkit
         }
         catch
         {
-            // Spatial map not enabled — fall back to linear scan
+            // Spatial map not enabled — fall back to linear scan, in the same world frame.
             for (int attempt = 0; attempt < 100; attempt++)
             {
                 bool overlap = false;
                 foreach (var existing in Tree.Nodes)
                 {
-                    double ex = existing.Anchor.Horizontal;
-                    double ey = existing.Anchor.Vertical;
-                    double ew = existing.Size.Width;
-                    double eh = existing.Size.Height;
+                    var existingAnchor = WorldAnchor(existing);
+                    var existingSize = WorldSize(existing);
+                    double ex = existingAnchor.Horizontal;
+                    double ey = existingAnchor.Vertical;
+                    double ew = existingSize.Width;
+                    double eh = existingSize.Height;
 
                     if (left < ex + ew + padding && left + width + padding > ex &&
                         top < ey + eh + padding && top + height + padding > ey)
@@ -1790,6 +1870,7 @@ public sealed class WorkflowAgentToolkit
     private async Task<string> ReverseBroadcastNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Optional parameter.")] string? parameter = null,
+        [Description("Optional timeout in milliseconds.")] int? timeoutMs = null,
         CancellationToken cancellationToken = default)
     {
         if (!_scope.AllowNodeExecution)
@@ -1797,7 +1878,7 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node.ReverseBroadcastCommand, parameter, cancellationToken);
+            await WaitForCommandAsync(node.ReverseBroadcastCommand, parameter, cancellationToken, timeoutMs);
             return Ok($"Reverse broadcast on node {nodeIndex} completed.");
         }
         catch (Exception ex)
@@ -1829,7 +1910,7 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Slot Channel ──────────────────────────
 
-    [Description("Changes the channel type of a slot. Channels: 'None','OneTarget','OneSource','OneBoth','MultipleTargets','MultipleSources','MultipleBoth'.")]
+    [Description("Changes the channel type of a slot. Channels: 'None','OneTarget','OneSource','OneBoth','MultipleTargets','MultipleSources','MultipleBoth'. NOT undoable: this is a direct channel write, not a history entry.")]
     private string SetSlotChannel(
         [Description("Node index.")] int nodeIndex,
         [Description("Slot index.")] int slotIndex,
@@ -1885,7 +1966,7 @@ public sealed class WorkflowAgentToolkit
         }.ToJson();
     }
 
-    [Description("Sets SlotChannel of slot inside SlotEnumerator by condition value")]
+    [Description("Sets SlotChannel of slot inside SlotEnumerator by condition value. NOT undoable: this is a direct channel write, not a history entry.")]
     private string SetEnumSlotChannel(
         [Description("Node index")] int nodeIndex,
         [Description("SlotEnumerator property")] string propertyName,
@@ -2005,10 +2086,11 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Bulk Operations ──────────────────────────
 
-    [Description("Executes ReceiveCommand on multiple nodes and WAITS for each to complete before returning. Optionally pass a parameter shared by all. Disabled by default: requires WithAllowNodeExecution(true).")]
+    [Description("Executes ReceiveCommand on multiple nodes and WAITS for each to complete before returning. Optionally pass a parameter shared by all, and a per-node timeout. Disabled by default: requires WithAllowNodeExecution(true).")]
     private async Task<string> ExecuteNodes(
         [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
         [Description("Optional parameter passed to each ReceiveCommand (becomes ITaskContext.Data).")] string? parameter = null,
+        [Description("Optional per-node timeout in milliseconds. Omit to wait indefinitely.")] int? timeoutMs = null,
         CancellationToken cancellationToken = default)
     {
         if (!_scope.AllowNodeExecution)
@@ -2028,7 +2110,7 @@ public sealed class WorkflowAgentToolkit
             }
             try
             {
-                await WaitForCommandAsync(Tree.Nodes[idx].ReceiveCommand, new TaskContext(data: parameter), cancellationToken);
+                await WaitForCommandAsync(Tree.Nodes[idx].ReceiveCommand, new TaskContext(data: parameter), cancellationToken, timeoutMs);
                 completed++;
             }
             catch (Exception ex)
@@ -2196,15 +2278,17 @@ public sealed class WorkflowAgentToolkit
     private Task<string> RunCompiledWorkflow(
         [Description("Node index of the compile entry point (usually a controller).")] int startNodeIndex,
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
+        [Description("Optional timeout in milliseconds. Omit to wait for the run to end.")] int? timeoutMs = null,
         CancellationToken cancellationToken = default)
-        => RunCompiledRoleAsync(startNodeIndex, CompileRole.Root, nameof(RunCompiledWorkflow), seed, cancellationToken);
+        => RunCompiledRoleAsync(startNodeIndex, CompileRole.Root, nameof(RunCompiledWorkflow), seed, timeoutMs, cancellationToken);
 
     [Description("Computes a node's RESULT in isolation (Terminal role): discovers the node's ancestor cone — all upstream producers feeding it, traced backward from its input slots — and drives it with the execution engine from the cone's own entry frontier, so no controller/start node is needed. Routers inside the cone KEEP real branch selection: only the branch leading to this node is compiled, so the result exactly matches a normal run that took that branch. IMPORTANT error contract: if a router on the cone actually selects a SIBLING branch at runtime, the target is NOT reached — the tool returns status:error with message naming the target ('... was NOT reached ... No result was produced.') and no data; never treat another branch's final payload as this node's result. To succeed, first point the router at the branch that leads to this node (set CompileMode/Selection via PatchNodeProperties or SetEnumSlotCollection), then retry; or ask for a node that sits on the actually-selected branch. Returns targetReached:true when the node was driven. DIFFERENT from RunCompiledWorkflow (runs the whole chain from a Root/start node) and from ExecuteNode (single-node EXEC via ReceiveCommand). Disabled by default: requires WithAllowNodeExecution(true).")]
     private Task<string> GetNodeResult(
         [Description("Node index whose result to compute (its output becomes the run's final data).")] int nodeIndex,
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
+        [Description("Optional timeout in milliseconds. Omit to wait for the run to end.")] int? timeoutMs = null,
         CancellationToken cancellationToken = default)
-        => RunCompiledRoleAsync(nodeIndex, CompileRole.Terminal, nameof(GetNodeResult), seed, cancellationToken);
+        => RunCompiledRoleAsync(nodeIndex, CompileRole.Terminal, nameof(GetNodeResult), seed, timeoutMs, cancellationToken);
 
     [Description("Starts a compiled workflow run (chain-level, same compile + engine path as RunCompiledWorkflow) and returns AT ONCE with a handle, instead of waiting for the run to end. Use it when the run may be long or may need holding: the handle is what PauseCompiledRun / ResumeCompiledRun / StopCompiledRun / GetCompiledRunStatus take. The run keeps going on the host's thread while you do other things — status is polled with GetCompiledRunStatus, whose 'outcome' tells you how it ended. Disabled by default: requires WithAllowNodeExecution(true).")]
     private Task<string> StartCompiledWorkflow(
@@ -2272,9 +2356,47 @@ public sealed class WorkflowAgentToolkit
         }
     }
 
-    [Description("Reports on a run started by StartCompiledWorkflow / ContinueCompiledWorkflow: isRunning, runStatus, outcome (Completed / Cancelled / Failed — the precise reading, since runStatus shares 'Stopped' between a failure and a cancellation), isPaused, attempts, endedWithError, the final data, failures (the failures the run recorded, as records: phase / level / message / attempt / order), the last lines of the log, and logFile (an absolute path when the host sent the lines to a file — open it with your own file tool for the whole log). Also the way to learn a run has finished: a completed run's outcome stops being 'Unknown'. Pure query.")]
+    [Description("Lists every compiled run handle this scope still holds, with its running state and outcome. Use when you have lost a handle; GetCompiledRunStatus reports the details of one.")]
+    private string ListCompiledRuns()
+    {
+        var arr = new VeloxJsonArray();
+        lock (_runsGate)
+        {
+            foreach (var run in _runs.Values.OrderBy(r => r.Handle, StringComparer.OrdinalIgnoreCase))
+            {
+                arr.Add(new VeloxJsonObject
+                {
+                    ["handle"] = run.Handle,
+                    ["isRunning"] = !run.Task.IsCompleted,
+                    ["outcome"] = run.Context?.Outcome.ToString(),
+                    ["failureCount"] = run.FailureCount,
+                });
+            }
+        }
+        return new VeloxJsonObject { ["status"] = "ok", ["count"] = arr.Count, ["runs"] = arr }.ToJson();
+    }
+
+    [Description("Retires every finished compiled run handle this scope holds, releasing the run's task and cancellation source. Running handles are left alone. Use after collecting a run's status if you do not intend to ask again.")]
+    private string ClearFinishedRuns()
+    {
+        var removed = 0;
+        lock (_runsGate)
+        {
+            foreach (var handle in _runs.Where(kv => kv.Value.Task.IsCompleted).Select(kv => kv.Key).ToList())
+            {
+                if (!_runs.TryGetValue(handle, out var run)) continue;
+                _runs.Remove(handle);
+                run.Cts.Dispose();
+                removed++;
+            }
+        }
+        return Ok($"Cleared {removed} finished compiled run(s).");
+    }
+
+    [Description("Reports on a run started by StartCompiledWorkflow / ContinueCompiledWorkflow: isRunning, runStatus, outcome (Completed / Cancelled / Failed — the precise reading, since runStatus shares 'Stopped' between a failure and a cancellation), isPaused, attempts, endedWithError, the final data, failures (the failures the run recorded, as records: phase / level / message / attempt / order), the last lines of the log, and logFile (an absolute path when the host sent the lines to a file — open it with your own file tool for the whole log). Also the way to learn a run has finished: a completed run's outcome stops being 'Unknown'. A payload over maxDataChars is replaced by a truncation envelope. Pure query.")]
     private string GetCompiledRunStatus(
-        [Description("The handle returned when the run was started.")] string handle)
+        [Description("The handle returned when the run was started.")] string handle,
+        [Description("Maximum characters of the final data payload. 0 = no cap.")] int maxDataChars = 16384)
     {
         if (!TryGetRun(handle, out var run, out var error)) return error;
 
@@ -2294,7 +2416,7 @@ public sealed class WorkflowAgentToolkit
             ["isPaused"] = run.Gate.IsPaused,
             ["attempts"] = context.Attempt,
             ["endedWithError"] = context.EndedWithError,
-            ["data"] = DataJson(context.Data),
+            ["data"] = CappedJson(context.Data, maxDataChars),
             ["failureCount"] = run.FailureCount,
             ["failures"] = VeloxJsonValue.From(run.SnapshotFailures().Select(FailureJson)),
             ["logCount"] = context.Logs.Count,
@@ -2348,7 +2470,7 @@ public sealed class WorkflowAgentToolkit
 
     /// <summary>Shared chain-run body for the two compile roles (RunCompiledWorkflow = Root, GetNodeResult = Terminal).</summary>
     private async Task<string> RunCompiledRoleAsync(
-        int nodeIndex, CompileRole role, string toolName, string? seed, CancellationToken ct)
+        int nodeIndex, CompileRole role, string toolName, string? seed, int? timeoutMs, CancellationToken ct)
     {
         if (!_scope.AllowNodeExecution)
             return Error($"{toolName} is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
@@ -2368,7 +2490,18 @@ public sealed class WorkflowAgentToolkit
             // for the end, so there is nothing to hold.
             var run = new CompiledRun(NextHandle(), new ManualExecutionGate());
             var context = NewSession(seed, role == CompileRole.Terminal ? node : null, run);
-            await new RuntimeEngine().RunAsync(graphs[0], context, ct);
+            using var timeoutCts = timeoutMs is int ms && ms > 0
+                ? CancellationTokenSource.CreateLinkedTokenSource(ct)
+                : null;
+            timeoutCts?.CancelAfter(timeoutMs!.Value);
+            try
+            {
+                await new RuntimeEngine().RunAsync(graphs[0], context, timeoutCts?.Token ?? ct);
+            }
+            catch (OperationCanceledException) when (timeoutCts is { IsCancellationRequested: true } && !ct.IsCancellationRequested)
+            {
+                return Error($"{toolName} timed out after {timeoutMs} ms.");
+            }
 
             // Forward-consistent semantics: a Terminal run only reports a result when the target node was
             // actually driven. If a router on its cone decided on a sibling branch, the target is simply not
@@ -2393,7 +2526,8 @@ public sealed class WorkflowAgentToolkit
                 ["data"] = DataJson(context.Data),
                 // The same failures the log carries, as records: phase / level / message / attempt / order.
                 ["failures"] = VeloxJsonValue.From(run.SnapshotFailures().Select(FailureJson)),
-                ["logs"] = VeloxJsonValue.From(context.Logs),
+                ["logCount"] = context.Logs.Count,
+                ["logs"] = LogTail(context.Logs),
                 // Present only when the host sent the lines to a file; an absolute path the model can open itself.
                 ["logFile"] = _scope.LogFilePath is { } logPath ? logPath : VeloxJsonValue.Null,
             };
@@ -2693,7 +2827,7 @@ public sealed class WorkflowAgentToolkit
         }
     }
 
-    [Description("Validates the workflow: checks for unconnected slots, nodes without connections, nodes with zero size, and other potential issues. Returns a list of warnings.")]
+    [Description("Structural lint for the workflow: zero-size nodes, nodes with no slots, duplicate links, cycles (one error per back edge — compiled execution needs an acyclic graph), and SlotEnumerators with no selector (their ports cannot exist yet). Returns records with level / node / id / msg; cycles are errors, the rest are warnings or info.")]
     private string ValidateWorkflow()
     {
         var warnings = new VeloxJsonArray();
@@ -2723,7 +2857,58 @@ public sealed class WorkflowAgentToolkit
             // Check node with no slots
             if (node.Slots.Count == 0)
                 warnings.Add(new VeloxJsonObject { ["level"] = "info", ["node"] = i, ["id"] = nodeId, ["msg"] = "Node has no slots." });
+
+            // A slot that has a visual port but no connection is not an error; a SlotEnumerator that has
+            // no selector at all is: its ports cannot exist until SetEnumSlotCollection runs.
+            foreach (var prop in PropertiesOf(node))
+            {
+                if (!prop.IsSlotEnumerator) continue;
+                if (prop.Get(node) is IConditionalSlotProvider provider && provider.SelectorType is null)
+                    warnings.Add(new VeloxJsonObject
+                    {
+                        ["level"] = "warn",
+                        ["node"] = i,
+                        ["id"] = nodeId,
+                        ["msg"] = $"SlotEnumerator '{prop.Name}' has no selector; configure it with SetEnumSlotCollection.",
+                    });
+            }
         }
+
+        // A cycle cannot compile. Report each back edge once, with the node that closes it.
+        var visibleLinks = Tree.Links.Where(l => l.IsVisible && l.Sender?.Parent is not null && l.Receiver?.Parent is not null).ToList();
+        var adjacency = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var link in visibleLinks)
+        {
+            var from = GetComponentId(link.Sender!.Parent!);
+            var to = GetComponentId(link.Receiver!.Parent!);
+            if (!adjacency.TryGetValue(from, out var targets)) adjacency[from] = targets = [];
+            targets.Add(to);
+        }
+
+        var state = new Dictionary<string, int>(StringComparer.Ordinal); // 0 unvisited, 1 in stack, 2 done
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+        void Walk(string id)
+        {
+            state[id] = 1;
+            if (adjacency.TryGetValue(id, out var targets))
+            {
+                foreach (var next in targets)
+                {
+                    state.TryGetValue(next, out var colour);
+                    if (colour == 1)
+                    {
+                        var key = $"{id}→{next}";
+                        if (reported.Add(key))
+                            warnings.Add(new VeloxJsonObject { ["level"] = "error", ["msg"] = $"Cycle detected on connection {key}; compiled execution requires an acyclic graph." });
+                        continue;
+                    }
+                    if (colour == 0) Walk(next);
+                }
+            }
+            state[id] = 2;
+        }
+        foreach (var id in adjacency.Keys)
+            if (!state.ContainsKey(id)) Walk(id);
 
         // Check for duplicate connections
         var seenLinks = new HashSet<string>();
@@ -2794,20 +2979,59 @@ public sealed class WorkflowAgentToolkit
         return new VeloxJsonObject { ["status"] = "ok", ["compiledNodes"] = orders.Count, ["nodes"] = orders }.ToJson();
     }
 
-    [Description("Returns the tree's aggregate execution log — the chronological record of direct (non-compiler) executions appended by nodes (e.g. '01. EXEC Load Seed'). For the compiler run-session log (with sequence numbers and [Warning] / [Error] markers), use RunCompiledWorkflow's 'logs' field instead. Pure query.")]
-    private string GetExecutionLog()
+    [Description("Returns the tree's aggregate execution log — the chronological record of direct (non-compiler) executions appended by nodes (e.g. '01. EXEC Load Seed'). For the compiler run-session log, use a compiled run's 'logs' field instead. Pure query. maxEntries keeps the most recent N entries; 0 returns all.")]
+    private string GetExecutionLog(
+        [Description("Maximum entries to return, keeping the most recent. 0 = all.")] int maxEntries = 0)
     {
         var logs = new VeloxJsonArray();
+        var total = 0;
 
         // The tree's execution log is a convention-named public property on the concrete tree view
         // model (e.g. TreeViewModel.ExecutionLog). The context tree is what says whether it is there.
         if (FindProperty(Tree, "ExecutionLog") is { } prop && prop.Get(Tree) is System.Collections.IEnumerable entries)
         {
-            foreach (var e in entries)
-                if (e is not null) logs.Add(e.ToString());
+            var all = entries.Cast<object?>().Where(e => e is not null).Select(e => e!.ToString()!).ToList();
+            total = all.Count;
+            var start = maxEntries > 0 ? Math.Max(0, total - maxEntries) : 0;
+            for (var i = start; i < total; i++) logs.Add(all[i]);
         }
 
-        return new VeloxJsonObject { ["status"] = "ok", ["entryCount"] = logs.Count, ["entries"] = logs }.ToJson();
+        return new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["entryCount"] = total,
+            ["returnedCount"] = logs.Count,
+            ["truncated"] = logs.Count < total,
+            ["entries"] = logs,
+        }.ToJson();
+    }
+
+    [Description("Serializes the current workflow tree to the library's JSON document. The result is the document itself — save it with a host file tool, or pass it back to LoadWorkflow. A large document may exceed the tool-result cap and be replaced by a truncation envelope.")]
+    private string SerializeWorkflow() => Tree.Serialize();
+
+    [Description("Replaces the current workflow tree with a graph restored from a document produced by SerializeWorkflow. The host must rebind its surface to the restored tree; this scope's tools follow it immediately. Uses the host's registered workflow loader, or TreeDefaultViewModel when none was registered.")]
+    private string LoadWorkflow(
+        [Description("The graph document produced by SerializeWorkflow.")] string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Error("A graph document is required.");
+
+        try
+        {
+            var restored = _scope.LoadWorkflow(json);
+            return new VeloxJsonObject
+            {
+                ["status"] = "ok",
+                ["nodeCount"] = restored.Nodes.Count,
+                ["linkCount"] = restored.Links.Count,
+                ["requiresHostRebind"] = true,
+                ["message"] = "The graph was restored. The host must bind its surface to the new tree.",
+            }.ToJson();
+        }
+        catch (Exception ex)
+        {
+            return Error($"Failed to load the workflow: {ex.Message}");
+        }
     }
 
     private VeloxJsonArray BuildCompileOrders()
@@ -3128,6 +3352,41 @@ public sealed class WorkflowAgentToolkit
         }
     }
 
+    // 文本型结果的同一条规矩：超限时留下预览与原始长度，而不是让全局兜底把整段换成一句提示。
+    private static string CapText(string text, int maxChars, string what)
+    {
+        if (maxChars <= 0 || text.Length <= maxChars) return text;
+
+        return new VeloxJsonObject
+        {
+            ["status"] = "truncated",
+            ["message"] = $"The {what} was {text.Length} characters, over the {maxChars}-character limit. Narrow the request, or inspect it in pieces.",
+            ["originalLength"] = text.Length,
+            ["limit"] = maxChars,
+            ["preview"] = text.Substring(0, maxChars),
+        }.ToJson();
+    }
+
+    // 把一段载荷按渲染后的长度封顶。模型要的是「太大、换个问法」，而不是被整段替换成一句
+    // 全局截断提示——后者连载荷里有什么都说不出来。
+    private static VeloxJsonValue CappedJson(object? data, int maxChars)
+    {
+        var value = DataJson(data);
+        if (maxChars <= 0) return value;
+
+        var json = value.ToJson();
+        if (json.Length <= maxChars) return value;
+
+        return new VeloxJsonObject
+        {
+            ["status"] = "truncated",
+            ["message"] = $"The payload was {json.Length} characters, over the {maxChars}-character limit. Read the run's output in smaller pieces or narrow what it produces.",
+            ["originalLength"] = json.Length,
+            ["limit"] = maxChars,
+            ["preview"] = json.Substring(0, maxChars),
+        };
+    }
+
     /// <summary>A node's position in the <b>world</b> frame — the one the placement tools take.</summary>
     /// <remarks>
     /// <para>
@@ -3146,6 +3405,18 @@ public sealed class WorkflowAgentToolkit
 
     /// <summary>A node's size in the <b>world</b> frame — as <see cref="WorldAnchor"/> is for its position.</summary>
     private static Size WorldSize(IWorkflowNodeViewModel node) => WorldFrame(node, node.Size);
+
+    /// <summary>
+    /// Converts a world length to the collapsed frame the spatial index reads. <c>1</c> when the tree has no
+    /// scale or a zero scale, matching <c>Anchor.Collapse</c> / <c>Size.Collapse</c>.
+    /// </summary>
+    private static (double X, double Y) CollapsedFactors(IWorkflowTreeViewModel tree)
+    {
+        var scale = tree.Layout?.Scale;
+        return (
+            scale is null || scale.Horizontal == 0d ? 1d : scale.Horizontal,
+            scale is null || scale.Vertical == 0d ? 1d : scale.Vertical);
+    }
 
     private static Anchor WorldFrame(IWorkflowNodeViewModel node, Anchor collapsed)
     {
@@ -3232,14 +3503,16 @@ public sealed class WorkflowAgentToolkit
             .Select(static r => r.DeclaredName)
             .Distinct(StringComparer.Ordinal));
 
-    [Description("Finds nodes by type name (substring match) or property value. Returns compact list like ListNodes but filtered. Saves tokens vs. ListNodes + manual filtering.")]
+    [Description("Finds nodes by type name (substring match) or property value. Returns compact list like ListNodes but filtered. Saves tokens vs. ListNodes + manual filtering. maxMatches keeps the first N matches; with a cap the reply becomes {status,matchCount,returnedCount,truncated,nodes} — check 'truncated' before treating it as every match.")]
     private string FindNodes(
         [Description("Substring of the node type name to match (case-insensitive). Pass empty string to skip type filter.")] string typeName = "",
         [Description("Optional property name to filter by.")] string? propertyName = null,
-        [Description("Optional property value (string) to match.")] string? propertyValue = null)
+        [Description("Optional property value (string) to match.")] string? propertyValue = null,
+        [Description("Maximum matches to return. 0 = all (the reply is then a bare array).")] int maxMatches = 0)
     {
         var nodes = Tree.Nodes;
         var result = new VeloxJsonArray();
+        var matched = 0;
         for (int i = 0; i < nodes.Count; i++)
         {
             var node = nodes[i];
@@ -3257,6 +3530,9 @@ public sealed class WorkflowAgentToolkit
                     continue;
             }
 
+            matched++;
+            if (maxMatches > 0 && result.Count >= maxMatches) continue;
+
             var obj = new VeloxJsonObject
             {
                 ["i"] = i,
@@ -3266,7 +3542,17 @@ public sealed class WorkflowAgentToolkit
             AppendScalarProperties(obj, node);
             result.Add(obj);
         }
-        return result.ToJson();
+
+        if (maxMatches <= 0) return result.ToJson();
+
+        return new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["matchCount"] = matched,
+            ["returnedCount"] = result.Count,
+            ["truncated"] = result.Count < matched,
+            ["nodes"] = result,
+        }.ToJson();
     }
 
     [Description("Resolves a slot's runtime ID from its owning property name on a node. For collections, specify the index. Avoids needing GetNodeDetail just to get a slot ID.")]
@@ -3342,13 +3628,17 @@ public sealed class WorkflowAgentToolkit
 
 
 
-    [Description("Returns the full topology: all nodes with their slots (including property names and IDs), plus all connections. One call replaces ListNodes + GetNodeDetail×N + ListConnections. Use for complex multi-node operations.")]
-    private string GetFullTopology()
+    [Description("Returns the whole graph — nodes, slots and visible links — in one call. maxNodes limits the node list; links are kept only when both endpoints are included. 0 = all. Check 'truncated' and 'totalNodes' before assuming the graph is complete.")]
+    private string GetFullTopology(
+        [Description("Maximum nodes to return, from the start of the node list. 0 = all.")] int maxNodes = 0)
     {
+        var nodeCount = maxNodes > 0 ? Math.Min(maxNodes, Tree.Nodes.Count) : Tree.Nodes.Count;
+        var included = new HashSet<string>(StringComparer.Ordinal);
         var nodesArr = new VeloxJsonArray();
-        for (int i = 0; i < Tree.Nodes.Count; i++)
+        for (int i = 0; i < nodeCount; i++)
         {
             var node = Tree.Nodes[i];
+            included.Add(GetComponentId(node));
             var slotPropertyMap = BuildSlotPropertyMap(node);
             var nodeObj = new VeloxJsonObject
             {
@@ -3380,16 +3670,24 @@ public sealed class WorkflowAgentToolkit
         foreach (var link in Tree.Links)
         {
             if (!link.IsVisible) continue;
+            var senderId = link.Sender != null ? GetComponentId(link.Sender) : null;
+            var receiverId = link.Receiver != null ? GetComponentId(link.Receiver) : null;
+            if (nodeCount < Tree.Nodes.Count &&
+                (senderId is null || receiverId is null || !included.Contains(senderId) || !included.Contains(receiverId)))
+                continue;
             linksArr.Add(new VeloxJsonObject
             {
                 ["id"] = GetComponentId(link),
-                ["sid"] = link.Sender != null ? GetComponentId(link.Sender) : null,
-                ["rid"] = link.Receiver != null ? GetComponentId(link.Receiver) : null,
+                ["sid"] = senderId,
+                ["rid"] = receiverId,
             });
         }
 
         return new VeloxJsonObject
         {
+            ["totalNodes"] = Tree.Nodes.Count,
+            ["returnedNodes"] = nodesArr.Count,
+            ["truncated"] = nodesArr.Count < Tree.Nodes.Count,
             ["nodes"] = nodesArr,
             ["links"] = linksArr,
         }.ToJson();
@@ -3521,10 +3819,27 @@ public sealed class WorkflowAgentToolkit
     /// without this the Agent could never observe when node work really finished.
     /// Throws on failure so the caller can return a structured error.
     /// </summary>
-    private static async Task WaitForCommandAsync(IVeloxCommand command, object? parameter, CancellationToken ct)
+    private static async Task WaitForCommandAsync(IVeloxCommand command, object? parameter, CancellationToken ct, int? timeoutMs = null)
     {
-        var completion = await command.ExecuteAndWaitAsync(parameter, ct).ConfigureAwait(false);
+        if (timeoutMs is not int ms || ms <= 0)
+        {
+            var plain = await command.ExecuteAndWaitAsync(parameter, ct).ConfigureAwait(false);
+            ThrowIfBad(plain);
+            return;
+        }
 
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(ms);
+        var completion = await command.ExecuteAndWaitAsync(parameter, timeoutCts.Token).ConfigureAwait(false);
+
+        if (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+            throw new TimeoutException($"The command did not finish within {ms} ms.");
+
+        ThrowIfBad(completion);
+    }
+
+    private static void ThrowIfBad(CommandCompletion completion)
+    {
         if (completion.Exception is not null)
         {
             throw completion.Exception;

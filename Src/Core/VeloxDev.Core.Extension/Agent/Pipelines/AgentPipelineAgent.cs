@@ -58,7 +58,7 @@ public sealed class AgentPipelineAgent(AIAgent innerAgent, AgentPipeline pipelin
                 await PublishContentsAsync(message.Contents, cancellationToken).ConfigureAwait(false);
 
             started.Stop();
-            await PublishAsync(new AgentTurnCompleted(AgentRunKind.Complete, response.Text, started.Elapsed), cancellationToken).ConfigureAwait(false);
+            await PublishAsync(new AgentTurnCompleted(AgentRunKind.Complete, response.Text, started.Elapsed, response.Usage), cancellationToken).ConfigureAwait(false);
             return response;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -149,6 +149,10 @@ public sealed class AgentPipelineAgent(AIAgent innerAgent, AgentPipeline pipelin
 
                 case TextContent text when !string.IsNullOrEmpty(text.Text):
                     await PublishAsync(new AgentTextDelta(text.Text), cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case UsageContent usage when usage.Details is { } details:
+                    await PublishAsync(new AgentUsageReported(details), cancellationToken).ConfigureAwait(false);
                     break;
             }
         }

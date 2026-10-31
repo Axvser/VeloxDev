@@ -128,4 +128,35 @@ public class AgentTranscriptTests
         Assert.AreEqual("```thinking", lines[0]);
         Assert.AreEqual("```", lines[^1]);
     }
+
+    /// <summary>
+    /// A stored transcript is a display record: every field a host renders has to survive the document,
+    /// including the tool's raw payload and its outcome. Restoring must not reopen a streaming entry — the
+    /// next turn's first fragment belongs to a new entry.
+    /// </summary>
+    [TestMethod]
+    public void ToJson_Restore_RoundTripsEveryField()
+    {
+        var transcript = new AgentTranscript();
+        transcript.AddUser("hi");
+        transcript.AppendAnswer("hello ");
+        transcript.AppendAnswer("there");
+        transcript.AddToolCall("ListNodes", """{"status":"ok"}""", AgentToolOutcome.Succeeded);
+        transcript.AddError("boom");
+
+        var restored = new AgentTranscript();
+        restored.Restore(transcript.ToJson());
+
+        Assert.HasCount(4, restored.Entries);
+        Assert.IsNull(restored.Open, "a restored transcript has no open entry");
+        Assert.AreEqual(AgentTranscriptRole.User, restored.Entries[0].Role);
+        Assert.AreEqual("hi", restored.Entries[0].Text);
+        Assert.AreEqual("hello there", restored.Entries[1].Text);
+        Assert.AreEqual("ListNodes", restored.Entries[2].ToolName);
+        Assert.AreEqual("""{"status":"ok"}""", restored.Entries[2].Detail);
+        Assert.AreEqual(AgentToolOutcome.Succeeded, restored.Entries[2].Outcome);
+        Assert.AreEqual(AgentTranscriptRole.Error, restored.Entries[3].Role);
+        Assert.AreEqual(transcript.Entries[0].Timestamp, restored.Entries[0].Timestamp,
+            "timestamps survive to the tick, or a host's ordering by time would drift");
+    }
 }

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using VeloxDev.AI;
+using VeloxDev.AI.Pipelines;
 using VeloxDev.AI.Safety;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
@@ -222,6 +223,54 @@ public class BudgetResetTests
         var json = JObject.Parse(Invoke(scope, "MarkDirty"));
         Assert.AreNotEqual("error", json["status"]?.Value<string>(),
             "reopening the budget must not spend a mutation slot");
+    }
+
+    /// <summary>
+    /// Usage arrives two ways — on the final turn event, and separately for the streaming path — and both
+    /// must reach the ledger, or a streamed turn would cost nothing against the cap.
+    /// </summary>
+    [TestMethod]
+    public void ReportedTokens_AccumulateFromBothPipelineEvents()
+    {
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+
+        scope.Pipeline.PublishAsync(new VeloxDev.AI.Pipelines.AgentUsageReported(
+            new UsageDetails { InputTokenCount = 10, OutputTokenCount = 5, TotalTokenCount = 15 }))
+            .AsTask().GetAwaiter().GetResult();
+        scope.Pipeline.PublishAsync(new AgentTurnCompleted(
+            VeloxDev.AI.Pipelines.AgentRunKind.Complete, "done", TimeSpan.Zero,
+            new UsageDetails { InputTokenCount = 20, OutputTokenCount = 10, TotalTokenCount = 30 }))
+            .AsTask().GetAwaiter().GetResult();
+
+        Assert.AreEqual(30, scope.InputTokens);
+        Assert.AreEqual(15, scope.OutputTokens);
+        Assert.AreEqual(45, scope.TotalTokens);
+    }
+
+    [TestMethod]
+    public void TheTokenCap_RefusesCallsOnceTheReportedSpendReachesIt()
+    {
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMaxTokens(100);
+        scope.AddUsage(new UsageDetails { InputTokenCount = 60, OutputTokenCount = 40, TotalTokenCount = 100 });
+
+        var refused = JObject.Parse(Invoke(scope, "ValidateWorkflow"));
+
+        Assert.AreEqual("error", refused["status"]?.Value<string>());
+        StringAssert.Contains(refused["message"]!.Value<string>()!, "Token budget");
+    }
+
+    [TestMethod]
+    public void ResettingTokenUsage_ReopensTheTokenCap()
+    {
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMaxTokens(100);
+        scope.AddUsage(new UsageDetails { TotalTokenCount = 100 });
+        Assert.AreEqual(100, scope.TotalTokens);
+
+        scope.ResetTokenUsage();
+
+        Assert.AreEqual(0, scope.TotalTokens);
+        Assert.AreEqual("ok", JObject.Parse(Invoke(scope, "ValidateWorkflow"))["status"]?.Value<string>(),
+            "with the ledger cleared, the next call is accepted again");
     }
 
     [TestMethod]

@@ -1,8 +1,8 @@
 namespace VeloxDev.AI;
 
 /// <summary>
-/// Provides data for the <see cref="IAgentToolCallNotifier.ToolCalled"/> event,
-/// raised after each Agent tool invocation.
+/// Provides data for the <see cref="IAgentToolCallNotifier.ToolCalled"/> event, raised after each
+/// <b>successful</b> Agent tool invocation.
 /// </summary>
 public class AgentToolCallEventArgs(string toolName, string result, int callCount) : EventArgs
 {
@@ -28,7 +28,8 @@ public class AgentToolCallEventArgs(string toolName, string result, int callCoun
 public interface IAgentToolCallNotifier
 {
     /// <summary>
-    /// Raised after each Agent tool invocation completes.
+    /// Raised after a successful Agent tool invocation. Refused and failed calls do not raise it — they are
+    /// published as <c>AgentToolCallCompleted</c> on the owner's pipeline, which carries the outcome.
     /// </summary>
     event EventHandler<AgentToolCallEventArgs> ToolCalled;
 }

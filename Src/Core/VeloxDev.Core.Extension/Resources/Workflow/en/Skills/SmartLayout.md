@@ -1,11 +1,22 @@
 ---
 name: smart-layout
-description: Tidy, arrange or quadrant-shift a graph by hand — read topology with ListNodes, layer by longest path with barycenter crossing minimization, size positions from Size.Width/Size.Height with 80 px / 40 px gaps, check bounding-box overlap, and apply one SetNodePosition or MoveNode per node
+description: Tidy, arrange or quadrant-shift a graph — run the tree's registered layout with PreviewLayout/ArrangeLayout first, and only fall back to hand-computed layering (ListNodes, longest path, barycenter crossing minimization, 80 px / 40 px gaps, bounding-box overlap) with SetNodePosition/MoveNode when the solver cannot express the request
 ---
 
 ## 🗺️ Skill: Smart Layout
 
 Use this skill whenever you need to arrange multiple nodes intelligently — whether creating them fresh, reorganizing an existing graph, or responding to user requests like "tidy up", "auto-arrange", or "fix the layout".
+
+> **Prefer the tree's own layout.** `GetLayoutInfo`, `PreviewLayout` and `ArrangeLayout` run the layout solver registered on the tree, in one undoable action. That is the correct route for "tidy up", "auto-arrange" and "fix the layout". Follow the manual procedure below only when the solver cannot express the request — a shape the user specified by hand, a quadrant shift, or a preview the user rejected.
+
+---
+
+### Step 0 — Run the registered layout first
+
+1. Call **`GetLayoutInfo`** to see which solver the tree uses and what its default options are. Every tree has one: a host that registered none falls back to `DefaultWorkflowLayoutSolver`.
+2. Call **`PreviewLayout`** to see the placements, cost and diagnostics without touching the graph. Scope it with `nodeIndex` when only one branch should move; `traversal`, `maxDepth`, `pinnedNodeIndicesJson` and the gap options tune the result.
+3. Call **`ArrangeLayout`** with the same arguments to apply it. It writes every anchor in **one undoable action**, so `Undo` reverses the whole arrangement.
+4. If the preview is unacceptable, adjust its parameters and preview again. Only if no parameter set expresses what the user asked for should you continue with the manual steps below.
 
 ---
 
@@ -75,9 +86,9 @@ After positioning, verify **no two nodes overlap** by checking bounding box inte
 
 ---
 
-### Step 5 — Apply Positions
+### Step 5 — Apply Positions (manual fallback)
 
-There is **no** `AutoLayout` tool. Apply the computed positions node-by-node, one command per node:
+This step is the fallback for a layout the registered solver could not express. Applying it node-by-node is **not** undoable as one action, so prefer `ArrangeLayout` whenever it fits:
 
 - For each node, call **`SetNodePosition`** (or **`MoveNode`**) with that node's computed coordinates.
 

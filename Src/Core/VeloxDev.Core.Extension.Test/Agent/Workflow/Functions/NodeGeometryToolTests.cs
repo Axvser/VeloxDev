@@ -151,6 +151,33 @@ public class NodeGeometryToolTests
         Assert.AreEqual(280d, listed["w"]!.Value<double>(), 0.001);
     }
 
+    /// <summary>
+    /// CreateNode's overlap check must run in the same frame as the caller's rectangle. The spatial query reads
+    /// the collapsed frame, so at a zoom the old code searched where the node was not: an existing node at world
+    /// x=1000 sits at collapsed x=2000 when scale is 0.5, and a world rectangle around 1000 never met it.
+    /// </summary>
+    [TestMethod]
+    public void CreateNode_AvoidsOverlapAtANonUnitScale()
+    {
+        var tree = new TreeDefaultViewModel();
+        var helper = tree.GetHelper();
+        helper.CreateNode(new NodeDefaultViewModel());
+        tree.Nodes[0].SetAnchorCommand.Execute(new Anchor(1000, 1000, 0));
+        tree.Nodes[0].SetSizeCommand.Execute(new Size(200, 100));
+        tree.Layout.Scale = new Scale(0.5, 0.5);
+        var scope = new WorkflowAgentScope(tree);
+
+        var created = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "CreateNode",
+            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!),
+            ("left", 1000d), ("top", 1000d), ("width", 200d), ("height", 100d)));
+
+        Assert.AreEqual("ok", created["status"]?.Value<string>());
+        Assert.IsTrue(created["repositioned"]?.Value<bool>() == true,
+            "the node was placed over an existing one, so the tool must have moved it");
+        Assert.AreEqual(1230d, created["x"]!.Value<double>(), 0.001,
+            "the shifted position is computed in world units: existing right edge + padding");
+    }
+
     /// <summary>The round trip an agent actually performs: place by tool, read by tool, get the same numbers.</summary>
     [TestMethod]
     public void SetNodePosition_ReadsBackThroughGetNodeDetail_AtANonUnitScale()

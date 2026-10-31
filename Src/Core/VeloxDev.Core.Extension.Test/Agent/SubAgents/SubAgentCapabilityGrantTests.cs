@@ -289,15 +289,15 @@ public class SubAgentCapabilityGrantTests
     {
         // A granted server is usable and nothing more. Loading, unloading and adding are decisions about the
         // parent's connections, and a background child is exactly the wrong place to make them — so the
-        // child's surface is the granted server's own tools, the list, and the description. Nothing else.
+        // child's surface is the granted server's own tools plus the reading tools (list, describe, resources
+        // and prompts). Nothing that changes a connection is there.
         await using var fx = new SubAgentFixture(mcp: TwoServers());
 
         var id = fx.Spawn("use the alpha server", ("allowedMcpServers", new[] { "alpha" }));
         var surface = SubAgentFixture.McpSurfaceOf(fx.ChildScope(id));
 
-        CollectionAssert.AreEquivalent(
-            new[] { McpAgentToolkit.ListName, McpAgentToolkit.DescribeName, "alpha_read" },
-            surface.ToArray());
+        var expected = new List<string>(McpAgentToolkit.ReadToolNames) { "alpha_read" };
+        CollectionAssert.AreEquivalent(expected.ToArray(), surface.ToArray());
 
         foreach (var name in new[] { McpAgentToolkit.ToolNames[1], McpAgentToolkit.ToolNames[2], McpAgentToolkit.AddToolName })
             CollectionAssert.DoesNotContain(surface.ToArray(), name);

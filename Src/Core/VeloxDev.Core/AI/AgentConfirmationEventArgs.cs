@@ -34,6 +34,12 @@ public sealed class AgentConfirmationEventArgs(string operationKey, string descr
 /// Contract for any Agent scope or toolkit that requires explicit user approval
 /// before executing sensitive operations via the <c>RequestConfirmation</c> interaction tool.
 /// </summary>
+/// <remarks>
+/// No library type implements or raises this interface; hosts ask through
+/// <c>WorkflowAgentScope.WithConfirmationHandler(Func&lt;AgentConfirmationEventArgs, Task&gt;)</c> instead.
+/// It is kept only so existing source that names it still compiles.
+/// </remarks>
+[Obsolete("Hosts supply a handler through WorkflowAgentScope.WithConfirmationHandler instead; nothing in the library implements or raises this event.")]
 public interface IAgentConfirmationNotifier
 {
     /// <summary>

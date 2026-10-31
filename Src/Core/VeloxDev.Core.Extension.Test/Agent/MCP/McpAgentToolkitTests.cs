@@ -25,6 +25,53 @@ public class McpAgentToolkitTests
         return result?.ToString() ?? string.Empty;
     }
 
+    /// <summary>
+    /// Resources and prompts are reads, so they are on every scope — including the granted view a child gets —
+    /// while the tools that change connections still are not.
+    /// </summary>
+    [TestMethod]
+    public void ResourcesAndPrompts_AreReadingTools_OnEveryView()
+    {
+        var toolkit = new McpAgentToolkit(new McpScope(), []);
+        var names = toolkit.CreateTools().Select(t => t.Name).ToArray();
+
+        foreach (var name in new[]
+        {
+            McpAgentToolkit.ListResourcesName,
+            McpAgentToolkit.ReadResourceName,
+            McpAgentToolkit.ListPromptsName,
+            McpAgentToolkit.GetPromptName,
+        })
+        {
+            CollectionAssert.Contains(names, name);
+            CollectionAssert.Contains(McpAgentToolkit.ReadToolNames, name, $"'{name}' must be classified as a read");
+        }
+
+        Assert.IsFalse(McpAgentToolkit.ReadToolNames.Contains(McpAgentToolkit.LoadName),
+            "loading installs and launches software — it is not a read");
+    }
+
+    /// <summary>A read tool answers with an error envelope when the server is not connected, rather than throwing.</summary>
+    [TestMethod]
+    public void ResourceAndPromptReads_OnAnUnknownServer_ReturnAnErrorEnvelope()
+    {
+        var toolkit = new McpAgentToolkit(new McpScope(), []);
+
+        foreach (var (toolName, arguments) in new (string, (string, object?)[])[]
+        {
+            (McpAgentToolkit.ListResourcesName, [("serverName", "missing")]),
+            (McpAgentToolkit.ReadResourceName, [("serverName", "missing"), ("uri", "file:///x")]),
+            (McpAgentToolkit.ListPromptsName, [("serverName", "missing")]),
+            (McpAgentToolkit.GetPromptName, [("serverName", "missing"), ("promptName", "p")]),
+        })
+        {
+            var tool = toolkit.CreateTools().Single(t => t.Name == toolName);
+            var json = JObject.Parse(Invoke(tool, arguments));
+            Assert.AreEqual("error", json["status"]?.Value<string>(), toolName);
+            StringAssert.Contains(json["message"]!.Value<string>()!, "missing", toolName);
+        }
+    }
+
     [TestMethod]
     public async Task ListMcpServers_ReturnsTrackedStatus()
     {

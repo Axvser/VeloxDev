@@ -108,13 +108,15 @@ public sealed class FileSkillSource : ISkillSource
             }
 
             _skillDirs[name!] = directory;
+            var resources = EnumerateResources(directory);
             found.Add(new SkillDescriptor
             {
                 Name = name!,
                 Description = description!,
                 Source = SkillSourceKind.File,
                 Path = file,
-                ResourceCount = CountResources(directory),
+                ResourceCount = resources.Count,
+                ResourceNames = resources,
             });
         }
 
@@ -189,17 +191,25 @@ public sealed class FileSkillSource : ISkillSource
         }
     }
 
-    private static int CountResources(string skillDirectory)
+    private static IReadOnlyList<string> EnumerateResources(string skillDirectory)
     {
         try
         {
-            return Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories)
-                .Count(f => !string.Equals(Path.GetFileName(f), SkillFileName, StringComparison.OrdinalIgnoreCase)
-                            && ResourceExtensions.Contains(Path.GetExtension(f)));
+            return
+            [
+                .. Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories)
+                    .Where(f => !string.Equals(Path.GetFileName(f), SkillFileName, StringComparison.OrdinalIgnoreCase)
+                                && ResourceExtensions.Contains(Path.GetExtension(f)))
+                    // netstandard2.0 没有 Path.GetRelativePath；枚举结果都以 skillDirectory 为前缀。
+                    .Select(f => f.Substring(skillDirectory.Length)
+                        .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                        .Replace(Path.DirectorySeparatorChar, '/'))
+                    .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            ];
         }
         catch (Exception)
         {
-            return 0;
+            return [];
         }
     }
 

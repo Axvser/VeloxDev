@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using VeloxDev.AI;
 
 namespace VeloxDev.AI.Skills;
@@ -35,6 +36,12 @@ public sealed class SkillDescriptor
     /// These are deliberately not read during discovery.
     /// </summary>
     public int ResourceCount { get; set; }
+
+    /// <summary>
+    /// Paths of the bundled resources, relative to the skill directory and using <c>/</c> separators —
+    /// exactly the form <see cref="ISkillSource.ReadResource"/> accepts. Enumerated, never opened.
+    /// </summary>
+    public IReadOnlyList<string> ResourceNames { get; set; } = [];
 
     /// <summary>
     /// Why this skill is unusable, or <c>null</c> when it is fine. A malformed skill is reported rather

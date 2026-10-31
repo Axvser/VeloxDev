@@ -60,6 +60,7 @@
 | `Post` 在当前已是 UI 上下文时**同步执行** | `Post` | 避免一次多余的排队 |
 | `QueueRebuild` 合并 | `QueueRebuild` | 一串 `Changed` 事件只花一次重建 |
 | `McpStatusText` 数**互斥的状态** | `McpStatusText` | 注释：数「有错误消息」会让一个服务器同时进两个桶 |
+| `SubAgents` 直接放子系统的行对象，不另做投影 | `RebuildSubAgents` | 子代理行本来就是可绑定的 `SubAgentStatusViewModel`；再造一层投影只会让面板与 `SubAgentTreeViewModel` 各显示一份会分叉的状态。面板只镜像 `SubAgents.Children` 并订阅 `SubAgentScope.Changed`，范围随 `_scope.SubAgents` 的替换重新挂钩 |
 
 **`AllMembers()` 的顺序是契约**：SystemTools → SkillTools → 每个 MCP 服务器（行 + 它的工具）→ Skills。`RecordCall` 按**名字**（`OrdinalIgnoreCase`）在**这个序列里取第一个匹配**。所以两个不同来源的同名工具，计数永远落在先出现的那个上。
 

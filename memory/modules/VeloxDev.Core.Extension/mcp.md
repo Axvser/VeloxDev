@@ -132,7 +132,9 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
   实测一行 `VeloxJsonValue.From(config.Options)` 就能把 `Bearer …` 与 client secret 原样序列化进提示词 ——
   守卫是 `McpParameterSwitchTests.ListMcpServers_NeverCarriesTheHostsOptionBag`（按**原始 JSON 串**断言，
   所以对将来新加的字段也成立）。
-- **MCP 管理工具的只读分类是缺的**：`ListMcpServers` / `LoadMcpServers` / `UnloadMcpServer` / `DescribeMcpServer` 都不在 `WorkflowAgentToolkit.BuildQueryToolNames` 的字面量集合里，而 `McpAgentToolkit.ToolNames` **没有**像 `SkillAgentToolkit.ToolNames` 与 `SubAgentAgentToolkit.ToolNames` 那样被自动并入。后果：它们被算作**写调用**，计入 `MaxWriteToolCalls`，并且在 `AutoMarkDirty = true` 时**会把工作流标脏**（`WorkflowAgentToolkit.AccountAsync` 的 `MarkDirty` 分支）。demo 之所以看不出问题，是因为它设了 `WithAutoMarkDirty(false)`。
+- **只读分类按 `McpAgentToolkit.ReadToolNames` 走**：`ListMcpServers` / `DescribeMcpServer` / `ListMcpResources` / `ReadMcpResource` / `ListMcpPrompts` / `GetMcpPrompt` 在这一组里，`WorkflowAgentToolkit.BuildQueryToolNames` 会并入它。因此它们花的是只读预算、不花写入预算、也不在 `AutoMarkDirty = true` 时标脏；`Load` / `Unload` / `Add` / `SetArguments` 仍然是写调用。新增读工具必须加进 `ReadToolNames`，否则会被当成变更。
+- **resources / prompts 也有工具面**（2026-10-31）：`ListMcpResources` / `ReadMcpResource` / `ListMcpPrompts` / `GetMcpPrompt` 调 `McpScope.ListResourcesAsync` / `ReadResourceAsync` / `ListPromptsAsync` / `GetPromptAsync`，后者经 `HostedMcpServer.WithClientAsync` 在**重建门**内读当前 client。资源正文按 `maxChars` 截断；二进制内容只报 `byteLength`，不把 base64 塞进上下文。提示词用 `GetPromptResult.ToChatMessages()` 展开，`maxChars` 是**整段消息文本**的预算。四个读工具在授权视图里也注册（它们是读），写工具不在。
+**sampling 仍不支持**：服务器不能反过来借宿主的模型。这是能力边界，不是遗漏 —— 它需要宿主提供采样回调，而不是一组工具。
 
 **`McpScope.InstanceId`** 是每 scope 一个 `Guid`，给 provider 做 state key。注释里有一条刻意设计：同一个 scope 造两个 provider 会**在 agent 构造时响亮地失败**，这是想要的；如果改成按 provider 生成 id，两个 provider 就会都通过，然后在同一轮里**把每个 MCP 工具和 inventory 块各塞两遍**。
 
@@ -160,8 +162,9 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
    「每个非视图 scope 都注册」的进 `ToolNames`；`AddMcpServer` / `SetMcpServerArguments` 也永远注册，名字同样放进 `ToolNames`。把名字写死在 `CreateTools` 里而不进 `ToolNames` 会让
    `McpAgentContextProviderTests.BuildContext_ContributesTheManagementToolsAndTheirDescription` 当场红（它会红是对的：
    那条断言就是 `ToolNames` 的定义）。
-3. **如果它该算只读**：把名字加进 `WorkflowAgentToolkit.BuildQueryToolNames` —— 注意这里**没有** `McpAgentToolkit.ToolNames` 的自动并入（技能与子代理工具才是自动的）。目前这些 MCP 管理工具**都不在**那个只读集合里。
+3. **如果它该算只读**：把名字加进 `McpAgentToolkit.ReadToolNames`。`WorkflowAgentToolkit.BuildQueryToolNames` 会自动并入这一组（**不是**并入 `ToolNames` —— 那里面还有会装软件、拆连接的写工具）。漏了这一步就会被计入写入预算并标脏。
 4. 若它的行为受权限模式影响，同步改 `BuildPromptContext()` 的措辞 —— 现在这段文本刻意与模式无关，拒绝文案由权限层给出。
+5. 读资源的工具要自己封顶：结果里放 `truncated` / `originalLength`，二进制只报大小 —— 全局的 `MaxToolResultChars` 是最后一道闸，它把整个结果换成一句提示，模型就此什么都拿不到。
 
 **加一个运行模式**
 

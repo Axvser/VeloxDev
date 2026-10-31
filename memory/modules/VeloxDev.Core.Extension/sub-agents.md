@@ -147,7 +147,9 @@
 
 ### 4.2 孩子握着重置工具的代价：重置是**用户的**闸，不是孩子的免费续命
 
-`ResetToolCallLimit` 的语义没变（`WorkflowAgentToolkit.CheckInvocation` 里，禁用 → 逃生舱 → 权限模式拒绝 → 根锅 → 本层额度 → 读/写分档）：没有耗尽时回 `ok` + 一句「当前没有触顶的限制」；没有确认处理器时 `denied`；用户同意时 `ok` + `ResetChain()`。
+`ResetToolCallLimit` 的语义没变（`WorkflowAgentToolkit.CheckInvocation` 里，逃生舱 → 禁用 → 权限模式拒绝 → 根锅 → 本层额度 → 读/写分档 → token 上限）：没有耗尽时回 `ok` + 一句「当前没有触顶的限制」；没有确认处理器时 `denied`；用户同意时 `ok` + `ResetChain()`。
+
+**它在任何授权清单里都在**：`CreateTools` 对它有豁免，所以 `TrySpawn` 在算完 `grantedTools` 后会把它补进去（包括空白名单的孩子）。于是「空白名单 = 零个工具」的准确说法是「只剩预算的逃生舱」—— 报告与实际因此仍然一致。
 
 代价是两条，**都不是「开销无界」**：
 
@@ -206,7 +208,7 @@
 | 五个名字并入只读集合（与技能工具同一段） | `BuildQueryToolNames` |
 | 自定义工具分组（可继承的前提） | `_customToolGroups`、`AppendCustomToolPrompt`、`GrantCustomToolsTo` |
 
-**`CheckInvocation` 的顺序是有讲究的**：禁用 → 逃生舱（`ResetToolCallLimit` 无条件放行）→ 权限模式拒绝 → **根锅** → 本层额度 → 读/写分档。根锅排在**本层之前**，因为它更硬、且是模型唯一绕不过去的墙；报错时必须指名对的那堵墙，否则模型会围绕错误的限制做推理。根 scope 上这条**跳过**（`CheckInvocation` 里跳过根锅的那段），不然同一个计数器会对同一个上限报两次。禁用判定排在最前，所以「被关掉的工具」永远赢 —— 这是宿主能对孩子单独关掉一把工具的唯一入口（`TrySpawn` 末尾那个循环），而**它不对任何一类工具做无条件关停**（没有 `NoChildMayHold`，§四）。
+**`CheckInvocation` 的顺序是有讲究的**：逃生舱（`ResetToolCallLimit` 无条件放行）→ 禁用 → 权限模式拒绝 → **根锅** → 本层额度 → 读/写分档 → token 上限。根锅排在**本层之前**，因为它更硬、且是模型唯一绕不过去的墙；报错时必须指名对的那堵墙，否则模型会围绕错误的限制做推理。根 scope 上这条**跳过**（`CheckInvocation` 里跳过根锅的那段），不然同一个计数器会对同一个上限报两次。禁用判定排在最前，所以「被关掉的工具」永远赢 —— 这是宿主能对孩子单独关掉一把工具的唯一入口（`TrySpawn` 末尾那个循环），而**它不对任何一类工具做无条件关停**（没有 `NoChildMayHold`，§四）。
 
 **五个工具全部计入只读**（`BuildQueryToolNames` 把 `SubAgentAgentToolkit.ToolNames` 并进 `QueryToolNames`）：spawn/wait/cancel 既不改图也不该标脏。`ASpawnIsAQuery_AndSoIsNotChargedToTheMutationBudget` 连「读预算花光时 spawn 会被拒」一起钉住。
 
@@ -325,6 +327,8 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 ## 九、扩展点与捷径
 
 **加第六个管理工具**：`SubAgentAgentToolkit` 加方法 + `CreateAllTools` 里 `AIFunctionFactory.Create(Xxx, ToolNames[n])` + 把名字加进 `ToolNames`（`BuildQueryToolNames` 会自动跟上，只读分类与不标脏都靠这一条）+ 在 `BuildPromptContext` 里按需说一句（它按 `CreateTools()` 的实际结果分叉，被宿主关掉的工具不会被广告）。
+
+**让每次 spawn 选模型**：`SubAgentScope.ForClientFactory(Func<string?, IChatClient>, instructions)`，或者用「两个参数」的构造函数 `SubAgentScope(Func<WorkflowAgentScope, string?, AIAgent>)`；`SpawnSubAgent` 的 `model` 参数原样交给工厂，`null` 表示宿主默认。库不校验模型名 —— 工厂抛出的异常会落到孩子的 `Failed` 行上，这正是「宿主没注册这个名字」该有的反馈。一个参数的构造函数继续存在，等价于忽略模型。
 
 **加第四条能力轴**：先问「它是不是一个工具名能表达的」。是 ⇒ 并入 `available` / `everyName` 那两份名单就够了 —— **但四个来源一个都不能漏**（§3.1 的表：漏一个，这条轴就在「省略时留着、点名时被判不存在」之间二选一）。否 ⇒ 照 §3.2：给父的那个源加一个 `CreateNarrowed` / `CreateGrantedView`，并把「本轴省略参数时的默认值」定成**继承父的全量** —— 三条轴现在共用这一个默认（§3.2），没有「刻意不同」的表。
 

@@ -146,4 +146,28 @@ public class SkillAgentToolkitTests
         var escaped = JObject.Parse(Invoke(read, ("skillName", "disk-skill"), ("relativePath", "../secret.md")));
         Assert.AreEqual("error", escaped["status"]?.Value<string>(), "a traversal attempt must not read the file");
     }
+
+    /// <summary>
+    /// The path a resource is read by has to be discoverable. Before resource names were reported, the model
+    /// could only guess a path from the body's prose, and a miss was indistinguishable from a missing file.
+    /// </summary>
+    [TestMethod]
+    public void ListSkills_ReportsTheResourcePaths_ReadSkillResourceAccepts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "veloxdev-skill-tests", Guid.NewGuid().ToString("N"));
+        var skillDir = Path.Combine(root, "disk-skill");
+        Directory.CreateDirectory(Path.Combine(skillDir, "references"));
+        File.WriteAllText(Path.Combine(skillDir, "SKILL.md"),
+            "---\nname: disk-skill\ndescription: A disk skill.\n---\n\n## Body");
+        File.WriteAllText(Path.Combine(skillDir, "references", "model.md"), "the model");
+
+        var scope = new SkillScope().WithSource(new FileSkillSource(root));
+        scope.Refresh();
+        var list = Toolkit(scope).CreateTools().Single(t => t.Name == "ListSkills");
+
+        var json = JObject.Parse(Invoke(list));
+        var names = (json["skills"] as JArray)![0]["resourceNames"]!.Select(v => v.Value<string>()).ToArray();
+
+        CollectionAssert.AreEquivalent(new[] { "references/model.md" }, names);
+    }
 }

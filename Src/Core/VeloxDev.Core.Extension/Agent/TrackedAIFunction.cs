@@ -96,9 +96,18 @@ internal sealed class TrackedAIFunction(
         if (_pipeline is not null)
             await _pipeline.PublishAsync(new AgentToolCallStarted(Name), cancellationToken);
 
+        // One graph has one writer at a time, whichever scope the call came from. The gate belongs to the
+        // tree (not to this wrapper), so two agents over the same tree cannot interleave their edits.
+        var mutationGate = _category is AgentActionCategory.Edit or AgentActionCategory.Execute
+            ? _tools.MutationGate?.Invoke()
+            : null;
+        if (mutationGate is not null)
+            await mutationGate.WaitAsync(cancellationToken);
+
         try
         {
             var result = await base.InvokeCoreAsync(arguments, cancellationToken);
+            result = CapResult(result);
             elapsed.Stop();
             await ReportAsync(result?.ToString() ?? string.Empty, AgentToolOutcome.Succeeded, elapsed.Elapsed, cancellationToken);
             return result;
@@ -112,6 +121,30 @@ internal sealed class TrackedAIFunction(
             await ReportAsync(message, AgentToolOutcome.Failed, elapsed.Elapsed, cancellationToken);
             return Error(message);
         }
+        finally
+        {
+            mutationGate?.Release();
+        }
+    }
+
+    /// <summary>
+    /// Replaces an over-large text result with a short envelope. The model gets a usable answer ("too big,
+    /// narrow the query") instead of a context-sized payload; the original length tells it how far to narrow.
+    /// </summary>
+    private object? CapResult(object? result)
+    {
+        var limit = _tools.MaxResultChars?.Invoke();
+        if (limit is not int cap || cap <= 0) return result;
+        if (result is not string text || text.Length <= cap) return result;
+
+        return new VeloxJsonObject
+        {
+            ["status"] = "truncated",
+            ["message"] = $"The tool result was {text.Length} characters, over the {cap}-character limit. "
+                        + "Narrow the query (filters, smaller ranges, or a summary tool) and retry.",
+            ["originalLength"] = text.Length,
+            ["limit"] = cap,
+        }.ToJson();
     }
 
     /// <summary>Publishes what this invocation produced, when the owner composed a chain.</summary>

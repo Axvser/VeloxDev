@@ -89,7 +89,9 @@ scope.WithMcps(mcp);
 
 That contributes the management tools, the prompt text describing them, the server inventory, and the tools of every connected server — each turn, from the scope's current state.
 
-Management tools — six, all registered on a normal scope: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `DescribeMcpServer`, `AddMcpServer`, `SetMcpServerArguments`. `ListMcpServers` and `DescribeMcpServer` are `Read`; the other four are `Curate`. A granted view (the MCP surface handed to a spawned child) registers only the two read tools.
+Management tools — ten, all registered on a normal scope: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `DescribeMcpServer`, `AddMcpServer`, `SetMcpServerArguments`, plus the four resource/prompt reads `ListMcpResources`, `ReadMcpResource`, `ListMcpPrompts`, `GetMcpPrompt`. Six are `Read` (`McpAgentToolkit.ReadToolNames`); the other four are `Curate`. A granted view (the MCP surface handed to a spawned child) registers only the reading tools.
+
+⚙ **Resources and prompts are part of the surface, not an afterthought.** A server that exposes only resources has no tools to export; without `ListMcpResources` / `ReadMcpResource` it would be invisible to the model. `ReadMcpResource` returns text (binary content is reported by size, not pasted) and caps each body by `maxChars`; `GetMcpPrompt` expands a template with a JSON argument object and caps the total message text. Both call the protocol through `HostedMcpServer`, under the same per-server rebuild gate as a tool call.
 
 ⚙ **A provider contributes the management tools.** Registering them again with `WithTools` puts every one of them in the prompt twice, because the framework unions tool lists without deduplicating by name.
 
@@ -105,9 +107,9 @@ Management tools — six, all registered on a normal scope: `ListMcpServers`, `L
 
 ⚙ A connected server's own tools are third-party code and are wrapped as `AgentActionCategory.Execute`, with a source of `mcp:<server>`. A host rule such as `WithPermissionRule(PermissionDecision.Ask, "source:mcp:*")` gates them.
 
-⚙ The management tools are `Curate` — except `ListMcpServers` / `DescribeMcpServer`, which are `Read`, with a source of `mcp:management`.
+⚙ The management tools are `Curate` — except the six in `McpAgentToolkit.ReadToolNames` (`ListMcpServers`, `DescribeMcpServer`, and the resource/prompt reads), which are `Read`, with a source of `mcp:management`.
 
-⚙ **The session's permission mode decides, and on a normal scope all six management tools are always registered.** `LoadMcpServers`, `UnloadMcpServer`, `AddMcpServer` and `SetMcpServerArguments` are `Curate`: `Auto` asks for them, `Manual` and `AutoEdit` ask too, `Plan` refuses them, and `Bypass` runs them unless a `Deny` rule matches. A refusal names the mode or the rule. A **standalone** `McpScope` has no wrapper around its tools. Only `AddMcpServer` and `SetMcpServerArguments` ask for themselves, through `WithConfirmationHandler`; with no handler an unanswerable prompt denies. `LoadMcpServers` and `UnloadMcpServer` have no gate of their own, so a standalone host gates those two itself.
+⚙ **The session's permission mode decides, and on a normal scope all ten management tools are always registered.** `LoadMcpServers`, `UnloadMcpServer`, `AddMcpServer` and `SetMcpServerArguments` are `Curate`: `Auto` asks for them, `Manual` and `AutoEdit` ask too, `Plan` refuses them, and `Bypass` runs them unless a `Deny` rule matches. A refusal names the mode or the rule. A **standalone** `McpScope` has no wrapper around its tools. Only `AddMcpServer` and `SetMcpServerArguments` ask for themselves, through `WithConfirmationHandler`; with no handler an unanswerable prompt denies. `LoadMcpServers` and `UnloadMcpServer` have no gate of their own, so a standalone host gates those two itself.
 
 ## Adding and reconfiguring at runtime
 

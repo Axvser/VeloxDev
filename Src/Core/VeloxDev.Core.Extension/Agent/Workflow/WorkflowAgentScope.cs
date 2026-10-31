@@ -20,10 +20,36 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.AI.Workflow;
 
 /// <summary>Configures and runs an Agent over one workflow tree: tools, capabilities, prompts, skills, MCP servers and sub-agents.</summary>
-public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNotifier
+public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNotifier, IAsyncDisposable
 {
     /// <summary>The workflow tree this scope operates on.</summary>
-    public IWorkflowTreeViewModel Tree { get; } = tree;
+    public IWorkflowTreeViewModel Tree { get; private set; } = tree;
+
+    /// <summary>
+    /// The cap on a single tool result's text, in characters. A result over it is replaced by a short
+    /// truncation envelope. Defaults to 64 KiB; <c>0</c> disables the cap. Set with
+    /// <see cref="WithMaxToolResultChars"/>.
+    /// </summary>
+    public int MaxToolResultChars { get; private set; } = 64 * 1024;
+
+    /// <summary>
+    /// The session's token cap, or <c>null</c> for no cap. Once the reported spend reaches it, tool calls
+    /// are refused (the model can still answer). Set with <see cref="WithMaxTokens"/>.
+    /// </summary>
+    public int? MaxTokens { get; private set; }
+
+    private long _inputTokens;
+    private long _outputTokens;
+    private long _totalTokens;
+
+    /// <summary>Input tokens reported by the model provider for this scope's runs.</summary>
+    public long InputTokens => Interlocked.Read(ref _inputTokens);
+
+    /// <summary>Output tokens reported by the model provider for this scope's runs.</summary>
+    public long OutputTokens => Interlocked.Read(ref _outputTokens);
+
+    /// <summary>Total tokens reported by the model provider for this scope's runs.</summary>
+    public long TotalTokens => Interlocked.Read(ref _totalTokens);
 
     /// <summary>The cap on total tool calls, or <c>null</c> for no cap. Set by <see cref="WithMaxToolCalls"/>.</summary>
     public int? MaxToolCalls { get; private set; }
@@ -31,7 +57,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// <summary>Whether mutating tool calls automatically mark the tree dirty. Set by <see cref="WithAutoMarkDirty"/>.</summary>
     public bool AutoMarkDirty { get; private set; }
 
-    /// <summary>Raised after every Agent tool call.</summary>
+    /// <summary>
+    /// Raised after a successful Agent tool call. Refused and failed calls are published on
+    /// <see cref="Pipeline"/> as <c>AgentToolCallCompleted</c>, which carries the outcome.
+    /// </summary>
     public event EventHandler<AgentToolCallEventArgs>? ToolCalled;
 
     private const string SystemName = "Workflow";
@@ -162,6 +191,89 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         MaxWriteToolCalls = maxCalls;
         BumpVersion();
         return this;
+    }
+
+    /// <summary>
+    /// Caps the text of any single tool result. A result over the cap is replaced by a short truncation
+    /// envelope rather than sent to the model whole; <c>0</c> disables the cap.
+    /// </summary>
+    public WorkflowAgentScope WithMaxToolResultChars(int maxChars)
+    {
+        MaxToolResultChars = Math.Max(0, maxChars);
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// Caps the total tokens this scope's runs may spend. Once the provider-reported total reaches it, tool
+    /// calls are refused until <see cref="ResetTokenUsage"/> (or a new scope) resets the ledger; the model can
+    /// still produce a final answer without tools.
+    /// </summary>
+    public WorkflowAgentScope WithMaxTokens(int maxTokens)
+    {
+        MaxTokens = Math.Max(1, maxTokens);
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>Clears the reported token counters, so a later switch can spend the budget again.</summary>
+    public void ResetTokenUsage()
+    {
+        Interlocked.Exchange(ref _inputTokens, 0);
+        Interlocked.Exchange(ref _outputTokens, 0);
+        Interlocked.Exchange(ref _totalTokens, 0);
+    }
+
+    internal void AddUsage(UsageDetails usage)
+    {
+        if (usage is null) return;
+        Interlocked.Add(ref _inputTokens, usage.InputTokenCount ?? 0);
+        Interlocked.Add(ref _outputTokens, usage.OutputTokenCount ?? 0);
+        Interlocked.Add(ref _totalTokens, usage.TotalTokenCount
+            ?? ((usage.InputTokenCount ?? 0) + (usage.OutputTokenCount ?? 0)));
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IWorkflowTreeViewModel, SemaphoreSlim> TreeGates = new();
+
+    /// <summary>
+    /// One writer at a time per tree, shared by every scope over that tree (and by every subsystem the scope
+    /// composes). Queries do not take it; edits and executions do.
+    /// </summary>
+    internal SemaphoreSlim MutationGate => TreeGates.GetValue(Tree, static _ => new SemaphoreSlim(1, 1));
+
+    private Func<string, IWorkflowTreeViewModel>? _workflowLoader;
+
+    /// <summary>Raised after <see cref="LoadWorkflow"/> replaces the scope's tree.</summary>
+    public event EventHandler? TreeChanged;
+
+    /// <summary>
+    /// Supplies the loader <see cref="LoadWorkflow"/> uses. The host should also rebind its surface when
+    /// <see cref="TreeChanged"/> fires; the scope's tools follow the new tree immediately.
+    /// </summary>
+    public WorkflowAgentScope WithWorkflowLoader(Func<string, IWorkflowTreeViewModel> loader)
+    {
+        _workflowLoader = loader ?? throw new ArgumentNullException(nameof(loader));
+        return this;
+    }
+
+    /// <summary>
+    /// Replaces this scope's tree with a graph deserialized from <paramref name="json"/>. The loader is the
+    /// host's (see <see cref="WithWorkflowLoader"/>), falling back to <see cref="TreeDefaultViewModel"/>.
+    /// The old tree is left untouched; the host owns closing it.
+    /// </summary>
+    public IWorkflowTreeViewModel LoadWorkflow(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) throw new ArgumentException("A graph document is required.", nameof(json));
+
+        var restored = _workflowLoader is { } loader
+            ? loader(json)
+            : VeloxDev.Serialization.ViewModelSerializer.Deserialize<TreeDefaultViewModel>(json);
+        if (restored is null) throw new InvalidOperationException("The workflow loader returned null.");
+
+        Tree = restored;
+        BumpVersion();
+        TreeChanged?.Invoke(this, EventArgs.Empty);
+        return restored;
     }
 
     /// <summary>
@@ -1299,11 +1411,11 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine();
         result.AppendLine("One-line summaries only. The full property/command tables are intentionally NOT preloaded to keep the prompt small and accurate.");
         result.AppendLine();
-        result.AppendLine("**MANDATE:** the FIRST time you operate on a type this session, call **GetComponentContext** with its full type name (e.g. `GetComponentContext(\"Demo.ViewModels.HttpNodeViewModel\")`) to load its complete property/command table. Never guess a type's shape from its name or from its one-line summary.");
+        result.AppendLine("**MANDATE:** when a type's shape matters — you are about to set a property or invoke a command — and its full property/command table is not already in your context, call **GetComponentContext** with its full type name (e.g. `GetComponentContext(\"Demo.ViewModels.HttpNodeViewModel\")`) before writing. Never guess a type's shape from its name or from its one-line summary.");
         result.AppendLine();
         AppendPreloadedComponentSummaries(result);
         result.AppendLine();
-        result.AppendLine("> Before operating on any type: `GetComponentContext(\"<Full.Type.Name>\")` first.");
+        result.AppendLine("> Before writing a property or invoking a command whose contract is not already in your context: `GetComponentContext(\"<Full.Type.Name>\")` first.");
         result.AppendLine();
 
         // ── Custom Tools ──
@@ -1621,6 +1733,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             pipeline.Use(new TextPipeline(() => _transcript, () => UIContext));
             pipeline.Use(SharedTools);
             pipeline.Use(CreateToolkit().CreateAccountingStage());
+            pipeline.Use(new TokenUsageStage(this));
 
             _pipeline = pipeline;
             return _pipeline;
@@ -1990,15 +2103,19 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     {
         var (toolCalls, readCalls, writeCalls) = CreateToolkit().CallUsage;
         return Math.Max(
-            BandFor(toolCalls, MaxToolCalls),
-            Math.Max(BandFor(readCalls, MaxReadToolCalls), BandFor(writeCalls, MaxWriteToolCalls)));
+            Math.Max(BandFor(toolCalls, MaxToolCalls),
+                Math.Max(BandFor(readCalls, MaxReadToolCalls), BandFor(writeCalls, MaxWriteToolCalls))),
+            BandFor(TotalTokens, MaxTokens));
     }
 
     /// <summary>0–5 for one budget: 0 with headroom, 4 past 80% of the cap, 5 once the cap is spent.</summary>
-    private static int BandFor(int used, int? cap)
+    private static int BandFor(int used, int? cap) => BandFor((long)used, cap);
+
+    /// <summary>0–5 for a long-valued budget.</summary>
+    private static int BandFor(long used, int? cap)
     {
         if (!cap.HasValue || cap.Value <= 0) return 0;
-        var percent = (int)((long)used * 100 / cap.Value);
+        var percent = (int)Math.Min(100L, used * 100 / cap.Value);
         return Math.Min(5, percent / 20);
     }
 
@@ -2142,6 +2259,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         AppendBudgetLine(sb, chinese, chinese ? "工具调用" : "Tool calls", toolCalls, MaxToolCalls);
         AppendBudgetLine(sb, chinese, chinese ? "只读（查询）调用" : "Read-only (query) calls", readCalls, MaxReadToolCalls);
         AppendBudgetLine(sb, chinese, chinese ? "变更调用" : "Mutating calls", writeCalls, MaxWriteToolCalls);
+        AppendBudgetLine(sb, chinese, chinese ? "Tokens" : "Tokens", TotalTokens, MaxTokens);
         sb.AppendLine();
     }
 
@@ -2149,7 +2267,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// One budget line. The usage figure appears only once the band is non-zero — below that the model has
     /// nothing to act on, and leaving it out is what keeps an idle turn from rendering different text.
     /// </summary>
-    private static void AppendBudgetLine(StringBuilder sb, bool chinese, string label, int used, int? cap)
+    private static void AppendBudgetLine(StringBuilder sb, bool chinese, string label, long used, int? cap)
     {
         if (!cap.HasValue)
         {
@@ -2157,7 +2275,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             return;
         }
 
-        var percent = cap.Value > 0 ? (int)((long)used * 100 / cap.Value) : 0;
+        var percent = cap.Value > 0 ? (int)Math.Min(100L, used * 100 / cap.Value) : 0;
         if (percent < 80)
         {
             sb.AppendLine(chinese ? $"- {label}：上限 {cap.Value}" : $"- {label}: cap {cap.Value}");
@@ -2342,5 +2460,39 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             foreach (var t in kvp.Value)
                 result.AppendLine(AgentContextCollector.GetDataContext(t, kvp.Key));
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Releases what this scope owns: running sub-agents are cancelled and awaited, and every MCP connection
+    /// is torn down (for a locally launched server, its process ends). Safe to call more than once; the
+    /// skill scope holds no external resource.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (SubAgents is { } subAgents)
+            await subAgents.DisposeAsync().ConfigureAwait(false);
+
+        if (Mcp is { } mcp)
+            await mcp.DisposeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Accumulates provider-reported token usage from the run's pipeline events.</summary>
+    private sealed class TokenUsageStage(WorkflowAgentScope owner) : IAgentPipelineStage
+    {
+        public ValueTask OnEventAsync(
+            AgentEvent agentEvent, Func<AgentEvent, ValueTask> next, CancellationToken cancellationToken)
+        {
+            switch (agentEvent)
+            {
+                case AgentTurnCompleted { Usage: { } usage }:
+                    owner.AddUsage(usage);
+                    break;
+                case AgentUsageReported reported:
+                    owner.AddUsage(reported.Usage);
+                    break;
+            }
+
+            return next(agentEvent);
+        }
     }
 }

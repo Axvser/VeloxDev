@@ -14,6 +14,8 @@
 
 **事件汇合点只有两个**：`AgentPipelineAgent`（run 级：turn / 文本 / 推理）与 `TrackedAIFunction`（工具级）。宿主直接订阅 pipeline 的 `StageFailed`（`AgentPipeline.StageFailed`）就能看到所有被隔离掉的异常。
 
+**token 用量有两条来路，都要接**：非流式回合的 `AgentTurnCompleted.Usage`（`response.Usage`），以及流式回合里单独到达的 `UsageContent` → `AgentUsageReported`。`WorkflowAgentScope.TokenUsageStage` 同时收这两条；只接前一条，流式的回合就不花钱。
+
 ---
 
 ## 二、为什么「阶段抛异常不能让 run 失败」是硬约束
@@ -53,7 +55,7 @@
 
 **`AgentLog` 只有一个写者：那条投影。** 曾经 `AppendAgentLog` 也直接往它追加一行，而重渲会把整个 log 对齐到转录 —— 转录里没有那行，于是**追加的会被下一次重渲抹掉**。现在那条路改走转录：`TreeViewModel.AppendAgentError(message)` → `AgentTranscript.AddError`，两条渲染路径各自加自己的前缀（行内 `[Error] …`、markdown `**错误：**`），所以**传裸消息**。于是同一条错误在七家都出现（原来只有 MAUI 的 ListBox 有，且会消失）。`AppendAgentLog` 因此不再碰 `AgentLog`，只喂 `AgentMessages` —— 它现在没有生产调用者，但 `AgentMessages` 是**有意留着的第三种形状**（按角色渲染的宿主可以绑它，见 `Src/.../Test/Examples/AgentTranscriptTests.cs` 的类注释），所以别顺手删。唯一的生产调用者是 MAUI 的发送失败提示，已改调 `AppendAgentError`。
 
-**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`、`ToPlainTextLines()`，以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs` 的 `ToMarkdown` / `ToPlainTextLines` 调用点。`ToMarkdown` 会把**连续的**工具调用攒成一个块，理由同样是为了让每个 markdown 宿主不必自己写渲染器。
+**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`、`ToPlainTextLines()`，以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs` 的 `ToMarkdown` / `ToPlainTextLines` 调用点。`ToJson()` / `Restore()` 持久化的也只是这份**显示记录**（角色 / 文本 / 时间戳 / 工具名 / 详情 / 结局），恢复它不会恢复模型的记忆 —— 要续对话仍需持久化 `AgentSession`。`ToMarkdown` 会把**连续的**工具调用攒成一个块，理由同样是为了让每个 markdown 宿主不必自己写渲染器。
 
 ### 推理的渲染形状（`ToMarkdown` 的文档注释 + `AgentMarkdownOptions`）
 

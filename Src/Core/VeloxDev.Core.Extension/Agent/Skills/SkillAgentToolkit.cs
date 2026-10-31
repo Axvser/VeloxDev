@@ -72,7 +72,7 @@ public sealed class SkillAgentToolkit(SkillScope scope)
             tool is AIFunction function ? (AITool)new TrackedAIFunction(function, tools, pipeline) : tool)];
     }
 
-    [Description("Lists every discovered skill with its source (Embedded/File), state (NotStarted/Loading/Ready/Error), whether it is currently enabled, its bundled resource count and any error. Also returns aggregate counts. Pure query — call it first to see what is available and what is already switched on. Embedded skills are injected in full when enabled; file skills are advertised only, so use load_skill to read one.")]
+    [Description("Lists every discovered skill with its source (Embedded/File), state (NotStarted/Loading/Ready/Error), whether it is currently enabled, its bundled resources (count and the exact paths read_skill_resource accepts), and any error. Also returns aggregate counts. Pure query — call it first to see what is available and what is already switched on. Embedded skills are injected in full when enabled; file skills are advertised only, so use load_skill to read one.")]
     private string ListSkills()
     {
         var arr = new VeloxJsonArray();
@@ -87,6 +87,7 @@ public sealed class SkillAgentToolkit(SkillScope scope)
                 ["stateText"] = skill.StateText,
                 ["enabled"] = skill.IsEnabled,
                 ["resourceCount"] = skill.ResourceCount,
+                ["resourceNames"] = VeloxJsonValue.From(skill.ResourceNames),
                 ["error"] = skill.Error,
             });
         }
@@ -123,6 +124,7 @@ public sealed class SkillAgentToolkit(SkillScope scope)
             ["skill"] = skill.Name,
             ["source"] = skill.Source.ToString(),
             ["resourceCount"] = skill.ResourceCount,
+            ["resourceNames"] = VeloxJsonValue.From(skill.ResourceNames),
             ["content"] = body,
         }.ToJson();
     }
@@ -144,7 +146,7 @@ public sealed class SkillAgentToolkit(SkillScope scope)
         }.ToJson();
     }
 
-    [Description("Reads a resource bundled with a skill — a reference document, schema or data file shipped beside the skill. Pass the skill name and the resource path as the skill lists it (e.g. \"references/model.md\"). Only meaningful for file skills; embedded skills ship no per-skill resources.")]
+    [Description("Reads a resource bundled with a skill — a reference document, schema or data file shipped beside the skill. Pass the skill name and one of the paths its `resourceNames` reports (e.g. \"references/model.md\"). Only meaningful for file skills; embedded skills ship no per-skill resources.")]
     private string ReadSkillResource(
         [Description("Skill name exactly as reported by ListSkills.")] string skillName,
         [Description("Resource path inside the skill, e.g. \"references/model.md\".")] string relativePath)

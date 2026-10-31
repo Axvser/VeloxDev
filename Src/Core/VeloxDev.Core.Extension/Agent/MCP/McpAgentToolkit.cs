@@ -1,4 +1,6 @@
 ﻿using Microsoft.Extensions.AI;
+using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using VeloxDev.AI.Pipelines;
 using VeloxDev.AI.Safety;
 using VeloxDev.Serialization;
@@ -37,11 +39,22 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// asking. The two that change what software runs on this machine used to appear only on a rung of a
     /// ladder of their own; what may run is now the session's permission mode and the host's rules, decided at
     /// call time and named in the refusal. A granted view (see <see cref="McpScope.CreateGrantedView"/>)
-    /// registers only <see cref="ListName"/> and <see cref="DescribeName"/> — the two that read.
+    /// registers only the reading tools — see <see cref="ReadToolNames"/>.
     /// </para>
     /// </summary>
     public static readonly string[] ToolNames =
-        [ListName, LoadName, UnloadName, DescribeName, AddToolName, SetArgumentsName];
+    [
+        ListName, LoadName, UnloadName, DescribeName, AddToolName, SetArgumentsName,
+        ListResourcesName, ReadResourceName, ListPromptsName, GetPromptName,
+    ];
+
+    /// <summary>
+    /// The management tools that only read: they ask a connected server a question and change nothing here or
+    /// on the server. A composing host classifies these as query calls, so they do not spend a mutation budget
+    /// and do not mark a workflow dirty.
+    /// </summary>
+    public static readonly string[] ReadToolNames =
+        [ListName, DescribeName, ListResourcesName, ReadResourceName, ListPromptsName, GetPromptName];
 
     /// <summary>Loads the host's pre-registered servers by name.</summary>
     public const string LoadName = "LoadMcpServers";
@@ -62,8 +75,7 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// <param name="toolName">The name the tool is registered under.</param>
     /// <returns>The category.</returns>
     internal static AgentActionCategory CategoryOf(string toolName)
-        => string.Equals(toolName, ListName, StringComparison.OrdinalIgnoreCase)
-           || string.Equals(toolName, DescribeName, StringComparison.OrdinalIgnoreCase)
+        => Array.Exists(ReadToolNames, name => string.Equals(name, toolName, StringComparison.OrdinalIgnoreCase))
             ? AgentActionCategory.Read
             : AgentActionCategory.Curate;
 
@@ -78,6 +90,18 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
 
     /// <summary>Read-only: exports a server's tool-capability prompt.</summary>
     public const string DescribeName = "DescribeMcpServer";
+
+    /// <summary>Read-only: lists a connected server's resources.</summary>
+    public const string ListResourcesName = "ListMcpResources";
+
+    /// <summary>Read-only: reads one of a connected server's resources by URI.</summary>
+    public const string ReadResourceName = "ReadMcpResource";
+
+    /// <summary>Read-only: lists a connected server's prompt templates.</summary>
+    public const string ListPromptsName = "ListMcpPrompts";
+
+    /// <summary>Read-only: expands one of a connected server's prompt templates.</summary>
+    public const string GetPromptName = "GetMcpPrompt";
 
     /// <summary>
     /// Name of the tool that lets the model add a server of its own. Always registered; whether a call runs
@@ -98,10 +122,10 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// reconfiguring a server is always offered; whether such a call runs is decided at call time by the
     /// session's permission mode and the host's rules.
     /// <para>
-    /// A granted view registers the two reading tools only. It is the MCP surface handed to a spawned
-    /// child, and a child runs while its parent's turn is suspended: loading installs and launches
-    /// software, and unloading tears down a connection the parent may still be using. Neither is a
-    /// decision a background child gets to make, so neither tool exists on its scope.
+    /// A granted view registers the reading tools only (<see cref="ReadToolNames"/>). It is the MCP
+    /// surface handed to a spawned child, and a child runs while its parent's turn is suspended: loading
+    /// installs and launches software, and unloading tears down a connection the parent may still be
+    /// using. Neither is a decision a background child gets to make, so neither tool exists on its scope.
     /// </para>
     /// </summary>
     public IList<AITool> CreateTools()
@@ -115,6 +139,14 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         }
 
         tools.Add(AIFunctionFactory.Create(DescribeServer, DescribeName));
+
+        // Resources and prompts are reads of a connected server, so every scope gets them — including a
+        // granted view. They are not server tools: a server that exposes only resources has no tools to
+        // expose, and without these it would be invisible to the model.
+        tools.Add(AIFunctionFactory.Create(ListResources, ListResourcesName));
+        tools.Add(AIFunctionFactory.Create(ReadResource, ReadResourceName));
+        tools.Add(AIFunctionFactory.Create(ListPrompts, ListPromptsName));
+        tools.Add(AIFunctionFactory.Create(GetPrompt, GetPromptName));
 
         // Both write tools are always registered, and what may run is decided at call time by the session's
         // permission mode and the host's rules. They used to appear only on a host-opened rung of a ladder of
@@ -156,6 +188,8 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         if (_scope.IsGrantedView)
             return "MCP server tools: ListMcpServers shows each server's state, tool count and how it was launched; "
                  + "DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools). "
+                 + "ListMcpResources/ReadMcpResource read a connected server's published resources, and "
+                 + "ListMcpPrompts/GetMcpPrompt discover and expand its prompt templates — use them instead of guessing what a server can offer. "
                  + "The servers listed are the whole of your MCP surface — loading, unloading, adding and reconfiguring "
                  + "servers are the host's decisions, and no tool to take any of them exists on this scope. "
                  + "If the user asks for one of those, tell them it is a setting on the host's side. "
@@ -164,6 +198,7 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
         var sb = new StringBuilder();
         sb.Append("MCP server management tools: ListMcpServers shows each server's alive/installing/connecting/error state, its tool count, and how it was launched (run mode, package, launch arguments, endpoint); ");
         sb.Append("DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools) so you can tell the user what it can do; ");
+        sb.Append("ListMcpResources/ReadMcpResource read a connected server's published resources, and ListMcpPrompts/GetMcpPrompt discover and expand its prompt templates — a server's prompts say how it recommends being used, and its resources may hold documents none of its tools expose; ");
         sb.Append("LoadMcpServers loads the servers the host pre-registered (installing and connecting when needed); ");
         sb.Append("UnloadMcpServer removes a server mid-session — its tools leave the next turn's tool set, and it can be loaded again. ");
         // Mode-independent, and deliberately so. What may run is decided at call time by the session's
@@ -425,6 +460,258 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             arr.Add(obj);
         }
         return new VeloxJsonObject { ["status"] = "ok", ["server"] = serverName, ["toolCount"] = arr.Count, ["tools"] = arr }.ToJson();
+    }
+
+    [Description("Lists a connected MCP server's resources — files, documents or data it publishes for reading. Returns each resource's URI, name, description and MIME type; call ReadMcpResource with a URI to read one. Pure query. An error means the server is unknown, not connected, switched off by the host, or exposes no resources.")]
+    private async Task<string> ListResources(
+        [Description("Server name, as ListMcpServers reports it.")] string serverName,
+        CancellationToken ct = default)
+    {
+        if (ServerReadRefusal(serverName) is { } refusal) return refusal;
+
+        try
+        {
+            var resources = await _scope.ListResourcesAsync(serverName, ct);
+            var arr = new VeloxJsonArray();
+            foreach (var resource in resources)
+            {
+                arr.Add(new VeloxJsonObject
+                {
+                    ["uri"] = resource.Uri,
+                    ["name"] = resource.Name,
+                    ["title"] = resource.Title,
+                    ["description"] = resource.Description,
+                    ["mimeType"] = resource.MimeType,
+                });
+            }
+
+            return new VeloxJsonObject
+            {
+                ["status"] = "ok",
+                ["server"] = serverName,
+                ["resourceCount"] = arr.Count,
+                ["resources"] = arr,
+            }.ToJson();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            return Error($"Could not list resources for '{serverName}': {ex.Message}");
+        }
+    }
+
+    [Description("Reads one resource from a connected MCP server by URI and returns its text. Binary resources are reported by type and size instead of being pasted into the conversation. maxChars caps each text body; a capped body says so and reports its original length. Pure query.")]
+    private async Task<string> ReadResource(
+        [Description("Server name, as ListMcpServers reports it.")] string serverName,
+        [Description("Resource URI exactly as ListMcpResources reports it, or a URI template the server documents.")] string uri,
+        [Description("Maximum characters of each text body to return. 0 = no cap.")] int maxChars = 65536,
+        CancellationToken ct = default)
+    {
+        if (ServerReadRefusal(serverName) is { } refusal) return refusal;
+        if (string.IsNullOrWhiteSpace(uri)) return Error("A resource URI is required.");
+
+        try
+        {
+            var result = await _scope.ReadResourceAsync(serverName, uri, ct);
+            var contents = new VeloxJsonArray();
+            var truncated = false;
+            foreach (var content in result.Contents)
+            {
+                var entry = new VeloxJsonObject
+                {
+                    ["uri"] = content.Uri,
+                    ["mimeType"] = content.MimeType,
+                };
+
+                if (content is TextResourceContents text)
+                {
+                    var body = text.Text ?? string.Empty;
+                    if (maxChars > 0 && body.Length > maxChars)
+                    {
+                        entry["text"] = body.Substring(0, maxChars);
+                        entry["originalLength"] = body.Length;
+                        entry["truncated"] = true;
+                        truncated = true;
+                    }
+                    else
+                    {
+                        entry["text"] = body;
+                    }
+                }
+                else if (content is BlobResourceContents blob)
+                {
+                    // 二进制内容对模型没有可读价值，只报类型与大小；把 base64 塞进上下文只会烧 token。
+                    entry["binary"] = true;
+                    entry["byteLength"] = blob.DecodedData.Length;
+                    entry["message"] = "Binary content is not pasted into the conversation; report its type and size to the user.";
+                }
+                else
+                {
+                    entry["kind"] = content.GetType().Name;
+                }
+
+                contents.Add(entry);
+            }
+
+            return new VeloxJsonObject
+            {
+                ["status"] = "ok",
+                ["server"] = serverName,
+                ["uri"] = uri,
+                ["contentCount"] = contents.Count,
+                ["truncated"] = truncated,
+                ["contents"] = contents,
+            }.ToJson();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            return Error($"Could not read '{uri}' from '{serverName}': {ex.Message}");
+        }
+    }
+
+    [Description("Lists a connected MCP server's prompt templates — reusable prompts the server defines, with their arguments. Call GetMcpPrompt with a name (and the arguments it asks for) to expand one. Pure query. Use this to discover what a server recommends asking it, rather than guessing from its tools.")]
+    private async Task<string> ListPrompts(
+        [Description("Server name, as ListMcpServers reports it.")] string serverName,
+        CancellationToken ct = default)
+    {
+        if (ServerReadRefusal(serverName) is { } refusal) return refusal;
+
+        try
+        {
+            var prompts = await _scope.ListPromptsAsync(serverName, ct);
+            var arr = new VeloxJsonArray();
+            foreach (var prompt in prompts)
+            {
+                var arguments = new VeloxJsonArray();
+                if (prompt.ProtocolPrompt?.Arguments is { } declared)
+                {
+                    foreach (var argument in declared)
+                    {
+                        arguments.Add(new VeloxJsonObject
+                        {
+                            ["name"] = argument.Name,
+                            ["title"] = argument.Title,
+                            ["description"] = argument.Description,
+                            ["required"] = argument.Required,
+                        });
+                    }
+                }
+
+                arr.Add(new VeloxJsonObject
+                {
+                    ["name"] = prompt.Name,
+                    ["title"] = prompt.Title,
+                    ["description"] = prompt.Description,
+                    ["arguments"] = arguments,
+                });
+            }
+
+            return new VeloxJsonObject
+            {
+                ["status"] = "ok",
+                ["server"] = serverName,
+                ["promptCount"] = arr.Count,
+                ["prompts"] = arr,
+            }.ToJson();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            return Error($"Could not list prompts for '{serverName}': {ex.Message}");
+        }
+    }
+
+    [Description("Expands one of a connected MCP server's prompt templates and returns the messages it produces, ready to use as the conversation's opening turns. Pass arguments as a JSON object, e.g. {\"topic\":\"routing\"}; use ListMcpPrompts to see which arguments a prompt declares. maxChars caps the total text returned. Pure query.")]
+    private async Task<string> GetPrompt(
+        [Description("Server name, as ListMcpServers reports it.")] string serverName,
+        [Description("Prompt name exactly as ListMcpPrompts reports it.")] string promptName,
+        [Description("Optional JSON object of arguments, e.g. {\"topic\":\"routing\"}. Omit when the prompt declares none.")] string? argumentsJson = null,
+        [Description("Maximum characters of returned text across all messages. 0 = no cap.")] int maxChars = 65536,
+        CancellationToken ct = default)
+    {
+        if (ServerReadRefusal(serverName) is { } refusal) return refusal;
+        if (string.IsNullOrWhiteSpace(promptName)) return Error("A prompt name is required.");
+
+        Dictionary<string, object?>? arguments = null;
+        if (!string.IsNullOrWhiteSpace(argumentsJson))
+        {
+            VeloxJsonValue parsed;
+            try
+            {
+                parsed = VeloxJsonValue.Parse(argumentsJson!);
+            }
+            catch (Exception ex)
+            {
+                return Error($"Invalid arguments JSON: {ex.Message}");
+            }
+
+            if (parsed is not VeloxJsonObject obj)
+                return Error("'argumentsJson' must be a JSON object, e.g. {\"topic\":\"routing\"}.");
+
+            arguments = new Dictionary<string, object?>(obj.Count, StringComparer.Ordinal);
+            foreach (var pair in obj) arguments[pair.Key] = pair.Value.Materialize();
+        }
+
+        try
+        {
+            var result = await _scope.GetPromptAsync(serverName, promptName, arguments, ct);
+
+            var messages = new VeloxJsonArray();
+            var used = 0;
+            var truncated = false;
+            foreach (var message in result.ToChatMessages())
+            {
+                var text = message.Text ?? string.Empty;
+                if (maxChars > 0)
+                {
+                    var remaining = maxChars - used;
+                    if (remaining <= 0) { truncated = true; break; }
+                    if (text.Length > remaining)
+                    {
+                        text = text.Substring(0, remaining);
+                        truncated = true;
+                    }
+                }
+
+                used += text.Length;
+                var entry = new VeloxJsonObject
+                {
+                    ["role"] = message.Role.ToString(),
+                    ["text"] = text,
+                };
+                if (text.Length == 0 && message.Contents.Count > 0)
+                    entry["note"] = "Non-text content omitted.";
+                messages.Add(entry);
+            }
+
+            return new VeloxJsonObject
+            {
+                ["status"] = "ok",
+                ["server"] = serverName,
+                ["prompt"] = promptName,
+                ["description"] = result.Description,
+                ["messageCount"] = messages.Count,
+                ["truncated"] = truncated,
+                ["messages"] = messages,
+            }.ToJson();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            return Error($"Could not expand prompt '{promptName}' from '{serverName}': {ex.Message}");
+        }
+    }
+
+    // 资源/提示词读取共用的前置拒绝。被宿主关掉的服务器仍然连着，但这一轮不向模型提供任何东西，
+    // 读它就等于宣传一个本轮并不存在的能力。
+    private string? ServerReadRefusal(string serverName)
+    {
+        if (string.IsNullOrWhiteSpace(serverName))
+            return Error("A server name is required.");
+        if (!_scope.IsServerEnabled(serverName))
+            return Error($"Server '{serverName}' is switched off by host policy; its resources and prompts are not offered. The host can switch it back on.");
+        return null;
     }
 
     /// <summary>

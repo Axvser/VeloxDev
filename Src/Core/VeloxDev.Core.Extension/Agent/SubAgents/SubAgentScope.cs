@@ -56,6 +56,12 @@ internal sealed class SubAgentRequest
     public string[]? AllowedGenericCommands { get; set; }
     public bool? AutoMarkDirty { get; set; }
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// The model this child should run on, or <c>null</c> for the host's default. Opaque to this library:
+    /// it is handed to the host's factory, which decides what names it knows.
+    /// </summary>
+    public string? Model { get; set; }
 }
 
 /// <summary>
@@ -122,7 +128,7 @@ internal sealed class ChildBriefing
 /// </summary>
 public sealed class SubAgentScope : IAsyncDisposable
 {
-    private readonly Func<WorkflowAgentScope, AIAgent> _agentFactory;
+    private readonly Func<WorkflowAgentScope, string?, AIAgent> _agentFactory;
     private readonly string? _instructions;
     private readonly List<SubAgentEntry> _entries = [];
     private readonly object _gate = new();
@@ -149,6 +155,24 @@ public sealed class SubAgentScope : IAsyncDisposable
     /// on every turn instead.
     /// </param>
     public SubAgentScope(Func<WorkflowAgentScope, AIAgent> agentFactory, string? instructions = null)
+        : this(IgnoringModel(agentFactory), instructions)
+    {
+    }
+
+    private static Func<WorkflowAgentScope, string?, AIAgent> IgnoringModel(
+        Func<WorkflowAgentScope, AIAgent> factory)
+        => factory is null
+            ? throw new ArgumentNullException(nameof(factory))
+            : (scope, _) => factory(scope);
+
+    /// <summary>
+    /// Creates a subsystem whose factory also receives the model a spawn asked for, or <c>null</c> when it
+    /// asked for none. A host that keeps several models registers how to build each one here, so a spawn can
+    /// put a cheap model on a mechanical task without replacing the whole subsystem.
+    /// </summary>
+    /// <param name="agentFactory">Builds the agent for one child scope and the requested model.</param>
+    /// <param name="instructions">The child's standing preamble; see the other constructor.</param>
+    public SubAgentScope(Func<WorkflowAgentScope, string?, AIAgent> agentFactory, string? instructions = null)
     {
         _agentFactory = agentFactory ?? throw new ArgumentNullException(nameof(agentFactory));
         _instructions = instructions;
@@ -163,6 +187,32 @@ public sealed class SubAgentScope : IAsyncDisposable
         return new SubAgentScope(scope => client
             .AsAIAgent(scope.CreateContextProviders(), instructions ?? DefaultInstructions)
             .WithPipeline(scope.Pipeline));
+    }
+
+    /// <summary>
+    /// A subsystem that picks a chat client per spawn from the model name the spawn carries.
+    /// <para>
+    /// The factory is handed the requested model, or <c>null</c> when the spawn named none; the host maps
+    /// that to a client, and may throw to refuse a name it does not know — the refusal reaches the spawning
+    /// agent as the child's failure. A child inherits the same factory, so a spawn from a child can pick a
+    /// model the same way.
+    /// </para>
+    /// </summary>
+    /// <param name="clientFactory">Maps a requested model name to the client for that child.</param>
+    /// <param name="instructions">The child's standing preamble.</param>
+    public static SubAgentScope ForClientFactory(
+        Func<string?, IChatClient> clientFactory, string? instructions = null)
+    {
+        if (clientFactory is null) throw new ArgumentNullException(nameof(clientFactory));
+        return new SubAgentScope((scope, model) =>
+        {
+            var client = clientFactory(model)
+                ?? throw new InvalidOperationException(
+                    $"The host registered no chat client for model '{model ?? "(default)"}'.");
+            return client
+                .AsAIAgent(scope.CreateContextProviders(), instructions ?? DefaultInstructions)
+                .WithPipeline(scope.Pipeline);
+        });
     }
 
     /// <summary>
@@ -469,6 +519,11 @@ public sealed class SubAgentScope : IAsyncDisposable
         {
             grantedTools = [.. available];
         }
+
+        // 预算的逃生工具不受任何开关约束（CreateTools 对它有豁免），所以即使空白名单的孩子也持有它。
+        // 报告说的是孩子实际拿到了什么，不是请求里写了什么 —— 否则「报告 == 实际」这条不变量就是假的。
+        if (!grantedTools.Any(n => string.Equals(n, WorkflowAgentToolkit.ResetBudgetToolName, StringComparison.OrdinalIgnoreCase)))
+            grantedTools.Add(WorkflowAgentToolkit.ResetBudgetToolName);
 
         // ── the knowledge surface: the same default as the tools ──
         var grantedSkills = ResolveSkills(parent, request, dropped);
@@ -791,7 +846,7 @@ public sealed class SubAgentScope : IAsyncDisposable
 
         try
         {
-            var agent = _agentFactory(entry.Scope);
+            var agent = _agentFactory(entry.Scope, request.Model);
             var response = await agent.RunAsync(request.Task, cancellationToken: entry.Cancellation.Token).ConfigureAwait(false);
             await OnRosterThread(() => Finish(entry, response.Text, response.Usage, null, cancelled: false)).ConfigureAwait(false);
         }

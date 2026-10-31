@@ -133,7 +133,11 @@
 | `WorkflowAgentToolkit.BuildQueryToolNames` | 决定读/写预算与标脏 |
 | `SkillAgentToolkit.ToolNames`（若属于技能） | 会自动并入只读集合 |
 | `SubAgentAgentToolkit.ToolNames`（子代理的那组） | 同样自动并入（`BuildQueryToolNames` 里并入子代理工具名的循环）—— 改名字要改这一处，别另起一份清单 |
-| `WorkflowAgentToolkit.CreateTools` 的 `.Where(IsToolEnabled)` | 自动生效，**但前提是名字能对上**（`OrdinalIgnoreCase`） |
+| `McpAgentToolkit.ReadToolNames`（MCP 的只读那几个） | 也自动并入；**不要**并入 `ToolNames`，那里面还有 `Load` / `Add` 这类写工具 |
+| `WorkflowAgentToolkit.CreateTools` 的 `.Where(IsToolEnabled)` | 自动生效，**但前提是名字能对上**（`OrdinalIgnoreCase`）；`ResetToolCallLimit` 是唯一豁免 |
+| 新工具的 `max*` 参数 | 返回全量列表/日志的工具必须自带分页；全局 `MaxResultChars` 只会把整个结果换成一句提示 |
+| 新的 `With*` 开关（预算、结果上限、token 上限） | 要 `BumpVersion()`：闸门读实时值，包络读缓存文本，不 bump 模型会读到一个不被执行的上限 |
+| `WorkflowAgentScope.WithWorkflowLoader` / `TreeChanged` | `LoadWorkflow` 换树后宿主必须重绑画布；不订阅事件就还在画旧树 |
 | `WorkflowAgentScope` 的提示文本 | 模型不知道存在就不会用 |
 | `Resources/Workflow/{en,zh}/Safety/*.md` | 若新工具与安全挡位有关 |
 | `skills/veloxdev-drive-workflow-with-ai/references/tools.md`、同目录 `mcp.md`、`SKILL.md` | 公开文档里的工具清单 |

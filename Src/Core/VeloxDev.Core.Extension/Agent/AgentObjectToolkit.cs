@@ -49,7 +49,8 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     /// <summary>
     /// Creates all generic AI tools for the target object.
     /// Every tool is wrapped with <see cref="TrackedAIFunction"/> so that
-    /// <see cref="IAgentToolCallNotifier.ToolCalled"/> is raised after each call.
+    /// <see cref="IAgentToolCallNotifier.ToolCalled"/> is raised after each successful call; refusals and
+    /// failures are carried by the pipeline's <c>AgentToolCallCompleted</c> events instead.
     /// </summary>
     public IList<AITool> CreateTools()
     {

@@ -1,4 +1,4 @@
-﻿using VeloxDev.AI.Safety;
+using VeloxDev.AI.Safety;
 using CliWrap;
 using VeloxDev.AI.Pipelines;
 using CliWrap.Buffered;
@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Authentication;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 using VeloxDev.Serialization;
 
 namespace VeloxDev.AI.MCP;
@@ -34,7 +35,7 @@ namespace VeloxDev.AI.MCP;
 /// For Exe mode, Package is the path to any executable, e.g. "tools/my-tool.exe".
 /// </para>
 /// </summary>
-public class McpScope
+public class McpScope : IAsyncDisposable
 {
     // ── Events ─────────────────────────────────────────────────────────────
 
@@ -937,6 +938,27 @@ public class McpScope
     /// </summary>
     /// <remarks>Receives the configuration, the resolved installation root, and cancellation.</remarks>
     internal Func<McpServerConfiguration, string, CancellationToken, Task<McpConnection>>? ConnectOverride { get; set; }
+
+    /// <summary>Lists a connected server's MCP resources. Throws when the server is unknown or not connected.</summary>
+    public Task<IReadOnlyList<McpClientResource>> ListResourcesAsync(string serverName, CancellationToken ct = default)
+        => RequireHost(serverName).ListResourcesAsync(ct);
+
+    /// <summary>Reads one resource from a connected server by URI or URI template.</summary>
+    public Task<ReadResourceResult> ReadResourceAsync(string serverName, string uri, CancellationToken ct = default)
+        => RequireHost(serverName).ReadResourceAsync(uri, ct);
+
+    /// <summary>Lists a connected server's MCP prompts. Throws when the server is unknown or not connected.</summary>
+    public Task<IReadOnlyList<McpClientPrompt>> ListPromptsAsync(string serverName, CancellationToken ct = default)
+        => RequireHost(serverName).ListPromptsAsync(ct);
+
+    /// <summary>Expands one prompt from a connected server, with optional arguments.</summary>
+    public Task<GetPromptResult> GetPromptAsync(
+        string serverName, string promptName, IReadOnlyDictionary<string, object?>? arguments = null, CancellationToken ct = default)
+        => RequireHost(serverName).GetPromptAsync(promptName, arguments, ct);
+
+    private HostedMcpServer RequireHost(string name)
+        => FindHost(name) ?? throw new InvalidOperationException(
+            $"MCP server '{name}' is not connected. Load it first, then retry.");
 
     /// <summary>The hosted server of that name, or null.</summary>
     private HostedMcpServer? FindHost(string name)

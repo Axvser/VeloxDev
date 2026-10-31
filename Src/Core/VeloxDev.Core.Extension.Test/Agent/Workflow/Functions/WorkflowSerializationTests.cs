@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Newtonsoft.Json.Linq;
 using VeloxDev.AI;
+using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
@@ -246,5 +247,30 @@ public class WorkflowSerializationTests
         Assert.AreEqual(worldTop / scale, restoredNode.Anchor.Vertical, 1e-9);
         Assert.AreEqual(worldWidth / scale, restoredNode.Size.Width, 1e-9);
         Assert.AreEqual(worldHeight / scale, restoredNode.Size.Height, 1e-9);
+    }
+
+    /// <summary>
+    /// The Agent-facing pair: what SerializeWorkflow answers can be handed straight back to LoadWorkflow, and
+    /// the scope's tree is the restored one afterwards. This is the "build it and save it" loop a host needs;
+    /// the transport is the tool surface, not a direct <c>tree.Serialize()</c> call.
+    /// </summary>
+    [TestMethod]
+    public void AgentTools_RoundTripTheWholeTree()
+    {
+        var tree = new TreeDefaultViewModel();
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
+        var scope = new WorkflowAgentScope(tree);
+
+        var document = WorkflowToolInvoker.Invoke(scope, "SerializeWorkflow");
+        Assert.IsFalse(string.IsNullOrWhiteSpace(document), "SerializeWorkflow must return the document itself");
+
+        var loaded = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "LoadWorkflow", ("json", document)));
+
+        Assert.AreEqual("ok", loaded["status"]?.Value<string>(), loaded.ToString());
+        Assert.AreEqual(2, loaded["nodeCount"]?.Value<int>());
+        Assert.IsTrue(loaded["requiresHostRebind"]?.Value<bool>(), "the host owns rebinding its surface");
+        Assert.HasCount(2, scope.Tree.Nodes, "the scope's tools follow the restored tree");
+        Assert.AreNotSame(tree, scope.Tree, "a restored graph is a new tree, not the old one reopened");
     }
 }

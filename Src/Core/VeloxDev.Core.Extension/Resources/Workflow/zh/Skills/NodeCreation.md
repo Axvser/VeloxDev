@@ -1,14 +1,14 @@
 ---
 name: node-creation
-description: 按协议创建节点——从预加载清单选类型而非 ListCreatableTypes，从 [AgentContext] 而非 GetComponentContext 读默认值，开发者说明优先于 GetTypeSchema 的 defaultJson 零值，留出 30px 间距，再 CreateNode 并确认 repositioned=true
+description: 按协议创建节点——宿主开启自动发现时从预加载清单选类型、否则调用 ListCreatableTypes，从 [AgentContext] 读默认值、需要完整属性/命令表时用 GetComponentContext，开发者说明优先于 GetTypeSchema 的 defaultJson 零值，留出 30px 间距，再 CreateNode 并确认 repositioned=true
 ---
 
 ## Skill: 节点创建协议
 
 当用户要求创建节点时，按以下步骤**依序**执行：
 
-1. **选择最合适的节点类型**：从上方已预加载的客户组件类型中选取。**禁止调用 `ListCreatableTypes`**——所有可用类型已在上方列出。若只有一种类型，直接使用；若有多种，选择最符合用户意图的，或请用户澄清。
-2. **读取该类型的预加载 `[AgentContext]` 描述**（已在上方上下文中）。提取默认尺寸及其他默认值。**禁止调用 `GetComponentContext`**——描述已在上下文中。
+1. **选择最合适的节点类型**：若上方已预加载客户组件类型清单，就从清单中选取——宿主已开启自动发现，这份清单是完整的。若清单缺失或为空，调用 **`ListCreatableTypes`** 取可用类型；不要凭印象编造类型名。若只有一种类型，直接使用；若有多种，选择最符合用户意图的，或请用户澄清。
+2. **读取该类型的 `[AgentContext]` 描述**（清单预加载时通常也已在上方）。提取默认尺寸及其他默认值。需要一句话描述未涵盖的属性或命令时，对该类型调用一次 **`GetComponentContext`** 并按其完整表格操作；不要凭名称猜测类型形状。
 3. **应用 `[AgentContext]` 中的默认值**：若描述中写有"默认大小为 200×100"，则在 CreateNode 中使用 `width=200, height=100`。若用户明确指定了不同的值，以用户的值为准。
 4. **选择无重叠的位置**：调用 CreateNode 前，检查现有节点位置（通过 ListNodes 或已缓存的知识），选取与已有节点不重叠的位置（至少 30px 间距）。工具会自动偏移重叠，但主动选择良好位置可获得更优布局。
    - **画布为空时**：将第一个节点放置在靠近原点的位置（如 `(20, 20)`），除非用户指定了特定区域。

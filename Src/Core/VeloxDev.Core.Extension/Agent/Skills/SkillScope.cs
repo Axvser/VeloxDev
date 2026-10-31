@@ -442,6 +442,13 @@ public class SkillScope
                     Source = primary.Source,
                     Path = primary.Path,
                     ResourceCount = group.Max(d => d.ResourceCount),
+                    // 同一技能的每种语言各给一份描述，资源清单是同一棵树，合并去重。
+                    ResourceNames =
+                    [
+                        .. group.SelectMany(d => d.ResourceNames)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                    ],
                     Error = errors.Length > 0 ? string.Join(" | ", errors) : null,
                     State = group.Any(d => d.Error is null) ? SkillState.Ready : SkillState.Error,
                     IsEnabled = !previous.TryGetValue(name, out var wasEnabled) || wasEnabled,

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using VeloxDev.AI.MCP;
 using VeloxDev.AI.Skills;
+using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
 
@@ -20,6 +21,7 @@ namespace VeloxDev.AI.Dashboard;
 ///   <item><see cref="SkillTools"/> — the four skill-management tools.</item>
 ///   <item><see cref="McpServers"/> — one row per configured server, each expandable to its tools.</item>
 ///   <item><see cref="Skills"/> — the discovered skills.</item>
+///   <item><see cref="SubAgents"/> — the children this session dispatched, when the subsystem is attached.</item>
 /// </list>
 /// <para>
 /// <b>Threading.</b> The dashboard captures the <see cref="SynchronizationContext"/> it is constructed on
@@ -43,11 +45,13 @@ public sealed partial class AgentDashboardViewModel : IDisposable
 
     private ObservableCollection<SkillStatusViewModel>? _skillRows;
     private ObservableCollection<McpServerStatusViewModel>? _mcpRows;
+    private SubAgentScope? _boundSubAgents;
 
     [VeloxProperty] private ObservableCollection<ToolMemberViewModel> systemTools = [];
     [VeloxProperty] private ObservableCollection<ToolMemberViewModel> skillTools = [];
     [VeloxProperty] private ObservableCollection<McpServerMemberViewModel> mcpServers = [];
     [VeloxProperty] private ObservableCollection<SkillMemberViewModel> skills = [];
+    [VeloxProperty] private ObservableCollection<SubAgentStatusViewModel> subAgents = [];
     [VeloxProperty] private string summaryText = string.Empty;
 
     private AgentDashboardViewModel(WorkflowAgentScope scope)
@@ -76,6 +80,9 @@ public sealed partial class AgentDashboardViewModel : IDisposable
 
     /// <summary>Servers connected, over servers configured.</summary>
     public string McpSummary => $"{McpServers.Count(s => s.IsConnected)}/{McpServers.Count}";
+
+    /// <summary>Sub-agents still running, over sub-agents dispatched.</summary>
+    public string SubAgentSummary => $"{SubAgents.Count(s => s.IsRunning)}/{SubAgents.Count}";
 
     /// <summary>
     /// Alive / failed split, the aggregate the MCP rows roll up to. Counted from the servers' own states,
@@ -170,8 +177,32 @@ public sealed partial class AgentDashboardViewModel : IDisposable
         BindMcp();
         RebuildSkills();
         RebuildMcpServers();
+        RebuildSubAgents();
         NotifyAggregates();
     }
+
+    /// <summary>
+    /// Mirrors the attached subsystem's roster. The rows are the subsystem's own bindable view-models, so the
+    /// panel and the sub-agent tree show the same objects rather than two drifting copies.
+    /// </summary>
+    private void RebuildSubAgents()
+    {
+        var source = _scope.SubAgents;
+        if (!ReferenceEquals(source, _boundSubAgents))
+        {
+            if (_boundSubAgents is not null)
+                _boundSubAgents.Changed -= OnSubAgentsChanged;
+            _boundSubAgents = source;
+            if (source is not null)
+                source.Changed += OnSubAgentsChanged;
+        }
+
+        SubAgents.Clear();
+        if (source is null) return;
+        foreach (var row in source.Children) SubAgents.Add(row);
+    }
+
+    private void OnSubAgentsChanged(object? sender, EventArgs e) => QueueRebuild();
 
     private void RebuildSystemTools()
     {
@@ -332,12 +363,13 @@ public sealed partial class AgentDashboardViewModel : IDisposable
 
     private void NotifyAggregates()
     {
-        SummaryText = $"工具 {SystemToolSummary} · Skill {SkillSummary} · MCP {McpStatusText} · {CallSummary}";
+        SummaryText = $"工具 {SystemToolSummary} · Skill {SkillSummary} · MCP {McpStatusText} · 子代理 {SubAgentSummary} · {CallSummary}";
         OnPropertyChanged(nameof(SystemToolSummary));
         OnPropertyChanged(nameof(SkillSummary));
         OnPropertyChanged(nameof(McpSummary));
         OnPropertyChanged(nameof(McpStatusText));
         OnPropertyChanged(nameof(CanReloadMcp));
+        OnPropertyChanged(nameof(SubAgentSummary));
         OnPropertyChanged(nameof(CallSummary));
     }
 
@@ -349,6 +381,12 @@ public sealed partial class AgentDashboardViewModel : IDisposable
 
         _scope.Changed -= OnScopeChanged;
         _scope.ToolCalled -= OnToolCalled;
+
+        if (_boundSubAgents is not null)
+        {
+            _boundSubAgents.Changed -= OnSubAgentsChanged;
+            _boundSubAgents = null;
+        }
 
         if (_skillRows is not null)
         {

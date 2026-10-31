@@ -7,8 +7,10 @@ using VeloxDev.AI;
 using VeloxDev.AI.Dashboard;
 using VeloxDev.AI.MCP;
 using VeloxDev.AI.Skills;
+using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
+using VeloxDev.Core.Extension.Test.Agent.SubAgents;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Test.Agent.Dashboard;
@@ -517,5 +519,24 @@ public class AgentDashboardViewModelTests
         Assert.AreEqual(0, offThreadMutations, "the panel's bound collection was mutated from the wrong thread");
 
         context.Post(_ => panel.Dispose(), null);
+    }
+
+    /// <summary>
+    /// The sub-agent roster used to live only on its own tree panel. The dashboard mirrors the attached
+    /// subsystem's rows — the same view-models, not a second projection — so one screen can answer "what can
+    /// the Agent do" and "what is it doing".
+    /// </summary>
+    [TestMethod]
+    public async Task SubAgents_MirrorTheAttachedSubsystem()
+    {
+        await using var fx = new SubAgentFixture();
+        var id = fx.Spawn("count the nodes");
+        SubAgentFixture.WaitFor(() => fx.Rows.Any(r => r.Id == id && r.IsFinished));
+
+        using var panel = AgentDashboardViewModel.Create(fx.Scope);
+
+        Assert.HasCount(1, panel.SubAgents);
+        Assert.AreEqual(id, panel.SubAgents[0].Id);
+        Assert.AreEqual("0/1", panel.SubAgentSummary, "the one child has finished, so none are running");
     }
 }

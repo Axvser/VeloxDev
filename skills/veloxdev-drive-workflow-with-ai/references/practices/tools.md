@@ -1,6 +1,6 @@
 # The tool surface
 
-**69 built-in tools** in the unconditional groups of `WorkflowToolCategory` (`Composite` is reserved and empty; `Layout` carries the three solution tools; the `Execution` / `Command` gates are checked inside each tool body). On top of them: `ResetToolCallLimit`, always; `RequestSelection` / `RequestConfirmation`, each when its handler exists; `EnterPlanMode` / `ExitPlanMode`, both when a confirmation handler exists. With both handlers configured that is **74**. The mode does not decide whether they exist: asking, and the Agent's own move into and out of Plan, are `Interact`, allowed in every mode.
+**76 built-in tools** in the unconditional groups of `WorkflowToolCategory` (`Composite` is reserved and empty; `Layout` carries the three solution tools; the `Execution` / `Command` gates are checked inside each tool body). On top of them: `ResetToolCallLimit`, always; `RequestSelection` / `RequestConfirmation`, each when its handler exists; `EnterPlanMode` / `ExitPlanMode`, both when a confirmation handler exists. With both handlers configured that is **81**. The mode does not decide whether they exist: asking, and the Agent's own move into and out of Plan, are `Interact`, allowed in every mode.
 
 `ResetToolCallLimit` is registered in every configuration, whatever the categories — it is the only way out of a spent budget. It asks the user through the confirmation handler and reopens the tree's budget on agreement.
 
@@ -11,25 +11,28 @@
 | Tool | Effect |
 |---|---|
 | `GetWorkflowSummary` | tree id, node and link counts, distinct node types. The intended first call. |
-| `GetFullTopology` | the whole graph — nodes, slots and links — in one call |
-| `ListNodes` | compact JSON per node: `{i, id, t, x, y, l, w, h, slots, …scalars}` |
+| `GetFullTopology(maxNodes?)` | the whole graph — nodes, slots and links — in one call. `maxNodes` caps the node list and keeps only links whose endpoints are included; the reply reports `truncated` |
+| `ListNodes(maxNodes?)` | compact JSON per node: `{i, id, t, x, y, l, w, h, slots, …scalars}`. Uncapped it is a bare array; with `maxNodes` it becomes `{status, totalNodes, returnedNodes, truncated, nodes}` |
 | `GetNodeDetail(nodeIndex)` | one node with its slots and connections |
 | `GetNodeDetailById(runtimeId)` | the same, addressed by a stable id |
-| `FindNodes(typeName, propertyName, propertyValue)` | filtered node list, cheaper than listing everything |
+| `FindNodes(typeName, propertyName, propertyValue, maxMatches?)` | filtered node list, cheaper than listing everything. With `maxMatches`, `matchCount` still counts every match |
+| `SerializeWorkflow()` | the tree's library JSON document — save it with a host file tool, or pass it back to `LoadWorkflow` |
+| `LocateNode(nodeIndex)` / `LocateSlot(nodeIndex, slotIndex)` / `LocateLink(linkId)` | scroll the host canvas so the thing is centred; read-only, zoom preserved. Fails when the host attached no surface navigator |
+| `ListCompiledRuns()` | every run handle this scope still holds, with running state and outcome |
+| `GetExecutionLog(maxEntries?)` | the tree's execution log; `maxEntries` keeps the newest N and reports `truncated` |
 | `ListConnections` | visible links as `{id, sid, rid}` |
 | `GetLinkDetail(linkId)` | a link's endpoint slots and their parent nodes |
 | `ResolveSlotId(nodeIndex, propertyName, collectionIndex)` | a slot's `RuntimeId` without fetching the whole node |
 | `ListSlotProperties(nodeIndex)` | single slots, slot collections and enumerators, with `allowedSelectorTypes` |
 | `GetEnumSlotByValue(nodeIndex, propertyName, conditionValue)` | the slot inside an enumerator for a given enum or bool value |
-| `GetTypeSchema(fullTypeName)` | a .NET type as a JSON schema — properties, types, current values |
-| `GetComponentContext(fullTypeName, language)` | the runtime `[AgentContext]` documentation for a type. The tool maps a language name containing `Chinese` to Chinese and every other value to English. |
+| `GetTypeSchema(fullTypeName, maxChars?)` | a .NET type as a JSON schema — properties, types, current values. Over `maxChars` (default 32 KiB) the reply is a truncation envelope with a preview |
+| `GetComponentContext(fullTypeName, language, maxChars?)` | the runtime `[AgentContext]` documentation for a type. The tool maps a language name containing `Chinese` to Chinese and every other value to English. Same `maxChars` envelope |
 | `ListComponentCommands(nodeIndex)` | command names and parameter types |
 | `ListCreatableTypes` | concrete node and slot types the compiled context tree carries (framework and customer roots) that have a public parameterless constructor |
-| `ValidateWorkflow` | warnings for zero-size nodes, isolated nodes, slot-less nodes and duplicate links |
+| `ValidateWorkflow` | structural lint: zero-size nodes, isolated nodes, slot-less nodes, duplicate links, cycles (one `error` per back edge), and SlotEnumerators with no selector |
 | `CompileWorkflow(startNodeIndex)` | the Root-role plan: segments, branches, `Order` / `ChainIndex` / `Offset` |
 | `CompileNodeResult(nodeIndex)` | the Terminal-role reverse compile of that node's ancestor cone |
 | `GetCompileStatus` | the current compile identity without recompiling |
-| `GetExecutionLog` | the tree's execution log — direct node executions only |
 
 ## Analytics
 
@@ -69,6 +72,8 @@ A category of its own with exactly one member — its flag is neither `Query` no
 | `Undo` / `Redo` / `ClearHistory` | history. `ClearHistory` drops the trail; the canvas is untouched. |
 | `MoveNode`† / `SetNodePosition`† / `ResizeNode`† | mirror the GUI drag: direct writes, **no undo entry** |
 | `PatchNodeProperties`† / `PatchComponentById`† | direct property writes, **not undoable by design** |
+| `LoadWorkflow(json)`† | replaces the scope's tree with the graph a `SerializeWorkflow` document restores. The host must rebind its canvas (`WithWorkflowLoader` / `TreeChanged`); the previous tree is left for the host |
+| `ClearFinishedRuns()` | releases finished compiled-run handles; running ones are untouched |
 
 ⚙ **A rejected connection is silent at the framework level**, so the connect tools re-verify against `LinksMap` and return `status:"rejected"` with `reasons`, a `hint` and often a `preferredAlternative`. A model that reads only the status field knows the truth.
 
@@ -82,14 +87,14 @@ The eight that start or drive node code re-check the policy at call time and ret
 
 | Tool | Effect |
 |---|---|
-| `ExecuteNode(nodeIndex, parameter?)` | node-level EXEC/RECV; **waits for completion** |
-| `ExecuteNodes(nodeIndicesJson, parameter?)` | the same over a set |
-| `BroadcastNode` / `ReverseBroadcastNode` | the node's broadcast channels |
-| `RunCompiledWorkflow(startNodeIndex, seed?)` | chain-level: compile as `Root` and drive the whole reachable sub-graph; returns when the run ends |
-| `GetNodeResult(nodeIndex, seed?)` | result-level: compile the ancestor cone as `Terminal` and return that node's output |
+| `ExecuteNode(nodeIndex, parameter?, timeoutMs?)` | node-level EXEC/RECV; **waits for completion**, or returns an error after `timeoutMs` |
+| `ExecuteNodes(nodeIndicesJson, parameter?, timeoutMs?)` | the same over a set; the timeout is per node |
+| `BroadcastNode` / `ReverseBroadcastNode(..., timeoutMs?)` | the node's broadcast channels |
+| `RunCompiledWorkflow(startNodeIndex, seed?, timeoutMs?)` | chain-level: compile as `Root` and drive the whole reachable sub-graph; returns when the run ends |
+| `GetNodeResult(nodeIndex, seed?, timeoutMs?)` | result-level: compile the ancestor cone as `Terminal` and return that node's output |
 | `StartCompiledWorkflow(startNodeIndex, seed?)` | the same chain-level path as `RunCompiledWorkflow`, but **returns a handle at once** while the run keeps going |
 | `ContinueCompiledWorkflow(startNodeIndex, seed?)` | starts a run that carries on from the scope's checkpoint store instead of starting over |
-| `GetCompiledRunStatus(handle)` | a run's `isRunning` / `outcome` / `isPaused` / `failures` / log tail / `logFile`; reporting a finished run retires its handle. **Not gated.** |
+| `GetCompiledRunStatus(handle, maxDataChars?)` | a run's `isRunning` / `outcome` / `isPaused` / `failures` / log tail / `logFile`; reporting a finished run retires its handle. `data` over `maxDataChars` (default 16 KiB) becomes a truncation envelope. **Not gated.** |
 | `PauseCompiledRun(handle)` / `ResumeCompiledRun(handle)` | hold a run at its next node boundary, and release it. **Not gated.** |
 | `StopCompiledRun(handle)` | ends the run at the next boundary with `outcome = Cancelled`, leaving its checkpoint behind for `ContinueCompiledWorkflow`. **Not gated.** |
 

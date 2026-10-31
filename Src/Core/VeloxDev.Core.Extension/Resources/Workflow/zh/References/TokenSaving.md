@@ -11,6 +11,8 @@
 | **ConnectByProperty** | ResolveSlotId×2 + ConnectSlots | 3 次 → 1 次；无需预先解析插槽 ID |
 | **GetFullTopology** | ListNodes + GetNodeDetail×N + ListConnections | N+2 次 → 1 次；适合复杂多节点操作 |
 
+> **大结果会被封顶，而不是整段送来。** `GetFullTopology` 有 `maxNodes`，`GetExecutionLog` 有 `maxEntries`，`ListNodes`/`FindNodes` 有 `maxNodes`/`maxMatches`；被截断的回复会带 `truncated` 与总数。任何工具结果超过宿主的字符上限时也会被替换成截断信封。回复说被截断时，收窄查询，不要原样重试。
+
 - **TakeSnapshot** 只返回版本号+统计数量；用 **GetChangesSinceSnapshot** 获取差异，而非重新读取全部内容。
 - **FindNodes**：按类型名或属性值过滤节点，避免读取全部再手动过滤。
 - **SearchForward / SearchReverse / SearchAllRelative**：通过图遍历发现相连节点，避免手动逐连接查找。

@@ -93,7 +93,8 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         [Description("Whether it may run node business code. Refused unless you have that ability yourself. Default false.")] bool? allowNodeExecution = null,
         [Description("Generic node commands it may run, e.g. \"ReceiveCommand\". Refused for any command you are not allowlisted for. Default none.")] string[]? allowedGenericCommands = null,
         [Description("Whether its graph edits should mark the graph dirty. Omitted, follows your setting.")] bool? autoMarkDirty = null,
-        [Description("Free-form context for the sub-agent, appended to what it is told about itself.")] string? notes = null)
+        [Description("Free-form context for the sub-agent, appended to what it is told about itself.")] string? notes = null,
+        [Description("Optional model name the host registered for sub-agents. Omit for the host's default. A name the host did not register makes the spawn fail with the host's message; it does not fall back silently.")] string? model = null)
         => Task.FromResult(Spawn(new SubAgentRequest
         {
             Task = task,
@@ -108,6 +109,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             AllowedGenericCommands = allowedGenericCommands,
             AutoMarkDirty = autoMarkDirty,
             Notes = notes,
+            Model = model,
         }));
 
     private string Spawn(SubAgentRequest request)
@@ -186,11 +188,13 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         }.ToJson();
     }
 
-    [Description("Reads one sub-agent's current state and, once it has finished, its full report — untruncated, unlike the preview WaitSubAgents returns. "
-        + "Use it to re-read a sub-agent you already collected, or to check on one you did not wait for.")]
+    [Description("Reads one sub-agent's current state and, once it has finished, its report — unlike the preview WaitSubAgents returns. "
+        + "Use it to re-read a sub-agent you already collected, or to check on one you did not wait for. "
+        + "maxChars caps the report (default 64 KiB); the cap says so in the text and reports how much was cut, and 0 removes it.")]
     private Task<string> GetSubAgentResult(
-        [Description("The id returned by SpawnSubAgent.")] string id)
-        => Task.FromResult(Describe(_scope.GetResult(id), id));
+        [Description("The id returned by SpawnSubAgent.")] string id,
+        [Description("Maximum characters of the report text. 0 = no cap.")] int maxChars = 65536)
+        => Task.FromResult(Describe(_scope.GetResult(id), id, maxChars));
 
     [Description("Lists the sub-agents you dispatched, with their state, depth, how many tool calls each has made, and a short preview of the task. "
         + "You see only the sub-agents you dispatched yourself — not those of other agents, and not the ones that dispatched you. Pure query.")]
@@ -374,7 +378,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
     private bool MayDispatch => _host.IsToolEnabled(ToolNames[0]);
 
     /// <summary>One child, described for the two tools that report a single handle.</summary>
-    private static string Describe(SubAgentSummary? row, string id)
+    private static string Describe(SubAgentSummary? row, string id, int maxChars = 0)
     {
         if (row is null)
             return Refused($"No sub-agent with id '{id}' was dispatched by you. Call ListSubAgents to see the ones you dispatched.");
@@ -395,7 +399,19 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         };
 
         if (row.DroppedRequests.Count > 0) result["dropped"] = VeloxJsonValue.From(row.DroppedRequests);
-        if (row.Result is { Length: > 0 }) result["result"] = row.Result;
+        if (row.Result is { Length: > 0 })
+        {
+            if (maxChars > 0)
+            {
+                var (text, truncated) = Truncate(row.Result, maxChars);
+                result["result"] = text;
+                if (truncated) result["truncated"] = true;
+            }
+            else
+            {
+                result["result"] = row.Result;
+            }
+        }
         if (row.Error is { Length: > 0 }) result["error"] = row.Error;
 
         return result.ToJson();

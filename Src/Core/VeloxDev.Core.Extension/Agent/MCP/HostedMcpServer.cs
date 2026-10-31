@@ -1,4 +1,6 @@
 using Microsoft.Extensions.AI;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -104,6 +106,54 @@ internal sealed class HostedMcpServer
     {
         get { lock (_publishedSync) return _offered; }
     }
+
+    /// <summary>
+    /// Runs one protocol read against the current connection, under the rebuild gate. A read that races a
+    /// rebuild either uses the old client completely or waits for the new one — never a half-disposed client.
+    /// </summary>
+    private async Task<T> WithClientAsync<T>(Func<McpClient, Task<T>> action, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_client is not McpClient client)
+                throw new InvalidOperationException($"MCP server '{_name}' is not connected.");
+            return await action(client).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    internal Task<IReadOnlyList<McpClientResource>> ListResourcesAsync(CancellationToken ct)
+        => WithClientAsync(
+            async c => (IReadOnlyList<McpClientResource>)await c.ListResourcesAsync(cancellationToken: ct).ConfigureAwait(false),
+            ct);
+
+    internal Task<ReadResourceResult> ReadResourceAsync(string uri, CancellationToken ct)
+        => WithClientAsync(c => c.ReadResourceAsync(uri, cancellationToken: ct).AsTask(), ct);
+
+    internal Task<IReadOnlyList<McpClientPrompt>> ListPromptsAsync(CancellationToken ct)
+        => WithClientAsync(
+            async c => (IReadOnlyList<McpClientPrompt>)await c.ListPromptsAsync(cancellationToken: ct).ConfigureAwait(false),
+            ct);
+
+    internal Task<GetPromptResult> GetPromptAsync(
+        string name, IReadOnlyDictionary<string, object?>? arguments, CancellationToken ct)
+        => WithClientAsync(async c =>
+        {
+            // 协议层收 IDictionary，而公开面用 IReadOnlyDictionary；逐项复制而不是强转，
+            // 调用方传进来的只读视图不保证实现了可写接口。
+            Dictionary<string, object?>? copy = null;
+            if (arguments is not null)
+            {
+                copy = new Dictionary<string, object?>(arguments.Count);
+                foreach (var pair in arguments) copy[pair.Key] = pair.Value;
+            }
+
+            return await c.GetPromptAsync(name, copy, cancellationToken: ct).ConfigureAwait(false);
+        }, ct);
 
     /// <summary>Points the server at a new configuration. Marks the connection stale; releases nothing yet.</summary>
     internal void SetConfiguration(McpServerConfiguration config)
