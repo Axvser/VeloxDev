@@ -136,6 +136,10 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
             }
         }
 
+        // 新一轮先把上一轮的节点状态清掉：节点只在被驱动时写 LastStatus，不清就会把上一个选中分支的
+        // Completed 留在画布上 —— 看上去像「一次运行跑了两个终点」。Resume 不清：已完成的节点正是它要继续的证据。
+        if (!resume) ResetRunState(graph);
+
         // IsActive 是这里写、别处读的：Blazor 的状态栏与 Stop 按钮直接绑它，树的 IsWorkflowRunning 由它推导。
         // 在此之前它从没被写过，所以状态栏永远显示 Idle、Stop 永远禁用。
         var tree = Parent as TreeViewModel;
@@ -162,6 +166,49 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
                 IsActive = false;
                 tree?.RefreshWorkflowRunningState();
             });
+        }
+    }
+
+    // 只清这次要驱动的那张编译图里的节点；整棵树清会误伤另一个正在运行的控制器。
+    private static void ResetRunState(CompiledGraph graph)
+    {
+        foreach (var node in NodesOf(graph))
+        {
+            switch (node)
+            {
+                case PythonScriptNodeViewModel python:
+                    python.LastStatus = "Idle";
+                    python.LastRun = "-";
+                    python.LastOutput = "-";
+                    break;
+                case EnumSelectorNodeViewModel selector:
+                    selector.LastRouted = "-";
+                    break;
+            }
+        }
+
+        static IEnumerable<IWorkflowNodeViewModel> NodesOf(CompiledGraph graph)
+        {
+            foreach (var entry in graph.Entries)
+            {
+                switch (entry)
+                {
+                    case ChainSegment chain:
+                        foreach (var node in chain.Nodes)
+                            if (node is not null) yield return node;
+                        break;
+                    case BranchSegment branch:
+                        if (branch.Router is not null) yield return branch.Router;
+                        foreach (var option in branch.Options)
+                            if (option.Graph is not null)
+                                foreach (var node in NodesOf(option.Graph)) yield return node;
+                        break;
+                    case ParallelSegment parallel:
+                        foreach (var sub in parallel.Branches)
+                            foreach (var node in NodesOf(sub)) yield return node;
+                        break;
+                }
+            }
         }
     }
 

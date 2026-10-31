@@ -18,7 +18,8 @@
 | 分支路由节点 | 实现 `ICompileTimeRouter`（`GetRouteTable` + `ResolveRouteKey`） | `CompilerEx/Compile/Contracts/ICompileTimeRouter.cs` |
 | 读编译身份 | 实现 `ICompileTimeAware`（`CompileContext.Order/ChainIndex/Offset/InputNodes`） | `CompilerEx/Compile/Contracts/ICompileTimeAware.cs` |
 | 运行期读上下文 | 实现 `IRuntimeAware`（`AttachRuntimeContext`） | `CompilerEx/Runtime/Contracts/IRuntimeAware.cs` |
-| 重定向（回退到更早的 Order 重跑） | 实现 `IRedirectable`（`ResolveRedirectAsync`） | `CompilerEx/Runtime/Contracts/IRedirectable.cs` |
+| 重定向（回退到上游节点重跑） | 实现 `IRedirectable`（`ResolveRedirectAsync` 返回上游节点） | `CompilerEx/Runtime/Contracts/IRedirectable.cs` |
+| 节点拖入（草稿预览 → 松手创建 / 离开取消） | `WorkflowNodeDrop.For(tree)`；预览实现 `IWorkflowNodeDropSurface<TContext>` | `Interfaces/WorkflowSystem/Surface/IWorkflowNodeDropSurface.cs`、`WorkflowSystem/GUI/Events/WorkflowNodeDrop.cs` |
 | 运行要能**中途存盘、之后再接着跑** | 配 `RuntimeContext.CheckpointStore`（`IExecutionCheckpointStore`，Core 自带 `InMemoryCheckpointStore`，落盘用 `Core.Extension` 的 `FileCheckpointStore`）；恢复把 store 里的 `ExecutionCheckpoint` 传给 `RuntimeEngine.RunAsync(graph, context, ct, resumeFrom)`。**图必须是同一张**（指纹不符会拒），序列化往返过的图恢复不了 | `CompilerEx/Runtime/Contracts/IExecutionCheckpointStore.cs`；[compiler-execution.md](compiler-execution.md) §十一 |
 | 运行要能暂停 / 观察 / 重试 / 收结构化错误 / 失败后补偿 | **不是实现接口，是往会话插一个对象**：`RuntimeContext` 的 `ExecutionGate` / `Observer` / `RetryPolicy` / `ErrorSink` / `Compensation`。五个契约都随库带默认实现（`ManualExecutionGate`、`ExponentialBackoffRetry`…）与委托适配器，不配置就什么都没有 | `CompilerEx/Runtime/Model/RuntimeContext.cs`（「可选能力」一节）；语义见 [compiler-execution.md](compiler-execution.md) §十 |
 | 数量可变的端口集合 | `[VeloxProperty] [SlotSelectors(typeof(...))] public partial SlotEnumerator<TSlot> X { get; set; }` | `SelectorEx/SlotEnumerator.cs` 的 `SlotEnumerator<TSlot>`；`Src/Core/VeloxDev.Core/AI/SlotSelectorsAttribute.cs` 的 `SlotSelectorsAttribute` |
@@ -197,10 +198,21 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 
 ### 3.7 加一个可重定向节点
 
-实现 `IRedirectable`，在 `ResolveRedirectAsync` 里返回**更早的** `CompileContext.Order`。
-- 引擎限制：只能往更早退（`RuntimeEngine.cs` 的 `RunExecuteAsync` 只接受 `targetOrder < order`）；`Order == -1` 是绝对停止；单次运行最多 `MaxRedirects = 50`（`RunAsync` 内的常量）。
+实现 `IRedirectable`，在 `ResolveRedirectAsync` 里返回**上游节点**（`IWorkflowNodeViewModel?`）；引擎自己把它映射成 `CompileContext.Order`。
+- 目标必须能由请求节点经 `SearchReverseNodes` 到达，且 `Order >= 0`（在本次编译图里）；下游、兄弟分支、被剪枝的节点、无关链都会被忽略并写一行日志。用图关系而不是 Order 比较，是因为分属两支的节点 Order 可以一大一小，而它们之间没有可回退的先后。
+- 单次运行最多 `MaxRedirects = 50`（`RunAsync` 内的常量）。
 - 被跳过的节点再次执行时，只有 `Attempt == 当前 Attempt` 或 `Order < ActiveRedirectTarget` 的输出才被采信（`CompilerEx/Runtime/Model/RuntimeContext.cs` 的 `IsCurrentPassOrPreserved`）。**这是「前缀保留」契约**：终止节点之前的产物可以直接用，之后的一律重算。
-- **`Error` 与未捕获的异常会来问你**（`Warn` 不会 —— 那只是一行日志，运行照常走）：引擎调 `ResolveRedirectAsync` 要目标（`RuntimeContext.cs` 的 `Error`；抛异常那支在 `RuntimeEngine.DriveAsync` 的 catch，重试耗尽后）。返回 `null` = 不重定向，于是整轮结束 —— 这是**正常返回**，是契约说「我也没办法」的方式，不是错误。
+- **`Error` 与未捕获的异常会来问你**（`Warn` 不会 —— 那只是一行日志，运行照常走）：引擎调 `ResolveRedirectAsync` 要目标（`RuntimeContext.cs` 的 `Error`；抛异常那支在 `RuntimeEngine.DriveAsync` 的 catch，重试耗尽后）。返回 `null` = 不重定向，值照常往下走、链条继续 —— 这是契约说「我也没办法」的方式，不是错误。
+
+### 3.9 让用户把节点拖进画布
+
+`WorkflowNodeDrop.For(tree)` 是节点版的 `VirtualLink`：外部用 `Begin(node, pointer?)` 或 `Begin(node, surface, context, pointer?)` 设定一份**未挂树**的草稿，`IsActive` 就是标志位；`Cancel()` / `Commit()` 清理。
+
+- **指针规则在 Core**：`WorkflowInput.Route` 收到移动就把**世界坐标**写进 `node.Anchor`（保留草稿原有层号），收到真正的 `PointerExited` 就 `Cancel()`，收到 `PointerReleased` 就 `Commit(release.Position)`；释放被 `PreventDefault` 否决时改为取消，避免留下放不下的预览。
+- **创建走树命令**：`Commit` 调 `tree.CreateNodeCommand.Execute(node)`，因此是一条可撤销的创建；取消不碰树。草稿在拖入期间**不在** `Nodes` / `VisibleItems` / 空间索引里 —— 预览完全由 surface 画。
+- **`IWorkflowNodeDropSurface<TContext>` 只负责画**：`Begin/Move/End(node, context)`，上下文由平台自定（装饰层、items panel、父容器皆可），Core 当它是不透明对象。`End` 的 `committed` 区分创建与取消；`Move` 时节点已带世界坐标，surface 可以做居中/吸附，最终节点带着什么位置就创建在哪。
+- **没有 surface 也能用**：`Begin(node, pointer?)` 后宿主自己绑 `PendingNode` 并订阅 `Changed`。
+- 一次拖入一份新草稿；`Begin` 会拒绝已经挂在树上的节点（否则创建命令会先去删它）。
 
 ### 3.8 加一个网格装饰器 / 小地图
 

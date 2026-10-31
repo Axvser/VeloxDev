@@ -74,7 +74,11 @@ public interface IRuntimeContext : ITaskContext
     /// </summary>
     bool EndedWithError { get; set; }
 
-    /// <summary>The engine-requested redirect target Order (may be cross-chain). <see cref="RuntimeEngine.RunAsync"/> re-runs the whole graph with it.</summary>
+    /// <summary>
+    /// The engine-requested redirect target Order (may be cross-chain). The pass that sets it ends at the
+    /// requesting node; <see cref="RuntimeEngine.RunAsync"/> then re-runs the whole graph with it, skipping
+    /// Order &lt; target.
+    /// </summary>
     int? PendingRedirectTarget { get; set; }
 
     /// <summary>

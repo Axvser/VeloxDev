@@ -62,9 +62,9 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** `ResolveRedirectAsync` returns a target, but the run carries on as if nothing happened.
 
-**Cause:** the target is not strictly earlier than the requesting node's `Order`; or the node does not implement `IRedirectable`; or the 50-redirect cap was hit and the run threw.
+**Cause:** the returned node is not an upstream node of the requesting node (downstream, a sibling branch, a pruned node or an unrelated chain); or the node does not implement `IRedirectable`; or the 50-redirect cap was hit and the run threw.
 
-**Fix:** return an earlier compile order; implement `IRedirectable`; inspect the log line for the ignored target.
+**Fix:** return a node reached through `SearchReverseNodes` from the requesting node; implement `IRedirectable`; inspect the log line for the ignored target.
 
 ## A warning stops the run, or an error does not
 

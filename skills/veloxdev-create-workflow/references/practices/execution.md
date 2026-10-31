@@ -213,7 +213,7 @@ if (context.Data is IGroupData group && group.TryGetValue(sourceNode, out var va
 ```csharp
 public interface IRedirectable
 {
-    Task<int?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct);
+    Task<IWorkflowNodeViewModel?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct);
 }
 ```
 
@@ -221,11 +221,11 @@ public interface IRedirectable
 
 ⚙ **`context.Error(...)` is a stop, and also not logging.** On a node that does not implement `IRedirectable`, the run ends: `Status = "Stopped"`, `CurrentOrder = -1`. An uncaught exception takes the same path. With `IRedirectable`, its answer decides where the run goes instead.
 
-⚙ **A redirect target is strictly earlier than the requesting node's `Order`.** Anything else is ignored with a single log line and the flow carries on.
+⚙ **A redirect target is an upstream node, and the engine owns the order mapping.** Return a node that is reachable from the requesting node along `Sources` (`SearchReverseNodes`) and belongs to the compiled graph; the engine reads its `CompileContext.Order`. Anything else — a downstream node, a sibling branch, a pruned node, an unrelated chain — is ignored with a single log line and the flow carries on. Implementers never deal in compile orders, so a redirect can be named before the graph is compiled.
 
-⚙ **The redirect route is shipped and exercised.** `PythonScriptNodeViewModel` implements `IRedirectable` (`ResolveRedirectAsync` resolves a named node back to its compile order), and `PythonHelper` drives it: a script's `redirect` field becomes the node's `RedirectTo`, and an `error` in the same output is what makes the engine ask `ResolveRedirectAsync` for that target order.
+⚙ **The redirect route is shipped and exercised.** `PythonScriptNodeViewModel` implements `IRedirectable` (`ResolveRedirectAsync` finds the named node with `SearchReverseNodes`), and `PythonHelper` drives it: a script's `redirect` field becomes the node's `RedirectTo`, and an `error` in the same output is what makes the engine ask for that target.
 
-⚙ The whole graph is re-run from the accepted target, with `Order < target` skipped; `Attempt` increments per pass. **50 redirects** is the cap, after which it throws. When the target is a router's own order, only the branch is re-routed and the router is not driven again.
+⚙ **An accepted redirect ends the pass at the requesting node.** The engine stops walking the current chain, does not drive the remaining entries, and then re-runs the whole graph from the target's compile order with `Order < target` skipped; `Attempt` increments per pass. Continuing the pass first would perform the downstream side effects of a route that is about to be re-run — and with a dynamic router it can drive the fallback branch as well. **50 redirects** is the cap, after which it throws. When the target is a router's own node, only the branch is re-routed and the router is not driven again.
 
 ⚙ **The compiled graph is always acyclic** — a redirect is purely a runtime contract.
 
@@ -235,7 +235,7 @@ public interface IRedirectable
 |---|---|---|
 | `ICompileTimeAware` | once per reached node, when compilation finishes | keep the `ICompileContext`; show `Order` in the UI; `context is { Order: -1 }` means stopped |
 | `IRuntimeAware` | before **every** drive of that node, once per pass | keep the session for logging and shared variables |
-| `IRedirectable` | when a redirect is requested | return an earlier `Order`, or `null` to decline |
+| `IRedirectable` | when a redirect is requested | return an upstream node, or `null` to decline |
 
 ⚙ `AttachCompileTimeContext` is called for reached nodes. A node without a compile context is outside the plan.
 

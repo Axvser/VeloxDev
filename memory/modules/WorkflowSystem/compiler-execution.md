@@ -67,7 +67,9 @@
 - **警告不吃掉结果**：`DriveAsync` 只在 Error 档把这次驱动记成「返回 null」+ `RegisterOutput(node, null)`；Warn 档节点返回什么，下游就收到什么（汇合点里读到的是那个值，不是 null）。
 - **级别是分支私有的**：门面自带一份（与 `Data`/`CurrentNode` 同理）—— 写在会话上，交错的两个分支会互相覆盖。引擎读它走 `RuntimeEngine.ReportedLevel(context, session)`。
 - 与 2026-09-27 之前那条「一句 `Warn` 终止整轮」比，**只有 Warn 这一格变了**；Error 与抛异常的行为逐字回到旧规则。
-- 分档的理由：demo 的 [`PythonHelper.cs`](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 的 `ReceiveAsync` 里，`WarnAsync("Python script is empty; nothing to run.")` 与末尾那个 `catch (Exception ex)` 里的 `throw` 正好是两种意图 —— 脚本为空是「这一支没东西可跑」（某条分支没写脚本不该拖垮整轮），python 进程失败是「没有任何下游能绕过它」。而全仓**没有一个生产 `IRedirectable` 实现者**（只有测试探针），所以 Error 档的默认后果就是终止。
+- **请求回退的这一趟在请求点结束**：`RunExecuteAsync` 接受合法目标后跳出当前链，`RunGraphAsync` 看到 `PendingRedirectTarget` 非空就不再驱动后续 entry；下一趟从 target 起重算。此前本趟会继续走到分支，demo 里未选中的报告节点因此被空负载驱动一次并写成 `Completed`（`DemoGraphTests.ANewRun_ClearsThePreviousRunsNodeStatuses` 钉住，2026-10-31 修）。
+- **`ResolveRedirectAsync` 返回的是节点，不是 Order**：引擎用 `NodeOrder` 把它映射成执行位置，并用 `SearchReverseNodes` 校验它确实是请求节点的上游、且 `Order >= 0`（在本次编译图里）；否则写一行日志忽略。实现者因此不需要知道编译序号，也不会把兄弟分支或无关链误当成「更早」。`PendingRedirectTarget` 仍是 `int`，检查点与产物收集形状不变。
+- 分档的理由：demo 的 [`PythonHelper.cs`](../../../Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/PythonHelper.cs) 的 `ReceiveAsync` 里，`WarnAsync("Python script is empty; nothing to run.")` 与末尾那个 `catch (Exception ex)` 里的 `throw` 正好是两种意图 —— 脚本为空是「这一支没东西可跑」（某条分支没写脚本不该拖垮整轮），python 进程失败是「没有任何下游能绕过它」。生产实现者是 demo 的 `PythonScriptNodeViewModel` 与 `TimerNodeViewModel`；不实现 `IRedirectable` 的节点，Error 档的默认后果就是终止。
 - **同步那对只写日志，异步那对才记录到宿主**：`ErrorAsync`/`WarnAsync` = 同步那对 + 把 `ExecutionError` 交给 `IExecutionErrorSink`（带 `ExecutionReportLevel`，见 §十），**档位语义完全继承**（`ErrorAsync` 一样停）。同步的 `Error`/`Warn` 必须保持 `void`（`ILogWriter.Write` 是同步的，节点帧里不能阻塞），所以它不碰 sink。
 - 节点自己报的记录里带 `CurrentNode`：**扇出里存在分支门面上**，与级别同一个理由。
 
@@ -159,7 +161,7 @@
 
 1. **目标落进（嵌套）分支内部时，分支照进、只跳「目标之前」的节点。** `RunBranchAsync` 不整分支跳过：分支一律进，跳节点交给「**目标之前不驱动**」这条统一规则；路由器的驱动条件是 `target < routerOrder` —— 目标在路由器之后（含落在分支内部）时，路由器属于保留前缀、**不再驱动**。写成 `routerOrder < t` 会把「目标落在分支内部」误判成「整条跳过」，那一趟**一个节点都不会重跑**（实测：日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`）。`RuntimeRedirectTests.RedirectIntoABranch_EntersIt_AndDrivesFromTheTargetInside` 是判别测试：目标在分支内被驱动 2 次。demo 的回退目标 `Generate Dataset` 就落在分支内部，正是这条的实例。
 2. **一条分支的所有选项都通向的节点，只会被编进其中一个选项。** demo 里 `Publish` 挂在三个报告节点之后 ⇒ 编译器把它编进遍历时先遇到的那个选项（实测它的 order 11 只属于 `Zero` 选项）⇒ 路由到 `Low` 的那一轮它根本不跑。想「分支之后再收拢」的步骤，得放到分支**之前**。
-3. **报错的那一趟给下游留 null，而重定向不会中断当趟。** 报错的驱动记 `null`（§六）＋ `RunExecuteAsync` 记下回退目标后继续走完这条链 ⇒ 被拒绝的那一趟，**尾巴拿到的全是 null**。demo 的尾巴脚本因此按「空载荷就记一行 warning 返回」写 —— 否则一次拒绝会换来一屏堆栈。
+3. **报错的驱动记 null；接受回退的那一趟在请求点结束。** 报错本身仍把这次驱动记成 `null`（§六），但一旦回退目标被接受，`RunExecuteAsync` 立即跳出、`RunGraphAsync` 不再驱动后续 entry ⇒ 尾巴**不会**再收到这一趟的 null。回退被拒绝（返回 `null` / 目标不在上游）时链条照常继续，尾巴才拿到 null —— demo 脚本里「空载荷就记一行 warning」的分支仍然覆盖后者。
 
 ## 十三、未做（别当成遗漏）
 

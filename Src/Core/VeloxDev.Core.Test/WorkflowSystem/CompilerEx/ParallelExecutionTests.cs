@@ -182,8 +182,8 @@ public class ParallelExecutionTests
             };
         a.Handler = FailOnce("A");
         b.Handler = FailOnce("B");
-        a.Resolve = _ => 1;   // s1 的 Order：s0(0) 在目标之前，所以重跑时 s0 应被跳过
-        b.Resolve = _ => 0;   // s0 的 Order：若「后写者胜」，重跑会连 s0 一起重跑
+        a.Resolve = _ => s1;   // s0 在 s1 之前，所以重跑时 s0 应被跳过
+        b.Resolve = _ => s0;   // 若「后写者胜」，重跑会连 s0 一起重跑
 
         var session = await ProbeGraph.RunAsync(ProbeGraph.Compile(s0));
 

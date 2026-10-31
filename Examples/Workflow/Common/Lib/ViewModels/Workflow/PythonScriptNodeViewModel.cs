@@ -3,6 +3,7 @@ using VeloxDev.AI;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace Demo.ViewModels;
 
@@ -120,24 +121,17 @@ public partial class PythonScriptNodeViewModel : ICompileTimeAware, IRuntimeAwar
     public string? RedirectTo { get; internal set; }
 
     /// <inheritdoc />
-    /// <returns>The compile order of the named node, or <c>null</c> — which is what ends the run.</returns>
-    /// <inheritdoc/>
-    public Task<int?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
-        => Task.FromResult(OrderOf(RedirectTo));
-
-    // 脚本只认识标题，所以要按标题找回那个节点。走树而不是走编译期的上游锥：ICompileContext.InputNodes
-    // 只在**汇合点**（Count > 1）上填，单输入节点恒为 null，顺着它往上找第一步就断了。
-    // 引擎只接受更早的 Order，所以命名得不对的后果是「忽略这次回退」，不是走错路。
-    private int? OrderOf(string? title)
+    /// <returns>The named upstream node, or <c>null</c> when the name is empty or points outside this node's upstream.</returns>
+    public Task<IWorkflowNodeViewModel?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(title) || Parent is not IWorkflowTreeViewModel tree) return null;
+        if (string.IsNullOrEmpty(RedirectTo)) return Task.FromResult<IWorkflowNodeViewModel?>(null);
 
-        foreach (var node in tree.Nodes)
-        {
-            if (string.Equals(TitleOf(node), title, StringComparison.Ordinal))
-                return (node as ICompileTimeAware)?.CompileContext?.Order;
-        }
-        return null;
+        // 脚本只认识标题，而回退只可能落在上游：直接走标准扩展的反向查询，找到的就是合法目标。
+        // 走图而不是走编译期的上游锥：ICompileContext.InputNodes 只在汇合点（Count > 1）上填，
+        // 单输入节点恒为 null，顺着它往上找第一步就断了。
+        var target = this.SearchReverseNodes(
+            node => string.Equals(TitleOf(node), RedirectTo, StringComparison.Ordinal)).FirstOrDefault();
+        return Task.FromResult<IWorkflowNodeViewModel?>(target);
     }
 
     // 演示图里能被脚本点名的节点类型。脚本要的是一个「从哪儿重跑」的落点，而落点未必是 python 节点

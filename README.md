@@ -163,7 +163,7 @@ The execution model is deliberately explicit:
 
 - **Branches are real.** A node implementing `ICompileTimeRouter` compiles to a branch; static keys are pruned at compile time, dynamic keys are resolved at runtime. If a router selects a sibling branch, the target is reported as not reached — never fabricated.
 - **Fan-out is concurrent, joins are keyed.** A route key with several targets compiles to a parallel segment; a join receives an `IGroupData` keyed by the upstream node, so "wait for all inputs" works regardless of interleaving.
-- **Loops are redirects, not cycles.** `IRedirectable` returns an earlier compile order and the engine re-runs the graph from there, up to 50 redirects per run.
+- **Loops are redirects, not cycles.** `IRedirectable` returns an upstream node; the engine maps it to that node's compile order and re-runs the graph from there, up to 50 redirects per run.
 - **Run controls are optional session objects.** `ExecutionGate`, `Observer`, `RetryPolicy`, `ErrorSink`, `Compensation` and `CheckpointStore` are attached to `RuntimeContext`; none of them changes a run when absent.
 - **Outcome and position are separate.** `TargetReached` says the target was driven; `Outcome` says whether the run completed, was cancelled or failed.
 

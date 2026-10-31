@@ -117,7 +117,7 @@ public class ExecutionCompensationTests
             if (((IRuntimeContext)ctx).Attempt == 1) ((IRuntimeContext)ctx).Error("ask for a re-run");
             return "R";
         };
-        r.Resolve = ctx => ctx.Attempt == 1 ? 1 : null;   // s1 的 Order：重跑时 s0 会被跳过
+        r.Resolve = ctx => ctx.Attempt == 1 ? s1 : null;   // 回到 s1：重跑时 s0 会被跳过
         x.Handler = (ctx, _) => ((IRuntimeContext)ctx).Attempt == 2
             ? throw new InvalidOperationException("boom")
             : "X";

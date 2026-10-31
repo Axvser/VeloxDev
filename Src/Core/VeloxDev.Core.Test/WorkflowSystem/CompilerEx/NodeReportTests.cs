@@ -109,7 +109,7 @@ public class NodeReportTests
             if (((IRuntimeContext)ctx).Attempt == 1) ((IRuntimeContext)ctx).Error("re-run from the start, please");
             return "R";
         };
-        r.Resolve = ctx => ctx.Attempt == 1 ? 0 : null;   // s 的 Order
+        r.Resolve = ctx => ctx.Attempt == 1 ? s : null;   // 上游节点：重跑从它开始
         var context = new RuntimeContext();
 
         await new RuntimeEngine().RunAsync(ProbeGraph.Compile(s), context, CancellationToken.None);

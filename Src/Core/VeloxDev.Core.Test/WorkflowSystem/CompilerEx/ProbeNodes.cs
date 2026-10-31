@@ -272,20 +272,19 @@ internal sealed class RouterNode : ProbeNode, ICompileTimeRouter
 
 /// <summary>
 /// Redirectable node: IWorkflowNodeViewModel + IRedirectable. After the node triggers Error/Warn, the engine calls
-/// ResolveRedirectAsync — returning a predecessor Order re-runs the whole graph toward that state, returning null
-/// continues.
+/// ResolveRedirectAsync — returning an upstream node re-runs the whole graph from it, returning null continues.
 /// </summary>
 internal sealed class RedirectableNode : ProbeNode, IRedirectable
 {
-    /// <summary>Redirect decision: given the runtime context, returns the target Order (null = continue).</summary>
-    public Func<IRuntimeContext, int?>? Resolve { get; set; }
+    /// <summary>Redirect decision: given the runtime context, returns the upstream target node (null = continue).</summary>
+    public Func<IRuntimeContext, IWorkflowNodeViewModel?>? Resolve { get; set; }
 
     // 设了就抛这个异常，而不是给出任何决定。
     public Exception? ResolveThrows { get; set; }
 
     public RedirectableNode(string? name = null) : base(name) { }
 
-    public Task<int?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
+    public Task<IWorkflowNodeViewModel?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
     {
         if (ResolveThrows is { } error) throw error;
         return Task.FromResult(Resolve?.Invoke(context));

@@ -157,23 +157,20 @@ public class DemoGraphTests
 
         var generate = PythonNode(session, "Generate Dataset");
         var audit = PythonNode(session, "Audit");
-        var drives = new Dictionary<string, int>();
-        foreach (var node in session.Tree.Nodes.OfType<PythonScriptNodeViewModel>())
-        {
-            var helper = (StubPythonHelper)node.GetHelper();
-            drives[node.Title] = helper.Drives(node.Title);
-        }
 
-        Assert.AreEqual(2, drives["Generate Dataset"],
+        int Invocations(string title)
+            => ((StubPythonHelper)PythonNode(session, title).GetHelper()).Invocations(title);
+
+        Assert.AreEqual(2, Invocations("Generate Dataset"),
             "driven once per pass — the redirect sent the run back to it; log: " + string.Join(" | ", runtime.Logs));
-        Assert.AreEqual(2, drives["Audit"], "and the audit itself ran on both passes");
-        Assert.AreEqual(2, drives["Numeric Stats"], "a fan-out branch runs on each pass");
+        Assert.AreEqual(2, Invocations("Audit"), "and the audit itself ran on both passes");
+        Assert.AreEqual(2, Invocations("Numeric Stats"), "a fan-out branch runs on each pass");
         var publishTrail = ((StubPythonHelper)PythonNode(session, "Publish").GetHelper()).Trail;
-        Assert.AreEqual(3, drives["Publish"],
+        Assert.AreEqual(3, Invocations("Publish"),
             $"twice on the first pass (fail, retry) and once on the second; trail: {string.Join(" ; ", publishTrail)}");
         Assert.IsTrue(publishTrail.Count >= 2 && publishTrail[0].Contains("drive=1") && publishTrail[1].Contains("drive=2"),
             $"the retry re-drives the same node with a bumped drive counter — that is how a script tells the two apart; got: {string.Join(" ; ", publishTrail)}");
-        Assert.AreEqual(0, drives["Load Sample File"], "the pruned branch is never driven");
+        Assert.AreEqual(0, Invocations("Load Sample File"), "the pruned branch is never driven");
 
         // Warnings that stop nothing, an error that asks for a re-run, and a retry that got through.
         Assert.IsTrue(session.Diagnostics.Any(e => e.Level == ExecutionReportLevel.Warning), "the flat set warns twice");
@@ -195,6 +192,36 @@ public class DemoGraphTests
         Assert.AreEqual("Completed", generate.LastStatus);
         Assert.AreEqual("Completed", audit.LastStatus);
         Assert.IsNull(audit.RedirectTo, "the fallback target is cleared at the start of the drive that follows");
+    }
+
+    /// <summary>
+    /// A fresh run is a new round. Nodes it does not drive must not keep the previous round's Completed pill,
+    /// or the canvas reads as "this one run finished two branches" while only one of them actually produced a
+    /// report. Resume is the exception: there, the already-done nodes are exactly what it carries on from.
+    /// </summary>
+    [TestMethod]
+    public async Task ANewRun_ClearsThePreviousRunsNodeStatuses()
+    {
+        var session = Stubbed();
+        var high = PythonNode(session, "Report High");
+        var zero = PythonNode(session, "Report Zero");
+        high.LastStatus = "Completed";
+        zero.LastStatus = "Completed";
+
+        await RunAsync(session);
+
+        Assert.AreEqual("Idle", high.LastStatus,
+            "the High branch was not driven this run, so its old Completed must be gone");
+        Assert.AreEqual("Idle", zero.LastStatus,
+            "nor was the Zero branch — only the one the payload routed to ran");
+        Assert.AreEqual("Completed", PythonNode(session, "Report Low").LastStatus,
+            "the stub's second-pass grade is Low, so that is the only report that ran");
+
+        // The audit's first pass asks to go back before the branch is reached; the pass must end there,
+        // not drive the selector's fallback branch first and re-run afterwards.
+        Assert.AreEqual(0, ((StubPythonHelper)high.GetHelper()).Invocations("Report High"));
+        Assert.AreEqual(0, ((StubPythonHelper)zero.GetHelper()).Invocations("Report Zero"),
+            "a pass that requested a redirect must stop before the branch, not run its fallback option");
     }
 
     /// <summary>

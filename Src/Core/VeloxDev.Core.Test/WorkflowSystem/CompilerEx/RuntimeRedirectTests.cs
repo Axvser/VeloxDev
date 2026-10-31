@@ -4,10 +4,10 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// Redirect contract: an in-node Error/Warn/exception is treated as a request to fall back to an earlier compile
-/// state. Implementing IRedirectable with a predecessor target re-runs the whole graph toward that Order, skipping
-/// nodes before the target; an invalid (non-predecessor) target is ignored; a target that is the router itself only
-/// re-routes without recomputing; without IRedirectable the status drops to -1; over the limit the run aborts.
+/// Redirect contract: an in-node Error/Warn/exception is treated as a request to fall back to an upstream node.
+/// Implementing IRedirectable with an upstream target re-runs the whole graph from that node's compile order, skipping
+/// nodes before it; a target that is not upstream is ignored; a target that is the router itself only re-routes
+/// without recomputing; without IRedirectable the status drops to -1; over the limit the run aborts.
 /// </summary>
 [TestClass]
 public class RuntimeRedirectTests
@@ -28,7 +28,7 @@ public class RuntimeRedirectTests
                 if (OnAttempt(ctx, 1)) throw new InvalidOperationException("c wants to go back");
                 return "C";
             },
-            Resolve = _ => 1, // 回到 b
+            Resolve = _ => b, // 回到 b（上游节点）
         };
         ProbeGraph.Wire(a, b);
         ProbeGraph.Wire(b, c);
@@ -45,15 +45,14 @@ public class RuntimeRedirectTests
     }
 
     [TestMethod]
-    public async Task RedirectTargetNotAPredecessor_IsIgnored_FlowCompletesSinglePass()
+    public async Task RedirectTargetNotAnUpstreamNode_IsIgnored_FlowCompletesSinglePass()
     {
         var a = new ProbeNode("a") { Handler = (_, _) => "A" };
-        var b = new RedirectableNode("b")
-        {
-            Handler = (_, _) => throw new InvalidOperationException("boom"),
-            Resolve = _ => 5, // 5 >= current Order(1) → 非法(非前驱)
-        };
+        var c = new ProbeNode("c") { Handler = (_, _) => "C" };
+        var b = new RedirectableNode("b") { Handler = (_, _) => throw new InvalidOperationException("boom") };
         ProbeGraph.Wire(a, b);
+        ProbeGraph.Wire(b, c);
+        b.Resolve = _ => c; // 下游节点：不是上游，回退没有意义
         var graph = ProbeGraph.Compile(a);
 
         var session = await ProbeGraph.RunAsync(graph);
@@ -63,6 +62,7 @@ public class RuntimeRedirectTests
         Assert.IsFalse(session.EndedWithError);
         Assert.HasCount(1, a.Calls);
         Assert.HasCount(1, b.Calls);
+        Assert.HasCount(1, c.Calls, "the chain carries on after the ignored request");
     }
 
     [TestMethod]
@@ -80,7 +80,7 @@ public class RuntimeRedirectTests
             Resolve = _ =>
             {
                 router.Selection = "B"; // 重跑时改选 B(动态分支运行期再决)
-                return 0;               // 目标是 Router 自身
+                return router;           // 目标是 Router 自身（上游节点）
             },
         };
         var b = new ProbeNode("b") { Handler = (_, _) => "B" };
@@ -125,7 +125,7 @@ public class RuntimeRedirectTests
             if (OnAttempt(ctx, 1)) throw new InvalidOperationException("go back to x");
             return "Y";
         };
-        y.Resolve = _ => xOrder;
+        y.Resolve = _ => x;
 
         var session = await ProbeGraph.RunAsync(graph);
 
@@ -144,7 +144,7 @@ public class RuntimeRedirectTests
         var b = new RedirectableNode("b")
         {
             Handler = (_, _) => throw new InvalidOperationException("always redirect"),
-            Resolve = _ => 0,
+            Resolve = _ => a,
         };
         ProbeGraph.Wire(a, b);
         var graph = ProbeGraph.Compile(a);

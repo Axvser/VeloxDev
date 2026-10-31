@@ -12,9 +12,9 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 ///  - BranchSegment: drives the router itself, then selects a branch via <see cref="ICompileTimeRouter.ResolveRouteKey"/> and drives the chosen subgraph;
 ///  - ParallelSegment: fan-out group, executes each branch in order (sequential order carries the "wait for all upstream" merge semantics).
 /// When a node calls <see cref="IRuntimeContext.Error"/>/<see cref="IRuntimeContext.Warn"/> or throws inside ReceiveAsync,
-/// it is treated as a redirect request: if the node implements <see cref="IRedirectable"/>, the engine re-runs the
-/// whole graph with the returned compile state (CompileContext.Order), skipping nodes before the target (possibly cross-chain);
-/// when the target is a Router it only re-routes without recomputing.
+/// it is treated as a redirect request: if the node implements <see cref="IRedirectable"/>, it returns an upstream
+/// node, the engine maps that to its compile order, ends the pass there and re-runs the whole graph from it, skipping
+/// nodes before the target; when the target is a Router it only re-routes without recomputing.
 /// <para>
 /// <b>Two levels, two outcomes.</b> <see cref="IRuntimeContext.Warn"/> is a note: the line is written and the run
 /// carries on with whatever the node returned. <see cref="IRuntimeContext.Error"/>, and an exception a node did not
@@ -34,8 +34,9 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 public sealed class RuntimeEngine
 {
     /// <summary>
-    /// Drives the graph to its end: every entry is walked, the nodes a redirect puts before its target are skipped,
-    /// and how it ended is written to <see cref="RuntimeContext.Outcome"/>.
+    /// Drives the graph to its end: every entry is walked, a pass that requests a redirect ends at that node, the
+    /// next pass skips the nodes before its target, and how it ended is written to
+    /// <see cref="RuntimeContext.Outcome"/>.
     /// </summary>
     /// <param name="graph">The compiled graph to drive.</param>
     /// <param name="context">The session to drive it with.</param>
@@ -152,16 +153,19 @@ public sealed class RuntimeEngine
                     break;
             }
             if (terminated) return true;
+
+            // 本趟已经请求回退：后面的 entry 属于下一趟从 target 起的重算，这一趟不再继续驱动。
+            if (context.PendingRedirectTarget is not null) return false;
         }
         return false;
     }
 
     /// <summary>
-    /// Drives a linear chain. On a cross-chain redirect, nodes with Order &lt; the target are skipped;
+    /// Drives a linear chain. On a later pass, nodes with Order &lt; the redirect target are skipped;
     /// a node error (Error/Warn/exception) is treated as a redirect request:
-    /// with <see cref="IRedirectable"/> the node returns a redirect target (possibly cross-chain), which is set on
-    /// <see cref="IRuntimeContext.PendingRedirectTarget"/> so RunAsync re-runs the whole graph with that target;
-    /// without it the flow ends with status -1. Returns true when the flow ends early.
+    /// with <see cref="IRedirectable"/> the node returns an upstream node, which the engine maps to its compile
+    /// order and sets on <see cref="IRuntimeContext.PendingRedirectTarget"/> so RunAsync re-runs the whole graph
+    /// from there; without it the flow ends with status -1. Returns true when the flow ends early.
     /// </summary>
     private async Task<bool> RunExecuteAsync(ChainSegment exec, IRuntimeContext context, CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
     {
@@ -213,9 +217,9 @@ public sealed class RuntimeEngine
                 return true;
             }
 
-            // With IRedirectable → its interface decides the redirect target (possibly cross-chain).
-            // Only a predecessor state (Order < current) is accepted.
-            int? target;
+            // With IRedirectable → its answer is the upstream node to fall back to. The engine owns the
+            // order mapping, so an implementer never has to know a compile-time execution number.
+            IWorkflowNodeViewModel? target;
             try
             {
                 target = await redirectable.ResolveRedirectAsync(context, ct);
@@ -234,14 +238,22 @@ public sealed class RuntimeEngine
                 return true;
             }
 
-            if (target is { } targetOrder && targetOrder < order)
+            // 契约说「我也没办法」：不是错误，值照常往下走。
+            if (target is null) continue;
+
+            var targetOrder = NodeOrder(target);
+            // 只接受本次编译图里的上游节点。上游关系用图查询判定，而不是比较 Order：兄弟分支或无关链的
+            // Order 可能更小，但回到它们不是「回退」，是跳到另一条路上重算。
+            if (targetOrder < 0 || targetOrder >= order || !IsUpstreamOf(node, target))
             {
-                context.PendingRedirectTarget = targetOrder;
+                context.Log($"Redirect target '{target.GetType().Name}' (Order {targetOrder}) is not an upstream compiled node; ignored.");
+                continue;
             }
-            else
-            {
-                context.Log($"Redirect target #{target} is not a predecessor or is invalid; ignored.");
-            }
+
+            context.PendingRedirectTarget = targetOrder;
+            // 已经决定回到 target 重跑：本趟后面的节点不再驱动。它们会在下一趟从 target 起重算；
+            // 继续驱动只会先做一遍副作用 —— demo 里正是它让没被选中的报告节点也跑成 Completed。
+            break;
         }
         return false;
     }
@@ -405,6 +417,11 @@ public sealed class RuntimeEngine
     /// <summary>The node's compile-state Order (-1 when it does not implement ICompileTimeAware).</summary>
     private static int NodeOrder(IWorkflowNodeViewModel node)
         => (node as ICompileTimeAware)?.CompileContext?.Order ?? -1;
+
+    // 沿 Sources 反向可达即上游。用它而不是 Order 比较：分属两支的节点 Order 可以一大一小，
+    // 但它们之间并没有可回退的先后关系。
+    private static bool IsUpstreamOf(IWorkflowNodeViewModel node, IWorkflowNodeViewModel target)
+        => node.SearchReverseNodes().Any(candidate => ReferenceEquals(candidate, target));
 
     // 驱动一个节点：注入 IRuntimeContext、经 ReceiveAsync 执行、把返回值写回 Data 供下游链式传递。
     // 抛异常照旧记 Error 再抛（RunExecuteAsync 决定谁来安排下一步）—— 除非配了重试策略并愿意再给一次机会。

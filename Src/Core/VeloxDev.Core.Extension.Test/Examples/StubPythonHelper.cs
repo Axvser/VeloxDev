@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Demo.ViewModels.Workflow.Helper;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
@@ -36,6 +37,14 @@ internal sealed class StubPythonHelper : PythonHelper
     public Action<int>? OnInvocation { get; set; }
 
     public int Drives(string title) => _drives.TryGetValue(title, out var n) ? n : 0;
+
+    /// <summary>
+    /// How many times the node was invoked, whatever its payload looked like. <see cref="Drives"/> carries the
+    /// last <c>_drive</c> the script saw, and that key exists only when the payload is an object — a null or
+    /// scalar input runs the node just as well while leaving the counter at zero.
+    /// </summary>
+    public int Invocations(string title)
+        => Trail.Count(line => line.StartsWith(title + "|", StringComparison.Ordinal));
 
     /// <summary>How long each call pretends to take — so a test can catch a run while it is still in flight.</summary>
     public TimeSpan PerCallDelay { get; set; }
