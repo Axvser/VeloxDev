@@ -1,10 +1,28 @@
 using System;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
+using VeloxDev.MVVM;
+using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
+
+/// <summary>A selector-driven node that never had its selector configured.</summary>
+public enum UnsetRouteKind { Alpha, Beta }
+
+/// <summary>Mirrors the demo's EnumSelector node, minus the constructor call that sets the selector.</summary>
+[WorkflowBuilder.Node<NodeHelper<UnsetSelectorNode>>(workSemaphore: 1)]
+public partial class UnsetSelectorNode
+{
+    public UnsetSelectorNode() => InitializeWorkflow();
+
+    [VeloxProperty]
+    [SlotSelectors(typeof(UnsetRouteKind))]
+    public partial SlotEnumerator<SlotDefaultViewModel> OutputSlots { get; set; }
+}
 
 /// <summary>
 /// The structural half of validation. A cycle cannot compile, and before this check the lint said nothing
@@ -81,5 +99,26 @@ public class ValidateWorkflowTests
         Assert.IsFalse(
             issues.Any(i => (i["msg"]?.Value<string>() ?? string.Empty).Contains("Cycle", StringComparison.Ordinal)),
             "one forward edge is not a cycle: " + result);
+    }
+
+    /// <summary>
+    /// A selector-driven node without a selector has no ports yet. The old lint said nothing, so a model could
+    /// connect to a node that visually had no ports and only learn the truth from the connection tool.
+    /// </summary>
+    [TestMethod]
+    public void ValidateWorkflow_ReportsAnUnconfiguredSlotEnumerator()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new UnsetSelectorNode { Parent = tree };
+        tree.Nodes.Add(node);
+
+        var result = JObject.Parse(WorkflowToolInvoker.Invoke(new WorkflowAgentScope(tree), "ValidateWorkflow"));
+        var issues = (JArray)result["warnings"]!;
+
+        Assert.IsTrue(
+            issues.Any(i => i["level"]?.Value<string>() == "warn"
+                         && (i["msg"]?.Value<string>() ?? string.Empty).Contains("no selector", StringComparison.Ordinal)
+                         && (i["msg"]?.Value<string>() ?? string.Empty).Contains("SetEnumSlotCollection", StringComparison.Ordinal)),
+            "an unconfigured SlotEnumerator must be a warning that names the configuring tool: " + result);
     }
 }
