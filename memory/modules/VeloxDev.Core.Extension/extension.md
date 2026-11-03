@@ -33,7 +33,7 @@
 | `WithAllowedGenericCommands(params string[])` | **从不调用 = 完全禁用** | `WithAllowedGenericCommands`、判定 `IsGenericCommandAllowed`。名字的 `"Command"` 后缀可省（`WithAllowedGenericCommands`） |
 | `WithSelectionHandler` / `WithConfirmationHandler` | 未设对应处理器 = 不注册 `RequestSelection` / `RequestConfirmation` | 注册处 `WorkflowAgentToolkit.CreateAllTools` 按 `_scope.SelectionHandler` / `ConfirmationHandler` 非空分叉；处理器本身由 `WithSelectionHandler` / `WithConfirmationHandler` 设置 |
 | `McpScope` 的权限接线 | 两个写工具永远注册，能否执行由权限模式与规则决定 | `WorkflowAgentScope.WithMcps` 把 `PermissionCheck` 接到 `McpScope`；`McpAgentToolkit.CreateTools` 注册全部工具 |
-| `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | 无上限 | `WorkflowAgentToolkit.CheckInvocation` |
+| `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | 无上限 | `WorkflowAgentToolkit.CheckInvocation`。**`Bypass` 下三道次数上限都不生效，计数也不走**（`AccountAsync` 跳过 `Spend`）；根 scope 的派发授权改用 `SpawnBudget`，token 上限不受影响 |
 | `WithToolEnabled` / `SetToolEnabled` | 全开 | `CreateTools` 的 `.Where` **加** `CheckInvocation` 的第一条 |
 | **一个子代理的额度** | 从父那里取一份**份额**，不是另开一口锅 | 授权在 `SubAgentScope.TrySpawn` 就被夹紧，执行期由 `CheckInvocation` 的根账本分支兜底 |
 | 权限模式的确认闸 | `Manual` 问、`Auto` 不问（除变更可达范围那一类） | `ToolPipeline.Confirm` → `WorkflowAgentToolkit.ConfirmMutationAsync`，判定 `AgentPermissionPolicy.Evaluate`；**确认钩子本身不产生提示文本**，所以只有模式变更才 `BumpVersion()` |

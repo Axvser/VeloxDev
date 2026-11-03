@@ -368,28 +368,39 @@ public sealed class WorkflowAgentToolkit
         if (_scope.PermissionPolicy.Evaluate(invocation) == PermissionDecision.Deny)
             return _scope.DescribePermissionRefusal(invocation);
 
-        // ── The session's shared allowance, when this scope is spending somebody else's ──
-        // Asked before this scope's own share, because it is the harder wall and the only one the model
-        // cannot reason its way around: when the tree is out, no call of any kind is accepted, so naming a
-        // per-kind limit here would explain the refusal with the wrong limit. Skipped at the root, where it
-        // would be the same counter measured against the same cap and would report one wall as two.
-        var root = _ledger.Root;
-        if (!ReferenceEquals(root, _ledger) && root.Owner.MaxToolCalls is { } ceiling)
+        // ── The call-count budgets ──
+        // Bypass does not enforce them. The mode's promise is that nothing is put to the user, and a count
+        // the model could only get past by asking is exactly that — the mode would be a dialog it cannot
+        // reach. Nothing is charged either (AccountAsync skips Spend), so a configured number cannot be
+        // consumed by work the mode calls free; a sub-agent's grant is still one less than its parent's,
+        // which is what keeps depth bounded without the shared pot. The token cap below still applies: it
+        // is a spend limit, not a call count.
+        if (_scope.PermissionPolicy.Mode != AgentPermissionMode.Bypass)
         {
-            var (treeSpent, _, _) = root.Usage;
-            if (treeSpent >= ceiling)
-                return BudgetRefusal($"The session's tool-call budget ({ceiling}) is spent.");
+            // ── The session's shared allowance, when this scope is spending somebody else's ──
+            // Asked before this scope's own share, because it is the harder wall and the only one the model
+            // cannot reason its way around: when the tree is out, no call of any kind is accepted, so naming
+            // a per-kind limit here would explain the refusal with the wrong limit. Skipped at the root,
+            // where it would be the same counter measured against the same cap and would report one wall as
+            // two.
+            var root = _ledger.Root;
+            if (!ReferenceEquals(root, _ledger) && root.Owner.MaxToolCalls is { } ceiling)
+            {
+                var (treeSpent, _, _) = root.Usage;
+                if (treeSpent >= ceiling)
+                    return BudgetRefusal($"The session's tool-call budget ({ceiling}) is spent.");
+            }
+
+            var (spent, readCalls, writeCalls) = _ledger.Usage;
+            if (_scope.MaxToolCalls.HasValue && spent >= _scope.MaxToolCalls.Value)
+                return BudgetRefusal($"Tool call limit ({_scope.MaxToolCalls.Value}) reached.");
+
+            bool isQueryTool = IsQueryTool(toolName);
+            if (!isQueryTool && _scope.MaxWriteToolCalls.HasValue && writeCalls >= _scope.MaxWriteToolCalls.Value)
+                return BudgetRefusal($"Mutation tool call limit ({_scope.MaxWriteToolCalls.Value}) reached.");
+            if (isQueryTool && _scope.MaxReadToolCalls.HasValue && readCalls >= _scope.MaxReadToolCalls.Value)
+                return BudgetRefusal($"Query tool call limit ({_scope.MaxReadToolCalls.Value}) reached.");
         }
-
-        var (spent, readCalls, writeCalls) = _ledger.Usage;
-        if (_scope.MaxToolCalls.HasValue && spent >= _scope.MaxToolCalls.Value)
-            return BudgetRefusal($"Tool call limit ({_scope.MaxToolCalls.Value}) reached.");
-
-        bool isQueryTool = IsQueryTool(toolName);
-        if (!isQueryTool && _scope.MaxWriteToolCalls.HasValue && writeCalls >= _scope.MaxWriteToolCalls.Value)
-            return BudgetRefusal($"Mutation tool call limit ({_scope.MaxWriteToolCalls.Value}) reached.");
-        if (isQueryTool && _scope.MaxReadToolCalls.HasValue && readCalls >= _scope.MaxReadToolCalls.Value)
-            return BudgetRefusal($"Query tool call limit ({_scope.MaxReadToolCalls.Value}) reached.");
 
         // A token cap is a cap on the whole run, not on one kind of call. It is checked last because a
         // call-count refusal is more actionable, and the model should hear the narrower wall first.
@@ -458,7 +469,12 @@ public sealed class WorkflowAgentToolkit
             return;
         }
 
-        _ledger.Spend(IsQueryTool(toolName));
+        // Bypass does not count at all: the ledger is the budget, and this mode has none. Skipping the spend
+        // also keeps a sub-agent's allowance from shrinking as the tree works — the grant it was handed is
+        // still one less than its parent's, so depth stays bounded without a shared pot.
+        if (_scope.PermissionPolicy.Mode != AgentPermissionMode.Bypass)
+            _ledger.Spend(IsQueryTool(toolName));
+
         await _scope.RaiseToolCalledAsync(toolName, result, _ledger.Usage.ToolCalls).ConfigureAwait(false);
         if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName) && !_scope.IsQueryOnlyCustomTool(toolName))
             Tree.GetHelper().MarkDirty();
@@ -484,8 +500,10 @@ public sealed class WorkflowAgentToolkit
         if (exhausted is null)
             return Ok("No tool-call limit is currently reached; there is nothing to extend.");
 
-        // No mode reopens the budget on its own, Bypass included: the budget is the host's number, so the
-        // only way past it is the user's answer. With no handler there is no answer, and no answer denies.
+        // No mode reopens a budget this gate is enforcing on its own, Bypass included: what is enforced is
+        // the host's number, so the only way past it is the user's answer. With no handler there is no
+        // answer, and no answer denies. (In Bypass the three call counts never reach here — the gate skips
+        // them, and DescribeExhaustedLimit no longer reports them — so this path is the token cap.)
         // Asking is the whole safety property: the Agent cannot widen its own budget, it can only put the
         // question to the user. With no confirmation handler registered the answer is no — an unanswerable
         // prompt must deny, never silently allow.
@@ -535,12 +553,18 @@ public sealed class WorkflowAgentToolkit
         var (toolCalls, readCalls, writeCalls) = CallUsage;
         var parts = new List<string>();
 
-        if (_scope.MaxToolCalls.HasValue && toolCalls >= _scope.MaxToolCalls.Value)
-            parts.Add($"{toolCalls}/{_scope.MaxToolCalls.Value} 次工具调用");
-        if (_scope.MaxReadToolCalls.HasValue && readCalls >= _scope.MaxReadToolCalls.Value)
-            parts.Add($"{readCalls}/{_scope.MaxReadToolCalls.Value} 次查询");
-        if (_scope.MaxWriteToolCalls.HasValue && writeCalls >= _scope.MaxWriteToolCalls.Value)
-            parts.Add($"{writeCalls}/{_scope.MaxWriteToolCalls.Value} 次变更");
+        // Bypass does not enforce the three call counts (CheckInvocation), so a spent count is not a limit
+        // the user could meaningfully extend — asking about it would reopen nothing the gate was holding
+        // shut. Only the token cap can still be reached in that mode.
+        if (_scope.PermissionPolicy.Mode != AgentPermissionMode.Bypass)
+        {
+            if (_scope.MaxToolCalls.HasValue && toolCalls >= _scope.MaxToolCalls.Value)
+                parts.Add($"{toolCalls}/{_scope.MaxToolCalls.Value} 次工具调用");
+            if (_scope.MaxReadToolCalls.HasValue && readCalls >= _scope.MaxReadToolCalls.Value)
+                parts.Add($"{readCalls}/{_scope.MaxReadToolCalls.Value} 次查询");
+            if (_scope.MaxWriteToolCalls.HasValue && writeCalls >= _scope.MaxWriteToolCalls.Value)
+                parts.Add($"{writeCalls}/{_scope.MaxWriteToolCalls.Value} 次变更");
+        }
         if (_scope.MaxTokens.HasValue && _scope.TotalTokens >= _scope.MaxTokens.Value)
             parts.Add($"{_scope.TotalTokens}/{_scope.MaxTokens.Value} tokens");
 

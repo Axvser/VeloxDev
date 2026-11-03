@@ -24,14 +24,15 @@
 任意深度把两个无界性放进来了：深度无界、分身数无界。子代理若各拿一份**独立**预算，「父是超集」就只在 spawn 那一刻成立，整棵树的实际开销完全无界。所以预算是一棵**树一口锅**（`ToolCallLedger`），而额度沿路径**严格递减**：
 
 ```
-有效上限 = MaxToolCalls ?? SpawnBudget          // 恒为有限值
+有效上限 = (根 scope 且 Bypass) ? SpawnBudget : MaxToolCalls ?? SpawnBudget   // 恒为有限值
 子额度   = min(请求值 ?? 剩余, 剩余 − 1)        // TrySpawn 里的 min(...)
 剩余     = min(有效上限 − 本层已用, 根上限 − 根已用)   // RemainingAllowance
 子额度 < 1 ⇒ 拒绝这次 spawn（不是给 0）
 ```
 
 - `SpawnBudget`（默认 64，见 `SpawnBudget` / `WithSpawnBudget`）**顶替**未设 `WithMaxToolCalls` 的父。没有它，「父剩余」对不设上限的宿主根本没有定义，递减就不成立 —— 这一行是整个终止性质的落点。
-- `− 1` 不是重复计数：`SpawnSubAgent` 被归为**只读**（§六），但仍会被 `AccountAsync` 记一次，`− 1` 保证「即便那次记账没发生，界依然成立」。
+- **Bypass 的根 scope 不认宿主的 `WithMaxToolCalls`**（`RemainingAllowance` 里判 `ParentLedger is null && PermissionPolicy.Mode == Bypass`）：该模式既不执行也不记录调用数，一个设成 0 的上限否则会让根自己无限调用、却一个孩子都派不出去。`SpawnBudget` 直接顶替它；`InBypass_ConfiguredCapDoesNotBlockDelegation` 钉住这条。子 scope 不受影响：它的 `ParentLedger` 非空，用的是自己被授予的那个更小的数。
+- `− 1` 本身就是界，与那口锅有没有被记账无关：普通模式下 `SpawnSubAgent` 被归为**只读**（§六）但会被 `AccountAsync` 记一次；Bypass 下根本不记。两种情况下 `− 1` 都保证额度逐级严格递减，所以终止不依赖计数。
 - `RemainingAllowance` 还额外夹一次**根锅**（方法内的根锅夹取）：否则授权会许诺一个孩子超出整棵树能交付的量，而真正的拒绝发生在调用期，离这次撒谎的 spawn 很远。
 - 推论：**深度 ≤ 根额度**，不是魔法常数，是算术。`TheRootsCap_BitesThroughASibling_NotThroughTheChildsOwnShare` 把这条写成算术断言。
 - **终止 ≠ 可用**：根设 200 且没花过，就允许一条 199 层深的链。`WithSubAgentDepth` 才是让它有用的东西，宿主该两个都设 —— 这句在 `SubAgentScope` 的类注释与 `WithSubAgentDepth` 的注释里各写了一遍。
@@ -147,7 +148,7 @@
 
 ### 4.2 孩子握着重置工具的代价：重置是**用户的**闸，不是孩子的免费续命
 
-`ResetToolCallLimit` 的语义没变（`WorkflowAgentToolkit.CheckInvocation` 里，逃生舱 → 禁用 → 权限模式拒绝 → 根锅 → 本层额度 → 读/写分档 → token 上限）：没有耗尽时回 `ok` + 一句「当前没有触顶的限制」；没有确认处理器时 `denied`；用户同意时 `ok` + `ResetChain()`。
+`ResetToolCallLimit` 的语义没变（`WorkflowAgentToolkit.CheckInvocation` 里，逃生舱 → 禁用 → 权限模式拒绝 → **非 Bypass 时才走：根锅 → 本层额度 → 读/写分档** → token 上限）：没有耗尽时回 `ok` + 一句「当前没有触顶的限制」；没有确认处理器时 `denied`；用户同意时 `ok` + `ResetChain()`。
 
 **它在任何授权清单里都在**：`CreateTools` 对它有豁免，所以 `TrySpawn` 在算完 `grantedTools` 后会把它补进去（包括空白名单的孩子）。于是「空白名单 = 零个工具」的准确说法是「只剩预算的逃生舱」—— 报告与实际因此仍然一致。
 
@@ -208,7 +209,7 @@
 | 五个名字并入只读集合（与技能工具同一段） | `BuildQueryToolNames` |
 | 自定义工具分组（可继承的前提） | `_customToolGroups`、`AppendCustomToolPrompt`、`GrantCustomToolsTo` |
 
-**`CheckInvocation` 的顺序是有讲究的**：逃生舱（`ResetToolCallLimit` 无条件放行）→ 禁用 → 权限模式拒绝 → **根锅** → 本层额度 → 读/写分档 → token 上限。根锅排在**本层之前**，因为它更硬、且是模型唯一绕不过去的墙；报错时必须指名对的那堵墙，否则模型会围绕错误的限制做推理。根 scope 上这条**跳过**（`CheckInvocation` 里跳过根锅的那段），不然同一个计数器会对同一个上限报两次。禁用判定排在最前，所以「被关掉的工具」永远赢 —— 这是宿主能对孩子单独关掉一把工具的唯一入口（`TrySpawn` 末尾那个循环），而**它不对任何一类工具做无条件关停**（没有 `NoChildMayHold`，§四）。
+**`CheckInvocation` 的顺序是有讲究的**：逃生舱（`ResetToolCallLimit` 无条件放行）→ 禁用 → 权限模式拒绝 → **根锅 → 本层额度 → 读/写分档（`Bypass` 下整段跳过）** → token 上限。根锅排在**本层之前**，因为它更硬、且是模型唯一绕不过去的墙；报错时必须指名对的那堵墙，否则模型会围绕错误的限制做推理。根 scope 上这条**跳过**（`CheckInvocation` 里跳过根锅的那段），不然同一个计数器会对同一个上限报两次。禁用判定排在最前，所以「被关掉的工具」永远赢 —— 这是宿主能对孩子单独关掉一把工具的唯一入口（`TrySpawn` 末尾那个循环），而**它不对任何一类工具做无条件关停**（没有 `NoChildMayHold`，§四）。
 
 **五个工具全部计入只读**（`BuildQueryToolNames` 把 `SubAgentAgentToolkit.ToolNames` 并进 `QueryToolNames`）：spawn/wait/cancel 既不改图也不该标脏。`ASpawnIsAQuery_AndSoIsNotChargedToTheMutationBudget` 连「读预算花光时 spawn 会被拒」一起钉住。
 

@@ -17,7 +17,8 @@ public class AgentToolCallEventArgs(string toolName, string result, int callCoun
     public string Result { get; } = result ?? string.Empty;
 
     /// <summary>
-    /// Cumulative number of tool calls in the current session.
+    /// Cumulative number of tool calls in the current session. A workflow scope in Bypass mode records no
+    /// spend, so it reports 0 for every call there.
     /// </summary>
     public int CallCount { get; } = callCount;
 }

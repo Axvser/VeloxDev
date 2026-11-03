@@ -82,7 +82,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 2. `TrackedAIFunction` 先把**整段调用**编组到宿主的 `SynchronizationContext`（`TrackedAIFunction.InvokeCoreAsync` → `RunOnContextAsync`）。**工具体里刻意没有 `ConfigureAwait(false)`** —— 加了会把 await 之后的工作挪到线程池，而那正是「连接校验 / `ExecuteNodes` 的第二个节点 / 执行引擎驱动编译链」发生的地方。
 3. 在编组块内、工具体之前，先跑 `ToolPipeline.CheckRefusal`（`TrackedAIFunction.InvokeCoreInnerAsync`）。拒绝 ⇒ 不跑工具体，直接发 `AgentToolCallCompleted{Refused}` 并返回 `{"status":"error",…}`（`TrackedAIFunction.Error`）。
 4. 若工具没被预算拒绝，再跑 `ToolPipeline.CheckConfirmationAsync`（`TrackedAIFunction.InvokeCoreInnerAsync`）—— 由权限策略判为 `Ask` 的调用才问人（只读 / `Allow` 不问）；拒绝同样按 `Refused` 上报。**这是 `CheckInvocation` 之后的第二道闸**（见 `maf-conformance.md` §三）。
-5. `WorkflowAgentToolkit.CheckInvocation` 按顺序判：**预算工具本身放行** → **被宿主关掉的工具** → **权限模式拒绝** → **根账本上限（子 scope 才有）** → `MaxToolCalls` → 写/读分档上限 → `MaxTokens`（最后，因为次数上限更可操作）。命中就返回 `BudgetRefusal`。`ResetToolCallLimit` 的豁免在**最前**：宿主可以关掉任何工具，但关不掉预算的出口。**两类 scope 现在都被指去 `ResetToolCallLimit`**（`LimitRefusal`）—— 因为两类都持有它；区别只在追加的职责：子 scope 另被要求「向上报告」，因为它有一个悬在结果上的派发者。见 `sub-agents.md` §四。
+5. `WorkflowAgentToolkit.CheckInvocation` 按顺序判：**预算工具本身放行** → **被宿主关掉的工具** → **权限模式拒绝** → **`Bypass` 下跳过三道调用数上限** → **根账本上限（子 scope 才有）** → `MaxToolCalls` → 写/读分档上限 → `MaxTokens`（最后，因为次数上限更可操作）。命中就返回 `BudgetRefusal`。`ResetToolCallLimit` 的豁免在**最前**：宿主可以关掉任何工具，但关不掉预算的出口。**`Bypass` 连计数一起跳过**：`AccountAsync` 在该模式下不调 `ToolCallLedger.Spend`，计数器停在原地，所以宿主设的调用数不会被「这个模式说免费」的工作消耗掉。`MaxTokens` 不在跳过范围内（它管花费，不管次数），`DescribeExhaustedLimit` 因此在该模式下不再把次数报成「可续」的上限。子代理授权的连带规则见 `sub-agents.md`：根 scope 在 Bypass 下改用 `SpawnBudget`（`SubAgentScope.RemainingAllowance`），逐级减一的 grant 仍然保证深度终止。**两类 scope 现在都被指去 `ResetToolCallLimit`**（`LimitRefusal`）—— 因为两类都持有它；区别只在追加的职责：子 scope 另被要求「向上报告」，因为它有一个悬在结果上的派发者。见 `sub-agents.md` §四。
 6. 工具体跑完 ⇒ `TrackedAIFunction.ReportAsync` 发 `AgentToolCallCompleted{Succeeded|Failed}`，带耗时。
 7. `AccountingStage`（`WorkflowAgentToolkit.CreateAccountingStage`）只对 **`Succeeded`** 记账。`AccountAsync` 先跳过预算工具本身（否则重置会把自己刚清零的计数再加回去 = 「重置撤销了自己」），再 `_ledger.Spend(IsQueryTool(toolName))`（沿账本链一路上行）、发 `RaiseToolCalledAsync`、按需要 `MarkDirty()`。
 8. 事件继续沿 `AgentPipeline` 走到 `TextPipeline` / `ToolPipeline`，写进 `AgentTranscript`。
@@ -180,7 +180,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 三条不变量：
 
-1. **`deny` 压得住 `allow`，也压得住 `Bypass`** —— 所以 Bypass 不是「关掉安全系统」。
+1. **`deny` 压得住 `allow`，也压得住 `Bypass`** —— 所以 Bypass 不是「关掉安全系统」。它关掉的是提问与三道**调用数**上限；token 上限与 deny 规则都照常。
 2. **`Plan` 的拒绝与 deny 同级**，`allow` 规则开不了它（否则「我做方案时什么都不变」这个承诺就被一条规则偷偷破了）。
 3. **「哪一模式允许什么」只住在提示词里** —— `[Description]` 是静态字符串，跟不上运行期可改的模式；与挡位相关的说明只能**让位**。
 
@@ -210,7 +210,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 | 并发（多 scope 同树） | `WorkflowAgentScope.MutationGate` + `TrackedAIFunction` 的取锁分支 |
 | 图的保存/恢复 | `SerializeWorkflow` / `LoadWorkflow`、`WorkflowAgentScope.WithWorkflowLoader` / `TreeChanged` |
 | token 账 | `WorkflowAgentScope.WithMaxTokens` / `TokenUsageStage` / `ResetTokenUsage`；事件在 `Agent/Pipelines/AgentEvent.cs` |
-| 工具预算（三档、拒绝文案、重置流程） | `WorkflowAgentToolkit.CheckInvocation`、`AccountAsync`、`ResetToolCallLimit`、`BudgetRefusal` 的根/子分叉、`Agent/Workflow/Functions/ToolCallLedger.cs`（树共享的那口锅）。**上限本身**由 `WithMax{Tool,Read,Write}ToolCalls` 设，三个都 `BumpVersion()` —— 门（`CheckInvocation`）读的是实时属性，包络读的是缓存文本，不 bump 就会让模型读到一个不被执行的上限 |
+| 工具预算（三档、拒绝文案、重置流程） | `WorkflowAgentToolkit.CheckInvocation`、`AccountAsync`、`ResetToolCallLimit`、`BudgetRefusal` 的根/子分叉、`Agent/Workflow/Functions/ToolCallLedger.cs`（树共享的那口锅）。**上限本身**由 `WithMax{Tool,Read,Write}ToolCalls` 设，三个都 `BumpVersion()` —— 门（`CheckInvocation`）读的是实时属性，包络读的是缓存文本，不 bump 就会让模型读到一个不被执行的上限。**`Bypass` 是门的例外**：三道次数上限跳过、账也不记（`AccountAsync`），包络（`AppendBudgets`）相应改说「Bypass 模式下不生效」——文案与门必须同源，否则模型会围着一堵不存在的墙规划 |
 | 子代理（派发 / 窄化 / 任意深度为什么终止） | `Agent/SubAgents/`（见 `sub-agents.md`） |
 | 提示词（行为约束、失败处理、渐进模式） | `Agent/Workflow/WorkflowAgentScope.cs` 的 `ProvideProgressiveContextPrompt`、`BuildFailureHandlingProtocol` |
 | 模式与规则注入什么 | `WorkflowAgentScope.BuildInteractionSafetyPrompt`（先 `Shared.md`、再 `{mode}.md`、最后宿主覆盖，自己再画真值表）+ `Resources/Workflow/{lang}/Safety/*.md` |
@@ -377,6 +377,6 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 （`ReadMap` 里 `key is null → SkipValue`）。
 
 **⚠ 修的是生成器，所以 Release 不受益。** `VeloxJsonRegistry` / `ReadValue` 那半边在源码里、两种配置都生效；
-但**工厂是生成代码**，而 Release 走的是 NuGet 包（`VeloxDev.Core.csproj` 的 `<Version>`（当前 `10.0.1`）、
-`VeloxDev.Core.Extension.Test.csproj` 的生成器 `PackageReference`（当前 `10.0.0`））—— 不升包，Release 下带连接的树仍然读不回来。
+但**工厂是生成代码**，而 Release 走的是 NuGet 包（`VeloxDev.Core.csproj` 的 `<Version>`（当前 `11.0.0`）、
+`VeloxDev.Core.Extension.Test.csproj` 的生成器 `PackageReference`（当前 `11.0.0`））—— 不升包，Release 下带连接的树仍然读不回来。
 哪几处要一起升见 [`VeloxDev.Core.Generator/extension.md`](../VeloxDev.Core.Generator/extension.md) §四。

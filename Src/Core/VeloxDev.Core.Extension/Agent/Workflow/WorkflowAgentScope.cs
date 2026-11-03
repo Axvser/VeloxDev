@@ -34,7 +34,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     /// <summary>
     /// The session's token cap, or <c>null</c> for no cap. Once the reported spend reaches it, tool calls
-    /// are refused (the model can still answer). Set with <see cref="WithMaxTokens"/>.
+    /// are refused (the model can still answer). Set with <see cref="WithMaxTokens"/>. Unlike the call-count
+    /// caps, this one is still enforced in <see cref="AgentPermissionMode.Bypass"/>.
     /// </summary>
     public int? MaxTokens { get; private set; }
 
@@ -51,7 +52,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// <summary>Total tokens reported by the model provider for this scope's runs.</summary>
     public long TotalTokens => Interlocked.Read(ref _totalTokens);
 
-    /// <summary>The cap on total tool calls, or <c>null</c> for no cap. Set by <see cref="WithMaxToolCalls"/>.</summary>
+    /// <summary>
+    /// The cap on total tool calls, or <c>null</c> for no cap. Set by <see cref="WithMaxToolCalls"/>.
+    /// Neither enforced nor counted while the session is in <see cref="AgentPermissionMode.Bypass"/>.
+    /// </summary>
     public int? MaxToolCalls { get; private set; }
 
     /// <summary>Whether mutating tool calls automatically mark the tree dirty. Set by <see cref="WithAutoMarkDirty"/>.</summary>
@@ -158,8 +162,17 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
-    /// <summary>Caps the total number of tool calls per turn.</summary>
+    /// <summary>
+    /// Caps the total number of tool calls the scope may make, counted across its lifetime until
+    /// <c>ResetToolCallLimit</c> clears the ledger.
+    /// </summary>
     /// <param name="maxCalls">The cap.</param>
+    /// <remarks>
+    /// Not enforced while the session is in <see cref="AgentPermissionMode.Bypass"/>: that mode's promise is
+    /// that nothing is put to the user, and a count the model could only get past by asking is exactly that.
+    /// The counter does not move either — the ledger is the budget, and there is none in that mode — so a
+    /// sub-agent's allowance is bounded by its granted number rather than by the tree's shared spend.
+    /// </remarks>
     public WorkflowAgentScope WithMaxToolCalls(int maxCalls)
     {
         MaxToolCalls = maxCalls;
@@ -173,7 +186,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// <summary>
     /// Sets a separate cap on read-only (query) tool calls. Independent of <see cref="WithMaxToolCalls"/>
     /// and <see cref="WithMaxWriteToolCalls"/>. Use to stop token-heavy queries (ListNodes, GetFullTopology, …)
-    /// from consuming the mutation budget.
+    /// from consuming the mutation budget. Not enforced in <see cref="AgentPermissionMode.Bypass"/>.
     /// </summary>
     public WorkflowAgentScope WithMaxReadToolCalls(int maxCalls)
     {
@@ -185,6 +198,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// <summary>
     /// Sets a separate cap on mutation (non-query) tool calls. Independent of <see cref="WithMaxToolCalls"/>
     /// and <see cref="WithMaxReadToolCalls"/>. Use to bound how many graph edits an Agent may make in a turn.
+    /// Not enforced in <see cref="AgentPermissionMode.Bypass"/>.
     /// </summary>
     public WorkflowAgentScope WithMaxWriteToolCalls(int maxCalls)
     {
@@ -2256,9 +2270,23 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
         sb.AppendLine(chinese ? "### 调用预算" : "### Call budgets");
         sb.AppendLine();
-        AppendBudgetLine(sb, chinese, chinese ? "工具调用" : "Tool calls", toolCalls, MaxToolCalls);
-        AppendBudgetLine(sb, chinese, chinese ? "只读（查询）调用" : "Read-only (query) calls", readCalls, MaxReadToolCalls);
-        AppendBudgetLine(sb, chinese, chinese ? "变更调用" : "Mutating calls", writeCalls, MaxWriteToolCalls);
+
+        // Bypass does not enforce the three call-count caps (WorkflowAgentToolkit.CheckInvocation), so
+        // printing "cap 200" there would describe a wall the model cannot hit. The token line keeps its
+        // normal rendering: it is the one budget Bypass still applies.
+        if (_permission.Mode == AgentPermissionMode.Bypass)
+        {
+            sb.AppendLine(chinese
+                ? "- 工具调用 / 只读（查询）调用 / 变更调用：**Bypass 模式下不生效**"
+                : "- Tool calls / read-only (query) calls / mutating calls: **not enforced in Bypass mode**");
+        }
+        else
+        {
+            AppendBudgetLine(sb, chinese, chinese ? "工具调用" : "Tool calls", toolCalls, MaxToolCalls);
+            AppendBudgetLine(sb, chinese, chinese ? "只读（查询）调用" : "Read-only (query) calls", readCalls, MaxReadToolCalls);
+            AppendBudgetLine(sb, chinese, chinese ? "变更调用" : "Mutating calls", writeCalls, MaxWriteToolCalls);
+        }
+
         AppendBudgetLine(sb, chinese, chinese ? "Tokens" : "Tokens", TotalTokens, MaxTokens);
         sb.AppendLine();
     }

@@ -14,6 +14,11 @@ namespace VeloxDev.AI.Workflow.Functions;
 /// and the tree's total spend unbounded.
 /// </para>
 /// <para>
+/// <b>Bypass spends nothing.</b> No <see cref="Spend"/> call is made in that mode, so this ledger stays at
+/// zero; the tree is still finite because each spawn is granted one less than its parent holds. The
+/// termination argument above is the enforced-budget one, not the only one.
+/// </para>
+/// <para>
 /// <b>A root scope's ledger has no <see cref="Outer"/>, and then every member below reduces to exactly the
 /// three counters this replaced.</b> A host that never attaches a sub-agent scope cannot observe any
 /// difference — which is the property that keeps the existing budget tests meaningful.

@@ -163,11 +163,35 @@ public class BudgetResetTests
     }
 
     [TestMethod]
-    public void InBypass_TheBudgetIsStillTheHostsToReopen()
+    public void InBypass_TheCallCountLimitsAreNotEnforced()
     {
-        // No mode reopens the budget on its own, Bypass included: the budget is the host's number, and the
-        // only way past it is the user's answer. A mode that could extend its own budget would make the
-        // limit a suggestion.
+        // The mode's promise is that nothing is put to the user. A count the model could only get past by
+        // asking is a dialog it cannot reach, so the three call-count gates stand down — while the counters
+        // keep moving, because sub-agent grants are computed from them.
+        var tree = new TreeDefaultViewModel();
+        var scope = new WorkflowAgentScope(tree)
+            .WithMaxToolCalls(0)
+            .WithMaxReadToolCalls(0)
+            .WithMaxWriteToolCalls(0)
+            .WithPermissionMode(AgentPermissionMode.Bypass);
+
+        var query = JObject.Parse(Invoke(scope, "ValidateWorkflow"));
+        Assert.AreEqual("ok", query["status"]?.Value<string>(),
+            $"a query must run past a spent count in Bypass: {query}");
+
+        var mutation = JObject.Parse(Invoke(scope, "MarkDirty"));
+        Assert.AreNotEqual("error", mutation["status"]?.Value<string>(),
+            $"a mutation must run past a spent count in Bypass: {mutation}");
+
+        Assert.AreEqual(0, scope.CreateToolkit().CallUsage.ToolCalls,
+            "Bypass does not record spend either, so nothing the tree does depletes a sub-agent allowance");
+    }
+
+    [TestMethod]
+    public void InBypass_ASpentCallCount_IsNothingToExtend()
+    {
+        // The reset tool asks about a limit the gate is holding shut. In Bypass the count is not one, so
+        // putting the question to the user would reopen nothing.
         var scope = SpendBudget(0).WithPermissionMode(AgentPermissionMode.Bypass);
         var asked = 0;
         scope.WithConfirmationHandler(args =>
@@ -179,9 +203,37 @@ public class BudgetResetTests
 
         var json = JObject.Parse(Invoke(scope, WorkflowAgentToolkit.ResetBudgetToolName));
 
-        Assert.AreEqual(1, asked, "Bypass turns off the questions about tools, not the one about the budget");
-        Assert.AreEqual("ok", json["status"]?.Value<string>(),
-            "the user's answer is the only way past the budget, and Bypass does not stand in for one");
+        Assert.AreEqual(0, asked, "there is no enforced limit for the user to extend");
+        Assert.AreEqual("ok", json["status"]?.Value<string>());
+        StringAssert.Contains(json["message"]?.Value<string>() ?? string.Empty, "nothing to extend");
+    }
+
+    [TestMethod]
+    public void InBypass_TheTokenBudgetIsStillEnforced()
+    {
+        // A token cap is a spend limit, not a call count: Bypass turns off the requests, not the ceiling the
+        // host put on what the conversation may cost.
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
+            .WithMaxTokens(100)
+            .WithPermissionMode(AgentPermissionMode.Bypass);
+        scope.AddUsage(new UsageDetails { InputTokenCount = 60, OutputTokenCount = 40, TotalTokenCount = 100 });
+
+        var refused = JObject.Parse(Invoke(scope, "ValidateWorkflow"));
+        Assert.AreEqual("error", refused["status"]?.Value<string>());
+        StringAssert.Contains(refused["message"]!.Value<string>()!, "Token budget");
+
+        var asked = 0;
+        scope.WithConfirmationHandler(args =>
+        {
+            asked++;
+            args.Result = AgentConfirmationResult.AllowOnce;
+            return System.Threading.Tasks.Task.CompletedTask;
+        });
+
+        var reset = JObject.Parse(Invoke(scope, WorkflowAgentToolkit.ResetBudgetToolName));
+
+        Assert.AreEqual(1, asked, "the token cap still puts its question to the user");
+        Assert.AreEqual("ok", reset["status"]?.Value<string>());
     }
 
     [TestMethod]
@@ -271,6 +323,23 @@ public class BudgetResetTests
         Assert.AreEqual(0, scope.TotalTokens);
         Assert.AreEqual("ok", JObject.Parse(Invoke(scope, "ValidateWorkflow"))["status"]?.Value<string>(),
             "with the ledger cleared, the next call is accepted again");
+    }
+
+    [TestMethod]
+    public void InBypass_ThePromptDoesNotStateCallCapsAsAWall()
+    {
+        // The envelope must agree with the gate. Printing "cap 10" in Bypass describes a wall the model
+        // cannot hit, and a model that believes it is one call from the end stops early for no reason.
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
+            .WithMaxToolCalls(10)
+            .WithPermissionMode(AgentPermissionMode.Bypass);
+
+        // The budget block is in the per-turn capability envelope, not the frozen skeleton prompt.
+        var envelope = new WorkflowAgentContextProvider(scope).BuildContext().Instructions!;
+
+        StringAssert.Contains(envelope, "not enforced in Bypass mode");
+        Assert.IsFalse(envelope.Contains("Tool calls: cap 10"),
+            "the cap must not be described as active in the mode that does not enforce it");
     }
 
     [TestMethod]

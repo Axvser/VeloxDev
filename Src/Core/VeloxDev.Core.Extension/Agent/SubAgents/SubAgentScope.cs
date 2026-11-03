@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI.MCP;
 using VeloxDev.AI.Pipelines;
+using VeloxDev.AI.Safety;
 using VeloxDev.AI.Skills;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
@@ -745,16 +746,32 @@ public sealed class SubAgentScope : IAsyncDisposable
     /// smaller remainder. When the parent set no cap, <see cref="SpawnBudget"/> stands in for it, which is
     /// what keeps the answer finite and the descent that guarantees termination intact.
     /// </para>
+    /// <para>
+    /// <b>Bypass at the root.</b> That mode neither enforces the host's call-count caps nor records spend,
+    /// so a configured number cannot have a say in delegation either — a root capped at zero would otherwise
+    /// refuse every spawn while allowing its own calls. <see cref="SpawnBudget"/> takes the cap's place,
+    /// which is still finite. A spawned scope is unaffected: its <see cref="WorkflowAgentScope.ParentLedger"/>
+    /// is set and its own granted number is already one less than its parent's, so each level keeps shrinking.
+    /// </para>
     /// </summary>
     private int RemainingAllowance(WorkflowAgentScope parent, ToolCallLedger ledger)
     {
-        var remaining = (parent.MaxToolCalls ?? SpawnBudget) - ledger.Usage.ToolCalls;
+        var bypassedRoot = parent.ParentLedger is null
+            && parent.PermissionPolicy.Mode == AgentPermissionMode.Bypass;
+        var allowance = bypassedRoot ? SpawnBudget : parent.MaxToolCalls ?? SpawnBudget;
+
+        // No usage is subtracted at a bypassed root: that mode records nothing, and spend accrued before
+        // the host switched modes must not throttle a budget the mode says does not exist.
+        var remaining = bypassedRoot ? allowance : allowance - ledger.Usage.ToolCalls;
 
         // The root's pot is the session's, and a grant that ignored it would promise a child more than the
         // tree can actually deliver — the call-time gate would refuse it later, far from the spawn that
-        // lied about it.
+        // lied about it. A bypassed root has no pot: clamping to its configured cap would resurrect exactly
+        // the number the mode stopped enforcing (a cap of zero would refuse every descendant).
         var root = ledger.Root;
-        if (!ReferenceEquals(root, ledger) && root.Owner.MaxToolCalls is { } rootCap)
+        if (!ReferenceEquals(root, ledger)
+            && root.Owner.PermissionPolicy.Mode != AgentPermissionMode.Bypass
+            && root.Owner.MaxToolCalls is { } rootCap)
             remaining = Math.Min(remaining, rootCap - root.Usage.ToolCalls);
 
         return remaining;

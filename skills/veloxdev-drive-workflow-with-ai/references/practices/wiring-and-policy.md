@@ -46,8 +46,8 @@ The policy is read per call, so the next call obeys a mid-session change.
 | `WithPermissionJudge(Func<ToolInvocation, PermissionDecision>)` | none | Decides what `Auto` would otherwise settle; a judge that throws denies. |
 | `WithModePrompt(mode, text)` | none | Appends host rules after the shipped Shared and mode text. |
 | `WithAutoMarkDirty(bool)` | off | Marks the tree dirty after every non-query tool call. |
-| `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | Pre-flight caps; exceeding one returns an error object rather than throwing. |
-| `WithMaxTokens(int)` | unlimited | Cap on provider-reported tokens. `TokenUsageStage` adds `AgentTurnCompleted.Usage` and `AgentUsageReported`; once `TotalTokens` reaches the cap, tool calls are refused (the model can still answer). `ResetTokenUsage()` clears the ledger. |
+| `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | Pre-flight caps; exceeding one returns an error object rather than throwing. **Not enforced in `Bypass` and not counted either** — that mode asks nothing, and a count the model could only pass by asking would be a dialog it cannot reach. With no spend recorded, delegation is bounded by the granted number each level hands down (and `SpawnBudget` at the root), not by a shared pot. |
+| `WithMaxTokens(int)` | unlimited | Cap on provider-reported tokens. `TokenUsageStage` adds `AgentTurnCompleted.Usage` and `AgentUsageReported`; once `TotalTokens` reaches the cap, tool calls are refused (the model can still answer). `ResetTokenUsage()` clears the ledger. **Still enforced in `Bypass`**: it caps spend, not call count. |
 | `WithMaxToolResultChars(int)` | 64 KiB | Cap on one tool result's text. A longer result is replaced by a truncation envelope; `0` disables. Per-tool `max*` parameters give a better answer than this last line of defence. |
 
 ### The mode matrix
@@ -70,7 +70,7 @@ The policy is read per call, so the next call obeys a mid-session change.
 
 ⚙ **The mode is enforced inside the call wrapper**, on the two hooks every slice shares, so it reaches MCP-sourced and skill-sourced tools as well.
 
-⚙ **A spent budget is not a dead end.** The model always has `ResetToolCallLimit`, which puts the question to the user through the confirmation handler and reopens the tree's budget only on agreement; every refusal that names a limit points at it.
+⚙ **A spent budget is not a dead end.** The model always has `ResetToolCallLimit`, which puts the question to the user through the confirmation handler and reopens the tree's budget only on agreement; every refusal that names a limit points at it. In `Bypass` the call counts are not enforced, so a spent count is nothing to extend — only the token cap can still raise that question.
 
 ## Feedback and budgets
 

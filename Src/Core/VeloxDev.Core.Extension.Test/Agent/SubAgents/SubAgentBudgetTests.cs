@@ -50,6 +50,34 @@ public class SubAgentBudgetTests
     }
 
     [TestMethod]
+    public async Task InBypass_ConfiguredCapDoesNotBlockDelegation()
+    {
+        // The mode ignores the cap and records no spend, so a root capped at zero must still be able to
+        // delegate: the finite bound comes from SpawnBudget, and each level's grant is one less than its
+        // parent's, which is what keeps depth terminating without a shared pot.
+        await using var fx = new SubAgentFixture(maxToolCalls: 0);
+        fx.Scope.WithPermissionMode(AgentPermissionMode.Bypass);
+
+        // The whole surface is inherited, so the child keeps the dispatch tool it needs for the check below.
+        var id = fx.Spawn("delegate one read");
+
+        Assert.AreEqual(fx.SubAgents.SpawnBudget - 1, fx.RowOf(id).MaxToolCalls,
+            "a cap the mode ignores must not govern the grant either");
+        Assert.AreEqual(0, Spent(fx.Scope), "Bypass records no spend");
+
+        // And the root's cap must not be re-imposed on a descendant either: the granted number is the only
+        // bound, and it keeps shrinking one per level.
+        var childSpawn = SubAgentFixture.SubAgentToolOf(fx.ChildScope(id), "SpawnSubAgent");
+        var reply = JObject.Parse(SubAgentFixture.InvokeTool(childSpawn, ("task", "delegate the same read")));
+        Assert.AreEqual("ok", (string?)reply["status"], $"a bypassed root must not clamp descendants: {reply}");
+
+        var grandId = (string)reply["id"]!;
+        var grandRow = fx.ChildSubAgents(id).Snapshot.Single(r => r.Id == grandId);
+        Assert.AreEqual(fx.SubAgents.SpawnBudget - 2, grandRow.MaxToolCalls,
+            "each level is one less than its parent's grant, which is what keeps depth finite");
+    }
+
+    [TestMethod]
     public async Task TheRootsCap_BitesThroughASibling_NotThroughTheChildsOwnShare()
     {
         // The mechanism, stated as arithmetic instead of prose. A grant is always at most one less than the
