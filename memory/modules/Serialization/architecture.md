@@ -395,7 +395,7 @@
 
 ## 五、Release 通道**目前根本跑不起来**（既有状态，与性能改动无关）
 
-`VeloxDev.Core.csproj` 在非 Debug 下引用 `VeloxDev.Core.Generator` **包**，而 `10.0.0` 从未发布（nuget.org 上最新是 `9.0.153`）。手工把本地 `bin/Debug` 的 nupkg 喂给还原也没用：**包里的分析器不产出任何东西**，Core 会以数百个「不实现接口成员」错误失败。
+`VeloxDev.Core.csproj` 在非 Debug 下引用 `VeloxDev.Core.Generator` **包**，而 `11.0.0` 从未发布（`10.0.0` 与更早的版本同样没有；nuget.org 上最新仍是 `9.0.153`）。手工把本地 `bin/Debug` 的 nupkg 喂给还原也没用：**包里的分析器不产出任何东西**，Core 会以数百个「不实现接口成员」错误失败。
 
 **推论（两条，都很容易踩）：**
 

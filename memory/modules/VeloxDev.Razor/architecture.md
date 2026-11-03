@@ -243,7 +243,7 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 | `<TargetFrameworks>net6.0;net8.0</TargetFrameworks>` | `TargetFrameworks` | 七家里只有 Jalium 是单 TFM；这里没有 `netstandard2.0`，所以 `Transition.cs` 的 `#if !NETSTANDARD2_0` 恒真 |
 | `Nullable` / `ImplicitUsings` / `AddRazorSupportForMvc` / `LangVersion` | 同名属性 | — |
 | `<FrameworkReference Include="Microsoft.AspNetCore.App" />` | `FrameworkReference` | 提供 `ComponentBase` / `IJSRuntime` / `DotNetObjectReference`；**不是** `PackageReference` |
-| Core 双轨（Debug `ProjectReference` / 非 Debug `PackageReference` 10.0.0） | `ProjectReference` / `PackageReference` | 与生成器那套同形；改一条要同时看另一条 |
+| Core 双轨（Debug `ProjectReference` / 非 Debug `PackageReference` 11.0.0） | `ProjectReference` / `PackageReference` | 与生成器那套同形；改一条要同时看另一条 |
 | `GeneratePackageOnBuild` | `GeneratePackageOnBuild` | 所以 `obj/` 下会堆各版本 `.nupkg`，**那是产物、不是配置** |
 
 **`obj/` 里存在 csproj 未声明的 TFM 目录（如 `net8.0` / `net10.0`）** ⇒ csproj 的单一 TFM

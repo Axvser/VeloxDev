@@ -236,7 +236,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 | `Examples/MVVM/Common/Lib/Lib.csproj` | `ProjectReference` | `PackageReference` |
 | `Examples/Tickable/WPF/Demo/Demo.csproj` | `ProjectReference` | `PackageReference` |
 
-**上表就是 `ProjectReference` 与 `PackageReference` 的完整配对。** 包自己的 `<Version>` 是 `10.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）；各处引用已全部对齐 `10.0.0`（含 `Examples/*/Directory.Build.props` 的 `PackageReference`）。版本落差的历史与「要不要补齐」的判断见 [extension.md](extension.md) §四。
+**上表就是 `ProjectReference` 与 `PackageReference` 的完整配对。** 包自己的 `<Version>` 是 `11.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）；各处引用已全部对齐 `11.0.0`（含 `Examples/*/Directory.Build.props` 的 `PackageReference`）。版本落差的历史与「要不要补齐」的判断见 [extension.md](extension.md) §四。
 
 `VeloxDev.Core.Test.csproj` 是**唯一不分 Debug/Release** 的一处（`Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 里 `ProjectReference` 上方的注释）：它测的对象就是生成器源码本身，测一个已发布的快照等于没测，所以无条件走 `ProjectReference`，且因为要直接驱动 `Command` 生成器断言诊断，**保留程序集引用**（`OutputItemType="Analyzer"`，`ReferenceOutputAssembly` 默认 true）。
 

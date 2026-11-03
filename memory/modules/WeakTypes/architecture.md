@@ -37,7 +37,7 @@
 
 **但它们不是死代码**，读的时候不要按死代码处理：
 
-- 它们在 `VeloxDev.Core` 包里以 public API 发布（`<Version>10.0.1</Version>`，`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj`），删改是破坏性变更；
+- 它们在 `VeloxDev.Core` 包里以 public API 发布（`<Version>11.0.0</Version>`，`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj`），删改是破坏性变更；
 - 反面：**改动 `WeakDelegate` 的真实爆炸半径只有 `TransitionSystem/Effects/TransitionEffect.cs`**，而改动另外三个的爆炸半径是「所有包使用者」。
 
 ### 测试实际覆盖到哪

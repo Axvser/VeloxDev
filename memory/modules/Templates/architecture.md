@@ -48,7 +48,7 @@
 | 事实 | 值 | 覆盖 |
 |---|---|---|
 | `TargetFramework` | `netstandard2.0` | 七家全部 |
-| `Version` | `10.0.1` | 七家全部 |
+| `Version` | `11.0.0` | 七家全部 |
 | `PackageId` | `VeloxDev.<平台>.Templates` | 七家全部 |
 | `sourceName` | `TemplateClass` | 全部条目 |
 | `preferNameDirectory` | `false` | 全部条目 |

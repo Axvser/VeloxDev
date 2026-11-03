@@ -180,7 +180,7 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 |---|---|---|
 | `<TargetFramework>net10.0</TargetFramework>`（**单 TFM、不带平台后缀**） | `TargetFramework` | 七家里**只有这家**是单 TFM 且不带 `-windows`（Razor 是多 TFM `net6.0;net8.0`，仍不带 `-windows`）。csproj 顶部注释把理由写明了：适配器只用跨平台核心，**不用 `net10.0-windows` 的 `Jalium.UI.Desktop` 入口包**，所以能同时服务 Windows / Linux / Android |
 | 唯一的 Jalium 引用是 `Jalium.UI.Controls 26.10.8` | `PackageReference Include="Jalium.UI.Controls"` | csproj 的注释：这是**能提供 `Canvas`/`ScrollViewer`/`Border`/`Control` + `DrawingContext`/`Geometry`/`FormattedText` 的最低平台中立包**，也是**同代码最低可编版本**（26.10.7 缺 `MainDispatcher`，26.10.0–26.10.6 缺 `DispatcherPriority`）。Jalium 的 demo 用 26.10.9（消费端可自行拉高；26.10.8 多次测量 9.2–12.5s/10s，26.10.9 约 8.4–9.3s；26.11.0 的 `ScrollViewer` classic gutter 会在 `ArrangeOverride` 内 `InvalidateMeasure`，空闲每帧跑 layout，约 11.1s）。**别名包 `Jalium.UI.Desktop` 由消费 demo 自己引** ⇒ 两个包仍是两个版本位，可以不同步 |
-| Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 10.0.1` | 两个引用项 | 与另外六家同形的双轨；两条同时生效会报重复成员 |
+| Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 11.0.0` | 两个引用项 | 与另外六家同形的双轨；两条同时生效会报重复成员 |
 | `NoWarn` 写成**一条** `1573;1591` | `NoWarn` | 与 WPF 现状同形。**注意**：`8605` / `8604`（DP 的 CLR 包装拆箱）在这个集合里没有触发点 —— 模板里值类型 DP 走泛型 `Read<T>`，不注册任何 DP 的 CLR 包装 |
 
 ---

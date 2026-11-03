@@ -203,9 +203,9 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 | `<NoWarn>CA1416</NoWarn>` | `NoWarn` | 只压平台兼容性告警一项 |
 | `SupportedOSPlatformVersion`/`TargetPlatformMinVersion` 的 `Condition` 覆盖 ios / maccatalyst / android / windows / tizen | 同名属性 | **这些平台标识符有一半不在 `TargetFrameworks` 里**（没有 android/ios TFM），条件不成立即为死条件。windows 的 min-version 是 `10.0.17763.0`，**低于** TFM 的 19041 ⇒ 它会把输出目录名改成 `net10.0-windows10.0.17763.0`（`obj/` 里那几条就是这么来的，见 §五·7）。这是从 MAUI 模板原样带下来的 |
 | `<SingleProject>true</SingleProject>` / `<AllowUnsafeBlocks>true</AllowUnsafeBlocks>` | 同名属性 | `AllowUnsafeBlocks` 在本模块**无消费者**：全模块 `unsafe` 零命中。模板残留 |
-| Debug → `ProjectReference`／非 Debug → `PackageReference` | 两个引用项 | 与生成器那套双轨同形；包里唯一的依赖是 `VeloxDev.Core` 10.0.1 |
+| Debug → `ProjectReference`／非 Debug → `PackageReference` | 两个引用项 | 与生成器那套双轨同形；包里唯一的依赖是 `VeloxDev.Core` 11.0.0 |
 | `Microsoft.WindowsAppSDK` 只在 windows TFM 下引用（现 `1.7.250909003`） | 条件 `ItemGroup` | 注释写明：app 从 MAUI SDK 拿到它，**类库必须自己显式引用**。这是本家 `#if WINDOWS` 里能写 `Microsoft.UI.Xaml.*` 的前提 |
-| `GeneratePackageOnBuild` + `<Version>10.0.1` | 同名属性 | **不生成 XML 文档**（全仓只有 Core、Jalium、WPF 三个项目开 `GenerateDocumentationFile`）⇒ 本模块的 XML 注释不进任何 `.xml`，注释纯给人看 |
+| `GeneratePackageOnBuild` + `<Version>11.0.0` | 同名属性 | **不生成 XML 文档**（全仓只有 Core、Jalium、WPF 三个项目开 `GenerateDocumentationFile`）⇒ 本模块的 XML 注释不进任何 `.xml`，注释纯给人看 |
 | `<None Include="..\..\..\Assets\veloxdev-logo.png" Pack="true">` | `None Include` | 三级上跳即仓库根的 `Assets/veloxdev-logo.png`（存在） |
 
 ---

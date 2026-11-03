@@ -76,16 +76,16 @@
 
 ## 四、改这里的代价（版本锁：引用与包版本）
 
-**当前状态：包版本 `10.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）。** 各处 `PackageReference` 的 `Version=` 需逐一核对 —— 当前已全部对齐 `10.0.0`（含两个 `Examples/*/Directory.Build.props`）。Debug 走 `ProjectReference`，包版本号根本不参与；Release 才会解析到 NuGet 上已发布的生成器，即**不含这条线上后续本地改动的那一版**。看到源码版本与某处引用不相同时，第一反应不该是补齐，而是先确认「这一轮是不是仍然只要 Debug」。
+**当前状态：包版本 `11.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）。** 各处 `PackageReference` 的 `Version=` 需逐一核对 —— 当前已全部对齐 `11.0.0`（含两个 `Examples/*/Directory.Build.props`）。Debug 走 `ProjectReference`，包版本号根本不参与；Release 才会解析到 NuGet 上已发布的生成器，即**不含这条线上后续本地改动的那一版**。看到源码版本与某处引用不相同时，第一反应不该是补齐，而是先确认「这一轮是不是仍然只要 Debug」。
 
-**版本历史**（提版说明只存在于提交信息里 —— **不可复核**；能复核的只有当前 csproj 里的 `10.0.0`）：
+**版本历史**（提版说明只存在于提交信息里 —— **不可复核**；能复核的只有当前 csproj 里的 `11.0.0`）：
 - 2026-09-26：Core 与其余库统一停在 `9.0.x`，只保证 Debug。
 - 2026-10-01：`9.0.228` → `9.1.0`（`ValueTask` / `ValueTask<T>` 命令体支持）。
 - 2026-10-02：`9.1.0` → `9.2.0`（`[VeloxProperty]` 字段与 partial 属性可同时声明）。
 - 2026-10-02：`9.2.0` → `9.3.0`（`[VeloxCommand]` 强类型命令）。
 - 2026-10-02：`9.3.0` → `9.4.0`（命令结果通道 + 校验器形参名跟随源方法；**含两处破坏性变更**：校验器改名报 CS8826，`Task<T>` 命令属性类型变成 `IVeloxCommand<T, R>`、参数类型不可见时报 CS0053）。
 - 2026-10-02：arity 族一版（命令支持最多 15 个形参，按前导形参个数选元数族）。
-- 此后提到 `10.0.0`（当前值）。
+- 2026-11-04：`10.0.0` → `11.0.0`（与 Core、Extension、适配器、模板、CLI 统一到同一条版本线）。
 
 下面各处 `PackageReference`（`Version=` 以工作区各 csproj 为准）：
 

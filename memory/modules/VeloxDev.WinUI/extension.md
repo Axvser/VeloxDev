@@ -114,7 +114,7 @@
 | `VeloxDev.WinUI.csproj` 的 `TargetFrameworks` | 各 WinUI demo 各自的 `SetTargetFramework`（`Examples/Workflow/WinUI Trimmed/Demo/Demo.csproj`、`Examples/Transition/WinUI/Demo/Demo.csproj`、`Examples/Workflow/WinUI/Demo/Demo.csproj`）—— 几处**写死的 TFM 与各 Workflow demo 的 `TargetFramework` 分别对齐**，不锁就会用错框架引用；`Examples/Transition/AUTO TEST/Drivers/WinUIDemoDriver.cs` 还把 `net8.0-windows10.0.19041.0` 连同 RID 一起写死在启动路径里 |
 | `RuntimeIdentifier`（默认 `win-x64`）/ `RuntimeIdentifiers` | 产物路径里会多一层 `win-x64/`；`WinUIDemoDriver.cs` 的启动路径是**整条硬编码**的字符串（含配置、TFM、RID 三段），改其中任何一段都会让它指向一个不存在的 exe ⇒ 表现为 AutoTest 直接找不到进程 |
 | `PackageReference Microsoft.WindowsAppSDK`（现 1.6.241114003） | **demo 侧是 1.8.x**，两个版本号同进程并存是现状；升其中一侧前先确认另一侧是否要跟 |
-| `VeloxDev.Core` 的 Debug/Release 双轨（`ProjectReference` / `PackageReference`） | 与生成器那套同形，**两条必须互斥**；Release 走的是包 `Version 10.0.1` |
+| `VeloxDev.Core` 的 Debug/Release 双轨（`ProjectReference` / `PackageReference`） | 与生成器那套同形，**两条必须互斥**；Release 走的是包 `Version 11.0.0` |
 | 采样器的引用（`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj` 里指向 `VeloxDev.WinUI` 的 `ProjectReference`） | 摘掉会让 `EveryAdapterAssembly_IsLoadedSoItsSamplersAreCounted` 失败（设计如此，消息直接指过来） |
 | 想让新类型出现在模板里 | `Src/Templates/VeloxDev.WinUI.Templates/` 是**纯内容包**，改它不产生任何依赖；面向用户的一侧在 `skills/veloxdev-create-workflow/references/gui/winui.md` |
 

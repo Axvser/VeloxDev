@@ -189,8 +189,8 @@ return accepted;
 | `<UseWinUI>true` + `WinUISDKReferences false` + `EnableCoreMrtTooling false`（`UseWinUI`/`WinUISDKReferences`/`EnableCoreMrtTooling`） | | 后两条是**关掉**默认注入（XAML 引用与 MRT 资源工具）—— 这一家不产出 WinUI 资源索引，`Examples/Workflow/WinUI Trimmed/Demo/Demo.csproj` 的 `WinUISDKReferences` 也是 `false` 同款 |
 | `<Nullable>enable`（`Nullable`）、`LangVersion latest`（`LangVersion`）、`AllowUnsafeBlocks`（`AllowUnsafeBlocks`） | | csproj 已开可空，但模块里仍有若干文件在**文件头**重复写 `#nullable enable`（`PlatformAdapters/ThemeValueConverters.cs`、`PlatformAdapters/UIThreadInspector.cs`）—— 冗余而非必需，别以为 csproj 那条没生效 |
 | **没有** `GenerateDocumentationFile`、**没有** `NoWarn` | — | 与 WPF 不同（WPF 两个都有）。⇒ 这一家不产 XML 文档、也没有 WPF §五·2 那类静默覆盖 |
-| Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 10.0.1`（`Configuration` 条件） | | 与生成器那套双轨同形 |
-| `GeneratePackageOnBuild`（`GeneratePackageOnBuild`）+ `Version 10.0.1`（`Version`）+ 图标（`PackageIcon`） | | 与本仓库其它非 Core 项目同款 |
+| Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 11.0.0`（`Configuration` 条件） | | 与生成器那套双轨同形 |
+| `GeneratePackageOnBuild`（`GeneratePackageOnBuild`）+ `Version 11.0.0`（`Version`）+ 图标（`PackageIcon`） | | 与本仓库其它非 Core 项目同款 |
 
 **条件编译只有一处，而且在这家恒为真**：`PlatformAdapters/Transition.cs` 的 `#if !NETSTANDARD2_0` 块包着 `System.Numerics` 那组重载（`Vector2`/`Vector3`/`Vector4`/`Quaternion`）—— 本模块两个 TFM 都不带 netstandard，所以这些重载**永远编进去**。（全模块只有这一处 `#if`。）这与 WPF 那条坑同形（WPF 的守卫同样恒为真），但**同样的守卫在 Avalonia 那边是真的有用**（它有 netstandard2.0）。顺带一个不显眼的事实：同文件的 `RectangleF` 重载用的是 `System.Drawing.RectangleF`（来自 `System.Drawing.Primitives`，与 Windows 无关），**没有**被任何守卫包住。
 

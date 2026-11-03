@@ -1,0 +1,20 @@
+<Project>
+
+  <!--
+    Mirrors Src/Directory.Build.targets for the examples: with VeloxDevLocalCore=true, a Release
+    build must use the working tree's generator instead of the package version that has not been
+    published yet. The examples' generator references live in their own props/csproj files, so the
+    swap has to happen here, after those items exist.
+  -->
+  <ItemGroup Condition="'$(VeloxDevLocalCore)' == 'true' And '$(Configuration)' != 'Debug'">
+    <_VeloxDevGeneratorConsumer Include="@(PackageReference->WithMetadataValue('Identity', 'VeloxDev.Core.Generator'))" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(VeloxDevLocalCore)' == 'true' And '$(Configuration)' != 'Debug' And '@(_VeloxDevGeneratorConsumer)' != ''">
+    <PackageReference Remove="VeloxDev.Core.Generator" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

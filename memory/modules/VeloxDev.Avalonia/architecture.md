@@ -97,7 +97,7 @@
 - TFM：`netstandard2.0;net6.0;net8.0`（`VeloxDev.Avalonia.csproj` 的 `TargetFrameworks`）。**七家里只有这一家声明 `netstandard2.0`**（`grep -l netstandard2.0 Src/Adapters/*/*.csproj` 只命中它）。代价是**全模块只有少量条件编译**：`Transition.cs` 的 `#if !NETSTANDARD2_0` 块（`System.Numerics` 那组重载）与 `BoxShadowsSampler.cs` 的零调用者死代码，细节见 `TransitionSystem/adapters/avalonia.md` §二.6。
 - 平台版本锚点 `AvaloniaVersion=11.1.0`（csproj 的 `AvaloniaVersion`），三处 `PackageReference` 共用：升版本改这一处。
 - 另外三条：`AvaloniaUseCompiledBindingsByDefault=true`（csproj 的 `AvaloniaUseCompiledBindingsByDefault`，所以 `{Binding $parent[local:TreeView].(behaviors:…)}` 这类写法按编译期绑定解析）、`GeneratePackageOnBuild=True`（csproj 的 `GeneratePackageOnBuild`）、`AvaloniaResource Include="Assets\**"`（csproj 的 `AvaloniaResource`）—— 最后一条指向的目录**在仓库里不存在**（`git ls-files` 与磁盘都没有 `Assets/`），空 glob，别按它去找资源。
-- `Debug` 走 `ProjectReference`、非 Debug 走 `PackageReference`（csproj 里 `Configuration` 条件的那一对）是**七家统一形状**（版本 10.0.1），规则与原因见 `VeloxDev.Core.Generator/architecture.md` §五。
+- `Debug` 走 `ProjectReference`、非 Debug 走 `PackageReference`（csproj 里 `Configuration` 条件的那一对）是**七家统一形状**（版本 11.0.0），规则与原因见 `VeloxDev.Core.Generator/architecture.md` §五。
 - `obj/` 下另有 **csproj 未声明**的 TFM 产物（如 `net8.0` / `net10.0`）；当前裁剪元数据只落在 `net8.0` 上（`obj/Debug/net8.0/VeloxDev.Avalonia.AssemblyInfo.cs` 的 `[assembly: AssemblyMetadata("IsTrimmable", "True")]`，`net10.0` 那份没有）。机制与 Core 那边同：外部 MSBuild 属性覆盖 ⇒ **不能反推「这个包本身可裁剪」**。这家是七家里唯一有裁剪 demo 的（`Examples/Workflow/Avalonia Trimmed/`，其 `Directory.Build.props` 不再显式 root `VeloxDev.Core.Extension`，理由写在注释里）。
 
 ---

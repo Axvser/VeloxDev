@@ -92,8 +92,8 @@
 | `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` | `TargetFrameworks` | 七家里只有这家与 WPF 是这个四元组 |
 | `UseWindowsForms` + `SuppressTfmSupportBuildWarnings` | 同名属性 | 四元组里 `netcoreapp3.0` 不带 `-windows`，靠后者压掉兼容告警（WPF 同形） |
 | `Nullable` + `ImplicitUsings` + `LangVersion latest` | 同名属性 | 全模块开可空 |
-| `GeneratePackageOnBuild` + `<Version>10.0.1</Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
-| Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 10.0.1` | 两个引用项 | 与生成器那套双轨同形；包里唯一的依赖是 Core |
+| `GeneratePackageOnBuild` + `<Version>11.0.0</Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
+| Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 11.0.0` | 两个引用项 | 与生成器那套双轨同形；包里唯一的依赖是 Core |
 | 三个 TFM 一起编 | — | 新写的 BCL 调用必须在 netframework4.6.1 与 netcoreapp3.0 上都存在，否则只在对应的那一次编译里报错（`bin/` 下每个 TFM 一份产物） |
 
 **别用 `bin/`/`obj/` 目录名推支持的框架**：这家的 `bin/Debug/` 下有 csproj 未声明的 `net8.0-windows`/`net10.0-windows` 目录（与 `memory/modules/VeloxDev.Core.Test` 记的同类现象）；而两个下游 demo 分别是 `net10.0-windows` 与 `net9.0-windows`，它们解析到的是 `net5.0-windows` 那一份资产。

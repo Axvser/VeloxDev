@@ -130,7 +130,7 @@
 |---|---|---|
 | `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` | `TargetFrameworks` | 七家里只有这家与 WinForms 是这个四元组；`netcoreapp3.0` 是四元组里唯一不带 `-windows` 的，`UseWPF` 由此成立，配 `SuppressTfmSupportBuildWarnings` 压告警 |
 | 四元组里**没有 netstandard2.0** | — | `PlatformAdapters/Transition.cs` 的 `#if !NETSTANDARD2_0`（`System.Numerics` 那组重载）在这家**恒为真**。六家写了这个守卫，只有 Avalonia（`netstandard2.0;net6.0;net8.0`）那条是真的 |
-| Debug → `ProjectReference`／非 Debug → `PackageReference` | — | 与生成器那套双轨同形；包里唯一的依赖是 `VeloxDev.Core` 10.0.1 |
+| Debug → `ProjectReference`／非 Debug → `PackageReference` | — | 与生成器那套双轨同形；包里唯一的依赖是 `VeloxDev.Core` 11.0.0 |
 | `GeneratePackageOnBuild` + `GenerateDocumentationFile` | — | 全仓只有 Core、Jalium、WPF 三个项目生成 XML 文档 |
 | `NoWarn` 写成**一条** `1573;1591`（其上方的注释） | — | 正确形 —— 拆成两条属性时 MSBuild 按序求值、只有后者生效（见 §五·2） |
 

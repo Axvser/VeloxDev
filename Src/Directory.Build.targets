@@ -1,22 +1,30 @@
 <Project>
 
   <!--
-    A build-only release run packs the dependents in Release, but the Core version that run is
-    about to publish does not exist on NuGet yet. With VeloxDevLocalCore=true, swap the package
-    reference for the working tree's project.
+    A build-only release run packs the dependents in Release, but the versions that run is about to
+    publish do not exist on NuGet yet. With VeloxDevLocalCore=true, swap the package references for
+    the working tree's projects — Core and the generator both, because the generator ships on the
+    same version line and a dependent cannot be restored without it.
 
     This lives here, not in each csproj: the version stays written directly in every project
-    (e.g. Version="10.1.0"), and the release procedure rewrites that literal. The condition applies
-    only to projects that actually consume VeloxDev.Core, so the Core project itself and unrelated
-    projects under Src/ are left alone.
+    (e.g. Version="11.0.0"), and the release procedure rewrites that literal. Each swap applies only
+    to projects that actually consume the package, so unrelated projects under Src/ are left alone.
   -->
   <ItemGroup Condition="'$(VeloxDevLocalCore)' == 'true' And '$(Configuration)' != 'Debug'">
     <_VeloxDevCoreConsumer Include="@(PackageReference->WithMetadataValue('Identity', 'VeloxDev.Core'))" />
+    <_VeloxDevGeneratorConsumer Include="@(PackageReference->WithMetadataValue('Identity', 'VeloxDev.Core.Generator'))" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(VeloxDevLocalCore)' == 'true' And '$(Configuration)' != 'Debug' And '@(_VeloxDevCoreConsumer)' != ''">
     <PackageReference Remove="VeloxDev.Core" />
     <ProjectReference Include="$(MSBuildThisFileDirectory)Core/VeloxDev.Core/VeloxDev.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(VeloxDevLocalCore)' == 'true' And '$(Configuration)' != 'Debug' And '@(_VeloxDevGeneratorConsumer)' != ''">
+    <PackageReference Remove="VeloxDev.Core.Generator" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

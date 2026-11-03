@@ -41,13 +41,13 @@
 <!-- 本项目自己也用生成器特性，而 analyzer 不随 ProjectReference 传递。 -->
 <ProjectReference Include="...Generator.csproj" OutputItemType="Analyzer"
                   ReferenceOutputAssembly="false" Condition="'$(Configuration)' == 'Debug'" />
-<PackageReference Include="VeloxDev.Core.Generator" Version="10.0.0"
+<PackageReference Include="VeloxDev.Core.Generator" Version="11.0.0"
                   Condition="'$(Configuration)' != 'Debug'" />
 ```
 
 | | Debug | Release |
 |---|---|---|
-| 生成器来源 | 本地 `ProjectReference` | NuGet 包 **10.0.0**（不是本地版本） |
+| 生成器来源 | 本地 `ProjectReference` | NuGet 包 **11.0.0**（不是本地版本） |
 | 本模块能用生成器 | ✅ | ✅，但用的是**已发布版** |
 
 后果分两层：

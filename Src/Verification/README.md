@@ -133,8 +133,8 @@ dotnet build Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Seriali
 ### 为什么不写 `-c Release`
 
 **本仓库目前根本无法在 Release 下构建 `VeloxDev.Core`。** 它在非 Debug 下引用
-`VeloxDev.Core.Generator` 包（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj`），而 10.0.0 从未发布
-（nuget.org 上最新是 `9.0.153`）。即使手工把它喂给还原，包里的分析器也不产出任何东西，Core 会以
+`VeloxDev.Core.Generator` 包（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj`），而 11.0.0 从未发布
+（`10.0.0` 与更早的也没有；nuget.org 上最新仍是 `9.0.153`）。即使手工把它喂给还原，包里的分析器也不产出任何东西，Core 会以
 **数百个「不实现接口成员」错误**失败。这与基准无关，是既有状态。
 
 所以基准改用 **Debug 配置**构建——生成器走工程引用，这条链是通的——同时用 `-p:Optimize=true`

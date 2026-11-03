@@ -10,7 +10,7 @@ namespace VeloxDev.Serialization.Benchmarks;
 /// <para>
 /// BenchmarkDotNet's default toolchain builds a fresh project per benchmark and recompiles the whole dependency
 /// graph in <c>Release</c>. That path does not work in this repository: <c>VeloxDev.Core</c> references the
-/// <c>VeloxDev.Core.Generator</c> package on any configuration other than Debug, version 10.0.0 is not published,
+/// <c>VeloxDev.Core.Generator</c> package on any configuration other than Debug, version 11.0.0 is not published,
 /// and the analyzer that does arrive never runs — so Core fails to compile with hundreds of missing generated
 /// members. Release is therefore not buildable repo-wide today, independently of these benchmarks.
 /// </para>
