@@ -44,6 +44,8 @@
 
 **引用点不用改**：`VeloxDev.Core.Generator.csproj` 里把 `bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).dll` 整包进 `analyzers/dotnet/cs` 的那个 `None` 项，新增的生成器类自然进包。
 
+**同一个 `None` 项也决定了打包顺序。** 它指的是 `bin/` 下的成品，而不是构建产物项，所以干净的工作区里直接 `dotnet pack` 会在该 DLL 生成之前解析文件列表，NuGet 报 `NU5019: File not found: '…/bin/Release/netstandard2.0/VeloxDev.Core.Generator.dll'`（发布 run 113051011632 就停在这一步）。出包必须先 `dotnet build -p:GeneratePackageOnBuild=false`，再 `dotnet pack --no-build`；`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 同样带 `GeneratePackageOnBuild=true`，有同样的先后问题，发布脚本里也按这个顺序走（`.github/workflows/publish.yml` 的 `Build and pack the generator` 与 `Pack Core against the published generator` 两步）。本地验证时可以照抄这两条命令。
+
 ### D. 加一个特性元数（以 Theme 为例）
 
 `Theme.cs` 里是**多条并列的 `ForAttributeWithMetadataName`**（`ThemeConfigAttribute\`3` … `` `7 ``），`.Collect()` 后逐级 `.Combine(...)`。再加一个元数要改**两处**：新增一条流 + 把新流 `.Combine` 进 `allClasses`。漏掉 Combine 不会报错，只会让该元数的类**永不生成**。
