@@ -1,10 +1,9 @@
 # Skills
 
 Claude Code skills this repository ships. The seven developer skills are for developers using the
-library; `veloxdev-use-workflow-cli/` is an operator skill for the shipped headless CLI/MCP server;
-`veloxdev-release/` is a maintainer-only skill, documented separately below. All of them are
-part of the repository, not of anyone's local configuration — the copies under a machine's
-`.claude/skills/` are installs of these.
+library; `veloxdev-use-workflow-cli/` is an operator skill for the shipped headless CLI/MCP server.
+All of them are part of the repository, not of anyone's local configuration — the copies under a
+machine's `.claude/skills/` are installs of these.
 
 ## What these skills are for
 
@@ -57,7 +56,7 @@ Copy it to `~/.claude/skills/` instead to have it available in every project on 
 
 The seven developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, and `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so install all seven when you can, and read a dead cross-link as "install that skill, or find the same rule in this one".
 
-`veloxdev-use-workflow-cli` is a standalone operator skill: it covers obtaining and launching the CLI, and drives the workflow through the tool surface. It does not require the developer skills; its one cross-link to `veloxdev-drive-workflow-with-ai` is for the underlying tool semantics, and the CLI reference in the repository covers the same ground. The maintainer-only `veloxdev-release` is **not** part of either set and is documented separately below.
+`veloxdev-use-workflow-cli` is a standalone operator skill: it covers obtaining and launching the CLI, and drives the workflow through the tool surface. It does not require the developer skills; its one cross-link to `veloxdev-drive-workflow-with-ai` is for the underlying tool semantics, and the CLI reference in the repository covers the same ground.
 
 The **directory name is the skill name** — it has to match the `name:` in the file's frontmatter. Claude Code reads the frontmatter `description` and loads the skill on its own when a request matches.
 
@@ -88,16 +87,6 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | `veloxdev-tick-loop` | lifecycle, channels/manager | tick |
 | `veloxdev-write-viewmodels` | properties, commands, interop/diagnostics | MVVM |
 | `veloxdev-use-workflow-cli` | launch, tools | runtime |
-
-## Maintainer skill
-
-`veloxdev-release/` is **not** one of the developer skills. It cuts this repository's own
-NuGet release, and it is self-contained and unrelated to the others. Its frontmatter sets
-`disable-model-invocation: true`: it may only be run when the maintainer explicitly asks, never
-automatically and never from another skill. Do not install it into a consuming project.
-
-The copy under `.claude/skills/veloxdev-release/` is the local install of this source; keep the
-`skills/` copy as the versioned one. Its only reference is `references/package-plan.md`.
 
 ## Keeping them accurate
 
