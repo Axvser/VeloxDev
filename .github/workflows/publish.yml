@@ -436,6 +436,17 @@ jobs:
               Start-Sleep -Seconds 10
             }
           }
+          # The flatcontainer endpoint can serve the nupkg before the feed's package index does,
+          # so `dotnet tool install` may still report "version not found" for a few minutes.
+          # Retry instead of failing a release that is already complete.
           $tool = Join-Path $env:RUNNER_TEMP "veloxdev-tool"
-          dotnet tool install --tool-path $tool VeloxDev.Cli --version $env:VERSION
+          $deadline = (Get-Date).AddMinutes(15)
+          while ($true) {
+            if (Test-Path $tool) { Remove-Item $tool -Recurse -Force }
+            dotnet tool install --tool-path $tool VeloxDev.Cli --version $env:VERSION
+            if ($LASTEXITCODE -eq 0) { break }
+            if ((Get-Date) -gt $deadline) { throw "VeloxDev.Cli $env:VERSION is not installable" }
+            Start-Sleep -Seconds 15
+          }
           & (Join-Path $tool "veloxdev.exe") --help
+          if ($LASTEXITCODE -ne 0) { throw "veloxdev --help failed" }
