@@ -279,9 +279,13 @@ jobs:
             "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
           )
           foreach ($project in $projects) {
+            # GeneratePackageOnBuild=true strips Build out of GenerateNuspecDependsOn, so a plain
+            # `dotnet pack` restores and then packs a DLL that was never built (NU5026). Turning it
+            # off for this invocation lets pack build the project first.
             dotnet pack $project -c Release -o artifacts `
               -p:Version=$env:VERSION `
-              -p:PackageVersion=$env:VERSION
+              -p:PackageVersion=$env:VERSION `
+              -p:GeneratePackageOnBuild=false
             if ($LASTEXITCODE -ne 0) { throw "pack failed: $project" }
           }
 
