@@ -14,10 +14,13 @@ name: publish
 #
 # Trigger:
 #   - push to master when package sources change. The version is read from
-#     Src/Core/VeloxDev.Core/VeloxDev.Core.csproj. If that version is already on NuGet,
-#     the release job is skipped; bump <Version> in the csproj to publish.
-#   - manual workflow_dispatch; `force` publishes even when the version already exists
-#     (existing packages are skipped with --skip-duplicate).
+#     Src/Core/VeloxDev.Core/VeloxDev.Core.csproj, and every package is checked against NuGet:
+#     only the ones missing for that version are packed and pushed. When all 18 are already
+#     there, the release job is skipped; bump <Version> in the csproj to publish.
+#   - manual workflow_dispatch; the default run publishes only the missing packages, so a run
+#     that failed halfway can be retried without repacking what already landed. `force` treats
+#     every package as missing and re-runs the whole pipeline (duplicates are skipped with
+#     --skip-duplicate).
 #
 # Auto vs manual:
 #   The push trigger is only acted on when the repository variable AUTO_PUBLISH is set to
@@ -62,10 +65,14 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
       publish: ${{ steps.read.outputs.publish }}
+      generator_missing: ${{ steps.read.outputs.generator_missing }}
+      core_missing: ${{ steps.read.outputs.core_missing }}
+      rest_missing: ${{ steps.read.outputs.rest_missing }}
+      cli_missing: ${{ steps.read.outputs.cli_missing }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Read and validate the version
+      - name: Read the version and find what NuGet is still missing
         id: read
         shell: pwsh
         run: |
@@ -101,16 +108,35 @@ jobs:
             if ($value -ne $version) { throw "$project is '$value', expected '$version'" }
           }
 
+          # Every package is checked on its own, so a run that stopped halfway can be retried and
+          # only repacks what NuGet is still missing. Package ids equal their csproj file names.
+          # force keeps the old meaning: pretend nothing is published and run the whole pipeline
+          # (duplicates are skipped at push time).
           $force = "${{ inputs.force }}" -eq "true"
-          if (-not $force) {
-            try {
-              $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.core/$version/veloxdev.core.$version.nupkg"
-              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
-              "publish=false" >> $env:GITHUB_OUTPUT
-              return
-            } catch { }
+          $missing = @()
+          foreach ($project in $projects) {
+            $id = [IO.Path]::GetFileNameWithoutExtension($project)
+            $exists = $false
+            if (-not $force) {
+              $lower = $id.ToLowerInvariant()
+              $url = "https://api.nuget.org/v3-flatcontainer/$lower/$version/$lower.$version.nupkg"
+              try { Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null; $exists = $true } catch { }
+            }
+            if ($exists) {
+              Write-Host "$id $version is already on NuGet"
+            } else {
+              Write-Host "$id $version is missing"
+              $missing += $id
+            }
           }
-          "publish=true" >> $env:GITHUB_OUTPUT
+
+          function To-Bool([bool]$value) { if ($value) { "true" } else { "false" } }
+          $rest = @($missing | Where-Object { $_ -ne "VeloxDev.Core.Generator" -and $_ -ne "VeloxDev.Core" })
+          "publish=$(To-Bool ($missing.Count -gt 0))" >> $env:GITHUB_OUTPUT
+          "generator_missing=$(To-Bool ($missing -contains 'VeloxDev.Core.Generator'))" >> $env:GITHUB_OUTPUT
+          "core_missing=$(To-Bool ($missing -contains 'VeloxDev.Core'))" >> $env:GITHUB_OUTPUT
+          "rest_missing=$($rest -join ' ')" >> $env:GITHUB_OUTPUT
+          "cli_missing=$(To-Bool ($missing -contains 'VeloxDev.Cli'))" >> $env:GITHUB_OUTPUT
 
   publish:
     needs: version
@@ -118,13 +144,16 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
       - name: Ensure the .NET Framework 4.6.1 targeting pack
+        # Core and the WPF / WinForms adapters target netframework4.6.1; skip the install when
+        # none of them is being packed.
+        if: needs.version.outputs.core_missing == 'true' || contains(needs.version.outputs.rest_missing, 'VeloxDev.WPF') || contains(needs.version.outputs.rest_missing, 'VeloxDev.WinForms')
         shell: pwsh
         run: |
           $pack = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6.1"
@@ -133,10 +162,12 @@ jobs:
           }
 
       - name: Install the MAUI workload
+        if: contains(needs.version.outputs.rest_missing, 'VeloxDev.MAUI')
         shell: pwsh
         run: dotnet workload install maui
 
       - name: Build and pack the generator
+        if: needs.version.outputs.generator_missing == 'true'
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -158,11 +189,13 @@ jobs:
 
       - name: NuGet login (OIDC -> temporary key)
         id: login
+        if: needs.version.outputs.generator_missing == 'true' || needs.version.outputs.core_missing == 'true'
         uses: NuGet/login@v1
         with:
           user: Axvser
 
       - name: Push the generator and wait until NuGet can serve it
+        if: needs.version.outputs.generator_missing == 'true'
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -193,6 +226,7 @@ jobs:
           Wait-One "VeloxDev.Core.Generator"
 
       - name: Pack Core against the published generator
+        if: needs.version.outputs.core_missing == 'true'
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -224,6 +258,7 @@ jobs:
           }
 
       - name: Push Core and wait until NuGet can serve it
+        if: needs.version.outputs.core_missing == 'true'
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -254,12 +289,16 @@ jobs:
           Wait-One "VeloxDev.Core"
 
       - name: Pack the dependents, templates and CLI against NuGet
+        if: needs.version.outputs.rest_missing != ''
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          MISSING: ${{ needs.version.outputs.rest_missing }}
         run: |
           # No VeloxDevLocalCore: Core and the generator are on NuGet now, and every dependent
           # package must carry the real dependency in its nuspec.
+          # Only the packages NuGet is still missing are packed; ids equal their csproj file names.
+          $missing = @("$env:MISSING" -split ' ' | Where-Object { $_ })
           $projects = @(
             "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj",
             "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj",
@@ -279,6 +318,11 @@ jobs:
             "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
           )
           foreach ($project in $projects) {
+            $id = [IO.Path]::GetFileNameWithoutExtension($project)
+            if ($missing -notcontains $id) {
+              Write-Host "$id $env:VERSION is already on NuGet; skipping"
+              continue
+            }
             # GeneratePackageOnBuild=true strips Build out of GenerateNuspecDependsOn, so a plain
             # `dotnet pack` restores and then packs a DLL that was never built (NU5026). Turning it
             # off for this invocation lets pack build the project first.
@@ -290,19 +334,22 @@ jobs:
           }
 
           # A representative adapter must declare Core, or the published package cannot restore.
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $file = Join-Path "artifacts" "VeloxDev.WPF.${env:VERSION}.nupkg"
-          $zip = [IO.Compression.ZipFile]::OpenRead($file)
-          $entry = $zip.Entries | Where-Object { $_.FullName -like "*.nuspec" }
-          $reader = New-Object IO.StreamReader($entry.Open())
-          $nuspec = $reader.ReadToEnd()
-          $reader.Dispose()
-          $zip.Dispose()
-          if ($nuspec -notmatch '<dependency id="VeloxDev.Core"') {
-            throw "VeloxDev.WPF nuspec lost its VeloxDev.Core dependency; refusing to publish it."
+          # Only check it when WPF was packed in this run; an already-published nupkg is immutable.
+          if ($missing -contains "VeloxDev.WPF") {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $file = Join-Path "artifacts" "VeloxDev.WPF.${env:VERSION}.nupkg"
+            $zip = [IO.Compression.ZipFile]::OpenRead($file)
+            $entry = $zip.Entries | Where-Object { $_.FullName -like "*.nuspec" }
+            $reader = New-Object IO.StreamReader($entry.Open())
+            $nuspec = $reader.ReadToEnd()
+            $reader.Dispose()
+            $zip.Dispose()
+            if ($nuspec -notmatch '<dependency id="VeloxDev.Core"') {
+              throw "VeloxDev.WPF nuspec lost its VeloxDev.Core dependency; refusing to publish it."
+            }
           }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: VeloxDev.${{ needs.version.outputs.version }}
           path: artifacts/*.nupkg
@@ -314,6 +361,7 @@ jobs:
           user: Axvser
 
       - name: Push the rest
+        if: needs.version.outputs.rest_missing != ''
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -372,6 +420,7 @@ jobs:
           }
 
       - name: Verify the published tool
+        if: needs.version.outputs.cli_missing == 'true'
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}

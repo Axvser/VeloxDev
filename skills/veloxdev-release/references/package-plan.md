@@ -201,12 +201,14 @@ Publishing. **Do not push any package from this local session.** The workflow:
 
 - reads the version from `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` and validates that all 18
   package projects carry the same `<Version>`;
-- skips publishing when that Core version is already on NuGet — bump the version to release, or use
-  `force=true` on a manual run;
-- packs and publishes in dependency order: pack the generator, log in with `NuGet/login@v1`, push it
-  and wait for the nupkg to be downloadable; pack Core **without** `VeloxDevLocalCore` so its generator
-  dependency comes from NuGet and stays in the nuspec, push it and wait; then pack the Extension,
-  adapters, templates and CLI against the published Core/generator;
+- checks all 18 ids against NuGet and works on the missing ones only, so retrying a run that failed
+  halfway never repacks what already landed; when all 18 are present nothing is published — bump the
+  version to release, or use `force=true` on a manual run to re-run the whole pipeline;
+- packs and publishes in dependency order, skipping every stage whose packages already exist: pack
+  the generator, log in with `NuGet/login@v1`, push it and wait for the nupkg to be downloadable;
+  pack Core **without** `VeloxDevLocalCore` so its generator dependency comes from NuGet and stays in
+  the nuspec, push it and wait; then pack the Extension, adapters, templates and CLI against the
+  published Core/generator;
 - asserts the Core nuspec keeps its `VeloxDev.Core.Generator` dependency and a representative adapter
   keeps its `VeloxDev.Core` dependency; pushes the rest with a fresh temporary key and
   `--skip-duplicate`; installs the CLI to verify it;

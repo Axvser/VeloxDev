@@ -135,16 +135,20 @@ Publishing (GitHub OIDC), which covers all 18 packages.
 
 1. The version is whatever is written in `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj`; the workflow
    reads it and refuses to run if any of the 18 package projects carries a different `<Version>`.
-2. If `VeloxDev.Core <version>` already exists on NuGet, the push-triggered run skips publishing.
-   Bump the version and commit/push the bump to publish. A manual run with `force=true` re-runs the
-   workflow and skips duplicates.
+2. Every package is checked against NuGet for that version; only the missing ones are packed and
+   pushed, so a run that stopped halfway can be retried as-is without repacking what already landed.
+   When all 18 are already present the push-triggered run publishes nothing — bump the version and
+   commit/push the bump to release. A manual run with `force=true` treats every package as missing
+   and re-runs the whole pipeline (duplicates are skipped at push time).
 3. The workflow is **sequential against NuGet**, not a local build:
    pack the generator → log in with `NuGet/login@v1` → push it and wait until the nupkg is downloadable;
    pack Core **without** `VeloxDevLocalCore` (so its generator dependency resolves from NuGet and lands
    in the nuspec) → push Core and wait again; then pack the Extension, adapters, templates and CLI
-   against the published Core/generator, and push them with a fresh temporary key. The workflow asserts
-   that the Core nuspec keeps its generator dependency and that a representative adapter keeps its Core
-   dependency, then installs the CLI tool to verify it. It must exist on the default branch.
+   against the published Core/generator, and push them with a fresh temporary key. Each of those steps
+   is skipped when its packages are already on NuGet; the waits only run for what was just pushed.
+   The workflow asserts that the Core nuspec keeps its generator dependency and that a representative
+   adapter keeps its Core dependency, then installs the CLI tool to verify it. It must exist on the
+   default branch.
 4. **Patch cleanup is automatic.** If the version is `X1.X2.X3` with `X3 > 0`, after publishing
    the workflow unlists every older `X1.X2.<i>` (`i < X3`) for all 18 packages, so only the highest
    patch of that major/minor line stays listed. A major/minor change leaves older lines alone.
