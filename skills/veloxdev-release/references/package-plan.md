@@ -197,9 +197,13 @@ Publishing. **Do not push any package from this local session.** The workflow:
   package projects carry the same `<Version>`;
 - skips publishing when that Core version is already on NuGet — bump the version to release, or use
   `force=true` on a manual run;
-- packs all 18 on `windows-latest` with `-p:VeloxDevLocalCore=true`;
-- logs in with `NuGet/login@v1` (OIDC -> temporary key), pushes the generator, waits, pushes Core,
-  waits, then pushes the rest with `--skip-duplicate`, and installs the CLI to verify it;
+- packs and publishes in dependency order: pack the generator, log in with `NuGet/login@v1`, push it
+  and wait for the nupkg to be downloadable; pack Core **without** `VeloxDevLocalCore` so its generator
+  dependency comes from NuGet and stays in the nuspec, push it and wait; then pack the Extension,
+  adapters, templates and CLI against the published Core/generator;
+- asserts the Core nuspec keeps its `VeloxDev.Core.Generator` dependency and a representative adapter
+  keeps its `VeloxDev.Core` dependency; pushes the rest with a fresh temporary key and
+  `--skip-duplicate`; installs the CLI to verify it;
 - if the version is `X1.X2.X3` with `X3 > 0`, unlists every older `X1.X2.<i>` for all 18 packages
   after the pushes, leaving only the highest patch of that line listed. A major/minor change
   leaves older lines listed. The policy must include the **Unlist or relist** scope.

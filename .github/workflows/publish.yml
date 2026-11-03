@@ -116,7 +116,7 @@ jobs:
     needs: version
     if: needs.version.outputs.publish == 'true'
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -136,44 +136,25 @@ jobs:
         shell: pwsh
         run: dotnet workload install maui
 
-      - name: Pack every package
+      - name: Build and pack the generator
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
-          $projects = @(
-            "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj",
-            "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj",
-            "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj",
-            "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj",
-            "Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj",
-            "Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj",
-            "Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj",
-            "Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj",
-            "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj",
-            "Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj",
-            "Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj",
-            "Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj",
-            "Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj",
-            "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj",
-            "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj",
-            "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj",
-            "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj",
-            "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
-          )
-          foreach ($project in $projects) {
-            dotnet pack $project -c Release -o artifacts `
-              -p:Version=$env:VERSION `
-              -p:PackageVersion=$env:VERSION `
-              -p:VeloxDevLocalCore=true
-            if ($LASTEXITCODE -ne 0) { throw "pack failed: $project" }
-          }
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: VeloxDev.${{ needs.version.outputs.version }}
-          path: artifacts/*.nupkg
+          # Build first with pack-on-build disabled: the generator packs a bin/... DLL through a
+          # custom None item, and a direct `dotnet pack` can evaluate it before that DLL exists.
+          dotnet build "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" `
+            -c Release `
+            -p:Version=$env:VERSION `
+            -p:PackageVersion=$env:VERSION `
+            -p:GeneratePackageOnBuild=false
+          if ($LASTEXITCODE -ne 0) { throw "build failed: generator" }
+          dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" `
+            -c Release -o artifacts --no-build `
+            -p:Version=$env:VERSION `
+            -p:PackageVersion=$env:VERSION
+          if ($LASTEXITCODE -ne 0) { throw "pack failed: generator" }
 
       - name: NuGet login (OIDC -> temporary key)
         id: login
@@ -181,7 +162,7 @@ jobs:
         with:
           user: Axvser
 
-      - name: Push the generator and Core first
+      - name: Push the generator and wait until NuGet can serve it
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -210,14 +191,129 @@ jobs:
           }
           Push-One "VeloxDev.Core.Generator"
           Wait-One "VeloxDev.Core.Generator"
+
+      - name: Pack Core against the published generator
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # No VeloxDevLocalCore here: the generator must resolve from NuGet, and the pack must
+          # carry that dependency in its nuspec. Build first, then pack the built output.
+          dotnet build "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" `
+            -c Release `
+            -p:Version=$env:VERSION `
+            -p:PackageVersion=$env:VERSION `
+            -p:GeneratePackageOnBuild=false
+          if ($LASTEXITCODE -ne 0) { throw "build failed: Core" }
+          dotnet pack "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" `
+            -c Release -o artifacts --no-build `
+            -p:Version=$env:VERSION `
+            -p:PackageVersion=$env:VERSION
+          if ($LASTEXITCODE -ne 0) { throw "pack failed: Core" }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $file = Join-Path "artifacts" "VeloxDev.Core.${env:VERSION}.nupkg"
+          $zip = [IO.Compression.ZipFile]::OpenRead($file)
+          $entry = $zip.Entries | Where-Object { $_.FullName -like "*.nuspec" }
+          $reader = New-Object IO.StreamReader($entry.Open())
+          $nuspec = $reader.ReadToEnd()
+          $reader.Dispose()
+          $zip.Dispose()
+          if ($nuspec -notmatch '<dependency id="VeloxDev.Core.Generator"') {
+            throw "Core nuspec lost its VeloxDev.Core.Generator dependency; refusing to publish it."
+          }
+
+      - name: Push Core and wait until NuGet can serve it
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          function Push-One([string]$id) {
+            $file = Join-Path "artifacts" "$id.${env:VERSION}.nupkg"
+            if (-not (Test-Path $file)) { throw "missing $file" }
+            dotnet nuget push $file --api-key $env:NUGET_API_KEY `
+              --source https://api.nuget.org/v3/index.json --skip-duplicate
+            if ($LASTEXITCODE -ne 0) { throw "push failed: $id" }
+          }
+          function Wait-One([string]$id) {
+            $lower = $id.ToLowerInvariant()
+            $url = "https://api.nuget.org/v3-flatcontainer/$lower/${env:VERSION}/$lower.${env:VERSION}.nupkg"
+            $deadline = (Get-Date).AddMinutes(15)
+            while ($true) {
+              try {
+                Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+                return
+              } catch {
+                if ((Get-Date) -gt $deadline) { throw "$id did not appear within 15 minutes" }
+                Start-Sleep -Seconds 10
+              }
+            }
+          }
           Push-One "VeloxDev.Core"
           Wait-One "VeloxDev.Core"
+
+      - name: Pack the dependents, templates and CLI against NuGet
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # No VeloxDevLocalCore: Core and the generator are on NuGet now, and every dependent
+          # package must carry the real dependency in its nuspec.
+          $projects = @(
+            "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj",
+            "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj",
+            "Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj",
+            "Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj",
+            "Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj",
+            "Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj",
+            "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj",
+            "Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj",
+            "Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj",
+            "Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj",
+            "Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj",
+            "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj",
+            "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj",
+            "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj",
+            "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj",
+            "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
+          )
+          foreach ($project in $projects) {
+            dotnet pack $project -c Release -o artifacts `
+              -p:Version=$env:VERSION `
+              -p:PackageVersion=$env:VERSION
+            if ($LASTEXITCODE -ne 0) { throw "pack failed: $project" }
+          }
+
+          # A representative adapter must declare Core, or the published package cannot restore.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $file = Join-Path "artifacts" "VeloxDev.WPF.${env:VERSION}.nupkg"
+          $zip = [IO.Compression.ZipFile]::OpenRead($file)
+          $entry = $zip.Entries | Where-Object { $_.FullName -like "*.nuspec" }
+          $reader = New-Object IO.StreamReader($entry.Open())
+          $nuspec = $reader.ReadToEnd()
+          $reader.Dispose()
+          $zip.Dispose()
+          if ($nuspec -notmatch '<dependency id="VeloxDev.Core"') {
+            throw "VeloxDev.WPF nuspec lost its VeloxDev.Core dependency; refusing to publish it."
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VeloxDev.${{ needs.version.outputs.version }}
+          path: artifacts/*.nupkg
+
+      - name: NuGet login (fresh key for the remaining pushes)
+        id: login2
+        uses: NuGet/login@v1
+        with:
+          user: Axvser
 
       - name: Push the rest
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
-          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
           $skip = @(
             "VeloxDev.Core.Generator.${env:VERSION}.nupkg",
@@ -235,7 +331,7 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
-          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
           if ($env:VERSION -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
             Write-Host "Version '$env:VERSION' is not X.Y.Z; skipping patch cleanup."

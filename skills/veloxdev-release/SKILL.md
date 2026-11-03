@@ -130,9 +130,13 @@ Publishing (GitHub OIDC), which covers all 18 packages.
 2. If `VeloxDev.Core <version>` already exists on NuGet, the push-triggered run skips publishing.
    Bump the version and commit/push the bump to publish. A manual run with `force=true` re-runs the
    workflow and skips duplicates.
-3. The workflow packs every package with `-p:VeloxDevLocalCore=true`, logs in with `NuGet/login@v1`,
-   pushes the generator → Core → the rest, waits for the index, and installs the CLI tool to verify
-   it. It must exist on the default branch.
+3. The workflow is **sequential against NuGet**, not a local build:
+   pack the generator → log in with `NuGet/login@v1` → push it and wait until the nupkg is downloadable;
+   pack Core **without** `VeloxDevLocalCore` (so its generator dependency resolves from NuGet and lands
+   in the nuspec) → push Core and wait again; then pack the Extension, adapters, templates and CLI
+   against the published Core/generator, and push them with a fresh temporary key. The workflow asserts
+   that the Core nuspec keeps its generator dependency and that a representative adapter keeps its Core
+   dependency, then installs the CLI tool to verify it. It must exist on the default branch.
 4. **Patch cleanup is automatic.** If the version is `X1.X2.X3` with `X3 > 0`, after publishing
    the workflow unlists every older `X1.X2.<i>` (`i < X3`) for all 18 packages, so only the highest
    patch of that major/minor line stays listed. A major/minor change leaves older lines alone.
