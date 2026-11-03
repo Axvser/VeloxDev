@@ -78,13 +78,21 @@ publishing is the task, the version bump is what the commit carries.
 
 ### 2. Pack the generator and Core
 
+`GeneratePackageOnBuild=true` (set on both projects) removes `Build` from `GenerateNuspecDependsOn`,
+so a bare `dotnet pack` restores and then packs a DLL that was never built (`NU5026`; the generator
+additionally reports `NU5019` for its analyzer payload). Build first, then pack the built output:
+
 ```powershell
-dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" -c Release -o $staging `
+dotnet build "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" -c Release `
+    -p:Version=$version -p:PackageVersion=$version -p:GeneratePackageOnBuild=false
+dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" -c Release -o $staging --no-build `
     -p:Version=$version -p:PackageVersion=$version
 
 $core = "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj"
 dotnet clean $core -c Release
-dotnet pack $core -c Release -o $staging -p:Version=$version -p:PackageVersion=$version -p:VeloxDevLocalCore=true
+dotnet build $core -c Release -p:Version=$version -p:PackageVersion=$version `
+    -p:VeloxDevLocalCore=true -p:GeneratePackageOnBuild=false
+dotnet pack $core -c Release -o $staging --no-build -p:Version=$version -p:PackageVersion=$version -p:VeloxDevLocalCore=true
 ```
 
 Check the produced Core package contains `lib/<tfm>/*.dll` entries (the package plan has the exact

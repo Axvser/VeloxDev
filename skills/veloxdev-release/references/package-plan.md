@@ -133,11 +133,17 @@ working-tree project.
 $staging = Join-Path $env:TEMP "veloxdev-release-$version"
 New-Item -ItemType Directory -Force $staging | Out-Null
 
-dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" -c Release -o $staging `
+# Both projects set GeneratePackageOnBuild=true, which strips Build from GenerateNuspecDependsOn:
+# a bare pack would ship a DLL that was never built. Build first, then pack the built output.
+dotnet build "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" -c Release `
+    -p:Version=$version -p:PackageVersion=$version -p:GeneratePackageOnBuild=false
+dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" -c Release -o $staging --no-build `
     -p:Version=$version -p:PackageVersion=$version
 
 dotnet clean "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" -c Release
-dotnet pack "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" -c Release -o $staging `
+dotnet build "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" -c Release `
+    -p:Version=$version -p:PackageVersion=$version -p:VeloxDevLocalCore=true -p:GeneratePackageOnBuild=false
+dotnet pack "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" -c Release -o $staging --no-build `
     -p:Version=$version -p:PackageVersion=$version -p:VeloxDevLocalCore=true
 
 $nupkg = Join-Path $staging "VeloxDev.Core.$version.nupkg"
