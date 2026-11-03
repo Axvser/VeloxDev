@@ -1,13 +1,16 @@
 # Skills
 
 Claude Code skills this repository ships. The seven developer skills are for developers using the
-library; `veloxdev-release/` is a maintainer-only skill, documented separately below. All of them are
+library; `veloxdev-use-workflow-cli/` is an operator skill for the shipped headless CLI/MCP server;
+`veloxdev-release/` is a maintainer-only skill, documented separately below. All of them are
 part of the repository, not of anyone's local configuration — the copies under a machine's
 `.claude/skills/` are installs of these.
 
 ## What these skills are for
 
-Every skill here answers one question: **how do I write my own project's code against VeloxDev, and write it the way the library intends?**
+The developer skills answer one question: **how do I write my own project's code against VeloxDev, and write it the way the library intends?**
+
+The operator skill answers a different one: **how do I drive a workflow that is already running, through the packaged CLI and its MCP tools, without writing C#.**
 
 That means two things, in every skill:
 
@@ -52,7 +55,9 @@ Copy the skill's **whole directory** into the `.claude/skills/` of the project y
 
 Copy it to `~/.claude/skills/` instead to have it available in every project on that machine.
 
-The seven developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, and `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so install all seven when you can, and read a dead cross-link as "install that skill, or find the same rule in this one". The maintainer-only `veloxdev-release` is **not** part of this set and is documented separately below.
+The seven developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, and `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so install all seven when you can, and read a dead cross-link as "install that skill, or find the same rule in this one".
+
+`veloxdev-use-workflow-cli` is a standalone operator skill: it covers obtaining and launching the CLI, and drives the workflow through the tool surface. It does not require the developer skills; its one cross-link to `veloxdev-drive-workflow-with-ai` is for the underlying tool semantics, and the CLI reference in the repository covers the same ground. The maintainer-only `veloxdev-release` is **not** part of either set and is documented separately below.
 
 The **directory name is the skill name** — it has to match the `name:` in the file's frontmatter. Claude Code reads the frontmatter `description` and loads the skill on its own when a request matches.
 
@@ -69,6 +74,7 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | `veloxdev-add-aspects` | Wrapping behaviour around an existing member without editing it — `[AspectOriented]`, `Aop()`, and the before / instead-of / after hooks |
 | `veloxdev-write-viewmodels` | Writing ViewModels with the source generators — `[VeloxProperty]`, `[VeloxCommand]`, collection hooks, and interop with CommunityToolkit / Prism / ReactiveUI / Caliburn |
 | `veloxdev-tick-loop` | Putting a frame loop on any class — `[Tickable]`, `InitializeTickable()`, the `Awake` / `Start` / `Update` / `LateUpdate` / `FixedUpdate` hooks, channels, and `TickManager` |
+| `veloxdev-use-workflow-cli` | Operating a running workflow through the headless CLI and its stdio MCP server — obtaining/packing the tool, client configuration, archive and dependency manifest, inspection/editing/compile/run tools, isolated workers and background jobs, redirects, checkpoints, logs and saving |
 
 ## Skills with references
 
@@ -81,10 +87,11 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | `veloxdev-add-aspects` | marking/proxies, hooks | aspects |
 | `veloxdev-tick-loop` | lifecycle, channels/manager | tick |
 | `veloxdev-write-viewmodels` | properties, commands, interop/diagnostics | MVVM |
+| `veloxdev-use-workflow-cli` | launch, tools | runtime |
 
 ## Maintainer skill
 
-`veloxdev-release/` is **not** one of the seven developer skills. It cuts this repository's own
+`veloxdev-release/` is **not** one of the developer skills. It cuts this repository's own
 NuGet release, and it is self-contained and unrelated to the others. Its frontmatter sets
 `disable-model-invocation: true`: it may only be run when the maintainer explicitly asks, never
 automatically and never from another skill. Do not install it into a consuming project.

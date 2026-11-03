@@ -41,6 +41,7 @@ The **source generator** (`VeloxDev.Core.Generator`) is what makes the model ple
 | A workflow runtime                                            | A compiled plan with chains, router branches, parallel fan-out and joins; redirects instead of cycles; optional pause, observation, retry, error, compensation and checkpoint hooks |
 | Headless execution in a service or CI                         | `VeloxDev.Core` only — no UI assembly is referenced, and the graph can be built, compiled and run from a console                                                                 |
 | An AI agent that can operate the editor                       | `VeloxDev.Core.Extension`: tools that dispatch the same commands as the canvas, behind explicit policy gates and call budgets                                                     |
+| An MCP client driving a headless workflow                     | `VeloxDev.Cli`: loads a workflow archive and its component assemblies, then exposes inspection, editing, compilation and execution over stdio MCP                                  |
 | The same product on several GUIs                              | Seven adapters with the same public surface: WPF, Avalonia, WinUI, MAUI, WinForms, Razor, Jalium                                                                                    |
 
 ## Packages
@@ -210,7 +211,7 @@ var agent = chatClient.AsAIAgent(
 What keeps the surface safe under a real session:
 
 - **Node execution is opt-in.** Until the host calls `WithAllowNodeExecution(true)`, execution tools are absent.
-- **Budgets are enforced.** `WithMaxToolCalls`, plus separate read and write caps, bound a session.
+- **Budgets are enforced.** `WithMaxToolCalls`, plus separate read and write caps, bound a session. `Bypass` turns the three call-count caps off — it asks nothing — while the token cap still holds.
 - **Interaction is explicit.** Selection and confirmation tools appear only when the host wires a handler.
 - **Plans can be read before they run.** `CompileWorkflow` / `CompileNodeResult` expose the plan. `RunCompiledWorkflow` waits for the end; `StartCompiledWorkflow` returns a handle that can be paused, resumed, polled or stopped.
 - **MCP, skills and sub-agents are separate subsystems.** Each can also be used on its own; an MCP server joins the tool set on the next turn without rebuilding the agent.

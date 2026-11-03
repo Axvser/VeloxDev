@@ -1,0 +1,24 @@
+# Runtime failures
+
+Symptom → the rule it violates → the fix. These are failures observed while building and exercising the CLI, not a
+catalogue of hypothetical errors.
+
+| Symptom | Rule | Fix |
+|---|---|---|
+| `... has no registered JSON reader for the type name 'X, Assembly' this document carries` | Dependencies are loaded before the document; resolution goes through the library registry, not `Type.GetType`. | Put the assembly in the manifest `assemblies` or pass `--assembly` before the document. Do not expect a directory scan. |
+| `RootType` in `ArchiveInfo` is `TreeDefaultViewModel` although the source was a derived tree | Serializing through a concrete tree type writes no root `$type`; the reader falls back to the base type. | Set `rootType` in the manifest or `--root-type` to the concrete type. |
+| `The worker exited with code N` | A node's business code killed the worker process. The server is still alive. | Read the result's `stderr`; reproduce with `veloxdev run`; fix the node. This is the isolation working, not a transport failure. |
+| `outcome: Cancelled`, `timedOut: true` | The run's `timeoutMs` elapsed; the parent waited `--worker-kill-grace-ms` then killed the tree. | Raise `timeoutMs` or check for a blocking node that ignores cancellation. A sync node cannot be interrupted; the kill is the backstop. |
+| `outcome: Cancelled`, `cancelled: true` | The client's tool-call token was cancelled. | Expected. The worker is killed; the server keeps serving. Re-run when ready. |
+| Graph looks unchanged after a successful run | Isolated runs use a snapshot; node VM state is not merged back into the server's tree. | Read the run's `data`/logs, or `LoadArchive(stateFile)` to adopt the post-run tree deliberately. |
+| `LoadArchive is unavailable with --in-process-execution` | Run handles belong to the session being replaced; a swap has no safe migration. | Restart the server in isolated mode (default) to switch archives. |
+| `... is outside the workspace` | `--workspace` confines every file path this process reads or writes. | Move the file under the workspace, or launch without the sandbox. |
+| `Tool 'RunCompiledWorkflow' is not available in the current session` (or absent from `tools/list`) | Execution is opt-in and the surface is fixed at startup. | Relaunch with `--allow-execution` or set `allowExecution` in the manifest. Under `--in-process-execution`, handle-based tools exist; isolated mode uses `RunCompiledWorkflow` / `StartWorkflow` instead. |
+| A node's result is a non-JSON tool failure in a worker | Node code wrote to stdout, corrupting the worker's JSON result. | Log through `IRuntimeContext.Log` or stderr. Never `Console.WriteLine` in a node. |
+| `pluginWarnings` names a VeloxDev.Core/Extension version mismatch | The default load context unifies by simple name; plugins are not isolated. | Rebuild the plugin against the host version. The warning means the plugin is already running against the host's copy, not the one it was built with. |
+| `SetRedirectOnError` returns an error for an in-range index | The index is validated against the live tree at set time; structural edits move indices. | Refresh `ListNodes`; set the target again. The engine re-validates upstreamness per failure. |
+| A redirect was set, but the run still ended on error | The failing node implements `IRedirectable` and owns the decision; the host fallback is not consulted. | Fix the node's resolver. Do not expect the host fallback to override it. |
+| A redirect target that exists still ended the run | A host target that is not an upstream node of the failing node is a host bug; the engine ends the run instead of carrying on. | Choose an upstream node. A node's invalid target is ignored; a host target is not. |
+| `dotnet build -c Release` fails with `HostRedirect`/API missing | The Release path uses the published Core package, which lags the working tree. | Build/pack with `-p:VeloxDevLocalCore=true` until the next Core release. |
+| A queued `StartWorkflow` job sits in `Queued` | `--max-concurrent-runs` is full (default 2) or a blocking run holds the slot. | Wait, cancel another job, or launch with a larger limit. `0` means unlimited. |
+| `LoadArchive` succeeds but a type from the old archive is still creatable | The shared `PluginLoader` accumulates assemblies; the type registry is process-wide. | Expected. The current tree decides what is actually present; `ListNodes` is the live view. |
