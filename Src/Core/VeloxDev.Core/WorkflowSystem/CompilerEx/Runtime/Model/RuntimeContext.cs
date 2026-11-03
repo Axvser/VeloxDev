@@ -149,6 +149,29 @@ public sealed partial class RuntimeContext : IRuntimeContext
     public IExecutionErrorSink? ErrorSink { get; set; }
 
     /// <summary>
+    /// Asked where to go when a node reports an error but does not implement <see cref="IRedirectable"/>;
+    /// <c>null</c> (the default) lets the failure end the flow.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The node's own contract wins.</b> A node implementing <see cref="IRedirectable"/> owns the decision,
+    /// including declining it by returning <see langword="null"/> — which carries on, exactly as before. The host
+    /// is only asked for nodes that have no way to answer.
+    /// </para>
+    /// <para>
+    /// The answer is validated like a node's: it must be an upstream node of the failing one in the compiled graph.
+    /// An invalid answer is logged and <b>ends the flow</b>, unlike a node's invalid target which is ignored. A host
+    /// that tried to place the run and named something that cannot be a fallback has a bug; carrying on would hide
+    /// it and silently drop the error that prompted the question.
+    /// </para>
+    /// <para>
+    /// A policy that throws ends the flow as a redirect-phase failure, the same way a node resolver that throws
+    /// does. The run's existing 50-redirect cap still applies.
+    /// </para>
+    /// </remarks>
+    public Func<IRuntimeContext, IWorkflowNodeViewModel, IWorkflowNodeViewModel?>? HostRedirect { get; set; }
+
+    /// <summary>
     /// Told about the nodes a run that ends badly already drove, most recent first; <c>null</c> (the default) tells
     /// nobody.
     /// </summary>

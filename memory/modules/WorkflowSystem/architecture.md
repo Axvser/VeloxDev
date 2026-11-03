@@ -346,7 +346,7 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 | 图怎么被切成执行段 | `CompilerEx/Compile/CompilerViewModel.cs`（正向）与 `CompilerViewModel.Reverse.cs`（逆向锥） |
 | 运行期怎么走 | `CompilerEx/Runtime/RuntimeEngine.cs`（`RunGraphAsync` → `DriveAsync`） |
 | 重定向 / 重试语义 | `CompilerEx/Runtime/RuntimeEngine.cs` 的 `RunAsync`；契约 `CompilerEx/Runtime/Contracts/IRedirectable.cs` |
-| 暂停 / 观察 / 重试 / 结构化错误 / 补偿 / 检查点 | 六个可选能力都是 `RuntimeContext` 的具体类成员，引擎在 `DriveAsync` 与 `RunAsync` 的收尾里读；见 [compiler-execution.md](compiler-execution.md) §十（前五个）与 §十一（检查点） |
+| 暂停 / 观察 / 重试 / 结构化错误 / 补偿 / 宿主重定向 / 检查点 | 六个可选能力加检查点都是 `RuntimeContext` 的具体类成员，引擎在 `DriveAsync` 与 `RunAsync` 的收尾里读；前五个见 [compiler-execution.md](compiler-execution.md) §十，宿主重定向见 §六，检查点见 §十一 |
 | 汇合点的输入怎么聚合 | `CompilerEx/Runtime/Model/RuntimeContext.cs` 的 `CollectGroupedInputs`；结构 `GroupData.cs` 的 `GroupData` |
 | 画布坐标换算 | `GUI/Math/WorkflowSurfaceMath.cs`（全模块唯一数学，别在适配器里重写） |
 | 节点自动布局 / 分离投影 | `WorkflowSystem/Layout/TileSeparationStage.cs`；管道 `WorkflowLayoutPipeline.cs`，展开见 [layout.md](layout.md) |

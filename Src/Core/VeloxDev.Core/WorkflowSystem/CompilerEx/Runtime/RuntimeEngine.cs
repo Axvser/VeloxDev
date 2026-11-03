@@ -25,8 +25,8 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </para>
 /// Before each drive the engine injects <see cref="IRuntimeContext"/> into <see cref="IRuntimeAware"/> nodes.
 /// <para>
-/// Five capabilities are optional and read off the host's <see cref="RuntimeContext"/> — the pause gate, the
-/// observer, the retry policy, the error sink and the compensator. Every one of them is a bypass: with none
+/// Six capabilities are optional and read off the host's <see cref="RuntimeContext"/> — the pause gate, the
+/// observer, the retry policy, the error sink, the compensator and the host-level redirect fallback. Every one of them is a bypass: with none
 /// configured, the run behaves exactly as it did before they existed, down to the log lines and the number of
 /// drives. They are resolved through <c>Session</c>, so they also work inside a fan-out.
 /// </para>
@@ -207,9 +207,46 @@ public sealed class RuntimeEngine
             // 只是提醒：值照常传下去，运行继续，连 IRedirectable 都不问 —— 没出问题就没有要改的路线。
             if (reported is null or ExecutionReportLevel.Warning) continue;
 
-            // 报的是错但没人能处理它 ⇒ 整轮就此结束，与从前一样（CurrentOrder = -1、EndedWithError）。
+            // 报的是错但节点没有自己的重定向契约：先问宿主策略，它可以说「回到某个上游节点重跑」。
+            // 只有非 IRedirectable 的节点才会走到这里 —— 实现了契约的节点自己拥有决定权，包括「我不管」（null）。
             if (node is not IRedirectable redirectable)
             {
+                if (session?.HostRedirect is { } hostPolicy)
+                {
+                    IWorkflowNodeViewModel? hostTarget;
+                    try
+                    {
+                        hostTarget = hostPolicy(context, node);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        // A host hook is no more allowed to throw than a node resolver: there is no answer left.
+                        context.CurrentOrder = -1;
+                        context.EndedWithError = true;
+                        await ReportErrorAsync(session, context, ExecutionFailurePhase.Redirect, node, ex.Message, ex, ct);
+                        return true;
+                    }
+
+                    if (hostTarget is not null)
+                    {
+                        var hostOrder = NodeOrder(hostTarget);
+                        if (hostOrder >= 0 && hostOrder < order && IsUpstreamOf(node, hostTarget))
+                        {
+                            context.PendingRedirectTarget = hostOrder;
+                            break;
+                        }
+
+                        // A host answer that cannot be a fallback is a host bug, not a declined request: end the
+                        // flow instead of carrying on and silently dropping the error that raised the question.
+                        context.Log($"Host redirect target '{hostTarget.GetType().Name}' (Order {hostOrder}) is not an upstream compiled node; the flow ends.");
+                    }
+                }
+
+                // 没有策略、策略说不管、或给了一个非法目标 ⇒ 整轮就此结束，与从前一样（CurrentOrder = -1、EndedWithError）。
                 context.CurrentOrder = -1;
                 context.EndedWithError = true;
                 await ReportErrorAsync(session, context, ExecutionFailurePhase.Node, node,

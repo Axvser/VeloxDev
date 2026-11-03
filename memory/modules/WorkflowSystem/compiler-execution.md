@@ -61,8 +61,9 @@
 |---|---|---|
 | 干净返回 | — | 值传下去 |
 | `Warn()`（正常返回） | **不改变走向**（连问都不问） | 值照常传下去，运行继续 |
-| `Error()`，或抛异常（重试耗尽后） | 问它的决定 → 重定向或继续 | **整轮结束**：`CurrentOrder = -1`、`EndedWithError = true`、Status `"Stopped"`、Outcome `Failed` |
+| `Error()`，或抛异常（重试耗尽后） | 问它的决定 → 重定向或继续 | 有宿主 `HostRedirect` 时问它；否则 **整轮结束**：`CurrentOrder = -1`、`EndedWithError = true`、Status `"Stopped"`、Outcome `Failed` |
 
+- **宿主兜底（2026-11-04）**：`RuntimeContext.HostRedirect`（不在 `IRuntimeContext` 上，与 pause / observer / retry / error sink / compensator 同一批，靠转型到具体类取）只在节点**没有** `IRedirectable` 时被问。返回上游节点 ⇒ 与节点契约走同一条重跑路径；返回 `null` ⇒ 照旧结束；返回非上游 ⇒ **结束**而不是像节点契约那样忽略（宿主说能处理却没给出可用答案，是宿主 bug，静默吞掉会掩盖最初那个错误）；策略抛异常 ⇒ `Redirect` 档失败并结束。实现了 `IRedirectable` 的节点自己拥有决定权，包括返回 `null` 继续 —— 宿主不覆盖它。测试见 `RuntimeRedirectTests` 的四条 `HostRedirect` 用例。
 - 判据是 `RuntimeContext.ReportedLevel`（`ExecutionReportLevel?`：null / Warning / Error），由 `Error()`/`Warn()` 写；**抛异常那支由 `DriveAsync` 的 catch 调 `context.Error(...)` 写同一档** —— 所以异常没有单独的通道，它就是 Error 档。`IRuntimeContext.RedirectRequested` 现在是从 `ReportedLevel` **派生**的（契约上的 bool 没动，赋 `true` 按 Error 算）。
 - **警告不吃掉结果**：`DriveAsync` 只在 Error 档把这次驱动记成「返回 null」+ `RegisterOutput(node, null)`；Warn 档节点返回什么，下游就收到什么（汇合点里读到的是那个值，不是 null）。
 - **级别是分支私有的**：门面自带一份（与 `Data`/`CurrentNode` 同理）—— 写在会话上，交错的两个分支会互相覆盖。引擎读它走 `RuntimeEngine.ReportedLevel(context, session)`。
@@ -73,7 +74,7 @@
 - **同步那对只写日志，异步那对才记录到宿主**：`ErrorAsync`/`WarnAsync` = 同步那对 + 把 `ExecutionError` 交给 `IExecutionErrorSink`（带 `ExecutionReportLevel`，见 §十），**档位语义完全继承**（`ErrorAsync` 一样停）。同步的 `Error`/`Warn` 必须保持 `void`（`ILogWriter.Write` 是同步的，节点帧里不能阻塞），所以它不碰 sink。
 - 节点自己报的记录里带 `CurrentNode`：**扇出里存在分支门面上**，与级别同一个理由。
 
-测试：`NodeReportTests`（Warn 让值流过、Error 无处理者时结束整轮、Error 有 `IRedirectable` 时由契约安排、警告后的值与汇合点）；抛异常的用例是 `RuntimeEngineRunTests.ANodeThatThrows_WithoutIRedirectable_EndsTheFlowWithStatusMinusOne` 与 `EngineHostContractFailureTests.AnAttachThatThrows_EndsTheRun_InsteadOfSilentlySkippingTheNode`。
+测试：`NodeReportTests`（Warn 让值流过、Error 无处理者时结束整轮、Error 有 `IRedirectable` 时由契约安排、警告后的值与汇合点）；`RuntimeRedirectTests` 另有四条 `HostRedirect` 用例（非契约节点被兜底、契约节点不被覆盖、非法宿主目标结束、策略抛异常结束）；抛异常的用例是 `RuntimeEngineRunTests.ANodeThatThrows_WithoutIRedirectable_EndsTheFlowWithStatusMinusOne` 与 `EngineHostContractFailureTests.AnAttachThatThrows_EndsTheRun_InsteadOfSilentlySkippingTheNode`。
 
 ## 七、测试在哪、什么没测
 

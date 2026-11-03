@@ -137,6 +137,106 @@ public class RuntimeRedirectTests
     }
 
     [TestMethod]
+    public async Task HostRedirect_PlacesANodeThatHasNoRedirectContract()
+    {
+        // b does not implement IRedirectable. The host policy is the only thing that can place it.
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var b = new ProbeNode("b")
+        {
+            Handler = (ctx, _) =>
+            {
+                if (OnAttempt(ctx, 1)) throw new InvalidOperationException("b failed");
+                return "B";
+            },
+        };
+        ProbeGraph.Wire(a, b);
+        var graph = ProbeGraph.Compile(a);
+
+        var session = new RuntimeContext
+        {
+            HostRedirect = (_, failing) => ReferenceEquals(failing, b) ? a : null,
+        };
+
+        await new RuntimeEngine().RunAsync(graph, session, CancellationToken.None);
+
+        Assert.AreEqual("Completed", session.Status);
+        Assert.AreEqual(2, session.Attempt, "the host fallback caused one re-run");
+        Assert.HasCount(2, a.Calls, "the target and everything after it re-runs");
+        Assert.HasCount(2, b.Calls);
+        Assert.IsFalse(session.EndedWithError);
+    }
+
+    [TestMethod]
+    public async Task HostRedirect_IsNotAskedWhenTheNodeHasItsOwnContract()
+    {
+        // A node that implements IRedirectable owns the answer, including "I decline" (null → carry on).
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var b = new RedirectableNode("b")
+        {
+            Handler = (_, _) => throw new InvalidOperationException("boom"),
+            Resolve = _ => null,
+        };
+        ProbeGraph.Wire(a, b);
+        var graph = ProbeGraph.Compile(a);
+
+        var asked = 0;
+        var session = new RuntimeContext
+        {
+            HostRedirect = (_, _) => { asked++; return a; },
+        };
+
+        await new RuntimeEngine().RunAsync(graph, session, CancellationToken.None);
+
+        Assert.AreEqual(0, asked, "the node's own contract must not be overridden");
+        Assert.AreEqual(1, session.Attempt);
+        Assert.AreEqual("Completed", session.Status);
+        Assert.IsFalse(session.EndedWithError);
+    }
+
+    [TestMethod]
+    public async Task AnInvalidHostRedirect_EndsTheFlowInsteadOfBeingIgnored()
+    {
+        // A node's invalid target is ignored and the chain carries on. A host's invalid target is a host bug:
+        // carrying on would drop the error that raised the question.
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var b = new ProbeNode("b") { Handler = (_, _) => throw new InvalidOperationException("boom") };
+        var c = new ProbeNode("c") { Handler = (_, _) => "C" };
+        ProbeGraph.Wire(a, b);
+        ProbeGraph.Wire(b, c);
+        var graph = ProbeGraph.Compile(a);
+
+        var session = new RuntimeContext
+        {
+            HostRedirect = (_, _) => c, // downstream, never a valid fallback
+        };
+
+        await new RuntimeEngine().RunAsync(graph, session, CancellationToken.None);
+
+        Assert.IsTrue(session.EndedWithError);
+        Assert.AreEqual(1, session.Attempt, "an invalid target must not start another pass");
+        Assert.HasCount(0, c.Calls, "the chain must not carry on");
+    }
+
+    [TestMethod]
+    public async Task AHostRedirectThatThrows_EndsTheFlowAsARedirectFailure()
+    {
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var b = new ProbeNode("b") { Handler = (_, _) => throw new InvalidOperationException("boom") };
+        ProbeGraph.Wire(a, b);
+        var graph = ProbeGraph.Compile(a);
+
+        var session = new RuntimeContext
+        {
+            HostRedirect = (_, _) => throw new InvalidOperationException("policy bug"),
+        };
+
+        await new RuntimeEngine().RunAsync(graph, session, CancellationToken.None);
+
+        Assert.IsTrue(session.EndedWithError);
+        Assert.AreEqual(-1, session.CurrentOrder);
+    }
+
+    [TestMethod]
     public void RedirectLoopsExceedingLimit_AbortWithException()
     {
         // b 每次跑都抛错并请求回到 a → 每次都被接受 → 无限重跑,直到超过 MaxRedirects 上限。
