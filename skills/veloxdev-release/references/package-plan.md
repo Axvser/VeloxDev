@@ -6,14 +6,14 @@ assume `$version`, `$repo`, `$staging`, `$dependentProjects`, `$templateProjects
 `$restoreSource` and `$pushSource` are already defined by the earlier blocks:
 
 ```powershell
-$version = "10.2.0"
+$version = "11.0.0"
 $repo = (Get-Location).Path
 $staging = Join-Path $env:TEMP "veloxdev-release-$version"
 $restoreSource = "https://www.nuget.org/api/v2/"
 $pushSource = "https://api.nuget.org/v3/index.json"
 ```
 
-## The 16 packages
+## The 18 packages
 
 | Kind | Id | Project |
 | --- | --- | --- |
@@ -33,13 +33,24 @@ $pushSource = "https://api.nuget.org/v3/index.json"
 | Template | `VeloxDev.Razor.Templates` | `Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj` |
 | Template | `VeloxDev.WinForms.Templates` | `Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj` |
 | Template | `VeloxDev.Jalium.Templates` | `Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj` |
+| Dependency | `VeloxDev.Core.Generator` | `Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj` |
+| Tool | `VeloxDev.Cli` | `Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj` |
 
 The seven adapters and the Extension are the only projects that carry a
-`<PackageReference Include="VeloxDev.Core" Version="…" />`. The templates have a direct
-`<Version>` but no Core reference. The Core project itself is never a dependent.
+`<PackageReference Include="VeloxDev.Core" Version="…" />`. The templates, generator and CLI have a
+direct `<Version>` but no Core reference. The Core project itself is never a dependent.
 
-Representative packages re-downloaded after a publish: `VeloxDev.Core`,
-`VeloxDev.Core.Extension`, `VeloxDev.WPF`, `VeloxDev.WPF.Templates`.
+⚙ **The generator is a dependency, not a separate release.** Core and Extension reference
+`VeloxDev.Core.Generator` at `$version`, so bump it in the same pass and publish it **before** Core
+and Extension. The dependents can be built locally first because `VeloxDevLocalCore=true` now swaps
+both Core and the generator to project references.
+
+⚙ **The CLI is a .NET tool, counted in the release.** Pack it with `-p:VeloxDevLocalCore=true`; the
+package bundles Core/Extension/MCP in `tools/net8.0/any/`, so it can be pushed after the library
+packages. Verify it by installing the staged nupkg as a tool and running `veloxdev --help`.
+
+Representative packages re-downloaded after a publish: `VeloxDev.Core`, `VeloxDev.Core.Extension`,
+`VeloxDev.Core.Generator`, `VeloxDev.WPF`, `VeloxDev.WPF.Templates`, `VeloxDev.Cli`.
 
 ## Bump
 
@@ -47,7 +58,7 @@ This rewrites the literal versions in the projects. It is the only version sourc
 `VeloxDevCoreVersion` property.
 
 ```powershell
-$version = "10.2.0"          # the version confirmed with the developer
+$version = "11.0.0"          # the version confirmed with the developer
 $repo = (Get-Location).Path
 
 $coreProjects = @(
@@ -75,7 +86,15 @@ $templateProjects = @(
     "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj"
 )
 
-foreach ($relative in ($coreProjects + $dependentProjects + $templateProjects)) {
+$generatorProjects = @(
+    "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj"
+)
+
+$toolProjects = @(
+    "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
+)
+
+foreach ($relative in ($coreProjects + $dependentProjects + $templateProjects + $generatorProjects + $toolProjects)) {
     $path = Join-Path $repo $relative
     if (-not (Test-Path $path)) { throw "missing $relative" }
 
@@ -101,18 +120,25 @@ foreach ($relative in ($coreProjects + $dependentProjects + $templateProjects)) 
 }
 ```
 
-Verify with `git diff -- Src` before packing. The diff should be exactly the 16 `<Version>` lines and
+Verify with `git diff -- Src` before packing. The diff should be exactly the 18 `<Version>` lines and
 the 8 Core-reference lines.
 
-## Core package and its TFM check
+## Generator and Core packages
+
+The generator must exist before Core can be restored by a consumer, so pack and publish it first.
+The Core pack uses `VeloxDevLocalCore=true` so its generator package reference resolves to the
+working-tree project.
 
 ```powershell
 $staging = Join-Path $env:TEMP "veloxdev-release-$version"
 New-Item -ItemType Directory -Force $staging | Out-Null
 
+dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" -c Release -o $staging `
+    -p:Version=$version -p:PackageVersion=$version
+
 dotnet clean "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" -c Release
 dotnet pack "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" -c Release -o $staging `
-    -p:Version=$version -p:PackageVersion=$version
+    -p:Version=$version -p:PackageVersion=$version -p:VeloxDevLocalCore=true
 
 $nupkg = Join-Path $staging "VeloxDev.Core.$version.nupkg"
 $inspect = Join-Path $staging "core-inspect"
@@ -156,56 +182,38 @@ foreach ($relative in $templateProjects) {
     dotnet pack (Join-Path $repo $relative) -c Release -o $staging `
         -p:Version=$version -p:PackageVersion=$version
 }
+
+# The CLI is a .NET tool and bundles Core/Extension; it needs the working-tree Core to pack.
+dotnet pack "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" -c Release -o $staging `
+    -p:Version=$version -p:PackageVersion=$version -p:VeloxDevLocalCore=true
 ```
 
 ## Publish
 
-Only after explicit confirmation. `$pushSource` defaults to
-`https://api.nuget.org/v3/index.json`.
+Publishing is the GitHub Actions workflow `.github/workflows/publish.yml` through NuGet Trusted
+Publishing. **Do not push any package from this local session.** The workflow:
+
+- reads the version from `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` and validates that all 18
+  package projects carry the same `<Version>`;
+- skips publishing when that Core version is already on NuGet — bump the version to release, or use
+  `force=true` on a manual run;
+- packs all 18 on `windows-latest` with `-p:VeloxDevLocalCore=true`;
+- logs in with `NuGet/login@v1` (OIDC -> temporary key), pushes the generator, waits, pushes Core,
+  waits, then pushes the rest with `--skip-duplicate`, and installs the CLI to verify it;
+- if the version is `X1.X2.X3` with `X3 > 0`, unlists every older `X1.X2.<i>` for all 18 packages
+  after the pushes, leaving only the highest patch of that line listed. A major/minor change
+  leaves older lines listed. The policy must include the **Unlist or relist** scope.
+
+The policy must name `publish.yml`, with owner/repo `Axvser/VeloxDev` and glob `VeloxDev.*`.
+Auto or manual is a repository variable: set `AUTO_PUBLISH=true` to act on a push to `master` under
+`Src/**`; leave it unset for manual-only. A manual run is always available:
 
 ```powershell
-dotnet nuget push (Join-Path $staging "VeloxDev.Core.$version.nupkg") `
-    --api-key $env:NUGET_API_KEY --source $pushSource --skip-duplicate
-
-$deadline = (Get-Date).AddMinutes(30)
-while ($true) {
-    try {
-        $response = Invoke-WebRequest `
-            -Uri "https://www.nuget.org/api/v2/package/VeloxDev.Core/$version" `
-            -Method Get -UseBasicParsing -TimeoutSec 30
-        if ($response.StatusCode -eq 200) { break }
-    } catch { }
-    if ((Get-Date) -gt $deadline) { throw "Core did not appear within 30 minutes" }
-    Start-Sleep -Seconds 20
-}
+gh workflow run publish.yml --repo Axvser/VeloxDev -f force=false
 ```
 
-After the Core is available, build the dependents **without** `VeloxDevLocalCore` (restore from
-v2, so the new Core resolves), stage each nupkg, and push Core's dependents before the templates:
-
-```powershell
-foreach ($relative in $dependentProjects) {
-    $project = Join-Path $repo $relative
-    dotnet restore $project -p:Configuration=Release --source $restoreSource
-    dotnet build $project -c Release --no-restore -p:Version=$version -p:PackageVersion=$version
-
-    $nupkg = Get-ChildItem (Join-Path (Split-Path $project) "bin/Release") "*.nupkg" |
-        Where-Object { $_.Name -like "*.$version.nupkg" } |
-        Select-Object -First 1
-    if (-not $nupkg) { throw "no nupkg produced for $relative" }
-    $staged = Join-Path $staging $nupkg.Name
-    Copy-Item $nupkg.FullName $staged -Force
-    dotnet nuget push $staged --api-key $env:NUGET_API_KEY --source $pushSource --skip-duplicate
-}
-
-foreach ($relative in $templateProjects) {
-    dotnet pack (Join-Path $repo $relative) -c Release -o $staging `
-        -p:Version=$version -p:PackageVersion=$version
-    $id = [IO.Path]::GetFileNameWithoutExtension($relative)
-    dotnet nuget push (Join-Path $staging "$id.$version.nupkg") `
-        --api-key $env:NUGET_API_KEY --source $pushSource --skip-duplicate
-}
-```
+`publish.yml` must exist on the default branch. The workflow uploads every nupkg as the
+`VeloxDev.<version>` artifact; `$staging` is only for build-mode inspection.
 
 ## Verify
 
@@ -213,18 +221,27 @@ foreach ($relative in $templateProjects) {
 $verify = Join-Path $staging "verify"
 New-Item -ItemType Directory -Force $verify | Out-Null
 
-foreach ($id in @('VeloxDev.Core', 'VeloxDev.Core.Extension', 'VeloxDev.WPF', 'VeloxDev.WPF.Templates')) {
+foreach ($id in @(
+    'VeloxDev.Core', 'VeloxDev.Core.Extension', 'VeloxDev.Core.Generator',
+    'VeloxDev.WPF', 'VeloxDev.WPF.Templates', 'VeloxDev.Cli'
+)) {
     Invoke-WebRequest "https://www.nuget.org/api/v2/package/$id/$version" `
         -OutFile (Join-Path $verify "$id.$version.nupkg") -UseBasicParsing
 }
 
 dotnet new install (Join-Path $verify "VeloxDev.WPF.Templates.$version.nupkg") `
     --debug:custom-hive (Join-Path $verify "hive")
+
+dotnet tool install --tool-path (Join-Path $verify "tools") --add-source $verify `
+    VeloxDev.Cli --version $version
+$cli = if ($env:OS -eq 'Windows_NT') { 'veloxdev.exe' } else { 'veloxdev' }
+& (Join-Path $verify "tools" $cli) --help
 ```
 
-## Unlist old versions — only on explicit request
+## Manual unlist — only on explicit request, outside the automatic patch cleanup
 
-Do not run this unless the developer explicitly asks to unlist old versions. Keep the newest N
+The publish workflow already unlists older patches of the same `X1.X2` automatically. This block is
+for any **other** unlisting: do not run it unless the developer explicitly asks. Keep the newest N
 (default 2) and never unlist the version this run publishes:
 
 ```powershell
@@ -246,9 +263,12 @@ NuGet keeps the package downloadable by exact version after an unlist; this is n
 ```text
 | Package | Version | Status |
 | --- | --- | --- |
-| VeloxDev.Core | 10.2.0 | pushed / verified |
+| VeloxDev.Core.Generator | 11.0.0 | pushed / verified |
+| VeloxDev.Core | 11.0.0 | pushed / verified |
 | ... | ... | ... |
+| VeloxDev.Cli | 11.0.0 | pushed / verified |
 ```
 
 Report every package, the staging directory, whether the version bump is still uncommitted, and
-the first failure if the run stopped. Nothing is unlisted unless the developer explicitly asked.
+the first failure if the run stopped. Patch releases unlist older same-`X1.X2` patches
+automatically; any other unlisting requires an explicit request.

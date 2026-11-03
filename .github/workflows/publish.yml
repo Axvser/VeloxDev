@@ -1,0 +1,292 @@
+name: publish
+
+# Publishes every VeloxDev package through NuGet Trusted Publishing (GitHub OIDC).
+# No long-lived NUGET_API_KEY is stored in this repository or in GitHub secrets.
+#
+# NuGet.org Trusted Publishing policy must match:
+#   Package Owner   Axvser
+#   CI/CD Provider  GitHub Actions
+#   Repo Owner      Axvser
+#   Repository      VeloxDev
+#   Workflow File   publish.yml
+#   Environment     (blank)
+#   Glob Patterns   VeloxDev.*
+#
+# Trigger:
+#   - push to master when package sources change. The version is read from
+#     Src/Core/VeloxDev.Core/VeloxDev.Core.csproj. If that version is already on NuGet,
+#     the release job is skipped; bump <Version> in the csproj to publish.
+#   - manual workflow_dispatch; `force` publishes even when the version already exists
+#     (existing packages are skipped with --skip-duplicate).
+#
+# Auto vs manual:
+#   The push trigger is only acted on when the repository variable AUTO_PUBLISH is set to
+#   "true" (Settings -> Secrets and variables -> Actions -> Variables). Unset or "false"
+#   makes the workflow manual-only: a push starts a run that skips every job; use
+#   workflow_dispatch or `gh workflow run` to release.
+#
+# Patch cleanup:
+#   If the version is X1.X2.X3 with X3 > 0, the workflow unlists every older X1.X2.<i>
+#   (i < X3) for all 18 packages after the new version is published, so only the highest
+#   patch of that major/minor line stays listed. A major/minor change does not touch older
+#   lines. The NuGet policy must include the "Unlist or relist package versions" scope.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Src/**'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Run even when this version already exists on NuGet'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: veloxdev-publish
+  cancel-in-progress: false
+
+jobs:
+  version:
+    # Manual runs always proceed. Push runs only proceed when the repository variable
+    # AUTO_PUBLISH is "true"; otherwise the run is a no-op.
+    if: github.event_name == 'workflow_dispatch' || vars.AUTO_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      publish: ${{ steps.read.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read and validate the version
+        id: read
+        shell: pwsh
+        run: |
+          $core = "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj"
+          $match = [regex]::Match((Get-Content $core -Raw), '<Version>([^<]+)</Version>')
+          if (-not $match.Success) { throw "no <Version> in $core" }
+          $version = $match.Groups[1].Value
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+          $projects = @(
+            "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj",
+            "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj",
+            "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj",
+            "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj",
+            "Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj",
+            "Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj",
+            "Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj",
+            "Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj",
+            "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj",
+            "Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj",
+            "Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj",
+            "Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj",
+            "Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj",
+            "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj",
+            "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj",
+            "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj",
+            "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj",
+            "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
+          )
+          foreach ($project in $projects) {
+            if (-not (Test-Path $project)) { throw "missing $project" }
+            $value = [regex]::Match((Get-Content $project -Raw), '<Version>([^<]+)</Version>').Groups[1].Value
+            if ($value -ne $version) { throw "$project is '$value', expected '$version'" }
+          }
+
+          $force = "${{ inputs.force }}" -eq "true"
+          if (-not $force) {
+            try {
+              $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.core/$version/veloxdev.core.$version.nupkg"
+              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+              "publish=false" >> $env:GITHUB_OUTPUT
+              return
+            } catch { }
+          }
+          "publish=true" >> $env:GITHUB_OUTPUT
+
+  publish:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Ensure the .NET Framework 4.6.1 targeting pack
+        shell: pwsh
+        run: |
+          $pack = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6.1"
+          if (-not (Test-Path $pack)) {
+            choco install netfx-4.6.1-devpack -y --no-progress
+          }
+
+      - name: Install the MAUI workload
+        shell: pwsh
+        run: dotnet workload install maui
+
+      - name: Pack every package
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          $projects = @(
+            "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj",
+            "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj",
+            "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj",
+            "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj",
+            "Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj",
+            "Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj",
+            "Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj",
+            "Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj",
+            "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj",
+            "Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj",
+            "Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj",
+            "Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj",
+            "Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj",
+            "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj",
+            "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj",
+            "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj",
+            "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj",
+            "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
+          )
+          foreach ($project in $projects) {
+            dotnet pack $project -c Release -o artifacts `
+              -p:Version=$env:VERSION `
+              -p:PackageVersion=$env:VERSION `
+              -p:VeloxDevLocalCore=true
+            if ($LASTEXITCODE -ne 0) { throw "pack failed: $project" }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VeloxDev.${{ needs.version.outputs.version }}
+          path: artifacts/*.nupkg
+
+      - name: NuGet login (OIDC -> temporary key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: Axvser
+
+      - name: Push the generator and Core first
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          function Push-One([string]$id) {
+            $file = Join-Path "artifacts" "$id.${env:VERSION}.nupkg"
+            if (-not (Test-Path $file)) { throw "missing $file" }
+            dotnet nuget push $file --api-key $env:NUGET_API_KEY `
+              --source https://api.nuget.org/v3/index.json --skip-duplicate
+            if ($LASTEXITCODE -ne 0) { throw "push failed: $id" }
+          }
+          function Wait-One([string]$id) {
+            $lower = $id.ToLowerInvariant()
+            $url = "https://api.nuget.org/v3-flatcontainer/$lower/${env:VERSION}/$lower.${env:VERSION}.nupkg"
+            $deadline = (Get-Date).AddMinutes(15)
+            while ($true) {
+              try {
+                Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+                return
+              } catch {
+                if ((Get-Date) -gt $deadline) { throw "$id did not appear within 15 minutes" }
+                Start-Sleep -Seconds 10
+              }
+            }
+          }
+          Push-One "VeloxDev.Core.Generator"
+          Wait-One "VeloxDev.Core.Generator"
+          Push-One "VeloxDev.Core"
+          Wait-One "VeloxDev.Core"
+
+      - name: Push the rest
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          $skip = @(
+            "VeloxDev.Core.Generator.${env:VERSION}.nupkg",
+            "VeloxDev.Core.${env:VERSION}.nupkg"
+          )
+          Get-ChildItem artifacts -Filter "*.nupkg" |
+            Where-Object { $skip -notcontains $_.Name } |
+            ForEach-Object {
+              dotnet nuget push $_.FullName --api-key $env:NUGET_API_KEY `
+                --source https://api.nuget.org/v3/index.json --skip-duplicate
+              if ($LASTEXITCODE -ne 0) { throw "push failed: $($_.Name)" }
+            }
+
+      - name: Unlist older patches of the same major/minor
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          if ($env:VERSION -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
+            Write-Host "Version '$env:VERSION' is not X.Y.Z; skipping patch cleanup."
+            return
+          }
+          $major = [int]$Matches[1]
+          $minor = [int]$Matches[2]
+          $patch = [int]$Matches[3]
+          if ($patch -le 0) {
+            Write-Host "Patch is 0; there are no older patches to unlist."
+            return
+          }
+
+          # One list for every published package. Missing or already-unlisted versions are
+          # expected and do not fail the release.
+          $ids = @(
+            "VeloxDev.Core.Generator", "VeloxDev.Core", "VeloxDev.Core.Extension",
+            "VeloxDev.WPF", "VeloxDev.Avalonia", "VeloxDev.WinUI", "VeloxDev.MAUI",
+            "VeloxDev.Razor", "VeloxDev.WinForms", "VeloxDev.Jalium",
+            "VeloxDev.WPF.Templates", "VeloxDev.Avalonia.Templates", "VeloxDev.WinUI.Templates",
+            "VeloxDev.MAUI.Templates", "VeloxDev.Razor.Templates", "VeloxDev.WinForms.Templates",
+            "VeloxDev.Jalium.Templates", "VeloxDev.Cli"
+          )
+          foreach ($id in $ids) {
+            for ($i = 0; $i -lt $patch; $i++) {
+              $old = "$major.$minor.$i"
+              Write-Host "Unlisting $id $old"
+              dotnet nuget delete $id $old --api-key $env:NUGET_API_KEY `
+                --source https://api.nuget.org/v3/index.json --non-interactive
+              if ($LASTEXITCODE -ne 0) {
+                Write-Host "  (not found or already unlisted; continuing)"
+              }
+            }
+          }
+
+      - name: Verify the published tool
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.cli/${env:VERSION}/veloxdev.cli.${env:VERSION}.nupkg"
+          $deadline = (Get-Date).AddMinutes(15)
+          while ($true) {
+            try {
+              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+              break
+            } catch {
+              if ((Get-Date) -gt $deadline) { throw "VeloxDev.Cli did not appear within 15 minutes" }
+              Start-Sleep -Seconds 10
+            }
+          }
+          $tool = Join-Path $env:RUNNER_TEMP "veloxdev-tool"
+          dotnet tool install --tool-path $tool VeloxDev.Cli --version $env:VERSION
+          & (Join-Path $tool "veloxdev.exe") --help
