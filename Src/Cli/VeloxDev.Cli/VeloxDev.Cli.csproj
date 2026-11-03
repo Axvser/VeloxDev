@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<!-- The project is VeloxDev.Cli; the command it produces is the shorter `veloxdev`. -->
+		<AssemblyName>veloxdev</AssemblyName>
+		<RootNamespace>VeloxDev.Cli</RootNamespace>
+		<!-- A .NET tool: `dotnet tool install VeloxDev.Cli` yields the cross-platform `veloxdev` command. -->
+		<IsPackable>true</IsPackable>
+		<PackAsTool>true</PackAsTool>
+		<ToolCommandName>veloxdev</ToolCommandName>
+		<!-- net8.0 is the floor, not a ceiling: a host with only .NET 9/10 installed can still run the tool. -->
+		<RollForward>LatestMajor</RollForward>
+		<!-- The worker launches `dotnet <cli.dll>`; a framework-dependent tool is the cross-platform shape. -->
+		<UseAppHost>false</UseAppHost>
+		<PackageId>VeloxDev.Cli</PackageId>
+		<Title>VeloxDev.Cli</Title>
+		<Version>11.0.0</Version>
+		<Authors>Axvser</Authors>
+		<Description>Headless VeloxDev workflow host and stdio MCP server: load an archive and its component assemblies, inspect and edit the graph through the library's own commands, compile, execute and save.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="VeloxDev.Cli.Test" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<!--
+	  The CLI is not a package; it always consumes the working tree. Release builds of the tree use
+	  -p:VeloxDevLocalCore=true until the next Core release carries the APIs this project was built against.
+	-->
+	<ItemGroup>
+		<ProjectReference Include="..\..\Core\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
+	</ItemGroup>
+
+</Project>

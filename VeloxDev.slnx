@@ -14,6 +14,11 @@
     <Project Path="Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj" />
     <Project Path="Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" />
   </Folder>
+  <Folder Name="/Cli/">
+    <Project Path="Src/Cli/VeloxDev.Cli.Test.Plugin/VeloxDev.Cli.Test.Plugin.csproj" />
+    <Project Path="Src/Cli/VeloxDev.Cli.Test/VeloxDev.Cli.Test.csproj" />
+    <Project Path="Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" />
+  </Folder>
   <Folder Name="/Core/">
     <Project Path="Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj" />
     <Project Path="Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj" />

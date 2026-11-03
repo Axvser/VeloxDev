@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<NoWarn>$(NoWarn);MSTEST0037;MSTEST0001</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="MSTest" Version="4.0.2" />
+		<!-- The integration test drives the real server over stdio, not a direct method call. -->
+		<PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+		<PackageReference Include="coverlet.collector" Version="6.0.4">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\VeloxDev.Cli\VeloxDev.Cli.csproj" />
+		<!-- A real out-of-process component: its node kills the worker in the crash-isolation test. -->
+		<ProjectReference Include="..\VeloxDev.Cli.Test.Plugin\VeloxDev.Cli.Test.Plugin.csproj" />
+		<ProjectReference Include="..\..\Core\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
+		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<!-- A real component library, used to prove that a dependent assembly can be loaded by the CLI. -->
+		<ProjectReference Include="..\..\..\Examples\Workflow\Common\Lib\Lib.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+	</ItemGroup>
+
+</Project>
