@@ -33,11 +33,11 @@ graph.json + lib/*.dll
 |---|---|---|
 | 参数 | `CliOptions` | 解析 `mcp` / `run`，拒绝未知项；`--archive` 必填，`run` 还要 `--start` |
 | 归档 | `WorkflowArchive` | 读文档与 sidecar 清单；把程序集路径解析为绝对路径并锁在清单目录内 |
-| 依赖 | `PluginLoader` | 把程序集载入默认 ALC；`AssemblyDependencyResolver` + 目录探测；强制跑模块初始化器 |
+| 依赖 | `PluginLoader` | 把程序集载入默认 ALC；`AssemblyDependencyResolver` + 目录探测；强制跑模块初始化器。默认先复制到每进程的 `tasks/{pid-rand}_{timestamp}/` 再加载，源 bin 不再被锁 |
 | 会话 | `WorkflowSession` | 反序列化树、建 `WorkflowAgentScope` / `WorkflowAgentToolkit`、生成工具面、保存归档 |
 | 会话宿主 | `WorkflowSessionHost` / `SessionBoundAIFunction` / `SessionLease` | 持有当前会话；工具是稳定代理，`LoadArchive` 换会话时不重注册工具；旧会话等最后一个 lease 释放再销毁 |
 | 宿主 | `McpHost` | 建 Host、把日志改去 stderr、`AddMcpServer().WithStdioServerTransport()` |
-| 归档工具 | `ArchiveTools` | `ArchiveInfo` / `LoadArchive` / `SaveArchive` / `LoadAssemblies` 四个非图命令 |
+| 归档工具 | `ArchiveTools` | `ArchiveInfo` / `LoadArchive` / `SaveArchive` / `LoadAssemblies` / `GetCapabilities` / `GetAuditLog` / `ApplyBatch` 七个非图命令 |
 | 执行隔离 | `WorkerRunner` / `ExecutionTools` / `WorkerJobRegistry` | 默认把节点代码放到 `veloxdev run` 子进程里跑；子进程拿的是当前内存图的临时快照，跑完写回 post-run 树（`stateFile`）。后台任务用 `StartWorkflow` 起，`GetWorkflowJob`/`CancelWorkflowJob` 管理 |
 | 重定向 | `RedirectPolicy` / `RedirectTools` | 会话级的 `RuntimeContext.HostRedirect`，只对没有 `IRedirectable` 的失败节点生效；MCP 面是 `SetRedirectOnError` / `ClearRedirectOnError`，仅在执行开启时注册 |
 | 上下文 | `SessionResources` / `SessionPrompts` | 只读 resources（`veloxdev://archive/info`、`.../manifest`）与 `workflow-operator` prompt；都走 `host.Acquire()`，换档后读新会话 |
@@ -73,7 +73,7 @@ graph.json + lib/*.dll
    `ClearProviders()` + `LogToStandardErrorThreshold = Trace`；否则一行日志就破坏 JSON-RPC 流。
 6. **工具名不另起一套。** 图工具直接从 `CreateTools(...)` 取 `AIFunction`，用启动会话的模板做 schema，
    再包成 `SessionBoundAIFunction` 交给 `McpServerTool.Create`。新增工具应改工具包，而不是在 CLI 里写第二份。
-7. **编辑只改内存。** `SaveArchive` 才落盘（临时文件 + 替换）。MCP 的编辑工具没有隐式写文件。
+7. **编辑只改内存。** `SaveArchive` 才落盘：默认 compact，先写临时文件，存在旧档时复制为 `<path>.bak`，再替换并更新 `ArchivePath`。`dryRun` 只序列化并报告 bytes/format/counts，不建目录、不写盘、不改 `ArchivePath`。MCP 的编辑工具没有隐式写文件。
 8. **默认的执行边界是进程。** `WorkerRunner` 的子进程死掉只会得到一个 `{status:error, stderr}` 结果，
    MCP 服务继续活着；超时/取消后父进程 `Kill(entireProcessTree)`，返回 `outcome: Cancelled`（不是基础设施
    错误）。`--max-concurrent-runs` 用宿主级 `SemaphoreSlim` 限流；`--worker-kill-grace-ms` 控制超时后的
@@ -91,7 +91,17 @@ graph.json + lib/*.dll
     隔离 worker 跑完写 post-run 树，结果带 `stateFile`，由 `LoadArchive` 显式采纳 —— **不自动合并**，
     避免覆盖运行期间的编辑。
 12. **插件版本不匹配要说出来。** 默认 ALC 按简单名统一，`PluginLoader` 加载后检查直接引用的
-    `VeloxDev.Core` / `VeloxDev.Core.Extension` 版本，写进 `Warnings`，由 `ArchiveInfo.pluginWarnings` 暴露。
+    `VeloxDev.Core` / `VeloxDev.Core.Extension` 版本，写进 `Warnings`，并由 `ArchiveInfo.compatibility`
+    给出 `exact | unified | incompatible`（major 不同才是 incompatible）。默认只警告；
+    `--strict-plugin-versions` 让 major 不匹配在 `Load` 时直接抛错。
+    审计环在 `WorkflowSessionHost`：原生工具经 `InvokeToolAsync` 自动记录，`ArchiveTools` 的
+    `LoadArchive` / `SaveArchive` / `LoadAssemblies` / `ApplyBatch` 显式调用 `RecordToolCall`；`GetAuditLog`
+    读最近 500 条。`GetCapabilities` 列出实际暴露的工具名（含 `McpHost` 直接注册的执行/归档工具）、执行模式
+    与结果上限。`ApplyBatch` 只接受 `Mutation` / `Layout` 工具，最多 100 条；`stopOnError` 时先把当前树写成
+    归档目录下的临时快照，首个失败后用 `ReloadAsync` 以快照换会话（`stateFile` 保留，原归档不动），
+    `--in-process-execution` 下拒绝这种回滚。`--single-archive` 在 `WorkflowSessionHost.ReloadAsync` 入口直接拒绝
+    换档：一个进程只服务一份文档，运行时 ID 因此在整个进程生命周期内稳定；`ArchiveInfo` 的
+    `runtimeIdScope` / `idStability` 区分 `process` 与 `loaded-graph`。
 13. **路径沙箱是 opt-in。** `WorkspaceRule.Normalize` 要求工作区目录存在；`Ensure` 用平台相关的大小写比较
     和 `工作区 + 分隔符` 前缀。`WorkflowSession` 在启动、换档、保存、加载程序集、检查点/日志/输出树处都调用
     它。worker 子进程**不**带 `--workspace`（它的快照/状态在 `%TEMP%`），所以内部路径不受限。
@@ -100,6 +110,16 @@ graph.json + lib/*.dll
 15. **工具包是本地包。** `PackAsTool` + `ToolCommandName=veloxdev`，`dotnet pack -c Release
     -p:VeloxDevLocalCore=true` 会生成 `VeloxDev.Cli.<version>.nupkg`；包内已带 Core/Extension/MCP 依赖
     （实测 tool install + run 通过）。发布仍走仓库的 release skill。
+16. **依赖先复制再加载。** `PluginLoader.Load` / `OnResolving` 把解析到的 DLL 复制到 CLI 目录下的
+    `tasks/{pid-rand}_{timestamp}/`（目录不可写时回退 `LocalAppData/VeloxDev/tasks` 或 `%TEMP%`），
+    每个进程一个目录；`tasks/.lock` 只包住建目录这一步，冲突时用带 `-independent` 的唯一目录继续。
+    加载的是副本，所以源 `bin` 不被句柄锁住、可以在服务运行时重新构建；原生库同样复制到 `native/`。
+    `--no-assembly-copy` 关闭复制，`ArchiveInfo.assemblyCopy` / `assemblyStaging` 报告状态与目录。
+17. **执行日志默认落 CSV。** `RunLogCsv.TryWrite` 把结果的 `logs`（逐行）与 `failures`（逐条）写到任务目录的
+    `runs/<时间戳>_<工具>.csv`，UTF-8 带 BOM；`WorkflowSession.AttachRunCsv` 再给结果加 `csvFile`。
+    隔离执行在 `ExecutionTools`、后台任务在 `WorkerJobRegistry`、in-process 执行在
+    `WorkflowSessionHost.InvokeToolAsync` 三处接入；`--no-run-csv` 关闭。编译计划没有独立日志流，仍是
+    `CompileWorkflow` / `CompileNodeResult` 的 JSON。
 
 ## 四、工具面的取舍
 

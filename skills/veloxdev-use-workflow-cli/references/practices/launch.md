@@ -124,6 +124,10 @@ The document is the library's serializer output. Dependencies and options live i
 | `--archive <path>` | Required. The startup document. |
 | `--manifest <path>` | Sidecar path. Defaults to `<archive>.manifest.json` if present. |
 | `--assembly <path>` | Extra dependency; repeatable. `--assemblies a.dll;b.dll` is equivalent. |
+| `--strict-plugin-versions` | Refuse a plugin whose VeloxDev.Core / Core.Extension reference has a different major version. Default: load it and warn. |
+| `--single-archive` | Serve one document for the process lifetime; `LoadArchive` is refused, so runtime IDs stay valid. Start a new process per archive. |
+| `--no-assembly-copy` | Load dependency DLLs directly from their source directory. The default copies them to `tasks/<taskId>_<timestamp>/` first so the project's build output stays unlocked. |
+| `--no-run-csv` | Do not write execution results to `tasks/<taskId>_<timestamp>/runs/<timestamp>.csv`. The CSV export is on by default. |
 | `--root-type <name>` | Concrete tree type; overrides the manifest. |
 | `--allow-execution` | Adds blocking and background execution tools. |
 | `--in-process-execution` | Runs node code in the server. Adds the toolkit's pause/resume/handle tools; refuses `LoadArchive`; a crash takes the server down. |

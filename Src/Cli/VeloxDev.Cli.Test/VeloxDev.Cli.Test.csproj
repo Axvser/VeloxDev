@@ -22,6 +22,8 @@
 		<ProjectReference Include="..\VeloxDev.Cli\VeloxDev.Cli.csproj" />
 		<!-- A real out-of-process component: its node kills the worker in the crash-isolation test. -->
 		<ProjectReference Include="..\VeloxDev.Cli.Test.Plugin\VeloxDev.Cli.Test.Plugin.csproj" />
+		<!-- A dependency assembly loaded only by path in the plugin-loader tests, so it starts unloaded. -->
+		<ProjectReference Include="..\VeloxDev.Cli.Test.Copy\VeloxDev.Cli.Test.Copy.csproj" />
 		<ProjectReference Include="..\..\Core\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
 		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
 		<!-- A real component library, used to prove that a dependent assembly can be loaded by the CLI. -->

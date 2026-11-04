@@ -15,6 +15,7 @@
     <Project Path="Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" />
   </Folder>
   <Folder Name="/Cli/">
+    <Project Path="Src/Cli/VeloxDev.Cli.Test.Copy/VeloxDev.Cli.Test.Copy.csproj" />
     <Project Path="Src/Cli/VeloxDev.Cli.Test.Plugin/VeloxDev.Cli.Test.Plugin.csproj" />
     <Project Path="Src/Cli/VeloxDev.Cli.Test/VeloxDev.Cli.Test.csproj" />
     <Project Path="Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" />

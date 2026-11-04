@@ -26,9 +26,10 @@ internal sealed class ExecutionTools(WorkflowSessionHost host, WorkerJobRegistry
         {
             // Held for the whole worker call: a reload retires this session instead of disposing it mid-run.
             using var lease = host.Acquire();
-            return await new WorkerRunner(lease.Session)
+            var result = await new WorkerRunner(lease.Session)
                 .RunCompiledAsync(startNodeIndex, seed, timeoutMs, cancellationToken)
                 .ConfigureAwait(false);
+            return lease.Session.AttachRunCsv("RunCompiledWorkflow", result);
         }
         finally
         {
@@ -49,9 +50,10 @@ internal sealed class ExecutionTools(WorkflowSessionHost host, WorkerJobRegistry
         try
         {
             using var lease = host.Acquire();
-            return await new WorkerRunner(lease.Session)
+            var result = await new WorkerRunner(lease.Session)
                 .GetNodeResultAsync(nodeIndex, seed, timeoutMs, cancellationToken)
                 .ConfigureAwait(false);
+            return lease.Session.AttachRunCsv("GetNodeResult", result);
         }
         finally
         {

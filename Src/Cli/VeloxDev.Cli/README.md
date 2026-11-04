@@ -52,7 +52,8 @@ tools over MCP. A fix to a tool is a fix in both the embedded Agent and this ser
 
 ```text
 veloxdev mcp --archive <graph.json> [--manifest <path>] [--assembly <path>]...
-             [--allow-execution] [--in-process-execution]
+             [--allow-execution] [--in-process-execution] [--strict-plugin-versions]
+             [--single-archive] [--no-assembly-copy] [--no-run-csv]
              [--redirect-on-error <nodeIndex>] [--checkpoint-file <path>] [--log-file <path>]
              [--max-concurrent-runs <n>] [--worker-kill-grace-ms <n>] [--workspace <dir>]
 ```
@@ -95,8 +96,22 @@ The archive is exactly what the library's serializer produced. Dependencies are 
   not automatically headless-ready.
 - Assembly paths are resolved relative to the manifest and may not escape its directory.
 - `--assembly` adds a dependency without editing the manifest; it resolves against the working directory.
+- Dependency assemblies are copied to `tasks/<taskId>_<timestamp>/` beside the executable (falling back to
+  LocalApplicationData when that directory is not writable) and loaded from the copy. A per-process
+  `tasks/.lock` covers directory creation. The source build output therefore stays unlocked and can be
+  rebuilt while the server runs. `ArchiveInfo.assemblyStaging` names the directory; `--no-assembly-copy`
+  restores direct loading for troubleshooting.
+- Every execution result is also exported to `tasks/<taskId>_<timestamp>/runs/<timestamp>.csv` (logs and
+  failures, one row each; UTF-8 with BOM). The run result carries `csvFile`, and
+  `ArchiveInfo.runLogDirectory` / `runCsv` describe the destination. `--no-run-csv` disables the export.
 - Loading an assembly is **code execution**: its module initializers run and register the component types and
   serializer readers. Load only files you trust.
+- A loaded plugin whose `VeloxDev.Core` / `VeloxDev.Core.Extension` reference differs is reported as
+  `ArchiveInfo.compatibility` (`exact`, `unified`, or `incompatible`) and in `pluginWarnings`.
+  `--strict-plugin-versions` refuses a major-version mismatch; the default is to load it and warn.
+- `--single-archive` serves one document for the life of the process and refuses `LoadArchive`. Runtime IDs
+  are only stable while the loaded graph stays alive; use this flag, or start a new process per archive, when
+  a client caches IDs. `ArchiveInfo.runtimeIdScope` says which contract is in force.
 - `allowExecution` is an opt-in request; `--allow-execution` does the same from the command line. Without either,
   the execution tools are not on the MCP surface at all.
 
@@ -116,15 +131,17 @@ with the type name and the remedy (`--assembly` or a manifest entry).
   `--in-process-execution`, the toolkit's full execution surface is exposed instead: `StartCompiledWorkflow`,
   `ContinueCompiledWorkflow`, `GetCompiledRunStatus`, `PauseCompiledRun`, `ResumeCompiledRun`,
   `StopCompiledRun`, `ListCompiledRuns`, and node-level `ExecuteNode` / `BroadcastNode`.
-- **Session** — `ArchiveInfo`, `LoadArchive`, `SaveArchive`, `LoadAssemblies`, `SetRedirectOnError`,
-  `ClearRedirectOnError`.
+- **Session** — `ArchiveInfo`, `LoadArchive`, `SaveArchive`, `LoadAssemblies`, `GetCapabilities`,
+  `GetAuditLog`, `ApplyBatch`, `SetRedirectOnError`, `ClearRedirectOnError`.
 - **Context** — resources `veloxdev://archive/info` and `veloxdev://archive/manifest`, plus the
   `workflow-operator` prompt carrying the same operating rules as the server instructions.
 
 `--workspace <dir>` is an optional path sandbox: every startup path, `LoadArchive`, `SaveArchive`,
 `LoadAssemblies`, checkpoint, log and `--output-tree` must stay below it. Without it, paths are unrestricted.
 
-Editing tools change the in-memory graph. Call `SaveArchive` when the change should outlive the process.
+Editing tools change the in-memory graph. Call `SaveArchive` when the change should outlive the process; it
+writes compact JSON by default, copies the previous document to `<path>.bak` before replacing it, and accepts
+`dryRun` to report the byte count, format and node/link counts without touching the disk.
 `LoadArchive` switches documents while the server keeps running; unsaved edits to the old graph are discarded.
 It is refused under `--in-process-execution`, where run handles belong to the session being replaced.
 

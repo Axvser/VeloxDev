@@ -14,6 +14,15 @@ internal sealed class CliOptions
           --archive <path>       Workflow document produced by the library's serializer. Required.
           --manifest <path>      Archive manifest. Defaults to <archive>.manifest.json when that file exists.
           --assembly <path>      A dependency assembly to load before the document is read. Repeatable.
+          --strict-plugin-versions
+                                 Refuse to load a plugin whose VeloxDev.Core / Core.Extension reference has a
+                                 different major version than the host. Default is to load it and warn.
+          --single-archive       Serve exactly one document for the life of the process: LoadArchive is
+                                 refused, so runtime IDs remain stable. Start a new process per archive.
+          --no-assembly-copy     Load dependency DLLs from their source directory instead of a per-process
+                                 copy. The default copy keeps the project's build output unlocked.
+          --no-run-csv           Do not write execution results to tasks/<task>/runs/<timestamp>.csv.
+                                 The CSV export is on by default.
           --root-type <name>     Concrete tree type the document was serialized from, when it was not
                                  TreeDefaultViewModel (e.g. Demo.ViewModels.TreeViewModel). The manifest may
                                  carry the same value as "rootType".
@@ -62,6 +71,10 @@ internal sealed class CliOptions
     public string? Manifest { get; private set; }
     public string? RootType { get; private set; }
     public List<string> Assemblies { get; } = [];
+    public bool StrictPluginVersions { get; private set; }
+    public bool SingleArchive { get; private set; }
+    public bool NoAssemblyCopy { get; private set; }
+    public bool NoRunCsv { get; private set; }
     public bool AllowExecution { get; private set; }
     public bool InProcessExecution { get; private set; }
     public bool NodeResult { get; private set; }
@@ -122,6 +135,18 @@ internal sealed class CliOptions
                     break;
                 case "--assembly":
                     options.Assemblies.Add(Value());
+                    break;
+                case "--strict-plugin-versions":
+                    options.StrictPluginVersions = true;
+                    break;
+                case "--single-archive":
+                    options.SingleArchive = true;
+                    break;
+                case "--no-assembly-copy":
+                    options.NoAssemblyCopy = true;
+                    break;
+                case "--no-run-csv":
+                    options.NoRunCsv = true;
                     break;
                 case "--assemblies":
                     foreach (var part in Value().Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))

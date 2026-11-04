@@ -6,10 +6,13 @@ All names are the library's own. An MCP client sees them unchanged. Tools not li
 
 | Tool | Use |
 |---|---|
-| `ArchiveInfo` | Archive path, root type, node/link counts, execution mode, redirect target, checkpoint and log files, loaded assemblies, plugin warnings. Call it first. |
+| `ArchiveInfo` | Archive path, root type, node/link counts, execution mode, redirect target, checkpoint and log files, loaded assemblies, plugin warnings, structured compatibility status, assembly copy/staging directory, task and run-log directories, and the runtime-ID scope. Call it first. |
 | `LoadArchive` | Switch documents (isolated mode only). Unsaved edits are discarded. Can load new assemblies first. |
-| `SaveArchive` | Write the current graph atomically. No path = overwrite the loaded archive. |
+| `SaveArchive` | Write the current graph atomically. No path = overwrite the loaded archive. Compact by default; `backup=false` skips the `.bak`, `compact=false` writes indented JSON, `dryRun=true` reports without writing. |
 | `LoadAssemblies` | Load dependency assemblies at runtime; their registered types become creatable. Loading runs code. |
+| `GetCapabilities` | One call: exposed tool names, execution mode, result cap, workspace, compatibility status. Prefer it over guessing limits from individual descriptions. |
+| `GetAuditLog` | Recent tool calls (native and archive-level): tool, time, duration, success, result size, 400-char argument summary. `maxEntries` keeps the newest N. |
+| `ApplyBatch` | Apply up to 100 Mutation/Layout calls in one request: `[{"tool":"CreateNode","arguments":{...}}]`. `stopOnError=true` snapshots first and, on failure, reloads the snapshot as the live session (`stateFile`); the archive file is untouched. Refused with stopOnError under `--in-process-execution`. |
 | `SetRedirectOnError` / `ClearRedirectOnError` | Session-wide host fallback for nodes without `IRedirectable`. Registered only when execution is enabled. |
 
 Resources: `veloxdev://archive/info`, `veloxdev://archive/manifest`.
@@ -24,8 +27,12 @@ Prompt: `workflow-operator` (the server's operating rules).
 graph traversal (`SearchForward`, `SearchReverse`, `SearchAllRelative`, `IsConnected`, `FindPath`),
 layout (`GetLayoutInfo`, `PreviewLayout`), `GetNodeStatistics`.
 
-⚙ Prefer the narrowest query. `GetFullTopology` and `SerializeWorkflow` can be large; the result cap replaces
-an oversized payload with a truncation envelope.
+⚙ Prefer the narrowest query. `GetFullTopology` and `SerializeWorkflow(mode: "full")` can be large; the result
+cap replaces an oversized payload with a truncation envelope. For a big graph use `ListNodes(maxNodes)`,
+`ListConnections(nodeIndex, direction, maxLinks, offset)`, and `SerializeWorkflow(mode: "summary" | "skeleton")`.
+`PreviewLayout` / `ArrangeLayout` accept `summaryOnly`, `changedOnly` and `maxPlacements` so the reply stays small.
+`ValidateWorkflow` also runs the domain validators registered by loaded assemblies; each record names its
+`validator` and optional `code`.
 
 ## Editing
 

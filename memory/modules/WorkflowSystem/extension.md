@@ -14,6 +14,7 @@
 | 一种新连线 | `[WorkflowBuilder.LinkAttribute<THelper>(Type? slotType)]`；或在 TreeHelper 重写 `CreateLink` 统一换 | `Templates/WorkflowBuilder.cs` 的 `WorkflowBuilder.LinkAttribute<T>`；`Templates/Helpers/TreeHelper.cs` 的 `CreateLink` |
 | 自定义整棵树 | `[WorkflowBuilder.TreeAttribute<THelper>(Type? virtualLinkType, Type? virtualSlotType)]` | `Templates/WorkflowBuilder.cs` 的 `WorkflowBuilder.TreeAttribute<T>` |
 | 连接规则 | 重写 `TreeHelper<T>.ValidateConnection(sender, receiver)`（默认 `true`） | `Templates/Helpers/TreeHelper.cs` 的 `TreeHelper<T>.ValidateConnection` |
+| 领域校验（`ValidateWorkflow` 的结构检查之外） | 实现 `IWorkflowTreeValidator`（`Name` + `Validate`），在程序集的模块初始化器里 `WorkflowValidation.Register(instance)`；每次调用取快照合并，单条记录带 `validator` 与可选 `code`。校验器只读树；抛错只记一条 `warn` | Core.Extension 的 `Agent/Workflow/Validation/WorkflowValidation.cs` |
 | 节点默认坐标/尺寸 | `[DefaultAnchor(h, v, layer)]` / `[DefaultSize(w, h)]`，可加在不带 `[WorkflowBuilder.*]` 的子类上 | `Templates/NodeLayoutAttributes.cs` 的 `DefaultAnchorAttribute` / `DefaultSizeAttribute` |
 | 分支路由节点 | 实现 `ICompileTimeRouter`（`GetRouteTable` + `ResolveRouteKey`） | `CompilerEx/Compile/Contracts/ICompileTimeRouter.cs` |
 | 读编译身份 | 实现 `ICompileTimeAware`（`CompileContext.Order/ChainIndex/Offset/InputNodes`） | `CompilerEx/Compile/Contracts/ICompileTimeAware.cs` |

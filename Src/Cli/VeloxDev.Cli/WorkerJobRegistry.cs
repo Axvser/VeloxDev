@@ -184,6 +184,7 @@ internal sealed class WorkerJobRegistry : IAsyncDisposable
                 ? await runner.GetNodeResultAsync(job.Index, seed, timeoutMs, job.Cancellation.Token).ConfigureAwait(false)
                 : await runner.RunCompiledAsync(job.Index, seed, timeoutMs, job.Cancellation.Token).ConfigureAwait(false);
 
+            result = job.Lease.Session.AttachRunCsv(job.NodeResult ? "GetNodeResult" : "RunCompiledWorkflow", result);
             job.Complete(result, job.Cancellation.IsCancellationRequested);
         }
         catch (OperationCanceledException)

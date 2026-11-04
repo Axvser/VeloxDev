@@ -5,6 +5,19 @@ using System.Runtime.Loader;
 
 namespace VeloxDev.Cli;
 
+/// <summary>One loaded assembly whose VeloxDev reference differs from the host's loaded version.</summary>
+internal sealed record PluginVersionMismatch(
+    string Assembly,
+    string Reference,
+    Version? Wanted,
+    Version? Loaded,
+    bool MajorMismatch);
+
+/// <summary>The plugin version picture: exact, unified by simple name, or incompatible at the major level.</summary>
+internal sealed record PluginCompatibility(
+    string Status,
+    IReadOnlyList<PluginVersionMismatch> Mismatches);
+
 /// <summary>
 /// Loads workflow component assemblies into the default load context and resolves the assemblies and native
 /// libraries they reference.
@@ -21,7 +34,43 @@ internal sealed class PluginLoader
     private readonly List<string> _directories = [];
     private readonly List<string> _loaded = [];
     private readonly List<string> _warnings = [];
+    private readonly List<PluginVersionMismatch> _mismatches = [];
+    private readonly string? _stagingRootOverride;
+    private string? _stagingDirectory;
+    private int _nativeCopyCounter;
     private bool _hooked;
+
+    /// <summary>Creates a loader that stages copies beside the CLI executable.</summary>
+    public PluginLoader() : this(null)
+    {
+    }
+
+    /// <summary>Creates a loader with an explicit staging root (tests and embedders).</summary>
+    internal PluginLoader(string? stagingRootOverride)
+    {
+        _stagingRootOverride = stagingRootOverride;
+    }
+
+    /// <summary>Whether resolved assemblies are copied before they are loaded.</summary>
+    public bool CopyAssemblies { get; set; } = true;
+
+    /// <summary>
+    /// The per-process directory holding owned copies of loaded assemblies, or <c>null</c> when no assembly has
+    /// been copied yet. Loading from here is what keeps the source build output unlocked.
+    /// </summary>
+    public string? StagingDirectory
+    {
+        get { lock (_gate) return _stagingDirectory; }
+    }
+
+    /// <summary>The per-process task directory, created on first use.</summary>
+    internal string EnsureTaskDirectory() => EnsureStagingDirectory();
+
+    /// <summary>The per-process task directory, or <c>null</c> before anything needed it.</summary>
+    public string? TaskDirectory => StagingDirectory;
+
+    /// <summary>Refuses a major-version mismatch instead of reporting it as a warning.</summary>
+    public bool StrictVersions { get; set; }
 
     /// <summary>The explicit assembly files loaded so far, in load order.</summary>
     public IReadOnlyList<string> LoadedPaths
@@ -37,6 +86,26 @@ internal sealed class PluginLoader
     public IReadOnlyList<string> Warnings
     {
         get { lock (_gate) return [.. _warnings]; }
+    }
+
+    /// <summary>
+    /// The structured version picture: <c>exact</c> when every reference matches, <c>unified</c> when only
+    /// minor/patch differ, <c>incompatible</c> when a major version differs.
+    /// </summary>
+    public PluginCompatibility Compatibility
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var status = _mismatches.Count == 0
+                    ? "exact"
+                    : _mismatches.Any(mismatch => mismatch.MajorMismatch)
+                        ? "incompatible"
+                        : "unified";
+                return new PluginCompatibility(status, [.. _mismatches]);
+            }
+        }
     }
 
     /// <summary>Loads one assembly and runs its module initializer.</summary>
@@ -77,9 +146,10 @@ internal sealed class PluginLoader
             }
             else
             {
+                var loadPath = PrepareCopy(full);
                 try
                 {
-                    assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(full);
+                    assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(loadPath);
                 }
                 catch (FileLoadException) when (FindLoadedByNameUnsafe(simpleName) is { } raced)
                 {
@@ -122,7 +192,7 @@ internal sealed class PluginLoader
             {
                 var path = resolver.ResolveAssemblyToPath(name);
                 if (path is not null && File.Exists(path))
-                    return context.LoadFromAssemblyPath(path);
+                    return LoadResolved(context, path);
             }
 
             if (name.Name is { Length: > 0 } simpleName)
@@ -131,7 +201,7 @@ internal sealed class PluginLoader
                 {
                     var candidate = System.IO.Path.Combine(directory, simpleName + ".dll");
                     if (File.Exists(candidate))
-                        return context.LoadFromAssemblyPath(candidate);
+                        return LoadResolved(context, candidate);
                 }
             }
         }
@@ -147,11 +217,107 @@ internal sealed class PluginLoader
             {
                 var path = resolver.ResolveUnmanagedDllToPath(name);
                 if (path is not null && File.Exists(path))
-                    return NativeLibrary.Load(path);
+                    return NativeLibrary.Load(PrepareNativeCopy(path));
             }
         }
 
         return IntPtr.Zero;
+    }
+
+    private Assembly LoadResolved(AssemblyLoadContext context, string sourcePath)
+    {
+        var simpleName = AssemblyName.GetAssemblyName(sourcePath).Name;
+        if (FindLoadedByNameUnsafe(simpleName) is { } resident) return resident;
+        return context.LoadFromAssemblyPath(PrepareCopy(sourcePath));
+    }
+
+    // 副本的目的只有一个：源 bin 里的 DLL 不被加载句柄锁住，项目可以继续构建。
+    internal string PrepareCopy(string sourcePath)
+    {
+        if (!CopyAssemblies) return sourcePath;
+
+        var staging = EnsureStagingDirectory();
+        var target = System.IO.Path.Combine(staging, System.IO.Path.GetFileName(sourcePath));
+        if (!File.Exists(target))
+            File.Copy(sourcePath, target, overwrite: false);
+        return target;
+    }
+
+    private string PrepareNativeCopy(string sourcePath)
+    {
+        if (!CopyAssemblies) return sourcePath;
+
+        var staging = System.IO.Path.Combine(EnsureStagingDirectory(), "native");
+        Directory.CreateDirectory(staging);
+        var target = System.IO.Path.Combine(
+            staging,
+            $"{Interlocked.Increment(ref _nativeCopyCounter)}_{System.IO.Path.GetFileName(sourcePath)}");
+        File.Copy(sourcePath, target, overwrite: false);
+        return target;
+    }
+
+    // 每个进程一个 tasks/{任务ID}_{时间戳}/；tasks/.lock 只包住建目录这一步。
+    // 目录名已带 PID 与随机段，锁拿不到时继续用一个唯一目录，不让加载失败。
+    private string EnsureStagingDirectory()
+    {
+        if (_stagingDirectory is not null) return _stagingDirectory;
+
+        var baseRoot = ResolveStagingRoot();
+        var name = $"p{Environment.ProcessId}-{Guid.NewGuid().ToString("N")[..8]}_" +
+                   $"{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}";
+        var lockPath = System.IO.Path.Combine(baseRoot, ".lock");
+
+        try
+        {
+            using var gate = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            var directory = System.IO.Path.Combine(baseRoot, name);
+            Directory.CreateDirectory(directory);
+            _stagingDirectory = directory;
+            return directory;
+        }
+        catch (IOException)
+        {
+            var directory = System.IO.Path.Combine(baseRoot, name + "-independent");
+            Directory.CreateDirectory(directory);
+            _stagingDirectory = directory;
+            return directory;
+        }
+    }
+
+    private string ResolveStagingRoot()
+    {
+        if (!string.IsNullOrWhiteSpace(_stagingRootOverride))
+        {
+            Directory.CreateDirectory(_stagingRootOverride);
+            return _stagingRootOverride;
+        }
+
+        var beside = System.IO.Path.Combine(AppContext.BaseDirectory, "tasks");
+        if (TryPrepareRoot(beside)) return beside;
+
+        var local = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VeloxDev", "tasks");
+        if (TryPrepareRoot(local)) return local;
+
+        var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "veloxdev-tasks");
+        Directory.CreateDirectory(temp);
+        return temp;
+    }
+
+    private static bool TryPrepareRoot(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            var probe = System.IO.Path.Combine(path, $".probe-{Guid.NewGuid():N}");
+            using (File.Create(probe)) { }
+            File.Delete(probe);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void CheckVersionsUnsafe(Assembly assembly, string path)
@@ -171,10 +337,28 @@ internal sealed class PluginLoader
             if (host?.Version is not { } loaded || reference.Version is not { } wanted) continue;
             if (wanted == loaded) continue;
 
-            var warning = $"'{System.IO.Path.GetFileName(path)}' references {reference.Name} {wanted}, " +
+            var file = System.IO.Path.GetFileName(path);
+            var majorMismatch = wanted.Major != loaded.Major;
+            if (!_mismatches.Any(mismatch =>
+                    string.Equals(mismatch.Assembly, file, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(mismatch.Reference, reference.Name, StringComparison.Ordinal) &&
+                    mismatch.Wanted == wanted && mismatch.Loaded == loaded))
+            {
+                _mismatches.Add(new PluginVersionMismatch(file, reference.Name!, wanted, loaded, majorMismatch));
+            }
+
+            var warning = $"'{file}' references {reference.Name} {wanted}, " +
                           $"but this process loaded {loaded}. The default load context unifies by simple name, " +
                           "so the plugin runs against the host version — check the API it was built with.";
             if (!_warnings.Contains(warning, StringComparer.Ordinal)) _warnings.Add(warning);
+
+            if (StrictVersions && majorMismatch)
+            {
+                throw new InvalidOperationException(
+                    $"'{file}' references {reference.Name} {wanted}, but this process loaded {loaded}. " +
+                    "A major-version mismatch is refused under --strict-plugin-versions; " +
+                    "rebuild the plugin against the host version or drop the flag.");
+            }
         }
     }
 

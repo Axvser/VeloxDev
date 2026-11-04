@@ -27,6 +27,36 @@ public class CliOptionsTests
     }
 
     [TestMethod]
+    public void ParsesTheStrictPluginVersionFlag()
+    {
+        var strict = CliOptions.Parse(["mcp", "--archive", "a.json", "--strict-plugin-versions"]);
+        var permissive = CliOptions.Parse(["mcp", "--archive", "a.json"]);
+
+        Assert.IsTrue(strict.StrictPluginVersions);
+        Assert.IsFalse(permissive.StrictPluginVersions);
+    }
+
+    [TestMethod]
+    public void ParsesTheSingleArchiveFlag()
+    {
+        var single = CliOptions.Parse(["mcp", "--archive", "a.json", "--single-archive"]);
+        var multi = CliOptions.Parse(["mcp", "--archive", "a.json"]);
+
+        Assert.IsTrue(single.SingleArchive);
+        Assert.IsFalse(multi.SingleArchive);
+    }
+
+    [TestMethod]
+    public void ParsesTheAssemblyCopyOptOut()
+    {
+        var copies = CliOptions.Parse(["mcp", "--archive", "a.json"]);
+        var noCopy = CliOptions.Parse(["mcp", "--archive", "a.json", "--no-assembly-copy"]);
+
+        Assert.IsFalse(copies.NoAssemblyCopy);
+        Assert.IsTrue(noCopy.NoAssemblyCopy);
+    }
+
+    [TestMethod]
     public void ParsesTheExecutionAndRecoveryOptions()
     {
         var options = CliOptions.Parse([

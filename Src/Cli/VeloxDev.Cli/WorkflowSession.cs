@@ -65,6 +65,8 @@ internal sealed class WorkflowSession : IAsyncDisposable
         bool inProcessExecution,
         int workerKillGraceMs,
         string? workspace,
+        bool singleArchive,
+        bool runCsv,
         TextWriterLogWriter? ownedLogWriter)
     {
         ArchivePath = archivePath;
@@ -79,6 +81,8 @@ internal sealed class WorkflowSession : IAsyncDisposable
         InProcessExecution = inProcessExecution;
         WorkerKillGraceMs = workerKillGraceMs;
         Workspace = workspace;
+        SingleArchive = singleArchive;
+        RunCsvEnabled = runCsv;
         _ownedLogWriter = ownedLogWriter;
         _tools = BuildExposedFunctions().ToDictionary(
             t => t.Function.Name, t => t.Function, StringComparer.OrdinalIgnoreCase);
@@ -117,6 +121,23 @@ internal sealed class WorkflowSession : IAsyncDisposable
     /// <summary>The optional path sandbox every read/write is checked against.</summary>
     public string? Workspace { get; }
 
+    /// <summary>
+    /// When true the process serves exactly one document: <c>LoadArchive</c> is refused, so runtime IDs stay
+    /// valid for the whole process lifetime.
+    /// </summary>
+    public bool SingleArchive { get; }
+
+    /// <summary>Whether every execution result also gets a CSV log under the task directory.</summary>
+    public bool RunCsvEnabled { get; }
+
+    /// <summary>The per-process task directory, or <c>null</c> before a dependency or run log created it.</summary>
+    public string? TaskDirectory => Plugins.TaskDirectory;
+
+    /// <summary>The directory execution CSVs go to, or <c>null</c> before the task directory exists.</summary>
+    public string? RunLogDirectory => Plugins.TaskDirectory is { } directory
+        ? Path.Combine(directory, "runs")
+        : null;
+
     /// <summary>What the MCP surface does about execution.</summary>
     public string ExecutionMode => !ExecutionEnabled
         ? "disabled"
@@ -134,6 +155,8 @@ internal sealed class WorkflowSession : IAsyncDisposable
             WorkspaceRule.Ensure(workspace, assembly, "Dependency assembly");
 
         var plugins = new PluginLoader();
+        plugins.StrictVersions = options.StrictPluginVersions;
+        plugins.CopyAssemblies = !options.NoAssemblyCopy;
         string? logFile = null;
         TextWriterLogWriter? logWriter = null;
         if (!string.IsNullOrWhiteSpace(options.LogFile))
@@ -235,7 +258,8 @@ internal sealed class WorkflowSession : IAsyncDisposable
 
         return new WorkflowSession(
             archive.Path, archive.ManifestPath, checkpointFile, logFile ?? logWriter?.Path, scope, plugins, redirect,
-            execution, inProcess, options.WorkerKillGraceMs, workspace, ownsLogWriter ? logWriter : null);
+            execution, inProcess, options.WorkerKillGraceMs, workspace, options.SingleArchive,
+            !options.NoRunCsv, ownsLogWriter ? logWriter : null);
     }
 
     /// <summary>
@@ -265,6 +289,30 @@ internal sealed class WorkflowSession : IAsyncDisposable
     /// <summary>The exposed native tool with this name, or <c>null</c> when this session does not have it.</summary>
     internal AIFunction? FindTool(string name)
         => _tools.TryGetValue(name, out var tool) ? tool : null;
+
+    // 批处理只允许图编辑与布局：归档工具会换会话，执行工具会起进程，查询工具没有写语义。
+    internal bool IsBatchableTool(string name)
+        => NamesOf(WorkflowToolCategory.Mutation).Contains(name)
+           || NamesOf(WorkflowToolCategory.Layout).Contains(name);
+
+    private static readonly HashSet<string> ExecutionResultToolNames = new(StringComparer.Ordinal)
+    {
+        "RunCompiledWorkflow",
+        "GetNodeResult",
+        "ContinueCompiledWorkflow",
+    };
+
+    /// <summary>True for the execution tools whose result carries the run log.</summary>
+    internal bool IsExecutionResultTool(string name) => ExecutionResultToolNames.Contains(name);
+
+    /// <summary>Writes the result's log/failures to a CSV and adds <c>csvFile</c>; best-effort.</summary>
+    internal string AttachRunCsv(string tool, string json)
+    {
+        if (!RunCsvEnabled) return json;
+
+        var path = RunLogCsv.TryWrite(Plugins.EnsureTaskDirectory(), tool, json);
+        return path is null ? json : RunLogCsv.Attach(json, path);
+    }
 
     internal ValueTask<object?> InvokeToolAsync(
         string name, AIFunctionArguments arguments, CancellationToken cancellationToken)
@@ -316,34 +364,130 @@ internal sealed class WorkflowSession : IAsyncDisposable
         return loaded;
     }
 
-    /// <summary>Writes the current tree back to an archive file, atomically.</summary>
-    public (string Path, int Bytes) SaveArchive(string? path = null)
+    // dryRun 只序列化并报告，不碰磁盘、不改 ArchivePath；backup 在替换前留一份 .bak；
+    // compact 使用无空白格式，默认开启，避免每次保存都把 13 MB 的缩进文档写出去。
+    public SaveArchiveResult SaveArchive(
+        string? path = null,
+        bool dryRun = false,
+        bool backup = true,
+        bool compact = true)
     {
         var target = string.IsNullOrWhiteSpace(path)
             ? ArchivePath
             : System.IO.Path.GetFullPath(path);
 
         WorkspaceRule.Ensure(Workspace, target, "Archive");
-        var json = Scope.Tree.Serialize();
+        var json = compact
+            ? Scope.Tree.Serialize(SerializationOptions.Create().WithCompact())
+            : Scope.Tree.Serialize();
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(json);
+        var format = compact ? "compact" : "indented";
+
+        if (dryRun)
+        {
+            return new SaveArchiveResult(
+                target,
+                bytes,
+                format,
+                null,
+                ArchivePath,
+                Scope.Tree.Nodes.Count,
+                Scope.Tree.Links.Count);
+        }
+
         var directory = System.IO.Path.GetDirectoryName(target);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
+        // 先把新文档写到临时文件，再备份旧文件，最后替换：任何一步失败都不会留下半份目标文件。
         var temp = target + ".tmp";
         File.WriteAllText(temp, json);
-        File.Move(temp, target, overwrite: true);
 
+        string? backupPath = null;
+        if (backup && File.Exists(target))
+        {
+            backupPath = target + ".bak";
+            File.Copy(target, backupPath, overwrite: true);
+        }
+
+        File.Move(temp, target, overwrite: true);
         ArchivePath = target;
-        return (target, System.Text.Encoding.UTF8.GetByteCount(json));
+        return new SaveArchiveResult(
+            target,
+            bytes,
+            format,
+            backupPath,
+            ArchivePath,
+            Scope.Tree.Nodes.Count,
+            Scope.Tree.Links.Count);
+    }
+
+    // 一次回答「这个进程现在能做什么」：工具面、执行模式、结果上限、兼容状态，省去逐个工具猜测。
+    public string DescribeCapabilities(WorkflowSessionHost host)
+    {
+        var tools = new List<string>(CreateMcpTools(host).Select(tool => tool.ProtocolTool.Name));
+
+        // 归档级工具与隔离执行工具由 McpHost 直接注册，不在 CreateMcpTools 的会话工具面里；这里补上，
+        // 否则 GetCapabilities 报出的工具清单比客户端实际看到的少。
+        tools.AddRange(
+        [
+            "ArchiveInfo", "LoadArchive", "SaveArchive", "LoadAssemblies",
+            "GetCapabilities", "GetAuditLog", "ApplyBatch",
+        ]);
+        if (ExecutionEnabled && !InProcessExecution)
+        {
+            tools.AddRange(
+            [
+                "RunCompiledWorkflow", "GetNodeResult", "StartWorkflow", "GetWorkflowJob",
+                "ListWorkflowJobs", "CancelWorkflowJob", "ClearFinishedJobs",
+            ]);
+        }
+
+        var orderedTools = tools
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        return JsonSerializer.Serialize(new
+        {
+            status = "ok",
+            archive = ArchivePath,
+            rootType = Scope.Tree.GetType().FullName,
+            nodeCount = Scope.Tree.Nodes.Count,
+            linkCount = Scope.Tree.Links.Count,
+            executionEnabled = ExecutionEnabled,
+            executionMode = ExecutionMode,
+            inProcessExecution = InProcessExecution,
+            singleArchive = SingleArchive,
+            runtimeIdScope = SingleArchive ? "process" : "loaded-graph",
+            maxToolResultChars = Scope.MaxToolResultChars,
+            workspace = Workspace,
+            assemblyCopy = Plugins.CopyAssemblies,
+            assemblyStaging = Plugins.StagingDirectory,
+            taskDirectory = TaskDirectory,
+            runLogDirectory = RunLogDirectory,
+            runCsv = RunCsvEnabled,
+            compatibility = new
+            {
+                status = Plugins.Compatibility.Status,
+                mismatchCount = Plugins.Compatibility.Mismatches.Count,
+            },
+            toolCount = orderedTools.Length,
+            tools = orderedTools,
+        });
     }
 
     /// <summary>The state a client needs before it starts editing.</summary>
-    public string Describe()
-        => JsonSerializer.Serialize(new
+    public string Describe()        => JsonSerializer.Serialize(new
         {
             status = "ok",
             archive = ArchivePath,
             manifest = ManifestPath,
             rootType = Scope.Tree.GetType().FullName,
+            singleArchive = SingleArchive,
+            runtimeIdScope = SingleArchive ? "process" : "loaded-graph",
+            idStability = SingleArchive
+                ? "stable for the process lifetime"
+                : "stable until LoadArchive replaces the graph; start a new process to keep IDs",
             nodeCount = Scope.Tree.Nodes.Count,
             linkCount = Scope.Tree.Links.Count,
             executionEnabled = ExecutionEnabled,
@@ -353,7 +497,24 @@ internal sealed class WorkflowSession : IAsyncDisposable
             logFile = LogFile,
             workspace = Workspace,
             assemblies = Plugins.LoadedPaths,
+            assemblyCopy = Plugins.CopyAssemblies,
+            assemblyStaging = Plugins.StagingDirectory,
+            taskDirectory = TaskDirectory,
+            runLogDirectory = RunLogDirectory,
+            runCsv = RunCsvEnabled,
             pluginWarnings = Plugins.Warnings,
+            compatibility = new
+            {
+                status = Plugins.Compatibility.Status,
+                mismatches = Plugins.Compatibility.Mismatches.Select(mismatch => new
+                {
+                    assembly = mismatch.Assembly,
+                    reference = mismatch.Reference,
+                    wanted = mismatch.Wanted?.ToString(),
+                    loaded = mismatch.Loaded?.ToString(),
+                    majorMismatch = mismatch.MajorMismatch,
+                }),
+            },
             coreVersion = typeof(WorkflowAgentScope).Assembly.GetName().Version?.ToString(),
         });
 
@@ -375,7 +536,15 @@ internal sealed class WorkflowSession : IAsyncDisposable
             Undo and Redo work exactly as they do in the editor.
 
             Save with SaveArchive when the graph should survive this process. LoadArchive switches to another
-            document; unsaved edits to the current graph are discarded. {execution}
+            document; unsaved edits to the current graph are discarded. Runtime IDs belong to the loaded graph:
+            they stay valid while it lives, and with --single-archive LoadArchive is refused so they last for the
+            process. {execution}
+
+            Dependencies are copied to tasks/<taskId>_<timestamp>/ beside this executable before they are loaded,
+            so the source project's build output stays unlocked. ArchiveInfo.assemblyStaging names that directory;
+            --no-assembly-copy disables the copy. Execution results are also written as
+            tasks/<taskId>_<timestamp>/runs/<timestamp>.csv; the result's csvFile names the file, and --no-run-csv
+            disables it. Read ArchiveInfo or GetCapabilities for taskDirectory / runLogDirectory / runCsv.
             """;
     }
 
@@ -426,3 +595,13 @@ internal sealed class WorkflowSession : IAsyncDisposable
         _ownedLogWriter?.Dispose();
     }
 }
+
+// SaveArchive 的结果；dryRun 时 BackupPath 为 null，ArchivePathAfterSave 仍是旧路径。
+internal sealed record SaveArchiveResult(
+    string Path,
+    int Bytes,
+    string Format,
+    string? BackupPath,
+    string ArchivePathAfterSave,
+    int NodeCount,
+    int LinkCount);

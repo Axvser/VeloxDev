@@ -144,13 +144,84 @@ public class WorkflowSessionTests
             Assert.AreEqual(JsonValueKind.Array, nodes.RootElement.ValueKind);
             Assert.AreEqual(2, nodes.RootElement.GetArrayLength());
 
-            var (written, bytes) = session.SaveArchive();
-            Assert.AreEqual(path, written);
-            Assert.IsTrue(bytes > 0);
+            var saved = session.SaveArchive();
+            Assert.AreEqual(path, saved.Path);
+            Assert.IsTrue(saved.Bytes > 0);
+            Assert.AreEqual("compact", saved.Format);
+            Assert.AreEqual(path + ".bak", saved.BackupPath);
         }
 
         var reloaded = ViewModelSerializer.Deserialize<TreeDefaultViewModel>(File.ReadAllText(path));
         Assert.AreEqual(2, reloaded.Nodes.Count);
+    }
+
+    [TestMethod]
+    public async Task SaveArchiveDryRunReportsWithoutTouchingTheFile()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+
+        await using var session = WorkflowSession.Create(Options(path));
+
+        var before = File.ReadAllBytes(path);
+        var beforeWrite = File.GetLastWriteTimeUtc(path);
+
+        using var created = await InvokeAsync(session, "CreateNode",
+            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!));
+        Assert.AreEqual("ok", created.RootElement.GetProperty("status").GetString(), created.RootElement.ToString());
+
+        var dry = session.SaveArchive(dryRun: true);
+
+        Assert.AreEqual(path, dry.Path);
+        Assert.AreEqual(path, dry.ArchivePathAfterSave);
+        Assert.AreEqual(2, dry.NodeCount);
+        Assert.IsNull(dry.BackupPath);
+        CollectionAssert.AreEqual(before, File.ReadAllBytes(path), "dry run must not rewrite the archive");
+        Assert.AreEqual(beforeWrite, File.GetLastWriteTimeUtc(path), "dry run must not touch the file timestamp");
+        Assert.IsFalse(File.Exists(path + ".bak"), "dry run must not create a backup");
+    }
+
+    [TestMethod]
+    public async Task SaveArchiveBacksUpThePreviousDocumentAndWritesCompactByDefault()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+
+        await using var session = WorkflowSession.Create(Options(path));
+
+        var first = session.SaveArchive();
+        var firstDocument = File.ReadAllText(path);
+        Assert.AreEqual("compact", first.Format);
+
+        using var created = await InvokeAsync(session, "CreateNode",
+            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!));
+        Assert.AreEqual("ok", created.RootElement.GetProperty("status").GetString(), created.RootElement.ToString());
+
+        var second = session.SaveArchive();
+
+        Assert.AreEqual(path + ".bak", second.BackupPath);
+        Assert.IsTrue(File.Exists(path + ".bak"));
+        Assert.AreEqual(firstDocument, File.ReadAllText(path + ".bak"), "the backup is the previous document");
+        Assert.IsFalse(File.ReadAllText(path).Contains('\n'), "compact output has no formatting newlines");
+
+        var reloaded = ViewModelSerializer.Deserialize<TreeDefaultViewModel>(File.ReadAllText(path));
+        Assert.AreEqual(2, reloaded.Nodes.Count);
+    }
+
+    [TestMethod]
+    public async Task SaveArchiveCanWriteAnIndentedDocumentWithoutABackup()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+
+        await using var session = WorkflowSession.Create(Options(path));
+
+        var saved = session.SaveArchive(backup: false, compact: false);
+
+        Assert.AreEqual("indented", saved.Format);
+        Assert.IsNull(saved.BackupPath);
+        Assert.IsFalse(File.Exists(path + ".bak"));
+        Assert.IsTrue(File.ReadAllText(path).Contains('\n'), "indented output keeps line breaks");
     }
 
     [TestMethod]
@@ -307,5 +378,160 @@ public class WorkflowSessionTests
         Assert.AreEqual("ok", result.RootElement.GetProperty("status").GetString(), result.RootElement.ToString());
         Assert.AreEqual("Completed", result.RootElement.GetProperty("outcome").GetString(),
             result.RootElement.ToString());
+    }
+
+    [TestMethod]
+    public async Task CapabilitiesAndAuditExposeTheSessionSurface()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+
+        await using var host = WorkflowSessionHost.Create(Options(path));
+        var archiveTools = new ArchiveTools(host);
+
+        using var capabilities = JsonDocument.Parse(archiveTools.GetCapabilities());
+        var root = capabilities.RootElement;
+        var tools = root.GetProperty("tools").EnumerateArray()
+            .Select(tool => tool.GetString())
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.IsTrue(tools.Contains("ListNodes"));
+        Assert.IsTrue(tools.Contains("SaveArchive"));
+        Assert.IsTrue(tools.Contains("GetCapabilities"));
+        Assert.AreEqual(tools.Count, root.GetProperty("toolCount").GetInt32());
+        Assert.AreEqual("disabled", root.GetProperty("executionMode").GetString());
+        Assert.IsFalse(string.IsNullOrWhiteSpace(root.GetProperty("compatibility").GetProperty("status").GetString()));
+
+        await host.InvokeToolAsync("ListNodes", new AIFunctionArguments(), CancellationToken.None);
+        archiveTools.SaveArchive(dryRun: true);
+
+        using var audit = JsonDocument.Parse(archiveTools.GetAuditLog());
+        var names = audit.RootElement.GetProperty("entries").EnumerateArray()
+            .Select(entry => entry.GetProperty("tool").GetString())
+            .ToList();
+        CollectionAssert.Contains(names, "ListNodes");
+        CollectionAssert.Contains(names, "SaveArchive");
+    }
+
+    [TestMethod]
+    public async Task SingleArchiveRefusesReloadAndKeepsRuntimeIdsStable()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+        await using var host = WorkflowSessionHost.Create(Options(path, "--single-archive"));
+        var archiveTools = new ArchiveTools(host);
+
+        using var before = await InvokeAsync(host.Current, "ListNodes");
+        var idBefore = before.RootElement[0].GetProperty("id").GetString();
+
+        using var reload = JsonDocument.Parse(await archiveTools.LoadArchive(path));
+        Assert.AreEqual("error", reload.RootElement.GetProperty("status").GetString());
+        StringAssert.Contains(reload.RootElement.GetProperty("message").GetString(), "single-archive");
+
+        using var after = await InvokeAsync(host.Current, "ListNodes");
+        Assert.AreEqual(idBefore, after.RootElement[0].GetProperty("id").GetString());
+
+        using var info = JsonDocument.Parse(host.Current.Describe());
+        Assert.IsTrue(info.RootElement.GetProperty("singleArchive").GetBoolean());
+        Assert.AreEqual("process", info.RootElement.GetProperty("runtimeIdScope").GetString());
+    }
+
+    [TestMethod]
+    public async Task InProcessExecutionWritesACsvLogIntoTheTaskDirectory()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+        await using var host = WorkflowSessionHost.Create(
+            Options(path, "--allow-execution", "--in-process-execution"));
+
+        var arguments = new AIFunctionArguments { ["startNodeIndex"] = 0 };
+        var raw = await host.InvokeToolAsync("RunCompiledWorkflow", arguments, CancellationToken.None);
+        var text = raw as string ?? raw?.ToString() ?? string.Empty;
+        using var result = JsonDocument.Parse(text);
+
+        Assert.AreEqual("ok", result.RootElement.GetProperty("status").GetString(), text);
+        var csv = result.RootElement.GetProperty("csvFile").GetString();
+        Assert.IsNotNull(csv, text);
+        Assert.IsTrue(File.Exists(csv), csv);
+
+        var content = File.ReadAllText(csv!);
+        StringAssert.StartsWith(content, "seq,record,level,phase,order,attempt,node,message");
+        StringAssert.Contains(content, "NodeDefaultViewModel");
+    }
+
+    [TestMethod]
+    public async Task ApplyBatchCreatesBothNodesInOneCall()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+        await using var host = WorkflowSessionHost.Create(Options(path));
+        var archiveTools = new ArchiveTools(host);
+
+        var operations = JsonSerializer.Serialize(new object[]
+        {
+            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultViewModel).FullName! } },
+            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultViewModel).FullName! } },
+        });
+
+        using var answer = JsonDocument.Parse(await archiveTools.ApplyBatch(operations));
+        Assert.AreEqual("ok", answer.RootElement.GetProperty("status").GetString(), answer.RootElement.ToString());
+        Assert.AreEqual(2, answer.RootElement.GetProperty("operationCount").GetInt32());
+        Assert.AreEqual(0, answer.RootElement.GetProperty("failedCount").GetInt32());
+        Assert.IsFalse(answer.RootElement.GetProperty("rolledBack").GetBoolean());
+
+        using var nodes = await InvokeAsync(host.Current, "ListNodes");
+        Assert.AreEqual(3, nodes.RootElement.GetArrayLength(), "one original node plus two created nodes");
+    }
+
+    [TestMethod]
+    public async Task ApplyBatchRollsBackToTheSnapshotOnFailure()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+        await using var host = WorkflowSessionHost.Create(Options(path));
+        var archiveTools = new ArchiveTools(host);
+
+        var operations = JsonSerializer.Serialize(new object[]
+        {
+            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultViewModel).FullName! } },
+            new { tool = "CreateNode", arguments = new { fullTypeName = "No.Such.NodeType" } },
+        });
+
+        using var answer = JsonDocument.Parse(await archiveTools.ApplyBatch(operations));
+        Assert.AreEqual("error", answer.RootElement.GetProperty("status").GetString(), answer.RootElement.ToString());
+        Assert.AreEqual(1, answer.RootElement.GetProperty("failedCount").GetInt32());
+        Assert.IsTrue(answer.RootElement.GetProperty("rolledBack").GetBoolean());
+
+        var stateFile = answer.RootElement.GetProperty("stateFile").GetString();
+        Assert.IsNotNull(stateFile);
+        Assert.IsTrue(File.Exists(stateFile));
+
+        try
+        {
+            using var nodes = await InvokeAsync(host.Current, "ListNodes");
+            Assert.AreEqual(1, nodes.RootElement.GetArrayLength(), "the failed batch left the pre-batch graph");
+        }
+        finally
+        {
+            File.Delete(stateFile!);
+        }
+    }
+
+    [TestMethod]
+    public async Task ApplyBatchRejectsArchiveAndQueryToolsUpFront()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+        await using var host = WorkflowSessionHost.Create(Options(path));
+        var archiveTools = new ArchiveTools(host);
+
+        var operations = JsonSerializer.Serialize(new object[]
+        {
+            new { tool = "LoadArchive", arguments = new { path } },
+        });
+
+        using var answer = JsonDocument.Parse(await archiveTools.ApplyBatch(operations));
+        Assert.AreEqual("error", answer.RootElement.GetProperty("status").GetString());
+        StringAssert.Contains(answer.RootElement.GetProperty("message").GetString(), "Not batchable");
     }
 }

@@ -19,7 +19,7 @@
 		<UseAppHost>false</UseAppHost>
 		<PackageId>VeloxDev.Cli</PackageId>
 		<Title>VeloxDev.Cli</Title>
-		<Version>11.0.0</Version>
+		<Version>11.1.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>Headless VeloxDev workflow host and stdio MCP server: load an archive and its component assemblies, inspect and edit the graph through the library's own commands, compile, execute and save.</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>

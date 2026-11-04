@@ -1,7 +1,19 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 namespace VeloxDev.Cli;
+
+/// <summary>One recorded tool call: what ran, how long it took, and whether it returned or threw.</summary>
+internal sealed record ToolAuditEntry(
+    string Tool,
+    DateTimeOffset At,
+    double DurationMs,
+    bool Ok,
+    int ResultChars,
+    string Arguments,
+    string? Error);
 
 /// <summary>
 /// Owns the current <see cref="WorkflowSession"/> and lets it be replaced without restarting the server.
@@ -18,6 +30,7 @@ namespace VeloxDev.Cli;
 /// </summary>
 internal sealed class WorkflowSessionHost : IAsyncDisposable
 {
+    private const int AuditCapacity = 500;
     private readonly object _gate = new();
     private readonly SemaphoreSlim _reloadGate = new(1, 1);
     private readonly CliOptions _options;
@@ -25,6 +38,7 @@ internal sealed class WorkflowSessionHost : IAsyncDisposable
     private readonly TextWriterLogWriter? _logWriter;
     private readonly string? _logFile;
     private readonly SemaphoreSlim? _runSlots;
+    private readonly List<ToolAuditEntry> _audit = [];
     private WorkflowSession _current;
     private WorkflowSession? _retired;
     private int _leases;
@@ -54,6 +68,8 @@ internal sealed class WorkflowSessionHost : IAsyncDisposable
     public static WorkflowSessionHost Create(CliOptions options, bool forceExecution = false)
     {
         var plugins = new PluginLoader();
+        plugins.StrictVersions = options.StrictPluginVersions;
+        plugins.CopyAssemblies = !options.NoAssemblyCopy;
         var workspace = WorkspaceRule.Normalize(options.Workspace);
         var logFile = ResolveLogFile(options.LogFile, workspace);
 
@@ -118,12 +134,116 @@ internal sealed class WorkflowSessionHost : IAsyncDisposable
         catch { /* best-effort retirement */ }
     }
 
-    /// <summary>Invokes a native tool on the current session.</summary>
+    /// <summary>Invokes a native tool on the current session and records the call in the audit ring.</summary>
     public async ValueTask<object?> InvokeToolAsync(
         string name, AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
         using var lease = Acquire();
-        return await lease.Session.InvokeToolAsync(name, arguments, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var result = await lease.Session.InvokeToolAsync(name, arguments, cancellationToken).ConfigureAwait(false);
+            if (lease.Session.IsExecutionResultTool(name))
+                result = AttachRunCsv(lease.Session, name, result);
+            RecordToolCall(name, DescribeArguments(arguments), ok: true, ResultChars(result),
+                Stopwatch.GetElapsedTime(started), error: null);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            RecordToolCall(name, DescribeArguments(arguments), ok: false, resultChars: 0,
+                Stopwatch.GetElapsedTime(started), ex.Message);
+            throw;
+        }
+    }
+
+    /// <summary>Records a tool call that bypasses <see cref="InvokeToolAsync"/> (the archive-level MCP tools).</summary>
+    public void RecordToolCall(
+        string tool,
+        string arguments,
+        bool ok,
+        int resultChars,
+        TimeSpan duration,
+        string? error = null)
+    {
+        lock (_gate)
+        {
+            _audit.Add(new ToolAuditEntry(
+                tool,
+                DateTimeOffset.UtcNow,
+                Math.Round(duration.TotalMilliseconds, 3),
+                ok,
+                resultChars,
+                arguments,
+                error));
+            if (_audit.Count > AuditCapacity)
+                _audit.RemoveRange(0, _audit.Count - AuditCapacity);
+        }
+    }
+
+    /// <summary>The most recent tool calls, newest last, as an MCP-shaped JSON envelope.</summary>
+    public string GetAuditLog(int maxEntries = 0)
+    {
+        lock (_gate)
+        {
+            var total = _audit.Count;
+            var take = maxEntries > 0 ? Math.Min(maxEntries, total) : total;
+            var entries = _audit
+                .Skip(total - take)
+                .Select(entry => new
+                {
+                    tool = entry.Tool,
+                    at = entry.At,
+                    durationMs = entry.DurationMs,
+                    ok = entry.Ok,
+                    resultChars = entry.ResultChars,
+                    arguments = entry.Arguments,
+                    error = entry.Error,
+                })
+                .ToArray();
+
+            return JsonSerializer.Serialize(new
+            {
+                status = "ok",
+                entryCount = total,
+                returnedCount = entries.Length,
+                truncated = entries.Length < total,
+                entries,
+            });
+        }
+    }
+
+    private static int ResultChars(object? result)
+        => result switch
+        {
+            null => 0,
+            string text => text.Length,
+            _ => result.ToString()?.Length ?? 0,
+        };
+
+    private static object? AttachRunCsv(WorkflowSession session, string tool, object? result)
+        => result switch
+        {
+            string text => session.AttachRunCsv(tool, text),
+            JsonElement element when element.ValueKind == JsonValueKind.String
+                => session.AttachRunCsv(tool, element.GetString() ?? string.Empty),
+            _ => result,
+        };
+
+    // 参数只留摘要：审计要能回答「调了什么」，不需要把整份文档塞进环形缓冲。
+    private static string DescribeArguments(AIFunctionArguments arguments)
+    {
+        try
+        {
+            var map = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var pair in arguments) map[pair.Key] = pair.Value;
+            var json = JsonSerializer.Serialize(map);
+            return json.Length <= 400 ? json : json[..400] + "…";
+        }
+        catch
+        {
+            return "{}";
+        }
     }
 
     /// <summary>Replaces the loaded archive. The old session is retired until its last call finishes.</summary>
@@ -148,6 +268,11 @@ internal sealed class WorkflowSessionHost : IAsyncDisposable
                 throw new InvalidOperationException(
                     "LoadArchive is unavailable with --in-process-execution: the run handles belong to the session being replaced. " +
                     "Restart the server to switch archives, or use the isolated execution mode.");
+
+            if (_options.SingleArchive)
+                throw new InvalidOperationException(
+                    "LoadArchive is unavailable under --single-archive: this process serves one document for its lifetime, " +
+                    "which is what keeps runtime IDs stable. Start a new server process for another archive.");
 
             // Build first. A failed load leaves the current session untouched.
             var next = WorkflowSession.Create(

@@ -662,7 +662,10 @@ public sealed class WorkflowAgentToolkit
         [Description("Runtime ID of the node.")] string runtimeId)
     {
         var (node, index) = FindNodeById(runtimeId);
-        if (node == null) return Error($"Node '{runtimeId}' not found.");
+        if (node == null)
+            return Error(
+                $"Node '{runtimeId}' not found. Runtime IDs belong to the currently loaded tree; after " +
+                "LoadArchive or a tree replacement, call ListNodes or FindNodes to get the current ID.");
         return BuildNodeDetailJson(node, index);
     }
 
@@ -732,24 +735,71 @@ public sealed class WorkflowAgentToolkit
         return obj.ToJson();
     }
 
-    [Description("Lists all visible connections only (compact, with link ids). GetFullTopology also returns connections alongside full node/slot detail — prefer it for the whole graph; use this only when you need links without node detail.")]
-    private string ListConnections()
+    [Description("Lists visible connections, compact (id / sid / rid). Without arguments it keeps the original bare array. Pass nodeIndex to keep only links touching that node and direction to choose out / in / any; maxLinks + offset page the result. A filtered or paged reply is an envelope with total / returned / truncated / nextOffset.")]
+    private string ListConnections(
+        [Description("Optional node index. Only links whose sender or receiver belongs to this node are returned.")] int? nodeIndex = null,
+        [Description("With nodeIndex: 'out' keeps links sent by the node, 'in' keeps links received by it, 'any' keeps both. Default 'any'.")] string direction = "any",
+        [Description("Number of matching links to skip. Default 0.")] int offset = 0,
+        [Description("Maximum links to return. 0 = all.")] int maxLinks = 0)
     {
-        var links = Tree.Links;
-        var result = new VeloxJsonArray();
-        for (int i = 0; i < links.Count; i++)
+        IWorkflowNodeViewModel? node = null;
+        if (nodeIndex.HasValue && !TryGetNode(nodeIndex.Value, out node, out var nodeError))
+            return nodeError;
+
+        var dir = (direction ?? "any").Trim().ToLowerInvariant();
+        if (dir is not ("out" or "in" or "any"))
+            return Error("direction must be 'out', 'in' or 'any'.");
+
+        var matched = new List<IWorkflowLinkViewModel>();
+        foreach (var link in Tree.Links)
         {
-            var link = links[i];
             if (!link.IsVisible) continue;
 
-            result.Add(new VeloxJsonObject
+            if (node is not null)
+            {
+                var outgoing = ReferenceEquals(link.Sender?.Parent, node);
+                var incoming = ReferenceEquals(link.Receiver?.Parent, node);
+                var keep = dir switch
+                {
+                    "out" => outgoing,
+                    "in" => incoming,
+                    _ => outgoing || incoming,
+                };
+                if (!keep) continue;
+            }
+
+            matched.Add(link);
+        }
+
+        var bareArray = node is null && offset <= 0 && maxLinks <= 0;
+        var skip = Math.Max(0, offset);
+        var take = maxLinks > 0 ? maxLinks : matched.Count;
+        var page = matched.Skip(skip).Take(take).ToList();
+
+        var links = new VeloxJsonArray();
+        foreach (var link in page)
+        {
+            links.Add(new VeloxJsonObject
             {
                 ["id"] = GetComponentId(link),
                 ["sid"] = link.Sender != null ? GetComponentId(link.Sender) : null,
                 ["rid"] = link.Receiver != null ? GetComponentId(link.Receiver) : null,
             });
         }
-        return result.ToJson();
+
+        if (bareArray) return links.ToJson();
+
+        var end = skip + page.Count;
+        var envelope = new VeloxJsonObject
+        {
+            ["status"] = "ok",
+            ["total"] = matched.Count,
+            ["returned"] = page.Count,
+            ["truncated"] = end < matched.Count,
+            ["links"] = links,
+        };
+        if (end < matched.Count) envelope["nextOffset"] = end;
+        return envelope.ToJson();
     }
 
     [Description("Scrolls the host's canvas so the node sits at the viewport center. Read-only with respect to the graph; returns an error when no surface navigator is attached (the host is not showing this tree). Zoom is preserved.")]
@@ -2619,9 +2669,13 @@ public sealed class WorkflowAgentToolkit
         [Description("Maximum separation sweeps.")] int? maxSweeps = null,
         [Description("Separation grid tile size in world units.")] double? tileSize = null,
         [Description("Measure overlaps and crossings (default true).")] bool measureCost = true,
-        [Description("JSON array of node indices that must not move, e.g. [0,2].")] string? pinnedNodeIndicesJson = null)
+        [Description("JSON array of node indices that must not move, e.g. [0,2].")] string? pinnedNodeIndicesJson = null,
+        [Description("Return only counts, cost and bounds; omit placements. Default false.")] bool summaryOnly = false,
+        [Description("Return only placements whose position changed. Default false.")] bool changedOnly = false,
+        [Description("Maximum placements to return after filtering; 0 = all.")] int maxPlacements = 0)
         => RunLayout(true, nodeIndex, traversal, maxDepth, pinStartNode, positionTolerance,
-            columnGap, rowGap, maxSweeps, tileSize, measureCost, pinnedNodeIndicesJson);
+            columnGap, rowGap, maxSweeps, tileSize, measureCost, pinnedNodeIndicesJson,
+            summaryOnly, changedOnly, maxPlacements);
 
     [Description("Runs the tree's registered layout and writes the anchors in one undoable action. Same parameters as PreviewLayout. Returns every placement, the applied/skipped counts, cost and diagnostics.")]
     private string ArrangeLayout(
@@ -2635,9 +2689,13 @@ public sealed class WorkflowAgentToolkit
         [Description("Maximum separation sweeps.")] int? maxSweeps = null,
         [Description("Separation grid tile size in world units.")] double? tileSize = null,
         [Description("Measure overlaps and crossings (default true).")] bool measureCost = true,
-        [Description("JSON array of node indices that must not move, e.g. [0,2].")] string? pinnedNodeIndicesJson = null)
+        [Description("JSON array of node indices that must not move, e.g. [0,2].")] string? pinnedNodeIndicesJson = null,
+        [Description("Return only counts, cost and bounds; omit placements. Default false.")] bool summaryOnly = false,
+        [Description("Return only placements whose position changed. Default false.")] bool changedOnly = false,
+        [Description("Maximum placements to return after filtering; 0 = all.")] int maxPlacements = 0)
         => RunLayout(false, nodeIndex, traversal, maxDepth, pinStartNode, positionTolerance,
-            columnGap, rowGap, maxSweeps, tileSize, measureCost, pinnedNodeIndicesJson);
+            columnGap, rowGap, maxSweeps, tileSize, measureCost, pinnedNodeIndicesJson,
+            summaryOnly, changedOnly, maxPlacements);
 
     private string RunLayout(
         bool preview,
@@ -2651,7 +2709,10 @@ public sealed class WorkflowAgentToolkit
         int? maxSweeps,
         double? tileSize,
         bool measureCost,
-        string? pinnedNodeIndicesJson)
+        string? pinnedNodeIndicesJson,
+        bool summaryOnly,
+        bool changedOnly,
+        int maxPlacements)
     {
         var options = new WorkflowLayoutOptions
         {
@@ -2708,7 +2769,7 @@ public sealed class WorkflowAgentToolkit
             // 走 Tree.Arrange，落到 helper 上注册的 IWorkflowLayoutSolver：Agent 看到的就是宿主那套解，
             // 不是 toolkit 里另开的第二份管道。
             var result = Tree.Arrange(options);
-            return BuildLayoutResultJson(result, preview);
+            return BuildLayoutResultJson(result, preview, summaryOnly, changedOnly, maxPlacements);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -2716,32 +2777,47 @@ public sealed class WorkflowAgentToolkit
         }
     }
 
-    private string BuildLayoutResultJson(WorkflowLayoutResult result, bool preview)
+    private string BuildLayoutResultJson(
+        WorkflowLayoutResult result,
+        bool preview,
+        bool summaryOnly,
+        bool changedOnly,
+        int maxPlacements)
     {
         var solution = result.Solution;
         var sources = solution.Problem.Sources;
-        var placements = new VeloxJsonArray();
+        var changedCount = solution.Placements.Count(placement => placement.Moved);
+        var selected = changedOnly
+            ? solution.Placements.Where(placement => placement.Moved).ToList()
+            : solution.Placements.ToList();
+        var totalPlacements = selected.Count;
+        if (maxPlacements > 0 && selected.Count > maxPlacements)
+            selected = selected.Take(maxPlacements).ToList();
 
-        foreach (var placement in solution.Placements)
+        var placements = new VeloxJsonArray();
+        if (!summaryOnly)
         {
-            var node = placement.Index >= 0 && placement.Index < sources.Count
-                ? sources[placement.Index]
-                : null;
-            placements.Add(new VeloxJsonObject
+            foreach (var placement in selected)
             {
-                ["i"] = placement.Index,
-                ["id"] = node is null ? null : GetComponentId(node),
-                ["x"] = placement.X,
-                ["y"] = placement.Y,
-                ["ox"] = placement.OriginalX,
-                ["oy"] = placement.OriginalY,
-                ["dx"] = placement.DeltaX,
-                ["dy"] = placement.DeltaY,
-                ["w"] = placement.Width,
-                ["h"] = placement.Height,
-                ["pinned"] = placement.IsPinned,
-                ["moved"] = placement.Moved,
-            });
+                var node = placement.Index >= 0 && placement.Index < sources.Count
+                    ? sources[placement.Index]
+                    : null;
+                placements.Add(new VeloxJsonObject
+                {
+                    ["i"] = placement.Index,
+                    ["id"] = node is null ? null : GetComponentId(node),
+                    ["x"] = placement.X,
+                    ["y"] = placement.Y,
+                    ["ox"] = placement.OriginalX,
+                    ["oy"] = placement.OriginalY,
+                    ["dx"] = placement.DeltaX,
+                    ["dy"] = placement.DeltaY,
+                    ["w"] = placement.Width,
+                    ["h"] = placement.Height,
+                    ["pinned"] = placement.IsPinned,
+                    ["moved"] = placement.Moved,
+                });
+            }
         }
 
         var cost = solution.Cost;
@@ -2749,7 +2825,7 @@ public sealed class WorkflowAgentToolkit
         var diagnostics = new VeloxJsonArray();
         foreach (var message in solution.Diagnostics) diagnostics.Add(message);
 
-        return new VeloxJsonObject
+        var json = new VeloxJsonObject
         {
             ["status"] = "ok",
             ["mode"] = preview ? "preview" : "apply",
@@ -2757,6 +2833,10 @@ public sealed class WorkflowAgentToolkit
             ["dryRun"] = result.DryRun,
             ["appliedCount"] = result.AppliedCount,
             ["skipped"] = result.SkippedCount,
+            ["changedCount"] = changedCount,
+            ["totalPlacements"] = totalPlacements,
+            ["placementsReturned"] = placements.Count,
+            ["placementsTruncated"] = !summaryOnly && selected.Count < totalPlacements,
             ["cost"] = new VeloxJsonObject
             {
                 ["measured"] = cost.CostMeasured,
@@ -2774,9 +2854,13 @@ public sealed class WorkflowAgentToolkit
                 ["w"] = bounds.Width,
                 ["h"] = bounds.Height,
             },
-            ["placements"] = placements,
             ["diagnostics"] = diagnostics,
-        }.ToJson();
+        };
+
+        if (!summaryOnly)
+            json["placements"] = placements;
+
+        return json.ToJson();
     }
 
     // ────────────────────────── Analytics Functions ──────────────────────────
@@ -2950,6 +3034,39 @@ public sealed class WorkflowAgentToolkit
                 warnings.Add(new VeloxJsonObject { ["level"] = "warn", ["id"] = GetComponentId(link), ["msg"] = $"Duplicate connection: {key}." });
         }
 
+        // 宿主程序集注册的领域校验器排在结构检查之后，共用同一份记录形状；一个校验器抛错不能带走整次检查。
+        foreach (var validator in WorkflowValidation.Snapshot())
+        {
+            try
+            {
+                var issues = validator.Validate(Tree);
+                if (issues is null) continue;
+
+                foreach (var issue in issues)
+                {
+                    var record = new VeloxJsonObject
+                    {
+                        ["level"] = issue.Level,
+                        ["node"] = issue.NodeIndex,
+                        ["msg"] = issue.Message,
+                        ["validator"] = validator.Name,
+                    };
+                    if (!string.IsNullOrWhiteSpace(issue.ComponentId)) record["id"] = issue.ComponentId;
+                    if (!string.IsNullOrWhiteSpace(issue.Code)) record["code"] = issue.Code;
+                    warnings.Add(record);
+                }
+            }
+            catch (Exception ex)
+            {
+                warnings.Add(new VeloxJsonObject
+                {
+                    ["level"] = "warn",
+                    ["msg"] = $"Validator '{validator.Name}' failed: {ex.Message}",
+                    ["validator"] = validator.Name,
+                });
+            }
+        }
+
         return new VeloxJsonObject
         {
             ["status"] = "ok",
@@ -3036,8 +3153,96 @@ public sealed class WorkflowAgentToolkit
         }.ToJson();
     }
 
-    [Description("Serializes the current workflow tree to the library's JSON document. The result is the document itself — save it with a host file tool, or pass it back to LoadWorkflow. A large document may exceed the tool-result cap and be replaced by a truncation envelope.")]
-    private string SerializeWorkflow() => Tree.Serialize();
+    [Description("Serializes the current workflow tree. mode=full returns the library document unchanged; skeleton returns node positions/types and links without custom properties; summary returns counts and the type distribution. maxChars caps skeleton/summary and replaces an over-long reply with a truncation envelope; it is ignored for full.")]
+    private string SerializeWorkflow(
+        [Description("full | skeleton | summary. Default full.")] string mode = "full",
+        [Description("Maximum characters for skeleton/summary; 0 = no cap. Ignored for full.")] int maxChars = 0)
+    {
+        var normalized = (mode ?? "full").Trim().ToLowerInvariant();
+        switch (normalized)
+        {
+            case "full":
+                return Tree.Serialize();
+
+            case "skeleton":
+            {
+                var nodes = new VeloxJsonArray();
+                for (var i = 0; i < Tree.Nodes.Count; i++)
+                {
+                    var node = Tree.Nodes[i];
+                    var world = WorldAnchor(node);
+                    var size = WorldSize(node);
+                    nodes.Add(new VeloxJsonObject
+                    {
+                        ["i"] = i,
+                        ["id"] = GetComponentId(node),
+                        ["t"] = node.GetType().Name,
+                        ["x"] = world.Horizontal,
+                        ["y"] = world.Vertical,
+                        ["l"] = world.Layer,
+                        ["w"] = size.Width,
+                        ["h"] = size.Height,
+                        ["slots"] = node.Slots.Count,
+                    });
+                }
+
+                var links = new VeloxJsonArray();
+                foreach (var link in Tree.Links)
+                {
+                    if (!link.IsVisible) continue;
+                    links.Add(new VeloxJsonObject
+                    {
+                        ["id"] = GetComponentId(link),
+                        ["sid"] = link.Sender != null ? GetComponentId(link.Sender) : null,
+                        ["rid"] = link.Receiver != null ? GetComponentId(link.Receiver) : null,
+                    });
+                }
+
+                var skeleton = new VeloxJsonObject
+                {
+                    ["status"] = "ok",
+                    ["mode"] = "skeleton",
+                    ["treeType"] = Tree.GetType().Name,
+                    ["nodeCount"] = Tree.Nodes.Count,
+                    ["linkCount"] = links.Count,
+                    ["nodes"] = nodes,
+                    ["links"] = links,
+                };
+                return CapText(skeleton.ToJson(), maxChars, "workflow skeleton");
+            }
+
+            case "summary":
+            {
+                var typeCounts = new VeloxJsonObject();
+                foreach (var group in Tree.Nodes
+                             .GroupBy(node => node.GetType().Name)
+                             .OrderBy(group => group.Key, StringComparer.Ordinal))
+                {
+                    typeCounts[group.Key] = group.Count();
+                }
+
+                var slotCount = Tree.Nodes.Sum(node => node.Slots.Count);
+                var connectedSlotCount = Tree.Nodes.Sum(node =>
+                    node.Slots.Count(slot => slot.Targets.Count > 0 || slot.Sources.Count > 0));
+                var summary = new VeloxJsonObject
+                {
+                    ["status"] = "ok",
+                    ["mode"] = "summary",
+                    ["treeType"] = Tree.GetType().Name,
+                    ["treeId"] = GetComponentId(Tree),
+                    ["nodeCount"] = Tree.Nodes.Count,
+                    ["linkCount"] = Tree.Links.Count(link => link.IsVisible),
+                    ["slotCount"] = slotCount,
+                    ["connectedSlotCount"] = connectedSlotCount,
+                    ["nodeTypes"] = typeCounts,
+                };
+                return CapText(summary.ToJson(), maxChars, "workflow summary");
+            }
+
+            default:
+                return Error("mode must be 'full', 'skeleton' or 'summary'.");
+        }
+    }
 
     [Description("Replaces the current workflow tree with a graph restored from a document produced by SerializeWorkflow. The host must rebind its surface to the restored tree; this scope's tools follow it immediately. Uses the host's registered workflow loader, or TreeDefaultViewModel when none was registered.")]
     private string LoadWorkflow(
