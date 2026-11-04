@@ -115,7 +115,9 @@ MCP 客户端会看到重复工具；`WorkflowSession` 的 `InProcessExecution` 
   state 文件不能被误判。
 - **打包**：`PackAsTool` + `ToolCommandName=veloxdev`；`dotnet pack -c Release -p:VeloxDevLocalCore=true` 会把
   ProjectReference 的 Core/Extension/MCP 依赖一起放进 `tools/net8.0/any/`（实测安装并运行通过）。不要把它改成
-  PackageReference，否则 Release 会拉 NuGet 上尚未包含新 API 的 Core。
+  PackageReference，否则 Release 会拉 NuGet 上尚未包含新 API 的 Core。包图标由 csproj 的
+  `PackageIcon=veloxdev-logo.png` 与 `None Include="..\..\..\Assets\veloxdev-logo.png"` 两条共同提供，
+  缺任一条 `dotnet pack` 都不会报错，但 nuspec 里没有图标。
 
 ## 七、坑（带依据）
 

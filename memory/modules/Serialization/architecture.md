@@ -393,14 +393,14 @@
 
 ---
 
-## 五、Release 通道**目前根本跑不起来**（既有状态，与性能改动无关）
+## 五、生成器包缺席时 Release 通道**根本跑不起来**（与性能改动无关）
 
-`VeloxDev.Core.csproj` 在非 Debug 下引用 `VeloxDev.Core.Generator` **包**，而 `11.0.0` 从未发布（`10.0.0` 与更早的版本同样没有；nuget.org 上最新仍是 `9.0.153`）。手工把本地 `bin/Debug` 的 nupkg 喂给还原也没用：**包里的分析器不产出任何东西**，Core 会以数百个「不实现接口成员」错误失败。
+`VeloxDev.Core.csproj` 在非 Debug 下引用 `VeloxDev.Core.Generator` **包**。`11.0.0` 发布前这条通道完全断掉：当时 nuget.org 上最新是 `9.0.153`，`10.0.0` 与 `11.0.0` 都不存在，Core 会以数百个「不实现接口成员」错误失败；手工把本地 `bin/Debug` 的 nupkg 喂给还原也没用，那个包里的分析器不产出任何东西。**现在 `11.0.0` 已发布**（包内有 `analyzers/dotnet/cs/VeloxDev.Core.Generator.dll`），阻塞解除；下面两条是它缺席时留下的判断，重新验证 Release 前先确认包里确实有分析器。
 
 **推论（两条，都很容易踩）：**
 
-- 本仓库**只有 Debug 可构建**。「Release 不受益」的旧说法其实还说轻了。
-- 基准因此以 `-c Debug -p:Optimize=true` 构建、并用 `InProcessEmitToolchain` 运行（`BenchmarkConfig.cs`）。**`-t:Rebuild` 是必需的**：增量构建会认为 Core 已最新而跳过它，留下 `dotnet test` 构出的未优化 DLL，BenchmarkDotNet 会直接拒绝。
+- 生成器包缺席时，本仓库**只有 Debug 可构建**。
+- 基准当前以 `-c Debug -p:Optimize=true` 构建、并用 `InProcessEmitToolchain` 运行（`BenchmarkConfig.cs`）。**`-t:Rebuild` 是必需的**：增量构建会认为 Core 已最新而跳过它，留下 `dotnet test` 构出的未优化 DLL，BenchmarkDotNet 会直接拒绝。
   **拒绝是安静的**（2026-10-04 实测踩到）：它只在 `BenchmarkDotNet.Artifacts/BenchmarkRun-*.log` 里写两行 `Validating benchmarks`，命令行不报错，**报告照样生成、只是「结果」那一节是「本次运行没有产出可用的数据。」** —— 看到那句先查这一条，别去查 `NodeCountOf` 或 `Scales`。同理 `dotnet run` 会再构建一次、把优化冲掉，要跑就直接执行 `bin/Debug/net10.0/` 下的产物。
 
 ---

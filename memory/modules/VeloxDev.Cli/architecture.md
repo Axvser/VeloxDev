@@ -5,10 +5,12 @@
 
 ---
 
-**构建**：项目总是 `ProjectReference` 工作区的 `VeloxDev.Core.Extension`（它不是包）。Debug 直接构建；Release
-还要 `-p:VeloxDevLocalCore=true`，否则 Extension 的 Release 档会引用 NuGet 上尚未发布的 Core 11.0.0 与
-Generator 11.0.0，CLI 编译失败。`Src/Directory.Build.targets` 现在在该属性下同时把 Core 和 Generator 换成
-工作区工程（`Examples/Directory.Build.targets` 对示例做同一件事）。新版本发布后这条可以去掉。
+**构建**：项目总是 `ProjectReference` 工作区的 `VeloxDev.Core.Extension`；打包时这条引用会变成对
+Core.Extension 当前 `<Version>` 的包依赖。Debug 直接构建；Release 下如果 Extension 的 Release 档引用的
+Core / Generator 版本还不在 NuGet 上，就要 `-p:VeloxDevLocalCore=true`，否则还原失败、CLI 编译失败。
+`Src/Directory.Build.targets` 在该属性下同时把 Core 和 Generator 换成工作区工程
+（`Examples/Directory.Build.targets` 对示例做同一件事）。这一轮发完、依赖版本上了 NuGet 之后，本地构建
+就不需要它，但下一次 Core / Generator 提版后又会需要。
 
 **Agent 使用指南**：`skills/veloxdev-use-workflow-cli/`（`SKILL.md` + `references/practices/{launch,tools}.md`
 + `references/pitfalls/runtime.md`）。安装/启动、工具循环、执行与 job 语义、路径/重定向/日志规则都在这份里；

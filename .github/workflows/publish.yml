@@ -12,11 +12,18 @@ name: publish
 #   Environment     (blank)
 #   Glob Patterns   VeloxDev.*
 #
+# Versioning:
+#   Every package is published at the <Version> written in its own csproj. The workflow checks
+#   one thing: whether that exact version is already on NuGet. A package whose version is not
+#   there is packed and pushed; a package whose version is already there is skipped. The layer
+#   rules in memory/specifications/version-management-specifications.md (generator > Core,
+#   downstream syncing to Core, templates staying put) are the developer's decision, not a gate
+#   here.
+#
 # Trigger:
-#   - push to master when package sources change. The version is read from
-#     Src/Core/VeloxDev.Core/VeloxDev.Core.csproj, and every package is checked against NuGet:
-#     only the ones missing for that version are packed and pushed. When all 18 are already
-#     there, the release job is skipped; bump <Version> in the csproj to publish.
+#   - push to master when package sources change. Each package's own <Version> is read, and only
+#     the packages NuGet is still missing for that version are packed and pushed. When nothing is
+#     missing, the release job is skipped; bump a <Version> to publish.
 #   - manual workflow_dispatch; the default run publishes only the missing packages, so a run
 #     that failed halfway can be retried without repacking what already landed. `force` treats
 #     every package as missing and re-runs the whole pipeline (duplicates are skipped with
@@ -29,10 +36,10 @@ name: publish
 #   workflow_dispatch or `gh workflow run` to release.
 #
 # Patch cleanup:
-#   If the version is X1.X2.X3 with X3 > 0, the workflow unlists every older X1.X2.<i>
-#   (i < X3) for all 18 packages after the new version is published, so only the highest
-#   patch of that major/minor line stays listed. A major/minor change does not touch older
-#   lines. The NuGet policy must include the "Unlist or relist package versions" scope.
+#   After a package is pushed, if its version is X1.X2.X3 with X3 > 0, the workflow unlists that
+#   package's older X1.X2.<i> (i < X3), so only the highest patch of its own line stays listed.
+#   A major/minor change does not touch older lines, and a package that was not pushed this run
+#   is left alone. The NuGet policy must include the "Unlist or relist package versions" scope.
 
 on:
   push:
@@ -43,7 +50,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: 'Run even when this version already exists on NuGet'
+        description: 'Run even when these versions already exist on NuGet'
         required: true
         default: false
         type: boolean
@@ -63,49 +70,48 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || vars.AUTO_PUBLISH == 'true'
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.read.outputs.version }}
       publish: ${{ steps.read.outputs.publish }}
       generator_missing: ${{ steps.read.outputs.generator_missing }}
+      generator_version: ${{ steps.read.outputs.generator_version }}
       core_missing: ${{ steps.read.outputs.core_missing }}
-      rest_missing: ${{ steps.read.outputs.rest_missing }}
+      core_version: ${{ steps.read.outputs.core_version }}
       cli_missing: ${{ steps.read.outputs.cli_missing }}
+      cli_version: ${{ steps.read.outputs.cli_version }}
+      rest_missing: ${{ steps.read.outputs.rest_missing }}
+      missing: ${{ steps.read.outputs.missing }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Read the version and find what NuGet is still missing
+      - name: Read every package's own version and find what NuGet is missing
         id: read
         shell: pwsh
         run: |
-          $core = "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj"
-          $match = [regex]::Match((Get-Content $core -Raw), '<Version>([^<]+)</Version>')
-          if (-not $match.Success) { throw "no <Version> in $core" }
-          $version = $match.Groups[1].Value
-          "version=$version" >> $env:GITHUB_OUTPUT
-
           $projects = @(
-            "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj",
-            "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj",
-            "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj",
-            "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj",
-            "Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj",
-            "Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj",
-            "Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj",
-            "Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj",
-            "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj",
-            "Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj",
-            "Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj",
-            "Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj",
-            "Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj",
-            "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj",
-            "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj",
-            "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj",
-            "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj",
-            "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
+            @{ Id = "VeloxDev.Core.Generator"; Kind = "generator"; Path = "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" },
+            @{ Id = "VeloxDev.Core"; Kind = "core"; Path = "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" },
+            @{ Id = "VeloxDev.Core.Extension"; Kind = "dependent"; Path = "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj" },
+            @{ Id = "VeloxDev.WPF"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" },
+            @{ Id = "VeloxDev.Avalonia"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj" },
+            @{ Id = "VeloxDev.WinUI"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj" },
+            @{ Id = "VeloxDev.MAUI"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj" },
+            @{ Id = "VeloxDev.Razor"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj" },
+            @{ Id = "VeloxDev.WinForms"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj" },
+            @{ Id = "VeloxDev.Jalium"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj" },
+            @{ Id = "VeloxDev.WPF.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj" },
+            @{ Id = "VeloxDev.Avalonia.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj" },
+            @{ Id = "VeloxDev.WinUI.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj" },
+            @{ Id = "VeloxDev.MAUI.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj" },
+            @{ Id = "VeloxDev.Razor.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj" },
+            @{ Id = "VeloxDev.WinForms.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj" },
+            @{ Id = "VeloxDev.Jalium.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj" },
+            @{ Id = "VeloxDev.Cli"; Kind = "dependent"; Path = "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" }
           )
+
           foreach ($project in $projects) {
-            if (-not (Test-Path $project)) { throw "missing $project" }
-            $value = [regex]::Match((Get-Content $project -Raw), '<Version>([^<]+)</Version>').Groups[1].Value
-            if ($value -ne $version) { throw "$project is '$value', expected '$version'" }
+            if (-not (Test-Path $project.Path)) { throw "missing $($project.Path)" }
+            $match = [regex]::Match((Get-Content $project.Path -Raw), '<Version>([^<]+)</Version>')
+            if (-not $match.Success) { throw "no <Version> in $($project.Path)" }
+            $project.Version = $match.Groups[1].Value
           }
 
           # Every package is checked on its own, so a run that stopped halfway can be retried and
@@ -115,28 +121,43 @@ jobs:
           $force = "${{ inputs.force }}" -eq "true"
           $missing = @()
           foreach ($project in $projects) {
-            $id = [IO.Path]::GetFileNameWithoutExtension($project)
             $exists = $false
             if (-not $force) {
-              $lower = $id.ToLowerInvariant()
-              $url = "https://api.nuget.org/v3-flatcontainer/$lower/$version/$lower.$version.nupkg"
+              $id = $project.Id.ToLowerInvariant()
+              $url = "https://api.nuget.org/v3-flatcontainer/$id/$($project.Version)/$id.$($project.Version).nupkg"
               try { Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null; $exists = $true } catch { }
             }
             if ($exists) {
-              Write-Host "$id $version is already on NuGet"
+              Write-Host "$($project.Id) $($project.Version) is already on NuGet"
             } else {
-              Write-Host "$id $version is missing"
-              $missing += $id
+              Write-Host "$($project.Id) $($project.Version) is missing"
+              $missing += $project
             }
           }
 
           function To-Bool([bool]$value) { if ($value) { "true" } else { "false" } }
-          $rest = @($missing | Where-Object { $_ -ne "VeloxDev.Core.Generator" -and $_ -ne "VeloxDev.Core" })
+          function Is-Missing([string]$kind) { return @($missing | Where-Object { $_.Kind -eq $kind }).Count -gt 0 }
+          function Get-Version([string]$kind) {
+            return ($projects | Where-Object { $_.Kind -eq $kind } | Select-Object -First 1).Version
+          }
+
+          $rest = @($missing | Where-Object { $_.Kind -eq 'dependent' -or $_.Kind -eq 'template' })
+          $missingJson = ConvertTo-Json -Compress -InputObject @(
+            $missing | ForEach-Object { [ordered]@{ id = $_.Id; version = $_.Version } }
+          )
+          $restJson = ConvertTo-Json -Compress -InputObject @(
+            $rest | ForEach-Object { [ordered]@{ id = $_.Id; version = $_.Version } }
+          )
+
           "publish=$(To-Bool ($missing.Count -gt 0))" >> $env:GITHUB_OUTPUT
-          "generator_missing=$(To-Bool ($missing -contains 'VeloxDev.Core.Generator'))" >> $env:GITHUB_OUTPUT
-          "core_missing=$(To-Bool ($missing -contains 'VeloxDev.Core'))" >> $env:GITHUB_OUTPUT
-          "rest_missing=$($rest -join ' ')" >> $env:GITHUB_OUTPUT
-          "cli_missing=$(To-Bool ($missing -contains 'VeloxDev.Cli'))" >> $env:GITHUB_OUTPUT
+          "generator_missing=$(To-Bool (Is-Missing 'generator'))" >> $env:GITHUB_OUTPUT
+          "generator_version=$(Get-Version 'generator')" >> $env:GITHUB_OUTPUT
+          "core_missing=$(To-Bool (Is-Missing 'core'))" >> $env:GITHUB_OUTPUT
+          "core_version=$(Get-Version 'core')" >> $env:GITHUB_OUTPUT
+          "cli_missing=$(To-Bool (@($missing | Where-Object { $_.Id -eq 'VeloxDev.Cli' }).Count -gt 0))" >> $env:GITHUB_OUTPUT
+          "cli_version=$((($projects | Where-Object { $_.Id -eq 'VeloxDev.Cli' } | Select-Object -First 1).Version))" >> $env:GITHUB_OUTPUT
+          "rest_missing=$restJson" >> $env:GITHUB_OUTPUT
+          "missing=$missingJson" >> $env:GITHUB_OUTPUT
 
   publish:
     needs: version
@@ -170,21 +191,17 @@ jobs:
         if: needs.version.outputs.generator_missing == 'true'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.generator_version }}
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
           # Build first with pack-on-build disabled: the generator packs a bin/... DLL through a
           # custom None item, and a direct `dotnet pack` can evaluate it before that DLL exists.
           dotnet build "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" `
             -c Release `
-            -p:Version=$env:VERSION `
-            -p:PackageVersion=$env:VERSION `
             -p:GeneratePackageOnBuild=false
           if ($LASTEXITCODE -ne 0) { throw "build failed: generator" }
           dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" `
-            -c Release -o artifacts --no-build `
-            -p:Version=$env:VERSION `
-            -p:PackageVersion=$env:VERSION
+            -c Release -o artifacts --no-build
           if ($LASTEXITCODE -ne 0) { throw "pack failed: generator" }
 
       - name: NuGet login (OIDC -> temporary key)
@@ -198,7 +215,7 @@ jobs:
         if: needs.version.outputs.generator_missing == 'true'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.generator_version }}
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           function Push-One([string]$id) {
@@ -229,20 +246,16 @@ jobs:
         if: needs.version.outputs.core_missing == 'true'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.core_version }}
         run: |
           # No VeloxDevLocalCore here: the generator must resolve from NuGet, and the pack must
           # carry that dependency in its nuspec. Build first, then pack the built output.
           dotnet build "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" `
             -c Release `
-            -p:Version=$env:VERSION `
-            -p:PackageVersion=$env:VERSION `
             -p:GeneratePackageOnBuild=false
           if ($LASTEXITCODE -ne 0) { throw "build failed: Core" }
           dotnet pack "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" `
-            -c Release -o artifacts --no-build `
-            -p:Version=$env:VERSION `
-            -p:PackageVersion=$env:VERSION
+            -c Release -o artifacts --no-build
           if ($LASTEXITCODE -ne 0) { throw "pack failed: Core" }
 
           Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -261,7 +274,7 @@ jobs:
         if: needs.version.outputs.core_missing == 'true'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.core_version }}
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           function Push-One([string]$id) {
@@ -289,55 +302,52 @@ jobs:
           Wait-One "VeloxDev.Core"
 
       - name: Pack the dependents, templates and CLI against NuGet
-        if: needs.version.outputs.rest_missing != ''
+        if: needs.version.outputs.rest_missing != '[]'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
           MISSING: ${{ needs.version.outputs.rest_missing }}
         run: |
           # No VeloxDevLocalCore: Core and the generator are on NuGet now, and every dependent
           # package must carry the real dependency in its nuspec.
-          # Only the packages NuGet is still missing are packed; ids equal their csproj file names.
-          $missing = @("$env:MISSING" -split ' ' | Where-Object { $_ })
-          $projects = @(
-            "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj",
-            "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj",
-            "Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj",
-            "Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj",
-            "Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj",
-            "Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj",
-            "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj",
-            "Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj",
-            "Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj",
-            "Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj",
-            "Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj",
-            "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj",
-            "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj",
-            "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj",
-            "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj",
-            "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
-          )
-          foreach ($project in $projects) {
-            $id = [IO.Path]::GetFileNameWithoutExtension($project)
-            if ($missing -notcontains $id) {
-              Write-Host "$id $env:VERSION is already on NuGet; skipping"
-              continue
-            }
+          # Each package packs at the <Version> written in its own csproj; only the packages the
+          # version stage found missing are packed.
+          $paths = @{
+            "VeloxDev.Core.Extension"  = "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj"
+            "VeloxDev.WPF"             = "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj"
+            "VeloxDev.Avalonia"        = "Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj"
+            "VeloxDev.WinUI"           = "Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj"
+            "VeloxDev.MAUI"            = "Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj"
+            "VeloxDev.Razor"           = "Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj"
+            "VeloxDev.WinForms"        = "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj"
+            "VeloxDev.Jalium"          = "Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj"
+            "VeloxDev.WPF.Templates"   = "Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj"
+            "VeloxDev.Avalonia.Templates" = "Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj"
+            "VeloxDev.WinUI.Templates" = "Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj"
+            "VeloxDev.MAUI.Templates"  = "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj"
+            "VeloxDev.Razor.Templates" = "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj"
+            "VeloxDev.WinForms.Templates" = "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj"
+            "VeloxDev.Jalium.Templates" = "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj"
+            "VeloxDev.Cli"             = "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
+          }
+
+          $missing = @("$env:MISSING" | ConvertFrom-Json)
+          foreach ($entry in $missing) {
+            $project = $paths[$entry.id]
+            if (-not $project) { throw "no project path for $($entry.id)" }
             # GeneratePackageOnBuild=true strips Build out of GenerateNuspecDependsOn, so a plain
             # `dotnet pack` restores and then packs a DLL that was never built (NU5026). Turning it
             # off for this invocation lets pack build the project first.
-            dotnet pack $project -c Release -o artifacts `
-              -p:Version=$env:VERSION `
-              -p:PackageVersion=$env:VERSION `
-              -p:GeneratePackageOnBuild=false
+            Write-Host "packing $($entry.id) $($entry.version)"
+            dotnet pack $project -c Release -o artifacts -p:GeneratePackageOnBuild=false
             if ($LASTEXITCODE -ne 0) { throw "pack failed: $project" }
           }
 
           # A representative adapter must declare Core, or the published package cannot restore.
           # Only check it when WPF was packed in this run; an already-published nupkg is immutable.
-          if ($missing -contains "VeloxDev.WPF") {
+          $wpf = $missing | Where-Object { $_.id -eq "VeloxDev.WPF" } | Select-Object -First 1
+          if ($null -ne $wpf) {
             Add-Type -AssemblyName System.IO.Compression.FileSystem
-            $file = Join-Path "artifacts" "VeloxDev.WPF.${env:VERSION}.nupkg"
+            $file = Join-Path "artifacts" "VeloxDev.WPF.$($wpf.version).nupkg"
             $zip = [IO.Compression.ZipFile]::OpenRead($file)
             $entry = $zip.Entries | Where-Object { $_.FullName -like "*.nuspec" }
             $reader = New-Object IO.StreamReader($entry.Open())
@@ -351,7 +361,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: VeloxDev.${{ needs.version.outputs.version }}
+          name: VeloxDev-${{ github.run_number }}
           path: artifacts/*.nupkg
 
       - name: NuGet login (fresh key for the remaining pushes)
@@ -361,15 +371,16 @@ jobs:
           user: Axvser
 
       - name: Push the rest
-        if: needs.version.outputs.rest_missing != ''
+        if: needs.version.outputs.rest_missing != '[]'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          GENERATOR_VERSION: ${{ needs.version.outputs.generator_version }}
+          CORE_VERSION: ${{ needs.version.outputs.core_version }}
           NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
           $skip = @(
-            "VeloxDev.Core.Generator.${env:VERSION}.nupkg",
-            "VeloxDev.Core.${env:VERSION}.nupkg"
+            "VeloxDev.Core.Generator.${env:GENERATOR_VERSION}.nupkg",
+            "VeloxDev.Core.${env:CORE_VERSION}.nupkg"
           )
           Get-ChildItem artifacts -Filter "*.nupkg" |
             Where-Object { $skip -notcontains $_.Name } |
@@ -379,39 +390,24 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "push failed: $($_.Name)" }
             }
 
-      - name: Unlist older patches of the same major/minor
+      - name: Unlist older patches of each pushed package's own line
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          MISSING: ${{ needs.version.outputs.missing }}
           NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
-          if ($env:VERSION -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
-            Write-Host "Version '$env:VERSION' is not X.Y.Z; skipping patch cleanup."
-            return
-          }
-          $major = [int]$Matches[1]
-          $minor = [int]$Matches[2]
-          $patch = [int]$Matches[3]
-          if ($patch -le 0) {
-            Write-Host "Patch is 0; there are no older patches to unlist."
-            return
-          }
-
-          # One list for every published package. Missing or already-unlisted versions are
-          # expected and do not fail the release.
-          $ids = @(
-            "VeloxDev.Core.Generator", "VeloxDev.Core", "VeloxDev.Core.Extension",
-            "VeloxDev.WPF", "VeloxDev.Avalonia", "VeloxDev.WinUI", "VeloxDev.MAUI",
-            "VeloxDev.Razor", "VeloxDev.WinForms", "VeloxDev.Jalium",
-            "VeloxDev.WPF.Templates", "VeloxDev.Avalonia.Templates", "VeloxDev.WinUI.Templates",
-            "VeloxDev.MAUI.Templates", "VeloxDev.Razor.Templates", "VeloxDev.WinForms.Templates",
-            "VeloxDev.Jalium.Templates", "VeloxDev.Cli"
-          )
-          foreach ($id in $ids) {
+          # Only the packages pushed in this run are cleaned up, each on its own X1.X2 line.
+          $missing = @("$env:MISSING" | ConvertFrom-Json)
+          foreach ($entry in $missing) {
+            if ($entry.version -notmatch '^(\d+)\.(\d+)\.(\d+)$') { continue }
+            $major = [int]$Matches[1]
+            $minor = [int]$Matches[2]
+            $patch = [int]$Matches[3]
+            if ($patch -le 0) { continue }
             for ($i = 0; $i -lt $patch; $i++) {
               $old = "$major.$minor.$i"
-              Write-Host "Unlisting $id $old"
-              dotnet nuget delete $id $old --api-key $env:NUGET_API_KEY `
+              Write-Host "Unlisting $($entry.id) $old"
+              dotnet nuget delete $entry.id $old --api-key $env:NUGET_API_KEY `
                 --source https://api.nuget.org/v3/index.json --non-interactive
               if ($LASTEXITCODE -ne 0) {
                 Write-Host "  (not found or already unlisted; continuing)"
@@ -423,7 +419,7 @@ jobs:
         if: needs.version.outputs.cli_missing == 'true'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.cli_version }}
         run: |
           $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.cli/${env:VERSION}/veloxdev.cli.${env:VERSION}.nupkg"
           $deadline = (Get-Date).AddMinutes(15)
