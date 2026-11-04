@@ -19,12 +19,81 @@ dotnet --list-runtimes
   bootstrap its own runtime.
 - On Unix, `~/.dotnet/tools` may not be on `PATH`; use `--tool-path` or add it to `PATH`.
 
+### Choose the CLI version
+
+The CLI compares the **assembly version** each component assembly references for `VeloxDev.Core` /
+`VeloxDev.Core.Extension` against its own bundled copy. The component↔host coupling lives in the view-model
+layer, and the generated, reflection-free serializer has kept that layer compatible across Core versions
+since `10.0.1` — a matching major is not the test.
+
+**1. Read what the components reference.**
+
+```powershell
+dotnet list MyNodes.csproj package --include-transitive
+```
+
+Only have the DLL? Read its metadata without running it:
+
+```powershell
+Add-Type -AssemblyName System.Reflection.Metadata
+$fs = [IO.File]::OpenRead("MyNodes.dll")
+$pe = [System.Reflection.PortableExecutable.PEReader]::new($fs)
+$md = [System.Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($pe)
+$md.AssemblyReferences | ForEach-Object {
+  $r = $md.GetAssemblyReference($_)
+  '{0} {1}' -f $md.GetString($r.Name), $r.Version
+} | Where-Object { $_ -match '^VeloxDev\.' }
+$pe.Dispose(); $fs.Dispose()
+```
+
+⚙ Compare assembly versions; the SDK derives them from `<Version>` unless `AssemblyVersion` is overridden.
+
+**2. Install the newest stable CLI.**
+
+Do not chase the components' Core major; a component built against a newer Core than the CLI bundles is
+fine.
+
+```powershell
+dotnet tool install --global VeloxDev.Cli
+dotnet tool list --global
+```
+
+**3. Judge each mismatch in `ArchiveInfo.compatibility.mismatches[]`.**
+
+`wanted` is what the component references; `loaded` is what the CLI bundled.
+
+| Reference | Condition | Action |
+|---|---|---|
+| `VeloxDev.Core` | `wanted >= loaded` | Fine. |
+| `VeloxDev.Core` | `wanted < loaded` and `wanted >= 10.0.1` | Fine. |
+| `VeloxDev.Core` | `wanted < loaded` and `wanted < 10.0.1` | Risk: the component predates the AOT-friendly serializer. Rebuild it against `10.0.1`+ and tell the user. |
+| `VeloxDev.Core.Extension` | `wanted == loaded` | Fine. |
+| `VeloxDev.Core.Extension` | any difference | Report the risk to the user before running. Extension is not a unified model layer and changes often. |
+
+⚙ `exact` / `unified` / `incompatible` are reporting labels (no drift / minor-patch drift / major drift).
+`incompatible` is **not** a hard stop and does not decide the table above.
+
+**4. Verify by exercising the graph.**
+
+Load the archive, call `ListCreatableTypes`, run `ValidateWorkflow`, then a small run. A pairing that passes
+those is the real answer.
+
+⚙ `--strict-plugin-versions` refuses a major mismatch at load. It is an opt-in policy, not the compatibility
+rule: it ignores minor/patch drift, the `10.0.1` Core floor, and Extension risk.
+
+⚙ **Coverage limit.** Only assemblies passed to `--assembly`, listed in the manifest, or loaded through
+`LoadAssemblies` are checked; a transitive dependency the resolver finds on its own is not.
+
 ### Install from NuGet
 
 ```powershell
-dotnet tool install --global VeloxDev.Cli --version 11.0.0
+dotnet tool install --global VeloxDev.Cli                   # newest stable
+dotnet tool install --global VeloxDev.Cli --version <x.y.z> # pinned build
 veloxdev --help
 ```
+
+Omit `--version` to take the newest stable release; pin one only when you need a reproducible build.
+`dotnet tool list --global` reports the installed version.
 
 The package bundles `VeloxDev.Core`, `VeloxDev.Core.Extension` and the MCP SDK in
 `tools/net8.0/any/`; a consumer does not need those references.
@@ -32,7 +101,7 @@ The package bundles `VeloxDev.Core`, `VeloxDev.Core.Extension` and the MCP SDK i
 For a project-local install:
 
 ```powershell
-dotnet tool install --tool-path ./.veloxdev VeloxDev.Cli --version 11.0.0
+dotnet tool install --tool-path ./.veloxdev VeloxDev.Cli
 ./.veloxdev/veloxdev --help          # Windows: .\.veloxdev\veloxdev.exe --help
 ```
 
@@ -48,7 +117,7 @@ The installed tool store contains `tools/net8.0/any/veloxdev.dll`:
 ```powershell
 # Windows: %USERPROFILE%\.dotnet\tools\.store\...
 # Unix:    ~/.dotnet/tools/.store/...
-dotnet <tools>/.store/veloxdev.cli/11.0.0/veloxdev.cli/11.0.0/tools/net8.0/any/veloxdev.dll --help
+dotnet <tools>/.store/veloxdev.cli/<version>/veloxdev.cli/<version>/tools/net8.0/any/veloxdev.dll --help
 ```
 
 The CLI's own worker launches itself this way. For client configuration, prefer the `veloxdev` shim:

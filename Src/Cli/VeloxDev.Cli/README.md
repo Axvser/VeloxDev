@@ -22,9 +22,15 @@ dotnet --list-runtimes   # .NET 8 or newer; the tool rolls forward to the latest
 Install from NuGet:
 
 ```powershell
-dotnet tool install --global VeloxDev.Cli --version 11.0.0
+dotnet tool install --global VeloxDev.Cli
 veloxdev --help
 ```
+
+Omit `--version` for the newest stable, or pin with `--version <x.y.z>`. The CLI bundles
+`VeloxDev.Core` and `VeloxDev.Core.Extension`. A component built against a newer Core than the CLI
+bundles is fine; an older one is supported down to `10.0.1`, the first release with the completed
+AOT-friendly serializer. `VeloxDev.Core.Extension` is not a unified model layer — any version difference
+is a risk. `ArchiveInfo.compatibility` reports the drift.
 
 `dotnet tool install` creates the cross-platform `veloxdev` shim (Windows: `veloxdev.exe`) and places
 the actual `veloxdev.dll` in the tool store. The shim is the supported entry; direct

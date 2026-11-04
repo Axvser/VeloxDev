@@ -95,7 +95,12 @@ graph.json + lib/*.dll
 12. **插件版本不匹配要说出来。** 默认 ALC 按简单名统一，`PluginLoader` 加载后检查直接引用的
     `VeloxDev.Core` / `VeloxDev.Core.Extension` 版本，写进 `Warnings`，并由 `ArchiveInfo.compatibility`
     给出 `exact | unified | incompatible`（major 不同才是 incompatible）。默认只警告；
-    `--strict-plugin-versions` 让 major 不匹配在 `Load` 时直接抛错。
+    `--strict-plugin-versions` 让 major 不匹配在 `Load` 时直接抛错。检查只发生在显式 `Load` 的程序集上：
+    由 `AssemblyDependencyResolver` / 目录探测自动解析的传递依赖走 `LoadResolved`，不经过
+    `CheckVersionsUnsafe` —— 想在兼容性里看到某个 DLL，就得把它写进 manifest 或 `--assembly`。
+    这三个状态只是**漂移标签**，不是兼容性判定：真正的耦合在视图模型层，`Core` 的组件引用
+    `wanted >= loaded` 一律可用，`wanted < loaded` 可低到 `10.0.1`（AOT 友好序列化完善后的首个版本），
+    再低才需要重建；`Core.Extension` 不是统一模型层、变动频繁，任何版本差异都应当作风险告知用户。
     审计环在 `WorkflowSessionHost`：原生工具经 `InvokeToolAsync` 自动记录，`ArchiveTools` 的
     `LoadArchive` / `SaveArchive` / `LoadAssemblies` / `ApplyBatch` 显式调用 `RecordToolCall`；`GetAuditLog`
     读最近 500 条。`GetCapabilities` 列出实际暴露的工具名（含 `McpHost` 直接注册的执行/归档工具）、执行模式

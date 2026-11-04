@@ -38,12 +38,33 @@ dotnet --list-runtimes
   bootstrap its own runtime.
 - On Unix, `~/.dotnet/tools` may not be on `PATH`. Use `--tool-path`, or add the directory to `PATH`.
 
+**Pick the CLI version, then judge drift from the components' references.**
+
+Compatibility is decided at the view-model layer, not by matching majors.
+
+1. Read the components' references — `dotnet list <proj> package --include-transitive`, or the DLL's
+   assembly references.
+2. Install the newest stable CLI. Do not chase the components' Core major.
+3. Judge each entry in `ArchiveInfo.compatibility.mismatches[]` (`wanted` = component, `loaded` = CLI):
+   - `VeloxDev.Core` — `wanted >= loaded` is fine. `wanted < loaded` is fine only down to `10.0.1`, the
+     first release with the completed AOT-friendly serializer. Below that, stop and tell the user.
+   - `VeloxDev.Core.Extension` — **any** difference is a risk to report to the user; Extension is not a
+     unified model layer and changes often.
+4. `incompatible` only labels a major difference. Confirm compatibility by loading and exercising the
+   graph: `ListCreatableTypes`, `ValidateWorkflow`, then a run.
+
+Commands and the DLL-metadata snippet: [references/practices/launch.md](references/practices/launch.md#choose-the-cli-version).
+
 **Install from NuGet.**
 
 ```powershell
-dotnet tool install --global VeloxDev.Cli --version 11.0.0
+dotnet tool install --global VeloxDev.Cli                  # newest stable
+dotnet tool install --global VeloxDev.Cli --version <x.y.z> # pinned build
 veloxdev --help
 ```
+
+⚙ Omit `--version` to take the newest stable release; pin one only when you need a reproducible build.
+`dotnet tool list --global` reports what is installed.
 
 ⚙ A global install creates the `veloxdev` shim (Windows: `veloxdev.exe`); the MCP client config uses
 `"command": "veloxdev"`.
@@ -51,7 +72,7 @@ veloxdev --help
 ⚙ For a project-local install (no global PATH change):
 
 ```powershell
-dotnet tool install --tool-path ./.veloxdev VeloxDev.Cli --version 11.0.0
+dotnet tool install --tool-path ./.veloxdev VeloxDev.Cli
 ./.veloxdev/veloxdev --help          # Windows: .\.veloxdev\veloxdev.exe --help
 ```
 
@@ -63,7 +84,7 @@ possible:
 ```powershell
 # Windows: %USERPROFILE%\.dotnet\tools\.store\...
 # Unix:    ~/.dotnet/tools/.store/...
-dotnet <tools>/.store/veloxdev.cli/11.0.0/veloxdev.cli/11.0.0/tools/net8.0/any/veloxdev.dll --help
+dotnet <tools>/.store/veloxdev.cli/<version>/veloxdev.cli/<version>/tools/net8.0/any/veloxdev.dll --help
 ```
 
 The worker already launches itself this way. For a client config, however, use the `veloxdev` shim:
@@ -164,7 +185,7 @@ The full tool catalogue and the exact execution/job semantics are in [references
 
 ⚙ **Results are capped at 64 KiB.** A long `ListNodes`, `SerializeWorkflow` or run payload can become a truncation envelope. `--log-file` keeps full run logs on disk.
 
-⚙ **Plugins are not unloaded.** The default load context unifies by simple name. `ArchiveInfo.pluginWarnings` names direct `VeloxDev.Core` / `VeloxDev.Core.Extension` version mismatches; the plugin still runs against the host's version.
+⚙ **Plugins are not unloaded.** The default load context unifies by simple name. `ArchiveInfo.pluginWarnings` names direct `VeloxDev.Core` / `VeloxDev.Core.Extension` version mismatches, and `compatibility.status` says whether they are `unified` (minor/patch) or `incompatible` (major); the plugin still runs against the host's version.
 
 ⚙ **The CLI is stdio-only.** One client, no HTTP/SSE, no authentication, no multi-tenant sessions. Approval is the MCP client's own tool-approval UI; the server has no permission mode of its own.
 
