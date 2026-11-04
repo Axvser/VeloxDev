@@ -169,6 +169,25 @@ veloxdev run --archive graph.json --start 0 --node-result        # terminal role
 
 The full tool catalogue and the exact execution/job semantics are in [references/practices/tools.md](references/practices/tools.md).
 
+## Headless authoring loop
+
+An archive must exist before the CLI starts; it loads one, it does not create one. When the starting point is
+an empty directory, the path is in [references/practices/headless.md](references/practices/headless.md). The shape:
+
+1. **Build a component library.** A plain `net8.0` class library referencing `VeloxDev.Core` (the NuGet
+   package brings the generator); `partial` node VMs with `[WorkflowBuilder.Node<THelper>]` and slot
+   properties, `InitializeWorkflow()` from the constructor, helpers overriding `ReceiveAsync`. No adapter and
+   no views.
+2. **Bootstrap the first archive.** A console app builds a `TreeDefaultViewModel`, adds one node with
+   `tree.GetHelper().CreateNode(...)`, and writes `tree.Serialize()`. Put `<archive>.manifest.json` beside it
+   naming the DLL under `assemblies`, and copy the DLL into a folder under the manifest.
+3. **Edit through the tools.** `ListCreatableTypes` must list the DLL's types; then `CreateNode`,
+   `ConnectByProperty`, `ValidateWorkflow`, `CompileWorkflow`, `RunCompiledWorkflow`, `SaveArchive`.
+4. **Verify headlessly.** `veloxdev run --archive ... --start 0` must exit `0` with `outcome: Completed` and
+   the expected `data`; that replaces the GUI's drag-and-drop check.
+
+⚙ **`$type` carries the assembly name.** Keep the component assembly name stable once archives exist.
+
 ## Rules that decide success
 
 ⚙ **Do not edit the archive file while the server runs.** The server owns the live graph; write through the tools and call `SaveArchive`. A direct file edit is invisible to the session and will be overwritten by the next save.
@@ -195,6 +214,7 @@ Symptom-first entries, with the rule each one violates and the fix, are in [refe
 
 | Symptom | Fix |
 |---|---|
+| `The workflow archive was not found: ...` | The CLI loads an archive; it never creates one. Bootstrap it first — [headless.md](references/practices/headless.md). |
 | `has no registered JSON reader for the type name ...` | Load the assembly that declares it (`--assembly` or the manifest `assemblies`) before the document. |
 | `The worker exited with code N` | A node died or crashed. Read the worker's stderr in the result; fix the node, or use `run` to reproduce. |
 | `outcome: Cancelled` | The timeout or a cancel killed the worker. Check `timeoutMs` and `--worker-kill-grace-ms`; inspect `cancelled` / `timedOut`. |
@@ -207,5 +227,6 @@ Symptom-first entries, with the rule each one violates and the fix, are in [refe
 
 - [references/practices/launch.md](references/practices/launch.md) — install, client configuration, archive manifest, and every launch flag.
 - [references/practices/tools.md](references/practices/tools.md) — the complete tool catalogue, execution/job modes, redirects, checkpoints and logs.
+- [references/practices/headless.md](references/practices/headless.md) — component DLL, first archive, stdio driver, headless verification.
 - [references/pitfalls/runtime.md](references/pitfalls/runtime.md) — observed failures: unloaded types, worker crashes/hangs, state not merging, reload refusals, workspace escapes.
 - The project README: `Src/Cli/VeloxDev.Cli/README.md`.

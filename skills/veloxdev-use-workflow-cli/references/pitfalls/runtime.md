@@ -5,6 +5,7 @@ catalogue of hypothetical errors.
 
 | Symptom | Rule | Fix |
 |---|---|---|
+| `The workflow archive was not found: ...` | The CLI loads an existing document at startup; it never creates one. | Bootstrap the first archive with the library ([headless.md](../practices/headless.md)), then start the CLI against it. |
 | `... has no registered JSON reader for the type name 'X, Assembly' this document carries` | Dependencies are loaded before the document; resolution goes through the library registry, not `Type.GetType`. | Put the assembly in the manifest `assemblies` or pass `--assembly` before the document. Do not expect a directory scan. |
 | `RootType` in `ArchiveInfo` is `TreeDefaultViewModel` although the source was a derived tree | Serializing through a concrete tree type writes no root `$type`; the reader falls back to the base type. | Set `rootType` in the manifest or `--root-type` to the concrete type. |
 | `The worker exited with code N` | A node's business code killed the worker process. The server is still alive. | Read the result's `stderr`; reproduce with `veloxdev run`; fix the node. This is the isolation working, not a transport failure. |
