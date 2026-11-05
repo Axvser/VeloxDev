@@ -181,6 +181,8 @@
     <Project Path="Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj" />
   </Folder>
   <Folder Name="/Verification/">
+    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks/VeloxDev.Adapters.Benchmarks.csproj" />
+    <Project Path="Src/Verification/VeloxDev.Maui.Benchmarks/VeloxDev.Maui.Benchmarks.csproj" />
     <Project Path="Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Serialization.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/Verification/Headless/">

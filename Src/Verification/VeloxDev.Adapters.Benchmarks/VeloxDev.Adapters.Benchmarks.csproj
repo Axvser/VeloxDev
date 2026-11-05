@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<!-- 适配器热路径的 A/B 基准：不打包、不被 dotnet test 发现。WinUI / MAUI 没有可在控制台进程里宿主的目标，不在此列。 -->
+		<IsPackable>false</IsPackable>
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Avalonia.Headless" Version="11.1.0" />
+		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+		<!-- MAUI 适配器无法在控制台宿主，只引图形原语库隔离其 PathF / Color 分配。 -->
+		<PackageReference Include="Microsoft.Maui.Graphics" Version="10.*" />
+	</ItemGroup>
+
+	<!-- 适配器的 Release 配置引用 NuGet 上的旧 Core，所以本工程只用 Debug 配置构建、运行，拿源码 Core：
+		 运行：dotnet run -c Debug -p:Optimize=true，基准过滤参数照常追加在其后。
+		 不在引用上逐个覆盖配置：那会让 Core 以两组全局属性各构建一次、写进同一个 obj，生成器产物重复。 -->
+	<ItemGroup>
+		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<ProjectReference Include="..\HeadlessAdapters\VeloxDev.AdapterTestKit\VeloxDev.AdapterTestKit.csproj" />
+		<ProjectReference Include="..\..\Adapters\VeloxDev.WPF\VeloxDev.WPF.csproj" Aliases="wpf" />
+		<ProjectReference Include="..\..\Adapters\VeloxDev.Avalonia\VeloxDev.Avalonia.csproj" Aliases="ava" />
+		<ProjectReference Include="..\..\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj" Aliases="jal" />
+		<ProjectReference Include="..\..\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj" Aliases="wf" />
+	</ItemGroup>
+
+</Project>

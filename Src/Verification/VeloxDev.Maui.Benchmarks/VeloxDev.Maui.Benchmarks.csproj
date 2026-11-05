@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<UseMaui>true</UseMaui>
+		<SingleProject>false</SingleProject>
+		<LangVersion>latest</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<!-- MAUI 适配器的真实绘制路径 A/B：只用平台无关的 net10.0 目标，ICanvas 由记录型画布提供。只用 Debug 配置拿源码 Core。 -->
+		<IsPackable>false</IsPackable>
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<ProjectReference Include="..\HeadlessAdapters\VeloxDev.AdapterTestKit\VeloxDev.AdapterTestKit.csproj" />
+		<ProjectReference Include="..\..\Adapters\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
+	</ItemGroup>
+
+</Project>
