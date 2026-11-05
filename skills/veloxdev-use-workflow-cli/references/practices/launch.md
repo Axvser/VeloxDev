@@ -1,10 +1,8 @@
 # Launching the CLI
 
-## Obtain
+## Obtain and select a version
 
-`VeloxDev.Cli` is a .NET 8 tool published on NuGet. It is a framework-dependent .NET tool: the
-package contains `tools/net8.0/any/veloxdev.dll` and the tool manifest; `dotnet tool install` creates
-the cross-platform `veloxdev` command. NuGet is the only distribution this skill relies on.
+Do this on the command line; the agent runs the checks and the installs.
 
 ### Check .NET
 
@@ -13,11 +11,8 @@ dotnet --info
 dotnet --list-runtimes
 ```
 
-- The target is `net8.0` with `RollForward=LatestMajor`: .NET 8 or a newer major runtime runs it.
-  If neither is present, install .NET 8+.
-- `dotnet tool install` needs the `dotnet` CLI (the SDK is the usual way to have it); the tool cannot
-  bootstrap its own runtime.
-- On Unix, `~/.dotnet/tools` may not be on `PATH`; use `--tool-path` or add it to `PATH`.
+The target is `net8.0` with `RollForward=LatestMajor`: .NET 8 or a newer major runtime runs it; `dotnet tool`
+needs the SDK. If `dotnet` is missing or older than 8, install the .NET 8+ SDK/runtime and re-check.
 
 ### Choose the CLI version
 
@@ -32,31 +27,24 @@ since `10.0.1` — a matching major is not the test.
 dotnet list MyNodes.csproj package --include-transitive
 ```
 
-Only have the DLL? Read its metadata without running it:
+Once the CLI is running, `ArchiveInfo.compatibility` is the authoritative reading: it reports `wanted`
+(component) and `loaded` (CLI) for every assembly it checked (step 3). The package list above is the
+pre-install shortcut.
+
+**2. Find and install the newest stable CLI.**
 
 ```powershell
-Add-Type -AssemblyName System.Reflection.Metadata
-$fs = [IO.File]::OpenRead("MyNodes.dll")
-$pe = [System.Reflection.PortableExecutable.PEReader]::new($fs)
-$md = [System.Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($pe)
-$md.AssemblyReferences | ForEach-Object {
-  $r = $md.GetAssemblyReference($_)
-  '{0} {1}' -f $md.GetString($r.Name), $r.Version
-} | Where-Object { $_ -match '^VeloxDev\.' }
-$pe.Dispose(); $fs.Dispose()
+dotnet tool search VeloxDev.Cli --detail          # published versions; add --prerelease for pre-releases
+dotnet tool install --global VeloxDev.Cli --version <x.y.z>
+dotnet tool update  --global VeloxDev.Cli --version <x.y.z>   # if already installed
+veloxdev --help
 ```
 
-⚙ Compare assembly versions; the SDK derives them from `<Version>` unless `AssemblyVersion` is overridden.
-
-**2. Install the newest stable CLI.**
-
-Do not chase the components' Core major; a component built against a newer Core than the CLI bundles is
-fine.
-
-```powershell
-dotnet tool install --global VeloxDev.Cli
-dotnet tool list --global
-```
+Omit `--version` for the newest stable. `--tool-path ./.veloxdev` installs project-locally; on Unix,
+`~/.dotnet/tools` may not be on `PATH`, so use the absolute shim or add it. Do not chase the components'
+Core major; a component built against a newer Core than the CLI bundles is fine. Pin `--version <x.y.z>`
+only when you need a reproducible build. The package is a **tool**, not a library: do not add it with
+`PackageReference`.
 
 **3. Judge each mismatch in `ArchiveInfo.compatibility.mismatches[]`.**
 
@@ -84,87 +72,26 @@ rule: it ignores minor/patch drift, the `10.0.1` Core floor, and Extension risk.
 ⚙ **Coverage limit.** Only assemblies passed to `--assembly`, listed in the manifest, or loaded through
 `LoadAssemblies` are checked; a transitive dependency the resolver finds on its own is not.
 
-### Install from NuGet
-
-```powershell
-dotnet tool install --global VeloxDev.Cli                   # newest stable
-dotnet tool install --global VeloxDev.Cli --version <x.y.z> # pinned build
-veloxdev --help
-```
-
-Omit `--version` to take the newest stable release; pin one only when you need a reproducible build.
-`dotnet tool list --global` reports the installed version.
-
-The package bundles `VeloxDev.Core`, `VeloxDev.Core.Extension` and the MCP SDK in
+⚙ The package bundles `VeloxDev.Core`, `VeloxDev.Core.Extension` and the MCP SDK in
 `tools/net8.0/any/`; a consumer does not need those references.
-
-For a project-local install:
-
-```powershell
-dotnet tool install --tool-path ./.veloxdev VeloxDev.Cli
-./.veloxdev/veloxdev --help          # Windows: .\.veloxdev\veloxdev.exe --help
-```
-
-⚙ A global install creates the `veloxdev` shim (Windows: `veloxdev.exe`); the MCP client config uses
-`"command": "veloxdev"`. A `--tool-path` install uses the absolute path to the shim.
-
-⚙ The package is a tool, not a library: do not add it with `PackageReference`.
-
-### Direct DLL launch
-
-The installed tool store contains `tools/net8.0/any/veloxdev.dll`:
-
-```powershell
-# Windows: %USERPROFILE%\.dotnet\tools\.store\...
-# Unix:    ~/.dotnet/tools/.store/...
-dotnet <tools>/.store/veloxdev.cli/<version>/veloxdev.cli/<version>/tools/net8.0/any/veloxdev.dll --help
-```
-
-The CLI's own worker launches itself this way. For client configuration, prefer the `veloxdev` shim:
-the `.store` path contains the version and is an implementation detail.
 
 ## Configure an MCP client
 
-The server speaks stdio. Output is the JSON-RPC stream; all logging goes to stderr. Claude Code reads
-`mcpServers` from `.mcp.json` at the project root (or through `claude mcp add`); Claude Desktop uses its own
-configuration file with the same shape.
+The server speaks stdio. Output is the JSON-RPC stream; all logging goes to stderr. The command is the
+installed shim (or `dotnet` + the DLL for a checkout):
 
-Installed tool:
-
-```json
-{
-  "mcpServers": {
-    "veloxdev": {
-      "command": "veloxdev",
-      "args": [
-        "mcp",
-        "--archive", "C:/work/graph.json",
-        "--assembly", "C:/work/lib/MyNodes.dll",
-        "--allow-execution",
-        "--workspace", "C:/work"
-      ]
-    }
-  }
-}
+```powershell
+veloxdev mcp --archive C:/work/graph.json --assembly C:/work/lib/MyNodes.dll --workspace C:/work --allow-execution
 ```
 
-Checkout or local build — run the DLL with `dotnet`:
+For a checkout or local build:
 
-```json
-{
-  "mcpServers": {
-    "veloxdev": {
-      "command": "dotnet",
-      "args": [
-        "<checkout>/Src/Cli/VeloxDev.Cli/bin/Debug/net8.0/veloxdev.dll",
-        "mcp",
-        "--archive", "C:/work/graph.json",
-        "--allow-execution"
-      ]
-    }
-  }
-}
+```powershell
+dotnet <checkout>/Src/Cli/VeloxDev.Cli/bin/Debug/net8.0/veloxdev.dll mcp --archive C:/work/graph.json --allow-execution
 ```
+
+Use the absolute shim path when `~/.dotnet/tools` is not on `PATH`, and translate the command and args into
+the client's own MCP configuration syntax.
 
 ⚙ Use absolute paths in client configuration. The client's working directory is not the CLI's.
 

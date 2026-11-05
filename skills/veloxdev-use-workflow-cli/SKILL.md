@@ -21,75 +21,42 @@ This is not the .NET API skill. Writing a host, a custom tool or a component lib
 
 ## Obtain
 
-`VeloxDev.Cli` is a .NET 8 tool published on NuGet. It is a **framework-dependent .NET tool**: the
-package contains `tools/net8.0/any/veloxdev.dll` and the tool manifest; `dotnet tool install` creates
-the cross-platform `veloxdev` command. NuGet is the only distribution this skill relies on.
+Do this on the command line; the agent runs the checks and the installs.
 
-**Check the .NET environment first.**
+1. **Check .NET.** Run `dotnet --info` and `dotnet --list-runtimes`. `VeloxDev.Cli` is a
+   framework-dependent `net8.0` tool with `RollForward=LatestMajor`: a .NET 8 or newer runtime runs it, and
+   `dotnet tool` needs the SDK. If `dotnet` is missing or older than 8, install the .NET 8+ SDK/runtime for
+   the platform and re-check.
+2. **Find the version.** `dotnet tool search VeloxDev.Cli --detail` lists the published versions (add
+   `--prerelease` to include prereleases). Take the newest stable; do not chase the components' Core major.
+3. **Install or update.** `dotnet tool install --global VeloxDev.Cli --version <x.y.z>` for a first
+   install, `dotnet tool update --global VeloxDev.Cli --version <x.y.z>` when it is already present. Omit
+   `--version` for the newest stable; `--tool-path ./.veloxdev` installs project-locally. Verify with
+   `veloxdev --help` (Windows: `veloxdev.exe`); on Unix, `~/.dotnet/tools` may not be on `PATH`, so use the
+   absolute path or add it.
+4. **Locate the runtime.** The shim is `~/.dotnet/tools/veloxdev` (`veloxdev.exe` on Windows). The DLL it
+   launches is `~/.dotnet/tools/.store/veloxdev.cli/<version>/veloxdev.cli/<version>/tools/net8.0/any/veloxdev.dll`.
+   `dotnet tool list --global` reports the installed version. Use the shim unless a checkout or
+   `dotnet <dll>` launch is needed.
 
-```powershell
-dotnet --info
-dotnet --list-runtimes
-```
+The package is a **tool**, not a library: do not add it with `PackageReference`.
 
-- The tool targets `net8.0` with `RollForward=LatestMajor`: .NET 8 or any newer major runtime can run
-  it. If neither is installed, install the .NET 8+ runtime.
-- `dotnet tool install` needs the `dotnet` CLI (the SDK is the usual way to have it). The tool cannot
-  bootstrap its own runtime.
-- On Unix, `~/.dotnet/tools` may not be on `PATH`. Use `--tool-path`, or add the directory to `PATH`.
-
-**Pick the CLI version, then judge drift from the components' references.**
+**Judge drift from the components' references.**
 
 Compatibility is decided at the view-model layer, not by matching majors.
 
-1. Read the components' references — `dotnet list <proj> package --include-transitive`, or the DLL's
-   assembly references.
-2. Install the newest stable CLI. Do not chase the components' Core major.
-3. Judge each entry in `ArchiveInfo.compatibility.mismatches[]` (`wanted` = component, `loaded` = CLI):
+1. Read the components' references — `dotnet list <proj> package --include-transitive`. A component
+   project's package list is the pre-install shortcut; `ArchiveInfo.compatibility` is the authoritative
+   reading once the CLI is running (`wanted` = component, `loaded` = CLI).
+2. Judge each entry in `ArchiveInfo.compatibility.mismatches[]` (`wanted` = component, `loaded` = CLI):
    - `VeloxDev.Core` — `wanted >= loaded` is fine. `wanted < loaded` is fine only down to `10.0.1`, the
      first release with the completed AOT-friendly serializer. Below that, stop and tell the user.
    - `VeloxDev.Core.Extension` — **any** difference is a risk to report to the user; Extension is not a
      unified model layer and changes often.
-4. `incompatible` only labels a major difference. Confirm compatibility by loading and exercising the
+3. `incompatible` only labels a major difference. Confirm compatibility by loading and exercising the
    graph: `ListCreatableTypes`, `ValidateWorkflow`, then a run.
 
-Commands and the DLL-metadata snippet: [references/practices/launch.md](references/practices/launch.md#choose-the-cli-version).
-
-**Install from NuGet.**
-
-```powershell
-dotnet tool install --global VeloxDev.Cli                  # newest stable
-dotnet tool install --global VeloxDev.Cli --version <x.y.z> # pinned build
-veloxdev --help
-```
-
-⚙ Omit `--version` to take the newest stable release; pin one only when you need a reproducible build.
-`dotnet tool list --global` reports what is installed.
-
-⚙ A global install creates the `veloxdev` shim (Windows: `veloxdev.exe`); the MCP client config uses
-`"command": "veloxdev"`.
-
-⚙ For a project-local install (no global PATH change):
-
-```powershell
-dotnet tool install --tool-path ./.veloxdev VeloxDev.Cli
-./.veloxdev/veloxdev --help          # Windows: .\.veloxdev\veloxdev.exe --help
-```
-
-⚙ The package is a **tool**, not a library: do not add it with `PackageReference`.
-
-⚙ **Direct DLL launch.** The installed tool store contains the actual DLL, and running it directly is
-possible:
-
-```powershell
-# Windows: %USERPROFILE%\.dotnet\tools\.store\...
-# Unix:    ~/.dotnet/tools/.store/...
-dotnet <tools>/.store/veloxdev.cli/<version>/veloxdev.cli/<version>/tools/net8.0/any/veloxdev.dll --help
-```
-
-The worker already launches itself this way. For a client config, however, use the `veloxdev` shim:
-the `.store` path contains the version and is an implementation detail. If you need a stable path,
-install with `--tool-path` and use the shim beside `.store`.
+Commands and the compatibility table: [references/practices/launch.md](references/practices/launch.md#choose-the-cli-version).
 
 ## The archive and its manifest
 
@@ -111,26 +78,15 @@ The archive is the library's serialized workflow document. Dependencies are decl
 
 ## Launch
 
-Point an MCP client at the stdio server. With the tool installed:
+Point the MCP client at the stdio server. The installed shim is the command:
 
-```json
-{
-  "mcpServers": {
-    "veloxdev": {
-      "command": "veloxdev",
-      "args": [
-        "mcp",
-        "--archive", "C:/work/graph.json",
-        "--assembly", "C:/work/lib/MyNodes.dll",
-        "--allow-execution",
-        "--workspace", "C:/work"
-      ]
-    }
-  }
-}
+```powershell
+veloxdev mcp --archive C:/work/graph.json --assembly C:/work/lib/MyNodes.dll --workspace C:/work --allow-execution
 ```
 
-For a checkout or a local build, use `"command": "dotnet"` and put `<checkout>/Src/Cli/VeloxDev.Cli/bin/Debug/net8.0/veloxdev.dll` first in `args`.
+Use the absolute shim path when `~/.dotnet/tools` is not on `PATH`. A checkout or local build is
+`dotnet <checkout>/Src/Cli/VeloxDev.Cli/bin/Debug/net8.0/veloxdev.dll` followed by the same `mcp` args.
+Translate that command and args into the client's own MCP configuration syntax.
 
 | Flag | Effect |
 |---|---|
@@ -225,7 +181,7 @@ Symptom-first entries, with the rule each one violates and the fix, are in [refe
 
 ## References
 
-- [references/practices/launch.md](references/practices/launch.md) — install, client configuration, archive manifest, and every launch flag.
+- [references/practices/launch.md](references/practices/launch.md) — runtime checks, version selection, archive manifest, and every launch flag.
 - [references/practices/tools.md](references/practices/tools.md) — the complete tool catalogue, execution/job modes, redirects, checkpoints and logs.
 - [references/practices/headless.md](references/practices/headless.md) — component DLL, first archive, stdio driver, headless verification.
 - [references/pitfalls/runtime.md](references/pitfalls/runtime.md) — observed failures: unloaded types, worker crashes/hangs, state not merging, reload refusals, workspace escapes.
