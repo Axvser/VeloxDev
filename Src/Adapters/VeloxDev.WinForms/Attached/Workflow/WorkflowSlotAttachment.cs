@@ -58,6 +58,9 @@ public sealed class WorkflowSlotAttachment
     private Color slotBackground = Color.FromArgb(0x01, 0x00, 0x00, 0x00);
     private Color standbyColor = Color.FromArgb(0xDD, 0x1E, 0x1E, 0x1E);
     private Color borderColor = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+    // 绘制资源复用，只在颜色变化时改写属性，避免每帧创建 GDI+ 句柄。
+    private SolidBrush? glyphBrush;
+    private Pen? glyphPen;
 
     /// <summary>Attaches the slot machinery to <paramref name="target"/>, or returns the one already attached.</summary>
     /// <param name="target">The control that is going to draw one port.</param>
@@ -235,8 +238,11 @@ public sealed class WorkflowSlotAttachment
         var saved = g.Save();
         g.ScaleTransform(target.Width / pathViewBox, target.Height / pathViewBox);
 
-        using var fill = new SolidBrush(GlyphColor);
-        using var pen = new Pen(borderColor, 1.5f);
+        var glyph = GlyphColor;
+        var fill = glyphBrush ??= new SolidBrush(glyph);
+        if (fill.Color != glyph) fill.Color = glyph;
+        var pen = glyphPen ??= new Pen(borderColor, 1.5f);
+        if (pen.Color != borderColor) pen.Color = borderColor;
         g.FillPath(fill, icon);
         g.DrawPath(pen, icon);
 
@@ -277,6 +283,10 @@ public sealed class WorkflowSlotAttachment
         modelEvents?.Dispose();
         modelEvents = null;
         DisposeIconPath();
+        glyphBrush?.Dispose();
+        glyphBrush = null;
+        glyphPen?.Dispose();
+        glyphPen = null;
     }
 
     // 助手自己接模型事件、自己摘订阅，把每条转成事件；视图只订事件，不碰 Helper。

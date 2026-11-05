@@ -545,7 +545,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         if (MinimapBackground is not null)
             context.FillRectangle(MinimapBackground, mmRect, cr);
         if (MinimapBorderBrush is not null)
-            context.DrawRectangle(null, new Pen(MinimapBorderBrush, MinimapBorderThickness), mmRect, cr);
+            context.DrawRectangle(null, GetPen(ref _borderPen, MinimapBorderBrush, MinimapBorderThickness), mmRect, cr);
 
         var gb = _lastGlobalBounds;
         if (gb.IsEmpty || gb.Width <= 0 || gb.Height <= 0) return;
@@ -582,8 +582,22 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
                 if (ViewportFill is not null)
                     context.FillRectangle(ViewportFill, vr, ncr);
                 if (ViewportStroke is not null)
-                    context.DrawRectangle(null, new Pen(ViewportStroke, ViewportStrokeThickness), vr, ncr);
+                    context.DrawRectangle(null, GetPen(ref _viewportPen, ViewportStroke, ViewportStrokeThickness), vr, ncr);
             }
         }
+    }
+
+    // 描边画笔按画刷引用与线宽缓存，避免每帧 Render 分配新 Pen。
+    private Pen? _borderPen;
+    private Pen? _viewportPen;
+
+    private static Pen GetPen(ref Pen? cache, IBrush brush, double thickness)
+    {
+        if (cache is null || !ReferenceEquals(cache.Brush, brush) || cache.Thickness != thickness)
+        {
+            cache = new Pen(brush, thickness);
+        }
+
+        return cache;
     }
 }

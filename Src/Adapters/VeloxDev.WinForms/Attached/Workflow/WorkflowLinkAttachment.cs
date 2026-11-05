@@ -236,17 +236,49 @@ public sealed class WorkflowLinkAttachment
         if (points is null || points.Length < 4) return;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.DrawPath(GetPaintPen(), GetPaintPath(points));
+    }
 
-        using var pen = new Pen(lineColor, thickness);
+    // GDI+ 画笔与路径都持有本机句柄：每次重绘都建一对再释放是纯开销。
+    // 按「颜色 + 粗细 + 虚实」和「曲线数组引用」缓存，变了才重建；控件销毁时一并释放。
+    private Pen? paintPen;
+    private Color paintPenColor;
+    private float paintPenThickness;
+    private bool paintPenVirtual;
+    private GraphicsPath? paintPath;
+    private PointF[]? paintPathSource;
+    private Pen? regionPen;
+    private Matrix? regionShift;
+
+    private Pen GetPaintPen()
+    {
+        if (paintPen is not null && paintPenColor == lineColor && paintPenThickness == thickness && paintPenVirtual == isVirtual)
+            return paintPen;
+
+        paintPen?.Dispose();
+        paintPen = new Pen(lineColor, thickness);
         if (isVirtual)
         {
-            pen.DashStyle = DashStyle.Dash;
-            pen.DashPattern = [4f, 2f];
+            paintPen.DashStyle = DashStyle.Dash;
+            paintPen.DashPattern = [4f, 2f];
         }
+        paintPenColor = lineColor;
+        paintPenThickness = thickness;
+        paintPenVirtual = isVirtual;
+        return paintPen;
+    }
 
-        using var curve = new GraphicsPath();
-        curve.AddBezier(points[0], points[1], points[2], points[3]);
-        g.DrawPath(pen, curve);
+    private GraphicsPath GetPaintPath(PointF[] points)
+    {
+        // windowCurve 每次重建几何都是新数组，引用不变即曲线不变。
+        if (paintPath is not null && ReferenceEquals(paintPathSource, points))
+            return paintPath;
+
+        paintPath?.Dispose();
+        paintPath = new GraphicsPath();
+        paintPath.AddBezier(points[0], points[1], points[2], points[3]);
+        paintPathSource = points;
+        return paintPath;
     }
 
     /// <summary>
@@ -318,6 +350,15 @@ public sealed class WorkflowLinkAttachment
         relay.Clear();
         windowRegion?.Dispose();
         windowRegion = null;
+        paintPen?.Dispose();
+        paintPen = null;
+        paintPath?.Dispose();
+        paintPath = null;
+        paintPathSource = null;
+        regionPen?.Dispose();
+        regionPen = null;
+        regionShift?.Dispose();
+        regionShift = null;
     }
 
     /// <summary>Re-reads the bound link and re-carves the window. Called on bind and on recycle.</summary>
@@ -377,18 +418,17 @@ public sealed class WorkflowLinkAttachment
                 points[2].X, points[2].Y, points[3].X, points[3].Y),
             target);
 
-        using var strokePen = new Pen(Color.Black, thickness + 2 * RegionPad) { LineJoin = LineJoin.Miter };
         using var strokePath = new GraphicsPath();
         strokePath.AddBezier(points[0], points[1], points[2], points[3]);
-        strokePath.Widen(strokePen);
+        strokePath.Widen(GetRegionPen());
 
         var bounds = strokePath.GetBounds();
         var originX = (float)Math.Floor(bounds.Left);
         var originY = (float)Math.Floor(bounds.Top);
-        using (var shift = new Matrix(1f, 0f, 0f, 1f, -originX, -originY))
-        {
-            strokePath.Transform(shift);
-        }
+        var shift = regionShift ??= new Matrix();
+        shift.Reset();
+        shift.Translate(-originX, -originY);
+        strokePath.Transform(shift);
 
         var local = new PointF[points.Length];
         for (var i = 0; i < points.Length; i++)
@@ -409,6 +449,20 @@ public sealed class WorkflowLinkAttachment
             Math.Max(1, (int)Math.Ceiling(bounds.Bottom) - (int)originY + 1));
 
         target.Invalidate();
+    }
+
+    // 命中区域的加宽画笔只依赖线宽，线宽不变就复用，拖拽时不再每帧创建 GDI+ 句柄。
+    private Pen GetRegionPen()
+    {
+        var width = thickness + 2 * RegionPad;
+        if (regionPen is not null && regionPen.Width == width)
+        {
+            return regionPen;
+        }
+
+        regionPen?.Dispose();
+        regionPen = new Pen(Color.Black, width) { LineJoin = LineJoin.Miter };
+        return regionPen;
     }
 
     // 画不出来：曲线撤掉、区域清空、盒子不再回答。

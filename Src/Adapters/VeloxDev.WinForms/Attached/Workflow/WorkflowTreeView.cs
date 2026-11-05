@@ -986,8 +986,8 @@ public abstract class WorkflowTreeView : UserControl
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var bounds = new RectangleF(0, 0, Width, Height);
         using var path = WorkflowSurfaceGraphics.RoundedRectangle(bounds, _surfaceCornerRadius);
-        using var brush = new SolidBrush(_surfaceBackground);
-        using var pen = new Pen(_surfaceBorderBrush, _surfaceBorderThickness);
+        var brush = _surfaceBrush.Get(_surfaceBackground);
+        var pen = _surfaceBorderPen.Get(_surfaceBorderBrush, _surfaceBorderThickness);
         g.FillPath(brush, path);
         g.DrawPath(pen, path);
     }
@@ -1021,10 +1021,17 @@ public abstract class WorkflowTreeView : UserControl
                 _rulerOverlay.Dispose();
                 _rulerOverlay = null;
             }
+
+            _surfaceBrush.Dispose();
+            _surfaceBorderPen.Dispose();
         }
 
         base.Dispose(disposing);
     }
+
+    // 外框背景与描边按颜色缓存，重绘不再每次创建 GDI+ 句柄。
+    private readonly CachedSolidBrush _surfaceBrush = new();
+    private readonly CachedPen _surfaceBorderPen = new(1f);
 
     private sealed class RoleBox
     {
@@ -1082,6 +1089,24 @@ public abstract class WorkflowTreeView : UserControl
         private readonly Color _minorGridColor = ParseColor("#2A2D2E");
         private readonly Color _majorGridColor = ParseColor("#3A3D40");
         private readonly Color _axisColor = ParseColor("#4D4D4D");
+        // 网格资源复用：滚动时每帧重绘。
+        private readonly CachedSolidBrush _bgBrush = new();
+        private readonly CachedPen _minorPen = new(1f);
+        private readonly CachedPen _majorPen = new(1f);
+        private readonly CachedPen _axisPen = new(1.2f);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _bgBrush.Dispose();
+                _minorPen.Dispose();
+                _majorPen.Dispose();
+                _axisPen.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
 
         public SurfaceCanvas(WorkflowTreeView owner)
         {
@@ -1149,7 +1174,7 @@ public abstract class WorkflowTreeView : UserControl
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var bounds = new RectangleF(0, 0, Width, Height);
 
-            using var bgBrush = new SolidBrush(_owner.SurfaceBackground);
+            var bgBrush = _bgBrush.Get(_owner.SurfaceBackground);
             g.FillRectangle(bgBrush, bounds);
 
             DrawGrid(g, bounds);
@@ -1164,9 +1189,9 @@ public abstract class WorkflowTreeView : UserControl
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 
-            using var minorPen = new Pen(_minorGridColor, 1f);
-            using var majorPen = new Pen(_majorGridColor, 1f);
-            using var axisPen = new Pen(_axisColor, 1.2f);
+            var minorPen = _minorPen.Get(_minorGridColor);
+            var majorPen = _majorPen.Get(_majorGridColor);
+            var axisPen = _axisPen.Get(_axisColor);
 
             // 网格 x = value - worldLeft；卡片在 anchor + panOffset + ActualOffset，两者共用同一个世界原点，
             // 平移时保持对齐（静止时 pan = 0）。线画满视口，于是能伸到半透明带下面。
@@ -1216,6 +1241,28 @@ public abstract class WorkflowTreeView : UserControl
         private readonly Color _axisColor = ParseColor("#4D4D4D");
         private readonly Color _dividerColor = ParseColor("#3A3D40");
         private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
+        // 标尺资源复用：每次平移都会重画分层表面。
+        private readonly StringFormat _labelFormat = new(StringFormat.GenericTypographic);
+        private readonly CachedSolidBrush _rulerBrush = new();
+        private readonly CachedSolidBrush _labelBrush = new();
+        private readonly CachedPen _dividerPen = new(1f);
+        private readonly CachedPen _tickPen = new(1f);
+        private readonly CachedPen _axisPen = new(1f);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _labelFormat.Dispose();
+                _rulerBrush.Dispose();
+                _labelBrush.Dispose();
+                _dividerPen.Dispose();
+                _tickPen.Dispose();
+                _axisPen.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
 
         private Bitmap? _surface;
 
@@ -1292,12 +1339,12 @@ public abstract class WorkflowTreeView : UserControl
         private void DrawBands(Graphics g, int cw, int ch)
         {
             var ruler = (float)RulerThickness;
-            using var rulerBrush = new SolidBrush(_rulerBackground);
-            using var dividerPen = new Pen(_dividerColor, 1f);
-            using var tickPen = new Pen(_tickColor, 1f);
-            using var axisPen = new Pen(_axisColor, 1f);
-            using var labelBrush = new SolidBrush(_labelColor);
-            using var format = new StringFormat(StringFormat.GenericTypographic);
+            var rulerBrush = _rulerBrush.Get(_rulerBackground);
+            var dividerPen = _dividerPen.Get(_dividerColor);
+            var tickPen = _tickPen.Get(_tickColor);
+            var axisPen = _axisPen.Get(_axisColor);
+            var labelBrush = _labelBrush.Get(_labelColor);
+            var format = _labelFormat;
 
             // 半透明带：一张位图，逐像素 alpha 压在下面的一切之上（画布的网格**和**不透明的卡片）。
             g.FillRectangle(rulerBrush, 0, 0, cw, ruler);

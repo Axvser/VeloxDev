@@ -432,6 +432,19 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     // ── 渲染 ────────────────────────────────────────────────────────────────
 
+    // 画笔与裁剪几何按「画刷引用 + 粗细 / 矩形」缓存：每帧比较即可，不必另挂属性失效回调。
+    // Pen 只持有画刷引用，画刷自身变色仍会生效。
+    private Pen? _borderPen;
+    private Pen? _viewportPen;
+    private RectangleGeometry? _clipGeometry;
+
+    private static Pen GetPen(ref Pen? cache, Brush brush, double thickness)
+    {
+        if (cache is null || !ReferenceEquals(cache.Brush, brush) || cache.Thickness != thickness)
+            cache = new Pen(brush, thickness);
+        return cache;
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         // 画透明背景，为命中测试建立可视内容
@@ -453,7 +466,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         if (MinimapBackground is not null)
             dc.DrawRoundedRectangle(MinimapBackground, null, mmRect, cr, cr);
         if (MinimapBorderBrush is not null)
-            dc.DrawRoundedRectangle(null, new Pen(MinimapBorderBrush, MinimapBorderThickness), mmRect, cr, cr);
+            dc.DrawRoundedRectangle(null, GetPen(ref _borderPen, MinimapBorderBrush, MinimapBorderThickness), mmRect, cr, cr);
 
         var gb = _lastGlobalBounds;
         if (gb.IsEmpty || gb.Width <= 0 || gb.Height <= 0) return;
@@ -461,8 +474,9 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         var pad = Math.Max(0, ContentPadding);
         var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(gb.Width, gb.Height, mmW - pad * 2, mmH - pad * 2, pad);
 
-        var clipGeometry = new RectangleGeometry(mmRect);
-        dc.PushClip(clipGeometry);
+        if (_clipGeometry is null || _clipGeometry.Rect != mmRect)
+            _clipGeometry = new RectangleGeometry(mmRect);
+        dc.PushClip(_clipGeometry);
         try
         {
             // 节点
@@ -490,7 +504,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
                 if (ViewportFill is not null)
                     dc.DrawRoundedRectangle(ViewportFill, null, vr, ncr, ncr);
                 if (ViewportStroke is not null)
-                    dc.DrawRoundedRectangle(null, new Pen(ViewportStroke, ViewportStrokeThickness), vr, ncr, ncr);
+                    dc.DrawRoundedRectangle(null, GetPen(ref _viewportPen, ViewportStroke, ViewportStrokeThickness), vr, ncr, ncr);
             }
         }
         finally

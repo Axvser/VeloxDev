@@ -367,9 +367,18 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             _samples[i] = new PointF((float)curve.XAt(i) + offsetX, (float)curve.YAt(i) + offsetY);
         }
 
-        // PathF 没有「清空」：这条链接的曲线只能重新装一条。一帧一条链接一次分配，
-        // 换来的是一次 DrawPath 覆盖整条曲线（而不是上百次 DrawLine）
-        var body = new PathF();
+        // 同一时刻只有一条链接在画，采样点数固定：复用同一个 PathF，原地改点，不再每帧每条链接分配一条路径。
+        if (_body is { } body && body.Count == _samples.Length)
+        {
+            for (var i = 0; i < _samples.Length; i++)
+            {
+                body.SetPoint(i, _samples[i].X, _samples[i].Y);
+            }
+
+            return;
+        }
+
+        body = new PathF();
         body.MoveTo(_samples[0]);
         for (var i = 1; i < _samples.Length; i++)
         {
@@ -443,6 +452,25 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     // 按比例压暗本色（Avalonia 那边是给画刷加一个 Opacity，效果就是 alpha 相乘）
     private static Color Fade(Color color, double factor)
         => color.WithAlpha((float)(color.Alpha * factor));
+
+    // Color 是引用类型，WithAlpha 每次都分配：按源色引用缓存四档管壁/线体色，一帧多条同色连线共用。
+    private Color? _fadeSource;
+    private readonly Color[] _fades = new Color[4];
+    private static readonly double[] FadeFactors = [0.10, 0.16, 0.75, 0.55];
+
+    private Color FadeCached(Color color, int slot)
+    {
+        if (!ReferenceEquals(_fadeSource, color))
+        {
+            _fadeSource = color;
+            for (var i = 0; i < _fades.Length; i++)
+            {
+                _fades[i] = Fade(color, FadeFactors[i]);
+            }
+        }
+
+        return _fades[slot];
+    }
 
     // 两色之间线性混合（含 alpha），用于尾梢到头部的那一段渐变
     private static Color Mix(Color from, Color to, float t) => new(
@@ -1582,18 +1610,18 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
                 // 管壁：两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。圆头圆角，
                 // 两端才不像被截断的横截面
-                canvas.StrokeColor = Fade(color, 0.10);
+                canvas.StrokeColor = owner.FadeCached(color, 0);
                 canvas.StrokeSize = thickness + 9;
                 canvas.DrawPath(owner.Body);
 
-                canvas.StrokeColor = Fade(color, 0.16);
+                canvas.StrokeColor = owner.FadeCached(color, 1);
                 canvas.StrokeSize = thickness + 4;
                 canvas.DrawPath(owner.Body);
 
                 // 虚拟连线是指针下的橡皮筋：虚线、不流动
                 if (isVirtual)
                 {
-                    canvas.StrokeColor = Fade(color, 0.75);
+                    canvas.StrokeColor = owner.FadeCached(color, 2);
                     canvas.StrokeSize = thickness;
                     canvas.DrawPath(owner.Body);
                     canvas.StrokeDashPattern = null;
@@ -1601,7 +1629,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
                 }
 
                 // 线体本身是静息的：光不在时它只是一根暗线，有了对比彗星才亮得出来
-                canvas.StrokeColor = Fade(color, 0.55);
+                canvas.StrokeColor = owner.FadeCached(color, 3);
                 canvas.StrokeSize = thickness;
                 canvas.DrawPath(owner.Body);
 

@@ -31,6 +31,18 @@ public class WorkflowGridDecorator : Panel, IWorkflowGridDecorator
     public const double DefaultRulerThickness = 36;
 
     private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
+    private readonly StringFormat _labelFormat = new(StringFormat.GenericTypographic);
+
+    // 每次重绘都会用到的 GDI+ 资源按颜色缓存，颜色不变就复用，避免每帧创建/释放原生句柄。
+    private readonly CachedSolidBrush _bgBrush = new();
+    private readonly CachedSolidBrush _rulerBrush = new();
+    private readonly CachedSolidBrush _labelBrush = new();
+    private readonly CachedPen _minorPen = new(1f);
+    private readonly CachedPen _majorPen = new(1f);
+    private readonly CachedPen _gridAxisPen = new(1.2f);
+    private readonly CachedPen _dividerPen = new(1f);
+    private readonly CachedPen _tickPen = new(1f);
+    private readonly CachedPen _rulerAxisPen = new(1f);
 
     private Color _gridBackground = Color.FromArgb(0x1E, 0x1E, 0x1E);
     private Color _minorGridColor = Color.FromArgb(0x2A, 0x2D, 0x2E);
@@ -188,8 +200,8 @@ public class WorkflowGridDecorator : Panel, IWorkflowGridDecorator
         var bounds = new RectangleF(0, 0, Width, Height);
         var ruler = Math.Max(0, RulerThickness);
 
-        using var bgBrush = new SolidBrush(_gridBackground);
-        using var rulerBrush = new SolidBrush(_rulerBackground);
+        var bgBrush = _bgBrush.Get(_gridBackground);
+        var rulerBrush = _rulerBrush.Get(_rulerBackground);
         g.FillRectangle(bgBrush, bounds);
 
         // 网格整幅画（不按内容矩形裁），线因此能伸到半透明带下面；带子随后铺上，把滚过去的东西压暗
@@ -212,9 +224,9 @@ public class WorkflowGridDecorator : Panel, IWorkflowGridDecorator
         var worldRight = worldLeft + bounds.Width;
         var worldBottom = worldTop + bounds.Height;
 
-        using var minorPen = new Pen(_minorGridColor, 1f);
-        using var majorPen = new Pen(_majorGridColor, 1f);
-        using var axisPen = new Pen(_axisColor, 1.2f);
+        var minorPen = _minorPen.Get(_minorGridColor);
+        var majorPen = _majorPen.Get(_majorGridColor);
+        var axisPen = _gridAxisPen.Get(_axisColor);
 
         // 网格 x = ruler + (value - worldLeft)：独立装饰器把世界网格画在一个被 RulerThickness 平移过的内容
         // 视口之下，所以原点停在带子内边。线画满视口，于是能伸到带子下面。
@@ -244,11 +256,11 @@ public class WorkflowGridDecorator : Panel, IWorkflowGridDecorator
         var worldRight = worldLeft + bounds.Width;
         var worldBottom = worldTop + bounds.Height;
 
-        using var dividerPen = new Pen(_rulerDividerColor, 1f);
-        using var tickPen = new Pen(_rulerTickColor, 1f);
-        using var axisPen = new Pen(_axisColor, 1f);
-        using var labelBrush = new SolidBrush(_rulerLabelColor);
-        using var format = new StringFormat(StringFormat.GenericTypographic);
+        var dividerPen = _dividerPen.Get(_rulerDividerColor);
+        var tickPen = _tickPen.Get(_rulerTickColor);
+        var axisPen = _rulerAxisPen.Get(_axisColor);
+        var labelBrush = _labelBrush.Get(_rulerLabelColor);
+        var format = _labelFormat;
 
         g.DrawLine(dividerPen, (float)ruler, 0, (float)ruler, bounds.Height);
         g.DrawLine(dividerPen, 0, (float)ruler, bounds.Width, (float)ruler);
@@ -309,4 +321,24 @@ public class WorkflowGridDecorator : Panel, IWorkflowGridDecorator
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
     protected static Color ParseColor(string hex) => WorkflowSurfaceColors.Parse(hex);
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _labelFormat.Dispose();
+            _bgBrush.Dispose();
+            _rulerBrush.Dispose();
+            _labelBrush.Dispose();
+            _minorPen.Dispose();
+            _majorPen.Dispose();
+            _gridAxisPen.Dispose();
+            _dividerPen.Dispose();
+            _tickPen.Dispose();
+            _rulerAxisPen.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
 }
