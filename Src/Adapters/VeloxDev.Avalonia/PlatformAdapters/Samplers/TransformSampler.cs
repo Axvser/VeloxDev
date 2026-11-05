@@ -40,6 +40,20 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return;
             }
 
+            // 子类可能重写了两个 protected virtual 插值钩子，那时仍按旧路径逐帧调用它们。
+            if (GetType() == typeof(TransformSampler))
+            {
+                // 配对与 scratch 只在起止对象换了时建一次，此后每帧原地改写（绝不改动 start/end）。
+                if (working is not SlowPlan plan || !ReferenceEquals(plan.Start, start) || !ReferenceEquals(plan.End, end))
+                {
+                    plan = SlowPlan.Build(start, end, startTransform, endTransform);
+                    working = plan;
+                }
+                plan.Apply(this, direction, t);
+                property.SetValue(target, plan.Result);
+                return;
+            }
+
             // 1. 统一预处理
             // 2. 解析有效变换
             var startTransforms = ParseTransforms(startTransform);
@@ -51,6 +65,74 @@ namespace VeloxDev.Adapters.NativeSamplers
             // 4. 在时刻 t 插值
             property.SetValue(target, InterpolateTransformPairs(transformPairs, t, direction));
         }
+
+        // 慢路径的每帧复用状态：配好的起止对与写回用的 scratch 变换。
+        private sealed class SlowPlan
+        {
+            public object? Start;
+            public object? End;
+            public Transform Result = null!;
+            private Transform[] _starts = null!;
+            private Transform[] _ends = null!;
+            private Transform[] _scratch = null!;
+
+            public static SlowPlan Build(object? start, object? end, Transform startTransform, Transform endTransform)
+            {
+                var pairs = CreateTransformPairs(ParseTransforms(startTransform), ParseTransforms(endTransform));
+                var starts = new List<Transform>(pairs.Count);
+                var ends = new List<Transform>(pairs.Count);
+                var scratch = new List<Transform>(pairs.Count);
+                foreach (var (ps, pe) in pairs)
+                {
+                    var s = ps ?? GetDefaultTransform(pe);
+                    var e = pe ?? GetDefaultTransform(s);
+                    var sameType = s.GetType() == e.GetType();
+                    // 同类型但不在已知变换里的，旧实现直接丢弃，这里保持一致。
+                    if (sameType && !IsKnownTransform(s)) continue;
+                    // 类型不一致按矩阵插值，scratch 也就是矩阵。
+                    starts.Add(s);
+                    ends.Add(e);
+                    scratch.Add(sameType ? CloneTransform(s) : new MatrixTransform(s.Value));
+                }
+                return new SlowPlan
+                {
+                    Start = start,
+                    End = end,
+                    _starts = [.. starts],
+                    _ends = [.. ends],
+                    _scratch = [.. scratch],
+                    Result = scratch.Count switch
+                    {
+                        0 => new TransformGroup(),
+                        1 => scratch[0],
+                        _ => new TransformGroup { Children = [.. scratch] }
+                    }
+                };
+            }
+
+            public void Apply(TransformSampler sampler, RotationDirection direction, double t)
+            {
+                for (var i = 0; i < _scratch.Length; i++)
+                {
+                    var s = _starts[i];
+                    var e = _ends[i];
+                    if (s.GetType() == e.GetType())
+                        sampler.MutateInPlace(_scratch[i], s, e, direction, t);
+                    else
+                        ((MatrixTransform)_scratch[i]).Matrix = LerpMatrix(s.Value, e.Value, t);
+                }
+            }
+        }
+
+        private static Transform GetDefaultTransform(Transform? transform) => transform switch
+        {
+            TranslateTransform _ => new TranslateTransform(0, 0),
+            RotateTransform _ => new RotateTransform(0, 0, 0),
+            ScaleTransform _ => new ScaleTransform(1, 1),
+            SkewTransform _ => new SkewTransform(0, 0),
+            Rotate3DTransform _ => new Rotate3DTransform(0, 0, 0, 0, 0, 0, 0),
+            _ => new MatrixTransform(Matrix.Identity)
+        };
 
         // 只有这几种变换既能被 CloneTransform 克隆、又有逐字段插值；其余子类必须走矩阵路径，
         // 否则会落进快路径的克隆上，而克隆恰好是唯一对它们抛异常的地方。
@@ -174,16 +256,6 @@ namespace VeloxDev.Adapters.NativeSamplers
         /// <summary>Interpolates a single transform pair, falling back to the matrix path for mismatched or unknown types.</summary>
         protected virtual Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t, RotationDirection direction)
         {
-            static Transform GetDefaultTransform(Transform? transform) => transform switch
-            {
-                TranslateTransform _ => new TranslateTransform(0, 0),
-                RotateTransform _ => new RotateTransform(0, 0, 0),
-                ScaleTransform _ => new ScaleTransform(1, 1),
-                SkewTransform _ => new SkewTransform(0, 0),
-                Rotate3DTransform _ => new Rotate3DTransform(0, 0, 0, 0, 0, 0, 0),
-                _ => new MatrixTransform(Matrix.Identity)
-            };
-
             start ??= GetDefaultTransform(end);
             end ??= GetDefaultTransform(start);
 

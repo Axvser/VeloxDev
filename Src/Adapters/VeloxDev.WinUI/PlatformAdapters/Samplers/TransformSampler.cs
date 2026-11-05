@@ -39,11 +39,89 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return;
             }
 
-            var startList = ExtractTransforms(s);
-            var endList = ExtractTransforms(e);
-            var pairs = MatchPairs(startList, endList);
+            // 子类可能重写了 CombineTransforms/InterpolateSingle/LerpAngle，那时仍按旧路径逐帧调用它们。
+            if (GetType() == typeof(TransformSampler))
+            {
+                // 配对与 scratch 只在起止对象换了时建一次，此后每帧原地改写（绝不改动 start/end）。
+                if (working is not SlowPlan plan || !ReferenceEquals(plan.Start, start) || !ReferenceEquals(plan.End, end))
+                {
+                    plan = SlowPlan.Build(start, end, MatchPairs(ExtractTransforms(s), ExtractTransforms(e)));
+                    working = plan;
+                }
+                plan.Apply(this, t);
+                property.SetValue(target, plan.Result);
+                return;
+            }
 
-            property.SetValue(target, CombineTransforms(pairs, t));
+            property.SetValue(target, CombineTransforms(MatchPairs(ExtractTransforms(s), ExtractTransforms(e)), t));
+        }
+
+        // 慢路径的每帧复用状态，语义与 CombineTransforms + InterpolateSingle 一致：
+        // 类型不一致直接取终点变换，同类型的未知变换丢弃，旋转只插值角度。
+        private sealed class SlowPlan
+        {
+            public object? Start;
+            public object? End;
+            public Transform Result = null!;
+            private Transform[] _starts = null!;
+            private Transform[] _ends = null!;
+            private Transform[] _scratch = null!;
+
+            public static SlowPlan Build(object? start, object? end, List<(Transform? s, Transform? e)> pairs)
+            {
+                var starts = new List<Transform>(pairs.Count);
+                var ends = new List<Transform>(pairs.Count);
+                var scratch = new List<Transform>(pairs.Count);
+                foreach (var (ps, pe) in pairs)
+                {
+                    var s = ps ?? DefaultFor(pe);
+                    var e = pe ?? DefaultFor(s);
+                    Transform item;
+                    if (s.GetType() != e.GetType()) item = e;
+                    else if (!IsKnownTransform(s)) continue;
+                    else item = s is RotateTransform ? new RotateTransform() : CloneTransform(s);
+                    starts.Add(s);
+                    ends.Add(e);
+                    scratch.Add(item);
+                }
+
+                Transform result;
+                switch (scratch.Count)
+                {
+                    case 0: result = new TransformGroup(); break;
+                    case 1: result = scratch[0]; break;
+                    default:
+                        var g = new TransformGroup();
+                        foreach (var tr in scratch) g.Children.Add(tr);
+                        result = g;
+                        break;
+                }
+
+                return new SlowPlan { Start = start, End = end, _starts = [.. starts], _ends = [.. ends], _scratch = [.. scratch], Result = result };
+            }
+
+            public void Apply(TransformSampler sampler, double t)
+            {
+                for (var i = 0; i < _scratch.Length; i++)
+                {
+                    var s = _starts[i];
+                    var e = _ends[i];
+                    if (s.GetType() != e.GetType()) continue;
+                    if (_scratch[i] is RotateTransform rt && s is RotateTransform rs && e is RotateTransform re)
+                        rt.Angle = sampler.LerpAngle(rs.Angle, re.Angle, t);
+                    else
+                        sampler.MutateInPlace(_scratch[i], s, e, t);
+                }
+            }
+
+            private static Transform DefaultFor(Transform? t) => t switch
+            {
+                TranslateTransform => new TranslateTransform(),
+                ScaleTransform => new ScaleTransform(),
+                RotateTransform => new RotateTransform(),
+                SkewTransform => new SkewTransform(),
+                _ => new MatrixTransform()
+            };
         }
 
         // 只有这几种变换既能被 CloneTransform 克隆、又有逐字段插值；其余子类必须走矩阵路径，

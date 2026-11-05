@@ -38,9 +38,82 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return;
             }
 
-            // 组/类型不匹配/未知/null → 新建变换（绝不改动 start/end）。
-            property.SetValue(target, Compute(start, end, direction, t));
+            // 组/类型不匹配/未知/null：配对与 scratch 只在起止对象换了时建一次，此后每帧原地改写（绝不改动 start/end）。
+            if (working is not SlowPlan plan || !ReferenceEquals(plan.Start, start) || !ReferenceEquals(plan.End, end))
+            {
+                plan = SlowPlan.Build(start, end);
+                working = plan;
+            }
+            plan.Apply(direction, t);
+            property.SetValue(target, plan.Result);
         }
+
+        // 慢路径的每帧复用状态：配好的起止对与写回用的 scratch 变换。
+        private sealed class SlowPlan
+        {
+            public object? Start;
+            public object? End;
+            public Transform Result = null!;
+            private Transform[] _starts = null!;
+            private Transform[] _ends = null!;
+            private Transform[] _scratch = null!;
+
+            public static SlowPlan Build(object? start, object? end)
+            {
+                var pairs = CreateTransformPairs(ParseTransforms(NormalizeInput(start)), ParseTransforms(NormalizeInput(end)));
+                var starts = new List<Transform>(pairs.Count);
+                var ends = new List<Transform>(pairs.Count);
+                var scratch = new List<Transform>(pairs.Count);
+                foreach (var pair in pairs)
+                {
+                    var s = pair.Start ?? GetDefaultTransform(pair.End);
+                    var e = pair.End ?? GetDefaultTransform(s);
+                    var sameType = s.GetType() == e.GetType();
+                    // 同类型但不在已知变换里的，旧实现直接丢弃，这里保持一致。
+                    if (sameType && !IsKnownTransform(s)) continue;
+                    // 类型不一致按矩阵插值，scratch 也就是矩阵。
+                    starts.Add(s);
+                    ends.Add(e);
+                    scratch.Add(sameType ? CloneTransform(s) : new MatrixTransform(s.Value));
+                }
+                return new SlowPlan
+                {
+                    Start = start,
+                    End = end,
+                    _starts = [.. starts],
+                    _ends = [.. ends],
+                    _scratch = [.. scratch],
+                    Result = scratch.Count switch
+                    {
+                        0 => new TransformGroup(),
+                        1 => scratch[0],
+                        _ => new TransformGroup { Children = [.. scratch] },
+                    },
+                };
+            }
+
+            public void Apply(RotationDirection direction, double t)
+            {
+                for (var i = 0; i < _scratch.Length; i++)
+                {
+                    var s = _starts[i];
+                    var e = _ends[i];
+                    if (s.GetType() == e.GetType())
+                        MutateInPlace(_scratch[i], s, e, direction, t);
+                    else
+                        ((MatrixTransform)_scratch[i]).Matrix = LerpMatrix(s.Value, e.Value, t);
+                }
+            }
+        }
+
+        private static Transform GetDefaultTransform(Transform? transform) => transform switch
+        {
+            TranslateTransform _ => new TranslateTransform(0, 0),
+            RotateTransform _ => new RotateTransform(0, 0, 0),
+            ScaleTransform _ => new ScaleTransform(1, 1, 0, 0),
+            SkewTransform _ => new SkewTransform(0, 0, 0, 0),
+            _ => new MatrixTransform(Matrix.Identity),
+        };
 
         private static bool IsKnownTransform(Transform transform) => transform is
             TranslateTransform or RotateTransform or ScaleTransform or SkewTransform or MatrixTransform;
@@ -84,18 +157,6 @@ namespace VeloxDev.Adapters.NativeSamplers
                     st.Matrix = LerpMatrix(s.Matrix, e.Matrix, t);
                     break;
             }
-        }
-
-        private static Transform Compute(object? start, object? end, RotationDirection direction, double t)
-        {
-            var startTransform = NormalizeInput(start);
-            var endTransform = NormalizeInput(end);
-
-            var startTransforms = ParseTransforms(startTransform);
-            var endTransforms = ParseTransforms(endTransform);
-            var transformPairs = CreateTransformPairs(startTransforms, endTransforms);
-
-            return InterpolateTransformPairs(transformPairs, t, direction);
         }
 
         private static Transform NormalizeInput(object? input)
@@ -150,78 +211,6 @@ namespace VeloxDev.Adapters.NativeSamplers
             }
 
             return pairs;
-        }
-
-        private static Transform InterpolateTransformPairs(
-            List<TransformPair> pairs, double t, RotationDirection direction)
-        {
-            var interpolatedTransforms = new List<Transform>();
-            foreach (var pair in pairs)
-            {
-                var interpolated = InterpolateSingleTransformPair(pair.Start, pair.End, t, direction);
-                if (interpolated != null)
-                {
-                    interpolatedTransforms.Add(interpolated);
-                }
-            }
-
-            return interpolatedTransforms.Count switch
-            {
-                0 => new TransformGroup(),
-                1 => interpolatedTransforms[0],
-                _ => new TransformGroup { Children = [.. interpolatedTransforms] },
-            };
-        }
-
-        private static Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t, RotationDirection direction)
-        {
-            static Transform GetDefaultTransform(Transform? transform) => transform switch
-            {
-                TranslateTransform _ => new TranslateTransform(0, 0),
-                RotateTransform _ => new RotateTransform(0, 0, 0),
-                ScaleTransform _ => new ScaleTransform(1, 1, 0, 0),
-                SkewTransform _ => new SkewTransform(0, 0, 0, 0),
-                _ => new MatrixTransform(Matrix.Identity),
-            };
-
-            start ??= GetDefaultTransform(end);
-            end ??= GetDefaultTransform(start);
-
-            if (start.GetType() != end.GetType())
-            {
-                return new MatrixTransform(LerpMatrix(start.Value, end.Value, t));
-            }
-
-            return start switch
-            {
-                TranslateTransform st when end is TranslateTransform et =>
-                    new TranslateTransform(Lerp(st.X, et.X, t), Lerp(st.Y, et.Y, t)),
-
-                RotateTransform st when end is RotateTransform et =>
-                    new RotateTransform(
-                        LerpAngle(st.Angle, et.Angle, t, direction),
-                        Lerp(st.CenterX, et.CenterX, t),
-                        Lerp(st.CenterY, et.CenterY, t)),
-
-                ScaleTransform st when end is ScaleTransform et =>
-                    new ScaleTransform(
-                        Lerp(st.ScaleX, et.ScaleX, t),
-                        Lerp(st.ScaleY, et.ScaleY, t),
-                        Lerp(st.CenterX, et.CenterX, t),
-                        Lerp(st.CenterY, et.CenterY, t)),
-
-                SkewTransform st when end is SkewTransform et =>
-                    new SkewTransform(
-                        Lerp(st.AngleX, et.AngleX, t),
-                        Lerp(st.AngleY, et.AngleY, t),
-                        Lerp(st.CenterX, et.CenterX, t),
-                        Lerp(st.CenterY, et.CenterY, t)),
-
-                MatrixTransform st when end is MatrixTransform et =>
-                    new MatrixTransform(LerpMatrix(st.Matrix, et.Matrix, t)),
-
-                _ => null,
-            };
         }
 
         private static double LerpAngle(double start, double end, double t, RotationDirection direction)
