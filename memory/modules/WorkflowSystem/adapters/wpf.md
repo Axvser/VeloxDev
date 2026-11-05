@@ -89,7 +89,7 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 ### 2.7 插槽布局的触发源必须同时挂两个「布局相关」事件
 
-`Loaded/Unloaded/DataContextChanged/IsVisibleChanged/LayoutUpdated/SizeChanged` 全挂（`WorkflowSlotLayoutBehavior.cs` 的 `Attach`），原因是 `OnSizeChanged` 里的注释写的：**`LayoutUpdated` 会在 arrange 途中触发**（子元素还没定），而 `SizeChanged` 只在节点尺寸最终定型后触发一次。只挂一个会在缩放折叠时读到中间态。实际同步还要再经一次 `Dispatcher.BeginInvoke(..., DispatcherPriority.Render)` 排队（`ScheduleSync`）。
+`Loaded/Unloaded/DataContextChanged/IsVisibleChanged/LayoutUpdated/SizeChanged` 全挂（`WorkflowSlotLayoutBehavior.cs` 的 `Attach`），原因是 `OnSizeChanged` 里的注释写的：**`LayoutUpdated` 会在 arrange 途中触发**（子元素还没定），而 `SizeChanged` 只在节点尺寸最终定型后触发一次。只挂一个会在缩放折叠时读到中间态。2026-11-06 起 `LayoutUpdated` 与 `SizeChanged` 先比 `WorkflowLayoutStamp` 再同步 `Flush`，其余触发走强制请求 + `Schedule`（`DispatcherPriority.Render`）；共享批次见 [../scheduling.md](../scheduling.md)。
 
 ⇒ **别家照抄时最容易丢的就是这一对**：MAUI 那条已知教训正是「托管 `SizeChanged` 是 arrange 途中而非 post-arrange，必须改挂原生 `LayoutUpdated`」（背景见 `memory/modules/WorkflowSystem/adapters/maui.md` §5）—— WPF 这里两个都挂了，所以它不踩那个坑。
 

@@ -15,7 +15,6 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
     private sealed class LayoutState
     {
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
-        public bool SyncPending { get; set; }
         public bool Syncing { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
     }
@@ -85,7 +84,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         control.LayoutUpdated += OnLayoutUpdated;
         control.PropertyChanged += OnControlPropertyChanged;
         UpdatePropertyChangedSubscription(control);
-        ScheduleSync(control);
+        RequestSync(control, force: true);
     }
 
     private static void Detach(UserControl control)
@@ -99,19 +98,20 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         if (control.GetValue(StateProperty) is LayoutState state && state.PropertyChangedSource is not null)
             state.PropertyChangedSource.PropertyChanged -= OnNodePropertyChanged;
 
+        CancelSync(control);
         control.ClearValue(StateProperty);
     }
 
     private static void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
         if (sender is UserControl control)
-            ScheduleSync(control);
+            RequestSync(control, force: true);
     }
 
     private static void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
-        if (sender is UserControl control && control.GetValue(StateProperty) is LayoutState state)
-            state.SyncPending = false;
+        if (sender is UserControl control)
+            CancelSync(control);
     }
 
     private static void OnDataContextChanged(object? sender, EventArgs e)
@@ -120,21 +120,22 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             return;
 
         UpdatePropertyChangedSubscription(control);
-        ScheduleSync(control);
+        RequestSync(control, force: true);
     }
 
     private static void OnLayoutUpdated(object? sender, EventArgs e)
     {
         // 布局后同步回写（与 WinUI 家一致）：在渲染前读插槽中心，保证连线端点锚点与节点折叠同帧刷新，
         // 而不是迟一个 Dispatcher.Post(Render) 节拍（插槽漂移/闪烁的来源）。
+        // 整棵树每次布局都会走到这里，所以先用指纹挡掉「输入没变」的节点，再进共享批次同步执行。
         if (sender is UserControl control)
-            Sync(control);
+            RequestSync(control, force: false);
     }
 
     private static void OnControlPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (sender is UserControl control && e.Property == Visual.BoundsProperty)
-            ScheduleSync(control);
+            RequestSync(control, force: true);
     }
 
     private static void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -151,7 +152,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             control = visual.GetVisualAncestors().OfType<UserControl>().FirstOrDefault(GetIsEnabled);
 
         if (control is not null)
-            ScheduleSync(control);
+            RequestSync(control, force: true);
     }
 
     private static void UpdatePropertyChangedSubscription(UserControl control)
@@ -172,20 +173,71 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         }
     }
 
-    private static void ScheduleSync(UserControl control)
+    // 同一棵树的节点共用一个批次：布局 pass 的同步回写走 Flush（同帧），其余触发走 Schedule（到 Render 优先级合并）。
+    // 指纹只看模型几何、实测尺寸与插槽控件数 —— 宿主每帧布局时，没动过的节点在这里就被挡掉了。
+    private static void RequestSync(UserControl control, bool force)
     {
-        if (control.GetValue(StateProperty) is not LayoutState state || state.SyncPending)
-            return;
-
-        state.SyncPending = true;
-        Dispatcher.UIThread.Post(() =>
+        if (control.GetValue(StateProperty) is null
+            || control.DataContext is not IWorkflowNodeViewModel node)
         {
-            if (control.GetValue(StateProperty) is not LayoutState currentState)
-                return;
+            return;
+        }
 
-            currentState.SyncPending = false;
-            Sync(control);
-        }, DispatcherPriority.Render);
+        var batch = WorkflowLayoutBatch.For(OwnerOf(control, node), PostToUiThread);
+        var work = new Action(() => Sync(control));
+
+        if (force)
+        {
+            batch.Request(control, work);
+            batch.Schedule();
+            return;
+        }
+
+        var stamp = WorkflowLayoutStamp.Capture(
+            node, control.Bounds.Width, control.Bounds.Height, CountSlotControls(control));
+        if (batch.Request(control, stamp, work))
+        {
+            batch.Flush();
+        }
+    }
+
+    private static void CancelSync(UserControl control)
+    {
+        object owner = control.DataContext is IWorkflowNodeViewModel { Parent: { } tree } ? tree : control;
+        WorkflowLayoutBatch.For(owner).Cancel(control);
+    }
+
+    private static object OwnerOf(UserControl control, IWorkflowNodeViewModel node)
+        => node.Parent ?? (object)control;
+
+    private static bool PostToUiThread(Action flush)
+    {
+        Dispatcher.UIThread.Post(flush, DispatcherPriority.Render);
+        return true;
+    }
+
+    // 指纹里的插槽数：容器数量变了（枚举插槽增删、模板重建）必须重测，哪怕节点外框尺寸没变。
+    private static int CountSlotControls(UserControl control)
+    {
+        var count = 0;
+
+        foreach (var name in GetAllSlotNames(control))
+        {
+            if (!string.IsNullOrWhiteSpace(name) && control.FindControl<Control>(name) is not null)
+            {
+                count++;
+            }
+        }
+
+        foreach (var name in GetAllSlotEnumeratorNames(control))
+        {
+            if (!string.IsNullOrWhiteSpace(name) && control.FindControl<ItemsControl>(name) is { } items)
+            {
+                count += items.ItemCount;
+            }
+        }
+
+        return count;
     }
 
     private static void Sync(UserControl control)
@@ -207,7 +259,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             var slotNames = GetAllSlotNames(control);
             var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-            // 重建「变化时该触发 ScheduleSync」的属性名集合。
+            // 重建「变化时该触发同步」的属性名集合。
             state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));

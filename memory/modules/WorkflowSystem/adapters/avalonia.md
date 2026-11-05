@@ -144,15 +144,15 @@ WPF 那份是 `PreviewMouseLeftButtonDown/Up` + 两个处理器都 `e.Handled = 
 
 **这里的做法和其他家不一样，因为 Avalonia 的指针捕获会把后续指针事件全部钉在按下的那个插槽上** —— 不主动放开，松开的那个事件永远到不了接收方的插槽，两阶段 `SendConnection`/`ReceiveConnection` 的第二阶段就永远不触发。这也是为什么这家不能在按下时置 `Handled`：事件要继续冒泡（配合 §三.2 的空白判定），否则「点空白取消连线」这类路径会断。
 
-### 4. 插槽布局有**三条**写回路径，别家只有一到两条
+### 4. 插槽布局有**三条**写回路径，但都汇进 Core 的共享批次
 
 `WorkflowSlotLayoutBehavior`：
 
-1. **同步**：`LayoutUpdated` → 直接 `Sync(control)`（`OnLayoutUpdated`）。
-2. **异步**：`Visual.BoundsProperty` 变化 → `ScheduleSync`（`OnControlPropertyChanged`）。
-3. **异步**：DataContext 的 `INotifyPropertyChanged` 且属性名在 `SlotPropertyNames` 里 → `ScheduleSync`（`OnNodePropertyChanged`）。
+1. **同步**：`LayoutUpdated` → `WorkflowLayoutStamp.Capture` → `WorkflowLayoutBatch.Request(control, stamp, work)` → `Flush()`（`OnLayoutUpdated`）。
+2. **异步**：`Visual.BoundsProperty` 变化 → `Request(control, work)` 强制 + `Schedule`（`OnControlPropertyChanged`）。
+3. **异步**：DataContext 的 `INotifyPropertyChanged` 且属性名在 `SlotPropertyNames` 里 → 强制 + `Schedule`（`OnNodePropertyChanged`）。
 
-`ScheduleSync` 用 `state.SyncPending` 合并、`Dispatcher.UIThread.Post(…, DispatcherPriority.Render)` 下发。**三条并存的理由是平台决定的**：布局 pass 在渲染循环上、与 `Render` 优先级同一带（§二.6），所以「延后到 Render」这条路没法保证赶在本帧渲染前，必须再留一条同步的路；而 `Bounds` 与 ViewModel 属性变化又不是每次都有布局 pass，所以两条异步路也不能省。
+批次以**树**为 owner（`node.Parent`），`post` 是 `Dispatcher.UIThread.Post(…, DispatcherPriority.Render)`（见 [../scheduling.md](../scheduling.md)）。**三条并存的理由仍是平台决定的**：布局 pass 在渲染循环上、与 `Render` 优先级同一带（§二.6），所以「延后到 Render」这条路没法保证赶在本帧渲染前，必须再留一条同步的路；而 `Bounds` 与 ViewModel 属性变化又不是每次都有布局 pass，所以两条异步路也不能省。区别在于：同步路现在先比指纹，宿主每帧布局时没动过的节点不再重测；异步路只排一次共享的 `Flush`，不再每节点一个 `SyncPending` 旗标。
 
 - 上一家（WPF）是 `LayoutUpdated` + `SizeChanged` + `PropertyChanged`（WPF `WorkflowSlotLayoutBehavior.cs` 的三个订阅）；这家把 `SizeChanged` 换成了 `BoundsProperty` 的类处理器，**因为 Avalonia 的 `Visual.Bounds` 是 `Rect` 且以 `AvaloniaProperty` 形式存在**（实测：`Visual.Bounds` 是 `Avalonia.Rect`），所以能直接挂在属性变化上，不必等 `SizeChanged` 事件。
 - 这家**没有** WinUI 那种「额外订阅坐标宿主的 `LayoutUpdated`」的做法（WinUI `WorkflowSlotLayoutBehavior.cs` 的额外订阅）—— 与 §二.7 同因：这家的 `LayoutUpdated` 本来就是整棵树一次。

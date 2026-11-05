@@ -70,7 +70,7 @@ MAUI 走 `GraphicsView`/`IDrawable`（各适配器的 `…/WorkflowMinimapOverla
 **WPF 免疫**：它的 `LayoutUpdated` 是整棵树一次 layout pass、天然 post-arrange（同注释）。
 WinUI 是七家里唯一需要挂两级的。
 同源的三个附带事实：`LayoutUpdated` 的 `sender` 恒为 `null`，只能用闭包捕获控件（`Attach` 里的注释）；
-`SizeChanged` 与之并行挂（`OnSizeChanged`）；两者都**同步**调 `Sync`，异步 hop 会晚一帧（`ScheduleSync`）。
+`SizeChanged` 与之并行挂（`OnSizeChanged`）；两者都先比 `WorkflowLayoutStamp` 再**同步** `Flush`，异步 hop 会晚一帧（其余触发的强制请求才走 `Schedule`，见 [../scheduling.md](../scheduling.md)）。
 
 **L4 · 名称域查找只有 `FindName` 一条路。** 见 §一 的 `Refresh(UserControl)`。
 `PART_*` 必须真的落在 `UserControl` 的 `x:Name` 域里；「模板不生成 `x:Name="Root"`」的坑
@@ -93,7 +93,7 @@ WinUI 是七家里唯一需要挂两级的。
 |---|---|---|
 | 可见区域/虚拟化重算（`UpdateVisibleRegion`） | `Low`（`UpdateVisibleRegion` 的 `TryEnqueue`） | `ReferenceEquals(currentState, state)` |
 | 一批视图的物化（`ScheduleNextBatchRender`） | `Low`（`ViewManager.ScheduleNextBatchRender`） | 批次上限 3 |
-| 槽位同步（`ScheduleSync`） | `Normal`（`WorkflowSlotLayoutBehavior.ScheduleSync`） | `Syncing` 守卫（`WorkflowSlotLayoutBehavior.Sync`） |
+| 槽位同步的非布局触发（`WorkflowLayoutBatch.Schedule`） | `Normal`（`WorkflowSlotLayoutBehavior.RequestSync` 传入的 post） | 入队返回值交给批次复位 `scheduled`；`Syncing` 守卫（`WorkflowSlotLayoutBehavior.Sync`） |
 | 小地图在 `ScrollViewer` 尺寸变化后的重算 | `Low`（`WorkflowMinimapOverlay.OnScrollViewerResized`） | —— |
 
 **这张表是这一家最值得抄的东西**：在任何「异步重算 + 下一帧才生效」的宿主上，
@@ -290,7 +290,7 @@ WHEEL handled=True delta=-120 | INNER off=(0,12) max=(0,12)   ← 仍然 True
 而后者的返回值被丢掉了：队列一旦拒绝（正在关闭），回调永远不跑 ⇒ 旗标永远立着 ⇒ 之后每次调用都在第一行返回
 ⇒ **画布一个视图都不会再加**。**症状很好认：小地图照旧画（它读的是模型，不是这批视图），画布上节点/连线却没了。**
 现在「没有入队成功就立刻复位旗标 + `Debug.WriteLine`」。同族还有两处同样丢返回值、但没有旗标（
-`WorkflowSlotLayoutBehavior.ScheduleSync` 与 `SyncSlotEnumerator` 的重试入队、`WorkflowMinimapOverlay.OnScrollViewerResized`）：它们只丢一次更新，下一次事件会补上。
+`WorkflowSlotLayoutBehavior.SyncSlotEnumerator` 的重试入队、`WorkflowMinimapOverlay.OnScrollViewerResized`）：它们只丢一次更新，下一次事件会补上。槽位同步那条已并入 Core 的 `WorkflowLayoutBatch`：`post` 返回 `TryEnqueue` 的真实结果，`Schedule` 在 `false` 时复位 `scheduled`，不再是「丢一次」。
 **这条与本文件 P4 是同一个教训**（「已置位状态……永久停止且不报错」），该家自己的正确范形在 `SyncSlotEnumerator`：
 用可判定的条件（`ActualWidth <= 0`）判断「还没测量」并**排 Low 重试**。
 

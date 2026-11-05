@@ -41,8 +41,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
         public bool Syncing { get; set; }
 
-        public bool SyncPending { get; set; }
-
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
 
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
@@ -141,7 +139,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     {
         if (d is FrameworkElement element && element.GetValue(StateProperty) is LayoutState)
         {
-            ScheduleSync(element);
+            RequestSync(element);
         }
     }
 
@@ -159,7 +157,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.DataContextChanged += OnDataContextChanged;
         control.SizeChanged += OnSizeChanged;
         UpdatePropertyChangedSubscription(control);
-        ScheduleSync(control);
+        RequestSync(control);
     }
 
     private static void Detach(FrameworkElement control)
@@ -174,6 +172,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
         }
 
+        CancelSync(control);
         control.ClearValue(StateProperty);
     }
 
@@ -182,15 +181,15 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         if (sender is FrameworkElement control)
         {
             UpdatePropertyChangedSubscription(control);
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
     private static void OnUnloaded(object? sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement control && control.GetValue(StateProperty) is LayoutState state)
+        if (sender is FrameworkElement control)
         {
-            state.SyncPending = false;
+            CancelSync(control);
         }
     }
 
@@ -202,14 +201,14 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
 
         UpdatePropertyChangedSubscription(control);
-        ScheduleSync(control);
+        RequestSync(control);
     }
 
     private static void OnSizeChanged(object? sender, SizeChangedEventArgs e)
     {
         if (sender is FrameworkElement control)
         {
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
@@ -226,7 +225,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         // 只看与插槽位置有关的属性名：模型侧改别的（标题、颜色）不该重跑一遍测量。
         if (e.PropertyName is null || state.SlotPropertyNames.Contains(e.PropertyName))
         {
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
@@ -277,27 +276,34 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
     }
 
-    // 排到布局之后同步：直接量会读到还没摆好的几何。
-    private static void ScheduleSync(FrameworkElement control)
+    // 排到布局之后同步：直接量会读到还没摆好的几何。同一棵树的请求并进共享批次，到 Render 优先级合并成一次 Flush。
+    private static void RequestSync(FrameworkElement control)
     {
-        if (control.GetValue(StateProperty) is not LayoutState state)
+        if (control.GetValue(StateProperty) is null
+            || control.DataContext is not IWorkflowNodeViewModel node)
         {
             return;
         }
 
-        // 已经在队里了就丢掉这一次：同一拍里的重复请求没有新信息。
-        if (state.SyncPending)
+        var dispatcher = control.Dispatcher;
+        var batch = WorkflowLayoutBatch.For(OwnerOf(control, node), action =>
         {
-            return;
-        }
+            dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(action));
+            return true;
+        });
 
-        state.SyncPending = true;
-        control.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
-        {
-            state.SyncPending = false;
-            Sync(control);
-        }));
+        batch.Request(control, new Action(() => Sync(control)));
+        batch.Schedule();
     }
+
+    private static void CancelSync(FrameworkElement control)
+    {
+        object owner = control.DataContext is IWorkflowNodeViewModel { Parent: { } tree } ? tree : control;
+        WorkflowLayoutBatch.For(owner).Cancel(control);
+    }
+
+    private static object OwnerOf(FrameworkElement control, IWorkflowNodeViewModel node)
+        => node.Parent ?? (object)control;
 
     private static void Sync(FrameworkElement host)
     {

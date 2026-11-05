@@ -52,7 +52,7 @@
 | `TreeHelper.Viewport` | 适配器（`TreeHelper<T>.OnViewportChanged` 同步虚拟化，`Templates/Helpers/TreeHelper.cs` 的 `OnViewportChanged`） | 坐标系是**画布局部** |
 | `CanvasLayout.ViewportOffset` | 适配器，两个方向各一处：滚动时写回、挂树时读出来恢复 | 坐标系是**世界**（与 `ActualOffset` 差一个平移，见 `WorkflowSurfaceMath.ViewportOffsetFromScroll` / `ViewportRestoreScroll`）。成对才有意义，见 [extension.md](extension.md) §3.9-10 |
 | `TreeHelper.VisibleItems` | `WorkflowSpatialEx.VirtualizeCore`（`GUI/Virtualization/WorkflowSpatialEx.cs` 的 `VirtualizeCore`） | 任何地方直接改它都会让空间索引与可见集脱钩 |
-| `slot.Anchor` | 适配器的 slot-layout 行为，在 render 优先级下异步测量后写入 | 见 `GUI/Rendering/WorkflowSlotUpdateGate.cs` 的 `WorkflowSlotUpdateGate` 类声明上方的长注释 |
+| `slot.Anchor` | 适配器的 slot-layout 行为，经 `WorkflowLayoutBatch` 合并后测量写入（布局 pass 同帧 `Flush`，其余触发到渲染优先级 `Schedule`） | 见 [scheduling.md](scheduling.md) 与 `GUI/Rendering/WorkflowSlotUpdateGate.cs` 的 `WorkflowSlotUpdateGate` 类声明上方的长注释 |
 | `VirtualLink` | `StandardSendConnection` / `StandardResetVirtualLink`（`StandardEx/WorkflowTreeEx.cs` 的同名两个方法） | `VirtualLink.Sender/Receiver` 的 Anchor 被直接赋值，不走 setter |
 
 ### 一个反直觉点：`Anchor` / `Size` 的 getter 返回的是「折叠后的临时对象」
@@ -154,7 +154,7 @@ RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/Ru
 ### 3.4 渲染（几何）
 
 ```
-适配器的 slot-layout 行为测量 → 写 slot.Anchor（世界坐标）
+适配器的 slot-layout 行为 → WorkflowLayoutBatch 合并/指纹 → 测量 → 写 slot.Anchor（世界坐标）
 节点视图读 node.Anchor / node.Size  ← getter 按 Layout.Scale 折叠（除以 Scale）
 连线视图读两端 slot.Anchor → 首行调 link.IsRenderReady()  ← NaN 就 return
 ```

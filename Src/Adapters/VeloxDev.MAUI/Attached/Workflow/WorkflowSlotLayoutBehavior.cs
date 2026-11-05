@@ -10,15 +10,7 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
-        public bool SyncPending { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
-
-        /// <summary>
-        /// Coalescing timer that fires once per frame after layout settles.
-        /// Replaces nested BeginInvoke which had fragile ordering dependencies
-        /// on the dispatcher queue across different MAUI platforms.
-        /// </summary>
-        public IDispatcherTimer? SyncTimer { get; set; }
 
         /// <summary>
         /// WinUI-native LayoutUpdated hook (Windows). Object-typed so LayoutState compiles on
@@ -78,7 +70,7 @@ public sealed class WorkflowSlotLayoutBehavior
     public static void SetCoordinateHostName(BindableObject element, string? value) => element.SetValue(CoordinateHostNameProperty, value);
     public static Type? GetCoordinateHostType(BindableObject element) => (Type?)element.GetValue(CoordinateHostTypeProperty);
     public static void SetCoordinateHostType(BindableObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
-    public static void Refresh(ContentView control) => ScheduleSync(control);
+    public static void Refresh(ContentView control) => RequestSync(control, force: true);
 
     private static void OnIsEnabledChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
@@ -117,7 +109,7 @@ public sealed class WorkflowSlotLayoutBehavior
 #endif
 
         UpdatePropertyChangedSubscription(control);
-        ScheduleSync(control);
+        RequestSync(control, force: true);
     }
 
     private static void Detach(ContentView control)
@@ -142,12 +134,6 @@ public sealed class WorkflowSlotLayoutBehavior
                 state.ResizeFallbackActive = false;
             }
 #endif
-            if (state.SyncTimer is not null)
-            {
-                state.SyncTimer.Stop();
-                state.SyncTimer = null;
-            }
-
             if (state.PropertyChangedSource is not null
                 && state.PropertyChangedHandler is not null)
             {
@@ -155,6 +141,7 @@ public sealed class WorkflowSlotLayoutBehavior
             }
         }
 
+        CancelSync(control);
         control.ClearValue(StateProperty);
     }
 
@@ -190,10 +177,11 @@ public sealed class WorkflowSlotLayoutBehavior
             state.NativeLayoutElement = native;
             state.NativeLayoutUpdatedHandler = (_, _) =>
             {
-                // 在 LayoutUpdated 里同步执行：该子树布局已完成，插槽中心是最终值。SyncSlot 的脏检查让几何稳定后的重复趟变成空操作 —— 没有重排链，也不会卡死。
+                // 在 LayoutUpdated 里同步执行：该子树布局已完成，插槽中心是最终值。共享批次先比指纹，
+                // 几何稳定后的重复趟直接跳过；SyncSlot 自己的脏检查再挡掉一次无变化的写入 —— 没有重排链，也不会卡死。
                 if (control.GetValue(StateProperty) is not null)
                 {
-                    Sync(control);
+                    RequestSync(control, force: false);
                 }
             };
             native.LayoutUpdated += state.NativeLayoutUpdatedHandler;
@@ -237,19 +225,15 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (sender is ContentView control)
         {
-            ScheduleSync(control);
+            RequestSync(control, force: true);
         }
     }
 
     private static void OnUnloaded(object? sender, EventArgs e)
     {
-        if (sender is ContentView control && control.GetValue(StateProperty) is LayoutState state)
+        if (sender is ContentView control)
         {
-            state.SyncPending = false;
-            if (state.SyncTimer is not null)
-            {
-                state.SyncTimer.Stop();
-            }
+            CancelSync(control);
         }
     }
 
@@ -259,7 +243,7 @@ public sealed class WorkflowSlotLayoutBehavior
         // （见 git 历史：每格端点跳动）；Windows 改用平台 LayoutUpdated 同步。
         if (sender is ContentView control)
         {
-            Sync(control);
+            RequestSync(control, force: false);
         }
     }
 
@@ -271,7 +255,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         UpdatePropertyChangedSubscription(control);
-        ScheduleSync(control);
+        RequestSync(control, force: true);
     }
 
     private static void UpdatePropertyChangedSubscription(ContentView control)
@@ -295,7 +279,7 @@ public sealed class WorkflowSlotLayoutBehavior
             {
                 if (e.PropertyName is not null && state.SlotPropertyNames.Contains(e.PropertyName))
                 {
-                    ScheduleSync(control);
+                    RequestSync(control, force: true);
                 }
             };
             state.PropertyChangedSource = notify;
@@ -304,32 +288,65 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void ScheduleSync(ContentView control)
+    // 同一棵树的节点共用一个批次：布局 pass 的同步回写走 Flush（同帧），其余触发走 Schedule（一次定时器合并）。
+    // 指纹只看模型几何、实测尺寸与插槽控件数 —— 宿主每帧布局时，没动过的节点在这里就被挡掉了。
+    private static void RequestSync(ContentView control, bool force)
     {
-        if (control.GetValue(StateProperty) is not LayoutState state || state.SyncPending)
+        if (control.GetValue(StateProperty) is null
+            || control.BindingContext is not IWorkflowNodeViewModel node)
         {
             return;
         }
 
-        state.SyncPending = true;
+        var dispatcher = control.Dispatcher;
+        var batch = WorkflowLayoutBatch.For(
+            OwnerOf(control, node), action => PostToUiThread(dispatcher, action));
+        // 已排队的工作可能在行为被摘掉之后才轮到：那一刻不要再量一次。
+        var work = new Action(() =>
+        {
+            if (control.GetValue(StateProperty) is not null)
+            {
+                Sync(control);
+            }
+        });
 
-        // 用 IDispatcherTimer（约一帧延迟）取代嵌套 BeginInvoke：MAUI 没有 WPF 的 DispatcherPriority.Render，原来的两级派发是依赖队列顺序的脆弱 hack。
-        // 逐控件的合并定时器：在两次 tick 之间自然等布局趟；消除与 ViewManager.ApplyLayout（SetLayoutBounds）的竞争；
-        // 跨 Android/iOS/Windows 表现一致；多个快速请求合并成一次 Sync。闭包短命（单次定时器），分配开销可忽略。
-        var timer = control.Dispatcher.CreateTimer();
+        if (force)
+        {
+            batch.Request(control, work);
+            batch.Schedule();
+            return;
+        }
+
+        var stamp = WorkflowLayoutStamp.Capture(
+            node, control.Width, control.Height, CountSlotControls(control));
+        if (batch.Request(control, stamp, work))
+        {
+            batch.Flush();
+        }
+    }
+
+    private static void CancelSync(ContentView control)
+    {
+        object owner = control.BindingContext is IWorkflowNodeViewModel { Parent: { } tree } ? tree : control;
+        WorkflowLayoutBatch.For(owner).Cancel(control);
+    }
+
+    private static object OwnerOf(ContentView control, IWorkflowNodeViewModel node)
+        => node.Parent ?? (object)control;
+
+    private static bool PostToUiThread(IDispatcher dispatcher, Action flush)
+    {
+        // 用 IDispatcherTimer（约一帧延迟）取代嵌套 BeginInvoke：MAUI 没有 WPF 的 DispatcherPriority.Render，
+        // 原来的两级派发是依赖队列顺序的脆弱 hack。共享批次保证一次请求潮只创建一个定时器。
+        var timer = dispatcher.CreateTimer();
         timer.Interval = TimeSpan.FromMilliseconds(16);  // ≈1 frame
         timer.IsRepeating = false;
-        timer.Tick += (s, e) =>
+        timer.Tick += (_, _) =>
         {
             try
             {
                 timer.Stop();
-                if (control.GetValue(StateProperty) is not LayoutState currentState)
-                    return;
-
-                currentState.SyncPending = false;
-                currentState.SyncTimer = null;
-                Sync(control);
+                flush();
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -339,7 +356,31 @@ public sealed class WorkflowSlotLayoutBehavior
             }
         };
         timer.Start();
-        state.SyncTimer = timer;
+        return true;
+    }
+
+    // 指纹里的插槽数：容器数量变了（枚举插槽增删、模板重建）必须重测，哪怕节点外框尺寸没变。
+    private static int CountSlotControls(ContentView control)
+    {
+        var count = 0;
+
+        foreach (var name in GetAllSlotNames(control))
+        {
+            if (!string.IsNullOrWhiteSpace(name) && control.FindByName<VisualElement>(name) is not null)
+            {
+                count++;
+            }
+        }
+
+        foreach (var name in GetAllSlotEnumeratorNames(control))
+        {
+            if (!string.IsNullOrWhiteSpace(name) && control.FindByName<Layout>(name) is { } layout)
+            {
+                count += layout.Children.Count;
+            }
+        }
+
+        return count;
     }
 
     private static void Sync(ContentView control)
@@ -354,7 +395,7 @@ public sealed class WorkflowSlotLayoutBehavior
         var slotNames = GetAllSlotNames(control);
         var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-        // 重建「变化时该触发 ScheduleSync」的属性名集合。
+        // 重建「变化时该触发同步」的属性名集合。
         if (control.GetValue(StateProperty) is LayoutState state)
         {
             state.SlotPropertyNames.Clear();
@@ -452,7 +493,7 @@ public sealed class WorkflowSlotLayoutBehavior
                 center.Value.X, center.Value.Y, slot.Anchor.Layer);
         }
 
-        // 脏检查：锚点值没变就跳过，避免无限循环 SyncSlot → slot.Anchor setter → PropertyChanged → ApplyLayout → MAUI 布局 → SizeChanged/X/Y → ScheduleSync → SyncSlot ……
+        // 脏检查：锚点值没变就跳过，避免无限循环 SyncSlot → slot.Anchor setter → PropertyChanged → ApplyLayout → MAUI 布局 → SizeChanged/X/Y → 请求同步 → SyncSlot ……
         if (slot.Anchor.Horizontal == newAnchor.Horizontal && slot.Anchor.Vertical == newAnchor.Vertical)
             return;
 

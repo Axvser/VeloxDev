@@ -19,7 +19,6 @@ public sealed class WorkflowSlotLayoutBehavior
         public bool IsEnabled { get; set; }
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
-        public bool SyncPending { get; set; }
         public string? SlotNames { get; set; }
         public string? SlotEnumeratorNames { get; set; }
         public string? CoordinateHostName { get; set; }
@@ -91,7 +90,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         GetState(element).SlotNames = value;
-        ScheduleSync(element);
+        RequestSync(element);
     }
 
     /// <summary>
@@ -118,7 +117,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         GetState(element).SlotEnumeratorNames = value;
-        ScheduleSync(element);
+        RequestSync(element);
     }
 
     /// <summary>
@@ -145,7 +144,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         GetState(element).CoordinateHostName = value;
-        ScheduleSync(element);
+        RequestSync(element);
     }
 
     /// <summary>
@@ -172,7 +171,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         GetState(element).CoordinateHostType = value;
-        ScheduleSync(element);
+        RequestSync(element);
     }
 
     /// <summary>
@@ -199,7 +198,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         GetState(element).ParentHostName = value;
-        ScheduleSync(element);
+        RequestSync(element);
     }
 
     /// <summary>
@@ -212,7 +211,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(control));
         }
 
-        ScheduleSync(control);
+        RequestSync(control);
     }
 
     /// <summary>
@@ -243,7 +242,7 @@ public sealed class WorkflowSlotLayoutBehavior
 
         if (!control.IsHandleCreated)
         {
-            ScheduleSync(control);
+            RequestSync(control);
             return;
         }
 
@@ -254,7 +253,7 @@ public sealed class WorkflowSlotLayoutBehavior
         catch (InvalidOperationException)
         {
             // 后代插槽控件还没有可用几何（例如在句柄创建期间、子句柄尚未存在时被调用）；重新排队，让锚点在布局落定后仍能落下。
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
@@ -269,7 +268,7 @@ public sealed class WorkflowSlotLayoutBehavior
         control.ControlRemoved += OnControlCollectionChanged;
         control.Disposed += OnDisposed;
         UpdatePropertyChangedSubscription(control, state);
-        ScheduleSync(control);
+        RequestSync(control);
     }
 
     private static void Detach(Control control)
@@ -294,14 +293,14 @@ public sealed class WorkflowSlotLayoutBehavior
             state.PropertyChangedHandler = null;
         }
 
-        state.SyncPending = false;
+        CancelSync(control);
     }
 
     private static void OnHandleCreated(object? sender, EventArgs e)
     {
         if (sender is Control control)
         {
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
@@ -309,7 +308,7 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (sender is Control control && control.Visible)
         {
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
@@ -317,7 +316,7 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (sender is Control control)
         {
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
@@ -325,7 +324,7 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (sender is Control control)
         {
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
@@ -333,7 +332,7 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (sender is Control control)
         {
-            ScheduleSync(control);
+            RequestSync(control);
         }
     }
 
@@ -354,7 +353,7 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
-        ScheduleSync(control);
+        RequestSync(control);
     }
 
     private static void UpdatePropertyChangedSubscription(Control control, LayoutState state)
@@ -381,32 +380,53 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void ScheduleSync(Control control)
+    // 同一棵树的请求并进共享批次，由一次 BeginInvoke 合并执行；句柄还没建好时留在队里，下一次触发再排。
+    private static void RequestSync(Control control)
     {
-        if (!States.TryGetValue(control, out var state) || !state.IsEnabled || state.SyncPending)
+        if (!States.TryGetValue(control, out var state) || !state.IsEnabled)
         {
             return;
         }
 
-        state.SyncPending = true;
-        Action sync = () =>
+        var node = ResolveNode(control);
+        object owner = node?.Parent ?? (object)control;
+        var target = control.FindForm() ?? control;
+        var batch = WorkflowLayoutBatch.For(owner, action => Post(target, action));
+
+        // 已排队的工作可能在行为被关掉之后才轮到：那一刻不要再量一次。
+        batch.Request(control, new Action(() =>
         {
-            if (!States.TryGetValue(control, out var currentState) || control.IsDisposed)
+            if (States.TryGetValue(control, out var current) && current.IsEnabled)
             {
-                return;
+                Sync(control);
             }
+        }));
+        batch.Schedule();
+    }
 
-            currentState.SyncPending = false;
-            Sync(control);
-        };
+    private static void CancelSync(Control control)
+    {
+        object owner = ResolveNode(control)?.Parent ?? (object)control;
+        WorkflowLayoutBatch.For(owner).Cancel(control);
+    }
 
-        if (control.IsHandleCreated)
+    // 窗口正在销毁时 BeginInvoke 会抛 InvalidOperationException；返回 false 让批次保留队列、等下一个触发再试。
+    private static bool Post(Control target, Action flush)
+    {
+        if (target.IsDisposed || !target.IsHandleCreated)
         {
-            control.BeginInvoke(sync);
-            return;
+            return false;
         }
 
-        state.SyncPending = false;
+        try
+        {
+            target.BeginInvoke(flush);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     private static void Sync(Control control)
@@ -430,7 +450,7 @@ public sealed class WorkflowSlotLayoutBehavior
         var slotNames = GetAllSlotNames(control);
         var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-        // 重建「变化时该触发 ScheduleSync」的属性名集合。
+        // 重建「变化时该触发同步」的属性名集合。
         if (state is not null)
         {
             state.SlotPropertyNames.Clear();

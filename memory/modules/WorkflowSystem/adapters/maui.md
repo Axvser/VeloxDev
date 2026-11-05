@@ -49,12 +49,12 @@
   按类型记进 `_unsupportedTypes` 字段跳过 —— 不排队、不重复抛。于是**只有节点模板的 demo/模板可以把
   `ViewPool.ItemsSource` 直绑 `Helper.VisibleItems`**，连线交给共享链接层画，池不再需要模板侧的过滤包装
   （原 `NodeOnlyVisibleItems` 已从模板与两个 demo 删除）。
-- 槽位同步：同样 16ms，但语义是**合并**（同一控件多次请求只留一次 `Sync`），`WorkflowSlotLayoutBehavior.cs` 的 `ScheduleSync`。
+- 槽位同步：同样 16ms，但定时器从「每控件一个」改为**每棵树的共享批次一个**（`WorkflowLayoutBatch` 的 `Schedule`，post 由 `WorkflowSlotLayoutBehavior.RequestSync` 提供），合并范围也从单控件扩到整棵树；布局 pass 那条（Windows 原生 `LayoutUpdated` / 非 Windows `SizeChanged`）仍同步 `Flush`，见 [../scheduling.md](../scheduling.md)。
 - **这两个 `IsRepeating = false` 与 Transition 侧 pacer 的 `IsRepeating = true` 不矛盾**：pacer 的定时器每拍由
   `FramePacerCore.Fire()` 先 `Disarm()`，重复正是为了让下一拍还在；这两个是「干完这一批就停、需要时再排」。
   照抄 `IsRepeating` 的取值前先确认你要的是哪一种（对位：`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/TransitionInterpreter.cs` 的 `IsRepeating` 设置）。
 - 两个定时器的 `Tick` 都必须自带 try：`IDispatcherTimer.Tick` 抛出的异常 MAUI 不接，直接冒到 WinUI 的
-  `UnhandledException`（dotnet/maui #12245，`ViewManager.cs` 的 `OnBatchTimerTick`、`WorkflowSlotLayoutBehavior.cs` 的 `ScheduleSync`）。
+  `UnhandledException`（dotnet/maui #12245，`ViewManager.cs` 的 `OnBatchTimerTick`、`WorkflowSlotLayoutBehavior.cs` 的 `PostToUiThread`）。
 
 ### 2. `GraphicsView` 的 `Draw` 回调没有异常保护
 
