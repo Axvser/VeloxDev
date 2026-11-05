@@ -42,7 +42,7 @@ var agent = chatClient.AsAIAgent([skills.CreateContextProvider()]);
 
 ## The disk format
 
-A disk skill is `<root>/<name>/SKILL.md` with `---` frontmatter carrying `name` and `description` — the same layout as a Claude Skill.
+A disk skill is `<root>/<name>/SKILL.md` with `---` frontmatter carrying `name` and `description` — the Agent Skills layout.
 
 - The directory name equals the frontmatter `name`.
 - The name is lowercase kebab-case, at most 64 characters.

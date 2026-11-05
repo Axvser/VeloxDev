@@ -1,9 +1,8 @@
 # Skills
 
-Claude Code skills this repository ships. The seven developer skills are for developers using the
+Skills this repository ships. The seven developer skills are for developers using the
 library; `veloxdev-use-workflow-cli/` is an operator skill for the shipped headless CLI/MCP server.
-All of them are part of the repository, not of anyone's local configuration — the copies under a
-machine's `.claude/skills/` are installs of these.
+All of them are part of the repository, not of anyone's local configuration.
 
 ## What these skills are for
 
@@ -42,23 +41,11 @@ A skill has one `SKILL.md` and, when it needs depth, a `references/` directory w
 
 ⚙ **No line-number citations.** A skill is self-contained outside this repository: it names types, members, files and commands, and it carries the guiding code. Line numbers rot when the source moves.
 
-## Install
-
-Copy the skill's **whole directory** into the `.claude/skills/` of the project you are working in — the `SKILL.md` and its `references/` folder when it ships one:
-
-```text
-<your project>/.claude/skills/<skill-name>/
-├─ SKILL.md
-└─ references/
-```
-
-Copy it to `~/.claude/skills/` instead to have it available in every project on that machine.
-
-The seven developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, and `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so install all seven when you can, and read a dead cross-link as "install that skill, or find the same rule in this one".
+The seven developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, and `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so keep all seven together when you can, and read a dead cross-link as "that skill is not at hand, or find the same rule in this one".
 
 `veloxdev-use-workflow-cli` is a standalone operator skill: it covers obtaining and launching the CLI, and drives the workflow through the tool surface. It does not require the developer skills; its one cross-link to `veloxdev-drive-workflow-with-ai` is for the underlying tool semantics, and the CLI reference in the repository covers the same ground.
 
-The **directory name is the skill name** — it has to match the `name:` in the file's frontmatter. Claude Code reads the frontmatter `description` and loads the skill on its own when a request matches.
+The **directory name is the skill name** — it has to match the `name:` in the file's frontmatter.
 
 A skill may ship a `references/` directory beside its `SKILL.md`. Those files are not loaded up front; the skill points at the one that fits the task, so a large subsystem can be documented without every session paying for it.
 
