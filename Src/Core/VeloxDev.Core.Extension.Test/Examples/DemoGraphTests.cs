@@ -195,6 +195,26 @@ public class DemoGraphTests
     }
 
     /// <summary>
+    /// The redirect pass must hand the generator the same kind of payload the first pass did. The engine skips
+    /// the ticker and the source selector and restores their output into <c>Data</c>; without that restoration the
+    /// second pass started from null, which every real script refuses (<c>d.get</c> on <c>None</c>) — the run then
+    /// looped back forever instead of reaching a report. The stubs ignore their input, so this assertion is what
+    /// keeps the gap visible at the demo level.
+    /// </summary>
+    [TestMethod]
+    public async Task TheRedirectPass_HandsTheGeneratorTheTickersPayloadAgain()
+    {
+        var session = await RunAsync(Stubbed());
+
+        var trail = ((StubPythonHelper)PythonNode(session, "Generate Dataset").GetHelper()).Trail;
+        Assert.HasCount(2, trail, "the generator is driven once per pass");
+        Assert.IsFalse(trail[0].Contains("payload=null", StringComparison.Ordinal),
+            "pass 1 drives the generator with the ticker's output");
+        Assert.IsFalse(trail[1].Contains("payload=null", StringComparison.Ordinal),
+            $"the redirect pass must restore the skipped prefix's output into Data; trail: {string.Join(" ; ", trail)}");
+    }
+
+    /// <summary>
     /// A fresh run is a new round. Nodes it does not drive must not keep the previous round's Completed pill,
     /// or the canvas reads as "this one run finished two branches" while only one of them actually produced a
     /// report. Resume is the exception: there, the already-done nodes are exactly what it carries on from.

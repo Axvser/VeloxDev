@@ -397,6 +397,20 @@ public sealed partial class RuntimeContext : IRuntimeContext
         _completed.Clear();
     }
 
+    // 重定向那一趟会跳过目标之前的节点，但它们的产物仍是这一趟的输入。按驱动顺序把这些产物补回 Data，
+    // 目标才拿得到与上一趟相同的载荷；这里刻意不套「本趟 / 保留前缀」的过滤 —— 要取的正是上一趟的条目。
+    internal bool TryGetRegisteredOutput(IWorkflowNodeViewModel node, out object? value)
+    {
+        if (_outputs.TryGetValue(node, out var entry))
+        {
+            value = entry.Value;
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
     /// <summary>
     /// Collects the outputs of a group of input nodes into a read-only dictionary; unregistered nodes are absent
     /// (TryGetValue returns false).

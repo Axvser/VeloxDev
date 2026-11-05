@@ -73,6 +73,10 @@ public sealed class RuntimeEngine
         if (session is not null) session.CheckpointNodes = nodes;
         var done = resumeFrom is null ? null : Restore(context, nodes, resumeFrom);
 
+        // 重定向重跑从这一轮最初进图时的载荷起步：目标若是图的首节点，它没有可跳过的前缀，唯一的输入
+        // 就是这份 seed。其余情况下，每跳过一个前缀节点都会用它的产物覆盖 Data（RunExecuteAsync）。
+        var passSeed = context.Data;
+
         int? redirectTarget = null;
         var redirects = 0;
         try
@@ -87,6 +91,7 @@ public sealed class RuntimeEngine
                 if (redirects == 0)
                     await ObserveAsync(session, context, ExecutionObservationKind.RunStarted, null, null, TimeSpan.Zero, ct);
                 context.PendingRedirectTarget = null;
+                if (redirects > 0) context.Data = passSeed;
                 context.ActiveRedirectTarget = redirectTarget;   // null on the first pass; output collection uses it to tell contract-preserved prefix from stale branches
                 // 已经做完的节点只在恢复的那一轮跳过；重定向要的就是重新驱动，从那一轮起交回按 Order 的旧规则。
                 var terminated = await RunGraphAsync(graph, context, ct, redirectTarget, redirects == 0 ? done : null);
@@ -179,7 +184,13 @@ public sealed class RuntimeEngine
 
             // Cross-chain redirect skip semantics: nodes before the target are not driven.
             if (redirectTarget is int t && order < t)
+            {
+                // 跳过不等于没发生：目标读的是链式 Data，不是产物表。把被跳节点的产物按顺序补回 Data，
+                // 目标才拿到与上一趟相同的载荷；不补时它拿到的是上一趟结尾留下的 null。
+                if (session is not null && session.TryGetRegisteredOutput(node, out var preserved))
+                    context.Data = preserved;
                 continue;
+            }
 
             // 恢复：检查点里已经做完的节点不再驱动 —— 它的效果已经在那儿了，重跑只会把副作用做第二遍。
             // 注意这里按「节点」而不是按 Order：扇出里几个分支的 Order 是交错的，一个阈值会连带跳过没跑过的兄弟。
@@ -311,7 +322,14 @@ public sealed class RuntimeEngine
         // 日志里有 `Redirecting to #3`，第二趟却一个节点都没驱动（2026-09-27 实测，做 demo 那张图时撞上）。
         // 目标正好是路由器时也走这一支：**只重选路、不重算**（路由器自己的 ReceiveAsync 不驱动）。
         if (redirectTarget is not int target || target < routerOrder)
+        {
             await DriveAsync(branch.Router, context, ct);
+        }
+        else if (session is not null && session.TryGetRegisteredOutput(branch.Router, out var routerOutput))
+        {
+            // 路由器被跳过（目标在它之后，或目标就是它）时，分支的输入就是它上一趟的输出。
+            context.Data = routerOutput;
+        }
 
         if (branch.Router is ICompileTimeRouter router)
         {

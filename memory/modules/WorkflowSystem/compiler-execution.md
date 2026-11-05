@@ -158,11 +158,12 @@
 
 **demo 侧已接（2026-09-27）**：门与检查点是六个能力里唯一「得有人按一下」的两件（其余四件在运行里自己生效），所以它们在 demo 里有可点的东西 —— `WorkflowDemoSession.Gate` 交给每一轮运行、`HasCheckpoint` 给按钮判可用；`ControllerViewModel` 因此有了 `ResumeCommand`（`Run`/`Resume` 共用 `DriveAsync`，`CheckpointSource` 由会话注册且是 `internal`，所以不进序列化）。**七家 demo 现在都有**一块「运行控制」（Pause / Resume / 从检查点继续）：Avalonia / WPF / WinUI / MAUI / Blazor / Jalium 放在各自宿主外壳的侧栏，WinForms 放在 `Form1` 的工具栏（与「停止工作流 / 重置示例」同一排）。**放在外壳而不是节点卡上**是有理由的：门与检查点是**会话级**的，而节点卡（如 WinForms 的 `Controls/WorkflowNodeCard.cs` 的 `BuildController`，那四个 Compile/Run/Stop/Close 按钮所在处）上下文只有节点 VM，要够到会话得顺着 `Parent` 往上爬。两点值得记：`ConfigureRun` 每次都 `Gate.Resume()`（一轮运行不带着上一轮的暂停开始）⇒ **「运行前先暂停」不成立**，暂停只能在运行中途按（也正是 UI 的用法）；以及会话的暂存目录可指定（`Create(scratchDirectory)`）—— 并行测试各自一个目录，否则日志与检查点这两条**固定路径**会互相踩。
 
-## 十二、重定向与分支的三处边界（2026-09-27 实测，做 demo 那张展示图时撞出来的）
+## 十二、重定向与分支的四处边界（2026-09-27 实测，做 demo 那张展示图时撞出来的）
 
 1. **目标落进（嵌套）分支内部时，分支照进、只跳「目标之前」的节点。** `RunBranchAsync` 不整分支跳过：分支一律进，跳节点交给「**目标之前不驱动**」这条统一规则；路由器的驱动条件是 `target < routerOrder` —— 目标在路由器之后（含落在分支内部）时，路由器属于保留前缀、**不再驱动**。写成 `routerOrder < t` 会把「目标落在分支内部」误判成「整条跳过」，那一趟**一个节点都不会重跑**（实测：日志有 `Redirecting to compile state #3 …`，第二趟零驱动，运行照样 `Completed`）。`RuntimeRedirectTests.RedirectIntoABranch_EntersIt_AndDrivesFromTheTargetInside` 是判别测试：目标在分支内被驱动 2 次。demo 的回退目标 `Generate Dataset` 就落在分支内部，正是这条的实例。
 2. **一条分支的所有选项都通向的节点，只会被编进其中一个选项。** demo 里 `Publish` 挂在三个报告节点之后 ⇒ 编译器把它编进遍历时先遇到的那个选项（实测它的 order 11 只属于 `Zero` 选项）⇒ 路由到 `Low` 的那一轮它根本不跑。想「分支之后再收拢」的步骤，得放到分支**之前**。
 3. **报错的驱动记 null；接受回退的那一趟在请求点结束。** 报错本身仍把这次驱动记成 `null`（§六），但一旦回退目标被接受，`RunExecuteAsync` 立即跳出、`RunGraphAsync` 不再驱动后续 entry ⇒ 尾巴**不会**再收到这一趟的 null。回退被拒绝（返回 `null` / 目标不在上游）时链条照常继续，尾巴才拿到 null —— demo 脚本里「空载荷就记一行 warning」的分支仍然覆盖后者。
+4. **跳过前缀时要把前缀的产物补回 `Data`。** 目标读的是链式 `Data`，不是产物表；只跳过不补，目标拿到的是上一趟结尾留下的 null（往往正是报错节点写下的）。真实节点会在第二趟直接失败，之后每趟都回退、直到 50 次上限 —— demo 的 `Generate Dataset` 就是实例（2026-11-06 实测：真实 Python 下第二趟输入为 null，`d.get` 抛异常，audit 每趟只看到 0 个样本）。stub 测试曾把这条盖住，因为 `StubPythonHelper` 不看输入。实现：`RuntimeContext.TryGetRegisteredOutput` 读上一趟登记的产物；`RuntimeEngine.RunExecuteAsync` 在 `order < target` 的跳过分支里按驱动顺序写回 `context.Data`；`RunBranchAsync` 在路由器被跳过（目标在它之后，或目标就是它）时写回路由器的产物。目标若是图的首节点、没有前缀可恢复，`RunAsync` 在每趟重定向开始时先把 `Data` 重置为这一轮的 seed（`passSeed`）。守卫：`RuntimeRedirectTests.RedirectTarget_ReceivesTheSkippedPrefixsOutput_NotTheLastPassesNull`、`RedirectIntoABranch_RestoresTheRoutersOutputAsTheBranchesPayload`、`RedirectToTheFirstNode_ReplaysTheRunsSeedPayload`，以及 `DemoGraphTests.TheRedirectPass_HandsTheGeneratorTheTickersPayloadAgain`。
 
 ## 十三、未做（别当成遗漏）
 

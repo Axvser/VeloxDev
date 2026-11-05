@@ -44,6 +44,64 @@ public class RuntimeRedirectTests
         Assert.IsFalse(session.EndedWithError, "a handled redirect does not end the flow as an error");
     }
 
+    /// <summary>
+    /// The skipped prefix does not re-run, but the target still reads the chain's payload. Its input must be the
+    /// output the last skipped node produced, not whatever the previous pass happened to leave behind (usually
+    /// null after the failing node reported an error).
+    /// </summary>
+    [TestMethod]
+    public async Task RedirectTarget_ReceivesTheSkippedPrefixsOutput_NotTheLastPassesNull()
+    {
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var b = new ProbeNode("b") { Handler = (_, _) => "B" };
+        var c = new RedirectableNode("c")
+        {
+            Handler = (ctx, _) =>
+            {
+                if (OnAttempt(ctx, 1)) throw new InvalidOperationException("c wants to go back");
+                return "C";
+            },
+            Resolve = _ => b,
+        };
+        ProbeGraph.Wire(a, b);
+        ProbeGraph.Wire(b, c);
+        var graph = ProbeGraph.Compile(a);
+
+        var session = await ProbeGraph.RunAsync(graph);
+
+        Assert.AreEqual(2, session.Attempt);
+        Assert.HasCount(2, b.Calls);
+        Assert.AreEqual("A", b.Calls[1].Data,
+            "the target is driven with the skipped prefix's output, exactly as it was on the first pass");
+    }
+
+    /// <summary>
+    /// A redirect back to the graph's first node has no skipped prefix to restore from, so the target must start
+    /// from the run's original seed again — not from whatever the failing pass left in Data.
+    /// </summary>
+    [TestMethod]
+    public async Task RedirectToTheFirstNode_ReplaysTheRunsSeedPayload()
+    {
+        var a = new ProbeNode("a") { Handler = (_, _) => "A" };
+        var b = new RedirectableNode("b")
+        {
+            Handler = (ctx, _) =>
+            {
+                if (OnAttempt(ctx, 1)) throw new InvalidOperationException("b wants to go back");
+                return "B";
+            },
+            Resolve = _ => a,
+        };
+        ProbeGraph.Wire(a, b);
+        var graph = ProbeGraph.Compile(a);
+
+        var session = await ProbeGraph.RunAsync(graph, seed: "SEED");
+
+        Assert.AreEqual(2, session.Attempt);
+        Assert.HasCount(2, a.Calls);
+        Assert.AreEqual("SEED", a.Calls[1].Data, "the first node is re-driven with the run's seed");
+    }
+
     [TestMethod]
     public async Task RedirectTargetNotAnUpstreamNode_IsIgnored_FlowCompletesSinglePass()
     {
@@ -134,6 +192,41 @@ public class RuntimeRedirectTests
         Assert.HasCount(2, y.Calls, "and the node behind it too");
         Assert.HasCount(1, router.Calls, "the router is before the target: preserved prefix, not driven again");
         Assert.AreEqual("Completed", session.Status);
+    }
+
+    /// <summary>
+    /// The same restoration through a router. The router is skipped as part of the prefix, and the first node of
+    /// the branch must still see the router's output — the payload it received on the first pass.
+    /// </summary>
+    [TestMethod]
+    public async Task RedirectIntoABranch_RestoresTheRoutersOutputAsTheBranchesPayload()
+    {
+        var router = new RouterNode("router")
+        {
+            Handler = (_, _) => "ROUTED",
+            CompileMode = RouterCompileMode.Dynamic,
+            Selection = "A",
+        };
+        var x = new ProbeNode("x");
+        var y = new RedirectableNode("y");
+        router.RouteTable["A"] = [x];
+        ProbeGraph.Wire(router, x);
+        ProbeGraph.Wire(x, y);
+        var graph = ProbeGraph.Compile(router);
+
+        y.Handler = (ctx, _) =>
+        {
+            if (OnAttempt(ctx, 1)) throw new InvalidOperationException("go back to x");
+            return "Y";
+        };
+        y.Resolve = _ => x;
+
+        var session = await ProbeGraph.RunAsync(graph);
+
+        Assert.AreEqual(2, session.Attempt);
+        Assert.HasCount(2, x.Calls);
+        Assert.AreEqual("ROUTED", x.Calls[1].Data,
+            "the skipped router's output is the branch's payload on the re-run");
     }
 
     [TestMethod]
