@@ -86,4 +86,57 @@ public class WeakCacheTests
         Assert.AreEqual("value19", val);
         GC.KeepAlive(keys);
     }
+
+    [TestMethod]
+    public void AddOrUpdate_SameTargetTwice_ForeachVisitsOnce()
+    {
+        var cache = new WeakCache<string, string>();
+        cache.AddOrUpdate("k1", "old");
+        cache.AddOrUpdate("k1", "new");
+        var visits = 0;
+
+        cache.ForeachCache((_, _) => visits++);
+
+        Assert.AreEqual(1, visits);
+    }
+
+    [TestMethod]
+    public void Remove_AfterUpdate_ForeachVisitsNothing()
+    {
+        var cache = new WeakCache<string, string>();
+        cache.AddOrUpdate("k1", "old");
+        cache.AddOrUpdate("k1", "new");
+        cache.Remove("k1");
+        var visits = 0;
+
+        cache.ForeachCache((_, _) => visits++);
+
+        Assert.AreEqual(0, visits);
+    }
+
+    [TestMethod]
+    public void ForeachCache_CallbackWaitingOnAnotherThreadWrite_DoesNotDeadlock()
+    {
+        var cache = new WeakCache<string, string>();
+        cache.AddOrUpdate("k1", "v1");
+        var completed = false;
+
+        cache.ForeachCache((_, _) =>
+            completed = Task.Run(() => cache.AddOrUpdate("k2", "v2")).Wait(TimeSpan.FromSeconds(2)));
+
+        Assert.IsTrue(completed);
+    }
+
+    [TestMethod]
+    public void TryGetCache_WhileForeachCallbackRuns_IsNotBlocked()
+    {
+        var cache = new WeakCache<string, string>();
+        cache.AddOrUpdate("k1", "v1");
+        var completed = false;
+
+        cache.ForeachCache((_, _) =>
+            completed = Task.Run(() => cache.TryGetCache("k1", out _)).Wait(TimeSpan.FromSeconds(2)));
+
+        Assert.IsTrue(completed);
+    }
 }

@@ -32,16 +32,17 @@
 
 ### 3. 迭代期间不要在回调/循环体里改容器 —— 锁救不了你
 
-`lock` 对同一线程可重入，所以下面两种写法**能拿到锁**，然后当场抛 `InvalidOperationException`：
+`lock` 对同一线程可重入，所以下面的写法**能拿到锁**，然后当场抛 `InvalidOperationException`：
 
-- `WeakCache.ForeachCache((k, v) => cache.AddOrUpdate(...))` —— 回调在锁内执行（`WeakCache.ForeachCache`），`_targets` 正在 `foreach` 却被 `AddOrUpdate`/`Remove` 的 `RemoveAll`/`Add` 改；
 - `foreach (var item in queue) queue.Enqueue(...)` —— `yield return` 在锁内且在 `_references` 的 `foreach` 里（`WeakQueue.GetEnumerator`），`Enqueue` 会改同一个 `Queue`。
+
+`WeakCache.ForeachCache` 是例外：回调在锁外跑快照，可以在里面读写本缓存。**不要把它改回「锁内回调」**—— 那会让回调里等待另一线程写入时死锁，`WeakCacheTests.ForeachCache_CallbackWaitingOnAnotherThreadWrite_DoesNotDeadlock` 会先失败。
 
 **官方**：先 `ToList()` 再遍历（`WeakQueueTests.Enumerable_ReturnsAllLiveItems` / `WeakStackTests.Enumerable_ReturnsAllLiveItems` 之类的用法），或在遍历外收集要加/删的项。
 
-### 4. 别调 `_perceptionThreshold`
+### 4. 清扫阈值不对外
 
-它是 **public 字段**（`WeakCache._perceptionThreshold`），但：改它不受锁保护（`_counter` 私有且在锁内改）、改了也不影响 `ForeachCache` 的每次全清、而且它按清理后存活数自适应重算（`AddOrUpdate` / `GetNextCleanupThreshold`），外部写的值会在下一次清理后被覆盖。想改阈值就改字段初值那一行。
+`WeakCache._perceptionThreshold` 是 `private`，按清理后存活数自适应重算（`AddOrUpdate` / `GetNextCleanupThreshold`）。想改初始阈值就改字段初值那一行；**不要为此把它重新公开** —— 外部写入不受 `_lock` 保护，且会在下一次清理后被覆盖。
 
 ### 5. 别指望"确定性地回收"
 

@@ -16,7 +16,7 @@
 | 容器 | 弱的是 | 强引用/被谁钉住 | 谁清扫、什么时候 | 生产消费者 |
 |---|---|---|---|---|
 | `WeakDelegate<TDelegate>` | 只有账本 `List<WeakReference<Delegate>>`（`WeakDelegate._handlers`） | **`_combinedDelegate`（`volatile`）把组合出来的每个 handler 都钉住**；它由 `Delegate.Combine` 拼成（`WeakDelegate.RebuildCache`） | 只在 `RebuildCache()` 里，即 `AddHandler`/`RemoveHandler` 且 `CanUpdateCache:true`、缓存为 null 时的 `GetInvocationList()`、`Clone()` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的一组 `WeakDelegate` 事件字段 —— **全仓唯一** |
-| `WeakCache<TTargetKey,TCacheKey>` | 键：`ConditionalWeakTable<TTargetKey,TCacheKey>`（`WeakCache._caches`） | **值**（`TCacheKey`）由 CWT 保活至键死；另有 `_targets` 作可枚举索引，它才是 `ForeachCache` 真正遍历的东西 | 两处：`ForeachCache` 每次调用都全清；`AddOrUpdate` 按计数器阈值定期清 | **零**（只有测试，见 §二） |
+| `WeakCache<TTargetKey,TCacheKey>` | 键：`ConditionalWeakTable<TTargetKey,Entry>`（`WeakCache._caches`） | **值**装在私有 `Entry` 里由 CWT 保活至键死；`Entry.Target` 是登记进 `_targets`（`HashSet<WeakReference<TTargetKey>>`）的同一个弱引用，`_targets` 才是 `ForeachCache` 真正遍历的东西 | 两处：`ForeachCache` 每次调用都全清；`AddOrUpdate` 插入**新键**时按计数器阈值定期清 | **零**（只有测试，见 §二） |
 | `WeakQueue<T>` | 值：`Queue<WeakReference<T>>`（`WeakQueue._references`） | 无强引用侧 | 访问即清扫（`Count`/`TryDequeue`/`TryPeek`/`TrimExcess`/`GetEnumerator`） | **零** |
 | `WeakStack<T>` | 值：`Stack<WeakReference<T>>`（`WeakStack._references`） | 无强引用侧 | 同上（`TryPop` 代替 `TryDequeue`） | **零** |
 
@@ -69,13 +69,14 @@
 ### `WeakCache` —— 计数阈值 + 每次遍历全清
 
 ```
-AddOrUpdate: if (_counter > _perceptionThreshold) { _targets.RemoveAll(dead); _counter = 0; _perceptionThreshold = GetNextCleanupThreshold(_targets.Count); }   // AddOrUpdate
+AddOrUpdate（仅新键）: if (_counter > _perceptionThreshold) { _targets.RemoveWhere(dead); _counter = 0; _perceptionThreshold = GetNextCleanupThreshold(_targets.Count); }   // AddOrUpdate
 GetNextCleanupThreshold: (count == 0 ? 4 : count * 2) * 0.9 取整   // GetNextCleanupThreshold
 ```
 
-- 初值 `_perceptionThreshold = 4`，**是一个 public 字段**，外部可随时改，而 `_counter` 私有 —— 所以外部能把清理周期压到每 1 次插入一次，或抬到永不触发。
+- 初值 `_perceptionThreshold = 4`，是 `private` 字段，只在锁内读写。
+- 已存在的键再 `AddOrUpdate` 只替换 `Entry.Value` 就返回：不计数、不触发清扫。
 - 阈值自适应但**按清理后的存活数**算，且 `* 0.9` 是整数截断：`_targets.Count == 20` 时下一次阈值是 `36`。
-- `ForeachCache` 每次调用都 `RemoveAll` 死键，**但不重置 `_counter` 也不改 `_perceptionThreshold`** —— 两条清理路径的账本不共享。
+- `ForeachCache` 每次调用都 `RemoveWhere` 死键，**但不重置 `_counter` 也不改 `_perceptionThreshold`** —— 两条清理路径的账本不共享。
 
 ### `WeakQueue` / `WeakStack` —— 访问即清扫，`Prune()` 是 O(n) 重建
 
@@ -100,12 +101,14 @@ GetNextCleanupThreshold: (count == 0 ? 4 : count * 2) * 0.9 取整   // GetNextC
 | `WeakDelegate` 其余成员 | 单把 `_lock` | 无 | `Clone()` 在自己的锁内调用**新对象**的 `GetInvocationList()`，两把不同的锁，不构成死锁 |
 | `WeakQueue.Count` | 有 | `_references.Count`（非 volatile） | 快速路径把"空"直接判定为 0；"非空"进锁重算，所以只会多做一次 Prune，不会漏报 |
 | `WeakQueue`/`WeakStack` 其余成员 | 单把 `_lock` | 无 | 唯一在锁外做的写前校验是 `Enqueue`/`Push` 的 null 检查 |
-| `WeakCache` 全部成员 | 单把 `_lock` | 无 | `_perceptionThreshold` 的读写在锁内，但字段 public → 外部改它时**不受锁保护** |
+| `WeakCache.TryGetCache` | **不进锁** | `_caches`（CWT 自身线程安全）、`Entry.Value`（`Volatile.Read`） | 与 `AddOrUpdate` 的 `Volatile.Write` 配对 |
+| `WeakCache` 其余成员 | 单把 `_lock` | 无 | `ForeachCache` 只在锁内拍快照，**回调在锁外执行** |
 
 **迭代期间改容器会抛。** `lock` 对同一线程可重入，所以下面的写法能拿到锁、然后当场抛 `InvalidOperationException`（集合已修改）：
 
-- `WeakCache.ForeachCache` 的回调里调 `AddOrUpdate`/`Remove` → `_targets` 在 `foreach` 途中被改（`ForeachCache` 的 `foreach` vs `AddOrUpdate`/`Remove` 的 `RemoveAll`/`Add`）；
 - `WeakQueue`/`WeakStack` 的 `foreach` 里调 `Enqueue`/`Push`/`Clear` → `_references` 在 `foreach` 途中被改（`GetEnumerator` 的 `foreach` vs `Enqueue`/`Clear`）。
+
+`WeakCache.ForeachCache` **不在此列**：它先在锁内把存活项拷进 `List<KeyValuePair<,>>` 快照，再在锁外逐个回调；回调里读写本缓存、或等待另一线程读写，都不会抛也不会死锁（`WeakCacheTests` 的 `ForeachCache_CallbackWaitingOnAnotherThreadWrite_DoesNotDeadlock` / `TryGetCache_WhileForeachCallbackRuns_IsNotBlocked`）。代价：回调拿到的是快照时刻的值。
 
 ---
 
@@ -116,7 +119,7 @@ GetNextCleanupThreshold: (count == 0 ? 4 : count * 2) * 0.9 取整   // GetNextC
 3. **`RemoveHandler` 会删掉所有匹配项**，不是第一个：倒序扫描且**不在删除后 break**（`WeakDelegate.RemoveHandler` 的循环），所以同一个 handler 加两次、删一次就都没了。
 4. **`AddHandler(null)` 静默返回**（`WeakDelegate.AddHandler` 的 null 检查），但 `WeakQueue.Enqueue(null)` / `WeakStack.Push(null)` 抛 `ArgumentNullException`（`WeakQueue.Enqueue`、`WeakStack.Push`）。
 5. **批量版容忍 null，单条版不容忍**：`EnqueueRange`/`PushRange` 跳过 null 并只把**实际入队的个数**当返回值（`WeakQueue.EnqueueRange`）—— 传入 3 个含 1 个 null 返回 2。
-6. **`WeakCache.AddOrUpdate` 的"更新"是删除 + 重加**（`WeakCache.AddOrUpdate` 里的 `RemoveAll` 后 `Add`，因为 CWT 的 `Add` 对已存在键会抛），这也意味着更新会**把该键挪到 `_targets` 末尾**。
+6. **`WeakCache.AddOrUpdate` 对已存在的键只原地替换值**（`Volatile.Write(ref existing.Value, cache)` 后直接 `return`），不重建条目。`_targets` 是 `HashSet`，**本身无序** —— `ForeachCache` 的遍历顺序不保证等于插入顺序，别依赖它。更新与删除是 O(1)：靠 `Entry.Target` 反查 `_targets` 里的那一项。行为依据：n=32000 时，旧的 `List.RemoveAll` 实现更新约 6 s、删除约 2.2 s，现实现均在 2 ms 内（单次测量，Release，net10.0；基准程序不在仓内，**不可复核**）。
 7. **`Invoke(object?[])` 走 `DynamicInvoke` → 自身会分配**（`WeakDelegate.Invoke`）。签名已知时必须用 `GetInvocationList()?.Invoke(sender, e)`，这是 `TransitionSystem/Effects/TransitionEffect.cs` 里 `InvokeAwake`…`InvokeError` 的写法，也是 §二那条零分配测试测量的路径。
 8. **它们都是 `sealed`**，且都直接 `new()` 内部字段而非注入 —— 没有可替换的锁、比较器或 GC 钩子。
 9. **`TCacheKey` 上的 `DynamicallyAccessedMembers` 标注不是对调用方的真实要求**（`WeakCache` 的类型参数声明，包在 `#if NET` 里）。`ConditionalWeakTable<TKey,TValue>` 的 `TValue` 带 `PublicParameterlessConstructor` 标注 —— 那是服务于 `GetOrCreateValue()` 的，而这个类型只走 `TryGetValue` / `Add`，从不碰它；但类型实参是**未标注的泛型形参**时，裁剪分析器照样报 IL2091，所以把标注传下去消警告。**具体类型不查构造器**，调用点不会因此多出约束。`#if NET` 是必需的：`DynamicallyAccessedMembersAttribute` 在 `netstandard2.0` / `net461` 上不存在，而本文件是全档编译的（对比 `AspectOriented/AopCache.cs` —— 那一份整个都在 `#if NET` 内，所以不需要这层判断）。
