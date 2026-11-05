@@ -443,6 +443,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (sender is UserControl control && control.GetValue(StateProperty) is SurfaceState state)
         {
             state.IsPanning = false;
+            // 树 VM 活得比表面久：离树就摘掉挂在树 helper 上、捕获了 host 的菜单订阅；Loaded 时 Refresh 会重新接上。
+            UnsubscribeMenu(state);
         }
     }
 

@@ -83,6 +83,9 @@ public sealed class ViewPool : AvaloniaObject
 
     private static void CleanupManager(Panel panel)
     {
+        // 换源/换模板都会重新 +=，不先 -= 每次都多挂一个委托，面板就一直根住旧的处理链。
+        panel.DetachedFromVisualTree -= OnPanelDetached;
+
         if (_managers.TryGetValue(panel, out var manager))
         {
             manager.Detach();

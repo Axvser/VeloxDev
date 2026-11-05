@@ -168,12 +168,16 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         Loaded += (_, _) =>
         {
             AttachInteractionSource(InteractionSource);
+            // 离树时退了树订阅，重新进树要重新接上。
+            AttachTree(WorkflowTree);
             StartFlow();
         };
         Unloaded += (_, _) =>
         {
             DetachInteractionSource();
             StopFlow();
+            // 树 VM 通常活得比这层久：离树不退订，整层视图就被树、节点、连线的事件拓住。
+            AttachTree(null);
         };
     }
 
