@@ -139,7 +139,7 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 由此得到三条不变量：
 
 - **`RegisterBehaviour` 只入队**（`LoopChannel.RegisterBehaviour`），所以调用它的顺序与生命周期顺序无关；`Awake`/`Start` **一定跑在第一帧体之前**（它们在 `Sample()` 的上游），且都跑在**更新线程**上。
-- **`Awake`/`Start` 各自的异常被 `SafeExecute` 吞掉**（`TickManager.SafeExecute`，只 `Debug.WriteLine`）。所以「钩子里抛异常」= 静默半死。
+- **`Awake`/`Start` 各自的异常被 `SafeExecute` 捕获后上报**（`LoopChannel.SafeExecute` → `TickManager.ReportBehaviorError`）：写 `Debug.WriteLine` 并触发静态事件 `TickManager.OnBehaviorError`，循环继续跑。**没人订阅时仍是静默半死**（Release 下 `Debug.WriteLine` 不存在）。
 - **配置队列由更新泵排空**，而固定泵的步长**不走配置队列**（`_pendingFixedIntervalMs`：`SetFixedUpdateInterval` 写入，`FixedUpdateLoop` 在自己的线程上取走）。理由是写死的：配置队列归更新泵，采样器归固定泵，从更新线程写 `Step` 会与 `Advance` 争它要重置的累加器。
 
 **数字（保留实测到的常量）：**
@@ -236,7 +236,7 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 5. **`ThreadSafeFrameEventArgs` 已于 2026-10-04 删除 —— 它是一份「带锁的摆设」，而且那个锁永远走不到。** 它 `public new bool Handled` **遮蔽**基类的 `virtual bool Handled`，而泵的读写都在 `FrameEventArgs` 静态类型上（`ExecuteBehaviorsUpdateSync(FrameEventArgs frameArgs, …)` 的读、`CreateFrameEventArgs` 的写），所以即便把实例塞进池子，走上来的也是基类那个**没锁**的属性。何况它连池子都进不了：池的声明就是 `ObjectPool<FrameEventArgs>`（`_frameEventArgsPool`），全仓除定义与测试外零引用，生成器也不产出它。
    ⇒ **记住这个形状**：`virtual` 留着是给 `override` 的，用 `new` 遮蔽等于让虚分派失效 —— 症状是「看起来有线程安全，实际读写的是另一个字段」，而且类型自己的单测**通过派生类型**访问，绿得毫无意义。要线程安全，这家的既有写法是 `Volatile.Read`（同一文件 `CreateFrameEventArgs` 里读 `_targetFPS` 就是），比对每次读写进出 `lock` 更贴。
 6. **`Handled` 在 Update 里置上 = 本帧没有 LateUpdate。** 见 §三·1。这不是推断，是 `ExecuteBehaviorsLateUpdateSync` 的循环体第一句 + 同一个 `frameArgs` 对象造成的确定结果。
-7. **`SafeExecute` 吞掉钩子异常**（`TickManager.SafeExecute`，只写 `Debug.WriteLine`）。在钩子里做 `Dispatcher.Invoke` 之类的跨线程动作一旦抛，症状是「循环还在跑但界面停止更新，且哪儿都没有日志」。WPF demo 的钩子侧头部注释把这条写成了它的整体设计理由（`Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs` 的头部注释）。
+7. **钩子异常只报给 `TickManager.OnBehaviorError`**（`TickManager.ReportBehaviorError`；覆盖 `Awake`/`Start`/`Update`/`LateUpdate`/`FixedUpdate` 与 `ExecuteOnMainThread` 队列，`TickBehaviorErrorEventArgs.Stage` 是这六个字符串之一）。事件在**循环线程**上触发，处理器自己抛的异常会被再捕一次并只写 `Debug`。不订阅它，在钩子里做 `Dispatcher.Invoke` 之类的跨线程动作一旦抛，症状仍是「循环还在跑但界面停止更新，且哪儿都没有日志」。WPF demo 的钩子侧头部注释把这条写成了它的整体设计理由（`Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs` 的头部注释）。
 8. **`GetCachedWrappers` 有最长 1000ms 的陈旧窗口。** `_wrappersNeedSort` 为假且距上次检查不到 `MAX_CONFIG_CACHE_DURATION_MS` 时直接用旧数组（`GetCachedWrappers`）。注册与注销都会置脏（`ProcessAddedBehaviors` / `ProcessRemovedBehaviors`），所以正常路径上是即时的；但如果有人在别处直接改了 `_behaviors`，最坏要等 1 秒。
 9. **池是有上限的。** `ObjectPool.Return` 在 `Interlocked.Increment(ref _count) > maxSize` 时不入栈（`TickManager` 里 `ObjectPool<T>` 的 `Return`）。上限 `DEFAULT_OBJECT_POOL_SIZE = 50`。所以「池」不是无限缓存 —— 超出就丢给 GC。
 10. **`StopAsync` 的关闭预算只有 1000ms，超时后不报错。** 线程用 `Join(1000)`，异步路径用 `Task.WhenAny(..., Task.Delay(1000))`，两条都在 `catch (Exception) { }` 里（`LoopChannel.StopAsync`）——**放弃等待后照常置空线程字段、清统计、清队列，并发 `Stopped` 事件**。所以 `Stopped` 的意思是「我停止等了」，不是「它们都停了」。

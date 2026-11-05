@@ -19,6 +19,7 @@
 | `TickManager.Bus(channel)`（实例版） | `TickManager.cs` 的 `TickManager.Bus` 静态门面 | 让一条动画与 channel 共用时间轴 |
 | 全局 channel 事件 `OnChannelStarted/Paused/Resumed/Stopped` | `TickManager.cs` 的 `OnChannel*` 静态事件 | 观察 channel 生命周期 |
 | `TickChannelEventArgs`（含 `ChannelName`） | `TickManager.cs` 的 `TickChannelEventArgs` | 上一条的参数 |
+| 全局错误事件 `OnBehaviorError` + `TickBehaviorErrorEventArgs`（`ChannelName`/`Stage`/`Exception`） | `TickManager.cs` 的 `OnBehaviorError` 与 `ReportBehaviorError` | 观察钩子与主线程队列里的异常；在循环线程上触发，处理器里不要做重活 |
 | `TimeLineEventArgs` | `TimeLineEventArgs.cs` | 只给 `TransitionSystem` 那侧用；不要在这里加派生类型 |
 | `ExecuteOnMainThread` | `TickManager.cs` 的 `LoopChannel.ExecuteOnMainThread` 与静态转发 | **死扩展点**，见 §五 |
 
@@ -52,7 +53,7 @@
 | | 做法 | 结果 |
 |---|---|---|
 | ✅ 官方 | 钩子里算完，把结果写进一个不可变报告/队列（`Interlocked`/`Volatile`），UI 侧**轮询** | 见 `Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs` 的 `Report` 与 `RecordIf` |
-| ❌ 捷径 | 在钩子里 `Dispatcher.Invoke(...)` 回 UI 线程 | 异常被 `SafeExecute` / 逐钩子 catch 吞掉（`ExecuteBehaviors*Sync` 里的逐钩子 catch 与 `TickManager.SafeExecute`），症状是「循环还在跑但界面停止刷新，且哪儿都没有日志」。WPF demo 的钩子侧头部注释把这条写成了它的整体设计理由（`MainWindow.Hooks.cs` 的头部注释） |
+| ❌ 捷径 | 在钩子里 `Dispatcher.Invoke(...)` 回 UI 线程 | 异常被 `SafeExecute` / 逐钩子 catch 捕获（`ExecuteBehaviors*Sync` 里的逐钩子 catch 与 `LoopChannel.SafeExecute`），只报给 `TickManager.OnBehaviorError`。没订阅该事件时症状是「循环还在跑但界面停止刷新，且哪儿都没有日志」。WPF demo 的钩子侧头部注释把这条写成了它的整体设计理由（`MainWindow.Hooks.cs` 的头部注释） |
 
 ### 4. 让动画与 channel 共用时间轴 —— 传 `Bus`，不要各用一条
 

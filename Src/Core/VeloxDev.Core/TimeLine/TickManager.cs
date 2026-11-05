@@ -698,7 +698,7 @@ namespace VeloxDev.TimeLine
                     if (w is { IsActive: true, Behavior: not null })
                     {
                         try { w.Behavior.InvokeUpdate(frameArgs); }
-                        catch (Exception ex) { Debug.WriteLine($"[{Name}] Update error: {ex.Message}"); }
+                        catch (Exception ex) { ReportBehaviorError(Name, "Update", ex); }
                     }
                 }
             }
@@ -714,7 +714,7 @@ namespace VeloxDev.TimeLine
                     if (w is { IsActive: true, Behavior: not null })
                     {
                         try { w.Behavior.InvokeLateUpdate(frameArgs); }
-                        catch (Exception ex) { Debug.WriteLine($"[{Name}] LateUpdate error: {ex.Message}"); }
+                        catch (Exception ex) { ReportBehaviorError(Name, "LateUpdate", ex); }
                     }
                 }
             }
@@ -730,7 +730,7 @@ namespace VeloxDev.TimeLine
                     if (w is { IsActive: true, Behavior: not null })
                     {
                         try { w.Behavior.InvokeFixedUpdate(frameArgs); }
-                        catch (Exception ex) { Debug.WriteLine($"[{Name}] FixedUpdate error: {ex.Message}"); }
+                        catch (Exception ex) { ReportBehaviorError(Name, "FixedUpdate", ex); }
                     }
                 }
             }
@@ -758,7 +758,7 @@ namespace VeloxDev.TimeLine
                 int processed = 0;
                 while (processed < 64 && _mainThreadQueue.TryDequeue(out var action))
                 {
-                    try { action(); } catch (Exception ex) { Debug.WriteLine($"[{Name}] Main thread error: {ex.Message}"); }
+                    try { action(); } catch (Exception ex) { ReportBehaviorError(Name, "MainThread", ex); }
                     processed++;
                 }
 
@@ -795,8 +795,8 @@ namespace VeloxDev.TimeLine
                     wrapper.Reset(behavior, Interlocked.Increment(ref _instanceCounter));
 
                     _behaviors[RuntimeHelpers.GetHashCode(behavior)] = wrapper;
-                    SafeExecute(behavior.InvokeAwake);
-                    SafeExecute(behavior.InvokeStart);
+                    SafeExecute(behavior.InvokeAwake, "Awake");
+                    SafeExecute(behavior.InvokeStart, "Start");
                     added = true;
                 }
                 if (added) _wrappersNeedSort = true;
@@ -938,9 +938,9 @@ namespace VeloxDev.TimeLine
                     TimeConversion.DefaultTicksPerSecond) < THREAD_INACTIVITY_TIMEOUT_MS;
             }
 
-            private static void SafeExecute(Action action)
+            private void SafeExecute(Action action, string stage)
             {
-                try { action?.Invoke(); } catch (Exception ex) { Debug.WriteLine($"Behavior error: {ex.Message}"); }
+                try { action?.Invoke(); } catch (Exception ex) { ReportBehaviorError(Name, stage, ex); }
             }
 
             private void ResetStatistics()
@@ -1042,6 +1042,19 @@ namespace VeloxDev.TimeLine
         public static event EventHandler<TickChannelEventArgs>? OnChannelPaused;
         public static event EventHandler<TickChannelEventArgs>? OnChannelResumed;
         public static event EventHandler<TickChannelEventArgs>? OnChannelStopped;
+
+        /// <summary>
+        /// Raised on the loop thread when a behavior or a queued main-thread action throws. The loop keeps running;
+        /// without a subscriber the error is only written to <see cref="Debug"/>, which Release builds drop.
+        /// </summary>
+        public static event EventHandler<TickBehaviorErrorEventArgs>? OnBehaviorError;
+
+        private static void ReportBehaviorError(string channel, string stage, Exception exception)
+        {
+            Debug.WriteLine($"[{channel}] {stage} error: {exception.Message}");
+            try { OnBehaviorError?.Invoke(null, new TickBehaviorErrorEventArgs(channel, stage, exception)); }
+            catch (Exception ex) { Debug.WriteLine($"[{channel}] OnBehaviorError handler failed: {ex.Message}"); }
+        }
 
         #endregion
 
@@ -1163,5 +1176,18 @@ namespace VeloxDev.TimeLine
     {
         /// <summary>The channel the event belongs to.</summary>
         public string ChannelName { get; } = channelName;
+    }
+
+    /// <summary>The event args for an exception thrown inside a tick channel.</summary>
+    public sealed class TickBehaviorErrorEventArgs(string channelName, string stage, Exception exception) : EventArgs
+    {
+        /// <summary>The channel the error happened on.</summary>
+        public string ChannelName { get; } = channelName;
+
+        /// <summary>The stage that threw: Awake, Start, Update, LateUpdate, FixedUpdate or MainThread.</summary>
+        public string Stage { get; } = stage;
+
+        /// <summary>The exception that was thrown.</summary>
+        public Exception Exception { get; } = exception;
     }
 }

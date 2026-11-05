@@ -170,4 +170,44 @@ public class TickManagerTests
 
         await TickManager.StopAsync(chA);
     }
+
+    // ───────── Behavior errors ─────────
+
+    [TestMethod]
+    public async Task BehaviorError_ThrowingUpdate_IsReported()
+    {
+        const string ch = "MBBTest_BehaviorError";
+        var reported = new TaskCompletionSource<TickBehaviorErrorEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<TickBehaviorErrorEventArgs> handler = (_, e) =>
+        {
+            if (e.ChannelName == ch) reported.TrySetResult(e);
+        };
+        TickManager.OnBehaviorError += handler;
+        try
+        {
+            TickManager.RegisterBehaviour(new ThrowingTickable(), ch);
+            TickManager.Start(ch);
+
+            var finished = await Task.WhenAny(reported.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            Assert.AreSame(reported.Task, finished);
+            Assert.IsInstanceOfType<InvalidOperationException>(reported.Task.Result.Exception);
+        }
+        finally
+        {
+            TickManager.OnBehaviorError -= handler;
+            await TickManager.StopAsync(ch);
+        }
+    }
+
+    private sealed class ThrowingTickable : ITickable
+    {
+        public void InitializeTickable() { }
+        public void CloseTickable() { }
+        public void InvokeAwake() { }
+        public void InvokeStart() { }
+        public void InvokeUpdate(FrameEventArgs e) => throw new InvalidOperationException("boom");
+        public void InvokeLateUpdate(FrameEventArgs e) { }
+        public void InvokeFixedUpdate(FrameEventArgs e) { }
+    }
 }
