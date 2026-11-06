@@ -16,7 +16,7 @@ name: publish
 #   Every package is published at the <Version> written in its own csproj. The workflow checks
 #   one thing: whether that exact version is already on NuGet. A package whose version is not
 #   there is packed and pushed; a package whose version is already there is skipped. The layer
-#   rules in memory/specifications/version-management-specifications.md (generator > Core,
+#   rules in memory/specifications/version-management-specifications.md (generator ≥ Core,
 #   downstream syncing to Core, templates staying put) are the developer's decision, not a gate
 #   here.
 #
@@ -241,6 +241,27 @@ jobs:
           }
           Push-One "VeloxDev.Core.Generator"
           Wait-One "VeloxDev.Core.Generator"
+
+      - name: Wait for the generator on NuGet before Core
+        # Core's Release build resolves the generator from NuGet. Even when the generator was not "missing"
+        # at the start (already present) or the push step above was skipped, make the dependency explicit:
+        # Core never packs until the exact generator version is downloadable.
+        if: needs.version.outputs.core_missing == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.generator_version }}
+        run: |
+          $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.core.generator/${env:VERSION}/veloxdev.core.generator.${env:VERSION}.nupkg"
+          $deadline = (Get-Date).AddMinutes(15)
+          while ($true) {
+            try {
+              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+              return
+            } catch {
+              if ((Get-Date) -gt $deadline) { throw "VeloxDev.Core.Generator $env:VERSION did not appear within 15 minutes" }
+              Start-Sleep -Seconds 10
+            }
+          }
 
       - name: Pack Core against the published generator
         if: needs.version.outputs.core_missing == 'true'
