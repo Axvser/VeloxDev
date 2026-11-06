@@ -93,7 +93,17 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 
 **本地装载会真的在用户机器上装东西**：`EnsureNpmPackageAsync` / `EnsurePipPackageAsync`，用 `CliWrap` 起子进程。**进程级一把静态锁** `s_installLock`（`SemaphoreSlim(1,1)`）+ 进程级已装列表 `s_installed`，且都是**先查表、再取锁、再查一次**的双检。所以给两个 `McpScope` 实例各装同一个包，只会装一次。
 
-**运行目录**：默认 `.evn/mcp`（相对 `AppContext.BaseDirectory`，字段 `McpRootRelative`），按运行模式分子目录 —— `GetRuntimeDir`：Npm/Npx → `node`，Pip/Uvx → `py`，Dotnet → `dotnet`，Exe → `exe`。
+**运行目录**：默认 `.evn/mcp`（相对 `AppContext.BaseDirectory`，字段 `McpRootRelative`），按运行模式分子目录 —— `GetRuntimeDir`：Npm/Npx → `node`，Pip/Uvx → `py`，Dotnet → `dotnet`，Exe → `exe`。`Normal` 与 `Http` 不落目录。
+
+**`Normal` 是通用的那一档**：`McpServerRunMode.Normal` 直接执行 `Package`（PATH 命令或绝对路径），
+`Arguments` 原样传入，不安装、不拼 `mcpRoot`。其它本地模式（Npx/Uvx/Dotnet/Exe/Npm/Pip）底层都归到
+`BuildStdioTransportOptions` 的同一个 `(command, arguments)` 契约，只是在前面各自加了一段安装/定位封装。
+
+**`.mcp.json`**：`McpConfigurationFile.Load(path)` / `Parse(json)` 读通用 `{ "mcpServers": { … } }`；
+本地条目（`command` + `args`）映射为 `Normal`，`url` 映射为 `Http`，`env`/`cwd` 进 `Options`，
+`headers` 与 `type: "sse"` 进 Http 的 `Options`，`disabled: true` 的条目跳过；`${VAR}` / `${VAR:-default}` 从进程环境展开。宿主入口是
+`McpScope.WithServersFromFile(path)` 与 `LoadConfigurationFileAsync(path)`。**不要从命令名猜生态**：
+`node`/`python`/`docker` 都是合法的 `Normal`，Npx/Dotnet 等仍留给愿意让库安装/落盘的宿主。
 
 **卸载**：`McpScope.UnloadServerAsync(name)` 把状态重置为 `NotStarted` 并把 `ToolCount` 清零；它可以从「没装载过」的服务器上安全调用。`McpScope.UnloadServer(name)` 是阻塞包装，注释明说异步代码该用 `*Async`。
 
@@ -106,7 +116,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 | 模式 | 允许的键 | 位置 |
 |---|---|---|
 | Http | `headers` / `oauth` / `connectionTimeout` / `transportMode` / `ownsSession` | `HttpOptionKeys` |
-| Stdio（Npm/Npx/Pip/Uvx/Dotnet/Exe） | `env` / `workingDirectory` | `StdioOptionKeys` |
+| Stdio（Normal/Npm/Npx/Pip/Uvx/Dotnet/Exe） | `env` / `workingDirectory` | `StdioOptionKeys` |
 
 **写了别的键 ⇒ 抛异常**（`EnsureKnownKeys`），错误信息会把允许列表列出来。所以要加一个新的 option 键，必须同时改 `HttpOptionKeys` / `StdioOptionKeys` **以及** 消费它的 `BuildHttpTransportOptions` / `BuildStdioTransportOptions`。
 

@@ -806,6 +806,29 @@ public class McpScope : IAsyncDisposable
     }
 
     /// <summary>
+    /// Pre-registers the servers in an <c>.mcp.json</c> document (<see cref="McpConfigurationFile"/>) so the
+    /// Agent can load them by name. The document is read once here; re-reading it is a host decision.
+    /// </summary>
+    /// <param name="path">The <c>.mcp.json</c> path.</param>
+    /// <returns>This scope, for chaining.</returns>
+    /// <exception cref="FileNotFoundException">The file does not exist.</exception>
+    /// <exception cref="InvalidDataException">The document is not a valid MCP server map.</exception>
+    public McpScope WithServersFromFile(string path)
+        => WithServers([.. McpConfigurationFile.Load(path)]);
+
+    /// <summary>
+    /// Loads the servers in an <c>.mcp.json</c> document, replacing whatever was loaded before — the same
+    /// replace semantics as <see cref="LoadAsync"/>.
+    /// </summary>
+    /// <param name="path">The <c>.mcp.json</c> path.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The tools contributed by the loaded servers.</returns>
+    /// <exception cref="FileNotFoundException">The file does not exist.</exception>
+    /// <exception cref="InvalidDataException">The document is not a valid MCP server map.</exception>
+    public Task<AITool[]> LoadConfigurationFileAsync(string path, CancellationToken ct = default)
+        => LoadAsync(McpConfigurationFile.Load(path), ct);
+
+    /// <summary>
     /// Loads <b>one</b> server without disturbing any server that is already loaded: the others keep
     /// their tools, their status entries and their live clients. This is the incremental counterpart to
     /// the destructive <see cref="LoadAsync"/>, and the entry point for adding a server mid-session.
@@ -1274,8 +1297,12 @@ public class McpScope : IAsyncDisposable
     /// <summary>Builds the stdio transport options: command line + Options (env / workingDirectory). Internal for tests.</summary>
     internal static StdioClientTransportOptions BuildStdioTransportOptions(McpServerConfiguration config, string mcpRoot)
     {
+        // Every local mode resolves to the same (command, arguments) pair and then goes through the one
+        // StdioClientTransport below. Normal is that pair as written; the other modes only prepend their
+        // install/launch wrapper (npx -y, uvx, dotnet, venv python, mcpRoot/exe) to the same contract.
         var (cmd, args) = config.RunMode switch
         {
+            McpServerRunMode.Normal => BuildNormalArgs(config),
             McpServerRunMode.Npx    => BuildNpxArgs(config),
             McpServerRunMode.Uvx    => BuildUvxArgs(config),
             McpServerRunMode.Dotnet => BuildDotnetArgs(config, mcpRoot),
@@ -1482,6 +1509,20 @@ public class McpScope : IAsyncDisposable
     }
 
     // ── Node.js: npx ───────────────────────────────────────────────────────
+
+    // ── Generic command: the raw form the other local modes wrap ─────────────
+
+    private static (string cmd, List<string> args) BuildNormalArgs(
+        McpServerConfiguration config)
+    {
+        if (string.IsNullOrWhiteSpace(config.Package))
+            throw new InvalidOperationException(
+                $"MCP server '{config.Name}' uses Normal mode but has no command in Package.");
+
+        return (config.Package, config.Arguments?.ToList() ?? []);
+    }
+
+    // ── Node: npx ──────────────────────────────────────────────────────────
 
     private static (string cmd, List<string> args) BuildNpxArgs(
         McpServerConfiguration config)

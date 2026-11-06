@@ -358,6 +358,37 @@ key, since a node reference cannot be written down.
 
 ## MCP servers
 
+### Generic command (`Normal`)
+
+`McpServerRunMode.Normal` runs `Package` exactly as written and passes `Arguments` verbatim; there is no
+install step and no `mcpRoot` prefix. The OS resolves the command (`node`, `/usr/bin/python3`,
+`C:\tools\server.exe`, or a PATH command). Every other local mode is a wrapper that resolves to the same
+`(command, arguments)` contract.
+
+```csharp
+new McpServerConfiguration
+{
+    Name = "My server",
+    RunMode = McpServerRunMode.Normal,
+    Package = "node",
+    Arguments = ["server.js", "--port", "0"],
+    Options = Map(("env", Map(("TOKEN", "…"))), ("workingDirectory", "C:/work")),
+};
+```
+
+### Reading `.mcp.json`
+
+`McpConfigurationFile` reads the common `{ "mcpServers": { … } }` document. A `command` entry becomes
+`Normal` (its args are preserved exactly), a `url` entry becomes `Http`; `env`, `cwd`, `headers` and
+`type: "sse"` map to `Options`, and `disabled: true` entries are skipped. `${VAR}` and `${VAR:-default}`
+references are expanded from the process environment.
+
+```csharp
+var configs = McpConfigurationFile.Load(".mcp.json");   // or Parse(json)
+mcp.WithServersFromFile(".mcp.json");                   // pre-register, load by name later
+await mcp.LoadConfigurationFileAsync(".mcp.json", ct);  // load now (replace semantics)
+```
+
 ### stdio local (npm / npx / pip / dotnet / exe)
 
 ```csharp

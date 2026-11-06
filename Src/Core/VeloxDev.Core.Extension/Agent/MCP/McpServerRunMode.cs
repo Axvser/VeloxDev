@@ -58,4 +58,13 @@ public enum McpServerRunMode
     /// <c>oauth</c> for OAuth 2.0 Authorization Code + PKCE).
     /// </summary>
     Http,
+
+    /// <summary>
+    /// <b>Normal (generic command)</b> — runs <see cref="McpServerConfiguration.Package"/> exactly as given,
+    /// with <see cref="McpServerConfiguration.Arguments"/> passed verbatim. The command is resolved by the
+    /// operating system: a path (<c>node</c>, <c>/usr/bin/python3</c>, <c>C:\tools\server.exe</c>) or a PATH
+    /// command. No install, no <c>mcpRoot</c> prefix. This is the form every other local mode ultimately
+    /// resolves to; the other modes only wrap their own install/launch rules around it.
+    /// </summary>
+    Normal,
 }

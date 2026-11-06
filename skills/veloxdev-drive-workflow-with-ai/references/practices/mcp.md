@@ -31,6 +31,7 @@ var tools = await mcp.LoadAsync(configs, cancellationToken);
 
 | `McpServerRunMode` | Launches | `Package` is |
 |---|---|---|
+| `Normal` | `{Package} {args}` exactly as written; the OS resolves PATH or an absolute path; no install, no root prefix | the command |
 | `Npm` | installs, then runs the package's main/bin from `node/` | an npm name |
 | `Npx` | `npx -y {pkg} {args}` | an npm name |
 | `Uvx` | `uvx {pkg} {args}` | a PyPI name |
@@ -54,6 +55,18 @@ var tools = await mcp.LoadAsync(configs, cancellationToken);
 ⚙ **An unknown key throws.** The options map is validated against these names, so a typo is a startup failure and not a server that mysteriously lacks its header.
 
 ⚙ **It is a dictionary, not an anonymous object.** The serialized world is closed and an anonymous type is in neither the archive format nor the generator's type set. A nested section is another `Dictionary<string, object?>`.
+
+## Reading `.mcp.json`
+
+`McpConfigurationFile.Load(path)` / `Parse(json)` reads the common `{ "mcpServers": { … } }` document used by Claude Code and other MCP clients. A local entry becomes `McpServerRunMode.Normal` (`command` → `Package`, `args` → `Arguments`); a `url` entry becomes `Http`; `env`, `cwd`, `headers` and `type: "sse"` map to `Options`; `disabled: true` entries are skipped; `${VAR}` / `${VAR:-default}` references are expanded from the process environment.
+
+```csharp
+var configs = McpConfigurationFile.Load(".mcp.json");
+mcp.WithServersFromFile(".mcp.json");                   // pre-register
+await mcp.LoadConfigurationFileAsync(".mcp.json", ct);  // load now (replace semantics)
+```
+
+The loader deliberately does **not** guess an ecosystem from the command: `node`, `python` and `docker` are valid `Normal` commands, while `Npx`/`Uvx`/`Pip`/`Dotnet`/`Exe` remain for hosts that want VeloxDev to install or place the package.
 
 ## Lifecycle and status
 

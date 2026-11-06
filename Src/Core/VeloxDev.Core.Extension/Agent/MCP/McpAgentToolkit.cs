@@ -218,12 +218,12 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// </summary>
     // 静态说明配动态档位：这里**只列有哪些模式**，不承诺这一档允许哪些 —— 那是提示词的活，
     // 而提示词按档位逐轮重渲染。写死了就会在某几档上撒谎。
-    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. Whether this is allowed is decided by the session's permission mode and the host's rules; a refusal says which mode or rule blocked it. Run modes: 'Http' for a remote server (give endpoint), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server launched locally (give package), which installs and starts software on the user's machine. Ask the user first when the server is one they did not mention. Reusing the name of a server that is already connected RECONFIGURES it: its tools keep their names, and a configuration that cannot be reached leaves the existing connection serving. To change only a local server's launch arguments, prefer SetMcpServerArguments.")]
+    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. Whether this is allowed is decided by the session's permission mode and the host's rules; a refusal says which mode or rule blocked it. Run modes: 'Http' for a remote server (give endpoint), or 'Normal' for a raw command (give the command as package; arguments are passed verbatim, nothing is installed), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server VeloxDev should install or locate (give package), which may install and starts software on the user's machine. Ask the user first when the server is one they did not mention. Reusing the name of a server that is already connected RECONFIGURES it: its tools keep their names, and a configuration that cannot be reached leaves the existing connection serving. To change only a local server's launch arguments, prefer SetMcpServerArguments.")]
     private async Task<string> AddServer(
         [Description("Server name. Reusing the name of a connected server reconfigures it rather than adding a second one.")] string name,
-        [Description("Run mode: 'Http' for remote, or 'Npx','Npm','Pip','Uvx','Dotnet','Exe' for local.")] string runMode,
+        [Description("Run mode: 'Http' for remote, 'Normal' for a raw command, or 'Npx','Npm','Pip','Uvx','Dotnet','Exe' for a managed local server.")] string runMode,
         [Description("Remote mode only: the endpoint URL.")] string? endpoint = null,
-        [Description("Local modes only: the package name, or the path for Dotnet/Exe.")] string? package = null,
+        [Description("Local modes only: the command for Normal, the package name for Npx/Npm/Pip/Uvx, or the path for Dotnet/Exe.")] string? package = null,
         [Description("Optional JSON array of command-line arguments, e.g. [\"C:/data\"].")] string? argumentsJson = null,
         CancellationToken ct = default)
     {
