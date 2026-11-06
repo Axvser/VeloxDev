@@ -29,6 +29,11 @@ internal sealed record PluginCompatibility(
 /// </summary>
 internal sealed class PluginLoader
 {
+    // 路径比较跟随文件系统：Windows 不区分大小写，Unix 区分。程序集简单名的比较仍走 OrdinalIgnoreCase（CLR 语义）。
+    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
+
     private readonly object _gate = new();
     private readonly List<AssemblyDependencyResolver> _resolvers = [];
     private readonly List<string> _directories = [];
@@ -168,7 +173,7 @@ internal sealed class PluginLoader
                     $"The module initializer of '{full}' failed. The archive's dependency could not register its types.", ex);
             }
 
-            if (!_loaded.Contains(full, StringComparer.OrdinalIgnoreCase))
+            if (!_loaded.Contains(full, PathComparer))
                 _loaded.Add(full);
 
             CheckVersionsUnsafe(assembly, full);
@@ -364,7 +369,7 @@ internal sealed class PluginLoader
 
     private void AddDirectoryUnsafe(string directory)
     {
-        if (!_directories.Contains(directory, StringComparer.OrdinalIgnoreCase))
+        if (!_directories.Contains(directory, PathComparer))
             _directories.Add(directory);
     }
 

@@ -77,10 +77,14 @@ veloxdev run --archive <graph.json> --start <nodeIndex> [--node-result]
 ```
 
 One-shot execution for a human or CI. Prints the run result (outcome, data, failures and the log) as JSON and
-exits 0 when `status` is `ok`. `--node-result` uses the terminal role and computes the node at `--start` from its
-ancestor cone instead of running the chain from it. `--output-tree` writes the post-run graph and names it in the
-result as `stateFile`; a client can adopt it with `LoadArchive`. This is also the process the MCP server uses as
-its worker.
+exits 0 when `status` is `ok` **and** every requested output was written. `--node-result` uses the terminal role and
+computes the node at `--start` from its ancestor cone instead of running the chain from it. `--output-tree` writes
+the post-run graph and names it in the result as `stateFile`; a client can adopt it with `LoadArchive`. When that
+write fails (for example outside `--workspace`), the result carries `stateFileError` and the process exits 1 — the
+run may have succeeded, but the artifact the caller asked for does not exist. `--timeout-ms` on this one-shot path is
+the toolkit's own timeout and reports `status: error` (exit 1); the isolated MCP surface additionally kills a worker
+that ignores cancellation and reports `outcome: Cancelled` with `timedOut`. This is also the process the MCP server
+uses as its worker.
 
 ## The archive and its manifest
 

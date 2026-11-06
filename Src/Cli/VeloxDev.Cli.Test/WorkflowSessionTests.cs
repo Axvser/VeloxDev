@@ -361,6 +361,13 @@ public class WorkflowSessionTests
         Assert.AreEqual(1, info.RootElement.GetProperty("nodeCount").GetInt32());
         Assert.IsFalse(info.RootElement.GetProperty("executionEnabled").GetBoolean());
         Assert.AreEqual(typeof(TreeDefaultViewModel).FullName, info.RootElement.GetProperty("rootType").GetString());
+        Assert.AreEqual(
+            typeof(IWorkflowTreeViewModel).Assembly.GetName().Version?.ToString(),
+            info.RootElement.GetProperty("coreVersion").GetString(),
+            "coreVersion must name the Core assembly, not the Extension assembly");
+        Assert.AreEqual(
+            typeof(VeloxDev.AI.Workflow.WorkflowAgentScope).Assembly.GetName().Version?.ToString(),
+            info.RootElement.GetProperty("extensionVersion").GetString());
         await Task.CompletedTask;
     }
 
@@ -515,6 +522,53 @@ public class WorkflowSessionTests
         {
             File.Delete(stateFile!);
         }
+    }
+
+    [TestMethod]
+    public async Task NoRunCsv_OmitsTheCsvFileFromExecutionResults()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+
+        await using var host = WorkflowSessionHost.Create(
+            Options(path, "--allow-execution", "--in-process-execution", "--no-run-csv"));
+        var archiveTools = new ArchiveTools(host);
+
+        using var info = JsonDocument.Parse(archiveTools.ArchiveInfo());
+        Assert.IsFalse(info.RootElement.GetProperty("runCsv").GetBoolean());
+
+        var result = await host.InvokeToolAsync(
+            "RunCompiledWorkflow",
+            new AIFunctionArguments { ["startNodeIndex"] = 0 },
+            CancellationToken.None);
+        var text = result?.ToString() ?? string.Empty;
+
+        StringAssert.Contains(text, "\"status\":\"ok\"");
+        Assert.IsFalse(text.Contains("csvFile", StringComparison.Ordinal),
+            "the result must not name a CSV the option told it not to write");
+    }
+
+    [TestMethod]
+    public async Task CapabilitiesIncludeRedirectToolsWhenExecutionIsEnabled()
+    {
+        using var fixture = new TestArchive();
+        var path = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+
+        await using var host = WorkflowSessionHost.Create(Options(path, "--allow-execution"));
+        var archiveTools = new ArchiveTools(host);
+
+        using var capabilities = JsonDocument.Parse(archiveTools.GetCapabilities());
+        var root = capabilities.RootElement;
+        var tools = root.GetProperty("tools").EnumerateArray()
+            .Select(tool => tool.GetString()!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // RedirectTools are registered by McpHost whenever execution is on; the capability manifest must include them
+        // in both execution modes, or a client reading only this tool believes they do not exist.
+        Assert.IsTrue(tools.Contains("SetRedirectOnError"), "the host-level redirect must be discoverable");
+        Assert.IsTrue(tools.Contains("ClearRedirectOnError"), "and so must clearing it");
+        Assert.AreEqual(tools.Count, root.GetProperty("toolCount").GetInt32(),
+            "toolCount must be the size of the reported surface");
     }
 
     [TestMethod]

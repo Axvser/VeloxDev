@@ -95,6 +95,12 @@ MCP 客户端会看到重复工具；`WorkflowSession` 的 `InProcessExecution` 
 - 子进程的 stdin 必须重定向并关闭，否则它会继承 MCP 的协议流；stdout/stderr 也重定向。
 - 临时快照放 `%TEMP%/veloxdev-worker`，执行完删除；**post-run 树**（`--output-tree`）保留，结果里叫
   `stateFile`，由客户端用 `LoadArchive` 显式采纳。不要自动采纳 —— 会覆盖运行期间的编辑。
+- **`--output-tree` 写失败是命令失败**（2026-11-06）：结果保留 run 字段并加 `stateFileError`，stderr 说明原因，
+  进程 exit 1。不要退回「只警告、exit 0」—— CI 无法只凭退出码发现 artifact 缺失。
+- **两种 timeout 语义不要混。** `run --timeout-ms` 走 toolkit 的 `RunCompiledRoleAsync`，它把自身超时返回
+  `status:error`（不是 `ok + Cancelled`，见该方法的注释）；只有 MCP 隔离层在**杀掉不响应取消的 worker** 时才
+  合成 `status:ok, outcome:Cancelled, timedOut:true`。`AHangingWorker_IsKilled...` 测后者，
+  `ARunWithATimeout_ReportsTheToolkitsTimeoutError` 测前者。
 - 节点代码写 stdout 会污染 worker 的 JSON 结果；in-process 模式则污染协议流。
 
 **重定向**：`RedirectPolicy` 是会话级对象，`WorkflowSession.Create` 把它装进
@@ -112,7 +118,8 @@ MCP 客户端会看到重复工具；`WorkflowSession` 的 `InProcessExecution` 
 - **工作区**：`WorkspaceRule.Normalize` 要求目录已存在并去掉尾分隔符；`Ensure` 用平台相关大小写比较。
   在创建目录/日志 writer **之前**校验，否则会先在沙箱外留下文件再抛。`WorkflowSession` 的启动/换档/保存/
   加载程序集/检查点/日志/`--output-tree` 都有检查。worker 子进程不传 `--workspace`，它的 `%TEMP%` 快照与
-  state 文件不能被误判。
+  state 文件不能被误判。**不解析符号链接**：`Path.GetFullPath` 只做字符串规范化，workspace 内一个指向外部的
+  symlink/junction 仍能通过前缀比较。若沙箱要承担对抗性输入的安全职责，需要逐段 `ResolveLinkTarget` —— 当前没有。
 - **打包**：`PackAsTool` + `ToolCommandName=veloxdev`；`dotnet pack -c Release -p:VeloxDevLocalCore=true` 会把
   ProjectReference 的 Core/Extension/MCP 依赖一起放进 `tools/net8.0/any/`（实测安装并运行通过）。不要把它改成
   PackageReference，否则 Release 会拉 NuGet 上尚未包含新 API 的 Core。包图标由 csproj 的
@@ -130,6 +137,12 @@ MCP 客户端会看到重复工具；`WorkflowSession` 的 `InProcessExecution` 
 - **不要从另一个项目的输出目录启动 net8 的 CLI。** 测试工程是 net10，输出目录会把共享依赖压平成 net10
   变体；在那里 `dotnet VeloxDev.Cli.dll` 会报 `System.Runtime, Version=10.0.0.0` 加载失败。集成测试从
   CLI 自己的 `bin/<Config>/net8.0` 启动（`McpProtocolTests` 的路径计算）。
+- **`PluginLoader` 的路径去重要按文件系统语义。** `_loaded` / `_directories` 用 `OrdinalIgnoreCase` 在 Linux 上
+  会把仅大小写不同的两个目录当成同一个，漏掉第二个目录里的依赖。现在走 `PathComparer`（Windows 忽略大小写、
+  Unix 区分）；程序集简单名的比较仍可保持忽略大小写，那是 CLR 自己的规则（2026-11-06）。
+- **CLI 测试在干净环境要先塞一个 dummy `API_KEY_DEEPSEEK`。** demo `TreeViewModel` 构造时安装 AgentHelper，
+  没有 key 会在后台任务里抛未处理异常、直接把测试宿主带崩（37 个测试后 abort）。`TestAssemblySetup` 的
+  `[AssemblyInitialize]` 只在变量为空时写占位值；不要删掉它来「跑真实模型」。
 - **工具包会无条件附带 `ResetToolCallLimit` 与自定义工具。** `CreateTools(category)` 不是纯类别过滤；
   CLI 必须按名字排除预算出口，否则会给出一个永远用不上的工具。
 - **Hosting 的 console logger 默认写 stdout。** stdio MCP 下必须

@@ -64,6 +64,7 @@ static async Task<int> RunOnceAsync(CliOptions options)
     var result = await tool.InvokeAsync(arguments).ConfigureAwait(false);
     var text = result?.ToString() ?? string.Empty;
 
+    var outputWritten = true;
     if (!string.IsNullOrWhiteSpace(options.OutputTree))
     {
         try
@@ -77,13 +78,17 @@ static async Task<int> RunOnceAsync(CliOptions options)
         }
         catch (Exception ex)
         {
+            // The run itself may have succeeded, but the caller asked for an artifact it did not get. Exit non-zero
+            // and say so in the result: a CI job cannot be expected to parse stderr to notice a missing state file.
+            outputWritten = false;
             Console.Error.WriteLine("veloxdev: the post-run tree could not be written: " + ex.Message);
+            text = WithStateFileError(text, ex.Message);
         }
     }
 
     Console.Out.WriteLine(text);
 
-    return IsOk(text) ? 0 : 1;
+    return IsOk(text) && outputWritten ? 0 : 1;
 }
 
 /// <summary>Adds the state path to a successful run result without changing any field the library produced.</summary>
@@ -100,6 +105,25 @@ static string WithStateFile(string text, string statePath)
     catch (JsonException)
     {
         // A non-JSON answer stays exactly as it was; stderr already explains any write failure.
+    }
+
+    return text;
+}
+
+/// <summary>Names the failed output artifact in the result so a caller can tell "run ok, state missing" apart.</summary>
+static string WithStateFileError(string text, string message)
+{
+    try
+    {
+        if (System.Text.Json.Nodes.JsonNode.Parse(text) is System.Text.Json.Nodes.JsonObject result)
+        {
+            result["stateFileError"] = message;
+            return result.ToJsonString();
+        }
+    }
+    catch (JsonException)
+    {
+        // A non-JSON answer stays exactly as it was; stderr already explains the failure.
     }
 
     return text;

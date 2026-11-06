@@ -103,8 +103,9 @@ graph.json + lib/*.dll
     再低才需要重建；`Core.Extension` 不是统一模型层、变动频繁，任何版本差异都应当作风险告知用户。
     审计环在 `WorkflowSessionHost`：原生工具经 `InvokeToolAsync` 自动记录，`ArchiveTools` 的
     `LoadArchive` / `SaveArchive` / `LoadAssemblies` / `ApplyBatch` 显式调用 `RecordToolCall`；`GetAuditLog`
-    读最近 500 条。`GetCapabilities` 列出实际暴露的工具名（含 `McpHost` 直接注册的执行/归档工具）、执行模式
-    与结果上限。`ApplyBatch` 只接受 `Mutation` / `Layout` 工具，最多 100 条；`stopOnError` 时先把当前树写成
+    读最近 500 条。`GetCapabilities` 列出实际暴露的工具名（含 `McpHost` 直接注册的执行/归档/**重定向**工具）、
+    执行模式与结果上限。重定向工具在两种执行模式下都注册，所以 `ExecutionEnabled` 时两份名单都要加；
+    漏掉时 `toolCount` 会小于 `ListTools` 的实际数量（2026-11-06 修复，`WorkflowSession.DescribeCapabilities`）。`ApplyBatch` 只接受 `Mutation` / `Layout` 工具，最多 100 条；`stopOnError` 时先把当前树写成
     归档目录下的临时快照，首个失败后用 `ReloadAsync` 以快照换会话（`stateFile` 保留，原归档不动），
     `--in-process-execution` 下拒绝这种回滚。`--single-archive` 在 `WorkflowSessionHost.ReloadAsync` 入口直接拒绝
     换档：一个进程只服务一份文档，运行时 ID 因此在整个进程生命周期内稳定；`ArchiveInfo` 的

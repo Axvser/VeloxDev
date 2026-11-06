@@ -285,11 +285,26 @@ internal sealed class ArchiveTools(WorkflowSessionHost host)
         {
             using var lease = host.Acquire();
             var loaded = lease.Session.LoadAssemblies(paths);
+            var compatibility = lease.Session.Plugins.Compatibility;
             var response = JsonSerializer.Serialize(new
             {
                 status = "ok",
                 loaded,
                 warnings = lease.Session.Plugins.Warnings,
+                // The answer a caller usually wants right after loading a DLL: did it reference a different
+                // Core/Core.Extension than this host? ArchiveInfo repeats it session-wide.
+                compatibility = new
+                {
+                    status = compatibility.Status,
+                    mismatches = compatibility.Mismatches.Select(mismatch => new
+                    {
+                        assembly = mismatch.Assembly,
+                        reference = mismatch.Reference,
+                        wanted = mismatch.Wanted?.ToString(),
+                        loaded = mismatch.Loaded?.ToString(),
+                        majorMismatch = mismatch.MajorMismatch,
+                    }),
+                },
                 message = "The assemblies are loaded and their registered component types are available to ListCreatableTypes.",
             });
             host.RecordToolCall("LoadAssemblies", auditArguments, ok: true, response.Length,

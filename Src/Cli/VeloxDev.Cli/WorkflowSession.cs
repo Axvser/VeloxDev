@@ -433,6 +433,11 @@ internal sealed class WorkflowSession : IAsyncDisposable
             "ArchiveInfo", "LoadArchive", "SaveArchive", "LoadAssemblies",
             "GetCapabilities", "GetAuditLog", "ApplyBatch",
         ]);
+        if (ExecutionEnabled)
+        {
+            // RedirectTools 在两种执行模式下都由 McpHost 直接注册；漏掉它们会让 GetCapabilities 比客户端实际看到的少两个。
+            tools.AddRange(["SetRedirectOnError", "ClearRedirectOnError"]);
+        }
         if (ExecutionEnabled && !InProcessExecution)
         {
             tools.AddRange(
@@ -515,7 +520,10 @@ internal sealed class WorkflowSession : IAsyncDisposable
                     majorMismatch = mismatch.MajorMismatch,
                 }),
             },
-            coreVersion = typeof(WorkflowAgentScope).Assembly.GetName().Version?.ToString(),
+            // Two separate assemblies: the host bundles both, and a plugin may drift from either. The old
+            // single coreVersion read the Extension assembly, which made a Core-only mismatch look fine.
+            coreVersion = typeof(VeloxDev.WorkflowSystem.IWorkflowTreeViewModel).Assembly.GetName().Version?.ToString(),
+            extensionVersion = typeof(WorkflowAgentScope).Assembly.GetName().Version?.ToString(),
         });
 
     /// <summary>The instructions the server sends during initialization.</summary>

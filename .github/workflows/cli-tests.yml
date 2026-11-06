@@ -1,0 +1,64 @@
+name: cli-tests
+
+# The CLI is the one component whose tests cross the process boundary on every run: they launch `veloxdev mcp`,
+# `veloxdev run`, and real workers. Run that suite on both supported development hosts so a Windows-only path
+# cannot pass unnoticed. The suite itself is platform-neutral (CliWrap for process launches, no ProcessStartInfo).
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Src/Cli/**'
+      - 'Src/Core/**'
+      - 'Src/Generators/**'
+      - 'Examples/Workflow/Common/**'
+      - '.github/workflows/cli-tests.yml'
+  pull_request:
+    paths:
+      - 'Src/Cli/**'
+      - 'Src/Core/**'
+      - 'Src/Generators/**'
+      - 'Examples/Workflow/Common/**'
+      - '.github/workflows/cli-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: CLI tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run the CLI test suite
+        run: dotnet test Src/Cli/VeloxDev.Cli.Test/VeloxDev.Cli.Test.csproj -c Debug --nologo
+
+      # Packaging is part of the contract: a tool package that installs on Windows may still have a bad
+      # DotnetToolSettings or a missing dependency. Build and install it on both hosts.
+      - name: Pack the tool
+        run: dotnet pack Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj -c Debug -o "${{ runner.temp }}/pack" --nologo
+
+      - name: Install the packed tool
+        shell: bash
+        run: |
+          VERSION=$(grep -o '<Version>[^<]*' Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj | head -1 | sed 's/<Version>//')
+          dotnet tool install --tool-path "$RUNNER_TEMP/tool" --add-source "$RUNNER_TEMP/pack" VeloxDev.Cli --version "$VERSION"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            "$RUNNER_TEMP/tool/veloxdev.exe" --help
+          else
+            "$RUNNER_TEMP/tool/veloxdev" --help
+          fi

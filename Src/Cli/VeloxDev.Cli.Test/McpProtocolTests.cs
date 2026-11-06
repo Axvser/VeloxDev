@@ -1,5 +1,9 @@
 using System.Text.Json;
+using CliWrap;
+using WrappedCli = CliWrap.Cli;
+using CliWrap.Buffered;
 using ModelContextProtocol.Client;
+using VeloxDev.AI.Workflow.Functions;
 using ModelContextProtocol.Protocol;
 
 namespace VeloxDev.Cli.Test;
@@ -43,6 +47,19 @@ public class McpProtocolTests
         Assert.IsTrue(tools.Any(t => t.Name == "SetRedirectOnError"), "the host redirect setting is agent-visible");
         Assert.IsFalse(tools.Any(t => t.Name == "PauseCompiledRun"),
             "the default surface is isolated; handle-based runs are not in the server process");
+
+        // GetCapabilities must describe the same surface the client just listed — including the redirect tools,
+        // which McpHost registers directly and which a hand-maintained list can forget.
+        var capabilityResult = await client.CallToolAsync("GetCapabilities", new Dictionary<string, object?>());
+        var capabilityText = string.Join("", capabilityResult.Content.OfType<TextContentBlock>().Select(c => c.Text));
+        using var capabilityJson = JsonDocument.Parse(capabilityText);
+        var reported = capabilityJson.RootElement.GetProperty("tools").EnumerateArray()
+            .Select(tool => tool.GetString()!)
+            .ToHashSet(StringComparer.Ordinal);
+        var actual = tools.Select(tool => tool.Name).ToHashSet(StringComparer.Ordinal);
+        Assert.IsTrue(actual.SetEquals(reported),
+            $"GetCapabilities disagrees with ListTools. Missing: {string.Join(", ", actual.Except(reported))}; " +
+            $"extra: {string.Join(", ", reported.Except(actual))}");
 
         var resources = await client.ListResourcesAsync(new ListResourcesRequestParams());
         Assert.IsTrue(resources.Resources.Any(r => r.Uri.ToString() == "veloxdev://archive/info"),
@@ -335,6 +352,213 @@ public class McpProtocolTests
         var info = await client.CallToolAsync("ArchiveInfo", new Dictionary<string, object?>());
         StringAssert.Contains(
             string.Join("", info.Content.OfType<TextContentBlock>().Select(c => c.Text)), "\"status\":\"ok\"");
+    }
+
+    private static (string Archive, string Plugin) WriteSlowChain(TestArchive fixture, int count, bool flakyTail = false)
+    {
+        var tree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
+        var nodes = new List<VeloxDev.WorkflowSystem.IWorkflowNodeViewModel>();
+
+        for (var index = 0; index < count; index++)
+        {
+            VeloxDev.WorkflowSystem.IWorkflowNodeViewModel node =
+                flakyTail && index == count - 1
+                    ? new VeloxDev.Cli.Test.Plugin.FlakyNodeViewModel()
+                    : new VeloxDev.Cli.Test.Plugin.SlowNodeViewModel();
+            tree.GetHelper().CreateNode(node);
+            nodes.Add(node);
+        }
+
+        for (var index = 0; index < nodes.Count - 1; index++)
+        {
+            var output = ((VeloxDev.Cli.Test.Plugin.SlowNodeViewModel)nodes[index]).OutputSlot;
+            var input = nodes[index + 1] is VeloxDev.Cli.Test.Plugin.FlakyNodeViewModel flaky
+                ? flaky.InputSlot
+                : ((VeloxDev.Cli.Test.Plugin.SlowNodeViewModel)nodes[index + 1]).InputSlot;
+            output.Channel = VeloxDev.WorkflowSystem.SlotChannel.MultipleTargets;
+            input.Channel = VeloxDev.WorkflowSystem.SlotChannel.MultipleSources;
+            tree.SendConnectionCommand.Execute(output);
+            tree.ReceiveConnectionCommand.Execute(input);
+        }
+
+        return (fixture.WriteTree(tree), typeof(VeloxDev.Cli.Test.Plugin.SlowNodeViewModel).Assembly.Location);
+    }
+
+    [TestMethod]
+    public async Task AnIsolatedRunHonorsTheRedirectOnErrorFlag()
+    {
+        using var fixture = new TestArchive();
+        var (archive, plugin) = WriteSlowChain(fixture, count: 2, flakyTail: true);
+
+        var (cli, cliDirectory) = CliLocation();
+        var transport = new StdioClientTransport(new StdioClientTransportOptions
+        {
+            Command = "dotnet",
+            Arguments =
+            [
+                cli, "mcp", "--archive", archive, "--assembly", plugin,
+                "--allow-execution", "--redirect-on-error", "0",
+            ],
+            Name = "veloxdev-redirect-test",
+            WorkingDirectory = cliDirectory,
+            StandardErrorLines = _ => { },
+        });
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        await using var client = await McpClient.CreateAsync(transport, cancellationToken: timeout.Token);
+
+        var run = await client.CallToolAsync("RunCompiledWorkflow",
+            new Dictionary<string, object?> { ["startNodeIndex"] = 0 });
+        var text = string.Join("", run.Content.OfType<TextContentBlock>().Select(c => c.Text));
+
+        using var result = JsonDocument.Parse(text);
+        Assert.AreEqual("Completed", result.RootElement.GetProperty("outcome").GetString(), text);
+        Assert.IsTrue(result.RootElement.GetProperty("attempts").GetInt32() >= 2,
+            "the worker must have re-run from the redirect target: " + text);
+        Assert.IsTrue(result.RootElement.GetProperty("failures").GetArrayLength() > 0,
+            "the first failure remains in the record: " + text);
+    }
+
+    [TestMethod]
+    public async Task AnIsolatedRunWritesTheCheckpointFile_AndInProcessCanContinueFromIt()
+    {
+        using var fixture = new TestArchive();
+        var (archive, plugin) = WriteSlowChain(fixture, count: 3);
+        var checkpoint = Path.Combine(fixture.Directory, "run.checkpoint.json");
+
+        var (cli, cliDirectory) = CliLocation();
+        var transport = new StdioClientTransport(new StdioClientTransportOptions
+        {
+            Command = "dotnet",
+            Arguments =
+            [
+                cli, "mcp", "--archive", archive, "--assembly", plugin,
+                "--allow-execution", "--checkpoint-file", checkpoint,
+            ],
+            Name = "veloxdev-checkpoint-test",
+            WorkingDirectory = cliDirectory,
+            StandardErrorLines = _ => { },
+        });
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        await using (var client = await McpClient.CreateAsync(transport, cancellationToken: timeout.Token))
+        {
+            var run = await client.CallToolAsync("RunCompiledWorkflow",
+                new Dictionary<string, object?> { ["startNodeIndex"] = 0 });
+            var text = string.Join("", run.Content.OfType<TextContentBlock>().Select(c => c.Text));
+            StringAssert.Contains(text, "\"outcome\":\"Completed\"");
+        }
+
+        Assert.IsTrue(File.Exists(checkpoint), "the isolated worker must write the checkpoint file it was given");
+        Assert.IsTrue(new FileInfo(checkpoint).Length > 0, "an empty checkpoint is not a checkpoint");
+
+        // The same file is the in-process continuation's input; the tool starts from it rather than from the entry.
+        var options = CliOptions.Parse([
+            "mcp", "--archive", archive, "--assembly", plugin,
+            "--allow-execution", "--in-process-execution", "--checkpoint-file", checkpoint,
+        ]);
+        await using var session = WorkflowSession.Create(options);
+        var function = session.Toolkit.CreateTools(WorkflowToolCategory.All)
+            .OfType<Microsoft.Extensions.AI.AIFunction>()
+            .First(f => f.Name == "ContinueCompiledWorkflow");
+        var continued = await function.InvokeAsync(new Microsoft.Extensions.AI.AIFunctionArguments
+        {
+            ["startNodeIndex"] = 0,
+        });
+
+        using var continuedJson = JsonDocument.Parse(continued?.ToString() ?? "null");
+        Assert.AreEqual("ok", continuedJson.RootElement.GetProperty("status").GetString(),
+            continuedJson.RootElement.ToString());
+    }
+
+    [TestMethod]
+    public async Task LoadAssembliesMakesANewAssemblysTypesCreatable()
+    {
+        using var fixture = new TestArchive();
+        var archive = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+        var plugin = typeof(VeloxDev.Cli.Test.Plugin.SlowNodeViewModel).Assembly.Location;
+
+        var (cli, cliDirectory) = CliLocation();
+        var transport = new StdioClientTransport(new StdioClientTransportOptions
+        {
+            Command = "dotnet",
+            Arguments = [cli, "mcp", "--archive", archive],
+            Name = "veloxdev-load-assemblies-test",
+            WorkingDirectory = cliDirectory,
+            StandardErrorLines = _ => { },
+        });
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        await using var client = await McpClient.CreateAsync(transport, cancellationToken: timeout.Token);
+
+        var before = await client.CallToolAsync("ListCreatableTypes", new Dictionary<string, object?>());
+        Assert.IsFalse(string.Join("", before.Content.OfType<TextContentBlock>().Select(c => c.Text))
+            .Contains("SlowNodeViewModel", StringComparison.Ordinal),
+            "the server must not know the plugin before it is loaded");
+
+        var loaded = await client.CallToolAsync("LoadAssemblies", new Dictionary<string, object?>
+        {
+            ["paths"] = new[] { plugin },
+        });
+        var loadedText = string.Join("", loaded.Content.OfType<TextContentBlock>().Select(c => c.Text));
+        StringAssert.Contains(loadedText, "\"status\":\"ok\"");
+        StringAssert.Contains(loadedText, "\"compatibility\"", "loading a DLL must report its version drift immediately");
+
+        var after = await client.CallToolAsync("ListCreatableTypes", new Dictionary<string, object?>());
+        StringAssert.Contains(
+            string.Join("", after.Content.OfType<TextContentBlock>().Select(c => c.Text)), "SlowNodeViewModel");
+    }
+
+    [TestMethod]
+    public async Task ARunWithATimeout_ReportsTheToolkitsTimeoutError()
+    {
+        using var fixture = new TestArchive();
+        var (archive, plugin) = WriteSlowChain(fixture, count: 3);
+        var (cli, cliDirectory) = CliLocation();
+
+        var result = await WrappedCli.Wrap("dotnet")
+            .WithArguments(new[]
+            {
+                cli, "run", "--archive", archive, "--start", "0",
+                "--assembly", plugin, "--timeout-ms", "100",
+            })
+            .WithWorkingDirectory(cliDirectory)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync();
+
+        // The in-process toolkit treats its own timeout as an error rather than "ok, Cancelled" (a caller that
+        // waited for the end must not mistake a timed-out run for one it chose to stop). The isolated MCP wrapper
+        // is the one that synthesizes Cancelled, when it kills a worker that ignored the cancellation.
+        Assert.AreEqual(1, result.ExitCode,
+            "STDOUT:\n" + result.StandardOutput + "\nSTDERR:\n" + result.StandardError);
+        StringAssert.Contains(result.StandardOutput, "\"status\":\"error\"", result.StandardOutput);
+        StringAssert.Contains(result.StandardOutput, "timed out after 100 ms", result.StandardOutput);
+    }
+
+    [TestMethod]
+    public async Task ARunWhoseOutputTreeIsOutsideTheWorkspaceFails()
+    {
+        using var fixture = new TestArchive();
+        var archive = fixture.WriteTree(TestArchive.TreeWithOneNode(out _));
+        var (cli, cliDirectory) = CliLocation();
+        var outside = Path.Combine(fixture.Directory, "..", $"outside-{Guid.NewGuid():N}.json");
+
+        var result = await WrappedCli.Wrap("dotnet")
+            .WithArguments(new[]
+            {
+                cli, "run", "--archive", archive, "--start", "0",
+                "--workspace", fixture.Directory, "--output-tree", outside,
+            })
+            .WithWorkingDirectory(cliDirectory)
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync();
+
+        // The run itself completes; the requested artifact does not exist. CI must be able to see that without
+        // parsing stderr, so the exit code and the result both say it.
+        Assert.AreEqual(1, result.ExitCode, result.StandardError);
+        StringAssert.Contains(result.StandardError, "outside the workspace");
+        StringAssert.Contains(result.StandardOutput, "stateFileError");
+        Assert.IsFalse(File.Exists(outside));
     }
 
     private static async Task<string> WaitForJobStateAsync(McpClient client, string id, string expected)

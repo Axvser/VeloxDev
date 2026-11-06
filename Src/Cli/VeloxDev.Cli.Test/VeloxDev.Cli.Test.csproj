@@ -12,6 +12,8 @@
 		<PackageReference Include="MSTest" Version="4.0.2" />
 		<!-- The integration test drives the real server over stdio, not a direct method call. -->
 		<PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+		<!-- Process-level checks go through one cross-platform command shape; no per-OS ProcessStartInfo. -->
+		<PackageReference Include="CliWrap" Version="3.10.5" />
 		<PackageReference Include="coverlet.collector" Version="6.0.4">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
