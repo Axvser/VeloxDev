@@ -447,6 +447,15 @@ public sealed partial class VeloxJsonReader
             && CharAt(_position + 3) == 'l';
     }
 
+    /// <summary>Consumes the JSON <c>null</c> literal when it is next, asynchronously; see the sync counterpart.</summary>
+    public async Task<bool> ReadNullIfPresentAsync()
+    {
+        ReleaseMember();
+        if (!await NextIsNullAsync().ConfigureAwait(false)) return false;
+        _position += 4;
+        return true;
+    }
+
     /// <summary>Whether the next token is a quoted string, asynchronously.</summary>
     public async Task<bool> NextIsStringAsync()
     {

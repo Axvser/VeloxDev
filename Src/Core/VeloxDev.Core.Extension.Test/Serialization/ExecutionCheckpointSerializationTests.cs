@@ -38,6 +38,30 @@ public class ExecutionCheckpointSerializationTests
     };
 
     [TestMethod]
+    public void ACheckpointWithNoRedirectOrData_RoundTrips()
+    {
+        // Every node completed without a redirect and produced no payload — the ordinary case for a
+        // checkpointed chain. The nullable members are written as null and must be consumed on the way back,
+        // or the next member sees the null literal where it expects a comma.
+        var checkpoint = new ExecutionCheckpoint
+        {
+            Attempt = 1,
+            ActiveRedirectTarget = null,
+            Data = null,
+            Outputs = new Dictionary<string, object?> { ["n1"] = null },
+            Shape = ["n1"],
+            Types = ["SlowNodeViewModel"],
+        };
+
+        var restored = checkpoint.SerializeCheckpoint().DeserializeCheckpoint();
+
+        Assert.IsNotNull(restored, "a checkpoint with null optional members must still deserialize");
+        Assert.IsNull(restored.ActiveRedirectTarget);
+        Assert.IsNull(restored.Data);
+        Assert.IsNull(restored.Outputs["n1"]);
+    }
+
+    [TestMethod]
     public void ACheckpoint_RoundTripsThroughJson()
     {
         var restored = Checkpoint().SerializeCheckpoint().DeserializeCheckpoint();

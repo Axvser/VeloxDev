@@ -434,6 +434,23 @@ public sealed partial class VeloxJsonReader
     }
 
     /// <summary>
+    /// Consumes the JSON <c>null</c> literal when it is next, and reports whether it did.
+    /// </summary>
+    /// <returns><see langword="true"/> when a <c>null</c> was consumed; <see langword="false"/> when the next value is not null.</returns>
+    /// <remarks>
+    /// <see cref="NextIsNull"/> is a lookahead and deliberately does not advance. A reader for a nullable value type
+    /// needs the consuming form: branching on the lookahead alone leaves the literal in the stream, and the object's
+    /// next <see cref="NextMember()"/> then finds <c>null</c> where it expects a comma.
+    /// </remarks>
+    public bool ReadNullIfPresent()
+    {
+        ReleaseMember();
+        if (!NextIsNull()) return false;
+        _position += 4;
+        return true;
+    }
+
+    /// <summary>
     /// Reads an enum written as the name of its value, or the JSON <c>null</c> literal.
     /// </summary>
     /// <param name="enumType">The enum's type.</param>

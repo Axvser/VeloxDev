@@ -424,9 +424,16 @@ namespace VeloxDev.Generators.Writers
             string Call(string name) => $"{wait}reader.{name}{(async ? "Async" : string.Empty)}(){configure}";
 
             // 可空值类型：缺值时文档里就是 null，读法与底层类型一样，只是结果可能为空。
+            // 必须用「消费 null」的版本：NextIsNull 只是前瞻，分支里不走 else 时字面量会留在流里，
+            // 对象的 NextMember 随后会在逗号的位置看到 null。
             var underlying = VeloxJsonModelBuilder.UnwrapNullable(type);
             if (!SymbolEqualityComparer.Default.Equals(underlying, type))
-                return $"({Call("NextIsNull")} ? null : {ScalarRead(underlying, async)})";
+            {
+                var nullRead = async
+                    ? $"await reader.ReadNullIfPresentAsync(){configure}"
+                    : "reader.ReadNullIfPresent()";
+                return $"({nullRead} ? null : {ScalarRead(underlying, async)})";
+            }
 
             if (type.TypeKind == TypeKind.Enum)
                 return $"({FullTypeOf(type)}){Call("ReadInt64")}";

@@ -232,6 +232,18 @@
 **另一处同日收尾时补上：读侧的标量表也漏了同一条 `byte[]`，以及 `DateTime` 的 `RoundtripKind`**（见 §八）——
 两处只在集合元素上走得到，所以上面那六处的测试都没碰到它们。
 
-**这轮收在 100%**：`Src/Core/VeloxDev.Core/Serialization/`，行 2022/2022、分支 1201/1201
-（2026-10-05 收尾实测，`dotnet-coverage merge` 合并两个测试程序集后读数；含同日加的注册归属规则）。
-方法、读数与工具上的两个坑见 [architecture.md](architecture.md) §七。
+**这轮收在 100%**：`Src/Core/VeloxDev.Core/Serialization/`，行 2022/2022、分支 1201/1201（2026-10-05 收尾实测，`dotnet-coverage merge` 合并两个测试程序集后读数；含同日加的注册归属规则）。方法、读数与工具上的两个坑见 [architecture.md](architecture.md) §七。
+
+## 十一、可空值类型的 null 必须被**消费**，不是只看一眼（2026-11-06）
+
+生成器为 `Nullable<T>` 标量写了 `(reader.NextIsNull() ? null : reader.ReadInt32())`。`NextIsNull()` 是**前瞻**，
+不推进游标；null 分支里字面量留在流上，对象的 `NextMember()` 随后在逗号的位置看到 `null`，抛
+`FormatException: expected ',' (at offset …)`。`ExecutionCheckpoint.ActiveRedirectTarget`（`int?`）为 null 时必现，
+所以「没有重定向、没有 payload」的检查点写得出、读不回，`ContinueCompiledWorkflow` 永远说没有检查点。
+
+现在 `VeloxJsonReader.ReadNullIfPresent()` / `ReadNullIfPresentAsync()`（`Serialization/VeloxJsonReader.cs` 与
+`.Async.cs`）先 `ReleaseMember()`，命中 null 时 `_position += 4`；`VeloxJsonCodeWriter.ScalarRead` 的可空分支改用它。
+别把 `NextIsNull()` 改成消费版：`ReadEnum`、集合/字典读法都把它当前瞻用。
+
+判据：`ExecutionCheckpointSerializationTests.ACheckpointWithNoRedirectOrData_RoundTrips`，以及 CLI 的
+`AnIsolatedRunWritesTheCheckpointFile_AndInProcessCanContinueFromIt`（隔离 worker 写、进程内读回继续）。
