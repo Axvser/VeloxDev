@@ -47,6 +47,8 @@
 
 **这是闭集。** 要用第 9 个，先改本文件再加进提交；不要在提交里现造一个。
 
+**版本号提交另有约束**：必须独立成一笔，body 的 `[what]` 下列出「包名 / 原版本 / 提升后的版本 / 修改简述」四列表；详见 [version-management-specifications.md](version-management-specifications.md) §六。
+
 **统计词表时要把两套写法都数进去。** 方括号式的历史只有 48 笔，其余绝大多数走的是 `type(scope):` —— 只看方括号形式会得出偏的结论。例：性能类在 `type(scope):` 形式里有 10 笔（`perf(transition)` 等），而 `[ optimize ]` / `[ Optimization ]` 只有 2 笔；本表因此以 `perf` 为准，而不是以笔数少的 `optimize` 为准。
 
 ---
