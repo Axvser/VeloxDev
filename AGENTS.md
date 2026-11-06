@@ -26,7 +26,7 @@
 | 无标记语言平台的适配器基类 | [memory/specifications/adapter-base-class-specifications.md](memory/specifications/adapter-base-class-specifications.md) | 改 **WinForms / Jalium**（判据见 §一：这一家的模板产物里没有标记文件）的适配器或它的 item template 之前；判断「这段代码该进适配器包还是留在模板里」之前 |
 | 功能落层（Core / 适配器 / 模板 / demo） | [memory/specifications/layer-ownership-specifications.md](memory/specifications/layer-ownership-specifications.md) | 判断一段连线或视图的功能该落在 Core / 适配器 / item template / demo 哪一层之前；给连线做**外观**（高亮、选中、主题、流光）之前 |
 | 输入家族类型的别名 | [memory/specifications/input-alias-specifications.md](memory/specifications/input-alias-specifications.md) | 在 `Src/Adapters/`、`Src/Templates/`、`Examples/` 下写出输入家族那 15 个类型（`IInputEvents` / `InputRelay` / `InputKey` / `InputModifiers` / `MouseButton` / `Pointer*EventArgs` / `Key*EventArgs`，清单见手册 §二）中的**任何一个**之前 |
-| 版本管理 | [memory/specifications/version-management-specifications.md](memory/specifications/version-management-specifications.md) | **决定或提交一个新版本号时** —— 改任何包 csproj 的 `<Version>` 之前；判断这一轮改动该提 `x1` / `x2` / `x3` 哪一位之前；判断 Core / 生成器提升时哪些包必须同步、模板要不要动之前；**提交版本号变更之前**（必须独立成一笔，body 列出包名 / 原版本 / 提升后的版本 / 修改简述）。破坏性提 `x1`、功能增量提 `x2`、优化修复提 `x3` |
+| 版本管理 | [memory/specifications/version-management-specifications.md](memory/specifications/version-management-specifications.md) | **决定或提交一个新版本号时** —— 改任何包 csproj 的 `<Version>` 之前；判断这一轮改动该提 `x1` / `x2` / `x3` 哪一位之前；判断 Core / 生成器提升时哪些包必须同步、模板要不要动之前；**提交版本号变更之前**（必须独立成一笔，body 列出包名 / 原版本 / 提升后的版本 / 修改简述）。破坏性提 `x1`、功能增量提 `x2`、优化修复提 `x3`（一轮命中多位时只取最高一档、低位归零）；7 个适配器与 CLI 独立：`x1` 跟 Core，`x2` 只看自身功能；适配器 `x3` 只算适配层自己的非破坏性变更（Core / Extension 依赖版本变化不算），CLI 的 `x3` 还包括 Core / Extension 依赖版本变更。**为适配更高 Core 而发版时，适配器与 CLI 的 `x1` / `x2` 对齐 Core** |
 
 ---
 

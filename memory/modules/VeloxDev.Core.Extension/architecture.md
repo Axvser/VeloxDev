@@ -379,6 +379,6 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 （`ReadMap` 里 `key is null → SkipValue`）。
 
 **⚠ 修的是生成器，所以 Release 不受益。** `VeloxJsonRegistry` / `ReadValue` 那半边在源码里、两种配置都生效；
-但**工厂是生成代码**，而 Release 走的是 NuGet 包（`VeloxDev.Core.csproj` 的 `<Version>`（当前 `11.0.0`）、
+但**工厂是生成代码**，而 Release 走的是 NuGet 包（`VeloxDev.Core.csproj` 的 `<Version>`（当前 `11.2.0`）、
 `VeloxDev.Core.Extension.Test.csproj` 的生成器 `PackageReference`（当前 `11.0.0`））—— 不升包，Release 下带连接的树仍然读不回来。
 哪几处要一起升见 [`VeloxDev.Core.Generator/extension.md`](../VeloxDev.Core.Generator/extension.md) §四。
