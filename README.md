@@ -1,48 +1,55 @@
+<div align="center">
+
+<img src="Assets/veloxdev-logo.png" width="96" height="96" alt="VeloxDev logo">
+
 # VeloxDev
 
 **A node-editor and workflow-engine framework for .NET.**
 
-![VeloxDev Flow Studio — a professional node editor built with VeloxDev](https://pic1.imgdb.cn/i/034i52aFN0kg2b1nmdDcYp.png)
+[![Documentation](https://img.shields.io/badge/docs-online-4f8ff7?logo=readthedocs&logoColor=white)](https://axvser.github.io/VeloxDev.Docs/)
+[![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?logo=nuget&label=NuGet)](https://www.nuget.org/packages/VeloxDev.Core)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-8%20skills-d97757)](skills/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.txt)
 
-**One model, seven GUIs.** Build the editor above with **WPF, Avalonia, WinUI, MAUI, WinForms, Blazor/Razor, or Jalium** — the same graph model, commands and execution engine behind all of them. The same model also runs headless through `VeloxDev.Core`, so the interactive and non-interactive paths are one implementation.
+<img src="Assets/promo/00-overview.gif" width="100%" alt="VeloxDev overview: a real node editor, seven GUIs, the pipeline, the four layers and the eight Claude skills">
 
-[Documentation](https://axvser.github.io/VeloxDev.Docs/) · [NuGet](https://www.nuget.org/packages/VeloxDev.Core) · [Examples](Examples/) · [MIT License](LICENSE.txt)
+<sub>**Overview** · six beats: the real editor, seven GUIs, the pipeline, the four layers, the skills, the close.</sub>
 
-## What this repository is
+</div>
 
-A workflow is a **tree of nodes**. Nodes own **slots**, slots are wired into **links**, and a slot declares a **channel** — how many connections it accepts in each direction — so the model itself knows which wiring is legal.
+## Workflow — the core film
 
-VeloxDev is built around that model, for the two ways it gets used:
+<img src="Assets/promo/01-workflow.gif" width="100%" alt="Workflow: a partial node class becomes a node card, slot channels limit the wiring, edits are commands, and the compiler turns the tree into chain, branch and parallel segments">
 
-- **Interactive** — a person edits a node editor: drags nodes, wires ports, pans and zooms, undoes structural changes.
-- **Non-interactive** — a program, a service, or an AI agent builds the graph, compiles it, and runs it headlessly.
+<sub><code>skills/veloxdev-create-workflow</code> · a tree of nodes, slots and links — edited or executed.</sub>
 
-These are not two implementations. They use the same model, the same commands, the same connection validation and the same undo stack. A graph edited on a canvas runs in a console; a graph built by code or an Agent opens on the canvas and can be edited there.
+## One skill per film
 
-### The four layers
+<table>
+<tr>
+<td align="center" width="50%"><b>ViewModels</b><br><img src="Assets/promo/02-viewmodels.gif" width="100%" alt="A VeloxProperty field becomes an observable property with an (old, new) callback, and an async method becomes a typed command"><br><sub><code>skills/veloxdev-write-viewmodels</code> · write the node, not the plumbing.</sub></td>
+<td align="center" width="50%"><b>Animation</b><br><img src="Assets/promo/03-animation.gif" width="100%" alt="A transition chain on opacity with cubic easing, then the easing curve families"><br><sub><code>skills/veloxdev-create-animation</code> · motion is a transition: declare it, reuse it, chain it.</sub></td>
+</tr>
+<tr>
+<td align="center" width="50%"><b>Themes</b><br><img src="Assets/promo/04-themes.gif" width="100%" alt="Declared Light and Dark palettes, then jump, animated transition and a runtime override"><br><sub><code>skills/veloxdev-switch-themes</code> · one palette, any surface — and the change can animate.</sub></td>
+<td align="center" width="50%"><b>Tick loop</b><br><img src="Assets/promo/05-tick.gif" width="100%" alt="A tickable channel with five lifecycle hooks on one timeline"><br><sub><code>skills/veloxdev-tick-loop</code> · a Unity-style frame loop for any class.</sub></td>
+</tr>
+<tr>
+<td align="center" width="50%"><b>Aspects</b><br><img src="Assets/promo/06-aspects.gif" width="100%" alt="Caller, proxy and target, with before, coverage and after hooks"><br><sub><code>skills/veloxdev-add-aspects</code> · cross-cutting behaviour without editing the member body.</sub></td>
+<td align="center" width="50%"><b>AI control</b><br><img src="Assets/promo/07-ai.gif" width="100%" alt="Prompt, tool, policy and graph, with MCP, skills, sub-agents and permission modes"><br><sub><code>skills/veloxdev-drive-workflow-with-ai</code> · the Agent edits the same graph through the same commands.</sub></td>
+</tr>
+</table>
 
-| Layer                                                | It owns                                                                                                                                                                                                                   | It does not own                                                                                                                         |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **`VeloxDev.Core`**                          | The tree / node / slot / link model, undoable commands, canvas geometry and hit testing, spatial virtualization, standard input routing, the compiler and runtime, and the closed-world serializer. Zero UI dependencies. | Any drawing, any native input, any platform lifecycle.                                                                                  |
-| **`VeloxDev.Core.Extension`**                | The optional AI surface over a tree: Agent tools, MCP, skills, sub-agents, and file-backed checkpoints. Additive — `Core` never references it.                                                                         | Anything the editor needs to run. A plain editor does not install it.                                                                   |
-| **`VeloxDev.<GUI>`** (seven adapters)        | Platform mechanics: translate native pointer and key input, pool and place views, implement drag / pan / zoom / connect gestures, focus and scroll routing, and — where the platform has one — a frame pacer.           | Graph rules, execution semantics, and what interaction should look like.                                                                |
-| **`VeloxDev.<GUI>.Templates`** (seven packs) | `dotnet new` item templates for the seven view roles: tree, node, slot, link, template selector, grid decorator, minimap.                                                                                               | Interaction effects and app policy. Templates draw the passive view; your app decides how a hover, a selection or a theme change looks. |
+## Headless CLI
 
-The **source generator** (`VeloxDev.Core.Generator`) is what makes the model pleasant to write: it turns `[WorkflowBuilder.*]`, `[VeloxProperty]` and `[VeloxCommand]` into `INotifyPropertyChanged`, commands, helper lifecycle and serializer code. It ships inside the packages as an analyzer.
+<img src="Assets/promo/08-cli.gif" width="100%" alt="A stdio MCP session loads an archive and its assemblies into an isolated worker, then a one-shot run writes its output tree">
 
-### What it solves
+<sub><code>skills/veloxdev-use-workflow-cli</code> · load, inspect, edit, compile and run without a window.</sub>
 
-| If you are building…                                         | VeloxDev gives you…                                                                                                                                                                |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A node editor for automation, data pipelines, or agent graphs | The complete editing layer: model, commands, undo/redo, coordinate math, and hit testing against the curve the view painted                                                         |
-| A canvas that stays responsive on large graphs                | A spatial grid and virtualized visible set (`TreeHelper(cellSize)`), plus adapter-side view pooling                                                                               |
-| Wiring rules that cannot be bypassed                          | Slot channels, two-phase connection (`SendConnection` → `ReceiveConnection`), a `ValidateConnection` hook, and drag-time preview checks with reason codes                    |
-| Ports that change with the node's configuration               | `SlotEnumerator<T>` + `[SlotSelectors]`: an enum, `bool`, or your own provider rebuilds the ports; existing links are restored where possible                                 |
-| A workflow runtime                                            | A compiled plan with chains, router branches, parallel fan-out and joins; redirects instead of cycles; optional pause, observation, retry, error, compensation and checkpoint hooks |
-| Headless execution in a service or CI                         | `VeloxDev.Core` only — no UI assembly is referenced, and the graph can be built, compiled and run from a console                                                                 |
-| An AI agent that can operate the editor                       | `VeloxDev.Core.Extension`: tools that dispatch the same commands as the canvas, behind explicit policy gates and call budgets                                                     |
-| An MCP client driving a headless workflow                     | `VeloxDev.Cli`: loads a workflow archive and its component assemblies, then exposes inspection, editing, compilation and execution over stdio MCP                                  |
-| The same product on several GUIs                              | Seven adapters with the same public surface: WPF, Avalonia, WinUI, MAUI, WinForms, Razor, Jalium                                                                                    |
+All nine are 1280 × 720 at 15 fps. Each skill film is one of the eight
+[`skills/`](skills/) `SKILL.md` files, and each film is also a VeloxDev workflow
+archive that `veloxdev run` executes end to end. Beats and verification:
+[Assets/promo/README.md](Assets/promo/README.md).
 
 ## Packages
 
@@ -50,6 +57,7 @@ The **source generator** (`VeloxDev.Core.Generator`) is what makes the model ple
 dotnet add package VeloxDev.Core              # the graph model + engine, no UI
 dotnet add package VeloxDev.WPF               # one adapter (brings Core)
 dotnet add package VeloxDev.Core.Extension    # optional — the AI surface
+dotnet tool install --global VeloxDev.Cli     # optional — headless host and MCP server
 ```
 
 | Platform | Package               | Targets                                                                                |
@@ -62,15 +70,19 @@ dotnet add package VeloxDev.Core.Extension    # optional — the AI surface
 | Razor    | `VeloxDev.Razor`    | `net6.0` · `net8.0`                                                               |
 | Jalium   | `VeloxDev.Jalium`   | `net10.0`                                                                            |
 
-`VeloxDev.Core` itself targets `netstandard2.0`, `netframework4.6.1`, `net5.0`, `netcoreapp3.0` and `net8.0`, and declares `IsAotCompatible` on `net8.0`. Trimming and AOT remain per-platform realities: the adapters enable the analyzers, but the GUI framework itself may not support them.
+`VeloxDev.Core` targets `netstandard2.0` through `net8.0` and declares `IsAotCompatible` on `net8.0`; trimming and AOT remain per-platform realities.
 
 ### Generate the view suite
 
-Each adapter ships a template pack with the same seven items.
-
 ```powershell
 dotnet new install VeloxDev.WPF.Templates
+dotnet new wpf-v-node -n NodeView -ns MyApp.Views
+```
 
+<details>
+<summary>All seven roles, and the prefix for each adapter</summary>
+
+```powershell
 dotnet new wpf-v-tree      -n WorkflowView     -ns MyApp.Views
 dotnet new wpf-v-node      -n NodeView         -ns MyApp.Views
 dotnet new wpf-v-slot      -n SlotView         -ns MyApp.Views
@@ -80,170 +92,53 @@ dotnet new wpf-v-decorator -n GridDecorator    -ns MyApp.Views
 dotnet new wpf-v-minimap   -n MinimapOverlay   -ns MyApp.Views
 ```
 
-Other adapters use their own prefix: `ava-v-*`, `winui-v-*`, `maui-v-*`, `winforms-v-*`, `razor-v-*`, `jalium-v-*`.
+The other adapters use `ava-v-*`, `winui-v-*`, `maui-v-*`, `winforms-v-*`, `razor-v-*` and `jalium-v-*`.
+
+</details>
 
 ## Workflow in code
 
-The snippets below walk one three-node chain: `ticker → bias → printer`.
-
-### A node is a partial class
+The whole loop: a node, a wire, a compile and a run.
 
 ```csharp
-// The generator supplies INotifyPropertyChanged, the commands and the Helper lifecycle.
 [WorkflowBuilder.Node<BiasNodeHelper>]
 public partial class BiasNodeViewModel
 {
     public BiasNodeViewModel() => InitializeWorkflow();
-
     [VeloxProperty] public partial SlotViewModel Input { get; set; }
     [VeloxProperty] public partial SlotViewModel Output { get; set; }
-    [VeloxProperty] private string title = "Bias";
 }
 
-public sealed class BiasNodeHelper : NodeHelper<BiasNodeViewModel>
-{
-    // What this node computes. The return value is passed to the next node in the chain.
-    public override Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
-        => Task.FromResult<object?>($"{context.Data}->bias");
-}
-```
-
-Slot types are declared the same way, with `[WorkflowBuilder.Slot<...>]`. A slot's `Channel` decides its capacity:
-
-```csharp
-output.SetChannelCommand.Execute(SlotChannel.MultipleTargets); // fan out from this port
-input.SetChannelCommand.Execute(SlotChannel.OneSource);        // one upstream connection only
-```
-
-### Edit through the same commands the canvas uses
-
-```csharp
 tree.CreateNodeCommand.Execute(bias);
-tree.SendConnectionCommand.Execute(ticker.Output);   // start from the sender…
-tree.ReceiveConnectionCommand.Execute(bias.Input);   // …complete on the receiver
-tree.UndoCommand.Execute(null);                      // the connection is one undoable step
-```
+tree.SendConnectionCommand.Execute(ticker.Output);
+tree.ReceiveConnectionCommand.Execute(bias.Input);
 
-Connection legality is a host rule, not a hard-coded policy:
-
-```csharp
-public sealed class GraphHelper : TreeHelper<GraphViewModel>
-{
-    public override bool ValidateConnection(
-        IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
-        => receiver.Parent is not SinkNodeViewModel;   // your rule
-}
-```
-
-During a drag, the same rules produce a preview for the candidate port, with a reason when it is invalid. A host can narrow a valid candidate further, but cannot turn a framework rejection into a valid one.
-
-### Compile once, run deterministically
-
-```csharp
 var compiler = new CompilerViewModel();
 var graph = (await compiler.CompileAsync(ticker, CompileRole.Root)).Single();
-
 var session = new RuntimeContext { Data = "seed" };
 await new RuntimeEngine().RunAsync(graph, session, CancellationToken.None);
-
-Console.WriteLine(session.Data);   // seed -> tick -> bias -> print
 ```
 
-`CompileRole.Root` walks downstream from a start node. `CompileRole.Terminal` does the opposite — it compiles only the ancestor cone needed for one node's result, and needs no start node:
+`BiasNodeHelper.ReceiveAsync` is the node's computation; the generator writes the rest.
 
-```csharp
-var cone = (await compiler.CompileAsync(printer, CompileRole.Terminal)).Single();
+- `CompileRole.Terminal` compiles the ancestor cone for one node instead of walking downstream.
+- Branches compile to router segments, fan-out to parallel segments with keyed joins, and loops are redirects, not cycles.
+- `ValidateConnection` is the host's rule; drag-time previews use it and report a reason.
+- `SlotEnumerator<T>` + `[SlotSelectors]` rebuild a node's ports when its configuration changes.
 
-var probe = new RuntimeContext { Target = printer };
-await new RuntimeEngine().RunAsync(cone, probe, ct);
-
-Console.WriteLine(probe.TargetReached ? probe.Data : "target not reached");
-```
-
-The execution model is deliberately explicit:
-
-- **Branches are real.** A node implementing `ICompileTimeRouter` compiles to a branch; static keys are pruned at compile time, dynamic keys are resolved at runtime. If a router selects a sibling branch, the target is reported as not reached — never fabricated.
-- **Fan-out is concurrent, joins are keyed.** A route key with several targets compiles to a parallel segment; a join receives an `IGroupData` keyed by the upstream node, so "wait for all inputs" works regardless of interleaving.
-- **Loops are redirects, not cycles.** `IRedirectable` returns an upstream node; the engine maps it to that node's compile order and re-runs the graph from there, up to 50 redirects per run.
-- **Run controls are optional session objects.** `ExecutionGate`, `Observer`, `RetryPolicy`, `ErrorSink`, `Compensation` and `CheckpointStore` are attached to `RuntimeContext`; none of them changes a run when absent.
-- **Outcome and position are separate.** `TargetReached` says the target was driven; `Outcome` says whether the run completed, was cancelled or failed.
-
-### Input is routed; appearance is yours
-
-Adapters translate native pointer and key input once. Core routes it to the hit component, then along its ancestors, and delivers `Exited` before the next `Entered`:
-
-```csharp
-if (link?.GetHelper() is IInputEvents events)
-{
-    events.Input.PointerEntered += (_, _) => IsHighlighted = true;
-    events.Input.PointerExited  += (_, _) => IsHighlighted = false;
-}
-```
-
-There is no `ILinkHighlight` in Core, and that is intentional. The library supplies events, hit testing against the curve the view actually painted, and a per-action handle. The host decides what a hover looks like; a handler can set `PreventDefault` to veto one framework action, such as Delete, without disabling it globally.
-
-### Ports that change shape
-
-```csharp
-[VeloxProperty]
-[SlotSelectors(typeof(PythonPortProvider))]
-public partial SlotEnumerator<SlotViewModel> Inputs { get; set; }
-```
-
-Changing the selector rebuilds the port set. Links are restored by name when the provider stays the same, and by position when the selector type changes. The same operation is available to the Agent as `SetEnumSlotCollection`.
-
-## AI control (optional)
-
-The **Workflow Agent** turns a tree into a tool surface for any `IChatClient`. Every mutation goes through the same component command the GUI dispatches, so the Agent and the canvas share one edit path and one undo stack.
-
-```csharp
-var scope = tree.AsAgentScope()
-    .WithAutoDiscovery()
-    .WithMaxToolCalls(200)
-    .WithAllowNodeExecution(true)                              // node execution is off by default
-    .WithSynchronizationContext(SynchronizationContext.Current);
-
-var agent = chatClient.AsAIAgent(
-    scope.CreateContextProviders(),
-    instructions: scope.ProvideProgressiveContextPrompt());
-```
-
-What keeps the surface safe under a real session:
-
-- **Node execution is opt-in.** Until the host calls `WithAllowNodeExecution(true)`, execution tools are absent.
-- **Budgets are enforced.** `WithMaxToolCalls`, plus separate read and write caps, bound a session. `Bypass` turns the three call-count caps off — it asks nothing — while the token cap still holds.
-- **Interaction is explicit.** Selection and confirmation tools appear only when the host wires a handler.
-- **Plans can be read before they run.** `CompileWorkflow` / `CompileNodeResult` expose the plan. `RunCompiledWorkflow` waits for the end; `StartCompiledWorkflow` returns a handle that can be paused, resumed, polled or stopped.
-- **MCP, skills and sub-agents are separate subsystems.** Each can also be used on its own; an MCP server joins the tool set on the next turn without rebuilding the agent.
-
-## Transition in code
-
-The same source also ships the rendering layer the editor uses for polish. A transition is a chain you build, then execute:
-
-```csharp
-var fade = Transition<Rectangle>.Create()
-    .Property(r => r.Opacity, 0d)
-    .Effect(new TransitionEffect { Duration = TimeSpan.FromSeconds(0.4), Ease = Eases.Cubic.Out });
-
-fade.Execute(rect);
-```
-
-Several transitions can share one timeline: pausing, seeking or re-rating it moves all of them, while each keeps its own progress. The adapters contribute only a frame pacer where the platform has one (Razor deliberately has none); easing, keyframes, sampling and scheduling are Core code shared by all seven.
-
-## The other layers
-
-All of these live in `VeloxDev.Core` and need no canvas.
+## Also in Core
 
 | Layer                   | What it gives you                                                                                                                                  |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **MVVM**          | Generated observable properties and async, cancellable commands — no `INotifyPropertyChanged` boilerplate                                       |
-| **Transition**    | The animation engine above: timelines, easing, keyframes, scheduling                                                                               |
+| **Transition**    | Timelines, easing, keyframes and scheduling — the animation engine the adapters share                                                              |
 | **Theme**         | Runtime theme switching that animates between states instead of snapping                                                                           |
-| **AOP**           | Generated aspect interfaces with runtime proxies — intercept a member without touching the class that declares it                                 |
+| **AOP**           | Generated aspect interfaces with runtime proxies — intercept a member without touching the class that declares it                                   |
 | **Tickable**      | A frame-driven lifecycle loop with a fixed-step pump beside the variable one                                                                       |
 | **Serialization** | A closed-world archiver with generated readers and writers — no reflection, and an unseen type fails loudly instead of serializing an empty shell |
 
-## Repository map
+<details>
+<summary><b>Repository map</b></summary>
 
 | Path                                                                    | What it holds                                                            |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -254,6 +149,8 @@ All of these live in `VeloxDev.Core` and need no canvas.
 | [`Src/Generators/`](Src/Generators/)                                   | The Roslyn generator                                                     |
 | [`Examples/`](Examples/)                                               | A demo per feature per GUI, including trimmed-publish demos              |
 | [`Docs/`](Docs/)                                                       | The source of the documentation site                                     |
+
+</details>
 
 ## License
 
