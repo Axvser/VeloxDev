@@ -4,6 +4,8 @@
              xmlns:controls="clr-namespace:Demo.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
+             xmlns:cex="clr-namespace:VeloxDev.Core.WorkflowSystem.CompilerEx;assembly=VeloxDev.Core"
+             xmlns:sub="clr-namespace:VeloxDev.AI.SubAgents;assembly=VeloxDev.Core.Extension"
              xmlns:workflow="clr-namespace:VeloxDev.WorkflowSystem;assembly=VeloxDev.Core"
              x:Class="Demo.Controls.WorkflowView"
              x:Name="Root"
@@ -15,6 +17,11 @@
              behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
              behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
     <ContentView.Resources>
+        <controls:InvertedBoolConverter x:Key="InverseBool" />
+        <controls:ZeroToBoolConverter x:Key="ZeroToBool" />
+        <controls:DepthToIndentConverter x:Key="DepthIndent" />
+        <controls:ZoomPercentConverter x:Key="ZoomPercent" />
+
         <DataTemplate x:Key="NodeTemplate">
             <controls:NodeView WidthRequest="{Binding Size.Width}"
                                HeightRequest="{Binding Size.Height}" />
@@ -46,594 +53,895 @@
         <MenuFlyout x:Key="LinkContextMenu">
             <MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}" />
         </MenuFlyout>
-
-        <!-- VS Code-style sidebar: a flat section heading and compact action row. -->
-        <Style x:Key="SidebarSectionStyle" TargetType="Label">
-            <Setter Property="TextColor" Value="#BBBBBB" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontAttributes" Value="Bold" />
-            <Setter Property="Margin" Value="12,14,12,6" />
-        </Style>
-        <Style x:Key="SidebarActionButtonStyle" TargetType="Button">
-            <Setter Property="BackgroundColor" Value="Transparent" />
-            <Setter Property="TextColor" Value="#CCCCCC" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="HeightRequest" Value="26" />
-            <Setter Property="Padding" Value="6,0" />
-            <Setter Property="CornerRadius" Value="3" />
-        </Style>
     </ContentView.Resources>
 
-    <Grid ColumnDefinitions="Auto,*">
-        <!-- Left rail: 48px activity bar plus the 300px sidebar. -->
-        <Grid Grid.Column="0" ColumnDefinitions="48,300">
+    <!-- ============================================================ -->
+    <!--  Workbench: title strip / activity bar + panels / status bar  -->
+    <!-- ============================================================ -->
+    <Grid RowDefinitions="32,*,24">
+
+        <!-- Title strip: brand, menu, command center, platform chrome. -->
+        <Grid x:Name="TitleBarHost" Grid.Row="0" BackgroundColor="{StaticResource WorkActivityBar}">
+            <Grid ColumnDefinitions="Auto,*,Auto" Padding="12,0,8,0">
+                <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                    <Border WidthRequest="18" HeightRequest="18" BackgroundColor="{StaticResource WorkAccent}"
+                            StrokeThickness="0" StrokeShape="RoundRectangle 3" VerticalOptions="Center">
+                        <Label Text="V" TextColor="White" FontSize="11" FontAttributes="Bold"
+                               HorizontalOptions="Center" VerticalOptions="Center" />
+                    </Border>
+                    <Label Text="VeloxDev" Style="{StaticResource WorkbenchTitle}" Margin="2,0,0,0" />
+                    <Label Text="Workflow Studio" TextColor="{StaticResource WorkTextTertiary}" FontSize="11"
+                           VerticalOptions="Center" Margin="0,0,8,0" />
+
+                    <!-- MAUI has no menu-bar control and its Button cannot host a Flyout on click,
+                         so the menus open as the platform's action sheet — the platform equivalent. -->
+                    <Button Text="文件" Style="{StaticResource WorkbenchMenuButton}" Clicked="OnFileMenu" />
+                    <Button Text="编辑" Style="{StaticResource WorkbenchMenuButton}" Clicked="OnEditMenu" />
+                    <Button Text="视图" Style="{StaticResource WorkbenchMenuButton}" Clicked="OnViewMenu" />
+                    <Button Text="帮助" Style="{StaticResource WorkbenchMenuButton}" Clicked="OnHelpMenu" />
+                </HorizontalStackLayout>
+
+                <Border x:Name="CommandCenterButton" Grid.Column="1" WidthRequest="330"
+                        HorizontalOptions="Center" VerticalOptions="Center"
+                        Style="{StaticResource WorkbenchCommandCenterBox}"
+                        ToolTipProperties.Text="搜索并运行命令">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnOpenCommandCenter" />
+                    </Border.GestureRecognizers>
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                        <Label Text="⌕" TextColor="{StaticResource WorkTextTertiary}" FontSize="12"
+                               VerticalOptions="Center" />
+                        <Label Grid.Column="1" Text="搜索命令" TextColor="{StaticResource WorkTextTertiary}"
+                               FontSize="11" VerticalOptions="Center" />
+                        <Label Grid.Column="2" Text="命令" TextColor="{StaticResource WorkTextTertiary}"
+                               FontSize="10" VerticalOptions="Center" />
+                    </Grid>
+                </Border>
+
+                <HorizontalStackLayout Grid.Column="2" Spacing="1" VerticalOptions="Center">
+                    <Button Text="◧" Style="{StaticResource WorkbenchIconButton}"
+                            ToolTipProperties.Text="切换侧栏" Clicked="OnToggleSidebar" />
+                    <Button Text="◨" Style="{StaticResource WorkbenchIconButton}"
+                            ToolTipProperties.Text="切换右侧面板" Clicked="OnToggleInspector" />
+                    <BoxView WidthRequest="1" HeightRequest="16" Color="{StaticResource WorkBorder}"
+                             Margin="6,0" VerticalOptions="Center" />
+                    <Label Text="MAUI" TextColor="{StaticResource WorkTextTertiary}" FontSize="11"
+                           VerticalOptions="Center" Margin="4,0" />
+                </HorizontalStackLayout>
+            </Grid>
+            <BoxView HeightRequest="1" Color="{StaticResource WorkBorderSubtle}"
+                     HorizontalOptions="Fill" VerticalOptions="End" />
+        </Grid>
+
+        <!-- Workbench body: activity bar / sidebar / canvas / inspector. -->
+        <Grid x:Name="WorkbenchGrid" Grid.Row="1" ColumnDefinitions="48,272,1,*,1,348">
+
             <!-- Activity bar -->
-            <Border Grid.Column="0" BackgroundColor="#333333" StrokeThickness="0">
-                <VerticalStackLayout Spacing="0">
-                    <Grid x:Name="ActivityExplorer"
-                          HeightRequest="48"
-                          WidthRequest="48"
-                          BackgroundColor="#333333"
-                          ToolTipProperties.Text="资源管理器">
-                        <Grid.GestureRecognizers>
-                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="explorer" />
-                        </Grid.GestureRecognizers>
-                        <BoxView x:Name="ActivityExplorerIndicator"
-                                 WidthRequest="2"
-                                 HorizontalOptions="Start"
-                                 Color="#007ACC"
-                                 InputTransparent="True" />
-                        <!-- A document outline. -->
-                        <Path Data="M5,3 L13,3 L19,9 L19,21 L5,21 Z M13,3 L13,9 L19,9 M8,13 L16,13 M8,16 L16,16"
-                              Fill="Transparent"
-                              Stroke="#CCCCCC"
-                              StrokeThickness="1.4"
-                              Aspect="Uniform"
-                              WidthRequest="20"
-                              HeightRequest="20"
-                              HorizontalOptions="Center"
-                              VerticalOptions="Center"
-                              InputTransparent="True" />
-                    </Grid>
+            <Border Grid.Column="0" BackgroundColor="{StaticResource WorkActivityBar}" StrokeThickness="0">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <VerticalStackLayout Grid.Row="0" Margin="0,6,0,0" Spacing="0">
+                        <Grid x:Name="ActivityExplorer" WidthRequest="48" HeightRequest="46"
+                              BackgroundColor="Transparent" ToolTipProperties.Text="资源管理器">
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="explorer" />
+                            </Grid.GestureRecognizers>
+                            <BoxView x:Name="ActivityExplorerIndicator" WidthRequest="2" HorizontalOptions="Start"
+                                     Color="Transparent" InputTransparent="True" />
+                            <Path Data="M5,3 L13,3 L19,9 L19,21 L5,21 Z M13,3 L13,9 L19,9 M8,13 L16,13 M8,16 L16,16"
+                                  Fill="Transparent" Stroke="#A0A0A0" StrokeThickness="1.4" Aspect="Uniform"
+                                  WidthRequest="20" HeightRequest="20" HorizontalOptions="Center"
+                                  VerticalOptions="Center" InputTransparent="True" />
+                        </Grid>
 
-                    <Grid x:Name="ActivityRun"
-                          HeightRequest="48"
-                          WidthRequest="48"
-                          BackgroundColor="#333333"
-                          ToolTipProperties.Text="运行">
-                        <Grid.GestureRecognizers>
-                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="run" />
-                        </Grid.GestureRecognizers>
-                        <BoxView x:Name="ActivityRunIndicator"
-                                 WidthRequest="2"
-                                 HorizontalOptions="Start"
-                                 Color="Transparent"
-                                 InputTransparent="True" />
-                        <!-- A play triangle. -->
-                        <Path Data="M8,4 L20,12 L8,20 Z"
-                              Fill="#CCCCCC"
-                              Aspect="Uniform"
-                              WidthRequest="20"
-                              HeightRequest="20"
-                              HorizontalOptions="Center"
-                              VerticalOptions="Center"
-                              InputTransparent="True" />
-                    </Grid>
+                        <Grid x:Name="ActivityRun" WidthRequest="48" HeightRequest="46"
+                              BackgroundColor="Transparent" ToolTipProperties.Text="运行">
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="run" />
+                            </Grid.GestureRecognizers>
+                            <BoxView x:Name="ActivityRunIndicator" WidthRequest="2" HorizontalOptions="Start"
+                                     Color="Transparent" InputTransparent="True" />
+                            <Path Data="M8,4 L20,12 L8,20 Z" Fill="#A0A0A0" Aspect="Uniform"
+                                  WidthRequest="20" HeightRequest="20" HorizontalOptions="Center"
+                                  VerticalOptions="Center" InputTransparent="True" />
+                        </Grid>
 
-                    <Grid x:Name="ActivityAgent"
-                          HeightRequest="48"
-                          WidthRequest="48"
-                          BackgroundColor="#333333"
-                          ToolTipProperties.Text="Agent 对话">
-                        <Grid.GestureRecognizers>
-                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="agent" />
-                        </Grid.GestureRecognizers>
-                        <BoxView x:Name="ActivityAgentIndicator"
-                                 WidthRequest="2"
-                                 HorizontalOptions="Start"
-                                 Color="Transparent"
-                                 InputTransparent="True" />
-                        <!-- A chat bubble. -->
-                        <Path Data="M4,4 L20,4 L20,15 L11,15 L7,20 L7,15 L4,15 Z"
-                              Fill="Transparent"
-                              Stroke="#CCCCCC"
-                              StrokeThickness="1.4"
-                              Aspect="Uniform"
-                              WidthRequest="20"
-                              HeightRequest="20"
-                              HorizontalOptions="Center"
-                              VerticalOptions="Center"
-                              InputTransparent="True" />
-                    </Grid>
+                        <Grid x:Name="ActivityMcp" WidthRequest="48" HeightRequest="46"
+                              BackgroundColor="Transparent" ToolTipProperties.Text="MCP 服务器">
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="mcp" />
+                            </Grid.GestureRecognizers>
+                            <BoxView x:Name="ActivityMcpIndicator" WidthRequest="2" HorizontalOptions="Start"
+                                     Color="Transparent" InputTransparent="True" />
+                            <Path Data="M9,3 L9,7 M15,3 L15,7 M6,7 L18,7 L18,11 C18,14.3 15.3,17 12,17 C8.7,17 6,14.3 6,11 Z M12,17 L12,21"
+                                  Fill="Transparent" Stroke="#A0A0A0" StrokeThickness="1.4" Aspect="Uniform"
+                                  WidthRequest="20" HeightRequest="20" HorizontalOptions="Center"
+                                  VerticalOptions="Center" InputTransparent="True" />
+                        </Grid>
 
-                    <Grid x:Name="ActivityMcp"
-                          HeightRequest="48"
-                          WidthRequest="48"
-                          BackgroundColor="#333333"
-                          ToolTipProperties.Text="MCP 服务器">
-                        <Grid.GestureRecognizers>
-                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="mcp" />
-                        </Grid.GestureRecognizers>
-                        <BoxView x:Name="ActivityMcpIndicator"
-                                 WidthRequest="2"
-                                 HorizontalOptions="Start"
-                                 Color="Transparent"
-                                 InputTransparent="True" />
-                        <!-- A plug. -->
-                        <Path Data="M9,3 L9,7 M15,3 L15,7 M6,7 L18,7 L18,11 C18,14.3 15.3,17 12,17 C8.7,17 6,14.3 6,11 Z M12,17 L12,21"
-                              Fill="Transparent"
-                              Stroke="#CCCCCC"
-                              StrokeThickness="1.4"
-                              Aspect="Uniform"
-                              WidthRequest="20"
-                              HeightRequest="20"
-                              HorizontalOptions="Center"
-                              VerticalOptions="Center"
-                              InputTransparent="True" />
-                    </Grid>
+                        <Grid x:Name="ActivityOutput" WidthRequest="48" HeightRequest="46"
+                              BackgroundColor="Transparent" ToolTipProperties.Text="执行输出">
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="output" />
+                            </Grid.GestureRecognizers>
+                            <BoxView x:Name="ActivityOutputIndicator" WidthRequest="2" HorizontalOptions="Start"
+                                     Color="Transparent" InputTransparent="True" />
+                            <Path Data="M4,4 L20,4 L20,20 L4,20 Z M7,9 L10,12 L7,15 M12,15 L17,15"
+                                  Fill="Transparent" Stroke="#A0A0A0" StrokeThickness="1.4" Aspect="Uniform"
+                                  WidthRequest="20" HeightRequest="20" HorizontalOptions="Center"
+                                  VerticalOptions="Center" InputTransparent="True" />
+                        </Grid>
+                    </VerticalStackLayout>
 
-                    <Grid x:Name="ActivityOutput"
-                          HeightRequest="48"
-                          WidthRequest="48"
-                          BackgroundColor="#333333"
-                          ToolTipProperties.Text="执行输出">
-                        <Grid.GestureRecognizers>
-                            <TapGestureRecognizer Tapped="OnActivityTapped" CommandParameter="output" />
-                        </Grid.GestureRecognizers>
-                        <BoxView x:Name="ActivityOutputIndicator"
-                                 WidthRequest="2"
-                                 HorizontalOptions="Start"
-                                 Color="Transparent"
-                                 InputTransparent="True" />
-                        <!-- A terminal prompt. -->
-                        <Path Data="M4,4 L20,4 L20,20 L4,20 Z M7,9 L10,12 L7,15 M12,15 L17,15"
-                              Fill="Transparent"
-                              Stroke="#CCCCCC"
-                              StrokeThickness="1.4"
-                              Aspect="Uniform"
-                              WidthRequest="20"
-                              HeightRequest="20"
-                              HorizontalOptions="Center"
-                              VerticalOptions="Center"
-                              InputTransparent="True" />
-                    </Grid>
-                </VerticalStackLayout>
+                    <VerticalStackLayout Grid.Row="2" Margin="0,0,0,6" Spacing="0">
+                        <Grid x:Name="ActivityProperties" WidthRequest="48" HeightRequest="46"
+                              BackgroundColor="Transparent" ToolTipProperties.Text="属性">
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnInspectorActivityTapped" CommandParameter="properties" />
+                            </Grid.GestureRecognizers>
+                            <BoxView x:Name="ActivityPropertiesIndicator" WidthRequest="2" HorizontalOptions="Start"
+                                     Color="Transparent" InputTransparent="True" />
+                            <Path Data="M4,4 L20,4 L20,20 L4,20 Z M8,8 L16,8 M8,12 L16,12 M8,16 L13,16"
+                                  Fill="Transparent" Stroke="#A0A0A0" StrokeThickness="1.4" Aspect="Uniform"
+                                  WidthRequest="20" HeightRequest="20" HorizontalOptions="Center"
+                                  VerticalOptions="Center" InputTransparent="True" />
+                        </Grid>
+
+                        <Grid x:Name="ActivityAgent" WidthRequest="48" HeightRequest="46"
+                              BackgroundColor="Transparent" ToolTipProperties.Text="AI 助手">
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnInspectorActivityTapped" CommandParameter="agent" />
+                            </Grid.GestureRecognizers>
+                            <BoxView x:Name="ActivityAgentIndicator" WidthRequest="2" HorizontalOptions="Start"
+                                     Color="Transparent" InputTransparent="True" />
+                            <Path Data="M4,4 L20,4 L20,15 L11,15 L7,20 L7,15 L4,15 Z"
+                                  Fill="Transparent" Stroke="#A0A0A0" StrokeThickness="1.4" Aspect="Uniform"
+                                  WidthRequest="20" HeightRequest="20" HorizontalOptions="Center"
+                                  VerticalOptions="Center" InputTransparent="True" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Grid>
             </Border>
+            <BoxView Grid.Column="0" WidthRequest="1" Color="{StaticResource WorkBorderSubtle}"
+                     HorizontalOptions="End" VerticalOptions="Fill" />
 
-            <!-- Sidebar -->
-            <Border Grid.Column="1" BackgroundColor="#252526" StrokeThickness="0">
-                <Grid RowDefinitions="Auto,*">
-                    <Label x:Name="SidebarHeader"
-                           Grid.Row="0"
-                           Text="资源管理器"
-                           Margin="12,12,12,4"
-                           TextColor="#CCCCCC"
-                           FontSize="11"
-                           FontAttributes="Bold" />
+            <!-- Sidebar: one page visible at a time. -->
+            <Border x:Name="SidebarHost" Grid.Column="1" BackgroundColor="{StaticResource WorkPanelBackground}"
+                    StrokeThickness="0">
+                <Grid RowDefinitions="34,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Padding="12,0,6,0">
+                        <Label x:Name="SidebarHeader" Text="资源管理器"
+                               Style="{StaticResource WorkbenchPanelTitle}" />
+                        <HorizontalStackLayout Grid.Column="1" Spacing="0" VerticalOptions="Center">
+                            <Button Text="保存" Style="{StaticResource WorkbenchRowAction}"
+                                    ToolTipProperties.Text="保存工作流" Clicked="OnSaveClicked" />
+                            <Button Text="加载" Style="{StaticResource WorkbenchRowAction}"
+                                    ToolTipProperties.Text="加载工作流" Clicked="OnSelectClicked" />
+                            <Button Text="撤销" Style="{StaticResource WorkbenchRowAction}"
+                                    ToolTipProperties.Text="撤销" Clicked="OnUndoClicked" />
+                            <Button Text="重做" Style="{StaticResource WorkbenchRowAction}"
+                                    ToolTipProperties.Text="重做" Clicked="OnRedoClicked" />
+                            <Button Text="重载" Style="{StaticResource WorkbenchRowAction}"
+                                    ToolTipProperties.Text="重新载入示例" Clicked="OnLoadNetworkDemoClicked" />
+                        </HorizontalStackLayout>
+                    </Grid>
+                    <BoxView Grid.Row="0" HeightRequest="1" Color="{StaticResource WorkBorderSubtle}"
+                             HorizontalOptions="Fill" VerticalOptions="End" />
 
                     <Grid Grid.Row="1">
-                        <!-- Explorer: file actions and the element list. -->
-                        <ScrollView x:Name="ExplorerPanel" VerticalScrollBarVisibility="Default">
-                            <VerticalStackLayout Spacing="0">
-                                <HorizontalStackLayout Margin="10,2,10,0" Spacing="2">
-                                    <Button Text="保存"
-                                            Style="{StaticResource SidebarActionButtonStyle}"
-                                            ToolTipProperties.Text="保存工作流"
-                                            Clicked="OnSaveClicked" />
-                                    <Button Text="加载"
-                                            Style="{StaticResource SidebarActionButtonStyle}"
-                                            ToolTipProperties.Text="加载工作流"
-                                            Clicked="OnSelectClicked" />
-                                    <Button Text="撤销"
-                                            Style="{StaticResource SidebarActionButtonStyle}"
-                                            ToolTipProperties.Text="撤销"
-                                            Command="{Binding UndoCommand}" />
-                                    <Button Text="重做"
-                                            Style="{StaticResource SidebarActionButtonStyle}"
-                                            ToolTipProperties.Text="重做"
-                                            Command="{Binding RedoCommand}" />
-                                    <Button Text="重载"
-                                            Style="{StaticResource SidebarActionButtonStyle}"
-                                            ToolTipProperties.Text="重新载入示例"
-                                            Clicked="OnLoadNetworkDemoClicked" />
-                                </HorizontalStackLayout>
-
-                                <Label Text="元素" Style="{StaticResource SidebarSectionStyle}" />
-
-                                <!-- Element list: nodes, slots and links from the tree, each row can
-                                     Locate / Delete. Fixed heights let the three lists scroll here. -->
-                                <Border Margin="12,0,12,0"
-                                        Padding="10"
-                                        BackgroundColor="#202020"
-                                        Stroke="#4C4C4C"
-                                        StrokeThickness="1"
-                                        StrokeShape="RoundRectangle 4">
-                                    <VerticalStackLayout Spacing="6">
-                                        <Label Text="元素（从 Tree 加载）"
-                                               TextColor="#7EC8FF"
-                                               FontAttributes="Bold" />
-
-                                        <Label Text="节点"
-                                               TextColor="#B0B0B0"
-                                               FontSize="11" />
-                                        <CollectionView x:Name="ElementNodeList"
-                                                        HeightRequest="150"
-                                                        SelectionMode="None">
-                                            <CollectionView.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
-                                                    <Grid ColumnDefinitions="*,Auto,Auto"
-                                                          ColumnSpacing="4"
-                                                          Margin="0,1">
-                                                        <Label Text="{Binding Label}"
-                                                               TextColor="#E0E0E0"
-                                                               FontSize="10"
-                                                               VerticalTextAlignment="Center"
-                                                               LineBreakMode="TailTruncation" />
-                                                        <Button Grid.Column="1"
-                                                                Text="Locate"
-                                                                FontSize="9"
-                                                                Padding="4,0"
-                                                                HeightRequest="24"
-                                                                BackgroundColor="#0F3460"
-                                                                TextColor="#7EC8FF"
-                                                                Clicked="OnLocateElement" />
-                                                        <Button Grid.Column="2"
-                                                                Text="Delete"
-                                                                FontSize="9"
-                                                                Padding="4,0"
-                                                                HeightRequest="24"
-                                                                BackgroundColor="#0F3460"
-                                                                TextColor="#7EC8FF"
-                                                                Clicked="OnDeleteElement" />
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </CollectionView.ItemTemplate>
-                                        </CollectionView>
-
-                                        <Label Text="插槽"
-                                               TextColor="#B0B0B0"
-                                               FontSize="11" />
-                                        <CollectionView x:Name="ElementSlotList"
-                                                        HeightRequest="150"
-                                                        SelectionMode="None">
-                                            <CollectionView.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
-                                                    <Grid ColumnDefinitions="*,Auto,Auto"
-                                                          ColumnSpacing="4"
-                                                          Margin="0,1">
-                                                        <Label Text="{Binding Label}"
-                                                               TextColor="#E0E0E0"
-                                                               FontSize="10"
-                                                               VerticalTextAlignment="Center"
-                                                               LineBreakMode="TailTruncation" />
-                                                        <Button Grid.Column="1"
-                                                                Text="Locate"
-                                                                FontSize="9"
-                                                                Padding="4,0"
-                                                                HeightRequest="24"
-                                                                BackgroundColor="#0F3460"
-                                                                TextColor="#7EC8FF"
-                                                                Clicked="OnLocateElement" />
-                                                        <Button Grid.Column="2"
-                                                                Text="Delete"
-                                                                FontSize="9"
-                                                                Padding="4,0"
-                                                                HeightRequest="24"
-                                                                BackgroundColor="#0F3460"
-                                                                TextColor="#7EC8FF"
-                                                                Clicked="OnDeleteElement" />
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </CollectionView.ItemTemplate>
-                                        </CollectionView>
-
-                                        <Label Text="连线"
-                                               TextColor="#B0B0B0"
-                                               FontSize="11" />
-                                        <CollectionView x:Name="ElementLinkList"
-                                                        HeightRequest="150"
-                                                        SelectionMode="None">
-                                            <CollectionView.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:WorkflowElementEntry">
-                                                    <Grid ColumnDefinitions="*,Auto,Auto"
-                                                          ColumnSpacing="4"
-                                                          Margin="0,1">
-                                                        <Label Text="{Binding Label}"
-                                                               TextColor="#E0E0E0"
-                                                               FontSize="10"
-                                                               VerticalTextAlignment="Center"
-                                                               LineBreakMode="TailTruncation" />
-                                                        <Button Grid.Column="1"
-                                                                Text="Locate"
-                                                                FontSize="9"
-                                                                Padding="4,0"
-                                                                HeightRequest="24"
-                                                                BackgroundColor="#0F3460"
-                                                                TextColor="#7EC8FF"
-                                                                Clicked="OnLocateElement" />
-                                                        <Button Grid.Column="2"
-                                                                Text="Delete"
-                                                                FontSize="9"
-                                                                Padding="4,0"
-                                                                HeightRequest="24"
-                                                                BackgroundColor="#0F3460"
-                                                                TextColor="#7EC8FF"
-                                                                Clicked="OnDeleteElement" />
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </CollectionView.ItemTemplate>
-                                        </CollectionView>
-
-                                        <Label x:Name="ElementStatus"
-                                               TextColor="#A0A0A0"
-                                               FontSize="10"
-                                               LineBreakMode="WordWrap" />
-                                    </VerticalStackLayout>
-                                </Border>
-                            </VerticalStackLayout>
-                        </ScrollView>
-
-                        <!-- Run: pause / resume / checkpoint and the canvas counts. -->
-                        <ScrollView x:Name="RunPanel"
-                                    IsVisible="False"
-                                    VerticalScrollBarVisibility="Default">
-                            <VerticalStackLayout Spacing="0">
-                                <Label Text="运行" Style="{StaticResource SidebarSectionStyle}" />
-                                <Border Margin="12,0,12,0"
-                                        Padding="10"
-                                        BackgroundColor="#1E1E1E"
-                                        Stroke="#3C3C3C"
-                                        StrokeThickness="1"
-                                        StrokeShape="RoundRectangle 4">
-                                    <VerticalStackLayout Spacing="6">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <Label Text="运行控制" TextColor="#E2E8F0" FontAttributes="Bold" VerticalOptions="Center"/>
-                                            <Label x:Name="RunGateState" Grid.Column="1" Text="空闲" TextColor="#A0A0A0" VerticalOptions="Center"/>
-                                        </Grid>
-                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-                                            <Button Text="Pause"
-                                                    HeightRequest="40"
-                                                    BackgroundColor="#0f3460"
-                                                    TextColor="White"
-                                                    Clicked="OnPauseClicked"/>
-                                            <Button Grid.Column="1"
-                                                    Text="Resume"
-                                                    HeightRequest="40"
-                                                    BackgroundColor="#0f3460"
-                                                    TextColor="White"
-                                                    Clicked="OnResumeClicked"/>
-                                        </Grid>
-                                        <Button x:Name="ContinueFromCheckpointButton"
-                                                Text="从检查点继续"
-                                                HeightRequest="40"
-                                                BackgroundColor="#0f3460"
-                                                TextColor="White"
-                                                IsEnabled="False"
-                                                Clicked="OnContinueFromCheckpointClicked"/>
-                                    </VerticalStackLayout>
-                                </Border>
-
-                                <Label Text="画布" Style="{StaticResource SidebarSectionStyle}" />
-                                <VerticalStackLayout Margin="12,0,12,0">
-                                    <Label Text="总元素数：" TextColor="#CCCCCC"/>
-                                    <Label Text="{Binding TotalElementText}" TextColor="#E7E7E7"/>
-                                    <Label Margin="0,8,0,0" Text="可见元素数：" TextColor="#CCCCCC"/>
-                                    <Label Text="{Binding VisibleElementText}" TextColor="#E7E7E7"/>
-                                </VerticalStackLayout>
-                            </VerticalStackLayout>
-                        </ScrollView>
-
-                        <!-- Agent: session permission first, then the chat. -->
-                        <Grid x:Name="AgentPanel"
-                              IsVisible="False"
-                              RowDefinitions="Auto,Auto,*,Auto">
-                            <!-- Session permission belongs to the Agent: it decides what the model may do,
-                                 not how a run is driven. It is not the AgentModes build/plan pair, which
-                                 changes what the model is told; this one changes what is allowed to run. -->
-                            <VerticalStackLayout Grid.Row="0" Margin="0,0,0,4">
-                                <Label Text="会话" Style="{StaticResource SidebarSectionStyle}" />
-                                <Grid Margin="12,0,12,0" ColumnDefinitions="Auto,*" ColumnSpacing="6">
-                                    <Label Text="权限模式"
-                                           TextColor="#CCCCCC"
-                                           VerticalOptions="Center" />
-                                    <Picker Grid.Column="1"
-                                            x:Name="PermissionModePicker"
-                                            TextColor="White"
-                                            FontSize="12"
-                                            HorizontalOptions="Fill"
-                                            ToolTipProperties.Text="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
-                                            SelectedIndexChanged="OnPermissionModeChanged" />
-                                </Grid>
-                            </VerticalStackLayout>
-
-                            <Grid Grid.Row="1" Margin="12,4,12,4" ColumnDefinitions="*,Auto">
-                                <Label Text="Agent 对话"
-                                       TextColor="#7EC8FF"
-                                       FontAttributes="Bold"
+                        <!-- Explorer -->
+                        <Grid x:Name="ExplorerPanel" RowDefinitions="Auto,Auto,*,Auto">
+                            <Grid Grid.Row="0" Margin="12,10,12,0" ColumnDefinitions="*,Auto">
+                                <Label Text="小地图" Style="{StaticResource WorkbenchMuted}"
                                        VerticalOptions="Center" />
-                                <HorizontalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
-                                    <Label Text="流式"
-                                           TextColor="#CBD5E1"
-                                           FontSize="11"
-                                           VerticalTextAlignment="Center" />
-                                    <Switch IsToggled="{Binding UseStreamingAgentResponse}"
-                                            Scale="0.7" />
-                                </HorizontalStackLayout>
+                                <Switch x:Name="MinimapToggle" Grid.Column="1"
+                                        Scale="0.7" Margin="0,-6"
+                                        OnColor="{StaticResource WorkAccent}"
+                                        Toggled="OnMinimapToggled" />
                             </Grid>
 
-                            <CollectionView x:Name="AgentLogScroller"
-                                            Grid.Row="2"
-                                            Margin="8,0,8,0"
-                                            VerticalScrollBarVisibility="Always"
-                                            ItemsSource="{Binding AgentLog}">
+                            <Label Grid.Row="1" Text="元素" Style="{StaticResource WorkbenchSectionLabel}" />
+
+                            <Border Grid.Row="2" Margin="12,0,12,0" Style="{StaticResource WorkbenchCard}"
+                                    Padding="4">
+                                <Grid RowDefinitions="30,1,*">
+                                    <Grid Grid.Row="0" ColumnDefinitions="*,*,*">
+                                        <Grid x:Name="ElementNodeTab" BackgroundColor="Transparent"
+                                              RowDefinitions="*,2">
+                                            <Grid.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnElementKindTapped" CommandParameter="Node" />
+                                            </Grid.GestureRecognizers>
+                                            <Label x:Name="ElementNodeTabLabel" Text="节点"
+                                                   Style="{StaticResource WorkbenchTabLabel}"
+                                                   HorizontalOptions="Fill" HorizontalTextAlignment="Center"
+                                                   InputTransparent="True" />
+                                            <BoxView x:Name="ElementNodeTabUnderline" Grid.Row="1"
+                                                     HeightRequest="2" Color="Transparent"
+                                                     InputTransparent="True" />
+                                        </Grid>
+                                        <Grid x:Name="ElementSlotTab" Grid.Column="1" BackgroundColor="Transparent"
+                                              RowDefinitions="*,2">
+                                            <Grid.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnElementKindTapped" CommandParameter="Slot" />
+                                            </Grid.GestureRecognizers>
+                                            <Label x:Name="ElementSlotTabLabel" Text="插槽"
+                                                   Style="{StaticResource WorkbenchTabLabel}"
+                                                   HorizontalOptions="Fill" HorizontalTextAlignment="Center"
+                                                   InputTransparent="True" />
+                                            <BoxView x:Name="ElementSlotTabUnderline" Grid.Row="1"
+                                                     HeightRequest="2" Color="Transparent"
+                                                     InputTransparent="True" />
+                                        </Grid>
+                                        <Grid x:Name="ElementLinkTab" Grid.Column="2" BackgroundColor="Transparent"
+                                              RowDefinitions="*,2">
+                                            <Grid.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnElementKindTapped" CommandParameter="Link" />
+                                            </Grid.GestureRecognizers>
+                                            <Label x:Name="ElementLinkTabLabel" Text="连线"
+                                                   Style="{StaticResource WorkbenchTabLabel}"
+                                                   HorizontalOptions="Fill" HorizontalTextAlignment="Center"
+                                                   InputTransparent="True" />
+                                            <BoxView x:Name="ElementLinkTabUnderline" Grid.Row="1"
+                                                     HeightRequest="2" Color="Transparent"
+                                                     InputTransparent="True" />
+                                        </Grid>
+                                    </Grid>
+                                    <BoxView Grid.Row="1" HeightRequest="1" Color="{StaticResource WorkBorderSubtle}" />
+
+                                    <CollectionView x:Name="ElementList" Grid.Row="2"
+                                                    SelectionMode="Single"
+                                                    SelectionChanged="OnElementSelectionChanged"
+                                                    BackgroundColor="Transparent"
+                                                    VerticalScrollBarVisibility="Default">
+                                        <CollectionView.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:WorkflowElementEntry">
+                                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="2" Margin="0,1"
+                                                      Padding="2,1">
+                                                    <Grid.GestureRecognizers>
+                                                        <TapGestureRecognizer Tapped="OnElementRowTapped" />
+                                                    </Grid.GestureRecognizers>
+                                                    <VisualStateManager.VisualStateGroups>
+                                                        <VisualStateGroupList>
+                                                            <VisualStateGroup x:Name="CommonStates">
+                                                                <VisualState x:Name="Normal" />
+                                                                <VisualState x:Name="Selected">
+                                                                    <VisualState.Setters>
+                                                                        <Setter Property="BackgroundColor"
+                                                                                Value="{StaticResource WorkRowSelection}" />
+                                                                    </VisualState.Setters>
+                                                                </VisualState>
+                                                            </VisualStateGroup>
+                                                        </VisualStateGroupList>
+                                                    </VisualStateManager.VisualStateGroups>
+                                                    <Label Text="{Binding Label}"
+                                                           TextColor="{StaticResource CardTitleText}"
+                                                           FontSize="10.5" VerticalTextAlignment="Center"
+                                                           LineBreakMode="TailTruncation"
+                                                           InputTransparent="True" />
+                                                    <Button Grid.Column="1" Text="Locate"
+                                                            Style="{StaticResource WorkbenchRowAction}"
+                                                            Clicked="OnLocateElement" />
+                                                    <Button Grid.Column="2" Text="Delete"
+                                                            Style="{StaticResource WorkbenchRowAction}"
+                                                            Clicked="OnDeleteElement" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </CollectionView.ItemTemplate>
+                                    </CollectionView>
+                                </Grid>
+                            </Border>
+
+                            <Label x:Name="ElementStatus" Grid.Row="3" Margin="12,8,12,12"
+                                   Style="{StaticResource WorkbenchMicro}" LineBreakMode="WordWrap" />
+                        </Grid>
+
+                        <!-- Run: every compile and run task, manual and Agent alike. -->
+                        <Grid x:Name="RunPanel" IsVisible="False" RowDefinitions="Auto,Auto,*,Auto">
+                            <Grid Grid.Row="0" Margin="12,12,12,6" ColumnDefinitions="*,Auto">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="运行任务" TextColor="{StaticResource CardTitleText}"
+                                           FontSize="12" FontAttributes="Bold" />
+                                    <Label Text="{Binding Runs.Summary}" Style="{StaticResource WorkbenchMicro}" />
+                                </VerticalStackLayout>
+                                <Button Grid.Column="1" Text="清除已完成" Padding="8,3"
+                                        Style="{StaticResource WorkbenchRowAction}"
+                                        ToolTipProperties.Text="移除已结束的任务行"
+                                        Clicked="OnClearFinishedRuns" />
+                            </Grid>
+
+                            <Label Grid.Row="1" Margin="12,0,12,8"
+                                   Style="{StaticResource WorkbenchMicro}" LineBreakMode="WordWrap"
+                                   Text="手动编译、手动运行，以及 Agent 编译 / 运行的任务都会出现在这里。选中一行，输出页会跟随它。" />
+
+                            <CollectionView x:Name="RunTaskList" Grid.Row="2" Margin="8,0"
+                                            SelectionMode="Single"
+                                            ItemsSource="{Binding Runs.Tasks}"
+                                            SelectedItem="{Binding Runs.Selected, Mode=TwoWay}"
+                                            BackgroundColor="Transparent"
+                                            VerticalScrollBarVisibility="Default">
                                 <CollectionView.ItemTemplate>
-                                    <DataTemplate>
-                                        <Label Text="{Binding .}"
-                                               TextColor="#D8D8D8"
-                                               FontSize="10"
-                                               Margin="0,1" />
+                                    <DataTemplate x:DataType="vm:WorkflowRunTaskViewModel">
+                                        <Border Margin="0,0,0,6" Padding="8"
+                                                BackgroundColor="{StaticResource CardSurface}"
+                                                Stroke="{StaticResource CardBorder}"
+                                                StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 6">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnRunRowTapped" />
+                                            </Border.GestureRecognizers>
+                                            <VisualStateManager.VisualStateGroups>
+                                                <VisualStateGroupList>
+                                                    <VisualStateGroup x:Name="CommonStates">
+                                                        <VisualState x:Name="Normal" />
+                                                        <VisualState x:Name="Selected">
+                                                            <VisualState.Setters>
+                                                                <Setter Property="Stroke"
+                                                                        Value="{StaticResource WorkAccent}" />
+                                                                <Setter Property="BackgroundColor"
+                                                                        Value="{StaticResource CardHoverSurface}" />
+                                                            </VisualState.Setters>
+                                                        </VisualState>
+                                                    </VisualStateGroup>
+                                                </VisualStateGroupList>
+                                            </VisualStateManager.VisualStateGroups>
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                <VerticalStackLayout Grid.Column="0" Spacing="3"
+                                                                     InputTransparent="True">
+                                                    <HorizontalStackLayout Spacing="6">
+                                                        <Border BackgroundColor="{StaticResource CardHoverSurface}"
+                                                                StrokeThickness="0"
+                                                                StrokeShape="RoundRectangle 3"
+                                                                Padding="5,0" VerticalOptions="Center">
+                                                            <Label Text="{Binding SourceText}" FontSize="10"
+                                                                   TextColor="{StaticResource CardValueText}" />
+                                                        </Border>
+                                                        <Label Text="{Binding RootLabel}" FontSize="11.5"
+                                                               FontAttributes="Bold"
+                                                               TextColor="{StaticResource CardTitleText}"
+                                                               LineBreakMode="TailTruncation"
+                                                               VerticalOptions="Center" />
+                                                    </HorizontalStackLayout>
+                                                    <HorizontalStackLayout Spacing="8">
+                                                        <Label Text="{Binding StateText}" FontSize="11"
+                                                               TextColor="{StaticResource CardValueText}" />
+                                                        <Label Text="{Binding StartedText}"
+                                                               Style="{StaticResource WorkbenchMicro}" />
+                                                        <Label Text="{Binding ElapsedText}"
+                                                               Style="{StaticResource WorkbenchMicro}" />
+                                                    </HorizontalStackLayout>
+                                                    <Label Text="{Binding ProgressText}"
+                                                           Style="{StaticResource WorkbenchMicro}"
+                                                           LineBreakMode="WordWrap" />
+                                                </VerticalStackLayout>
+
+                                                <VerticalStackLayout Grid.Column="1" Spacing="3"
+                                                                     VerticalOptions="Start">
+                                                    <Button Text="暂停" Padding="6,1"
+                                                            Style="{StaticResource WorkbenchRowAction}"
+                                                            IsVisible="{Binding CanPause}"
+                                                            Clicked="OnPauseRunTask" />
+                                                    <Button Text="继续" Padding="6,1"
+                                                            Style="{StaticResource WorkbenchRowAction}"
+                                                            IsVisible="{Binding CanResume}"
+                                                            Clicked="OnResumeRunTask" />
+                                                    <Button Text="停止" Padding="6,1"
+                                                            Style="{StaticResource WorkbenchRowAction}"
+                                                            IsVisible="{Binding CanStop}"
+                                                            Clicked="OnStopRunTask" />
+                                                    <Button Text="运行" Padding="6,1"
+                                                            Style="{StaticResource WorkbenchRowAction}"
+                                                            IsVisible="{Binding CanStart}"
+                                                            Clicked="OnStartRunTask" />
+                                                    <Button Text="移除" Padding="6,1"
+                                                            Style="{StaticResource WorkbenchRowAction}"
+                                                            IsVisible="{Binding CanRemove}"
+                                                            Clicked="OnRemoveRunTask" />
+                                                </VerticalStackLayout>
+                                            </Grid>
+                                        </Border>
                                     </DataTemplate>
                                 </CollectionView.ItemTemplate>
                             </CollectionView>
 
-                            <Grid Grid.Row="3" Margin="12,6,12,12" ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                <Entry x:Name="AgentInput"
-                                       Placeholder="输入消息..."
-                                       BackgroundColor="#2D2D2D"
-                                       TextColor="White"
-                                       FontSize="12"
-                                       HeightRequest="32"
-                                       Completed="OnAgentInputCompleted" />
-                                <Button Grid.Column="1"
-                                        Text="发送"
-                                        FontSize="12"
-                                        HeightRequest="32"
-                                        BackgroundColor="#0f3460"
-                                        TextColor="White"
-                                        Clicked="OnSendToAgent" />
-                            </Grid>
+                            <Label Grid.Row="3" Margin="12,10,12,12"
+                                   Style="{StaticResource WorkbenchMicro}" LineBreakMode="WordWrap"
+                                   IsVisible="{Binding Runs.IsEmpty}"
+                                   Text="还没有任务。在控制器卡上编译一次，或让 Agent 编译 / 运行工作流。" />
                         </Grid>
 
-                        <!-- MCP servers -->
-                        <ScrollView x:Name="McpPanel"
-                                    IsVisible="False"
+                        <!-- MCP -->
+                        <ScrollView x:Name="McpPanel" IsVisible="False"
                                     VerticalScrollBarVisibility="Default">
                             <VerticalStackLayout Spacing="0">
-                                <Label Text="服务器" Style="{StaticResource SidebarSectionStyle}" />
-                                <Border x:Name="McpStatusPanel"
-                                        Margin="12,0,12,0"
-                                        Padding="10"
-                                        BackgroundColor="#1E1E1E"
-                                        Stroke="#3C3C3C"
-                                        StrokeThickness="1"
-                                        StrokeShape="RoundRectangle 4">
-                                    <VerticalStackLayout Spacing="6">
+                                <Label Text="服务器" Style="{StaticResource WorkbenchSectionLabel}" />
+                                <Border x:Name="McpStatusPanel" Margin="12,0"
+                                        Style="{StaticResource WorkbenchCard}">
+                                    <VerticalStackLayout Spacing="8">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <Label Text="MCP 服务器" TextColor="#7EC8FF" FontAttributes="Bold" VerticalOptions="Center"/>
-                                            <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
-                                                <Label Text="{Binding Helper.Mcp.Status.ConnectedCount, StringFormat='存活 {0}'}" TextColor="#6BFFB8" FontAttributes="Bold"/>
-                                                <Label Text="{Binding Helper.Mcp.Status.ErrorCount, StringFormat='· 错误 {0}'}" TextColor="#FF6B6B"/>
-                                                <Button Text="重载" FontSize="11" Clicked="OnReloadMcp"/>
+                                            <Label Text="MCP 服务器"
+                                                   TextColor="{StaticResource WorkAccentText}"
+                                                   FontAttributes="Bold" VerticalOptions="Center" />
+                                            <HorizontalStackLayout Grid.Column="1" Spacing="8"
+                                                                   VerticalOptions="Center">
+                                                <Label Text="{Binding Helper.Mcp.Status.ConnectedCount, StringFormat='存活 {0}'}"
+                                                       TextColor="{StaticResource GhostRunText}" FontAttributes="Bold" />
+                                                <Label Text="{Binding Helper.Mcp.Status.ErrorCount, StringFormat='· 错误 {0}'}"
+                                                       TextColor="{StaticResource GhostStopText}" />
+                                                <Button Text="重载" Style="{StaticResource WorkbenchRowAction}"
+                                                        Clicked="OnReloadMcp" />
                                             </HorizontalStackLayout>
                                         </Grid>
-                                        <CollectionView ItemsSource="{Binding Helper.Mcp.Status.Servers}" HeightRequest="140">
-                                            <CollectionView.ItemsLayout>
-                                                <LinearItemsLayout Orientation="Vertical" ItemSpacing="2"/>
-                                            </CollectionView.ItemsLayout>
-                                            <CollectionView.ItemTemplate>
+                                        <VerticalStackLayout Spacing="2"
+                                                             BindableLayout.ItemsSource="{Binding Helper.Mcp.Status.Servers}">
+                                            <BindableLayout.ItemTemplate>
                                                 <DataTemplate>
                                                     <VerticalStackLayout Spacing="2">
                                                         <HorizontalStackLayout Spacing="6">
-                                                            <Label Text="{Binding Name}" TextColor="#E0E0E0" FontAttributes="Bold"/>
-                                                            <Label Text="{Binding StateText}" TextColor="#A0A0A0"/>
-                                                            <Label Text="{Binding ToolCount, StringFormat='· {0} tools'}" TextColor="#6BFFB8"/>
+                                                            <Label Text="{Binding Name}"
+                                                                   TextColor="{StaticResource CardTitleText}"
+                                                                   FontAttributes="Bold" />
+                                                            <Label Text="{Binding StateText}"
+                                                                   Style="{StaticResource WorkbenchMuted}" />
+                                                            <Label Text="{Binding ToolCount, StringFormat='· {0} tools'}"
+                                                                   TextColor="{StaticResource GhostRunText}" />
                                                         </HorizontalStackLayout>
-                                                        <Label Text="{Binding Error}" TextColor="#FF6B6B" FontSize="11"
-                                                               IsVisible="{Binding IsError}"/>
+                                                        <Label Text="{Binding Error}"
+                                                               TextColor="{StaticResource GhostStopText}"
+                                                               FontSize="11" Margin="14,0,0,0"
+                                                               LineBreakMode="WordWrap"
+                                                               IsVisible="{Binding IsError}" />
                                                     </VerticalStackLayout>
                                                 </DataTemplate>
-                                            </CollectionView.ItemTemplate>
-                                        </CollectionView>
+                                            </BindableLayout.ItemTemplate>
+                                        </VerticalStackLayout>
                                     </VerticalStackLayout>
                                 </Border>
                             </VerticalStackLayout>
                         </ScrollView>
+                    </Grid>
+                </Grid>
+            </Border>
 
-                        <!-- Output: the tree's ExecutionLog. -->
-                        <Grid x:Name="OutputPanel"
-                              IsVisible="False"
-                              RowDefinitions="Auto,Auto,*">
-                            <Label Grid.Row="0" Text="执行输出" Style="{StaticResource SidebarSectionStyle}" />
+            <BoxView Grid.Column="2" Color="{StaticResource WorkBorderSubtle}" />
+
+            <!-- Main area: editor tabs + canvas or output. -->
+            <Grid Grid.Column="3" RowDefinitions="32,1,*"
+                  BackgroundColor="{StaticResource WorkEditorBackground}">
+                <Grid Grid.Row="0" BackgroundColor="{StaticResource WorkPanelBackground}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" Padding="6,0,12,0">
+                        <HorizontalStackLayout Spacing="0">
+                            <Grid x:Name="CanvasTab" RowDefinitions="*,2" BackgroundColor="Transparent"
+                                  HeightRequest="32">
+                                <Grid.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnMainTabTapped" CommandParameter="canvas" />
+                                </Grid.GestureRecognizers>
+                                <Label x:Name="CanvasTabLabel" Text="流程图" Padding="12,0"
+                                       Style="{StaticResource WorkbenchTabLabel}"
+                                       VerticalTextAlignment="Center" InputTransparent="True" />
+                                <BoxView x:Name="CanvasTabUnderline" Grid.Row="1" HeightRequest="2"
+                                         Color="Transparent" InputTransparent="True" />
+                            </Grid>
+                            <Grid x:Name="OutputTab" RowDefinitions="*,2" BackgroundColor="Transparent"
+                                  HeightRequest="32">
+                                <Grid.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnMainTabTapped" CommandParameter="output" />
+                                </Grid.GestureRecognizers>
+                                <Label x:Name="OutputTabLabel" Text="输出" Padding="12,0"
+                                       Style="{StaticResource WorkbenchTabLabel}"
+                                       VerticalTextAlignment="Center" InputTransparent="True" />
+                                <BoxView x:Name="OutputTabUnderline" Grid.Row="1" HeightRequest="2"
+                                         Color="Transparent" InputTransparent="True" />
+                            </Grid>
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout Grid.Column="2" Spacing="8"
+                                               HorizontalOptions="End" VerticalOptions="Center">
+                            <Label Text="Ctrl+滚轮缩放" Style="{StaticResource WorkbenchMicro}" />
+                            <Label Text="·" Style="{StaticResource WorkbenchMicro}" />
+                            <Label Text="{Binding TotalElementText}" Style="{StaticResource WorkbenchMicro}" />
+                        </HorizontalStackLayout>
+                    </Grid>
+                </Grid>
+                <BoxView Grid.Row="1" Color="{StaticResource WorkBorderSubtle}" />
+
+                <Grid Grid.Row="2">
+                    <!-- Canvas host. Markup must stay a direct child of the decorated surface. -->
+                    <Grid x:Name="WorkflowContainer">
+                        <Border x:Name="PART_SurfaceBorder"
+                                Margin="0"
+                                Stroke="#33FFFFFF"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 3"
+                                BackgroundColor="#0B1120">
+                            <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
+                                <!-- Viewport-sized link layer: a sibling of the scroll viewer (NOT inside the
+                                     growing world canvas, so it never hits the Win2D texture cap). Renders every
+                                     connection in one GraphicsView at px = Ruler + anchor + ContentOffset − Scroll.
+                                     Child order gives z: grid background < links < node views < ruler bands.
+                                     This layer stays input-transparent and never takes the pointer: hit testing is
+                                     geometric, driven by the input the page root already receives — that is what keeps
+                                     link hover (highlight, Delete, the link menu) from eating canvas gestures. -->
+                                <behaviors:WorkflowLinkOverlay x:Name="PART_LinkLayer"
+                                                              WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
+                                                              InteractionSource="{x:Reference Root}"
+                                                              ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                                              ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                                              ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                                              ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                                              RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
+                                                              LinkLineColor="#CC38BDF8"
+                                                              VirtualLineColor="#E7E7E7"
+                                                              VirtualValidTargetColor="#FF34D399"
+                                                              VirtualInvalidTargetColor="#FFF87171"
+                                                              StrokeWidth="2"
+                                                              LinkFlowEnabled="True" />
+                                <!-- VeloxDev customization: 悬停高亮是本 demo 的一层（适配器的连线层只画静息线）。 -->
+                                <controls:LinkHighlightLayer Tree="{Binding BindingContext, Source={x:Reference Root}}"
+                                                             ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                                             ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                                             ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                                             ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                                             RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}" />
+                                <ScrollView x:Name="PART_ScrollViewer"
+                                            Orientation="Both"
+                                            BackgroundColor="Transparent">
+                                    <AbsoluteLayout x:Name="PART_RulerOffsetHost"
+                                                    TranslationX="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
+                                                    TranslationY="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}">
+                                        <AbsoluteLayout x:Name="PART_Canvas"
+                                                        BackgroundColor="Transparent"
+                                                        behaviors:ViewPool.ItemsSource="{Binding BindingContext.Helper.VisibleItems, Source={x:Reference Root}}"
+                                                        behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}" />
+                                    </AbsoluteLayout>
+                                </ScrollView>
+                            </controls:WorkflowGridDecorator>
+                        </Border>
+                        <!-- 小地图：画布按 MinimapOverlayName="PART_MinimapOverlay" 找到此元素，把滚动/内容/视口推给
+                             它，取代原先手写的绑定 -->
+                        <controls:MinimapOverlay x:Name="PART_MinimapOverlay"
+                                                 HorizontalOptions="End"
+                                                 VerticalOptions="Start"
+                                                 Margin="0,8,8,0"
+                                                 ScrollViewerName="PART_ScrollViewer" />
+                        <!-- 实时画布信息 HUD：随模型与画布的滚动变化刷新（WorkflowView.xaml.cs）；文本层不吃命中测试，
+                             拖拽仍落到画布 -->
+                        <controls:InfoOverlay x:Name="InfoOverlay"
+                                              HorizontalOptions="Start"
+                                              VerticalOptions="End"
+                                              Margin="44,0,0,12" />
+                    </Grid>
+
+                    <!-- Output -->
+                    <Grid x:Name="OutputPanel" IsVisible="False" RowDefinitions="Auto,*"
+                          BackgroundColor="{StaticResource WorkEditorBackground}">
+                        <Grid Grid.Row="0" BackgroundColor="{StaticResource WorkPanelBackground}">
+                            <Grid ColumnDefinitions="*,Auto" Padding="12,8">
+                                <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                    <Label Text="执行输出" Style="{StaticResource WorkbenchPanelTitle}" />
+                                    <Label Text="{Binding Runs.Selected.RootLabel}"
+                                           TextColor="{StaticResource WorkAccentText}"
+                                           VerticalOptions="Center" LineBreakMode="TailTruncation"
+                                           IsVisible="{Binding Runs.HasSelection}" />
+                                    <Label Text="{Binding Runs.Selected.StateText}"
+                                           Style="{StaticResource WorkbenchMuted}"
+                                           VerticalOptions="Center"
+                                           IsVisible="{Binding Runs.HasSelection}" />
+                                    <Label Text="{Binding Runs.Selected.ProgressText}"
+                                           Style="{StaticResource WorkbenchMicro}"
+                                           VerticalOptions="Center"
+                                           IsVisible="{Binding Runs.HasSelection}" />
+                                </HorizontalStackLayout>
+                                <Label Grid.Column="1"
+                                       Text="{Binding ExecutionLog.Count, StringFormat='已记录 {0} 行'}"
+                                       Style="{StaticResource WorkbenchMicro}" VerticalOptions="Center" />
+                            </Grid>
+                            <BoxView HeightRequest="1" Color="{StaticResource WorkBorderSubtle}"
+                                     HorizontalOptions="Fill" VerticalOptions="End" />
+                        </Grid>
+
+                        <Grid Grid.Row="1" RowDefinitions="Auto,Auto,*" Padding="12,8,12,12"
+                              RowSpacing="6">
+                            <Label Text="实际执行顺序" TextColor="{StaticResource WorkAccentText}"
+                                   FontSize="12" FontAttributes="Bold" />
                             <Label Grid.Row="1"
-                                   Text="{Binding ExecutionLog.Count, StringFormat='已记录: {0}'}"
-                                   Margin="12,0,12,4"
-                                   TextColor="#BDBDBD"
-                                   FontSize="11" />
-                            <CollectionView x:Name="ExecutionLogScroller"
-                                            Grid.Row="2"
-                                            Margin="8,0,8,8"
-                                            VerticalScrollBarVisibility="Always"
-                                            ItemsSource="{Binding ExecutionLog}">
+                                   Style="{StaticResource WorkbenchMicro}" LineBreakMode="WordWrap"
+                                   IsVisible="{Binding Runs.HasSelection, Converter={StaticResource InverseBool}}"
+                                   Text="运行一次，或让 Agent 编译 / 运行工作流。节点开始、完成、重试、重定向和运行收尾都会按发生顺序落在这里。" />
+                            <CollectionView x:Name="ExecutionLogScroller" Grid.Row="2"
+                                            ItemsSource="{Binding ExecutionLog}"
+                                            SelectionMode="None"
+                                            ItemsUpdatingScrollMode="KeepLastItemInView"
+                                            BackgroundColor="Transparent"
+                                            VerticalScrollBarVisibility="Default">
                                 <CollectionView.ItemTemplate>
                                     <DataTemplate>
                                         <Label Text="{Binding .}"
-                                               TextColor="#D8D8D8"
-                                               FontSize="10"
+                                               TextColor="{StaticResource CardTitleText}"
+                                               FontFamily="monospace"
+                                               FontSize="11"
                                                LineBreakMode="WordWrap"
-                                               Margin="4,1" />
+                                               Margin="0,1" />
                                     </DataTemplate>
                                 </CollectionView.ItemTemplate>
                             </CollectionView>
                         </Grid>
                     </Grid>
                 </Grid>
+            </Grid>
+
+            <BoxView Grid.Column="4" Color="{StaticResource WorkBorderSubtle}" />
+
+            <!-- Right inspector. -->
+            <Border x:Name="InspectorHost" Grid.Column="5"
+                    BackgroundColor="{StaticResource WorkPanelBackground}"
+                    StrokeThickness="0">
+                <Grid RowDefinitions="34,*">
+                    <Grid Grid.Row="0" Padding="6,0,6,0" ColumnDefinitions="*,Auto">
+                        <HorizontalStackLayout Spacing="0">
+                            <Grid x:Name="PropertiesTab" RowDefinitions="*,2" BackgroundColor="Transparent"
+                                  HeightRequest="34">
+                                <Grid.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnInspectorTabTapped" CommandParameter="properties" />
+                                </Grid.GestureRecognizers>
+                                <Label x:Name="PropertiesTabLabel" Text="属性" Padding="12,0"
+                                       Style="{StaticResource WorkbenchPanelTabLabel}"
+                                       VerticalTextAlignment="Center" InputTransparent="True" />
+                                <BoxView x:Name="PropertiesTabUnderline" Grid.Row="1"
+                                         HeightRequest="2" Color="Transparent" InputTransparent="True" />
+                            </Grid>
+                            <Grid x:Name="AgentTab" RowDefinitions="*,2" BackgroundColor="Transparent"
+                                  HeightRequest="34">
+                                <Grid.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnInspectorTabTapped" CommandParameter="agent" />
+                                </Grid.GestureRecognizers>
+                                <Label x:Name="AgentTabLabel" Text="AI 助手" Padding="12,0"
+                                       Style="{StaticResource WorkbenchPanelTabLabel}"
+                                       VerticalTextAlignment="Center" InputTransparent="True" />
+                                <BoxView x:Name="AgentTabUnderline" Grid.Row="1"
+                                         HeightRequest="2" Color="Transparent" InputTransparent="True" />
+                            </Grid>
+                        </HorizontalStackLayout>
+                    </Grid>
+                    <BoxView Grid.Row="0" HeightRequest="1" Color="{StaticResource WorkBorderSubtle}"
+                             HorizontalOptions="Fill" VerticalOptions="End" />
+
+                    <Grid Grid.Row="1">
+                        <!-- Properties: the selected element, then the compiled structure. Run state and
+                             canvas counts live in the status bar and the run manager. -->
+                        <ScrollView x:Name="PropertiesPanel" VerticalScrollBarVisibility="Default">
+                            <VerticalStackLayout Spacing="0" Padding="0,0,0,12">
+                                <Label Text="选中元素" Style="{StaticResource WorkbenchSectionLabel}" />
+                                <Border Margin="12,0" Style="{StaticResource WorkbenchCard}">
+                                    <Grid>
+                                        <VerticalStackLayout Spacing="8"
+                                                             IsVisible="{Binding HasSelectedElement}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <Label Text="{Binding SelectedElement.Label}"
+                                                       TextColor="{StaticResource CardTitleText}"
+                                                       FontAttributes="Bold" LineBreakMode="WordWrap"
+                                                       VerticalOptions="Center" />
+                                                <Label Grid.Column="1"
+                                                       Text="{Binding SelectedElement.KindText}"
+                                                       Style="{StaticResource WorkbenchMuted}"
+                                                       Margin="8,0,0,0" VerticalOptions="Center" />
+                                            </Grid>
+                                            <BoxView HeightRequest="1"
+                                                     Color="{StaticResource WorkBorderSubtle}"
+                                                     HorizontalOptions="Fill" />
+                                            <Label Text="{Binding SelectedElement.DetailText}"
+                                                   FontFamily="monospace" FontSize="11"
+                                                   TextColor="{StaticResource CardValueText}"
+                                                   LineBreakMode="WordWrap" />
+                                            <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                                                <Button Text="定位" Style="{StaticResource WorkbenchRowAction}"
+                                                        HorizontalOptions="Fill"
+                                                        Clicked="OnLocateSelectedElement" />
+                                                <Button Grid.Column="1" Text="删除"
+                                                        Style="{StaticResource WorkbenchRowAction}"
+                                                        HorizontalOptions="Fill"
+                                                        Clicked="OnDeleteSelectedElement" />
+                                            </Grid>
+                                        </VerticalStackLayout>
+                                        <Label Text="在左侧「元素」列表里选一行，这里显示它的类型、位置、编译顺序与连接。"
+                                               Style="{StaticResource WorkbenchMicro}" LineBreakMode="WordWrap"
+                                               IsVisible="{Binding HasSelectedElement, Converter={StaticResource InverseBool}}" />
+                                    </Grid>
+                                </Border>
+
+                                <Label Text="编译结构" Style="{StaticResource WorkbenchSectionLabel}" />
+                                <Border Margin="12,0,12,12" Style="{StaticResource WorkbenchCard}">
+                                    <VerticalStackLayout Spacing="8">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Text="分段" Style="{StaticResource WorkbenchMuted}" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding CompiledStructure.Count, StringFormat='{0} 段'}"
+                                                   Style="{StaticResource WorkbenchMicro}" />
+                                        </Grid>
+                                        <VerticalStackLayout Spacing="4"
+                                                             BindableLayout.ItemsSource="{Binding CompiledStructure}">
+                                            <BindableLayout.ItemTemplate>
+                                                <DataTemplate x:DataType="cex:CompiledOutlineRow">
+                                                    <Grid ColumnDefinitions="58,*"
+                                                          Margin="{Binding Depth, Converter={StaticResource DepthIndent}}">
+                                                        <Label Text="{Binding Kind}"
+                                                               TextColor="{StaticResource WorkWarning}"
+                                                               FontSize="11" />
+                                                        <Label Grid.Column="1" Text="{Binding Label}"
+                                                               TextColor="{StaticResource CardTitleText}"
+                                                               FontSize="11" LineBreakMode="WordWrap" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </BindableLayout.ItemTemplate>
+                                        </VerticalStackLayout>
+                                        <Label Text="编译一次后这里列出实际执行段。"
+                                               Style="{StaticResource WorkbenchMicro}" LineBreakMode="WordWrap"
+                                               IsVisible="{Binding CompiledStructure.Count, Converter={StaticResource ZeroToBool}}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </VerticalStackLayout>
+                        </ScrollView>
+
+                        <!-- Agent -->
+                        <Grid x:Name="AgentPanel" IsVisible="False" RowDefinitions="Auto,Auto,*,Auto,Auto">
+                            <VerticalStackLayout Grid.Row="0">
+                                <Label Text="会话" Style="{StaticResource WorkbenchSectionLabel}" />
+                                <Grid Margin="12,0,12,0" ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                                    <Label Text="权限模式" Style="{StaticResource WorkbenchMuted}"
+                                           VerticalOptions="Center" />
+                                    <Picker Grid.Column="1" x:Name="PermissionModePicker"
+                                            Style="{StaticResource WorkbenchPicker}"
+                                            HorizontalOptions="Fill"
+                                            ToolTipProperties.Text="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
+                                            SelectedIndexChanged="OnPermissionModeChanged" />
+                                </Grid>
+                            </VerticalStackLayout>
+
+                            <Grid Grid.Row="1" Margin="12,8,12,6" ColumnDefinitions="*,Auto">
+                                <Label Text="Agent 对话" TextColor="{StaticResource WorkAccentText}"
+                                       FontAttributes="Bold" VerticalOptions="Center" />
+                                <HorizontalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
+                                    <Label Text="流式" TextColor="{StaticResource CardValueText}" FontSize="11"
+                                           VerticalTextAlignment="Center" />
+                                    <Switch IsToggled="{Binding UseStreamingAgentResponse}"
+                                            Scale="0.7" OnColor="{StaticResource WorkAccent}" />
+                                </HorizontalStackLayout>
+                            </Grid>
+
+                            <CollectionView x:Name="AgentLogScroller" Grid.Row="2" Margin="8,0"
+                                            VerticalScrollBarVisibility="Default"
+                                            SelectionMode="None"
+                                            ItemsUpdatingScrollMode="KeepLastItemInView"
+                                            BackgroundColor="Transparent"
+                                            ItemsSource="{Binding AgentLog}">
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Label Text="{Binding .}"
+                                               TextColor="{StaticResource CardTitleText}"
+                                               FontSize="10.5"
+                                               Margin="0,1"
+                                               LineBreakMode="WordWrap" />
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+
+                            <!-- Sub-agents the Agent dispatched, at every depth, under the scope's own row. -->
+                            <Border x:Name="SubAgentPanel" Grid.Row="3" IsVisible="False"
+                                    Margin="12,4,12,8" Style="{StaticResource WorkbenchCard}">
+                                <VerticalStackLayout Spacing="6">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label Text="子代理" TextColor="{StaticResource WorkAccentText}"
+                                               FontAttributes="Bold" VerticalOptions="Center" />
+                                        <HorizontalStackLayout Grid.Column="1" Spacing="6"
+                                                               VerticalOptions="Center">
+                                            <Label Text="{Binding RunningCount, StringFormat='运行中 {0}'}"
+                                                   TextColor="{StaticResource GhostRunText}"
+                                                   FontAttributes="Bold"
+                                                   IsVisible="{Binding IsIdle, Converter={StaticResource InverseBool}}" />
+                                            <Label Text="{Binding TotalCount, StringFormat='{0} 个'}"
+                                                   Style="{StaticResource WorkbenchMuted}" />
+                                            <Label Text="{Binding SubtreeTokensText, StringFormat='· {0} tokens'}"
+                                                   TextColor="{StaticResource AccentEnum}"
+                                                   IsVisible="{Binding ScopeRoot.HasTokens}" />
+                                            <Label Text="{Binding FailedCount, StringFormat='· 失败 {0}'}"
+                                                   TextColor="{StaticResource GhostStopText}"
+                                                   IsVisible="{Binding HasFailed}" />
+                                        </HorizontalStackLayout>
+                                    </Grid>
+                                    <Label Text="尚无子代理。让 Agent「派一个子代理去数一数节点」试试。"
+                                           Style="{StaticResource WorkbenchMicro}" LineBreakMode="WordWrap"
+                                           IsVisible="{Binding IsEmpty}" />
+                                    <CollectionView x:Name="SubAgentList"
+                                                    HeightRequest="170"
+                                                    SelectionMode="None"
+                                                    BackgroundColor="Transparent"
+                                                    VerticalScrollBarVisibility="Default">
+                                        <CollectionView.ItemTemplate>
+                                            <DataTemplate x:DataType="sub:SubAgentTreeNodeViewModel">
+                                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7"
+                                                      Margin="{Binding Depth, Converter={StaticResource DepthIndent}}">
+                                                    <Grid Grid.Column="0" WidthRequest="9" HeightRequest="9"
+                                                          VerticalOptions="Start" Margin="0,4,0,0">
+                                                        <Label Text="●" TextColor="{StaticResource GhostRunText}"
+                                                               FontSize="8"
+                                                               IsVisible="{Binding IsRunning}" />
+                                                        <Label Text="○" TextColor="{StaticResource CardDisabledText}"
+                                                               FontSize="8"
+                                                               IsVisible="{Binding IsRunning, Converter={StaticResource InverseBool}}" />
+                                                    </Grid>
+                                                    <VerticalStackLayout Grid.Column="1" Spacing="1">
+                                                        <Label Text="{Binding Title}"
+                                                               TextColor="{StaticResource CardTitleText}"
+                                                               FontAttributes="Bold" FontSize="11"
+                                                               LineBreakMode="TailTruncation" />
+                                                        <HorizontalStackLayout Spacing="5"
+                                                                               IsVisible="{Binding IsScopeRoot, Converter={StaticResource InverseBool}}">
+                                                            <Label Text="{Binding DurationText}"
+                                                                   Style="{StaticResource WorkbenchMuted}"
+                                                                   IsVisible="{Binding HasDuration}" />
+                                                            <Label Text="{Binding TokensText, StringFormat='· {0}'}"
+                                                                   TextColor="{StaticResource AccentEnum}"
+                                                                   FontSize="11"
+                                                                   IsVisible="{Binding HasTokens}" />
+                                                            <Label Text="{Binding StateText}"
+                                                                   Style="{StaticResource WorkbenchMuted}"
+                                                                   IsVisible="{Binding ShowStateText}" />
+                                                        </HorizontalStackLayout>
+                                                    </VerticalStackLayout>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </CollectionView.ItemTemplate>
+                                    </CollectionView>
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Grid Grid.Row="4" Margin="12,6,12,12" ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="6">
+                                <Entry x:Name="AgentInput" Style="{StaticResource WorkbenchEntry}"
+                                       Placeholder="输入消息..." Completed="OnAgentInputCompleted" />
+                                <Button Grid.Column="1" Text="发送"
+                                        Style="{StaticResource WorkbenchSendButton}"
+                                        Clicked="OnSendToAgent" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Grid>
             </Border>
         </Grid>
 
-        <!-- Workflow surface -->
-        <Grid Grid.Column="1">
-            <Border x:Name="PART_SurfaceBorder"
-                    Margin="0"
-                    Stroke="#33FFFFFF"
-                    StrokeThickness="1"
-                    StrokeShape="RoundRectangle 3"
-                    BackgroundColor="#0B1120">
-                <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
-                    <!-- Viewport-sized link layer: a sibling of the scroll viewer (NOT inside the
-                         growing world canvas, so it never hits the Win2D texture cap). Renders every
-                         connection in one GraphicsView at px = Ruler + anchor + ContentOffset − Scroll.
-                         Child order gives z: grid background < links < node views < ruler bands.
-                         This layer stays input-transparent and never takes the pointer: hit testing is
-                         geometric, driven by the input the page root already receives — that is what keeps
-                         link hover (highlight, Delete, the link menu) from eating canvas gestures. -->
-                    <behaviors:WorkflowLinkOverlay x:Name="PART_LinkLayer"
-                                                  WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
-                                                  InteractionSource="{x:Reference Root}"
-                                                  ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                                  ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                                  ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                                  ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                                  RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
-                                                  LinkLineColor="#CC38BDF8"
-                                                  VirtualLineColor="#E2E8F0"
-                                                  VirtualValidTargetColor="#FF34D399"
-                                                  VirtualInvalidTargetColor="#FFF87171"
-                                                  StrokeWidth="2"
-                                                  LinkFlowEnabled="True" />
-                    <!-- VeloxDev customization: 悬停高亮是本 demo 的一层（适配器的连线层只画静息线）。 -->
-                    <controls:LinkHighlightLayer Tree="{Binding BindingContext, Source={x:Reference Root}}"
-                                             ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                             ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                             ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                             ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                             RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}" />
-                    <ScrollView x:Name="PART_ScrollViewer"
-                                Orientation="Both"
-                                BackgroundColor="Transparent">
-                        <AbsoluteLayout x:Name="PART_RulerOffsetHost"
-                                        TranslationX="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
-                                        TranslationY="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}">
-                            <AbsoluteLayout x:Name="PART_Canvas"
-                                            BackgroundColor="Transparent"
-                                            behaviors:ViewPool.ItemsSource="{Binding BindingContext.Helper.VisibleItems, Source={x:Reference Root}}"
-                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}" />
-                        </AbsoluteLayout>
-                    </ScrollView>
-                </controls:WorkflowGridDecorator>
-            </Border>
-            <!-- 小地图：画布按 MinimapOverlayName="PART_MinimapOverlay" 找到此元素，把滚动/内容/视口推给
-                 它，取代原先手写的绑定 -->
-            <controls:MinimapOverlay x:Name="PART_MinimapOverlay"
-                                     HorizontalOptions="End"
-                                     VerticalOptions="Start"
-                                     Margin="0,8,8,0"
-                                     ScrollViewerName="PART_ScrollViewer" />
-            <!-- 实时画布信息 HUD：随模型与画布的滚动变化刷新（WorkflowView.xaml.cs）；文本层不吃命中测试，
-                 拖拽仍落到画布 -->
-            <controls:InfoOverlay x:Name="InfoOverlay"
-                                  HorizontalOptions="Start"
-                                  VerticalOptions="End"
-                                  Margin="44,0,0,12" />
+        <!-- Status bar -->
+        <Grid Grid.Row="2" BackgroundColor="{StaticResource WorkActivityBar}">
+            <BoxView HeightRequest="1" Color="{StaticResource WorkDivider}"
+                     HorizontalOptions="Fill" VerticalOptions="Start" />
+            <Grid ColumnDefinitions="Auto,*,Auto" Padding="8,0" Margin="0,1,0,0">
+                <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                    <HorizontalStackLayout Spacing="5" Padding="8,0" VerticalOptions="Center">
+                        <BoxView WidthRequest="6" HeightRequest="6" CornerRadius="3"
+                                 Color="{StaticResource GhostRunText}" VerticalOptions="Center"
+                                 IsVisible="{Binding IsWorkflowRunning, Converter={StaticResource InverseBool}}" />
+                        <BoxView WidthRequest="6" HeightRequest="6" CornerRadius="3"
+                                 Color="{StaticResource WorkWarning}" VerticalOptions="Center"
+                                 IsVisible="{Binding IsWorkflowRunning}" />
+                        <Label Text="运行中" TextColor="{StaticResource WorkWarning}" FontSize="11"
+                               IsVisible="{Binding IsWorkflowRunning}" />
+                        <Label Text="空闲" Style="{StaticResource WorkbenchStatusText}"
+                               IsVisible="{Binding IsWorkflowRunning, Converter={StaticResource InverseBool}}" />
+                    </HorizontalStackLayout>
+                    <Label Text="{Binding CompiledStructure.Count, StringFormat='编译 {0} 段'}"
+                           Style="{StaticResource WorkbenchStatusText}" Margin="8,0" />
+                    <Label Text="{Binding TotalElementText, StringFormat='元素 {0}'}"
+                           Style="{StaticResource WorkbenchStatusText}" Margin="8,0" />
+                </HorizontalStackLayout>
+
+                <HorizontalStackLayout Grid.Column="2" Spacing="12" VerticalOptions="Center">
+                    <Label Text="{Binding VisibleElementText, StringFormat='可见 {0}'}"
+                           Style="{StaticResource WorkbenchStatusText}" />
+                    <HorizontalStackLayout Spacing="5" VerticalOptions="Center">
+                        <Label Text="◎" TextColor="{StaticResource WorkStatusText}" FontSize="11" />
+                        <Label Text="{Binding Layout.Scale.Horizontal, Converter={StaticResource ZoomPercent}}"
+                               Style="{StaticResource WorkbenchStatusText}" />
+                    </HorizontalStackLayout>
+                    <Label Text="Ctrl+滚轮缩放" TextColor="{StaticResource WorkTextTertiary}" FontSize="11" />
+                </HorizontalStackLayout>
+            </Grid>
         </Grid>
     </Grid>
 </ContentView>

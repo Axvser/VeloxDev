@@ -19,7 +19,7 @@
             <Border BackgroundColor="Transparent"
                     behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
                     behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-                <Grid ColumnDefinitions="2,*,Auto,Auto">
+                <Grid ColumnDefinitions="3,*,Auto,Auto">
                     <Border Grid.Column="0"
                             Style="{StaticResource CardAccent}"
                             BackgroundColor="{StaticResource AccentTimerPython}" />

@@ -17,7 +17,7 @@
     <Border Style="{StaticResource Card}"
             behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
             behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-        <Grid ColumnDefinitions="2,*">
+        <Grid ColumnDefinitions="3,*">
             <Border Grid.Column="0"
                     Style="{StaticResource CardAccent}"
                     BackgroundColor="{StaticResource AccentFallback}" />

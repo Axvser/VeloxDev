@@ -6,13 +6,13 @@
              x:Class="Demo.Controls.InfoOverlay">
     <Grid InputTransparent="True" CascadeInputTransparent="False">
         <Border InputTransparent="True"
-                Stroke="#CC8EA3B8"
+                Stroke="#404040"
                 StrokeThickness="1"
                 StrokeShape="RoundRectangle 6"
-                BackgroundColor="#E612151B"
+                BackgroundColor="#E6222222"
                 Padding="12,8,58,8">
             <Label x:Name="InfoText"
-                   TextColor="#DDE4EA"
+                   TextColor="#A0A0A0"
                    FontSize="12"
                    LineHeight="1.3"
                    InputTransparent="True" />
@@ -24,9 +24,9 @@
                 Margin="0,0,8,8"
                 HorizontalOptions="End"
                 VerticalOptions="End"
-                BackgroundColor="#1E3A5F"
-                TextColor="#7EC8FF"
-                BorderColor="#7EC8FF"
+                BackgroundColor="#2A2A2A"
+                TextColor="#4FC1FF"
+                BorderColor="#404040"
                 BorderWidth="1"
                 Clicked="OnCopyClicked" />
     </Grid>

@@ -4,7 +4,8 @@
              xmlns:controls="clr-namespace:Demo.Controls"
              x:Class="Demo.MainPage"
              Title="Workflow"
-             BackgroundColor="#020617">
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="{StaticResource WorkEditorBackground}">
 
     <controls:WorkflowView x:Name="WorkflowSurface"
                            Session="{Binding DemoSession}" />

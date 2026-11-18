@@ -10,48 +10,48 @@
     属性而非类名。
 
     色板：
-      卡面 #161B22 ／ 边框 #2A313C（1px，圆角 8）／ 分隔线 #222A34
-      标题 #E6EAF2 12.5 SemiBold ／ 标签 #7C8798 10 ／ 正文 #D6DCE6 11.5
-      输入底 #0E1218 ／ 悬停底 #1E2731 ／ 禁用字 #5A6474
-    类型色条由各卡自己给（Controller #38BDF8、Timer/Python #6EC6FF、Enum #D6A0FF、兜底 #94A3B8）。
+      卡面 #252526 ／ 边框 #3C3C3C（1px，圆角 8）／ 分隔线 #262626
+      标题 #E7E7E7 12.5 SemiBold ／ 标签 #6E7681 10 ／ 正文 #A0A0A0 11.5
+      输入底 #2A2A2A ／ 悬停底 #2A2D2E ／ 禁用字 #585858
+    类型色条由各卡自己给（Controller #6E8BFF、Timer/Python #4FC1FF、Enum #C99BFF、兜底 #94A3B8）。
     MAUI 的 FontAttributes 只有 None/Bold/Italic，没有 SemiBold —— 标题在此落成 Bold。
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
 
     <!-- ── 色板 ───────────────────────────────────────────────────────────── -->
-    <Color x:Key="CardSurface">#161B22</Color>
-    <Color x:Key="CardBorder">#2A313C</Color>
-    <Color x:Key="CardDivider">#222A34</Color>
-    <Color x:Key="CardTitleText">#E6EAF2</Color>
-    <Color x:Key="CardLabelText">#7C8798</Color>
-    <Color x:Key="CardValueText">#D6DCE6</Color>
-    <Color x:Key="CardFieldSurface">#0E1218</Color>
-    <Color x:Key="CardHoverSurface">#1E2731</Color>
-    <Color x:Key="CardDisabledText">#5A6474</Color>
-    <Color x:Key="CardDisabledBorder">#232A34</Color>
-    <Color x:Key="CardHoverBorder">#3A4553</Color>
+    <Color x:Key="CardSurface">#252526</Color>
+    <Color x:Key="CardBorder">#3C3C3C</Color>
+    <Color x:Key="CardDivider">#262626</Color>
+    <Color x:Key="CardTitleText">#E7E7E7</Color>
+    <Color x:Key="CardLabelText">#6E7681</Color>
+    <Color x:Key="CardValueText">#A0A0A0</Color>
+    <Color x:Key="CardFieldSurface">#2A2A2A</Color>
+    <Color x:Key="CardHoverSurface">#2A2D2E</Color>
+    <Color x:Key="CardDisabledText">#585858</Color>
+    <Color x:Key="CardDisabledBorder">#2E2E2E</Color>
+    <Color x:Key="CardHoverBorder">#565656</Color>
 
     <!-- 标题行右侧那个执行序号 -->
-    <Color x:Key="CardExecOrder">#6EE7A8</Color>
+    <Color x:Key="CardExecOrder">#7EE787</Color>
 
     <!-- 类型色条 -->
-    <Color x:Key="AccentController">#38BDF8</Color>
-    <Color x:Key="AccentTimerPython">#6EC6FF</Color>
-    <Color x:Key="AccentEnum">#D6A0FF</Color>
+    <Color x:Key="AccentController">#6E8BFF</Color>
+    <Color x:Key="AccentTimerPython">#4FC1FF</Color>
+    <Color x:Key="AccentEnum">#C99BFF</Color>
     <Color x:Key="AccentFallback">#94A3B8</Color>
 
     <!-- 动作按钮的语义字色 -->
-    <Color x:Key="GhostCompileText">#7EC8FF</Color>
-    <Color x:Key="GhostRunText">#6EE7A8</Color>
-    <Color x:Key="GhostStopText">#FCA5A5</Color>
-    <Color x:Key="GhostCloseText">#9AA6B5</Color>
+    <Color x:Key="GhostCompileText">#4FC1FF</Color>
+    <Color x:Key="GhostRunText">#7EE787</Color>
+    <Color x:Key="GhostStopText">#F85149</Color>
+    <Color x:Key="GhostCloseText">#A0A0A0</Color>
 
     <!-- 代码面（Python 卡） -->
     <Color x:Key="CardCodeSurface">#0D1117</Color>
-    <Color x:Key="CardCodeBorder">#222A34</Color>
-    <Color x:Key="CardCodeTitle">#6EE7A8</Color>
-    <Color x:Key="CardCodeMuted">#5A6474</Color>
+    <Color x:Key="CardCodeBorder">#262626</Color>
+    <Color x:Key="CardCodeTitle">#7EE787</Color>
+    <Color x:Key="CardCodeMuted">#585858</Color>
 
     <!-- ── 卡片外壳 ───────────────────────────────────────────────────────── -->
 
@@ -67,7 +67,8 @@
     <!-- 标题行左侧那条 2px 类型色条。圆角只削左上，与卡面左上角对齐 -->
     <Style x:Key="CardAccent" TargetType="Border">
         <Setter Property="StrokeThickness" Value="0" />
-        <Setter Property="StrokeShape" Value="RoundRectangle 8,0,0,0" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 2" />
+        <Setter Property="Margin" Value="0,8,0,8" />
     </Style>
 
     <!-- 分隔线。MAUI 的 Border 只有一条 StrokeThickness，写不出「只描底边」，
@@ -83,7 +84,7 @@
     <!-- ── 字级 ───────────────────────────────────────────────────────────── -->
 
     <Style x:Key="CardTitle" TargetType="Label">
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="15" />
         <Setter Property="FontAttributes" Value="Bold" />
         <Setter Property="TextColor" Value="{StaticResource CardTitleText}" />
         <Setter Property="VerticalTextAlignment" Value="Center" />
@@ -91,12 +92,12 @@
     </Style>
 
     <Style x:Key="CardLabel" TargetType="Label">
-        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontSize" Value="10.5" />
         <Setter Property="TextColor" Value="{StaticResource CardLabelText}" />
     </Style>
 
     <Style x:Key="CardValue" TargetType="Label">
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
     </Style>
 
@@ -121,7 +122,7 @@
     </Style>
 
     <Style x:Key="CardField" TargetType="Entry">
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
         <Setter Property="PlaceholderColor" Value="{StaticResource CardDisabledText}" />
         <Setter Property="BackgroundColor" Value="Transparent" />
@@ -129,7 +130,7 @@
     </Style>
 
     <Style x:Key="CardPicker" TargetType="Picker">
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
         <Setter Property="TitleColor" Value="{StaticResource CardLabelText}" />
         <Setter Property="BackgroundColor" Value="Transparent" />
@@ -232,6 +233,255 @@
 
     <Style x:Key="CardGhostClose" TargetType="Button" BasedOn="{StaticResource CardGhost}">
         <Setter Property="TextColor" Value="{StaticResource GhostCloseText}" />
+    </Style>
+
+    <!-- ── 工作台外壳（标题条 / 活动栏 / 面板 / 状态栏） ─────────────────────
+         与 Avalonia 版 Theme/Tokens.axaml、Theme/Styles.axaml 同一组色值与字级。
+         外壳只补卡片色板没有的那几档（面板底、编辑器底、状态栏、强调蓝），
+         其余直接复用上面的 Card* 资源 —— 整份 UI 仍然只有一个调色板。 -->
+
+    <Color x:Key="WorkPanelBackground">#1F1F1F</Color>
+    <Color x:Key="WorkEditorBackground">#141414</Color>
+    <Color x:Key="WorkActivityBar">#181818</Color>
+    <Color x:Key="WorkBorderSubtle">#262626</Color>
+    <Color x:Key="WorkBorder">#333333</Color>
+    <Color x:Key="WorkBorderStrong">#404040</Color>
+    <Color x:Key="WorkDivider">#2B2B2B</Color>
+    <Color x:Key="WorkTextTertiary">#6E7681</Color>
+    <Color x:Key="WorkAccent">#0078D4</Color>
+    <Color x:Key="WorkAccentText">#4FC1FF</Color>
+    <Color x:Key="WorkWarning">#D29922</Color>
+    <Color x:Key="WorkDanger">#F85149</Color>
+    <Color x:Key="WorkStatusText">#B8B8B8</Color>
+    <Color x:Key="WorkRowSelection">#1AFFFFFF</Color>
+    <Color x:Key="WorkActivityActive">#14FFFFFF</Color>
+
+    <Style x:Key="WorkbenchTitle" TargetType="Label">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor" Value="{StaticResource CardTitleText}" />
+        <Setter Property="VerticalTextAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="WorkbenchPanelTitle" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+        <Setter Property="VerticalTextAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="WorkbenchSectionLabel" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+        <Setter Property="Margin" Value="12,14,12,6" />
+    </Style>
+
+    <Style x:Key="WorkbenchMuted" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextColor" Value="{StaticResource WorkTextTertiary}" />
+    </Style>
+
+    <Style x:Key="WorkbenchMicro" TargetType="Label">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="TextColor" Value="{StaticResource WorkTextTertiary}" />
+    </Style>
+
+    <Style x:Key="WorkbenchValue" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextColor" Value="{StaticResource CardTitleText}" />
+    </Style>
+
+    <Style x:Key="WorkbenchStatusText" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextColor" Value="{StaticResource WorkStatusText}" />
+    </Style>
+
+    <Style x:Key="WorkbenchTabLabel" TargetType="Label">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextColor" Value="{StaticResource WorkTextTertiary}" />
+        <Setter Property="VerticalTextAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="WorkbenchPanelTabLabel" TargetType="Label">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextColor" Value="{StaticResource WorkTextTertiary}" />
+        <Setter Property="VerticalTextAlignment" Value="Center" />
+    </Style>
+
+    <!-- 行内动作：无底无边的轻按钮。类选择器在 MAUI 里不可用，所以用显式 Style 挂载。 -->
+    <Style x:Key="WorkbenchRowAction" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Padding" Value="6,1" />
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="TextColor" Value="{StaticResource WorkTextTertiary}" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+        <Setter Property="MinimumWidthRequest" Value="0" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="{StaticResource CardHoverSurface}" />
+                            <Setter Property="TextColor" Value="{StaticResource CardTitleText}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="TextColor" Value="{StaticResource CardDisabledText}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style x:Key="WorkbenchIconButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="WidthRequest" Value="26" />
+        <Setter Property="HeightRequest" Value="26" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+        <Setter Property="MinimumWidthRequest" Value="0" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="{StaticResource CardHoverSurface}" />
+                            <Setter Property="TextColor" Value="{StaticResource CardTitleText}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style x:Key="WorkbenchMenuButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Padding" Value="7,2" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+        <Setter Property="MinimumWidthRequest" Value="0" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="{StaticResource CardHoverSurface}" />
+                            <Setter Property="TextColor" Value="{StaticResource CardTitleText}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style x:Key="WorkbenchCommandCenter" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardFieldSurface}" />
+        <Setter Property="BorderColor" Value="{StaticResource CardBorder}" />
+        <Setter Property="BorderWidth" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="HeightRequest" Value="24" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextColor" Value="{StaticResource CardLabelText}" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+        <Setter Property="MinimumWidthRequest" Value="0" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="{StaticResource CardHoverSurface}" />
+                            <Setter Property="BorderColor" Value="{StaticResource CardHoverBorder}" />
+                            <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <Style x:Key="WorkbenchSendButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource WorkAccent}" />
+        <Setter Property="TextColor" Value="White" />
+        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="HeightRequest" Value="30" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+        <Setter Property="MinimumWidthRequest" Value="0" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="#1184DE" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
+    </Style>
+
+    <!-- 命令中心是 Border + TapGestureRecognizer：MAUI 的 Button 只有文本，挂不了搜索框那一行。 -->
+    <Style x:Key="WorkbenchCommandCenterBox" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardFieldSurface}" />
+        <Setter Property="Stroke" Value="{StaticResource CardBorder}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 4" />
+        <Setter Property="HeightRequest" Value="24" />
+        <Setter Property="Padding" Value="8,0" />
+    </Style>
+
+    <Style x:Key="WorkbenchCard" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardSurface}" />
+        <Setter Property="Stroke" Value="{StaticResource CardBorder}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 6" />
+        <Setter Property="Padding" Value="10" />
+    </Style>
+
+    <Style x:Key="WorkbenchFieldBox" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource CardFieldSurface}" />
+        <Setter Property="Stroke" Value="{StaticResource CardBorder}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 4" />
+        <Setter Property="Padding" Value="7,0" />
+    </Style>
+
+    <Style x:Key="WorkbenchEntry" TargetType="Entry">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextColor" Value="{StaticResource CardTitleText}" />
+        <Setter Property="PlaceholderColor" Value="{StaticResource CardDisabledText}" />
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+        <Setter Property="HeightRequest" Value="30" />
+    </Style>
+
+    <Style x:Key="WorkbenchPicker" TargetType="Picker">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextColor" Value="{StaticResource CardValueText}" />
+        <Setter Property="TitleColor" Value="{StaticResource CardLabelText}" />
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="MinimumHeightRequest" Value="0" />
+        <Setter Property="HeightRequest" Value="30" />
     </Style>
 
 </ResourceDictionary>
