@@ -25,10 +25,10 @@
                 behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2" />
+                    <ColumnDefinition Width="3" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="#94A3B8" />
+                <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="{DynamicResource NodeFallbackAccentBrush}" />
                 <TextBlock Grid.Column="1"
                            Style="{StaticResource CardLabelTextStyle}"
                            Text="?"

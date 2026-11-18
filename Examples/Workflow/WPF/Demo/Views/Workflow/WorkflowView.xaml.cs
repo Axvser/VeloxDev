@@ -24,6 +24,10 @@ namespace Demo.Views.Workflow;
 public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
+
+    // 当前树背后的会话：持有日志文件句柄与控制器上的会话配置。换树时先释放，
+    // 否则下一棵树第一次运行会去开同一个 log 文件（FileShare.Read）而失败。
+    private WorkflowDemoSession? _session;
     private double _nodeLayoutTolerance = 8d;
 
     public WorkflowView()
@@ -42,26 +46,218 @@ public partial class WorkflowView : UserControl
         InitializeMcp();
     }
 
-    /// <summary>Switches the sidebar between the explorer, run controls, agent, MCP and output views.</summary>
+    /// <summary>Switches the left sidebar between the explorer, run controls and MCP views.</summary>
     private void OnActivityClick(object sender, RoutedEventArgs e)
     {
         if (sender is not RadioButton { Tag: string view }) return;
 
+        SetSidebarVisible(true);
+        ShowSidebarPage(view);
+    }
+
+    private void ShowSidebarPage(string view)
+    {
         ExplorerPanel.Visibility = view == "explorer" ? Visibility.Visible : Visibility.Collapsed;
         RunPanel.Visibility = view == "run" ? Visibility.Visible : Visibility.Collapsed;
-        AgentPanel.Visibility = view == "agent" ? Visibility.Visible : Visibility.Collapsed;
         McpPanel.Visibility = view == "mcp" ? Visibility.Visible : Visibility.Collapsed;
-        OutputPanel.Visibility = view == "output" ? Visibility.Visible : Visibility.Collapsed;
 
         SidebarHeader.Text = view switch
         {
             "run" => "运行",
-            "agent" => "AGENT",
-            "mcp" => "MCP",
-            "output" => "输出",
+            "mcp" => "MCP 服务器",
             _ => "资源管理器",
         };
     }
+
+    private void OnInspectorActivityClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string view }) return;
+
+        SetInspectorVisible(true);
+        ShowInspectorPage(view);
+    }
+
+    private void OnRightTabClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string view }) return;
+        ShowInspectorPage(view);
+    }
+
+    private void ShowInspectorPage(string view)
+    {
+        PropertiesPanel.Visibility = view == "properties" ? Visibility.Visible : Visibility.Collapsed;
+        AgentPanel.Visibility = view == "agent" ? Visibility.Visible : Visibility.Collapsed;
+        PropertiesTab.IsChecked = view == "properties";
+        AgentTab.IsChecked = view == "agent";
+        InspectorPropertiesActivity.IsChecked = view == "properties";
+        InspectorAgentActivity.IsChecked = view == "agent";
+    }
+
+    private void OnMainTabClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string view }) return;
+        SelectMainTab(view);
+    }
+
+    private void SelectMainTab(string view)
+    {
+        WorkflowContainer.Visibility = view == "canvas" ? Visibility.Visible : Visibility.Collapsed;
+        OutputPanel.Visibility = view == "output" ? Visibility.Visible : Visibility.Collapsed;
+        CanvasTab.IsChecked = view == "canvas";
+        OutputTab.IsChecked = view == "output";
+        OutputActivity.IsChecked = view == "output";
+    }
+
+    private void OnOutputActivityClick(object sender, RoutedEventArgs e)
+        => SelectMainTab("output");
+
+    private void OnShowPanelMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string view }) return;
+
+        switch (view)
+        {
+            case "properties":
+            case "agent":
+                SetInspectorVisible(true);
+                ShowInspectorPage(view);
+                break;
+            case "output":
+                SelectMainTab("output");
+                break;
+            default:
+                SetSidebarVisible(true);
+                ShowSidebarPage(view);
+                ExplorerActivity.IsChecked = view == "explorer";
+                RunActivity.IsChecked = view == "run";
+                McpActivity.IsChecked = view == "mcp";
+                break;
+        }
+    }
+
+    private void OnToggleSidebar(object sender, RoutedEventArgs e)
+        => SetSidebarVisible(SidebarHost.Visibility != Visibility.Visible);
+
+    private void OnToggleInspector(object sender, RoutedEventArgs e)
+        => SetInspectorVisible(InspectorHost.Visibility != Visibility.Visible);
+
+    private void SetSidebarVisible(bool visible)
+    {
+        SidebarHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        LeftSplitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        WorkbenchGrid.ColumnDefinitions[1].Width = new GridLength(visible ? 272 : 0);
+        WorkbenchGrid.ColumnDefinitions[2].Width = new GridLength(visible ? 4 : 0);
+    }
+
+    private void SetInspectorVisible(bool visible)
+    {
+        InspectorHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        RightSplitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        WorkbenchGrid.ColumnDefinitions[4].Width = new GridLength(visible ? 4 : 0);
+        WorkbenchGrid.ColumnDefinitions[5].Width = new GridLength(visible ? 348 : 0);
+    }
+
+    private void OnOpenCommandCenter(object sender, RoutedEventArgs e)
+    {
+        if (CommandCenterButton.ContextMenu is not { } menu) return;
+        menu.PlacementTarget = CommandCenterButton;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    private void OnShowAbout(object sender, RoutedEventArgs e)
+        => MessageBox.Show(
+            "演示宿主：工作流画布、运行门、Agent 与 MCP 面板都在这一套外壳里。",
+            "VeloxDev — Workflow Studio",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+
+    private void OnGlobalKeyDown(object sender, PlatformInput.KeyEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+
+        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+
+        switch (e.Key)
+        {
+            case PlatformInput.Key.P when shift:
+                OnOpenCommandCenter(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+            case PlatformInput.Key.S:
+                SaveWorkflow(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+            case PlatformInput.Key.O:
+                SelectWorkflow(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+            case PlatformInput.Key.Z:
+                ExecuteHistory(undo: true);
+                e.Handled = true;
+                break;
+            case PlatformInput.Key.Y:
+                ExecuteHistory(undo: false);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void ExecuteHistory(bool undo)
+    {
+        var command = undo ? _workflowViewModel.UndoCommand : _workflowViewModel.RedoCommand;
+        if (command.CanExecute(null)) command.Execute(null);
+    }
+
+    // Custom title bar: drag from empty space, double-click toggles maximize. Buttons and menu items
+    // handle their own clicks, so the press is ignored when it originates inside either.
+    private void OnTitleBarMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject source &&
+            (FindAncestor<ButtonBase>(source) is not null || FindAncestor<MenuItem>(source) is not null))
+            return;
+
+        if (Window.GetWindow(this) is not { } window) return;
+
+        if (e.ClickCount == 2)
+        {
+            ToggleMaximize(window);
+            return;
+        }
+
+        window.DragMove();
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? source) where T : DependencyObject
+    {
+        while (source is not null)
+        {
+            if (source is T match) return match;
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return null;
+    }
+
+    private void OnMinimizeWindow(object sender, RoutedEventArgs e)
+    {
+        if (Window.GetWindow(this) is { } window)
+            window.WindowState = WindowState.Minimized;
+    }
+
+    private void OnMaximizeWindow(object sender, RoutedEventArgs e)
+    {
+        if (Window.GetWindow(this) is { } window)
+            ToggleMaximize(window);
+    }
+
+    private void OnCloseWindow(object sender, RoutedEventArgs e)
+        => Window.GetWindow(this)?.Close();
+
+    private static void ToggleMaximize(Window window)
+        => window.WindowState = window.WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
 
     /// <summary>
     /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
@@ -135,6 +331,10 @@ public partial class WorkflowView : UserControl
                 result.Layout.UpdateCommand.Execute(null);
 
                 UnsubscribeAutoScroll(_workflowViewModel);
+                _session?.Dispose();
+
+                // 从文件来的树也要有会话配置，否则控制器上的 Compile/Run 没有日志、观察者与运行管理器行。
+                _session = WorkflowDemoSession.FromTree(result);
                 _workflowViewModel = result;
                 DataContext = _workflowViewModel;
                 ElementList.Tree = _workflowViewModel;
@@ -175,8 +375,9 @@ public partial class WorkflowView : UserControl
     private void InitializeNetworkDemo()
     {
         UnsubscribeAutoScroll(_workflowViewModel);
-        _demo = WorkflowDemoSession.Create();
-        _workflowViewModel = _demo.Tree;
+        _session?.Dispose();
+        _session = WorkflowDemoSession.Create();
+        _workflowViewModel = _session.Tree;
         HookLinkKeys(_workflowViewModel);
         DataContext = _workflowViewModel;
         ElementList.Tree = _workflowViewModel;
@@ -185,50 +386,48 @@ public partial class WorkflowView : UserControl
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         InitializePermissionMode();
-
-        // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。Exited 是在线程池上发的，所以回到
-        // UI 线程再改控件。
-        _demo.Controller.RunCommand.Exited += _ => Dispatcher.InvokeAsync(RefreshRunControls);
-        _demo.Controller.ResumeCommand.Exited += _ => Dispatcher.InvokeAsync(RefreshRunControls);
-        RefreshRunControls();
     }
-
-    /// <summary>
-    /// The demo session behind the tree on screen — <c>null</c> when the tree came from a file instead of from
-    /// <see cref="WorkflowDemoSession.Create"/>. The run controls live on it, not on the tree.
-    /// </summary>
-    private WorkflowDemoSession? _demo;
 
     // Agent 一轮里每个工具调用都要求刷新，而一次刷新是全量的（重新定位命名控件、跑布局、重算可见区）。
     // 合并之后一轮只刷新一次 —— 控制器本身是纯的，后来的请求要的正是前面那次刷新即将看到的状态。
     private CoalescedRefresh? _surfaceRefresh;
 
-    // 门与检查点都在会话上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做。
-    private void RefreshRunControls()
+    // ── Run manager ──────────────────────────────────────────────────────────
+
+    private static WorkflowRunTaskViewModel? RunTaskOf(object sender)
+        => (sender as FrameworkElement)?.DataContext as WorkflowRunTaskViewModel;
+
+    private void OnPauseRunTask(object sender, RoutedEventArgs e) => RunTaskOf(sender)?.Pause();
+
+    private void OnResumeRunTask(object sender, RoutedEventArgs e) => RunTaskOf(sender)?.Resume();
+
+    private void OnStopRunTask(object sender, RoutedEventArgs e) => RunTaskOf(sender)?.Stop();
+
+    private void OnStartRunTask(object sender, RoutedEventArgs e) => RunTaskOf(sender)?.Start();
+
+    private void OnRemoveRunTask(object sender, RoutedEventArgs e)
     {
-        ContinueFromCheckpointButton.IsEnabled = _demo?.HasCheckpoint == true;
-        RunGateState.Text = _demo?.Gate.IsPaused == true ? "已暂停" : "空闲";
+        if (RunTaskOf(sender) is { } task) _workflowViewModel.Runs.Remove(task);
     }
 
-    private void PauseWorkflow(object sender, RoutedEventArgs e)
+    private void OnClearFinishedRuns(object sender, RoutedEventArgs e)
+        => _workflowViewModel.Runs.ClearFinished();
+
+    private void OnLocateSelectedElement(object sender, RoutedEventArgs e)
     {
-        if (_demo is null) return;
-        _demo.Gate.Pause();
-        RunGateState.Text = "已暂停：停在下一个节点边界";
+        if (_workflowViewModel.SelectedElement is not { } entry) return;
+
+        ElementStatus.Text = ElementList.Locate(entry)
+            ? $"已定位 {entry.Label}"
+            : "没有可用的表面，或该元素还没有有限坐标";
     }
 
-    private void ResumeWorkflow(object sender, RoutedEventArgs e)
+    private void OnDeleteSelectedElement(object sender, RoutedEventArgs e)
     {
-        if (_demo is null) return;
-        _demo.Gate.Resume();
-        RunGateState.Text = "运行中";
-    }
+        if (_workflowViewModel.SelectedElement is not { } entry) return;
 
-    private async void ContinueFromCheckpoint(object sender, RoutedEventArgs e)
-    {
-        if (_demo is null) return;
-        RunGateState.Text = "从检查点继续…";
-        await _demo.Controller.ResumeCommand.ExecuteAsync(null);
+        ElementList.Delete(entry);
+        ElementStatus.Text = $"已删除 {entry.Label}";
     }
 
     private void OnSendToAgent(object sender, RoutedEventArgs e)

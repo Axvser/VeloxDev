@@ -4,13 +4,27 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:views="clr-namespace:Demo.Views.Workflow"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
-        Title="Demo"
-        Width="1280"
-        Height="820"
-        Background="#1E1E1E"
+        Title="VeloxDev — Workflow Studio"
+        Width="1500"
+        Height="900"
+        MinWidth="1180"
+        MinHeight="720"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontFamily="{DynamicResource UiFontFamily}"
+        FontSize="{DynamicResource UiFontSize}"
         WindowStartupLocation="CenterScreen">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
     <Grid>
-        <views:WorkflowView Background="#1e1e1e"/>
+        <views:WorkflowView />
     </Grid>
 </Window>

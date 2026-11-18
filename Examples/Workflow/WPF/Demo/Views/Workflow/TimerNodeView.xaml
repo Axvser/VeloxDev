@@ -32,11 +32,11 @@
                     behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2" />
+                        <ColumnDefinition Width="3" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="#6EC6FF" />
+                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="{DynamicResource NodeTimerAccentBrush}" />
                     <TextBlock Grid.Column="1"
                                Style="{StaticResource CardTitleTextStyle}"
                                Text="{Binding Title}"
@@ -44,7 +44,7 @@
                     <TextBlock Grid.Column="2"
                                Style="{StaticResource CardValueTextStyle}"
                                Text="{Binding ExecutionOrderText}"
-                               Foreground="#6EE7A8"
+                               Foreground="{DynamicResource NodeSuccessBrush}"
                                VerticalAlignment="Center"
                                Margin="0,0,12,0"
                                Visibility="{Binding HasExecutionOrder, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -66,7 +66,7 @@
                     <TextBlock Style="{StaticResource CardValueTextStyle}"
                                Margin="0,5,0,0"
                                Text="{Binding LastTick}"
-                               Foreground="#6EC6FF"
+                               Foreground="{DynamicResource NodeTimerAccentBrush}"
                                FontWeight="SemiBold"
                                TextWrapping="Wrap" />
                 </StackPanel>

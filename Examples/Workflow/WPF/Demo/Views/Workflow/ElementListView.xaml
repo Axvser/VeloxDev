@@ -1,32 +1,16 @@
-<UserControl x:Class="Demo.Views.Workflow.ElementListView"
+﻿<UserControl x:Class="Demo.Views.Workflow.ElementListView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:Demo.Views.Workflow">
-    <UserControl.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="#0F3460" />
-            <Setter Property="Foreground" Value="#7EC8FF" />
-            <Setter Property="BorderBrush" Value="#7EC8FF" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="6,1" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style TargetType="ListBox">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-        </Style>
-    </UserControl.Resources>
-
     <Border Padding="10"
-            Background="#202020"
-            BorderBrush="#4C4C4C"
+            Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
-            CornerRadius="4">
+            CornerRadius="6">
         <StackPanel>
-            <TextBlock Text="元素（从 Tree 加载）"
-                       Foreground="#7EC8FF"
-                       FontWeight="Bold" />
+            <TextBlock Text="元素"
+                       Style="{StaticResource PanelTitleTextStyle}"
+                       Foreground="{DynamicResource AccentTextBrush}" />
 
             <TabControl x:Name="Tabs"
                         Height="220"
@@ -34,7 +18,7 @@
                         Background="Transparent"
                         BorderThickness="0">
                 <TabItem Header="节点">
-                    <ListBox x:Name="NodeList" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox x:Name="NodeList" Background="{DynamicResource PanelBackgroundBrush}" SelectionChanged="OnSelectionChanged" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid Margin="0,1">
@@ -44,12 +28,14 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="{Binding Label}"
-                                               Foreground="#D8D8D8"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
                                     <Button Grid.Column="1" Content="Locate" Margin="4,0,0,0" Click="OnLocate"
+                                            Style="{StaticResource RowActionButtonStyle}"
                                             ToolTip="滚到视口中心；插槽定位所属节点，连线定位两端节点中心" />
                                     <Button Grid.Column="2" Content="Delete" Margin="4,0,0,0" Click="OnDelete"
+                                            Style="{StaticResource RowActionButtonStyle}"
                                             ToolTip="删除该元素；插槽与节点会一并删除它们的连线" />
                                 </Grid>
                             </DataTemplate>
@@ -57,7 +43,7 @@
                     </ListBox>
                 </TabItem>
                 <TabItem Header="插槽">
-                    <ListBox x:Name="SlotList" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox x:Name="SlotList" Background="{DynamicResource PanelBackgroundBrush}" SelectionChanged="OnSelectionChanged" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid Margin="0,1">
@@ -67,12 +53,14 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="{Binding Label}"
-                                               Foreground="#D8D8D8"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
                                     <Button Grid.Column="1" Content="Locate" Margin="4,0,0,0" Click="OnLocate"
+                                            Style="{StaticResource RowActionButtonStyle}"
                                             ToolTip="滚到视口中心；插槽定位所属节点，连线定位两端节点中心" />
                                     <Button Grid.Column="2" Content="Delete" Margin="4,0,0,0" Click="OnDelete"
+                                            Style="{StaticResource RowActionButtonStyle}"
                                             ToolTip="删除该元素；插槽与节点会一并删除它们的连线" />
                                 </Grid>
                             </DataTemplate>
@@ -80,7 +68,7 @@
                     </ListBox>
                 </TabItem>
                 <TabItem Header="连线">
-                    <ListBox x:Name="LinkList" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox x:Name="LinkList" Background="{DynamicResource PanelBackgroundBrush}" SelectionChanged="OnSelectionChanged" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid Margin="0,1">
@@ -90,12 +78,14 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="{Binding Label}"
-                                               Foreground="#D8D8D8"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
                                     <Button Grid.Column="1" Content="Locate" Margin="4,0,0,0" Click="OnLocate"
+                                            Style="{StaticResource RowActionButtonStyle}"
                                             ToolTip="滚到视口中心；插槽定位所属节点，连线定位两端节点中心" />
                                     <Button Grid.Column="2" Content="Delete" Margin="4,0,0,0" Click="OnDelete"
+                                            Style="{StaticResource RowActionButtonStyle}"
                                             ToolTip="删除该元素；插槽与节点会一并删除它们的连线" />
                                 </Grid>
                             </DataTemplate>
@@ -106,8 +96,7 @@
 
             <TextBlock x:Name="StatusText"
                        Margin="0,6,0,0"
-                       Foreground="#A0A0A0"
-                       FontSize="11"
+                       Style="{StaticResource MicroTextStyle}"
                        TextWrapping="Wrap" />
         </StackPanel>
     </Border>

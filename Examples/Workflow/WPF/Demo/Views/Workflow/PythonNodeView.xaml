@@ -33,12 +33,12 @@
                     behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2" />
+                        <ColumnDefinition Width="3" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="#6EC6FF" />
+                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="{DynamicResource NodeScriptAccentBrush}" />
                     <TextBlock Grid.Column="1"
                                Style="{StaticResource CardTitleTextStyle}"
                                Text="{Binding Title}"
@@ -46,7 +46,7 @@
                     <TextBlock Grid.Column="2"
                                Style="{StaticResource CardValueTextStyle}"
                                Text="{Binding ExecutionOrderText}"
-                               Foreground="#6EE7A8"
+                               Foreground="{DynamicResource NodeSuccessBrush}"
                                VerticalAlignment="Center"
                                Margin="0,0,12,0"
                                Visibility="{Binding HasExecutionOrder, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -108,7 +108,7 @@
                                                    Text="{Binding Name}"
                                                    Style="{StaticResource CardValueTextStyle}"
                                                    FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="#6EC6FF"
+                                                   Foreground="{DynamicResource NodeScriptAccentBrush}"
                                                    VerticalAlignment="Center"
                                                    HorizontalAlignment="Left"
                                                    Margin="4,0,0,0"
@@ -126,7 +126,7 @@
                             BorderBrush="{StaticResource CardDividerBrush}" BorderThickness="1"
                             CornerRadius="6" Background="#0D1117">
                         <DockPanel>
-                            <Border DockPanel.Dock="Top" Background="#161B22"
+                            <Border DockPanel.Dock="Top" Background="{DynamicResource NodeFooterBrush}"
                                     BorderBrush="{StaticResource CardDividerBrush}" BorderThickness="0,0,0,1"
                                     Padding="8,4" CornerRadius="6,6,0,0">
                                 <Grid>
@@ -134,7 +134,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="script.py" Foreground="#6EE7A8"
+                                    <TextBlock Grid.Column="0" Text="script.py" Foreground="{DynamicResource NodeSuccessBrush}"
                                                FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" />
                                     <TextBlock Grid.Column="1" Text="Python 3"
                                                Foreground="{StaticResource CardDisabledTextBrush}" FontSize="10" />
@@ -183,7 +183,7 @@
                                                    Text="{Binding Name}"
                                                    Style="{StaticResource CardValueTextStyle}"
                                                    FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="#6EC6FF"
+                                                   Foreground="{DynamicResource NodeScriptAccentBrush}"
                                                    VerticalAlignment="Center"
                                                    HorizontalAlignment="Right"
                                                    Margin="0,0,4,0"

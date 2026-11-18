@@ -21,16 +21,15 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    // 中性灰一套，与 Trimmed demo（模板的默认调色板）逐字相同。原先这套是青蓝的──画布 #141922、
-    // 轴用 #38BDF8──七家非 Trimmed 里有四家共用它。对齐的只有画布层：节点卡的逐类型配色是刻意保留的。
-    private static readonly Brush SurfaceBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E1E1E"));
-    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C8252526"));
-    private static readonly Brush LabelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888"));
-    private static readonly Pen MinorGridPen = CreateFrozenPen("#2A2D2E", 1);
-    private static readonly Pen MajorGridPen = CreateFrozenPen("#3A3D40", 1);
-    private static readonly Pen AxisPen = CreateFrozenPen("#4D4D4D", 1.2);
-    private static readonly Pen TickPen = CreateFrozenPen("#555555", 1);
-    private static readonly Pen DividerPen = CreateFrozenPen("#3A3D40", 1);
+    // 工作台中性灰：画布 #171717，网格与刻度只在近黑上抬起一档。节点卡的逐类型配色仍然留在卡上。
+    private static readonly Brush SurfaceBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#171717"));
+    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D21F1F1F"));
+    private static readonly Brush LabelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6E7681"));
+    private static readonly Pen MinorGridPen = CreateFrozenPen("#232323", 1);
+    private static readonly Pen MajorGridPen = CreateFrozenPen("#2E2E2E", 1);
+    private static readonly Pen AxisPen = CreateFrozenPen("#3A3A3A", 1.2);
+    private static readonly Pen TickPen = CreateFrozenPen("#4A4A4A", 1);
+    private static readonly Pen DividerPen = CreateFrozenPen("#2E2E2E", 1);
     private static readonly Typeface LabelTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
     private readonly GridLayer _gridLayer;

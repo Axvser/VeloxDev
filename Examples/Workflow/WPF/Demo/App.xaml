@@ -6,8 +6,9 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- 节点卡共用的一套（卡面、字级、幽灵按钮）。五张卡都从它取具名 Style，不各自写色值。
-                     与 Avalonia 把 StyleInclude 挂在 Application.Styles 上同一个位置。 -->
+                <!-- Workbench tokens and control styles first; the node-card family layers on top. -->
+                <ResourceDictionary Source="Themes/Tokens.xaml" />
+                <ResourceDictionary Source="Themes/Styles.xaml" />
                 <ResourceDictionary Source="Themes/CardTheme.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

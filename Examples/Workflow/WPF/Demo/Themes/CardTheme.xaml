@@ -24,25 +24,25 @@
 
     <!-- ── 色板 ───────────────────────────────────────────────────────────── -->
 
-    <SolidColorBrush x:Key="CardSurfaceBrush"        Color="#161B22" />
-    <SolidColorBrush x:Key="CardBorderBrush"         Color="#2A313C" />
-    <SolidColorBrush x:Key="CardBorderHoverBrush"    Color="#3A4553" />
-    <SolidColorBrush x:Key="CardBorderFocusedBrush"  Color="#38BDF8" />
-    <SolidColorBrush x:Key="CardBorderDisabledBrush" Color="#232A34" />
-    <SolidColorBrush x:Key="CardDividerBrush"        Color="#222A34" />
-    <SolidColorBrush x:Key="CardTitleBrush"          Color="#E6EAF2" />
-    <SolidColorBrush x:Key="CardLabelBrush"          Color="#7C8798" />
-    <SolidColorBrush x:Key="CardValueBrush"          Color="#D6DCE6" />
-    <SolidColorBrush x:Key="CardFieldBrush"          Color="#0E1218" />
-    <SolidColorBrush x:Key="CardFieldHoverBrush"     Color="#141A22" />
-    <SolidColorBrush x:Key="CardHoverBrush"          Color="#1E2731" />
-    <SolidColorBrush x:Key="CardDisabledTextBrush"   Color="#5A6474" />
+    <SolidColorBrush x:Key="CardSurfaceBrush"        Color="#252526" />
+    <SolidColorBrush x:Key="CardBorderBrush"         Color="#3C3C3C" />
+    <SolidColorBrush x:Key="CardBorderHoverBrush"    Color="#565656" />
+    <SolidColorBrush x:Key="CardBorderFocusedBrush"  Color="#0078D4" />
+    <SolidColorBrush x:Key="CardBorderDisabledBrush" Color="#2E2E2E" />
+    <SolidColorBrush x:Key="CardDividerBrush"        Color="#262626" />
+    <SolidColorBrush x:Key="CardTitleBrush"          Color="#E7E7E7" />
+    <SolidColorBrush x:Key="CardLabelBrush"          Color="#6E7681" />
+    <SolidColorBrush x:Key="CardValueBrush"          Color="#A0A0A0" />
+    <SolidColorBrush x:Key="CardFieldBrush"          Color="#2A2A2A" />
+    <SolidColorBrush x:Key="CardFieldHoverBrush"     Color="#303030" />
+    <SolidColorBrush x:Key="CardHoverBrush"          Color="#2A2D2E" />
+    <SolidColorBrush x:Key="CardDisabledTextBrush"   Color="#585858" />
 
     <!-- 动作按钮的语义色。Avalonia 那边写在每张卡的 Foreground 上，这里同理，只是顺带留个名字 -->
-    <SolidColorBrush x:Key="CardActionCompileBrush" Color="#7EC8FF" />
-    <SolidColorBrush x:Key="CardActionRunBrush"     Color="#6EE7A8" />
-    <SolidColorBrush x:Key="CardActionStopBrush"    Color="#FCA5A5" />
-    <SolidColorBrush x:Key="CardActionCloseBrush"   Color="#9AA6B5" />
+    <SolidColorBrush x:Key="CardActionCompileBrush" Color="#4FC1FF" />
+    <SolidColorBrush x:Key="CardActionRunBrush"     Color="#7EE787" />
+    <SolidColorBrush x:Key="CardActionStopBrush"    Color="#F85149" />
+    <SolidColorBrush x:Key="CardActionCloseBrush"   Color="#A0A0A0" />
 
     <!-- ── 卡面 ───────────────────────────────────────────────────────────── -->
 
@@ -52,6 +52,9 @@
         <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
         <Setter Property="Background" Value="{StaticResource CardSurfaceBrush}" />
         <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource CardBorderHoverBrush}" />
+            </Trigger>
             <!-- Agent 工作集：紫罗兰描边 + 同色辉光。标志由 AgentSelectionVisual 写在外层 UserControl 上，
                  卡片只负责画 —— 节点视图模型没有为它增加任何属性。 -->
             <DataTrigger Binding="{Binding Path=(views:AgentSelectionVisual.IsSelected), RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -74,15 +77,16 @@
 
     <!-- 标题行左侧那条 2px 类型色条。圆角只削左上，与卡面左上角对齐 -->
     <Style x:Key="CardAccentStyle" TargetType="Border">
-        <Setter Property="CornerRadius" Value="8,0,0,0" />
-        <Setter Property="Width" Value="2" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Margin" Value="0,8,0,8" />
+        <Setter Property="Width" Value="3" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
     </Style>
 
     <!-- ── 字级 ───────────────────────────────────────────────────────────── -->
 
     <Style x:Key="CardTitleTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="15" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{StaticResource CardTitleBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -96,12 +100,13 @@
         字距不值得。所以这一条 WPF 缺一档：标签只剩字号与颜色，字距由字体默认给。
     -->
     <Style x:Key="CardLabelTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{StaticResource CardLabelBrush}" />
     </Style>
 
     <Style x:Key="CardValueTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{StaticResource CardValueBrush}" />
     </Style>
 
@@ -150,7 +155,7 @@
     </ControlTemplate>
 
     <Style x:Key="CardFieldTextBoxStyle" TargetType="TextBox">
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="Padding" Value="7,4" />
         <Setter Property="Background" Value="{StaticResource CardFieldBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
@@ -238,7 +243,7 @@
     <Style x:Key="CardFieldComboBoxItemStyle" TargetType="ComboBoxItem">
         <Setter Property="Foreground" Value="{StaticResource CardValueBrush}" />
         <Setter Property="Padding" Value="7,3" />
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Style.Triggers>
             <Trigger Property="IsHighlighted" Value="True">
                 <Setter Property="Background" Value="{StaticResource CardHoverBrush}" />
@@ -252,7 +257,7 @@
     </Style>
 
     <Style x:Key="CardFieldComboBoxStyle" TargetType="ComboBox">
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="Padding" Value="7,3" />
         <Setter Property="Background" Value="{StaticResource CardFieldBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />

@@ -1,4 +1,4 @@
-<UserControl x:Class="Demo.Views.Workflow.WorkflowView"
+﻿<UserControl x:Class="Demo.Views.Workflow.WorkflowView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -8,7 +8,7 @@
              xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
              xmlns:workflow="clr-namespace:VeloxDev.WorkflowSystem;assembly=VeloxDev.Core"
              mc:Ignorable="d"
-             d:DesignHeight="720" d:DesignWidth="1280"
+             d:DesignHeight="900" d:DesignWidth="1500"
              behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
              behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
              behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
@@ -16,9 +16,15 @@
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
              behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
              behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
-             behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
+             behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"
+             PreviewKeyDown="OnGlobalKeyDown">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <local:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <local:ZoomPercentConverter x:Key="ZoomPercent"/>
+        <local:DepthIndentConverter x:Key="DepthIndent"/>
+        <local:ZeroToVisibilityConverter x:Key="ZeroToVisibility"/>
+
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView Width="{Binding Size.Width}"
                             Height="{Binding Size.Height}"
@@ -65,7 +71,7 @@
                                      EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                      EndTop="{Binding Receiver.Anchor.Vertical}"
                                      CanRender="{Binding IsVisible}"
-                                     LineColor="#CC38BDF8"
+                                     LineColor="#CC6E8BFF"
                                      Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
                                      Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
                                      RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"
@@ -77,7 +83,7 @@
                                      EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                      EndTop="{Binding Receiver.Anchor.Vertical}"
                                      CanRender="{Binding IsVisible}"
-                                     LineColor="#CC38BDF8"
+                                     LineColor="#CC6E8BFF"
                                      Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
                                      Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
                                      RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"
@@ -90,298 +96,323 @@
                                       Timer="{StaticResource TimerTemplate}"
                                       Python="{StaticResource PythonTemplate}"
                                       Link="{StaticResource LinkTemplate}"/>
-        <!-- Right-click menu for a link; its DataContext is that link. Add or remove entries here. -->
+
+        <!-- Link right-click menu; its DataContext is the link. Add or remove entries here. -->
         <ContextMenu x:Key="LinkContextMenu">
             <MenuItem Header="Delete" Command="{Binding DeleteCommand}" />
         </ContextMenu>
-        <!-- VS Code-style left rail: activity buttons, flat sidebar actions, and the node explorer. -->
-        <Style x:Key="ActivityButtonStyle" TargetType="RadioButton">
-            <Setter Property="Width" Value="48"/>
-            <Setter Property="Height" Value="48"/>
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="19"/>
-            <Setter Property="Foreground" Value="#9D9D9D"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="2,0,0,0">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="#2A2D2E"/>
-                                <Setter Property="Foreground" Value="#E7E7E7"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#007ACC"/>
-                                <Setter Property="Foreground" Value="#FFFFFF"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
 
-        <Style x:Key="SidebarIconButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="26"/>
-            <Setter Property="Height" Value="26"/>
-            <Setter Property="Margin" Value="0,0,4,0"/>
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="#CCCCCC"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="3">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="#3A3D41"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="SidebarSectionStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#BBBBBB"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="12,14,12,6"/>
-        </Style>
-
+        <!-- Command-center menu. The button opens it on left click; entries use the same handlers as the
+             title-strip menus, so there is one implementation per command. -->
+        <ContextMenu x:Key="CommandMenu" Placement="Bottom">
+            <MenuItem Header="保存工作流" InputGestureText="Ctrl+S" Click="SaveWorkflow" />
+            <MenuItem Header="加载工作流" InputGestureText="Ctrl+O" Click="SelectWorkflow" />
+            <MenuItem Header="重新载入示例" Click="LoadNetworkDemo" />
+            <Separator />
+            <MenuItem Header="撤销" InputGestureText="Ctrl+Z" Command="{Binding UndoCommand}" />
+            <MenuItem Header="重做" InputGestureText="Ctrl+Y" Command="{Binding RedoCommand}" />
+            <Separator />
+            <MenuItem Header="资源管理器" Tag="explorer" Click="OnShowPanelMenu" />
+            <MenuItem Header="运行" Tag="run" Click="OnShowPanelMenu" />
+            <MenuItem Header="MCP 服务器" Tag="mcp" Click="OnShowPanelMenu" />
+            <MenuItem Header="属性" Tag="properties" Click="OnShowPanelMenu" />
+            <MenuItem Header="Agent 对话" Tag="agent" Click="OnShowPanelMenu" />
+            <MenuItem Header="执行输出" Tag="output" Click="OnShowPanelMenu" />
+        </ContextMenu>
     </UserControl.Resources>
 
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" MinWidth="320" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="8*" />
-        </Grid.ColumnDefinitions>
-        <Grid Grid.Column="2">
-            <Border x:Name="PART_SurfaceBorder"
-                    Margin="0,20,20,20"
-                    BorderBrush="#33FFFFFF"
-                    BorderThickness="1"
-                    CornerRadius="3"
-                    Background="#0B1120">
-                <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
-                    <ScrollViewer x:Name="PART_ScrollViewer"
-                                  HorizontalScrollBarVisibility="Auto"
-                                  VerticalScrollBarVisibility="Auto"
-                                  PanningMode="Both">
-                        <Canvas x:Name="PART_Canvas"
-                                Width="{Binding Layout.ActualSize.Width}"
-                                Height="{Binding Layout.ActualSize.Height}"
-                                Background="Transparent"
-                                behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
-                                behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}">
-                            <Canvas.RenderTransform>
-                                <TranslateTransform X="{Binding RulerThickness, ElementName=PART_GridDecorator}"
-                                                    Y="{Binding RulerThickness, ElementName=PART_GridDecorator}" />
-                            </Canvas.RenderTransform>
-                        </Canvas>
-                    </ScrollViewer>
-                </local:WorkflowGridDecorator>
-            </Border>
-            <!-- 小地图：画布按 MinimapOverlayName="PART_MinimapOverlay" 找到此元素，把滚动/内容/视口/树
-                 推给它，取代原先手写的六条绑定；ScrollViewerName 仍留着，小地图自己解析它做拖拽导航 -->
-            <behaviors:WorkflowMinimapOverlay x:Name="PART_MinimapOverlay"
-                                              HorizontalAlignment="Right"
-                                              VerticalAlignment="Top"
-                                              Margin="0,56,45,0"
-                                              ScrollViewerName="PART_ScrollViewer"/>
-            <!-- 实时画布信息 HUD（浮动装饰层）：偏移取网格装饰器的依赖属性，视口尺寸取画布边框以跟随窗口
-                 缩放；缩放与实际尺寸由控件订阅 Core 模型，滚动时刷新 -->
-            <local:InfoOverlay x:Name="InfoOverlay"
-                               HorizontalAlignment="Left"
-                               VerticalAlignment="Bottom"
-                               Margin="46,0,20,32"
-                               ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
-                               ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
-                               ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
-                               ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
-                               ViewportWidth="{Binding ActualWidth, ElementName=PART_SurfaceBorder}"
-                               ViewportHeight="{Binding ActualHeight, ElementName=PART_SurfaceBorder}" />
-        </Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="24" />
+        </Grid.RowDefinitions>
 
-        <Grid Grid.Column="0" Margin="20,20,0,20">
+        <!-- Title strip: brand, menu, command center, window controls. -->
+        <Border x:Name="TitleBarHost" Grid.Row="0"
+                Background="{DynamicResource ActivityBarBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="OnTitleBarMouseLeftButtonDown">
+            <Grid Margin="12,0,6,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Width="20" Height="20" Source="/Assets/veloxdev-logo.png"
+                           ToolTip="VeloxDev" />
+                    <Menu Margin="6,0,0,0" VerticalAlignment="Center">
+                        <MenuItem Header="文件">
+                            <MenuItem Header="保存工作流" InputGestureText="Ctrl+S" Click="SaveWorkflow" />
+                            <MenuItem Header="加载工作流" InputGestureText="Ctrl+O" Click="SelectWorkflow" />
+                            <MenuItem Header="重新载入示例" Click="LoadNetworkDemo" />
+                            <Separator />
+                            <MenuItem Header="退出" Click="OnCloseWindow" />
+                        </MenuItem>
+                        <MenuItem Header="编辑">
+                            <MenuItem Header="撤销" InputGestureText="Ctrl+Z" Command="{Binding UndoCommand}" />
+                            <MenuItem Header="重做" InputGestureText="Ctrl+Y" Command="{Binding RedoCommand}" />
+                            <Separator />
+                            <MenuItem Header="命令中心" InputGestureText="Ctrl+Shift+P" Click="OnOpenCommandCenter" />
+                        </MenuItem>
+                        <MenuItem Header="视图">
+                            <MenuItem Header="资源管理器" Tag="explorer" Click="OnShowPanelMenu" />
+                            <MenuItem Header="运行" Tag="run" Click="OnShowPanelMenu" />
+                            <MenuItem Header="MCP 服务器" Tag="mcp" Click="OnShowPanelMenu" />
+                            <Separator />
+                            <MenuItem Header="属性" Tag="properties" Click="OnShowPanelMenu" />
+                            <MenuItem Header="Agent 对话" Tag="agent" Click="OnShowPanelMenu" />
+                            <MenuItem Header="执行输出" Tag="output" Click="OnShowPanelMenu" />
+                            <Separator />
+                            <MenuItem Header="切换侧栏" Click="OnToggleSidebar" />
+                            <MenuItem Header="切换右侧面板" Click="OnToggleInspector" />
+                        </MenuItem>
+                        <MenuItem Header="帮助">
+                            <MenuItem Header="关于 VeloxDev" Click="OnShowAbout" />
+                        </MenuItem>
+                    </Menu>
+                </StackPanel>
+
+                <Button x:Name="CommandCenterButton" Grid.Column="1"
+                        Style="{StaticResource CommandCenterButtonStyle}"
+                        Width="330"
+                        Click="OnOpenCommandCenter"
+                        ContextMenu="{StaticResource CommandMenu}"
+                        ToolTip="搜索并运行命令（Ctrl+Shift+P）">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="&#xE721;" FontFamily="{DynamicResource IconFontFamily}"
+                                   FontSize="11" VerticalAlignment="Center" Margin="0,0,7,0" />
+                        <TextBlock Grid.Column="1" Text="搜索命令" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="Ctrl+Shift+P" Style="{StaticResource MicroTextStyle}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource IconButtonStyle}" Click="OnToggleSidebar" ToolTip="切换侧栏"
+                            Content="&#xE8A0;" />
+                    <Button Style="{StaticResource IconButtonStyle}" Click="OnToggleInspector" ToolTip="切换右侧面板"
+                            Content="&#xE8A9;" />
+                    <Border Width="1" Height="16" Background="{DynamicResource BorderBrush}" Margin="6,0" />
+                    <Button Style="{StaticResource CaptionButtonStyle}" Click="OnMinimizeWindow"
+                            AutomationProperties.Name="最小化" ToolTip="最小化" Content="&#xE921;" />
+                    <Button Style="{StaticResource CaptionButtonStyle}" Click="OnMaximizeWindow"
+                            AutomationProperties.Name="最大化或还原" Content="&#xE922;" />
+                    <Button Style="{StaticResource CloseCaptionButtonStyle}" Click="OnCloseWindow"
+                            AutomationProperties.Name="关闭" ToolTip="关闭" Content="&#xE8BB;" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Workbench body: activity bar / sidebar / canvas / inspector. -->
+        <Grid x:Name="WorkbenchGrid" Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="48"/>
-                <ColumnDefinition Width="300"/>
+                <ColumnDefinition Width="48" />
+                <ColumnDefinition Width="272" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="348" />
             </Grid.ColumnDefinitions>
 
             <!-- Activity bar -->
-            <Border Grid.Column="0" Background="#333333">
-                <StackPanel>
-                    <RadioButton Style="{StaticResource ActivityButtonStyle}" GroupName="SidebarActivity"
-                                 Tag="explorer" IsChecked="True" Content="&#xE8B7;" ToolTip="资源管理器"
-                                 Click="OnActivityClick"/>
-                    <RadioButton Style="{StaticResource ActivityButtonStyle}" GroupName="SidebarActivity"
-                                 Tag="run" Content="&#xE768;" ToolTip="运行" Click="OnActivityClick"/>
-                    <RadioButton Style="{StaticResource ActivityButtonStyle}" GroupName="SidebarActivity"
-                                 Tag="agent" Content="&#xE8BD;" ToolTip="Agent 对话" Click="OnActivityClick"/>
-                    <RadioButton Style="{StaticResource ActivityButtonStyle}" GroupName="SidebarActivity"
-                                 Tag="mcp" Content="&#xE774;" ToolTip="MCP 服务器" Click="OnActivityClick"/>
-                    <RadioButton Style="{StaticResource ActivityButtonStyle}" GroupName="SidebarActivity"
-                                 Tag="output" Content="&#xE756;" ToolTip="执行输出" Click="OnActivityClick"/>
-                </StackPanel>
+            <Border x:Name="ActivityBar" Grid.Column="0"
+                    Background="{DynamicResource ActivityBarBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,6,0,0">
+                        <RadioButton x:Name="ExplorerActivity" Style="{StaticResource ActivityButtonStyle}"
+                                     GroupName="SidebarActivity" Tag="explorer" IsChecked="True"
+                                     Content="&#xE8B7;" ToolTip="资源管理器" Click="OnActivityClick" />
+                        <RadioButton x:Name="RunActivity" Style="{StaticResource ActivityButtonStyle}"
+                                     GroupName="SidebarActivity" Tag="run"
+                                     Content="&#xE768;" ToolTip="运行" Click="OnActivityClick" />
+                        <RadioButton x:Name="McpActivity" Style="{StaticResource ActivityButtonStyle}"
+                                     GroupName="SidebarActivity" Tag="mcp"
+                                     Content="&#xE774;" ToolTip="MCP 服务器" Click="OnActivityClick" />
+                        <RadioButton x:Name="OutputActivity" Style="{StaticResource ActivityButtonStyle}"
+                                     GroupName="OutputActivity" Tag="output"
+                                     Content="&#xE756;" ToolTip="执行输出" Click="OnOutputActivityClick" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Margin="0,0,0,6">
+                        <RadioButton x:Name="InspectorPropertiesActivity" Style="{StaticResource ActivityButtonStyle}"
+                                     GroupName="InspectorActivity" Tag="properties" IsChecked="True"
+                                     Content="&#xE713;" ToolTip="属性" Click="OnInspectorActivityClick" />
+                        <RadioButton x:Name="InspectorAgentActivity" Style="{StaticResource ActivityButtonStyle}"
+                                     GroupName="InspectorActivity" Tag="agent"
+                                     Content="&#xE8BD;" ToolTip="Agent 对话" Click="OnInspectorActivityClick" />
+                    </StackPanel>
+                </Grid>
             </Border>
 
             <!-- Sidebar -->
-            <Border Grid.Column="1" Background="#252526">
+            <Border x:Name="SidebarHost" Grid.Column="1" Background="{DynamicResource PanelBackgroundBrush}">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock x:Name="SidebarHeader" Grid.Row="0" Text="资源管理器"
-                               Margin="12,12,12,4" Foreground="#CCCCCC" FontSize="11" FontWeight="SemiBold"/>
+                    <Border Grid.Row="0" Style="{StaticResource PanelHeaderStyle}" Height="34">
+                        <Grid Margin="12,0,6,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="SidebarHeader" Grid.Column="0" Text="资源管理器"
+                                       Style="{StaticResource PanelTitleTextStyle}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource IconButtonStyle}" Content="&#xE74E;" ToolTip="保存工作流" Click="SaveWorkflow" />
+                                <Button Style="{StaticResource IconButtonStyle}" Content="&#xE8E5;" ToolTip="加载工作流" Click="SelectWorkflow" />
+                                <Button Style="{StaticResource IconButtonStyle}" Content="&#xE7A7;" ToolTip="撤销" Command="{Binding UndoCommand}" />
+                                <Button Style="{StaticResource IconButtonStyle}" Content="&#xE7A6;" ToolTip="重做" Command="{Binding RedoCommand}" />
+                                <Button Style="{StaticResource IconButtonStyle}" Content="&#xE72C;" ToolTip="重新载入示例" Click="LoadNetworkDemo" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
 
                     <Grid Grid.Row="1">
                         <!-- Explorer -->
                         <ScrollViewer x:Name="ExplorerPanel" VerticalScrollBarVisibility="Auto">
                             <StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="10,2,10,0">
-                                    <Button Style="{StaticResource SidebarIconButtonStyle}" Content="&#xE74E;"
-                                            ToolTip="保存工作流" Click="SaveWorkflow"/>
-                                    <Button Style="{StaticResource SidebarIconButtonStyle}" Content="&#xE8E5;"
-                                            ToolTip="加载工作流" Click="SelectWorkflow"/>
-                                    <Button Style="{StaticResource SidebarIconButtonStyle}" Content="&#xE7A7;"
-                                            ToolTip="撤销" Command="{Binding UndoCommand}"/>
-                                    <Button Style="{StaticResource SidebarIconButtonStyle}" Content="&#xE7A6;"
-                                            ToolTip="重做" Command="{Binding RedoCommand}"/>
-                                    <Button Style="{StaticResource SidebarIconButtonStyle}" Content="&#xE8B7;"
-                                            ToolTip="重新载入示例" Click="LoadNetworkDemo"/>
-                                </StackPanel>
-
-                                <TextBlock Text="元素" Style="{StaticResource SidebarSectionStyle}"/>
-                                <local:ElementListView x:Name="ElementList" Margin="12,0,12,0"/>
-                                <TextBlock x:Name="ElementStatus" Margin="12,8,12,12" Foreground="#94A3B8"
-                                           FontSize="11" TextWrapping="Wrap"/>
+                                <Grid Margin="12,10,12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="小地图" Style="{StaticResource MutedTextStyle}" VerticalAlignment="Center" />
+                                    <CheckBox Grid.Column="1" Content="显示"
+                                              IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}"
+                                              VerticalAlignment="Center" />
+                                </Grid>
+                                <TextBlock Text="元素" Style="{StaticResource SectionTextStyle}" />
+                                <local:ElementListView x:Name="ElementList" Margin="12,0,12,0" />
+                                <TextBlock x:Name="ElementStatus" Margin="12,8,12,12"
+                                           Style="{StaticResource MicroTextStyle}" TextWrapping="Wrap" />
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- Run -->
+                        <!-- Run: every compile and run task, manual and Agent alike. -->
                         <ScrollViewer x:Name="RunPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
                             <StackPanel>
-                                <TextBlock Text="运行" Style="{StaticResource SidebarSectionStyle}"/>
-                                <Border Margin="12,0,12,0" Padding="10" Background="#1E1E1E"
-                                        BorderBrush="#3C3C3C" BorderThickness="1" CornerRadius="4">
+                                <Grid Margin="12,12,12,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="运行控制" Foreground="#E2E8F0" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="1" x:Name="RunGateState" Text="空闲" Foreground="#A0A0A0" VerticalAlignment="Center"/>
-                                        </Grid>
-                                        <Grid Margin="0,6,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Content="Pause" Margin="0,0,3,0" HorizontalAlignment="Stretch" Click="PauseWorkflow"/>
-                                            <Button Grid.Column="1" Content="Resume" Margin="3,0,0,0" HorizontalAlignment="Stretch" Click="ResumeWorkflow"/>
-                                        </Grid>
-                                        <Button x:Name="ContinueFromCheckpointButton" Content="从检查点继续" Margin="0,6,0,0"
-                                                HorizontalAlignment="Stretch" Click="ContinueFromCheckpoint" IsEnabled="False"/>
+                                        <TextBlock Text="运行任务" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Runs.Summary}" Style="{StaticResource MicroTextStyle}" />
                                     </StackPanel>
-                                </Border>
+                                    <Button Grid.Column="1" Content="清除已完成" Style="{StaticResource RowActionButtonStyle}"
+                                            Padding="8,3" Click="OnClearFinishedRuns" ToolTip="移除已结束的任务行" />
+                                </Grid>
 
-                                <TextBlock Text="画布" Style="{StaticResource SidebarSectionStyle}"/>
-                                <StackPanel Margin="12,0,12,0">
-                                    <TextBlock Text="总元素数：" Foreground="#CCCCCC"/>
-                                    <TextBlock Text="{Binding TotalElementText}" Foreground="#E7E7E7"/>
-                                    <TextBlock Margin="0,8,0,0" Text="可见元素数：" Foreground="#CCCCCC"/>
-                                    <TextBlock Text="{Binding VisibleElementText}" Foreground="#E7E7E7"/>
-                                </StackPanel>
+                                <TextBlock Margin="12,0,12,8" Style="{StaticResource MicroTextStyle}" TextWrapping="Wrap"
+                                           Text="手动编译、手动运行，以及 Agent 编译 / 运行的任务都会出现在这里。选中一行，输出页会跟随它。" />
+
+                                <ListBox x:Name="RunTaskList" ItemsSource="{Binding Runs.Tasks}"
+                                         SelectedItem="{Binding Runs.Selected, Mode=TwoWay}"
+                                         Background="Transparent" BorderThickness="0" Margin="8,0"
+                                         HorizontalContentAlignment="Stretch"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,0,6" Padding="8"
+                                                    Background="{DynamicResource SurfaceBrush}"
+                                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                    BorderThickness="1" CornerRadius="6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Border Background="{DynamicResource SurfaceElevatedBrush}" CornerRadius="3"
+                                                                    Padding="5,0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding SourceText}" FontSize="10"
+                                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                            </Border>
+                                                            <TextBlock Text="{Binding RootLabel}" FontWeight="SemiBold" Margin="6,0,0,0"
+                                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                            <TextBlock Text="{Binding StateText}" FontSize="11"
+                                                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                            <TextBlock Text="{Binding StartedText}" Style="{StaticResource MicroTextStyle}" Margin="8,0,0,0" />
+                                                            <TextBlock Text="{Binding ElapsedText}" Style="{StaticResource MicroTextStyle}" Margin="8,0,0,0" />
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding ProgressText}" Style="{StaticResource MicroTextStyle}"
+                                                                   TextWrapping="Wrap" Margin="0,2,0,0" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                                        <Button Content="暂停" Style="{StaticResource RowActionButtonStyle}" Padding="6,1"
+                                                                Visibility="{Binding CanPause, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="OnPauseRunTask" />
+                                                        <Button Content="继续" Style="{StaticResource RowActionButtonStyle}" Padding="6,1"
+                                                                Visibility="{Binding CanResume, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="OnResumeRunTask" />
+                                                        <Button Content="停止" Style="{StaticResource RowActionButtonStyle}" Padding="6,1"
+                                                                Visibility="{Binding CanStop, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="OnStopRunTask" />
+                                                        <Button Content="运行" Style="{StaticResource RowActionButtonStyle}" Padding="6,1"
+                                                                Visibility="{Binding CanStart, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="OnStartRunTask" />
+                                                        <Button Content="移除" Style="{StaticResource RowActionButtonStyle}" Padding="6,1"
+                                                                Visibility="{Binding CanRemove, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="OnRemoveRunTask" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <TextBlock Margin="12,10,12,12" Style="{StaticResource MicroTextStyle}" TextWrapping="Wrap"
+                                           Text="还没有任务。在控制器卡上编译一次，或让 Agent 编译 / 运行工作流。"
+                                           Visibility="{Binding Runs.IsEmpty, Converter={StaticResource BoolToVisibility}}" />
                             </StackPanel>
                         </ScrollViewer>
-
-                        <!-- Agent -->
-                        <Grid x:Name="AgentPanel" Visibility="Collapsed" Margin="0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <!-- Session permission belongs to the Agent: it decides what the model may do, not how a run is driven. -->
-                            <StackPanel Grid.Row="0" Margin="0,0,0,4">
-                                <TextBlock Text="会话" Style="{StaticResource SidebarSectionStyle}"/>
-                                <Grid Margin="12,0,12,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="权限模式" Foreground="#CCCCCC" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <ComboBox Grid.Column="1" x:Name="PermissionModePicker" MinWidth="120" HorizontalAlignment="Stretch"
-                                              ToolTip="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
-                                              SelectionChanged="OnPermissionModeChanged"/>
-                                </Grid>
-                            </StackPanel>
-                            <Grid Grid.Row="1" Margin="12,4,12,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Agent 对话" Foreground="#7EC8FF" FontWeight="Bold" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" IsChecked="{Binding UseStreamingAgentResponse}" Content="流式"
-                                          Foreground="#CCCCCC" VerticalAlignment="Center"/>
-                            </Grid>
-                            <ListBox Grid.Row="2" x:Name="AgentLogScroller" Margin="8,0,8,0"
-                                     ScrollViewer.VerticalScrollBarVisibility="Auto" ItemsSource="{Binding AgentLog}"
-                                     Background="Transparent" BorderThickness="0"
-                                     VirtualizingStackPanel.IsVirtualizing="True"
-                                     VirtualizingStackPanel.VirtualizationMode="Recycling">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding .}" Foreground="#D8D8D8" TextWrapping="Wrap" Margin="0,2"/>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                            <Grid Grid.Row="3" Margin="12,6,12,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="AgentInput" Grid.Column="0" Background="#1E1E1E" Foreground="White"
-                                         BorderBrush="#3C3C3C" KeyDown="OnAgentInputKeyDown"/>
-                                <Button Grid.Column="1" Content="发送" Margin="4,0,0,0" Click="OnSendToAgent"/>
-                            </Grid>
-                        </Grid>
 
                         <!-- MCP -->
                         <ScrollViewer x:Name="McpPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
                             <StackPanel>
-                                <TextBlock Text="服务器" Style="{StaticResource SidebarSectionStyle}"/>
-                                <Border x:Name="McpStatusPanel" Margin="12,0,12,0" Padding="10" Background="#1E1E1E"
-                                        BorderBrush="#3C3C3C" BorderThickness="1" CornerRadius="4">
+                                <TextBlock Text="服务器" Style="{StaticResource SectionTextStyle}" />
+                                <Border x:Name="McpStatusPanel" Margin="12,0" Style="{StaticResource PropertyCardStyle}">
                                     <StackPanel>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="MCP 服务器" Foreground="#7EC8FF" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="MCP 服务器" Foreground="{DynamicResource AccentTextBrush}"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center" />
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding ConnectedCount, StringFormat=存活 {0}}" Foreground="#6BFFB8" FontWeight="Bold"/>
-                                                <TextBlock Text="{Binding ErrorCount, StringFormat= · 错误 {0}}" Foreground="#FF6B6B" Margin="6,0,0,0"/>
+                                                <TextBlock Text="{Binding ConnectedCount, StringFormat=存活 {0}}"
+                                                           Foreground="{DynamicResource NodeSuccessBrush}" FontWeight="Bold" />
+                                                <TextBlock Text="{Binding ErrorCount, StringFormat=· 错误 {0}}"
+                                                           Foreground="{DynamicResource DangerBrush}" Margin="6,0,0,0" />
                                                 <Button Content="重载" Margin="8,0,0,0" Padding="8,1" FontSize="11"
-                                                        Background="#0F3460" Foreground="#7EC8FF" BorderBrush="#7EC8FF" BorderThickness="1"
-                                                        Cursor="Hand" Click="OnReloadMcp"/>
+                                                        Click="OnReloadMcp" />
                                             </StackPanel>
                                         </Grid>
                                         <ListBox x:Name="McpServerList" Margin="0,6,0,0" MaxHeight="360"
-                                                 ScrollViewer.VerticalScrollBarVisibility="Auto" Background="Transparent" BorderThickness="0"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                                                  ItemsSource="{Binding Servers}">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
@@ -393,29 +424,29 @@
                                                                         <Setter Property="Fill" Value="#888888" />
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding IsConnected}" Value="True">
-                                                                                <Setter Property="Fill" Value="#6BFFB8" />
+                                                                                <Setter Property="Fill" Value="{DynamicResource NodeSuccessBrush}" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding IsError}" Value="True">
-                                                                                <Setter Property="Fill" Value="#FF6B6B" />
+                                                                                <Setter Property="Fill" Value="{DynamicResource DangerBrush}" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding IsInstalling}" Value="True">
-                                                                                <Setter Property="Fill" Value="#FFD166" />
+                                                                                <Setter Property="Fill" Value="{DynamicResource WarningBrush}" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding IsConnecting}" Value="True">
-                                                                                <Setter Property="Fill" Value="#7EC8FF" />
+                                                                                <Setter Property="Fill" Value="{DynamicResource AccentTextBrush}" />
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
                                                                 </Ellipse.Style>
                                                             </Ellipse>
-                                                            <TextBlock Text="{Binding Name}" Foreground="#E0E0E0" FontWeight="SemiBold" />
-                                                            <TextBlock Text="{Binding StateText}" Foreground="#A0A0A0" Margin="6,0,0,0" />
-                                                            <TextBlock Text="{Binding ToolCount, StringFormat=· {0} tools}" Foreground="#6BFFB8" Margin="6,0,0,0" />
+                                                            <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" />
+                                                            <TextBlock Text="{Binding StateText}" Style="{StaticResource MutedTextStyle}" Margin="6,0,0,0" />
+                                                            <TextBlock Text="{Binding ToolCount, StringFormat=· {0} tools}"
+                                                                       Foreground="{DynamicResource NodeSuccessBrush}" Margin="6,0,0,0" />
                                                         </StackPanel>
                                                         <TextBlock Text="{Binding Error}"
-                                                                   Foreground="#FF6B6B"
-                                                                   TextWrapping="Wrap"
-                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource DangerBrush}"
+                                                                   TextWrapping="Wrap" FontSize="11"
                                                                    Margin="14,1,0,0"
                                                                    Visibility="{Binding IsError, Converter={StaticResource BoolToVisibility}}" />
                                                     </StackPanel>
@@ -426,39 +457,359 @@
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
 
-                        <!-- Output -->
-                        <Grid x:Name="OutputPanel" Visibility="Collapsed">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Text="执行输出" Style="{StaticResource SidebarSectionStyle}"/>
-                            <ScrollViewer Grid.Row="1" x:Name="ExecutionLogScroller" Margin="8,0,8,8" VerticalScrollBarVisibility="Auto">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding ExecutionLog.Count, StringFormat=已记录: {0}}" Foreground="#BDBDBD" Margin="4,0,0,4"/>
-                                    <ListBox ItemsSource="{Binding ExecutionLog}" Background="Transparent" BorderThickness="0"
-                                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                             VirtualizingStackPanel.IsVirtualizing="True"
-                                             VirtualizingStackPanel.VirtualizationMode="Recycling">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding .}" Foreground="#D8D8D8" TextWrapping="Wrap"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+            <GridSplitter x:Name="LeftSplitter" Grid.Column="2" Width="4"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
+
+            <!-- Main area: editor tabs + canvas or output. -->
+            <Grid Grid.Column="3">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="32" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Background="{DynamicResource PanelBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,0,0,1">
+                    <Grid Margin="6,0,12,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <RadioButton x:Name="CanvasTab" Style="{StaticResource EditorTabStyle}"
+                                         GroupName="MainTabs" Tag="canvas" IsChecked="True"
+                                         Content="流程图" Click="OnMainTabClick" />
+                            <RadioButton x:Name="OutputTab" Style="{StaticResource EditorTabStyle}"
+                                         GroupName="MainTabs" Tag="output"
+                                         Content="输出" Click="OnMainTabClick" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="Ctrl+滚轮缩放" Style="{StaticResource MicroTextStyle}" />
+                            <TextBlock Text="·" Style="{StaticResource MicroTextStyle}" Margin="8,0" />
+                            <TextBlock Text="{Binding TotalElementText}" Style="{StaticResource MicroTextStyle}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1">
+                    <!-- Canvas host. -->
+                    <Grid x:Name="WorkflowContainer">
+                        <Border x:Name="PART_SurfaceBorder"
+                                BorderBrush="{DynamicResource CanvasBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+                                <ScrollViewer x:Name="PART_ScrollViewer"
+                                              HorizontalScrollBarVisibility="Auto"
+                                              VerticalScrollBarVisibility="Auto"
+                                              PanningMode="Both">
+                                    <Canvas x:Name="PART_Canvas"
+                                            Width="{Binding Layout.ActualSize.Width}"
+                                            Height="{Binding Layout.ActualSize.Height}"
+                                            Background="Transparent"
+                                            behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}">
+                                        <Canvas.RenderTransform>
+                                            <TranslateTransform X="{Binding RulerThickness, ElementName=PART_GridDecorator}"
+                                                                Y="{Binding RulerThickness, ElementName=PART_GridDecorator}" />
+                                        </Canvas.RenderTransform>
+                                    </Canvas>
+                                </ScrollViewer>
+                            </local:WorkflowGridDecorator>
+                        </Border>
+                        <behaviors:WorkflowMinimapOverlay x:Name="PART_MinimapOverlay"
+                                                          HorizontalAlignment="Right"
+                                                          VerticalAlignment="Top"
+                                                          Margin="0,12,12,0"
+                                                          ScrollViewerName="PART_ScrollViewer"/>
+                        <local:InfoOverlay x:Name="InfoOverlay"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Bottom"
+                                           Margin="12,0,0,12"
+                                           ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
+                                           ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
+                                           ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
+                                           ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
+                                           ViewportWidth="{Binding ActualWidth, ElementName=PART_SurfaceBorder}"
+                                           ViewportHeight="{Binding ActualHeight, ElementName=PART_SurfaceBorder}" />
+                    </Grid>
+
+                    <!-- Output -->
+                    <Grid x:Name="OutputPanel" Visibility="Collapsed" Background="{DynamicResource EditorBackgroundBrush}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Style="{StaticResource PanelHeaderStyle}" Padding="12,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="执行输出" Style="{StaticResource PanelTitleTextStyle}" />
+                                    <TextBlock Text="{Binding Runs.Selected.RootLabel}" Margin="8,0,0,0"
+                                               Foreground="{DynamicResource AccentTextBrush}" VerticalAlignment="Center"
+                                               Visibility="{Binding Runs.HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                    <TextBlock Text="{Binding Runs.Selected.StateText}" Margin="8,0,0,0"
+                                               Style="{StaticResource MutedTextStyle}" VerticalAlignment="Center"
+                                               Visibility="{Binding Runs.HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                    <TextBlock Text="{Binding Runs.Selected.ProgressText}" Margin="8,0,0,0"
+                                               Style="{StaticResource MicroTextStyle}" VerticalAlignment="Center"
+                                               Visibility="{Binding Runs.HasSelection, Converter={StaticResource BoolToVisibility}}" />
                                 </StackPanel>
-                            </ScrollViewer>
+                                <TextBlock Grid.Column="1" Text="{Binding ExecutionLog.Count, StringFormat=已记录 {0} 行}"
+                                           Style="{StaticResource MicroTextStyle}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <ScrollViewer Grid.Row="1" x:Name="ExecutionLogScroller" Margin="12,8,12,12" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="执行轨迹" Foreground="{DynamicResource AccentTextBrush}" FontWeight="SemiBold" />
+                                <TextBlock Text="运行一次，或让 Agent 编译 / 运行工作流。节点开始、完成、重试、重定向和运行收尾都会按发生顺序落在这里。"
+                                           Style="{StaticResource MicroTextStyle}" TextWrapping="Wrap"
+                                           Visibility="{Binding Runs.HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <ListBox ItemsSource="{Binding ExecutionLog}" Background="{DynamicResource PanelBackgroundBrush}" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                         VirtualizingStackPanel.IsVirtualizing="True"
+                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding .}" Foreground="{DynamicResource TextPrimaryBrush}"
+                                                       FontFamily="{DynamicResource MonoFontFamily}" FontSize="11.5"
+                                                       TextWrapping="Wrap"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Grid>
+
+            <GridSplitter x:Name="RightSplitter" Grid.Column="4" Width="4"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
+
+            <!-- Right inspector -->
+            <Border x:Name="InspectorHost" Grid.Column="5"
+                    Background="{DynamicResource PanelBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Style="{StaticResource PanelHeaderStyle}" Height="34">
+                        <Grid Margin="6,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <RadioButton x:Name="PropertiesTab" Style="{StaticResource PanelTabStyle}"
+                                             GroupName="RightTabs" Tag="properties" IsChecked="True"
+                                             Content="属性" Click="OnRightTabClick" />
+                                <RadioButton x:Name="AgentTab" Style="{StaticResource PanelTabStyle}"
+                                             GroupName="RightTabs" Tag="agent"
+                                             Content="Agent 对话" Click="OnRightTabClick" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <!-- Properties: the selected element, then the compiled structure. Run state and canvas
+                             counts already live in the status bar and the run manager. -->
+                        <ScrollViewer x:Name="PropertiesPanel" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="选中元素" Style="{StaticResource SectionTextStyle}" />
+                                <Border Margin="12,0" Style="{StaticResource PropertyCardStyle}">
+                                    <Grid>
+                                        <StackPanel Visibility="{Binding HasSelectedElement, Converter={StaticResource BoolToVisibility}}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding SelectedElement.Label}" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap" />
+                                                <TextBlock Grid.Column="1" Text="{Binding SelectedElement.KindText}"
+                                                           Style="{StaticResource MutedTextStyle}" Margin="8,0,0,0" />
+                                            </Grid>
+                                            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}" Margin="0,8" />
+                                            <TextBlock Text="{Binding SelectedElement.DetailText}"
+                                                       FontFamily="{DynamicResource MonoFontFamily}" FontSize="11"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                                            <Grid Margin="0,8,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Button Grid.Column="0" Content="定位" Margin="0,0,3,0"
+                                                        Style="{StaticResource RowActionButtonStyle}"
+                                                        HorizontalAlignment="Stretch" Click="OnLocateSelectedElement" />
+                                                <Button Grid.Column="1" Content="删除" Margin="3,0,0,0"
+                                                        Style="{StaticResource RowActionButtonStyle}"
+                                                        HorizontalAlignment="Stretch" Click="OnDeleteSelectedElement" />
+                                            </Grid>
+                                        </StackPanel>
+                                        <TextBlock Text="在左侧「元素」列表里选一行，这里显示它的类型、位置、编译顺序与连接。"
+                                                   Style="{StaticResource MicroTextStyle}" TextWrapping="Wrap"
+                                                   Visibility="{Binding HasSelectedElement, Converter={StaticResource InverseBoolToVisibility}}" />
+                                    </Grid>
+                                </Border>
+
+                                <TextBlock Text="编译结构" Style="{StaticResource SectionTextStyle}" />
+                                <Border Margin="12,0,12,12" Style="{StaticResource PropertyCardStyle}">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="分段" Style="{StaticResource MutedTextStyle}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding CompiledStructure.Count, StringFormat={}{0} 段}"
+                                                       Style="{StaticResource MicroTextStyle}" />
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding CompiledStructure}" Margin="0,6,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="{Binding Depth, Converter={StaticResource DepthIndent}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="58" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding Kind}" Foreground="{DynamicResource WarningBrush}" FontSize="11" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Label}" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="11" TextWrapping="Wrap" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Text="编译一次后这里列出实际执行段。" Style="{StaticResource MicroTextStyle}"
+                                                   TextWrapping="Wrap" Margin="0,4,0,0"
+                                                   Visibility="{Binding CompiledStructure.Count, Converter={StaticResource ZeroToVisibility}}" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <!-- Agent -->
+                        <Grid x:Name="AgentPanel" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Margin="0,0,0,4">
+                                <TextBlock Text="会话" Style="{StaticResource SectionTextStyle}" />
+                                <Grid Margin="12,0,12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="权限模式" Style="{StaticResource MutedTextStyle}"
+                                               VerticalAlignment="Center" Margin="0,0,6,0" />
+                                    <ComboBox Grid.Column="1" x:Name="PermissionModePicker" MinWidth="120"
+                                              HorizontalAlignment="Stretch"
+                                              ToolTip="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效"
+                                              SelectionChanged="OnPermissionModeChanged" />
+                                </Grid>
+                            </StackPanel>
+                            <Grid Grid.Row="1" Margin="12,8,12,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Agent 对话" Foreground="{DynamicResource AccentTextBrush}"
+                                           FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding UseStreamingAgentResponse}"
+                                          Content="流式" Foreground="{DynamicResource TextSecondaryBrush}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                            <ListBox Grid.Row="2" x:Name="AgentLogScroller" Margin="8,0"
+                                     Background="{DynamicResource PanelBackgroundBrush}"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     ItemsSource="{Binding AgentLog}"
+                                     VirtualizingStackPanel.IsVirtualizing="True"
+                                     VirtualizingStackPanel.VirtualizationMode="Recycling">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding .}" Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   TextWrapping="Wrap" Margin="0,2"
+                                                   FontFamily="{DynamicResource MonoFontFamily}" FontSize="11.5"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <Grid Grid.Row="3" Margin="12,6,12,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="AgentInput" Grid.Column="0" KeyDown="OnAgentInputKeyDown" />
+                                <Button Grid.Column="1" Style="{StaticResource AccentButtonStyle}" Content="发送"
+                                        Margin="6,0,0,0" Click="OnSendToAgent" />
+                            </Grid>
                         </Grid>
                     </Grid>
                 </Grid>
             </Border>
         </Grid>
 
-        <GridSplitter Grid.Column="1"
-                      Width="5"
-                      Background="Gray"
-                      HorizontalAlignment="Stretch"
-                      VerticalAlignment="Stretch" />
+        <!-- Status bar -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource StatusBarBackgroundBrush}"
+                BorderBrush="{DynamicResource StatusBarBorderBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid Margin="8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Style="{StaticResource StatusItemStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="6" Height="6" Fill="{DynamicResource WarningBrush}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                     Visibility="{Binding IsWorkflowRunning, Converter={StaticResource BoolToVisibility}}" />
+                            <Ellipse Width="6" Height="6" Fill="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,5,0"
+                                     Visibility="{Binding IsWorkflowRunning, Converter={StaticResource InverseBoolToVisibility}}" />
+                            <TextBlock Text="运行中" Foreground="{DynamicResource WarningBrush}" FontSize="11"
+                                       Visibility="{Binding IsWorkflowRunning, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Text="空闲" Foreground="{DynamicResource StatusBarTextBrush}" FontSize="11"
+                                       Visibility="{Binding IsWorkflowRunning, Converter={StaticResource InverseBoolToVisibility}}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource StatusItemStyle}">
+                        <TextBlock Text="{Binding CompiledStructure.Count, StringFormat=编译 {0} 段}"
+                                   Foreground="{DynamicResource StatusBarTextBrush}" FontSize="11" />
+                    </Border>
+                    <Border Style="{StaticResource StatusItemStyle}">
+                        <TextBlock Text="{Binding TotalElementText, StringFormat=元素 {0}}"
+                                   Foreground="{DynamicResource StatusBarTextBrush}" FontSize="11" />
+                    </Border>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Style="{StaticResource StatusItemStyle}">
+                        <TextBlock Text="{Binding VisibleElementText, StringFormat=可见 {0}}"
+                                   Foreground="{DynamicResource StatusBarTextBrush}" FontSize="11" />
+                    </Border>
+                    <Border Style="{StaticResource StatusItemStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE71E;" FontFamily="{DynamicResource IconFontFamily}"
+                                       Foreground="{DynamicResource StatusBarTextBrush}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,0,5,0" />
+                            <TextBlock Text="{Binding Layout.Scale.Horizontal, Converter={StaticResource ZoomPercent}}"
+                                       Foreground="{DynamicResource StatusBarTextBrush}" FontSize="11" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource StatusItemStyle}">
+                        <TextBlock Text="Ctrl+滚轮缩放" Foreground="{DynamicResource TextTertiaryBrush}" FontSize="11" />
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

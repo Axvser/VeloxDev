@@ -13,6 +13,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Resource Include="Assets\veloxdev-logo.png" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
         <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WPF\VeloxDev.WPF.csproj" />
 	</ItemGroup>

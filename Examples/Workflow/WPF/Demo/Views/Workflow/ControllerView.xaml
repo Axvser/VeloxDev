@@ -34,10 +34,10 @@
                     behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2" />
+                        <ColumnDefinition Width="3" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="#38BDF8" />
+                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="{DynamicResource NodeControllerAccentBrush}" />
                     <TextBlock Grid.Column="1"
                                Style="{StaticResource CardTitleTextStyle}"
                                Text="Controller"
@@ -75,7 +75,7 @@
                     </Grid>
                 </StackPanel>
             </Border>
-            <Border Grid.Row="2" BorderBrush="{StaticResource CardDividerBrush}" BorderThickness="0,1,0,0" />
+            <Border Grid.Row="2" Background="{DynamicResource NodeFooterBrush}" BorderBrush="{StaticResource CardDividerBrush}" BorderThickness="0,1,0,0" />
 
             <!-- 动作：2×2 的同形「幽灵按钮」，语义只体现在文字颜色上。原来是一排四块高饱和色块。
                  WPF 的 Grid 没有 RowSpacing / ColumnSpacing（那是 UWP 起才有的），6 单位的缝由
