@@ -24,8 +24,8 @@
 					Background="Transparent"
 					behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
 					behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-				<Grid ColumnDefinitions="2,*">
-					<Border Grid.Column="0" Classes="card-accent" Background="#38BDF8" />
+				<Grid ColumnDefinitions="3,*">
+					<Border Grid.Column="0" Classes="card-accent" Background="{DynamicResource NodeControllerAccentBrush}" />
 					<TextBlock Grid.Column="1" Classes="card-title" Text="Controller" Margin="12,0,0,0" />
 				</Grid>
 			</Border>
@@ -39,20 +39,20 @@
 							 PlaceholderText="payload" />
 				</StackPanel>
 			</Border>
-			<Border Grid.Row="2" BorderBrush="#222A34" BorderThickness="0,1,0,0" />
+			<Border Grid.Row="2" Background="{DynamicResource NodeFooterBrush}" BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0" />
 
 			<!-- 动作：2×2 的同形「幽灵按钮」，语义只体现在文字颜色上。原来是一排四块高饱和色块 -->
 			<Grid Grid.Row="2" ColumnDefinitions="*,*" RowDefinitions="*,*" ColumnSpacing="6" RowSpacing="6" Margin="12,7">
 				<Button Grid.Row="0" Grid.Column="0" Classes="ghost" Content="Compile"
-						Foreground="#7EC8FF" Command="{Binding CompileCommand}" />
+						Foreground="{DynamicResource AccentTextBrush}" Command="{Binding CompileCommand}" />
 				<Button Grid.Row="0" Grid.Column="1" Classes="ghost" Content="Run"
-						Foreground="#6EE7A8"
+						Foreground="{DynamicResource NodeSuccessBrush}"
 						IsEnabled="{Binding HasCompiledGraphs}"
 						Command="{Binding RunCommand}" />
 				<Button Grid.Row="1" Grid.Column="0" Classes="ghost" Content="Stop"
-						Foreground="#FCA5A5" Command="{Binding StopCommand}" />
+						Foreground="{DynamicResource DangerBrush}" Command="{Binding StopCommand}" />
 				<Button Grid.Row="1" Grid.Column="1" Classes="ghost" Content="Close"
-						Foreground="#9AA6B5" Command="{Binding CloseWorkflowCommand}" />
+						Foreground="{DynamicResource TextSecondaryBrush}" Command="{Binding CloseWorkflowCommand}" />
 			</Grid>
 
 			<!-- ZIndex：端口有一半压在卡片上，不给序就会被卡面盖掉内侧那一半。Timer 那家早就这么做了，

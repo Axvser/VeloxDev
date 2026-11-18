@@ -9,6 +9,8 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
+using AvalonMarkdown.ViewModels;
 using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
@@ -34,6 +36,10 @@ public partial class WorkflowView : UserControl
     private TreeViewModel _workflowViewModel = new();
     private readonly WorkflowElementCatalog _elements;
     private WindowNotificationManager _manager;
+
+    // 当前树背后的会话：它持有日志文件的句柄与控制器上的会话配置。换树时先释放它，
+    // 否则第二棵树第一次运行会去开同一个 log 文件（FileShare.Read）而失败。
+    private WorkflowDemoSession? _session;
     private double _nodeLayoutTolerance = 8d;
 
     // 面板的树，建立在当前显示的 helper 子系统上。留成字段是因为它要被从建它时的作用域上摘下来：
@@ -70,6 +76,12 @@ public partial class WorkflowView : UserControl
         ElementStatus.Text = _elements.Summary;
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
 
+        ConversationView.OnReady += OnConversationReady;
+
+        // The command-center hint is a promise: wire the shortcuts it advertises. Tunnel so a focused
+        // input box cannot swallow them before the shell sees them.
+        AddHandler(PlatformInput.InputElement.KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
+
         SubscribeAutoScroll(_workflowViewModel);
         VetoFrameworkGestures(_workflowViewModel);
 
@@ -77,25 +89,230 @@ public partial class WorkflowView : UserControl
         InitializeMcp();
     }
 
-    // 侧栏在资源管理器 / 运行 / Agent / MCP / 输出之间切换，同一时刻只显示一页。
+    // 侧栏是恒暗的；预览默认跟随系统主题，浅色模式下会露出一块白底。按同一套配色钉死，并把状态徽标的
+    // 光晕换成侧栏标题的蓝色。
+    private async void OnConversationReady(object? sender, EventArgs e)
+    {
+        var theme = new MarkdownThemeViewModel
+        {
+            ChatAccentR = 126,
+            ChatAccentG = 200,
+            ChatAccentB = 255,
+        };
+
+        try
+        {
+            await ConversationView.ApplyCustomCssAsync(theme.GenerateCss());
+        }
+        catch (Exception ex)
+        {
+            // 样式是增强项：应用失败最多让预览换个底色，不该影响 Agent 面板本身。
+            System.Diagnostics.Debug.WriteLine($"[Demo] Markdown theme failed: {ex}");
+        }
+    }
+
+    // 左侧活动栏在资源管理器 / 运行 / MCP 之间切换；同一时刻只显示一页。
     private void OnActivityClick(object? sender, RoutedEventArgs e)
     {
         if (sender is not RadioButton { Tag: string view }) return;
 
+        SetSidebarVisible(true);
+        ShowSidebarPage(view);
+    }
+
+    private void ShowSidebarPage(string view)
+    {
         ExplorerPanel.IsVisible = view == "explorer";
         RunPanel.IsVisible = view == "run";
-        AgentPanel.IsVisible = view == "agent";
         McpPanel.IsVisible = view == "mcp";
-        OutputPanel.IsVisible = view == "output";
 
         SidebarHeader.Text = view switch
         {
             "run" => "运行",
-            "agent" => "AGENT",
-            "mcp" => "MCP",
-            "output" => "输出",
+            "mcp" => "MCP 服务器",
             _ => "资源管理器",
         };
+    }
+
+    // 底部两个入口：把右侧检查器切到属性 / AI。它们与面板内的标签是同一状态的两个入口。
+    private void OnInspectorActivityClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string view }) return;
+
+        SetInspectorVisible(true);
+        ShowInspectorPage(view);
+    }
+
+    private void OnRightTabClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string view }) return;
+        ShowInspectorPage(view);
+    }
+
+    private void ShowInspectorPage(string view)
+    {
+        PropertiesPanel.IsVisible = view == "properties";
+        AgentPanel.IsVisible = view == "agent";
+        PropertiesTab.IsChecked = view == "properties";
+        AgentTab.IsChecked = view == "agent";
+        InspectorPropertiesActivity.IsChecked = view == "properties";
+        InspectorAgentActivity.IsChecked = view == "agent";
+    }
+
+    // 主区域标签：流程图与执行输出共用同一块画布区，切页而不是另开窗口。
+    private void OnMainTabClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string view }) return;
+        SelectMainTab(view);
+    }
+
+    private void SelectMainTab(string view)
+    {
+        WorkflowContainer.IsVisible = view == "canvas";
+        OutputPanel.IsVisible = view == "output";
+        CanvasTab.IsChecked = view == "canvas";
+        OutputTab.IsChecked = view == "output";
+        OutputActivity.IsChecked = view == "output";
+    }
+
+    private void OnOutputActivityClick(object? sender, RoutedEventArgs e)
+        => SelectMainTab("output");
+
+    // 菜单/命令中心的统一入口：面板名的词表与活动栏、右侧标签一致。
+    private void OnShowPanelMenu(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string view }) return;
+
+        switch (view)
+        {
+            case "properties":
+            case "agent":
+                SetInspectorVisible(true);
+                ShowInspectorPage(view);
+                break;
+            case "output":
+                SelectMainTab("output");
+                break;
+            default:
+                SetSidebarVisible(true);
+                ShowSidebarPage(view);
+                ExplorerActivity.IsChecked = view == "explorer";
+                RunActivity.IsChecked = view == "run";
+                McpActivity.IsChecked = view == "mcp";
+                break;
+        }
+    }
+
+    private void OnToggleSidebar(object? sender, RoutedEventArgs e)
+        => SetSidebarVisible(!SidebarHost.IsVisible);
+
+    private void OnToggleInspector(object? sender, RoutedEventArgs e)
+        => SetInspectorVisible(!InspectorHost.IsVisible);
+
+    private void SetSidebarVisible(bool visible)
+    {
+        SidebarHost.IsVisible = visible;
+        LeftSplitter.IsVisible = visible;
+        WorkbenchGrid.ColumnDefinitions[1].Width = new GridLength(visible ? 272 : 0);
+        WorkbenchGrid.ColumnDefinitions[2].Width = new GridLength(visible ? 4 : 0);
+    }
+
+    private void SetInspectorVisible(bool visible)
+    {
+        InspectorHost.IsVisible = visible;
+        RightSplitter.IsVisible = visible;
+        WorkbenchGrid.ColumnDefinitions[4].Width = new GridLength(visible ? 4 : 0);
+        WorkbenchGrid.ColumnDefinitions[5].Width = new GridLength(visible ? 348 : 0);
+    }
+
+    private void OnOpenCommandCenter(object? sender, RoutedEventArgs e)
+        => CommandCenterButton.Flyout?.ShowAt(CommandCenterButton);
+
+    private void OnShowAbout(object? sender, RoutedEventArgs e)
+    {
+        _manager.Show(new Notification(
+            "VeloxDev — Workflow Studio",
+            "演示宿主：工作流画布、运行门、Agent 与 MCP 面板都在这一套外壳里。",
+            NotificationType.Information));
+    }
+
+    private void OnGlobalKeyDown(object? sender, PlatformInput.KeyEventArgs e)
+    {
+        if ((e.KeyModifiers & PlatformInput.KeyModifiers.Control) == 0) return;
+
+        bool shift = (e.KeyModifiers & PlatformInput.KeyModifiers.Shift) != 0;
+
+        switch (e.Key)
+        {
+            case PlatformInput.Key.P when shift:
+                OnOpenCommandCenter(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+            case PlatformInput.Key.S:
+                SaveWorkflow(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+            case PlatformInput.Key.O:
+                SelectWorkflow(null, new RoutedEventArgs());
+                e.Handled = true;
+                break;
+            case PlatformInput.Key.Z:
+                ExecuteHistory(undo: true);
+                e.Handled = true;
+                break;
+            case PlatformInput.Key.Y:
+                ExecuteHistory(undo: false);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void ExecuteHistory(bool undo)
+    {
+        var command = undo ? _workflowViewModel.UndoCommand : _workflowViewModel.RedoCommand;
+        if (command.CanExecute(null)) command.Execute(null);
+    }
+
+    // 自定义标题栏：空白处拖动窗口，双击切换最大化；按钮与菜单自己处理点击。
+    private void OnTitleBarPointerPressed(object? sender, PlatformInput.PointerPressedEventArgs e)
+    {
+        if (e.Source is Control source &&
+            (source.FindAncestorOfType<Button>(includeSelf: true) is not null ||
+             source.FindAncestorOfType<MenuItem>(includeSelf: true) is not null))
+            return;
+
+        if (TopLevel.GetTopLevel(this) is not Window window) return;
+
+        if (e.ClickCount == 2)
+        {
+            ToggleMaximize(window);
+            return;
+        }
+
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            window.BeginMoveDrag(e);
+    }
+
+    private void OnMinimizeWindow(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this) is Window window)
+            window.WindowState = WindowState.Minimized;
+    }
+
+    private void OnMaximizeWindow(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this) is Window window)
+            ToggleMaximize(window);
+    }
+
+    private void OnCloseWindow(object? sender, RoutedEventArgs e)
+        => (TopLevel.GetTopLevel(this) as Window)?.Close();
+
+    private void ToggleMaximize(Window window)
+    {
+        window.WindowState = window.WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
     }
 
     /// <summary>
@@ -247,6 +464,10 @@ public partial class WorkflowView : UserControl
             result.Layout.UpdateCommand.Execute(null);
 
             UnsubscribeAutoScroll(_workflowViewModel);
+            _session?.Dispose();
+
+            // 从文件来的树也要有会话配置：否则控制器上的 Compile/Run 没有日志、观察者与运行管理器行。
+            _session = WorkflowDemoSession.FromTree(result);
             _workflowViewModel = result;
             DataContext = _workflowViewModel;
             _elements.SetTree(_workflowViewModel);
@@ -267,8 +488,9 @@ public partial class WorkflowView : UserControl
     private void InitializeNetworkDemo()
     {
         UnsubscribeAutoScroll(_workflowViewModel);
-        _demo = WorkflowDemoSession.Create();
-        _workflowViewModel = _demo.Tree;
+        _session?.Dispose();
+        _session = WorkflowDemoSession.Create();
+        _workflowViewModel = _session.Tree;
         HookLinkKeys(_workflowViewModel);
         DataContext = _workflowViewModel;
         _elements.SetTree(_workflowViewModel);
@@ -278,47 +500,28 @@ public partial class WorkflowView : UserControl
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         InitializePermissionMode();
 
-        // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。
-        // 要跳回 UI 线程：命令体是以 ConfigureAwait(false) 等的，Exited 落在池线程上，
-        // 在那里写控件的属性要么抛、要么被 RaiseCommandEvent 的 try/catch 吞掉（按钮就永远置灰）。
-        _demo.Controller.RunCommand.Exited += _ => Dispatcher.UIThread.Post(RefreshRunControls);
-        _demo.Controller.ResumeCommand.Exited += _ => Dispatcher.UIThread.Post(RefreshRunControls);
-        RefreshRunControls();
     }
 
-    /// <summary>
-    /// The demo session behind the tree on screen — <c>null</c> when the tree came from a file instead of from
-    /// <see cref="WorkflowDemoSession.Create"/>. The run controls live on it, not on the tree.
-    /// </summary>
-    private WorkflowDemoSession? _demo;
+    // ── Run manager ──────────────────────────────────────────────────────────
 
-    // 门与检查点都在会话上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做。
-    private void RefreshRunControls()
+    private static WorkflowRunTaskViewModel? RunTaskOf(object? sender)
+        => (sender as Control)?.DataContext as WorkflowRunTaskViewModel;
+
+    private void OnPauseRunTask(object? sender, RoutedEventArgs e) => RunTaskOf(sender)?.Pause();
+
+    private void OnResumeRunTask(object? sender, RoutedEventArgs e) => RunTaskOf(sender)?.Resume();
+
+    private void OnStopRunTask(object? sender, RoutedEventArgs e) => RunTaskOf(sender)?.Stop();
+
+    private void OnStartRunTask(object? sender, RoutedEventArgs e) => RunTaskOf(sender)?.Start();
+
+    private void OnRemoveRunTask(object? sender, RoutedEventArgs e)
     {
-        ContinueFromCheckpointButton.IsEnabled = _demo?.HasCheckpoint == true;
-        RunGateState.Text = _demo?.Gate.IsPaused == true ? "已暂停" : "空闲";
+        if (RunTaskOf(sender) is { } task) _workflowViewModel.Runs.Remove(task);
     }
 
-    private void PauseWorkflow(object? sender, RoutedEventArgs e)
-    {
-        if (_demo is null) return;
-        _demo.Gate.Pause();
-        RunGateState.Text = "已暂停：停在下一个节点边界";
-    }
-
-    private void ResumeWorkflow(object? sender, RoutedEventArgs e)
-    {
-        if (_demo is null) return;
-        _demo.Gate.Resume();
-        RunGateState.Text = "运行中";
-    }
-
-    private async void ContinueFromCheckpoint(object? sender, RoutedEventArgs e)
-    {
-        if (_demo is null) return;
-        RunGateState.Text = "从检查点继续…";
-        await _demo.Controller.ResumeCommand.ExecuteAsync(null);
-    }
+    private void OnClearFinishedRuns(object? sender, RoutedEventArgs e)
+        => _workflowViewModel.Runs.ClearFinished();
 
     private void OnSendToAgent(object? sender, RoutedEventArgs e)
     {
@@ -812,7 +1015,28 @@ public partial class WorkflowView : UserControl
     {
         if ((sender as Control)?.DataContext is not WorkflowElementEntry entry) return;
 
+        DeleteElement(entry);
+    }
+
+    private void OnLocateSelectedElement(object? sender, RoutedEventArgs e)
+    {
+        if (_workflowViewModel.SelectedElement is not { } entry) return;
+
+        ElementStatus.Text = _elements.Locate(entry)
+            ? $"已定位 {entry.Label}"
+            : "没有可用的表面，或该元素还没有有限坐标";
+    }
+
+    private void OnDeleteSelectedElement(object? sender, RoutedEventArgs e)
+    {
+        if (_workflowViewModel.SelectedElement is { } entry) DeleteElement(entry);
+    }
+
+    private void DeleteElement(WorkflowElementEntry entry)
+    {
         _elements.Delete(entry);
+        if (ReferenceEquals(_workflowViewModel.SelectedElement, entry))
+            _workflowViewModel.SelectedElement = null;
         ElementStatus.Text = $"已删除 {entry.Label}";
     }
 

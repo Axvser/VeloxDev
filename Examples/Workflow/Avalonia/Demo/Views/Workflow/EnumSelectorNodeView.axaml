@@ -22,20 +22,19 @@
 					Background="Transparent"
 					behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
 					behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-				<Grid ColumnDefinitions="2,*,Auto,Auto">
-					<Border Grid.Column="0" Classes="card-accent" Background="#D6A0FF" />
+				<Grid ColumnDefinitions="3,*,Auto,Auto">
+					<Border Grid.Column="0" Classes="card-accent" Background="{DynamicResource NodeEnumAccentBrush}" />
 					<TextBlock Grid.Column="1" Classes="card-title" Text="{Binding Title}" Margin="12,0,6,0" />
 					<TextBlock Grid.Column="2"
 							   Classes="card-value"
 							   Text="{Binding ExecutionOrderText}"
-							   Foreground="#6EE7A8"
+							   Foreground="{DynamicResource NodeSuccessBrush}"
 							   VerticalAlignment="Center"
 							   Margin="0,0,12,0" />
 					<Border Grid.Column="3"
-							Background="#1E2731" BorderBrush="#2A313C" BorderThickness="1"
-							CornerRadius="9" Padding="7,1" Margin="0,0,12,0"
+							Classes="card-badge" Margin="0,0,12,0"
 							VerticalAlignment="Center">
-						<TextBlock Text="{Binding LastRouted}" Foreground="#D6A0FF" FontSize="10.5" FontWeight="SemiBold" />
+						<TextBlock Text="{Binding LastRouted}" Foreground="{DynamicResource NodeEnumAccentBrush}" FontSize="10.5" FontWeight="SemiBold" />
 					</Border>
 				</Grid>
 			</Border>
@@ -60,7 +59,7 @@
 										<TextBlock Grid.Column="0"
 												   Text="{Binding Name}"
 												   Classes="card-value" FontSize="11" FontWeight="SemiBold"
-												   Foreground="#D6A0FF"
+												   Foreground="{DynamicResource NodeEnumAccentBrush}"
 												   VerticalAlignment="Center"
 												   HorizontalAlignment="Right"
 												   Margin="0,0,12,0" />

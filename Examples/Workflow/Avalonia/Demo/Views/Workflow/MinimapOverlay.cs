@@ -14,10 +14,11 @@ public class MinimapOverlay : WorkflowMinimapOverlay
 {
     public MinimapOverlay()
     {
-        MinimapBackground = CreateBrush("#D2141922");
-        MinimapBorderBrush = CreateBrush("#DC94A3B8");
-        NodeBrush = CreateBrush("#DC38BDF8");
-        ViewportStroke = CreateBrush("#F0FFFFFF");
+        // 与外壳同一套工作台色：安静的面板底、蓝色节点像素、白色视口框。
+        MinimapBackground = CreateBrush("#D21F1F1F");
+        MinimapBorderBrush = CreateBrush("#DC404040");
+        NodeBrush = CreateBrush("#DC6E8BFF");
+        ViewportStroke = CreateBrush("#F0E7E7E7");
     }
 
     private static IBrush CreateBrush(string hex)

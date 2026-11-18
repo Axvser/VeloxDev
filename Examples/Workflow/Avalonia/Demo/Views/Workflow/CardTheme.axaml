@@ -1,105 +1,125 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-	<!-- 节点卡共用的一套：简笔、暗色、靠字重与留白分区。
-	     放在这里而不是每张卡各写一遍 —— 五张卡重复同一组色值与内边距，改一次要改五处，
-	     而且必然会漂（这个仓库的其它地方已经吃过这个亏）。
-
-	     色板：
-	       卡面 #161B22 ／ 边框 #2A313C（1px，圆角 8）／ 分隔线 #222A34
-	       标题 #E6EAF2 12.5 SemiBold ／ 标签 #7C8798 10 ／ 正文 #D6DCE6 11.5
-	       输入底 #0E1218 ／ 悬停底 #1E2731 ／ 禁用字 #5A6474
-	     类型色条由各卡自己给（Controller #38BDF8、Timer/Python #6EC6FF、Enum #D6A0FF、兜底 #94A3B8）。 -->
+	<!-- Node cards share one chrome: a near-black surface, a coloured type stripe, a hairline header,
+	     and a muted footer. Every card takes its colours from Theme/Tokens.axaml, so the canvas, the
+	     inspector and the node family read as one system. -->
 
 	<Style Selector="Border.card">
 		<Setter Property="CornerRadius" Value="8" />
 		<Setter Property="BorderThickness" Value="1" />
-		<Setter Property="BorderBrush" Value="#2A313C" />
-		<Setter Property="Background" Value="#161B22" />
+		<Setter Property="BorderBrush" Value="{DynamicResource NodeBorderBrush}" />
+		<Setter Property="Background" Value="{DynamicResource NodeBackgroundBrush}" />
+		<Setter Property="BoxShadow" Value="0 6 20 0 #48000000" />
+		<Setter Property="Transitions">
+			<Transitions>
+				<BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+			</Transitions>
+		</Setter>
 	</Style>
 
-	<!-- Agent 工作集：紫罗兰描边 + 同色辉光。类由 AgentSelectionVisual 挂在外层 UserControl 上，
-	     卡片只负责画 —— 节点视图模型没有为它增加任何属性。 -->
+	<Style Selector="Border.card:pointerover">
+		<Setter Property="BorderBrush" Value="{DynamicResource NodeHoverBorderBrush}" />
+	</Style>
+
+	<!-- Agent working set: violet outline + same-colour glow. The class is attached to the outer
+	     UserControl by AgentSelectionVisual; the card only paints. -->
 	<Style Selector=".agent-selected Border.card">
 		<Setter Property="BorderBrush" Value="#A78BFA" />
 		<Setter Property="BoxShadow" Value="0 0 18 2 #A78BFA" />
 	</Style>
 
 	<Style Selector="Border.card-divider">
-		<Setter Property="BorderBrush" Value="#222A34" />
+		<Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
 		<Setter Property="BorderThickness" Value="0,0,0,1" />
 	</Style>
 
+	<!-- The type stripe: 3px, inset vertically like a language-coloured editor tab. -->
+	<Style Selector="Border.card-accent">
+		<Setter Property="CornerRadius" Value="2" />
+		<Setter Property="Margin" Value="0,8,0,8" />
+	</Style>
+
 	<Style Selector="TextBlock.card-title">
-		<Setter Property="FontSize" Value="12.5" />
+		<Setter Property="FontSize" Value="15" />
 		<Setter Property="FontWeight" Value="SemiBold" />
-		<Setter Property="Foreground" Value="#E6EAF2" />
+		<Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
 		<Setter Property="VerticalAlignment" Value="Center" />
 		<Setter Property="TextTrimming" Value="CharacterEllipsis" />
 	</Style>
 
 	<Style Selector="TextBlock.card-label">
-		<Setter Property="FontSize" Value="10" />
-		<Setter Property="Foreground" Value="#7C8798" />
+		<Setter Property="FontSize" Value="10.5" />
+		<Setter Property="FontWeight" Value="SemiBold" />
+		<Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
 		<Setter Property="LetterSpacing" Value="0.6" />
 	</Style>
 
 	<Style Selector="TextBlock.card-value">
-		<Setter Property="FontSize" Value="11.5" />
-		<Setter Property="Foreground" Value="#D6DCE6" />
+		<Setter Property="FontSize" Value="12" />
+		<Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
 	</Style>
 
 	<Style Selector="TextBox.card-field">
-		<Setter Property="FontSize" Value="11.5" />
+		<Setter Property="FontSize" Value="12" />
+		<Setter Property="MinHeight" Value="26" />
 		<Setter Property="Padding" Value="7,4" />
-		<Setter Property="CornerRadius" Value="6" />
-		<Setter Property="Background" Value="#0E1218" />
-		<Setter Property="BorderBrush" Value="#2A313C" />
+		<Setter Property="CornerRadius" Value="4" />
+		<Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+		<Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
 		<Setter Property="BorderThickness" Value="1" />
-		<Setter Property="Foreground" Value="#D6DCE6" />
+		<Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
 	</Style>
 
 	<Style Selector="ComboBox.card-field">
-		<Setter Property="FontSize" Value="11.5" />
-		<Setter Property="Padding" Value="7,3" />
-		<Setter Property="CornerRadius" Value="6" />
-		<Setter Property="Background" Value="#0E1218" />
-		<Setter Property="BorderBrush" Value="#2A313C" />
+		<Setter Property="FontSize" Value="12" />
+		<Setter Property="MinHeight" Value="26" />
+		<Setter Property="Padding" Value="7,2" />
+		<Setter Property="CornerRadius" Value="4" />
+		<Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+		<Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
 		<Setter Property="BorderThickness" Value="1" />
-		<Setter Property="Foreground" Value="#D6DCE6" />
+		<Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
 		<Setter Property="HorizontalAlignment" Value="Stretch" />
 	</Style>
 
-	<!-- 动作按钮：同形的「幽灵按钮」，语义只体现在各卡给的前景色上，不靠高饱和色块 -->
+	<!-- Action buttons: one ghost shape; semantics live in the foreground colour, not a saturated block. -->
 	<Style Selector="Button.ghost">
 		<Setter Property="Background" Value="Transparent" />
-		<Setter Property="BorderBrush" Value="#2A313C" />
+		<Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
 		<Setter Property="BorderThickness" Value="1" />
-		<Setter Property="CornerRadius" Value="6" />
+		<Setter Property="CornerRadius" Value="4" />
 		<Setter Property="Padding" Value="10,4" />
+		<Setter Property="MinHeight" Value="26" />
 		<Setter Property="FontSize" Value="11" />
 		<Setter Property="HorizontalAlignment" Value="Stretch" />
 		<Setter Property="HorizontalContentAlignment" Value="Center" />
 		<Setter Property="VerticalContentAlignment" Value="Center" />
+		<Setter Property="Transitions">
+			<Transitions>
+				<BrushTransition Property="Background" Duration="0:0:0.10" />
+				<BrushTransition Property="BorderBrush" Duration="0:0:0.10" />
+			</Transitions>
+		</Setter>
 	</Style>
 
-	<!-- 悬停只抬边框与底，不换色 —— 动作语义已经写在各自的前景色里了 -->
 	<Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
-		<Setter Property="Background" Value="#1E2731" />
-		<Setter Property="BorderBrush" Value="#3A4553" />
+		<Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+		<Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
 	</Style>
 
-	<!-- 禁用态：Fluent 默认会把按钮填成一块实灰，那会在一排幽灵按钮里格外突兀。
-	     这里只把边与字压暗，形状不变 -->
 	<Style Selector="Button.ghost:disabled /template/ ContentPresenter">
 		<Setter Property="Background" Value="Transparent" />
-		<Setter Property="BorderBrush" Value="#232A34" />
-		<Setter Property="TextElement.Foreground" Value="#5A6474" />
+		<Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+		<Setter Property="TextElement.Foreground" Value="{DynamicResource TextDisabledBrush}" />
 	</Style>
 
-	<!-- 标题行左侧那条 2px 类型色条。圆角只削左上，与卡面左上角对齐 -->
-	<Style Selector="Border.card-accent">
-		<Setter Property="CornerRadius" Value="8,0,0,0" />
+	<!-- The status pill used by script nodes. -->
+	<Style Selector="Border.card-badge">
+		<Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}" />
+		<Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="CornerRadius" Value="9" />
+		<Setter Property="Padding" Value="7,1" />
 	</Style>
-
 </Styles>

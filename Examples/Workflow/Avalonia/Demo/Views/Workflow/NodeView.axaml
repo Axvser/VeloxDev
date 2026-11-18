@@ -21,8 +21,8 @@
 
 	<Border Classes="card" Padding="0" behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
 			behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas">
-		<Grid ColumnDefinitions="2,*">
-			<Border Grid.Column="0" Classes="card-accent" Background="#94A3B8" />
+		<Grid ColumnDefinitions="3,*">
+			<Border Grid.Column="0" Classes="card-accent" Background="{DynamicResource NodeFallbackAccentBrush}" />
 			<TextBlock Grid.Column="1" Classes="card-label" Text="?" Margin="12,0,0,0" VerticalAlignment="Center" />
 		</Grid>
 	</Border>

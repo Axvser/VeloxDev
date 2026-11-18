@@ -3,20 +3,25 @@
         xmlns:vm="using:Demo.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="1500" d:DesignHeight="900"
         x:Class="Demo.Views.MainWindow"
         xmlns:local="using:Demo"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Demo"
-        Background="#1e1e1e">
+        Title="VeloxDev — Workflow Studio"
+        Width="1500"
+        Height="900"
+        MinWidth="1180"
+        MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        WindowDecorations="BorderOnly"
+        FontFamily="{DynamicResource UiFontFamily}"
+        FontSize="{DynamicResource UiFontSize}"
+        Background="{DynamicResource WindowBackgroundBrush}">
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <local:WorkflowView Width="{Binding $parent[Window].Bounds.Width}"
-                        Height="{Binding $parent[Window].Bounds.Height}"
-                        Background="#1e1e1e"/>
-
+    <local:WorkflowView />
 </Window>
