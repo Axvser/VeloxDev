@@ -33,48 +33,48 @@ internal enum CardCorners
 internal static class CardTheme
 {
     // ── Surfaces ────────────────────────────────────────────────────────────────
-    public static readonly Color Surface = FromHex("#161B22");
-    public static readonly Color Border = FromHex("#2A313C");
-    public static readonly Color Divider = FromHex("#222A34");
-    public static readonly Color Field = FromHex("#0E1218");
-    public static readonly Color Hover = FromHex("#1E2731");
-    public static readonly Color HoverBorder = FromHex("#3A4553");
-    public static readonly Color DisabledBorder = FromHex("#232A34");
-    public static readonly Color DisabledText = FromHex("#5A6474");
+    public static readonly Color Surface = FromHex("#252526");
+    public static readonly Color Border = FromHex("#3C3C3C");
+    public static readonly Color Divider = FromHex("#262626");
+    public static readonly Color Field = FromHex("#2A2A2A");
+    public static readonly Color Hover = FromHex("#2A2D2E");
+    public static readonly Color HoverBorder = FromHex("#565656");
+    public static readonly Color DisabledBorder = FromHex("#2E2E2E");
+    public static readonly Color DisabledText = FromHex("#585858");
 
     /// <summary>The colour around a card, so the square corners outside its rounded border blend in.</summary>
-    public static readonly Color Ground = FromHex("#1E1E1E");
+    public static readonly Color Ground = FromHex("#171717");
 
     // ── Text ────────────────────────────────────────────────────────────────────
-    public static readonly Color Title = FromHex("#E6EAF2");
-    public static readonly Color Label = FromHex("#7C8798");
-    public static readonly Color Value = FromHex("#D6DCE6");
-    public static readonly Color BadgeText = FromHex("#9AA6B5");
+    public static readonly Color Title = FromHex("#E7E7E7");
+    public static readonly Color Label = FromHex("#6E7681");
+    public static readonly Color Value = FromHex("#A0A0A0");
+    public static readonly Color BadgeText = FromHex("#A0A0A0");
 
     // ── Type accents (the 2px bar left of the title row) ─────────────────────────
-    public static readonly Color AccentController = FromHex("#38BDF8");
-    public static readonly Color AccentAgent = FromHex("#6EC6FF");
-    public static readonly Color AccentEnum = FromHex("#D6A0FF");
+    public static readonly Color AccentController = FromHex("#6E8BFF");
+    public static readonly Color AccentAgent = FromHex("#4FC1FF");
+    public static readonly Color AccentEnum = FromHex("#C99BFF");
     public static readonly Color AccentFallback = FromHex("#94A3B8");
 
     // ── Action semantics — the ghost buttons differ only in their text colour ────
-    public static readonly Color ActionCompile = FromHex("#7EC8FF");
-    public static readonly Color ActionRun = FromHex("#6EE7A8");
-    public static readonly Color ActionStop = FromHex("#FCA5A5");
-    public static readonly Color ActionClose = FromHex("#9AA6B5");
+    public static readonly Color ActionCompile = FromHex("#4FC1FF");
+    public static readonly Color ActionRun = FromHex("#7EE787");
+    public static readonly Color ActionStop = FromHex("#F85149");
+    public static readonly Color ActionClose = FromHex("#A0A0A0");
 
     // ── Script editor ───────────────────────────────────────────────────────────
     public static readonly Color EditorSurface = FromHex("#0D1117");
-    public static readonly Color EditorChrome = FromHex("#161B22");
-    public static readonly Color EditorFile = FromHex("#6EE7A8");
-    public static readonly Color EditorMeta = FromHex("#5A6474");
+    public static readonly Color EditorChrome = FromHex("#1B1B1C");
+    public static readonly Color EditorFile = FromHex("#7EE787");
+    public static readonly Color EditorMeta = FromHex("#585858");
 
     // ── Metrics, in design pixels ───────────────────────────────────────────────
     public const float CardRadius = 8f;
     public const float FieldRadius = 6f;
     public const float CapsuleRadius = 9f;
     public const float HeaderHeight = 32f;
-    public const float AccentWidth = 2f;
+    public const float AccentWidth = 3f;
     public const float DividerThickness = 1f;
     public const float ControllerFooterHeight = 66f;
     public const float BodyPaddingX = 12f;
@@ -86,9 +86,9 @@ internal static class CardTheme
     public const float CapsulePaddingY = 1f;
 
     // ── Type ────────────────────────────────────────────────────────────────────
-    public const float TitleSize = 12.5f;
-    public const float LabelSize = 10f;
-    public const float ValueSize = 11.5f;
+    public const float TitleSize = 15f;
+    public const float LabelSize = 10.5f;
+    public const float ValueSize = 12f;
     public const float ButtonSize = 11f;
     public const float CapsuleSize = 10.5f;
     public const float PortNameSize = 11f;

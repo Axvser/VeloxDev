@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
@@ -7,15 +6,19 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-// 侧栏的「元素」页：把树里的节点 / 插槽 / 连线列成三张表，每张表下各有 Locate / Delete ——
+// 侧栏的「元素」页：节点 / 插槽 / 连线三张表，每行自带 Locate / Delete（与 Avalonia、WinUI、MAUI、Blazor 同形）。
 // 列表状态全部来自共享的 WorkflowElementCatalog，这里只做渲染与转发。
 internal sealed class WorkflowElementPanel : UserControl
 {
     private readonly WorkflowElementCatalog _catalog = new();
-    private readonly ListBox _nodeList;
-    private readonly ListBox _slotList;
-    private readonly ListBox _linkList;
+    private readonly ElementRowList _nodeList;
+    private readonly ElementRowList _slotList;
+    private readonly ElementRowList _linkList;
     private readonly Label _status;
+    private TreeViewModel? _tree;
+
+    /// <summary>Raised when a row is picked, or when the host clears the selection. The host feeds it to the tree.</summary>
+    public event EventHandler<WorkflowElementEntry?>? SelectedElementChanged;
 
     public WorkflowElementPanel()
     {
@@ -26,15 +29,12 @@ internal sealed class WorkflowElementPanel : UserControl
         _nodeList = CreateList();
         _slotList = CreateList();
         _linkList = CreateList();
-
-        var header = new Label
+        foreach (var list in new[] { _nodeList, _slotList, _linkList })
         {
-            AutoSize = true,
-            Text = "元素（从 Tree 加载）",
-            ForeColor = CardTheme.AccentController,
-            Font = CardTheme.Font(11.5f, FontStyle.Bold),
-            Margin = new Padding(0, 0, 0, 6),
-        };
+            list.SelectedEntryChanged += OnListSelected;
+            list.LocateRequested += OnLocateRequested;
+            list.DeleteRequested += OnDeleteRequested;
+        }
 
         var tabs = new TabControl
         {
@@ -62,16 +62,14 @@ internal sealed class WorkflowElementPanel : UserControl
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 2,
             BackColor = CardTheme.Ground,
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(header, 0, 0);
-        layout.Controls.Add(tabs, 0, 1);
-        layout.Controls.Add(_status, 0, 2);
+        layout.Controls.Add(tabs, 0, 0);
+        layout.Controls.Add(_status, 0, 1);
 
         Controls.Add(layout);
 
@@ -79,15 +77,52 @@ internal sealed class WorkflowElementPanel : UserControl
         RefreshLists();
     }
 
+    /// <summary>Selects <paramref name="entry"/> in the list that owns it, without raising an event back.</summary>
+    public void SetSelectedElement(WorkflowElementEntry? entry)
+    {
+        _nodeList.Select(entry is { Kind: WorkflowElementKind.Node } ? entry : null);
+        _slotList.Select(entry is { Kind: WorkflowElementKind.Slot } ? entry : null);
+        _linkList.Select(entry is { Kind: WorkflowElementKind.Link } ? entry : null);
+    }
+
+    private void OnListSelected(object? sender, WorkflowElementEntry? entry)
+    {
+        if (entry is null) return;
+
+        // One list owns the selection at a time, as in the XAML demos.
+        if (!ReferenceEquals(sender, _nodeList)) _nodeList.Select(null);
+        if (!ReferenceEquals(sender, _slotList)) _slotList.Select(null);
+        if (!ReferenceEquals(sender, _linkList)) _linkList.Select(null);
+
+        SelectedElementChanged?.Invoke(this, entry);
+    }
+
+    private void OnLocateRequested(object? sender, WorkflowElementEntry entry)
+    {
+        ShowStatus(_catalog.Locate(entry)
+            ? $"已定位 {entry.Label}"
+            : $"未能定位 {entry.Label}：没有可用的表面，或该元素还没有有限坐标");
+    }
+
+    private void OnDeleteRequested(object? sender, WorkflowElementEntry entry)
+    {
+        _catalog.Delete(entry);
+        // Delete rebuilds the lists and resets the status; write the line after it.
+        ShowStatus($"已删除 {entry.Label}");
+    }
+
     // 侧栏要列的树；换树时目录会退订旧树、重建三张表。不是可设计属性，序列化器不必知道它。
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public IWorkflowTreeViewModel? Tree
     {
-        set => _catalog.SetTree(value);
+        set
+        {
+            _tree = value as TreeViewModel;
+            _catalog.SetTree(value);
+        }
     }
 
-    // 元素被删掉后列表会整表重建；选中项不跨重建保留，所以每次重建后选中的是「无」而不是旧行的索引。
     private void RefreshLists()
     {
         // 目录自己会把重建排回创建它的线程，但这条防线很便宜：代理线程上的 Changed 也不会碰控件。
@@ -97,110 +132,36 @@ internal sealed class WorkflowElementPanel : UserControl
             return;
         }
 
-        Reload(_nodeList, _catalog.Nodes);
-        Reload(_slotList, _catalog.Slots);
-        Reload(_linkList, _catalog.Links);
+        _nodeList.SetEntries(_catalog.Nodes);
+        _slotList.SetEntries(_catalog.Slots);
+        _linkList.SetEntries(_catalog.Links);
         _status.Text = _catalog.Summary;
-    }
 
-    private static void Reload(ListBox list, ObservableCollection<WorkflowElementEntry> entries)
-    {
-        list.BeginUpdate();
-        list.Items.Clear();
-        foreach (var entry in entries) list.Items.Add(entry);
-        list.EndUpdate();
-    }
-
-    private void LocateSelected(ListBox list)
-    {
-        if (list.SelectedItem is not WorkflowElementEntry entry)
+        // The catalog keeps the rows alive until the next rebuild; when the tree still points at one of them,
+        // put the highlight back rather than leave the inspector describing a row nothing is selected on.
+        if (_tree?.SelectedElement is { } selected)
         {
-            ShowStatus("先选择一个元素");
-            return;
+            var stillListed = _catalog.Nodes.Contains(selected)
+                || _catalog.Slots.Contains(selected)
+                || _catalog.Links.Contains(selected);
+            SetSelectedElement(stillListed ? selected : null);
         }
-
-        ShowStatus(_catalog.Locate(entry)
-            ? $"已定位 {entry.Label}"
-            : $"未能定位 {entry.Label}：没有可用的表面，或该元素还没有有限坐标");
-    }
-
-    private void DeleteSelected(ListBox list)
-    {
-        if (list.SelectedItem is not WorkflowElementEntry entry)
-        {
-            ShowStatus("先选择一个元素");
-            return;
-        }
-
-        _catalog.Delete(entry);
-        // Delete 触发重建、把状态行刷成摘要；这一行覆盖回来，用户才看得到自己刚删了什么。
-        ShowStatus($"已删除 {entry.Label}");
     }
 
     private void ShowStatus(string message) => _status.Text = $"{_catalog.Summary} · {message}";
 
-    private static ListBox CreateList() => new()
+    private ElementRowList CreateList() => new()
     {
         Dock = DockStyle.Fill,
-        BackColor = CardTheme.Field,
-        ForeColor = CardTheme.Value,
-        BorderStyle = BorderStyle.FixedSingle,
-        DisplayMember = nameof(WorkflowElementEntry.Label),
-        IntegralHeight = false,
-        Font = CardTheme.Font(CardTheme.ValueSize),
     };
 
-    private TabPage CreatePage(string title, ListBox list)
+    private static TabPage CreatePage(string title, ElementRowList list) => new()
     {
-        var page = new TabPage(title)
-        {
-            BackColor = CardTheme.Ground,
-            ForeColor = CardTheme.Value,
-            UseVisualStyleBackColor = false,
-            Padding = new Padding(4),
-        };
-
-        var locate = CreateAction("Locate", CardTheme.ActionCompile);
-        locate.Click += (_, _) => LocateSelected(list);
-        var delete = CreateAction("Delete", CardTheme.ActionStop);
-        delete.Click += (_, _) => DeleteSelected(list);
-
-        var actions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = CardTheme.Ground,
-            Padding = new Padding(0, 6, 0, 0),
-        };
-        actions.Controls.Add(locate);
-        actions.Controls.Add(delete);
-
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            BackColor = CardTheme.Ground,
-        };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(list, 0, 0);
-        layout.Controls.Add(actions, 0, 1);
-        page.Controls.Add(layout);
-
-        return page;
-    }
-
-    private static GhostButton CreateAction(string text, Color color) => new()
-    {
-        Text = text,
-        TextColor = color,
-        AutoSize = false,
-        Size = new System.Drawing.Size(64, 24),
-        Margin = new Padding(0, 0, 6, 0),
+        BackColor = CardTheme.Ground,
+        ForeColor = CardTheme.Value,
+        UseVisualStyleBackColor = false,
+        Padding = new Padding(4),
+        Controls = { list },
+        Text = title,
     };
 }

@@ -67,7 +67,7 @@ public sealed class LinkView : Control
     private bool _isVirtual;
     private bool _isHighlighted;
     private ConnectionPreviewState _preview;
-    private Color _lineColor = CardTheme.FromHex("#CC38BDF8");
+    private Color _lineColor = CardTheme.FromHex("#CC6E8BFF");
 
     // 本帧彗星的头部走到全长的几成、以及它有多亮：每次 Render 前由画布从它的时钟推入（SetFlow）——
     // 时钟归画布，渲染器不在控件树里、没有窗口应答它的 Invalidate

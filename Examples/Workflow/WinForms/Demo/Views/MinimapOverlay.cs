@@ -18,10 +18,10 @@ namespace Demo.Views;
 /// </summary>
 public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource
 {
-    private readonly Color _background = ParseColor("#D2141922");
-    private readonly Color _border = ParseColor("#DC94A3B8");
-    private readonly Color _nodeFill = ParseColor("#DC38BDF8");
-    private readonly Color _viewportStroke = ParseColor("#F0FFFFFF");
+    private readonly Color _background = ParseColor("#D21F1F1F");
+    private readonly Color _border = ParseColor("#DC404040");
+    private readonly Color _nodeFill = ParseColor("#DC6E8BFF");
+    private readonly Color _viewportStroke = ParseColor("#F0E7E7E7");
 
     // Overlay margin from the surface's top-right corner.
     private const int CornerMargin = 12;

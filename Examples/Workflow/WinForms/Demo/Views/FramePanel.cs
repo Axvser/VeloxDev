@@ -16,7 +16,7 @@ namespace Demo.Views;
 /// (the field's borderless text box, the capsule's label) are inset far enough that their square corners never
 /// poke past the curve.
 /// </summary>
-internal sealed class FramePanel : Panel
+internal class FramePanel : Panel
 {
     private Color _fill = CardTheme.Surface;
     private Color _frame = CardTheme.Border;
@@ -42,7 +42,12 @@ internal sealed class FramePanel : Panel
     public Color Fill
     {
         get => _fill;
-        set { _fill = value; Invalidate(); }
+        set
+        {
+            if (_fill == value) return;
+            _fill = value;
+            Invalidate();
+        }
     }
 
     /// <summary>The hairline's colour. Ignored when <see cref="FrameWidth"/> is zero.</summary>
@@ -51,7 +56,12 @@ internal sealed class FramePanel : Panel
     public Color Frame
     {
         get => _frame;
-        set { _frame = value; Invalidate(); }
+        set
+        {
+            if (_frame == value) return;
+            _frame = value;
+            Invalidate();
+        }
     }
 
     /// <summary>The colour outside the rounded shape — normally the surface this panel sits on.</summary>
@@ -60,7 +70,13 @@ internal sealed class FramePanel : Panel
     public Color Ground
     {
         get => _ground;
-        set { _ground = value; BackColor = value; Invalidate(); }
+        set
+        {
+            if (_ground == value) return;
+            _ground = value;
+            BackColor = value;
+            Invalidate();
+        }
     }
 
     [Browsable(false)]
@@ -68,7 +84,12 @@ internal sealed class FramePanel : Panel
     public float FrameWidth
     {
         get => _frameWidth;
-        set { _frameWidth = value; Invalidate(); }
+        set
+        {
+            if (_frameWidth == value) return;
+            _frameWidth = value;
+            Invalidate();
+        }
     }
 
     [Browsable(false)]
@@ -76,7 +97,12 @@ internal sealed class FramePanel : Panel
     public float Radius
     {
         get => _radius;
-        set { _radius = value; Invalidate(); }
+        set
+        {
+            if (_radius == value) return;
+            _radius = value;
+            Invalidate();
+        }
     }
 
     [Browsable(false)]

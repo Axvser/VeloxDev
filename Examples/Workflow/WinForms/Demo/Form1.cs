@@ -1,10 +1,15 @@
 using Demo.ViewModels;
+using Demo.ViewModels.Workflow.Helper;
+using Demo.Views;
+using Demo.Views.Workbench;
+using Demo.Views.Workflow;
 using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.Safety;
+using VeloxDev.AI.SubAgents;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -18,24 +23,24 @@ namespace Demo
 
         // Agent 一轮里每个工具调用都要求刷新，而一次刷新是全量的（重新定位命名控件、跑布局、重算可见区）。
         // 合并之后一轮只刷新一次 —— 刷新本身是幂等的，后来的请求要的正是前一次即将看到的状态。
-        private ViewModels.Workflow.Helper.CoalescedRefresh? _surfaceRefresh;
+        private CoalescedRefresh? _surfaceRefresh;
 
-        // ── VS Code 式左栏 ───────────────────────────────────────────────────
-        // 活动栏 48px + 侧栏；五个活动页一次只显示一个。命名控件仍由 Designer 创建，
-        // BuildSidebar 只把它们从原来的 toolbarPanel / 标签页里搬到对应页，事件与绑定原样保留。
-        private static readonly Color ActivityBack = Color.FromArgb(0x33, 0x33, 0x33);
-        private static readonly Color ActivityHover = Color.FromArgb(0x2A, 0x2D, 0x2E);
-        private static readonly Color ActivityActive = Color.FromArgb(0x00, 0x7A, 0xCC);
-        private static readonly Color ActivityGlyph = Color.FromArgb(0x9D, 0x9D, 0x9D);
-        private static readonly Color SidebarBack = Views.CardTheme.FromHex("#252526");
-        private static readonly Color SidebarField = Views.CardTheme.FromHex("#1E1E1E");
-        private static readonly Color SidebarText = Views.CardTheme.FromHex("#CCCCCC");
-        private static readonly Color SidebarValue = Views.CardTheme.FromHex("#E7E7E7");
-        private static readonly Color SidebarMuted = Views.CardTheme.FromHex("#94A3B8");
-        private static readonly Color SidebarAccent = Views.CardTheme.FromHex("#7EC8FF");
-        private static readonly Color SidebarHover = Views.CardTheme.FromHex("#3A3D41");
-        private static readonly Color SidebarButtonBack = Views.CardTheme.FromHex("#333333");
-        private static readonly Color SidebarBorder = Views.CardTheme.FromHex("#3C3C3C");
+        // ── VS Code 式外壳 ───────────────────────────────────────────────────
+        // 48px 活动栏 + 272px 侧栏 | 主区（标签页 / 画布 / 输出） | 348px 右侧检查器。
+        // 命名控件仍由 Designer 创建，Build* 方法只把它们搬到对应页；事件与绑定原样保留。
+        private static readonly Color ActivityBack = WorkbenchPalette.ActivityBar;
+        private static readonly Color ActivityHover = WorkbenchPalette.Hover;
+        private static readonly Color ActivityActive = WorkbenchPalette.Accent;
+        private static readonly Color ActivityGlyph = WorkbenchPalette.TextTertiary;
+        private static readonly Color SidebarBack = WorkbenchPalette.Panel;
+        private static readonly Color SidebarField = WorkbenchPalette.Input;
+        private static readonly Color SidebarText = WorkbenchPalette.TextSecondary;
+        private static readonly Color SidebarValue = WorkbenchPalette.TextPrimary;
+        private static readonly Color SidebarMuted = WorkbenchPalette.TextTertiary;
+        private static readonly Color SidebarAccent = WorkbenchPalette.AccentText;
+        private static readonly Color SidebarHover = WorkbenchPalette.Hover;
+        private static readonly Color SidebarButtonBack = WorkbenchPalette.Input;
+        private static readonly Color SidebarBorder = WorkbenchPalette.Border;
 
         private readonly Dictionary<string, Control> _sidebarPages = [];
         private readonly Dictionary<string, ActivityButton> _activityButtons = [];
@@ -44,27 +49,812 @@ namespace Demo
         private Panel _explorerElementHost = null!;
         private Panel _mcpHost = null!;
         private ToolTip _toolTip = null!;
+        private string _sidebarActivity = "explorer";
+        private string _inspectorPage = "properties";
+
+        private WorkflowElementPanel? _elementPanel;
+
+        // ── 主区 ─────────────────────────────────────────────────────────────
+        private SplitContainer _rightSplit = null!;
+        private Panel _mainContent = null!;
+        private Panel _outputPanel = null!;
+        private WorkbenchTabButton _canvasTab = null!;
+        private WorkbenchTabButton _outputTab = null!;
+        private Label _mainHintLabel = null!;
+        private Label _outputRootLabel = null!;
+        private Label _outputStateLabel = null!;
+        private Label _outputProgressLabel = null!;
+        private Label _outputCountLabel = null!;
+        private Label _outputHintLabel = null!;
+        private WorkflowRunTaskViewModel? _outputTask;
+
+        // ── 右侧检查器 ───────────────────────────────────────────────────────
+        private Panel _inspectorHost = null!;
+        private Panel _inspectorPageHost = null!;
+        private Panel _propertiesPage = null!;
+        private Panel _agentPage = null!;
+        private WorkbenchTabButton _propertiesTab = null!;
+        private WorkbenchTabButton _agentTab = null!;
+        private WorkflowInspectorPanel _inspector = null!;
+        private RunManagerPanel _runManager = null!;
+        private SubAgentPanel _subAgentPanel = null!;
+        private StatusBarStrip _statusBar = null!;
+        private SubAgentScope? _attachedSubAgents;
+
+        private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 500 };
 
         public Form1()
         {
             InitializeComponent();
+            splitContainer.Panel1.Padding = Padding.Empty;
+            splitContainer.Panel2.Padding = Padding.Empty;
+            splitContainer.SplitterWidth = 4;
+            splitContainer.SplitterDistance = 320;
+            splitContainer.Panel1MinSize = 200;
+            splitContainer.Panel2MinSize = 400;
+            splitContainer.BackColor = WorkbenchPalette.Splitter;
+
+            BuildWorkbenchFrame();
+            BuildMainArea();
+            BuildInspector();
             BuildSidebar();
+
             WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(workflowSurfaceControl, true);
             WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvas(workflowSurfaceControl, workflowSurfaceControl);
-            workflowSurfaceControl.MinimapOverlay = minimapOverlay;
+
+            _uiTimer.Tick += OnUiTimerTick;
+            _uiTimer.Start();
+
             LoadDemo(WorkflowDemoSession.Create());
+            FormClosed += (_, _) =>
+            {
+                _uiTimer.Stop();
+                _uiTimer.Dispose();
+            };
         }
 
-        /// <summary>
-        /// Replaces the designer's stacked toolbar + log tabs with a VS Code-style rail:
-        /// a 48px activity bar, a dark sidebar, and five pages that are shown one at a time.
-        /// </summary>
-        /// <remarks>
-        /// The named controls are not rebuilt — they are moved out of <see cref="toolbarPanel"/> and the
-        /// log tabs into their new page. WinForms moves a control, its bindings and its event handlers
-        /// together when it is added to a new parent, so this preserves every existing handler and
-        /// the seed binding that <see cref="LoadDemo"/> installs.
-        /// </remarks>
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            PositionInspector();
+            RepaintShellDeferred();
+        }
+
+        // The shell's cards and strips are custom-painted containers with child labels. WinForms can finish the
+        // parent's paint after a child has drawn, which leaves a label invisible until its own WM_PAINT runs; a
+        // single invalidate(true) on the containers after layout puts every label back.
+        private void RepaintShellDeferred()
+        {
+            if (IsHandleCreated && !IsDisposed) BeginInvoke(RepaintShell);
+        }
+
+        private void RepaintShell()
+        {
+            if (IsDisposed) return;
+
+            _statusBar.Refresh();
+            _inspector.Refresh();
+            _runManager.Refresh();
+            _outputPanel.Refresh();
+            _agentPage.Refresh();
+            _subAgentPanel.Refresh();
+            _mainContent.Refresh();
+        }
+
+        // The inspector's width is a constant of the shell, not a fraction: the Avalonia grid pins it at 348.
+        // SplitterDistance is only valid after the container has a width, so it is set once the form is shown.
+        private void PositionInspector()
+        {
+            if (_rightSplit.IsDisposed || _rightSplit.Width <= 0) return;
+
+            // Minimums are set only once the control has a width: assigning them while the splitter is still
+            // at its construction size makes the framework clamp SplitterDistance to an impossible range.
+            _rightSplit.Panel1MinSize = 520;
+            _rightSplit.Panel2MinSize = 260;
+
+            var distance = _rightSplit.Width - 348 - _rightSplit.SplitterWidth;
+            if (distance < _rightSplit.Panel1MinSize) return;
+            if (distance > _rightSplit.Width - _rightSplit.Panel2MinSize) return;
+            _rightSplit.SplitterDistance = distance;
+        }
+
+        // A 32px workbench title strip, the body and a 24px status strip.
+        private void BuildWorkbenchFrame()
+        {
+            var title = BuildTitleStrip();
+
+            _statusBar = new StatusBarStrip { Dock = DockStyle.Fill };
+
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = WorkbenchPalette.Window,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+
+            Controls.Clear();
+            root.Controls.Add(title, 0, 0);
+            root.Controls.Add(splitContainer, 0, 1);
+            root.Controls.Add(_statusBar, 0, 2);
+            Controls.Add(root);
+        }
+
+        // The title strip mirrors Avalonia's: brand + menu + command centre. The native window border
+        // already owns minimise/maximise/close, so no fake window buttons are drawn here.
+        private Control BuildTitleStrip()
+        {
+            var host = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                BackColor = WorkbenchPalette.ActivityBar,
+                Margin = Padding.Empty,
+                Padding = new Padding(12, 0, 12, 0),
+            };
+            host.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            host.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            host.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            host.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            var left = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                BackColor = WorkbenchPalette.ActivityBar,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            left.Controls.Add(new Label
+            {
+                Text = "VeloxDev",
+                AutoSize = true,
+                ForeColor = WorkbenchPalette.TextPrimary,
+                BackColor = WorkbenchPalette.ActivityBar,
+                Font = new Font(Views.CardTheme.UiFamily, 9F, FontStyle.Bold),
+                Margin = new Padding(0, 0, 14, 0),
+                Anchor = AnchorStyles.Left,
+            });
+            left.Controls.Add(CreateMenuButton("文件", BuildFileMenu()));
+            left.Controls.Add(CreateMenuButton("编辑", BuildEditMenu()));
+            left.Controls.Add(CreateMenuButton("视图", BuildViewMenu()));
+            left.Controls.Add(CreateMenuButton("帮助", BuildHelpMenu()));
+            host.Controls.Add(left, 0, 0);
+
+            var centre = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                BackColor = WorkbenchPalette.ActivityBar,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            centre.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            centre.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            centre.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            centre.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            var command = new GhostButton
+            {
+                Text = "搜索命令    Ctrl+Shift+P",
+                AutoSize = false,
+                Size = new Size(330, 24),
+                Radius = 4,
+                TextColor = WorkbenchPalette.TextTertiary,
+                BackColor = WorkbenchPalette.Input,
+                Font = Views.CardTheme.Font(8.5f),
+                Anchor = AnchorStyles.None,
+                Margin = Padding.Empty,
+            };
+            command.Click += (_, _) => ShowCommandCenter(command);
+            centre.Controls.Add(command, 1, 0);
+            host.Controls.Add(centre, 1, 0);
+
+            var right = new Label
+            {
+                Text = "工作台",
+                AutoSize = true,
+                ForeColor = WorkbenchPalette.TextTertiary,
+                BackColor = WorkbenchPalette.ActivityBar,
+                Font = Views.CardTheme.Font(8f),
+                Anchor = AnchorStyles.Right,
+                Margin = Padding.Empty,
+            };
+            host.Controls.Add(right, 2, 0);
+            return host;
+        }
+
+        private GhostButton CreateMenuButton(string text, DarkPopupMenu menu)
+        {
+            var button = new GhostButton
+            {
+                Text = text,
+                AutoSize = false,
+                Size = new Size(52, 24),
+                Radius = 3,
+                FrameWidth = 0F,
+                TextColor = WorkbenchPalette.TextSecondary,
+                BackColor = WorkbenchPalette.ActivityBar,
+                Font = Views.CardTheme.Font(8.5f),
+                Margin = new Padding(0, 0, 2, 0),
+                Anchor = AnchorStyles.Left,
+            };
+            button.Click += (_, _) => menu.ShowBelow(button);
+            return button;
+        }
+
+        private DarkPopupMenu BuildFileMenu()
+        {
+            var menu = new DarkPopupMenu();
+            menu.AddItem("保存工作流", "Ctrl+S", () => SaveWorkflow(this, EventArgs.Empty));
+            menu.AddItem("加载工作流", "Ctrl+O", () => SelectWorkflow(this, EventArgs.Empty));
+            menu.AddItem("重新载入示例", null, () => ReloadWorkflow(this, EventArgs.Empty));
+            menu.AddSeparator();
+            menu.AddItem("退出", null, Close);
+            return menu;
+        }
+
+        private DarkPopupMenu BuildEditMenu()
+        {
+            var menu = new DarkPopupMenu();
+            menu.AddItem("撤销", "Ctrl+Z", () => UndoWorkflow(this, EventArgs.Empty));
+            menu.AddItem("重做", "Ctrl+Y", () => RedoWorkflow(this, EventArgs.Empty));
+            menu.AddSeparator();
+            menu.AddItem("命令中心", "Ctrl+Shift+P", () => ShowCommandCenter(null));
+            return menu;
+        }
+
+        private DarkPopupMenu BuildViewMenu()
+        {
+            var menu = new DarkPopupMenu();
+            menu.AddItem("资源管理器", null, () => SelectActivity("explorer"));
+            menu.AddItem("运行", null, () => SelectActivity("run"));
+            menu.AddItem("MCP 服务器", null, () => SelectActivity("mcp"));
+            menu.AddSeparator();
+            menu.AddItem("属性", null, () => SelectInspectorPage("properties"));
+            menu.AddItem("AI 助手", null, () => SelectInspectorPage("agent"));
+            menu.AddItem("执行输出", null, () => SelectMainTab("output"));
+            return menu;
+        }
+
+        private DarkPopupMenu BuildHelpMenu()
+        {
+            var menu = new DarkPopupMenu();
+            menu.AddItem("关于 VeloxDev", null, () => MessageBox.Show(
+                this,
+                "VeloxDev — Workflow Studio\n演示宿主：工作流画布、运行门、Agent 与 MCP 面板。",
+                "关于 VeloxDev",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information));
+            return menu;
+        }
+
+        private void ShowCommandCenter(Control? owner)
+        {
+            var menu = BuildCommandMenu();
+            if (owner is not null)
+            {
+                menu.ShowBelow(owner);
+                return;
+            }
+
+            menu.ShowAt(PointToScreen(new Point(330, 24)), this);
+        }
+
+        private DarkPopupMenu BuildCommandMenu()
+        {
+            var menu = new DarkPopupMenu(320);
+            menu.AddItem("保存工作流", "Ctrl+S", () => SaveWorkflow(this, EventArgs.Empty));
+            menu.AddItem("加载工作流", "Ctrl+O", () => SelectWorkflow(this, EventArgs.Empty));
+            menu.AddItem("重新载入示例", null, () => ReloadWorkflow(this, EventArgs.Empty));
+            menu.AddSeparator();
+            menu.AddItem("撤销", "Ctrl+Z", () => UndoWorkflow(this, EventArgs.Empty));
+            menu.AddItem("重做", "Ctrl+Y", () => RedoWorkflow(this, EventArgs.Empty));
+            menu.AddSeparator();
+            menu.AddItem("资源管理器", null, () => SelectActivity("explorer"));
+            menu.AddItem("运行", null, () => SelectActivity("run"));
+            menu.AddItem("MCP 服务器", null, () => SelectActivity("mcp"));
+            menu.AddItem("属性", null, () => SelectInspectorPage("properties"));
+            menu.AddItem("AI 助手", null, () => SelectInspectorPage("agent"));
+            menu.AddItem("执行输出", null, () => SelectMainTab("output"));
+            return menu;
+        }
+
+        // ── Main area: editor tabs + canvas / output ─────────────────────────
+
+        private void BuildMainArea()
+        {
+            splitContainer.Panel2.SuspendLayout();
+
+            // The minimap is adopted by the canvas's parent; detach it before the parent is cleared and adopt
+            // it again once the canvas sits in its new host.
+            workflowSurfaceControl.MinimapOverlay = null;
+            splitContainer.Panel2.Controls.Clear();
+            splitContainer.Panel2.BackColor = WorkbenchPalette.Window;
+
+            _rightSplit = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Vertical,
+                FixedPanel = FixedPanel.Panel2,
+                SplitterWidth = 4,
+                BackColor = WorkbenchPalette.Splitter,
+            };
+            _rightSplit.Panel1.Padding = Padding.Empty;
+            _rightSplit.Panel2.Padding = Padding.Empty;
+            _rightSplit.Panel1.BackColor = WorkbenchPalette.Window;
+            _rightSplit.Panel2.BackColor = WorkbenchPalette.Panel;
+
+            var mainArea = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = WorkbenchPalette.Window,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            mainArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            mainArea.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+            mainArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            mainArea.Controls.Add(BuildMainTabStrip(), 0, 0);
+
+            _mainContent = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = WorkbenchPalette.Editor,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            workflowSurfaceControl.Dock = DockStyle.Fill;
+            workflowSurfaceControl.Margin = Padding.Empty;
+            _mainContent.Controls.Add(workflowSurfaceControl);
+
+            _outputPanel = BuildOutputPanel();
+            _outputPanel.Dock = DockStyle.Fill;
+            _outputPanel.Visible = false;
+            _mainContent.Controls.Add(_outputPanel);
+
+            mainArea.Controls.Add(_mainContent, 0, 1);
+            _rightSplit.Panel1.Controls.Add(mainArea);
+
+            _inspectorHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            _rightSplit.Panel2.Controls.Add(_inspectorHost);
+
+            splitContainer.Panel2.Controls.Add(_rightSplit);
+            splitContainer.Panel2.ResumeLayout(true);
+
+            workflowSurfaceControl.MinimapOverlay = minimapOverlay;
+            SelectMainTab("canvas");
+        }
+
+        private Panel BuildMainTabStrip()
+        {
+            var strip = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            _canvasTab = new WorkbenchTabButton { Text = "流程图", Width = 80, IsActive = true };
+            _outputTab = new WorkbenchTabButton { Text = "输出", Width = 64 };
+            _canvasTab.Click += (_, _) => SelectMainTab("canvas");
+            _outputTab.Click += (_, _) => SelectMainTab("output");
+
+            var tabs = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = new Padding(6, 0, 0, 0),
+            };
+            tabs.Controls.Add(_canvasTab);
+            tabs.Controls.Add(_outputTab);
+
+            _mainHintLabel = new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "Ctrl+滚轮缩放",
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = WorkbenchPalette.TextTertiary,
+                BackColor = Color.Transparent,
+                Font = Views.CardTheme.Font(8f),
+                Margin = Padding.Empty,
+            };
+
+            var header = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = new Padding(0, 0, 12, 0),
+            };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            header.Controls.Add(tabs, 0, 0);
+            header.Controls.Add(_mainHintLabel, 1, 0);
+
+            var line = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 1,
+                BackColor = WorkbenchPalette.BorderSubtle,
+                Margin = Padding.Empty,
+            };
+
+            strip.Controls.Add(header);
+            strip.Controls.Add(line);
+            return strip;
+        }
+
+        private Panel BuildOutputPanel()
+        {
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = WorkbenchPalette.Editor,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            _outputRootLabel = CreateHeaderLabel(WorkbenchPalette.AccentText, 9.5f, FontStyle.Bold);
+            _outputStateLabel = CreateHeaderLabel(WorkbenchPalette.TextTertiary, 8.5f);
+            _outputProgressLabel = CreateHeaderLabel(WorkbenchPalette.TextTertiary, 8f);
+
+            var headerFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = new Padding(0, 10, 0, 0),
+            };
+            var outputTitle = CreateHeaderLabel(WorkbenchPalette.TextSecondary, 9.5f, FontStyle.Bold);
+            outputTitle.Text = "执行输出";
+            outputTitle.Margin = new Padding(0, 0, 10, 0);
+            headerFlow.Controls.Add(outputTitle);
+            headerFlow.Controls.Add(_outputRootLabel);
+            headerFlow.Controls.Add(_outputStateLabel);
+            headerFlow.Controls.Add(_outputProgressLabel);
+
+            _outputCountLabel = CreateHeaderLabel(WorkbenchPalette.TextTertiary, 8f);
+            _outputCountLabel.TextAlign = ContentAlignment.MiddleRight;
+            _outputCountLabel.Dock = DockStyle.Fill;
+            _outputCountLabel.Margin = Padding.Empty;
+
+            var header = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = new Padding(12, 0, 12, 0),
+            };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            header.Controls.Add(headerFlow, 0, 0);
+            header.Controls.Add(_outputCountLabel, 1, 0);
+
+            var headerHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            headerHost.Controls.Add(header);
+
+            var heading = CreateHeaderLabel(WorkbenchPalette.AccentText, 9f, FontStyle.Bold);
+            heading.Text = "实际执行顺序";
+            heading.AutoSize = true;
+            heading.Margin = new Padding(0, 8, 0, 6);
+
+            _outputHintLabel = new Label
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                MaximumSize = new Size(760, 0),
+                Text = "运行一次，或让 Agent 编译 / 运行工作流。节点开始、完成、重试、重定向和运行收尾都会按发生顺序落在这里。",
+                ForeColor = WorkbenchPalette.TextTertiary,
+                BackColor = Color.Transparent,
+                Font = Views.CardTheme.Font(8f),
+                Margin = new Padding(0, 0, 0, 6),
+            };
+
+            var body = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = WorkbenchPalette.Editor,
+                Margin = Padding.Empty,
+                Padding = new Padding(12, 0, 12, 12),
+            };
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            body.Controls.Add(heading, 0, 0);
+            body.Controls.Add(_outputHintLabel, 0, 1);
+
+            executionLogListBox.BackColor = WorkbenchPalette.Editor;
+            executionLogListBox.ForeColor = WorkbenchPalette.TextPrimary;
+            executionLogListBox.BorderStyle = BorderStyle.None;
+            executionLogListBox.Dock = DockStyle.Fill;
+            executionLogListBox.IntegralHeight = false;
+            executionLogListBox.HorizontalScrollbar = true;
+            executionLogListBox.Margin = Padding.Empty;
+            executionLogListBox.Font = new Font(Views.CardTheme.MonoFamily, 9.5F);
+            body.Controls.Add(executionLogListBox, 0, 2);
+
+            root.Controls.Add(headerHost, 0, 0);
+            root.Controls.Add(body, 0, 1);
+
+            RefreshOutputHeader();
+            return root;
+        }
+
+        private static Label CreateHeaderLabel(Color color, float size, FontStyle style = FontStyle.Regular) => new()
+        {
+            AutoSize = true,
+            ForeColor = color,
+            BackColor = Color.Transparent,
+            Font = Views.CardTheme.Font(size, style),
+            Margin = new Padding(0, 0, 8, 0),
+        };
+
+        private void SelectMainTab(string view)
+        {
+            var output = view == "output";
+            _mainContent.Visible = true;
+            workflowSurfaceControl.Visible = !output;
+            _outputPanel.Visible = output;
+            _canvasTab.IsActive = !output;
+            _outputTab.IsActive = output;
+
+            if (output) _outputPanel.BringToFront();
+            else
+            {
+                workflowSurfaceControl.BringToFront();
+                WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(workflowSurfaceControl);
+            }
+
+            RefreshOutputHeader();
+            UpdateActivityMarkers();
+            RepaintShellDeferred();
+        }
+
+        // ── Right inspector: 属性 / AI 助手 ──────────────────────────────────
+
+        private void BuildInspector()
+        {
+            _inspectorHost.SuspendLayout();
+
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            _propertiesTab = new WorkbenchTabButton { Text = "属性", Width = 62, IsActive = true };
+            _agentTab = new WorkbenchTabButton { Text = "AI 助手", Width = 78 };
+            _propertiesTab.Click += (_, _) => SelectInspectorPage("properties");
+            _agentTab.Click += (_, _) => SelectInspectorPage("agent");
+
+            var tabs = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = new Padding(6, 0, 0, 0),
+            };
+            tabs.Controls.Add(_propertiesTab);
+            tabs.Controls.Add(_agentTab);
+
+            var header = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            var headerLine = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 1,
+                BackColor = WorkbenchPalette.BorderSubtle,
+            };
+            header.Controls.Add(tabs);
+            header.Controls.Add(headerLine);
+
+            _inspectorPageHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            _propertiesPage = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            _inspector = new WorkflowInspectorPanel { Dock = DockStyle.Fill };
+            _propertiesPage.Controls.Add(_inspector);
+
+            _agentPage = BuildAgentPage();
+            _agentPage.Dock = DockStyle.Fill;
+            _agentPage.Visible = false;
+
+            _inspectorPageHost.Controls.Add(_agentPage);
+            _inspectorPageHost.Controls.Add(_propertiesPage);
+            _propertiesPage.BringToFront();
+
+            layout.Controls.Add(header, 0, 0);
+            layout.Controls.Add(_inspectorPageHost, 0, 1);
+            _inspectorHost.Controls.Add(layout);
+            _inspectorHost.ResumeLayout(true);
+
+            SelectInspectorPage("properties");
+        }
+
+        private Panel BuildAgentPage()
+        {
+            var page = new Panel
+            {
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 5,
+                BackColor = WorkbenchPalette.Panel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            var session = CreateVerticalStack(WorkbenchPalette.Panel);
+            AddStackRow(session, CreateSectionLabel("会话", WorkbenchPalette.Panel));
+
+            StyleCaptionLabel(permissionModeLabel);
+            permissionModeLabel.Font = Views.CardTheme.Font(8.5f);
+            permissionModePicker.BackColor = WorkbenchPalette.Input;
+            permissionModePicker.ForeColor = WorkbenchPalette.TextPrimary;
+            permissionModePicker.FlatStyle = FlatStyle.Flat;
+            permissionModePicker.Font = Views.CardTheme.Font(8.5f);
+            AddStackRow(session, CreatePairRow(permissionModeLabel, permissionModePicker, stretchValue: true, back: WorkbenchPalette.Panel));
+
+            var chatHeader = new Label
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                Text = "Agent 对话",
+                ForeColor = WorkbenchPalette.AccentText,
+                BackColor = Color.Transparent,
+                Font = Views.CardTheme.Font(9f, FontStyle.Bold),
+                Margin = new Padding(12, 4, 12, 6),
+            };
+
+            agentLogListBox.BackColor = WorkbenchPalette.Surface;
+            agentLogListBox.ForeColor = WorkbenchPalette.TextPrimary;
+            agentLogListBox.BorderStyle = BorderStyle.None;
+            agentLogListBox.Dock = DockStyle.Fill;
+            agentLogListBox.IntegralHeight = false;
+            agentLogListBox.HorizontalScrollbar = true;
+            agentLogListBox.Margin = new Padding(12, 0, 12, 0);
+            agentLogListBox.Font = new Font(Views.CardTheme.MonoFamily, 9F);
+
+            agentInputPanel.BackColor = WorkbenchPalette.Panel;
+            agentInputPanel.Dock = DockStyle.Fill;
+            agentInputPanel.Margin = new Padding(12, 6, 12, 6);
+            agentInputTextBox.BackColor = WorkbenchPalette.Input;
+            agentInputTextBox.ForeColor = WorkbenchPalette.TextPrimary;
+            agentInputTextBox.BorderStyle = BorderStyle.FixedSingle;
+            agentInputTextBox.Font = Views.CardTheme.Font(9f);
+
+            StyleSessionButton(agentSendButton);
+            agentSendButton.BackColor = WorkbenchPalette.Accent;
+            agentSendButton.ForeColor = Color.White;
+            agentSendButton.FlatAppearance.BorderSize = 0;
+            agentSendButton.FlatAppearance.MouseOverBackColor = WorkbenchPalette.AccentText;
+            agentSendButton.AutoSize = false;
+            agentSendButton.Width = 70;
+            agentSendButton.Font = Views.CardTheme.Font(9f, FontStyle.Bold);
+
+            _subAgentPanel = new SubAgentPanel
+            {
+                Dock = DockStyle.Top,
+                Margin = new Padding(12, 4, 12, 12),
+            };
+
+            layout.Controls.Add(session, 0, 0);
+            layout.Controls.Add(chatHeader, 0, 1);
+            layout.Controls.Add(agentLogListBox, 0, 2);
+            layout.Controls.Add(agentInputPanel, 0, 3);
+            layout.Controls.Add(_subAgentPanel, 0, 4);
+
+            page.Controls.Add(layout);
+            return page;
+        }
+
+        private void SelectInspectorPage(string view)
+        {
+            _inspectorPage = view;
+            var properties = view == "properties";
+            _propertiesPage.Visible = properties;
+            _agentPage.Visible = !properties;
+            _propertiesTab.IsActive = properties;
+            _agentTab.IsActive = !properties;
+
+            if (properties) _propertiesPage.BringToFront();
+            else _agentPage.BringToFront();
+
+            UpdateActivityMarkers();
+            RepaintShellDeferred();
+        }
+
+        // ── Sidebar: activity bar + explorer / run / MCP ─────────────────────
+
         private void BuildSidebar()
         {
             _toolTip = new ToolTip
@@ -78,7 +868,7 @@ namespace Demo
 
             splitContainer.Panel1.SuspendLayout();
             splitContainer.Panel1.Controls.Clear();
-            splitContainer.Panel1.BackColor = Views.CardTheme.Ground;
+            splitContainer.Panel1.BackColor = WorkbenchPalette.Window;
 
             var sidebarLayout = new TableLayoutPanel
             {
@@ -90,7 +880,7 @@ namespace Demo
                 Padding = Padding.Empty,
             };
             sidebarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+            sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
             sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
             _sidebarHeaderLabel = new Label
@@ -100,7 +890,7 @@ namespace Demo
                 TextAlign = ContentAlignment.MiddleLeft,
                 ForeColor = SidebarText,
                 BackColor = SidebarBack,
-                Font = new Font(Views.CardTheme.UiFamily, 9F, FontStyle.Bold),
+                Font = new Font(Views.CardTheme.UiFamily, 8.5F, FontStyle.Bold),
                 Padding = new Padding(12, 0, 12, 0),
                 Margin = Padding.Empty,
             };
@@ -111,38 +901,53 @@ namespace Demo
 
             BuildExplorerPage();
             BuildRunPage();
-            BuildAgentPage();
             BuildMcpPage();
-            BuildOutputPage();
 
             var activityBar = new Panel { Dock = DockStyle.Fill, BackColor = ActivityBack };
-            var activityStack = new TableLayoutPanel
+
+            var topStack = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 1,
-                RowCount = 5,
+                RowCount = 4,
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BackColor = ActivityBack,
                 Margin = Padding.Empty,
-                Padding = Padding.Empty,
+                Padding = new Padding(0, 6, 0, 0),
             };
-            activityStack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            for (var i = 0; i < 5; i++) activityStack.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+            topStack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            for (var i = 0; i < 4; i++) topStack.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));
+            AddActivityButton(topStack, 0, "explorer", "", "资源管理器");
+            AddActivityButton(topStack, 1, "run", "", "运行");
+            AddActivityButton(topStack, 2, "mcp", "", "MCP 服务器");
+            AddActivityButton(topStack, 3, "output", "", "执行输出");
 
-            AddActivityButton(activityStack, 0, "explorer", "", "资源管理器");
-            AddActivityButton(activityStack, 1, "run", "", "运行");
-            AddActivityButton(activityStack, 2, "agent", "", "Agent 对话");
-            AddActivityButton(activityStack, 3, "mcp", "", "MCP 服务器");
-            AddActivityButton(activityStack, 4, "output", "", "执行输出");
-            activityBar.Controls.Add(activityStack);
+            var bottomStack = new TableLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                ColumnCount = 1,
+                RowCount = 2,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = ActivityBack,
+                Margin = Padding.Empty,
+                Padding = new Padding(0, 0, 0, 6),
+            };
+            bottomStack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            for (var i = 0; i < 2; i++) bottomStack.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));
+            AddActivityButton(bottomStack, 0, "properties", "", "属性");
+            AddActivityButton(bottomStack, 1, "agent", "", "AI 助手");
+
+            activityBar.Controls.Add(topStack);
+            activityBar.Controls.Add(bottomStack);
 
             var rail = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
                 RowCount = 1,
-                BackColor = Views.CardTheme.Ground,
+                BackColor = WorkbenchPalette.Window,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
@@ -153,13 +958,15 @@ namespace Demo
             rail.Controls.Add(sidebarLayout, 1, 0);
 
             splitContainer.Panel1.Controls.Add(rail);
-            splitContainer.Panel1.ResumeLayout(false);
+            splitContainer.Panel1.ResumeLayout(true);
 
             // Both old hosts are empty by now: every named child was re-parented above.
             toolbarPanel.Dispose();
             logTabControl.Dispose();
 
             SelectActivity("explorer");
+            SelectMainTab("canvas");
+            SelectInspectorPage("properties");
         }
 
         private void AddActivityButton(TableLayoutPanel stack, int row, string key, string glyph, string tooltip)
@@ -190,9 +997,20 @@ namespace Demo
             if (sender is Control { Tag: string key }) SelectActivity(key);
         }
 
-        /// <summary>Shows one page at a time and moves the activity bar's active marker and the header.</summary>
         private void SelectActivity(string key)
         {
+            switch (key)
+            {
+                case "properties":
+                case "agent":
+                    SelectInspectorPage(key);
+                    return;
+                case "output":
+                    SelectMainTab("output");
+                    return;
+            }
+
+            _sidebarActivity = key;
             foreach (var (name, page) in _sidebarPages)
                 page.Visible = name == key;
 
@@ -201,15 +1019,27 @@ namespace Demo
             _sidebarHeaderLabel.Text = key switch
             {
                 "run" => "运行",
-                "agent" => "AGENT",
-                "mcp" => "MCP",
-                "output" => "输出",
+                "mcp" => "MCP 服务器",
                 _ => "资源管理器",
             };
 
+            UpdateActivityMarkers();
+            RepaintShellDeferred();
+        }
+
+        private void UpdateActivityMarkers()
+        {
+            if (_activityButtons.Count == 0) return;
+
             foreach (var (name, button) in _activityButtons)
             {
-                button.IsActive = name == key;
+                button.IsActive = name switch
+                {
+                    "explorer" or "run" or "mcp" => _sidebarActivity == name,
+                    "output" => _outputTab is { IsActive: true },
+                    "properties" or "agent" => _inspectorPage == name,
+                    _ => false,
+                };
                 button.Invalidate();
             }
         }
@@ -223,7 +1053,7 @@ namespace Demo
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 5,
+                RowCount = 4,
                 BackColor = SidebarBack,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
@@ -233,23 +1063,35 @@ namespace Demo
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            titleLabel.AutoSize = true;
-            titleLabel.ForeColor = SidebarValue;
-            titleLabel.BackColor = Color.Transparent;
-            titleLabel.Margin = new Padding(12, 12, 12, 0);
-            layout.Controls.Add(titleLabel, 0, 0);
-
+            // The workbench already has a brand + title strip; the old sidebar brand made the
+            // explorer read as a second application header. Only the actions remain here, as
+            // glyph buttons in the same 24px rhythm as the Avalonia panel header. The old
+            // "Load Workflow Demo" button duplicated the refresh action and is no longer added.
             var actions = CreateButtonFlow();
-            actions.Padding = new Padding(10, 2, 10, 0);
-            foreach (var button in new[] { saveButton, selectButton, undoButton, redoButton, reloadButton, loadDemoButton })
+            actions.Padding = new Padding(10, 8, 10, 0);
+            foreach (var (button, glyph, tip) in new[]
+                     {
+                         (saveButton, "", "保存工作流"),
+                         (selectButton, "", "加载工作流"),
+                         (undoButton, "", "撤销"),
+                         (redoButton, "", "重做"),
+                         (reloadButton, "", "重新载入示例"),
+                     })
             {
                 StyleSidebarActionButton(button);
+                button.Text = glyph;
+                button.Font = new Font("Segoe Fluent Icons", 9.5F);
+                button.AutoSize = false;
+                button.Size = new Size(24, 24);
+                button.Padding = Padding.Empty;
+                button.Margin = new Padding(0, 0, 4, 0);
+                button.AccessibleName = tip;
+                _toolTip.SetToolTip(button, tip);
                 actions.Controls.Add(button);
             }
-            layout.Controls.Add(actions, 0, 1);
-
+            layout.Controls.Add(actions, 0, 0);
+            layout.Controls.Add(CreateMinimapRow(), 0, 1);
             layout.Controls.Add(CreateSectionLabel("元素"), 0, 2);
 
             _explorerElementHost = new Panel
@@ -260,126 +1102,79 @@ namespace Demo
             };
             layout.Controls.Add(_explorerElementHost, 0, 3);
 
-            summaryLabel.ForeColor = SidebarMuted;
-            summaryLabel.BackColor = Color.Transparent;
-            summaryLabel.Visible = false;
-            layout.Controls.Add(summaryLabel, 0, 4);
-
             page.Controls.Add(layout);
+        }
+
+        private Control CreateMinimapRow()
+        {
+            var label = new Label
+            {
+                AutoSize = true,
+                Text = "小地图",
+                ForeColor = SidebarText,
+                BackColor = Color.Transparent,
+                Font = Views.CardTheme.Font(8.5f),
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, 0, 8, 0),
+            };
+
+            var toggle = new GhostButton
+            {
+                Text = "开",
+                TextColor = Views.CardTheme.ActionCompile,
+                AutoSize = false,
+                Size = new Size(44, 22),
+                Anchor = AnchorStyles.Left,
+                Margin = Padding.Empty,
+            };
+            toggle.Click += (_, _) =>
+            {
+                var visible = !minimapOverlay.IsMinimapVisible;
+                minimapOverlay.IsMinimapVisible = visible;
+                minimapOverlay.Visible = visible;
+                minimapOverlay.Invalidate();
+                toggle.Text = visible ? "开" : "关";
+                toggle.TextColor = visible ? Views.CardTheme.ActionCompile : Views.CardTheme.DisabledText;
+            };
+
+            var row = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                ColumnCount = 2,
+                RowCount = 1,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = SidebarBack,
+                Margin = new Padding(12, 2, 12, 2),
+                Padding = Padding.Empty,
+            };
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            row.Controls.Add(label, 0, 0);
+            row.Controls.Add(toggle, 1, 0);
+            return row;
         }
 
         private void BuildRunPage()
         {
             var page = CreateSidebarPage("run");
-            var scroll = new Panel { Dock = DockStyle.Fill, BackColor = SidebarBack, AutoScroll = true };
-            var stack = CreateVerticalStack();
-
-            AddStackRow(stack, CreateSectionLabel("运行控制"));
-
-            StyleCaptionLabel(runControlLabel);
-            StyleValueLabel(runGateStateLabel);
-            StyleCaptionLabel(statusLabel);
-            StyleValueLabel(statusValueLabel);
-            AddStackRow(stack, CreatePairRow(runControlLabel, runGateStateLabel));
-            AddStackRow(stack, CreatePairRow(statusLabel, statusValueLabel));
-
-            var runButtons = CreateButtonFlow();
-            foreach (var button in new[] { stopButton, pauseButton, resumeButton, continueFromCheckpointButton })
-            {
-                StyleSidebarControlButton(button);
-                runButtons.Controls.Add(button);
-            }
-            stopButton.ForeColor = Views.CardTheme.ActionStop;
-            AddStackRow(stack, runButtons);
-
-            AddStackRow(stack, CreateSectionLabel("画布"));
-            StyleCaptionLabel(nodeCountCaptionLabel);
-            StyleValueLabel(nodeCountLabel);
-            StyleCaptionLabel(visibleCountCaptionLabel);
-            StyleValueLabel(visibleCountLabel);
-            AddStackRow(stack, CreatePairRow(nodeCountCaptionLabel, nodeCountLabel));
-            AddStackRow(stack, CreatePairRow(visibleCountCaptionLabel, visibleCountLabel));
-
-            AddStackRow(stack, CreateSectionLabel("本次运行"));
-            StyleCaptionLabel(seedLabel);
-            seedTextBox.BackColor = SidebarField;
-            seedTextBox.ForeColor = SidebarValue;
-            seedTextBox.BorderStyle = BorderStyle.FixedSingle;
-            AddStackRow(stack, CreatePairRow(seedLabel, seedTextBox, stretchValue: true));
-
-            scroll.Controls.Add(stack);
-            page.Controls.Add(scroll);
-        }
-
-        private void BuildAgentPage()
-        {
-            var page = CreateSidebarPage("agent");
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 3,
+                RowCount = 1,
                 BackColor = SidebarBack,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            // 会话权限与 Agent 放一起：模式决定模型能做什么，不决定一次运行怎么被驱动。
-            var session = CreateVerticalStack();
-            AddStackRow(session, CreateSectionLabel("会话"));
-            StyleCaptionLabel(permissionModeLabel);
-            permissionModePicker.BackColor = SidebarField;
-            permissionModePicker.ForeColor = SidebarValue;
-            permissionModePicker.FlatStyle = FlatStyle.Flat;
-            AddStackRow(session, CreatePairRow(permissionModeLabel, permissionModePicker, stretchValue: true));
-            layout.Controls.Add(session, 0, 0);
-
-            var chatHeader = new Label
-            {
-                Text = "Agent 对话",
-                AutoSize = true,
-                ForeColor = SidebarAccent,
-                BackColor = Color.Transparent,
-                Font = new Font(Views.CardTheme.UiFamily, 9F, FontStyle.Bold),
-                Margin = new Padding(12, 6, 12, 4),
-            };
-            layout.Controls.Add(chatHeader, 0, 1);
-
-            var chat = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                BackColor = SidebarBack,
-                Margin = Padding.Empty,
-                Padding = new Padding(8, 0, 8, 8),
-            };
-            chat.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            chat.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            chat.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
-
-            agentLogListBox.BackColor = SidebarField;
-            agentLogListBox.ForeColor = SidebarValue;
-            agentLogListBox.BorderStyle = BorderStyle.FixedSingle;
-            agentLogListBox.Dock = DockStyle.Fill;
-
-            agentInputPanel.BackColor = SidebarBack;
-            agentInputPanel.Dock = DockStyle.Fill;
-            agentInputTextBox.BackColor = SidebarField;
-            agentInputTextBox.ForeColor = Color.White;
-            agentInputTextBox.BorderStyle = BorderStyle.FixedSingle;
-
-            StyleSidebarControlButton(agentSendButton);
-            agentSendButton.AutoSize = false;
-            agentSendButton.Width = 70;
-
-            chat.Controls.Add(agentLogListBox, 0, 0);
-            chat.Controls.Add(agentInputPanel, 0, 1);
-            layout.Controls.Add(chat, 0, 2);
+            // The seed belongs to the controller card (where it is edited); a second field under the run
+            // manager was a second copy of the same state and did not exist in the Avalonia shell.
+            _runManager = new RunManagerPanel { Dock = DockStyle.Fill };
+            layout.Controls.Add(_runManager, 0, 0);
 
             page.Controls.Add(layout);
         }
@@ -411,35 +1206,9 @@ namespace Demo
             page.Controls.Add(layout);
         }
 
-        private void BuildOutputPage()
-        {
-            var page = CreateSidebarPage("output");
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                BackColor = SidebarBack,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty,
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            layout.Controls.Add(CreateSectionLabel("执行输出"), 0, 0);
-
-            executionLogListBox.BackColor = SidebarField;
-            executionLogListBox.ForeColor = SidebarValue;
-            executionLogListBox.BorderStyle = BorderStyle.FixedSingle;
-            executionLogListBox.Dock = DockStyle.Fill;
-            executionLogListBox.Margin = new Padding(8, 0, 8, 8);
-            layout.Controls.Add(executionLogListBox, 0, 1);
-            page.Controls.Add(layout);
-        }
-
         // ── Sidebar building blocks ─────────────────────────────────────────
 
-        private static TableLayoutPanel CreateVerticalStack()
+        private static TableLayoutPanel CreateVerticalStack(Color? back = null)
         {
             var stack = new TableLayoutPanel
             {
@@ -448,7 +1217,7 @@ namespace Demo
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 1,
                 RowCount = 0,
-                BackColor = SidebarBack,
+                BackColor = back ?? SidebarBack,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
@@ -465,19 +1234,20 @@ namespace Demo
             stack.Controls.Add(control, 0, row);
         }
 
-        private static Label CreateSectionLabel(string text) => new()
+        private static Label CreateSectionLabel(string text, Color? back = null) => new()
         {
             Text = text,
             AutoSize = true,
             Dock = DockStyle.Top,
-            ForeColor = Views.CardTheme.FromHex("#BBBBBB"),
-            BackColor = Color.Transparent,
-            Font = new Font(Views.CardTheme.UiFamily, 9F, FontStyle.Bold),
+            ForeColor = WorkbenchPalette.TextSecondary,
+            BackColor = back ?? SidebarBack,
+            Font = new Font(Views.CardTheme.UiFamily, 8.5F, FontStyle.Bold),
             Margin = new Padding(12, 14, 12, 6),
         };
 
-        private static TableLayoutPanel CreatePairRow(Control caption, Control value, bool stretchValue = false)
+        private static TableLayoutPanel CreatePairRow(Control caption, Control value, bool stretchValue = false, Color? back = null)
         {
+            var background = back ?? SidebarBack;
             caption.AutoSize = true;
             caption.Anchor = AnchorStyles.Left;
             caption.Margin = new Padding(0, 0, 8, 0);
@@ -499,7 +1269,7 @@ namespace Demo
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 2,
                 RowCount = 1,
-                BackColor = SidebarBack,
+                BackColor = background,
                 Margin = new Padding(12, 2, 12, 2),
                 Padding = Padding.Empty,
             };
@@ -537,9 +1307,10 @@ namespace Demo
             button.Padding = new Padding(8, 3, 8, 3);
             button.Margin = new Padding(0, 0, 6, 6);
             button.Cursor = Cursors.Hand;
+            button.Font = Views.CardTheme.Font(8.5f);
         }
 
-        private static void StyleSidebarControlButton(Button button)
+        private static void StyleSessionButton(Button button)
         {
             button.FlatStyle = FlatStyle.Flat;
             button.FlatAppearance.BorderSize = 1;
@@ -549,22 +1320,12 @@ namespace Demo
             button.BackColor = SidebarButtonBack;
             button.ForeColor = SidebarText;
             button.UseVisualStyleBackColor = false;
-            button.AutoSize = true;
-            button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            button.Padding = new Padding(8, 3, 8, 3);
-            button.Margin = new Padding(0, 0, 6, 6);
             button.Cursor = Cursors.Hand;
         }
 
         private static void StyleCaptionLabel(Label label)
         {
             label.ForeColor = SidebarText;
-            label.BackColor = Color.Transparent;
-        }
-
-        private static void StyleValueLabel(Label label)
-        {
-            label.ForeColor = SidebarValue;
             label.BackColor = Color.Transparent;
         }
 
@@ -651,22 +1412,26 @@ namespace Demo
             if (_demo is not null)
             {
                 _demo.Controller.PropertyChanged -= OnControllerPropertyChanged;
-                _demo.Controller.RunCommand.Exited -= OnRunCommandExited;
-                _demo.Controller.ResumeCommand.Exited -= OnRunCommandExited;
                 _demo.Tree.ExecutionLog.CollectionChanged -= OnExecutionLogCollectionChanged;
                 _demo.Tree.AgentLog.CollectionChanged -= OnAgentLogCollectionChanged;
                 _demo.Tree.Nodes.CollectionChanged -= OnNodesCollectionChanged;
+                _demo.Tree.CompiledStructure.CollectionChanged -= OnCompiledStructureChanged;
+                _demo.Tree.PropertyChanged -= OnTreePropertyChanged;
+                _demo.Tree.Runs.PropertyChanged -= OnRunsPropertyChanged;
+                if (_outputTask is not null) _outputTask.PropertyChanged -= OnOutputTaskPropertyChanged;
+                _outputTask = null;
                 _demo.Tree.GetHelper().VisibleItems.CollectionChanged -= OnVisibleItemsChanged;
                 UnsubscribeHelper(_demo);
             }
 
             _demo = session;
             _demo.Controller.PropertyChanged += OnControllerPropertyChanged;
-            _demo.Controller.RunCommand.Exited += OnRunCommandExited;
-            _demo.Controller.ResumeCommand.Exited += OnRunCommandExited;
             _demo.Tree.ExecutionLog.CollectionChanged += OnExecutionLogCollectionChanged;
             _demo.Tree.AgentLog.CollectionChanged += OnAgentLogCollectionChanged;
             _demo.Tree.Nodes.CollectionChanged += OnNodesCollectionChanged;
+            _demo.Tree.CompiledStructure.CollectionChanged += OnCompiledStructureChanged;
+            _demo.Tree.PropertyChanged += OnTreePropertyChanged;
+            _demo.Tree.Runs.PropertyChanged += OnRunsPropertyChanged;
             SubscribeHelper(_demo);
             InitializePermissionMode();
             SetupMcpStatusTab();
@@ -681,19 +1446,34 @@ namespace Demo
 
             workflowSurfaceControl.Session = _demo;
 
+            _runManager.Catalog = _demo.Tree.Runs;
+            _inspector.Tree = _demo.Tree;
+            SyncSubAgents();
+
             ReloadExecutionLog();
-            UpdateControllerState();
-            RefreshRunControls();
+            ReloadAgentLog();
+            RefreshOutputHeader();
+            UpdateWorkbenchStatus();
+            RepaintShellDeferred();
+        }
+
+        private void SyncSubAgents()
+        {
+            var scope = (_demo?.Tree.GetHelper() as AgentHelper)?.SubAgents;
+            if (ReferenceEquals(scope, _attachedSubAgents)) return;
+
+            _attachedSubAgents = scope;
+            _subAgentPanel.SetScope(scope);
         }
 
         private void SubscribeHelper(WorkflowDemoSession session)
         {
-            if (session.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            if (session.Tree.GetHelper() is not AgentHelper helper) return;
 
             // 一个 surface 一个合并器：换演示会话会重新订阅，但合并器跟着窗体走，不该重建。
             // 这里的线程跳必须异步：BeginInvoke 只把委托排进消息泵，调用方立刻返回，
             // 排进去的刷新才有机会把中间那些请求吃掉。
-            _surfaceRefresh ??= new ViewModels.Workflow.Helper.CoalescedRefresh(
+            _surfaceRefresh ??= new CoalescedRefresh(
                 () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(workflowSurfaceControl),
                 action => BeginInvoke(action));
 
@@ -705,7 +1485,7 @@ namespace Demo
 
         private void UnsubscribeHelper(WorkflowDemoSession session)
         {
-            if (session.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            if (session.Tree.GetHelper() is not AgentHelper helper) return;
             helper.SelectionHandler = null;
             helper.ConfirmationHandler = null;
             helper.ToolCalled -= OnAgentToolCalled;
@@ -716,32 +1496,19 @@ namespace Demo
         /// <summary>
         /// Fills the permission-mode picker with every mode, and starts it on the one the helper was built with.
         /// </summary>
-        /// <remarks>
-        /// Selecting the current mode fires the change handler, which sets the same mode again —
-        /// <c>SetPermissionMode</c> reports that nothing moved and does nothing. Cheaper than arranging not to.
-        /// <para>
-        /// Re-run on every tree swap rather than once at construction: a tree loaded from a file arrives with its
-        /// own helper at that helper's default mode, and a picker still showing the previous one would be a lie
-        /// about the session on screen.
-        /// </para>
-        /// </remarks>
         private void InitializePermissionMode()
         {
-            if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            if (_demo?.Tree.GetHelper() is not AgentHelper helper) return;
 
             permissionModePicker.Items.Clear();
             permissionModePicker.Items.AddRange([.. Enum.GetValues<AgentPermissionMode>().Cast<object>()]);
             permissionModePicker.SelectedItem = helper.PermissionMode;
         }
 
-        /// <summary>
-        /// Moves the session to the mode the user picked. There is nothing to rebuild: the gate reads the policy
-        /// per call, so the very next tool call obeys the new mode, and the prompt is re-rendered next turn.
-        /// </summary>
         private void OnPermissionModeChanged(object? sender, EventArgs e)
         {
             if (permissionModePicker.SelectedItem is not AgentPermissionMode mode) return;
-            if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            if (_demo?.Tree.GetHelper() is not AgentHelper helper) return;
 
             helper.PermissionMode = mode;
             helper.Scope?.SetPermissionMode(mode);
@@ -753,7 +1520,7 @@ namespace Demo
 
         private void SetupMcpStatusTab()
         {
-            if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            if (_demo?.Tree.GetHelper() is not AgentHelper helper) return;
 
             if (_mcpStatusPanel is null)
             {
@@ -779,12 +1546,12 @@ namespace Demo
 
         private void OnMcpStatusChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            if (_demo?.Tree.GetHelper() is not AgentHelper helper) return;
             if (InvokeRequired) { BeginInvoke(() => OnMcpStatusChanged(sender, e)); return; }
             RefreshMcpStatusPanel(helper);
         }
 
-        private void RefreshMcpStatusPanel(ViewModels.Workflow.Helper.AgentHelper helper)
+        private void RefreshMcpStatusPanel(AgentHelper helper)
         {
             if (_mcpStatusPanel is null) return;
             var status = helper.Mcp.Status;
@@ -822,8 +1589,7 @@ namespace Demo
             }
 
             var reload = new Button { Text = "重载", AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
-            StyleSidebarControlButton(reload);
-            reload.AutoSize = true;
+            StyleSidebarActionButton(reload);
             reload.Margin = new Padding(0, 8, 0, 0);
             reload.Click += OnReloadMcp;
             _mcpStatusPanel.Controls.Add(reload);
@@ -831,24 +1597,31 @@ namespace Demo
 
         private async void OnReloadMcp(object? sender, EventArgs e)
         {
-            if (_demo?.Tree.GetHelper() is ViewModels.Workflow.Helper.AgentHelper helper)
+            if (_demo?.Tree.GetHelper() is AgentHelper helper)
                 await helper.LoadMcpServersAsync();
         }
 
         // ── 元素列表 ──────────────────────────────────────────────────────────
-
-        private Views.Workflow.WorkflowElementPanel? _elementPanel;
 
         // 元素面板只建一次；树每换一次（重置示例、载入文件）都重绑到新树 —— 旧树的集合事件由目录自己退订。
         private void SetupElementTab()
         {
             if (_elementPanel is null)
             {
-                _elementPanel = new Views.Workflow.WorkflowElementPanel { Dock = DockStyle.Fill };
+                _elementPanel = new WorkflowElementPanel { Dock = DockStyle.Fill };
+                _elementPanel.SelectedElementChanged += OnElementSelected;
                 _explorerElementHost.Controls.Add(_elementPanel);
             }
 
             _elementPanel.Tree = _demo?.Tree;
+            _elementPanel.SetSelectedElement(_demo?.Tree.SelectedElement);
+        }
+
+        private void OnElementSelected(object? sender, WorkflowElementEntry? entry)
+        {
+            if (_demo is null) return;
+            if (ReferenceEquals(_demo.Tree.SelectedElement, entry)) return;
+            _demo.Tree.SelectedElement = entry;
         }
 
         private void OnAgentToolCalled() => _surfaceRefresh?.Request();
@@ -887,25 +1660,41 @@ namespace Demo
             {
                 if (InvokeRequired)
                 {
-                    BeginInvoke(UpdateControllerState);
+                    BeginInvoke(UpdateWorkbenchStatus);
                     return;
                 }
 
-                UpdateControllerState();
+                UpdateWorkbenchStatus();
             }
         }
 
         private void OnNodesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            if (InvokeRequired) { BeginInvoke(UpdateControllerState); return; }
-            UpdateControllerState();
+            if (InvokeRequired) { BeginInvoke(UpdateWorkbenchStatus); return; }
+            UpdateWorkbenchStatus();
         }
 
-        // 可见集随缩放/平移/滚动在变，而 Nodes 不动 —— 少了这一条，工具栏那个计数会一直停在启动时的值
+        // 可见集随缩放/平移/滚动在变，而 Nodes 不动 —— 少了这一条，状态栏那个计数会一直停在启动时的值
         private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            if (InvokeRequired) { BeginInvoke(UpdateControllerState); return; }
-            UpdateControllerState();
+            if (InvokeRequired) { BeginInvoke(UpdateWorkbenchStatus); return; }
+            UpdateWorkbenchStatus();
+        }
+
+        private void OnCompiledStructureChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (InvokeRequired) { BeginInvoke(UpdateWorkbenchStatus); return; }
+            UpdateWorkbenchStatus();
+        }
+
+        private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (InvokeRequired) { BeginInvoke(UpdateWorkbenchStatus); return; }
+
+            UpdateWorkbenchStatus();
+
+            if (e.PropertyName is nameof(TreeViewModel.SelectedElement) or nameof(TreeViewModel.HasSelectedElement))
+                _elementPanel?.SetSelectedElement(_demo?.Tree.SelectedElement);
         }
 
         private void OnExecutionLogCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -941,49 +1730,80 @@ namespace Demo
             }
 
             executionLogListBox.EndUpdate();
+            RefreshOutputHeader();
         }
 
-        private void UpdateControllerState()
+        private void OnRunsPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            var isActive = _demo?.Controller.IsActive == true;
-            stopButton.Enabled = isActive;
-            statusValueLabel.Text = isActive ? "运行中" : "空闲";
-            nodeCountLabel.Text = _demo?.Tree.TotalElementText ?? "0";
-            visibleCountLabel.Text = _demo?.Tree.VisibleElementText ?? "0";
+            if (InvokeRequired) { BeginInvoke(RefreshOutputHeader); return; }
+            RefreshOutputHeader();
+            UpdateWorkbenchStatus();
+        }
+
+        private void OnOutputTaskPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (InvokeRequired) { BeginInvoke(RefreshOutputHeader); return; }
+            RefreshOutputHeader();
+        }
+
+        private void RefreshOutputHeader()
+        {
+            if (_outputRootLabel is null) return;
+
+            var selected = _demo?.Tree.Runs.Selected;
+            if (!ReferenceEquals(selected, _outputTask))
+            {
+                if (_outputTask is not null) _outputTask.PropertyChanged -= OnOutputTaskPropertyChanged;
+                _outputTask = selected;
+                if (_outputTask is not null) _outputTask.PropertyChanged += OnOutputTaskPropertyChanged;
+            }
+
+            var hasSelection = selected is not null;
+            _outputRootLabel.Visible = hasSelection;
+            _outputStateLabel.Visible = hasSelection;
+            _outputProgressLabel.Visible = hasSelection;
+            _outputHintLabel.Visible = !hasSelection;
+
+            _outputRootLabel.Text = selected?.RootLabel ?? string.Empty;
+            _outputStateLabel.Text = selected?.StateText ?? string.Empty;
+            _outputProgressLabel.Text = selected?.ProgressText ?? string.Empty;
+            _outputCountLabel.Text = $"已记录 {_demo?.Tree.ExecutionLog.Count ?? 0} 行";
+        }
+
+        private void UpdateWorkbenchStatus()
+        {
+            var tree = _demo?.Tree;
+            var running = tree?.IsWorkflowRunning == true;
+
+            _statusBar.SetState(running);
+            _statusBar.Compiled.Text = $"编译 {tree?.CompiledStructure.Count ?? 0} 段";
+            _statusBar.Elements.Text = $"元素 {tree?.TotalElementText ?? "0"}";
+            _statusBar.VisibleCount.Text = $"可见 {tree?.VisibleElementText ?? "0"}";
+            _mainHintLabel.Text = $"Ctrl+滚轮缩放 · {tree?.TotalElementText ?? "0"}";
+            UpdateZoom();
+        }
+
+        private void UpdateZoom()
+        {
+            var scale = _demo?.Tree.Layout.Scale.Horizontal ?? 1d;
+            if (scale <= 0d) scale = 1d;
+            _statusBar.Zoom.Text = $"{scale * 100d:0}%";
+        }
+
+        private void OnUiTimerTick(object? sender, EventArgs e)
+        {
+            UpdateZoom();
+            SyncSubAgents();
         }
 
         // 门与检查点都在会话上、不在树上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做
-        private void RefreshRunControls()
-        {
-            continueFromCheckpointButton.Enabled = _demo?.HasCheckpoint == true;
-            runGateStateLabel.Text = _demo?.Gate.IsPaused == true ? "已暂停" : "空闲";
-        }
+        private void PauseWorkflow(object? sender, EventArgs e) => _demo?.Tree.Runs.Selected?.Pause();
 
-        // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。Exited 是在线程池上发的，所以回到 UI 线程再改控件
-        private void OnRunCommandExited(CommandEventArgs e)
-        {
-            if (InvokeRequired) { BeginInvoke(RefreshRunControls); return; }
-            RefreshRunControls();
-        }
-
-        private void PauseWorkflow(object? sender, EventArgs e)
-        {
-            if (_demo is null) return;
-            _demo.Gate.Pause();
-            runGateStateLabel.Text = "已暂停：停在下一个节点边界";
-        }
-
-        private void ResumeWorkflow(object? sender, EventArgs e)
-        {
-            if (_demo is null) return;
-            _demo.Gate.Resume();
-            runGateStateLabel.Text = "运行中";
-        }
+        private void ResumeWorkflow(object? sender, EventArgs e) => _demo?.Tree.Runs.Selected?.Resume();
 
         private async void ContinueFromCheckpoint(object? sender, EventArgs e)
         {
             if (_demo is null) return;
-            runGateStateLabel.Text = "从检查点继续…";
             await _demo.Controller.ResumeCommand.ExecuteAsync(null);
         }
 
@@ -1078,8 +1898,8 @@ namespace Demo
             }
 
             // 运行时绘制状态，不是设计器属性；显式隐藏，WFO1000 才不会要求为它生成序列化代码。
-            [System.ComponentModel.Browsable(false)]
-            [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+            [Browsable(false)]
+            [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
             internal bool IsActive { get; set; }
 
             protected override void OnMouseEnter(EventArgs e)

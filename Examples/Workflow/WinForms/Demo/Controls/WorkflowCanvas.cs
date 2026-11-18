@@ -212,7 +212,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     public WorkflowCanvas()
     {
         DoubleBuffered = true;
-        BackColor = Color.FromArgb(30, 30, 30); // #1E1E1E template grid decorator default background
+        BackColor = Color.FromArgb(23, 23, 23); // #1E1E1E template grid decorator default background
         AutoScroll = true;
 
         // 这块画布是自己组装的：滚动容器、画布、网格装饰器都是它自己 —— 现在把**对象**交出去，
@@ -508,6 +508,27 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     private void OnRulerOverlayHostChanged(object? sender, EventArgs e) => SyncRulerOverlay();
     private void OnRulerOverlayOwnerMoved(object? sender, EventArgs e) => SyncRulerOverlay();
+
+    // The ruler is an owned popup, not a child, so hiding the canvas does not hide it. Without this a host that
+    // switches the canvas out of the main area (the workbench's 输出 tab) leaves the band and its tick labels
+    // floating over the page that replaced the canvas.
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+
+        if (_rulerOverlay is null || _rulerOverlay.IsDisposed) return;
+
+        if (Visible)
+        {
+            if (FindForm() is { } owner && !owner.IsDisposed && !_rulerOverlay.Visible)
+                _rulerOverlay.Show(owner);
+            SyncRulerOverlay();
+        }
+        else
+        {
+            _rulerOverlay.Hide();
+        }
+    }
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -1311,9 +1332,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     private void DrawGrid(Graphics g, PointF origin)
     {
         // Colors match the WinForms grid decorator template defaults (#2A2D2E / #3A3D40 / axis #4D4D4D).
-        using var minor = new Pen(Color.FromArgb(42, 45, 46), 1f);
-        using var major = new Pen(Color.FromArgb(58, 61, 64), 1f);
-        using var axis = new Pen(Color.FromArgb(77, 77, 77), 1.2f);
+        using var minor = new Pen(Color.FromArgb(35, 35, 35), 1f);
+        using var major = new Pen(Color.FromArgb(46, 46, 46), 1f);
+        using var axis = new Pen(Color.FromArgb(58, 58, 58), 1.2f);
 
         var cw = ClientSize.Width;
         var ch = ClientSize.Height;
@@ -1527,11 +1548,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // over cards AND grid, so at the other frameworks' 0xC8 the grid under the band would read
         // only ~3.5 lum deep (imperceptible); 0x70 keeps the tint but lets the grid pass visibly
         // under the band.
-        private readonly Color _rulerBackground = Color.FromArgb(112, 37, 37, 38);
-        private readonly Color _labelColor = Color.FromArgb(136, 136, 136);
-        private readonly Color _tickColor = Color.FromArgb(85, 85, 85);
-        private readonly Color _axisColor = Color.FromArgb(77, 77, 77);
-        private readonly Color _dividerColor = Color.FromArgb(58, 61, 64);
+        private readonly Color _rulerBackground = Color.FromArgb(210, 31, 31, 31);
+        private readonly Color _labelColor = Color.FromArgb(110, 118, 129);
+        private readonly Color _tickColor = Color.FromArgb(74, 74, 74);
+        private readonly Color _axisColor = Color.FromArgb(58, 58, 58);
+        private readonly Color _dividerColor = Color.FromArgb(46, 46, 46);
         private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
 
         private Bitmap? _surface;

@@ -23,11 +23,11 @@ public sealed class InfoOverlay : Panel
     private const int LineGap = 4;
     private const int RightZone = 66; // 给右下角的复制按钮留位置
 
-    private static readonly Color s_bg = Color.FromArgb(0xFF, 0x12, 0x15, 0x1B);
-    private static readonly Color s_border = Color.FromArgb(0xFF, 0x8E, 0xA3, 0xB8);
-    private static readonly Color s_text = Color.FromArgb(0xDD, 0xE4, 0xEA);
-    private static readonly Color s_btnBg = Color.FromArgb(0x1E, 0x3A, 0x5F);
-    private static readonly Color s_btnFg = Color.FromArgb(0x7E, 0xC8, 0xFF);
+    private static readonly Color s_bg = Color.FromArgb(0xFF, 0x22, 0x22, 0x22);
+    private static readonly Color s_border = Color.FromArgb(0xFF, 0x40, 0x40, 0x40);
+    private static readonly Color s_text = Color.FromArgb(0xA0, 0xA0, 0xA0);
+    private static readonly Color s_btnBg = Color.FromArgb(0x2A, 0x2A, 0x2A);
+    private static readonly Color s_btnFg = Color.FromArgb(0x4F, 0xC1, 0xFF);
 
     private readonly Font _font = new("Segoe UI", 9f);
     private readonly Button _copy;
