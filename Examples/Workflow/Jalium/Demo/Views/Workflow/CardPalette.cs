@@ -10,60 +10,60 @@ internal static class CardPalette
 {
     // ── 卡面 ────────────────────────────────────────────────────────────────
 
-    public static readonly Color Surface = Rgb(0x16, 0x1B, 0x22);
+    public static readonly Color Surface = Rgb(0x25, 0x25, 0x26);
 
     // 发丝边。1px，圆角 8。
-    public static readonly Color Border = Rgb(0x2A, 0x31, 0x3C);
+    public static readonly Color Border = Rgb(0x3C, 0x3C, 0x3C);
 
     // 悬停只抬亮，不换色 —— 动作语义已经写在各自的前景色里了。
-    public static readonly Color BorderHover = Rgb(0x3A, 0x45, 0x53);
+    public static readonly Color BorderHover = Rgb(0x56, 0x56, 0x56);
 
     // 压暗而不是抹掉，形状仍是同一条发丝线。
-    public static readonly Color BorderDisabled = Rgb(0x23, 0x2A, 0x34);
+    public static readonly Color BorderDisabled = Rgb(0x2E, 0x2E, 0x2E);
 
-    public static readonly Color Divider = Rgb(0x22, 0x2A, 0x34);
-    public static readonly Color TitleText = Rgb(0xE6, 0xEA, 0xF2);
-    public static readonly Color LabelText = Rgb(0x7C, 0x87, 0x98);
-    public static readonly Color ValueText = Rgb(0xD6, 0xDC, 0xE6);
+    public static readonly Color Divider = Rgb(0x26, 0x26, 0x26);
+    public static readonly Color TitleText = Rgb(0xE7, 0xE7, 0xE7);
+    public static readonly Color LabelText = Rgb(0x6E, 0x76, 0x81);
+    public static readonly Color ValueText = Rgb(0xA0, 0xA0, 0xA0);
 
     // 比卡面更深一档，输入框因此读作「凹进去」。
-    public static readonly Color FieldSurface = Rgb(0x0E, 0x12, 0x18);
+    public static readonly Color FieldSurface = Rgb(0x2A, 0x2A, 0x2A);
 
-    public static readonly Color HoverSurface = Rgb(0x1E, 0x27, 0x31);
-    public static readonly Color DisabledText = Rgb(0x5A, 0x64, 0x74);
+    public static readonly Color HoverSurface = Rgb(0x2A, 0x2D, 0x2E);
+    public static readonly Color DisabledText = Rgb(0x58, 0x58, 0x58);
 
     // ── 类型色条与执行序号 ──────────────────────────────────────────────────
 
-    public static readonly Color AccentController = Rgb(0x38, 0xBD, 0xF8);
-    public static readonly Color AccentTimerPython = Rgb(0x6E, 0xC6, 0xFF);
-    public static readonly Color AccentEnum = Rgb(0xD6, 0xA0, 0xFF);
+    public static readonly Color AccentController = Rgb(0x6E, 0x8B, 0xFF);
+    public static readonly Color AccentTimerPython = Rgb(0x4F, 0xC1, 0xFF);
+    public static readonly Color AccentEnum = Rgb(0xC9, 0x9B, 0xFF);
 
     // 外来的节点类型没有「类型」可上色，给中性灰蓝。
     public static readonly Color AccentFallback = Rgb(0x94, 0xA3, 0xB8);
 
-    public static readonly Color ExecOrderText = Rgb(0x6E, 0xE7, 0xA8);
+    public static readonly Color ExecOrderText = Rgb(0x7E, 0xE7, 0x87);
 
     // ── 幽灵按钮的语义字色（同形，只有字色不同） ────────────────────────────
 
-    public static readonly Color GhostCompileText = Rgb(0x7E, 0xC8, 0xFF);
-    public static readonly Color GhostRunText = Rgb(0x6E, 0xE7, 0xA8);
-    public static readonly Color GhostStopText = Rgb(0xFC, 0xA5, 0xA5);
-    public static readonly Color GhostCloseText = Rgb(0x9A, 0xA6, 0xB5);
+    public static readonly Color GhostCompileText = Rgb(0x4F, 0xC1, 0xFF);
+    public static readonly Color GhostRunText = Rgb(0x7E, 0xE7, 0x87);
+    public static readonly Color GhostStopText = Rgb(0xF8, 0x51, 0x49);
+    public static readonly Color GhostCloseText = Rgb(0xA0, 0xA0, 0xA0);
 
     // ── 代码面（Python 卡） ─────────────────────────────────────────────────
 
     // 比卡面更深，代码要读起来像代码。
     public static readonly Color CodeSurface = Rgb(0x0D, 0x11, 0x17);
-    public static readonly Color CodeBorder = Rgb(0x22, 0x2A, 0x34);
-    public static readonly Color CodeTitleText = Rgb(0x6E, 0xE7, 0xA8);
-    public static readonly Color CodeMutedText = Rgb(0x5A, 0x64, 0x74);
+    public static readonly Color CodeBorder = Rgb(0x26, 0x26, 0x26);
+    public static readonly Color CodeTitleText = Rgb(0x7E, 0xE7, 0x87);
+    public static readonly Color CodeMutedText = Rgb(0x58, 0x58, 0x58);
 
     // ── 字级 ────────────────────────────────────────────────────────────────
 
-    public const double TitleSize = 12.5;
-    public const double LabelSize = 10;
+    public const double TitleSize = 15;
+    public const double LabelSize = 10.5;
     public const double SlotNameSize = 11;
-    public const double ValueSize = 11.5;
+    public const double ValueSize = 12;
     public const double PillSize = 10.5;
     public const double GhostSize = 11;
     public const double CodeSize = 12;
@@ -76,7 +76,7 @@ internal static class CardPalette
     // 标题行高度。卡片的每一行都从这里量起，端口行的起点也一样（见 NodePorts）。
     public const double HeaderHeight = 32;
 
-    public const double AccentWidth = 2;
+    public const double AccentWidth = 3;
     public const double CardRadius = 8;
     public const double FieldRadius = 6;
     public const double PillRadius = 9;
