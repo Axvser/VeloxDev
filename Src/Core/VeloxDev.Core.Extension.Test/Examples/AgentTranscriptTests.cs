@@ -128,15 +128,15 @@ public class AgentTranscriptTests
     }
 
     [TestMethod]
-    public void ConversationMarkdown_WrapsReasoningInAFence()
+    public void ConversationMarkdown_WrapsReasoningInAChatPanel()
     {
-        // The Avalonia demo hands this string straight to a Markdown control, so the fence has to survive
-        // the hop through the view model — a rebuild that dropped it would leave the panel looking exactly
-        // as it did before the fence existed.
+        // The Avalonia demo hands this string straight to AvalonMarkdown 12, so the folded panel has to
+        // survive the hop through the view model — a rebuild that dropped it would leave the panel looking
+        // exactly as it did before the fence existed.
         var tree = new TreeViewModel();
 
         ((AgentHelper)tree.Helper).Transcript.AppendReasoning("先看一下拓扑。");
 
-        StringAssert.Contains(tree.ConversationMarkdown, "```thinking");
+        StringAssert.Contains(tree.ConversationMarkdown, "```chat[思考中][thinking]");
     }
 }

@@ -129,6 +129,96 @@ public class AgentTranscriptTests
         Assert.AreEqual("```", lines[^1]);
     }
 
+    [TestMethod]
+    public void ChatFences_RenderReasoningAsACollapsiblePanel()
+    {
+        // The panel replaces both the heading and the code block: its label and badge carry what the
+        // heading and the fence's language used to say.
+        var transcript = new AgentTranscript();
+
+        transcript.AddUser("把 Ticker 右移 120 像素");
+        transcript.AppendReasoning("先看一下拓扑。");
+        transcript.AppendAnswer("我把 Ticker 右移了。");
+
+        var markdown = transcript.ToMarkdown(new AgentMarkdownOptions { ChatFences = true });
+
+        StringAssert.Contains(markdown,
+            "```chat[思考][done]\n先看一下拓扑。\n```",
+            "a closed reasoning entry shows a check, not a frozen spinner");
+        Assert.DoesNotContain("**思考：**", markdown, "the panel's label replaces the heading");
+        Assert.DoesNotContain("```thinking\n", markdown, "the panel replaces the fenced code block");
+    }
+
+    [TestMethod]
+    public void ChatFences_KeepTheOpenReasoningPanelLive()
+    {
+        // While the reasoning is still the entry being written to, the badge spins; once the answer or a
+        // tool call closes it, it freezes. The transcript's Open entry is the only thing that knows.
+        var transcript = new AgentTranscript();
+
+        transcript.AppendReasoning("先看一下拓扑。");
+
+        var markdown = transcript.ToMarkdown(new AgentMarkdownOptions { ChatFences = true });
+
+        StringAssert.Contains(markdown, "```chat[思考中][thinking]\n先看一下拓扑。\n```");
+    }
+
+    [TestMethod]
+    public void ChatFences_OutgrowFencesInsideThePanelBody()
+    {
+        // The body is rendered as Markdown, so a code fence written by the model is inside it. The outer
+        // fence has to outgrow that run or the panel is closed from within.
+        var transcript = new AgentTranscript();
+
+        transcript.AppendReasoning("先写 ``` 这样的围栏。");
+        transcript.AppendAnswer("结论在后面。");
+
+        var markdown = transcript.ToMarkdown(new AgentMarkdownOptions { ChatFences = true });
+
+        StringAssert.Contains(markdown, "````chat[思考][done]\n先写 ``` 这样的围栏。\n````");
+        StringAssert.EndsWith(markdown, "结论在后面。",
+            "nothing after the panel may be swallowed into it");
+    }
+
+    [TestMethod]
+    public void ChatFences_RenderEachToolCallAsItsOwnPanel_CarryingThePayload()
+    {
+        // One panel per call, not one block for the run: the payload is the reason a panel folds at all.
+        var transcript = new AgentTranscript();
+
+        transcript.AddUser("做点事");
+        transcript.AppendAnswer("好的。");
+        transcript.AddToolCall("ListNodes", """{"status":"ok","nodes":3}""", AgentToolOutcome.Succeeded);
+        transcript.AddToolCall("Broken", "boom", AgentToolOutcome.Failed);
+
+        var markdown = transcript.ToMarkdown(new AgentMarkdownOptions { ChatFences = true });
+
+        StringAssert.Contains(markdown,
+            "````chat[工具 ListNodes · Succeeded][done]\n```json\n{\"status\":\"ok\",\"nodes\":3}\n```\n````");
+        StringAssert.Contains(markdown,
+            "````chat[工具 Broken · Failed][error]\n```\nboom\n```\n````");
+        Assert.DoesNotContain("**工具调用：**", markdown, "the panels replace the run's bullet list");
+    }
+
+    [TestMethod]
+    public void ChatFences_TruncateALongToolPayload()
+    {
+        // A streamed answer rebuilds the whole document, so an unbounded payload would be re-sent on every
+        // fragment. The cap belongs to the host; the panel says the result was longer.
+        var transcript = new AgentTranscript();
+
+        transcript.AddToolCall("Big", new string('x', 100), AgentToolOutcome.Succeeded);
+
+        var markdown = transcript.ToMarkdown(new AgentMarkdownOptions
+        {
+            ChatFences = true,
+            ToolDetailLimit = 10,
+        });
+
+        StringAssert.Contains(markdown, "结果已截断（共 100 字符）");
+        Assert.DoesNotContain(new string('x', 11), markdown, "the payload must stop at the limit");
+    }
+
     /// <summary>
     /// A stored transcript is a display record: every field a host renders has to survive the document,
     /// including the tool's raw payload and its outcome. Restoring must not reopen a streaming entry — the

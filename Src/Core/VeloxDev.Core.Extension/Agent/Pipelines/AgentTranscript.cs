@@ -168,6 +168,35 @@ public sealed class AgentMarkdownOptions
     /// showed before the fence existed; a host that would rather the block stands alone nulls it.
     /// </summary>
     public string? ReasoningHeading { get; set; } = "**思考：**";
+
+    /// <summary>
+    /// Whether reasoning and tool calls are rendered as collapsible <c>chat</c> fences instead of a
+    /// fenced code block and one bullet list.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A <c>chat</c> fence is the folded status panel AvalonMarkdown 12 draws: one summary row with a
+    /// state badge — a lightbulb while thinking, a check or a cross for a tool's outcome. It is off by
+    /// default so a host whose renderer does not know the fence keeps the shipped shape; a host that
+    /// does can fold the thinking and the tool payloads out of the reading path.
+    /// </para>
+    /// <para>
+    /// When this is on, <see cref="ReasoningFence"/> and <see cref="ReasoningHeading"/> do not apply:
+    /// the panel's own label and badge carry both.
+    /// </para>
+    /// </remarks>
+    public bool ChatFences { get; set; }
+
+    /// <summary>
+    /// The longest tool payload, in characters, a <see cref="ChatFences"/> panel carries. <c>0</c> carries
+    /// all of it.
+    /// </summary>
+    /// <remarks>
+    /// The panel is rebuilt with the whole document on every render, so an unbounded payload would cross
+    /// the control's bridge again on every fragment of a streamed answer. A truncated payload states how
+    /// long the result actually was.
+    /// </remarks>
+    public int ToolDetailLimit { get; set; } = 4000;
 }
 
 /// <summary>
@@ -393,17 +422,19 @@ public partial class AgentTranscript
     }
 
     /// <summary>
-    /// Renders the conversation as Markdown, with consecutive tool calls gathered into one block.
+    /// Renders the conversation as Markdown, with consecutive tool calls gathered into one block — or, when
+    /// <see cref="AgentMarkdownOptions.ChatFences"/> is on, each into its own folded panel.
     /// <para>
     /// Provided so that the markdown hosts do not each write their own renderer — which is where the blank
     /// separator rows came from.
     /// </para>
     /// <para>
-    /// Reasoning is wrapped in a fenced code block rather than a bold paragraph, so a Markdown control draws
-    /// it as a block of its own instead of as the answer's shape under a different label. The fence is
-    /// measured against the body: the model's thinking about code contains backtick runs, and a fixed
-    /// three-backtick fence would be closed by the first one it met. The label stays above the fence, where
-    /// it is a paragraph rather than code.
+    /// By default reasoning is wrapped in a fenced code block rather than a bold paragraph, so a Markdown
+    /// control draws it as a block of its own instead of as the answer's shape under a different label. The
+    /// fence is measured against the body: the model's thinking about code contains backtick runs, and a
+    /// fixed three-backtick fence would be closed by the first one it met. The label stays above the fence,
+    /// where it is a paragraph rather than code. With <see cref="AgentMarkdownOptions.ChatFences"/> on, a
+    /// <c>chat</c> panel replaces that pair.
     /// </para>
     /// <para>
     /// The shape is <paramref name="options"/>'s to decide; passing nothing renders the shape described here.
@@ -423,12 +454,24 @@ public partial class AgentTranscript
         {
             if (toolRun.Count == 0) return;
             if (sb.Length > 0) sb.Append("\n\n");
-            sb.Append("**工具调用：**\n\n");
-            foreach (var tool in toolRun)
+            if (options.ChatFences)
             {
-                sb.Append("- `").Append(tool.ToolName).Append('`');
-                if (tool.Outcome is { } outcome) sb.Append(" · ").Append(outcome);
-                sb.Append('\n');
+                // 每个工具一格：折叠面板的全部意义是「结果展开才看」，攒回一个块就又成了条目列表。
+                for (var i = 0; i < toolRun.Count; i++)
+                {
+                    if (i > 0) sb.Append("\n\n");
+                    AppendToolCallPanel(sb, toolRun[i], options);
+                }
+            }
+            else
+            {
+                sb.Append("**工具调用：**\n\n");
+                foreach (var tool in toolRun)
+                {
+                    sb.Append("- `").Append(tool.ToolName).Append('`');
+                    if (tool.Outcome is { } outcome) sb.Append(" · ").Append(outcome);
+                    sb.Append('\n');
+                }
             }
             toolRun.Clear();
         }
@@ -463,7 +506,8 @@ public partial class AgentTranscript
                     sb.Append("**助手：**\n\n").Append(entry.Text);
                     break;
                 case AgentTranscriptRole.Reasoning:
-                    AppendReasoning(sb, options, entry.Text);
+                    if (options.ChatFences) AppendReasoningPanel(sb, entry, ReferenceEquals(entry, Open));
+                    else AppendReasoning(sb, options, entry.Text);
                     break;
                 case AgentTranscriptRole.Error:
                     sb.Append("**错误：** ").Append(entry.Text);
@@ -542,6 +586,76 @@ public partial class AgentTranscript
         sb.Append(text);
         if (sb[sb.Length - 1] != '\n') sb.Append('\n');
         sb.Append(fence);
+    }
+
+    // 一个 chat 围栏：折叠面板的标题与状态在 info string 里，正文仍是 Markdown。
+    private static void AppendChatFence(StringBuilder sb, string label, string info, string body)
+    {
+        // 围栏必须长过正文里的每一条反引号串 —— 正文是 Markdown，自己可能就带代码围栏。
+        var fence = new string('`', FenceLength(body));
+        sb.Append(fence).Append("chat[").Append(ChatLabel(label)).Append("][").Append(info).Append("]\n");
+        sb.Append(body);
+        if (body.Length > 0 && body[body.Length - 1] != '\n') sb.Append('\n');
+        sb.Append(fence);
+    }
+
+    // 还开着的那条推理在转；被回答或工具调用关掉之后统一显示勾 —— 冻结的灯泡光环看着像停在半路。
+    private static void AppendReasoningPanel(StringBuilder sb, AgentTranscriptEntry entry, bool live)
+        => AppendChatFence(sb, live ? "思考中" : "思考", live ? "thinking" : "done", entry.Text);
+
+    // 工具调用结束时格子已经关掉，徽标直接表示结局；没有结局的（旧文档恢复）用扳手并停转。
+    private static void AppendToolCallPanel(StringBuilder sb, AgentTranscriptEntry tool, AgentMarkdownOptions options)
+    {
+        var info = tool.Outcome switch
+        {
+            AgentToolOutcome.Succeeded => "done",
+            AgentToolOutcome.Failed or AgentToolOutcome.Refused => "error",
+            _ => "tool,static",
+        };
+        var label = tool.Outcome is null ? $"工具 {tool.ToolName}" : $"工具 {tool.ToolName} · {tool.Outcome}";
+        AppendChatFence(sb, label, info, ToolPayload(tool.Detail, options.ToolDetailLimit));
+    }
+
+    // 载荷按代码围栏放进格子里：JSON 给高亮，其余当纯文本；超长时截断并写明原长度。
+    private static string ToolPayload(string detail, int limit)
+    {
+        if (string.IsNullOrWhiteSpace(detail)) return string.Empty;
+
+        var truncated = limit > 0 && detail.Length > limit;
+        var body = truncated ? detail.Substring(0, limit) : detail;
+
+        var info = LooksLikeJson(body) ? "json" : string.Empty;
+        var fence = new string('`', FenceLength(body));
+        var sb = new StringBuilder();
+        sb.Append(fence).Append(info).Append('\n').Append(body);
+        if (body[body.Length - 1] != '\n') sb.Append('\n');
+        sb.Append(fence);
+
+        if (truncated) sb.Append("\n\n_结果已截断（共 ").Append(detail.Length).Append(" 字符）。_");
+        return sb.ToString();
+    }
+
+    private static bool LooksLikeJson(string text)
+    {
+        foreach (var ch in text)
+        {
+            if (char.IsWhiteSpace(ch)) continue;
+            return ch == '{' || ch == '[';
+        }
+        return false;
+    }
+
+    // 标签里不能出现 ]：chat 围栏按 ] 切分组，早闭合会让后面整段变成「组间有文本」的错误。
+    private static string ChatLabel(string label)
+    {
+        var cleaned = label
+            .Replace("`", string.Empty)
+            .Replace("[", "(")
+            .Replace("]", ")")
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Trim();
+        return cleaned.Length == 0 ? "详情" : cleaned;
     }
 
     /// <summary>
